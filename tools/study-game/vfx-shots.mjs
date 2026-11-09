@@ -84,6 +84,32 @@ async function awards(page) {
   return files.length;
 }
 
+// 形态签名：24 个形态各自的大招（按目录 ult 构图 + sig 母题）和命中（暴击），每个形态一张接触表，再拼一张总览。
+async function formsShots(page) {
+  const catalog = JSON.parse(fs.readFileSync(path.join(repo, 'services/mode-architecture/learning-game-forms.json'), 'utf8')).forms;
+  const only = opt('forms', '').split(',').filter(Boolean), list = only.length ? catalog.filter(f => only.includes(f.id)) : catalog;
+  const files = [], cineAt = [.12, .4, .7, .87], over = {ult: [], hit: []};
+  await page.evaluate(() => window.__pinkieGame?.manifest?.());
+  for (const f of list) {
+    const shots = [];
+    await page.evaluate(f => { const fx = window.__pinkieGameFx, g = window.__pinkieGame; fx._timeScale(.2); fx.cinematic(f.ult, {text: f.name, sub: f.bonus?.text || '', kicker: f.name, art: g?.ultArt?.(f.id) || g?.portrait?.(f.id), palette: f.palette, particle: f.particle, form: f}); }, f);
+    await page.waitForFunction(() => window.__pinkieGameFx._st().cine);
+    for (const at of cineAt) {
+      for (let i = 0; i < 800; i++) { const T = await page.evaluate(() => { const c = window.__pinkieGameFx._st().cine; return c ? c.t / c.dur : 2; }); if (T >= at) break; await wait(15); }
+      const file = path.join(out, `form-${theme}-${f.id}-ult-${String(Math.round(at * 100)).padStart(2, '0')}.png`); await page.screenshot({path: file}); shots.push(file); 
+    }
+    await page.waitForFunction(() => !window.__pinkieGameFx._st().cine, null, {timeout: 60000});
+    { const te = await engineTime(page); for (const dt of [.12, .4]) { await atEngine(page, te, dt); const file = path.join(out, `form-${theme}-${f.id}-ult-tail${Math.round(dt * 100)}.png`); await page.screenshot({path: file}); shots.push(file); if (dt === .12) over.ult.push(file); } }
+    await page.waitForFunction(() => !window.__pinkieGameSig?.alive(), null, {timeout: 60000});
+    const t0 = await page.evaluate(f => { const fx = window.__pinkieGameFx, c = window.__pinkieGameDemo.center(); fx.hit(f.hit, c, {sound: false, crit: true, palette: f.palette, form: f}); return fx._st().time; }, f);
+    for (const dt of [.1, .25, .45]) { await atEngine(page, t0, dt); const box = await page.evaluate(() => { const c = window.__pinkieGameDemo.center(); return {x: Math.max(0, c.x - 300), y: Math.max(0, c.y - 200), width: 600, height: 400}; }); const file = path.join(out, `form-${theme}-${f.id}-hit-${String(Math.round(dt * 100)).padStart(3, '0')}.png`); await page.screenshot({path: file, clip: box}); shots.push(file); if (dt === .25) over.hit.push(file); }
+    await page.evaluate(() => window.__pinkieGameFx._timeScale(1)); await wait(900);
+    sheet(shots, `sheet-form-${theme}-${f.id}.png`, '3x3'); files.push(...shots);
+  }
+  if (list.length > 1) { sheet(over.ult, `sheet-forms-ult-${theme}.png`, '6x'); sheet(over.hit, `sheet-forms-hit-${theme}.png`, '6x'); }
+  return files.length;
+}
+
 const harness = await startHarness(); const browser = await launch();
 const result = {};
 try {
@@ -93,6 +119,7 @@ try {
   if (cmd === 'hits' || cmd === 'all') { const names = await page.evaluate(() => window.__pinkieGameFx.hits); result.hits = await grid(page, names, 'hit', 'hits'); if (args.includes('--single')) result.hitsSingle = await single(page, names, 'hit', 'hit'); }
   if (cmd === 'cine' || cmd === 'all') result.cine = await cine(page);
   if (cmd === 'awards' || cmd === 'all') result.awards = await awards(page);
+  if (cmd === 'forms') result.forms = await formsShots(page);
   await context.close();
 } finally { await browser.close(); await harness.close(); }
 console.log(JSON.stringify({...result, out}));

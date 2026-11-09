@@ -16,7 +16,7 @@
    ],
    "particle": "confetti",
    "hit": "pop",
-   "ult": "burst",
+   "ult": "burst", "sig": "party",
    "sound": "bubbly",
    "bonus": {
     "kind": "firstSetStars",
@@ -52,7 +52,7 @@
    ],
    "particle": "stars",
    "hit": "stamp",
-   "ult": "stamp",
+   "ult": "stamp", "sig": "pen",
    "sound": "chime",
    "bonus": {
     "kind": "lessonStarsPct",
@@ -88,7 +88,7 @@
    ],
    "particle": "gold",
    "hit": "stamp",
-   "ult": "stamp",
+   "ult": "stamp", "sig": "blueprint",
    "sound": "click",
    "bonus": {
     "kind": "questStarsPct",
@@ -123,7 +123,7 @@
    ],
    "particle": "crystal",
    "hit": "shard",
-   "ult": "spell",
+   "ult": "spell", "sig": "lattice",
    "sound": "glass",
    "bonus": {
     "kind": "writeStarsMul",
@@ -158,7 +158,7 @@
    ],
    "particle": "confetti",
    "hit": "rainbow",
-   "ult": "warp",
+   "ult": "warp", "sig": "prism",
    "sound": "synth",
    "bonus": {
     "kind": "comboStarsMul",
@@ -196,7 +196,7 @@
    ],
    "particle": "cards",
    "hit": "lens",
-   "ult": "curtain",
+   "ult": "curtain", "sig": "lens",
    "sound": "pluck",
    "bonus": {
     "kind": "captureStarsPct",
@@ -231,7 +231,7 @@
    ],
    "particle": "coins",
    "hit": "coin",
-   "ult": "rain",
+   "ult": "rain", "sig": "chart",
    "sound": "brass",
    "bonus": {
     "kind": "dailyShelfExtra",
@@ -266,7 +266,7 @@
    ],
    "particle": "stars",
    "hit": "ping",
-   "ult": "warp",
+   "ult": "warp", "sig": "orbit",
    "sound": "sine",
    "bonus": {
     "kind": "streakStarsPct",
@@ -301,7 +301,7 @@
    ],
    "particle": "embers",
    "hit": "flame",
-   "ult": "beam",
+   "ult": "beam", "sig": "dragon",
    "sound": "roar",
    "bonus": {
     "kind": "examSealsAdd",
@@ -337,7 +337,7 @@
    ],
    "particle": "gold",
    "hit": "carpet",
-   "ult": "curtain",
+   "ult": "curtain", "sig": "carpet",
    "sound": "fanfare",
    "bonus": {
     "kind": "guardExamSealsAdd",
@@ -374,7 +374,7 @@
    ],
    "particle": "petals",
    "hit": "sparkle",
-   "ult": "rain",
+   "ult": "rain", "sig": "rose",
    "sound": "harp",
    "bonus": {
     "kind": "streakMilestoneMul",
@@ -410,7 +410,7 @@
    ],
    "particle": "lightning",
    "hit": "slash",
-   "ult": "slash",
+   "ult": "slash", "sig": "aegis",
    "sound": "steel",
    "bonus": {
     "kind": "huntStarsPct",
@@ -446,7 +446,7 @@
    ],
    "particle": "confetti",
    "hit": "sprinkle",
-   "ult": "rain",
+   "ult": "rain", "sig": "piping",
    "sound": "pop",
    "bonus": {
     "kind": "setFinishAdd",
@@ -482,7 +482,7 @@
    ],
    "particle": "hearts",
    "hit": "heart",
-   "ult": "spell",
+   "ult": "spell", "sig": "ribbon",
    "sound": "twinkle",
    "bonus": {
     "kind": "ultThreshold",
@@ -518,7 +518,7 @@
    ],
    "particle": "crystal",
    "hit": "constellation",
-   "ult": "warp",
+   "ult": "warp", "sig": "zodiac",
    "sound": "celesta",
    "bonus": {
     "kind": "comboStepAdd",
@@ -554,7 +554,7 @@
    ],
    "particle": "ink",
    "hit": "brush",
-   "ult": "ink",
+   "ult": "ink", "sig": "scroll",
    "sound": "guzheng",
    "bonus": {
     "kind": "examStarsPct",
@@ -590,7 +590,7 @@
    ],
    "particle": "hearts",
    "hit": "glow",
-   "ult": "curtain",
+   "ult": "curtain", "sig": "spotlight",
    "sound": "pop",
    "bonus": {
     "kind": "chestExtra",
@@ -625,7 +625,7 @@
    ],
    "particle": "neon",
    "hit": "glitch",
-   "ult": "beam",
+   "ult": "beam", "sig": "datamosh",
    "sound": "synth",
    "bonus": {
     "kind": "notesStarsPct",
@@ -660,7 +660,7 @@
    ],
    "particle": "smoke",
    "hit": "shuriken",
-   "ult": "slash",
+   "ult": "slash", "sig": "smokeclone",
    "sound": "whoosh",
    "bonus": {
     "kind": "perfectSetAdd",
@@ -695,7 +695,7 @@
    ],
    "particle": "snow",
    "hit": "steam",
-   "ult": "rain",
+   "ult": "rain", "sig": "lantern",
    "sound": "bell",
    "bonus": {
     "kind": "firstSetStars",
@@ -731,7 +731,7 @@
    ],
    "particle": "snow",
    "hit": "flake",
-   "ult": "rain",
+   "ult": "rain", "sig": "firstsnow",
    "sound": "bell",
    "bonus": {
     "kind": "huntStarsPct",
@@ -767,7 +767,7 @@
    ],
    "particle": "snow",
    "hit": "aurora",
-   "ult": "warp",
+   "ult": "warp", "sig": "aurora",
    "sound": "bell",
    "bonus": {
     "kind": "streakStarsPct",
@@ -803,7 +803,7 @@
    ],
    "particle": "confetti",
    "hit": "stamp",
-   "ult": "burst",
+   "ult": "burst", "sig": "mortarboard",
    "sound": "fanfare",
    "bonus": {
     "kind": "none",
@@ -837,7 +837,7 @@
    ],
    "particle": "gold",
    "hit": "stamp",
-   "ult": "stamp",
+   "ult": "stamp", "sig": "goldseal",
    "sound": "fanfare",
    "bonus": {
     "kind": "none",

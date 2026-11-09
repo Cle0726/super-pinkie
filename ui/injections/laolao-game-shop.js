@@ -145,11 +145,11 @@
       if (!f) return;
       box.style.setProperty('--fa', f.palette?.[0]); box.style.setProperty('--fb', f.palette?.[1]); box.style.setProperty('--fc', f.palette?.[2]);
       box.dataset.owned = String(f.owned);
-      const art = el('div', 'pks-wr__art'); const img = el('img'); img.alt = f.name; img.decoding = 'async'; img.src = g.portrait(f.id); art.append(img);
+      const art = el('div', 'pks-wr__art'); const img = el('img'); img.alt = f.name; img.decoding = 'async'; img.src = g.portrait(f.id); art.append(img); if (f.owned) g.ambient?.(art, f);
       if (!f.owned) art.append(el('span', 'pks-wr__q', '？'));
       const info = el('div', 'pks-wr__info');
       info.append(el('small', 'pkg-kicker', `${RARITY[f.rarity]?.label || f.rarity} · ${f.series === 'mode' ? 'MODE' : f.season ? 'SEASONAL' : 'FORM'}`), el('h3', 'pks-wr__name', f.owned ? f.name : '还没遇见'));
-      info.append(el('p', 'pks-wr__bonus', f.bonus?.text || ''));
+      { const b = el('p', 'pks-wr__bonus'); b.append(g.bonusText ? g.bonusText(f.bonus?.text) : document.createTextNode(f.bonus?.text || '')); info.append(b); }
       const pal = el('div', 'pks-wr__pal'); for (const c of f.palette || []) { const d = el('i'); d.style.background = c; pal.append(d); } info.append(pal);
       if (f.owned) {
         const lv = f.level || {lv: 1, xp: 0, next: 100};
@@ -173,7 +173,7 @@
         const eq = el('button', 'pkg-btn', f.equipped ? '装备中' : '装备这个形态'); eq.type = 'button'; eq.disabled = f.equipped;
         eq.addEventListener('click', async () => { eq.disabled = true; try { await g.call('forms.equip', {formId: f.id}); forms = await g.forms(true); s = await g.refresh(); paint(); try { fx()?.burst(f.particle || 'sparkle', img, {palette: f.palette, scale: .9}); fx()?.sfx('sparkle', {form: g.fxForm(f)}); } catch { /* ignore */ } } catch (e) { eq.disabled = false; g.toast(e.message); } });
         const demo = el('button', 'pkb-link', '看一眼大招'); demo.type = 'button';
-        demo.addEventListener('click', () => fx()?.cinematic(f.ult || 'burst', {text: f.name, sub: f.bonus?.text || '', kicker: f.name, art: g.ultArt(f.id) || g.portrait(f.id), palette: f.palette, particle: f.particle, form: g.fxForm(f)}));
+        demo.addEventListener('click', () => fx()?.cinematic(f.ult || 'burst', {text: f.name, sub: String(f.bonus?.text || '').replace(/\s*(⭐|🟡|💎)\s*/gu, m => ({'⭐': ' 星星 ', '🟡': ' 金印 ', '💎': ' 碎片 '})[m.trim()] || ' ').replace(/\s+/g, ' ').trim(), kicker: f.name, art: g.ultArt(f.id) || g.portrait(f.id), palette: f.palette, particle: f.particle, form: g.fxForm(f)}));
         act.append(eq, demo); info.append(act);
       } else {
         const how = el('div', 'pks-how'); how.append(el('small', 'pkg-kicker', 'HOW TO GET'), el('p', '', f.howToGet || '商店 / 扭蛋'));

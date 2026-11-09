@@ -112,7 +112,11 @@
 #pinkie-study-desk .pkg-stage__shadow{position:absolute;left:18%;right:18%;bottom:1.5%;height:7%;border-radius:50%;background:radial-gradient(closest-side,var(--cast),transparent);filter:blur(2px)}
 #pinkie-study-desk .pkg-stage[data-still] .pkg-stage__biqi{animation:none}
 @keyframes pkg-breathe{0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(-2px) scale(1.004,1.012)}}
-#pinkie-study-desk .pkg-stage__tag{position:absolute;right:24px;top:22px;text-align:right;display:grid;justify-items:end;gap:5px;max-width:40%}
+#pinkie-study-desk .pkg-stage__tag{position:absolute;right:20px;top:18px;text-align:right;display:grid;justify-items:end;gap:5px;max-width:40%;padding:10px 14px 11px;border-radius:12px;background:rgba(251,246,239,.78);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 10px 24px -16px rgba(58,42,53,.45)}
+#pinkie-study-desk .pkg-stage[data-time="night"] .pkg-stage__tag{background:rgba(22,15,28,.62);box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 10px 24px -16px rgba(0,0,0,.7)}
+#pinkie-study-desk .pkg-stage__tag span{display:inline-flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+#pinkie-study-desk :is(.pkg-stage__tag,.pks-wr__bonus) .pkg-glyph{display:inline-block;width:1.15em;height:1.15em;vertical-align:-.2em;color:var(--pkg-gold,#C9922E)}
+#pinkie-study-desk :is(.pkg-stage__tag,.pks-wr__bonus) .pkg-glyph svg{width:100%;height:100%;display:block}
 #pinkie-study-desk .pkg-stage__tag small{font:600 10px/1 var(--pkg-latin);letter-spacing:.34em;color:var(--st-ink-3)}
 #pinkie-study-desk .pkg-stage__tag b{font:900 18px/1.05 var(--pkg-display);letter-spacing:.08em}
 #pinkie-study-desk .pkg-stage__tag span{font-size:11.5px;color:var(--st-ink-2);line-height:1.45}
@@ -321,3 +325,89 @@
 html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
 /* 验收修：手账皮肤给每页画的那条粉色页边竖线（.view 背景渐变）在游戏页上会从卡片、立绘、Boss 中间直穿过去，游戏页不要。 */
 #pinkie-study-desk.pk-ink .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard),#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view:is(.pkg-camp,.pks-page,.pkw-page,.pke-page,.pkb-hunt,.pkb-guard){--pk-page-margin:transparent}
+
+/* ── 待机氛围（11-08 验收 R5）：只动 transform / opacity；data-still 时全部静止。 ── */
+#pinkie-study-desk .pkg-amb{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden;contain:strict}
+#pinkie-study-desk .pks-wr__art{position:relative;isolation:isolate;overflow:hidden}
+#pinkie-study-desk .pkg-amb i,#pinkie-study-desk .pkg-amb b{position:absolute;display:block;will-change:transform,opacity}
+#pinkie-study-desk .pkg-amb[data-still] i,#pinkie-study-desk .pkg-amb[data-still] b{animation:none!important}
+/* 通用：两块慢慢漂的光斑（时间光照）+ 浮尘 */
+#pinkie-study-desk .pkg-amb__sun{left:6%;top:-8%;width:52%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,rgba(255,240,214,.5),transparent);mix-blend-mode:screen;animation:pkg-amb-drift 26s ease-in-out infinite alternate}
+#pinkie-study-desk .pkg-amb__sun--2{left:auto;right:-6%;top:30%;width:40%;background:radial-gradient(closest-side,color-mix(in srgb,var(--pkg-a,#F7A8C8) 32%,transparent),transparent);animation-duration:34s;animation-delay:-12s}
+#pinkie-study-desk .pkg-stage[data-time="night"] .pkg-amb__sun{background:radial-gradient(closest-side,rgba(160,170,255,.14),transparent)}
+@keyframes pkg-amb-drift{0%{transform:translate(0,0) scale(1);opacity:.75}100%{transform:translate(6%,4%) scale(1.08);opacity:1}}
+#pinkie-study-desk .pkg-amb__dust{left:var(--x);top:var(--y);width:4px;height:4px;border-radius:50%;background:rgba(255,248,236,.9);box-shadow:0 0 6px rgba(255,236,200,.8);opacity:0;animation:pkg-amb-dust var(--d) linear var(--dl) infinite}
+#pinkie-study-desk .pkg-stage:not([data-time="night"]) .pkg-amb__dust{background:color-mix(in srgb,var(--pkg-b,#DB1F74) 40%,#fff);box-shadow:none}
+@keyframes pkg-amb-dust{0%{transform:translate(0,0) scale(var(--s));opacity:0}15%{opacity:.7}85%{opacity:.5}100%{transform:translate(28px,-60px) scale(var(--s));opacity:0}}
+/* 形态层：同一组 <i class="pkg-amb__m">，按 data-amb 画成不同的东西 */
+#pinkie-study-desk .pkg-amb__m{left:var(--x);top:var(--y);opacity:0}
+/* 立冬：暖橘灯笼慢慢升 + 远处炊烟 */
+#pinkie-study-desk [data-amb="lantern"] .pkg-amb__m{top:auto;bottom:-12%;width:calc(14px * var(--s) + 6px);aspect-ratio:.82;border-radius:46% 46% 42% 42%;background:radial-gradient(60% 55% at 50% 45%,#ffd9a0,#ff8a3d 55%,#c6382a);box-shadow:0 0 18px 6px rgba(255,150,70,.45);animation:pkg-amb-lantern calc(var(--d) * 2.2) linear var(--dl) infinite}
+#pinkie-study-desk [data-amb="lantern"] .pkg-amb__m:nth-child(3n){width:2px;height:120px;aspect-ratio:auto;border-radius:2px;background:linear-gradient(transparent,rgba(255,255,255,.35),transparent);box-shadow:none;filter:blur(2px);animation-name:pkg-amb-smoke}
+@keyframes pkg-amb-lantern{0%{transform:translate(0,0) scale(.9);opacity:0}10%{opacity:.9}50%{transform:translate(14px,-46vh) scale(.8);opacity:.85}100%{transform:translate(-8px,-92vh) scale(.6);opacity:0}}
+@keyframes pkg-amb-smoke{0%{transform:translate(0,0) scaleX(1) rotate(-4deg);opacity:0}30%{opacity:.6}100%{transform:translate(30px,-50vh) scaleX(3) rotate(8deg);opacity:0}}
+/* 小雪：稀疏的雪慢慢落 */
+#pinkie-study-desk [data-amb="firstsnow"] .pkg-amb__m{top:-6%;width:calc(3px + 3px * var(--s));aspect-ratio:1;border-radius:50%;background:#fff;box-shadow:0 0 6px rgba(200,225,255,.9);animation:pkg-amb-snow calc(var(--d) * 1.4) linear var(--dl) infinite}
+#pinkie-study-desk .pkg-stage:not([data-time="night"]) [data-amb="firstsnow"] .pkg-amb__m{background:#b7cce0;box-shadow:none}
+@keyframes pkg-amb-snow{0%{transform:translate(0,0);opacity:0}10%{opacity:.95}50%{transform:translate(22px,55vh)}100%{transform:translate(-10px,112vh);opacity:.2}}
+/* 大雪：极光幕在上方缓慢起伏 */
+#pinkie-study-desk [data-amb="aurora"] .pkg-amb__m{left:calc(var(--i) * 30% - 20%);top:-6%;width:70%;height:46%;border-radius:50%;filter:blur(18px);background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--pkg-b,#7FFFD4) 60%,transparent) 55%,transparent);animation:pkg-amb-aurora calc(var(--d) * 1.6) ease-in-out var(--dl) infinite alternate}
+#pinkie-study-desk [data-amb="aurora"] .pkg-amb__m:nth-child(2n){background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--pkg-c,#FFC1E3) 50%,transparent) 60%,transparent)}
+@keyframes pkg-amb-aurora{0%{transform:translateX(-6%) skewX(-8deg) scaleY(.9);opacity:.25}100%{transform:translateX(8%) skewX(10deg) scaleY(1.15);opacity:.7}}
+/* 赛博：一道扫描线自上而下 + 霓虹切片闪 */
+#pinkie-study-desk [data-amb="datamosh"] .pkg-amb__m{left:0;right:0;top:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--pkg-c,#38F2FF),transparent);box-shadow:0 0 8px var(--pkg-c,#38F2FF);animation:pkg-amb-scan 7s linear var(--dl) infinite}
+#pinkie-study-desk [data-amb="datamosh"] .pkg-amb__m:nth-child(n+13){left:var(--x);top:var(--y);width:calc(40px + 80px * var(--s));height:3px;box-shadow:none;background:var(--pkg-b,#FF3EA5);animation:pkg-amb-flick calc(var(--d) * .6) steps(1,end) var(--dl) infinite}
+@keyframes pkg-amb-scan{0%{transform:translateY(-2vh);opacity:0}6%{opacity:.8}100%{transform:translateY(100vh);opacity:.2}}
+@keyframes pkg-amb-flick{0%,88%,100%{opacity:0;transform:translateX(0)}90%{opacity:.7;transform:translateX(-14px)}93%{opacity:.4;transform:translateX(10px)}}
+/* 海盗：海面反光——底部一排短发丝明灭 */
+#pinkie-study-desk [data-amb="chart"] .pkg-amb__m{top:calc(72% + var(--y) * .25);width:calc(10px + 22px * var(--s));height:1.5px;border-radius:2px;background:linear-gradient(90deg,transparent,#fff3cf,transparent);animation:pkg-amb-glint calc(var(--d) * .45) ease-in-out var(--dl) infinite}
+@keyframes pkg-amb-glint{0%,100%{opacity:0;transform:translateX(0) scaleX(.6)}50%{opacity:.85;transform:translateX(10px) scaleX(1)}}
+/* 占星：星点明灭 + 一圈很慢的星盘刻度 */
+#pinkie-study-desk [data-amb="zodiac"] .pkg-amb__m{top:calc(var(--y) * .6);width:3px;height:3px;border-radius:50%;background:#fff6dc;box-shadow:0 0 8px #ffe6a8;animation:pkg-amb-twinkle calc(var(--d) * .4) ease-in-out var(--dl) infinite}
+#pinkie-study-desk [data-amb="zodiac"] .pkg-amb__m:nth-child(12){left:auto;right:-14%;top:-30%;width:62%;height:auto;aspect-ratio:1;background:repeating-conic-gradient(rgba(255,230,168,.5) 0 .4deg,transparent .4deg 6deg);-webkit-mask:radial-gradient(closest-side,transparent 94%,#000 95%,#000 99%,transparent);mask:radial-gradient(closest-side,transparent 94%,#000 95%,#000 99%,transparent);box-shadow:none;animation:pkg-amb-spin 140s linear infinite;opacity:.5}
+@keyframes pkg-amb-twinkle{0%,100%{opacity:.1;transform:scale(.6)}50%{opacity:.95;transform:scale(1.2)}}
+@keyframes pkg-amb-spin{to{transform:rotate(360deg)}}
+/* 偶像：两束追光慢慢摆 */
+#pinkie-study-desk [data-amb="spotlight"] .pkg-amb__m{left:calc(30% + var(--i) * 40%);top:-10%;width:30%;height:120%;transform-origin:50% 0;background:linear-gradient(180deg,rgba(255,255,255,.28),transparent 85%);clip-path:polygon(42% 0,58% 0,100% 100%,0 100%);animation:pkg-amb-sway 11s ease-in-out var(--dl) infinite alternate;opacity:.6}
+@keyframes pkg-amb-sway{0%{transform:rotate(-14deg)}100%{transform:rotate(14deg)}}
+/* 宇航员：一条倾斜的轨道慢转，上面一颗光点 */
+#pinkie-study-desk [data-amb="orbit"] .pkg-amb__m{left:calc(40% + var(--i) * 6%);top:calc(10% + var(--i) * 8%);width:calc(50% - var(--i) * 8%);aspect-ratio:2.6;border-radius:50%;border:1px solid color-mix(in srgb,var(--pkg-c,#9AD8FF) 50%,transparent);transform:rotate(calc(-18deg + var(--i) * 14deg));opacity:.55;animation:none}
+#pinkie-study-desk [data-amb="orbit"] .pkg-amb__m::after{content:"";position:absolute;left:50%;top:-3px;width:5px;height:5px;border-radius:50%;background:#fff;box-shadow:0 0 10px var(--pkg-c,#9AD8FF);offset-path:ellipse(50% 50%);animation:pkg-amb-orbit calc(var(--d) * 1.5) linear var(--dl) infinite}
+@keyframes pkg-amb-orbit{to{offset-distance:100%}}
+/* 龙骑士：余烬往上飘 */
+#pinkie-study-desk [data-amb="dragon"] .pkg-amb__m,#pinkie-study-desk [data-amb="lattice"] .pkg-amb__m{top:auto;bottom:-4%;width:3px;height:3px;border-radius:50%;background:#ffcf7a;box-shadow:0 0 6px #ff8a3d;animation:pkg-amb-ember calc(var(--d) * .8) linear var(--dl) infinite}
+@keyframes pkg-amb-ember{0%{transform:translate(0,0);opacity:0}10%{opacity:1}60%{transform:translate(18px,-40vh);opacity:.6}100%{transform:translate(-10px,-70vh);opacity:0}}
+/* 公主 / 魔法少女：花瓣 / 光斑慢慢落、飘 */
+#pinkie-study-desk [data-amb="rose"] .pkg-amb__m{top:-6%;width:calc(8px + 6px * var(--s));aspect-ratio:1.6;border-radius:60% 40% 60% 40%;background:color-mix(in srgb,var(--c) 80%,#fff);animation:pkg-amb-petal calc(var(--d) * 1.5) linear var(--dl) infinite}
+@keyframes pkg-amb-petal{0%{transform:translate(0,0) rotate(var(--r)) rotateY(0);opacity:0}10%{opacity:.85}100%{transform:translate(60px,110vh) rotate(calc(var(--r) + 300deg)) rotateY(540deg);opacity:.3}}
+#pinkie-study-desk [data-amb="ribbon"] .pkg-amb__m,#pinkie-study-desk [data-amb="party"] .pkg-amb__m{width:calc(10px + 16px * var(--s));aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--c) 70%,#fff),transparent);filter:blur(1px);animation:pkg-amb-bokeh var(--d) ease-in-out var(--dl) infinite alternate}
+@keyframes pkg-amb-bokeh{0%{transform:translate(0,0) scale(.8);opacity:.15}100%{transform:translate(20px,-30px) scale(1.15);opacity:.65}}
+/* 日常：几片彩带慢慢翻着落 */
+#pinkie-study-desk [data-amb="party"] .pkg-amb__m:nth-child(2n){top:-6%;width:5px;height:11px;aspect-ratio:auto;border-radius:1px;filter:none;background:var(--c);animation:pkg-amb-foil calc(var(--d) * 1.3) linear var(--dl) infinite}
+@keyframes pkg-amb-foil{0%{transform:translate(0,0) rotate(var(--r)) rotateX(0);opacity:0}10%{opacity:.85}100%{transform:translate(-40px,110vh) rotate(calc(var(--r) + 200deg)) rotateX(900deg);opacity:.3}}
+/* 女王 / 毕业 / 金章：金屑落 */
+#pinkie-study-desk :is([data-amb="carpet"],[data-amb="mortarboard"],[data-amb="goldseal"]) .pkg-amb__m{top:-6%;width:calc(4px + 4px * var(--s));aspect-ratio:.7;background:linear-gradient(135deg,#fff1c2,#d9a23c 60%,#8d6418);animation:pkg-amb-foil calc(var(--d) * 1.5) linear var(--dl) infinite}
+#pinkie-study-desk [data-amb="carpet"] .pkg-amb__m:nth-child(12){top:-10%;left:62%;width:18%;height:120%;aspect-ratio:auto;background:linear-gradient(180deg,rgba(255,230,170,.32),transparent);filter:blur(8px);animation:pkg-amb-drift 18s ease-in-out infinite alternate}
+/* 骑士：一道很慢的金属反光扫过 */
+#pinkie-study-desk [data-amb="aegis"] .pkg-amb__m{left:-40%;top:-20%;width:30%;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.26),transparent);transform:rotate(18deg);animation:pkg-amb-sheen 9s cubic-bezier(.7,0,.3,1) infinite}
+@keyframes pkg-amb-sheen{0%,60%{transform:translateX(0) rotate(18deg);opacity:0}65%{opacity:1}100%{transform:translateX(560%) rotate(18deg);opacity:0}}
+/* 甜点师：糖粒闪 + 一缕热气 */
+#pinkie-study-desk [data-amb="piping"] .pkg-amb__m{width:2px;height:7px;border-radius:2px;background:var(--c);transform:rotate(var(--r));animation:pkg-amb-twinkle calc(var(--d) * .5) ease-in-out var(--dl) infinite}
+/* 状元 / 忍者：低处飘动的薄雾（墨晕 / 烟） */
+#pinkie-study-desk :is([data-amb="scroll"],[data-amb="smokeclone"]) .pkg-amb__m{left:-30%;top:calc(52% + var(--i) * 10%);width:90%;height:22%;border-radius:50%;background:radial-gradient(closest-side,rgba(255,255,255,.34),transparent);filter:blur(10px);animation:pkg-amb-mist calc(var(--d) * 2.6) linear var(--dl) infinite}
+#pinkie-study-desk [data-amb="scroll"] .pkg-amb__m{background:radial-gradient(closest-side,rgba(40,30,30,.14),transparent)}
+#pinkie-study-desk .pkg-stage[data-time="night"] [data-amb="scroll"] .pkg-amb__m{background:radial-gradient(closest-side,rgba(242,193,78,.12),transparent)}
+@keyframes pkg-amb-mist{0%{transform:translateX(0);opacity:0}20%{opacity:.9}80%{opacity:.7}100%{transform:translateX(120%);opacity:0}}
+/* 侦探：一盏台灯光圈慢慢挪 */
+#pinkie-study-desk [data-amb="lens"] .pkg-amb__m{left:calc(10% + var(--i) * 40%);top:calc(10% + var(--i) * 30%);width:34%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,rgba(255,240,210,.42),rgba(255,236,200,.12) 70%,transparent);mix-blend-mode:screen;box-shadow:inset 0 0 0 1px rgba(255,246,230,.35),0 0 0 6px rgba(255,246,230,.06);animation:pkg-amb-drift calc(var(--d) * 2) ease-in-out var(--dl) infinite alternate}
+/* 项目：极淡的蓝图网格 + 一道扫描 */
+#pinkie-study-desk [data-amb="blueprint"] .pkg-amb__m{inset:0;width:auto;height:auto;opacity:.5;background:linear-gradient(90deg,transparent 0 calc(100% - 1px),color-mix(in srgb,var(--pkg-b,#2F6FB0) 18%,transparent) 0) 0 0/34px 34px,linear-gradient(0deg,transparent 0 calc(100% - 1px),color-mix(in srgb,var(--pkg-b,#2F6FB0) 18%,transparent) 0) 0 0/34px 34px;-webkit-mask:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent) 0 0/300% 100%;mask:linear-gradient(90deg,transparent,#000 40%,#000 60%,transparent) 0 0/300% 100%;animation:pkg-amb-reveal 12s linear infinite}
+@keyframes pkg-amb-reveal{0%{-webkit-mask-position:100% 0;mask-position:100% 0}100%{-webkit-mask-position:0 0;mask-position:0 0}}
+/* 思考：晶格节点明灭（借余烬的路径，改成冷色、更慢） */
+#pinkie-study-desk [data-amb="lattice"] .pkg-amb__m{bottom:auto;top:var(--y);background:#c9b8ff;box-shadow:0 0 8px var(--pkg-c,#8FE3FF);animation:pkg-amb-twinkle calc(var(--d) * .5) ease-in-out var(--dl) infinite}
+/* 无限制：一道慢慢漂的色散光带 */
+#pinkie-study-desk [data-amb="prism"] .pkg-amb__m{left:-20%;top:calc(20% + var(--i) * 35%);width:140%;height:16%;filter:blur(14px);background:linear-gradient(90deg,transparent,rgba(255,111,170,.22),rgba(255,214,90,.2),rgba(70,230,200,.22),rgba(123,92,255,.22),transparent);animation:pkg-amb-aurora calc(var(--d) * 1.8) ease-in-out var(--dl) infinite alternate}
+/* 学习：几张便签纸角轻轻浮动 */
+#pinkie-study-desk [data-amb="pen"] .pkg-amb__m{width:calc(10px + 10px * var(--s));aspect-ratio:1;background:color-mix(in srgb,var(--c) 45%,#fff);box-shadow:0 2px 6px rgba(0,0,0,.08);transform:rotate(var(--r));animation:pkg-amb-bokeh calc(var(--d) * 1.2) ease-in-out var(--dl) infinite alternate;filter:none;border-radius:1px}
+/* 营地暗光卡片下的减少动效 */
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkg-amb i,#pinkie-study-desk .pkg-amb b{animation:none!important}}

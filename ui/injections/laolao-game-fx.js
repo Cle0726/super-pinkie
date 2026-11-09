@@ -103,6 +103,35 @@
     shuriken: ['sparkle', [crescent(.7), glints(6)]], steam: ['steam', []], flake: ['snow', []],
     aurora: ['sparkle', [streaks(18, {c: ['#7dffc9', '#6fd3ff', '#c39bff'], stretch: .07, sp: [300, 700], g: -60})]],
   };
+  // 形态签名的粒子层（11-08）：每个形态在命中 / 大招释放时多一层只属于它的粒子，和 laolao-game-sig.js 的线稿母题配套。
+  const SIG_PARTS = {
+    party: [L(E.FOIL, 18, {sp: [500, 1100], life: [1.2, 2], size: [5, 9], aspect: .3, g: 520, drag: 2, tumble: [8, 14], spin: [-6, 6], c: [0, 2, 1]})],
+    pen: [L(E.INK, 10, {sp: [200, 520], life: [.4, .8], size: [3, 7], g: 600, drag: 2.6, c: [1]}), L(E.CARD, 3, {sp: [160, 360], life: [1.2, 1.8], size: [20, 26], aspect: 1, g: 260, drag: 2, tumble: [2, 5], c: [0, 2]})],
+    blueprint: [L(E.NEON, 10, {sp: [160, 420], life: [.4, .8], size: [2, 3], aspect: [8, 14], drag: 3, alignV: true, c: [1, 'h']}), glints(4, {c: [2]})],
+    lattice: [L(E.SHARD, 10, {sp: [200, 600], life: [.8, 1.3], size: [6, 12], aspect: .5, g: 0, drag: 3, spin: [-3, 3], tumble: [3, 7], c: [2, 'h']})],
+    prism: [streaks(16, {c: ['#ff4a8c', '#ffd65a', '#46e6c8', '#6e8cff'], stretch: .06})],
+    lens: [L(E.RIPPLE, 1, {life: [.5, .6], size: [120, 140], c: [2]}), L(E.MOTE, 10, {sp: [10, 60], life: [1, 1.6], size: [3, 6], g: -10, c: ['#f6eee6']})],
+    chart: [L(E.PUFF, 6, {sp: [60, 220], life: [.9, 1.5], size: [50, 100], drag: 3, grow: 1.5, c: ['#d8cfc6', '#9d8f86'], int: .75}), L(E.COIN, 6, {sp: [300, 700], life: [.9, 1.4], size: [12, 18], g: 760, tumble: [6, 12], c: [0]})],
+    orbit: [L(E.RIPPLE, 2, {life: [.6, .8], size: [160, 220], c: [2], delay: [0, .1]}), motes(12, {g: 0, drag: .3, sp: [20, 80], c: [2, 'h']})],
+    dragon: [L(E.EMBER, 30, {sp: [200, 700], life: [.8, 1.6], size: [3, 6], g: -260, drag: 1.2, turb: [20, 5], c: [2, 1]}), L(E.PUFF, 3, {sp: [20, 80], life: [1.2, 1.8], size: [70, 120], g: -70, grow: 1.4, c: ['#2a1418'], int: .6})],
+    carpet: [L(E.FOIL, 20, {sp: [200, 600], life: [1.4, 2.2], size: [6, 10], aspect: .6, g: 260, drag: 1.8, tumble: [5, 11], c: [1, 2]}), L(E.PILLAR, 1, {life: [.5, .6], size: [70, 80], c: [1]})],
+    rose: [L(E.PETAL, 14, {sp: [120, 380], life: [1.6, 2.6], size: [10, 16], aspect: .7, g: 60, drag: 1.9, turb: [30, 1.5], spin: [-2, 2], tumble: [2, 5], c: [0, 1]})],
+    aegis: [L(E.ARC, 3, {life: [.12, .2], size: [80, 140], c: ['h', 1], randomAngle: true}), streaks(14, {c: [2, 'h'], g: 500})],
+    piping: [L(E.NEON, 18, {sp: [200, 600], life: [.9, 1.4], size: [2, 3], aspect: [2.5, 3.5], g: 700, drag: 1.4, c: [0, 1, 2]})],
+    ribbon: [L(E.FEATHER, 6, {sp: [120, 320], life: [1.6, 2.4], size: [16, 26], aspect: .4, g: 40, drag: 2, turb: [40, 1.4], tumble: [1.5, 4], c: [0, 2]}), L(E.BOKEH, 6, {sp: [60, 200], life: [1, 1.6], size: [10, 18], g: -40, int: .6, c: [2]})],
+    zodiac: [glints(10, {size: [14, 30], sp: [20, 160], drag: 4, c: [2, 'h']}), L(E.RING, 1, {life: [.6, .7], size: [180, 200], c: [1]})],
+    scroll: [L(E.INK, 8, {sp: [220, 560], life: [.4, .8], size: [4, 9], g: 600, drag: 2.4, c: ['#c4122f']}), L(E.FOIL, 10, {sp: [160, 420], life: [1.2, 1.9], size: [5, 9], aspect: .6, g: 300, tumble: [5, 11], c: [2]})],
+    spotlight: [L(E.BOKEH, 12, {sp: [40, 200], life: [1, 1.8], size: [8, 18], g: -30, drag: 2, int: .55, c: [0, 1, 'w']})],
+    datamosh: [L(E.NEON, 16, {sp: [300, 900], life: [.2, .45], size: [2, 4], aspect: [10, 24], drag: 4, c: [1, 2]})],
+    smokeclone: [L(E.PUFF, 8, {sp: [80, 260], life: [.9, 1.6], size: [50, 110], drag: 3, grow: 1.6, c: ['#cfc6d2', '#8f8596'], int: .7})],
+    lantern: [L(E.EMBER, 14, {sp: [40, 160], life: [1.2, 2], size: [3, 5], g: -140, drag: 1, turb: [10, 3], c: ['#ffb060', '#ffd28a']}), L(E.PUFF, 4, {sp: [20, 80], life: [1.2, 1.8], size: [40, 80], g: -160, grow: 1.5, c: ['#ffffff'], int: .45})],
+    firstsnow: [L(E.FLAKE, 6, {sp: [60, 200], life: [2, 3], size: [16, 26], g: 30, drag: 1.8, turb: [16, 1.2], spin: [-.6, .6], c: [0, 2]})],
+    aurora: [streaks(14, {c: ['#7dffd4', '#6fd3ff', '#ffc1e3'], stretch: .08, sp: [200, 520], g: -40, drag: 1.4})],
+    mortarboard: [L(E.CARD, 4, {sp: [300, 700], life: [1.2, 1.8], size: [18, 24], aspect: 1, g: 500, tumble: [4, 9], spin: [-3, 3], c: ['#1A1A2E']}), L(E.FOIL, 14, {sp: [300, 800], life: [1.2, 2], size: [5, 9], aspect: .6, g: 360, tumble: [5, 11], c: [1, 2]})],
+    goldseal: [L(E.FOIL, 24, {sp: [200, 700], life: [1.6, 2.6], size: [7, 12], aspect: .8, g: 240, drag: 2, turb: [24, 2], tumble: [4, 10], c: [0, 2]}), L(E.RING, 1, {life: [.4, .5], size: [150, 170], c: [0]})],
+  };
+  const sigApi = () => window.__pinkieGameSig || null;
+  const sigOf = form => sigApi()?.of(form) || null;
   const PRESETS = ['burst', 'slash', 'spell', 'curtain', 'ink', 'warp', 'rain', 'stamp', 'beam'];
   const PRESET_LABEL = {burst: '新星', slash: '一闪', spell: '法阵', curtain: '谢幕', ink: '泼墨', warp: '跃迁', rain: '星落', stamp: '落印', beam: '天光'};
   const PRESET_EN = {burst: 'NOVA', slash: 'SEVER', spell: 'ARCANA', curtain: 'ENCORE', ink: 'SUMI-E', warp: 'HYPERDRIVE', rain: 'STARFALL', stamp: 'SEAL', beam: 'RADIANCE'};
@@ -656,7 +685,7 @@
     for (const sys of Object.values(st.meshes)) sys.mesh.material.uniforms.uGlow.value = .35 + s.bloom * .65;
     resize();
   }
-  function want() { return st.time < st.aliveUntil || st.cine || performance.now() < st.hitUntil || st.shake || st.active?.instance?.animating?.(); }
+  function want() { return st.time < st.aliveUntil || st.cine || performance.now() < st.hitUntil || st.shake || st.active?.instance?.animating?.() || sigApi()?.alive(); }
   function kick() {
     if (st.raf || st.inFrame || st.hidden || document.hidden || !st.renderer) return;
     st.last = performance.now(); stats.rafActive = true; st.raf = requestAnimationFrame(frame);
@@ -677,6 +706,7 @@
     if (st.shake) { const k = st.shake; const e = (now - k.start) / k.ms; if (e >= 1) st.shake = null; else { const a = k.power * (1 - e) * (1 - e); k.x = (Math.random() * 2 - 1) * a; k.y = (Math.random() * 2 - 1) * a; } }
     if (!frozen) st.active?.instance?.update?.(dt, st.time);
     draw();
+    try { sigApi()?.frame(st.time, st.cine, s.density); } catch { /* 签名层出错不影响引擎 */ }
     if (want()) st.raf = requestAnimationFrame(frame);
     else { stats.rafActive = false; draw(); hideCanvasIfIdle(); }
   }
@@ -800,7 +830,11 @@
     const ringy = crit || ['stamp', 'ping', 'lens', 'shard'].includes(name);
     const layers = [flash(.7 * k), ...(ringy ? [ring(.5 * k)] : []), ...spec.layers.filter(l => l.e !== E.FLASH && l.e !== E.RING).map(l => ({...l, n: Math.max(1, Math.round(l.n * (crit ? .9 : .62)))})), ...def[1]];
     if (crit) layers.push(streaks(18, {sp: [700, 1500]}), ring(.95, {c: ['h'], delay: .06}));
-    const n = play(layers, localPoint(targetPoint(at)), {size: 1.3, ...opts, pal: opts.palette?.length ? opts.palette : spec.pal});
+    const sig = sigOf(opts.form);
+    if (sig && SIG_PARTS[sig]) layers.push(...SIG_PARTS[sig].map(l => ({...l, n: Math.max(1, Math.round(l.n * (crit ? 1 : .7)))})));
+    const pt = targetPoint(at);
+    const n = play(layers, localPoint(pt), {size: 1.3, ...opts, pal: opts.palette?.length ? opts.palette : spec.pal});
+    if (sig) sigApi().start({kind: 'hit', id: sig, x: pt.x, y: pt.y, crit, palette: opts.palette, dark: !onPaper(), time: st.time, layer: layer()});
     kick(); return n;
   }
   // 彗星：一串流光沿弧线飞向目标（HUD 计数器等），到达时一点闪光和小环。
@@ -944,7 +978,7 @@
     const text = cineText(preset, opts, dur, geo, pal);
     return new Promise(resolve => {
       const done = (skipped = false) => {
-        if (!st.cine) return; st.cine = null; st.cineQuad.visible = false; applySettings(); delete st.canvas.dataset.cine; text.remove();
+        if (!st.cine) return; st.cine = null; st.cineQuad.visible = false; if (skipped) sigApi()?.stopUlt(); applySettings(); delete st.canvas.dataset.cine; text.remove();
         removeEventListener('keydown', onKey, true); text.removeEventListener('pointerdown', onSkip);
         if (prevHost) attachScene(prevHost); else { draw(); kick(); }
         resolve({played: true, skipped, preset});
@@ -953,6 +987,7 @@
       const onKey = event => { if (event.key === 'Escape' || event.key === ' ' || event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); done(true); } };
       text.addEventListener('pointerdown', onSkip); addEventListener('keydown', onKey, true);
       st.cine = {preset, t: 0, dur, opts, geo, pal, particle: opts.particle || 'sparkle', fired: new Set(), done};
+      const sig = sigOf(opts.form); if (sig) sigApi().start({kind: 'ult', id: sig, palette: pal, dark: preset !== 'ink', time: st.time, layer: layer(), cineGeo: geo});
       kick();
       sfx('ult', {form: opts.form, preset, dur});
     });
@@ -1004,6 +1039,7 @@
       else play([flash(2.2), ring(2.4), ring(1.5, {c: ['h'], delay: .06}), streaks(Math.round(70 * density), {sp: [600, 1700]}), glints(14, {size: [20, 48]}), motes(Math.round(44 * density), {life: [1.4, 2.4], sp: [60, 420]})], p, one);
       const kind = KINDS[c.particle] || KINDS.sparkle;
       play(kind.layers.filter(l => l.e !== E.FLASH && l.e !== E.RING), p, {...one, scale: 1.1 * density, pal});
+      const sig = sigOf(c.opts.form); if (sig && SIG_PARTS[sig]) play(SIG_PARTS[sig], p, {...one, scale: 1.4 * density, pal});
       shake(.7); sfx('release', {form: c.opts.form});
     });
     if (c.t >= c.dur) c.done(false);

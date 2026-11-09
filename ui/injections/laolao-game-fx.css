@@ -12,7 +12,7 @@
 html[data-pinkie-hitstop="1"] #pinkie-study-desk *{animation-play-state:paused!important}
 
 /* ── 大招切入：文字排在条带外侧，跟条带同角度 ── */
-.pk-cut{position:absolute;inset:0;z-index:2;pointer-events:auto;cursor:pointer;color:#fff;font-family:var(--pk-ui)}
+.pk-cut{position:absolute;inset:0;z-index:3;pointer-events:auto;cursor:pointer;color:#fff;font-family:var(--pk-ui)}
 .pk-cut__frame{position:absolute;left:50%;top:50%;width:0;height:0;transform:translate(var(--cx,0),var(--cy,0)) rotate(var(--theta,0deg))}
 .pk-cut__copy{position:absolute;left:clamp(12px,2.4vw,48px);top:calc(var(--h0,20vh) + 2.4vh);width:max-content;max-width:min(46vw,760px)}
 .pk-cut__kicker{display:flex;align-items:center;gap:12px;font:600 14px/1 var(--pk-latin);letter-spacing:.36em;text-transform:uppercase;color:rgba(255,255,255,.72);
@@ -117,3 +117,6 @@ html[data-pinkie-night] .pk-award-title__body span,html[data-theme-mode="dark"] 
 html[data-theme-mode="dark"] .pk-gamefx-demo-stage{background:radial-gradient(circle at 50% 40%,#2a2030,#141017 70%);color:#f6eee6}
 .pk-gamefx-demo-stage .target{display:grid;place-items:center;width:150px;height:150px;border-radius:22px;background:#fffdf9;box-shadow:0 1px 0 #fff inset,0 18px 40px -14px rgba(58,42,53,.3);letter-spacing:.2em}
 html[data-theme-mode="dark"] .pk-gamefx-demo-stage .target{background:#241b28;box-shadow:0 18px 40px -14px rgba(0,0,0,.6)}
+/* 形态签名线稿层（laolao-game-sig.js）：在 WebGL 层之上、过场标题之下。 */
+.pk-gamefx-sig{position:absolute;left:0;top:0;display:block;pointer-events:none;z-index:2}
+.pk-gamefx-sig[data-live="0"]{visibility:hidden}
