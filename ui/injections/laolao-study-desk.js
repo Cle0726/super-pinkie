@@ -680,6 +680,15 @@
     state.drawers ||= new Map(); if (!state.drawers.has(drawer)) state.drawers.set(drawer, drawer.parentNode);
     state.root.append(drawer);
   }
+  // WKWebView 在 macOS 默认设置（「键盘导航」/ 全键盘控制关）下，Tab 只停在输入框和写了 tabindex 的元素上，普通 <button> 和链接直接跳过——
+  // 学习台、背一背、考场都没法只用键盘走。给桌上的按钮 / 链接 / 折叠标题补 tabindex=0（已经写了 tabindex 的不动，-1 照旧跳过）。
+  function keyboardReach(root) {
+    let queued = false;
+    const fix = () => { queued = false; for (const n of root.querySelectorAll('button:not([tabindex]),a[href]:not([tabindex]),summary:not([tabindex])')) n.tabIndex = 0; };
+    const watch = new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(fix); } });
+    watch.observe(root, {childList: true, subtree: true}); fix();
+    return () => watch.disconnect();
+  }
   function observeStickers(root) {
     const sizes = [36,64,96,128,192,240,320,384,480], observed = new Set();
     const fit = img => {
@@ -1015,7 +1024,7 @@
     const content = el('div', 'desk-content');
     // 先定好对话视图和日夜再挂上去：否则新根节点先按白天纸色算一次样式，切成对话视图时背景的 .4s 过渡会在聊天上淡出一层白（切换会话时闪白）。
     root.dataset.view = 'chat'; root.dataset.theme = doc.hasAttribute('data-pinkie-night') || doc.dataset.themeMode === 'dark' ? 'night' : 'day';
-    root.append(plate, rail, content, canvas, status); document.body.append(root); observeStickers(root);
+    root.append(plate, rail, content, canvas, status); document.body.append(root); observeStickers(root); state.disposeKeys = keyboardReach(root);
     // The grain is generated once, then composited as a static overlay.
     const grain = el('canvas'); grain.width = grain.height = 140;
     const ctx = grain.getContext('2d'); if (ctx) { const data = ctx.createImageData(140, 140); let seed = 11; for (let i = 0; i < data.data.length; i += 4) { seed = (seed * 9301 + 49297) % 233280; data.data[i] = data.data[i + 1] = data.data[i + 2] = seed / 233280 * 255; data.data[i + 3] = 255; } ctx.putImageData(data, 0, 0); root.style.setProperty('--grain', `url(${grain.toDataURL()})`); }
@@ -1044,7 +1053,7 @@
     window.dispatchEvent(new CustomEvent('pinkie:study-desk-unmount', {detail: {sessionKey: state.key}}));
     for (const pane of workspace().panes) { unmountPane(pane); pane.host = null; }
     workspace().chat = true; syncFocusClock();
-    state.disposeStickers?.(); state.generation++; state.controller?.abort(); state.controller = null;
+    state.disposeStickers?.(); state.disposeKeys?.(); state.generation++; state.controller?.abort(); state.controller = null;
     clearInterval(state.timer); state.timer = 0;
     syncEntry(false);
     for (const [n, inert] of state.native) n.inert = inert;

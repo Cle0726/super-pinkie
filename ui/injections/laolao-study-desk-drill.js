@@ -649,6 +649,8 @@
     function onKey(event) {
       if (!alive || !focused()) return;
       if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
+      // 结算页上的按钮（再背一组 / 回去）用键盘按下时让按钮自己响应，不当成「检查」。
+      if ((event.key === 'Enter' || event.code === 'Space') && event.target?.closest?.('.pk-done')) return;
       if (event.key === 'Enter') { event.preventDefault(); onCheck(); return; }
       if (event.code === 'Space') { event.preventDefault(); if (queue[index]?.mode === 'flip' && phase === 'ask') q._body?.flip?.(); return; }
       if (phase === 'ask' && /^[1-9]$/.test(event.key)) { event.preventDefault(); pickAt(Number(event.key) - 1); return; }
