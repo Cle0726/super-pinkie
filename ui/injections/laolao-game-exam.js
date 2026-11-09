@@ -1,7 +1,7 @@
 /* 碧琪上岸记 · 考场（学习台视图 gameexam）。
-   - 考场大厅：巴别兽状态（离稳过线还差几分）、卷子列表（exam.papers / generate，生成中自动刷新）、B 级五部分说明、真分数录入（boss.realScore）。
+   - 考场大厅：卷架（左「历年真题」按年份 + 官方模拟卷，右「仿真卷」；U 盘备卷进度）、巴别兽状态（离稳过线还差几分）、卷子列表（exam.papers / generate，生成中自动刷新）、B 级五部分说明、真分数录入（boss.realScore）。
    - 真考场：盖满学习台的安静考卷。倒计时（endsAt）、五部分导航、答题卡、标记待检查、15 秒自动保存 + 本地草稿、关掉再开接着考（exam.start 的 resumed/answers）、
-     听力用系统 TTS 朗读 item.tts（对话按 W:/M: 换声音，听写读 repeat 遍）。**考试中零特效**：不调 fx、不播音效、HUD 隐藏。
+     真题听力放原录音（start.audio.url，整场一个播放条）；仿真卷听力用系统 TTS 朗读 item.tts（对话按 W:/M: 换声音，听写读 repeat 遍）。**考试中零特效**：不调 fx、不播音效、HUD 隐藏。
    - 交卷：exam.submit → 阅卷等待（轮询 exam.result）→ Boss 结算（每部分一击，≥90% 暴击，血条 bossBefore → bossAfter，破防 = 天光过场）→ 成绩报告。
    视觉语言：VFX.md（衬线标题、拉丁窄体小字、等宽数字、发丝线；纸面 / 夜间玻璃）。 */
 (() => {
@@ -54,13 +54,17 @@
     const answers = {...(start.answers || {}), ...(store.get(draftKey)?.answers || {})};
     const flags = new Set(store.get(draftKey)?.flags || []);
     let dirty = Object.keys(store.get(draftKey)?.answers || {}).length > 0, savedAt = 0, saving = false, closed = false;
-    const items = []; paper.sections.forEach((sec, si) => sec.items.forEach(it => items.push({...it, sec: sec.id, si, no: items.length + 1}))); const noOf = new Map(items.map(it => [it.id, it.no]));
+    const items = []; paper.sections.forEach((sec, si) => sec.items.forEach(it => items.push({...it, sec: sec.id, si, no: it.no || items.length + 1}))); const noOf = new Map(items.map(it => [it.id, it.no]));
+    const realPaper = paper.kind === 'real' || paper.kind === 'mock';
+    // 真题原录音：整场一个播放器，切部分不断；考完 / 暂离就停
+    const audio = realPaper && start.audio?.url ? new Audio(start.audio.url) : null;
+    if (audio) { audio.preload = 'metadata'; }
     const latin = (node, text) => { if (/^[\x00-\x7F\u2018-\u201D\u2013\u2014\u2026]*$/.test(String(text || ''))) node.lang = 'en'; return node; };
     r.dataset.exam = 'on'; tts.stop();
     const hall = el('section', 'pke-hall'); hall.setAttribute('role', 'dialog'); hall.setAttribute('aria-label', '考场');
     // 顶栏
     const top = el('header', 'pke-top');
-    const id = el('div', 'pke-top__id'); id.append(el('small', 'pkb-kicker', `PRETCO-B · ${start.resumed ? 'RESUMED' : 'IN SESSION'}`), el('b', '', start.title || '英语 B 级 · 仿真卷'));
+    const id = el('div', 'pke-top__id'); id.append(el('small', 'pkb-kicker', `PRETCO-B · ${realPaper ? (paper.kind === 'mock' ? 'MOCK · ' : 'PAST PAPER · ') : ''}${start.resumed ? 'RESUMED' : 'IN SESSION'}`), el('b', '', start.title || '英语 B 级 · 仿真卷'));
     const tabs = el('nav', 'pke-tabs'); tabs.setAttribute('aria-label', '部分');
     const timer = el('div', 'pke-timer'); const tVal = el('b', 'pkg-num', '--:--'); timer.append(el('small', 'pkb-kicker', 'REMAINING'), tVal);
     const save = el('div', 'pke-save', start.resumed ? '已恢复上次的答案' : '自动保存 · 每 15 秒');
@@ -93,8 +97,12 @@
       sheet.append(head);
       const notes = String(sec.instructions || '').split('；');
       const parts = []; for (const it of sec.items) { let p = parts.find(x => x.id === it.part); if (!p) parts.push(p = {id: it.part, items: []}); p.items.push(it); }
+      if (audio && sec.id === 'listening') sheet.append(recordBar());
       parts.forEach((p, pi) => {
-        const g = el('section', 'pke-part'); const ph = el('div', 'pke-part__head'); ph.append(el('b', 'pkg-num', /^T\d/.test(p.id) ? `Task ${p.id.slice(1)}` : `Section ${p.id}`), el('span', '', notes[pi] || ''));
+        const g = el('section', 'pke-part'); const ph = el('div', 'pke-part__head');
+        const note = (sec.parts || []).find(x => x.id === p.id)?.note ?? notes[pi] ?? '';
+        const label = /^(section|task)\b/i.test(p.id) ? p.id.replace(/^(\w)/, c => c.toUpperCase()) : /^T\d/.test(p.id) ? `Task ${p.id.slice(1)}` : `Section ${p.id}`;
+        ph.append(el('b', 'pkg-num', label), el('span', '', note));
         g.append(ph);
         const first = p.items[0];
         if (first.kind === 'listen-dictation' && first.tts) g.append(listenBar(first.tts, '短文（读三遍）'));
@@ -109,6 +117,23 @@
       else foot.append(btn('检查完了，交卷', 'pkg-btn', () => askSubmit()));
       sheet.append(foot);
       refreshCard();
+    }
+    // 原录音播放条：播放 / 暂停、可拖的进度、已播 / 总长。考场里只有这一种声音。
+    function recordBar() {
+      const bar = el('div', 'pke-record'); bar.dataset.on = audio.paused ? '' : '1';
+      const b = btn('', 'pke-play'); b.setAttribute('aria-label', '播放原录音');
+      const icon = () => { b.innerHTML = audio.paused ? '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 5v14l12-7z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>'; b.setAttribute('aria-label', audio.paused ? '播放原录音' : '暂停'); };
+      const meta = el('div', 'pke-record__meta'); meta.append(el('small', 'pkb-kicker', 'ORIGINAL RECORDING'), el('b', '', '听力原录音 · 和考场里放的一样'));
+      const track = el('div', 'pke-record__track'); const fill = el('i'); track.append(fill); track.setAttribute('role', 'slider'); track.setAttribute('aria-label', '录音进度'); track.tabIndex = 0;
+      const time = el('span', 'pke-record__time pkg-num', '00:00 / --:--');
+      const paint = () => { const d = audio.duration; fill.style.transform = `scaleX(${Number.isFinite(d) && d > 0 ? audio.currentTime / d : 0})`; time.textContent = `${mmss(audio.currentTime * 1000)} / ${Number.isFinite(audio.duration) ? mmss(audio.duration * 1000) : '--:--'}`; track.setAttribute('aria-valuenow', String(Math.round(audio.currentTime))); bar.dataset.on = audio.paused ? '' : '1'; icon(); };
+      b.addEventListener('click', () => { if (audio.paused) audio.play().catch(() => { time.textContent = '录音放不了，请检查声音输出'; }); else audio.pause(); });
+      const seek = x => { const r = track.getBoundingClientRect(); if (Number.isFinite(audio.duration)) audio.currentTime = Math.max(0, Math.min(1, (x - r.left) / r.width)) * audio.duration; };
+      track.addEventListener('pointerdown', e => { seek(e.clientX); track.setPointerCapture?.(e.pointerId); const mv = ev => seek(ev.clientX); track.addEventListener('pointermove', mv); track.addEventListener('pointerup', () => track.removeEventListener('pointermove', mv), {once: true}); });
+      track.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); audio.currentTime = Math.max(0, audio.currentTime + (e.key === 'ArrowRight' ? 5 : -5)); } });
+      for (const ev of ['timeupdate', 'play', 'pause', 'loadedmetadata', 'ended']) audio.addEventListener(ev, () => { if (bar.isConnected) paint(); });
+      audio.addEventListener('error', () => { if (bar.isConnected) { time.textContent = '录音没加载上（重开考场会重新取）'; bar.dataset.err = '1'; } });
+      paint(); bar.append(b, meta, track, time); return bar;
     }
     function listenBar(spec, label) {
       const bar = el('div', 'pke-listen'); let plays = 0;
@@ -168,7 +193,7 @@
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); if (!e.defaultPrevented) { e.preventDefault(); escape(); } } };
     hall.addEventListener('keydown', onKey, true);
     function close(leaving) {
-      if (closed) return; closed = true; tts.stop(); clearInterval(saveTimer); clearInterval(tickTimer); document.removeEventListener('visibilitychange', onHide);
+      if (closed) return; closed = true; tts.stop(); try { audio?.pause(); } catch { /* ignore */ } clearInterval(saveTimer); clearInterval(tickTimer); document.removeEventListener('visibilitychange', onHide);
       hall.remove(); delete r.dataset.exam;
       if (leaving) { dirty = true; closed = false; flush().finally(() => { closed = true; }); onLeave?.(); }
     }
@@ -280,24 +305,48 @@
       for (const [k, v] of [['离稳过线', boss.gap > 0 ? `${fmtScore(boss.gap)} 分` : '已经稳了'], ['预估分', boss.bestPredicted ? fmtScore(boss.bestPredicted) : '—'], ['考试日', `${String(boss.examDate || '2026-12-13').slice(5).replace('-', ' 月 ')} 日`]]) { facts.append(el('dt', '', k), el('dd', 'pkg-num', v)); }
       info.append(facts, el('p', 'pke-bosscard__tip', boss.phase === 'broken' ? '巴别兽已经破防。安心上考场。' : '每交一份卷，五个部分各打它一下；某部分拿到 90% 以上是暴击。'));
       bp.append(img, info);
-      // 卷子
-      const pc = el('section', 'pke-papers'); pc.append(el('small', 'pkb-kicker', 'PAPERS'), el('h3', '', '仿真卷'));
+      // 卷子：左「历年真题」（按年份，每年几次考试），右「仿真卷」（碧琪出的）
+      const pc = el('section', 'pke-papers');
+      const realCol = el('div', 'pke-shelf pke-shelf--real'); const simCol = el('div', 'pke-shelf pke-shelf--sim');
+      const rs = list.realStatus || {};
+      realCol.append(el('small', 'pkb-kicker', `PAST PAPERS · ${list.real?.length || 0} SETS`), el('h3', '', '历年真题'));
+      const prep = el('p', 'pke-prep pkg-num');
+      const found = Math.max(rs.found || 0, list.real?.length || 0);
+      prep.textContent = rs.state === 'preparing' ? `U 盘里找到 ${found} 套卷，已备好 ${rs.ready} 套 · 正在整理 ${rs.preparing || ''}` : found ? `U 盘里找到 ${found} 套卷，已备好 ${rs.ready} 套${rs.ready < found ? (rs.mounted ? ' · 剩下的碧琪会接着整理' : ' · 插上 U 盘碧琪接着整理') : ''}` : (rs.mounted ? 'U 盘插着，碧琪在找卷子…' : '插上放着 B 级真题的 U 盘，碧琪会把每一套整理成考场整卷。');
+      if (found) { const bar = el('i', 'pke-prep__bar'); const f = el('u'); f.style.transform = `scaleX(${found ? Math.min(1, rs.ready / found) : 0})`; bar.append(f); prep.append(bar); }
+      realCol.append(prep);
+      const years = new Map(); const mocks = [];
+      for (const p of list.real || []) { if (p.kind === 'mock') mocks.push(p); else { if (!years.has(p.year)) years.set(p.year, []); years.get(p.year).push(p); } }
+      const chip = p => {
+        const c = btn('', 'pke-chip'); c.dataset.done = p.attempts ? '1' : ''; c.title = `${p.title}${p.audio ? ' · 原录音' : ' · 本机没有录音'}`;
+        c.append(el('b', 'pkg-num', p.kind === 'mock' ? `0${p.title.replace(/\D/g, '')}`.slice(-2) : `${String(p.month).padStart(2, '0')}`), el('small', '', p.kind === 'mock' ? '模拟' : '月'));
+        c.append(el('em', 'pkg-num', p.open ? '接着考' : p.best != null ? `${fmtScore(p.best)}` : p.attempts ? '已考' : p.audio ? '' : '无录音'));
+        c.addEventListener('click', () => begin(p, c)); return c;
+      };
+      const ylist = el('div', 'pke-years');
+      for (const [y, ps] of [...years.entries()].sort((a, b) => b[0] - a[0])) { const row = el('div', 'pke-year'); row.append(el('b', 'pkg-num', String(y))); const cs = el('div', 'pke-chips'); for (const p of ps.sort((a, b) => a.month - b.month)) cs.append(chip(p)); row.append(cs); ylist.append(row); }
+      if (mocks.length) { const row = el('div', 'pke-year is-mock'); row.append(el('b', '', '模拟卷')); const cs = el('div', 'pke-chips'); for (const p of mocks) cs.append(chip(p)); row.append(cs); ylist.append(row); }
+      if (!years.size && !mocks.length) ylist.append(el('p', 'pkb-empty', '还没有整理好的真题。'));
+      realCol.append(ylist);
+      if (rs.mounted && rs.state !== 'preparing' && (rs.ready < found || !found)) realCol.append(btn('再扫一遍 U 盘', 'pkb-link', async ev => { ev.currentTarget.disabled = true; try { await call('exam.realSync', {}); } catch (e) { g.toast?.(e.message); } setTimeout(() => { if (alive && !hall) lobby(); }, 1200); }));
+      simCol.append(el('small', 'pkb-kicker', 'SIMULATED · BY 碧琪'), el('h3', '', '仿真卷'));
       const ul = el('div', 'pke-plist');
       const last = store.get('pinkie.exam.last');
-      if (!list.papers.length) ul.append(el('p', 'pkb-empty', '还没有卷子。点下面「出一份新卷」，碧琪按 B 级官方题型出整套。'));
+      if (!list.papers.length) ul.append(el('p', 'pkb-empty', '还没有仿真卷。点下面「出一份新卷」，碧琪按 B 级官方题型出整套。'));
       const hasReady = list.papers.some(p => p.status === 'ready'); let failedShown = false;
       for (const p of list.papers) {
         if (p.status === 'failed') { if (hasReady || failedShown) continue; failedShown = true; }
         const row = el('div', 'pke-prow'); row.dataset.status = p.status;
-        const meta = el('div'); meta.append(el('b', '', p.title), el('small', 'pkg-num', p.status === 'generating' ? '出卷中 · 大约几分钟' : p.status === 'failed' ? '碧琪离线，这份没出成；联网后点「出一份新卷」' : `${new Date(p.createdAt).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric'})} · 考过 ${p.attempts} 次`));
+        const meta = el('div'); meta.append(el('b', '', p.title), el('small', 'pkg-num', p.status === 'generating' ? '出卷中 · 大约几分钟' : p.status === 'failed' ? '碧琪离线，这份没出成；联网后点「出一份新卷」' : `${new Date(p.createdAt).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric'})} · 考过 ${p.attempts} 次${p.best != null ? ` · 最好 ${fmtScore(p.best)}` : ''}`));
         row.append(meta);
         if (p.status === 'ready') row.append(btn(p.attempts ? '再考 / 接着考' : '开考', p.attempts ? 'pks-pull pke-nav' : 'pkg-btn', ev => begin(p, ev.currentTarget)));
         else if (p.status === 'generating') row.append(el('span', 'pke-spin', '出卷中'));
         ul.append(row);
       }
-      pc.append(ul);
+      simCol.append(ul);
       const gen = btn('出一份新卷', 'pkb-link', async () => { gen.disabled = true; try { await call('exam.generate', {exam: EXAM}); } catch (e) { g.toast?.(e.message); } lobby(); });
-      const prow = el('div', 'pke-papers__act'); prow.append(gen); if (last?.attemptId) prow.append(btn('上一次的成绩', 'pkb-link', () => showResult(last.attemptId, {replay: !last.seen}))); pc.append(prow);
+      const prow = el('div', 'pke-papers__act'); prow.append(gen); if (last?.attemptId) prow.append(btn('上一次的成绩', 'pkb-link', () => showResult(last.attemptId, {replay: !last.seen}))); simCol.append(prow);
+      pc.append(realCol, simCol);
       // 题型
       const fm = el('section', 'pke-format'); fm.append(el('small', 'pkb-kicker', 'FORMAT · 120 MIN · 100 PTS'));
       const tbl = el('div', 'pke-ftable');
@@ -311,8 +360,8 @@
         const go = btn('填好了', 'pkg-btn', async () => { const v = Number(inp.value); if (!(v >= 0 && v <= 100)) return; go.disabled = true; try { const res = await call('boss.realScore', {exam: EXAM, score: v}); await finale(res); } catch (e) { g.toast?.(e.message); go.disabled = false; } });
         const row = el('div', 'pke-real__row'); row.append(inp, go); real.append(el('p', '', '把成绩单上的总分填进来。'), row);
       }
-      main.append(bp, pc, fm, real);
-      if (list.papers.some(p => p.status === 'generating')) pollT = setTimeout(() => { if (alive && !hall) lobby(); }, 8000);
+      main.append(pc, bp, fm, real);
+      if (list.papers.some(p => p.status === 'generating') || list.realStatus?.state === 'preparing') pollT = setTimeout(() => { if (alive && !hall) lobby(); }, 8000);
     }
     async function begin(p, b) {
       if (b) b.disabled = true;

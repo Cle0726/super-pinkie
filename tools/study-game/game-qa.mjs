@@ -39,7 +39,7 @@ export async function harnessWithGame(opts = {}) {
   const service = await isolatedService();
   if (opts.seed !== false) seed(service, opts.seed || {});
   if (opts.monsters) seedMonsters(service);
-  const harness = await startHarness({handler: service.handler, ...(opts.harness || {})});
+  const harness = await startHarness({handler: service.handler, routes: service.routes || [], ...(opts.harness || {})});
   return {service, harness, close: async () => { await harness.close(); await service.close(); }};
 }
 export async function deskReady(page, view = 'today') {

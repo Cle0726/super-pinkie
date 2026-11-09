@@ -7,6 +7,7 @@ import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool} from './learning-game-content.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
+import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
 const clean = (v, n = 2000) => String(v ?? '').replace(/\u0000/g, '').trim().slice(0, n);
 const PART_RULES = `你是高等学校英语应用能力考试 B 级的命题老师。输入 {"section":这一部分的官方题型,"seed":随机种子,"learner":先生的薄弱考点}。
@@ -76,13 +77,17 @@ export function validSection(section, v) {
 }
 
 // 卷子 → 给前端的公开版（绝不带 answer / reference / rubric / why）
+// 真题卷（kind real / mock）：听力放原录音（start 里给 audio），不带 tts；听写短文是印在卷上的，照常给 material；录音原文（script）永远不给。
 export function publicPaper(full) {
-  return {sections: full.sections.map(sec => ({id: sec.id, title: sec.title, timeMin: sec.timeMin, instructions: sec.instructions,
+  const real = ['real', 'mock'].includes(full.kind);
+  const shown = p => (p.kind.startsWith('listen') ? real && p.kind === 'listen-dictation' : true);
+  return {kind: real ? full.kind : 'sim', sections: full.sections.map(sec => ({id: sec.id, title: sec.title, timeMin: sec.timeMin, instructions: sec.instructions,
+    parts: sec.parts.map(p => ({id: p.id, kind: p.kind, note: p.note || ''})),
     items: sec.parts.flatMap(p => p.items.map((it, i) => ({
-      id: `${sec.id}-${p.id}-${i + 1}`, kind: p.kind, part: p.id, points: p.each, ...(i === 0 && p.material ? {material: p.kind.startsWith('listen') ? '' : p.material} : {}),
+      id: `${sec.id}-${p.id}-${i + 1}`, kind: p.kind, part: p.id, points: p.each, ...(real && it.no ? {no: it.no} : {}), ...(i === 0 && p.material ? {material: shown(p) ? p.material : ''} : {}),
       prompt: it.stem, ...(it.options ? {options: it.options} : {}), ...(it.base ? {base: it.base} : {}),
-      ...(it.tts ? {tts: {text: it.tts, voiceHint: 'en-US'}} : {}),
-      ...(p.kind === 'listen-dictation' && i === 0 ? {tts: {text: p.material, voiceHint: 'en-US', repeat: 3}} : {}),
+      ...(!real && it.tts ? {tts: {text: it.tts, voiceHint: 'en-US'}} : {}),
+      ...(!real && p.kind === 'listen-dictation' && i === 0 ? {tts: {text: p.material, voiceHint: 'en-US', repeat: 3}} : {}),
     })))}))};
 }
 
@@ -100,6 +105,54 @@ export class GameExam {
     this.jobs = new Map();
     this.grading = new Map();
     game.modules.exam = this;
+    this.audioTokens = new Map();
+    this.real = new RealPapers(this, {materials: game.store?.materials || null, requestModel: game.requestModel, now: () => this.now(), dataRoot: game.store?.materials?.root || null});
+    // 插着 U 盘（App 开着）就备真题：每分钟看一眼，盘挂上 / 有没备好的卷就跑一轮。测试里不开（没有模型）。
+    if (game.requestModel && game.autoReal !== false) {
+      this.realTimer = setInterval(() => this.realTick(), 60000);
+      this.realTimer.unref?.();
+      setTimeout(() => this.realTick(), 15000).unref?.();
+    }
+  }
+  realTick() {
+    try {
+      const base = this.real.usbBase();
+      const was = this.real.status.mounted;
+      this.real.status.mounted = Boolean(base);
+      if (!base || this.real.job) return;
+      // 刚插上，或上一轮之后过了 30 分钟还有没备好的（失败的卷重试）
+      if (!was || this.now() - (this.real.status.at || 0) > 30 * 60000) this.real.sync().then(() => this.keepSpare()).catch(() => {});
+    } catch { /* 游戏层出错不影响学习 */ }
+  }
+  realReady(paperId) {
+    const p = this.ensure(this.game.read()).papers[paperId];
+    return Boolean(p && p.status === 'ready' && p.version === REAL_VERSION && this.readFull(paperId));
+  }
+  installReal(full) {
+    this.writeFull(full);
+    const items = full.sections.reduce((n, s) => n + s.parts.reduce((m, p) => m + p.items.length, 0), 0);
+    this.game.mutate(state => {
+      const ex = this.ensure(state);
+      const old = ex.papers[full.paperId];
+      ex.papers[full.paperId] = {paperId: full.paperId, exam: full.exam, kind: full.kind, year: full.year, month: full.month, title: full.title, createdAt: old?.createdAt || full.createdAt, status: 'ready', version: full.version, audio: Boolean(full.audio), items, total: full.check?.total ?? null, flags: (full.flags || []).length};
+    });
+  }
+  // 原录音：每次开考发一个只在本进程有效的随机 key（2 小时），HTTP 路由凭 key 给文件。
+  audioFor(full) {
+    if (!full?.audio) return null;
+    const file = path.join(this.real.audioRoot(), full.audio);
+    if (!file.startsWith(this.real.audioRoot() + path.sep) || !fs.existsSync(file)) return null;
+    const now = this.now();
+    for (const [k, v] of this.audioTokens) if (v.exp < now) this.audioTokens.delete(k);
+    const key = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
+    this.audioTokens.set(key, {file, exp: now + 2 * 3600000});
+    return {url: `/pinkie-exam-audio/${encodeURIComponent(full.paperId)}?key=${key}`, name: path.basename(file)};
+  }
+  audioFile(paperId, key) {
+    const t = this.audioTokens.get(String(key || ''));
+    if (!t || t.exp < this.now() || !t.file.includes(path.sep)) return null;
+    const full = this.readFull(String(paperId || ''));
+    return full?.audio && t.file === path.join(this.real.audioRoot(), full.audio) ? t.file : null;
   }
   get economy() { return this.game.economy; }
   now() { return this.game.now(); }
@@ -118,18 +171,32 @@ export class GameExam {
 
   papers({exam = GAME_EXAM} = {}) {
     const ex = this.ensure(this.game.read());
-    const list = Object.values(ex.papers).filter(p => p.exam === exam).sort((a, b) => b.createdAt - a.createdAt)
-      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: Object.values(ex.attempts).filter(a => a.paperId === p.paperId).length}));
+    const tries = id => Object.values(ex.attempts).filter(a => a.paperId === id);
+    const best = id => { const s = tries(id).map(a => a.result?.score).filter(Number.isFinite); return s.length ? Math.max(...s) : null; };
+    const isReal = p => ['real', 'mock'].includes(p.kind);
+    const list = Object.values(ex.papers).filter(p => p.exam === exam && !isReal(p)).sort((a, b) => b.createdAt - a.createdAt)
+      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: tries(p.paperId).length, best: best(p.paperId)}));
+    const real = Object.values(ex.papers).filter(p => p.exam === exam && isReal(p) && p.status === 'ready')
+      .sort((a, b) => (a.kind === b.kind ? (b.year * 100 + b.month) - (a.year * 100 + a.month) || a.paperId.localeCompare(b.paperId) : a.kind === 'real' ? -1 : 1))
+      .map(p => ({paperId: p.paperId, kind: p.kind, year: p.year, month: p.month, title: p.title, audio: Boolean(p.audio) && Boolean(this.audioPresent(p.paperId)), items: p.items, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt)}));
     this.keepSpare(exam);
+    this.realTick();
     for (const [id] of this.jobs) if (!list.some(p => p.paperId === id)) list.unshift({paperId: id, title: '碧琪正在出卷…', createdAt: this.now(), status: 'generating', attempts: 0});
-    return {papers: list, format: PRETCO_B_FORMAT};
+    const st = this.real.status;
+    const found = Math.max(st.found || 0, this.real.readManifest().sets.length);
+    return {papers: list, real, realStatus: {found, ready: real.length, state: st.state, preparing: st.preparing, mounted: Boolean(st.mounted), failed: (st.failed || []).length}, format: PRETCO_B_FORMAT};
   }
-  // 后端始终预生成 1 份备用卷（没做过的 ready 卷 < 1 时开一份）
+  audioPresent(paperId) {
+    const full = this.readFull(paperId);
+    return full?.audio ? fs.existsSync(path.join(this.real.audioRoot(), full.audio)) : false;
+  }
+  // 后端预备 3 份没做过的仿真卷（一次只出一份；考前一周安静期只留 1 份；U 盘拆真题时先让真题）
   keepSpare(exam = GAME_EXAM) {
-    if (!this.game.requestModel || this.jobs.size) return;
+    if (!this.game.requestModel || this.jobs.size || this.real?.job) return;
     const ex = this.ensure(this.game.read());
-    const fresh = Object.values(ex.papers).filter(p => p.exam === exam && p.status === 'ready' && !Object.values(ex.attempts).some(a => a.paperId === p.paperId));
-    if (!fresh.length) this.kick(exam);
+    const fresh = Object.values(ex.papers).filter(p => p.exam === exam && !['real', 'mock'].includes(p.kind) && p.status === 'ready' && !Object.values(ex.attempts).some(a => a.paperId === p.paperId));
+    const quiet = daysBetween(beijingDate(this.now()), EXAM_DATES[exam]) <= 7;
+    if (fresh.length < (quiet ? 1 : 3)) this.kick(exam);
   }
   generate({exam = GAME_EXAM, requestId} = {}) {
     if (!requestId) throw new Error('缺少 requestId');
@@ -154,7 +221,7 @@ export class GameExam {
       full.verify = await this.verifyPaper(full).catch(() => null);
       this.writeFull(full);
       this.game.mutate(state => { this.ensure(state).papers[paperId] = {paperId, exam, title: `B 级仿真卷 · ${beijingDate(this.now()).slice(5)}`, createdAt: this.now(), status: 'ready'}; });
-    })().catch(() => {}).finally(() => this.jobs.delete(paperId));
+    })().catch(() => {}).finally(() => { this.jobs.delete(paperId); setTimeout(() => { try { this.keepSpare(exam); } catch { /* ignore */ } }, 5000).unref?.(); });
     this.jobs.set(paperId, job);
     return paperId;
   }
@@ -195,8 +262,9 @@ export class GameExam {
     if (!requestId) throw new Error('缺少 requestId');
     const full = this.readFull(clean(paperId, 80));
     if (!full) throw new Error('这份卷子还没出好');
-    const minutes = PRETCO_B_FORMAT.minutes;
-    return this.game.once('exam.start', requestId, state => {
+    const real = ['real', 'mock'].includes(full.kind);
+    const minutes = real ? full.sections.reduce((n, s) => n + (s.timeMin || 0), 0) || PRETCO_B_FORMAT.minutes : PRETCO_B_FORMAT.minutes;
+    const res = this.game.once('exam.start', requestId, state => {
       const ex = this.ensure(state);
       // 同一份卷子有没交的答卷：接着考（关掉再开能恢复答案和剩余时间）
       const open = Object.values(ex.attempts).find(a => a.paperId === full.paperId && !a.submittedAt);
@@ -205,8 +273,10 @@ export class GameExam {
         const id = `att-${randomUUID()}`;
         attempt = ex.attempts[id] = {attemptId: id, paperId: full.paperId, exam: full.exam, startedAt: this.now(), endsAt: this.now() + minutes * 60000, answers: {}};
       }
-      return {attemptId: attempt.attemptId, paper: publicPaper(full), endsAt: attempt.endsAt, answers: attempt.answers, resumed: Boolean(open)};
+      return {attemptId: attempt.attemptId, paper: publicPaper(full), endsAt: attempt.endsAt, answers: attempt.answers, resumed: Boolean(open), title: full.title || null, kind: real ? full.kind : 'sim'};
     });
+    // 录音 key 每次现发（同一 requestId 重放也拿新 key），不进状态文件
+    return real ? {...res, audio: this.audioFor(full)} : res;
   }
   save({attemptId, answers = {}} = {}) {
     return this.game.mutate(state => {
@@ -270,7 +340,10 @@ export class GameExam {
       notes[s.id] = got;
       sections.find(x => x.id === s.sec).score += got.score;
     }
-    const score = Math.round(sections.reduce((n, s) => n + s.score, 0));
+    // 真题卷少拆了几道题时满分不是 100：按比例折成百分制
+    const maxAll = sections.reduce((n, s) => n + s.max, 0);
+    const raw = sections.reduce((n, s) => n + s.score, 0);
+    const score = Math.round(maxAll > 0 && Math.abs(maxAll - 100) > 0.5 ? raw / maxAll * 100 : raw);
     let review = {text: localLine(score >= 70 ? 'boss' : 'default', {seed: score}), source: 'local'};
     const line = await modelJson(this.game.requestModel, LINE_RULES, {event: 'examResult', context: {score, sections: sections.map(s => ({id: s.id, score: s.score, max: s.max})), passLine: 60, safeLine: 70}}, {validate: validLine, retries: 1, timeoutMs: 45000, maxTokens: 200});
     if (line) review = {text: line.value.text, source: 'model'};
