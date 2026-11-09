@@ -45,13 +45,13 @@ test('一组中途换形态不叠加成：同一组每题只按当时装的那�
     const ctx = {after() {}};
     const f = gameFixture(ctx, {at: T0});
     const {game} = f;
-    game.mutate(s => { if (!s.forms.owned.includes('learning')) s.forms.owned.push('learning'); });
+    game.mutate(s => { if (!s.forms.owned.includes('seapony')) s.forms.owned.push('seapony'); });
     const session = {sessionId: 's1', sessionKey: 'agent:learning:notes-library', source: 'notes', items: [], answers: [], graded: {}, learned: {}};
     const items = Array.from({length: 8}, (_, i) => ({itemId: 'i' + i, mode: 'choice', cardRef: {book: 'notes', noteId: 'n' + i, recallId: 'k' + i}}));
     session.items = items;
     game.onDrillStart?.({session, items});
     items.forEach((it, i) => {
-      if (swap && i === 4) game.equip({formId: 'learning'});
+      if (swap && i === 4) game.equip({formId: 'seapony'});
       session.answers.push({itemId: it.itemId});
       game.onDrillAnswer({session, item: it, correct: true, firstTry: true, fresh: true, refs: [{book: 'notes', key: 'notes:' + it.cardRef.recallId}]});
     });
@@ -61,7 +61,7 @@ test('一组中途换形态不叠加成：同一组每题只按当时装的那�
   const swapped = run(true);
   const ctx = {after() {}};
   // 全程学习碧琪
-  const f = gameFixture(ctx); f.game.mutate(s => { s.forms.owned.push('learning'); s.forms.equipped = 'learning'; });
+  const f = gameFixture(ctx); f.game.mutate(s => { s.forms.owned.push('seapony'); s.forms.equipped = 'seapony'; });
   const session = {sessionId: 's1', sessionKey: 'agent:learning:notes-library', source: 'notes', items: [], answers: [], graded: {}, learned: {}};
   for (let i = 0; i < 8; i++) { const it = {itemId: 'i' + i, mode: 'choice', cardRef: {book: 'notes', noteId: 'n' + i, recallId: 'k' + i}}; session.answers.push({itemId: it.itemId}); f.game.onDrillAnswer({session, item: it, correct: true, firstTry: true, fresh: true, refs: [{book: 'notes', key: 'notes:k' + i}]}); }
   const learning = f.game.read().wallet.stars;

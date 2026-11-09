@@ -4,7 +4,7 @@
   {
    "id": "daily",
    "name": "日常碧琪",
-   "series": "mode",
+   "series": "v2",
    "rarity": "N",
    "source": [
     "start"
@@ -16,7 +16,8 @@
    ],
    "particle": "confetti",
    "hit": "pop",
-   "ult": "burst", "sig": "party",
+   "ult": "burst",
+   "sig": "party",
    "sound": "bubbly",
    "bonus": {
     "kind": "firstSetStars",
@@ -32,7 +33,284 @@
     "portrait": "form/daily/portrait",
     "ult": "form/daily/ult",
     "icon": "form/daily/icon",
-    "idle": "form/daily/idle"
+    "idle": "form/daily/idle",
+    "stage": "form/daily/plate"
+   },
+   "season1": true,
+   "form": "原本的碧琪"
+  },
+  {
+   "id": "unrestricted",
+   "name": "无限制碧琪",
+   "series": "v2",
+   "rarity": "SR",
+   "source": [
+    "shop"
+   ],
+   "palette": [
+    "#FF8FC7",
+    "#7B5CFF",
+    "#3DE0C8"
+   ],
+   "particle": "confetti",
+   "hit": "rainbow",
+   "ult": "warp",
+   "sig": "prism",
+   "sound": "synth",
+   "bonus": {
+    "kind": "comboStarsMul",
+    "mul": 2,
+    "noPerfect": true,
+    "text": "狂欢：连击奖 ×2，但本组没有全对奖"
+   },
+   "awaken": {
+    "stat": "maxCombo",
+    "count": 30,
+    "text": "一组连击 30"
+   },
+   "art": {
+    "portrait": "form/unrestricted/portrait",
+    "ult": "form/unrestricted/ult",
+    "icon": "form/unrestricted/icon",
+    "idle": "form/unrestricted/idle",
+    "stage": "form/unrestricted/plate"
+   },
+   "season1": true,
+   "form": "鬃毛尾巴变长、彩虹挑染"
+  },
+  {
+   "id": "alicorn",
+   "name": "天角兽公主碧琪",
+   "series": "v2",
+   "rarity": "SSR",
+   "source": [
+    "gacha-star",
+    "gacha-seal",
+    "seal-shop"
+   ],
+   "palette": [
+    "#FFD9E8",
+    "#E0418A",
+    "#F6C76A"
+   ],
+   "particle": "petals",
+   "hit": "sparkle",
+   "ult": "rain",
+   "sig": "rose",
+   "sound": "harp",
+   "bonus": {
+    "kind": "streakMilestoneMul",
+    "mul": 2,
+    "text": "加冕：连续盖章里程碑奖励 ×2"
+   },
+   "awaken": {
+    "stat": "streak",
+    "count": 14,
+    "text": "连续盖章 14 天"
+   },
+   "form": "长螺旋角、一对羽翼、会发光的流动鬃毛",
+   "art": {
+    "portrait": "form/alicorn/portrait",
+    "ult": "form/alicorn/ult",
+    "icon": "form/alicorn/icon",
+    "idle": "form/alicorn/idle",
+    "stage": "form/alicorn/plate"
+   },
+   "season1": true
+  },
+  {
+   "id": "crystal",
+   "name": "水晶碧琪",
+   "series": "v2",
+   "rarity": "SR",
+   "source": [
+    "shop",
+    "gacha-star",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#F3D6FF",
+    "#8E4BD6",
+    "#9FE7FF"
+   ],
+   "particle": "crystal",
+   "hit": "shard",
+   "ult": "spell",
+   "sig": "lattice",
+   "sound": "glass",
+   "bonus": {
+    "kind": "writeStarsMul",
+    "mul": 1.5,
+    "text": "折光：默写 / 挖空 ⭐ ×1.5"
+   },
+   "awaken": {
+    "stat": "writePerfectSets",
+    "count": 3,
+    "text": "默写全对 3 组"
+   },
+   "form": "玫瑰水晶的身体、刻面水晶卷鬃",
+   "art": {
+    "portrait": "form/crystal/portrait",
+    "ult": "form/crystal/ult",
+    "icon": "form/crystal/icon",
+    "idle": "form/crystal/idle",
+    "stage": "form/crystal/plate"
+   },
+   "season1": true
+  },
+  {
+   "id": "seapony",
+   "name": "海马碧琪",
+   "series": "v2",
+   "rarity": "SR",
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#BFF3F0",
+    "#F06A8F",
+    "#FFE0C2"
+   ],
+   "particle": "bubbles",
+   "hit": "ping",
+   "ult": "rain",
+   "sig": "orbit",
+   "sound": "sine",
+   "bonus": {
+    "kind": "lessonStarsPct",
+    "pct": 0.3,
+    "text": "潮汐：学习关 ⭐ +30%"
+   },
+   "awaken": {
+    "stat": "nodesLit",
+    "count": 15,
+    "text": "点亮 15 个节点"
+   },
+   "form": "鱼尾、鳍耳、在水里漂浮的鬃毛",
+   "art": {
+    "portrait": "form/seapony/portrait",
+    "ult": "form/seapony/ult",
+    "icon": "form/seapony/icon",
+    "idle": "form/seapony/idle",
+    "stage": "form/seapony/plate"
+   },
+   "season1": true
+  },
+  {
+   "id": "kirin",
+   "name": "麒麟碧琪",
+   "series": "v2",
+   "rarity": "SSR",
+   "source": [
+    "seal-shop",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#FFD3B0",
+    "#D8343C",
+    "#F2C14E"
+   ],
+   "particle": "embers",
+   "hit": "flame",
+   "ult": "beam",
+   "sig": "dragon",
+   "sound": "guzheng",
+   "bonus": {
+    "kind": "examStarsPct",
+    "pct": 0.3,
+    "text": "祥瑞：考试交卷 ⭐ +30%"
+   },
+   "awaken": {
+    "stat": "examsSafe",
+    "count": 3,
+    "text": "考试 3 次 ≥ 稳过线"
+   },
+   "form": "鳞片、单角、火焰尖的云鬃、狮尾",
+   "art": {
+    "portrait": "form/kirin/portrait",
+    "ult": "form/kirin/ult",
+    "icon": "form/kirin/icon",
+    "idle": "form/kirin/idle",
+    "stage": "form/kirin/plate"
+   },
+   "season1": true
+  },
+  {
+   "id": "batpony",
+   "name": "夜骐碧琪",
+   "series": "v2",
+   "rarity": "SR",
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
+   "palette": [
+    "#2A1E4A",
+    "#B04FA0",
+    "#FFE6A8"
+   ],
+   "particle": "stars",
+   "hit": "constellation",
+   "ult": "warp",
+   "sig": "zodiac",
+   "sound": "celesta",
+   "bonus": {
+    "kind": "huntStarsPct",
+    "pct": 0.3,
+    "text": "夜行：讨伐 ⭐ +30%"
+   },
+   "awaken": {
+    "stat": "captures",
+    "count": 20,
+    "text": "收服 20 只"
+   },
+   "form": "蝙蝠膜翼、簇毛尖耳、竖瞳、小尖牙",
+   "art": {
+    "portrait": "form/batpony/portrait",
+    "ult": "form/batpony/ult",
+    "icon": "form/batpony/icon",
+    "idle": "form/batpony/idle",
+    "stage": "form/batpony/plate"
+   },
+   "season1": true
+  },
+  {
+   "id": "serious",
+   "name": "较真碧琪",
+   "series": "v2",
+   "rarity": "R",
+   "source": [
+    "shop",
+    "gacha-star"
+   ],
+   "palette": [
+    "#E7B3C2",
+    "#8E2F4E",
+    "#F3E6D8"
+   ],
+   "particle": "ink",
+   "hit": "brush",
+   "ult": "ink",
+   "sig": "scroll",
+   "sound": "pluck",
+   "bonus": {
+    "kind": "captureStarsPct",
+    "pct": 0.4,
+    "text": "较真：收服错题怪 ⭐ +40%"
+   },
+   "awaken": {
+    "stat": "captures",
+    "count": 30,
+    "text": "收服 30 只"
+   },
+   "form": "卷毛全部变直、冷静锐利的眼神",
+   "art": {
+    "portrait": "form/serious/portrait",
+    "ult": "form/serious/ult",
+    "icon": "form/serious/icon",
+    "idle": "form/serious/idle",
+    "stage": "form/serious/plate"
    },
    "season1": true
   },
@@ -41,10 +319,7 @@
    "name": "学习碧琪",
    "series": "mode",
    "rarity": "R",
-   "source": [
-    "shop",
-    "gacha-star"
-   ],
+   "source": [],
    "palette": [
     "#F4B6D2",
     "#7A3E9D",
@@ -52,7 +327,8 @@
    ],
    "particle": "stars",
    "hit": "stamp",
-   "ult": "stamp", "sig": "pen",
+   "ult": "stamp",
+   "sig": "pen",
    "sound": "chime",
    "bonus": {
     "kind": "lessonStarsPct",
@@ -70,17 +346,15 @@
     "icon": "form/learning/icon",
     "idle": "form/learning/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "project",
    "name": "项目碧琪",
    "series": "mode",
    "rarity": "R",
-   "source": [
-    "shop",
-    "gacha-star"
-   ],
+   "source": [],
    "palette": [
     "#F6C1D6",
     "#2F6FB0",
@@ -88,7 +362,8 @@
    ],
    "particle": "gold",
    "hit": "stamp",
-   "ult": "stamp", "sig": "blueprint",
+   "ult": "stamp",
+   "sig": "blueprint",
    "sound": "click",
    "bonus": {
     "kind": "questStarsPct",
@@ -106,16 +381,15 @@
     "icon": "form/project/icon",
     "idle": "form/project/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "thinking",
    "name": "思考碧琪",
    "series": "mode",
    "rarity": "SR",
-   "source": [
-    "shop"
-   ],
+   "source": [],
    "palette": [
     "#E9C6F2",
     "#5B3FA8",
@@ -123,7 +397,8 @@
    ],
    "particle": "crystal",
    "hit": "shard",
-   "ult": "spell", "sig": "lattice",
+   "ult": "spell",
+   "sig": "lattice",
    "sound": "glass",
    "bonus": {
     "kind": "writeStarsMul",
@@ -141,54 +416,15 @@
     "icon": "form/thinking/icon",
     "idle": "form/thinking/idle"
    },
-   "season1": true
-  },
-  {
-   "id": "unrestricted",
-   "name": "无限制碧琪",
-   "series": "mode",
-   "rarity": "SR",
-   "source": [
-    "shop"
-   ],
-   "palette": [
-    "#FF8FC7",
-    "#7B5CFF",
-    "#3DE0C8"
-   ],
-   "particle": "confetti",
-   "hit": "rainbow",
-   "ult": "warp", "sig": "prism",
-   "sound": "synth",
-   "bonus": {
-    "kind": "comboStarsMul",
-    "mul": 2,
-    "noPerfect": true,
-    "text": "狂欢：连击奖 ×2，但本组没有全对奖"
-   },
-   "awaken": {
-    "stat": "maxCombo",
-    "count": 30,
-    "text": "一组连击 30"
-   },
-   "art": {
-    "portrait": "form/unrestricted/portrait",
-    "ult": "form/unrestricted/ult",
-    "icon": "form/unrestricted/icon",
-    "idle": "form/unrestricted/idle"
-   },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "detective",
    "name": "名侦探碧琪",
    "series": "mystery",
    "rarity": "SR",
-   "source": [
-    "shop",
-    "gacha-star",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#E8C9A0",
     "#7A2E4F",
@@ -196,7 +432,8 @@
    ],
    "particle": "cards",
    "hit": "lens",
-   "ult": "curtain", "sig": "lens",
+   "ult": "curtain",
+   "sig": "lens",
    "sound": "pluck",
    "bonus": {
     "kind": "captureStarsPct",
@@ -214,16 +451,15 @@
     "icon": "form/detective/icon",
     "idle": "form/detective/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "pirate",
    "name": "海盗船长碧琪",
    "series": "mystery",
    "rarity": "SR",
-   "source": [
-    "shop"
-   ],
+   "source": [],
    "palette": [
     "#F2C14E",
     "#3A2A35",
@@ -231,7 +467,8 @@
    ],
    "particle": "coins",
    "hit": "coin",
-   "ult": "rain", "sig": "chart",
+   "ult": "rain",
+   "sig": "chart",
    "sound": "brass",
    "bonus": {
     "kind": "dailyShelfExtra",
@@ -249,16 +486,15 @@
     "icon": "form/pirate/icon",
     "idle": "form/pirate/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "astronaut",
    "name": "宇航员碧琪",
    "series": "mystery",
    "rarity": "SR",
-   "source": [
-    "shop"
-   ],
+   "source": [],
    "palette": [
     "#F7B6D2",
     "#1B2A5C",
@@ -266,7 +502,8 @@
    ],
    "particle": "stars",
    "hit": "ping",
-   "ult": "warp", "sig": "orbit",
+   "ult": "warp",
+   "sig": "orbit",
    "sound": "sine",
    "bonus": {
     "kind": "streakStarsPct",
@@ -284,16 +521,15 @@
     "icon": "form/astronaut/icon",
     "idle": "form/astronaut/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "dragon-rider",
    "name": "龙骑士碧琪",
    "series": "mystery",
    "rarity": "exclusive",
-   "source": [
-    "boss:babel"
-   ],
+   "source": [],
    "palette": [
     "#FF9EC4",
     "#B23A48",
@@ -301,7 +537,8 @@
    ],
    "particle": "embers",
    "hit": "flame",
-   "ult": "beam", "sig": "dragon",
+   "ult": "beam",
+   "sig": "dragon",
    "sound": "roar",
    "bonus": {
     "kind": "examSealsAdd",
@@ -319,17 +556,15 @@
     "icon": "form/dragon-rider/icon",
     "idle": "form/dragon-rider/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "queen",
    "name": "女王碧琪",
    "series": "royal",
    "rarity": "SSR",
-   "source": [
-    "seal-shop",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#C8102E",
     "#F2C14E",
@@ -337,7 +572,8 @@
    ],
    "particle": "gold",
    "hit": "carpet",
-   "ult": "curtain", "sig": "carpet",
+   "ult": "curtain",
+   "sig": "carpet",
    "sound": "fanfare",
    "bonus": {
     "kind": "guardExamSealsAdd",
@@ -355,18 +591,15 @@
     "icon": "form/queen/icon",
     "idle": "form/queen/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "princess",
    "name": "公主碧琪",
    "series": "royal",
    "rarity": "SR",
-   "source": [
-    "shop",
-    "gacha-star",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#FFC2DD",
     "#E85A9B",
@@ -374,7 +607,8 @@
    ],
    "particle": "petals",
    "hit": "sparkle",
-   "ult": "rain", "sig": "rose",
+   "ult": "rain",
+   "sig": "rose",
    "sound": "harp",
    "bonus": {
     "kind": "streakMilestoneMul",
@@ -392,17 +626,15 @@
     "icon": "form/princess/icon",
     "idle": "form/princess/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "knight",
    "name": "骑士碧琪",
    "series": "royal",
    "rarity": "SR",
-   "source": [
-    "gacha-star",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#F7A8C8",
     "#8C9BB0",
@@ -410,7 +642,8 @@
    ],
    "particle": "lightning",
    "hit": "slash",
-   "ult": "slash", "sig": "aegis",
+   "ult": "slash",
+   "sig": "aegis",
    "sound": "steel",
    "bonus": {
     "kind": "huntStarsPct",
@@ -428,17 +661,15 @@
     "icon": "form/knight/icon",
     "idle": "form/knight/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "chef",
    "name": "甜点师碧琪",
    "series": "royal",
    "rarity": "R",
-   "source": [
-    "shop",
-    "gacha-star"
-   ],
+   "source": [],
    "palette": [
     "#FFF4E0",
     "#F48FB1",
@@ -446,7 +677,8 @@
    ],
    "particle": "confetti",
    "hit": "sprinkle",
-   "ult": "rain", "sig": "piping",
+   "ult": "rain",
+   "sig": "piping",
    "sound": "pop",
    "bonus": {
     "kind": "setFinishAdd",
@@ -464,17 +696,15 @@
     "icon": "form/chef/icon",
     "idle": "form/chef/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "magical-girl",
    "name": "魔法少女碧琪",
    "series": "magic",
    "rarity": "SSR",
-   "source": [
-    "gacha-star",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#FF6FAE",
     "#FFD1E8",
@@ -482,7 +712,8 @@
    ],
    "particle": "hearts",
    "hit": "heart",
-   "ult": "spell", "sig": "ribbon",
+   "ult": "spell",
+   "sig": "ribbon",
    "sound": "twinkle",
    "bonus": {
     "kind": "ultThreshold",
@@ -500,17 +731,15 @@
     "icon": "form/magical-girl/icon",
     "idle": "form/magical-girl/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "astrologer",
    "name": "星砂占星师碧琪",
    "series": "magic",
    "rarity": "SSR",
-   "source": [
-    "seal-shop",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#1F1B4D",
     "#B9A4FF",
@@ -518,7 +747,8 @@
    ],
    "particle": "crystal",
    "hit": "constellation",
-   "ult": "warp", "sig": "zodiac",
+   "ult": "warp",
+   "sig": "zodiac",
    "sound": "celesta",
    "bonus": {
     "kind": "comboStepAdd",
@@ -536,17 +766,15 @@
     "icon": "form/astrologer/icon",
     "idle": "form/astrologer/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "zhuangyuan",
    "name": "古风状元碧琪",
    "series": "east",
    "rarity": "SSR",
-   "source": [
-    "seal-shop",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#C8102E",
     "#1F1A17",
@@ -554,7 +782,8 @@
    ],
    "particle": "ink",
    "hit": "brush",
-   "ult": "ink", "sig": "scroll",
+   "ult": "ink",
+   "sig": "scroll",
    "sound": "guzheng",
    "bonus": {
     "kind": "examStarsPct",
@@ -572,17 +801,15 @@
     "icon": "form/zhuangyuan/icon",
     "idle": "form/zhuangyuan/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "idol",
    "name": "偶像碧琪",
    "series": "stage",
    "rarity": "SR",
-   "source": [
-    "gacha-star",
-    "gacha-seal"
-   ],
+   "source": [],
    "palette": [
     "#FF8AC2",
     "#7C4DFF",
@@ -590,7 +817,8 @@
    ],
    "particle": "hearts",
    "hit": "glow",
-   "ult": "curtain", "sig": "spotlight",
+   "ult": "curtain",
+   "sig": "spotlight",
    "sound": "pop",
    "bonus": {
     "kind": "chestExtra",
@@ -608,16 +836,15 @@
     "icon": "form/idol/icon",
     "idle": "form/idol/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "cyber",
    "name": "赛博荧光碧琪",
    "series": "tech",
    "rarity": "SR",
-   "source": [
-    "shop"
-   ],
+   "source": [],
    "palette": [
     "#0E0B1F",
     "#FF3EA5",
@@ -625,7 +852,8 @@
    ],
    "particle": "neon",
    "hit": "glitch",
-   "ult": "beam", "sig": "datamosh",
+   "ult": "beam",
+   "sig": "datamosh",
    "sound": "synth",
    "bonus": {
     "kind": "notesStarsPct",
@@ -643,16 +871,15 @@
     "icon": "form/cyber/icon",
     "idle": "form/cyber/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "ninja",
    "name": "忍者碧琪",
    "series": "tech",
    "rarity": "R",
-   "source": [
-    "gacha-star"
-   ],
+   "source": [],
    "palette": [
     "#F7A8C8",
     "#2B2340",
@@ -660,7 +887,8 @@
    ],
    "particle": "smoke",
    "hit": "shuriken",
-   "ult": "slash", "sig": "smokeclone",
+   "ult": "slash",
+   "sig": "smokeclone",
    "sound": "whoosh",
    "bonus": {
     "kind": "perfectSetAdd",
@@ -678,16 +906,15 @@
     "icon": "form/ninja/icon",
     "idle": "form/ninja/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "lidong",
    "name": "立冬碧琪",
    "series": "season",
    "rarity": "limited",
-   "source": [
-    "limited:lidong"
-   ],
+   "source": [],
    "palette": [
     "#C62828",
     "#FFF4E0",
@@ -695,7 +922,8 @@
    ],
    "particle": "snow",
    "hit": "steam",
-   "ult": "rain", "sig": "lantern",
+   "ult": "rain",
+   "sig": "lantern",
    "sound": "bell",
    "bonus": {
     "kind": "firstSetStars",
@@ -714,16 +942,15 @@
     "icon": "form/lidong/icon",
     "idle": "form/lidong/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "xiaoxue",
    "name": "小雪碧琪",
    "series": "season",
    "rarity": "limited",
-   "source": [
-    "limited:xiaoxue"
-   ],
+   "source": [],
    "palette": [
     "#E3F2FD",
     "#F48FB1",
@@ -731,7 +958,8 @@
    ],
    "particle": "snow",
    "hit": "flake",
-   "ult": "rain", "sig": "firstsnow",
+   "ult": "rain",
+   "sig": "firstsnow",
    "sound": "bell",
    "bonus": {
     "kind": "huntStarsPct",
@@ -750,16 +978,15 @@
     "icon": "form/xiaoxue/icon",
     "idle": "form/xiaoxue/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "daxue",
    "name": "大雪碧琪",
    "series": "season",
    "rarity": "limited",
-   "source": [
-    "limited:daxue"
-   ],
+   "source": [],
    "palette": [
     "#0D1B3E",
     "#7FFFD4",
@@ -767,7 +994,8 @@
    ],
    "particle": "snow",
    "hit": "aurora",
-   "ult": "warp", "sig": "aurora",
+   "ult": "warp",
+   "sig": "aurora",
    "sound": "bell",
    "bonus": {
     "kind": "streakStarsPct",
@@ -786,16 +1014,15 @@
     "icon": "form/daxue/icon",
     "idle": "form/daxue/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "graduate",
    "name": "毕业碧琪",
    "series": "honor",
    "rarity": "exclusive",
-   "source": [
-    "achievement:realPass"
-   ],
+   "source": [],
    "palette": [
     "#1A1A2E",
     "#F2C14E",
@@ -803,7 +1030,8 @@
    ],
    "particle": "confetti",
    "hit": "stamp",
-   "ult": "burst", "sig": "mortarboard",
+   "ult": "burst",
+   "sig": "mortarboard",
    "sound": "fanfare",
    "bonus": {
     "kind": "none",
@@ -820,16 +1048,15 @@
     "icon": "form/graduate/icon",
     "idle": "form/graduate/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   },
   {
    "id": "gold-master",
    "name": "金章大师碧琪",
    "series": "honor",
    "rarity": "exclusive",
-   "source": [
-    "achievement:allGold"
-   ],
+   "source": [],
    "palette": [
     "#F2C14E",
     "#DB1F74",
@@ -837,7 +1064,8 @@
    ],
    "particle": "gold",
    "hit": "stamp",
-   "ult": "stamp", "sig": "goldseal",
+   "ult": "stamp",
+   "sig": "goldseal",
    "sound": "fanfare",
    "bonus": {
     "kind": "none",
@@ -854,7 +1082,8 @@
     "icon": "form/gold-master/icon",
     "idle": "form/gold-master/idle"
    },
-   "season1": true
+   "season1": false,
+   "retired": true
   }
  ],
  "items": [
@@ -1122,35 +1351,24 @@
   {
    "kind": "title",
    "id": "title:five-faces",
-   "name": "五面碧琪",
-   "reward": "set:mode",
+   "name": "八面碧琪",
+   "reward": "set:v2",
    "notForSale": true
   }
  ],
  "sets": [
   {
-   "id": "royal",
-   "name": "皇家系列",
-   "forms": [
-    "queen",
-    "princess",
-    "knight",
-    "chef"
-   ],
-   "rewards": [
-    "title:royal-family",
-    "cover:palace"
-   ]
-  },
-  {
-   "id": "mode",
-   "name": "模式系列",
+   "id": "v2",
+   "name": "八面碧琪",
    "forms": [
     "daily",
-    "learning",
-    "project",
-    "thinking",
-    "unrestricted"
+    "unrestricted",
+    "alicorn",
+    "crystal",
+    "seapony",
+    "kirin",
+    "batpony",
+    "serious"
    ],
    "rewards": [
     "title:five-faces"

@@ -110,7 +110,34 @@ export class LearningGame {
     state.wallet.shards ||= {any: 0};
     for (const k of ['stars', 'seals']) state.wallet[k] = Math.max(0, Math.floor(Number(state.wallet[k]) || 0));
     if (!state.forms.owned.includes('daily')) state.forms.owned.unshift('daily');
+    this.migrateFormsV2(state);
     return state;
+  }
+  // 形态 v2（11-09）：旧的换装 / 贴纸形态退场。已拥有的换成最接近的新形态（亲密度带过去）；没有对应的按原价退星星 / 金印。
+  // 只在还拥有退场形态时动；换完写进 forms.v2note，营地提示一次。成就专属（毕业、金章）不动。
+  migrateFormsV2(state) {
+    const byId = new Map(this.catalog.forms.map(f => [f.id, f]));
+    const MAP = {thinking: 'crystal', princess: 'alicorn', queen: 'alicorn', detective: 'serious', zhuangyuan: 'kirin', 'dragon-rider': 'kirin', astrologer: 'batpony'};
+    const KEEP = new Set(['graduate', 'gold-master']);
+    const old = state.forms.owned.filter(id => byId.get(id)?.retired && !KEEP.has(id));
+    if (!old.length) return;
+    const note = state.forms.v2note && !state.forms.v2note.seen ? state.forms.v2note : {converted: [], refund: {stars: 0, seals: 0}};
+    for (const id of old) {
+      const to = MAP[id];
+      state.forms.owned = state.forms.owned.filter(x => x !== id);
+      if (to && !state.forms.owned.includes(to)) {
+        state.forms.owned.push(to);
+        state.forms.xp[to] = Math.max(state.forms.xp[to] || 0, state.forms.xp[id] || 0);
+        note.converted.push([id, to]);
+      } else {
+        const price = E.formPrice(byId.get(id), this.economy) || {};
+        state.wallet.stars += price.stars || 0; state.wallet.seals += price.seals || 0;
+        note.refund.stars += price.stars || 0; note.refund.seals += price.seals || 0;
+      }
+      if (state.forms.equipped === id) state.forms.equipped = to && state.forms.owned.includes(to) ? to : 'daily';
+    }
+    if (byId.get(state.forms.equipped)?.retired && !KEEP.has(state.forms.equipped)) state.forms.equipped = 'daily';
+    state.forms.v2note = {...note, at: note.at || new Date().toISOString(), seen: false};
   }
   write(state) {
     fs.mkdirSync(this.root, {recursive: true, mode: 0o700});
@@ -362,7 +389,7 @@ export class LearningGame {
     return {
       wallet: {stars: state.wallet.stars, seals: state.wallet.seals, shards: {...state.wallet.shards}},
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
-      form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened]},
+      form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened], v2note: state.forms.v2note && !state.forms.v2note.seen ? state.forms.v2note : null},
       items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}, names: Object.fromEntries((state.items.owned || []).map(id => [id, this.itemName(id)]))},
       today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: 2, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened},
       boss, monsters,
@@ -399,9 +426,9 @@ export class LearningGame {
     const seal = forms.filter(f => f.source.includes('seal-shop')).map(f => formEntry(f));
     const limited = [];
     const quiet = isQuiet(date); // 考前 7 天：不上限时货架、不打限时折扣
-    if (season && !quiet) for (const f of forms.filter(x => x.season === season.term)) limited.push({...formEntry(f), until: season.to});
+    if (season && !quiet) for (const f of forms.filter(x => x.season === season.term && !x.retired)) limited.push({...formEntry(f), until: season.to});
     // 过季限定：30 万能碎片复刻
-    for (const f of forms.filter(x => x.season && SEASON_TERMS.some(t => t.term === x.season && t.to < date))) {
+    for (const f of forms.filter(x => x.season && !x.retired && SEASON_TERMS.some(t => t.term === x.season && t.to < date))) {
       seal.push({sku: `replica:${f.id}`, kind: 'form', itemId: f.id, name: `${f.name}（复刻）`, desc: f.bonus.text, price: {shards: this.economy.prices.limitedReplicaShards}});
     }
     const items = this.catalog.items.filter(i => !i.notForSale && (!i.season || i.season === season?.term));
@@ -750,6 +777,7 @@ export function registerLearningGame(api, store, options = {}) {
   register('gacha.banners', () => game.banners());
   register('gacha.pull', p => game.pull(p));
   register('forms.list', () => game.formsList());
+  register('forms.v2seen', () => game.mutate(state => { if (state.forms.v2note) state.forms.v2note.seen = true; return {ok: true}; }));
   register('forms.equip', p => game.equip(p));
   register('forms.awaken', p => game.awaken(p));
   register('wishlist.set', p => game.setWishlist(p));

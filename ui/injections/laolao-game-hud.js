@@ -205,6 +205,14 @@
     if (tab === 'journal') { body.classList.add('pkg-journal'); const sheet = el('div', 'pkg-journal__page'); body.append(sheet); builtin?.mountToday(sheet); return; }
 
     const form = equippedForm();
+    const v2 = s.form?.v2note;
+    if (v2) {
+      // 形态换代只提示一次：旧形态换成了哪个新形态、退了多少
+      const conv = (v2.converted || []).map(([a, b]) => `${formOf(a)?.name || a} → ${formOf(b)?.name || b}`);
+      const back = [v2.refund?.stars ? `${fmt(v2.refund.stars)} 星星` : '', v2.refund?.seals ? `${v2.refund.seals} 金印` : ''].filter(Boolean).join('、');
+      toast(`碧琪形态换新了。${conv.length ? '你的旧形态换成了：' + conv.join('，') + '。' : ''}${back ? '没有对应新形态的已按原价退还 ' + back + '。' : ''}`);
+      call('forms.v2seen').catch(() => {});
+    }
     if (form?.palette) host.style.cssText += `;--pkg-a:${form.palette[0]};--pkg-b:${form.palette[1]};--pkg-c:${form.palette[2]}`;
     const night = (() => { const h = beijingHour(); return h >= 18 || h < 5; })();
 
@@ -227,12 +235,21 @@
     const go = el('button', 'pkg-go'); go.type = 'button';
     const goText = el('span', 'pkg-go__text'); const goKick = el('small', '', 'NEXT'); const goTitle = el('b', '', '出发'); const goSub = el('em', '', '正在找路线上的下一站…');
     goText.append(goKick, goTitle, goSub); go.append(goText, el('i', 'pkg-go__rule')); copy.append(go);
-    stage.append(sky, layers, glow, plinth, figure, head, copy);
-    ambient(stage, form, {still: fx()?.settings?.().biqi === false || ctx.motion?.reduced});
-    glow.after(stage.querySelector('.pkg-amb'));
+    const FS = window.__pinkieFormStage, still = fx()?.settings?.().biqi === false || ctx.motion?.reduced;
+    const liveForm = form && FS?.has(form.id);
+    if (liveForm) {
+      // 形态 v2：营地就是这个形态自己的场景，碧琪是活的（laolao-game-form-stage.js）；文字压在左边的柔光上
+      stage.classList.add('is-live'); stage.dataset.time = FS.tone(form.id);
+      const live = el('div', 'pkg-stage__live'); stage.append(live, el('i', 'pkg-stage__scrim'), head, copy);
+      host.__pkFormStage?.destroy?.(); host.__pkFormStage = FS.mount(live, form.id, {focus: .7, still});
+    } else {
+      stage.append(sky, layers, glow, plinth, figure, head, copy);
+      ambient(stage, form, {still});
+      glow.after(stage.querySelector('.pkg-amb'));
+    }
     if (form) { const tag = el('div', 'pkg-stage__tag'); tag.append(el('small', '', form.series === 'mode' ? 'MODE FORM' : `${form.rarity} FORM`), el('b', '', form.name), bonusText(form.bonus?.text)); stage.append(tag); }
     const left = el('div', 'pkg-left'); left.append(stage); body.append(left);
-    parallax(stage, [layers, figure, glow]);
+    if (!liveForm) parallax(stage, [layers, figure, glow]);
     if (fx()?.settings?.().biqi === false || ctx.motion?.reduced) stage.dataset.still = '1';
 
     // 右：Boss / 委托 / 今日 / 入口

@@ -165,3 +165,8 @@
 @keyframes pks-sheen{to{transform:translateX(120%)}}
 @container pkspage (max-width:900px){ .pks-ga{grid-template-columns:minmax(0,1fr)!important} .pks-ga__stage{min-height:420px} .pks-results__grid.is-ten{grid-template-columns:repeat(3,minmax(0,140px))!important} }
 #pinkie-study-desk[data-reduced="true"] .pks-page *{animation:none!important;transition:none!important}
+/* 形态 v2：衣橱大图是活的舞台；没拥有的也给看（想要才会去拿）；商店卡片用主视觉场景 */
+#pinkie-study-desk .pks-wr__art.is-live{display:block;overflow:hidden;border-radius:14px;height:clamp(240px,42vh,440px);background:#140E18;box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 22px 40px -28px rgba(30,10,30,.7)}
+#pinkie-study-desk .pks-wr__art.is-live .pkfs-still--stage{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:none;animation:none}
+#pinkie-study-desk .pks-wr__form{position:absolute;left:14px;bottom:12px;margin:0;padding:6px 10px;border-radius:8px;font-size:12px;letter-spacing:.06em;color:#FBF4EE;background:rgba(14,9,20,.42);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);pointer-events:none}
+#pinkie-study-desk .pks-pv.is-scene img{width:100%;height:100%;object-fit:cover;object-position:60% 35%;filter:none}

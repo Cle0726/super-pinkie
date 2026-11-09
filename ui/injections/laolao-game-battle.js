@@ -29,6 +29,10 @@
     if (form?.palette) root.style.cssText = `--pkb-a:${form.palette[0]};--pkb-b:${form.palette[1]};--pkb-c:${form.palette[2]}`;
     const ground = el('i', 'pkb-ground');
     const hero = el('div', 'pkb-hero'); const heroImg = el('img'); heroImg.alt = ''; heroImg.decoding = 'async'; heroImg.src = G()?.portrait(form?.id || 'daily') || ''; hero.append(el('i', 'pkb-shadow'), heroImg);
+    // 形态 v2：头像是活的（呼吸、眨眼、看鼠标），答对换成 GPT 出的欢呼姿势、答错换成一缩的姿势
+    let live = null;
+    const mountLive = (id) => { live?.destroy?.(); live = null; const FS = window.__pinkieFormStage; if (!FS?.has(id) || reduced()) { heroImg.hidden = false; hero.classList.remove('is-live'); return; } heroImg.hidden = true; hero.classList.add('is-live'); live = FS.mount(hero, id, {mode: 'avatar', poke: false}); };
+    mountLive(form?.id || 'daily');
     const combo = el('div', 'pkb-combo'); const comboN = el('b', 'pkb-combo__n', '0'); combo.append(comboN, el('small', '', 'COMBO')); combo.dataset.on = '0';
     const meter = el('i', 'pkb-ultmeter'); const meterFill = el('i'); meter.append(meterFill); combo.append(meter);
     const foe = el('div', 'pkb-foe'); const foeBody = el('div', 'pkb-foe__body'); const foeAura = el('i', 'pkb-foe__aura'); foe.append(el('i', 'pkb-shadow'), foeAura, foeBody);
@@ -41,7 +45,7 @@
     let enemy = null, hpFrac = 1, threshold = ultThreshold(form);
     const api = {
       root, foe: foeBody, hero,
-      setForm(f) { form = f; threshold = ultThreshold(f); heroImg.src = G()?.portrait(f?.id || 'daily') || heroImg.src; if (f?.palette) root.style.cssText = `--pkb-a:${f.palette[0]};--pkb-b:${f.palette[1]};--pkb-c:${f.palette[2]}`; },
+      setForm(f) { const changed = (f?.id || 'daily') !== (form?.id || 'daily'); form = f; threshold = ultThreshold(f); heroImg.src = G()?.portrait(f?.id || 'daily') || heroImg.src; if (changed || !live) mountLive(f?.id || 'daily'); if (f?.palette) root.style.cssText = `--pkb-a:${f.palette[0]};--pkb-b:${f.palette[1]};--pkb-c:${f.palette[2]}`; },
       setEnemy(next) {
         const key = next ? `${next.kind}:${next.id || next.species || ''}` : '';
         if (enemy && key === enemy.key) return;
@@ -72,11 +76,11 @@
       strike({crit = false, damage = 0, partial = false} = {}) {
         const engine = fx();
         try { engine?.hit(form?.hit || 'sparkle', foeBody, {crit, palette: form?.palette, form: G()?.fxForm(form), ...(strip ? {size: 1} : {})}); } catch { /* 没有引擎就只有数字 */ }
-        pop(damage, {crit, partial});
+        pop(damage, {crit, partial}); live?.state('cheer');
         if (!reduced()) { foe.classList.remove('is-hurt', 'is-crit'); void foe.offsetWidth; foe.classList.add(crit ? 'is-crit' : 'is-hurt'); hero.classList.remove('is-lunge'); void hero.offsetWidth; hero.classList.add('is-lunge'); }
       },
       dodge() {
-        pop(null, {miss: true});
+        pop(null, {miss: true}); live?.state('hurt');
         if (!reduced()) { foe.classList.remove('is-dodge'); void foe.offsetWidth; foe.classList.add('is-dodge'); }
       },
       defeat({capture = false} = {}) {
