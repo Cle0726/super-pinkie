@@ -288,7 +288,7 @@
     if (result.review?.text) { const rv = el('blockquote', 'pke-review'); rv.append(el('p', '', result.review.text), el('cite', '', '— 碧琪')); box.append(rv); }
     const act = el('div', 'pke-report__act'); const mons = (result.monstersSpawned || []).length;
     const backView = (() => { const v = desk()?.pane?.()?.state?.returnView; return v && v !== 'gameexam' ? v : 'today'; })();
-    const backName = {today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', vocab: '回生词本', notes: '回笔记本', stage: '回舞台'}[backView] || '返回';
+    const backName = desk()?.backName?.(backView) || '返回';
     if (mons) { act.append(el('span', 'pke-mons', `${mons} 道错题变成了错题怪，回到了地图上`), btn('去地图看看', 'pkg-btn', onMap), btn('去讨伐', 'pks-pull pke-nav', onHunt)); }
     act.append(btn('再考一份', mons ? 'pkb-link' : 'pkg-btn', onAgain), btn(backName, mons ? 'pkb-link' : 'pks-pull pke-nav', () => desk()?.go(backView)));
     box.append(act); host.append(box); return box;
@@ -299,7 +299,8 @@
     host.classList.add('pke-page');
     const g = G(); let alive = true, pollT = 0, hall = null;
     const head = el('header', 'pkb-page__head pks-head');
-    const x = btn('×', 'pkb-x', () => desk()?.go('today')); x.setAttribute('aria-label', '回营地');
+    // × 和别的游戏页一样：从地图进来回地图，从营地进来回营地。
+    const x = btn('×', 'pkb-x', () => (g.goBack ? g.goBack() : desk()?.go('today'))); x.setAttribute('aria-label', g.backLabel?.() || '回营地'); x.title = x.getAttribute('aria-label');
     const t = el('div'); t.append(el('small', 'pkb-kicker', 'EXAMINATION HALL · PRETCO-B'), el('h2', '', '考场'));
     const hudBox = el('div', 'pkb-page__hud'); head.append(x, t, hudBox); host.append(head);
     const main = el('div', 'pke-lobby'); host.append(main);
@@ -391,7 +392,7 @@
       if (!main.contains(document.activeElement)) { main.tabIndex = -1; main.focus({preventScroll: true}); }
       const wait1 = el('div', 'pke-grading'); wait1.append(el('small', 'pkb-kicker', 'GRADING'), el('h3', '', '阅卷中'), el('p', '', '客观题已经判完，碧琪在按评分细则看翻译和作文。'), el('i', 'pke-grading__rule'));
       const backView = (() => { const v = desk()?.pane?.()?.state?.returnView; return v && v !== 'gameexam' ? v : 'today'; })();
-      wait1.append(btn(backView === 'today' ? '先回营地' : '先返回', 'pkb-link', () => desk()?.go(backView)));
+      wait1.append(btn('先' + (desk()?.backName?.(backView) || '返回'), 'pkb-link', () => desk()?.go(backView)));
       main.append(wait1);
       let res = null; const t0 = Date.now();
       while (alive) { try { res = await call('exam.result', {attemptId}); } catch (e) { wait1.querySelector('p').textContent = e.message || '成绩取不到'; return; } if (res.status === 'done' || res.status === 'open') break; await wait(Date.now() - t0 < 20000 ? 1500 : 4000); }

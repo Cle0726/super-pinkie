@@ -158,7 +158,14 @@
       segment.hidden = !isSection || legacy; organize.hidden = !isSection || legacy; for (const b of segment.children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
       const count = (data.notes || []).length;
       if (route.view === 'inbox') { subtitle.textContent = '聊天里随手记下的内容先放在这里，碧琪帮你分好类再收进笔记本'; return renderInbox(); }
-      if (route.view === 'review') { subtitle.textContent = '今天要背的，打开背一背。'; if (!route.opened) { route.opened = true; window.__pinkieDrill?.start({source: 'notes', scope: toc?.today?.count ? {kind: 'due'} : {kind: 'more'}, size: 10}); } content.append(el('p', 'n-empty', '正在打开背一背…')); return; }
+      if (route.view === 'review') {
+        subtitle.textContent = '今天要背的，打开背一背。';
+        const open = () => window.__pinkieDrill?.start({source: 'notes', scope: toc?.today?.count ? {kind: 'due'} : {kind: 'more'}, size: 10, ...(route.from && route.from !== 'notes' && route.from !== 'drill' ? {returnTo: route.from} : {})});
+        // 只自动打开一次，并且记在页面状态里：背完回到这里不会又被弹进背一背（以前会来回打转）。
+        if (!route.opened) { route.opened = true; local.notesRoute = {...route, mode}; open(); content.append(el('p', 'n-empty', '正在打开背一背…')); return; }
+        const box = el('div', 'n-empty'); const again = btn(toc?.today?.count ? `背今天的 ${toc.today.count} 条` : '再背一组', open, 'n-btn n-primary');
+        box.append(el('p', '', toc?.today?.count ? '今天到期的笔记卡还没背完。' : '今天到期的都背过了，可以再背一组。'), again); content.append(box); return;
+      }
       if (isSection && (mode === 'manuscript' || legacy)) {
         const saved = section?.section;
         subtitle.textContent = saved ? `${legacy ? saved.sourceCount : section.noteCount} 条原笔记 → 提炼成 ${saved.pointCount} 个要点 · ${date(saved.builtAt || saved.createdAt)} 整理${legacy ? ' · 只读' : ''}` : `${section?.noteCount ?? count} 条原笔记 · 还没有整理稿`;

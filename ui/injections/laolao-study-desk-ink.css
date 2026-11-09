@@ -90,7 +90,7 @@
 #pinkie-study-desk.pk-ink .pk-sticker{filter:drop-shadow(0 8px 10px rgba(90,40,70,.25))}
 #pinkie-study-desk.pk-ink[data-theme="night"] .pk-sticker{filter:drop-shadow(0 8px 12px rgba(0,0,0,.6))}
 #pinkie-study-desk.pk-ink .desk-empty img{width:150px}
-#pinkie-study-desk.pk-ink .desk-status{left:128px;bottom:28px;font-family:var(--pk-hand);font-size:15px;color:var(--pk-pink-ink)}
+#pinkie-study-desk.pk-ink .desk-status{bottom:28px;border-radius:4px;font-family:var(--pk-sans);font-size:13px;color:var(--pk-ink);background:var(--pk-paper);box-shadow:0 1px 0 var(--pk-rule),0 8px 26px rgba(40,20,40,.18)}
 
 /* ===== 今日 ===== */
 /* 页面自己的留白用百分比跟着学习台宽度走（便签栏开着时学习台会变窄；容器查询查不到视图自己）。左边永远让出页边。 */

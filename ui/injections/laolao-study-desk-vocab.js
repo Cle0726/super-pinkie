@@ -103,7 +103,7 @@
         if(route.wordId) { const node=[...root.querySelectorAll('[data-id]')].find(n=>n.dataset.id===route.wordId&&n.getClientRects().length);if(node){node.tabIndex=-1;node.scrollIntoView({block:'center'});node.focus();delete route.wordId;} }
         clearTimeout(poll);
         if ((result.counts.pending || result.retagging) && !document.hidden && (!ctx.pane || desk.isFocused())) poll = setTimeout(load, 2500);
-        if (route.review && !route.started) { route.started = true; window.__pinkieDrill?.start({source: 'vocab', scope: result.counts.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: 'vocab'}); if (!result.counts.due) toast('今天没有到期的，先背一组新的'); }
+        if (route.review && !route.started) { route.started = true; window.__pinkieDrill?.start({source: 'vocab', scope: result.counts.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: route.from && route.from !== 'vocab' && route.from !== 'drill' ? route.from : 'vocab'}); if (!result.counts.due) toast('今天没有到期的，先背一组新的'); }
       } catch (error) { if (alive && token === revision) { count.textContent = error.message || '读取失败'; } }
     }
 

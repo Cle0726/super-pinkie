@@ -45,6 +45,13 @@
   };
   const focusedPane = () => workspace().panes[workspace().focus] || workspace().panes[0];
   const current = () => focusedPane().state;
+  // 「回哪」统一一个说法：按钮上写清回哪一页。今日页开了游戏层就是营地。
+  const PLAYING = ['drill', 'stage', 'gameguard', 'gameexam'];
+  const GAME_PAGES = ['gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
+  const BACK_NAMES = {gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场', notes: '回笔记本', vocab: '回生词本', stage: '回舞台', board: '回看板', library: '回书架', drill: '回背一背', gameguard: '回守关'};
+  const backName = view => (!view || view === 'today' ? (window.__pinkieGame ? '回营地' : '回今日') : BACK_NAMES[view] || '返回');
+  // 做题页（背一背、舞台、守关、考场）退出时回进来的那一页；没有记录就回今日 / 营地。
+  const backViewOf = st => { const v = PLAYING.includes(st?.view) ? st.returnView : ''; return v && v !== st.view ? v : 'today'; };
   const conversationKey = () => {
     const key='pinkie-desk-conversation:'+state.key;
     const w=workspace();if(w.conversation)return w.conversation;
@@ -168,7 +175,9 @@
     const row = el('div', 'desk-empty-actions'); row.append(...actions);
     box.append(img, el('h2', 'desk-empty-title', title), el('p', '', sentence), row); return box;
   };
-  const notice = text => { if (state.root) { const n = state.root.querySelector('.desk-status'); n.textContent = text; } };
+  // 一条提示：显示几秒自己淡掉（以前一直留在左下角，压着入口格和商店价格）。
+  let noticeTimer = 0;
+  const notice = (text, ms = 3600) => { if (!state.root) return; const n = state.root.querySelector('.desk-status'); if (!n) return; n.textContent = text || ''; n.classList.toggle('show', Boolean(text)); clearTimeout(noticeTimer); if (text) noticeTimer = setTimeout(() => n.classList.remove('show'), ms); };
   const context = pane => ({request, sessionKey:conversationKey, motion: pane.motion, tokens, go: (id, options) => goPane(pane, id, options), local: () => pane.state, pane, desk: deskForPane(pane)});
   let focusQueue = Promise.resolve(), focusOwned = null;
   function syncFocusClock() {
@@ -504,8 +513,8 @@
     const say = host.querySelector('.say'); if (say) { say.replaceChildren(); speak(say, [feedback(stage, result, q)], result.explanation || ''); }
   }
   function stageHeader(host, stage) {
-    const backTo = (current().returnView && current().returnView !== 'stage') ? current().returnView : 'today';
-    const top = el('header', 's-top'), back = button('', () => go(backTo), 'back'); back.setAttribute('aria-label', backTo === 'today' ? '返回今日' : '返回'); back.append(icon('arrow-left'));
+    const backTo = backViewOf(current());
+    const top = el('header', 's-top'), back = button('', () => go(backTo), 'back'); back.setAttribute('aria-label', backName(backTo)); back.title = backName(backTo); back.append(icon('arrow-left'));
     const heading = el('div', 's-heading'); heading.append(el('div', 'crumb', '舞台 · ' + (stage?.set?.title || '学习舞台')));
     if (stage?.set && !stage.summary) heading.append(el('h2', 's-number', `第 ${stage.index + 1} 题`));
     top.append(back, heading);
@@ -528,7 +537,7 @@
     if (stageModes.has(current().stageMode)) { stageHeader(host); return stageMode(pane).mount(host, context()); }
     const stage = current().stage;
     if (current().stageMode && current().stageMode !== 'practice') { mountOtherStage(host); return; }
-    if (!stage) { stageHeader(host); const empty = el('div', 'stage-empty'); empty.append(emptyState('先从一小组开始。', '碧琪会挑 6 道题，做完一起看哪里还不稳。', [button('开始练习', () => void startSet(), 'confirm'), button('回到今日', () => go('today'), 'link')])); host.append(empty); return; }
+    if (!stage) { stageHeader(host); const empty = el('div', 'stage-empty'); empty.append(emptyState('先从一小组开始。', '碧琪会挑 6 道题，做完一起看哪里还不稳。', [button('开始练习', () => void startSet(), 'confirm'), button(backName(backViewOf(current())), () => go(backViewOf(current())), 'link')])); host.append(empty); return; }
     stage.mode = 'practice'; if (!stage.summary && focused(pane)) stage.activeAt = performance.now(); stageHeader(host, stage);
     const column = el('div', 'qcol'), side = reveal(el('aside', 'side'), 3), figure = el('div', 'fig'), buddy = el('img');
     const result = stage.results[stage.index], q = question(stage);
@@ -539,8 +548,8 @@
       const summary = el('div', 'summary on'), done = el('span', 'pk-stamp pk-anim pk-done-stamp', '这一组 · 完成'); done.dataset.size = 'lg';
       summary.append(done, el('h3', '', `这一组，答对 ${correct} 题。`), el('p', '', `${[independent && `其中 ${independent} 题是独立且确定的`, stage.results.length - independent && `${independent ? '其余' : '这一组'} ${stage.results.length - independent} 题明天再考一次`].filter(Boolean).join('；')}。用时 ${Math.floor(sec / 60)} 分 ${sec % 60} 秒。`));
       const dots = el('div', 'sum-dots'); stage.results.forEach((r, i) => { const n = el('i', r.correct ? 'l' : ''); n.style.animationDelay = 300 + i * 120 + 'ms'; dots.append(n); });
-      const backTo = (current().returnView && current().returnView !== 'stage') ? current().returnView : 'today';
-      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button(backTo === 'today' ? '回到今日' : '返回', () => go(backTo), 'link')); summary.append(dots, actions); column.append(summary);
+      const backTo = backViewOf(current());
+      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button(backName(backTo), () => go(backTo), 'link')); summary.append(dots, actions); column.append(summary);
       speak(say, ['先生，这一组做完啦。', '休息一下，再一起补薄弱的地方。']);
     } else {
       const {stem, code, part, judge} = stemParts(q);
@@ -786,6 +795,7 @@
   function deskForPane(pane) {
     return {...window.__pinkieStudyDesk, local: () => pane.state, pane: () => pane, motion: pane.motion, sessionKey:conversationKey,
       go: (id, options) => goPane(pane, id, options), refresh: () => renderPane(pane, pane.view),
+      backView: () => backViewOf(pane.state), back: () => goPane(pane, backViewOf(pane.state)),
       startSet: (...args) => pane.builtin.startSet(...args), switchStageMode: mode => pane.builtin.switchStageMode(mode),
       askBiqi: text => pane.builtin.askBiqi(text), askRef: (ref, title) => pane.builtin.askBiqi('请帮我讲清楚「' + title + '」，先引导我回忆。\n\n[[DESK_REF_V1 ' + ref + ']]'), revealRef: async ref => { const r = await request('pinkie.learning.ref.resolve', {refs:[ref]}); window.__pinkieDeskChat?.reveal?.(r.cards?.[0]?.origin); }, isFocused: () => focused(pane)};
   }
@@ -935,11 +945,12 @@
     else {
       if (!allowHeavy(pane, id)) return;
       // 做题页记住从哪进来，打完回到那一页（营地、地图、讨伐……），不要一律掉回今日或笔记本。
-      const playing = ['drill', 'stage', 'gameguard', 'gameexam'];
+      const playing = PLAYING;
       if (pane.view && pane.view !== id && playing.includes(id) && !playing.includes(pane.view)) pane.state.returnView = pane.view;
       // 游戏各页之间的返回栈：衣橱 → 商店 → × 回衣橱；从营地进来的 × 回营地。往回走时出栈，不会来回打转。
-      const gamePages = ['gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
-      if (gamePages.includes(id) && pane.view !== id) {
+      // 打完一组（背一背 / 守关）回到游戏页时栈不动：地图 → 讨伐 → 打完回讨伐，× 还是回地图。
+      const gamePages = GAME_PAGES;
+      if (gamePages.includes(id) && pane.view !== id && !(PLAYING.includes(pane.view) && !gamePages.includes(pane.view))) {
         const stack = pane.state.gameStack ||= [];
         if (!gamePages.includes(pane.view)) stack.length = 0;
         else if (stack.at(-1) === id) stack.pop();
@@ -949,7 +960,8 @@
       w.chat = false; w.chatFocus = false; w.focus = w.panes.indexOf(pane);
       if (!pane.host) createPane(pane);
       if (id === 'notes') {
-        if (options) pane.state.notesRoute = options;
+        // 从营地「笔记回顾」进来自动开背一背：记下从哪来，背完 / 先放着回那一页
+        if (options) pane.state.notesRoute = options.view === 'review' && !options.from && pane.view !== 'notes' ? {...options, from: pane.view} : options;
         if (!views.has(id)) {
           pane.view = id; pane.state.view = id;
           if (!state.notesLoading) {
@@ -963,7 +975,7 @@
           renderWorkspace(); return;
         }
       }
-      if (id === 'vocab' && options) pane.state.vocabRoute = options;
+      if (id === 'vocab' && options) pane.state.vocabRoute = options.review && !options.from && pane.view !== 'vocab' ? {...options, from: pane.view} : options;
       if (id === 'entry' && options) pane.state.entryRef = options.ref;
       if (id === 'drill') {
         if (options) pane.state.drillRoute = options;
@@ -1014,9 +1026,9 @@
     if (event.key === 'Escape') { focusedPane().runtime?.keydown?.(event); if (event.defaultPrevented) return; }
     if (event.key === 'Escape' && current().view !== 'chat') {
       event.preventDefault();
-      const playing = ['drill', 'stage', 'gameguard', 'gameexam'];
-      const back = playing.includes(current().view) ? current().returnView : '';
-      go(back && back !== current().view ? back : 'today');
+      // 游戏各页（地图、商店……）按返回栈退一步，和左上角 × 一样；做题页回进来的那一页。
+      if (GAME_PAGES.includes(current().view) && !PLAYING.includes(current().view) && window.__pinkieGame?.goBack) { window.__pinkieGame.goBack(); return; }
+      go(backViewOf(current()));
       return;
     }
     if (workspace().chat || workspace().chatFocus) return;
@@ -1103,7 +1115,7 @@
     const closed = () => { if (host.isConnected) for (const drawer of previous.keys()) { drawer.hidden = false; drawer.inert = false; } }; window.addEventListener('pinkie:library-closed', closed);
     return {unmount() { window.removeEventListener('pinkie:library-closed', closed); if (window.__pinkieLibrary?.state?.deskHost === host) window.__pinkieLibrary.closeReader(); for (const [drawer, parent] of previous) { drawer.hidden = true; drawer.inert = true; parent?.append(drawer); } }};
   }});
-  window.__pinkieStudyDesk = {registerView, request, go, sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode),
+  window.__pinkieStudyDesk = {registerView, request, go, backName, notice, backView: () => backViewOf(current()), back: () => go(backViewOf(current())), sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode),
     pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: () => { tileRects(workspace()); renderWorkspace(); }, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
     contexts: () => workspace().panes.map(context),
     pages: () => workspace().panes.map(p => ({id: p.id, view: p.view, focused: focused(p), state: p.state})),
