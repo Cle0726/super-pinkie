@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
@@ -89,6 +89,20 @@ export function publicPaper(full) {
       ...(!real && it.tts ? {tts: {text: it.tts, voiceHint: 'en-US'}} : {}),
       ...(!real && p.kind === 'listen-dictation' && i === 0 ? {tts: {text: p.material, voiceHint: 'en-US', repeat: 3}} : {}),
     })))}))};
+}
+
+function keyText(kind, item) {
+  if (item.options) return clean(item.options[item.answer], 300);
+  if (kind === 'term-match') return clean(item.answer, 8);
+  if (Array.isArray(item.answer)) return clean(item.answer[0], 200);
+  if (item.reference) return clean(item.reference, 400);
+  return clean(item.answer, 200);
+}
+function givenText(kind, item, given) {
+  if (given == null || given === '') return '';
+  if (item.options) { const n = Number(given); return Number.isInteger(n) && item.options[n] ? clean(item.options[n], 300) : ''; }
+  if (kind === 'term-match') return clean(String(given).toUpperCase(), 8);
+  return clean(given, 200);
 }
 
 export function gradeObjective(kind, item, answer) {
@@ -322,7 +336,7 @@ export class GameExam {
         const ans = snap.answers[id];
         if (['translate-passage', 'writing'].includes(p.kind)) { subjective.push({sec: sec.id, id, kind: p.kind, it, max: p.each, ans}); return; }
         if (gradeObjective(p.kind, it, ans)) score += p.each;
-        else wrong.push({id, kind: p.kind, it, material: p.material});
+        else wrong.push({id, sec: sec.id, kind: p.kind, it, given: ans});
       });
       sections.push({id: sec.id, score, max});
     }
@@ -337,9 +351,25 @@ export class GameExam {
         // 模型判不了时的兜底：按长度给一个保守分，并标明需要碧琪稍后复判
         got = r ? {...r.value, source: 'model'} : {score: Math.min(Math.floor(s.max * 0.4), Math.floor(clean(s.ans).split(/\s+/).length / 20)), reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local'};
       }
-      notes[s.id] = got;
+      notes[s.id] = {...got, standard: clean(s.it.reference, 400), yours: clean(s.ans, 300)};
       sections.find(x => x.id === s.sec).score += got.score;
     }
+    // 错题：标准答案先定下来，模型只顺着它讲。最多 24 道，避免一页全错时阅卷停太久。
+    const explained = [];
+    await pool(wrong.slice(0, 24), 4, async w => {
+      const standard = keyText(w.kind, w.it);
+      if (!standard) return;
+      const yours = givenText(w.kind, w.it, w.given);
+      const note = clean(w.it.why, 200);
+      let text = note;
+      let source = note ? 'key' : 'none';
+      if (this.game.requestModel) {
+        const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, {question: clean(w.it.stem, 500), standard, note, yours, correct: false}, {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 500});
+        if (r) { text = r.value.text; source = 'model'; }
+      }
+      explained.push({id: w.id, section: w.sec, no: w.it.no || null, stem: clean(w.it.stem, 90), yours, standard, text, source});
+    });
+    explained.sort((a, b) => wrong.findIndex(w => w.id === a.id) - wrong.findIndex(w => w.id === b.id));
     // 真题卷少拆了几道题时满分不是 100：按比例折成百分制
     const maxAll = sections.reduce((n, s) => n + s.max, 0);
     const raw = sections.reduce((n, s) => n + s.score, 0);
@@ -376,7 +406,7 @@ export class GameExam {
         awards.push(...this.game.grant(state, `boss-break:${a.exam}`, {type: 'boss', id: 'babel'}, [{kind: 'form', itemId: 'dragon-rider', reason: '巴别兽破防！龙骑士碧琪加入', fx: 'cinematic'}]));
       }
       a.result = {status: 'done', score, passLine: this.economy.boss.passLine,
-        sections: sections.map(s => ({...s, crit: s.max > 0 && s.score / s.max >= 0.9})), notes, predicted: bossAfter.bestPredicted,
+        sections: sections.map(s => ({...s, crit: s.max > 0 && s.score / s.max >= 0.9})), notes, explained, predicted: bossAfter.bestPredicted,
         bossBefore, bossAfter, monstersSpawned: spawned, review, awards};
     });
   }

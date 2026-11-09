@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {gameFixture} from './helpers/learning-game-fixture.mjs';
 import {PRETCO_B_FORMAT, LINE_RULES} from '../services/mode-architecture/learning-game-content.mjs';
+import {EXPLAIN_RULES} from '../services/mode-architecture/learning-game-content.mjs';
 import {GRADE_RULES, validSection, gradeObjective} from '../services/mode-architecture/learning-game-exam.mjs';
 
 const ch = i => ({stem: `Q${i} ___ ?`, options: [`w${i}a`, `w${i}b`, `RIGHT${i}`, `w${i}d`], answer: 2});
@@ -19,6 +20,7 @@ function model({gradeScore = 10} = {}) {
   return async (rules, payload) => {
     if (payload?.section) return {value: sectionFor(payload.section)};
     if (rules === GRADE_RULES) return {value: {score: Math.min(gradeScore, payload.max), reason: '要点齐全'}};
+    if (rules === EXPLAIN_RULES) return {value: {text: `标准答案是${payload.standard}。`}};
     if (rules === LINE_RULES) return {value: {text: '这次稳稳的！'}};
     return {unavailable: true};
   };
@@ -76,6 +78,9 @@ test('判卷：客观题代码判、主观题模型按细则判；巴别兽掉�
   assert.equal(r1.status, 'done');
   assert.ok(r1.score > 70 && r1.score < 100, `score ${r1.score}`);
   assert.equal(r1.notes['translation-B-1'].source, 'model');
+  assert.match(r1.notes['translation-B-1'].standard, /REFERENCE/);
+  assert.ok(r1.explained.length >= 1);
+  assert.ok(r1.explained.every(item => item.standard && item.text.startsWith('标准答案是') && item.text.includes(item.standard)));
   assert.ok(r1.bossAfter.hpPercent < r1.bossBefore.hpPercent);
   assert.ok(r1.monstersSpawned.length >= 1);
   assert.ok(r1.awards.some(a => a.kind === 'seals'));
@@ -148,4 +153,20 @@ test('出卷后盲做复核：对不上的选择题改写一次；改不好就�
   assert.equal(gradeObjective('choice', vocabA[3], 0), false);
   const s = game.modules.exam.start({paperId, requestId: 'v1'});
   assert.ok(!JSON.stringify(s).includes('"alt"'), 'alt 不进公开卷');
+});
+
+test('守关答完才按标准答案讲解', async t => {
+  const {game} = gameFixture(t);
+  let seen;
+  game.requestModel = async (rules, payload) => { seen = payload; return rules === EXPLAIN_RULES ? {value: {text: '标准答案是 Here you are。'}} : {unavailable: true}; };
+  game.mutate(state => { game.modules.world.ensure(state).guards.g1 = {items: [{stem: 'Could you pass the report?', options: ['Yes', 'Here you are.'], answer: 1, why: '请求帮忙'}], answers: {}}; });
+  await assert.rejects(() => game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'}), /先做完/);
+  game.modules.world.guardAnswer({attemptId: 'g1', itemId: 'g1', answer: 0});
+  const told = await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1', yours: 'Yes'});
+  assert.equal(told.source, 'model');
+  assert.equal(seen.standard, 'Here you are.');
+  assert.equal(seen.correct, false);
+  assert.equal(seen.yours, 'Yes');
+  const cached = await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'});
+  assert.equal(cached.text, told.text);
 });

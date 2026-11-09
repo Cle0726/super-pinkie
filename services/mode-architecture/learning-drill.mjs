@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import {vocabDrillFields} from './learning-vocab.mjs';
+import {EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
 
 const LIBRARY = 'agent:learning:notes-library';
 const SIZES = [5, 10, 15, 20];
@@ -901,6 +902,33 @@ export class LearningDrill {
     return {ok: true};
   }
 
+  // 标准答案已经在卷子上。这里只在做完之后，让模型顺着这份答案讲，不另给一个答案。
+  async explain({sessionId, itemId, yours = ''} = {}) {
+    const session = this.load(sessionId);
+    const item = (session.items || []).find(entry => entry.itemId === itemId);
+    if (!item) throw new Error('这道题不在这一组里');
+    const last = [...(session.answers || [])].reverse().find(entry => entry.itemId === itemId);
+    if (!last && !session.learned?.[itemId]) throw new Error('先做完这题');
+    session.explained ||= {};
+    if (session.explained[itemId]?.text) return session.explained[itemId];
+    const standard = clean(typeof item.reveal?.answer === 'string' ? item.reveal.answer : (typeof item.answer === 'string' ? item.answer : ''), 400);
+    const note = clean(item.reveal?.extra || '', 300);
+    const correct = last ? fullyCorrect(last) : true;
+    const attempt = correct ? '' : clean(yours, 200);
+    const local = {text: note, source: note ? 'local' : 'none'};
+    const keep = out => { if (out.text) { session.explained[itemId] = out; this.save(session); } return out.text ? out : local; };
+    const status = this.modelStatus(session.sessionKey);
+    if (!standard || !status.available || !this.organizer?.requestModel) return keep(local);
+    try {
+      const payload = {question: clean(item.reveal?.question || item.prompt || '', 500), standard, note, yours: attempt, correct};
+      const result = await this.organizer.requestModel(status.model, EXPLAIN_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 700, timeoutMs: 25000});
+      const text = validExplain(result)?.text || validExplain(result?.value)?.text;
+      return keep(text ? {text, source: 'model'} : local);
+    } catch {
+      return keep(local);
+    }
+  }
+
   async judge({sessionId, itemId, text = ''} = {}) {
     const session = this.load(sessionId);
     const item = (session.items || []).find(entry => entry.itemId === itemId);
@@ -1094,6 +1122,7 @@ export function registerLearningDrill(api, store, options = {}) {
   }, {scope: 'operator.admin'});
   register('session', params => drill.session(params));
   register('judge', params => drill.judge(params));
+  register('explain', params => drill.explain(params));
   register('answer', params => drill.answer(params));
   register('learned', params => drill.learned(params));
   register('finish', params => drill.finish(params));

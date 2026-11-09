@@ -762,6 +762,7 @@ export function registerLearningGame(api, store, options = {}) {
   register('world.regenerate', via('world', 'regenerate', notReady('考点地图')));
   register('node.start', via('world', 'nodeStart', notReady('考点')));
   register('guard.answer', via('world', 'guardAnswer', notReady('守关战')));
+  register('guard.explain', via('world', 'guardExplain', notReady('守关战')));
   register('guard.finish', via('world', 'guardFinish', notReady('守关战')));
   register('monsters.list', via('monsters', 'list', (() => ({monsters: []}))));
   register('hunt.start', via('monsters', 'huntStart', notReady('讨伐')));
