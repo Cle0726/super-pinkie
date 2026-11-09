@@ -252,7 +252,7 @@ export class LearningGame {
           state.stats.maxCombo = Math.max(state.stats.maxCombo, run.combo);
           const c = E.comboStars(run.combo, {form, economy: this.economy});
           if (c.stars) awards.push({kind: 'stars', amount: c.stars, reason: c.ult ? `连击 ${run.combo} · 碧琪大招` : `连击 ${run.combo}`, fx: c.ult ? 'cinematic' : 'medium'});
-          if (c.ult) { run.ults += 1; state.stats.ults += 1; }
+          if (c.ult) { run.ults += 1; state.stats.ults += 1; const dd = this.day(state); dd.ults = (dd.ults || 0) + 1; }
         }
       } else {
         run.combo = 0;
@@ -283,6 +283,7 @@ export class LearningGame {
         state.stats.setsDone += 1;
         if (correct === scored) {
           state.stats.perfectSets += 1;
+          d.perfectSets = (d.perfectSets || 0) + 1;
           if (run.writeAll && (session.items || []).some(i => E.isWriteMode(i.mode))) state.stats.writePerfectSets += 1;
         }
         if (run.maxCombo >= 20) state.stats.combo20Sets += 1;
@@ -606,7 +607,16 @@ export class LearningGame {
     const list = [];
     list.push({id: `${date}-a`, title: '今天的到期卡', text: dueCards > 0 ? `先把到期的 ${Math.min(dueCards, 30)} 张浇浇水` : '背 20 道题，让手账亮起来', target: {kind: 'answers', count: dueCards > 0 ? Math.min(Math.max(dueCards, 10), 30) : 20}, reward: {stars: this.economy.earn.quests[0]}});
     if (activeDue > 0) list.push({id: `${date}-b`, title: '讨伐错题怪', text: `去打 ${Math.min(activeDue, 3)} 只到期的错题怪`, target: {kind: 'huntWins', count: Math.min(activeDue, 3)}, reward: {stars: this.economy.earn.quests[1]}});
-    else list.push({id: `${date}-b`, title: '背完两组', text: '背一背做完两组', target: {kind: 'sets', count: 2}, reward: {stars: this.economy.earn.quests[1]}});
+    else {
+      // 没有到期的怪时，第二个委托按日子轮换（两组 / 一次大招 / 一组全对），不要天天同一件事。
+      const turn = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000) % 3;
+      const b = [
+        {title: '背完两组', text: '背一背做完两组', target: {kind: 'sets', count: 2}},
+        {title: '打出一次大招', text: `一组里连对 ${this.economy.earn.ultCombo} 题，看碧琪放大招`, target: {kind: 'ults', count: 1}},
+        {title: '一组全对', text: '背一背里有一组一题不错', target: {kind: 'perfectSets', count: 1}},
+      ][turn];
+      list.push({id: `${date}-b`, ...b, reward: {stars: this.economy.earn.quests[1]}});
+    }
     list.push({id: `${date}-c`, title: '学一个新考点', text: '上一节课，或者背 5 张新卡', target: {kind: 'learn', count: 1}, reward: {stars: this.economy.earn.quests[2]}});
     return {list, claimed: {}, chest: null, text: 'local'};
   }
@@ -695,6 +705,8 @@ function questProgress(target, d) {
   if (target.kind === 'answers') return d.correct || 0;
   if (target.kind === 'sets') return d.sets || 0;
   if (target.kind === 'huntWins') return d.huntWins || 0;
+  if (target.kind === 'ults') return d.ults || 0;
+  if (target.kind === 'perfectSets') return d.perfectSets || 0;
   if (target.kind === 'learn') return (d.lessons || 0) + Math.floor((d.newCards || 0) / 5);
   return 0;
 }
