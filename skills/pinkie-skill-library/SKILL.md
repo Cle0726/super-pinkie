@@ -5,7 +5,7 @@ description: 碧琪自带的 161 个现成技能的目录（视频短片、动�
 
 # 碧琪自带的现成技能
 
-前 4 个是碧琪自己的薄技能（底下是开源工具），其余来自社区开源项目（来源和许可证见每个文件夹里的 SOURCE.md、LICENSE，总表在 `../THIRD_PARTY_SKILLS.md`）。
+前 5 个是碧琪自己的薄技能（底下是开源工具），其余来自社区开源项目（来源和许可证见每个文件夹里的 SOURCE.md、LICENSE，总表在 `../THIRD_PARTY_SKILLS.md`）。
 它们不在系统技能清单里，免得把清单挤满；系统通常会在消息里直接写好「这件活先用这些现成的技能」和路径。没写、而活儿像下面某一种时：
 
 1. 在表里挑最贴近的 1–2 个（视频类先看 hyperframes，再看按片子类型分的那些）。
@@ -18,6 +18,7 @@ description: 碧琪自带的 161 个现成技能的目录（视频短片、动�
 | pinkie-remove-background | 抠图去背景、换纯色底或背景图、批量处理（底层 rembg，MIT，本地跑） | `../pinkie-remove-background/SKILL.md` |
 | pinkie-kids-worksheets | 字帖（田字格 / 米字格 / 回宫格、拼音、描红）和口算题卡（带答案页），A4 PDF | `../pinkie-kids-worksheets/SKILL.md` |
 | pinkie-resume | 简历：填一份 YAML 出排版好的 PDF，多套主题，中英文（底层 RenderCV，MIT） | `../pinkie-resume/SKILL.md` |
+| pinkie-script-image | 批量出图 / 出片脚本流水线：网页版 ChatGPT 或 Gemini 出图、桌面豆包图生视频，加本地加工（抠图、切贴纸、拼对比表、深度图、剪影矢量化、去水印） | `../pinkie-script-image/SKILL.md` |
 | ui-ux-pro-max | 做网页、App 界面前先查：按行业挑风格、配色、字体、UX 规则（带可搜索的数据表） | `../ui-ux-pro-max/SKILL.md` |
 | design-system | 搭一整套设计系统：颜色、字号、间距、组件规范 | `../design-system/SKILL.md` |
 | design | 通用视觉设计方法：版式、层级、留白、配色 | `../design/SKILL.md` |
