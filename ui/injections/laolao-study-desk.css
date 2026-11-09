@@ -214,7 +214,9 @@
 #pinkie-study-desk .rail-nav button{display:grid;place-items:center;padding:0}
 #pinkie-study-desk .rail-nav button .desk-icon{position:static;transform:none;opacity:1;padding:0;background:none;color:inherit;border-radius:0}
 #pinkie-study-desk .rail-nav button:focus-visible .nav-tip{opacity:1;transform:translate(0,-50%)}
-#pinkie-study-desk .desk-status{position:absolute;bottom:18px;left:120px;font:12px var(--sans);color:var(--ink-2);pointer-events:none;z-index:9}
+#pinkie-study-desk .desk-status{position:absolute;bottom:22px;left:50%;max-width:min(520px,calc(100% - 160px));padding:8px 16px;border-radius:999px;font:13px/1.45 var(--sans);color:var(--ink);background:var(--glass-strong,#fff);box-shadow:0 6px 24px rgba(40,20,40,.16);pointer-events:none;z-index:60;opacity:0;transform:translate(-50%,6px);transition:opacity .18s ease,transform .18s ease;white-space:normal;text-align:center}
+#pinkie-study-desk .desk-status.show{opacity:1;transform:translate(-50%,0)}
+#pinkie-study-desk .desk-status:empty{display:none}
 #pinkie-study-desk[data-view="chat"]{pointer-events:none;background:none;transition:none}
 #pinkie-study-desk[data-view="chat"] .plate,#pinkie-study-desk[data-view="chat"] .desk-content,#pinkie-study-desk[data-view="chat"] .party,#pinkie-study-desk[data-view="chat"] .desk-status{display:none}
 #pinkie-study-desk[data-view="chat"] .rail{pointer-events:auto}

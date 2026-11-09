@@ -410,7 +410,7 @@ test('v2 A2: prepare can be cancelled, late results are ignored and 45 second ti
   const f = createV2Fixture({pending: true});
   try { await run({handler: f.handler, engine: 'chromium'}, async page => {
     await page.locator('.task').click(); await page.locator('.lesson-skeleton').waitFor();
-    await page.getByRole('button', {name: '取消', exact: true}).click(); f.release();
+    await page.getByRole('button', {name: '取消备课', exact: true}).click(); f.release();
     await page.locator('.task').waitFor(); assert.equal(await page.locator('.lesson-outline').count(), 0);
   }); } finally { f.release(); }
   const g = createV2Fixture({pending: true});

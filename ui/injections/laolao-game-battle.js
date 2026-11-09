@@ -195,8 +195,24 @@
     const count = el('span', 'pk-drill-count pkb-guard__count pkb-num', '');
     top.append(back, title, count); host.append(top);
     const backTo = () => { const v = local.returnView; return v && v !== 'gameguard' ? v : 'gamemap'; };
-    const backName = v => ({today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', stage: '回舞台'}[v] || '返回');
-    back.addEventListener('click', () => ctx.go?.(backTo()) ?? desk()?.go('today'));
+    const backName = v => desk()?.backName?.(v) || ({today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', stage: '回舞台'}[v] || '返回');
+    // 注意 go() 没有返回值：以前写成 `ctx.go?.(…) ?? desk().go('today')`，回了地图又被拽回营地。
+    const leaveNow = () => (ctx.go ? ctx.go(backTo()) : desk()?.go(backTo()));
+    // 做到一半退出要问一句（和讨伐一样）：守关卷不能接着做，退了这次就不算。
+    let finished = false, asking = false, i = 0;
+    const askLeave = () => {
+      if (finished || i === 0 || !payload?.items?.length) { leaveNow(); return; }
+      if (asking) return; asking = true;
+      const dialog = el('dialog', 'lesson-dialog pk-drill-ask'); dialog.setAttribute('aria-label', '退出守关战');
+      dialog.append(el('p', '', `守关卷做到第 ${Math.min(i + 1, items.length)} / ${items.length} 题。现在退出，这次不算，下次重新出卷。`));
+      const row = el('div', 'pk-done-actions');
+      const stay = el('button', 'pk-btn', '接着打'); stay.type = 'button'; stay.dataset.kind = 'go'; stay.addEventListener('click', () => dialog.close('stay'));
+      const quit = el('button', 'pk-link', `退出，${backName(backTo())}`); quit.type = 'button'; quit.addEventListener('click', () => dialog.close('leave'));
+      row.append(stay, quit); dialog.append(row); host.append(dialog); dialog.showModal(); stay.focus();
+      dialog.addEventListener('close', () => { asking = false; const go = dialog.returnValue === 'leave'; dialog.remove(); if (go) leaveNow(); }, {once: true});
+    };
+    back.addEventListener('click', askLeave);
+    back.setAttribute('aria-label', `退出守关战，${backName(backTo())}`); back.title = back.getAttribute('aria-label');
     const payload = opts.payload;
     if (!payload?.items?.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
     const a = arena({form: g.equippedForm(), strip: true}); top.append(a.root);
@@ -204,7 +220,7 @@
     a.setHp(1, {instant: true}); a.setCombo(0);
     const stage = el('div', 'pk-drill-stage pkb-guard__stage'); const qWrap = el('section', 'pk-drill-col pkb-guard__q'); stage.append(qWrap); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
-    const items = payload.items; let i = 0, right = 0, combo = 0, busy = false, alive = true;
+    const items = payload.items; let right = 0, combo = 0, busy = false, alive = true;
     const paint = () => { count.textContent = `${Math.min(i + 1, items.length)} / ${items.length}`; };
     function show() {
       paint(); qWrap.replaceChildren();
@@ -253,6 +269,7 @@
       live.textContent = r.correct ? '答对了' : '没答对';
     }
     async function finish() {
+      finished = true;
       qWrap.replaceChildren(el('p', 'pkb-empty', '结算中…'));
       try {
         const r = await g.call('guard.finish', {attemptId: payload.attemptId});
@@ -275,6 +292,7 @@
     show();
     return {unmount() { alive = false; }, keydown(event) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
       const key = String(event.key || '').toLowerCase(); const n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
       if (n >= 1 && n <= 4) { event.preventDefault(); qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); }
       if (event.key === 'Enter' && !event.target?.closest?.('button')) qWrap.querySelector('.pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')?.click();

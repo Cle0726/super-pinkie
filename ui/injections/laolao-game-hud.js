@@ -53,7 +53,7 @@
   // 游戏页左上角 ×：回到上一个游戏页（栈在 laolao-study-desk.js 的 goPane 里记），没有就回营地
   const BACK_NAME = {gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
   const backTarget = () => desk()?.pane?.()?.state?.gameStack?.at(-1) || 'today';
-  const backLabel = () => BACK_NAME[backTarget()] || '回营地';
+  const backLabel = () => desk()?.backName?.(backTarget()) || BACK_NAME[backTarget()] || '回营地';
   const goBack = () => desk()?.go(backTarget());
   const portrait = id => art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
   const ultArt = id => art(`form/${id}/ult`) || art(`form/${id}/portrait`) || null;
@@ -446,7 +446,8 @@
   }
   // 后端旧文案里的货币 emoji 换成字（VFX.md：界面里不出 emoji）。
   const plain = text => String(text ?? '').replace(/\s*(⭐|🟡|💎)/gu, m => ' ' + ({'⭐': '星星', '🟡': '金印', '💎': '碎片'})[m.trim()]);
-  function toast(text) { const d = document.querySelector('#pinkie-study-desk .desk-status'); if (d) { d.textContent = plain(text); d.classList.add('show'); setTimeout(() => d.classList.remove('show'), 2600); } }
+  // 和学习台的提示共用一条（同一个计时器），不会互相提前收掉
+  function toast(text) { if (desk()?.notice) { desk().notice(plain(text)); return; } const d = document.querySelector('#pinkie-study-desk .desk-status'); if (d) { d.textContent = plain(text); d.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => d.classList.remove('show'), 3600); } }
 
   function askBox(ctx) {
     const d = desk();

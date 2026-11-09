@@ -155,7 +155,7 @@
       if (route.source === 'mixed') return 'today';
       return 'notes';
     }
-    function backLabel() { return RETURN_LABEL[destination()] || '返回'; }
+    function backLabel() { return window.__pinkieStudyDesk?.backName?.(destination()) || RETURN_LABEL[destination()] || '返回'; }
     function snapshot() {
       local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
     }
@@ -595,7 +595,8 @@
       dialog.append(el('p', '', lines().exit(n)));
       const row = el('div', 'pk-done-actions');
       const stay = el('button', 'pk-btn', `接着${VERB}`); stay.type = 'button'; stay.dataset.kind = 'go'; stay.setAttribute('aria-label', `接着${VERB}`);
-      const quit = el('button', 'pk-link', '先放着'); quit.type = 'button'; quit.setAttribute('aria-label', '先放着');
+      // 写清楚「先放着」之后回哪一页
+      const quit = el('button', 'pk-link', `先放着，${backLabel()}`); quit.type = 'button'; quit.setAttribute('aria-label', `先放着，${backLabel()}`);
       stay.addEventListener('click', () => dialog.close('stay'));
       quit.addEventListener('click', () => dialog.close('leave'));
       row.append(stay, quit); dialog.append(row); root.append(dialog); dialog.showModal();
@@ -656,9 +657,12 @@
         check.hidden = true;
         const retry = el('button', 'pk-link', '再试一次'); retry.type = 'button'; retry.setAttribute('aria-label', '再试一次');
         retry.addEventListener('click', () => { check.hidden = false; openFresh(); });
-        const box = el('div', 'pk-drill-empty'), back = el('button', 'pk-link', backLabel()); back.type = 'button';
+        // 「没有可背的」不是出错：再试一次也还是没有，只给回去的路（主按钮）；真出错才给「再试一次」。
+        const nothing = /没有(可背|到期|要背|可练|题)/.test(error.message || '');
+        const box = el('div', 'pk-drill-empty'), back = el('button', 'pk-btn', backLabel()); back.type = 'button'; back.dataset.kind = 'go';
         back.addEventListener('click', () => goBack());
-        box.append(el('p', '', error.message || '这组没有打开'), retry, back);
+        box.append(el('p', '', error.message || '这组没有打开'), back);
+        if (!nothing) box.append(retry);
         q.replaceChildren(box);
       }
     }
