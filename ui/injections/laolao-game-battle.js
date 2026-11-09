@@ -23,8 +23,9 @@
   const TARGET_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="pkb-paper" cx="45%" cy="38%"><stop offset="0" stop-color="#FFFDF8"/><stop offset="1" stop-color="#EFE4D8"/></radialGradient></defs><circle cx="60" cy="60" r="54" fill="url(#pkb-paper)" stroke="#3A2A35" stroke-opacity=".28" stroke-width="1"/><circle cx="60" cy="60" r="42" fill="none" stroke="#3A2A35" stroke-opacity=".22"/><circle cx="60" cy="60" r="30" fill="none" stroke="#DB1F74" stroke-opacity=".55" stroke-width="1.2"/><circle cx="60" cy="60" r="18" fill="none" stroke="#3A2A35" stroke-opacity=".22"/><circle cx="60" cy="60" r="7" fill="#DB1F74" fill-opacity=".85"/><path d="M60 2v14M60 104v14M2 60h14M104 60h14" stroke="#3A2A35" stroke-opacity=".35" stroke-width="1"/></svg>';
 
   // ───────────── 竞技场：碧琪 ↔ 敌人，血条、连击、伤害数字 ─────────────
-  function arena({form, compact = false} = {}) {
-    const root = el('div', 'pkb-arena' + (compact ? ' is-compact' : '')); root.setAttribute('aria-hidden', 'true');
+  // strip = 状态条版：碧琪和怪缩成题目上方那一条的两端小头像（作答页都用这个；题目才是第一视觉）。
+  function arena({form, compact = false, strip = false} = {}) {
+    const root = el('div', 'pkb-arena' + (compact ? ' is-compact' : '') + (strip ? ' is-strip' : '')); root.setAttribute('aria-hidden', 'true');
     if (form?.palette) root.style.cssText = `--pkb-a:${form.palette[0]};--pkb-b:${form.palette[1]};--pkb-c:${form.palette[2]}`;
     const ground = el('i', 'pkb-ground');
     const hero = el('div', 'pkb-hero'); const heroImg = el('img'); heroImg.alt = ''; heroImg.decoding = 'async'; heroImg.src = G()?.portrait(form?.id || 'daily') || ''; hero.append(el('i', 'pkb-shadow'), heroImg);
@@ -34,7 +35,9 @@
     const plate = el('div', 'pkb-plate'); const pName = el('b'); const pLv = el('small'); const hp = el('i', 'pkb-hp'); const hpFill = el('i', 'pkb-hp__fill'); const hpLag = el('i', 'pkb-hp__lag'); hp.append(hpLag, hpFill, el('i', 'pkb-hp__tick'));
     const pNote = el('em', 'pkb-plate__note'); plate.append(pLv, pName, hp, pNote);
     const pops = el('div', 'pkb-pops');
-    root.append(ground, hero, combo, foe, plate, pops);
+    root.append(ground, hero, combo, foe, plate);
+    // 状态条里伤害数字挂在怪身上（从怪脚下升起），不挂在整条上。
+    if (strip) foe.append(pops); else root.append(pops);
     let enemy = null, hpFrac = 1, threshold = ultThreshold(form);
     const api = {
       root, foe: foeBody, hero,
@@ -68,7 +71,7 @@
       // 出手：命中特效打在敌人身上；伤害数字从敌人头顶升起。
       strike({crit = false, damage = 0, partial = false} = {}) {
         const engine = fx();
-        try { engine?.hit(form?.hit || 'sparkle', foeBody, {crit, palette: form?.palette, form: G()?.fxForm(form)}); } catch { /* 没有引擎就只有数字 */ }
+        try { engine?.hit(form?.hit || 'sparkle', foeBody, {crit, palette: form?.palette, form: G()?.fxForm(form), ...(strip ? {size: 1} : {})}); } catch { /* 没有引擎就只有数字 */ }
         pop(damage, {crit, partial});
         if (!reduced()) { foe.classList.remove('is-hurt', 'is-crit'); void foe.offsetWidth; foe.classList.add(crit ? 'is-crit' : 'is-hurt'); hero.classList.remove('is-lunge'); void hero.offsetWidth; hero.classList.add('is-lunge'); }
       },
@@ -126,10 +129,11 @@
     const g = G(); if (!g || !root || !top) return null;
     if (fx()?.settings?.().tier === 'quiet' && !route.forceBattle) { /* 安静档仍显示敌人和血条，只是没有粒子 */ }
     const form0 = g.equippedForm();
-    const a = arena({form: form0});
+    const a = arena({form: form0, strip: true});
     root.dataset.battle = '1';
-    top.after(a.root);
-    const mark = () => { const r = a.root.getBoundingClientRect(); if (r.height) document.documentElement.style.setProperty('--pkb-arena-bottom', Math.round(r.bottom) + 'px'); };
+    // 状态条：× · 碧琪 · 连击 · 本组进度 · 怪的名牌和血条 · 怪 · 星星，一行。
+    top.classList.add('pkb-top'); top.append(a.root);
+    const mark = () => { const r = top.getBoundingClientRect(); if (r.height) document.documentElement.style.setProperty('--pkb-arena-bottom', Math.round(r.bottom) + 'px'); };
     requestAnimationFrame(mark);
     let alive = true, original = 0, correct = 0, combo = 0, shown = 0;
     a.setHp(1, {instant: true}); a.setCombo(0);
@@ -171,7 +175,7 @@
         if (awards.length) setTimeout(() => g.play(awards, {from: a.foe}), 500);
         else g.pending();
       },
-      detach() { alive = false; a.root.remove(); delete root.dataset.battle; },
+      detach() { alive = false; a.root.remove(); top.classList.remove('pkb-top'); delete root.dataset.battle; },
     };
   }
 
@@ -180,28 +184,33 @@
     const g = G(); const local = ctx.local?.() || {};
     const opts = local.guardRoute || local.gameOpts || {};
     host.classList.add('pkb-guard');
-    const top = el('header', 'pkb-guard__top');
+    // 跟背一背同一套作答页：顶上一条状态条，下面一栏（最宽 760）题型小字 → 题干 → 选项 → 反馈卡。
+    const top = el('header', 'pk-drill-top pkb-top pkb-guard__top');
     const back = el('button', 'pkb-x', '×'); back.type = 'button'; back.setAttribute('aria-label', '退出守关战');
     const title = el('div', 'pkb-guard__title'); title.append(el('small', 'pkb-kicker', 'GUARD BATTLE'), el('b', '', opts.node?.name ? `守关 · ${opts.node.name}` : '守关战'));
-    const count = el('span', 'pkb-guard__count pkb-num', '');
+    const count = el('span', 'pk-drill-count pkb-guard__count pkb-num', '');
     top.append(back, title, count); host.append(top);
     back.addEventListener('click', () => ctx.go?.('gamemap') ?? desk()?.go('today'));
     const payload = opts.payload;
     if (!payload?.items?.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
-    const a = arena({form: g.equippedForm()}); host.append(a.root);
+    const a = arena({form: g.equippedForm(), strip: true}); top.append(a.root);
     a.setEnemy({kind: 'guard', species: GUARDIAN[opts.node?.region] || 'fog-puff', name: `${REGION_NAME[opts.node?.region] || '区域'} · 守卫`, level: 3, note: opts.node?.name || ''});
     a.setHp(1, {instant: true}); a.setCombo(0);
-    const qWrap = el('section', 'pkb-guard__q'); host.append(qWrap);
+    const stage = el('div', 'pk-drill-stage pkb-guard__stage'); const qWrap = el('section', 'pk-drill-col pkb-guard__q'); stage.append(qWrap); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
     const items = payload.items; let i = 0, right = 0, combo = 0, busy = false, alive = true;
     const paint = () => { count.textContent = `${Math.min(i + 1, items.length)} / ${items.length}`; };
     function show() {
       paint(); qWrap.replaceChildren();
       const it = items[i]; if (!it) return finish();
-      const stem = el('h3', 'pkb-guard__stem', it.prompt); qWrap.append(el('small', 'pkb-kicker', it.point ? `考点 · ${it.point}` : `第 ${i + 1} 题`), stem);
-      const list = el('div', 'pkb-guard__opts');
-      it.options.forEach((o, k) => { const b = el('button', 'pkb-opt'); b.type = 'button'; b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => pick(k, b)); list.append(b); });
-      qWrap.append(list); setTimeout(() => list.querySelector('button')?.focus(), 30);
+      const q = el('div', 'pk-drill-q');
+      const stem = el('h3', 'pk-drill-stem', it.prompt); if (String(it.prompt || '').length > 90) stem.classList.add('is-long');
+      q.append(el('p', 'pk-drill-kicker', it.point ? `第 ${i + 1} 题 · 考点 · ${it.point}` : `第 ${i + 1} 题 · 单选`), stem);
+      const list = el('div', 'pk-drill-options pkb-guard__opts');
+      it.options.forEach((o, k) => { const b = el('button', 'pk-choice pkb-opt'); b.type = 'button'; b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => pick(k, b)); list.append(b); });
+      q.append(list);
+      const bar = el('footer', 'pk-drill-bar'); bar.append(el('span', 'pk-drill-keys', `点选即作答 · 1–${it.options.length} 或 A–${'ABCD'[it.options.length - 1] || 'D'}`));
+      qWrap.append(q, bar); // 不自动聚焦第一项：焦点环看起来像已经选了 A。键盘 1–4 / A–D 由页面 keydown 接。
     }
     async function pick(k, b) {
       if (busy || !alive) return; busy = true;
@@ -213,13 +222,19 @@
       catch (e) { buttons.forEach(x => { x.disabled = false; }); b.classList.remove('is-lock'); busy = false; live.textContent = e.message || '没记上'; return; }
       if (!alive) return;
       host.dataset.feedbackMs = String(Math.round(performance.now() - t0));
-      buttons[r.answer]?.classList.add('is-answer'); if (!r.correct) b.classList.add('is-wrong');
+      b.classList.remove('is-lock'); buttons[r.answer]?.classList.add('is-answer'); if (!r.correct) b.classList.add('is-wrong');
       if (r.correct) { right++; combo = r.combo ?? combo + 1; a.strike({crit: Boolean(r.crit), damage: r.damage || 100}); } else { combo = 0; a.dodge(); }
       a.setCombo(combo); a.setHp(1 - right / items.length);
       if (r.correct && combo > 0 && combo % a.threshold === 0) a.ult(combo);
-      const note = el('div', 'pkb-guard__explain'); note.append(el('b', '', r.correct ? '命中' : '这题记下了，会变成错题怪回来'), el('p', '', r.explain || ''));
-      const next = el('button', 'pkg-btn pkb-guard__next', i + 1 < items.length ? '下一题' : '结算'); next.type = 'button';
-      next.addEventListener('click', () => { i++; busy = false; show(); }); note.append(next); qWrap.append(note); next.focus();
+      qWrap.querySelector('.pk-drill-bar')?.remove();
+      const next = () => { i++; busy = false; show(); };
+      const R = window.__pinkieDeskReward;
+      if (R?.feedbackSheet) {
+        R.feedbackSheet(qWrap, {kind: r.correct ? 'right' : 'wrong', title: r.correct ? '命中' : '记下了', again: false, line: r.correct ? (r.explain || '') : `这题会变成错题怪，过几天回来。${r.explain ? ' ' + r.explain : ''}`, onContinue: next});
+      } else {
+        const note = el('div', 'pkb-guard__explain'); note.append(el('b', '', r.correct ? '命中' : '这题记下了，会变成错题怪回来'), el('p', '', r.explain || ''));
+        const nb = el('button', 'pkg-btn pk-btn', i + 1 < items.length ? '下一题' : '结算'); nb.type = 'button'; nb.addEventListener('click', next); note.append(nb); qWrap.append(note); nb.focus();
+      }
       live.textContent = r.correct ? '答对了' : '没答对';
     }
     async function finish() {
@@ -239,7 +254,12 @@
       } catch (e) { qWrap.replaceChildren(el('p', 'pkb-empty', e.message || '结算失败，再点一次')); }
     }
     show();
-    return {unmount() { alive = false; }, keydown(event) { const n = Number(event.key); if (n >= 1 && n <= 4) qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); if (event.key === 'Enter') qWrap.querySelector('.pkb-guard__next')?.click(); }};
+    return {unmount() { alive = false; }, keydown(event) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const key = String(event.key || '').toLowerCase(); const n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
+      if (n >= 1 && n <= 4) { event.preventDefault(); qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); }
+      if (event.key === 'Enter' && !event.target?.closest?.('button')) qWrap.querySelector('.pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')?.click();
+    }};
   }
 
   // ───────────── 讨伐（gamehunt）：错题怪名单 + 开打 ─────────────
