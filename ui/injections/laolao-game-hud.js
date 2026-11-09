@@ -50,6 +50,11 @@
     if (f && MODE_ART[f[1]] && f[2] !== 'ult') return BASE + MODE_ART[f[1]];
     return null;
   }
+  // 游戏页左上角 ×：回到上一个游戏页（栈在 laolao-study-desk.js 的 goPane 里记），没有就回营地
+  const BACK_NAME = {gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
+  const backTarget = () => desk()?.pane?.()?.state?.gameStack?.at(-1) || 'today';
+  const backLabel = () => BACK_NAME[backTarget()] || '回营地';
+  const goBack = () => desk()?.go(backTarget());
   const portrait = id => art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
   const ultArt = id => art(`form/${id}/ult`) || art(`form/${id}/portrait`) || null;
   const iconArt = id => art(`form/${id}/icon`) || art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
@@ -432,7 +437,8 @@
       const r = await call('node.start', {nodeId: node.id, mode});
       if (r?.flow === 'lesson' && window.__pinkieStudyDeskLesson?.open) window.__pinkieStudyDeskLesson.open({k: r.payload.k, i: r.payload.i});
       else if (r?.flow === 'lesson') d.go('today');
-      else if (r?.flow === 'drill') window.__pinkieDrill?.start({source: r.payload.source, scope: r.payload.scope, returnTo: 'gamemap', node: node.id});
+      // 做完回到点「出发」的那一页：营地点的回营地，地图上点的回地图（以前一律回地图）
+      else if (r?.flow === 'drill') { const here = d?.pane?.()?.view; window.__pinkieDrill?.start({source: r.payload.source, scope: r.payload.scope, returnTo: here === 'today' ? 'today' : 'gamemap', node: node.id}); }
       else if (r?.flow === 'guard') openGame('guard', {node, payload: r.payload});
       return r;
     } catch (e) { toast(e.message || '没打开'); }
@@ -471,6 +477,6 @@
   // 学习后端改了数据（作答、复习、上课）→ 状态和 pending 补播。
   window.addEventListener('pinkie:desk-changed', () => { refresh().catch(() => {}); });
 
-  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, plain, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
+  window.__pinkieGame = {backTarget, backLabel, goBack, markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, plain, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
   window.dispatchEvent(new CustomEvent('pinkie:game-ready'));
 })();

@@ -84,7 +84,8 @@
     root.classList.add('pk-drill');
     root.replaceChildren();
     const top = el('header', 'pk-drill-top');
-    const exit = el('button', 'pk-drill-exit', '×'); exit.type = 'button'; exit.setAttribute('aria-label', '退出背一背');
+    const VERB = route.source === 'hunt' ? '打' : route.returnTo === 'gamemap' || route.node ? '做' : '背';
+    const exit = el('button', 'pk-drill-exit', '×'); exit.type = 'button'; exit.setAttribute('aria-label', route.source === 'hunt' ? '退出讨伐' : VERB === '做' ? '退出这一关' : '退出背一背');
     const prog = el('div', 'pk-drill-progress');
     prog.setAttribute('role', 'progressbar'); prog.setAttribute('aria-valuemin', '0'); prog.setAttribute('aria-valuemax', '1'); prog.setAttribute('aria-valuenow', '0'); prog.setAttribute('aria-label', '本组进度');
     const ink = el('span', 'pk-drill-ink');
@@ -593,7 +594,7 @@
       dialog.setAttribute('aria-label', '先放着');
       dialog.append(el('p', '', lines().exit(n)));
       const row = el('div', 'pk-done-actions');
-      const stay = el('button', 'pk-btn', '接着背'); stay.type = 'button'; stay.dataset.kind = 'go'; stay.setAttribute('aria-label', '接着背');
+      const stay = el('button', 'pk-btn', `接着${VERB}`); stay.type = 'button'; stay.dataset.kind = 'go'; stay.setAttribute('aria-label', `接着${VERB}`);
       const quit = el('button', 'pk-link', '先放着'); quit.type = 'button'; quit.setAttribute('aria-label', '先放着');
       stay.addEventListener('click', () => dialog.close('stay'));
       quit.addEventListener('click', () => dialog.close('leave'));
@@ -620,7 +621,7 @@
       phase = 'ask';
       q.replaceChildren(el('h3', 'pk-drill-stem', '接着上次那组？'), el('p', 'pk-drill-extra', '进度还在这一页上。'));
       const row = el('div', 'pk-done-actions');
-      const yes = el('button', 'pk-btn', '接着背'); yes.type = 'button'; yes.dataset.kind = 'go';
+      const yes = el('button', 'pk-btn', `接着${VERB}`); yes.type = 'button'; yes.dataset.kind = 'go';
       const no = el('button', 'pk-link', '重新开始'); no.type = 'button';
       yes.addEventListener('click', () => resume(saved));
       no.addEventListener('click', () => { local.drillSaved = null; openFresh(); });
@@ -640,7 +641,12 @@
         original = queue.length; index = 0;
         prog.setAttribute('aria-valuemax', String(original || 1));
         if (pendingN > 0) { pendingLine.hidden = false; pendingLine.textContent = lines().pending(pendingN); }
-        if (!queue.length) { q.replaceChildren(el('p', 'pk-drill-empty', '这组暂时没有可背的。')); check.hidden = true; return; }
+        if (!queue.length) {
+          const box = el('div', 'pk-drill-empty'), back = el('button', 'pk-btn', backLabel()); back.type = 'button'; back.dataset.kind = 'go';
+          back.addEventListener('click', () => goBack());
+          box.append(el('p', '', route.source === 'hunt' ? '现在没有要讨伐的错题怪。' : route.source === 'vocab' ? '今天的生词都背过了，没有到期的。' : route.source === 'notes' ? '今天的笔记都回顾过了，没有到期的卡片。' : '这组暂时没有题。'), back);
+          q.replaceChildren(box); check.hidden = true; return;
+        }
         root.dataset.demo = route.demo ? 'ready' : '';
         show();
         if (route.demo && route.auto !== false) autorun();
@@ -650,8 +656,9 @@
         check.hidden = true;
         const retry = el('button', 'pk-link', '再试一次'); retry.type = 'button'; retry.setAttribute('aria-label', '再试一次');
         retry.addEventListener('click', () => { check.hidden = false; openFresh(); });
-        const box = el('div', 'pk-drill-empty');
-        box.append(el('p', '', error.message || '这组没有打开'), retry);
+        const box = el('div', 'pk-drill-empty'), back = el('button', 'pk-link', backLabel()); back.type = 'button';
+        back.addEventListener('click', () => goBack());
+        box.append(el('p', '', error.message || '这组没有打开'), retry, back);
         q.replaceChildren(box);
       }
     }

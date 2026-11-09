@@ -937,6 +937,14 @@
       // 做题页记住从哪进来，打完回到那一页（营地、地图、讨伐……），不要一律掉回今日或笔记本。
       const playing = ['drill', 'stage', 'gameguard', 'gameexam'];
       if (pane.view && pane.view !== id && playing.includes(id) && !playing.includes(pane.view)) pane.state.returnView = pane.view;
+      // 游戏各页之间的返回栈：衣橱 → 商店 → × 回衣橱；从营地进来的 × 回营地。往回走时出栈，不会来回打转。
+      const gamePages = ['gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
+      if (gamePages.includes(id) && pane.view !== id) {
+        const stack = pane.state.gameStack ||= [];
+        if (!gamePages.includes(pane.view)) stack.length = 0;
+        else if (stack.at(-1) === id) stack.pop();
+        else stack.push(pane.view);
+      }
       const chat = id === 'deskchat' && chatCard(); if (chat && chat !== pane) { focusPage(chat); return; }
       w.chat = false; w.chatFocus = false; w.focus = w.panes.indexOf(pane);
       if (!pane.host) createPane(pane);
