@@ -64,7 +64,7 @@
     "seal": {
       "name": "金印扭蛋",
       "cost": {"single": {"seals": 2}},
-      "rates": {"R": 0.80, "SR": 0.15, "SSR": 0.05},
+      "rates": {"SR": 0.95, "SSR": 0.05},
       "pity": {"ssr": 20}
     }
   },

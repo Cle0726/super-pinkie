@@ -94,3 +94,14 @@ test('讨伐离线退回原题（local）时背原题答案赢了也不算收服
     game.mutate(s => { s.monsters.list[id].state = 'due'; });
   }
 });
+
+test('扭蛋公示和代码一致：公示概率 > 0 的档位池子里都有东西；含保底综合概率和 2 万次实抽对得上', async t => {
+  const E = await import('../services/mode-architecture/learning-game-economy.mjs');
+  const {game} = gameFixture(t);
+  for (const b of game.banners()) {
+    for (const [tier, p] of Object.entries(b.rates)) if (p > 0) assert.ok(b.pools[tier]?.length, `${b.id} 公示 ${tier} ${p * 100}% 但池子是空的`);
+    const rng = E.mulberry32(E.seedFrom('cheats', b.id)); let pity = {sr: 0, ssr: 0}, ssr = 0; const N = 20000;
+    for (let i = 0; i < N; i++) { const r = E.gachaPull(b.id, {pity, rng}); pity = r.pity; if (r.results[0].rarity === 'SSR') ssr++; }
+    assert.ok(Math.abs(ssr / N - b.effectiveSSR) < 0.006, `${b.id} 实抽 ${ssr / N} vs 公示 ${b.effectiveSSR}`);
+  }
+});

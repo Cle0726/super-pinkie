@@ -230,6 +230,18 @@ export function gachaPools(bannerId, catalog = loadForms()) {
   return pools;
 }
 
+// 含保底的综合 SSR 概率（商店页公示用）：按 gachaRarity 同一套规则精确算一个保底周期的期望长度。
+export function effectiveSSR(bannerId, economy = loadEconomy()) {
+  const b = economy.gacha[bannerId]; if (!b) return null;
+  let surv = 1, expect = 0;
+  for (let n = 1; n <= b.pity.ssr; n += 1) {
+    let p = n >= b.pity.ssr ? 1 : b.rates.SSR;
+    if (n < b.pity.ssr && b.pity.softStart && n >= b.pity.softStart) p = Math.min(1, p + b.pity.softStep * (n - b.pity.softStart + 1));
+    expect += n * surv * p; surv *= 1 - p;
+  }
+  return 1 / expect;
+}
+
 // 一抽。pity = {sr, ssr}（距上次 SR+ / SSR 已抽多少次，不含本抽）。返回 {rarity, pity}。
 export function gachaRarity(bannerId, pity, rng, economy = loadEconomy()) {
   const banner = economy.gacha[bannerId];
