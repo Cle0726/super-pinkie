@@ -420,7 +420,9 @@
     } catch (e) { toast(e.message || '没打开'); }
     finally { if (from) from.disabled = false; }
   }
-  function toast(text) { const d = document.querySelector('#pinkie-study-desk .desk-status'); if (d) { d.textContent = text; d.classList.add('show'); setTimeout(() => d.classList.remove('show'), 2600); } }
+  // 后端旧文案里的货币 emoji 换成字（VFX.md：界面里不出 emoji）。
+  const plain = text => String(text ?? '').replace(/\s*(⭐|🟡|💎)/gu, m => ' ' + ({'⭐': '星星', '🟡': '金印', '💎': '碎片'})[m.trim()]);
+  function toast(text) { const d = document.querySelector('#pinkie-study-desk .desk-status'); if (d) { d.textContent = plain(text); d.classList.add('show'); setTimeout(() => d.classList.remove('show'), 2600); } }
 
   function askBox(ctx) {
     const d = desk();
@@ -451,6 +453,6 @@
   // 学习后端改了数据（作答、复习、上课）→ 状态和 pending 补播。
   window.addEventListener('pinkie:desk-changed', () => { refresh().catch(() => {}); });
 
-  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
+  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, plain, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
   window.dispatchEvent(new CustomEvent('pinkie:game-ready'));
 })();

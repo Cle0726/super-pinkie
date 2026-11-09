@@ -125,14 +125,14 @@ test('课程 recordLesson：一节课只发一次 +15', t => {
 
 test('商店：requestId 幂等、钱不够写清还差多少、买过的不能再买', t => {
   const {game} = gameFixture(t);
-  assert.throws(() => game.buy({sku: 'form:learning', requestId: 'r1'}), /还差 1200 ⭐/);
+  assert.throws(() => game.buy({sku: 'form:learning', requestId: 'r1'}), /还差 1200 星星/);
   game.mutate(s => { s.wallet.stars = 2500; });
   const a = game.buy({sku: 'form:learning', requestId: 'r2'});
   const b = game.buy({sku: 'form:learning', requestId: 'r2'});
   assert.deepEqual(a, b);
   assert.equal(game.read().wallet.stars, 1300);
   assert.throws(() => game.buy({sku: 'form:learning', requestId: 'r3'}), /已经有/);
-  assert.throws(() => game.buy({sku: 'form:queen', requestId: 'r4'}), /8 🟡/, 'SSR 在金印专柜，要金印');
+  assert.throws(() => game.buy({sku: 'form:queen', requestId: 'r4'}), /8 金印/, 'SSR 在金印专柜，要金印');
   assert.throws(() => game.buy({sku: 'form:lidong'}), /requestId/);
 });
 

@@ -123,7 +123,7 @@
 #pinkie-study-desk .pkg-stage__head{position:absolute;left:clamp(24px,4%,44px);top:clamp(24px,5%,44px);width:min(46%,420px);display:grid;gap:10px}
 #pinkie-study-desk .pkg-stage__copy{position:absolute;left:clamp(24px,4%,44px);bottom:clamp(22px,4%,34px);width:min(44%,400px);display:grid;gap:10px}
 #pinkie-study-desk .pkg-hello{margin:4px 0 0;font:900 clamp(30px,3.1vw,46px)/1.12 var(--pkg-display);letter-spacing:.04em}
-#pinkie-study-desk .pkg-line{margin:0;font-size:13.5px;line-height:1.6;color:var(--st-ink-2);min-height:1.6em}
+#pinkie-study-desk .pkg-line{margin:0;font-size:13.5px;line-height:1.6;color:var(--st-ink-2);min-height:1.6em;text-wrap:balance;line-break:strict}
 #pinkie-study-desk .pkg-go{appearance:none;position:relative;display:block;width:100%;border:0;cursor:pointer;text-align:left;border-radius:12px;padding:16px 20px 15px 22px;color:#fff;overflow:hidden;
   background:linear-gradient(118deg,color-mix(in srgb,var(--pkg-b,#DB1F74) 88%,#160a12) 0,color-mix(in srgb,var(--pkg-b,#DB1F74) 62%,#160a12) 100%);
   box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 0 0 1px rgba(0,0,0,.08),0 18px 30px -18px color-mix(in srgb,var(--pkg-b,#DB1F74) 80%,#000);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}

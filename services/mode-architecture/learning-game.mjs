@@ -445,8 +445,8 @@ export class LearningGame {
       if (owned) fail('这个已经有啦');
       const price = entry.price || {};
       const lack = [];
-      if ((price.stars || 0) > state.wallet.stars) lack.push(`${price.stars - state.wallet.stars} ⭐`);
-      if ((price.seals || 0) > state.wallet.seals) lack.push(`${price.seals - state.wallet.seals} 🟡`);
+      if ((price.stars || 0) > state.wallet.stars) lack.push(`${price.stars - state.wallet.stars} 星星`);
+      if ((price.seals || 0) > state.wallet.seals) lack.push(`${price.seals - state.wallet.seals} 金印`);
       if ((price.shards || 0) > (state.wallet.shards.any || 0)) lack.push(`${price.shards - (state.wallet.shards.any || 0)} 万能碎片`);
       if (lack.length) fail(`还差 ${lack.join('、')}，再学一会儿就够啦`);
       state.wallet.stars -= price.stars || 0;
@@ -487,8 +487,8 @@ export class LearningGame {
       const g = state.gacha[id];
       const cost = E.bannerCost(id, n, this.economy, {tensDone: g.tens});
       if (!cost) fail('这个扭蛋机不能十连');
-      if ((cost.stars || 0) > state.wallet.stars) fail(`还差 ${cost.stars - state.wallet.stars} ⭐`);
-      if ((cost.seals || 0) > state.wallet.seals) fail(`还差 ${cost.seals - state.wallet.seals} 🟡`);
+      if ((cost.stars || 0) > state.wallet.stars) fail(`还差 ${cost.stars - state.wallet.stars} 星星`);
+      if ((cost.seals || 0) > state.wallet.seals) fail(`还差 ${cost.seals - state.wallet.seals} 金印`);
       state.wallet.stars -= cost.stars || 0;
       state.wallet.seals -= cost.seals || 0;
       const owned = new Set([...state.forms.owned, ...state.items.owned]);
