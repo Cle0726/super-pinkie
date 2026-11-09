@@ -34,7 +34,7 @@ test('CONTRACT §2 每个方法都注册了，权限照背一背', async t => {
   const {store} = gameFixture(t);
   const api = fakeApi();
   registerLearningGame(api, store);
-  const names = ['state', 'awards.pending', 'awards.ack', 'world', 'world.regenerate', 'node.start', 'guard.answer', 'guard.finish',
+  const names = ['state', 'awards.pending', 'awards.ack', 'world', 'world.regenerate', 'node.start', 'guard.answer', 'guard.explain', 'guard.finish',
     'monsters.list', 'hunt.start', 'shop.catalog', 'shop.buy', 'gacha.banners', 'gacha.pull', 'forms.list', 'forms.equip', 'forms.awaken',
     'wishlist.set', 'items.equip', 'quests.today', 'quests.claim', 'chest.open', 'exam.papers', 'exam.generate', 'exam.start', 'exam.save',
     'exam.submit', 'exam.result', 'boss.state', 'boss.realScore', 'line'];

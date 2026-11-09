@@ -3,7 +3,7 @@
 // 迷雾 → 已探索（上过这一课）→ 点亮（这个节点的一组练习 ≥80% 或守关通过）→ 金章（隔 ≥3 天复测仍 ≥80%）。
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
 import {GAME_EXAM} from './learning-game.mjs';
 
 const DAY = 86400000;
@@ -279,6 +279,27 @@ export class GameWorld {
       if (!correct) this.game.modules.monsters?.spawn(state, {key: `guard:${fold(item.point || item.stem).slice(0, 40)}`, subject: '英语', topic: item.point, question: item.stem, answer: item.options[item.answer], options: item.options, source: {type: 'guard', id: attemptId}, node: g.nodeId});
       return res;
     });
+  }
+  // 守关点过之后才讲。标准答案是选项本身，模型只顺着它讲。
+  async guardExplain({attemptId, itemId, yours = ''} = {}) {
+    const id = clean(attemptId, 80);
+    const g = this.ensure(this.game.read()).guards[id];
+    if (!g) throw new Error('这场守关战已经不在了');
+    const rec = g.answers?.[String(itemId || '')];
+    if (!rec) throw new Error('先做完这题');
+    if (rec.lecture) return {text: rec.lecture, source: rec.lectureSource || 'model'};
+    const idx = Number(String(itemId).replace(/^g/, '')) - 1;
+    const item = g.items[idx];
+    if (!item) throw new Error('这道题不在卷子里');
+    const standard = clean(item.options?.[item.answer], 300);
+    let text = '';
+    let source = 'none';
+    if (standard && this.game.requestModel) {
+      const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, {question: clean(item.stem, 500), standard, note: clean(item.why, 200), yours: rec.correct ? '' : clean(yours, 200), correct: Boolean(rec.correct)}, {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 500});
+      if (r) { text = r.value.text; source = 'model'; }
+    }
+    if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; } });
+    return {text, source};
   }
   guardFinish({attemptId} = {}) {
     return this.game.mutate(state => {

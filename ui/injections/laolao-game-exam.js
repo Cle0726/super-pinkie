@@ -270,7 +270,21 @@
     (result.sections || []).forEach((s, i) => { const r = el('div', 'pke-row'); const b = el('div', 'pke-row__bar'); const f = el('i'); f.style.transform = `scaleX(${s.max ? s.score / s.max : 0})`; b.append(f); r.append(el('small', 'pkb-kicker', `PART ${ROMAN[i]}`), el('b', '', PART_ZH[s.id] || s.id), b, el('em', 'pkg-num', `${fmtScore(s.score)} / ${s.max}`)); if (s.crit) r.dataset.crit = '1'; rows.append(r); });
     box.append(rows);
     const notes = Object.entries(result.notes || {});
-    if (notes.length) { const n = el('div', 'pke-notes'); n.append(el('small', 'pkb-kicker', 'MARKER’S NOTES')); for (const [id, v] of notes) { const it = el('div', 'pke-note'); it.append(el('b', '', /^writing/.test(id) ? '作文' : '翻译段落'), el('em', 'pkg-num', `${v.score} 分`), el('p', '', v.reason || '')); if (v.source === 'local') it.append(el('small', '', '碧琪稍后会再细看一遍')); n.append(it); } box.append(n); }
+    const misses = result.explained || [];
+    if (misses.length) {
+      const block = el('div', 'pke-misses'); block.append(el('small', 'pkb-kicker', 'THE ONES THAT SLIPPED'));
+      for (const m of misses) {
+        const it = el('article', 'pke-miss');
+        it.append(el('b', '', m.no ? `第 ${m.no} 题` : (PART_ZH[m.section] || '这题')));
+        if (m.stem) it.append(el('p', '', m.stem));
+        if (m.yours) it.append(el('p', '', `你的答案：${m.yours}`));
+        it.append(el('p', 'pke-miss__key', `标准答案：${m.standard}`));
+        if (m.text) it.append(el('p', 'pke-miss__why', m.text));
+        block.append(it);
+      }
+      box.append(block);
+    }
+    if (notes.length) { const n = el('div', 'pke-notes'); n.append(el('small', 'pkb-kicker', 'MARKER’S NOTES')); for (const [id, v] of notes) { const it = el('div', 'pke-note'); it.append(el('b', '', /^writing/.test(id) ? '作文' : '翻译段落'), el('em', 'pkg-num', `${v.score} 分`)); if (v.standard) it.append(el('p', 'pke-miss__key', `标准答案：${v.standard}`)); it.append(el('p', '', v.reason || '')); if (v.source === 'local') it.append(el('small', '', '碧琪稍后会再细看一遍')); n.append(it); } box.append(n); }
     if (result.review?.text) { const rv = el('blockquote', 'pke-review'); rv.append(el('p', '', result.review.text), el('cite', '', '— 碧琪')); box.append(rv); }
     const act = el('div', 'pke-report__act'); const mons = (result.monstersSpawned || []).length;
     if (mons) { act.append(el('span', 'pke-mons', `${mons} 道错题变成了错题怪，回到了地图上`), btn('去地图看看', 'pkg-btn', onMap), btn('去讨伐', 'pks-pull pke-nav', onHunt)); }

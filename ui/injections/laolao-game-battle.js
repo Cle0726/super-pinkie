@@ -230,7 +230,16 @@
       const next = () => { i++; busy = false; show(); };
       const R = window.__pinkieDeskReward;
       if (R?.feedbackSheet) {
-        R.feedbackSheet(qWrap, {kind: r.correct ? 'right' : 'wrong', title: r.correct ? '命中' : '记下了', again: false, line: r.correct ? (r.explain || '') : `这题会变成错题怪，过几天回来。${r.explain ? ' ' + r.explain : ''}`, onContinue: next});
+        const sheet = R.feedbackSheet(qWrap, {kind: r.correct ? 'right' : 'wrong', title: r.correct ? '命中' : '记下了', again: false, line: r.correct ? (r.explain || '') : `这题会变成错题怪，过几天回来。${r.explain ? ' ' + r.explain : ''}`, onContinue: next});
+        const copy = sheet?.sheet?.querySelector('.pk-sheet-copy');
+        if (copy) {
+          const p = el('p', 'pk-sheet-explain', '碧琪在按标准答案讲…');
+          copy.append(p);
+          g.call('guard.explain', {attemptId: payload.attemptId, itemId: items[i].itemId, yours: items[i].options[k]}).then(res => {
+            if (!p.isConnected) return;
+            if (res?.text) p.textContent = res.text; else p.remove();
+          }).catch(() => { if (p.isConnected) p.remove(); });
+        }
       } else {
         const note = el('div', 'pkb-guard__explain'); note.append(el('b', '', r.correct ? '命中' : '这题记下了，会变成错题怪回来'), el('p', '', r.explain || ''));
         const nb = el('button', 'pkg-btn pk-btn', i + 1 < items.length ? '下一题' : '结算'); nb.type = 'button'; nb.addEventListener('click', next); note.append(nb); qWrap.append(note); nb.focus();

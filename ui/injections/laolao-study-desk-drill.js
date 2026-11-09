@@ -457,10 +457,10 @@
         const text = typed || '';
         const d = distance(text, item.answer);
         const verdict = d === 0 ? 'correct' : d === 1 ? 'partial' : 'wrong';
-        result = {correct: verdict === 'correct', verdict, kind: verdict === 'partial' ? 'partial' : verdict === 'correct' ? 'right' : 'wrong', line: verdict === 'partial' ? '差一个字母。' : undefined, answerHtml: hi(String(item.answer), ctx.motion?.reduced), shake: verdict === 'correct' ? null : body};
+        result = {correct: verdict === 'correct', verdict, yours: text, kind: verdict === 'partial' ? 'partial' : verdict === 'correct' ? 'right' : 'wrong', line: verdict === 'partial' ? '差一个字母。' : undefined, answerHtml: hi(String(item.answer), ctx.motion?.reduced), shake: verdict === 'correct' ? null : body};
       } else {
         const correct = choiceCorrect(item, selection);
-        result = {correct, answerHtml: hi(item.options?.[item.answer] || revealText(item), ctx.motion?.reduced), shake: correct ? null : selectedEl, after: () => markChoices(item, correct)};
+        result = {correct, yours: item.options?.[selection] || '', answerHtml: hi(item.options?.[item.answer] || revealText(item), ctx.motion?.reduced), shake: correct ? null : selectedEl, after: () => markChoices(item, correct)};
       }
       if (hinted) result.hinted = true;
       await settle(result);
@@ -490,7 +490,7 @@
     function finishWrite(item, judged) {
       const verdict = judged?.verdict || 'wrong';
       const correct = verdict === 'correct';
-      settle({correct, verdict, kind: verdict === 'partial' ? 'partial' : correct ? 'right' : 'wrong', line: judged?.comment || '', missing: judged?.missing || [], answerHtml: hi(revealText(item), ctx.motion?.reduced)});
+      settle({correct, verdict, yours: typed || '', kind: verdict === 'partial' ? 'partial' : correct ? 'right' : 'wrong', line: judged?.comment || '', missing: judged?.missing || [], answerHtml: hi(revealText(item), ctx.motion?.reduced)});
     }
     async function settle(result) {
       if (!alive) return;
@@ -520,7 +520,21 @@
       phase = 'sheet'; busy = false; check.hidden = true; bar.hidden = true;
       const kind = result.kind || (result.correct ? 'right' : 'wrong');
       sheetApi = R.feedbackSheet(col, {kind, title: result.title, line: result.line, answerHtml: result.answerHtml, missing: result.missing, silent: result.silent, onContinue: advance});
+      attachExplain(sheetApi?.sheet, item, result);
       live.textContent = (result.title || (result.correct ? '对啦' : '差一点')) + '。' + (result.line || '');
+    }
+    function attachExplain(sheet, item, result) {
+      if (!sheet || route.demo || result.learned) return;
+      const copy = sheet.querySelector('.pk-sheet-copy');
+      if (!copy) return;
+      const known = item.reveal?.extra || '';
+      const p = el('p', 'pk-sheet-explain', known || '碧琪在按标准答案讲…');
+      copy.append(p);
+      rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 30000).then(r => {
+        if (!p.isConnected) return;
+        if (r?.text) p.textContent = r.text;
+        else if (!known) p.remove();
+      }).catch(() => { if (p.isConnected && !known) p.remove(); });
     }
     function advance() {
       sheetApi = null; index += 1;

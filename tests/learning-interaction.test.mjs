@@ -143,7 +143,7 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   assert.deepEqual([...legacyMethods.keys()].sort(), [
     'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
     'pinkie.learning.current',
-    'pinkie.learning.drill.answer', 'pinkie.learning.drill.cheer', 'pinkie.learning.drill.finish', 'pinkie.learning.drill.judge', 'pinkie.learning.drill.learned', 'pinkie.learning.drill.session', 'pinkie.learning.drill.settings.get', 'pinkie.learning.drill.settings.set',
+    'pinkie.learning.drill.answer', 'pinkie.learning.drill.cheer', 'pinkie.learning.drill.explain', 'pinkie.learning.drill.finish', 'pinkie.learning.drill.judge', 'pinkie.learning.drill.learned', 'pinkie.learning.drill.session', 'pinkie.learning.drill.settings.get', 'pinkie.learning.drill.settings.set',
     'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
     'pinkie.learning.notes.delete', 'pinkie.learning.notes.list', 'pinkie.learning.notes.organize.apply',
     'pinkie.learning.notes.organize.get', 'pinkie.learning.notes.organize.light', 'pinkie.learning.notes.organize.preview',

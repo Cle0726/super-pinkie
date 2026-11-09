@@ -92,6 +92,16 @@ export async function pool(items, n, fn) {
   await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } }));
 }
 
+// 做完才讲。standard 是标准答案，讲解必须顺着它，不能改成另一个答案。
+export const EXPLAIN_RULES = `你在学生做完一道题之后讲解。输入 {"question":题干,"standard":标准答案,"note":出题时的一句解析或原文,"yours":学生写的答案，做对时为空,"correct":是否做对}。
+必须照 standard 讲，不能改成别的答案。note 有内容就用上，和 standard 冲突时以 standard 为准。
+用中文讲 2 到 4 句：这题在考什么、为什么是这个答案；correct 为 false 时点出 yours 和标准答案差在哪。
+不要称呼，不要「加油」，不要把题干整段重抄一遍。只输出 JSON：{"text":"讲解"}`;
+export function validExplain(v) {
+  const text = clean(v?.text, 400);
+  return text.length >= 8 ? {text} : null;
+}
+
 // ---------- 错题怪 ----------
 export const MONSTER_NAME_RULES = `你是碧琪上岸记的错题怪命名师。输入一道先生做错的题 {"subject","topic","question","answer","species"}。
 给这只错题怪起名字和一句话介绍。只输出 JSON：{"name":"考点 · 怪名（≤14 字，例：一般现在时 · 迷糊史莱姆）","blurb":"一句话，≤30 字，可爱、俏皮，说清它代表的知识点，不骂人、不说『你忘了』"}`;

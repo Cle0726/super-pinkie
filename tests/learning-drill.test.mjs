@@ -8,6 +8,7 @@ import {LearningPact} from '../services/mode-architecture/learning-pact.mjs';
 import {LearningRecall, recallHash} from '../services/mode-architecture/learning-recall.mjs';
 import {LearningVocab} from '../services/mode-architecture/learning-vocab.mjs';
 import {LearningDesk} from '../services/mode-architecture/learning-desk.mjs';
+import {EXPLAIN_RULES} from '../services/mode-architecture/learning-game-content.mjs';
 import {
   DRILL_CHEER_RULES, DRILL_JUDGE_RULES, DRILL_RULES, LearningDrill, buildSession, drillCardHash, drillStars, drillStrength,
   foldDrillText, localCheer, localJudge, mapDrillRating, mixDrillCards, pairLabel, validateDrillCards,
@@ -568,4 +569,27 @@ test('notes saved from any learning chat are drilled, whichever chat opens the d
   assert.equal(result.rating, 'remembered');
   const card = recall.read().records['note-elsewhere'].cards[0];
   assert.ok(card.drillSessions?.[opened.sessionId]);
+});
+
+test('做完才讲：讲解顺着标准答案，没做完不能要', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-explain-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const store = new LearningInteractionStore({root, workspace: path.join(root, 'workspace')});
+  let payload;
+  const organizer = {catalog: () => ({defaultRef: 'qa/explain'}), requestModel: async (_model, rules, body) => { payload = body; assert.equal(rules, EXPLAIN_RULES); return {text: 'impact 后面固定用 on。'}; }};
+  const drill = new LearningDrill(store, {organizer});
+  const session = {sessionId: 's1', sessionKey: KEY, items: [{itemId: 'd1', mode: 'choice', prompt: 'impact ___', reveal: {question: 'impact ___ business', answer: 'on', extra: '介词用 on'}}], answers: [], graded: {}, learned: {}};
+  drill.save(session);
+  await assert.rejects(() => drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'}), /先做完/);
+  session.answers.push({itemId: 'd1', correct: false});
+  drill.save(session);
+  const told = await drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'});
+  assert.equal(told.source, 'model');
+  assert.equal(told.text, 'impact 后面固定用 on。');
+  assert.equal(payload.standard, 'on');
+  assert.equal(payload.yours, 'in');
+  assert.equal(payload.correct, false);
+  organizer.requestModel = async () => { throw new Error('不该再叫模型'); };
+  const again = await drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'});
+  assert.equal(again.text, told.text);
 });
