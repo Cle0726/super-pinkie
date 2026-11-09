@@ -66,6 +66,19 @@ final class Host: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDel
       window.setContentSize(NSSize(width: w, height: h)); emit(["id": id, "ok": true])
     case "dark":
       window.appearance = NSAppearance(named: (o["on"] as? Bool ?? false) ? .darkAqua : .aqua); emit(["id": id, "ok": true])
+    case "key":
+      // 真键盘事件（可信事件，Tab 走原生焦点顺序）：keys = [[keyCode, "字符", shift?], …]
+      window.makeKey(); window.makeFirstResponder(web)
+      for k in (o["keys"] as? [[Any]] ?? []) {
+        let code = UInt16(k[0] as? Int ?? 0), ch = k.count > 1 ? (k[1] as? String ?? "") : "", shift = k.count > 2 ? (k[2] as? Bool ?? false) : false
+        let flags: NSEvent.ModifierFlags = shift ? [.shift] : []
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+          if let ev = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: ch, charactersIgnoringModifiers: ch, isARepeat: false, keyCode: code) {
+            window.sendEvent(ev)
+          }
+        }
+      }
+      emit(["id": id, "ok": true])
     case "quit": NSApp.terminate(nil)
     default: emit(["id": id, "ok": false, "error": "unknown op"])
     }
