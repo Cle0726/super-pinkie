@@ -188,36 +188,16 @@ html[data-laolao-mode="learning"][data-pinkie-study-desk="desk"] .shell,html[dat
 #pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page[data-focused] .view{--pk-page-margin:var(--pink)}
 @container pkpage (max-width:480px){#pinkie-study-desk.pk-ink:not([data-pages="1"]) .desk-page .view{--pk-margin-x:30px}}
 
-/* 先生 10-29：桌上的页是能拖动的卡片，不是固定的单页 / 对开。位置和大小由 JS 写在 left/top/width/height（内容区的百分比）上。
-   顶上的胶带是把手；右边、下边和右下角拖动改大小。拖的时候只动 transform，不加模糊。 */
+/* 页面位置由 JS 写在 left/top/width/height（内容区的百分比）上：主页面铺满，对话卡停在右边。 */
 #pinkie-study-desk.pk-ink:not([data-view="chat"]) .desk-content{display:block}
 /* 回到普通聊天时整张桌面都收起来（上面的定位规则比 laolao-study-desk.css 里那条隐藏规则晚加载，会把它盖掉）。 */
 #pinkie-study-desk.pk-ink[data-view="chat"] .desk-content{display:none}
 #pinkie-study-desk.pk-ink .desk-page{position:absolute;box-sizing:border-box;min-width:0;min-height:0}
-#pinkie-study-desk.pk-ink .desk-page-grip{position:absolute;left:0;right:0;top:0;height:22px;z-index:8;cursor:grab;touch-action:none}
-#pinkie-study-desk.pk-ink .desk-page-grip::before{content:"";position:absolute;left:50%;top:-6px;width:84px;height:18px;margin-left:-42px;transform:rotate(-2deg);
-  background:repeating-linear-gradient(90deg,rgba(239,175,123,.42) 0 6px,rgba(245,194,154,.48) 6px 12px);opacity:0;transition:opacity .15s}
-#pinkie-study-desk.pk-ink .desk-page:hover>.desk-page-grip::before,#pinkie-study-desk.pk-ink .desk-page[data-dragging]>.desk-page-grip::before{opacity:1}
-#pinkie-study-desk.pk-ink[data-pages="1"][data-tiled="true"] .desk-page-grip::before{opacity:0!important}
-#pinkie-study-desk.pk-ink .desk-page[data-dragging] .desk-page-grip{cursor:grabbing}
-#pinkie-study-desk.pk-ink .desk-page[data-dragging]{user-select:none;will-change:transform}
-#pinkie-study-desk.pk-ink .desk-page[data-dragging] .desk-page-body{pointer-events:none}
-#pinkie-study-desk.pk-ink .desk-page-resize{position:absolute;z-index:8;touch-action:none}
-#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="e"]{top:22px;bottom:18px;right:0;width:6px;cursor:ew-resize}
-#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="s"]{left:0;right:18px;bottom:0;height:6px;cursor:ns-resize}
-#pinkie-study-desk.pk-ink .desk-page-resize[data-edge="se"]{right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;
-  background:linear-gradient(135deg,transparent 0 55%,var(--hair-2) 55% 60%,transparent 60% 70%,var(--hair-2) 70% 75%,transparent 75%);opacity:0;transition:opacity .15s}
-#pinkie-study-desk.pk-ink .desk-page:hover>.desk-page-resize[data-edge="se"]{opacity:.9}
-/* 拖散以后每张卡都是一张独立的纸：四角都圆、自己带投影，书脊阴影去掉。平铺时保持原来那本摊开的本子。 */
-#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page .view{border-radius:6px 16px 16px 6px!important;box-shadow:var(--book-shadow)!important}
-#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page:first-child::after{display:none}
-#pinkie-study-desk.pk-ink[data-tiled="false"] .desk-page[data-focused] .view{box-shadow:0 0 0 1px var(--hair-2),var(--book-shadow)!important}
-/* 合上 / 换位按钮只要不止一张就显示（原来只在对开时显示）。 */
-#pinkie-study-desk.pk-ink[data-pages="1"] .desk-page-action{visibility:hidden}
+/* 11-08：一次一页。主页面不显示合上按钮（合上 = 回今日，用导轨就行）；对话卡的合上按钮一直在。 */
+#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-action{visibility:visible}
 /* 聊天卡片：就是学习台独立对话本身，纸面和便签栏时一样。 */
 #pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .view{border-radius:14px!important}
 #pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"]::after{display:none}
 #pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-tools{top:0;right:8px;height:22px;z-index:9}
-#pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-grip{right:44px}
 #pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .pk-chat-page{padding-top:16px!important}
 #pinkie-study-desk.pk-ink .desk-page[data-view="deskchat"] .desk-page-action[aria-label="换到另一页"]{display:none}

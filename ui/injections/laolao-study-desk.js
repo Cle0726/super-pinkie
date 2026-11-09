@@ -19,12 +19,10 @@
     const owner = /^agent:([^:]+):/.exec(sessionKey())?.[1], mode = doc.dataset.laolaoMode;
     return mode ? mode === 'learning' && (!owner || owner === 'learning') : owner === 'learning';
   };
-  // 桌上的每一页是一张能拖、能改大小的卡片。位置按学习台内容区的比例存（0–1），换窗口大小也不会跑出去。
-  const MAX_CARDS = 4, MIN_W = 320, MIN_H = 260, SNAP = 14;
-  // 4 张学习页的上限不算聊天卡：桌上摊满了也总能开合对话。
-  const full = w => w.panes.filter(p => p.view !== 'deskchat').length >= MAX_CARDS;
-  const validRect = r => r && [r.x, r.y, r.w, r.h].every(Number.isFinite) && r.w > 0 && r.h > 0 ? {x: r.x, y: r.y, w: Math.min(1, r.w), h: Math.min(1, r.h)} : null;
-  // 平铺：从左到右排成一本摊开的本子；聊天卡固定窄一点、放最右边。
+  // 11-08 起学习台一次只摊一页（铺满）+ 可开合的对话卡停在右边。原来的多卡摊开（最多 4 张、拖动缩放）在真 App 里把
+  // 游戏页 / 生词本 / 资料页挤成约 280pt 的窄条，用户要求去掉。导轨点哪页就在这一页里换页。
+  const mainPage = w => w.panes.find(p => p.view !== 'deskchat');
+  // 主页面铺满，对话卡固定窄一点、停在最右边。
   function tileRects(w) {
     const chat = w.panes.filter(p => p.view === 'deskchat'), pages = w.panes.filter(p => p.view !== 'deskchat');
     const chatW = chat.length && pages.length ? 0.27 : 0, gap = chatW ? 0.012 : 0, each = pages.length ? (1 - chatW - gap) / pages.length : 0;
@@ -35,10 +33,13 @@
   const workspace = () => {
     if (!sessions.has(state.key)) {
       let saved; try { saved = JSON.parse(localStorage.getItem('pinkie-desk-pages:' + state.key) || 'null'); } catch {}
-      const configs = Array.isArray(saved?.panes) && saved.panes.length ? saved.panes.slice(0, MAX_CARDS + 1) : [{view: 'today'}];
-      const panes = configs.map((config, i) => ({id: 'page-' + i, view: config.view === 'chat' ? 'today' : config.view || 'today', state: {view: config.view || 'today', deskView: config.view || 'today', notesRoute: config.notesRoute, vocabRoute: config.vocabRoute}, rect: validRect(config.rect), z: Number(config.z) || i + 1, host: null}));
-      const w = {panes, focus: Math.min(Number(saved?.focus) || 0, panes.length - 1), chat: true, chatFocus: false, tiled: saved?.tiled !== false || panes.some(p => !p.rect), zTop: panes.length};
-      if (w.tiled) tileRects(w); w.zTop = Math.max(...panes.map(p => p.z)); sessions.set(state.key, w);
+      // 迁移旧的多卡工作区：只留最上面那张学习页 + 对话卡（学习数据都在后端，这里只是布局）。
+      const all = Array.isArray(saved?.panes) ? saved.panes.filter(c => c && typeof c === 'object') : [];
+      const page = all.filter(c => c.view !== 'deskchat').sort((a, b) => (Number(b.z) || 0) - (Number(a.z) || 0))[0] || {view: 'today'};
+      const configs = [page, ...(all.some(c => c.view === 'deskchat') ? [{view: 'deskchat'}] : [])];
+      const panes = configs.map((config, i) => ({id: 'page-' + i, view: config.view === 'chat' || !config.view ? 'today' : config.view, state: {view: config.view || 'today', deskView: config.view || 'today', notesRoute: config.notesRoute, vocabRoute: config.vocabRoute}, z: i + 1, host: null}));
+      const w = {panes, focus: 0, chat: true, chatFocus: false, tiled: true, zTop: panes.length};
+      tileRects(w); sessions.set(state.key, w);
     }
     return sessions.get(state.key);
   };
@@ -52,7 +53,7 @@
     try{localStorage.setItem(key,w.conversation);}catch{}return w.conversation;
   };
   const focused = pane => Boolean(state.root) && !workspace().chat && !workspace().chatFocus && focusedPane() === pane && !document.hidden;
-  const saveWorkspace = () => { try { const w = workspace(); localStorage.setItem('pinkie-desk-pages:' + state.key, JSON.stringify({focus: w.focus, tiled: w.tiled, panes: w.panes.map(p => ({view: p.view, notesRoute: p.state.notesRoute, vocabRoute: p.state.vocabRoute, rect: p.rect, z: p.z}))})); } catch {} };
+  const saveWorkspace = () => { try { const w = workspace(); localStorage.setItem('pinkie-desk-pages:' + state.key, JSON.stringify({focus: w.focus, panes: w.panes.map(p => ({view: p.view, notesRoute: p.state.notesRoute, vocabRoute: p.state.vocabRoute, z: p.z}))})); } catch {} };
   // 页面刚加载时请求可能抢在 App 的 connect 握手前，被网关拒绝或连接还没就绪；这些请求都没被处理，
   // 稍等重试是安全的（包括作答这类写操作）。其他错误照旧抛出。
   const CONNECTING = /invalid handshake|first request must be connect|gateway socket unavailable|学习台正在连接/i;
@@ -851,98 +852,20 @@
     const tools = el('header', 'desk-page-tools'); pane.title = el('span', 'desk-page-title');
     const close = button('', () => closePage(pane), 'desk-page-action'); close.setAttribute('aria-label', '合上这一页'); close.append(icon('x', {size: 'xs'}));
     tools.append(pane.title, close); pane.body = el('div', 'desk-page-body');
-    // 顶上那条胶带是把手：按住拖动换位置，双击铺满 / 还原。右边、下边和右下角拖动改大小。
-    const grip = el('div', 'desk-page-grip'); grip.title = '按住拖动；双击铺满'; grip.setAttribute('aria-hidden', 'true');
-    grip.addEventListener('pointerdown', event => dragCard(pane, event, 'move'));
-    const handles = ['e', 's', 'se'].map(edge => { const h = el('div', 'desk-page-resize'); h.dataset.edge = edge; h.setAttribute('aria-hidden', 'true'); h.addEventListener('pointerdown', event => dragCard(pane, event, edge)); return h; });
-    host.append(grip, tools, pane.body, ...handles);
+    host.append(tools, pane.body);
     for (const name of ['pointerdown', 'focusin']) host.addEventListener(name, () => focusPage(pane), {capture: true});
-    host.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/x-pinkie-view')) { event.preventDefault(); host.dataset.drop = ''; } });
-    host.addEventListener('dragleave', () => delete host.dataset.drop);
-    host.addEventListener('drop', event => { const view = event.dataTransfer.getData('application/x-pinkie-view'); delete host.dataset.drop; if (!view) return; event.preventDefault(); event.stopPropagation(); dropCard(view, event, pane); });
     return pane;
   }
   function applyRect(pane) {
     const r = pane.rect || {x: 0, y: 0, w: 1, h: 1}, s = pane.host?.style; if (!s) return;
     s.left = r.x * 100 + '%'; s.top = r.y * 100 + '%'; s.width = r.w * 100 + '%'; s.height = r.h * 100 + '%'; s.zIndex = String(pane.z || 1); s.transform = '';
   }
-  // 拖动时只改 transform（移动）或宽高（改大小），松手才写回比例；不起常驻的动画循环。
-  function dragCard(pane, event, mode) {
-    if (event.button !== 0) return;
-    const container = state.root?.querySelector('.desk-content'), host = pane.host; if (!container || !host) return;
-    event.preventDefault(); focusPage(pane);
-    const box = container.getBoundingClientRect(), W = box.width, H = box.height, start = {...pane.rect}, x0 = event.clientX, y0 = event.clientY;
-    const minW = Math.min(1, MIN_W / W), minH = Math.min(1, MIN_H / H), w = workspace();
-    const edges = axis => [0, 1, ...w.panes.filter(p => p !== pane && p.rect).flatMap(p => axis === 'x' ? [p.rect.x, p.rect.x + p.rect.w] : [p.rect.y, p.rect.y + p.rect.h])];
-    const snap = (value, axis, size) => { const limit = SNAP / (axis === 'x' ? W : H); let best = value, gap = limit; for (const e of edges(axis)) for (const v of [e, e - size]) if (Math.abs(v - value) < gap) { gap = Math.abs(v - value); best = v; } return best; };
-    let next = {...start}, frame = 0;
-    const paint = () => { frame = 0; if (mode === 'move') host.style.transform = `translate(${(next.x - start.x) * W}px,${(next.y - start.y) * H}px)`; else { host.style.width = next.w * 100 + '%'; host.style.height = next.h * 100 + '%'; } };
-    const move = e => {
-      const dx = (e.clientX - x0) / W, dy = (e.clientY - y0) / H;
-      if (mode === 'move') { next.x = snap(Math.min(1 - start.w, Math.max(0, start.x + dx)), 'x', start.w); next.y = snap(Math.min(1 - start.h, Math.max(0, start.y + dy)), 'y', start.h); }
-      else {
-        if (mode.includes('e')) { const right = snap(Math.min(1, Math.max(start.x + minW, start.x + start.w + dx)), 'x', 0); next.w = right - start.x; }
-        if (mode.includes('s')) { const bottom = snap(Math.min(1, Math.max(start.y + minH, start.y + start.h + dy)), 'y', 0); next.h = bottom - start.y; }
-      }
-      if (!frame) frame = requestAnimationFrame(paint);
-    };
-    const end = () => {
-      cancelAnimationFrame(frame); host.releasePointerCapture?.(event.pointerId); host.removeAttribute('data-dragging');
-      host.removeEventListener('pointermove', move); host.removeEventListener('pointerup', end); host.removeEventListener('pointercancel', end);
-      const moved = Math.abs(next.x - start.x) + Math.abs(next.y - start.y) + Math.abs(next.w - start.w) + Math.abs(next.h - start.h) > 0.001;
-      if (moved) { pane.rect = next; pane.maximized = null; w.tiled = false; state.root.dataset.tiled = 'false'; }
-      applyRect(pane); saveWorkspace(); pane.tuckBubble?.();
-      // 指针被卡片接管后 dblclick 不落在胶带上，这里自己数两下。
-      if (mode === 'move' && !moved) { const now = performance.now(); if (now - (pane.lastTap || 0) < 380) { pane.lastTap = 0; toggleMaximize(pane); } else pane.lastTap = now; }
-    };
-    // 拖的时候不选中文字。
-    const noSelect = e => e.preventDefault(); document.addEventListener('selectstart', noSelect); getSelection()?.removeAllRanges();
-    host.addEventListener('pointerup', () => document.removeEventListener('selectstart', noSelect), {once: true}); host.addEventListener('pointercancel', () => document.removeEventListener('selectstart', noSelect), {once: true});
-    host.setAttribute('data-dragging', mode); host.setPointerCapture?.(event.pointerId);
-    host.addEventListener('pointermove', move); host.addEventListener('pointerup', end); host.addEventListener('pointercancel', end);
-  }
-  function toggleMaximize(pane) {
-    const w = workspace();
-    if (pane.maximized) { pane.rect = pane.maximized; pane.maximized = null; }
-    else { pane.maximized = pane.rect; pane.rect = {x: 0, y: 0, w: 1, h: 1}; }
-    w.tiled = false; state.root.dataset.tiled = 'false'; focusPage(pane); applyRect(pane); saveWorkspace();
-  }
-  // 游戏场景页（地图 / 商店 / 扭蛋 / 衣橱 / 图鉴 / 讨伐 / 守关 / 考场，视图声明 wide）在窄卡片里打开时临时铺满桌面，回到普通页再还原。
-  // 用户自己双击最大化的不动；在场景里开背一背（讨伐 / 守关的战斗）也先不还原，打完回营地才还原。
-  function roomFor(pane, id) {
-    const w = workspace(), wide = views.get(id)?.wide;
-    if (wide && !pane.maximized && w.panes.length > 1) {
-      const box = state.root?.querySelector('.desk-content')?.getBoundingClientRect(), need = typeof wide === 'number' ? wide : 900;
-      if (box && (pane.rect?.w ?? 1) * box.width < need) { pane.roomFrom = {rect: pane.rect, tiled: w.tiled}; pane.maximized = pane.rect; pane.rect = {x: 0, y: 0, w: 1, h: 1}; pane.z = ++w.zTop; w.tiled = false; state.root.dataset.tiled = 'false'; saveWorkspace(); }
-    } else if (!wide && id !== 'drill' && pane.roomFrom) {
-      const from = pane.roomFrom; pane.roomFrom = null;
-      if (pane.maximized) { pane.rect = from.rect; pane.maximized = null; w.tiled = from.tiled; if (w.tiled) tileRects(w); state.root.dataset.tiled = String(w.tiled); saveWorkspace(); }
-    }
-  }
-  // 新卡片：桌面是平铺的就重新平铺；已经被拖乱了，就叠在当前卡片右下方一点。
-  function placeCard(pane) {
-    const w = workspace();
-    if (w.tiled) { tileRects(w); return; }
-    const from = focusedPane()?.rect || {x: 0, y: 0}, cw = pane.view === 'deskchat' ? 0.3 : 0.46, ch = 0.88;
-    pane.rect = {x: Math.min(1 - cw, from.x + 0.05), y: Math.min(1 - ch, from.y + 0.05), w: cw, h: ch};
-  }
   function addCard(view) {
     const w = workspace();
-    if (view !== 'deskchat' && full(w)) { notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return null; }
-    const pane = {id: 'page-' + crypto.randomUUID(), view: view === 'library' ? 'today' : view, state: {view, deskView: view}, z: ++w.zTop, host: null};
-    w.panes.push(pane); placeCard(pane); return pane;
+    if (view !== 'deskchat' && mainPage(w)) return mainPage(w);
+    const pane = {id: 'page-' + crypto.randomUUID(), view, state: {view, deskView: view}, z: ++w.zTop, host: null};
+    w.panes.push(pane); tileRects(w); return pane;
   }
-  // 把索引贴拖到桌上：松手的地方摊开一张新卡片；桌上摊满了，就换掉松手处那一张。
-  function dropCard(view, event, under) {
-    const w = workspace(), box = state.root.querySelector('.desk-content').getBoundingClientRect();
-    if (view === 'deskchat') { toggleChat(true); return; }
-    if (full(w)) { if (under) goPane(under, view); else notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return; }
-    const pane = addCard(view); if (!pane) return;
-    const px = (event.clientX - box.left) / box.width, py = (event.clientY - box.top) / box.height, cw = Math.max(0.36, Math.min(1, MIN_W / box.width)), ch = 0.82;
-    pane.rect = {x: Math.min(1 - cw, Math.max(0, px - cw / 2)), y: Math.min(1 - ch, Math.max(0, py - 0.06)), w: cw, h: ch}; w.tiled = false;
-    w.chat = false; w.focus = w.panes.indexOf(pane); w.chatFocus = false; renderWorkspace(); goPane(pane, view);
-  }
-  function tileCards() { const w = workspace(); tileRects(w); renderWorkspace(); saveWorkspace(); }
   const chatCard = () => workspace().panes.find(p => p.view === 'deskchat');
   function toggleChat(force) {
     if (!state.root) return;
@@ -953,11 +876,8 @@
     const pane = addCard('deskchat'); if (!pane) return;
     w.focus = w.panes.indexOf(pane); renderWorkspace(); goPane(pane, 'deskchat');
   }
-  // 「对话」索引贴：聊天卡已在最上面就合上；没开或被压着就摊开 / 提上来。
-  function tabChat() {
-    const w = workspace(), card = chatCard();
-    toggleChat(!(card && card.z === Math.max(...w.panes.map(p => p.z))));
-  }
+  // 「对话」索引贴：开着就合上，没开就停到右边。
+  function tabChat() { toggleChat(!chatCard()); }
   function renderWorkspace() {
     if (!state.root) return;
     const w = workspace(), container = state.root.querySelector('.desk-content');
@@ -967,45 +887,35 @@
       applyRect(pane);
       if (!w.chat && !pane.body.childElementCount) renderPane(pane);
     }
-    state.root.dataset.pages = String(w.panes.length); state.root.dataset.tiled = String(w.tiled); setNativeChat(w.chat); focusPage(focusedPane(), {chat: w.chatFocus});
+    state.root.dataset.pages = String(w.panes.filter(p => p.view !== 'deskchat').length); state.root.toggleAttribute('data-chat-card', Boolean(chatCard())); state.root.dataset.tiled = 'true'; setNativeChat(w.chat); focusPage(focusedPane(), {chat: w.chatFocus});
     window.dispatchEvent(new CustomEvent('pinkie:desk-split-changed', {detail: {open: Boolean(chatCard())}}));
   }
-  // 点索引贴：这一页已经摊开就提到最前面；没开就另摊一张（满了换掉最久没碰的那张）。⌥ 点击才在当前卡里换页。
+  // 点导轨：在主页面里换页（已经在这一页就只把焦点拉回来）。
   function openCard(view) {
-    const w = workspace(), open = w.panes.find(p => p.view === view);
-    if (!open) { if (allowHeavy(null, view)) openOtherPage(view); return; }
-    if (w.chat) { w.focus = w.panes.indexOf(open); goPane(open, view); return; }
-    focusPage(open); saveWorkspace();
+    const w = workspace(), page = mainPage(w);
+    if (view === 'deskchat') { toggleChat(true); return; }
+    if (page.view === view && !w.chat) { focusPage(page); return; }
+    goPane(page, view);
   }
-  // 在另一张卡片上打开：桌上还有空位就新摊一张；摊满了就换掉最久没碰的那张（不动聊天卡和当前卡）。
+  // 旧接口（各页面「在另一页打开」）：单页之后就是在主页面换页。
   function openOtherPage(id, options) {
-    const w = workspace();
     if (id === 'deskchat') { toggleChat(true); return; }
-    let pane = !full(w) ? addCard(id) : [...w.panes].filter(p => p !== focusedPane() && p.view !== 'deskchat').sort((a, b) => a.z - b.z)[0];
-    if (!pane) { notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return; }
-    w.chat = false; w.focus = w.panes.indexOf(pane); w.chatFocus = false; renderWorkspace(); goPane(pane, id, options);
+    goPane(mainPage(workspace()), id, options);
   }
+  // 只有对话卡能合上；主页面合上等于回到今日。
   function closePage(pane) {
-    const w = workspace(); if (w.panes.length === 1) { goPane(pane, 'today'); return; }
-    const i = w.panes.indexOf(pane); unmountPane(pane); pane.host.remove(); w.panes.splice(i, 1);
-    const top = [...w.panes].sort((a, b) => b.z - a.z)[0]; w.focus = w.panes.indexOf(top);
-    // 只剩一张时铺满；平铺的桌面合上一张后重新平铺。
-    if (w.panes.length === 1) { w.panes[0].rect = {x: 0, y: 0, w: 1, h: 1}; w.tiled = true; } else if (w.tiled) tileRects(w);
-    renderWorkspace(); saveWorkspace();
+    const w = workspace();
+    if (pane.view !== 'deskchat') { goPane(pane, 'today'); return; }
+    const i = w.panes.indexOf(pane); unmountPane(pane); pane.host?.remove(); w.panes.splice(i, 1);
+    w.focus = 0; tileRects(w); renderWorkspace(); saveWorkspace();
   }
-  // 一键排法（生词本页脚的小图标和测试用）：几页并排，要不要聊天卡；排完是平铺状态，之后照样能拖。
+  // 旧的一键排法接口（测试 / 外部调用还在用）：只认「要不要对话卡」，页数一律是一页。
   function setLayout(value) {
-    const withChat = value.endsWith('-chat'), count = value.startsWith('triple') ? 3 : value.startsWith('spread') ? 2 : 1, w = workspace();
-    const pages = () => w.panes.filter(p => p.view !== 'deskchat');
-    while (pages().length > count) { const p = pages().sort((a, b) => a.z - b.z)[0]; unmountPane(p); p.host?.remove(); w.panes.splice(w.panes.indexOf(p), 1); }
-    while (pages().length < count) w.panes.splice(pages().length, 0, {id: 'page-' + crypto.randomUUID(), view: pages().length === 1 ? 'vocab' : 'board', state: {view: 'notes', deskView: 'notes'}, z: ++w.zTop, host: null});
-    const card = chatCard();
+    const withChat = String(value).endsWith('-chat'), w = workspace(), card = chatCard();
     if (!withChat && card) { unmountPane(card); card.host?.remove(); w.panes.splice(w.panes.indexOf(card), 1); }
     if (withChat && !card) w.panes.push({id: 'page-' + crypto.randomUUID(), view: 'deskchat', state: {view: 'deskchat', deskView: 'deskchat'}, z: ++w.zTop, host: null});
-    w.focus = Math.max(0, w.panes.indexOf(pages()[0])); w.chat = false; w.chatFocus = false;
-    tileRects(w); renderWorkspace();
-    for (const pane of w.panes) if (pane.view === 'notes' && !views.has('notes')) goPane(pane, 'notes');
-    saveWorkspace();
+    w.focus = Math.max(0, w.panes.indexOf(mainPage(w))); w.chat = false; w.chatFocus = false;
+    tileRects(w); renderWorkspace(); saveWorkspace();
   }
   function goPane(pane, id, options) {
     id = id === 'home' ? 'today' : id; if (!state.root) return;
@@ -1054,7 +964,7 @@
         }
       }
       if (!views.has(id)) { notice('这一页正在准备，请稍后再试'); return; }
-      roomFor(pane, id); closeLibrary(); renderPane(pane, id); renderWorkspace();
+      closeLibrary(); renderPane(pane, id); renderWorkspace();
     }
     window.dispatchEvent(new CustomEvent('pinkie:study-desk-view', {detail: {view: id, paneId: pane.id, sessionKey: state.key}}));
   }
@@ -1096,16 +1006,13 @@
     const nav = el('div', 'rail-nav');
     for (const [id, label] of [['today', '今日'], ['stage', '舞台'], ['board', '看板'], ['library', '书架'], ['notes', '笔记本'], ['vocab', '生词本'], ['chat', '对话']]) {
       const target=id==='chat'?'deskchat':id;
-      const b = button('', event => id === 'chat' ? tabChat() : event.altKey ? go(target) : openCard(target)); b.dataset.go = target; b.draggable = true; b.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-pinkie-view', target); event.dataTransfer.effectAllowed = 'copy'; }); b.setAttribute('aria-label', label); b.append(handIcon(id), el('span', 'nav-tip', label)); nav.append(b);
+      const b = button('', () => id === 'chat' ? tabChat() : openCard(target)); b.dataset.go = target; b.setAttribute('aria-label', label); b.append(handIcon(id), el('span', 'nav-tip', label)); nav.append(b);
     }
     const foot = el('div', 'rail-foot'), theme = button('', toggleTheme); theme.dataset.themeToggle = ''; theme.setAttribute('aria-label', '切换日间和夜间');
-    const tidy = button('', tileCards); tidy.dataset.tidy = ''; tidy.setAttribute('aria-label', '把卡片排整齐'); tidy.append(icon('layout-grid', {size: 'md'}), el('span', 'nav-tip', '排整齐'));
-    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(tidy, theme, avatar); rail.append(logo, nav, foot);
+    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(theme, avatar); rail.append(logo, nav, foot);
     const status = el('div', 'desk-status'); status.setAttribute('role', 'status');
     const canvas = el('canvas', 'party'); canvas.setAttribute('aria-hidden', 'true');
     const content = el('div', 'desk-content');
-    content.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/x-pinkie-view')) event.preventDefault(); });
-    content.addEventListener('drop', event => { const id = event.dataTransfer.getData('application/x-pinkie-view'); if (id) { event.preventDefault(); dropCard(id, event); } });
     // 先定好对话视图和日夜再挂上去：否则新根节点先按白天纸色算一次样式，切成对话视图时背景的 .4s 过渡会在聊天上淡出一层白（切换会话时闪白）。
     root.dataset.view = 'chat'; root.dataset.theme = doc.hasAttribute('data-pinkie-night') || doc.dataset.themeMode === 'dark' ? 'night' : 'day';
     root.append(plate, rail, content, canvas, status); document.body.append(root); observeStickers(root);
@@ -1169,7 +1076,7 @@
     return {unmount() { window.removeEventListener('pinkie:library-closed', closed); if (window.__pinkieLibrary?.state?.deskHost === host) window.__pinkieLibrary.closeReader(); for (const [drawer, parent] of previous) { drawer.hidden = true; drawer.inert = true; parent?.append(drawer); } }};
   }});
   window.__pinkieStudyDesk = {registerView, request, go, sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode),
-    pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: tileCards, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
+    pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: () => { tileRects(workspace()); renderWorkspace(); }, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
     contexts: () => workspace().panes.map(context),
     pages: () => workspace().panes.map(p => ({id: p.id, view: p.view, focused: focused(p), state: p.state})),
     claimHeavy(kind, pane = focusedPane()) { if (!allowHeavy(pane, kind)) return false; const token={kind}; pane.heavy = token; return () => { if(pane.heavy===token)pane.heavy=false; }; },
