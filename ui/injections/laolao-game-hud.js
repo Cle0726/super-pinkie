@@ -152,7 +152,8 @@
       rollNum(nStars, s.wallet.stars); rollNum(nSeals, s.wallet.seals);
       rollNum(nShards, Object.values(s.wallet.shards || {}).reduce((a, b) => a + (Number(b) || 0), 0));
       streak.textContent = `连续 ${s.today?.streak || 0} 天`;
-      jar.replaceChildren(el('span', '', '星星罐'), el('b', 'pkg-num', `${s.today?.jar?.stars || 0}`), el('small', '', `/ ${s.today?.jar?.goal || 30}`));
+      const jarGot = s.today?.jar?.stars || 0, jarGoal = s.today?.jar?.goal || 30;
+      jar.replaceChildren(el('span', '', '星星罐'), el('b', 'pkg-num', String(jarGot)), el('small', '', jarGot >= jarGoal ? ` · 目标 ${jarGoal}` : ` / ${jarGoal}`));
       const w = s.wishlist; wish.hidden = compact || !w;
       if (w) { const have = Math.max(0, (w.price?.stars || 0) - (w.missing?.stars || 0)), pct = w.price?.stars ? Math.min(100, have / w.price.stars * 100) : 100;
         wish.replaceChildren(el('small', '', '心愿单'), el('b', '', w.name || w.sku), el('i', 'pkg-wish__bar'), el('em', '', (w.missing?.stars || 0) > 0 ? `再 ${fmt(w.missing.stars)} 星` : '可以买了'));
