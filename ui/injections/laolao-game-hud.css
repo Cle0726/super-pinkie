@@ -411,3 +411,9 @@ html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
 #pinkie-study-desk [data-amb="pen"] .pkg-amb__m{width:calc(10px + 10px * var(--s));aspect-ratio:1;background:color-mix(in srgb,var(--c) 45%,#fff);box-shadow:0 2px 6px rgba(0,0,0,.08);transform:rotate(var(--r));animation:pkg-amb-bokeh calc(var(--d) * 1.2) ease-in-out var(--dl) infinite alternate;filter:none;border-radius:1px}
 /* 营地暗光卡片下的减少动效 */
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkg-amb i,#pinkie-study-desk .pkg-amb b{animation:none!important}}
+/* 形态 v2：营地 = 形态自己的场景 + 活的碧琪（laolao-game-form-stage.js），文字压在左侧柔光上 */
+#pinkie-study-desk .pkg-stage.is-live{background:#140E18}
+#pinkie-study-desk .pkg-stage__live{position:absolute;inset:0;z-index:-3}
+#pinkie-study-desk .pkg-stage__scrim{position:absolute;inset:0;z-index:-2;pointer-events:none;background:linear-gradient(90deg,rgba(250,244,236,.84) 0,rgba(250,244,236,.5) 30%,rgba(250,244,236,0) 56%),linear-gradient(0deg,rgba(250,244,236,.52) 0,rgba(250,244,236,0) 26%)}
+#pinkie-study-desk .pkg-stage.is-live[data-time="night"] .pkg-stage__scrim{background:linear-gradient(90deg,rgba(14,9,20,.8) 0,rgba(14,9,20,.46) 32%,rgba(14,9,20,0) 58%),linear-gradient(0deg,rgba(14,9,20,.56) 0,rgba(14,9,20,0) 28%)}
+#pinkie-study-desk .pkfs-still--stage{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 40%}

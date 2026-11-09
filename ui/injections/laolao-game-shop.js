@@ -34,7 +34,7 @@
   // 商品 / 收藏品的预览：形态用立绘，其它用排版小卡（类型拉丁字 + 中文名），不画卡通图标。
   function preview(entry) {
     const box = el('div', 'pks-pv'); box.dataset.kind = entry.kind;
-    if (entry.kind === 'form') { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = G().portrait(entry.itemId); box.append(i); return box; }
+    if (entry.kind === 'form') { const i = el('img'); i.alt = ''; i.decoding = 'async'; const scene = window.__pinkieFormStage?.has(entry.itemId) ? G().art(`form/${entry.itemId}/ult`) : null; i.src = scene || G().portrait(entry.itemId); if (scene) box.classList.add('is-scene'); box.append(i); return box; }
     // 收藏品：名字的第一个字做成印章式大字 + 类型拉丁小字，像书封。
     const [en] = KIND[entry.kind] || ['ITEM'];
     const name = entry.name || itemName(entry.itemId || '');
@@ -117,14 +117,15 @@
     function paint() {
       wrap.replaceChildren();
       const detail = el('section', 'pks-wr__detail'), grid = el('section', 'pks-wr__grid');
-      const owned = forms.filter(f => f.owned).length;
-      const gh = el('header', 'pkg-sec'); gh.append(el('h3', '', '全部形态'), el('span', 'pkg-sec__meta', `${owned} / ${forms.length}`), el('small', 'pkg-kicker', 'COLLECTION')); grid.append(gh);
+      const shown = forms.filter(f => !f.retired || f.owned), owned = shown.filter(f => f.owned).length;
+      const gh = el('header', 'pkg-sec'); gh.append(el('h3', '', '全部形态'), el('span', 'pkg-sec__meta', `${owned} / ${shown.length}`), el('small', 'pkg-kicker', 'COLLECTION')); grid.append(gh);
       const list = el('div', 'pks-wr__list');
       for (const f of forms) {
+        if (f.retired && !f.owned) continue;
         const b = el('button', 'pks-tile'); b.type = 'button'; b.dataset.rarity = f.rarity; b.toggleAttribute('data-owned', f.owned); b.toggleAttribute('data-equipped', f.equipped); b.setAttribute('aria-pressed', String(f.id === pick));
         b.style.setProperty('--tone', RARITY[f.rarity]?.tone || '#B9AEA4'); b.style.setProperty('--fa', f.palette?.[0] || '#F7A8C8');
         const real = g.cache.manifest?.[`form/${f.id}/portrait`]; if (f.owned || real) { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = f.owned ? (g.iconArt(f.id) || g.portrait(f.id)) : g.portrait(f.id); b.append(i); } else b.append(el('span', 'pks-tile__q', '？'));
-        b.append(el('small', 'pks-tile__r', RARITY[f.rarity]?.label || f.rarity), el('span', 'pks-tile__n', f.owned ? f.name : '？？？'));
+        b.append(el('small', 'pks-tile__r', RARITY[f.rarity]?.label || f.rarity), el('span', 'pks-tile__n', f.owned || window.__pinkieFormStage?.has(f.id) ? f.name : '？？？'));
         if (f.equipped) b.append(el('em', 'pks-tile__on', '装备中'));
         b.setAttribute('aria-label', f.owned ? f.name : `未获得：${f.howToGet || ''}`);
         b.addEventListener('click', () => { pick = f.id; local.wardrobePick = f.id; paint(); });
@@ -133,7 +134,7 @@
       grid.append(list);
       // 套装
       const sets = el('div', 'pks-sets');
-      for (const st of [['royal', '皇家系列', ['queen', 'princess', 'knight', 'chef']], ['mode', '模式系列', ['daily', 'learning', 'project', 'thinking', 'unrestricted']]]) {
+      for (const st of [['v2', '八面碧琪', ['daily', 'unrestricted', 'alicorn', 'crystal', 'seapony', 'kirin', 'batpony', 'serious']]]) {
         const have = st[2].filter(id => forms.find(f => f.id === id)?.owned).length;
         const row = el('div', 'pks-set'); row.append(el('b', '', st[1]), el('span', 'pkg-num', `${have} / ${st[2].length}`), el('i', 'pks-set__bar')); row.querySelector('i').style.setProperty('--p', (have / st[2].length * 100) + '%'); sets.append(row);
       }
@@ -145,10 +146,17 @@
       if (!f) return;
       box.style.setProperty('--fa', f.palette?.[0]); box.style.setProperty('--fb', f.palette?.[1]); box.style.setProperty('--fc', f.palette?.[2]);
       box.dataset.owned = String(f.owned);
-      const art = el('div', 'pks-wr__art'); const img = el('img'); img.alt = f.name; img.decoding = 'async'; img.src = g.portrait(f.id); art.append(img); if (f.owned) g.ambient?.(art, f);
-      if (!f.owned) art.append(el('span', 'pks-wr__q', '？'));
+      const art = el('div', 'pks-wr__art'); const img = el('img'); img.alt = f.name; img.decoding = 'async'; img.src = g.portrait(f.id);
+      const FS = window.__pinkieFormStage; let live = null;
+      wrap.__pkFormStage?.destroy?.(); wrap.__pkFormStage = null;
+      if (FS?.has(f.id)) {
+        // 形态 v2：没拥有的也能看到活的样子（剪影不再藏），这才想要
+        art.classList.add('is-live'); live = FS.mount(art, f.id, {focus: .5, still: fx()?.settings?.().biqi === false}); wrap.__pkFormStage = live;
+        const form = el('p', 'pks-wr__form', f.form || ''); if (f.form) art.append(form);
+      } else { art.append(img); if (f.owned) g.ambient?.(art, f); }
+      if (!f.owned && !live) art.append(el('span', 'pks-wr__q', '？'));
       const info = el('div', 'pks-wr__info');
-      info.append(el('small', 'pkg-kicker', `${RARITY[f.rarity]?.label || f.rarity} · ${f.series === 'mode' ? 'MODE' : f.season ? 'SEASONAL' : 'FORM'}`), el('h3', 'pks-wr__name', f.owned ? f.name : '还没遇见'));
+      info.append(el('small', 'pkg-kicker', `${RARITY[f.rarity]?.label || f.rarity} · ${f.series === 'mode' ? 'MODE' : f.season ? 'SEASONAL' : 'FORM'}`), el('h3', 'pks-wr__name', f.owned || live ? f.name : '还没遇见'));
       { const b = el('p', 'pks-wr__bonus'); b.append(g.bonusText ? g.bonusText(f.bonus?.text) : document.createTextNode(f.bonus?.text || '')); info.append(b); }
       const pal = el('div', 'pks-wr__pal'); for (const c of f.palette || []) { const d = el('i'); d.style.background = c; pal.append(d); } info.append(pal);
       if (f.owned) {
@@ -171,7 +179,7 @@
         info.append(awBox);
         const act = el('div', 'pks-wr__act');
         const eq = el('button', 'pkg-btn', f.equipped ? '装备中' : '装备这个形态'); eq.type = 'button'; eq.disabled = f.equipped;
-        eq.addEventListener('click', async () => { eq.disabled = true; try { await g.call('forms.equip', {formId: f.id}); forms = await g.forms(true); s = await g.refresh(); paint(); try { fx()?.burst(f.particle || 'sparkle', img, {palette: f.palette, scale: .9}); fx()?.sfx('sparkle', {form: g.fxForm(f)}); } catch { /* ignore */ } } catch (e) { eq.disabled = false; g.toast(e.message); } });
+        eq.addEventListener('click', async () => { eq.disabled = true; const prev = s.form.equipped; try { await g.call('forms.equip', {formId: f.id}); try { fx()?.sfx('sparkle', {form: g.fxForm(f)}); } catch { /* ignore */ } if (live && prev && prev !== f.id) await live.play?.(prev); else if (!live) { try { fx()?.burst(f.particle || 'sparkle', img, {palette: f.palette, scale: .9}); } catch { /* ignore */ } } forms = await g.forms(true); s = await g.refresh(); paint(); } catch (e) { eq.disabled = false; g.toast(e.message); } });
         const demo = el('button', 'pkb-link', '看一眼大招'); demo.type = 'button';
         demo.addEventListener('click', () => fx()?.cinematic(f.ult || 'burst', {text: f.name, sub: String(f.bonus?.text || '').replace(/\s*(⭐|🟡|💎)\s*/gu, m => ({'⭐': ' 星星 ', '🟡': ' 金印 ', '💎': ' 碎片 '})[m.trim()] || ' ').replace(/\s+/g, ' ').trim(), kicker: f.name, art: g.ultArt(f.id) || g.portrait(f.id), palette: f.palette, particle: f.particle, form: g.fxForm(f)}));
         act.append(eq, demo); info.append(act);

@@ -125,25 +125,39 @@ test('课程 recordLesson：一节课只发一次 +15', t => {
 
 test('商店：requestId 幂等、钱不够写清还差多少、买过的不能再买', t => {
   const {game} = gameFixture(t);
-  assert.throws(() => game.buy({sku: 'form:learning', requestId: 'r1'}), /还差 1200 星星/);
+  assert.throws(() => game.buy({sku: 'form:serious', requestId: 'r1'}), /还差 1200 星星/);
   game.mutate(s => { s.wallet.stars = 2500; });
-  const a = game.buy({sku: 'form:learning', requestId: 'r2'});
-  const b = game.buy({sku: 'form:learning', requestId: 'r2'});
+  const a = game.buy({sku: 'form:serious', requestId: 'r2'});
+  const b = game.buy({sku: 'form:serious', requestId: 'r2'});
   assert.deepEqual(a, b);
   assert.equal(game.read().wallet.stars, 1300);
-  assert.throws(() => game.buy({sku: 'form:learning', requestId: 'r3'}), /已经有/);
-  assert.throws(() => game.buy({sku: 'form:queen', requestId: 'r4'}), /8 金印/, 'SSR 在金印专柜，要金印');
-  assert.throws(() => game.buy({sku: 'form:lidong'}), /requestId/);
+  assert.throws(() => game.buy({sku: 'form:serious', requestId: 'r3'}), /已经有/);
+  assert.throws(() => game.buy({sku: 'form:kirin', requestId: 'r4'}), /8 金印/, 'SSR 在金印专柜，要金印');
+  assert.throws(() => game.buy({sku: 'form:crystal'}), /requestId/);
 });
 
-test('立冬限定只在立冬上架；过季后用 30 万能碎片复刻', t => {
+test('形态 v2：退场的旧形态（含节气限定）不上任何货架，也不能复刻', t => {
   const {game, setClock} = gameFixture(t);
-  assert.ok(game.catalogView().shelves.limited.some(s => s.sku === 'form:lidong'));
-  setClock(Date.parse('2026-11-22T01:00:00Z')); // 北京 11-22 09:00，小雪
-  const cat = game.catalogView();
-  assert.ok(!cat.shelves.limited.some(s => s.sku === 'form:lidong'));
-  assert.ok(cat.shelves.limited.some(s => s.sku === 'form:xiaoxue'));
-  assert.ok(cat.shelves.seal.some(s => s.sku === 'replica:lidong' && s.price.shards === 30));
+  const skus = c => [...c.shelves.permanent, ...c.shelves.limited, ...c.shelves.seal, ...c.shelves.daily].map(s => s.sku);
+  for (const at of [undefined, '2026-11-22T01:00:00Z', '2027-02-01T01:00:00Z']) {
+    if (at) setClock(Date.parse(at));
+    const all = skus(game.catalogView());
+    for (const id of ['learning', 'lidong', 'xiaoxue', 'queen', 'detective']) assert.ok(!all.some(x => x.endsWith(':' + id)), id + ' 不该上架');
+  }
+});
+
+test('形态 v2：已拥有的旧形态换成新形态（亲密度带过去），没有对应的按原价退', t => {
+  const {game} = gameFixture(t);
+  game.mutate(s => { s.forms.owned.push('detective', 'learning', 'queen'); s.forms.equipped = 'detective'; s.forms.xp.detective = 500; s.wallet.stars = 0; });
+  const st = game.read();
+  assert.ok(st.forms.owned.includes('serious') && st.forms.owned.includes('alicorn'));
+  assert.ok(!st.forms.owned.some(id => ['detective', 'learning', 'queen'].includes(id)));
+  assert.equal(st.forms.equipped, 'serious');
+  assert.equal(st.forms.xp.serious, 500);
+  assert.equal(st.wallet.stars, 1200, '学习碧琪（R）退 1200');
+  assert.ok(game.state().form.v2note);
+  game.mutate(s => { s.forms.v2note.seen = true; });
+  assert.equal(game.state().form.v2note, null);
 });
 
 test('扭蛋：requestId 幂等，结果可复现；保底计数持久化（重开进程还在）', t => {
@@ -175,15 +189,15 @@ test('收藏品带中文名：扭蛋结果、奖池条目、state.items.names', 
 test('并发：同步读改写，两次快速购买不会花两份钱', t => {
   const {game} = gameFixture(t);
   game.mutate(s => { s.wallet.stars = 1300; });
-  game.buy({sku: 'form:learning', requestId: 'x1'});
-  assert.throws(() => game.buy({sku: 'form:chef', requestId: 'x2'}), /还差/);
+  game.buy({sku: 'form:serious', requestId: 'x1'});
+  assert.throws(() => game.buy({sku: 'form:crystal', requestId: 'x2'}), /还差/);
   assert.equal(game.read().wallet.stars, 100);
 });
 
-test('形态加成只改奖励：装学习碧琪后学习关 +30%', t => {
+test('形态加成只改奖励：装海马碧琪后学习关 +30%', t => {
   const {game, pact} = gameFixture(t);
-  game.mutate(s => { s.forms.owned.push('learning'); });
-  game.equip({formId: 'learning'});
+  game.mutate(s => { s.forms.owned.push('seapony'); });
+  game.equip({formId: 'seapony'});
   pact.recordLesson({lessonId: 'L9', minutes: 10});
   assert.equal(game.read().wallet.stars, 20);
   assert.throws(() => game.equip({formId: 'queen'}), /还没有/);

@@ -21,8 +21,8 @@ test('形态加成：单事件叠加封顶 ×2，只改奖励', () => {
   assert.equal(E.boosted(2, {event: 'combo', form: astro}).value, 4);
   const uncapped = {bonus: {kind: 'comboStepAdd', add: 99}};
   assert.equal(E.boosted(2, {event: 'combo', form: uncapped}).value, 4);
-  assert.equal(E.boosted(10, {event: 'capture', form: E.formById('detective')}).value, 14);
-  assert.equal(E.boosted(10, {event: 'lesson', form: E.formById('detective')}).value, 10);
+  assert.equal(E.boosted(10, {event: 'capture', form: E.formById('serious')}).value, 14);
+  assert.equal(E.boosted(10, {event: 'lesson', form: E.formById('serious')}).value, 10);
 });
 
 test('防刷：没到期且记牢的卡 0 星；到期 / 新卡 / 变体全额', () => {

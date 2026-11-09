@@ -171,3 +171,8 @@ html[data-pinkie-night]:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award
 #pinkie-study-desk .pkb-mon[data-state="captured"]{opacity:.8}
 #pinkie-study-desk .pkb-mon[data-state="captured"] .pkb-mon__art::after{content:"收服";position:absolute;right:-4px;bottom:-2px;font:900 11px/1 var(--pkg-display,serif);letter-spacing:.2em;color:var(--pkg-gold,#B8893A);border:1px solid currentColor;border-radius:3px;padding:3px 3px 3px 5px;transform:rotate(-8deg);background:var(--pkg-card-solid)}
 #pinkie-study-desk .pkb-hunt__foot{max-width:420px}
+/* 形态 v2：状态条头像是活的，画布往上多留一截给答对时的蹦跳 */
+#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero.is-live{width:72px;height:72px;margin-top:-6px}
+#pinkie-study-desk .pkb-hero.is-live > canvas.pkfs{left:-18%!important;top:-22%!important;right:auto!important;bottom:auto!important;width:136%!important;height:122%!important;pointer-events:none}
+#pinkie-study-desk .pkb-hero.is-live > .pkb-shadow{opacity:.6}
+@media (max-width:720px){#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero.is-live{width:56px;height:56px}}
