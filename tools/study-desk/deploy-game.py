@@ -32,7 +32,7 @@ stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 backup = home / 'Library/Application Support/SuperPinkie/backups' / ('study-game-' + stamp)
 BASE = '069c5cc'
 MERGE_BASE = MERGE_BASE or BASE
-VERSION = 'game4'
+VERSION = 'game5'
 
 
 def git(*a, text=False):
