@@ -163,7 +163,9 @@
     const tickTimer = setInterval(tick, 1000); tick();
     const onHide = () => { if (document.hidden) flush(); };
     document.addEventListener('visibilitychange', onHide);
-    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); } };
+    // Escape：有确认框就关确认框，否则什么也不做（考场不能被一个键关掉）。学习台在 document 捕获阶段先看到 Escape，会先问这一页的 keydown（下面 escape()）。
+    const escape = () => { const m = hall.querySelector('.pke-modal'); if (m) m.querySelector('.pke-nav')?.click(); };
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); if (!e.defaultPrevented) { e.preventDefault(); escape(); } } };
     hall.addEventListener('keydown', onKey, true);
     function close(leaving) {
       if (closed) return; closed = true; tts.stop(); clearInterval(saveTimer); clearInterval(tickTimer); document.removeEventListener('visibilitychange', onHide);
@@ -172,7 +174,8 @@
     }
     function confirmBox(title, text, ok, onOk, extra) {
       const m = el('div', 'pke-modal'); const c = el('div', 'pke-modal__card'); c.append(el('h3', '', title), el('p', '', text)); if (extra) c.append(extra);
-      const row = el('div', 'pke-modal__act'); row.append(btn('再看看', 'pks-pull pke-nav', () => m.remove()), btn(ok, 'pkg-btn', () => { m.remove(); onOk(); })); c.append(row); m.append(c); hall.append(m); row.lastChild.focus();
+      const back = document.activeElement;
+      const row = el('div', 'pke-modal__act'); row.append(btn('再看看', 'pks-pull pke-nav', () => { m.remove(); if (back?.isConnected) back.focus({preventScroll: true}); }), btn(ok, 'pkg-btn', () => { m.remove(); onOk(); })); c.append(row); m.append(c); hall.append(m); row.lastChild.focus();
     }
     function askSubmit() {
       const blank = items.filter(it => !answered(it)).length;
@@ -186,7 +189,9 @@
       close(false); onDone?.(attemptId, timeUp);
     }
     show(0);
-    return {close: () => close(true)};
+    // 进考场焦点落在卷面上：下一次 Tab 就是第一题，不用先穿过导轨和顶栏。
+    sheet.tabIndex = -1; sheet.focus({preventScroll: true});
+    return {close: () => close(true), escape};
   }
 
   // ───────────── Boss 结算 ─────────────
@@ -317,6 +322,8 @@
     }
     async function showResult(attemptId, {replay}) {
       clearTimeout(pollT); main.replaceChildren(); main.classList.add('is-report');
+      // 交卷后考场关掉、焦点掉回页面：落到成绩页上，下一次 Tab 就进成绩页的按钮。
+      if (!main.contains(document.activeElement)) { main.tabIndex = -1; main.focus({preventScroll: true}); }
       const wait1 = el('div', 'pke-grading'); wait1.append(el('small', 'pkb-kicker', 'GRADING'), el('h3', '', '阅卷中'), el('p', '', '客观题已经判完，碧琪在按评分细则看翻译和作文。'), el('i', 'pke-grading__rule'));
       main.append(wait1);
       let res = null; const t0 = Date.now();
@@ -336,7 +343,7 @@
     }
     await lobby();
     window.__pinkieGameExam._page = {lobby, begin, showResult, hall: () => hall};
-    return {unmount() { alive = false; clearTimeout(pollT); hall?.close(); tts.stop(); }};
+    return {unmount() { alive = false; clearTimeout(pollT); hall?.close(); tts.stop(); }, keydown(e) { if (e.key === 'Escape' && hall) { e.preventDefault(); hall.escape?.(); } }};
   }
 
   function register() {

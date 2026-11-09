@@ -59,6 +59,7 @@
 #pinkie-study-desk .pke-save[data-err]{color:#B5304E}
 #pinkie-study-desk .pke-submit{padding:10px 22px;letter-spacing:.3em}
 #pinkie-study-desk .pke-body{display:grid;grid-template-columns:1fr 268px;min-height:0}
+#pinkie-study-desk .pke-paper:focus,#pinkie-study-desk .pke-lobby:focus{outline:none}
 #pinkie-study-desk .pke-paper{overflow:auto;padding:30px max(28px,calc((100% - 820px) / 2)) 60px;scroll-behavior:smooth}
 #pinkie-study-desk .pke-sec{padding-bottom:16px;margin-bottom:8px;border-bottom:1px solid var(--pkg-line-2)}
 #pinkie-study-desk .pke-sec h2{margin:8px 0 4px;font-size:30px}
