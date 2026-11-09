@@ -53,7 +53,7 @@
   const portrait = id => art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
   const ultArt = id => art(`form/${id}/ult`) || art(`form/${id}/portrait`) || null;
   const iconArt = id => art(`form/${id}/icon`) || art(`form/${id}/portrait`) || BASE + MODE_ART.daily;
-  function fxForm(form) { return form ? {id: form.id, name: form.name, palette: form.palette, particle: form.particle, hit: form.hit, ult: form.ult, sound: form.sound} : null; }
+  function fxForm(form) { return form ? {id: form.id, name: form.name, palette: form.palette, particle: form.particle, hit: form.hit, ult: form.ult, sig: form.sig, sound: form.sound} : null; }
   function equippedForm() { return formOf(cache.state?.form?.equipped) || (cache.forms || [])[0] || null; }
 
   // ───────────── 奖励播放：立刻播、按 id 去重、播完 ack；pending 兜底 ─────────────
@@ -114,6 +114,12 @@
     seals: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="currentColor" opacity=".18"/><path d="M12 2l8.7 5v10L12 22l-8.7-5V7z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 9h8v6H8z" fill="none" stroke="currentColor" stroke-width="1"/><path d="M12 9v6M8 12h8" stroke="currentColor" stroke-width=".7" opacity=".6"/></svg>',
     shards: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l5 7-5 13-5-13z" fill="currentColor" opacity=".18"/><path d="M12 2l5 7-5 13-5-13zM7 9h10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M12 2v20" stroke="currentColor" stroke-width=".7" opacity=".55"/></svg>',
   };
+  // 加成文案里的 ⭐ / 🟡 是数据里的货币记号，显示时换成 HUD 同款线稿图标（VFX.md：界面里不出 emoji）。
+  function bonusText(text, cls = '') {
+    const node = el('span', cls);
+    for (const part of String(text || '').split(/(⭐|🟡|💎)/u)) { if (!part) continue; const kind = {'⭐': 'stars', '🟡': 'seals', '💎': 'shards'}[part]; node.append(kind ? glyph(kind) : document.createTextNode(part)); }
+    return node;
+  }
   function glyph(kind) { const s = el('span', 'pkg-glyph'); s.dataset.kind = kind; s.innerHTML = SVG[kind] || ''; return s; }
   function rollNum(node, to) {
     const from = Number(node.dataset.v || to); node.dataset.v = to;
@@ -221,7 +227,9 @@
     const goText = el('span', 'pkg-go__text'); const goKick = el('small', '', 'NEXT'); const goTitle = el('b', '', '出发'); const goSub = el('em', '', '正在找路线上的下一站…');
     goText.append(goKick, goTitle, goSub); go.append(goText, el('i', 'pkg-go__rule')); copy.append(go);
     stage.append(sky, layers, glow, plinth, figure, head, copy);
-    if (form) { const tag = el('div', 'pkg-stage__tag'); tag.append(el('small', '', form.series === 'mode' ? 'MODE FORM' : `${form.rarity} FORM`), el('b', '', form.name), el('span', '', form.bonus?.text || '')); stage.append(tag); }
+    ambient(stage, form, {still: fx()?.settings?.().biqi === false || ctx.motion?.reduced});
+    glow.after(stage.querySelector('.pkg-amb'));
+    if (form) { const tag = el('div', 'pkg-stage__tag'); tag.append(el('small', '', form.series === 'mode' ? 'MODE FORM' : `${form.rarity} FORM`), el('b', '', form.name), bonusText(form.bonus?.text)); stage.append(tag); }
     const left = el('div', 'pkg-left'); left.append(stage); body.append(left);
     parallax(stage, [layers, figure, glow]);
     if (fx()?.settings?.().biqi === false || ctx.motion?.reduced) stage.dataset.still = '1';
@@ -261,6 +269,26 @@
       <path class="h3" filter="url(#pkg-cut)" d="M0 452 C110 430 220 446 330 432 C450 416 560 438 680 428 C790 418 880 432 1000 422 L1000 560 L0 560Z"/>
       <g class="pkg-lamps">${night ? [140, 610, 880].map((x, i) => `<circle cx="${x}" cy="${[300, 286, 262][i]}" r="2.2"/>`).join('') : ''}</g>
     </svg>`;
+  }
+  // 待机氛围（11-08 验收 R5）：营地 / 衣橱立绘区按形态铺一层氛围（立冬炊烟灯笼、小雪稀雪、赛博扫描线、海盗海面反光……），
+  // 外加通用的光斑漂移和浮尘。全部是 CSS 合成层动画（transform / opacity），不起 rAF；页面隐藏时浏览器自己停，
+  // 安静档 / 碧琪动画关 / 减少动效时静止（data-still）。每颗的位置、大小、周期用形态 id 做种子，刷新不跳。
+  const AMB_COUNT = {party: 10, pen: 7, blueprint: 1, lattice: 12, prism: 2, lens: 2, chart: 14, orbit: 3, dragon: 14, carpet: 14, rose: 10, aegis: 1, piping: 12, ribbon: 9, zodiac: 16,
+    scroll: 4, spotlight: 2, datamosh: 6, smokeclone: 4, lantern: 7, firstsnow: 18, aurora: 3, mortarboard: 10, goldseal: 14};
+  function ambient(host, form, {still = false} = {}) {
+    host.querySelector(':scope > .pkg-amb')?.remove();
+    const sig = window.__pinkieGameSig?.of(form) || form?.sig || 'party';
+    const amb = el('div', 'pkg-amb'); amb.dataset.amb = sig; amb.setAttribute('aria-hidden', 'true');
+    if (form?.palette) ['--pkg-a', '--pkg-b', '--pkg-c'].forEach((k, i) => amb.style.setProperty(k, form.palette[i]));
+    let seed = [...(form?.id || sig)].reduce((a, c) => a * 31 + c.charCodeAt(0) >>> 0, 7);
+    const rnd = () => (seed = seed * 1664525 + 1013904223 >>> 0) / 4294967296;
+    const dot = (cls, i, n) => { const d = el('i', cls); d.style.cssText = `--x:${(rnd() * 100).toFixed(1)}%;--y:${(rnd() * 100).toFixed(1)}%;--s:${(.6 + rnd() * .8).toFixed(2)};--d:${(9 + rnd() * 10).toFixed(1)}s;--dl:${(-rnd() * 18).toFixed(1)}s;--r:${(rnd() * 360).toFixed(0)}deg;--i:${i};--n:${n};--c:var(${['--pkg-a', '--pkg-b', '--pkg-c'][i % 3]})`; return d; };
+    amb.append(el('b', 'pkg-amb__sun'), el('b', 'pkg-amb__sun pkg-amb__sun--2'));
+    for (let i = 0; i < 14; i++) amb.append(dot('pkg-amb__dust', i, 14));
+    const n = AMB_COUNT[sig] || 8;
+    for (let i = 0; i < n; i++) amb.append(dot('pkg-amb__m', i, n));
+    if (still || fx()?.settings?.().biqi === false || (fx()?.settings?.().density ?? 1) <= 0 || window.__pinkieStudyDesk?.motion?.reduced) amb.dataset.still = '1';
+    host.prepend(amb); return amb;
   }
   function parallax(stage, [far, mid, near]) {
     let raf = 0, nx = 0, ny = 0;
@@ -423,6 +451,6 @@
   // 学习后端改了数据（作答、复习、上课）→ 状态和 pending 补播。
   window.addEventListener('pinkie:desk-changed', () => { refresh().catch(() => {}); });
 
-  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, play, pending, hud, glyph, open: openGame, startNode, toast, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
+  window.__pinkieGame = {markSeen: ids => { for (const id of ids || []) seen.add(id); remember(); }, call, state, refresh, forms, formOf, equippedForm, manifest, art, portrait, ultArt, iconArt, fxForm, ambient, bonusText, play, pending, hud, glyph, open: openGame, startNode, toast, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, get cache() { return cache; }, rewardText, fmt};
   window.dispatchEvent(new CustomEvent('pinkie:game-ready'));
 })();
