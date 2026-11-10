@@ -9,12 +9,8 @@ import {pathToFileURL} from 'node:url';
 async function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-windows-workbench-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  for (const [source, name] of [
-    ['desktop/windows/mac-runtime/services/mode-architecture/workbench.mjs', 'workbench.mjs'],
-    ['services/mode-architecture/workbench-lsp.mjs', 'workbench-lsp.mjs'],
-    ['services/mode-architecture/workbench-ext.mjs', 'workbench-ext.mjs'],
-  ]) fs.copyFileSync(source, path.join(root, name));
-  return {root, module: await import(pathToFileURL(path.join(root, 'workbench.mjs')).href)};
+  // Windows ships the repository workbench (no snapshot copy any more).
+  return {root, module: await import(pathToFileURL(path.resolve('services/mode-architecture/workbench.mjs')).href)};
 }
 
 test('Windows workbench sends reveal and open requests to Explorer', async t => {
@@ -53,4 +49,12 @@ test('notebook uses configured Windows Python and reports a missing interpreter 
   assert.equal(result.ok, false);
   assert.match(result.error, /内核进程已退出/);
   assert.doesNotMatch(result.error, /超时/);
+});
+
+test('the app guide describes the browser each platform really has', async () => {
+  const {appBrowserPlace} = await import('../services/mode-architecture/app-guide.mjs');
+  assert.match(appBrowserPlace('win32'), /独立浏览器窗口/);
+  assert.match(appBrowserPlace('win32'), /粉色「碧琪」指针/);
+  assert.match(appBrowserPlace('darwin'), /App 右侧的浏览器/);
+  assert.doesNotMatch(appBrowserPlace('darwin'), /Windows/);
 });

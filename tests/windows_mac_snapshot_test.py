@@ -51,6 +51,14 @@ class MacSnapshotTest(unittest.TestCase):
             self.assertTrue(path.is_file(), rel)
             self.assertEqual(value, hashlib.sha256(path.read_bytes()).hexdigest(), rel)
 
+    def test_windows_ships_the_repository_services(self):
+        # Windows fixes live in services/ now (workbench Explorer, app_browser
+        # guide, party retry limit). Only the engine stays apart until plan A
+        # merges it back.
+        carried = sorted(path.relative_to(SNAPSHOT).as_posix()
+                         for path in (SNAPSHOT / "services").rglob("*") if path.is_file())
+        self.assertEqual(carried, ["services/mode-architecture/index.mjs"])
+
     def test_snapshot_services_only_carry_real_differences(self):
         # A byte-identical copy only goes stale later and shadows the repository fix.
         for path in (SNAPSHOT / "services").rglob("*"):
