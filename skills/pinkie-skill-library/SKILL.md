@@ -14,6 +14,7 @@ description: 碧琪自带的 161 个现成技能的目录（视频短片、动�
 
 | 技能 | 干什么 | SKILL.md |
 |---|---|---|
+| pinkie-toolbox | 缺少工具或安装失败时，检查和补齐用户目录中的工具 | `../pinkie-toolbox/SKILL.md` |
 | pinkie-id-photo | 证件照：换白 / 蓝 / 红底、一寸二寸等标准尺寸、六寸排版冲印（底层 HivisionIDPhotos，Apache-2.0，本地跑） | `../pinkie-id-photo/SKILL.md` |
 | pinkie-remove-background | 抠图去背景、换纯色底或背景图、批量处理（底层 rembg，MIT，本地跑） | `../pinkie-remove-background/SKILL.md` |
 | pinkie-kids-worksheets | 字帖（田字格 / 米字格 / 回宫格、拼音、描红）和口算题卡（带答案页），A4 PDF | `../pinkie-kids-worksheets/SKILL.md` |

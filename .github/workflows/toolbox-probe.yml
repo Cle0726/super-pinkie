@@ -1,0 +1,52 @@
+name: Toolbox probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_probe:
+        description: Run clean-environment downloads and real capability probes
+        type: boolean
+        default: false
+
+jobs:
+  windows-toolbox:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit and routing tests
+        shell: pwsh
+        run: |
+          $env:PINKIE_TEST_PYTHON = (Get-Command python).Source
+          node --test tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tests -p persona_bundle_test.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Clean directory real installation
+        if: ${{ inputs.full_probe }}
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP '碧琪 工具箱 长路径\工作环境与真实安装测试'
+          New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
+          $env:PINKIE_TOOLBOX_NO_SYSTEM = '1'
+          $env:PINKIE_TOOLBOX_HOME = Join-Path $testRoot 'home'
+          $env:PINKIE_TOOLBOX_DIR = Join-Path $testRoot 'box'
+          $env:OPENCLAW_STATE_DIR = Join-Path $testRoot 'state'
+          $env:PINKIE_DOWNLOADS_LEDGER = Join-Path $testRoot 'downloads.json'
+          $env:PINKIE_AGENT_PYTHON = (Get-Command python).Source
+          node personas/project/playbooks/toolbox.mjs ensure python screenshot video node office-view pdf docs-write image fonts-cjk tts git --human *> (Join-Path $testRoot 'results.log')
+          $exitCode = $LASTEXITCODE
+          Get-Content -Encoding UTF8 -Path (Join-Path $testRoot 'results.log')
+          exit $exitCode
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && inputs.full_probe }}
+        with:
+          name: toolbox-windows-results
+          path: ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/results.log
+          if-no-files-found: warn

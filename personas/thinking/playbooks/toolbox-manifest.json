@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "pythonVersion": "3.12.11",
+  "playwrightVersion": "1.64.1",
+  "font": {"version": "0.4.4", "integrity": "sha512-LF4+p6xdtgUArufW0K+l9/FeDiXrW8FcEkEbOPIUC5ZnPupeFVA6yY9qCZ0sBrdAeLdlusDhv0R7q2x3onXo3w=="},
+  "office": {
+    "darwin-arm64": {"version": "26.8.2", "folder": "aarch64", "arch": "aarch64", "integrity": "sha256-nyT+g6se1cles99YARnzKTL3E+V3/urAK/YZ+wB0m1U="},
+    "darwin-x64": {"version": "26.8.2", "folder": "x86_64", "arch": "x86-64", "integrity": "sha256-CvBid5zBf2+FKRiyQkx0X33S0g1R1/uKCSXrkuwEF6c="},
+    "win32-x64": {"version": "26.8.2", "folder": "x86_64", "arch": "x86-64", "integrity": "sha256-/0uRFAO2funmJJ+CD5eCxEuzLJT9qkWw2lOo5BnlMHo="},
+    "win32-arm64": {"version": "26.8.2", "folder": "aarch64", "arch": "aarch64", "integrity": "sha256-c+ahX1srnmqH/61/2qzW6ZKll7CMkR7n47rd0V4pvMc="}
+  },
+  "git": {
+    "win32-x64": {"version": "2.56.0.4", "arch": "64-bit", "integrity": "sha256-4794NR/nd/ukfd7llQCC+KmLsPAmBP3Huj7iy2j/qHc="},
+    "win32-arm64": {"version": "2.56.0.4", "arch": "arm64", "integrity": "sha256-cPdkn3gIjB2x0vNXHKRqBNW+8G5OnVbY7X+YKejGxNs="}
+  },
+  "pypiMirrors": [
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.org/simple"
+  ],
+  "ffprobe": {
+    "darwin-arm64": {"version": "5.0.1", "integrity": "sha512-vwNCNjokH8hfkbl6m95zICHwkSzhEvDC3GVBcUp5HX8+4wsX10SP3B+bGur7XUzTIZ4cQpgJmEIAx6TUwRepMg=="},
+    "darwin-x64": {"version": "5.1.0", "integrity": "sha512-J+YGscZMpQclFg31O4cfVRGmDpkVsQ2fZujoUdMAAYcP0NtqpC49Hs3SWJpBdsGB4VeqOt5TTm1vSZQzs1NkhA=="},
+    "win32-x64": {"version": "5.1.0", "integrity": "sha512-jMGYeAgkrdn4e2vvYt/qakgHRE3CPju4bn5TmdPfoAm1BlX1mY9cyMd8gf5vSzI8gH8Zq5WQAyAkmekX/8TSTg=="}
+  },
+  "capabilities": {
+    "python": {"what": "Python 3.11 以上和独立环境", "reserveMiB": 600},
+    "screenshot": {"what": "打开网页、点击并截图", "reserveMiB": 800},
+    "video": {"what": "用 ffmpeg 和 ffprobe 处理视频", "reserveMiB": 300},
+    "node": {"what": "碧琪自带的 Node.js", "reserveMiB": 0},
+    "office-view": {"what": "把 PPT、Word 和 Excel 转成 PDF", "reserveMiB": 2500},
+    "pdf": {"what": "读取、合并 PDF 和转图", "reserveMiB": 300},
+    "docs-write": {"what": "读写 PPT、Word 和 Excel", "reserveMiB": 300},
+    "image": {"what": "裁剪、缩放和转换图片", "reserveMiB": 150},
+    "fonts-cjk": {"what": "能正常显示中文的字体", "reserveMiB": 150},
+    "tts": {"what": "中文文字转语音", "reserveMiB": 150},
+    "git": {"what": "版本管理", "reserveMiB": 300}
+  }
+}
