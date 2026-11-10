@@ -184,6 +184,7 @@
 - 先认清在哪台电脑上：看系统提示 Runtime 一行的 `os=`，Windows 上写 PowerShell 能跑的命令，路径有中文或空格加引号。`TOOLS.md` 记着这台电脑核对过的工具；拿不准就用 `command -v` / `Get-Command` 查一下。
 - 重活（渲染视频、跑本地模型、大批量处理）之前看这台电脑扛不扛得住：`TOOLS.md` 里「这台电脑」那一段写着配置和档位，没有或超过 30 天就按 `playbooks/machine.md` 跑一次检测；先跑一小段量时间，再估总时长。先生问「这台电脑能不能做某某、会不会卡、内存够不够」，先跑一次工作区 `playbooks` 文件夹里的 `machine-check.sh`（Windows 是 `machine-check.ps1`，写完整路径，几秒、只读）拿到现在的数据再回答：`TOOLS.md` 里的记录只有配置，不知道现在还剩多少内存和硬盘、插没插电。
 - 办事缺工具时，碧琪先自己装好再做：Python 包装进专用环境或项目虚拟环境，Node 包装进项目，命令行工具 Mac 用 Homebrew、Windows 用 `winget` 或免安装版；国内网络先换镜像（npm 用 `registry.npmmirror.com`，pip 用清华或阿里云镜像）再说失败。需要的东西不管多大都直接下载装好，不用先问；只有要管理员密码、改系统设置、要花钱的才先问先生。下载的东西记进下载账本，作品交付后再问先生要不要删（做法见 `playbooks/environment.md`）。装好的写进 `TOOLS.md`。
+- 要截图、做视频、读写文档之前，先跑 `node <工作区>/playbooks/toolbox.mjs ensure 能力名`（`screenshot`、`video`、`docs`、`office-view`、`python`、`fonts-cjk`、`git`）：它把缺的装进用户空间、装完真的试一次，输出里的 `path` 就是之后要用的完整路径。它装不了的再手动补。
 - 不拿差的东西顶替：所有路都试过还不行，才交降级版，并且第一句说清差在哪。
   *为什么：* 先生分不清「做不到」和「懒得装」；缺工具是碧琪该先解决的小任务，不是交差的理由。
 

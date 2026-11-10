@@ -406,7 +406,7 @@ const SCHEDULE_COMMAND = /\blaunchctl\s+(?:load|bootstrap|enable|kickstart)\b|\b
 const SCHEDULE_QUERY = /\blaunchctl\s+(?:list|print)\b|\bcrontab\s+-l\b|\bschtasks(?:\.exe)?\s+\/query\b|\bGet-ScheduledTask\b|\bsystemctl\s+--user\s+status\b|\bpm2\s+(?:list|ls|status)\b/i;
 const SCHEDULE_LIST_ALL = /\blaunchctl\s+list\b(?!\s+[\w.-]*[A-Za-z][\w.-]*)(?![^\n]*\|\s*grep\b)/i;
 const SCHEDULE_EMPTY = /no crontab|could not find|not found|找不到|不存在|ERROR:|cannot find|does not exist|inactive \(dead\)/i;
-const MACHINE_COMMAND = /machine-check\.(?:sh|ps1)|\bsysctl\s+(?:-n\s+)?(?:hw|machdep)|\bvm_stat\b|\bdf\s+-h\b|\bmemory_pressure\b|\bsystem_profiler\b|\bsw_vers\b|\buname\s+-[a-z]*m|\btop\s+-l\b|\bpmset\s+-g\b|Get-CimInstance|Get-ComputerInfo|\bsysteminfo\b|\bwmic\b|Get-PSDrive|\bnvidia-smi\b|\bfree\s+-h\b|\blscpu\b|\b(?:which|where(?:\.exe)?|command\s+-v|type\s+-a|Get-Command)\s+\S|\S+\s+(?:--version|-V\b|-version\b)|\bpy\s+-3\s+--version|\bbrew\s+list\b|\bpip\d*\s+(?:show|list)\b|\bnpm\s+(?:ls|list)\b/i;
+const MACHINE_COMMAND = /machine-check\.(?:sh|ps1)|toolbox\.mjs\s+(?:check|ensure)|\bsysctl\s+(?:-n\s+)?(?:hw|machdep)|\bvm_stat\b|\bdf\s+-h\b|\bmemory_pressure\b|\bsystem_profiler\b|\bsw_vers\b|\buname\s+-[a-z]*m|\btop\s+-l\b|\bpmset\s+-g\b|Get-CimInstance|Get-ComputerInfo|\bsysteminfo\b|\bwmic\b|Get-PSDrive|\bnvidia-smi\b|\bfree\s+-h\b|\blscpu\b|\b(?:which|where(?:\.exe)?|command\s+-v|type\s+-a|Get-Command)\s+\S|\S+\s+(?:--version|-V\b|-version\b)|\bpy\s+-3\s+--version|\bbrew\s+list\b|\bpip\d*\s+(?:show|list)\b|\bnpm\s+(?:ls|list)\b/i;
 const DEPLOY_COMMAND = /\b(?:vercel|netlify|surge|wrangler|gh-pages|firebase\s+deploy|rsync|scp|sftp|lftp|git\s+push|cloudflared|ngrok|caddy|nginx\s+-s|pm2\s+start|docker\s+push|fly\s+deploy|railway\s+up)\b/i;
 const PRIVATE_HOST = /^(?:localhost|127\.|0\.0\.0\.0|\[?::1\]?|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|[^/]*\.local\b|file:)/i;
 
@@ -937,7 +937,7 @@ const STEPS = {
   writing: ['先定给谁看、在哪看、看完要他干嘛', '写完读一遍顺不顺；有字数、行数要求就逐条数清', '用户的每条硬要求都对一遍再交'],
   ideas: ['给 3 个真不同的方向，每个一句理由', '说出推荐哪个、为什么', '能做小样就做一个'],
   debugging: ['先复现，拿到失败输出或截图', '找到根因再改，改动尽量小', '用同一步骤再跑一次，看到通过'],
-  environment: ['先跑一次 playbooks 里的 machine-check（Windows 用 .ps1）或版本命令，拿到现在的数据', '缺东西就装进用户空间或碧琪自己的环境，不动系统', '装完跑一下版本号；改好的用法记进 TOOLS.md'],
+  environment: ['先跑一次 playbooks 里的 machine-check（Windows 用 .ps1）或 toolbox.mjs check，拿到现在的数据', '缺东西先用 playbooks 里的 toolbox.mjs ensure 装；它装不了的再手动装进用户空间或碧琪自己的环境，不动系统', '装完跑一下版本号；改好的用法记进 TOOLS.md'],
   publish: ['先问清给谁看、能不能公开', '选最省事的路发布，密钥不进网页', '发布后从外面真打开一次公开地址'],
   standard_answer: ['独立解，关键数字真的算出来', '用程序或换一种方法验算', '候选结论不一致时查到原因再交'],
   tradeoff: ['不同立场各写一版', '列出差异和代价', '交给用户选（可以说推荐哪个）'],
