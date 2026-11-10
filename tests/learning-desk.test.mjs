@@ -82,7 +82,7 @@ test('today uses Shanghai exam boundaries, real ledgers, due retests and conserv
   assert.equal(today.date, '2026-10-20'); assert.equal(today.focus.payload.mode, 'retest');
   seed({question: {id: 'chat-generated', topic: '未知话题'}});
   assert.equal(today.mastery.lit, desk.mastery().lit);
-  assert.throws(() => desk.today({sessionKey: 'agent:project:x'}), /学习|习作/);
+  assert.throws(() => desk.today({sessionKey: 'agent:project:x'}), /学习/);
 });
 
 test('desk is registered from the existing learning gateway without index edits', async t => {

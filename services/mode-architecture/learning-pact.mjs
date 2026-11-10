@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
-// Le Pacte：习作模式的约定、每日账本、连续天数、专注计时与提醒上下文。
+// Le Pacte：学习模式的约定、每日账本、连续天数、专注计时与提醒上下文。
 // 所有日期都按 pact 的时区（默认 Asia/Shanghai）切天，UTC 的 16:30 属于第二天。
 
 const PACT_VERSION = 1;

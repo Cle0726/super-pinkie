@@ -490,7 +490,7 @@ export class LearningInteractionStore {
 
   assertLearningSession(sessionKey) {
     const key = String(sessionKey || '');
-    if (!isLearningSession(key)) throw new Error('互动学习只在习作模式会话中可用');
+    if (!isLearningSession(key)) throw new Error('互动学习只在学习模式会话中可用');
     return key;
   }
 

@@ -125,7 +125,7 @@ test('organizer model selection is scoped and does not patch the chat model or g
   assert.equal(organizer.status('agent:learning:other').model, 'local/notes-small');
   assert.equal(JSON.stringify(config), before);
   assert.throws(() => organizer.setModel(sessionKey, 'unconfigured/model'), /不可用/);
-  assert.throws(() => organizer.status('agent:project:other'), /习作模式/);
+  assert.throws(() => organizer.status('agent:project:other'), /学习模式/);
   const note = store.saveNote(sessionKey, {content: 'put off = 推迟'}).note;
   await organizer.light(sessionKey, note.id);
   assert.equal(JSON.stringify(config), before);
