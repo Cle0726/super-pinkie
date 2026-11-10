@@ -172,7 +172,7 @@ if ($LASTEXITCODE -ne 0) { throw "Mac/Windows shared UI installation failed" }
 $chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
 if (-not $chat) { throw "缺少聊天页" }
 $chatText = Get-Content -LiteralPath $chat.FullName -Raw
-if ($chatText -notmatch 'pinkie-chat-timeline:v26' -or $chatText -notmatch 'pinkie-thinking-segments:v1') { throw "聊天页不是本机 Mac 的完整时间线 v26" }
+if ($chatText -notmatch 'pinkie-chat-timeline:v27' -or $chatText -notmatch 'pinkie-thinking-segments:v1') { throw "聊天页不是本机 Mac 的完整时间线 v27" }
 $indexText = Get-Content -LiteralPath (Join-Path $openclawRoot "dist\control-ui\index.html") -Raw
 foreach ($needle in @('pinkie-surface=6', 'pinkie-browser=3', 'pinkie-learning=8')) {
     if ($indexText -notlike "*$needle*") { throw "页面入口缺少 $needle" }
