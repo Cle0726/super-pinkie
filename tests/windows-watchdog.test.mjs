@@ -1,6 +1,7 @@
 // The Windows package builds the mode plugin from the repository's
-// services/mode-architecture with the Mac snapshot laid over it
-// (build-win.ps1). Assemble it the same way and check which failed turns the
+// services/mode-architecture with the remaining Mac snapshot files laid over it
+// (build-win.ps1). The shared index supplies the Windows watchdog behavior.
+// Assemble it the same way and check which failed turns the
 // watchdog retries.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ function watchdog() {
   const logs = [];
   const logger = {info: line => logs.push(line), warn: line => logs.push(line)};
   const dog = new UpstreamWatchdog({session: {workflow}, logger}, () => '', async () => ({stdout: '{}'}), '',
-    () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+    () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''), {platform: 'win32'});
   return {dog, logs};
 }
 
@@ -93,13 +94,13 @@ test('a host-success connection failure keeps the two-retry bound', async () => 
 });
 
 test('a partial failed reply does not start an integrity retry', () => {
-  const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog('')});
+  const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog(''), platform: 'win32'});
   supervisor.begin({prompt: '测试一下：请回复一句话。'}, ctx);
   const failed = {role: 'assistant', stopReason: 'error', errorMessage: 'terminated',
     content: [{type: 'text', text: '碧琪先说到一半'}]};
   assert.equal(supervisor.beforeMessageWrite({message: failed}, ctx), undefined);
   assert.equal(supervisor.hasPending(key), false);
-  const completed = {...failed, stopReason: 'stop'};
+  const completed = {...failed, stopReason: 'stop', content: [{type: 'text', text: '测试完成。'}]};
   assert.deepEqual(supervisor.beforeMessageWrite({message: completed}, ctx), {block: true});
 });
 
@@ -165,7 +166,7 @@ test('a resend the local gateway CLI refuses is not rescheduled forever', async 
     throw error;
   };
   const dog = new UpstreamWatchdog({session: {workflow}, logger: {info: l => logs.push(l), warn: l => logs.push(l)}},
-    () => '', runner, 'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+    () => '', runner, 'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''), {platform: 'win32'});
   await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
   clearTimeout(dog.timers.get(key));
   dog.timers.delete(key);
@@ -178,7 +179,7 @@ test('a resend the local gateway CLI refuses is not rescheduled forever', async 
 test('JSON error replies from the gateway are bounded too', async () => {
   const dog = new UpstreamWatchdog({session: {workflow}}, () => '',
     async () => ({stdout: JSON.stringify({status: 'timeout', error: 'gateway is draining'})}),
-    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''), {platform: 'win32'});
   await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
   for (let i = 0; i < 8; i += 1) {
     clearTimeout(dog.timers.get(key));
@@ -192,7 +193,7 @@ test('JSON error replies from the gateway are bounded too', async () => {
 test('a JSON credentials error stops immediately', async () => {
   const dog = new UpstreamWatchdog({session: {workflow}}, () => '',
     async () => ({stdout: JSON.stringify({status: 'error', error: 'GatewayCredentialsRequiredError'})}),
-    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''));
+    'openclaw.mjs', () => ({pending: 0, quietForMs: Infinity}), new WatchdogJobStore(''), {platform: 'win32'});
   await dog.agentEnded({success: false, error: 'terminated', runId: 'run-1'}, ctx);
   clearTimeout(dog.timers.get(key));
   dog.timers.delete(key);

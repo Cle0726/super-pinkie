@@ -21,12 +21,13 @@ function produce(guard, ctx, id, command, file, content = 'bytes') {
   guard.afterTool({toolName: 'exec', toolCallId: id, params: {command}, result: 'ok'}, ctx);
 }
 
-test('a finished video must be looked at once before it is called done', (t) => {
+test('a claimed visual check needs evidence, while an unclaimed check is not a delivery gate', (t) => {
   const {root, guard, ctx} = setup(t, '帮我做一个 4 分钟的爱情故事视频');
   const video = path.join(root, 'love.mp4');
   produce(guard, ctx, 'render', `ffmpeg -y -i frames/%04d.png "${video}"`, video);
   guard.afterTool({toolName: 'exec', toolCallId: 'probe', params: {command: `ffprobe "${video}"`}, result: 'Duration: 00:04:00'}, ctx);
-  const reply = '视频已经全部完成，时长 4 分钟。';
+  assert.equal(guard.finalize({lastAssistantMessage:'视频已经全部完成，时长 4 分钟。'},ctx,{verifyExternal:false}),undefined);
+  const reply = '视频已经全部完成，时长 4 分钟，并截图看过。';
   const first = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
   assert.equal(first?.action, 'revise');
   assert.match(first.reason, /没有亲自看过成品内容/);
@@ -46,7 +47,7 @@ test('the inspection nudge fires only once per turn', (t) => {
   const poster = path.join(root, 'poster.png');
   produce(guard, ctx, 'draw', `python3 draw.py --out "${poster}"`, poster);
   guard.afterTool({toolName: 'exec', toolCallId: 'ls', params: {command: `ls -la "${poster}"`}, result: 'poster.png'}, ctx);
-  assert.equal(guard.finalize({lastAssistantMessage: '海报已经生成完成。'}, ctx, {verifyExternal: false})?.action, 'revise');
+  assert.equal(guard.finalize({lastAssistantMessage: '海报已经生成完成，并截图看过。'}, ctx, {verifyExternal: false})?.action, 'revise');
   const second = guard.finalize({lastAssistantMessage: '海报已经做好了，全部完成。'}, ctx, {verifyExternal: false});
   assert.notEqual(second?.action, 'revise', 'a model that still does not look is not trapped in a retry loop');
 });
@@ -69,14 +70,13 @@ test('documents pass with a text check; ordinary HTML code edits are not treated
   assert.doesNotMatch(edited?.reason || '', /没有亲自看过成品内容/);
 });
 
-test('announcing the work and stopping is sent back once; waiting on the user is not', (t) => {
+test('a reply that only announces future work is not rejected as a false completion', (t) => {
   const {guard, ctx} = setup(t, '帮我把这个视频剪成 30 秒');
   guard.afterTool({toolName: 'exec', toolCallId: 'probe', params: {command: 'ffprobe in.mp4'}, result: 'Duration: 00:02:00'}, ctx);
   const promise = '素材碧琪看过了，碧琪这就去剪，稍等～';
   const first = guard.finalize({lastAssistantMessage: promise}, ctx, {verifyExternal: false});
-  assert.equal(first?.action, 'revise');
-  assert.match(first.reason, /不要只预告/);
-  assert.equal(guard.finalize({lastAssistantMessage: promise}, ctx, {verifyExternal: false})?.action, 'revise');
+  assert.equal(first, undefined);
+  assert.equal(guard.finalize({lastAssistantMessage: promise}, ctx, {verifyExternal: false}), undefined);
   assert.doesNotMatch(guard.finalize({lastAssistantMessage: '碧琪马上开始剪。'}, ctx, {verifyExternal: false})?.reason || '', /不要只预告/);
 
   const waiting = setup(t, '帮我把这个视频剪成 30 秒');
@@ -115,7 +115,7 @@ test('the workbench note appended to a question does not turn it into an executi
   assert.match(decision.reason, /执行型请求/);
 });
 
-test('a video built from generated or downloaded assets must say where they came from; editing the user\'s own clip need not', (t) => {
+test('missing asset-source disclosure alone does not trigger the delivery gate', (t) => {
   // 11-04 R-ad: image_generate pictures + edge-tts voice + synthesized music, delivered without a word about sources.
   const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
   guard.afterTool({toolName: 'image_generate', toolCallId: 'img', params: {prompt: 'latte'}, result: 'Background task started'}, ctx);
@@ -125,9 +125,7 @@ test('a video built from generated or downloaded assets must say where they came
   guard.afterTool({toolName: 'exec', toolCallId: 'look', params: {command: `look-video "${video}" 9`}, result: 'ok'}, ctx);
   guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
   const silent = guard.finalize({lastAssistantMessage: '15 秒竖屏广告已经完成：1080×1920，30fps，H.264 + AAC。'}, ctx, {verifyExternal: false});
-  assert.equal(silent?.action, 'revise');
-  assert.match(silent.reason, /素材从哪来.+能不能商用/);
-  assert.doesNotMatch(silent.reason, /没有亲自看过/, 'it did look; only the sources are missing');
+  assert.equal(silent, undefined);
 
   const told = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
   told.guard.afterTool({toolName: 'image_generate', toolCallId: 'img', params: {prompt: 'latte'}, result: 'Background task started'}, told.ctx);
@@ -144,8 +142,7 @@ test('a video built from generated or downloaded assets must say where they came
   produce(quiet.guard, quiet.ctx, 'render', `python3 render_video_15s.py "${ad3}"`, ad3);
   quiet.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(quiet.root, 'ad.preview.png')}, result: 'image'}, quiet.ctx);
   const q = quiet.guard.finalize({lastAssistantMessage: '15 秒广告已经完成，1080×1920。'}, quiet.ctx, {verifyExternal: false});
-  assert.equal(q?.action, 'revise');
-  assert.match(q.reason, /素材从哪来/);
+  assert.equal(q, undefined);
 
   // routes-f: a nudge to swap in real footage is not a statement of where the footage came from.
   const vague = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
@@ -153,8 +150,7 @@ test('a video built from generated or downloaded assets must say where they came
   produce(vague.guard, vague.ctx, 'render', `python3 render.py "${ad4}"`, ad4);
   vague.guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(vague.root, 'ad.preview.png')}, result: 'image'}, vague.ctx);
   const v = vague.guard.finalize({lastAssistantMessage: '成片已经剪好，可以直接发抖音。配音与暖调 Lo-Fi 爵士伴奏混音。小建议：店里有高清实拍拿铁特写就发给我替换。'}, vague.ctx, {verifyExternal: false});
-  assert.equal(v?.action, 'revise');
-  assert.match(v.reason, /素材从哪来/);
+  assert.equal(v, undefined);
 
   const own = setup(t, '帮我把这个视频剪成 30 秒');
   const cut = path.join(own.root, 'cut.mp4');
@@ -173,8 +169,7 @@ test('a turn opened by a background completion event is judged against the user\
   produce(guard, ctx, 'render', `python3 render.py "${video}"`, video);
   guard.afterTool({toolName: 'read', toolCallId: 'see', params: {path: path.join(root, 'ad.preview.png')}, result: 'image'}, ctx);
   const v = guard.finalize({lastAssistantMessage: '成片已经剪好，可以直接发抖音。'}, ctx, {verifyExternal: false});
-  assert.equal(v?.action, 'revise');
-  assert.match(v.reason, /素材从哪来/);
+  assert.equal(v, undefined);
 });
 
 test('a video handed over with MEDIA: counts as a video even when no tool call names the .mp4', (t) => {
@@ -189,7 +184,7 @@ test('a video handed over with MEDIA: counts as a video even when no tool call n
   const reply = '**15 秒桂花拿铁竖屏广告 MP4 已剪辑并渲染完成**，内置 Lo-fi BGM 和普通话旁白。\n\nMEDIA:' + path.join(root, 'output/ad.mp4');
   const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
   assert.equal(decision?.action, 'revise');
-  assert.match(decision.reason, /素材从哪来/);
+  assert.match(decision.reason, /没有主机确认/);
 
   // A picture delivered the same way is not a video: no source question.
   const pic = setup(t, '帮我做个小红书封面，主题是「租房避坑 7 条」，直接出图给我');
@@ -199,7 +194,7 @@ test('a video handed over with MEDIA: counts as a video even when no tool call n
   assert.doesNotMatch(String(cover?.reason || ''), /素材从哪来/);
 });
 
-test('the sources note rides along when another reminder fires first', (t) => {
+test('a failed final tool is reported without adding an unrelated source reminder', (t) => {
   // 11-04 routes-i R-ad-2: the side-panel browser is not connected, so the last tool call failed;
   // that reminder used up the single reminder of the turn and the sources were never asked for.
   const {root, guard, ctx} = setup(t, '剪一个 15 秒的竖屏抖音广告，卖我们店新出的桂花拿铁，出 MP4 给我');
@@ -213,11 +208,10 @@ test('the sources note rides along when another reminder fires first', (t) => {
   const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
   assert.equal(decision?.action, 'revise');
   assert.match(decision.reason, /最后一次工具调用失败/);
-  assert.match(decision.reason, /另外，交付的视频没说清素材从哪来/);
-  assert.match(decision.retry.instruction, /素材从哪来/);
+  assert.doesNotMatch(decision.reason, /素材从哪来/);
   // Said once is enough: the same check on the same reply does not stack the note twice.
   const again = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
-  assert.equal((again.reason.match(/素材从哪来/g) || []).length, 1);
+  assert.equal((again.reason.match(/素材从哪来/g) || []).length, 0);
 });
 
 
@@ -232,7 +226,7 @@ test('next-step buttons after a delivered file do not turn the reply into an in-
     + '\n\nMEDIA:' + path.join(root, '桂花拿铁_秋日限定广告_15s.mp4');
   const decision = guard.finalize({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
   assert.equal(decision?.action, 'revise');
-  assert.match(decision.reason, /素材从哪来/);
+  assert.match(decision.reason, /没有主机确认/);
 
   // routes-i R-ad-2: the attachment failed, so the runtime replaced MEDIA: with "Media failed";
   // the reply still names the finished file's path, which is a delivery all the same.
@@ -242,15 +236,14 @@ test('next-step buttons after a delivered file do not turn the reply into an in-
   const named = '这支 15 秒广告已经剪好。\n视频文件路径：`' + path.join(failed.root, 'osmanthus_latte_ad_15s.mp4') + '`\n⚠️ Media failed.\n\n' + buttons;
   const second = failed.guard.finalize({lastAssistantMessage: named}, failed.ctx, {verifyExternal: false});
   assert.equal(second?.action, 'revise');
-  assert.match(second.reason, /素材从哪来/);
+  assert.match(second.reason, /没有主机确认/);
 
   // Choice buttons that close a turn which already produced a file are not the deliverable either.
   const made = setup(t, '帮我做一个 4 分钟的爱情故事视频');
   const video = path.join(made.root, 'love.mp4');
   produce(made.guard, made.ctx, 'render', `ffmpeg -y -i frames/%04d.png "${video}"`, video);
   const unseen = made.guard.finalize({lastAssistantMessage: '视频做好了，4 分钟。\n\n' + buttons}, made.ctx, {verifyExternal: false});
-  assert.equal(unseen?.action, 'revise');
-  assert.match(unseen.reason, /亲眼|看/);
+  assert.equal(unseen, undefined);
 });
 
 test('asking with buttons before any work, or answering with a chart, still passes as an in-chat reply', (t) => {

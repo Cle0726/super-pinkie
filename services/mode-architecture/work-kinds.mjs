@@ -1,6 +1,7 @@
 // 活儿种类：先认清一条请求是「哪一种活」，再按这种活的打法定流程、定「做完」要看到的证据。
 // 两套档位都用这里——四档「思考强度」（index.mjs：运行单、证据门禁、子任务）和九档「思考等级」的
 // 自补档（reasoning.mjs：独立起草的用途、审稿员看什么）。纯函数，不依赖 OpenClaw，可单测。
+import {SPAWN_FALLBACK} from './run-contract.mjs';
 //
 // 证据只认工具记录（index.mjs captureVerificationEvidence 存下的 {name, kind, params, output, ok, sequence}），
 // 不认回复里的自述。拿不准的信号宁可不认：漏认只会让碧琪多验一步，错认会放过假完成。
@@ -447,7 +448,25 @@ export function normalizeEntry(entry = {}) {
   const command = String(params?.command || params?.cmd || params?.script || (/"command"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(paramsText)?.[1] || '').replace(/\\n/g, '\n').replace(/\\"/g, '"'));
   const name = String(entry.name || entry.toolName || '').toLowerCase();
   const action = String(params?.action || params?.kind || (/"action"\s*:\s*"([^"]+)"/.exec(paramsText)?.[1] || '')).toLowerCase();
-  return {name, action, params, paramsText, command, output: String(entry.output || ''), ok: entry.ok !== false,
+  const result = entry.result && typeof entry.result === 'object' ? entry.result : {};
+  const details = result.details && typeof result.details === 'object' ? result.details : result;
+  const exitCode = details.exitCode;
+  const failed = Boolean(entry.error) || entry.failed === true || entry.isError === true || result.isError === true
+    || details.isError === true || details.ok === false
+    || /^(?:error|failed|blocked|timeout)$/i.test(String(details.status || ''))
+    || (exitCode !== null && exitCode !== undefined && exitCode !== '' && Number.isFinite(Number(exitCode)) && Number(exitCode) !== 0);
+  // Process bookkeeping (exit code, duration, pid) is not the program's
+  // numerical output; otherwise a silent Python call can look like a real
+  // calculation merely because its envelope contains numbers.
+  const processTool = /(?:^|[._:-])(?:exec|shell|bash|terminal|run|process)(?:$|[._:-])/.test(name);
+  const hasContent = Array.isArray(result.content) && result.content.length > 0;
+  const directOutput = [result.stdout, result.output, result.aggregated, details.stdout, details.output, details.aggregated]
+    .find(value => typeof value === 'string');
+  const hasMetadata = ['exitCode', 'durationMs', 'pid', 'status'].some(key => Object.hasOwn(details, key));
+  const output = entry.output != null ? String(entry.output)
+    : processTool && !hasContent && directOutput !== undefined ? directOutput
+      : processTool && !hasContent && hasMetadata ? '' : toolResultText(entry.result);
+  return {name, action, params, paramsText, command, output, ok: entry.ok !== false && !failed,
     kind: String(entry.kind || ''), seq: Number(entry.sequence) || Number(entry.at) || 0};
 }
 
@@ -1026,7 +1045,7 @@ export function kindPlanSection(kinds = [], tier = 'boost', {playbookRoot = '', 
   }
   if (tier === 'full') {
     const roles = rolePlanFor(primary);
-    if (roles) lines.push(`全开档多做几版：${roles}。子任务只给原始需求和必要材料，不给你的草稿；批评要附反例、截图里的具体位置、失败输出或出处，没证据的丢弃。`);
+    if (roles) lines.push(`全开档多做几版：${roles}。${SPAWN_FALLBACK}子任务只给原始需求和必要材料，不给你的草稿；批评要附反例、截图里的具体位置、失败输出或出处，没证据的丢弃。`);
   }
   return lines;
 }
