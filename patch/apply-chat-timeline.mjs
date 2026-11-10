@@ -9,13 +9,13 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-export const marker = '/* pinkie-chat-timeline:v26 */';
+export const marker = '/* pinkie-chat-timeline:v27 */';
 // Keep the v26 marker for the independently maintained optimistic-user patch.
 // This second marker lets older v26 installations upgrade the projection.
 const thinkingSegmentsMarker = '/* pinkie-thinking-segments:v1 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v26 */', '/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 // These are compatibility exports, not retention caps. Fetching is paginated;
 // the renderer must keep every page the user has already opened reachable.
@@ -869,11 +869,69 @@ function pinkieRunIsActive() {
  * Plain answers without
  * any intermediate step keep exactly the native layout.
  */
-function pinkieProcessTurnKey(head, ownerKey) {
+function pinkieProcessTurnKey(head, ownerKey, byPosition = false) {
   let session = '';
   try { session = new URLSearchParams(globalThis.location?.search || '').get('session') || ''; } catch {}
+  // Plan B: a card belongs to the gateway run, not to the row that happens to
+  // head it. The optimistic row (Vh patch) and the durable transcript row
+  // (idempotencyKey "<runId>:user") give the same key, so nothing migrates.
+  const runId = byPosition ? '' : pinkieTurnRunId(head);
+  if (runId) return `pinkie:process:${session}:run:${runId}`;
   const id = String(head?.messages?.[0]?.message?.__openclaw?.id || ownerKey);
   return `pinkie:process:${session}:${id}`;
+}
+
+function pinkieTurnRunId(head) {
+  for (const entry of head?.messages || []) {
+    const message = entry?.message || {};
+    const id = message.__pinkieOptimisticRunId || message.__openclaw?.runId
+      || message.idempotencyKey || message.__openclaw?.idempotencyKey || '';
+    if (typeof id === 'string' && id.trim()) return id.trim().replace(/:user$/u, '').slice(0, 160);
+  }
+  return '';
+}
+
+function pinkieGroupCallIds(item) {
+  const ids = new Set();
+  for (const entry of item?.messages || []) {
+    const message = entry?.message || {};
+    for (const part of textParts(message)) {
+      const kind = isToolCallPart(part) ? 'call' : isToolResultPart(part) ? 'result' : '';
+      const id = kind && partCallId(part, message);
+      if (id) ids.add(`${kind}:${id}`);
+    }
+    const direct = message.toolCallId || message.tool_call_id;
+    if (direct) ids.add(`result:${direct}`);
+  }
+  return [...ids];
+}
+
+/** Native control-ui renders the live tool stream after every chat message,
+ * and a steered follow-up is appended to the messages. Rows that started
+ * before that follow-up belong to the run it interrupted; rows that history
+ * already holds are not drawn twice. */
+function pinkieRehomeSteeredRows(entries) {
+  let head = -1;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (isRealUserGroup(entries[index])) { head = index; break; }
+  }
+  if (head <= 0) return entries;
+  const at = Number(timelineTimestamp(entries[head]));
+  const persisted = new Set();
+  for (const item of entries.slice(0, head)) for (const id of pinkieGroupCallIds(item)) persisted.add(id);
+  const before = [], after = [];
+  let changed = false;
+  for (const item of entries.slice(head + 1)) {
+    const role = String(item?.role || '').toLowerCase();
+    if (item?.kind === 'group' && (role === 'tool' || role === 'assistant')) {
+      const ids = pinkieGroupCallIds(item);
+      if (ids.length && ids.every(id => persisted.has(id))) { changed = true; continue; }
+      const stamp = Number(timelineTimestamp(item));
+      if (ids.length && at > 0 && stamp > 0 && stamp < at) { before.push(item); changed = true; continue; }
+    }
+    after.push(item);
+  }
+  return changed ? [...entries.slice(0, head), ...before, entries[head], ...after] : entries;
 }
 
 /** Only trusted learning-tool results create slots. Prose and arbitrary HTML
@@ -907,7 +965,7 @@ export function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
   return [...refs.values()];
 }
 
-function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
+function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false, followedByUser = false) {
   if (!entries.length) return [];
   const hasUserHead = isRealUserGroup(entries[0]);
   const firstStepIndex = hasUserHead ? 1 : 0;
@@ -1008,6 +1066,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const ownerKey = String(head?.key || head?.messages?.[0]?.key
     || entries[0]?.key || entries[0]?.messages?.[0]?.key || 'turn');
   const processKey = pinkieProcessTurnKey(head || entries[0], ownerKey);
+  const processPriorKey = pinkieProcessTurnKey(head || entries[0], ownerKey, true);
   let routedSession = '';
   try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
     || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
@@ -1039,9 +1098,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const legacyKey = `pinkie:process:${legacyOwner}`;
   const savedThinking = globalThis.__laolaoProcessCard?.store || {};
   const kept = Boolean(keep && typeof keep.has === 'function' && (keep.has(processKey)
-    || keep.has(legacyKey) || keep.has(pinkieProcessTurnKey(null, legacyOwner))))
+    || keep.has(processPriorKey) || keep.has(legacyKey) || keep.has(pinkieProcessTurnKey(null, legacyOwner))))
     || Object.values(savedThinking).some(record => record?.text && record.turn?.id
-      && processKey === `pinkie:process:${record.turn.session}:${record.turn.id}`);
+      && [processKey, processPriorKey].includes(`pinkie:process:${record.turn.session}:${record.turn.id}`));
   if (!steps.length && !live && !kept && !historyThinking) return [...(head ? [head] : []), ...tail];
 
   const finalMessage = finalAssistantIndex >= 0
@@ -1052,6 +1111,12 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     || finalAssistantIndex <= lastToolIndex
     || finalReason === 'error' || finalReason === 'aborted' || finalReason === 'timeout'
     || finalMessage.__pinkieFailureSummary === true);
+  // Interrupted only because the user sent a follow-up while it ran: nothing
+  // failed, the next card carries on. Errors, timeouts and Stop stay "stopped".
+  const processSuperseded = processInterrupted && followedByUser && hasUserHead
+    && finalAssistantIndex < 0 && !['error', 'aborted', 'timeout'].includes(finalReason)
+    && !entries.some(item => (item?.messages || []).some(entry => entry?.message?.__pinkieFailureSummary === true
+      || ['error', 'aborted', 'timeout'].includes(String(entry?.message?.stopReason || '').toLowerCase())));
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
   const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
@@ -1061,6 +1126,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const card = {
     kind: 'group',
     key: processKey,
+    processRunId: pinkieTurnRunId(head),
+    processPriorKey: processPriorKey === processKey ? '' : processPriorKey,
+    processSuperseded,
     role: 'assistant',
     messages: [],
     timestamp: timelineTimestamp(steps[0]),
@@ -1073,18 +1141,19 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processHistoryVersion: historyVersion,
     processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
     processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
-    processState: !live && processInterrupted ? 'oops' : '',
+    processState: !live && processInterrupted && !processSuperseded ? 'oops' : '',
     processRowCount: steps.length,
     processRows: collapseTimelineRows(steps.map((row, index) => ({...row,
       pinkieThinkingAnchor: index, pinkieThinkingKey: processKey})), maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
       : live ? '碧琪正在干活'
+        : processSuperseded ? '这一轮被你的新消息接上了'
         : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',
-        processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
+        processSuperseded ? '已接上' : processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
   };
   // Tool-created activities are part of this reply, not its folded work log.
   // Give them a stable row after the answer so a long reply cannot leave the
@@ -1106,7 +1175,16 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
     const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
     return messages.length ? [{...item, messages}] : [];
   });
-  const safeEntries = collapseFailedAssistantEntries(visibleEntries).flatMap((item) => {
+  // Failure summaries can be collapsed past the next user row; remember which
+  // turns failed before that, so a failed run never reads as "接上了".
+  const failedHeads = new Set();
+  let currentHead = '';
+  for (const item of visibleEntries) {
+    if (isRealUserGroup(item)) { currentHead = String(item.messages?.at?.(-1)?.key || ''); continue; }
+    if (currentHead && (item?.messages || []).some(entry => ['error', 'aborted', 'timeout']
+      .includes(String(entry?.message?.stopReason || '').toLowerCase()))) failedHeads.add(currentHead);
+  }
+  let safeEntries = collapseFailedAssistantEntries(visibleEntries).flatMap((item) => {
     if (item?.kind !== 'group') return [item];
     const messages = (item.messages || []).filter((entry) => {
       const message = entry?.message || {};
@@ -1126,6 +1204,7 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
       key: entry.key, pinkieLegacyOwnerKey: item.key, messages: [entry], timestamp: entry.message?.timestamp ?? item.timestamp}));
     return [{...item, messages}];
   });
+  if (pageIsLive) safeEntries = pinkieRehomeSteeredRows(safeEntries);
   const turnStarts = [];
   for (let index = 0; index < safeEntries.length; index += 1) {
     if (isRealUserGroup(safeEntries[index])) turnStarts.push(index);
@@ -1147,6 +1226,8 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
       getToolCalls,
       maxRows,
       pageIsLive && turnIndex === turnStarts.length - 1,
+      turnIndex < turnStarts.length - 1
+        && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
   }
   return pagePresentation(timeline);
@@ -1206,7 +1287,7 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${pinkieHistoryMessageKey.toString()}\n${pinkieHistoryMessageWeight.toString()}\n${pinkieLegacyHistoryView.toString()}\n${pinkieHistoryRenderOptions.toString()}\n${pinkieHistoryPane.toString()}\n${pinkieHistoryRepaint.toString()}\n${pinkieNavigateHistory.toString()}\n${pinkieEarlierHistory.toString()}\n${pinkieTimelineView.toString()}\n${pinkieProcessOpen.toString()}\n${pinkieTimelineRows.toString()}\n${pinkieTimelineUpdate.toString()}\n${pinkieTimelineToggle.toString()}\n${pinkieTimelineMore.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${pinkieLearningInlineReferences.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${pinkieHistoryMessageKey.toString()}\n${pinkieHistoryMessageWeight.toString()}\n${pinkieLegacyHistoryView.toString()}\n${pinkieHistoryRenderOptions.toString()}\n${pinkieHistoryPane.toString()}\n${pinkieHistoryRepaint.toString()}\n${pinkieNavigateHistory.toString()}\n${pinkieEarlierHistory.toString()}\n${pinkieTimelineView.toString()}\n${pinkieProcessOpen.toString()}\n${pinkieTimelineRows.toString()}\n${pinkieTimelineUpdate.toString()}\n${pinkieTimelineToggle.toString()}\n${pinkieTimelineMore.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${pinkieTurnRunId.toString()}\n${pinkieGroupCallIds.toString()}\n${pinkieRehomeSteeredRows.toString()}\n${pinkieLearningInlineReferences.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
 }
 
 function withSessionMessageProgress(source) {
@@ -1246,7 +1327,7 @@ function withScrollIntent(source) {
 
 /** Closed cards retain only their summary; Lit mounts rows on a user click. */
 export function processBranchSource(groupName) {
-  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key} data-pinkie-row-count=\${e.processRowCount||0}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg="0" data-pinkie-history-revision=\${e.processHistoryVersion||0} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieHistorySegments=\${e.processThinkingSegments||[]} .pinkieToolAnchors=\${e.processToolAnchors||{}} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>s\`\${n.pinkieThinkingAnchor?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${n.pinkieThinkingAnchor}></div>\`:c}\${n.kind===\`group\`?${groupName}(n,t):c}\`)}</div><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${e.processRowCount||0} data-pinkie-thinking-tail="1"></div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
+  return `if(e&&e.isProcessCard)return s\`<div class="chat-group assistant chat-group--process" data-pinkie-process=\${e.key} data-pinkie-row-count=\${e.processRowCount||0} data-pinkie-run=\${e.processRunId||\`\`} data-pinkie-prior=\${e.processPriorKey||\`\`} data-superseded=\${e.processSuperseded?\`1\`:\`0\`}><div class="chat-group-messages"><details class="pinkie-process" .open=\${pinkieProcessOpen(e)} data-live=\${e.processLive?\`1\`:\`0\`}><summary class="pinkie-process__summary" @click=\${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">\${e.processTitle}</span><span class="pinkie-process__meta">\${e.processMeta}</span></summary>\${pinkieProcessOpen(e)?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg="0" data-pinkie-history-revision=\${e.processHistoryVersion||0} .pinkieHistoryThinking=\${e.processThinking||\`\`} .pinkieHistorySegments=\${e.processThinkingSegments||[]} .pinkieToolAnchors=\${e.processToolAnchors||{}} .pinkieLegacyKey=\${e.processLegacyKey||\`\`}></div><div class="pinkie-process__rows">\${e.processRows.map(n=>s\`\${n.pinkieThinkingAnchor?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${n.pinkieThinkingAnchor}></div>\`:c}\${n.kind===\`group\`?${groupName}(n,t):c}\`)}</div><div class="pinkie-process__thinking" data-pinkie-thinking=\${e.key} data-pinkie-thinking-seg=\${e.processRowCount||0} data-pinkie-thinking-tail="1"></div>\`:c}</details><div class="pinkie-process__status" data-pinkie-status=\${e.key} data-live=\${e.processLive?\`1\`:\`0\`} data-state=\${e.processState||\`\`}></div></div></div>\`;if(e&&e.isLearningCard)return s\`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=\${e.key} .pinkieLearningCards=\${e.learningCards||[]} .pinkieLearningSession=\${t?.sessionKey||\`\`}></div></div></div>\`;`;
 }
 export function overflowBranchSource(groupName) {
   return `if(e&&e.timelineOverflow)return s\`<details class="chat-timeline-overflow" .open=\${pinkieTimelineView(e.key).open}><summary @click=\${n=>pinkieTimelineToggle(n,e.key)}>前面还有 \${e.overflowCount} 步</summary>\${pinkieTimelineView(e.key).open?s\`<div class="chat-timeline-overflow__body">\${pinkieTimelineRows(e,e.overflowItems).map(n=>s\`\${n.pinkieThinkingAnchor?s\`<div class="pinkie-process__thinking" data-pinkie-thinking=\${n.pinkieThinkingKey} data-pinkie-thinking-seg=\${n.pinkieThinkingAnchor}></div>\`:c}\${n.kind===\`group\`?${groupName}({...n,timelineOverflow:!1},t):c}\`)}\${pinkieTimelineView(e.key).count<e.overflowItems.length?s\`<button type="button" @click=\${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>\`:c}</div>\`:c}</details>\`;`;
