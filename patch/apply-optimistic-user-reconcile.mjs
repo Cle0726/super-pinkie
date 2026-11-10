@@ -33,7 +33,8 @@ export function transformWithStatus(original) {
   // The installed work-first UI still has v25. Reconcile its send identity
   // without pulling in the separate, unfinished timeline upgrade.
   const runtime = original.includes('/* pinkie-chat-timeline:v25 */')
-    ? '/* pinkie-chat-timeline:v25 */' : '/* pinkie-chat-timeline:v26 */function userText';
+    ? '/* pinkie-chat-timeline:v25 */' : original.includes('/* pinkie-chat-timeline:v27 */')
+      ? '/* pinkie-chat-timeline:v27 */function userText' : '/* pinkie-chat-timeline:v26 */function userText';
   if (original.includes(marker)) return {changed:false,reason:'already-patched',text:original};
   if ([fn,call,select,runtime].some(x => original.split(x).length !== 2)) return {changed:false,reason:'unsupported-ui',text:original};
   const tagged = 'function Vh(e,t,n,r=Date.now(),runId){let i={role:`user`,content:Dh(t,n),timestamp:r};if(/^agent:(?:main|project|thinking|learning):/.test(String(e.sessionKey||""))&&typeof runId==="string")i.__pinkieOptimisticRunId=runId;return e.chatMessages=[...e.chatMessages,i],i}';
