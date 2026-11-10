@@ -292,6 +292,10 @@ def _ensure_none_marker(workspace: Path, backup_root: Path) -> bool:
     return True
 
 
+MODE_AGENT_IDS = ("main", "project", "thinking", "learning")
+UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
+
+
 def _configure_plugin(data: dict, target: Path) -> bool:
     before = json.dumps(data, ensure_ascii=False, sort_keys=True)
 
@@ -352,6 +356,16 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
     for agent in data["agents"].get("list", []):
+        if isinstance(agent, dict) and agent.get("id") in MODE_AGENT_IDS:
+            # OpenClaw 自带、碧琪的代码、手册和技能都不用的工具：每轮少发约 2.5 万字的工具说明，
+            # 也免得模型拿任务板、canvas 去顶替 plan_update、app_browser。只加不删，无限制模式不动。
+            tools = agent.get("tools")
+            if not isinstance(tools, dict):
+                tools = agent["tools"] = {}
+            deny = tools.get("deny")
+            if not isinstance(deny, list):
+                deny = tools["deny"] = []
+            deny.extend(name for name in UNUSED_OPENCLAW_TOOLS if name not in deny)
         if isinstance(agent, dict) and agent.get("id") == "unrestricted":
             # Keep every workspace file on disk, but do not inject AGENTS.md,
             # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
