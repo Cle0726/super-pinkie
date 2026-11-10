@@ -14,6 +14,10 @@ const copies = {
   windowsSnapshot: 'desktop/windows/mac-runtime/services',
 };
 
+// build-win.ps1 copies services/ and lays the snapshot over it: a module the
+// snapshot does not carry comes from the repository.
+const pick = (base, rel) => fs.existsSync(path.join(root, base, rel)) ? path.join(root, base, rel) : path.join(root, 'services', rel);
+
 function home(t) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-missing-folder-')));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
@@ -47,7 +51,7 @@ function writeBinding(stateRoot, key, folder) {
 for (const [label, base] of Object.entries(copies)) {
   test(`${label}: a session bound to a missing folder runs unanchored instead of failing every tool call`, async t => {
     const dir = home(t);
-    const {ProjectScope, MISSING_FOLDER} = await import(pathToFileURL(path.join(root, base, 'project-scope/index.mjs')).href);
+    const {ProjectScope, MISSING_FOLDER} = await import(pathToFileURL(pick(base, 'project-scope/index.mjs')).href);
     const stateRoot = path.join(dir, 'state');
     const key = 'agent:learning:dashboard:one';
     writeBinding(stateRoot, key, goneFolder());
@@ -64,12 +68,8 @@ for (const [label, base] of Object.entries(copies)) {
     const dir = home(t);
     const staged = path.join(dir, 'plugin');
     fs.mkdirSync(staged);
-    for (const name of fs.readdirSync(path.join(root, base, 'mode-architecture'))) {
-      if (name.endsWith('.mjs')) fs.copyFileSync(path.join(root, base, 'mode-architecture', name), path.join(staged, name));
-    }
-    // The Windows snapshot overlays only some modules; the rest come from services/.
-    for (const name of ['workbench-ext.mjs', 'openclaw-paths.mjs']) {
-      if (!fs.existsSync(path.join(staged, name))) fs.copyFileSync(path.join(root, 'services/mode-architecture', name), path.join(staged, name));
+    for (const name of fs.readdirSync(path.join(root, 'services/mode-architecture'))) {
+      if (name.endsWith('.mjs')) fs.copyFileSync(pick(base, `mode-architecture/${name}`), path.join(staged, name));
     }
     const {Workbench} = await import(pathToFileURL(path.join(staged, 'workbench.mjs')).href);
     const stateRoot = path.join(dir, 'state');

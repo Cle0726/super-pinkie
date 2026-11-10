@@ -14,19 +14,10 @@ def load(path):
     return module
 
 
-def load_snapshot():
-    # The Windows build overlays this copy onto services/, beside services/state_root.py.
-    import shutil
-    stage = Path(tempfile.mkdtemp(prefix="pinkie-snapshot-setup-"))
-    (stage / "services/mode-architecture").mkdir(parents=True)
-    shutil.copy2(ROOT / "services/state_root.py", stage / "services/state_root.py")
-    target = stage / "services/mode-architecture/setup.py"
-    shutil.copy2(ROOT / "desktop/windows/mac-runtime/services/mode-architecture/setup.py", target)
-    return load(target), ROOT / "desktop/windows/mac-runtime/services/mode-architecture/setup.py"
-
-
-SNAPSHOT, SNAPSHOT_SOURCE = load_snapshot()
-COPIES = [load(ROOT / "services/mode-architecture/setup.py"), SNAPSHOT]
+# Windows no longer overlays its own setup.py (desktop/windows/mac-runtime), so
+# both platforms install from this one copy.
+SOURCE = ROOT / "services/mode-architecture/setup.py"
+COPIES = [load(SOURCE)]
 RELAY = {"models": {"providers": {"openai": {"baseUrl": "https://relay.example/v1", "apiKey": "k1"}}}}
 
 
@@ -70,7 +61,8 @@ class MemorySearchChoiceTest(unittest.TestCase):
                 self.assertNotIn("memorySearch", ref.get("agents", {}).get("defaults", {}))
 
     def test_new_module_ships_with_the_plugin(self):
-        for source in (ROOT / "services/mode-architecture/setup.py", SNAPSHOT_SOURCE):
+        self.assertFalse((ROOT / "desktop/windows/mac-runtime/services/mode-architecture/setup.py").exists())
+        for source in (SOURCE,):
             self.assertIn('"web-search-fallback.mjs"', source.read_text(encoding="utf-8"))
 
 

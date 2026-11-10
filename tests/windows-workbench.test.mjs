@@ -11,7 +11,7 @@ async function fixture(t) {
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   for (const [source, name] of [
     ['desktop/windows/mac-runtime/services/mode-architecture/workbench.mjs', 'workbench.mjs'],
-    ['desktop/windows/mac-runtime/services/mode-architecture/workbench-lsp.mjs', 'workbench-lsp.mjs'],
+    ['services/mode-architecture/workbench-lsp.mjs', 'workbench-lsp.mjs'],
     ['services/mode-architecture/workbench-ext.mjs', 'workbench-ext.mjs'],
   ]) fs.copyFileSync(source, path.join(root, name));
   return {root, module: await import(pathToFileURL(path.join(root, 'workbench.mjs')).href)};

@@ -38,7 +38,7 @@ class MacSnapshotTest(unittest.TestCase):
 
     def test_companion_answers_in_the_format_the_shared_ui_reads(self):
         ui = (ROOT / "ui/injections/laolao-companion.js").read_text(encoding="utf-8")
-        backend = (SNAPSHOT / "services/mode-architecture/companion.mjs").read_text(encoding="utf-8")
+        backend = (ROOT / "services/mode-architecture/companion.mjs").read_text(encoding="utf-8")
         if "understood" in ui:
             self.assertIn("export function normalizeClarify", backend)
 
@@ -50,6 +50,14 @@ class MacSnapshotTest(unittest.TestCase):
             path = SNAPSHOT / rel.strip()
             self.assertTrue(path.is_file(), rel)
             self.assertEqual(value, hashlib.sha256(path.read_bytes()).hexdigest(), rel)
+
+    def test_snapshot_services_only_carry_real_differences(self):
+        # A byte-identical copy only goes stale later and shadows the repository fix.
+        for path in (SNAPSHOT / "services").rglob("*"):
+            if path.is_file():
+                rel = path.relative_to(SNAPSHOT)
+                repo = ROOT / rel
+                self.assertFalse(repo.is_file() and repo.read_bytes() == path.read_bytes(), rel)
 
 
 if __name__ == "__main__":

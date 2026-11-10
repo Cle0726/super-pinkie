@@ -8,9 +8,9 @@ from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'services/tts/edge_tts_server.py'
-# build-win.ps1 lays the Mac runtime snapshot over services/, so this is the
-# copy Windows actually ships. An older one there crashed the voice service on
-# the first start after every update (--update-health-token is not a port).
+# build-win.ps1 lays the Mac runtime snapshot over services/. An older copy
+# there once crashed the voice service on the first start after every update
+# (--update-health-token is not a port); Windows now ships SCRIPT itself.
 PACKAGED = Path(__file__).resolve().parents[1] / 'desktop/windows/mac-runtime/services/tts/edge_tts_server.py'
 
 
@@ -30,9 +30,8 @@ class WindowsTtsStartupTests(unittest.TestCase):
             with self.subTest(argument=argument):
                 self.assertEqual(self.load_embedded(argument).PORT, 18888)
 
-    def test_packaged_windows_copy_also_ignores_desktop_only_arguments(self):
-        self.assertTrue(PACKAGED.is_file())
-        self.assertEqual(self.load_embedded('--update-health-token=' + 'a' * 32, script=PACKAGED).PORT, 18888)
+    def test_windows_ships_the_repository_copy(self):
+        self.assertFalse(PACKAGED.exists(), 'a snapshot copy would shadow the fixed service on Windows')
 
     def test_embedded_service_honours_explicit_port_environment(self):
         self.assertEqual(self.load_embedded('--preserve-existing-profile', '19990').PORT, 19990)
