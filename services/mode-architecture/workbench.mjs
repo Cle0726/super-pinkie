@@ -117,6 +117,8 @@ export class Workbench {
     this.trashRoot = options.trashRoot || path.join(this.stateRoot, 'workbench-trash');
     this.config = options.config || (() => ({}));
     this.findCache = new Map();
+    this.platform = options.platform || process.platform;
+    this.spawnProcess = options.spawnProcess || spawn;
   }
 
   agentWorkspace(agentId) {
@@ -555,7 +557,17 @@ export class Workbench {
   async reveal(params) {
     const scope = this.scope(params);
     const target = this.resolve(scope, params.path || '', {read: true});
-    if (process.platform !== 'darwin') throw fail('只在 macOS 上支持。');
+    if (this.platform === 'win32') {
+      // Explorer may exit with a non-zero status after handing a request to an
+      // existing window. Success means that Windows started the process.
+      await new Promise((resolve, reject) => {
+        const child = this.spawnProcess('explorer.exe', params.open ? [target] : ['/select,', target], {stdio: 'ignore', detached: true, windowsHide: true});
+        child.once('error', reject);
+        child.once('spawn', () => { child.unref(); resolve(); });
+      });
+      return {ok: true};
+    }
+    if (this.platform !== 'darwin') throw fail('当前系统暂不支持。');
     await exec('/usr/bin/open', params.open ? [target] : ['-R', target], {timeout: 10000});
     return {ok: true};
   }
@@ -622,8 +634,10 @@ export function createWorkbenchReadTool(bench, ctx = {}) {
  * 笔记本内核进程。常驻一个 python 子进程（行协议），复用内核。
  * 不用 HTTP：工作台页面有 CSP（connect-src 'self'），跨端口 fetch 会被拦。
  */
-class NotebookProcess {
-  constructor() {
+export class NotebookProcess {
+  constructor({platform = process.platform, environment = process.env} = {}) {
+    this.platform = platform;
+    this.environment = environment;
     this.child = null;
     this.buffer = '';
     this.pending = [];
@@ -632,6 +646,8 @@ class NotebookProcess {
   }
 
   pythonPath() {
+    if (this.environment.PINKIE_PYTHON_BIN) return this.environment.PINKIE_PYTHON_BIN;
+    if (this.platform === 'win32') return 'python';
     const candidates = [
       openclawAgentEnvPath('bin/python'),
       '/usr/bin/python3',
@@ -644,17 +660,22 @@ class NotebookProcess {
 
   ensure() {
     if (this.child && this.child.exitCode === null) return this.child;
+    this.lastError = '';
+    this.buffer = '';
     const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'nb_runner.py');
     const child = spawn(this.pythonPath(), [script, 'serve'], {
       cwd: path.dirname(script),
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {...process.env, MPLBACKEND: 'Agg'},
+      env: {...this.environment, MPLBACKEND: 'Agg'},
     });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => this.onData(chunk));
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', chunk => { this.lastError = String(chunk).slice(-800); });
-    child.on('exit', () => {
+    // A missing interpreter emits error + close, but not exit. Resolve the
+    // request promptly instead of waiting five minutes or crashing on EPIPE.
+    child.stdin.on('error', error => { this.lastError = String(error.message || error); });
+    child.on('close', () => {
       this.child = null;
       const waiting = this.pending.splice(0);
       for (const item of waiting) item.resolve({ok: false, error: '内核进程已退出' + (this.lastError ? '：' + this.lastError : '')});

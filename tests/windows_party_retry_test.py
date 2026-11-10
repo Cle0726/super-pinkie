@@ -10,13 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def windows_party():
-    """services/party as build-win.ps1 assembles it: repository + Mac snapshot."""
+    """services/party as build-win.ps1 assembles it (the snapshot no longer overlays it)."""
     root = Path(tempfile.mkdtemp(prefix="pinkie-windows-services-"))
     atexit.register(shutil.rmtree, root, True)
     services = root / "services"
     ignore = shutil.ignore_patterns("node_modules")
     shutil.copytree(ROOT / "services", services, ignore=ignore)
-    shutil.copytree(ROOT / "desktop/windows/mac-runtime/services/party", services / "party", dirs_exist_ok=True)
+    assert not (ROOT / "desktop/windows/mac-runtime/services/party").exists()
     directory = services / "party"
     spec = importlib.util.spec_from_file_location("windows_party", directory / "server.py")
     module = importlib.util.module_from_spec(spec)
