@@ -1,0 +1,204 @@
+/* 碧琪的运行状态条：输入框正上方一行，和工作过程卡同一套珍珠玻璃与粉色。
+   高度固定 34px，换状态只换图和字，不顶动聊天内容；只动 opacity / transform。 */
+.pk-run {
+  position: fixed;
+  z-index: 58;
+  box-sizing: border-box;
+  height: 34px;
+  contain: layout style;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  color: #805269;
+  font: 13px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+.pk-run[hidden] { display: none; }
+.pk-run.is-shown { opacity: 1; transform: none; }
+.pk-run.is-shown > * { pointer-events: auto; }
+
+.pk-run__body {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 4px 0 6px;
+  border-radius: 17px;
+  background: linear-gradient(135deg, rgba(255, 253, 254, 0.86), rgba(255, 247, 251, 0.74));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.12), 0 6px 20px rgba(111, 45, 74, 0.06);
+  backdrop-filter: blur(10px) saturate(1.08);
+  -webkit-backdrop-filter: blur(10px) saturate(1.08);
+}
+.pk-run__face { flex: none; width: 26px; height: 26px; object-fit: contain; }
+.pk-run__text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: #623247;
+}
+.pk-run__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #a36b82;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.pk-run__meta[hidden] { display: block; visibility: hidden; }
+.pk-run__actions { flex: none; display: flex; gap: 4px; margin-left: auto; }
+.pk-run__btn {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 32px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 12px;
+  line-height: 26px;
+  color: #805269;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(205, 70, 127, 0.18);
+  white-space: nowrap;
+}
+.pk-run__btn:hover { color: #623247; background: #fff; }
+.pk-run__btn:focus-visible, .pk-run__dot:focus-visible { outline: 2px solid #e94f91; outline-offset: 2px; }
+.pk-run__btn[data-act="answer"], .pk-run__btn[data-act="skip"] { color: #fff; background: #e94f91; box-shadow: none; }
+.pk-run__btn[data-act="answer"]:hover, .pk-run__btn[data-act="skip"]:hover { color: #fff; background: #c2457c; }
+
+/* 原生「有新消息」小胶囊和状态条在同一个位置：条在的时候它往上让一行。 */
+html.pk-run-on .chat-new-messages { transform: translateY(-40px); }
+
+/* 等你确认：整条换强调色，要确认的那句话就在条上。 */
+.pk-run[data-tone="ask"] .pk-run__body { background: linear-gradient(135deg, #ffe6f0, rgba(255, 238, 246, 0.92)); box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.5), 0 6px 20px rgba(233, 79, 145, 0.12); }
+.pk-run[data-tone="ask"] .pk-run__text { color: #623247; }
+.pk-run[data-tone="slow"] .pk-run__text, .pk-run[data-tone="warn"] .pk-run__text { color: #c2457c; }
+.pk-run[data-tone="done"] .pk-run__text { color: #c2457c; }
+
+/* 窄窗口：收成一个带表情的小圆点，点开是同样内容的浮层。 */
+.pk-run__dot { display: none; }
+.pk-run[data-layout="dot"] { width: auto; }
+.pk-run[data-layout="dot"] .pk-run__dot {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  background: linear-gradient(135deg, rgba(255, 253, 254, 0.9), rgba(255, 247, 251, 0.8));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.16), 0 6px 18px rgba(111, 45, 74, 0.08);
+}
+.pk-run[data-layout="dot"][data-tone="ask"] .pk-run__dot { box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.6), 0 6px 18px rgba(233, 79, 145, 0.14); }
+.pk-run__dot-face { width: 26px; height: 26px; object-fit: contain; }
+.pk-run[data-layout="dot"] .pk-run__body {
+  position: absolute;
+  left: 0;
+  bottom: 42px;
+  width: min(360px, calc(100vw - 32px));
+  height: auto;
+  min-height: 34px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  padding: 8px 8px 8px 8px;
+  border-radius: 18px;
+  opacity: 0;
+  transform: translateY(4px);
+  visibility: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.pk-run[data-layout="dot"].is-open .pk-run__body { opacity: 1; transform: none; visibility: visible; }
+.pk-run[data-layout="dot"] .pk-run__text { flex: 1 1 calc(100% - 40px); white-space: normal; line-height: 1.45; }
+.pk-run[data-layout="dot"] .pk-run__meta { flex: 1 1 100%; padding-left: 34px; white-space: normal; line-height: 1.4; }
+.pk-run[data-layout="dot"] .pk-run__actions { flex: 1 1 100%; justify-content: flex-end; }
+.pk-run[data-layout="dot"] .pk-run__btn { height: 32px; line-height: 32px; border-radius: 16px; }
+
+/* 减少动效：直接切换。 */
+@media (prefers-reduced-motion: reduce) {
+  .pk-run, .pk-run[data-layout="dot"] .pk-run__body { transition: none; transform: none; }
+}
+
+/* 夜间：沿用夜间层的颜色变量，粉色压成柔和的发光色。 */
+html[data-pinkie-night]:not(#_n) .pk-run { color: var(--n-muted, #a8959f); }
+html[data-pinkie-night]:not(#_n) .pk-run__body,
+html[data-pinkie-night]:not(#_n) .pk-run[data-layout="dot"] .pk-run__dot {
+  background: rgba(36, 27, 41, 0.9);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 10px 26px rgba(0, 0, 0, 0.32);
+}
+html[data-pinkie-night]:not(#_n) .pk-run__text { color: var(--n-ink-strong, #fff6fa); }
+html[data-pinkie-night]:not(#_n) .pk-run__meta { color: var(--n-muted, #a8959f); }
+html[data-pinkie-night]:not(#_n) .pk-run__btn { color: var(--n-ink, #efe5ea); background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+html[data-pinkie-night]:not(#_n) .pk-run__btn:hover { background: rgba(255, 255, 255, 0.12); }
+html[data-pinkie-night]:not(#_n) .pk-run__btn:is([data-act="answer"], [data-act="skip"]) { color: #fff6fa; background: #b0466f; box-shadow: none; }
+html[data-pinkie-night]:not(#_n) .pk-run[data-tone="ask"] .pk-run__body { background: rgba(58, 32, 48, 0.94); box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.42), 0 10px 26px rgba(0, 0, 0, 0.32); }
+html[data-pinkie-night]:not(#_n) .pk-run:is([data-tone="slow"], [data-tone="warn"], [data-tone="done"]) .pk-run__text { color: #f3a6c7; }
+
+/* 会话列表里的运行标记（laolao-run-notify.js 写在行上的 data-pinkie-run）：
+   在跑 = 小点，有新进展时轻轻跳一下（不循环）；做完未读 = 粉点；出错或等确认 = 感叹号。 */
+.sidebar-recent-session[data-pinkie-run] .sidebar-recent-session__link { position: relative; }
+.sidebar-recent-session[data-pinkie-run] .sidebar-recent-session__name::before {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 1px 0;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.sidebar-recent-session[data-pinkie-run="running"] .sidebar-recent-session__name::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.6px #e94f91;
+}
+.sidebar-recent-session[data-pinkie-run="running"][data-pinkie-beat="1"] .sidebar-recent-session__name::before { animation: pk-run-beat 0.24s ease-out; }
+.sidebar-recent-session[data-pinkie-run="unread"] .sidebar-recent-session__name::before { background: #e94f91; }
+.sidebar-recent-session[data-pinkie-run="attention"] .sidebar-recent-session__name::before {
+  content: "!";
+  width: 13px;
+  height: 13px;
+  margin-right: 5px;
+  color: #fff;
+  background: #c2457c;
+  font: 700 10px/13px -apple-system, BlinkMacSystemFont, sans-serif;
+  text-align: center;
+}
+@keyframes pk-run-beat { 50% { transform: scale(1.35); } }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-recent-session[data-pinkie-run] .sidebar-recent-session__name::before { animation: none !important; }
+}
+html[data-pinkie-night]:not(#_n) .sidebar-recent-session[data-pinkie-run="running"] .sidebar-recent-session__name::before { box-shadow: inset 0 0 0 1.6px #f3a6c7; }
+html[data-pinkie-night]:not(#_n) .sidebar-recent-session[data-pinkie-run="unread"] .sidebar-recent-session__name::before { background: #f3a6c7; }
+
+/* 第一次要系统通知权限：碧琪问一句，两个按钮。 */
+.pk-notify-ask {
+  position: fixed;
+  z-index: 59;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 8px;
+  border-radius: 18px;
+  color: #623247;
+  background: linear-gradient(135deg, rgba(255, 253, 254, 0.94), rgba(255, 245, 250, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.16), 0 12px 32px rgba(111, 45, 74, 0.12);
+  font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.pk-notify-ask img { flex: none; width: 26px; height: 26px; object-fit: contain; }
+.pk-notify-ask span { min-width: 0; }
+html[data-pinkie-night]:not(#_n) .pk-notify-ask { color: var(--n-ink-strong, #fff6fa); background: rgba(36, 27, 41, 0.94); border-color: rgba(255, 255, 255, 0.08); }
