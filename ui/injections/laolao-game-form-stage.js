@@ -30,6 +30,10 @@
     kirin:        {kind: 4, src: [.7, .1], c1: [1, .62, .32], c2: [1, .86, .7], focus: .6},
     batpony:      {kind: 5, src: [.175, .125], c1: [.82, .86, 1], c2: [1, .86, .64], focus: .58},
     serious:      {kind: 6, src: [.17, .33], c1: [1, .78, .52], c2: [.62, .76, 1], focus: .62},
+    breezie:      {kind: 0, src: [.5, .18], c1: [.78, .95, .72], c2: [1, .72, .86], focus: .58},
+    changeling:   {kind: 2, src: [.5, .12], c1: [.35, .9, .78], c2: [1, .62, .82], focus: .58},
+    lidong:       {kind: 0, src: [.72, .16], c1: [1, .78, .62], c2: [.72, .86, 1], focus: .6},
+    detective:    {kind: 6, src: [.22, .28], c1: [1, .84, .58], c2: [.62, .7, .86], focus: .6},
   };
   const look = id => LOOK[id] || LOOK.daily;
 
@@ -69,7 +73,7 @@
 precision highp float;
 varying vec2 vUV;
 uniform sampler2D uA, uAs, uB, uBs;
-uniform float uMixP, uT, uKind, uKindB, uFront, uFocus, uFlash, uLift, uAspect, uFeather, uDim, uAmb;
+uniform float uMixP, uT, uKind, uKindB, uFront, uFocus, uFlash, uLift, uAspect, uFeather, uDim, uAmb, uClip;
 uniform vec2 uSrc, uSrcB;
 uniform vec3 uC1, uC2, uC1B, uC2B;
 float h1(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -174,6 +178,7 @@ void main(){
   if (uFront > .5) {
     vec3 a = ambient(uv, uKind, uSrc, uC1, uC2, 1.), b = ambient(uv, uKindB, uSrcB, uC1B, uC2B, 1.);
     vec3 c = mix(a, b, uMixP);
+    if (uClip > .5) { vec2 q = (uv - .5) * vec2(uAspect, 1.); c *= smoothstep(.78, .16, length(q)) * 1.8; }
     gl_FragColor = vec4(c, 0.);
     return;
   }
@@ -226,6 +231,8 @@ uniform sampler2D uTex; uniform sampler2D uMask;
 uniform float uBlink, uHasMask, uAlpha, uRim, uDissolve, uWarm, uCool, uT;
 uniform vec4 uEyeA; uniform vec4 uEyeB; uniform vec3 uLidA; uniform vec3 uLidB;
 uniform vec3 uRimC; uniform vec2 uTexel;
+uniform vec3 uMul; uniform float uFire; uniform vec2 uFireDir; uniform vec3 uFireC;
+uniform float uWater, uWaterY; uniform vec2 uRes;
 varying vec2 vUV;
 const vec3 LASH = vec3(.23, .10, .16);
 float h1(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -266,23 +273,115 @@ void main() {
     a *= smoothstep(th - .015, th + .02, n);
     rgb *= smoothstep(th - .015, th + .02, n);
   }
+  rgb *= uMul;
+  if (uFire > .001) {
+    float toward = texture2D(uTex, vUV + uFireDir * uTexel * 7.).a;
+    rgb += uFireC * clamp(c.a - toward, 0., 1.) * uFire * c.a;
+  }
+  if (uWater > .5) {
+    float yTop = uRes.y - gl_FragCoord.y;
+    float dist = (yTop - uWaterY) / max(36., uRes.y * .09);
+    float keep = 1. - smoothstep(-.15, 1., dist);
+    float line = exp(-(yTop - uWaterY) * (yTop - uWaterY) / 90.);
+    rgb += vec3(.72, .9, 1.) * line * .22 * c.a;
+    a *= keep; rgb *= keep;
+  }
   gl_FragColor = vec4(rgb, a) * uAlpha;
 }`;
+
+  // 营地接触阴影 / 水面涟漪。uKind 0 = 柔边椭圆，1 = 一圈涟漪。颜色是直通 RGB，着色器里预乘。
+  const FS_SOFT = `
+precision mediump float;
+varying vec2 vUV;
+uniform vec4 uColor;
+uniform float uKind;
+void main() {
+  vec2 p = vUV * 2. - 1.;
+  float d = length(p);
+  float a = uKind < .5 ? smoothstep(1., .12, d) : smoothstep(.14, 0., abs(d - .72));
+  a *= uColor.a;
+  gl_FragColor = vec4(uColor.rgb * a, a);
+}`;
+
+  // 营地取景。place 来自 camp-place.json。脚底尽量落在卡片的 footCard / footCardY，
+  // 这样左 42% 的问候和「出发」不被蹄子压住；装不下时保住右侧帐篷和营火。
+  // 海马单独给 cardX / cardY：原图 x0.33 y0.64 量过是草坡，改到栈桥右侧的水里，再把焦点往左挪。
+  function frameCamp(place, id, cw, ch, imgW, imgH) {
+    const spec = Object.assign({height: .56}, place.forms?.default || {}, place.forms?.[id] || {});
+    const stand = place.day?.stand || [.6, .8];
+    const anchor = spec.water ? [spec.x, spec.y] : stand;
+    const k = (cw / Math.max(1, ch)) / (imgW / imgH);
+    const cardX = spec.cardX ?? place.footCard ?? .66;
+    const cardY = spec.cardY ?? spec.footCardY ?? place.footCardY ?? .76;
+    const caps = [1];
+    if (cardX > .02) caps.push(anchor[0] / (cardX * k));
+    if (cardX < .98) caps.push((1 - anchor[0]) / (k * (1 - cardX)));
+    if (cardY > .02) caps.push(anchor[1] / cardY);
+    if (cardY < .98) caps.push((1 - anchor[1]) / (1 - cardY));
+    let vh = Math.max(.45, Math.min(...caps.filter(v => v > .2)));
+    let vw = vh * k;
+    if (vw > 1) { vw = 1; vh = vw / k; }
+    if (vh > 1) { vh = 1; vw = Math.min(1, vh * k); }
+    let x = anchor[0] - cardX * vw;
+    let y = anchor[1] - cardY * vh;
+    const hi = (span) => Math.max(0, 1 - span);
+    // 右沿尽量带到帐篷和营火，但不能把脚底推回文字区那边
+    if (!spec.water && x + vw < (place.keepRight ?? .9)) {
+      const nx = (place.keepRight ?? .9) - vw;
+      if ((anchor[0] - nx) / vw >= cardX - .03) x = nx;
+    }
+    x = clamp(x, 0, hi(vw)); y = clamp(y, 0, hi(vh));
+    return {x, y, w: vw, h: vh, spec, stand, anchor};
+  }
+  function campGrade(place, id, night) {
+    const slot = night ? place.night : place.day;
+    const g = slot?.grade || {};
+    let mul = (g.mul || [1, 1, 1]).slice();
+    if (night && (place.glow || []).includes(id)) {
+      const s = (place.glowDim || .88) / (place.night?.dim || .78);
+      mul = mul.map(v => v * s);
+    }
+    return {mul, fire: g.rim || 0, fireDir: g.rimDir || [.6, .7], fireC: g.rimColor || [1, .52, .18]};
+  }
+  // 脚底中心：缩小后扫最下面几行不透明像素。海马不用这个，用画面中心。
+  function footAnchor(img) {
+    const w = 72, h = 72, c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', {willReadFrequently: true});
+    x.drawImage(img, 0, 0, w, h);
+    const d = x.getImageData(0, 0, w, h).data;
+    let maxY = 0;
+    for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) if (d[(y * w + i) * 4 + 3] > 40) maxY = y;
+    let sx = 0, n = 0;
+    for (let y = Math.max(0, maxY - 5); y <= maxY; y++) for (let i = 0; i < w; i++) if (d[(y * w + i) * 4 + 3] > 80) { sx += i; n++; }
+    return {x: n ? sx / n / w : .5, y: (maxY + .5) / h};
+  }
 
   class Stage {
     constructor(host, id, opts = {}) {
       this.host = host; this.id = id; this.opts = opts;
-      this.mode = opts.mode === 'avatar' ? 'avatar' : 'stage';
+      this.mode = opts.mode === 'avatar' ? 'avatar' : opts.mode === 'camp' ? 'camp' : 'stage';
       this.canvas = document.createElement('canvas');
       this.canvas.className = `pkfs pkfs--${this.mode}`;
       this.canvas.setAttribute('aria-hidden', 'true');
-      Object.assign(this.canvas.style, {position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block'});
+      Object.assign(this.canvas.style, {position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', zIndex: this.mode === 'camp' ? '1' : '0'});
       const gl = this.canvas.getContext('webgl', {premultipliedAlpha: true, alpha: true, antialias: true});
       if (!gl) throw new Error('no webgl');
       this.gl = gl;
       this.pPlate = this.program(VS_QUAD, FS_PLATE);
       this.pChar = this.program(VS_CHAR, FS_CHAR);
       this.lp = this.locs(this.pPlate); this.lc = this.locs(this.pChar);
+      if (this.mode === 'camp') {
+        this.pSoft = this.program(VS_QUAD, FS_SOFT);
+        this.ls = this.locs(this.pSoft);
+        const px = document.createElement('canvas'); px.width = px.height = 2;
+        this.dummy = this.tex(px);
+        if (opts.background) {
+          this.bg = document.createElement('div');
+          this.bg.className = 'pkfs-campbg';
+          Object.assign(this.bg.style, {position: 'absolute', inset: '0', zIndex: '0', backgroundRepeat: 'no-repeat', backgroundImage: `url("${opts.background}")`});
+          host.append(this.bg);
+        }
+      }
       this.quad = this.buf(new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]));
       this.grid();
       this.forms = new Map(); this.textures = new Map();
@@ -363,8 +462,10 @@ void main() {
         if (this.mode === 'stage') {
           const plate = await loadImage(slot('plate'));
           f.plateImg = plate; f.plate = this.tex(plate); f.plateSoft = this.tex(this.soft(plate));
-        } else {
+        } else if (this.mode === 'avatar') {
           for (const st of ['cheer', 'hurt']) { const u = slot(st); if (u) f[st] = this.sprite(u).catch(() => null); }
+        } else {
+          f.plate = this.dummy; f.plateSoft = this.dummy;
         }
         return f;
       })();
@@ -484,6 +585,13 @@ void main() {
       gl.uniform1f(L.uWarm, s.warm); gl.uniform1f(L.uCool, s.cool);
       gl.uniform3fv(L.uRimC, extra.rimC || this.cur.look.c1);
       gl.uniform2f(L.uTexel, 1 / d.W, 1 / d.H);
+      const mul = extra.mul || [1, 1, 1];
+      gl.uniform3f(L.uMul, mul[0], mul[1], mul[2]);
+      gl.uniform1f(L.uFire, extra.fire || 0);
+      const fd = extra.fireDir || [0, 0], fc = extra.fireC || [1, .5, .16];
+      gl.uniform2f(L.uFireDir, fd[0], fd[1]); gl.uniform3f(L.uFireC, fc[0], fc[1], fc[2]);
+      gl.uniform1f(L.uWater, extra.water || 0); gl.uniform1f(L.uWaterY, extra.waterY || 0);
+      gl.uniform2f(L.uRes, this.cw, this.ch);
       gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_SHORT, 0);
     }
     drawPlate(a, b, mix, extra) {
@@ -497,6 +605,7 @@ void main() {
       gl.uniform1f(L.uMixP, mix); gl.uniform1f(L.uT, this.t); gl.uniform1f(L.uFront, extra.front ? 1 : 0);
       gl.uniform1f(L.uFocus, extra.focus ?? .38); gl.uniform1f(L.uFlash, extra.flash || 0); gl.uniform1f(L.uLift, extra.lift || 0);
       gl.uniform1f(L.uFeather, extra.feather ? 1 : 0); gl.uniform1f(L.uDim, extra.dim ?? 1); gl.uniform1f(L.uAmb, extra.amb ?? 1);
+      gl.uniform1f(L.uClip, extra.clip ? 1 : 0);
       gl.uniform1f(L.uAspect, r.W / r.H);
       gl.uniform1f(L.uKind, a.look.kind); gl.uniform2fv(L.uSrc, a.look.src); gl.uniform3fv(L.uC1, a.look.c1); gl.uniform3fv(L.uC2, a.look.c2);
       gl.uniform1f(L.uKindB, b.look.kind); gl.uniform2fv(L.uSrcB, b.look.src); gl.uniform3fv(L.uC1B, b.look.c1); gl.uniform3fv(L.uC2B, b.look.c2);
@@ -512,6 +621,7 @@ void main() {
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       if (this.mode === 'avatar') return this.drawAvatar(now);
+      if (this.mode === 'camp') return this.drawCamp();
       const tr = this.tr;
       let k = 0;
       if (tr) { k = clamp((now - tr.at) / tr.dur); if (k >= 1) { this.tr = null; this.cur = tr.to; tr.resolve(); } }
@@ -557,11 +667,79 @@ void main() {
       if (pm < 1) this.drawChar(it, fit(d), 1 - pm);
       if (pm > 0) this.drawChar(this.pose, fit(this.pose.d), pm);
     }
+    applyBg(win) {
+      const b = this.bg; if (!b) return;
+      const w = Math.max(win.w, .001), h = Math.max(win.h, .001);
+      b.style.backgroundSize = `${(100 / w).toFixed(3)}% ${(100 / h).toFixed(3)}%`;
+      const px = w >= .999 ? 0 : win.x / (1 - w) * 100;
+      const py = h >= .999 ? 0 : win.y / (1 - h) * 100;
+      b.style.backgroundPosition = `${px.toFixed(2)}% ${py.toFixed(2)}%`;
+    }
+    drawBlob(r, kind, color) {
+      const gl = this.gl, L = this.ls;
+      gl.useProgram(this.pSoft);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quad); gl.enableVertexAttribArray(L.aP); gl.vertexAttribPointer(L.aP, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform4f(L.uRect, -1 + 2 * r.x / this.cw, 1 - 2 * r.y / this.ch, 2 * r.w / this.cw, 2 * r.h / this.ch);
+      gl.uniform4f(L.uColor, color[0], color[1], color[2], color[3]);
+      gl.uniform1f(L.uKind, kind);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+    // 只画角色：背景、站位、缩放、调色都由外部（营地）给。脚底踩在站位点上。
+    drawCamp() {
+      const place = this.opts.place, scene = this.opts.scene || {w: 1536, h: 1024};
+      if (!place || !this.cur?.char) return;
+      const win = frameCamp(place, this.cur.id, this.cw, this.ch, scene.w, scene.h);
+      this.applyBg(win);
+      const d = this.cur.char.d;
+      if (!d.foot) d.foot = footAnchor(d.img);
+      const spec = win.spec;
+      const sceneH = this.ch / Math.max(win.h, .001);
+      const ch = spec.height / Math.max(win.h, .001) * this.ch;
+      const cw = ch * (d.W / d.H);
+      const grade = campGrade(place, this.cur.id, !!this.opts.night);
+      const slot = (this.opts.night ? place.night : place.day) || {};
+      const sh = slot.shadow || {dx: 0, dy: 0, sx: .6, sy: .14, alpha: .25, color: [0, 0, 0]};
+      let rect, waterY = 0;
+      if (spec.water) {
+        const cx = (spec.x - win.x) / win.w * this.cw, cy = (spec.y - win.y) / win.h * this.ch;
+        // 身子在画面偏右，尾巴在左下。把腰而不是外框中心放进水里，否则看起来像坐在岸上。
+        rect = {x: cx - cw * (spec.anchorX ?? .58), y: cy - ch * (spec.anchorY ?? .42), w: cw, h: ch};
+        waterY = rect.y + ch * (spec.waterAt ?? .5);
+      } else {
+        const hover = (spec.hover || 0) * sceneH;
+        const bob = spec.bob && !this.still ? Math.sin(this.t * 1.7) * spec.bob * sceneH : 0;
+        const fx = (win.stand[0] - win.x) / win.w * this.cw;
+        const footY = (win.stand[1] - win.y) / win.h * this.ch;
+        // 图像里脚底不在正中：用脚底的横向位置对准站位点
+        rect = {x: fx - cw * d.foot.x, y: footY - ch * d.foot.y - hover - bob + ch * .01, w: cw, h: ch};
+        const groundY = footY + sh.dy * sceneH;
+        const sw = cw * sh.sx, she = Math.max(6, cw * sh.sy);
+        const shadow = {x: fx + sh.dx * sceneH - sw / 2, y: groundY - she / 2, w: sw, h: she};
+        const col = sh.color || [0, 0, 0];
+        this.drawBlob(shadow, 0, [col[0], col[1], col[2], (sh.alpha || .25) * (spec.shadow ?? 1)]);
+      }
+      const extra = {mul: grade.mul, fire: grade.fire, fireDir: grade.fireDir, fireC: grade.fireC};
+      if (spec.water) extra.water = 1, extra.waterY = waterY;
+      this.drawChar(this.cur.char, rect, 1, extra);
+      if (spec.water) {
+        const cx = rect.x + rect.w / 2;
+        for (let i = 0; i < 3; i++) {
+          const p = (this.t * .18 + i / 3) % 1;
+          const rw = rect.w * (.45 + p * .85), rh = rw * .22;
+          this.drawBlob({x: cx - rw / 2, y: waterY - rh * .35, w: rw, h: rh}, 1, [.7, .9, 1, .2 * (1 - p)]);
+        }
+      }
+      const gl = this.gl;
+      gl.blendFunc(gl.ONE, gl.ONE);
+      const aura = {x: rect.x - rect.w * .12, y: rect.y - rect.h * .06, W: rect.w * 1.24, H: rect.h * 1.12};
+      this.drawPlate(this.cur, this.cur, 0, {rect: aura, front: true, clip: true, amb: 1});
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    }
     fail() { this.dead = true; this.opts.onFail?.(); }
     destroy() {
       this.dead = true; cancelAnimationFrame(this.raf); this.raf = 0;
       window.removeEventListener('pointermove', this.onMove); document.removeEventListener('visibilitychange', this.onVis);
-      this.ro?.disconnect(); this.io?.disconnect(); this.canvas.remove(); this.host.classList.remove('pkfs-host');
+      this.ro?.disconnect(); this.io?.disconnect(); this.bg?.remove(); this.canvas.remove(); this.host.classList.remove('pkfs-host');
       if (this.tr) { this.tr.resolve(); this.tr = null; }
     }
   }
@@ -571,21 +749,31 @@ void main() {
     return !!(m[`form/${id}/plate`] && m[`form/${id}/portrait`]);
   };
   // 失败时的静态兜底：stage 用主视觉铺满，avatar 用立绘
-  const fallback = (host, id, mode) => {
-    const g = G(); const img = document.createElement('img'); img.alt = ''; img.decoding = 'async';
+  const fallback = (host, id, mode, opts = {}) => {
+    const g = G();
+    host.classList.add('pkfs-host');
+    if (mode === 'camp' && opts.background) {
+      const bg = document.createElement('div');
+      Object.assign(bg.style, {position: 'absolute', inset: '0', background: `url("${opts.background}") center/cover no-repeat`});
+      const img = document.createElement('img'); img.alt = ''; img.decoding = 'async'; img.className = 'pkfs-still pkfs-still--camp';
+      img.src = g?.portrait?.(id) || '';
+      host.append(bg, img);
+      return {ready: Promise.resolve(), state() {}, transform: async () => {}, destroy() { bg.remove(); img.remove(); }, still: true};
+    }
+    const img = document.createElement('img'); img.alt = ''; img.decoding = 'async';
     img.className = `pkfs-still pkfs-still--${mode}`;
     img.src = (mode === 'stage' ? g?.art?.(`form/${id}/ult`) : null) || g?.portrait?.(id) || '';
-    host.classList.add('pkfs-host'); host.append(img);
+    host.append(img);
     return {ready: Promise.resolve(), state() {}, transform: async (nid) => { img.src = (mode === 'stage' ? g?.art?.(`form/${nid}/ult`) : null) || g?.portrait?.(nid) || img.src; }, destroy() { img.remove(); }, still: true};
   };
   const mount = (host, id, opts = {}) => {
-    const mode = opts.mode === 'avatar' ? 'avatar' : 'stage';
-    if (!has(id) || document.documentElement.hasAttribute('data-pinkie-lite')) return fallback(host, id, mode);
+    const mode = opts.mode === 'avatar' ? 'avatar' : opts.mode === 'camp' ? 'camp' : 'stage';
+    if (!has(id) || document.documentElement.hasAttribute('data-pinkie-lite')) return fallback(host, id, mode, opts);
     let st;
-    try { st = new Stage(host, id, opts); } catch { return fallback(host, id, mode); }
+    try { st = new Stage(host, id, opts); } catch (error) { window.__qaErrors = window.__qaErrors || []; window.__qaErrors.push('stage ' + (error && error.message)); return fallback(host, id, mode, opts); }
     let fb = null;
     const ctl = {
-      ready: st.ready.catch(() => { st.destroy(); fb = fallback(host, id, mode); }),
+      ready: st.ready.catch(() => { st.destroy(); fb = fallback(host, id, mode, opts); }),
       state: (n) => (fb || st).state(n),
       transform: (nid) => (fb || st).transform(nid),
       play: (fromId) => (fb ? Promise.resolve() : st.play(fromId)),

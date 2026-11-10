@@ -112,7 +112,10 @@
       b.addEventListener('click', () => { area = a.id; local.practiceArea = a.id; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', String(x === b))); paint(); });
       seg.append(b);
     }
-    pts.append(seg, list); paint();
+    const listen = btn('', '听力'); listen.disabled = true; listen.dataset.off = '1'; listen.title = '先按套练 Part I，单题随机准备中'; listen.setAttribute('aria-disabled', 'true');
+    seg.append(listen);
+    const listenNote = el('p', 'pkp-listenote', '先按套练 Part I，单题随机准备中');
+    pts.append(seg, listenNote, list); paint();
 
     // 按题型（侧栏）
     const kinds = el('section', 'pkp-kinds');

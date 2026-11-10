@@ -124,7 +124,7 @@
       const tile = f => {
         const b = el('button', 'pks-tile'); b.type = 'button'; b.dataset.rarity = f.rarity; b.dataset.form = f.id; b.toggleAttribute('data-owned', f.owned); b.toggleAttribute('data-equipped', f.equipped); b.setAttribute('aria-pressed', String(f.id === pick));
         b.style.setProperty('--tone', RARITY[f.rarity]?.tone || '#B9AEA4'); b.style.setProperty('--fa', f.palette?.[0] || '#F7A8C8');
-        const real = g.cache.manifest?.[`form/${f.id}/portrait`] || g.avatarArt?.(f.id); if (f.owned || real) { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = g.iconArt(f.id); b.append(i); } else b.append(el('span', 'pks-tile__q', '？'));
+        const real = g.cache.manifest?.[`form/${f.id}/portrait`] || g.avatarArt?.(f.id); if (f.owned || real) { const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = g.iconArt(f.id); if (g.avatarArt?.(f.id)) i.classList.add('is-avatar'); b.append(i); } else b.append(el('span', 'pks-tile__q', '？'));
         b.append(el('small', 'pks-tile__r', RARITY[f.rarity]?.label || f.rarity), el('span', 'pks-tile__n', f.owned || window.__pinkieFormStage?.has(f.id) || !f.retired ? f.name : '？？？'));
         if (f.equipped) b.append(el('em', 'pks-tile__on', '装备中'));
         b.setAttribute('aria-label', f.owned ? f.name : `${f.name}，未获得：${f.howToGet || ''}`);
@@ -252,7 +252,7 @@
         const forms = await g.forms(true).catch(() => []);
         body.replaceChildren(el('p', 'pks-codex__lede', `${forms.filter(f => f.owned).length} / ${forms.length} 个形态 · ${forms.filter(f => f.awakened).length} 个觉醒`));
         const grid = el('div', 'pks-dex is-forms');
-        for (const f of forms) { const c = el('article', 'pks-dex__card'); c.dataset.state = f.awakened ? 'caught' : f.owned ? 'seen' : 'unknown'; c.style.setProperty('--tone', RARITY[f.rarity]?.tone); const pic = el('div', 'pks-dex__art'); const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = g.iconArt(f.id); pic.append(i); c.append(pic, el('small', 'pkg-kicker', RARITY[f.rarity]?.label || f.rarity), el('b', '', f.owned ? f.name : '？？？'), el('em', '', f.awakened ? '已觉醒' : f.owned ? `Lv.${f.level?.lv || 1}` : f.howToGet || '')); grid.append(c); }
+        for (const f of forms) { const c = el('article', 'pks-dex__card'); c.dataset.state = f.awakened ? 'caught' : f.owned ? 'seen' : 'unknown'; c.style.setProperty('--tone', RARITY[f.rarity]?.tone); const pic = el('div', 'pks-dex__art'); const i = el('img'); i.alt = ''; i.decoding = 'async'; i.src = g.iconArt(f.id); if (g.avatarArt?.(f.id)) i.classList.add('is-avatar'); pic.append(i); c.append(pic, el('small', 'pkg-kicker', RARITY[f.rarity]?.label || f.rarity), el('b', '', f.owned ? f.name : '？？？'), el('em', '', f.awakened ? '已觉醒' : f.owned ? `Lv.${f.level?.lv || 1}` : f.howToGet || '')); grid.append(c); }
         body.append(grid);
       } else {
         const s = await g.refresh().catch(() => null); const owned = new Set(s?.items?.owned || []);

@@ -41,19 +41,17 @@
    "file": "camp/day.webp",
    "w": 1536,
    "h": 1024,
-   "bytes": 335734,
+   "bytes": 259830,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152574890
+   "date": "2026-11-09"
   },
   "camp/night": {
    "file": "camp/night.webp",
    "w": 1536,
    "h": 1024,
-   "bytes": 350734,
+   "bytes": 185692,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152574908
+   "date": "2026-11-09"
   },
   "exam/hall": {
    "file": "exam/hall.webp",
@@ -176,24 +174,24 @@
    "file": "form/daily/icon.webp",
    "w": 256,
    "h": 256,
-   "bytes": 12696,
+   "bytes": 18518,
    "source": "derived",
    "date": "2026-11-09",
    "from": "form/daily/portrait"
   },
   "form/daily/portrait": {
    "file": "form/daily/portrait.webp",
-   "w": 816,
-   "h": 668,
-   "bytes": 64562,
+   "w": 823,
+   "h": 832,
+   "bytes": 93034,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
   "form/daily/ult": {
    "file": "form/daily/ult.webp",
    "w": 1536,
-   "h": 864,
-   "bytes": 48482,
+   "h": 1024,
+   "bytes": 127928,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
@@ -228,28 +226,26 @@
    "file": "form/detective/icon.webp",
    "w": 256,
    "h": 256,
-   "bytes": 21946,
+   "bytes": 20164,
    "source": "derived",
-   "from": "form/detective/portrait",
-   "date": "2026-11-08"
+   "date": "2026-11-09",
+   "from": "form/detective/portrait"
   },
   "form/detective/portrait": {
    "file": "form/detective/portrait.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 155436,
-   "source": "codex",
-   "date": "2026-11-08",
-   "rawMtime": 1794133602937
+   "w": 694,
+   "h": 902,
+   "bytes": 81698,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
   },
   "form/detective/ult": {
    "file": "form/detective/ult.webp",
    "w": 1536,
    "h": 1024,
-   "bytes": 72188,
+   "bytes": 133400,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794153817735
+   "date": "2026-11-09"
   },
   "form/dragon-rider/icon": {
    "file": "form/dragon-rider/icon.webp",
@@ -417,28 +413,26 @@
    "file": "form/lidong/icon.webp",
    "w": 256,
    "h": 256,
-   "bytes": 20888,
+   "bytes": 20168,
    "source": "derived",
-   "from": "form/lidong/portrait",
-   "date": "2026-11-08"
+   "date": "2026-11-09",
+   "from": "form/lidong/portrait"
   },
   "form/lidong/portrait": {
    "file": "form/lidong/portrait.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 131896,
-   "source": "codex",
-   "date": "2026-11-08",
-   "rawMtime": 1794133591638
+   "w": 844,
+   "h": 896,
+   "bytes": 128792,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
   },
   "form/lidong/ult": {
    "file": "form/lidong/ult.webp",
    "w": 1536,
    "h": 1024,
-   "bytes": 79246,
+   "bytes": 196388,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794153228762
+   "date": "2026-11-09"
   },
   "form/magical-girl/icon": {
    "file": "form/magical-girl/icon.webp",
@@ -633,24 +627,24 @@
    "file": "form/unrestricted/icon.webp",
    "w": 256,
    "h": 256,
-   "bytes": 14186,
+   "bytes": 22998,
    "source": "derived",
    "date": "2026-11-09",
    "from": "form/unrestricted/portrait"
   },
   "form/unrestricted/portrait": {
    "file": "form/unrestricted/portrait.webp",
-   "w": 864,
-   "h": 765,
-   "bytes": 83136,
+   "w": 1054,
+   "h": 836,
+   "bytes": 162216,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
   "form/unrestricted/ult": {
    "file": "form/unrestricted/ult.webp",
    "w": 1536,
-   "h": 864,
-   "bytes": 74372,
+   "h": 1024,
+   "bytes": 203286,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
@@ -1152,37 +1146,37 @@
   "form/daily/plate": {
    "file": "form/daily/plate.webp",
    "w": 1536,
-   "h": 864,
-   "bytes": 22230,
+   "h": 1024,
+   "bytes": 68240,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "layout": {
     "char": [
-     0.4366,
-     0.1627,
-     0.5311,
-     0.773
+     0.4108,
+     0.0195,
+     0.5358,
+     0.8125
     ],
     "w": 1536,
-    "h": 864
+    "h": 1024
    }
   },
   "form/unrestricted/plate": {
    "file": "form/unrestricted/plate.webp",
    "w": 1536,
-   "h": 864,
-   "bytes": 31398,
+   "h": 1024,
+   "bytes": 86336,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "layout": {
     "char": [
-     0.4378,
-     0.0521,
-     0.5622,
-     0.8857
+     0.3138,
+     0.002,
+     0.6862,
+     0.8164
     ],
     "w": 1536,
-    "h": 864
+    "h": 1024
    }
   },
   "form/alicorn/portrait": {
@@ -1445,33 +1439,33 @@
   },
   "form/daily/cheer": {
    "file": "form/daily/cheer.webp",
-   "w": 883,
+   "w": 827,
    "h": 900,
-   "bytes": 73730,
+   "bytes": 95646,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
   "form/daily/hurt": {
    "file": "form/daily/hurt.webp",
-   "w": 779,
+   "w": 731,
    "h": 900,
-   "bytes": 65834,
+   "bytes": 80722,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
   "form/unrestricted/cheer": {
    "file": "form/unrestricted/cheer.webp",
-   "w": 854,
+   "w": 868,
    "h": 900,
-   "bytes": 87722,
+   "bytes": 128456,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
   "form/unrestricted/hurt": {
    "file": "form/unrestricted/hurt.webp",
-   "w": 783,
-   "h": 900,
-   "bytes": 82754,
+   "w": 900,
+   "h": 685,
+   "bytes": 97396,
    "source": "chatgpt-web",
    "date": "2026-11-09"
   },
@@ -1570,6 +1564,300 @@
    "bytes": 64650,
    "source": "chatgpt-web",
    "date": "2026-11-09"
+  },
+  "form/breezie/portrait": {
+   "file": "form/breezie/portrait.webp",
+   "w": 1055,
+   "h": 896,
+   "bytes": 131708,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/plate": {
+   "file": "form/breezie/plate.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 60306,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "layout": {
+    "char": [
+     0.2747,
+     0.0,
+     0.6868,
+     0.875
+    ],
+    "w": 1536,
+    "h": 1024
+   }
+  },
+  "form/breezie/ult": {
+   "file": "form/breezie/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 136660,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/cheer": {
+   "file": "form/breezie/cheer.webp",
+   "w": 886,
+   "h": 900,
+   "bytes": 112590,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/hurt": {
+   "file": "form/breezie/hurt.webp",
+   "w": 739,
+   "h": 900,
+   "bytes": 98316,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/icon": {
+   "file": "form/breezie/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 17836,
+   "source": "derived",
+   "date": "2026-11-09",
+   "from": "form/breezie/portrait"
+  },
+  "form/changeling/portrait": {
+   "file": "form/changeling/portrait.webp",
+   "w": 802,
+   "h": 862,
+   "bytes": 96928,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/plate": {
+   "file": "form/changeling/plate.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 107956,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "layout": {
+    "char": [
+     0.2936,
+     0.0059,
+     0.5221,
+     0.8418
+    ],
+    "w": 1536,
+    "h": 1024
+   }
+  },
+  "form/changeling/ult": {
+   "file": "form/changeling/ult.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 176576,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/cheer": {
+   "file": "form/changeling/cheer.webp",
+   "w": 900,
+   "h": 886,
+   "bytes": 133968,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/hurt": {
+   "file": "form/changeling/hurt.webp",
+   "w": 900,
+   "h": 643,
+   "bytes": 82910,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/icon": {
+   "file": "form/changeling/icon.webp",
+   "w": 256,
+   "h": 256,
+   "bytes": 20752,
+   "source": "derived",
+   "date": "2026-11-09",
+   "from": "form/changeling/portrait"
+  },
+  "form/lidong/plate": {
+   "file": "form/lidong/plate.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 93164,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "layout": {
+    "char": [
+     0.3854,
+     0.0234,
+     0.5495,
+     0.875
+    ],
+    "w": 1536,
+    "h": 1024
+   }
+  },
+  "form/lidong/cheer": {
+   "file": "form/lidong/cheer.webp",
+   "w": 845,
+   "h": 900,
+   "bytes": 125792,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/lidong/hurt": {
+   "file": "form/lidong/hurt.webp",
+   "w": 850,
+   "h": 900,
+   "bytes": 127944,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/detective/plate": {
+   "file": "form/detective/plate.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 77538,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "layout": {
+    "char": [
+     0.3932,
+     0.0176,
+     0.4518,
+     0.8809
+    ],
+    "w": 1536,
+    "h": 1024
+   }
+  },
+  "form/detective/cheer": {
+   "file": "form/detective/cheer.webp",
+   "w": 685,
+   "h": 900,
+   "bytes": 85352,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/detective/hurt": {
+   "file": "form/detective/hurt.webp",
+   "w": 713,
+   "h": 900,
+   "bytes": 84976,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/daily/avatar": {
+   "file": "form/daily/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 33754,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/daily/avatar-256.webp"
+  },
+  "form/unrestricted/avatar": {
+   "file": "form/unrestricted/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 49536,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/unrestricted/avatar-256.webp"
+  },
+  "form/alicorn/avatar": {
+   "file": "form/alicorn/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 39586,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/alicorn/avatar-256.webp"
+  },
+  "form/crystal/avatar": {
+   "file": "form/crystal/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 37590,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/crystal/avatar-256.webp"
+  },
+  "form/seapony/avatar": {
+   "file": "form/seapony/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 41728,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/seapony/avatar-256.webp"
+  },
+  "form/kirin/avatar": {
+   "file": "form/kirin/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 40552,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/kirin/avatar-256.webp"
+  },
+  "form/batpony/avatar": {
+   "file": "form/batpony/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 36034,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/batpony/avatar-256.webp"
+  },
+  "form/serious/avatar": {
+   "file": "form/serious/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 20158,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/serious/avatar-256.webp"
+  },
+  "form/breezie/avatar": {
+   "file": "form/breezie/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 42050,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/breezie/avatar-256.webp"
+  },
+  "form/changeling/avatar": {
+   "file": "form/changeling/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 49032,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/changeling/avatar-256.webp"
+  },
+  "form/lidong/avatar": {
+   "file": "form/lidong/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 47530,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/lidong/avatar-256.webp"
+  },
+  "form/detective/avatar": {
+   "file": "form/detective/avatar.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 35088,
+   "source": "chatgpt-web",
+   "date": "2026-11-09",
+   "thumb": "form/detective/avatar-256.webp"
   }
  },
  "updatedAt": "2026-11-09"

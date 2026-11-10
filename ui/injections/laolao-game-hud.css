@@ -25,7 +25,8 @@
 /* ── HUD ── */
 #pinkie-study-desk .pkg-hud{display:flex;align-items:center;gap:18px;min-width:0;color:var(--pkg-ink)}
 #pinkie-study-desk .pkg-who{appearance:none;border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;cursor:pointer;color:inherit;text-align:left}
-#pinkie-study-desk .pkg-who__face{width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:50% 22%;background:var(--pkg-card-solid);
+#pinkie-study-desk .pkg-who__face{width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:50% 22%;background:var(--pkg-card-solid);}
+#pinkie-study-desk .pkg-who__face.is-avatar{object-position:50% 50%}
   box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 3px var(--pkg-card-solid),0 0 0 4px color-mix(in srgb,var(--pkg-form,#DB1F74) 70%,transparent)}
 #pinkie-study-desk .pkg-who__meta{display:grid;grid-template-columns:auto auto;align-items:baseline;column-gap:8px;row-gap:5px}
 #pinkie-study-desk .pkg-who__meta b{font:900 15px/1 var(--pkg-display);letter-spacing:.04em}
@@ -210,6 +211,9 @@
 #pinkie-study-desk .pkg-loop .pkg-trow[data-next] .pkg-loop__n{box-shadow:inset 0 0 0 1.4px var(--pkg-b,#DB1F74);color:var(--pkg-b,#DB1F74)}
 #pinkie-study-desk .pkg-loop .pkg-trow[data-next] b{font-family:var(--pkg-display);font-weight:900;letter-spacing:.03em}
 #pinkie-study-desk .pkg-loop .pkg-trow[data-next] em{color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-idle="1"] .pkg-loop__n{box-shadow:inset 0 0 0 1px var(--pkg-line-2);background:transparent}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-idle="1"] .pkg-loop__n::after{content:"";width:8px;height:1.5px;margin:0;border:0;border-radius:1px;background:var(--pkg-ink-3);transform:none}
+#pinkie-study-desk .pkg-loop .pkg-trow[data-idle="1"] :is(b,small,em){color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkg-entries{display:grid;grid-template-columns:1.35fr repeat(7,minmax(0,1fr));gap:8px}
 #pinkie-study-desk .pkg-entry{appearance:none;position:relative;display:grid;align-content:end;gap:4px;min-height:80px;padding:11px 12px 10px;min-width:0;border-radius:12px;border:0;cursor:pointer;text-align:left;color:var(--pkg-ink);
   background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}
@@ -429,4 +433,14 @@ html:has(#pinkie-study-desk .pkg-camp) .pk-awards{top:104px}
 #pinkie-study-desk .pkg-stage__live{position:absolute;inset:0;z-index:-3}
 #pinkie-study-desk .pkg-stage__scrim{position:absolute;inset:0;z-index:-2;pointer-events:none;background:linear-gradient(90deg,rgba(250,244,236,.84) 0,rgba(250,244,236,.5) 30%,rgba(250,244,236,0) 56%),linear-gradient(0deg,rgba(250,244,236,.52) 0,rgba(250,244,236,0) 26%)}
 #pinkie-study-desk .pkg-stage.is-live[data-time="night"] .pkg-stage__scrim{background:linear-gradient(90deg,rgba(14,9,20,.8) 0,rgba(14,9,20,.46) 32%,rgba(14,9,20,0) 58%),linear-gradient(0deg,rgba(14,9,20,.56) 0,rgba(14,9,20,0) 28%)}
+/* 湖边营地：文字只在自己身后一小团柔光，不再用整块白雾盖住左半边 */
+#pinkie-study-desk .pkg-stage.is-camp{background:#24180f}
+#pinkie-study-desk .pkg-stage.is-camp[data-time="night"]{background:#0c1018}
+#pinkie-study-desk .pkg-stage.is-camp .pkg-stage__live{z-index:0}
+#pinkie-study-desk .pkg-stage.is-camp .pkg-stage__scrim{z-index:1;background:radial-gradient(ellipse 46% 42% at 16% 18%,rgba(255,248,240,.5),transparent 70%),radial-gradient(ellipse 42% 28% at 18% 82%,rgba(255,246,236,.34),transparent 72%)}
+#pinkie-study-desk .pkg-stage.is-camp[data-time="night"] .pkg-stage__scrim{background:radial-gradient(ellipse 48% 42% at 14% 16%,rgba(6,8,18,.5),transparent 70%),radial-gradient(ellipse 44% 30% at 16% 84%,rgba(6,8,16,.4),transparent 72%)}
+#pinkie-study-desk .pkg-stage.is-camp :is(.pkg-stage__head,.pkg-stage__copy,.pkg-stage__tag){z-index:2}
+#pinkie-study-desk .pkg-stage.is-camp[data-time="day"] :is(.pkg-hello,.pkg-line,.pkg-kicker){text-shadow:0 1px 0 rgba(255,252,248,.5),0 8px 18px rgba(255,246,236,.85)}
+#pinkie-study-desk .pkg-stage.is-camp[data-time="night"] :is(.pkg-hello,.pkg-line,.pkg-kicker){text-shadow:0 1px 2px rgba(0,0,0,.7),0 10px 22px rgba(0,0,0,.45)}
+#pinkie-study-desk .pkfs-still--camp{position:absolute;left:34%;bottom:8%;height:56%;width:auto;object-fit:contain;object-position:50% 100%}
 #pinkie-study-desk .pkfs-still--stage{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:70% 40%}

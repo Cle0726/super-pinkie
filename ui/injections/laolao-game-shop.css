@@ -89,6 +89,7 @@
 #pinkie-study-desk .pks-tile{appearance:none;position:relative;display:grid;justify-items:center;gap:3px;padding:8px 6px 9px;border:0;border-radius:12px;cursor:pointer;color:var(--pkg-ink);
   background:radial-gradient(70% 60% at 50% 40%,color-mix(in srgb,var(--fa) 22%,transparent),transparent 70%),var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);transition:transform .3s var(--pkg-out),box-shadow .3s var(--pkg-out)}
 #pinkie-study-desk .pks-tile img{width:74px;height:74px;object-fit:cover;object-position:50% 25%;border-radius:50%;background:var(--pkg-card-solid);box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 3px var(--pkg-card-solid),0 0 0 4px color-mix(in srgb,var(--tone) 70%,transparent)}
+#pinkie-study-desk .pks-tile img.is-avatar{object-position:50% 50%}
 #pinkie-study-desk .pks-tile:not([data-owned]) img{object-fit:contain;object-position:50% 100%;border-radius:0;background:none;box-shadow:none;filter:brightness(0) opacity(.2)}
 #pinkie-study-desk[data-theme="night"] .pks-tile:not([data-owned]) img{filter:brightness(0) invert(1) opacity(.12)}
 #pinkie-study-desk .pks-tile__q{width:74px;height:74px;display:grid;place-items:center;font:900 30px/1 var(--pkg-display);color:var(--pkg-ink-3);opacity:.5;border-radius:50%;box-shadow:0 0 0 1px var(--pkg-line) inset}
@@ -113,6 +114,7 @@
 #pinkie-study-desk .pks-dex__art{width:100%;aspect-ratio:1;display:grid;place-items:center}
 #pinkie-study-desk .pks-dex__art img{width:86%;height:86%;object-fit:contain;filter:drop-shadow(0 6px 8px rgba(60,20,50,.2))}
 #pinkie-study-desk .pks-dex.is-forms .pks-dex__art img{border-radius:50%;object-fit:cover;object-position:50% 25%;box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 4px var(--pkg-card-solid),0 0 0 5px color-mix(in srgb,var(--tone,#B9AEA4) 60%,transparent)}
+#pinkie-study-desk .pks-dex.is-forms .pks-dex__art img.is-avatar{object-position:50% 50%}
 #pinkie-study-desk .pks-dex__card[data-state="unknown"] .pks-dex__art img{filter:brightness(0) opacity(.14)}
 #pinkie-study-desk[data-theme="night"] .pks-dex__card[data-state="unknown"] .pks-dex__art img{filter:brightness(0) invert(1) opacity(.1)}
 #pinkie-study-desk .pks-dex__card[data-state="seen"] .pks-dex__art img{filter:grayscale(.85) opacity(.6)}
