@@ -24,7 +24,10 @@ export function planWeixinAdapter(root) {
       // Reverse just this adapter, then check the publisher's exact baseline.
       const restored = source.replace(/^[ \t]*\/\/ pinkie-wechat-owner-scope-v1: authorize before commands or media work\.[\s\S]*?^[ \t]*\/\/ pinkie-wechat-owner-scope-end\n/gm, '')
         .replace('sessionKey: route.lastRoutePolicy === "main" ? route.mainSessionKey : route.sessionKey,', 'sessionKey: route.mainSessionKey,');
-      if (hash(restored) === expected && source === adaptWechatMessageSource(restored)) return {file, source, next: source};
+      // Packages patched before the mode rename say 挥洒模式 in the log line; they are already adapted too.
+      const adapted = adaptWechatMessageSource(restored);
+      const accepted = source === adapted || source === adapted.replace('独立的无限模式会话', '独立的挥洒模式会话');
+      if (hash(restored) === expected && accepted) return {file, source, next: source};
     }
     throw new Error(`Weixin publisher file changed: ${rel}; nothing was written`);
   });
