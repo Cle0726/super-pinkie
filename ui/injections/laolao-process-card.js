@@ -114,7 +114,12 @@
       // while this very run is still streaming. Carry the current thought and
       // its transient animation/open state to the new live card immediately.
       const oldKey = run.key, previous = oldKey && store[oldKey];
-      if (run.startedAt && run.session === sessionKey() && previous?.text && !store[key]?.text) {
+      // Plan B: a follow-up message opens a card for a different gateway run.
+      // Only the optimistic → durable swap of the same run may carry thoughts.
+      const oldRun = processCards.get(oldKey)?.dataset.pinkieRun || "";
+      const newRun = processCards.get(key)?.dataset.pinkieRun || "";
+      const sameRun = !oldRun || !newRun || oldRun === newRun;
+      if (sameRun && run.startedAt && run.session === sessionKey() && previous?.text && !store[key]?.text) {
         store[key] = {...previous, eps: previous.eps?.map(ep => ({...ep})),
           turn: {session: run.session, id: key.slice(('pinkie:process:' + run.session + ':').length)}};
         keep.add(key);
@@ -499,6 +504,18 @@
     save();
   }
 
+  // Plan B: cards are keyed by run id now. A thought saved under the old
+  // position key moves once to the run key; one that matches nothing stays.
+  function adoptPrior(card, key) {
+    const prior = card.dataset.pinkiePrior || "";
+    if (!prior || prior === key || !store[prior] || store[key]) return;
+    store[key] = {...store[prior], eps: store[prior].eps?.map(ep => ({...ep})), run: card.dataset.pinkieRun || ""};
+    delete store[prior];
+    keep.delete(prior);
+    keep.add(key);
+    save();
+  }
+
   function preserveSlot(slot, change) {
     const pane = slot.closest?.('openclaw-chat-pane');
     return window.__pinkieChatViewport?.preserve
@@ -513,6 +530,7 @@
     if (previous && previous !== key && processCards.get(previous) === card) processCards.delete(previous);
     processCardKeys.set(card, key);
     processCards.set(key, card);
+    adoptPrior(card, key);
     dirtyCards.add(card);
   }
   function indexCards(root) {
