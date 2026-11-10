@@ -162,6 +162,20 @@ test('disconnect shows the retry count and a reconnect never reads as finished',
   assert.notEqual(resumed.text, '完成啦！');
 });
 
+test('an outage survives a page reload: the snapshot is packed and read back', () => {
+  const {api} = load();
+  assert.equal(typeof api.packOffline, 'function');
+  assert.equal(typeof api.unpackOffline, 'function');
+  const raw = api.packOffline({key: 'agent:project:dashboard:x', runId: 'run-1', startedAt: T0}, T0 + 5_000);
+  const back = api.unpackOffline(raw, T0 + 60_000);
+  assert.deepEqual(JSON.parse(JSON.stringify(back)), {key: 'agent:project:dashboard:x', runId: 'run-1', startedAt: T0});
+  // Stale, broken or foreign snapshots are ignored.
+  assert.equal(api.unpackOffline(raw, T0 + 5_000 + 16 * 60_000), null);
+  assert.equal(api.unpackOffline('{oops', T0), null);
+  assert.equal(api.unpackOffline(JSON.stringify({key: 'not a session', at: T0}), T0), null);
+  assert.equal(api.unpackOffline(null, T0), null);
+});
+
 test('finished and stopped runs say so briefly, then the bar leaves', () => {
   const {api} = load();
   const done = api.describe(base({live: {active: false, startedAt: 0}, ended: {outcome: 'done', at: T0 + 29_000}}));

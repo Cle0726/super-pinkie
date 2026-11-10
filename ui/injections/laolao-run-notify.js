@@ -143,12 +143,15 @@
   };
 
   // ---------- 一轮结束（或停下来等你） ----------
-  function settle(key, runId, outcome, text) {
+  function settle(key, runId, outcome, text, carriedStart = 0) {
     const run = runs.get(key);
     const id = runId || run?.runId || '';
     const token = key + '|' + id;
     const already = told.has(token);
-    const durationMs = run?.startedAt ? now() - run.startedAt : 0;
+    // After a page reload this page never saw the start event: use the start time
+    // laolao-run-status carried over in sessionStorage.
+    const startedAt = run?.startedAt || Number(carriedStart) || 0;
+    const durationMs = startedAt ? Math.max(0, now() - startedAt) : 0;
     if (outcome !== 'ask') runs.delete(key);
     if (already) { if (outcome !== 'ask' && marks.get(key) === 'running') setMark(key, viewing(key) ? null : 'unread'); return; }
     const plan = decide({outcome, isVisible: visible(), isCurrent: key === currentSession(), durationMs, prefs});
@@ -203,9 +206,9 @@
     }
   });
   window.addEventListener('pinkie:run-recovered', (event) => {
-    const {sessionKey, runId, outcome, text} = event.detail || {};
+    const {sessionKey, runId, outcome, text, startedAt} = event.detail || {};
     if (!SESSION.test(String(sessionKey || ''))) return;
-    settle(sessionKey, runId, outcome === 'error' ? 'error' : 'done', text || '');
+    settle(sessionKey, runId, outcome === 'error' ? 'error' : 'done', text || '', startedAt);
   });
 
   // ---------- 回来了：清掉标题和这个会话的标记 ----------

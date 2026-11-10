@@ -162,7 +162,21 @@
     return {visible: true, kind, slow: false, tone: 'run', sticker, text, meta, actions};
   }
 
-  const model = {describe, layoutFor, median, recordDuration, duration, PHRASE};
+  // 断线时这一轮的快照。laolao-resume 在网关回来、socket 还没连上时会整页刷新，
+  // 刷新后的页面靠它照常重读状态、结束了补一次提醒（存 sessionStorage，只在这个窗口里）。
+  const OFFLINE_MAX_MS = 15 * 60_000;
+  const OFFLINE_SESSION = /^agent:(?:main|project|thinking|learning|unrestricted):/;
+  const packOffline = ({key, runId = '', startedAt = 0}, now = Date.now()) =>
+    JSON.stringify({key: String(key || ''), runId: String(runId || ''), startedAt: Number(startedAt) || 0, at: now});
+  function unpackOffline(raw, now = Date.now()) {
+    let value;
+    try { value = JSON.parse(String(raw)); } catch { return null; }
+    if (!value || typeof value !== 'object' || !OFFLINE_SESSION.test(String(value.key || ''))) return null;
+    if (!(now - Number(value.at) < OFFLINE_MAX_MS)) return null;
+    return {key: value.key, runId: String(value.runId || ''), startedAt: Number(value.startedAt) || 0};
+  }
+
+  const model = {describe, layoutFor, median, recordDuration, duration, packOffline, unpackOffline, PHRASE};
 
   // ---------- 运行时：没有页面（测试）时到这里为止 ----------
   if (typeof HTMLElement === 'undefined') {
@@ -194,7 +208,9 @@
   const statuses = new Map(); // sessionKey → {value, at}
   const plans = new Map();    // sessionKey → plan
   const endings = new Map();  // sessionKey → {outcome, at, ms}
-  const conn = {online: true, attempt: 0, wasActive: false, runId: '', key: ''};
+  const conn = {online: true, attempt: 0, wasActive: false, runId: '', key: '', startedAt: 0};
+  const OFFLINE_KEY = 'pinkie:run-status:offline:v1';
+  const offlineStore = () => { try { return window.sessionStorage; } catch { return null; } };
   const phase = {key: '', kind: '', since: 0};
   let skipped = '';
   const liveOf = (key) => {
@@ -350,22 +366,27 @@
     if (!online) {
       if (conn.online) {
         const live = liveOf(key);
-        Object.assign(conn, {online: false, attempt: 0, wasActive: Boolean(live.active || freshStatus(key)?.active), runId: live.runId, key});
+        Object.assign(conn, {online: false, attempt: 0, wasActive: Boolean(live.active || freshStatus(key)?.active), runId: live.runId, key, startedAt: live.startedAt || 0});
+        if (conn.wasActive) { try { offlineStore()?.setItem(OFFLINE_KEY, packOffline(conn)); } catch {} }
         schedule();
       }
       return;
     }
-    if (!conn.online) recover();
+    // 刷新后接着的快照：「壳还没起来」不算连上，等网关仓库和请求通道都在了再读。
+    const ready = !conn.carried || (gatewayStore() && typeof window.__laolaoSidebar?.gwRequest === 'function');
+    if (!conn.online && ready) recover();
   }
   async function recover() {
     if (conn.online) return;
-    const {wasActive, runId} = conn;
+    const {wasActive, runId, startedAt} = conn;
     const key = conn.key || currentSession();
-    Object.assign(conn, {online: true, attempt: 0});
+    Object.assign(conn, {online: true, attempt: 0, carried: false});
+    try { offlineStore()?.removeItem(OFFLINE_KEY); } catch {}
     schedule();
     if (!wasActive) return;
     const value = await refresh(key, {plan: true});
     const live = liveOf(key);
+    if (!live.startedAt && startedAt) live.startedAt = startedAt; // 刷新过：「已用」接着算
     // 第二个证据：原生会话记录自己说还有没有在跑的一轮（普通聊天不一定进档位状态）。
     let nativeActive = null;
     try {
@@ -377,7 +398,7 @@
     if (value?.active || nativeActive === true) { if (!live.active) { live.active = true; live.state = live.state || 'thinking'; } schedule(); return; }
     if (!value && nativeActive === null) return; // 读不到：什么都不说，等下一个事件
     // 断线期间这一轮已经结束：不在条上冒充「完成啦」，只补一次提醒。
-    Object.assign(live, {active: false, state: '', ask: null, bg: null});
+    Object.assign(live, {active: false, state: '', ask: null, bg: null, startedAt: 0});
     let text = '';
     try {
       const history = await request('chat.history', {sessionKey: key, limit: 4}, 8000);
@@ -385,10 +406,20 @@
       const content = last?.content;
       text = typeof content === 'string' ? content : Array.isArray(content) ? content.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('') : '';
     } catch {}
-    window.dispatchEvent(new CustomEvent('pinkie:run-recovered', {detail: {sessionKey: key, runId: runId || value?.runId || '', outcome: 'done', text}}));
+    window.dispatchEvent(new CustomEvent('pinkie:run-recovered', {detail: {sessionKey: key, runId: runId || value?.runId || '', outcome: 'done', text, startedAt}}));
     schedule();
   }
   window.addEventListener('pinkie:gateway-reconnected', () => { if (!conn.online) void recover(); });
+  // 刷新前断着线、这一轮还在跑：从快照接着走，网关一连上就照常 recover()。
+  {
+    const carried = unpackOffline(offlineStore()?.getItem(OFFLINE_KEY));
+    if (carried) {
+      Object.assign(conn, {online: false, attempt: 0, wasActive: true, carried: true, ...carried});
+      if (carried.startedAt) liveOf(carried.key).startedAt = carried.startedAt;
+    } else {
+      try { offlineStore()?.removeItem(OFFLINE_KEY); } catch {}
+    }
+  }
 
   // ---------- 画面 ----------
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
