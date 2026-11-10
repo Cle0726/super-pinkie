@@ -1,6 +1,6 @@
 // 碧琪住的这个 App 有哪些本事。按「什么时候 → 用什么」写，让碧琪自己会用，
 // 用户只能自己点的功能，碧琪要能准确指路。位置和名字都对照过真实界面
-// （2026-10-08，聊天页的按钮名），界面改了这里要一起改。挥洒模式不注入。
+// （2026-10-08，聊天页的按钮名），界面改了这里要一起改。无限模式不注入。
 // Windows 的 app_browser 是独立窗口（带粉色指针、标签页、窗口停靠和节点切换），Mac 上嵌在 App 右侧。
 export function appBrowserPlace(platform = process.platform) {
   return platform === 'win32'

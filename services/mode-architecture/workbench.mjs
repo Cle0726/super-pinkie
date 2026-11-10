@@ -1,4 +1,4 @@
-// 营造模式 / 习作模式 / 挥洒模式的工作台（VS Code 式页面）后端：文件、搜索、Git、回收站。
+// 项目模式 / 学习模式 / 无限模式的工作台（VS Code 式页面）后端：文件、搜索、Git、回收站。
 //
 // 根目录 = 这段会话绑定的项目文件夹（pinkie-project-scope 的 bindings.json）；没有绑定就用该模式的工作区。
 // 项目是默认编辑、运行和 Git 目录；模式工作区和其他绝对路径始终可读。项目外写入沿用各模式的规则。
@@ -17,7 +17,7 @@ import {agentWorkspace, openclawAgentEnvPath} from './openclaw-paths.mjs';
 
 const exec = promisify(execFile);
 export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
-const LEARNING_WORKBENCH_RULES = '【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循习作模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按先生当前要求。需要指给先生看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
+const LEARNING_WORKBENCH_RULES = '【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循学习模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按先生当前要求。需要指给先生看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
 const fsp = fs.promises;
 const SESSION = /^agent:([a-z0-9_-]+):.{1,500}$/i;
 const WORKBENCH_AGENTS = new Set(['project', 'learning', 'unrestricted']);
@@ -142,7 +142,7 @@ export class Workbench {
     const match = SESSION.exec(key);
     if (!match) throw fail('没有找到当前会话，请先打开一段对话。');
     const agentId = match[1].toLowerCase();
-    if (!WORKBENCH_AGENTS.has(agentId)) throw fail('工作台可在营造模式、习作模式和挥洒模式里使用。');
+    if (!WORKBENCH_AGENTS.has(agentId)) throw fail('工作台可在项目模式、学习模式和无限模式里使用。');
     const binding = this.binding(key);
     const workspaceRoot = realish(this.agentWorkspace(agentId));
     // Only the app's own mode workspace may be created here. A folder the user
@@ -823,7 +823,7 @@ export function registerWorkbench(api, options = {}) {
   }), {name: 'code_check'});
   api.registerTool?.(ctx => (/^agent:(project|learning|unrestricted):/.test(String(ctx.sessionKey || '')) ? {
     name: 'workbench_show', label: '在工作台打开',
-    description: '在先生的工作台编辑器里打开一个文件并定位到某一行（营造模式、习作模式、挥洒模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',
+    description: '在先生的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',
     parameters: {type: 'object', additionalProperties: false, properties: {path: {type: 'string'}, line: {type: 'integer', minimum: 1}}, required: ['path']},
     async execute(toolCallId, params) {
       try {
@@ -834,7 +834,7 @@ export function registerWorkbench(api, options = {}) {
       } catch (error) { return {...reply({error: String(error.message || error)}), isError: true}; }
     },
   } : null), {name: 'workbench_show'});
-  // 让碧琪知道工作台的能力（只在营造 / 习作 / 挥洒模式）
+  // 让碧琪知道工作台的能力（只在项目 / 学习 / 无限模式）
   api.on?.('before_prompt_build', (_event, ctx) => {
     if (!/^agent:(project|learning|unrestricted):/.test(String(ctx?.sessionKey || ''))) return;
     let location = '';

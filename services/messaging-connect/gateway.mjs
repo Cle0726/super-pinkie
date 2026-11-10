@@ -23,9 +23,9 @@ export default {
     const shared = { stateDir, makeQr, config: () => api.runtime.config.current(),
       resolveRoute: params => api.runtime.channel.routing.resolveAgentRoute(params),
       mutate: mutate => api.runtime.config.mutateConfigFile({ base: 'source', afterWrite: { mode: 'auto' }, mutate }) };
-    const feishu = new MessagingLoginManager({ ...shared, channel: 'feishu', title: '飞书', agentId: 'learning', label: '习作模式',
+    const feishu = new MessagingLoginManager({ ...shared, channel: 'feishu', title: '飞书', agentId: 'learning', label: '学习模式',
       accountId: 'pinkie-learning', loadProvider: () => loadFeishuProvider(path.join(stateDir, 'extensions/feishu')) });
-    const qq = new MessagingLoginManager({ ...shared, channel: 'qqbot', title: 'QQ', agentId: 'project', label: '营造模式',
+    const qq = new MessagingLoginManager({ ...shared, channel: 'qqbot', title: 'QQ', agentId: 'project', label: '项目模式',
       accountId: 'pinkie-project', loadProvider: () => loadQqProvider(path.join(stateDir, 'extensions/qqbot')),
       validateProject: root => { if (!scope) throw new Error('项目选择还没有准备好，请稍后再试。'); return scope.validateRoot(root); },
       projectBinding: sessionKey => scope?.binding({ sessionKey }),
