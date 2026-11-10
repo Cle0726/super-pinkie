@@ -177,7 +177,7 @@ html[data-pinkie-night]:has(#pinkie-study-desk .pk-drill[data-battle]) .pk-award
 #pinkie-study-desk .pkb-hero.is-live > .pkb-shadow{opacity:.6}
 @media (max-width:720px){#pinkie-study-desk .pkb-arena.is-strip > .pkb-hero.is-live{width:56px;height:56px}}
 /* v3：单独画的圆形头像待机（呼吸），答对 / 答错换姿势 */
-#pinkie-study-desk .pkb-hero.is-avatar > img{border-radius:50%;object-fit:cover;object-position:50% 40%;box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 3px var(--pkg-card-solid,#FFFDFA);animation:pkb-breathe 4.2s ease-in-out infinite}
+#pinkie-study-desk .pkb-hero.is-avatar > img{border-radius:50%;object-fit:cover;object-position:50% 50%;box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 3px var(--pkg-card-solid,#FFFDFA);animation:pkb-breathe 4.2s ease-in-out infinite}
 #pinkie-study-desk .pkb-hero.is-avatar[data-pose] > img{border-radius:0;object-fit:contain;box-shadow:none;animation:none}
 @keyframes pkb-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-1px) scale(1.012)}}
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkb-hero.is-avatar > img{animation:none}}

@@ -71,12 +71,31 @@ const SCENES = {
   async writing(page, tag) { await deskReady(page, 'today'); await startSet(page, {mode: 'kind', kind: 'writing'}); await waitQ(page); await wait(800); await shoot(page, `set-writing-${tag}`); },
   async listening(page, tag) { await deskReady(page, 'today'); await startSet(page, {mode: 'listening'}); await waitQ(page); await wait(900); await shoot(page, `set-listening-${tag}`); },
   async point(page, tag) { await deskReady(page, 'today'); await startSet(page, {mode: 'point', point: 'vc/非谓语'}); await waitQ(page); await wait(900); await shoot(page, `set-point-${tag}`); },
-  async camp(page, tag) { await deskReady(page, 'today'); await wait(1500); await shoot(page, `camp-today-loop-${tag}`);
+  async camp(page, tag) { await deskReady(page, 'today'); await page.waitForFunction(() => document.querySelector('.pkg-stage.is-camp canvas, .pkg-stage canvas, .pkg-stage__biqi'), null, {timeout: 12000}).catch(() => {}); await wait(1800); await shoot(page, `camp-today-loop-${tag}`);
     const box = await page.evaluate(() => { const r = document.querySelector('.pkg-side')?.getBoundingClientRect(); return r ? {x: r.x, y: r.y, width: r.width, height: r.height} : null; });
     if (box) { const f = path.join(out, `camp-today-loop-crop-${tag}.png`); await page.screenshot({path: f, clip: box}); shots.push(path.basename(f)); }
     const hud = await page.evaluate(() => { const r = document.querySelector('.pkg-camp__top')?.getBoundingClientRect(); return r ? {x: r.x, y: r.y, width: Math.min(r.width, 520), height: r.height} : null; });
     if (hud) { const f = path.join(out, `hud-avatar-${tag}.png`); await page.screenshot({path: f, clip: hud}); shots.push(path.basename(f)); } },
   async wardrobe(page, tag) { await deskReady(page, 'today'); await go(page, 'gamewardrobe'); await wait(2600); await shoot(page, `wardrobe-two-columns-${tag}`); },
+  async campforms(page, tag) {
+    await deskReady(page, 'today');
+    const forms = ['daily', 'unrestricted', 'alicorn', 'crystal', 'seapony', 'kirin', 'batpony', 'serious', 'breezie', 'changeling', 'lidong', 'detective'];
+    for (const hour of [10, 21]) {
+      const when = hour < 18 ? 'day' : 'night';
+      for (const id of forms) {
+        await page.evaluate(async ({id, hour}) => {
+          window.__pkBeijingHour = hour;
+          await window.__pinkieGame.call('forms.equip', {formId: id});
+          window.__pinkieStudyDesk.go('today');
+        }, {id, hour});
+        await page.waitForFunction(fid => document.querySelector('.pkg-stage.is-camp') && (document.querySelector('.pkg-stage__tag b')?.textContent || '').length > 0, id, {timeout: 12000}).catch(() => {});
+        await wait(1400);
+        await shoot(page, `camp-${id}-${when}-${tag}`);
+      }
+    }
+    const hud = await page.evaluate(() => { const r = document.querySelector('.pkg-who')?.getBoundingClientRect(); return r ? {x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16} : null; });
+    if (hud) { const f = path.join(out, `hud-face-${tag}.png`); await page.screenshot({path: f, clip: hud}); shots.push(path.basename(f)); }
+  },
 };
 
 try {
@@ -85,7 +104,18 @@ try {
     for (const [name, fn] of Object.entries(SCENES)) {
       if (only && !only.includes(name)) continue;
       // 每个场景开一个干净的状态（今日闭环 / 题目做题记录不串）
-      game.mutate(s => { s.practice = {rec: {}, sets: {}, unlocked: {}}; if (name === 'camp' && w === 1440) { const d = game.day(s); d.lessons = 1; d.realSets = 1; d.realCorrect = 7; } else delete s.days[game.today()]; });
+      game.mutate(s => {
+        s.practice = {rec: {}, sets: {}, unlocked: {}};
+        // 换新提示是一次性的。隔离存档拥有退场旧形态，提示会挡住考点表，截图一律清掉。
+        s.forms.v3done = true; s.forms.v3note = null; s.forms.v2note = null;
+        if (name === 'camp' || name === 'campforms' || name === 'wardrobe' || name === 'random') {
+          for (const id of ['daily', 'unrestricted', 'alicorn', 'crystal', 'seapony', 'kirin', 'batpony', 'serious', 'breezie', 'changeling', 'lidong', 'detective']) if (!s.forms.owned.includes(id)) s.forms.owned.push(id);
+        }
+        if (name === 'camp' && w === 1440) { const d = game.day(s); d.lessons = 1; d.realSets = 1; d.realCorrect = 7; }
+        else if (name !== 'campforms') delete s.days[game.today()];
+      });
+      // 手账「今日 n 组」读 pact.drillFinished。隔离里只改了 days.realSets 时两行会对不上，这里跟真实 finish() 一样两边一起写。
+      service.store.pact?.mutateDay?.(game.today(), day => { day.drillFinished = name === 'camp' && w === 1440 ? 1 : 0; });
       const page = await openWk(harness, {width: w, height: h, theme, init: ['window.__qaKey = (id, c) => fetch("/__qa/key?set=" + encodeURIComponent(id) + "&c=" + encodeURIComponent(c || "")).then(r => r.json())']});
       try { await fn(page, tag); } catch (e) { console.log('ERR', name, tag, e.message); }
       const errs = await page.evaluate(() => window.__qaErrors || []).catch(() => []);

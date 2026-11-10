@@ -2,16 +2,16 @@
  "note": "碧琪是 Pinkie Pie（孩之宝）的同人二创；本目录图片均由用户的 GPT 会员生成（Codex image_gen / chatgpt.com 网页版），提示词见 tools/study-game/art/art-slots.json 与 PROGRESS-B。",
  "items": {
   "form/lidong/portrait": {
-   "source": "codex",
-   "prompt": "art-slots.json · portrait",
-   "reviewed": "2026-11-08",
-   "note": "红围巾、姜茶、头顶雪花、三气球正确；B0 风格测试"
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
   },
   "form/detective/portrait": {
-   "source": "codex",
-   "prompt": "art-slots.json · portrait",
-   "reviewed": "2026-11-08",
-   "note": "格纹帽、放大镜放大眼睛、棒棒糖烟斗，原创造型"
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
   },
   "form/queen/portrait": {
    "source": "codex",
@@ -273,15 +273,15 @@
   },
   "camp/day": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · scene",
-   "reviewed": "2026-11-08",
-   "note": "纸艺营地白天，左中留空给角色"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 湖边上岸营地清晨，画面里没有角色"
   },
   "camp/night": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · scene",
-   "reviewed": "2026-11-08",
-   "note": "纸艺营地夜晚，暖灯"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 湖边上岸营地夜晚，画面里没有角色"
   },
   "exam/hall": {
    "source": "chatgpt-web",
@@ -381,9 +381,9 @@
   },
   "form/lidong/ult": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · ult",
-   "reviewed": "2026-11-08",
-   "note": "v2：蓝调雪夜、暖灯逆光、脸居中、眼睛约 40%，红围巾 + 姜茶，三气球对"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
   },
   "sticker/cheer": {
    "source": "chatgpt-web",
@@ -429,9 +429,9 @@
   },
   "form/daily/ult": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · ult",
-   "reviewed": "2026-11-08",
-   "note": "v2：派对礼炮金色逆光、气球虚化；比其他张亮一些但仍克制"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
   },
   "form/learning/ult": {
    "source": "chatgpt-web",
@@ -453,9 +453,9 @@
   },
   "form/detective/ult": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · ult",
-   "reviewed": "2026-11-08",
-   "note": "v2 第 2 次：站在书桌前、和场景同光，顶光 + 红线索，脸居中约 40%"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
   },
   "form/pirate/ult": {
    "source": "chatgpt-web",
@@ -489,9 +489,9 @@
   },
   "form/unrestricted/ult": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · ult",
-   "reviewed": "2026-11-08",
-   "note": "v2：深紫超空间细光线（彩虹鬃毛是这个形态的设定）；脸略偏右约 7%，身体向左后方延伸"
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
   },
   "form/knight/ult": {
    "source": "chatgpt-web",
@@ -597,9 +597,9 @@
   },
   "form/daily/portrait": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · portrait",
+   "prompt": "art/study-game/v3/prompts.json",
    "reviewed": "2026-11-09",
-   "note": "R3 11-09 game-review-3: classic look waving, on-model, white die-cut; transparent from GPT"
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
   },
   "form/learning/portrait": {
    "source": "chatgpt-web",
@@ -621,9 +621,249 @@
   },
   "form/unrestricted/portrait": {
    "source": "chatgpt-web",
-   "prompt": "art-slots.json · portrait",
+   "prompt": "art/study-game/v3/prompts.json",
    "reviewed": "2026-11-09",
-   "note": "R3 11-09 game-review-3: rainbow mane + star bow, wink; 1st try had grey shadow ring after cutout → asked GPT for transparent re-render (try 2), clean"
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/daily/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/unrestricted/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/unrestricted/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/unrestricted/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/unrestricted/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/breezie/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/breezie/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/breezie/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/changeling/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/changeling/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/changeling/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/lidong/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/lidong/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/lidong/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/lidong/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/detective/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/detective/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/detective/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/detective/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/daily/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/unrestricted/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/alicorn/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/crystal/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/seapony/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/kirin/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/batpony/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/serious/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/breezie/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/changeling/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/lidong/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+  },
+  "form/detective/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
   }
  }
 }

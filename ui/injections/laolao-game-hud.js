@@ -152,7 +152,7 @@
     const paint = (s, first) => {
       if (!s || (!first && !bar.isConnected)) return;
       const form = formOf(s.form.equipped), lvl = s.form.levels?.[s.form.equipped] || {lv: 1, xp: 0, next: 100};
-      face.src = iconArt(s.form.equipped); name.textContent = form?.name || '碧琪';
+      face.src = iconArt(s.form.equipped); face.classList.toggle('is-avatar', Boolean(avatarArt(s.form.equipped))); name.textContent = form?.name || '碧琪';
       lv.textContent = `亲密度 Lv.${lvl.lv}`;
       const prev = lvl.prev ?? 0, span = Math.max(1, (lvl.next || lvl.xp || 1) - prev); fill.style.width = (lvl.next ? Math.min(100, Math.max(4, (lvl.xp - prev) / span * 100)) : 100) + '%';
       if (form?.palette) bar.style.setProperty('--pkg-form', form.palette[1]);
@@ -187,7 +187,17 @@
     ['map', '地图', 'ATLAS', '上岸之书'], ['practice', '刷题', 'DRILL', '真题题库'], ['hunt', '讨伐', 'HUNT', '错题怪'], ['exam', '考场', 'EXAM', '模拟考'],
     ['shop', '商店', 'SHOP', '每日刷新'], ['gacha', '扭蛋', 'GACHA', '两个池子'], ['wardrobe', '衣橱', 'FORMS', '形态觉醒'], ['codex', '图鉴', 'CODEX', '收藏'],
   ];
-  function beijingHour() { return Number(new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Shanghai', hour: 'numeric', hourCycle: 'h23'}).format(new Date())); }
+  function beijingHour() {
+    const q = window.__pkBeijingHour;
+    if (typeof q === 'number' && Number.isFinite(q)) return q;
+    return Number(new Intl.DateTimeFormat('en-GB', {timeZone: 'Asia/Shanghai', hour: 'numeric', hourCycle: 'h23'}).format(new Date()));
+  }
+  async function campPlace() {
+    if (cache.campPlace) return cache.campPlace;
+    try { const r = await fetch(ART + 'camp-place.json', {cache: 'no-cache'}); cache.campPlace = r.ok ? await r.json() : null; }
+    catch { cache.campPlace = null; }
+    return cache.campPlace;
+  }
 
   async function mountCamp(host, ctx) {
     host.classList.add('pkg-camp'); host.setAttribute('aria-busy', 'true');
@@ -195,7 +205,7 @@
     // 手账分区 = 原今日页，整页保留。
     const fallback = () => { host.classList.remove('pkg-camp'); host.replaceChildren(); host.removeAttribute('aria-busy'); return builtin?.mountToday(host); };
     let s;
-    try { [s] = await Promise.all([refresh(), forms(), manifest()]); }
+    try { [s] = await Promise.all([refresh(), forms(), manifest(), campPlace()]); }
     catch (error) { console.warn('[game] camp fallback', error); if (host.isConnected) return fallback(); return; }
     if (!host.isConnected) return;
     host.replaceChildren(); host.setAttribute('aria-busy', 'false');
@@ -248,12 +258,15 @@
     const goText = el('span', 'pkg-go__text'); const goKick = el('small', '', 'NEXT'); const goTitle = el('b', '', '出发'); const goSub = el('em', '', '正在找路线上的下一站…');
     goText.append(goKick, goTitle, goSub); go.append(goText, el('i', 'pkg-go__rule')); copy.append(go);
     const FS = window.__pinkieFormStage, still = fx()?.settings?.().biqi === false || ctx.motion?.reduced;
-    const liveForm = form && FS?.has(form.id);
+    const place = cache.campPlace;
+    const liveForm = form && FS?.has(form.id) && place && bgArt;
     if (liveForm) {
-      // 形态 v2：营地就是这个形态自己的场景，碧琪是活的（laolao-game-form-stage.js）；文字压在左边的柔光上
-      stage.classList.add('is-live'); stage.dataset.time = FS.tone(form.id);
+      // 营地是固定的湖边场景，只把活的角色放进去（站位 / 缩放 / 调色在 camp-place.json）
+      stage.classList.add('is-live', 'is-camp');
+      const slot = (cache.manifest || {})[night ? 'camp/night' : 'camp/day'] || {};
       const live = el('div', 'pkg-stage__live'); stage.append(live, el('i', 'pkg-stage__scrim'), head, copy);
-      host.__pkFormStage?.destroy?.(); host.__pkFormStage = FS.mount(live, form.id, {focus: .7, still});
+      host.__pkFormStage?.destroy?.();
+      host.__pkFormStage = FS.mount(live, form.id, {mode: 'camp', still, night, place, background: bgArt, scene: {w: slot.w || 1536, h: slot.h || 1024}});
     } else {
       stage.append(sky, layers, glow, plinth, figure, head, copy);
       ambient(stage, form, {still});
@@ -397,10 +410,10 @@
     host.append(head);
     const list = el('ol', 'pkg-tlist pkg-loop'); host.append(list);
     const rows = [];
-    const row = ({step, title, meta, done, run, id}) => {
+    const row = ({step, title, meta, done, idle, run, id}) => {
       const li = el('li', 'pkg-loop__li');
-      const b = el('button', 'pkg-trow'); b.type = 'button'; b.dataset.step = id; b.dataset.done = String(Boolean(done));
-      const n = el('i', 'pkg-loop__n', done ? '' : String(rows.length + 1));
+      const b = el('button', 'pkg-trow'); b.type = 'button'; b.dataset.step = id; b.dataset.done = String(Boolean(done)); if (idle) b.dataset.idle = '1';
+      const n = el('i', 'pkg-loop__n', done || idle ? '' : String(rows.length + 1));
       const txt = el('span', 'pkg-loop__t'); txt.append(el('small', '', step), el('b', '', title));
       b.append(n, txt, el('em', '', meta || ''));
       b.addEventListener('click', run); li.append(b); list.append(li); rows.push(b); return b;
@@ -419,9 +432,10 @@
       run: e => { const P = window.__pinkieGamePractice; if (sg && P) P.startPoint(sg.point, {nodeId: sg.nodeId || '', from: e.currentTarget}); else openGame('practice'); }});
     row({id: 'vocab', step: '背', title: '生词', meta: loop.words ? `背了 ${loop.words} 个` : '打开生词复习', done: loop.words > 0, run: () => d.go('vocab', {review: true})});
     row({id: 'notes', step: '背', title: '笔记回顾', meta: loop.notes ? `回顾了 ${loop.notes} 条` : '今天最多 10 条', done: loop.notes > 0, run: () => d.go('notes', {view: 'review'})});
-    row({id: 'hunt', step: '讨伐', title: '到期的错题怪', meta: loop.huntDue ? `${loop.huntDue} 只到期` : loop.huntWins ? `打赢 ${loop.huntWins} 只` : '现在没有到期的', done: loop.huntDue === 0 && (loop.huntWins > 0 || loop.realSets > 0 || loop.lessons > 0), run: () => openGame('hunt')});
+    const huntIdle = !loop.huntDue && !(loop.huntWins > 0);
+    row({id: 'hunt', step: '讨伐', title: '到期的错题怪', meta: loop.huntDue ? `${loop.huntDue} 只到期` : loop.huntWins ? `打赢 ${loop.huntWins} 只` : '今天没有到期的', done: loop.huntWins > 0 && !loop.huntDue, idle: huntIdle, run: () => openGame('hunt')});
     if (loop.weekend) row({id: 'exam', step: '周末', title: '整套模考', meta: loop.examWeek ? '这周考过了' : '120 分钟 · 历年真题', done: loop.examWeek, run: () => openGame('exam')});
-    const next = rows.find(r => r.dataset.done !== 'true');
+    const next = rows.find(r => r.dataset.done !== 'true' && r.dataset.idle !== '1');
     if (next) next.dataset.next = '1';
   }
 
