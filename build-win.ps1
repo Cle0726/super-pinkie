@@ -98,8 +98,6 @@ foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerSt
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
 }
 Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -Recurse -Force
-$cleStudio = Join-Path $serviceStage "cle-studio"
-if (Test-Path -LiteralPath $cleStudio) { Remove-Item -LiteralPath $cleStudio -Recurse -Force }
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force

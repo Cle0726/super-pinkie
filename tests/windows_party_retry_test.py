@@ -14,7 +14,7 @@ def windows_party():
     root = Path(tempfile.mkdtemp(prefix="pinkie-windows-services-"))
     atexit.register(shutil.rmtree, root, True)
     services = root / "services"
-    ignore = shutil.ignore_patterns("node_modules", "cle-studio")
+    ignore = shutil.ignore_patterns("node_modules")
     shutil.copytree(ROOT / "services", services, ignore=ignore)
     shutil.copytree(ROOT / "desktop/windows/mac-runtime/services/party", services / "party", dirs_exist_ok=True)
     directory = services / "party"

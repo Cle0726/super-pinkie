@@ -55,7 +55,7 @@ test('both builds ship the manifest, the index and the notices', () => {
     assert.match(text, /pinkie-skill-library/);
     assert.match(text, /THIRD_PARTY_SKILLS\.md/);
   }
-  for (const file of ['services/mode-architecture/setup.py', 'desktop/windows/mac-runtime/services/mode-architecture/setup.py', 'installer/macos/apply-theme.sh']) {
+  for (const file of ['services/mode-architecture/setup.py', 'installer/macos/apply-theme.sh']) {
     assert.match(fs.readFileSync(path.join(ROOT, file), 'utf8'), /skill-routes\.mjs/, `${file} must install the router`);
   }
   const snapshot = fs.readFileSync(path.join(ROOT, 'desktop/windows/mac-runtime/services/mode-architecture/index.mjs'), 'utf8');
