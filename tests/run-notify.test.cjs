@@ -183,6 +183,18 @@ test('after a reconnect, a run that ended while offline is reported once', () =>
   assert.equal(h.notifications.length, 1);
 });
 
+test('after a page reload during the outage, the start time comes with the recovery', () => {
+  // laolao-resume reloads the page when the gateway is back before the socket is:
+  // the new page has never seen the start event, so the recovery carries startedAt.
+  const h = load({hidden: true});
+  h.tick(1000);
+  h.recovered({sessionKey: SK, runId: 'run-9', outcome: 'done', text: '都做完了。', startedAt: 1_800_000_000_000 + 1000 - 5_000});
+  assert.equal(h.notifications.length, 0, 'a 5-second run gets no system notification');
+  const g = load({hidden: true});
+  g.recovered({sessionKey: SK, runId: 'run-9', outcome: 'done', text: '都做完了。', startedAt: 1_800_000_000_000 - 90_000});
+  assert.equal(g.notifications.length, 1, 'a long run (start carried over) still gets its one notification');
+});
+
 test('asks for permission once in Pinkie\'s voice; a no is remembered', () => {
   const h = load({hidden: false, permission: 'default'});
   const prompt = h.api.permissionPrompt();

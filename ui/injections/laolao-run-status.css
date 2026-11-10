@@ -119,6 +119,9 @@ html.pk-run-on .chat-new-messages { transform: translateY(-40px); }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .pk-run[data-layout="dot"].is-open .pk-run__body { opacity: 1; transform: none; visibility: visible; }
+/* 浮层盖在聊天文字上：底色要实，不能靠模糊（WebKit 里不一定生效）。 */
+.pk-run[data-layout="dot"] .pk-run__body:not(#_n) { background: linear-gradient(135deg, #fffdfe, #fff7fb); }
+.pk-run[data-layout="dot"][data-tone="ask"] .pk-run__body:not(#_n) { background: linear-gradient(135deg, #ffe6f0, #fff0f6); }
 .pk-run[data-layout="dot"] .pk-run__text { flex: 1 1 calc(100% - 40px); white-space: normal; line-height: 1.45; }
 .pk-run[data-layout="dot"] .pk-run__meta { flex: 1 1 100%; padding-left: 34px; white-space: normal; line-height: 1.4; }
 .pk-run[data-layout="dot"] .pk-run__actions { flex: 1 1 100%; justify-content: flex-end; }
@@ -202,3 +205,5 @@ html[data-pinkie-night]:not(#_n) .sidebar-recent-session[data-pinkie-run="unread
 .pk-notify-ask img { flex: none; width: 26px; height: 26px; object-fit: contain; }
 .pk-notify-ask span { min-width: 0; }
 html[data-pinkie-night]:not(#_n) .pk-notify-ask { color: var(--n-ink-strong, #fff6fa); background: rgba(36, 27, 41, 0.94); border-color: rgba(255, 255, 255, 0.08); }
+html[data-pinkie-night]:not(#_n) .pk-run[data-layout="dot"] .pk-run__body:not(#_n) { background: #241b29; }
+html[data-pinkie-night]:not(#_n) .pk-run[data-layout="dot"][data-tone="ask"] .pk-run__body:not(#_n) { background: #3a2030; }

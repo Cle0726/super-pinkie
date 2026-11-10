@@ -43,7 +43,7 @@
     ['slower-than-usual', () => {
       fire('agent', {stream: 'tool', data: {phase: 'result', name: 'ask_user', toolCallId: 'q1', result: '先留着'}});
       status({review: {phase: 'reviewing', requestId: 'r2'}});
-      const d = window.__pinkieRunStatus.state.durations; d.review = [400, 400, 400];
+      const d = window.__pinkieRunStatus.state.durations; d.review = [200, 200, 200];
       return refresh();
     }],
     ['done', () => {
@@ -60,7 +60,9 @@
     ['reconnecting', () => {
       window.__shotRun = 'shot-3';
       fire('agent', {stream: 'lifecycle', data: {phase: 'start'}});
-      setTimeout(() => window.__fake.dropConnection({holdMs: 6000}), 300);
+      // Under laolao-resume's 6 s grace: a longer outage reloads the page (covered by
+      // the sessionStorage carry-over, checked separately) and the WebKit host hangs on it.
+      setTimeout(() => window.__fake.dropConnection({holdMs: 4000}), 300);
     }],
   ];
   // Start from an empty local history of phase lengths (earlier replays persist in WebKit storage).
