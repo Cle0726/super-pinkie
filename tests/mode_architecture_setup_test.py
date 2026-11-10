@@ -120,6 +120,26 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertEqual(data['agents']['defaults']['heartbeat']['agentId'],'main')
         self.assertEqual(data['talk']['agentId'],'main')
 
+    def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
+        data = {'agents': {'list': [
+            {'id': 'main'}, {'id': 'project', 'tools': {'deny': ['browser'], 'exec': {'pathPrepend': ['/x']}}},
+            {'id': 'thinking'}, {'id': 'learning'}, {'id': 'unrestricted'}, {'id': 'party-claude'}]}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        agents = {a['id']: a for a in data['agents']['list']}
+        for mode in ('main', 'project', 'thinking', 'learning'):
+            deny = agents[mode]['tools']['deny']
+            for name in ('workboard_*', 'wiki_*', 'skill_workshop', 'canvas', 'llm-task', 'node_inference'):
+                self.assertIn(name, deny)
+            for kept in ('cron', 'message', 'nodes', 'gateway'):
+                self.assertNotIn(kept, deny)
+        self.assertEqual(agents['project']['tools']['deny'][0], 'browser')
+        self.assertEqual(agents['project']['tools']['exec'], {'pathPrepend': ['/x']})
+        self.assertNotIn('tools', agents['unrestricted'])
+        self.assertNotIn('tools', agents['party-claude'])
+        before = json.dumps(data, sort_keys=True)
+        self.assertFalse(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
+        self.assertEqual(json.dumps(data, sort_keys=True), before)
+
     def test_only_verified_gemini_model_gains_native_xhigh_without_changing_permissions(self):
         data = {
             'models': {'providers': {'mm': {'models': [
