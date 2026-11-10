@@ -155,7 +155,11 @@ test('a bare 继续 with nothing to continue starts no independent pass but keep
   const f = fixture();
   const enhancer = new ReasoningEnhancer(f.api);
   await enhancer.prepare(ask('max', '继续'));
-  assert.match(enhancer.beforePromptBuild({prompt: '继续', messages: []}, {sessionKey: KEY}).appendContext, /交付验收/);
+  const context = enhancer.beforePromptBuild({prompt: '继续', messages: []}, {sessionKey: KEY}).appendContext;
+  assert.match(context, /交付验收/);
+  // Real-model run L1-d: without a word the model searched the whole disk for "the last task".
+  assert.match(context, /直接用一句话问用户要接着做哪件事/);
+  assert.doesNotMatch(context, /pinkie:effort level=/, 'no thinking brief for a task that does not exist');
   assert.equal(enhancer.independent.size, 0);
   await enhancer.agentEnded(turn('继续', '好的，我接着整理。'), {sessionKey: KEY});
   assert.equal(solverCalls(f.calls).length, 0);
@@ -269,7 +273,13 @@ test('independent versions are counted once: the tier\'s own helpers first, the 
     if (tier) enhancer.armTier(KEY, tier);
     if (level) await enhancer.prepare(ask(level, message));
     enhancer.beforePromptBuild({prompt: message}, {sessionKey: KEY});
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    // The engine starts its passes in the background: wait until the call count stops changing
+    // (a fixed 5 ms was flaky under load).
+    for (let last = -1, stable = 0; stable < 3;) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      stable = f.calls.length === last ? stable + 1 : 0;
+      last = f.calls.length;
+    }
     return {f, enhancer, solvers: solverCalls(f.calls)};
   };
   assert.equal((await started('max', '')).solvers.length, 2, 'Max alone: two engine passes');

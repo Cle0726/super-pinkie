@@ -925,7 +925,11 @@ export class ReasoningEnhancer {
       intent.recipe = recipe;
       intent.weight = weight;
       const parts = [];
-      const brief = briefContext(recipe, intent.workKind, intent.workTier || '');
+      // 11-10 实测 L1-d：新会话只发「继续」，模型翻了 40 次工具（连全盘搜索都做了）找「上一件事」才问。
+      if (weight === 'carry' && !intent.task && !legacy) {
+        parts.push('[pinkie:effort carry]\n用户只说了接着做，但这段对话里没有之前的请求。最多看一眼这个会话自己的检查点；没有就直接用一句话问用户要接着做哪件事，不要去翻别的文件夹、会话记录或全盘搜索。');
+      }
+      const brief = weight === 'carry' && !intent.task ? '' : briefContext(recipe, intent.workKind, intent.workTier || '');
       if (brief) parts.push(`[pinkie:effort level=${recipe.level}]\n${brief}`);
       if (recipe.audit) {
         intent.phase = 'answering';
@@ -1012,12 +1016,21 @@ export class ReasoningEnhancer {
     const attempts = [preferred];
     if (main && preferred && (preferred.provider !== main.provider || preferred.model !== main.model)) attempts.push(main);
     let lastError = null;
+    let badOutput = '';
     for (const ref of attempts) {
       try {
         let used = {tools: [], opened: []};
-        const output = await this.pass(intent.sessionKey, prompt, signal, {ref, tools: true, workspaceDir: intent.workspaceDir || '', onTools: (value) => { used = value; }});
-        const verdict = parseVerdict(output);
-        if (!verdict) { lastError = new Error('批评结果格式不对'); continue; }
+        const ask = (text) => this.pass(intent.sessionKey, text, signal, {ref, tools: true, workspaceDir: intent.workspaceDir || '', onTools: (value) => { used = value; }});
+        let output = await ask(prompt);
+        let verdict = parseVerdict(output);
+        // 11-10 实测 L2-e：打回后的复核回了一段不是 JSON 的话，验收停在 unchecked。同一个模型再要一次纯 JSON，
+        // 还不行才换下一个；原文留在任务记录里，方便查它到底回了什么。
+        if (!verdict && !signal?.aborted) {
+          badOutput = String(output || '').slice(0, 2000);
+          output = await ask(`${prompt}\n\n你上一次的输出不是一个合法的 JSON 对象。这次只输出那一个 JSON 对象，前后不要任何文字。`);
+          verdict = parseVerdict(output);
+        }
+        if (!verdict) { lastError = new Error('批评结果格式不对'); badOutput = String(output || badOutput).slice(0, 2000); continue; }
         const summary = verdict.pass ? '通过' : `发现 ${verdict.issues.length} 处问题：${summaryOf(verdict.issues[0]?.what)}`;
         this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'done', endedAt: Date.now(), model: ref ? `${ref.provider}/${ref.model}` : job.model, summary, output,
           toolsUsed: used.tools, opened: used.opened});
@@ -1027,7 +1040,8 @@ export class ReasoningEnhancer {
         if (signal?.aborted) break;
       }
     }
-    this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'failed', endedAt: Date.now(), summary: summaryOf(lastError?.message || '失败')});
+    this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'failed', endedAt: Date.now(), summary: summaryOf(lastError?.message || '失败'),
+      ...(badOutput ? {output: badOutput} : {})});
     return null;
   }
 
