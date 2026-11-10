@@ -77,7 +77,7 @@ test('model picker preserves native session actions and reasoning controls',()=>
   assert.match(behavior,/details\.dataset\.pinkieModelsOpen = "0"/);
   assert.match(behavior,/Number\(range\.value\) >= Number\(range\.max\)/);
   assert.match(behavior,/watcher\.observe\(details, \{childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: \["hidden", "aria-selected", "disabled"\]\}\)/);
-  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker50/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=modelpicker51/);
 });
 
 test('the mode header keeps its controls readable and uses one clear split-window icon',()=>{

@@ -1301,16 +1301,27 @@ test('tier limits and task routing match the new four-level design', () => {
   assert.equal(classifyDeliberationTask('核实这个事实并给出处'), 'fact_check');
   assert.equal(classifyDeliberationTask('请解释闭包是什么'), 'simple');
 
-  assert.deepEqual(deliberationRequirements('base', 'project', 'standard_answer').roles, {solver: 2});
-  assert.deepEqual(deliberationRequirements('boost', 'project', 'tradeoff').roles, {solver: 2});
+  // 2026-11-09 升级逻辑：工作模式里只有全开档必须派独立求解（界面写的「多做几版」）；其余档位是建议，
+  // 想派可以派（optionalRoles），不派不拦。无限制模式照旧每档必须。
+  assert.deepEqual(deliberationRequirements('base', 'project', 'standard_answer').roles, {});
+  assert.equal(deliberationRequirements('base', 'project', 'standard_answer').optionalRoles.solver, 3);
+  assert.deepEqual(deliberationRequirements('boost', 'project', 'tradeoff').roles, {});
+  assert.equal(deliberationRequirements('boost', 'project', 'tradeoff').optionalRoles.solver, 3);
   assert.deepEqual(deliberationRequirements('full', 'project', 'standard_answer').roles, {solver: 2});
+  assert.equal(deliberationRequirements('full', 'project', 'standard_answer').optionalRoles.solver, 0);
   assert.equal(deliberationRequirements('full', 'project', 'standard_answer').maxSolvers, 3);
-  assert.deepEqual(deliberationRequirements('marathon', 'project', 'standard_answer').roles, {solver: 2});
+  assert.deepEqual(deliberationRequirements('marathon', 'project', 'standard_answer').roles, {});
   assert.equal(deliberationRequirements('marathon', 'project', 'standard_answer').maxSolvers, 3);
+  for (const tier of ['base', 'boost', 'full', 'marathon']) {
+    assert.deepEqual(deliberationRequirements(tier, 'none', 'standard_answer').roles, {solver: 2}, `unrestricted ${tier}`);
+  }
   assert.deepEqual(deliberationRequirements('boost', 'project', 'implementation').roles, {});
   assert.equal(deliberationRequirements('boost', 'project', 'implementation').evidenceKind, 'test');
   assert.equal(deliberationRequirements('full', 'project', 'fact_check').evidenceKind, 'sources');
-  assert.equal(deliberationRequirements('base', 'project', 'fact_check').needsEvidence, true);
+  // 基础档不设门禁（只照打法做）；查事实要两个来源从加强档起。无限制模式保持原样。
+  assert.equal(deliberationRequirements('base', 'project', 'fact_check').needsEvidence, false);
+  assert.equal(deliberationRequirements('boost', 'project', 'fact_check').needsEvidence, true);
+  assert.equal(deliberationRequirements('base', 'none', 'fact_check').needsEvidence, true);
   assert.equal(deliberationRequirements('full', 'project', 'implementation').optionalRoles.critic, 0);
   assert.equal(deliberationRequirements('full', 'project', 'standard_answer').optionalRoles.critic, 1);
   assert.equal(deliberationRequirements('full', 'project', 'tradeoff').optionalRoles.critic, 1);
@@ -1500,7 +1511,7 @@ test('fact-check workflow needs two distinct source references and reports uncer
 test('tradeoff and fact-check finals cannot finish without their promised user-facing summary', () => {
   const tradeoff = new ModeArchitecture();
   const tradeoffCtx = {agentId: 'project', sessionKey: 'agent:project:tradeoff-final'};
-  tradeoff.arm(tradeoffCtx.sessionKey, 'base');
+  tradeoff.arm(tradeoffCtx.sessionKey, 'boost');
   const tradeoffState = setTierTask(tradeoff, tradeoffCtx, '比较两个方案并交给我选择');
   tradeoffState.completedRoles.set('solver', 2);
   tradeoff.finishTurn(tradeoffCtx, {success: true, lastAssistantMessage: '方案 A 的速度更快；方案 B 的维护成本更低。'});
@@ -1509,7 +1520,7 @@ test('tradeoff and fact-check finals cannot finish without their promised user-f
 
   const facts = new ModeArchitecture();
   const factsCtx = {agentId: 'thinking', sessionKey: 'agent:thinking:fact-final'};
-  facts.arm(factsCtx.sessionKey, 'base');
+  facts.arm(factsCtx.sessionKey, 'boost');
   setTierTask(facts, factsCtx, '核实这件事并标注来源和不确定性');
   facts.afterTool({toolName: 'web.search', result: 'https://one.example/source A'}, factsCtx);
   facts.afterTool({toolName: 'web.search', result: 'https://two.example/source B'}, factsCtx);
@@ -1586,11 +1597,12 @@ test('judge can select only an existing candidate and must cite a real check', (
 test('every retry states its difference and two unchanged retries stop with a report', () => {
   const runtime = new ModeArchitecture();
   const ctx = {agentId: 'project', sessionKey: 'agent:project:stagnation', runId: 'r1'};
-  runtime.arm(ctx.sessionKey, 'base');
+  // 加强档：有标准答案的题要一次真的验算，没有就推回去（基础档不设门禁，不会推）。
+  runtime.arm(ctx.sessionKey, 'boost');
   setTierTask(runtime, ctx, '求方程 x² = 4，并验算两个根');
   const first = runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx);
   assert.equal(first.action, 'revise');
-  assert.equal(first.retry.maxAttempts, 3);
+  assert.equal(first.retry.maxAttempts, 6);
 
   const second = runtime.finalize({
     lastAssistantMessage: '这次和上次不同：换思路，改用因式分解重新推导。',
@@ -1610,7 +1622,7 @@ test('every retry states its difference and two unchanged retries stop with a re
 test('a retry without a stated change stops immediately', () => {
   const runtime = new ModeArchitecture();
   const ctx = {agentId: 'project', sessionKey: 'agent:project:no-change', runId: 'r1'};
-  runtime.arm(ctx.sessionKey, 'base');
+  runtime.arm(ctx.sessionKey, 'boost');
   setTierTask(runtime, ctx, '求方程 x + 1 = 3');
   assert.equal(runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx).action, 'revise');
   assert.equal(runtime.finalize({lastAssistantMessage: '我再试一次。'}, {...ctx, runId: 'r2'}), undefined);
@@ -1905,10 +1917,13 @@ test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{
   assert.equal(response[1].active,false);
 });
 
-test('marathon tier uses the 40-retry cap and stops without completion markers',()=>{
+test('marathon tier uses the 40-retry cap and stops without completion markers',t=>{
   const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:overnight',runId:'run-1'};
   runtime.arm(ctx.sessionKey,'marathon');
-  setTierTask(runtime,ctx,'求方程 x² = 4，并验算两个根');
+  // 长跑档靠检查点里程碑推进（独立求解在这一档只是建议）：留一个一直没勾掉的里程碑，推到续跑上限。
+  const checkpoint=path.join(workspace(t,'overnight'),'checkpoint.md');
+  fs.writeFileSync(checkpoint,'- [ ] 验算两个根 — 验证：代回原方程\n');
+  setTierTask(runtime,ctx,'求方程 x² = 4，并验算两个根').checkpointFile=checkpoint;
   let decision=runtime.finalize({lastAssistantMessage:'还没解完。'},ctx);
   assert.equal(decision.action,'revise');assert.equal(decision.retry.maxAttempts,40);
   for(let attempt=2;attempt<=40;attempt+=1){
@@ -2968,9 +2983,12 @@ test('a stop by the system still hands the user the last full reply',t=>{
   // 同一版回复、没有新证据：第一次推回去补，第二次停下。
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-1'}).action,'revise');
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-2'}),undefined);
+  // 2026-11-09 升级逻辑：成品已经有了、差的只是核对——把成品交出去，照实说哪一步还没亲眼核对，
+  // 不再把做完的东西报成「本轮未完成」、成品当参考附在后面。
   const report=run.runtime.stopReport({...run.ctx,runId:'s-2'});
-  assert.match(report,/^本轮未完成：/);
-  assert.match(report,/上一版回复（还没核对完，仅供参考）：\n记账网页做好了/);
+  assert.ok(report.startsWith(draft));
+  assert.match(report,/有几步碧琪还没能亲眼核对：改完的页面还没截图打开看过/);
+  assert.doesNotMatch(report,/本轮未完成|仅供参考|续跑/);
   // 如实说没做完：用碧琪自己的话，不套模板。
   const honest=tierRun(t,'stop-honest','boost','帮我做一个记账的小网页');
   honest.tool('write',{path:path.join(honest.root,'index.html')},'Successfully wrote 6 bytes');

@@ -1,7 +1,7 @@
 // 活儿种类：先认清一条请求是「哪一种活」，再按这种活的打法定流程、定「做完」要看到的证据。
 // 两套档位都用这里——四档「思考强度」（index.mjs：运行单、证据门禁、子任务）和九档「思考等级」的
 // 自补档（reasoning.mjs：独立起草的用途、审稿员看什么）。纯函数，不依赖 OpenClaw，可单测。
-import {SPAWN_FALLBACK} from './run-contract.mjs';
+import {RIGOR_LADDER, SPAWN_FALLBACK} from './run-contract.mjs';
 //
 // 证据只认工具记录（index.mjs captureVerificationEvidence 存下的 {name, kind, params, output, ok, sequence}），
 // 不认回复里的自述。拿不准的信号宁可不认：漏认只会让碧琪多验一步，错认会放过假完成。
@@ -698,9 +698,25 @@ const PRINT_HINT = /(?:印刷|打印|印出来|出血|毫米|mm\b|a4|a5|名片|�
 // 讲题时要验算的是「有具体计算」的题（求 f(x)…、解方程、算式），不是「讲讲导数的定义」这种概念题。
 const MATH_HINT = /(?:计算|算一下|算出|求(?!助|职|学)|解方程|方程组?[：:]|证明|=|[a-z]\s*\(\s*[a-z]\s*\)|\d+\s*[+\-×x*/÷^]\s*\d+|\d[^。？?\n]{0,20}多少|多少[^。？?\n]{0,20}\d)/i;
 
-// 档位在流程里的强弱：base 只照打法做、不加硬门禁；boost 起按种类要证据；full 再多做几版；
-// marathon 用 full 的证据标准（终审要打开成品）但不强派子任务，靠检查点里程碑推进。
-const STRICT = {base: 0, boost: 1, full: 2, marathon: 2};
+// 档位在流程里的强弱（数在 run-contract.mjs 的 RIGOR_LADDER）：base 只照打法做、不设门禁；boost 起按种类要证据；
+// full 再多做几版；marathon 用 full 的证据标准（终审要打开成品）但不强派子任务，靠检查点里程碑推进。
+const STRICT = Object.freeze(Object.fromEntries(Object.entries(RIGOR_LADDER).map(([tier, rigor]) => [tier, rigor.strict])));
+
+// 「独立做法」的子任务：各做各的一版，交付前拿来对照。审稿、试用不算（它们看的是做出来的成品）。
+const VIEW_ROLES = Object.freeze(['solver', 'drafter', 'recomputer']);
+export const isViewRole = (role) => VIEW_ROLES.includes(role);
+
+/**
+ * 这种活在这一档自己会派出去几份独立做法（只有「必须派」的全开档才算数）。
+ * 九档的独立解答拿它来去重：这几份交付前就能用上，九档只补还差的。
+ */
+export function independentViews(kinds = [], tier = '') {
+  if (RIGOR_LADDER[tier]?.roles !== 'required') return 0;
+  const primary = kinds[0] || '';
+  const {roles} = kindRoles(kinds, tier);
+  const solvers = ['standard_answer', 'tradeoff'].includes(primary) ? 2 : 0;
+  return solvers + VIEW_ROLES.reduce((sum, role) => sum + (roles[role] || 0), 0);
+}
 
 /**
  * 这几种活在这一档要的子任务（全开档）。roles 是必须做完的，caps 是允许派的上限。
@@ -1223,13 +1239,15 @@ export function solverModeFor(kinds = []) {
   return 'answer';
 }
 
-// Adaptive：动手的活、报错、写代码、硬性计数写作按难题（XHigh 路线），一句话聊天按简单。
+// Adaptive 分三段：动手的活、报错、写代码、有标准答案的难题按难题（XHigh 路线）；一句话聊天按简单（Low）；
+// 文案、点子、取舍、查事实、讲题至少按普通（Medium）——它们不该被「直接给结论、不铺垫」压扁。
+// 返回 easy / normal / hard；认不出种类时返回空，由消息本身的难度分决定。
 export function adaptiveHint(kinds = []) {
   const primary = kinds[0] || '';
   if (!primary || primary === 'pending') return '';
   if (primary === 'simple') return 'easy';
-  if (isHandsOnKind(primary)) return 'hard';
-  return '';
+  if (isHandsOnKind(primary) || primary === 'standard_answer') return 'hard';
+  return 'normal';
 }
 
 // 一个字的终稿：做了很多工具调用，最后只吐出几个字（REPORT 第九节「碧」）。
