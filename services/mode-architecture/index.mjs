@@ -5507,10 +5507,10 @@ export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话
     const must = RIGOR_LADDER[normalizedTier].roles === 'required';
     lines.push(primary === 'tradeoff'
       ? (must
-        ? `不同立场：有 sessions_spawn 时派 2 个「求解」子任务，各按一组不同的优先级独立成案；只给原始问题，不给你的倾向。${SPAWN_FALLBACK}`
+        ? `不同立场：有 sessions_spawn 时派 2 个「求解」子任务（label 写「求解·1」「求解·2」），各按一组不同的优先级独立成案；只给原始问题，不给你的倾向。${SPAWN_FALLBACK}`
         : '不同立场：自己先按两组不同的优先级各成一案再比较；拿不准时可以派 2 个「求解」子任务各写一案（只给原始问题，不给你的倾向），不派也行。')
       : (must
-        ? `独立求解：有 sessions_spawn 时派 2–3 个「求解」子任务，每个用不同解法，只给原始问题。结论一致就直接用；不一致先跑检查或查来源，仍分不出再派「仲裁」，仲裁只能从已有候选里选一个。${SPAWN_FALLBACK}`
+        ? `独立求解：有 sessions_spawn 时派 2–3 个「求解」子任务（label 写「求解·1」「求解·2」…），每个用不同解法，只给原始问题。结论一致就直接用；不一致先跑检查或查来源，仍分不出再派「仲裁」，仲裁只能从已有候选里选一个。${SPAWN_FALLBACK}`
         : '独立求解：关键结果自己换一种方法再算一遍；拿不准时可以派 2–3 个「求解」子任务，每个用不同解法、只给原始问题，结论不一致先跑检查或查来源。不派也行。'));
   }
   lines.push('重试前先说「这次和上次不同：换思路/换信息/换模型 + 具体变化」；连续两次没有新证据就停下，说清卡在哪。最终只汇报结果、依据和没解决的问题，不汇报档位、流程和子任务数量。');
@@ -6034,7 +6034,12 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       return {block: true, blockReason: '已有 5 个子任务在运行。请先用 sessions_yield 等这一批结束，再派下一批。'};
     }
     if (state?.active && !role) {
-      return {block: true, blockReason: '当前任务流程不需要此子任务，请按已选流程直接处理。'};
+      // 说清楚接受哪些名字：只回「不需要」时模型常常接着 sessions_yield 空等，整轮卡到超时（11-10 隔离实测 L4-d）。
+      let names = [];
+      try { names = Object.keys(deliberationRequirements(state.tier, state.mode, state.taskType, kindsOf(state)).roles || {}).map(r => ROLE_LABELS[r] || r); } catch {}
+      return {block: true, blockReason: names.length
+        ? `这个子任务没有写角色名，没派出去。本流程的子任务 label 要写成：${names.map(n => '「' + n + '·1」').join('、')} 这样（同一角色多个就 ·2、·3），改好重新派；不派就自己直接做完。不要用 sessions_yield 等这次没派出去的子任务。`
+        : '当前任务流程不需要此子任务，请按已选流程直接处理，不要用 sessions_yield 等它。'};
     }
     if (state?.active && role) {
       const reservedForRole = [...state.reservations.values()].filter(value => value?.role === role).length;
@@ -6453,6 +6458,20 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     return safeDecision;
   }
 
+  // 这条终稿已经被扣下、要求续跑过（写入记录前那道检查）：之后几道检查给同一个决定。
+  // 扣下时仪式提醒的次数已经记上，收尾再审会把缺口当成「提醒过、放行」，既不续跑也不把扣下的终稿写进记录，
+  // 用户一个字也收不到（11-10 隔离实测 L3-b、L4-d：全开档终稿被扣，整轮卡到超时）。
+  heldDecision(state, event = {}, ctx = {}) {
+    if (!state?.lastRetryDecision) return null;
+    const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+    const runId = String(ctx.runId || event.runId || hashForAudit(reply));
+    const replyKey = reply ? hashForAudit(reply) : '';
+    const hasRunId = Boolean(ctx.runId || event.runId);
+    // 只认同一段文字：同一次运行里续跑写出的新终稿要重新审，不能沿用旧决定。
+    if (!replyKey || state.lastRetryReplyKey !== replyKey) return null;
+    return state.lastRetryRunId === runId || !hasRunId || state.lastRetryWithoutRunId ? state.lastRetryDecision : null;
+  }
+
   stopReport(ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
     const state = this.getRun(this.resolveParent(sessionKey));
@@ -6522,6 +6541,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     captureWorkflowFinalClaims(state, reply);
     this.setRun(state.parentSessionKey, state);
+    const held = state.active ? this.heldDecision(state, event, ctx) : null;
+    if (held) return held;
     const audit = auditDeliberation(state, reply);
     if (this.stopForHonestIncomplete(state, reply, audit, ctx)) return;
     if (audit.complete) return;
@@ -6542,6 +6563,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (state && sessionKey === state.parentSessionKey) {
       const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
       captureWorkflowFinalClaims(state, reply);
+      // 被扣下等续跑的终稿不算交付，档位保持进行中，由续跑接着做。
+      if (state.active && this.heldDecision(state, event, ctx)) return;
       const audit = auditDeliberation(state, reply);
       if (this.stopForHonestIncomplete(state, reply, audit, ctx)) return;
       if (!audit.complete) return;

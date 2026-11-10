@@ -387,6 +387,37 @@ test('helpers that were never sent are asked for once, then the finished answer 
   assert.equal(status.required, 0, 'the panel no longer waits on 0/2');
 });
 
+test('a final held back before it is written stays held at finalize and keeps the tier open', () => {
+  // 11-10 隔离实测 L3-b / L4-d：写入记录前那道检查（拿不到 runId）把终稿扣下并记了一次仪式提醒，
+  // 收尾那道检查再审时把缺口算成「提醒过、放行」，既不续跑也不交付，整轮卡到超时。
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'main', sessionKey: 'agent:main:held-final', runId: 'h-1'};
+  tierTask(runtime, ctx, 'full', '求方程 x² = 4，并验算两个根');
+  runtime.afterTool({toolName: 'exec', params: {command: 'python3 -c "print(2*2, (-2)*(-2))"'}, result: '4 4'}, ctx);
+  const reply = 'x = 2 或 x = -2，代回原方程都成立。';
+  const preview = runtime.previewFinalize({lastAssistantMessage: reply}, {agentId: ctx.agentId, sessionKey: ctx.sessionKey});
+  assert.equal(preview.action, 'revise');
+  const atFinalize = runtime.finalize({lastAssistantMessage: reply}, ctx);
+  assert.equal(atFinalize?.action, 'revise', 'the same held final gets the same decision');
+  assert.deepEqual(atFinalize, preview);
+  runtime.finishTurn(ctx, {lastAssistantMessage: reply, messages: [{role: 'assistant', content: [{type: 'text', text: reply}]}]});
+  assert.equal(runtime.status(ctx.sessionKey).active, true, 'a held final is not a delivery');
+  // The retry writes a new final in the same run: it is judged afresh, and the waived ceremony lets it out.
+  const retried = runtime.finalize({lastAssistantMessage: '我换因式分解又做了一版：(x-2)(x+2)=0，同样得到 x = 2 或 x = -2。'}, ctx);
+  assert.equal(retried, undefined);
+});
+
+test('a helper spawned without a role name is refused with the names that are accepted', async () => {
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'main', sessionKey: 'agent:main:unnamed-helper', runId: 'n-1'};
+  tierTask(runtime, ctx, 'full', '比较这两个方案的成本');
+  const result = runtime.beforeTool({toolName: 'sessions_spawn', params: {taskName: 'stance_pro', task: '从性能优先出发独立成案'}}, ctx);
+  assert.equal(result?.block, true);
+  assert.match(result.blockReason, /「求解·1」/);
+  assert.match(result.blockReason, /不要用 sessions_yield/);
+  assert.match(buildDeliberationPlan('full', 'chat', 'checkpoint.md', 'tradeoff'), /label 写「求解·1」「求解·2」/);
+});
+
 test('missing evidence is not ceremony: it is asked for again after the helpers were waived', () => {
   const runtime = new ModeArchitecture();
   const ctx = {agentId: 'project', sessionKey: 'agent:project:evidence-stays', runId: 'e-1'};
