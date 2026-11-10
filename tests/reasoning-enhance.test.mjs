@@ -455,7 +455,7 @@ test('Max first, then the marathon tier: still one review, with the final check'
   const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => !tierActive});
   const key = 'agent:project:one';
   await enhancer.prepare({level: 'max', requestId: 'request-merge-0005', sessionKey: key, message: '做一个能玩的贪吃蛇小游戏'});
-  const armed = enhancer.armTier(key, 'marathon');
+  const armed = enhancer.armTier(key, 'marathon', {requestId: 'request-merge-0005'});
   assert.deepEqual(armed, {armed: true, requestId: 'request-merge-0005', merged: true}, 'the UI keeps tracking the prepare request');
   const status = enhancer.status({sessionKey: key});
   assert.deepEqual([status.workTier, status.workKind, status.recipe.critic, status.recipe.rounds, status.recipe.solvers], ['marathon', 'app_game_ai', true, 2, 2]);
@@ -466,15 +466,15 @@ test('Max first, then the marathon tier: still one review, with the final check'
   tierActive = false;
   assert.deepEqual(await enhancer.agentEnded(toolRun('全部做完。'), {sessionKey: key}), {reviewed: true, pass: true});
   assert.equal(auditCalls(f.calls).length, 1);
-  // 很久以前登记的（超过合并窗口）不合并：按新的一条重新登记。
+  // 合并靠明确的登记关系，不靠十分钟窗口：尚未使用的档位仍属于下一条消息。
   const g = fixture();
   const stale = new ReasoningEnhancer(g.api);
   stale.armTier(key, 'full');
   const old = stale.store.get(key);
   stale.store.set({...old, createdAt: Date.now() - 11 * 60_000});
   const fresh = await stale.prepare({level: 'max', requestId: 'request-merge-0006', sessionKey: key, message: '做个网页'});
-  assert.equal(fresh.merged, undefined);
-  assert.equal(stale.status({sessionKey: key}).workTier, '');
+  assert.equal(fresh.merged, true);
+  assert.equal(stale.status({sessionKey: key}).workTier, 'full');
   // 只有档位的验收：长跑档的终审也带批评（审稿员打开成品）。
   const h = new ReasoningEnhancer(fixture().api);
   h.armTier(key, 'marathon');

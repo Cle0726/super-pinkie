@@ -988,7 +988,7 @@ test('FileRunStore rejects tampered run and child state and migrates legacy file
   assert.equal(migrated.v,1);assert.ok(migrated.digest);
 });
 
-test('a file-changing task needs a real effect and a post-change check',t=>{
+test('a file-changing task needs a real effect and a post-change check when claimed',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-effect-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const file=path.join(root,'app.txt');
@@ -997,11 +997,11 @@ test('a file-changing task needs a real effect and a post-change check',t=>{
   guard.beforeTool({toolName:'write',toolCallId:'write-1',params:{path:file}},ctx);
   fs.writeFileSync(file,'fixed');
   guard.afterTool({toolName:'write',toolCallId:'write-1',params:{path:file},result:{status:'completed'}},ctx);
-  let result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经修复完成，并且读回检查过。'},ctx);
   assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
   guard.beforeTool({toolName:'read',toolCallId:'read-1',params:{path:file}},ctx);
   guard.afterTool({toolName:'read',toolCallId:'read-1',params:{path:file},result:'fixed'},ctx);
-  result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经修复完成，并且读回检查过。'},ctx);
   assert.equal(result,undefined);
 });
 
@@ -1037,10 +1037,10 @@ test('a structured host write receipt survives missing before-tool correlation',
     toolName:'write',toolCallId:'after-only',params:{path:file},
     result:{content:[{type:'text',text:'Successfully wrote file'}],details:{changed:true,created:true}},
   },ctx);
-  let result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经创建完成，并且读回检查过。'},ctx);
   assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
   guard.afterTool({toolName:'read',params:{path:file},result:'real host write'},ctx);
-  result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经创建完成，并且读回检查过。'},ctx);
   assert.equal(result,undefined);
   const effect=guard.runs.get(ctx.sessionKey).tools[0].effects[0];
   assert.equal(effect.changed,true);assert.equal(effect.hostReported,true);
@@ -1067,14 +1067,14 @@ test('a bare continue message is not misclassified as a new file mutation',()=>{
   assert.equal(blocked.action,'revise');assert.match(blocked.reason,/没有任何真实执行工具记录/);
 });
 
-test('external actions also need a separate post-action observation',()=>{
+test('a claimed external status check needs a separate post-action observation',()=>{
   const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:external-check'};
   guard.begin({prompt:'帮我发布这个项目'},ctx);
   guard.afterTool({toolName:'publish_project',params:{target:'remote'},result:{ok:true}},ctx);
-  let blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  let blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成，已核对发布状态。'},ctx);
   assert.match(blocked.reason,/之后没有读取、测试或检查真实结果/);
   guard.afterTool({toolName:'check_publish_status',params:{target:'remote'},result:{status:'live'}},ctx);
-  blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成，已核对发布状态。'},ctx);
   assert.equal(blocked,undefined);
 });
 
@@ -1778,6 +1778,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
+  assert.equal(methods.get('pinkie.run.status').opts.scope,'operator.read');
   assert.equal(tools.length,15);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','pinkie_search','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
@@ -1816,8 +1817,14 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(embeddedVerified.details.ok,true);
   assert.equal(embeddedVerified.details.scope,'read-only-diagnostic');
   let response;
+  await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost',requestId:'request-missing-01'},respond:(...args)=>{response=args;}});
+  assert.equal(response[0],false);assert.equal(queued.length,0);
   await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/做事流程：加强档/);
+  await methods.get('pinkie.run.status').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
+  assert.equal(response[0],true);assert.equal(response[1].active,true);assert.equal(response[1].selection.workTier,'boost');
+  assert.equal(response[1].binding,'unverified');assert.equal(typeof response[1].review.runId,'string');
+  assert.equal(response[1].continuations.tier,0);assert.ok(Array.isArray(response[1].missing));
   await methods.get('pinkie.deepThink.disarm').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
 
@@ -2620,7 +2627,7 @@ test('a command still running in the background is an honest in-progress state, 
   assert.equal(guard.finalize({lastAssistantMessage:'打包已经完成，dist/app.zip 已生成。'},ctx)?.action,'revise','a finished claim still needs evidence');
   guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
     result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
-  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
+  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx),undefined,'a reply without a completion claim is not rejected by the delivery gate');
 });
 
 // 2026-11-01 实测：长跑档计划写了 6 个里程碑，只勾了第一个、跑过一次测试就交付了。

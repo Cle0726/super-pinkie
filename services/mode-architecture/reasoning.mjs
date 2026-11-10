@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs';
+import {mergeLayers} from './run-contract.mjs';
 import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, isHandsOnKind, kindLabel, solverModeFor} from './work-kinds.mjs';
 
 // 输入框思考等级滑块的 9 档属于碧琪，不属于任何模型的原生等级表。每一档先按当前模型真正支持的
@@ -37,8 +38,12 @@ const WORK_TIERS = Object.freeze({
 // 审稿员只给只读工具：能打开截图、文档、网页，不能执行、写文件、操作浏览器。
 export const REVIEW_TOOLS = Object.freeze(['read', 'image', 'pdf', 'web_fetch', 'web_search']);
 const MODE_BY_AGENT = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
-// 同一条消息发送前，四档的 armTier 和九档的 prepare 先后登记：这么短的时间里的两次登记合并成一个验收。
-const MERGE_WINDOW_MS = 10 * 60_000;
+// The unrestricted mode retains its existing review behavior and is not part
+// of the four work-mode contract migration.
+const LEGACY_MERGE_WINDOW_MS = 10 * 60_000;
+const unrestrictedSession = sessionKey => /^agent:unrestricted:/.test(String(sessionKey || ''));
+const legacyMergeable = intent => Boolean(intent && intent.phase === 'armed'
+  && Date.now() - (Number(intent.createdAt) || 0) < LEGACY_MERGE_WINDOW_MS);
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const MAX_MESSAGE = 12_000;
 const MAX_HISTORY = 10_000;
@@ -49,39 +54,71 @@ const FIX_PREFIX = '[pinkie-tier] 交付验收';
 // 网关方法（发送前登记、状态查询）和 Agent 运行时的钩子（注入、回合结束后核对）是插件的两个实例，
 // 内存不共享——旧版 Max/Ultra 的审阅笔记就是因此从来没能交给主模型。待核对的状态必须落盘。
 const FIELDS = ['requestId', 'tier', 'level', 'recipe', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'jobs', 'createdAt', 'updatedAt',
-  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply'];
+  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply', 'runId', 'preparedParams', 'preparedResult'];
 
 export class ReviewStore {
   constructor(root = path.join(openclawStateDir(), 'pinkie-deep-think', 'reviews')) {
     this.root = root;
   }
 
-  file(sessionKey) {
-    return path.join(this.root, `${createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 32)}.json`);
+  file(sessionKey, requestId = '') {
+    const session = createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 32);
+    const request = requestId ? `-${createHash('sha256').update(String(requestId)).digest('hex').slice(0, 32)}` : '';
+    return path.join(this.root, `${session}${request}.json`);
   }
 
-  get(sessionKey) {
+  list(sessionKey) {
+    const legacy = path.basename(this.file(sessionKey));
+    const prefix = legacy.slice(0, -5) + '-';
     try {
-      const value = JSON.parse(fsSync.readFileSync(this.file(sessionKey), 'utf8'));
-      return value?.sessionKey === sessionKey ? value : null;
+      return fsSync.readdirSync(this.root).filter(name => name === legacy || (name.startsWith(prefix) && name.endsWith('.json')))
+        .flatMap(name => {
+          try {
+            const value = JSON.parse(fsSync.readFileSync(path.join(this.root, name), 'utf8'));
+            return value?.sessionKey === sessionKey ? [value] : [];
+          } catch { return []; }
+        }).sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
     } catch {
-      return null;
+      return [];
     }
+  }
+
+  get(sessionKey, {requestId = '', runId = ''} = {}) {
+    const entries = this.list(sessionKey);
+    if (requestId) return entries.find(entry => entry.requestId === requestId) || null;
+    if (runId) return entries.find(entry => entry.runId === runId) || null;
+    const current = entries.filter(entry => ['answering', 'reviewing', 'fixing'].includes(entry.phase));
+    return (current.length ? current : entries).sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0] || null;
   }
 
   set(intent) {
     const value = Object.fromEntries(FIELDS.map((key) => [key, intent[key]]));
     value.updatedAt = Date.now();
     fsSync.mkdirSync(this.root, {recursive: true});
-    const target = this.file(intent.sessionKey);
+    const target = this.file(intent.sessionKey, intent.requestId);
     const temp = `${target}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
     fsSync.writeFileSync(temp, JSON.stringify(value));
     fsSync.renameSync(temp, target);
+    // One-time migration of the older one-file-per-session format. Only remove
+    // the old file when it contains this exact request, never another run.
+    const legacy = this.file(intent.sessionKey);
+    try {
+      const old = JSON.parse(fsSync.readFileSync(legacy, 'utf8'));
+      if (old?.sessionKey === intent.sessionKey && old.requestId === intent.requestId) fsSync.unlinkSync(legacy);
+    } catch {}
     return value;
   }
 
-  delete(sessionKey) {
-    try { fsSync.unlinkSync(this.file(sessionKey)); } catch {}
+  delete(sessionKey, requestId = '') {
+    for (const intent of this.list(sessionKey)) {
+      if (requestId && intent.requestId !== requestId) continue;
+      for (const file of [this.file(sessionKey, intent.requestId), this.file(sessionKey)]) {
+        try {
+          const value = JSON.parse(fsSync.readFileSync(file, 'utf8'));
+          if (value?.sessionKey === sessionKey && value.requestId === intent.requestId) fsSync.unlinkSync(file);
+        } catch {}
+      }
+    }
   }
 }
 const REVIEW_MARK = '[pinkie:delivery-review';
@@ -450,9 +487,10 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
 }
 
 // 交付验收在回复已经交给用户之后才做：打回时只发更正，不把整段回答再发一遍（REPORT 第九节：重复回复）。
-export function fixMessage(issues = []) {
+export function fixMessage(issues = [], requestId = '') {
   const list = issues.map((item, index) => `${index + 1}. ${item.what}（依据：${item.evidence}${item.fix ? `；应改为：${item.fix}` : ''}）`).join('\n');
-  return `${FIX_PREFIX}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。上一条回复用户已经看到了，所以只发更正：先用一句话说清改了什么，再给出改正后的那部分；问题牵动全文（字数、格式、结构、整体结论）时才给出完整的新版本。核实后都不是问题，就只回一句「核对过了，上面的回复不用改」。不要提到验收、检查或这条消息。\n${list}`;
+  const identity = /^[\w-]{8,100}$/.test(requestId) ? ` [request=${requestId}]` : '';
+  return `${FIX_PREFIX}${identity}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。上一条回复用户已经看到了，所以只发更正：先用一句话说清改了什么，再给出改正后的那部分；问题牵动全文（字数、格式、结构、整体结论）时才给出完整的新版本。核实后都不是问题，就只回一句「核对过了，上面的回复不用改」。不要提到验收、检查或这条消息。\n${list}`;
 }
 
 // 补强提示按活儿种类写：答题类拆要求、找易错、想验证；动手的活先写验收清单，做完逐条用工具核对。
@@ -494,21 +532,9 @@ async function passToolUse(file) {
   }
 }
 
-// 九档补强和四档思考强度同时选：保留一个验收，独立份数、打回轮数取大，批评任一要就要。
+// 九档补强和四档思考强度同时选：份数和轮数只在 run-contract 里取大。
 function mergeRecipe(first = {}, second = {}) {
-  return {
-    ...first,
-    brevity: Boolean(first.brevity || second.brevity) && !(first.think || second.think),
-    think: Boolean(first.think || second.think),
-    solvers: Math.max(Number(first.solvers) || 0, Number(second.solvers) || 0),
-    rounds: Math.max(Number(first.rounds) || 0, Number(second.rounds) || 0),
-    critic: Boolean(first.critic || second.critic),
-    audit: true,
-  };
-}
-
-function mergeable(intent) {
-  return Boolean(intent && intent.phase === 'armed' && Date.now() - (Number(intent.createdAt) || 0) < MERGE_WINDOW_MS);
+  return mergeLayers(first, second);
 }
 
 export class ReasoningEnhancer {
@@ -583,46 +609,88 @@ export class ReasoningEnhancer {
     const sessionKey = String(params.sessionKey || '');
     const level = String(params.level || params.tier || '');
     const requestId = String(params.requestId || '');
+    const runId = unrestrictedSession(sessionKey) ? '' : String(params.runId || '');
+    const explicitTier = !unrestrictedSession(sessionKey) && Object.hasOwn(params, 'workTier');
+    const requestedWorkTier = explicitTier ? String(params.workTier || '') : '';
     const message = String(params.message || '').trim();
     if (!SESSION_KEY.test(sessionKey) || !RANK.has(level) || !/^[\w-]{8,100}$/.test(requestId)) {
       throw new Error('增强档位请求无效');
     }
+    if ((runId && (runId.length > 200 || /\s/.test(runId)))
+        || (explicitTier && requestedWorkTier && !['base', 'boost', 'full', 'marathon'].includes(requestedWorkTier))) {
+      throw new Error('运行编号或思考强度无效');
+    }
     if (!message || message.length > MAX_MESSAGE) throw new Error('本条文字过长或为空，无法安全执行增强审阅');
     const done = this.completed.get(requestId);
     if (done) {
-      if (done.sessionKey !== sessionKey || done.level !== level || done.message !== message) throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
+      if (done.sessionKey !== sessionKey || done.level !== level || done.message !== message
+          || done.runId !== runId || done.workTier !== requestedWorkTier) throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
       return done.result;
     }
+    if (!unrestrictedSession(sessionKey)) {
+      const existing = this.store.get(sessionKey, {requestId});
+      if (existing) {
+        const original = existing.preparedParams;
+        if (!original || !existing.preparedResult || existing.level !== level || existing.message !== message
+            || original.runId !== runId || original.explicitTier !== explicitTier || original.workTier !== requestedWorkTier) {
+          throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
+        }
+        return existing.preparedResult;
+      }
+    }
+    const boundRun = runId ? this.store.get(sessionKey, {runId}) : null;
+    if (boundRun && boundRun.requestId !== requestId) throw new Error('运行编号已绑定其他消息');
     const {recipe, thinkingLevel, ...route} = this.routePlan(sessionKey, level, message);
     const summary = {level, kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds,
       brevity: recipe.brevity, think: recipe.think, ...(recipe.as ? {as: recipe.as, difficulty: recipe.difficulty} : {})};
     let result;
-    if (!hasLayers(recipe)) {
+    if (!hasLayers(recipe) && !(explicitTier && WORK_TIERS[requestedWorkTier])) {
+      if (explicitTier) {
+        for (const pending of this.store.list(sessionKey)) {
+          if (pending.phase === 'armed' && pending.workTier && !pending.message) this.store.delete(sessionKey, pending.requestId);
+        }
+      }
       result = {prepared: false, recipe: summary, thinkingLevel, ...route};
     } else {
-      const previous = this.store.get(sessionKey);
-      // 先选了思考强度档位（armTier 刚登记了这一条）：合并成一次验收，不把档位的验收冲掉。
-      const workTier = mergeable(previous) && previous.workTier && !previous.message ? previous.workTier : '';
-      if (previous && previous.requestId !== requestId && !workTier) this.controllers.get(previous.requestId)?.abort();
-      const merged = workTier ? mergeRecipe(recipe, previous.recipe) : recipe;
+      // The work-tier arm is consumed by the next preparation; reviews that
+      // already belong to another message stay untouched.
+      const legacy = unrestrictedSession(sessionKey);
+      const previous = legacy ? this.store.get(sessionKey) : null;
+      const pending = legacy
+        ? (legacyMergeable(previous) && previous.workTier && !previous.message ? previous : null)
+        : this.store.list(sessionKey).find(intent => intent.phase === 'armed' && intent.workTier && !intent.message
+          && (!explicitTier || intent.workTier === requestedWorkTier));
+      if (legacy && previous && previous.requestId !== requestId && !pending) {
+        this.controllers.get(previous.requestId)?.abort();
+        this.store.delete(sessionKey);
+      }
+      const workTier = explicitTier ? (WORK_TIERS[requestedWorkTier] ? requestedWorkTier : '') : pending?.workTier || '';
+      const work = pending?.recipe || (workTier ? {level: workTier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[workTier], audit: true} : null);
+      const merged = workTier ? mergeRecipe(recipe, work) : recipe;
       const workKinds = workKindsFor(message, sessionKey);
+      result = {prepared: true, tier: level, mode: merged.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: merged.rounds, crossCheck: merged.solvers > 0,
+        recipe: summary, thinkingLevel, ...route, ...(workTier ? {workTier, merged: true} : {})};
       this.store.set({
         requestId, tier: level, level, recipe: merged, message, sessionKey, history: historyText(params.history),
         phase: 'armed', round: 0, maxRounds: merged.rounds, crossCheck: merged.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
-        workTier, workKinds, workKind: workKinds[0] || '',
+        workTier, workKinds, workKind: workKinds[0] || '', runId,
+        preparedParams: {runId, explicitTier, workTier: requestedWorkTier}, preparedResult: result,
       });
-      result = {prepared: true, tier: level, mode: merged.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: merged.rounds, crossCheck: merged.solvers > 0,
-        recipe: summary, thinkingLevel, ...route, ...(workTier ? {workTier, merged: true} : {})};
+      if (explicitTier) {
+        for (const old of this.store.list(sessionKey)) {
+          if (old.phase === 'armed' && old.workTier && !old.message) this.store.delete(sessionKey, old.requestId);
+        }
+      } else if (pending) this.store.delete(sessionKey, pending.requestId);
     }
-    this.completed.set(requestId, {sessionKey, level, message, result});
+    this.completed.set(requestId, {sessionKey, level, message, runId, workTier: requestedWorkTier, result});
     if (this.completed.size > 200) this.completed.delete(this.completed.keys().next().value);
     return result;
   }
 
   // 后台工作的一行：落盘，供小面板读。
   updateJob(sessionKey, requestId, job, patch = {}) {
-    const intent = this.store.get(sessionKey);
-    if (!intent || intent.requestId !== requestId) return;
+    const intent = this.store.get(sessionKey, {requestId});
+    if (!intent) return;
     const jobs = Array.isArray(intent.jobs) ? intent.jobs : [];
     const index = jobs.findIndex((item) => item.id === job.id);
     const next = {...(index >= 0 ? jobs[index] : job), ...patch};
@@ -668,19 +736,37 @@ export class ReasoningEnhancer {
 
   // 思考强度档位：选档后下一条真实用户消息开启验收（消息内容到发送时才知道）。
   // 九档补强已经为这一条登记过（prepare 在前）：合并进同一个验收，只在整个档位任务结束后审一次。
-  armTier(sessionKey, tier) {
+  canBindTier(sessionKey, requestId) {
+    const intent = this.store.get(sessionKey, {requestId});
+    return Boolean(intent && intent.phase === 'armed' && !WORK_TIERS[intent.level]);
+  }
+
+  armTier(sessionKey, tier, {requestId = ''} = {}) {
     if (!SESSION_KEY.test(sessionKey) || !WORK_TIERS[tier]) {
-      this.cancel({sessionKey});
+      if (unrestrictedSession(sessionKey)) this.cancel({sessionKey});
       return {armed: false};
     }
-    const previous = this.store.get(sessionKey);
+    // A caller that prepares first can explicitly name the same request.
+    // Without an ID, guessing from a previous message attaches a newly
+    // selected tier to the wrong queued/running request.
+    const legacy = unrestrictedSession(sessionKey);
+    const previous = legacy ? this.store.get(sessionKey) : requestId ? this.store.get(sessionKey, {requestId}) : null;
+    if (!legacy && requestId && !this.canBindTier(sessionKey, requestId)) return {armed: false};
     const work = {level: tier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[tier], audit: true};
-    if (mergeable(previous) && previous.message && !WORK_TIERS[previous.level]) {
+    const canMerge = legacy ? legacyMergeable(previous) && previous.message : previous?.phase === 'armed';
+    if (canMerge && !WORK_TIERS[previous.level]) {
       const recipe = mergeRecipe(previous.recipe, work);
       const value = this.store.set({...previous, workTier: tier, recipe, maxRounds: recipe.rounds, crossCheck: recipe.solvers > 0});
       return {armed: true, requestId: value.requestId, merged: true};
     }
-    if (previous) this.controllers.get(previous.requestId)?.abort();
+    if (legacy && previous) {
+      this.controllers.get(previous.requestId)?.abort();
+      this.store.delete(sessionKey);
+    }
+    // Re-selecting a tier replaces only a not-yet-bound selection.
+    for (const intent of this.store.list(sessionKey)) {
+      if (intent.phase === 'armed' && intent.workTier && !intent.message) this.store.delete(sessionKey, intent.requestId);
+    }
     const value = this.store.set({
       requestId: `tier-${tier}-${randomUUID().slice(0, 8)}`, tier, level: tier, recipe: work, message: '', sessionKey, history: '',
       phase: 'armed', round: 0, maxRounds: work.rounds, crossCheck: work.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
@@ -692,20 +778,22 @@ export class ReasoningEnhancer {
   cancel(params = {}) {
     const sessionKey = String(params.sessionKey || '');
     const requestId = String(params.requestId || '');
-    const intent = this.store.get(sessionKey);
-    if (!intent || (requestId && intent.requestId !== requestId)) return {cancelled: false};
-    this.controllers.get(intent.requestId)?.abort();
-    this.store.delete(sessionKey);
+    const intents = this.store.list(sessionKey).filter(intent => !requestId || intent.requestId === requestId);
+    if (!intents.length) return {cancelled: false};
+    for (const intent of intents) {
+      this.controllers.get(intent.requestId)?.abort();
+      this.store.delete(sessionKey, intent.requestId);
+    }
     return {cancelled: true};
   }
 
   status(params = {}) {
-    const intent = this.store.get(String(params.sessionKey || ''));
+    const intent = this.store.get(String(params.sessionKey || ''), {requestId: String(params.requestId || ''), runId: String(params.runId || '')});
     if (!intent) return {phase: 'idle'};
     const recipe = intent.recipe || {};
     return {
       phase: intent.phase, tier: intent.tier, level: intent.level || intent.tier, round: intent.round, maxRounds: intent.maxRounds,
-      workTier: intent.workTier || '', workKind: intent.workKind || '',
+      workTier: intent.workTier || '', workKind: intent.workKind || '', runId: intent.runId || '',
       issues: (intent.issues || []).length, requestId: intent.requestId, updatedAt: intent.updatedAt,
       recipe: {kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds, as: recipe.as},
       jobs: (intent.jobs || []).map(({output, ...job}) => ({...job, hasOutput: Boolean(output)})),
@@ -713,21 +801,34 @@ export class ReasoningEnhancer {
   }
 
   job(params = {}) {
-    const intent = this.store.get(String(params.sessionKey || ''));
-    const job = (intent?.jobs || []).find((item) => item.id === String(params.jobId || ''));
+    const intents = this.store.list(String(params.sessionKey || ''));
+    const job = intents.flatMap(intent => intent.jobs || []).find((item) => item.id === String(params.jobId || ''));
     if (!job) return {found: false};
     return {found: true, ...job};
   }
 
   beforePromptBuild(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
-    const intent = this.store.get(sessionKey);
-    if (!intent) return;
-    if (Date.now() - intent.createdAt > INTENT_TTL_MS) { this.store.delete(sessionKey); return; }
     const prompt = String(event.prompt || '').trim();
-    const matches = intent.message ? prompt === intent.message || prompt.endsWith(intent.message) : Boolean(prompt) && !CONTROL_PROMPT.test(prompt);
+    const runId = String(ctx.runId || event.runId || '');
+    const intents = this.store.list(sessionKey);
+    const matchesPrompt = intent => intent.message ? prompt === intent.message || prompt.endsWith(intent.message) : Boolean(prompt) && !CONTROL_PROMPT.test(prompt);
+    const fixId = prompt.startsWith(FIX_PREFIX) ? /\[request=([\w-]{8,100})\]/.exec(prompt)?.[1] || '' : '';
+    const fixing = prompt.startsWith(FIX_PREFIX) ? intents.filter(item => item.phase === 'fixing' && (!fixId || item.requestId === fixId)) : [];
+    const intent = unrestrictedSession(sessionKey) ? this.store.get(sessionKey)
+      : (runId && this.store.get(sessionKey, {runId}))
+        || (fixing.length === 1 ? fixing[0] : null)
+        || intents.find(item => item.phase === 'armed' && (!runId || !item.runId || item.runId === runId) && matchesPrompt(item));
+    if (!intent) return;
+    // Only an unused selection may expire in work modes. An active review
+    // can legitimately need a correction after a long-running task.
+    if ((unrestrictedSession(sessionKey) || intent.phase === 'armed') && Date.now() - intent.createdAt > INTENT_TTL_MS) {
+      this.store.delete(sessionKey, intent.requestId); return;
+    }
+    const matches = matchesPrompt(intent);
     const recipe = intent.recipe || {...NO_LAYERS, audit: true, solvers: intent.crossCheck ? 1 : 0, rounds: intent.maxRounds};
     if (intent.phase === 'armed' && matches) {
+      if (runId && !unrestrictedSession(sessionKey)) intent.runId = runId;
       if (!intent.message) intent.message = prompt.slice(0, MAX_MESSAGE);
       if (!intent.history) intent.history = historyFromMessages(event.messages);
       if (!Array.isArray(intent.workKinds) || !intent.workKinds.length) {
@@ -746,11 +847,12 @@ export class ReasoningEnhancer {
         parts.push(`${REVIEW_MARK} tier=${intent.tier}]\n这一条开启了交付验收：最终回复会被独立核对——用户的每条要求是否满足、每个「完成 / 通过 / 已生成」的说法是否有本轮真实的工具结果${recipe.critic ? '、结论和推导是否正确' : ''}${isHandsOnKind(intent.workKind) ? '；审稿员会打开你做出来的文件和截图本身看' : ''}。回复前先自己逐条对一遍。不要在回复里提到验收。`);
       } else {
         // 只加一段提示的档位：用完即弃。
-        this.store.delete(sessionKey);
+        this.store.delete(sessionKey, intent.requestId);
       }
       return parts.length ? {appendContext: parts.join('\n\n')} : undefined;
     }
     if (intent.phase === 'fixing' && prompt.startsWith(FIX_PREFIX)) {
+      if (runId && !unrestrictedSession(sessionKey)) intent.runId = runId;
       intent.phase = 'answering';
       this.store.set(intent);
       this.updateJob(sessionKey, intent.requestId, newJob('fix', `按批评更正 · 第 ${intent.round} 轮`, null));
@@ -844,8 +946,17 @@ export class ReasoningEnhancer {
   // 主回复结束后调用（index.mjs 在确认没有重试、没有被拦截之后才调用）。
   async agentEnded(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
-    const intent = this.store.get(sessionKey);
+    const runId = String(ctx.runId || event.runId || '');
+    const legacy = unrestrictedSession(sessionKey);
+    let intent = legacy ? this.store.get(sessionKey) : runId ? this.store.get(sessionKey, {runId}) : null;
+    if (!intent) {
+      // Some older hosts omit runId at prompt-build time. Only use an
+      // unbound record if it is the sole possible answering run.
+      const answering = this.store.list(sessionKey).filter(item => item.phase === 'answering' && (!runId || !item.runId));
+      if (answering.length === 1) intent = answering[0];
+    }
     if (!intent || intent.phase !== 'answering') return {reviewed: false};
+    if (runId && !intent.runId && !legacy) { intent.runId = runId; this.store.set(intent); }
     // 档位任务还在续跑（子任务、检查点续跑）时不验收，等整个任务交付后再核对。
     if (!this.readyForReview(sessionKey)) return {reviewed: false, waiting: true};
     const messages = Array.isArray(event.messages) ? event.messages : [];
@@ -859,8 +970,9 @@ export class ReasoningEnhancer {
         this.updateJob(sessionKey, intent.requestId, job, {state: event.success === false ? 'failed' : 'done', endedAt: Date.now(), summary: summaryOf(reply), output: reply.slice(0, 6000)});
       }
     }
-    if (event.success === false || !reply) { const current = this.store.get(sessionKey); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
-    const fresh = this.store.get(sessionKey);
+    if (event.success === false || !reply) { const current = this.store.get(sessionKey, {requestId: intent.requestId}); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
+    const fresh = this.store.get(sessionKey, {requestId: intent.requestId});
+    if (!fresh) return {reviewed: false, cancelled: true};
     // 打回之后这一条是「更正」：连同之前已交给用户的那条一起审，免得把只发更正当成没回答完整。
     // 在等独立解答之前落盘：等完再写会用旧副本盖掉独立解答刚写进去的结果。
     const earlier = fresh.round > 0 ? String(fresh.deliveredReply || '').slice(0, 6000) : '';
@@ -878,7 +990,7 @@ export class ReasoningEnhancer {
         message: fresh.message, history: fresh.history, reply: reply.slice(0, 8000), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
         workKind: fresh.workKind || '', artifacts: artifactPaths(entriesFromMessages(messages)), tools: true, earlier,
       }), signal);
-      const current = this.store.get(sessionKey);
+      const current = this.store.get(sessionKey, {requestId: fresh.requestId});
       if (!current || current.requestId !== fresh.requestId) return {reviewed: false, cancelled: true};
       if (!verdict) { current.phase = 'unchecked'; this.store.set(current); return {reviewed: false}; }
       current.issues = verdict.issues;
@@ -887,24 +999,24 @@ export class ReasoningEnhancer {
       current.round += 1;
       current.phase = 'fixing';
       this.store.set(current);
-      const sent = await this.sendFix(sessionKey, verdict.issues);
-      if (!sent) { const latest = this.store.get(sessionKey); if (latest) { latest.phase = 'unresolved'; this.store.set(latest); } }
+      const sent = await this.sendFix(sessionKey, verdict.issues, legacy ? '' : current.requestId);
+      if (!sent) { const latest = this.store.get(sessionKey, {requestId: fresh.requestId}); if (latest) { latest.phase = 'unresolved'; this.store.set(latest); } }
       return {reviewed: true, pass: false, fixScheduled: sent};
     } catch {
-      const current = this.store.get(sessionKey);
+      const current = this.store.get(sessionKey, {requestId: fresh.requestId});
       if (current?.requestId === fresh.requestId && current.phase === 'reviewing') { current.phase = 'unchecked'; this.store.set(current); }
       return {reviewed: false};
     }
   }
 
-  async sendFix(sessionKey, issues) {
+  async sendFix(sessionKey, issues, requestId = '') {
     if (!this.runProcess || !this.cliEntry) return false;
     const agentId = sessionKey.split(':')[1];
     for (let wait = 0; wait < 40 && this.isBusy(sessionKey); wait += 1) await new Promise((resolve) => setTimeout(resolve, 500));
     try {
       const {stdout = ''} = await this.runProcess(process.execPath, [
         this.cliEntry, 'gateway', 'call', 'chat.send',
-        '--params', JSON.stringify({sessionKey, agentId, message: fixMessage(issues), deliver: false, idempotencyKey: `pinkie-review-${randomUUID()}`}),
+        '--params', JSON.stringify({sessionKey, agentId, message: fixMessage(issues, requestId), deliver: false, idempotencyKey: `pinkie-review-${randomUUID()}`}),
         '--json', '--timeout', '30000',
       ], {timeout: 35_000, maxBuffer: 64 * 1024, windowsHide: true, env: process.env});
       let result;

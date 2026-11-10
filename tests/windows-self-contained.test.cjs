@@ -86,7 +86,9 @@ test('both packages share the complete Mac browser renderer and preserve the bac
   assert.match(index, /pinkie-browser=3/);
   assert.match(index, /pinkie-learning=8/);
   assert.doesNotMatch(index, /laolao-[^" ]+\.(?:js|css)/, "runtime snapshot must not own a second skin");
-  const mode = fs.readFileSync(path.join(snapshot, 'services/mode-architecture/index.mjs'), 'utf8');
+  assert.ok(!fs.existsSync(path.join(snapshot, 'services/mode-architecture/index.mjs')), 'Windows must use the shared mode engine');
+  assert.ok(!sums.some(line => line.endsWith('  services/mode-architecture/index.mjs')), 'the overlay must not replace the shared mode engine');
+  const mode = read('services/mode-architecture/index.mjs');
   assert.doesNotMatch(mode, /C\.le\. 执行控制层/);
   // Personas ship from the repository; a snapshot copy used to overwrite them.
   assert.ok(!sums.some((line) => line.includes('  personas/')), 'the Mac snapshot must not carry personas');
