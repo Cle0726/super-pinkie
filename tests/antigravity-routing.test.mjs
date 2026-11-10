@@ -51,7 +51,9 @@ test('effective At effort differs from the adapter parameter; all custom tiers k
           calls.push(params);return {payloads:[{text:/独立解题助手/.test(params.prompt)?'42':'{"pass":true,"issues":[]}'}]};
         }}}};
         const engine=new ReasoningEnhancer(api,{store:new ReviewStore(path.join(root,base+'-'+level))});
-        const result=await engine.prepare({sessionKey:key,requestId:'at-route-'+base+'-'+level,level,message:'你好'});
+        // 寒暄在任何档位都不派独立做法（力气跟着活走），所以要看补强的三档用一道真题。
+        const message=['xhigh','max','ultra'].includes(level)?'这道题怎么做：证明 n^3 - n 能被 6 整除':'你好';
+        const result=await engine.prepare({sessionKey:key,requestId:'at-route-'+base+'-'+level,level,message});
         assert.equal(result.thinkingLevel,'off');
         if(result.model)entry.modelOverride=result.model.slice(3);
         if(level!=='adaptive')assert.equal(entry.modelOverride,selected,'Client and backend choose the same source endpoint');
@@ -59,7 +61,7 @@ test('effective At effort differs from the adapter parameter; all custom tiers k
         assert.equal(result.recipe.kind,expected[0]);assert.equal(result.recipe.native,expected[1]);
         assert.equal(result.recipe.solvers,({xhigh:1,max:2,ultra:3})[level]||0);
         if(['xhigh','max','ultra'].includes(level)){
-          engine.beforePromptBuild({prompt:'你好',messages:[]},{sessionKey:key,agentId:'learning'});
+          engine.beforePromptBuild({prompt:message,messages:[]},{sessionKey:key,agentId:'learning'});
           await engine.agentEnded({success:true,messages:[{role:'assistant',content:'42'}]},{sessionKey:key,agentId:'learning'});
           assert.equal(calls.length,result.recipe.solvers+1);
           for(const call of calls){assert.equal(call.model,base+'-high');assert.equal(call.provider,'mm');assert.equal(call.thinkLevel,'off');}

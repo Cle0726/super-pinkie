@@ -284,10 +284,17 @@ test('work tiers review the first real message after arming, and only once the w
   tierActive = false;
   assert.deepEqual(await enhancer.agentEnded(runEvent('修好了。', [['exec', 'OK']]), {sessionKey: 'agent:learning:one'}), {reviewed: true, pass: true});
   assert.match(f.calls[0].prompt, /帮我修测试/);
+  // 全开档至少要一份独立做法。这种活自己不派独立做法时（写代码派的是「用户视角试用」），九档在后台补一份；
+  // 这种活自己会派时（讲题派「独立起草」），那一份就算数，不再重复做一遍。
   const full = new ReasoningEnhancer(fixture().api, {readyForReview: () => true});
-  full.armTier('agent:learning:two', 'full');
-  full.beforePromptBuild({prompt: '这题怎么算'}, {sessionKey: 'agent:learning:two'});
-  assert.equal(full.independent.size, 1, 'full tier starts the independent solve once the message is known');
+  full.armTier('agent:project:two', 'full');
+  full.beforePromptBuild({prompt: '给 utils.py 里的 parse_date 加一个单元测试'}, {sessionKey: 'agent:project:two'});
+  assert.equal(full.independent.size, 1, 'full tier starts the independent pass once the message is known');
+  const tutoring = new ReasoningEnhancer(fixture().api, {readyForReview: () => true});
+  tutoring.armTier('agent:learning:two', 'full');
+  tutoring.beforePromptBuild({prompt: '这题怎么算'}, {sessionKey: 'agent:learning:two'});
+  assert.equal(tutoring.independent.size, 0, 'the tier\'s own drafter is the independent view; no duplicate pass');
+  assert.equal(tutoring.status({sessionKey: 'agent:learning:two'}).recipe.tierViews, 1);
 });
 
 test('state is shared through disk: the gateway instance arms, the agent-runtime instance injects and reviews', async () => {
@@ -344,9 +351,11 @@ test('adaptive sends hands-on work down the XHigh path and small talk down Low',
   assert.equal(as('我的程序报错了，打不开'), 'xhigh');
   assert.equal(as('早上好'), 'low');
   assert.equal(as('你是谁'), 'low');
-  // 硬性计数的写作仍按难题（原规则保留）；普通写作按分数，还是简单。
+  // 硬性计数的写作仍按难题（原规则保留）；普通写作、点子、取舍至少按 Medium（三段里的中间一段），
+  // 不被「直接给结论、不铺垫」压扁。
   assert.equal(as('用一句话介绍长城：恰好 30 个汉字（标点不算），只有一句。'), 'xhigh');
-  assert.equal(as('帮我写一段 100 字左右的自我介绍'), 'low');
+  assert.equal(as('帮我写一段 100 字左右的自我介绍'), 'medium');
+  assert.equal(as('这两个方案选哪个好，帮我比较一下'), 'medium');
   // 无限制模式不分活儿种类，只用原来的分数。
   assert.deepEqual(workKindsFor('帮我做一个记账的小网页', 'agent:unrestricted:one'), []);
   assert.equal(adaptiveDifficulty('帮我做一个记账的小网页', 'agent:unrestricted:one'), messageDifficulty('帮我做一个记账的小网页'));

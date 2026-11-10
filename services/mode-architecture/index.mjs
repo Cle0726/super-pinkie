@@ -11,9 +11,9 @@ import {registerCompanionGateway} from './companion.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
-import {SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims} from './run-contract.mjs';
+import {RIGOR_LADDER, SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims, unverifiedNote} from './run-contract.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
-import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
+import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, independentViews, isViewRole, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
@@ -50,7 +50,8 @@ const ALWAYS_MEMORY_FILES = Object.freeze([
 ]);
 
 const TIER_LIMITS = Object.freeze({base: 20, boost: 48, full: 96, marathon: 512});
-export const TIER_RETRY_LIMITS = Object.freeze({base: 3, boost: 6, full: 10, marathon: 40});
+// 续跑上限和其他档位数字都在 run-contract.mjs 的 RIGOR_LADDER，这里只取用。
+export const TIER_RETRY_LIMITS = Object.freeze(Object.fromEntries(Object.entries(RIGOR_LADDER).map(([tier, rigor]) => [tier, rigor.continuationLimit])));
 const SOLVER_LIMITS = Object.freeze({base: 3, boost: 3, full: 3, marathon: 3});
 const UPGRADE_ROLES = Object.freeze(['decomposer', 'pipeline', 'debater', 'verifier', 'assumption']);
 const ROLE_LABELS = Object.freeze({
@@ -71,6 +72,8 @@ const TASK_WORKFLOWS = Object.freeze({
 const VALID_TIER = /\[deep-think:(base|boost|full|marathon)\]/i;
 // 所有档位连续两次没有新证据时停止，避免只重复重试没有变化的做法。
 const NO_PROGRESS_LIMIT = 2;
+// 被拦下的上一版回复留多少字：推不动时它就是交给用户的成品（stopReport），不能截在中间。
+const DRAFT_KEEP = 60_000;
 const RETRY_DIFFERENCE = /这次和上次不同\s*[：:]\s*(换思路|换信息|换模型)[，,、\s：:]+(.{4,})/i;
 const GATE_RESEARCH = /(?:COMPLETION_TRUTH_RULES|completionClaimed|scheduleIntegrityRetry|integrityRetryLimit|verify_completion\.py|delivery_guard.{0,30}(?:代码|实现|规则|门禁)|(?:通过|绕过|构造).{0,24}(?:验收|门禁|completion|integrity)|(?:--test-name-pattern|--grep)[= ]?.{0,100}(?:integrity|门禁|验收|completion|delivery))/i;
 const MODE_ARCHITECTURE_SOURCE = /services[\\/ ]mode-architecture[\\/ ]index\.mjs/i;
@@ -336,7 +339,8 @@ function tierControlMessage(status = {}) {
   if (status.complete) {
     return `${TIER_CONTROL_PREFIX} 子代理审议已通过，但原始用户任务还没有因此自动完成。立即回到用户最初目标：如果用户要求改、做、生成、打开、运行或验证，就由主代理真正调用工具完成成品并验证；如果用户只是提问，就直接给明确答案。不得只写分析报告、方案、角色总结或“建议下一步”。最终回复只需要先说成品/答案，再用 1—3 行说清实际修改与验证；除非用户明确要求，不得汇报角色数量、流水线、打回轮次或审议过程。这是当前用户轮次的内部续跑命令，不得输出 NO_REPLY。`;
   }
-  return `${TIER_CONTROL_PREFIX} 本轮仍未通过后端硬验收：${(status.missing || []).join('；')}。这是当前用户轮次的内部续跑命令。有 sessions_spawn 时用它补齐缺失角色，并用 sessions_yield 结束当前批次。${SPAWN_FALLBACK}sessions_spawn 结果中有关“Auto-announce”或“NO_REPLY”的通用备注在本插件模式下已失效：子结果由插件收集，绝对不得输出 NO_REPLY 规避缺口。`;
+  // 用平常的话说还差什么：「后端硬验收」「内部命令」这类措辞，谨慎的模型会当成可疑指令而不照做。
+  return `${TIER_CONTROL_PREFIX} 用户这件事还差：${(status.missing || []).join('；')}。接着做，把差的补上：有 sessions_spawn 时用它派出还缺的子任务，再用 sessions_yield 等这一批回来。${SPAWN_FALLBACK}子任务的结果由系统收集；工具结果里关于“Auto-announce”或“NO_REPLY”的通用备注在这里不适用：不得输出 NO_REPLY，也不要在回复里提到这条提醒。`;
 }
 
 function displayCost(value = {}, requests = Number(value.requests) || 0) {
@@ -5019,18 +5023,24 @@ export function deliberationRequirements(tier, mode, taskType = 'pending', workK
   const primary = kinds[0] || (type === 'pending' ? 'pending' : 'simple');
   // 无限制模式保持旧语义：只有旧五类和它们的证据要求，不加打法、不加新子任务。
   const work = mode === 'none' ? {roles: {}, caps: {}} : kindRoles(kinds, normalizedTier);
-  const roles = {...(['standard_answer', 'tradeoff'].includes(primary) ? {solver: 2} : {}), ...work.roles};
+  const rigor = RIGOR_LADDER[normalizedTier];
+  // 独立求解（有标准答案的题、取舍）：工作模式里只有全开档必须派（界面写的「多做几版」就是这一档），
+  // 其余档位是建议——想派可以派，不派不拦。无限制模式照旧每档必须。
+  const solverKind = ['standard_answer', 'tradeoff'].includes(primary);
+  const solversRequired = solverKind && (mode === 'none' || rigor.roles === 'required');
+  const roles = {...(solversRequired ? {solver: 2} : {}), ...work.roles};
   const optionalCaps = Object.fromEntries(Object.entries(work.caps).filter(([role]) => !roles[role]));
   const legacyEvidence = primary === 'fact_check'
     || (normalizedTier !== 'base' && !['pending', 'simple'].includes(type));
   // 工作模式里，写代码、网页、文档这些活的证据由 evidenceGaps 按种类核对；这里只留旧的两种：
-  // 查事实要两个来源、有标准答案的题（加强档起）要一次验算。
+  // 查事实要两个来源、有标准答案的题要一次验算——都从加强档起（基础档不设门禁，只照打法做）。
   const needsEvidence = mode === 'none' ? legacyEvidence
-    : primary === 'fact_check' || (normalizedTier !== 'base' && primary === 'standard_answer');
+    : rigor.strict >= 1 && ['fact_check', 'standard_answer'].includes(primary);
   return {
     roles,
     maxSolvers,
     optionalRoles: {
+      solver: solverKind && !solversRequired ? maxSolvers : 0,
       critic: normalizedTier === 'full' && ['standard_answer', 'tradeoff'].includes(primary) ? 1 : 0,
       judge: primary === 'standard_answer' ? 1 : 0,
       ...optionalCaps,
@@ -5224,15 +5234,31 @@ const SHORT_FINAL = '最终回复只有几个字，没交代结果';
 const SHORT_DONE = /^(?:都|全部|已经|已)?(?:做|改|弄|写|修|装|发|整理|处理|搞|生成|导出)(?:好|完)了?[。！!~～\s]*$|^(?:搞定|已?完成|done)了?[。！!~～\s]*$/i;
 const FINAL_GAPS = new Set([SHORT_FINAL, '最终答复缺少方案差异和代价对比', '最终答复还没有交给用户选择', '最终答复缺少两个来源和不确定性说明']);
 
+// 仪式只提醒有限次（run-contract.mjs 第 4 条）：没派子任务、终稿少一句套话，提醒过了仍没有就放行，
+// 不为了仪式扣住做好的成品。以前这两类缺口和缺证据一样一直推到续跑上限，没有派子任务工具的模型
+// 每次都被推到停机，用户看到的就是「选了档位反而不干活」。无限制模式保持原规则。
+function ceremonyBudget(state, tier) {
+  const rigor = RIGOR_LADDER[tier] || RIGOR_LADDER.boost;
+  const work = state?.mode !== 'none';
+  return {
+    rolesWaived: work && (Number(state?.rolePushes) || 0) >= rigor.rolePushes,
+    finalWaived: work && (Number(state?.finalPushes) || 0) >= rigor.finalPushes,
+  };
+}
+
 function auditDeliberation(state, reply = '') {
-  if (state?.stopRequested) return {complete: true, missing: []};
+  if (state?.stopRequested) return {complete: true, missing: [], roleGaps: [], finalGaps: [], waived: []};
   const kinds = kindsOf(state);
   const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType, kinds);
   const primary = requirement.workKinds[0] || requirement.taskType;
-  const missing = [];
+  const missing = [], roleGaps = [], finalGaps = [], waived = [];
+  const {rolesWaived, finalWaived} = ceremonyBudget(state, requirement.tier);
+  const finalGap = (text) => { if (finalWaived) waived.push(text); else { missing.push(text); finalGaps.push(text); } };
   for (const [role, count] of Object.entries(requirement.roles)) {
     const actual = state?.completedRoles?.get?.(role) || 0;
-    if (actual < count) missing.push((ROLE_LABELS[role] || role) + ' ' + actual + '/' + count);
+    if (actual >= count) continue;
+    const text = (ROLE_LABELS[role] || role) + ' ' + actual + '/' + count;
+    if (rolesWaived) waived.push(text); else { missing.push(text); roleGaps.push(text); }
   }
   if (state?.pendingChildren?.size) missing.push('等待中的子任务 ' + state.pendingChildren.size);
   // 按活儿种类核对证据（加强档起）：网页要截图看过、PPT 要打开交付文件本身、数据要程序算过……
@@ -5256,16 +5282,16 @@ function auditDeliberation(state, reply = '') {
     }
   }
   if (primary === 'tradeoff') {
-    if (!/(?:比较|对比|差异|优缺点|成本|代价)/i.test(String(reply || ''))) missing.push('最终答复缺少方案差异和代价对比');
+    if (!/(?:比较|对比|差异|优缺点|成本|代价)/i.test(String(reply || ''))) finalGap('最终答复缺少方案差异和代价对比');
     if (!/(?:请.{0,12}选择|由你.{0,8}选择|你可以选择|选择其中|建议你选择|请选择|交给.{0,8}选择)/i.test(String(reply || ''))) {
-      missing.push('最终答复还没有交给用户选择');
+      finalGap('最终答复还没有交给用户选择');
     }
   }
   if (primary === 'fact_check' && !state?.finalSourceSummary) {
-    missing.push('最终答复缺少两个来源和不确定性说明');
+    finalGap('最终答复缺少两个来源和不确定性说明');
   }
   missing.push(...marathonMissing(state));
-  return {complete: missing.length === 0, missing, requirement};
+  return {complete: missing.length === 0, missing, requirement, roleGaps, finalGaps, waived};
 }
 
 // 旧五类的环节判断（写代码、有标准答案、取舍、查事实、简单）：标签和测试都沿用。
@@ -5354,14 +5380,21 @@ function deliberationProgress(state) {
     const role = reservation?.role || '';
     if (role) reservedByRole.set(role, (reservedByRole.get(role) || 0) + 1);
   }
-  const roles = Object.entries(requirement.roles).map(([role, required]) => ({
-    role,
-    label: ROLE_LABELS[role] || role,
-    completed: state.completedRoles.get(role) || 0,
-    pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
-    required,
-    optional: false,
-  }));
+  const {rolesWaived} = ceremonyBudget(state, requirement.tier);
+  const roles = Object.entries(requirement.roles).map(([role, required]) => {
+    const completed = state.completedRoles.get(role) || 0;
+    // 提醒过仍没派的子任务已经放行：面板上不再算进「必须」，免得进度永远停在 0/2。
+    const waived = rolesWaived && completed < required;
+    return {
+      role,
+      label: ROLE_LABELS[role] || role,
+      completed,
+      pending: (pendingByRole.get(role) || 0) + (reservedByRole.get(role) || 0),
+      required,
+      optional: waived,
+      ...(waived ? {waived: true} : {}),
+    };
+  });
   for (const [role, cap] of Object.entries(requirement.optionalRoles)) {
     if (!cap) continue;
     roles.push({
@@ -5394,7 +5427,7 @@ function roleSpawnCap(state, role) {
   const kinds = kindsOf(state);
   const requirement = deliberationRequirements(state?.tier, state?.mode, state?.taskType, kinds);
   if (requirement.taskType === 'pending' && !kinds.length) return 0;
-  if (role === 'solver') return requirement.roles.solver ? requirement.maxSolvers : 0;
+  if (role === 'solver') return requirement.roles.solver || requirement.optionalRoles.solver ? requirement.maxSolvers : 0;
   if (role === 'critic') return requirement.optionalRoles.critic;
   if (role === 'judge') return requirement.optionalRoles.judge;
   return requirement.roleCaps?.[role] || 0;
@@ -5470,9 +5503,15 @@ export function buildDeliberationPlan(tier, mode, checkpointPath = '当前会话
   const lines = kindPlanSection(kinds, normalizedTier, {playbookRoot, mode});
   if (!primary || primary === 'simple') return lines.join('\n');
   if (['standard_answer', 'tradeoff'].includes(primary)) {
+    // 全开档必须多做几版；其余档位自己换一种做法对一遍就行，拿不准才派。
+    const must = RIGOR_LADDER[normalizedTier].roles === 'required';
     lines.push(primary === 'tradeoff'
-      ? `不同立场：有 sessions_spawn 时派 2 个「求解」子任务，各按一组不同的优先级独立成案；只给原始问题，不给你的倾向。${SPAWN_FALLBACK}`
-      : `独立求解：有 sessions_spawn 时派 2–3 个「求解」子任务，每个用不同解法，只给原始问题。结论一致就直接用；不一致先跑检查或查来源，仍分不出再派「仲裁」，仲裁只能从已有候选里选一个。${SPAWN_FALLBACK}`);
+      ? (must
+        ? `不同立场：有 sessions_spawn 时派 2 个「求解」子任务，各按一组不同的优先级独立成案；只给原始问题，不给你的倾向。${SPAWN_FALLBACK}`
+        : '不同立场：自己先按两组不同的优先级各成一案再比较；拿不准时可以派 2 个「求解」子任务各写一案（只给原始问题，不给你的倾向），不派也行。')
+      : (must
+        ? `独立求解：有 sessions_spawn 时派 2–3 个「求解」子任务，每个用不同解法，只给原始问题。结论一致就直接用；不一致先跑检查或查来源，仍分不出再派「仲裁」，仲裁只能从已有候选里选一个。${SPAWN_FALLBACK}`
+        : '独立求解：关键结果自己换一种方法再算一遍；拿不准时可以派 2–3 个「求解」子任务，每个用不同解法、只给原始问题，结论不一致先跑检查或查来源。不派也行。'));
   }
   lines.push('重试前先说「这次和上次不同：换思路/换信息/换模型 + 具体变化」；连续两次没有新证据就停下，说清卡在哪。最终只汇报结果、依据和没解决的问题，不汇报档位、流程和子任务数量。');
   lines.push('本档续跑上限 ' + TIER_RETRY_LIMITS[normalizedTier] + ' 次。');
@@ -5760,6 +5799,16 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     };
   }
 
+  // 做事档位派出去、已经交回来的独立做法（求解 / 独立起草 / 独立复算）。九档的交付验收拿它们和自己补的那几份
+  // 一起对照：两套档位同时开时，独立做法取大、同一份不做两遍。
+  independentViews(sessionKey) {
+    const state = this.getRun(sessionKey);
+    if (!state || state.mode === 'none' || !(state.childResults instanceof Map)) return [];
+    return [...state.childResults.values()]
+      .filter(entry => isViewRole(entry?.role) && String(entry?.text || '').trim())
+      .map(entry => ({role: entry.role, text: String(entry.text).slice(0, 6000)}));
+  }
+
   // 小面板点开某个子代理时看它的完整结果；只给父会话自己的子代理。
   childOutput(sessionKey, id) {
     const state = this.getRun(sessionKey);
@@ -6004,7 +6053,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       }
       const taskRequirements = deliberationRequirements(state.tier, state.mode, state.taskType);
       const candidateCount = [...state.childResults.values()].filter(entry => entry.role === 'solver' && entry.candidateId).length;
-      const requiredCandidates = taskRequirements.roles.solver || 0;
+      // 批评和仲裁都是对着候选方案做的：独立求解只是建议的档位里，也要先有两份候选。
+      const requiredCandidates = Math.max(taskRequirements.roles.solver || 0, state.mode !== 'none' && ['critic', 'judge'].includes(role) ? 2 : 0);
       if (role === 'critic' && candidateCount < requiredCandidates) {
         return {block: true, blockReason: '先收齐独立候选，再按需做带证据的批评审查。'};
       }
@@ -6305,16 +6355,20 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const replyOnlyGap = workFirst && (gapKind === '' || gapKind === 'final');
     const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint
       && (!replyOnlyGap || !replyKey || replyKey === state.lastRetryReplyKey);
-    const stop = (reason) => {
+    const stop = (reason, kind = 'budget') => {
       state.stopRequested = true;
       state.stopReason = reason;
+      // 推不动了：记下还差什么，stopReport 据此把成品交出去并如实说明（见 run-contract.mjs 第 5 条）。
+      // 档位这边不缺什么、是交付门禁要改而没改成时，也不能把草稿不带一句说明就交出去。
+      state.stopKind = kind;
+      state.stopMissing = audit.missing.length ? audit.missing.slice(0, 6) : ['目前的记录还不足以核实这个结果'];
       state.active = false;
       state.lastRetryRunId = runId;
       state.lastRetryDecision = null;
       state.stopRunId = runId;
       state.stopReportPending = true;
       state.lastEventAt = Date.now();
-      if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, 6000);
+      if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, DRAFT_KEEP);
       this.setRun(state.parentSessionKey, state);
     };
 
@@ -6348,7 +6402,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     // 截断的终稿只补发一次；第二次还是几个字，就如实报告并附上已做的事。
     if (workFirst && audit.missing.includes(SHORT_FINAL) && (Number(state.shortFinalNudges) || 0) >= 1) {
-      stop('最终回复两次都只有几个字，没能交代结果。');
+      stop('最终回复两次都只有几个字，没能交代结果。', 'short');
       return;
     }
     const maxAttempts = TIER_RETRY_LIMITS[state.tier] || TIER_RETRY_LIMITS.boost;
@@ -6357,8 +6411,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       return;
     }
     state.retryAttempts += 1;
+    // 仪式类缺口这一次提醒过了；用完次数后 auditDeliberation 不再把它们算作缺口。
+    if (workFirst && audit.roleGaps?.length) state.rolePushes = (Number(state.rolePushes) || 0) + 1;
+    if (workFirst && audit.finalGaps?.length) state.finalPushes = (Number(state.finalPushes) || 0) + 1;
     if (workFirst && audit.missing.includes(SHORT_FINAL)) state.shortFinalNudges = (Number(state.shortFinalNudges) || 0) + 1;
-    if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, 6000);
+    if (workFirst && visibleReplyText(reply).length >= 40 && !internalControlText(reply)) state.lastDraftReply = reply.slice(0, DRAFT_KEEP);
     const idempotencyKey = 'pinkie-task-progress-' + hashForAudit(state.parentSessionKey + ':' + runId).slice(0, 16);
     // 长跑档还有没勾的里程碑：不论还差不差别的核对，都按「接着做下一个里程碑」推，不问用户要不要继续。
     const milestonesOpen = marathonOpen || (workFirst && state.tier === 'marathon'
@@ -6409,6 +6466,14 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       return state.honestReply.trim() + '\n\n已尝试：' + methods;
     }
     const draft = state.mode !== 'none' ? String(state.lastDraftReply || '').trim() : '';
+    // 续跑推不动了、成品已经有了、差的只是核对：把成品交出去，照实说哪几步还没亲眼核对。
+    // 以前这里一律报「本轮未完成」，做完的东西被当成参考附在后面，用户看到的是碧琪没干成。
+    // 长跑档还有没做的里程碑是真没做完，仍按未完成报告。
+    const unfinished = (state.stopMissing || []).some(item => item.startsWith(MILESTONE_MISSING) || item === PLAN_MISSING);
+    if (draft && state.stopKind === 'budget' && !unfinished) {
+      const note = unverifiedNote(state.stopMissing || []);
+      return note ? draft + '\n\n' + note : draft;
+    }
     return '本轮未完成：' + state.stopReason + '\n已尝试：' + methods
       + '\n当前流程：' + workflowProgress(state).label
       + '。请查看本轮已有结果后，再决定下一步。'
@@ -6771,6 +6836,7 @@ export default {
         return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
       },
       readyForReview: sessionKey => !architecture.status(sessionKey)?.active,
+      tierViews: sessionKey => architecture.independentViews(sessionKey),
       store: new ReviewStore(path.join(new FileRunStore().root, 'reviews')),
     }));
     // 后台命令结束时叫醒碧琪（OpenClaw 自带的心跳叫醒在这几个模式里不生效，见 background-jobs.mjs）。
@@ -6913,9 +6979,13 @@ export default {
         contract: buildContract({
           level: reviewActive ? level : '',
           workTier: tier.active ? tier.tier || '' : reviewActive ? review.workTier || '' : '',
+          kinds: tier.workflow?.kinds || [],
+          tierViews: independentViews(tier.workflow?.kinds || [], tier.active ? tier.tier || '' : reviewActive ? review.workTier || '' : ''),
+          weight: review.weight || 'task',
           levelCopies: reviewActive ? review.recipe?.solvers : null,
           levelRounds: reviewActive ? review.recipe?.rounds : null,
           levelCritic: reviewActive ? review.recipe?.critic : null,
+          levelBrevity: reviewActive && Boolean(review.recipe?.brief),
           mode: sessionKey.split(':')[1] === 'main' ? 'chat' : sessionKey.split(':')[1] || '',
         }),
       });

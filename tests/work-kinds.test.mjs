@@ -631,7 +631,8 @@ test('nine-stop helpers: what an independent pass is for, adaptive hints, one-wo
   assert.equal(solverModeFor([]), 'answer');
   assert.equal(adaptiveHint(['document']), 'hard');
   assert.equal(adaptiveHint(['simple']), 'easy');
-  assert.equal(adaptiveHint(['writing']), '');
+  assert.equal(adaptiveHint(['writing']), 'normal');
+  assert.equal(adaptiveHint(['standard_answer']), 'hard');
   assert.equal(adaptiveHint([]), '');
   assert.equal(truncatedFinal('碧', 5), true);
   assert.equal(truncatedFinal('碧', 4), false, 'few tools: a short answer can be the whole answer');
