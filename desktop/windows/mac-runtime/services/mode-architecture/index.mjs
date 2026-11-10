@@ -21,7 +21,7 @@ import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
 import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
-import {registerRichRuntime} from './rich-runtime.mjs';
+import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
@@ -4620,18 +4620,23 @@ export class UpstreamWatchdog {
 }
 
 export class TierContinuation {
-  constructor(api, statusFor, activityFor, processRunner = runProcess, cliEntry = resolveGatewayCliEntry()) {
+  // options 让同一条续跑通道也给「计划清单没做完」用：换一句提醒、换一个标签，其余完全一样。
+  constructor(api, statusFor, activityFor, processRunner = runProcess, cliEntry = resolveGatewayCliEntry(), options = {}) {
     this.api = api;
     this.statusFor = statusFor;
     this.activityFor = activityFor;
     this.processRunner = processRunner;
     this.cliEntry = cliEntry;
+    this.messageFor = options.messageFor || tierControlMessage;
+    this.tagName = options.tagName || 'pinkie-tier-';
+    this.turnName = options.turnName || '碧琪档位续跑';
+    this.onDispatched = options.onDispatched || null;
     this.timers = new Map();
     this.dispatching = new Set();
   }
 
   tag(sessionKey) {
-    return safeTag(sessionKey).replace('pinkie-watchdog-', 'pinkie-tier-');
+    return safeTag(sessionKey).replace('pinkie-watchdog-', this.tagName);
   }
 
   async schedule(sessionKey, agentId) {
@@ -4639,14 +4644,14 @@ export class TierContinuation {
     if (!status.active || status.parentRunning || Number(status.pending) > 0) return false;
     const tag = this.tag(sessionKey);
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
-    const controlText = tierControlMessage(status);
+    const controlText = this.messageFor(status);
     try {
       await this.api.session.workflow.enqueueNextTurnInjection?.({
         sessionKey,
         text: controlText,
         placement: 'append_context',
         ttlMs: 300_000,
-        idempotencyKey: `pinkie-tier-control-${stateFileId(`${sessionKey}:${status.spawned}:${(status.missing || []).join('|')}`)}`,
+        idempotencyKey: `${this.tagName}control-${stateFileId(`${sessionKey}:${status.spawned}:${(status.missing || []).join('|')}`)}`,
         metadata: {source: 'pinkie-tier-controller'},
       });
     } catch {}
@@ -4661,7 +4666,7 @@ export class TierContinuation {
         delayMs: 5_000,
         deliveryMode: 'none',
         deleteAfterRun: true,
-        name: '碧琪档位续跑',
+        name: this.turnName,
         tag,
       });
     }
@@ -4704,9 +4709,9 @@ export class TierContinuation {
         '--params', JSON.stringify({
           sessionKey,
           agentId,
-          message: tierControlMessage(status),
+          message: this.messageFor(status),
           deliver: false,
-          idempotencyKey: `pinkie-tier-continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
+          idempotencyKey: `${this.tagName}continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
         }),
         '--json', '--timeout', String(WATCHDOG_CLI_TIMEOUT_MS),
       ], {
@@ -4722,6 +4727,7 @@ export class TierContinuation {
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
+      try { this.onDispatched?.(sessionKey); } catch {}
       return true;
     } catch {
       this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
@@ -5660,7 +5666,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     this.rememberUserPrompt(sessionKey, event.prompt || '');
     const currentState = this.getRun(this.resolveParent(sessionKey));
-    if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
+    if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active
+        && !String(event.prompt || '').includes(PLAN_CONTROL_MARK)) {
       return {
         appendSystemContext: '【档位控制器】这是一条在任务已经交付后才到达的过期内部续跑指令。不要再次总结、执行或回复用户；只输出 NO_REPLY。',
       };
@@ -6564,6 +6571,18 @@ export default {
       sessionKey => architecture.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
     );
+    // 计划清单是合同：plan_update 列的清单还有没做完的项，这一轮结束后用同一条续跑通道接着做，不看档位。
+    let planStore = null;
+    try { planStore = new RichStore(path.join(api.runtime.state.resolveStateDir(), 'pinkie-rich')); } catch {}
+    const planState = new PlanContinuationState(planStore);
+    const planContinuation = new TierContinuation(
+      api,
+      sessionKey => planState.status(sessionKey),
+      sessionKey => architecture.activityFor(sessionKey),
+      undefined,
+      undefined,
+      {messageFor: status => status.message, tagName: 'pinkie-plan-', turnName: '碧琪计划续跑', onDispatched: sessionKey => planState.disarm(sessionKey)},
+    );
     const usage = new ModelUsageLedger();
     api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
@@ -6604,6 +6623,8 @@ export default {
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
+    sharePluginState(planContinuation, 'plan', ['timers', 'dispatching']);
+    sharePluginState(planState, 'planState', ['sessions']);
     sharePluginState(cleKk, 'clekk', ['turns', 'orphaned', 'sessionByRunId', 'sessionBySessionId', 'sessionByToolCallId', 'pendingDeliverySessions', 'deliveryFallbackBySession']);
     sharePluginState(cleKk.audit, 'audit', ['sequence', 'lastHash', 'appendCounts']);
     sharePluginState(integrity, 'integrity', ['runs']);
@@ -6851,9 +6872,11 @@ export default {
       if (!sessionKey) return;
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);
+      planState.userMessage(sessionKey);
       await Promise.all([
         watchdog.cancel(sessionKey),
         tierContinuation.cancel(sessionKey),
+        planContinuation.cancel(sessionKey),
       ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
@@ -6873,6 +6896,7 @@ export default {
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
       background.afterTool(event, ctx);
+      planState.toolCalled(String(ctx.sessionKey || ''), event.toolName, Boolean(event.error || event.isError || event.result?.isError));
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);
@@ -7015,6 +7039,7 @@ export default {
       // 父轮次已经结束才允许任何续跑器写入会话。先撤掉可能遗留的档位
       // 定时器，再释放父运行锁，避免它与 OpenClaw 自带的上游重试撞车。
       await tierContinuation.cancel(ctx.sessionKey || '');
+      await planContinuation.cancel(ctx.sessionKey || '');
       architecture.parentEnded(event, ctx);
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
@@ -7059,6 +7084,23 @@ export default {
           await tierContinuation.schedule(ctx.sessionKey, ctx.agentId || agentFromSessionKey(ctx.sessionKey));
         } else if (!status.active || status.complete) {
           await tierContinuation.cancel(ctx.sessionKey || '');
+        }
+        // 计划清单上还有没做完的项，这一轮又不是停在等用户、如实报告卡住或等后台命令上：接着做。
+        // 档位任务在跑时由档位自己的续跑负责，这里不插手。
+        if (!status.active) {
+          const planKey = String(ctx.sessionKey || '');
+          const planReply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+          const planDecision = planState.consider(planKey, {
+            mode: modeForContext(ctx),
+            internalSession: isInternalExecutionSession(planKey),
+            success: event.success !== false && hasDeliverableAssistantReply(event),
+            userStopped: userStoppedRecently(planKey),
+            waitingOnUser: endsWithUserQuestion(event.messages) || /```ui\b/.test(planReply),
+            honestIncomplete: isHonestIncomplete(planReply),
+            backgroundRunning: runningBackgroundJobs(planKey).length > 0,
+            prefix: TIER_CONTROL_PREFIX,
+          });
+          if (planDecision.continue) await planContinuation.schedule(planKey, ctx.agentId || agentFromSessionKey(planKey));
         }
         if (event.success === true && hasDeliverableAssistantReply(event)) {
           architecture.acknowledgeCompaction(ctx.sessionKey || '');

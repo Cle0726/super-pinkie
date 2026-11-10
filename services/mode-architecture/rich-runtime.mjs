@@ -41,6 +41,109 @@ export function normalizePlan(params = {}) {
   return {title: String(params.title || '工作计划').trim().slice(0, 80), items, explanation: String(params.explanation || '').slice(0, 500)};
 }
 
+// ── 计划清单是合同：清单上还有没做完的项，这一轮结束后自动接着做 ──
+// 之前 plan_update 只是把清单画在界面上：清单没做完，碧琪照样可以收工，只有手动选了长跑档才会续跑。
+// 这里只放判断（纯函数 + 每个会话一小份状态），真正发续跑消息的是 index.mjs 里和档位续跑同一条通道。
+export const PLAN_CONTINUE_LIMIT = 10;
+export const PLAN_CONTROL_MARK = '【计划续跑】';
+const PLAN_OPEN = new Set(['pending', 'in_progress']);
+
+export function planOpenItems(plan) {
+  return Array.isArray(plan?.items) ? plan.items.filter(item => PLAN_OPEN.has(String(item?.status || ''))) : [];
+}
+
+export function planFingerprint(plan) {
+  return Array.isArray(plan?.items) ? plan.items.map(item => `${item.id}:${item.status}:${item.text}`).join('\n') : '';
+}
+
+// 续跑提醒：列出清单现状，从第一项没做完的接着做。写给模型看，界面不显示（前缀是档位续跑同一个）。
+export function planControlText(prefix, plan) {
+  const items = Array.isArray(plan?.items) ? plan.items : [];
+  const open = planOpenItems(plan);
+  const mark = status => status === 'completed' ? '已完成' : status === 'in_progress' ? '进行中' : '没做';
+  const list = items.slice(0, 20).map((item, index) => `${index + 1}. [${mark(item.status)}] ${item.text}`).join('\n');
+  return `${prefix} ${PLAN_CONTROL_MARK}这是碧琪 App 发的内部续跑提醒，不是用户的新消息。你自己用 plan_update 列的计划清单上还有 ${open.length} 项没做完：\n${list}\n`
+    + `从「${open[0]?.text || ''}」接着做：做完一项、真的验证过，就用 plan_update 标成完成，再做下一项，一直做到清单做完。`
+    + '不要重做已经完成的项，不要重复执行已经成功的对外操作（发送、发布、付款、删除）。'
+    + '如果其实已经做完并验证过，只是没更新清单：更新清单，然后用一两句话收尾，不重复上一条回复的内容。'
+    + '如果剩下的某一项确实做不了，或者只有用户能决定：先把不依赖它的项做完，再明确告诉用户本轮没做完、卡在哪、需要他做什么，不要把它标成完成。'
+    + '回复里不要提到这条提醒，不得输出 NO_REPLY。';
+}
+
+export class PlanContinuationState {
+  constructor(store, clock = Date.now) {
+    this.store = store;
+    this.clock = clock;
+    this.sessions = new Map();
+  }
+
+  entry(sessionKey) {
+    let entry = this.sessions.get(sessionKey);
+    // 网关重启后没有记录：从现在算起，重启前留下的旧清单不会凭空触发续跑。
+    if (!entry) { entry = {since: this.clock(), attempts: 0, fingerprint: '', stalls: 0, tools: 0, stopped: false, armed: null}; this.sessions.set(sessionKey, entry); }
+    return entry;
+  }
+
+  // 用户真的发来一条新消息：之前的续跑一笔勾销，从这条消息重新算。
+  userMessage(sessionKey) {
+    if (!sessionKey) return;
+    this.sessions.set(sessionKey, {since: this.clock(), attempts: 0, fingerprint: '', stalls: 0, tools: 0, stopped: false, armed: null});
+    if (this.sessions.size > 500) this.sessions.delete(this.sessions.keys().next().value);
+  }
+
+  // 这一轮里真正干了活的工具调用（更新清单、记进度不算）。
+  toolCalled(sessionKey, name = '', failed = false) {
+    if (!sessionKey || failed || /^(?:plan_update|update_plan|todo_write|todowrite)$/i.test(String(name))) return;
+    const entry = this.sessions.get(sessionKey);
+    if (entry) entry.tools += 1;
+  }
+
+  userStopped(sessionKey) {
+    const entry = this.sessions.get(sessionKey);
+    if (entry) { entry.stopped = true; entry.armed = null; }
+  }
+
+  // 一轮结束时问一次：要不要接着做。facts 由引擎给，全是这一轮的事实。
+  consider(sessionKey, facts = {}) {
+    const no = reason => { const entry = this.sessions.get(sessionKey); if (entry) { entry.armed = null; entry.tools = 0; } return {continue: false, reason}; };
+    // 学习模式停下来等先生作答是常态，不自动接着做；无限制模式不加任何新机制。
+    if (!sessionKey || facts.internalSession || !['chat', 'project', 'ideas'].includes(facts.mode)) return no('not-applicable');
+    let plan = null;
+    try { plan = this.store?.plan(sessionKey); } catch { plan = null; }
+    const open = planOpenItems(plan);
+    if (!plan || !open.length) return no('done');
+    const entry = this.entry(sessionKey);
+    if (Number(plan.updatedAt) < entry.since) return no('stale-plan');
+    if (entry.stopped || facts.userStopped) { entry.stopped = true; return no('user-stopped'); }
+    if (facts.success === false) return no('run-failed');
+    if (facts.tierActive) return no('tier-owns-continuation');
+    if (facts.waitingOnUser) return no('waiting-on-user');
+    if (facts.honestIncomplete) return no('reported-blocked');
+    if (facts.backgroundRunning) return no('background-running');
+    const fingerprint = planFingerprint(plan);
+    if (fingerprint === entry.fingerprint) entry.stalls = entry.tools > 0 ? entry.stalls + 1 : 2;
+    else { entry.stalls = 0; entry.fingerprint = fingerprint; }
+    if (entry.stalls >= 2) return no('stalled');
+    if (entry.attempts >= PLAN_CONTINUE_LIMIT) return no('limit');
+    entry.attempts += 1;
+    entry.tools = 0;
+    entry.armed = {attempt: entry.attempts, missing: open.map(item => item.text), text: planControlText(facts.prefix || '', plan)};
+    return {continue: true, attempt: entry.attempts, open: open.length};
+  }
+
+  // 给续跑发送器看的状态，形状和档位续跑的 status 一样。
+  status(sessionKey) {
+    const armed = this.sessions.get(sessionKey)?.armed;
+    if (!armed) return {active: false};
+    return {active: true, complete: false, pending: 0, parentRunning: false, spawned: armed.attempt, missing: armed.missing, message: armed.text};
+  }
+
+  disarm(sessionKey) {
+    const entry = this.sessions.get(sessionKey);
+    if (entry) entry.armed = null;
+  }
+}
+
 export class RichStore {
   constructor(root, clock = Date.now) { this.root = root; this.clock = clock; }
   directory(kind) {
