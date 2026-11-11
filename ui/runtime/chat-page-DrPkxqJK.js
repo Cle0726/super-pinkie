@@ -2587,8 +2587,11 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
   // card would vanish right after the follow-up.
   if (pageIsLive) {
     const processCards = timeline.filter((item) => item?.isProcessCard);
-    for (let index = processCards.length - 2; index >= 0 && processCards[index].processSuperseded; index -= 1) {
-      processCards[index].processCurrent = true;
+    for (let index = processCards.length - 1; index >= 0; index -= 1) {
+      const card = processCards[index];
+      if (card.processCurrent) continue; // the latest turn's own card, when it has one
+      if (!card.processSuperseded) break;
+      card.processCurrent = true;
     }
   }
   return pagePresentation(timeline);

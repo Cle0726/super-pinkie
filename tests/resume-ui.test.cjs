@@ -1961,3 +1961,22 @@ test('a replayed Send click without pointerdown starts follow on the prepared pa
  assert.deepEqual(follow,[h.right]);assert.equal(view.browsing,false);assert.equal(view.endKey,null);assert.equal(h.right.__pinkieHistoryBrowsing,false);
  assert.equal(h.right.state.chatUserNearBottom,true);assert.equal(h.right.state.chatFollowLocked,false);assert.equal(h.left.state.chatUserNearBottom,false);
 });
+
+// Plan B real-model check 11-10: a follow-up steered into a running task is
+// stored under the new run's id ("<new run>:user"), not the client send id
+// the queue card keeps. The strict id match never confirmed it, so 3 cards of
+// "确认追加中" piled up for 141 s, until the whole chain ended. A steered card
+// is confirmed by its exact text arriving after it was created; a plain retry
+// still needs the exact id.
+test('a steered card is confirmed by its text even when the stored run id differs',()=>{
+  const pages=new Map([[0,{sessionId:'s',totalMessages:0,hasMore:false,messages:[]}]]);
+  const {window}=loadResumeHarness(pages);
+  const delivered=window.__laolaoQueueRecovery.isDelivered;
+  const stored={role:'user',content:'（追加 1）补充一句',timestamp:2000,idempotencyKey:'new-run:user',__openclaw:{id:'u',seq:9}};
+  const steered={id:'q1',kind:'steered',text:'（追加 1）补充一句',createdAt:1900,sendRunId:'client-send',pendingRunId:'old-run'};
+  assert.equal(delivered(steered,[stored]),true);
+  assert.equal(delivered({...steered,text:'别的话'},[stored]),false);
+  assert.equal(delivered({...steered,createdAt:2100},[stored]),false,'an earlier identical message is not proof');
+  const retry={id:'q2',text:'（追加 1）补充一句',createdAt:1900,sendRunId:'client-send'};
+  assert.equal(delivered(retry,[stored]),false,'a plain retry still needs its exact id');
+});
