@@ -432,5 +432,13 @@ html[data-laolao-sessions-managed] .shell--chat .sidebar .sidebar-recent-session
    WKWebView 合成层裁剪失效时滚动中的文字会画出侧栏、盖到聊天区（用户截图证实）。
    滚动期间保持 ellipsis，文字始终裁剪在行内；视觉效果无差异（滚动时末尾本来就在变）。 */
 .hover-marquee--scrolling{text-overflow:ellipsis!important}
-/* Derived workers stay attached to their parent transcript, not the user's chat list. */
-.sidebar-recent-session[data-session-key*=":subagent:"]{display:none!important}
+/* Hide the native worker rows. The managed list owns the read-only group. */
+.sidebar-recent-session[data-session-key*=":subagent:"]:not(.pinkie-session-persona){display:none!important}
+#laolao-session-manager .pinkie-session-branch{
+  margin:1px 0 4px 18px;
+  padding-inline-start:6px;
+  border-inline-start:1px solid color-mix(in srgb,currentColor 19%,transparent);
+}
+#laolao-session-manager .pinkie-session-branch .sidebar-recent-session{margin-inline-start:0}
+#laolao-session-manager .pinkie-session-workers{opacity:.84}
+#laolao-session-manager .pinkie-session-workers>button,#laolao-session-manager .pinkie-session-fold{font-size:10px}

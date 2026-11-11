@@ -122,7 +122,8 @@ export function validateTitle(raw, sources = []) {
 
 export function heuristicTitle(source) {
   if (looksInjected(source)) return usesCjk(source) ? '标题提示注入' : 'Title Prompt Injection';
-  let text = source.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]/gu, '').trim();
+  let text = source.replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]/gu, '').trim()
+    .replace(/^(?:碧琪|小碧琪|Pinkie)[，,：:]\s*/iu, '');
   let previous;
   do {
     previous = text;
@@ -464,7 +465,8 @@ export class SessionTitles {
       if (!title) logSessionFailure(this.api, 'session-title', key, 'invalid-model-title');
     } catch (error) {
       logSessionFailure(this.api, 'session-title', key, error.message === 'title-model-unavailable'
-        ? 'model-unavailable' : /超时|timeout/i.test(error.message) ? 'model-timeout' : 'model-request-failed');
+        ? 'model-unavailable' : /超时|timeout/i.test(error.message) ? 'model-timeout'
+          : /结果未完成/i.test(error.message) ? 'model-output-truncated' : 'model-request-failed');
     }
     if (title) return this.persistLabel(entry, title, 'auto', {basisHash, stamp, attempts});
     if (record?.source === 'heuristic' && record.basisHash === basisHash) return;
@@ -488,7 +490,7 @@ export class SessionTitles {
         if (!entry) return;
         const channel = channelTitle(entry, key);
         const record = records[key];
-        const source = record?.title === entry.label ? record.source : undefined;
+        const source = record && record.title === entry.label ? record.source : undefined;
         const facts = isInternalSessionKey(key) ? {internal: true}
           : await this.summary(entry).catch(() => {
             logSessionFailure(this.api, 'session-title', key, 'transcript-read');
@@ -519,8 +521,8 @@ export class SessionTitles {
 }
 
 export function registerSessionMethod(api, name, fn) {
-  api.registerGatewayMethod?.(name, async ({params, respond}) => {
-    try { respond(true, await fn(params || {})); }
+  api.registerGatewayMethod?.(name, async ({params, respond, context}) => {
+    try { respond(true, await fn(params || {}, context)); }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message}); }
   }, {scope: 'operator.admin'});
 }
