@@ -47,3 +47,11 @@ test('fork uses real message identifiers, not generated timestamp placeholders',
   assert.equal(forkEntryId('msg:a1b2c3',[]),'');
   assert.equal(forkEntryId('stream:live',history),'');
 });
+
+test('card alignment follows assistant text while staying inside the composer', () => {
+  const {cardMeasure} = load();
+  const input = {left: 100, right: 900, width: 800};
+  assert.deepEqual(plain(cardMeasure(input, {left: 140, right: 920, width: 780})), {left: 140, width: 760});
+  assert.deepEqual(plain(cardMeasure(input, {left: 0, right: 0, width: 0})), {left: 100, width: 800});
+  assert.equal(cardMeasure({left: 0, right: 0, width: 0}, null), null);
+});

@@ -49,7 +49,7 @@
   }
 
   let selected = '', data = null, sequence = 0, frame = 0, expiryTimer = 0, refreshTimer = 0;
-  let parentLink, decisionBar;
+  let parentLink, decisionBar, layoutObserver, observedThread, observedComposer;
   const panels = new Map(), expanded = new Set(), fullPrompts = new Map(), loadingFull = new Set();
   const busy = new Set();
   const errors = new Map();
@@ -87,6 +87,47 @@
       if (delta < distance) { nearest = index; distance = delta; }
     });
     return nearest;
+  }
+
+  // Align to the assistant text, without extending beyond the composer.
+  // On a fresh page the conversation can still be hidden, so the composer is
+  // also a useful fallback until the first assistant message is painted.
+  function cardMeasure(composer, message) {
+    if (!composer || composer.width <= 0) return null;
+    const left = message?.width > 0 ? Math.max(composer.left, message.left) : composer.left;
+    const right = message?.width > 0 ? Math.min(composer.right, message.right) : composer.right;
+    return right > left ? {left, width: right - left} : {left: composer.left, width: composer.width};
+  }
+
+  function alignInParent(node, measure) {
+    const parent = node?.parentElement;
+    if (!parent || !measure) return;
+    const rect = parent.getBoundingClientRect();
+    const padding = parseFloat(getComputedStyle(parent).paddingLeft) || 0;
+    const left = Math.max(0, measure.left - rect.left - parent.clientLeft - padding + parent.scrollLeft);
+    const width = `${Math.max(0, measure.width)}px`;
+    const margin = `${left}px`;
+    if (node.style.width !== width) node.style.width = width;
+    if (node.style.marginLeft !== margin) node.style.marginLeft = margin;
+    if (node.style.marginRight !== '0px') node.style.marginRight = '0px';
+  }
+
+  function alignCards(thread, composer) {
+    if (!composer) return;
+    const input = composer.getBoundingClientRect();
+    const message = thread.querySelector('.chat-group.assistant .chat-group-messages')?.getBoundingClientRect();
+    const measure = cardMeasure(input, message);
+    for (const panel of panels.values()) alignInParent(panel, measure);
+    alignInParent(decisionBar, input.width > 0 ? {left: input.left, width: input.width} : null);
+  }
+
+  function observeLayout(thread, composer) {
+    if (typeof ResizeObserver !== 'function' || (thread === observedThread && composer === observedComposer)) return;
+    layoutObserver?.disconnect();
+    observedThread = thread; observedComposer = composer;
+    layoutObserver = new ResizeObserver(reconcile);
+    if (thread) layoutObserver.observe(thread);
+    if (composer) layoutObserver.observe(composer);
   }
 
   function forkEntryId(messageId, history = []) {
@@ -263,6 +304,8 @@
       if (decisionBar.textContent !== label) { decisionBar.textContent = label; decisionBar.setAttribute('aria-label', label); }
       if (decisionBar.parentElement !== composer.parentElement || decisionBar.nextElementSibling !== composer) composer.before(decisionBar);
     }
+    observeLayout(thread, composer);
+    alignCards(thread, composer);
 
     clearTimeout(expiryTimer);
     const expiresAt = Math.min(...cards.filter(card => cardActions(card).length).map(card => card.expiresAt));
@@ -315,10 +358,11 @@
     refreshTimer = setTimeout(() => void refresh(), 180);
   }
 
-  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor, forkEntryId};
+  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor, forkEntryId, cardMeasure};
   if (typeof MutationObserver !== 'function') return;
   new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
   window.addEventListener('popstate', reconcile);
+  window.addEventListener('resize', reconcile);
   window.addEventListener('pinkie:session-selected', reconcile);
   window.addEventListener('pinkie:sidebar-gateway-ready', refreshSoon);
   window.addEventListener('pinkie:gateway-event', ({detail}) => {
