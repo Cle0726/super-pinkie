@@ -231,3 +231,31 @@ test('title transport ignores helper settings, does not think, and never changes
   await assert.rejects(assistant.title('另一个主题'), /title-model-unavailable/);
   assert.equal(calls.length, 1);
 });
+
+test('provider failure consumes at most three attempts across new turns', async t => {
+  let calls = 0;
+  const f = fixture(t, async () => { calls++; throw new Error('title-model-unavailable'); });
+  const lines = [['user', '请帮我看看清理系统内存，怎么操作']];
+  for (let i = 0; i < 4; i++) {
+    f.add(key, f.store[key]?.label || '新会话', [...lines, ...Array.from({length: i}, () => ['user', '这个步骤还要重新核对'])]);
+    await f.titles.ensure(key);
+  }
+  assert.equal(calls, 3);
+  assert.equal(f.titles.record(key).attempts, 3);
+  assert.equal(f.store[key].label, '清理系统内存');
+});
+
+test('enqueue returns while the companion is still working', async t => {
+  let release;
+  const ready = new Promise(resolve => { release = resolve; });
+  let started = false;
+  const f = fixture(t, async () => { started = true; return ready; });
+  f.add(key, '新会话', [['user', '帮我看看碧琪流式输出为什么消失']]);
+  assert.deepEqual(f.titles.enqueue([key]), {accepted: 1});
+  assert.equal(f.store[key].label, '新会话');
+  while (!started) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.titles.running, true);
+  release('流式输出消失');
+  while (f.titles.running) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.store[key].label, '流式输出消失');
+});
