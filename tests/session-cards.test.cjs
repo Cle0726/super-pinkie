@@ -41,7 +41,9 @@ test('fork uses real message identifiers, not generated timestamp placeholders',
     {role:'assistant',timestamp:456,__openclaw:{id:'other-entry'}}];
   assert.equal(forkEntryId('msg:ui-id',history),'entry-id');
   assert.equal(forkEntryId('msg:assistant:456:1',history),'other-entry');
+  assert.equal(forkEntryId('msg:assistant:456:0',history),'other-entry');
   assert.equal(forkEntryId('msg:assistant:123:2',history),'');
+  assert.equal(forkEntryId('msg:assistant:456:0',[...history,history[1]]),'');
   assert.equal(forkEntryId('msg:a1b2c3',[]),'');
   assert.equal(forkEntryId('stream:live',history),'');
 });

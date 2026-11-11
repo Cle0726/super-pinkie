@@ -92,12 +92,16 @@
   function forkEntryId(messageId, history = []) {
     const domId = String(messageId || '');
     if (!domId.startsWith('msg:') || !Array.isArray(history)) return '';
-    const message = history.find((item, index) => {
+    const candidates = history.filter(item => {
       const direct = [item?.id, item?.messageId].filter(value => typeof value === 'string' && value);
-      if (direct.some(value => domId === 'msg:' + value)) return true;
-      return typeof item?.timestamp === 'number' && domId === `msg:${item.role || 'unknown'}:${item.timestamp}:${index}`;
+      if (direct.length) return direct.some(value => domId === 'msg:' + value);
+      if (typeof item?.timestamp !== 'number') return false;
+      const prefix = `msg:${item.role || 'unknown'}:${item.timestamp}:`;
+      return domId.startsWith(prefix) && /^\d+$/.test(domId.slice(prefix.length));
     });
-    return typeof message?.__openclaw?.id === 'string' ? message.__openclaw.id : '';
+    // The renderer numbers a paged window, so its index need not be the
+    // history-array index. A timestamp is safe only when it identifies one entry.
+    return candidates.length === 1 && typeof candidates[0].__openclaw?.id === 'string' ? candidates[0].__openclaw.id : '';
   }
   function currentTitle(key) {
     const row = [...document.querySelectorAll('.session-row-host')].find(item => item.dataset.sessionKey === key);
