@@ -1,0 +1,41 @@
+/* M1–M5 message actions: quiet until hover, one row under each message. */
+.pinkie-msg-row { --msg-accent:var(--accent,#d9508d); display:flex;align-items:center;gap:2px;margin-top:4px;opacity:0;transition:opacity .12s ease;font-size:12px;color:color-mix(in srgb,currentColor 62%,transparent) }
+.chat-group:is(:hover,:focus-within) .pinkie-msg-row,.pinkie-msg-row:focus-within,.pinkie-msg-row:has([aria-pressed="true"]),.pinkie-msg-row:has(.pinkie-msg-variants) { opacity:1 }
+.chat-group.user .pinkie-msg-row { justify-content:flex-end }
+.chat-group-footer .pinkie-msg-row { margin-top:0 }
+.pinkie-msg-btn { display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 5px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer }
+.pinkie-msg-btn:hover:not(:disabled) { background:color-mix(in srgb,currentColor 9%,transparent);color:var(--text,inherit) }
+.pinkie-msg-btn:focus-visible { outline:2px solid var(--msg-accent);outline-offset:1px }
+.pinkie-msg-btn:disabled { opacity:.4;cursor:not-allowed }
+.pinkie-msg-btn--caret { min-width:16px;padding:0 1px;margin-left:-3px }
+.pinkie-msg-split { display:inline-flex;align-items:center }
+.pinkie-msg-icon { display:inline-flex }
+.pinkie-msg-thumb[aria-pressed="true"] { color:var(--msg-accent) }
+.pinkie-msg-thumb[aria-pressed="true"] svg { fill:color-mix(in srgb,var(--msg-accent) 85%,transparent) }
+.pinkie-msg-variants { display:inline-flex;align-items:center;gap:1px;margin-right:4px;font-variant-numeric:tabular-nums }
+.pinkie-msg-variants__step { min-width:22px;font-size:15px;line-height:1 }
+.pinkie-msg-variants__count { min-width:34px;text-align:center }
+/* The native assistant copy button is replaced by 复制 ▾ when ours is present. */
+.chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > .chat-copy-btn { display:none }
+.chat-group-footer-actions:has(.pinkie-msg-row) { display:flex;align-items:center;gap:4px }
+.pinkie-msg-edit { margin-top:8px;display:flex;flex-direction:column;gap:8px;min-width:min(520px,70vw) }
+.chat-bubble[data-pinkie-editing] > :not(.pinkie-msg-edit) { display:none }
+.pinkie-msg-edit__input,.pinkie-msg-feedback__input { box-sizing:border-box;width:100%;resize:vertical;padding:9px 11px;border:1px solid color-mix(in srgb,var(--accent,#d9508d) 45%,transparent);border-radius:10px;background:var(--bg,#fff);color:inherit;font:inherit;font-size:14px;line-height:1.55;outline:none }
+.pinkie-msg-edit__input:focus,.pinkie-msg-feedback__input:focus { border-color:var(--accent,#d9508d);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#d9508d) 14%,transparent) }
+.pinkie-msg-edit__row { display:flex;align-items:center;justify-content:flex-end;gap:8px }
+.pinkie-msg-edit__hint { flex:1;font-size:12px;opacity:.6 }
+.pinkie-msg-edit__cancel,.pinkie-msg-edit__send { height:30px;padding:0 12px;border:0;border-radius:7px;font:inherit;font-size:13px;cursor:pointer }
+.pinkie-msg-edit__cancel { background:transparent;color:inherit }
+.pinkie-msg-edit__cancel:hover { background:color-mix(in srgb,currentColor 8%,transparent) }
+.pinkie-msg-edit__send { background:var(--accent,#d9508d);color:#fff;font-weight:600 }
+.pinkie-msg-edit__send:disabled { opacity:.6;cursor:wait }
+.pinkie-msg-menu { position:fixed;z-index:2147483000;min-width:180px;max-width:min(320px,calc(100vw - 16px));max-height:min(420px,calc(100vh - 16px));overflow:auto;padding:4px;border:1px solid color-mix(in srgb,currentColor 12%,transparent);border-radius:10px;background:var(--card,#fff);color:var(--text,#2b2328);box-shadow:0 10px 30px rgba(40,20,32,.16);font-size:13px }
+html[data-pinkie-night] .pinkie-msg-menu { background:#2a2027;color:#f3e9ef;box-shadow:0 10px 30px rgba(0,0,0,.45) }
+.pinkie-msg-menu__heading { padding:6px 10px 4px;font-size:11px;opacity:.6 }
+.pinkie-msg-menu__item { display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:30px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer }
+.pinkie-msg-menu__item:is(:hover,:focus-visible) { background:color-mix(in srgb,var(--accent,#d9508d) 10%,transparent);outline:none }
+.pinkie-msg-menu__detail { font-size:11px;opacity:.5 }
+.pinkie-msg-feedback { width:280px;padding:10px;display:flex;flex-direction:column;gap:8px }
+.pinkie-msg-toast { position:fixed;left:50%;bottom:96px;z-index:2147483000;transform:translate(-50%,8px);padding:7px 14px;border-radius:9px;background:rgba(43,35,40,.92);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease }
+.pinkie-msg-toast[data-show] { opacity:1;transform:translate(-50%,0) }
+html[data-pinkie-reduce-motion] :is(.pinkie-msg-row,.pinkie-msg-toast) { transition:none }
