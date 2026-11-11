@@ -11,7 +11,9 @@
       "https://registry.npmmirror.com/-/binary/playwright",
       ""
     ],
-    "digests": {}
+    "digests": {
+      "darwin-arm64": "sha256-SETY3BwtHcjR3KC8E0H7/qd7stEmFOpSWQaB24oY1EQ="
+    }
   },
   "uv": {
     "version": "0.13.7",

@@ -3,7 +3,7 @@ name: Toolbox probe
 on:
   push:
     branches: [feat/biqi-toolbox-1110]
-    paths: [tools/pinkie-toolbox/**, personas/*/playbooks/toolbox*, .github/workflows/toolbox-probe.yml]
+    paths: [tools/pinkie-toolbox/**, personas/*/playbooks/toolbox*, tests/pinkie-toolbox*, tests/skill-routes.test.mjs, .github/workflows/toolbox-probe.yml]
   workflow_dispatch:
     inputs:
       full_probe:
@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
     steps:
