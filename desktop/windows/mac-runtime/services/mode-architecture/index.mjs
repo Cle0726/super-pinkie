@@ -10,6 +10,7 @@ import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
 import {isSessionOperationEvidence, registerSessionLineage} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
+import {registerSessionBranches} from './session-branch.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
@@ -6590,6 +6591,10 @@ export default {
         return activity.parentRunning || activity.pending > 0 || watchdog.timers.has(key)
           || watchdog.dispatching.has(key) || tierContinuation.timers.has(key);
       },
+    });
+    registerSessionBranches(api, {
+      titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
+      isBusy: key => architecture.activityFor(key).parentRunning,
     });
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
