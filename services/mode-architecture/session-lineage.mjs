@@ -164,9 +164,9 @@ export class SessionLineage {
       || this.reserved.has(key) || this.isBusy(key));
   }
 
-  runningChildren(parent, rows) {
-    const keys = new Set(Object.entries(this.lineage()).filter(([, record]) => record.parentKey === parent).map(([key]) => key));
-    const launches = Object.values(this.state(parent).launches || {});
+  runningChildren(parent, rows, lineage = this.lineage(), state = this.state(parent)) {
+    const keys = new Set(Object.entries(lineage).filter(([, record]) => record.parentKey === parent).map(([key]) => key));
+    const launches = Object.values(state.launches || {});
     for (const launch of launches) keys.add(launch.key);
     return [...keys].filter(key => this.busy(key, rows.get(key)) || launches.some(launch => launch.key === key)).length;
   }
@@ -331,7 +331,8 @@ export class SessionLineage {
   async views(agentId) {
     if (!/^[a-z\d][a-z\d_-]*$/iu.test(agentId || '')) return {children: {}, states: {}};
     const owns = ([key]) => agentOf(key) === agentId;
-    const children = Object.fromEntries(Object.entries(this.lineage()).filter(owns)
+    const lineage = this.lineage(), storedStates = readSessionJson(this.cardsFile);
+    const children = Object.fromEntries(Object.entries(lineage).filter(owns)
       .map(([key, row]) => [key, {parentKey: row.parentKey, detached: row.detached, title: row.title}]));
     const {entries} = await this.access.list(agentId);
     for (const [key, entry] of Object.entries(entries)) {
@@ -339,8 +340,17 @@ export class SessionLineage {
       const parentKey = entry.parentSessionKey || entry.spawnedBy || this.parentForWorker(key);
       if (parentKey !== key && agentOf(parentKey) === agentId) children[key] = {parentKey, title: entry.label};
     }
-    const states = Object.fromEntries(Object.entries(readSessionJson(this.cardsFile)).filter(owns)
+    const states = Object.fromEntries(Object.entries(storedStates).filter(owns)
       .filter(([, value]) => value.phase).map(([key, value]) => [key, {phase: value.phase, at: value.at}]));
+    const parents = new Set(Object.entries(lineage).filter(owns).map(([, child]) => child.parentKey)
+      .filter(key => agentOf(key) === agentId));
+    for (const [key, state] of Object.entries(storedStates).filter(owns)) {
+      if (Object.keys(state.launches || {}).length) parents.add(key);
+    }
+    const active = parents.size ? await this.activeRows(agentId) : new Map();
+    for (const parent of parents) {
+      states[parent] = {...states[parent], runningChildren: this.runningChildren(parent, active, lineage, storedStates[parent] || {})};
+    }
     return {children, states};
   }
 
