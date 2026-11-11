@@ -547,9 +547,10 @@ function ensureOffice() {
     try {
       const extracted = path.join(stage, 'SourceDir');
       const msi = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'msiexec.exe');
+      // 关掉重启管理器：不然它会把它认为占着文件的程序（包括跑工具箱的 node）直接结束。
       // msiexec 要的是 TARGETDIR="路径"，Node 默认会把整段包进引号，带空格的路径就解不开；手动按它的格式拼，并留安装日志。
       const log = path.join(stage, 'msiexec.log');
-      const unpacked = run(msi, [`/a "${downloaded.path}" /qn /l*v "${log}" TARGETDIR="${extracted}"`], {timeout: 1_500_000, verbatim: true});
+      const unpacked = run(msi, [`/a "${downloaded.path}" /qn /norestart /l*v "${log}" TARGETDIR="${extracted}" MSIRESTARTMANAGERCONTROL=Disable REBOOT=ReallySuppress`], {timeout: 1_500_000, verbatim: true});
       let source = extracted;
       if (!exists(path.join(source, 'program', 'soffice.exe')) && exists(path.join(source, 'LibreOffice', 'program', 'soffice.exe'))) source = path.join(source, 'LibreOffice');
       if (!unpacked.ok || !exists(path.join(source, 'program', 'soffice.exe'))) {
