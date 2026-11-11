@@ -272,7 +272,8 @@ html[data-pinkie-night]:not(#_n) .sidebar #laolao-session-manager .sidebar-recen
 html .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree)::after { content:attr(data-pinkie-shortcut);margin-left:auto;font-size:11px;color:var(--sb-muted);font-weight:400 }
 html .sidebar :is(.pinkie-sidebar-entry svg,.sidebar-new-session__icon) { display:inline-flex;width:16px !important;height:16px !important;flex:0 0 16px;color:inherit !important;transform:none !important; }
 html .sidebar .pinkie-sidebar-entry svg { fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round }
-html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls { display:flex;flex-direction:column;align-items:stretch;gap:0 !important;margin:0 0 4px !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls { display:flex;flex:0 0 auto;flex-direction:column;align-items:stretch;gap:0 !important;margin:0 0 4px !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar.sidebar--collapsed .laolao-session-controls { display:none !important }
 
 /* S8: search lives above scrolling sidebar content, so it cannot be clipped. */
 .pinkie-session-search-mask { --search-bg:#fffafb;--search-ink:#44343c;--search-muted:#806b76;--search-hover:rgba(217,80,141,.09);position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;background:rgba(33,22,30,.28) }

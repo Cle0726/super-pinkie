@@ -639,14 +639,17 @@
     document.documentElement.setAttribute('data-laolao-sessions-managed','1');
     let host=section.querySelector('#laolao-session-manager');
     if(!host){host=el('div');host.id='laolao-session-manager';section.append(host);signature='';}
+    // Keep all three shortcuts above the scrolling list. The native section may
+    // be rebuilt by Lit, so recover an existing control group before creating it.
+    let controls=section.querySelector('.laolao-session-controls');
+    if(!controls){controls=el('div','laolao-session-controls');signature='';}
+    if(controls.parentElement!==section || controls.nextElementSibling!==host) section.insertBefore(controls,host);
     const newSession=section.querySelector('.sidebar-new-session:not(.sidebar-new-session--worktree)');
     if(newSession)newSession.dataset.pinkieShortcut=/Mac|iPhone|iPad/i.test(navigator.platform||'')?'⌘N':'Ctrl+N';
     const cached = cache.get(key);
     const rows = cached?.rows || [];
     const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, new Date().toDateString()]);
     if(signature===next)return;signature=next;
-    let controls=host.querySelector('.laolao-session-controls');
-    if(!controls){controls=el('div','laolao-session-controls');host.append(controls);}
     controls.replaceChildren();
     const search=button('','搜索当前模式的会话',()=>openSearch(api));
     search.append(entryIcon('M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z'),el('span','','搜索'));
