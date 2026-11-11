@@ -115,3 +115,12 @@ test('assign-menu new project chooses a validated folder rather than creating a 
   assert.doesNotMatch(menu,/state\.projects\[name\] = \[\]/);
   assert.match(menu,/if\(name!==current\)assignToProject/);
 });
+test('new session shortcut leaves workbench and Monaco keyboard handling alone',()=>{
+  const snippet=source.slice(source.indexOf('  function isNewSessionShortcut('),source.indexOf("  document.addEventListener('keydown',event=>{\n    if(!isNewSessionShortcut"));
+  const ctx={};vm.createContext(ctx);vm.runInContext(snippet,ctx);
+  const event={key:'n',metaKey:true,target:{closest:()=>null}};
+  assert.equal(ctx.isNewSessionShortcut(event),true);
+  assert.equal(ctx.isNewSessionShortcut({...event,target:{closest:()=>({})}}),false);
+  assert.equal(ctx.isNewSessionShortcut({...event,shiftKey:true}),false);
+  assert.equal(ctx.isNewSessionShortcut({...event,defaultPrevented:true}),false);
+});

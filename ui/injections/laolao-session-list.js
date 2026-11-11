@@ -433,12 +433,58 @@
     updateSelection();
     return true;
   }
+  function beginRename(key) {
+    if (!current || archived || isPersona(key)) return;
+    const row = [...current.section.querySelectorAll('.session-row-host')].find(item => item.dataset.sessionKey === key);
+    const name = row?.querySelector('.sidebar-recent-session__name');
+    if (!name || row.querySelector('[data-pinkie-rename]')) return;
+    const original = name.textContent;
+    const input = el('input', 'pinkie-session-rename');
+    input.dataset.pinkieRename = '1'; input.value = original; input.maxLength = 120;
+    input.setAttribute('aria-label', '重命名会话');
+    name.replaceWith(input);
+    let saving = false;
+    const cancel = () => { if (input.isConnected) input.replaceWith(name); };
+    input.onblur = () => { if (!saving) cancel(); };
+    input.onkeydown = async event => {
+      event.stopPropagation();
+      if (event.key === 'Escape') { event.preventDefault(); cancel(); row.querySelector('a')?.focus(); return; }
+      if (event.key !== 'Enter' || saving) return;
+      event.preventDefault();
+      const title = input.value.trim();
+      if (!title) { current.api.toast('会话名称不能为空'); return; }
+      if (title === original) { cancel(); return; }
+      const api = current.api; saving = true; input.disabled = true;
+      try {
+        const reply = await api.gwRequest('pinkie.session.rename', {key, title});
+        if (reply?.ok === false) throw new Error(reply.error || '重命名失败');
+        invalidate(); api.toast('会话名称已保存');
+      } catch (error) {
+        saving = false; input.disabled = false; api.toast(error?.message || '重命名失败'); input.focus();
+      }
+    };
+    input.focus(); input.select();
+  }
+  let clickTimer = 0;
+  function handleLinkClick(key,event) {
+    if (selectFromClick(key,event)) return true;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || archived || isPersona(key)) return false;
+    clearTimeout(clickTimer);
+    if (event.detail >= 2) beginRename(key);
+    else if (event.detail === 0) current.api.navigateSession(key);
+    else { const api=current.api; clickTimer=setTimeout(()=>api.navigateSession(key),220); }
+    return true;
+  }
 
   function row(s, api, {children = 0, collapsed = false, worker = false} = {}) {
     const n = el('div', 'sidebar-recent-session session-row-host');
     n.dataset.sessionKey = s.key;
     n.classList.toggle('sidebar-recent-session--active', s.key === api.currentKey);
     n.classList.toggle('pinkie-session-persona', worker);
+    if(!worker && !archived) {
+      n.draggable=true;
+      n.ondragstart=event=>{event.dataTransfer.setData('application/x-pinkie-session',s.key);event.dataTransfer.effectAllowed='move';};
+    }
     const name = title(s);
     const link = el('a', 'sidebar-recent-session__link');
     link.href = '/chat?session=' + encodeURIComponent(s.key);
@@ -528,6 +574,18 @@
   }
   function group(id,name,rows,api,project){
     const n=el('section','laolao-group');n.dataset.laolaoGroup=id;
+    if(project) {
+      n.ondragover=event=>{
+        if(!Array.from(event.dataTransfer?.types||[]).includes('application/x-pinkie-session'))return;
+        event.preventDefault();event.dataTransfer.dropEffect='move';n.classList.add('pinkie-project-drop-target');
+      };
+      n.ondragleave=event=>{if(!n.contains(event.relatedTarget))n.classList.remove('pinkie-project-drop-target');};
+      n.ondrop=event=>{
+        event.preventDefault();n.classList.remove('pinkie-project-drop-target');
+        const key=event.dataTransfer?.getData('application/x-pinkie-session');
+        if(key)void api.assignToProject(key,name);
+      };
+    }
     const head=el('div','laolao-group__head');const collapsed=!!api.state.collapsed[id];
     const toggle=button(collapsed?'›':'⌄',(collapsed?'展开':'收起')+name,()=>api.toggleGroup(id));toggle.classList.add('laolao-group__toggle');toggle.setAttribute('aria-expanded',String(!collapsed));
     const label=el('span','laolao-group__label',name);label.onclick=()=>api.toggleGroup(id);
@@ -640,9 +698,21 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges,nextSelection,selectFromClick};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges,nextSelection,handleLinkClick,beginRename};
   if(typeof document!=='undefined')document.addEventListener('keydown',event=>{
     if(event.key==='Escape' && selectedKeys.size){selectedKeys.clear();selectionAnchor='';updateSelection();}
+    if(!current || !event.target?.closest?.('#laolao-session-manager') || event.target.matches?.('input,textarea,[contenteditable="true"]'))return;
+    const row=event.target.closest('.session-row-host');
+    if(!row)return;
+    const links=[...current.section.querySelectorAll('.session-row-host a.sidebar-recent-session__link')];
+    const index=links.indexOf(row.querySelector('a.sidebar-recent-session__link'));
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+      event.preventDefault();links[Math.max(0,Math.min(links.length-1,index+(event.key==='ArrowDown'?1:-1)))]?.focus();
+    } else if(event.key==='F2' && !isPersona(row.dataset.sessionKey)) {
+      event.preventDefault();beginRename(row.dataset.sessionKey);
+    } else if(event.key==='Delete' && !archived && !isPersona(row.dataset.sessionKey)) {
+      event.preventDefault();void current.api.archiveWithUndo(row.dataset.sessionKey);
+    }
   });
   let refreshTimer;
   function refreshSoon() {
