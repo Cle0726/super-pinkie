@@ -145,6 +145,23 @@ test('command palette recognises project creation searches',()=>{
   assert.equal(ctx.paletteProjectMatch('folder'),true);
   assert.equal(ctx.paletteProjectMatch('天气'),false);
 });
+test('command palette keeps session search inside the current mode and ignores stale replies',async()=>{
+  const snippet=source.slice(source.indexOf('  function paletteProjectMatch('),source.indexOf('  function tooltipPosition('));
+  const palette={open:true,sessionSearchId:0,onNavigate(){}},requests=[],created=[];
+  let finish;
+  const ctx={document:{querySelector:()=>palette},stateMode:'chat',currentModeAgent:()=>ctx.stateMode==='chat'?'main':'project',
+    gwRequest:(method,params)=>{requests.push({method,params});return new Promise(resolve=>finish=resolve);},
+    addFolderProject:(...args)=>created.push(args)};
+  vm.createContext(ctx);vm.runInContext(snippet,ctx);ctx.ensurePaletteCommands();
+  const first=palette.searchSessions('项目');
+  finish({ok:true,results:[{key:'agent:main:one',title:'本模式'},{key:'agent:project:two',title:'其他模式'}]});
+  await first;
+  assert.deepEqual(Array.from(palette.sessionItems,item=>item.action),['session:agent:main:one','nav:pinkie-new-project']);
+  assert.equal(requests[0].params.agentId,'main');assert.equal(requests[0].params.mode,'chat');
+  palette.onNavigate('pinkie-new-project');assert.equal(created.length,1);
+  const stale=palette.searchSessions('旧查询');ctx.stateMode='project';finish({ok:true,results:[{key:'agent:main:old'}]});await stale;
+  assert.equal(palette.sessionItems.some(item=>item.action==='session:agent:main:old'),false);
+});
 test('archive checks running children and respects cancellation before changing the parent',async()=>{
   const snippet=source.slice(source.indexOf('  async function archiveSession('),source.indexOf('  function showArchiveUndo('));
   const calls=[];let choice='cancel';
