@@ -180,6 +180,25 @@ test('fork starts with the native flag after the parent is idle and reserves its
   assert.equal(f.lineage.lineage()[plans[0].key].context, 'fork');
 });
 
+test('lineage reports running and queued direct children for archive protection', async t => {
+  const f = fixture(t);
+  const first = await f.lineage.start(parent, 'human', request, 'one');
+  const second = await f.lineage.start(parent, 'human', request, 'two');
+  let view = await f.lineage.views('project');
+  assert.equal(view.states[parent].runningChildren, 2);
+  assert.equal(view.children[first.key].parentKey, parent);
+  await finishChild(f, first.key, f.sent[0].idempotencyKey);
+  view = await f.lineage.views('project');
+  assert.equal(view.states[parent].runningChildren, 1);
+  f.running.delete(second.key);
+  f.lineage.reserved.delete(second.key);
+  f.running.add(parent);
+  const queued = await f.lineage.start(parent, 'human', {...request, context: 'fork'}, 'queued');
+  assert.equal(queued.queued, true);
+  assert.equal((await f.lineage.views('project')).states[parent].runningChildren, 1);
+  assert.equal((await f.lineage.views('main')).states[parent], undefined);
+});
+
 test('messages are scoped to direct family and leave a running child on the native send lane', async t => {
   const f = fixture(t);
   const child = await f.lineage.start(parent, 'human', request, 'one');
