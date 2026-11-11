@@ -369,7 +369,7 @@ export class SessionLineage {
     const key = sessionKeyOf(event, ctx);
     const text = messageText(event.content ?? event.body ?? event.prompt);
     if (!agentOf(key) || isInternalSessionKey(key) || isPersona(key) || !text.trim()
-        || generated(event, ctx) || isInternalMessage(text) || event.provenance?.kind === 'inter_session'
+        || generated(event, ctx) || isInternalMessage(text) || text.trimStart().startsWith(FAMILY_PREFIX) || event.provenance?.kind === 'inter_session'
         || ['inter_session', 'internal_system'].includes(event.metadata?.inputProvenance?.kind)) return;
     const turn = this.turns.get(key);
     if (turn?.authored && text.trim() === turn.prompt) return;

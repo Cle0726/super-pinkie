@@ -33,6 +33,7 @@ test('clears channel metadata, code blocks, invisible text and long paths', () =
   assert.match(result, /^查项目文件 .*sample\.md example\.org$/u);
   assert.doesNotMatch(result, /ou_|om_|Sender|secret|const|[\uD800-\uDFFF]/u);
   assert.equal(cleanTitleSource('请看 C:\\Users\\Admin\\project\\demo.txt'), '请看 demo.txt');
+  assert.equal(cleanTitleSource('【来自关联会话的消息】\n请查看项目目录'), '请查看项目目录');
 });
 
 test('greets and acknowledgements are low information, topics are kept', () => {

@@ -23,7 +23,7 @@ const INJECTION = /(?:(?:忽略|无视|忘掉).{0,20}(?:之前|以上|前面|指
 
 export const INTERNAL_MESSAGE_PREFIXES = Object.freeze([
   '[pinkie-watchdog]', '[pinkie-tier-control]', '[pinkie-tier]', '[pinkie-integrity]',
-  '[pinkie-marathon]', '[pinkie-session-wake]', '[pinkie-session-message]', '【来自关联会话的消息】', '[System]',
+  '[pinkie-marathon]', '[pinkie-session-wake]', '[pinkie-session-message]', '[System]',
   'Your previous turn was interrupted by a gateway restart', '【自动续接保护】',
   '【压缩续工恢复】', '【全局交付真实性门禁】', '【档位控制器】',
   'A background task completed.', 'Continue the OpenClaw runtime event',
@@ -80,7 +80,8 @@ function stripEnvelope(value) {
   return value.replace(/^(?:\s*(?:Conversation info|Sender|Chat history|Replied message|Forwarded message)(?: \(untrusted metadata\))?:\s*\n[ \t]*```[^\n]*\n[\s\S]*?^\s*```[ \t]*(?:\n|$))+/gim, '')
     .replace(/\[(?:message_id|media attached|timestamp|sender_id):[^\]\r\n]*\]/giu, '')
     .replace(/^[ \t]*(?:\[(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+)?\d{4}-\d{2}-\d{2}[^\]\n]*\][ \t]*)+/gim, '')
-    .replace(/^[ \t]*(?:ou|on|oc|wxid|wm|cid|ding|dt)_[\w-]+\s*[:：][ \t]*/gim, '');
+    .replace(/^[ \t]*(?:ou|on|oc|wxid|wm|cid|ding|dt)_[\w-]+\s*[:：][ \t]*/gim, '')
+    .replace(/^\s*【来自关联会话的消息】\s*/u, '');
 }
 
 export function isInternalMessage(value) {

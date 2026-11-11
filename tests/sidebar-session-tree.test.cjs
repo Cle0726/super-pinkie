@@ -14,7 +14,7 @@ const row = (key, label, values = {}) => ({key, label, lastMessagePreview: '会�
 test('child and deep-thinking workers stay grouped under the parent with role names', () => {
   const tree = build([
     row(parent, '项目检查'),
-    row(child, '独立验证', {lineage: {parentKey: parent, detached: false}}),
+    row(child, '独立验证', {lineage: {parentKey: parent, detached: false}, meta: {internal: true}}),
     row(worker, '求解·1', {spawnedBy: parent}),
     row(worker + '-2', '批评·2', {parentSessionKey: parent}),
     row(worker + '-3', '仲裁', {spawnedBy: worker}),
