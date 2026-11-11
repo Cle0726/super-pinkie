@@ -59,7 +59,7 @@ test('Mac dialog receives real Git download events while the installed checkout 
     assert.ok(downloads.length>0,'Git did not report any byte progress');
     assert.ok(downloads.at(-1).event.downloaded>2*1024*1024);
     assert.equal(downloads.at(-1).event.total,null);
-    assert.equal(await page.locator('.pinkie-upd__notes li').count(),3);
+    assert.equal(await page.locator('.pinkie-upd__summary > span').innerText(),'第一个变化');assert.equal(await page.locator('.pinkie-upd__notes li').count(),2);
     assert.equal(git('-C',installed,'rev-parse','HEAD'),old);
     assert.ok(fs.existsSync(path.join(env.PINKIE_STATE_ROOT,'updates/prepared-git.json')));
   } finally {await browser.close();fs.rmSync(temp,{recursive:true,force:true});}
