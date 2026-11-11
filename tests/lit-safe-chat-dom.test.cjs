@@ -81,6 +81,8 @@ test('phrases localizes Lit-owned chat labels only through their text node value
   assert.equal(run(textNode('You', element('chat-sender-name', userGroup))), '你');
   // A user's own message that says "You" is content, not chrome.
   assert.equal(run(textNode('You', element('chat-text', element('chat-bubble', userGroup, 'div'), 'div'))), 'You');
+  assert.equal(run(textNode('New messages', element('chat-new-messages', null, 'button'))), '有新消息');
+  assert.equal(run(textNode('New messages', element('chat-text', element('chat-bubble', userGroup, 'div'), 'div'))), 'New messages');
 
   // The native queue uses the same comment-delimited Lit text bindings as
   // activity labels. Its count, actions and error need Chinese text without
