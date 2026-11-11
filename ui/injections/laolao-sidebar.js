@@ -991,11 +991,21 @@
     }
   }
 
-  async function archiveSession(key){
+  async function archiveSession(key,{undo=false}={}){
     await patchSession(key,{archived:true});
     await followAfterSessionLeaves(key);
-    toast('已归档；记录、项目绑定和文件都保留');
+    if(undo)showArchiveUndo(key);else toast('已归档；记录、项目绑定和文件都保留');
   }
+
+  function showArchiveUndo(key) {
+    document.querySelector('.pinkie-archive-undo')?.remove();
+    const bar=document.createElement('div');bar.className='pinkie-archive-undo';bar.setAttribute('role','status');
+    const text=document.createElement('span');text.textContent='已归档';
+    const undo=document.createElement('button');undo.type='button';undo.textContent='撤销';undo.setAttribute('aria-label','撤销归档');
+    undo.onclick=async()=>{undo.disabled=true;try{await patchSession(key,{archived:false});bar.remove();toast('已撤销归档');}catch(error){undo.disabled=false;toast(error.message);}};
+    bar.append(text,undo);document.body.append(bar);setTimeout(()=>bar.remove(),5000);
+  }
+  async function archiveWithUndo(key){try{await archiveSession(key,{undo:true});}catch(error){toast(error.message);}}
 
   async function restoreSession(key){
     await patchSession(key,{archived:false});
@@ -1088,9 +1098,10 @@
   document.addEventListener('click',event=>{
     const link=event.target?.closest?.('a.sidebar-recent-session__link');
     if(!link)return;
+    if(event.target?.closest?.('[data-pinkie-rename]'))return;
     const key=new URL(link.href,window.location.href).searchParams.get('session');
     if(!key||modeForSession(key)!==stateMode)return;
-    if(link.closest('#laolao-session-manager')&&window.PinkieSessionList?.selectFromClick(key,event)){
+    if(link.closest('#laolao-session-manager')&&window.PinkieSessionList?.handleLinkClick(key,event)){
       event.preventDefault();event.stopImmediatePropagation();return;
     }
     event.preventDefault();
@@ -1103,6 +1114,16 @@
     if(!event.target?.closest?.('.sidebar-new-session'))return;
     const name=projectOf(pageSessionKey());
     event.preventDefault();event.stopImmediatePropagation();createProjectSession(name&&state.projectFolders[name]?name:null);
+  },true);
+  function isNewSessionShortcut(event){
+    if(event.defaultPrevented || event.repeat || event.altKey || event.shiftKey || !(event.metaKey||event.ctrlKey) || String(event.key||'').toLowerCase()!=='n')return false;
+    return !event.target?.closest?.('.monaco-editor,.monaco-diff-editor,.cm-editor,.pk-wb,.pk-wb-host,[data-workbench-editor]');
+  }
+  document.addEventListener('keydown',event=>{
+    if(!isNewSessionShortcut(event))return;
+    event.preventDefault();
+    const name=projectOf(pageSessionKey());
+    void createProjectSession(name&&state.projectFolders[name]?name:null);
   },true);
   function makeGroup(id, labelText, actions) {
     const group = document.createElement("div");
@@ -1770,7 +1791,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany,openBulkProjectMenu,askDeleteSelected,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany,openBulkProjectMenu,askDeleteSelected,assignToProject,archiveWithUndo,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }
