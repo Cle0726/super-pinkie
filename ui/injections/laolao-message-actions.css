@@ -6,7 +6,8 @@
 .pinkie-msg-btn { display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 5px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer }
 .pinkie-msg-btn:hover:not(:disabled) { background:color-mix(in srgb,currentColor 9%,transparent);color:var(--text,inherit) }
 .pinkie-msg-btn:focus-visible { outline:2px solid var(--msg-accent);outline-offset:1px }
-.pinkie-msg-btn:disabled { opacity:.4;cursor:not-allowed }
+.chat-group-footer .pinkie-msg-row .pinkie-msg-btn { opacity:1 }
+.pinkie-msg-row .pinkie-msg-btn:disabled { opacity:.4;cursor:not-allowed }
 .pinkie-msg-btn--caret { min-width:16px;padding:0 1px;margin-left:-3px }
 .pinkie-msg-split { display:inline-flex;align-items:center }
 .pinkie-msg-icon { display:inline-flex }
@@ -18,6 +19,7 @@
 /* The native assistant copy button is replaced by 复制 ▾ when ours is present. */
 .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > .chat-copy-btn { display:none }
 .chat-group-footer-actions:has(.pinkie-msg-row) { display:flex;align-items:center;gap:4px }
+html .chat-group-footer .chat-group-footer-actions:has([aria-pressed="true"],:focus-within) { opacity:1 !important }
 .pinkie-msg-edit { margin-top:8px;display:flex;flex-direction:column;gap:8px;min-width:min(520px,70vw) }
 .chat-bubble[data-pinkie-editing] > :not(.pinkie-msg-edit) { display:none }
 .pinkie-msg-edit__input,.pinkie-msg-feedback__input { box-sizing:border-box;width:100%;resize:vertical;padding:9px 11px;border:1px solid color-mix(in srgb,var(--accent,#d9508d) 45%,transparent);border-radius:10px;background:var(--bg,#fff);color:inherit;font:inherit;font-size:14px;line-height:1.55;outline:none }
@@ -39,3 +41,5 @@ html[data-pinkie-night] .pinkie-msg-menu { background:#2a2027;color:#f3e9ef;box-
 .pinkie-msg-toast { position:fixed;left:50%;bottom:96px;z-index:2147483000;transform:translate(-50%,8px);padding:7px 14px;border-radius:9px;background:rgba(43,35,40,.92);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease }
 .pinkie-msg-toast[data-show] { opacity:1;transform:translate(-50%,0) }
 html[data-pinkie-reduce-motion] :is(.pinkie-msg-row,.pinkie-msg-toast) { transition:none }
+.chat-group.assistant .chat-group-footer:has(.pinkie-msg-row) { justify-content:flex-start }
+.chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) { order:-1;margin-left:-5px }
