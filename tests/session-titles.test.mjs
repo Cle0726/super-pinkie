@@ -143,6 +143,24 @@ test('reads from the beginning and recognizes old titles in the first twelve use
   assert.equal(f.titles.record(key).source, 'auto');
 });
 
+test('an unnamed user child is titled from the user task, not inherited parent messages or the brief wrapper', async t => {
+  let input = '';
+  const f = fixture(t, async text => { input = text; return '春季内容规划'; });
+  const child = 'agent:main:pinkie-child:auto-title';
+  const prompt = '帮我整理春季内容规划，列出需要准备的素材';
+  f.add(child, '', [
+    ['user', '这是父会话里的旧主题'], ['assistant', '这是父会话的旧答复'],
+    ['user', '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n来自会话：父会话\n'
+      + '（你继承了父会话到这一条为止的记录，之后的内容你看不到。）\n要做的事：\n' + prompt
+      + '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。'],
+    ['assistant', '已经整理好'],
+  ]);
+  await f.titles.ensure(child);
+  assert.equal(input, prompt);
+  assert.equal(f.store[child].label, '春季内容规划');
+  assert.equal(f.titles.record(child).source, 'auto');
+});
+
 test('preserves manual and learning labels, and produces channel names without the model', async t => {
   const f = fixture(t, async () => { throw new Error('should not call model'); });
   f.add(key, 'B级到哪里了', [['user', '我想查看目前英语复习进度']]);
