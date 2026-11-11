@@ -149,3 +149,23 @@ test('a recorded follow-up is ordered by when the transcript stored it', async (
   assert.equal(Vb(item(result)), 1300, 'other roles are unchanged');
   assert.equal(Vb({kind: 'message', key: 'chat:history:notice', message: steer}), -Infinity);
 });
+
+// Real-model check 11-10: while a steered run is live the runtime briefly
+// holds two copies of the follow-up (same idempotency key), and native chat
+// folded them as "×2", as if the user had sent it twice. One send stored twice
+// is one message; a real repeat still counts.
+test('two stored copies of one send fold without a duplicate count', async () => {
+  const {withSameSendFold} = await load();
+  const native = 'function Fb(e){let t=[],n=null,r=null;for(let i of e){if(i.kind!==`message`){t.push(i),n=null,r=null;continue}let e=Pb(i.message),a=Ob(i.message),o=t[t.length-1];if(a&&r===a&&o?.kind===`message`&&Nb(o.message,i.message)){continue}if(e&&n===e&&o?.kind===`message`&&!(a&&r&&a!==r)){o.duplicateCount=(o.duplicateCount??1)+1;continue}t.push(i),n=e,r=a}return t}';
+  const patched = withSameSendFold(native);
+  assert.notEqual(patched, native);
+  assert.equal(withSameSendFold(patched), patched, 'idempotent');
+  const Fb = new Function('Pb', 'Ob', 'Nb', `${patched};return Fb;`)(m => `user:${m.content}`, () => null, () => false);
+  const item = (content, extra = {}) => ({kind: 'message', message: {role: 'user', content, ...extra}});
+  const same = Fb([item('追加 1', {idempotencyKey: 'run-2:user'}), item('追加 1', {__openclaw: {idempotencyKey: 'run-2:user'}})]);
+  assert.equal(same.length, 1);
+  assert.equal(same[0].duplicateCount, undefined);
+  const repeat = Fb([item('again', {idempotencyKey: 'a:user'}), item('again', {idempotencyKey: 'b:user'})]);
+  assert.equal(repeat.length, 1);
+  assert.equal(repeat[0].duplicateCount, 2);
+});
