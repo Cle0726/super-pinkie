@@ -9,6 +9,7 @@ import {LearningPact} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
 import {isSessionOperationEvidence, registerSessionLineage} from './session-lineage.mjs';
+import {registerSessionSearch} from './session-search.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
@@ -6580,6 +6581,7 @@ export default {
     registerLearningLibrary(api, {learning});
     const companion = registerCompanionGateway(api, learning);
     const sessionTitles = registerSessionTitles(api, {root: path.join(pinkieStateRoot(), 'sessions'), assistant: companion, cli: resolveGatewayCliEntry(), runProcess});
+    registerSessionSearch(api, {titles: sessionTitles});
     const sessionLineage = registerSessionLineage(api, {
       root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, stopped: userStoppedRecently,
       parentForWorker: key => architecture.resolveParent(key),
