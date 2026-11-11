@@ -442,3 +442,19 @@ html[data-laolao-sessions-managed] .shell--chat .sidebar .sidebar-recent-session
 #laolao-session-manager .pinkie-session-branch .sidebar-recent-session{margin-inline-start:0}
 #laolao-session-manager .pinkie-session-workers{opacity:.84}
 #laolao-session-manager .pinkie-session-workers>button,#laolao-session-manager .pinkie-session-fold{font-size:10px}
+#laolao-session-manager .sidebar-recent-session__link{display:flex;align-items:center;gap:5px}
+.pinkie-session-icon{width:13px;height:13px;display:inline-flex;align-items:center;flex:0 0 13px}
+.pinkie-session-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.pinkie-session-channel{color:#426bd1}
+.pinkie-session-status--running{color:#a24e79}
+.pinkie-session-status--waiting{color:#9b631c}
+.pinkie-session-status--error{color:#ba3457}
+.pinkie-session-unread{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#bb477e;margin:0 2px}
+.pinkie-session-status--running svg{animation:pinkie-session-spin 1.1s linear infinite}
+@keyframes pinkie-session-spin{to{transform:rotate(360deg)}}
+html[data-pinkie-reduce-motion] .pinkie-session-status--running svg{animation:none}
+html[data-pinkie-night] .pinkie-session-channel{color:#a4bdff}
+html[data-pinkie-night] .pinkie-session-status--running{color:#f2a1c7}
+html[data-pinkie-night] .pinkie-session-status--waiting{color:#f0c176}
+html[data-pinkie-night] .pinkie-session-status--error{color:#fa90a9}
+html[data-pinkie-night] .pinkie-session-unread{background:#ff9fd1}

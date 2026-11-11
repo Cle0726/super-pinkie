@@ -50,3 +50,12 @@ test('search can find a child or a worker by name without making workers normal 
   assert.equal(build(rows, {query: '仲裁'})[0].workers[0].key, worker);
   assert.equal(build(rows, {query: 'worker'}).length, 0);
 });
+
+test('run state takes precedence over waiting and terminal errors', () => {
+  const {sessionStatus} = window.PinkieSessionList;
+  assert.equal(sessionStatus({hasActiveRun: true, phase: 'error'}), 'running');
+  assert.equal(sessionStatus({hasActiveSubagentRun: true, phase: 'waiting'}), 'running');
+  assert.equal(sessionStatus({phase: 'waiting'}), 'waiting');
+  assert.equal(sessionStatus({status: 'failed'}), 'error');
+  assert.equal(sessionStatus({status: 'aborted'}), '');
+});
