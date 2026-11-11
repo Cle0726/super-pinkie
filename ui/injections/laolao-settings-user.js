@@ -211,6 +211,138 @@
     return section;
   };
 
+  // C3 default reply style + N1 notify, N2 menu bar, N3 hotkey (pinkie.prefs.*).
+  const STYLE_OPTIONS = [["default", "默认"], ["concise", "简洁"], ["detailed", "详细讲解"], ["casual", "口语聊天"], ["formal", "正式书面"], ["custom", "自定义"]];
+  const bridge = () => window.__pinkieNativeBridge;
+  const toggle = (parent, label, onChange) => {
+    const node = element("button", "pinkie-user-settings__switch", parent);
+    node.type = "button";
+    node.setAttribute("role", "switch");
+    node.setAttribute("aria-label", label);
+    element("span", "pinkie-user-settings__switch-knob", node);
+    node.addEventListener("click", () => {
+      const next = node.getAttribute("aria-checked") !== "true";
+      node.setAttribute("aria-checked", String(next));
+      onChange(next, node);
+    });
+    return node;
+  };
+  const setToggle = (node, value) => node.setAttribute("aria-checked", String(Boolean(value)));
+  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent || "");
+  const prettyHotkey = value => !value ? "已关闭" : String(value).split("+").map(part => {
+    const key = part.trim().toLowerCase();
+    if (!isMac) return {alt: "Alt", ctrl: "Ctrl", control: "Ctrl", shift: "Shift", cmd: "Win", space: "Space"}[key] || part.trim().toUpperCase();
+    return {alt: "⌥", option: "⌥", ctrl: "⌃", control: "⌃", shift: "⇧", cmd: "⌘", command: "⌘", space: "Space"}[key] || part.trim().toUpperCase();
+  }).join(isMac ? "" : "+");
+  const defaultHotkey = () => isMac ? "Alt+Space" : "Ctrl+Alt+Space";
+
+  function buildStyleCard(scroll) {
+    const styleCard = card(scroll, "✍️", "回答风格", "新会话默认用哪种写法。每个会话也可以在输入框下面单独改。");
+    const styleRow = row(styleCard, "默认风格", "只管写法，不会盖过安全和谨慎规则。");
+    const group = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", styleRow.control);
+    const buttons = new Map();
+    const customWrap = element("div", "pinkie-user-settings__custom-style", styleCard);
+    const area = element("textarea", "pinkie-user-settings__textarea", customWrap);
+    area.maxLength = 1000;
+    area.rows = 4;
+    area.placeholder = "例如：先给结论，再分点；每点不超过两句；不要用表情。";
+    area.setAttribute("aria-label", "自定义回答风格");
+    const counter = element("span", "pinkie-user-settings__hint pinkie-user-settings__counter", customWrap, "0 / 1000");
+    const sync = value => {
+      for (const [id, node] of buttons) setPressed(node, id === (value?.defaultStyle || "default"));
+      customWrap.hidden = (value?.defaultStyle || "default") !== "custom";
+      if (document.activeElement !== area) area.value = value?.customStyle || "";
+      counter.textContent = `${[...area.value].length} / 1000`;
+    };
+    const save = async patch => {
+      try { sync(await bridge()?.savePrefs(patch)); setStatus("style", "已保存", "success"); }
+      catch (error) { setStatus("style", "没保存上：" + error.message, "error"); }
+    };
+    for (const [value, label] of STYLE_OPTIONS) {
+      const node = button(label, "pinkie-user-settings__choice", group, () => save({defaultStyle: value}));
+      node.dataset.style = value;
+      buttons.set(value, node);
+    }
+    let timer = 0;
+    area.addEventListener("input", () => {
+      counter.textContent = `${[...area.value].length} / 1000`;
+      clearTimeout(timer);
+      timer = setTimeout(() => save({customStyle: area.value}), 600);
+    });
+    makeStatus(styleCard, "style");
+    customWrap.hidden = true;
+    bridge()?.loadPrefs(true).then(sync);
+    window.addEventListener("pinkie:prefs-change", event => sync(event.detail));
+  }
+
+  function buildNotifyCard(scroll) {
+    const notifyCard = card(scroll, "🔔", "通知与快捷", "碧琪在后台做完事或等你回答时，用系统通知告诉你。");
+    const doneRow = row(notifyCard, "做完时", "一轮用了 20 秒以上、你又不在看它时提醒。");
+    const waitingRow = row(notifyCard, "等我回答时", "碧琪提问、或有事等你拍板时提醒。");
+    const save = async (patch, label) => {
+      try { const value = await bridge()?.savePrefs(patch); sync(value); setStatus("notify", label, "success"); return value; }
+      catch (error) { setStatus("notify", "没保存上：" + error.message, "error"); return null; }
+    };
+    const done = toggle(doneRow.control, "做完时通知", value => save({notify: {done: value}}, value ? "做完时会通知你" : "做完时不再通知"));
+    const waiting = toggle(waitingRow.control, "等我回答时通知", value => save({notify: {waiting: value}}, value ? "等你回答时会通知你" : "等你回答时不再通知"));
+    const menubarRow = row(notifyCard, isMac ? "菜单栏图标" : "托盘图标", "从这里新建会话、快速提问、看正在运行的会话。");
+    const menubar = toggle(menubarRow.control, "显示菜单栏图标", async value => {
+      await save({menubar: value}, value ? "图标已显示" : "图标已隐藏");
+      bridge()?.pinkieNative({type: "setMenubar", enabled: value}).catch(() => {});
+    });
+    const hotkeyRow = row(notifyCard, "快速提问快捷键", "在任何地方按下，弹出小窗直接问碧琪。");
+    const hotkeyLabel = element("kbd", "pinkie-user-settings__kbd", hotkeyRow.control, prettyHotkey(defaultHotkey()));
+    const record = button("修改", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
+    const off = button("关闭", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
+    const applyHotkey = async accelerator => {
+      let result = {ok: true, accelerator};
+      try { result = await bridge()?.pinkieNative({type: "setHotkey", accelerator}) || result; }
+      catch (error) { setStatus("notify", error.message, "error"); return; }
+      if (result.ok === false) { setStatus("notify", result.error || "这个快捷键用不了", "error"); return; }
+      const value = result.accelerator ?? null;
+      await save({hotkey: value}, result.conflict ? `这个快捷键被占用了，已改用 ${prettyHotkey(value)}` : value ? `快捷键改成 ${prettyHotkey(value)}` : "快捷键已关闭");
+      if (result.conflict) setStatus("notify", `这个快捷键被占用了，已改用 ${prettyHotkey(value)}`, "error");
+    };
+    record.addEventListener("click", () => {
+      hotkeyLabel.textContent = "按下新的组合键…";
+      record.disabled = true;
+      const onKey = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === "Escape") { finish(); return; }
+        if (["Shift", "Alt", "Control", "Meta"].includes(event.key)) return;
+        const parts = [];
+        if (event.metaKey) parts.push("Cmd");
+        if (event.ctrlKey) parts.push("Ctrl");
+        if (event.altKey) parts.push("Alt");
+        if (event.shiftKey) parts.push("Shift");
+        const code = event.code === "Space" ? "Space" : /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : /^Digit\d$/.test(event.code) ? event.code.slice(5) : "";
+        if (!parts.length || !code) { setStatus("notify", "要至少带一个修饰键，再加字母、数字或空格", "error"); return; }
+        finish();
+        void applyHotkey([...parts, code].join("+"));
+      };
+      const finish = () => {
+        window.removeEventListener("keydown", onKey, true);
+        record.disabled = false;
+        hotkeyLabel.textContent = prettyHotkey(current.hotkey === null ? null : !current.hotkey || current.hotkey === "default" ? defaultHotkey() : current.hotkey);
+      };
+      window.addEventListener("keydown", onKey, true);
+    });
+    off.addEventListener("click", () => applyHotkey(null));
+    makeStatus(notifyCard, "notify");
+    let current = {};
+    const sync = value => {
+      if (!value) return;
+      current = value;
+      setToggle(done, value.notify?.done !== false);
+      setToggle(waiting, value.notify?.waiting !== false);
+      setToggle(menubar, value.menubar !== false);
+      hotkeyLabel.textContent = prettyHotkey(value.hotkey === null ? null : !value.hotkey || value.hotkey === "default" ? defaultHotkey() : value.hotkey);
+    };
+    bridge()?.loadPrefs(true).then(sync);
+    window.addEventListener("pinkie:prefs-change", event => sync(event.detail));
+  }
+
   function buildPage() {
     if (state.root || !document.body) return;
     state.root = element("div", "pinkie-user-settings", document.body);
@@ -230,8 +362,10 @@
       node.dataset.mode = value;
       state.modeButtons.set(value, node);
     }
-    element("p", "pinkie-user-settings__soft-note", modeCard, "回复语气会跟随所选模式；目前没有单独的语气选项。" );
     makeStatus(modeCard, "mode");
+
+    buildStyleCard(scroll);
+    buildNotifyCard(scroll);
 
     const modelCard = card(scroll, "🧠", "模型与思考", "选择碧琪默认使用的模型和回答节奏。" );
     const modelRow = row(modelCard, "默认模型", "显示名称来自可用模型目录。" );
