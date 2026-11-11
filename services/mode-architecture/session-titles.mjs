@@ -213,17 +213,22 @@ async function* transcriptMessages(file) {
   }
 }
 
-async function readUserChildBrief(file) {
+export function userChildPrompt(value) {
   const prefix = '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n';
   const marker = '\n要做的事：\n';
   const footer = '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。';
+  const text = messageText(value);
+  if (!text.startsWith(prefix)) return null;
+  const start = text.indexOf(marker, prefix.length), end = text.lastIndexOf(footer);
+  return start < 0 || end < start + marker.length ? null : text.slice(start + marker.length, end);
+}
+
+async function readUserChildBrief(file) {
   for await (const message of transcriptMessages(file)) {
     if (message.role !== 'user') continue;
-    const text = messageText(message);
-    if (!text.startsWith(prefix)) continue;
-    const start = text.indexOf(marker, prefix.length), end = text.lastIndexOf(footer);
-    if (start < 0 || end < start + marker.length) continue;
-    const clean = cleanTitleSource(text.slice(start + marker.length, end));
+    const prompt = userChildPrompt(message);
+    if (prompt === null) continue;
+    const clean = cleanTitleSource(prompt);
     return {sources: clean && !isLowInformation(clean) ? [clipGraphemes(clean, 1500)] : [],
       firstReply: '', greetings: 0, legacy: false, messages: 1, internal: false};
   }
