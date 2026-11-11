@@ -89,6 +89,38 @@
     return nearest;
   }
 
+  function forkEntryId(messageId) {
+    if (!String(messageId || '').startsWith('msg:')) return '';
+    const id = messageId.slice(4);
+    return id && !id.includes(':') ? id : '';
+  }
+  function currentTitle(key) {
+    const row = [...document.querySelectorAll('.session-row-host')].find(item => item.dataset.sessionKey === key);
+    return row?.querySelector('.sidebar-recent-session__name')?.textContent || '当前会话';
+  }
+  function ensureEntryPoints(pane, key) {
+    const sidebar = window.__laolaoSidebar;
+    const topbar = document.querySelector('.shell--chat .topnav-shell__actions');
+    if (topbar && sidebar?.sessionMenu) {
+      let more = topbar.querySelector('.pinkie-chat-session-menu');
+      if (!more) {
+        more = cardButton('⋯', null, 'pinkie-chat-session-menu');
+        more.setAttribute('aria-label', '聊天会话菜单'); topbar.append(more);
+      }
+      more.onclick = event => sidebar.sessionMenu(event.currentTarget, key, currentTitle(key), false, {isChild:Boolean(data?.parentKey)});
+    }
+    const canFork = !data?.parentKey && !/:subagent:/i.test(key);
+    for (const bubble of pane.querySelectorAll('.chat-group.assistant .chat-bubble[data-message-id]')) {
+      let button = bubble.querySelector('.pinkie-fork-action');
+      if (!canFork || bubble.classList.contains('streaming') || bubble.classList.contains('chat-bubble--tool-shell')) { button?.remove(); continue; }
+      if (!button) {
+        button = cardButton('从这里分出去', null, 'pinkie-fork-action'); bubble.append(button);
+      }
+      button.onclick = () => sidebar?.openChildSessionDialog(key, currentTitle(key),
+        {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId)});
+    }
+  }
+
   function renderCard(card, key) {
     const proposal = card.kind === 'proposal';
     const state = proposal ? proposalState(card) : 'report';
@@ -166,9 +198,12 @@
       for (const panel of panels.values()) panel.remove(); panels.clear();
       parentLink?.remove();
       decisionBar?.remove();
+      document.querySelector('.pinkie-chat-session-menu')?.remove();
+      for (const button of pane?.querySelectorAll('.pinkie-fork-action') || []) button.remove();
       return;
     }
     const host = pane.querySelector('.chat-thread, .chat-thread-scroll') || thread;
+    ensureEntryPoints(pane, key);
     if (data.parentKey) {
       if (!parentLink || parentLink.parentElement !== host.parentElement || parentLink.dataset.signature !== signature) {
         parentLink?.remove();
@@ -270,7 +305,7 @@
     refreshTimer = setTimeout(() => void refresh(), 180);
   }
 
-  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor};
+  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor, forkEntryId};
   if (typeof MutationObserver !== 'function') return;
   new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
   window.addEventListener('popstate', reconcile);

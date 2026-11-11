@@ -536,6 +536,7 @@
     } else if (!worker && !archived) {
       actions.append(button('⋯', '管理会话：' + name, e => api.sessionMenu(e.currentTarget, s.key, name, false, {
         detachable: Boolean(s.lineage?.parentKey && !s.lineage.detached), children,
+        isChild: Boolean(s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy),
       })));
     }
     aside.append(actions);
