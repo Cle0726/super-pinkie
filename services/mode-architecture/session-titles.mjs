@@ -295,10 +295,12 @@ export function createSessionAccess(api, {cli, runProcess} = {}) {
   const dist = runtimeDist(cli);
   const sdk = name => dist ? import(pathToFileURL(path.join(dist, 'plugin-sdk', name + '.js')).href).catch(() => null) : null;
   let gateway, sessionStore;
-  async function rpc(method, params) {
+  async function rpc(method, params, options = {}) {
     gateway ??= Promise.resolve(sdk('gateway-runtime'));
     const direct = (await gateway)?.callGatewayFromCli;
-    if (direct) return direct(method, {json: true, timeout: '15000'}, params);
+    if (direct) return direct(method, {json: true, timeout: '15000'}, params,
+      options.admin ? {scopes: ['operator.admin']} : undefined);
+    if (options.admin) throw new Error('session-admin-gateway-unavailable');
     if (!cli || !runProcess) throw new Error('session-gateway-unavailable');
     const {stdout} = await runProcess(process.execPath, [cli, 'gateway', 'call', method,
       '--params', JSON.stringify(params), '--json', '--timeout', '15000'],
