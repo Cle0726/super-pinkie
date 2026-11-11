@@ -76,7 +76,9 @@ function downloadArtifact(name, urls, integrity, maxBytes) {
   if (exists(target)) return fileIntegrity(target, integrity) ? {ok: true, path: target} : {ok: false, note: '已有下载文件的校验不符，未覆盖它。'};
   const helper = path.join(HERE, 'toolbox-download.mjs');
   if (!exists(helper)) return {ok: false, note: '缺少工具箱下载程序。'};
-  const downloaded = run(process.execPath, [helper, JSON.stringify({urls, target, integrity, maxBytes})], {timeout: 900_000});
+  // 卡住由下载程序自己的 20 秒无数据换源负责；总时长按文件大小、最低 50 KB/s 算，慢网也能下完大文件。
+  const budget = Math.max(900_000, Math.ceil(maxBytes / (50 * 1024)) * 1000 * urls.length);
+  const downloaded = run(process.execPath, [helper, JSON.stringify({urls, target, integrity, maxBytes})], {timeout: budget});
   let result;
   try { result = JSON.parse(downloaded.out); } catch { result = {ok: false, note: firstLine(downloaded.err || downloaded.out) || '下载失败'}; }
   return downloaded.ok && result.ok && exists(target) && fileIntegrity(target, integrity) ? {ok: true, path: target} : {ok: false, note: result.note || '下载校验失败。'};
