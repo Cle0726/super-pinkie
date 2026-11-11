@@ -327,6 +327,7 @@
     render,
     get view() { return view; },
     get chips() { return chips; },
+    get link() { return {online: linkOnline, latency: linkLatency}; },
   };
 
   function boot() {

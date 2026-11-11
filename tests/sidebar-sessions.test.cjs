@@ -124,3 +124,11 @@ test('new session shortcut leaves workbench and Monaco keyboard handling alone',
   assert.equal(ctx.isNewSessionShortcut({...event,shiftKey:true}),false);
   assert.equal(ctx.isNewSessionShortcut({...event,defaultPrevented:true}),false);
 });
+test('connection status reports slow only after 800 ms and offline wins',()=>{
+  const snippet=source.slice(source.indexOf('  function connectionState('),source.indexOf('  function ensureConnectionStatus('));
+  const ctx={};vm.createContext(ctx);vm.runInContext(snippet,ctx);
+  assert.equal(ctx.connectionState(true,800),'online');
+  assert.equal(ctx.connectionState(true,801),'slow');
+  assert.equal(ctx.connectionState(false,100),'offline');
+  assert.equal(ctx.connectionState(true,null),'online');
+});

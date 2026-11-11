@@ -282,3 +282,14 @@ html[data-pinkie-night] .pinkie-session-search-mask { --search-bg:#2b2029;--sear
 .pinkie-session-search-snippet mark { background:color-mix(in srgb,var(--accent,#d9508d) 30%,transparent);color:inherit;border-radius:2px }
 .pinkie-session-search-time { grid-column:2;grid-row:1;font-size:11px;color:var(--search-muted) }
 .pinkie-search-hit { outline:2px solid var(--accent,#d9508d);outline-offset:3px }
+
+/* S6: connection state stays visible above the fading session list. */
+html .sidebar #laolao-session-manager { padding-bottom:20px;mask-image:linear-gradient(to bottom,#000 calc(100% - 16px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 16px),transparent) }
+html .sidebar .sidebar-footer-bar>openclaw-tooltip:has(.sidebar-status__dot) { display:none }
+.pinkie-connection-status { min-width:0;min-height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 3px;border:0;border-radius:6px;background:transparent;color:var(--sb-ink);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer }
+.pinkie-connection-status:hover { background:var(--sb-hover) }
+.pinkie-connection-status:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px }
+.pinkie-connection-status__dot { width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#34a866 }
+.pinkie-connection-status[data-state="slow"] .pinkie-connection-status__dot { background:var(--sb-status-waiting) }
+.pinkie-connection-status[data-state="offline"] .pinkie-connection-status__dot { background:var(--sb-status-error) }
+.pinkie-connection-detail { padding:6px 12px;color:inherit;opacity:.75;font-size:12px;white-space:nowrap }

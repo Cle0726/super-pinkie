@@ -563,6 +563,7 @@
   function menuItem(menu, icon, label, onClick) {
     const btn = document.createElement("button");
     btn.type = "button";
+    btn.setAttribute("aria-label", label);
     btn.className = "laolao-menu__item";
     btn.innerHTML = (icon || "") + `<span></span>`;
     btn.querySelector("span").textContent = label;
@@ -1775,6 +1776,39 @@
     syncSidebarThemeButton();
   }
 
+  function connectionState(connected,latency){
+    return !connected?'offline':Number.isFinite(latency)&&latency>800?'slow':'online';
+  }
+  function ensureConnectionStatus() {
+    const footer=document.querySelector('.sidebar-footer-bar');
+    const dot=footer?.querySelector('.sidebar-status__dot');
+    if(!footer||!dot)return;
+    let status=footer.querySelector('.pinkie-connection-status');
+    if(!status){
+      status=document.createElement('button');status.type='button';status.className='pinkie-connection-status';
+      const marker=document.createElement('span');marker.className='pinkie-connection-status__dot';marker.setAttribute('aria-hidden','true');
+      const label=document.createElement('span');label.className='pinkie-connection-status__label';
+      const arrow=document.createElement('span');arrow.textContent='▾';arrow.setAttribute('aria-hidden','true');
+      status.append(marker,label,arrow);
+      status.onclick=event=>openMenu(event.currentTarget,menu=>{
+        const link=window.__laolaoUsage?.link;
+        const shell=document.querySelector('openclaw-app-shell');
+        const version=shell?.context?.config?.current?.serverVersion||shell?.context?.gateway?.snapshot?.hello?.server?.version||'暂不可用';
+        const cost=document.querySelector('.laolao-usage__chip--cost .laolao-usage__value')?.textContent||'—';
+        for(const text of [`链路延迟：${Number.isFinite(link?.latency)?link.latency+' ms':'暂不可用'}`,`版本：${version}`,`累计估算：${cost}`]){
+          const row=document.createElement('div');row.className='pinkie-connection-detail';row.textContent=text;menu.append(row);
+        }
+        menuItem(menu,ICONS.external,'检查更新',()=>{closeMenu();if(!window.__pinkieUpdateDialog?.open())toast('请到设置中的「关于与更新」检查更新');});
+      });
+      footer.prepend(status);
+    }
+    const state=connectionState(dot.classList.contains('sidebar-connection-status--online'),window.__laolaoUsage?.link?.latency);
+    const label={online:'碧琪在线',slow:'连接较慢',offline:'连接断开'}[state];
+    if(status.dataset.state!==state)status.dataset.state=state;
+    if(status.getAttribute('aria-label')!==label+'，查看连接详情')status.setAttribute('aria-label',label+'，查看连接详情');
+    const text=status.querySelector('.pinkie-connection-status__label');if(text.textContent!==label)text.textContent=label;
+  }
+
   window.addEventListener('pinkie:night', syncSidebarThemeButton);
   // 原生快捷栏在折叠/展开时会整块重画，慢轮询把开关补回去（幂等）。
   if (typeof setInterval === 'function') setInterval(ensureRailThemeButton, 1500);
@@ -1783,6 +1817,7 @@
     ensureDrawerFocusGuard();
     ensureSidebarThemeButton();
     ensureRailThemeButton();
+    ensureConnectionStatus();
     if (applying) return;
     const section = document.querySelector("section.sidebar-sessions");
     if (!section) return;
