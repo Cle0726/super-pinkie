@@ -297,6 +297,37 @@ test('work tiers review the first real message after arming, and only once the w
   assert.equal(tutoring.status({sessionKey: 'agent:learning:two'}).recipe.tierViews, 1);
 });
 
+test('a tier task finished in a continuation turn (its own runId) is still reviewed; a new user message is not adopted', async () => {
+  // 11-11 hy4free 实测：验收记录绑的是用户那一轮的 runId，档位任务在续跑轮里做完，验收按 runId 找不到，永远停在 answering。
+  const f = fixture();
+  let tierActive = true;
+  const key = 'agent:project:cont';
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => !tierActive});
+  assert.equal(enhancer.armTier(key, 'boost').armed, true);
+  assert.match(enhancer.beforePromptBuild({prompt: '帮我修测试'}, {sessionKey: key, runId: 'run-user-1'}).appendContext, /交付验收/);
+  assert.deepEqual(await enhancer.agentEnded(runEvent('先派子任务。'), {sessionKey: key, runId: 'run-user-1'}), {reviewed: false, waiting: true});
+  // 引擎的续跑轮：不注入任何东西，但记到这件事上。
+  assert.equal(enhancer.beforePromptBuild({prompt: '[pinkie-tier-control] 用户这件事还差：验证。接着做。'}, {sessionKey: key, runId: 'run-cont-2'}), undefined);
+  assert.equal(enhancer.beforePromptBuild({prompt: '[pinkie-watchdog] 交付前提醒（只提醒这一次）'}, {sessionKey: key, runId: 'run-cont-3'}), undefined);
+  assert.deepEqual(await enhancer.agentEnded(runEvent('还在跑。'), {sessionKey: key, runId: 'run-cont-2'}), {reviewed: false, waiting: true});
+  assert.equal(f.calls.length, 0);
+  tierActive = false;
+  assert.deepEqual(await enhancer.agentEnded(runEvent('修好了。', [['exec', 'OK']]), {sessionKey: key, runId: 'run-cont-3'}), {reviewed: true, pass: true});
+  assert.match(f.calls[0].prompt, /帮我修测试/);
+  assert.equal(enhancer.status({sessionKey: key}).phase, 'passed');
+
+  // 用户新发的一句话（没有续跑前缀）不能被当成上一件事的续跑，免得拿新回复去验收旧任务。
+  const g = fixture();
+  const other = new ReasoningEnhancer(g.api, {runProcess: g.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => true});
+  const k2 = 'agent:project:fresh';
+  other.armTier(k2, 'boost');
+  other.beforePromptBuild({prompt: '帮我修测试'}, {sessionKey: k2, runId: 'run-a'});
+  assert.equal(other.beforePromptBuild({prompt: '顺便问一下今天几号'}, {sessionKey: k2, runId: 'run-b'}), undefined);
+  assert.deepEqual(await other.agentEnded(runEvent('11 号。'), {sessionKey: k2, runId: 'run-b'}), {reviewed: false});
+  assert.equal(g.calls.length, 0);
+  assert.equal(other.status({sessionKey: k2}).phase, 'answering');
+});
+
 test('state is shared through disk: the gateway instance arms, the agent-runtime instance injects and reviews', async () => {
   const f = fixture();
   const store = tempStore();
