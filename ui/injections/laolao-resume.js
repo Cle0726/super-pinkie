@@ -1764,7 +1764,10 @@
     // Native retry stores sendRunId and the gateway persists it as
     // `${sendRunId}:user`. This is stronger than matching text (and is the
     // only reliable confirmation for a pure attachment send).
-    if (runId) return historyIdempotencyKey(message) === `${runId}:user`;
+    if (runId && historyIdempotencyKey(message) === `${runId}:user`) return true;
+    // A steered follow-up is stored under the new run's id, never the client
+    // send id, so only a plain retry relies on the exact id.
+    if (runId && item?.kind !== "steered") return false;
 
     const createdAt = queueItemCreatedAt(item);
     if (!createdAt || historyMessageAt(message) < createdAt) return false;
