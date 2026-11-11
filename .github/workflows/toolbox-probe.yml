@@ -59,6 +59,11 @@ jobs:
             size=$(du -sk "$root/box" 2>/dev/null | cut -f1)
             echo "$cap exit=$code seconds=$((end-start)) box_kb=$size $(cat "$root/$cap.json")" | tee -a "$root/results.log"
           done
+          echo "--- 办公软件诊断" | tee -a "$root/results.log"
+          ls "$root/box" "$root/box/office" 2>&1 | head -20 | tee -a "$root/results.log"
+          find "$root/box" -maxdepth 3 -name 'msiexec.log' -o -maxdepth 3 -name 'soffice*' 2>/dev/null | head | tee -a "$root/results.log"
+          node personas/project/playbooks/toolbox.mjs check office-view 2>&1 | tee -a "$root/results.log"; echo "check exit=${PIPESTATUS[0]}" | tee -a "$root/results.log"
+          node personas/project/playbooks/toolbox.mjs ensure office-view 2>&1 | tee -a "$root/results.log"; echo "ensure exit=${PIPESTATUS[0]}" | tee -a "$root/results.log"
           echo "--- 浏览器内核指纹（清单 browser.digests 用）" | tee -a "$root/results.log"
           venv_py="$root/box/venv/bin/python"; [ -f "$root/box/venv/Scripts/python.exe" ] && venv_py="$root/box/venv/Scripts/python.exe"
           PLAYWRIGHT_BROWSERS_PATH="$root/box/browsers" "$venv_py" -m playwright install chromium-headless-shell >> "$root/results.log" 2>&1
