@@ -67,7 +67,11 @@
         s.meta = metadata?.rows?.[s.key];
         s.parentArchived = metadata?.rows?.[parentOf(s)]?.archived === true;
       }
-      cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(s => internalRow(s) || s.parentArchived)] : rows, version: ++dataVersion});
+      const activeKeys = new Set((archiveView ? activeRows : rows).map(s => s.key));
+      const archivedRunning = Object.entries(lineage?.states || {}).reduce((count, [parent, value]) =>
+        count + (!activeKeys.has(parent) ? Math.max(0, Number(value?.runningChildren) || 0) : 0), 0);
+      cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(s => internalRow(s) || s.parentArchived)] : rows,
+        archivedRunning, version: ++dataVersion});
     } catch (error) {
       if (version !== revision) return;
       cache.set(key, {rows: cache.get(key)?.rows || [], version: ++dataVersion});
@@ -596,7 +600,7 @@
     if(id==='__recent') {
       const more=button('⋯','最近会话菜单',e=>api.openRecentMenu(e.currentTarget,()=>{
         archived=true;limit=30;signature='';render(current.section,current.api);
-      }));
+      },cache.get(api.mode+'|false')?.archivedRunning||0));
       more.classList.add('laolao-group__action','pinkie-recent-menu');
       head.append(more);
     }
