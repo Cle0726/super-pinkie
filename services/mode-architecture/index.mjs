@@ -8,6 +8,8 @@ import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runt
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
+import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
+import {isSessionOperationEvidence, registerSessionLineage} from './session-lineage.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
@@ -438,7 +440,7 @@ function hasIncompleteToolTurn(event = {}, reason = '', ctx = {}) {
 // “仅 CLE Kk 主模式”行为，便于兼容需要自行管理重试的部署。
 function isWatchdogParentContext(ctx = {}) {
   const sessionKey = String(ctx.sessionKey || '');
-  if (!sessionKey || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return false;
+  if (!sessionKey || isUnresolvedSessionKey(sessionKey) || /:(?:subagent|internal-session-effects):/.test(sessionKey)) return false;
   if (String(process.env.PINKIE_WATCHDOG_ALL || '1') === '0') return Boolean(modeForContext(ctx));
   return Boolean(ctx.agentId || agentFromSessionKey(sessionKey));
 }
@@ -462,7 +464,7 @@ function resolveGatewayCliEntry() {
 }
 
 function isInternalExecutionSession(sessionKey = '') {
-  return /:(?:subagent|internal-session-effects):/.test(String(sessionKey || ''));
+  return /:(?:subagent|internal-session-effects):/.test(String(sessionKey || '')) || isUnresolvedSessionKey(sessionKey);
 }
 
 function runProcess(file, args, options) {
@@ -2257,7 +2259,7 @@ export class CompletionIntegrityGuard {
       // requests; a request to edit/create/delete can never pass with reads.
       const mutationRun = isMutationRequest(state.prompt);
       const executed = state.tools.some(entry => !entry.failed && (
-        EXECUTION_TOOL.test(entry.name) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
+        EXECUTION_TOOL.test(entry.name) || isSessionOperationEvidence(entry, state.prompt) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
       ));
       if (!executed) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
       if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
@@ -6522,7 +6524,17 @@ export default {
       if (!nudge) return;
       return {appendSystemContext: `\n${composeNudgeContext(kind, nudge.today)}\n`};
     }, {priority: -10870});
-    registerCompanionGateway(api, learning);
+    const companion = registerCompanionGateway(api, learning);
+    const sessionTitles = registerSessionTitles(api, {root: path.join(pinkieStateRoot(), 'sessions'), assistant: companion, cli: resolveGatewayCliEntry(), runProcess});
+    const sessionLineage = registerSessionLineage(api, {
+      root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, stopped: userStoppedRecently,
+      parentForWorker: key => architecture.resolveParent(key),
+      isBusy: key => {
+        const activity = architecture.activityFor(key);
+        return activity.parentRunning || activity.pending > 0 || watchdog.timers.has(key)
+          || watchdog.dispatching.has(key) || tierContinuation.timers.has(key);
+      },
+    });
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
     // 思考等级的 Max / Ultra：答完之后的交付验收（见 reasoning.mjs 顶部的实测说明）。
@@ -7005,8 +7017,11 @@ export default {
         }
         if (event.success === true && hasDeliverableAssistantReply(event)) {
           architecture.acknowledgeCompaction(ctx.sessionKey || '');
+          sessionTitles.enqueue([ctx.sessionKey || event.sessionKey]);
         }
         fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
+        void sessionLineage.ended(event, ctx, event.success === true && hasDeliverableAssistantReply(event))
+          .catch(() => logSessionFailure(api, 'session-lineage', ctx.sessionKey, 'agent-end'));
       }
     });
     // Re-arm rejected finals that survived a gateway restart. This is quiet
