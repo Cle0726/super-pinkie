@@ -164,6 +164,13 @@
             if(key){try{send(JSON.stringify({type:'req',id:'pinkie-stop-'+Date.now()+'-'+Math.random().toString(36).slice(2),method:'pinkie.watchdog.cancel',params:{sessionKey:key}}));}catch{}}
             return send(data);
           }
+          if (request.type === 'req' && ['chat.send', 'sessions.send', 'sessions.steer'].includes(request.method)
+              && /:subagent:/i.test(request.params?.sessionKey || request.params?.key || '')) {
+            ws.dispatchEvent(new MessageEvent('message', {data: JSON.stringify({
+              type: 'res', id: request.id, ok: false, error: {code: 'INVALID_REQUEST', message: '分身会话只读'},
+            })}));
+            return;
+          }
           if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
           const key=request.params?.sessionKey||request.params?.key;
           const version=abortVersions.get(key)||0;
@@ -1005,7 +1012,7 @@
     });
   }
 
-  function sessionMenu(anchor,key,title,archived=false){
+  function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0}={}){
     openMenu(anchor,menu=>{
       if(archived){
         menuItem(menu,ICONS.restore,'恢复会话',async()=>{closeMenu();try{await restoreSession(key);}catch(error){toast(error.message);}});
@@ -1025,6 +1032,17 @@
           toast(/label already in use/i.test(error.message) ? '已有同名会话，请换一个名称' : error.message);
         }
       }}));
+      if (detachable) menuItem(menu, ICONS.folder, '移到顶层', async () => {
+        closeMenu();
+        try {
+          await gwRequest('pinkie.session.detach', {key});
+          window.PinkieSessionList?.invalidate();
+        } catch (error) { toast(error.message); }
+      });
+      if (children) menuItem(menu, ICONS.folder, '查看子会话', () => {
+        closeMenu();
+        window.PinkieSessionList?.viewChildren(key);
+      });
       menuItem(menu,ICONS.pin,state.pins.includes(key)?'取消置顶':'置顶会话',()=>{closeMenu();togglePin(key);});
       menuItem(menu,ICONS.folder,'归入项目…',()=>openProjectMenu(anchor,key));
       menuItem(menu,ICONS.archive,'归档会话（保留记录）',async()=>{closeMenu();try{await archiveSession(key);}catch(error){toast(error.message);}});

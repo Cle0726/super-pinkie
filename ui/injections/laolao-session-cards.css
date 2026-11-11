@@ -1,0 +1,43 @@
+.pinkie-session-cards {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.pinkie-session-card {
+  padding: 11px 14px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.pinkie-session-card__title { font-weight: 600; }
+.pinkie-session-card__body {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  opacity: .86;
+}
+.pinkie-session-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 7px; }
+.pinkie-session-card__actions .pinkie-session-card__button {
+  border-color: color-mix(in srgb, currentColor 22%, transparent);
+  padding: 3px 9px;
+}
+.pinkie-session-card[data-state="expired"], .pinkie-session-card[data-state="dismissed"] { opacity: .58; }
+.pinkie-session-card__error { color: var(--danger, #b34264); }
+.pinkie-session-card a, .pinkie-session-parent { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pinkie-session-parent {
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 6px 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: .78;
+}
+
+openclaw-chat-pane[data-pinkie-session-readonly] :is(.agent-chat__input, .agent-chat__composer-shell, .chat-composer) {
+  display: none !important;
+}
