@@ -2,11 +2,11 @@
 (() => {
   'use strict';
   const cache=new Map(),loading=new Map();
-  let current=null,revision=0,archived=false,query='',limit=30,signature='',lastMode='';
+  let current=null,revision=0,archived=false,query='',limit=30,signature='',lastMode='',dataVersion=0;
   const el=(tag,cls='',text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
   function button(text,label,action){const b=el('button','laolao-managed-button',text);b.type='button';b.setAttribute('aria-label',label);b.title=label;b.onclick=action;return b;}
   function invalidate(){for(const entry of cache.values())entry.stale=true;revision++;signature='';if(current)void load(current.api);}
-  const requestedTitles = new Map();
+  const requestedTitles = new Map(), clearingUnread = new Set();
   const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
   const internalRow = s => Boolean(s.meta?.internal) || internalKey(s.key);
   const isPersona = key => /:subagent:/iu.test(key || '');
@@ -67,10 +67,10 @@
         s.meta = metadata?.rows?.[s.key];
         s.parentArchived = metadata?.rows?.[parentOf(s)]?.archived === true;
       }
-      cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(s => internalRow(s) || s.parentArchived)] : rows});
+      cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(s => internalRow(s) || s.parentArchived)] : rows, version: ++dataVersion});
     } catch (error) {
       if (version !== revision) return;
-      cache.set(key, {rows: cache.get(key)?.rows || [], error: error.message, at: Date.now()});
+      cache.set(key, {rows: cache.get(key)?.rows || [], version: ++dataVersion});
       if (current?.api.mode === api.mode) api.toast('会话列表暂未刷新：' + error.message);
     } finally {
       if (loading.get(key) === job) loading.delete(key);
@@ -184,6 +184,50 @@
     host?.scrollIntoView({block: 'nearest'});
   }
 
+  const shapes = {
+    running: ['M21 12a9 9 0 1 1-9-9'],
+    waiting: ['M21 11.5a8.4 8.4 0 0 1-.9 3.8A8.5 8.5 0 0 1 12.5 20a8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 4a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.4z', 'M9 12h6'],
+    error: ['M12 8v4m0 4h.01', 'M22 12a10 10 0 1 1-20 0 10 10 0 1 1 20 0'],
+    feishu: ['m22 2-7 20-4-9-9-4 20-7Z', 'M22 2 11 13'],
+    chat: ['M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.3-3.2A7.5 7.5 0 1 1 20 11.5Z', 'M10 11h5'],
+  };
+  const statusLabels = {running: '运行中', waiting: '等你回复', error: '上一轮出错'};
+  function sessionIcon(kind, label, className) {
+    const icon = el('span', className);
+    icon.title = label;
+    icon.setAttribute('aria-label', label);
+    icon.setAttribute('role', 'img');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    for (const d of shapes[kind]) {
+      const line = document.createElementNS(svg.namespaceURI, 'path');
+      line.setAttribute('d', d);
+      svg.append(line);
+    }
+    icon.append(svg);
+    return icon;
+  }
+
+  function sessionStatus(s) {
+    if (s.hasActiveRun || s.hasActiveSubagentRun || /^(?:running|queued)$/i.test(s.status || '')) return 'running';
+    if (s.phase === 'waiting') return 'waiting';
+    if (s.phase === 'error' || /^(?:error|failed|timeout)$/i.test(s.status || '')) return 'error';
+    return '';
+  }
+
+  function readCurrent(rows, api) {
+    const key = api.currentKey;
+    const row = rows.find(s => s.key === key && s.unread);
+    if (!row || clearingUnread.has(key)) return;
+    clearingUnread.add(key);
+    void api.gwRequest('sessions.patch', {key, agentId: api.agentId, unread: false}).then(() => {
+      row.unread = false;
+      signature = '';
+      if (current) render(current.section, current.api);
+    }).catch(() => {}).finally(() => clearingUnread.delete(key));
+  }
+
   function row(s, api, {children = 0, collapsed = false, worker = false} = {}) {
     const n = el('div', 'sidebar-recent-session session-row-host');
     n.dataset.sessionKey = s.key;
@@ -193,6 +237,9 @@
     const link = el('a', 'sidebar-recent-session__link');
     link.href = '/chat?session=' + encodeURIComponent(s.key);
     link.title = worker ? name + '（只读）' : name;
+    const channel = s.meta?.channel;
+    if (channel) link.append(sessionIcon(channel === 'feishu' ? 'feishu' : 'chat',
+      s.meta.channelTitle || channel, 'pinkie-session-icon pinkie-session-channel'));
     link.append(el('span', 'sidebar-recent-session__name', name));
     link.onclick = e => {
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -200,6 +247,15 @@
       api.navigateSession(s.key);
     };
     const aside = el('span', 'session-row-aside');
+    const phase = sessionStatus(s);
+    if (phase) aside.append(sessionIcon(phase, statusLabels[phase], 'pinkie-session-icon pinkie-session-status--' + phase));
+    if (s.unread) {
+      const dot = el('span', 'pinkie-session-unread');
+      dot.title = '未读';
+      dot.setAttribute('aria-label', '未读');
+      dot.setAttribute('role', 'img');
+      aside.append(dot);
+    }
     if (children) {
       const expand = button((collapsed ? '› ' : '⌄ ') + children, (collapsed ? '展开' : '收起') + name + '的子会话',
         () => setFolded(archived ? 'archive:' + s.key : s.key, !collapsed));
@@ -286,8 +342,9 @@
     document.documentElement.setAttribute('data-laolao-sessions-managed','1');
     let host=section.querySelector('#laolao-session-manager');
     if(!host){host=el('div');host.id='laolao-session-manager';section.append(host);signature='';}
-    const rows=cache.get(key)?.rows||[];
-    const next=JSON.stringify([api.mode,archived,query,limit,rows,api.state,api.currentKey,Math.floor(Date.now()/60000)]);
+    const cached = cache.get(key);
+    const rows = cached?.rows || [];
+    const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey]);
     if(signature===next)return;signature=next;
     let search=host.querySelector('.laolao-session-search');
     if(!search){search=el('input','laolao-session-search');search.type='search';search.placeholder='搜索当前模式的会话';search.setAttribute('aria-label','搜索当前模式的会话');search.oninput=()=>{query=search.value;signature='';render(current.section,current.api);};}
@@ -332,6 +389,7 @@
     }
     if(old)old.replaceWith(groups);else host.append(groups);
     ensureVisibleTitles(groups, rows, api);
+    if (!archived) readCurrent(rows, api);
   }
   function chooseFolder(value,request){
     return new Promise(resolve=>{
@@ -345,8 +403,15 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus};
   let refreshTimer;
-  window.addEventListener('laolao:sessions-changed',()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(invalidate,250);});
-  setInterval(()=>{if(current&&!document.hidden)invalidate();},20000);
+  function refreshSoon() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(invalidate, 250);
+  }
+  window.addEventListener('laolao:sessions-changed', refreshSoon);
+  window.addEventListener('pinkie:sidebar-gateway-ready', refreshSoon);
+  window.addEventListener('pinkie:gateway-event', ({detail}) => {
+    if (detail?.event === 'agent' && detail.payload?.stream === 'lifecycle') refreshSoon();
+  });
 })();

@@ -113,7 +113,7 @@
       if (msg?.type === 'event' && msg.event) {
         window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: msg.event, payload: msg.payload}}));
       }
-      if(msg?.type==='event' && (String(msg.event).startsWith('sessions.') || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
+      if(msg?.type==='event' && (msg.event === 'sessions.changed' || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
         window.dispatchEvent(new Event('laolao:sessions-changed'));
       }
       if (msg?.type === 'res' && !msg.ok) {
@@ -125,7 +125,13 @@
         }
       }
       if (!msg || msg.type !== "res" || !msg.id) return;
-      if (msg.ok && msg.id === connectIds.get(ws)) gwSocket = ws;
+      if (msg.ok && msg.id === connectIds.get(ws)) {
+        gwSocket = ws;
+        if (msg.payload?.features?.methods?.includes('sessions.subscribe')) {
+          void gwRequest('sessions.subscribe', {}).catch(() => {});
+        }
+        window.dispatchEvent(new Event('pinkie:sidebar-gateway-ready'));
+      }
       const entry = pending.get(msg.id);
       if (!entry) return;
       pending.delete(msg.id);
