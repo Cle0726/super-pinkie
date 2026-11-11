@@ -992,10 +992,33 @@
     }
   }
 
+  function archiveChildChoice(count){
+    return new Promise(resolve=>{
+      const mask=document.createElement('div');mask.className='laolao-modal-mask';
+      const dialog=document.createElement('div');dialog.className='laolao-modal pinkie-archive-children';
+      dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',`还有 ${count} 个子会话在跑`);
+      const title=document.createElement('h3');title.className='laolao-modal__title';title.textContent=`还有 ${count} 个子会话在跑`;
+      const note=document.createElement('p');note.className='laolao-modal__body';note.textContent='这些子会话可能仍在运行或等待启动。';
+      const actions=document.createElement('div');actions.className='pinkie-archive-children__actions';
+      const stop=document.createElement('button');stop.type='button';stop.className='laolao-modal__btn';stop.textContent='一起停掉并归档（暂不可用）';stop.disabled=true;stop.setAttribute('aria-label','一起停掉并归档，暂不可用');
+      const parent=document.createElement('button');parent.type='button';parent.className='laolao-modal__btn';parent.textContent='让它们跑完再说（只归档父会话）';parent.setAttribute('aria-label',parent.textContent);
+      const cancel=document.createElement('button');cancel.type='button';cancel.className='laolao-modal__btn';cancel.textContent='取消';cancel.setAttribute('aria-label','取消归档');
+      const finish=value=>{mask.remove();resolve(value);};parent.onclick=()=>finish('parent');cancel.onclick=()=>finish('cancel');
+      mask.onpointerdown=event=>{if(event.target===mask)finish('cancel');};
+      dialog.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();finish('cancel');}};
+      actions.append(stop,parent,cancel);dialog.append(title,note,actions);mask.append(dialog);document.body.append(mask);parent.focus();
+    });
+  }
   async function archiveSession(key,{undo=false}={}){
+    const agentId=MODE_AGENT[modeForSession(key)];
+    const lineage=await gwRequest('pinkie.session.lineage',{agentId});
+    if(!lineage || lineage.ok===false)throw new Error(lineage?.error||'暂时无法确认子会话状态，请稍后再试');
+    const running=Math.max(0,Number(lineage.states?.[key]?.runningChildren)||0);
+    if(running && await archiveChildChoice(running)!=='parent')return false;
     await patchSession(key,{archived:true});
     await followAfterSessionLeaves(key);
     if(undo)showArchiveUndo(key);else toast('已归档；记录、项目绑定和文件都保留');
+    return true;
   }
 
   function showArchiveUndo(key) {
@@ -1038,7 +1061,7 @@
   async function archiveMany(keys) {
     const done=[];
     for(const key of keys) {
-      try { await archiveSession(key); done.push(key); }
+      try { if(await archiveSession(key))done.push(key); }
       catch(error) { toast('部分会话未归档：'+(error.message||'请重试')); }
     }
     return done;
@@ -1394,9 +1417,9 @@
     });
   }
 
-  function openRecentMenu(anchor, openArchive) {
+  function openRecentMenu(anchor, openArchive, runningArchived=0) {
     openMenu(anchor, menu => {
-      menuItem(menu, ICONS.archive, '已归档的会话', () => { closeMenu(); openArchive(); });
+      menuItem(menu, ICONS.archive, '已归档的会话'+(runningArchived?` · ${runningArchived} 个运行中`:''), () => { closeMenu(); openArchive(); });
       menuItem(menu, ICONS.more, '会话管理', () => { closeMenu(); openSessionManagement(anchor); });
       menuItem(menu, ICONS.folder, '打开文件夹建项目…', () => {
         closeMenu(); void addFolderProject(null, {bindCurrent: false});

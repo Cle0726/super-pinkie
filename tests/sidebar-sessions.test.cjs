@@ -145,3 +145,16 @@ test('command palette recognises project creation searches',()=>{
   assert.equal(ctx.paletteProjectMatch('folder'),true);
   assert.equal(ctx.paletteProjectMatch('天气'),false);
 });
+test('archive checks running children and respects cancellation before changing the parent',async()=>{
+  const snippet=source.slice(source.indexOf('  async function archiveSession('),source.indexOf('  function showArchiveUndo('));
+  const calls=[];let choice='cancel';
+  const ctx={MODE_AGENT:{chat:'main'},modeForSession:()=> 'chat',
+    gwRequest:async()=>({states:{'agent:main:parent':{runningChildren:2}}}),
+    archiveChildChoice:async count=>{calls.push(['choice',count]);return choice;},
+    patchSession:async(...args)=>calls.push(['patch',...args]),followAfterSessionLeaves:async()=>{},toast(){}};
+  vm.createContext(ctx);vm.runInContext(snippet,ctx);
+  assert.equal(await ctx.archiveSession('agent:main:parent'),false);
+  assert.equal(calls.some(call=>call[0]==='patch'),false);
+  choice='parent';assert.equal(await ctx.archiveSession('agent:main:parent'),true);
+  assert.equal(calls.filter(call=>call[0]==='patch').length,1);
+});
