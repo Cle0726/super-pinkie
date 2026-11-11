@@ -254,6 +254,8 @@ html[data-pinkie-reduce-motion] .sidebar .pinkie-session-status--running svg { a
 
 /* S1/S12: three quiet, equal-height shortcuts. */
 html .sidebar .sidebar-new-session--worktree { display:none !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-sessions.laolao-managed-sessions { gap:0 !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager { padding-top:0 !important }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree):not(#_sb),
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls .pinkie-sidebar-entry:not(#_sb) {
   display:flex !important;align-items:center;gap:10px;width:100%;height:32px !important;min-height:32px !important;
@@ -291,7 +293,8 @@ html[data-pinkie-night] .pinkie-session-search-mask { --search-bg:#2b2029;--sear
 
 /* S6: connection state stays visible above the fading session list. */
 html .sidebar #laolao-session-manager { padding-bottom:20px;mask-image:linear-gradient(to bottom,#000 calc(100% - 16px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 16px),transparent) }
-html .sidebar .sidebar-footer-bar>openclaw-tooltip:has(.sidebar-status__dot) { display:none }
+/* The runtime sets display:contents inline on tooltip wrappers. */
+html .sidebar .sidebar-footer-bar>openclaw-tooltip:has(.sidebar-status__dot) { display:none !important }
 .pinkie-connection-status { min-width:0;min-height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 3px;border:0;border-radius:6px;background:transparent;color:var(--sb-ink);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer }
 .pinkie-connection-status:hover { background:var(--sb-hover) }
 .pinkie-connection-status:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px }
