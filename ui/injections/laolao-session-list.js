@@ -217,6 +217,27 @@
     return '';
   }
 
+  // Compare local calendar days, not elapsed 24-hour periods (DST days can
+  // have 23 or 25 hours). Invalid timestamps remain in the oldest section.
+  function calendarAge(value, now = Date.now()) {
+    const date = new Date(value), today = new Date(now);
+    if (!value || !Number.isFinite(date.getTime()) || !Number.isFinite(today.getTime())) return Infinity;
+    const day = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    return Math.max(0, Math.floor((day(today) - day(date)) / 86400000));
+  }
+  function dateGroup(value, now = Date.now()) {
+    const age = calendarAge(value, now);
+    return age === 0 ? '今天' : age === 1 ? '昨天' : age < 7 ? '7 天内' : age < 30 ? '30 天内' : '更早';
+  }
+  function dateLabel(value, now = Date.now()) {
+    const age = calendarAge(value, now);
+    if (!Number.isFinite(age)) return '';
+    const date = new Date(value);
+    if (age === 0) return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+    if (age < 7) return '周' + '日一二三四五六'[date.getDay()];
+    return (date.getMonth() + 1) + '/' + date.getDate();
+  }
+
   function readCurrent(rows, api) {
     const key = api.currentKey;
     const row = rows.find(s => s.key === key && s.unread);
@@ -256,6 +277,10 @@
       dot.setAttribute('aria-label', '未读');
       dot.setAttribute('role', 'img');
       aside.append(dot);
+    }
+    if (!phase && !s.unread) {
+      const time = dateLabel(s.updatedAt);
+      if (time) aside.append(el('time', 'pinkie-session-time', time));
     }
     if (children) {
       const expand = button((collapsed ? '› ' : '⌄ ') + children, (collapsed ? '展开' : '收起') + name + '的子会话',
@@ -329,7 +354,16 @@
     }
     n.append(head);
     if(!collapsed){
-      const list=el('div','laolao-group__list');for(const node of rows)addTree(list,node,api);
+      const list=el('div','laolao-group__list');
+      if(id==='__recent') {
+        const now=Date.now();
+        for(const label of ['今天','昨天','7 天内','30 天内','更早']) {
+          const matching=rows.filter(node=>dateGroup(node.session.updatedAt,now)===label);
+          if(!matching.length)continue;
+          list.append(el('div','pinkie-session-date',label));
+          for(const node of matching)addTree(list,node,api);
+        }
+      } else for(const node of rows)addTree(list,node,api);
       if(!rows.length)list.append(el('div','laolao-group__empty',loading.size?'正在读取…':project?'点 ＋ 开始一个会话':'暂无会话'));
       if(project&&api.state.projectFolders[name]){const p=el('div','laolao-project__path',api.state.projectFolders[name].replace(/^\/Users\/[^/]+/,'~'));p.title=api.state.projectFolders[name];n.append(p);}
       n.append(list);
@@ -347,7 +381,7 @@
     if(!host){host=el('div');host.id='laolao-session-manager';section.append(host);signature='';}
     const cached = cache.get(key);
     const rows = cached?.rows || [];
-    const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey]);
+    const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, new Date().toDateString()]);
     if(signature===next)return;signature=next;
     let search=host.querySelector('.laolao-session-search');
     if(!search){search=el('input','laolao-session-search');search.type='search';search.placeholder='搜索当前模式的会话';search.setAttribute('aria-label','搜索当前模式的会话');search.oninput=()=>{query=search.value;signature='';render(current.section,current.api);};}
@@ -406,7 +440,7 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel};
   let refreshTimer;
   function refreshSoon() {
     clearTimeout(refreshTimer);
