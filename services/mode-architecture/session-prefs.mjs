@@ -15,7 +15,7 @@ const MAX_SESSIONS = 5000;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export const DEFAULT_GLOBAL = Object.freeze({
-  defaultStyle: 'default', customStyle: '', notify: {done: true, waiting: true}, menubar: true, hotkey: null,
+  defaultStyle: 'default', customStyle: '', notify: {done: true, waiting: true}, menubar: true, hotkey: 'default',
 });
 
 let styleCache = null;
