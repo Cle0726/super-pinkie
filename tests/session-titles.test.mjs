@@ -75,6 +75,7 @@ test('validates thematic model output, injection and grapheme limits', () => {
   assert.equal(heuristicTitle(injection), '标题提示注入');
   assert.equal(validateTitle('Short Title', ['Short Title']), 'Short Title');
   assert.equal(heuristicTitle('请帮我看看清理系统内存，怎么操作'), '清理系统内存');
+  assert.equal(heuristicTitle('去看看为什么每次追加信息之前碧琪的流式输出内容都会消失'), '流式输出消失');
   assert.equal(heuristicTitle('Please investigate local caching, then summarize'), 'local caching');
   assert.equal(clipGraphemes('𠮷👩🏽‍💻e\u0301', 2), '𠮷👩🏽‍💻');
   assert.equal(graphemeCount('𠮷👩🏽‍💻e\u0301'), 3);

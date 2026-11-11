@@ -18,7 +18,7 @@ const BAD_TITLE = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|\[(?:pinkie-[\w-]+|S
 const CHANNEL_ID = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|(?:direct|dm|group|channel):|[0-9a-f]{8}\b|\+?\d{5,}$)|@chatroom$|^[A-Za-z0-9_-]{24,}$/iu;
 const CHANNELS = {feishu: '飞书', 'openclaw-weixin': '微信', weixin: '微信', dingtalk: '钉钉'};
 const LOW_INFORMATION = /^(?:(?:hi|hey|hello)(?:there|pinkie|碧琪)?|ping|test(?:ing)?\d*|ok(?:ay)?|thanks|thankyou|gotit|yes|yep|sure|continue|goon|你好(?:呀|啊|吗|么|碧琪)?|您好|在(?:吗|不在|不)|嗨|哈[喽啰]|[嗯哦啊]+|测试(?:一下|哈)?\d*|好的?|收到|知道了|可以|对|继续(?:吧|啊|呀)?|接着|明白了|谢谢|早上好|晚安)$/iu;
-const FILLER = /^(?:(?:你(?:能不能|可以|帮我)|请(?:你|帮我)?|帮我|麻烦(?:你)?|我[想要]|我需要|我希望|去|看看|看一下|问一下|研究一下|想了解|想|想问|如何|怎么(?:样|办)?|能不能|能否|实现|做一个|给我|给出)[\s，、,:：]*|(?:please|can you|could you|would you|help me|i want to|i need to|how (?:do|can) i|take a look at|look into|investigate|implement)\b[\s,:-]*)/iu;
+const FILLER = /^(?:(?:你(?:能不能|可以|帮我)|请(?:你|帮我)?|帮我|帮忙|麻烦(?:你)?|我[想要]|我需要|我希望|去|先看|看看|看一下|查一下|问一下|研究一下|想了解|想问|想|为什么|如何|怎么(?:样|办)?|能不能|能否|实现|做一个|给我|给出)[\s，、,:：]*|(?:please|can you|could you|would you|help me|i want to|i need to|how (?:do|can) i|explain (?:why|how)|what are some(?: simple)? ways to|take a look at|look into|investigate|implement)\b[\s,:-]*)/iu;
 const INJECTION = /(?:(?:忽略|无视|忘掉).{0,20}(?:之前|以上|前面|指令|要求).{0,40}标题|ignore\b.{0,60}(?:previous|prior|above|instructions).{0,70}\btitle\b)/iu;
 
 export const INTERNAL_MESSAGE_PREFIXES = Object.freeze([
@@ -129,9 +129,18 @@ export function heuristicTitle(source) {
     previous = text;
     text = text.replace(FILLER, '');
   } while (text && text !== previous);
-  text = unquote(text || source);
-  const natural = text.match(/^(.+?)(?:[，、；。！？!?;]|,\s|\s[—–]\s|\.(?:\s|$))/u)?.[1]?.trim();
-  const phrase = natural || text;
+  text = unquote(text || source)
+    .replace(/^(?:一个办法[，,]|.{1,20}?(?:有(?:没有|什么)办法)(?:可以|能)?)\s*/u, '')
+    .replace(/^(?:my|our)\s+/iu, '');
+  const clauses = text.split(/[，、；。！？!?;]|,\s|\s[—–]\s|\.(?:\s|$)/u);
+  let phrase = clauses.map(clause => clause.trim()).find(clause => !isLowInformation(clause)) || text;
+  // In a timing report the symptom is usually after the condition.
+  // Keep that clause when it describes an observable failure.
+  const symptom = /(?:之前|之后|以后|的时候|时)([^，。]+(?:消失|断流|断开|失败|报错|出错|卡顿|崩溃|闪退|超时|没反应|不见了))$/u.exec(phrase)?.[1];
+  if (symptom && !isLowInformation(symptom)) {
+    phrase = symptom.replace(/^(?:碧琪|应用|系统)的/u, '')
+      .replace(/(?:内容)?(?:就|都|总是|一直)?会(?=消失|断流|断开|失败|报错|出错|卡顿|崩溃|闪退|超时)/u, '');
+  }
   if (graphemeCount(phrase, 16) <= 16) return phrase;
   const prefix = clipGraphemes(phrase, 16);
   const boundary = prefix.lastIndexOf(' ');
