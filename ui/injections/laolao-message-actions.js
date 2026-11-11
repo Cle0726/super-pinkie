@@ -117,6 +117,7 @@
 
   // ── per-session data ──
   let session = '', variants = new Map(), ratings = {}, loadSeq = 0, lastLength = -1;
+  const pendingRatings = new Map();
   async function loadMeta(key, pane) {
     const seq = ++loadSeq;
     const [v, f] = await Promise.all([
@@ -125,7 +126,8 @@
     ]);
     if (seq !== loadSeq || key !== currentKey(pane)) return;
     variants = new Map((v?.ok ? v.items : []).map(item => [item.entryId, item]));
-    ratings = f?.ok ? f.ratings || {} : {};
+    ratings = f?.ok ? {...(f.ratings || {})} : {};
+    for (const [id, value] of pendingRatings) { if (value) ratings[id] = value; else delete ratings[id]; }
     schedule();
   }
 
@@ -255,12 +257,15 @@
   async function rate(key, entryId, rating, note) {
     const previous = ratings[entryId];
     if (rating) ratings[entryId] = rating; else delete ratings[entryId];
+    pendingRatings.set(entryId, rating);
     schedule();
     try {
       const result = await request('pinkie.feedback.record', {key, entryId, rating, ...(note ? {note} : {})});
       if (!result?.ok) throw new Error(result?.error);
+      if (pendingRatings.get(entryId) === rating) pendingRatings.delete(entryId);
       if (rating) toast(rating === 'up' ? '收到，谢谢' : '记下了，谢谢');
     } catch {
+      pendingRatings.delete(entryId);
       if (previous) ratings[entryId] = previous; else delete ratings[entryId];
       schedule();
       toast('没记上，请稍后再试');
@@ -326,6 +331,8 @@
     group.dataset.pinkieActions = signature;
     footer.querySelector('.pinkie-msg-row')?.remove();
     if (streaming || !ownId) return;
+    let slot = footer.querySelector('.chat-group-footer-actions');
+    if (!slot) { slot = el('div', 'chat-group-footer-actions'); footer.append(slot); }
     const messages = [...group.querySelectorAll('.chat-bubble[data-message-id]')]
       .map(node => historyItem(node.dataset.messageId, history)).filter(Boolean);
     const markdown = () => messages.map(textOf).filter(Boolean).join('\n\n');
@@ -355,7 +362,7 @@
     up.setAttribute('aria-pressed', String(current === 'up'));
     down.setAttribute('aria-pressed', String(current === 'down'));
     row.append(up, down);
-    footer.append(row);
+    slot.append(row);
   }
 
   function paint() {
@@ -364,7 +371,7 @@
     const key = currentKey(pane);
     if (!pane || !key) return;
     if (key !== session) {
-      session = key; variants = new Map(); ratings = {}; lastLength = -1;
+      session = key; variants = new Map(); ratings = {}; lastLength = -1; pendingRatings.clear();
     }
     const history = pane.state?.chatMessages;
     const busy = running(pane);
