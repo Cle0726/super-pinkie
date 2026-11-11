@@ -29,12 +29,13 @@ const PIP_MIRRORS = MANIFEST.pypiMirrors;
 const DOC_PACKAGES = {pptx: 'python-pptx', docx: 'python-docx', openpyxl: 'openpyxl'};
 
 function run(file, args = [], options = {}) {
-  const result = spawnSync(file, args, {encoding: 'utf8', timeout: options.timeout || 60_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024,
+  const result = spawnSync(file, args, {encoding: 'utf8', timeout: options.timeout || 60_000, windowsHide: true, maxBuffer: 8 * 1024 * 1024, windowsVerbatimArguments: Boolean(options.verbatim),
     env: {...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8', PYTHONNOUSERSITE: '1', PYTHONPATH: '',
       PIP_CONFIG_FILE: os.devNull, PIP_NO_INPUT: '1', PLAYWRIGHT_BROWSERS_PATH: path.join(BOX, 'browsers'), ...(options.env || {})}, cwd: options.cwd});
   return {ok: !result.error && result.status === 0, out: String(result.stdout || '').trim(), err: String(result.stderr || result.error?.message || '').trim()};
 }
 const exists = file => { try { return Boolean(file) && fs.existsSync(file); } catch { return false; } };
+const lastLine = text => String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).at(-1) || '';
 const firstLine = text => String(text || '').split(/\r?\n/).find(Boolean) || '';
 
 function requireSpace(bytes) {
@@ -441,7 +442,7 @@ import tempfile
 from pathlib import Path
 from pypdf import PdfWriter, PdfReader
 import pypdfium2 as pdfium
-with tempfile.TemporaryDirectory(prefix='pinkie-pdf-') as folder:
+with tempfile.TemporaryDirectory(prefix='pinkie-pdf-', ignore_cleanup_errors=True) as folder:
     from pypdf.generic import NameObject, DictionaryObject, DecodedStreamObject
     root=Path(folder); writer=PdfWriter(); page=writer.add_blank_page(width=200, height=100)
     font=writer._add_object(DictionaryObject({NameObject('/Type'): NameObject('/Font'), NameObject('/Subtype'): NameObject('/Type1'), NameObject('/BaseFont'): NameObject('/Helvetica')}))
@@ -452,7 +453,8 @@ with tempfile.TemporaryDirectory(prefix='pinkie-pdf-') as folder:
     merged=PdfWriter(); merged.append(root/'one.pdf'); merged.append(root/'one.pdf')
     with (root/'test.pdf').open('wb') as out: merged.write(out)
     assert len(PdfReader(root/'test.pdf').pages) == 2
-    pdf=pdfium.PdfDocument(str(root/'test.pdf')); image=pdf[0].render(scale=1).to_pil(); image.save(root/'page.png')
+    pdf=pdfium.PdfDocument(str(root/'test.pdf')); page=pdf[0]; image=page.render(scale=1).to_pil(); image.save(root/'page.png')
+    page.close(); pdf.close()  # Windows 上文件还开着，临时目录就删不掉
     assert image.size == (200, 100) and (root/'page.png').stat().st_size > 30
 `;
 const IMAGE_PROBE = `
@@ -469,7 +471,7 @@ function checkPythonGroup(group, modules, probe) {
   if (!python) return {ok: false, note: '没有 Python 3.11 以上'};
   if (!canImport(python.path, modules)) return {ok: false, path: python.path, note: `缺少 ${group} 组件`};
   const result = run(python.path, ['-c', probe], {timeout: 90_000});
-  return result.ok ? {ok: true, path: python.path, how: 'found'} : {ok: false, path: python.path, note: `${group} 自检失败：${firstLine(result.err).slice(0, 150)}`};
+  return result.ok ? {ok: true, path: python.path, how: 'found'} : {ok: false, path: python.path, note: `${group} 自检失败：${lastLine(result.err).slice(0, 150)}`};
 }
 const checkPdf = () => checkPythonGroup('PDF', ['pypdf', 'pypdfium2'], PDF_PROBE);
 const checkImage = () => checkPythonGroup('图片', ['PIL'], IMAGE_PROBE);
@@ -545,10 +547,16 @@ function ensureOffice() {
     try {
       const extracted = path.join(stage, 'SourceDir');
       const msi = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'msiexec.exe');
-      const unpacked = run(msi, ['/a', downloaded.path, '/qn', `TARGETDIR=${extracted}`], {timeout: 900_000});
+      // msiexec 要的是 TARGETDIR="路径"，Node 默认会把整段包进引号，带空格的路径就解不开；手动按它的格式拼，并留安装日志。
+      const log = path.join(stage, 'msiexec.log');
+      const unpacked = run(msi, [`/a "${downloaded.path}" /qn /l*v "${log}" TARGETDIR="${extracted}"`], {timeout: 1_500_000, verbatim: true});
       let source = extracted;
       if (!exists(path.join(source, 'program', 'soffice.exe')) && exists(path.join(source, 'LibreOffice', 'program', 'soffice.exe'))) source = path.join(source, 'LibreOffice');
-      if (!unpacked.ok || !exists(path.join(source, 'program', 'soffice.exe'))) return {ok: false, how: 'failed', note: '办公软件免安装解包失败；没有修改系统安装。'};
+      if (!unpacked.ok || !exists(path.join(source, 'program', 'soffice.exe'))) {
+        let reason = '';
+        try { reason = fs.readFileSync(log, 'utf16le').split(/\r?\n/).filter(line => /error|错误|return value 3/i.test(line)).slice(-2).join(' ').replace(/\s+/g, ' ').slice(0, 200); } catch {}
+        return {ok: false, how: 'failed', note: `办公软件免安装解包失败；没有修改系统安装。${reason ? `（${reason}）` : unpacked.err ? `（${firstLine(unpacked.err).slice(0, 120)}）` : ''}`};
+      }
       const fonts = path.join(source, 'Fonts');
       if (exists(fonts)) fs.cpSync(fonts, path.join(source, 'share', 'fonts', 'truetype'), {recursive: true, force: false});
       fs.renameSync(source, office);
