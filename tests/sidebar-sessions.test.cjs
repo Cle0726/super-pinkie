@@ -63,23 +63,14 @@ test('all four modes create sessions with their own namespace; plain chat does n
 });
 test('session sidebar uses independent DOM and only queries the current agent',()=>{
   const src=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-session-list.js'),'utf8');
-  assert.match(src,/agentId:api\.agentId,archived:archiveView/);
-  assert.match(src,/s\.key\?\.startsWith\('agent:'\+api\.agentId\+':'\)/);
-  assert.match(src,/!s\.key\.includes\(':subagent:'\)/);
-  assert.match(src,/archived:false/);assert.doesNotMatch(src,/sessions\.delete|deleteTranscript/);
-  assert.match(src,/管理已归档会话/);assert.match(src,/sessionMenu\(e\.currentTarget,s\.key,title\(s\),true\)/);
-  assert.match(src,/entry\.stale=true/);assert.doesNotMatch(src,/cache\.clear\(\)/);
-  assert.match(src,/includeDerivedTitles:true/);
-  assert.match(src,/placeholderTitle/);
-  assert.match(src,/placeholderTitle\(v,s\.key,s\.sessionId\)/);
-  assert.match(src,/\[s\.derivedTitle,s\.title,s\.displayName,s\.name,label\]/);
-  assert.match(source,/for\(const offset of \[0,12,24,36\]\)/);
-  assert.match(source,/gwRequest\('chat\.history',\{sessionKey:key,agentId,limit:12,offset,maxChars:16000\}/);
-  assert.match(source,/autoTitleCheckedAt\.get\(row\.key\)!==marker/);
-  assert.match(source,/placeholderSessionTitle/);
-  assert.match(source,/placeholderSessionTitle\(name,row\.key,row\.sessionId\)/);
-  assert.match(source,/gwRequest\('sessions\.patch',\{key,agentId:MODE_AGENT\[mode\],label:title\}\)/);
-  assert.match(source,/await new Promise\(resolve=>setTimeout\(resolve,120\)\)/);
+  assert.match(src,/agentId: api\.agentId, archived, includeLastMessage: true/);
+  assert.match(src,/s\.key\?\.startsWith\('agent:' \+ api\.agentId \+ ':'\)/);
+  assert.doesNotMatch(src,/sessions\.delete|deleteTranscript/);
+  assert.match(src,/管理已归档会话/);
+  assert.match(src,/pinkie\.session\.title\.ensure/);
+  assert.match(src,/pinkie\.session\.title\.metadata/);
+  assert.doesNotMatch(source,/autoTitleFromText|drainAutoTitleHistory|queueAutoTitles/);
+  assert.match(source,/gwRequest\('pinkie\.session\.rename', \{key, title: name\}\)/);
 });
 test('derived worker sessions stay out of every user-facing sidebar path',()=>{
   assert.match(source,/!s\.key\.includes\(":subagent:"\)/);
@@ -98,7 +89,7 @@ test('session manager exposes one confirmed bulk delete for the current mode',()
   const list=fs.readFileSync(path.join(__dirname,'../ui/injections/laolao-session-list.js'),'utf8');
   assert.match(list,/全部删除/);
   assert.match(source,/askDeleteAllSessions/);
-  assert.match(source,/patchSession,askDeleteAllSessions,openSessionManagement,queueAutoTitles,toast/);
+  assert.match(source,/patchSession,askDeleteAllSessions,openSessionManagement,toast/);
   assert.match(source,/archived:true/);
   assert.match(source,/targets\.slice\(offset, offset \+ 5\)/);
   assert.match(source,/项目文件夹里的真实文件不会被动/);
