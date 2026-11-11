@@ -3184,6 +3184,21 @@ class NativeBridge(InAppBrowserBridge):
     def attach(self, window):
         self._window = window
 
+    def _pinkie_native(self):
+        native = getattr(self, "_native_bridge", None)
+        if native is None:
+            from app.windows_native import WindowsNative
+
+            native = self._native_bridge = WindowsNative(self, state_root() / "native-settings.json")
+        return native
+
+    def pinkieNative(self, message):  # noqa: N802 - same name as the Mac handler (PLAN §8)
+        try:
+            return self._pinkie_native().handle(message)
+        except Exception as error:  # the page always gets an answer
+            append_log("native", f"pinkieNative failed: {type(error).__name__}")
+            return {"ok": False, "error": "原生端出错了"}
+
     def open_chat(self):
         self._window.load_url(gateway_ui_url())
 
@@ -4858,6 +4873,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         shadow=False, background_color="#000000", transparent=True,
     )
     bridge.attach(window)
+    try:
+        bridge._pinkie_native().start()  # tray icon + global hotkey (N2, N3)
+    except Exception as error:
+        append_log("native", f"tray start failed: {type(error).__name__}")
     if inapp_browser.manager() is not None:
         inapp_browser.manager().owner_hwnd = bridge._native_window_handle
     if update_health_token and updater.health_reporter is not None:
