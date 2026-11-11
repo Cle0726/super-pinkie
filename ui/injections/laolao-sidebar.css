@@ -432,5 +432,29 @@ html[data-laolao-sessions-managed] .shell--chat .sidebar .sidebar-recent-session
    WKWebView 合成层裁剪失效时滚动中的文字会画出侧栏、盖到聊天区（用户截图证实）。
    滚动期间保持 ellipsis，文字始终裁剪在行内；视觉效果无差异（滚动时末尾本来就在变）。 */
 .hover-marquee--scrolling{text-overflow:ellipsis!important}
-/* Derived workers stay attached to their parent transcript, not the user's chat list. */
-.sidebar-recent-session[data-session-key*=":subagent:"]{display:none!important}
+/* Hide the native worker rows. The managed list owns the read-only group. */
+.sidebar-recent-session[data-session-key*=":subagent:"]:not(.pinkie-session-persona){display:none!important}
+#laolao-session-manager .pinkie-session-branch{
+  margin:1px 0 4px 18px;
+  padding-inline-start:6px;
+  border-inline-start:1px solid color-mix(in srgb,currentColor 19%,transparent);
+}
+#laolao-session-manager .pinkie-session-branch .sidebar-recent-session{margin-inline-start:0}
+#laolao-session-manager .pinkie-session-workers{opacity:.84}
+#laolao-session-manager .pinkie-session-workers>button,#laolao-session-manager .pinkie-session-fold{font-size:10px}
+#laolao-session-manager .sidebar-recent-session__link{display:flex;align-items:center;gap:5px}
+.pinkie-session-icon{width:13px;height:13px;display:inline-flex;align-items:center;flex:0 0 13px}
+.pinkie-session-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
+.pinkie-session-channel{color:#426bd1}
+.pinkie-session-status--running{color:#a24e79}
+.pinkie-session-status--waiting{color:#9b631c}
+.pinkie-session-status--error{color:#ba3457}
+.pinkie-session-unread{width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:#bb477e;margin:0 2px}
+.pinkie-session-status--running svg{animation:pinkie-session-spin 1.1s linear infinite}
+@keyframes pinkie-session-spin{to{transform:rotate(360deg)}}
+html[data-pinkie-reduce-motion] .pinkie-session-status--running svg{animation:none}
+html[data-pinkie-night] .pinkie-session-channel{color:#a4bdff}
+html[data-pinkie-night] .pinkie-session-status--running{color:#f2a1c7}
+html[data-pinkie-night] .pinkie-session-status--waiting{color:#f0c176}
+html[data-pinkie-night] .pinkie-session-status--error{color:#fa90a9}
+html[data-pinkie-night] .pinkie-session-unread{background:#ff9fd1}

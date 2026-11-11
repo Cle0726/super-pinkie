@@ -12,6 +12,12 @@
   let gwSocket = null;
   const connectIds = new WeakMap();
   const pending = new Map();
+  const messageText=value=>{
+    if(typeof value==='string')return value;
+    if(Array.isArray(value))return value.map(part=>typeof part==='string'?part:(part?.type==='text'||part?.type==='input_text'?part.text||part.content||'':'')).join(' ');
+    if(value&&typeof value==='object')return messageText(value.content??value.text??value.message??'');
+    return '';
+  };
   const reasoningJobs = new Map();
   const reasoningTierKey = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
 
@@ -113,7 +119,7 @@
       if (msg?.type === 'event' && msg.event) {
         window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: msg.event, payload: msg.payload}}));
       }
-      if(msg?.type==='event' && (String(msg.event).startsWith('sessions.') || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
+      if(msg?.type==='event' && (msg.event === 'sessions.changed' || msg.event==='chat'&&['final','error','aborted'].includes(msg.payload?.state))){
         window.dispatchEvent(new Event('laolao:sessions-changed'));
       }
       if (msg?.type === 'res' && !msg.ok) {
@@ -125,7 +131,13 @@
         }
       }
       if (!msg || msg.type !== "res" || !msg.id) return;
-      if (msg.ok && msg.id === connectIds.get(ws)) gwSocket = ws;
+      if (msg.ok && msg.id === connectIds.get(ws)) {
+        gwSocket = ws;
+        if (msg.payload?.features?.methods?.includes('sessions.subscribe')) {
+          void gwRequest('sessions.subscribe', {}).catch(() => {});
+        }
+        window.dispatchEvent(new Event('pinkie:sidebar-gateway-ready'));
+      }
       const entry = pending.get(msg.id);
       if (!entry) return;
       pending.delete(msg.id);
@@ -163,6 +175,13 @@
             // abort 后面（同一连接上网关先处理完 abort），停下的这一轮会被当成故障自动续接。
             if(key){try{send(JSON.stringify({type:'req',id:'pinkie-stop-'+Date.now()+'-'+Math.random().toString(36).slice(2),method:'pinkie.watchdog.cancel',params:{sessionKey:key}}));}catch{}}
             return send(data);
+          }
+          if (request.type === 'req' && ['chat.send', 'sessions.send', 'sessions.steer'].includes(request.method)
+              && /:subagent:/i.test(request.params?.sessionKey || request.params?.key || '')) {
+            ws.dispatchEvent(new MessageEvent('message', {data: JSON.stringify({
+              type: 'res', id: request.id, ok: false, error: {code: 'INVALID_REQUEST', message: '分身会话只读'},
+            })}));
+            return;
           }
           if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
           const key=request.params?.sessionKey||request.params?.key;
@@ -793,93 +812,6 @@
   }
 
   const creatingSessions=new Map();
-  const autoTitlePending=new Set();
-  const autoTitleDone=new Set();
-  const autoTitleCheckedAt=new Map();
-  const autoTitleHistoryQueue=[];
-  let autoTitleHistoryRunning=false;
-  const placeholderSessionTitle=(value,key='',sessionId='')=>{
-    const text=String(value||'').trim();
-    if(!text)return true;
-    if(/^(?:(?:.+?)\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+)$/i.test(text))return true;
-    if(/^[0-9a-f]{8}\b/i.test(text))return true;
-    return [String(key||'').split(':').pop(),String(sessionId||'')].filter(Boolean).some(id=>{
-      const short=id.slice(0,8);
-      return text===id||text===short||text===short+'…'||text.startsWith(short+' (');
-    });
-  };
-  const messageText=value=>{
-    if(typeof value==='string')return value;
-    if(Array.isArray(value))return value.map(part=>typeof part==='string'?part:(part?.type==='text'||part?.type==='input_text'?part.text||part.content||'':'')).join(' ');
-    if(value&&typeof value==='object')return messageText(value.content??value.text??value.message??'');
-    return '';
-  };
-  const autoTitleFromText=value=>{
-    const cleaned=messageText(value)
-      .replace(/```[\s\S]*?```/g,' ')
-      .replace(/https?:\/\/\S+/g,' ')
-      .replace(/[\u200B-\u200D\u2060\u2063\u2064\uFEFF]/g,' ')
-      .replace(/^\s*(?:[#>*-]|\d+[.)])\s*/gm,'')
-      .replace(/\s+/g,' ').trim();
-    if(!cleaned)return '';
-    const sentence=cleaned.split(/[。！？!?\n]/,1)[0].trim()||cleaned;
-    return sentence.length>28?sentence.slice(0,27).trim()+'…':sentence;
-  };
-
-  async function maybeAutoTitle(key,message){
-    const title=autoTitleFromText(message);
-    const mode=modeForSession(key);
-    if(!title||!mode||key.endsWith(':main')||autoTitlePending.has(key)||autoTitleDone.has(key))return false;
-    autoTitlePending.add(key);
-    try{
-      const listed=await gwRequest('sessions.list',{agentId:MODE_AGENT[mode],limit:1000});
-      const row=extractSessions(listed).find(item=>item.key===key);
-      if(!row||!placeholderSessionTitle(row.label??row.name,key,row.sessionId)){autoTitleDone.add(key);return false;}
-      await gwRequest('sessions.patch',{key,agentId:MODE_AGENT[mode],label:title});
-      autoTitleDone.add(key);sessionIndex=null;window.PinkieSessionList?.invalidate();schedule();
-      return true;
-    }catch(error){
-      if(!/label already in use/i.test(String(error?.message||'')))return false;
-      try{
-        await gwRequest('sessions.patch',{key,agentId:MODE_AGENT[mode],label:`${title} · ${String(key).slice(-4)}`});
-        autoTitleDone.add(key);sessionIndex=null;window.PinkieSessionList?.invalidate();schedule();return true;
-      }catch{return false;}
-    }finally{autoTitlePending.delete(key);}
-  }
-
-  async function drainAutoTitleHistory(){
-    if(autoTitleHistoryRunning)return;
-    autoTitleHistoryRunning=true;
-    try{
-      while(autoTitleHistoryQueue.length){
-        const {key,marker}=autoTitleHistoryQueue.shift();
-        if(autoTitleDone.has(key)||autoTitlePending.has(key)||key.endsWith(':main'))continue;
-        try{
-          const agentId=String(key).match(/^agent:([^:]+):/)?.[1];
-          let user=null;
-          for(const offset of [0,12,24,36]){
-            const history=await gwRequest('chat.history',{sessionKey:key,agentId,limit:12,offset,maxChars:16000},12000);
-            const messages=Array.isArray(history?.messages)?history.messages:Array.isArray(history?.items)?history.items:[];
-            user=messages.find(item=>String(item?.role||item?.message?.role||'').toLowerCase()==='user'&&autoTitleFromText(item.message??item));
-            if(user||messages.length<12)break;
-          }
-          if(user)await maybeAutoTitle(key,user.message??user);
-        }catch{}
-        autoTitleCheckedAt.set(key,marker);
-        await new Promise(resolve=>setTimeout(resolve,120));
-      }
-    }finally{autoTitleHistoryRunning=false;}
-  }
-
-  function queueAutoTitles(rows=[]){
-    for(const row of rows){
-      const name=row?.label??row?.displayName??row?.title??row?.name??'';
-      const marker=row?.updatedAt||row?.lastActivityAt||row?.createdAt||0;
-      if(row?.key&&!row.key.endsWith(':main')&&placeholderSessionTitle(name,row.key,row.sessionId)&&autoTitleCheckedAt.get(row.key)!==marker&&!autoTitleDone.has(row.key)&&!autoTitlePending.has(row.key)&&!autoTitleHistoryQueue.some(item=>item.key===row.key))autoTitleHistoryQueue.push({key:row.key,marker});
-    }
-    void drainAutoTitleHistory();
-  }
-
   async function createProjectSession(name, options = {}) {
     if(name&&!state.projectFolders[name]){toast('请先为「'+name+'」选择项目文件夹');return;}
     const agentId = currentModeAgent();
@@ -1092,7 +1024,7 @@
     });
   }
 
-  function sessionMenu(anchor,key,title,archived=false){
+  function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0}={}){
     openMenu(anchor,menu=>{
       if(archived){
         menuItem(menu,ICONS.restore,'恢复会话',async()=>{closeMenu();try{await restoreSession(key);}catch(error){toast(error.message);}});
@@ -1102,8 +1034,27 @@
         return;
       }
       menuItem(menu,ICONS.plus,'重命名会话…',()=>showNameInput(menu,{value:title,placeholder:'会话名称，回车保存',onSubmit:async name=>{
-        try{await patchSession(key,{label:name});toast('会话名称已保存');}catch(error){toast(/label already in use/i.test(error.message)?'已有同名会话，请换一个名称':error.message);}
+        try {
+          await gwRequest('pinkie.session.rename', {key, title: name});
+          window.PinkieSessionList?.invalidate();
+          sessionIndex = null;
+          schedule();
+          toast('会话名称已保存');
+        } catch (error) {
+          toast(/label already in use/i.test(error.message) ? '已有同名会话，请换一个名称' : error.message);
+        }
       }}));
+      if (detachable) menuItem(menu, ICONS.folder, '移到顶层', async () => {
+        closeMenu();
+        try {
+          await gwRequest('pinkie.session.detach', {key});
+          window.PinkieSessionList?.invalidate();
+        } catch (error) { toast(error.message); }
+      });
+      if (children) menuItem(menu, ICONS.folder, '查看子会话', () => {
+        closeMenu();
+        window.PinkieSessionList?.viewChildren(key);
+      });
       menuItem(menu,ICONS.pin,state.pins.includes(key)?'取消置顶':'置顶会话',()=>{closeMenu();togglePin(key);});
       menuItem(menu,ICONS.folder,'归入项目…',()=>openProjectMenu(anchor,key));
       menuItem(menu,ICONS.archive,'归档会话（保留记录）',async()=>{closeMenu();try{await archiveSession(key);}catch(error){toast(error.message);}});
@@ -1223,7 +1174,7 @@
 
   function makeSyntheticRow(key) {
     const info = sessionIndex && sessionIndex.get(key);
-    const name = (info && info.name) || key.split(":").pop().slice(0, 8) + "…";
+    const name = (info && info.name) || "新会话";
     const row = document.createElement("div");
     row.className = "sidebar-recent-session session-row-host";
     row.dataset.sessionKey = key;
@@ -1771,7 +1722,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,queueAutoTitles,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }

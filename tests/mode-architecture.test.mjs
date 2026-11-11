@@ -1778,7 +1778,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
-  assert.equal(tools.length,15);assert.deepEqual(tools.map(item=>item.opts.name),['delivery_guard','clekk_memory','computer','app_browser','pinkie_search','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','plan_update','workbench_read','code_check','workbench_show']);
+  assert.equal(tools.length,19);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','app_browser','pinkie_search','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','plan_update','workbench_read','code_check','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1840,7 +1840,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -2073,7 +2073,11 @@ test('watchdog retries unknown failures but retires context overflow after nativ
   };
   const watchdog=new UpstreamWatchdog({session:{workflow}});
   assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
-    {agentId:'main',sessionKey:'agent:main:unknown'}),true);
+    {agentId:'main',sessionKey:'agent:main:opaque-provider-failure'}),true);
+  for (const sessionKey of ['unknown', 'agent:main:unknown']) {
+    assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
+      {agentId:'main',sessionKey}),false);
+  }
   assert.equal(await watchdog.agentEnded({success:false,error:'Context overflow: prompt too large for the model'},
     {agentId:'project',sessionKey:'agent:project:overflow'}),false);
   assert.equal(await watchdog.agentEnded({success:false,error:'Auto-compaction could not recover this turn.'},
