@@ -59,3 +59,20 @@ test('run state takes precedence over waiting and terminal errors', () => {
   assert.equal(sessionStatus({status: 'failed'}), 'error');
   assert.equal(sessionStatus({status: 'aborted'}), '');
 });
+
+test('recent dates use local calendar days at the group boundaries', () => {
+  const {dateGroup, dateLabel} = window.PinkieSessionList;
+  const now = new Date(2026, 10, 11, 0, 5).getTime();
+  const at = (day, hour = 23, minute = 7) => new Date(2026, 10, day, hour, minute).getTime();
+  assert.equal(dateGroup(at(11, 0, 2), now), '今天');
+  assert.equal(dateGroup(at(10), now), '昨天');
+  assert.equal(dateGroup(at(5), now), '7 天内');
+  assert.equal(dateGroup(at(4), now), '30 天内');
+  assert.equal(dateGroup(at(-18), now), '30 天内');
+  assert.equal(dateGroup(at(-19), now), '更早');
+  assert.equal(dateGroup(null, now), '更早');
+  assert.equal(dateLabel(at(11, 0, 2), now), '00:02');
+  assert.equal(dateLabel(at(10), now), '周二');
+  assert.equal(dateLabel(at(3), now), '11/3');
+  assert.equal(dateLabel(null, now), '');
+});

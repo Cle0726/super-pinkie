@@ -458,3 +458,11 @@ html[data-pinkie-night] .pinkie-session-status--running{color:#f2a1c7}
 html[data-pinkie-night] .pinkie-session-status--waiting{color:#f0c176}
 html[data-pinkie-night] .pinkie-session-status--error{color:#fa90a9}
 html[data-pinkie-night] .pinkie-session-unread{background:#ff9fd1}
+
+/* Recent sessions are grouped by local calendar day; hover swaps the
+   timestamp/status for the session menu without leaving a dead gap. */
+#laolao-session-manager .pinkie-session-date{padding:9px 12px 3px;font-size:11px;line-height:16px;opacity:.58}
+#laolao-session-manager .pinkie-session-time{font-size:11px;line-height:16px;opacity:.56;white-space:nowrap}
+#laolao-session-manager .session-row-aside .laolao-row-actions{display:none}
+#laolao-session-manager .sidebar-recent-session:is(:hover,:focus-within) .session-row-aside .laolao-row-actions{display:inline-flex}
+#laolao-session-manager .sidebar-recent-session:is(:hover,:focus-within) .session-row-aside :is(.pinkie-session-time,.pinkie-session-icon,.pinkie-session-unread){display:none}
