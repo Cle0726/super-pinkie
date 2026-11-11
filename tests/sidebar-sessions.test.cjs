@@ -164,14 +164,21 @@ test('command palette keeps session search inside the current mode and ignores s
 });
 test('archive checks running children and respects cancellation before changing the parent',async()=>{
   const snippet=source.slice(source.indexOf('  async function archiveSession('),source.indexOf('  function showArchiveUndo('));
-  const calls=[];let choice='cancel';
-  const ctx={MODE_AGENT:{chat:'main'},modeForSession:()=> 'chat',
-    gwRequest:async()=>({states:{'agent:main:parent':{runningChildren:2}}}),
+  const calls=[];let choice='cancel',stopResult={ok:true,stopped:1,cancelled:1};
+  const ctx={MODE_AGENT:{chat:'main'},stateMode:'chat',modeForSession:()=> 'chat',window:{},schedule(){},
+    gwRequest:async(method,params)=>{calls.push([method,params]);return method==='pinkie.session.lineage'
+      ? {states:{'agent:main:parent':{runningChildren:2}}} : stopResult;},
     archiveChildChoice:async count=>{calls.push(['choice',count]);return choice;},
     patchSession:async(...args)=>calls.push(['patch',...args]),followAfterSessionLeaves:async()=>{},toast(){}};
   vm.createContext(ctx);vm.runInContext(snippet,ctx);
   assert.equal(await ctx.archiveSession('agent:main:parent'),false);
   assert.equal(calls.some(call=>call[0]==='patch'),false);
   choice='parent';assert.equal(await ctx.archiveSession('agent:main:parent'),true);
+  assert.equal(calls.filter(call=>call[0]==='patch').length,1);
+  choice='stop';assert.equal(await ctx.archiveSession('agent:main:parent'),true);
+  assert.equal(calls.filter(call=>call[0]==='patch').length,1);
+  assert.deepEqual(calls.filter(call=>call[0]==='pinkie.session.archive.stopChildren').map(call=>call[1].key),['agent:main:parent']);
+  stopResult={ok:false,error:'父会话还在运行'};
+  await assert.rejects(ctx.archiveSession('agent:main:parent'),/父会话还在运行/);
   assert.equal(calls.filter(call=>call[0]==='patch').length,1);
 });
