@@ -318,6 +318,16 @@ export class SessionLineage {
       ...(parent ? {parentKey, parentTitle: titleFor(parent, parentKey)} : {})};
   }
 
+  card(key, id) {
+    if (!agentOf(key) || isInternalSessionKey(key) || isPersona(key) || typeof id !== 'string' || !id) {
+      return {ok: false, error: '找不到这张卡片'};
+    }
+    const card = (this.state(key).cards || []).find(item => item.id === id);
+    if (!card) return {ok: false, error: '找不到这张卡片'};
+    return {ok: true, card: {...this.publicCard(card),
+      ...(card.kind === 'proposal' ? {prompt: BRIEF_PREFIX + '\n' + card.prompt} : {})}};
+  }
+
   async views(agentId) {
     if (!/^[a-z\d][a-z\d_-]*$/iu.test(agentId || '')) return {children: {}, states: {}};
     const owns = ([key]) => agentOf(key) === agentId;
@@ -585,6 +595,10 @@ export function registerSessionLineage(api, options) {
     return lineage.views(agentId);
   });
   registerSessionMethod(api, 'pinkie.session.cards', ({key}) => lineage.cards(key));
+  registerSessionMethod(api, 'pinkie.session.card.get', ({key, id}) => {
+    try { return lineage.card(key, id); }
+    catch { return {ok: false, error: '卡片暂时不可用，请稍后重试'}; }
+  });
   registerSessionMethod(api, 'pinkie.session.card.act', ({key, id, action}) => lineage.act(key, id, action));
   registerSessionMethod(api, 'pinkie.session.detach', ({key}) => lineage.detach(key));
   api.registerTool?.(ctx => sessionTool('pinkie_session_start',
