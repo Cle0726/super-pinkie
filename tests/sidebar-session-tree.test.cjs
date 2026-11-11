@@ -76,3 +76,9 @@ test('recent dates use local calendar days at the group boundaries', () => {
   assert.equal(dateLabel(at(3), now), '11/3');
   assert.equal(dateLabel(null, now), '');
 });
+
+test('search highlights clamp and merge untrusted result ranges', () => {
+  const ranges = window.PinkieSessionList.searchRanges('abcde', [[-2, 2], [1, 4], [4, 99], [3, 2], ['1', 2]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(ranges)), [[0, 5]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(window.PinkieSessionList.searchRanges('abc', null))), []);
+});

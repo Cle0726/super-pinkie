@@ -250,3 +250,35 @@ html .sidebar #laolao-session-manager .pinkie-session-fold__count { display:inli
 html .sidebar #laolao-session-manager .pinkie-session-workers>button { min-height:28px;font-size:12px;opacity:.65 }
 html[data-reduce-motion] .sidebar .pinkie-session-status--running svg,
 html[data-pinkie-reduce-motion] .sidebar .pinkie-session-status--running svg { animation:none }
+
+/* S1/S12: three quiet, equal-height shortcuts. */
+html .sidebar .sidebar-new-session--worktree { display:none !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree):not(#_sb),
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls .pinkie-sidebar-entry:not(#_sb) {
+  display:flex !important;align-items:center;gap:10px;width:100%;height:32px !important;min-height:32px !important;
+  margin:0 !important;padding:0 var(--sb-x) !important;border:0 !important;border-radius:8px !important;
+  background:transparent !important;box-shadow:none !important;color:var(--sb-ink) !important;
+  font-size:13px !important;font-weight:400 !important;text-align:left;opacity:1;transform:none !important;
+}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-new-session:not(.sidebar-new-session--worktree),.laolao-session-controls .pinkie-sidebar-entry):hover { background:var(--sb-hover) !important;box-shadow:none !important;transform:none !important; }
+html .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree)::after { content:attr(data-pinkie-shortcut);margin-left:auto;font-size:11px;color:var(--sb-muted);font-weight:400 }
+html .sidebar :is(.pinkie-sidebar-entry svg,.sidebar-new-session__icon) { display:inline-flex;width:16px !important;height:16px !important;flex:0 0 16px;color:inherit !important;transform:none !important; }
+html .sidebar .pinkie-sidebar-entry svg { fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-session-controls { display:flex;flex-direction:column;align-items:stretch;gap:0 !important;margin:0 0 4px !important }
+
+/* S8: search lives above scrolling sidebar content, so it cannot be clipped. */
+.pinkie-session-search-mask { --search-bg:#fffafb;--search-ink:#44343c;--search-muted:#806b76;--search-hover:rgba(217,80,141,.09);position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:12vh 16px 16px;background:rgba(33,22,30,.28) }
+html[data-pinkie-night] .pinkie-session-search-mask { --search-bg:#2b2029;--search-ink:#f7eaf0;--search-muted:#c9aebd;--search-hover:rgba(255,140,190,.14) }
+.pinkie-session-search-dialog { width:min(560px,100%);max-height:70vh;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;padding:16px;border:1px solid color-mix(in srgb,var(--accent,#d9508d) 25%,transparent);border-radius:14px;background:var(--search-bg);color:var(--search-ink);box-shadow:0 18px 60px rgba(25,15,23,.25) }
+.pinkie-session-search-input { width:100%;height:38px;box-sizing:border-box;padding:0 12px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:14px }
+.pinkie-session-search-input:focus-visible,.pinkie-session-search-result:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:2px }
+.pinkie-session-search-filter { display:flex;align-items:center;gap:7px;min-height:28px;font-size:12px;color:var(--search-muted) }
+.pinkie-session-search-status { font-size:12px;color:var(--search-muted) }
+.pinkie-session-search-results { min-height:0;overflow:auto }
+.pinkie-session-search-result { width:100%;display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px;border:0;border-radius:8px;background:transparent;color:inherit;text-align:left;cursor:pointer }
+.pinkie-session-search-result[aria-selected="true"],.pinkie-session-search-result:hover { background:var(--search-hover) }
+.pinkie-session-search-title { grid-column:1;font-size:14px;font-weight:600 }
+.pinkie-session-search-snippet { grid-column:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--search-muted) }
+.pinkie-session-search-snippet mark { background:color-mix(in srgb,var(--accent,#d9508d) 30%,transparent);color:inherit;border-radius:2px }
+.pinkie-session-search-time { grid-column:2;grid-row:1;font-size:11px;color:var(--search-muted) }
+.pinkie-search-hit { outline:2px solid var(--accent,#d9508d);outline-offset:3px }
