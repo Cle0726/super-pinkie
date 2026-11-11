@@ -114,6 +114,20 @@ test('superseded cards leading into the latest turn stay open; finished older tu
 });
 
 
+// Real-model check 11-10, one exec call: the follow-up's turn only replied
+// (no tools, so no card of its own). The interrupted card must still stay open.
+test('a superseded card stays open when the latest turn has no card of its own', async () => {
+  const {pinkieBuildTimeline, pinkieProcessOpen} = await load();
+  globalThis.__pinkieTimelineViews = new Map();
+  const u1 = group('user', 'u1', 1000, [msg('user', 'run one', 'u1', 1000)]);
+  const run1 = [toolCall('one', 2000)];
+  const u2 = group('user', 'u2', 3000, [msg('user', 'append 1', 'u2', 3000)]);
+  const reply = group('assistant', 'final', 4000, [msg('assistant', [{type: 'text', text: 'done'}], 'f', 4000)]);
+  const [only] = cards(pinkieBuildTimeline([u1, ...run1, u2, reply], calls));
+  assert.equal(only.processSuperseded, true);
+  assert.equal(pinkieProcessOpen(only), true);
+});
+
 // Real-model check 11-10 (hy4free, 10 exec calls, 3 follow-ups): native chat
 // orders items by message timestamp. A follow-up keeps the time it was sent,
 // earlier than the result of the command still running then, so after a
