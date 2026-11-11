@@ -82,3 +82,12 @@ test('search highlights clamp and merge untrusted result ranges', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(ranges)), [[0, 5]]);
   assert.deepEqual(JSON.parse(JSON.stringify(window.PinkieSessionList.searchRanges('abc', null))), []);
 });
+
+test('multi-select toggles and selects an anchored visible range', () => {
+  const select = (...args) => Array.from(window.PinkieSessionList.nextSelection(...args));
+  const order = ['a','b','c','d'];
+  assert.deepEqual(select(order, ['a'], 'a', 'c', true, false), ['a','b','c']);
+  assert.deepEqual(select(order, ['a'], 'a', 'd', false, true), ['a','d']);
+  assert.deepEqual(select(order, ['a','d'], 'd', 'a', false, true), ['d']);
+  assert.deepEqual(select(order, ['a'], 'a', 'c', true, true), ['a','b','c']);
+});

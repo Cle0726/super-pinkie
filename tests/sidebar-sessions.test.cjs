@@ -92,7 +92,7 @@ test('session manager exposes one confirmed bulk delete for the current mode',()
   assert.match(source,/打开文件夹建项目/);
   assert.match(source,/删除当前模式全部会话/);
   assert.match(source,/askDeleteAllSessions/);
-  assert.match(source,/patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,toast/);
+  assert.match(source,/patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany/);
   assert.match(source,/archived:true/);
   assert.match(source,/targets\.slice\(offset, offset \+ 5\)/);
   assert.match(source,/项目文件夹里的真实文件不会被动/);

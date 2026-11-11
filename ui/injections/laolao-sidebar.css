@@ -478,3 +478,9 @@ html[data-pinkie-night] .pinkie-session-unread{background:#ff9fd1}
 #laolao-session-manager .pinkie-project-heading:is(:hover,:focus-within) .laolao-group__add-project{opacity:.8}
 #laolao-session-manager .pinkie-recent-menu{opacity:.65}
 #laolao-session-manager .pinkie-session-branch{margin-inline-start:14px;padding-inline-start:0}
+.laolao-managed-sessions{position:relative}
+#laolao-session-manager .pinkie-session-selected{outline:2px solid var(--accent,#d9508d);outline-offset:-2px}
+.pinkie-session-selection-bar{position:absolute;z-index:8;left:6px;right:6px;bottom:6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:6px;border-radius:10px;background:var(--search-bg,#fffafb);color:var(--search-ink,#44343c);box-shadow:0 4px 20px rgba(45,25,38,.18)}
+html[data-pinkie-night] .pinkie-session-selection-bar{--search-bg:#2b2029;--search-ink:#f7eaf0}
+.pinkie-session-selection-bar .laolao-managed-button{min-height:28px;font-size:11px}
+.pinkie-session-selection-count{flex:1 0 100%;font-size:12px;font-weight:600}

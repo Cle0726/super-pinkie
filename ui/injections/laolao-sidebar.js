@@ -1024,6 +1024,24 @@
     });
   }
 
+  async function archiveMany(keys) {
+    const done=[];
+    for(const key of keys) {
+      try { await archiveSession(key); done.push(key); }
+      catch(error) { toast('部分会话未归档：'+(error.message||'请重试')); }
+    }
+    return done;
+  }
+  function askDeleteSelected(keys,onDone) {
+    if(!keys.length)return;
+    showModal({title:`删除 ${keys.length} 个会话`,body:`确定删除所选的 ${keys.length} 个会话和聊天记录吗？项目文件夹里的真实文件不会被动。此操作不可撤销。`,
+      dangerText:'确认删除',busyText:'删除中…',onConfirm:async()=>{
+        const done=[];let failed=0;
+        for(const key of keys){try{await deleteSession(key);done.push(key);}catch{failed++;}}
+        onDone(done);toast(`已删除 ${done.length} 个会话${failed?`，${failed} 个未能删除`:''}`);
+      }});
+  }
+
   function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0}={}){
     openMenu(anchor,menu=>{
       if(archived){
@@ -1072,6 +1090,9 @@
     if(!link)return;
     const key=new URL(link.href,window.location.href).searchParams.get('session');
     if(!key||modeForSession(key)!==stateMode)return;
+    if(link.closest('#laolao-session-manager')&&window.PinkieSessionList?.selectFromClick(key,event)){
+      event.preventDefault();event.stopImmediatePropagation();return;
+    }
     event.preventDefault();
     event.stopImmediatePropagation();
     navigateSession(key);
@@ -1353,18 +1374,34 @@
     });
   }
 
+  function openBulkProjectMenu(anchor,keys,onDone) {
+    openMenu(anchor,menu=>{
+      const names=Object.keys(state.projects);
+      for(const name of names)menuItem(menu,ICONS.folder,name,async()=>{
+        closeMenu();const done=[];
+        for(const key of keys)if(await assignToProject(key,name))done.push(key);
+        onDone(done);
+      });
+      menuItem(menu,ICONS.plus,'打开文件夹建项目…',async()=>{
+        closeMenu();const name=await addFolderProject();if(!name)return;
+        const done=[];for(const key of keys)if(await assignToProject(key,name))done.push(key);
+        onDone(done);
+      });
+    });
+  }
+
   async function assignToProject(key, name) {
     if (modeForSession(key) !== stateMode) {
       toast("这个会话属于其他模式，不能放进当前项目");
-      return;
+      return false;
     }
     const ownerMode=stateMode,ownerState=state;
     try {
       const current=await gwRequest('pinkie.project.bind',{key,path:null});
       if(current.binding&&(!name||ownerState.projectFolders[name]!==current.binding.root))throw new Error('这个会话已有固定项目。请在目标项目中新建会话。');
       if(name){if(!ownerState.projectFolders[name])throw new Error('请先给这个分组选择文件夹');await gwRequest('pinkie.project.bind',{key,path:ownerState.projectFolders[name],name});}
-      if(stateMode!==ownerMode){toast('模式已切换，请回原模式重新操作');return;}
-    } catch(error){toast(error.message);return;}
+      if(stateMode!==ownerMode){toast('模式已切换，请回原模式重新操作');return false;}
+    } catch(error){toast(error.message);return false;}
     for (const keys of Object.values(state.projects)) {
       const i = keys.indexOf(key);
       if (i >= 0) keys.splice(i, 1);
@@ -1379,6 +1416,7 @@
     // Empty folder projects remain available for their next conversation.
     save();
     schedule();
+    return true;
   }
 
   async function togglePin(key) {
@@ -1732,7 +1770,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany,openBulkProjectMenu,askDeleteSelected,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }
