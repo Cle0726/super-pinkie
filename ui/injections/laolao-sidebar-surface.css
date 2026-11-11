@@ -241,6 +241,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-sessi
 html .sidebar .pinkie-session-status--running { color:var(--sb-status-running) }
 html .sidebar .pinkie-session-status--waiting { color:var(--sb-status-waiting) }
 html .sidebar .pinkie-session-status--error { color:var(--sb-status-error) }
+html .sidebar :is(.pinkie-session-status--running,.pinkie-session-status--waiting,.pinkie-session-status--error) { width:12px;height:12px;flex-basis:12px }
 html .sidebar .pinkie-session-status--running svg { stroke-width:2.4 }
 html .sidebar :is(.pinkie-session-status--waiting,.pinkie-session-status--error) svg path:first-child { fill:currentColor;stroke:currentColor }
 html .sidebar :is(.pinkie-session-status--waiting,.pinkie-session-status--error) svg path:last-child { fill:none;stroke:var(--sb-status-contrast);stroke-width:2.2 }
@@ -261,6 +262,11 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .laolao-sessi
   font-size:13px !important;font-weight:400 !important;text-align:left;opacity:1;transform:none !important;
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-new-session:not(.sidebar-new-session--worktree),.laolao-session-controls .pinkie-sidebar-entry):hover { background:var(--sb-hover) !important;box-shadow:none !important;transform:none !important; }
+/* The night stylesheet loads later and uses an ID-specific selector. Keep
+   the same quiet entry and selected tint under that cascade too. */
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree):not(#_sb) { background:transparent !important;box-shadow:none !important;border-color:transparent !important }
+html[data-pinkie-night]:not(#_n) .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree):not(#_sb):hover { background:var(--sb-hover) !important }
+html[data-pinkie-night]:not(#_n) .sidebar #laolao-session-manager .sidebar-recent-session--active { background:var(--sb-active) !important;box-shadow:none !important }
 html .sidebar .sidebar-new-session:not(.sidebar-new-session--worktree)::after { content:attr(data-pinkie-shortcut);margin-left:auto;font-size:11px;color:var(--sb-muted);font-weight:400 }
 html .sidebar :is(.pinkie-sidebar-entry svg,.sidebar-new-session__icon) { display:inline-flex;width:16px !important;height:16px !important;flex:0 0 16px;color:inherit !important;transform:none !important; }
 html .sidebar .pinkie-sidebar-entry svg { fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round }
