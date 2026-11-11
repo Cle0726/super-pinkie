@@ -26,3 +26,11 @@ test('reports, expired cards and previously handled cards offer no action', () =
     assert.deepEqual(plain(cardActions(card, 2000)), []);
   }
 });
+
+test('cards use exact entry anchors and fall back to the nearest dated message', () => {
+  const {chooseAnchor} = load();
+  const messages = [{ids:['msg:old'],at:1000},{ids:['msg:new'],at:5000}];
+  assert.equal(chooseAnchor({anchor:{entryId:'old'},createdAt:4900},messages),0);
+  assert.equal(chooseAnchor({createdAt:4900},messages),1);
+  assert.equal(chooseAnchor({createdAt:4900},[{ids:[],at:NaN}]),-1);
+});

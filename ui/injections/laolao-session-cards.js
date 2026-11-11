@@ -1,7 +1,7 @@
 /* Chat-side view of gateway-owned proposals, reports, and lineage. */
 (() => {
   'use strict';
-  const stateLabels = {expired: '已过期', dismissed: '已跳过', here: '已在这里继续', started: '已开启子会话'};
+  const stateLabels = {expired: '已过期', dismissed: '已跳过', here: '已在这里继续', started: '已开启'};
   const el = (tag, className = '', text = '') => {
     const node = document.createElement(tag);
     node.className = className;
@@ -49,9 +49,45 @@
   }
 
   let selected = '', data = null, sequence = 0, frame = 0, expiryTimer = 0, refreshTimer = 0;
-  let panel, parentLink;
+  let parentLink, decisionBar;
+  const panels = new Map(), expanded = new Set(), fullPrompts = new Map(), loadingFull = new Set();
   const busy = new Set();
   const errors = new Map();
+
+  function cardButton(label, action, className = '') {
+    const button = el('button', 'pinkie-session-card__button ' + className, label);
+    button.type = 'button'; button.setAttribute('aria-label', label); button.onclick = action;
+    return button;
+  }
+  async function showFullPrompt(card, key) {
+    if (expanded.has(card.id)) { expanded.delete(card.id); paint(); return; }
+    if (fullPrompts.has(card.id)) { expanded.add(card.id); paint(); return; }
+    if (loadingFull.has(card.id)) return;
+    loadingFull.add(card.id); errors.delete(card.id); paint();
+    try {
+      const result = await request('pinkie.session.card.get', {key, id: card.id});
+      if (result?.ok === false) throw new Error(result.error || '简报暂时无法读取');
+      if (typeof result?.card?.prompt !== 'string') throw new Error('没有取得完整简报');
+      if (key === selected) { fullPrompts.set(card.id, result.card.prompt); expanded.add(card.id); }
+    } catch (error) { if (key === selected) errors.set(card.id, error.message || '简报暂时无法读取'); }
+    finally { loadingFull.delete(card.id); if (key === selected) paint(); }
+  }
+
+  function chooseAnchor(card, messages) {
+    const id = card.anchor?.entryId;
+    if (id) {
+      const index = messages.findIndex(message => message.ids?.some(value => value === id || value === 'msg:' + id || value === 'message:' + id));
+      if (index >= 0) return index;
+    }
+    if (!Number.isFinite(Number(card.createdAt))) return -1;
+    let nearest = -1, distance = Infinity;
+    messages.forEach((message, index) => {
+      if (!Number.isFinite(message.at)) return;
+      const delta = Math.abs(message.at - Number(card.createdAt));
+      if (delta < distance) { nearest = index; distance = delta; }
+    });
+    return nearest;
+  }
 
   function renderCard(card, key) {
     const proposal = card.kind === 'proposal';
@@ -59,15 +95,44 @@
     const box = el('section', 'pinkie-session-card');
     box.dataset.sessionCard = card.id;
     box.dataset.state = state;
+    if (proposal && state !== 'pending') {
+      const header = el('div', 'pinkie-session-card__compact');
+      const icon = {started:'✓', dismissed:'—', here:'↩', expired:'◷'}[state] || '•';
+      const childState = state === 'started' && card.childKey ? ' · ' + (data?.childStates?.[card.childKey] || '已完成') : '';
+      const toggle = cardButton(`${icon} ${stateLabels[state] || state} · ${card.title}${childState}`,
+        () => { if (expanded.has(card.id)) { expanded.delete(card.id); paint(); } else void showFullPrompt(card, key); },
+        'pinkie-session-card__compact-toggle');
+      toggle.setAttribute('aria-expanded', String(expanded.has(card.id)));
+      header.append(toggle);
+      if (state === 'started' && card.childKey) header.append(link(card.childKey, '打开 ›'));
+      box.append(header);
+      if (expanded.has(card.id)) box.append(el('div', 'pinkie-session-card__body', fullPrompts.get(card.id) || card.summary || ''));
+      if (errors.has(card.id)) box.append(el('div', 'pinkie-session-card__error', errors.get(card.id)));
+      return box;
+    }
     const heading = el('div', 'pinkie-session-card__title');
     if (proposal) heading.textContent = card.title;
-    else heading.append('子会话「', link(card.childKey, card.title), '」做完一轮');
-    box.append(heading, el('div', 'pinkie-session-card__body', proposal ? card.summary : card.text));
+    else heading.textContent = card.title + ' 做完一轮';
+    const body = el('div', 'pinkie-session-card__body', proposal
+      ? (expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary) : card.text);
+    if (!expanded.has(card.id)) body.classList.add('pinkie-session-card__body--preview');
+    box.append(heading, body);
 
     const actions = el('div', 'pinkie-session-card__actions');
+    if (proposal) {
+      const full = cardButton(loadingFull.has(card.id) ? '正在读取简报…' : expanded.has(card.id) ? '收起简报 ⌃' : '看完整简报 ⌄',
+        () => void showFullPrompt(card, key), 'pinkie-session-card__text-button');
+      full.disabled = loadingFull.has(card.id); full.setAttribute('aria-expanded', String(expanded.has(card.id)));
+      box.append(full);
+    } else {
+      const full = cardButton(expanded.has(card.id) ? '收起全文' : '展开全文', () => {
+        if (expanded.has(card.id)) expanded.delete(card.id); else expanded.add(card.id); paint();
+      }, 'pinkie-session-card__text-button');
+      full.setAttribute('aria-expanded', String(expanded.has(card.id)));
+      actions.append(full, link(card.childKey, '打开子会话 ›'));
+    }
     for (const [action, label] of cardActions(card)) {
-      const button = el('button', 'laolao-managed-button pinkie-session-card__button', label);
-      button.type = 'button';
+      const button = cardButton(label, null, action === 'start' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
       button.disabled = busy.has(card.id);
       button.onclick = async () => {
         if (busy.has(card.id) || key !== selected) return;
@@ -87,11 +152,6 @@
       };
       actions.append(button);
     }
-    if (proposal && stateLabels[state]) {
-      const status = state === 'started' && card.childKey
-        ? link(card.childKey, stateLabels[state]) : el('span', '', stateLabels[state]);
-      actions.append(status);
-    }
     if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
     if (actions.childNodes.length) box.append(actions);
     return box;
@@ -101,11 +161,11 @@
     const pane = activePane(), key = currentKey();
     if (pane) pane.toggleAttribute('data-pinkie-session-readonly', /:subagent:/i.test(key));
     const thread = pane?.querySelector('.chat-thread-inner');
-    const signature = JSON.stringify([selected, data, [...busy], [...errors],
-      (data?.cards || []).map(card => proposalState(card))]);
+    const signature = JSON.stringify([selected, data?.parentKey, data?.parentTitle]);
     if (!thread || !data || key !== selected || /:subagent:/i.test(key)) {
-      panel?.remove();
+      for (const panel of panels.values()) panel.remove(); panels.clear();
       parentLink?.remove();
+      decisionBar?.remove();
       return;
     }
     const host = pane.querySelector('.chat-thread, .chat-thread-scroll') || thread;
@@ -117,20 +177,50 @@
         host.before(parentLink);
       }
     } else parentLink?.remove();
-    if (!(data.cards || []).length) {
-      panel?.remove();
-      return;
+    const cards = data.cards || [], ids = new Set(cards.map(card => card.id));
+    for (const [id, panel] of panels) if (!ids.has(id)) { panel.remove(); panels.delete(id); }
+    const groups = [...thread.querySelectorAll('.chat-group')].filter(group => !group.closest('.pinkie-session-cards'));
+    const messages = groups.map(group => ({group,
+      ids: [...group.querySelectorAll('[data-message-id]')].map(node => node.dataset.messageId),
+      at: Date.parse(group.querySelector('time[datetime]')?.getAttribute('datetime') || '')}));
+    const placed = new Map();
+    for (const card of cards) {
+      const cardSignature = JSON.stringify([card, proposalState(card), busy.has(card.id), errors.get(card.id),
+        expanded.has(card.id), fullPrompts.get(card.id), loadingFull.has(card.id), data.childStates?.[card.childKey]]);
+      let panel = panels.get(card.id);
+      if (!panel || panel.dataset.signature !== cardSignature) {
+        const replacement = el('div', 'pinkie-session-cards');
+        replacement.dataset.signature = cardSignature;
+        replacement.setAttribute('aria-label', '子会话提案和汇报');
+        replacement.append(renderCard(card, key));
+        if (panel?.isConnected) panel.replaceWith(replacement);
+        panel = replacement; panels.set(card.id, panel);
+      }
+      const index = chooseAnchor(card, messages);
+      let anchor = index < 0 ? null : messages[index].group;
+      while (anchor && anchor.parentElement !== thread) anchor = anchor.parentElement;
+      const cursor = placed.get(anchor) || anchor;
+      if (cursor && cursor.parentElement === thread) {
+        if (cursor.nextElementSibling !== panel) cursor.after(panel);
+      } else if (panel.parentElement !== thread || thread.lastElementChild !== panel) thread.append(panel);
+      placed.set(anchor, panel);
     }
-    if (panel?.parentElement === thread && panel.dataset.signature === signature) return;
-    panel?.remove();
-    panel = el('div', 'pinkie-session-cards');
-    panel.dataset.signature = signature;
-    panel.setAttribute('aria-label', '子会话提案和汇报');
-    for (const card of data.cards) panel.append(renderCard(card, key));
-    thread.append(panel);
+
+    const pending = cards.filter(card => cardActions(card).length);
+    const composer = pane.querySelector('.agent-chat__composer-shell');
+    if (!pending.length || !composer) decisionBar?.remove();
+    else {
+      if (!decisionBar) decisionBar = cardButton('', () => {
+        panels.get(pending[0].id)?.scrollIntoView({block:'center',behavior:'auto'});
+      }, 'pinkie-session-decisions');
+      decisionBar.onclick = () => panels.get(pending[0].id)?.scrollIntoView({block:'center',behavior:'auto'});
+      const label = `有 ${pending.length} 件事等你决定 ↓`;
+      if (decisionBar.textContent !== label) { decisionBar.textContent = label; decisionBar.setAttribute('aria-label', label); }
+      if (decisionBar.parentElement !== composer.parentElement || decisionBar.nextElementSibling !== composer) composer.before(decisionBar);
+    }
 
     clearTimeout(expiryTimer);
-    const expiresAt = Math.min(...data.cards.filter(card => cardActions(card).length).map(card => card.expiresAt));
+    const expiresAt = Math.min(...cards.filter(card => cardActions(card).length).map(card => card.expiresAt));
     if (Number.isFinite(expiresAt)) expiryTimer = setTimeout(paint, Math.max(0, expiresAt - Date.now()));
   }
 
@@ -142,8 +232,17 @@
     }
     const requestId = ++sequence;
     try {
-      const result = await request('pinkie.session.cards', {key});
+      const agentId = key.split(':')[1];
+      const [result, list, lineage] = await Promise.all([
+        request('pinkie.session.cards', {key}),
+        request('sessions.list', {agentId, archived:false, limit:1000}).catch(() => null),
+        request('pinkie.session.lineage', {agentId}).catch(() => null),
+      ]);
       if (requestId !== sequence || key !== currentKey()) return;
+      result.childStates = Object.fromEntries((list?.sessions || []).map(row => {
+        const phase = window.PinkieSessionList?.sessionStatus({...row, phase:lineage?.states?.[row.key]?.phase});
+        return [row.key, {running:'运行中', waiting:'等你回复', error:'出错'}[phase] || '已完成'];
+      }));
       data = result;
       paint();
     } catch { /* The chat remains usable while an older gateway reconnects. */ }
@@ -158,6 +257,7 @@
         selected = key;
         data = null;
         errors.clear();
+        expanded.clear(); fullPrompts.clear(); loadingFull.clear();
         void refresh(key);
       }
       paint();
@@ -170,16 +270,18 @@
     refreshTimer = setTimeout(() => void refresh(), 180);
   }
 
-  window.PinkieSessionCards = {cardActions, proposalState};
+  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor};
   if (typeof MutationObserver !== 'function') return;
   new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
   window.addEventListener('popstate', reconcile);
   window.addEventListener('pinkie:session-selected', reconcile);
   window.addEventListener('pinkie:sidebar-gateway-ready', refreshSoon);
   window.addEventListener('pinkie:gateway-event', ({detail}) => {
-    if (detail?.event === 'sessions.changed' && detail.payload?.sessionKey === selected
-        || detail?.event === 'chat' && ['final', 'error', 'aborted'].includes(detail.payload?.state)
-          && detail.payload?.sessionKey === selected) refreshSoon();
+    const eventKey = detail?.payload?.sessionKey;
+    const relevant = eventKey === selected || (data?.cards || []).some(card => card.childKey === eventKey);
+    if (relevant && (detail?.event === 'sessions.changed'
+        || detail?.event === 'agent' && detail.payload?.stream === 'lifecycle'
+        || detail?.event === 'chat' && ['final', 'error', 'aborted'].includes(detail.payload?.state))) refreshSoon();
   });
   reconcile();
 })();
