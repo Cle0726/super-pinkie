@@ -295,7 +295,8 @@
       const messages = [...(pane?.querySelectorAll('[data-message-id]') || [])];
       const excerpt = String(result.snippet || '').replace(/^…|…$/g, '').replace(/\s+/g, ' ').trim();
       const target = messages.find(item => [String(result.entryId || ''), 'msg:' + result.entryId,
-        'message:' + result.entryId].includes(item.dataset.messageId))
+        'message:' + result.entryId].includes(item.dataset.messageId)
+        || window.PinkieSessionCards?.forkEntryId(item.dataset.messageId, pane?.state?.chatMessages) === result.entryId)
         || (excerpt && messages.find(item => (item.dataset.messageText || '').replace(/\s+/g, ' ').includes(excerpt)));
       if (target) {
         target.scrollIntoView({block: 'center', behavior: 'auto'});

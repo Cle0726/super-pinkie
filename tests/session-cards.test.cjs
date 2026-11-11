@@ -37,7 +37,11 @@ test('cards use exact entry anchors and fall back to the nearest dated message',
 
 test('fork uses real message identifiers, not generated timestamp placeholders', () => {
   const {forkEntryId} = load();
-  assert.equal(forkEntryId('msg:a1b2c3'),'a1b2c3');
-  assert.equal(forkEntryId('msg:assistant:123:2'),'');
-  assert.equal(forkEntryId('stream:live'),'');
+  const history=[{role:'assistant',id:'ui-id',timestamp:123,__openclaw:{id:'entry-id'}},
+    {role:'assistant',timestamp:456,__openclaw:{id:'other-entry'}}];
+  assert.equal(forkEntryId('msg:ui-id',history),'entry-id');
+  assert.equal(forkEntryId('msg:assistant:456:1',history),'other-entry');
+  assert.equal(forkEntryId('msg:assistant:123:2',history),'');
+  assert.equal(forkEntryId('msg:a1b2c3',[]),'');
+  assert.equal(forkEntryId('stream:live',history),'');
 });
