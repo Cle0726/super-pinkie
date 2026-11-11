@@ -206,10 +206,27 @@ test('asks for permission once in Pinkie\'s voice; a no is remembered', () => {
   assert.equal(h.api.permissionPrompt(), null, 'never asks again after a no');
 });
 
+test('native shell: Pinkie asks first, then the shell asks macOS; never twice', () => {
+  const h = load({hidden: false, nativeNotify: true});
+  assert.ok(h.posted.some((m) => m.native?.action === 'status'), 'asks the shell for the current permission on load');
+  assert.equal(h.api.permissionPrompt(), null, 'no prompt until the shell reports');
+  h.window.__pinkieNotifyPermission('default');
+  const prompt = h.api.permissionPrompt();
+  assert.ok(prompt && /碧琪/.test(prompt.text), 'Pinkie asks in her own voice');
+  h.api.answerPermission(true);
+  assert.ok(h.posted.some((m) => m.native?.action === 'request-permission'), 'a yes goes to the native permission dialog');
+  assert.equal(h.notifications.length, 0);
+  h.window.__pinkieNotifyPermission('granted');
+  assert.equal(h.api.permissionPrompt(), null);
+  const denied = load({hidden: false, nativeNotify: true});
+  denied.window.__pinkieNotifyPermission('denied');
+  assert.equal(denied.api.permissionPrompt(), null, 'a system-level no is respected');
+});
+
 test('uses the native notification bridge when the shell has one', () => {
   const h = load({hidden: true, nativeNotify: true});
   h.start(); h.tick(61_000); h.final();
-  const native = h.posted.filter((m) => m.native);
+  const native = h.posted.filter((m) => m.native && !m.native.action);
   assert.equal(native.length, 1);
   assert.equal(native[0].native.title, '整理销售数据');
   assert.equal(h.notifications.length, 0, 'not both');

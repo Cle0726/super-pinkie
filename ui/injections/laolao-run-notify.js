@@ -220,8 +220,17 @@
   document.addEventListener('visibilitychange', () => { if (visible()) viewed(); });
 
   // ---------- 第一次要通知权限：碧琪问一句 ----------
+  // 原生壳（Mac）的权限状态由壳回报：default / granted / denied；没回报前不问。
+  let nativePermission = null;
+  window.__pinkieNotifyPermission = (state) => { nativePermission = String(state || ''); };
+  try { window.webkit?.messageHandlers?.pinkieNotify?.postMessage({action: 'status'}); } catch {}
   function permissionPrompt() {
-    if (!prefs.system || nativeNotifier()) return null;
+    if (!prefs.system) return null;
+    if (nativeNotifier()) {
+      if (nativePermission !== 'default') return null;
+      try { if (localStorage.getItem(ASKED_KEY)) return null; } catch {}
+      return {text: '碧琪做完事，要不要敲敲你？', buttons: ['好呀', '不用了']};
+    }
     const Web = webNotifier();
     if (!Web || Web.permission !== 'default') return null;
     try { if (localStorage.getItem(ASKED_KEY)) return null; } catch {}
@@ -230,7 +239,10 @@
   function answerPermission(yes) {
     try { localStorage.setItem(ASKED_KEY, yes ? 'yes' : 'no'); } catch {}
     hidePrompt();
-    if (yes) { try { void webNotifier()?.requestPermission?.(); } catch {} }
+    if (!yes) return;
+    const native = window.webkit?.messageHandlers?.pinkieNotify;
+    if (native) { try { native.postMessage({action: 'request-permission'}); } catch {} return; }
+    try { void webNotifier()?.requestPermission?.(); } catch {}
   }
   let promptNode = null;
   function hidePrompt() { promptNode?.remove(); promptNode = null; }
