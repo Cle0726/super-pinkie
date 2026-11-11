@@ -466,3 +466,15 @@ html[data-pinkie-night] .pinkie-session-unread{background:#ff9fd1}
 #laolao-session-manager .session-row-aside .laolao-row-actions{display:none}
 #laolao-session-manager .sidebar-recent-session:is(:hover,:focus-within) .session-row-aside .laolao-row-actions{display:inline-flex}
 #laolao-session-manager .sidebar-recent-session:is(:hover,:focus-within) .session-row-aside :is(.pinkie-session-time,.pinkie-session-icon,.pinkie-session-unread){display:none}
+
+/* One shared left edge for headings and rows. The disclosure follows the
+   label and remains keyboard accessible even when visually quiet. */
+#laolao-session-manager{--sb-x:12px}
+#laolao-session-manager .laolao-group__head{padding:2px var(--sb-x);min-height:28px;gap:4px}
+#laolao-session-manager .laolao-group__toggle{width:28px;height:28px;opacity:0}
+#laolao-session-manager .laolao-group__head:is(:hover,:focus-within) .laolao-group__toggle{opacity:.75}
+#laolao-session-manager .laolao-group__action{min-width:28px;min-height:28px}
+#laolao-session-manager .pinkie-project-heading .laolao-group__add-project{width:28px;padding:0;border:0;background:transparent;opacity:0}
+#laolao-session-manager .pinkie-project-heading:is(:hover,:focus-within) .laolao-group__add-project{opacity:.8}
+#laolao-session-manager .pinkie-recent-menu{opacity:.65}
+#laolao-session-manager .pinkie-session-branch{margin-inline-start:14px;padding-inline-start:0}

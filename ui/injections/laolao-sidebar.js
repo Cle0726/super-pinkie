@@ -1310,6 +1310,16 @@
     });
   }
 
+  function openRecentMenu(anchor, openArchive) {
+    openMenu(anchor, menu => {
+      menuItem(menu, ICONS.archive, '已归档的会话', () => { closeMenu(); openArchive(); });
+      menuItem(menu, ICONS.more, '会话管理', () => { closeMenu(); openSessionManagement(anchor); });
+      menuItem(menu, ICONS.folder, '打开文件夹建项目…', () => {
+        closeMenu(); void addFolderProject(null, {bindCurrent: false});
+      });
+    });
+  }
+
   /* ---------- 6. 行内按钮与项目菜单 ---------- */
   function keyOfRow(row) {
     const link = row.querySelector("a.sidebar-recent-session__link");
@@ -1722,7 +1732,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }

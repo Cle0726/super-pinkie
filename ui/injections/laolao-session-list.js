@@ -345,7 +345,14 @@
     const head=el('div','laolao-group__head');const collapsed=!!api.state.collapsed[id];
     const toggle=button(collapsed?'›':'⌄',(collapsed?'展开':'收起')+name,()=>api.toggleGroup(id));toggle.classList.add('laolao-group__toggle');toggle.setAttribute('aria-expanded',String(!collapsed));
     const label=el('span','laolao-group__label',name);label.onclick=()=>api.toggleGroup(id);
-    head.append(toggle,label,el('span','laolao-group__count',String(rows.reduce((count, node) => count + [node, ...node.children].filter(item => hasMessages(item.session)).length, 0) || '')));
+    head.append(label,toggle,el('span','laolao-group__count',String(rows.reduce((count, node) => count + [node, ...node.children].filter(item => hasMessages(item.session)).length, 0) || '')));
+    if(id==='__recent') {
+      const more=button('⋯','最近会话菜单',e=>api.openRecentMenu(e.currentTarget,()=>{
+        archived=true;limit=30;signature='';render(current.section,current.api);
+      }));
+      more.classList.add('laolao-group__action','pinkie-recent-menu');
+      head.append(more);
+    }
     if(project){
       const add=button('＋','在项目「'+name+'」中新建会话',async()=>{add.disabled=true;try{await api.createProjectSession(name);}finally{add.disabled=false;}});add.classList.add('laolao-group__action');
       const settings=button('⋯','管理项目「'+name+'」',e=>api.openProjectSettings(e.currentTarget,name));settings.classList.add('laolao-group__action');head.append(add,settings);
@@ -389,13 +396,7 @@
     let controls=host.querySelector('.laolao-session-controls');
     if(!controls){controls=el('div','laolao-session-controls');controls.append(search);host.append(controls);}
     for(const n of [...controls.children])if(n!==search)n.remove();
-    controls.append(button(archived?'‹ 返回':'归档',archived?'返回进行中的会话':'查看已归档会话',()=>{archived=!archived;limit=30;signature='';render(section,api);}));
-    if(['chat','project','thinking','learning'].includes(api.mode)&&typeof api.openSessionManagement==='function'){
-      controls.append(button('更多','更多会话管理',e=>api.openSessionManagement(e.currentTarget)));
-    }else{
-      const deleteAll=button('全部删除','删除当前模式的全部普通会话和聊天记录',()=>api.askDeleteAllSessions());
-      deleteAll.classList.add('laolao-managed-button--danger');controls.append(deleteAll);
-    }
+    if(archived) controls.append(button('‹ 返回','返回进行中的会话',()=>{archived=false;limit=30;signature='';render(section,api);}));
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     const tree = buildTree(rows, {archive: archived, currentKey: api.currentKey, query});
     if (archived) groups.append(group('__archive', '已归档', tree, api));
@@ -403,12 +404,14 @@
       const pinned = node => [node, ...node.children].some(item => api.state.pins.includes(item.session.key));
       const pinnedRows = tree.filter(pinned);
       if (pinnedRows.length) groups.append(group('__pins', '置顶', pinnedRows, api));
-      const heading = el('div', 'laolao-group__head');
-      heading.append(el('span', 'laolao-group__label', '项目文件夹'));
-      const add = button('＋ 打开文件夹', '选择文件夹并建立项目', () => api.addFolderProject(null, {bindCurrent: true}));
-      add.classList.add('laolao-group__action', 'laolao-group__add-project');
-      heading.append(add);
-      groups.append(heading);
+      if(Object.keys(api.state.projects).length) {
+        const heading = el('div', 'laolao-group__head pinkie-project-heading');
+        heading.append(el('span', 'laolao-group__label', '项目'));
+        const add = button('＋', '选择文件夹并建立项目', () => api.addFolderProject(null, {bindCurrent: false}));
+        add.classList.add('laolao-group__action', 'laolao-group__add-project');
+        heading.append(add);
+        groups.append(heading);
+      }
       const assigned = new Set();
       for (const [name, keys] of Object.entries(api.state.projects)) {
         const members = new Set(keys);
