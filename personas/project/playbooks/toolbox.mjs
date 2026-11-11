@@ -495,6 +495,15 @@ function legacyDocs(command) {
 }
 
 // ---- office-view：把 PPT / Word / Excel 转成 PDF 或图片来看（LibreOffice） ----
+// 逐个文件复制、已有的不覆盖。不用 fs.cpSync：Node 22 在 Windows 上遇到中文路径会让整个进程直接退出，连错误都接不住。
+function copyTree(from, to) {
+  fs.mkdirSync(to, {recursive: true});
+  for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
+    const source = path.join(from, entry.name), target = path.join(to, entry.name);
+    if (entry.isDirectory()) copyTree(source, target);
+    else if (entry.isFile() && !exists(target)) fs.copyFileSync(source, target);
+  }
+}
 function findSoffice() {
   const candidates = [WIN ? path.join(BOX, 'office', 'program', 'soffice.exe') : path.join(BOX, 'office', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice'), ...(!NO_SYSTEM ? [which('soffice')] : [])];
   if (MAC && !NO_SYSTEM) candidates.push('/Applications/LibreOffice.app/Contents/MacOS/soffice', path.join(userHome, 'Applications/LibreOffice.app/Contents/MacOS/soffice'));
@@ -559,7 +568,7 @@ function ensureOffice() {
         return {ok: false, how: 'failed', note: `办公软件免安装解包失败；没有修改系统安装。${reason ? `（${reason}）` : unpacked.err ? `（${firstLine(unpacked.err).slice(0, 120)}）` : ''}`};
       }
       const fonts = path.join(source, 'Fonts');
-      if (exists(fonts)) fs.cpSync(fonts, path.join(source, 'share', 'fonts', 'truetype'), {recursive: true, force: false});
+      if (exists(fonts)) copyTree(fonts, path.join(source, 'share', 'fonts', 'truetype'));
       fs.renameSync(source, office);
       ledger(downloaded.path, '办公软件安装包'); ledger(office, '办公文档查看工具 LibreOffice');
       const verified = checkOffice();
