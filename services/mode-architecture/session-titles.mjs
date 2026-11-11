@@ -213,6 +213,28 @@ async function* transcriptMessages(file) {
   }
 }
 
+export function userChildPrompt(value) {
+  const prefix = '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n';
+  const marker = '\n要做的事：\n';
+  const footer = '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。';
+  const text = messageText(value);
+  if (!text.startsWith(prefix)) return null;
+  const start = text.indexOf(marker, prefix.length), end = text.lastIndexOf(footer);
+  return start < 0 || end < start + marker.length ? null : text.slice(start + marker.length, end);
+}
+
+async function readUserChildBrief(file) {
+  for await (const message of transcriptMessages(file)) {
+    if (message.role !== 'user') continue;
+    const prompt = userChildPrompt(message);
+    if (prompt === null) continue;
+    const clean = cleanTitleSource(prompt);
+    return {sources: clean && !isLowInformation(clean) ? [clipGraphemes(clean, 1500)] : [],
+      firstReply: '', greetings: 0, legacy: false, messages: 1, internal: false};
+  }
+  return null;
+}
+
 export async function readTitleTranscript(file, legacyLabel = '', summaryOnly = false) {
   const sources = [];
   let firstReply = '', users = 0, internalUsers = 0, messages = 0, legacy = false;
@@ -300,7 +322,7 @@ export function createSessionAccess(api, {cli, runProcess} = {}) {
     const {entries, dir} = await list(agentId);
     return sessionEntry(entries, dir, key);
   }
-  return {rpc, list, entry};
+  return {rpc, list, entry, sdk};
 }
 
 function sessionEntry(entries, dir, key) {
@@ -458,7 +480,8 @@ export class SessionTitles {
     const stamp = `${entry.sessionId}:${file.size}:${file.mtimeMs}`;
     if (record?.attempts >= MAX_ATTEMPTS || record?.stamp === stamp) return;
     const unknownLabel = !record && !isBadTitle(label, key, entry.sessionId);
-    const basis = await readTitleTranscript(entry.transcript, unknownLabel ? label : '');
+    const basis = (/:pinkie-child:/i.test(key) && await readUserChildBrief(entry.transcript))
+      || await readTitleTranscript(entry.transcript, unknownLabel ? label : '');
     // Recheck after streaming so a user rename during the read takes priority.
     const current = this.record(key);
     if (current?.source === 'user' || current?.source === 'system') return;

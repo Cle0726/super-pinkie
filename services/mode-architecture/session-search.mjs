@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createInterface} from 'node:readline';
 import {agentOf, channelTitle, isBadTitle, isInternalMessage, isInternalSessionKey, isPersona,
-  messageText, registerSessionMethod, safeText} from './session-titles.mjs';
+  messageText, registerSessionMethod, safeText, userChildPrompt} from './session-titles.mjs';
 
 // Mode and agent must agree: a search must never accidentally cross modes.
 const MODE_AGENTS = Object.freeze({chat: 'main', project: 'project', thinking: 'thinking', ideas: 'thinking',
@@ -34,6 +34,10 @@ function searchable(message) {
   if (['inter_session', 'internal_system'].includes(message.metadata?.inputProvenance?.kind)
       || ['inter_session', 'internal_system'].includes(message.provenance?.kind)) return '';
   const text = messageText(message);
+  if (message.role === 'user') {
+    const prompt = userChildPrompt(text);
+    if (prompt !== null) return prompt;
+  }
   if (/^\s*(?:【子会话简报】|【来自关联会话的消息】|【就在这里继续】|NO_REPLY\s*$|HEARTBEAT_OK\s*$)/u.test(text)) return '';
   if (message.role === 'assistant' && /^(?:error|abort(?:ed)?|cancel(?:led)?)$/i.test(message.stopReason || '')) return '';
   return text;

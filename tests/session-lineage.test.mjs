@@ -61,7 +61,7 @@ function fixture(t) {
       if (method === 'sessions.list') return {sessions: [...entries.values()].map(entry => ({...entry, hasActiveRun: running.has(entry.key)}))};
       if (method === 'chat.history') return {messages: histories.get(params.sessionKey) || []};
       if (method === 'sessions.create') {
-        if ([...entries.values()].some(entry => entry.label === params.label)) throw new Error('label already in use');
+        if (params.label && [...entries.values()].some(entry => entry.label === params.label)) throw new Error('label already in use');
         const child = add(params.key, {parentSessionKey: params.parentSessionKey, label: params.label});
         return {key: child.key, sessionId: child.sessionId};
       }
@@ -104,6 +104,95 @@ test('fresh user-requested child is created immediately in the parent mode with 
   assert.equal(f.sent[0].message, '【子会话简报】\n' + request.prompt);
   assert.equal(f.sent[0].deliver, false);
   assert.deepEqual(await f.lineage.start(parent, 'human', request, 'first'), child);
+  assert.equal(f.sent.length, 1);
+});
+
+test('user start wraps the exact task, keeps an explicit name and lets unnamed children use automatic titles', async t => {
+  const f = fixture(t), prompt = '  保留  空格\n第二行 <资料>  ';
+  const named = await f.lineage.startUser({parentKey: parent, prompt, title: '本人起的名字', context: 'fresh'});
+  assert.equal(f.records.get(named.key).source, 'user');
+  assert.equal(f.sent[0].message, '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n来自会话：项目清单\n要做的事：\n'
+    + prompt + '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。');
+  assert.equal(f.lineage.lineage()[named.key].initiation, 'user_asked');
+  assert.deepEqual(f.bindings.get(named.key), f.bindings.get(parent));
+  const unnamed = await f.lineage.startUser({parentKey: parent, prompt: '整理一份学习清单', context: 'fresh'});
+  assert.equal(f.records.has(unnamed.key), false);
+  const create = f.calls.filter(([method]) => method === 'sessions.create').at(-1)[1];
+  assert.equal(Object.hasOwn(create, 'label'), false);
+  assert.equal(create.agentId, 'project');
+});
+
+test('user start preserves the child cap and rejects invalid, nested, archived and busy requests', async t => {
+  const f = fixture(t), valid = {parentKey: parent, prompt: '核对用户资料', context: 'fresh'};
+  for (const params of [{...valid, prompt: ' '}, {...valid, prompt: '字'.repeat(4001)},
+    {...valid, context: 'wrong'}, {...valid, forkAt: 'entry'}, {...valid, title: '字'.repeat(41)}]) {
+    await assert.rejects(f.lineage.startUser(params));
+  }
+  const children = await Promise.all(Array.from({length: 4}, () => f.lineage.startUser(valid)));
+  await assert.rejects(f.lineage.startUser(valid), /已有 4 个/);
+  await assert.rejects(f.lineage.startUser({...valid, parentKey: children[0].key}), /子会话里不能再开/);
+  f.entries.get(parent).archivedAt = 1;
+  await assert.rejects(f.lineage.startUser(valid), /父会话/);
+  f.entries.get(parent).archivedAt = 0;
+  f.running.add(parent);
+  await assert.rejects(f.lineage.startUser({...valid, context: 'fork'}), /父会话还在运行/);
+});
+
+test('user forkAt keeps only the chosen path in the child file and rejects unknown entries before creating it', async t => {
+  const f = fixture(t), access = f.options.titles.access;
+  const parentFile = path.join(f.root, 'parent.jsonl');
+  const header = {type: 'session', id: f.entries.get(parent).sessionId};
+  const earlier = {type: 'message', id: 'chosen', parentId: null, message: {role: 'assistant', content: '保留'}};
+  const later = {type: 'message', id: 'later', parentId: 'chosen', message: {role: 'user', content: '不能带过去'}};
+  fs.writeFileSync(parentFile, [header, earlier, later].map(JSON.stringify).join('\n') + '\n');
+  f.entries.get(parent).transcript = parentFile;
+  let locks = 0, omitChosenFromChild = false, cleaned = 0;
+  class FakeSessionManager {
+    constructor(file) { this.file = file; this.rows = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse); }
+    static open(file) { return new FakeSessionManager(file); }
+    getHeader() { return this.rows[0]; }
+    getBranch() { return this.rows.slice(1); }
+    createBranchedSession(id) {
+      const index = this.rows.findIndex(row => row.id === id);
+      const target = this.file + '.branch';
+      fs.writeFileSync(target, [{type: 'session', id: 'temporary'}, ...this.rows.slice(1, index + 1)].map(JSON.stringify).join('\n') + '\n');
+      return target;
+    }
+    rewriteFile() {}
+  }
+  access.sdk = async name => name === 'agent-sessions' ? {SessionManager: FakeSessionManager}
+    : {acquireSessionWriteLock: async () => { locks++; return {release: async () => {}}; }};
+  const originalRpc = access.rpc;
+  access.rpc = async (method, params) => {
+    if (method === 'sessions.delete') {
+      const child = f.entries.get(params.key);
+      if (child?.transcript) fs.rmSync(child.transcript, {force: true});
+      f.entries.delete(params.key); cleaned++; return {ok: true};
+    }
+    const result = await originalRpc(method, params);
+    if (method === 'sessions.create' && params.fork) {
+      const child = f.entries.get(params.key);
+      child.transcript = path.join(f.root, `child-${params.key.slice(-8)}.jsonl`);
+      fs.writeFileSync(child.transcript, [{...header, id: child.sessionId}, ...(omitChosenFromChild ? [later] : [earlier, later])].map(JSON.stringify).join('\n') + '\n');
+    }
+    return result;
+  };
+  const before = f.entries.size;
+  await assert.rejects(f.lineage.startUser({parentKey: parent, prompt: '看看', context: 'fork', forkAt: 'missing'}), /找不到当前分支/);
+  assert.equal(f.entries.size, before);
+  const child = await f.lineage.startUser({parentKey: parent, prompt: '看看', context: 'fork', forkAt: 'chosen'});
+  const content = fs.readFileSync(f.entries.get(child.key).transcript, 'utf8');
+  assert.match(content, /保留/);
+  assert.doesNotMatch(content, /不能带过去/);
+  assert.equal(JSON.parse(content.split('\n')[0]).id, f.entries.get(child.key).sessionId);
+  assert.equal(fs.existsSync(f.entries.get(child.key).transcript + '.branch'), false);
+  assert.equal(locks, 3);
+  assert.match(f.sent[0].message, /你继承了父会话到这一条为止的记录/);
+  const afterSuccess = f.entries.size;
+  omitChosenFromChild = true;
+  await assert.rejects(f.lineage.startUser({parentKey: parent, prompt: '看看', context: 'fork', forkAt: 'chosen'}), /找不到当前分支/);
+  assert.equal(f.entries.size, afterSuccess);
+  assert.equal(cleaned, 1);
   assert.equal(f.sent.length, 1);
 });
 
