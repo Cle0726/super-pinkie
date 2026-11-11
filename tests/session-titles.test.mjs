@@ -213,7 +213,7 @@ test('a duplicate title is numbered, and an internal-only session is flagged wit
   assert.equal(f.rpcCalls.some(call => call.key === internal), false);
 });
 
-test('title transport ignores helper settings, does not think, and never changes models', async () => {
+test('title transport ignores helper settings, explicitly turns thinking off, and never changes models', async () => {
   const model = {id: 'workbuddy/hy4free', compat: {supportsTemperature: false}, reasoning: true};
   const models = [model, {id: 'other-model', reasoning: true}];
   const config = {models: {providers: {mm: {api: 'openai-completions', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'test', models}}}};
@@ -226,8 +226,9 @@ test('title transport ignores helper settings, does not think, and never changes
   assert.equal(TITLE_MODEL, 'mm/workbuddy/hy4free');
   assert.equal(await assistant.title('帮我找找怎么清理系统内存'), '系统内存清理');
   assert.equal(calls[0].model, 'workbuddy/hy4free');
-  assert.equal(calls[0].max_tokens, 60);
-  assert.equal(calls[0].reasoning_effort, undefined);
+  assert.equal(calls[0].max_tokens, 120);
+  // hy4free 不传思考参数时会把全部 token 用在思考上、正文为空（11-11 实测），必须显式关掉。
+  assert.equal(calls[0].reasoning_effort, 'none');
   assert.equal(calls[0].temperature, undefined);
   models.shift();
   await assert.rejects(assistant.title('另一个主题'), /title-model-unavailable/);
@@ -260,4 +261,10 @@ test('enqueue returns while the companion is still working', async t => {
   release('流式输出消失');
   while (f.titles.running) await new Promise(resolve => setImmediate(resolve));
   assert.equal(f.store[key].label, '流式输出消失');
+});
+
+test('mixed Chinese and English titles are measured by visual width, not graphemes', () => {
+  assert.equal(validateTitle('Mac 上 VMware 实训方案', ['这个项目文件有什么办法可以在 Mac 上练习 VMware 实训吗？']), 'Mac 上 VMware 实训方案');
+  assert.equal(validateTitle('WebKit 与 Chromium 侧边栏布局对比'), 'WebKit 与 Chromium 侧边栏布局对比');
+  assert.equal(validateTitle('这是一个明显太长了的中文会话主题名字超过上限'), '');
 });
