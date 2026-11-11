@@ -187,7 +187,7 @@
   const shapes = {
     running: ['M21 12a9 9 0 1 1-9-9'],
     waiting: ['M21 11.5a8.4 8.4 0 0 1-.9 3.8A8.5 8.5 0 0 1 12.5 20a8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 4a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.4z', 'M9 12h6'],
-    error: ['M12 8v4m0 4h.01', 'M22 12a10 10 0 1 1-20 0 10 10 0 1 1 20 0'],
+    error: ['M22 12a10 10 0 1 1-20 0 10 10 0 1 1 20 0', 'M12 7v6m0 3h.01'],
     feishu: ['m22 2-7 20-4-9-9-4 20-7Z', 'M22 2 11 13'],
     chat: ['M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.3-3.2A7.5 7.5 0 1 1 20 11.5Z', 'M10 11h5'],
   };
@@ -283,9 +283,11 @@
       if (time) aside.append(el('time', 'pinkie-session-time', time));
     }
     if (children) {
-      const expand = button((collapsed ? '› ' : '⌄ ') + children, (collapsed ? '展开' : '收起') + name + '的子会话',
+      const expand = button(String(children), (collapsed ? '展开' : '收起') + name + '的子会话',
         () => setFolded(archived ? 'archive:' + s.key : s.key, !collapsed));
       expand.classList.add('pinkie-session-fold');
+      expand.textContent = '';
+      expand.append(el('span', 'pinkie-session-fold__count', String(children)));
       expand.setAttribute('aria-expanded', String(!collapsed));
       aside.append(expand);
     }
