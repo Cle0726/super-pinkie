@@ -30,6 +30,36 @@ const messageOf = value => value?.message || value;
 const titleFor = (entry, key) => entry?.label && !isBadTitle(entry.label, key, entry.sessionId)
   ? entry.label : channelTitle(entry, key)?.title || '新会话';
 
+export const MINIMAL_CHILD_TOOLS = Object.freeze(['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list']);
+
+export function supplementMinimalChildTools(config) {
+  const tools = config?.tools;
+  // An explicit allowlist is a separate user policy, and OpenClaw rejects
+  // combining it with alsoAllow. Leave that custom policy untouched.
+  if (!tools || tools.profile !== 'minimal' || Object.hasOwn(tools, 'allow')
+      || tools.alsoAllow !== undefined && !Array.isArray(tools.alsoAllow)) return false;
+  const present = new Set((tools.alsoAllow || []).map(name => String(name).toLowerCase()));
+  const missing = MINIMAL_CHILD_TOOLS.filter(name => !present.has(name));
+  if (!missing.length) return false;
+  tools.alsoAllow = [...(tools.alsoAllow || []), ...missing];
+  return true;
+}
+
+function registerMinimalChildToolsMigration(api) {
+  const config = api.runtime?.config;
+  if (!config?.current || !config?.mutateConfigFile) return;
+  api.on('gateway_start', async () => {
+    try {
+      // Avoid a no-op write/reload on every startup; check again against the
+      // latest source while holding the runtime's configuration write lock.
+      if (!supplementMinimalChildTools(structuredClone(config.current() || {}))) return;
+      await config.mutateConfigFile({base: 'source', afterWrite: {mode: 'auto'}, mutate: supplementMinimalChildTools});
+    } catch {
+      api.logger?.warn?.('[session-lineage] 无法补齐只聊天的子会话工具权限');
+    }
+  });
+}
+
 export function isSessionOperationEvidence(entry, prompt) {
   if (!/子会话|sub[- ]?session|child session/iu.test(prompt || '') || entry.name !== 'pinkie_session_start') return false;
   try {
@@ -538,6 +568,7 @@ export function registerSessionLineage(api, options) {
   const shared = globalThis[LINEAGE_INSTANCES] ??= new Map();
   if (!shared.has(options.root)) shared.set(options.root, new SessionLineage(api, options));
   const lineage = shared.get(options.root);
+  registerMinimalChildToolsMigration(api);
   const protectedHook = (name, work) => (event, ctx) => {
     try { return work(event, ctx); }
     catch { logSessionFailure(api, 'session-lineage', sessionKeyOf(event, ctx), name); }

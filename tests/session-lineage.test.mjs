@@ -3,12 +3,43 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {SessionLineage, isSessionOperationEvidence, normalizeChildRequest} from '../services/mode-architecture/session-lineage.mjs';
+import {MINIMAL_CHILD_TOOLS, SessionLineage, isSessionOperationEvidence, normalizeChildRequest,
+  registerSessionLineage, supplementMinimalChildTools} from '../services/mode-architecture/session-lineage.mjs';
 import {graphemeCount} from '../services/mode-architecture/session-titles.mjs';
 
 const parent = 'agent:project:dashboard:parent';
 const request = {title: '校对项目清单', prompt: '从 /tmp/project/checklist.md 核对清单，最后说出缺了什么。', initiation: 'user_asked'};
 const ending = (runId, text = '工作完成') => ({success: true, runId, messages: [{role: 'assistant', content: text, stopReason: 'stop'}]});
+
+test('minimal migration adds only the three child tools and preserves separate restrictions', () => {
+  const config = {tools: {profile: 'minimal', alsoAllow: ['some-existing-choice'], deny: ['pinkie_session_message']}};
+  assert.equal(supplementMinimalChildTools(config), true);
+  assert.deepEqual(config.tools.alsoAllow, ['some-existing-choice', ...MINIMAL_CHILD_TOOLS]);
+  assert.deepEqual(config.tools.deny, ['pinkie_session_message']);
+  assert.equal(supplementMinimalChildTools(config), false);
+  for (const tools of [{profile: 'full'}, {profile: 'minimal', allow: ['session_status']},
+    {profile: 'minimal', alsoAllow: 'invalid'}]) {
+    const original = structuredClone(tools);
+    assert.equal(supplementMinimalChildTools({tools}), false);
+    assert.deepEqual(tools, original);
+  }
+});
+
+test('startup migrates old minimal profiles once using the runtime config writer', async t => {
+  const f = fixture(t), hooks = {};
+  const config = {tools: {profile: 'minimal', deny: ['pinkie_session_message']}};
+  let writes = 0;
+  f.api.on = (name, fn) => { (hooks[name] ||= []).push(fn); };
+  f.api.runtime = {config: {current: () => config, async mutateConfigFile({base, mutate}) {
+    assert.equal(base, 'source'); writes++; mutate(config);
+  }}};
+  registerSessionLineage(f.api, f.options);
+  await Promise.all(hooks.gateway_start.map(fn => fn()));
+  assert.deepEqual(config.tools.alsoAllow, MINIMAL_CHILD_TOOLS);
+  assert.deepEqual(config.tools.deny, ['pinkie_session_message']);
+  await Promise.all(hooks.gateway_start.map(fn => fn()));
+  assert.equal(writes, 1);
+});
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'session-lineage-'));
