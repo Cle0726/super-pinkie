@@ -9,7 +9,7 @@ ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 PINKIE_NATIVE_SOURCE_DIR="$REPO_ROOT/desktop/macos/pinkie/Sources"
 LAUNCHER_SOURCE="$PINKIE_NATIVE_SOURCE_DIR/Launcher.swift"
-LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift")
+LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -99,7 +99,8 @@ rebuild_launcher_if_needed() {
     && strings "$target_file" | grep -Fq 'laolaoRoundtable' \
     && strings "$target_file" | grep -Fq 'laolaoWorkspaceDock' \
     && strings "$target_file" | grep -Fq 'laolaoBrowserWorkspace' \
-    && strings "$target_file" | grep -Fq 'laolaoMaterialPreview'; then
+    && strings "$target_file" | grep -Fq 'laolaoMaterialPreview' \
+    && strings "$target_file" | grep -Fq 'pinkieNative'; then
     return 0
   fi
 
@@ -107,8 +108,10 @@ rebuild_launcher_if_needed() {
   xcrun swiftc -parse-as-library -O "${LAUNCHER_SUPPORT_SOURCES[@]}" "$source_file" \
     -framework AppKit \
     -framework AVFoundation \
+    -framework Carbon \
     -framework Foundation \
     -framework Speech \
+    -framework UserNotifications \
     -framework WebKit \
     -o "$temp_binary"
   chmod 755 "$temp_binary"
