@@ -269,7 +269,8 @@ export class SessionLineage {
         if (cards.filter(item => item.kind === 'proposal' && item.runId === runId).length >= MAX_PROPOSALS) {
           throw new Error('一轮最多提出 3 张子会话卡片');
         }
-        card = {id, kind: 'proposal', ...request, runId, state: 'pending', createdAt: this.now(), expiresAt: this.now() + CARD_TTL};
+        card = {id, kind: 'proposal', ...request, runId, anchor: null, anchorPending: true,
+          state: 'pending', createdAt: this.now(), expiresAt: this.now() + CARD_TTL};
         return {...state, cards: [...cards, card]};
       });
       this.notify(parentKey);
@@ -301,18 +302,69 @@ export class SessionLineage {
 
   publicCard(card) {
     if (card.kind === 'report') {
-      return {id: card.id, kind: card.kind, title: card.title, text: card.text, childKey: card.childKey, createdAt: card.createdAt};
+      return {id: card.id, kind: card.kind, title: card.title, text: card.text, childKey: card.childKey,
+        createdAt: card.createdAt, anchor: card.anchor || null};
     }
     const expired = card.state === 'pending' && card.expiresAt <= this.now();
     return {id: card.id, kind: card.kind, title: card.title, summary: clipGraphemes(card.prompt.split('\n')[0], 160),
       initiation: card.initiation, context: card.context, state: expired ? 'expired' : card.state,
-      createdAt: card.createdAt, expiresAt: card.expiresAt, childKey: card.childKey};
+      createdAt: card.createdAt, expiresAt: card.expiresAt, childKey: card.childKey, anchor: card.anchor || null};
+  }
+
+  async historyMessages(key) {
+    const result = await this.access.rpc('chat.history', {sessionKey: key, agentId: agentOf(key), limit: 1000});
+    return (result.messages || []).map(messageOf);
+  }
+
+  async proposalAnchor(key, runId, event) {
+    const messages = await this.historyMessages(key);
+    const assistants = messages.filter(message => message.role === 'assistant' && message.__openclaw?.id);
+    const final = (event?.messages || []).map(messageOf).findLast(message => message?.role === 'assistant' && messageText(message).trim());
+    const exact = final?.timestamp && assistants.findLast(message => Number(message.timestamp) === Number(final.timestamp)
+      && messageText(message) === messageText(final));
+    if (exact) return {runId, entryId: exact.__openclaw.id};
+    const user = messages.findLastIndex(message => message.role === 'user'
+      && [message.__openclaw?.idempotencyKey, message.idempotencyKey].some(id => id === runId || id === runId + ':user'));
+    if (user < 0) return null;
+    const nextUser = messages.findIndex((message, index) => index > user && message.role === 'user');
+    const last = messages.slice(user + 1, nextUser < 0 ? undefined : nextUser)
+      .findLast(message => message.role === 'assistant' && message.__openclaw?.id && messageText(message).trim());
+    return last ? {runId, entryId: last.__openclaw.id} : null;
+  }
+
+  async resolveProposalAnchors(key, runId, event) {
+    const pending = (this.state(key).cards || []).filter(card => card.kind === 'proposal' && card.anchorPending && card.runId === runId);
+    if (!pending.length) return;
+    const anchor = await this.proposalAnchor(key, runId, event);
+    if (!anchor) return;
+    const ids = new Set(pending.map(card => card.id));
+    this.updateState(key, state => ({...state, cards: state.cards.map(card => ids.has(card.id)
+      ? {...card, anchor, anchorPending: false} : card)}));
+    this.notify(key);
+  }
+
+  async latestAnchor(key) {
+    const messages = await this.historyMessages(key);
+    const last = messages.findLast(message => ['user', 'assistant'].includes(message.role)
+      && message.__openclaw?.id && !isInternalMessage(message));
+    if (!last) return null;
+    const user = messages.findLast(message => message.role === 'user' && message.__openclaw?.idempotencyKey);
+    const idempotencyKey = user?.__openclaw?.idempotencyKey;
+    const runId = this.turns.get(key)?.runId || (idempotencyKey ? idempotencyKey.replace(/:user$/, '') : null);
+    return {runId, entryId: last.__openclaw.id};
   }
 
   async cards(key) {
     if (!agentOf(key) || isInternalSessionKey(key) || isPersona(key)) return {cards: []};
     const parentKey = this.lineage()[key]?.parentKey;
     const parent = parentKey ? await this.access.entry(parentKey) : null;
+    if (!this.turns.has(key) && !this.isBusy(key)) {
+      const pendingRuns = new Set((this.state(key).cards || []).filter(card => card.anchorPending && card.runId).map(card => card.runId));
+      for (const runId of pendingRuns) {
+        try { await this.resolveProposalAnchors(key, runId); }
+        catch { logSessionFailure(this.api, 'session-lineage', key, 'proposal-anchor'); }
+      }
+    }
     const state = this.state(key);
     return {cards: (state.cards || []).map(card => this.publicCard(card)),
       ...(parent ? {parentKey, parentTitle: titleFor(parent, parentKey)} : {})};
@@ -465,6 +517,8 @@ export class SessionLineage {
     this.updateState(key, state => ({...state, phase, at: this.now()}));
     this.notify(key);
     try {
+      try { await this.resolveProposalAnchors(key, runId || turn?.runId, event); }
+      catch { logSessionFailure(this.api, 'session-lineage', key, 'proposal-anchor'); }
       if (child && !stopped && deliverable && turn?.authored && !turn.user && (runId || turn.runId)) {
         const text = reportText(event);
         if (text) await this.report(key, child, text, runId || turn.runId);
@@ -480,8 +534,11 @@ export class SessionLineage {
     const id = 'report-' + nowId(key, runId);
     let added = false;
     const entry = await this.access.entry(key);
+    let anchor = null;
+    try { anchor = await this.latestAnchor(parent.key); }
+    catch { logSessionFailure(this.api, 'session-lineage', parent.key, 'report-anchor'); }
     const card = {kind: 'report', id, title: entry?.label || child.title, text: clipGraphemes(plainText(text), 400),
-      childKey: key, createdAt: this.now(), injection: 'pending'};
+      childKey: key, createdAt: this.now(), injection: 'pending', anchor};
     this.updateState(parent.key, state => {
       const cards = state.cards || [];
       if (cards.some(item => item.id === id)) return state;
