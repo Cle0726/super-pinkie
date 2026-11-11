@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {unpackZip} from '../tools/pinkie-toolbox/toolbox.mjs';
+import {unpackZip, treeDigest} from '../tools/pinkie-toolbox/toolbox.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cli = path.join(root, 'personas/project/playbooks/toolbox.mjs');
@@ -148,4 +148,44 @@ test('a valid portable archive extracts into a directory with Chinese and spaces
   assert.equal(create.status, 0, create.stderr);
   assert.equal(unpackZip(python, archive, destination).ok, true);
   assert.equal(fs.readFileSync(path.join(destination, 'cmd', 'git.exe'), 'utf8'), 'test');
+});
+
+test('browser directory digest ignores install markers and catches any changed or added file', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), '碧琪 内核-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(dir, 'chrome-headless-shell-mac-arm64'), {recursive: true});
+  fs.writeFileSync(path.join(dir, 'chrome-headless-shell-mac-arm64', 'chrome-headless-shell'), 'binary');
+  fs.writeFileSync(path.join(dir, 'chrome-headless-shell-mac-arm64', 'resources.pak'), 'pak');
+  const skip = new Set(['INSTALLATION_COMPLETE', 'DEPENDENCIES_VALIDATED']);
+  const before = treeDigest(dir, skip);
+  assert.match(before, /^sha256-[A-Za-z0-9+/]+=*$/);
+  fs.writeFileSync(path.join(dir, 'INSTALLATION_COMPLETE'), '');
+  fs.writeFileSync(path.join(dir, 'DEPENDENCIES_VALIDATED'), '');
+  assert.equal(treeDigest(dir, skip), before);
+  fs.writeFileSync(path.join(dir, 'chrome-headless-shell-mac-arm64', 'resources.pak'), 'pak!');
+  assert.notEqual(treeDigest(dir, skip), before);
+  fs.writeFileSync(path.join(dir, 'chrome-headless-shell-mac-arm64', 'resources.pak'), 'pak');
+  fs.writeFileSync(path.join(dir, 'extra.dylib'), 'x');
+  assert.notEqual(treeDigest(dir, skip), before);
+});
+
+test('manifest pins uv per platform with a hash and the browser revision of the locked playwright', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'tools/pinkie-toolbox/toolbox-manifest.json'), 'utf8'));
+  for (const key of ['darwin-arm64', 'darwin-x64', 'win32-x64', 'win32-arm64']) {
+    const file = manifest.uv.files[key];
+    assert.match(file.integrity, /^sha256-[A-Za-z0-9+/]{43}=$/, key);
+    assert.ok(file.path.endsWith('.whl') && file.path.includes(`uv-${manifest.uv.version}-`), key);
+  }
+  assert.ok(manifest.uv.mirrors[0].includes('tuna') && manifest.uv.mirrors.at(-1).includes('pythonhosted'));
+  assert.equal(manifest.browser.dir, `chromium_headless_shell-${manifest.browser.revision}`);
+  const lock = fs.readFileSync(path.join(root, 'tools/pinkie-toolbox/requirements/screenshot.lock'), 'utf8');
+  assert.ok(lock.includes(`playwright==${manifest.playwrightVersion}`));
+  for (const digest of Object.values(manifest.browser.digests)) assert.match(digest, /^sha256-/);
+});
+
+test('without a verified browser digest for this machine the toolbox refuses to download one', t => {
+  const {env} = fixture(t);
+  const result = call(['ensure', 'screenshot'], {...env, PINKIE_TOOLBOX_NO_SYSTEM: '1'});
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /"ok":true/);
 });

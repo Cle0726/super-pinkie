@@ -1,6 +1,9 @@
 name: Toolbox probe
 
 on:
+  push:
+    branches: [feat/biqi-toolbox-1110]
+    paths: [tools/pinkie-toolbox/**, personas/*/playbooks/toolbox*, .github/workflows/toolbox-probe.yml]
   workflow_dispatch:
     inputs:
       full_probe:
@@ -9,9 +12,13 @@ on:
         default: false
 
 jobs:
-  windows-toolbox:
-    runs-on: windows-latest
-    timeout-minutes: 120
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,32 +28,49 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit and routing tests
-        shell: pwsh
+        shell: bash
         run: |
-          $env:PINKIE_TEST_PYTHON = (Get-Command python).Source
+          export PINKIE_TEST_PYTHON="$(command -v python)"
+          node tools/pinkie-toolbox/sync.mjs --check
           node --test tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -p persona_bundle_test.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Clean directory real installation
-        if: ${{ inputs.full_probe }}
-        shell: pwsh
+
+      # 干净目录：隐藏系统里的工具（PINKIE_TOOLBOX_NO_SYSTEM），也不给 Python，
+      # 让工具箱自己下 uv、再下独立 Python，路径带中文和空格。
+      - name: Clean directory real installation (no system tools, no Python)
+        if: ${{ inputs.full_probe || github.event_name == 'push' }}
+        shell: bash
         run: |
-          $testRoot = Join-Path $env:RUNNER_TEMP '碧琪 工具箱 长路径\工作环境与真实安装测试'
-          New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
-          $env:PINKIE_TOOLBOX_NO_SYSTEM = '1'
-          $env:PINKIE_TOOLBOX_HOME = Join-Path $testRoot 'home'
-          $env:PINKIE_TOOLBOX_DIR = Join-Path $testRoot 'box'
-          $env:OPENCLAW_STATE_DIR = Join-Path $testRoot 'state'
-          $env:PINKIE_DOWNLOADS_LEDGER = Join-Path $testRoot 'downloads.json'
-          $env:PINKIE_AGENT_PYTHON = (Get-Command python).Source
-          node personas/project/playbooks/toolbox.mjs ensure python screenshot video node office-view pdf docs-write image fonts-cjk tts git --human *> (Join-Path $testRoot 'results.log')
-          $exitCode = $LASTEXITCODE
-          Get-Content -Encoding UTF8 -Path (Join-Path $testRoot 'results.log')
-          exit $exitCode
+          root="$RUNNER_TEMP/碧琪 工具箱 长路径/工作环境与真实安装测试"
+          mkdir -p "$root"
+          export PINKIE_TOOLBOX_NO_SYSTEM=1
+          export PINKIE_TOOLBOX_HOME="$root/home"
+          export PINKIE_TOOLBOX_DIR="$root/box"
+          export OPENCLAW_STATE_DIR="$root/state"
+          export PINKIE_DOWNLOADS_LEDGER="$root/downloads.json"
+          unset PINKIE_AGENT_PYTHON
+          set +e
+          for cap in python screenshot video node office-view pdf docs-write image fonts-cjk tts git; do
+            start=$(date +%s)
+            node personas/project/playbooks/toolbox.mjs ensure "$cap" > "$root/$cap.json" 2> "$root/$cap.err"
+            code=$?
+            end=$(date +%s)
+            size=$(du -sk "$root/box" 2>/dev/null | cut -f1)
+            echo "$cap exit=$code seconds=$((end-start)) box_kb=$size $(cat "$root/$cap.json")" | tee -a "$root/results.log"
+          done
+          echo "--- 浏览器内核指纹（清单 browser.digests 用）" | tee -a "$root/results.log"
+          venv_py="$root/box/venv/bin/python"; [ -f "$root/box/venv/Scripts/python.exe" ] && venv_py="$root/box/venv/Scripts/python.exe"
+          PLAYWRIGHT_BROWSERS_PATH="$root/box/browsers" "$venv_py" -m playwright install chromium-headless-shell >> "$root/results.log" 2>&1
+          PINKIE_TOOLBOX_DIR="$root/box" node tools/pinkie-toolbox/toolbox.mjs browser-digest | tee -a "$root/results.log"
+          echo "--- 工具箱目录以外的残留检查" | tee -a "$root/results.log"
+          ls -la "$root/home" | tee -a "$root/results.log"
+          exit 0
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && inputs.full_probe }}
+        if: ${{ always() && (inputs.full_probe || github.event_name == 'push') }}
         with:
-          name: toolbox-windows-results
-          path: ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/results.log
+          name: toolbox-${{ runner.os }}-results
+          path: |
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.log
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.json
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.err
           if-no-files-found: warn
