@@ -58,7 +58,8 @@ function fixture(t) {
     list: async () => ({entries: Object.fromEntries(entries), dir: root}),
     async rpc(method, params) {
       calls.push([method, params]);
-      if (method === 'sessions.list') return {sessions: [...entries.values()].map(entry => ({...entry, hasActiveRun: running.has(entry.key)}))};
+      if (method === 'sessions.list') return {sessions: [...entries.values()].filter(entry => params.archived !== false || !entry.archivedAt)
+        .map(entry => ({...entry, hasActiveRun: running.has(entry.key)}))};
       if (method === 'chat.history') return {messages: histories.get(params.sessionKey) || []};
       if (method === 'sessions.create') {
         if (params.label && [...entries.values()].some(entry => entry.label === params.label)) throw new Error('label already in use');
@@ -74,8 +75,11 @@ function fixture(t) {
         running.add(params.sessionKey);
         return {status: 'started', runId: params.idempotencyKey};
       }
+      if (method === 'pinkie.deepThink.disarm' || method === 'pinkie.watchdog.cancel') return {ok: true};
+      if (method === 'chat.abort') { running.delete(params.sessionKey); return {ok: true, aborted: true}; }
       if (method === 'sessions.patch') {
-        Object.assign(entries.get(params.key), {unread: params.unread});
+        if (params.unread !== undefined) entries.get(params.key).unread = params.unread;
+        if (params.archived !== undefined) entries.get(params.key).archivedAt = params.archived ? Date.now() : undefined;
         return {ok: true};
       }
       throw new Error('unexpected RPC ' + method);
@@ -321,6 +325,63 @@ test('lineage reports running and queued direct children for archive protection'
   assert.equal(queued.queued, true);
   assert.equal((await f.lineage.views('project')).states[parent].runningChildren, 1);
   assert.equal((await f.lineage.views('main')).states[parent], undefined);
+});
+
+test('stop-and-archive cancels queued children, stops active children and blocks concurrent restarts', async t => {
+  const f = fixture(t), child = await f.lineage.start(parent, 'human', request, 'active-child');
+  f.running.add(parent);
+  const pending = await f.lineage.start(parent, 'human', {...request, context: 'fork'}, 'queued-child');
+  assert.equal(pending.queued, true);
+  f.running.delete(parent);
+  f.lineage.updateState(parent, state => ({...state, messages: [{id: 'one', to: child.key}, {id: 'two', to: parent}]}));
+  const access = f.options.titles.access, originalRpc = access.rpc;
+  let entered; const abortStarted = new Promise(resolve => { entered = resolve; });
+  let release; const gate = new Promise(resolve => { release = resolve; });
+  access.rpc = async (method, params, options) => {
+    if (method === 'chat.abort') { assert.deepEqual(options, {admin: true}); entered(); await gate; }
+    return originalRpc(method, params, options);
+  };
+  const archive = f.lineage.stopChildrenAndArchive(parent);
+  await abortStarted;
+  assert.equal(f.lineage.begin({runId: 'new-run', prompt: '继续'}, {sessionKey: child.key}).outcome, 'block');
+  assert.equal(f.lineage.begin({runId: 'new-parent-run', prompt: '继续'}, {sessionKey: parent}).outcome, 'block');
+  const concurrent = f.lineage.start(parent, 'another', request, 'concurrent');
+  release();
+  assert.deepEqual(await archive, {ok: true, stopped: 1, cancelled: 1});
+  await assert.rejects(concurrent, /父会话/);
+  assert.ok(f.entries.get(parent).archivedAt);
+  assert.equal(f.entries.has(pending.key), false);
+  assert.deepEqual(f.lineage.state(parent).launches, {});
+  assert.deepEqual(f.lineage.state(parent).messages, [{id: 'two', to: parent}]);
+  const methods = f.calls.map(([method]) => method);
+  assert.ok(methods.indexOf('pinkie.deepThink.disarm') < methods.indexOf('pinkie.watchdog.cancel'));
+  assert.ok(methods.indexOf('pinkie.watchdog.cancel') < methods.indexOf('chat.abort'));
+});
+
+test('stop-and-archive leaves the parent unarchived if a child cannot be stopped', async t => {
+  const f = fixture(t), child = await f.lineage.start(parent, 'human', request, 'active-child');
+  const access = f.options.titles.access, originalRpc = access.rpc;
+  access.rpc = (method, params) => method === 'chat.abort' ? Promise.reject(new Error('failure')) : originalRpc(method, params);
+  await assert.rejects(f.lineage.stopChildrenAndArchive(parent));
+  assert.equal(Boolean(f.entries.get(parent).archivedAt), false);
+  assert.equal(f.running.has(child.key), true);
+  assert.equal(f.lineage.stopping.has(parent), false);
+});
+
+test('stop-and-archive does not interrupt an active parent and leaves it unarchived on timeout', async t => {
+  const f = fixture(t), child = await f.lineage.start(parent, 'human', request, 'active-child');
+  f.running.add(parent);
+  f.lineage.begin({runId: 'parent-existing', prompt: '继续'}, {sessionKey: parent});
+  f.lineage.stopping.add(parent);
+  assert.equal(f.lineage.begin({runId: 'parent-existing', prompt: '继续'}, {sessionKey: parent}), undefined);
+  assert.equal(f.lineage.begin({runId: 'parent-new', prompt: '继续'}, {sessionKey: parent}).outcome, 'block');
+  f.lineage.stopping.delete(parent);
+  f.lineage.stopTimeoutMs = 10;
+  await assert.rejects(f.lineage.stopChildrenAndArchive(parent), /parent-busy/);
+  assert.equal(f.running.has(child.key), false);
+  assert.equal(f.running.has(parent), true);
+  assert.equal(Boolean(f.entries.get(parent).archivedAt), false);
+  assert.equal(f.calls.some(([method, params]) => method === 'chat.abort' && params.sessionKey === parent), false);
 });
 
 test('messages are scoped to direct family and leave a running child on the native send lane', async t => {

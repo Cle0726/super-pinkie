@@ -102,7 +102,8 @@ function reportText(event) {
 }
 
 export class SessionLineage {
-  constructor(api, {root, titles, isBusy = () => false, stopped = () => false, parentForWorker = () => '', now = Date.now, schedule = setTimeout}) {
+  constructor(api, {root, titles, isBusy = () => false, stopped = () => false, parentForWorker = () => '', now = Date.now,
+    schedule = setTimeout, stopTimeoutMs = 12_000}) {
     this.api = api;
     this.titles = titles;
     this.access = titles.access;
@@ -113,10 +114,12 @@ export class SessionLineage {
     this.parentForWorker = parentForWorker;
     this.now = now;
     this.schedule = schedule;
+    this.stopTimeoutMs = stopTimeoutMs;
     this.parents = new Map();
     this.turns = new Map();
     this.reserved = new Map();
     this.timers = new Map();
+    this.stopping = new Set();
   }
 
   lineage() { return readSessionJson(this.file); }
@@ -552,6 +555,50 @@ export class SessionLineage {
     return {key, detached: true};
   }
 
+  async stopChildrenAndArchive(key) {
+    return this.serial(key, async () => {
+      await this.parentEntry(key);
+      this.stopping.add(key);
+      try {
+        const lineage = this.lineage(), state = this.state(key);
+        const children = new Set(Object.entries(lineage).filter(([child, item]) => item.parentKey === key
+          && agentOf(child) === agentOf(key)).map(([child]) => child));
+        const launches = Object.values(state.launches || {});
+        for (const launch of launches) if (agentOf(launch.key) === agentOf(key)) children.add(launch.key);
+        const cancelled = launches.length;
+        this.updateState(key, value => ({...value, launches: {}, wakePending: false,
+          messages: (value.messages || []).filter(message => !children.has(message.to))}));
+        for (const launch of launches) this.reserved.delete(launch.key);
+        const stopped = new Set(), deadline = Date.now() + this.stopTimeoutMs;
+        while (true) {
+          const rows = await this.activeRows(agentOf(key));
+          const busy = [...children].filter(child => lineage[child] && this.busy(child, rows.get(child)));
+          const parentBusy = this.busy(key, rows.get(key));
+          for (const child of busy.filter(child => !stopped.has(child))) {
+            // Match the ordinary Stop button: disarm continuation, suppress
+            // watchdog retry, then ask the gateway to abort the active run.
+            await this.access.rpc('pinkie.deepThink.disarm', {sessionKey: child});
+            await this.access.rpc('pinkie.watchdog.cancel', {sessionKey: child});
+            const result = await this.access.rpc('chat.abort', {sessionKey: child, agentId: agentOf(child), preserveSideRuns: false}, {admin: true});
+            if (result?.ok === false) throw new Error('child-abort-failed');
+            this.reserved.delete(child);
+            stopped.add(child);
+          }
+          if (!busy.length && !parentBusy) break;
+          if (Date.now() >= deadline) throw new Error(parentBusy && !busy.length ? 'parent-busy' : 'child-abort-timeout');
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        this.updateState(key, value => ({...value, wakePending: false}));
+        const archived = await this.access.rpc('sessions.patch', {key, agentId: agentOf(key), archived: true});
+        if (archived?.ok === false) throw new Error('parent-archive-failed');
+        this.notify(key);
+        return {ok: true, stopped: stopped.size, cancelled};
+      } finally {
+        this.stopping.delete(key);
+      }
+    });
+  }
+
   userArrived(key) {
     this.updateState(key, state => state.wakes || state.wakePending || state.phase === 'waiting'
       ? {...state, wakes: 0, wakePending: false, phase: state.phase === 'waiting' ? undefined : state.phase}
@@ -574,6 +621,11 @@ export class SessionLineage {
     const key = sessionKeyOf(event, ctx);
     if (!agentOf(key) || isPersona(key) || isInternalSessionKey(key)) return;
     const child = this.lineage()[key];
+    const existingRun = this.turns.get(key)?.runId;
+    const continuingParent = existingRun && existingRun === runIdOf(event, ctx);
+    if (this.stopping.has(key) && !continuingParent || child && this.stopping.has(child.parentKey)) {
+      return {outcome: 'block', reason: 'session-parent-archiving', message: '父会话正在停止子会话并归档，请稍后再试'};
+    }
     if (child && !this.busy(key) && this.runningChildren(child.parentKey, new Map()) >= MAX_RUNNING) {
       return {outcome: 'block', reason: 'session-child-cap', message: '这个父会话已有 4 个子会话在跑，等一个做完再发送'};
     }
@@ -635,7 +687,7 @@ export class SessionLineage {
       if (cards.some(item => item.id === id)) return state;
       added = true;
       return {...state, cards: [...cards, card],
-        wakePending: state.wakePending || child.initiation === 'user_asked'};
+        wakePending: state.wakePending || child.initiation === 'user_asked' && !this.stopping.has(parent.key)};
     });
     if (!added) return;
     this.updateLineage(key, {lastReportAt: card.createdAt});
@@ -765,6 +817,14 @@ export function registerSessionLineage(api, options) {
       const message = String(error?.message || '');
       const expected = /^(?:请填写不超过 4000 字的任务|请选择新上下文或继承父会话|请选择要继承到的消息|子会话名称需要 1 到 40 个字|找不到父会话|分身不能再开子会话|子会话里不能再开子会话|请在打开的父会话里操作|父会话还在运行|这个父会话已有 4 个子会话|找不到当前分支里的这条消息|暂时无法从指定消息继承记录|子会话记录暂时不可用|会话消息未送达)/u;
       return {ok: false, error: expected.test(message) ? message : '子会话没有开成，请稍后再试'};
+    }
+  });
+  registerSessionMethod(api, 'pinkie.session.archive.stopChildren', async ({key}) => {
+    try { return await lineage.stopChildrenAndArchive(key); }
+    catch (error) {
+      return {ok: false, error: error?.message === 'parent-busy'
+        ? '子会话已停止，父会话这轮还在运行，请等结束后再归档'
+        : '没能全部停掉子会话，父会话还没有归档，请稍后再试'};
     }
   });
   registerSessionMethod(api, 'pinkie.session.card.act', ({key, id, action}) => lineage.act(key, id, action));
