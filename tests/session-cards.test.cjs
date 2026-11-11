@@ -34,3 +34,10 @@ test('cards use exact entry anchors and fall back to the nearest dated message',
   assert.equal(chooseAnchor({createdAt:4900},messages),1);
   assert.equal(chooseAnchor({createdAt:4900},[{ids:[],at:NaN}]),-1);
 });
+
+test('fork uses real message identifiers, not generated timestamp placeholders', () => {
+  const {forkEntryId} = load();
+  assert.equal(forkEntryId('msg:a1b2c3'),'a1b2c3');
+  assert.equal(forkEntryId('msg:assistant:123:2'),'');
+  assert.equal(forkEntryId('stream:live'),'');
+});

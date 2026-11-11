@@ -491,3 +491,9 @@ html[data-pinkie-night] .pinkie-session-rename{--search-bg:#2b2029;--search-ink:
 html[data-pinkie-night] .pinkie-archive-undo{background:#2b2029;color:#f7eaf0}
 .pinkie-archive-undo button{min-height:28px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--accent,#d9508d);font:inherit;cursor:pointer}
 .pinkie-archive-undo button:focus-visible{outline:2px solid var(--accent,#d9508d)}
+.pinkie-child-dialog label,.pinkie-child-dialog fieldset{display:block;margin-top:12px;font-size:13px}
+.pinkie-child-dialog textarea,.pinkie-child-dialog input:not([type="radio"]){display:block;box-sizing:border-box;width:100%;margin-top:5px;padding:8px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:8px;background:transparent;color:inherit;font:inherit}
+.pinkie-child-dialog fieldset{padding:0;border:0}
+.pinkie-child-dialog fieldset label{display:flex;align-items:center;gap:7px;min-height:28px;margin:0}
+.pinkie-child-dialog :is(textarea,input,button):focus-visible{outline:2px solid var(--accent,#d9508d);outline-offset:2px}
+.pinkie-child-dialog__start{background:var(--accent,#d9508d)!important;color:#fff!important}

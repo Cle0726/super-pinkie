@@ -1053,7 +1053,47 @@
       }});
   }
 
-  function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0}={}){
+  function openChildSessionDialog(parentKey,parentTitle,{forkAt='',fromMessage=false}={}) {
+    const mask=document.createElement('div');mask.className='laolao-modal-mask';
+    const form=document.createElement('form');form.className='laolao-modal pinkie-child-dialog';
+    form.setAttribute('role','dialog');form.setAttribute('aria-modal','true');form.setAttribute('aria-label','开子会话');
+    const heading=document.createElement('h3');heading.className='laolao-modal__title';heading.textContent='开子会话';
+    const description=document.createElement('p');description.className='laolao-modal__body';description.textContent='来自：'+parentTitle;
+    const taskLabel=document.createElement('label');taskLabel.textContent='要它做什么';
+    const task=document.createElement('textarea');task.rows=5;task.maxLength=4000;task.required=true;task.setAttribute('aria-label','要子会话做什么');
+    taskLabel.append(task);
+    const nameLabel=document.createElement('label');nameLabel.textContent='名字（选填）';
+    const name=document.createElement('input');name.maxLength=120;name.setAttribute('aria-label','子会话名字');nameLabel.append(name);
+    const choices=document.createElement('fieldset');const legend=document.createElement('legend');legend.textContent='带哪些记录';choices.append(legend);
+    function radio(value,text,checked){
+      const label=document.createElement('label');const input=document.createElement('input');input.type='radio';input.name='context';input.value=value;input.checked=checked;input.disabled=fromMessage;input.setAttribute('aria-label',text);
+      label.append(input,document.createTextNode(text));choices.append(label);
+    }
+    radio('fork','带上这里的记录',true);radio('fresh','只带这句话',false);
+    if(fromMessage){const note=document.createElement('p');note.className='laolao-modal__body';note.textContent=forkAt?'会带上到这条消息为止的记录。':'暂时无法定位这条消息，会带上整段记录。';choices.append(note);}
+    const error=document.createElement('p');error.className='laolao-modal__error';error.setAttribute('role','status');error.hidden=true;
+    const actions=document.createElement('div');actions.className='laolao-modal__buttons';
+    const cancel=document.createElement('button');cancel.type='button';cancel.className='laolao-modal__btn';cancel.textContent='取消';cancel.setAttribute('aria-label','取消开子会话');
+    const start=document.createElement('button');start.type='submit';start.className='laolao-modal__btn pinkie-child-dialog__start';start.textContent='开始';start.setAttribute('aria-label','开始子会话');
+    actions.append(cancel,start);form.append(heading,description,taskLabel,nameLabel,choices,error,actions);mask.append(form);document.body.append(mask);
+    const close=()=>mask.remove();cancel.onclick=close;mask.onpointerdown=event=>{if(event.target===mask)close();};
+    form.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();}};
+    form.onsubmit=async event=>{
+      event.preventDefault();const prompt=task.value;if(!prompt.trim()){task.focus();return;}
+      const payload={parentKey,prompt,context:fromMessage?'fork':form.elements.context.value};
+      if(name.value.trim())payload.title=name.value.trim();if(fromMessage&&forkAt)payload.forkAt=forkAt;
+      start.disabled=true;error.hidden=true;
+      try{
+        const result=await gwRequest('pinkie.session.start.user',payload,45000);
+        if(result?.ok===false)throw new Error(result.error||'子会话没有开成');
+        if(!result?.key)throw new Error('没有取得子会话');
+        close();window.PinkieSessionList?.invalidate();navigateSession(result.key);
+      }catch(failure){error.textContent=failure?.message||'子会话没有开成，请再试一次';error.hidden=false;start.disabled=false;}
+    };
+    task.focus();
+  }
+
+  function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0,isChild=false}={}){
     openMenu(anchor,menu=>{
       if(archived){
         menuItem(menu,ICONS.restore,'恢复会话',async()=>{closeMenu();try{await restoreSession(key);}catch(error){toast(error.message);}});
@@ -1062,6 +1102,7 @@
         remove.classList.add('laolao-menu__item--danger');
         return;
       }
+      if(!isChild&&!/:subagent:/i.test(key))menuItem(menu,ICONS.plus,'开子会话…',()=>{closeMenu();openChildSessionDialog(key,title);});
       menuItem(menu,ICONS.plus,'重命名会话…',()=>showNameInput(menu,{value:title,placeholder:'会话名称，回车保存',onSubmit:async name=>{
         try {
           await gwRequest('pinkie.session.rename', {key, title: name});
@@ -1864,6 +1905,8 @@
   window.__laolaoSidebar = {
     gwRequest,
     navigateSession,
+    sessionMenu,
+    openChildSessionDialog,
     createSession: () => createProjectSession(null, {plain: true}),
     askDeleteAllSessions,
     get mode() { return stateMode; },
