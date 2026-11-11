@@ -175,7 +175,8 @@ function installUv() {
   fs.mkdirSync(BOX, {recursive: true});
   const stage = fs.mkdtempSync(path.join(BOX, 'uv-stage-'));
   try {
-    const unpacked = WIN ? run(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', downloaded.path, '-C', stage, member], {timeout: 120_000})
+    // Windows 自带的 tar 会把中文路径读成问号（用户名带中文时整条路径都是）：在解压目录里运行，只传纯英文的相对路径。
+    const unpacked = WIN ? run(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', path.relative(stage, downloaded.path), member], {timeout: 120_000, cwd: stage})
       : run('/usr/bin/unzip', ['-q', '-o', downloaded.path, member, '-d', stage], {timeout: 120_000});
     const extracted = path.join(stage, ...member.split('/'));
     if (!unpacked.ok || !exists(extracted)) return {ok: false, note: `uv 解压失败：${firstLine(unpacked.err).slice(0, 120)}`};
