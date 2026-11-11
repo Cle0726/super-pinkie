@@ -1562,10 +1562,22 @@ export function withMediaCaptionPlaceholder(source) {
   return source.replace(strip, `$1${mediaCaptionMarker}if(/^\\s*\\[User sent media without caption\\]\\s*$/.test(e))return\`\`;`);
 }
 
+/** Native chat orders items by message timestamp. A follow-up keeps the time
+ *  it was sent, earlier than the result of the command still running then, so
+ *  after a refresh that result jumped behind it. A user message the transcript
+ *  already stored is ordered by its record time; unsaved rows keep send time. */
+const recordedUserOrderMarker = '/*pinkie-recorded-user-order:v1*/';
+export function withRecordedUserOrder(source) {
+  if (source.includes(recordedUserOrderMarker)) return source;
+  const pattern = /(case`message`:return e\.key===`chat:history:notice`\?-1\/0:)([\w$]+)\(e\.message\);/gu;
+  if ((source.match(pattern) || []).length !== 1) return source;
+  return source.replace(pattern, (_, head, fn) => `${head}${recordedUserOrderMarker}(String(e.message?.role||\`\`).toLowerCase()===\`user\`&&Number.isFinite(e.message?.__openclaw?.recordTimestampMs)?e.message.__openclaw.recordTimestampMs:${fn}(e.message));`);
+}
+
 function transformBundle(original) {
   const result = transformBundleCore(original);
   if (!result.text.includes(marker)) return result;
-  const text = withMediaCaptionPlaceholder(withEarlyUserEcho(result.text));
+  const text = withRecordedUserOrder(withMediaCaptionPlaceholder(withEarlyUserEcho(result.text)));
   if (text === result.text) return result;
   return {text, changed: true, reason: result.changed ? result.reason : 'send-path-updated'};
 }

@@ -113,3 +113,25 @@ test('superseded cards leading into the latest turn stay open; finished older tu
   assert.equal(pinkieProcessOpen(older), false, 'a finished earlier job keeps its collapsed default');
 });
 
+
+// Real-model check 11-10 (hy4free, 10 exec calls, 3 follow-ups): native chat
+// orders items by message timestamp. A follow-up keeps the time it was sent,
+// earlier than the result of the command still running then, so after a
+// refresh that result jumped behind the follow-up into the next card. A user
+// message the transcript recorded is ordered by its record time instead.
+test('a recorded follow-up is ordered by when the transcript stored it', async () => {
+  const {withRecordedUserOrder} = await load();
+  const native = 'function Vb(e){switch(e.kind){case`message`:return e.key===`chat:history:notice`?-1/0:Bb(e.message);case`divider`:return e.timestamp;case`stream`:return e.startedAt}return null}';
+  const patched = withRecordedUserOrder(native);
+  assert.notEqual(patched, native);
+  assert.equal(withRecordedUserOrder(patched), patched, 'idempotent');
+  const Vb = new Function('Bb', `${patched};return Vb;`)(m => m.timestamp);
+  const item = message => ({kind: 'message', key: 'k', message});
+  const result = {role: 'toolResult', timestamp: 1300, __openclaw: {seq: 29, recordTimestampMs: 1300}};
+  const steer = {role: 'user', timestamp: 1200, __openclaw: {seq: 30, recordTimestampMs: 1301}};
+  const optimistic = {role: 'user', timestamp: 1200};
+  assert.ok(Vb(item(steer)) > Vb(item(result)));
+  assert.equal(Vb(item(optimistic)), 1200, 'an unsaved row keeps its send time');
+  assert.equal(Vb(item(result)), 1300, 'other roles are unchanged');
+  assert.equal(Vb({kind: 'message', key: 'chat:history:notice', message: steer}), -Infinity);
+});
