@@ -125,10 +125,23 @@ test('new session shortcut leaves workbench and Monaco keyboard handling alone',
   assert.equal(ctx.isNewSessionShortcut({...event,defaultPrevented:true}),false);
 });
 test('connection status reports slow only after 800 ms and offline wins',()=>{
-  const snippet=source.slice(source.indexOf('  function connectionState('),source.indexOf('  function ensureConnectionStatus('));
+  const snippet=source.slice(source.indexOf('  function connectionState('),source.indexOf('  function paletteProjectMatch('));
   const ctx={};vm.createContext(ctx);vm.runInContext(snippet,ctx);
   assert.equal(ctx.connectionState(true,800),'online');
   assert.equal(ctx.connectionState(true,801),'slow');
   assert.equal(ctx.connectionState(false,100),'offline');
   assert.equal(ctx.connectionState(true,null),'online');
+});
+test('sidebar tooltip fits inside the viewport near its right and bottom edges',()=>{
+  const snippet=source.slice(source.indexOf('  function tooltipPosition('),source.indexOf('  let sidebarTooltip=')).replace(/\n\s*$/,'');
+  const ctx={};vm.createContext(ctx);vm.runInContext(snippet,ctx);
+  const pos=ctx.tooltipPosition({left:195,top:180,bottom:200},{width:100,height:40},{width:220,height:220});
+  assert.deepEqual(JSON.parse(JSON.stringify(pos)),{left:112,top:134});
+});
+test('command palette recognises project creation searches',()=>{
+  const snippet=source.slice(source.indexOf('  function paletteProjectMatch('),source.indexOf('  function ensurePaletteCommands('));
+  const ctx={};vm.createContext(ctx);vm.runInContext(snippet,ctx);
+  assert.equal(ctx.paletteProjectMatch('新建项目'),true);
+  assert.equal(ctx.paletteProjectMatch('folder'),true);
+  assert.equal(ctx.paletteProjectMatch('天气'),false);
 });

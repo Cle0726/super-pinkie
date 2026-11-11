@@ -1820,6 +1820,58 @@
   function connectionState(connected,latency){
     return !connected?'offline':Number.isFinite(latency)&&latency>800?'slow':'online';
   }
+  function paletteProjectMatch(query){return /项目|文件夹|project|folder/i.test(String(query||''));}
+  function ensurePaletteCommands(){
+    const palette=document.querySelector('openclaw-command-palette');
+    if(!palette)return;
+    if(!palette.__pinkieScopedSearch){
+      palette.__pinkieScopedSearch=true;
+      palette.searchSessions=async function(query){
+        const requestId=++this.sessionSearchId,mode=stateMode,agentId=currentModeAgent();
+        let items=[];
+        try{
+          const result=await gwRequest('pinkie.session.search',{agentId,mode,query,includeArchived:false,limit:10});
+          if(result?.ok!==false&&Array.isArray(result?.results))items=result.results
+            .filter(item=>String(item?.key||'').startsWith('agent:'+agentId+':'))
+            .map(item=>({id:'session-'+item.key,label:item.title||'新会话',icon:'messageSquare',category:'chats',action:'session:'+item.key}));
+        }catch{}
+        if(requestId!==this.sessionSearchId||!this.open||mode!==stateMode)return;
+        if(paletteProjectMatch(query))items.push({id:'pinkie-new-project',label:'打开文件夹建项目…',icon:'folder',category:'navigation',action:'nav:pinkie-new-project'});
+        this.sessionItems=items;this.activeIndex=0;
+      };
+    }
+    const navigate=palette.onNavigate;
+    if(typeof navigate==='function'&&!navigate.__pinkieProjectCommand){
+      const wrapped=route=>route==='pinkie-new-project'?void addFolderProject(null,{bindCurrent:false}):navigate(route);
+      wrapped.__pinkieProjectCommand=true;palette.onNavigate=wrapped;
+    }
+  }
+  function tooltipPosition(rect,size,viewport){
+    const left=Math.max(8,Math.min(rect.left,viewport.width-size.width-8));
+    const below=rect.bottom+6;
+    const top=Math.max(8,Math.min(below+size.height<=viewport.height-8?below:rect.top-size.height-6,viewport.height-size.height-8));
+    return {left,top};
+  }
+  let sidebarTooltip=null,sidebarTooltipAnchor=null;
+  function hideSidebarTooltip(){sidebarTooltip?.remove();sidebarTooltip=null;sidebarTooltipAnchor=null;}
+  function showSidebarTooltip(target){
+    const anchor=target?.closest?.('.sidebar [data-pinkie-tooltip], .sidebar [title]');
+    if(!anchor || anchor===sidebarTooltipAnchor)return;
+    const text=anchor.dataset.pinkieTooltip||anchor.getAttribute('title');
+    if(!text)return;
+    if(anchor.hasAttribute('title')){anchor.dataset.pinkieTooltip=text;anchor.removeAttribute('title');}
+    hideSidebarTooltip();sidebarTooltipAnchor=anchor;
+    const tip=document.createElement('div');tip.className='pinkie-sidebar-tooltip';tip.setAttribute('role','tooltip');tip.textContent=text;
+    document.body.append(tip);sidebarTooltip=tip;
+    const pos=tooltipPosition(anchor.getBoundingClientRect(),tip.getBoundingClientRect(),{width:window.innerWidth,height:window.innerHeight});
+    tip.style.left=pos.left+'px';tip.style.top=pos.top+'px';
+  }
+  document.addEventListener('pointerover',event=>showSidebarTooltip(event.target));
+  document.addEventListener('focusin',event=>showSidebarTooltip(event.target));
+  document.addEventListener('pointerout',event=>{if(sidebarTooltipAnchor&&!sidebarTooltipAnchor.contains(event.relatedTarget))hideSidebarTooltip();});
+  document.addEventListener('focusout',event=>{if(sidebarTooltipAnchor&&!sidebarTooltipAnchor.contains(event.relatedTarget))hideSidebarTooltip();});
+  window.addEventListener('resize',hideSidebarTooltip,{passive:true});
+  document.addEventListener('scroll',hideSidebarTooltip,true);
   function ensureConnectionStatus() {
     const footer=document.querySelector('.sidebar-footer-bar');
     const dot=footer?.querySelector('.sidebar-status__dot');
@@ -1859,6 +1911,7 @@
     ensureSidebarThemeButton();
     ensureRailThemeButton();
     ensureConnectionStatus();
+    ensurePaletteCommands();
     if (applying) return;
     const section = document.querySelector("section.sidebar-sessions");
     if (!section) return;

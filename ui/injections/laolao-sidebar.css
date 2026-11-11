@@ -12,8 +12,7 @@ html[data-pinkie-sidebar-auto="1"]:is([data-laolao-mode="chat"], [data-laolao-mo
   [data-laolao-mode="thinking"], [data-laolao-mode="learning"])
   .shell--chat.shell--nav-collapsed .topbar .topbar-nav-toggle { display: inline-flex !important; visibility: visible !important; }
 /* These advanced pages remain available by URL; remove only their sidebar links. */
-html:is([data-laolao-mode="chat"], [data-laolao-mode="project"], [data-laolao-mode="thinking"], [data-laolao-mode="learning"])
-  .sidebar-nav a:is([href$="/instances"], [href$="/nodes"], [href$="/dreaming"]) { display: none !important; }
+html .sidebar-nav a:is([href$="/instances"], [href$="/nodes"], [href$="/dreaming"], [href$="/dreams"]) { display: none !important; }
 #laolao-project-scope { padding:8px 14px 0; font-size:10px; line-height:1.5; color:#966b84; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; user-select:none; }
 #laolao-project-scope[data-error="true"] { color:#b46362; }
 
@@ -497,3 +496,5 @@ html[data-pinkie-night] .pinkie-archive-undo{background:#2b2029;color:#f7eaf0}
 .pinkie-child-dialog fieldset label{display:flex;align-items:center;gap:7px;min-height:28px;margin:0}
 .pinkie-child-dialog :is(textarea,input,button):focus-visible{outline:2px solid var(--accent,#d9508d);outline-offset:2px}
 .pinkie-child-dialog__start{background:var(--accent,#d9508d)!important;color:#fff!important}
+.pinkie-sidebar-tooltip{position:fixed;z-index:100002;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px 9px;border-radius:7px;background:#493841;color:#fff;font-size:12px;line-height:1.35;overflow-wrap:anywhere;pointer-events:none;box-shadow:0 3px 14px rgba(25,15,20,.18)}
+html[data-pinkie-night] .pinkie-sidebar-tooltip{background:#f5e9ef;color:#382a32}

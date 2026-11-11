@@ -4,7 +4,7 @@
   const cache=new Map(),loading=new Map();
   let current=null,revision=0,archived=false,query='',limit=30,signature='',lastMode='',dataVersion=0;
   const el=(tag,cls='',text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
-  function button(text,label,action){const b=el('button','laolao-managed-button',text);b.type='button';b.setAttribute('aria-label',label);b.title=label;b.onclick=action;return b;}
+  function button(text,label,action){const b=el('button','laolao-managed-button',text);b.type='button';b.setAttribute('aria-label',label);b.dataset.pinkieTooltip=label;b.onclick=action;return b;}
   function invalidate(){for(const entry of cache.values())entry.stale=true;revision++;signature='';if(current)void load(current.api);}
   const requestedTitles = new Map(), clearingUnread = new Set();
   const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
@@ -194,7 +194,7 @@
   const statusLabels = {running: '运行中', waiting: '等你回复', error: '上一轮出错'};
   function sessionIcon(kind, label, className) {
     const icon = el('span', className);
-    icon.title = label;
+    icon.dataset.pinkieTooltip = label;
     icon.setAttribute('aria-label', label);
     icon.setAttribute('role', 'img');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -490,7 +490,7 @@
     const name = title(s);
     const link = el('a', 'sidebar-recent-session__link');
     link.href = '/chat?session=' + encodeURIComponent(s.key);
-    link.title = worker ? name + '（只读）' : name;
+    link.dataset.pinkieTooltip = worker ? name + '（只读）' : name;
     const channel = s.meta?.channel;
     if (channel) link.append(sessionIcon(channel === 'feishu' ? 'feishu' : 'chat',
       s.meta.channelTitle || channel, 'pinkie-session-icon pinkie-session-channel'));
@@ -505,7 +505,7 @@
     if (phase) aside.append(sessionIcon(phase, statusLabels[phase], 'pinkie-session-icon pinkie-session-status--' + phase));
     if (s.unread) {
       const dot = el('span', 'pinkie-session-unread');
-      dot.title = '未读';
+      dot.dataset.pinkieTooltip = '未读';
       dot.setAttribute('aria-label', '未读');
       dot.setAttribute('role', 'img');
       aside.append(dot);
@@ -619,7 +619,7 @@
         }
       } else for(const node of rows)addTree(list,node,api);
       if(!rows.length)list.append(el('div','laolao-group__empty',loading.size?'正在读取…':project?'点 ＋ 开始一个会话':'暂无会话'));
-      if(project&&api.state.projectFolders[name]){const p=el('div','laolao-project__path',api.state.projectFolders[name].replace(/^\/Users\/[^/]+/,'~'));p.title=api.state.projectFolders[name];n.append(p);}
+      if(project&&api.state.projectFolders[name]){const p=el('div','laolao-project__path',api.state.projectFolders[name].replace(/^\/Users\/[^/]+/,'~'));p.dataset.pinkieTooltip=api.state.projectFolders[name];n.append(p);}
       n.append(list);
     }
     return n;
