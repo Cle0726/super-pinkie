@@ -86,3 +86,30 @@ test('the rendered card carries the run id and the prior key for thought migrati
   assert.match(source, /data-pinkie-run=/);
   assert.match(source, /data-pinkie-prior=/);
 });
+
+// Real-model check 11-10: the 碧琪 skin hides every closed, finished card
+// (laolao-cle-stage.css), so a superseded card that defaults to closed vanished
+// from the screen right after the follow-up, rows and all. The cards of the
+// job still in progress (the latest turn plus the superseded runs leading into
+// it) stay open; an older finished turn keeps its collapsed default.
+test('superseded cards leading into the latest turn stay open; finished older turns do not', async () => {
+  const {pinkieBuildTimeline, pinkieProcessOpen} = await load();
+  globalThis.__pinkieTimelineViews = new Map();
+  const u0 = group('user', 'u0', 100, [msg('user', 'earlier job', 'u0', 100)]);
+  const done = [toolCall('d0', 200), group('assistant', 'final0', 300, [msg('assistant', [{type: 'text', text: 'all done'}], 'f0', 300)])];
+  const u1 = group('user', 'u1', 1000, [msg('user', 'first ask', 'u1', 1000)]);
+  const run1 = [toolCall('a', 2000), toolCall('b', 2010)];
+  const u2 = group('user', 'u2', 3000, [msg('user', 'append 1', 'u2', 3000)]);
+  const run2 = [toolCall('c', 3500)];
+  const u3 = group('user', 'u3', 4000, [msg('user', 'append 2', 'u3', 4000)]);
+  const run3 = [toolCall('e', 4500)];
+  const timeline = pinkieBuildTimeline([u0, ...done, u1, ...run1, u2, ...run2, u3, ...run3], calls);
+  const [older, first, second, latest] = cards(timeline);
+  assert.equal(first.processSuperseded, true);
+  assert.equal(second.processSuperseded, true);
+  assert.equal(pinkieProcessOpen(first), true, 'first superseded run stays open');
+  assert.equal(pinkieProcessOpen(second), true, 'second superseded run stays open');
+  assert.equal(pinkieProcessOpen(latest), true);
+  assert.equal(pinkieProcessOpen(older), false, 'a finished earlier job keeps its collapsed default');
+});
+
