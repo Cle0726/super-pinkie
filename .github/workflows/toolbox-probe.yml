@@ -33,7 +33,8 @@ jobs:
           export PINKIE_TEST_PYTHON="$(command -v python)"
           node tools/pinkie-toolbox/sync.mjs --check
           node --test tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
-          python -m unittest discover -s tests -p persona_bundle_test.py
+          # 人格打包测试跑的是 Mac 安装脚本，只在 Mac 上跑
+          if [ "$RUNNER_OS" = macOS ]; then python -m unittest discover -s tests -p persona_bundle_test.py; fi
 
       # 干净目录：隐藏系统里的工具（PINKIE_TOOLBOX_NO_SYSTEM），也不给 Python，
       # 让工具箱自己下 uv、再下独立 Python，路径带中文和空格。
@@ -68,7 +69,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ always() && (inputs.full_probe || github.event_name == 'push') }}
         with:
-          name: toolbox-${{ runner.os }}-results
+          name: toolbox-${{ matrix.os }}-results
           path: |
             ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.log
             ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.json
