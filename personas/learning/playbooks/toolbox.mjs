@@ -657,6 +657,8 @@ function ensureGit() {
       return {ok: true, path: local, how: 'installed'};
     } finally { if (exists(stage)) { try { fs.rmSync(stage, {recursive: true, force: true}); } catch {} } }
   }
+  // Mac 的 Git 由苹果的命令行工具提供，要用户在弹窗里点一下「安装」，工具箱不替用户装系统组件。
+  if (MAC) return {ok: false, how: 'failed', note: 'Mac 上的 Git 要装苹果的命令行工具：在终端运行 xcode-select --install，弹窗里点「安装」。装好之前，改动前可以先复制文件夹作备份。'};
   return {ok: false, how: 'failed', note: '没有找到可用的 Git，也没有能自动安装的免安装版本；改动前可以先复制文件夹作备份。'};
 }
 
