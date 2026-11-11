@@ -12,6 +12,12 @@
   let gwSocket = null;
   const connectIds = new WeakMap();
   const pending = new Map();
+  const messageText=value=>{
+    if(typeof value==='string')return value;
+    if(Array.isArray(value))return value.map(part=>typeof part==='string'?part:(part?.type==='text'||part?.type==='input_text'?part.text||part.content||'':'')).join(' ');
+    if(value&&typeof value==='object')return messageText(value.content??value.text??value.message??'');
+    return '';
+  };
   const reasoningJobs = new Map();
   const reasoningTierKey = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
 

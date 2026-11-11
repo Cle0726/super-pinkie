@@ -1840,7 +1840,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','plan_update','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','computer','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','web_gpt_activity','workbench_read','workbench_show']);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
@@ -2073,7 +2073,11 @@ test('watchdog retries unknown failures but retires context overflow after nativ
   };
   const watchdog=new UpstreamWatchdog({session:{workflow}});
   assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
-    {agentId:'main',sessionKey:'agent:main:unknown'}),true);
+    {agentId:'main',sessionKey:'agent:main:opaque-provider-failure'}),true);
+  for (const sessionKey of ['unknown', 'agent:main:unknown']) {
+    assert.equal(await watchdog.agentEnded({success:false,error:'unclassified provider failure'},
+      {agentId:'main',sessionKey}),false);
+  }
   assert.equal(await watchdog.agentEnded({success:false,error:'Context overflow: prompt too large for the model'},
     {agentId:'project',sessionKey:'agent:project:overflow'}),false);
   assert.equal(await watchdog.agentEnded({success:false,error:'Auto-compaction could not recover this turn.'},

@@ -37,7 +37,7 @@
     if (!hasMessages(s)) return '新会话';
     const label = typeof s.label === 'string' ? s.label.trim() : '';
     if (label && !isBadTitle(label, s.key, s.sessionId)) return label;
-    return s.meta?.channelTitle || (s.key?.endsWith(':main') ? '主会话' : '新会话');
+    return s.meta?.channelTitle || '新会话';
   }
 
   async function load(api) {
@@ -210,7 +210,8 @@
   }
 
   function sessionStatus(s) {
-    if (s.hasActiveRun || s.hasActiveSubagentRun || /^(?:running|queued)$/i.test(s.status || '')) return 'running';
+    if (s.hasActiveRun || s.hasActiveSubagentRun
+        || s.hasActiveRun === undefined && /^(?:running|queued)$/i.test(s.status || '')) return 'running';
     if (s.phase === 'waiting') return 'waiting';
     if (s.phase === 'error' || /^(?:error|failed|timeout)$/i.test(s.status || '')) return 'error';
     return '';
@@ -294,7 +295,7 @@
       (collapsed ? '展开' : '收起') + '分身', () => setFolded(key, !collapsed));
     toggle.setAttribute('aria-expanded', String(!collapsed));
     list.append(toggle);
-    if (!collapsed) for (const s of node.workers) list.append(row(s, api, {worker: true}));
+    for (const s of node.workers) if (!collapsed || s.key === api.currentKey) list.append(row(s, api, {worker: true}));
     host.append(list);
   }
 
@@ -302,9 +303,11 @@
     const key = archived ? 'archive:' + node.session.key : node.session.key;
     const collapsed = !query.trim() && folded(key, archived);
     host.append(row(node.session, api, {children: node.children.length, collapsed}));
-    if (node.children.length && !collapsed) {
+    const shown = collapsed ? node.children.filter(child => child.session.key === api.currentKey
+      || child.workers.some(worker => worker.key === api.currentKey)) : node.children;
+    if (shown.length) {
       const branch = el('div', 'pinkie-session-branch');
-      for (const child of node.children) {
+      for (const child of shown) {
         branch.append(row(child.session, api));
         addWorkers(branch, child, api);
       }

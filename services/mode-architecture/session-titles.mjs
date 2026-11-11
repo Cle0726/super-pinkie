@@ -23,7 +23,7 @@ const INJECTION = /(?:(?:忽略|无视|忘掉).{0,20}(?:之前|以上|前面|指
 
 export const INTERNAL_MESSAGE_PREFIXES = Object.freeze([
   '[pinkie-watchdog]', '[pinkie-tier-control]', '[pinkie-tier]', '[pinkie-integrity]',
-  '[pinkie-marathon]', '[pinkie-session-wake]', '[pinkie-session-message]', '[System]',
+  '[pinkie-marathon]', '[pinkie-session-wake]', '[pinkie-session-message]', '【来自关联会话的消息】', '[System]',
   'Your previous turn was interrupted by a gateway restart', '【自动续接保护】',
   '【压缩续工恢复】', '【全局交付真实性门禁】', '【档位控制器】',
   'A background task completed.', 'Continue the OpenClaw runtime event',
@@ -107,7 +107,7 @@ const usesCjk = value => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\
 export function validateTitle(raw, sources = []) {
   if (typeof raw !== 'string' || /[\r\n\u2028\u2029\uD800-\uDFFF\uFFFD]/u.test(raw)) return '';
   const title = unquote(safeText(raw)).normalize('NFC');
-  if (isBadTitle(title) || /(?:抱歉|无法|作为\s*AI|\bI(?:\s+(?:can['’]t|cannot|am sorry)|['’]m sorry)|^标题\s*[:：])/iu.test(title)) return '';
+  if (isBadTitle(title) || /(?:抱歉|无法|作为\s*AI|\bas an AI\b|\bI(?:\s+(?:can['’]t|cannot|am sorry)|['’]m sorry)|^(?:标题|title)\s*[:：])/iu.test(title)) return '';
   if (/["“”「」『』《》。\p{Extended_Pictographic}]|\p{Cc}|[.!?！？]$/u.test(title)) return '';
   const limit = usesCjk(title) ? 16 : 48;
   if (graphemeCount(title, limit) > limit) return '';

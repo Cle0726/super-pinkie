@@ -6531,7 +6531,8 @@ export default {
       parentForWorker: key => architecture.resolveParent(key),
       isBusy: key => {
         const activity = architecture.activityFor(key);
-        return activity.parentRunning || activity.pending > 0;
+        return activity.parentRunning || activity.pending > 0 || watchdog.timers.has(key)
+          || watchdog.dispatching.has(key) || tierContinuation.timers.has(key);
       },
     });
     registerWebGptActivityGateway(api, webGptActivity);
