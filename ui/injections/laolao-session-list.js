@@ -273,7 +273,8 @@
 
   let searchView = null;
   function scrollToSearchHit(api, result) {
-    if (!result.entryId && !result.snippet) return;
+    // Title-only matches have no message to scroll to.
+    if (!result.entryId) return;
     const deadline = Date.now() + 15000;
     let lastPage = 0;
     const find = () => {
@@ -288,9 +289,10 @@
         return;
       }
       const messages = [...(pane?.querySelectorAll('[data-message-id]') || [])];
+      const excerpt = String(result.snippet || '').replace(/^…|…$/g, '').replace(/\s+/g, ' ').trim();
       const target = messages.find(item => [String(result.entryId || ''), 'msg:' + result.entryId,
         'message:' + result.entryId].includes(item.dataset.messageId))
-        || (result.snippet && messages.find(item => (item.dataset.messageText || '').includes(result.snippet)));
+        || (excerpt && messages.find(item => (item.dataset.messageText || '').replace(/\s+/g, ' ').includes(excerpt)));
       if (target) {
         target.scrollIntoView({block: 'center', behavior: 'auto'});
         target.classList.add('pinkie-search-hit');
