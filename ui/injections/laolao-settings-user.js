@@ -10,8 +10,9 @@
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
     ["learning", "学习"], ["unrestricted", "无限制"],
   ];
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list"]);
   const PRESET_MAP = Object.freeze({
-    chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false}),
+    chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
     work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
     open: Object.freeze({profile: "full", execSecurity: "full", browserEnabled: true}),
   });
@@ -64,12 +65,13 @@
   };
   const hasScopedToolOverrides = (config) => {
     const baseProfile = permissionValues(config).profile;
-    const hasRules = (value) => isObject(value) && (
+    const hasRules = (value, root = false) => isObject(value) && (
       (Array.isArray(value.allow) && value.allow.length > 0)
       || (Array.isArray(value.deny) && value.deny.length > 0)
+      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => !root || baseProfile !== "minimal" || !CHILD_SESSION_TOOLS.includes(tool)))
       || (typeof value.profile === "string" && value.profile.trim() && value.profile.trim() !== baseProfile)
     );
-    if (hasRules(config?.tools) || hasRules(config?.agents?.defaults?.tools)) return true;
+    if (hasRules(config?.tools, true) || hasRules(config?.agents?.defaults?.tools)) return true;
     return Array.isArray(config?.agents?.list) && config.agents.list.some((agent) => hasRules(agent?.tools));
   };
   const matchingPreset = (config) => {
@@ -80,6 +82,21 @@
       return current.profile === preset.profile && current.execSecurity === preset.execSecurity
         && current.browserEnabled === preset.browserEnabled;
     }) || null;
+  };
+  const presetChanges = (id, config) => {
+    const preset = PRESET_MAP[id];
+    if (!preset) return [];
+    const changes = [
+      [["tools", "profile"], preset.profile],
+      [["tools", "exec", "security"], preset.execSecurity],
+      [["browser", "enabled"], preset.browserEnabled],
+    ];
+    const tools = isObject(config?.tools) ? config.tools : {};
+    if (preset.alsoAllow && !Object.hasOwn(tools, "allow")) {
+      const existing = Array.isArray(tools.alsoAllow) ? tools.alsoAllow : [];
+      changes.push([["tools", "alsoAllow"], [...new Set([...existing, ...preset.alsoAllow])]]);
+    }
+    return changes;
   };
   const hostIsOutsideThisComputer = (host) => {
     const value = String(host || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
@@ -123,6 +140,7 @@
     remoteAccessEnabled,
     authMode,
     configFromSnapshot,
+    presetChanges,
   });
 
   const state = {
@@ -910,7 +928,7 @@
       const config = configFromSnapshot(snapshot);
       if (!config || typeof snapshot?.hash !== "string") throw new Error("无法读取设置版本，请刷新后重试");
       const next = copyObject(config);
-      for (const [path, value] of changes) setPath(next, path, value);
+      for (const [path, value] of (typeof changes === "function" ? changes(config) : changes)) setPath(next, path, value);
       const result = await request("config.apply", {raw: JSON.stringify(next), baseHash: snapshot.hash}, 30000);
       if (result?.ok === false) throw new Error(result.error || result.message || "网关没有接受这项设置");
       state.config = next;
@@ -949,14 +967,10 @@
   function savePreset(id) {
     const preset = PRESET_MAP[id];
     if (!preset) return;
-    const save = saveConfigPatch([
-      [["tools", "profile"], preset.profile],
-      [["tools", "exec", "security"], preset.execSecurity],
-      [["browser", "enabled"], preset.browserEnabled],
-    ], "permissions");
+    const save = saveConfigPatch(config => presetChanges(id, config), "permissions");
     void save.then((saved) => {
       if (saved && state.config && matchingPreset(state.config) !== id) {
-        setStatus("permissions", "这三项已保存；高级设置里的单独权限规则仍保留，所以当前仍显示为自定义。", "success");
+        setStatus("permissions", "预设已保存；高级设置里的单独权限规则仍保留，所以当前仍显示为自定义。", "success");
       }
     });
   }
