@@ -3,8 +3,9 @@
 // 迷雾 → 已探索（上过这一课）→ 点亮（这个节点的一组练习 ≥80% 或守关通过）→ 金章（隔 ≥3 天复测仍 ≥80%）。
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
 import {GAME_EXAM} from './learning-game.mjs';
+import {examMonster} from './learning-game-monsters.mjs';
 
 const DAY = 86400000;
 export const REGIONS = [
@@ -124,7 +125,7 @@ export class GameWorld {
   // 节点状态从真实数据算
   decorate(state, map) {
     const fade = this.fadeByRegion();
-    const monsters = Object.values(state.monsters?.list || {}).filter(m => m.state !== 'captured');
+    const monsters = Object.values(state.monsters?.list || {}).filter(m => m.state !== 'captured' && examMonster(m));
     const regions = map.regions.map(r => ({...r, nodes: r.nodes.map(n => {
       const rec = state.nodes[n.id] || {};
       const st = rec.gold ? 'gold' : rec.lit ? 'lit' : rec.explored ? 'explored' : 'fog';
@@ -307,7 +308,7 @@ export class GameWorld {
     let text = '';
     let source = 'none';
     if (standard && this.game.requestModel) {
-      const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, {question: clean(item.stem, 500), standard, note: clean(item.why, 200), yours: rec.correct ? '' : clean(yours, 200), correct: Boolean(rec.correct)}, {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 500});
+      const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 900});
       if (r) { text = r.value.text; source = 'model'; }
     }
     if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; } });

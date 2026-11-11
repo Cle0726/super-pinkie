@@ -16,10 +16,12 @@
     const range = selection.getRangeAt(0);
     const element = node => node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
     const anchor = element(selection.anchorNode), focus = element(selection.focusNode);
-    const thread = anchor?.closest('[data-pinkie-reading], .chat-thread');
-    if (!thread || focus?.closest('[data-pinkie-reading], .chat-thread') !== thread) return null;
-    const reading = thread.hasAttribute('data-pinkie-reading');
-    if (!reading && (!anchor.closest('.chat-text') || !focus.closest('.chat-text'))) return null;
+    const deskBox = anchor?.closest('#pinkie-study-desk :is(.pkp-fb, .pk-sheet, .pk-drill-q)');
+    const sameDesk = deskBox && focus?.closest('#pinkie-study-desk :is(.pkp-fb, .pk-sheet, .pk-drill-q)') === deskBox;
+    const thread = sameDesk ? deskBox : anchor?.closest('[data-pinkie-reading], .chat-thread');
+    if (!thread || (!sameDesk && focus?.closest('[data-pinkie-reading], .chat-thread') !== thread)) return null;
+    const reading = thread.hasAttribute?.('data-pinkie-reading');
+    if (!sameDesk && !reading && (!anchor.closest('.chat-text') || !focus.closest('.chat-text'))) return null;
     const view = viewport(), bounds = thread.getBoundingClientRect();
     const visible = [...range.getClientRects()].filter(rect => rect.width > 0 && rect.height > 0
       && rect.bottom > Math.max(view.top, bounds.top) && rect.top < Math.min(view.top + view.height, bounds.bottom)
@@ -29,6 +31,7 @@
     const forward = selection.anchorNode === range.startContainer && selection.anchorOffset === range.startOffset;
     const rect = visible[forward ? visible.length - 1 : 0];
     return {text, range: range.cloneRange(), anchor, focus, thread, rect, visible,
+      desk: Boolean(sameDesk),
       assistant: anchor.closest('.chat-group.assistant'),
       library: reading ? window.__pinkieLibrary?.selectionSource({text, anchor, focus, range}) : null};
   }

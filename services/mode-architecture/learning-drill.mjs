@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import {vocabDrillFields} from './learning-vocab.mjs';
-import {EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
+import {EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
 
 const LIBRARY = 'agent:learning:notes-library';
 const SIZES = [5, 10, 15, 20];
@@ -923,8 +923,8 @@ export class LearningDrill {
     const status = this.modelStatus(session.sessionKey);
     if (!standard || !status.available || !this.organizer?.requestModel) return keep(local);
     try {
-      const payload = {question: clean(item.reveal?.question || item.prompt || '', 500), standard, note, yours: attempt, correct};
-      const result = await this.organizer.requestModel(status.model, EXPLAIN_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 700, timeoutMs: 25000});
+      const payload = explainInput({question: item.reveal?.question || item.prompt || '', options: item.options, standard, note, yours: attempt, correct});
+      const result = await this.organizer.requestModel(status.model, EXPLAIN_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 900, timeoutMs: 25000});
       const text = validExplain(result)?.text || validExplain(result?.value)?.text;
       return keep(text ? {text, source: 'model'} : local);
     } catch {

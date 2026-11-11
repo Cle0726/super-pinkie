@@ -165,6 +165,7 @@ test('守关答完才按标准答案讲解', async t => {
   const told = await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1', yours: 'Yes'});
   assert.equal(told.source, 'model');
   assert.equal(seen.standard, 'Here you are.');
+  assert.deepEqual(seen.options, ['Yes', 'Here you are.']);
   assert.equal(seen.correct, false);
   assert.equal(seen.yours, 'Yes');
   const cached = await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'});

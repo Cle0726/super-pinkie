@@ -15,6 +15,16 @@ export const SPECIES = {
   writing: [['inkpot-imp', '墨水瓶小鬼'], ['eraser-gnome', '橡皮小精灵'], ['shaving-hog', '卷笔刀刺猬']],
   other: [['fog-puff', '迷雾团']],
 };
+// 这本游戏是英语 B 级。专升本 C 语言、其它科目的错题不能进讨伐。
+const NOT_ENGLISH = /c语言|循环结构|do-while|printf|#include|\bscanf\b|\bint\s+\w|\bfor\s*\(|\bwhile\s*\(|\bmain\s*\(/i;
+const OTHER_BANK = /(?:^|:)(?:zsb-)?c\d+-\d+/i;
+export function examMonster(input = {}) {
+  const blob = `${input.subject || ''} ${input.topic || ''} ${input.key || ''} ${input.question || input.seed?.question || ''}`;
+  if (NOT_ENGLISH.test(blob) || OTHER_BANK.test(String(input.key || input.bankId || input.id || ''))) return false;
+  const subject = String(input.subject || '').trim();
+  if (subject && !/英语|english|pretco|cet|b级/i.test(subject)) return false;
+  return true;
+}
 export function regionOf(text = '') {
   const t = String(text).toLowerCase();
   if (/听力|listen/.test(t)) return 'listening';
@@ -50,6 +60,7 @@ export class GameMonsters {
   // 生出或升级一只怪。key = 考点 / 卡片的稳定键（同 key 合并）。
   spawn(state, {key, subject = '', topic = '', question = '', answer = '', options = null, source = {type: 'drill', id: ''}, node = null} = {}) {
     const box = this.ensure(state);
+    if (!examMonster({subject, topic, question, key})) return null;
     const k = clean(key, 160) || `q:${hashOf(question)}`;
     const now = this.now();
     const lurk = this.economy.monsters.lurkDays;
@@ -96,6 +107,7 @@ export class GameMonsters {
       const ev = `spawn:att:${a.id}`;
       if (state.ledger[ev]) continue;
       const q = a.question || {};
+      if (!examMonster({subject: q.subject, topic: q.topic, question: q.question, key: q.bankId || q.id})) continue;
       const options = Array.isArray(q.options) ? q.options.map(o => (typeof o === 'string' ? o : o?.label || o?.text || '')) : null;
       this.spawn(state, {key: q.bankId ? `bank:${q.bankId}` : `att:${hashOf(q.question || a.id)}`, subject: q.subject || '', topic: q.topic || '',
         question: q.question || '', answer: Array.isArray(q.correctAnswer) ? q.correctAnswer.join(' / ') : (q.correctAnswer || q.answer || ''), options, source: {type: 'question', id: a.id}});
@@ -113,7 +125,7 @@ export class GameMonsters {
 
   summary(state) {
     const box = this.refresh(state);
-    const list = Object.values(box.list);
+    const list = Object.values(box.list).filter(examMonster);
     return {active: list.filter(m => m.state !== 'captured').length, due: list.filter(m => m.state === 'due').length, captured: list.filter(m => m.state === 'captured').length};
   }
 
@@ -126,7 +138,7 @@ export class GameMonsters {
     const out = this.game.mutate(state => {
       this.syncAttempts(state);
       const box = this.refresh(state);
-      return Object.values(box.list)
+      return Object.values(box.list).filter(examMonster)
         .filter(m => (filter === 'captured' ? m.state === 'captured' : filter === 'due' ? m.state === 'due' : m.state !== 'captured'))
         .sort((a, b) => a.dueAt - b.dueAt).map(m => this.view(m));
     });
@@ -187,7 +199,7 @@ export class GameMonsters {
       for (let n = 0; n < 6; n += 1) {
         const now = this.now();
         const list = Object.values(this.ensure(this.game.read()).list)
-          .filter(m => m.state !== 'captured' && m.seed?.question && m.prepared?.round !== this.round(m) && !(m.variantTriedAt && now - m.variantTriedAt < 10 * 60000))
+          .filter(m => examMonster(m) && m.state !== 'captured' && m.seed?.question && m.prepared?.round !== this.round(m) && !(m.variantTriedAt && now - m.variantTriedAt < 10 * 60000))
           .sort((a, b) => a.dueAt - b.dueAt);
         const target = list[0];
         if (!target) break;
@@ -211,8 +223,8 @@ export class GameMonsters {
     const picked = this.game.mutate(state => {
       this.syncAttempts(state);
       const box = this.refresh(state);
-      let list = Array.isArray(monsterIds) && monsterIds.length ? monsterIds.map(id => box.list[id]).filter(m => m && m.state !== 'captured')
-        : Object.values(box.list).filter(m => m.state === 'due').sort((a, b) => b.level - a.level || a.dueAt - b.dueAt);
+      let list = Array.isArray(monsterIds) && monsterIds.length ? monsterIds.map(id => box.list[id]).filter(m => m && examMonster(m) && m.state !== 'captured')
+        : Object.values(box.list).filter(m => examMonster(m) && m.state === 'due').sort((a, b) => b.level - a.level || a.dueAt - b.dueAt);
       return list.slice(0, 8).map(m => ({...m}));
     });
     if (!picked.length) throw new Error('现在没有到期的错题怪，过几天它们会回来');

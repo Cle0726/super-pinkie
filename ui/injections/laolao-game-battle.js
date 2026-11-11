@@ -31,11 +31,11 @@
     const hero = el('div', 'pkb-hero'); const heroImg = el('img'); heroImg.alt = ''; heroImg.decoding = 'async'; heroImg.src = G()?.portrait(form?.id || 'daily') || ''; hero.append(el('i', 'pkb-shadow'), heroImg);
     // 形态 v2：头像是活的（呼吸、眨眼、看鼠标），答对换成 GPT 出的欢呼姿势、答错换成一缩的姿势
     let live = null;
-    // v3：有单独画的头像（avatar）就用它待机（圆形胸像 + 呼吸），答对 / 答错短暂换成 GPT 姿势；没有时照旧用活体网格。
+    // v3：待机、答对、答错都是单独画的方形胸像，圆框不拆。全身 cheer / hurt 留给营地活体。
     const avatarLive = (id, src) => {
       heroImg.hidden = false; heroImg.src = src; hero.classList.add('is-avatar'); hero.classList.remove('is-live');
       let t = 0;
-      return {state(kind) { const pose = kind === 'cheer' || kind === 'hurt' ? G()?.art(`form/${id}/${kind}`) : null; clearTimeout(t); if (!pose) return; hero.dataset.pose = kind; heroImg.src = pose; t = setTimeout(() => { heroImg.src = src; delete hero.dataset.pose; }, 1300); }, destroy() { clearTimeout(t); hero.classList.remove('is-avatar'); delete hero.dataset.pose; }};
+      return {state(kind) { const pose = kind === 'cheer' || kind === 'hurt' ? (G()?.art(`form/${id}/avatar-${kind}`) || G()?.art(`form/${id}/${kind}`)) : null; clearTimeout(t); if (!pose) return; hero.dataset.pose = kind; heroImg.src = pose; t = setTimeout(() => { heroImg.src = src; delete hero.dataset.pose; }, 1300); }, destroy() { clearTimeout(t); hero.classList.remove('is-avatar'); delete hero.dataset.pose; }};
     };
     const mountLive = (id) => { live?.destroy?.(); live = null; const av = G()?.avatarArt?.(id); if (av) { live = avatarLive(id, av); return; } const FS = window.__pinkieFormStage; if (!FS?.has(id) || reduced()) { heroImg.hidden = false; hero.classList.remove('is-live'); return; } heroImg.hidden = true; hero.classList.add('is-live'); live = FS.mount(hero, id, {mode: 'avatar', poke: false}); };
     mountLive(form?.id || 'daily');
@@ -226,7 +226,7 @@
     a.setHp(1, {instant: true}); a.setCombo(0);
     const stage = el('div', 'pk-drill-stage pkb-guard__stage'); const qWrap = el('section', 'pk-drill-col pkb-guard__q'); stage.append(qWrap); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
-    const items = payload.items; let right = 0, combo = 0, busy = false, alive = true;
+    const items = payload.items; let right = 0, combo = 0, busy = false, alive = true, picked = null;
     const paint = () => { count.textContent = `${Math.min(i + 1, items.length)} / ${items.length}`; };
     function show() {
       paint(); qWrap.replaceChildren();
@@ -235,10 +235,23 @@
       const stem = el('h3', 'pk-drill-stem', it.prompt); if (String(it.prompt || '').length > 90) stem.classList.add('is-long');
       q.append(el('p', 'pk-drill-kicker', [`第 ${i + 1} 题`, it.point ? `考点 · ${it.point}` : '单选', it.source ? `真题 · ${it.source}` : ''].filter(Boolean).join(' · ')), stem);
       const list = el('div', 'pk-drill-options pkb-guard__opts');
-      it.options.forEach((o, k) => { const b = el('button', 'pk-choice pkb-opt'); b.type = 'button'; b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => pick(k, b)); list.append(b); });
+      picked = null;
+      it.options.forEach((o, k) => {
+        const b = el('button', 'pk-choice pkb-opt'); b.type = 'button'; b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o));
+        b.addEventListener('click', () => {
+          if (busy) return;
+          picked = {k, b};
+          list.querySelectorAll('.pk-choice').forEach(n => { n.classList.toggle('is-on', n === b); n.setAttribute('aria-pressed', String(n === b)); });
+          check.classList.add('is-ready'); check.setAttribute('aria-disabled', 'false');
+        });
+        list.append(b);
+      });
       q.append(list);
-      const bar = el('footer', 'pk-drill-bar'); bar.append(el('span', 'pk-drill-keys', `点选即作答 · 1–${it.options.length} 或 A–${'ABCD'[it.options.length - 1] || 'D'}`));
-      qWrap.append(q, bar); // 不自动聚焦第一项：焦点环看起来像已经选了 A。键盘 1–4 / A–D 由页面 keydown 接。
+      const bar = el('footer', 'pk-drill-bar');
+      const check = el('button', 'pk-drill-check'); check.type = 'button'; check.setAttribute('aria-disabled', 'true'); check.append(el('span', '', '检查'));
+      check.addEventListener('click', () => { if (!picked || busy || check.getAttribute('aria-disabled') === 'true') return; pick(picked.k, picked.b); });
+      bar.append(el('span', 'pk-drill-keys', `1–${it.options.length} 或 A–${'ABCD'[it.options.length - 1] || 'D'} 选择 · Enter 检查`), check);
+      qWrap.append(q, bar); // 不自动聚焦第一项：焦点环看起来像已经选了 A。点选项只选定，回车或「检查」才交卷。
     }
     async function pick(k, b) {
       if (busy || !alive) return; busy = true;
@@ -299,9 +312,15 @@
     return {unmount() { alive = false; }, keydown(event) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
+      if (host.querySelector('dialog[open]')) return;
       const key = String(event.key || '').toLowerCase(); const n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
-      if (n >= 1 && n <= 4) { event.preventDefault(); qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); }
-      if (event.key === 'Enter' && !event.target?.closest?.('button')) qWrap.querySelector('.pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')?.click();
+      if (n >= 1 && n <= 4 && !qWrap.querySelector('.pk-sheet, .pkb-guard__explain')) { event.preventDefault(); qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); return; }
+      if (event.key === 'Enter') {
+        if (event.target?.closest?.('.pk-drill-check, .pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')) return;
+        const next = qWrap.querySelector('.pk-sheet .pk-btn, .pkb-guard__explain .pk-btn');
+        const check = qWrap.querySelector('.pk-drill-check.is-ready');
+        if (next || check) { event.preventDefault(); (next || check).click(); }
+      }
     }};
   }
 

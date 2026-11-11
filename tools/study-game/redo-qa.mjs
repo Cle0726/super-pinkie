@@ -29,7 +29,7 @@ async function answer(page, right) {
     const input = document.querySelector('.pkp-set .pkp-input'), essay = document.querySelector('.pkp-set .pkp-essay');
     // 偷看答案只在隔离环境：从 QA 钩子拿
     const key = await window.__qaKey?.(set.setId, document.querySelector('.pk-drill-count')?.textContent);
-    if (opts.length) { const i = right ? key.index : (key.index + 1) % opts.length; opts[i].click(); }
+    if (opts.length) { const i = right ? key.index : (key.index + 1) % opts.length; opts[i].click(); document.querySelector('.pkp-set .pk-drill-check.is-ready')?.click(); }
     else if (input) { input.value = right ? key.text : 'zzz'; input.closest('form').requestSubmit(); }
     else if (essay) { essay.value = right ? key.text : ''; [...document.querySelectorAll('.pkp-set .pkg-btn')].find(b => /阅卷/.test(b.textContent)).click(); }
     return true;

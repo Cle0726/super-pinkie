@@ -387,9 +387,14 @@
     window.__pinkieSelectionActions.register('vocab', {
       // 只在像单词时出现；出现时排在「记笔记」前面，当主按钮。
       order: 0,
-      when: ({text, assistant, library}) => learning() && (!!assistant || !!library) && looksLikeVocab(text),
+      when: ({text, assistant, library, desk}) => learning() && (!!assistant || !!library || !!desk) && (desk ? /[A-Za-z]/.test(text) : looksLikeVocab(text)),
       create: () => el('button', 'laolao-learning-selection-save laolao-learning-selection-vocab', '记生词'),
-      run: selected => { if (selected.assistant && window.__pinkieDeskChat?.active?.() && window.__pinkieDeskChat?.collectSelection) void window.__pinkieDeskChat.collectSelection(selected, 'word').catch(() => {}); else void saveSelectedWords(selected.text); },
+      run: selected => {
+        if (selected.assistant && window.__pinkieDeskChat?.active?.() && window.__pinkieDeskChat?.collectSelection) { void window.__pinkieDeskChat.collectSelection(selected, 'word').catch(() => {}); return; }
+        // 答题卡里常是「英文搭配紧贴中文释义」，中间补一个空格，生词本才认得出词和释义。
+        const text = selected.desk ? selected.text.replace(/([A-Za-z.)])(?=[^\sA-Za-z'’./()-])/g, '$1 ') : selected.text;
+        void saveSelectedWords(text);
+      },
     });
     return true;
   };

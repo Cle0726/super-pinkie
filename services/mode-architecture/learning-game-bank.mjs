@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {fold, modelJson, pool, EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
+import {fold, modelJson, pool, EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
 import {GRADE_RULES, gradeObjective} from './learning-game-exam.mjs';
 
 const DAY = 86400000;
@@ -596,7 +596,8 @@ export class GamePractice {
     if (!it) throw new Error('题库里没有这道题了');
     const mat = it.material ? clean(this.bank.load().materials[it.material], 1200) : '';
     const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, 300);
-    const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, {question: clean(`${mat ? mat + '\n\n' : ''}${it.stem}`, 1800), standard: keyText(it), note: clean(it.why || it.script, 300), yours: rec.correct ? '' : yours, correct: Boolean(rec.correct)}, {validate: validExplain, retries: 1, timeoutMs: 30000, maxTokens: 600});
+    if (!this.game.requestModel) return {text: '', source: 'offline'};
+    const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validExplain, retries: 1, timeoutMs: 30000, maxTokens: 900});
     if (!r) return {text: '', source: 'none'};
     this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) row.lecture = r.value.text; });
     return {text: r.value.text, source: 'model'};

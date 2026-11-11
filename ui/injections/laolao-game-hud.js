@@ -45,7 +45,7 @@
   // 素材槽位 → URL；没到的返回 null（调用方用占位）。模式系列形态没有新立绘时用现成的模式图。
   function art(slot) {
     const m = cache.manifest || {};
-    if (m[slot]?.file) return ART + m[slot].file;
+    if (m[slot]?.file) return ART + m[slot].file + (/\/avatar($|-)/.test(slot) ? '?v=game17' : '');
     const f = /^form\/([^/]+)\/(portrait|ult|icon)$/.exec(slot);
     if (f && MODE_ART[f[1]] && f[2] !== 'ult') return BASE + MODE_ART[f[1]];
     return null;
