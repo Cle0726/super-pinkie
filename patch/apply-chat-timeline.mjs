@@ -9,13 +9,13 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-export const marker = '/* pinkie-chat-timeline:v27 */';
+export const marker = '/* pinkie-chat-timeline:v28 */';
 // Keep the v26 marker for the independently maintained optimistic-user patch.
 // This second marker lets older v26 installations upgrade the projection.
 const thinkingSegmentsMarker = '/* pinkie-thinking-segments:v1 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v26 */', '/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v27 */', '/* pinkie-chat-timeline:v26 */', '/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 // These are compatibility exports, not retention caps. Fetching is paginated;
 // the renderer must keep every page the user has already opened reachable.
@@ -1229,6 +1229,16 @@ export function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRo
       turnIndex < turnStarts.length - 1
         && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
+  }
+  // The job still in progress is the latest turn plus the runs the user's
+  // follow-ups superseded on the way. Those cards stay open like the latest
+  // one: the 碧琪 skin hides closed finished cards, so a collapsed superseded
+  // card would vanish right after the follow-up.
+  if (pageIsLive) {
+    const processCards = timeline.filter((item) => item?.isProcessCard);
+    for (let index = processCards.length - 2; index >= 0 && processCards[index].processSuperseded; index -= 1) {
+      processCards[index].processCurrent = true;
+    }
   }
   return pagePresentation(timeline);
 }
