@@ -391,6 +391,49 @@
     }).catch(() => {}).finally(() => clearingUnread.delete(key));
   }
 
+  const selectedKeys = new Set();
+  let selectionAnchor = '';
+  function nextSelection(order, previous, anchor, key, range, additive) {
+    const picked = new Set(previous);
+    const start = order.indexOf(anchor), end = order.indexOf(key);
+    if (range && start >= 0 && end >= 0) {
+      if (!additive) picked.clear();
+      for (const item of order.slice(Math.min(start, end), Math.max(start, end) + 1)) picked.add(item);
+    } else if (picked.has(key)) picked.delete(key);
+    else picked.add(key);
+    return [...picked];
+  }
+  function updateSelection() {
+    if (!current) return;
+    const section = current.section;
+    for (const row of section.querySelectorAll('.session-row-host')) {
+      row.classList.toggle('pinkie-session-selected', selectedKeys.has(row.dataset.sessionKey));
+    }
+    let bar = section.querySelector('.pinkie-session-selection-bar');
+    if (!selectedKeys.size || archived) { bar?.remove(); return; }
+    if (!bar) { bar = el('div', 'pinkie-session-selection-bar'); section.append(bar); }
+    bar.replaceChildren();
+    const count = el('span', 'pinkie-session-selection-count', '已选 ' + selectedKeys.size + ' 个');
+    count.setAttribute('role', 'status'); bar.append(count);
+    const done = keys => { for (const key of keys || []) selectedKeys.delete(key); updateSelection(); };
+    bar.append(
+      button('归档', '归档所选会话', async () => done(await current.api.archiveMany([...selectedKeys]))),
+      button('移进项目…', '将所选会话移进项目', event => current.api.openBulkProjectMenu(event.currentTarget, [...selectedKeys], done)),
+      button('删除', '删除所选会话', () => current.api.askDeleteSelected([...selectedKeys], done)),
+      button('取消', '取消多选', () => { selectedKeys.clear(); selectionAnchor = ''; updateSelection(); }),
+    );
+  }
+  function selectFromClick(key, event) {
+    if (archived || isPersona(key) || !(event.metaKey || event.ctrlKey || event.shiftKey)) return false;
+    const order = [...current.section.querySelectorAll('.session-row-host:not(.pinkie-session-persona)')]
+      .map(row => row.dataset.sessionKey).filter(Boolean);
+    const next = nextSelection(order, selectedKeys, selectionAnchor, key, event.shiftKey, event.metaKey || event.ctrlKey);
+    selectedKeys.clear(); for (const item of next) selectedKeys.add(item);
+    if (!event.shiftKey || !selectionAnchor) selectionAnchor = key;
+    updateSelection();
+    return true;
+  }
+
   function row(s, api, {children = 0, collapsed = false, worker = false} = {}) {
     const n = el('div', 'sidebar-recent-session session-row-host');
     n.dataset.sessionKey = s.key;
@@ -523,7 +566,7 @@
   function render(section,api){
     current={section,api};
     if(searchView && searchView.mode!==api.mode)searchView.close();
-    if(lastMode!==api.mode){lastMode=api.mode;query='';archived=false;limit=30;signature='';}
+    if(lastMode!==api.mode){lastMode=api.mode;query='';archived=false;limit=30;signature='';selectedKeys.clear();selectionAnchor='';}
     const key=api.mode+'|'+archived;void load(api);
     // Only our DOM is rebuilt. Native list remains mounted and can reconcile safely.
     section.classList.add('laolao-managed-sessions');
@@ -581,6 +624,7 @@
       }));
     }
     if(old)old.replaceWith(groups);else host.append(groups);
+    updateSelection();
     ensureVisibleTitles(groups, rows, api);
     if (!archived) readCurrent(rows, api);
   }
@@ -596,7 +640,10 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges,nextSelection,selectFromClick};
+  if(typeof document!=='undefined')document.addEventListener('keydown',event=>{
+    if(event.key==='Escape' && selectedKeys.size){selectedKeys.clear();selectionAnchor='';updateSelection();}
+  });
   let refreshTimer;
   function refreshSoon() {
     clearTimeout(refreshTimer);
