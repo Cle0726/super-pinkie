@@ -139,10 +139,21 @@
 #pinkie-study-desk .pk-drill-col .pk-sheet-answer{font-size:17px}
 /* 程序把焦点给到「继续」时只留一圈细的焦点环，不要两层粉圈。 */
 #pinkie-study-desk .pk-drill-col .pk-sheet .pk-btn:focus-visible{outline:1.5px solid color-mix(in srgb,var(--pink) 55%,transparent);outline-offset:3px}
-/* 很宽的页（2K / 4K 屏铺满）：栏放到 880、字大一号，不在一大片纸中间缩成一小条。 */
-@container drill (min-width:1700px){
-  #pinkie-study-desk .pk-drill-col{width:min(880px,100%)}
-  #pinkie-study-desk .pk-drill-stem,#pinkie-study-desk .pk-drill-cloze{font-size:34px}
-  #pinkie-study-desk .pk-drill-q > .pk-drill-stem.is-long{font-size:23px}
-  #pinkie-study-desk .pk-choice{min-height:60px;font-size:19px}
+#pinkie-study-desk .pk-sheet-explain{white-space:pre-wrap}
+/* 学习台只开这一页、作答区铺开时：题干和选项按这一页放大。窄卡（分栏、小窗）仍用上面的字号。 */
+@container drill (min-width:900px){
+  #pinkie-study-desk .pk-drill-col{width:min(920px,100%);gap:22px}
+  #pinkie-study-desk .pk-drill-stem,#pinkie-study-desk .pk-drill-cloze{font-size:36px;line-height:1.45}
+  #pinkie-study-desk .pk-drill-q > .pk-drill-stem.is-long{font-size:25px}
+  #pinkie-study-desk .pk-choice{min-height:64px;font-size:20px;padding:15px 22px 15px 16px;border-radius:14px}
+  #pinkie-study-desk .pk-choice kbd{width:34px;height:34px;font-size:15px;border-radius:8px}
+  #pinkie-study-desk .pk-drill-options,#pinkie-study-desk .pk-order-bank,#pinkie-study-desk .pk-pair-col{gap:12px}
+  #pinkie-study-desk .pk-sheet-explain{font-size:17px;line-height:1.7}
+}
+@container drill (min-width:1200px){
+  #pinkie-study-desk .pk-drill-col{width:min(1040px,100%)}
+  #pinkie-study-desk .pk-drill-stem,#pinkie-study-desk .pk-drill-cloze{font-size:42px}
+  #pinkie-study-desk .pk-drill-q > .pk-drill-stem.is-long{font-size:28px}
+  #pinkie-study-desk .pk-choice{min-height:72px;font-size:22px}
+  #pinkie-study-desk .pk-sheet-explain{font-size:18px}
 }

@@ -214,6 +214,12 @@
       byLevel: {off: "gemini-3.6-flash-tiered", minimal: "gemini-3.6-flash-tiered", low: "gemini-3.6-flash-low", medium: "gemini-3.6-flash-medium", high: "gemini-3.6-flash-high", xhigh: "gemini-3.6-flash-tiered", adaptive: "gemini-3.6-flash-tiered", max: "gemini-3.6-flash-tiered", ultra: "gemini-3.6-flash-tiered"},
       implied: {"gemini-3.6-flash-low": "low", "gemini-3.6-flash-medium": "medium", "gemini-3.6-flash-high": "high"},
     },
+    {
+      provider: "mm", label: "Gemini 3.8 Flash", canonical: "gemini-3.8-flash-tiered",
+      ids: ["gemini-3.8-flash", "gemini-3.8-flash-high", "gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-tiered"],
+      byLevel: {off: "gemini-3.8-flash-tiered", minimal: "gemini-3.8-flash-tiered", low: "gemini-3.8-flash-low", medium: "gemini-3.8-flash-medium", high: "gemini-3.8-flash-high", xhigh: "gemini-3.8-flash-tiered", adaptive: "gemini-3.8-flash-tiered", max: "gemini-3.8-flash-tiered", ultra: "gemini-3.8-flash-tiered"},
+      implied: {"gemini-3.8-flash-low": "low", "gemini-3.8-flash-medium": "medium", "gemini-3.8-flash-high": "high"},
+    },
   ];
 
   // These six fixed-effort endpoints are the Antigravity source shown by the user.

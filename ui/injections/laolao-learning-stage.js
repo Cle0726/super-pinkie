@@ -590,14 +590,14 @@
 
   window.__pinkieSelectionActions?.register('note', {
     order: 1,
-    when: ({text, assistant, library}) => inLearningMode() && (!!assistant || !!library) && text.length >= 2,
+    when: ({text, assistant, library, desk}) => inLearningMode() && (!!assistant || !!library || !!desk) && text.length >= 2,
     create: () => el("button", "laolao-learning-selection-save", "记笔记"),
     run: selected => {
       const {text, assistant, library} = selected;
       if (assistant && window.__pinkieDeskChat?.active?.() && window.__pinkieDeskChat?.collectSelection) { void window.__pinkieDeskChat.collectSelection(selected, "note").catch(() => {}); return; }
       if (library) { void window.__pinkieLibrary.saveSelection(selected).catch(error => showToast(error.message, true)); return; }
       state.selectionText = text;
-      state.selectionLabel = assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答";
+      state.selectionLabel = selected.desk ? "答题卡" : (assistant?.querySelector(".chat-sender-name")?.textContent?.trim() || "碧琪回答");
       void saveSelection();
     },
   });

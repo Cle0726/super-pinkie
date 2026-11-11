@@ -39,6 +39,14 @@ test('背一背答错生成怪；同考点再错升级不重复刷怪', t => {
   assert.ok(['ink-slime', 'tangle-yarn', 'clock-beetle'].includes(list[0].species), list[0].species);
 });
 
+test('专升本 C 语言错题不进英语 B 级讨伐', t => {
+  const {game, store} = gameFixture(t);
+  store.allAttempts = () => [{id: 'att-c', createdAt: Date.now(), result: {correct: false}, question: {bankId: 'c5-117', id: 'zsb-c5-117', topic: '循环结构 · while / do-while / for', question: 'int i, sum = ____; for (i = 2; i <= 50; i += 2) { sum += i; }', correctAnswer: '0'}}];
+  assert.equal(game.modules.monsters.list({filter: 'due'}).monsters.length, 0);
+  assert.equal(game.modules.monsters.list({}).monsters.length, 0);
+  assert.equal(game.modules.monsters.spawn(game.read(), {key: 'bank:c5-74', topic: 'C语言 · 循环结构', question: '关于 do-while 循环，正确的说法是'}), null);
+});
+
 test('刷题答错（作答记录）懒生成怪，按 attempt 幂等', t => {
   const {game, store} = gameFixture(t);
   store.allAttempts = () => [{id: 'att-1', createdAt: Date.now(), result: {correct: false}, question: {question: 'The book ___ on the desk.', options: ['is', 'are'], correctAnswer: 'is', subject: '英语', topic: '主谓一致'}}];

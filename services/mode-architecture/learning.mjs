@@ -1953,6 +1953,16 @@ function noteModelBase(value) {
   } catch { return null; }
 }
 
+function parseModelJson(text) {
+  const source = String(text || '').trim();
+  if (!source) return null;
+  try { return JSON.parse(source); } catch { /* 字符串里有真实换行 */ }
+  try { return JSON.parse(source.replace(/\r?\n/g, '\\n')); } catch { /* 再抽 text 字段 */ }
+  const matched = source.match(/^\{\s*"text"\s*:\s*"([\s\S]*)"\s*\}\s*$/);
+  if (!matched) return null;
+  return {text: matched[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')};
+}
+
 async function noteModelJson(response, {withMetadata = false, responseFormat = 'json'} = {}) {
   if (!response.ok) throw new Error(`笔记整理模型请求失败（${response.status}），笔记保持原样`);
   const reader = response.body?.getReader();
@@ -1968,16 +1978,21 @@ async function noteModelJson(response, {withMetadata = false, responseFormat = '
   let body;
   try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
   catch { throw new Error('笔记整理模型返回了无效的响应，笔记保持原样'); }
-  if (body.choices?.[0]?.finish_reason === 'length' || body.status === 'incomplete' || body.stop_reason === 'max_tokens') {
-    throw new Error('笔记整理结果未完成，请稍后重试；笔记保持原样');
-  }
+  const truncated = body.choices?.[0]?.finish_reason === 'length' || body.status === 'incomplete' || body.stop_reason === 'max_tokens';
   const content = body.choices?.[0]?.message?.content;
   const text = typeof content === 'string' ? content : Array.isArray(content) ? content.map(item => item.text || '').join('\n')
     : body.output_text || (body.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n')
       || (body.content || []).filter(item => item.type === 'text').map(item => item.text).join('\n');
+  const rawText = String(text || '').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1').trim();
   let result;
-  try { result = responseFormat === 'text' ? String(text || '').trim() : JSON.parse(String(text || '').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1')); }
-  catch { throw new Error('整理模型没有返回有效的 JSON，笔记保持原样'); }
+  if (responseFormat === 'text') result = rawText;
+  else {
+    result = parseModelJson(rawText);
+    // 讲解这类调用常把换行写进 JSON 字符串，或直接回一段中文。有正文就收下，不当成模型不在线。
+    if (!result && rawText.length >= 8 && !rawText.startsWith('{')) result = {text: rawText};
+    if (!result && truncated) throw new Error('笔记整理结果未完成，请稍后重试；笔记保持原样');
+    if (!result) throw new Error('整理模型没有返回有效的 JSON，笔记保持原样');
+  }
   if (!result || (responseFormat !== 'text' && (Array.isArray(result) || typeof result !== 'object'))) throw new Error('整理模型返回格式不正确，笔记保持原样');
   if (!withMetadata) return result;
   const raw = body.usage || {};
@@ -1987,6 +2002,14 @@ async function noteModelJson(response, {withMetadata = false, responseFormat = '
 }
 
 // 学习台复用整理助手的鉴权、模型目录、超时与直连通道，默认跟随学习模式。
+function builtinReasoningEffort(entry) {
+  const declared = entry?.compat?.supportedReasoningEfforts;
+  if (!Array.isArray(declared) || !declared.length) return entry?.reasoning === true ? 'high' : '';
+  const levels = new Set(declared.map(value => String(value).toLowerCase()));
+  if (levels.has('high')) return 'high';
+  return ['medium', 'low', 'minimal'].find(level => levels.has(level)) || '';
+}
+
 export async function requestLearningModel(organizer, rules, digest, options = {}) {
   const started = Date.now();
   const {models, defaultRef} = organizer.catalog();
@@ -1996,8 +2019,9 @@ export async function requestLearningModel(organizer, rules, digest, options = {
   const model = models.find(model => model.ref === (reference || defaultRef));
   if (!model) return {unavailable: true, model: null, usage: null};
   const info = {ref: model.ref, name: model.name};
+  const reasoningEffort = options.reasoningEffort || builtinReasoningEffort(model.model);
   try {
-    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true});
+    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true, ...(reasoningEffort ? {reasoningEffort} : {})});
     return {...response, model: info, ms: Date.now() - started};
   } catch (error) { error.learningModel = info; error.ms = Date.now() - started; throw error; }
 }

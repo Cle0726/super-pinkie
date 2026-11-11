@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, EXPLAIN_RULES, validExplain} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
@@ -364,7 +364,7 @@ export class GameExam {
       let text = note;
       let source = note ? 'key' : 'none';
       if (this.game.requestModel) {
-        const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, {question: clean(w.it.stem, 500), standard, note, yours, correct: false}, {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 500});
+        const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, explainInput({question: w.it.stem, options: w.it.options, standard, note, yours, correct: false}), {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 900});
         if (r) { text = r.value.text; source = 'model'; }
       }
       explained.push({id: w.id, section: w.sec, no: w.it.no || null, stem: clean(w.it.stem, 90), yours, standard, text, source});

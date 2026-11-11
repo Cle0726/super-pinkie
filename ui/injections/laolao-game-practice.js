@@ -172,6 +172,7 @@
     const answered = {...(data.answered || {})};
     let i = items.findIndex(it => !answered[it.itemId]); if (i < 0) i = items.length;
     let right = Object.values(answered).filter(r => r.correct).length, combo = 0, busy = false, alive = true, finished = Boolean(data.finished), asking = false;
+    let picked = null;
     const a = window.__pinkieGameBattle?.arena({form: g.equippedForm(), strip: true});
     if (a) {
       top.append(a.root);
@@ -228,16 +229,17 @@
       if (it.base) stem.append(el('span', 'pkp-base', ` （${it.base}）`));
       q.append(stem);
       q.append(el('small', 'pkp-source', `${it.paper}${it.no ? ' · 原卷第 ' + it.no + ' 题' : ''}`));
+      picked = null;
       if (it.options) {
         const list = el('div', 'pk-drill-options pkb-guard__opts');
-        it.options.forEach((o, k) => { const b = btn('pk-choice pkb-opt'); b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => submit(k, b)); list.append(b); });
+        it.options.forEach((o, k) => { const b = btn('pk-choice pkb-opt'); b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o)); b.addEventListener('click', () => choose(k, b, list)); list.append(b); });
         q.append(list);
-        q.append(barOf(`点选即作答 · 1–${it.options.length} 或 A–${'ABCD'[it.options.length - 1]}`));
+        q.append(choiceBar(`1–${it.options.length} 或 A–${'ABCD'[it.options.length - 1]} 选择 · Enter 检查`));
       } else if (it.qkind === 'term-match') {
         const letters = letterChoices(data.materials?.[it.material] || '');
         const list = el('div', 'pkp-letters');
-        for (const L of letters) { const b = btn('pk-choice pkp-letter'); b.append(el('kbd', '', L.letter), el('span', '', L.text)); b.addEventListener('click', () => submit(L.letter, b)); list.append(b); }
-        q.append(list, barOf('点选左侧候选里对应的那一项'));
+        for (const L of letters) { const b = btn('pk-choice pkp-letter'); b.append(el('kbd', '', L.letter), el('span', '', L.text)); b.addEventListener('click', () => choose(L.letter, b, list)); list.append(b); }
+        q.append(list, choiceBar('先点一项，选错了可以改 · Enter 检查'));
       } else if (BIG_KINDS.has(it.qkind)) {
         const ta = el('textarea', 'pkp-essay'); ta.rows = it.qkind === 'writing' ? 12 : 8; ta.placeholder = it.qkind === 'writing' ? '在这里写作文（80–100 词）。写完点「交给碧琪阅卷」。' : '在这里写中文译文。';
         ta.setAttribute('aria-label', '你的作答');
@@ -261,6 +263,24 @@
       qCol.scrollTop = 0;
     }
     function barOf(text) { const bar = el('footer', 'pk-drill-bar'); bar.append(el('span', 'pk-drill-keys', text)); return bar; }
+    // 和背单词一样：点选项只是选定，还能改；回车或「检查」才交卷。
+    function choose(answer, b, list) {
+      if (busy) return;
+      picked = {answer, el: b};
+      list.querySelectorAll('.pk-choice').forEach(n => { n.classList.toggle('is-on', n === b); n.setAttribute('aria-pressed', String(n === b)); });
+      const check = qCol.querySelector('.pk-drill-check');
+      check?.classList.add('is-ready');
+      check?.setAttribute('aria-disabled', 'false');
+    }
+    function choiceBar(hint) {
+      const bar = barOf(hint);
+      const check = btn('pk-drill-check');
+      check.setAttribute('aria-disabled', 'true');
+      check.append(el('span', '', '检查'));
+      check.addEventListener('click', () => { if (!picked || busy || check.getAttribute('aria-disabled') === 'true') return; submit(picked.answer, picked.el); });
+      bar.append(check);
+      return bar;
+    }
 
     async function submit(answer, b, {essay = false} = {}) {
       if (busy || !alive) return; busy = true;
@@ -300,7 +320,15 @@
       const explain = btn('pkb-link', '讲给我听');
       explain.addEventListener('click', async () => {
         explain.disabled = true; explain.textContent = '碧琪在按标准答案讲…';
-        try { const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 45000); if (!box.isConnected) return; const p = el('p', 'pkp-fb__lecture', res?.text || '碧琪这会儿讲不了（内置模型不在线），先看官方解析。'); explain.replaceWith(p); }
+        try {
+          const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 45000);
+          if (!box.isConnected) return;
+          if (res?.text) { explain.replaceWith(el('p', 'pkp-fb__lecture', res.text)); return; }
+          explain.disabled = false;
+          explain.textContent = '再讲一次';
+          const note = el('p', 'pkp-fb__mon', res?.source === 'offline' ? '内置模型这会儿没接上，先看官方解析。' : '上游还在，这次没把讲解收下来。再点一次。');
+          explain.before(note);
+        }
         catch (e) { explain.disabled = false; explain.textContent = '讲给我听'; G().toast(e.message || '没讲出来'); }
       });
       row.append(next, explain); box.append(row);
@@ -341,12 +369,21 @@
         if (host.__pkpRuntime) return host.__pkpRuntime.keydown(event);
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
+        if (host.querySelector('dialog[open]')) return;
         const tag = event.target?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         const key = String(event.key || '').toLowerCase();
-        const n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
-        if (n >= 1 && n <= 4 && qCol?.querySelector('.pkb-opt:not(:disabled)')) { event.preventDefault(); qCol.querySelectorAll('.pkb-opt')[n - 1]?.click(); }
-        if (event.key === 'Enter' && !event.target?.closest?.('button')) qCol?.querySelector('.pkp-fb .pk-btn')?.click();
+        const choices = [...(qCol?.querySelectorAll('.pkb-opt:not(:disabled), .pkp-letter:not(:disabled)') || [])];
+        if (choices.length && !qCol.querySelector('.pkp-fb')) {
+          const idx = /^[1-9]$/.test(key) ? Number(key) - 1 : (/^[a-j]$/.test(key) ? key.charCodeAt(0) - 97 : -1);
+          if (idx >= 0 && idx < choices.length && idx < 10) { event.preventDefault(); choices[idx].click(); return; }
+        }
+        if (event.key === 'Enter') {
+          if (event.target?.closest?.('.pk-drill-check, .pkp-fb .pk-btn')) return;
+          const next = qCol?.querySelector('.pkp-fb .pk-btn');
+          const check = qCol?.querySelector('.pk-drill-check.is-ready');
+          if (next || check) { event.preventDefault(); (next || check).click(); }
+        }
       },
     };
   }

@@ -584,7 +584,7 @@ test('做完才讲：讲解顺着标准答案，没做完不能要', async t => 
   let payload;
   const organizer = {catalog: () => ({defaultRef: 'qa/explain'}), requestModel: async (_model, rules, body) => { payload = body; assert.equal(rules, EXPLAIN_RULES); return {text: 'impact 后面固定用 on。'}; }};
   const drill = new LearningDrill(store, {organizer});
-  const session = {sessionId: 's1', sessionKey: KEY, items: [{itemId: 'd1', mode: 'choice', prompt: 'impact ___', reveal: {question: 'impact ___ business', answer: 'on', extra: '介词用 on'}}], answers: [], graded: {}, learned: {}};
+  const session = {sessionId: 's1', sessionKey: KEY, items: [{itemId: 'd1', mode: 'choice', prompt: 'impact ___', options: ['in', 'on', 'at', 'of'], reveal: {question: 'impact ___ business', answer: 'on', extra: '介词用 on'}}], answers: [], graded: {}, learned: {}};
   drill.save(session);
   await assert.rejects(() => drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'}), /先做完/);
   session.answers.push({itemId: 'd1', correct: false});
@@ -593,6 +593,7 @@ test('做完才讲：讲解顺着标准答案，没做完不能要', async t => 
   assert.equal(told.source, 'model');
   assert.equal(told.text, 'impact 后面固定用 on。');
   assert.equal(payload.standard, 'on');
+  assert.deepEqual(payload.options, ['in', 'on', 'at', 'of']);
   assert.equal(payload.yours, 'in');
   assert.equal(payload.correct, false);
   organizer.requestModel = async () => { throw new Error('不该再叫模型'); };

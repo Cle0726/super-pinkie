@@ -795,75 +795,219 @@
   },
   "form/daily/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/unrestricted/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/alicorn/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/crystal/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/seapony/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/kirin/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/batpony/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/serious/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/breezie/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/changeling/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/lidong/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
   },
   "form/detective/avatar": {
    "source": "chatgpt-web",
-   "prompt": "art/study-game/v3/prompts.json",
+   "prompt": "art/study-game/refs/bust-prompts.json",
    "reviewed": "2026-11-09",
-   "note": "v3 胸像，居中裁正方形后 512；另存 256 的 avatar-256.webp"
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/daily/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/daily/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/unrestricted/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/unrestricted/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/alicorn/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/alicorn/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/crystal/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/crystal/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/seapony/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/seapony/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/kirin/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/kirin/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/batpony/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/batpony/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/serious/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/serious/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/breezie/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/breezie/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/changeling/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/changeling/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/lidong/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/lidong/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/detective/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/detective/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
   }
  }
 }

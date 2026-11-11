@@ -98,7 +98,7 @@ async function playGuard(page) {
     const st = await page.evaluate(() => ({opt: [...document.querySelectorAll('.pkb-guard .pkb-opt:not([disabled])')].some(e => e.getClientRects().length), result: Boolean(document.querySelector('.pkb-result')), next: [...document.querySelectorAll('.pkb-guard .pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')].some(e => e.getClientRects().length)}));
     if (st.result) return k;
     if (st.next) { await page.evaluate(() => [...document.querySelectorAll('.pkb-guard .pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')].find(e => e.getClientRects().length).click()); continue; }
-    if (st.opt) await page.evaluate(() => document.querySelector('.pkb-guard .pkb-opt:not([disabled])').click());
+    if (st.opt) await page.evaluate(() => { document.querySelector('.pkb-guard .pkb-opt:not([disabled])').click(); document.querySelector('.pkb-guard .pk-drill-check.is-ready')?.click(); });
     else if (k > 6) return -1;
   }
   return -2;
@@ -114,7 +114,7 @@ async function playPractice(page, {stopAfter = 99} = {}) {
     });
     if (st.result) return done;
     if (st.next) { if (done >= stopAfter) return done; await page.evaluate(() => [...document.querySelectorAll('.pkp-fb .pk-btn')].find(e => e.getClientRects().length).click()); continue; }
-    if (st.opt) { await page.evaluate(() => [...document.querySelectorAll('.pkp-set .pkb-opt:not(:disabled), .pkp-set .pkp-letter:not(:disabled)')].find(e => e.getClientRects().length).click()); done++; }
+    if (st.opt) { await page.evaluate(() => { const b = [...document.querySelectorAll('.pkp-set .pkb-opt:not(:disabled), .pkp-set .pkp-letter:not(:disabled)')].find(e => e.getClientRects().length); b?.click(); document.querySelector('.pkp-set .pk-drill-check.is-ready')?.click(); }); done++; }
     else if (st.input) { await page.evaluate(() => { const i = document.querySelector('.pkp-set .pkp-input'); i.value = 'a'; i.closest('form').requestSubmit(); }); done++; }
     else if (st.essay) { await page.evaluate(() => { const t = document.querySelector('.pkp-set .pkp-essay'); t.value = 'Dear Sir, thank you.'; [...document.querySelectorAll('.pkp-set .pkg-btn')].find(b => /阅卷/.test(b.textContent)).click(); }); done++; }
     await page.waitForFunction(() => document.querySelector('.pkp-fb') || document.querySelector('.pkp-set .pkb-result'), null, {timeout: 30000}).catch(() => {});
@@ -316,7 +316,7 @@ const FLOWS = {
     const n = await node(page, 'guard');
     await startNode(page, n, 'guard'); await wait(2500);
     // 先答两题，再按 Escape：应该先问一句；「接着打」留下，再点 × →「退出，回地图」
-    for (let k = 0; k < 2; k++) { await page.evaluate(() => document.querySelector('.pkb-guard .pkb-opt:not([disabled])')?.click()); await wait(700); await page.evaluate(() => [...document.querySelectorAll('.pkb-guard .pk-sheet .pk-btn')].find(e => e.getClientRects().length)?.click()); await wait(500); }
+    for (let k = 0; k < 2; k++) { await page.evaluate(() => { document.querySelector('.pkb-guard .pkb-opt:not([disabled])')?.click(); document.querySelector('.pkb-guard .pk-drill-check.is-ready')?.click(); }); await wait(700); await page.evaluate(() => [...document.querySelectorAll('.pkb-guard .pk-sheet .pk-btn')].find(e => e.getClientRects().length)?.click()); await wait(500); }
     await esc(page); await wait(500);
     const escDialog = await page.evaluate(() => [...document.querySelectorAll('dialog[open] button')].map(b => b.textContent.trim()));
     await page.evaluate(() => [...document.querySelectorAll('dialog[open] button')].find(b => b.textContent.trim() === '接着打')?.click()); await wait(400);

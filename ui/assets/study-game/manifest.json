@@ -1755,7 +1755,7 @@
    "file": "form/daily/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 33754,
+   "bytes": 25686,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/daily/avatar-256.webp"
@@ -1764,7 +1764,7 @@
    "file": "form/unrestricted/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 49536,
+   "bytes": 36094,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/unrestricted/avatar-256.webp"
@@ -1773,7 +1773,7 @@
    "file": "form/alicorn/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 39586,
+   "bytes": 32408,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/alicorn/avatar-256.webp"
@@ -1782,7 +1782,7 @@
    "file": "form/crystal/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 37590,
+   "bytes": 25524,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/crystal/avatar-256.webp"
@@ -1791,7 +1791,7 @@
    "file": "form/seapony/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 41728,
+   "bytes": 25528,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/seapony/avatar-256.webp"
@@ -1800,7 +1800,7 @@
    "file": "form/kirin/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 40552,
+   "bytes": 31868,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/kirin/avatar-256.webp"
@@ -1809,7 +1809,7 @@
    "file": "form/batpony/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 36034,
+   "bytes": 23776,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/batpony/avatar-256.webp"
@@ -1818,7 +1818,7 @@
    "file": "form/serious/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 20158,
+   "bytes": 15378,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/serious/avatar-256.webp"
@@ -1827,7 +1827,7 @@
    "file": "form/breezie/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 42050,
+   "bytes": 27530,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/breezie/avatar-256.webp"
@@ -1836,7 +1836,7 @@
    "file": "form/changeling/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 49032,
+   "bytes": 33124,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/changeling/avatar-256.webp"
@@ -1845,7 +1845,7 @@
    "file": "form/lidong/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 47530,
+   "bytes": 31502,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/lidong/avatar-256.webp"
@@ -1854,10 +1854,202 @@
    "file": "form/detective/avatar.webp",
    "w": 512,
    "h": 512,
-   "bytes": 35088,
+   "bytes": 29576,
    "source": "chatgpt-web",
    "date": "2026-11-09",
    "thumb": "form/detective/avatar-256.webp"
+  },
+  "form/daily/avatar-cheer": {
+   "file": "form/daily/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 27478,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/daily/avatar-hurt": {
+   "file": "form/daily/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 25188,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/unrestricted/avatar-cheer": {
+   "file": "form/unrestricted/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 39556,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/unrestricted/avatar-hurt": {
+   "file": "form/unrestricted/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 37004,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/alicorn/avatar-cheer": {
+   "file": "form/alicorn/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 32994,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/alicorn/avatar-hurt": {
+   "file": "form/alicorn/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 34350,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/crystal/avatar-cheer": {
+   "file": "form/crystal/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 25232,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/crystal/avatar-hurt": {
+   "file": "form/crystal/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 26448,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/seapony/avatar-cheer": {
+   "file": "form/seapony/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 28598,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/seapony/avatar-hurt": {
+   "file": "form/seapony/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 26170,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/kirin/avatar-cheer": {
+   "file": "form/kirin/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 33498,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/kirin/avatar-hurt": {
+   "file": "form/kirin/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 33654,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/batpony/avatar-cheer": {
+   "file": "form/batpony/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 25440,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/batpony/avatar-hurt": {
+   "file": "form/batpony/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 24422,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/serious/avatar-cheer": {
+   "file": "form/serious/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 14912,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/serious/avatar-hurt": {
+   "file": "form/serious/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 13986,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/avatar-cheer": {
+   "file": "form/breezie/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 28262,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/breezie/avatar-hurt": {
+   "file": "form/breezie/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 28634,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/avatar-cheer": {
+   "file": "form/changeling/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 34206,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/changeling/avatar-hurt": {
+   "file": "form/changeling/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 33338,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/lidong/avatar-cheer": {
+   "file": "form/lidong/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 35380,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/lidong/avatar-hurt": {
+   "file": "form/lidong/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 30692,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/detective/avatar-cheer": {
+   "file": "form/detective/avatar-cheer.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 30054,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
+  },
+  "form/detective/avatar-hurt": {
+   "file": "form/detective/avatar-hurt.webp",
+   "w": 512,
+   "h": 512,
+   "bytes": 29638,
+   "source": "chatgpt-web",
+   "date": "2026-11-09"
   }
  },
  "updatedAt": "2026-11-09"
