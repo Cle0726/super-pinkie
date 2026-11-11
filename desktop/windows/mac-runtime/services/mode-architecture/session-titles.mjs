@@ -15,7 +15,7 @@ const MAIN_SESSION = /^agent:[^:]+:main$/i;
 const SESSION_KEY = /^agent:([a-z\d][a-z\d_-]*):[^\s\p{Cc}]+$/iu;
 const EMPTY_TITLE = /^(?:.+?\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+|New session(?:\s*\d+)?|Untitled)$/iu;
 const BAD_TITLE = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|\[(?:pinkie-[\w-]+|System)\]|agent:|[0-9a-f]{8}\b)|\s·\s[0-9a-f]{4}$|[\uD800-\uDFFF\uFFFD]/iu;
-const CHANNEL_ID = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|(?:direct|dm|group|channel):|[0-9a-f]{8}\b|\+?\d{5,}$)|@chatroom$|^[A-Za-z0-9_-]{24,}$/iu;
+const CHANNEL_ID = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|(?:direct|dm|group|channel):|[0-9a-f]{8}\b|\+?\d{5,}$)|@(?:chatroom|im\.wechat)$|^[A-Za-z0-9_-]{24,}$/iu;
 const CHANNELS = {feishu: '飞书', 'openclaw-weixin': '微信', weixin: '微信', dingtalk: '钉钉'};
 const LOW_INFORMATION = /^(?:(?:hi|hey|hello)(?:there|pinkie|碧琪)?|ping|test(?:ing)?\d*|ok(?:ay)?|thanks|thankyou|gotit|yes|yep|sure|continue|goon|你好(?:呀|啊|吗|么|碧琪)?|您好|在(?:吗|不在|不)|嗨|哈[喽啰]|[嗯哦啊]+|测试(?:一下|哈)?\d*|好的?|收到|知道了|可以|对|继续(?:吧|啊|呀)?|接着|明白了|谢谢|早上好|晚安)$/iu;
 const FILLER = /^(?:(?:你(?:能不能|可以|帮我)|请(?:你|帮我)?|帮我|帮忙|麻烦(?:你)?|我[想要]|我需要|我希望|去|先看|看看|看一下|查一下|问一下|研究一下|想了解|想问|想|为什么|如何|怎么(?:样|办)?|能不能|能否|实现|做一个|给我|给出)[\s，、,:：]*|(?:please|can you|could you|would you|help me|i want to|i need to|how (?:do|can) i|explain (?:why|how)|what are some(?: simple)? ways to|take a look at|look into|investigate|implement)\b[\s,:-]*)/iu;
@@ -157,8 +157,12 @@ export function heuristicTitle(source) {
 
 export function channelTitle(entry = {}, key = entry.key) {
   const origin = entry.origin || {};
-  if (/^(?:webchat|internal)$/iu.test(origin.provider || '')) return null;
   const parts = String(key || '').split(':');
+  // The WeChat plugin reports origin.provider "webchat"; only the delivery
+  // route says the reply goes back to WeChat. Trust that, not the key alone.
+  const delivered = String(entry.deliveryContext?.channel || entry.lastChannel || '').toLowerCase();
+  if (/^(?:webchat|internal)$/iu.test(origin.provider || '')
+      && !(Object.hasOwn(CHANNELS, delivered) && parts[2] === delivered)) return null;
   const fromKey = parts.length >= 5 && /^(?:direct|dm|group|channel|room)$/i.test(parts[3]) ? parts[2] : '';
   const route = String(origin.provider || entry.channel || '').toLowerCase();
   const channel = Object.hasOwn(CHANNELS, parts[2]) ? parts[2] : fromKey || route;
