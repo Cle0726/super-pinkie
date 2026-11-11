@@ -8,6 +8,7 @@ import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runt
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
+import {isUnresolvedSessionKey, registerSessionTitles} from './session-titles.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
@@ -462,7 +463,7 @@ function resolveGatewayCliEntry() {
 }
 
 function isInternalExecutionSession(sessionKey = '') {
-  return /:(?:subagent|internal-session-effects):/.test(String(sessionKey || ''));
+  return /:(?:subagent|internal-session-effects):/.test(String(sessionKey || '')) || isUnresolvedSessionKey(sessionKey);
 }
 
 function runProcess(file, args, options) {
@@ -6522,7 +6523,8 @@ export default {
       if (!nudge) return;
       return {appendSystemContext: `\n${composeNudgeContext(kind, nudge.today)}\n`};
     }, {priority: -10870});
-    registerCompanionGateway(api, learning);
+    const companion = registerCompanionGateway(api, learning);
+    const sessionTitles = registerSessionTitles(api, {root: path.join(pinkieStateRoot(), 'sessions'), assistant: companion, cli: resolveGatewayCliEntry(), runProcess});
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
     // 思考等级的 Max / Ultra：答完之后的交付验收（见 reasoning.mjs 顶部的实测说明）。
@@ -7005,6 +7007,7 @@ export default {
         }
         if (event.success === true && hasDeliverableAssistantReply(event)) {
           architecture.acknowledgeCompaction(ctx.sessionKey || '');
+          sessionTitles.enqueue([ctx.sessionKey || event.sessionKey]);
         }
         fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
       }

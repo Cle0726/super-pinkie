@@ -6,36 +6,78 @@
   const el=(tag,cls='',text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
   function button(text,label,action){const b=el('button','laolao-managed-button',text);b.type='button';b.setAttribute('aria-label',label);b.title=label;b.onclick=action;return b;}
   function invalidate(){for(const entry of cache.values())entry.stale=true;revision++;signature='';if(current)void load(current.api);}
-  async function load(api){
-    const key=api.mode+'|'+archived;
-    if(loading.has(key)||cache.has(key)&&!cache.get(key).stale)return;
-    const version=revision,archiveView=archived;
-    const job=api.gwRequest('sessions.list',{agentId:api.agentId,archived:archiveView,includeDerivedTitles:true,limit:1000});loading.set(key,job);
-    try{
-      const data=await job;if(version!==revision)return;
-      const rows=(data.sessions||[]).filter(s=>s.key?.startsWith('agent:'+api.agentId+':')&&!s.key.includes(':subagent:'));
-      cache.set(key,{rows,at:Date.now()});
-      if(!archiveView)api.queueAutoTitles?.(rows);
-    }catch(error){cache.set(key,{rows:cache.get(key)?.rows||[],error:error.message,at:Date.now()});if(current?.api.mode===api.mode)api.toast('会话列表暂未刷新：'+error.message);}
-    finally{if(loading.get(key)===job)loading.delete(key);signature='';if(current)render(current.section,current.api);}
+  const requestedTitles = new Map();
+  const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
+  const internalRow = s => Boolean(s.meta?.internal) || internalKey(s.key);
+  const hasMessages = s => Boolean(s.lastMessagePreview || s.meta?.hasMessages);
+  // Mirror the title rules in session-titles.mjs. Tests compare both sides.
+  const segmenter = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
+  const lowInformation = /^(?:(?:hi|hey|hello)(?:there|pinkie|碧琪)?|ping|test(?:ing)?\d*|ok(?:ay)?|thanks|thankyou|gotit|yes|yep|sure|continue|goon|你好(?:呀|啊|吗|么|碧琪)?|您好|在(?:吗|不在|不)|嗨|哈[喽啰]|[嗯哦啊]+|测试(?:一下|哈)?\d*|好的?|收到|知道了|可以|对|继续(?:吧|啊|呀)?|接着|明白了|谢谢|早上好|晚安)$/iu;
+  const emptyTitle = /^(?:.+?\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+|New session(?:\s*\d+)?|Untitled)$/iu;
+  const badTitle = /^(?:(?:ou|on|oc|om|wxid|wm|cid|ding|dt)_|\[(?:pinkie-[\w-]+|System)\]|agent:|[0-9a-f]{8}\b)|\s·\s[0-9a-f]{4}$|[\uD800-\uDFFF\uFFFD]/iu;
+  function isBadTitle(value, key = '', sessionId = '') {
+    const name = String(value || '').trim();
+    const effective = name.replace(/[^\p{L}\p{N}]/gu, '');
+    return !name || emptyTitle.test(name) || badTitle.test(name)
+      || [...segmenter.segment(effective)].length < 4
+      || lowInformation.test(effective) || [String(key).split(':').pop(), String(sessionId)].filter(Boolean).some(id => name === id);
   }
-  const placeholderTitle=(value,key='',sessionId='')=>{
-    const text=String(value||'').trim();
-    if(!text)return true;
-    if(/^(?:(?:.+?)\s*·\s*)?(?:新会话(?:\s*\d+)?|会话\s*\d+)$/i.test(text))return true;
-    if(/^[0-9a-f]{8}\b/i.test(text))return true;
-    return [String(key||'').split(':').pop(),String(sessionId||'')].filter(Boolean).some(id=>{
-      const short=id.slice(0,8);
-      return text===id||text===short||text===short+'…'||text.startsWith(short+' (');
-    });
-  };
-  const title=s=>{
-    const label=typeof s.label==='string'?s.label.trim():'';
-    if(label&&!placeholderTitle(label,s.key,s.sessionId)&&!/^agent:/.test(label))return label;
-    return [s.derivedTitle,s.title,s.displayName,s.name,label]
-      .find(v=>typeof v==='string'&&v.trim()&&!/^agent:/.test(v)&&!placeholderTitle(v,s.key,s.sessionId))
-      ||label||(s.key?.endsWith(':main')?'主会话':'新会话');
-  };
+
+  function title(s) {
+    if (internalRow(s)) return '后台记录';
+    if (s.meta?.source === 'user' && s.label) return s.label;
+    if (!hasMessages(s)) return '新会话';
+    const label = typeof s.label === 'string' ? s.label.trim() : '';
+    if (label && !isBadTitle(label, s.key, s.sessionId)) return label;
+    return s.meta?.channelTitle || (s.key?.endsWith(':main') ? '主会话' : '新会话');
+  }
+
+  async function load(api) {
+    const key = api.mode + '|' + archived;
+    if (loading.has(key) || cache.has(key) && !cache.get(key).stale) return;
+    const version = revision, archiveView = archived;
+    const list = archived => api.gwRequest('sessions.list', {agentId: api.agentId, archived, includeLastMessage: true, limit: 1000});
+    const job = Promise.all([list(archiveView), archiveView ? list(false) : null]);
+    loading.set(key, job);
+    try {
+      const [data, active] = await job;
+      const owned = s => s.key?.startsWith('agent:' + api.agentId + ':') && !s.key.includes(':subagent:');
+      const rows = (data.sessions || []).filter(owned);
+      const activeRows = (active?.sessions || []).filter(owned);
+      const keys = [...new Set([...rows, ...activeRows].map(s => s.key))];
+      const metadata = await api.gwRequest('pinkie.session.title.metadata', {keys}).catch(() => null);
+      if (version !== revision) return;
+      for (const s of [...rows, ...activeRows]) s.meta = metadata?.rows?.[s.key];
+      cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(internalRow)] : rows, at: Date.now()});
+    } catch (error) {
+      if (version !== revision) return;
+      cache.set(key, {rows: cache.get(key)?.rows || [], error: error.message, at: Date.now()});
+      if (current?.api.mode === api.mode) api.toast('会话列表暂未刷新：' + error.message);
+    } finally {
+      if (loading.get(key) === job) loading.delete(key);
+      signature = '';
+      if (current) render(current.section, current.api);
+    }
+  }
+
+  function ensureVisibleTitles(groups, rows, api) {
+    if (archived) return;
+    const visible = new Set([...groups.querySelectorAll('.session-row-host')].map(node => node.dataset.sessionKey));
+    const candidates = rows.filter(s => visible.has(s.key) && hasMessages(s) && !internalRow(s)
+      && !['user', 'auto', 'system'].includes(s.meta?.source));
+    candidates.sort((a, b) => Number(isBadTitle(b.label, b.key, b.sessionId)) - Number(isBadTitle(a.label, a.key, a.sessionId)));
+    const keys = [];
+    for (const s of candidates) {
+      const marker = JSON.stringify([s.sessionId, s.label, s.lastActivityAt || s.updatedAt]);
+      if (requestedTitles.get(s.key) === marker) continue;
+      if (requestedTitles.size >= 1500) requestedTitles.delete(requestedTitles.keys().next().value);
+      requestedTitles.set(s.key, marker);
+      keys.push(s.key);
+    }
+    for (let offset = 0; offset < keys.length; offset += 20) {
+      void api.gwRequest('pinkie.session.title.ensure', {keys: keys.slice(offset, offset + 20)}).catch(() => {});
+    }
+  }
   function row(s,api){
     const n=el('div','sidebar-recent-session session-row-host');n.dataset.sessionKey=s.key;
     n.classList.toggle('sidebar-recent-session--active',s.key===api.currentKey);
@@ -57,7 +99,7 @@
     const head=el('div','laolao-group__head');const collapsed=!!api.state.collapsed[id];
     const toggle=button(collapsed?'›':'⌄',(collapsed?'展开':'收起')+name,()=>api.toggleGroup(id));toggle.classList.add('laolao-group__toggle');toggle.setAttribute('aria-expanded',String(!collapsed));
     const label=el('span','laolao-group__label',name);label.onclick=()=>api.toggleGroup(id);
-    head.append(toggle,label,el('span','laolao-group__count',String(rows.length||'')));
+    head.append(toggle,label,el('span','laolao-group__count',String(rows.filter(hasMessages).length||'')));
     if(project){
       const add=button('＋','在项目「'+name+'」中新建会话',async()=>{add.disabled=true;try{await api.createProjectSession(name);}finally{add.disabled=false;}});add.classList.add('laolao-group__action');
       const settings=button('⋯','管理项目「'+name+'」',e=>api.openProjectSettings(e.currentTarget,name));settings.classList.add('laolao-group__action');head.append(add,settings);
@@ -99,7 +141,8 @@
       deleteAll.classList.add('laolao-managed-button--danger');controls.append(deleteAll);
     }
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
-    const filtered=rows.filter(s=>title(s).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    const filtered=rows.filter(s=>(archived || !internalRow(s) && (s.key === api.currentKey || hasMessages(s)))
+      && title(s).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     if(archived)groups.append(group('__archive','已归档',filtered,api));
     else{
       const pinned=filtered.filter(s=>api.state.pins.includes(s.key));if(pinned.length)groups.append(group('__pins','置顶',pinned,api));
@@ -117,6 +160,7 @@
       if(recent.length>limit)groups.append(button('显示更多会话','显示更多当前模式会话',()=>{limit+=30;signature='';render(section,api);}));
     }
     if(old)old.replaceWith(groups);else host.append(groups);
+    ensureVisibleTitles(groups, filtered, api);
   }
   function chooseFolder(value,request){
     return new Promise(resolve=>{
@@ -130,7 +174,7 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle};
   let refreshTimer;
   window.addEventListener('laolao:sessions-changed',()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(invalidate,250);});
   setInterval(()=>{if(current&&!document.hidden)invalidate();},20000);
