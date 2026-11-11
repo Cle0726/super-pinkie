@@ -228,3 +228,25 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar :is(.sidebar-
 @media (prefers-reduced-motion: reduce) {
   html[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav, .sb-glide { transition: none; }
 }
+
+/* S4/S5/K7: the selected row and the four session states share theme tokens. */
+html .sidebar { --sb-x:12px; --sb-active:rgba(217,80,141,.10); --sb-status-waiting:#e0a030; --sb-status-error:#d9534f; --sb-status-running:#d9508d; --sb-status-contrast:#fff; }
+html[data-pinkie-night] .sidebar { --sb-active:rgba(255,140,190,.14); --sb-status-waiting:#f2b84b; --sb-status-error:#ff6b6b; --sb-status-running:#ff8cbe; --sb-status-contrast:#241b23; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .laolao-group__head { padding-inline:var(--sb-x) !important; }
+html .sidebar #laolao-session-manager .pinkie-project-heading .laolao-group__add-project:not(#_sb) { opacity:0 }
+html .sidebar #laolao-session-manager .pinkie-project-heading:is(:hover,:focus-within) .laolao-group__add-project:not(#_sb) { opacity:.8 }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session__name { margin-left:0 !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active { background:var(--sb-active) !important;box-shadow:none !important;font-weight:600; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active::before { left:0;width:2px;height:18px; }
+html .sidebar .pinkie-session-status--running { color:var(--sb-status-running) }
+html .sidebar .pinkie-session-status--waiting { color:var(--sb-status-waiting) }
+html .sidebar .pinkie-session-status--error { color:var(--sb-status-error) }
+html .sidebar .pinkie-session-status--running svg { stroke-width:2.4 }
+html .sidebar :is(.pinkie-session-status--waiting,.pinkie-session-status--error) svg path:first-child { fill:currentColor;stroke:currentColor }
+html .sidebar :is(.pinkie-session-status--waiting,.pinkie-session-status--error) svg path:last-child { fill:none;stroke:var(--sb-status-contrast);stroke-width:2.2 }
+html .sidebar .pinkie-session-unread { background:var(--sb-status-running) }
+html .sidebar #laolao-session-manager .pinkie-session-fold { min-width:28px;height:28px;margin-left:6px;padding:0;border:0;background:transparent;font-size:11px; }
+html .sidebar #laolao-session-manager .pinkie-session-fold__count { display:inline-block;min-width:20px;height:16px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);line-height:16px;text-align:center; }
+html .sidebar #laolao-session-manager .pinkie-session-workers>button { min-height:28px;font-size:12px;opacity:.65 }
+html[data-reduce-motion] .sidebar .pinkie-session-status--running svg,
+html[data-pinkie-reduce-motion] .sidebar .pinkie-session-status--running svg { animation:none }
