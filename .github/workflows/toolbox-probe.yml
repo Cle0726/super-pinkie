@@ -79,4 +79,5 @@ jobs:
             ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.log
             ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.json
             ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.err
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/box/office-stage-*/msiexec.log
           if-no-files-found: warn
