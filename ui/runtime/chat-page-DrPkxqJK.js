@@ -1428,7 +1428,7 @@ Action:
   state.chatMessages = result;
   return result;
 }
-/* pinkie-chat-timeline:v27 */function userText(message = {}) {
+/* pinkie-chat-timeline:v28 */function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
   if (typeof message.text === 'string') return message.text;
   if (!Array.isArray(message.content)) return '';
@@ -2580,6 +2580,16 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
       turnIndex < turnStarts.length - 1
         && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
+  }
+  // The job still in progress is the latest turn plus the runs the user's
+  // follow-ups superseded on the way. Those cards stay open like the latest
+  // one: the 碧琪 skin hides closed finished cards, so a collapsed superseded
+  // card would vanish right after the follow-up.
+  if (pageIsLive) {
+    const processCards = timeline.filter((item) => item?.isProcessCard);
+    for (let index = processCards.length - 2; index >= 0 && processCards[index].processSuperseded; index -= 1) {
+      processCards[index].processCurrent = true;
+    }
   }
   return pagePresentation(timeline);
 }
