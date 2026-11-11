@@ -5,7 +5,8 @@ import {agentOf, channelTitle, isBadTitle, isInternalMessage, isInternalSessionK
   messageText, registerSessionMethod, safeText} from './session-titles.mjs';
 
 // Mode and agent must agree: a search must never accidentally cross modes.
-const MODE_AGENTS = Object.freeze({chat: 'main', project: 'project', ideas: 'thinking', learning: 'learning', none: 'unrestricted'});
+const MODE_AGENTS = Object.freeze({chat: 'main', project: 'project', thinking: 'thinking', ideas: 'thinking',
+  learning: 'learning', unrestricted: 'unrestricted', none: 'unrestricted'});
 const CANONICAL = new Set(['message', 'thinking_level_change', 'model_change', 'compaction',
   'branch_summary', 'custom', 'custom_message', 'label', 'session_info']);
 const SEARCH_TIMEOUT_MS = 1500;

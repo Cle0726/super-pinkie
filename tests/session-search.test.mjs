@@ -37,6 +37,11 @@ test('searches the requested mode, title and visible text, with archived opt-in 
   assert.deepEqual(all.results.map(r => r.key), ['agent:main:visible', 'agent:main:archived']);
   assert.equal(all.results[1].archived, true);
   assert.equal((await f.search.search(ask('深海计划', {mode: 'project'}))).ok, false);
+  f.add('agent:thinking:visible', [msg('t', null, 'user', '想法模式关键词')]);
+  for (const mode of ['thinking', 'ideas']) {
+    const ideas = await f.search.search({agentId: 'thinking', mode, query: '想法模式关键词'});
+    assert.equal(ideas.results[0].key, 'agent:thinking:visible');
+  }
 });
 
 test('only searches the selected branch and excludes tools, thinking and internal messages', async t => {
