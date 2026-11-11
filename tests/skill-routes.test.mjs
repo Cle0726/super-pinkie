@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {SKILL_ROUTES, readRange, resolveSkillFile, routeSkills, skillRouteBlock} from '../services/mode-architecture/skill-routes.mjs';
 import {classifyWorkKind} from '../services/mode-architecture/work-kinds.mjs';
 
@@ -212,7 +212,7 @@ test('the Windows build layout (repo services + Mac snapshot overlay) routes too
   t.after(() => fs.rmSync(ws, {recursive: true, force: true}));
   fs.mkdirSync(path.join(ws, 'persona'), {recursive: true});
   const script = `
-    const {ModeArchitecture} = await import(${JSON.stringify(path.join(stage, 'mode-architecture/index.mjs'))});
+    const {ModeArchitecture} = await import(${JSON.stringify(pathToFileURL(path.join(stage, 'mode-architecture/index.mjs')).href)});
     const warn = console.warn; let warned = ''; console.warn = (...a) => { warned += a.join(' '); };
     const c = new ModeArchitecture().prompt({prompt: '做个记账网页', messages: []}, {agentId: 'main', sessionKey: 'agent:main:w', workspaceDir: ${JSON.stringify(ws)}}).appendSystemContext;
     console.warn = warn;

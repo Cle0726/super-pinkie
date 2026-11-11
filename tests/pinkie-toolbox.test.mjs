@@ -100,7 +100,8 @@ test('ensure records a verified tool without overwriting the user notes', t => {
   assert.match(text, /^我的自定义记录\n/);
   assert.equal((text.match(/<!-- pinkie-toolbox:start -->/g) || []).length, 1);
   assert.equal((text.match(/- node:/g) || []).length, 1);
-  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  // Windows 没有 Unix 权限位，只在 Mac / Linux 上核对
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
 });
 
 test('all four bundled workspaces use exactly the tested toolbox source', () => {
