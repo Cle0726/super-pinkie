@@ -1577,10 +1577,21 @@ export function withRecordedUserOrder(source) {
   return source.replace(pattern, (_, head, fn) => `${head}${recordedUserOrderMarker}(String(e.message?.role||\`\`).toLowerCase()===\`user\`&&Number.isFinite(e.message?.__openclaw?.recordTimestampMs)?e.message.__openclaw.recordTimestampMs:${fn}(e.message));`);
 }
 
+/** While a steered run is live the runtime briefly holds two copies of the
+ *  follow-up with one idempotency key; native chat folded them as "×2", as
+ *  if the user had sent it twice. One send stored twice folds without a count. */
+const sameSendFoldMarker = '/*pinkie-same-send-fold:v1*/';
+export function withSameSendFold(source) {
+  if (source.includes(sameSendFoldMarker)) return source;
+  const pattern = /(let [\w$]+=[\w$]+\(([\w$]+)\.message\),[\w$]+=[\w$]+\(\2\.message\),([\w$]+)=[\w$]+\[[\w$]+\.length-1\];[^;]{0,200}?;?continue\}if\([\w$]+&&[\w$]+===[\w$]+&&\3\?\.kind===`message`&&!\([\w$]+&&[\w$]+&&[\w$]+!==[\w$]+\)\)\{)(\3\.duplicateCount=\(\3\.duplicateCount\?\?1\)\+1;continue\})/gu;
+  if ((source.match(pattern) || []).length !== 1) return source;
+  return source.replace(pattern, (_, head, item, last, count) => `${head}${sameSendFoldMarker}if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||\`\`;return!!k(x)&&k(x)===k(y)})(${last}.message,${item}.message))continue;${count}`);
+}
+
 function transformBundle(original) {
   const result = transformBundleCore(original);
   if (!result.text.includes(marker)) return result;
-  const text = withRecordedUserOrder(withMediaCaptionPlaceholder(withEarlyUserEcho(result.text)));
+  const text = withSameSendFold(withRecordedUserOrder(withMediaCaptionPlaceholder(withEarlyUserEcho(result.text))));
   if (text === result.text) return result;
   return {text, changed: true, reason: result.changed ? result.reason : 'send-path-updated'};
 }
