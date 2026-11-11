@@ -13,7 +13,8 @@
     ],
     "digests": {
       "darwin-arm64": "sha256-SETY3BwtHcjR3KC8E0H7/qd7stEmFOpSWQaB24oY1EQ=",
-      "darwin-x64": "sha256-8qq3MUaTFRHUgHarai5SDmDwbqhq0RNOCIBlJuZodrI="
+      "darwin-x64": "sha256-8qq3MUaTFRHUgHarai5SDmDwbqhq0RNOCIBlJuZodrI=",
+      "win32-x64": "sha256-FsvEsjymI1UCw7O1wAawrB4FStcm7ELzwCmOJtWMGHs="
     }
   },
   "uv": {
