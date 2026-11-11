@@ -105,13 +105,18 @@ const unquote = value => value.trim().replace(/^["'“”‘’「」『』《�
 const looksInjected = value => INJECTION.test(value);
 const usesCjk = value => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(value);
 
+const cjkTitleWeight = value => {
+  const latin = value.match(/[A-Za-z0-9]+/g) || [];
+  return graphemeCount(value.replace(/[A-Za-z0-9]+/g, '').replace(/\s+/gu, ''), 64) + latin.reduce((sum, word) => sum + Math.ceil(word.length / 3), 0);
+};
+
 export function validateTitle(raw, sources = []) {
   if (typeof raw !== 'string' || /[\r\n\u2028\u2029\uD800-\uDFFF\uFFFD]/u.test(raw)) return '';
   const title = unquote(safeText(raw)).normalize('NFC');
   if (isBadTitle(title) || /(?:抱歉|无法|作为\s*AI|\bas an AI\b|\bI(?:\s+(?:can['’]t|cannot|am sorry)|['’]m sorry)|^(?:标题|title)\s*[:：])/iu.test(title)) return '';
   if (/["“”「」『』《》。\p{Extended_Pictographic}]|\p{Cc}|[.!?！？]$/u.test(title)) return '';
-  const limit = usesCjk(title) ? 16 : 48;
-  if (graphemeCount(title, limit) > limit) return '';
+  // 中英混写时一个英文词约等于两三个汉字宽：按「汉字 1、英文每 3 个字母 1」算，免得「Mac 上 VMware 实训方案」被误拒。
+  if (usesCjk(title) ? cjkTitleWeight(title) > 16 : graphemeCount(title, 48) > 48) return '';
   const candidate = title.replace(/(?:…|\.{3})$/u, '').trim().toLowerCase();
   for (const source of sources) {
     const input = source.toLowerCase();
