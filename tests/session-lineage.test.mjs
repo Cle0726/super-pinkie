@@ -44,7 +44,7 @@ test('startup migrates old minimal profiles once using the runtime config writer
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'session-lineage-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
-  const entries = new Map(), bindings = new Map(), running = new Set(), stopped = new Set(), sent = [];
+  const entries = new Map(), bindings = new Map(), running = new Set(), stopped = new Set(), sent = [], histories = new Map();
   const records = new Map(), notices = [], calls = [], scheduled = [];
   let now = 10_000;
   function add(key, props = {}) {
@@ -59,6 +59,7 @@ function fixture(t) {
     async rpc(method, params) {
       calls.push([method, params]);
       if (method === 'sessions.list') return {sessions: [...entries.values()].map(entry => ({...entry, hasActiveRun: running.has(entry.key)}))};
+      if (method === 'chat.history') return {messages: histories.get(params.sessionKey) || []};
       if (method === 'sessions.create') {
         if ([...entries.values()].some(entry => entry.label === params.label)) throw new Error('label already in use');
         const child = add(params.key, {parentSessionKey: params.parentSessionKey, label: params.label});
@@ -87,7 +88,7 @@ function fixture(t) {
   schedule: task => { scheduled.push(task); return {unref() {}}; }};
   const api = {logger: {warn: text => notices.push(text)}};
   const lineage = new SessionLineage(api, options);
-  return {root, api, options, lineage, entries, bindings, running, stopped, sent, records, notices, calls,
+  return {root, api, options, lineage, entries, bindings, running, stopped, sent, histories, records, notices, calls,
     scheduled, add, advance: ms => { now += ms; }};
 }
 
@@ -140,6 +141,40 @@ test('card.get returns the exact full child brief before confirmation and stays 
   assert.match(f.lineage.card(parent, '').error, /找不到/);
   await f.lineage.act(parent, offer.id, 'start');
   assert.equal(f.sent[0].message, full.card.prompt);
+});
+
+test('proposal anchors track the last assistant of their run and survive reload', async t => {
+  const f = fixture(t), runId = 'human-run-1';
+  f.lineage.begin({runId, prompt: '需要一个子会话'}, {sessionKey: parent});
+  const proposal = await f.lineage.start(parent, runId, {...request, initiation: 'offer'}, 'proposal');
+  assert.equal((await f.lineage.cards(parent)).cards[0].anchor, null);
+  f.histories.set(parent, [
+    {role: 'user', content: '上轮', __openclaw: {id: 'old-user', idempotencyKey: 'old:user'}},
+    {role: 'assistant', content: '上轮回答', timestamp: 10, __openclaw: {id: 'old-answer'}},
+    {role: 'user', content: '这一轮', __openclaw: {id: 'new-user', idempotencyKey: runId + ':user'}},
+    {role: 'assistant', content: '这一轮的最后回复', timestamp: 20, __openclaw: {id: 'new-answer'}},
+    {role: 'user', content: '下一轮', __openclaw: {id: 'later-user', idempotencyKey: 'later:user'}},
+    {role: 'assistant', content: '下一轮回复', timestamp: 30, __openclaw: {id: 'later-answer'}},
+  ]);
+  await f.lineage.ended({success: true, runId, messages: [{role: 'assistant', content: '这一轮的最后回复', timestamp: 20}]}, {sessionKey: parent});
+  const reloaded = new SessionLineage(f.api, f.options);
+  assert.deepEqual((await reloaded.cards(parent)).cards.find(card => card.id === proposal.id).anchor, {runId, entryId: 'new-answer'});
+  assert.deepEqual(reloaded.card(parent, proposal.id).card.anchor, {runId, entryId: 'new-answer'});
+});
+
+test('reports anchor to the latest parent message and old cards retain a null fallback', async t => {
+  const f = fixture(t);
+  const child = await f.lineage.start(parent, 'human', request, 'child-with-report');
+  f.histories.set(parent, [
+    {role: 'user', content: '父消息', __openclaw: {id: 'parent-user', idempotencyKey: 'parent-run:user'}},
+    {role: 'assistant', content: '父回答', __openclaw: {id: 'parent-answer'}},
+  ]);
+  await finishChild(f, child.key, f.sent[0].idempotencyKey, '子会话汇报');
+  const card = (await f.lineage.cards(parent)).cards.find(item => item.kind === 'report');
+  assert.deepEqual(card.anchor, {runId: 'parent-run', entryId: 'parent-answer'});
+  f.lineage.updateState(parent, state => ({...state, cards: [...state.cards,
+    {id: 'old', kind: 'report', title: '旧汇报', text: '旧内容', createdAt: 1}]}));
+  assert.equal((await f.lineage.cards(parent)).cards.find(item => item.id === 'old').anchor, null);
 });
 
 test('offer may continue in the parent as a user message without creating a child', async t => {
