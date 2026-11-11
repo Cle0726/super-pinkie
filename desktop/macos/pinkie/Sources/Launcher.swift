@@ -1970,6 +1970,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var window: NSWindow?
     private var webView: WKWebView?
     private var windowDragArea: WindowDragArea?
+    private lazy var pinkieNative: PinkieNativeBridge = {
+        let bridge = PinkieNativeBridge()
+        bridge.mainWebView = { [weak self] in self?.webView }
+        bridge.mainWindow = { [weak self] in self?.window }
+        return bridge
+    }()
     // The companion is deliberately another WKWebView inside the *same*
     // native window. It keeps a second mode/session truly independent while
     // the two chats stay visible as a real left/right split instead of a
@@ -2573,6 +2579,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         NSApp.activate(ignoringOtherApps: true)
 
         showStartupScreen()
+        _ = pinkieNative // menu bar icon + global hotkey come up with the window
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             BundledSetup.apply()
             DispatchQueue.main.async {
@@ -2612,6 +2619,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         controller.add(self, name: "laolaoParty")
         controller.add(self, name: "laolaoRoundtable")
         controller.add(self, name: "pinkieMotion")
+        controller.add(self, name: PinkieNativeBridge.handlerName)
         controller.addUserScript(WKUserScript(
             source: nativeDictationBridge,
             injectionTime: .atDocumentEnd,
@@ -4637,6 +4645,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         guard trustedFrame(message.frameInfo) else { return }
         let sourceWebView = message.webView ?? webView
+        if message.name == PinkieNativeBridge.handlerName {
+            if let body = message.body as? [String: Any] { pinkieNative.handle(body, from: sourceWebView) }
+            return
+        }
         if message.name == "pinkieMotion" {
             // The in-app 减少动效 switch, not the OS flag, drives native motion too.
             if let body = message.body as? [String: Any], let reduce = body["reduce"] as? Bool { PinkieMotion.reduce = reduce }

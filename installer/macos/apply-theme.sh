@@ -9,7 +9,7 @@ ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 PINKIE_NATIVE_SOURCE_DIR="$REPO_ROOT/desktop/macos/pinkie/Sources"
 LAUNCHER_SOURCE="$PINKIE_NATIVE_SOURCE_DIR/Launcher.swift"
-LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift")
+LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -99,7 +99,8 @@ rebuild_launcher_if_needed() {
     && strings "$target_file" | grep -Fq 'laolaoRoundtable' \
     && strings "$target_file" | grep -Fq 'laolaoWorkspaceDock' \
     && strings "$target_file" | grep -Fq 'laolaoBrowserWorkspace' \
-    && strings "$target_file" | grep -Fq 'laolaoMaterialPreview'; then
+    && strings "$target_file" | grep -Fq 'laolaoMaterialPreview' \
+    && strings "$target_file" | grep -Fq 'pinkieNative'; then
     return 0
   fi
 
@@ -107,8 +108,10 @@ rebuild_launcher_if_needed() {
   xcrun swiftc -parse-as-library -O "${LAUNCHER_SUPPORT_SOURCES[@]}" "$source_file" \
     -framework AppKit \
     -framework AVFoundation \
+    -framework Carbon \
     -framework Foundation \
     -framework Speech \
+    -framework UserNotifications \
     -framework WebKit \
     -o "$temp_binary"
   chmod 755 "$temp_binary"
@@ -231,7 +234,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/first-person-renderer/$service_file" \
       "$bundled_root/services/first-person-renderer/$service_file"
   done
-  for service_file in index.mjs memory.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs reasoning.mjs work-kinds.mjs skill-routes.mjs background-jobs.mjs work-status.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs reply-styles.json session-prefs.mjs reasoning.mjs work-kinds.mjs skill-routes.mjs background-jobs.mjs work-status.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
     if [[ -f "$REPO_ROOT/services/mode-architecture/$service_file" ]]; then
       copy_if_changed \
         "$REPO_ROOT/services/mode-architecture/$service_file" \
