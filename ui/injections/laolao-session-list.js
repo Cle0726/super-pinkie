@@ -8,7 +8,7 @@
   function invalidate(){for(const entry of cache.values())entry.stale=true;revision++;signature='';if(current)void load(current.api);}
   const requestedTitles = new Map(), clearingUnread = new Set();
   const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
-  const internalRow = s => Boolean(s.meta?.internal) || internalKey(s.key);
+  const internalRow = s => internalKey(s.key) || !s.lineage?.parentKey && Boolean(s.meta?.internal);
   const isPersona = key => /:subagent:/iu.test(key || '');
   const parentOf = s => {
     if (s.lineage?.detached) return '';
