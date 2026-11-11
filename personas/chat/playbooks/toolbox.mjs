@@ -131,13 +131,23 @@ function ensurePython() {
   if (!space.ok) return space;
   let base = findPython();
   const steps = [];
-  if (!base) {
-    const uv = NO_SYSTEM ? '' : which('uv');
-    if (uv && !OFFLINE) {
+  if (!base && !OFFLINE) {
+    let uv = (NO_SYSTEM ? '' : which('uv')) || boxUv();
+    if (!uv) {
+      const fetched = installUv();
+      if (fetched.ok) uv = fetched.path;
+      else steps.push(['下载 uv', {ok: false, err: fetched.note}]);
+    }
+    if (uv) {
       fs.mkdirSync(BOX, {recursive: true});
-      const uvEnv = {UV_PYTHON_INSTALL_DIR: path.join(BOX, 'python'), UV_CACHE_DIR: path.join(BOX, 'cache', 'uv'), UV_NO_CONFIG: '1',
-        UV_PYTHON_INSTALL_MIRROR: undefined, UV_PYTHON_DOWNLOADS_JSON_URL: undefined, UV_INSECURE_HOST: undefined};
-      steps.push(['下载独立 Python', run(uv, ['python', 'install', '--no-bin', MANIFEST.pythonVersion], {timeout: 900_000, env: uvEnv})]);
+      // uv 自己按内置清单核对 Python 安装包的 SHA-256，换镜像不影响校验。
+      for (const mirror of MANIFEST.uv.pythonMirrors) {
+        const uvEnv = {UV_PYTHON_INSTALL_DIR: path.join(BOX, 'python'), UV_CACHE_DIR: path.join(BOX, 'cache', 'uv'), UV_NO_CONFIG: '1',
+          UV_PYTHON_INSTALL_MIRROR: mirror || undefined, UV_PYTHON_DOWNLOADS_JSON_URL: undefined, UV_INSECURE_HOST: undefined, UV_HTTP_TIMEOUT: '30'};
+        const installed = run(uv, ['python', 'install', '--no-bin', MANIFEST.pythonVersion], {timeout: 900_000, env: uvEnv});
+        steps.push(['下载独立 Python', installed]);
+        if (installed.ok) break;
+      }
       base = findPython();
     }
   }
@@ -148,6 +158,35 @@ function ensurePython() {
   info = pythonInfo(venv);
   if (info) { ledger(path.join(BOX, 'venv'), '碧琪工具箱的 Python 环境'); return {ok: true, ...info, how: 'installed'}; }
   return {ok: false, how: 'failed', note: lastError(steps) || '没有找到 Python 3.11 以上，也没有可用的 uv；需要先提供碧琪自带的 Python。'};
+}
+// uv 免安装版：PyPI 上的 uv 发行包本身就是一个 zip，里面带可执行文件。固定版本和 SHA-256，国内 PyPI 镜像排前面。
+// 这一步还没有 Python，所以用系统自带的解压工具（Mac 的 unzip，Windows 10 起自带的 tar）。
+function boxUv() {
+  const file = path.join(BOX, 'bin', WIN ? 'uv.exe' : 'uv');
+  return exists(file) && run(file, ['--version'], {timeout: 20_000}).ok ? file : '';
+}
+function installUv() {
+  const artifact = MANIFEST.uv?.files?.[browserKey()];
+  if (!artifact) return {ok: false, note: '这类电脑没有可校验的 uv 版本。'};
+  const name = path.basename(artifact.path);
+  const downloaded = downloadArtifact(name, MANIFEST.uv.mirrors.map(base => `${base}${artifact.path}`), artifact.integrity, 64 * 1024 * 1024);
+  if (!downloaded.ok) return downloaded;
+  const member = `uv-${MANIFEST.uv.version}.data/scripts/${WIN ? 'uv.exe' : 'uv'}`;
+  fs.mkdirSync(BOX, {recursive: true});
+  const stage = fs.mkdtempSync(path.join(BOX, 'uv-stage-'));
+  try {
+    const unpacked = WIN ? run(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', downloaded.path, '-C', stage, member], {timeout: 120_000})
+      : run('/usr/bin/unzip', ['-q', '-o', downloaded.path, member, '-d', stage], {timeout: 120_000});
+    const extracted = path.join(stage, ...member.split('/'));
+    if (!unpacked.ok || !exists(extracted)) return {ok: false, note: `uv 解压失败：${firstLine(unpacked.err).slice(0, 120)}`};
+    const target = path.join(BOX, 'bin', WIN ? 'uv.exe' : 'uv');
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.copyFileSync(extracted, target);
+    if (!WIN) fs.chmodSync(target, 0o755);
+    if (!run(target, ['--version'], {timeout: 20_000}).ok) { fs.rmSync(target, {force: true}); return {ok: false, note: 'uv 下载了但启动不了。'}; }
+    ledger(target, 'uv（用来下载独立 Python）');
+    return {ok: true, path: target};
+  } finally { fs.rmSync(stage, {recursive: true, force: true}); }
 }
 function lastError(steps) {
   const failed = steps.filter(([, result]) => result && !result.ok).at(-1);
@@ -206,12 +245,44 @@ function screenshotProbe(python) {
   try { size = fs.statSync(out).size; fs.unlinkSync(out); } catch {}
   return probe.ok && size > 1500 ? {ok: true, browser: firstLine(probe.out)} : {ok: false, note: firstLine(probe.err).slice(0, 200)};
 }
+// 整个目录的指纹：每个文件的相对路径 + SHA-256，排序后再算一次 SHA-256。浏览器内核是一整个目录，只校验主程序不够。
+export function treeDigest(root, skip = new Set()) {
+  const rows = [];
+  const walk = dir => {
+    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(root, full).split(path.sep).join('/');
+      if (skip.has(rel)) continue;
+      if (entry.isSymbolicLink()) rows.push(`${rel}\0link:${fs.readlinkSync(full).split(path.sep).join('/')}`);
+      else if (entry.isDirectory()) walk(full);
+      else if (entry.isFile()) rows.push(`${rel}\0${crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex')}`);
+    }
+  };
+  walk(root);
+  return `sha256-${crypto.createHash('sha256').update(rows.sort().join('\n')).digest('base64')}`;
+}
+const BROWSER_MARKERS = new Set(['INSTALLATION_COMPLETE', 'DEPENDENCIES_VALIDATED']);
+function browserDir() { return path.join(BOX, 'browsers', MANIFEST.browser.dir); }
+function browserKey() { return `${process.platform}-${process.arch}`; }
+
+// 浏览器内核：用工具箱里固定版本的 playwright 自己的下载器装 headless 内核（版本跟着 playwright 包走，包本身已按哈希安装），
+// 装完对整个目录算指纹，和清单里在干净机器上实测得到的指纹比对；对不上就删掉，不拿来用。
 function installBrowser(python) {
-  const key = `${process.platform}-${process.arch}`;
-  const artifact = MANIFEST.browserArtifacts?.[key];
-  if (!artifact || !artifact.sha256) return {ok: false, note: '没有可校验的浏览器安装包，暂时不能自动下载。'};
   if (OFFLINE) return {ok: false, note: '当前为离线检查，没有可用浏览器内核。'};
-  return {ok: false, note: '浏览器安装包尚未接入解压和自检，暂时不能自动安装。'};
+  const expected = MANIFEST.browser?.digests?.[browserKey()];
+  if (!expected) return {ok: false, note: '这类电脑还没有核对过的浏览器内核版本，暂时不能自动下载。'};
+  const dir = browserDir();
+  const errors = [];
+  for (const host of MANIFEST.browser.hosts) {
+    if (exists(dir)) fs.rmSync(dir, {recursive: true, force: true});
+    const installed = run(python, ['-m', 'playwright', 'install', 'chromium-headless-shell'],
+      {timeout: 900_000, env: {PLAYWRIGHT_DOWNLOAD_HOST: host || undefined, PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '30000'}});
+    if (!installed.ok || !exists(dir)) { errors.push(firstLine(installed.err || installed.out) || '下载没有完成'); continue; }
+    if (treeDigest(dir, BROWSER_MARKERS) === expected) { ledger(dir, '无界面浏览器内核'); return {ok: true}; }
+    errors.push('下载的浏览器内核校验不一致');
+  }
+  if (exists(dir)) fs.rmSync(dir, {recursive: true, force: true});
+  return {ok: false, note: `浏览器内核没装上：${errors.at(-1) || '所有下载源都不可用'}`};
 }
 function checkScreenshot() {
   const python = findPython({needVenv: true}) || findPython();
@@ -682,6 +753,13 @@ function main(argv) {
     for (const [name, capability] of Object.entries(MANIFEST.capabilities)) {
       console.log(human ? `${name}\t${capability.what}` : JSON.stringify({capability: name, ...capability}));
     }
+    return 0;
+  }
+  // 维护用：在干净机器上装好浏览器内核后打印目录指纹，填进清单的 browser.digests。
+  if (command === 'browser-digest') {
+    const dir = browserDir();
+    if (!exists(dir)) { console.error(`没有 ${dir}`); return 1; }
+    console.log(JSON.stringify({key: browserKey(), dir: MANIFEST.browser.dir, digest: treeDigest(dir, BROWSER_MARKERS)}));
     return 0;
   }
   if (!['check', 'ensure'].includes(command)) { console.error('用法：node toolbox.mjs check|ensure|list [能力…]'); return 2; }
