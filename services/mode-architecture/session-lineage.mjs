@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {endsWithUserQuestion} from './ask.mjs';
@@ -29,6 +30,12 @@ const runIdOf = (event, ctx) => String(ctx?.runId || event?.runId || '');
 const messageOf = value => value?.message || value;
 const titleFor = (entry, key) => entry?.label && !isBadTitle(entry.label, key, entry.sessionId)
   ? entry.label : channelTitle(entry, key)?.title || '新会话';
+const userBrief = (parentTitle, prompt, forkAt) =>
+  '这是用户亲自开的子会话，任务来自用户本人。\n'
+  + '来自会话：' + parentTitle.replace(/[<>]/g, char => char === '<' ? '\\u003c' : '\\u003e') + '\n'
+  + (forkAt ? '（你继承了父会话到这一条为止的记录，之后的内容你看不到。）\n' : '')
+  + '要做的事：\n' + prompt + '\n'
+  + '做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。';
 
 export const MINIMAL_CHILD_TOOLS = Object.freeze(['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list']);
 
@@ -182,6 +189,51 @@ export class SessionLineage {
     return result;
   }
 
+  async branchTools() {
+    const [sessions, harness] = await Promise.all([
+      this.access.sdk?.('agent-sessions'), this.access.sdk?.('agent-harness-runtime'),
+    ]);
+    if (!sessions?.SessionManager || !harness?.acquireSessionWriteLock) throw new Error('暂时无法从指定消息继承记录');
+    return {SessionManager: sessions.SessionManager, acquireSessionWriteLock: harness.acquireSessionWriteLock};
+  }
+
+  async validateForkAt(entry, forkAt) {
+    const {SessionManager, acquireSessionWriteLock} = await this.branchTools();
+    const lock = await acquireSessionWriteLock({sessionFile: entry.transcript, timeoutMs: 1000});
+    try {
+      const session = SessionManager.open(entry.transcript);
+      const target = session.getBranch().find(item => item.id === forkAt && item.type === 'message'
+        && ['user', 'assistant'].includes(item.message?.role));
+      if (!target) throw new Error('找不到当前分支里的这条消息');
+    } finally { await lock.release(); }
+  }
+
+  async trimChildFork(entry, forkAt) {
+    const {SessionManager, acquireSessionWriteLock} = await this.branchTools();
+    const lock = await acquireSessionWriteLock({sessionFile: entry.transcript, timeoutMs: 1000});
+    let branchFile, temporary;
+    try {
+      const session = SessionManager.open(entry.transcript);
+      const target = session.getBranch().find(item => item.id === forkAt && item.type === 'message'
+        && ['user', 'assistant'].includes(item.message?.role));
+      if (!target) throw new Error('找不到当前分支里的这条消息');
+      const header = session.getHeader();
+      if (!header || header.id !== entry.sessionId) throw new Error('子会话记录暂时不可用');
+      branchFile = session.createBranchedSession(forkAt);
+      if (!branchFile || path.resolve(branchFile) === path.resolve(entry.transcript)) throw new Error('子会话记录暂时不可用');
+      session.rewriteFile();
+      const lines = fs.readFileSync(branchFile, 'utf8').split('\n');
+      lines[0] = JSON.stringify(header);
+      temporary = entry.transcript + '.' + randomUUID() + '.tmp';
+      fs.writeFileSync(temporary, lines.join('\n'), {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temporary, entry.transcript);
+    } finally {
+      if (temporary) fs.rmSync(temporary, {force: true});
+      if (branchFile && path.resolve(branchFile) !== path.resolve(entry.transcript)) fs.rmSync(branchFile, {force: true});
+      await lock.release();
+    }
+  }
+
   async create(parent, request, id) {
     const parentKey = parent.key;
     const agentId = agentOf(parentKey), key = keyFor(parentKey, id);
@@ -193,15 +245,18 @@ export class SessionLineage {
     }
     const binding = (await this.access.rpc('pinkie.project.bind', {key: parentKey})).binding;
     let child = await this.access.entry(key);
+    let created = false;
     if (child && child.parentSessionKey !== parentKey) throw new Error('子会话标识冲突，请重新提出');
     if (!child) {
+      if (request.forkAt) await this.validateForkAt(parent, request.forkAt);
       for (let ordinal = 1; ordinal <= 100; ordinal++) {
-        const label = numberedTitle(request.title, ordinal, 40);
+        const label = request.autoTitle ? undefined : numberedTitle(request.title, ordinal, 40);
         try {
-          const result = await this.access.rpc('sessions.create', {agentId, key, label, parentSessionKey: parentKey,
+          const result = await this.access.rpc('sessions.create', {agentId, key, ...(label ? {label} : {}), parentSessionKey: parentKey,
             ...(request.context === 'fork' ? {fork: true} : {})});
           if (result?.key !== key) throw new Error('网关未返回子会话');
-          child = {label, sessionId: result.sessionId || result.entry?.sessionId};
+          child = {label: result.entry?.label || label, sessionId: result.sessionId || result.entry?.sessionId};
+          created = true;
           break;
         } catch (error) {
           if (/label already in use/i.test(error.message)) continue;
@@ -213,13 +268,26 @@ export class SessionLineage {
       }
     }
     if (!child) throw new Error('找不到可用的子会话名称');
+    if (request.forkAt) {
+      try {
+        const stored = await this.access.entry(key);
+        if (!stored?.transcript) throw new Error('子会话记录暂时不可用');
+        await this.trimChildFork(stored, request.forkAt);
+      } catch (error) {
+        if (created) {
+          try { await this.access.rpc('sessions.delete', {key, agentId, deleteTranscript: true}); }
+          catch { logSessionFailure(this.api, 'session-lineage', key, 'fork-cleanup'); }
+        }
+        throw error;
+      }
+    }
     if (binding) await this.access.rpc('pinkie.project.bind', {key, path: binding.root, name: binding.name});
     const startRun = 'pinkie-child-start-' + nowId(key);
-    this.updateLineage(key, {parentKey, title: child.label || request.title, initiation: request.initiation,
+    this.updateLineage(key, {parentKey, title: child.label || request.title || '新会话', initiation: request.initiation,
       context: request.context, createdAt: already?.createdAt || this.now(), detached: already?.detached || false,
       lastReportAt: already?.lastReportAt || 0, startRun});
-    if (this.titles.record(key)?.source !== 'user') {
-      this.titles.record(key, {title: child.label || request.title, source: 'system'});
+    if (!request.autoTitle && this.titles.record(key)?.source !== 'user') {
+      this.titles.record(key, {title: child.label || request.title, source: request.userAuthored ? 'user' : 'system'});
     }
     this.reserved.set(key, this.now());
     try {
@@ -234,19 +302,42 @@ export class SessionLineage {
       this.notify(parentKey);
       this.notify(key);
     }
-    return {key, title: child.label || request.title};
+    return {key, title: child.label || request.title || '新会话'};
   }
 
   async start(parentKey, runId, input, callId) {
-    const request = normalizeChildRequest(input);
+    return this.startRequest(parentKey, runId, normalizeChildRequest(input), callId);
+  }
+
+  async startUser({parentKey, prompt, title, context, forkAt} = {}) {
+    if (typeof prompt !== 'string' || !prompt.trim() || graphemeCount(prompt, 4000) > 4000) {
+      throw new Error('请填写不超过 4000 字的任务');
+    }
+    if (!CONTEXTS.includes(context)) throw new Error('请选择新上下文或继承父会话');
+    if (title !== undefined && typeof title !== 'string') throw new Error('子会话名称需要 1 到 40 个字');
+    const name = plainText(title).replace(/\s+/gu, ' ');
+    if (graphemeCount(name, 40) > 40) throw new Error('子会话名称需要 1 到 40 个字');
+    if (forkAt !== undefined && (context !== 'fork' || typeof forkAt !== 'string' || !forkAt.trim() || forkAt.length > 512)) {
+      throw new Error('请选择要继承到的消息');
+    }
+    return this.startRequest(parentKey, '', {title: name, prompt, context, forkAt, userAuthored: true,
+      autoTitle: !name, initiation: 'user_asked'});
+  }
+
+  async startRequest(parentKey, runId, input, callId) {
     return this.serial(parentKey, async () => {
       const parent = await this.parentEntry(parentKey);
+      const request = input.userAuthored ? {...input, prompt: userBrief(titleFor(parent, parentKey), input.prompt, input.forkAt)} : input;
       const id = callId ? nowId(parentKey, runId, callId) : randomUUID();
       if (request.initiation === 'user_asked') {
-        if (this.turns.get(parentKey)?.internal) throw new Error('内部通知不能代替用户授权，请先提出提案');
+        if (!request.userAuthored && this.turns.get(parentKey)?.internal) throw new Error('内部通知不能代替用户授权，请先提出提案');
+        if (request.userAuthored && request.context === 'fork') {
+          const rows = await this.activeRows(agentOf(parentKey));
+          if (this.busy(parentKey, rows.get(parentKey))) throw new Error('父会话还在运行，请等这轮结束再继承记录');
+        }
         // A fork needs the parent turn to be quiescent. The launch stays
         // queued against this parent and its original run, using the same key.
-        if (request.context === 'fork' && this.isBusy(parentKey)) {
+        if (!request.userAuthored && request.context === 'fork' && this.isBusy(parentKey)) {
           const rows = await this.activeRows(agentOf(parentKey));
           const key = keyFor(parentKey, id);
           if (this.runningChildren(parentKey, rows) >= MAX_RUNNING && !this.reserved.has(key)) {
@@ -665,6 +756,16 @@ export function registerSessionLineage(api, options) {
   registerSessionMethod(api, 'pinkie.session.card.get', ({key, id}) => {
     try { return lineage.card(key, id); }
     catch { return {ok: false, error: '卡片暂时不可用，请稍后重试'}; }
+  });
+  registerSessionMethod(api, 'pinkie.session.start.user', async params => {
+    try {
+      const {key} = await lineage.startUser(params);
+      return {ok: true, key};
+    } catch (error) {
+      const message = String(error?.message || '');
+      const expected = /^(?:请填写不超过 4000 字的任务|请选择新上下文或继承父会话|请选择要继承到的消息|子会话名称需要 1 到 40 个字|找不到父会话|分身不能再开子会话|子会话里不能再开子会话|请在打开的父会话里操作|父会话还在运行|这个父会话已有 4 个子会话|找不到当前分支里的这条消息|暂时无法从指定消息继承记录|子会话记录暂时不可用|会话消息未送达)/u;
+      return {ok: false, error: expected.test(message) ? message : '子会话没有开成，请稍后再试'};
+    }
   });
   registerSessionMethod(api, 'pinkie.session.card.act', ({key, id, action}) => lineage.act(key, id, action));
   registerSessionMethod(api, 'pinkie.session.detach', ({key}) => lineage.detach(key));

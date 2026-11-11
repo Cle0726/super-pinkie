@@ -63,6 +63,12 @@ test('only searches the selected branch and excludes tools, thinking and interna
   }
   f.add('agent:main:flat', [{type: 'message', message: {role: 'user', content: '旧格式可搜索'}}]);
   assert.equal((await f.search.search(ask('旧格式可搜索'))).results[0].key, 'agent:main:flat');
+  f.add('agent:main:pinkie-child:user', [msg('brief', null, 'user', '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n'
+    + '来自会话：父会话\n要做的事：\n整理春季复习计划\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。')]);
+  const brief = await f.search.search(ask('春季复习计划'));
+  assert.equal(brief.results[0].entryId, 'brief');
+  assert.equal(brief.results[0].snippet, '整理春季复习计划');
+  assert.equal((await f.search.search(ask('任务来自用户本人'))).results.length, 0);
 });
 
 test('literal queries and invalid inputs do not leak paths or widen a search', async t => {
