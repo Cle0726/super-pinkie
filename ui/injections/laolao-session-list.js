@@ -238,6 +238,147 @@
     return (date.getMonth() + 1) + '/' + date.getDate();
   }
 
+  function searchRanges(text, ranges) {
+    const length = String(text || '').length;
+    const valid = (Array.isArray(ranges) ? ranges : [])
+      .filter(range => Array.isArray(range) && Number.isInteger(range[0]) && Number.isInteger(range[1]))
+      .map(([start, end]) => [Math.max(0, start), Math.min(length, end)])
+      .filter(([start, end]) => end > start).sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const [start, end] of valid) {
+      const last = merged[merged.length - 1];
+      if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+      else merged.push([start, end]);
+    }
+    return merged;
+  }
+  function highlightSnippet(node, snippet, ranges) {
+    const text = String(snippet || '');
+    let offset = 0;
+    for (const [start, end] of searchRanges(text, ranges)) {
+      node.append(document.createTextNode(text.slice(offset, start)));
+      node.append(el('mark', '', text.slice(start, end)));
+      offset = end;
+    }
+    node.append(document.createTextNode(text.slice(offset)));
+  }
+  function entryIcon(path) {
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    const shape = document.createElementNS(icon.namespaceURI, 'path');
+    shape.setAttribute('d', path); icon.append(shape);
+    return icon;
+  }
+
+  let searchView = null;
+  function scrollToSearchHit(api, result) {
+    if (!result.entryId && !result.snippet) return;
+    const deadline = Date.now() + 15000;
+    let lastPage = 0;
+    const find = () => {
+      if (current?.api.currentKey !== result.key && new URL(location.href).searchParams.get('session') !== result.key) {
+        if (Date.now() < deadline) return setTimeout(find, 150);
+        return;
+      }
+      const pane = [...document.querySelectorAll('openclaw-chat-pane')].find(item => item.active === true)
+        || document.querySelector('openclaw-chat-pane');
+      if (pane?.state?.sessionKey && pane.state.sessionKey !== result.key) {
+        if (Date.now() < deadline) setTimeout(find, 150);
+        return;
+      }
+      const messages = [...(pane?.querySelectorAll('[data-message-id]') || [])];
+      const target = messages.find(item => [String(result.entryId || ''), 'msg:' + result.entryId,
+        'message:' + result.entryId].includes(item.dataset.messageId))
+        || (result.snippet && messages.find(item => (item.dataset.messageText || '').includes(result.snippet)));
+      if (target) {
+        target.scrollIntoView({block: 'center', behavior: 'auto'});
+        target.classList.add('pinkie-search-hit');
+        setTimeout(() => target.classList.remove('pinkie-search-hit'), 3000);
+        return;
+      }
+      const earlier = pane?.querySelector('[data-pinkie-load-earlier]:not(:disabled)');
+      if (earlier && Date.now() - lastPage > 750) { lastPage = Date.now(); earlier.click(); }
+      if (Date.now() < deadline) setTimeout(find, 150);
+      else api.toast('已打开会话，暂时找不到命中的消息');
+    };
+    setTimeout(find, 100);
+  }
+
+  function openSearch(api) {
+    searchView?.close();
+    const mask = el('div', 'pinkie-session-search-mask');
+    const dialog = el('section', 'pinkie-session-search-dialog');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-label', '搜索当前模式的会话');
+    const input = el('input', 'pinkie-session-search-input');
+    input.type = 'search'; input.placeholder = '搜索当前模式的会话和聊天内容';
+    input.setAttribute('aria-label', '搜索当前模式的会话和聊天内容');
+    const filter = el('label', 'pinkie-session-search-filter');
+    const include = el('input'); include.type = 'checkbox';
+    include.setAttribute('aria-label', '包含已归档会话');
+    filter.append(include, document.createTextNode('含已归档'));
+    const results = el('div', 'pinkie-session-search-results');
+    results.setAttribute('role', 'listbox'); results.setAttribute('aria-label', '搜索结果');
+    const status = el('div', 'pinkie-session-search-status', '输入关键词搜索当前模式');
+    status.setAttribute('role', 'status');
+    dialog.append(input, filter, status, results); mask.append(dialog); document.body.append(mask);
+    let timer = 0, serial = 0, items = [], selected = 0, closed = false;
+    const close = () => { closed = true; serial++; clearTimeout(timer); mask.remove(); if (searchView?.mask === mask) searchView = null; };
+    searchView = {mask, mode: api.mode, close};
+    const open = item => {
+      if (!item) return;
+      close(); api.navigateSession(item.key); scrollToSearchHit(api, item);
+    };
+    function paint() {
+      results.replaceChildren();
+      items.forEach((item, index) => {
+        const row = button('', '打开会话：' + item.title, () => open(item));
+        row.className = 'pinkie-session-search-result';
+        row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(index === selected));
+        row.append(el('span', 'pinkie-session-search-title', item.title || '新会话'));
+        const excerpt = el('span', 'pinkie-session-search-snippet');
+        highlightSnippet(excerpt, item.snippet, item.hitRanges);
+        row.append(excerpt, el('span', 'pinkie-session-search-time', dateLabel(item.updatedAt)));
+        row.onpointermove = () => { if (selected !== index) { selected = index; paint(); } };
+        results.append(row);
+      });
+    }
+    function scheduleSearch() {
+      clearTimeout(timer);
+      const requestId = ++serial, queryText = input.value.trim();
+      items = []; selected = 0; paint();
+      if (!queryText) { status.textContent = '输入关键词搜索当前模式'; return; }
+      status.textContent = '正在搜索…';
+      timer = setTimeout(async () => {
+        try {
+          const reply = await api.gwRequest('pinkie.session.search', {agentId: api.agentId, mode: api.mode,
+            query: queryText, includeArchived: include.checked, limit: 30});
+          if (closed || serial !== requestId) return;
+          if (reply?.ok === false) throw new Error(reply.error || '搜索暂不可用');
+          items = Array.isArray(reply?.results) ? reply.results.filter(item =>
+            String(item?.key || '').startsWith('agent:' + api.agentId + ':')) : [];
+          status.textContent = items.length ? `找到 ${items.length} 条结果` : '没有找到匹配的会话';
+          paint();
+        } catch (error) {
+          if (!closed && serial === requestId) status.textContent = error?.message || '搜索暂不可用';
+        }
+      }, 200);
+    }
+    input.oninput = scheduleSearch; include.onchange = scheduleSearch;
+    mask.onpointerdown = event => { if (event.target === mask) close(); };
+    dialog.onkeydown = event => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (!items.length) return;
+        event.preventDefault(); selected = (selected + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        paint(); results.children[selected]?.scrollIntoView({block: 'nearest'});
+      } else if (event.key === 'Enter' && event.target === input && items.length) { event.preventDefault(); open(items[selected]); }
+    };
+    input.focus();
+  }
+
   function readCurrent(rows, api) {
     const key = api.currentKey;
     const row = rows.find(s => s.key === key && s.unread);
@@ -381,6 +522,7 @@
   }
   function render(section,api){
     current={section,api};
+    if(searchView && searchView.mode!==api.mode)searchView.close();
     if(lastMode!==api.mode){lastMode=api.mode;query='';archived=false;limit=30;signature='';}
     const key=api.mode+'|'+archived;void load(api);
     // Only our DOM is rebuilt. Native list remains mounted and can reconcile safely.
@@ -388,16 +530,25 @@
     document.documentElement.setAttribute('data-laolao-sessions-managed','1');
     let host=section.querySelector('#laolao-session-manager');
     if(!host){host=el('div');host.id='laolao-session-manager';section.append(host);signature='';}
+    const newSession=section.querySelector('.sidebar-new-session:not(.sidebar-new-session--worktree)');
+    if(newSession)newSession.dataset.pinkieShortcut=/Mac|iPhone|iPad/i.test(navigator.platform||'')?'⌘N':'Ctrl+N';
     const cached = cache.get(key);
     const rows = cached?.rows || [];
     const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, new Date().toDateString()]);
     if(signature===next)return;signature=next;
-    let search=host.querySelector('.laolao-session-search');
-    if(!search){search=el('input','laolao-session-search');search.type='search';search.placeholder='搜索当前模式的会话';search.setAttribute('aria-label','搜索当前模式的会话');search.oninput=()=>{query=search.value;signature='';render(current.section,current.api);};}
-    search.value=query;
     let controls=host.querySelector('.laolao-session-controls');
-    if(!controls){controls=el('div','laolao-session-controls');controls.append(search);host.append(controls);}
-    for(const n of [...controls.children])if(n!==search)n.remove();
+    if(!controls){controls=el('div','laolao-session-controls');host.append(controls);}
+    controls.replaceChildren();
+    const search=button('','搜索当前模式的会话',()=>openSearch(api));
+    search.append(entryIcon('M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z'),el('span','','搜索'));
+    search.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--search');
+    const artifacts=button('','打开作品库',()=>{
+      if(window.PinkieArtifacts?.open) window.PinkieArtifacts.open();
+      else api.toast('作品库正在准备中');
+    });
+    artifacts.append(entryIcon('M4 4h16v16H4zM4 9h16M9 9v11'),el('span','','作品'));
+    artifacts.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--artifacts');
+    controls.append(search,artifacts);
     if(archived) controls.append(button('‹ 返回','返回进行中的会话',()=>{archived=false;limit=30;signature='';render(section,api);}));
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     const tree = buildTree(rows, {archive: archived, currentKey: api.currentKey, query});
@@ -445,7 +596,7 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges};
   let refreshTimer;
   function refreshSoon() {
     clearTimeout(refreshTimer);
