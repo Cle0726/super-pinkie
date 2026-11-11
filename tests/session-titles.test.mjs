@@ -90,6 +90,10 @@ test('channel names prefer a real contact label and retain generic fallback', ()
   assert.equal(channelTitle({}, 'agent:main:openclaw-weixin:direct:wxid_test').title, '微信私聊');
   assert.equal(channelTitle({origin: {provider: 'dingtalk', label: '产品讨论', chatType: 'group'}}, key).title, '钉钉 · 产品讨论');
   assert.equal(channelTitle({origin: {provider: 'webchat'}}, feishu), null);
+  const weixin = 'agent:unrestricted:openclaw-weixin:cafbcb49afd1-im-bot:direct:o9cq804zun6a7mvii1crsjh3zpk8@im.wechat';
+  assert.deepEqual(channelTitle({origin: {provider: 'webchat', label: 'o9cq804ZUN6a7MviI1cRSJH3ZPk8@im.wechat', chatType: 'direct'},
+    lastChannel: 'openclaw-weixin', deliveryContext: {channel: 'openclaw-weixin'}}, weixin), {channel: 'openclaw-weixin', title: '微信私聊'});
+  assert.equal(channelTitle({origin: {provider: 'webchat'}, deliveryContext: {channel: 'feishu'}}, weixin), null);
 });
 
 function fixture(t, titleModel = async () => '流式输出消失') {
