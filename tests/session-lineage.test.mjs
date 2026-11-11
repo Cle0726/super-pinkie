@@ -127,6 +127,21 @@ test('proposals await confirmation, survive a new instance, expire and enforce t
   assert.equal((await f.lineage.cards(parent)).cards.find(item => item.id === own.id).state, 'dismissed');
 });
 
+test('card.get returns the exact full child brief before confirmation and stays scoped to the session', async t => {
+  const f = fixture(t);
+  const prompt = '第一行' + '完整内容'.repeat(100) + '\n第二行 <原样保留>';
+  const offer = await f.lineage.start(parent, 'human', {...request, initiation: 'offer', prompt}, 'full-brief');
+  const full = f.lineage.card(parent, offer.id);
+  assert.equal(full.ok, true);
+  assert.equal(full.card.prompt, '【子会话简报】\n' + prompt);
+  assert.ok((await f.lineage.cards(parent)).cards[0].summary.length < full.card.prompt.length);
+  assert.equal(f.lineage.card('agent:project:dashboard:other', offer.id).ok, false);
+  assert.match(f.lineage.card(parent, 'missing').error, /找不到/);
+  assert.match(f.lineage.card(parent, '').error, /找不到/);
+  await f.lineage.act(parent, offer.id, 'start');
+  assert.equal(f.sent[0].message, full.card.prompt);
+});
+
 test('offer may continue in the parent as a user message without creating a child', async t => {
   const f = fixture(t);
   const offer = await f.lineage.start(parent, 'human', {...request, initiation: 'offer'}, 'offer');
