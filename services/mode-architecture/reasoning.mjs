@@ -53,7 +53,7 @@ const FIX_PREFIX = '[pinkie-tier] 交付验收';
 // 网关方法（发送前登记、状态查询）和 Agent 运行时的钩子（注入、回合结束后核对）是插件的两个实例，
 // 内存不共享——旧版 Max/Ultra 的审阅笔记就是因此从来没能交给主模型。待核对的状态必须落盘。
 const FIELDS = ['requestId', 'tier', 'level', 'recipe', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'jobs', 'createdAt', 'updatedAt',
-  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply', 'runId', 'preparedParams', 'preparedResult', 'weight', 'task'];
+  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply', 'runId', 'preparedParams', 'preparedResult', 'weight', 'task', 'runIds'];
 
 export class ReviewStore {
   constructor(root = path.join(openclawStateDir(), 'pinkie-deep-think', 'reviews')) {
@@ -85,7 +85,8 @@ export class ReviewStore {
   get(sessionKey, {requestId = '', runId = ''} = {}) {
     const entries = this.list(sessionKey);
     if (requestId) return entries.find(entry => entry.requestId === requestId) || null;
-    if (runId) return entries.find(entry => entry.runId === runId) || null;
+    // runIds：同一件事的续跑轮（档位续跑、续接保护、交付前提醒）各有自己的 runId，见 beforePromptBuild。
+    if (runId) return entries.find(entry => entry.runId === runId || (Array.isArray(entry.runIds) && entry.runIds.includes(runId))) || null;
     const current = entries.filter(entry => ['answering', 'reviewing', 'fixing'].includes(entry.phase));
     return (current.length ? current : entries).sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0] || null;
   }
@@ -898,7 +899,7 @@ export class ReasoningEnhancer {
       : (runId && this.store.get(sessionKey, {runId}))
         || (fixing.length === 1 ? fixing[0] : null)
         || intents.find(item => item.phase === 'armed' && (!runId || !item.runId || item.runId === runId) && matchesPrompt(item));
-    if (!intent) return;
+    if (!intent) { this.adoptContinuation(sessionKey, prompt, runId, intents); return; }
     // Only an unused selection may expire in work modes. An active review
     // can legitimately need a correction after a long-running task.
     if ((unrestrictedSession(sessionKey) || intent.phase === 'armed') && Date.now() - intent.createdAt > INTENT_TTL_MS) {
@@ -1043,6 +1044,21 @@ export class ReasoningEnhancer {
     this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'failed', endedAt: Date.now(), summary: summaryOf(lastError?.message || '失败'),
       ...(badOutput ? {output: badOutput} : {})});
     return null;
+  }
+
+  // 续跑轮是同一件事的下一段，但带着自己的 runId。验收记录只绑了用户那一轮的 runId，档位任务在续跑里做完时
+  // agentEnded 按 runId 找不到这件事，验收就永远停在 answering（11-11 hy4free 实测：所有带做事档位的任务都没验收，
+  // Gemini 的 r2 也一样）。这里把续跑轮记到这件事上。只认引擎自己的续跑前缀，用户新发的话不算；
+  // 只认会话里最新的那件事，而且它还在等交付。
+  adoptContinuation(sessionKey, prompt, runId, intents = this.store.list(sessionKey)) {
+    if (!runId || unrestrictedSession(sessionKey) || !CONTROL_PROMPT.test(prompt) || prompt.startsWith(FIX_PREFIX)) return false;
+    const latest = intents[intents.length - 1];
+    if (!latest || latest.phase !== 'answering' || !latest.runId || latest.runId === runId) return false;
+    const runIds = Array.isArray(latest.runIds) ? latest.runIds : [];
+    if (runIds.includes(runId)) return false;
+    latest.runIds = [...runIds, runId].slice(-40);
+    this.store.set(latest);
+    return true;
   }
 
   // 主回复结束后调用（index.mjs 在确认没有重试、没有被拦截之后才调用）。
