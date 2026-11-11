@@ -163,6 +163,15 @@
     return roots.filter(root => matches(root.session) || root.children.length || root.workers.length);
   }
 
+  function recentPage(roots, limit, currentKey) {
+    const visible = roots.slice(0, limit);
+    const contains = node => node.session.key === currentKey || node.workers.some(worker => worker.key === currentKey)
+      || node.children.some(child => child.session.key === currentKey || child.workers.some(worker => worker.key === currentKey));
+    const selected = currentKey && roots.find(contains);
+    if (selected && !visible.includes(selected)) visible.push(selected);
+    return visible;
+  }
+
   const foldKey = key => 'pinkie:session-sidebar:fold:' + key;
   const temporaryFolds = new Map();
   function folded(key, fallback) {
@@ -687,7 +696,7 @@
         groups.append(group('proj:' + name, name, projectRows, api, true));
       }
       const recent = tree.filter(node => !assigned.has(node.session.key) && !pinned(node));
-      groups.append(group('__recent', '最近', recent.slice(0, limit), api));
+      groups.append(group('__recent', '最近', recentPage(recent, limit, api.currentKey), api));
       if (recent.length > limit) groups.append(button('显示更多会话', '显示更多当前模式会话', () => {
         limit += 30; signature = ''; render(section, api);
       }));
@@ -709,7 +718,7 @@
       mask.onkeydown=e=>{if(e.key==='Escape')finish(null);};input.focus();
     });
   }
-  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges,nextSelection,handleLinkClick,beginRename};
+  window.PinkieSessionList={render,invalidate,chooseFolder,isBadTitle,buildTree,recentPage,viewChildren,sessionStatus,dateGroup,dateLabel,searchRanges,nextSelection,handleLinkClick,beginRename};
   if(typeof document!=='undefined')document.addEventListener('keydown',event=>{
     if(event.key==='Escape' && selectedKeys.size){selectedKeys.clear();selectionAnchor='';updateSelection();}
     if(!current || !event.target?.closest?.('#laolao-session-manager') || event.target.matches?.('input,textarea,[contenteditable="true"]'))return;

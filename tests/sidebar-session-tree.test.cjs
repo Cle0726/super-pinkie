@@ -60,6 +60,16 @@ test('run state takes precedence over waiting and terminal errors', () => {
   assert.equal(sessionStatus({status: 'aborted'}), '');
 });
 
+test('the current parent or child stays in the recent page after the first 30 roots', () => {
+  const roots = build(Array.from({length: 35}, (_, index) => row(`agent:main:item-${index}`, `会话 ${index}`, {updatedAt: 100 - index}))
+    .concat(row(child, '子会话', {parentSessionKey:'agent:main:item-34'})));
+  const page = key => Array.from(window.PinkieSessionList.recentPage(roots, 30, key), item => item.session.key);
+  assert.equal(page('').length, 30);
+  assert.equal(page('agent:main:item-3').length, 30);
+  assert.equal(page('agent:main:item-34').at(-1), 'agent:main:item-34');
+  assert.equal(page(child).at(-1), 'agent:main:item-34');
+});
+
 test('recent dates use local calendar days at the group boundaries', () => {
   const {dateGroup, dateLabel} = window.PinkieSessionList;
   const now = new Date(2026, 10, 11, 0, 5).getTime();
