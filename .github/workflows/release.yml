@@ -20,6 +20,8 @@ jobs:
             echo "Release must run from the tag matching VERSION: v$version" >&2
             exit 1
           fi
+      - name: Require 碧琪-voice release notes for this version (docs/RELEASE-NOTES.md)
+        run: python3 tools/release/release_notes.py check "$GITHUB_REF_NAME"
 
   verify:
     needs: tag
@@ -34,9 +36,11 @@ jobs:
         run: |
           mkdir -p dist
           git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
+      - name: Take this version's notes for the release page
+        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
-          body_path: desktop/windows/release-notes.md
+          body_path: release-body.md
           fail_on_unmatched_files: true
           files: dist/super-pinkie-full-*.zip
 
@@ -178,9 +182,11 @@ jobs:
         with:
           name: macos-release
           path: dist
+      - name: Take this version's notes for the release page
+        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
-          body_path: desktop/windows/release-notes.md
+          body_path: release-body.md
           fail_on_unmatched_files: true
           files: dist/super-pinkie-macos-*.zip
 
@@ -193,9 +199,11 @@ jobs:
         with:
           name: windows-release
           path: dist
+      - name: Take this version's notes for the release page
+        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
-          body_path: desktop/windows/release-notes.md
+          body_path: release-body.md
           fail_on_unmatched_files: true
           files: |
             dist/super-pinkie-windows-*.exe
@@ -222,10 +230,13 @@ jobs:
       - name: Describe every release file in latest.json
         run: |
           git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
-          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" desktop/windows/release-notes.md dist mirror/latest.json
+          python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
+          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" release-body.md dist mirror/latest.json
+      - name: Take this version's notes for the release page
+        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
-          body_path: desktop/windows/release-notes.md
+          body_path: release-body.md
           fail_on_unmatched_files: true
           files: mirror/latest.json
       - name: Copy the release to the China bucket

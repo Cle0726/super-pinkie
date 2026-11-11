@@ -2,6 +2,8 @@
 
 ## 待发布
 
+> 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
+
 ### 2.5.48
 - 代码库瘦身（计划 E）：删掉约 1 万行没人用或重复的代码，功能和用户数据不变。
   - Windows 版不再带一份过期的服务副本：和 Mac 完全相同的 14 个服务文件直接用主线那份；只在 Windows 副本里的修复（工作台用 `explorer.exe` 打开文件、Windows 用 `python`、`PINKIE_PYTHON_BIN`、浏览器说明按平台）并回主线，两边现在跑同一份代码。

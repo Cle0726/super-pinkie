@@ -8,7 +8,21 @@
   const manualUrl = 'https://github.com/Cle0726/super-pinkie/releases/latest';
   // 碧琪的表情贴纸跟着更新阶段换（和过程卡同一套图，放在 control-ui 根目录）。
   const stickers = {check:'thinking', available:'done', current:'writing', download:'working', verify:'thinking',
-    ready:'done', install:'working', error:'oops'};
+    ready:'done', install:'working', error:'oops', installed:'done'};
+  // 更新说明：碧琪口吻的一段摘要 + 细节。细节多时先收着，入口也用碧琪的话（docs/RELEASE-NOTES.md）。
+  const MORE = '听碧琪一件件说', LESS = '先说到这儿';
+  const notesOf = info => {
+    const clean = x => String(x || '').replace(/\s+/g, ' ').trim();
+    let summary = clean(info?.summary);
+    let details = Array.isArray(info?.details) ? info.details.map(clean).filter(Boolean) : [];
+    if (!summary && !details.length) {
+      // 旧版发布正文只有一串行：第一行当摘要。
+      const lines = String(info?.notes || '').split('\n').map(clean).filter(Boolean);
+      summary = lines.shift() || ''; details = lines;
+    }
+    return {summary, details: details.slice(0, 12)};
+  };
+  const ICON_MORE = 'M6 9l6 6 6-6';
   const routeKey = 'pinkie-update-route';
   // 国内网络连 GitHub 常常很慢：第一次打开时，时区在国内就默认走国内线路；用户选过就记住。
   const defaultRoute = () => {
@@ -72,7 +86,9 @@
         <div class="pinkie-upd__track" role="progressbar" aria-label="更新进度" aria-valuemin="0" aria-valuemax="100"><div></div></div>
         <p class="pinkie-upd__detail"><span></span><span></span></p>
       </div>
-      <div class="pinkie-upd__notes" hidden><h3>这次更新了什么</h3><ul></ul></div>
+      <div class="pinkie-upd__notes" hidden><h3>碧琪的新变化</h3>
+        <p class="pinkie-upd__summary"><span></span><button type="button" class="pinkie-upd__more" aria-expanded="false" aria-controls="pinkie-upd-details"><span>${MORE}</span>${icon(ICON_MORE)}</button></p>
+        <ul id="pinkie-upd-details"></ul></div>
       <p class="pinkie-upd__reassure">${icon(ICON_SHIELD)}<span>安装时会暂时退出，<strong>你的记忆和设置不会丢。</strong></span></p>
       <div class="pinkie-upd__actions"><a class="pinkie-upd__manual" href="${manualUrl}" target="_blank" rel="noopener noreferrer" hidden>手动下载</a><button type="button" class="pinkie-upd__switch" hidden>换国内线路</button><button type="button" class="pinkie-upd__later">稍后再说</button><button type="button" class="pinkie-upd__primary"></button></div>
     </section>`;
@@ -81,6 +97,7 @@
     backdrop.querySelector('.pinkie-upd__close').addEventListener('click', close);
     backdrop.querySelector('.pinkie-upd__later').addEventListener('click', close);
     backdrop.querySelector('.pinkie-upd__primary').addEventListener('click', primary);
+    backdrop.querySelector('.pinkie-upd__more').addEventListener('click', () => { state.notesOpen = !state.notesOpen; paint(); });
     backdrop.querySelector('.pinkie-upd__switch').addEventListener('click', () => chooseRoute('mirror'));
     backdrop.querySelectorAll('.pinkie-upd__segments button').forEach(button => button.addEventListener('click', () => chooseRoute(button.dataset.route)));
     backdrop.addEventListener('keydown', e => {
@@ -119,6 +136,7 @@
       verify: ['下载好了，正在检查', '正在核对更新包是否完整，请稍等片刻。', '正在校验', '确认文件完整后就可以安装'],
       ready: ['准备好了', '下载和校验已经完成，可以开始安装。', '校验完成', '安装时碧琪会暂时退出'],
       install: ['正在准备安装', '碧琪要暂时离开一会儿，安装结束后会自动回来。', '正在启动安装', '请保持电脑开机'],
+      installed: ['碧琪换上新版本啦', '记忆和设置都还在，可以接着用。', '', ''],
       error: ['这次没更新成功', mirror ? '国内线路暂时没连上，可以重试、换回官方线路，或手动下载安装包。'
         : '网络或更新服务可能开了个小差。在国内的话，换成国内线路通常会快很多。', '更新没有完成', '已经下载的内容会尽量保留']
     }[s] || [];
@@ -130,7 +148,9 @@
     root.dataset.stage = s;
     root.querySelector('#pinkie-upd-title').textContent = details[0] || '';
     root.querySelector('#pinkie-upd-intro').textContent = details[1] || '';
-    root.querySelector('.pinkie-upd__version').textContent = state.info?.version ? `新版本 ${state.info.version}` : '';
+    root.querySelector('.pinkie-upd__version').textContent = state.info?.version ? `${s === 'installed' ? '现在是' : '新版本'} ${state.info.version}` : '';
+    root.querySelector('.pinkie-upd__panel').hidden = s === 'installed';
+    root.querySelector('.pinkie-upd__reassure').hidden = s === 'installed';
     const img = root.querySelector('.pinkie-upd__mascot img');
     const sticker = `./laolao-pinkie-status-${stickers[s] || 'thinking'}.png`;
     if (img.getAttribute('src') !== sticker) img.setAttribute('src', sticker);
@@ -158,9 +178,21 @@
     if (value == null) { track.removeAttribute('aria-valuenow'); track.firstElementChild.style.width = s === 'error' ? '0%' : ''; }
     else { track.setAttribute('aria-valuenow', String(Math.round(value))); track.firstElementChild.style.width = `${value}%`; }
     const detail = root.querySelectorAll('.pinkie-upd__detail span'); detail[0].textContent = left; detail[1].textContent = right;
-    const notes = String(state.info?.notes || '').split('\n').map(x => x.trim()).filter(Boolean).slice(0,5);
-    const notesRoot = root.querySelector('.pinkie-upd__notes'); notesRoot.hidden = !notes.length;
-    const list = notesRoot.querySelector('ul'); list.replaceChildren(...notes.map(note => {
+    const {summary, details: items} = notesOf(state.info);
+    const notesRoot = root.querySelector('.pinkie-upd__notes'); notesRoot.hidden = !summary && !items.length;
+    // 两三句短话就直接摆出来；多了只给摘要，旁边放碧琪的展开入口。
+    const long = items.length > 2 || items.join('').length > 90;
+    const open = !long || !!state.notesOpen;
+    notesRoot.classList.toggle('is-open', open);
+    const summaryRoot = notesRoot.querySelector('.pinkie-upd__summary');
+    summaryRoot.hidden = !summary && !long;
+    summaryRoot.firstElementChild.textContent = summary;
+    const more = notesRoot.querySelector('.pinkie-upd__more');
+    more.hidden = !long || !items.length;
+    more.setAttribute('aria-expanded', String(open));
+    more.firstElementChild.textContent = open ? LESS : MORE;
+    const list = notesRoot.querySelector('ul'); list.hidden = !open || !items.length;
+    list.replaceChildren(...items.map(note => {
       const li = document.createElement('li'); li.innerHTML = icon(ICON_CHECK); const text = document.createElement('span'); text.textContent = note; li.append(text); return li;
     }));
     // 线路切换只在还没开始下载、或者失败时出现；下载中途换线路没有意义。
@@ -176,9 +208,9 @@
     manual.hidden = s !== 'error';
     root.querySelector('.pinkie-upd__switch').hidden = !(s === 'error' && !mirror);
     const action = root.querySelector('.pinkie-upd__primary');
-    action.textContent = ({available:'开始下载',ready:'安装并重启',error:'重新试试',current:'知道了',download:'后台下载',verify:'后台处理',check:'稍后再说',install:'正在安装'})[s] || '知道了';
+    action.textContent = ({installed:'知道了',available:'开始下载',ready:'安装并重启',error:'重新试试',current:'知道了',download:'后台下载',verify:'后台处理',check:'稍后再说',install:'正在安装'})[s] || '知道了';
     action.disabled = s === 'install';
-    root.querySelector('.pinkie-upd__later').hidden = ['check','current','download','verify','error'].includes(s);
+    root.querySelector('.pinkie-upd__later').hidden = ['check','current','download','verify','error','installed'].includes(s);
     root.querySelector('.pinkie-upd__close').disabled = s === 'install';
   }
   async function check() {
@@ -186,6 +218,7 @@
     state.busy = true; state.stage = 'check'; state.progress = null; state.errorMessage = ''; paint();
     try {
       const info = await api().check_for_updates(state.route);
+      state.notesOpen = false;
       if (info?.temporaryError || info?.supported === false) { state.errorAt = 0; state.errorMessage = info?.message || ''; state.stage = 'error'; }
       else if (info?.available) { state.info = info; state.stage = 'available'; }
       else { state.info = null; state.stage = 'current'; }
@@ -219,7 +252,7 @@
   }
   window.__pinkieUpdateProgress = event => {
     if (!state.busy || !event || typeof event !== 'object') return;
-    if (event.stage === 'metadata') { state.info = {...state.info, version:event.version, notes:event.notes}; }
+    if (event.stage === 'metadata') { state.info = {...state.info, version:event.version, notes:event.notes, summary:event.summary, details:event.details}; }
     else if (event.stage === 'download' && validNumber(event.downloaded)) { state.stage = 'download'; state.progress = event; }
     else if (event.stage === 'verify') state.stage = 'verify';
     else return;
@@ -229,9 +262,17 @@
     if (!supported()) return false;
     mount();
     if (state.busy) { paint(); return true; }
-    if (info?.available) { state.info = info; state.stage = 'available'; paint(); }
+    if (info?.available) { state.info = info; state.stage = 'available'; state.notesOpen = false; paint(); }
     else if (state.stage === 'ready') paint();
     else void check();
+    return true;
+  },
+  // Windows 更新装好后第一次打开：同一张卡，告诉用户这次碧琪变了什么。
+  showInstalled(info) {
+    if (!supported() || state.busy) return false;
+    const {summary, details} = notesOf(info);
+    if (!summary && !details.length) return false;
+    mount(); state.info = info; state.stage = 'installed'; state.notesOpen = false; paint();
     return true;
   } };
 })();
