@@ -89,10 +89,15 @@
     return nearest;
   }
 
-  function forkEntryId(messageId) {
-    if (!String(messageId || '').startsWith('msg:')) return '';
-    const id = messageId.slice(4);
-    return id && !id.includes(':') ? id : '';
+  function forkEntryId(messageId, history = []) {
+    const domId = String(messageId || '');
+    if (!domId.startsWith('msg:') || !Array.isArray(history)) return '';
+    const message = history.find((item, index) => {
+      const direct = [item?.id, item?.messageId].filter(value => typeof value === 'string' && value);
+      if (direct.some(value => domId === 'msg:' + value)) return true;
+      return typeof item?.timestamp === 'number' && domId === `msg:${item.role || 'unknown'}:${item.timestamp}:${index}`;
+    });
+    return typeof message?.__openclaw?.id === 'string' ? message.__openclaw.id : '';
   }
   function currentTitle(key) {
     const row = [...document.querySelectorAll('.session-row-host')].find(item => item.dataset.sessionKey === key);
@@ -117,7 +122,7 @@
         button = cardButton('从这里分出去', null, 'pinkie-fork-action'); bubble.append(button);
       }
       button.onclick = () => sidebar?.openChildSessionDialog(key, currentTitle(key),
-        {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId)});
+        {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId, pane.state?.chatMessages)});
     }
   }
 
@@ -216,7 +221,8 @@
     for (const [id, panel] of panels) if (!ids.has(id)) { panel.remove(); panels.delete(id); }
     const groups = [...thread.querySelectorAll('.chat-group')].filter(group => !group.closest('.pinkie-session-cards'));
     const messages = groups.map(group => ({group,
-      ids: [...group.querySelectorAll('[data-message-id]')].map(node => node.dataset.messageId),
+      ids: [...group.querySelectorAll('[data-message-id]')].flatMap(node =>
+        [node.dataset.messageId, forkEntryId(node.dataset.messageId, pane.state?.chatMessages)].filter(Boolean)),
       at: Date.parse(group.querySelector('time[datetime]')?.getAttribute('datetime') || '')}));
     const placed = new Map();
     for (const card of cards) {
