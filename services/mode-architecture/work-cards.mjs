@@ -210,3 +210,15 @@ export function workCardBlock(kinds = [], prompt = '', {mode = '', sessionKey = 
   lines.push(`要做深、或者碰到上面没写的情况，读完整做法：${book}`);
   return lines.join('\n');
 }
+
+// 技能路由用的种类：分类器（给门禁用，认得保守）把编程请求留成「简单问答」时，项目模式里按写代码来路由，
+// 这样技能、等待清单、打法指路都跟得上。只用在路由上；档位和证据门禁仍然用分类器原来的结果，不受影响。
+export function routingKinds(routed = {}, prompt = '', {mode = ''} = {}) {
+  const kinds = routed.kinds || [];
+  if (mode !== 'project' || kinds.some(kind => CODE_ADJACENT.has(kind))) return routed;
+  const card = pickCard(kinds, prompt, {mode});
+  if (!card.startsWith('code.')) return routed;
+  // 一律按 code 路由：修 bug 的情况由 code.bug 那张卡（指向 debugging.md）接住，比通用的排错卡更贴写代码。
+  const rest = kinds.filter(kind => kind !== 'simple' && kind !== 'pending');
+  return {...routed, kind: 'code', kinds: ['code', ...rest]};
+}

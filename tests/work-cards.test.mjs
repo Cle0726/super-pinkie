@@ -198,3 +198,16 @@ test('end to end: the real prompt hook adds the card and the project brief for a
   const unrestricted = runtime.prompt({prompt: '加个暗色模式', messages: []}, {agentId: 'unrestricted', sessionKey: 'agent:unrestricted:x', workspaceDir: workspace}).appendSystemContext || '';
   assert.doesNotMatch(unrestricted, /【这件活/);
 });
+
+test('routing treats coding requests the classifier leaves as simple as code, only in project mode', async () => {
+  const {routingKinds} = await import('../services/mode-architecture/work-cards.mjs');
+  const simple = {kind: 'simple', kinds: ['simple']};
+  for (const prompt of ['实现一个 LRU 缓存', 'add pagination to the users endpoint', '给这个函数加个超时参数']) {
+    assert.deepEqual(routingKinds(simple, prompt, {mode: 'project'}).kinds, ['code'], prompt);
+  }
+  assert.deepEqual(routingKinds(simple, '登录接口报 500 了', {mode: 'project'}).kinds, ['code']);
+  assert.equal(routingKinds(simple, '实现一个 LRU 缓存', {mode: 'chat'}), simple);
+  assert.equal(routingKinds(simple, '你好呀', {mode: 'project'}), simple);
+  const web = {kind: 'web_ui', kinds: ['web_ui']};
+  assert.equal(routingKinds(web, '做一个记账网页', {mode: 'project'}), web);
+});
