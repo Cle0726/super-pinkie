@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {agentOf, channelTitle, isBadTitle, isInternalSessionKey, registerSessionMethod} from './session-titles.mjs';
 import {searchable} from './session-search.mjs';
+import {hasSessionHeader} from './session-branch.mjs';
 
 // H2 Markdown export and C2 digest (PLAN §5, §6). Both read the current
 // branch straight from the transcript: no model call, no chat.history limits.
@@ -117,7 +118,8 @@ export class SessionExport {
     if (!entry?.transcript || !fs.existsSync(entry.transcript)) throw new Error('找不到这条会话');
     const sessions = await this.access.sdk?.('agent-sessions');
     let branch;
-    if (sessions?.SessionManager) branch = sessions.SessionManager.open(entry.transcript).getBranch();
+    if (!hasSessionHeader(entry.transcript)) branch = [];
+    else if (sessions?.SessionManager) branch = sessions.SessionManager.open(entry.transcript).getBranch();
     else branch = fs.readFileSync(entry.transcript, 'utf8').split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
     const {turns, model} = branchTurns(branch);
     return {entry, turns, model: entry.model || model, title: sessionTitle(entry, key)};
