@@ -127,6 +127,8 @@
       const stopped = ended.outcome === 'stopped' || ended.outcome === 'error';
       if (ended.outcome !== 'done' && !stopped) return hidden;
       if (now - Number(ended.at || 0) > (stopped ? SHOW_STOPPED_MS : SHOW_DONE_MS)) return hidden;
+      // 「完成啦」聊天里的过程卡已经说了，这里不再重复；只有被停下 / 出错才短暂提示。
+      if (!stopped) return hidden;
       return {...hidden, visible: true, kind: stopped ? 'stopped' : 'done', tone: stopped ? 'stop' : 'done',
         sticker: stopped ? 'oops' : 'done', text: stopped ? PHRASE.stopped : PHRASE.done,
         meta: ended.ms ? `用了 ${duration(ended.ms)}` : ''};
@@ -147,7 +149,7 @@
     else if (stageSteps && status?.workflow) { kind = 'steps'; text = stageSteps.text; sticker = 'working'; }
     else {
       const state = ['thinking', 'working', 'writing'].includes(live.state) ? live.state : 'thinking';
-      text = PHRASE[state]; sticker = state;
+      text = PHRASE[state]; sticker = state; kind = 'plain';
     }
 
     const actions = [{id: 'stop', label: '停下'}];
@@ -159,6 +161,8 @@
       return {visible: true, kind, slow: true, tone: 'slow', sticker, text: '比平时久，还在跑',
         meta: [text, `这一步 ${duration(phaseFor)}`].join(' · '), actions};
     }
+    // 只是「在想 / 在干活 / 在回复」时，聊天里的过程卡已经在显示同一句话和计时，这条不再重复出现。
+    if (kind === 'plain') return {...hidden, kind, sticker, text, meta};
     return {visible: true, kind, slow: false, tone: 'run', sticker, text, meta, actions};
   }
 
