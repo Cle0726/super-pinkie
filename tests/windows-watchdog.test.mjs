@@ -13,7 +13,9 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const plugin = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-windows-plugin-'));
 fs.cpSync(path.join(root, 'services/mode-architecture'), plugin, {recursive: true});
-fs.cpSync(path.join(root, 'desktop/windows/mac-runtime/services/mode-architecture'), plugin, {recursive: true});
+// Plan A: the Windows engine is the shared one; overlay only what the snapshot still carries.
+const overlay = path.join(root, 'desktop/windows/mac-runtime/services/mode-architecture');
+if (fs.existsSync(overlay)) fs.cpSync(overlay, plugin, {recursive: true});
 process.on('exit', () => fs.rmSync(plugin, {recursive: true, force: true}));
 const {UpstreamWatchdog, WatchdogJobStore, CleKkSupervisor, CleKkAuditLog, localSetupFailure} = await import(pathToFileURL(path.join(plugin, 'index.mjs')).href);
 
