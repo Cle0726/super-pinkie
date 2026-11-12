@@ -119,6 +119,22 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual((out_dir / "会话-20261111.pdf").read_bytes(), b"%PDF-1.4")
 
+    def test_export_markdown_copies_assets(self):
+        out_dir = Path(self.tmp.name) / "md"
+        out_dir.mkdir()
+        image = Path(self.tmp.name) / "img.png"
+        image.write_bytes(b"png")
+        message = {"type": "exportMarkdown", "fileName": "天气-20261111", "assetDir": "__assets__",
+                   "markdown": "# 天气\n\n![a](./__assets__/a.png)\n",
+                   "assets": [{"name": "a.png", "path": str(image)}, {"name": "../evil", "path": str(image)}]}
+        with mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
+            result = self.native.handle(message)
+        self.assertTrue(result["ok"], result)
+        text = (out_dir / "天气-20261111.md").read_text(encoding="utf-8")
+        self.assertIn("](./%E5%A4%A9%E6%B0%94-20261111-%E9%99%84%E4%BB%B6/a.png)", text)
+        self.assertEqual((out_dir / "天气-20261111-附件" / "a.png").read_bytes(), b"png")
+        self.assertFalse((out_dir / "evil").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
