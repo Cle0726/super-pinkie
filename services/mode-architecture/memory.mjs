@@ -27,6 +27,8 @@ const canonicalKey = value => normalized(value).toLocaleLowerCase().slice(0, 160
 const boundedText = value => normalized(value).slice(0, 2400);
 const validSession = value => /^agent:(main|project|thinking|learning|unrestricted):[^\s]{1,260}$/.test(String(value || ''));
 const isChild = value => /:subagent:/.test(String(value || ''));
+// H1: temp sessions never write long-term memory.
+const isTemp = value => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(value || ''));
 
 function atomicJson(file, value) {
   const directory = path.dirname(file);
@@ -197,6 +199,7 @@ export class LongTermMemoryStore {
 
   remember(ctx, input = {}) {
     if (isChild(ctx.sessionKey)) throw new Error('子代理只能读取父模式记忆，不能直接写入');
+    if (isTemp(ctx.sessionKey)) throw new Error('临时会话不写长期记忆');
     const scope = this.safeContext(ctx);
     const text = boundedText(input.text);
     if (!text) throw new Error('记忆内容不能为空');
@@ -260,7 +263,7 @@ export class LongTermMemoryStore {
   }
 
   captureExplicit(ctx, prompt) {
-    if (isChild(ctx.sessionKey)) return null;
+    if (isChild(ctx.sessionKey) || isTemp(ctx.sessionKey)) return null;
     const text = explicitMemoryCandidate(prompt);
     if (!text) return null;
     return this.remember(ctx, {
