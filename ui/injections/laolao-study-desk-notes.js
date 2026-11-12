@@ -421,9 +421,9 @@
       download('﻿' + [['Front', 'Back', 'Example', 'Tags'], ...notes.map(n => [n.cue || n.title || n.term || n.content, n.meaning || n.content, n.example, (n.tags || []).join(' ')])].map(row => row.map(c => '"' + String(c || '').replace(/"/g, '""') + '"').join(',')).join('\r\n'), '笔记-Anki.csv', 'text/csv');
     }
     function download(text, name, type = 'text/markdown') { const url = URL.createObjectURL(new Blob([text], {type: type + ';charset=utf-8'})), a = el('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-    async function modelDialog() {
-      const d = dialog('整理模型'), info = await rpc('notes.organizer.status'); if (!d.isConnected) return;
-      const select = el('select'); select.setAttribute('aria-label', '整理模型'); for (const m of info.models || []) { const o = el('option', '', m.name || m.id); o.value = m.id || m.key; select.append(o); } select.value = info.model || info.defaultModel || ''; d.append(select, btn('保存', async () => { await rpc('notes.organizer.setModel', {model: select.value}); d.close(); toast('整理模型已更新'); }, 'n-btn n-ink'));
+    function modelDialog() {
+      if (typeof window.__pinkieStudyDesk?.openBuiltinModel === 'function') window.__pinkieStudyDesk.openBuiltinModel();
+      else toast('模型设置还在准备，请稍后再试');
     }
     keyHandler = event => {
       if (event.target.closest?.('input,textarea,select,[contenteditable=true]')) return;
