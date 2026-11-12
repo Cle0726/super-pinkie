@@ -155,9 +155,9 @@
           const live = el("span", "pinkie-power__row-hint pinkie-power__auto-live", copy, "");
           refs.rows.push(() => {
             const t = T();
-            press(pairs, t.auto !== false);
-            dot.hidden = t.auto !== false;
-            const easing = t.auto !== false && Object.keys(t.easing || {}).length > 0;
+            press(pairs, t.auto === true);
+            dot.hidden = t.auto === true;
+            const easing = t.auto === true && Object.keys(t.easing || {}).length > 0;
             live.textContent = easing ? "现在：电脑有点吃力，碧琪正在省着画，缓过来就恢复。" : "";
             live.hidden = !easing;
           });
@@ -184,7 +184,7 @@
     }
 
     const foot = el("footer", "pinkie-power__foot", dialog);
-    const note = el("p", "pinkie-power__note", foot, "碧琪不看电脑配置，每台电脑默认的效果都一样；只有真的卡了才临时省一点（可以在上面关掉）。聊天记录类的改动在下次打开或切换聊天时生效，其它马上生效。");
+    const note = el("p", "pinkie-power__note", foot, "碧琪不看电脑配置，每台电脑的效果都一样；只有你打开上面的「卡的时候自动减负」，真的卡了才会临时省一点。聊天记录类的改动在下次打开或切换聊天时生效，其它马上生效。");
     note.setAttribute("role", "note");
     refs.status = el("p", "pinkie-power__status", foot, "");
     refs.status.setAttribute("aria-live", "polite");
