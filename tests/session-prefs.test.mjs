@@ -68,3 +68,14 @@ test('hooks: before_prompt_build and before_tool_call', async () => {
   assert.equal(hooks.before_tool_call[0]({toolName: 'read'}, {sessionKey: KEY}), undefined);
   assert.equal((await call('pinkie.prefs.get', {})).menubar, true);
 });
+
+test('every plugin instance shares one prefs cache per root', () => {
+  const root = tmp();
+  const hooks = [];
+  const api = () => ({on: (name, fn) => { if (name === 'before_prompt_build') hooks.push(fn); }, registerGatewayMethod() {}});
+  const first = registerSessionPrefs(api(), {root});
+  const second = registerSessionPrefs(api(), {root});
+  assert.equal(first, second);
+  first.setSession(KEY, {style: 'concise'});
+  assert.match(hooks[1]({}, {sessionKey: KEY}).appendSystemContext, /回答风格：简洁/);
+});

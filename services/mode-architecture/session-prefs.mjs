@@ -113,8 +113,14 @@ export class SessionPrefs {
   }
 }
 
+// The host loads the plugin more than once (one instance per runtime); all of
+// them must read the same cache, or a choice saved through one is never seen
+// by the prompt hook of another.
+const PREFS_INSTANCES = Symbol.for('pinkie.session-prefs.instances');
 export function registerSessionPrefs(api, {root}) {
-  const prefs = new SessionPrefs(root);
+  const shared = globalThis[PREFS_INSTANCES] ??= new Map();
+  if (!shared.has(root)) shared.set(root, new SessionPrefs(root));
+  const prefs = shared.get(root);
   const method = (name, fn) => registerSessionMethod(api, name, async params => {
     try { return await fn(params); } catch (error) { return {ok: false, error: error.message}; }
   });
