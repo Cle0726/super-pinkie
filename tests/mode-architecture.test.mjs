@@ -3013,6 +3013,8 @@ test('runtime turns (background results, internal events, finalize revisions) ne
     '<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>\nOpenClaw runtime context (internal):\n[Internal task completion event]',
     'Continue the OpenClaw runtime event.',
     'Before accepting the previous final answer, apply this revision request and produce the revised final answer.\n\n当前任务还差：最终答复缺少两个来源',
+    'Pre-compaction memory flush. Store durable memories only in memory/2026-11-02.md (create memory/ if needed).',
+    'Read HEARTBEAT.md if it exists (workspace context). Follow it strictly.',
   ]){
     runtime.prompt({prompt,messages:[]},ctx);
     assert.equal(runtime.receiveUserMessage({content:prompt},ctx),'');
@@ -3114,4 +3116,29 @@ test('a tier retry that waited for children hands the next turn to the tier cont
   t.after(()=>void plain.cancel(key));
   assert.equal(await plain.dispatchImmediate({sessionKey:key,agentId:'project',runId:'yield-run',attempt:1,tag:'w',kind:'integrity',waitedOnChildren:true}),true);
   assert.equal(calls.length,1);
+});
+
+test('a tier that is already satisfied lets the delivery gate revise text-only work without the "different approach" stop',t=>{
+  // 11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请先生选择」，全局门禁要求再改一版；
+  // 取舍题没有工具证据，指纹不变被当成空转，以「续跑没说明换了什么做法」停掉。
+  const gate={action:'revise',reason:'交付门禁要求再改',retry:{instruction:'再改',idempotencyKey:'g',maxAttempts:3}};
+  const runtime=new ModeArchitecture();
+  const ctx={agentId:'main',sessionKey:'agent:main:tradeoff-gate',workspaceDir:workspace(t,'tradeoff-gate')};
+  runtime.arm(ctx.sessionKey,'boost');
+  runtime.prompt({prompt:'MacBook Air 和 MacBook Pro 我该买哪个？主要剪视频和写代码'},{...ctx,runId:'t-0'});
+  for(let index=1;index<=2;index+=1){
+    const call=runtime.beforeTool({toolName:'sessions_spawn',toolCallId:`s${index}`,runId:'t-0',params:{label:'求解'}},{...ctx,runId:'t-0'});
+    const child=`${ctx.sessionKey}:subagent:solver-${index}`;
+    runtime.spawned({childSessionKey:child,label:call.params.label},{requesterSessionKey:ctx.sessionKey});
+    runtime.afterTool({toolName:'sessions_spawn',toolCallId:`s${index}`,runId:'t-0'},{...ctx,runId:'t-0'});
+    runtime.ended({targetSessionKey:child,outcome:'ok',resultText:`候选方案：选 ${index===1?'Air':'Pro'}。\n关键依据：1. 无风扇机型长时间导出 4K 会降频；2. 有风扇机型重约 1.6kg。\n验算办法：查 Apple 官网技术规格页；用同一段 10 分钟 4K 素材分别导出计时。\n尚不确定：用户预算和是否经常外出。`});
+  }
+  const reply=n=>`第${n}版：两种立场的差异和代价对比如下……请先生选择适合自己的方案。`;
+  assert.equal(runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(1)},{...ctx,runId:'t-1'})?.action,'revise');
+  assert.equal(runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-2'})?.action,'revise');
+  assert.equal(runtime.status(ctx.sessionKey).active,true,'a new reply is progress for text-only work');
+  // 一字不差的回复仍然算空转，照旧停。
+  runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-3'});
+  runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-4'});
+  assert.equal(runtime.status(ctx.sessionKey).active,false);
 });

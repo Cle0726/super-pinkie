@@ -255,6 +255,8 @@ function historyFromMessages(messages = []) {
   return historyText(rows);
 }
 
+const SILENT_REPLY = /^\s*(?:NO_REPLY|HEARTBEAT_OK)\s*$/;
+
 export function finalReply(messages = []) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messageOf(messages[index]);
@@ -848,6 +850,10 @@ export class ReasoningEnhancer {
     if (!this.readyForReview(sessionKey)) return {reviewed: false, waiting: true};
     const messages = Array.isArray(event.messages) ? event.messages : [];
     const reply = finalReply(messages);
+    // 内部轮（后台任务完成通知、运行时事件）以 NO_REPLY 静默收尾：这一轮什么也没交给用户，不拿它验收，
+    // 也不结束这次验收，等真正交付的那条回复再审（11-02 隔离实测 K-poster-full：审稿员看到 NO_REPLY，
+    // 判成「没交付」，逼碧琪把已经发出的整份终稿又发了一遍）。
+    if (SILENT_REPLY.test(reply)) return {reviewed: false, silent: true};
     for (const job of intent.jobs || []) {
       if ((job.role === 'main' || job.role === 'fix') && job.state === 'running') {
         this.updateJob(sessionKey, intent.requestId, job, {state: event.success === false ? 'failed' : 'done', endedAt: Date.now(), summary: summaryOf(reply), output: reply.slice(0, 6000)});
