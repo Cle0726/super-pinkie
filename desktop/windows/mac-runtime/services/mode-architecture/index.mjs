@@ -13,6 +13,8 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
+import {workCardBlock, forgetCards} from './work-cards.mjs';
+import {projectBriefBlock, forgetBrief} from './project-brief.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
@@ -5730,6 +5732,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           if (block) blocks.push('\n' + block + '\n');
           const waiting = waitingSection(routed.kinds || []);
           if (waiting) blocks.push('\n' + waiting + '\n');
+          // 活儿卡：这种活最要紧的几步直接放在消息旁边（小模型常常不去读打法）；项目速览：绑定的项目里真实的命令和目录。
+          const card = workCardBlock(routed.kinds || [], routedPrompt, {mode, sessionKey, playbookRoot: root});
+          if (card) blocks.push('\n' + card + '\n');
+          const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
+          if (brief) blocks.push('\n' + brief + '\n');
         } catch (error) {
           // 不能让路由拖垮这一轮，但也不能悄悄失效（11-04：Windows 快照少一个 import，路由整个没生效也没人知道）。
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
@@ -6134,6 +6141,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (!sessionKey) return;
     this.handoffStore.markCompacted(sessionKey);
     this.recentCompaction.set(sessionKey, Date.now());
+    forgetCards(sessionKey); forgetBrief(sessionKey);
   }
 
   prepareRetryDecision(decision, event = {}, ctx = {}) {

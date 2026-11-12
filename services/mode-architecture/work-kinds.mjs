@@ -9,7 +9,7 @@ const kind = (id, label, playbooks, extra = {}) => Object.freeze({id, label, pla
 
 // 种类表：和 personas/*/playbooks 的 18 份打法一一对应（crafts.md 是没见过的活的兜底）。
 export const WORK_KINDS = Object.freeze({
-  code: kind('code', '写代码 / 改程序', ['web-and-ui.md', 'debugging.md'], {hands: true, solver: 'checklist'}),
+  code: kind('code', '写代码 / 改程序', ['coding.md', 'debugging.md', 'code-stacks.md'], {hands: true, solver: 'checklist'}),
   web_ui: kind('web_ui', '网页 / 界面 / 小工具', ['web-and-ui.md', 'design-review.md'], {hands: true, solver: 'checklist'}),
   app_game_ai: kind('app_game_ai', 'App / 小游戏 / 接 AI', ['apps-games-ai.md'], {hands: true, solver: 'checklist'}),
   automation: kind('automation', '自动做事 / 批量处理', ['automation.md'], {hands: true, solver: 'checklist'}),
