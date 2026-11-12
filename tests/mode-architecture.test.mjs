@@ -1828,12 +1828,13 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   const unscheduledBeforeSteer=unscheduled.length;
   await hooks.get('message_received')({content:'改成用 X 方法继续当前任务',messageId:'append-1',runId:'append-run'},
     {sessionKey:steeredKey,runId:'append-run',messageId:'append-1'});
-  assert.equal(unscheduled.length,unscheduledBeforeSteer+2);
+  assert.equal(unscheduled.length,unscheduledBeforeSteer+3);
   assert.ok(unscheduled.slice(unscheduledBeforeSteer).some(item=>/pinkie-watchdog-/.test(item.tag)));
   assert.ok(unscheduled.slice(unscheduledBeforeSteer).some(item=>/pinkie-tier-/.test(item.tag)));
+  assert.ok(unscheduled.slice(unscheduledBeforeSteer).some(item=>/pinkie-plan-/.test(item.tag)));
   await hooks.get('message_received')({content:'\u2063',runId:'watchdog-run'},
     {sessionKey:steeredKey,runId:'watchdog-run'});
-  assert.equal(unscheduled.length,unscheduledBeforeSteer+2);
+  assert.equal(unscheduled.length,unscheduledBeforeSteer+3);
 });
 
 test('plugin manifest declares every agent tool before registration',()=>{
