@@ -988,7 +988,7 @@ test('FileRunStore rejects tampered run and child state and migrates legacy file
   assert.equal(migrated.v,1);assert.ok(migrated.digest);
 });
 
-test('a file-changing task needs a real effect and a post-change check',t=>{
+test('a file-changing task needs a real effect and a post-change check when claimed',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-effect-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const file=path.join(root,'app.txt');
@@ -997,11 +997,11 @@ test('a file-changing task needs a real effect and a post-change check',t=>{
   guard.beforeTool({toolName:'write',toolCallId:'write-1',params:{path:file}},ctx);
   fs.writeFileSync(file,'fixed');
   guard.afterTool({toolName:'write',toolCallId:'write-1',params:{path:file},result:{status:'completed'}},ctx);
-  let result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经修复完成，并且读回检查过。'},ctx);
   assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
   guard.beforeTool({toolName:'read',toolCallId:'read-1',params:{path:file}},ctx);
   guard.afterTool({toolName:'read',toolCallId:'read-1',params:{path:file},result:'fixed'},ctx);
-  result=guard.finalize({lastAssistantMessage:'已经修复完成。'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经修复完成，并且读回检查过。'},ctx);
   assert.equal(result,undefined);
 });
 
@@ -1037,10 +1037,10 @@ test('a structured host write receipt survives missing before-tool correlation',
     toolName:'write',toolCallId:'after-only',params:{path:file},
     result:{content:[{type:'text',text:'Successfully wrote file'}],details:{changed:true,created:true}},
   },ctx);
-  let result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  let result=guard.finalize({lastAssistantMessage:'已经创建完成，并且读回检查过。'},ctx);
   assert.match(result.reason,/之后没有读取、测试或检查真实结果/);
   guard.afterTool({toolName:'read',params:{path:file},result:'real host write'},ctx);
-  result=guard.finalize({lastAssistantMessage:'已经创建完成。'},ctx);
+  result=guard.finalize({lastAssistantMessage:'已经创建完成，并且读回检查过。'},ctx);
   assert.equal(result,undefined);
   const effect=guard.runs.get(ctx.sessionKey).tools[0].effects[0];
   assert.equal(effect.changed,true);assert.equal(effect.hostReported,true);
@@ -1067,14 +1067,14 @@ test('a bare continue message is not misclassified as a new file mutation',()=>{
   assert.equal(blocked.action,'revise');assert.match(blocked.reason,/没有任何真实执行工具记录/);
 });
 
-test('external actions also need a separate post-action observation',()=>{
+test('a claimed external status check needs a separate post-action observation',()=>{
   const guard=new CompletionIntegrityGuard(),ctx={agentId:'project',sessionKey:'agent:project:external-check'};
   guard.begin({prompt:'帮我发布这个项目'},ctx);
   guard.afterTool({toolName:'publish_project',params:{target:'remote'},result:{ok:true}},ctx);
-  let blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  let blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成，已核对发布状态。'},ctx);
   assert.match(blocked.reason,/之后没有读取、测试或检查真实结果/);
   guard.afterTool({toolName:'check_publish_status',params:{target:'remote'},result:{status:'live'}},ctx);
-  blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成。'},ctx);
+  blocked=guard.finalize({lastAssistantMessage:'项目已经发布完成，已核对发布状态。'},ctx);
   assert.equal(blocked,undefined);
 });
 
@@ -1301,16 +1301,27 @@ test('tier limits and task routing match the new four-level design', () => {
   assert.equal(classifyDeliberationTask('核实这个事实并给出处'), 'fact_check');
   assert.equal(classifyDeliberationTask('请解释闭包是什么'), 'simple');
 
-  assert.deepEqual(deliberationRequirements('base', 'project', 'standard_answer').roles, {solver: 2});
-  assert.deepEqual(deliberationRequirements('boost', 'project', 'tradeoff').roles, {solver: 2});
+  // 2026-11-09 升级逻辑：工作模式里只有全开档必须派独立求解（界面写的「多做几版」）；其余档位是建议，
+  // 想派可以派（optionalRoles），不派不拦。无限制模式照旧每档必须。
+  assert.deepEqual(deliberationRequirements('base', 'project', 'standard_answer').roles, {});
+  assert.equal(deliberationRequirements('base', 'project', 'standard_answer').optionalRoles.solver, 3);
+  assert.deepEqual(deliberationRequirements('boost', 'project', 'tradeoff').roles, {});
+  assert.equal(deliberationRequirements('boost', 'project', 'tradeoff').optionalRoles.solver, 3);
   assert.deepEqual(deliberationRequirements('full', 'project', 'standard_answer').roles, {solver: 2});
+  assert.equal(deliberationRequirements('full', 'project', 'standard_answer').optionalRoles.solver, 0);
   assert.equal(deliberationRequirements('full', 'project', 'standard_answer').maxSolvers, 3);
-  assert.deepEqual(deliberationRequirements('marathon', 'project', 'standard_answer').roles, {solver: 2});
+  assert.deepEqual(deliberationRequirements('marathon', 'project', 'standard_answer').roles, {});
   assert.equal(deliberationRequirements('marathon', 'project', 'standard_answer').maxSolvers, 3);
+  for (const tier of ['base', 'boost', 'full', 'marathon']) {
+    assert.deepEqual(deliberationRequirements(tier, 'none', 'standard_answer').roles, {solver: 2}, `unrestricted ${tier}`);
+  }
   assert.deepEqual(deliberationRequirements('boost', 'project', 'implementation').roles, {});
   assert.equal(deliberationRequirements('boost', 'project', 'implementation').evidenceKind, 'test');
   assert.equal(deliberationRequirements('full', 'project', 'fact_check').evidenceKind, 'sources');
-  assert.equal(deliberationRequirements('base', 'project', 'fact_check').needsEvidence, true);
+  // 基础档不设门禁（只照打法做）；查事实要两个来源从加强档起。无限制模式保持原样。
+  assert.equal(deliberationRequirements('base', 'project', 'fact_check').needsEvidence, false);
+  assert.equal(deliberationRequirements('boost', 'project', 'fact_check').needsEvidence, true);
+  assert.equal(deliberationRequirements('base', 'none', 'fact_check').needsEvidence, true);
   assert.equal(deliberationRequirements('full', 'project', 'implementation').optionalRoles.critic, 0);
   assert.equal(deliberationRequirements('full', 'project', 'standard_answer').optionalRoles.critic, 1);
   assert.equal(deliberationRequirements('full', 'project', 'tradeoff').optionalRoles.critic, 1);
@@ -1500,7 +1511,7 @@ test('fact-check workflow needs two distinct source references and reports uncer
 test('tradeoff and fact-check finals cannot finish without their promised user-facing summary', () => {
   const tradeoff = new ModeArchitecture();
   const tradeoffCtx = {agentId: 'project', sessionKey: 'agent:project:tradeoff-final'};
-  tradeoff.arm(tradeoffCtx.sessionKey, 'base');
+  tradeoff.arm(tradeoffCtx.sessionKey, 'boost');
   const tradeoffState = setTierTask(tradeoff, tradeoffCtx, '比较两个方案并交给我选择');
   tradeoffState.completedRoles.set('solver', 2);
   tradeoff.finishTurn(tradeoffCtx, {success: true, lastAssistantMessage: '方案 A 的速度更快；方案 B 的维护成本更低。'});
@@ -1509,7 +1520,7 @@ test('tradeoff and fact-check finals cannot finish without their promised user-f
 
   const facts = new ModeArchitecture();
   const factsCtx = {agentId: 'thinking', sessionKey: 'agent:thinking:fact-final'};
-  facts.arm(factsCtx.sessionKey, 'base');
+  facts.arm(factsCtx.sessionKey, 'boost');
   setTierTask(facts, factsCtx, '核实这件事并标注来源和不确定性');
   facts.afterTool({toolName: 'web.search', result: 'https://one.example/source A'}, factsCtx);
   facts.afterTool({toolName: 'web.search', result: 'https://two.example/source B'}, factsCtx);
@@ -1586,11 +1597,12 @@ test('judge can select only an existing candidate and must cite a real check', (
 test('every retry states its difference and two unchanged retries stop with a report', () => {
   const runtime = new ModeArchitecture();
   const ctx = {agentId: 'project', sessionKey: 'agent:project:stagnation', runId: 'r1'};
-  runtime.arm(ctx.sessionKey, 'base');
+  // 加强档：有标准答案的题要一次真的验算，没有就推回去（基础档不设门禁，不会推）。
+  runtime.arm(ctx.sessionKey, 'boost');
   setTierTask(runtime, ctx, '求方程 x² = 4，并验算两个根');
   const first = runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx);
   assert.equal(first.action, 'revise');
-  assert.equal(first.retry.maxAttempts, 3);
+  assert.equal(first.retry.maxAttempts, 6);
 
   const second = runtime.finalize({
     lastAssistantMessage: '这次和上次不同：换思路，改用因式分解重新推导。',
@@ -1610,7 +1622,7 @@ test('every retry states its difference and two unchanged retries stop with a re
 test('a retry without a stated change stops immediately', () => {
   const runtime = new ModeArchitecture();
   const ctx = {agentId: 'project', sessionKey: 'agent:project:no-change', runId: 'r1'};
-  runtime.arm(ctx.sessionKey, 'base');
+  runtime.arm(ctx.sessionKey, 'boost');
   setTierTask(runtime, ctx, '求方程 x + 1 = 3');
   assert.equal(runtime.finalize({lastAssistantMessage: '还没解完。'}, ctx).action, 'revise');
   assert.equal(runtime.finalize({lastAssistantMessage: '我再试一次。'}, {...ctx, runId: 'r2'}), undefined);
@@ -1778,6 +1790,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.arm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
+  assert.equal(methods.get('pinkie.run.status').opts.scope,'operator.read');
   assert.equal(tools.length,25);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
@@ -1816,8 +1829,14 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(embeddedVerified.details.ok,true);
   assert.equal(embeddedVerified.details.scope,'read-only-diagnostic');
   let response;
+  await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost',requestId:'request-missing-01'},respond:(...args)=>{response=args;}});
+  assert.equal(response[0],false);assert.equal(queued.length,0);
   await methods.get('pinkie.deepThink.arm').fn({params:{sessionKey:'agent:thinking:one',tier:'boost'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].armed,true);assert.equal(response[1].mode,'ideas');assert.equal(queued.length,1);assert.match(queued[0].text,/做事流程：加强档/);
+  await methods.get('pinkie.run.status').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
+  assert.equal(response[0],true);assert.equal(response[1].active,true);assert.equal(response[1].selection.workTier,'boost');
+  assert.equal(response[1].binding,'unverified');assert.equal(typeof response[1].review.runId,'string');
+  assert.equal(response[1].continuations.tier,0);assert.ok(Array.isArray(response[1].missing));
   await methods.get('pinkie.deepThink.disarm').fn({params:{sessionKey:'agent:thinking:one'},respond:(...args)=>{response=args;}});
   assert.equal(response[0],true);assert.equal(response[1].disarmed,true);
 
@@ -1898,10 +1917,13 @@ test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{
   assert.equal(response[1].active,false);
 });
 
-test('marathon tier uses the 40-retry cap and stops without completion markers',()=>{
+test('marathon tier uses the 40-retry cap and stops without completion markers',t=>{
   const runtime=new ModeArchitecture();const ctx={agentId:'project',sessionKey:'agent:project:overnight',runId:'run-1'};
   runtime.arm(ctx.sessionKey,'marathon');
-  setTierTask(runtime,ctx,'求方程 x² = 4，并验算两个根');
+  // 长跑档靠检查点里程碑推进（独立求解在这一档只是建议）：留一个一直没勾掉的里程碑，推到续跑上限。
+  const checkpoint=path.join(workspace(t,'overnight'),'checkpoint.md');
+  fs.writeFileSync(checkpoint,'- [ ] 验算两个根 — 验证：代回原方程\n');
+  setTierTask(runtime,ctx,'求方程 x² = 4，并验算两个根').checkpointFile=checkpoint;
   let decision=runtime.finalize({lastAssistantMessage:'还没解完。'},ctx);
   assert.equal(decision.action,'revise');assert.equal(decision.retry.maxAttempts,40);
   for(let attempt=2;attempt<=40;attempt+=1){
@@ -2624,7 +2646,7 @@ test('a command still running in the background is an honest in-progress state, 
   assert.equal(guard.finalize({lastAssistantMessage:'打包已经完成，dist/app.zip 已生成。'},ctx)?.action,'revise','a finished claim still needs evidence');
   guard.afterTool({toolName:'process',toolCallId:'bg-poll',params:{action:'poll',sessionId:'tidal-harbor'},
     result:{content:[{type:'text',text:'build ok\n\nProcess exited with code 0.'}],details:{status:'completed'}}},ctx);
-  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx)?.action,'revise','once the command has exited, waiting is no longer honest');
+  assert.equal(guard.finalize({lastAssistantMessage:'还在后台运行，跑完告诉你。'},ctx),undefined,'a reply without a completion claim is not rejected by the delivery gate');
 });
 
 // 2026-11-01 实测：长跑档计划写了 6 个里程碑，只勾了第一个、跑过一次测试就交付了。
@@ -2965,9 +2987,12 @@ test('a stop by the system still hands the user the last full reply',t=>{
   // 同一版回复、没有新证据：第一次推回去补，第二次停下。
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-1'}).action,'revise');
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'s-2'}),undefined);
+  // 2026-11-09 升级逻辑：成品已经有了、差的只是核对——把成品交出去，照实说哪一步还没亲眼核对，
+  // 不再把做完的东西报成「本轮未完成」、成品当参考附在后面。
   const report=run.runtime.stopReport({...run.ctx,runId:'s-2'});
-  assert.match(report,/^本轮未完成：/);
-  assert.match(report,/上一版回复（还没核对完，仅供参考）：\n记账网页做好了/);
+  assert.ok(report.startsWith(draft));
+  assert.match(report,/有几步碧琪还没能亲眼核对：改完的页面还没截图打开看过/);
+  assert.doesNotMatch(report,/本轮未完成|仅供参考|续跑/);
   // 如实说没做完：用碧琪自己的话，不套模板。
   const honest=tierRun(t,'stop-honest','boost','帮我做一个记账的小网页');
   honest.tool('write',{path:path.join(honest.root,'index.html')},'Successfully wrote 6 bytes');
@@ -3163,4 +3188,46 @@ test('a tier that is already satisfied lets the delivery gate revise text-only w
   runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-3'});
   runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-4'});
   assert.equal(runtime.status(ctx.sessionKey).active,false);
+});
+
+// 11-11 r7 隔离实测：上游 429 冷却 6 分钟时，档位续跑每次失败后 2–3 秒就再推一次，
+// 一件事推了 80 多次、把队列推爆，还一直占着同一个被限流的号。
+test('a tier continuation after a failed turn backs off and stops after repeated failures',async()=>{
+  const calls=[];
+  const api={session:{workflow:{
+    scheduleSessionTurn:async()=>({id:'fallback'}),unscheduleSessionTurnsByTag:async()=>({removed:1}),
+    enqueueNextTurnInjection:async()=>({enqueued:true}),
+  }}};
+  const continuation=new TierContinuation(
+    api,
+    ()=>({active:true,complete:false,pending:0,parentRunning:false,missing:['改完的页面还没截图打开看过']}),
+    ()=>({pending:0,quietForMs:20_000}),
+    async(file,args)=>{calls.push(args);return {stdout:'{"status":"started"}',stderr:''};},
+    '/runtime/openclaw/dist/index.js',
+  );
+  const sessionKey='agent:project:tier-rate-limited';
+  const delays=[];
+  const original=continuation.scheduleTimer.bind(continuation);
+  continuation.scheduleTimer=params=>{delays.push(params.delayMs);original(params);clearTimeout(continuation.timers.get(sessionKey));continuation.timers.delete(sessionKey);};
+  const failed={failed:true,reason:'⚠️ API rate limit reached. Please try again later.'};
+  // A normal (successful) turn keeps the quick wake-up.
+  assert.equal(await continuation.schedule(sessionKey,'project'),true);
+  assert.equal(delays.at(-1),1_000);
+  // Failed turns wait, longer each time.
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),true);
+  const first=delays.at(-1);
+  assert.ok(first>=30_000,`first failed-turn wait ${first}`);
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),true);
+  assert.ok(delays.at(-1)>first);
+  // The provider's own reset time wins when it is longer.
+  assert.equal(await continuation.schedule(sessionKey,'project',{failed:true,reason:'429 {"error":{"code":"model_cooldown","reset_seconds":362}}'}),true);
+  assert.ok(delays.at(-1)>=362_000);
+  for(let i=0;i<10&&await continuation.schedule(sessionKey,'project',failed);i++);
+  // It gives up instead of looping forever on a dead upstream.
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),false);
+  assert.ok(continuation.failedTurns.get(sessionKey)>6);
+  // One successful turn resets the count.
+  assert.equal(await continuation.schedule(sessionKey,'project'),true);
+  assert.equal(continuation.failedTurns.has(sessionKey),false);
+  assert.equal(calls.length,0);
 });

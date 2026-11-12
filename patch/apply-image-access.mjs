@@ -19,9 +19,52 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const marker = "/* pinkie-image-access:v3 */";
+const marker = "/* pinkie-image-access:v4 */";
 const legacyMarker = "/* pinkie-image-access:v1 */";
 const previousMarker = "/* pinkie-image-access:v2 */";
+const v3Marker = "/* pinkie-image-access:v3 */";
+
+/* v4: a project folder the user bound (project-scope bindings.json) is where
+   碧琪 builds and screenshots the work. v3 only allowed Desktop / Downloads /
+   Documents / workspaces, so a project at e.g. ~/Projects/shop or D:\\work could
+   be written and screenshotted but not looked at: the image tool refused the
+   screenshot, the delivery check kept saying "the page was never viewed", and
+   the tier ran to its continuation limit (11-11 hy4free ladder-r7, L3-a / L6).
+   Bound roots are read on every check (bindings change while the gateway runs),
+   cached by the file's mtime. project-scope already refuses the home folder,
+   drive roots and its own state folder as a project root. */
+const v3RootsHead = "function _pinkieResolveExtraMediaRoots() {\n  if (_pinkieExtraMediaRoots) return _pinkieExtraMediaRoots;\n";
+const v4RootsHead = "function _pinkieStaticMediaRoots() {\n  if (_pinkieExtraMediaRoots) return _pinkieExtraMediaRoots;\n";
+const projectRootsHelpers = `let _pinkieProjectRootsCache;
+function _pinkieProjectRoots() {
+  const home = (os && typeof os.homedir === "function") ? os.homedir() : (process.env.HOME || process.env.USERPROFILE || "");
+  const stateRoot = process.env.PINKIE_STATE_ROOT || path.join(home, "Library/Application Support/SuperPinkie");
+  const file = path.join(stateRoot, "project-scope", "bindings.json");
+  let mtime = -1;
+  try { mtime = fsSync.statSync(file).mtimeMs; } catch { return []; }
+  if (_pinkieProjectRootsCache && _pinkieProjectRootsCache.file === file && _pinkieProjectRootsCache.mtime === mtime) return _pinkieProjectRootsCache.roots;
+  let roots = [];
+  try {
+    const data = JSON.parse(fsSync.readFileSync(file, "utf8"));
+    roots = Object.values(data || {}).flatMap((entry) => {
+      const root = entry && typeof entry.root === "string" ? path.resolve(entry.root) : "";
+      if (!root || root === path.parse(root).root || root === path.resolve(home)) return [];
+      return [root];
+    });
+  } catch {}
+  roots = [...new Set(roots)];
+  _pinkieProjectRootsCache = { file, mtime, roots };
+  return roots;
+}
+function _pinkieResolveExtraMediaRoots() {
+  return [..._pinkieStaticMediaRoots(), ..._pinkieProjectRoots()];
+}
+`;
+
+function toV4(text) {
+  if (text.split(v3RootsHead).length !== 2) throw new Error("图片白名单 v3 结构已变化，未覆盖");
+  return text.replace(v3Marker, marker).replace(v3RootsHead, projectRootsHelpers + v4RootsHead);
+}
 
 /**
  * Header injected at the very top of the patched dist file.
@@ -96,6 +139,7 @@ function replaceOnce(text, from, to) {
  */
 export function transform(original) {
   if (original.includes(marker)) return original;
+  if (original.includes(v3Marker)) return toV4(original);
 
   /* v2 had the right exact workspace list but only applied it to callers that
      omitted localRoots. Control UI supplies an agent-scoped root array, so its
@@ -105,9 +149,9 @@ export function transform(original) {
   if (original.includes(previousMarker)) {
     const oldCheck = '\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
     const newCheck = '\tif (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n';
-    return original
-      .replace(previousMarker, marker)
-      .replace(oldCheck, newCheck);
+    return toV4(original
+      .replace(previousMarker, v3Marker)
+      .replace(oldCheck, newCheck));
   }
   let text = original;
 
@@ -185,7 +229,7 @@ export function transform(original) {
   for (const [from, to] of shapes) text = text.replace(from, to);
   if (!shapes.length) throw new Error("OpenClaw 图片白名单代码结构已变化，未覆盖: inbound/boundary roots");
 
-  return header + text;
+  return toV4(v3Marker + header.slice(marker.length) + text);
 }
 
 /**

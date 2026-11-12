@@ -34,7 +34,11 @@ test('the hover text says plainly what each kind of stop does', () => {
   assert.equal(routeDescription('high', GEMINI), '当前模型原生支持这一档');
   assert.match(routeDescription('minimal', GLM), /最低只到 High.*更快.*（模拟）/);
   assert.match(routeDescription('xhigh', GLM), /原生最高到 High；碧琪补 1 份独立起草 \+ 打开成品审稿/);
-  assert.match(routeDescription('high', ['off']), /拆清要求，动手的活先列验收清单/);
+  // 2026-11-09 升级逻辑：Medium 先弄懂，High 再加交前自查；Medium 以下不补，按最接近的原生档发送。
+  assert.match(routeDescription('medium', ['off']), /拆清要求，动手的活先列验收清单/);
+  assert.match(routeDescription('high', ['off']), /拆清要求，交之前再逐条核一遍/);
+  assert.match(routeDescription('low', ['off']), /当前模型没有这一档，按最接近的 .+ 发送/);
+  assert.match(routeDescription('adaptive', GLM), /写东西、做选择按 Medium/);
   // 补强 = 碧琪替这个模型多做一步：拆题 / 独立起草 / 打开成品审稿（reasoning.mjs 的审稿员带只读工具）。
   assert.match(routeDescription('max', GEMINI), /碧琪替当前模型多做一步：2 份独立起草.*打开成品审稿/);
   assert.match(routeDescription('ultra', GLM), /3 份独立起草/);

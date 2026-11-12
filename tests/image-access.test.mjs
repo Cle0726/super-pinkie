@@ -9,6 +9,52 @@ const anchor='/** Verifies that a local media path is managed inbound media or l
 const legacy=`import path from "node:path";\n${anchor}mediaPath, localRoots) {\n\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n}`;
 const current=`import path from "node:path";\nasync function resolveLocalMediaBoundary(mediaPath, localRoots) {\n\tconst roots = localRoots ?? getDefaultLocalRootsCore();\n\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n\treturn {roots,resolved};\n}\n${anchor}mediaPath, localRoots) {}`;
 
+// A v3 install as it exists on users' machines: v4 minus the project-root helpers.
+function v3Of(source){
+  const text=transform(source);
+  const start=text.indexOf('let _pinkieProjectRootsCache;'),end=text.indexOf('function _pinkieStaticMediaRoots() {');
+  return (text.slice(0,start)+text.slice(end).replace('function _pinkieStaticMediaRoots() {','function _pinkieResolveExtraMediaRoots() {')).replace('pinkie-image-access:v4','pinkie-image-access:v3');
+}
+
+// Run the injected helpers against a fake home + state root.
+function rootsFn(patched,{home,stateRoot}){
+  const start=patched.indexOf('let _pinkieExtraMediaRoots;'),end=patched.indexOf('/** Verifies that a local media path');
+  const body=patched.slice(start,end);
+  const fakeOs={homedir:()=>home};
+  const fakeProcess={env:{...(stateRoot?{PINKIE_STATE_ROOT:stateRoot}:{})}};
+  return new Function('path','os','fsSync','process',body+'\nreturn {roots:_pinkieResolveExtraMediaRoots,under:_pinkiePathIsUnderRoots};')(path,fakeOs,fs,fakeProcess);
+}
+
+test('image access lets 碧琪 look at screenshots inside a bound project folder (11-11 ladder-r7)',()=>{
+  const home=fs.mkdtempSync(path.join(os.tmpdir(),'pk-img-home-'));
+  const stateRoot=path.join(home,'state'),project=path.join(home,'Projects','shop'),other=path.join(home,'Projects','other');
+  fs.mkdirSync(path.join(stateRoot,'project-scope'),{recursive:true});fs.mkdirSync(project,{recursive:true});
+  const bindings=path.join(stateRoot,'project-scope','bindings.json');
+  const {roots,under}=rootsFn(transform(current),{home,stateRoot});
+  const shot=path.join(project,'preview-desktop.png');
+  assert.equal(under(shot,roots()),false,'not bound yet');
+  fs.writeFileSync(bindings,JSON.stringify({'agent:project:s1':{root:project,name:'shop'},'agent:project:bad':{root:home},'agent:project:junk':{root:42}}));
+  assert.equal(under(shot,roots()),true,'bound project folder is allowed');
+  assert.equal(under(path.join(other,'x.png'),roots()),false,'a sibling folder is not');
+  assert.equal(under(path.join(home,'secret.png'),roots()),false,'a binding to the home folder never opens the whole home');
+  assert.equal(under(path.join(stateRoot,'x.png'),roots()),false);
+  // unbinding takes effect without restarting the gateway
+  fs.writeFileSync(bindings,'{}');const later=new Date(Date.now()+5000);fs.utimesSync(bindings,later,later);
+  assert.equal(under(shot,roots()),false,'unbound again');
+  // Desktop/Documents/workspace roots are unchanged
+  assert.equal(under(path.join(home,'Desktop','a.png'),roots()),true);
+});
+
+test('image access upgrades a v3 install to v4 in place',()=>{
+  const v3=v3Of(current);
+  assert.match(v3,/pinkie-image-access:v3/);assert.doesNotMatch(v3,/_pinkieProjectRoots/);
+  const upgraded=transform(v3);
+  assert.match(upgraded,/pinkie-image-access:v4/);assert.doesNotMatch(upgraded,/pinkie-image-access:v3/);
+  assert.match(upgraded,/_pinkieProjectRoots\(\)/);
+  assert.equal(upgraded,transform(current));
+  assert.equal(transform(upgraded),upgraded);
+});
+
 test('image access supports both legacy and current OpenClaw boundary layouts',()=>{
   const oldPatched=transform(legacy),currentPatched=transform(current);
   assert.match(oldPatched,/_pinkiePathIsUnderRoots/);
@@ -24,7 +70,7 @@ test('image access supports both legacy and current OpenClaw boundary layouts',(
 test('image access upgrades the previous narrow v1 patch in place',()=>{
   const v1=`/* pinkie-image-access:v1 */\nimport os from "node:os";\nlet _pinkieExtraMediaRoots;\nfunction _pinkieResolveExtraMediaRoots() { return []; }\nfunction _pinkiePathIsUnderRoots() { return false; }\n${anchor}mediaPath, localRoots) {\n\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n}`;
   const upgraded=transform(v1);
-  assert.match(upgraded,/pinkie-image-access:v3/);
+  assert.match(upgraded,/pinkie-image-access:v4/);
   assert.doesNotMatch(upgraded,/pinkie-image-access:v1/);
   assert.match(upgraded,/_pinkieWorkspaceRoots/);
   assert.match(upgraded,/import fsSync from "node:fs"/);
@@ -32,13 +78,13 @@ test('image access upgrades the previous narrow v1 patch in place',()=>{
 });
 
 test('image access upgrades v2 so Control UI agent-scoped roots include exact workspaces',()=>{
-  const v2=transform(legacy).replace('pinkie-image-access:v3','pinkie-image-access:v2')
+  const v2=v3Of(legacy).replace('pinkie-image-access:v3','pinkie-image-access:v2')
     .replace(
       'if (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;',
       'if (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;'
     );
   const upgraded=transform(v2);
-  assert.match(upgraded,/pinkie-image-access:v3/);
+  assert.match(upgraded,/pinkie-image-access:v4/);
   assert.match(upgraded,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return/);
   assert.doesNotMatch(upgraded,/localRoots === void 0 && _pinkiePathIsUnderRoots/);
   assert.equal(transform(upgraded),upgraded);
@@ -82,7 +128,7 @@ async function assertLocalMediaAllowed(mediaPath, localRoots, options) {
 test('2026.10 boundary check allows the extra roots before inbound resolution and in the default root list',()=>{
   const patched=transform(current2026);
   assert.notEqual(patched,current2026);
-  assert.match(patched,/pinkie-image-access:v3/);
+  assert.match(patched,/pinkie-image-access:v4/);
   assert.match(patched,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return \{\n\t\trejectHardlinks: false,\n\t\troots: \[path\.dirname\(path\.resolve\(mediaPath\)\)\]\n\t\};/);
   assert.match(patched,/const roots = \[\.\.\.\(localRoots \?\? getDefaultMediaLocalRoots\(\)\), \.\.\._pinkieResolveExtraMediaRoots\(\)\];/);
   assert.match(patched,/try \{\n\t\tinboundReference = await resolveInboundMediaReference\(mediaPath\);/,'the managed-reference branch is kept');
@@ -97,7 +143,7 @@ test('2026.10 picks the real .mjs chunk, not a re-export shim',()=>{
     const real=path.join(dist,'local-media-access-REAL.mjs');
     fs.writeFileSync(real,current2026);
     assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-REAL.mjs');
-    assert.match(fs.readFileSync(real,'utf8'),/pinkie-image-access:v3/);
+    assert.match(fs.readFileSync(real,'utf8'),/pinkie-image-access:v4/);
     assert.doesNotMatch(fs.readFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'utf8'),/pinkie/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
@@ -109,6 +155,6 @@ test('2026.7 picks the unpatched .js chunk (the runtime the release build instal
     const file=path.join(dist,'local-media-access-olAlkTss.js');
     fs.writeFileSync(file,legacy);
     assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-olAlkTss.js');
-    assert.match(fs.readFileSync(file,'utf8'),/pinkie-image-access:v3/);
+    assert.match(fs.readFileSync(file,'utf8'),/pinkie-image-access:v4/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
