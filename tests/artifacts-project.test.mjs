@@ -37,6 +37,9 @@ test('W1: html written and edited twice → 1 item, 3 versions; restore v1 adds 
   assert.equal(restored.v, 4);
   assert.equal(fs.readFileSync(file, 'utf8'), '<p>one</p>');
   assert.equal(store.get(id).item.versions.at(-1).source, 'restore');
+  const preview = store.read(id, 2);
+  assert.equal(preview.data, '<p>two</p>');
+  assert.equal(preview.encoding, 'utf8');
   store.remove(id);
   assert.equal(store.list({}).items.length, 0);
   assert.ok(fs.existsSync(file), '移除只删索引，不删磁盘文件');
@@ -158,6 +161,8 @@ test('P1: settings keyed by folder, prompt per PROMPTS §6, pinned only paths in
   assert.match((await api.call('pinkie.project.settings.set', {folder: project, pinned: ['/etc/hosts']})).error, /项目文件夹里/);
   assert.match((await api.call('pinkie.project.settings.set', {folder: project, instructions: 'x'.repeat(MAX_INSTRUCTIONS + 1)})).error, /最多 8000/);
   assert.match((await api.call('pinkie.project.settings.set', {name: '没文件夹'})).error, /还没有文件夹/);
+  const files = await api.call('pinkie.project.settings.files', {folder: project, query: 'brief'});
+  assert.deepEqual(files.files.map(f => f.rel), ['brief.md']);
   assert.equal(projectPrompt('A', '说明', []).includes('常看资料'), false);
   assert.equal(projectPrompt('A', '', []), '');
   assert.ok(new ProjectSettings(path.join(dir, 'state'), {bindingsFile}).promptFor(KEY));
