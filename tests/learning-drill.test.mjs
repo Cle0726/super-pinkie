@@ -8,7 +8,7 @@ import {LearningPact} from '../services/mode-architecture/learning-pact.mjs';
 import {LearningRecall, recallHash} from '../services/mode-architecture/learning-recall.mjs';
 import {LearningVocab} from '../services/mode-architecture/learning-vocab.mjs';
 import {LearningDesk} from '../services/mode-architecture/learning-desk.mjs';
-import {EXPLAIN_RULES} from '../services/mode-architecture/learning-game-content.mjs';
+import {isExplainRules} from '../services/mode-architecture/learning-explain-voice.mjs';
 import {
   DRILL_CHEER_RULES, DRILL_JUDGE_RULES, DRILL_RULES, LearningDrill, buildSession, drillCardHash, drillStars, drillStrength,
   foldDrillText, localCheer, localJudge, mapDrillRating, mixDrillCards, pairLabel, validateDrillCards,
@@ -582,7 +582,7 @@ test('做完才讲：讲解顺着标准答案，没做完不能要', async t => 
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const store = new LearningInteractionStore({root, workspace: path.join(root, 'workspace')});
   let payload;
-  const organizer = {catalog: () => ({defaultRef: 'qa/explain'}), requestModel: async (_model, rules, body) => { payload = body; assert.equal(rules, EXPLAIN_RULES); return {text: 'impact 后面固定用 on。'}; }};
+  const organizer = {catalog: () => ({defaultRef: 'qa/explain'}), requestModel: async (_model, rules, body) => { payload = body; assert.ok(isExplainRules(rules)); return {text: 'impact 后面固定用 on。'}; }};
   const drill = new LearningDrill(store, {organizer});
   const session = {sessionId: 's1', sessionKey: KEY, items: [{itemId: 'd1', mode: 'choice', prompt: 'impact ___', options: ['in', 'on', 'at', 'of'], reveal: {question: 'impact ___ business', answer: 'on', extra: '介词用 on'}}], answers: [], graded: {}, learned: {}};
   drill.save(session);

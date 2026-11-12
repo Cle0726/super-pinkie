@@ -94,7 +94,7 @@
 #pinkie-study-desk .pkp-fb small{display:inline-block;margin-right:10px;font:600 10.5px/1 var(--pkg-latin);letter-spacing:.2em;color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkp-fb__key b{font:600 15px/1.4 var(--serif,var(--pkg-display));color:var(--pkg-ink)}
 #pinkie-study-desk .pkp-fb__mon{font-size:12.5px!important;color:var(--pkg-ink-3)!important}
-#pinkie-study-desk .pkp-fb__lecture{padding-top:8px;border-top:1px solid var(--pkg-line);color:var(--pkg-ink)!important;white-space:pre-wrap}
+#pinkie-study-desk .pkp-fb__lecture{white-space:pre-line;line-height:1.6;padding-top:8px;border-top:1px solid var(--pkg-line);color:var(--pkg-ink)!important;white-space:pre-wrap}
 /* 作答区铺开时，篇章题干、术语选项和解析跟题干一起放大，不留在窄卡字号。 */
 @container drill (min-width:900px){
   #pinkie-study-desk .pkp-split .pk-drill-stem{font-size:28px;line-height:1.5}

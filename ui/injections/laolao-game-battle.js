@@ -276,7 +276,7 @@
         if (copy) {
           const p = el('p', 'pk-sheet-explain', '碧琪在按标准答案讲…');
           copy.append(p);
-          g.call('guard.explain', {attemptId: payload.attemptId, itemId: items[i].itemId, yours: items[i].options[k]}).then(res => {
+          g.call('guard.explain', {attemptId: payload.attemptId, itemId: items[i].itemId, yours: items[i].options[k]}, 60000).then(res => {
             if (!p.isConnected) return;
             if (res?.text) p.textContent = res.text; else p.remove();
           }).catch(() => { if (p.isConnected) p.remove(); });

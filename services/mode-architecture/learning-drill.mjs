@@ -4,7 +4,8 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import {vocabDrillFields} from './learning-vocab.mjs';
-import {EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
+import {explainInput} from './learning-game-content.mjs';
+import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 
 const LIBRARY = 'agent:learning:notes-library';
 const SIZES = [5, 10, 15, 20];
@@ -913,7 +914,7 @@ export class LearningDrill {
     const last = [...(session.answers || [])].reverse().find(entry => entry.itemId === itemId);
     if (!last && !session.learned?.[itemId]) throw new Error('先做完这题');
     session.explained ||= {};
-    if (session.explained[itemId]?.text) return session.explained[itemId];
+    if (session.explained[itemId]?.text && session.explained[itemId].v === EXPLAIN_VERSION) return session.explained[itemId];
     const standard = clean(typeof item.reveal?.answer === 'string' ? item.reveal.answer : (typeof item.answer === 'string' ? item.answer : ''), 400);
     const note = clean(item.reveal?.extra || '', 300);
     const correct = last ? fullyCorrect(last) : true;
@@ -924,9 +925,9 @@ export class LearningDrill {
     if (!standard || !status.available || !this.organizer?.requestModel) return keep(local);
     try {
       const payload = explainInput({question: item.reveal?.question || item.prompt || '', options: item.options, standard, note, yours: attempt, correct});
-      const result = await this.organizer.requestModel(status.model, EXPLAIN_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 900, timeoutMs: 25000});
-      const text = validExplain(result)?.text || validExplain(result?.value)?.text;
-      return keep(text ? {text, source: 'model'} : local);
+      const result = await this.organizer.requestModel(status.model, explainRules(), payload, true, {userText: JSON.stringify(payload), maxTokens: 1400, timeoutMs: 45000});
+      const text = validVoicedExplain(result)?.text || validVoicedExplain(result?.value)?.text;
+      return keep(text ? {text, source: 'model', v: EXPLAIN_VERSION} : local);
     } catch {
       return keep(local);
     }
