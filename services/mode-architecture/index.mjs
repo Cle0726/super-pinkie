@@ -332,6 +332,10 @@ const WATCHDOG_CLI_TIMEOUT_MS = Math.max(2_000,
   // resending then creates two invisible runs that fight over the JSONL.
   Number(process.env.PINKIE_WATCHDOG_CLI_TIMEOUT_MS) || 30_000);
 const TIER_CONTROL_PREFIX = '[pinkie-tier-control]';
+const TIER_FAILED_TURN_LIMIT = 6;
+const TIER_FAILED_TURN_BASE_MS = 30_000;
+const TIER_FAILED_TURN_MAX_MS = 8 * 60_000;
+const TIER_FAILED_TURN_RESET_CAP_MS = 15 * 60_000;
 const DISPLAY_PRICING_VERSION = 2;
 const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
 
@@ -4782,15 +4786,39 @@ export class TierContinuation {
     this.onDispatched = options.onDispatched || null;
     this.timers = new Map();
     this.dispatching = new Set();
+    this.failedTurns = new Map();
   }
 
   tag(sessionKey) {
     return safeTag(sessionKey).replace('pinkie-watchdog-', this.tagName);
   }
 
-  async schedule(sessionKey, agentId) {
+  // 上一轮没出内容就失败了（多半是上游限流 / 断流）：不马上再推，等一会儿，越等越久；
+  // 上游给了恢复时间就至少等到那时。连着失败 TIER_FAILED_TURN_LIMIT 次就不再推，
+  // 让真实的报错留在用户面前，不在一个限流的号上空转（11-11 r7：一件事空推 80 多次）。
+  failedTurnDelay(sessionKey, reason = '') {
+    const count = (Number(this.failedTurns.get(sessionKey)) || 0) + 1;
+    this.failedTurns.set(sessionKey, count);
+    if (count > TIER_FAILED_TURN_LIMIT) return -1;
+    const backoff = Math.min(TIER_FAILED_TURN_BASE_MS * 2 ** (count - 1), TIER_FAILED_TURN_MAX_MS);
+    const reset = Number(String(reason).match(/reset_seconds["']?\s*[:=]\s*(\d+)/)?.[1]) || 0;
+    return Math.max(backoff, Math.min(reset * 1000 + 5_000, TIER_FAILED_TURN_RESET_CAP_MS));
+  }
+
+  async schedule(sessionKey, agentId, outcome = {}) {
     const status = this.statusFor(sessionKey) || {};
     if (!status.active || status.parentRunning || Number(status.pending) > 0) return false;
+    let delayMs = 1_000;
+    if (outcome.failed) {
+      delayMs = this.failedTurnDelay(sessionKey, outcome.reason);
+      if (delayMs < 0) {
+        this.api.logger?.warn?.(`tier continuation stopped after ${TIER_FAILED_TURN_LIMIT} failed turns session=${sessionKey}`);
+        await this.cancel(sessionKey, {keepFailures: true});
+        return false;
+      }
+    } else {
+      this.failedTurns.delete(sessionKey);
+    }
     const tag = this.tag(sessionKey);
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
     const controlText = this.messageFor(status);
@@ -4812,14 +4840,14 @@ export class TierContinuation {
         sessionKey,
         agentId,
         message: controlText,
-        delayMs: 5_000,
+        delayMs: Math.max(5_000, delayMs),
         deliveryMode: 'none',
         deleteAfterRun: true,
         name: this.turnName,
         tag,
       });
     }
-    this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
+    this.scheduleTimer({sessionKey, agentId, tag, delayMs});
     return true;
   }
 
@@ -4886,11 +4914,12 @@ export class TierContinuation {
     }
   }
 
-  async cancel(sessionKey) {
+  async cancel(sessionKey, {keepFailures = false} = {}) {
     const timer = this.timers.get(sessionKey);
     if (timer) clearTimeout(timer);
     this.timers.delete(sessionKey);
     this.dispatching.delete(sessionKey);
+    if (!keepFailures) this.failedTurns.delete(sessionKey);
     try {
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag: this.tag(sessionKey)});
     } catch {}
@@ -7389,7 +7418,10 @@ export default {
         if (hasDeliverableAssistantReply(event)) void reasoning.agentEnded(event, ctx).catch(() => {});
         const status = architecture.status(ctx.sessionKey || '');
         if (status.active && status.pending === 0) {
-          await tierContinuation.schedule(ctx.sessionKey, ctx.agentId || agentFromSessionKey(ctx.sessionKey));
+          // 这一轮没交出内容就失败了：续跑要等上游缓过来，不能立刻再推。
+          const failedTurn = event.success !== true && !hasDeliverableAssistantReply(event);
+          await tierContinuation.schedule(ctx.sessionKey, ctx.agentId || agentFromSessionKey(ctx.sessionKey),
+            failedTurn ? {failed: true, reason: failureReasonFromEvent(event)} : {});
         } else if (!status.active || status.complete) {
           await tierContinuation.cancel(ctx.sessionKey || '');
         }
