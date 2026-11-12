@@ -10,7 +10,7 @@ const {createDocument} = require('./fixtures/mini-dom.cjs');
 const script = fs.readFileSync(new URL('../ui/injections/laolao-process-card.js', import.meta.url), 'utf8');
 const key = 'pinkie:process:agent:main:test:user1';
 
-function harness(saved = {}, session = "agent:main:test") {
+function harness(saved = {}, session = "agent:main:test", clock = null) {
   const localKey = `pinkie:process:${session}:user1`;
   const document = createDocument();
   const proto = Object.getPrototypeOf(document.createElement('div'));
@@ -43,7 +43,8 @@ function harness(saved = {}, session = "agent:main:test") {
     performance: {now: () => 1}, matchMedia: () => ({matches: true}),
     MutationObserver: class {constructor(fn) { observer = fn; } observe() {}},
     requestAnimationFrame(fn) { frames.push(fn); return frames.length; }, cancelAnimationFrame() {},
-    setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; }, clearTimeout() {}, setInterval() {}, console});
+    setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; }, clearTimeout() {}, setInterval() {}, console,
+    Date: clock || Date});
   function flush() { for (let i = 0; i < 8 && frames.length; i++) for (const fn of frames.splice(0)) fn(); }
   function render() { window.__laolaoProcessCard.schedule(); flush(); }
   function send(stream, data) {
@@ -111,6 +112,41 @@ test('live thinking follows its own rows and only fills Lit-owned slots', () => 
   assert.match(processBranchSource('render'), /data-pinkie-thinking-seg/);
 });
 
+test('a later round with a blank reasoning block gets a duration-only 思考了', () => {
+  const msg = (role, content, id, timestamp, extra = {}) => ({role, content, timestamp, ...extra, __openclaw: {id}});
+  const grp = (role, id, messages, timestamp) => ({kind: 'group', role, key: id, timestamp,
+    messages: messages.map((value, i) => ({message: value, key: `${id}:${i}`}))});
+  const projected = pinkieBuildTimeline([
+    grp('user', 'user1', [msg('user', '继续', 'user1', 1000)], 1000),
+    grp('tool', 'step1', [msg('assistant', [
+      {type: 'thinking', thinking: '先看'}, {type: 'text', text: '看一下'},
+      {type: 'tool_call', callId: 'read1', name: 'read', arguments: {}},
+    ], 'step1', 1100)], 1100),
+    grp('tool', 'res1', [msg('toolResult', [{type: 'text', text: 'ok'}], 'res1', 8600, {toolCallId: 'read1', details: {durationMs: 500}})], 8600),
+    grp('tool', 'step2', [msg('assistant', [
+      {type: 'thinking', thinking: ' '}, {type: 'text', text: '再跑'},
+      {type: 'tool_call', callId: 'read2', name: 'exec', arguments: {}},
+    ], 'step2', 8650)], 8650),
+    grp('tool', 'res2', [msg('toolResult', [{type: 'text', text: 'ok'}], 'res2', 16150, {toolCallId: 'read2', details: {durationMs: 500}})], 16150),
+  ], getToolCalls).find(row => row.isProcessCard);
+  const segs = projected.processThinkingSegments;
+  assert.deepEqual(segs.map(ep => [ep.text, ep.ms, Boolean(ep.narration)]), [['先看', 7000, false], ['', 7000, false]]);
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '先看'});
+  h.send('assistant', {delta: '看一下'});
+  h.send('tool', {phase: 'result', name: 'read', toolCallId: 'read1'});
+  h.setRows(4);
+  h.top.pinkieHistorySegments = segs;
+  h.invalidateHistory();
+  const boxes = [...h.card.querySelectorAll('.pinkie-thinking')];
+  assert.equal(boxes.length, 2);
+  assert.equal(boxes[1].classList.contains('is-empty'), true);
+  const labels = boxes.map(box => box.querySelector('.pinkie-thinking__label').textContent);
+  assert.match(labels[0], /^思考了 \d+ 秒$/); // live timing wins when it was measured
+  assert.equal(labels[1], '思考了 7 秒');
+});
+
 test('historical thinking parts are projected to the same rows', () => {
   const projected = historicalCard();
   assert.deepEqual(projected.processThinkingSegments.map(ep => [ep.text, ep.anchor]), [
@@ -164,6 +200,33 @@ test('a live card whose durable key replaces its optimistic key keeps thinking a
 });
 
 
+test('a Mac chat opened without ?session= still places each thought by its row', () => {
+  const h = harness({}, '');
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '第一段'});
+  h.send('assistant', {delta: '说一句'});
+  h.send('tool', {phase: 'start', name: 'read'});
+  h.setRows(2);
+  h.send('tool', {phase: 'result', name: 'read', toolCallId: 'read1'});
+  h.send('thinking', {delta: '第二段'});
+  assert.deepEqual(h.textAt(0), ['第一段']);
+  assert.deepEqual(h.textAt(2), ['第二段']);
+});
+
+test('unrestricted mode places each thought by its row instead of one top block', () => {
+  const h = harness({}, 'agent:unrestricted:main');
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '第一段'});
+  h.send('assistant', {delta: '说一句'});
+  h.send('tool', {phase: 'start', name: 'read'});
+  h.setRows(2);
+  h.send('tool', {phase: 'result', name: 'read', toolCallId: 'read1'});
+  h.send('thinking', {delta: '第二段'});
+  assert.deepEqual(h.textAt(0), ['第一段']);
+  assert.deepEqual(h.textAt(2), ['第二段']);
+  assert.equal(h.card.textContent.includes('2 次'), false);
+});
+
 test('other sessions keep one combined thought in the original top position', () => {
   const h = harness({}, 'agent:other:test');
   h.send('lifecycle', {phase: 'start'});
@@ -200,4 +263,89 @@ test('the active sidebar session also keeps other modes on the previous history 
     if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
   }
+});
+
+test('a Gemini tool round with no reasoning part at all gets its own duration-only 思考了', () => {
+  const msg = (role, content, id, timestamp, extra = {}) => ({role, content, timestamp, ...extra, __openclaw: {id}});
+  const grp = (role, id, messages, timestamp) => ({kind: 'group', role, key: id, timestamp,
+    messages: messages.map((value, i) => ({message: value, key: `${id}:${i}`}))});
+  const res = (id, call, at, ran) => grp('tool', id, [msg('toolResult', [{type: 'text', text: 'ok'}], id, at, {toolCallId: call, details: {durationMs: ran}})], at);
+  const projected = pinkieBuildTimeline([
+    grp('user', 'user1', [msg('user', '查', 'user1', 1000)], 1000),
+    grp('tool', 'step1', [msg('assistant', [
+      {type: 'thinking', thinking: '先看'}, {type: 'tool_call', callId: 'r1', name: 'read', arguments: {}},
+    ], 'step1', 1000)], 1000),
+    res('res1', 'r1', 6500, 500),
+    grp('tool', 'step2', [msg('assistant', [
+      {type: 'text', text: '再跑 `ls`'}, {type: 'tool_call', callId: 'r2', name: 'exec', arguments: {}},
+    ], 'step2', 6550)], 6550),
+    res('res2', 'r2', 12000, 450),
+    grp('tool', 'step3', [msg('assistant', [
+      {type: 'tool_call', callId: 'r3', name: 'exec', arguments: {}},
+    ], 'step3', 12050)], 12050),
+    res('res3', 'r3', 12600, 100),
+    grp('tool', 'step4', [msg('assistant', [
+      {type: 'tool_call', callId: 'r4', name: 'exec', arguments: {}},
+    ], 'step4', 12650)], 12650),
+    res('res4', 'r4', 15000, 100),
+  ], getToolCalls).find(row => row.isProcessCard);
+  const eps = projected.processThinkingSegments.map(ep => [ep.text, ep.ms]);
+  // Round 3 said nothing and acted within 0.8 s: no row. Round 4 said nothing: duration only.
+  assert.deepEqual(eps, [['先看', 5000], ['', 5000], ['', 2250]]);
+  const h = harness();
+  h.setRows(4);
+  h.top.pinkieHistorySegments = projected.processThinkingSegments;
+  h.invalidateHistory();
+  const boxes = [...h.card.querySelectorAll('.pinkie-thinking')];
+  assert.equal(boxes.length, 3);
+  assert.equal(boxes[1].classList.contains('is-empty'), true);
+  assert.equal(boxes[2].classList.contains('is-empty'), true);
+  assert.equal(boxes[2].querySelector('.pinkie-thinking__head').disabled, true);
+  assert.deepEqual(boxes.map(box => box.querySelector('.pinkie-thinking__label').textContent), ['思考了 5 秒', '思考了 5 秒', '思考了 2 秒']);
+});
+
+test('live: a round that acts without streamed reasoning gets 思考了 N 秒 before its command', () => {
+  let now = 100000;
+  class Clock extends Date { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } }
+  const h = harness({}, 'agent:main:test', Clock);
+  h.send('lifecycle', {phase: 'start'});
+  now += 3000;
+  h.send('thinking', {delta: '先看'});
+  now += 1000;
+  h.send('tool', {phase: 'start', name: 'read'});
+  h.setRows(2);
+  now += 500;
+  h.send('tool', {phase: 'result', name: 'read'});
+  now += 6000; // the model works 6 s and streams no words
+  h.send('tool', {phase: 'start', name: 'exec'});
+  h.send('tool', {phase: 'start', name: 'exec'}); // same round: no second row
+  h.setRows(4);
+  const labels = [...h.card.querySelectorAll('.pinkie-thinking__label')].map(node => node.textContent);
+  assert.deepEqual(labels, ['思考了 4 秒', '思考了 6 秒']);
+  assert.deepEqual(h.textAt(0), ['先看']);
+  assert.deepEqual(h.textAt(2), ['']);
+});
+
+test('live: a quiet round gets a duration-only 思考了; late reasoning fills the same box', () => {
+  let now = 100000;
+  class Clock extends Date { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } }
+  const h = harness({}, 'agent:main:test', Clock);
+  h.send('lifecycle', {phase: 'start'});
+  now += 7000; // Gemini: silence, then the sentence and the call arrive together
+  h.send('assistant', {text: '碧琪先运行 date'});
+  h.send('tool', {phase: 'start', name: 'exec'});
+  h.setRows(2);
+  now += 800;
+  h.send('tool', {phase: 'result', name: 'exec'});
+  now += 6000;
+  h.send('assistant', {text: '碧琪先运行 date碧琪再运行 ls'}); // cumulative text: only this round's part
+  h.send('tool', {phase: 'start', name: 'exec'});
+  h.send('thinking', {delta: '其实要先看目录'}); // reasoning that arrives after the call
+  h.setRows(4);
+  const boxes = [...h.card.querySelectorAll('.pinkie-thinking')];
+  assert.equal(boxes.length, 2);
+  assert.deepEqual(h.textAt(0), ['']);
+  assert.deepEqual(h.textAt(2), ['其实要先看目录']);
+  const labels = boxes.map(box => box.querySelector('.pinkie-thinking__label').textContent);
+  assert.equal(labels[0], '思考了 7 秒');
 });

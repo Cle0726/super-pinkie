@@ -112,6 +112,7 @@
       };
       const todayBtn = btn('今天要背', () => startDrill(toc.today?.count ? {kind: 'due'} : {kind: 'more'}), 'n-toc-entry', 'rotate-ccw');
       todayBtn.append(el('span', 'n-number', toc.today?.count ?? 0)); todayBtn.setAttribute('aria-current', 'false'); aside.append(todayBtn);
+      entry('过几天', toc.resting, {view: 'resting'}, 'calendar');
       entry('易错', toc.mistakes, {view: 'mistakes'}, 'triangle-alert');
       for (const exam of toc.exams || []) {
         if (!exam.subjects?.length) continue;
@@ -131,7 +132,7 @@
       try {
         const legacy = route.exam === 'other' && route.subject === LEGACY;
         const params = {limit: 500, query, ...(route.exam ? {exam: route.exam, subject: route.subject, ...(route.topic ? {topic: route.topic} : {})} : {}),
-          ...(route.view === 'inbox' ? {inbox: true} : ['mistakes', 'moved'].includes(route.view) ? {view: route.view} : route.view === 'merged' ? {includeMerged: true} : {})};
+          ...(route.view === 'inbox' ? {inbox: true} : ['mistakes', 'moved', 'resting'].includes(route.view) ? {view: route.view} : route.view === 'merged' ? {includeMerged: true} : {})};
         const jobs = [rpc('notes.toc'), legacy ? rpc('notes.list', {limit: 500}) : rpc('notes.list', params)];
         if (route.subject && mode === 'manuscript') jobs.push(rpc('notes.section.get', {exam: route.exam, subject: route.subject}));
         if (route.view === 'mistakes') jobs.push(rpc('attempts.list', {sessionKey: typeof ctx.sessionKey === 'function' ? ctx.sessionKey() : ctx.sessionKey, wrongOnly: true, limit: 20}));
@@ -153,7 +154,7 @@
       const isSection = Boolean(route.subject), legacy = route.subject === LEGACY;
       const due = toc?.today?.count || 0;
       drillHead.replaceChildren(document.createTextNode(due ? `背 ${due} 条` : '背一组新的'));
-      title.textContent = route.topic || route.subject || ({inbox: '收集箱', review: '今天要背', mistakes: '易错', moved: '已搬进生词本', merged: '已合并'}[route.view] || '原笔记');
+      title.textContent = route.topic || route.subject || ({inbox: '收集箱', review: '今天要背', resting: '过几天', mistakes: '易错', moved: '已搬进生词本', merged: '已合并'}[route.view] || '原笔记');
       crumb.textContent = [route.exam ? examName(route.exam) : '', route.topic ? route.subject : ''].filter(Boolean).join(' / ');
       segment.hidden = !isSection || legacy; organize.hidden = !isSection || legacy; for (const b of segment.children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
       const count = (data.notes || []).length;
@@ -164,7 +165,7 @@
         subtitle.textContent = saved ? `${legacy ? saved.sourceCount : section.noteCount} 条原笔记 → 提炼成 ${saved.pointCount} 个要点 · ${date(saved.builtAt || saved.createdAt)} 整理${legacy ? ' · 只读' : ''}` : `${section?.noteCount ?? count} 条原笔记 · 还没有整理稿`;
         return renderManuscript();
       }
-      subtitle.textContent = route.view === 'moved' ? `${count} 条 · 原笔记归档在这里，词在生词本里背` : `${count} 条 · 按最近更新`;
+      subtitle.textContent = route.view === 'resting' ? `${count} 条 · 点过「记得」或已经掌握的先放在这里，到期后再出现` : route.view === 'moved' ? `${count} 条 · 原笔记归档在这里，词在生词本里背` : `${count} 条 · 按最近更新`;
       renderCards(); if (route.view === 'mistakes') renderWrongAttempts();
     }
 

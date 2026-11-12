@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {calculateReviewSchedule} from './learning.mjs';
+import {calculateReviewSchedule, restingReview} from './learning.mjs';
 import {LEARNING_EXAMS} from './learning-exams.mjs';
 
 const MAX_WORDS = 3000;
@@ -217,6 +217,7 @@ export class LearningVocab {
     const settings = this.settings();
     const needle = clean(query, 80).toLowerCase();
     const counts = {total: all.length, due: all.filter(word => word.due && word.status === 'ready').length,
+      resting: all.filter(word => restingReview(word, now)).length,
       pending: all.filter(word => ['pending', 'organizing'].includes(word.status)).length, failed: all.filter(word => word.status === 'failed').length, byExam: {}};
     for (const item of ENGLISH_EXAMS) {
       const inExam = all.filter(word => word.exams.some(tag => tag.id === item.id && tag.tier !== '超纲'));
@@ -228,6 +229,8 @@ export class LearningVocab {
       covered: list.words.filter(word => heads.has(word)).length, createdAt: list.createdAt || 0}));
     const words = all.filter(word => {
       if (filter === 'due' && !(word.due && word.status === 'ready')) return false;
+      if (filter === 'resting' && !restingReview(word, now)) return false;
+      if ((filter === 'all' || filter === '') && restingReview(word, now)) return false;
       if (filter === 'pending' && !['pending', 'organizing'].includes(word.status)) return false;
       if (filter === 'failed' && word.status !== 'failed') return false;
       if (exam && !word.exams.some(tag => tag.id === exam)) return false;
