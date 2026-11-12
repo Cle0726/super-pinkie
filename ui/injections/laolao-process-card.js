@@ -27,13 +27,30 @@
     return node;
   };
   const sessionKey = () => {
-    const routed = new URL(location.href).searchParams.get("session") || "";
+    let routed = "";
+    try { routed = new URL(location.href).searchParams.get("session") || ""; } catch {}
     if (routed) return routed;
-    return document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
+    const row = document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
+    if (row) return row;
+    // Mac's main window loads /chat with no ?session=. The pane and shell still
+    // know which conversation is open; Windows puts the key in the URL.
+    for (const pane of document.querySelectorAll?.("openclaw-chat-pane") || []) {
+      const key = pane.state?.sessionKey || pane.sessionKey;
+      if (typeof key === "string" && key) return key;
+    }
+    const shell = document.querySelector?.("openclaw-app-shell");
+    const fromShell = shell?.activeSessionKey || shell?.context?.gateway?.snapshot?.sessionKey;
+    return typeof fromShell === "string" ? fromShell : "";
   };
-  // Only the four included modes get the new segmented presentation. Other
-  // sessions retain the previous single combined thought at the top.
-  const segmentedAllowed = () => /^agent:(?:main|project|thinking|learning):/.test(sessionKey());
+  // One 「思考了」 per burst, placed before the step that followed it.
+  // 「· N 次」 is the old single box. It was still used for 无限制, and for any
+  // Mac page whose session string was not one of the first four modes.
+  const segmentedAllowed = () => {
+    const mode = document.documentElement?.dataset?.laolaoMode || "";
+    if (mode === "chat" || mode === "project" || mode === "thinking" || mode === "learning" || mode === "unrestricted") return true;
+    const key = sessionKey();
+    return !key || /^agent:(?:main|project|thinking|learning|unrestricted):/.test(key);
+  };
   const publishRunState = (key, active) => {
     if (!key) return;
     const runs = window.__pinkieActiveChatRuns instanceof Map
@@ -60,6 +77,9 @@
   const processCardKeys = new WeakMap();
   const dirtyCards = new Set();
   const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
+  const moveThoughtState = (from, to) => {
+    if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+  };
   // v8: show each received thought before folding, including a block delivered
   // in the same batch as tool.start. Keep this transient state out of storage.
   const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
@@ -96,7 +116,7 @@
   // boundaryAt: when the model last started a new call (turn start, a tool
   // result). Some providers deliver a whole thought in one chunk just before
   // acting, so the wait since that boundary is the real thinking time.
-  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, boundaryToolId: "", buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
+  const run = {session: "", key: "", state: "", startedAt: 0, thinkingSince: 0, boundaryAt: 0, boundaryToolId: "", roundThought: false, quietEp: null, buffer: "", doneKey: "", doneAt: 0, oops: new Map(), confetti: "", migrate: null};
   const liveCardKey = () => {
     const known = processCards.get(run.key);
     if (known?.isConnected && known.dataset.pinkieProcess === run.key
@@ -114,14 +134,18 @@
       // while this very run is still streaming. Carry the current thought and
       // its transient animation/open state to the new live card immediately.
       const oldKey = run.key, previous = oldKey && store[oldKey];
-      if (run.startedAt && run.session === sessionKey() && previous?.text && !store[key]?.text) {
+      const incoming = store[key];
+      const liveRicher = previous?.text && (!incoming?.text
+        || previous.text.length > String(incoming.text).length
+        || (previous.eps?.length || 0) > (incoming.eps?.length || 0));
+      if (run.startedAt && run.session === sessionKey() && liveRicher) {
         store[key] = {...previous, eps: previous.eps?.map(ep => ({...ep})),
           turn: {session: run.session, id: key.slice(('pinkie:process:' + run.session + ':').length)}};
         keep.add(key);
         episodesOf(previous).forEach((_, index) => {
           const from = epKey(oldKey, index), to = epKey(key, index);
           if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
-          if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+          moveThoughtState(from, to);
         });
         save();
       }
@@ -152,6 +176,7 @@
     return hidden ? kids.length - 1 + hidden : kids.length;
   }
   function appendThinking(text) {
+    run.roundThought = true;
     const key = resolveKey();
     if (!key) { run.buffer = (run.buffer + text).slice(-MAX_TEXT); return; }
     const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
@@ -169,12 +194,17 @@
       record.at = Date.now(); keep.add(key); save();
       return;
     }
-    if (!Array.isArray(record.eps)) record.eps = record.text ? [{text: record.text, ms: record.ms || 0, anchor: 0, legacy: true}] : [];
+    if (!Array.isArray(record.eps)) record.eps = record.text ? [{text: record.text, ms: record.ms || 0, anchor: 0}] : [];
     if (!run.thinkingSince) {
-      run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1;
+      const quiet = run.quietEp && run.quietEp === record.eps.at(-1) ? run.quietEp : null;
+      run.thinkingSince = quiet ? Date.now() : run.boundaryAt || Date.now();
       if (record.text) record.text += "\n\n";
-      record.eps.push({text: "", ms: 0, anchor: rowAnchor(key),
-        ...(run.boundaryToolId ? {afterTool: run.boundaryToolId, pendingTool: true} : {})});
+      if (quiet) typing.delete(epKey(key, record.eps.length - 1));
+      else {
+        record.count += 1;
+        record.eps.push({text: "", ms: 0, anchor: rowAnchor(key),
+          ...(run.boundaryToolId ? {afterTool: run.boundaryToolId, pendingTool: true} : {})});
+      }
     }
     const index = record.eps.length - 1, ep = record.eps[index], before = ep.text.length;
     ep.text += text;
@@ -194,6 +224,25 @@
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
     save();
+  }
+  // A round that acted without streaming any reasoning words still gets its
+  // own 「思考了 N 秒」 in front of its first command (duration only, cannot
+  // expand). Reasoning that arrives after the call fills this same box.
+  function noteQuietRound() {
+    if (run.roundThought || !run.boundaryAt || !segmentedAllowed()) return;
+    run.roundThought = true;
+    const spent = Date.now() - run.boundaryAt;
+    if (spent < 800) return;
+    const key = resolveKey();
+    if (!key) return;
+    const record = store[key] || (store[key] = {text: "", ms: 0, count: 0, at: Date.now()});
+    record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
+    if (!Array.isArray(record.eps)) record.eps = record.text ? [{text: record.text, ms: record.ms || 0, anchor: 0}] : [];
+    const ep = {text: "", ms: spent, anchor: rowAnchor(key),
+      ...(run.boundaryToolId ? {afterTool: run.boundaryToolId, pendingTool: true} : {})};
+    record.eps.push(ep); run.quietEp = ep;
+    record.ms += spent; record.count += 1; record.at = Date.now();
+    keep.add(key); save();
   }
   function stopThinking() {
     if (!run.thinkingSince) return;
@@ -224,7 +273,7 @@
         if (data.phase === "start") {
           if (run.state !== "asking" || run.session !== key) {
             stopThinking();
-            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), boundaryToolId: "", thinkingSince: 0, buffer: "", confetti: "", migrate: null});
+            Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), boundaryToolId: "", roundThought: false, quietEp: null, thinkingSince: 0, buffer: "", confetti: "", migrate: null});
             run.oops.clear();
           }
           publishRunState(key, true);
@@ -240,7 +289,7 @@
       if (!run.startedAt && Date.now() - run.doneAt > 3000
           && ["thinking", "assistant", "tool"].includes(payload.stream)) {
         Object.assign(run, {session: key, key: "", startedAt: Date.now(), boundaryAt: Date.now(), boundaryToolId: "",
-          thinkingSince: 0, buffer: "", migrate: null});
+          roundThought: false, quietEp: null, thinkingSince: 0, buffer: "", migrate: null});
         publishRunState(key, true);
       }
       if (payload.stream === "thinking") {
@@ -250,9 +299,10 @@
       }
       if (payload.stream === "assistant") { if (run.state !== "asking") setState("writing"); return; }
       if (payload.stream === "tool") {
-        if (data.phase === "start") setState(data.name === "ask_user" ? "asking" : "working");
+        if (data.phase === "start") { noteQuietRound(); setState(data.name === "ask_user" ? "asking" : "working"); }
         else if (data.phase === "result") {
           run.boundaryAt = Date.now();
+          run.roundThought = false; run.quietEp = null;
           run.boundaryToolId = String(data.toolCallId || data.tool_call_id || data.callId || "");
           if (run.state === "working") setState("thinking");
         }
@@ -291,14 +341,35 @@
         || Object.values(store).find(record => record.turn?.id && key === 'pinkie:process:' + record.turn.session + ':' + record.turn.id);
       if (previous?.text) { record = store[key] = {...previous}; keep.add(key); save(); }
     }
-    const history = segmentedAllowed() && Array.isArray(slot.pinkieHistorySegments) ? slot.pinkieHistorySegments.filter(ep => ep?.text) : [];
+    const history = segmentedAllowed() && Array.isArray(slot.pinkieHistorySegments)
+      ? slot.pinkieHistorySegments.filter(ep => ep && (String(ep.text || "").trim() || Number(ep.ms) > 0)) : [];
     if (!record?.text && (history.length || slot.pinkieHistoryThinking)) {
-      const text = history.length ? history.map(ep => ep.text).join("\n\n") : String(slot.pinkieHistoryThinking);
+      const text = history.length ? history.map(ep => ep.text).filter(Boolean).join("\n\n") : String(slot.pinkieHistoryThinking);
       record = store[key] = {text: text.slice(-MAX_TEXT), ms: 0, count: history.length || 1,
-        ...(history.length ? {eps: history.map(ep => ({text: ep.text, ms: 0, anchor: ep.anchor}))} : {}),
+        ...(history.length ? {eps: history.map(ep => ({text: String(ep.text || "").trim(), ms: ep.ms || 0, anchor: ep.anchor}))} : {}),
         at: Date.now(), fromHistory: true};
       record.turn = {session: sessionKey(), id: key.slice(('pinkie:process:' + sessionKey() + ':').length)};
       keep.add(key); save();
+    }
+    // Once the round is saved, history is the source of truth: one 「思考了」 per
+    // model round. Keep live timings/text where the live burst said more.
+    // While this card is still live, only take history that already covers
+    // every live burst, so the one being streamed is never dropped.
+    const liveHere = run.startedAt && run.key === key;
+    if (history.length && (!liveHere || history.length >= (record?.eps?.length || 0)) && Array.isArray(record?.eps) && !record.eps.some(ep => ep.legacy)) {
+      const next = history.map((ep, i) => {
+        const text = String(ep.text || "").trim(), old = record.eps[i];
+        const same = old && !old.pendingTool && String(old.text || "").trim() === text;
+        // Display history carries no reasoning words: a thought this page saw
+        // live stays, instead of being replaced by history's empty segment.
+        const thought = old && !old.narration && String(old.text || "").trim() ? old.text : "";
+        if (thought) return {text: thought, ms: old.ms > 0 ? old.ms : ep.ms || 0, anchor: ep.anchor};
+        return {text: same && String(old.text).length > text.length ? old.text : text,
+          ms: same && old.ms > 0 ? old.ms : ep.ms || 0, anchor: ep.anchor};
+      });
+      const changed = next.length !== record.eps.length || next.some((ep, i) => ep.anchor !== record.eps[i].anchor
+        || ep.ms !== record.eps[i].ms || ep.text !== record.eps[i].text);
+      if (changed) { record.eps = next; record.count = next.length; save(); }
     }
     const anchors = slot.pinkieToolAnchors || {};
     let resolved = false;
@@ -343,7 +414,7 @@
     const wanted = new Set();
     const placements = [];
     eps.forEach((ep, index) => {
-      if (!ep.text) return;
+      if (!String(ep.text || "").trim() && !(Number(ep.ms) > 0)) return;
       const target = card ? placeFor(card, slot, ep) : slot;
       if (!target) return;
       wanted.add(epKey(key, index));
@@ -411,14 +482,17 @@
     if (t && !isTyping && !holding && !thinking) typing.delete(id);
     if (isTyping) typingFrame = true;
     const live = thinking || isTyping || holding;
-    const opened = openedThoughts.has(id);
+    const empty = !String(ep.text || "").trim() && !thinking;
+    const opened = !empty && openedThoughts.has(id);
+    box.classList.toggle("is-empty", empty);
     // Folding a finished thought shrinks the card; keep the reader in place.
     if (box.classList.contains("is-live") !== live && !live) preserveSlot(slot, () => box.classList.remove("is-live"));
     box.classList.toggle("is-live", live);
     box.classList.toggle("is-typing", isTyping);
     box.classList.toggle("is-open", opened);
     const head = box.querySelector(".pinkie-thinking__head");
-    const expanded = String(live || opened);
+    const expanded = String(!empty && (live || opened));
+    head.disabled = empty;
     if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
     const label = box.querySelector(".pinkie-thinking__label");
     const ms = (ep.legacy ? record.ms : ep.ms) + (thinking ? Date.now() - run.thinkingSince : 0);
@@ -491,7 +565,7 @@
     episodesOf(record).forEach((_, index) => {
       const from = epKey(move.from, index), to = epKey(key, index);
       if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
-      if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+      moveThoughtState(from, to);
     });
     if (run.doneKey === move.from) run.doneKey = key;
     if (run.oops.has(move.from)) run.oops.set(key, run.oops.get(move.from));

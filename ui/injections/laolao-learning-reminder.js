@@ -3,87 +3,63 @@
   'use strict';
   if (window.__pinkieLearningReminder) return;
   const root = document.documentElement, ID = 'pinkie-learning-reminder';
-  const state = {key: '', generation: 0, node: null, host: null, panel: null, data: null, error: '', timer: 0, frame: 0, pending: null, readAt: 0};
-  const key = () => new URL(location.href).searchParams.get('session') || window.__pinkieStudyDesk?.sessionKey?.() || '';
+  const state = {key: '', generation: 0, node: null, host: null, data: null, error: '', timer: 0, frame: 0, pending: null, readAt: 0};
+  const learningKey = value => /^agent:learning:/.test(value || '') ? value : '';
+  const key = () => {
+    const found = [
+      new URL(location.href).searchParams.get('session') || '',
+      window.__pinkieStudyDesk?.sessionKey?.() || '',
+      ...[...document.querySelectorAll('openclaw-chat-pane')].map(pane => pane.state?.sessionKey || pane.sessionKey || ''),
+      document.querySelector('openclaw-app-shell')?.activeSessionKey || '',
+      document.querySelector('openclaw-app-shell')?.context?.gateway?.snapshot?.sessionKey || '',
+      document.querySelector('.sidebar-recent-session--active[data-session-key]')?.dataset.sessionKey || '',
+    ].find(learningKey);
+    if (found) return found;
+    return root.dataset.laolaoMode === 'learning' ? 'agent:learning:main' : '';
+  };
   const active = () => {
+    // __pinkieDeskChat is the desk-chat API and is set for the whole session.
+    // Treating it as "already on the desk" removed the top-bar countdown forever.
+    if (root.dataset.laolaoMode !== 'learning') return false;
     const owner = /^agent:([^:]+):/.exec(key())?.[1];
-    return !window.__pinkieDeskChat && root.dataset.laolaoMode === 'learning' && owner === 'learning';
+    return !owner || owner === 'learning';
   };
   const visible = node => node && !node.closest('[hidden], [inert]') && node.getBoundingClientRect().height > 0 && getComputedStyle(node).visibility !== 'hidden';
-  const header = () => ['header.topbar .dashboard-header', '.chat-pane__header .dashboard-header', '.topnav-shell__content', '.chat-pane__header', '.topnav-shell'].map(s => document.querySelector(s)).find(visible);
-  const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-  const number = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
-  const dayLabel = exam => !Number.isFinite(exam.daysLeft) ? '待定' : exam.daysLeft === 0 ? '今天' : exam.daysLeft < 0 ? `已过 ${Math.abs(exam.daysLeft)} 天` : `${exam.daysLeft} 天`;
-  const shortName = exam => exam.id === 'pretco-b' || /英语\s*B\s*级/i.test(exam.name) ? 'B级' : exam.id === 'zsb' || exam.name === '专升本' ? '升本' : exam.name;
-  const exams = () => (Array.isArray(state.data?.exams) ? state.data.exams : []).filter(e => e && typeof e.name === 'string').slice().sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
-  const progress = () => {
-    const data = state.data, items = [];
-    if (number(data?.goals?.minutes) !== null) items.push(`每天 ${data.goals.minutes} 分钟`);
-    if (number(data?.streak?.current) !== null) items.push(`连续 ${data.streak.current} 天`);
-    if (number(data?.progress?.lessons) !== null && number(data?.goals?.lessons) !== null) items.push(`上课 ${data.progress.lessons} / ${data.goals.lessons} 节`);
-    return items;
+  const header = () => {
+    // The bar in the screenshot is the row that holds 「学习台」 and the usage chips.
+    const usage = [...document.querySelectorAll('.laolao-usage')].find(visible);
+    const bar = usage?.parentElement;
+    if (bar && visible(bar)) return bar;
+    return ['.dashboard-header', '.chat-pane__header', '.pk-workspace-header', '.topnav-shell', 'header.topbar'].map(s => document.querySelector(s)).find(visible);
   };
-  function closePanel() {
-    state.panel?.remove(); state.panel = null;
-    state.node?.setAttribute('aria-expanded', 'false');
-  }
-  function positionPanel() {
-    if (!state.panel || !state.node) return;
-    const rect = state.node.getBoundingClientRect(), panel = state.panel.getBoundingClientRect();
-    state.panel.style.left = Math.max(8, Math.min(rect.left, innerWidth - panel.width - 8)) + 'px';
-    state.panel.style.top = Math.min(rect.bottom + 8, innerHeight - panel.height - 8) + 'px';
-  }
-  function panelContent() {
-    if (!state.panel) return;
-    const nodes = [el('strong', 'pinkie-learning-reminder-panel__title', '学习提醒')];
-    for (const exam of exams()) {
-      const row = el('div', 'pinkie-learning-reminder-panel__exam');
-      const label = el('span', '', exam.name); if (exam.date) label.append(el('small', '', exam.date));
-      row.append(label, el('b', '', dayLabel(exam))); nodes.push(row);
-    }
-    if (progress().length) nodes.push(el('p', '', progress().join(' · ')));
-    if (state.error) nodes.push(el('small', 'pinkie-learning-reminder-panel__error', state.data ? '暂时无法刷新，显示上次同步的数据' : '学习提醒暂未连接，稍后会自动重试'));
-    else if (!state.data) nodes.push(el('p', '', '正在读取学习台数据…'));
-    state.panel.replaceChildren(...nodes); positionPanel();
-  }
-  function togglePanel() {
-    if (state.panel) { closePanel(); return; }
-    const panel = state.panel = el('section', 'pinkie-learning-reminder-panel'); panel.id = ID + '-details';
-    panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', '考试倒计时和学习进度');
-    document.body.append(panel); state.node.setAttribute('aria-expanded', 'true'); panelContent();
-    if (state.error) void refresh(true);
-  }
+  const el = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const dayLabel = exam => !Number.isFinite(exam.daysLeft) ? '待定' : exam.daysLeft === 0 ? '今天' : exam.daysLeft < 0 ? `已过 ${Math.abs(exam.daysLeft)} 天` : `${exam.daysLeft} 天`;
+  const exams = () => (Array.isArray(state.data?.exams) ? state.data.exams : []).filter(e => e && typeof e.name === 'string').slice().sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity));
   function paint() {
     if (!state.node) return;
     const parts = [];
     for (const [i, exam] of exams().entries()) {
+      // One quiet line, the same size as the rest of the bar: name + days.
       const chip = el('span', 'pinkie-learning-reminder__exam'); chip.dataset.nearest = String(i === 0);
-      const name = el('span', 'pinkie-learning-reminder__exam-name');
-      name.append(el('span', 'pinkie-learning-reminder__full-name', exam.name), el('span', 'pinkie-learning-reminder__short-name', shortName(exam)));
-      chip.append(name, el('b', '', dayLabel(exam))); parts.push(chip);
+      const days = Number.isFinite(exam.daysLeft) && exam.daysLeft > 0;
+      chip.append(el('span', 'pinkie-learning-reminder__name', exam.name), el('b', 'pinkie-learning-reminder__days', days ? String(exam.daysLeft) : dayLabel(exam)));
+      if (days) chip.append(el('span', 'pinkie-learning-reminder__unit', '天'));
+      if (exam.date) chip.title = `${exam.name} ${exam.date}`;
+      parts.push(chip);
     }
-    if (progress().length) parts.push(el('span', 'pinkie-learning-reminder__progress', progress().join(' · ')));
-    if (!parts.length) parts.push(el('span', 'pinkie-learning-reminder__empty', state.error ? '提醒待连接' : '学习提醒'));
     state.node.replaceChildren(...parts);
     state.node.dataset.stale = String(Boolean(state.error));
-    state.node.setAttribute('aria-label', [...exams().map(e => `${e.name} ${dayLabel(e)}`), ...progress(), state.error ? '暂时无法刷新' : '', '查看完整学习提醒'].filter(Boolean).join('，'));
-    fit(); panelContent();
+    state.node.setAttribute('aria-label', '考试倒计时：' + exams().map(e => `${e.name} ${dayLabel(e)}`).join('，'));
+    fit();
   }
   function fit() {
     const {node, host} = state; if (!node || !host) return;
-    // A previous narrow window must not lock an intrinsically sized header
-    // into the abbreviated state after the window grows again.
-    node.style.removeProperty('max-width'); node.dataset.density = 'full';
-    const s = getComputedStyle(host), own = getComputedStyle(node);
-    const siblings = [...host.children].filter(n => n !== node && getComputedStyle(n).position !== 'absolute' && getComputedStyle(n).display !== 'none');
-    const used = siblings.reduce((sum, n) => { const c = getComputedStyle(n); return sum + n.getBoundingClientRect().width + (parseFloat(c.marginLeft) || 0) + (parseFloat(c.marginRight) || 0); }, 0);
-    const available = Math.max(24, host.clientWidth - (parseFloat(s.paddingLeft) || 0) - (parseFloat(s.paddingRight) || 0) - used - (parseFloat(s.columnGap) || 0) * siblings.length - (parseFloat(own.marginLeft) || 0) - 2);
-    node.style.maxWidth = Math.floor(available) + 'px';
-    for (const density of ['full', 'short', 'exams', 'nearest', 'number']) {
-      node.dataset.density = density;
-      if (node.scrollWidth <= available + 1) break;
-    }
-    positionPanel();
+    // Too narrow for both exams → keep only the nearest; too narrow for that → hide. Never clip.
+    node.hidden = !node.children.length; if (node.hidden) return;
+    const over = () => node.scrollWidth > node.clientWidth + 1 || host.scrollWidth > host.clientWidth + 1;
+    node.dataset.density = 'full';
+    if (over()) node.dataset.density = 'nearest';
+    if (over()) node.hidden = true;
   }
   function stopTimer() { clearTimeout(state.timer); state.timer = 0; }
   function scheduleRead() {
@@ -111,7 +87,7 @@
   }
   const resize = new ResizeObserver(() => queue());
   function remove() {
-    stopTimer(); resize.disconnect(); closePanel(); state.node?.remove(); state.host?.classList.remove('pinkie-learning-reminder-host');
+    stopTimer(); resize.disconnect(); state.node?.remove(); state.host?.classList.remove('pinkie-learning-reminder-host');
     state.node = state.host = null;
   }
   function reconcile() {
@@ -121,14 +97,13 @@
     const host = active() && root.dataset.pinkieStudyDesk !== 'desk' ? header() : null;
     if (!host) { if (state.node) remove(); return; }
     if (!state.node) {
-      const button = state.node = el('button', 'pinkie-learning-reminder'); button.id = ID; button.type = 'button';
-      button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', ID + '-details');
-      button.addEventListener('click', event => { event.stopPropagation(); togglePanel(); });
+      const line = state.node = el('div', 'pinkie-learning-reminder'); line.id = ID; line.setAttribute('role', 'status');
       paint();
     }
     if (state.host !== host || state.node.parentNode !== host) {
       state.host?.classList.remove('pinkie-learning-reminder-host'); state.host = host; host.classList.add('pinkie-learning-reminder-host');
-      host.insertBefore(state.node, host.querySelector(':scope > .dashboard-header__actions, :scope > .laolao-usage, :scope > .topnav-shell__actions'));
+      const usage = [...host.querySelectorAll('.laolao-usage')].find(node => node.parentElement === host);
+      host.insertBefore(state.node, usage || host.querySelector(':scope > .dashboard-header__actions, :scope > .topnav-shell__actions, :scope > .pk-workspace-header__views'));
       resize.disconnect(); resize.observe(host);
     }
     fit(); void refresh();
@@ -136,7 +111,7 @@
   function queue() {
     if (!state.frame) state.frame = requestAnimationFrame(() => { state.frame = 0; reconcile(); });
   }
-  const mounts = 'header.topbar, .topnav-shell__content, .dashboard-header, .chat-pane__header';
+  const mounts = 'header.topbar, .topnav-shell__content, .dashboard-header, .chat-pane__header, .pk-workspace-header';
   const observer = new MutationObserver(records => {
     if (records.some(r => r.type === 'attributes' || [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === 1 && (n.matches(mounts) || n.querySelector(mounts))))) queue();
   });
@@ -146,10 +121,8 @@
   };
   for (const name of ['pinkie:session-selected', 'laolao:modechange', 'popstate', 'pinkie:study-desk-view', 'pinkie:study-desk-mounted', 'pinkie:desk-chat-ready']) window.addEventListener(name, queue);
   window.addEventListener('pinkie:learning-state', () => { if (active() && !document.hidden) { state.readAt = 0; queue(); } });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopTimer(); closePanel(); } else { state.readAt = 0; queue(); } });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopTimer(); } else { state.readAt = 0; queue(); } });
   window.addEventListener('resize', queue);
-  document.addEventListener('pointerdown', event => { if (state.panel && !state.panel.contains(event.target) && !state.node?.contains(event.target)) closePanel(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.panel) { event.preventDefault(); closePanel(); state.node?.focus(); } });
   window.addEventListener('pagehide', () => { state.generation++; state.pending = null; observer.disconnect(); remove(); });
   window.addEventListener('pageshow', () => { observe(); queue(); });
   window.__pinkieLearningReminder = {refresh: () => refresh(true)};

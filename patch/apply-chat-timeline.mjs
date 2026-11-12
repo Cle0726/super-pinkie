@@ -934,14 +934,63 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const steps = [];
   const tail = [];
   const historySegments = [];
-  const captureHistoryThinking = (entry) => {
+  // Every model round gets its own 「思考了」 in front of what it did. A round
+  // whose provider returned no reasoning words gets a duration-only one.
+  // The gateway's display history drops thinking and tool-call parts; what is
+  // left is the narration text, stopReason "toolUse" and recordTimestampMs
+  // (when the reply finished). ms = reply finished minus reply began.
+  const resultsById = new Map();
+  for (const item of entries) for (const entry of item?.messages || []) {
     const message = entry?.message || {};
-    if (String(message.role || '').toLowerCase() !== 'assistant') return;
+    const id = message.toolCallId || message.tool_call_id || message.toolUseId || message.tool_use_id;
+    if (id) resultsById.set(String(id), message);
+  }
+  const roundMs = (message) => {
+    const began = Number(message.timestamp) || 0;
+    const recorded = Number(message.__openclaw?.recordTimestampMs) || 0;
+    if (began && recorded > began) return recorded - began;
     for (const part of textParts(message)) {
-      if (!['thinking', 'reasoning'].includes(partType(part))) continue;
-      const text = part.thinking || part.reasoning || part.text || '';
-      if (typeof text === 'string' && text.trim()) historySegments.push({text, ms: 0, anchor: steps.length});
+      if (!isToolCallPart(part)) continue;
+      const result = resultsById.get(partCallId(part, message));
+      const acted = (Number(result?.timestamp) || 0) - (Number(result?.details?.durationMs) || 0);
+      if (began && acted > began) return acted - began;
     }
+    return 0;
+  };
+  // A round that only ran a command left no reply in display history: its
+  // 「思考了」 is timed from the previous boundary to its result.
+  let roundReplied = false;
+  let boundaryAt = Number(timelineTimestamp(head)) || 0;
+  const captureQuietRound = (entry) => {
+    const message = entry?.message || {};
+    const role = String(message.role || '').toLowerCase();
+    if (role !== 'toolresult' && role !== 'tool_result' && role !== 'tool') return;
+    const at = Number(message.timestamp) || 0;
+    if (!roundReplied && at && boundaryAt && at - boundaryAt >= 800) {
+      historySegments.push({text: '', ms: at - boundaryAt, anchor: steps.length});
+    }
+    roundReplied = false;
+    if (at) boundaryAt = at;
+  };
+  const captureHistoryThinking = (entry, finalReply = false) => {
+    const message = entry?.message || {};
+    if (String(message.role || '').toLowerCase() !== 'assistant') return false;
+    const parts = textParts(message);
+    const ms = roundMs(message);
+    let found = false;
+    for (const part of parts) {
+      if (!['thinking', 'reasoning'].includes(partType(part))) continue;
+      const raw = part.thinking || part.reasoning || part.text || '';
+      if (typeof raw !== 'string' || !raw.trim()) continue;
+      historySegments.push({text: raw.trim(), ms: found ? 0 : ms, anchor: steps.length});
+      found = true;
+    }
+    roundReplied = true;
+    if (found || finalReply) return false;
+    if (!parts.some(isToolCallPart) && String(message.stopReason || '').toLowerCase() !== 'tooluse') return false;
+    if (ms < 800) return false;
+    historySegments.push({text: '', ms, anchor: steps.length});
+    return false;
   };
   let liveItems = false;
   for (let index = firstStepIndex; index < entries.length; index += 1) {
@@ -982,7 +1031,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     const role = String(item.role || '').toLowerCase();
     if (role === 'assistant' && index === finalAssistantIndex) {
       // The final response deliberately keeps the normal assistant bubble.
-      for (const entry of item.messages || []) captureHistoryThinking(entry);
+      for (const entry of item.messages || []) captureHistoryThinking(entry, true);
       tail.push(item);
       continue;
     }
@@ -996,6 +1045,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     for (const entry of item.messages || []) {
       if (pairedResultKeys.has(entry.key)) continue;
       captureHistoryThinking(entry);
+      captureQuietRound(entry);
       const augmented = role === 'tool'
         ? attachToolResults(entry, results, pairedResultKeys, getToolCalls)
         : entry;
@@ -1011,8 +1061,8 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   let routedSession = '';
   try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
     || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
-  const segmented = !routedSession || /^agent:(?:main|project|thinking|learning):/.test(routedSession);
-  const historyThinking = segmented ? historySegments.map(segment => segment.text).join('\n\n')
+  const segmented = !routedSession || /^agent:(?:main|project|thinking|learning|unrestricted):/.test(routedSession);
+  const historyThinking = segmented ? historySegments.map(segment => segment.text).filter(Boolean).join('\n\n')
     : entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
       .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))
       .filter(part => ['thinking', 'reasoning'].includes(partType(part)))

@@ -275,6 +275,13 @@ test('legacy notes remain readable and missing review fields mean never reviewed
   assert.match(fs.readFileSync(store.markdownPathForSession(sessionKey), 'utf8'), /\*\*arrive at\*\*：到达/);
 });
 
+test('learning header countdown stays up for the whole learning session', () => {
+  const source = fs.readFileSync(new URL('../ui/injections/laolao-learning-reminder.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /!window\.__pinkieDeskChat/);
+  assert.match(source, /考试倒计时/);
+  assert.match(source, /pinkieStudyDesk !== 'desk'/);
+});
+
 test('review scheduling uses spaced intervals and resets after forgetting', () => {
   const day = 24 * 60 * 60 * 1000;
   let note = {reviewCount: 0, lapses: 0};

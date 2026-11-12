@@ -253,6 +253,15 @@ export function calculateReviewSchedule(note = {}, rating, now = Date.now(), evi
   };
 }
 
+// 点过「记得」，或已经掌握（reviewLevel ≥ 3）且还没到期：先离开本子，放到「过几天」。
+// 到期后回到原来的本子和复习队列。忘了、模糊且尚未掌握的留在本子里。
+export function restingReview(item = {}, now = Date.now()) {
+  const next = Number(item.nextReviewAt) || 0;
+  if (!(next > now)) return false;
+  const level = Number(item.reviewLevel);
+  return item.lastReviewRating === 'remembered' || (Number.isFinite(level) && level >= 3);
+}
+
 function withReviewDefaults(note) {
   return {
     ...note,
@@ -1199,9 +1208,10 @@ export class LearningInteractionStore {
   notesToc(sessionKey, {now = Date.now()} = {}) {
     this.assertLearningSession(sessionKey);
     const scoped = this.readNotesState().notes.filter(note => noteInScope(note, sessionKey));
-    const active = scoped.filter(activeNote), queue = this.recall ? this.recall.snapshot(sessionKey, {now}) : this.reviewQueue(sessionKey, {now});
+    const active = scoped.filter(activeNote), onBook = active.filter(note => !restingReview(note, now));
+    const queue = this.recall ? this.recall.snapshot(sessionKey, {now}) : this.reviewQueue(sessionKey, {now});
     const exams = [...this.noteExams(), {id: 'other', name: '其它'}].map(exam => {
-      const notes = active.filter(note => note.triagedAt && (note.exam || 'other') === exam.id);
+      const notes = onBook.filter(note => note.triagedAt && (note.exam || 'other') === exam.id);
       const names = [...new Set(notes.map(note => note.subject || '未分类'))];
       return {id: exam.id, name: exam.name, count: notes.length, subjects: names.map(name => {
         const items = notes.filter(note => (note.subject || '未分类') === name);
@@ -1211,12 +1221,13 @@ export class LearningInteractionStore {
     });
     const legacy = this.readNotesState().organizedNotebooks[LEARNING_NOTEBOOK_SESSION];
     if (legacy && sessionKey === LEARNING_NOTEBOOK_SESSION) exams.at(-1).subjects.push({name: LEGACY_SECTION, count: legacy.sourceCount || 0, topics: [], legacy: true});
-    return {inbox: active.filter(note => !note.triagedAt).length, today: {count: queue.todayCount, backlog: queue.backlog, pending: (queue.pending || 0) + (queue.missing || 0)},
-      mistakes: active.filter(note => Number(note.lapses) > 0 || note.noteType === '易错').length,
+    return {inbox: onBook.filter(note => !note.triagedAt).length, today: {count: queue.todayCount, backlog: queue.backlog, pending: (queue.pending || 0) + (queue.missing || 0)},
+      mistakes: onBook.filter(note => Number(note.lapses) > 0 || note.noteType === '易错').length,
+      resting: active.filter(note => restingReview(note, now)).length,
       moved: scoped.filter(note => note.status === 'moved').length, exams};
   }
 
-  listNotes({sessionKey, query = '', tags = [], includeMerged = false, limit = 200, exam, subject, topic, inbox = false, noteType, view} = {}) {
+  listNotes({sessionKey, query = '', tags = [], includeMerged = false, limit = 200, exam, subject, topic, inbox = false, noteType, view, now = Date.now()} = {}) {
     const state = this.readNotesState();
     const all = state.notes;
     if (sessionKey === LEARNING_NOTEBOOK_SESSION) this.writeNotesMarkdown(all, sessionKey);
@@ -1241,6 +1252,9 @@ export class LearningInteractionStore {
       if (subject !== undefined && note.subject !== subject) return false;
       if (topic !== undefined && note.topic !== topic) return false;
       if (noteType !== undefined && note.noteType !== noteType) return false;
+      if (view === 'resting') {
+        if (!activeNote(note) || !restingReview(note, now)) return false;
+      } else if (activeNote(note) && restingReview(note, now)) return false;
       if (inbox === true && (!activeNote(note) || note.triagedAt)) return false;
       if (view === 'mistakes' && (!activeNote(note) || !(note.lapses > 0 || note.noteType === '易错'))) return false;
       if (needle && !comparable(`${note.title} ${note.content} ${note.term || ''} ${note.meaning || ''} ${(note.tags || []).join(' ')} ${note.topic || ''}`).includes(needle)) return false;

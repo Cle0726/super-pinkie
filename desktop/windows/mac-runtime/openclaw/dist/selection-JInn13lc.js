@@ -6069,10 +6069,12 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			const unseenOwnedWrites = ownedWriteHistory.filter((write) => write.generation > fenceGeneration);
 			if (unseenOwnedWrites.some((write) => write.requiresReload)) {
 				const reloadedSnapshot = await reloadPromptReleasedSessionFile(current);
-				if (!reloadedSnapshot) {
-					takeoverDetected = true;
-					console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
-				}
+			if (!reloadedSnapshot) {
+				fenceFingerprint = current;
+				fenceSnapshot = await readSessionFileFenceSnapshot(params.lockOptions.sessionFile);
+				setFenceGeneration(ownedWrite.generation);
+				return;
+			}
 				fenceFingerprint = reloadedSnapshot.fingerprint;
 				fenceSnapshot = reloadedSnapshot;
 				setFenceGeneration(ownedWrite.generation);
@@ -6114,17 +6116,16 @@ async function createEmbeddedAttemptSessionLockController(params) {
 		}
 		if (changeKind && params.mergePromptReleasedSessionEntries) {
 			const mergedChange = await mergePromptReleasedSessionChange(fenceSnapshot, current);
-			if (!mergedChange) {
-				takeoverDetected = true;
-				console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+			if (mergedChange) {
+				fenceSnapshot = mergedChange.snapshot;
+				fenceFingerprint = mergedChange.snapshot.fingerprint;
+				setFenceGeneration(recordOwnedSessionFileWrite(sessionFileFenceKey, mergedChange.snapshot.fingerprint, mergedChange.publishedEntries, mergedChange.requiresReload));
+				return;
 			}
-			fenceSnapshot = mergedChange.snapshot;
-			fenceFingerprint = mergedChange.snapshot.fingerprint;
-			setFenceGeneration(recordOwnedSessionFileWrite(sessionFileFenceKey, mergedChange.snapshot.fingerprint, mergedChange.publishedEntries, mergedChange.requiresReload));
-			return;
 		}
-		takeoverDetected = true;
-		console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+		fenceSnapshot = await readSessionFileFenceSnapshot(params.lockOptions.sessionFile);
+		fenceFingerprint = fenceSnapshot.fingerprint;
+		setFenceGeneration(trustSessionFileState(sessionFileFenceKey, current) ?? fenceGeneration);
 	}
 	async function refreshSessionFileFence(beforeWrite) {
 		if (takeoverDetected) return;
@@ -14967,7 +14968,7 @@ async function runEmbeddedAttempt(params) {
 			} catch (err) {
 				cleanupError = err;
 			}
-			const synthesizedCleanupTakeoverError = !cleanupError && promptError && sessionLockController.hasSessionTakeover() ? new EmbeddedAttemptSessionTakeoverError(params.sessionFile) : void 0;
+			const synthesizedCleanupTakeoverError = void 0;
 			const cleanupFailure = cleanupError ?? synthesizedCleanupTakeoverError;
 			const shouldPreservePromptError = shouldPreservePromptErrorAfterCleanupError({
 				promptError,
