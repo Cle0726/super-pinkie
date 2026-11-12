@@ -411,3 +411,66 @@ html[data-pinkie-study-desk] :is(.laolao-learning-notes,.pinkie-library){z-index
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk .ask.sending .ask-send svg{animation:none}}
 #pinkie-study-desk .ask-error{margin:8px 0 0 22px;font:13px/1.5 var(--sans);color:var(--ink)}
 #pinkie-study-desk .ask-error[hidden]{display:none}
+
+/* 内置模型：单色线稿，只有交互时才动。 */
+#pinkie-study-desk .desk-model-mark{display:inline-flex;flex:none;width:72px;height:72px;align-items:center;justify-content:center;color:var(--ink-2)}
+#pinkie-study-desk .desk-model-mark svg{display:block;width:100%;height:100%;overflow:visible}
+#pinkie-study-desk .desk-model-mark :is(.model-mark-book,.model-mark-route,.model-mark-lines,.model-mark-star){transform-box:fill-box;transform-origin:center;transition:transform .28s ease}
+#pinkie-study-desk .rail-foot [data-builtin-model] .desk-model-mark{width:38px;height:38px;vertical-align:middle;color:inherit}
+#pinkie-study-desk .rail-foot [data-builtin-model]:is(:hover,:focus-visible) .model-mark-book,
+#pinkie-study-desk .desk-model-head:hover .model-mark-book{transform:translateY(-2px)}
+#pinkie-study-desk .rail-foot [data-builtin-model]:is(:hover,:focus-visible) .model-mark-route,
+#pinkie-study-desk .desk-model-head:hover .model-mark-route{transform:translateY(-2px)}
+#pinkie-study-desk .rail-foot [data-builtin-model]:is(:hover,:focus-visible) .model-mark-star,
+#pinkie-study-desk .desk-builtin-model.has-choice .model-mark-star{transform:rotate(45deg)}
+#pinkie-study-desk dialog.desk-builtin-model{box-sizing:border-box;width:min(640px,calc(100vw - 32px));max-width:none;max-height:min(760px,calc(100vh - 32px));margin:auto;padding:0;border:1px solid var(--hair-2);border-radius:22px;background:var(--paper);color:var(--ink);box-shadow:0 28px 90px rgba(32,18,34,.32);overflow:hidden}
+#pinkie-study-desk dialog.desk-builtin-model[open]{display:flex;flex-direction:column}
+#pinkie-study-desk dialog.desk-builtin-model::backdrop{background:rgba(25,15,27,.58)}
+#pinkie-study-desk .desk-model-head{display:flex;align-items:center;gap:14px;flex:none;padding:20px 24px 14px;border-bottom:1px solid var(--hair);background:linear-gradient(110deg,var(--pink-tint),transparent 75%)}
+#pinkie-study-desk .desk-model-heading{min-width:0;flex:1}
+#pinkie-study-desk .desk-model-kicker{margin:0 0 5px;color:var(--pink-ink);font:700 10px/1.3 var(--sans);letter-spacing:.16em}
+#pinkie-study-desk .desk-model-heading h2{margin:0;color:var(--ink);font:700 28px/1.2 var(--serif)}
+#pinkie-study-desk .desk-model-lead{margin:6px 0 0;color:var(--ink-2);font:14px/1.5 var(--sans)}
+#pinkie-study-desk .desk-model-close{align-self:flex-start;padding:7px 10px;border:1px solid var(--hair-2);border-radius:9px;background:var(--card);color:var(--ink-2);font:13px var(--sans);cursor:pointer}
+#pinkie-study-desk .desk-model-body{min-height:0;overflow:auto;padding:16px 24px 8px}
+#pinkie-study-desk .desk-model-current{display:flex;align-items:center;gap:12px;padding:13px 16px;border:1px solid var(--hair);border-radius:13px;background:var(--card)}
+#pinkie-study-desk .desk-model-current.is-warning{border-color:var(--pink-ink)}
+#pinkie-study-desk .desk-model-current-copy{display:grid;gap:3px;min-width:0;flex:1}
+#pinkie-study-desk .desk-model-label{color:var(--ink-2);font:12px/1.3 var(--sans)}
+#pinkie-study-desk .desk-model-current-name{overflow-wrap:anywhere;font:700 17px/1.35 var(--sans)}
+#pinkie-study-desk .desk-model-current-detail{margin:0;color:var(--ink-2);font:12px/1.5 var(--sans)}
+#pinkie-study-desk .desk-model-current-mark{color:var(--ink-2);width:32px;height:32px;flex:none}
+#pinkie-study-desk .desk-model-current-mark svg{width:100%;height:100%}
+#pinkie-study-desk .desk-model-scope{margin:12px 1px 15px;color:var(--ink-2);font:13px/1.65 var(--sans)}
+#pinkie-study-desk .desk-model-search{display:flex;align-items:center;gap:11px;padding:0 12px;border:1px solid var(--hair-2);border-radius:11px;background:var(--card);color:var(--ink-2);font:13px var(--sans)}
+#pinkie-study-desk .desk-model-search>span{flex:none;white-space:nowrap}
+#pinkie-study-desk .desk-model-search:focus-within{outline:2px solid var(--pink-solid);outline-offset:1px}
+#pinkie-study-desk .desk-model-search input{box-sizing:border-box;min-width:0;width:100%;height:41px;padding:0;border:0;outline:0;background:transparent;color:var(--ink);font:14px var(--sans)}
+#pinkie-study-desk .desk-model-list-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:17px 1px 9px}
+#pinkie-study-desk .desk-model-list-head h3{margin:0;font:700 15px var(--sans)}
+#pinkie-study-desk .desk-model-list-head span{color:var(--ink-2);font:12px var(--sans)}
+#pinkie-study-desk .desk-model-choices{max-height:250px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--hair);border-radius:13px;background:var(--card)}
+#pinkie-study-desk .desk-model-option{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 14px;border:0;border-bottom:1px solid var(--hair);border-radius:0;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
+#pinkie-study-desk .desk-model-option:last-of-type{border-bottom:0}
+#pinkie-study-desk .desk-model-option:hover{background:var(--ink-tint)}
+#pinkie-study-desk .desk-model-option.is-selected{background:var(--pink-tint)}
+#pinkie-study-desk .desk-model-option[hidden],#pinkie-study-desk .desk-model-no-match[hidden]{display:none}
+#pinkie-study-desk .desk-model-radio{width:17px;height:17px;flex:none;box-sizing:border-box;border:1.5px solid var(--ink-3);border-radius:50%;background:var(--card)}
+#pinkie-study-desk .desk-model-option.is-selected .desk-model-radio{border:5px solid var(--pink-solid)}
+#pinkie-study-desk .desk-model-option-copy{display:grid;gap:3px;min-width:0;flex:1}
+#pinkie-study-desk .desk-model-option-copy strong{overflow-wrap:anywhere;font:600 14px/1.35 var(--sans)}
+#pinkie-study-desk .desk-model-option-copy small{overflow-wrap:anywhere;color:var(--ink-2);font:12px/1.35 var(--sans)}
+#pinkie-study-desk .desk-model-capability{flex:none;padding:4px 7px;border:1px solid var(--hair-2);border-radius:7px;color:var(--ink-2);font:12px var(--sans)}
+#pinkie-study-desk :is(.desk-model-empty,.desk-model-loading,.desk-model-no-match){margin:0;padding:17px;color:var(--ink-2);font:13px/1.6 var(--sans)}
+#pinkie-study-desk .desk-model-retry{margin:0 16px 16px;padding:6px 10px;border:1px solid var(--hair-2);border-radius:8px;background:var(--paper);color:var(--ink);cursor:pointer}
+#pinkie-study-desk .desk-model-message{min-height:20px;margin:9px 1px 0;color:var(--ink-2);font:12px/1.55 var(--sans)}
+#pinkie-study-desk .desk-model-message[data-kind="error"]{color:var(--pink-ink)}
+#pinkie-study-desk .desk-model-message[data-kind="success"]{color:var(--ink)}
+#pinkie-study-desk .desk-model-actions{display:flex;align-items:center;gap:9px;flex:none;padding:12px 24px 18px;border-top:1px solid var(--hair)}
+#pinkie-study-desk .desk-model-spacer{flex:1}
+#pinkie-study-desk :is(.desk-model-test,.desk-model-cancel,.desk-model-save){min-height:39px;padding:0 14px;border:1px solid var(--hair-2);border-radius:10px;background:var(--card);color:var(--ink);font:600 13px var(--sans);cursor:pointer}
+#pinkie-study-desk .desk-model-save{border-color:var(--pink-solid);background:var(--pink-solid);color:var(--on-pink)}
+#pinkie-study-desk :is(.desk-model-option,.desk-model-test,.desk-model-cancel,.desk-model-save,.desk-model-close,.desk-model-retry):focus-visible{outline:2px solid var(--pink-solid);outline-offset:-2px}
+#pinkie-study-desk :is(.desk-model-test,.desk-model-cancel,.desk-model-save):disabled{cursor:default}
+@media(max-width:520px){#pinkie-study-desk .desk-model-head{padding:14px 16px 12px;gap:9px}#pinkie-study-desk .desk-model-mark{width:58px;height:58px}#pinkie-study-desk .desk-model-heading h2{font-size:23px}#pinkie-study-desk .desk-model-body{padding:12px 16px 6px}#pinkie-study-desk .desk-model-actions{padding:10px 16px 14px}#pinkie-study-desk .desk-model-capability{display:none}}
+@media(prefers-reduced-motion:reduce){#pinkie-study-desk .desk-model-mark :is(.model-mark-book,.model-mark-route,.model-mark-lines,.model-mark-star){transition:none!important;transform:none!important}}

@@ -142,6 +142,7 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   const legacyMethods = new Map([...methods].filter(([name]) => !name.startsWith('pinkie.learning.materials.') && !name.startsWith('pinkie.learning.desk.lesson.') && !name.startsWith('pinkie.learning.ref.') && !name.startsWith('pinkie.learning.game.')));
   assert.deepEqual([...legacyMethods.keys()].sort(), [
     'pinkie.learning.attempts.correct', 'pinkie.learning.attempts.list', 'pinkie.learning.attempts.retry',
+    'pinkie.learning.builtinModel.setModel', 'pinkie.learning.builtinModel.status', 'pinkie.learning.builtinModel.test',
     'pinkie.learning.current',
     'pinkie.learning.drill.answer', 'pinkie.learning.drill.cheer', 'pinkie.learning.drill.explain', 'pinkie.learning.drill.finish', 'pinkie.learning.drill.judge', 'pinkie.learning.drill.learned', 'pinkie.learning.drill.session', 'pinkie.learning.drill.settings.get', 'pinkie.learning.drill.settings.set',
     'pinkie.learning.inline.draft', 'pinkie.learning.inline.get', 'pinkie.learning.inline.save',
