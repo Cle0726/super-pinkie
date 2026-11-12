@@ -3,6 +3,24 @@
 分支 **`audit/pinkie-1112`**。还没合 main、没打 tag、没发版、没装进任何 App。
 这份说明随改动一起更新，最下面的「进度」是做到哪了。Mac 端先读这一份，再看提交。
 
+## Mac 端 11-12 06:00 统一合并（Windows 端先 `git pull`）
+
+用户要求先把所有分支统一到这一条再讨论，不等实测。Mac 端在 `0e4d2f2` 之上合进了剩下的五条，本分支现在包含**除学习台游戏以外的全部在做的线**：
+
+| 合进来的 | 内容 | 冲突怎么解 |
+|---|---|---|
+| `fix/context-meter-live`（a7410c1） | 运行中上下文占用跟着每次模型调用刷新 | head 缓存号取新：`ctxpanel5live1` |
+| `feat/biqi-update-notes`（a7e2c04） | 碧琪口吻的更新说明（发版必须带） | 无冲突 |
+| `feat/biqi-tier-contract-1109`（e6fbdaa） | 计划 A：两套档位升级、run contract；**Windows 引擎改用公共源码** | 快照里的 `services/mode-architecture/index.mjs`、`setup.py` 删掉（`build-win.ps1` 现在快照里有 index.mjs 就报错）；`SHA256SUMS` 去掉这两行；清单加 `run-contract.mjs`；import 两边取并集 |
+| `feat/run-status-ui`（345caef） | 计划 B：输入框上方运行状态条、后台提醒（Dock / 任务栏）、断线恢复 | 时间线相关的 4 个提交 append-keeps-cards 早已带过来（v29 更新），这些文件一律取本分支；head 加 run-status / run-notify 三行 |
+| `feat/biqi-toolbox-1110`（e7781d2） | 计划 D：按活儿提示需要的能力，`toolbox.mjs ensure` | 快照 index.mjs 同上删掉；import 加 `toolboxBlock` |
+
+测试改了三处，都是因为引擎快照删了：`windows_mac_snapshot_test`（快照不再带任何 services 文件）、两个 watchdog 测试（快照目录不存在就不叠加）、`self-contained-app` 的打包清单加 `run-contract.mjs`。
+
+Mac 上全量：Node 1803 项，失败 40 项，和合并前的 `0e4d2f2` 是同一批（多为依赖已装 App / WebKit 的旧失败），**新增失败 0**；Python 467 项全过（`PYTHONPATH=app`）；`check_runtime.py` 通过。
+
+**仍然单独放着的：** `dev/study-game`（验收前不进 main 的规矩）；`feat/first-person-ui`（已装线上，等它自己发版）。**都没跑真实模型**，A / B / D / project-coding 的实测都停了，按用户的意思先讨论。
+
 ## 这条分支的底座
 
 `origin/feat/claude-parity-1111`（e3d66bc，最新界面）+ `origin/feat/project-coding-1111`（f4bc174，项目模式写代码、子会话时机提醒）合并而成，合并提交 `8f06238`。两条线原来都从 2.5.48 的 main 分出去，各自往前走，谁也不包含谁。
