@@ -554,3 +554,42 @@ test('a run that ends in NO_REPLY is not reviewed and does not use up the review
   assert.deepEqual(outcome, {reviewed: true, pass: true});
   assert.equal(auditCalls(f.calls).length, 1);
 });
+
+// 11-11 hy4free ladder-r7：慢模型带工具看图，审稿两次都在 300 秒时限里一个字没交，旧逻辑记成「批评结果格式不对」，
+// 第二次还追了一句「只输出 JSON」。没交东西就把同一份审稿再做一次；乱回一段话才追 JSON。
+test('a reviewer that returns nothing is asked the same review again, not nudged about JSON, and the failure says it timed out', async () => {
+  const audits = [];
+  const f = fixture({run: (params) => {
+    if (SOLVER.test(params.prompt)) return {payloads: [{text: '解答'}], meta: {}};
+    audits.push(params.prompt);
+    return {payloads: [], meta: {}};
+  }});
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs'});
+  await enhancer.prepare(request('max'));
+  enhancer.beforePromptBuild({prompt: '把 report.md 写成 3 段'}, {sessionKey: 'agent:learning:one'});
+  const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(outcome, {reviewed: false});
+  assert.equal(audits.length, 2, 'one retry');
+  assert.equal(audits[1], audits[0], 'the retry is the same review');
+  const status = enhancer.status({sessionKey: 'agent:learning:one'});
+  assert.equal(status.phase, 'unchecked');
+  const critic = status.jobs.find((job) => job.role === 'critic');
+  assert.equal(critic.state, 'failed');
+  assert.match(critic.summary, /没在时限内给出结论/);
+});
+
+test('a reviewer that answers in prose still gets one pure-JSON retry and keeps the prose', async () => {
+  const audits = [];
+  const f = fixture({run: (params) => {
+    if (SOLVER.test(params.prompt)) return {payloads: [{text: '解答'}], meta: {}};
+    audits.push(params.prompt);
+    return {payloads: [{text: audits.length === 1 ? '我觉得写得不错。' : '{"pass": true}'}], meta: {}};
+  }});
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs'});
+  await enhancer.prepare(request('max'));
+  enhancer.beforePromptBuild({prompt: '把 report.md 写成 3 段'}, {sessionKey: 'agent:learning:one'});
+  const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(outcome, {reviewed: true, pass: true});
+  assert.equal(audits.length, 2);
+  assert.match(audits[1], /只输出那一个 JSON 对象/);
+});

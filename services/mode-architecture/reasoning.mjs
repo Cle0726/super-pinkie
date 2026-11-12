@@ -1026,12 +1026,19 @@ export class ReasoningEnhancer {
         let verdict = parseVerdict(output);
         // 11-10 实测 L2-e：打回后的复核回了一段不是 JSON 的话，验收停在 unchecked。同一个模型再要一次纯 JSON，
         // 还不行才换下一个；原文留在任务记录里，方便查它到底回了什么。
+        // 11-11 hy4free ladder-r7：审稿在时限内一个字都没交（慢模型带工具看图），旧逻辑把它当成「格式不对」，
+        // 再要一次纯 JSON。没交东西不是格式问题：同样的审稿再做一次，失败时如实写「没在时限内给出结论」。
+        const empty = !String(output || '').trim();
         if (!verdict && !signal?.aborted) {
           badOutput = String(output || '').slice(0, 2000);
-          output = await ask(`${prompt}\n\n你上一次的输出不是一个合法的 JSON 对象。这次只输出那一个 JSON 对象，前后不要任何文字。`);
+          output = await ask(empty ? prompt : `${prompt}\n\n你上一次的输出不是一个合法的 JSON 对象。这次只输出那一个 JSON 对象，前后不要任何文字。`);
           verdict = parseVerdict(output);
         }
-        if (!verdict) { lastError = new Error('批评结果格式不对'); badOutput = String(output || badOutput).slice(0, 2000); continue; }
+        if (!verdict) {
+          lastError = new Error(String(output || '').trim() ? '批评结果格式不对' : '审稿没在时限内给出结论');
+          badOutput = String(output || badOutput).slice(0, 2000);
+          continue;
+        }
         const summary = verdict.pass ? '通过' : `发现 ${verdict.issues.length} 处问题：${summaryOf(verdict.issues[0]?.what)}`;
         this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'done', endedAt: Date.now(), model: ref ? `${ref.provider}/${ref.model}` : job.model, summary, output,
           toolsUsed: used.tools, opened: used.opened});
