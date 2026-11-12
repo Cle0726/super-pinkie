@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 
-function page({store = {}, focused = true} = {}) {
+function page({store = {}, focused = true, auto = true} = {}) {
   let now = 1000;
   const saved = new Map(Object.entries(store));
   const events = [];
@@ -70,6 +70,7 @@ function page({store = {}, focused = true} = {}) {
     }
     return true;
   };
+  if (auto) { window.PinkieTuning.setAuto(true); saved.clear(); }
   return {
     T: window.PinkieTuning, R: window.__pinkieRest, saved, events, attrs, ids, said, state, animation, run,
     advance: (ms) => { now += ms; },
@@ -92,6 +93,7 @@ test('ease overlay: only on the untouched 标准 level, never over a hand-set co
   assert.equal(T.get('effects.ambientFps', 30), 60, 'a control the user set wins');
   assert.deepEqual({...T.easing}, {'render.pixelRatio': 'low'});
   T.reset();
+  T.setAuto(true); // reset() turns 自动减负 back off (the default)
 
   T.setLevel('max');
   assert.equal(T.get('effects.ambientFps', 30), 60, 'no easing on 尽情用');
@@ -116,16 +118,17 @@ test('ease overlay never raises a value and drops anything unknown', () => {
   assert.deepEqual({...T.easing}, {});
 });
 
-test('自动减负 off is remembered; on leaves stored configs exactly as before', () => {
-  const first = page();
-  first.T.setAuto(false);
-  assert.deepEqual(JSON.parse(first.saved.get('pinkie.tuning.v1')), {version: 1, level: 'standard', values: {}, auto: false});
-  const again = page({store: Object.fromEntries(first.saved)});
-  assert.equal(again.T.auto, false, 'survives a restart');
+test('自动减负 is off by default; on is remembered; off leaves stored configs exactly as before', () => {
+  const first = page({auto: false});
+  assert.equal(first.T.auto, false, 'off by default: same effects on every machine');
+  first.T.setAuto(true);
+  assert.deepEqual(JSON.parse(first.saved.get('pinkie.tuning.v1')), {version: 1, level: 'standard', values: {}, auto: true});
+  const again = page({store: Object.fromEntries(first.saved), auto: false});
+  assert.equal(again.T.auto, true, 'survives a restart');
   again.T.setLevel('max');
-  assert.equal(again.T.auto, false, 'changing the level keeps it');
-  again.T.setAuto(true);
-  assert.deepEqual(JSON.parse(again.saved.get('pinkie.tuning.v1')), {version: 1, level: 'max', values: {}}, 'no auto field when on');
+  assert.equal(again.T.auto, true, 'changing the level keeps it');
+  again.T.setAuto(false);
+  assert.deepEqual(JSON.parse(again.saved.get('pinkie.tuning.v1')), {version: 1, level: 'max', values: {}}, 'no auto field when off');
   again.T.reset();
   assert.equal(again.saved.size, 0);
 });

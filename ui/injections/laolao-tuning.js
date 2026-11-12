@@ -18,7 +18,8 @@
  * page is measurably dropping frames. It is not a hardware guess: it comes from
  * frame times actually observed, steps back up when they recover, only applies
  * on the untouched 标准 level, never beats a control the user set by hand, and
- * can be switched off on the page (`auto: false` in the stored config).
+ * is OFF by default — every machine looks the same unless the user switches
+ * it on (`auto: true` in the stored config).
  * Must load right after laolao-motion-preference.js, before any other injection. */
 (() => {
   "use strict";
@@ -55,10 +56,10 @@
   const valid = (key, value) => Object.prototype.hasOwnProperty.call(OPTIONS, key)
     && OPTIONS[key].some((option) => option === value);
   const clean = (raw) => {
-    const out = {version: VERSION, level: "standard", values: {}, auto: true};
+    const out = {version: VERSION, level: "standard", values: {}, auto: false};
     if (!raw || typeof raw !== "object" || raw.version !== VERSION) return out;
     if (LEVELS.includes(raw.level)) out.level = raw.level;
-    if (raw.auto === false) out.auto = false;
+    if (raw.auto === true) out.auto = true;
     if (raw.values && typeof raw.values === "object") {
       for (const [key, value] of Object.entries(raw.values)) if (valid(key, value)) out.values[key] = value;
     }
@@ -76,9 +77,9 @@
     const before = snapshot();
     config = clean(next);
     try {
-      if (config.level === "standard" && !Object.keys(config.values).length && config.auto) localStorage.removeItem(KEY);
-      // `auto` is written only when switched off, so configs saved before it existed stay byte-identical.
-      else localStorage.setItem(KEY, JSON.stringify(config.auto ? {version: config.version, level: config.level, values: config.values} : config));
+      if (config.level === "standard" && !Object.keys(config.values).length && !config.auto) localStorage.removeItem(KEY);
+      // 自动减负 is off by default (same effects on every machine); `auto` is written only when the user switches it on.
+      else localStorage.setItem(KEY, JSON.stringify(config.auto ? config : {version: config.version, level: config.level, values: config.values}));
     } catch {}
     const after = snapshot();
     emit(Object.keys(after).filter((key) => after[key] !== before[key]));
@@ -163,6 +164,6 @@
       save({version: VERSION, level: config.level, values, auto: config.auto});
       return true;
     },
-    reset() { save({version: VERSION, level: "standard", values: {}, auto: true}); },
+    reset() { save({version: VERSION, level: "standard", values: {}, auto: false}); },
   });
 })();
