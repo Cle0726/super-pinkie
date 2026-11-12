@@ -5,7 +5,7 @@
   window.__pinkieStudyDeskVocabLoaded = true;
   let registered = false;
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; };
-  const FILTERS = [['all', '全部'], ['due', '待复习'], ['pending', '整理中'], ['failed', '需重试']];
+  const FILTERS = [['all', '全部'], ['due', '待复习'], ['resting', '过几天'], ['pending', '整理中'], ['failed', '需重试']];
   const LAYOUT_KEY = 'pinkie.vocab.layout';
   // 卡片 / 词表的选择只是本机偏好，读写失败就用卡片。
   const readLayout = () => { try { return localStorage.getItem(LAYOUT_KEY) === 'table' ? 'table' : 'cards'; } catch { return 'cards'; } };
@@ -129,19 +129,21 @@
         if (Number(word.createdAt) > Date.now() - 600000) { row.classList.add('is-new'); const stamp = el('span', 'pk-stamp v-book-new', '刚收'); row.prepend(stamp); }
         compactList.append(row);
       }
-      if (!words.length) compactList.append(el('p', 'v-book-empty', '生词本还是空的。点页底「管理」，写下要背的词。'));
+      if (!words.length) compactList.append(el('p', 'v-book-empty', filter === 'resting' ? '还没有先放下的词。' : '生词本还是空的。点页底「管理」，写下要背的词。'));
       count.textContent = counts.total ? `${counts.total} 个词${counts.pending ? ` · ${counts.pending} 个整理中` : ''}` : '还没有生词';
       model.textContent = data.model ? `内置模型 · ${data.model}` : data.organizing ? '内置模型整理中' : '内置模型';
       reviewButton.textContent = counts.due ? `背 ${counts.due} 个` : '背一组新的'; if (counts.due && window.__pinkieDeskKit) reviewButton.append(window.__pinkieDeskKit.star('full'));
       shelfStamp.hidden = !counts.total;
+      for (const node of filters.children) if (node.dataset.filter === 'resting') node.textContent = counts.resting ? `过几天 ${counts.resting}` : '过几天';
       retryAll.hidden = !counts.failed;
       renderExams();
       list.replaceChildren();
       list.classList.toggle('is-table', layout === 'table');
       if (!words.length) {
         const empty = el('div', 'v-empty');
-        empty.append(el('strong', '', counts.total ? '没有符合条件的生词' : '生词本还是空的'),
-          el('p', '', counts.total ? '换个筛选或搜索词试试。' : '在上面写下第一个词，碧琪会把它整理成好记的谐音和常考搭配。'));
+        const parked = filter === 'resting';
+        empty.append(el('strong', '', parked ? '这里还空着' : counts.total ? '没有符合条件的生词' : '生词本还是空的'),
+          el('p', '', parked ? '点过「记得」、或已经掌握的词会先放在这里，到期后再出现在生词本和复习里。' : counts.resting && filter === 'all' ? '记得和已掌握的先放到了「过几天」，到期再回来。' : counts.total ? '换个筛选或搜索词试试。' : '在上面写下第一个词，碧琪会把它整理成好记的谐音和常考搭配。'));
         list.append(empty); return;
       }
       if (layout === 'table') { list.append(table(words)); return; }
