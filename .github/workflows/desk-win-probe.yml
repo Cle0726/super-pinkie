@@ -1,0 +1,27 @@
+name: desk-win-probe
+on:
+  push:
+    branches: [test/desk-win-probe]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - name: Run desk probe
+        shell: pwsh
+        run: node tools/desk-win-probe.mjs
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desk-win-probe
+          path: probe-out
