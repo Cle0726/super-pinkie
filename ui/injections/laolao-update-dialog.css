@@ -61,6 +61,14 @@ html[data-pinkie-night] #pinkie-update-v2 .pinkie-upd__mascot:before{background:
 #pinkie-update-v2 .pinkie-upd__notes{margin:18px 32px 0}
 #pinkie-update-v2 .pinkie-upd__notes h3{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--text)}
 #pinkie-update-v2 .pinkie-upd__notes ul{margin:0;padding:0;list-style:none;display:grid;gap:9px}
+/* 摘要 + 碧琪的展开入口（细节多时才出现，跟在摘要后面） */
+#pinkie-update-v2 .pinkie-upd__summary{margin:0;color:var(--text);font-size:13.5px;line-height:1.7}
+#pinkie-update-v2 .pinkie-upd__summary>span:not(:empty){margin-right:6px}
+#pinkie-update-v2 .pinkie-upd__more{display:inline-flex;align-items:center;gap:3px;padding:0 2px;border:0;border-radius:6px;background:transparent;color:var(--strong);font-size:13px;font-weight:600;line-height:inherit;white-space:nowrap;vertical-align:baseline}
+#pinkie-update-v2 .pinkie-upd__more:hover span{text-decoration:underline;text-underline-offset:3px}
+#pinkie-update-v2 .pinkie-upd__more svg{width:14px;height:14px;transition:transform .18s ease}
+#pinkie-update-v2 .pinkie-upd__notes.is-open .pinkie-upd__more svg{transform:rotate(180deg)}
+#pinkie-update-v2 .pinkie-upd__summary:not([hidden])+ul{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 #pinkie-update-v2 .pinkie-upd__notes li{display:flex;gap:10px;color:var(--muted);font-size:13px;line-height:1.55}
 #pinkie-update-v2 .pinkie-upd__notes li svg{width:18px;height:18px;padding:3px;margin-top:1px;border-radius:50%;background:var(--soft);color:var(--accent);stroke-width:3}
 #pinkie-update-v2 .pinkie-upd__reassure{display:flex;align-items:center;gap:8px;margin:18px 32px 0;color:var(--muted);font-size:12px;line-height:1.6}
