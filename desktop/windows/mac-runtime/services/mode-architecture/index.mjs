@@ -20,6 +20,13 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
+import {workCardBlock, forgetCards, routingKinds} from './work-cards.mjs';
+import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.mjs';
+import {codeWatch} from './code-work.mjs';
+import {sessionHintBlock, noteCompaction} from './session-hints.mjs';
+import {designDirectionBlock} from './design-directions.mjs';
+import {ensureManualLimits} from './config-floor.mjs';
+import {createDeskTool, deskHintBlock} from './desk.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
@@ -30,7 +37,7 @@ import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
 import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
-import {registerRichRuntime} from './rich-runtime.mjs';
+import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
@@ -691,7 +698,7 @@ function toolCallKey(event = {}) {
 // structured result object (never matching model-visible output text), and
 // only for the known file mutation tools.
 function hostFileMutationReceipt(toolName = '', result = null) {
-  if (!/^(?:write|edit|apply_patch)$/i.test(String(toolName || ''))
+  if (!/^(?:write|edit|apply_patch|code_edit)$/i.test(String(toolName || ''))
       || !result || typeof result !== 'object') return false;
   const candidates = [
     result,
@@ -1838,7 +1845,10 @@ export class CompletionIntegrityGuard {
     // discarded just because the transport failed to correlate hook ids.
     if (!failed && !effects.some(effect => effect.changed)
         && hostFileMutationReceipt(event.toolName, event.result)) {
-      effects = toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx)).slice(0, 16).map(target => ({
+      // code_edit 的 path 相对项目目录（不是 agent 工作区），用它回执里引擎写的绝对路径。
+      const reported = String(event.toolName || '') === 'code_edit' && typeof event.result?.details?.absolutePath === 'string'
+        && path.isAbsolute(event.result.details.absolutePath) ? [event.result.details.absolutePath] : null;
+      effects = (reported || toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx))).slice(0, 16).map(target => ({
         ...snapshotFile(target), changed: true, hostReported: true,
       }));
     }
@@ -4629,18 +4639,23 @@ export class UpstreamWatchdog {
 }
 
 export class TierContinuation {
-  constructor(api, statusFor, activityFor, processRunner = runProcess, cliEntry = resolveGatewayCliEntry()) {
+  // options 让同一条续跑通道也给「计划清单没做完」用：换一句提醒、换一个标签，其余完全一样。
+  constructor(api, statusFor, activityFor, processRunner = runProcess, cliEntry = resolveGatewayCliEntry(), options = {}) {
     this.api = api;
     this.statusFor = statusFor;
     this.activityFor = activityFor;
     this.processRunner = processRunner;
     this.cliEntry = cliEntry;
+    this.messageFor = options.messageFor || tierControlMessage;
+    this.tagName = options.tagName || 'pinkie-tier-';
+    this.turnName = options.turnName || '碧琪档位续跑';
+    this.onDispatched = options.onDispatched || null;
     this.timers = new Map();
     this.dispatching = new Set();
   }
 
   tag(sessionKey) {
-    return safeTag(sessionKey).replace('pinkie-watchdog-', 'pinkie-tier-');
+    return safeTag(sessionKey).replace('pinkie-watchdog-', this.tagName);
   }
 
   async schedule(sessionKey, agentId) {
@@ -4648,14 +4663,14 @@ export class TierContinuation {
     if (!status.active || status.parentRunning || Number(status.pending) > 0) return false;
     const tag = this.tag(sessionKey);
     await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
-    const controlText = tierControlMessage(status);
+    const controlText = this.messageFor(status);
     try {
       await this.api.session.workflow.enqueueNextTurnInjection?.({
         sessionKey,
         text: controlText,
         placement: 'append_context',
         ttlMs: 300_000,
-        idempotencyKey: `pinkie-tier-control-${stateFileId(`${sessionKey}:${status.spawned}:${(status.missing || []).join('|')}`)}`,
+        idempotencyKey: `${this.tagName}control-${stateFileId(`${sessionKey}:${status.spawned}:${(status.missing || []).join('|')}`)}`,
         metadata: {source: 'pinkie-tier-controller'},
       });
     } catch {}
@@ -4670,7 +4685,7 @@ export class TierContinuation {
         delayMs: 5_000,
         deliveryMode: 'none',
         deleteAfterRun: true,
-        name: '碧琪档位续跑',
+        name: this.turnName,
         tag,
       });
     }
@@ -4713,9 +4728,9 @@ export class TierContinuation {
         '--params', JSON.stringify({
           sessionKey,
           agentId,
-          message: tierControlMessage(status),
+          message: this.messageFor(status),
           deliver: false,
-          idempotencyKey: `pinkie-tier-continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
+          idempotencyKey: `${this.tagName}continue-${stateFileId(`${sessionKey}:${status.spawned || 0}:${status.completed || 0}:${status.complete ? 'final' : (status.missing || []).join('|')}`)}-${Date.now()}`,
         }),
         '--json', '--timeout', String(WATCHDOG_CLI_TIMEOUT_MS),
       ], {
@@ -4731,6 +4746,7 @@ export class TierContinuation {
         return false;
       }
       await this.api.session.workflow.unscheduleSessionTurnsByTag({sessionKey, tag});
+      try { this.onDispatched?.(sessionKey); } catch {}
       return true;
     } catch {
       this.scheduleTimer({sessionKey, agentId, tag, delayMs: 1_000});
@@ -5669,7 +5685,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     this.rememberUserPrompt(sessionKey, event.prompt || '');
     const currentState = this.getRun(this.resolveParent(sessionKey));
-    if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active) {
+    if (String(event.prompt || '').includes(TIER_CONTROL_PREFIX) && !currentState?.active
+        && !String(event.prompt || '').includes(PLAN_CONTROL_MARK)) {
       return {
         appendSystemContext: '【档位控制器】这是一条在任务已经交付后才到达的过期内部续跑指令。不要再次总结、执行或回复用户；只输出 NO_REPLY。',
       };
@@ -5723,13 +5740,30 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
       if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
         try {
-          const routed = classifyWorkKind(routedPrompt, {mode});
+          const routed = routingKinds(classifyWorkKind(routedPrompt, {mode}), routedPrompt, {mode});
           if (routed.kinds?.length && !['simple', 'pending'].includes(routed.kind)) rememberKinds(sessionKey, routed.kinds);
           const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
           const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
           if (block) blocks.push('\n' + block + '\n');
           const waiting = waitingSection(routed.kinds || []);
           if (waiting) blocks.push('\n' + waiting + '\n');
+          // 活儿卡：这种活最要紧的几步直接放在消息旁边（小模型常常不去读打法）；项目速览：绑定的项目里真实的命令和目录。
+          const card = workCardBlock(routed.kinds || [], routedPrompt, {mode, sessionKey, playbookRoot: root});
+          if (card) blocks.push('\n' + card + '\n');
+          // 视觉方向：做看得见的新作品时，从方向库里按题材抽几个具体的起点，每次不同，作品不重样。
+          const direction = designDirectionBlock(routed.kinds || [], routedPrompt, {mode, sessionKey});
+          if (direction) blocks.push('\n' + direction + '\n');
+          const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
+          if (brief) blocks.push('\n' + brief + '\n');
+          // 改完自动查语法：写文件的工具动过的代码文件还有语法错，就放到眼前。
+          const broken = codeWatch.block(sessionKey);
+          if (broken) blocks.push('\n' + broken + '\n');
+          // 子会话的时机：用户多半不知道可以分会话，由引擎看情况提醒碧琪自己提出。
+          // 要操控软件：指到现成动作，并把这台电脑上存好的流程放到眼前。
+          const desk = deskHintBlock(routedPrompt, {mode});
+          if (desk) blocks.push('\n' + desk + '\n');
+          const sessionHint = sessionHintBlock(sessionKey, routedPrompt, routed.kinds || [], {mode});
+          if (sessionHint) blocks.push('\n' + sessionHint + '\n');
         } catch (error) {
           // 不能让路由拖垮这一轮，但也不能悄悄失效（11-04：Windows 快照少一个 import，路由整个没生效也没人知道）。
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
@@ -6133,7 +6167,9 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const sessionKey = String(ctx.sessionKey || event?.sessionKey || '');
     if (!sessionKey) return;
     this.handoffStore.markCompacted(sessionKey);
+    noteCompaction(sessionKey);
     this.recentCompaction.set(sessionKey, Date.now());
+    forgetCards(sessionKey); forgetBrief(sessionKey);
   }
 
   prepareRetryDecision(decision, event = {}, ctx = {}) {
@@ -6458,7 +6494,7 @@ function computerToolResult(value, isError = false) {
 function cuaEndpoint(environment = process.env) {
   const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
   // Windows 版没有桌面执行器（Mac 用 App 自带的 CuaDriver）；别让碧琪以为稍后会连上而反复重试。
-  if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试这个工具，也不要告诉先生它用不了：网页用 browser 工具；其他应用和系统操作用 exec 跑 PowerShell（如 Start-Process、Get-Process、UI Automation）；文件用 read、write。');
+  if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试它。操控软件改用 computer_flow：按名字找窗口和控件、一次连做多步，不用现写脚本。');
   if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
   let endpoint;
   try {
@@ -6573,10 +6609,26 @@ export default {
       sessionKey => architecture.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
     );
+    // 计划清单是合同：plan_update 列的清单还有没做完的项，这一轮结束后用同一条续跑通道接着做，不看档位。
+    let planStore = null;
+    try { planStore = new RichStore(path.join(api.runtime.state.resolveStateDir(), 'pinkie-rich')); } catch {}
+    const planState = new PlanContinuationState(planStore);
+    const planContinuation = new TierContinuation(
+      api,
+      sessionKey => planState.status(sessionKey),
+      sessionKey => architecture.activityFor(sessionKey),
+      undefined,
+      undefined,
+      {messageFor: status => status.message, tagName: 'pinkie-plan-', turnName: '碧琪计划续跑', onDispatched: sessionKey => planState.disarm(sessionKey)},
+    );
     const usage = new ModelUsageLedger();
     api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    // 操控软件的现成动作：一次连做多步、按名字点控件、跑通的流程存在这台电脑上重放。Mac 和 Windows 都有。
+    api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
+    // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
+    api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
     api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
@@ -6633,6 +6685,8 @@ export default {
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
+    sharePluginState(planContinuation, 'plan', ['timers', 'dispatching']);
+    sharePluginState(planState, 'planState', ['sessions']);
     sharePluginState(cleKk, 'clekk', ['turns', 'orphaned', 'sessionByRunId', 'sessionBySessionId', 'sessionByToolCallId', 'pendingDeliverySessions', 'deliveryFallbackBySession']);
     sharePluginState(cleKk.audit, 'audit', ['sequence', 'lastHash', 'appendCounts']);
     sharePluginState(integrity, 'integrity', ['runs']);
@@ -6880,9 +6934,11 @@ export default {
       if (!sessionKey) return;
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);
+      planState.userMessage(sessionKey);
       await Promise.all([
         watchdog.cancel(sessionKey),
         tierContinuation.cancel(sessionKey),
+        planContinuation.cancel(sessionKey),
       ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
@@ -6902,9 +6958,14 @@ export default {
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
       background.afterTool(event, ctx);
+      planState.toolCalled(String(ctx.sessionKey || ''), event.toolName, Boolean(event.error || event.isError || event.result?.isError));
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);
+      try {
+        const watchKey = String(ctx.sessionKey || '');
+        if (watchKey) codeWatch.afterTool(event, ctx, {baseDirs: [boundProjectRoot(watchKey, {stateRoot: pinkieStateRoot()}), String(event.params?.cwd || ''), agentWorkspaceDir(ctx)]});
+      } catch { /* 查语法是附带的好处，不能影响工具结果 */ }
       await cleKk.verifyAfterTool(event, ctx);
     });
     api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
@@ -7044,6 +7105,7 @@ export default {
       // 父轮次已经结束才允许任何续跑器写入会话。先撤掉可能遗留的档位
       // 定时器，再释放父运行锁，避免它与 OpenClaw 自带的上游重试撞车。
       await tierContinuation.cancel(ctx.sessionKey || '');
+      await planContinuation.cancel(ctx.sessionKey || '');
       architecture.parentEnded(event, ctx);
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
@@ -7088,6 +7150,23 @@ export default {
           await tierContinuation.schedule(ctx.sessionKey, ctx.agentId || agentFromSessionKey(ctx.sessionKey));
         } else if (!status.active || status.complete) {
           await tierContinuation.cancel(ctx.sessionKey || '');
+        }
+        // 计划清单上还有没做完的项，这一轮又不是停在等用户、如实报告卡住或等后台命令上：接着做。
+        // 档位任务在跑时由档位自己的续跑负责，这里不插手。
+        if (!status.active) {
+          const planKey = String(ctx.sessionKey || '');
+          const planReply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
+          const planDecision = planState.consider(planKey, {
+            mode: modeForContext(ctx),
+            internalSession: isInternalExecutionSession(planKey),
+            success: event.success !== false && hasDeliverableAssistantReply(event),
+            userStopped: userStoppedRecently(planKey),
+            waitingOnUser: endsWithUserQuestion(event.messages) || /```ui\b/.test(planReply),
+            honestIncomplete: isHonestIncomplete(planReply),
+            backgroundRunning: runningBackgroundJobs(planKey).length > 0,
+            prefix: TIER_CONTROL_PREFIX,
+          });
+          if (planDecision.continue) await planContinuation.schedule(planKey, ctx.agentId || agentFromSessionKey(planKey));
         }
         if (event.success === true && hasDeliverableAssistantReply(event)) {
           architecture.acknowledgeCompaction(ctx.sessionKey || '');

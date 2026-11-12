@@ -377,6 +377,12 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
+    # 手册单个文件默认超过 2 万字就被 OpenClaw 悄悄截掉中间一段（项目手册已经 1.9 万字），
+    # 模型拿到的是缺了几节的手册，没有任何提示。把上限抬到手册够不着的地方；只抬不降。
+    for key, floor in (("bootstrapMaxChars", 60_000), ("bootstrapTotalMaxChars", 200_000)):
+        current = defaults.get(key)
+        if isinstance(current, bool) or not isinstance(current, int) or current < floor:
+            defaults[key] = floor
     timeout = defaults.get("timeoutSeconds")
     if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
         defaults["timeoutSeconds"] = 43_200
@@ -490,7 +496,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "skill-routes.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
