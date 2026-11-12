@@ -94,19 +94,26 @@ function registerMinimalChildToolsMigration(api) {
   });
 }
 
+// 工具结果到门禁手里有三种样子：{details}、只有 {content:[{text:'{…}'}]}（网关把 details 去掉了，11-12 隔离实测）、或直接是那段 JSON。
+function toolDetails(output) {
+  const envelope = JSON.parse(output);
+  if (envelope?.details && typeof envelope.details === 'object') return envelope.details;
+  const text = Array.isArray(envelope?.content) ? envelope.content.find(part => typeof part?.text === 'string')?.text : '';
+  return text ? JSON.parse(text) : envelope;
+}
+
 export function isSessionOperationEvidence(entry, prompt) {
   if (entry.name === 'pinkie_mode_ask') {
     // 用户要的就是「替我去问那个模式」：问过了（答了、还在想、那边没答出来）都算真的去办了。
     if (!/模式|那边|mode/iu.test(prompt || '')) return false;
     try {
-      const envelope = JSON.parse(entry.output), result = envelope.details || envelope;
+      const result = toolDetails(entry.output);
       return Boolean(agentOf(result.key) && result.key.includes(':pinkie-child:') || typeof result.answer === 'string' && result.answer);
     } catch { return false; }
   }
   if (!/子会话|会话|sub[- ]?session|child session/iu.test(prompt || '') || entry.name !== 'pinkie_session_start') return false;
   try {
-    const envelope = JSON.parse(entry.output);
-    const result = envelope.details || envelope;
+    const result = toolDetails(entry.output);
     return Boolean(agentOf(result.key) && result.key.includes(':pinkie-child:') || typeof result.id === 'string' && result.id.length > 0);
   } catch { return false; }
 }
