@@ -17,6 +17,7 @@
 | `user_asked` | 用户明确要求另开会话时，建好子会话、继承当前模式和项目绑定，再发送简报 |
 | `offer` | 先显示提案，用户可选「开新会话」或「就在这里做」 |
 | `own_initiative` | 代理发现的独立后续工作先显示提案，用户可选「开始」或「不用了」 |
+| `in_scope` | 用户这条消息本身要的活里互不依赖的一块：直接建好并开始，不出提案卡片。只在用户亲自发来的那一轮可用（内部续跑、汇报唤醒、心跳、记忆整理都不行），每轮最多 3 个 |
 
 `fresh` 只带简报。`fork` 用网关复制父会话已有的对话分支。原生网关要求父会话空闲才能 fork，代理在运行中发起的直接请求会等本轮释放后启动。
 
@@ -24,7 +25,16 @@
 
 每个父会话同时最多运行 4 个子会话，血缘只允许一层，每轮最多发 3 张提案，提案 7 天后过期。代理只可给直接父会话或自己开的子会话发消息。目标在运行时先排队，空闲后通过现有网关通道送达。
 
-由关联会话发起的子会话轮次正常结束后，父会话收到前 400 个字形的汇报卡片和未读点。汇报在父会话下一轮作为引用资料提供。用户在子会话亲自发起或接手的一轮只保留在子会话。自动唤醒只针对用户明确要求开启的子会话，等父会话和所有子会话空闲后执行。用户两次发言之间最多唤醒 3 次。
+由关联会话发起的子会话轮次正常结束后，父会话收到汇报卡片和未读点。卡片显示前 400 个字形；父会话下一轮读到的引用资料是完整的那份（最多 6000 个字形），读过之后长的那份从存储里删掉。代理写的简报末尾会自动加一句「最后一条回复就是交回去的汇报」。用户在子会话亲自发起或接手的一轮只保留在子会话。自动唤醒针对起头就开工的子会话（`user_asked`、`in_scope`，以及没能当场答完的跨模式提问），等父会话和所有子会话空闲后执行。用户两次发言之间最多唤醒 3 次。
+
+## 跨模式
+
+四个模式（唠嗑 `chat`、项目 `project`、想法 `ideas`、学习 `learning`）各是一个 agent，各有自己的手册。无限模式不参与。
+
+- **跨模式子会话**：`pinkie_session_start` 可带 `mode`，子会话建在那个模式的 agent 下（key 形如 `agent:thinking:pinkie-child:…`），带着父会话的项目文件夹绑定。只能 `fresh`（写了 `fork` 会改成 `fresh` 并在结果里说明）。网关里的父子关系只在同一个 agent 内成立，所以创建时不传 `parentSessionKey`，血缘只记在 `session-lineage.json`（多了 `mode`、`fromMode`）。运行数上限、归档时停止子会话、汇报、发消息都把别的 agent 里的子会话算进去。
+- **问另一个模式**：`pinkie_mode_ask`（`mode`、`question`、可选 `background`）在那个模式里开一个只回答问题的会话，默认等 120 秒，答完把答案作为工具结果当场带回，父会话留一张已读的汇报卡片，那个会话随即归档。等不到就返回 `pending`，答案之后走普通汇报并唤醒父会话。每轮最多 3 次，无限模式和临时会话不可用。
+- **时机提醒**：`session-hints.mjs` 看到这条消息明显是另一个模式更拿手（且当前模式自己的专长对不上）时，在这一轮的上下文里加一段【别的模式更拿手】，同一个去处隔 6 轮才再提，「以后可以直接去那个模式」只说一次。
+- `pinkie.session.lineage` 的返回里，别的模式转来的子会话带 `cross: true`、`fromMode`，按顶层显示；父会话在别的模式里开的子会话列在 `away` 里。卡片带 `mode`、`modeName`。
 
 ## 状态
 
@@ -34,5 +44,5 @@
 
 - `pinkie.session.title.ensure` 提交一批待检查的会话 key，每批最多 20 个。`pinkie.session.title.metadata` 返回标题来源、渠道和内部记录信息。`pinkie.session.rename` 记录手动改名。
 - `pinkie.session.lineage` 返回血缘和列表状态。`pinkie.session.cards` 读取会话卡片。`pinkie.session.card.act` 确认、转回或跳过提案。`pinkie.session.detach` 将子会话移到顶层。
-- 代理工具为 `pinkie_session_start`、`pinkie_session_message`、`pinkie_session_list` 和 `pinkie_session_title`。
+- 代理工具为 `pinkie_session_start`、`pinkie_mode_ask`、`pinkie_session_message`、`pinkie_session_list` 和 `pinkie_session_title`。只聊天的权限预设会自动补上前四个。
 - 插件状态目录的 `sessions/` 下使用 `session-titles.json`、`session-lineage.json` 和 `session-cards.json`。这三份文件原子写入。提案、汇报和唤醒计数会跨刷新和重启保留。
