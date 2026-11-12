@@ -764,6 +764,8 @@ test('asking another mode counts as doing a "go ask that mode" request', () => {
   assert.equal(isSessionOperationEvidence(asked, '配色你替我去问问想法模式那边'), true);
   assert.equal(isSessionOperationEvidence({name: 'pinkie_mode_ask', output: JSON.stringify({mode: 'ideas', failed: true,
     key: 'agent:thinking:pinkie-child:abc'})}, '去问问想法模式'), true);
+  assert.equal(isSessionOperationEvidence({name: 'pinkie_session_start', output: JSON.stringify({content: [{type: 'text',
+    text: JSON.stringify({key: 'agent:project:pinkie-child:abc', title: '写脚本'})}]})}, '另开一个会话写脚本'), true, 'content-only envelope');
   assert.equal(isSessionOperationEvidence(asked, '删除临时文件'), false);
   assert.equal(isSessionOperationEvidence({name: 'pinkie_mode_ask', output: '没问成'}, '去问问想法模式'), false);
 });
