@@ -1428,7 +1428,7 @@ Action:
   state.chatMessages = result;
   return result;
 }
-/* pinkie-chat-timeline:v28 */function userText(message = {}) {
+/* pinkie-chat-timeline:v29 */function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
   if (typeof message.text === 'string') return message.text;
   if (!Array.isArray(message.content)) return '';
@@ -2063,6 +2063,9 @@ function collapseFailedAssistantEntries(entries) {
       content: [{type: 'text', text: formatFailureSummary(source, pending.count)}],
       __pinkieFailureSummary: true,
       __pinkieFailureCount: pending.count,
+      // Every failure in this streak belongs to turns before the latest user
+      // row: the summary is shown under that row but says nothing about it.
+      ...(pending.carried ? {__pinkieFailureCarried: true} : {}),
     };
     for (const key of ['stopReason', 'errorMessage', 'error', 'actions', 'retryable', 'isError']) delete message[key];
     output.push({
@@ -2085,6 +2088,7 @@ function collapseFailedAssistantEntries(entries) {
         const signature = failureDetail(message) || 'model-failure';
         if (pending && pending.signature !== signature) flush();
         if (!pending) pending = {signature, count: 0, last: null};
+        pending.carried = false;
         pending.count += 1;
         pending.last = {group: entry, entry: wrapped, message};
       }
@@ -2093,6 +2097,7 @@ function collapseFailedAssistantEntries(entries) {
     // Internal control turns were removed before this pass, while real user
     // turns stay visible and do not split a consecutive retry streak.
     if (entry?.kind === 'group' && String(entry.role || '').toLowerCase() === 'user') {
+      if (pending) pending.carried = true;
       output.push(entry);
       continue;
     }
@@ -2441,7 +2446,8 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   // failed, the next card carries on. Errors, timeouts and Stop stay "stopped".
   const processSuperseded = processInterrupted && followedByUser && hasUserHead
     && finalAssistantIndex < 0 && !['error', 'aborted', 'timeout'].includes(finalReason)
-    && !entries.some(item => (item?.messages || []).some(entry => entry?.message?.__pinkieFailureSummary === true
+    && !entries.some(item => (item?.messages || []).some(entry => (entry?.message?.__pinkieFailureSummary === true
+        && entry.message.__pinkieFailureCarried !== true)
       || ['error', 'aborted', 'timeout'].includes(String(entry?.message?.stopReason || '').toLowerCase())));
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
@@ -2455,6 +2461,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processRunId: pinkieTurnRunId(head),
     processPriorKey: processPriorKey === processKey ? '' : processPriorKey,
     processSuperseded,
+    processUnfinished: processInterrupted,
     role: 'assistant',
     messages: [],
     timestamp: timelineTimestamp(steps[0]),
@@ -2581,17 +2588,36 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
         && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
   }
-  // The job still in progress is the latest turn plus the runs the user's
-  // follow-ups superseded on the way. Those cards stay open like the latest
-  // one: the 碧琪 skin hides closed finished cards, so a collapsed superseded
-  // card would vanish right after the follow-up.
+  // The job still in progress is the latest turn plus every unfinished run
+  // leading into it: runs the user's follow-ups superseded, and runs that
+  // stopped (abort, error, timeout) before the user carried on. Those cards
+  // stay open like the latest one: the 碧琪 skin hides closed finished cards,
+  // so a collapsed one would take its commands and text off the screen right
+  // after the next message. A turn that ended in a real answer ends the chain.
   if (pageIsLive) {
-    const processCards = timeline.filter((item) => item?.isProcessCard);
-    for (let index = processCards.length - 1; index >= 0; index -= 1) {
-      const card = processCards[index];
-      if (card.processCurrent) continue; // the latest turn's own card, when it has one
-      if (!card.processSuperseded) break;
-      card.processCurrent = true;
+    let pastLatestHead = false;
+    let answered = false;
+    for (let index = timeline.length - 1; index >= 0; index -= 1) {
+      const item = timeline[index];
+      if (item?.isProcessCard) {
+        if (!pastLatestHead || item.processCurrent) continue; // the latest turn's own card
+        if (!item.processSuperseded && !item.processUnfinished) break;
+        item.processCurrent = true;
+        answered = false;
+        continue;
+      }
+      if (isRealUserGroup(item)) {
+        if (pastLatestHead && answered) break;
+        pastLatestHead = true;
+        answered = false;
+        continue;
+      }
+      if (pastLatestHead && item?.kind === 'group' && String(item.role || '').toLowerCase() === 'assistant'
+          && !item.isLearningCard && (item.messages || []).some(entry => {
+            const message = entry?.message || {};
+            return message.__pinkieFailureSummary !== true
+              && !['error', 'aborted', 'timeout'].includes(String(message.stopReason || '').toLowerCase());
+          })) answered = true;
     }
   }
   return pagePresentation(timeline);
