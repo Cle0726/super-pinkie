@@ -108,7 +108,7 @@ const CONTRACT = `硬性要求：
 
 // 英语题和其他科目讲法不同：谐音、斜线断句只用在英语；专升本其他科目按「先图景再公式」讲。
 const SUBJECTS = `科目差异：
-- 英语题（B 级 / 四级 / 专升本英语）：按上面的先生铁律口味讲，只给真正难的生词标中文释义和谐音。
+- 英语题（B 级 / 四级 / 专升本英语）：按上面的先生铁律口味讲。带读要把含正确答案的整句话用「/」断块，每一块都标中文意思和谐音、一块不漏，简单词谐音写短；谐音一个音节配一个常见汉字，读起来像中文口语，不要外语腔长尾巴（如 problem 写扑拉不冷，不写普若布勒姆兹）。
 - 数学、电工电子、C 语言、计算机网络：不用谐音和斜线断句，用大白话讲这题在考哪个知识点、标准答案怎么一步步来的，先讲图景或思路再讲公式或语法，计算题给关键步骤；不超出专升本考纲。`;
 
 export function explainRules({brief = false, dir} = {}) {
@@ -117,15 +117,43 @@ export function explainRules({brief = false, dir} = {}) {
   lines.push('【先生定的辅导口味（语气与取舍照这个；但答题卡上的篇幅以最后的长度要求为准，不要把每条都做一遍）】', ...voice.rules.map(r => '- ' + r), '');
   lines.push('【讲法工具箱：不是清单，按这题真正需要的挑 1 到 2 样用，其余全部略过】', ...voice.steps.map(r => '- ' + r), '', SUBJECTS, '');
   if (brief) lines.push('这是整套卷子交卷后的错题回看，一次要讲很多题：每题只讲最关键的 3 到 4 句，保留「这题答错了…」和考点两点，其余全部省掉，总长不超过 150 字。', '');
-  else lines.push('这是先生刚做完一道题时的当场讲解，要轻、要短：总长不超过 260 字，写成一到两小段自然的话，不分步骤、不加小标题、不列序号。第一句判对错；答对也要讲，只是换成「对在哪里」。英语题要带上一句中文翻译：把这道题的句子（或正确答案放进句子后）翻成通顺的大白话，放在讲解里自然带出，不单列、不逐词对译。拆句和谐音只给先生真正可能不认识的那一两个词，整句逐块拆、每个词都标，一概不要；这题用不上的方法就不提。', '');
+  else lines.push('这是先生刚做完一道题时的当场讲解，要轻、要短：讲解部分总长不超过 260 字，写成一到两小段自然的话，不分步骤、不加小标题、不列序号。第一句判对错；答对也要讲，只是换成「对在哪里」。英语题要带上一句中文翻译：把这道题的句子（或正确答案放进句子后）翻成通顺的大白话，放在讲解里自然带出，不单列、不逐词对译。英语题要带读：把含正确答案的整句话用「/」断块，每块都标中文意思和谐音，从头带到尾一块不漏，单独一行放在讲解后面；这个带读不算在字数里。这题用不上的其他方法就不提。', '');
   lines.push(CONTRACT);
   return lines.join('\n');
 }
 
 // 讲解长度：旧版限 400 字，四步写不下；这里放宽，并要求带「答对也讲」的实质内容。
 export function validVoicedExplain(v, {brief = false} = {}) {
-  const text = String(v?.text ?? '').replace(/\u0000/g, '').replace(/\\n/g, '\n').trim().slice(0, brief ? 420 : 520);
+  const text = String(v?.text ?? '').replace(/\u0000/g, '').replace(/\\n/g, '\n').trim().slice(0, brief ? 420 : 760);
   return text.length >= 8 ? {text} : null;
+}
+
+// 会长篇思考的内置模型（如 hy4free）面对完整口吻提示词，常把 token 全花在思考上、正文为空。
+// 一次截断后，接下来半小时直接用精简提示词；首次遇到时由 modelJson 在重试里自动切换。
+const COMPACT_BASE = `你是碧琪，学习台里陪先生做题的学习搭档。先生刚做完一题，请给一段简短讲解，写在答题卡上，先生不能再作答，不要出新题。
+输入是 JSON：question 题干，options 选项，standard 标准答案，note 官方解析，yours 先生的答案（做对时为空），correct 是否做对。`;
+const STYLE = '谐音规矩：一个英文音节配一个常见简单汉字，读出来像中文口语，先生张嘴就能念；重读音节用响亮的字，弱读、轻读的音节用轻短的字或省掉；不要拖「兹、斯、布勒、普若」这类外语腔长尾巴，不要超过每词 3 到 4 个字。例：problem 扑拉不冷、important 引破特恩、every 爱我瑞。';
+const DAI = '带读：把含正确答案的整句话用「/」断成 3 到 5 块，每一块都写成「英文 中文意思（谐音）」，一块不漏，从头带到尾，最后单独一行放完整中文翻译；简单词也要带，但简单词的谐音写短。';
+let compactAt = 0;
+export const useCompactExplain = () => Date.now() - compactAt < 30 * 60 * 1000;
+export const markCompactExplain = () => { compactAt = Date.now(); };
+export function compactExplainRules({brief = false} = {}) {
+  return [COMPACT_BASE,
+    '要求：以 standard 为准，note 有内容就用上；第一句判对错（答对也讲对在哪里）；用大白话讲清考点；英语题带一句通顺的中文翻译，只给真正难的生词标中文；不念条文，不写「加油」。题干若有缺字或排版瑕疵不要纠结，也不要评论题目，直接照 standard 和 note 讲；不要反复推敲，想清考点就写。',
+    `英语题：${DAI}${STYLE}其他科目不用谐音和断句。`,
+    brief ? '这是整套卷子交卷后的错题回看，只讲 3 到 4 句，总长不超过 150 字。' : '总长不超过 280 字，一到两小段。',
+    '只输出 JSON：{"text":"讲解"}，不要小标题、序号和 Markdown。'].join('\n');
+}
+export const explainRulesFor = opts => (useCompactExplain() ? compactExplainRules(opts) : explainRules(opts));
+
+export function explainFailure(error) {
+  const text = String(error?.message || error || '');
+  if (/（429）/.test(text)) return '模型服务限流或额度不足，请在内置模型里换一个可用模型。';
+  if (/（401）|（403）|（404）/.test(text)) return '当前模型没有使用权限或不可用，请在内置模型里换一个。';
+  if (/（5\d\d）|连接失败|暂时不可用/.test(text)) return '模型服务暂时没连上，请检查内置模型后重试。';
+  if (/超时/.test(text)) return '模型讲解超时了，可以重试或更换内置模型。';
+  if (/未完成|没通过校验|没有返回可用|没有返回有效/.test(text)) return '这个模型思考太久、没来得及写出讲解，已换成精简讲法，请再点一次重试。';
+  return '这次没有生成讲解，可以重试或检查内置模型。';
 }
 
 export const EXPLAIN_VERSION = 2;

@@ -318,18 +318,24 @@
       const row = el('div', 'pkp-row');
       const next = btn('pk-btn', i + 1 < items.length ? '下一题' : '结算'); next.dataset.kind = 'go'; next.addEventListener('click', () => { i++; show(); });
       const explain = btn('pkb-link', '讲给我听');
+      let explainNotice;
+      const failed = message => {
+        if (!box.isConnected) return;
+        explain.disabled = false; explain.textContent = '再讲一次';
+        explainNotice = el('p', 'pkp-fb__mon', message || '这次没有生成讲解，请检查内置模型后重试。');
+        const switchModel = btn('pkb-link', '切换模型'); switchModel.addEventListener('click', () => desk()?.openBuiltinModel?.());
+        explainNotice.append(document.createTextNode(' '), switchModel); explain.before(explainNotice);
+      };
       explain.addEventListener('click', async () => {
+        explainNotice?.remove(); explainNotice = null;
         explain.disabled = true; explain.textContent = '碧琪在按标准答案讲…';
         try {
-          const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 60000);
+          const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 260000);
           if (!box.isConnected) return;
           if (res?.text) { explain.replaceWith(el('p', 'pkp-fb__lecture', res.text)); return; }
-          explain.disabled = false;
-          explain.textContent = '再讲一次';
-          const note = el('p', 'pkp-fb__mon', res?.source === 'offline' ? '内置模型这会儿没接上，先看官方解析。' : '上游还在，这次没把讲解收下来。再点一次。');
-          explain.before(note);
+          failed(res?.error);
         }
-        catch (e) { explain.disabled = false; explain.textContent = '讲给我听'; G().toast(e.message || '没讲出来'); }
+        catch (e) { failed(e.message || '讲解暂时没连上，请重试。'); }
       });
       row.append(next, explain); box.append(row);
       qCol.append(box); next.focus({preventScroll: true});
