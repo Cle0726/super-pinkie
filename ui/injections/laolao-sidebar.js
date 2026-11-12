@@ -785,6 +785,11 @@
       info.title = path || "";
       menu.appendChild(info);
 
+      menuItem(menu, ICONS.folder, "项目设置…", () => {
+        closeMenu();
+        if (window.PinkieArtifacts?.openProjectSettings) void window.PinkieArtifacts.openProjectSettings(name, path || "");
+        else toast("项目设置正在准备中");
+      });
       if (path) {
         menuItem(menu, ICONS.external, "在 Finder 中显示", () => {
           revealNativeFolder(path);
