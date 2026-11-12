@@ -1,0 +1,35 @@
+{
+  "id": "xhs-big-number",
+  "name": "超大数字封面",
+  "family": "social",
+  "format": "html",
+  "order": 5,
+  "summary": "一个巨大的数字撑满画面（30 天、7 斤、¥99），配一句话；挑战、打卡、成果、价格、数据",
+  "kinds": ["image_print"],
+  "scenes": ["小红书", "封面", "挑战", "打卡", "减肥", "健身", "存钱", "成果", "数据", "价格", "自律", "复盘"],
+  "moods": ["醒目", "有冲击力", "自信"],
+  "keywords": ["大数字", "数据", "天数", "前后对比", "成绩"],
+  "canvas": {"w": 1080, "h": 1440, "scale": 1},
+  "outputs": ["png"],
+  "theme": {"palette": "neon", "pair": "modern", "palettes": ["neon", "graphite", "coral-navy", "lemon", "cream-tomato", "midnight", "mono"]},
+  "check": {"minFont": 30},
+  "slots": {
+    "label": {"type": "text", "label": "数字上方的小字", "max": 12, "example": "坚持早起"},
+    "number": {"type": "text", "label": "大数字", "max": 5, "required": true, "hint": "只写数字或很短的符号，比如 30、7.5、¥99", "example": "30"},
+    "unit": {"type": "text", "label": "单位", "max": 3, "example": "天"},
+    "title": {"type": "text", "label": "一句话标题", "max": 16, "required": true, "example": "我的生活**彻底变了**"},
+    "subtitle": {"type": "text", "label": "补充", "max": 28, "example": "5 点起床的真实记录，没有鸡汤"},
+    "author": {"type": "text", "label": "署名", "max": 12, "brand": "name", "example": "@早起的阿梨"}
+  },
+  "example": {
+    "label": "坚持早起",
+    "number": "30",
+    "unit": "天",
+    "title": "我的生活**彻底变了**",
+    "subtitle": "5 点起床的真实记录，没有鸡汤",
+    "author": "@早起的阿梨"
+  },
+  "notFor": "没有一个能代表全文的数字时（用 xhs-bold-headline）",
+  "license": "Opus 自制，随碧琪发布",
+  "source": "pinkie"
+}

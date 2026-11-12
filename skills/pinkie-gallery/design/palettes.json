@@ -1,0 +1,835 @@
+{
+  "_note": "成品库配色。bg 底色 / surface 卡片 / ink 正文 / muted 次要字 / accent 主强调 / accent2 辅强调 / accentInk 压在 accent 上的字 / line 分隔线。mood 和 scene 给搜索和自动挑配色用。",
+  "palettes": {
+    "milk-tea": {
+      "label": "奶茶",
+      "dark": false,
+      "bg": "#F6EDE3",
+      "surface": "#FFF9F2",
+      "ink": "#3B2A20",
+      "muted": "#7D6755",
+      "accent": "#A66839",
+      "accent2": "#E9C9A8",
+      "accentInk": "#FFFFFF",
+      "line": "#E3D3C1",
+      "mood": [
+        "温暖",
+        "治愈",
+        "日常"
+      ],
+      "scene": [
+        "奶茶",
+        "咖啡",
+        "餐饮",
+        "烘焙",
+        "秋冬"
+      ]
+    },
+    "cream-tomato": {
+      "label": "奶油番茄",
+      "dark": false,
+      "bg": "#FFF6EC",
+      "surface": "#FFFFFF",
+      "ink": "#2B1B17",
+      "muted": "#7D6A62",
+      "accent": "#D34229",
+      "accent2": "#FFC94A",
+      "accentInk": "#FFFFFF",
+      "line": "#F1DCCB",
+      "mood": [
+        "活泼",
+        "醒目",
+        "热闹"
+      ],
+      "scene": [
+        "美食",
+        "促销",
+        "探店",
+        "开业"
+      ]
+    },
+    "matcha": {
+      "label": "抹茶",
+      "dark": false,
+      "bg": "#EEF2E6",
+      "surface": "#FBFCF7",
+      "ink": "#1F2A1C",
+      "muted": "#5F6C57",
+      "accent": "#4F7D3D",
+      "accent2": "#CFE0B5",
+      "accentInk": "#FFFFFF",
+      "line": "#D8E1CB",
+      "mood": [
+        "清新",
+        "健康",
+        "自然"
+      ],
+      "scene": [
+        "茶饮",
+        "轻食",
+        "健身",
+        "春天"
+      ]
+    },
+    "sakura": {
+      "label": "樱花",
+      "dark": false,
+      "bg": "#FDF0F2",
+      "surface": "#FFFFFF",
+      "ink": "#3A2228",
+      "muted": "#84656E",
+      "accent": "#C34E6E",
+      "accent2": "#FFD3DD",
+      "accentInk": "#FFFFFF",
+      "line": "#F5D9DF",
+      "mood": [
+        "甜美",
+        "少女",
+        "温柔"
+      ],
+      "scene": [
+        "美妆",
+        "穿搭",
+        "约会",
+        "春天"
+      ]
+    },
+    "lemon": {
+      "label": "柠檬",
+      "dark": false,
+      "bg": "#FFFBE6",
+      "surface": "#FFFFFF",
+      "ink": "#26231A",
+      "muted": "#6E6850",
+      "accent": "#F2C200",
+      "accent2": "#2D6BFF",
+      "accentInk": "#26231A",
+      "line": "#F1E8B8",
+      "mood": [
+        "明亮",
+        "活力",
+        "夏日"
+      ],
+      "scene": [
+        "饮品",
+        "夏天",
+        "学习",
+        "促销"
+      ]
+    },
+    "ocean": {
+      "label": "海盐",
+      "dark": false,
+      "bg": "#EAF4F8",
+      "surface": "#FFFFFF",
+      "ink": "#10283A",
+      "muted": "#557083",
+      "accent": "#1C75A8",
+      "accent2": "#9ED3E8",
+      "accentInk": "#FFFFFF",
+      "line": "#CFE3EC",
+      "mood": [
+        "清爽",
+        "开阔"
+      ],
+      "scene": [
+        "旅行",
+        "海边",
+        "夏天",
+        "运动"
+      ]
+    },
+    "lavender": {
+      "label": "薰衣草",
+      "dark": false,
+      "bg": "#F2EFFA",
+      "surface": "#FFFFFF",
+      "ink": "#26213A",
+      "muted": "#6D6684",
+      "accent": "#6F55CF",
+      "accent2": "#D8CDF6",
+      "accentInk": "#FFFFFF",
+      "line": "#E0DAF2",
+      "mood": [
+        "梦幻",
+        "温柔",
+        "安静"
+      ],
+      "scene": [
+        "护肤",
+        "睡眠",
+        "疗愈",
+        "女生"
+      ]
+    },
+    "paper": {
+      "label": "旧纸",
+      "dark": false,
+      "bg": "#F4F1EA",
+      "surface": "#FBFAF6",
+      "ink": "#1E1C19",
+      "muted": "#67625A",
+      "accent": "#B03F2A",
+      "accent2": "#E2D8C3",
+      "accentInk": "#FFFFFF",
+      "line": "#DDD6C7",
+      "mood": [
+        "文艺",
+        "复古",
+        "克制"
+      ],
+      "scene": [
+        "读书",
+        "杂志",
+        "笔记",
+        "展览"
+      ]
+    },
+    "mint": {
+      "label": "薄荷",
+      "dark": false,
+      "bg": "#F1F7F5",
+      "surface": "#FFFFFF",
+      "ink": "#0F1F1B",
+      "muted": "#566963",
+      "accent": "#0D866B",
+      "accent2": "#FFB547",
+      "accentInk": "#FFFFFF",
+      "line": "#D5E6E0",
+      "mood": [
+        "干净",
+        "效率",
+        "理性"
+      ],
+      "scene": [
+        "干货",
+        "科技",
+        "职场",
+        "工具"
+      ]
+    },
+    "kraft": {
+      "label": "牛皮纸",
+      "dark": false,
+      "bg": "#E8DCC6",
+      "surface": "#F3EBDC",
+      "ink": "#2E2418",
+      "muted": "#6C5D48",
+      "accent": "#9A4D28",
+      "accent2": "#556B2F",
+      "accentInk": "#FFFFFF",
+      "line": "#D3C4A8",
+      "mood": [
+        "复古",
+        "手作",
+        "朴素"
+      ],
+      "scene": [
+        "咖啡",
+        "手工",
+        "市集",
+        "面包"
+      ]
+    },
+    "ink-gold": {
+      "label": "墨金",
+      "dark": true,
+      "bg": "#141414",
+      "surface": "#1E1E1E",
+      "ink": "#F5EFE3",
+      "muted": "#A89F8E",
+      "accent": "#D4A94F",
+      "accent2": "#6E5B3A",
+      "accentInk": "#141414",
+      "line": "#34302A",
+      "mood": [
+        "高级",
+        "奢华",
+        "沉稳"
+      ],
+      "scene": [
+        "发布会",
+        "酒吧",
+        "珠宝",
+        "年会"
+      ]
+    },
+    "midnight": {
+      "label": "午夜蓝",
+      "dark": true,
+      "bg": "#0E1630",
+      "surface": "#18234A",
+      "ink": "#EEF2FF",
+      "muted": "#9AA6CF",
+      "accent": "#7C98FF",
+      "accent2": "#FF7AB6",
+      "accentInk": "#0E1630",
+      "line": "#2A3768",
+      "mood": [
+        "科技",
+        "未来",
+        "夜晚"
+      ],
+      "scene": [
+        "发布会",
+        "AI",
+        "数码",
+        "演讲"
+      ]
+    },
+    "neon": {
+      "label": "霓虹",
+      "dark": true,
+      "bg": "#0B0B12",
+      "surface": "#161622",
+      "ink": "#F7F7FF",
+      "muted": "#9C9CB8",
+      "accent": "#C6FF3D",
+      "accent2": "#FF3DA5",
+      "accentInk": "#0B0B12",
+      "line": "#2A2A3C",
+      "mood": [
+        "潮流",
+        "炸裂",
+        "年轻"
+      ],
+      "scene": [
+        "音乐",
+        "电竞",
+        "派对",
+        "潮牌"
+      ]
+    },
+    "forest-night": {
+      "label": "墨绿",
+      "dark": true,
+      "bg": "#0F2A22",
+      "surface": "#163A2F",
+      "ink": "#F1EEE4",
+      "muted": "#A4B5A9",
+      "accent": "#E7C46A",
+      "accent2": "#8DBF9F",
+      "accentInk": "#0F2A22",
+      "line": "#285043",
+      "mood": [
+        "沉稳",
+        "高级",
+        "自然"
+      ],
+      "scene": [
+        "户外",
+        "茶",
+        "地产",
+        "品牌"
+      ]
+    },
+    "wine": {
+      "label": "酒红",
+      "dark": true,
+      "bg": "#3B0F1C",
+      "surface": "#4E1726",
+      "ink": "#FBEFE9",
+      "muted": "#D2AFAF",
+      "accent": "#F2B880",
+      "accent2": "#C25B6F",
+      "accentInk": "#3B0F1C",
+      "line": "#64283A",
+      "mood": [
+        "浪漫",
+        "隆重",
+        "复古"
+      ],
+      "scene": [
+        "婚礼",
+        "情人节",
+        "红酒",
+        "晚宴"
+      ]
+    },
+    "zhuhong": {
+      "label": "朱红宣纸",
+      "dark": false,
+      "bg": "#F7F1E5",
+      "surface": "#FDFAF3",
+      "ink": "#2B2119",
+      "muted": "#74644F",
+      "accent": "#C0302C",
+      "accent2": "#C9973A",
+      "accentInk": "#FFF8EC",
+      "line": "#E6DAC4",
+      "mood": [
+        "国风",
+        "喜庆",
+        "传统"
+      ],
+      "scene": [
+        "春节",
+        "节气",
+        "国潮",
+        "开业",
+        "书法"
+      ]
+    },
+    "dailan": {
+      "label": "黛蓝",
+      "dark": false,
+      "bg": "#EDEFEA",
+      "surface": "#F8F8F4",
+      "ink": "#1F2B3A",
+      "muted": "#626C78",
+      "accent": "#2E4E7E",
+      "accent2": "#A8C3B0",
+      "accentInk": "#FFFFFF",
+      "line": "#D7DCD6",
+      "mood": [
+        "清雅",
+        "国风",
+        "安静"
+      ],
+      "scene": [
+        "节气",
+        "诗词",
+        "茶",
+        "博物馆"
+      ]
+    },
+    "qingci": {
+      "label": "青瓷",
+      "dark": false,
+      "bg": "#E4EEE9",
+      "surface": "#F4F8F5",
+      "ink": "#23332C",
+      "muted": "#5A6D64",
+      "accent": "#3E7E6E",
+      "accent2": "#C7A36A",
+      "accentInk": "#FFFFFF",
+      "line": "#CFDDD6",
+      "mood": [
+        "雅致",
+        "东方",
+        "宁静"
+      ],
+      "scene": [
+        "茶",
+        "瓷器",
+        "中医",
+        "养生"
+      ]
+    },
+    "yanzhi": {
+      "label": "胭脂",
+      "dark": false,
+      "bg": "#F8ECEA",
+      "surface": "#FFF8F6",
+      "ink": "#3A1F1F",
+      "muted": "#85625F",
+      "accent": "#9D2933",
+      "accent2": "#E4B7A0",
+      "accentInk": "#FFFFFF",
+      "line": "#EBD4D0",
+      "mood": [
+        "婉约",
+        "深情",
+        "古典"
+      ],
+      "scene": [
+        "婚礼",
+        "七夕",
+        "情感",
+        "汉服"
+      ]
+    },
+    "festival-red": {
+      "label": "鎏金红",
+      "dark": true,
+      "bg": "#A3171E",
+      "surface": "#B8222A",
+      "ink": "#FFF4DE",
+      "muted": "#F6D7B9",
+      "accent": "#F5C451",
+      "accent2": "#FFE7A8",
+      "accentInk": "#7A1015",
+      "line": "#C9474D",
+      "mood": [
+        "喜庆",
+        "隆重",
+        "热烈"
+      ],
+      "scene": [
+        "春节",
+        "开业",
+        "年会",
+        "婚礼",
+        "中秋"
+      ]
+    },
+    "peach": {
+      "label": "蜜桃",
+      "dark": false,
+      "bg": "#FFEFE6",
+      "surface": "#FFFFFF",
+      "ink": "#3A2420",
+      "muted": "#87655B",
+      "accent": "#F2704A",
+      "accent2": "#FFD1BC",
+      "accentInk": "#3A2420",
+      "line": "#F7D9CC",
+      "mood": [
+        "温柔",
+        "甜",
+        "元气"
+      ],
+      "scene": [
+        "甜品",
+        "早餐",
+        "母婴",
+        "生日"
+      ]
+    },
+    "sky": {
+      "label": "晴空",
+      "dark": false,
+      "bg": "#EAF3FF",
+      "surface": "#FFFFFF",
+      "ink": "#142540",
+      "muted": "#5E6D87",
+      "accent": "#2F6BEA",
+      "accent2": "#FFD166",
+      "accentInk": "#FFFFFF",
+      "line": "#D6E4FA",
+      "mood": [
+        "明快",
+        "积极",
+        "专注"
+      ],
+      "scene": [
+        "学习",
+        "教育",
+        "考试",
+        "职场"
+      ]
+    },
+    "candy": {
+      "label": "糖果",
+      "dark": false,
+      "bg": "#FFF4FB",
+      "surface": "#FFFFFF",
+      "ink": "#2D1E3A",
+      "muted": "#786886",
+      "accent": "#D03C7B",
+      "accent2": "#5DD6FF",
+      "accentInk": "#FFFFFF",
+      "line": "#F3DDEC",
+      "mood": [
+        "可爱",
+        "童趣",
+        "开心"
+      ],
+      "scene": [
+        "儿童",
+        "派对",
+        "生日",
+        "萌宠"
+      ]
+    },
+    "oat": {
+      "label": "燕麦",
+      "dark": false,
+      "bg": "#EFE9E1",
+      "surface": "#F8F5F0",
+      "ink": "#2A2722",
+      "muted": "#6E675E",
+      "accent": "#2A2722",
+      "accent2": "#C9B79C",
+      "accentInk": "#EFE9E1",
+      "line": "#DDD4C8",
+      "mood": [
+        "极简",
+        "松弛",
+        "质感"
+      ],
+      "scene": [
+        "家居",
+        "穿搭",
+        "生活方式",
+        "咖啡"
+      ]
+    },
+    "mono": {
+      "label": "黑白",
+      "dark": false,
+      "bg": "#FFFFFF",
+      "surface": "#F4F4F4",
+      "ink": "#111111",
+      "muted": "#5E5E5E",
+      "accent": "#111111",
+      "accent2": "#FF4D2E",
+      "accentInk": "#FFFFFF",
+      "line": "#E3E3E3",
+      "mood": [
+        "极简",
+        "干货",
+        "冷静"
+      ],
+      "scene": [
+        "干货",
+        "设计",
+        "职场",
+        "知识"
+      ]
+    },
+    "klein": {
+      "label": "克莱因蓝",
+      "dark": false,
+      "bg": "#F3F1EC",
+      "surface": "#FFFFFF",
+      "ink": "#111111",
+      "muted": "#5F5952",
+      "accent": "#1F3FBF",
+      "accent2": "#F2C14E",
+      "accentInk": "#FFFFFF",
+      "line": "#DDD9D0",
+      "mood": [
+        "艺术",
+        "高级",
+        "大胆"
+      ],
+      "scene": [
+        "展览",
+        "设计",
+        "品牌",
+        "讲座"
+      ]
+    },
+    "tiffany": {
+      "label": "蒂芙尼",
+      "dark": false,
+      "bg": "#EAF7F5",
+      "surface": "#FFFFFF",
+      "ink": "#12302B",
+      "muted": "#55736D",
+      "accent": "#08827D",
+      "accent2": "#F7CAD0",
+      "accentInk": "#FFFFFF",
+      "line": "#CDEBE6",
+      "mood": [
+        "清新",
+        "精致",
+        "浪漫"
+      ],
+      "scene": [
+        "礼物",
+        "婚礼",
+        "珠宝",
+        "甜品"
+      ]
+    },
+    "coral-navy": {
+      "label": "珊瑚藏青",
+      "dark": false,
+      "bg": "#FDF5EF",
+      "surface": "#FFFFFF",
+      "ink": "#1B2A41",
+      "muted": "#626E80",
+      "accent": "#CB4A35",
+      "accent2": "#1B2A41",
+      "accentInk": "#FFFFFF",
+      "line": "#EFDDD3",
+      "mood": [
+        "活力",
+        "自信",
+        "专业"
+      ],
+      "scene": [
+        "招聘",
+        "运动",
+        "职场",
+        "活动"
+      ]
+    },
+    "olive": {
+      "label": "橄榄",
+      "dark": false,
+      "bg": "#F1EFE4",
+      "surface": "#FAF9F3",
+      "ink": "#2B2C1E",
+      "muted": "#696A55",
+      "accent": "#5F6D22",
+      "accent2": "#D9A05B",
+      "accentInk": "#FFFFFF",
+      "line": "#DEDCC9",
+      "mood": [
+        "自然",
+        "复古",
+        "松弛"
+      ],
+      "scene": [
+        "户外",
+        "露营",
+        "农产品",
+        "市集"
+      ]
+    },
+    "caramel": {
+      "label": "焦糖",
+      "dark": true,
+      "bg": "#2A1B12",
+      "surface": "#3A271B",
+      "ink": "#F8EBDD",
+      "muted": "#C7AE96",
+      "accent": "#E59A4C",
+      "accent2": "#F3D3A1",
+      "accentInk": "#2A1B12",
+      "line": "#4A3424",
+      "mood": [
+        "醇厚",
+        "温暖",
+        "高级"
+      ],
+      "scene": [
+        "咖啡",
+        "烘焙",
+        "秋冬",
+        "酒馆"
+      ]
+    },
+    "berry": {
+      "label": "莓果",
+      "dark": false,
+      "bg": "#F7EEF5",
+      "surface": "#FFFFFF",
+      "ink": "#321A2E",
+      "muted": "#7C6278",
+      "accent": "#9C2C77",
+      "accent2": "#F4A6C8",
+      "accentInk": "#FFFFFF",
+      "line": "#EAD7E6",
+      "mood": [
+        "时髦",
+        "甜酷",
+        "精致"
+      ],
+      "scene": [
+        "美妆",
+        "时尚",
+        "穿搭",
+        "甜品"
+      ]
+    },
+    "graphite": {
+      "label": "石墨橙",
+      "dark": true,
+      "bg": "#1C1F24",
+      "surface": "#262A31",
+      "ink": "#F2F4F7",
+      "muted": "#A3AAB5",
+      "accent": "#FF7A1A",
+      "accent2": "#3AA0FF",
+      "accentInk": "#1C1F24",
+      "line": "#363B44",
+      "mood": [
+        "科技",
+        "硬核",
+        "力量"
+      ],
+      "scene": [
+        "数码",
+        "数据",
+        "健身",
+        "汽车"
+      ]
+    },
+    "snow": {
+      "label": "冬雪",
+      "dark": false,
+      "bg": "#F5F8FB",
+      "surface": "#FFFFFF",
+      "ink": "#1A2633",
+      "muted": "#607083",
+      "accent": "#3F64A0",
+      "accent2": "#D94F4F",
+      "accentInk": "#FFFFFF",
+      "line": "#E1E8EF",
+      "mood": [
+        "清冷",
+        "安静",
+        "节日"
+      ],
+      "scene": [
+        "冬天",
+        "圣诞",
+        "滑雪",
+        "新年"
+      ]
+    },
+    "maple": {
+      "label": "枫叶",
+      "dark": false,
+      "bg": "#FBF1E4",
+      "surface": "#FFFAF3",
+      "ink": "#3A2414",
+      "muted": "#7F624B",
+      "accent": "#C0501B",
+      "accent2": "#E5A93B",
+      "accentInk": "#FFFFFF",
+      "line": "#EED9C2",
+      "mood": [
+        "温暖",
+        "丰收",
+        "怀旧"
+      ],
+      "scene": [
+        "秋天",
+        "中秋",
+        "感恩",
+        "旅行"
+      ]
+    },
+    "lime": {
+      "label": "青柠",
+      "dark": false,
+      "bg": "#F4FAEE",
+      "surface": "#FFFFFF",
+      "ink": "#1C2A14",
+      "muted": "#64735A",
+      "accent": "#43841B",
+      "accent2": "#FF9EB5",
+      "accentInk": "#FFFFFF",
+      "line": "#DDEBCF",
+      "mood": [
+        "清新",
+        "成长",
+        "元气"
+      ],
+      "scene": [
+        "春天",
+        "开学",
+        "健康",
+        "植物"
+      ]
+    },
+    "clay": {
+      "label": "陶土",
+      "dark": false,
+      "bg": "#EFE4DA",
+      "surface": "#F8F1EA",
+      "ink": "#3B2A22",
+      "muted": "#746051",
+      "accent": "#A95A33",
+      "accent2": "#7E8C6A",
+      "accentInk": "#FFFFFF",
+      "line": "#DECDBD",
+      "mood": [
+        "侘寂",
+        "手作",
+        "质感"
+      ],
+      "scene": [
+        "家居",
+        "陶艺",
+        "民宿",
+        "花艺"
+      ]
+    }
+  }
+}

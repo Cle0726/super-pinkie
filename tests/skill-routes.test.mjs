@@ -59,7 +59,7 @@ test('both builds ship the manifest, the index and the notices', () => {
     assert.match(fs.readFileSync(path.join(ROOT, file), 'utf8'), /skill-routes\.mjs/, `${file} must install the router`);
   }
   const snapshot = fs.readFileSync(path.join(ROOT, 'desktop/windows/mac-runtime/services/mode-architecture/index.mjs'), 'utf8');
-  for (const needle of ['skillRouteBlock(', 'waitingSection(', 'runningBackgroundJobs(', "'\\n' + BACKGROUND_WORK_RULES + '\\n'"]) {
+  for (const needle of ['skillRouteBlock(', 'chatMoveBlock(', 'waitingSection(', 'runningBackgroundJobs(', "'\\n' + BACKGROUND_WORK_RULES + '\\n'"]) {
     assert.ok(snapshot.includes(needle), `Windows snapshot index lacks ${needle}`);
   }
 });

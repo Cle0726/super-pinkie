@@ -1,0 +1,48 @@
+<style>
+  .c { display: flex; flex-direction: column; padding: 92px 88px 84px; background: var(--bg); color: var(--ink); }
+  .orb { position: absolute; right: -230px; top: -190px; width: 680px; height: 680px; border-radius: 50%;
+         background: color-mix(in srgb, var(--accent2) 30%, var(--bg)); }
+  .ring { position: absolute; right: -150px; top: -110px; width: 520px; height: 520px; border-radius: 50%;
+          border: 3px solid color-mix(in srgb, var(--ink) 16%, transparent); }
+  .pip { position: absolute; right: 339px; top: 46px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); }
+  .top { position: relative; display: flex; align-items: center; justify-content: space-between; }
+  .tag { font: 700 34px/1 var(--font-body); letter-spacing: .06em; padding: 18px 28px 17px; border-radius: 999px;
+         background: var(--ink); color: var(--bg); }
+  .no { font: 800 34px/1 var(--font-accent); letter-spacing: .14em; color: var(--ink); opacity: .75; }
+  .mid { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 40px 0 30px; }
+  .title { font-family: var(--font-title); font-weight: var(--w-title); font-size: 180px; line-height: 1.12;
+           letter-spacing: -0.02em; }
+  .title .hl { color: var(--ink); padding: 0 .05em; margin: 0 -.05em; -webkit-box-decoration-break: clone; box-decoration-break: clone;
+               background: linear-gradient(transparent 55%, color-mix(in srgb, var(--accent2) 78%, var(--bg)) 55%, color-mix(in srgb, var(--accent2) 78%, var(--bg)) 92%, transparent 92%); }
+  .sub { margin-top: 56px; max-width: 880px; font: 500 50px/1.45 var(--font-body); color: var(--muted); }
+  .sub::before { content: ""; display: block; width: 96px; height: 10px; border-radius: 5px; background: var(--accent); margin-bottom: 40px; }
+  .pts { position: relative; display: flex; flex-wrap: wrap; gap: 20px; }
+  .pt { display: flex; align-items: center; gap: 16px; padding: 20px 30px 20px 20px; border-radius: 22px;
+        background: var(--surface); border: 3px solid var(--ink); font: 700 38px/1 var(--font-body); }
+  .pt i { font: 900 26px/1 var(--font-accent); font-style: normal; width: 48px; height: 48px; display: grid; place-items: center;
+          border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+  .foot { position: relative; display: flex; align-items: center; justify-content: space-between; margin-top: 44px;
+          padding-top: 34px; border-top: 3px solid var(--line); }
+  .who { display: flex; align-items: center; gap: 18px; font: 600 36px/1 var(--font-body); }
+  .av { width: 64px; height: 64px; border-radius: 50%; overflow: hidden; }
+  .av img { width: 100%; height: 100%; object-fit: cover; }
+  .hint { font: 600 34px/1 var(--font-body); color: var(--muted); letter-spacing: .08em; }
+</style>
+<div class="canvas c">
+  <div class="orb" data-bleed></div><div class="ring" data-bleed></div><div class="pip" data-bleed></div>
+  <div class="top">
+    <div class="tag" data-if="tag" data-slot="tag"></div>
+    <div class="no" data-if="issue" data-slot="issue"></div>
+  </div>
+  <div class="mid">
+    <h1 class="title" data-slot="title" data-fit="112" data-maxlines="3"></h1>
+    <p class="sub" data-if="subtitle" data-slot="subtitle" data-fit="40" data-maxlines="2"></p>
+  </div>
+  <div class="pts" data-if="points">
+    <template data-each="points" data-max="3"><div class="pt"><i data-index="2"></i><span data-field="text" data-fit="30" data-maxlines="1"></span></div></template>
+  </div>
+  <div class="foot">
+    <div class="who" data-if="author"><div class="av" data-if="avatar"><img data-slot-img="avatar" alt=""></div><span data-slot="author"></span></div>
+    <div class="hint" data-if="hint" data-slot="hint"></div>
+  </div>
+</div>

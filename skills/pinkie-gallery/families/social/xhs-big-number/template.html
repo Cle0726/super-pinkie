@@ -1,0 +1,27 @@
+<style>
+  .c { background: var(--bg); color: var(--ink); padding: 96px 84px 88px; display: flex; flex-direction: column; }
+  .glow { position: absolute; left: 50%; top: 520px; width: 980px; height: 980px; transform: translate(-50%, -50%); border-radius: 50%;
+          background: radial-gradient(circle, color-mix(in srgb, var(--accent) 34%, transparent) 0%, transparent 62%); }
+  .label { position: relative; display: inline-flex; align-self: flex-start; align-items: center; gap: 14px; font: 700 40px/1 var(--font-body);
+           padding: 16px 28px; border-radius: 999px; border: 3px solid var(--ink); }
+  .label::before { content: ""; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); }
+  .num { position: relative; display: flex; align-items: flex-start; justify-content: center; margin-top: 40px; height: 640px; }
+  .n { font-family: var(--font-accent); font-weight: 900; font-size: 560px; line-height: .98; letter-spacing: -0.06em; color: var(--accent);
+       white-space: nowrap; max-width: 912px; overflow: hidden; }
+  .u { margin-top: 70px; margin-left: 18px; font-family: var(--font-title); font-weight: var(--w-title); font-size: 120px; line-height: 1; color: var(--ink); }
+  .title { position: relative; margin-top: 10px; font-family: var(--font-title); font-weight: var(--w-title); font-size: 110px; line-height: 1.15; text-align: center; }
+  .title .hl { color: var(--accent); }
+  .sub { position: relative; margin-top: 34px; text-align: center; font: 500 44px/1.45 var(--font-body); color: var(--muted); }
+  .who { position: relative; margin-top: auto; text-align: center; font: 600 34px/1 var(--font-body); color: var(--muted); letter-spacing: .06em; }
+</style>
+<div class="canvas c">
+  <div class="glow" data-bleed></div>
+  <div class="label" data-if="label" data-slot="label"></div>
+  <div class="num">
+    <div class="n" data-slot="number" data-fit="220" data-maxlines="1"></div>
+    <div class="u" data-if="unit" data-slot="unit"></div>
+  </div>
+  <h1 class="title balance" data-slot="title" data-fit="76" data-maxlines="2"></h1>
+  <p class="sub" data-if="subtitle" data-slot="subtitle" data-fit="36" data-maxlines="2"></p>
+  <div class="who" data-if="author" data-slot="author"></div>
+</div>
