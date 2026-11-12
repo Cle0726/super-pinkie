@@ -767,3 +767,18 @@ test('asking another mode counts as doing a "go ask that mode" request', () => {
   assert.equal(isSessionOperationEvidence(asked, '删除临时文件'), false);
   assert.equal(isSessionOperationEvidence({name: 'pinkie_mode_ask', output: '没问成'}, '去问问想法模式'), false);
 });
+
+test('a native spawn is pointed back to a real session once when the user asked for a session', async t => {
+  const {spawnShouldBeSession} = await import('../services/mode-architecture/session-lineage.mjs');
+  const f = fixture(t);
+  const shared = globalThis[Symbol.for('pinkie.session-lineage.v1')] ??= new Map();
+  shared.set(f.root, f.lineage);
+  t.after(() => shared.delete(f.root));
+  f.lineage.begin({runId: 'r1', prompt: '另开一个子会话写个小脚本，做完告诉我'}, {sessionKey: parent});
+  assert.match(spawnShouldBeSession(parent), /pinkie_session_start/);
+  assert.equal(spawnShouldBeSession(parent), '', 'only once per turn: the model may insist');
+  f.lineage.begin({runId: 'r2', prompt: '把这三个函数分别重构一下'}, {sessionKey: parent});
+  assert.equal(spawnShouldBeSession(parent), '', 'ordinary parallel parts stay with the native tool');
+  f.lineage.begin({runId: 'pinkie-session-wake-x', prompt: '[pinkie-watchdog] [pinkie-session-wake] 子会话 汇报'}, {sessionKey: parent});
+  assert.equal(spawnShouldBeSession(parent), '', 'internal turns are not the user asking');
+});

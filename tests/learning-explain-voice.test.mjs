@@ -54,7 +54,7 @@ test('工作区有规则就用工作区的，改了规则下一次就变；没�
 test('当场讲解短而轻、不分步骤；整卷回看更短', () => {
   const long = '字'.repeat(300);
   assert.equal(validVoicedExplain({text: long}).text.length, long.length);
-  assert.ok(validVoicedExplain({text: '字'.repeat(900)}).text.length <= 520);
+  assert.ok(validVoicedExplain({text: '字'.repeat(900)}).text.length <= 760) // 英语带读要把整句逐块带完，上限从 520 放到 760;
   assert.ok(validVoicedExplain({text: '字'.repeat(900)}, {brief: true}).text.length <= 420);
   assert.equal(validVoicedExplain({text: '短'}), null);
   assert.equal(validVoicedExplain({text: 'a\\nb 好的好的好的'}).text.includes('\n'), true);
