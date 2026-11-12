@@ -1819,7 +1819,10 @@
     const label = night ? '切换到浅色模式' : '切换到深色模式';
     const icon = night ? '☀' : '☾';
     for (const button of document.querySelectorAll('.laolao-sidebar-theme-toggle, #pinkie-night-rail-entry')) {
-      if (button.textContent !== icon) button.textContent = icon;
+      // 有碧琪的线条图标就用它（月亮旁一颗小星 / 太阳），没有就还是原来的文字符号。
+      const name = night ? 'sun' : 'moon', art = window.PinkieIcons?.markup(name);
+      if (art) { if (button.dataset.pinkieIcon !== name) { button.innerHTML = art; button.dataset.pinkieIcon = name; } }
+      else if (button.textContent !== icon) button.textContent = icon;
       button.setAttribute('aria-label', label);
       button.setAttribute('title', label);
       button.setAttribute('aria-pressed', String(night));

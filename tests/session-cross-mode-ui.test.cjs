@@ -120,3 +120,35 @@ test('one day/night switch on the chat page, two different controls no longer sh
     assert.ok(fs.existsSync(path.join(assets, `laolao-mode-${id}-hd.png`)), `${id}: the picture in use stays`);
   }
 });
+
+// 碧琪的线条图标 (laolao-icons.js): one shared set, every caller keeps its old icon as the fallback.
+test('the icon set is one module, loaded before its callers, and every entry falls back to what it drew before', () => {
+  const window = {};
+  vm.runInNewContext(source('laolao-icons.js'), {window});
+  const icons = window.PinkieIcons;
+  assert.deepEqual(plain(icons.names), ['new-session', 'temp', 'search', 'works', 'moon', 'sun', 'wand', 'globe', 'more']);
+  for (const name of icons.names) {
+    const svg = icons.markup(name);
+    assert.ok(svg.startsWith(`<svg class="pinkie-ic" data-pinkie-ic="${name}" viewBox="0 0 24 24" aria-hidden="true">`) && svg.endsWith('</svg>'), name);
+    assert.equal(/<img|href=|url\(|<script/i.test(svg), false, `${name} is plain inline line art`);
+    assert.equal((svg.match(/<(g|svg)\b/g) || []).length, (svg.match(/<\/(g|svg)>/g) || []).length, `${name} is balanced`);
+  }
+  assert.equal(icons.markup('nope'), '');
+  assert.equal(icons.node('search'), null, 'no document: nothing to build, callers fall back');
+  const head = source('laolao-head.fragment.html');
+  const at = name => head.indexOf('/' + name);
+  assert.ok(at('laolao-icons.js') > 0 && at('laolao-icons.js') < at('laolao-session-list.js'), 'before the first script that asks for an icon');
+  assert.equal(/<script defer src="\/laolao-icons\.js/.test(head), false, 'synchronous, like the session list that uses it');
+  has(source('laolao-session-list.js'), "window.PinkieIcons?.node('search')||entryIcon(");
+  has(source('laolao-session-list.js'), "window.PinkieIcons?.node('works')||entryIcon(");
+  has(source('laolao-session-list.js'), "newSession.prepend(art);", 'the native plus is Lit-owned: it is hidden by CSS, never replaced');
+  has(source('laolao-session-tools.js'), "window.PinkieIcons?.markup('temp') || '<svg");
+  has(source('laolao-sidebar.js'), "else if (button.textContent !== icon) button.textContent = icon;");
+  has(source('laolao-laser-pointer.js'), "window.PinkieIcons?.markup('wand') || svgWrap(TOOLS.laser.icon)");
+  has(source('laolao-link-viewer.js'), 'window.PinkieIcons?.markup("globe") || \'<svg');
+  has(source('laolao-classic-shell.js'), 'window.PinkieIcons?.markup("more") || \'<svg');
+  const css = source('laolao-icons.css');
+  has(css, 'html .sidebar .sidebar-new-session:has(> .pinkie-new-session-ic) > .sidebar-new-session__icon { display: none !important; }');
+  has(css, 'html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree) > .pinkie-new-session-ic { display: inline-flex !important; }', 'the collapsed rail still shows the icon');
+  has(css, 'html[data-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }');
+});

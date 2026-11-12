@@ -829,7 +829,7 @@
     btn.title = '演示工具：左键开启，右键设置（ESC 退出）';
     btn.setAttribute('aria-label', '演示工具：激光笔、画笔、荧光笔、聚光灯、放大镜');
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-    btn.innerHTML = svgWrap(TOOLS.laser.icon);
+    btn.innerHTML = window.PinkieIcons?.markup('wand') || svgWrap(TOOLS.laser.icon);
     btn.addEventListener('click', toggle);
     btn.addEventListener('contextmenu', (event) => {
       event.preventDefault();

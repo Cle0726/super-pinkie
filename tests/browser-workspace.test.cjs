@@ -59,7 +59,8 @@ test('every mode gets the same sidebar browser launcher and chat links use it', 
   assert.match(source, /bridge\.postMessage\(\{ action: "open", url \}\)/);
   assert.match(source, /setInterval\(mountBrowserLauncher, 1500\)/);
   assert.match(source, /flex:0 0 28px;width:28px;height:28px/);
-  assert.match(source, /button\.innerHTML = '<svg[\s\S]*?<\/svg>';/);
+  // 11-12: the shared line-icon set draws the globe; the launcher's own svg stays as the fallback.
+  assert.match(source, /button\.innerHTML = window\.PinkieIcons\?\.markup\("globe"\) \|\| '<svg[\s\S]*?<\/svg>';/);
   assert.doesNotMatch(source, /<span>网页资料<\/span>/);
   assert.doesNotMatch(source, /learning.*laolao-browser-workspace-entry/i);
 
