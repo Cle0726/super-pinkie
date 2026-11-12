@@ -7,6 +7,7 @@ import {openclawStateDir} from './openclaw-paths.mjs';
 
 // when：这条消息里出现这些说法才用（更具体的排前面）；没有 when 的是这种活的默认技能。
 export const SKILL_ROUTES = Object.freeze([
+  {skill: 'pinkie-toolbox', kinds: ['environment', 'debugging', 'video_motion', 'document', 'web_ui', 'code'], when: /(?:缺少?|没有|安装?|装不上|跑不起来|找不到|不可用|修复).{0,20}(?:工具|依赖|浏览器|python|node|npm|ffmpeg|ffprobe|libreoffice|git|字体)|(?:工具|依赖|浏览器|python|node|npm|ffmpeg|ffprobe|libreoffice|git|字体).{0,20}(?:缺少?|没有|安装?|装不上|跑不起来|找不到|不可用|修复)/i, why: '检查缺少的工具，在用户目录补齐并验证'},
   // 证件照 / 抠图 / 练习纸 / 简历（碧琪自己写的薄技能，底下是开源工具）
   {skill: 'pinkie-id-photo', kinds: ['image_print', 'craft', 'document'], when: /证件照|一寸照?|二寸照?|换底色?|蓝底|红底|白底照|签证照|报名照|简历照|护照照/, why: '证件照：换白 / 蓝 / 红底、标准尺寸、六寸排版（本地跑，不上传照片）'},
   // 批量出图 / 出片：网页版出图 + 豆包图生视频 + 本地加工脚本。排在抠图技能前面：
@@ -160,6 +161,7 @@ export const SKILL_ROUTES = Object.freeze([
 
 // 要碧琪动手做东西的说法。活儿分类偶尔漏判（比如「剪个抖音广告」被当成闲聊）时，靠它 + 技能的具体说法兜底。
 const ACTION = /(?:帮我|给我|替我|麻烦|请)?(?:做|剪|写|画|设计|出|生成|制作|整|弄|拍|配|搞)(?:个|一个|一份|一张|一段|一套|几张|几个|点)?/;
+const TOOLBOX_REQUEST = SKILL_ROUTES.find(route => route.skill === 'pinkie-toolbox').when;
 const ASKING_ONLY = /^(?:什么是|.{0,20}(?:是什么|什么意思|怎么回事|为什么|对吗|吗)[？?]?)$/;
 
 export function routeSkills(kinds = [], prompt = '', {limit = 3, available = null} = {}) {
@@ -169,7 +171,7 @@ export function routeSkills(kinds = [], prompt = '', {limit = 3, available = nul
   let wanted = new Set(kinds);
   const unsure = !wanted.size || (wanted.size === 1 && (wanted.has('simple') || wanted.has('pending')));
   if (unsure) {
-    if (!ACTION.test(text)) return [];
+    if (!ACTION.test(text) && !TOOLBOX_REQUEST.test(text)) return [];
     const direct = SKILL_ROUTES.filter(r => r.when && r.when.test(text) && (!available || available.has(r.skill)));
     if (!direct.length) return [];
     wanted = new Set(direct[0].kinds.slice(0, 1));
@@ -237,4 +239,36 @@ export function skillRouteBlock(kinds = [], prompt = '', {workspace = '', stateD
   });
   lines.push(`技能和碧琪的打法冲突时以打法为准：先做出来、不问一串问题、交付前亲眼验证${playbook ? `（${playbook}）` : ''}。技能里要下载的依赖照样自己装好，记进下载账本。`);
   return lines.join('\n');
+}
+
+// 工具箱：11-11 实测 6 条做视频 / 网页 / 能不能做的对话里，碧琪 0 次调用 toolbox.mjs（手册里写了「先 ensure」），
+// 照旧现想安装命令。在真没装工具的电脑上，这正是计划 D 要解决的事。所以由引擎按活儿种类直接点名要备的能力。
+// 只在工作区真有 playbooks/toolbox.mjs 时说；能力名和 toolbox.mjs list 一致。
+const TOOLBOX_CAPS = Object.freeze({
+  web_ui: ['screenshot'],
+  app_game_ai: ['screenshot'],
+  publish: ['screenshot'],
+  video_motion: ['video'],
+  document: ['docs-write', 'office-view', 'pdf'],
+  data_charts: ['python'],
+  image_print: ['image', 'fonts-cjk'],
+});
+export function toolboxCaps(kinds = []) {
+  return [...new Set(kinds.flatMap(id => TOOLBOX_CAPS[id] || []))].slice(0, 4);
+}
+// 项目绑定时会话的工作目录是项目文件夹，打法在模式自己的工作区：按给的顺序找第一个真有 toolbox.mjs 的。
+export function toolboxBlock(kinds = [], {workspaces = [], mode = ''} = {}) {
+  if (mode === 'none') return '';
+  const file = workspaces.filter(Boolean).map(dir => path.join(dir, 'playbooks', 'toolbox.mjs')).find(candidate => {
+    try { return fs.statSync(candidate).isFile(); } catch { return false; }
+  });
+  if (!file) return '';
+  const check = kinds.includes('environment');
+  const caps = toolboxCaps(kinds);
+  if (!check && !caps.length) return '';
+  const command = check && !caps.length ? `node "${file}" check` : `node "${file}" ensure ${caps.join(' ')}`;
+  return [
+    `【先备好工具】开工前先跑一次 \`${command}\`。已经有的它马上回 ok，缺的它装进碧琪自己的环境、装完真试一次；照它报的路径和命令做。`,
+    '它报装不上，再按 playbooks/environment.md 手动装进用户空间。不要自己现想安装命令，不要让先生自己去装软件；同一会话里它已经报过 ok 的能力不用再跑。',
+  ].join('\n');
 }

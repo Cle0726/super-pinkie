@@ -21,7 +21,7 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {RIGOR_LADDER, SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims, unverifiedNote} from './run-contract.mjs';
-import {skillRouteBlock} from './skill-routes.mjs';
+import {skillRouteBlock, toolboxBlock} from './skill-routes.mjs';
 import {workCardBlock, forgetCards, routingKinds} from './work-cards.mjs';
 import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.mjs';
 import {codeWatch} from './code-work.mjs';
@@ -5967,6 +5967,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
           const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
           if (block) blocks.push('\n' + block + '\n');
+          const kit = toolboxBlock(routed.kinds || [], {workspaces: [root, agentWorkspaceDir({agentId: ctx.agentId, sessionKey})], mode});
+          if (kit) blocks.push('\n' + kit + '\n');
           const waiting = waitingSection(routed.kinds || []);
           if (waiting) blocks.push('\n' + waiting + '\n');
           // 活儿卡：这种活最要紧的几步直接放在消息旁边（小模型常常不去读打法）；项目速览：绑定的项目里真实的命令和目录。

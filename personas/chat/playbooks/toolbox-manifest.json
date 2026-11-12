@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "pythonVersion": "3.12.11",
+  "playwrightVersion": "1.64.1",
+  "browser": {
+    "name": "chromium-headless-shell",
+    "revision": "1248",
+    "browserVersion": "156.0.8078.4",
+    "dir": "chromium_headless_shell-1248",
+    "hosts": [
+      "https://registry.npmmirror.com/-/binary/playwright",
+      ""
+    ],
+    "digests": {
+      "darwin-arm64": "sha256-SETY3BwtHcjR3KC8E0H7/qd7stEmFOpSWQaB24oY1EQ=",
+      "darwin-x64": "sha256-8qq3MUaTFRHUgHarai5SDmDwbqhq0RNOCIBlJuZodrI=",
+      "win32-x64": "sha256-FsvEsjymI1UCw7O1wAawrB4FStcm7ELzwCmOJtWMGHs="
+    }
+  },
+  "uv": {
+    "version": "0.13.7",
+    "mirrors": [
+      "https://pypi.tuna.tsinghua.edu.cn/packages/",
+      "https://mirrors.aliyun.com/pypi/packages/",
+      "https://files.pythonhosted.org/packages/"
+    ],
+    "pythonMirrors": [
+      "https://registry.npmmirror.com/-/binary/python-build-standalone",
+      ""
+    ],
+    "files": {
+      "darwin-arm64": {
+        "path": "40/a5/8756c38ace102fa13fd4e653e8bc40e1f65924f1c0a0d23350339dac97e5/uv-0.13.7-py3-none-macosx_11_0_arm64.whl",
+        "integrity": "sha256-+RoikJMWPu/KieobIgoiHWTDvq3gXQNRmmWE0Xl6Wl8="
+      },
+      "darwin-x64": {
+        "path": "3d/5b/e0379e7b172659420b1ec99a8e8229830aa85ea59684847c80b1c959a056/uv-0.13.7-py3-none-macosx_10_12_x86_64.whl",
+        "integrity": "sha256-/QS/AbpfKCn0+Uyo8MJKdD8h5z11BFYT7W/C/Wb8e9o="
+      },
+      "win32-x64": {
+        "path": "8e/4f/041b59d2a38807a3e31ef41064cf3e45d2752fe0409d89040d52778049ae/uv-0.13.7-py3-none-win_amd64.whl",
+        "integrity": "sha256-KDXiqzl9DbhjI7mXXc517Ndqqc+g1qKuqEc0quf4ybM="
+      },
+      "win32-arm64": {
+        "path": "44/8d/1594dce4465d9699467a639b25aafd335ce1e5917f8bb60c9c0bed9e0859/uv-0.13.7-py3-none-win_arm64.whl",
+        "integrity": "sha256-VedBo4CpgAj8SYXPBphV82vFAkLvQ44hpGZ4b1vITag="
+      }
+    }
+  },
+  "font": {
+    "version": "0.4.4",
+    "integrity": "sha512-LF4+p6xdtgUArufW0K+l9/FeDiXrW8FcEkEbOPIUC5ZnPupeFVA6yY9qCZ0sBrdAeLdlusDhv0R7q2x3onXo3w=="
+  },
+  "office": {
+    "darwin-arm64": {
+      "version": "26.8.2",
+      "folder": "aarch64",
+      "arch": "aarch64",
+      "integrity": "sha256-nyT+g6se1cles99YARnzKTL3E+V3/urAK/YZ+wB0m1U="
+    },
+    "darwin-x64": {
+      "version": "26.8.2",
+      "folder": "x86_64",
+      "arch": "x86-64",
+      "integrity": "sha256-CvBid5zBf2+FKRiyQkx0X33S0g1R1/uKCSXrkuwEF6c="
+    },
+    "win32-x64": {
+      "version": "26.8.2",
+      "folder": "x86_64",
+      "arch": "x86-64",
+      "integrity": "sha256-/0uRFAO2funmJJ+CD5eCxEuzLJT9qkWw2lOo5BnlMHo="
+    },
+    "win32-arm64": {
+      "version": "26.8.2",
+      "folder": "aarch64",
+      "arch": "aarch64",
+      "integrity": "sha256-c+ahX1srnmqH/61/2qzW6ZKll7CMkR7n47rd0V4pvMc="
+    }
+  },
+  "git": {
+    "win32-x64": {
+      "version": "2.56.0.4",
+      "arch": "64-bit",
+      "integrity": "sha256-4794NR/nd/ukfd7llQCC+KmLsPAmBP3Huj7iy2j/qHc="
+    },
+    "win32-arm64": {
+      "version": "2.56.0.4",
+      "arch": "arm64",
+      "integrity": "sha256-cPdkn3gIjB2x0vNXHKRqBNW+8G5OnVbY7X+YKejGxNs="
+    }
+  },
+  "pypiMirrors": [
+    "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "https://mirrors.aliyun.com/pypi/simple/",
+    "https://pypi.org/simple"
+  ],
+  "ffprobe": {
+    "darwin-arm64": {
+      "version": "5.0.1",
+      "integrity": "sha512-vwNCNjokH8hfkbl6m95zICHwkSzhEvDC3GVBcUp5HX8+4wsX10SP3B+bGur7XUzTIZ4cQpgJmEIAx6TUwRepMg=="
+    },
+    "darwin-x64": {
+      "version": "5.1.0",
+      "integrity": "sha512-J+YGscZMpQclFg31O4cfVRGmDpkVsQ2fZujoUdMAAYcP0NtqpC49Hs3SWJpBdsGB4VeqOt5TTm1vSZQzs1NkhA=="
+    },
+    "win32-x64": {
+      "version": "5.1.0",
+      "integrity": "sha512-jMGYeAgkrdn4e2vvYt/qakgHRE3CPju4bn5TmdPfoAm1BlX1mY9cyMd8gf5vSzI8gH8Zq5WQAyAkmekX/8TSTg=="
+    }
+  },
+  "capabilities": {
+    "python": {
+      "what": "Python 3.11 以上和独立环境",
+      "reserveMiB": 600
+    },
+    "screenshot": {
+      "what": "打开网页、点击并截图",
+      "reserveMiB": 800
+    },
+    "video": {
+      "what": "用 ffmpeg 和 ffprobe 处理视频",
+      "reserveMiB": 300
+    },
+    "node": {
+      "what": "碧琪自带的 Node.js",
+      "reserveMiB": 0
+    },
+    "office-view": {
+      "what": "把 PPT、Word 和 Excel 转成 PDF",
+      "reserveMiB": 2500
+    },
+    "pdf": {
+      "what": "读取、合并 PDF 和转图",
+      "reserveMiB": 300
+    },
+    "docs-write": {
+      "what": "读写 PPT、Word 和 Excel",
+      "reserveMiB": 300
+    },
+    "image": {
+      "what": "裁剪、缩放和转换图片",
+      "reserveMiB": 150
+    },
+    "fonts-cjk": {
+      "what": "能正常显示中文的字体",
+      "reserveMiB": 150
+    },
+    "tts": {
+      "what": "中文文字转语音",
+      "reserveMiB": 150
+    },
+    "git": {
+      "what": "版本管理",
+      "reserveMiB": 300
+    }
+  }
+}

@@ -1,0 +1,83 @@
+name: Toolbox probe
+
+on:
+  push:
+    branches: [feat/biqi-toolbox-1110]
+    paths: [tools/pinkie-toolbox/**, personas/*/playbooks/toolbox*, tests/pinkie-toolbox*, tests/skill-routes.test.mjs, .github/workflows/toolbox-probe.yml]
+  workflow_dispatch:
+    inputs:
+      full_probe:
+        description: Run clean-environment downloads and real capability probes
+        type: boolean
+        default: false
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit and routing tests
+        shell: bash
+        run: |
+          export PINKIE_TEST_PYTHON="$(command -v python)"
+          node tools/pinkie-toolbox/sync.mjs --check
+          node --test tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
+          # 人格打包测试跑的是 Mac 安装脚本，只在 Mac 上跑
+          if [ "$RUNNER_OS" = macOS ]; then python -m unittest discover -s tests -p persona_bundle_test.py; fi
+
+      # 干净目录：隐藏系统里的工具（PINKIE_TOOLBOX_NO_SYSTEM），也不给 Python，
+      # 让工具箱自己下 uv、再下独立 Python，路径带中文和空格。
+      - name: Clean directory real installation (no system tools, no Python)
+        if: ${{ inputs.full_probe || github.event_name == 'push' }}
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/碧琪 工具箱 长路径/工作环境与真实安装测试"
+          mkdir -p "$root"
+          export PINKIE_TOOLBOX_NO_SYSTEM=1
+          export PINKIE_TOOLBOX_HOME="$root/home"
+          export PINKIE_TOOLBOX_DIR="$root/box"
+          export OPENCLAW_STATE_DIR="$root/state"
+          export PINKIE_DOWNLOADS_LEDGER="$root/downloads.json"
+          unset PINKIE_AGENT_PYTHON
+          set +e
+          for cap in python screenshot video node office-view pdf docs-write image fonts-cjk tts git; do
+            start=$(date +%s)
+            node personas/project/playbooks/toolbox.mjs ensure "$cap" > "$root/$cap.json" 2> "$root/$cap.err"
+            code=$?
+            end=$(date +%s)
+            size=$(du -sk "$root/box" 2>/dev/null | cut -f1)
+            echo "$cap exit=$code seconds=$((end-start)) box_kb=$size $(cat "$root/$cap.json")" | tee -a "$root/results.log"
+          done
+          echo "--- 办公软件诊断" | tee -a "$root/results.log"
+          ls "$root/box" "$root/box/office" 2>&1 | head -20 | tee -a "$root/results.log"
+          find "$root/box" -maxdepth 3 -name 'msiexec.log' -o -maxdepth 3 -name 'soffice*' 2>/dev/null | head | tee -a "$root/results.log"
+          node personas/project/playbooks/toolbox.mjs check office-view 2>&1 | tee -a "$root/results.log"; echo "check exit=${PIPESTATUS[0]}" | tee -a "$root/results.log"
+          node personas/project/playbooks/toolbox.mjs ensure office-view 2>&1 | tee -a "$root/results.log"; echo "ensure exit=${PIPESTATUS[0]}" | tee -a "$root/results.log"
+          echo "--- 浏览器内核指纹（清单 browser.digests 用）" | tee -a "$root/results.log"
+          venv_py="$root/box/venv/bin/python"; [ -f "$root/box/venv/Scripts/python.exe" ] && venv_py="$root/box/venv/Scripts/python.exe"
+          PLAYWRIGHT_BROWSERS_PATH="$root/box/browsers" "$venv_py" -m playwright install chromium-headless-shell >> "$root/results.log" 2>&1
+          PINKIE_TOOLBOX_DIR="$root/box" node tools/pinkie-toolbox/toolbox.mjs browser-digest | tee -a "$root/results.log"
+          echo "--- 工具箱目录以外的残留检查" | tee -a "$root/results.log"
+          ls -la "$root/home" | tee -a "$root/results.log"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && (inputs.full_probe || github.event_name == 'push') }}
+        with:
+          name: toolbox-${{ matrix.os }}-results
+          path: |
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.log
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.json
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/*.err
+            ${{ runner.temp }}/碧琪 工具箱 长路径/工作环境与真实安装测试/box/office-stage-*/msiexec.log
+          if-no-files-found: warn
