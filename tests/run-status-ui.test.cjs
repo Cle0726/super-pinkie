@@ -67,8 +67,6 @@ test('the run-status files exist and expose a pure model', () => {
 test('each phase reads as plain Pinkie language', () => {
   const {api} = load();
   const cases = [
-    ['thinking', base(), /碧琪在动小脑瓜/],
-    ['writing', base({live: {active: true, state: 'writing', startedAt: T0}}), /碧琪在比划着回你/],
     ['plan steps', base({live: {active: true, state: 'working', startedAt: T0}, plan: {items: [
       {id: 'a', text: '读需求', status: 'completed'}, {id: 'b', text: '写页面', status: 'completed'},
       {id: 'c', text: '截图核对手机宽度', status: 'in_progress'}, {id: 'd', text: '写结论', status: 'pending'},
@@ -92,6 +90,14 @@ test('each phase reads as plain Pinkie language', () => {
     assert.doesNotMatch(view.text + ' ' + (view.meta || ''), FORBIDDEN, name);
     assert.ok(['thinking', 'working', 'writing', 'asking', 'done', 'oops'].includes(view.sticker), name);
     assert.ok(view.actions.some((a) => a.id === 'stop' && a.label === '停下'), `${name} offers 停下`);
+  }
+});
+
+test('a plain thinking / working / writing run stays hidden: the process card already says it', () => {
+  const {api} = load();
+  for (const state of ['thinking', 'working', 'writing']) {
+    const view = api.describe(base({live: {active: true, state, startedAt: T0}}));
+    assert.equal(view.visible, false, state);
   }
 });
 
@@ -158,7 +164,7 @@ test('disconnect shows the retry count and a reconnect never reads as finished',
   // Back online, the gateway says it is still running: keep showing a run.
   const resumed = api.describe(base({conn: {online: true, attempt: 0}, live: {active: false, startedAt: T0},
     status: {active: true, phase: 'running', missing: [], continuations: {tier: 0}, review: {phase: 'idle'}}}));
-  assert.equal(resumed.visible, true);
+  assert.notEqual(resumed.kind, 'done');
   assert.notEqual(resumed.text, '完成啦！');
 });
 
@@ -176,11 +182,10 @@ test('an outage survives a page reload: the snapshot is packed and read back', (
   assert.equal(api.unpackOffline(null, T0), null);
 });
 
-test('finished and stopped runs say so briefly, then the bar leaves', () => {
+test('a finished run leaves quietly; a stopped run says so briefly, then the bar leaves', () => {
   const {api} = load();
   const done = api.describe(base({live: {active: false, startedAt: 0}, ended: {outcome: 'done', at: T0 + 29_000}}));
-  assert.equal(done.text, '完成啦！');
-  assert.equal(done.sticker, 'done');
+  assert.equal(done.visible, false);
   const stopped = api.describe(base({live: {active: false, startedAt: 0}, ended: {outcome: 'stopped', at: T0 + 29_000}}));
   assert.equal(stopped.text, '这一轮停下来了');
   assert.equal(stopped.sticker, 'oops');
