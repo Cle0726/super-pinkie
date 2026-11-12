@@ -18,6 +18,12 @@ import tempfile
 import time
 import uuid
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'app'))
+try:
+    import release_notes  # 碧琪口吻的摘要 + 细节，和 Windows、发布页同一套读法
+except Exception:  # 旧检出里没有这个文件时照旧只给几行
+    release_notes = None
+
 STATE = Path(os.environ.get('PINKIE_STATE_ROOT') or Path.home() / 'Library/Application Support/SuperPinkie')
 CONFIG = Path(os.environ.get('PINKIE_CONFIG_ROOT') or Path.home() / '.config/super-pinkie') / 'install.env'
 UPDATES = STATE / 'updates'
@@ -126,8 +132,12 @@ def official_checkout(repo):
     return bool(re.search(r'github\.com[:/]Cle0726/super-pinkie(?:\.git)?/?$', url))
 
 
+LATEST_NOTES = {}
+
+
 def latest_release(repo):
     """最新正式发布的 tag（v2.5.27）。不是官方仓库（自己的分叉、开发用的检出）或查不到时返回 None，照旧跟当前分支。"""
+    LATEST_NOTES.clear()
     if not official_checkout(repo):
         return None
     import urllib.request
@@ -136,10 +146,15 @@ def latest_release(repo):
         try:
             request = urllib.request.Request(url, headers={'User-Agent': 'SuperPinkie-Mac-Updater', 'Accept': 'application/json'})
             with urllib.request.urlopen(request, timeout=20) as response:
-                value = str(json.loads(response.read(256 * 1024).decode('utf-8')).get(field, '')).strip().removeprefix('v')
+                data = json.loads(response.read(256 * 1024).decode('utf-8'))
+                value = str(data.get(field, '')).strip().removeprefix('v')
         except Exception:
             continue
         if VERSION_TEXT.fullmatch(value):
+            # 检查时就能给出这次更新说了什么（latest.json 的 notes / 发布页正文），不用等下载完。
+            text = data.get('notes') if field == 'version' else data.get('body')
+            if release_notes and isinstance(text, str) and text.strip():
+                LATEST_NOTES.update(note_parts(text, value))
             return 'v' + value
     return None
 
@@ -165,7 +180,7 @@ def check():
     # Even if the checkout is current it may need to be reapplied, so do not
     # claim the App is definitely current based on the checkout alone.
     return {'supported': True, 'available': True, 'route': ROUTE, 'mirror': route if ROUTE == 'mirror' else '',
-            **({'version': tag[1:]} if tag else {}),
+            **({'version': tag[1:]} if tag else {}), **LATEST_NOTES,
             'unchangedCheckout': current is not None and current == latest}
 
 
@@ -218,14 +233,24 @@ def run_progress(command):
             process.wait()
 
 
+def note_parts(text, version=None):
+    parts = release_notes.parse(text, version)
+    summary, details = parts['summary'][:300], [x[:240] for x in parts['details'][:12]]
+    return {'summary': summary, 'details': details, 'notes': release_notes.as_text({'summary': summary, 'details': details})}
+
+
 def notes(repo, revision):
     text = git(repo, 'show', f'{revision}:CHANGELOG.md', check=False)
     version = git(repo, 'show', f'{revision}:VERSION', check=False).strip()
     if not re.fullmatch(r'[A-Za-z0-9._-]{1,32}', version):
         return {'version': '', 'notes': ''}
     # 发版分支的更新说明写在 desktop/windows/release-notes.md（GitHub 发布页用的同一份）。
-    release_notes = git(repo, 'show', f'{revision}:desktop/windows/release-notes.md', check=False)
-    picked = [m.group(1)[:240] for m in (re.match(r'^\s*[-*]\s+(.+)', raw) for raw in release_notes.splitlines()) if m][:5]
+    release_notes_md = git(repo, 'show', f'{revision}:desktop/windows/release-notes.md', check=False)
+    if release_notes and release_notes_md.strip():
+        parts = note_parts(release_notes_md, version)
+        if parts['summary'] or parts['details']:
+            return {'version': version, **parts}
+    picked = [m.group(1)[:240] for m in (re.match(r'^\s*[-*]\s+(.+)', raw) for raw in release_notes_md.splitlines()) if m][:5]
     if picked:
         return {'version': version, 'notes': '\n'.join(picked)}
     lines = []

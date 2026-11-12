@@ -23,6 +23,8 @@ import urllib.request
 import uuid
 import webbrowser
 
+import release_notes
+
 
 GATEWAY_URL = "http://127.0.0.1:18789/"
 GATEWAY_CHAT_URL = urllib.parse.urljoin(GATEWAY_URL, "chat")
@@ -113,34 +115,30 @@ def update_mirrors(resource_root):
     return routes
 
 
-_NOTES_CUT = re.compile(
-    r"\n(?:\*\*Full Changelog\*\*|## What's Changed|<!-- pinkie-notes-end -->)",
-    re.IGNORECASE,
-)
+def release_notes_parts(body, version=None):
+    """碧琪口吻的摘要 + 细节（格式见 app/release_notes.py）。"""
+    parts = release_notes.parse(body, version)
+    summary = parts["summary"][:300]
+    details, used = [], len(summary)
+    for item in parts["details"][:12]:
+        used += len(item)
+        if used > 1600:
+            break
+        details.append(item[:240])
+    return {"summary": summary, "details": details}
 
 
-def release_notes_text(body):
-    """Keep the user-facing lines and drop the generated commit trailer."""
-    text = _NOTES_CUT.split(str(body or "").replace("\r\n", "\n"), maxsplit=1)[0].strip()
-    lines = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        line = re.sub(r"^[-*]\s+", "", line).replace("**", "").replace("`", "").strip()
-        if line:
-            lines.append(line)
-    notes = "\n".join(lines)
-    if len(notes) > 1200:
-        notes = notes[:1200].rsplit("\n", 1)[0].strip()
-    return notes
+def release_notes_text(body, version=None):
+    """Plain lines (summary first) for older dialogs and the update log."""
+    return release_notes.as_text(release_notes_parts(body, version))
 
 
-def bundled_release_notes(resource_root):
+def bundled_release_notes(resource_root, version=None):
     try:
-        return release_notes_text((Path(resource_root) / "release-notes.md").read_text(encoding="utf-8-sig"))
+        text = (Path(resource_root) / "release-notes.md").read_text(encoding="utf-8-sig")
     except OSError:
-        return ""
+        return {"summary": "", "details": []}
+    return release_notes_parts(text, version)
 
 
 def release_update(release, current_version, portable=False):
@@ -170,6 +168,7 @@ def release_update(release, current_version, portable=False):
         "checksumUrl": checksum_url,
         "releaseUrl": str(release.get("html_url", "")),
         "notes": release_notes_text(release.get("body")),
+        **release_notes_parts(release.get("body")),
     }
 
 
@@ -199,6 +198,7 @@ def manifest_update(manifest, current_version, asset_url, portable=False):
         "sha256": digest,
         "releaseUrl": f"{UPDATE_RELEASES_URL}/tag/v{version}",
         "notes": release_notes_text(manifest.get("notes")),
+        **release_notes_parts(manifest.get("notes")),
     }
 
 
@@ -4118,6 +4118,7 @@ BRIDGE_SCRIPT = r"""
       actions.append(later, install); card.append(mark, title, copy, notes, status, actions); shade.append(card); document.body.append(shade);
     };
     window.__pinkieShowInstalledNotes = info => {
+      if (window.__pinkieUpdateDialog?.showInstalled?.(info)) return;
       document.getElementById('pinkie-update-dialog')?.remove();
       const shade = document.createElement('div'); shade.id = 'pinkie-update-dialog';
       const card = document.createElement('section'); card.className = 'pinkie-update-card';
@@ -4582,7 +4583,7 @@ class UpdateHealthReporter:
             self.done.wait(self.poll)
 
 
-def install_native_bridge(window, updater, update_health_token=None, installed_notes=""):
+def install_native_bridge(window, updater, update_health_token=None, installed_notes=None):
     """Dress the gateway page with the native bridge and confirm a fresh update.
 
     pywebview fires `loaded` on WebView2's GUI thread, where a synchronous
@@ -4616,12 +4617,14 @@ def install_native_bridge(window, updater, update_health_token=None, installed_n
     except Exception as error:
         append_log("launcher", f"native bridge setup skipped: {error}")
 
-    if update_health_token and installed_notes:
+    if isinstance(installed_notes, str):
+        installed_notes = release_notes_parts(installed_notes)
+    if update_health_token and installed_notes and (installed_notes.get("summary") or installed_notes.get("details")):
         try:
             window.evaluate_js(
                 "window.__pinkieShowInstalledNotes?.("
                 + json.dumps(
-                    {"version": updater.current_version, "notes": installed_notes},
+                    {"version": updater.current_version, "notes": release_notes.as_text(installed_notes), **installed_notes},
                     ensure_ascii=False,
                 )
                 + ")"
@@ -4900,7 +4903,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             startup_timing(f"page loaded #{len(page_loads)}")
         threading.Thread(
             target=install_native_bridge,
-            args=(window, updater, update_health_token, bundled_release_notes(resource_root)),
+            args=(window, updater, update_health_token, bundled_release_notes(resource_root, updater.current_version)),
             name="pinkie-native-bridge",
             daemon=True,
         ).start()

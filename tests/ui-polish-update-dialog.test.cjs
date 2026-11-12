@@ -73,7 +73,7 @@ test('Mac native bridge carries unknown-size progress, release notes and install
     assert.match(await page.locator('.pinkie-upd__measure').innerText(),/已下载 3\.0 MB/);
     assert.equal(await page.locator('[role=progressbar]').getAttribute('aria-valuenow'),null);
     await page.evaluate(()=>{window.__pinkieUpdateProgress({stage:'verify'});window.__pinkieUpdateProgress({stage:'metadata',version:'3.0.0',notes:'发布说明一\n发布说明二\n发布说明三'});});
-    assert.equal(await page.locator('.pinkie-upd__notes li').count(),3);
+    assert.equal(await page.locator('.pinkie-upd__summary > span').innerText(),'发布说明一');assert.equal(await page.locator('.pinkie-upd__notes li').count(),2);
     await page.evaluate(id=>window.__pinkieUpdateResult(id,{ready:true,version:'3.0.0'}),request.request);
     await page.getByRole('button',{name:'安装并重启'}).click();
     request=await page.evaluate(()=>window.macMessages.at(-1));assert.equal(request.action,'apply');
