@@ -14,7 +14,7 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
-import {workCardBlock, forgetCards} from './work-cards.mjs';
+import {workCardBlock, forgetCards, routingKinds} from './work-cards.mjs';
 import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.mjs';
 import {codeWatch} from './code-work.mjs';
 import {sessionHintBlock, noteCompaction} from './session-hints.mjs';
@@ -5657,7 +5657,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
       if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
         try {
-          const routed = classifyWorkKind(routedPrompt, {mode});
+          const routed = routingKinds(classifyWorkKind(routedPrompt, {mode}), routedPrompt, {mode});
           if (routed.kinds?.length && !['simple', 'pending'].includes(routed.kind)) rememberKinds(sessionKey, routed.kinds);
           const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
           const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
