@@ -130,6 +130,7 @@ Get-Content -LiteralPath $sums | ForEach-Object {
     $parts = $_ -split '  ', 2
     $expect = $parts[0].ToLower()
     $rel = $parts[1].Trim()
+    if ($rel -eq 'services/mode-architecture/index.mjs') { throw '模式引擎必须使用公共源码，不能由快照覆盖' }
     if ($rel.StartsWith("openclaw/")) {
         Install-MacSnapshot $rel (Join-Path $openclawRoot ($rel.Substring(9) -replace '/', '\')) $expect
     } elseif ($rel.StartsWith("services/")) {

@@ -4,19 +4,22 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs';
-import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, isHandsOnKind, kindLabel, solverModeFor} from './work-kinds.mjs';
+import {LEVELS as LADDER_LEVELS, NO_LAYERS, depthLayers, mergeLayers, messageWeight, proportion, rigorLayers} from './run-contract.mjs';
+import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, independentViews, isHandsOnKind, kindLabel, solverModeFor, tierName} from './work-kinds.mjs';
 
 // 输入框思考等级滑块的 9 档属于碧琪，不属于任何模型的原生等级表。每一档先按当前模型真正支持的
 // 原生等级就近发送；原生够不到的部分，用流程补：
 //   往下缺（模型最低档仍比所选档高）：只能让回答更快——直接给结论，不铺垫。
-//   往上缺（模型最高档够不到所选档）：
-//     Medium / High：回答前先拆清要求和约束（只加一段提示）。
-//     XHigh：并行一份独立解答 + 批评，打回 1 轮。
+//   往上缺（模型最高档够不到所选档）：每一级包含下面各级，再多一种做法（数在 run-contract.mjs 的 DEPTH_LADDER）。
+//     Medium：回答前先拆清要求和约束（只加一段提示）。
+//     High：再加「交之前自己逐条核一遍」。
+//     XHigh：再加并行一份独立解答 + 批评，打回 1 轮。
 //   Max：2 份独立解答（各用一种做法）+ 批评 + 交付验收，最多打回 2 轮。
 //   Ultra：3 份独立解答（直接解、换方法、列清单自查）+ 批评兼仲裁 + 交付验收，最多打回 3 轮。
+//   力气跟着活走：纯寒暄什么都不加；只说「继续」时核对的是它接着做的那件事；打回后的复核只追旧问题。
 // 独立解答和批评都用用户当前选的模型（用户 2026-10-25 明确要求），不偷偷换成别的模型；
 // 只有插件配置 reasoning.criticModels 明确写了，批评才换模型。
-//   Adaptive（原生不支持时）：按这条消息的难度，难题按 XHigh 做，简单题按 Low 做。
+//   Adaptive（原生不支持时）：按这条消息分三段，难题和动手的活按 XHigh，一句话聊天按 Low，其余按 Medium。
 // 2026-10 的 Gemini 实测说明：同一个模型自己多推演几轮几乎没有用；有用的是换做法的独立解答对照、
 // 有证据的打回，以及核对交付（没验证就说完成、漏掉要求、文件不存在却给结果）。
 // 独立解答都在主回答进行的同时并行跑，不增加等待；批评在主回答结束后进行。
@@ -24,21 +27,22 @@ import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, isHa
 // 改成独立写验收清单；文案、点子独立写一版。审稿员带只读工具（read / image / pdf / web_fetch / web_search），
 // 打开交付物本身核对，不再只看文字。九档补强和四档思考强度同时选时合并成一次验收。
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
-export const LEVELS = Object.freeze(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']);
+export const LEVELS = LADDER_LEVELS;
 const RANK = new Map(LEVELS.map((name, index) => [name, index]));
 const LABELS = {off: '关闭', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', adaptive: 'Adaptive', max: 'Max', ultra: 'Ultra'};
 // 思考强度档位（极致思考按钮）也带同一套交付验收：档位决定做事流程，验收在整个档位任务结束后才做。
 // 长跑档全部里程碑勾完后做一轮全开档式终审（审稿员打开成品挑毛病）。
-const WORK_TIERS = Object.freeze({
-  boost: {solvers: 0, rounds: 1, critic: false},
-  full: {solvers: 1, rounds: 2, critic: true},
-  marathon: {solvers: 0, rounds: 2, critic: true},
-});
+// 数在 run-contract.mjs 的 RIGOR_LADDER；基础档没有验收，不在这张表里。
+const WORK_TIERS = Object.freeze(Object.fromEntries(['boost', 'full', 'marathon'].map((tier) => [tier, rigorLayers(tier)])));
 // 审稿员只给只读工具：能打开截图、文档、网页，不能执行、写文件、操作浏览器。
 export const REVIEW_TOOLS = Object.freeze(['read', 'image', 'pdf', 'web_fetch', 'web_search']);
 const MODE_BY_AGENT = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
-// 同一条消息发送前，四档的 armTier 和九档的 prepare 先后登记：这么短的时间里的两次登记合并成一个验收。
-const MERGE_WINDOW_MS = 10 * 60_000;
+// The unrestricted mode retains its existing review behavior and is not part
+// of the four work-mode contract migration.
+const LEGACY_MERGE_WINDOW_MS = 10 * 60_000;
+const unrestrictedSession = sessionKey => /^agent:unrestricted:/.test(String(sessionKey || ''));
+const legacyMergeable = intent => Boolean(intent && intent.phase === 'armed'
+  && Date.now() - (Number(intent.createdAt) || 0) < LEGACY_MERGE_WINDOW_MS);
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const MAX_MESSAGE = 12_000;
 const MAX_HISTORY = 10_000;
@@ -49,39 +53,72 @@ const FIX_PREFIX = '[pinkie-tier] 交付验收';
 // 网关方法（发送前登记、状态查询）和 Agent 运行时的钩子（注入、回合结束后核对）是插件的两个实例，
 // 内存不共享——旧版 Max/Ultra 的审阅笔记就是因此从来没能交给主模型。待核对的状态必须落盘。
 const FIELDS = ['requestId', 'tier', 'level', 'recipe', 'message', 'sessionKey', 'history', 'phase', 'round', 'maxRounds', 'crossCheck', 'issues', 'jobs', 'createdAt', 'updatedAt',
-  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply'];
+  'workTier', 'workKind', 'workKinds', 'workspaceDir', 'deliveredReply', 'runId', 'preparedParams', 'preparedResult', 'weight', 'task', 'runIds'];
 
 export class ReviewStore {
   constructor(root = path.join(openclawStateDir(), 'pinkie-deep-think', 'reviews')) {
     this.root = root;
   }
 
-  file(sessionKey) {
-    return path.join(this.root, `${createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 32)}.json`);
+  file(sessionKey, requestId = '') {
+    const session = createHash('sha256').update(String(sessionKey)).digest('hex').slice(0, 32);
+    const request = requestId ? `-${createHash('sha256').update(String(requestId)).digest('hex').slice(0, 32)}` : '';
+    return path.join(this.root, `${session}${request}.json`);
   }
 
-  get(sessionKey) {
+  list(sessionKey) {
+    const legacy = path.basename(this.file(sessionKey));
+    const prefix = legacy.slice(0, -5) + '-';
     try {
-      const value = JSON.parse(fsSync.readFileSync(this.file(sessionKey), 'utf8'));
-      return value?.sessionKey === sessionKey ? value : null;
+      return fsSync.readdirSync(this.root).filter(name => name === legacy || (name.startsWith(prefix) && name.endsWith('.json')))
+        .flatMap(name => {
+          try {
+            const value = JSON.parse(fsSync.readFileSync(path.join(this.root, name), 'utf8'));
+            return value?.sessionKey === sessionKey ? [value] : [];
+          } catch { return []; }
+        }).sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
     } catch {
-      return null;
+      return [];
     }
+  }
+
+  get(sessionKey, {requestId = '', runId = ''} = {}) {
+    const entries = this.list(sessionKey);
+    if (requestId) return entries.find(entry => entry.requestId === requestId) || null;
+    // runIds：同一件事的续跑轮（档位续跑、续接保护、交付前提醒）各有自己的 runId，见 beforePromptBuild。
+    if (runId) return entries.find(entry => entry.runId === runId || (Array.isArray(entry.runIds) && entry.runIds.includes(runId))) || null;
+    const current = entries.filter(entry => ['answering', 'reviewing', 'fixing'].includes(entry.phase));
+    return (current.length ? current : entries).sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0] || null;
   }
 
   set(intent) {
     const value = Object.fromEntries(FIELDS.map((key) => [key, intent[key]]));
     value.updatedAt = Date.now();
     fsSync.mkdirSync(this.root, {recursive: true});
-    const target = this.file(intent.sessionKey);
+    const target = this.file(intent.sessionKey, intent.requestId);
     const temp = `${target}.${process.pid}.${randomUUID().slice(0, 8)}.tmp`;
     fsSync.writeFileSync(temp, JSON.stringify(value));
     fsSync.renameSync(temp, target);
+    // One-time migration of the older one-file-per-session format. Only remove
+    // the old file when it contains this exact request, never another run.
+    const legacy = this.file(intent.sessionKey);
+    try {
+      const old = JSON.parse(fsSync.readFileSync(legacy, 'utf8'));
+      if (old?.sessionKey === intent.sessionKey && old.requestId === intent.requestId) fsSync.unlinkSync(legacy);
+    } catch {}
     return value;
   }
 
-  delete(sessionKey) {
-    try { fsSync.unlinkSync(this.file(sessionKey)); } catch {}
+  delete(sessionKey, requestId = '') {
+    for (const intent of this.list(sessionKey)) {
+      if (requestId && intent.requestId !== requestId) continue;
+      for (const file of [this.file(sessionKey, intent.requestId), this.file(sessionKey)]) {
+        try {
+          const value = JSON.parse(fsSync.readFileSync(file, 'utf8'));
+          if (value?.sessionKey === sessionKey && value.requestId === intent.requestId) fsSync.unlinkSync(file);
+        } catch {}
+      }
+    }
   }
 }
 const REVIEW_MARK = '[pinkie:delivery-review';
@@ -142,7 +179,7 @@ export function nearestNative(level, natives) {
 const topNative = (natives) => natives.filter((value) => value !== 'adaptive').at(-1) || 'off';
 
 // 只看这条消息本身，判断值不值得多花力气：不调用模型，不增加等待。
-export function messageDifficulty(text) {
+function messageScore(text) {
   const value = String(text || '');
   let score = 0;
   if (value.length > 280) score += 1;
@@ -155,7 +192,15 @@ export function messageDifficulty(text) {
   if ((value.match(/[0-9]+/g) || []).length >= 6) score += 1;
   if ((value.match(/[；;。\n]/g) || []).length >= 6) score += 1;
   if (/^(?:你好|在吗|谢谢|好的|嗯|ok|收到|早|晚安)[!！。.~～\s]*$/i.test(value.trim())) score = 0;
-  return score >= 3 ? 'hard' : 'easy';
+  return score;
+}
+export function messageDifficulty(text) {
+  return messageScore(text) >= 3 ? 'hard' : 'easy';
+}
+// 三段：easy 一句话的事；normal 要讲理由、作比较的事；hard 要算、要证、要查错的事。
+export function messageBand(text) {
+  const score = messageScore(text);
+  return score >= 3 ? 'hard' : score >= 1 ? 'normal' : 'easy';
 }
 
 // 这条消息是哪种活（无限制模式不分）。sessionKey 带出模式：学习模式默认按讲题辅导。
@@ -165,43 +210,73 @@ export function workKindsFor(message = '', sessionKey = '') {
   return classifyWorkKind(message, {mode}).kinds;
 }
 
-// Adaptive 的难易：动手的活（网页、PPT、视频、代码、报错……）按难题走 XHigh 路线；一句话聊天按简单；
-// 其余按原来的分数（保留「恰好 N 个字」这类硬性计数写作按难题的实测规则）。
-export function adaptiveDifficulty(message = '', sessionKey = '') {
-  return adaptiveHint(workKindsFor(message, sessionKey)) || messageDifficulty(message);
+// Adaptive 的三段：动手的活（网页、PPT、视频、代码、报错……）和有标准答案的难题按难题走 XHigh 路线；
+// 一句话聊天按简单走 Low；文案、点子、取舍、查事实、讲题至少按普通走 Medium。种类和消息本身的分数取高的那个
+// （保留「恰好 N 个字」这类硬性计数写作按难题的实测规则）。
+const BAND_RANK = {easy: 0, normal: 1, hard: 2};
+export function adaptiveBand(message = '', sessionKey = '') {
+  const hint = adaptiveHint(workKindsFor(message, sessionKey));
+  const own = messageBand(message);
+  if (!hint) return own;
+  if (hint === 'easy') return own === 'hard' ? 'hard' : 'easy';
+  return BAND_RANK[own] > BAND_RANK[hint] ? own : hint;
 }
+export function adaptiveDifficulty(message = '', sessionKey = '') {
+  return adaptiveBand(message, sessionKey) === 'hard' ? 'hard' : 'easy';
+}
+const BAND_LEVEL = {easy: 'low', normal: 'medium', hard: 'xhigh'};
 
-const NO_LAYERS = {brevity: false, think: false, solvers: 0, critic: false, rounds: 0, audit: false};
-const UP_LAYERS = {
-  medium: {...NO_LAYERS, think: true},
-  high: {...NO_LAYERS, think: true},
-  xhigh: {...NO_LAYERS, think: true, solvers: 1, critic: true, rounds: 1, audit: true},
-};
-const ENHANCED_LAYERS = {
-  max: {...NO_LAYERS, solvers: 2, critic: true, rounds: 2, audit: true},
-  ultra: {...NO_LAYERS, solvers: 3, critic: true, rounds: 3, audit: true},
-};
+const ENHANCED = new Set(['max', 'ultra']);
 
 // 一个档位在当前模型上的实际做法。kind: native 原生 / down 往下补 / up 往上补 / enhanced Max·Ultra / adaptive 自适应模拟。
 export function recipeFor(level, record, {message = '', sessionKey = ''} = {}) {
   const natives = nativeLevels(record);
   if (!RANK.has(level)) level = 'medium';
   if (level === 'adaptive' && !natives.includes('adaptive')) {
-    const difficulty = adaptiveDifficulty(message, sessionKey);
-    const inner = recipeFor(difficulty === 'hard' ? 'xhigh' : 'low', record);
-    return {...inner, level, kind: 'adaptive', difficulty, as: difficulty === 'hard' ? 'xhigh' : 'low'};
+    const difficulty = adaptiveBand(message, sessionKey);
+    const as = BAND_LEVEL[difficulty];
+    const inner = recipeFor(as, record);
+    return {...inner, level, kind: 'adaptive', difficulty, as};
   }
-  if (ENHANCED_LAYERS[level]) {
+  if (ENHANCED.has(level)) {
     const native = natives.includes(level) ? level : topNative(natives);
-    return {level, native, kind: 'enhanced', ...ENHANCED_LAYERS[level]};
+    // 梯子是累加的：原生够不到这一档时，下面几级的「先弄懂、交前自查」也一起补上。
+    const short = native !== level;
+    return {level, native, kind: 'enhanced', ...depthLayers(level), think: short, selfCheck: short};
   }
   const native = nearestNative(level, natives);
   if (native === level || level === 'adaptive') return {level, native, kind: 'native', ...NO_LAYERS};
   if (RANK.get(native) > RANK.get(level)) return {level, native, kind: 'down', ...NO_LAYERS, brevity: true};
-  return {level, native, kind: 'up', ...(UP_LAYERS[level] || NO_LAYERS)};
+  return {level, native, kind: 'up', ...depthLayers(level)};
 }
 
-const hasLayers = (recipe) => Boolean(recipe && (recipe.brevity || recipe.think || recipe.solvers || recipe.critic || recipe.audit));
+const hasLayers = (recipe) => Boolean(recipe && (recipe.brevity || recipe.concise || recipe.think || recipe.solvers || recipe.critic || recipe.audit));
+
+// 消息和它的种类都知道之后，把这一条的做法定下来（只在这一处定）：
+//   做事档位这种活自己会派出去的独立做法先算数，九档只在后台补还差的那几份（engineSolvers）；
+//   纯寒暄什么都不加；只说「继续」又找不到它指哪件事时，不派独立做法。
+function settleRecipe(recipe = {}, {workTier = '', kinds = [], weight = 'task', hasTask = true} = {}) {
+  const tierViews = independentViews(kinds, workTier);
+  const solvers = Math.max(0, Number(recipe.solvers) || 0);
+  return proportion({...recipe, tierViews, engineSolvers: Math.max(0, Math.max(solvers, tierViews) - tierViews)}, weight, {hasTask});
+}
+
+// 只说「继续」「好的」时，它接着做的是哪件事：往回找最近一条真的在提要求的用户消息。
+function lastTaskFromMessages(messages = []) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messageOf(messages[index]);
+    if (message?.role !== 'user') continue;
+    const text = partsText(message.content).trim();
+    if (!text || CONTROL_PROMPT.test(text) || messageWeight(text) !== 'task') continue;
+    return text.slice(0, 4000);
+  }
+  return '';
+}
+
+// 给独立做法和审稿员看的「用户这一轮」：只说「继续」时带上它指的那件事。
+function subjectOf(intent = {}) {
+  return intent.task ? `${intent.message}\n（这一句是让接着做之前这条请求：${intent.task}）` : intent.message;
+}
 
 function bestEffort(record) {
   if (fixedEndpointLevel(record)) return 'off';
@@ -402,7 +477,7 @@ function workFolder(files = []) {
   return common.length >= 4 && folder !== os.homedir() ? folder : '';
 }
 
-export function auditPrompt({message, history, reply, evidence, independent, quality = false, workKind = '', artifacts = [], tools = false, earlier = ''}) {
+export function auditPrompt({message, history, reply, evidence, independent, quality = false, workKind = '', artifacts = [], tools = false, earlier = '', previous = []}) {
   const answers = Array.isArray(independent) ? independent.filter(Boolean) : independent ? [independent] : [];
   const mode = workKind ? solverModeFor([workKind]) : 'answer';
   const answerText = answers.map((text, index) => (answers.length > 1 ? `〔${mode === 'checklist' ? '验收清单' : mode === 'draft' ? '对照稿' : '独立解答'} ${index + 1}〕\n${text}` : text)).join('\n\n');
@@ -413,6 +488,9 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
   const focus = REVIEW_FOCUS[workKind] || '';
   const files = (Array.isArray(artifacts) ? artifacts : []).filter(Boolean).slice(0, 16);
   const folder = workFolder(files);
+  // 打回之后的复核要收敛：先追上一轮指出的问题，新问题只报会让结果出错的。每一轮都翻出新的小毛病，
+  // 用户会连着收到几条「更正」，而成品并没有变好。
+  const raised = (Array.isArray(previous) ? previous : []).filter(item => item && String(item.what || '').trim()).slice(0, 5);
   return [
     quality
       ? '你是严格的审稿人兼交付验收员。你的工作是找出这份回复里真实存在的错误和缺漏，不重写回答。'
@@ -420,6 +498,7 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
     `【最近对话（只用来理解上下文）】\n${history || '无'}`,
     `【用户这一轮的原话】\n${message}`,
     earlier ? `【之前已经交给用户的回复】\n${earlier}` : '',
+    raised.length ? `【上一轮你指出的问题（这一轮先逐条核对它们改了没有）】\n${raised.map((item, index) => `${index + 1}. ${item.what}${item.fix ? `（当时要求：${item.fix}）` : ''}`).join('\n')}` : '',
     `【${earlier ? '这次补充的更正' : '助手的最终回复'}】\n${reply}`,
     `【回复的机械统计（程序算出，准确；涉及字数、行数、句数的要求以这里为准，不要自己数）】\n${replyFacts(earlier ? `${earlier}\n${reply}` : reply)}`,
     `【本轮实际发生的工具调用和结果（节选，只有这里的内容算执行证据）】\n${evidence}`,
@@ -444,29 +523,39 @@ export function auditPrompt({message, history, reply, evidence, independent, qua
       '用户要的是成品，却只给了计划或建议，也算问题。',
       '成品是文件（代码、文档、网页、图片）时，回复说清放在哪、怎么用就够了；不要求把文件内容（源码、全文）贴进回复。',
       '只报告有具体依据的问题（引用原文、工具记录、你打开文件看到的具体位置，或写出你能复核的推导）。语气、风格、可有可无的改进、你自己拿不准的猜测，都不算问题。',
+      raised.length ? '这是打回之后的复核：先逐条确认上一轮的问题是否已经改正，改了的不再提。新问题只报三种——结果或结论是错的、漏了用户明确提出的硬要求、把没做的事说成做了；措辞、排版、可改可不改的地方，这一轮一律不提。' : '',
     ].filter(Boolean).join('\n'),
     '只输出一个 JSON 对象，不要 Markdown：全部通过时输出 {"pass": true}；否则输出 {"pass": false, "issues": [{"what": "哪里不对（引用回复原文）", "evidence": "依据（引用用户原话、工具记录、打开文件看到的内容或你的推导）", "fix": "应该怎么改"}]}，最多 5 条。',
   ].filter(Boolean).join('\n\n');
 }
 
 // 交付验收在回复已经交给用户之后才做：打回时只发更正，不把整段回答再发一遍（REPORT 第九节：重复回复）。
-export function fixMessage(issues = []) {
+export function fixMessage(issues = [], requestId = '') {
   const list = issues.map((item, index) => `${index + 1}. ${item.what}（依据：${item.evidence}${item.fix ? `；应改为：${item.fix}` : ''}）`).join('\n');
-  return `${FIX_PREFIX}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。上一条回复用户已经看到了，所以只发更正：先用一句话说清改了什么，再给出改正后的那部分；问题牵动全文（字数、格式、结构、整体结论）时才给出完整的新版本。核实后都不是问题，就只回一句「核对过了，上面的回复不用改」。不要提到验收、检查或这条消息。\n${list}`;
+  const identity = /^[\w-]{8,100}$/.test(requestId) ? ` [request=${requestId}]` : '';
+  return `${FIX_PREFIX}${identity}：上一条回复还有下面几处具体问题。逐条核实——依据可能有错，先用工具或重新推导确认；确认是问题的就改正，确认不是的保持原样。需要就重新运行、读取或查证，拿到真实结果；没法解决的照实说明卡在哪里。上一条回复用户已经看到了，所以只发更正：先用一句话说清改了什么，再给出改正后的那部分；问题牵动全文（字数、格式、结构、整体结论）时才给出完整的新版本。核实后都不是问题，就只回一句「核对过了，上面的回复不用改」。不要提到验收、检查或这条消息。\n${list}`;
 }
 
 // 补强提示按活儿种类写：答题类拆要求、找易错、想验证；动手的活先写验收清单，做完逐条用工具核对。
-function briefContext(recipe, workKind = '') {
+function briefContext(recipe, workKind = '', workTier = '') {
   const level = LABELS[recipe.level] || recipe.level;
   const native = LABELS[recipe.native] || recipe.native;
   const hands = isHandsOnKind(workKind);
+  // 选了更快的思考等级，又选了带验收的做事档位：两句话不能打架。省的是话，不是核对。
+  if (recipe.concise) {
+    return `这一条用户选了更快的「${level}」，同时开了「${tierName(workTier)}」。回复写短：直接给结论，不铺垫、不复述问题、不展开推导（用户要求时除外）。但这一档要的核对一步都不能省——该打开看的、该跑的、该重算的照做，省的只是话。`;
+  }
   if (recipe.brevity) {
     return `这一条用户选了更快的「${level}」，但当前模型最低只能用「${native}」思考。请尽量快：直接给结论，不铺垫、不复述问题、不展开推导（用户要求时除外）；需要工具时照常使用，但只做必要的一两步。${hands ? '动手的活仍要做最必要的一次验证（打开、截图或运行一次），不能为了快说没做过的事。' : ''}`;
   }
   if (recipe.think) {
+    // 交前自查（High 起）：开了交付验收时由验收那段话代说；动手的活上面已经要求逐条用工具核对。
+    const selfCheck = recipe.selfCheck && !recipe.audit && !hands
+      ? '写完先别交：对着用户的每条要求逐条核一遍，关键数字和结论换一种方法再验一次，对不上就改，拿不准的地方照实标出来。'
+      : '';
     return hands
       ? `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。动手前先在心里写一张验收清单：用户的每条要求、这一行交付前会查的点、最容易翻车的地方，每条想好用什么工具核对；做完逐条用工具核对（打开、截图、转成图片、运行或重算），不合格就改。正文不写这张清单。`
-      : `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。回答前先把问题拆清楚：列出用户的每条要求和关键约束、找出最容易出错的地方、想好至少一种验证方法；需要计算的真的算出来。正文只写结论和必要依据，不要把这段拆解过程写出来。`;
+      : `这一条用户选了「${level}」，当前模型的原生思考最高只到「${native}」。回答前先把问题拆清楚：列出用户的每条要求和关键约束、找出最容易出错的地方、想好至少一种验证方法；需要计算的真的算出来。${selfCheck}正文只写结论和必要依据，不要把这段拆解过程写出来。`;
   }
   return '';
 }
@@ -494,30 +583,20 @@ async function passToolUse(file) {
   }
 }
 
-// 九档补强和四档思考强度同时选：保留一个验收，独立份数、打回轮数取大，批评任一要就要。
+// 九档补强和四档思考强度同时选：份数和轮数只在 run-contract 里取大。
 function mergeRecipe(first = {}, second = {}) {
-  return {
-    ...first,
-    brevity: Boolean(first.brevity || second.brevity) && !(first.think || second.think),
-    think: Boolean(first.think || second.think),
-    solvers: Math.max(Number(first.solvers) || 0, Number(second.solvers) || 0),
-    rounds: Math.max(Number(first.rounds) || 0, Number(second.rounds) || 0),
-    critic: Boolean(first.critic || second.critic),
-    audit: true,
-  };
-}
-
-function mergeable(intent) {
-  return Boolean(intent && intent.phase === 'armed' && Date.now() - (Number(intent.createdAt) || 0) < MERGE_WINDOW_MS);
+  return mergeLayers(first, second);
 }
 
 export class ReasoningEnhancer {
-  constructor(api, {runProcess = null, cliEntry = '', isBusy = () => false, readyForReview = () => true, store = new ReviewStore(), critics = null} = {}) {
+  constructor(api, {runProcess = null, cliEntry = '', isBusy = () => false, readyForReview = () => true, tierViews = () => [], store = new ReviewStore(), critics = null} = {}) {
     this.api = api;
     this.runProcess = runProcess;
     this.cliEntry = cliEntry;
     this.isBusy = isBusy;
     this.readyForReview = readyForReview;
+    // 做事档位派出去、已经交回来的独立做法（求解 / 独立起草 / 独立复算）：[{role, text}]。验收时和九档自己补的放在一起对照。
+    this.tierViews = tierViews;
     this.store = store;
     this.critics = critics;
     this.completed = new Map();
@@ -567,7 +646,7 @@ export class ReasoningEnhancer {
       const available = (this.api.config?.models?.providers?.[provider]?.models || []).filter(item =>
         item.available !== false && fixedEndpointLevel(item) && item.id.replace(/-(low|medium|high)$/, '') === family);
       const levels = [...new Set(available.map(fixedEndpointLevel))].sort((a,b) => RANK.get(a)-RANK.get(b));
-      const requested = level === 'adaptive' ? adaptiveDifficulty(message, sessionKey) === 'hard' ? 'high' : 'low' : level;
+      const requested = level === 'adaptive' ? {hard: 'high', normal: 'medium', easy: 'low'}[adaptiveBand(message, sessionKey)] : level;
       const native = nearestNative(requested, levels);
       const candidate = available.find(item => fixedEndpointLevel(item) === native);
       if (candidate) { target = candidate.id; record = candidate; }
@@ -583,46 +662,103 @@ export class ReasoningEnhancer {
     const sessionKey = String(params.sessionKey || '');
     const level = String(params.level || params.tier || '');
     const requestId = String(params.requestId || '');
+    const runId = unrestrictedSession(sessionKey) ? '' : String(params.runId || '');
+    const explicitTier = !unrestrictedSession(sessionKey) && Object.hasOwn(params, 'workTier');
+    const requestedWorkTier = explicitTier ? String(params.workTier || '') : '';
     const message = String(params.message || '').trim();
     if (!SESSION_KEY.test(sessionKey) || !RANK.has(level) || !/^[\w-]{8,100}$/.test(requestId)) {
       throw new Error('增强档位请求无效');
     }
+    if ((runId && (runId.length > 200 || /\s/.test(runId)))
+        || (explicitTier && requestedWorkTier && !['base', 'boost', 'full', 'marathon'].includes(requestedWorkTier))) {
+      throw new Error('运行编号或思考强度无效');
+    }
     if (!message || message.length > MAX_MESSAGE) throw new Error('本条文字过长或为空，无法安全执行增强审阅');
     const done = this.completed.get(requestId);
     if (done) {
-      if (done.sessionKey !== sessionKey || done.level !== level || done.message !== message) throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
+      if (done.sessionKey !== sessionKey || done.level !== level || done.message !== message
+          || done.runId !== runId || done.workTier !== requestedWorkTier) throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
       return done.result;
     }
-    const {recipe, thinkingLevel, ...route} = this.routePlan(sessionKey, level, message);
+    if (!unrestrictedSession(sessionKey)) {
+      const existing = this.store.get(sessionKey, {requestId});
+      if (existing) {
+        const original = existing.preparedParams;
+        if (!original || !existing.preparedResult || existing.level !== level || existing.message !== message
+            || original.runId !== runId || original.explicitTier !== explicitTier || original.workTier !== requestedWorkTier) {
+          throw new Error('增强档位请求编号重复，已拒绝复用旧审阅');
+        }
+        return existing.preparedResult;
+      }
+    }
+    const boundRun = runId ? this.store.get(sessionKey, {runId}) : null;
+    if (boundRun && boundRun.requestId !== requestId) throw new Error('运行编号已绑定其他消息');
+    const {recipe: routed, thinkingLevel, ...route} = this.routePlan(sessionKey, level, message);
+    // 力气跟着活走：纯寒暄不拆题、不派独立做法、不验收（无限制模式保持原样）。
+    const weight = unrestrictedSession(sessionKey) ? 'task' : messageWeight(message);
+    const social = weight === 'social';
+    const recipe = social ? proportion(routed, 'social') : routed;
     const summary = {level, kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds,
-      brevity: recipe.brevity, think: recipe.think, ...(recipe.as ? {as: recipe.as, difficulty: recipe.difficulty} : {})};
+      brevity: recipe.brevity, think: recipe.think, ...(recipe.as ? {as: recipe.as, difficulty: recipe.difficulty} : {}), ...(weight !== 'task' ? {weight} : {})};
     let result;
-    if (!hasLayers(recipe)) {
+    if (social) {
+      // 界面对 Max / Ultra 要求「登记成功」才发送：照常回 prepared，只是这一条什么都不加、什么都不存。
+      // 之前单独选好的做事档位留给发送那一刻处理（beforePromptBuild 见到寒暄会把它收掉）。
+      result = hasLayers(routed)
+        ? {prepared: true, tier: level, mode: 'prompt', passes: 0, rounds: 0, crossCheck: false, recipe: summary, thinkingLevel, ...route}
+        : {prepared: false, recipe: summary, thinkingLevel, ...route};
+      if (explicitTier) {
+        for (const pending of this.store.list(sessionKey)) {
+          if (pending.phase === 'armed' && pending.workTier && !pending.message) this.store.delete(sessionKey, pending.requestId);
+        }
+      }
+    } else if (!hasLayers(recipe) && !(explicitTier && WORK_TIERS[requestedWorkTier])) {
+      if (explicitTier) {
+        for (const pending of this.store.list(sessionKey)) {
+          if (pending.phase === 'armed' && pending.workTier && !pending.message) this.store.delete(sessionKey, pending.requestId);
+        }
+      }
       result = {prepared: false, recipe: summary, thinkingLevel, ...route};
     } else {
-      const previous = this.store.get(sessionKey);
-      // 先选了思考强度档位（armTier 刚登记了这一条）：合并成一次验收，不把档位的验收冲掉。
-      const workTier = mergeable(previous) && previous.workTier && !previous.message ? previous.workTier : '';
-      if (previous && previous.requestId !== requestId && !workTier) this.controllers.get(previous.requestId)?.abort();
-      const merged = workTier ? mergeRecipe(recipe, previous.recipe) : recipe;
+      // The work-tier arm is consumed by the next preparation; reviews that
+      // already belong to another message stay untouched.
+      const legacy = unrestrictedSession(sessionKey);
+      const previous = legacy ? this.store.get(sessionKey) : null;
+      const pending = legacy
+        ? (legacyMergeable(previous) && previous.workTier && !previous.message ? previous : null)
+        : this.store.list(sessionKey).find(intent => intent.phase === 'armed' && intent.workTier && !intent.message
+          && (!explicitTier || intent.workTier === requestedWorkTier));
+      if (legacy && previous && previous.requestId !== requestId && !pending) {
+        this.controllers.get(previous.requestId)?.abort();
+        this.store.delete(sessionKey);
+      }
+      const workTier = explicitTier ? (WORK_TIERS[requestedWorkTier] ? requestedWorkTier : '') : pending?.workTier || '';
+      const work = pending?.recipe || (workTier ? {level: workTier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[workTier], audit: true} : null);
+      const merged = workTier ? mergeRecipe(recipe, work) : recipe;
       const workKinds = workKindsFor(message, sessionKey);
+      result = {prepared: true, tier: level, mode: merged.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: merged.rounds, crossCheck: merged.solvers > 0,
+        recipe: summary, thinkingLevel, ...route, ...(workTier ? {workTier, merged: true} : {})};
       this.store.set({
         requestId, tier: level, level, recipe: merged, message, sessionKey, history: historyText(params.history),
         phase: 'armed', round: 0, maxRounds: merged.rounds, crossCheck: merged.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
-        workTier, workKinds, workKind: workKinds[0] || '',
+        workTier, workKinds, workKind: workKinds[0] || '', runId, weight,
+        preparedParams: {runId, explicitTier, workTier: requestedWorkTier}, preparedResult: result,
       });
-      result = {prepared: true, tier: level, mode: merged.audit ? 'delivery-review' : 'prompt', passes: 0, rounds: merged.rounds, crossCheck: merged.solvers > 0,
-        recipe: summary, thinkingLevel, ...route, ...(workTier ? {workTier, merged: true} : {})};
+      if (explicitTier) {
+        for (const old of this.store.list(sessionKey)) {
+          if (old.phase === 'armed' && old.workTier && !old.message) this.store.delete(sessionKey, old.requestId);
+        }
+      } else if (pending) this.store.delete(sessionKey, pending.requestId);
     }
-    this.completed.set(requestId, {sessionKey, level, message, result});
+    this.completed.set(requestId, {sessionKey, level, message, runId, workTier: requestedWorkTier, result});
     if (this.completed.size > 200) this.completed.delete(this.completed.keys().next().value);
     return result;
   }
 
   // 后台工作的一行：落盘，供小面板读。
   updateJob(sessionKey, requestId, job, patch = {}) {
-    const intent = this.store.get(sessionKey);
-    if (!intent || intent.requestId !== requestId) return;
+    const intent = this.store.get(sessionKey, {requestId});
+    if (!intent) return;
     const jobs = Array.isArray(intent.jobs) ? intent.jobs : [];
     const index = jobs.findIndex((item) => item.id === job.id);
     const next = {...(index >= 0 ? jobs[index] : job), ...patch};
@@ -646,41 +782,68 @@ export class ReasoningEnhancer {
   // 主回答进行的同时，做几份不带工具、各用一种做法的独立解答，不增加等待。
   startIndependent(intent) {
     if (this.independent.has(intent.requestId)) return;
-    const count = Math.max(1, Number(intent.recipe?.solvers) || 1);
+    const recipe = intent.recipe || {};
+    // 做事档位自己派出去的那几份不重复做：九档只补还差的（settleRecipe 定的 engineSolvers），做法从没用过的那种开始。
+    const count = Math.max(0, Number(recipe.engineSolvers ?? recipe.solvers) || 0);
+    if (!count) return;
+    const all = this.launchIndependent(intent, count, Number(recipe.tierViews) || 0);
+    this.independent.set(intent.requestId, all);
+    if (this.independent.size > 20) this.independent.delete(this.independent.keys().next().value);
+  }
+
+  // 起 count 份独立做法，做法从第 offset 种开始；返回拿到内容的那几份。
+  launchIndependent(intent, count, offset = 0) {
     let main = null;
     try { main = this.mainRef(intent.sessionKey); } catch {}
     const jobs = [];
     const workKind = intent.workKind || '';
     const mode = solverModeFor([workKind]);
     const title = mode === 'checklist' ? '验收清单' : mode === 'draft' ? '独立起草' : '独立解答';
-    for (let index = 0; index < count; index += 1) {
+    for (let step = 0; step < count; step += 1) {
       // 几份都用当前模型，各用一种做法，避免犯同一个错；动手的活写验收清单，文案点子写对照稿。
+      const index = offset + step;
       const label = `${title} ${['①', '②', '③'][index] || index + 1} · ${SOLVER_LABELS[mode][index % 3]}`;
       const job = newJob('solver', label, main);
       const ref = main;
-      const prompt = solverPrompt({message: intent.message, history: intent.history, index, workKind});
+      const prompt = solverPrompt({message: subjectOf(intent), history: intent.history, index, workKind});
       jobs.push(this.runJob(intent, job, ref, prompt).catch(() => ''));
     }
-    const all = Promise.all(jobs).then((answers) => answers.filter(Boolean));
-    this.independent.set(intent.requestId, all);
-    if (this.independent.size > 20) this.independent.delete(this.independent.keys().next().value);
+    return Promise.all(jobs).then((answers) => answers.filter(Boolean));
   }
 
   // 思考强度档位：选档后下一条真实用户消息开启验收（消息内容到发送时才知道）。
   // 九档补强已经为这一条登记过（prepare 在前）：合并进同一个验收，只在整个档位任务结束后审一次。
-  armTier(sessionKey, tier) {
+  canBindTier(sessionKey, requestId) {
+    const intent = this.store.get(sessionKey, {requestId});
+    return Boolean(intent && intent.phase === 'armed' && !WORK_TIERS[intent.level]);
+  }
+
+  armTier(sessionKey, tier, {requestId = ''} = {}) {
     if (!SESSION_KEY.test(sessionKey) || !WORK_TIERS[tier]) {
-      this.cancel({sessionKey});
+      if (unrestrictedSession(sessionKey)) this.cancel({sessionKey});
       return {armed: false};
     }
-    const previous = this.store.get(sessionKey);
+    // A caller that prepares first can explicitly name the same request.
+    // Without an ID, guessing from a previous message attaches a newly
+    // selected tier to the wrong queued/running request.
+    const legacy = unrestrictedSession(sessionKey);
+    const previous = legacy ? this.store.get(sessionKey) : requestId ? this.store.get(sessionKey, {requestId}) : null;
+    if (!legacy && requestId && !this.canBindTier(sessionKey, requestId)) return {armed: false};
     const work = {level: tier, kind: 'work', native: '', ...NO_LAYERS, ...WORK_TIERS[tier], audit: true};
-    if (mergeable(previous) && previous.message && !WORK_TIERS[previous.level]) {
+    const canMerge = legacy ? legacyMergeable(previous) && previous.message : previous?.phase === 'armed';
+    if (canMerge && !WORK_TIERS[previous.level]) {
       const recipe = mergeRecipe(previous.recipe, work);
       const value = this.store.set({...previous, workTier: tier, recipe, maxRounds: recipe.rounds, crossCheck: recipe.solvers > 0});
       return {armed: true, requestId: value.requestId, merged: true};
     }
-    if (previous) this.controllers.get(previous.requestId)?.abort();
+    if (legacy && previous) {
+      this.controllers.get(previous.requestId)?.abort();
+      this.store.delete(sessionKey);
+    }
+    // Re-selecting a tier replaces only a not-yet-bound selection.
+    for (const intent of this.store.list(sessionKey)) {
+      if (intent.phase === 'armed' && intent.workTier && !intent.message) this.store.delete(sessionKey, intent.requestId);
+    }
     const value = this.store.set({
       requestId: `tier-${tier}-${randomUUID().slice(0, 8)}`, tier, level: tier, recipe: work, message: '', sessionKey, history: '',
       phase: 'armed', round: 0, maxRounds: work.rounds, crossCheck: work.solvers > 0, issues: [], jobs: [], createdAt: Date.now(),
@@ -692,65 +855,97 @@ export class ReasoningEnhancer {
   cancel(params = {}) {
     const sessionKey = String(params.sessionKey || '');
     const requestId = String(params.requestId || '');
-    const intent = this.store.get(sessionKey);
-    if (!intent || (requestId && intent.requestId !== requestId)) return {cancelled: false};
-    this.controllers.get(intent.requestId)?.abort();
-    this.store.delete(sessionKey);
+    const intents = this.store.list(sessionKey).filter(intent => !requestId || intent.requestId === requestId);
+    if (!intents.length) return {cancelled: false};
+    for (const intent of intents) {
+      this.controllers.get(intent.requestId)?.abort();
+      this.store.delete(sessionKey, intent.requestId);
+    }
     return {cancelled: true};
   }
 
   status(params = {}) {
-    const intent = this.store.get(String(params.sessionKey || ''));
+    const intent = this.store.get(String(params.sessionKey || ''), {requestId: String(params.requestId || ''), runId: String(params.runId || '')});
     if (!intent) return {phase: 'idle'};
     const recipe = intent.recipe || {};
     return {
       phase: intent.phase, tier: intent.tier, level: intent.level || intent.tier, round: intent.round, maxRounds: intent.maxRounds,
-      workTier: intent.workTier || '', workKind: intent.workKind || '',
+      workTier: intent.workTier || '', workKind: intent.workKind || '', runId: intent.runId || '',
       issues: (intent.issues || []).length, requestId: intent.requestId, updatedAt: intent.updatedAt,
-      recipe: {kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds, as: recipe.as},
+      recipe: {kind: recipe.kind, native: recipe.native, solvers: recipe.solvers, critic: recipe.critic, rounds: recipe.rounds, as: recipe.as,
+        ...(recipe.brevity || recipe.concise ? {brief: true} : {}),
+        ...(recipe.tierViews ? {tierViews: recipe.tierViews, engineSolvers: recipe.engineSolvers || 0} : {})},
+      ...(intent.weight && intent.weight !== 'task' ? {weight: intent.weight} : {}),
       jobs: (intent.jobs || []).map(({output, ...job}) => ({...job, hasOutput: Boolean(output)})),
     };
   }
 
   job(params = {}) {
-    const intent = this.store.get(String(params.sessionKey || ''));
-    const job = (intent?.jobs || []).find((item) => item.id === String(params.jobId || ''));
+    const intents = this.store.list(String(params.sessionKey || ''));
+    const job = intents.flatMap(intent => intent.jobs || []).find((item) => item.id === String(params.jobId || ''));
     if (!job) return {found: false};
     return {found: true, ...job};
   }
 
   beforePromptBuild(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
-    const intent = this.store.get(sessionKey);
-    if (!intent) return;
-    if (Date.now() - intent.createdAt > INTENT_TTL_MS) { this.store.delete(sessionKey); return; }
     const prompt = String(event.prompt || '').trim();
-    const matches = intent.message ? prompt === intent.message || prompt.endsWith(intent.message) : Boolean(prompt) && !CONTROL_PROMPT.test(prompt);
-    const recipe = intent.recipe || {...NO_LAYERS, audit: true, solvers: intent.crossCheck ? 1 : 0, rounds: intent.maxRounds};
+    const runId = String(ctx.runId || event.runId || '');
+    const intents = this.store.list(sessionKey);
+    const matchesPrompt = intent => intent.message ? prompt === intent.message || prompt.endsWith(intent.message) : Boolean(prompt) && !CONTROL_PROMPT.test(prompt);
+    const fixId = prompt.startsWith(FIX_PREFIX) ? /\[request=([\w-]{8,100})\]/.exec(prompt)?.[1] || '' : '';
+    const fixing = prompt.startsWith(FIX_PREFIX) ? intents.filter(item => item.phase === 'fixing' && (!fixId || item.requestId === fixId)) : [];
+    const intent = unrestrictedSession(sessionKey) ? this.store.get(sessionKey)
+      : (runId && this.store.get(sessionKey, {runId}))
+        || (fixing.length === 1 ? fixing[0] : null)
+        || intents.find(item => item.phase === 'armed' && (!runId || !item.runId || item.runId === runId) && matchesPrompt(item));
+    if (!intent) { this.adoptContinuation(sessionKey, prompt, runId, intents); return; }
+    // Only an unused selection may expire in work modes. An active review
+    // can legitimately need a correction after a long-running task.
+    if ((unrestrictedSession(sessionKey) || intent.phase === 'armed') && Date.now() - intent.createdAt > INTENT_TTL_MS) {
+      this.store.delete(sessionKey, intent.requestId); return;
+    }
+    const matches = matchesPrompt(intent);
+    const stored = intent.recipe || {...NO_LAYERS, audit: true, solvers: intent.crossCheck ? 1 : 0, rounds: intent.maxRounds};
     if (intent.phase === 'armed' && matches) {
+      const legacy = unrestrictedSession(sessionKey);
+      if (runId && !legacy) intent.runId = runId;
       if (!intent.message) intent.message = prompt.slice(0, MAX_MESSAGE);
+      // 力气跟着活走：单独选了做事档位、发来的却只是寒暄，这一条什么都不加。
+      const weight = legacy ? 'task' : messageWeight(intent.message);
+      if (weight === 'social') { this.store.delete(sessionKey, intent.requestId); return; }
       if (!intent.history) intent.history = historyFromMessages(event.messages);
-      if (!Array.isArray(intent.workKinds) || !intent.workKinds.length) {
-        intent.workKinds = workKindsFor(intent.message, sessionKey);
+      // 只说「继续」「好的」：要核对的是它接着做的那件事，种类也按那件事认。
+      if (weight === 'carry' && !intent.task) intent.task = lastTaskFromMessages(event.messages);
+      if (!Array.isArray(intent.workKinds) || !intent.workKinds.length || intent.task) {
+        intent.workKinds = workKindsFor(intent.task || intent.message, sessionKey);
         intent.workKind = intent.workKinds[0] || '';
       }
       if (typeof ctx.workspaceDir === 'string' && path.isAbsolute(ctx.workspaceDir)) intent.workspaceDir = ctx.workspaceDir;
+      const recipe = legacy ? stored : settleRecipe(stored, {workTier: intent.workTier || '', kinds: intent.workKinds, weight, hasTask: weight !== 'carry' || Boolean(intent.task)});
+      intent.recipe = recipe;
+      intent.weight = weight;
       const parts = [];
-      const brief = briefContext(recipe, intent.workKind);
+      // 11-10 实测 L1-d：新会话只发「继续」，模型翻了 40 次工具（连全盘搜索都做了）找「上一件事」才问。
+      if (weight === 'carry' && !intent.task && !legacy) {
+        parts.push('[pinkie:effort carry]\n用户只说了接着做，但这段对话里没有之前的请求。最多看一眼这个会话自己的检查点；没有就直接用一句话问用户要接着做哪件事，不要去翻别的文件夹、会话记录或全盘搜索。');
+      }
+      const brief = weight === 'carry' && !intent.task ? '' : briefContext(recipe, intent.workKind, intent.workTier || '');
       if (brief) parts.push(`[pinkie:effort level=${recipe.level}]\n${brief}`);
       if (recipe.audit) {
         intent.phase = 'answering';
         intent.jobs = [newJob('main', '碧琪主回答', null)];
         this.store.set(intent);
-        if (recipe.solvers > 0) this.startIndependent(intent);
+        this.startIndependent(intent);
         parts.push(`${REVIEW_MARK} tier=${intent.tier}]\n这一条开启了交付验收：最终回复会被独立核对——用户的每条要求是否满足、每个「完成 / 通过 / 已生成」的说法是否有本轮真实的工具结果${recipe.critic ? '、结论和推导是否正确' : ''}${isHandsOnKind(intent.workKind) ? '；审稿员会打开你做出来的文件和截图本身看' : ''}。回复前先自己逐条对一遍。不要在回复里提到验收。`);
       } else {
         // 只加一段提示的档位：用完即弃。
-        this.store.delete(sessionKey);
+        this.store.delete(sessionKey, intent.requestId);
       }
       return parts.length ? {appendContext: parts.join('\n\n')} : undefined;
     }
     if (intent.phase === 'fixing' && prompt.startsWith(FIX_PREFIX)) {
+      if (runId && !unrestrictedSession(sessionKey)) intent.runId = runId;
       intent.phase = 'answering';
       this.store.set(intent);
       this.updateJob(sessionKey, intent.requestId, newJob('fix', `按批评更正 · 第 ${intent.round} 轮`, null));
@@ -822,12 +1017,28 @@ export class ReasoningEnhancer {
     const attempts = [preferred];
     if (main && preferred && (preferred.provider !== main.provider || preferred.model !== main.model)) attempts.push(main);
     let lastError = null;
+    let badOutput = '';
     for (const ref of attempts) {
       try {
         let used = {tools: [], opened: []};
-        const output = await this.pass(intent.sessionKey, prompt, signal, {ref, tools: true, workspaceDir: intent.workspaceDir || '', onTools: (value) => { used = value; }});
-        const verdict = parseVerdict(output);
-        if (!verdict) { lastError = new Error('批评结果格式不对'); continue; }
+        const ask = (text) => this.pass(intent.sessionKey, text, signal, {ref, tools: true, workspaceDir: intent.workspaceDir || '', onTools: (value) => { used = value; }});
+        let output = await ask(prompt);
+        let verdict = parseVerdict(output);
+        // 11-10 实测 L2-e：打回后的复核回了一段不是 JSON 的话，验收停在 unchecked。同一个模型再要一次纯 JSON，
+        // 还不行才换下一个；原文留在任务记录里，方便查它到底回了什么。
+        // 11-11 hy4free ladder-r7：审稿在时限内一个字都没交（慢模型带工具看图），旧逻辑把它当成「格式不对」，
+        // 再要一次纯 JSON。没交东西不是格式问题：同样的审稿再做一次，失败时如实写「没在时限内给出结论」。
+        const empty = !String(output || '').trim();
+        if (!verdict && !signal?.aborted) {
+          badOutput = String(output || '').slice(0, 2000);
+          output = await ask(empty ? prompt : `${prompt}\n\n你上一次的输出不是一个合法的 JSON 对象。这次只输出那一个 JSON 对象，前后不要任何文字。`);
+          verdict = parseVerdict(output);
+        }
+        if (!verdict) {
+          lastError = new Error(String(output || '').trim() ? '批评结果格式不对' : '审稿没在时限内给出结论');
+          badOutput = String(output || badOutput).slice(0, 2000);
+          continue;
+        }
         const summary = verdict.pass ? '通过' : `发现 ${verdict.issues.length} 处问题：${summaryOf(verdict.issues[0]?.what)}`;
         this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'done', endedAt: Date.now(), model: ref ? `${ref.provider}/${ref.model}` : job.model, summary, output,
           toolsUsed: used.tools, opened: used.opened});
@@ -837,15 +1048,40 @@ export class ReasoningEnhancer {
         if (signal?.aborted) break;
       }
     }
-    this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'failed', endedAt: Date.now(), summary: summaryOf(lastError?.message || '失败')});
+    this.updateJob(intent.sessionKey, intent.requestId, job, {state: 'failed', endedAt: Date.now(), summary: summaryOf(lastError?.message || '失败'),
+      ...(badOutput ? {output: badOutput} : {})});
     return null;
+  }
+
+  // 续跑轮是同一件事的下一段，但带着自己的 runId。验收记录只绑了用户那一轮的 runId，档位任务在续跑里做完时
+  // agentEnded 按 runId 找不到这件事，验收就永远停在 answering（11-11 hy4free 实测：所有带做事档位的任务都没验收，
+  // Gemini 的 r2 也一样）。这里把续跑轮记到这件事上。只认引擎自己的续跑前缀，用户新发的话不算；
+  // 只认会话里最新的那件事，而且它还在等交付。
+  adoptContinuation(sessionKey, prompt, runId, intents = this.store.list(sessionKey)) {
+    if (!runId || unrestrictedSession(sessionKey) || !CONTROL_PROMPT.test(prompt) || prompt.startsWith(FIX_PREFIX)) return false;
+    const latest = intents[intents.length - 1];
+    if (!latest || latest.phase !== 'answering' || !latest.runId || latest.runId === runId) return false;
+    const runIds = Array.isArray(latest.runIds) ? latest.runIds : [];
+    if (runIds.includes(runId)) return false;
+    latest.runIds = [...runIds, runId].slice(-40);
+    this.store.set(latest);
+    return true;
   }
 
   // 主回复结束后调用（index.mjs 在确认没有重试、没有被拦截之后才调用）。
   async agentEnded(event = {}, ctx = {}) {
     const sessionKey = String(ctx.sessionKey || '');
-    const intent = this.store.get(sessionKey);
+    const runId = String(ctx.runId || event.runId || '');
+    const legacy = unrestrictedSession(sessionKey);
+    let intent = legacy ? this.store.get(sessionKey) : runId ? this.store.get(sessionKey, {runId}) : null;
+    if (!intent) {
+      // Some older hosts omit runId at prompt-build time. Only use an
+      // unbound record if it is the sole possible answering run.
+      const answering = this.store.list(sessionKey).filter(item => item.phase === 'answering' && (!runId || !item.runId));
+      if (answering.length === 1) intent = answering[0];
+    }
     if (!intent || intent.phase !== 'answering') return {reviewed: false};
+    if (runId && !intent.runId && !legacy) { intent.runId = runId; this.store.set(intent); }
     // 档位任务还在续跑（子任务、检查点续跑）时不验收，等整个任务交付后再核对。
     if (!this.readyForReview(sessionKey)) return {reviewed: false, waiting: true};
     const messages = Array.isArray(event.messages) ? event.messages : [];
@@ -859,8 +1095,9 @@ export class ReasoningEnhancer {
         this.updateJob(sessionKey, intent.requestId, job, {state: event.success === false ? 'failed' : 'done', endedAt: Date.now(), summary: summaryOf(reply), output: reply.slice(0, 6000)});
       }
     }
-    if (event.success === false || !reply) { const current = this.store.get(sessionKey); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
-    const fresh = this.store.get(sessionKey);
+    if (event.success === false || !reply) { const current = this.store.get(sessionKey, {requestId: intent.requestId}); if (current) { current.phase = 'skipped'; this.store.set(current); } return {reviewed: false}; }
+    const fresh = this.store.get(sessionKey, {requestId: intent.requestId});
+    if (!fresh) return {reviewed: false, cancelled: true};
     // 打回之后这一条是「更正」：连同之前已交给用户的那条一起审，免得把只发更正当成没回答完整。
     // 在等独立解答之前落盘：等完再写会用旧副本盖掉独立解答刚写进去的结果。
     const earlier = fresh.round > 0 ? String(fresh.deliveredReply || '').slice(0, 6000) : '';
@@ -869,16 +1106,32 @@ export class ReasoningEnhancer {
     this.store.set(fresh);
     const signal = this.controller(fresh.requestId).signal;
     try {
-      const job = this.independent.get(fresh.requestId);
-      let timer = null;
-      const independent = job ? await Promise.race([job, new Promise((resolve) => { timer = setTimeout(() => resolve([]), INDEPENDENT_WAIT_MS); })]) : [];
-      clearTimeout(timer);
+      const waitFor = async (job) => {
+        if (!job) return [];
+        let timer = null;
+        const answers = await Promise.race([job, new Promise((resolve) => { timer = setTimeout(() => resolve([]), INDEPENDENT_WAIT_MS); })]);
+        clearTimeout(timer);
+        return Array.isArray(answers) ? answers : [];
+      };
       const recipe = fresh.recipe || {};
+      const engine = await waitFor(this.independent.get(fresh.requestId));
+      // 两套档位的独立做法放在一起对照：做事档位派出去、已经交回来的那几版 + 九档在后台补的。
+      // 做事档位那几版没派出来（模型没有派子任务的工具，或者提醒过一次仍没派）时，差的份数现在补上，
+      // 免得「取大」落空——这时回复已经交给用户了，补做不让用户多等。
+      // 只在这一条自己带做事档位时才取：会话里上一件档位任务留下的子任务结果和这一条无关。
+      let views = [];
+      if (!legacy && fresh.workTier) { try { views = (this.tierViews(sessionKey) || []).map((view) => String(view?.text || '').trim().slice(0, 6000)).filter(Boolean); } catch {} }
+      const owed = legacy || fresh.round > 0 ? 0 : Math.min(3, (Number(recipe.tierViews) || 0) - views.length);
+      const backfill = owed > 0 ? await waitFor(this.launchIndependent(fresh, owed, views.length + engine.length)) : [];
+      // 补做的那几份留着，打回后的复核接着用，不再做一遍。
+      if (backfill.length) this.independent.set(fresh.requestId, Promise.resolve([...engine, ...backfill]));
+      const independent = [...views, ...engine, ...backfill];
       const verdict = await this.critique(fresh, auditPrompt({
-        message: fresh.message, history: fresh.history, reply: reply.slice(0, 8000), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
+        message: subjectOf(fresh), history: fresh.history, reply: reply.slice(0, 8000), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
         workKind: fresh.workKind || '', artifacts: artifactPaths(entriesFromMessages(messages)), tools: true, earlier,
+        previous: fresh.round > 0 ? fresh.issues : [],
       }), signal);
-      const current = this.store.get(sessionKey);
+      const current = this.store.get(sessionKey, {requestId: fresh.requestId});
       if (!current || current.requestId !== fresh.requestId) return {reviewed: false, cancelled: true};
       if (!verdict) { current.phase = 'unchecked'; this.store.set(current); return {reviewed: false}; }
       current.issues = verdict.issues;
@@ -887,24 +1140,24 @@ export class ReasoningEnhancer {
       current.round += 1;
       current.phase = 'fixing';
       this.store.set(current);
-      const sent = await this.sendFix(sessionKey, verdict.issues);
-      if (!sent) { const latest = this.store.get(sessionKey); if (latest) { latest.phase = 'unresolved'; this.store.set(latest); } }
+      const sent = await this.sendFix(sessionKey, verdict.issues, legacy ? '' : current.requestId);
+      if (!sent) { const latest = this.store.get(sessionKey, {requestId: fresh.requestId}); if (latest) { latest.phase = 'unresolved'; this.store.set(latest); } }
       return {reviewed: true, pass: false, fixScheduled: sent};
     } catch {
-      const current = this.store.get(sessionKey);
+      const current = this.store.get(sessionKey, {requestId: fresh.requestId});
       if (current?.requestId === fresh.requestId && current.phase === 'reviewing') { current.phase = 'unchecked'; this.store.set(current); }
       return {reviewed: false};
     }
   }
 
-  async sendFix(sessionKey, issues) {
+  async sendFix(sessionKey, issues, requestId = '') {
     if (!this.runProcess || !this.cliEntry) return false;
     const agentId = sessionKey.split(':')[1];
     for (let wait = 0; wait < 40 && this.isBusy(sessionKey); wait += 1) await new Promise((resolve) => setTimeout(resolve, 500));
     try {
       const {stdout = ''} = await this.runProcess(process.execPath, [
         this.cliEntry, 'gateway', 'call', 'chat.send',
-        '--params', JSON.stringify({sessionKey, agentId, message: fixMessage(issues), deliver: false, idempotencyKey: `pinkie-review-${randomUUID()}`}),
+        '--params', JSON.stringify({sessionKey, agentId, message: fixMessage(issues, requestId), deliver: false, idempotencyKey: `pinkie-review-${randomUUID()}`}),
         '--json', '--timeout', '30000',
       ], {timeout: 35_000, maxBuffer: 64 * 1024, windowsHide: true, env: process.env});
       let result;

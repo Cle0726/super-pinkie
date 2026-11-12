@@ -284,10 +284,48 @@ test('work tiers review the first real message after arming, and only once the w
   tierActive = false;
   assert.deepEqual(await enhancer.agentEnded(runEvent('修好了。', [['exec', 'OK']]), {sessionKey: 'agent:learning:one'}), {reviewed: true, pass: true});
   assert.match(f.calls[0].prompt, /帮我修测试/);
+  // 全开档至少要一份独立做法。这种活自己不派独立做法时（写代码派的是「用户视角试用」），九档在后台补一份；
+  // 这种活自己会派时（讲题派「独立起草」），那一份就算数，不再重复做一遍。
   const full = new ReasoningEnhancer(fixture().api, {readyForReview: () => true});
-  full.armTier('agent:learning:two', 'full');
-  full.beforePromptBuild({prompt: '这题怎么算'}, {sessionKey: 'agent:learning:two'});
-  assert.equal(full.independent.size, 1, 'full tier starts the independent solve once the message is known');
+  full.armTier('agent:project:two', 'full');
+  full.beforePromptBuild({prompt: '给 utils.py 里的 parse_date 加一个单元测试'}, {sessionKey: 'agent:project:two'});
+  assert.equal(full.independent.size, 1, 'full tier starts the independent pass once the message is known');
+  const tutoring = new ReasoningEnhancer(fixture().api, {readyForReview: () => true});
+  tutoring.armTier('agent:learning:two', 'full');
+  tutoring.beforePromptBuild({prompt: '这题怎么算'}, {sessionKey: 'agent:learning:two'});
+  assert.equal(tutoring.independent.size, 0, 'the tier\'s own drafter is the independent view; no duplicate pass');
+  assert.equal(tutoring.status({sessionKey: 'agent:learning:two'}).recipe.tierViews, 1);
+});
+
+test('a tier task finished in a continuation turn (its own runId) is still reviewed; a new user message is not adopted', async () => {
+  // 11-11 hy4free 实测：验收记录绑的是用户那一轮的 runId，档位任务在续跑轮里做完，验收按 runId 找不到，永远停在 answering。
+  const f = fixture();
+  let tierActive = true;
+  const key = 'agent:project:cont';
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => !tierActive});
+  assert.equal(enhancer.armTier(key, 'boost').armed, true);
+  assert.match(enhancer.beforePromptBuild({prompt: '帮我修测试'}, {sessionKey: key, runId: 'run-user-1'}).appendContext, /交付验收/);
+  assert.deepEqual(await enhancer.agentEnded(runEvent('先派子任务。'), {sessionKey: key, runId: 'run-user-1'}), {reviewed: false, waiting: true});
+  // 引擎的续跑轮：不注入任何东西，但记到这件事上。
+  assert.equal(enhancer.beforePromptBuild({prompt: '[pinkie-tier-control] 用户这件事还差：验证。接着做。'}, {sessionKey: key, runId: 'run-cont-2'}), undefined);
+  assert.equal(enhancer.beforePromptBuild({prompt: '[pinkie-watchdog] 交付前提醒（只提醒这一次）'}, {sessionKey: key, runId: 'run-cont-3'}), undefined);
+  assert.deepEqual(await enhancer.agentEnded(runEvent('还在跑。'), {sessionKey: key, runId: 'run-cont-2'}), {reviewed: false, waiting: true});
+  assert.equal(f.calls.length, 0);
+  tierActive = false;
+  assert.deepEqual(await enhancer.agentEnded(runEvent('修好了。', [['exec', 'OK']]), {sessionKey: key, runId: 'run-cont-3'}), {reviewed: true, pass: true});
+  assert.match(f.calls[0].prompt, /帮我修测试/);
+  assert.equal(enhancer.status({sessionKey: key}).phase, 'passed');
+
+  // 用户新发的一句话（没有续跑前缀）不能被当成上一件事的续跑，免得拿新回复去验收旧任务。
+  const g = fixture();
+  const other = new ReasoningEnhancer(g.api, {runProcess: g.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => true});
+  const k2 = 'agent:project:fresh';
+  other.armTier(k2, 'boost');
+  other.beforePromptBuild({prompt: '帮我修测试'}, {sessionKey: k2, runId: 'run-a'});
+  assert.equal(other.beforePromptBuild({prompt: '顺便问一下今天几号'}, {sessionKey: k2, runId: 'run-b'}), undefined);
+  assert.deepEqual(await other.agentEnded(runEvent('11 号。'), {sessionKey: k2, runId: 'run-b'}), {reviewed: false});
+  assert.equal(g.calls.length, 0);
+  assert.equal(other.status({sessionKey: k2}).phase, 'answering');
 });
 
 test('state is shared through disk: the gateway instance arms, the agent-runtime instance injects and reviews', async () => {
@@ -344,9 +382,11 @@ test('adaptive sends hands-on work down the XHigh path and small talk down Low',
   assert.equal(as('我的程序报错了，打不开'), 'xhigh');
   assert.equal(as('早上好'), 'low');
   assert.equal(as('你是谁'), 'low');
-  // 硬性计数的写作仍按难题（原规则保留）；普通写作按分数，还是简单。
+  // 硬性计数的写作仍按难题（原规则保留）；普通写作、点子、取舍至少按 Medium（三段里的中间一段），
+  // 不被「直接给结论、不铺垫」压扁。
   assert.equal(as('用一句话介绍长城：恰好 30 个汉字（标点不算），只有一句。'), 'xhigh');
-  assert.equal(as('帮我写一段 100 字左右的自我介绍'), 'low');
+  assert.equal(as('帮我写一段 100 字左右的自我介绍'), 'medium');
+  assert.equal(as('这两个方案选哪个好，帮我比较一下'), 'medium');
   // 无限制模式不分活儿种类，只用原来的分数。
   assert.deepEqual(workKindsFor('帮我做一个记账的小网页', 'agent:unrestricted:one'), []);
   assert.equal(adaptiveDifficulty('帮我做一个记账的小网页', 'agent:unrestricted:one'), messageDifficulty('帮我做一个记账的小网页'));
@@ -455,7 +495,7 @@ test('Max first, then the marathon tier: still one review, with the final check'
   const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs', readyForReview: () => !tierActive});
   const key = 'agent:project:one';
   await enhancer.prepare({level: 'max', requestId: 'request-merge-0005', sessionKey: key, message: '做一个能玩的贪吃蛇小游戏'});
-  const armed = enhancer.armTier(key, 'marathon');
+  const armed = enhancer.armTier(key, 'marathon', {requestId: 'request-merge-0005'});
   assert.deepEqual(armed, {armed: true, requestId: 'request-merge-0005', merged: true}, 'the UI keeps tracking the prepare request');
   const status = enhancer.status({sessionKey: key});
   assert.deepEqual([status.workTier, status.workKind, status.recipe.critic, status.recipe.rounds, status.recipe.solvers], ['marathon', 'app_game_ai', true, 2, 2]);
@@ -466,15 +506,15 @@ test('Max first, then the marathon tier: still one review, with the final check'
   tierActive = false;
   assert.deepEqual(await enhancer.agentEnded(toolRun('全部做完。'), {sessionKey: key}), {reviewed: true, pass: true});
   assert.equal(auditCalls(f.calls).length, 1);
-  // 很久以前登记的（超过合并窗口）不合并：按新的一条重新登记。
+  // 合并靠明确的登记关系，不靠十分钟窗口：尚未使用的档位仍属于下一条消息。
   const g = fixture();
   const stale = new ReasoningEnhancer(g.api);
   stale.armTier(key, 'full');
   const old = stale.store.get(key);
   stale.store.set({...old, createdAt: Date.now() - 11 * 60_000});
   const fresh = await stale.prepare({level: 'max', requestId: 'request-merge-0006', sessionKey: key, message: '做个网页'});
-  assert.equal(fresh.merged, undefined);
-  assert.equal(stale.status({sessionKey: key}).workTier, '');
+  assert.equal(fresh.merged, true);
+  assert.equal(stale.status({sessionKey: key}).workTier, 'full');
   // 只有档位的验收：长跑档的终审也带批评（审稿员打开成品）。
   const h = new ReasoningEnhancer(fixture().api);
   h.armTier(key, 'marathon');
@@ -513,4 +553,43 @@ test('a run that ends in NO_REPLY is not reviewed and does not use up the review
   const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
   assert.deepEqual(outcome, {reviewed: true, pass: true});
   assert.equal(auditCalls(f.calls).length, 1);
+});
+
+// 11-11 hy4free ladder-r7：慢模型带工具看图，审稿两次都在 300 秒时限里一个字没交，旧逻辑记成「批评结果格式不对」，
+// 第二次还追了一句「只输出 JSON」。没交东西就把同一份审稿再做一次；乱回一段话才追 JSON。
+test('a reviewer that returns nothing is asked the same review again, not nudged about JSON, and the failure says it timed out', async () => {
+  const audits = [];
+  const f = fixture({run: (params) => {
+    if (SOLVER.test(params.prompt)) return {payloads: [{text: '解答'}], meta: {}};
+    audits.push(params.prompt);
+    return {payloads: [], meta: {}};
+  }});
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs'});
+  await enhancer.prepare(request('max'));
+  enhancer.beforePromptBuild({prompt: '把 report.md 写成 3 段'}, {sessionKey: 'agent:learning:one'});
+  const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(outcome, {reviewed: false});
+  assert.equal(audits.length, 2, 'one retry');
+  assert.equal(audits[1], audits[0], 'the retry is the same review');
+  const status = enhancer.status({sessionKey: 'agent:learning:one'});
+  assert.equal(status.phase, 'unchecked');
+  const critic = status.jobs.find((job) => job.role === 'critic');
+  assert.equal(critic.state, 'failed');
+  assert.match(critic.summary, /没在时限内给出结论/);
+});
+
+test('a reviewer that answers in prose still gets one pure-JSON retry and keeps the prose', async () => {
+  const audits = [];
+  const f = fixture({run: (params) => {
+    if (SOLVER.test(params.prompt)) return {payloads: [{text: '解答'}], meta: {}};
+    audits.push(params.prompt);
+    return {payloads: [{text: audits.length === 1 ? '我觉得写得不错。' : '{"pass": true}'}], meta: {}};
+  }});
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs'});
+  await enhancer.prepare(request('max'));
+  enhancer.beforePromptBuild({prompt: '把 report.md 写成 3 段'}, {sessionKey: 'agent:learning:one'});
+  const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(outcome, {reviewed: true, pass: true});
+  assert.equal(audits.length, 2);
+  assert.match(audits[1], /只输出那一个 JSON 对象/);
 });

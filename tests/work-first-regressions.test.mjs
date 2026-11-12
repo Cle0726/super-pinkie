@@ -27,13 +27,14 @@ test('naming and prose are answers; explicitly requested files still need eviden
   const logo = setup(t, '给奶茶店想个名字，并做个 logo');
   assert.equal(logo.guard.finalize({lastAssistantMessage: '名字和 logo 已经生成完成。'}, logo.ctx, {verifyExternal:false})?.action, 'revise');
   const skill = setup(t, '调用 Skill 给奶茶店想个名字');
-  assert.equal(skill.guard.finalize({lastAssistantMessage: '推荐「慢半拍」，名字好记，也有松弛感。'}, skill.ctx, {verifyExternal:false})?.action, 'revise');
+  assert.equal(skill.guard.finalize({lastAssistantMessage: '推荐「慢半拍」，名字好记，也有松弛感。'}, skill.ctx, {verifyExternal:false}), undefined);
+  assert.equal(skill.guard.finalize({lastAssistantMessage: '已经调用 Skill，推荐「慢半拍」。'}, skill.ctx, {verifyExternal:false})?.action, 'revise');
 });
 
-test('a fragment after work is nudged once; concise verified completions remain valid', t => {
+test('a fragment without a completion claim passes; concise verified completions remain valid', t => {
   const {guard, ctx} = setup(t, '帮我排一下复习计划');
   for (let i = 0; i < 3; i++) guard.afterTool({toolName: 'read', toolCallId: `read-${i}`, params: {path: `/tmp/notes-${i}`}, result: 'notes'}, ctx);
-  assert.match(guard.finalize({lastAssistantMessage: '碧'}, ctx, {verifyExternal: false})?.reason, /过短|截断/);
+  assert.equal(guard.finalize({lastAssistantMessage: '碧'}, ctx, {verifyExternal: false}), undefined);
   assert.equal(guard.finalize({lastAssistantMessage: '复习计划写好了：每天复习数学和英语，周末回顾错题。'}, ctx, {verifyExternal: false}), undefined);
   const chat = setup(t, '你好');
   assert.equal(chat.guard.finalize({lastAssistantMessage: '好'}, chat.ctx, {verifyExternal: false}), undefined);
@@ -158,11 +159,10 @@ test('a pre-compaction memory flush between a rejected delivery and its retry ke
     supervisor.afterTool({toolName: 'exec', toolCallId: 'render', runId: 'deliver', params: {command: `ffmpeg -y -i frames/%04d.png "${video}"`}, result: 'ok'}, ctx);
     supervisor.afterTool({toolName: 'exec', toolCallId: 'look', runId: 'deliver', params: {command: `look-video "${video}" 12`}, result: 'ok'}, ctx);
     supervisor.afterTool({toolName: 'read', toolCallId: 'see', runId: 'deliver', params: {path: video.replace(/\.mp4$/, '.preview.png')}, result: 'image'}, ctx);
-    const delivered = {lastAssistantMessage: `广告已经剪好，可以直接发抖音。\n\nMEDIA:${video}`};
+    const delivered = {lastAssistantMessage: `广告已经剪好，可以直接发抖音。全部测试通过。\n\nMEDIA:${video}`};
     const rejected = supervisor.recordFinalize(delivered, ctx, supervisor.finalizeDecision(delivered, ctx, {verifyExternal: false}));
     assert.equal(rejected?.action, 'revise');
-    assert.match(rejected.reason, /素材从哪来/);
-    assert.match(rejected.reason, /images\.unsplash\.com/, 'the reminder names the download it can see');
+    assert.match(rejected.reason, /没有读取、测试或检查/);
 
     // The runtime's own memory flush. before_message_write carries no run id.
     const flush = {...ctx, ...flushCtx, runId: 'flush'};

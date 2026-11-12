@@ -585,9 +585,13 @@
     if (level === "max") return "碧琪替当前模型多做一步：2 份独立起草（答题是两种解法，做东西是验收清单）+ 打开成品审稿，最多打回 2 轮";
     if (level === "ultra") return "碧琪替当前模型多做一步：3 份独立起草（各换一种做法）+ 打开成品审稿兼仲裁，最多打回 3 轮";
     if (kind === "native") return "当前模型原生支持这一档";
-    if (level === "adaptive") return "按每条消息判断：动手的活和难题按 XHigh 做，闲聊和简单问题按 Low 做（模拟）";
+    if (level === "adaptive") return "按每条消息判断：动手的活和难题按 XHigh 做，写东西、做选择按 Medium 做，闲聊和一句话的问题按 Low 做（模拟）";
     if (kind === "down") return `当前模型最低只到 ${name(bottom)}；这一档让回答直接给结论、更快，动手的活仍做必要的一次验证（模拟）`;
     if (level === "xhigh") return `当前模型原生最高到 ${name(top)}；碧琪补 1 份独立起草 + 打开成品审稿，打回 1 轮（模拟）`;
+    // Mirrors DEPTH_LADDER in run-contract.mjs: Medium = understand first; High = that plus a self-check
+    // before sending; below Medium nothing is added, the nearest native effort is simply used.
+    if (level === "high") return `当前模型原生最高到 ${name(top)}；碧琪先替它拆清要求，交之前再逐条核一遍（模拟）`;
+    if (level !== "medium") return `当前模型没有这一档，按最接近的 ${name(nativeTierFor(level, pool))} 发送`;
     return `当前模型原生最高到 ${name(top)}；碧琪先替它拆清要求，动手的活先列验收清单（模拟）`;
   }
 
