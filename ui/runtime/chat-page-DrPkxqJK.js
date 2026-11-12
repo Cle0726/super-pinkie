@@ -1404,7 +1404,7 @@ Action:
     `}};r([m({attribute:!1})],Z.prototype,`content`,void 0),r([m({attribute:!1})],Z.prototype,`loadFullMessage`,void 0),r([m()],Z.prototype,`canvasPluginSurfaceUrl`,void 0),r([m()],Z.prototype,`embedSandboxMode`,void 0),r([m({type:Boolean})],Z.prototype,`allowExternalEmbedUrls`,void 0),r([m({attribute:!1})],Z.prototype,`onOpenWorkspaceFile`,void 0),r([m({attribute:!1})],Z.prototype,`onRevealInWorkspace`,void 0),r([o()],Z.prototype,`visibleContent`,void 0),r([o()],Z.prototype,`error`,void 0),r([o()],Z.prototype,`fileSearchOpen`,void 0),r([o()],Z.prototype,`fileSearchQuery`,void 0),r([o()],Z.prototype,`fileSearchMatchIndex`,void 0),r([o()],Z.prototype,`fileEditorMenuOpen`,void 0),r([o()],Z.prototype,`fileContentsCopied`,void 0),customElements.get(`openclaw-chat-detail-panel`)||customElements.define(`openclaw-chat-detail-panel`,Z);function By(e){if(typeof e.messageId==`string`&&e.messageId.trim())return e.messageId;let t=e.__openclaw,n=t&&typeof t==`object`&&!Array.isArray(t)?t:null;return typeof n?.id==`string`&&n.id.trim()?n.id:void 0}function Vy(e){return Array.isArray(e)?e.filter(e=>!!e&&typeof e==`object`):[]}function Hy(e){if(typeof e!=`string`)return e;let t=e.trim();if(!t||!t.startsWith(`{`)&&!t.startsWith(`[`))return e;try{return JSON.parse(t)}catch{return e}}function Uy(e){if(typeof e.text==`string`)return e.text;if(typeof e.content==`string`)return e.content;if(Array.isArray(e.content)){let t=e.content.flatMap(e=>{if(!e||typeof e!=`object`)return[];let t=e.text;return typeof t==`string`?[t]:[]});if(t.length>0)return t.join(`
 `)}}function Wy(e){let t=e.isError??e.is_error;return typeof t==`boolean`?t:void 0}var Gy=/^tool not found\.?$/i,Ky=2e4,qy=new Set([`error`,`failed`,`timeout`]);function Jy(e){return typeof e==`string`&&qy.has(e.trim().toLowerCase())}function Yy(e){if(!e)return!1;let t=e.trim();if(!t)return!1;if(Gy.test(t))return!0;if(t.length>Ky||!t.startsWith(`{`)||!t.endsWith(`}`))return!1;let n;try{n=JSON.parse(t)}catch{return!1}if(!n||typeof n!=`object`||Array.isArray(n))return!1;let r=n,i=Wy(r);if(i!==void 0)return i;if(`error`in r){let e=r.error;if(typeof e==`string`)return e.trim().length>0;if(typeof e==`boolean`)return e;if(e&&typeof e==`object`)return!0}return Jy(r.status)}function Xy(e){return e.isError===void 0?Yy(e.outputText):e.isError}function Zy(e,t){return In(e,t)}function Qy(e,t){return Un(e)||typeof e.callId==`string`&&e.callId.trim()||typeof t.toolCallId==`string`&&t.toolCallId.trim()||typeof t.tool_call_id==`string`&&t.tool_call_id.trim()||typeof t.toolUseId==`string`&&t.toolUseId.trim()||typeof t.tool_use_id==`string`&&t.tool_use_id.trim()||void 0}function $y(e,t){return typeof e.name==`string`&&e.name.trim()||typeof t.toolName==`string`&&t.toolName.trim()||typeof t.tool_name==`string`&&t.tool_name.trim()||`tool`}function eb(e,t,n,r=`tool`){let i=Qy(e,t);return i?`${r}:${i}`:`${r}:${$y(e,t)}:${n}`}function tb(e){if(e!=null){if(typeof e==`string`)return e;try{return JSON.stringify(e,null,2)}catch{return typeof e==`number`||typeof e==`boolean`||typeof e==`bigint`?String(e):typeof e==`symbol`?e.description?`Symbol(${e.description})`:`Symbol()`:Object.prototype.toString.call(e)}}}function nb(e){let t=e?.trim().replace(/\s+/g,` `);if(t)return t.replace(/^with\s+/i,``).trim()||t}function rb(e){return nb(e)?.toLowerCase().replace(/[\s._-]+/g,``)}function ib(e,t){let n=nb(e);if(!n)return;let r=rb(n),i=rb(t);return r&&i&&r===i?void 0:n}function ab(e){let t=nb(e);if(t)return _t(t,120)}function ob(e,t,n,r){let i;for(let a of e){if(a.id===t)return a;!i&&a.name===n&&a.outputText===void 0&&!r.has(a)&&(i=a)}return i}function sb(e,t=`tool`){let n=e,r=Vy(n.content),i=Wy(n),a=[],o=new WeakSet,s=By(n);for(let e=0;e<r.length;e++){let c=r[e]??{};if(Bn(c.type)||typeof c.name==`string`&&(c.arguments!=null||c.args!=null||c.input!=null)){let r=Hy(c.arguments??c.args??c.input),i=Qy(c,n);a.push({id:eb(c,n,e,t),...i?{callId:i}:{},name:$y(c,n),args:r,inputText:tb(r),messageId:s});continue}if(Vn(c.type)){let r=$y(c,n),l=eb(c,n,e,t),u=Qy(c,n),d=ob(a,l,r,o),f=Uy(c),p=Zy(f,r),m=Wy(c)??i;if(d){o.add(d),d.callId??=u,d.outputText=f,d.preview=p,m!==void 0&&(d.isError=m);continue}a.push({id:l,...u?{callId:u}:{},name:r,outputText:f,messageId:s,...m===void 0?{}:{isError:m},preview:p})}}let c=typeof n.role==`string`?n.role.toLowerCase():``;if(($r(e)||c===`tool`||c===`function`||typeof n.toolName==`string`||typeof n.tool_name==`string`)&&a.length===0){let r=typeof n.toolName==`string`&&n.toolName||typeof n.tool_name==`string`&&n.tool_name||`tool`,o=Jo(e)??void 0,c=Qy({},n);a.push({id:eb({},n,0,t),...c?{callId:c}:{},name:r,outputText:o,messageId:s,...i===void 0?{}:{isError:i},preview:Zy(o,r)})}return a}var cb=new WeakMap;function lb(e,t=`tool`){if(!e||typeof e!=`object`)return sb(e,t);let n=cb.get(e);n||(n=new Map,cb.set(e,n));let r=n.get(t);if(r)return r;let i=sb(e,t);return n.set(t,i),i}var ub=new Map,db=new Map,fb=new Map,pb=new Map;function mb(){ub.clear(),db.clear(),fb.clear(),pb.clear()}function hb(e,t,n){let r=e,i=Array.isArray(r.content)?[...r.content]:typeof r.content==`string`?[{type:`text`,text:r.content}]:typeof r.text==`string`?[{type:`text`,text:r.text}]:[];return i.some(e=>{if(!e||typeof e!=`object`)return!1;let n=e;return n.type===`canvas`&&n.preview?.kind===`canvas`&&(t.viewId&&n.preview.viewId===t.viewId||t.url&&n.preview.url===t.url)})?e:{...r,content:[...i,{type:`canvas`,preview:t,...n?{rawText:n}:{}}]}}function Q(e){return e&&typeof e==`object`&&!Array.isArray(e)?e:null}function gb(e){if(!Q(e))return null;try{return mi(e)}catch{return null}}function _b(e,t){let n=O(t);return n?O(Jo(e)).includes(n):!0}function vb(e){let t=gb(e);if(!t)return null;let n=lb(e,`preview`);for(let e=n.length-1;e>=0;e--){let r=n[e];if(r?.preview?.kind===`canvas`)return{preview:r.preview,text:r.outputText??null,timestamp:t.timestamp??null}}let r=Jo(e)??void 0,i=e,a=Zy(r,typeof i.toolName==`string`?i.toolName:typeof i.tool_name==`string`?i.tool_name:void 0);return a?.kind===`canvas`?{preview:a,text:r??null,timestamp:t.timestamp??null}:null}function yb(e,t){let n=e.map((e,t)=>{if(e.kind!==`message`)return null;let n=e.message;return(typeof n.role==`string`?n.role.toLowerCase():``)===`assistant`?{index:t,timestamp:gb(e.message)?.timestamp??null}:null}).filter(Boolean);if(n.length===0)return null;if(t==null)return n[n.length-1]?.index??null;let r=null,i=null;for(let e of n)if(e.timestamp!=null){if(e.timestamp<=t){r={index:e.index,timestamp:e.timestamp};continue}i={index:e.index,timestamp:e.timestamp};break}if(r&&i){let e=t-r.timestamp;return i.timestamp-t<e?i.index:r.index}return r?r.index:i?i.index:n[n.length-1]?.index??null}function bb(e){let t=[],n=null;for(let r of e){if(r.kind!==`message`){n&&=(t.push(n),null),t.push(r);continue}let e=mi(r.message),i=U(e.role),a=i.toLowerCase()===`user`||i.toLowerCase()===`assistant`?e.senderLabel??null:null,o=e.timestamp||Date.now(),s=i.toLowerCase()===`user`||i.toLowerCase()===`assistant`;!n||n.role!==i||s&&n.senderLabel!==a?(n&&t.push(n),n={kind:`group`,key:`group:${i}:${r.key}`,role:i,senderLabel:a,messages:[{message:r.message,key:r.key,duplicateCount:r.duplicateCount}],timestamp:o,isStreaming:!1}):n.messages.push({message:r.message,key:r.key,duplicateCount:r.duplicateCount})}return n&&t.push(n),t}function xb(e,t){if(e.kind!==`message`||t.kind!==`message`)return null;let n=Q(e.message),r=Q(t.message);if(!n||!r)return null;let i=typeof n.role==`string`?n.role.toLowerCase():``,a=gb(t.message),o=a?U(a.role):`unknown`;if(i!==`assistant`||o!==`tool`||!Array.isArray(n.content)||!n.content.some(e=>Bn(Q(e)?.type)))return null;let s=lb(e.message,`${e.key}:activity-call`),c=lb(t.message,`${t.key}:activity-result`);if(s.length!==1||c.length!==1)return null;let[l]=s,[u]=c,d=u.name===`tool`?l.name:u.name,f=(Array.isArray(r.content)?r.content:[]).filter(e=>!Bn(Q(e)?.type)),p=f.some(e=>Vn(Q(e)?.type)),m=p||u.outputText!==void 0||u.isError!==void 0;if(!l.callId||l.callId!==u.callId||!m||O(l.name)!==O(d))return null;let h=f.filter(e=>Q(e)?.type!==`text`),g=p?f:[{type:`tool_result`,id:u.callId,name:d,text:u.outputText??``,...u.isError===void 0?{}:{isError:u.isError}},...h],_=r.isError??r.is_error;return{...e,message:{...n,content:[...n.content,...g],...typeof _==`boolean`?{isError:_}:{}}}}function Sb(e){let t=[];for(let n of e){let e=t[t.length-1],r=e?xb(e,n):null;r?t[t.length-1]=r:t.push(n)}return t}function Cb(e){return e.messages.some(({message:e})=>!!Jo(e)?.trim())}function wb(e){return e.messages.some(({message:e})=>{let t=Q(Q(e)?.provenance);return t?.kind===`inter_session`&&t.sourceTool===`sessions_send`})}function Tb(e){let t=!1;for(let n=e.length-1;n>=0;--n){let r=e[n];if(r.kind!==`group`)continue;let i=r.role.toLowerCase();i===`user`?t=!1:i===`assistant`?wb(r)?t=!1:Cb(r)&&(t=!0):i===`tool`&&(r.turnSucceeded=t)}return e}function Eb(e){return Q(Q(e)?.__openclaw)?.kind===`pending-send`}function Db(e){let t=Q(e);if(!t)return null;let n=Q(t.__openclaw)?.id;return typeof n==`string`&&n.trim()?n.trim():(typeof t.messageId==`string`?t.messageId.trim():``)||(typeof t.id==`string`?t.id.trim():``)||null}function Ob(e){if(Eb(e))return null;let t=gb(e);if(!t)return null;let n=U(t.role).toLowerCase();if(n!==`assistant`)return null;let r=Db(e);return r?`${n}:${r}`:null}function kb(e){let t=gb(e);if(!t)return!1;let n=U(t.role).toLowerCase();return(n===`user`||n===`assistant`)&&!(t.senderLabel??``).trim()}function Ab(e){return e.replace(/[.*+?^${}()|[\]\\]/g,`\\$&`)}function jb(e,t){let n=t.trim();return n?e.replace(RegExp(`^${Ab(n)}(?::|：|-|—)?[ \\t]+`),``):e}function Mb(e){let t=gb(e);if(!t)return null;let n=U(t.role).toLowerCase();if(n!==`assistant`)return null;let r=[];for(let e of t.content){if(e.type!==`text`||typeof e.text!=`string`)return null;r.push(e.text)}let i=r.join(`
 `);return i.trim()?{role:n,senderLabel:(t.senderLabel??``).trim(),text:i}:null}function Nb(e,t){let n=Mb(e),r=Mb(t);if(!n||!r||n.role!==r.role||!!n.senderLabel==!!r.senderLabel)return!1;let i=n.senderLabel?n:r,a=n.senderLabel?r:n;return i.text===a.text||jb(i.text,i.senderLabel)===a.text}function Pb(e){if(Eb(e))return null;let t=gb(e);if(!t)return null;let n=U(t.role).toLowerCase();if(!n||n===`tool`||t.content.length===0)return null;let r=[];for(let e of t.content){if(e.type!==`text`||typeof e.text!=`string`)return null;r.push(e.text)}let i=r.join(`
-`).trim().replace(/\s+/g,` `);return i?`${n}:${n===`user`||n===`assistant`?(t.senderLabel??``).trim():``}:${i}`:null}function Fb(e){let t=[],n=null,r=null;for(let i of e){if(i.kind!==`message`){t.push(i),n=null,r=null;continue}let e=Pb(i.message),a=Ob(i.message),o=t[t.length-1];if(a&&r===a&&o?.kind===`message`&&Nb(o.message,i.message)){!kb(o.message)&&kb(i.message)&&(t[t.length-1]=i,n=e);continue}if(e&&n===e&&o?.kind===`message`&&!(a&&r&&a!==r)){o.duplicateCount=(o.duplicateCount??1)+1;continue}t.push(i),n=e,r=a}return t}function Ib(e){let t=gb(e);if(!t)return!1;let n=U(t.role)===`assistant`&&!!t.senderLabel?.trim();return t.content.length>0||!!t.replyTarget||n}function Lb(e){let t=di(e);return t.trim().length>0?t:``}function Rb(e){return typeof e.sendSubmittedAtMs!=`number`||e.sendState===`failed`?!1:e.sendState===`waiting-model`||e.sendState===`sending`||e.sendState===`waiting-reconnect`}function zb(e){let t=Dh(e.text,e.attachments);return t.length===0?null:{role:`user`,content:t,timestamp:e.createdAt,__openclaw:{kind:`pending-send`,id:e.id,state:e.sendState}}}function Bb(e){let t=Q(e)?.timestamp;return typeof t==`number`&&Number.isFinite(t)?t:null}function Vb(e){switch(e.kind){case`message`:return e.key===`chat:history:notice`?-1/0:Bb(e.message);case`divider`:return e.timestamp;case`stream`:return e.startedAt;case`reading-indicator`:return null}return null}function Hb(e,t){let n=e.reduce((e,t)=>{let n=Vb(t);return n==null?e:e==null||n>e?n:e},null);return n!=null&&t<=n?n+1:t}function Ub(e,t){let n=new Map;for(let t of e){let e=Vb(t);e!=null&&n.set(t.key,e)}return e.map((e,r)=>{let i=Vb(e),a=t.get(e.key),o=a?n.get(a):null;return{item:e,index:r,predecessorKey:a,timestamp:i!=null&&o!=null?Math.max(i,o):i}}).toSorted((e,t)=>e.timestamp==null&&t.timestamp==null?e.index-t.index:e.timestamp==null?1:t.timestamp==null?-1:e.timestamp===t.timestamp?e.predecessorKey===t.item.key?1:t.predecessorKey===e.item.key?-1:e.index-t.index:e.timestamp-t.timestamp).map(({item:e})=>e)}var Wb=8,Gb=400;function Kb(e,t,n){return Math.min(n,e+Math.max(0,t))}function qb(e,t,n,r=0){if(t<=0)return 0;if(typeof e==`string`)return Math.min(e.length,t);if(!e||typeof e!=`object`||r>=Wb||n.nodes>=Gb||n.visited.has(e))return 0;if(n.visited.add(e),n.nodes+=1,Array.isArray(e)){let i=0;for(let a of e)if(i=Kb(i,qb(a,t-i,n,r+1),t),i>=t)break;return i}let i=e,a=0;for(let e of[`text`,`content`,`args`,`arguments`,`input`])if(a=Kb(a,qb(i[e],t-a,n,r+1),t),a>=t)break;return a}function Jb(e,t){let n=Q(e);if(!n)return 1;let r={visited:new WeakSet,nodes:0},i=0;for(let e of[`content`,`text`,`args`,`arguments`,`input`])if(i=Kb(i,qb(n[e],t-i,r),t),i>=t)break;return Math.max(i,1)}function Yb(e,t){return t?!1:gb(e)?.role.toLowerCase()===`toolresult`}function Xb(e,t){let n=0;for(let r of e)Yb(r,t)||(n+=1);return n}function Zb(e){return Infinity}function Qb(e,t,n){let r=0,i=0,a=e.length;for(let o=e.length-1;o>=0;--o){let s=e[o];if(Yb(s,t))continue;if(r>=n)break;let c=Jb(s,Math.max(1,us-i+1));if(r>0&&i+c>24e4)break;i+=c,r+=1,a=o}return a}/* pinkie-optimistic-user-reconcile:v1 */function pinkieReconcileOptimisticUser(messages, options) {
+`).trim().replace(/\s+/g,` `);return i?`${n}:${n===`user`||n===`assistant`?(t.senderLabel??``).trim():``}:${i}`:null}function Fb(e){let t=[],n=null,r=null;for(let i of e){if(i.kind!==`message`){t.push(i),n=null,r=null;continue}let e=Pb(i.message),a=Ob(i.message),o=t[t.length-1];if(a&&r===a&&o?.kind===`message`&&Nb(o.message,i.message)){!kb(o.message)&&kb(i.message)&&(t[t.length-1]=i,n=e);continue}if(e&&n===e&&o?.kind===`message`&&!(a&&r&&a!==r)){/*pinkie-same-send-fold:v1*/if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||``;return!!k(x)&&k(x)===k(y)})(o.message,i.message))continue;o.duplicateCount=(o.duplicateCount??1)+1;continue}t.push(i),n=e,r=a}return t}function Ib(e){let t=gb(e);if(!t)return!1;let n=U(t.role)===`assistant`&&!!t.senderLabel?.trim();return t.content.length>0||!!t.replyTarget||n}function Lb(e){let t=di(e);return t.trim().length>0?t:``}function Rb(e){return typeof e.sendSubmittedAtMs!=`number`||e.sendState===`failed`?!1:e.sendState===`waiting-model`||e.sendState===`sending`||e.sendState===`waiting-reconnect`}function zb(e){let t=Dh(e.text,e.attachments);return t.length===0?null:{role:`user`,content:t,timestamp:e.createdAt,__openclaw:{kind:`pending-send`,id:e.id,state:e.sendState}}}function Bb(e){let t=Q(e)?.timestamp;return typeof t==`number`&&Number.isFinite(t)?t:null}function Vb(e){switch(e.kind){case`message`:return e.key===`chat:history:notice`?-1/0:/*pinkie-recorded-user-order:v1*/(String(e.message?.role||``).toLowerCase()===`user`&&Number.isFinite(e.message?.__openclaw?.recordTimestampMs)?e.message.__openclaw.recordTimestampMs:Bb(e.message));case`divider`:return e.timestamp;case`stream`:return e.startedAt;case`reading-indicator`:return null}return null}function Hb(e,t){let n=e.reduce((e,t)=>{let n=Vb(t);return n==null?e:e==null||n>e?n:e},null);return n!=null&&t<=n?n+1:t}function Ub(e,t){let n=new Map;for(let t of e){let e=Vb(t);e!=null&&n.set(t.key,e)}return e.map((e,r)=>{let i=Vb(e),a=t.get(e.key),o=a?n.get(a):null;return{item:e,index:r,predecessorKey:a,timestamp:i!=null&&o!=null?Math.max(i,o):i}}).toSorted((e,t)=>e.timestamp==null&&t.timestamp==null?e.index-t.index:e.timestamp==null?1:t.timestamp==null?-1:e.timestamp===t.timestamp?e.predecessorKey===t.item.key?1:t.predecessorKey===e.item.key?-1:e.index-t.index:e.timestamp-t.timestamp).map(({item:e})=>e)}var Wb=8,Gb=400;function Kb(e,t,n){return Math.min(n,e+Math.max(0,t))}function qb(e,t,n,r=0){if(t<=0)return 0;if(typeof e==`string`)return Math.min(e.length,t);if(!e||typeof e!=`object`||r>=Wb||n.nodes>=Gb||n.visited.has(e))return 0;if(n.visited.add(e),n.nodes+=1,Array.isArray(e)){let i=0;for(let a of e)if(i=Kb(i,qb(a,t-i,n,r+1),t),i>=t)break;return i}let i=e,a=0;for(let e of[`text`,`content`,`args`,`arguments`,`input`])if(a=Kb(a,qb(i[e],t-a,n,r+1),t),a>=t)break;return a}function Jb(e,t){let n=Q(e);if(!n)return 1;let r={visited:new WeakSet,nodes:0},i=0;for(let e of[`content`,`text`,`args`,`arguments`,`input`])if(i=Kb(i,qb(n[e],t-i,r),t),i>=t)break;return Math.max(i,1)}function Yb(e,t){return t?!1:gb(e)?.role.toLowerCase()===`toolresult`}function Xb(e,t){let n=0;for(let r of e)Yb(r,t)||(n+=1);return n}function Zb(e){return Infinity}function Qb(e,t,n){let r=0,i=0,a=e.length;for(let o=e.length-1;o>=0;--o){let s=e[o];if(Yb(s,t))continue;if(r>=n)break;let c=Jb(s,Math.max(1,us-i+1));if(r>0&&i+c>24e4)break;i+=c,r+=1,a=o}return a}/* pinkie-optimistic-user-reconcile:v1 */function pinkieReconcileOptimisticUser(messages, options) {
   if (!Array.isArray(messages) || !/^agent:(?:main|project|thinking|learning):/.test(String(options?.sessionKey || ''))) return messages;
   const pane = pinkieHistoryPane(options), state = pane?.state;
   if (!state || state.sessionKey !== options.sessionKey || state.chatMessages !== messages) return messages;
@@ -1428,7 +1428,7 @@ Action:
   state.chatMessages = result;
   return result;
 }
-/* pinkie-chat-timeline:v26 */function userText(message = {}) {
+/* pinkie-chat-timeline:v29 */function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
   if (typeof message.text === 'string') return message.text;
   if (!Array.isArray(message.content)) return '';
@@ -2063,6 +2063,9 @@ function collapseFailedAssistantEntries(entries) {
       content: [{type: 'text', text: formatFailureSummary(source, pending.count)}],
       __pinkieFailureSummary: true,
       __pinkieFailureCount: pending.count,
+      // Every failure in this streak belongs to turns before the latest user
+      // row: the summary is shown under that row but says nothing about it.
+      ...(pending.carried ? {__pinkieFailureCarried: true} : {}),
     };
     for (const key of ['stopReason', 'errorMessage', 'error', 'actions', 'retryable', 'isError']) delete message[key];
     output.push({
@@ -2085,6 +2088,7 @@ function collapseFailedAssistantEntries(entries) {
         const signature = failureDetail(message) || 'model-failure';
         if (pending && pending.signature !== signature) flush();
         if (!pending) pending = {signature, count: 0, last: null};
+        pending.carried = false;
         pending.count += 1;
         pending.last = {group: entry, entry: wrapped, message};
       }
@@ -2093,6 +2097,7 @@ function collapseFailedAssistantEntries(entries) {
     // Internal control turns were removed before this pass, while real user
     // turns stay visible and do not split a consecutive retry streak.
     if (entry?.kind === 'group' && String(entry.role || '').toLowerCase() === 'user') {
+      if (pending) pending.carried = true;
       output.push(entry);
       continue;
     }
@@ -2206,11 +2211,62 @@ function pinkieRunIsActive() {
   const session = state?.sessionsResult?.sessions?.find?.((item) => item?.key === (sessionKey || state.sessionKey));
   return session?.hasActiveRun === true;
 }
-function pinkieProcessTurnKey(head, ownerKey) {
+function pinkieProcessTurnKey(head, ownerKey, byPosition = false) {
   let session = '';
   try { session = new URLSearchParams(globalThis.location?.search || '').get('session') || ''; } catch {}
+  // Plan B: a card belongs to the gateway run, not to the row that happens to
+  // head it. The optimistic row (Vh patch) and the durable transcript row
+  // (idempotencyKey "<runId>:user") give the same key, so nothing migrates.
+  const runId = byPosition ? '' : pinkieTurnRunId(head);
+  if (runId) return `pinkie:process:${session}:run:${runId}`;
   const id = String(head?.messages?.[0]?.message?.__openclaw?.id || ownerKey);
   return `pinkie:process:${session}:${id}`;
+}
+function pinkieTurnRunId(head) {
+  for (const entry of head?.messages || []) {
+    const message = entry?.message || {};
+    const id = message.__pinkieOptimisticRunId || message.__openclaw?.runId
+      || message.idempotencyKey || message.__openclaw?.idempotencyKey || '';
+    if (typeof id === 'string' && id.trim()) return id.trim().replace(/:user$/u, '').slice(0, 160);
+  }
+  return '';
+}
+function pinkieGroupCallIds(item) {
+  const ids = new Set();
+  for (const entry of item?.messages || []) {
+    const message = entry?.message || {};
+    for (const part of textParts(message)) {
+      const kind = isToolCallPart(part) ? 'call' : isToolResultPart(part) ? 'result' : '';
+      const id = kind && partCallId(part, message);
+      if (id) ids.add(`${kind}:${id}`);
+    }
+    const direct = message.toolCallId || message.tool_call_id;
+    if (direct) ids.add(`result:${direct}`);
+  }
+  return [...ids];
+}
+function pinkieRehomeSteeredRows(entries) {
+  let head = -1;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (isRealUserGroup(entries[index])) { head = index; break; }
+  }
+  if (head <= 0) return entries;
+  const at = Number(timelineTimestamp(entries[head]));
+  const persisted = new Set();
+  for (const item of entries.slice(0, head)) for (const id of pinkieGroupCallIds(item)) persisted.add(id);
+  const before = [], after = [];
+  let changed = false;
+  for (const item of entries.slice(head + 1)) {
+    const role = String(item?.role || '').toLowerCase();
+    if (item?.kind === 'group' && (role === 'tool' || role === 'assistant')) {
+      const ids = pinkieGroupCallIds(item);
+      if (ids.length && ids.every(id => persisted.has(id))) { changed = true; continue; }
+      const stamp = Number(timelineTimestamp(item));
+      if (ids.length && at > 0 && stamp > 0 && stamp < at) { before.push(item); changed = true; continue; }
+    }
+    after.push(item);
+  }
+  return changed ? [...entries.slice(0, head), ...before, entries[head], ...after] : entries;
 }
 function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
   const refs = new Map();
@@ -2240,7 +2296,7 @@ function pinkieLearningInlineReferences(rows, getToolCalls = () => []) {
   }
   return [...refs.values()];
 }
-function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false) {
+function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = false, followedByUser = false) {
   if (!entries.length) return [];
   const hasUserHead = isRealUserGroup(entries[0]);
   const firstStepIndex = hasUserHead ? 1 : 0;
@@ -2341,6 +2397,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const ownerKey = String(head?.key || head?.messages?.[0]?.key
     || entries[0]?.key || entries[0]?.messages?.[0]?.key || 'turn');
   const processKey = pinkieProcessTurnKey(head || entries[0], ownerKey);
+  const processPriorKey = pinkieProcessTurnKey(head || entries[0], ownerKey, true);
   let routedSession = '';
   try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
     || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
@@ -2372,9 +2429,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const legacyKey = `pinkie:process:${legacyOwner}`;
   const savedThinking = globalThis.__laolaoProcessCard?.store || {};
   const kept = Boolean(keep && typeof keep.has === 'function' && (keep.has(processKey)
-    || keep.has(legacyKey) || keep.has(pinkieProcessTurnKey(null, legacyOwner))))
+    || keep.has(processPriorKey) || keep.has(legacyKey) || keep.has(pinkieProcessTurnKey(null, legacyOwner))))
     || Object.values(savedThinking).some(record => record?.text && record.turn?.id
-      && processKey === `pinkie:process:${record.turn.session}:${record.turn.id}`);
+      && [processKey, processPriorKey].includes(`pinkie:process:${record.turn.session}:${record.turn.id}`));
   if (!steps.length && !live && !kept && !historyThinking) return [...(head ? [head] : []), ...tail];
 
   const finalMessage = finalAssistantIndex >= 0
@@ -2385,6 +2442,13 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     || finalAssistantIndex <= lastToolIndex
     || finalReason === 'error' || finalReason === 'aborted' || finalReason === 'timeout'
     || finalMessage.__pinkieFailureSummary === true);
+  // Interrupted only because the user sent a follow-up while it ran: nothing
+  // failed, the next card carries on. Errors, timeouts and Stop stay "stopped".
+  const processSuperseded = processInterrupted && followedByUser && hasUserHead
+    && finalAssistantIndex < 0 && !['error', 'aborted', 'timeout'].includes(finalReason)
+    && !entries.some(item => (item?.messages || []).some(entry => (entry?.message?.__pinkieFailureSummary === true
+        && entry.message.__pinkieFailureCarried !== true)
+      || ['error', 'aborted', 'timeout'].includes(String(entry?.message?.stopReason || '').toLowerCase())));
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
   const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
@@ -2394,6 +2458,10 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   const card = {
     kind: 'group',
     key: processKey,
+    processRunId: pinkieTurnRunId(head),
+    processPriorKey: processPriorKey === processKey ? '' : processPriorKey,
+    processSuperseded,
+    processUnfinished: processInterrupted,
     role: 'assistant',
     messages: [],
     timestamp: timelineTimestamp(steps[0]),
@@ -2406,18 +2474,19 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
     processHistoryVersion: historyVersion,
     processLegacyKey: `pinkie:process:${head?.pinkieLegacyOwnerKey || ownerKey}`,
     processLiveRows: [], // laolao: live narration stays in the card, interleaved with tools (like the finished card)
-    processState: !live && processInterrupted ? 'oops' : '',
+    processState: !live && processInterrupted && !processSuperseded ? 'oops' : '',
     processRowCount: steps.length,
     processRows: collapseTimelineRows(steps.map((row, index) => ({...row,
       pinkieThinkingAnchor: index, pinkieThinkingKey: processKey})), maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
       : live ? '碧琪正在干活'
+        : processSuperseded ? '这一轮被你的新消息接上了'
         : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',
-        processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
+        processSuperseded ? '已接上' : processInterrupted ? '已中断' : ''].filter(Boolean).join(' · '),
   };
   // Tool-created activities are part of this reply, not its folded work log.
   // Give them a stable row after the answer so a long reply cannot leave the
@@ -2464,7 +2533,16 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
     const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
     return messages.length ? [{...item, messages}] : [];
   });
-  const safeEntries = collapseFailedAssistantEntries(visibleEntries).flatMap((item) => {
+  // Failure summaries can be collapsed past the next user row; remember which
+  // turns failed before that, so a failed run never reads as "接上了".
+  const failedHeads = new Set();
+  let currentHead = '';
+  for (const item of visibleEntries) {
+    if (isRealUserGroup(item)) { currentHead = String(item.messages?.at?.(-1)?.key || ''); continue; }
+    if (currentHead && (item?.messages || []).some(entry => ['error', 'aborted', 'timeout']
+      .includes(String(entry?.message?.stopReason || '').toLowerCase()))) failedHeads.add(currentHead);
+  }
+  let safeEntries = collapseFailedAssistantEntries(visibleEntries).flatMap((item) => {
     if (item?.kind !== 'group') return [item];
     const messages = (item.messages || []).filter((entry) => {
       const message = entry?.message || {};
@@ -2484,6 +2562,7 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
       key: entry.key, pinkieLegacyOwnerKey: item.key, messages: [entry], timestamp: entry.message?.timestamp ?? item.timestamp}));
     return [{...item, messages}];
   });
+  if (pageIsLive) safeEntries = pinkieRehomeSteeredRows(safeEntries);
   const turnStarts = [];
   for (let index = 0; index < safeEntries.length; index += 1) {
     if (isRealUserGroup(safeEntries[index])) turnStarts.push(index);
@@ -2505,7 +2584,41 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
       getToolCalls,
       maxRows,
       pageIsLive && turnIndex === turnStarts.length - 1,
+      turnIndex < turnStarts.length - 1
+        && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
+  }
+  // The job still in progress is the latest turn plus every unfinished run
+  // leading into it: runs the user's follow-ups superseded, and runs that
+  // stopped (abort, error, timeout) before the user carried on. Those cards
+  // stay open like the latest one: the 碧琪 skin hides closed finished cards,
+  // so a collapsed one would take its commands and text off the screen right
+  // after the next message. A turn that ended in a real answer ends the chain.
+  if (pageIsLive) {
+    let pastLatestHead = false;
+    let answered = false;
+    for (let index = timeline.length - 1; index >= 0; index -= 1) {
+      const item = timeline[index];
+      if (item?.isProcessCard) {
+        if (!pastLatestHead || item.processCurrent) continue; // the latest turn's own card
+        if (!item.processSuperseded && !item.processUnfinished) break;
+        item.processCurrent = true;
+        answered = false;
+        continue;
+      }
+      if (isRealUserGroup(item)) {
+        if (pastLatestHead && answered) break;
+        pastLatestHead = true;
+        answered = false;
+        continue;
+      }
+      if (pastLatestHead && item?.kind === 'group' && String(item.role || '').toLowerCase() === 'assistant'
+          && !item.isLearningCard && (item.messages || []).some(entry => {
+            const message = entry?.message || {};
+            return message.__pinkieFailureSummary !== true
+              && !['error', 'aborted', 'timeout'].includes(String(message.stopReason || '').toLowerCase());
+          })) answered = true;
+    }
   }
   return pagePresentation(timeline);
 }
@@ -2629,7 +2742,7 @@ ${e}
             `}
       </div>
     </div>
-  `}function gS(e,t,n,r){return{isStreaming:e.isStreaming&&n===e.messages.length-1,sessionKey:r.sessionKey,agentId:r.agentId,duplicateCount:t.duplicateCount??1,showReasoning:r.showReasoning,showToolCalls:r.showToolCalls??!0,turnSucceeded:e.turnSucceeded,autoExpandToolCalls:r.autoExpandToolCalls??!1,isToolMessageExpanded:r.isToolMessageExpanded,onToggleToolMessageExpanded:r.onToggleToolMessageExpanded,isToolExpanded:r.isToolExpanded,onToggleToolExpanded:r.onToggleToolExpanded,onRequestUpdate:r.onRequestUpdate,onAssistantAttachmentLoaded:r.onAssistantAttachmentLoaded,canvasPluginSurfaceUrl:r.canvasPluginSurfaceUrl,basePath:r.basePath,localMediaPreviewRoots:r.localMediaPreviewRoots,assistantAttachmentAuthToken:r.assistantAttachmentAuthToken,embedSandboxMode:r.embedSandboxMode,allowExternalEmbedUrls:r.allowExternalEmbedUrls}}function _S(e,t){if(e&&e.isProcessCard)return s`<div class="chat-group assistant chat-group--process" data-pinkie-process=${e.key} data-pinkie-row-count=${e.processRowCount||0}><div class="chat-group-messages"><details class="pinkie-process" .open=${pinkieProcessOpen(e)} data-live=${e.processLive?`1`:`0`}><summary class="pinkie-process__summary" @click=${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">${e.processTitle}</span><span class="pinkie-process__meta">${e.processMeta}</span></summary>${pinkieProcessOpen(e)?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg="0" data-pinkie-history-revision=${e.processHistoryVersion||0} .pinkieHistoryThinking=${e.processThinking||``} .pinkieHistorySegments=${e.processThinkingSegments||[]} .pinkieToolAnchors=${e.processToolAnchors||{}} .pinkieLegacyKey=${e.processLegacyKey||``}></div><div class="pinkie-process__rows">${e.processRows.map(n=>s`${n.pinkieThinkingAnchor?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg=${n.pinkieThinkingAnchor}></div>`:c}${n.kind===`group`?_S(n,t):c}`)}</div><div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg=${e.processRowCount||0} data-pinkie-thinking-tail="1"></div>`:c}</details><div class="pinkie-process__status" data-pinkie-status=${e.key} data-live=${e.processLive?`1`:`0`} data-state=${e.processState||``}></div></div></div>`;if(e&&e.isLearningCard)return s`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=${e.key} .pinkieLearningCards=${e.learningCards||[]} .pinkieLearningSession=${t?.sessionKey||``}></div></div></div>`;if(e&&e.timelineOverflow)return s`<details class="chat-timeline-overflow" .open=${pinkieTimelineView(e.key).open}><summary @click=${n=>pinkieTimelineToggle(n,e.key)}>前面还有 ${e.overflowCount} 步</summary>${pinkieTimelineView(e.key).open?s`<div class="chat-timeline-overflow__body">${pinkieTimelineRows(e,e.overflowItems).map(n=>s`${n.pinkieThinkingAnchor?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${n.pinkieThinkingKey} data-pinkie-thinking-seg=${n.pinkieThinkingAnchor}></div>`:c}${n.kind===`group`?_S({...n,timelineOverflow:!1},t):c}`)}${pinkieTimelineView(e.key).count<e.overflowItems.length?s`<button type="button" @click=${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>`:c}</div>`:c}</details>`;let n=U(e.role),r=t.assistantName??`Assistant`,i=Xe({name:t.userName??null,avatar:t.userAvatar??null}),a=e.senderLabel?.trim(),o=n===`user`?a??i:n===`assistant`?a??r:n===`tool`?`Tool`:n,l=n===`user`?`user`:n===`assistant`?`assistant`:n===`tool`?`tool`:`other`,u=vS(e,t.contextWindow??null);if(n===`tool`&&t.showToolCalls===!1)return c;if(n===`tool`&&e.isTimelineStep){let d=e.messages.flatMap((n,r)=>pinkieSplitTimelineMessage(n,lb).map((a,o)=>{let i={...n,message:a.message,key:a.key},u=gS(e,i,r,t);return s`<div class="${a.role===`tool`?`chat-timeline-tool-row`:`chat-timeline-text-row`}">${aC(a.message,a.key,u,t.onOpenSidebar)}</div>`}));return s`<div class="chat-group tool chat-group--timeline-step chat-group--timeline-tools"><div class="chat-group-messages">${d}</div></div>`}if(n===`tool`&&e.messages.length>1){let n=e.messages.flatMap(e=>lb(e.message,e.key)),i=n.length||e.messages.length,a=n.some(Xy)&&e.turnSucceeded!==!0,o=`activity:${e.key}`,l=t.isToolMessageExpanded?.(o)??a;return s`
+  `}function gS(e,t,n,r){return{isStreaming:e.isStreaming&&n===e.messages.length-1,sessionKey:r.sessionKey,agentId:r.agentId,duplicateCount:t.duplicateCount??1,showReasoning:r.showReasoning,showToolCalls:r.showToolCalls??!0,turnSucceeded:e.turnSucceeded,autoExpandToolCalls:r.autoExpandToolCalls??!1,isToolMessageExpanded:r.isToolMessageExpanded,onToggleToolMessageExpanded:r.onToggleToolMessageExpanded,isToolExpanded:r.isToolExpanded,onToggleToolExpanded:r.onToggleToolExpanded,onRequestUpdate:r.onRequestUpdate,onAssistantAttachmentLoaded:r.onAssistantAttachmentLoaded,canvasPluginSurfaceUrl:r.canvasPluginSurfaceUrl,basePath:r.basePath,localMediaPreviewRoots:r.localMediaPreviewRoots,assistantAttachmentAuthToken:r.assistantAttachmentAuthToken,embedSandboxMode:r.embedSandboxMode,allowExternalEmbedUrls:r.allowExternalEmbedUrls}}function _S(e,t){if(e&&e.isProcessCard)return s`<div class="chat-group assistant chat-group--process" data-pinkie-process=${e.key} data-pinkie-row-count=${e.processRowCount||0} data-pinkie-run=${e.processRunId||``} data-pinkie-prior=${e.processPriorKey||``} data-superseded=${e.processSuperseded?`1`:`0`}><div class="chat-group-messages"><details class="pinkie-process" .open=${pinkieProcessOpen(e)} data-live=${e.processLive?`1`:`0`}><summary class="pinkie-process__summary" @click=${n=>pinkieTimelineToggle(n,e.key)}><span class="pinkie-process__title">${e.processTitle}</span><span class="pinkie-process__meta">${e.processMeta}</span></summary>${pinkieProcessOpen(e)?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg="0" data-pinkie-history-revision=${e.processHistoryVersion||0} .pinkieHistoryThinking=${e.processThinking||``} .pinkieHistorySegments=${e.processThinkingSegments||[]} .pinkieToolAnchors=${e.processToolAnchors||{}} .pinkieLegacyKey=${e.processLegacyKey||``}></div><div class="pinkie-process__rows">${e.processRows.map(n=>s`${n.pinkieThinkingAnchor?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg=${n.pinkieThinkingAnchor}></div>`:c}${n.kind===`group`?_S(n,t):c}`)}</div><div class="pinkie-process__thinking" data-pinkie-thinking=${e.key} data-pinkie-thinking-seg=${e.processRowCount||0} data-pinkie-thinking-tail="1"></div>`:c}</details><div class="pinkie-process__status" data-pinkie-status=${e.key} data-live=${e.processLive?`1`:`0`} data-state=${e.processState||``}></div></div></div>`;if(e&&e.isLearningCard)return s`<div class="chat-group assistant chat-group--learning"><div class="chat-group-messages"><div class="pinkie-learning-inline-slot" data-pinkie-learning-slot=${e.key} .pinkieLearningCards=${e.learningCards||[]} .pinkieLearningSession=${t?.sessionKey||``}></div></div></div>`;if(e&&e.timelineOverflow)return s`<details class="chat-timeline-overflow" .open=${pinkieTimelineView(e.key).open}><summary @click=${n=>pinkieTimelineToggle(n,e.key)}>前面还有 ${e.overflowCount} 步</summary>${pinkieTimelineView(e.key).open?s`<div class="chat-timeline-overflow__body">${pinkieTimelineRows(e,e.overflowItems).map(n=>s`${n.pinkieThinkingAnchor?s`<div class="pinkie-process__thinking" data-pinkie-thinking=${n.pinkieThinkingKey} data-pinkie-thinking-seg=${n.pinkieThinkingAnchor}></div>`:c}${n.kind===`group`?_S({...n,timelineOverflow:!1},t):c}`)}${pinkieTimelineView(e.key).count<e.overflowItems.length?s`<button type="button" @click=${n=>pinkieTimelineMore(n,e.key)}>再显示前面 80 步</button>`:c}</div>`:c}</details>`;let n=U(e.role),r=t.assistantName??`Assistant`,i=Xe({name:t.userName??null,avatar:t.userAvatar??null}),a=e.senderLabel?.trim(),o=n===`user`?a??i:n===`assistant`?a??r:n===`tool`?`Tool`:n,l=n===`user`?`user`:n===`assistant`?`assistant`:n===`tool`?`tool`:`other`,u=vS(e,t.contextWindow??null);if(n===`tool`&&t.showToolCalls===!1)return c;if(n===`tool`&&e.isTimelineStep){let d=e.messages.flatMap((n,r)=>pinkieSplitTimelineMessage(n,lb).map((a,o)=>{let i={...n,message:a.message,key:a.key},u=gS(e,i,r,t);return s`<div class="${a.role===`tool`?`chat-timeline-tool-row`:`chat-timeline-text-row`}">${aC(a.message,a.key,u,t.onOpenSidebar)}</div>`}));return s`<div class="chat-group tool chat-group--timeline-step chat-group--timeline-tools"><div class="chat-group-messages">${d}</div></div>`}if(n===`tool`&&e.messages.length>1){let n=e.messages.flatMap(e=>lb(e.message,e.key)),i=n.length||e.messages.length,a=n.some(Xy)&&e.turnSucceeded!==!0,o=`activity:${e.key}`,l=t.isToolMessageExpanded?.(o)??a;return s`
       <div class="chat-group tool chat-group--activity">
         ${hi(e.role,{name:r,avatar:t.assistantAvatar??null},{name:t.userName??null,avatar:t.userAvatar??null},t.basePath,t.assistantAttachmentAuthToken)}
         <div class="chat-group-messages">
