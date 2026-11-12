@@ -16,6 +16,8 @@ import {skillRouteBlock} from './skill-routes.mjs';
 import {workCardBlock, forgetCards} from './work-cards.mjs';
 import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.mjs';
 import {codeWatch} from './code-work.mjs';
+import {sessionHintBlock, noteCompaction} from './session-hints.mjs';
+import {designDirectionBlock} from './design-directions.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
@@ -5739,11 +5741,17 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           // 活儿卡：这种活最要紧的几步直接放在消息旁边（小模型常常不去读打法）；项目速览：绑定的项目里真实的命令和目录。
           const card = workCardBlock(routed.kinds || [], routedPrompt, {mode, sessionKey, playbookRoot: root});
           if (card) blocks.push('\n' + card + '\n');
+          // 视觉方向：做看得见的新作品时，从方向库里按题材抽几个具体的起点，每次不同，作品不重样。
+          const direction = designDirectionBlock(routed.kinds || [], routedPrompt, {mode, sessionKey});
+          if (direction) blocks.push('\n' + direction + '\n');
           const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
           if (brief) blocks.push('\n' + brief + '\n');
           // 改完自动查语法：写文件的工具动过的代码文件还有语法错，就放到眼前。
           const broken = codeWatch.block(sessionKey);
           if (broken) blocks.push('\n' + broken + '\n');
+          // 子会话的时机：用户多半不知道可以分会话，由引擎看情况提醒碧琪自己提出。
+          const sessionHint = sessionHintBlock(sessionKey, routedPrompt, routed.kinds || [], {mode});
+          if (sessionHint) blocks.push('\n' + sessionHint + '\n');
         } catch (error) {
           // 不能让路由拖垮这一轮，但也不能悄悄失效（11-04：Windows 快照少一个 import，路由整个没生效也没人知道）。
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
@@ -6147,6 +6155,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const sessionKey = String(ctx.sessionKey || event?.sessionKey || '');
     if (!sessionKey) return;
     this.handoffStore.markCompacted(sessionKey);
+    noteCompaction(sessionKey);
     this.recentCompaction.set(sessionKey, Date.now());
     forgetCards(sessionKey); forgetBrief(sessionKey);
   }

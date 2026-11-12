@@ -496,7 +496,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",

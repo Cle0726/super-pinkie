@@ -557,7 +557,7 @@ export function registerSessionLineage(api, options) {
   registerSessionMethod(api, 'pinkie.session.card.act', ({key, id, action}) => lineage.act(key, id, action));
   registerSessionMethod(api, 'pinkie.session.detach', ({key}) => lineage.detach(key));
   api.registerTool?.(ctx => sessionTool('pinkie_session_start',
-    '为独立、能自己收尾且用户可能单独查看或停止的工作开子会话。与本轮回答直接相关的子步骤在这里做或用分身。用户明确要求另开会话才用 user_asked。用户提到可分开的工作用 offer，自己发现的后续只能用 own_initiative。提案须等用户点击。简报写明路径、任务与完成条件。fresh 只带简报，fork 带父会话已有记录。',
+    '为独立、能自己收尾且用户可能单独查看或停止的工作开子会话。与本轮回答直接相关的子步骤在这里做或用分身。用户明确要求另开会话才用 user_asked。用户提到可分开的工作用 offer，自己发现的后续只能用 own_initiative。提案须等用户点击。简报写明路径、任务与完成条件。fresh 只带简报，fork 带父会话已有记录。用户多半不知道可以分会话，这些时候要自己想到并提出卡片：一条消息里有几件互不依赖的大活（第一件在这里做，其余 offer）；做着做着发现一件范围外但值得做的事（own_initiative，不要顺手扩大范围）；会话很长了用户又说起不相干的新事（offer）；会话压缩过多次，手上的事告一段落（own_initiative 提一张「接着做」的卡片，简报写清目标、已完成、没做完、路径、验证方法）。',
     {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
       context: {type: 'string', enum: CONTEXTS}}, ['title', 'prompt', 'initiation'],
     (params, callId) => lineage.start(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_session_start'});
