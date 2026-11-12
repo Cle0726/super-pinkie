@@ -87,6 +87,24 @@ export function imageAttachmentsOf(message) {
     .map(part => ({type: 'image', mimeType: part.mimeType || 'image/png', content: part.data}));
 }
 
+// SessionManager.open() rewrites a transcript that has no header yet (a fresh
+// session before its first run flushes). Doing that while a run is writing
+// makes OpenClaw treat the file as taken over and drop the reply, so readers
+// only open files that already start with a session header.
+export function hasSessionHeader(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buffer = Buffer.alloc(65536);
+    const size = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    const text = buffer.subarray(0, size).toString('utf8');
+    const end = text.indexOf('\n');
+    if (end < 0) return size === buffer.length; // one very long first line: not empty
+    const record = JSON.parse(text.slice(0, end));
+    return Boolean(record && typeof record === 'object' && typeof record.type === 'string');
+  } catch { return false; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+}
+
 export class SessionBranches {
   constructor(api, {access, root, lineage, isBusy = () => false, now = Date.now}) {
     this.api = api;
@@ -142,6 +160,7 @@ export class SessionBranches {
     try { lock = await acquireSessionWriteLock({sessionFile: entry.transcript, timeoutMs: 1000}); }
     catch { throw new Error(BUSY); }
     try {
+      if (!hasSessionHeader(entry.transcript)) throw new Error('这条会话还没有可改的消息');
       const session = SessionManager.open(entry.transcript);
       return await work(session);
     } finally { await lock.release(); }
@@ -158,9 +177,14 @@ export class SessionBranches {
     session.rewriteFile();
   }
 
+  // Read-only: no write lock. Taking OpenClaw's write lock in-process while a
+  // run is appending counts as a takeover and the run's reply is not saved.
   async variants(key) {
     const entry = await this.entryFor(key);
-    return this.withSession(entry, session => ({ok: true, items: variantsOf(session.getEntries(), session.getBranch())}));
+    if (!hasSessionHeader(entry.transcript)) return {ok: true, items: []};
+    const {SessionManager} = await this.tools();
+    const session = SessionManager.open(entry.transcript);
+    return {ok: true, items: variantsOf(session.getEntries(), session.getBranch())};
   }
 
   async switchTo(key, entryId) {
