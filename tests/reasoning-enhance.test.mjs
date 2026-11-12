@@ -501,3 +501,16 @@ test('the reviewer is told which folder the files were made in and that file del
   assert.match(text, /不要求把文件内容（源码、全文）贴进回复/);
   assert.doesNotMatch(auditPrompt({message: 'x', reply: 'y', evidence: '', artifacts: ['a.png']}), /本轮做文件的文件夹/);
 });
+
+test('a run that ends in NO_REPLY is not reviewed and does not use up the review', async () => {
+  // 11-02 隔离实测 K-poster-full：内部轮以 NO_REPLY 收尾，审稿员判成「没交付」，碧琪把整份终稿又发了一遍。
+  const f = fixture();
+  const enhancer = new ReasoningEnhancer(f.api, {runProcess: f.runProcess, cliEntry: '/x/openclaw.mjs'});
+  await enhancer.prepare(request('max'));
+  enhancer.beforePromptBuild({prompt: '把 report.md 写成 3 段'}, {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(await enhancer.agentEnded(runEvent('NO_REPLY'), {sessionKey: 'agent:learning:one'}), {reviewed: false, silent: true});
+  assert.equal(auditCalls(f.calls).length, 0);
+  const outcome = await enhancer.agentEnded(runEvent('写好了，3 段。', [['write', 'Successfully wrote 300 bytes']]), {sessionKey: 'agent:learning:one'});
+  assert.deepEqual(outcome, {reviewed: true, pass: true});
+  assert.equal(auditCalls(f.calls).length, 1);
+});
