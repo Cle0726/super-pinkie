@@ -469,7 +469,7 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v26 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v29 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
 function asLegacyV1Bundle(v4Bundle) {
@@ -489,7 +489,7 @@ function asLegacyV1Bundle(v4Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v26/);
+  assert.match(result.text, /pinkie-chat-timeline:v29/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,e\)/);
   assert.match(result.text, /function Zb\(e\)\{return Infinity\}/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -722,7 +722,7 @@ test('an installed v1 chat bundle upgrades to the current runtime through apply 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v26/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v29/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1\b|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
