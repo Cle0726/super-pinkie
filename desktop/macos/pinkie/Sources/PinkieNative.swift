@@ -30,6 +30,8 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
 
     override init() {
         super.init()
+        // Isolated UI tests load this bridge without the menu bar or a global hotkey.
+        if ProcessInfo.processInfo.environment["PINKIE_NATIVE_NO_SYSTEM"] == "1" { return }
         if Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = self }
         let menubar = UserDefaults.standard.object(forKey: "pinkie.menubar") as? Bool ?? true
         setMenubar(menubar)

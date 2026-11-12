@@ -339,6 +339,8 @@ export function logSessionFailure(api, topic, key, reason) {
 }
 
 const SAME_LABEL = /label already in use/i;
+// H1: temp sessions keep the fixed name「临时会话」and never call the title model.
+const TEMP_SESSION = /:dashboard:temp-[0-9a-f-]{36}$/i;
 export function numberedTitle(title, ordinal, limit = 80) {
   if (ordinal === 1) return title;
   const suffix = `（${ordinal}）`;
@@ -372,6 +374,13 @@ export class SessionTitles {
     data[key] = next;
     writeSessionJson(this.file, data);
     return next;
+  }
+
+  forget(key) {
+    const data = readSessionJson(this.file);
+    if (!(key in data)) return;
+    delete data[key];
+    writeSessionJson(this.file, data);
   }
 
   serial(key, fn) {
@@ -450,7 +459,7 @@ export class SessionTitles {
 
   async ensure(key) {
     const entry = await this.access.entry(key);
-    if (!entry || entry.archivedAt || isInternalSessionKey(key) || isPersona(key)) return;
+    if (!entry || entry.archivedAt || isInternalSessionKey(key) || isPersona(key) || TEMP_SESSION.test(key)) return;
     const label = typeof entry.label === 'string' ? entry.label : '';
     const record = this.record(key);
     if (record?.source === 'user' || record?.attempts >= MAX_ATTEMPTS) return;

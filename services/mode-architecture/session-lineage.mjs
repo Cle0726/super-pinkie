@@ -328,6 +328,7 @@ export class SessionLineage {
   }
 
   async startRequest(parentKey, runId, input, callId) {
+    if (/:dashboard:temp-[0-9a-f-]{36}$/i.test(String(parentKey || ''))) throw new Error('临时会话不能开子会话');
     return this.serial(parentKey, async () => {
       const parent = await this.parentEntry(parentKey);
       const request = input.userAuthored ? {...input, prompt: userBrief(titleFor(parent, parentKey), input.prompt, input.forkAt)} : input;
