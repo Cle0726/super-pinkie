@@ -537,13 +537,26 @@
       const copy = sheet.querySelector('.pk-sheet-copy');
       if (!copy) return;
       const known = item.reveal?.extra || '';
-      const p = el('p', 'pk-sheet-explain', known || '碧琪在按标准答案讲…');
+      const p = el('p', 'pk-sheet-explain', known);
       copy.append(p);
-      rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 60000).then(r => {
+      const retry = (message, fallback = known) => {
         if (!p.isConnected) return;
-        if (r?.text) p.textContent = r.text;
-        else if (!known) p.remove();
-      }).catch(() => { if (p.isConnected && !known) p.remove(); });
+        p.textContent = [fallback, message || '这次没有生成讲解，请检查内置模型后重试。'].filter(Boolean).join('\n');
+        const b = el('button', 'pkb-link', '重新讲解'); b.type = 'button'; b.addEventListener('click', run); p.append(document.createTextNode(' '), b);
+        const switchModel = el('button', 'pkb-link', '切换模型'); switchModel.type = 'button'; switchModel.addEventListener('click', () => window.__pinkieStudyDesk?.openBuiltinModel?.()); p.append(switchModel);
+      };
+      const run = () => {
+        p.textContent = known ? `${known}\n碧琪在按标准答案讲…` : '碧琪在按标准答案讲…';
+        rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 260000).then(r => {
+          if (!p.isConnected) return;
+          if (r?.text && r.source === 'model') p.textContent = r.text;
+          else retry(r?.error, r?.text || known);
+        }).catch(error => retry(error?.message));
+      };
+      // 讲解要先生自己点才开始，不自动调用模型。
+      const ask = el('button', 'pkb-link', '讲给我听'); ask.type = 'button'; ask.addEventListener('click', run);
+      if (known) p.append(document.createTextNode(' '));
+      p.append(ask);
     }
     function advance() {
       sheetApi = null; index += 1;

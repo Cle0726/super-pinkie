@@ -4,7 +4,7 @@
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, explainInput} from './learning-game-content.mjs';
-import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 import {GAME_EXAM} from './learning-game.mjs';
 import {examMonster} from './learning-game-monsters.mjs';
 
@@ -72,6 +72,7 @@ export class GameWorld {
   constructor(game) {
     this.game = game;
     this.generating = new Map();
+    this.explaining = new Map();
     game.modules.world = this;
   }
   get economy() { return this.game.economy; }
@@ -295,7 +296,14 @@ export class GameWorld {
     });
   }
   // 守关点过之后才讲。标准答案是选项本身，模型只顺着它讲。
-  async guardExplain({attemptId, itemId, yours = ''} = {}) {
+  guardExplain(params = {}) {
+    const key = JSON.stringify([clean(params.attemptId, 80), clean(params.itemId, 80)]);
+    if (this.explaining.has(key)) return this.explaining.get(key);
+    const job = this.guardExplainOne(params).finally(() => this.explaining.delete(key));
+    this.explaining.set(key, job);
+    return job;
+  }
+  async guardExplainOne({attemptId, itemId, yours = ''} = {}) {
     const id = clean(attemptId, 80);
     const g = this.ensure(this.game.read()).guards[id];
     if (!g) throw new Error('这场守关战已经不在了');
@@ -308,12 +316,13 @@ export class GameWorld {
     const standard = clean(item.options?.[item.answer], 300);
     let text = '';
     let source = 'none';
+    let failure;
     if (standard && this.game.requestModel) {
-      const r = await modelJson(this.game.requestModel, explainRules(), explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 45000, maxTokens: 1400});
+      const r = await modelJson(this.game.requestModel, explainRulesFor(), explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 1500, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules(), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
       if (r) { text = r.value.text; source = 'model'; }
     }
     if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; row.lectureV = EXPLAIN_VERSION; } });
-    return {text, source};
+    return {text, source, ...(!text ? {error: explainFailure(failure)} : {})};
   }
   guardFinish({attemptId} = {}) {
     return this.game.mutate(state => {

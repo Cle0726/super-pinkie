@@ -5,7 +5,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {dayInZone} from './learning-pact.mjs';
 import {vocabDrillFields} from './learning-vocab.mjs';
 import {explainInput} from './learning-game-content.mjs';
-import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 
 const LIBRARY = 'agent:learning:notes-library';
 const SIZES = [5, 10, 15, 20];
@@ -579,6 +579,7 @@ export class LearningDrill {
     this.file = path.join(store.root, 'notes-drill.json');
     this.requested = new Set();
     this.pendingCards = new Map();
+    this.explaining = new Map();
     this.running = null;
   }
 
@@ -907,7 +908,14 @@ export class LearningDrill {
   }
 
   // 标准答案已经在卷子上。这里只在做完之后，让模型顺着这份答案讲，不另给一个答案。
-  async explain({sessionId, itemId, yours = ''} = {}) {
+  explain(params = {}) {
+    const key = JSON.stringify([params.sessionId, params.itemId]);
+    if (this.explaining.has(key)) return this.explaining.get(key);
+    const job = this.explainOne(params).finally(() => this.explaining.delete(key));
+    this.explaining.set(key, job);
+    return job;
+  }
+  async explainOne({sessionId, itemId, yours = ''} = {}) {
     const session = this.load(sessionId);
     const item = (session.items || []).find(entry => entry.itemId === itemId);
     if (!item) throw new Error('这道题不在这一组里');
@@ -922,14 +930,23 @@ export class LearningDrill {
     const local = {text: note, source: note ? 'local' : 'none'};
     const keep = out => { if (out.text) { session.explained[itemId] = out; this.save(session); } return out.text ? out : local; };
     const status = this.modelStatus(session.sessionKey);
-    if (!standard || !status.available || !this.organizer?.requestModel) return keep(local);
+    if (!standard) return {...local, error: '这道题缺少标准答案，暂时不能讲解。'};
+    if (!status.available || !this.organizer?.requestModel) return {...local, error: explainFailure('模型暂时不可用')};
     try {
       const payload = explainInput({question: item.reveal?.question || item.prompt || '', options: item.options, standard, note, yours: attempt, correct});
-      const result = await this.organizer.requestModel(status.model, explainRules(), payload, true, {userText: JSON.stringify(payload), maxTokens: 1400, timeoutMs: 45000});
-      const text = validVoicedExplain(result)?.text || validVoicedExplain(result?.value)?.text;
-      return keep(text ? {text, source: 'model', v: EXPLAIN_VERSION} : local);
-    } catch {
-      return keep(local);
+      const ask = (rules, maxTokens) => this.organizer.requestModel(status.model, rules, payload, true, {userText: JSON.stringify(payload), maxTokens, timeoutMs: 120000});
+      const read = result => validVoicedExplain(result)?.text || validVoicedExplain(result?.value)?.text;
+      let text = '', failure;
+      for (const [rules, budget] of useCompactExplain() ? [[compactExplainRules(), 5200]] : [[explainRules(), 1500], [compactExplainRules(), 5200]]) {
+        try { text = read(await ask(rules, budget)); failure = undefined; } catch (error) { failure = error; text = ''; }
+        if (text) break;
+        // 会长篇思考的模型会把 token 花光、正文为空：换精简提示词再来一次，并记住一阵子。
+        if (failure && !/未完成|没有返回有效|没通过校验/.test(String(failure.message || failure))) break;
+        markCompactExplain();
+      }
+      return text ? keep({text, source: 'model', v: EXPLAIN_VERSION}) : {...local, error: explainFailure(failure)};
+    } catch (error) {
+      return {...local, error: explainFailure(error)};
     }
   }
 

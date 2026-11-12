@@ -6,7 +6,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, explainInput} from './learning-game-content.mjs';
-import {explainRules, validVoicedExplain} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain} from './learning-explain-voice.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
@@ -255,7 +255,7 @@ export class GameExam {
       if (solved.unique && solved.answer === it.answer) { out.unique += 1; return; }
       const listen = p.kind.startsWith('listen');
       const r = await modelJson(rm, FIX_ITEM_RULES, {material: listen ? '' : String(p.material || '').slice(0, 1500), tts: it.tts || '', stem: it.stem || '', options: it.options, answer: it.answer, solver: solved.answer}, {
-        retries: 1, timeoutMs: 60000, maxTokens: 1200,
+        retries: 1, timeoutMs: 100000, maxTokens: 1200,
         validate: v => { const c = validChoice({stem: v?.stem || it.stem || '(听录音选答案)', options: v?.options, answer: v?.answer}); return c ? {...c, stem: v?.stem ? c.stem : it.stem, tts: listen && v?.tts ? String(v.tts).slice(0, 1200) : it.tts} : null; },
       });
       if (r) {
@@ -347,7 +347,7 @@ export class GameExam {
       let got = {score: 0, reason: blank ? '没有作答（或只抄了题目）。' : '', source: 'local'};
       if (!blank) {
         const r = await modelJson(this.game.requestModel, GRADE_RULES, {kind: s.kind, task: s.it.stem, reference: s.it.reference, rubric: s.it.rubric, max: s.max, answer: s.ans}, {
-          validate: v => (Number.isInteger(Number(v?.score)) && Number(v.score) >= 0 && Number(v.score) <= s.max ? {score: Number(v.score), reason: clean(v.reason, 300)} : null), timeoutMs: 60000, maxTokens: 800,
+          validate: v => (Number.isInteger(Number(v?.score)) && Number(v.score) >= 0 && Number(v.score) <= s.max ? {score: Number(v.score), reason: clean(v.reason, 300)} : null), timeoutMs: 100000, maxTokens: 800,
         });
         // 模型判不了时的兜底：按长度给一个保守分，并标明需要碧琪稍后复判
         got = r ? {...r.value, source: 'model'} : {score: Math.min(Math.floor(s.max * 0.4), Math.floor(clean(s.ans).split(/\s+/).length / 20)), reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local'};
@@ -365,7 +365,7 @@ export class GameExam {
       let text = note;
       let source = note ? 'key' : 'none';
       if (this.game.requestModel) {
-        const r = await modelJson(this.game.requestModel, explainRules({brief: true}), explainInput({question: w.it.stem, options: w.it.options, standard, note, yours, correct: false}), {validate: v => validVoicedExplain(v, {brief: true}), retries: 1, timeoutMs: 40000, maxTokens: 700});
+        const r = await modelJson(this.game.requestModel, explainRulesFor({brief: true}), explainInput({question: w.it.stem, options: w.it.options, standard, note, yours, correct: false}), {validate: v => validVoicedExplain(v, {brief: true}), retries: 1, timeoutMs: 100000, maxTokens: useCompactExplain() ? 3200 : 1000, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 3200, fallbackRules: compactExplainRules({brief: true}), onFallback: markCompactExplain})});
         if (r) { text = r.value.text; source = 'model'; }
       }
       explained.push({id: w.id, section: w.sec, no: w.it.no || null, stem: clean(w.it.stem, 90), yours, standard, text, source});

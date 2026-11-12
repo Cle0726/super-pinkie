@@ -2135,6 +2135,8 @@ export class LearningNotesOrganizer {
     if (!target) throw new Error('整理模型暂时不可用，笔记已保存');
     const {model, provider, api, base, apiKey} = target;
     const message = typeof options.userText === 'string' ? options.userText : JSON.stringify({notes});
+    // 本地模型中转靠运行时标记区分学习后台和其他客户端，缺失时会误套别的模式的提示词。
+    const systemRules = `${rules}\n\n## Runtime\nOpenClaw agent=learning`;
     const images = options.images || [];
     if (!Array.isArray(images)) throw new Error('图片参数无效');
     if (images.length && !model.input?.includes('image')) throw new Error('当前模型不支持看图');
@@ -2147,17 +2149,17 @@ export class LearningNotesOrganizer {
     if (api === 'anthropic-messages') {
       endpoint = 'messages'; headers['x-api-key'] = apiKey; headers['anthropic-version'] = '2023-06-01';
       const content = images.length ? [{type: 'text', text: message}, ...images.map(image => ({type: 'image', source: {type: 'base64', media_type: image.mime, data: image.base64}}))] : message;
-      body = {model: model.id, system: rules, messages: [{role: 'user', content}], max_tokens: tokens, stream: false};
+      body = {model: model.id, system: systemRules, messages: [{role: 'user', content}], max_tokens: tokens, stream: false};
     } else {
       headers.Authorization = `Bearer ${apiKey}`;
       if (api === 'openai-responses') {
         const input = images.length ? [{role: 'user', content: [{type: 'input_text', text: message}, ...images.map(image => ({type: 'input_image', image_url: `data:${image.mime};base64,${image.base64}`}))]}] : message;
-        endpoint = 'responses'; body = {model: model.id, instructions: rules, input, max_output_tokens: tokens, stream: false, store: false};
+        endpoint = 'responses'; body = {model: model.id, instructions: systemRules, input, max_output_tokens: tokens, stream: false, store: false};
       } else {
         endpoint = 'chat/completions';
         const maxTokensField = model.compat?.maxTokensField || (/^(?:gpt-[56]|o\d)/i.test(model.id) ? 'max_completion_tokens' : 'max_tokens');
         const content = images.length ? [{type: 'text', text: message}, ...images.map(image => ({type: 'image_url', image_url: {url: `data:${image.mime};base64,${image.base64}`}}))] : message;
-        body = {model: model.id, messages: [{role: 'system', content: rules}, {role: 'user', content}], [maxTokensField]: tokens, stream: false};
+        body = {model: model.id, messages: [{role: 'system', content: systemRules}, {role: 'user', content}], [maxTokensField]: tokens, stream: false};
       }
     }
     if (options.temperature != null) body.temperature = options.temperature;
