@@ -274,12 +274,24 @@
         const sheet = R.feedbackSheet(qWrap, {kind: r.correct ? 'right' : 'wrong', title: r.correct ? '命中' : '记下了', again: false, line: r.correct ? (r.explain || '') : `这题会变成错题怪，过几天回来。${r.explain ? ' ' + r.explain : ''}`, onContinue: next});
         const copy = sheet?.sheet?.querySelector('.pk-sheet-copy');
         if (copy) {
-          const p = el('p', 'pk-sheet-explain', '碧琪在按标准答案讲…');
+          const p = el('p', 'pk-sheet-explain', '');
           copy.append(p);
-          g.call('guard.explain', {attemptId: payload.attemptId, itemId: items[i].itemId, yours: items[i].options[k]}, 60000).then(res => {
+          const explainParams = {attemptId: payload.attemptId, itemId: items[i].itemId, yours: items[i].options[k]};
+          const retry = message => {
             if (!p.isConnected) return;
-            if (res?.text) p.textContent = res.text; else p.remove();
-          }).catch(() => { if (p.isConnected) p.remove(); });
+            p.textContent = message || '这次没有生成讲解，请检查内置模型后重试。';
+            const b = el('button', 'pkb-link', '重新讲解'); b.type = 'button'; b.addEventListener('click', run); p.append(document.createTextNode(' '), b);
+            const switchModel = el('button', 'pkb-link', '切换模型'); switchModel.type = 'button'; switchModel.addEventListener('click', () => desk()?.openBuiltinModel?.()); p.append(switchModel);
+          };
+          const run = () => {
+            p.textContent = '碧琪在按标准答案讲…';
+            g.call('guard.explain', explainParams, 260000).then(res => {
+              if (!p.isConnected) return;
+              if (res?.text) p.textContent = res.text; else retry(res?.error);
+            }).catch(error => retry(error?.message));
+          };
+          // 讲解要先生自己点才开始，不自动调用模型。
+          const ask = el('button', 'pkb-link', '讲给我听'); ask.type = 'button'; ask.addEventListener('click', run); p.append(ask);
         }
       } else {
         const note = el('div', 'pkb-guard__explain'); note.append(el('b', '', r.correct ? '命中' : '这题记下了，会变成错题怪回来'), el('p', '', r.explain || ''));

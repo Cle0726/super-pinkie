@@ -8,7 +8,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {fold, modelJson, pool, explainInput} from './learning-game-content.mjs';
-import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 import {GRADE_RULES, gradeObjective} from './learning-game-exam.mjs';
 
 const DAY = 86400000;
@@ -393,6 +393,7 @@ export class GamePractice {
     game.modules.practice = this;
     this.bank = new QuestionBank({root: game.root, requestModel: game.requestModel, now: () => game.now()});
     this.grading = new Map();
+    this.explaining = new Map();
   }
   get economy() { return this.game.economy; }
   now() { return this.game.now(); }
@@ -587,7 +588,14 @@ export class GamePractice {
     return {score: Math.min(Math.floor(max * 0.4), Math.floor(clean(text).split(/\s+/).length / 20)), max, reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local', reference: it.reference || ''};
   }
   // 「讲给我听」：标准答案是官方的，模型只顺着它讲
-  async explain({setId, itemId} = {}) {
+  explain(params = {}) {
+    const key = JSON.stringify([clean(params.setId, 40), clean(params.itemId, 80)]);
+    if (this.explaining.has(key)) return this.explaining.get(key);
+    const job = this.explainOne(params).finally(() => this.explaining.delete(key));
+    this.explaining.set(key, job);
+    return job;
+  }
+  async explainOne({setId, itemId} = {}) {
     const sid = clean(setId, 40), iid = clean(itemId, 80);
     const set = this.ensure(this.game.read()).sets[sid];
     const rec = set?.answers?.[iid];
@@ -597,9 +605,10 @@ export class GamePractice {
     if (!it) throw new Error('题库里没有这道题了');
     const mat = it.material ? clean(this.bank.load().materials[it.material], 1200) : '';
     const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, 300);
-    if (!this.game.requestModel) return {text: '', source: 'offline'};
-    const r = await modelJson(this.game.requestModel, explainRules(), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 45000, maxTokens: 1400});
-    if (!r) return {text: '', source: 'none'};
+    if (!this.game.requestModel) return {text: '', source: 'offline', error: explainFailure('模型暂时不可用')};
+    let failure;
+    const r = await modelJson(this.game.requestModel, explainRulesFor(), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 1500, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules(), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
+    if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
     this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row.lecture = r.value.text; row.lectureV = EXPLAIN_VERSION; } });
     return {text: r.value.text, source: 'model'};
   }
