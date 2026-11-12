@@ -19,7 +19,7 @@ class FirstPersonRendererTests(unittest.TestCase):
         self.assertIn('"message_sending"', source)
         self.assertIn('"reply_payload_sending"', source)
         self.assertIn("function renderFirstPerson", source)
-        self.assertIn("replaceAll('我', '碧琪')", source)
+        self.assertIn("out += '碧琪'", source)
         self.assertNotIn("before_prompt_build", source)
 
     def test_installer_copies_plugin_and_registers_it(self):

@@ -120,6 +120,16 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertEqual(data['agents']['defaults']['heartbeat']['agentId'],'main')
         self.assertEqual(data['talk']['agentId'],'main')
 
+    def test_manual_size_limit_is_raised_and_never_lowered(self):
+        data = {'agents': {'list': [{'id': 'project'}]}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['agents']['defaults']['bootstrapMaxChars'], 60_000)
+        self.assertEqual(data['agents']['defaults']['bootstrapTotalMaxChars'], 200_000)
+        data = {'agents': {'defaults': {'bootstrapMaxChars': 90_000, 'bootstrapTotalMaxChars': 1000}, 'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['agents']['defaults']['bootstrapMaxChars'], 90_000)
+        self.assertEqual(data['agents']['defaults']['bootstrapTotalMaxChars'], 200_000)
+
     def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
         data = {'agents': {'list': [
             {'id': 'main'}, {'id': 'project', 'tools': {'deny': ['browser'], 'exec': {'pathPrepend': ['/x']}}},
