@@ -137,10 +137,10 @@
     const started = Date.now(); let expired = false;
     const timer = setInterval(() => { if (!active()) { clearInterval(timer); return; } const sec = Math.floor((Date.now() - started) / 1000); side.querySelector('p').textContent = `碧琪在备课… ${sec} 秒`; if (sec >= 45) { expired = true; clearInterval(timer); local.revision++; paper.replaceChildren(el('p', 'lesson-error', '备课超时，重试'), btn('重试', () => { local.prepared = null; desk.refresh(); }, 'lesson-secondary', 'rotate-ccw')); side.querySelector('p').textContent = '备课超时了'; } }, 1000);
     host._lessonCleanup = () => clearInterval(timer);
-    paper.append(btn('取消', () => { local.revision++; desk.go('today'); }, 'link'));
+    paper.append(btn('取消备课', () => { local.revision++; (desk.back || (() => desk.go('today')))(); }, 'link'));
     const prepare = async () => {
       try { const result = await rpc('lesson.prepare', local.selection, local, key); if (!active() || expired) return; clearInterval(timer); local.prepared = result; desk.refresh(); }
-      catch (error) { if (!active() || expired) return; clearInterval(timer); paper.replaceChildren(el('p', 'lesson-error', error.message), btn('重试', () => desk.refresh()), btn('回今日', () => desk.go('today'), 'link')); side.querySelector('p').textContent = '备课暂时没完成，稍后再试。'; }
+      catch (error) { if (!active() || expired) return; clearInterval(timer); paper.replaceChildren(el('p', 'lesson-error', error.message), btn('重试', () => desk.refresh()), btn(desk.backName?.(desk.backView?.()) || '回今日', () => (desk.back ? desk.back() : desk.go('today')), 'link')); side.querySelector('p').textContent = '备课暂时没完成，稍后再试。'; }
     };
     rpc('lesson.current', {}, local, key).then(current => {
       if (!active()) return;
@@ -315,7 +315,7 @@
     const actions = el('footer', 'lesson-actions'), next = result.next;
     if (!result.failed) actions.append(btn(next?.kind === 'chat' ? '让碧琪出题' : '去练 4 道', () => { if (next?.kind === 'chat') return desk.askBiqi(`请围绕「${pointTitle(lesson)}」出一道理解练习题，一次只出一题。`); return desk.startSet({chapter: next?.k || local.selection?.k, item: next?.i ?? local.selection?.i, size: 4}); }, 'lesson-primary', 'arrow'));
     const notes = btn('看笔记', () => desk.go('notes', {noteId: result.noteId}), 'lesson-secondary', 'notes'); notes.disabled = !result.noteId;
-    actions.append(notes, btn('回今日', () => desk.go('today'), 'link')); paper.append(actions);
+    actions.append(notes, btn(desk.backName?.(desk.backView?.()) || '回今日', () => (desk.back ? desk.back() : desk.go('today')), 'link')); paper.append(actions);
     if (lesson.sources?.length) paper.append(btn('查看本节出处', () => openPage(lesson.sources[0], lesson.sources), 'lesson-ghost', 'file-text'));
     demo(paper, local); renderSide(host, result.failed ? 'working' : 'happy', summary.next || (result.failed ? '课程还在，稍后可以再试一次。' : '先生，这节课学过了，接着试一小组。'));
   }

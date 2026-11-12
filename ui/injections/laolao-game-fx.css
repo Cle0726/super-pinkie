@@ -1,0 +1,122 @@
+/* 碧琪上岸记 · 特效层。画布和奖励卡片都不拦点击（大招切入除外：点一下跳过）。视觉语言见 briefs/study-desk-game/VFX.md。 */
+.pk-gamefx-layer{position:fixed;inset:0;z-index:2147482000;pointer-events:none;contain:strict;overflow:hidden;
+  --pk-display:"Songti SC","STSong","Noto Serif SC","Source Han Serif SC","Microsoft YaHei",serif;
+  --pk-latin:"Avenir Next Condensed","DIN Condensed","Bahnschrift","Arial Narrow",sans-serif;
+  --pk-num:"DIN Alternate","Avenir Next Condensed","Bahnschrift",ui-monospace,sans-serif;
+  --pk-ui:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+.pk-gamefx-canvas{position:absolute;left:0;top:0;display:block;pointer-events:none}
+.pk-gamefx-canvas[data-live="0"]{visibility:hidden}
+.pk-gamefx-canvas[data-cine="1"]{z-index:1}
+.pk-gamefx-dot{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;will-change:transform,opacity;
+  background:radial-gradient(circle,#fff 0,var(--c,#ffd36e) 45%,transparent 72%)}
+html[data-pinkie-hitstop="1"] #pinkie-study-desk *{animation-play-state:paused!important}
+
+/* ── 大招切入：文字排在条带外侧，跟条带同角度 ── */
+.pk-cut{position:absolute;inset:0;z-index:3;pointer-events:auto;cursor:pointer;color:#fff;font-family:var(--pk-ui)}
+.pk-cut__frame{position:absolute;left:50%;top:50%;width:0;height:0;transform:translate(var(--cx,0),var(--cy,0)) rotate(var(--theta,0deg))}
+.pk-cut__copy{position:absolute;left:clamp(12px,2.4vw,48px);top:calc(var(--h0,20vh) + 2.4vh);width:max-content;max-width:min(46vw,760px)}
+.pk-cut__kicker{display:flex;align-items:center;gap:12px;font:600 14px/1 var(--pk-latin);letter-spacing:.36em;text-transform:uppercase;color:rgba(255,255,255,.72);
+  animation:pk-cut-kicker var(--dur,1.8s) linear both}
+.pk-cut__kicker i{font-style:normal;color:var(--accent,#ffd36e)}
+.pk-cut__kicker b{display:block;width:28px;height:1px;background:currentColor;opacity:.6}
+.pk-cut__kicker span{font:500 14px/1 var(--pk-ui);letter-spacing:.24em}
+.pk-cut__title{display:block;margin-top:12px;font:900 clamp(52px,7vw,128px)/1.02 var(--pk-display);letter-spacing:.04em;white-space:nowrap;
+  text-shadow:0 2px 30px rgba(0,0,0,.4),0 0 1px rgba(0,0,0,.4);animation:pk-cut-title var(--dur,1.8s) linear both}
+.pk-cut__rule{display:block;height:1px;width:min(34vw,520px);margin:16px 0 11px;transform-origin:left center;
+  background:linear-gradient(90deg,var(--accent,#ffd36e) 0,var(--accent,#ffd36e) 22%,rgba(255,255,255,.55) 22.4%,rgba(255,255,255,0) 100%);
+  animation:pk-cut-rule var(--dur,1.8s) linear both}
+.pk-cut__sub{display:block;font:600 12.5px/1.5 var(--pk-latin);letter-spacing:.32em;text-transform:uppercase;color:rgba(255,255,255,.66);animation:pk-cut-sub var(--dur,1.8s) linear both}
+.pk-cut__sub:empty{display:none}
+.pk-cut__skip{position:absolute;right:24px;bottom:20px;font:500 11px/1 var(--pk-ui);font-style:normal;letter-spacing:.24em;color:rgba(255,255,255,.42);animation:pk-cut-sub var(--dur,1.8s) linear both}
+.pk-cut__seal{position:absolute;left:var(--seal,34vw);top:0;width:min(22vh,230px);height:min(22vh,230px);margin:calc(min(22vh,230px) / -2) 0 0 calc(min(22vh,230px) / -2);
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.35));animation:pk-cut-seal var(--dur,1.9s) linear both}
+.pk-cut[data-preset="slash"] .pk-cut__copy{left:-21vw}
+.pk-cut[data-preset="warp"] .pk-cut__copy{left:calc(var(--h0,30vh) + 6vh);top:-7vh}
+.pk-cut[data-preset="ink"] .pk-cut__copy{left:66vh;top:-9vh;max-width:min(40vw,640px)}
+.pk-cut[data-preset="ink"] .pk-cut__title{font-size:clamp(40px,4.6vw,88px);white-space:normal}
+.pk-cut[data-preset="ink"]{color:#24171f}
+.pk-cut[data-preset="ink"] .pk-cut__title{text-shadow:none}
+.pk-cut[data-preset="ink"] .pk-cut__kicker,.pk-cut[data-preset="ink"] .pk-cut__sub{color:rgba(36,23,31,.62)}
+.pk-cut[data-preset="ink"] .pk-cut__kicker i{color:var(--tone,#DB1F74)}
+.pk-cut[data-preset="ink"] .pk-cut__rule{background:linear-gradient(90deg,#24171f 0,#24171f 22%,rgba(36,23,31,.4) 22.4%,rgba(36,23,31,0) 100%)}
+.pk-cut[data-preset="ink"] .pk-cut__skip{color:rgba(36,23,31,.42)}
+.pk-cut.is-flat{background:radial-gradient(120% 90% at 50% 45%,#2a1424 0,#120a12 70%)}
+.pk-cut.is-flat .pk-cut__frame{transform:translate(-50%,-50%)}
+.pk-cut.is-flat .pk-cut__copy{position:relative;left:auto;top:auto}
+@keyframes pk-cut-kicker{0%,15%{opacity:0;transform:translateX(24px);animation-timing-function:cubic-bezier(.16,1,.3,1)}27%{opacity:1;transform:none}74%{opacity:1;transform:none;animation-timing-function:cubic-bezier(.7,0,.84,0)}82%,100%{opacity:0;transform:translateX(-40px)}}
+@keyframes pk-cut-title{0%,19%{opacity:0;clip-path:inset(-20% 100% -20% 0);transform:translateX(-14px);letter-spacing:.16em;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+  34%{opacity:1;clip-path:inset(-20% 0 -20% 0);transform:none;letter-spacing:.04em}
+  74%{opacity:1;clip-path:inset(-20% 0 -20% 0);transform:translateX(-6px);letter-spacing:.04em;animation-timing-function:cubic-bezier(.7,0,.84,0)}82%,100%{opacity:0;clip-path:inset(-20% 0 -20% 0);transform:translateX(-70px) skewX(-14deg);letter-spacing:.04em}}
+@keyframes pk-cut-rule{0%,23%{transform:scaleX(0);opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}42%,74%{transform:scaleX(1);opacity:1}82%,100%{transform:scaleX(1.1);opacity:0}}
+@keyframes pk-cut-sub{0%,29%{opacity:0;transform:translateY(6px);animation-timing-function:cubic-bezier(.16,1,.3,1)}42%,74%{opacity:1;transform:none}82%,100%{opacity:0;transform:none}}
+@keyframes pk-cut-seal{0%,20%{opacity:0;transform:rotate(-14deg) scale(2.5)}20.5%{opacity:1;transform:rotate(-13.4deg) scale(2.42);animation-timing-function:cubic-bezier(.55,0,1,.45)}
+  26%{opacity:1;transform:rotate(-6deg) scale(1);animation-timing-function:cubic-bezier(.2,.8,.2,1)}29%{opacity:1;transform:rotate(-6deg) scale(1.04)}33%,76%{opacity:1;transform:rotate(-6deg) scale(1)}86%,100%{opacity:0;transform:rotate(-6deg) scale(1.03)}}
+
+/* ── 奖励卡片：右上角叠放，点不到 ── */
+.pk-awards{position:absolute;top:64px;right:22px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.pk-award{--k:#d9a23c;position:relative;display:grid;grid-template-columns:auto auto;align-items:center;column-gap:11px;min-width:132px;padding:9px 16px 9px 12px;border-radius:12px;overflow:hidden;
+  background:linear-gradient(180deg,#fffdf9 0,#fbf6ef 100%);color:#2b1d27;border:1px solid rgba(58,42,53,.1);
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 10px 26px -10px rgba(58,42,53,.32),0 2px 6px rgba(58,42,53,.08);
+  animation:pk-award-in .5s cubic-bezier(.16,1,.3,1) both}
+.pk-award::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:2px;border-radius:2px;background:var(--k)}
+.pk-award::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.75) 45%,transparent 60%);transform:translateX(-120%);animation:pk-award-sheen 1.1s .12s cubic-bezier(.4,0,.2,1) both}
+.pk-award__icon{display:block;width:26px;height:26px;color:var(--k)}
+.pk-award__icon svg{display:block;width:100%;height:100%}
+.pk-award__body{display:grid;gap:2px}
+.pk-award__line{display:flex;align-items:baseline;gap:6px}
+.pk-award__num{font:700 22px/1 var(--pk-num);font-variant-numeric:tabular-nums;letter-spacing:.01em;color:#2b1d27}
+.pk-award__unit{font:600 12px/1 var(--pk-ui);letter-spacing:.14em;color:rgba(43,29,39,.62)}
+.pk-award__title{font:700 15px/1.2 var(--pk-display);letter-spacing:.06em}
+.pk-award__why{font:500 11.5px/1.3 var(--pk-ui);color:rgba(43,29,39,.56);letter-spacing:.02em}
+.pk-award[data-level="big"]{padding:11px 18px 11px 14px}
+.pk-award[data-level="big"] .pk-award__num{font-size:26px}
+.pk-award.is-out{animation:pk-award-out .42s cubic-bezier(.7,0,.84,0) both}
+@keyframes pk-award-in{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes pk-award-out{to{opacity:0;transform:translateY(-8px)}}
+@keyframes pk-award-sheen{to{transform:translateX(120%)}}
+html[data-pinkie-night] .pk-award,html[data-theme-mode="dark"] .pk-award{background:linear-gradient(180deg,rgba(38,28,40,.94) 0,rgba(27,20,30,.94) 100%);color:#f6eee6;border-color:rgba(255,255,255,.08);
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 12px 30px -10px rgba(0,0,0,.6)}
+html[data-pinkie-night] .pk-award::after,html[data-theme-mode="dark"] .pk-award::after{background:linear-gradient(105deg,transparent 30%,rgba(255,255,255,.12) 45%,transparent 60%)}
+html[data-pinkie-night] .pk-award__num,html[data-theme-mode="dark"] .pk-award__num{color:#fff6e8}
+html[data-pinkie-night] .pk-award__unit,html[data-theme-mode="dark"] .pk-award__unit,html[data-pinkie-night] .pk-award__why,html[data-theme-mode="dark"] .pk-award__why{color:rgba(246,238,230,.6)}
+
+/* 大奖标题：两侧细线从中间展开，衬线大字，金色只给细节 */
+.pk-award-title{--k:#d9a23c;position:absolute;left:50%;top:31%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:22px;color:#2b1d27;animation:pk-title 2.1s linear both}
+.pk-award-title__rule{display:block;width:min(14vw,180px);height:1px;background:linear-gradient(90deg,transparent,var(--k));transform-origin:right center;animation:pk-title-rule 2.1s linear both}
+.pk-award-title__rule:last-child{background:linear-gradient(270deg,transparent,var(--k));transform-origin:left center}
+.pk-award-title__body{display:grid;justify-items:center;gap:6px;text-align:center}
+.pk-award-title__body small{font:600 11.5px/1 var(--pk-latin);letter-spacing:.42em;color:var(--k);padding-left:.42em}
+.pk-award-title__body strong{font:900 clamp(30px,3.4vw,52px)/1.05 var(--pk-display);letter-spacing:.06em;white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+.pk-award-title__body span{font:500 13px/1.3 var(--pk-ui);letter-spacing:.08em;color:rgba(43,29,39,.6)}
+html[data-pinkie-night] .pk-award-title,html[data-theme-mode="dark"] .pk-award-title{color:#fff3df}
+html[data-pinkie-night] .pk-award-title__body strong,html[data-theme-mode="dark"] .pk-award-title__body strong{text-shadow:0 0 28px rgba(255,200,120,.35)}
+html[data-pinkie-night] .pk-award-title__body span,html[data-theme-mode="dark"] .pk-award-title__body span{color:rgba(255,243,223,.6)}
+@keyframes pk-title{0%{opacity:0;transform:translate(-50%,-50%);animation-timing-function:cubic-bezier(.16,1,.3,1)}18%{opacity:1;transform:translate(-50%,-50%)}78%{opacity:1;transform:translate(-50%,-50%)}100%{opacity:0;transform:translate(-50%,-56%)}}
+@keyframes pk-title-rule{0%{transform:scaleX(0);animation-timing-function:cubic-bezier(.16,1,.3,1)}30%,80%{transform:scaleX(1);opacity:1}100%{transform:scaleX(1);opacity:0}}
+
+/* 设置页：游戏特效 */
+.pk-gamefx-settings{display:contents}
+.pk-gamefx-custom{margin:4px 0 6px;border-radius:12px}
+.pk-gamefx-custom>summary{cursor:pointer;font-weight:600;padding:8px 2px;color:inherit;list-style-position:inside}
+.pk-gamefx-range{width:150px;accent-color:#DB1F74;vertical-align:middle}
+.pk-gamefx-range-value{display:inline-block;min-width:44px;text-align:right;font-variant-numeric:tabular-nums;opacity:.75;margin-left:6px}
+.pk-gamefx-reset{margin:8px 0 2px}
+.pk-gamefx-reduced[hidden]{display:none}
+
+/* ?game-demo 演示面板（开发用） */
+.pk-gamefx-demo{position:fixed;left:14px;top:14px;bottom:14px;width:300px;z-index:2147483000;overflow:auto;padding:16px;border-radius:14px;background:rgba(22,17,24,.92);color:#efe6ee;
+  box-shadow:0 20px 50px -12px rgba(0,0,0,.5);font:12.5px/1.45 "PingFang SC",system-ui,sans-serif;border:1px solid rgba(255,255,255,.08)}
+.pk-gamefx-demo h2{font:600 13px/1.2 "Avenir Next Condensed","PingFang SC",sans-serif;letter-spacing:.24em;margin:0 0 10px;text-transform:uppercase}
+.pk-gamefx-demo h3{font:600 10.5px/1 "Avenir Next Condensed","PingFang SC",sans-serif;margin:14px 0 7px;opacity:.55;letter-spacing:.24em;text-transform:uppercase}
+.pk-gamefx-demo .grid{display:flex;flex-wrap:wrap;gap:5px}
+.pk-gamefx-demo button{font:inherit;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:inherit;border-radius:7px;padding:4px 8px;cursor:pointer}
+.pk-gamefx-demo button:hover{background:rgba(255,255,255,.1)}
+.pk-gamefx-demo button[aria-pressed="true"]{background:#DB1F74;border-color:#DB1F74;color:#fff}
+.pk-gamefx-demo output{display:block;margin-top:12px;font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;opacity:.7}
+.pk-gamefx-demo-stage{position:fixed;inset:0;left:330px;z-index:1;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#fffaf4,#f3ebe2 70%);font:600 20px "Songti SC","PingFang SC",serif;color:#3A2A35}
+html[data-theme-mode="dark"] .pk-gamefx-demo-stage{background:radial-gradient(circle at 50% 40%,#2a2030,#141017 70%);color:#f6eee6}
+.pk-gamefx-demo-stage .target{display:grid;place-items:center;width:150px;height:150px;border-radius:22px;background:#fffdf9;box-shadow:0 1px 0 #fff inset,0 18px 40px -14px rgba(58,42,53,.3);letter-spacing:.2em}
+html[data-theme-mode="dark"] .pk-gamefx-demo-stage .target{background:#241b28;box-shadow:0 18px 40px -14px rgba(0,0,0,.6)}
+/* 形态签名线稿层（laolao-game-sig.js）：在 WebGL 层之上、过场标题之下。 */
+.pk-gamefx-sig{position:absolute;left:0;top:0;display:block;pointer-events:none;z-index:2}
+.pk-gamefx-sig[data-live="0"]{visibility:hidden}

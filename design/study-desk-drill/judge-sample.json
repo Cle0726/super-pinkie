@@ -1,0 +1,177 @@
+{
+  "at": "2026-11-07T04:21:55.627Z",
+  "model": "mm/gemini-3.8-flash-tiered",
+  "timeoutMs": 25000,
+  "summary": {
+    "total": 10,
+    "byModel": 10,
+    "ok": 10
+  },
+  "rows": [
+    {
+      "card": "net3-131",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "kind": "完全对",
+      "text": "将 IP 地址解析为 MAC 地址",
+      "expect": "correct",
+      "verdict": "correct",
+      "missing": [],
+      "comment": "全对，记得很准！",
+      "ms": 14024,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "correct"
+    },
+    {
+      "card": "net3-131",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "kind": "换说法对",
+      "text": "已知对方的 IP，用广播查出它的网卡物理地址",
+      "expect": "correct",
+      "verdict": "correct",
+      "missing": [],
+      "comment": "意思全对，连物理地址和广播细节都记住了！",
+      "ms": 10091,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "wrong"
+    },
+    {
+      "card": "net3-131",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "kind": "半对",
+      "text": "解析 IP 地址",
+      "expect": "partial",
+      "verdict": "partial",
+      "missing": [
+        "MAC 地址"
+      ],
+      "comment": "光解析可不够，要解析成 MAC 地址才行！",
+      "ms": 11400,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "partial"
+    },
+    {
+      "card": "net3-131",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "kind": "方向写反",
+      "text": "将 MAC 地址解析为 IP 地址",
+      "expect": "wrong|partial",
+      "verdict": "partial",
+      "missing": [
+        "IP 地址解析为 MAC 地址"
+      ],
+      "comment": "方向搞反啦，ARP 是拿 IP 地址去查 MAC 地址！",
+      "ms": 11382,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "correct"
+    },
+    {
+      "card": "net3-131",
+      "question": "ARP 协议的作用是",
+      "answer": "将 IP 地址解析为 MAC 地址",
+      "kind": "空白",
+      "text": "",
+      "expect": "wrong",
+      "verdict": "wrong",
+      "missing": [
+        "IP 地址",
+        "MAC 地址"
+      ],
+      "comment": "先记最核心的：把 IP 地址转成 MAC 地址！",
+      "ms": 12918,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "wrong"
+    },
+    {
+      "card": "ee6-20",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "kind": "完全对",
+      "text": "发射结正偏，集电结反偏",
+      "expect": "correct",
+      "verdict": "correct",
+      "missing": [],
+      "comment": "全对啦，这两个偏置状态记结实了！",
+      "ms": 9583,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "correct"
+    },
+    {
+      "card": "ee6-20",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "kind": "换说法对",
+      "text": "发正集反，BE 结正向偏置、BC 结反向偏置",
+      "expect": "correct",
+      "verdict": "correct",
+      "missing": [],
+      "comment": "记得很准，口诀和对应的结都没问题！",
+      "ms": 10795,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "wrong"
+    },
+    {
+      "card": "ee6-20",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "kind": "半对",
+      "text": "发射结正偏",
+      "expect": "partial",
+      "verdict": "partial",
+      "missing": [
+        "集电结反偏"
+      ],
+      "comment": "发射结记住了，还差一个集电结反偏。",
+      "ms": 11175,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "partial"
+    },
+    {
+      "card": "ee6-20",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "kind": "方向写反",
+      "text": "发射结反偏，集电结正偏",
+      "expect": "wrong|partial",
+      "verdict": "wrong",
+      "missing": [
+        "发射结正偏",
+        "集电结反偏"
+      ],
+      "comment": "先生刚好记反啦，先记住发射结要正偏！",
+      "ms": 13504,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "wrong"
+    },
+    {
+      "card": "ee6-20",
+      "question": "三极管工作在放大区的外部条件是",
+      "answer": "发射结正偏，集电结反偏",
+      "kind": "空白",
+      "text": "",
+      "expect": "wrong",
+      "verdict": "wrong",
+      "missing": [
+        "发射结正偏",
+        "集电结反偏"
+      ],
+      "comment": "先记住发射结正偏，集电结反过来就行！",
+      "ms": 8863,
+      "by": "model",
+      "ok": true,
+      "localVerdict": "wrong"
+    }
+  ]
+}

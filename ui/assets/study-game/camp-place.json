@@ -1,0 +1,28 @@
+{
+  "crop": {"x0": 0.18, "x1": 0.98, "y0": 0, "y1": 1},
+  "text": 0.42,
+  "tent": 0.9,
+  "keepRight": 0.9,
+  "footCard": 0.66,
+  "footCardY": 0.76,
+  "day": {
+    "stand": [0.6, 0.8],
+    "grade": {"mul": [1.04, 1.015, 0.985], "rim": 0},
+    "shadow": {"dx": 0.05, "dy": 0.016, "sx": 1.15, "sy": 0.32, "alpha": 0.66, "color": [0.05, 0.02, 0.03]}
+  },
+  "night": {
+    "stand": [0.6, 0.8],
+    "dim": 0.78,
+    "grade": {"mul": [0.7, 0.74, 0.92], "rim": 1.05, "rimDir": [0.62, 0.78], "rimColor": [1, 0.46, 0.12]},
+    "shadow": {"dx": -0.035, "dy": 0.01, "sx": 0.72, "sy": 0.2, "alpha": 0.72, "color": [0.02, 0.01, 0.05]}
+  },
+  "glowDim": 0.88,
+  "glow": ["crystal", "changeling", "unrestricted"],
+  "forms": {
+    "default": {"height": 0.56},
+    "alicorn": {"height": 0.6, "footCardY": 0.78},
+    "kirin": {"height": 0.6, "footCardY": 0.78},
+    "breezie": {"height": 0.48, "hover": 0.05, "bob": 0.012, "shadow": 0.45},
+    "seapony": {"x": 0.24, "y": 0.52, "height": 0.44, "water": true, "waterAt": 0.48, "anchorX": 0.62, "anchorY": 0.4, "cardX": 0.46, "cardY": 0.48}
+  }
+}

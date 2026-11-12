@@ -1,0 +1,65 @@
+/* 碧琪上岸记 · 上岸之书（3D 立体书 + 平面 SVG 版）。视觉语言：VFX.md。 */
+#pinkie-study-desk .view.pkw-page{display:flex;flex-direction:column;gap:12px;padding:18px 26px 18px 30px;overflow:hidden;color:var(--pkg-ink)}
+#pinkie-study-desk .pkw-bar{display:flex;align-items:center;gap:14px;min-width:0}
+#pinkie-study-desk .pkw-tabs{display:flex;gap:6px;min-width:0;overflow-x:auto;scrollbar-width:none;flex:1}
+#pinkie-study-desk .pkw-tab{appearance:none;position:relative;display:grid;grid-template-columns:auto auto;align-items:baseline;column-gap:8px;row-gap:3px;padding:8px 14px 9px;border:0;border-radius:10px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);color:var(--pkg-ink);cursor:pointer;white-space:nowrap;text-align:left;transition:box-shadow .3s var(--pkg-out),transform .3s var(--pkg-out)}
+#pinkie-study-desk .pkw-tab small{grid-row:1/3;font:600 11px/1 var(--pkg-num);color:var(--pkg-ink-3);align-self:center}
+#pinkie-study-desk .pkw-tab b{font:900 14px/1 var(--pkg-display);letter-spacing:.08em}
+#pinkie-study-desk .pkw-tab em{font-style:normal;font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkw-tab[aria-selected="true"]{box-shadow:0 0 0 1.5px var(--pkg-b,#DB1F74),0 10px 18px -14px rgba(60,20,50,.5);transform:translateY(-1px)}
+#pinkie-study-desk .pkw-tab[data-due="1"]::after,#pinkie-study-desk .pkw-tab[data-mon="1"]::after{content:"";position:absolute;top:7px;right:7px;width:5px;height:5px;border-radius:50%;background:#D2405C}
+#pinkie-study-desk .pkw-mode{flex:none}
+#pinkie-study-desk .pkw-gen{font-size:11.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkw-stage{position:relative;flex:1;min-height:360px;border-radius:18px;overflow:hidden;box-shadow:0 0 0 1px var(--pkg-line),0 28px 50px -40px rgba(60,20,50,.7);background:#e9ddd2}
+#pinkie-study-desk[data-theme="night"] .pkw-stage{background:#120d16}
+#pinkie-study-desk .pkw-canvas,#pinkie-study-desk .pkw-flathost{position:absolute;inset:0}
+#pinkie-study-desk .pkw-canvas canvas{position:absolute;inset:0}
+#pinkie-study-desk .pkw-canvas[data-loading]::after{content:"翻开书…";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:900 15px/1 var(--pkg-display);letter-spacing:.3em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkw-planning{position:absolute;inset:0;display:grid;place-items:center;font:900 18px/1 var(--pkg-display);letter-spacing:.3em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkw-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:11.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkw-legend span{display:inline-flex;align-items:center;gap:6px}
+#pinkie-study-desk .pkw-legend i{width:10px;height:10px;border-radius:50%;border:1px solid rgba(58,42,53,.5)}
+#pinkie-study-desk .pkw-legend [data-state="fog"] i{background:#cfc8c2;opacity:.7}
+#pinkie-study-desk .pkw-legend [data-state="explored"] i{background:#fbf6ee}
+#pinkie-study-desk .pkw-legend [data-state="lit"] i{background:#fff3f8;border-color:var(--pkg-b,#DB1F74);box-shadow:0 0 6px var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkw-legend [data-state="gold"] i{background:linear-gradient(135deg,#f6e2b0,#c99a3e);border-color:#a87a2c;box-shadow:0 0 6px rgba(226,192,122,.8)}
+/* 关卡卡片 */
+#pinkie-study-desk .pkw-card{position:absolute;z-index:3;width:300px;display:grid;gap:8px;padding:16px 16px 14px;border-radius:14px;color:var(--pkg-ink);
+  background:color-mix(in srgb,var(--pkg-card-solid) 94%,transparent);box-shadow:0 0 0 1px var(--pkg-line-2),0 24px 40px -22px rgba(30,10,30,.6);animation:pkg-rise .45s var(--pkg-out) both}
+#pinkie-study-desk .pkw-card h3{margin:0;font:900 20px/1.2 var(--pkg-display);letter-spacing:.06em;padding-right:24px}
+#pinkie-study-desk .pkw-card__sum{margin:0;font-size:12.5px;line-height:1.6;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkw-card__meta{display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pkw-card__meta span{font-size:11px;padding:3px 7px;border-radius:4px;background:var(--pkg-line);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkw-card__meta .is-due{color:#B5462B;background:rgba(210,64,92,.1)}
+#pinkie-study-desk .pkw-card__meta .is-mon{color:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkw-card__act{display:flex;gap:8px;margin-top:4px}
+#pinkie-study-desk .pkw-card__act > *{flex:1}
+#pinkie-study-desk .pkw-btn{padding:9px 10px;display:block}
+#pinkie-study-desk .pkw-card__act .pkg-btn{padding:10px 14px;font-size:14px;letter-spacing:.3em}
+#pinkie-study-desk .pkw-card__x{position:absolute;top:6px;right:6px;width:30px;height:30px;font-size:20px}
+#pinkie-study-desk .pkw-card[data-state="gold"]{box-shadow:0 0 0 1px rgba(201,154,62,.7),0 24px 40px -22px rgba(30,10,30,.6)}
+/* 平面版 */
+#pinkie-study-desk .pkw-flat{position:absolute;inset:0;overflow:hidden;background:radial-gradient(70% 70% at 50% 45%,#f8f1e8,#eadfd3)}
+#pinkie-study-desk[data-theme="night"] .pkw-flat{background:radial-gradient(70% 70% at 50% 45%,#2a2030,#160f1a)}
+#pinkie-study-desk .pkw-flathost{container-type:size}
+#pinkie-study-desk .pkw-flat__box{position:absolute;left:50%;top:50%;width:min(94cqw,138cqh);aspect-ratio:3/2;transform:translate(-50%,-50%)}
+#pinkie-study-desk .pkw-flat__art{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:.95;filter:drop-shadow(0 14px 22px rgba(60,20,50,.22))}
+#pinkie-study-desk[data-theme="night"] .pkw-flat__art{filter:brightness(.72) saturate(.9) drop-shadow(0 14px 22px rgba(0,0,0,.6))}
+#pinkie-study-desk .pkw-flat__svg{position:absolute;inset:0;width:100%;height:100%}
+#pinkie-study-desk .pkw-path{fill:none;stroke:#3a2a35;stroke-opacity:.55;stroke-width:2.2;stroke-dasharray:2 9;stroke-linecap:round}
+#pinkie-study-desk[data-theme="night"] .pkw-path{stroke:#f2e9ef;stroke-opacity:.5}
+#pinkie-study-desk .pkw-pin{appearance:none;position:absolute;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:6px;border:0;background:none;cursor:pointer;color:var(--pkg-ink);padding:0}
+#pinkie-study-desk .pkw-pin b{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font:900 18px/1 var(--pkg-display);background:#fbf6ee;color:#2e2236;
+  box-shadow:0 0 0 2px #fff,0 0 0 3px rgba(58,42,53,.45),0 8px 14px -6px rgba(60,20,50,.45);transition:transform .3s var(--pkg-out)}
+#pinkie-study-desk .pkw-pin[data-kind="guard"] b{width:52px;height:52px}
+#pinkie-study-desk .pkw-pin[data-state="fog"] b{background:#cfc8c2;color:rgba(58,42,53,.5);box-shadow:0 0 0 2px rgba(255,255,255,.7),0 0 0 3px rgba(58,42,53,.25)}
+#pinkie-study-desk .pkw-pin[data-state="lit"] b{background:#fff3f8;box-shadow:0 0 0 2px #fff,0 0 0 3.5px var(--pkg-b,#DB1F74),0 0 18px color-mix(in srgb,var(--pkg-b,#DB1F74) 50%,transparent)}
+#pinkie-study-desk .pkw-pin[data-state="gold"] b{background:linear-gradient(135deg,#fbecc4,#d7ae5c);box-shadow:0 0 0 2px #fff6dc,0 0 0 3.5px #a87a2c,0 0 22px rgba(226,192,122,.7)}
+#pinkie-study-desk .pkw-pin::before{content:"";position:absolute;left:50%;top:22px;width:110px;height:70px;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(255,255,255,.85),rgba(255,255,255,0));opacity:var(--fade,0);filter:blur(4px)}
+#pinkie-study-desk[data-theme="night"] .pkw-pin::before{background:radial-gradient(closest-side,rgba(170,160,200,.55),rgba(170,160,200,0))}
+#pinkie-study-desk .pkw-pin__name{position:relative;font:700 12px/1.2 var(--pk-sans,system-ui);padding:3px 7px;border-radius:4px;background:color-mix(in srgb,var(--pkg-card-solid) 88%,transparent);white-space:nowrap;box-shadow:0 0 0 1px var(--pkg-line)}
+#pinkie-study-desk .pkw-pin__mon{position:absolute;right:-12px;top:-6px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;font:700 10.5px/1 var(--pkg-num);font-style:normal;color:#fff;background:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkw-pin__due{position:absolute;left:-4px;top:-2px;width:8px;height:8px;border-radius:50%;background:#D2405C;box-shadow:0 0 0 2px #fff}
+#pinkie-study-desk .pkw-pin:hover b,#pinkie-study-desk .pkw-pin:focus-visible b{transform:translateY(-3px)}
+#pinkie-study-desk[data-reduced="true"] .pkw-page *{animation:none!important;transition:none!important}
