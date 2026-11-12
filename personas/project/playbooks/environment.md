@@ -9,21 +9,26 @@
 ```
 node <工作区>/playbooks/toolbox.mjs check                 # 只查：这台电脑现在有什么
 node <工作区>/playbooks/toolbox.mjs ensure screenshot video   # 缺的装好，装完真的试一次
+node <工作区>/playbooks/toolbox.mjs list --human         # 查看能力和说明
 ```
 
 | 能力 | 是什么 | 什么活要用 |
 |---|---|---|
 | `python` | Python + 一个独立环境 | 处理文件、数据、下面几样的基础 |
 | `screenshot` | 无界面浏览器 | 做网页后截图自己看、点一遍 |
-| `video` | ffmpeg | 剪辑、合成、抽帧、烧字幕 |
-| `docs` | 读写 PPT / Word / Excel / PDF、处理图片的包 | 做文档、表格、看成品内容 |
+| `video` | ffmpeg 和 ffprobe | 剪辑、合成、抽帧、烧字幕、读回时长 |
+| `node` | 碧琪自带的 Node.js | 运行 Node 脚本 |
+| `docs-write` | 读写 PPT / Word / Excel | 做文档、表格和幻灯片 |
+| `pdf` | 读、合并、转图 | 查看和处理 PDF |
+| `image` | 图片处理 | 裁剪、缩放、转换格式 |
 | `office-view` | LibreOffice | 把 PPT / Word 转成图片亲眼看版式 |
 | `fonts-cjk` | 中文字体文件的位置 | 视频字幕、图片排字不出方框 |
+| `tts` | 中文配音 | 文字转语音；实际合成需要网络 |
 | `git` | 版本管理 | 改坏了能退回 |
 
-- **要用哪种能力，动手前先 `ensure` 它。** 它会按顺序试本机已有的、国内镜像、官方源，装在用户空间，不要管理员密码，装完用一个最小的真实样例验证（真截一张图、真合成一秒视频、真转一页 PDF）。
-- 每个能力输出一行结果，里面的 `path` 就是之后调用要用的完整路径；最后一行是大白话，可以直接转给用户。
-- 它说 `ok: false` 时，读 `note` 写的原因，再照下面各节手动补；`needs-user` 表示这一步要用户点一下或同意，把 `note` 里的话告诉他，同时先用 `note` 里给的替代办法把活做下去。
+- **要用哪种能力，动手前先 `ensure` 它。** 优先用本机已有的；缺少时只往工具箱目录装，下载的 Python 依赖按固定版本和哈希校验。Mac 默认在 `~/.pinkie/toolbox/`，Windows 在 `%LOCALAPPDATA%\\Pinkie\\toolbox\\`。
+- 每个能力输出一行 JSON，里面的 `path` 是调用用的完整路径；加 `--human` 会显示方便阅读的结果。旧命令 `ensure docs` 仍表示文档、PDF 和图片三项。
+- `ok: false` 时读 `note`，找用户目录里的其他可用办法；不能把没有真正验证过的工具说成已装好，也不要为了补工具修改系统或调用需要管理员权限的安装器。
 - 工具箱没有覆盖的东西（模型权重、素材包、别的命令行工具）照下面各节做。
 
 ## 一、先认清这台电脑（每个新会话第一次要动手时做一次）
@@ -40,10 +45,10 @@ node <工作区>/playbooks/toolbox.mjs ensure screenshot video   # 缺的装好�
 | 东西 | 首选（不用管理员） | 备选 |
 |---|---|---|
 | Python 包 | 项目自己的虚拟环境：`python -m venv .venv`（或 `uv venv .venv`），再 `.venv` 里的 python `-m pip install 包名`；碧琪有专用环境的（看 `TOOLS.md`）就装进专用环境 | 不往系统 Python 里装，不用 `sudo pip` |
-| Python 本身 | Mac：`uv python install 3.12`（有 uv 的话）；Windows：`winget install -e --id Python.Python.3.12 --scope user`（装在用户目录，不用管理员；这个参数不被支持时去掉再试） | 官网安装包，让用户双击（勾选「Add to PATH」） |
+| Python 本身 | 先复用碧琪自带的 Python，或运行工具箱的 `ensure python` 创建独立环境 | 没有可用来源就说明原因，不修改系统 Python 或 PATH |
 | Node 包 | 装进项目：`npm install 包名`（开发用的加 `-D`）；临时用 `npx 包名` | 不用 `npm install -g`，除非 `TOOLS.md` 说这台电脑就这么配的 |
 | Node 本身 | Windows：`winget install -e --id OpenJS.NodeJS.LTS`；Mac：有 Homebrew 用 `brew install node`，没有就用官网的安装包或 nvm | |
-| 命令行工具（ffmpeg、git、ImageMagick…） | Mac：`brew install 名字`；Windows：`winget install -e --id 包ID`（ffmpeg 是 `Gyan.FFmpeg`，git 是 `Git.Git`，ImageMagick 是 `ImageMagick.ImageMagick`） | 官方的免安装压缩包，解压到项目的 `.tools/` 目录，用完整路径调用 |
+| 命令行工具（ffmpeg、git、ImageMagick…） | 先运行工具箱的 `ensure`，使用已有工具或经校验的用户目录版本 | 缺少可靠来源时如实说明，不调用系统级包管理器 |
 | 浏览器自动化 / 截图 | Python 的 `playwright` 包，优先接电脑上已有的 Chrome / Edge（`channel="chrome"` / `"msedge"`） | 都没有时 `python -m playwright install chromium`（几百 MB，直接装） |
 
 **下载和安装不用问：** 这件活需要的依赖、工具、浏览器内核、字体、模板包、素材包、模型权重、音色，**不管多大都直接下载装好**，不先问先生，也不停下来说「要下载几个 G，可以吗」。下之前看一眼硬盘：剩下的空间不够，先清碧琪自己的缓存和账本里先生说过可以删的东西；还不够，才告诉先生卡在硬盘上。每样下载都记进下载账本（第七节）。
@@ -105,7 +110,7 @@ node <工作区>/playbooks/downloads.mjs add --path "<装在哪>" --what "<是�
 
 **Windows，用户要把一个视频剪成 30 秒并加中文字幕：**
 1. `Get-Command ffmpeg -ErrorAction SilentlyContinue` 没有结果。
-2. `winget install -e --id Gyan.FFmpeg`，装完当前终端找不到 → 先看 `$env:LOCALAPPDATA\Microsoft\WinGet\Links\ffmpeg.exe`，没有就在 `$env:LOCALAPPDATA\Microsoft\WinGet\Packages\` 下找 `ffmpeg.exe`，用完整路径调用。
+2. 运行 `node <工作区>/playbooks/toolbox.mjs ensure video fonts-cjk`，按输出的完整路径调用；没有通过检查时如实说明缺什么。
 3. 剪辑、烧字幕时指定中文字体：`subtitles=字幕.srt:force_style='FontName=Microsoft YaHei'`。
 4. 抽 6 帧拼成一张图，用 `read` 亲眼看字幕清楚、没有方框乱码。
 5. 交付成品；`TOOLS.md` 记一行「ffmpeg：winget 装的，路径……；中文字幕用 Microsoft YaHei」。
