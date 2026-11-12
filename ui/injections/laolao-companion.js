@@ -1176,12 +1176,15 @@
       const card = document.querySelector(".card.chat");
       const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
+      // 没人在看（窗口在后台、很久没动）：停在当前这一帧，不消失；回来就接着动。见 laolao-rest.js。
+      if (window.__pinkieRest?.away && canvas && canvas.parentElement === card && currentMode === mode()) { stop(); return; }
       if (!canvas || canvas.parentElement !== card) { canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; new ResizeObserver(() => canvas && resize()).observe(card); }
       if (currentMode !== mode()) { currentMode = mode(); resize(); }
       canvas.classList.add("is-on");
       if (!raf) { last = performance.now(); raf = requestAnimationFrame(draw); }
     };
     document.addEventListener("visibilitychange", sync);
+    window.addEventListener("pinkie:rest-change", sync);
     window.addEventListener("pinkie:tuning-change", (event) => {
       const keys = event.detail?.keys || [];
       if (canvas && keys.some((key) => key === "effects.particles" || key === "render.pixelRatio")) resize();
