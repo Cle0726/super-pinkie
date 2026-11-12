@@ -220,6 +220,12 @@
       byLevel: {off: "gemini-3.8-flash-tiered", minimal: "gemini-3.8-flash-tiered", low: "gemini-3.8-flash-low", medium: "gemini-3.8-flash-medium", high: "gemini-3.8-flash-high", xhigh: "gemini-3.8-flash-tiered", adaptive: "gemini-3.8-flash-tiered", max: "gemini-3.8-flash-tiered", ultra: "gemini-3.8-flash-tiered"},
       implied: {"gemini-3.8-flash-low": "low", "gemini-3.8-flash-medium": "medium", "gemini-3.8-flash-high": "high"},
     },
+    {
+      provider: "mm", label: "Gemini 4 Argon", canonical: "gemini-4-argon-high",
+      ids: ["gemini-4-argon", "gemini-4-argon-high"],
+      byLevel: {off: "gemini-4-argon", minimal: "gemini-4-argon", low: "gemini-4-argon-high", medium: "gemini-4-argon-high", high: "gemini-4-argon-high", xhigh: "gemini-4-argon-high", adaptive: "gemini-4-argon-high", max: "gemini-4-argon-high", ultra: "gemini-4-argon-high"},
+      implied: {"gemini-4-argon": "off", "gemini-4-argon-high": "high"},
+    },
   ];
 
   // These six fixed-effort endpoints are the Antigravity source shown by the user.
@@ -290,11 +296,34 @@
       ? family.byLevel[ranked[0]] : family.canonical;
   }
 
+  // 渠道首字母：K = Kiro，C = GitHub Copilot，L = Claude CLI，W = WorkBuddy。
+  // 只在 id 明确带渠道前缀时才加，普通直连模型（Gemini / Grok / 官方 API）保持原名。
+  const CHANNEL_TAGS = {kiro: "K", "github-copilot": "C", "claude-cli": "L", "workbuddy": "W"};
+  function channelTag(id) {
+    const prefix = String(id || "").toLowerCase().split("/")[0];
+    return Object.hasOwn(CHANNEL_TAGS, prefix) ? CHANNEL_TAGS[prefix] : "";
+  }
+
+  // 判断"是不是同一个模型"用的归一化 key：不同渠道给的 ID 写法不同
+  // （claude-opus-4-6 / claude-opus-4-6-thinking / claude-opus-4 6），
+  // 去掉渠道前缀、思考档后缀和标点后比较，避免同一个模型被当成两个。
+  function baseModelKey(id) {
+    return String(id || "").toLowerCase()
+      .split("/").at(-1)
+      .replace(/-(?:thinking|reasoning|tiered|adaptive|non-reasoning)$/i, "")
+      .replace(/[.\s_-]+/g, "");
+  }
+
   function presentationModels(models, selectedModel = "") {
     models = models.map((model) => {
-      let name = String(model.name || model.id).replace(/\s*[·•]\s*Work\s*Buddy\s*$/i, "");
-      if (/^workbuddy\/deepseek(?:[-_.:]|$)/i.test(model.id) && !/\s*[·•]\s*WB$/i.test(name)) name += " · WB";
-      return {...model, name: modelSourceLabel(model, name)};
+      // 上游常把渠道名直接写进模型名（"Auto · kiro"），先摘掉；
+      // 之后统一用下面的一字母后缀表示渠道，避免"· kiro · K"这种重复。
+      let name = String(model.name || model.id)
+        .replace(/\s*[·•]\s*Work\s*Buddy\s*$/i, "")
+        .replace(/\s*[·•]\s*(?:WB|kiro|github-copilot|claude-cli|workbuddy)(?:\s*[·•]\s*[A-Z])?\s*$/i, "");
+      // 渠道标记先存着不显示：只有同名模型真的出现多次时才挂后缀，
+      // 名称本来就唯一的模型保持干净。
+      return {...model, name: modelSourceLabel(model, name), _channel: channelTag(model.id)};
     });
     const seenFamilies = new Set();
     const folded = models.flatMap((model) => {
@@ -323,11 +352,28 @@
           && entry.sources.includes(selectedModel) ? 100 : 0);
       byId.set(key, {...(score(model) > score(previous) ? model : previous), sources});
     }
-    return [...byId.values()];
+    const finalModels = [...byId.values()];
+    // 判断"是否重复"要按模型 ID，不能按显示名：同一个 Claude Opus 4.6
+    // 经渠道进来可能叫 "Claude Opus 4 6"、直连却叫 "Claude Opus 4.6"，
+    // 名称不同但其实是同一个模型，按名字数会漏判。
+    const modelKeys = new Map();
+    for (const model of finalModels) {
+      const key = baseModelKey(model.id);
+      modelKeys.set(key, (modelKeys.get(key) || 0) + 1);
+    }
+    return finalModels.map((model) => {
+      const channel = model._channel || channelTag(model.id);
+      const key = baseModelKey(model.id);
+      // 只有同一模型能从多个渠道拿到时，才用「· 首字母」区分来源；
+      // 独一份的模型保持干净名字，不加后缀。
+      if (!channel || (modelKeys.get(key) || 0) < 2) return model;
+      return {...model, name: `${model.name} · ${channel}`};
+    });
   }
 
   const MODEL_GROUP_ORDER = ["GPT", "Codex", "Gemini", "Gemma", "Claude", "Grok",
-    "DeepSeek", "Qwen", "Kimi", "GLM", "MiniMax", "混元", "Mistral", "Llama", "豆包", "Perplexity", "其他模型"];
+    "DeepSeek", "Qwen", "Kimi", "GLM", "MiniMax", "混元", "Mistral", "Llama", "豆包", "Perplexity",
+    "MiMo", "StepFun", "WorkBuddy", "Antigravity", "其他模型"];
   const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
   // Availability comes from the gateway catalog, never a client-side list of
   // model-name prefixes: an older model may still be deliberately configured.
@@ -342,15 +388,17 @@
     if (/^claude[-_.]/.test(id)) return "Claude";
     if (/^grok[-_.]/.test(id)) return "Grok";
     if (/^deepseek[-_.]/.test(id)) return "DeepSeek";
-    if (/^(?:qwen|qwq)[-_.]/.test(id)) return "Qwen";
+    if (/^(?:qwen|qwq)\d*[-_.]/.test(id)) return "Qwen";
     if (/^(?:kimi|moonshot)[-_.]/.test(id)) return "Kimi";
     if (/^(?:glm|zai)[-_.]/.test(id)) return "GLM";
     if (/^mistral[-_.]/.test(id)) return "Mistral";
     if (/^(?:llama|ollama)[-_.]/.test(id)) return "Llama";
     if (/^minimax(?:[-_.:]|$)/.test(id)) return "MiniMax";
-    if (/^(?:hunyuan|hy\d+)(?:[-_.:]|$)/.test(id)) return "混元";
+    if (/^(?:hunyuan|hy\d+[a-z]*)(?:[-_.:]|$)/.test(id)) return "混元";
     if (/^doubao(?:[-_.:]|$)/.test(id)) return "豆包";
     if (/^perplexity(?:[-_.:]|$)/.test(id)) return "Perplexity";
+    if (/^mimo[-_.]/.test(id)) return "MiMo";
+    if (/^step[-_.]/.test(id)) return "StepFun";
     if (/^tab(?:[-_.:]|$)/.test(id)) return "Antigravity";
     if (fullId.startsWith("workbuddy/")) return "WorkBuddy";
     return "其他模型";
@@ -377,13 +425,16 @@
     if (/^deepseek(?:[-_.:]|$)/.test(model)) return "deepseek";
     if (/^mistral(?:[-_.:]|$)/.test(model)) return "mistral";
     if (/^(?:kimi|moonshot)(?:[-_.:]|$)/.test(model)) return "kimi";
-    if (/^(?:qwen|qwq)(?:[-_.:]|$)/.test(model)) return "alibaba";
+    if (/^(?:qwen|qwq)\d*(?:[-_.:]|$)/.test(model)) return "alibaba";
+    if (/^mimo[-_.]/.test(model)) return "mimo";
+    if (/^step[-_.]/.test(model)) return "stepfun";
+    if (/^space-bunny(?:[-_.:]|$)/.test(model)) return "workbuddy";
     if (/^(?:glm|zai)(?:[-_.:]|$)/.test(model)) return "zai";
     if (/^(?:llama|ollama)(?:[-_.:]|$)/.test(model)) return "ollama";
     if (/^minimax(?:[-_.:]|$)/.test(model)) return "minimax";
     if (/^doubao(?:[-_.:]|$)/.test(model)) return "doubao";
     if (/^perplexity(?:[-_.:]|$)/.test(model)) return "perplexity";
-    if (/^(?:hunyuan|hy\d+)(?:[-_.:]|$)/.test(model)) return "hunyuan";
+    if (/^(?:hunyuan|hy\d+[a-z]*)(?:[-_.:]|$)/.test(model)) return "hunyuan";
     if (/^tab(?:[-_.:]|$)/.test(model)) return "antigravity";
     if (String(id || "").toLowerCase().startsWith("workbuddy/")) return "workbuddy";
     return ({anthropic: "claude", openai: "openai", google: "gemini", xai: "grok",
@@ -1371,8 +1422,8 @@
      selection, authentication, runtime routing and saving remain with their owner. */
   const surfaceStates = new WeakMap();
   const RECENT_MODELS_KEY = "pinkie:model-picker:recent:v1";
-  const SURFACE_BRANDS = ["gemini", "openai", "codex", "deepseek", "minimax", "grok", "crossmodel", "zai", "kimi", "doubao", "claude", "alibaba", "mistral", "ollama", "hunyuan", "perplexity", "groq"];
-  const BRAND_NAMES = {gemini: "Gemini", openai: "OpenAI", codex: "Codex", deepseek: "DeepSeek", minimax: "MiniMax", grok: "Grok", crossmodel: "其他", zai: "GLM", kimi: "Kimi", doubao: "豆包", claude: "Claude", alibaba: "Qwen", mistral: "Mistral", ollama: "Llama", hunyuan: "混元", perplexity: "Perplexity", groq: "Groq"};
+  const SURFACE_BRANDS = ["gemini", "openai", "codex", "deepseek", "minimax", "grok", "crossmodel", "zai", "kimi", "doubao", "claude", "alibaba", "mistral", "ollama", "hunyuan", "perplexity", "groq", "mimo", "stepfun", "antigravity", "workbuddy"];
+  const BRAND_NAMES = {gemini: "Gemini", openai: "OpenAI", codex: "Codex", deepseek: "DeepSeek", minimax: "MiniMax", grok: "Grok", crossmodel: "其他", zai: "GLM", kimi: "Kimi", doubao: "豆包", claude: "Claude", alibaba: "Qwen", mistral: "Mistral", ollama: "Llama", hunyuan: "混元", perplexity: "Perplexity", groq: "Groq", mimo: "MiMo", stepfun: "StepFun", antigravity: "Antigravity", workbuddy: "WorkBuddy"};
   function recentModels() {
     try {
       const rows = JSON.parse(window.localStorage?.getItem(RECENT_MODELS_KEY) || "[]");
@@ -1403,7 +1454,8 @@
   function surfaceBrand(node, brand) {
     if (node.dataset.pinkieBrand !== brand) node.dataset.pinkieBrand = brand;
     const asset = brand === "crossmodel" ? "/provider-icons/ProviderIcon-crossmodel.svg" : `/laolao-provider-${brand}.svg`;
-    const mono = ["crossmodel", "openai", "codex", "grok", "groq", "kimi", "zai", "ollama"].includes(brand);
+    // 彩色图标走 background-image；单色（currentColor）才走 mask 以便跟随主题。
+    const mono = ["crossmodel", "openai", "codex", "grok", "groq", "kimi", "zai", "ollama", "mimo"].includes(brand);
     const set = (key, value) => { if (node.style.getPropertyValue(key) !== value) node.style.setProperty(key, value); };
     set("--model-brand-mask", mono ? `url("${asset}")` : "none");
     set("--model-brand-image", mono ? "none" : `url("${asset}")`);
