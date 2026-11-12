@@ -228,7 +228,10 @@
     return node;
   };
   const setToggle = (node, value) => node.setAttribute("aria-checked", String(Boolean(value)));
-  const isMac = /Mac/i.test(navigator.platform || navigator.userAgent || "");
+  // Our own nodes only: update their one text node in place.
+  const setText = (node, text) => { const own = node.firstChild?.nodeType === 3 ? node.firstChild : node.appendChild(document.createTextNode("")); own.data = String(text); };
+  const nav = typeof navigator === "undefined" ? {} : navigator;
+  const isMac = /Mac/i.test(nav.platform || nav.userAgent || "");
   const prettyHotkey = value => !value ? "已关闭" : String(value).split("+").map(part => {
     const key = part.trim().toLowerCase();
     if (!isMac) return {alt: "Alt", ctrl: "Ctrl", control: "Ctrl", shift: "Shift", cmd: "Win", space: "Space"}[key] || part.trim().toUpperCase();
@@ -252,7 +255,7 @@
       for (const [id, node] of buttons) setPressed(node, id === (value?.defaultStyle || "default"));
       customWrap.hidden = (value?.defaultStyle || "default") !== "custom";
       if (document.activeElement !== area) area.value = value?.customStyle || "";
-      counter.textContent = `${[...area.value].length} / 1000`;
+      setText(counter, `${[...area.value].length} / 1000`);
     };
     const save = async patch => {
       try { sync(await bridge()?.savePrefs(patch)); setStatus("style", "已保存", "success"); }
@@ -265,7 +268,7 @@
     }
     let timer = 0;
     area.addEventListener("input", () => {
-      counter.textContent = `${[...area.value].length} / 1000`;
+      setText(counter, `${[...area.value].length} / 1000`);
       clearTimeout(timer);
       timer = setTimeout(() => save({customStyle: area.value}), 600);
     });
@@ -304,7 +307,7 @@
       if (result.conflict) setStatus("notify", `这个快捷键被占用了，已改用 ${prettyHotkey(value)}`, "error");
     };
     record.addEventListener("click", () => {
-      hotkeyLabel.textContent = "按下新的组合键…";
+      setText(hotkeyLabel, "按下新的组合键…");
       record.disabled = true;
       const onKey = event => {
         event.preventDefault();
@@ -324,7 +327,7 @@
       const finish = () => {
         window.removeEventListener("keydown", onKey, true);
         record.disabled = false;
-        hotkeyLabel.textContent = prettyHotkey(current.hotkey === null ? null : !current.hotkey || current.hotkey === "default" ? defaultHotkey() : current.hotkey);
+        setText(hotkeyLabel, prettyHotkey(current.hotkey === null ? null : !current.hotkey || current.hotkey === "default" ? defaultHotkey() : current.hotkey));
       };
       window.addEventListener("keydown", onKey, true);
     });
@@ -337,7 +340,7 @@
       setToggle(done, value.notify?.done !== false);
       setToggle(waiting, value.notify?.waiting !== false);
       setToggle(menubar, value.menubar !== false);
-      hotkeyLabel.textContent = prettyHotkey(value.hotkey === null ? null : !value.hotkey || value.hotkey === "default" ? defaultHotkey() : value.hotkey);
+      setText(hotkeyLabel, prettyHotkey(value.hotkey === null ? null : !value.hotkey || value.hotkey === "default" ? defaultHotkey() : value.hotkey));
     };
     bridge()?.loadPrefs(true).then(sync);
     window.addEventListener("pinkie:prefs-change", event => sync(event.detail));
