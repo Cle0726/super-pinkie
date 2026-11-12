@@ -13,7 +13,9 @@
 - `services/mode-architecture/setup.py` 的服务文件清单
 - `desktop/windows/mac-runtime/SHA256SUMS` 里 `services/mode-architecture/index.mjs` 那一行，按合并后的文件重算
 
-**没有并进来的：** `dev/study-game`（学习台游戏，按 `docs/study-game/WINDOWS-DEV.md` 的规矩，验收前不合 main，所以也不合进这条）、`feat/biqi-toolbox-1110`、`feat/biqi-tier-contract-1109`、`feat/run-status-ui`（都还落后 main 22 个提交，是 Mac 端在做的）、`fix/context-meter-live`、`feat/biqi-update-notes`（各一个提交，和这条分支都能干净合并）。
+**后来并进来的：** `origin/fix/append-keeps-cards`（6b7bbee，Mac 端 11-12 03:42 推的过程卡片 / 时间线 v29 修复，6 个提交）已合进这条分支，没有冲突。它带的 4 个测试文件在合并后 201 项全过。`dev/study-game` 上对应的移植（fba4214、054acde）是 Mac 端自己做的，这边没有动。
+
+**没有并进来的：** `dev/study-game`（学习台游戏，按 `docs/study-game/WINDOWS-DEV.md` 的规矩，验收前不合 main，所以也不合进这条）、`feat/biqi-toolbox-1110`、`feat/biqi-tier-contract-1109`、`feat/run-status-ui`（都还落后 main 22 个提交，是 Mac 端在做的）、`fix/context-meter-live`、`feat/biqi-update-notes`（各一个提交，和这条分支都能干净合并，还没合）。
 
 Mac 端如果自己已经把 parity 和 project-coding 合过，再合这条分支时只会在上面 3 个文件上再遇到同样的清单冲突，仍然取并集。
 
@@ -58,6 +60,29 @@ Mac 端如果自己已经把 parity 和 project-coding 合过，再合这条分�
 
 「子会话」一节改成四种发起方式；后面新加一节「别的模式更拿手的事：替用户去问，不让用户跑」。四份手册这两节的文字相同。
 
+### 6. 性能：打盹和自动减负（`ui/injections/laolao-rest.js`，新文件）
+
+两件事，都不读硬件信息。
+
+**打盹**（看不出差别）：
+
+- 窗口在后台 20 秒，或 5 分钟没人碰鼠标键盘 → `away`：聊天背景氛围画布停在当前这一帧，不消失。
+- `away` 而且碧琪上一轮结束超过 30 秒 → `rest`：小碧琪（`laolao-buddy-rig.js`）停在当前姿势，无限循环的装饰动画和循环视频暂停。有头有尾的出现 / 消失动画不碰。
+- 鼠标、键盘、滚轮、窗口回前台、碧琪开始干活，任何一样立刻恢复。碧琪在后台干活时小碧琪照常动，只有氛围画布还停着。
+- 开了「减少动效」、页面隐藏、启动动画或模式转场期间不打盹。
+
+**自动减负**（只在真的掉帧时）：
+
+- 页面在前台、有人在用时量帧间隔。连续三个 5 秒窗口里过半时间花在慢帧上（比屏幕正常帧间隔慢三倍以上且超过 50 毫秒）才降一级；连续 60 秒不卡升回一级。
+- 两级：氛围帧率 20 + 画布清晰度「低」；再加粒子数量 0.5。都是进阶调节里本来就有的选项，画面上的东西一样不少。
+- 通过 `PinkieTuning.setEase()` 盖一层临时值，不写进存储。只在「标准」档、用户没手动改过的那一项上生效。
+- 进阶调节「特效」第一行是它的开关（默认开）。关掉后存储里多一个 `auto: false`；开着时存储内容和以前逐字节相同。
+- 第一次降级时小碧琪说一句话，告诉用户在哪里关。
+
+**这改了一条原来的说法：** `laolao-tuning.js` 和进阶调节页脚原来写的是「每台电脑看到的效果都一样，只听你的选择」。现在是「默认都一样，只有实测掉帧才临时省一点，可以关」。如果 Mac 端认为效果不该自动变，把 `clean()` 里 `auto` 的默认值改成 `false` 即可，其余不用动。
+
+测试 `tests/rest.test.cjs`（13 项，假页面）。
+
 ## 界面上还没接的
 
 后端的返回已经带了这些字段，前端还没用：
@@ -71,6 +96,8 @@ Mac 端如果自己已经把 parity 和 project-coding 合过，再合这条分�
 - **没有跑任何真实模型。** 上面全部是单元测试（假网关）验证的。`in_scope` 和 `pinkie_mode_ask` 在便宜的小模型上会不会被用对、会不会滥用，要 Mac 端用真实额度看。
 - **跨 agent 的 `sessions.create` 不带 `parentSessionKey` 是否被网关接受，没有在真网关上试过。** 这是整个跨模式功能最需要先确认的一点。
 - `pinkie_mode_ask` 会让一次工具调用最多等 120 秒。网关对单次工具调用有没有更短的超时，没有确认；如果有，把 `askTimeoutMs` 调小即可，超时后的兜底路径是测过的。
+
+- **打盹和自动减负没有在真实 App 或浏览器里看过。** 测试用的是假的页面对象。掉帧的阈值（三个 5 秒窗口、50 毫秒）是按道理定的，没有在慢机器上校准过；`document.getAnimations()` 在 WebKit（Mac App）里暂停无限动画后恢复是否平滑，也要 Mac 端看一眼。
 
 ## 测试
 
@@ -89,6 +116,7 @@ node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mo
 - [x] 整合底座分支
 - [x] 子会话：`in_scope`、汇报全文、跨模式子会话、`pinkie_mode_ask`、时机提醒、手册、测试、文档
 - [ ] 界面：把跨模式的字段接到侧栏和卡片上
-- [ ] 性能：后台休眠、按实测卡顿自动减负
+- [x] 性能：后台休眠（打盹）、按实测卡顿自动减负（未在真实 App 里验证）
+- [x] 同步 Mac 端 11-12 的推送：合入 `fix/append-keeps-cards`
 - [ ] 界面和 IP 感的审计与修改
 - [ ] 前后端重复、用不到的入口清理
