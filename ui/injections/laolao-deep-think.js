@@ -583,8 +583,9 @@
         }
       }
       btn.setAttribute("aria-pressed", String(Boolean(tier)));
-      btn.setAttribute("title", tier ? `思考强度：${tier.label}（点击调整或取消）` : "选择思考强度");
-      btn.setAttribute("aria-label", tier ? `思考强度已固定为${tier.label}` : "选择思考强度");
+      btn.setAttribute("title", tier ? `极致思考：${tier.label}（点击调整或取消）` : "极致思考：让碧琪多想几轮再答");
+      // 旁边模型那一栏还有一个「思考强度」（模型自己的推理档位）。两个按钮原来叫同一个名字，这个是极致思考。
+      btn.setAttribute("aria-label", tier ? `极致思考已固定为${tier.label}` : "极致思考：让碧琪多想几轮再答");
     }
   }
 
