@@ -114,6 +114,17 @@ Mac 端如果自己已经把 parity 和 project-coding 合过，再合这条分�
 - 删掉 9 张仓库里没有任何引用的图：`laolao-mode-{chat,project,thinking,learning,unrestricted}.png`（不带 `-hd` 的）和 4 张 `-badge.png`，约 6.3 MB，原来每个安装包都带着。**如果 Mac 端在仓库外面用到它们，从 `d87398a` 之前取回。**
 - 侧栏「新会话」右边的快捷键提示和「临时」按钮原来叠在同一个位置（两行字糊成一团），已错开。
 
+### 12. 线条图标（`ui/injections/laolao-icons.js`、`laolao-icons.css`，新文件）
+
+用户觉得侧栏的按键「太系统化」。出了样稿让用户选，选的是 B（小记号平时带一点粉）。
+
+- 一套共用的内联 SVG：新会话（气球加小加号）、临时（虚线气球）、搜索（镜片里一颗星）、作品（纸杯蛋糕加樱桃）、昼夜（月亮加星 / 太阳）、演示工具（星头魔杖）、浏览器（一条经线是粉的）、更多（中间一个点是粉的）。
+- 平时只有那个小记号是粉的，其余跟着按钮的文字颜色。悬停或聚焦时动的只有小记号。
+- 设置的齿轮没换形状（换了认不出），只加了悬停转一下。
+- 每个用到的地方都写成 `window.PinkieIcons?.markup('x') || 原来的图标`，模块没加载时界面和以前一样。
+- 「新会话」的加号是原生界面（Lit）画的：没有替换它的节点，是在按钮里另放一个图标，原来的用样式收起。折叠侧栏时也显示新图标。
+- 截图 `docs/screenshots/audit-1112/chat-icons.png`。悬停的动效只在样稿网页里试过，没有在真实界面里逐个看。
+
 ### 11. 在本机看真实界面的办法（`tools/ui-parity/capture.mjs`）
 
 这台 Windows 上没有开发版 App，这次是这样看的：复制一份已安装 App 的 `control-ui`，用 `bundle.py install` 把仓库界面盖上去，再用 `capture.mjs --browser msedge`（系统 Edge，不用下载浏览器）加假网关截图。脚本新增两个参数：
@@ -157,5 +168,5 @@ node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mo
 - [x] 界面：把跨模式的字段接到侧栏和卡片上
 - [x] 性能：后台休眠（打盹）、按实测卡顿自动减负（未在真实 App 里验证）
 - [x] 同步 Mac 端 11-12 的推送：合入 `fix/append-keeps-cards`
-- [x] 界面和 IP 感：小头像、分工条、排版缺陷（侧栏图标是否换成更有 IP 感的一套，还没做，等用户定方向）
+- [x] 界面和 IP 感：小头像、分工条、排版缺陷、侧栏和快捷栏的线条图标
 - [x] 重复入口和无引用素材清理

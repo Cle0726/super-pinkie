@@ -672,19 +672,21 @@
     if(controls.parentElement!==section || controls.nextElementSibling!==host) section.insertBefore(controls,host);
     const newSession=section.querySelector('.sidebar-new-session:not(.sidebar-new-session--worktree)');
     if(newSession)newSession.dataset.pinkieShortcut=/Mac|iPhone|iPad/i.test(navigator.platform||'')?'⌘N':'Ctrl+N';
+    // 「新会话」的加号是原生界面画的（Lit 管着），不替换它的节点：旁边放上碧琪的气球，原来的用样式收起。
+    if(newSession&&!newSession.querySelector(':scope > .pinkie-new-session-ic')){const art=window.PinkieIcons?.node('new-session');if(art){art.classList.add('pinkie-new-session-ic');newSession.prepend(art);}}
     const cached = cache.get(key);
     const rows = cached?.rows || [];
     const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, new Date().toDateString()]);
     if(signature===next)return;signature=next;
     controls.replaceChildren();
     const search=button('','搜索当前模式的会话',()=>openSearch(api));
-    search.append(entryIcon('M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z'),el('span','','搜索'));
+    search.append(window.PinkieIcons?.node('search')||entryIcon('M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z'),el('span','','搜索'));
     search.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--search');
     const artifacts=button('','打开作品库',()=>{
       if(window.PinkieArtifacts?.open) window.PinkieArtifacts.open();
       else api.toast('作品库正在准备中');
     });
-    artifacts.append(entryIcon('M4 4h16v16H4zM4 9h16M9 9v11'),el('span','','作品'));
+    artifacts.append(window.PinkieIcons?.node('works')||entryIcon('M4 4h16v16H4zM4 9h16M9 9v11'),el('span','','作品'));
     artifacts.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--artifacts');
     controls.append(search,artifacts);
     if(archived) controls.append(button('‹ 返回','返回进行中的会话',()=>{archived=false;limit=30;signature='';render(section,api);}));

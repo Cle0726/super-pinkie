@@ -130,7 +130,7 @@
     if (!ghost) {
       ghost = button('开一个临时会话（关掉就删除，不写进记忆）', 'pinkie-temp-entry', () => void startTemp(), '');
       ghost.dataset.pinkieTooltip = '临时会话 ' + (isMac ? '⌘⇧N' : 'Ctrl+Shift+N');
-      ghost.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.6 2.6" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg><span>临时</span>';
+      ghost.innerHTML = (window.PinkieIcons?.markup('temp') || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.6 2.6" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>') + '<span>临时</span>';
     }
     if (ghost.previousElementSibling !== newSession) newSession.after(ghost);
   }

@@ -263,7 +263,7 @@
       footerMenuButton.setAttribute("title", "更多工具");
       footerMenuButton.setAttribute("aria-haspopup", "menu");
       footerMenuButton.setAttribute("aria-expanded", "false");
-      footerMenuButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.25"></circle><circle cx="12" cy="12" r="1.25"></circle><circle cx="18" cy="12" r="1.25"></circle></svg>';
+      footerMenuButton.innerHTML = window.PinkieIcons?.markup("more") || '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.25"></circle><circle cx="12" cy="12" r="1.25"></circle><circle cx="18" cy="12" r="1.25"></circle></svg>';
       footerMenuButton.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();

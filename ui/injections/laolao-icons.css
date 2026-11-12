@@ -1,0 +1,47 @@
+/* 碧琪的线条图标（laolao-icons.js）。平时：单色细线 + 一个粉色小记号。回应：只有小记号在动。 */
+.pinkie-ic {
+  --pk-mark: var(--accent, #d9508d);
+  fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; overflow: visible;
+}
+.pinkie-ic .pk-a { stroke: var(--pk-mark); }
+.pinkie-ic .pk-f { fill: var(--pk-mark); stroke: none; }
+.pinkie-ic .pk-solid { fill: currentColor; stroke: none; }
+.pinkie-ic * { transform-box: fill-box; transform-origin: center; transition: transform .28s cubic-bezier(.3, 1.6, .5, 1), opacity .2s ease; }
+html[data-pinkie-night] .pinkie-ic { --pk-mark: #f28ab8; }
+
+/* —— 回应：悬停或键盘聚焦到所在的按钮 —— */
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-balloon { transform: translateY(-2.5px) rotate(-4deg); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-string { transform: translateY(-2.5px) rotate(8deg); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-plus { transform: rotate(90deg) scale(1.15); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-lens { transform: rotate(-12deg) scale(1.04); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-twinkle { animation: pinkie-ic-twinkle .9s ease-in-out infinite; }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-cherry { animation: pinkie-ic-hop .5s cubic-bezier(.3, 1.6, .5, 1); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-frost { transform: scaleY(1.06) translateY(-.6px); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-moon { transform: rotate(-14deg); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-rays { transform: rotate(45deg); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-wand { transform: rotate(-10deg); }
+.pinkie-ic .pk-spark { opacity: 0; transform: scale(.4); }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-spark { opacity: 1; transform: scale(1); }
+.pinkie-ic .pk-sweep { stroke-dasharray: 100; stroke-dashoffset: 0; }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-sweep { animation: pinkie-ic-sweep .9s ease-in-out; }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-dot { animation: pinkie-ic-hop .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-dot:nth-child(2) { animation-delay: .07s; }
+:is(button, a, summary):is(:hover, :focus-visible) .pinkie-ic .pk-dot:nth-child(3) { animation-delay: .14s; }
+/* 设置的齿轮是原生图标，形状不换（换了就认不出），只给它同样的回应。 */
+.sidebar-shell__footer .sidebar-footer-icon:is([aria-label="设置"], [title="设置"]) svg { transition: transform .32s cubic-bezier(.3, 1.6, .5, 1); }
+.sidebar-shell__footer .sidebar-footer-icon:is([aria-label="设置"], [title="设置"]):is(:hover, :focus-visible) svg { transform: rotate(45deg); }
+
+@keyframes pinkie-ic-twinkle { 0%, 100% { transform: scale(1) rotate(0); opacity: 1; } 50% { transform: scale(.55) rotate(45deg); opacity: .5; } }
+@keyframes pinkie-ic-hop { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-3px); } }
+@keyframes pinkie-ic-sweep { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+
+/* —— 各处的落位 —— */
+/* 新会话：原生的加号是 Lit 管的，不动它，只是收起来，换上气球。 */
+html .sidebar .sidebar-new-session:has(> .pinkie-new-session-ic) > .sidebar-new-session__icon { display: none !important; }
+html .sidebar .sidebar-new-session > .pinkie-new-session-ic { display: inline-flex; width: 17px !important; height: 17px !important; flex: 0 0 17px; }
+html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree) > .pinkie-new-session-ic { display: inline-flex !important; }
+/* 昼夜开关原来是一个文字符号，换成图标后给个尺寸。 */
+.laolao-sidebar-theme-toggle > .pinkie-ic, #pinkie-night-rail-entry > .pinkie-ic { width: 17px; height: 17px; }
+.laolao-footer-more > .pinkie-ic { width: 18px; height: 18px; }
+
+html[data-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }
