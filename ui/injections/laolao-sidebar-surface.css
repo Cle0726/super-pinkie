@@ -303,3 +303,7 @@ html .sidebar .sidebar-footer-bar>openclaw-tooltip:has(.sidebar-status__dot) { d
 .pinkie-connection-status[data-state="slow"] .pinkie-connection-status__dot { background:var(--sb-status-waiting) }
 .pinkie-connection-status[data-state="offline"] .pinkie-connection-status__dot { background:var(--sb-status-error) }
 .pinkie-connection-detail { padding:6px 12px;color:inherit;opacity:.75;font-size:12px;white-space:nowrap }
+/* Collapsed icon rail: 新会话 is a centered icon button like the rail's other icons — no ⌘N hint, no label. */
+html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree)::after { content:none !important }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree):not(#_sb) { width:36px !important;height:36px !important;min-height:36px !important;padding:0 !important;margin:0 auto !important;justify-content:center;gap:0;border-radius:9px !important }
+html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--worktree) > :not(.sidebar-new-session__icon) { display:none !important }

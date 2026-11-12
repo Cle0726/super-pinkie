@@ -147,16 +147,28 @@
 
   // ---------- W2 library ----------
   let library = null;
+  // The page covers the content area: it starts right of the sidebar only
+  // while the sidebar is really docked and shown; collapsed, peeking or
+  // hidden it starts at the window edge.
+  function sidebarRight() {
+    const side = document.querySelector('aside.sidebar');
+    if (!side || side.classList.contains('sidebar--collapsed') || side.closest('[inert]')) return 0;
+    const style = getComputedStyle(side);
+    if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < 0.05 || style.position === 'fixed') return 0;
+    const rect = side.getBoundingClientRect();
+    if (rect.width < 40 || rect.left < -2 || rect.right > window.innerWidth / 2) return 0;
+    return Math.round(rect.right);
+  }
   function libraryBounds(page) {
-    const side = document.querySelector('.sidebar, .laolao-sidebar, aside.sidebar-shell, .shell-nav')?.getBoundingClientRect();
-    const left = side && side.width > 40 && side.right < window.innerWidth / 2 ? Math.round(side.right) : 0;
-    page.style.left = left + 'px';
+    const left = sidebarRight();
+    if (page.style.left !== left + 'px') page.style.left = left + 'px';
   }
   function closeLibrary() {
     if (!library) return;
     library.page.remove();
     document.removeEventListener('keydown', library.onKey, true);
     window.removeEventListener('resize', library.onResize);
+    clearInterval(library.follow);
     library = null;
   }
   function openLibrary(options = {}) {
@@ -247,7 +259,9 @@
     window.addEventListener('resize', onResize);
     document.body.append(page);
     libraryBounds(page);
-    library = {page, onKey, onResize, reload: load, state};
+    // Follow the sidebar while open (⌘B, the collapse button, auto-hide).
+    const follow = setInterval(onResize, 250);
+    library = {page, onKey, onResize, follow, reload: load, state};
     paintFilters();
     void load();
     setTimeout(() => search.focus(), 0);

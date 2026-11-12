@@ -97,3 +97,6 @@ html aside.sidebar .sidebar-nav a.nav-item[href$="/overview"],
 html aside.sidebar .sidebar-nav > .nav-section:not(.nav-section--more):has(> .nav-section__items > a.nav-item[href$="/overview"]):not(:has(> .nav-section__items > a.nav-item:not([href$="/overview"]))) { display:none !important }
 .laolao-footer-overflow__divider { height:1px;margin:4px 6px;background:color-mix(in srgb,currentColor 12%,transparent) }
 .laolao-footer-overflow__page svg { width:16px;height:16px }
+
+/* Collapsed sidebar is an icon rail: the 临时 ghost entry has no room there. */
+.sidebar.sidebar--collapsed .pinkie-temp-entry { display:none !important }
