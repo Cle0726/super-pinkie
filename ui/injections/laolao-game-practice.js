@@ -321,7 +321,7 @@
       explain.addEventListener('click', async () => {
         explain.disabled = true; explain.textContent = '碧琪在按标准答案讲…';
         try {
-          const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 45000);
+          const res = await G().call('practice.explain', {setId: data.setId, itemId: it.itemId}, 60000);
           if (!box.isConnected) return;
           if (res?.text) { explain.replaceWith(el('p', 'pkp-fb__lecture', res.text)); return; }
           explain.disabled = false;

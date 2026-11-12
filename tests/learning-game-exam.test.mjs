@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {gameFixture} from './helpers/learning-game-fixture.mjs';
 import {PRETCO_B_FORMAT, LINE_RULES} from '../services/mode-architecture/learning-game-content.mjs';
-import {EXPLAIN_RULES} from '../services/mode-architecture/learning-game-content.mjs';
+import {isExplainRules} from '../services/mode-architecture/learning-explain-voice.mjs';
 import {GRADE_RULES, validSection, gradeObjective} from '../services/mode-architecture/learning-game-exam.mjs';
 
 const ch = i => ({stem: `Q${i} ___ ?`, options: [`w${i}a`, `w${i}b`, `RIGHT${i}`, `w${i}d`], answer: 2});
@@ -20,7 +20,7 @@ function model({gradeScore = 10} = {}) {
   return async (rules, payload) => {
     if (payload?.section) return {value: sectionFor(payload.section)};
     if (rules === GRADE_RULES) return {value: {score: Math.min(gradeScore, payload.max), reason: '要点齐全'}};
-    if (rules === EXPLAIN_RULES) return {value: {text: `标准答案是${payload.standard}。`}};
+    if (isExplainRules(rules)) return {value: {text: `标准答案是${payload.standard}。`}};
     if (rules === LINE_RULES) return {value: {text: '这次稳稳的！'}};
     return {unavailable: true};
   };
@@ -158,7 +158,7 @@ test('出卷后盲做复核：对不上的选择题改写一次；改不好就�
 test('守关答完才按标准答案讲解', async t => {
   const {game} = gameFixture(t);
   let seen;
-  game.requestModel = async (rules, payload) => { seen = payload; return rules === EXPLAIN_RULES ? {value: {text: '标准答案是 Here you are。'}} : {unavailable: true}; };
+  game.requestModel = async (rules, payload) => { seen = payload; return isExplainRules(rules) ? {value: {text: '标准答案是 Here you are。'}} : {unavailable: true}; };
   game.mutate(state => { game.modules.world.ensure(state).guards.g1 = {items: [{stem: 'Could you pass the report?', options: ['Yes', 'Here you are.'], answer: 1, why: '请求帮忙'}], answers: {}}; });
   await assert.rejects(() => game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'}), /先做完/);
   game.modules.world.guardAnswer({attemptId: 'g1', itemId: 'g1', answer: 0});

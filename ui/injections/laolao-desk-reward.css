@@ -30,7 +30,7 @@
 #pinkie-study-desk .pk-sheet-line,#pinkie-study-desk .pk-sheet-again,#pinkie-study-desk .pk-sheet-missing{margin:4px 0 0;font-size:14px;line-height:1.45;color:var(--ink-2)}
 #pinkie-study-desk .pk-sheet-again{font-size:12px}
 #pinkie-study-desk .pk-sheet-answer{margin-top:6px;font:600 16px/1.4 var(--serif);color:var(--ink);min-width:0;overflow-wrap:anywhere}
-#pinkie-study-desk .pk-sheet-explain{margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--ink)}
+#pinkie-study-desk .pk-sheet-explain{margin:8px 0 0;font-size:14px;line-height:1.6;color:var(--ink);white-space:pre-line}
 #pinkie-study-desk .pk-sheet .pk-hl{white-space:normal;overflow-wrap:anywhere;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 #pinkie-study-desk .pk-sheet > *{min-width:0}
 #pinkie-study-desk .pk-sheet .pk-btn{height:44px;padding:0 18px;white-space:nowrap}

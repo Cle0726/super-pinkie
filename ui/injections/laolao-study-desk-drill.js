@@ -539,7 +539,7 @@
       const known = item.reveal?.extra || '';
       const p = el('p', 'pk-sheet-explain', known || '碧琪在按标准答案讲…');
       copy.append(p);
-      rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 30000).then(r => {
+      rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 60000).then(r => {
         if (!p.isConnected) return;
         if (r?.text) p.textContent = r.text;
         else if (!known) p.remove();

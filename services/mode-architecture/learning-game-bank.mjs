@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {fold, modelJson, pool, EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
+import {fold, modelJson, pool, explainInput} from './learning-game-content.mjs';
+import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 import {GRADE_RULES, gradeObjective} from './learning-game-exam.mjs';
 
 const DAY = 86400000;
@@ -591,15 +592,15 @@ export class GamePractice {
     const set = this.ensure(this.game.read()).sets[sid];
     const rec = set?.answers?.[iid];
     if (!rec) throw new Error('先做完这题');
-    if (rec.lecture) return {text: rec.lecture, source: 'model'};
+    if (rec.lecture && rec.lectureV === EXPLAIN_VERSION) return {text: rec.lecture, source: 'model'};
     const it = this.bank.item(iid);
     if (!it) throw new Error('题库里没有这道题了');
     const mat = it.material ? clean(this.bank.load().materials[it.material], 1200) : '';
     const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, 300);
     if (!this.game.requestModel) return {text: '', source: 'offline'};
-    const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validExplain, retries: 1, timeoutMs: 30000, maxTokens: 900});
+    const r = await modelJson(this.game.requestModel, explainRules(), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 45000, maxTokens: 1400});
     if (!r) return {text: '', source: 'none'};
-    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) row.lecture = r.value.text; });
+    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row.lecture = r.value.text; row.lectureV = EXPLAIN_VERSION; } });
     return {text: r.value.text, source: 'model'};
   }
   finish({setId} = {}) {

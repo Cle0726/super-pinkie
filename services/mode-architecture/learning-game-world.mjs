@@ -3,7 +3,8 @@
 // 迷雾 → 已探索（上过这一课）→ 点亮（这个节点的一组练习 ≥80% 或守关通过）→ 金章（隔 ≥3 天复测仍 ≥80%）。
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
-import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, EXPLAIN_RULES, validExplain, explainInput} from './learning-game-content.mjs';
+import {PRETCO_B_FORMAT, fold, modelJson, validChoice, blindCheck, explainInput} from './learning-game-content.mjs';
+import {explainRules, validVoicedExplain, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 import {GAME_EXAM} from './learning-game.mjs';
 import {examMonster} from './learning-game-monsters.mjs';
 
@@ -300,7 +301,7 @@ export class GameWorld {
     if (!g) throw new Error('这场守关战已经不在了');
     const rec = g.answers?.[String(itemId || '')];
     if (!rec) throw new Error('先做完这题');
-    if (rec.lecture) return {text: rec.lecture, source: rec.lectureSource || 'model'};
+    if (rec.lecture && rec.lectureV === EXPLAIN_VERSION) return {text: rec.lecture, source: rec.lectureSource || 'model'};
     const idx = Number(String(itemId).replace(/^g/, '')) - 1;
     const item = g.items[idx];
     if (!item) throw new Error('这道题不在卷子里');
@@ -308,10 +309,10 @@ export class GameWorld {
     let text = '';
     let source = 'none';
     if (standard && this.game.requestModel) {
-      const r = await modelJson(this.game.requestModel, EXPLAIN_RULES, explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validExplain, retries: 1, timeoutMs: 25000, maxTokens: 900});
+      const r = await modelJson(this.game.requestModel, explainRules(), explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 45000, maxTokens: 1400});
       if (r) { text = r.value.text; source = 'model'; }
     }
-    if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; } });
+    if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; row.lectureV = EXPLAIN_VERSION; } });
     return {text, source};
   }
   guardFinish({attemptId} = {}) {
