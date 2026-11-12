@@ -161,3 +161,13 @@ test('SessionExport reads the transcript and writes image assets', async () => {
   const digest = await exporter.digest('agent:main:dashboard:x1', 2000);
   assert.match(digest.excerpt, /用户：帮我查天气/);
 });
+
+test('readers never open an empty transcript (a fresh session mid-run)', async () => {
+  const {hasSessionHeader} = await import('../services/mode-architecture/session-branch.mjs');
+  const dir = tmp('hdr-');
+  const empty = path.join(dir, 'a.jsonl'); fs.writeFileSync(empty, '');
+  const good = path.join(dir, 'b.jsonl'); fs.writeFileSync(good, JSON.stringify({type: 'session', id: 'x'}) + '\n');
+  assert.equal(hasSessionHeader(empty), false);
+  assert.equal(hasSessionHeader(path.join(dir, 'missing.jsonl')), false);
+  assert.equal(hasSessionHeader(good), true);
+});
