@@ -590,9 +590,15 @@ export class LearningDesk {
       progress: {minutes: ledger.minutes, questions: ledger.questions.answered, reviews: ledger.reviews.done, lessons: ledger.lessons || 0},
       focus, materials: {mounted: mountedRoots.length > 0, label: mountedRoots.map(root => root.label).join(' / ') || 'U盘未插 · 用本机索引', indexedFiles: materialStatus?.files?.indexed || 0,
         updatedAt: Math.max(0, ...(materialStatus?.roots || []).map(root => root.lastScanAt || 0)), busy: busy ? {kind: busy.kind, done: busy.done, total: busy.total} : null},
-      quiet: this.quiet(now, due.length), mastery,
+      quiet: this.quiet(now, due.length), mastery, drill: this.drillToday(now),
       biqiLine: {text: fresh && cache?.biqiLine ? cache.biqiLine : focus.kind === 'learn' ? '先生，我们先把这个考点弄懂。' : '先生，我陪你把每一步弄懂。', source: fresh && cache?.biqiLine ? 'insight' : 'rule'},
       insightStale: !fresh, subjectWarnings: this.subjectWarnings(now), almanac: deskAlmanac(this, now, pact)};
+  }
+
+  drillToday(now) {
+    try { if (typeof this.store.drill?.today === 'function') return this.store.drill.today(now); } catch {}
+    const blank = [false, false, false, false, false, false, false];
+    return {jar: {today: 0, goal: 30}, streak: {current: 0, best: 0, week: blank, weekKind: blank.map(() => 'empty'), stampedToday: false, leaveUsedYesterday: false}, leaveNotes: 0, dueNotes: 0, dueWords: 0};
   }
 
   // 今日页的安静列表说实话：背单词和笔记回顾各算各的，笔记每天最多 10 条，积压不催。

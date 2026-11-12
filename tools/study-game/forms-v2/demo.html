@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><title>形态舞台 demo</title>
+<style>
+ body{margin:0;background:#120c14;color:#eee;font:14px -apple-system,system-ui}
+ #stage{position:relative;width:100vw;height:62vh;overflow:hidden}
+ #bar{display:flex;gap:6px;flex-wrap:wrap;padding:10px}
+ button{background:#2a1d2c;color:#f3d;border:1px solid #533;border-radius:8px;padding:6px 10px}
+ #av{position:relative;width:160px;height:160px;border:1px solid #333;margin:10px}
+</style>
+<div id="stage"></div><div id="bar"></div><div id="av"></div>
+<script src="/ui/injections/laolao-buddy-rig.js"></script>
+<script>
+const ART='/ui/assets/study-game/';
+window.__pinkieGame={cache:{manifest:{}},art(s){const m=this.cache.manifest[s];return m?ART+m.file:null},portrait(id){return this.art('form/'+id+'/portrait')}};
+</script>
+<script src="/ui/injections/laolao-game-form-stage.js"></script>
+<script>
+(async()=>{
+ const m=await (await fetch(ART+'manifest.json')).json(); __pinkieGame.cache.manifest=m.slots;
+ const ids=['daily','unrestricted','alicorn','crystal','seapony','kirin','batpony','serious'];
+ const q=new URLSearchParams(location.search); let id=q.get('f')||'alicorn';
+ window.st=__pinkieFormStage.mount(document.getElementById('stage'), id, {});
+ window.av=__pinkieFormStage.mount(document.getElementById('av'), id, {mode:'avatar'});
+ const bar=document.getElementById('bar');
+ for(const f of ids){const b=document.createElement('button');b.textContent=f;b.onclick=()=>{st.transform(f);av.destroy();window.av=__pinkieFormStage.mount(document.getElementById('av'), f, {mode:'avatar'});};bar.append(b);}
+ for(const s of ['cheer','hurt']){const b=document.createElement('button');b.textContent=s;b.onclick=()=>{st.state(s);av.state(s)};bar.append(b);}
+ await st.ready; document.title='ready';
+})().catch(e=>{document.title='ERR '+e.message});
+</script>

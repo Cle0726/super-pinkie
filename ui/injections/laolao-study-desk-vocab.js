@@ -5,8 +5,7 @@
   window.__pinkieStudyDeskVocabLoaded = true;
   let registered = false;
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; };
-  const FILTERS = [['all', '全部'], ['due', '待复习'], ['pending', '整理中'], ['failed', '需重试']];
-  const RATINGS = [['forgot', '忘了', '1'], ['fuzzy', '模糊', '2'], ['remembered', '记得', '3']];
+  const FILTERS = [['all', '全部'], ['due', '待复习'], ['resting', '过几天'], ['pending', '整理中'], ['failed', '需重试']];
   const LAYOUT_KEY = 'pinkie.vocab.layout';
   // 卡片 / 词表的选择只是本机偏好，读写失败就用卡片。
   const readLayout = () => { try { return localStorage.getItem(LAYOUT_KEY) === 'table' ? 'table' : 'cards'; } catch { return 'cards'; } };
@@ -27,8 +26,8 @@
     let keyHandler = null;
     const desk = ctx.desk || window.__pinkieStudyDesk, icon = (name, size = 'xs') => desk.icon(name, {size});
     const request = (method, params = {}, timeout = 20000) => ctx.request('pinkie.learning.vocab.' + method, params, timeout);
-    let alive = true, revision = 0, filter = 'all', query = '', data = null, poll = 0, searchTimer = 0, review = null, toastTimer = 0, examFilter = '', layout = readLayout();
-    const saved = desk.local().vocabUi; if (saved) ({filter, query, review, examFilter, layout} = saved);
+    let alive = true, revision = 0, filter = 'all', query = '', data = null, poll = 0, searchTimer = 0, toastTimer = 0, examFilter = '', layout = readLayout();
+    const saved = desk.local().vocabUi; if (saved) ({filter, query, examFilter, layout} = saved);
     const route = desk.local().vocabRoute || {}; desk.local().vocabRoute = null;
     if (route.query) { query=route.query;filter='all';examFilter=''; }
     root.classList.add('pinkie-desk-vocab'); root.replaceChildren();
@@ -42,7 +41,8 @@
       filters.append(b);
     }
     const model = el('span', 'v-model', '内置模型');
-    const reviewButton = el('button', 'v-review', '复习'); reviewButton.type = 'button'; reviewButton.addEventListener('click', startReview);
+    const reviewButton = el('button', 'v-review', '背一组新的'); reviewButton.type = 'button'; reviewButton.setAttribute('aria-label', '背一背');
+    reviewButton.addEventListener('click', () => window.__pinkieDrill?.start({source: 'vocab', scope: data?.counts?.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: 'vocab'}));
     // 页眉：小字「英语 · N 个词」+ 宋体页名；右边一个粉色复习键。页边批注是碧琪写给先生的提醒。
     const heading = el('div', 'v-heading'), bookKicker = el('div', 'v-book-kicker pk-kicker', '生词本'); count.classList.add('pk-kicker'); heading.append(bookKicker, count, title);
     top.append(heading, filters, model, reviewButton);
@@ -80,17 +80,13 @@
     tools.append(searchBox, examSelect, layoutGroup, retryAll);
 
     const list = el('div', 'v-list'); list.setAttribute('aria-live', 'polite');
-    const stage = el('section', 'v-stage'); stage.hidden = true; stage.setAttribute('aria-label', '生词复习');
     const toastHost = el('div', 'v-toast'); toastHost.setAttribute('role', 'status'); toastHost.hidden = true;
     const compactTitle = el('h2', 'v-spread-title', '生词本'); heading.append(compactTitle);
     const compactList = el('div', 'v-spread-list'); compactList.setAttribute('aria-label', '手账词表');
-    const foot = el('footer', 'v-foot'), layouts = el('div', 'v-book-layouts'); layouts.setAttribute('aria-label', '摊开方式');
-    for (const [value, label, lines] of [['single', '单页', ''], ['spread', '对开', '<path d="M11 1v14"/>'], ['spread-chat', '对开加便签', '<path d="M8 1v14M15 1v14"/>']]) {
-      const b = el('button'); b.type = 'button'; b.setAttribute('aria-label', label); b.innerHTML = '<svg viewBox="0 0 22 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="20" height="14" rx="2"/>' + lines + '</svg>'; b.addEventListener('click', () => window.__pinkieStudyDesk.setLayout(value)); layouts.append(b);
-    }
+    const foot = el('footer', 'v-foot');
     const manage = el('button', 'v-text-button', '管理'); manage.type = 'button'; manage.addEventListener('click', manageDialog);
-    foot.append(layouts, manage, reviewButton);
-    root.append(shelfStamp, top, aside, examsRow, cover, add, tools, list, compactList, foot, stage, toastHost);
+    foot.append(manage, reviewButton);
+    root.append(shelfStamp, top, aside, examsRow, cover, add, tools, list, compactList, foot, toastHost);
 
     function toast(text, action) {
       clearTimeout(toastTimer); toastHost.replaceChildren(el('span', '', text)); toastHost.hidden = false;
@@ -107,13 +103,12 @@
         if(route.wordId) { const node=[...root.querySelectorAll('[data-id]')].find(n=>n.dataset.id===route.wordId&&n.getClientRects().length);if(node){node.tabIndex=-1;node.scrollIntoView({block:'center'});node.focus();delete route.wordId;} }
         clearTimeout(poll);
         if ((result.counts.pending || result.retagging) && !document.hidden && (!ctx.pane || desk.isFocused())) poll = setTimeout(load, 2500);
-        if (route.review && !route.started) { route.started = true; if (result.counts.due) startReview(); else toast('今天没有要复习的生词'); }
+        if (route.review && !route.started) { route.started = true; window.__pinkieDrill?.start({source: 'vocab', scope: result.counts.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: route.from && route.from !== 'vocab' && route.from !== 'drill' ? route.from : 'vocab'}); if (!result.counts.due) toast('今天没有到期的，先背一组新的'); }
       } catch (error) { if (alive && token === revision) { count.textContent = error.message || '读取失败'; } }
     }
 
     function render() {
       const {counts, words} = data;
-      root.toggleAttribute('data-reviewing', Boolean(review));
       compactTitle.textContent = `今天到期 ${counts.due || 0} 个`;
       const primary = data.exams?.find(exam => exam.id === data.settings?.primary);
       const kicker = bookKicker; if (kicker) kicker.textContent = '生词本 · ' + (primary?.name || '单词和短语');
@@ -131,21 +126,21 @@
         if (Number(word.createdAt) > Date.now() - 600000) { row.classList.add('is-new'); const stamp = el('span', 'pk-stamp v-book-new', '刚收'); row.prepend(stamp); }
         compactList.append(row);
       }
-      if (!words.length) compactList.append(el('p', 'v-book-empty', '生词本还是空的。点页底「管理」，写下要背的词。'));
+      if (!words.length) compactList.append(el('p', 'v-book-empty', filter === 'resting' ? '还没有先放下的词。' : '生词本还是空的。点页底「管理」，写下要背的词。'));
       count.textContent = counts.total ? `${counts.total} 个词${counts.pending ? ` · ${counts.pending} 个整理中` : ''}` : '还没有生词';
       model.textContent = data.model ? `内置模型 · ${data.model}` : data.organizing ? '内置模型整理中' : '内置模型';
-      reviewButton.textContent = counts.due ? `复习 ${counts.due} 个` : '今天没有要复习的'; if (counts.due && window.__pinkieDeskKit) reviewButton.append(window.__pinkieDeskKit.star('full'));
+      reviewButton.textContent = counts.due ? `背 ${counts.due} 个` : '背一组新的'; if (counts.due && window.__pinkieDeskKit) reviewButton.append(window.__pinkieDeskKit.star('full'));
       shelfStamp.hidden = !counts.total;
-      reviewButton.disabled = !counts.due;
+      for (const node of filters.children) if (node.dataset.filter === 'resting') node.textContent = counts.resting ? `过几天 ${counts.resting}` : '过几天';
       retryAll.hidden = !counts.failed;
       renderExams();
-      if (review) return;
       list.replaceChildren();
       list.classList.toggle('is-table', layout === 'table');
       if (!words.length) {
         const empty = el('div', 'v-empty');
-        empty.append(el('strong', '', counts.total ? '没有符合条件的生词' : '生词本还是空的'),
-          el('p', '', counts.total ? '换个筛选或搜索词试试。' : '在上面写下第一个词，碧琪会把它整理成好记的谐音和常考搭配。'));
+        const parked = filter === 'resting';
+        empty.append(el('strong', '', parked ? '这里还空着' : counts.total ? '没有符合条件的生词' : '生词本还是空的'),
+          el('p', '', parked ? '点过「记得」、或已经掌握的词会先放在这里，到期后再出现在生词本和复习里。' : counts.resting && filter === 'all' ? '记得和已掌握的先放到了「过几天」，到期再回来。' : counts.total ? '换个筛选或搜索词试试。' : '在上面写下第一个词，碧琪会把它整理成好记的谐音和常考搭配。'));
         list.append(empty); return;
       }
       if (layout === 'table') { list.append(table(words)); return; }
@@ -208,7 +203,7 @@
         if (window.__pinkieDeskKit) bar.append(window.__pinkieDeskKit.stars(Array.from({length: 8}, (_, i) => i < lit ? 'full' : '')));
         cardNode.append(row, bar, el('small', '', `我导入的词表${item.exam ? ' · ' + (examOf(item.exam)?.name || '') : ''}`)); cover.append(cardNode);
       }
-      cover.hidden = Boolean(review) || !cover.children.length;
+      cover.hidden = !cover.children.length;
       const current = examSelect.value;
       examSelect.replaceChildren(...[['', '全部考试'], ...(data.exams || []).map(exam => [exam.id, exam.name])].map(([v, t]) => { const o = el('option', '', t); o.value = v; return o; }));
       examSelect.value = current || examFilter;
@@ -353,58 +348,7 @@
       finally { submit.disabled = false; input.focus(); }
     }
 
-    async function startReview() {
-      try {
-        const queue = await request('review.queue', {limit: 20});
-        if (!alive) return;
-        if (!queue.words.length) { toast('今天没有要复习的生词'); return; }
-        review = {words: queue.words, index: 0, flipped: false, done: 0}; root.setAttribute('data-reviewing', '');
-        list.hidden = add.hidden = tools.hidden = filters.hidden = reviewButton.hidden = examsRow.hidden = cover.hidden = aside.hidden = true; stage.hidden = false; renderReview();
-      } catch (error) { toast(error.message); }
-    }
-
-    function endReview() {
-      review = null; root.removeAttribute('data-reviewing'); stage.hidden = true; stage.replaceChildren(); list.hidden = add.hidden = tools.hidden = filters.hidden = reviewButton.hidden = examsRow.hidden = aside.hidden = false; load();
-    }
-
-    function renderReview() {
-      stage.replaceChildren();
-      const bar = el('div', 'v-stage-bar'), back = el('button', 'v-text-button', '回到生词本'); back.type = 'button'; back.addEventListener('click', endReview);
-      const word = review.words[review.index];
-      bar.append(el('span', 'v-progress', word ? `第 ${review.index + 1} / ${review.words.length} 个` : '本轮完成'), back);
-      stage.append(bar);
-      if (!word) {
-        const done = el('div', 'v-empty'); done.append(el('strong', '', `这一轮复习了 ${review.done} 个词`), el('p', '', '记得的会隔几天再回来，忘了的明天再见。'));
-        stage.append(done); return;
-      }
-      const flash = el('div', 'v-flash');
-      if (!review.flipped) {
-        const front = el('button', 'v-front'); front.type = 'button'; front.setAttribute('aria-label', '翻面');
-        front.append(el('strong', 'v-word', word.word), el('span', 'v-phonetic', word.phonetic || ''), el('span', 'v-hint', '先在心里想中文和谐音，按空格翻面'));
-        front.addEventListener('click', flip); flash.append(front);
-        if (window.speechSynthesis) speak(word.word);
-      } else {
-        flash.append(card(word, {full: false}));
-        const rate = el('div', 'v-rate');
-        for (const [rating, label, key] of RATINGS) { const b = el('button', '', label); b.type = 'button'; b.dataset.rating = rating; b.append(el('kbd', '', key)); b.addEventListener('click', () => grade(rating)); rate.append(b); }
-        flash.append(rate);
-      }
-      stage.append(flash);
-    }
-    function flip() { if (review && !review.flipped && review.words[review.index]) { review.flipped = true; renderReview(); } }
-    async function grade(rating) {
-      const word = review?.words[review.index]; if (!word || !review.flipped) return;
-      try { await request('review', {id: word.id, rating}); } catch (error) { toast(error.message); return; }
-      if (!review) return;
-      review.done++; review.index++; review.flipped = false; renderReview();
-    }
-
-    keyHandler = event => {
-      if (!review || event.target.closest?.('input, textarea')) return;
-      if (event.code === 'Space') { event.preventDefault(); flip(); return; }
-      const rating = RATINGS.find(item => item[2] === event.key); if (rating && review.flipped) { event.preventDefault(); grade(rating[0]); }
-    };
-    const teardown = () => { desk.local().vocabUi = {filter, query, review, examFilter, layout}; alive = false; revision++; clearTimeout(poll); clearTimeout(searchTimer); clearTimeout(toastTimer); window.speechSynthesis?.cancel(); keyHandler = null; };
+    const teardown = () => { desk.local().vocabUi = {filter, query, examFilter, layout}; alive = false; revision++; clearTimeout(poll); clearTimeout(searchTimer); clearTimeout(toastTimer); window.speechSynthesis?.cancel(); keyHandler = null; };
     load();
     return {unmount: teardown, keydown: event => keyHandler?.(event), pause() { clearTimeout(poll); window.speechSynthesis?.cancel(); }, resume() { if (alive && (data?.counts?.pending || data?.retagging)) { clearTimeout(poll); poll = setTimeout(load, 2500); } }};
   }
@@ -445,9 +389,14 @@
     window.__pinkieSelectionActions.register('vocab', {
       // 只在像单词时出现；出现时排在「记笔记」前面，当主按钮。
       order: 0,
-      when: ({text, assistant, library}) => learning() && (!!assistant || !!library) && looksLikeVocab(text),
+      when: ({text, assistant, library, desk}) => learning() && (!!assistant || !!library || !!desk) && (desk ? /[A-Za-z]/.test(text) : looksLikeVocab(text)),
       create: () => el('button', 'laolao-learning-selection-save laolao-learning-selection-vocab', '记生词'),
-      run: selected => { if (selected.assistant && window.__pinkieDeskChat?.active?.() && window.__pinkieDeskChat?.collectSelection) void window.__pinkieDeskChat.collectSelection(selected, 'word').catch(() => {}); else void saveSelectedWords(selected.text); },
+      run: selected => {
+        if (selected.assistant && window.__pinkieDeskChat?.active?.() && window.__pinkieDeskChat?.collectSelection) { void window.__pinkieDeskChat.collectSelection(selected, 'word').catch(() => {}); return; }
+        // 答题卡里常是「英文搭配紧贴中文释义」，中间补一个空格，生词本才认得出词和释义。
+        const text = selected.desk ? selected.text.replace(/([A-Za-z.)])(?=[^\sA-Za-z'’./()-])/g, '$1 ') : selected.text;
+        void saveSelectedWords(text);
+      },
     });
     return true;
   };

@@ -1052,7 +1052,7 @@
   /* 选中聊天文字时出现「问碧琪」 */
   window.__pinkieSelectionActions?.register('ask', {
     order: 2,
-    when: ({text, library}) => library ? text.length <= 20000 : text.length <= 60,
+    when: ({text, library, desk}) => !desk && (library ? text.length <= 20000 : text.length <= 60),
     create: () => {
       const askChip = el("button", "pinkie-buddy-ask");
       const ico = el("span", "pinkie-buddy__ico"); ico.innerHTML = ICON.explain;

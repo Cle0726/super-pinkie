@@ -1,0 +1,229 @@
+/* 碧琪上岸记 · 考场（大厅 / 真考场 / Boss 结算 / 成绩报告）。视觉语言：VFX.md。考场本身是安静的考卷排版，没有游戏装饰、没有循环动画。 */
+#pinkie-study-desk .view.pke-page{display:flex;flex-direction:column;gap:14px;padding:18px 26px 22px 30px;overflow:auto;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-page > .pkb-page__head{position:sticky;top:0;z-index:2;background:var(--pkg-paper,var(--paper))}
+#pinkie-study-desk .pke-report__act{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px;padding:12px 0;background:linear-gradient(to top,var(--pkg-paper,var(--paper)) 70%,transparent)}
+#pinkie-study-desk .pke-page h2,#pinkie-study-desk .pke-page h3{margin:0;font-family:var(--pkg-display);font-weight:900;letter-spacing:.06em}
+#pinkie-study-desk .pke-lobby{display:grid;grid-template-columns:minmax(300px,1fr) minmax(320px,1.15fr);gap:14px;align-content:start}
+#pinkie-study-desk .pke-lobby.is-report{display:block}
+#pinkie-study-desk .pke-lobby > section{position:relative;padding:18px 20px;border-radius:16px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);animation:pkg-rise .5s var(--pkg-out) both}
+#pinkie-study-desk .pke-lobby > section:nth-child(2){animation-delay:.05s}#pinkie-study-desk .pke-lobby > section:nth-child(3){animation-delay:.1s}#pinkie-study-desk .pke-lobby > section:nth-child(4){animation-delay:.15s}
+#pinkie-study-desk .pke-lobby h3{font-size:20px;margin:6px 0 12px}
+/* 巴别兽卡 */
+#pinkie-study-desk .pke-bosscard{grid-row:span 2;display:grid;grid-template-rows:auto 1fr;gap:6px;overflow:hidden}
+#pinkie-study-desk .pke-bosscard__art{width:100%;max-height:300px;object-fit:contain;filter:drop-shadow(0 18px 24px rgba(40,10,40,.28))}
+#pinkie-study-desk[data-theme="night"] .pke-bosscard__art{filter:drop-shadow(0 18px 30px rgba(0,0,0,.6)) brightness(.92)}
+#pinkie-study-desk .pke-bosscard__tip{margin:12px 0 0;font-size:12.5px;line-height:1.7;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:14px 0 0;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-facts dt{grid-row:1;padding-top:10px;font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-facts dd{grid-row:2;margin:4px 0 0;font:600 20px/1.1 var(--pkg-num);font-variant-numeric:tabular-nums}
+#pinkie-study-desk .pke-hp{position:relative;height:6px;border-radius:3px;background:var(--pkg-line);overflow:hidden}
+#pinkie-study-desk .pke-hp i,#pinkie-study-desk .pke-hp u{position:absolute;inset:0;transform-origin:left;border-radius:inherit}
+#pinkie-study-desk .pke-hp i{background:linear-gradient(90deg,#8E1E3E,#D2405C);transition:transform .7s var(--pkg-out)}
+#pinkie-study-desk .pke-hp u{background:rgba(255,236,200,.75);transition:transform .9s var(--pkg-in)}
+/* 卷子 */
+/* 卷架：左历年真题（年份 × 月份），右仿真卷 */
+#pinkie-study-desk .pke-lobby > section.pke-papers{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:0;padding:0}
+#pinkie-study-desk .pke-shelf{padding:18px 20px;min-width:0}
+#pinkie-study-desk .pke-shelf--sim{border-left:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-prep{position:relative;margin:-4px 0 12px;font-size:12px;color:var(--pkg-ink-2);line-height:1.6}
+#pinkie-study-desk .pke-prep__bar{display:block;height:2px;margin-top:8px;background:var(--pkg-line);overflow:hidden}
+#pinkie-study-desk .pke-prep__bar u{display:block;height:100%;background:var(--pkg-ink);transform-origin:0 50%;transition:transform .7s var(--pkg-out)}
+#pinkie-study-desk .pke-years{display:grid;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-year{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-year > b{font:600 19px/1 var(--pkg-num);font-variant-numeric:tabular-nums;letter-spacing:.02em;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-year.is-mock > b{font:900 13px/1.2 var(--pkg-display);letter-spacing:.08em;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-chips{display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pke-chip{appearance:none;display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;column-gap:3px;align-items:baseline;min-width:76px;padding:7px 11px 6px;border:0;border-radius:9px;background:none;color:var(--pkg-ink);cursor:pointer;text-align:left;box-shadow:inset 0 0 0 1px var(--pkg-line-2);transition:box-shadow .25s var(--pkg-out),background .25s var(--pkg-out)}
+#pinkie-study-desk .pke-chip b{font:600 18px/1 var(--pkg-num);font-variant-numeric:tabular-nums}
+#pinkie-study-desk .pke-chip small{font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-chip em{grid-column:1/3;min-height:13px;margin-top:3px;font:500 10.5px/1.2 var(--pkg-num);font-style:normal;letter-spacing:.04em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-chip[data-done="1"] em{color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-chip:hover{box-shadow:inset 0 0 0 1px var(--pkg-ink)}
+#pinkie-study-desk .pke-chip:focus-visible{outline:2px solid var(--pkg-ink);outline-offset:2px}
+#pinkie-study-desk .pke-chip:disabled{opacity:.5;cursor:default}
+#pinkie-study-desk .pke-shelf--real > .pkb-link{margin-top:10px}
+@media (max-width:860px){#pinkie-study-desk .pke-lobby > section.pke-papers{grid-template-columns:1fr}#pinkie-study-desk .pke-shelf--sim{border-left:0;border-top:1px solid var(--pkg-line)}}
+/* 真题原录音播放条（考场 Part I 顶部） */
+#pinkie-study-desk .pke-record{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:14px;margin:0 0 18px;padding:12px 16px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--pkg-line-2)}
+#pinkie-study-desk .pke-record__meta b{display:block;margin-top:3px;font:900 13px/1.2 var(--pkg-display);letter-spacing:.05em;white-space:nowrap}
+#pinkie-study-desk .pke-record__track{position:relative;height:18px;cursor:pointer;touch-action:none}
+#pinkie-study-desk .pke-record__track::before,#pinkie-study-desk .pke-record__track i{content:'';position:absolute;left:0;right:0;top:8px;height:2px;background:var(--pkg-line)}
+#pinkie-study-desk .pke-record__track i{background:var(--pkg-ink);transform-origin:0 50%;transform:scaleX(0)}
+#pinkie-study-desk .pke-record__track:focus-visible{outline:2px solid var(--pkg-ink);outline-offset:2px;border-radius:4px}
+#pinkie-study-desk .pke-record__time{font:500 13px/1 var(--pkg-num);font-variant-numeric:tabular-nums;color:var(--pkg-ink-2);white-space:nowrap}
+#pinkie-study-desk .pke-record[data-on="1"] .pke-play{background:#B5304E}
+#pinkie-study-desk .pke-record[data-err] .pke-record__time{color:#B5304E;font-family:inherit;font-size:12px}
+#pinkie-study-desk .pke-plist{display:grid;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-prow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-prow b{display:block;font:900 15px/1.3 var(--pkg-display);letter-spacing:.04em}
+#pinkie-study-desk .pke-prow small{font-size:11.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-prow[data-status="failed"]{opacity:.55}
+#pinkie-study-desk .pke-prow .pkg-btn{padding:9px 20px;letter-spacing:.3em}
+#pinkie-study-desk .pke-nav{display:inline-block;padding:8px 14px;font-size:12.5px}
+#pinkie-study-desk .pke-spin{font-size:11.5px;color:var(--pkg-ink-3);letter-spacing:.2em}
+#pinkie-study-desk .pke-papers__act{display:flex;gap:14px;margin-top:8px}
+/* 题型表 */
+#pinkie-study-desk .pke-ftable{display:grid;margin-top:10px;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-frow{display:grid;grid-template-columns:26px 82px 1fr auto;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--pkg-line);font-size:12px}
+#pinkie-study-desk .pke-frow small{color:var(--pkg-ink-3);font-size:11px}
+#pinkie-study-desk .pke-frow b{font:900 13.5px/1.2 var(--pkg-display);letter-spacing:.06em}
+#pinkie-study-desk .pke-frow span{color:var(--pkg-ink-2);line-height:1.5}
+#pinkie-study-desk .pke-frow em{font-style:normal;color:var(--pkg-ink-3);font-size:11.5px;white-space:nowrap}
+#pinkie-study-desk .pke-format__tip{margin:12px 0 0;font-size:12px;color:var(--pkg-ink-3);line-height:1.6}
+#pinkie-study-desk .pke-real p{margin:0;font-size:12.5px;color:var(--pkg-ink-2);line-height:1.6}
+#pinkie-study-desk .pke-real__row{display:flex;gap:10px;margin-top:10px}
+
+/* ───── 真考场 ───── */
+#pinkie-study-desk .pke-hall{position:fixed;inset:0;z-index:2147483000;display:grid;grid-template-rows:auto 1fr;color:var(--pkg-ink);
+  background:#F7F2EC;animation:pke-in .5s var(--pkg-out) both;text-autospace:no-autospace;text-spacing-trim:space-all;font-kerning:normal}
+#pinkie-study-desk[data-theme="night"] .pke-hall{background:#17121B}
+@keyframes pke-in{from{opacity:0}to{opacity:1}}
+#pinkie-study-desk .pke-top{display:flex;align-items:center;gap:18px;padding:12px 28px;border-bottom:1px solid var(--pkg-line);background:color-mix(in srgb,var(--pkg-card-solid) 92%,transparent)}
+#pinkie-study-desk .pke-top__id b{display:block;margin-top:4px;font:900 15px/1.2 var(--pkg-display);letter-spacing:.05em;white-space:nowrap}
+#pinkie-study-desk .pke-tabs{display:flex;gap:4px;flex:1;min-width:0;justify-content:center;overflow-x:auto;scrollbar-width:none}
+#pinkie-study-desk .pke-tab{appearance:none;display:grid;grid-template-columns:auto auto;column-gap:8px;row-gap:2px;align-items:baseline;padding:7px 12px;border:0;border-radius:8px;background:none;color:var(--pkg-ink-2);cursor:pointer;white-space:nowrap;text-align:left;box-shadow:inset 0 -1.5px 0 transparent;transition:box-shadow .3s var(--pkg-out),color .3s var(--pkg-out)}
+#pinkie-study-desk .pke-tab small{grid-column:1/3;font:600 9.5px/1 var(--pkg-latin);letter-spacing:.3em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-tab b{font:900 13.5px/1.1 var(--pkg-display);letter-spacing:.06em}
+#pinkie-study-desk .pke-tab em{font-style:normal;font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-tab[aria-selected="true"]{color:var(--pkg-ink);box-shadow:inset 0 -1.5px 0 var(--pkg-ink)}
+#pinkie-study-desk .pke-timer{display:grid;justify-items:end;gap:3px}
+#pinkie-study-desk .pke-timer b{font:600 26px/1 var(--pkg-num);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+#pinkie-study-desk .pke-timer[data-low="1"] b{color:#B5304E}
+#pinkie-study-desk .pke-save{width:132px;font-size:11px;line-height:1.4;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-save[data-err]{color:#B5304E}
+#pinkie-study-desk .pke-submit{padding:10px 22px;letter-spacing:.3em}
+#pinkie-study-desk .pke-body{display:grid;grid-template-columns:1fr 268px;min-height:0}
+#pinkie-study-desk .pke-paper:focus,#pinkie-study-desk .pke-lobby:focus{outline:none}
+#pinkie-study-desk .pke-paper{overflow:auto;padding:30px max(28px,calc((100% - 820px) / 2)) 60px;scroll-behavior:smooth}
+#pinkie-study-desk .pke-sec{padding-bottom:16px;margin-bottom:8px;border-bottom:1px solid var(--pkg-line-2)}
+#pinkie-study-desk .pke-sec h2{margin:8px 0 4px;font-size:30px}
+#pinkie-study-desk .pke-sec__zh{margin:0;font-size:12.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-part{padding:18px 0 6px}
+#pinkie-study-desk .pke-part__head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;font-size:12.5px;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-part__head b{font:600 11px/1 var(--pkg-num);letter-spacing:.2em;text-transform:uppercase;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-material{margin:0 0 14px;padding:16px 18px;border-left:2px solid var(--pkg-line-2);background:var(--pkg-card);font:15px/1.75 "Iowan Old Style","Palatino","Georgia",var(--pkg-display);white-space:pre-wrap;color:var(--pkg-ink)}
+#pinkie-study-desk .pke-material.is-terms{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 24px;white-space:normal;font-size:14px}
+#pinkie-study-desk .pke-item{display:grid;grid-template-columns:34px 1fr 28px;gap:6px;padding:14px 0;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-item__no{font:600 13px/1.9 var(--pkg-num);color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-item__main{display:grid;gap:9px;min-width:0}
+#pinkie-study-desk .pke-item__q{margin:0;font:15px/1.7 "Iowan Old Style","Palatino","Georgia",var(--pkg-display);color:var(--pkg-ink)}
+#pinkie-study-desk .pke-base{font-family:var(--pk-sans,system-ui);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-pts{justify-self:start;font-size:10.5px;color:var(--pkg-ink-3);letter-spacing:.08em}
+#pinkie-study-desk .pke-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px}
+#pinkie-study-desk .pke-item[data-kind="passage-choice"] .pke-opts,#pinkie-study-desk .pke-item[data-kind="translate-choice"] .pke-opts{grid-template-columns:1fr}
+#pinkie-study-desk .pke-opt{appearance:none;display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:0;border-radius:8px;background:none;color:var(--pkg-ink);text-align:left;cursor:pointer;font:14.5px/1.5 "Iowan Old Style","Palatino","Georgia",var(--pkg-display);box-shadow:inset 0 0 0 1px transparent;transition:box-shadow .2s var(--pkg-out),background .2s var(--pkg-out)}
+#pinkie-study-desk .pke-opt:hover{box-shadow:inset 0 0 0 1px var(--pkg-line-2)}
+#pinkie-study-desk .pke-opt i{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:600 11px/1 var(--pkg-num);font-style:normal;box-shadow:inset 0 0 0 1px var(--pkg-line-2);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-opt[aria-checked="true"]{background:color-mix(in srgb,var(--pkg-ink) 6%,transparent)}
+#pinkie-study-desk .pke-opt[aria-checked="true"] i{background:var(--pkg-ink);color:var(--pkg-card-solid);box-shadow:none}
+#pinkie-study-desk .pke-letters{display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pke-letter{appearance:none;width:32px;height:32px;border:0;border-radius:6px;background:none;box-shadow:inset 0 0 0 1px var(--pkg-line-2);font:600 13px/1 var(--pkg-num);color:var(--pkg-ink-2);cursor:pointer}
+#pinkie-study-desk .pke-letter[aria-pressed="true"]{background:var(--pkg-ink);color:var(--pkg-card-solid);box-shadow:none}
+#pinkie-study-desk .pke-fill,#pinkie-study-desk .pke-write{appearance:none;width:100%;max-width:340px;padding:8px 2px;border:0;border-bottom:1px solid var(--pkg-line-2);background:transparent;color:var(--pkg-ink);font:15px/1.5 "Iowan Old Style","Palatino","Georgia",serif;outline:none}
+#pinkie-study-desk .pke-fill:focus,#pinkie-study-desk .pke-write:focus{border-color:var(--pkg-ink)}
+#pinkie-study-desk .pke-write{max-width:none;padding:12px 14px;border:1px solid var(--pkg-line-2);border-radius:8px;background:var(--pkg-card);resize:vertical;line-height:1.8}
+#pinkie-study-desk .pke-count{justify-self:end;font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-flag{appearance:none;width:28px;height:28px;border:0;border-radius:6px;background:none;color:var(--pkg-ink-3);cursor:pointer;opacity:.55}
+#pinkie-study-desk .pke-flag:hover{opacity:1}
+#pinkie-study-desk .pke-flag[aria-pressed="true"]{opacity:1;color:#B5462B}
+#pinkie-study-desk .pke-flag[aria-pressed="true"] path{fill:currentColor}
+#pinkie-study-desk .pke-listen{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-play{appearance:none;width:30px;height:30px;border:0;border-radius:50%;display:grid;place-items:center;background:var(--pkg-ink);color:var(--pkg-card-solid);cursor:pointer}
+#pinkie-study-desk .pke-listen[data-on] .pke-play{background:#B5304E}
+#pinkie-study-desk .pke-foot{display:flex;justify-content:space-between;align-items:center;padding-top:26px}
+/* 答题卡 */
+#pinkie-study-desk .pke-card{display:flex;flex-direction:column;gap:12px;padding:24px 22px;border-left:1px solid var(--pkg-line);overflow:auto;background:color-mix(in srgb,var(--pkg-card-solid) 55%,transparent)}
+#pinkie-study-desk .pke-card__head b{display:block;margin-top:4px;font:900 17px/1 var(--pkg-display);letter-spacing:.1em}
+#pinkie-study-desk .pke-card__stat{font-size:11.5px;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+#pinkie-study-desk .pke-cell{appearance:none;position:relative;aspect-ratio:1;border:0;border-radius:5px;background:none;box-shadow:inset 0 0 0 1px var(--pkg-line-2);font-size:11px;color:var(--pkg-ink-3);cursor:pointer;padding:0}
+#pinkie-study-desk .pke-cell.is-done{background:var(--pkg-ink);color:var(--pkg-card-solid);box-shadow:none}
+#pinkie-study-desk .pke-cell.is-flag::after{content:"";position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%;background:#C8553D}
+#pinkie-study-desk .pke-cell.is-here:not(.is-done){box-shadow:inset 0 0 0 1px var(--pkg-ink-2)}
+#pinkie-study-desk .pke-card__legend{display:flex;gap:12px;font-size:10.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-card__legend span{display:inline-flex;align-items:center;gap:5px}
+#pinkie-study-desk .pke-card__legend i{width:9px;height:9px;border-radius:2px;box-shadow:inset 0 0 0 1px var(--pkg-line-2)}
+#pinkie-study-desk .pke-card__legend i.is-done{background:var(--pkg-ink);box-shadow:none}
+#pinkie-study-desk .pke-card__legend i.is-flag{background:#C8553D;box-shadow:none;border-radius:50%}
+/* 弹窗 */
+#pinkie-study-desk .pke-modal{position:absolute;inset:0;display:grid;place-items:center;background:rgba(30,18,32,.32);backdrop-filter:blur(3px);animation:pke-in .25s var(--pkg-out) both}
+#pinkie-study-desk .pke-modal__card{width:min(420px,90vw);padding:24px 24px 20px;border-radius:14px;background:var(--pkg-card-solid);box-shadow:0 0 0 1px var(--pkg-line-2),0 30px 60px -30px rgba(20,8,24,.6);animation:pkg-rise .4s var(--pkg-out) both}
+#pinkie-study-desk .pke-modal__card h3{margin:0 0 8px;font:900 20px/1.2 var(--pkg-display);letter-spacing:.06em}
+#pinkie-study-desk .pke-modal__card p{margin:0;font-size:13px;line-height:1.7;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-modal__meta{margin-top:12px!important;font-size:12px!important;color:var(--pkg-ink)!important}
+#pinkie-study-desk .pke-modal__act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+#pinkie-study-desk .pke-modal__act .pkg-btn{padding:9px 22px;letter-spacing:.3em}
+/* 交卷时考场之外的一切都不动（零特效） */
+#pinkie-study-desk[data-exam="on"] .pk-gamefx-layer,#pinkie-study-desk[data-exam="on"] [data-game-hud]{display:none!important}
+
+/* ───── 阅卷等待 ───── */
+#pinkie-study-desk .pke-grading{display:grid;justify-items:center;gap:10px;padding:16vh 0;text-align:center}
+#pinkie-study-desk .pke-grading h3{font-size:28px}
+#pinkie-study-desk .pke-grading p{margin:0;font-size:13px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-grading__rule{display:block;width:160px;height:1px;margin-top:14px;background:linear-gradient(90deg,transparent,var(--pkg-ink-2),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:pke-sweep 1.6s cubic-bezier(.65,0,.35,1) infinite}
+@keyframes pke-sweep{from{background-position:-100% 0}to{background-position:200% 0}}
+
+/* ───── Boss 结算 ───── */
+#pinkie-study-desk .pke-boss{position:fixed;inset:0;z-index:2147481000;overflow:hidden;opacity:0;transition:opacity .5s var(--pkg-out);
+  background:radial-gradient(60% 70% at 50% 42%,#3A1B33 0%,#1A0F1C 55%,#0C080E 100%)}
+#pinkie-study-desk .pke-boss.is-in{opacity:1}
+#pinkie-study-desk .pke-boss.is-out{opacity:0;transition-timing-function:var(--pkg-in)}
+#pinkie-study-desk .pke-boss__art{position:absolute;left:50%;top:44%;width:min(62vw,880px);transform:translate(-50%,-50%) scale(1.04);filter:drop-shadow(0 40px 60px rgba(0,0,0,.6));transition:transform 1.2s var(--pkg-out)}
+#pinkie-study-desk .pke-boss.is-in .pke-boss__art{transform:translate(-50%,-50%) scale(1)}
+#pinkie-study-desk .pke-boss__plate{position:absolute;left:50%;bottom:9vh;width:min(560px,80vw);transform:translateX(-50%);display:grid;grid-template-columns:1fr auto;gap:10px 16px;align-items:end;color:#F5ECF1}
+#pinkie-study-desk .pke-boss__name small{color:rgba(245,236,241,.6)}
+#pinkie-study-desk .pke-boss__name b{display:block;margin-top:6px;font:900 30px/1 var(--pkg-display);letter-spacing:.12em}
+#pinkie-study-desk .pke-boss__plate > .pkg-num{font:600 22px/1 var(--pkg-num);font-variant-numeric:tabular-nums}
+#pinkie-study-desk .pke-boss .pke-hp{grid-column:1/3;height:5px;background:rgba(255,255,255,.12)}
+#pinkie-study-desk .pke-boss__log{position:absolute;right:5vw;top:50%;transform:translateY(-50%);display:grid;gap:10px;width:300px}
+#pinkie-study-desk .pke-strike{display:grid;grid-template-columns:auto 1fr auto;column-gap:10px;align-items:baseline;padding:8px 0 8px 12px;border-left:1px solid rgba(255,230,200,.4);color:#F5ECF1;animation:pke-strike .5s var(--pkg-out) both}
+#pinkie-study-desk .pke-strike small{grid-column:1/4;color:rgba(245,236,241,.55)}
+#pinkie-study-desk .pke-strike b{font:900 19px/1.2 var(--pkg-display);letter-spacing:.08em}
+#pinkie-study-desk .pke-strike em{font-style:normal;font:600 18px/1 var(--pkg-num)}
+#pinkie-study-desk .pke-strike strong{grid-column:1/4;margin-top:3px;font:600 10px/1 var(--pkg-latin);letter-spacing:.36em;color:#FFD88A}
+@keyframes pke-strike{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+#pinkie-study-desk .pke-dmg{position:absolute;top:28%;font:600 64px/1 var(--pkg-num);color:#FFF4F7;text-shadow:0 0 18px rgba(255,120,160,.55);pointer-events:none;animation:pke-dmg 1.1s var(--pkg-out) both}
+#pinkie-study-desk .pke-dmg.is-crit{font-size:88px;color:#FFE6A8;text-shadow:0 0 24px rgba(255,200,110,.7)}
+@keyframes pke-dmg{0%{opacity:0;transform:translateY(16px) scale(.9)}18%{opacity:1;transform:none}70%{opacity:1}100%{opacity:0;transform:translateY(-26px)}}
+#pinkie-study-desk .pke-boss__skip{position:absolute;right:24px;top:20px;color:rgba(245,236,241,.7)}
+
+/* ───── 成绩报告 ───── */
+#pinkie-study-desk .pke-report{display:grid;gap:18px;max-width:880px;margin:0 auto;padding:10px 0 30px;animation:pkg-rise .6s var(--pkg-out) both}
+#pinkie-study-desk .pke-report__head{display:grid;grid-template-columns:auto 1fr;gap:34px;align-items:end;padding-bottom:20px;border-bottom:1px solid var(--pkg-line-2)}
+#pinkie-study-desk .pke-score b{display:inline-block;margin-top:8px;font:600 92px/.9 var(--pkg-num);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#pinkie-study-desk .pke-score span{margin-left:8px;font:500 18px/1 var(--pkg-num);color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-line p{margin:12px 0 0;font-size:13px;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-line__bar{position:relative;height:6px;border-radius:3px;background:var(--pkg-line)}
+#pinkie-study-desk .pke-line__bar > i{position:absolute;inset:0;border-radius:inherit;transform-origin:left;background:var(--pkg-ink);animation:pke-grow 1.2s var(--pkg-out) .2s both}
+@keyframes pke-grow{from{transform:scaleX(0)}}
+#pinkie-study-desk .pke-line__mark{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-line__mark em{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-style:normal;font-size:10.5px;color:var(--pkg-ink-3);white-space:nowrap}
+#pinkie-study-desk .pke-rows{display:grid}
+#pinkie-study-desk .pke-row{display:grid;grid-template-columns:62px 92px 1fr 70px;gap:14px;align-items:center;padding:11px 0;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pke-row b{font:900 14px/1 var(--pkg-display);letter-spacing:.08em}
+#pinkie-study-desk .pke-row em{font-style:normal;text-align:right;font:600 14px/1 var(--pkg-num)}
+#pinkie-study-desk .pke-row__bar{position:relative;height:3px;border-radius:2px;background:var(--pkg-line)}
+#pinkie-study-desk .pke-row__bar i{position:absolute;inset:0;transform-origin:left;border-radius:inherit;background:var(--pkg-ink-2);animation:pke-grow 1s var(--pkg-out) .4s both}
+#pinkie-study-desk .pke-row[data-crit="1"] .pke-row__bar i{background:linear-gradient(90deg,#C99A3E,#E9C77E)}
+#pinkie-study-desk .pke-row[data-crit="1"] b::after{content:"CRIT";margin-left:8px;font:600 9px/1 var(--pkg-latin);letter-spacing:.3em;color:#A87A2C;vertical-align:middle}
+#pinkie-study-desk .pke-misses{display:grid;gap:10px}
+#pinkie-study-desk .pke-miss{padding:12px 16px;border-radius:10px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line)}
+#pinkie-study-desk .pke-miss b{font:900 13px/1.2 var(--pkg-display);letter-spacing:.04em}
+#pinkie-study-desk .pke-miss p{margin:4px 0 0;font-size:13px;line-height:1.6;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-miss__key{color:var(--pkg-ink)}
+#pinkie-study-desk .pke-miss__why{white-space:pre-line}
+#pinkie-study-desk .pke-notes{display:grid;gap:10px}
+#pinkie-study-desk .pke-note{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 16px;border-radius:10px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line)}
+#pinkie-study-desk .pke-note b{font:900 13.5px/1.2 var(--pkg-display)}
+#pinkie-study-desk .pke-note em{font-style:normal;font:600 13px/1.2 var(--pkg-num);justify-self:end}
+#pinkie-study-desk .pke-note p,#pinkie-study-desk .pke-note small{grid-column:1/3;margin:0;font-size:12.5px;line-height:1.7;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pke-note small{font-size:11px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-review{margin:0;padding:6px 0 6px 18px;border-left:2px solid var(--pkg-ink-2)}
+#pinkie-study-desk .pke-review p{margin:0;font:600 16px/1.7 var(--pkg-display);letter-spacing:.03em}
+#pinkie-study-desk .pke-review cite{display:block;margin-top:6px;font-style:normal;font-size:11.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pke-report__act{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+#pinkie-study-desk .pke-report__act .pkg-btn{padding:10px 20px;letter-spacing:.2em}
+#pinkie-study-desk .pke-mons{flex-basis:100%;font-size:12.5px;color:var(--pkg-ink-2)}
+@container (max-width:900px){#pinkie-study-desk .pke-lobby{grid-template-columns:1fr}#pinkie-study-desk .pke-bosscard{grid-row:auto}}
+#pinkie-study-desk[data-reduced="true"] .pke-page *,#pinkie-study-desk[data-reduced="true"] .pke-hall *{animation:none!important;transition:none!important}
+#pinkie-study-desk .pke-hall [lang="en"]{font-family:"Iowan Old Style","Palatino","Georgia","Times New Roman",serif!important}

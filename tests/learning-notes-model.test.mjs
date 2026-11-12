@@ -115,14 +115,14 @@ test('notes model calls the provider directly and keeps chat state, original, an
   assert.doesNotMatch(JSON.stringify(organizer.status(sessionKey)), /server-only-secret|baseUrl|1467/);
 });
 
-test('organizer model selection is scoped and does not patch the chat model or global config', async t => {
+test('organizer model selection is shared across learning sessions without changing chat configuration', async t => {
   const {store, organizer, config} = fixture(t, {fetchImpl: async (_url, options) => {
     assert.equal(JSON.parse(options.body).model, 'notes-large'); return response(lightResult);
   }});
   const before = JSON.stringify(config);
   organizer.setModel(sessionKey, 'local/notes-large');
   assert.equal(organizer.status(sessionKey).selectedModel, 'local/notes-large');
-  assert.equal(organizer.status('agent:learning:other').model, 'local/notes-small');
+  assert.equal(organizer.status('agent:learning:other').model, 'local/notes-large');
   assert.equal(JSON.stringify(config), before);
   assert.throws(() => organizer.setModel(sessionKey, 'unconfigured/model'), /不可用/);
   assert.throws(() => organizer.status('agent:project:other'), /学习模式/);

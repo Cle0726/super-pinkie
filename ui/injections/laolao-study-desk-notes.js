@@ -6,7 +6,6 @@
   const TYPES = ['规则', '易错', '句型', '方法', '概念', '摘录'];
   const LIBRARY = 'agent:learning:notes-library';
   const LEGACY = '旧版整理稿';
-  const RATINGS = [['forgot', '忘了', '1'], ['fuzzy', '模糊', '2'], ['remembered', '记得', '3']];
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const date = at => at ? new Date(at).toLocaleDateString('zh-CN', {month: 'long', day: 'numeric'}) : '';
   const shortDate = at => at ? new Date(at).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric'}) : '';
@@ -17,10 +16,9 @@
     let keyHandler = null;
     const local = ctx.local ? ctx.local() : desk.local(), controller = new AbortController(), reduced = () => Boolean(ctx.motion?.reduced);
     let alive = true, revision = 0, data = null, toc = null, menu = null, searchTimer = 0, toastTimer = 0, pollTimer = 0;
-    let section = null, preview = null, review = null, moves = null, wrongAttempts = [], autoSuggested = false, editing = '';
+    let section = null, preview = null, moves = null, wrongAttempts = [], autoSuggested = false, editing = '';
     const checked = new Set();
     let route = {...(local.notesRoute || {view: 'inbox'})}, mode = route.mode || (route.subject ? 'manuscript' : 'cards'), query = local.notesUi?.query || '';
-    review = local.notesUi?.review || null;
     root.classList.add('pinkie-desk-notes'); root.replaceChildren();
     const rpc = (name, params = {}, timeout = 20000) => ctx.request('pinkie.learning.' + name, {sessionKey: LIBRARY, ...params}, timeout);
     const btn = (text, action, cls = 'n-btn', mark) => {
@@ -43,7 +41,9 @@
     const add = btn('记一条', () => edit(null), 'n-btn n-ink', 'plus');
     const more = btn('', n => openMenu(n, [['导出 Markdown', () => exportMarkdown()], ['导出 Anki CSV', () => exportAnki()], ['整理模型', () => modelDialog()], ['看已合并', () => navigate({view: 'merged'})]]), 'n-btn n-icon', 'ellipsis'); more.setAttribute('aria-label', '笔记本更多');
     const directory = btn('目录', () => { root.classList.toggle('n-directory-open'); directory.setAttribute('aria-expanded', String(root.classList.contains('n-directory-open'))); }, 'n-btn n-directory-toggle', 'list'); directory.setAttribute('aria-expanded', 'false');
-    tools.append(directory, segment, searchBox, organize, add, more); head.append(heading, tools);
+    const drillHead = btn('背一组新的', () => window.__pinkieDrill?.start({source: 'notes', scope: toc?.today?.count ? {kind: 'due'} : {kind: 'more'}, size: 10}), 'n-btn n-primary');
+    drillHead.setAttribute('aria-label', '背一背');
+    tools.append(directory, segment, searchBox, organize, add, drillHead, more); head.append(heading, tools);
     const content = el('div', 'n-scroll'); content.setAttribute('aria-live', 'polite');
     const toastHost = el('div', 'n-toast'); toastHost.setAttribute('role', 'status'); toastHost.hidden = true;
     main.append(head, content); root.append(aside, main, toastHost);
@@ -93,7 +93,7 @@
     function navigate(next) {
       root.classList.remove('n-directory-open'); directory.setAttribute('aria-expanded', 'false');
       route = next; mode = next.mode || (next.subject ? 'manuscript' : 'cards'); local.notesRoute = {...route, mode};
-      query = ''; search.value = ''; preview = null; review = null; editing = ''; checked.clear(); load();
+      query = ''; search.value = ''; preview = null; editing = ''; checked.clear(); load();
     }
     function renderToc() {
       aside.replaceChildren(el('h1', '', '笔记本'));
@@ -103,15 +103,24 @@
         b.setAttribute('aria-current', on ? 'page' : 'false'); aside.append(b); return b;
       };
       entry('收集箱', toc.inbox, {view: 'inbox'}, 'inbox').classList.add('n-inbox-entry');
-      entry('今天回顾', toc.today?.count, {view: 'review'}, 'rotate-ccw');
+      const startDrill = (scope) => window.__pinkieDrill?.start({source: 'notes', scope, size: 10});
+      const attach = (b, next, label) => {
+        if (!next?.subject) return b;
+        const drill = el('button', 'n-toc-drill', '背'); drill.type = 'button'; drill.setAttribute('aria-label', '背 ' + label);
+        drill.addEventListener('click', () => startDrill({kind: 'section', exam: next.exam, subject: next.subject, ...(next.topic ? {topic: next.topic} : {})}));
+        const row = el('div', 'n-toc-row'); aside.insertBefore(row, b); row.append(b, drill); return b;
+      };
+      const todayBtn = btn('今天要背', () => startDrill(toc.today?.count ? {kind: 'due'} : {kind: 'more'}), 'n-toc-entry', 'rotate-ccw');
+      todayBtn.append(el('span', 'n-number', toc.today?.count ?? 0)); todayBtn.setAttribute('aria-current', 'false'); aside.append(todayBtn);
+      entry('过几天', toc.resting, {view: 'resting'}, 'calendar');
       entry('易错', toc.mistakes, {view: 'mistakes'}, 'triangle-alert');
       for (const exam of toc.exams || []) {
         if (!exam.subjects?.length) continue;
         aside.append(el('div', 'n-group', exam.name));
         for (const subject of exam.subjects) {
-          entry(subject.name, subject.count, {exam: exam.id, subject: subject.name}, subject.legacy ? 'file-text' : /C\s*语言/.test(subject.name) ? 'code' : /网络/.test(subject.name) ? 'network' : /数/.test(subject.name) ? 'sigma' : /电/.test(subject.name) ? 'zap' : /写/.test(subject.name) ? 'pen-line' : 'book-open');
+          attach(entry(subject.name, subject.count, {exam: exam.id, subject: subject.name}, subject.legacy ? 'file-text' : /C\s*语言/.test(subject.name) ? 'code' : /网络/.test(subject.name) ? 'network' : /数/.test(subject.name) ? 'sigma' : /电/.test(subject.name) ? 'zap' : /写/.test(subject.name) ? 'pen-line' : 'book-open'), {exam: exam.id, subject: subject.name}, subject.name);
           const topics = subject.topics || [], key = exam.id + '/' + subject.name, expanded = local.notesExpanded?.includes(key);
-          for (const topic of expanded ? topics : topics.slice(0, 5)) entry(topic.name, topic.count, {exam: exam.id, subject: subject.name, topic: topic.name}, null, true);
+          for (const topic of expanded ? topics : topics.slice(0, 5)) attach(entry(topic.name, topic.count, {exam: exam.id, subject: subject.name, topic: topic.name}, null, true), {exam: exam.id, subject: subject.name, topic: topic.name}, topic.name);
           if (topics.length > 5) aside.append(btn(expanded ? '收起考点' : `展开另外 ${topics.length - 5} 个考点`, () => { local.notesExpanded = expanded ? local.notesExpanded.filter(x => x !== key) : [...(local.notesExpanded || []), key]; renderToc(); }, 'n-toc-expand'));
         }
       }
@@ -123,17 +132,15 @@
       try {
         const legacy = route.exam === 'other' && route.subject === LEGACY;
         const params = {limit: 500, query, ...(route.exam ? {exam: route.exam, subject: route.subject, ...(route.topic ? {topic: route.topic} : {})} : {}),
-          ...(route.view === 'inbox' ? {inbox: true} : ['mistakes', 'moved'].includes(route.view) ? {view: route.view} : route.view === 'merged' ? {includeMerged: true} : {})};
+          ...(route.view === 'inbox' ? {inbox: true} : ['mistakes', 'moved', 'resting'].includes(route.view) ? {view: route.view} : route.view === 'merged' ? {includeMerged: true} : {})};
         const jobs = [rpc('notes.toc'), legacy ? rpc('notes.list', {limit: 500}) : rpc('notes.list', params)];
         if (route.subject && mode === 'manuscript') jobs.push(rpc('notes.section.get', {exam: route.exam, subject: route.subject}));
-        if (route.view === 'review' && (!review || !review.notes.length)) jobs.push(rpc('notes.recall.queue', {limit: 10}));
         if (route.view === 'mistakes') jobs.push(rpc('attempts.list', {sessionKey: typeof ctx.sessionKey === 'function' ? ctx.sessionKey() : ctx.sessionKey, wrongOnly: true, limit: 20}));
         if (route.view === 'inbox') jobs.push(rpc('vocab.fromNotes.preview').catch(() => null));
         const results = await Promise.all(jobs);
         if (!alive || token !== revision) return;
         [toc, data] = results;
         if (route.subject && mode === 'manuscript') section = results[2];
-        if (route.view === 'review' && (!review || !review.notes.length)) { const queue = results[2]; review = {queue, notes: queue.notes || [], index: 0, flipped: false, done: 0}; }
         if (route.view === 'inbox') moves = results[2];
         if (route.view === 'mistakes') wrongAttempts = results[2]?.attempts || [];
         renderToc(); render();
@@ -145,18 +152,27 @@
     function render() {
       closeMenu(); content.replaceChildren();
       const isSection = Boolean(route.subject), legacy = route.subject === LEGACY;
-      title.textContent = route.topic || route.subject || ({inbox: '收集箱', review: '今天回顾', mistakes: '易错', moved: '已搬进生词本', merged: '已合并'}[route.view] || '原笔记');
+      const due = toc?.today?.count || 0;
+      drillHead.replaceChildren(document.createTextNode(due ? `背 ${due} 条` : '背一组新的'));
+      title.textContent = route.topic || route.subject || ({inbox: '收集箱', review: '今天要背', resting: '过几天', mistakes: '易错', moved: '已搬进生词本', merged: '已合并'}[route.view] || '原笔记');
       crumb.textContent = [route.exam ? examName(route.exam) : '', route.topic ? route.subject : ''].filter(Boolean).join(' / ');
       segment.hidden = !isSection || legacy; organize.hidden = !isSection || legacy; for (const b of segment.children) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
       const count = (data.notes || []).length;
       if (route.view === 'inbox') { subtitle.textContent = '聊天里随手记下的内容先放在这里，碧琪帮你分好类再收进笔记本'; return renderInbox(); }
-      if (route.view === 'review') { subtitle.textContent = reviewSubtitle(); return renderReview(); }
+      if (route.view === 'review') {
+        subtitle.textContent = '今天要背的，打开背一背。';
+        const open = () => window.__pinkieDrill?.start({source: 'notes', scope: toc?.today?.count ? {kind: 'due'} : {kind: 'more'}, size: 10, ...(route.from && route.from !== 'notes' && route.from !== 'drill' ? {returnTo: route.from} : {})});
+        // 只自动打开一次，并且记在页面状态里：背完回到这里不会又被弹进背一背（以前会来回打转）。
+        if (!route.opened) { route.opened = true; local.notesRoute = {...route, mode}; open(); content.append(el('p', 'n-empty', '正在打开背一背…')); return; }
+        const box = el('div', 'n-empty'); const again = btn(toc?.today?.count ? `背今天的 ${toc.today.count} 条` : '再背一组', open, 'n-btn n-primary');
+        box.append(el('p', '', toc?.today?.count ? '今天到期的笔记卡还没背完。' : '今天到期的都背过了，可以再背一组。'), again); content.append(box); return;
+      }
       if (isSection && (mode === 'manuscript' || legacy)) {
         const saved = section?.section;
         subtitle.textContent = saved ? `${legacy ? saved.sourceCount : section.noteCount} 条原笔记 → 提炼成 ${saved.pointCount} 个要点 · ${date(saved.builtAt || saved.createdAt)} 整理${legacy ? ' · 只读' : ''}` : `${section?.noteCount ?? count} 条原笔记 · 还没有整理稿`;
         return renderManuscript();
       }
-      subtitle.textContent = route.view === 'moved' ? `${count} 条 · 原笔记归档在这里，词在生词本里背` : `${count} 条 · 按最近更新`;
+      subtitle.textContent = route.view === 'resting' ? `${count} 条 · 点过「记得」或已经掌握的先放在这里，到期后再出现` : route.view === 'moved' ? `${count} 条 · 原笔记归档在这里，词在生词本里背` : `${count} 条 · 按最近更新`;
       renderCards(); if (route.view === 'mistakes') renderWrongAttempts();
     }
 
@@ -366,7 +382,8 @@
       if (!preview) {
         const ids = sectionNoteIds(saved, sections), row = el('div', 'n-quizme');
         const quizButton = btn(`考考我这一节（${Math.min(10, ids.length)} 题）`, () => quiz(pickNotes(ids)), 'n-btn n-primary', 'pencil-line'); quizButton.disabled = !ids.length;
-        row.append(quizButton, btn('复制', async () => { await navigator.clipboard.writeText(section.section.text || ''); toast('整理稿已复制'); }, 'n-btn', 'copy'), btn('导出 Markdown', () => exportMarkdown(), 'n-btn', 'download'));
+        const drillSection = btn('背这一节', () => window.__pinkieDrill?.start({source: 'notes', scope: {kind: 'section', exam: route.exam, subject: route.subject, ...(route.topic ? {topic: route.topic} : {})}, size: 10}), 'n-btn'); drillSection.disabled = !ids.length;
+        row.append(quizButton, drillSection, btn('复制', async () => { await navigator.clipboard.writeText(section.section.text || ''); toast('整理稿已复制'); }, 'n-btn', 'copy'), btn('导出 Markdown', () => exportMarkdown(), 'n-btn', 'download'));
         page.append(row);
       }
       content.append(page);
@@ -387,61 +404,6 @@
       undoable('整理稿已保存', () => rpc('notes.organize.undo', {backupId: result.backupId}));
     }
 
-    // ---- 今天回顾 ----
-    function reviewSubtitle() {
-      const q = review?.queue || {}, limit = q.dailyLimit ?? 10, backlog = q.backlog || 0;
-      return `每天最多 ${limit} 条，按到期先后来` + (backlog ? `；积压的 ${backlog} 条会分到之后几天，不用一次补完` : '');
-    }
-    function renderReview() {
-      const wrap = el('div', 'n-review'), notes = review?.notes || [], note = notes[review?.index ?? 0];
-      if (!notes.length || !note) {
-        const queue = review?.queue || {};
-        if (queue.pending || queue.missing) {
-          const box = el('div', 'n-empty'); box.append(el('strong', '', queue.pending ? '碧琪正在把笔记拆成问题和答案…' : '先把笔记拆成回忆卡'), el('p', '', '整段原文已经保存。准备好后，正面只显示问题，翻面才显示答案。'));
-          const refresh = btn(queue.pending ? '查看进度' : '重新拆分', async () => { if (!queue.pending) await rpc('notes.recall.prepare', {force: true}); await load(); }, 'n-btn n-ink'); box.append(refresh);
-          if (queue.problems?.length) box.append(el('p', '', queue.problems[0].error));
-          wrap.append(box); content.append(wrap);
-          if (queue.pending && !document.hidden && (!ctx.pane || ctx.desk.isFocused())) { clearTimeout(pollTimer); pollTimer = setTimeout(() => { review = null; load(); }, 2500); }
-          return;
-        }
-        const empty = el('div', 'n-empty');
-        empty.append(el('strong', '', review?.done ? `今天回顾了 ${review.done} 条` : review?.queue?.completedToday ? '今天的回顾做完了' : '今天没有到期的笔记'), el('p', '', '记得的会隔几天再回来，忘了的明天再见。'));
-        wrap.append(empty); content.append(wrap); return;
-      }
-      const bar = el('div', 'n-rbar'), dots = el('div', 'n-dots');
-      notes.forEach((_, i) => dots.append(el('i', i < review.index ? 'd' : i === review.index ? 'c' : '')));
-      bar.append(dots, el('span', '', `第 ${review.index + 1} / ${notes.length} 条` + (note.subject ? ` · ${note.subject}` : '')));
-      const card = el('div', 'n-rcard'), top = el('div', 'n-card-top'); top.append(badge(note.noteType));
-      const q = el('div', 'n-q', note.recallQuestion || (note.cue && /[?？]|什么|怎么|如何|哪/.test(note.cue) ? note.cue : '请回忆这条笔记的关键知识点。'));
-      const answer = el('textarea'); answer.rows = 3; answer.placeholder = '先在这里写下你记得的（可以不写），⌘↩ 或点「翻面」看答案'; answer.setAttribute('aria-label', '回忆内容'); answer.value = review.draft || '';
-      answer.addEventListener('input', () => { review.draft = answer.value; });
-      answer.addEventListener('keydown', event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); flip(); } });
-      card.append(top, q, answer);
-      if (!review.flipped) { const row = el('div', 'n-actions'); row.append(btn('翻面', () => flip(), 'n-btn n-ink')); row.append(el('span', 'n-kbd-hint', '空格翻面')); card.append(row); }
-      else {
-        const ans = el('div', 'n-ans'); ans.append(el('p', '', note.recallAnswer || note.meaning || note.content || ''));
-        if (!note.recallAnswer && note.example) ans.append(el('p', 'n-eg', '例：' + note.example));
-        if (note.recallQuote) { const source = el('details', 'n-recall-source'); source.append(el('summary', '', '看原文依据'), el('p', '', note.recallQuote)); ans.append(source); }
-        card.append(ans);
-        const rate = el('div', 'n-rate');
-        for (const [rating, label, key] of RATINGS) { const b = btn(label, () => grade(rating), rating === 'remembered' ? 'n-rate-ok' : ''); b.append(el('kbd', '', key)); rate.append(b); }
-        card.append(rate);
-      }
-      const alt = el('div', 'n-alt'); alt.append(btn(`换成做题：用这 ${notes.length - review.index} 条出一组题`, () => quiz(notes.slice(review.index)), 'n-btn', 'pencil-line'));
-      wrap.append(bar, card, alt, el('p', 'n-honest', '只凭你自评，碧琪不会替你判对错；做题模式会按答案计入掌握度。'));
-      content.append(wrap);
-      // 不自动聚焦输入框：空格默认翻面；想写下回忆时点进输入框，⌘↩ 翻面。也不聚焦评分按钮，免得空格误点「记得」。
-    }
-    function flip() { if (route.view === 'review' && review?.notes[review.index] && !review.flipped) { review.flipped = true; render(); } }
-    async function grade(rating) {
-      const note = review?.notes[review.index]; if (!note || !review.flipped || review.grading) return;
-      review.grading = true;
-      try { await rpc(note.recallId ? 'notes.recall.review' : 'notes.review', {id: note.id, recallId: note.recallId, rating}); } finally { review.grading = false; }
-      review.done++; review.index++; review.flipped = false; review.draft = '';
-      if (review.index >= review.notes.length) { const keep = review; review = null; await load(); if (review) review.done = keep.done; render(); return; }
-      render(); rpc('notes.toc').then(next => { if (alive) { toc = next; renderToc(); } }).catch(() => {});
-    }
-
     // ---- 出题、导出 ----
     // 题出在聊天舞台上：先回到对话，再走学习舞台已有的笔记出题链路（单条/批量），不另起协议。
     async function quiz(notes) {
@@ -459,23 +421,19 @@
       download('﻿' + [['Front', 'Back', 'Example', 'Tags'], ...notes.map(n => [n.cue || n.title || n.term || n.content, n.meaning || n.content, n.example, (n.tags || []).join(' ')])].map(row => row.map(c => '"' + String(c || '').replace(/"/g, '""') + '"').join(',')).join('\r\n'), '笔记-Anki.csv', 'text/csv');
     }
     function download(text, name, type = 'text/markdown') { const url = URL.createObjectURL(new Blob([text], {type: type + ';charset=utf-8'})), a = el('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-    async function modelDialog() {
-      const d = dialog('整理模型'), info = await rpc('notes.organizer.status'); if (!d.isConnected) return;
-      const select = el('select'); select.setAttribute('aria-label', '整理模型'); for (const m of info.models || []) { const o = el('option', '', m.name || m.id); o.value = m.id || m.key; select.append(o); } select.value = info.model || info.defaultModel || ''; d.append(select, btn('保存', async () => { await rpc('notes.organizer.setModel', {model: select.value}); d.close(); toast('整理模型已更新'); }, 'n-btn n-ink'));
+    function modelDialog() {
+      if (typeof window.__pinkieStudyDesk?.openBuiltinModel === 'function') window.__pinkieStudyDesk.openBuiltinModel();
+      else toast('模型设置还在准备，请稍后再试');
     }
     keyHandler = event => {
       if (event.target.closest?.('input,textarea,select,[contenteditable=true]')) return;
       if (menu && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); return; }
       if (menu && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); const items = [...menu.node.children], i = items.indexOf(document.activeElement); items[(i + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus(); return; }
-      if (route.view === 'review' && review) {
-        if (event.code === 'Space' && !event.target.closest?.('button')) { event.preventDefault(); flip(); return; }
-        const rating = RATINGS.find(item => item[2] === event.key); if (rating && review.flipped) { event.preventDefault(); grade(rating[0]).catch(error => toast(error.message)); return; }
-      }
       if (event.target.closest?.('.n-toc') && ['ArrowDown', 'ArrowUp'].includes(event.key)) { event.preventDefault(); const entries = [...aside.querySelectorAll('.n-toc-entry')], i = entries.indexOf(document.activeElement), n = entries[(i + (event.key === 'ArrowDown' ? 1 : -1) + entries.length) % entries.length]; n.click(); n.focus(); }
     };
-    const teardown = () => { local.notesUi = {query, review}; alive = false; revision++; controller.abort(); clearTimeout(searchTimer); clearTimeout(toastTimer); clearTimeout(pollTimer); closeMenu(); for (const d of root.querySelectorAll('dialog')) { d.close(); d.remove(); } keyHandler = null; };
+    const teardown = () => { local.notesUi = {query}; alive = false; revision++; controller.abort(); clearTimeout(searchTimer); clearTimeout(toastTimer); clearTimeout(pollTimer); closeMenu(); for (const d of root.querySelectorAll('dialog')) { d.close(); d.remove(); } keyHandler = null; };
     load();
-    return {unmount: teardown, keydown: event => keyHandler?.(event), pause() { clearTimeout(pollTimer); }, resume() { if (route.view === 'inbox' && alive) schedulePoll(); else if (route.view === 'review' && review?.queue?.pending && alive) { clearTimeout(pollTimer); pollTimer = setTimeout(() => { review = null; load(); }, 500); } }};
+    return {unmount: teardown, keydown: event => keyHandler?.(event), pause() { clearTimeout(pollTimer); }, resume() { if (route.view === 'inbox' && alive) schedulePoll(); }};
   }
   desk.registerView('notes', {title: '笔记本', icon: 'notebook-text', mount});
   window.__pinkieStudyDeskNotes = {open: options => desk.go('notes', options)};

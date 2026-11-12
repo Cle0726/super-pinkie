@@ -19,12 +19,10 @@
     const owner = /^agent:([^:]+):/.exec(sessionKey())?.[1], mode = doc.dataset.laolaoMode;
     return mode ? mode === 'learning' && (!owner || owner === 'learning') : owner === 'learning';
   };
-  // 桌上的每一页是一张能拖、能改大小的卡片。位置按学习台内容区的比例存（0–1），换窗口大小也不会跑出去。
-  const MAX_CARDS = 4, MIN_W = 320, MIN_H = 260, SNAP = 14;
-  // 4 张学习页的上限不算聊天卡：桌上摊满了也总能开合对话。
-  const full = w => w.panes.filter(p => p.view !== 'deskchat').length >= MAX_CARDS;
-  const validRect = r => r && [r.x, r.y, r.w, r.h].every(Number.isFinite) && r.w > 0 && r.h > 0 ? {x: r.x, y: r.y, w: Math.min(1, r.w), h: Math.min(1, r.h)} : null;
-  // 平铺：从左到右排成一本摊开的本子；聊天卡固定窄一点、放最右边。
+  // 11-08 起学习台一次只摊一页（铺满）+ 可开合的对话卡停在右边。原来的多卡摊开（最多 4 张、拖动缩放）在真 App 里把
+  // 游戏页 / 生词本 / 资料页挤成约 280pt 的窄条，用户要求去掉。导轨点哪页就在这一页里换页。
+  const mainPage = w => w.panes.find(p => p.view !== 'deskchat');
+  // 主页面铺满，对话卡固定窄一点、停在最右边。
   function tileRects(w) {
     const chat = w.panes.filter(p => p.view === 'deskchat'), pages = w.panes.filter(p => p.view !== 'deskchat');
     const chatW = chat.length && pages.length ? 0.27 : 0, gap = chatW ? 0.012 : 0, each = pages.length ? (1 - chatW - gap) / pages.length : 0;
@@ -35,15 +33,25 @@
   const workspace = () => {
     if (!sessions.has(state.key)) {
       let saved; try { saved = JSON.parse(localStorage.getItem('pinkie-desk-pages:' + state.key) || 'null'); } catch {}
-      const configs = Array.isArray(saved?.panes) && saved.panes.length ? saved.panes.slice(0, MAX_CARDS + 1) : [{view: 'today'}];
-      const panes = configs.map((config, i) => ({id: 'page-' + i, view: config.view === 'chat' ? 'today' : config.view || 'today', state: {view: config.view || 'today', deskView: config.view || 'today', notesRoute: config.notesRoute, vocabRoute: config.vocabRoute}, rect: validRect(config.rect), z: Number(config.z) || i + 1, host: null}));
-      const w = {panes, focus: Math.min(Number(saved?.focus) || 0, panes.length - 1), chat: true, chatFocus: false, tiled: saved?.tiled !== false || panes.some(p => !p.rect), zTop: panes.length};
-      if (w.tiled) tileRects(w); w.zTop = Math.max(...panes.map(p => p.z)); sessions.set(state.key, w);
+      // 迁移旧的多卡工作区：只留最上面那张学习页 + 对话卡（学习数据都在后端，这里只是布局）。
+      const all = Array.isArray(saved?.panes) ? saved.panes.filter(c => c && typeof c === 'object') : [];
+      const page = all.filter(c => c.view !== 'deskchat').sort((a, b) => (Number(b.z) || 0) - (Number(a.z) || 0))[0] || {view: 'today'};
+      const configs = [page, ...(all.some(c => c.view === 'deskchat') ? [{view: 'deskchat'}] : [])];
+      const panes = configs.map((config, i) => ({id: 'page-' + i, view: config.view === 'chat' || !config.view ? 'today' : config.view, state: {view: config.view || 'today', deskView: config.view || 'today', notesRoute: config.notesRoute, vocabRoute: config.vocabRoute}, z: i + 1, host: null}));
+      const w = {panes, focus: 0, chat: true, chatFocus: false, tiled: true, zTop: panes.length};
+      tileRects(w); sessions.set(state.key, w);
     }
     return sessions.get(state.key);
   };
   const focusedPane = () => workspace().panes[workspace().focus] || workspace().panes[0];
   const current = () => focusedPane().state;
+  // 「回哪」统一一个说法：按钮上写清回哪一页。今日页开了游戏层就是营地。
+  const PLAYING = ['drill', 'stage', 'gameguard', 'gameexam', 'gamepracset'];
+  const GAME_PAGES = ['gamepractice', 'gamemap', 'gamehunt', 'gameshop', 'gamegacha', 'gamewardrobe', 'gamecodex', 'gameexam'];
+  const BACK_NAMES = {gamepractice: '回题库', gamepracset: '回刷题', gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场', notes: '回笔记本', vocab: '回生词本', stage: '回舞台', board: '回看板', library: '回书架', drill: '回背一背', gameguard: '回守关'};
+  const backName = view => (!view || view === 'today' ? (window.__pinkieGame ? '回营地' : '回今日') : BACK_NAMES[view] || '返回');
+  // 做题页（背一背、舞台、守关、考场）退出时回进来的那一页；没有记录就回今日 / 营地。
+  const backViewOf = st => { const v = PLAYING.includes(st?.view) ? st.returnView : ''; return v && v !== st.view ? v : 'today'; };
   const conversationKey = () => {
     const key='pinkie-desk-conversation:'+state.key;
     const w=workspace();if(w.conversation)return w.conversation;
@@ -52,7 +60,7 @@
     try{localStorage.setItem(key,w.conversation);}catch{}return w.conversation;
   };
   const focused = pane => Boolean(state.root) && !workspace().chat && !workspace().chatFocus && focusedPane() === pane && !document.hidden;
-  const saveWorkspace = () => { try { const w = workspace(); localStorage.setItem('pinkie-desk-pages:' + state.key, JSON.stringify({focus: w.focus, tiled: w.tiled, panes: w.panes.map(p => ({view: p.view, notesRoute: p.state.notesRoute, vocabRoute: p.state.vocabRoute, rect: p.rect, z: p.z}))})); } catch {} };
+  const saveWorkspace = () => { try { const w = workspace(); localStorage.setItem('pinkie-desk-pages:' + state.key, JSON.stringify({focus: w.focus, panes: w.panes.map(p => ({view: p.view, notesRoute: p.state.notesRoute, vocabRoute: p.state.vocabRoute, z: p.z}))})); } catch {} };
   // 页面刚加载时请求可能抢在 App 的 connect 握手前，被网关拒绝或连接还没就绪；这些请求都没被处理，
   // 稍等重试是安全的（包括作答这类写操作）。其他错误照旧抛出。
   const CONNECTING = /invalid handshake|first request must be connect|gateway socket unavailable|学习台正在连接/i;
@@ -167,7 +175,9 @@
     const row = el('div', 'desk-empty-actions'); row.append(...actions);
     box.append(img, el('h2', 'desk-empty-title', title), el('p', '', sentence), row); return box;
   };
-  const notice = text => { if (state.root) { const n = state.root.querySelector('.desk-status'); n.textContent = text; } };
+  // 一条提示：显示几秒自己淡掉（以前一直留在左下角，压着入口格和商店价格）。
+  let noticeTimer = 0;
+  const notice = (text, ms = 3600) => { if (!state.root) return; const n = state.root.querySelector('.desk-status'); if (!n) return; n.textContent = text || ''; n.classList.toggle('show', Boolean(text)); clearTimeout(noticeTimer); if (text) noticeTimer = setTimeout(() => n.classList.remove('show'), ms); };
   const context = pane => ({request, sessionKey:conversationKey, motion: pane.motion, tokens, go: (id, options) => goPane(pane, id, options), local: () => pane.state, pane, desk: deskForPane(pane)});
   let focusQueue = Promise.resolve(), focusOwned = null;
   function syncFocusClock() {
@@ -189,6 +199,160 @@
       }
     }).catch(error => { if (state.root) notice('专注记录：' + error.message); });
   }
+  // 专为学习台画的线稿：书页里的节点和笔记，随交互轻微移动。
+  function builtinModelMark() {
+    const art = el('span', 'desk-model-mark');
+    art.setAttribute('aria-hidden', 'true');
+    art.innerHTML = `<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <g class="model-mark-book"><path d="M14 26c12-4 23-3 34 4 11-7 22-8 34-4v42c-12-4-23-3-34 4-11-7-22-8-34-4z"/><path d="M48 30v42"/></g>
+      <g class="model-mark-route"><path d="M23 53l8-9 8 4"/><circle cx="23" cy="53" r="2"/><circle cx="31" cy="44" r="2"/><circle cx="39" cy="48" r="2"/></g>
+      <g class="model-mark-lines"><path d="M57 42h15M57 49h15M57 56h9"/></g>
+      <path class="model-mark-star" d="M74 13v8m-4-4h8"/>
+    </svg>`;
+    return art;
+  }
+
+  function builtinModelDialog() {
+    if (!state.root) return;
+    const existing = state.root.querySelector('dialog.desk-builtin-model');
+    if (existing?.open) { existing.querySelector('.desk-model-search input')?.focus(); return; }
+    existing?.remove();
+    const dialog = el('dialog', 'desk-builtin-model');
+    dialog.setAttribute('aria-labelledby', 'desk-model-title');
+    const head = el('header', 'desk-model-head');
+    const heading = el('div', 'desk-model-heading');
+    heading.append(el('p', 'desk-model-kicker', 'PINKIE’S STUDY DESK'), el('h2', '', '内置模型'));
+    heading.lastChild.id = 'desk-model-title';
+    heading.append(el('p', 'desk-model-lead', '给学习台和游戏选一位后台搭档'));
+    const close = button('关闭', () => dialog.close(), 'desk-model-close');
+    close.setAttribute('aria-label', '关闭内置模型');
+    head.append(builtinModelMark(), heading, close);
+
+    const body = el('div', 'desk-model-body');
+    const currentBox = el('section', 'desk-model-current');
+    const currentCopy = el('div', 'desk-model-current-copy');
+    const currentName = el('strong', 'desk-model-current-name', '正在读取…');
+    const currentDetail = el('p', 'desk-model-current-detail', '请稍等一下');
+    currentCopy.append(el('span', 'desk-model-label', '当前配置'), currentName, currentDetail);
+    const currentMark = el('span', 'desk-model-current-mark'); currentMark.setAttribute('aria-hidden', 'true');
+    currentMark.innerHTML = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="16" cy="16" r="12"/><path d="M10 16h12M16 10v12"/></svg>';
+    currentBox.append(currentCopy, currentMark);
+    const scope = el('p', 'desk-model-scope', '备课、看板、生词和笔记，以及游戏的地图、出题、错题怪、讲解和阅卷，都会使用这里的选择。列表来自已配置的模型来源，可先测试连接。');
+    const searchBox = el('label', 'desk-model-search');
+    const search = el('input'); search.type = 'search'; search.placeholder = '搜索名称、模型 ID 或来源'; search.setAttribute('aria-label', '搜索内置模型'); search.disabled = true;
+    searchBox.append(el('span', '', '查找'), search);
+    const listHead = el('div', 'desk-model-list-head');
+    const listTitle = el('h3', '', '选择模型'); const count = el('span', '', ''); listHead.append(listTitle, count);
+    const choices = el('div', 'desk-model-choices'); choices.setAttribute('aria-label', '可选模型');
+    const message = el('p', 'desk-model-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+    body.append(currentBox, scope, searchBox, listHead, choices, message);
+
+    const foot = el('footer', 'desk-model-actions');
+    const test = button('测试连接', testConnection, 'desk-model-test');
+    const spacer = el('span', 'desk-model-spacer');
+    const cancel = button('取消', () => dialog.close(), 'desk-model-cancel');
+    const save = button('应用模型', apply, 'desk-model-save');
+    test.disabled = true; save.disabled = true;
+    foot.append(test, spacer, cancel, save);
+    dialog.append(head, body, foot); state.root.append(dialog);
+    dialog.addEventListener('close', () => dialog.remove(), {once: true});
+    dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+    dialog.showModal();
+    close.focus();
+
+    let info = null, draft = '', saving = false, testing = false;
+    const connected = () => dialog.isConnected && dialog.open;
+    const chosen = () => draft ? info?.models?.find(item => item.id === draft) : info?.models?.find(item => item.id === info.defaultModel);
+    function setMessage(text = '', kind = '') { message.textContent = text; message.dataset.kind = kind; }
+    function updateButtons() {
+      const ready = Boolean(info); const busy = saving || testing;
+      save.disabled = !ready || busy || draft === (info.selectedModel || '') || (draft !== '' && !chosen());
+      test.disabled = !ready || busy || !chosen();
+      search.disabled = !ready || busy;
+      cancel.disabled = close.disabled = saving;
+      choices.querySelectorAll('button').forEach(row => { row.disabled = busy; });
+      test.textContent = testing ? '正在测试…' : '测试连接';
+      save.textContent = saving ? '正在保存…' : '应用模型';
+    }
+    function select(value) {
+      if (saving || testing) return;
+      draft = value;
+      setMessage(chosen()?.image === false ? '这个模型只支持文字；图片讲义需要选择可看图的模型。' : '');
+      choices.querySelectorAll('[data-model-ref]').forEach(row => {
+        const selected = row.dataset.modelRef === draft;
+        row.classList.toggle('is-selected', selected); row.setAttribute('aria-pressed', String(selected));
+      });
+      dialog.classList.remove('has-choice'); void dialog.offsetWidth; dialog.classList.add('has-choice');
+      updateButtons();
+    }
+    function row(value, name, detail, image) {
+      const item = button('', () => select(value), 'desk-model-option'); item.dataset.modelRef = value;
+      const dot = el('span', 'desk-model-radio'); dot.setAttribute('aria-hidden', 'true');
+      const copy = el('span', 'desk-model-option-copy'); copy.append(el('strong', '', name), el('small', '', detail));
+      item.append(dot, copy);
+      if (image != null) item.append(el('span', 'desk-model-capability', image ? '可看图' : '文字'));
+      return item;
+    }
+    function filter() {
+      const query = search.value.trim().toLocaleLowerCase(); let visible = 0, visibleAny = 0;
+      choices.querySelectorAll('[data-model-ref]').forEach(item => {
+        const show = !query || item.textContent.toLocaleLowerCase().includes(query) || item.dataset.modelRef.toLocaleLowerCase().includes(query);
+        item.hidden = !show; if (show) visibleAny++; if (show && item.dataset.modelRef) visible++;
+      });
+      count.textContent = query ? `${visible} 个匹配` : `${info?.models?.length || 0} 个可选`;
+      const empty = choices.querySelector('.desk-model-no-match'); if (empty) empty.hidden = !query || visibleAny > 0;
+    }
+    function render() {
+      currentName.textContent = info.modelName || '没有可用模型';
+      currentDetail.textContent = !info.available ? '请在应用的模型设置里配置可用来源。' : info.usingFallback ? `之前选择的模型不可用，暂时使用 ${info.modelName || '无'}。请选择其他模型。`
+        : info.selectedModel ? '已手动指定，所有学习会话共用；可先测试连接' : '跟随学习模式的默认模型；可先测试连接';
+      currentBox.classList.toggle('is-warning', Boolean(info.usingFallback || !info.available));
+      draft = info.selectedModel || '';
+      choices.replaceChildren();
+      choices.append(row('', '跟随学习模式', info.defaultModelName ? `当前默认：${info.defaultModelName}` : '暂时没有可用的默认模型', null));
+      const models = [...(info.models || [])].sort((a, b) => `${a.provider || ''} ${a.name}`.localeCompare(`${b.provider || ''} ${b.name}`, 'zh-CN'));
+      for (const model of models) choices.append(row(model.id, model.name || model.id, model.id, model.image));
+      const empty = el('p', 'desk-model-no-match', '没有找到匹配的模型，试试其他关键词。'); empty.hidden = true; choices.append(empty);
+      if (!models.length) choices.append(el('p', 'desk-model-empty', '没有找到可用模型。请先在应用的模型设置里配置可用来源，再回来重试。'));
+      select(draft); filter();
+    }
+    async function load() {
+      info = null; updateButtons(); setMessage(''); choices.replaceChildren(el('p', 'desk-model-loading', '正在读取可用模型…'));
+      try {
+        const result = await request('pinkie.learning.builtinModel.status', {});
+        if (!connected()) return;
+        info = {...result, models: Array.isArray(result.models) ? result.models : []}; render();
+      } catch (error) {
+        if (!connected()) return;
+        choices.replaceChildren(el('p', 'desk-model-empty', '模型列表暂时没有连上。'));
+        const retry = button('重新加载', load, 'desk-model-retry'); choices.append(retry);
+        setMessage(error?.message || '连接失败，请稍后重试。', 'error');
+      }
+    }
+    async function apply() {
+      if (!info || saving || testing || save.disabled) return;
+      saving = true; setMessage(''); updateButtons();
+      try {
+        const result = await request('pinkie.learning.builtinModel.setModel', {model: draft});
+        if (!connected()) return;
+        info = {...result, models: Array.isArray(result.models) ? result.models : []}; render();
+        setMessage('已保存。接下来的后台任务会使用这个模型，正在进行的任务会继续完成。', 'success');
+      } catch (error) { if (connected()) setMessage(error?.message || '保存失败，请重试。', 'error'); }
+      finally { saving = false; if (connected()) updateButtons(); }
+    }
+    async function testConnection() {
+      if (!info || saving || testing || test.disabled) return;
+      testing = true; setMessage('正在发送一条简短测试，可能产生少量模型用量。'); updateButtons();
+      try {
+        const result = await request('pinkie.learning.builtinModel.test', {model: draft}, 35000);
+        if (connected()) setMessage(`${result.modelName || '模型'}连接成功 · ${(result.ms / 1000).toFixed(1)} 秒`, 'success');
+      } catch (error) { if (connected()) setMessage(`连接失败：${error?.message || '请检查模型来源后重试。'}`, 'error'); }
+      finally { testing = false; if (connected()) updateButtons(); }
+    }
+    search.addEventListener('input', filter);
+    load();
+  }
+  window.__pinkieStudyDeskBuiltinDialog = builtinModelDialog;
   function createBuiltin(pane, shell) {
     // Every callback below closes over its own page, including callbacks resumed after an RPC.
     const state = new Proxy(shell, {
@@ -503,7 +667,8 @@
     const say = host.querySelector('.say'); if (say) { say.replaceChildren(); speak(say, [feedback(stage, result, q)], result.explanation || ''); }
   }
   function stageHeader(host, stage) {
-    const top = el('header', 's-top'), back = button('', () => go('today'), 'back'); back.setAttribute('aria-label', '返回今日'); back.append(icon('arrow-left'));
+    const backTo = backViewOf(current());
+    const top = el('header', 's-top'), back = button('', () => go(backTo), 'back'); back.setAttribute('aria-label', backName(backTo)); back.title = backName(backTo); back.append(icon('arrow-left'));
     const heading = el('div', 's-heading'); heading.append(el('div', 'crumb', '舞台 · ' + (stage?.set?.title || '学习舞台')));
     if (stage?.set && !stage.summary) heading.append(el('h2', 's-number', `第 ${stage.index + 1} 题`));
     top.append(back, heading);
@@ -526,7 +691,7 @@
     if (stageModes.has(current().stageMode)) { stageHeader(host); return stageMode(pane).mount(host, context()); }
     const stage = current().stage;
     if (current().stageMode && current().stageMode !== 'practice') { mountOtherStage(host); return; }
-    if (!stage) { stageHeader(host); const empty = el('div', 'stage-empty'); empty.append(emptyState('先从一小组开始。', '碧琪会挑 6 道题，做完一起看哪里还不稳。', [button('开始练习', () => void startSet(), 'confirm'), button('回到今日', () => go('today'), 'link')])); host.append(empty); return; }
+    if (!stage) { stageHeader(host); const empty = el('div', 'stage-empty'); empty.append(emptyState('先从一小组开始。', '碧琪会挑 6 道题，做完一起看哪里还不稳。', [button('开始练习', () => void startSet(), 'confirm'), button(backName(backViewOf(current())), () => go(backViewOf(current())), 'link')])); host.append(empty); return; }
     stage.mode = 'practice'; if (!stage.summary && focused(pane)) stage.activeAt = performance.now(); stageHeader(host, stage);
     const column = el('div', 'qcol'), side = reveal(el('aside', 'side'), 3), figure = el('div', 'fig'), buddy = el('img');
     const result = stage.results[stage.index], q = question(stage);
@@ -537,7 +702,8 @@
       const summary = el('div', 'summary on'), done = el('span', 'pk-stamp pk-anim pk-done-stamp', '这一组 · 完成'); done.dataset.size = 'lg';
       summary.append(done, el('h3', '', `这一组，答对 ${correct} 题。`), el('p', '', `${[independent && `其中 ${independent} 题是独立且确定的`, stage.results.length - independent && `${independent ? '其余' : '这一组'} ${stage.results.length - independent} 题明天再考一次`].filter(Boolean).join('；')}。用时 ${Math.floor(sec / 60)} 分 ${sec % 60} 秒。`));
       const dots = el('div', 'sum-dots'); stage.results.forEach((r, i) => { const n = el('i', r.correct ? 'l' : ''); n.style.animationDelay = 300 + i * 120 + 'ms'; dots.append(n); });
-      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button('回到今日', () => go('today'), 'link')); summary.append(dots, actions); column.append(summary);
+      const backTo = backViewOf(current());
+      const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button(backName(backTo), () => go(backTo), 'link')); summary.append(dots, actions); column.append(summary);
       speak(say, ['先生，这一组做完啦。', '休息一下，再一起补薄弱的地方。']);
     } else {
       const {stem, code, part, judge} = stemParts(q);
@@ -679,6 +845,15 @@
     state.drawers ||= new Map(); if (!state.drawers.has(drawer)) state.drawers.set(drawer, drawer.parentNode);
     state.root.append(drawer);
   }
+  // WKWebView 在 macOS 默认设置（「键盘导航」/ 全键盘控制关）下，Tab 只停在输入框和写了 tabindex 的元素上，普通 <button> 和链接直接跳过——
+  // 学习台、背一背、考场都没法只用键盘走。给桌上的按钮 / 链接 / 折叠标题补 tabindex=0（已经写了 tabindex 的不动，-1 照旧跳过）。
+  function keyboardReach(root) {
+    let queued = false;
+    const fix = () => { queued = false; for (const n of root.querySelectorAll('button:not([tabindex]),a[href]:not([tabindex]),summary:not([tabindex])')) n.tabIndex = 0; };
+    const watch = new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(fix); } });
+    watch.observe(root, {childList: true, subtree: true}); fix();
+    return () => watch.disconnect();
+  }
   function observeStickers(root) {
     const sizes = [36,64,96,128,192,240,320,384,480], observed = new Set();
     const fit = img => {
@@ -774,6 +949,7 @@
   function deskForPane(pane) {
     return {...window.__pinkieStudyDesk, local: () => pane.state, pane: () => pane, motion: pane.motion, sessionKey:conversationKey,
       go: (id, options) => goPane(pane, id, options), refresh: () => renderPane(pane, pane.view),
+      backView: () => backViewOf(pane.state), back: () => goPane(pane, backViewOf(pane.state)),
       startSet: (...args) => pane.builtin.startSet(...args), switchStageMode: mode => pane.builtin.switchStageMode(mode),
       askBiqi: text => pane.builtin.askBiqi(text), askRef: (ref, title) => pane.builtin.askBiqi('请帮我讲清楚「' + title + '」，先引导我回忆。\n\n[[DESK_REF_V1 ' + ref + ']]'), revealRef: async ref => { const r = await request('pinkie.learning.ref.resolve', {refs:[ref]}); window.__pinkieDeskChat?.reveal?.(r.cards?.[0]?.origin); }, isFocused: () => focused(pane)};
   }
@@ -851,86 +1027,20 @@
     const tools = el('header', 'desk-page-tools'); pane.title = el('span', 'desk-page-title');
     const close = button('', () => closePage(pane), 'desk-page-action'); close.setAttribute('aria-label', '合上这一页'); close.append(icon('x', {size: 'xs'}));
     tools.append(pane.title, close); pane.body = el('div', 'desk-page-body');
-    // 顶上那条胶带是把手：按住拖动换位置，双击铺满 / 还原。右边、下边和右下角拖动改大小。
-    const grip = el('div', 'desk-page-grip'); grip.title = '按住拖动；双击铺满'; grip.setAttribute('aria-hidden', 'true');
-    grip.addEventListener('pointerdown', event => dragCard(pane, event, 'move'));
-    const handles = ['e', 's', 'se'].map(edge => { const h = el('div', 'desk-page-resize'); h.dataset.edge = edge; h.setAttribute('aria-hidden', 'true'); h.addEventListener('pointerdown', event => dragCard(pane, event, edge)); return h; });
-    host.append(grip, tools, pane.body, ...handles);
+    host.append(tools, pane.body);
     for (const name of ['pointerdown', 'focusin']) host.addEventListener(name, () => focusPage(pane), {capture: true});
-    host.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/x-pinkie-view')) { event.preventDefault(); host.dataset.drop = ''; } });
-    host.addEventListener('dragleave', () => delete host.dataset.drop);
-    host.addEventListener('drop', event => { const view = event.dataTransfer.getData('application/x-pinkie-view'); delete host.dataset.drop; if (!view) return; event.preventDefault(); event.stopPropagation(); dropCard(view, event, pane); });
     return pane;
   }
   function applyRect(pane) {
     const r = pane.rect || {x: 0, y: 0, w: 1, h: 1}, s = pane.host?.style; if (!s) return;
     s.left = r.x * 100 + '%'; s.top = r.y * 100 + '%'; s.width = r.w * 100 + '%'; s.height = r.h * 100 + '%'; s.zIndex = String(pane.z || 1); s.transform = '';
   }
-  // 拖动时只改 transform（移动）或宽高（改大小），松手才写回比例；不起常驻的动画循环。
-  function dragCard(pane, event, mode) {
-    if (event.button !== 0) return;
-    const container = state.root?.querySelector('.desk-content'), host = pane.host; if (!container || !host) return;
-    event.preventDefault(); focusPage(pane);
-    const box = container.getBoundingClientRect(), W = box.width, H = box.height, start = {...pane.rect}, x0 = event.clientX, y0 = event.clientY;
-    const minW = Math.min(1, MIN_W / W), minH = Math.min(1, MIN_H / H), w = workspace();
-    const edges = axis => [0, 1, ...w.panes.filter(p => p !== pane && p.rect).flatMap(p => axis === 'x' ? [p.rect.x, p.rect.x + p.rect.w] : [p.rect.y, p.rect.y + p.rect.h])];
-    const snap = (value, axis, size) => { const limit = SNAP / (axis === 'x' ? W : H); let best = value, gap = limit; for (const e of edges(axis)) for (const v of [e, e - size]) if (Math.abs(v - value) < gap) { gap = Math.abs(v - value); best = v; } return best; };
-    let next = {...start}, frame = 0;
-    const paint = () => { frame = 0; if (mode === 'move') host.style.transform = `translate(${(next.x - start.x) * W}px,${(next.y - start.y) * H}px)`; else { host.style.width = next.w * 100 + '%'; host.style.height = next.h * 100 + '%'; } };
-    const move = e => {
-      const dx = (e.clientX - x0) / W, dy = (e.clientY - y0) / H;
-      if (mode === 'move') { next.x = snap(Math.min(1 - start.w, Math.max(0, start.x + dx)), 'x', start.w); next.y = snap(Math.min(1 - start.h, Math.max(0, start.y + dy)), 'y', start.h); }
-      else {
-        if (mode.includes('e')) { const right = snap(Math.min(1, Math.max(start.x + minW, start.x + start.w + dx)), 'x', 0); next.w = right - start.x; }
-        if (mode.includes('s')) { const bottom = snap(Math.min(1, Math.max(start.y + minH, start.y + start.h + dy)), 'y', 0); next.h = bottom - start.y; }
-      }
-      if (!frame) frame = requestAnimationFrame(paint);
-    };
-    const end = () => {
-      cancelAnimationFrame(frame); host.releasePointerCapture?.(event.pointerId); host.removeAttribute('data-dragging');
-      host.removeEventListener('pointermove', move); host.removeEventListener('pointerup', end); host.removeEventListener('pointercancel', end);
-      const moved = Math.abs(next.x - start.x) + Math.abs(next.y - start.y) + Math.abs(next.w - start.w) + Math.abs(next.h - start.h) > 0.001;
-      if (moved) { pane.rect = next; pane.maximized = null; w.tiled = false; state.root.dataset.tiled = 'false'; }
-      applyRect(pane); saveWorkspace(); pane.tuckBubble?.();
-      // 指针被卡片接管后 dblclick 不落在胶带上，这里自己数两下。
-      if (mode === 'move' && !moved) { const now = performance.now(); if (now - (pane.lastTap || 0) < 380) { pane.lastTap = 0; toggleMaximize(pane); } else pane.lastTap = now; }
-    };
-    // 拖的时候不选中文字。
-    const noSelect = e => e.preventDefault(); document.addEventListener('selectstart', noSelect); getSelection()?.removeAllRanges();
-    host.addEventListener('pointerup', () => document.removeEventListener('selectstart', noSelect), {once: true}); host.addEventListener('pointercancel', () => document.removeEventListener('selectstart', noSelect), {once: true});
-    host.setAttribute('data-dragging', mode); host.setPointerCapture?.(event.pointerId);
-    host.addEventListener('pointermove', move); host.addEventListener('pointerup', end); host.addEventListener('pointercancel', end);
-  }
-  function toggleMaximize(pane) {
-    const w = workspace();
-    if (pane.maximized) { pane.rect = pane.maximized; pane.maximized = null; }
-    else { pane.maximized = pane.rect; pane.rect = {x: 0, y: 0, w: 1, h: 1}; }
-    w.tiled = false; state.root.dataset.tiled = 'false'; focusPage(pane); applyRect(pane); saveWorkspace();
-  }
-  // 新卡片：桌面是平铺的就重新平铺；已经被拖乱了，就叠在当前卡片右下方一点。
-  function placeCard(pane) {
-    const w = workspace();
-    if (w.tiled) { tileRects(w); return; }
-    const from = focusedPane()?.rect || {x: 0, y: 0}, cw = pane.view === 'deskchat' ? 0.3 : 0.46, ch = 0.88;
-    pane.rect = {x: Math.min(1 - cw, from.x + 0.05), y: Math.min(1 - ch, from.y + 0.05), w: cw, h: ch};
-  }
   function addCard(view) {
     const w = workspace();
-    if (view !== 'deskchat' && full(w)) { notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return null; }
-    const pane = {id: 'page-' + crypto.randomUUID(), view: view === 'library' ? 'today' : view, state: {view, deskView: view}, z: ++w.zTop, host: null};
-    w.panes.push(pane); placeCard(pane); return pane;
+    if (view !== 'deskchat' && mainPage(w)) return mainPage(w);
+    const pane = {id: 'page-' + crypto.randomUUID(), view, state: {view, deskView: view}, z: ++w.zTop, host: null};
+    w.panes.push(pane); tileRects(w); return pane;
   }
-  // 把索引贴拖到桌上：松手的地方摊开一张新卡片；桌上摊满了，就换掉松手处那一张。
-  function dropCard(view, event, under) {
-    const w = workspace(), box = state.root.querySelector('.desk-content').getBoundingClientRect();
-    if (view === 'deskchat') { toggleChat(true); return; }
-    if (full(w)) { if (under) goPane(under, view); else notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return; }
-    const pane = addCard(view); if (!pane) return;
-    const px = (event.clientX - box.left) / box.width, py = (event.clientY - box.top) / box.height, cw = Math.max(0.36, Math.min(1, MIN_W / box.width)), ch = 0.82;
-    pane.rect = {x: Math.min(1 - cw, Math.max(0, px - cw / 2)), y: Math.min(1 - ch, Math.max(0, py - 0.06)), w: cw, h: ch}; w.tiled = false;
-    w.chat = false; w.focus = w.panes.indexOf(pane); w.chatFocus = false; renderWorkspace(); goPane(pane, view);
-  }
-  function tileCards() { const w = workspace(); tileRects(w); renderWorkspace(); saveWorkspace(); }
   const chatCard = () => workspace().panes.find(p => p.view === 'deskchat');
   function toggleChat(force) {
     if (!state.root) return;
@@ -941,11 +1051,8 @@
     const pane = addCard('deskchat'); if (!pane) return;
     w.focus = w.panes.indexOf(pane); renderWorkspace(); goPane(pane, 'deskchat');
   }
-  // 「对话」索引贴：聊天卡已在最上面就合上；没开或被压着就摊开 / 提上来。
-  function tabChat() {
-    const w = workspace(), card = chatCard();
-    toggleChat(!(card && card.z === Math.max(...w.panes.map(p => p.z))));
-  }
+  // 「对话」索引贴：开着就合上，没开就停到右边。
+  function tabChat() { toggleChat(!chatCard()); }
   function renderWorkspace() {
     if (!state.root) return;
     const w = workspace(), container = state.root.querySelector('.desk-content');
@@ -955,45 +1062,35 @@
       applyRect(pane);
       if (!w.chat && !pane.body.childElementCount) renderPane(pane);
     }
-    state.root.dataset.pages = String(w.panes.length); state.root.dataset.tiled = String(w.tiled); setNativeChat(w.chat); focusPage(focusedPane(), {chat: w.chatFocus});
+    state.root.dataset.pages = String(w.panes.filter(p => p.view !== 'deskchat').length); state.root.toggleAttribute('data-chat-card', Boolean(chatCard())); state.root.dataset.tiled = 'true'; setNativeChat(w.chat); focusPage(focusedPane(), {chat: w.chatFocus});
     window.dispatchEvent(new CustomEvent('pinkie:desk-split-changed', {detail: {open: Boolean(chatCard())}}));
   }
-  // 点索引贴：这一页已经摊开就提到最前面；没开就另摊一张（满了换掉最久没碰的那张）。⌥ 点击才在当前卡里换页。
+  // 点导轨：在主页面里换页（已经在这一页就只把焦点拉回来）。
   function openCard(view) {
-    const w = workspace(), open = w.panes.find(p => p.view === view);
-    if (!open) { if (allowHeavy(null, view)) openOtherPage(view); return; }
-    if (w.chat) { w.focus = w.panes.indexOf(open); goPane(open, view); return; }
-    focusPage(open); saveWorkspace();
+    const w = workspace(), page = mainPage(w);
+    if (view === 'deskchat') { toggleChat(true); return; }
+    if (page.view === view && !w.chat) { focusPage(page); return; }
+    goPane(page, view);
   }
-  // 在另一张卡片上打开：桌上还有空位就新摊一张；摊满了就换掉最久没碰的那张（不动聊天卡和当前卡）。
+  // 旧接口（各页面「在另一页打开」）：单页之后就是在主页面换页。
   function openOtherPage(id, options) {
-    const w = workspace();
     if (id === 'deskchat') { toggleChat(true); return; }
-    let pane = !full(w) ? addCard(id) : [...w.panes].filter(p => p !== focusedPane() && p.view !== 'deskchat').sort((a, b) => a.z - b.z)[0];
-    if (!pane) { notice(`桌上最多摊开 ${MAX_CARDS} 张，先合上一张。`); return; }
-    w.chat = false; w.focus = w.panes.indexOf(pane); w.chatFocus = false; renderWorkspace(); goPane(pane, id, options);
+    goPane(mainPage(workspace()), id, options);
   }
+  // 只有对话卡能合上；主页面合上等于回到今日。
   function closePage(pane) {
-    const w = workspace(); if (w.panes.length === 1) { goPane(pane, 'today'); return; }
-    const i = w.panes.indexOf(pane); unmountPane(pane); pane.host.remove(); w.panes.splice(i, 1);
-    const top = [...w.panes].sort((a, b) => b.z - a.z)[0]; w.focus = w.panes.indexOf(top);
-    // 只剩一张时铺满；平铺的桌面合上一张后重新平铺。
-    if (w.panes.length === 1) { w.panes[0].rect = {x: 0, y: 0, w: 1, h: 1}; w.tiled = true; } else if (w.tiled) tileRects(w);
-    renderWorkspace(); saveWorkspace();
+    const w = workspace();
+    if (pane.view !== 'deskchat') { goPane(pane, 'today'); return; }
+    const i = w.panes.indexOf(pane); unmountPane(pane); pane.host?.remove(); w.panes.splice(i, 1);
+    w.focus = 0; tileRects(w); renderWorkspace(); saveWorkspace();
   }
-  // 一键排法（生词本页脚的小图标和测试用）：几页并排，要不要聊天卡；排完是平铺状态，之后照样能拖。
+  // 旧的一键排法接口（测试 / 外部调用还在用）：只认「要不要对话卡」，页数一律是一页。
   function setLayout(value) {
-    const withChat = value.endsWith('-chat'), count = value.startsWith('triple') ? 3 : value.startsWith('spread') ? 2 : 1, w = workspace();
-    const pages = () => w.panes.filter(p => p.view !== 'deskchat');
-    while (pages().length > count) { const p = pages().sort((a, b) => a.z - b.z)[0]; unmountPane(p); p.host?.remove(); w.panes.splice(w.panes.indexOf(p), 1); }
-    while (pages().length < count) w.panes.splice(pages().length, 0, {id: 'page-' + crypto.randomUUID(), view: pages().length === 1 ? 'vocab' : 'board', state: {view: 'notes', deskView: 'notes'}, z: ++w.zTop, host: null});
-    const card = chatCard();
+    const withChat = String(value).endsWith('-chat'), w = workspace(), card = chatCard();
     if (!withChat && card) { unmountPane(card); card.host?.remove(); w.panes.splice(w.panes.indexOf(card), 1); }
     if (withChat && !card) w.panes.push({id: 'page-' + crypto.randomUUID(), view: 'deskchat', state: {view: 'deskchat', deskView: 'deskchat'}, z: ++w.zTop, host: null});
-    w.focus = Math.max(0, w.panes.indexOf(pages()[0])); w.chat = false; w.chatFocus = false;
-    tileRects(w); renderWorkspace();
-    for (const pane of w.panes) if (pane.view === 'notes' && !views.has('notes')) goPane(pane, 'notes');
-    saveWorkspace();
+    w.focus = Math.max(0, w.panes.indexOf(mainPage(w))); w.chat = false; w.chatFocus = false;
+    tileRects(w); renderWorkspace(); saveWorkspace();
   }
   function goPane(pane, id, options) {
     id = id === 'home' ? 'today' : id; if (!state.root) return;
@@ -1001,26 +1098,59 @@
     if (id === 'chat') { w.chat = true; pane.state.view = 'chat'; pane.state.deskView = pane.view; for (const p of w.panes) { unmountPane(p); p.body?.replaceChildren(); } renderWorkspace(); }
     else {
       if (!allowHeavy(pane, id)) return;
+      // 做题页记住从哪进来，打完回到那一页（营地、地图、讨伐……），不要一律掉回今日或笔记本。
+      const playing = PLAYING;
+      if (pane.view && pane.view !== id && playing.includes(id) && !playing.includes(pane.view)) pane.state.returnView = pane.view;
+      // 游戏各页之间的返回栈：衣橱 → 商店 → × 回衣橱；从营地进来的 × 回营地。往回走时出栈，不会来回打转。
+      // 打完一组（背一背 / 守关）回到游戏页时栈不动：地图 → 讨伐 → 打完回讨伐，× 还是回地图。
+      const gamePages = GAME_PAGES;
+      if (gamePages.includes(id) && pane.view !== id && !(PLAYING.includes(pane.view) && !gamePages.includes(pane.view))) {
+        const stack = pane.state.gameStack ||= [];
+        if (!gamePages.includes(pane.view)) stack.length = 0;
+        else if (stack.at(-1) === id) stack.pop();
+        else stack.push(pane.view);
+      }
       const chat = id === 'deskchat' && chatCard(); if (chat && chat !== pane) { focusPage(chat); return; }
       w.chat = false; w.chatFocus = false; w.focus = w.panes.indexOf(pane);
       if (!pane.host) createPane(pane);
       if (id === 'notes') {
-        if (options) pane.state.notesRoute = options;
+        // 从营地「笔记回顾」进来自动开背一背：记下从哪来，背完 / 先放着回那一页
+        if (options) pane.state.notesRoute = options.view === 'review' && !options.from && pane.view !== 'notes' ? {...options, from: pane.view} : options;
         if (!views.has(id)) {
           pane.view = id; pane.state.view = id;
           if (!state.notesLoading) {
             state.notesLoading = true;
-            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + 'laolao-study-desk-notes.css?v=pages1'; css.dataset.notebookV2 = '';
+            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + 'laolao-study-desk-notes.css?v=drill2'; css.dataset.notebookV2 = '';
             if (!document.querySelector('link[data-notebook-v2]')) document.head.append(css);
-            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-notes.js?v=pages1';
+            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-notes.js?v=drill2';
             script.onload = () => { state.notesLoading = false; for (const p of workspace().panes) if (p.view === 'notes') renderPane(p); };
             script.onerror = () => { state.notesLoading = false; script.remove(); notice('笔记本未能加载，请重试'); }; document.head.append(script);
           }
           renderWorkspace(); return;
         }
       }
-      if (id === 'vocab' && options) pane.state.vocabRoute = options;
+      if (id === 'vocab' && options) pane.state.vocabRoute = options.review && !options.from && pane.view !== 'vocab' ? {...options, from: pane.view} : options;
       if (id === 'entry' && options) pane.state.entryRef = options.ref;
+      if (id === 'drill') {
+        if (options) pane.state.drillRoute = options;
+        if (!views.has('drill')) {
+          pane.view = 'drill'; pane.state.view = 'drill';
+          if (!state.drillLoading) {
+            state.drillLoading = true;
+            for (const file of ['laolao-desk-reward.css', 'laolao-study-desk-drill.css']) {
+              const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + file + '?v=drill2';
+              if (!document.querySelector('link[href="' + css.href + '"]')) document.head.append(css);
+            }
+            const reward = document.createElement('script'); reward.src = BASE + 'laolao-desk-reward.js?v=drill2';
+            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-drill.js?v=drill2';
+            reward.onload = () => document.head.append(script);
+            script.onload = () => { state.drillLoading = false; for (const p of workspace().panes) if (p.view === 'drill') renderPane(p); };
+            script.onerror = () => { state.drillLoading = false; notice('背一背未能加载，请重试'); };
+            if (!window.__pinkieDeskReward) document.head.append(reward); else document.head.append(script);
+          }
+          renderWorkspace(); return;
+        }
+      }
       if (!views.has(id)) { notice('这一页正在准备，请稍后再试'); return; }
       closeLibrary(); renderPane(pane, id); renderWorkspace();
     }
@@ -1048,7 +1178,13 @@
     }
     if (event.target.closest?.('input, textarea, select, [contenteditable="true"], dialog, .pinkie-library, .laolao-learning-notes')) return;
     if (event.key === 'Escape') { focusedPane().runtime?.keydown?.(event); if (event.defaultPrevented) return; }
-    if (event.key === 'Escape' && current().view !== 'chat') { event.preventDefault(); go('today'); return; }
+    if (event.key === 'Escape' && current().view !== 'chat') {
+      event.preventDefault();
+      // 游戏各页（地图、商店……）按返回栈退一步，和左上角 × 一样；做题页回进来的那一页。
+      if (GAME_PAGES.includes(current().view) && !PLAYING.includes(current().view) && window.__pinkieGame?.goBack) { window.__pinkieGame.goBack(); return; }
+      go(backViewOf(current()));
+      return;
+    }
     if (workspace().chat || workspace().chatFocus) return;
     const pane = focusedPane(); (pane.runtime?.keydown || views.get(pane.view)?.keydown)?.(event, context(pane));
   }
@@ -1064,19 +1200,19 @@
     const nav = el('div', 'rail-nav');
     for (const [id, label] of [['today', '今日'], ['stage', '舞台'], ['board', '看板'], ['library', '书架'], ['notes', '笔记本'], ['vocab', '生词本'], ['chat', '对话']]) {
       const target=id==='chat'?'deskchat':id;
-      const b = button('', event => id === 'chat' ? tabChat() : event.altKey ? go(target) : openCard(target)); b.dataset.go = target; b.draggable = true; b.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-pinkie-view', target); event.dataTransfer.effectAllowed = 'copy'; }); b.setAttribute('aria-label', label); b.append(handIcon(id), el('span', 'nav-tip', label)); nav.append(b);
+      const b = button('', () => id === 'chat' ? tabChat() : openCard(target)); b.dataset.go = target; b.setAttribute('aria-label', label); b.append(handIcon(id), el('span', 'nav-tip', label)); nav.append(b);
     }
     const foot = el('div', 'rail-foot'), theme = button('', toggleTheme); theme.dataset.themeToggle = ''; theme.setAttribute('aria-label', '切换日间和夜间');
-    const tidy = button('', tileCards); tidy.dataset.tidy = ''; tidy.setAttribute('aria-label', '把卡片排整齐'); tidy.append(icon('layout-grid', {size: 'md'}), el('span', 'nav-tip', '排整齐'));
-    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(tidy, theme, avatar); rail.append(logo, nav, foot);
+    const modelBtn = button('', () => window.__pinkieStudyDeskBuiltinDialog?.(), ''); modelBtn.dataset.builtinModel = '';
+    modelBtn.setAttribute('aria-label', '切换内置模型'); modelBtn.title = '内置模型';
+    modelBtn.append(builtinModelMark(), el('span', 'nav-tip', '内置模型'));
+    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(theme, modelBtn, avatar); rail.append(logo, nav, foot);
     const status = el('div', 'desk-status'); status.setAttribute('role', 'status');
     const canvas = el('canvas', 'party'); canvas.setAttribute('aria-hidden', 'true');
     const content = el('div', 'desk-content');
-    content.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('application/x-pinkie-view')) event.preventDefault(); });
-    content.addEventListener('drop', event => { const id = event.dataTransfer.getData('application/x-pinkie-view'); if (id) { event.preventDefault(); dropCard(id, event); } });
     // 先定好对话视图和日夜再挂上去：否则新根节点先按白天纸色算一次样式，切成对话视图时背景的 .4s 过渡会在聊天上淡出一层白（切换会话时闪白）。
     root.dataset.view = 'chat'; root.dataset.theme = doc.hasAttribute('data-pinkie-night') || doc.dataset.themeMode === 'dark' ? 'night' : 'day';
-    root.append(plate, rail, content, canvas, status); document.body.append(root); observeStickers(root);
+    root.append(plate, rail, content, canvas, status); document.body.append(root); observeStickers(root); state.disposeKeys = keyboardReach(root);
     // The grain is generated once, then composited as a static overlay.
     const grain = el('canvas'); grain.width = grain.height = 140;
     const ctx = grain.getContext('2d'); if (ctx) { const data = ctx.createImageData(140, 140); let seed = 11; for (let i = 0; i < data.data.length; i += 4) { seed = (seed * 9301 + 49297) % 233280; data.data[i] = data.data[i + 1] = data.data[i + 2] = seed / 233280 * 255; data.data[i + 3] = 255; } ctx.putImageData(data, 0, 0); root.style.setProperty('--grain', `url(${grain.toDataURL()})`); }
@@ -1105,7 +1241,7 @@
     window.dispatchEvent(new CustomEvent('pinkie:study-desk-unmount', {detail: {sessionKey: state.key}}));
     for (const pane of workspace().panes) { unmountPane(pane); pane.host = null; }
     workspace().chat = true; syncFocusClock();
-    state.disposeStickers?.(); state.generation++; state.controller?.abort(); state.controller = null;
+    state.disposeStickers?.(); state.disposeKeys?.(); state.generation++; state.controller?.abort(); state.controller = null;
     clearInterval(state.timer); state.timer = 0;
     syncEntry(false);
     for (const [n, inert] of state.native) n.inert = inert;
@@ -1136,8 +1272,8 @@
     const closed = () => { if (host.isConnected) for (const drawer of previous.keys()) { drawer.hidden = false; drawer.inert = false; } }; window.addEventListener('pinkie:library-closed', closed);
     return {unmount() { window.removeEventListener('pinkie:library-closed', closed); if (window.__pinkieLibrary?.state?.deskHost === host) window.__pinkieLibrary.closeReader(); for (const [drawer, parent] of previous) { drawer.hidden = true; drawer.inert = true; parent?.append(drawer); } }};
   }});
-  window.__pinkieStudyDesk = {registerView, request, go, sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode),
-    pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: tileCards, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
+  window.__pinkieStudyDesk = {registerView, request, go, backName, notice, backView: () => backViewOf(current()), back: () => go(backViewOf(current())), sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode), openBuiltinModel: () => window.__pinkieStudyDeskBuiltinDialog?.(),
+    pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: () => { tileRects(workspace()); renderWorkspace(); }, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
     contexts: () => workspace().panes.map(context),
     pages: () => workspace().panes.map(p => ({id: p.id, view: p.view, focused: focused(p), state: p.state})),
     claimHeavy(kind, pane = focusedPane()) { if (!allowHeavy(pane, kind)) return false; const token={kind}; pane.heavy = token; return () => { if(pane.heavy===token)pane.heavy=false; }; },

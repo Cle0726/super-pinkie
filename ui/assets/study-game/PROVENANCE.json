@@ -1,0 +1,1013 @@
+{
+ "note": "碧琪是 Pinkie Pie（孩之宝）的同人二创；本目录图片均由用户的 GPT 会员生成（Codex image_gen / chatgpt.com 网页版），提示词见 tools/study-game/art/art-slots.json 与 PROGRESS-B。",
+ "items": {
+  "form/lidong/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/detective/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/queen/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "王冠、红丝绒披风、权杖、金马蹄"
+  },
+  "form/princess/portrait": {
+   "source": "codex",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/ink-slime": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "可爱不吓人、白切边干净"
+  },
+  "monster/bookworm": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/lost-crane": {
+   "source": "codex",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/inkpot-imp": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/block-golem": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/eraser-gnome": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/paper-fox": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "monster/fog-puff": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "boss/babel/full": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "书本+字母积木+背上小塔，威风但萌"
+  },
+  "boss/babel/broken": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "趴下、塔歪、冒星星"
+  },
+  "world/pretco-b/listening/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/mg": {
+   "source": "codex",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/listening/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "更像小岛底板，可用"
+  },
+  "world/pretco-b/vocab/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "整张不透明，作远景层可用"
+  },
+  "world/pretco-b/vocab/mg": {
+   "source": "codex",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "剪纸层透明背景、纸纹毛边、闪卡树叶"
+  },
+  "world/pretco-b/vocab/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "world/pretco-b/grammar/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": ""
+  },
+  "form/pirate/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "网页版文字提示词首张，风格和 Codex 版一致"
+  },
+  "monster/echo-bat": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/tangle-yarn": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/sticky-ghost": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/quiz-shroom": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/shell-crab": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/clock-beetle": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "monster/bridge-troll": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "圆滚滚纸艺小怪，白切边干净，无文字（题目蘑菇的问号是花纹）"
+  },
+  "boss/babel/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "重出版：积木上没有数字了（星星 / 漩涡花纹），书塔 + 符文"
+  },
+  "world/pretco-b/grammar/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "这张原本落在 vocab/base（网页版晚到的图被记到下一个槽位）：其实是语法工坊的远景雾天际线，正好是 bg 要的，改记到 grammar/bg"
+  },
+  "world/pretco-b/grammar/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框，中间留空"
+  },
+  "world/pretco-b/grammar/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板 + 两侧小工坊道具"
+  },
+  "world/pretco-b/reading/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：大图书馆 + 旋转楼梯"
+  },
+  "world/pretco-b/reading/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/translation/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：中西两岸的拱桥"
+  },
+  "world/pretco-b/translation/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/translation/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板（含桥基，和已过的 listening/base 带灯塔一致）"
+  },
+  "world/pretco-b/writing/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "远景雾天际线"
+  },
+  "world/pretco-b/writing/mg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地标：钢笔笔记本塔"
+  },
+  "world/pretco-b/writing/fg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "前景框"
+  },
+  "world/pretco-b/writing/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "地面板 + 塔基"
+  },
+  "world/book/cover": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "粉色布面手账 + 金角 + 气球徽章"
+  },
+  "world/book/page": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "可平铺的奶油纸纹 + 浅横线"
+  },
+  "camp/day": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 湖边上岸营地清晨，画面里没有角色"
+  },
+  "camp/night": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 湖边上岸营地夜晚，画面里没有角色"
+  },
+  "exam/hall": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · scene",
+   "reviewed": "2026-11-08",
+   "note": "安静考场，钟面无数字"
+  },
+  "form/astronaut/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/dragon-rider/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/knight/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/chef/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/magical-girl/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/astrologer/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/zhuangyuan/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/idol/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/cyber/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/ninja/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/xiaoxue/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/daxue/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/graduate/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/gold-master/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-08",
+   "note": "在模、三气球可见、白切边透明、服装原创"
+  },
+  "form/queen/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：王座厅金色顶光 + 红幕，脸居中约 40%，配色克制（红金象牙）"
+  },
+  "form/lidong/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "sticker/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/oops": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/combo": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/focus": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/finish": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/jar": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "sticker/leave": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · sticker",
+   "reviewed": "2026-11-08",
+   "note": "贴纸规范：白切边透明、和现有贴纸同画风"
+  },
+  "form/daily/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/learning/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里书房，金色印章光从书页升起"
+  },
+  "form/project/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：文件夹堆顶上，琥珀色勾选光环，蓝调办公室黄昏"
+  },
+  "form/thinking/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：闭眼悬浮，细线水晶法阵，深紫 + 冰青"
+  },
+  "form/detective/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/pirate/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：黄昏甲板、慢动作金币、藏宝图（地图上的 X 是记号不是文字）"
+  },
+  "form/astronaut/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：深蓝行星弧线 + 跃迁漩涡，头盔里鬃毛漂浮"
+  },
+  "form/dragon-rider/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：暴风云上的落日，小粉龙侧向喷琥珀火"
+  },
+  "form/princess/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：月夜阳台、玫瑰花瓣、远处城堡"
+  },
+  "form/cyber/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2 第 2 次：带笔帽的大荧光笔（不再像枪），雨夜天台霓虹线，脸居中"
+  },
+  "form/unrestricted/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/knight/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：雨夜石院、白金弧光挥剑、三气球盾"
+  },
+  "form/chef/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里烘焙间、炉火逆光、糖粒在光里落下"
+  },
+  "form/magical-girl/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：细光丝带柱 + 细线法阵，粉 / 丁香紫"
+  },
+  "form/astrologer/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：天文台屋顶、金色星座连线、星盘"
+  },
+  "form/zhuangyuan/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：黄昏水墨山水、一笔浓墨、朱红空白旗（无字）"
+  },
+  "form/idol/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：暗场顶光、粉色应援棒虚化人海"
+  },
+  "form/ninja/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：月下竹林、烟雾 + 两道残影"
+  },
+  "form/xiaoxue/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：雪原黄昏冷逆光、大雪花、小雪人在右下"
+  },
+  "form/daxue/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里雪坡滑雪橇，青绿极光"
+  },
+  "form/graduate/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：夜里石台，抛帽、金色逆光"
+  },
+  "form/gold-master/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · ult",
+   "reviewed": "2026-11-08",
+   "note": "v2：金章大印砸下，金色冲击环扫过立体书世界"
+  },
+  "world/pretco-b/vocab/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：林间小路地面板，两侧小树 + 蘑菇（和 listening/base 带地标的先例一致）"
+  },
+  "world/pretco-b/reading/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：图书馆后墙 + 大窗（窗外雾中远景），和中景大厅不重复，当后板用"
+  },
+  "world/pretco-b/reading/base": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 2 次：地面板（石板 + 地毯徽章 + 小书堆），没有建筑"
+  },
+  "monster/shaving-hog": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · monster",
+   "reviewed": "2026-11-08",
+   "note": "重排后出：铅笔尖刺 + 卷笔刀，白切边"
+  },
+  "boss/babel/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · boss",
+   "reviewed": "2026-11-08",
+   "note": "重排后出：书页飞散、裂纹、汗滴，和 full / broken 同一只"
+  },
+  "world/pretco-b/translation/bg": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · layer",
+   "reviewed": "2026-11-08",
+   "note": "第 3 次（专用描述，明确禁桥）：远山一条，左塔柳、右钟楼，云和鸟，透明、低对比；不和中景重复"
+  },
+  "form/daily/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/learning/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: pencil + star notebook (matches learning mode art); transparent from GPT"
+  },
+  "form/project/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: pencil + checklist scroll + teal folder; white bg cut by corner flood fill (5%), edges clean"
+  },
+  "form/thinking/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art-slots.json · portrait",
+   "reviewed": "2026-11-09",
+   "note": "R3 11-09 game-review-3: chin on hoof, calm; white bg cut by corner flood fill (5%), edges clean"
+  },
+  "form/unrestricted/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/daily/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/daily/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/unrestricted/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/unrestricted/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/unrestricted/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/unrestricted/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/breezie/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/breezie/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/breezie/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/breezie/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/changeling/portrait": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/changeling/ult": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/changeling/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/changeling/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/lidong/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/lidong/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/lidong/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/lidong/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/detective/plate": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库"
+  },
+  "form/detective/cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/detective/hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/v3/prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "v3 过审原图，Vision 抠图后入库；边缘去了原场景色溢"
+  },
+  "form/detective/icon": {
+   "source": "derived",
+   "prompt": "",
+   "reviewed": "2026-11-09",
+   "note": "从 v3 portrait 上部裁的头像，avatar 缺失时退回"
+  },
+  "form/daily/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/unrestricted/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/alicorn/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/crystal/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/seapony/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/kirin/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/batpony/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/serious/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/breezie/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/changeling/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/lidong/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/detective/avatar": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "按该形态过审原图重画的方形胸像，给圆头像用；另存 256"
+  },
+  "form/daily/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/daily/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/unrestricted/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/unrestricted/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/alicorn/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/alicorn/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/crystal/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/crystal/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/seapony/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/seapony/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/kirin/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/kirin/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/batpony/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/batpony/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/serious/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/serious/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/breezie/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/breezie/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/changeling/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/changeling/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/lidong/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/lidong/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  },
+  "form/detective/avatar-cheer": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答对的表情。全身 cheer 不动"
+  },
+  "form/detective/avatar-hurt": {
+   "source": "chatgpt-web",
+   "prompt": "art/study-game/refs/bust-prompts.json",
+   "reviewed": "2026-11-09",
+   "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
+  }
+ }
+}
