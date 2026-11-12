@@ -169,3 +169,65 @@ test('two stored copies of one send fold without a duplicate count', async () =>
   assert.equal(repeat.length, 1);
   assert.equal(repeat[0].duplicateCount, 2);
 });
+
+// 11-12: real sessions. A failed reply earlier in the session used to make
+// the next interrupted run read as "stopped" and collapse (the skin then hid
+// it), and a run aborted before the user typed 继续 vanished the same way.
+const failed = (key, at) => group('assistant', key, at, [msg('assistant',
+  [{type: 'text', text: '[assistant turn failed before producing content]'}], key, at,
+  {stopReason: 'error', errorMessage: '502 no auth available'})]);
+
+test('a failed reply earlier in the session does not stop a later run from reading as continued', async () => {
+  const {pinkieBuildTimeline, pinkieProcessOpen} = await load();
+  globalThis.__pinkieTimelineViews = new Map();
+  const u0 = group('user', 'u0', 100, [msg('user', 'ask', 'u0', 100)]);
+  const u0b = group('user', 'u0b', 200, [msg('user', 'ask', 'u0b', 200)]);
+  const u1 = group('user', 'u1', 1000, [msg('user', 'ask', 'u1', 1000)]);
+  const run1 = [toolCall('a', 2000), toolCall('b', 2010)];
+  const u2 = group('user', 'u2', 3000, [msg('user', 'append', 'u2', 3000)]);
+  const run2 = [toolCall('c', 3500)];
+  const timeline = pinkieBuildTimeline([u0, failed('f0', 150), u0b, failed('f1', 250), u1, ...run1, u2, ...run2], calls);
+  const [first, latest] = cards(timeline);
+  assert.equal(toolRows(first), 2);
+  assert.equal(first.processSuperseded, true);
+  assert.equal(first.processTitle, '这一轮被你的新消息接上了');
+  assert.equal(pinkieProcessOpen(first), true);
+  assert.equal(pinkieProcessOpen(latest), true);
+});
+
+test('a turn that itself failed after earlier failures still reads as stopped', async () => {
+  const {pinkieBuildTimeline} = await load();
+  const u0 = group('user', 'u0', 100, [msg('user', 'ask', 'u0', 100)]);
+  const u1 = group('user', 'u1', 1000, [msg('user', 'ask', 'u1', 1000)]);
+  const u2 = group('user', 'u2', 3000, [msg('user', 'next', 'u2', 3000)]);
+  const timeline = pinkieBuildTimeline([u0, failed('f0', 150), u1, toolCall('a', 2000), failed('f1', 2500), u2, toolCall('c', 3500)], calls);
+  const [first] = cards(timeline);
+  assert.equal(first.processSuperseded, false);
+  assert.equal(first.processTitle, '这一轮停下来了');
+});
+
+test('an aborted run stays open while the user carries the same job on; a finished answer ends the chain', async () => {
+  const {pinkieBuildTimeline, pinkieProcessOpen} = await load();
+  globalThis.__pinkieTimelineViews = new Map();
+  const aborted = (key, at) => group('assistant', key, at, [msg('assistant', [{type: 'text', text: 'partial'}], key, at,
+    {stopReason: 'aborted', errorMessage: 'This operation was aborted'})]);
+  const uOld = group('user', 'uOld', 10, [msg('user', 'old job', 'uOld', 10)]);
+  const oldRun = [toolCall('o', 20), aborted('ab0', 30)];
+  const uDone = group('user', 'uDone', 50, [msg('user', 'quick question', 'uDone', 50)]);
+  const answer = group('assistant', 'ans', 60, [msg('assistant', [{type: 'text', text: 'answer'}], 'ans', 60)]);
+  const u1 = group('user', 'u1', 1000, [msg('user', 'check the computer', 'u1', 1000)]);
+  const run1 = [toolCall('a', 2000), toolCall('b', 2010), aborted('ab1', 2500)];
+  const u2 = group('user', 'u2', 3000, [msg('user', '继续', 'u2', 3000)]);
+  const run2 = [toolCall('c', 3500)];
+  const u3 = group('user', 'u3', 4000, [msg('user', '继续', 'u3', 4000)]);
+  const run3 = [toolCall('d', 4500)];
+  const timeline = pinkieBuildTimeline([uOld, ...oldRun, uDone, answer, u1, ...run1, u2, ...run2, u3, ...run3], calls);
+  const [old, stopped, appended, latest] = cards(timeline);
+  assert.equal(stopped.processSuperseded, false);
+  assert.equal(stopped.processTitle, '这一轮停下来了');
+  assert.equal(toolRows(stopped), 2);
+  assert.equal(pinkieProcessOpen(stopped), true, 'the aborted run before 继续 keeps its rows on screen');
+  assert.equal(pinkieProcessOpen(appended), true);
+  assert.equal(pinkieProcessOpen(latest), true);
+  assert.equal(pinkieProcessOpen(old), false, 'a stopped run before a finished answer keeps the collapsed default');
+});
