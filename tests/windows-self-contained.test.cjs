@@ -75,7 +75,7 @@ test('both packages share the complete Mac browser renderer and preserve the bac
     assert.equal(actual, expected, relative);
   }
   const chat = read('ui/runtime/chat-page-DrPkxqJK.js');
-  assert.match(chat, /\/\* pinkie-chat-timeline:v28 \*\//);
+  assert.match(chat, /\/\* pinkie-chat-timeline:v29 \*\//);
   assert.match(chat, /pinkie-thinking-segments:v1/);
   assert.doesNotMatch(chat, /pinkie-chat-timeline:v25/);
   // 追加消息时保留流式输出：ack 换新 runId 时不再清空 chatStream。
