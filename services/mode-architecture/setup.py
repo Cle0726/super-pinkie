@@ -377,6 +377,12 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
+    # 手册单个文件默认超过 2 万字就被 OpenClaw 悄悄截掉中间一段（项目手册已经 1.9 万字），
+    # 模型拿到的是缺了几节的手册，没有任何提示。把上限抬到手册够不着的地方；只抬不降。
+    for key, floor in (("bootstrapMaxChars", 60_000), ("bootstrapTotalMaxChars", 200_000)):
+        current = defaults.get(key)
+        if isinstance(current, bool) or not isinstance(current, int) or current < floor:
+            defaults[key] = floor
     timeout = defaults.get("timeoutSeconds")
     if timeout != 0 and (not isinstance(timeout, (int, float)) or timeout < 43_200):
         defaults["timeoutSeconds"] = 43_200
