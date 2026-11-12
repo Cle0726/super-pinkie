@@ -533,7 +533,8 @@ export class SessionLineage {
   publicCard(card) {
     if (card.kind === 'report') {
       return {id: card.id, kind: card.kind, title: card.title, text: card.text, childKey: card.childKey,
-        createdAt: card.createdAt, anchor: card.anchor || null, ...(card.mode ? {mode: card.mode, modeName: MODE_NAMES[card.mode]} : {})};
+        createdAt: card.createdAt, anchor: card.anchor || null, ...(card.mode ? {mode: card.mode, modeName: MODE_NAMES[card.mode]} : {}),
+        ...(card.consult ? {consult: true} : {})};
     }
     const expired = card.state === 'pending' && card.expiresAt <= this.now();
     return {id: card.id, kind: card.kind, title: card.title, summary: clipGraphemes(card.prompt.split('\n')[0], 160),
@@ -836,7 +837,7 @@ export class SessionLineage {
     catch { logSessionFailure(this.api, 'session-lineage', parent.key, 'report-anchor'); }
     const full = clipGraphemes(plainText(text), REPORT_FULL), short = clipGraphemes(full, REPORT_CARD);
     const card = {kind: 'report', id, title: entry?.label || child.title, text: short, ...(full !== short && !delivered ? {full} : {}),
-      ...(child.mode ? {mode: child.mode} : {}),
+      ...(child.mode ? {mode: child.mode} : {}), ...(child.initiation === 'consult' ? {consult: true} : {}),
       childKey: key, createdAt: this.now(), injection: delivered ? 'injected' : 'pending', anchor};
     this.updateState(parent.key, state => {
       const cards = state.cards || [];
