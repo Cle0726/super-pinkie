@@ -36,14 +36,18 @@ function session(key='agent:main:parity') {
   return {key,sessionId:key.replaceAll(':','-'),kind:'direct',label:'今天的计划',displayName:'今天的计划',updatedAt:now,
     modelProvider:'google',model:'gemini-3-pro-preview',thinkingLevel:'high',inputTokens:1360,outputTokens:480,contextTokens:1048576};
 }
+// --rpc file.json: canned answers by method name, to stage a scene the built-in fixture has no data for.
+// The key "+sessions" adds rows to sessions.list instead of replacing it.
+const canned=args.rpc?JSON.parse(fs.readFileSync(args.rpc,'utf8')):{};
 function rpc(method,p={}) {
   calls.push({method,params:p});
+  if(Object.hasOwn(canned,method)) return canned[method];
   const key=p.key||p.sessionKey||'agent:main:parity';
   if(method==='connect') return {type:'hello-ok',protocol:3,server:{version:'parity-fixture',connId:'parity'},features:{methods:['models.list','sessions.list','sessions.patch','chat.history','agents.list'],events:['chat']},snapshot:{presence:[],health:{ok:true},sessionDefaults:{defaultAgentId:'main',mainSessionKey:'agent:main:parity',defaultModel:'google/gemini-3-pro-preview'}},auth:{role:'operator',scopes:['operator.admin','operator.read'],deviceToken:'isolated-parity'},policy:{tickIntervalMs:30000}};
   if(method==='agents.list') return {defaultId:'main',mainKey:'agent:main:parity',agents:modes.map(id=>({id,name:'碧琪',identity:{name:'碧琪'}}))};
   if(method==='agent.identity.get') return {agentId:p.agentId||'main',name:'碧琪',avatar:'/laolao-mode-chat-hd.png'};
   if(method==='models.list') return {models};
-  if(method==='sessions.list') return {sessions:modes.filter(id=>!p.agentId||p.agentId===id).map(id=>session(`agent:${id}:parity`)),defaults:{modelProvider:'google',model:'gemini-3-pro-preview',contextTokens:1048576,thinkingLevel:'high'}};
+  if(method==='sessions.list') return {sessions:modes.filter(id=>!p.agentId||p.agentId===id).map(id=>session(`agent:${id}:parity`)).concat((canned['+sessions']||[]).filter(s=>!p.agentId||s.key.startsWith(`agent:${p.agentId}:`)).map(s=>({...session(s.key),...s}))),defaults:{modelProvider:'google',model:'gemini-3-pro-preview',contextTokens:1048576,thinkingLevel:'high'}};
   if(method==='sessions.resolve'||method==='sessions.patch') return {ok:true,...session(key),entry:session(key),session:session(key),resolved:{modelProvider:'google',model:'gemini-3-pro-preview'}};
   if(method==='chat.history'||method==='pinkie.chat.history') return {sessionKey:key,sessionId:session(key).sessionId,messages:currentView==='home'||currentView==='learning'?[]:example,thinkingLevel:'high',hasMore:false,totalMessages:currentView==='home'?0:2};
   if(method==='health') return {ok:true};
@@ -163,7 +167,7 @@ try {
       if(untouched.level!=='standard'||untouched.stored!==null)throw Error('进阶调节 is not at its untouched default: '+JSON.stringify(untouched));
       await page.locator('#pinkie-power-entry').click();
       await page.waitForSelector('#pinkie-power.is-open .pinkie-power__level--standard.is-on',{state:'visible'});
-      await page.waitForFunction(()=>document.querySelectorAll('#pinkie-power .pinkie-power__row').length===14&&[...document.querySelectorAll('#pinkie-power img')].every(i=>i.complete&&i.naturalWidth));
+      await page.waitForFunction(()=>document.querySelectorAll('#pinkie-power .pinkie-power__row').length===15&&[...document.querySelectorAll('#pinkie-power img')].every(i=>i.complete&&i.naturalWidth));
       await page.waitForTimeout(600);
     }
     if(view==='learning'){
@@ -182,6 +186,8 @@ try {
     states[view]=await page.evaluate(()=>({title:document.title,theme:document.documentElement.getAttribute('data-theme-mode'),mode:document.documentElement.getAttribute('data-laolao-mode'),font:getComputedStyle(document.body).fontFamily,surface:window.__pinkieSurface||null,glass:CSS.supports('backdrop-filter','blur(12px)'),styleSheets:document.styleSheets.length,images:[...document.images].filter(i=>!i.complete||!i.naturalWidth).map(i=>i.src),videos:[...document.querySelectorAll('video')].map(v=>({src:v.currentSrc,readyState:v.readyState,paused:v.paused,error:v.error?.message||null})),cards:document.querySelector('.chat-controls__model')?.outerHTML.slice(0,600),text:document.body.innerText.slice(0,2000)}));
     const expectedMode=view==='learning'?'learning':captureMode;
     if(states[view].mode!==expectedMode)throw Error(`wrong mode for ${view}: ${states[view].mode}, expected ${expectedMode}`);
+    // --probe file.js: run in the page right before the shot (stage something, or read layout back).
+    if(args.probe){console.log('probe',view,JSON.stringify(await page.evaluate(fs.readFileSync(args.probe,'utf8'))));await page.waitForTimeout(Number(args['probe-wait'])||800);}
     await page.screenshot({path:path.join(out,`${label}-${view}.png`),timeout:30000});
     if(args['desktop-python']){
       if(!args.cdp||!args['app-pid'])throw Error('desktop evidence requires the actual packaged App and its PID');
