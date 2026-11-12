@@ -5,6 +5,7 @@
 // 删除和「放弃改动」都先放进碧琪自己的回收站，
 // 可以一键恢复，所以前端不需要确认弹窗。写入一律原子替换，并用修改时间防止覆盖外部刚改过的文件。
 import fs from 'node:fs';
+import {createCodeSearchTool} from './code-tools.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -16,7 +17,7 @@ import {ExtensionMarket, formatText, formatters} from './workbench-ext.mjs';
 import {agentWorkspace, openclawAgentEnvPath} from './openclaw-paths.mjs';
 
 const exec = promisify(execFile);
-export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
+export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。找代码用 code_search（搜内容、找文件、看文件大纲；Mac 和 Windows 都能用，不用写 grep / find）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
 const LEARNING_WORKBENCH_RULES = '【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循学习模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按先生当前要求。需要指给先生看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
 const fsp = fs.promises;
 const SESSION = /^agent:([a-z0-9_-]+):.{1,500}$/i;
@@ -821,6 +822,8 @@ export function registerWorkbench(api, options = {}) {
       } catch (error) { return {...reply({error: String(error.message || error)}), isError: true}; }
     },
   }), {name: 'code_check'});
+  // 找代码：搜内容、找文件、看大纲。两种系统一样用，不靠命令行的 grep / find。
+  api.registerTool?.(ctx => createCodeSearchTool(ctx, {rootFor: toolRoot}), {name: 'code_search'});
   api.registerTool?.(ctx => (/^agent:(project|learning|unrestricted):/.test(String(ctx.sessionKey || '')) ? {
     name: 'workbench_show', label: '在工作台打开',
     description: '在先生的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',
