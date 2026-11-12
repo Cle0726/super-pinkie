@@ -1953,6 +1953,16 @@ function noteModelBase(value) {
   } catch { return null; }
 }
 
+function parseModelJson(text) {
+  const source = String(text || '').trim();
+  if (!source) return null;
+  try { return JSON.parse(source); } catch { /* 字符串里有真实换行 */ }
+  try { return JSON.parse(source.replace(/\r?\n/g, '\\n')); } catch { /* 再抽 text 字段 */ }
+  const matched = source.match(/^\{\s*"text"\s*:\s*"([\s\S]*)"\s*\}\s*$/);
+  if (!matched) return null;
+  return {text: matched[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')};
+}
+
 async function noteModelJson(response, {withMetadata = false, responseFormat = 'json'} = {}) {
   if (!response.ok) throw new Error(`笔记整理模型请求失败（${response.status}），笔记保持原样`);
   const reader = response.body?.getReader();
@@ -1968,16 +1978,21 @@ async function noteModelJson(response, {withMetadata = false, responseFormat = '
   let body;
   try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
   catch { throw new Error('笔记整理模型返回了无效的响应，笔记保持原样'); }
-  if (body.choices?.[0]?.finish_reason === 'length' || body.status === 'incomplete' || body.stop_reason === 'max_tokens') {
-    throw new Error('笔记整理结果未完成，请稍后重试；笔记保持原样');
-  }
+  const truncated = body.choices?.[0]?.finish_reason === 'length' || body.status === 'incomplete' || body.stop_reason === 'max_tokens';
   const content = body.choices?.[0]?.message?.content;
   const text = typeof content === 'string' ? content : Array.isArray(content) ? content.map(item => item.text || '').join('\n')
     : body.output_text || (body.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n')
       || (body.content || []).filter(item => item.type === 'text').map(item => item.text).join('\n');
+  const rawText = String(text || '').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1').trim();
   let result;
-  try { result = responseFormat === 'text' ? String(text || '').trim() : JSON.parse(String(text || '').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1')); }
-  catch { throw new Error('整理模型没有返回有效的 JSON，笔记保持原样'); }
+  if (responseFormat === 'text') result = rawText;
+  else {
+    result = parseModelJson(rawText);
+    // 讲解这类调用常把换行写进 JSON 字符串，或直接回一段中文。有正文就收下，不当成模型不在线。
+    if (!result && rawText.length >= 8 && !rawText.startsWith('{')) result = {text: rawText};
+    if (!result && truncated) throw new Error('笔记整理结果未完成，请稍后重试；笔记保持原样');
+    if (!result) throw new Error('整理模型没有返回有效的 JSON，笔记保持原样');
+  }
   if (!result || (responseFormat !== 'text' && (Array.isArray(result) || typeof result !== 'object'))) throw new Error('整理模型返回格式不正确，笔记保持原样');
   if (!withMetadata) return result;
   const raw = body.usage || {};
@@ -1987,17 +2002,29 @@ async function noteModelJson(response, {withMetadata = false, responseFormat = '
 }
 
 // 学习台复用整理助手的鉴权、模型目录、超时与直连通道，默认跟随学习模式。
+function builtinReasoningEffort(entry) {
+  const declared = entry?.compat?.supportedReasoningEfforts;
+  if (!Array.isArray(declared) || !declared.length) return entry?.reasoning === true ? 'high' : '';
+  const levels = new Set(declared.map(value => String(value).toLowerCase()));
+  if (levels.has('high')) return 'high';
+  return ['medium', 'low', 'minimal'].find(level => levels.has(level)) || '';
+}
+
+// 所有学习台后台任务（包括游戏）共用这一项；普通聊天及其模型配置不受影响。
+const BUILTIN_MODEL_KEY = 'builtinModel';
+function builtinModelRef(organizer) {
+  return cleanText(organizer?.store?.readNotesState?.()?.[BUILTIN_MODEL_KEY], 300);
+}
+
 export async function requestLearningModel(organizer, rules, digest, options = {}) {
   const started = Date.now();
   const {models, defaultRef} = organizer.catalog();
-  const config = organizer.api.runtime?.config?.current?.() || organizer.api.config || {};
-  const selected = agentEntries(config).find(agent => agent.id === 'learning')?.model ?? config.agents?.defaults?.model;
-  const reference = typeof selected === 'string' ? selected : selected?.primary;
-  const model = models.find(model => model.ref === (reference || defaultRef));
+  const model = models.find(model => model.ref === defaultRef);
   if (!model) return {unavailable: true, model: null, usage: null};
   const info = {ref: model.ref, name: model.name};
+  const reasoningEffort = options.reasoningEffort || builtinReasoningEffort(model.model);
   try {
-    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true});
+    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true, ...(reasoningEffort ? {reasoningEffort} : {})});
     return {...response, model: info, ms: Date.now() - started};
   } catch (error) { error.learningModel = info; error.ms = Date.now() - started; throw error; }
 }
@@ -2022,29 +2049,62 @@ export class LearningNotesOrganizer {
         models.push({ref: `${providerId}/${model.id}`, name: model.name || model.id, model, provider, api, base, apiKey});
       }
     }
+    const preferred = builtinModelRef(this);
     const agentModel = agentEntries(config).find(agent => agent.id === 'learning')?.model ?? config.agents?.defaults?.model;
-    const defaultRef = typeof agentModel === 'string' ? agentModel : agentModel?.primary;
-    return {models, defaultRef: models.find(model => model.ref === defaultRef)?.ref || models[0]?.ref || ''};
+    const fallback = typeof agentModel === 'string' ? agentModel : agentModel?.primary;
+    const fallbackRef = models.find(model => model.ref === fallback)?.ref || models[0]?.ref || '';
+    const defaultRef = models.find(model => model.ref === preferred)?.ref || fallbackRef;
+    return {models, defaultRef, fallbackRef, preferred};
   }
 
   status(sessionKey) {
     this.store.assertLearningSession(sessionKey);
-    const {models, defaultRef} = this.catalog();
-    const selectedModel = this.store.readNotesState().organizerModels?.[sessionKey] || '';
-    const model = models.find(item => item.ref === (selectedModel || defaultRef));
-    return {available: Boolean(model), selectedModel, model: model?.ref || '', modelName: model?.name || '',
-      defaultModelName: models.find(item => item.ref === defaultRef)?.name || '',
-      models: models.map(item => ({id: item.ref, name: item.name}))};
+    const {models, defaultRef, fallbackRef, preferred} = this.catalog();
+    const model = models.find(item => item.ref === defaultRef);
+    const fallback = models.find(item => item.ref === fallbackRef);
+    // 旧的 organizerModels 是按会话的，不能在这里偷偷覆盖全局选择。
+    return {available: Boolean(model), selectedModel: preferred, model: model?.ref || '', modelName: model?.name || '',
+      defaultModel: fallback?.ref || '', defaultModelName: fallback?.name || '',
+      usingFallback: Boolean(preferred && preferred !== defaultRef),
+      models: models.map(item => ({id: item.ref, name: item.name, provider: item.ref.split('/')[0],
+        image: Array.isArray(item.model.input) ? item.model.input.includes('image') : null}))};
+  }
+
+  setBuiltinModel(sessionKey, model) {
+    this.store.assertLearningSession(sessionKey);
+    const reference = cleanText(model, 300);
+    if (reference && !this.catalog().models.some(item => item.ref === reference)) throw new Error('这个内置模型暂时不可用');
+    const state = this.store.readNotesState();
+    // 只更新配置本身，不重写每个笔记的 Markdown，避免设置操作被大笔记本拖慢。
+    writeJsonAtomic(this.store.notesFile, {...state, [BUILTIN_MODEL_KEY]: reference, updatedAt: Date.now()});
+    return this.status(sessionKey);
   }
 
   setModel(sessionKey, model) {
+    return this.setBuiltinModel(sessionKey, model);
+  }
+
+  async testBuiltinModel(sessionKey, reference) {
     this.store.assertLearningSession(sessionKey);
-    const reference = cleanText(model, 300);
-    if (reference && !this.catalog().models.some(item => item.ref === reference)) throw new Error('这个整理模型暂时不可用');
-    this.invalidate(sessionKey);
-    const state = this.store.readNotesState();
-    this.store.writeNotes(state.notes, {organizerModels: {...state.organizerModels, [sessionKey]: reference}});
-    return this.status(sessionKey);
+    const catalog = this.catalog();
+    const ref = cleanText(reference, 300) || catalog.fallbackRef;
+    const model = catalog.models.find(item => item.ref === ref);
+    if (!model) throw new Error('这个模型暂时不可用，请重新选择');
+    const start = Date.now();
+    const reasoningEffort = builtinReasoningEffort(model.model);
+    try {
+      await this.requestModel(ref, '只回复 OK。', [], false,
+        {userText: '请回复 OK。', responseFormat: 'text', maxTokens: 512, timeoutMs: 30000,
+          ...(reasoningEffort ? {reasoningEffort} : {})});
+    } catch (error) {
+      const text = String(error?.message || '');
+      if (/（404）/.test(text)) throw new Error('模型不存在，或当前模型来源无权使用它；请换一个模型。');
+      if (/（401）|（403）/.test(text)) throw new Error('模型来源的凭据无效，或没有使用这个模型的权限。');
+      if (/（429）/.test(text)) throw new Error('模型服务暂时繁忙或额度不足，请稍后重试。');
+      if (/（5\d\d）/.test(text)) throw new Error('模型服务暂时出错，请检查模型来源的登录状态或稍后重试。');
+      throw error;
+    }
+    return {ok: true, model: model.ref, modelName: model.name, ms: Date.now() - start};
   }
 
   invalidate(sessionKey) { this.generations.set(sessionKey, (this.generations.get(sessionKey) || 0) + 1); }
@@ -2168,12 +2228,13 @@ LearningNotesOrganizer.prototype.triageSuggest = function triageSuggest(sessionK
         if (!batch.length) break;
         const context = this.store.triageContext(sessionKey);
         const input = {notes: batch.map(note => ({id: note.id, text: noteSourceText(note), source: note.sourceLabel || note.sourceSessionLabel || ''}))};
-        const result = await this.requestModel(this.status(sessionKey).model, triageRules(context.exams, context.topics), input.notes, true,
+        const modelStatus = this.status(sessionKey);
+        const result = await this.requestModel(modelStatus.model, triageRules(context.exams, context.topics), input.notes, true,
           {userText: JSON.stringify(input), maxTokens: 260 * batch.length + 800, timeoutMs: this.deepTimeoutMs});
         const {accepted} = validateTriageSuggestions(result, batch, context.exams);
         batch.forEach(note => this.triageDone.add(note.id));
         // 没通过校验的条目这一轮跳过，不拿坏结果覆盖；下次「重新建议」再试。
-        this.store.setTriageSuggestions(sessionKey, accepted, this.status(sessionKey).modelName);
+        this.store.setTriageSuggestions(sessionKey, accepted, modelStatus.modelName);
         done += batch.length;
         this.store.setTriageStatus({state: 'running', queued: Math.max(0, queued - done), done});
         if (!accepted.length) throw new Error('整理模型没有给出可用的建议，请稍后再试；笔记保持原样');
@@ -2272,7 +2333,11 @@ export function registerLearningGateway(api, store, {organizer = new LearningNot
     return {...store.listNotes({...params, sessionKey}), organizer: organizer.status(sessionKey)};
   });
   register(api, 'pinkie.learning.notes.organizer.status', params => organizer.status(String(params.sessionKey || '')));
-  register(api, 'pinkie.learning.notes.organizer.setModel', params => organizer.setModel(String(params.sessionKey || ''), params.model));
+  register(api, 'pinkie.learning.notes.organizer.setModel', params => organizer.setBuiltinModel(String(params.sessionKey || ''), params.model));
+  // 学习台「内置模型」按钮走这两个：列可用模型 + 读写全局偏好。
+  register(api, 'pinkie.learning.builtinModel.status', params => organizer.status(String(params.sessionKey || '')));
+  register(api, 'pinkie.learning.builtinModel.setModel', params => organizer.setBuiltinModel(String(params.sessionKey || ''), params.model));
+  register(api, 'pinkie.learning.builtinModel.test', params => organizer.testBuiltinModel(String(params.sessionKey || ''), params.model));
   register(api, 'pinkie.learning.notes.organize.light', params => organizer.light(String(params.sessionKey || ''), params.id));
   register(api, 'pinkie.learning.notes.organize.preview', params => organizer.preview(String(params.sessionKey || ''), params.requestId));
   register(api, 'pinkie.learning.notes.save', params => store.saveNote(String(params.sessionKey || ''), params));
