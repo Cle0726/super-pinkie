@@ -204,6 +204,8 @@
 | 上面都对不上的新类型的活 | `playbooks/crafts.md`（活儿地图和没见过的活怎么做） |
 | 预计很久、要反复打磨的大活 | `playbooks/long-task.md` |
 | 报错、跑不起来、结果不对 | `playbooks/debugging.md` |
+| 写程序、在已有项目里加功能或改代码、补测试、整理代码 | `playbooks/coding.md`（各种语言怎么装、跑、测见 `playbooks/code-stacks.md`） |
+| 交付代码之前自查；用户说「帮我看看这段代码」 | `playbooks/code-review.md` |
 | 要用的工具不在或不确定在不在 | `playbooks/environment.md` |
 
 *为什么：* 聊天里冒出来的活什么样都有；常驻手册只放每轮都要的判断，细的做法用到时读全，比凭印象做得好。
