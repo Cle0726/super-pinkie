@@ -1,13 +1,16 @@
 /* 分工 · 把「碧琪分头在忙」安静地标出来。
  *
- * 父会话开了子会话（同一个模式里的，或者开到别的模式里的），输入框上方出现一行小圆点：
- * 一个圆点就是一个正在干活的碧琪，里面是她在那个模式的脸，外面一圈细环表示状态。
- *   运行中 → 细环慢慢转；等你回复 → 环变成琥珀色；做完 → 环收成一个小对勾；出错 → 褪成灰色。
- * 外表克制：没有弹跳、彩带和音效式的动画，整行只用一个强调色。全部回来后停留片刻自己收起。
- * 点圆点就去那个会话（别的模式会带你切过去）。
+ * 聊天是干活的地方：平时外表克制，只有一行细线画的小符号；手放上去、点下去时回应才丰富。
  *
- * 数据全部来自 laolao-session-cards.js 已经在取的那一份（血缘、卡片、会话状态），这里不发任何请求、
- * 不开定时轮询、不开观察器。没有子会话在跑时什么都不画。
+ * 父会话开了子会话（同一个模式里的，或者开到别的模式里的），输入框上方出现一条细线，线上一串小圆：
+ *   运行中 → 一段弧沿着圆慢慢走；等你回复 → 圆心一个琥珀色的点；
+ *   做完   → 圆画满、里面描出一个对勾（只在刚做完时描一次）；出错 → 虚线圆加一个叉。
+ * 平时不显示名字（等你回复的那个除外，因为它需要你）。
+ * 悬停或聚焦：那个圆展开成一小条，写出名字、在哪个模式、什么状态，弧走得快一点；按下有回弹。
+ * 点了就去那个会话（别的模式会带你切过去）。全部回来后停留片刻自己收起。
+ *
+ * 符号全部是内联 SVG，不用图片。数据来自 laolao-session-cards.js 已经在取的那一份，
+ * 这里不发任何请求、不开定时轮询、不开观察器。没有子会话在跑时什么都不画。
  *
  * 对外：window.PinkieCrew = {render(composer, family), summarize(family), clear()}
  *   family: [{key, title, mode, status}]，status 是 running | waiting | done | error。 */
@@ -15,10 +18,7 @@
   'use strict';
   if (window.PinkieCrew) return;
   const MODES = {
-    chat: {name: '唠嗑模式', face: 'chat'},
-    project: {name: '项目模式', face: 'project'},
-    ideas: {name: '想法模式', face: 'thinking'},
-    learning: {name: '学习模式', face: 'learning'},
+    chat: {name: '唠嗑模式'}, project: {name: '项目模式'}, ideas: {name: '想法模式'}, learning: {name: '学习模式'},
   };
   const STATUS = {running: '正在忙', waiting: '等你回复', done: '做完了', error: '出错了'};
   const MAX = 5, LINGER_MS = 6000; // 五只：再多就伸到趴在输入框右上角的小碧琪身子底下了
@@ -53,6 +53,24 @@
     strip?.remove(); strip = null; lastSignature = '';
   }
 
+  // 一个 20×20 的线条符号：底圈、状态弧、状态记号。全部用 currentColor 和一个强调色。
+  const SVG = 'http://www.w3.org/2000/svg';
+  const MARKS = {done: 'M6.4 10.4l2.4 2.4 4.8-5.2', error: 'M7.4 7.4l5.2 5.2M12.6 7.4l-5.2 5.2'};
+  function shape(tag, className, attrs) {
+    const node = document.createElementNS(SVG, tag);
+    node.setAttribute('class', className);
+    for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+    return node;
+  }
+  function glyph(status) {
+    const svg = shape('svg', 'pinkie-crew__glyph', {viewBox: '0 0 20 20', 'aria-hidden': 'true'});
+    const circle = {cx: 10, cy: 10, r: 7, pathLength: 100};
+    svg.append(shape('circle', 'pinkie-crew__track', circle), shape('circle', 'pinkie-crew__arc', circle));
+    if (status === 'waiting' || status === 'running') svg.append(shape('circle', 'pinkie-crew__core', {cx: 10, cy: 10, r: status === 'waiting' ? 2.6 : 1.4}));
+    if (MARKS[status]) svg.append(shape('path', 'pinkie-crew__mark', {d: MARKS[status], pathLength: 100}));
+    return svg;
+  }
+
   function token(row, previous) {
     const mode = MODES[row.mode] || MODES.chat;
     const button = el('button', 'pinkie-crew__one pinkie-crew__one--' + row.status);
@@ -63,14 +81,11 @@
     button.setAttribute('aria-label', tip);
     button.dataset.pinkieTooltip = tip;
     button.onclick = () => window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: row.key}}));
-    const dot = el('span', 'pinkie-crew__dot');
-    const face = el('img', 'pinkie-crew__face');
-    face.src = `/laolao-mode-${mode.face}-sm.png?v=sm1`; face.alt = ''; face.draggable = false; face.decoding = 'async';
-    dot.append(face, el('span', 'pinkie-crew__ring'));
-    if (row.status === 'done') dot.append(el('span', 'pinkie-crew__tick'));
-    // 刚从「在忙」变成「做完」：对勾淡入一次。之前就做完的不重放。
+    // 刚从「在忙」变成「做完」：圆和对勾描一次。之前就做完的不重放。
     if (row.status === 'done' && previous && previous !== 'done' && !reduced()) button.classList.add('is-fresh');
-    button.append(dot, el('span', 'pinkie-crew__name', title));
+    const text = el('span', 'pinkie-crew__text');
+    text.append(el('span', 'pinkie-crew__name', title), el('span', 'pinkie-crew__where', mode.name + ' · ' + STATUS[row.status]));
+    button.append(glyph(row.status), text);
     return button;
   }
 

@@ -1,55 +1,79 @@
-/* 分工（laolao-crew.js）。输入框上方一行小圆点，宽度跟「有几件事等你决定」那一条对齐。
-   外表克制：一个强调色，状态只靠一圈细环表达；唯一一直在动的是运行中那圈慢慢转的环。 */
+/* 分工（laolao-crew.js）。输入框上方一条细线，线上一串线条画的小圆。
+   平时克制：细线、一个强调色、不显示名字；唯一一直在动的是运行中那段慢慢走的弧。
+   回应丰富：悬停 / 聚焦时那个圆展开成一小条（名字、模式、状态），弧加快，按下回弹。 */
 .pinkie-crew {
   --crew: var(--accent, #d9508d);
-  display: flex; align-items: center; gap: 12px; box-sizing: border-box;
-  width: min(780px, calc(100% - 48px)); margin: 0 auto 4px; padding: 2px 236px 2px 12px; /* 右边留给趴在输入框上的小碧琪 */
+  --crew-wait: #d99a1f;
+  display: flex; align-items: center; gap: 10px; box-sizing: border-box;
+  width: min(780px, calc(100% - 48px)); height: 30px; margin: 0 auto 2px; padding: 0 236px 0 12px; /* 右边留给趴在输入框上的小碧琪 */
   font-size: 12px; color: inherit;
   animation: pinkie-crew-in .24s ease-out both;
 }
 html[data-laolao-startup-home="1"] .pinkie-crew { display: none; }
 .pinkie-crew.is-leaving { opacity: 0; transition: opacity .5s ease; }
-.pinkie-crew__label { flex: 0 0 auto; white-space: nowrap; opacity: .62; }
-.pinkie-crew__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.pinkie-crew__more { margin-left: 4px; opacity: .5; }
+.pinkie-crew__label { flex: 0 0 auto; white-space: nowrap; opacity: .55; }
+.pinkie-crew__more { margin-left: 2px; opacity: .45; }
+/* 圆和圆之间一小段细线连着：是「同一件事分出去的几路」。 */
+.pinkie-crew__row { display: flex; align-items: center; gap: 9px; min-width: 0; padding-left: 14px; }
+.pinkie-crew__one::before {
+  content: ""; position: absolute; right: 100%; top: 50%; width: 9px; height: 1px; pointer-events: none;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+.pinkie-crew__one:first-child::before { width: 14px; background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 22%, transparent)); }
 
 .pinkie-crew__one {
-  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 132px; height: 26px;
-  padding: 0 8px 0 3px; border: 0; border-radius: 13px; background: none; color: inherit; font: inherit; cursor: pointer;
-  transition: background-color .15s ease;
+  position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; height: 26px;
+  padding: 0 3px; border: 0; border-radius: 13px; color: inherit; font: inherit; cursor: pointer;
+  background: transparent;
+  transition: background-color .18s ease, box-shadow .18s ease, transform .18s cubic-bezier(.3, 1.6, .5, 1), padding .22s ease;
 }
-.pinkie-crew__one:hover { background: color-mix(in srgb, var(--crew) 9%, transparent); }
-.pinkie-crew__one:focus-visible { outline: 2px solid var(--crew); outline-offset: 1px; }
-.pinkie-crew__dot { position: relative; flex: 0 0 20px; width: 20px; height: 20px; }
-.pinkie-crew__face { position: absolute; inset: 2px; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
-.pinkie-crew__ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--crew) 22%, transparent); box-sizing: border-box; }
-.pinkie-crew__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .78; }
+.pinkie-crew__glyph { flex: 0 0 20px; width: 20px; height: 20px; overflow: visible; fill: none; stroke-linecap: round; stroke-linejoin: round; transition: transform .22s cubic-bezier(.3, 1.6, .5, 1); }
+.pinkie-crew__track { stroke: color-mix(in srgb, currentColor 26%, transparent); stroke-width: 1.4; }
+.pinkie-crew__arc { stroke: var(--crew); stroke-width: 1.6; stroke-dasharray: 0 100; transform-origin: 10px 10px; transform: rotate(-90deg); }
+.pinkie-crew__core { fill: var(--crew); stroke: none; }
+.pinkie-crew__mark { stroke: var(--crew); stroke-width: 1.6; stroke-dasharray: 100; stroke-dashoffset: 0; }
 
-/* 运行中：一段弧慢慢转。 */
-.pinkie-crew__one--running .pinkie-crew__ring { border-top-color: var(--crew); animation: pinkie-crew-turn 1.6s linear infinite; }
-/* 等你回复：整圈琥珀色，不动。 */
-.pinkie-crew__one--waiting .pinkie-crew__ring { border-color: #e0a12b; }
-.pinkie-crew__one--waiting .pinkie-crew__name { opacity: 1; }
-/* 做完：环收起，右下角一个小对勾，名字淡下去。 */
-.pinkie-crew__one--done .pinkie-crew__ring { border-color: transparent; }
-/* 做完和出错的只留圆点（名字在提示里），把位置让给还在忙的。 */
-.pinkie-crew__one--done .pinkie-crew__name, .pinkie-crew__one--error .pinkie-crew__name { display: none; }
-.pinkie-crew__one--done, .pinkie-crew__one--error { padding-right: 3px; flex: 0 0 auto; }
-.pinkie-crew__tick {
-  position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%;
-  background: var(--crew); box-shadow: 0 0 0 1.5px var(--bg, #fff);
+/* 名字默认收着；展开时从 0 宽长出来。 */
+.pinkie-crew__text { display: grid; max-width: 0; overflow: hidden; opacity: 0; line-height: 1.15; text-align: left; transition: max-width .26s cubic-bezier(.2, .8, .2, 1), opacity .18s ease, margin .22s ease; }
+.pinkie-crew__name, .pinkie-crew__where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinkie-crew__where { display: none; font-size: 10px; opacity: .55; }
+
+/* 运行中：一段弧慢慢走，圆心一个小点。 */
+.pinkie-crew__one--running .pinkie-crew__arc { stroke-dasharray: 26 74; animation: pinkie-crew-turn 2.4s linear infinite; }
+.pinkie-crew__one--running .pinkie-crew__core { opacity: .55; }
+/* 等你回复：琥珀色，圆心实点；它需要你，所以名字一直显示。 */
+.pinkie-crew__one--waiting { --crew: var(--crew-wait); }
+.pinkie-crew__one--waiting .pinkie-crew__track { stroke: color-mix(in srgb, var(--crew-wait) 70%, transparent); }
+.pinkie-crew__one--waiting .pinkie-crew__text { max-width: 9em; opacity: 1; margin: 0 7px 0 5px; }
+/* 做完：圆画满，里面一个对勾。刚做完时描一次。 */
+.pinkie-crew__one--done .pinkie-crew__arc { stroke-dasharray: 100 0; opacity: .5; }
+.pinkie-crew__one--done.is-fresh .pinkie-crew__arc { animation: pinkie-crew-close .5s ease-out both; }
+.pinkie-crew__one--done.is-fresh .pinkie-crew__mark { animation: pinkie-crew-draw .32s .38s ease-out both; }
+/* 出错：虚线圆，灰色的叉。 */
+.pinkie-crew__one--error { --crew: color-mix(in srgb, currentColor 55%, transparent); }
+.pinkie-crew__one--error .pinkie-crew__track { stroke-dasharray: 3 3.6; }
+
+/* —— 回应 —— */
+.pinkie-crew__one:hover, .pinkie-crew__one:focus-visible {
+  padding: 0 4px; outline: none;
+  background: color-mix(in srgb, var(--crew) 9%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--crew) 30%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--crew) 55%, transparent);
+  z-index: 1;
 }
-.pinkie-crew__tick::after {
-  content: ""; position: absolute; left: 2.6px; top: 1.2px; width: 2.4px; height: 4.6px;
-  border: solid #fff; border-width: 0 1.3px 1.3px 0; transform: rotate(42deg);
-}
-.pinkie-crew__one--done.is-fresh .pinkie-crew__tick { animation: pinkie-crew-in .3s ease-out both; }
-/* 出错：褪色。 */
-.pinkie-crew__one--error .pinkie-crew__face { filter: grayscale(1); opacity: .6; }
-.pinkie-crew__one--error .pinkie-crew__ring { border-color: color-mix(in srgb, currentColor 35%, transparent); border-style: dashed; }
+.pinkie-crew__one:hover .pinkie-crew__text, .pinkie-crew__one:focus-visible .pinkie-crew__text { max-width: 14em; opacity: 1; margin: 0 8px 0 5px; }
+.pinkie-crew__one:hover .pinkie-crew__where, .pinkie-crew__one:focus-visible .pinkie-crew__where { display: block; animation: pinkie-crew-in .2s ease-out both; }
+.pinkie-crew__one:hover .pinkie-crew__glyph, .pinkie-crew__one:focus-visible .pinkie-crew__glyph { transform: scale(1.12); }
+.pinkie-crew__one:hover .pinkie-crew__track, .pinkie-crew__one:focus-visible .pinkie-crew__track { stroke: color-mix(in srgb, var(--crew) 40%, transparent); }
+.pinkie-crew__one--running:hover .pinkie-crew__arc, .pinkie-crew__one--running:focus-visible .pinkie-crew__arc { animation-duration: .9s; stroke-dasharray: 40 60; }
+.pinkie-crew__one--running:hover .pinkie-crew__core, .pinkie-crew__one--running:focus-visible .pinkie-crew__core { opacity: 1; }
+.pinkie-crew__one--done:hover .pinkie-crew__arc, .pinkie-crew__one--done:focus-visible .pinkie-crew__arc { opacity: 1; }
+.pinkie-crew__one--done:hover .pinkie-crew__mark { animation: pinkie-crew-draw .3s ease-out both; }
+.pinkie-crew__one:active { transform: scale(.94); }
 
 @keyframes pinkie-crew-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pinkie-crew-turn { to { transform: rotate(360deg); } }
+@keyframes pinkie-crew-turn { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+@keyframes pinkie-crew-close { from { stroke-dasharray: 26 74; opacity: 1; } to { stroke-dasharray: 100 0; opacity: .5; } }
+@keyframes pinkie-crew-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 
 html[data-reduce-motion] .pinkie-crew, html[data-reduce-motion] .pinkie-crew * { animation: none !important; transition: none !important; }
 @media (max-width: 900px) { .pinkie-crew { padding-right: 12px; } }
