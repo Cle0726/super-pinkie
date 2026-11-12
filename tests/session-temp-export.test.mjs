@@ -131,6 +131,9 @@ test('markdown export: header, roles, tool line, no thinking or tool output, ima
   assert.doesNotMatch(markdown, /秘密思考|工具输出|子会话简报/);
   assert.equal(assets.length, 1);
   assert.match(markdown, new RegExp(`!\\[图片-1-[0-9a-f]+\\.png\\]\\(\\./${ASSET_DIR}/`));
+  const inline = renderMarkdown({title: '天气', model, exportedAt: 0, turns, inlineImages: true});
+  assert.equal(inline.assets.length, 0);
+  assert.match(inline.markdown, /\(data:image\/png;base64,cG5n\)/);
 });
 
 test('digest keeps the opening and the latest exchange within the limit', () => {
