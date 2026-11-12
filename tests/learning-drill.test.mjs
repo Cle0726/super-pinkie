@@ -600,3 +600,14 @@ test('做完才讲：讲解顺着标准答案，没做完不能要', async t => 
   const again = await drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'});
   assert.equal(again.text, told.text);
 });
+
+test('背一背讲解失败时保留原解析并给出可重试的原因', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-explain-failure-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const store = new LearningInteractionStore({root, workspace: path.join(root, 'workspace')});
+  const organizer = {catalog: () => ({defaultRef: 'qa/model'}), requestModel: async () => { throw Error('笔记整理模型请求失败（429）'); }};
+  const drill = new LearningDrill(store, {organizer});
+  drill.save({sessionId: 's1', sessionKey: KEY, items: [{itemId: 'd1', prompt: 'impact ___', options: ['in', 'on'], reveal: {answer: 'on', extra: '介词用 on'}}], answers: [{itemId: 'd1', correct: false}], graded: {}, learned: {}});
+  const r = await drill.explain({sessionId: 's1', itemId: 'd1', yours: 'in'});
+  assert.equal(r.text, '介词用 on'); assert.equal(r.source, 'local'); assert.match(r.error, /限流或额度不足/);
+});

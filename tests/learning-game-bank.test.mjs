@@ -216,3 +216,28 @@ test('今日闭环：讲完课的下一站是这节课考点的真题；没上�
   assert.equal(typeof loop.weekend, 'boolean');
   assert.ok(loop.suggest?.point);
 });
+
+test('讲题等待模型时合并重复请求，讲完缓存；限流会明确提示而不是反复调用', async t => {
+  const {game} = gameFixture(t);
+  install(game, [paper('mock-explain', {kind: 'mock'})]);
+  const pr = game.modules.practice;
+  const set = pr.start({mode: 'kind', kind: 'vc', requestId: 'explain-fixture'});
+  const [first, second] = set.items;
+  await pr.answer({setId: set.setId, itemId: first.itemId, answer: 0});
+  let calls = 0, release, seen;
+  game.requestModel = (_rules, payload, options) => { calls++; seen = {payload, options}; return new Promise(resolve => { release = resolve; }); };
+  const a = pr.explain({setId: set.setId, itemId: first.itemId});
+  const b = pr.explain({setId: set.setId, itemId: first.itemId});
+  assert.equal(calls, 1);
+  assert.deepEqual(JSON.parse(seen.options.userText), seen.payload);
+  release({value: {text: '这里要按标准答案理解比较级的固定结构。'}});
+  const [x, y] = await Promise.all([a, b]);
+  assert.equal(x.text, y.text);
+  assert.equal((await pr.explain({setId: set.setId, itemId: first.itemId})).text, x.text);
+  assert.equal(calls, 1);
+  await pr.answer({setId: set.setId, itemId: second.itemId, answer: pr.bank.item(second.itemId).answer});
+  game.requestModel = async () => { calls++; throw Error('笔记整理模型请求失败（429），笔记保持原样'); };
+  const fail = await pr.explain({setId: set.setId, itemId: second.itemId});
+  assert.match(fail.error, /限流或额度不足/);
+  assert.equal(calls, 2, '限流时不立即重复请求');
+});
