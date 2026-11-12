@@ -23,10 +23,7 @@ import urllib.request
 import uuid
 import webbrowser
 
-try:
-    import release_notes
-except ImportError:  # imported as app.windows_desktop (tests, tools)
-    from app import release_notes
+import release_notes
 
 
 GATEWAY_URL = "http://127.0.0.1:18789/"
