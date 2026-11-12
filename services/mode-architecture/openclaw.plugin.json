@@ -20,6 +20,7 @@
       "pinkie_session_list",
       "plan_update",
       "code_check",
+      "computer_flow",
       "code_search",
       "code_edit",
       "code_refs",
