@@ -19,6 +19,8 @@ import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.
 import {codeWatch} from './code-work.mjs';
 import {sessionHintBlock, noteCompaction} from './session-hints.mjs';
 import {designDirectionBlock} from './design-directions.mjs';
+import {ensureManualLimits} from './config-floor.mjs';
+import {createDeskTool, deskHintBlock} from './desk.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
@@ -5676,6 +5678,9 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           const broken = codeWatch.block(sessionKey);
           if (broken) blocks.push('\n' + broken + '\n');
           // 子会话的时机：用户多半不知道可以分会话，由引擎看情况提醒碧琪自己提出。
+          // 要操控软件：指到现成动作，并把这台电脑上存好的流程放到眼前。
+          const desk = deskHintBlock(routedPrompt, {mode});
+          if (desk) blocks.push('\n' + desk + '\n');
           const sessionHint = sessionHintBlock(sessionKey, routedPrompt, routed.kinds || [], {mode});
           if (sessionHint) blocks.push('\n' + sessionHint + '\n');
         } catch (error) {
@@ -6549,6 +6554,10 @@ export default {
     api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    // 操控软件的现成动作：一次连做多步、按名字点控件、跑通的流程存在这台电脑上重放。Mac 和 Windows 都有。
+    api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
+    // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
+    api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
     api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
