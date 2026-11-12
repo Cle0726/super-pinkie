@@ -273,6 +273,7 @@ void main() {
       this.ro.observe(figure);
       this.onVis = () => { if (!document.hidden) this.kick(); };
       document.addEventListener("visibilitychange", this.onVis);
+      window.addEventListener("pinkie:rest-change", this.onVis);
     }
     program(vs, fs) {
       const gl = this.gl;
@@ -387,12 +388,14 @@ void main() {
       const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
       if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; this.kick(); }
     }
-    kick() { if (!this.raf && !this.dead && !this.paused && !document.hidden) { this.last = 0; this.raf = requestAnimationFrame((t) => this.frame(t)); } }
+    kick() { if (!this.raf && !this.dead && !this.paused && !document.hidden && !window.__pinkieRest?.rest) { this.last = 0; this.raf = requestAnimationFrame((t) => this.frame(t)); } }
     /* 转场盖住页面时先停，省下 GPU 给转场 */
     pause(on) { this.paused = Boolean(on); if (this.paused) { cancelAnimationFrame(this.raf); this.raf = 0; } else this.kick(); }
     frame(now) {
       this.raf = 0;
       if (this.dead || this.paused || document.hidden || !this.front) return;
+      // 打盹（没人在看、手上也没活，见 laolao-rest.js）：停在当前姿势，醒来接着动。
+      if (window.__pinkieRest?.rest) return;
       // 被输入框的菜单挡住（她会先躲起来）时不画，隔一会儿再看
       if ((this.visCheck = (this.visCheck || 0) + 1) % 20 === 0) this.hiddenNow = this.figure.checkVisibility ? !this.figure.checkVisibility({checkVisibilityCSS: true, checkOpacity: true}) : false;
       if (this.hiddenNow) { this.last = now; this.raf = requestAnimationFrame((t) => this.frame(t)); return; }
@@ -493,7 +496,7 @@ void main() {
     }
     destroy() {
       cancelAnimationFrame(this.raf); this.raf = 0; this.dead = true;
-      this.ro?.disconnect(); document.removeEventListener("visibilitychange", this.onVis);
+      this.ro?.disconnect(); document.removeEventListener("visibilitychange", this.onVis); window.removeEventListener("pinkie:rest-change", this.onVis);
       this.canvas.remove();
     }
   }

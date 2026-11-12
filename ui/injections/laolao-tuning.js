@@ -13,6 +13,12 @@
  *
  * No hardware, GPU, memory or OS flag is ever consulted here: effects look the
  * same on every machine unless the user picks something on the page.
+ *
+ * 自动减负 (laolao-rest.js) may lay a temporary "ease" overlay on top while the
+ * page is measurably dropping frames. It is not a hardware guess: it comes from
+ * frame times actually observed, steps back up when they recover, only applies
+ * on the untouched 标准 level, never beats a control the user set by hand, and
+ * can be switched off on the page (`auto: false` in the stored config).
  * Must load right after laolao-motion-preference.js, before any other injection. */
 (() => {
   "use strict";
@@ -49,9 +55,10 @@
   const valid = (key, value) => Object.prototype.hasOwnProperty.call(OPTIONS, key)
     && OPTIONS[key].some((option) => option === value);
   const clean = (raw) => {
-    const out = {version: VERSION, level: "standard", values: {}};
+    const out = {version: VERSION, level: "standard", values: {}, auto: true};
     if (!raw || typeof raw !== "object" || raw.version !== VERSION) return out;
     if (LEVELS.includes(raw.level)) out.level = raw.level;
+    if (raw.auto === false) out.auto = false;
     if (raw.values && typeof raw.values === "object") {
       for (const [key, value] of Object.entries(raw.values)) if (valid(key, value)) out.values[key] = value;
     }
@@ -69,16 +76,24 @@
     const before = snapshot();
     config = clean(next);
     try {
-      if (config.level === "standard" && !Object.keys(config.values).length) localStorage.removeItem(KEY);
-      else localStorage.setItem(KEY, JSON.stringify(config));
+      if (config.level === "standard" && !Object.keys(config.values).length && config.auto) localStorage.removeItem(KEY);
+      // `auto` is written only when switched off, so configs saved before it existed stay byte-identical.
+      else localStorage.setItem(KEY, JSON.stringify(config.auto ? {version: config.version, level: config.level, values: config.values} : config));
     } catch {}
     const after = snapshot();
     emit(Object.keys(after).filter((key) => after[key] !== before[key]));
   };
 
+  // 自动减负's temporary overlay: {key: value}, set by laolao-rest.js, never stored.
+  let ease = {};
+  const easeApplies = (key) => config.auto && config.level === "standard"
+    && Object.prototype.hasOwnProperty.call(ease, key)
+    && !Object.prototype.hasOwnProperty.call(config.values, key);
+
   // What a script should use; `fallback` is the script's own constant.
   const get = (key, fallback) => {
     if (Object.prototype.hasOwnProperty.call(config.values, key)) return config.values[key];
+    if (easeApplies(key)) return ease[key];
     const preset = PRESETS[config.level];
     if (preset && Object.prototype.hasOwnProperty.call(preset, key)) return preset[key];
     return fallback !== undefined ? fallback : DEFAULTS[key];
@@ -113,10 +128,29 @@
     get, num, pixelRatio, snapshot,
     get level() { return config.level; },
     get overrides() { return {...config.values}; },
+    // 自动减负: on unless the user switched it off. The overlay only ever holds
+    // values from the same OPTIONS lists, and only ones at or below the default.
+    get auto() { return config.auto; },
+    get easing() { return Object.fromEntries(Object.keys(ease).filter(easeApplies).map((key) => [key, ease[key]])); },
+    setAuto(on) { save({version: VERSION, level: config.level, values: config.values, auto: Boolean(on)}); },
+    setEase(next) {
+      const before = snapshot();
+      const cleaned = {};
+      for (const [key, value] of Object.entries(next && typeof next === "object" ? next : {})) {
+        if (!valid(key, value)) continue;
+        const options = OPTIONS[key];
+        if (options.indexOf(value) <= options.indexOf(DEFAULTS[key])) cleaned[key] = value;
+      }
+      ease = cleaned;
+      const after = snapshot();
+      const keys = Object.keys(after).filter((key) => after[key] !== before[key]);
+      if (keys.length) emit(keys);
+      return keys;
+    },
     // Pick a level; hand-made changes are cleared so the level reads cleanly.
     setLevel(level) {
       if (!LEVELS.includes(level)) return;
-      save({version: VERSION, level, values: {}});
+      save({version: VERSION, level, values: {}, auto: config.auto});
     },
     // Change one control. Picking the level's own value drops the override.
     set(key, value) {
@@ -126,9 +160,9 @@
       const levelValue = Object.prototype.hasOwnProperty.call(preset, key) ? preset[key] : DEFAULTS[key];
       if (value === levelValue) delete values[key];
       else values[key] = value;
-      save({version: VERSION, level: config.level, values});
+      save({version: VERSION, level: config.level, values, auto: config.auto});
       return true;
     },
-    reset() { save({version: VERSION, level: "standard", values: {}}); },
+    reset() { save({version: VERSION, level: "standard", values: {}, auto: true}); },
   });
 })();

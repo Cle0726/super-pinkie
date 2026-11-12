@@ -1,8 +1,10 @@
 /* 进阶调节 · 给性能好的电脑放开用，也可以省着用。
  * Reads and writes only through window.PinkieTuning (laolao-tuning.js) and the
  * existing motion switch (window.__pinkieMotion) and 小碧琪 氛围 preference, so
- * nothing here can disagree with another switch. Nothing looks at the hardware:
- * every choice is the user's. Entry points: the workspace rail button (under
+ * nothing here can disagree with another switch. Nothing looks at the hardware.
+ * 自动减负 (laolao-rest.js) is the one thing that acts without a click: it eases
+ * a few smoothness controls while the page is measurably dropping frames, only
+ * on the untouched 标准 level, and its switch is the first row here. Entry points: the workspace rail button (under
  * 灵感圆桌), the 小碧琪 menu, and window.__pinkiePower.open(). */
 (() => {
   "use strict";
@@ -21,6 +23,7 @@
   const chars = (n) => `${num(n)} 字`;
   const GROUPS = [
     {id: "effects", icon: "✨", title: "特效", hint: "氛围画布、彩带和小动画。", rows: [
+      {kind: "auto", title: "卡的时候自动减负", hint: "只有页面真的在掉帧时，碧琪才临时把氛围帧率、画布清晰度和粒子数量调低一点，不卡了就自己恢复。画面上的东西一样不少。只在「标准」档、你没手动改过的项目上生效。", cost: "关掉后完全按你选的来"},
       {kind: "motion", title: "减少动效", hint: "容易晕动或想安静时打开。这是舒适选项，不跟着档位变。", cost: "不影响性能档位"},
       {kind: "ambient", title: "聊天背景氛围", hint: "聊天卡片后面飘着的气球、光点。和小碧琪菜单里的「氛围」是同一个开关。", cost: "关掉最省电"},
       {key: "effects.ambientFps", title: "氛围帧率", hint: "背景动画每秒画几次。越高越顺滑。", cost: "60 帧大约多用一倍显卡",
@@ -145,7 +148,20 @@
         el("span", "pinkie-power__row-hint", copy, spec.hint);
         el("span", "pinkie-power__cost", copy, `代价：${spec.cost}`);
         const control = el("div", "pinkie-power__row-control", row);
-        if (spec.kind === "motion") {
+        if (spec.kind === "auto") {
+          const pairs = segment(control, [[true, "开"], [false, "关"]], (value) => {
+            T()?.setAuto(value); say(value ? "卡的时候碧琪会自己省一点" : "不再自动调，完全按你选的来"); sync();
+          });
+          const live = el("span", "pinkie-power__row-hint pinkie-power__auto-live", copy, "");
+          refs.rows.push(() => {
+            const t = T();
+            press(pairs, t.auto !== false);
+            dot.hidden = t.auto !== false;
+            const easing = t.auto !== false && Object.keys(t.easing || {}).length > 0;
+            live.textContent = easing ? "现在：电脑有点吃力，碧琪正在省着画，缓过来就恢复。" : "";
+            live.hidden = !easing;
+          });
+        } else if (spec.kind === "motion") {
           const pairs = segment(control, [[false, "完整特效"], [true, "减少动效"]], (value) => {
             window.__pinkieMotion?.set(value); say(value ? "已减少动效" : "已恢复完整特效"); sync();
           });
@@ -168,7 +184,7 @@
     }
 
     const foot = el("footer", "pinkie-power__foot", dialog);
-    const note = el("p", "pinkie-power__note", foot, "每台电脑看到的效果都一样，只听你在这里的选择。聊天记录类的改动在下次打开或切换聊天时生效，其它马上生效。");
+    const note = el("p", "pinkie-power__note", foot, "碧琪不看电脑配置，每台电脑默认的效果都一样；只有真的卡了才临时省一点（可以在上面关掉）。聊天记录类的改动在下次打开或切换聊天时生效，其它马上生效。");
     note.setAttribute("role", "note");
     refs.status = el("p", "pinkie-power__status", foot, "");
     refs.status.setAttribute("aria-live", "polite");
@@ -194,6 +210,7 @@
     });
     window.addEventListener("pinkie:tuning-change", sync);
     window.addEventListener("pinkie:motion-change", sync);
+    window.addEventListener("pinkie:ease-change", sync);
   }
 
   let sayTimer = 0;
