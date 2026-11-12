@@ -134,6 +134,12 @@ test('W1 hook: records inside workspace/project, skips outside, failures and tem
   const id = listed.items[0].id;
   assert.ok((await api.call('pinkie.artifacts.version', {id, v: 1})).path);
   assert.deepEqual(await api.call('pinkie.artifacts.remove', {id}), {ok: true});
+  // No workspace in the after-hook ctx: the configured agent workspace is used.
+  const api2 = fakeApi();
+  const other = registerArtifacts(api2, {root: path.join(dir, 'artifacts2'), stateDir, bindingsFile: path.join(dir, 'none.json'), home: dir, workspaceFor: () => workspace});
+  fs.writeFileSync(path.join(workspace, 'cfg.md'), 'c');
+  api2.hooks.after_tool_call[0]({toolName: 'write', params: {path: 'cfg.md'}, toolCallId: 't1'}, {sessionKey: KEY, runId: 'run-9'});
+  assert.equal(other.list({runId: 'run-9'}).items.length, 1);
   assert.equal(store, registerArtifacts(fakeApi(), {root: path.join(dir, 'artifacts'), stateDir, bindingsFile}), '同一个 root 共用一个实例');
 });
 

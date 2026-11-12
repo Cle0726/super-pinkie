@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {openclawStateDir} from './openclaw-paths.mjs';
+import {agentWorkspace, openclawStateDir, runtimeConfig} from './openclaw-paths.mjs';
 import {agentOf, readSessionJson, registerSessionMethod, writeSessionJson} from './session-titles.mjs';
 import {agentForMode, isTempKey} from './session-temp.mjs';
 
@@ -259,7 +259,7 @@ export function artifactRoots(ctx = {}, {stateDir = openclawStateDir(), bindings
 }
 
 const STORE_INSTANCES = Symbol.for('pinkie.artifacts.instances');
-export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bindingsFile = '', home = os.homedir()} = {}) {
+export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bindingsFile = '', home = os.homedir(), workspaceFor} = {}) {
   const shared = globalThis[STORE_INSTANCES] ??= new Map();
   if (!shared.has(root)) shared.set(root, new ArtifactStore(root));
   const store = shared.get(root);
@@ -273,6 +273,17 @@ export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bin
   method('pinkie.artifacts.restore', ({id, v, key}) => store.restore(id, v, {sessionKey: key}));
   method('pinkie.artifacts.remove', ({id}) => store.remove(id));
   method('pinkie.artifacts.read', ({id, v}) => store.read(id, v));
+  // after_tool_call's ctx carries no workspace; remember the one the tool
+  // started with, and fall back to the agent's configured workspace.
+  const started = new Map();
+  const agentDir = workspaceFor || (agentId => { try { return agentWorkspace(runtimeConfig(api), agentId, {home}); } catch { return ''; } });
+  api.on?.('before_tool_call', (event, ctx = {}) => {
+    const id = String(event?.toolCallId || ctx.toolCallId || '');
+    const dir = ctx.workspaceDir || ctx.workspace;
+    if (!id || !dir || !producedPaths(event).length) return;
+    started.set(id, dir);
+    if (started.size > 500) started.delete(started.keys().next().value);
+  }, {priority: -10890});
   api.on?.('after_tool_call', (event, ctx = {}) => {
     try {
       const sessionKey = String(ctx.sessionKey || event?.sessionKey || '');
@@ -282,8 +293,11 @@ export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bin
       if (!raws.length) return;
       const params = event.params && typeof event.params === 'object' ? event.params : {};
       const binding = bindings()[sessionKey];
-      const cwd = String(params.cwd || params.workdir || binding?.root || ctx.workspaceDir || '');
-      const roots = artifactRoots(ctx, {stateDir, bindings, home});
+      const callId = String(event.toolCallId || ctx.toolCallId || '');
+      const workspaceDir = ctx.workspaceDir || started.get(callId) || agentDir(agentOf(sessionKey));
+      started.delete(callId);
+      const cwd = String(params.cwd || params.workdir || binding?.root || workspaceDir || '');
+      const roots = artifactRoots({...ctx, workspaceDir}, {stateDir, bindings, home});
       const runId = String(ctx.runId || event.runId || '');
       for (const raw of raws.slice(0, 20)) {
         const file = resolvePath(raw, {home, cwd});
