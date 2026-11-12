@@ -12,6 +12,8 @@ import {isSessionOperationEvidence, registerSessionLineage} from './session-line
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
+import {registerSessionTemp} from './session-temp.mjs';
+import {registerSessionExport} from './session-export.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
@@ -6598,6 +6600,8 @@ export default {
       isBusy: key => architecture.activityFor(key).parentRunning,
     });
     const sessionPrefs = registerSessionPrefs(api, {root: path.join(pinkieStateRoot(), 'sessions')});
+    const sessionTemp = registerSessionTemp(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
+    const sessionExport = registerSessionExport(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
     registerWebGptActivityGateway(api, webGptActivity);
     registerWebGptConnectionGateway(api, webGptConnection);
     // 思考等级的 Max / Ultra：答完之后的交付验收（见 reasoning.mjs 顶部的实测说明）。

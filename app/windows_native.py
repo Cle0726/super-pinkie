@@ -90,6 +90,31 @@ def safe_file_name(raw, ext):
     return name[:180]
 
 
+def write_markdown_export(target, markdown, assets, placeholder="__assets__"):
+    """H2: write the .md and copy images into `<stem>-附件/` beside it."""
+    from urllib.parse import quote
+
+    try:
+        usable = [(str(item.get("name")), str(item.get("path"))) for item in assets
+                  if isinstance(item, dict) and item.get("name") and item.get("path")
+                  and "/" not in str(item.get("name")) and "\\" not in str(item.get("name"))
+                  and not str(item.get("name")).startswith(".")]
+        if usable:
+            folder_name = target.stem + "-附件"
+            markdown = markdown.replace("./" + placeholder + "/", "./" + quote(folder_name) + "/")
+            folder = target.parent / folder_name
+            folder.mkdir(parents=True, exist_ok=True)
+            for name, source in usable:
+                try:
+                    shutil.copyfile(source, folder / name)
+                except OSError:
+                    pass
+        target.write_text(markdown, encoding="utf-8")
+        return {"ok": True, "path": str(target)}
+    except OSError as error:
+        return {"ok": False, "error": f"保存失败：{error}"}
+
+
 def find_edge():
     candidates = []
     for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
@@ -174,6 +199,8 @@ class WindowsNative:
             return {"granted": True}
         if kind in ("exportPDF", "exportImage"):
             return self.export(message, pdf=kind == "exportPDF")
+        if kind == "exportMarkdown":
+            return self.export_markdown(message)
         if kind in ("revealFile", "openFile"):
             return self.open_path(str(message.get("path", "")), reveal=kind == "revealFile")
         if kind == "setMenubar":
@@ -264,6 +291,16 @@ class WindowsNative:
             return {"ok": False, "error": f"导出失败：{error}"}
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+    def export_markdown(self, message):
+        markdown = message.get("markdown")
+        if not isinstance(markdown, str) or not markdown:
+            return {"ok": False, "error": "没有可导出的内容"}
+        target = self._ask_save(safe_file_name(message.get("fileName"), "md"), "md")
+        if not target:
+            return {"ok": False, "cancelled": True}
+        return write_markdown_export(Path(target), markdown, message.get("assets") or [],
+                                     str(message.get("assetDir") or "__assets__"))
 
     def _ask_save(self, name, ext):
         override = os.environ.get("PINKIE_EXPORT_DIR")

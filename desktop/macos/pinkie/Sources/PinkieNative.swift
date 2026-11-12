@@ -30,6 +30,8 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
 
     override init() {
         super.init()
+        // Isolated UI tests load this bridge without the menu bar or a global hotkey.
+        if ProcessInfo.processInfo.environment["PINKIE_NATIVE_NO_SYSTEM"] == "1" { return }
         if Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = self }
         let menubar = UserDefaults.standard.object(forKey: "pinkie.menubar") as? Bool ?? true
         setMenubar(menubar)
@@ -48,6 +50,8 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
             requestPermission { granted in self.reply(reqId, ["granted": granted], webView) }
         case "exportPDF", "exportImage":
             export(body, pdf: type == "exportPDF") { result in self.reply(reqId, result, webView) }
+        case "exportMarkdown":
+            exportMarkdown(body) { result in self.reply(reqId, result, webView) }
         case "revealFile", "openFile":
             let path = (body["path"] as? String ?? "") as NSString
             let url = URL(fileURLWithPath: path.expandingTildeInPath)
@@ -272,6 +276,50 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
             guard response == .OK, let url = panel.url else { self.finish(job.view, ["ok": false, "cancelled": true]); return }
             do { try data.write(to: url); self.finish(job.view, ["ok": true, "path": url.path]) }
             catch { self.finish(job.view, ["ok": false, "error": "保存失败：\(error.localizedDescription)"]) }
+        }
+        if let window = mainWindow() { panel.beginSheetModal(for: window, completionHandler: handle) }
+        else { handle(panel.runModal()) }
+    }
+
+    // H2 Markdown: images live in `<stem>-附件/` beside the saved file.
+    private func exportMarkdown(_ body: [String: Any], done: @escaping ([String: Any]) -> Void) {
+        guard let markdown = body["markdown"] as? String, !markdown.isEmpty else {
+            done(["ok": false, "error": "没有可导出的内容"]); return
+        }
+        let assets = (body["assets"] as? [[String: Any]] ?? []).compactMap { item -> (String, String)? in
+            guard let name = item["name"] as? String, let path = item["path"] as? String,
+                  !name.contains("/"), !name.hasPrefix(".") else { return nil }
+            return (name, path)
+        }
+        let placeholder = body["assetDir"] as? String ?? "__assets__"
+        let write: (URL) -> [String: Any] = { url in
+            let stem = url.deletingPathExtension().lastPathComponent
+            let folderName = stem + "-附件"
+            var text = markdown
+            if !assets.isEmpty {
+                let encoded = folderName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? folderName
+                text = text.replacingOccurrences(of: "./" + placeholder + "/", with: "./" + encoded + "/")
+                let folder = url.deletingLastPathComponent().appendingPathComponent(folderName)
+                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                for (name, path) in assets {
+                    let target = folder.appendingPathComponent(name)
+                    try? FileManager.default.removeItem(at: target)
+                    try? FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: target)
+                }
+            }
+            do { try text.write(to: url, atomically: true, encoding: .utf8); return ["ok": true, "path": url.path] }
+            catch { return ["ok": false, "error": "保存失败：\(error.localizedDescription)"] }
+        }
+        let fileName = safeFileName(body["fileName"] as? String ?? "", ext: "md")
+        if let directory = ProcessInfo.processInfo.environment["PINKIE_EXPORT_DIR"], !directory.isEmpty {
+            done(write(URL(fileURLWithPath: directory).appendingPathComponent(fileName))); return
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = fileName
+        if let type = UTType(filenameExtension: "md") { panel.allowedContentTypes = [type] }
+        let handle: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { done(["ok": false, "cancelled": true]); return }
+            done(write(url))
         }
         if let window = mainWindow() { panel.beginSheetModal(for: window, completionHandler: handle) }
         else { handle(panel.runModal()) }
