@@ -106,3 +106,17 @@ test('the changed scripts are served under new cache names', () => {
   const head = source('laolao-head.fragment.html');
   for (const name of ['laolao-session-list.js?v=audit1112.', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode48']) has(head, name);
 });
+
+// Clean-up from the same audit (duplicates seen on a real render of the chat page).
+test('one day/night switch on the chat page, two different controls no longer share the name 思考强度, and dead art is gone', () => {
+  has(source('laolao-sidebar.css'), 'html:has(#pinkie-night-rail-entry) .sidebar-shell__footer .laolao-sidebar-theme-toggle { display: none !important; }');
+  const deep = source('laolao-deep-think.js');
+  assert.equal(deep.includes('"选择思考强度"'), false, 'the model picker owns that name');
+  has(deep, '"极致思考：让碧琪多想几轮再答"');
+  has(source('laolao-model-picker.js'), 'pinkie-effort-trigger');
+  const assets = path.join(__dirname, '../ui/assets');
+  for (const id of ['chat', 'project', 'thinking', 'learning', 'unrestricted']) {
+    assert.equal(fs.existsSync(path.join(assets, `laolao-mode-${id}.png`)), false, `${id}: the unreferenced 1.2 MB copy is not shipped`);
+    assert.ok(fs.existsSync(path.join(assets, `laolao-mode-${id}-hd.png`)), `${id}: the picture in use stays`);
+  }
+});

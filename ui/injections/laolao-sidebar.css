@@ -3,6 +3,9 @@
   font-size: 18px; line-height: 1; color: #985474;
 }
 html[data-pinkie-night] .sidebar-shell__footer .laolao-sidebar-theme-toggle { color: #f1b3d1; }
+/* 聊天页右侧快捷栏已经有同一个昼夜开关（#pinkie-night-rail-entry），两个一模一样的按钮同时在屏幕上没有必要：
+   有右侧那个时收起左下角这个；没有快捷栏的页面（设置、学习台）左下角的照常在。 */
+html:has(#pinkie-night-rail-entry) .sidebar-shell__footer .laolao-sidebar-theme-toggle { display: none !important; }
 .sidebar-shell__footer .laolao-sidebar-theme-toggle:focus-visible {
   outline: 2px solid #d45b96; outline-offset: 2px;
 }
