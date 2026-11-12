@@ -95,7 +95,15 @@ function registerMinimalChildToolsMigration(api) {
 }
 
 export function isSessionOperationEvidence(entry, prompt) {
-  if (!/子会话|sub[- ]?session|child session/iu.test(prompt || '') || entry.name !== 'pinkie_session_start') return false;
+  if (entry.name === 'pinkie_mode_ask') {
+    // 用户要的就是「替我去问那个模式」：问过了（答了、还在想、那边没答出来）都算真的去办了。
+    if (!/模式|那边|mode/iu.test(prompt || '')) return false;
+    try {
+      const envelope = JSON.parse(entry.output), result = envelope.details || envelope;
+      return Boolean(agentOf(result.key) && result.key.includes(':pinkie-child:') || typeof result.answer === 'string' && result.answer);
+    } catch { return false; }
+  }
+  if (!/子会话|会话|sub[- ]?session|child session/iu.test(prompt || '') || entry.name !== 'pinkie_session_start') return false;
   try {
     const envelope = JSON.parse(entry.output);
     const result = envelope.details || envelope;
@@ -115,6 +123,15 @@ export function normalizeChildRequest(input = {}) {
   return {title, prompt, context, initiation: input.initiation, ...(mode ? {mode} : {})};
 }
 
+// 用户在父会话里亲自选的模型（「提供方/模型」）；没选过就是空，子会话用那个模式自己的默认。
+function inheritedModel(parent) {
+  const provider = String(parent?.providerOverride || '').trim(), model = String(parent?.modelOverride || '').trim();
+  if (!provider || !model || parent.modelOverrideSource && parent.modelOverrideSource !== 'user') return '';
+  return `${provider}/${model}`;
+}
+
+const FAILED_REPORT = '这个子会话没有跑起来（模型调用失败或中途出错），简报里的活还没有人做。不要当作已经完成：这件事就在这里做，或者如实告诉用户它没做成、稍后可以重开。如果它之后又交回了正常的汇报，以那份汇报为准。';
+
 function reportContext(card) {
   // 卡片上只放前 400 字；交给父会话的是完整的那份（最多 6000 字），不然结论常常被截在开场白里。
   const data = JSON.stringify({title: card.title, ...(card.mode ? {来自: MODE_NAMES[card.mode]} : {}), text: card.full || card.text})
@@ -132,7 +149,7 @@ function reportText(event) {
 
 export class SessionLineage {
   constructor(api, {root, titles, isBusy = () => false, stopped = () => false, parentForWorker = () => '', now = Date.now,
-    schedule = setTimeout, stopTimeoutMs = 12_000, askTimeoutMs = ASK_TIMEOUT, autoSplit = () => true}) {
+    schedule = setTimeout, stopTimeoutMs = 12_000, askTimeoutMs = ASK_TIMEOUT, autoSplit = () => true, failGraceMs = 20_000}) {
     this.api = api;
     this.titles = titles;
     this.access = titles.access;
@@ -152,6 +169,7 @@ export class SessionLineage {
     this.askTimeoutMs = askTimeoutMs;
     this.autoSplit = autoSplit;
     this.waiters = new Map();
+    this.failGraceMs = failGraceMs;
   }
 
   lineage() { return readSessionJson(this.file); }
@@ -313,9 +331,18 @@ export class SessionLineage {
       for (let ordinal = 1; ordinal <= 100; ordinal++) {
         const label = request.autoTitle ? undefined : numberedTitle(request.title, ordinal, 40);
         try {
-          const result = await this.access.rpc('sessions.create', {agentId, key, ...(label ? {label} : {}),
+          // 跨模式时网关不认父子关系，子会话会落到那个模式的默认模型上。用户在这个会话里亲自选过模型的话带过去：
+          // 用户正在用、确实能用的那一个，比另一个模式的默认值可靠（11-12 隔离实测：默认模型的账号不可用，跨模式子会话全部起不来）。
+          const base = {agentId, key, ...(label ? {label} : {}),
             ...(cross ? {} : {parentSessionKey: parentKey}),
-            ...(!cross && request.context === 'fork' ? {fork: true} : {})});
+            ...(!cross && request.context === 'fork' ? {fork: true} : {})};
+          const model = cross ? inheritedModel(parent) : '';
+          let result;
+          try { result = await this.access.rpc('sessions.create', model ? {...base, model} : base); }
+          catch (error) {
+            if (!model || !/model/i.test(error.message) || /label already in use/i.test(error.message)) throw error;
+            result = await this.access.rpc('sessions.create', base);
+          }
           if (result?.key !== key) throw new Error('网关未返回子会话');
           child = {label: result.entry?.label || label, sessionId: result.sessionId || result.entry?.sessionId};
           created = true;
@@ -438,7 +465,9 @@ export class SessionLineage {
         const result = await this.create(parent, request, id);
         if (request.initiation === 'in_scope' && turn) turn.autoStarts = (turn.autoStarts || 0) + 1;
         return {...result, ...(note ? {note} : {}),
-          ...(request.initiation === 'in_scope' ? {message: '已经开始做了。做完的汇报会自动送回这里；这一轮先把该在这里做的做完，汇报到了再核对、合并'} : {})};
+          message: request.initiation === 'in_scope'
+            ? '已经开始做了。做完的汇报会自动送回这里；这一轮先把该在这里做的做完，汇报到了再核对、合并'
+            : '已经开始做了。做完（或没做成）的汇报会自动送回这里并叫醒你：这一轮用一句话告诉用户已经开了就可以收尾。不要轮询或等待（sessions_history、sessions_yield、subagents 都读不到它），也不要自己把同一件事再做一遍'};
       }
       if (!runId) throw new Error('没有取得当前轮次，暂时不能提出子会话');
       let card;
@@ -534,7 +563,7 @@ export class SessionLineage {
     if (card.kind === 'report') {
       return {id: card.id, kind: card.kind, title: card.title, text: card.text, childKey: card.childKey,
         createdAt: card.createdAt, anchor: card.anchor || null, ...(card.mode ? {mode: card.mode, modeName: MODE_NAMES[card.mode]} : {}),
-        ...(card.consult ? {consult: true} : {})};
+        ...(card.consult ? {consult: true} : {}), ...(card.failed ? {failed: true} : {})};
     }
     const expired = card.state === 'pending' && card.expiresAt <= this.now();
     return {id: card.id, kind: card.kind, title: card.title, summary: clipGraphemes(card.prompt.split('\n')[0], 160),
@@ -816,6 +845,20 @@ export class SessionLineage {
       // 有人在等这份答案（pinkie_mode_ask）：答案当场交给它，卡片照留但不再重复塞进上下文、不叫醒。
       if (text) await this.report(key, child, text, runId || turn.runId, {delivered: Boolean(waiter)});
       if (waiter) { this.waiters.delete(key); waiter(text); }
+      // 子会话自己那一轮出错收场：原来父会话什么都收不到，卡片停在「出错」，模型只能靠轮询去猜（11-12 隔离实测）。
+      // 等一小会儿（自动续接可能马上把它救回来），还是没起来就送一份「没做成」的汇报，并像正常汇报一样叫醒父会话。
+      else if (child && phase === 'error' && turn?.authored && !turn.user && WAKING.has(child.initiation) && child.initiation !== 'consult') {
+        const failedRun = runId || turn.runId, reportedAt = child.lastReportAt || 0;
+        const timer = this.schedule(() => {
+          const latest = this.lineage()[key];
+          if (!latest || latest.detached || (latest.lastReportAt || 0) !== reportedAt) return;
+          if (this.state(key).phase !== 'error' || this.turns.has(key) || this.isBusy(key)) return;
+          this.report(key, latest, FAILED_REPORT, failedRun, {failed: true})
+            .then(() => this.defer(latest.parentKey))
+            .catch(() => logSessionFailure(this.api, 'session-lineage', key, 'failed-report'));
+        }, this.failGraceMs);
+        timer?.unref?.();
+      }
       // 问完就收：跨模式提问的会话不留在那个模式的侧栏里占地方，归档里还能找到。
       if (child?.initiation === 'consult' && turn?.authored && !turn.user) {
         try { await this.access.rpc('sessions.patch', {key, agentId: agentOf(key), archived: true}); }
@@ -826,10 +869,10 @@ export class SessionLineage {
     }
   }
 
-  async report(key, child, text, runId, {delivered = false} = {}) {
+  async report(key, child, text, runId, {delivered = false, failed = false} = {}) {
     const parent = await this.access.entry(child.parentKey);
     if (!parent) return;
-    const id = 'report-' + nowId(key, runId);
+    const id = (failed ? 'report-failed-' : 'report-') + nowId(key, runId);
     let added = false;
     const entry = await this.access.entry(key);
     let anchor = null;
@@ -837,7 +880,7 @@ export class SessionLineage {
     catch { logSessionFailure(this.api, 'session-lineage', parent.key, 'report-anchor'); }
     const full = clipGraphemes(plainText(text), REPORT_FULL), short = clipGraphemes(full, REPORT_CARD);
     const card = {kind: 'report', id, title: entry?.label || child.title, text: short, ...(full !== short && !delivered ? {full} : {}),
-      ...(child.mode ? {mode: child.mode} : {}), ...(child.initiation === 'consult' ? {consult: true} : {}),
+      ...(child.mode ? {mode: child.mode} : {}), ...(child.initiation === 'consult' ? {consult: true} : {}), ...(failed ? {failed: true} : {}),
       childKey: key, createdAt: this.now(), injection: delivered ? 'injected' : 'pending', anchor};
     this.updateState(parent.key, state => {
       const cards = state.cards || [];
@@ -950,6 +993,8 @@ export function registerSessionLineage(api, options) {
   const shared = globalThis[LINEAGE_INSTANCES] ??= new Map();
   if (!shared.has(options.root)) shared.set(options.root, new SessionLineage(api, options));
   const lineage = shared.get(options.root);
+  // 插件重新注册时实例是共用的：开关读的是最新一次注册给的那个，不然会一直读旧实例缓存的偏好。
+  if (typeof options.autoSplit === 'function') lineage.autoSplit = options.autoSplit;
   registerMinimalChildToolsMigration(api);
   const protectedHook = (name, work) => (event, ctx) => {
     try { return work(event, ctx); }

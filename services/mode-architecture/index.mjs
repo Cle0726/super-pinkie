@@ -6931,6 +6931,8 @@ export default {
         return activity.parentRunning || activity.pending > 0 || watchdog.timers.has(key)
           || watchdog.dispatching.has(key) || tierContinuation.timers.has(key);
       },
+      // 设置页「碧琪自己分工」开关（pinkie.prefs 的 autoSplit，默认开）。sessionPrefs 在下面才注册，这里到用的时候才读。
+      autoSplit: () => { try { return sessionPrefs.globalPrefs().autoSplit !== false; } catch { return true; } },
     });
     registerSessionBranches(api, {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,

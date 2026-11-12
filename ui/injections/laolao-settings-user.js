@@ -293,6 +293,8 @@
       await save({menubar: value}, value ? "图标已显示" : "图标已隐藏");
       bridge()?.pinkieNative({type: "setMenubar", enabled: value}).catch(() => {});
     });
+    const splitRow = row(notifyCard, "碧琪自己分工", "一条消息里有几件互不相干的大活时，碧琪直接分头并行做。关掉后她只提一张卡片，等你点了才开。");
+    const split = toggle(splitRow.control, "碧琪自己分工", value => save({autoSplit: value}, value ? "大活会自己分头做" : "分头做之前会先问你"));
     const hotkeyRow = row(notifyCard, "快速提问快捷键", "在任何地方按下，弹出小窗直接问碧琪。");
     const hotkeyLabel = element("kbd", "pinkie-user-settings__kbd", hotkeyRow.control, prettyHotkey(defaultHotkey()));
     const record = button("修改", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
@@ -340,6 +342,7 @@
       setToggle(done, value.notify?.done !== false);
       setToggle(waiting, value.notify?.waiting !== false);
       setToggle(menubar, value.menubar !== false);
+      setToggle(split, value.autoSplit !== false);
       setText(hotkeyLabel, prettyHotkey(value.hotkey === null ? null : !value.hotkey || value.hotkey === "default" ? defaultHotkey() : value.hotkey));
     };
     bridge()?.loadPrefs(true).then(sync);
