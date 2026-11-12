@@ -1,0 +1,44 @@
+<style>
+  .c { padding: 84px 72px 72px; background: var(--bg); display: flex; flex-direction: column; }
+  .c::before { content: ""; position: absolute; inset: 0; opacity: .55;
+    background-image: linear-gradient(color-mix(in srgb, var(--line) 70%, transparent) 2px, transparent 2px),
+                      linear-gradient(90deg, color-mix(in srgb, var(--line) 70%, transparent) 2px, transparent 2px);
+    background-size: 60px 60px; background-position: -2px -2px; }
+  .head { position: relative; padding: 0 16px; }
+  .kicker { display: inline-flex; align-items: center; gap: 14px; font: 700 38px/1 var(--font-body); color: var(--accent); letter-spacing: .04em; }
+  .kicker::before { content: ""; width: 44px; height: 6px; border-radius: 3px; background: var(--accent); }
+  .title { margin-top: 30px; font-family: var(--font-title); font-weight: var(--w-title); font-size: 132px; line-height: 1.12; letter-spacing: -0.015em; color: var(--ink); }
+  .title .hl { color: var(--accent); }
+  .card { position: relative; flex: 1; margin-top: 54px; background: var(--surface); border-radius: 40px; padding: 30px 48px;
+          box-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 6%, transparent), 0 30px 60px -30px color-mix(in srgb, var(--ink) 30%, transparent);
+          display: flex; flex-direction: column; justify-content: space-evenly; }
+  .row { display: grid; grid-template-columns: 74px 1fr; column-gap: 26px; align-items: center; padding: 18px 0;
+         border-bottom: 2px dashed var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .n { grid-row: span 2; width: 74px; height: 74px; border-radius: 22px; display: grid; place-items: center;
+       background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); font: 800 34px/1 var(--font-accent); }
+  .t { font: 700 46px/1.2 var(--font-body); color: var(--ink); }
+  .note { margin-top: 8px; font: 500 32px/1.3 var(--font-body); color: var(--muted); }
+  .foot { position: relative; display: flex; justify-content: space-between; align-items: center; margin-top: 40px; padding: 0 16px; }
+  .slogan { font: 700 38px/1.2 var(--font-body); color: var(--ink); }
+  .who { font: 600 32px/1 var(--font-body); color: var(--muted); }
+</style>
+<div class="canvas c">
+  <div class="head">
+    <div class="kicker" data-if="kicker"><span data-slot="kicker"></span></div>
+    <h1 class="title" data-slot="title" data-fit="92" data-maxlines="2"></h1>
+  </div>
+  <div class="card" data-fit-scale="0.7">
+    <template data-each="items" data-max="6">
+      <div class="row">
+        <div class="n" data-index="2"></div>
+        <div class="t" data-field="text" data-fit="34" data-maxlines="1"></div>
+        <div class="note" data-field-if="note" data-field="note" data-fit="26" data-maxlines="1"></div>
+      </div>
+    </template>
+  </div>
+  <div class="foot">
+    <div class="slogan" data-if="footer" data-slot="footer"></div>
+    <div class="who" data-if="author" data-slot="author"></div>
+  </div>
+</div>

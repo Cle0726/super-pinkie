@@ -1,0 +1,35 @@
+{
+  "id": "xhs-magazine",
+  "name": "杂志感封面",
+  "family": "social",
+  "format": "html",
+  "order": 3,
+  "summary": "报头 + 衬线大标题 + 细线排版，像一本生活方式杂志的封面；读书、穿搭、生活记录、品牌故事",
+  "kinds": ["image_print"],
+  "scenes": ["小红书", "封面", "读书", "书单", "生活方式", "穿搭", "家居", "品牌", "随笔", "展览", "咖啡"],
+  "moods": ["高级", "文艺", "克制"],
+  "keywords": ["杂志", "magazine", "vogue 风", "报头", "衬线"],
+  "canvas": {"w": 1080, "h": 1440, "scale": 1},
+  "outputs": ["png"],
+  "theme": {"palette": "paper", "pair": "editorial", "palettes": ["paper", "oat", "klein", "wine", "ink-gold", "forest-night", "clay"]},
+  "check": {"minFont": 28},
+  "slots": {
+    "masthead": {"type": "text", "label": "报头", "max": 10, "hint": "像杂志名，可以是英文", "example": "SLOW LIFE"},
+    "issue": {"type": "text", "label": "期号", "max": 14, "example": "VOL.12 · 秋"},
+    "title": {"type": "text", "label": "大标题", "max": 16, "required": true, "example": "把日子过成\n**一本书**"},
+    "deck": {"type": "text", "label": "导语", "max": 46, "example": "十月读完的五本书，和它们教会我的事：慢一点，也没关系。"},
+    "lines": {"type": "list", "label": "封面小标题", "maxItems": 3, "item": {"text": {"label": "小标题", "max": 14}}},
+    "author": {"type": "text", "label": "署名", "max": 14, "brand": "name", "example": "文 / 阿白"}
+  },
+  "example": {
+    "masthead": "SLOW LIFE",
+    "issue": "VOL.12 · 秋",
+    "title": "把日子过成\n**一本书**",
+    "deck": "十月读完的五本书，和它们教会我的事：慢一点，也没关系。",
+    "lines": ["一个人的周末", "书桌上的秋天", "给焦虑的人"],
+    "author": "文 / 阿白"
+  },
+  "notFor": "促销、打折这类要很吵的内容（用 xhs-ticket 或海报）",
+  "license": "Opus 自制，随碧琪发布",
+  "source": "pinkie"
+}

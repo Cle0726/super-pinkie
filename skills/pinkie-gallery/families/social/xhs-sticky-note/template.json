@@ -1,0 +1,33 @@
+{
+  "id": "xhs-sticky-note",
+  "name": "便利贴手账封面",
+  "family": "social",
+  "format": "html",
+  "order": 4,
+  "summary": "方格纸上贴一张便利贴，胶带 + 手写感文楷；学习笔记、备考、日常记录、温柔的小分享",
+  "kinds": ["image_print"],
+  "scenes": ["小红书", "封面", "学习", "笔记", "备考", "考研", "日常", "手账", "自律", "打卡", "读书笔记"],
+  "moods": ["温暖", "治愈", "手作"],
+  "keywords": ["便利贴", "手账", "胶带", "方格纸", "手写"],
+  "canvas": {"w": 1080, "h": 1440, "scale": 1},
+  "outputs": ["png"],
+  "theme": {"palette": "lemon", "pair": "warm-kai", "palettes": ["lemon", "peach", "sakura", "matcha", "sky", "kraft"]},
+  "check": {"minFont": 30},
+  "slots": {
+    "date": {"type": "text", "label": "日期", "max": 12, "example": "Day 23 / 100"},
+    "title": {"type": "text", "label": "便利贴上的标题", "max": 16, "required": true, "example": "考研英语\n我是这样**背单词**的"},
+    "lines": {"type": "list", "label": "便利贴上的几行", "maxItems": 3, "item": {"text": {"label": "一行", "max": 14}}},
+    "doodle": {"type": "text", "label": "纸上的手写批注", "max": 10, "example": "亲测有用！"},
+    "author": {"type": "text", "label": "署名", "max": 12, "brand": "name", "example": "@今天也在学"}
+  },
+  "example": {
+    "date": "Day 23 / 100",
+    "title": "考研英语\n我是这样**背单词**的",
+    "lines": ["每天 60 个，分三轮", "睡前十分钟回看", "错的单独记一本"],
+    "doodle": "亲测有用！",
+    "author": "@今天也在学"
+  },
+  "notFor": "商务、正式、科技感的内容（用 xhs-bold-headline 或 xhs-magazine）",
+  "license": "Opus 自制，随碧琪发布",
+  "source": "pinkie"
+}

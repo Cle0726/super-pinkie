@@ -1,0 +1,38 @@
+{
+  "id": "xhs-bold-headline",
+  "name": "大字干货封面",
+  "family": "social",
+  "format": "html",
+  "order": 1,
+  "summary": "超大标题 + 荧光笔强调，适合干货、教程、清单、经验分享",
+  "kinds": ["image_print"],
+  "scenes": ["小红书", "封面", "干货", "教程", "攻略", "清单", "经验", "知识", "学习", "职场", "效率"],
+  "moods": ["醒目", "干净", "专业"],
+  "keywords": ["大字", "标题党", "笔记封面", "知识博主"],
+  "canvas": {"w": 1080, "h": 1440, "scale": 1},
+  "outputs": ["png"],
+  "theme": {"palette": "mono", "pair": "modern", "palettes": ["mono", "lemon", "mint", "sky", "cream-tomato", "klein"]},
+  "check": {"minFont": 30},
+  "slots": {
+    "tag": {"type": "text", "label": "左上角标签", "max": 6, "example": "干货分享"},
+    "issue": {"type": "text", "label": "右上角编号", "max": 8, "example": "NO.07"},
+    "title": {"type": "text", "label": "大标题", "max": 18, "required": true, "hint": "8–14 个字最好看；用 **词** 标出最想让人看到的那个词", "example": "租房避坑\n**12 条**血泪经验"},
+    "subtitle": {"type": "text", "label": "副标题", "max": 30, "example":"看完再签合同，少花冤枉钱"},
+    "points": {"type": "list", "label": "要点", "maxItems": 3, "item": {"text": {"label": "要点", "max": 10}}},
+    "author": {"type": "text", "label": "署名", "max": 14, "brand": "name", "example": "@住在哪儿"},
+    "avatar": {"type": "image", "label": "头像", "brand": "logo"},
+    "hint": {"type": "text", "label": "右下角小字", "max": 8, "example": "建议收藏"}
+  },
+  "example": {
+    "tag": "干货分享",
+    "issue": "NO.07",
+    "title": "租房避坑\n**12 条**血泪经验",
+    "subtitle": "看完再签合同，少花冤枉钱",
+    "points": ["看房必问", "合同陷阱", "押金退还"],
+    "author": "@住在哪儿",
+    "hint": "建议收藏"
+  },
+  "notFor": "照片为主的种草、探店（用 xhs-photo-hero）；长段文字（用 xhs-checklist）",
+  "license": "Opus 自制，随碧琪发布",
+  "source": "pinkie"
+}

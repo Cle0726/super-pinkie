@@ -1,0 +1,38 @@
+/* 碧琪成品库 · 所有 HTML 模板共用的底层样式。模板自己的样式写在 template.html 里。 */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: var(--w-body, 400);
+  overflow: hidden;
+}
+/* 中文排版：避头尾、标点挤压、不让最后一行只剩一个字 */
+.canvas, .canvas * {
+  line-break: strict;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  hanging-punctuation: allow-end;
+  text-spacing-trim: trim-start;
+}
+h1, h2, h3, p { margin: 0; }
+img { display: block; max-width: none; }
+.canvas { position: relative; overflow: hidden; width: var(--canvas-w); height: var(--canvas-h); }
+.balance { text-wrap: balance; }
+/* 强调词的默认样子，模板可以覆盖 */
+.hl { color: var(--accent); }
+/* 缺图时永远不出现灰色占位框：用同色系的图形顶上 */
+.pinkie-empty {
+  background-color: var(--accent2);
+  background-image:
+    radial-gradient(circle at 22% 28%, color-mix(in srgb, var(--accent) 38%, transparent) 0 18%, transparent 19%),
+    radial-gradient(circle at 78% 70%, color-mix(in srgb, var(--surface) 70%, transparent) 0 24%, transparent 25%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent2) 92%, var(--bg)), color-mix(in srgb, var(--accent) 22%, var(--accent2)));
+}

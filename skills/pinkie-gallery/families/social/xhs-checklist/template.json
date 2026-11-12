@@ -1,0 +1,39 @@
+{
+  "id": "xhs-checklist",
+  "name": "清单卡片封面",
+  "family": "social",
+  "format": "html",
+  "order": 2,
+  "summary": "标题 + 4–6 条编号清单，像一张整理好的卡片；攻略、步骤、好物清单都合适",
+  "kinds": ["image_print"],
+  "scenes": ["小红书", "封面", "清单", "攻略", "步骤", "好物", "必备", "书单", "干货", "旅行", "学习"],
+  "moods": ["干净", "有条理", "实用"],
+  "keywords": ["清单", "list", "必备清单", "收藏"],
+  "canvas": {"w": 1080, "h": 1440, "scale": 1},
+  "outputs": ["png"],
+  "theme": {"palette": "mint", "pair": "modern", "palettes": ["mint", "sky", "milk-tea", "lemon", "lavender", "oat"]},
+  "check": {"minFont": 30},
+  "slots": {
+    "kicker": {"type": "text", "label": "小标题", "max": 12, "example": "第一次去日本"},
+    "title": {"type": "text", "label": "大标题", "max": 14, "required": true, "hint": "一句话说清这是什么清单", "example": "行李**必带清单**"},
+    "items": {"type": "list", "label": "清单", "maxItems": 6, "required": true, "item": {"text": {"label": "条目", "max": 12}, "note": {"label": "补充", "max": 16}}},
+    "footer": {"type": "text", "label": "底部一句话", "max": 18, "example": "按这个装，到了不慌"},
+    "author": {"type": "text", "label": "署名", "max": 12, "brand": "name", "example": "@小鹿去旅行"}
+  },
+  "example": {
+    "kicker": "第一次去日本",
+    "title": "行李**必带清单**",
+    "items": [
+      {"text": "转换插头", "note": "两脚扁插，酒店不一定有"},
+      {"text": "西瓜卡 / Suica", "note": "手机钱包就能开"},
+      {"text": "少量现金", "note": "小店和神社常常只收现金"},
+      {"text": "常用药", "note": "肠胃药、创可贴"},
+      {"text": "折叠伞", "note": "天气变化快"}
+    ],
+    "footer": "按这个装，到了不慌",
+    "author": "@小鹿去旅行"
+  },
+  "notFor": "只有一句话的标题党（用 xhs-bold-headline）；图片为主的种草（用 xhs-photo-grid）",
+  "license": "Opus 自制，随碧琪发布",
+  "source": "pinkie"
+}

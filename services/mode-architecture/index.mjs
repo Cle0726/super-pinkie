@@ -12,6 +12,7 @@ import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGat
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
+import {chatMoveBlock} from './chat-moves.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
@@ -5645,6 +5646,8 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           const book = routed.kinds?.length ? (WORK_KINDS[routed.kinds[0]]?.playbooks || [])[0] : '';
           const block = skillRouteBlock(routed.kinds || [], routedPrompt, {workspace: root, mode, playbook: book ? `playbooks/${book}` : ''});
           if (block) blocks.push('\n' + block + '\n');
+          const chatMove = chatMoveBlock(routedPrompt, {mode, kinds: routed.kinds || []});
+          if (chatMove) blocks.push('\n' + chatMove + '\n');
           const waiting = waitingSection(routed.kinds || []);
           if (waiting) blocks.push('\n' + waiting + '\n');
         } catch (error) {

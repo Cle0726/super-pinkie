@@ -1,0 +1,36 @@
+<style>
+  .c { background-color: color-mix(in srgb, var(--surface) 88%, var(--bg));
+       background-image: linear-gradient(color-mix(in srgb, var(--accent) 16%, transparent) 2px, transparent 2px),
+                         linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent) 2px, transparent 2px);
+       background-size: 54px 54px; background-position: 26px 26px; }
+  .date { position: absolute; left: 90px; top: 96px; font: 700 40px/1 var(--font-accent); color: var(--ink);
+          padding: 12px 22px; border: 3px solid var(--ink); border-radius: 14px; transform: rotate(-3deg); background: var(--surface); }
+  .note { position: absolute; left: 110px; right: 110px; top: 250px; height: 860px; padding: 110px 76px 64px;
+          background: color-mix(in srgb, var(--accent) 30%, var(--surface)); transform: rotate(-1.6deg); border-radius: 6px 6px 18px 6px;
+          box-shadow: 0 34px 50px -26px color-mix(in srgb, var(--ink) 45%, transparent), 0 2px 0 color-mix(in srgb, var(--ink) 10%, transparent);
+          display: flex; flex-direction: column; }
+  .c[data-dark] .note { color: var(--ink); }
+  .tape { position: absolute; top: -34px; left: 50%; width: 260px; height: 74px; transform: translateX(-50%) rotate(3deg);
+          background: color-mix(in srgb, var(--surface) 62%, transparent); border: 2px solid color-mix(in srgb, var(--ink) 8%, transparent);
+          box-shadow: 0 6px 12px -8px color-mix(in srgb, var(--ink) 40%, transparent); }
+  .title { font-family: var(--font-title); font-weight: 700; font-size: 112px; line-height: 1.22; color: var(--ink); }
+  .title .hl { color: var(--ink); background: linear-gradient(transparent 60%, color-mix(in srgb, var(--surface) 80%, transparent) 60%); }
+  .lines { margin-top: auto; display: flex; flex-direction: column; gap: 22px; }
+  .ln { display: flex; gap: 18px; align-items: baseline; font: 400 46px/1.3 var(--font-body); color: var(--ink); border-bottom: 3px dotted color-mix(in srgb, var(--ink) 35%, transparent); padding-bottom: 14px; }
+  .ln::before { content: "✓"; font-weight: 700; color: var(--ink); }
+  .doodle { position: absolute; right: 120px; top: 1150px; font: 700 64px/1 var(--font-accent); color: var(--ink); transform: rotate(-6deg); }
+  .doodle::after { content: ""; position: absolute; left: -6px; right: -10px; bottom: -18px; height: 16px; border-bottom: 6px solid var(--accent); border-radius: 0 0 50% 50%; }
+  .who { position: absolute; left: 110px; bottom: 90px; font: 400 40px/1 var(--font-body); color: var(--ink); opacity: .8; }
+</style>
+<div class="canvas c">
+  <div class="date" data-if="date" data-slot="date"></div>
+  <div class="note">
+    <div class="tape" data-decor></div>
+    <h1 class="title" data-slot="title" data-fit="78" data-maxlines="4"></h1>
+    <div class="lines" data-if="lines">
+      <template data-each="lines" data-max="3"><div class="ln"><span data-field="text" data-fit="34" data-maxlines="1"></span></div></template>
+    </div>
+  </div>
+  <div class="doodle" data-if="doodle" data-slot="doodle" data-allow-overlap></div>
+  <div class="who" data-if="author" data-slot="author"></div>
+</div>

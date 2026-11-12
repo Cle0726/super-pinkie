@@ -1,0 +1,26 @@
+{
+  "_note": "成品库用到的字体。全部 OFL-1.1（或打包成 MIT 的 OFL 字体），第一次用到时从 npm（国内镜像优先）下载。family 是 CSS 里写的名字。",
+  "fonts": {
+    "noto-sans": {"label": "思源黑体", "family": "Noto Sans SC Variable", "pkg": "@fontsource-variable/noto-sans-sc@5.3.1", "css": ["index.css"], "license": "OFL-1.1", "kind": "sans", "weights": [100, 900]},
+    "noto-serif": {"label": "思源宋体", "family": "Noto Serif SC Variable", "pkg": "@fontsource-variable/noto-serif-sc@5.3.1", "css": ["index.css"], "license": "OFL-1.1", "kind": "serif", "weights": [200, 900]},
+    "wenkai": {"label": "霞鹜文楷", "family": "LXGW WenKai", "pkg": "lxgw-wenkai-webfont@1.7.0", "css": ["lxgwwenkai-regular.css", "lxgwwenkai-bold.css"], "license": "OFL-1.1", "kind": "kai", "weights": [400, 700]},
+    "kuaile": {"label": "站酷快乐体", "family": "ZCOOL KuaiLe", "pkg": "@fontsource/zcool-kuaile@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "display-round", "weights": [400]},
+    "huangyou": {"label": "站酷庆科黄油体", "family": "ZCOOL QingKe HuangYou", "pkg": "@fontsource/zcool-qingke-huangyou@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "display-bold", "weights": [400]},
+    "xiaowei": {"label": "站酷小薇", "family": "ZCOOL XiaoWei", "pkg": "@fontsource/zcool-xiaowei@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "display-serif", "weights": [400]},
+    "mashanzheng": {"label": "马善政毛笔楷", "family": "Ma Shan Zheng", "pkg": "@fontsource/ma-shan-zheng@5.3.1", "css": ["index.css"], "license": "OFL-1.1", "kind": "brush", "weights": [400]},
+    "zhimang": {"label": "志莽行书", "family": "Zhi Mang Xing", "pkg": "@fontsource/zhi-mang-xing@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "brush-run", "weights": [400]},
+    "longcang": {"label": "龙藏体", "family": "Long Cang", "pkg": "@fontsource/long-cang@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "hand", "weights": [400]},
+    "inter": {"label": "Inter", "family": "Inter Variable", "pkg": "@fontsource-variable/inter@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "latin-sans", "weights": [100, 900]},
+    "playfair": {"label": "Playfair Display", "family": "Playfair Display Variable", "pkg": "@fontsource-variable/playfair-display@5.3.0", "css": ["index.css"], "license": "OFL-1.1", "kind": "latin-serif", "weights": [400, 900]}
+  },
+  "pairs": {
+    "modern": {"label": "现代黑体", "title": ["inter", "noto-sans"], "body": ["inter", "noto-sans"], "accent": ["inter", "noto-sans"], "titleWeight": 900, "bodyWeight": 400, "mood": ["干净", "专业", "干货", "科技"]},
+    "editorial": {"label": "杂志宋体", "title": ["playfair", "noto-serif"], "body": ["noto-sans"], "accent": ["playfair", "noto-serif"], "titleWeight": 800, "bodyWeight": 400, "mood": ["高级", "文艺", "生活方式", "读书"]},
+    "warm-kai": {"label": "温柔文楷", "title": ["wenkai"], "body": ["wenkai"], "accent": ["wenkai"], "titleWeight": 700, "bodyWeight": 400, "mood": ["温暖", "治愈", "手账", "学习"]},
+    "cute": {"label": "圆润可爱", "title": ["kuaile"], "body": ["noto-sans"], "accent": ["kuaile"], "titleWeight": 400, "bodyWeight": 500, "mood": ["可爱", "活泼", "萌宠", "母婴", "甜品"]},
+    "poster": {"label": "粗黑海报", "title": ["huangyou"], "body": ["noto-sans"], "accent": ["huangyou"], "titleWeight": 400, "bodyWeight": 500, "mood": ["醒目", "促销", "活动", "潮流"]},
+    "literary": {"label": "清雅小薇", "title": ["xiaowei"], "body": ["noto-serif"], "accent": ["xiaowei"], "titleWeight": 400, "bodyWeight": 400, "mood": ["清新", "文艺", "诗意", "国风"]},
+    "ink": {"label": "毛笔国风", "title": ["mashanzheng"], "body": ["noto-serif"], "accent": ["zhimang"], "titleWeight": 400, "bodyWeight": 400, "mood": ["国风", "节气", "书法", "传统", "国潮"]},
+    "hand": {"label": "随手写", "title": ["longcang"], "body": ["wenkai"], "accent": ["longcang"], "titleWeight": 400, "bodyWeight": 400, "mood": ["随性", "日常", "手写", "情绪"]}
+  }
+}
