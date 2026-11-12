@@ -4,7 +4,7 @@
 // snapshots as numbered PNGs named f<frame>_<ms>.png.
 //   swiftc -O wk-host.swift -o /tmp/wk
 //   WK_LIGHT=1 WK_W=1920 WK_H=1080 WK_SNAPW=1920 /tmp/wk <url> <outDir> <seconds> <fps> [<ms>=<js> ...]
-// WK_LIGHT=1 forces the light appearance. Snapshots lag the screen a little while
+// WK_LIGHT=1 forces the light appearance, WK_DARK=1 the dark one. Snapshots lag the screen a little while
 // layers animate, so time things with rAF inside the page and use frames for looks.
 import Cocoa
 import WebKit
@@ -25,6 +25,7 @@ try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirecto
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 if ProcessInfo.processInfo.environment["WK_LIGHT"] == "1" { app.appearance = NSAppearance(named: .aqua) }
+if ProcessInfo.processInfo.environment["WK_DARK"] == "1" { app.appearance = NSAppearance(named: .darkAqua) }
 let size = NSSize(width: Double(ProcessInfo.processInfo.environment["WK_W"] ?? "1440") ?? 1440, height: Double(ProcessInfo.processInfo.environment["WK_H"] ?? "900") ?? 900)
 let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 4, height: 4), styleMask: [.borderless], backing: .buffered, defer: false)
 win.isReleasedWhenClosed = false

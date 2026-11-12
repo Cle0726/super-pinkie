@@ -450,6 +450,26 @@
     };
     syncMotion();
     window.addEventListener("pinkie:motion-change", syncMotion);
+    // 计划书 B：看不到页面时的三层提醒，各自能关（laolao-run-notify.js）。
+    const notifyRow = row(appearanceCard, "碧琪做完时提醒我", "切到别的窗口时，做完、出错或等你确认，碧琪会提醒你。点亮的是开着的。" );
+    const notifyGroup = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", notifyRow.control);
+    const notifyButtons = [["list", "会话列表标记"], ["title", "标题和图标"], ["system", "系统通知"]].map(([key, label]) => {
+      const node = button(label, "pinkie-user-settings__choice", notifyGroup, () => {
+        const api = window.__pinkieRunNotify;
+        if (!api) return;
+        const on = api.prefs[key] === false;
+        api.setPrefs({[key]: on});
+        syncNotify();
+        setStatus("appearance", `${label}：${on ? "已打开" : "已关闭"}`, "success");
+      });
+      return [key, node];
+    });
+    const syncNotify = () => {
+      const prefs = window.__pinkieRunNotify?.prefs || {};
+      for (const [key, node] of notifyButtons) setPressed(node, prefs[key] !== false);
+    };
+    syncNotify();
+    window.addEventListener("pinkie:run-notify-prefs", syncNotify);
     element("p", "pinkie-user-settings__soft-note", appearanceCard,
       "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。" );
     makeStatus(appearanceCard, "appearance");

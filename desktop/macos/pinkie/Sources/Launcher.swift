@@ -3,6 +3,7 @@ import AVFoundation
 import Darwin
 import Foundation
 import Speech
+import UserNotifications
 import WebKit
 
 private enum RuntimeConfig {
@@ -1966,7 +1967,7 @@ private final class MaterialDownloadContext {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate, UNUserNotificationCenterDelegate {
     private var window: NSWindow?
     private var webView: WKWebView?
     private var windowDragArea: WindowDragArea?
@@ -2063,6 +2064,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"
     private let windowControlHandlerName = "laolaoWindowControl"
     private let materialPreviewHandlerName = "laolaoMaterialPreview"
+    /// 计划书 B 第三节：页面看不到时，碧琪做完 / 出错 / 等确认的系统通知（laolao-run-notify.js）。
+    private let runNotifyHandlerName = "pinkieNotify"
     private var updateLaunchInProgress = false
     private var updateStageTask: Process?
     private let party = PartyService()
@@ -2500,6 +2503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 深色是出厂默认：没有存过偏好的设备（全新安装 / 首次启动）直接进深色。
         UserDefaults.standard.register(defaults: ["pinkie.appearanceMode": "dark"])
+        UNUserNotificationCenter.current().delegate = self
         let appearanceMode = UserDefaults.standard.string(forKey: "pinkie.appearanceMode") ?? "system"
         nightAppearance = appearanceMode == "dark" || (appearanceMode == "system" && NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
         applyNightAppearance()
@@ -2616,6 +2620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         controller.add(self, name: browserWorkspaceHandlerName)
         controller.add(self, name: windowControlHandlerName)
         controller.add(self, name: materialPreviewHandlerName)
+        controller.add(self, name: runNotifyHandlerName)
         controller.add(self, name: "laolaoParty")
         controller.add(self, name: "laolaoRoundtable")
         controller.add(self, name: "pinkieMotion")
@@ -4631,6 +4636,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         decisionHandler(type == .microphone && trustedFrame(frame) ? .grant : .deny)
     }
 
+    // MARK: 运行提醒（计划书 B 第三节）
+
+    /// 网页 → 原生：{action:"status"} 只回报权限；{action:"request-permission"} 在碧琪问过、用户点「好呀」后才申请；
+    /// 其余是一条通知 {title, body, sessionKey}，没授权就什么都不发。
+    private func handleRunNotify(_ body: [String: Any]) {
+        let center = UNUserNotificationCenter.current()
+        switch body["action"] as? String {
+        case "status":
+            reportNotifyPermission()
+        case "request-permission":
+            center.requestAuthorization(options: [.alert, .sound]) { [weak self] _, _ in
+                DispatchQueue.main.async { self?.reportNotifyPermission() }
+            }
+        default:
+            let title = String((body["title"] as? String ?? "超级碧琪").prefix(80))
+            let text = String((body["body"] as? String ?? "").prefix(200))
+            let sessionKey = String((body["sessionKey"] as? String ?? "").prefix(300))
+            center.getNotificationSettings { settings in
+                guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+                let content = UNMutableNotificationContent()
+                content.title = title.isEmpty ? "超级碧琪" : title
+                content.body = text
+                content.sound = .default
+                content.userInfo = ["sessionKey": sessionKey]
+                // 同一个会话只留最新一条，不在通知中心堆起来。
+                let id = "pinkie-run-" + (sessionKey.isEmpty ? UUID().uuidString : sessionKey)
+                center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+            }
+        }
+    }
+
+    private func reportNotifyPermission() {
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            let state: String
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral: state = "granted"
+            case .denied: state = "denied"
+            default: state = "default"
+            }
+            DispatchQueue.main.async {
+                self?.webView?.evaluateJavaScript("window.__pinkieNotifyPermission?.('\(state)')", completionHandler: nil)
+            }
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // 只有页面看不到时网页才会发（例如窗口最小化但 App 仍在前台），这时也要显示出来。
+        completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let key = response.notification.request.content.userInfo["sessionKey"] as? String ?? ""
+        DispatchQueue.main.async { [weak self] in
+            if let window = self?.window {
+                if window.isMiniaturized { window.deminiaturize(nil) }
+                window.makeKeyAndOrderFront(nil)
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            if !key.isEmpty, let data = try? JSONSerialization.data(withJSONObject: [key]),
+               let json = String(data: data, encoding: .utf8) {
+                self?.webView?.evaluateJavaScript("window.__laolaoSidebar?.navigateSession?.(\(json)[0])", completionHandler: nil)
+            }
+        }
+        completionHandler()
+    }
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "pinkieBrowserLayout" {
             guard message.webView === browserWebView, message.frameInfo.isMainFrame,
@@ -4679,6 +4752,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             if let body = message.body as? [String: Any], body["action"] as? String != "pull" {
                 if message.webView === webView { handleUpdateRequest(body) }
             } else { checkForUpdates(nil) }
+            return
+        }
+        if message.name == windowControlHandlerName,
+           message.webView === webView,
+           let body = message.body as? [String: Any],
+           body["action"] as? String == "attention" {
+            // 页面看不到时一轮结束：Dock 图标跳一下。App 在前台时 macOS 本来就不跳。
+            if !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
+            return
+        }
+        if message.name == runNotifyHandlerName, message.webView === webView,
+           let body = message.body as? [String: Any] {
+            handleRunNotify(body)
             return
         }
         if message.name == windowControlHandlerName,
