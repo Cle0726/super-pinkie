@@ -17,6 +17,7 @@
     { id: "mm/gemini-3.5-flash-low",       label: "Gemini 3.5 Flash" },
     { id: "mm/gemini-3.7-flash-tiered",    label: "Gemini 3.7 Flash" },
     { id: "mm/gemini-3.8-flash-tiered",    label: "Gemini 3.8 Flash" },
+    { id: "mm/gemini-4-argon-high",        label: "Gemini 4 Argon" },
     { id: "mm/gemini-2.5-flash-thinking",  label: "Gemini 2.5 Flash Thinking" },
     { id: "mm/gemini-3.1-pro-preview",     label: "Gemini 3.1 Pro" },
     { id: "mm/gemini-3-pro-preview",       label: "Gemini 3 Pro" },

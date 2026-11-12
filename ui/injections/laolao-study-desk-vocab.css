@@ -72,6 +72,8 @@
   #pinkie-study-desk .v-model{margin-left:0;width:100%;order:5}
   #pinkie-study-desk .v-add{grid-template-columns:1fr}
   #pinkie-study-desk .v-list{grid-template-columns:1fr}
+  #pinkie-study-desk .v-flash .v-sound,#pinkie-study-desk .v-flash .v-block,#pinkie-study-desk .v-flash .v-colls li{grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk .v-rate button{font-size:14px;padding:0 6px}
 }
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk .v-wait .desk-icon{animation:none}}
 
