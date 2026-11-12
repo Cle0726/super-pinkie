@@ -3185,3 +3185,45 @@ test('a tier that is already satisfied lets the delivery gate revise text-only w
   runtime.prepareRetryDecision(gate,{lastAssistantMessage:reply(2)},{...ctx,runId:'t-4'});
   assert.equal(runtime.status(ctx.sessionKey).active,false);
 });
+
+// 11-11 r7 隔离实测：上游 429 冷却 6 分钟时，档位续跑每次失败后 2–3 秒就再推一次，
+// 一件事推了 80 多次、把队列推爆，还一直占着同一个被限流的号。
+test('a tier continuation after a failed turn backs off and stops after repeated failures',async()=>{
+  const calls=[];
+  const api={session:{workflow:{
+    scheduleSessionTurn:async()=>({id:'fallback'}),unscheduleSessionTurnsByTag:async()=>({removed:1}),
+    enqueueNextTurnInjection:async()=>({enqueued:true}),
+  }}};
+  const continuation=new TierContinuation(
+    api,
+    ()=>({active:true,complete:false,pending:0,parentRunning:false,missing:['改完的页面还没截图打开看过']}),
+    ()=>({pending:0,quietForMs:20_000}),
+    async(file,args)=>{calls.push(args);return {stdout:'{"status":"started"}',stderr:''};},
+    '/runtime/openclaw/dist/index.js',
+  );
+  const sessionKey='agent:project:tier-rate-limited';
+  const delays=[];
+  const original=continuation.scheduleTimer.bind(continuation);
+  continuation.scheduleTimer=params=>{delays.push(params.delayMs);original(params);clearTimeout(continuation.timers.get(sessionKey));continuation.timers.delete(sessionKey);};
+  const failed={failed:true,reason:'⚠️ API rate limit reached. Please try again later.'};
+  // A normal (successful) turn keeps the quick wake-up.
+  assert.equal(await continuation.schedule(sessionKey,'project'),true);
+  assert.equal(delays.at(-1),1_000);
+  // Failed turns wait, longer each time.
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),true);
+  const first=delays.at(-1);
+  assert.ok(first>=30_000,`first failed-turn wait ${first}`);
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),true);
+  assert.ok(delays.at(-1)>first);
+  // The provider's own reset time wins when it is longer.
+  assert.equal(await continuation.schedule(sessionKey,'project',{failed:true,reason:'429 {"error":{"code":"model_cooldown","reset_seconds":362}}'}),true);
+  assert.ok(delays.at(-1)>=362_000);
+  for(let i=0;i<10&&await continuation.schedule(sessionKey,'project',failed);i++);
+  // It gives up instead of looping forever on a dead upstream.
+  assert.equal(await continuation.schedule(sessionKey,'project',failed),false);
+  assert.ok(continuation.failedTurns.get(sessionKey)>6);
+  // One successful turn resets the count.
+  assert.equal(await continuation.schedule(sessionKey,'project'),true);
+  assert.equal(continuation.failedTurns.has(sessionKey),false);
+  assert.equal(calls.length,0);
+});
