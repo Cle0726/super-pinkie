@@ -212,6 +212,13 @@
       state.sockets.add(this);
       note('socket-open', {id: this.id, url: this.url});
       setTimeout(() => {
+        // __fake.dropConnection(): the gateway is "down" — every reconnect attempt fails.
+        if (state.offlineUntil > now()) {
+          this.readyState = 3; state.sockets.delete(this); note('socket-refused', {id: this.id});
+          const CloseEventImpl = typeof CloseEvent === 'function' ? CloseEvent : Event;
+          this._fire('close', new CloseEventImpl('close', {code: 1006, reason: 'gateway down', wasClean: false}));
+          return;
+        }
         this.readyState = 1;
         this._fire('open', new Event('open'));
         this._event('connect.challenge', {nonce: `n${Math.random()}`, ts: now()}, false);
@@ -360,7 +367,10 @@
       case 'connect': return ok(hello());
       case 'chat.history':
       case 'chat.startup': return ok(historyPage(params));
-      case 'sessions.list': return ok({sessions: [row()], count: 1, ts: now(), path: '', defaults: {model: state.model, contextTokens: 1000000}});
+      case 'sessions.list': {
+        const sessions = [row(), ...(window.__fakeExtraSessions || []).map((extra) => ({...row(), hasActiveRun: false, activeRunIds: [], status: 'done', ...extra}))];
+        return ok({sessions, count: sessions.length, ts: now(), path: '', defaults: {model: state.model, contextTokens: 1000000}});
+      }
       case 'sessions.subscribe': socket.subscribedSessions = true; return ok({subscribed: true});
       case 'sessions.messages.subscribe': socket.subscribedMessages = true; return ok({subscribed: true, key: SK, agentId: AGENT});
       case 'sessions.messages.unsubscribe': socket.subscribedMessages = false; return ok({subscribed: false});
@@ -382,6 +392,9 @@
         return ok({disarmed: true});
       case 'pinkie.deepThink.status':
         return ok(JSON.parse(JSON.stringify(state.deepThinkStatus)));
+      // Plan B status bar: tests set window.__fakeRunStatus / __fakePlan to replay a moment.
+      case 'pinkie.run.status': return ok(window.__fakeRunStatus || {active: false, phase: 'idle', review: {phase: 'idle'}, continuations: {tier: 0, integrity: 0}, missing: []});
+      case 'pinkie.plan.get': return ok({plan: window.__fakePlan || null});
       case 'chat.abort': return ok({ok: true, aborted: false, runIds: []});
       case 'chat.send': {
         void receiveChatSend(socket, params).then(ok, (error) => {
@@ -940,5 +953,11 @@
     setModel(model) { state.model = model; sessionsChanged('model', null); },
     setTierStatus(status) { state.deepThinkStatus = JSON.parse(JSON.stringify(status || {active: false})); },
     tail(n = 40) { return log.slice(-n); },
+    /** Close every connection and refuse reconnects for holdMs (gateway restart / sleep). */
+    dropConnection({holdMs = 8000} = {}) {
+      state.offlineUntil = now() + holdMs;
+      for (const socket of [...state.sockets]) socket.close(1006, 'gateway down');
+      return {offlineUntil: state.offlineUntil};
+    },
   };
 })();

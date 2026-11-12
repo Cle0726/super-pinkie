@@ -340,6 +340,31 @@ class NativeBridgeHealthMarkerTests(unittest.TestCase):
         self.assertEqual([], window.injected)
 
 
+class RunNotifyBridgeTests(unittest.TestCase):
+    """Plan B section 3: laolao-run-notify.js calls request_attention / notify."""
+
+    def test_bridge_exposes_both_calls_and_fails_quietly_off_windows(self):
+        bridge = windows_desktop.NativeBridge(updater=None)
+        self.assertTrue(callable(bridge.request_attention))
+        self.assertTrue(callable(bridge.notify))
+        with mock.patch.object(windows_desktop.os, "name", "posix"):
+            self.assertFalse(bridge.request_attention("done"))
+            self.assertFalse(bridge.notify({"title": "x", "body": "y", "sessionKey": "agent:main:main"}))
+
+    def test_payload_is_clamped_and_defaults_to_the_app_name(self):
+        title, body, key = windows_desktop.run_notify_fields({"title": "  ", "body": "长" * 500, "sessionKey": "k" * 400})
+        self.assertEqual(title, "超級碧琪")
+        self.assertEqual(len(body), 200)
+        self.assertEqual(len(key), 300)
+        self.assertEqual(windows_desktop.run_notify_fields(None), ("超級碧琪", "", ""))
+
+    def test_internal_helpers_stay_private_for_pywebview(self):
+        # pywebview exports every public attribute to the page; the tray icon must not leak.
+        public = [name for name in vars(windows_desktop.NativeBridge) if not name.startswith("_")]
+        self.assertNotIn("show_run_notification", public)
+        self.assertNotIn("open_run_session", public)
+
+
 class WindowsSmokeDebugPortTests(unittest.TestCase):
     def test_debug_port_only_for_the_isolated_smoke_endpoint(self):
         port = windows_desktop.smoke_debug_port

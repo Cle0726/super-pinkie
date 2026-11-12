@@ -23,7 +23,10 @@ import urllib.request
 import uuid
 import webbrowser
 
-import release_notes
+try:
+    import release_notes
+except ImportError:  # imported as app.windows_desktop (tests, tools)
+    from app import release_notes
 
 
 GATEWAY_URL = "http://127.0.0.1:18789/"
@@ -3158,6 +3161,15 @@ def _image_dimensions(path: Path, suffix: str):
     return {}
 
 
+def run_notify_fields(payload):
+    """Clamp a run-notify payload from the page to (title, body, sessionKey)."""
+    data = payload if isinstance(payload, dict) else {}
+    title = str(data.get("title") or "").strip()[:80] or "超級碧琪"
+    body = str(data.get("body") or "").strip()[:200]
+    session_key = str(data.get("sessionKey") or "").strip()[:300]
+    return title, body, session_key
+
+
 class NativeBridge(InAppBrowserBridge):
     def __init__(self, updater):
         # pywebview recursively exposes public js_api attributes. Keeping a
@@ -3540,6 +3552,85 @@ class NativeBridge(InAppBrowserBridge):
 
     def minimize(self):
         self._window.minimize()
+
+    # ---- 计划书 B 第三节：页面看不到时的提醒（laolao-run-notify.js 调用） ----
+
+    def request_attention(self, kind=None):
+        """Flash the taskbar button until the window comes back to the front."""
+        handle = self._native_window_handle()
+        if not handle:
+            return False
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class FlashInfo(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.UINT), ("hwnd", wintypes.HWND), ("dwFlags", wintypes.DWORD),
+                            ("uCount", wintypes.UINT), ("dwTimeout", wintypes.DWORD)]
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            if user32.GetForegroundWindow() == handle:
+                return False
+            # FLASHW_TRAY | FLASHW_TIMERNOFG: only the taskbar button, until the user comes back.
+            info = FlashInfo(ctypes.sizeof(FlashInfo), handle, 0x2 | 0xC, 0, 0)
+            user32.FlashWindowEx(ctypes.byref(info))
+            return True
+        except (AttributeError, OSError, TypeError, ValueError):
+            return False
+
+    def notify(self, payload=None):
+        """Show one Windows notification; clicking it opens that session."""
+        title, body, session_key = run_notify_fields(payload)
+        if os.name != "nt" or not self._window:
+            return False
+        try:
+            from System import Action
+            native = self._window.native
+            native.Invoke(Action(lambda: self._show_run_notification(title, body, session_key)))
+            return True
+        except Exception as error:  # pythonnet raises .NET exceptions here
+            append_log("launcher", f"run notify failed: {type(error).__name__}")
+            return False
+
+    def _show_run_notification(self, title, body, session_key):
+        import sys as _sys
+        from System.Drawing import Icon, SystemIcons
+        from System.Windows.Forms import NotifyIcon, ToolTipIcon
+
+        icon = getattr(self, "_run_notify_icon", None)
+        if icon is None:
+            icon = NotifyIcon()
+            try:
+                icon.Icon = Icon.ExtractAssociatedIcon(_sys.executable)
+            except Exception:
+                icon.Icon = SystemIcons.Application
+            icon.Text = "超級碧琪"
+            icon.BalloonTipClicked += lambda *_: self._open_run_session()
+            icon.BalloonTipClosed += lambda *_: setattr(icon, "Visible", False)
+            self._run_notify_icon = icon
+        self._run_notify_session = session_key
+        icon.Visible = True
+        icon.ShowBalloonTip(8000, title, body or " ", ToolTipIcon.Info)
+
+    def _open_run_session(self):
+        icon = getattr(self, "_run_notify_icon", None)
+        if icon is not None:
+            icon.Visible = False
+        window = self._window
+        if not window:
+            return
+        try:
+            window.restore()
+            window.show()
+            handle = self._native_window_handle()
+            if handle:
+                import ctypes
+                ctypes.windll.user32.SetForegroundWindow(handle)
+        except Exception:
+            pass
+        key = getattr(self, "_run_notify_session", "")
+        if key:
+            window.evaluate_js("window.__laolaoSidebar?.navigateSession?.(" + json.dumps(key) + ")")
 
     def _native_window_handle(self):
         """Return the Win32 HWND exposed by pywebview's WinForms backend."""
