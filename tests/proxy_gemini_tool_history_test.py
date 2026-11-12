@@ -4,6 +4,7 @@ The proxy module starts a server on import, so load only the rewriter.
 """
 import ast
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -11,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "proxy" / "mm-retry-proxy.py").read_text()
 TREE = ast.parse(SOURCE)
 WANTED = {"_message_text", "_tool_command", "flatten_gemini_tool_history"}
-ENV = {"json": json}
+ENV = {"json": json, "os": os}
 exec(
     compile(
         ast.Module(
