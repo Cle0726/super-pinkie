@@ -232,7 +232,7 @@ function watchdogControlMessage(instruction = '') {
     || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
   return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
 }
-const PLUGIN_BUILD = '2026-11-02.5-work-kinds';
+const PLUGIN_BUILD = '2026-11-02.6-work-kinds';
 
 // 同一个网关进程里，OpenClaw 会把本插件加载好几份：网关注册表一份（界面调用的 RPC 走这里），
 // agent runtime 注册表一份（运行中的钩子、工具走这里），按工作区 / 运行还会再建（日志 instance=3、4…）。
@@ -2238,10 +2238,11 @@ function internalControlText(value = '') {
 
 // OpenClaw 自己塞进会话的「用户」轮：后台生图/生视频完成通知、内部上下文事件、交付前改写请求。
 // 它们不是用户的新要求，不能拿来重新判活儿种类（11-02 隔离实测：生图失败通知把视频活判成简单问答，
-// 「Before accepting … apply this revision request」把查 iPhone 版本判成 App 活）。
+// 「Before accepting … apply this revision request」把查 iPhone 版本判成 App 活；r4：长任务压缩上下文前的
+// 「Pre-compaction memory flush」把海报、视频判成简单问答）。心跳轮同理。
 function runtimeTurnText(value = '') {
   const text = String(value || '').trimStart();
-  return /^(?:A background task completed\.|Continue the OpenClaw runtime event\b|Before accepting the previous final answer, apply this revision request|\[Internal task completion event\])/.test(text)
+  return /^(?:A background task completed\.|Continue the OpenClaw runtime event\b|Before accepting the previous final answer, apply this revision request|\[Internal task completion event\]|Pre-compaction memory flush\b|Read HEARTBEAT\.md if it exists)/.test(text)
     || text.includes('<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>');
 }
 
@@ -5795,7 +5796,12 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const marathonOpen = state.tier === 'marathon' && onlyMilestonesMissing(audit.missing);
     const gapKind = workFirst ? retryGapKind(audit.missing) : '';
     const fingerprint = deliberationFingerprint(state);
-    const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint;
+    // 档位这边已经齐了（或只差终稿内容）时，续跑是在改回复本身：取舍、文案、查事实本来就没有工具证据，
+    // 写出不一样的回复就是进展（11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请先生选择」，全局门禁要求再改一版，
+    // 证据指纹没变被当成空转，以「续跑没说明换了什么做法」停掉）。只有回复也一字不差才算空转。
+    const replyOnlyGap = workFirst && (gapKind === '' || gapKind === 'final');
+    const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint
+      && (!replyOnlyGap || !replyKey || replyKey === state.lastRetryReplyKey);
     const stop = (reason) => {
       state.stopRequested = true;
       state.stopReason = reason;
@@ -5813,7 +5819,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     // 工作模式里只拦「这一轮什么新证据都没有、又没说换了什么做法」的空转：补一次截图、补一句终稿
     // 都是真进展，不该因为没背那句话就把整轮停掉、让用户收不到回复。无限制模式保持原规则。
     const needDifference = state.retryAttempts > 0 && !marathonOpen
-      && (!workFirst || (stalled && gapKind !== 'final'));
+      && (!workFirst || (stalled && !replyOnlyGap));
     if (needDifference) {
       const difference = RETRY_DIFFERENCE.exec(reply);
       if (!difference) {
