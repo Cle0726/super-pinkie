@@ -65,7 +65,7 @@ export function branchTurns(branch) {
   return {turns, model};
 }
 
-export function renderMarkdown({title, model, exportedAt, turns}) {
+export function renderMarkdown({title, model, exportedAt, turns, inlineImages = false}) {
   const lines = [`# ${title}`, '', `导出时间：${formatStamp(exportedAt)}${model ? ` · 模型：${model}` : ''}`, '', '---', ''];
   const assets = [];
   for (const turn of turns) {
@@ -77,6 +77,7 @@ export function renderMarkdown({title, model, exportedAt, turns}) {
         const ext = IMAGE_EXT[String(block.mimeType).toLowerCase()] || 'png';
         const hash = createHash('sha1').update(block.data).digest('hex').slice(0, 10);
         const name = `图片-${assets.length + 1}-${hash}.${ext}`;
+        if (inlineImages) { lines.push(`![${name}](data:${String(block.mimeType).toLowerCase()};base64,${block.data})`, ''); continue; }
         assets.push({name, data: block.data});
         lines.push(`![${name}](./${ASSET_DIR}/${encodeURI(name)})`, '');
       }
@@ -122,9 +123,9 @@ export class SessionExport {
     return {entry, turns, model: entry.model || model, title: sessionTitle(entry, key)};
   }
 
-  async exportMarkdown(key) {
+  async exportMarkdown(key, {inlineImages = false} = {}) {
     const {turns, model, title} = await this.read(key);
-    const {markdown, assets} = renderMarkdown({title, model, exportedAt: this.now(), turns});
+    const {markdown, assets} = renderMarkdown({title, model, exportedAt: this.now(), turns, inlineImages});
     const files = [];
     if (assets.length) {
       const dir = path.join(this.root, 'exports', createHash('sha1').update(key + ':' + this.now()).digest('hex').slice(0, 16));
@@ -162,9 +163,9 @@ export function registerSessionExport(api, {titles, root}) {
   const method = (name, fn) => registerSessionMethod(api, name, async params => {
     try { return await fn(params || {}); } catch (error) { return {ok: false, error: error.message}; }
   });
-  method('pinkie.session.export', ({key, format = 'md'}) => {
+  method('pinkie.session.export', ({key, format = 'md', inlineImages = false}) => {
     if (format !== 'md') throw new Error('后端只导出 Markdown；PDF 和长图由界面生成');
-    return exporter.exportMarkdown(key);
+    return exporter.exportMarkdown(key, {inlineImages: inlineImages === true});
   });
   method('pinkie.session.digest', ({key, maxChars}) => exporter.digest(key, maxChars));
   return exporter;
