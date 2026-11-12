@@ -1,97 +1,55 @@
-/* 分工气球（laolao-crew.js）。一排气球贴在输入框上方，宽度跟「有几件事等你决定」那一条对齐。 */
+/* 分工（laolao-crew.js）。输入框上方一行小圆点，宽度跟「有几件事等你决定」那一条对齐。
+   外表克制：一个强调色，状态只靠一圈细环表达；唯一一直在动的是运行中那圈慢慢转的环。 */
 .pinkie-crew {
-  --crew: #e8518d;
-  display: flex; align-items: flex-end; gap: 14px; box-sizing: border-box;
-  width: min(780px, calc(100% - 48px)); margin: 0 auto 2px; padding: 6px 190px 4px 12px; /* 右边留给趴在输入框上的小碧琪 */
-  font-size: 12px; color: inherit; pointer-events: none;
-  animation: pinkie-crew-in .42s cubic-bezier(.2, .9, .3, 1.2) both;
+  --crew: var(--accent, #d9508d);
+  display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+  width: min(780px, calc(100% - 48px)); margin: 0 auto 4px; padding: 2px 236px 2px 12px; /* 右边留给趴在输入框上的小碧琪 */
+  font-size: 12px; color: inherit;
+  animation: pinkie-crew-in .24s ease-out both;
 }
 html[data-laolao-startup-home="1"] .pinkie-crew { display: none; }
-.pinkie-crew.is-leaving { animation: pinkie-crew-out .5s ease-in both; }
-.pinkie-crew__label {
-  flex: 0 0 auto; align-self: center; padding: 3px 10px; border-radius: 999px; pointer-events: auto;
-  background: color-mix(in srgb, var(--accent, #d9508d) 11%, transparent);
-  color: color-mix(in srgb, var(--accent, #d9508d) 78%, currentColor); font-weight: 600; white-space: nowrap;
-}
-.pinkie-crew.is-all-back .pinkie-crew__label { background: color-mix(in srgb, #f5b93e 22%, transparent); color: color-mix(in srgb, #b9770a 80%, currentColor); }
-.pinkie-crew__row { display: flex; align-items: flex-end; gap: 10px; min-width: 0; }
-.pinkie-crew__more { align-self: center; opacity: .6; }
+.pinkie-crew.is-leaving { opacity: 0; transition: opacity .5s ease; }
+.pinkie-crew__label { flex: 0 0 auto; white-space: nowrap; opacity: .62; }
+.pinkie-crew__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.pinkie-crew__more { margin-left: 4px; opacity: .5; }
 
 .pinkie-crew__one {
-  display: flex; flex-direction: column; align-items: center; gap: 1px; width: 58px; min-width: 0;
-  padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 132px; height: 26px;
+  padding: 0 8px 0 3px; border: 0; border-radius: 13px; background: none; color: inherit; font: inherit; cursor: pointer;
+  transition: background-color .15s ease;
 }
-.pinkie-crew__one[data-mode="chat"] { --crew: #ee5a97; }
-.pinkie-crew__one[data-mode="project"] { --crew: #2fa7a0; }
-.pinkie-crew__one[data-mode="ideas"] { --crew: #9a6be0; }
-.pinkie-crew__one[data-mode="learning"] { --crew: #4a9be8; }
-.pinkie-crew__one:focus-visible { outline: 2px solid var(--crew); outline-offset: 3px; border-radius: 10px; }
-.pinkie-crew__float { position: relative; display: flex; flex-direction: column; align-items: center; }
-.pinkie-crew__balloon {
-  position: relative; display: block; width: 34px; height: 40px; overflow: hidden;
-  border-radius: 50% 50% 50% 50% / 46% 46% 54% 54%;
-  background: var(--crew);
-  box-shadow: inset -4px -6px 10px color-mix(in srgb, #000 16%, transparent), inset 3px 4px 8px color-mix(in srgb, #fff 42%, transparent), 0 5px 12px -4px color-mix(in srgb, var(--crew) 70%, transparent);
-  transition: transform .2s ease, border-radius .3s ease, filter .3s ease;
-}
-.pinkie-crew__one:hover .pinkie-crew__balloon { transform: scale(1.1) rotate(-3deg); }
-.pinkie-crew__face { position: absolute; left: 3px; top: 4px; width: 28px; height: 28px; border-radius: 50%; object-fit: cover; opacity: .96; }
-.pinkie-crew__shine { position: absolute; left: 6px; top: 5px; width: 8px; height: 12px; border-radius: 50%; background: #fff; opacity: .55; transform: rotate(28deg); filter: blur(.6px); }
-.pinkie-crew__string { display: block; width: 1.5px; height: 12px; margin-top: -1px; background: linear-gradient(color-mix(in srgb, var(--crew) 85%, #000), transparent); transform-origin: top center; }
-.pinkie-crew__name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 15px; opacity: .78; }
+.pinkie-crew__one:hover { background: color-mix(in srgb, var(--crew) 9%, transparent); }
+.pinkie-crew__one:focus-visible { outline: 2px solid var(--crew); outline-offset: 1px; }
+.pinkie-crew__dot { position: relative; flex: 0 0 20px; width: 20px; height: 20px; }
+.pinkie-crew__face { position: absolute; inset: 2px; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+.pinkie-crew__ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--crew) 22%, transparent); box-sizing: border-box; }
+.pinkie-crew__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .78; }
 
-/* 运行中：上下飘，每只错开一点，像真的一串气球。 */
-.pinkie-crew__one--running .pinkie-crew__float { animation: pinkie-crew-bob 3.2s ease-in-out infinite; }
-.pinkie-crew__one--running .pinkie-crew__string { animation: pinkie-crew-sway 3.2s ease-in-out infinite; }
-.pinkie-crew__one:nth-child(2n) .pinkie-crew__float, .pinkie-crew__one:nth-child(2n) .pinkie-crew__string { animation-delay: -1.1s; }
-.pinkie-crew__one:nth-child(3n) .pinkie-crew__float, .pinkie-crew__one:nth-child(3n) .pinkie-crew__string { animation-delay: -2.2s; }
+/* 运行中：一段弧慢慢转。 */
+.pinkie-crew__one--running .pinkie-crew__ring { border-top-color: var(--crew); animation: pinkie-crew-turn 1.6s linear infinite; }
+/* 等你回复：整圈琥珀色，不动。 */
+.pinkie-crew__one--waiting .pinkie-crew__ring { border-color: #e0a12b; }
+.pinkie-crew__one--waiting .pinkie-crew__name { opacity: 1; }
+/* 做完：环收起，右下角一个小对勾，名字淡下去。 */
+.pinkie-crew__one--done .pinkie-crew__ring { border-color: transparent; }
+/* 做完和出错的只留圆点（名字在提示里），把位置让给还在忙的。 */
+.pinkie-crew__one--done .pinkie-crew__name, .pinkie-crew__one--error .pinkie-crew__name { display: none; }
+.pinkie-crew__one--done, .pinkie-crew__one--error { padding-right: 3px; flex: 0 0 auto; }
+.pinkie-crew__tick {
+  position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--crew); box-shadow: 0 0 0 1.5px var(--bg, #fff);
+}
+.pinkie-crew__tick::after {
+  content: ""; position: absolute; left: 2.6px; top: 1.2px; width: 2.4px; height: 4.6px;
+  border: solid #fff; border-width: 0 1.3px 1.3px 0; transform: rotate(42deg);
+}
+.pinkie-crew__one--done.is-fresh .pinkie-crew__tick { animation: pinkie-crew-in .3s ease-out both; }
+/* 出错：褪色。 */
+.pinkie-crew__one--error .pinkie-crew__face { filter: grayscale(1); opacity: .6; }
+.pinkie-crew__one--error .pinkie-crew__ring { border-color: color-mix(in srgb, currentColor 35%, transparent); border-style: dashed; }
 
-/* 等你回复：气球扯线，挂个问号。 */
-.pinkie-crew__one--waiting .pinkie-crew__float { animation: pinkie-crew-tug 1.4s ease-in-out infinite; }
-.pinkie-crew__ask {
-  position: absolute; right: -1px; top: -1px; width: 15px; height: 15px; border-radius: 50%;
-  background: #ffc93c; color: #6b4300; font-size: 11px; font-weight: 800; line-height: 15px; text-align: center;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #fff 80%, transparent);
-}
-.pinkie-crew__one--waiting .pinkie-crew__balloon { overflow: visible; }
-.pinkie-crew__one--waiting .pinkie-crew__face { clip-path: circle(50%); }
-
-/* 做完：气球变成一份包好的礼物。 */
-.pinkie-crew__one--done .pinkie-crew__balloon {
-  width: 32px; height: 30px; margin-top: 10px; border-radius: 7px; overflow: visible;
-  background: linear-gradient(90deg, transparent 43%, #fff8 43% 57%, transparent 57%), var(--crew);
-}
-.pinkie-crew__one--done .pinkie-crew__face { left: 4px; top: 3px; width: 24px; height: 24px; opacity: .92; }
-.pinkie-crew__one--done .pinkie-crew__shine, .pinkie-crew__one--done .pinkie-crew__string { display: none; }
-.pinkie-crew__bow { position: absolute; left: 50%; top: -7px; width: 18px; height: 9px; transform: translateX(-50%); }
-.pinkie-crew__bow::before, .pinkie-crew__bow::after {
-  content: ""; position: absolute; top: 0; width: 9px; height: 9px; background: #ffd35c;
-  border-radius: 60% 40% 40% 60% / 60% 60% 40% 40%; box-shadow: inset -1px -1px 2px #c98b0055;
-}
-.pinkie-crew__bow::before { left: 0; transform: rotate(-18deg); }
-.pinkie-crew__bow::after { right: 0; transform: scaleX(-1) rotate(-18deg); }
-.pinkie-crew__one--done.is-popping .pinkie-crew__balloon { animation: pinkie-crew-pop .5s cubic-bezier(.2, 1.6, .4, 1) both; }
-.pinkie-crew__bit {
-  position: absolute; left: 50%; top: 18px; width: 5px; height: 5px; border-radius: 1.5px; pointer-events: none;
-  background: hsl(calc(var(--i) * 58 + 330) 85% 62%);
-  animation: pinkie-crew-bit .7s ease-out both;
-  --a: calc(var(--i) * 60deg + 20deg);
-}
-
-/* 出错：气球瘪了。 */
-.pinkie-crew__one--error .pinkie-crew__balloon { filter: grayscale(.85) brightness(.95); transform: scale(.82, .7) rotate(14deg); border-radius: 46% 54% 40% 60% / 50% 44% 56% 50%; }
-.pinkie-crew__one--error .pinkie-crew__string { height: 7px; transform: rotate(18deg); }
-
-@keyframes pinkie-crew-in { from { opacity: 0; transform: translateY(14px) scale(.96); } to { opacity: 1; transform: none; } }
-@keyframes pinkie-crew-out { to { opacity: 0; transform: translateY(-10px); } }
-@keyframes pinkie-crew-bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
-@keyframes pinkie-crew-sway { 0%, 100% { transform: rotate(5deg); } 50% { transform: rotate(-5deg); } }
-@keyframes pinkie-crew-tug { 0%, 100% { transform: translateY(0); } 18% { transform: translateY(-5px) rotate(-5deg); } 36% { transform: translateY(0); } 54% { transform: translateY(-3px) rotate(4deg); } 72% { transform: translateY(0); } }
-@keyframes pinkie-crew-pop { 0% { transform: scale(1.5); opacity: .2; } 60% { transform: scale(.9); opacity: 1; } 100% { transform: scale(1); } }
-@keyframes pinkie-crew-bit {
-  from { transform: translate(-50%, 0) rotate(0); opacity: 1; }
-  to { transform: translate(calc(-50% + cos(var(--a)) * 26px), calc(sin(var(--a)) * 26px)) rotate(200deg); opacity: 0; }
-}
+@keyframes pinkie-crew-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pinkie-crew-turn { to { transform: rotate(360deg); } }
 
 html[data-reduce-motion] .pinkie-crew, html[data-reduce-motion] .pinkie-crew * { animation: none !important; transition: none !important; }
 @media (max-width: 900px) { .pinkie-crew { padding-right: 12px; } }

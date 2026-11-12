@@ -1,10 +1,10 @@
-/* 分工气球 · 把「碧琪分头在忙」画出来。
+/* 分工 · 把「碧琪分头在忙」安静地标出来。
  *
- * 父会话开了子会话（同一个模式里的，或者开到别的模式里的），输入框上方飘起一排气球：
- * 一只气球就是一个正在干活的碧琪，气球里是她在那个模式的脸，颜色跟着模式走。
- *   运行中 → 气球上下飘；等你回复 → 气球上挂个问号、轻轻扯线；
- *   做完   → 气球「啪」一下变成一份包好的礼物；出错 → 气球瘪下去。
- * 全部回来的那一刻撒一次彩带，过一会儿这一排自己收起来。点气球就去那个会话（别的模式会带你切过去）。
+ * 父会话开了子会话（同一个模式里的，或者开到别的模式里的），输入框上方出现一行小圆点：
+ * 一个圆点就是一个正在干活的碧琪，里面是她在那个模式的脸，外面一圈细环表示状态。
+ *   运行中 → 细环慢慢转；等你回复 → 环变成琥珀色；做完 → 环收成一个小对勾；出错 → 褪成灰色。
+ * 外表克制：没有弹跳、彩带和音效式的动画，整行只用一个强调色。全部回来后停留片刻自己收起。
+ * 点圆点就去那个会话（别的模式会带你切过去）。
  *
  * 数据全部来自 laolao-session-cards.js 已经在取的那一份（血缘、卡片、会话状态），这里不发任何请求、
  * 不开定时轮询、不开观察器。没有子会话在跑时什么都不画。
@@ -21,7 +21,7 @@
     learning: {name: '学习模式', face: 'learning'},
   };
   const STATUS = {running: '正在忙', waiting: '等你回复', done: '做完了', error: '出错了'};
-  const MAX = 5, LINGER_MS = 9000; // 五只：再多就伸到趴在输入框右上角的小碧琪身子底下了
+  const MAX = 5, LINGER_MS = 6000; // 五只：再多就伸到趴在输入框右上角的小碧琪身子底下了
 
   // 只在有人还没回来、或者刚刚全部回来时才出现；排在前面的是还在忙的。
   function summarize(family) {
@@ -46,7 +46,7 @@
     return node;
   };
   const reduced = () => Boolean(window.__pinkieMotion?.reduce);
-  let strip = null, lastSignature = '', lingerTimer = 0, seen = new Map(), celebrated = '';
+  let strip = null, lastSignature = '', lingerTimer = 0, seen = new Map();
 
   function clear() {
     clearTimeout(lingerTimer); lingerTimer = 0;
@@ -63,20 +63,14 @@
     button.setAttribute('aria-label', tip);
     button.dataset.pinkieTooltip = tip;
     button.onclick = () => window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: row.key}}));
-    const float = el('span', 'pinkie-crew__float');
-    const balloon = el('span', 'pinkie-crew__balloon');
+    const dot = el('span', 'pinkie-crew__dot');
     const face = el('img', 'pinkie-crew__face');
     face.src = `/laolao-mode-${mode.face}-sm.png?v=sm1`; face.alt = ''; face.draggable = false; face.decoding = 'async';
-    balloon.append(face, el('span', 'pinkie-crew__shine'));
-    if (row.status === 'waiting') balloon.append(el('span', 'pinkie-crew__ask', '?'));
-    if (row.status === 'done') balloon.append(el('span', 'pinkie-crew__bow'));
-    float.append(balloon, el('span', 'pinkie-crew__string'));
-    // 刚从「在忙」变成「做完」：放一次「啪」的小碎屑。之前就做完的不重放。
-    if (row.status === 'done' && previous && previous !== 'done' && !reduced()) {
-      button.classList.add('is-popping');
-      for (let i = 0; i < 6; i += 1) { const bit = el('i', 'pinkie-crew__bit'); bit.style.setProperty('--i', String(i)); float.append(bit); }
-    }
-    button.append(float, el('span', 'pinkie-crew__name', title));
+    dot.append(face, el('span', 'pinkie-crew__ring'));
+    if (row.status === 'done') dot.append(el('span', 'pinkie-crew__tick'));
+    // 刚从「在忙」变成「做完」：对勾淡入一次。之前就做完的不重放。
+    if (row.status === 'done' && previous && previous !== 'done' && !reduced()) button.classList.add('is-fresh');
+    button.append(dot, el('span', 'pinkie-crew__name', title));
     return button;
   }
 
@@ -103,11 +97,6 @@
     }
     clearTimeout(lingerTimer); lingerTimer = 0;
     if (allBack) {
-      const round = sessionKey + '|' + summary.rows.map(row => row.key).join(',');
-      if (celebrated !== round) {
-        celebrated = round;
-        try { if (!reduced()) window.__pinkieBuddy?.burst?.('party'); } catch {}
-      }
       lingerTimer = setTimeout(() => { strip?.classList.add('is-leaving'); lingerTimer = setTimeout(clear, 600); }, LINGER_MS);
     }
     return summary;
