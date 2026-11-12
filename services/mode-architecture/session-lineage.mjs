@@ -989,6 +989,20 @@ export class SessionLineage {
 }
 
 const LINEAGE_INSTANCES = Symbol.for('pinkie.session-lineage.v1');
+// 用户明说「另开一个（子）会话」，模型却去用网关自带的 sessions_spawn（看不见的子代理，用户在侧栏里找不到，
+// 也不走汇报卡片；11-12 隔离实测里项目模式就这么干了）。每轮只拦一次，指回 pinkie_session_start；模型坚持就放行。
+const ASKED_FOR_SESSION = /子会话|(?:另|新|单独|再)开.{0,8}会话|开(?:个|一个)新?会话|sub[- ]?session|new session/i;
+export function spawnShouldBeSession(sessionKey) {
+  for (const lineage of (globalThis[LINEAGE_INSTANCES] || new Map()).values()) {
+    const turn = lineage.turns.get(sessionKey);
+    if (!turn?.user || turn.spawnNudged || !ASKED_FOR_SESSION.test(turn.prompt || '')) continue;
+    if (lineage.lineage()[sessionKey] || isPersona(sessionKey)) continue;
+    turn.spawnNudged = true;
+    return '用户要的是另开一个会话（他能在侧栏里看到、点进去、收到汇报卡片），不是看不见的子任务：改用 pinkie_session_start，initiation 用 user_asked，简报写全。';
+  }
+  return '';
+}
+
 export function registerSessionLineage(api, options) {
   const shared = globalThis[LINEAGE_INSTANCES] ??= new Map();
   if (!shared.has(options.root)) shared.set(options.root, new SessionLineage(api, options));
