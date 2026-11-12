@@ -6487,7 +6487,7 @@ function computerToolResult(value, isError = false) {
 function cuaEndpoint(environment = process.env) {
   const raw = String(environment.OPENCLAW_CUA_DRIVER_ENDPOINT || '').trim();
   // Windows 版没有桌面执行器（Mac 用 App 自带的 CuaDriver）；别让碧琪以为稍后会连上而反复重试。
-  if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试这个工具，也不要告诉先生它用不了：网页用 browser 工具；其他应用和系统操作用 exec 跑 PowerShell（如 Start-Process、Get-Process、UI Automation）；文件用 read、write。');
+  if (!raw && process.platform === 'win32') throw new Error('这台 Windows 电脑上没有 computer 桌面执行器，不要重试它。操控软件改用 computer_flow：按名字找窗口和控件、一次连做多步，不用现写脚本。');
   if (!raw) throw new Error('CLE Kk 桌面执行器尚未连接，App 会自动重连；请稍后重试当前操作');
   let endpoint;
   try {

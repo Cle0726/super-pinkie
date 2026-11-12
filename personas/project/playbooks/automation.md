@@ -65,7 +65,13 @@ Register-ScheduledTask -TaskName "碧琪-整理下载" -Action $action -Trigger 
 ## 七、自动操作网页和软件
 
 - 能用接口或文件解决的，不用模拟点击；模拟点击慢、容易坏。
-- 必须操作界面时，按 `AGENTS.md` 里讲本机桌面操作的那一节：先截图看清、用真实的点击和输入、再截图确认真的变了。
+- 必须操作软件界面时用 `computer_flow`（Mac 和 Windows 都有），不现写 PowerShell、AppleScript、pyautogui 脚本：
+  1. 先 `flows` 看这台电脑上有没有存好的流程，有就 `run_flow`。
+  2. 没有：`windows` 和 `ui` 看清窗口名和控件的真实名字（一轮）。
+  3. 把整件事写成一个 `steps` 一次发完：`open_app` → `wait_window` → `ui_click` / `ui_set` / `keys` / `type` → `screenshot`。哪一步失败会停在那一步并说原因，改那一步接着发，不从头来。
+  4. 跑通了、以后还会做：`save_flow` 存下来，会变的内容写成 `{{变量}}`。
+  示范（Windows，把一段话存成记事本文件）：`[{"op":"open_app","name":"记事本"},{"op":"wait_window","window":"记事本"},{"op":"type","text":"{{内容}}"},{"op":"keys","keys":"ctrl+s"},{"op":"wait_window","window":"另存为"},{"op":"ui_set","window":"另存为","name":"文件名","value":"{{文件名}}"},{"op":"keys","keys":"enter"}]`
+- 网页上的操作用浏览器工具，不用它。控件没有名字（游戏、画布）时才截图按坐标点。
 - 发布、提交、付款、发送消息这类对外的最后一步，每次都等用户确认；密码和验证码让用户自己输。
 
 ## 八、验收
