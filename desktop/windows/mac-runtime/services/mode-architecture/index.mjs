@@ -14,7 +14,8 @@ import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gp
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {skillRouteBlock} from './skill-routes.mjs';
 import {workCardBlock, forgetCards} from './work-cards.mjs';
-import {projectBriefBlock, forgetBrief} from './project-brief.mjs';
+import {projectBriefBlock, forgetBrief, boundProjectRoot} from './project-brief.mjs';
+import {codeWatch} from './code-work.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
@@ -686,7 +687,7 @@ function toolCallKey(event = {}) {
 // structured result object (never matching model-visible output text), and
 // only for the known file mutation tools.
 function hostFileMutationReceipt(toolName = '', result = null) {
-  if (!/^(?:write|edit|apply_patch)$/i.test(String(toolName || ''))
+  if (!/^(?:write|edit|apply_patch|code_edit)$/i.test(String(toolName || ''))
       || !result || typeof result !== 'object') return false;
   const candidates = [
     result,
@@ -1833,7 +1834,10 @@ export class CompletionIntegrityGuard {
     // discarded just because the transport failed to correlate hook ids.
     if (!failed && !effects.some(effect => effect.changed)
         && hostFileMutationReceipt(event.toolName, event.result)) {
-      effects = toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx)).slice(0, 16).map(target => ({
+      // code_edit 的 path 相对项目目录（不是 agent 工作区），用它回执里引擎写的绝对路径。
+      const reported = String(event.toolName || '') === 'code_edit' && typeof event.result?.details?.absolutePath === 'string'
+        && path.isAbsolute(event.result.details.absolutePath) ? [event.result.details.absolutePath] : null;
+      effects = (reported || toolTargetPaths(event.toolName, params, agentWorkspaceDir(ctx))).slice(0, 16).map(target => ({
         ...snapshotFile(target), changed: true, hostReported: true,
       }));
     }
@@ -5737,6 +5741,9 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           if (card) blocks.push('\n' + card + '\n');
           const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
           if (brief) blocks.push('\n' + brief + '\n');
+          // 改完自动查语法：写文件的工具动过的代码文件还有语法错，就放到眼前。
+          const broken = codeWatch.block(sessionKey);
+          if (broken) blocks.push('\n' + broken + '\n');
         } catch (error) {
           // 不能让路由拖垮这一轮，但也不能悄悄失效（11-04：Windows 快照少一个 import，路由整个没生效也没人知道）。
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
@@ -6920,6 +6927,10 @@ export default {
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);
+      try {
+        const watchKey = String(ctx.sessionKey || '');
+        if (watchKey) codeWatch.afterTool(event, ctx, {baseDirs: [boundProjectRoot(watchKey, {stateRoot: pinkieStateRoot()}), String(event.params?.cwd || ''), agentWorkspaceDir(ctx)]});
+      } catch { /* 查语法是附带的好处，不能影响工具结果 */ }
       await cleKk.verifyAfterTool(event, ctx);
     });
     api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));

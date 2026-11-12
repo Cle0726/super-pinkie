@@ -27,7 +27,8 @@ test('a code message gets a short card that ends with the full playbook path', (
   const card = workCardBlock(['code'], '给记录页加一个按月导出', {mode: 'project', sessionKey: 'agent:project:a', playbookRoot: '/ws'});
   assert.match(card, /^【这件活：在已有项目里改代码】/);
   assert.match(card, /不编命令/);
-  assert.match(card, /改完读回/);
+  assert.match(card, /code_edit/);
+  assert.match(card, /run_tests/);
   assert.ok(card.endsWith(path.join('/ws', 'playbooks', 'coding.md')));
   assert.ok(card.length < 900, `card is ${card.length} chars`);
 });
