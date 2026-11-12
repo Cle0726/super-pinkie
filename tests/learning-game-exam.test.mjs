@@ -171,3 +171,18 @@ test('守关答完才按标准答案讲解', async t => {
   const cached = await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'});
   assert.equal(cached.text, told.text);
 });
+
+test('守关同题讲解只发一次请求，失败时返回可读提示', async t => {
+  const {game} = gameFixture(t);
+  game.mutate(state => { game.modules.world.ensure(state).guards.g1 = {items: [{stem: 'She depends __ her team.', options: ['on', 'in'], answer: 0, why: '固定搭配'}], answers: {}}; });
+  game.modules.world.guardAnswer({attemptId: 'g1', itemId: 'g1', answer: 1});
+  let calls = 0, release;
+  game.requestModel = () => { calls++; return new Promise(resolve => { release = resolve; }); };
+  const p = game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1', yours: 'in'});
+  const q = game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1', yours: 'in'});
+  assert.equal(calls, 1); release({value: {text: '这题是固定搭配 depend on，意思是依靠。'}});
+  assert.equal((await p).text, (await q).text);
+  game.mutate(s => { delete s.guards.g1.answers.g1.lecture; });
+  game.requestModel = async () => { throw Error('笔记整理模型请求失败（429）'); };
+  assert.match((await game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'})).error, /限流或额度不足/);
+});

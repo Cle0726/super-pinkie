@@ -9,7 +9,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isSessionOperationEvidence, registerSessionLineage} from './session-lineage.mjs';
+import {isSessionOperationEvidence, registerSessionLineage, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
@@ -6072,6 +6072,10 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     if (event.toolName !== 'sessions_spawn') return;
     const params = {...(event.params || {})};
     state = this.getRun(parent);
+    if (!state?.active && ctx.sessionKey === parent) {
+      const redirect = spawnShouldBeSession(parent);
+      if (redirect) return {block: true, blockReason: redirect};
+    }
     const childDepth = String(ctx.sessionKey || '').split(':subagent:').length - 1;
     // Base mode is a single standard pipeline: only the selected parent may
     // create its planner/solver/critic/judge batch.  Higher tiers may use the
@@ -6931,6 +6935,8 @@ export default {
         return activity.parentRunning || activity.pending > 0 || watchdog.timers.has(key)
           || watchdog.dispatching.has(key) || tierContinuation.timers.has(key);
       },
+      // 设置页「碧琪自己分工」开关（pinkie.prefs 的 autoSplit，默认开）。sessionPrefs 在下面才注册，这里到用的时候才读。
+      autoSplit: () => { try { return sessionPrefs.globalPrefs().autoSplit !== false; } catch { return true; } },
     });
     registerSessionBranches(api, {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,

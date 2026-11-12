@@ -226,6 +226,96 @@ def restore_terms(text, pairs):
     return text
 
 
+def _message_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                parts.append(part["text"])
+        return "\n".join(parts)
+    if content is None:
+        return ""
+    return str(content)
+
+
+def _tool_command(call):
+    fn = call.get("function") if isinstance(call, dict) else None
+    if not isinstance(fn, dict):
+        return "tool"
+    name = str(fn.get("name") or "tool")
+    raw = fn.get("arguments") if isinstance(fn.get("arguments"), str) else json.dumps(fn.get("arguments") or "", ensure_ascii=False)
+    shown = raw[:300]
+    try:
+        args = json.loads(raw) if isinstance(fn.get("arguments"), str) else fn.get("arguments")
+    except (TypeError, ValueError):
+        args = None
+    if isinstance(args, dict) and isinstance(args.get("command"), str) and args["command"].strip():
+        shown = args["command"][:300]
+    return name + "：" + shown
+
+
+def flatten_gemini_tool_history(parsed):
+    """Turn past Gemini tool rounds into plain user log lines.
+
+    The relay does not return thought signatures. Once the current turn still
+    contains those native tool calls, Gemini stops sending the thought text.
+    Replays of the real round-3 and round-4 requests (4 times each) kept both
+    the thought text and the next tool call when every previous tool round was
+    rewritten as "已执行 / 结果". The tools list is left untouched, so the model
+    can still call a tool for the step it is on. Non-Gemini models are unchanged.
+    """
+    if not isinstance(parsed, dict):
+        return False
+    # UR_GEMINI_FLATTEN=0 turns this off (used to test relay-side fixes).
+    if os.environ.get("UR_GEMINI_FLATTEN", "1") == "0":
+        return False
+    if "gemini" not in str(parsed.get("model") or "").lower():
+        return False
+    messages = parsed.get("messages")
+    if not isinstance(messages, list):
+        return False
+    if not any(isinstance(m, dict) and m.get("tool_calls") for m in messages):
+        return False
+    out = []
+    pending = None
+    for message in messages:
+        if not isinstance(message, dict):
+            pending = None
+            out.append(message)
+            continue
+        role = message.get("role")
+        if role in ("tool", "tool_result"):
+            content = message.get("content")
+            line = "结果：" + _message_text(content)
+            # Keep screenshots and other non-text parts so the model still sees them.
+            extra = [part for part in content if isinstance(part, dict) and not isinstance(part.get("text"), str)] if isinstance(content, list) else []
+            if pending is None:
+                pending = {"role": "user", "content": ""}
+                out.append(pending)
+            if isinstance(pending["content"], str):
+                pending["content"] = ([{"type": "text", "text": pending["content"]}] if pending["content"] else []) if extra else pending["content"]
+            if isinstance(pending["content"], list):
+                pending["content"].append({"type": "text", "text": ("\n" if pending["content"] else "") + line})
+                pending["content"].extend(extra)
+            else:
+                pending["content"] += ("\n" if pending["content"] else "") + line
+            continue
+        calls = message.get("tool_calls")
+        if role == "assistant" and isinstance(calls, list) and calls:
+            bits = [_tool_command(call) for call in calls if isinstance(call, dict)]
+            pending = {"role": "user", "content": "已执行：" + " ".join(bits)}
+            out.append(pending)
+            continue
+        pending = None
+        out.append(message)
+    parsed["messages"] = out
+    return True
+
+
 # --- 招1: 铁拒模型降级表 (仅 gated 请求, 拒绝时才切换) ---
 FALLBACK_MODELS = {
     "gemini-3.8-flash-tiered": "gemini-3.7-flash-tiered",
@@ -534,9 +624,13 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
             if info is not None and info["is_ur"]:
                 original_model = info["model"]
                 fallback_model = resolve_fallback(original_model)
-            print("ur-proxy: model=%s unrestricted=%s already=%s injected=%s" % (
+            flattened = False
+            if info is not None and flatten_gemini_tool_history(info.get("parsed")):
+                body = json.dumps(info["parsed"], ensure_ascii=False).encode("utf-8")
+                flattened = True
+            print("ur-proxy: model=%s unrestricted=%s already=%s injected=%s flattened=%s" % (
                 (info or {}).get("model"), (info or {}).get("is_ur"),
-                (info or {}).get("already"), injected), flush=True)
+                (info or {}).get("already"), injected, flattened), flush=True)
         headers = {
             key: value
             for key, value in self.headers.items()

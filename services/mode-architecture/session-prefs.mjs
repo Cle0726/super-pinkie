@@ -16,6 +16,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export const DEFAULT_GLOBAL = Object.freeze({
   defaultStyle: 'default', customStyle: '', notify: {done: true, waiting: true}, menubar: true, hotkey: 'default',
+  // 碧琪自己分工：用户这条消息要的活里互不依赖的大块，直接开子会话并行做（session-lineage 的 in_scope）。关掉后只提卡片等用户点。
+  autoSplit: true,
 });
 
 let styleCache = null;
@@ -63,6 +65,7 @@ export class SessionPrefs {
       for (const name of ['done', 'waiting']) if (typeof params.notify[name] === 'boolean') g.notify[name] = params.notify[name];
     }
     if (typeof params.menubar === 'boolean') g.menubar = params.menubar;
+    if (typeof params.autoSplit === 'boolean') g.autoSplit = params.autoSplit;
     if ('hotkey' in params) g.hotkey = params.hotkey === null ? null : clip(params.hotkey, 40) || null;
     this.save();
     return {ok: true, ...this.globalPrefs()};
