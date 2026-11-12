@@ -652,6 +652,9 @@ test('mode ask brings the other mode\'s answer back in the same call, leaves a q
   const card = f.lineage.state(parent).cards[0];
   assert.equal(card.kind, 'report');
   assert.equal(card.injection, 'injected', 'already delivered as the tool result: not injected twice');
+  assert.equal(card.consult, true);
+  const shown = (await f.lineage.cards(parent)).cards[0];
+  assert.deepEqual([shown.consult, shown.mode, shown.modeName], [true, 'ideas', '想法模式'], 'the card can say whose answer it is and offers nothing to open');
   assert.ok(!f.lineage.state(parent).wakePending);
   assert.notEqual(f.entries.get(parent).unread, true);
   assert.ok(f.entries.get(sent.sessionKey).archivedAt, 'the helper session does not linger in the other mode\'s sidebar');

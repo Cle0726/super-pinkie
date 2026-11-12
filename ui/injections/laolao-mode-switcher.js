@@ -1105,6 +1105,19 @@
     window.addEventListener("pinkie-native-bridge-ready", onDockSettled);
   };
 
+  // A session that lives in another mode (a cross-mode sub-session, or the parent
+  // it came from), opened from a card or a sidebar row: play the normal switch and
+  // land on that session instead of the mode's last one. If it is gone or archived,
+  // resolveTargetSession falls back to the mode's usual session.
+  window.addEventListener("pinkie:open-session-in-mode", (event) => {
+    const key = String(event.detail?.sessionKey || "");
+    const modeId = modeIdForSession(key);
+    if (!modeId || key.includes(":subagent:") || switching) return;
+    if (modeId === activeMode()) { window.__laolaoSidebar?.navigateSession(key); return; }
+    rememberSession(key);
+    void switchMode(modeById(modeId));
+  });
+
   window.addEventListener("load", schedulePreload, { once: true });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render, { once: true });
   else render();

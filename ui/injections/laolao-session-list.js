@@ -10,6 +10,7 @@
   const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
   const internalRow = s => internalKey(s.key) || !s.lineage?.parentKey && Boolean(s.meta?.internal);
   const isPersona = key => /:subagent:/iu.test(key || '');
+  const MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', learning: '学习'};
   const parentOf = s => {
     if (s.lineage?.detached) return '';
     const parent = s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy;
@@ -56,7 +57,10 @@
       const rows = (data.sessions || []).filter(owned);
       const activeRows = (active?.sessions || []).filter(owned);
       const allRows = [...rows, ...activeRows];
+      const awayBy = {};
+      for (const [childKey, child] of Object.entries(lineage?.away || {})) (awayBy[child.parentKey] ||= []).push({key: childKey, ...child});
       for (const s of allRows) {
+        s.away = awayBy[s.key];
         s.lineage = lineage?.children?.[s.key];
         s.phase = lineage?.states?.[s.key]?.phase;
       }
@@ -504,10 +508,12 @@
     const name = title(s);
     const link = el('a', 'sidebar-recent-session__link');
     link.href = '/chat?session=' + encodeURIComponent(s.key);
-    link.dataset.pinkieTooltip = worker ? name + '（只读）' : name;
+    const origin = s.lineage?.cross ? MODE_SHORT[s.lineage.fromMode] : '';
+    link.dataset.pinkieTooltip = worker ? name + '（只读）' : origin ? name + '（从' + origin + '模式转来）' : name;
     const channel = s.meta?.channel;
     if (channel) link.append(sessionIcon(channel === 'feishu' ? 'feishu' : 'chat',
       s.meta.channelTitle || channel, 'pinkie-session-icon pinkie-session-channel'));
+    if (origin) link.append(el('span', 'pinkie-session-origin', origin));
     link.append(el('span', 'sidebar-recent-session__name', name));
     link.onclick = e => {
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -527,6 +533,13 @@
     if (!phase && !s.unread) {
       const time = dateLabel(s.updatedAt);
       if (time) aside.append(el('time', 'pinkie-session-time', time));
+    }
+    // 这个会话在别的模式里开的子会话：点了切到那个模式、落在那个会话上。最多列两个，其余看卡片。
+    for (const child of (!worker && !archived && s.away || []).slice(0, 2)) {
+      const go = button('↗' + (MODE_SHORT[child.mode] || ''), '去' + (MODE_SHORT[child.mode] || '另一个') + '模式打开：' + (child.title || '子会话'),
+        () => window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: child.key}})));
+      go.classList.add('pinkie-session-away');
+      aside.append(go);
     }
     if (children) {
       const expand = button(String(children), (collapsed ? '展开' : '收起') + name + '的子会话',

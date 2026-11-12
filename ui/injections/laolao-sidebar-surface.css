@@ -248,6 +248,8 @@ html .sidebar :is(.pinkie-session-status--waiting,.pinkie-session-status--error)
 html .sidebar .pinkie-session-unread { background:var(--sb-status-running) }
 html .sidebar #laolao-session-manager .pinkie-session-fold { min-width:28px;height:28px;margin-left:6px;padding:0;border:0;background:transparent;font-size:11px; }
 html .sidebar #laolao-session-manager .pinkie-session-fold__count { display:inline-block;min-width:20px;height:16px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);line-height:16px;text-align:center; }
+html .sidebar #laolao-session-manager .pinkie-session-origin { flex:0 0 auto;margin-right:6px;padding:0 5px;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);font-size:11px;line-height:16px;opacity:.75 }
+html .sidebar #laolao-session-manager .pinkie-session-away { min-width:0;height:20px;margin-left:6px;padding:0 6px;border:0;border-radius:5px;background:color-mix(in srgb,currentColor 8%,transparent);font-size:11px;line-height:20px;white-space:nowrap }
 html .sidebar #laolao-session-manager .pinkie-session-workers>button { min-height:28px;font-size:12px;opacity:.65 }
 html[data-reduce-motion] .sidebar .pinkie-session-status--running svg,
 html[data-pinkie-reduce-motion] .sidebar .pinkie-session-status--running svg { animation:none }

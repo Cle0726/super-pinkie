@@ -36,6 +36,8 @@
       || document.querySelector('.sidebar-recent-session--active[data-session-key]')?.dataset.sessionKey || '';
   }
 
+  const agentOf = key => String(key || '').split(':')[1] || '';
+  const MODE_OF_AGENT = {main: '唠嗑模式', project: '项目模式', thinking: '想法模式', learning: '学习模式'};
   function link(key, label, className = '') {
     const anchor = el('a', className, label);
     anchor.href = '/chat?session=' + encodeURIComponent(key);
@@ -43,7 +45,9 @@
     anchor.onclick = event => {
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
       event.preventDefault();
-      window.__laolaoSidebar?.navigateSession(key);
+      // 别的模式里的会话：侧栏只认当前模式，交给模式切换器带过去。
+      if (agentOf(key) !== agentOf(currentKey())) window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: key}}));
+      else window.__laolaoSidebar?.navigateSession(key);
     };
     return anchor;
   }
@@ -186,15 +190,16 @@
         'pinkie-session-card__compact-toggle');
       toggle.setAttribute('aria-expanded', String(expanded.has(card.id)));
       header.append(toggle);
-      if (state === 'started' && card.childKey) header.append(link(card.childKey, '打开 ›'));
+      if (state === 'started' && card.childKey) header.append(link(card.childKey, card.modeName ? '去' + card.modeName + '打开 ›' : '打开 ›'));
       box.append(header);
       if (expanded.has(card.id)) box.append(el('div', 'pinkie-session-card__body', fullPrompts.get(card.id) || card.summary || ''));
       if (errors.has(card.id)) box.append(el('div', 'pinkie-session-card__error', errors.get(card.id)));
       return box;
     }
     const heading = el('div', 'pinkie-session-card__title');
-    if (proposal) heading.textContent = card.title;
-    else heading.textContent = card.title + ' 做完一轮';
+    const where = card.modeName ? card.modeName + ' · ' : '';
+    if (proposal) heading.textContent = where + card.title;
+    else heading.textContent = where + card.title + (card.consult ? ' 的回答' : ' 做完一轮');
     const body = el('div', 'pinkie-session-card__body', proposal
       ? (expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary) : card.text);
     if (!expanded.has(card.id)) body.classList.add('pinkie-session-card__body--preview');
@@ -211,7 +216,9 @@
         if (expanded.has(card.id)) expanded.delete(card.id); else expanded.add(card.id); paint();
       }, 'pinkie-session-card__text-button');
       full.setAttribute('aria-expanded', String(expanded.has(card.id)));
-      actions.append(full, link(card.childKey, '打开子会话 ›'));
+      // 去别的模式问一句的会话答完就归档了，没有可打开的东西。
+      actions.append(full);
+      if (!card.consult) actions.append(link(card.childKey, card.modeName ? '去' + card.modeName + '打开 ›' : '打开子会话 ›'));
     }
     for (const [action, label] of cardActions(card)) {
       const button = cardButton(label, null, action === 'start' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
@@ -257,7 +264,8 @@
     if (data.parentKey) {
       if (!parentLink || parentLink.parentElement !== host.parentElement || parentLink.dataset.signature !== signature) {
         parentLink?.remove();
-        parentLink = link(data.parentKey, '来自：' + data.parentTitle, 'pinkie-session-parent');
+        const fromMode = agentOf(data.parentKey) !== agentOf(key) ? MODE_OF_AGENT[agentOf(data.parentKey)] : '';
+        parentLink = link(data.parentKey, (fromMode ? '来自' + fromMode + '：' : '来自：') + data.parentTitle, 'pinkie-session-parent');
         parentLink.dataset.signature = signature;
         host.before(parentLink);
       }
