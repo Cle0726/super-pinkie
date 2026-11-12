@@ -1123,6 +1123,16 @@
   }
 
   function sessionMenu(anchor,key,title,archived=false,{detachable=false,children=0,isChild=false}={}){
+    const exportItem=menu=>{if(window.PinkieSessionTools?.openExport)menuItem(menu,ICONS.external,'导出…',()=>{closeMenu();window.PinkieSessionTools.openExport(key,title);});};
+    if(window.PinkieSessionTools?.isTemp?.(key)){
+      openMenu(anchor,menu=>{
+        exportItem(menu);
+        const divider=document.createElement('div');divider.className='laolao-menu__divider';menu.appendChild(divider);
+        const end=menuItem(menu,ICONS.trash,'结束并删除临时会话',()=>{closeMenu();createProjectSession(null,{plain:true});});
+        end.classList.add('laolao-menu__item--danger');
+      });
+      return;
+    }
     openMenu(anchor,menu=>{
       if(archived){
         menuItem(menu,ICONS.restore,'恢复会话',async()=>{closeMenu();try{await restoreSession(key);}catch(error){toast(error.message);}});
@@ -1157,6 +1167,7 @@
       menuItem(menu,ICONS.pin,state.pins.includes(key)?'取消置顶':'置顶会话',()=>{closeMenu();togglePin(key);});
       menuItem(menu,ICONS.folder,'归入项目…',()=>openProjectMenu(anchor,key));
       menuItem(menu,ICONS.archive,'归档会话（保留记录）',async()=>{closeMenu();try{await archiveSession(key);}catch(error){toast(error.message);}});
+      exportItem(menu);
       const divider=document.createElement('div');divider.className='laolao-menu__divider';menu.appendChild(divider);
       const remove=menuItem(menu,ICONS.trash,'删除会话和记录…',()=>askDeleteSession(key,title));
       remove.classList.add('laolao-menu__item--danger');
@@ -1991,6 +2002,11 @@
     openChildSessionDialog,
     createSession: () => createProjectSession(null, {plain: true}),
     askDeleteAllSessions,
+    toast,
+    openMenu,
+    closeMenu,
+    menuItem,
+    icons: ICONS,
     get mode() { return stateMode; },
     get state() { return state; },
   };

@@ -206,6 +206,38 @@
       });
       rows.push(row);
     }
+    // 概览 and the 更多 pages left the top of the sidebar (Claude App keeps
+    // nothing above 新会话); they live here now so every page stays reachable.
+    const nav = document.querySelector("aside.sidebar .sidebar-nav");
+    const moreSection = nav?.querySelector(":scope > .nav-section.nav-section--more");
+    if (moreSection?.classList.contains("nav-section--collapsed") && !moreSection.dataset.laolaoOpened) {
+      moreSection.dataset.laolaoOpened = "1";
+      moreSection.querySelector(":scope > .nav-section__label")?.click();
+    }
+    const home = document.querySelector('aside.sidebar .sidebar-nav a.nav-item[href$="/overview"]') || document.querySelector("aside.sidebar .nav-item--home");
+    const pages = [home, ...(moreSection?.querySelectorAll(".nav-section__items a[href], .nav-section__items .nav-item") || [])]
+      .filter((node, index, list) => node && list.indexOf(node) === index);
+    if (pages.length) {
+      const divider = document.createElement("div");
+      divider.className = "laolao-footer-overflow__divider";
+      divider.setAttribute("role", "separator");
+      rows.push(divider);
+    }
+    for (const page of pages) {
+      const label = (page.querySelector(".nav-item__text")?.textContent || page.textContent || "").trim();
+      if (!label || /^(?:实例|节点|梦境)$/.test(label)) continue; // S11
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "laolao-footer-overflow__item laolao-footer-overflow__page";
+      row.setAttribute("role", "menuitem");
+      const icon = page.querySelector("svg")?.cloneNode(true);
+      if (icon) { icon.setAttribute("aria-hidden", "true"); row.append(icon); }
+      const span = document.createElement("span");
+      span.textContent = page === home ? "概览" : label;
+      row.append(span);
+      row.addEventListener("click", () => { closeFooterMenu(); page.click(); });
+      rows.push(row);
+    }
     footerMenu.replaceChildren(...rows);
     return rows.length;
   };

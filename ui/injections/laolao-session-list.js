@@ -672,7 +672,18 @@
     controls.append(search,artifacts);
     if(archived) controls.append(button('‹ 返回','返回进行中的会话',()=>{archived=false;limit=30;signature='';render(section,api);}));
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
-    const tree = buildTree(rows, {archive: archived, currentKey: api.currentKey, query});
+    // H1: temp sessions never join the list; the open one sits on top with a dashed circle.
+    const isTemp = key => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(key || ''));
+    const tree = buildTree(rows.filter(s => !isTemp(s.key)), {archive: archived, currentKey: api.currentKey, query});
+    if (!archived && isTemp(api.currentKey)) {
+      const tempRow = row({key: api.currentKey, label: '临时会话', meta: {source: 'system'}, updatedAt: Date.now()}, api);
+      tempRow.classList.add('pinkie-session-temp-row');
+      tempRow.draggable = false;
+      tempRow.querySelector('.sidebar-recent-session__link')?.prepend(el('span', 'pinkie-temp-dot'));
+      const tempGroup = el('div', 'laolao-group pinkie-temp-group');
+      tempGroup.append(tempRow);
+      groups.append(tempGroup);
+    }
     if (archived) groups.append(group('__archive', '已归档', tree, api));
     else {
       const pinned = node => [node, ...node.children].some(item => api.state.pins.includes(item.session.key));
