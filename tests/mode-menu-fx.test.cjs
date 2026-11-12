@@ -71,7 +71,7 @@ test('a real mode change queues exactly one top portrait swap, while normal repa
   assert.match(transitionFinish, /await finishModeTransition\(targetMode, transition\);[\s\S]*?modeTransitionTargetId = null;[\s\S]*?laolao:mode-transition-finished[\s\S]*?pinkie:session-selected[\s\S]*?render\(\);[\s\S]*?flushPendingModePortraitFx\(targetMode\);/);
   assert.match(switcher, /pending\.armed = true;\s*render\(\);/);
   assert.match(switcher, /force: shouldSwapPortrait,/);
-  assert.match(switcher, /createPortraitImage\(outgoingMode\?\.avatar\) \|\| currentPortrait/);
+  assert.match(switcher, /createPortraitImage\(outgoingMode\?\.avatarSmall\) \|\| currentPortrait/);
   assert.match(switcher, /laolao-mode-button__portrait--fx-swap/);
   assert.match(switcher, /const modeSignatureCleanup = new WeakMap\(\);/);
   assert.match(switcher, /modeSignatureCleanup\.get\(option\)\?\.\(\);/);
