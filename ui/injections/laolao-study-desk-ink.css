@@ -345,7 +345,7 @@
 #pinkie-study-desk.pk-ink .v-strength{gap:3px}
 #pinkie-study-desk.pk-ink .v-strength .pk-star{width:16px;height:16px}
 /* 复习：一张单词卡 */
-#pinkie-study-desk.pk-ink .v-front{border:0;border-radius:4px;background:var(--paper);box-shadow:var(--pk-lift);transform:rotate(-.4deg)}
+#pinkie-study-desk.pk-ink .v-front{border:0;border-top:3px solid var(--pk-ink);border-radius:4px;background:var(--paper);box-shadow:var(--pk-lift)}
 #pinkie-study-desk.pk-ink[data-theme="night"] .v-front{background:var(--paper-2)}
 #pinkie-study-desk.pk-ink .v-rate button{border-color:var(--pk-rule-2);background:none}
 #pinkie-study-desk.pk-ink .v-rate button[data-rating="remembered"]{background:var(--pk-pink-solid);color:#fff}
