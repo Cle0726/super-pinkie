@@ -10,7 +10,7 @@
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
     ["learning", "学习"], ["unrestricted", "无限制"],
   ];
-  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list"]);
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
     work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),

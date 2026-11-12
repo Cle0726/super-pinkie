@@ -3,12 +3,13 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {MINIMAL_CHILD_TOOLS, SessionLineage, isSessionOperationEvidence, normalizeChildRequest,
+import {MINIMAL_CHILD_TOOLS, MODE_AGENTS, SessionLineage, isSessionOperationEvidence, normalizeChildRequest, normalizeMode,
   registerSessionLineage, supplementMinimalChildTools} from '../services/mode-architecture/session-lineage.mjs';
 import {graphemeCount} from '../services/mode-architecture/session-titles.mjs';
 
 const parent = 'agent:project:dashboard:parent';
 const request = {title: '校对项目清单', prompt: '从 /tmp/project/checklist.md 核对清单，最后说出缺了什么。', initiation: 'user_asked'};
+const REPORT_NOTE = '\n\n（你最后一条回复就是交回去的汇报：先写结论和成品在哪，再写验证过什么、还差什么。不要只说「做完了」。）';
 const ending = (runId, text = '工作完成') => ({success: true, runId, messages: [{role: 'assistant', content: text, stopReason: 'stop'}]});
 
 test('minimal migration adds only the three child tools and preserves separate restrictions', () => {
@@ -105,7 +106,7 @@ test('fresh user-requested child is created immediately in the parent mode with 
   assert.equal(f.calls.find(([name]) => name === 'sessions.create')[1].fork, undefined);
   assert.deepEqual(f.bindings.get(child.key), f.bindings.get(parent));
   assert.equal(f.records.get(child.key).source, 'system');
-  assert.equal(f.sent[0].message, '【子会话简报】\n' + request.prompt);
+  assert.equal(f.sent[0].message, '【子会话简报】\n' + request.prompt + REPORT_NOTE);
   assert.equal(f.sent[0].deliver, false);
   assert.deepEqual(await f.lineage.start(parent, 'human', request, 'first'), child);
   assert.equal(f.sent.length, 1);
@@ -116,7 +117,7 @@ test('user start wraps the exact task, keeps an explicit name and lets unnamed c
   const named = await f.lineage.startUser({parentKey: parent, prompt, title: '本人起的名字', context: 'fresh'});
   assert.equal(f.records.get(named.key).source, 'user');
   assert.equal(f.sent[0].message, '【子会话简报】\n这是用户亲自开的子会话，任务来自用户本人。\n来自会话：项目清单\n要做的事：\n'
-    + prompt + '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复的前 400 字。');
+    + prompt + '\n做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复（卡片上显示前 400 字）。');
   assert.equal(f.lineage.lineage()[named.key].initiation, 'user_asked');
   assert.deepEqual(f.bindings.get(named.key), f.bindings.get(parent));
   const unnamed = await f.lineage.startUser({parentKey: parent, prompt: '整理一份学习清单', context: 'fresh'});
@@ -227,7 +228,7 @@ test('card.get returns the exact full child brief before confirmation and stays 
   const offer = await f.lineage.start(parent, 'human', {...request, initiation: 'offer', prompt}, 'full-brief');
   const full = f.lineage.card(parent, offer.id);
   assert.equal(full.ok, true);
-  assert.equal(full.card.prompt, '【子会话简报】\n' + prompt);
+  assert.equal(full.card.prompt, '【子会话简报】\n' + prompt + REPORT_NOTE);
   assert.ok((await f.lineage.cards(parent)).cards[0].summary.length < full.card.prompt.length);
   assert.equal(f.lineage.card('agent:project:dashboard:other', offer.id).ok, false);
   assert.match(f.lineage.card(parent, 'missing').error, /找不到/);
@@ -494,4 +495,206 @@ test('the delivery gate counts child creation evidence only for session work', (
   assert.equal(isSessionOperationEvidence({...entry, output: JSON.stringify({details: JSON.parse(entry.output)})}, '另开子会话'), true);
   assert.equal(isSessionOperationEvidence(entry, '删除临时文件'), false);
   assert.equal(isSessionOperationEvidence({...entry, output: '完成了'}, '另开子会话'), false);
+});
+
+// ── 11-12：范围内自动分工、跨模式子会话、问另一个模式、汇报全文 ─────────────────────────
+
+const userTurn = (f, key = parent, runId = 'human', prompt = '同时做一个网页和一份报告') =>
+  f.lineage.begin({prompt, runId}, {sessionKey: key});
+
+test('mode names: aliases resolve, unknown and unrestricted are refused', () => {
+  assert.deepEqual(Object.keys(MODE_AGENTS), ['chat', 'project', 'ideas', 'learning']);
+  assert.equal(normalizeMode(undefined), '');
+  assert.equal(normalizeMode('thinking'), 'ideas');
+  assert.equal(normalizeMode('想法模式'), 'ideas');
+  assert.equal(normalizeMode('main'), 'chat');
+  assert.throws(() => normalizeMode('none'), /模式只能是/);
+  assert.throws(() => normalizeMode('unrestricted'), /模式只能是/);
+  assert.equal(normalizeChildRequest({...request, mode: 'ideas'}).mode, 'ideas');
+  assert.equal(Object.hasOwn(normalizeChildRequest(request), 'mode'), false);
+});
+
+test('in_scope starts at once in a real user turn, is capped per turn, and its report wakes the parent', async t => {
+  const f = fixture(t), scoped = {...request, initiation: 'in_scope'};
+  await assert.rejects(f.lineage.start(parent, 'human', scoped, 'no-turn'), /不是用户亲自发来的/);
+  userTurn(f);
+  const first = await f.lineage.start(parent, 'human', scoped, 'a');
+  assert.match(first.key, /^agent:project:pinkie-child:/);
+  assert.match(first.message, /已经开始做了/);
+  assert.equal(f.lineage.lineage()[first.key].initiation, 'in_scope');
+  assert.equal(f.sent.length, 1, 'no card, no click: the brief is sent straight away');
+  assert.equal((await f.lineage.cards(parent)).cards.length, 0);
+  await f.lineage.start(parent, 'human', scoped, 'b');
+  await f.lineage.start(parent, 'human', scoped, 'c');
+  await assert.rejects(f.lineage.start(parent, 'human', scoped, 'd'), /一轮最多自己开 3 个/);
+  // 汇报回来叫醒父会话去核对、合并（offer 不会）。
+  f.running.delete(parent);
+  for (const [index, sent] of f.sent.slice(0, 3).entries()) await finishChild(f, sent.sessionKey, sent.idempotencyKey, '第 ' + index + ' 块做完了');
+  assert.equal(f.lineage.state(parent).wakePending, true);
+  await f.lineage.drainParent(parent);
+  assert.match(f.sent.at(-1).message, /^\[pinkie-watchdog\] \[pinkie-session-wake\]/);
+});
+
+test('in_scope is refused in internal turns and when the user switched it off', async t => {
+  const f = fixture(t), scoped = {...request, initiation: 'in_scope'};
+  f.lineage.begin({prompt: '[pinkie-watchdog] 继续', runId: 'wake'}, {sessionKey: parent});
+  await assert.rejects(f.lineage.start(parent, 'wake', scoped, 'x'), /不是用户亲自发来的/);
+  f.lineage.begin({prompt: 'Read HEARTBEAT.md if it exists', runId: 'beat'}, {sessionKey: parent, trigger: 'heartbeat'});
+  await assert.rejects(f.lineage.start(parent, 'beat', scoped, 'y'), /不是用户亲自发来的/);
+  const off = new SessionLineage(f.api, {...f.options, autoSplit: () => false});
+  off.begin({prompt: '同时做两件事', runId: 'human'}, {sessionKey: parent});
+  await assert.rejects(off.start(parent, 'human', scoped, 'z'), /关掉了/);
+  assert.equal(f.sent.length, 0);
+});
+
+test('a cross-mode child lives in the other agent, keeps the project folder, and is never forked', async t => {
+  const f = fixture(t);
+  userTurn(f);
+  const child = await f.lineage.start(parent, 'human', {...request, initiation: 'in_scope', context: 'fork', mode: 'ideas'}, 'look');
+  assert.match(child.key, /^agent:thinking:pinkie-child:/);
+  assert.equal(child.mode, 'ideas');
+  assert.match(child.note, /已改用新上下文/);
+  const create = f.calls.find(([name]) => name === 'sessions.create')[1];
+  assert.equal(create.agentId, 'thinking');
+  assert.equal(Object.hasOwn(create, 'parentSessionKey'), false, 'the gateway parent link only exists inside one agent');
+  assert.equal(Object.hasOwn(create, 'fork'), false);
+  assert.deepEqual(f.bindings.get(child.key), f.bindings.get(parent));
+  const record = f.lineage.lineage()[child.key];
+  assert.equal(record.parentKey, parent);
+  assert.equal(record.mode, 'ideas');
+  assert.equal(record.fromMode, 'project');
+  assert.match(f.sent[0].message, /^【子会话简报】\n（这份简报来自「项目模式」里的碧琪/);
+  assert.ok(f.sent[0].message.endsWith(REPORT_NOTE));
+  // 同一个调用重放：不会建第二个。
+  assert.equal((await f.lineage.start(parent, 'human', {...request, initiation: 'in_scope', mode: 'ideas'}, 'look')).key, child.key);
+  assert.equal(f.sent.length, 1);
+  // 写了当前模式等于没写。
+  const same = await f.lineage.start(parent, 'human', {...request, initiation: 'in_scope', mode: 'project'}, 'same');
+  assert.match(same.key, /^agent:project:pinkie-child:/);
+  assert.equal(f.lineage.lineage()[same.key].mode, undefined);
+});
+
+test('cross-mode children count toward the cap, show up on both sides, report back and stop with the parent', async t => {
+  const f = fixture(t);
+  userTurn(f);
+  const away = await f.lineage.start(parent, 'human', {...request, initiation: 'in_scope', mode: 'ideas'}, 'away');
+  const there = await f.lineage.views('thinking');
+  assert.equal(there.children[away.key].cross, true);
+  assert.equal(there.children[away.key].detached, true);
+  assert.equal(there.children[away.key].fromMode, 'project');
+  const here = await f.lineage.views('project');
+  assert.equal(here.away[away.key].mode, 'ideas');
+  assert.equal(here.states[parent].runningChildren, 1);
+  assert.equal((await f.lineage.list(parent)).children[0].mode, 'ideas');
+  // 上限把别的模式里的也算进去。
+  for (const name of ['b', 'c']) await f.lineage.start(parent, 'human', {...request, initiation: 'in_scope'}, name);
+  await f.lineage.start(parent, 'human', request, 'd');
+  await assert.rejects(f.lineage.start(parent, 'human', request, 'e'), /已有 4 个/);
+  // 汇报带着「来自哪个模式」。
+  f.running.delete(parent);
+  await finishChild(f, away.key, f.sent[0].idempotencyKey, '配色用暖粉配奶白，标题换成圆体。');
+  const card = (await f.lineage.cards(parent)).cards.find(item => item.kind === 'report');
+  assert.equal(card.mode, 'ideas');
+  assert.equal(card.modeName, '想法模式');
+  assert.match(f.lineage.prompt({}, {sessionKey: parent}).appendContext, /想法模式/);
+  // 归档父会话时，别的模式里还在跑的子会话也要停。
+  f.running.add(away.key);
+  for (const sent of f.sent.slice(1, 4)) f.running.delete(sent.sessionKey);
+  const result = await f.lineage.stopChildrenAndArchive(parent);
+  assert.equal(result.ok, true);
+  assert.equal(f.running.has(away.key), false);
+});
+
+test('a proposal card can target another mode and starts there when the user accepts', async t => {
+  const f = fixture(t);
+  const offer = await f.lineage.start(parent, 'human', {...request, initiation: 'offer', mode: 'learning'}, 'card');
+  const shown = (await f.lineage.cards(parent)).cards[0];
+  assert.equal(shown.mode, 'learning');
+  assert.equal(shown.modeName, '学习模式');
+  assert.match(f.lineage.card(parent, offer.id).card.prompt, /来自「项目模式」里的碧琪/);
+  const started = await f.lineage.act(parent, offer.id, 'start');
+  assert.match(started.childKey, /^agent:learning:pinkie-child:/);
+  assert.equal(f.sent[0].message, f.lineage.card(parent, offer.id).card.prompt);
+});
+
+test('the parent reads the whole report (up to 6000) while the card keeps 400, and the long copy is dropped once read', async t => {
+  const f = fixture(t);
+  const child = await f.lineage.start(parent, 'human', request, 'long');
+  const text = '开场白'.repeat(200) + '结论：缺第三项。' + '细节'.repeat(4000);
+  await finishChild(f, child.key, f.sent[0].idempotencyKey, text);
+  const stored = f.lineage.state(parent).cards[0];
+  assert.equal(graphemeCount(stored.text), 400);
+  assert.equal(graphemeCount(stored.full), 6000);
+  assert.equal((await f.lineage.cards(parent)).cards[0].full, undefined, 'the UI card stays short');
+  const injection = f.lineage.prompt({}, {sessionKey: parent});
+  assert.match(injection.appendContext, /结论：缺第三项。/, 'the conclusion past the first 400 characters reaches the parent');
+  assert.equal(f.lineage.state(parent).cards[0].full, undefined);
+  assert.equal(f.lineage.state(parent).cards[0].injection, 'injected');
+});
+
+test('mode ask brings the other mode\'s answer back in the same call, leaves a quiet card and archives the helper', async t => {
+  const f = fixture(t);
+  userTurn(f, parent, 'human', '这个首页配色怎么更高级');
+  const pending = f.lineage.ask(parent, 'human', {mode: 'ideas', question: '首页配色怎么更高级？', background: '宠物店官网，主色现在是大红。'}, 'ask-1');
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  const sent = f.sent.at(-1);
+  assert.match(sent.sessionKey, /^agent:thinking:pinkie-child:/);
+  assert.match(sent.message, /^【子会话简报】\n【跨模式提问】「项目模式」里的碧琪替用户来问/);
+  assert.match(sent.message, /背景：\n宠物店官网/);
+  assert.match(sent.message, /问题：\n首页配色怎么更高级？/);
+  assert.equal(sent.message.includes('最后一条回复就是交回去的汇报'), false);
+  await finishChild(f, sent.sessionKey, sent.idempotencyKey, '把大红降成砖红，配奶白和一点薄荷绿。');
+  const answer = await pending;
+  assert.equal(answer.mode, 'ideas');
+  assert.equal(answer.from, '想法模式');
+  assert.equal(answer.answer, '把大红降成砖红，配奶白和一点薄荷绿。');
+  const card = f.lineage.state(parent).cards[0];
+  assert.equal(card.kind, 'report');
+  assert.equal(card.injection, 'injected', 'already delivered as the tool result: not injected twice');
+  assert.ok(!f.lineage.state(parent).wakePending);
+  assert.notEqual(f.entries.get(parent).unread, true);
+  assert.ok(f.entries.get(sent.sessionKey).archivedAt, 'the helper session does not linger in the other mode\'s sidebar');
+  assert.equal((await f.lineage.views('project')).away, undefined);
+});
+
+test('mode ask validates its input, is capped per turn, and falls back to a report when the answer is slow', async t => {
+  const f = fixture(t);
+  userTurn(f);
+  await assert.rejects(f.lineage.ask(parent, 'human', {mode: 'project', question: '怎么做'}), /不用问自己/);
+  await assert.rejects(f.lineage.ask(parent, 'human', {mode: 'ideas', question: ' '}), /写清要问的问题/);
+  await assert.rejects(f.lineage.ask(parent, 'human', {question: '怎么做'}), /要问哪个模式/);
+  await assert.rejects(f.lineage.ask('agent:unrestricted:dashboard:x', 'human', {mode: 'ideas', question: '怎么做'}), /不能问别的模式/);
+  assert.equal(f.sent.length, 0);
+  const slow = new SessionLineage(f.api, {...f.options, askTimeoutMs: 5});
+  slow.begin({prompt: '这个怎么配色', runId: 'human'}, {sessionKey: parent});
+  const late = await slow.ask(parent, 'human', {mode: 'ideas', question: '配色怎么选？'}, 'slow-1');
+  assert.equal(late.pending, true);
+  assert.match(late.message, /还在想/);
+  // 迟到的答案走普通汇报：进卡片、叫醒父会话、问完归档。
+  const sent = f.sent.at(-1);
+  f.running.delete(parent);
+  slow.begin({prompt: sent.message, runId: sent.idempotencyKey}, {sessionKey: sent.sessionKey});
+  f.running.delete(sent.sessionKey);
+  await slow.ended(ending(sent.idempotencyKey, '用砖红配奶白。'), {sessionKey: sent.sessionKey});
+  assert.equal(slow.state(parent).cards[0].injection, 'pending');
+  assert.equal(slow.state(parent).wakePending, true);
+  assert.ok(f.entries.get(sent.sessionKey).archivedAt);
+  await slow.ask(parent, 'human', {mode: 'learning', question: '第二问'}, 'slow-2');
+  await slow.ask(parent, 'human', {mode: 'chat', question: '第三问'}, 'slow-3');
+  await assert.rejects(slow.ask(parent, 'human', {mode: 'chat', question: '第四问'}, 'slow-4'), /一轮最多问 3 次/);
+});
+
+test('the plugin registers the mode-ask tool next to the session tools', async t => {
+  const f = fixture(t), tools = [];
+  f.api.on = () => {};
+  f.api.registerTool = (factory, options) => tools.push({factory, options});
+  registerSessionLineage(f.api, {...f.options, root: f.root + '-tools'});
+  assert.deepEqual(tools.map(tool => tool.options.name), ['pinkie_session_start', 'pinkie_mode_ask', 'pinkie_session_message', 'pinkie_session_list']);
+  const start = tools[0].factory({sessionKey: parent});
+  assert.deepEqual(start.parameters.properties.initiation.enum, ['user_asked', 'offer', 'own_initiative', 'in_scope']);
+  assert.deepEqual(start.parameters.properties.mode.enum, ['chat', 'project', 'ideas', 'learning']);
+  const ask = tools[1].factory({sessionKey: parent});
+  assert.deepEqual(ask.parameters.required, ['mode', 'question']);
+  assert.ok(MINIMAL_CHILD_TOOLS.includes('pinkie_mode_ask'));
 });
