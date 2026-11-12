@@ -809,7 +809,14 @@ export function registerWorkbench(api, options = {}) {
   api.registerTool?.(ctx => createWorkbenchReadTool(bench, ctx), {name: 'workbench_read'});
   const toolRoot = ctx => {
     try { return bench.scope({sessionKey: ctx.sessionKey}).root; }
-    catch { const dir = String(ctx.workspaceDir || ''); if (path.isAbsolute(dir)) return dir; throw new Error('没有找到当前项目目录。'); }
+    catch {
+      // 唠嗑、想法模式没有工作台，但会话照样可以绑定项目文件夹，写文件也落在那里：
+      // 代码工具跟着绑定走，不然会去模式自己的工作区里找不到刚写的文件（11-12 隔离实测）。
+      let bound = '';
+      try { const root = bench.binding(String(ctx.sessionKey || ''))?.root; if (root && fs.existsSync(root)) bound = root; } catch {}
+      if (bound) return bound;
+      const dir = String(ctx.workspaceDir || ''); if (path.isAbsolute(dir)) return dir; throw new Error('没有找到当前项目目录。');
+    }
   };
   api.registerTool?.(ctx => ({
     name: 'code_check', label: '检查代码',
