@@ -29,7 +29,7 @@ function excerpt(text, query) {
   return {snippet, hitRanges: ranges};
 }
 
-function searchable(message) {
+export function searchable(message) {
   if (!message || !['user', 'assistant'].includes(message.role) || isInternalMessage(message)) return '';
   if (['inter_session', 'internal_system'].includes(message.metadata?.inputProvenance?.kind)
       || ['inter_session', 'internal_system'].includes(message.provenance?.kind)) return '';
