@@ -45,3 +45,40 @@ test('stream cursor does not create its own animation-frame mutation loop',()=>{
   assert.doesNotMatch(css,/@keyframes pinkieStreamIn/);
   assert.match(css,/data-pinkie-streaming="true"[\s\S]*animation: none !important/);
 });
+
+// 11-11 用户：模型干活的过程中上下文占用不动，要等整轮结束才刷新。
+// 每次模型调用结束时 session.message 带着那次调用的 usage，用它实时更新。
+test('context meter follows each model call while a run is still going',()=>{
+  const source=read('ui/injections/laolao-context-compact.js');
+  const listeners={};
+  const window={addEventListener(name,fn){(listeners[name]??=[]).push(fn);},dispatchEvent(){}};
+  const document={
+    addEventListener(){}, getElementById(){return null;},
+    querySelector(){return null;}, querySelectorAll(){return [];},
+    createElement(){return {id:'',style:{},textContent:''};},
+    head:{append(){}},
+  };
+  const location={search:'?session=agent%3Aproject%3Alive',hash:'',pathname:'/chat'};
+  vm.runInNewContext(source,{window,document,location,URLSearchParams,setInterval(){},setTimeout(){},clearTimeout(){},localStorage:{getItem(){return null;},setItem(){},removeItem(){}}});
+  const api=window.__laolaoContextCompact;
+  const key='agent:project:live';
+  api.seedUsage(key,{totalTokens:20000,contextTokens:200000,hasActiveRun:true},{});
+  assert.equal(api.currentUsage().used,20000);
+  const send=(payload)=>listeners['pinkie:gateway-event'].forEach(fn=>fn({detail:{event:'session.message',payload}}));
+  // A user message carries no usage and changes nothing.
+  send({sessionKey:key,message:{role:'user',content:'hi'}});
+  assert.equal(api.currentUsage().used,20000);
+  // Each finished model call: prompt = input + cacheRead + cacheWrite (OpenClaw's own rule).
+  send({sessionKey:key,message:{role:'assistant',usage:{input:1000,cacheRead:60000,cacheWrite:2000,output:500}}});
+  assert.equal(api.currentUsage().used,63000);
+  assert.equal(api.currentUsage().percent,32);
+  // Another session's events never move this meter.
+  send({sessionKey:'agent:project:other',message:{role:'assistant',usage:{input:190000}}});
+  assert.equal(api.currentUsage().used,63000);
+  // A stale persisted total read mid-run does not pull the meter back.
+  api.seedUsage(key,{totalTokens:20000,contextTokens:200000,hasActiveRun:true},{});
+  assert.equal(api.currentUsage().used,63000);
+  // Once the run is over the persisted total is the truth again.
+  api.seedUsage(key,{totalTokens:64000,contextTokens:200000,hasActiveRun:false},{});
+  assert.equal(api.currentUsage().used,64000);
+});

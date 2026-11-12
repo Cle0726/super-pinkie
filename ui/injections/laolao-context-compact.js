@@ -77,6 +77,42 @@
     return {used, limit, percent, approximate: session?.totalTokensFresh === false, compactionBudget};
   };
 
+  // 模型干活时上下文占用要跟着走：OpenClaw 只在整轮结束时写回会话总数，
+  // 但每次模型调用结束都会推一条带 usage 的 session.message。用那次调用的
+  // 提示词大小（input + cacheRead + cacheWrite，和 OpenClaw 自己记的口径一样）实时更新。
+  let liveUsage = null;
+  const promptTokensOf = (raw) => {
+    if (!raw || typeof raw !== "object") return 0;
+    const num = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : 0);
+    const input = num(raw.input ?? raw.inputTokens ?? raw.promptTokens ?? raw.prompt_tokens ?? raw.input_tokens);
+    const cache = num(raw.cacheRead ?? raw.cache_read_input_tokens) + num(raw.cacheWrite ?? raw.cache_creation_input_tokens);
+    if (input + cache > 0) return input + cache;
+    const total = num(raw.total ?? raw.totalTokens ?? raw.total_tokens);
+    const output = num(raw.output ?? raw.outputTokens ?? raw.completionTokens ?? raw.completion_tokens);
+    return total > output ? total - output : 0;
+  };
+  // 运行中读到的会话总数还是上一轮的：有这次运行里的实时数就用实时数；运行结束后以会话记录为准。
+  const withLiveUsage = (key, session, defaults) => {
+    if (liveUsage?.key === key && session?.hasActiveRun !== true) liveUsage = null;
+    const capacity = contextCapacity(session, defaults);
+    if (liveUsage?.key !== key) return capacity;
+    const limit = Number(capacity?.limit || session?.contextTokens || defaults?.contextTokens);
+    return contextCapacity({...(session || {}), totalTokens: liveUsage.used, contextTokens: limit, totalTokensFresh: true}, defaults) || capacity;
+  };
+  const applyLiveMessage = (payload) => {
+    const key = typeof payload?.sessionKey === "string" ? payload.sessionKey : "";
+    const message = payload?.message;
+    if (!key || key !== currentSessionKey() || message?.role !== "assistant") return false;
+    const used = promptTokensOf(message.usage);
+    if (!used) return false;
+    liveUsage = {key, used, at: Date.now()};
+    if (usageKey !== key) { usageKey = key; sessionInfo = null; usageFetchedAt = 0; }
+    const session = {...(sessionInfo?.key === key ? sessionInfo.session : {}), ...(payload.session || {}), hasActiveRun: true};
+    if (!session.contextTokens && usage?.limit) session.contextTokens = usage.limit;
+    usage = withLiveUsage(key, session, sessionInfo?.result?.defaults) || usage;
+    return true;
+  };
+
   const compactionStorageKey = (key) => `${COMPACTION_STATE_PREFIX}${encodeURIComponent(key)}`;
 
   const readCompactionState = (key) => {
@@ -206,7 +242,7 @@
       .then((info) => {
         if (usageKey !== key) return;
         sessionInfo = info;
-        usage = info?.capacity || null;
+        usage = info ? withLiveUsage(key, info.session, info.result?.defaults) : null;
         reconcileCompactionState(key, info?.session, usage);
         renderContextViewer();
       })
@@ -499,6 +535,10 @@
     const payload = event.detail?.payload || {};
     const key = typeof payload.sessionKey === "string" ? payload.sessionKey : "";
     if (!key || !/^agent:(main|project|thinking|learning|unrestricted):/.test(key)) return;
+    if (name === "session.message") {
+      if (applyLiveMessage(payload)) renderContextViewer();
+      return;
+    }
     const terminal = name === "agent" && payload.stream === "lifecycle"
       && ["end", "error"].includes(payload.data?.phase)
       || name === "chat" && ["final", "aborted", "error"].includes(payload.state);
@@ -751,5 +791,7 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
   setInterval(render, 900);
   window.addEventListener("pinkie:gateway-event", handleCompactionEvent);
   window.addEventListener("laolao:sessions-changed", () => { usageFetchedAt = 0; fetchContextCapacity(); });
-  window.__laolaoContextCompact = {compact, currentSessionKey, contextCapacity, readCompactionState, handleCompactionEvent};
+  window.__laolaoContextCompact = {compact, currentSessionKey, contextCapacity, readCompactionState, handleCompactionEvent,
+    currentUsage: () => usage,
+    seedUsage: (key, session, defaults) => { usageKey = key; sessionInfo = {key, session, result: {defaults}}; usage = withLiveUsage(key, session, defaults); }};
 })();
