@@ -253,6 +253,7 @@
     const signature = JSON.stringify([selected, data?.parentKey, data?.parentTitle]);
     if (!thread || !data || key !== selected || /:subagent:/i.test(key)) {
       for (const panel of panels.values()) panel.remove(); panels.clear();
+      window.PinkieCrew?.clear();
       parentLink?.remove();
       decisionBar?.remove();
       document.querySelector('.pinkie-chat-session-menu')?.remove();
@@ -312,6 +313,7 @@
       if (decisionBar.textContent !== label) { decisionBar.textContent = label; decisionBar.setAttribute('aria-label', label); }
       if (decisionBar.parentElement !== composer.parentElement || decisionBar.nextElementSibling !== composer) composer.before(decisionBar);
     }
+    window.PinkieCrew?.render(composer, data.family, key);
     observeLayout(thread, composer);
     alignCards(thread, composer);
 
@@ -339,6 +341,19 @@
         const phase = window.PinkieSessionList?.sessionStatus({...row, phase:lineage?.states?.[row.key]?.phase});
         return [row.key, {running:'运行中', waiting:'等你回复', error:'出错'}[phase] || '已完成'];
       }));
+      // 分工气球（laolao-crew.js）用的那一家子：这个会话开出去的子会话，同模式的和开到别的模式里的。
+      const phases = {running: 'running', waiting: 'waiting', error: 'error'};
+      const rows = new Map((list?.sessions || []).map(row => [row.key, row]));
+      const reported = new Set((result.cards || []).filter(card => card.kind === 'report').map(card => card.childKey));
+      const AGENT_MODE = {main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning'};
+      result.family = [
+        ...Object.entries(lineage?.children || {})
+          .filter(([childKey, child]) => child.parentKey === key && !child.cross && !/:subagent:/i.test(childKey) && rows.has(childKey))
+          .map(([childKey, child]) => ({key: childKey, title: child.title || rows.get(childKey).label, mode: AGENT_MODE[agentId] || 'chat',
+            status: phases[window.PinkieSessionList?.sessionStatus({...rows.get(childKey), phase: lineage?.states?.[childKey]?.phase})] || 'done'})),
+        ...Object.entries(lineage?.away || {}).filter(([, child]) => child.parentKey === key)
+          .map(([childKey, child]) => ({key: childKey, title: child.title, mode: child.mode, status: reported.has(childKey) ? 'done' : 'running'})),
+      ];
       data = result;
       paint();
     } catch { /* The chat remains usable while an older gateway reconnects. */ }

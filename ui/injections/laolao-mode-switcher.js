@@ -14,6 +14,7 @@
       address: "先生",
       asset: "/laolao-mode-chat.svg?v=states6",
       avatar: "/laolao-mode-chat-hd.png?v=avatars6",
+      avatarSmall: "/laolao-mode-chat-sm.png?v=sm1",
       transition: "/laolao-mode-transition-chat.png?v=transition2",
       phrases: [
         "先生稍等，碧琪把聊天气球牵过来啦…",
@@ -29,6 +30,7 @@
       address: "老板",
       asset: "/laolao-mode-project.svg?v=states6",
       avatar: "/laolao-mode-project-hd.png?v=avatars6",
+      avatarSmall: "/laolao-mode-project-sm.png?v=sm1",
       transition: "/laolao-mode-transition-project.png?v=transition2",
       phrases: [
         "老板稍等，碧琪正在把项目档案摊开…",
@@ -44,6 +46,7 @@
       address: "先生",
       asset: "/laolao-mode-thinking.svg?v=states6",
       avatar: "/laolao-mode-thinking-hd.png?v=avatars6",
+      avatarSmall: "/laolao-mode-thinking-sm.png?v=sm1",
       transition: "/laolao-mode-transition-thinking.png?v=transition2",
       phrases: [
         "先生稍等，碧琪在把点子排成彩带…",
@@ -59,6 +62,7 @@
       address: "先生",
       asset: "/laolao-mode-learning.svg?v=states1",
       avatar: "/laolao-mode-learning-hd.png?v=avatars1",
+      avatarSmall: "/laolao-mode-learning-sm.png?v=sm1",
       transition: "/laolao-mode-transition-learning.png?v=transition1",
       phrases: [
         "先生稍等，碧琪把学习桌和笔记本摆好啦…",
@@ -74,6 +78,7 @@
       address: "先生",
       asset: "/laolao-mode-unrestricted.svg?v=states6",
       avatar: "/laolao-mode-unrestricted-hd.png?v=avatars6",
+      avatarSmall: "/laolao-mode-unrestricted-sm.png?v=sm1",
       transition: "/laolao-mode-transition-unrestricted.png?v=transition2",
       phrases: [
         "先生，彩虹力量开始升温啦…",
@@ -321,8 +326,11 @@
       ".agent-chat__welcome img[alt='碧琪']",
       ".agent-chat__welcome img[alt='助手']",
     ].join(", ")).forEach((avatar) => {
-      if (avatar.getAttribute("src") !== mode.avatar) {
-        avatar.setAttribute("src", mode.avatar);
+      // The avatar beside a message is 24 to 30 px: it gets the face-sized picture, not the
+      // 1254 px scene squeezed fifty times. The welcome picture is large and keeps the full one.
+      const src = avatar.classList.contains("chat-avatar") ? mode.avatarSmall : mode.avatar;
+      if (avatar.getAttribute("src") !== src) {
+        avatar.setAttribute("src", src);
       }
       if (avatar.getAttribute("data-laolao-mode-avatar") !== mode.id) {
         avatar.setAttribute("data-laolao-mode-avatar", mode.id);
@@ -690,7 +698,7 @@
     }
 
     const outgoingAvatar = animateSwap && !modeFxReduced()
-      ? createPortraitImage(outgoingMode?.avatar) || currentPortrait?.querySelector("img")?.cloneNode(true)
+      ? createPortraitImage(outgoingMode?.avatarSmall) || currentPortrait?.querySelector("img")?.cloneNode(true)
       : null;
     const portrait = createModePortrait(mode, current);
     if (outgoingAvatar) {
@@ -761,7 +769,7 @@
     starPath.setAttribute("d", "M21 3.5 25.9 15l12.4 1-9.4 8.1 2.8 12.1L21 29.8l-10.7 6.4 2.8-12.1L3.7 16l12.4-1z");
     star.append(starPath);
 
-    const avatar = createPortraitImage(mode.avatar);
+    const avatar = createPortraitImage(mode.avatarSmall);
     // Only thinking mode has a bubble layer. append(null) would insert the
     // text "null", which also pushes the avatar out of its circle.
     portrait.append(...[halo, fx, bubbles, star, avatar].filter(Boolean));

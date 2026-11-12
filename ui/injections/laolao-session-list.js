@@ -530,13 +530,17 @@
       dot.setAttribute('role', 'img');
       aside.append(dot);
     }
-    if (!phase && !s.unread) {
+    if (!phase && !s.unread && !s.away?.length) {
       const time = dateLabel(s.updatedAt);
       if (time) aside.append(el('time', 'pinkie-session-time', time));
     }
     // 这个会话在别的模式里开的子会话：点了切到那个模式、落在那个会话上。最多列两个，其余看卡片。
-    for (const child of (!worker && !archived && s.away || []).slice(0, 2)) {
-      const go = button('↗' + (MODE_SHORT[child.mode] || ''), '去' + (MODE_SHORT[child.mode] || '另一个') + '模式打开：' + (child.title || '子会话'),
+    // 一行只放一个：一个就写去哪个模式，多个写个数（点了去第一个，其余的在聊天里的气球和卡片上）。标题不能被挤没。
+    const away = !worker && !archived && s.away || [];
+    if (away.length) {
+      const child = away[0], where = MODE_SHORT[child.mode] || '另一个';
+      const go = button('↗' + (away.length > 1 ? away.length : where),
+        away.length > 1 ? '在别的模式里开了 ' + away.length + ' 个子会话，去' + where + '模式打开：' + (child.title || '子会话') : '去' + where + '模式打开：' + (child.title || '子会话'),
         () => window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: child.key}})));
       go.classList.add('pinkie-session-away');
       aside.append(go);

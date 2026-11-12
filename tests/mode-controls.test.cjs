@@ -29,12 +29,12 @@ class Element{
   replaceChildren(...children){this.children=children;this.renders++;}
 }
 const draw=vm.runInNewContext(source.slice(start,end)+';renderModeButton',{document:{createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag)}});
-test('five mode buttons use HD portraits and crisp native text, not opaque banner images',()=>{
+test('five mode buttons use the face-sized portrait and crisp native text, not opaque banner images',()=>{
   for(const [id,label] of [['chat','唠嗑模式'],['project','项目模式'],['thinking','想法模式'],['learning','学习模式'],['unrestricted','无限制模式']]){
-    const button=new Element('button');draw(button,{id,label,avatar:`./laolao-mode-${id}-hd.png`});
+    const button=new Element('button');draw(button,{id,label,avatar:`./laolao-mode-${id}-hd.png`,avatarSmall:`./laolao-mode-${id}-sm.png`});
     const portrait=button.children[0];const avatar=portrait.querySelector('img');
     assert.equal(button.dataset.mode,id);assert.equal(portrait.tag,'span');assert.ok(portrait.classList.contains('laolao-mode-button__portrait'));
-    assert.equal(portrait.dataset.mode,id);assert.equal(portrait.attributes['aria-hidden'],'true');assert.match(avatar.src,/-hd\.png$/);
+    assert.equal(portrait.dataset.mode,id);assert.equal(portrait.attributes['aria-hidden'],'true');assert.match(avatar.src,/-sm\.png$/,'a 30px button never squeezes the 1254px scene');
     assert.equal(avatar.alt,'');assert.equal(avatar.draggable,false);
     assert.ok(portrait.querySelector('.laolao-mode-button__halo'));assert.ok(portrait.querySelector('.laolao-mode-button__fx'));assert.ok(portrait.querySelector('.laolao-mode-button__fx-star'));
     const bubbles=portrait.querySelector('.laolao-mode-button__fx-bubbles');
@@ -44,10 +44,19 @@ test('five mode buttons use HD portraits and crisp native text, not opaque banne
   }
 });
 test('mutation observer repaint stays idempotent and changes avatar only on mode changes',()=>{
-  const button=new Element('button');const chat={id:'chat',label:'唠嗑模式',avatar:'chat-hd.png'};
+  const button=new Element('button');const chat={id:'chat',label:'唠嗑模式',avatar:'chat-hd.png',avatarSmall:'chat-sm.png'};
   draw(button,chat);draw(button,chat);assert.equal(button.renders,1);
-  draw(button,{id:'project',label:'项目模式',avatar:'project-hd.png'});
-  assert.equal(button.renders,2);assert.equal(button.children[0].querySelector('img').src,'project-hd.png');
+  draw(button,{id:'project',label:'项目模式',avatar:'project-hd.png',avatarSmall:'project-sm.png'});
+  assert.equal(button.renders,2);assert.equal(button.children[0].querySelector('img').src,'project-sm.png');
+});
+test('every mode has a face-sized avatar on disk, and the message avatar uses it while the welcome picture stays full',()=>{
+  for(const id of ['chat','project','thinking','learning','unrestricted']){
+    assert.ok(source.includes(`avatarSmall: "/laolao-mode-${id}-sm.png?v=sm1"`),id);
+    const png=fs.readFileSync(path.join(__dirname,`../ui/assets/laolao-mode-${id}-sm.png`));
+    assert.deepEqual([png.readUInt32BE(16),png.readUInt32BE(20)],[128,128],id);
+    assert.ok(png.length<40000,`${id} stays small`);
+  }
+  assert.ok(source.includes('const src = avatar.classList.contains("chat-avatar") ? mode.avatarSmall : mode.avatar;'));
 });
 test('learning mode has its own session and visual asset keys',()=>{
   assert.match(source,/id: "learning"/);

@@ -6,6 +6,8 @@ html[data-pinkie-night] { --pt-card:#2a2027; --pt-text:#f3e9ef }
 .sidebar-sessions { position:relative }
 .pinkie-temp-entry { position:absolute;right:8px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:color-mix(in srgb,currentColor 55%,transparent);font:inherit;font-size:12px;cursor:pointer;opacity:.75 }
 .pinkie-temp-entry svg { width:15px;height:15px }
+/* 「临时」叠在「新会话」那一行的右端，快捷键提示原来也排在同一个位置，两行字糊成一团：有「临时」时把提示往左让开。 */
+html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }
 .pinkie-temp-entry:hover,.pinkie-temp-entry:focus-visible { opacity:1;color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 9%,transparent);outline:none }
 html[data-pinkie-temp] .pinkie-temp-entry { color:var(--pt-accent);opacity:1 }
 

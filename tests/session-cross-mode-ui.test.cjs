@@ -53,14 +53,56 @@ test('the sidebar marks a child that came from another mode and offers a way to 
   has(list, "for (const [childKey, child] of Object.entries(lineage?.away || {})) (awayBy[child.parentKey] ||= []).push({key: childKey, ...child});");
   has(list, "const origin = s.lineage?.cross ? MODE_SHORT[s.lineage.fromMode] : '';");
   has(list, "if (origin) link.append(el('span', 'pinkie-session-origin', origin));");
-  has(list, '(!worker && !archived && s.away || []).slice(0, 2)', 'at most two, never on archived or persona rows');
+  has(list, 'const away = !worker && !archived && s.away || [];', 'never on archived or persona rows');
+  has(list, "button('↗' + (away.length > 1 ? away.length : where),", 'one chip per row, so the title is never squeezed out (seen in a real render)');
+  has(list, 'if (!phase && !s.unread && !s.away?.length) {', 'the chip takes the place of the time');
   has(list, "new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: child.key}})");
   has(list, "MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', learning: '学习'}", 'keys are the backend mode names');
   const css = source('laolao-sidebar-surface.css');
   for (const name of ['pinkie-session-origin', 'pinkie-session-away']) has(css, '.' + name + ' {');
 });
 
+// 分工气球 (laolao-crew.js): the rule for what shows is a pure function; the drawing was checked
+// in Edge through tools/ui-parity/capture.mjs --rpc, not here.
+const crew = () => {
+  const window = {};
+  vm.runInNewContext(source('laolao-crew.js'), {window});
+  return window.PinkieCrew;
+};
+const child = (key, status, mode = 'chat') => ({key, title: key, mode, status});
+
+test('crew balloons: nothing without children, busy ones first, five at most, and the label counts who is back', () => {
+  const {summarize} = crew();
+  assert.deepEqual(plain(summarize([])), {rows: [], busy: 0, total: 0, hidden: 0, label: '', waiting: 0});
+  assert.equal(summarize(null).total, 0);
+  assert.equal(summarize([child('a', 'running'), child('b', 'running'), child('c', 'running')]).label, '碧琪分成 3 路在忙');
+  const mixed = summarize([child('a', 'done'), child('b', 'running'), child('c', 'waiting', 'ideas'), child('d', 'error'), child('x', 'nonsense'), null]);
+  assert.equal(mixed.label, '碧琪分头在忙 · 2/4 回来了');
+  assert.deepEqual(plain(mixed.rows.map(row => row.key)), ['c', 'b', 'd', 'a'], 'waiting for the user comes first, finished last');
+  assert.deepEqual([mixed.busy, mixed.waiting, mixed.total], [2, 1, 4], 'unknown statuses are dropped');
+  assert.equal(summarize([child('a', 'done'), child('b', 'done')]).label, '2 路都回来啦');
+  const many = summarize(Array.from({length: 8}, (_, i) => child('k' + i, i < 2 ? 'running' : 'done')));
+  assert.deepEqual([many.rows.length, many.hidden, many.total], [5, 3, 8]);
+});
+
+test('crew balloons draw only from what the cards already fetched: no requests, timers or observers of their own', () => {
+  const script = source('laolao-crew.js');
+  for (const banned of ['gwRequest', 'fetch(', 'setInterval', 'MutationObserver', 'requestAnimationFrame']) assert.equal(script.includes(banned), false, banned);
+  const cards = source('laolao-session-cards.js');
+  has(cards, 'window.PinkieCrew?.render(composer, data.family, key);');
+  has(cards, 'window.PinkieCrew?.clear();');
+  has(cards, "status: reported.has(childKey) ? 'done' : 'running'", 'a child in another mode is done once its report card exists');
+  has(cards, "!child.cross && !/:subagent:/i.test(childKey) && rows.has(childKey)", 'personas and archived children are not balloons');
+  const head = source('laolao-head.fragment.html');
+  assert.ok(head.indexOf('/laolao-crew.js') > 0 && head.indexOf('/laolao-crew.js') < head.indexOf('/laolao-session-cards.js'), 'loads before the cards');
+  has(source('laolao-crew.css'), 'html[data-reduce-motion] .pinkie-crew, html[data-reduce-motion] .pinkie-crew * { animation: none !important;');
+});
+
+test('the 临时 button no longer sits on top of the new-session shortcut', () => {
+  has(source('laolao-session-tools.css'), 'html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }');
+});
+
 test('the changed scripts are served under new cache names', () => {
   const head = source('laolao-head.fragment.html');
-  for (const name of ['laolao-session-list.js?v=audit1112.', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode47']) has(head, name);
+  for (const name of ['laolao-session-list.js?v=audit1112.', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode48']) has(head, name);
 });
