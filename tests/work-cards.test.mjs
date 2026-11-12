@@ -166,3 +166,34 @@ test('the brief follows the session binding, is given once, and again when the p
   forgetBrief('agent:project:s1');
   assert.match(projectBriefBlock('agent:project:s1', {stateRoot: state}), /node b\.js/, 'given again after compaction');
 });
+
+test('end to end: the real prompt hook adds the card and the project brief for a coding message, and not for small talk', async (t) => {
+  const {ModeArchitecture} = await import('../services/mode-architecture/index.mjs');
+  forgetCards(); forgetBrief();
+  const state = tmp(), workspace = tmp(), project = tmp();
+  write(path.join(project, 'package.json'), JSON.stringify({scripts: {dev: 'vite', test: 'vitest run'}}));
+  write(path.join(project, 'src/main.js'), '');
+  const sessionKey = 'agent:project:e2e';
+  write(path.join(state, 'project-scope/bindings.json'), JSON.stringify({[sessionKey]: {root: project, name: 'demo', created: 1}}));
+  const before = process.env.PINKIE_STATE_ROOT;
+  process.env.PINKIE_STATE_ROOT = state;
+  t.after(() => { if (before === undefined) delete process.env.PINKIE_STATE_ROOT; else process.env.PINKIE_STATE_ROOT = before; });
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey, workspaceDir: workspace};
+  const first = runtime.prompt({prompt: '加个暗色模式', messages: []}, ctx).appendSystemContext;
+  assert.match(first, /【这件活：在已有项目里改代码】/);
+  assert.ok(first.includes(path.join(workspace, 'playbooks', 'coding.md')), 'the playbook path is absolute, inside the mode workspace');
+  assert.match(first, /【项目速览】/);
+  assert.match(first, /测试：npm test（= vitest run）/);
+  const second = runtime.prompt({prompt: '给 parser.js 再加一个参数', messages: []}, ctx).appendSystemContext;
+  assert.match(second, /前面给过的那张要点卡/);
+  assert.doesNotMatch(second, /【项目速览】/, 'the brief is not repeated while the project is unchanged');
+  const chat = runtime.prompt({prompt: '谢谢', messages: []}, ctx).appendSystemContext;
+  assert.doesNotMatch(chat, /【这件活/);
+  runtime.afterCompaction({}, {sessionKey});
+  const again = runtime.prompt({prompt: '登录接口报 500 了', messages: []}, ctx).appendSystemContext;
+  assert.match(again, /【这件活：修 bug】\S*\n?[\s\S]*1\. 先复现/);
+  assert.match(again, /【项目速览】/, 'given again after compaction');
+  const unrestricted = runtime.prompt({prompt: '加个暗色模式', messages: []}, {agentId: 'unrestricted', sessionKey: 'agent:unrestricted:x', workspaceDir: workspace}).appendSystemContext || '';
+  assert.doesNotMatch(unrestricted, /【这件活/);
+});

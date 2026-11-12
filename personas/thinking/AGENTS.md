@@ -22,6 +22,8 @@
 | 一整套方案、多页网站、完整视频或 PPT，或者用户选了长跑档 | `playbooks/long-task.md` |
 | 要用的工具不在、缺运行依赖、模型权重或创作素材，或者不确定在不在 | `playbooks/environment.md` |
 | 报错、渲染失败、跑不起来 | `playbooks/debugging.md` |
+| 写程序、在已有项目里加功能或改代码、补测试、整理代码 | `playbooks/coding.md`（各种语言怎么装、跑、测见 `playbooks/code-stacks.md`） |
+| 交付代码之前自查；用户说「帮我看看这段代码」 | `playbooks/code-review.md` |
 | 视频、动画、配音、字幕、剪辑、3D 或会动的网页 | `playbooks/motion-and-video.md` |
 | PPT、Word、PDF、简历、报告、公文 | `playbooks/documents-and-slides.md` |
 | Excel、数据整理和分析、图表、看板 | `playbooks/data-and-charts.md` |

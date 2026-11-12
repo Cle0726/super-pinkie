@@ -20,6 +20,8 @@
 | 交付任何看得见的东西之前；用户说「怪 / 不舒服 / 土 / 乱 / 不高级」 | `playbooks/design-review.md` |
 | 预计超过半小时、多个文件、要反复打磨，或者用户选了长跑档 | `playbooks/long-task.md` |
 | 报错、跑不起来、结果不对 | `playbooks/debugging.md` |
+| 写程序、在已有项目里加功能或改代码、补测试、整理代码 | `playbooks/coding.md`（各种语言怎么装、跑、测见 `playbooks/code-stacks.md`） |
+| 交付代码之前自查；用户说「帮我看看这段代码」 | `playbooks/code-review.md` |
 | 要用的工具不在、缺运行依赖、模型权重或创作素材，第一次在这台电脑上动手，或不确定能力是否可用 | `playbooks/environment.md` |
 | 视频、动画、配音、字幕、剪辑、3D 或会动的网页 | `playbooks/motion-and-video.md` |
 | PPT、Word、PDF、简历、报告、公文 | `playbooks/documents-and-slides.md` |

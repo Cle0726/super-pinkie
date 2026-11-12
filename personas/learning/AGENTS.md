@@ -173,6 +173,8 @@
 | 上面都对不上的新类型的活 | `playbooks/crafts.md`（活儿地图和没见过的活怎么做） |
 | 预计很久、要反复打磨的大活 | `playbooks/long-task.md` |
 | 报错、跑不起来、结果不对 | `playbooks/debugging.md` |
+| 写程序、在已有项目里加功能或改代码、补测试、整理代码 | `playbooks/coding.md`（各种语言怎么装、跑、测见 `playbooks/code-stacks.md`） |
+| 交付代码之前自查；用户说「帮我看看这段代码」 | `playbooks/code-review.md` |
 | 要用的工具不在或不确定在不在 | `playbooks/environment.md` |
 
 辅导和刷题时，`USER.md` 里先生定的辅导规则优先：打法只管怎么把东西做好，不能拿来替先生做作业、抢答题目。
