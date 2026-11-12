@@ -16,6 +16,7 @@ export const ARTIFACT_EXTS = new Set(['html', 'htm', 'md', 'svg', 'pdf', 'png', 
 export const LIMITS = Object.freeze({snapshotBytes: 20 * 1024 * 1024, versions: 50, totalBytes: 2 * 1024 * 1024 * 1024});
 const KIND = {html: 'html', htm: 'html', md: 'doc', pdf: 'doc', docx: 'doc', svg: 'image', png: 'image', jpg: 'image', jpeg: 'image', webp: 'image', gif: 'image', pptx: 'slides', xlsx: 'sheet', csv: 'sheet', mp4: 'video'};
 export const KINDS = Object.freeze([...new Set(Object.values(KIND))]);
+const IMAGE_MIME = {png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif'};
 const WRITE_TOOLS = new Set(['write', 'edit', 'apply_patch', 'multi_edit', 'create', 'update']);
 const MAKE_TOOLS = /^(?:image_generate|imagegen|video_generate|canvas|canvas_\w+)$/i;
 const PATH_KEYS = ['path', 'file_path', 'filePath', 'target', 'destination', 'dest', 'outputPath', 'output_path', 'output'];
@@ -214,6 +215,26 @@ export class ArtifactStore {
     const updated = this.record({file: item.path, sessionKey: sessionKey || item.sessionKey, runId: '', source: 'restore'});
     return {ok: true, v: updated?.versions.at(-1)?.v || last?.v || 0};
   }
+  // Small previews for the library (thumbnails, html/markdown preview) without
+  // a native file bridge: images ≤ 4 MB as base64, text ≤ 1 MB as utf8.
+  read(id, v) {
+    const item = this.item(id);
+    const version = v ? item.versions.find(entry => entry.v === Number(v)) : item.versions.at(-1);
+    if (!version) throw new Error('没有这个版本');
+    const file = version.snapshot && fs.existsSync(version.snapshot) ? version.snapshot
+      : version === item.versions.at(-1) ? item.path : '';
+    if (!file || !fs.existsSync(file)) throw new Error('这个版本没有存副本');
+    const ext = extOf(item.path);
+    const size = fs.statSync(file).size;
+    const text = ['html', 'htm', 'md', 'csv', 'svg'].includes(ext);
+    const limit = text ? 1024 * 1024 : 4 * 1024 * 1024;
+    if (size > limit) return {ok: true, tooLarge: true, size, v: version.v};
+    if (!text && !IMAGE_MIME[ext]) return {ok: true, unsupported: true, size, v: version.v};
+    const buffer = fs.readFileSync(file);
+    return text
+      ? {ok: true, v: version.v, size, mime: ext === 'svg' ? 'image/svg+xml' : 'text/plain', encoding: 'utf8', data: buffer.toString('utf8')}
+      : {ok: true, v: version.v, size, mime: IMAGE_MIME[ext], encoding: 'base64', data: buffer.toString('base64')};
+  }
   remove(id) {
     const data = this.load();
     const item = data.items[String(id || '')];
@@ -251,6 +272,7 @@ export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bin
   method('pinkie.artifacts.version', ({id, v}) => store.versionPath(id, v));
   method('pinkie.artifacts.restore', ({id, v, key}) => store.restore(id, v, {sessionKey: key}));
   method('pinkie.artifacts.remove', ({id}) => store.remove(id));
+  method('pinkie.artifacts.read', ({id, v}) => store.read(id, v));
   api.on?.('after_tool_call', (event, ctx = {}) => {
     try {
       const sessionKey = String(ctx.sessionKey || event?.sessionKey || '');

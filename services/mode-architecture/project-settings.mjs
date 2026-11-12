@@ -9,6 +9,7 @@ import {readSessionJson, registerSessionMethod, writeSessionJson} from './sessio
 // sidebar keeps them, and every session bound to that folder sees them.
 export const MAX_INSTRUCTIONS = 8000;
 export const MAX_PINNED = 20;
+const SKIP_DIRS = new Set(['node_modules', '__pycache__', 'dist', 'build', '.git', 'venv', '.venv']);
 const clip = (value, limit) => [...String(value ?? '')].slice(0, limit).join('');
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
 const real = dir => { try { return fs.realpathSync(dir); } catch { return ''; } };
@@ -76,6 +77,34 @@ export class ProjectSettings {
     writeSessionJson(this.file, {projects: all});
     return {ok: true};
   }
+  // Files to choose 常看资料 from: a bounded walk of the project folder.
+  files(params = {}) {
+    const folder = this.folderFor(params);
+    if (!folder) throw new Error('这个项目还没有文件夹');
+    const base = real(folder) || folder;
+    const needle = String(params.query || '').trim().toLowerCase();
+    const out = [];
+    let seen = 0;
+    const walk = (dir, depth) => {
+      if (depth > 6 || out.length >= 200 || seen > 20000) return;
+      let entries = [];
+      try { entries = fs.readdirSync(dir, {withFileTypes: true}); } catch { return; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (out.length >= 200) return;
+        seen += 1;
+        if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full, depth + 1);
+        else if (entry.isFile()) {
+          const rel = path.relative(base, full);
+          if (!needle || rel.toLowerCase().includes(needle)) out.push({path: full, rel});
+        }
+      }
+    };
+    walk(base, 0);
+    return {ok: true, folder: base, files: out};
+  }
   promptFor(sessionKey) {
     const binding = this.bindings()[sessionKey];
     if (!binding?.root) return '';
@@ -92,6 +121,7 @@ export function registerProjectSettings(api, {root, bindingsFile}) {
   });
   method('pinkie.project.settings.get', params => settings.get(params));
   method('pinkie.project.settings.set', params => settings.set(params));
+  method('pinkie.project.settings.files', params => settings.files(params));
   api.on?.('before_prompt_build', (event, ctx) => {
     try {
       const text = settings.promptFor(String(ctx?.sessionKey || ''));
