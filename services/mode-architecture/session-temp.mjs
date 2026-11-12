@@ -88,11 +88,14 @@ export class TempSessions {
       }
       files.add(entry.transcript);
     }
-    if (entry) {
-      try { await this.access.rpc('sessions.delete', {key, agentId, deleteTranscript: true}, {admin: true}); }
-      catch (error) {
+    // Always ask the gateway: a temp session nobody wrote in has no transcript
+    // yet, so the store lookup can miss it while the session row still exists.
+    const gone = error => /not found|no such session|unknown session|不存在/i.test(String(error?.message || ''));
+    try { await this.access.rpc('sessions.delete', {key, agentId, deleteTranscript: true}, {admin: true}); }
+    catch (error) {
+      if (!gone(error)) {
         try { await this.access.rpc('sessions.delete', {key, agentId, deleteTranscript: true}); }
-        catch { logSessionFailure(this.api, 'session-temp', key, 'delete'); throw new Error('临时会话没删掉，稍后会再试'); }
+        catch (again) { if (!gone(again)) { logSessionFailure(this.api, 'session-temp', key, 'delete'); throw new Error('临时会话没删掉，稍后会再试'); } }
       }
     }
     // The gateway archives the transcript instead of removing it; a temp
