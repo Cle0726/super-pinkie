@@ -199,7 +199,7 @@
     const heading = el('div', 'pinkie-session-card__title');
     const where = card.modeName ? card.modeName + ' · ' : '';
     if (proposal) heading.textContent = where + card.title;
-    else heading.textContent = where + card.title + (card.consult ? ' 的回答' : ' 做完一轮');
+    else heading.textContent = where + card.title + (card.failed ? ' 没做成' : card.consult ? ' 的回答' : ' 做完一轮');
     const body = el('div', 'pinkie-session-card__body', proposal
       ? (expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary) : card.text);
     if (!expanded.has(card.id)) body.classList.add('pinkie-session-card__body--preview');

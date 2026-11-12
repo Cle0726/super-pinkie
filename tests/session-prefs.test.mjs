@@ -79,3 +79,16 @@ test('every plugin instance shares one prefs cache per root', () => {
   first.setSession(KEY, {style: 'concise'});
   assert.match(hooks[1]({}, {sessionKey: KEY}).appendSystemContext, /回答风格：简洁/);
 });
+
+test('自己分工 is on by default and the settings switch turns it off and back on', async t => {
+  const root = tmp();
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const make = () => new SessionPrefs(root);
+  const prefs = make();
+  assert.equal(prefs.globalPrefs().autoSplit, true);
+  assert.equal(prefs.setGlobal({autoSplit: false}).autoSplit, false);
+  assert.equal(make().globalPrefs().autoSplit, false, 'survives a restart');
+  prefs.setGlobal({autoSplit: 'yes'});
+  assert.equal(prefs.globalPrefs().autoSplit, false, 'only a real boolean changes it');
+  assert.equal(prefs.setGlobal({autoSplit: true}).autoSplit, true);
+});

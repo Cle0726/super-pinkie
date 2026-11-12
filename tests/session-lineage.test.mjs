@@ -701,3 +701,84 @@ test('the plugin registers the mode-ask tool next to the session tools', async t
   assert.deepEqual(ask.parameters.required, ['mode', 'question']);
   assert.ok(MINIMAL_CHILD_TOOLS.includes('pinkie_mode_ask'));
 });
+
+test('a cross-mode child runs on the model the user picked in the parent session, and falls back if the gateway refuses it', async t => {
+  const f = fixture(t);
+  Object.assign(f.entries.get(parent), {providerOverride: 'mm', modelOverride: 'picked', modelOverrideSource: 'user'});
+  const across = await f.lineage.start(parent, 'human', {...request, mode: 'ideas'}, 'across');
+  assert.equal(f.calls.find(([name, params]) => name === 'sessions.create' && params.key === across.key)[1].model, 'mm/picked');
+  const same = await f.lineage.start(parent, 'human', {...request, title: '同模式'}, 'same');
+  assert.equal(Object.hasOwn(f.calls.find(([name, params]) => name === 'sessions.create' && params.key === same.key)[1], 'model'), false,
+    'inside one agent the gateway parent link already carries the model');
+  assert.match(across.message, /不要轮询或等待/);
+  const access = f.options.titles.access, originalRpc = access.rpc;
+  access.rpc = async (method, params) => {
+    if (method === 'sessions.create' && params.model) throw new Error('model not allowed for agent');
+    return originalRpc.call(access, method, params);
+  };
+  const retried = await f.lineage.start(parent, 'human', {...request, title: '换默认模型', mode: 'chat'}, 'retry');
+  assert.match(retried.key, /^agent:main:pinkie-child:/);
+  f.entries.get(parent).modelOverrideSource = 'auto';
+  access.rpc = originalRpc;
+  const auto = await f.lineage.start(parent, 'human', {...request, title: '不是用户选的', mode: 'learning'}, 'auto');
+  assert.equal(Object.hasOwn(f.calls.find(([name, params]) => name === 'sessions.create' && params.key === auto.key)[1], 'model'), false);
+});
+
+test('a child whose own run fails tells the parent after a short grace, unless it recovered or reported meanwhile', async t => {
+  const f = fixture(t);
+  const child = await f.lineage.start(parent, 'human', request, 'broken');
+  const runId = f.sent[0].idempotencyKey;
+  f.lineage.begin({runId, prompt: f.sent[0].message}, {sessionKey: child.key});
+  f.running.delete(child.key);
+  f.scheduled.length = 0;
+  await f.lineage.ended({runId, success: false, error: '503 auth_unavailable'}, {sessionKey: child.key}, false);
+  assert.equal((await f.lineage.cards(parent)).cards.length, 0, 'nothing is said before the grace period');
+  const check = f.scheduled.shift();
+  check();
+  await new Promise(resolve => setImmediate(resolve));
+  const report = (await f.lineage.cards(parent)).cards[0];
+  assert.equal(report.kind, 'report');
+  assert.equal(report.failed, true);
+  assert.match(report.text, /没有跑起来/);
+  assert.equal(f.entries.get(parent).unread, true);
+  assert.match(f.lineage.prompt({}, {sessionKey: parent}).appendContext, /不要当作已经完成/);
+
+  const g = fixture(t);
+  const saved = await g.lineage.start(parent, 'human', request, 'saved');
+  const run = g.sent[0].idempotencyKey;
+  g.lineage.begin({runId: run, prompt: g.sent[0].message}, {sessionKey: saved.key});
+  g.running.delete(saved.key);
+  g.scheduled.length = 0;
+  await g.lineage.ended({runId: run, success: false, error: 'timeout'}, {sessionKey: saved.key}, false);
+  const later = g.scheduled.shift();
+  await finishChild(g, saved.key, run, '第二次跑成功了，成品在 out/。');
+  later();
+  await new Promise(resolve => setImmediate(resolve));
+  const cards = (await g.lineage.cards(parent)).cards;
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].failed, undefined);
+});
+
+test('asking another mode counts as doing a "go ask that mode" request', () => {
+  const asked = {name: 'pinkie_mode_ask', output: JSON.stringify({mode: 'ideas', from: '想法模式', answer: '用燕麦白做底'})};
+  assert.equal(isSessionOperationEvidence(asked, '配色你替我去问问想法模式那边'), true);
+  assert.equal(isSessionOperationEvidence({name: 'pinkie_mode_ask', output: JSON.stringify({mode: 'ideas', failed: true,
+    key: 'agent:thinking:pinkie-child:abc'})}, '去问问想法模式'), true);
+  assert.equal(isSessionOperationEvidence(asked, '删除临时文件'), false);
+  assert.equal(isSessionOperationEvidence({name: 'pinkie_mode_ask', output: '没问成'}, '去问问想法模式'), false);
+});
+
+test('a native spawn is pointed back to a real session once when the user asked for a session', async t => {
+  const {spawnShouldBeSession} = await import('../services/mode-architecture/session-lineage.mjs');
+  const f = fixture(t);
+  const shared = globalThis[Symbol.for('pinkie.session-lineage.v1')] ??= new Map();
+  shared.set(f.root, f.lineage);
+  t.after(() => shared.delete(f.root));
+  f.lineage.begin({runId: 'r1', prompt: '另开一个子会话写个小脚本，做完告诉我'}, {sessionKey: parent});
+  assert.match(spawnShouldBeSession(parent), /pinkie_session_start/);
+  assert.equal(spawnShouldBeSession(parent), '', 'only once per turn: the model may insist');
+  f.lineage.begin({runId: 'r2', prompt: '把这三个函数分别重构一下'}, {sessionKey: parent});
+  assert.equal(spawnShouldBeSession(parent), '', 'ordinary parallel parts stay with the native tool');
+  f.lineage.begin({runId: 'pinkie-session-wake-x', prompt: '[pinkie-watchdog] [pinkie-session-wake] 子会话 汇报'}, {sessionKey: parent});
+  assert.equal(spawnShouldBeSession(parent), '', 'internal turns are not the user asking');
+});

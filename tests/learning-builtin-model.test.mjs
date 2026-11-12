@@ -101,10 +101,19 @@ test('connection test uses the draft model, preserves the selection and reports 
   assert.equal(result.model, 'local/first');
   assert.deepEqual(sent, ['first']);
   assert.equal(organizer.status(A).model, 'local/second');
-  await assert.rejects(organizer.testBuiltinModel('agent:project:x', 'local/first'), /习作模式/);
+  await assert.rejects(organizer.testBuiltinModel('agent:project:x', 'local/first'), /学习模式/);
   await assert.rejects(organizer.testBuiltinModel(A, 'missing/model'), /不可用/);
   organizer.fetchImpl = async () => { throw Error('private networking detail'); };
   await assert.rejects(organizer.testBuiltinModel(A, 'local/first'), /连接失败/);
   organizer.fetchImpl = async () => new Response('private provider detail', {status: 404});
   await assert.rejects(organizer.testBuiltinModel(A, 'local/first'), /模型不存在，或当前模型来源无权使用/);
+});
+
+test('learning requests carry their runtime identity through the local model relay', async t => {
+  const {organizer} = setup(t); let body;
+  organizer.fetchImpl = async (_url, options) => { body = JSON.parse(options.body); return new Response(JSON.stringify({choices: [{message: {content: '{"ok":true}'}}]})); };
+  await requestLearningModel(organizer, '学习台讲题规则', {question: 'fixture'}, {userText: '{"question":"fixture"}'});
+  assert.match(body.messages[0].content, /^学习台讲题规则/);
+  assert.match(body.messages[0].content, /## Runtime\nOpenClaw agent=learning/);
+  assert.deepEqual(JSON.parse(body.messages[1].content), {question: 'fixture'});
 });
