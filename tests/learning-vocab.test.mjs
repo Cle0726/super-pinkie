@@ -38,7 +38,29 @@ test('add saves first, organizes in the background, dedupes and reviews', async 
   assert.equal(queue.total, 2);
   const reviewed = vocab.review(queue.words[0].id, 'remembered');
   assert.equal(reviewed.word.due, false); assert.equal(vocab.list({filter: 'due'}).words.length, 1);
-  assert.equal(vocab.list({query: '俺不能'}).words.length, 2);
+  assert.equal(vocab.list({query: '俺不能'}).words.length, 1);
+  assert.equal(vocab.list({filter: 'resting', query: '俺不能'}).words.length, 1);
+});
+
+test('remembered and mastered words leave the book until they are due again', async t => {
+  const vocab = fixture(t, async (rules, payload) => ({value: {entries: payload.words.map(word => entry(word.id, word.word))}}));
+  const {added: [word]} = vocab.add({text: 'ambulance'});
+  await vocab.running;
+  const now = Date.parse('2026-11-06T02:00:00Z');
+  const day = 86400000;
+  vocab.review(word.id, 'forgot', now);
+  assert.equal(vocab.list({}, now).words.length, 1);
+  assert.equal(vocab.list({filter: 'resting'}, now).words.length, 0);
+  const remembered = vocab.review(word.id, 'remembered', now);
+  assert.equal(remembered.word.lastReviewRating, 'remembered');
+  assert.equal(vocab.list({}, now).words.some(item => item.id === word.id), false);
+  assert.equal(vocab.list({filter: 'resting'}, now).words[0].id, word.id);
+  assert.equal(vocab.list({}, now + 4 * day).words.some(item => item.id === word.id), true);
+  assert.equal(vocab.list({filter: 'resting'}, now + 4 * day).words.length, 0);
+  let current = word.id;
+  for (let i = 0; i < 4; i++) current = vocab.review(current, 'remembered', now + i * day).word.id;
+  vocab.review(current, 'fuzzy', now + 4 * day);
+  assert.equal(vocab.list({filter: 'resting'}, now + 4 * day).words.length, 1);
 });
 
 test('model failure keeps the word and allows retry; edits during organizing are not overwritten', async t => {

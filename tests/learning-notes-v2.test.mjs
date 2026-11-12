@@ -29,6 +29,27 @@ test('registry and legacy defaults are read without changing source records or t
   assert.equal(fs.readFileSync(store.notesFile, 'utf8'), before);
 });
 
+test('remembered and mastered notes leave the book until they are due again', t => {
+  const {store} = fixture(t);
+  const note = store.saveNote(KEY, {content: 'arrive at = 到达'}).note;
+  const now = Date.parse('2026-11-06T02:00:00Z'), day = 86400000;
+  store.reviewNote(ALL, note.id, 'forgot', now);
+  assert.deepEqual(store.listNotes({sessionKey: ALL, now}).notes.map(item => item.id), [note.id]);
+  assert.equal(store.listNotes({sessionKey: ALL, view: 'resting', now}).notes.length, 0);
+  store.reviewNote(ALL, note.id, 'remembered', now);
+  assert.equal(store.listNotes({sessionKey: ALL, now}).notes.length, 0);
+  assert.deepEqual(store.listNotes({sessionKey: ALL, view: 'resting', now}).notes.map(item => item.id), [note.id]);
+  assert.equal(store.notesToc(ALL, {now}).resting, 1);
+  assert.equal(store.notesToc(ALL, {now}).inbox, 0);
+  assert.equal(store.listNotes({sessionKey: ALL, now: now + 4 * day}).notes.length, 1);
+  assert.equal(store.reviewQueue(ALL, {now: now + 4 * day}).notes.some(item => item.id === note.id), true);
+  let id = note.id;
+  for (let i = 0; i < 4; i++) id = store.reviewNote(ALL, id, 'remembered', now + i * day).note.id;
+  store.reviewNote(ALL, id, 'fuzzy', now + 4 * day);
+  assert.equal(store.listNotes({sessionKey: ALL, view: 'resting', now: now + 4 * day}).notes.length, 1);
+  assert.equal(store.listNotes({sessionKey: ALL, now: now + 4 * day}).notes.length, 0);
+});
+
 test('moved records stay out of active queries, reviews, quiz, similarity, exports and note capacity', t => {
   const {store} = fixture(t);
   const base = {id: 'moved', content: 'moved-only-token', title: 'same', term: 'same', sourceSessionKey: KEY, status: 'moved'};
