@@ -26,13 +26,13 @@
 
 **还留着的：**
 
-- 开了跨模式子会话后，交付前提醒仍会多提醒一次（「没有真实执行工具记录」/「没有主机确认的文件变化」）。模型都正常收尾了，只是多花一轮；原因没查清（`isSessionOperationEvidence` 单测是过的）。
+- 开了跨模式子会话后，交付前提醒仍会多提醒一次（「没有真实执行工具记录」/「没有主机确认的文件变化」）。模型都正常收尾了，只是多花一轮；原因没查清：`isSessionOperationEvidence` 单测是过的，也已兼容只有 content 的结果外壳，实测仍会提醒，要在 index.mjs 的交付门禁里打日志看 state.prompt 和 state.tools。
 - 并行的小活模型仍爱用 `sessions_spawn` 而不是 `in_scope`：三件几分钟的小事这样选说得过去，没有改。但网关自带子代理用的是 agent 默认模型，默认模型挂了它们会全部失败、父会话自己重做。
 - 打盹 / 自动减负、图标悬停在 **WebKit** 里仍没看过（这台 Mac 的 Playwright 要 webkit-2336，本机只有 2311，磁盘只剩 3 GB 没下载）；点跨模式链接后真的切过去，也还没在真界面里点过。
 - 跨模式子会话在侧栏里仍按顶层会话显示。
 - 上游现状（不是代码问题）：`gemini-3.8-flash-tiered` 503、3.6/3.7 403、deepseek 欠费；各模式默认模型现在就是 3.8，用户要么换默认、要么去账号页处理。
 
-Node 全量 1950 项，失败 25（都是学习台 / 游戏的旧失败，比装之前少 1）；`session-lineage` 38 项、`session-hints`、`mode-architecture`、`session-prefs`、`user-settings` 全过。
+Node 全量 1950 项，失败 25（都是学习台 / 游戏的旧失败，比装之前少 1）；`session-lineage` 37 项、`session-hints`、`mode-architecture`、`session-prefs`、`user-settings` 全过。
 
 ## Mac 端 11-12 06:00 统一合并（Windows 端先 `git pull`）
 
