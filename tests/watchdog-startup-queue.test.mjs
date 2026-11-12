@@ -12,7 +12,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-win-watchdog-'));
 const staged = path.join(temp, 'mode-architecture');
 fs.cpSync(path.join(root, 'services/mode-architecture'), staged, {recursive: true});
-fs.cpSync(path.join(root, 'desktop/windows/mac-runtime/services/mode-architecture'), staged, {recursive: true});
+// Plan A: the Windows engine is the shared one; overlay only what the snapshot still carries.
+const overlay = path.join(root, 'desktop/windows/mac-runtime/services/mode-architecture');
+if (fs.existsSync(overlay)) fs.cpSync(overlay, staged, {recursive: true});
 process.on('exit', () => fs.rmSync(temp, {recursive: true, force: true}));
 const {UpstreamWatchdog: WindowsWatchdog} = await import(pathToFileURL(path.join(staged, 'index.mjs')));
 

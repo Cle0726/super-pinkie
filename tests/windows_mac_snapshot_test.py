@@ -53,11 +53,11 @@ class MacSnapshotTest(unittest.TestCase):
 
     def test_windows_ships_the_repository_services(self):
         # Windows fixes live in services/ now (workbench Explorer, app_browser
-        # guide, party retry limit). Only the engine stays apart until plan A
-        # merges it back.
+        # guide, party retry limit). Plan A merged the engine back, so the
+        # snapshot carries no service files at all.
         carried = sorted(path.relative_to(SNAPSHOT).as_posix()
                          for path in (SNAPSHOT / "services").rglob("*") if path.is_file())
-        self.assertEqual(carried, ["services/mode-architecture/index.mjs"])
+        self.assertEqual(carried, [])
 
     def test_snapshot_services_only_carry_real_differences(self):
         # A byte-identical copy only goes stale later and shadows the repository fix.
