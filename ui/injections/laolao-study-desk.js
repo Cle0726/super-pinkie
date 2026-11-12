@@ -199,6 +199,160 @@
       }
     }).catch(error => { if (state.root) notice('专注记录：' + error.message); });
   }
+  // 专为学习台画的线稿：书页里的节点和笔记，随交互轻微移动。
+  function builtinModelMark() {
+    const art = el('span', 'desk-model-mark');
+    art.setAttribute('aria-hidden', 'true');
+    art.innerHTML = `<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <g class="model-mark-book"><path d="M14 26c12-4 23-3 34 4 11-7 22-8 34-4v42c-12-4-23-3-34 4-11-7-22-8-34-4z"/><path d="M48 30v42"/></g>
+      <g class="model-mark-route"><path d="M23 53l8-9 8 4"/><circle cx="23" cy="53" r="2"/><circle cx="31" cy="44" r="2"/><circle cx="39" cy="48" r="2"/></g>
+      <g class="model-mark-lines"><path d="M57 42h15M57 49h15M57 56h9"/></g>
+      <path class="model-mark-star" d="M74 13v8m-4-4h8"/>
+    </svg>`;
+    return art;
+  }
+
+  function builtinModelDialog() {
+    if (!state.root) return;
+    const existing = state.root.querySelector('dialog.desk-builtin-model');
+    if (existing?.open) { existing.querySelector('.desk-model-search input')?.focus(); return; }
+    existing?.remove();
+    const dialog = el('dialog', 'desk-builtin-model');
+    dialog.setAttribute('aria-labelledby', 'desk-model-title');
+    const head = el('header', 'desk-model-head');
+    const heading = el('div', 'desk-model-heading');
+    heading.append(el('p', 'desk-model-kicker', 'PINKIE’S STUDY DESK'), el('h2', '', '内置模型'));
+    heading.lastChild.id = 'desk-model-title';
+    heading.append(el('p', 'desk-model-lead', '给学习台和游戏选一位后台搭档'));
+    const close = button('关闭', () => dialog.close(), 'desk-model-close');
+    close.setAttribute('aria-label', '关闭内置模型');
+    head.append(builtinModelMark(), heading, close);
+
+    const body = el('div', 'desk-model-body');
+    const currentBox = el('section', 'desk-model-current');
+    const currentCopy = el('div', 'desk-model-current-copy');
+    const currentName = el('strong', 'desk-model-current-name', '正在读取…');
+    const currentDetail = el('p', 'desk-model-current-detail', '请稍等一下');
+    currentCopy.append(el('span', 'desk-model-label', '当前配置'), currentName, currentDetail);
+    const currentMark = el('span', 'desk-model-current-mark'); currentMark.setAttribute('aria-hidden', 'true');
+    currentMark.innerHTML = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="16" cy="16" r="12"/><path d="M10 16h12M16 10v12"/></svg>';
+    currentBox.append(currentCopy, currentMark);
+    const scope = el('p', 'desk-model-scope', '备课、看板、生词和笔记，以及游戏的地图、出题、错题怪、讲解和阅卷，都会使用这里的选择。列表来自已配置的模型来源，可先测试连接。');
+    const searchBox = el('label', 'desk-model-search');
+    const search = el('input'); search.type = 'search'; search.placeholder = '搜索名称、模型 ID 或来源'; search.setAttribute('aria-label', '搜索内置模型'); search.disabled = true;
+    searchBox.append(el('span', '', '查找'), search);
+    const listHead = el('div', 'desk-model-list-head');
+    const listTitle = el('h3', '', '选择模型'); const count = el('span', '', ''); listHead.append(listTitle, count);
+    const choices = el('div', 'desk-model-choices'); choices.setAttribute('aria-label', '可选模型');
+    const message = el('p', 'desk-model-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+    body.append(currentBox, scope, searchBox, listHead, choices, message);
+
+    const foot = el('footer', 'desk-model-actions');
+    const test = button('测试连接', testConnection, 'desk-model-test');
+    const spacer = el('span', 'desk-model-spacer');
+    const cancel = button('取消', () => dialog.close(), 'desk-model-cancel');
+    const save = button('应用模型', apply, 'desk-model-save');
+    test.disabled = true; save.disabled = true;
+    foot.append(test, spacer, cancel, save);
+    dialog.append(head, body, foot); state.root.append(dialog);
+    dialog.addEventListener('close', () => dialog.remove(), {once: true});
+    dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+    dialog.showModal();
+    close.focus();
+
+    let info = null, draft = '', saving = false, testing = false;
+    const connected = () => dialog.isConnected && dialog.open;
+    const chosen = () => draft ? info?.models?.find(item => item.id === draft) : info?.models?.find(item => item.id === info.defaultModel);
+    function setMessage(text = '', kind = '') { message.textContent = text; message.dataset.kind = kind; }
+    function updateButtons() {
+      const ready = Boolean(info); const busy = saving || testing;
+      save.disabled = !ready || busy || draft === (info.selectedModel || '') || (draft !== '' && !chosen());
+      test.disabled = !ready || busy || !chosen();
+      search.disabled = !ready || busy;
+      cancel.disabled = close.disabled = saving;
+      choices.querySelectorAll('button').forEach(row => { row.disabled = busy; });
+      test.textContent = testing ? '正在测试…' : '测试连接';
+      save.textContent = saving ? '正在保存…' : '应用模型';
+    }
+    function select(value) {
+      if (saving || testing) return;
+      draft = value;
+      setMessage(chosen()?.image === false ? '这个模型只支持文字；图片讲义需要选择可看图的模型。' : '');
+      choices.querySelectorAll('[data-model-ref]').forEach(row => {
+        const selected = row.dataset.modelRef === draft;
+        row.classList.toggle('is-selected', selected); row.setAttribute('aria-pressed', String(selected));
+      });
+      dialog.classList.remove('has-choice'); void dialog.offsetWidth; dialog.classList.add('has-choice');
+      updateButtons();
+    }
+    function row(value, name, detail, image) {
+      const item = button('', () => select(value), 'desk-model-option'); item.dataset.modelRef = value;
+      const dot = el('span', 'desk-model-radio'); dot.setAttribute('aria-hidden', 'true');
+      const copy = el('span', 'desk-model-option-copy'); copy.append(el('strong', '', name), el('small', '', detail));
+      item.append(dot, copy);
+      if (image != null) item.append(el('span', 'desk-model-capability', image ? '可看图' : '文字'));
+      return item;
+    }
+    function filter() {
+      const query = search.value.trim().toLocaleLowerCase(); let visible = 0, visibleAny = 0;
+      choices.querySelectorAll('[data-model-ref]').forEach(item => {
+        const show = !query || item.textContent.toLocaleLowerCase().includes(query) || item.dataset.modelRef.toLocaleLowerCase().includes(query);
+        item.hidden = !show; if (show) visibleAny++; if (show && item.dataset.modelRef) visible++;
+      });
+      count.textContent = query ? `${visible} 个匹配` : `${info?.models?.length || 0} 个可选`;
+      const empty = choices.querySelector('.desk-model-no-match'); if (empty) empty.hidden = !query || visibleAny > 0;
+    }
+    function render() {
+      currentName.textContent = info.modelName || '没有可用模型';
+      currentDetail.textContent = !info.available ? '请在应用的模型设置里配置可用来源。' : info.usingFallback ? `之前选择的模型不可用，暂时使用 ${info.modelName || '无'}。请选择其他模型。`
+        : info.selectedModel ? '已手动指定，所有学习会话共用；可先测试连接' : '跟随学习模式的默认模型；可先测试连接';
+      currentBox.classList.toggle('is-warning', Boolean(info.usingFallback || !info.available));
+      draft = info.selectedModel || '';
+      choices.replaceChildren();
+      choices.append(row('', '跟随学习模式', info.defaultModelName ? `当前默认：${info.defaultModelName}` : '暂时没有可用的默认模型', null));
+      const models = [...(info.models || [])].sort((a, b) => `${a.provider || ''} ${a.name}`.localeCompare(`${b.provider || ''} ${b.name}`, 'zh-CN'));
+      for (const model of models) choices.append(row(model.id, model.name || model.id, model.id, model.image));
+      const empty = el('p', 'desk-model-no-match', '没有找到匹配的模型，试试其他关键词。'); empty.hidden = true; choices.append(empty);
+      if (!models.length) choices.append(el('p', 'desk-model-empty', '没有找到可用模型。请先在应用的模型设置里配置可用来源，再回来重试。'));
+      select(draft); filter();
+    }
+    async function load() {
+      info = null; updateButtons(); setMessage(''); choices.replaceChildren(el('p', 'desk-model-loading', '正在读取可用模型…'));
+      try {
+        const result = await request('pinkie.learning.builtinModel.status', {});
+        if (!connected()) return;
+        info = {...result, models: Array.isArray(result.models) ? result.models : []}; render();
+      } catch (error) {
+        if (!connected()) return;
+        choices.replaceChildren(el('p', 'desk-model-empty', '模型列表暂时没有连上。'));
+        const retry = button('重新加载', load, 'desk-model-retry'); choices.append(retry);
+        setMessage(error?.message || '连接失败，请稍后重试。', 'error');
+      }
+    }
+    async function apply() {
+      if (!info || saving || testing || save.disabled) return;
+      saving = true; setMessage(''); updateButtons();
+      try {
+        const result = await request('pinkie.learning.builtinModel.setModel', {model: draft});
+        if (!connected()) return;
+        info = {...result, models: Array.isArray(result.models) ? result.models : []}; render();
+        setMessage('已保存。接下来的后台任务会使用这个模型，正在进行的任务会继续完成。', 'success');
+      } catch (error) { if (connected()) setMessage(error?.message || '保存失败，请重试。', 'error'); }
+      finally { saving = false; if (connected()) updateButtons(); }
+    }
+    async function testConnection() {
+      if (!info || saving || testing || test.disabled) return;
+      testing = true; setMessage('正在发送一条简短测试，可能产生少量模型用量。'); updateButtons();
+      try {
+        const result = await request('pinkie.learning.builtinModel.test', {model: draft}, 35000);
+        if (connected()) setMessage(`${result.modelName || '模型'}连接成功 · ${(result.ms / 1000).toFixed(1)} 秒`, 'success');
+      } catch (error) { if (connected()) setMessage(`连接失败：${error?.message || '请检查模型来源后重试。'}`, 'error'); }
+      finally { testing = false; if (connected()) updateButtons(); }
+    }
+    search.addEventListener('input', filter);
+    load();
+  }
+  window.__pinkieStudyDeskBuiltinDialog = builtinModelDialog;
   function createBuiltin(pane, shell) {
     // Every callback below closes over its own page, including callbacks resumed after an RPC.
     const state = new Proxy(shell, {
@@ -1049,7 +1203,10 @@
       const b = button('', () => id === 'chat' ? tabChat() : openCard(target)); b.dataset.go = target; b.setAttribute('aria-label', label); b.append(handIcon(id), el('span', 'nav-tip', label)); nav.append(b);
     }
     const foot = el('div', 'rail-foot'), theme = button('', toggleTheme); theme.dataset.themeToggle = ''; theme.setAttribute('aria-label', '切换日间和夜间');
-    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(theme, avatar); rail.append(logo, nav, foot);
+    const modelBtn = button('', () => window.__pinkieStudyDeskBuiltinDialog?.(), ''); modelBtn.dataset.builtinModel = '';
+    modelBtn.setAttribute('aria-label', '切换内置模型'); modelBtn.title = '内置模型';
+    modelBtn.append(builtinModelMark(), el('span', 'nav-tip', '内置模型'));
+    const avatar = el('img'); avatar.src = sticker('split-peek'); avatar.alt = '碧琪'; foot.append(theme, modelBtn, avatar); rail.append(logo, nav, foot);
     const status = el('div', 'desk-status'); status.setAttribute('role', 'status');
     const canvas = el('canvas', 'party'); canvas.setAttribute('aria-hidden', 'true');
     const content = el('div', 'desk-content');
@@ -1115,7 +1272,7 @@
     const closed = () => { if (host.isConnected) for (const drawer of previous.keys()) { drawer.hidden = false; drawer.inert = false; } }; window.addEventListener('pinkie:library-closed', closed);
     return {unmount() { window.removeEventListener('pinkie:library-closed', closed); if (window.__pinkieLibrary?.state?.deskHost === host) window.__pinkieLibrary.closeReader(); for (const [drawer, parent] of previous) { drawer.hidden = true; drawer.inert = true; parent?.append(drawer); } }};
   }});
-  window.__pinkieStudyDesk = {registerView, request, go, backName, notice, backView: () => backViewOf(current()), back: () => go(backViewOf(current())), sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode),
+  window.__pinkieStudyDesk = {registerView, request, go, backName, notice, backView: () => backViewOf(current()), back: () => go(backViewOf(current())), sessionKey, conversationKey, motion, tokens, icon, handIcon, sticker, askBiqi: text => focusedPane().builtin.askBiqi(text), startSet: (...args) => focusedPane().builtin.startSet(...args), base: BASE, local: current, switchStageMode: mode => focusedPane().builtin.switchStageMode(mode), openBuiltinModel: () => window.__pinkieStudyDeskBuiltinDialog?.(),
     pane: focusedPane, forPane: deskForPane, context, openOtherPage, setLayout, tile: () => { tileRects(workspace()); renderWorkspace(); }, toggleChat, hasChat: () => Boolean(state.root && chatCard()), cards: () => workspace().panes.map(p => ({id: p.id, view: p.view, rect: {...p.rect}, z: p.z})), focusPane: id => { const p = workspace().panes.find(p => p.id === id); if (p) focusPage(p); },
     contexts: () => workspace().panes.map(context),
     pages: () => workspace().panes.map(p => ({id: p.id, view: p.view, focused: focused(p), state: p.state})),
