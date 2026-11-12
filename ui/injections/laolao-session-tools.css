@@ -1,0 +1,99 @@
+/* Milestone 3: temp sessions, export, outline, paste, @ mentions, style/web chips, sources. */
+:root { --pt-accent:var(--accent,#d9508d); --pt-card:var(--card,#fff); --pt-text:var(--text,#2b2328); --pt-line:color-mix(in srgb,currentColor 12%,transparent) }
+html[data-pinkie-night] { --pt-card:#2a2027; --pt-text:#f3e9ef }
+
+/* H1 ghost entry beside 新会话 */
+.sidebar-sessions { position:relative }
+.pinkie-temp-entry { position:absolute;right:8px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:color-mix(in srgb,currentColor 55%,transparent);font:inherit;font-size:12px;cursor:pointer;opacity:.75 }
+.pinkie-temp-entry svg { width:15px;height:15px }
+.pinkie-temp-entry:hover,.pinkie-temp-entry:focus-visible { opacity:1;color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 9%,transparent);outline:none }
+html[data-pinkie-temp] .pinkie-temp-entry { color:var(--pt-accent);opacity:1 }
+
+.pinkie-temp-banner { display:flex;align-items:center;justify-content:center;gap:8px;margin:10px auto 0;width:min(760px,calc(100% - 32px));box-sizing:border-box;padding:8px 14px;border:1.5px dashed color-mix(in srgb,var(--pt-accent) 55%,transparent);border-radius:12px;color:color-mix(in srgb,var(--pt-accent) 85%,var(--pt-text));background:color-mix(in srgb,var(--pt-accent) 5%,transparent);font-size:13px }
+.pinkie-temp-banner svg { width:16px;height:16px;flex:none }
+
+/* Temp row on top of the sidebar list */
+.pinkie-temp-group .sidebar-recent-session__link { gap:8px }
+.pinkie-temp-group .pinkie-temp-dot { width:14px;height:14px;flex:none;border:1.5px dashed var(--pt-accent);border-radius:50%;box-sizing:border-box }
+.pinkie-temp-group .session-row-host { border-radius:8px;outline:1px dashed color-mix(in srgb,var(--pt-accent) 35%,transparent);outline-offset:-1px }
+
+/* H2 export modal */
+.pinkie-export-modal { width:min(440px,calc(100vw - 32px)) }
+.pinkie-export-choices { display:grid;gap:8px;margin:12px 0 4px }
+.pinkie-export-choice { display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 14px;border:1px solid var(--pt-line);border-radius:12px;background:color-mix(in srgb,var(--pt-card) 70%,transparent);color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .12s,background .12s }
+.pinkie-export-choice strong { font-size:14px }
+.pinkie-export-choice span { font-size:12px;opacity:.62 }
+.pinkie-export-choice:hover:not(:disabled),.pinkie-export-choice:focus-visible { border-color:color-mix(in srgb,var(--pt-accent) 45%,transparent);background:color-mix(in srgb,var(--pt-accent) 7%,transparent);outline:none }
+.pinkie-export-choice:disabled { opacity:.55;cursor:wait }
+.pinkie-export-status { min-height:18px;margin:4px 0 0;font-size:12.5px;color:color-mix(in srgb,var(--pt-accent) 80%,var(--pt-text)) }
+
+/* H3 outline */
+.pinkie-outline-btn { display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;margin-right:4px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:13px;cursor:pointer;opacity:.8 }
+.pinkie-outline-btn svg { width:16px;height:16px }
+.pinkie-outline-btn:hover,.pinkie-outline-btn:focus-visible { opacity:1;background:color-mix(in srgb,currentColor 8%,transparent);outline:none }
+.pinkie-outline { position:fixed;z-index:2147482000;width:340px;max-height:min(460px,calc(100vh - 90px));display:flex;flex-direction:column;border:1px solid var(--pt-line);border-radius:12px;background:var(--pt-card);color:var(--pt-text);box-shadow:0 14px 40px rgba(40,20,32,.18);overflow:hidden;font-size:13px }
+html[data-pinkie-night] .pinkie-outline { box-shadow:0 14px 40px rgba(0,0,0,.5) }
+.pinkie-outline__head { padding:10px 14px 8px;font-size:12px;opacity:.6;border-bottom:1px solid var(--pt-line) }
+.pinkie-outline__list { list-style:none;margin:0;padding:4px;overflow:auto;counter-reset:q }
+.pinkie-outline__item { display:flex;align-items:baseline;gap:10px;width:100%;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer }
+.pinkie-outline__item::before { counter-increment:q;content:counter(q);min-width:16px;font-size:11px;opacity:.45;font-variant-numeric:tabular-nums }
+.pinkie-outline__item:hover,.pinkie-outline__item:focus-visible { background:color-mix(in srgb,var(--pt-accent) 9%,transparent);outline:none }
+.pinkie-outline__text { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.pinkie-outline__time { font-size:11px;opacity:.5;font-variant-numeric:tabular-nums }
+.chat-group.pinkie-outline-flash .chat-bubble { animation:pinkie-outline-flash 1.3s ease }
+@keyframes pinkie-outline-flash { 0%,40% { box-shadow:0 0 0 3px color-mix(in srgb,var(--pt-accent) 35%,transparent) } 100% { box-shadow:0 0 0 0 transparent } }
+
+/* C1 paste editor */
+.pinkie-paste-modal { width:min(720px,calc(100vw - 32px)) }
+.pinkie-paste-editor { box-sizing:border-box;width:100%;height:min(52vh,460px);margin:10px 0;padding:10px 12px;resize:vertical;border:1px solid var(--pt-line);border-radius:10px;background:var(--bg,#fff);color:inherit;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace }
+html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
+.pinkie-paste-modal .laolao-modal__buttons { align-items:center }
+.pinkie-paste-count { margin-right:auto;font-size:12px;opacity:.6;font-variant-numeric:tabular-nums }
+.agent-chat__input [class*="attachment"]:has(> [title^="粘贴的文字"]),.agent-chat__input [class*="attachment"][title^="粘贴的文字"] { cursor:pointer }
+
+/* C2 @ mentions */
+.pinkie-mention { position:fixed;z-index:2147482500;max-height:300px;overflow:auto;padding:4px;border:1px solid var(--pt-line);border-radius:12px;background:var(--pt-card);color:var(--pt-text);box-shadow:0 12px 34px rgba(40,20,32,.18);font-size:13px }
+.pinkie-mention__group { padding:6px 10px 3px;font-size:11px;opacity:.55 }
+.pinkie-mention__item { display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;min-width:0 }
+.pinkie-mention__item[aria-selected="true"],.pinkie-mention__item:hover { background:color-mix(in srgb,var(--pt-accent) 10%,transparent) }
+.pinkie-mention__icon { flex:none;font-size:13px }
+.pinkie-mention__label { flex:none;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.pinkie-mention__hint { flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;opacity:.45;direction:rtl;text-align:left }
+.pinkie-mention__empty { padding:10px 12px;font-size:12.5px;opacity:.6 }
+.pinkie-mention-tags { display:flex;flex-wrap:wrap;gap:6px;padding:6px 12px 0 }
+.pinkie-mention-tag { display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 4px 0 9px;border-radius:999px;background:color-mix(in srgb,var(--pt-accent) 10%,transparent);color:color-mix(in srgb,var(--pt-accent) 75%,var(--pt-text));font-size:12px }
+.pinkie-mention-tag__x { width:20px;height:20px;border:0;border-radius:50%;background:transparent;color:inherit;font:inherit;cursor:pointer;opacity:.6 }
+.pinkie-mention-tag__x:hover { opacity:1;background:color-mix(in srgb,currentColor 12%,transparent) }
+
+/* C3 / C4 chips */
+.pinkie-composer-chips { display:inline-flex;align-items:center;gap:4px;margin-left:2px }
+.pinkie-chip { display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 9px;border:0;border-radius:8px;background:transparent;color:color-mix(in srgb,currentColor 68%,transparent);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap }
+.pinkie-chip:hover,.pinkie-chip:focus-visible { background:color-mix(in srgb,currentColor 8%,transparent);color:var(--pt-text);outline:none }
+.pinkie-chip--style:not([data-style="default"]) { color:var(--pt-accent) }
+.pinkie-chip--web svg { width:15px;height:15px }
+.pinkie-chip--web[aria-pressed="true"] { color:color-mix(in srgb,var(--pt-accent) 85%,var(--pt-text)) }
+.pinkie-chip--web[aria-pressed="false"] { opacity:.55 }
+.pinkie-chip--web[aria-pressed="false"] span { text-decoration:line-through }
+.pinkie-style-menu { position:fixed;z-index:2147482500;min-width:180px;padding:4px;border:1px solid var(--pt-line);border-radius:10px;background:var(--pt-card);color:var(--pt-text);box-shadow:0 10px 30px rgba(40,20,32,.16);font-size:13px }
+.pinkie-style-menu__item { display:flex;align-items:center;width:100%;min-height:30px;padding:0 10px 0 28px;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;position:relative }
+.pinkie-style-menu__item[aria-checked="true"]::before { content:"✓";position:absolute;left:10px;color:var(--pt-accent) }
+.pinkie-style-menu__item:hover,.pinkie-style-menu__item:focus-visible { background:color-mix(in srgb,var(--pt-accent) 10%,transparent);outline:none }
+.pinkie-style-menu__note { padding:6px 10px 4px;font-size:11px;opacity:.5;max-width:220px }
+
+/* C4 sources */
+.pinkie-sources { display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:6px 0 2px;font-size:12px;color:color-mix(in srgb,currentColor 60%,transparent) }
+.pinkie-sources__item { color:inherit;text-decoration:none;padding:1px 5px;border-radius:5px }
+.pinkie-sources__item:hover { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 9%,transparent) }
+.pinkie-cite { display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;margin:0 1px;padding:0 3px;border-radius:5px;background:color-mix(in srgb,var(--pt-accent) 14%,transparent);color:var(--pt-accent);font-size:10px;font-weight:600;line-height:1;vertical-align:super;text-decoration:none }
+.pinkie-cite:hover { background:var(--pt-accent);color:#fff }
+
+@media (prefers-reduced-motion:reduce) { .chat-group.pinkie-outline-flash .chat-bubble { animation:none } }
+html[data-pinkie-reduce-motion] .chat-group.pinkie-outline-flash .chat-bubble { animation:none }
+
+/* Sidebar top matches Claude App: nothing above 新会话. 概览 / 更多 pages moved into the footer ⋯ menu. */
+html aside.sidebar .sidebar-nav .nav-item--home,
+html aside.sidebar .sidebar-nav > .nav-section.nav-section--more,
+html aside.sidebar .sidebar-nav a.nav-item[href$="/overview"],
+html aside.sidebar .sidebar-nav > .nav-section:not(.nav-section--more):has(> .nav-section__items > a.nav-item[href$="/overview"]):not(:has(> .nav-section__items > a.nav-item:not([href$="/overview"]))) { display:none !important }
+.laolao-footer-overflow__divider { height:1px;margin:4px 6px;background:color-mix(in srgb,currentColor 12%,transparent) }
+.laolao-footer-overflow__page svg { width:16px;height:16px }
