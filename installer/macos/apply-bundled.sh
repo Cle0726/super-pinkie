@@ -10,6 +10,14 @@ PYTHON_BIN="${PINKIE_PYTHON_BIN:-/usr/bin/python3}"
 
 mkdir -p "$STATE_ROOT"
 
+# 产品设定防护（正式版才做事：包里 build-info.json 的 guard 为 true；开发版立刻退出）。
+# 校验签名清单，把被改过的人设/手册/插件/自带技能换回包里的官方版本，openclaw.json 只修产品键。
+# 放在 setup 之前：被关掉的插件要先打开，setup 才不会报「插件被禁用」。出错不挡启动。
+GUARD_NODE="$REPO_ROOT/runtime/bin/node"
+if [[ -f "$REPO_ROOT/build-info.json" && -x "$GUARD_NODE" && -f "$REPO_ROOT/installer/guard/guard.mjs" ]]; then
+  "$GUARD_NODE" "$REPO_ROOT/installer/guard/guard.mjs" startup --app-state "$STATE_ROOT" >/dev/null 2>&1 || true
+fi
+
 # Older CLE Kk builds installed OpenClaw's global KeepAlive LaunchAgent.  That
 # service survives the App, starts with a different Node executable identity,
 # and can take port 18789 before the self-contained Launcher gets a chance to
