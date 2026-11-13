@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 只听 127.0.0.1:47811。GET：读 art/study-game/refs（bridge 用）。POST /upload：chatgpt.com 页面用表单（导航，不受 fetch 的 CSP 限制）
-# 把生成的图交过来，存成 ~/Downloads/pk__<slot>.png，由 mover.sh 搬进 raw/；然后 303 跳回 chatgpt.com 并带上已收到的键。
+# 把生成的图交过来，存成 ~/Downloads/pk__<slot>.png，由 mover.zsh 搬进 raw/；然后 303 跳回 chatgpt.com 并带上已收到的键。
 import http.server, functools, sys, os, urllib.parse, email.parser, email.policy
 ROOT = '/Users/Admin/release-superpinkie/art/study-game/refs'
 OUT = os.path.expanduser('~/Downloads')
