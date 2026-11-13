@@ -56,6 +56,14 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run i {
   flex: none; width: 7px; height: 7px; margin: 0 2px 0 3px; border-radius: 50%; background: var(--tr-exec);
 }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="read"] i { background: var(--tr-read); }
+/* 搜索、看网页、查代码、浏览器：和「读」同色；出题、小互动、手账：和「写」同色 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="search"] i,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="fetch"] i,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="find"] i,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="browse"] i { background: var(--tr-read); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="quiz"] i,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="lab"] i,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="note"] i { background: var(--tr-write); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="write"] i { background: var(--tr-write); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-kind="edit"] i { background: var(--tr-edit); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run b { flex: none; font-weight: 500; color: var(--tr-fg); opacity: .86; }
@@ -96,6 +104,14 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary::before {
   transform: none !important; background: var(--tr-exec); box-shadow: 0 0 0 3px var(--tr-dot-ring);
 }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="read"]::before { background: var(--tr-read); }
+/* 搜索、看网页、查代码、浏览器：和「读」同色；出题、小互动、手账：和「写」同色 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="search"]::before,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="fetch"]::before,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="find"]::before,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="browse"]::before { background: var(--tr-read); }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="quiz"]::before,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="lab"]::before,
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="note"]::before { background: var(--tr-write); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="write"]::before { background: var(--tr-write); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary[data-tool-kind="edit"]::before { background: var(--tr-edit); }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .chat-tool-msg-summary--error::before { background: #e5484d !important; }
