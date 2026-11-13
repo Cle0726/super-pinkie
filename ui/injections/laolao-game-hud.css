@@ -126,11 +126,11 @@
 #pinkie-study-desk .pkg-hello{margin:4px 0 0;font:900 clamp(30px,3.1vw,46px)/1.12 var(--pkg-display);letter-spacing:.04em}
 #pinkie-study-desk .pkg-line{margin:0;font-size:13.5px;line-height:1.6;color:var(--st-ink-2);min-height:1.6em;text-wrap:balance;line-break:strict}
 #pinkie-study-desk .pkg-go{appearance:none;position:relative;display:block;width:100%;border:0;cursor:pointer;text-align:left;border-radius:12px;padding:16px 20px 15px 22px;color:#fff;overflow:hidden;
-  background:linear-gradient(118deg,color-mix(in srgb,var(--pkg-b,#DB1F74) 88%,#160a12) 0,color-mix(in srgb,var(--pkg-b,#DB1F74) 62%,#160a12) 100%);
-  box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 0 0 1px rgba(0,0,0,.08),0 18px 30px -18px color-mix(in srgb,var(--pkg-b,#DB1F74) 80%,#000);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}
+  background:linear-gradient(118deg,color-mix(in srgb,var(--pkg-go,var(--pkg-b,#DB1F74)) 88%,#160a12) 0,color-mix(in srgb,var(--pkg-go,var(--pkg-b,#DB1F74)) 62%,#160a12) 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 0 0 1px rgba(0,0,0,.08),0 18px 30px -18px color-mix(in srgb,var(--pkg-go,var(--pkg-b,#DB1F74)) 80%,#000);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}
 #pinkie-study-desk .pkg-go::before{content:"";position:absolute;inset:4px;border-radius:9px;border:1px solid rgba(255,255,255,.16);pointer-events:none}
 #pinkie-study-desk .pkg-go::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.16) 46%,transparent 60%);transform:translateX(-100%);pointer-events:none}
-#pinkie-study-desk .pkg-go:hover{transform:translateY(-2px);box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 0 0 1px rgba(0,0,0,.08),0 24px 36px -18px color-mix(in srgb,var(--pkg-b,#DB1F74) 85%,#000)}
+#pinkie-study-desk .pkg-go:hover{transform:translateY(-2px);box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 0 0 1px rgba(0,0,0,.08),0 24px 36px -18px color-mix(in srgb,var(--pkg-go,var(--pkg-b,#DB1F74)) 85%,#000)}
 #pinkie-study-desk .pkg-go:hover::after{transform:translateX(100%);transition:transform .9s var(--pkg-out)}
 #pinkie-study-desk .pkg-go:disabled{opacity:.7;cursor:progress}
 #pinkie-study-desk .pkg-go__text{display:grid;grid-template-columns:auto 1fr;align-items:baseline;column-gap:14px;row-gap:6px}
