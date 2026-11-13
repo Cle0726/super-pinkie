@@ -13,7 +13,7 @@
       label: "唠嗑模式",
       address: "先生",
       asset: "/laolao-mode-chat.svg?v=states6",
-      avatar: "/laolao-mode-chat-hd.png?v=avatars6",
+      avatar: "/laolao-mode-chat-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-chat-sm.png?v=sm1",
       transition: "/laolao-mode-transition-chat.png?v=transition2",
       phrases: [
@@ -29,7 +29,7 @@
       label: "项目模式",
       address: "老板",
       asset: "/laolao-mode-project.svg?v=states6",
-      avatar: "/laolao-mode-project-hd.png?v=avatars6",
+      avatar: "/laolao-mode-project-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-project-sm.png?v=sm1",
       transition: "/laolao-mode-transition-project.png?v=transition2",
       phrases: [
@@ -45,7 +45,7 @@
       label: "想法模式",
       address: "先生",
       asset: "/laolao-mode-thinking.svg?v=states6",
-      avatar: "/laolao-mode-thinking-hd.png?v=avatars6",
+      avatar: "/laolao-mode-thinking-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-thinking-sm.png?v=sm1",
       transition: "/laolao-mode-transition-thinking.png?v=transition2",
       phrases: [
@@ -61,7 +61,7 @@
       label: "学习模式",
       address: "先生",
       asset: "/laolao-mode-learning.svg?v=states1",
-      avatar: "/laolao-mode-learning-hd.png?v=avatars1",
+      avatar: "/laolao-mode-learning-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-learning-sm.png?v=sm1",
       transition: "/laolao-mode-transition-learning.png?v=transition1",
       phrases: [
@@ -77,7 +77,7 @@
       label: "无限制模式",
       address: "先生",
       asset: "/laolao-mode-unrestricted.svg?v=states6",
-      avatar: "/laolao-mode-unrestricted-hd.png?v=avatars6",
+      avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-unrestricted-sm.png?v=sm1",
       transition: "/laolao-mode-transition-unrestricted.png?v=transition2",
       phrases: [
