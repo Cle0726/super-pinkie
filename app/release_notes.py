@@ -31,7 +31,7 @@ _VERSION = re.compile(r"v?(\d+(?:\.\d+){1,3})")
 # 细节多到这个程度，界面就先只给摘要，细节收进碧琪的展开入口里。
 SUMMARY_MAX = 90
 DETAIL_MAX = 100
-DETAILS_MAX = 12
+DETAILS_MAX = 16
 
 
 def _plain(text):

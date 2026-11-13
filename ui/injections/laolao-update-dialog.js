@@ -20,7 +20,7 @@
       const lines = String(info?.notes || '').split('\n').map(clean).filter(Boolean);
       summary = lines.shift() || ''; details = lines;
     }
-    return {summary, details: details.slice(0, 12)};
+    return {summary, details: details.slice(0, 16)};
   };
   const ICON_MORE = 'M6 9l6 6 6-6';
   const routeKey = 'pinkie-update-route';
