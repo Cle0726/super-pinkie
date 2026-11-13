@@ -5241,6 +5241,14 @@ html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--st
 html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--stop):has(button.chat-send-btn:not(.chat-send-btn--stop)) button.laolao-followup-mode-btn {
   margin: 0 89px 0 0 !important;
 }
+/* 运行中多出的「立即追加」/ 停止 / 发送都跨 9–12 列靠右放：不撑宽第 12 列，
+   输入框下面的模型 / 思考强度 / 容量圈在运行前后位置一样。文字给按钮让出位置。 */
+html:not([data-laolao-plain-composer]) .agent-chat__input :is(button.chat-send-btn, button.laolao-followup-mode-btn):not(#__p1):not(#__p2):not(#__p3) {
+  grid-column: 9 / -1 !important;
+}
+html:not([data-laolao-plain-composer]) .agent-chat__input:has(.chat-send-btn--stop):has(button.laolao-followup-mode-btn) .agent-chat__composer-combobox {
+  padding-right: 120px !important;
+}
 html:not([data-laolao-plain-composer]) .agent-chat__input button.laolao-followup-mode-btn[data-pinkie-followup-mode="queue"] {
   background: color-mix(in srgb, var(--accent) 20%, #fff) !important;
   border-color: color-mix(in srgb, var(--accent) 48%, transparent) !important;
