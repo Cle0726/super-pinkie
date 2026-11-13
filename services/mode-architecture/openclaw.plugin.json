@@ -12,7 +12,8 @@
       "computer",
       "app_browser",
       "learning_activity",
-      "web_gpt_activity", "pinkie_search",
+      "web_gpt_activity",
+      "pinkie_search",
       "ask_user",
       "pinkie_session_title",
       "pinkie_session_start",
@@ -30,8 +31,7 @@
       "workbench_read",
       "learning_library",
       "learning_material",
-      "learning_desk",
-      "pinkie_search"
+      "learning_desk"
     ]
   },
   "configSchema": {

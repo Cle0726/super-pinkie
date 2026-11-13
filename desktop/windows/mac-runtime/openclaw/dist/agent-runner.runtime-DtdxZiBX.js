@@ -7047,8 +7047,18 @@ async function runReplyAgent(params) {
 	if (effectiveShouldSteer && isActive) {
 		const activeReplyOperation = providedReplyOperation ?? (sessionKey ? replyRunRegistry.get(sessionKey) : void 0);
 		const steerSessionId = activeReplyOperation?.sessionId ?? followupRun.run.sessionId;
+		/* pinkie-steer-current-images:v1 */
+		const pinkieSteerImages = /^agent:(?:main|project|thinking|learning):/.test(String(sessionKey ?? followupRun.run.sessionKey ?? ""))
+			? (await resolveCurrentTurnImages({
+				ctx: sessionCtx,
+				cfg: resolveQueuedReplyRuntimeConfig(followupRun.run.config),
+				images: followupRun.images ?? opts?.images,
+				imageOrder: followupRun.imageOrder ?? opts?.imageOrder
+			})).images
+			: void 0;
 		const steerOutcome = await queueEmbeddedAgentMessageWithOutcomeAsync(steerSessionId, followupRun.prompt, {
 			steeringMode: "all",
+			...pinkieSteerImages?.length ? { images: pinkieSteerImages } : {},
 			...opts?.onTurnAdopted ? { waitForTranscriptCommit: true } : {},
 			...resolvedQueue.debounceMs !== void 0 ? { debounceMs: resolvedQueue.debounceMs } : {},
 			...followupRun.userTurnTranscriptRecorder ? { userTurnTranscriptRecorder: followupRun.userTurnTranscriptRecorder } : {}

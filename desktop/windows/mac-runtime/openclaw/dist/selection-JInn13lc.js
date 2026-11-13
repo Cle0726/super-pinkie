@@ -8507,7 +8507,8 @@ async function cancelQueuedSteeringMessage(activeSession, text) {
 * `message_end` event appears. If the run ends or times out first, the pending
 * queue entry is removed so an abandoned steer does not leak into a later turn.
 */
-async function steerAndWaitForTranscriptCommit(activeSession, text, timeoutMs, userTurnTranscriptRecorder) {
+/* pinkie-forward-steer-images:v1 */
+async function steerAndWaitForTranscriptCommit(activeSession, text, timeoutMs, userTurnTranscriptRecorder, images) {
 	await new Promise((resolve, reject) => {
 		let settled = false;
 		let terminalTimer;
@@ -8558,7 +8559,7 @@ async function steerAndWaitForTranscriptCommit(activeSession, text, timeoutMs, u
 			}
 			if (isTerminalActiveSessionEvent(event)) scheduleTerminalCancellation();
 		});
-		(userTurnTranscriptRecorder ? activeSession.steer(text, void 0, userTurnTranscriptRecorder) : activeSession.steer(text)).catch((err) => {
+		(userTurnTranscriptRecorder ? activeSession.steer(text, images, userTurnTranscriptRecorder) : images ? activeSession.steer(text, images) : activeSession.steer(text)).catch((err) => {
 			finish(err);
 		});
 	});
@@ -8569,11 +8570,12 @@ async function steerAndWaitForTranscriptCommit(activeSession, text, timeoutMs, u
 */
 async function steerActiveSessionWithOptionalDeliveryWait(activeSession, text, options) {
 	if (options?.waitForTranscriptCommit !== true) {
-		if (options?.userTurnTranscriptRecorder) await activeSession.steer(text, void 0, options.userTurnTranscriptRecorder);
+		if (options?.userTurnTranscriptRecorder) await activeSession.steer(text, options?.images, options.userTurnTranscriptRecorder);
+		else if (options?.images) await activeSession.steer(text, options.images);
 		else await activeSession.steer(text);
 		return;
 	}
-	await steerAndWaitForTranscriptCommit(activeSession, text, options.deliveryTimeoutMs ?? DEFAULT_QUEUE_TRANSCRIPT_COMMIT_TIMEOUT_MS, options.userTurnTranscriptRecorder);
+	await steerAndWaitForTranscriptCommit(activeSession, text, options.deliveryTimeoutMs ?? DEFAULT_QUEUE_TRANSCRIPT_COMMIT_TIMEOUT_MS, options.userTurnTranscriptRecorder, options.images);
 }
 //#endregion
 //#region src/agents/embedded-agent-runner/run/attempt.run-decisions.ts
