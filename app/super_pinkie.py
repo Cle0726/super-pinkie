@@ -1050,8 +1050,41 @@ def pull_and_update(log):
         return False
 
 
+def run_settings_guard(log):
+    """产品设定防护（正式版才做事）：校验签名清单，把被改过的人设/插件/自带技能换回官方版本，openclaw.json 只修产品键。
+
+    包里 build-info.json 不是正式版就什么也不做（开发版、本地构建）。放在所有启动准备之前：
+    后面的插件 setup 读到的已经是修好的配置。校验器自己出错不挡启动（它会写 status.json 标记）。
+    """
+    guard = resource_path("installer", "guard", "guard.mjs")
+    info = resource_path("build-info.json")
+    if not guard.is_file() or not info.is_file():
+        return None
+    try:
+        if json.loads(info.read_text(encoding="utf-8-sig")).get("guard") is not True:
+            return None
+    except (OSError, ValueError, AttributeError):
+        return None
+    try:
+        result = subprocess.run(
+            node_command(guard, "startup", "--bundle", resource_path(), "--state-dir", prompts_dir(),
+                         "--app-state", windows_state_root()),
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60, **hidden_process_kwargs())
+        summary = json.loads((result.stdout or "").strip().splitlines()[-1]) if (result.stdout or "").strip() else {}
+    except Exception as error:  # 不挡启动
+        log(f"⚠️ 设定校验没有完成：{type(error).__name__}")
+        return None
+    if summary.get("nonOfficial"):
+        log("⚠️ 设定校验：这不是官方签名的版本")
+    elif summary.get("restored") or summary.get("configFixed"):
+        log(f"设定校验：换回了 {summary.get('restored', 0)} 个被改过的设定文件，修了 {len(summary.get('configFixed') or [])} 处配置")
+    return summary
+
+
 def prepare_bundled_desktop(log):
     config = openclaw_config_path()
+    # 正式版的设定防护最先跑，「保留现有资料」启动参数也绕不过去。
+    run_settings_guard(log)
     if os.environ.get("PINKIE_PRESERVE_EXISTING_PROFILE") == "1":
         # Explicit opt-in for starting a known, already prepared profile while
         # leaving its config, managed extensions, and workspaces untouched.

@@ -13,6 +13,7 @@ import re
 import shutil
 import socket
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -226,6 +227,44 @@ def mirrored_release_update(release, current_version, asset_url, portable=False)
             raise ValueError("invalid release asset digest")
         selected["sha256"] = match.group(1).lower()
     return selected
+
+
+GUARD_UPDATE_REFUSED = "更新包的签名不对，没有安装，旧版没有改动。"
+
+
+def guard_release_build(resource_root):
+    """现装 App 是不是正式版（设定防护开）：只认包里写死的 build-info.json，不看环境变量。"""
+    try:
+        return json.loads((Path(resource_root) / "build-info.json").read_text(encoding="utf-8-sig")).get("guard") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def verify_signed_latest(resource_root, latest, asset, sha256, public_key=None):
+    """用包里自带的 node 跑 guard.mjs verify-latest：latest.json 的发布签名对、
+    要装的文件名和 SHA-256 在签名覆盖的安装包清单里。公钥写死在 guard.mjs（public_key 只给测试）。"""
+    root = Path(resource_root)
+    node, guard = root / "runtime" / "bin" / "node.exe", root / "installer" / "guard" / "guard.mjs"
+    if not node.is_file():
+        node = Path(shutil.which("node") or "")
+    if not guard.is_file() or not node.name or not isinstance(latest, dict):
+        return False
+    fd, temporary = tempfile.mkstemp(prefix="latest-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(latest, handle, ensure_ascii=False)
+        command = [str(node), str(guard), "verify-latest", temporary, "--asset", str(asset), "--sha256", str(sha256)]
+        if public_key:
+            command += ["--public-key", public_key]
+        kwargs = {"creationflags": 0x08000000} if os.name == "nt" else {}
+        return subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, **kwargs).returncode == 0
+    except Exception:
+        return False
+    finally:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
 
 
 def app_version(resource_root):
@@ -1028,6 +1067,8 @@ class WindowsUpdater:
                         raise ValueError("new mirror release is missing a valid package digest")
                 except ValueError:
                     continue
+                if selected:
+                    selected["signedManifest"] = manifest  # 正式版更新前验它的签名（设定防护 A6）
                 self.mirror_latest = ({**selected, "route": "mirror", "mirror": route["label"]} if selected else
                                       {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version})
                 return dict(self.mirror_latest)
@@ -1048,6 +1089,23 @@ class WindowsUpdater:
             return {"available": False, "supported": True, "route": "mirror", "currentVersion": self.current_version,
                     "temporaryError": True, "message": ("国内线路缺少版本清单，暂时无法检查；可换官方线路或手动下载。" if missing_manifest else
                                                           "国内线路暂时都连不上，可以稍后重试，或换回官方线路。")}
+
+    def _require_signed(self, metadata, expected):
+        """正式版：只装 latest.json 签名覆盖的安装包（文件名 + SHA-256）。开发版不检查，行为不变。"""
+        if not guard_release_build(self.resource_root):
+            return
+        latest = metadata.get("signedManifest")
+        if not isinstance(latest, dict):
+            try:
+                url = f"{UPDATE_RELEASES_URL}/download/v{metadata['version']}/{UPDATE_MANIFEST_NAME}"
+                latest = json.loads(self._read(url, 256 * 1024).decode("utf-8-sig"))
+            except Exception as error:
+                append_log("updater", f"signed release manifest unavailable: {error}")
+                latest = None
+        if (not isinstance(latest, dict) or str(latest.get("version", "")).removeprefix("v") != metadata["version"]
+                or not verify_signed_latest(self.resource_root, latest, metadata["name"], expected)):
+            append_log("updater", f"update {metadata['version']} refused: release signature does not cover {metadata['name']}")
+            raise ValueError(GUARD_UPDATE_REFUSED)
 
     def _expected_checksum(self, metadata):
         try:
@@ -1190,6 +1248,7 @@ class WindowsUpdater:
             directory.mkdir(parents=True, exist_ok=True)
             payload = directory / metadata["name"]
             expected = self._expected_checksum(metadata)
+            self._require_signed(metadata, expected)
             if not payload.is_file() or self._file_hash(payload) != expected:
                 payload.unlink(missing_ok=True)
                 self._download(metadata["executableUrl"], payload, progress=progress)
