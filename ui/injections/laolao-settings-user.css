@@ -441,6 +441,10 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #laolao-user-settings .pinkie-user-settings__warning-text { margin: 0; font-size: 11px; line-height: 1.5; }
 
 #laolao-user-settings .pinkie-user-settings__value { color: var(--pinkie-settings-muted); font-size: 12px; }
+#laolao-user-settings .pinkie-user-settings__guard[data-tone="ok"] { color: var(--pinkie-settings-ink, inherit); }
+#laolao-user-settings .pinkie-user-settings__guard[data-tone="warn"] { color: #c2410c; font-weight: 600; }
+html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__guard[data-tone="warn"] { color: #fdba74; }
+#laolao-user-settings .pinkie-user-settings__guard-detail { margin: 2px 0 8px; overflow-wrap: anywhere; }
 #laolao-user-settings .pinkie-user-settings__usage-label { margin: 12px 0 7px; font-size: 12px; font-weight: 700; }
 #laolao-user-settings .pinkie-user-settings__usage-grid {
   display: grid;
