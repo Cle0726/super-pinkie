@@ -20,7 +20,40 @@ if (!window.__laolaoCleStage) {
 
   const root = document.documentElement;
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)');
-  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', image: '图片生成中', done: '完成', stopped: '已中断'};
+  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', image: '图片生成中', done: '完成', stopped: '已中断',
+    search: '正在搜索', fetch: '正在看网页', browse: '正在用浏览器', find: '正在查代码', test: '正在跑测试',
+    quiz: '正在出题', lab: '正在搭小互动', grade: '正在批改', note: '正在记进手账', memory: '正在翻记忆',
+    session: '正在安排子会话', show: '正在打开工作台', computer: '正在操作电脑', webgpt: '正在和网页 GPT 协作',
+    cron: '正在设定时', tool: '正在用工具'};
+  // 工具名 → 类别。类别决定标题行的动作词、展开后那一行的说法和色点。
+  // 碧琪自己的工具（services/mode-architecture 里注册的）和 OpenClaw 原生工具都在这里；
+  // 不认识的工具归「tool」，不再一律当成「运行命令」。
+  const TOOL_KIND = {
+    read: 'read', workbench_read: 'read', learning_library: 'read', learning_material: 'read', memory_get: 'memory',
+    write: 'write', edit: 'edit', apply_patch: 'edit', code_edit: 'edit', multiedit: 'edit',
+    exec: 'exec', bash: 'exec', process: 'exec', code_check: 'exec', run_tests: 'test',
+    code_search: 'find', code_refs: 'find', grep: 'find', glob: 'find',
+    web_search: 'search', pinkie_search: 'search', web_fetch: 'fetch',
+    browser: 'browse', app_browser: 'browse',
+    image: 'image', image_generate: 'image', imagegen: 'image',
+    plan_update: 'plan', update_plan: 'plan',
+    ask_user: 'ask', pinkie_mode_ask: 'ask',
+    learning_activity: 'quiz', learning_desk: 'note',
+    clekk_memory: 'memory', memory_search: 'memory',
+    pinkie_session_start: 'session', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
+    sessions_spawn: 'session', sessions_send: 'session', subagents: 'session',
+    workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', cron: 'cron',
+  };
+  const QUIZ_KINDS = /^(?:single_choice|multiple_choice|fill_blank|short_answer|batch)$/;
+  const normTool = (s) => String(s || '').trim().toLowerCase().replace(/[\s.-]+/g, '_');
+  // 一次工具调用归哪一类：看名字；出题工具再看它这次是出题、批改还是搭互动
+  function kindOfCall(name, args) {
+    const k = TOOL_KIND[normTool(name)];
+    if (k !== 'quiz') return k || '';
+    const a = args && typeof args === 'object' ? args : {};
+    if (a.action && a.action !== 'present') return 'grade';
+    return !a.kind || QUIZ_KINDS.test(String(a.kind)) ? 'quiz' : 'lab';
+  }
   const STOPPED = /中断|失败|出错|错误|取消|interrupt|abort|fail|error|cancel/i;
   const DONE_HOLD = 6900;      // 落款全长（含回到签名）
   const NS = 'http://www.w3.org/2000/svg';
@@ -39,7 +72,15 @@ if (!window.__laolaoCleStage) {
   }
 
   function kindOf(text) {
+    const byName = kindOfCall(text);
+    if (byName) return byName;
+    // 标签上是中文名（laolao-phrases 把工具名换成了中文）：反查工具名
+    const labels = window.__pinkieToolLabels || {};
+    const label = String(text || '').trim();
+    for (const name of Object.keys(labels)) if (labels[name] === label && TOOL_KIND[name]) return TOOL_KIND[name];
     const s = String(text || '').toLowerCase();
+    // 原生标签里夹着工具名（「网页搜索 · web_search」、「Web Search」）
+    for (const name of Object.keys(TOOL_KIND)) if (name.length > 4 && normTool(s).includes(name)) return TOOL_KIND[name];
     if (/plan_update|更新工作计划/.test(s)) return 'plan';
     if (/apply_patch|\bpatch\b|\bedit\b|multiedit|replace|修改|编辑|替换|补丁/.test(s)) return 'edit';
     if (/\bwrite\b|\bcreate\b|notebook|写入|新建|创建|保存/.test(s)) return 'write';
@@ -79,7 +120,14 @@ if (!window.__laolaoCleStage) {
     } else if (a.query || a.q) { t = firstLine(a.query || a.q); mono = false; }
     else if (a.url) t = a.url;
     else if (meta) { t = firstLine(meta); mono = false; }
-    else { const v = Object.values(a).find((x) => typeof x === 'string' && x.trim()); t = firstLine(v); mono = false; }
+    else {
+      // 先找像标题、题干的字段；action / kind 这类开关值（present、list…）不当说明
+      const keys = ['title', 'question', 'stem', 'prompt', 'topic', 'task', 'message', 'text', 'name', 'label'];
+      const skip = /^(?:action|kind|mode|area|type|status|format|lesson_phase|activity_id|id)$/;
+      const v = keys.map((k) => a[k]).find((x) => typeof x === 'string' && x.trim())
+        || Object.entries(a).filter(([k]) => !skip.test(k)).map(([, x]) => x).find((x) => typeof x === 'string' && x.trim());
+      t = firstLine(v); mono = false;
+    }
     if (!t && meta) { t = firstLine(meta); mono = false; }
     return {text: t.length > 160 ? t.slice(0, 159) + '…' : t, mono};
   }
@@ -450,7 +498,7 @@ if (!window.__laolaoCleStage) {
         if (stream === 'tool') {
           const id = d.toolCallId || '';
           if (d.phase === 'start') {
-            const k = kindOf(d.name);
+            const k = kindOfCall(d.name, d.args) || kindOf(d.name);
             const a = argText(d.name, d.args, d.meta);
             if (id) { ARGS[id] = {k, t: a.text, m: a.mono, at: Date.now()}; saveArgs(); }
             run.queue.push({id, kind: d.name === 'ask_user' ? 'ask' : k, text: a.text, mono: a.mono, done: false});
@@ -490,7 +538,18 @@ if (!window.__laolaoCleStage) {
   });
 
   /* ── 展开后的过程：说明照常显示，连续的工具收成一行「已运行 2 个命令 ›」 ── */
-  const RUN_WORD = {exec: ['运行', '命令'], read: ['读取', '文件'], write: ['写入', '文件'], edit: ['修改', '文件']};
+  // 每类工具做完之后怎么说（「搜了 2 次网页」「出了一道练习」）
+  const cnNum = (n) => (n === 1 ? '一' : n === 2 ? '两' : String(n));
+  const DONE_WORD = {
+    exec: (n) => `运行了 ${n} 个命令`, read: (n) => `读了 ${n} 个文件`, write: (n) => `写了 ${n} 个文件`,
+    edit: (n) => `改了 ${n} 个文件`, plan: (n) => (n > 1 ? `更新了 ${n} 次计划` : '更新了计划'),
+    search: (n) => `搜了 ${n} 次网页`, fetch: (n) => `看了 ${n} 个网页`, browse: (n) => `用浏览器看了 ${n} 次`,
+    find: (n) => `查了 ${n} 次代码`, test: (n) => `跑了 ${n} 次测试`,
+    quiz: (n) => `出了${cnNum(n)}道练习`, lab: (n) => `做了${cnNum(n)}个小互动`, grade: (n) => `批改了 ${n} 次`,
+    note: (n) => `记了 ${n} 条手账`, memory: (n) => `翻了 ${n} 次记忆`, session: (n) => `安排了 ${n} 次子会话`,
+    show: (n) => `在工作台打开了 ${n} 个文件`, computer: (n) => `操作了 ${n} 次电脑`, webgpt: (n) => `和网页 GPT 协作了 ${n} 次`,
+    image: (n) => `生成了 ${n} 张图`, ask: (n) => `问了你 ${n} 次`, cron: (n) => `设了 ${n} 个定时`, tool: (n) => `用了 ${n} 个工具`,
+  };
   const openRuns = new Set();         // 用户点开的工具组（按第一步的 toolCallId 记，重绘后照样展开）
   const seenSteps = new WeakSet();    // 已经出场过的步骤；运行中新来的依次淡入
 
@@ -505,12 +564,8 @@ if (!window.__laolaoCleStage) {
     const count = {};
     rows.forEach((r) => { const k = r.getAttribute('data-tool-kind') || 'exec'; count[k] = (count[k] || 0) + 1; });
     const kinds = Object.keys(count);
-    if (kinds.length > 2) return '已使用 ' + rows.length + ' 个工具';
-    return kinds.map((k, i) => {
-      if (k === 'plan') return (i ? '' : '已') + '更新计划' + (count[k] > 1 ? ' ' + count[k] + ' 次' : '');
-      const w = RUN_WORD[k] || RUN_WORD.exec;
-      return (i ? '' : '已') + w[0] + ' ' + count[k] + ' 个' + w[1];
-    }).join('，');
+    const said = kinds.slice(0, 2).map((k) => (DONE_WORD[k] || DONE_WORD.tool)(count[k])).join('，');
+    return kinds.length > 2 ? said + '，共 ' + rows.length + ' 步' : said;
   }
 
   function shapeRows() {

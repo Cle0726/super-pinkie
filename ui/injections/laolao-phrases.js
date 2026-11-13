@@ -267,7 +267,18 @@
   // markers; Lit's next update of that label then throws inside the chat pane
   // render, so the pane stops committing new replies and never scrolls to them
   // until the app is reopened. Only rewrite the text node values in place.
-  const toolLabels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索资料',web_fetch:'读取网页',browser:'操作浏览器',apply_patch:'应用补丁'};
+  // 工具中文名：原生工具 + 碧琪自己的工具（services/mode-architecture 注册的）。
+  // 标签只显示中文，不露英文工具名；laolao-cle-stage 用同一张表反查类别。
+  const toolLabels={read:'读取文件',write:'写入文件',edit:'编辑文件',exec:'执行命令',process:'查看进程',web_search:'搜索网页',web_fetch:'看网页',browser:'操作浏览器',apply_patch:'应用补丁',
+    image:'看图片',image_generate:'生成图片',cron:'定时任务',memory_search:'翻记忆',memory_get:'翻记忆',sessions_spawn:'开子会话',sessions_send:'给子会话发消息',
+    pinkie_search:'搜索网页',app_browser:'用浏览器看网页',plan_update:'更新计划',update_plan:'更新计划',ask_user:'问你',pinkie_mode_ask:'问你',
+    code_edit:'修改代码',code_search:'查代码',code_refs:'查代码引用',code_check:'检查代码',run_tests:'跑测试',
+    computer:'操作电脑',computer_flow:'操作电脑',workbench_read:'读取项目资料',workbench_show:'在工作台打开',
+    learning_activity:'学习小练习',learning_desk:'记进手账',learning_library:'查学习资料',learning_material:'看学习资料',
+    clekk_memory:'长期记忆',pinkie_session_start:'开子会话',pinkie_session_message:'给子会话发消息',pinkie_session_list:'查看子会话',pinkie_session_title:'给会话起名',
+    web_gpt_activity:'网页 GPT 协作'};
+  window.__pinkieToolLabels=toolLabels;
+  const toolLabelFor=(core)=>toolLabels[core.toLowerCase()]||toolLabels[core.toLowerCase().replace(/[\s.-]+/g,'_')]||null;
   const queueSteerBadge = (parent) => {
     // Accepted is not a model-consumption receipt. The card is removed when
     // its durable user message is confirmed; never promise a particular step.
@@ -282,8 +293,9 @@
     }
     if(parent.matches?.('.chat-tool-msg-summary__label')){
       if(/^ask[_ ]user$/i.test(core))return '向你提问';
-      const label=toolLabels[core.toLowerCase()];
-      return label?`${label} · ${core}`:null;
+      // 已经是中文名（重绘时再走一遍）就不动
+      if(Object.values(toolLabels).includes(core))return null;
+      return toolLabelFor(core);
     }
     // Queue labels are also Lit bindings. Update only the individual text
     // node so its sibling marker and live count survive the next render.
