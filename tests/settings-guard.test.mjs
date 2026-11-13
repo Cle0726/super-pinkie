@@ -216,4 +216,11 @@ test('tool_result_persist hook restores and tells the model, only for command to
   assert.equal(fs.readFileSync(path.join(ws, 'AGENTS.md'), 'utf8'), 'agents');
   assert.equal(out.message.content[0].text, 'SUCCESS');
   assert.match(out.message.content[1].text, /碧琪设定防护/);
+  // after_tool_call 抢先换回时，提示照样写进随后落盘的命令结果，而且只写一次
+  fs.writeFileSync(path.join(ws, 'SOUL.md'), 'tampered again');
+  hooks.after_tool_call[0]({toolName: 'exec'});
+  assert.equal(fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8'), 'soul');
+  const later = persist({toolName: 'exec', message: {role: 'toolResult', content: 'done'}});
+  assert.match(later.message.content[1].text, /SOUL\.md/);
+  assert.equal(persist({toolName: 'exec', message: {role: 'toolResult', content: 'done'}}), undefined);
 });

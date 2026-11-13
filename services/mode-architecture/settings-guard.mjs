@@ -312,7 +312,7 @@ export class SettingsGuard {
     const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
       // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
       product: productView(config), official: structuredClone(config), lastGood: structuredClone(config),
-      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: []};
+      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: [], unreported: []};
     shared.set(key, snap);
     return snap;
   }
@@ -381,6 +381,8 @@ export class SettingsGuard {
     if (fixed.length) {
       const event = {at: new Date().toISOString(), tool, restored: fixed.map(f => path.relative(this.stateDir, f) || f)};
       snap.restores.push(event);
+      // 还没告诉碧琪的：after_tool_call 和 tool_result_persist 谁先跑都行，后跑的那个把提示写进命令结果。
+      snap.unreported.push(...fixed);
       if (snap.restores.length > 20) snap.restores.splice(0, snap.restores.length - 20);
       this.record({toolName: tool}, `命令改了 ${fixed.length} 个设定文件，已换回`);
       if (this.pinkieStateRoot) {
@@ -388,6 +390,12 @@ export class SettingsGuard {
       }
     }
     return fixed;
+  }
+
+  takeUnreported() {
+    const snap = this.enabled ? globalThis[BASELINES]?.get(`${this.stateDir}|${this.configPath}`) : null;
+    if (!snap?.unreported?.length) return [];
+    return [...new Set(snap.unreported.splice(0))];
   }
 
   execNote(fixed) {
@@ -543,8 +551,10 @@ export function registerSettingsGuard(api, options = {}) {
     try {
       const tool = String(event.toolName || event.message?.toolName || '');
       if (!guard.enabled || !COMMAND_TOOLS.has(tool)) return undefined;
-      const fixed = guard.verifyAfterCommand(tool);
-      if (!fixed.length || !event.message) return undefined;
+      guard.verifyAfterCommand(tool);
+      if (!event.message) return undefined;
+      const fixed = guard.takeUnreported();
+      if (!fixed.length) return undefined;
       const message = {...event.message};
       const note = {type: 'text', text: guard.execNote(fixed)};
       message.content = Array.isArray(message.content) ? [...message.content, note] : [{type: 'text', text: String(message.content ?? '')}, note];
