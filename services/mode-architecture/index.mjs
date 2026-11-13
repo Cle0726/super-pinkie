@@ -44,6 +44,7 @@ import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime
 import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
+import {registerSettingsGuard} from './settings-guard.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -6853,6 +6854,8 @@ export default {
       const config = runtimeConfig(api, {allowFile: false});
       return config && typeof config === 'object' ? config : {};
     };
+    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置。
+    registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
     // Le Pacte（学习约定 + 每日账本 + 连续天数）：账本挂在学习存储上，由后者的
