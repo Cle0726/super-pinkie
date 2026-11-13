@@ -1009,5 +1009,167 @@
    "reviewed": "2026-11-09",
    "note": "同一胸像构图，只换答错的表情。全身 hurt 不动"
   }
+ },
+ "v4": {
+  "battle/boss": {
+   "raw": "bg-boss.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/exam": {
+   "raw": "bg-exam.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/grammar": {
+   "raw": "bg-grammar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/listening": {
+   "raw": "bg-listening.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/reading": {
+   "raw": "bg-reading.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/training": {
+   "raw": "bg-training.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/translation": {
+   "raw": "bg-translation.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/vocab": {
+   "raw": "bg-vocab.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/world": {
+   "raw": "bg-world.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "battle/writing": {
+   "raw": "bg-writing.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-12"
+  },
+  "monster/block-golem": {
+   "raw": "mon-block-golem.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/bookworm": {
+   "raw": "mon-bookworm.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/bridge-troll": {
+   "raw": "mon-bridge-troll.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/clock-beetle": {
+   "raw": "mon-clock-beetle.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/echo-bat": {
+   "raw": "mon-echo-bat.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-dictionary-mimic": {
+   "raw": "mon-elite-dictionary-mimic.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-gear-knight": {
+   "raw": "mon-elite-gear-knight.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-quill-dragon": {
+   "raw": "mon-elite-quill-dragon.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-siren-conch": {
+   "raw": "mon-elite-siren-conch.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-tome-owl": {
+   "raw": "mon-elite-tome-owl.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/elite-twin-mask": {
+   "raw": "mon-elite-twin-mask.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/eraser-gnome": {
+   "raw": "mon-eraser-gnome.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/fog-puff": {
+   "raw": "mon-fog-puff.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/ink-slime": {
+   "raw": "mon-ink-slime.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/inkpot-imp": {
+   "raw": "mon-inkpot-imp.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/lost-crane": {
+   "raw": "mon-lost-crane.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/paper-fox": {
+   "raw": "mon-paper-fox.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/quiz-shroom": {
+   "raw": "mon-quiz-shroom.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/shaving-hog": {
+   "raw": "mon-shaving-hog.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/shell-crab": {
+   "raw": "mon-shell-crab.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/sticky-ghost": {
+   "raw": "mon-sticky-ghost.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  },
+  "monster/tangle-yarn": {
+   "raw": "mon-tangle-yarn.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "date": "2026-11-13"
+  }
  }
 }

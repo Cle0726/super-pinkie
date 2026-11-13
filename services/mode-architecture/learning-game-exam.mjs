@@ -210,7 +210,7 @@ export class GameExam {
     if (!this.game.requestModel || this.jobs.size || this.real?.job) return;
     const ex = this.ensure(this.game.read());
     const fresh = Object.values(ex.papers).filter(p => p.exam === exam && !['real', 'mock'].includes(p.kind) && p.status === 'ready' && !Object.values(ex.attempts).some(a => a.paperId === p.paperId));
-    const quiet = daysBetween(beijingDate(this.now()), EXAM_DATES[exam]) <= 7;
+    const quiet = daysBetween(beijingDate(this.now()), this.examDateOf(exam)) <= 7;
     if (fresh.length < (quiet ? 1 : 3)) this.kick(exam);
   }
   generate({exam = GAME_EXAM, requestId} = {}) {
@@ -419,6 +419,8 @@ export class GameExam {
     return a.result;
   }
 
+  // 考试日：用户在学习台填的优先，没填用预估日。
+  examDateOf(exam = GAME_EXAM) { return this.game.examDate?.(exam) || EXAM_DATES[exam]; }
   bossState(state, exam = GAME_EXAM) {
     const ex = this.ensure(state);
     const b = this.economy.boss;
@@ -430,16 +432,17 @@ export class GameExam {
       predicted = Math.round(recent.reduce((acc, s, i) => acc + s.score * w[i], 0) / sum);
     }
     const date = beijingDate(this.now());
-    const daysLeft = Math.max(0, daysBetween(date, EXAM_DATES[exam]));
+    const examDate = this.examDateOf(exam);
+    const daysLeft = Math.max(0, daysBetween(date, examDate));
     const hpPercent = predicted >= b.safeLine ? 0 : Math.round((b.safeLine - predicted) / b.safeLine * 100);
     const real = ex.real[exam];
     const phase = real ? 'done' : predicted >= b.safeLine ? 'broken' : daysLeft <= 7 ? 'final' : predicted >= b.passLine ? 'hurt' : 'normal';
-    return {id: 'babel', name: '巴别兽', exam, examDate: EXAM_DATES[exam], daysLeft, hpPercent, bestPredicted: predicted, passLine: b.passLine, safeLine: b.safeLine, phase, gap: Math.max(0, b.safeLine - predicted)};
+    return {id: 'babel', name: '巴别兽', exam, examDate, daysLeft, hpPercent, bestPredicted: predicted, passLine: b.passLine, safeLine: b.safeLine, phase, gap: Math.max(0, b.safeLine - predicted)};
   }
   realScore({exam = GAME_EXAM, score, requestId} = {}) {
     const s = Number(score);
     if (!Number.isFinite(s) || s < 0 || s > 100) throw new Error('分数要在 0 到 100 之间');
-    if (beijingDate(this.now()) < EXAM_DATES[exam]) throw new Error('考完以后再来填真实分数');
+    if (beijingDate(this.now()) < this.examDateOf(exam)) throw new Error('考完以后再来填真实分数');
     return this.game.once('boss.realScore', requestId, state => {
       const ex = this.ensure(state);
       if (ex.real[exam]) throw new Error('真实分数已经填过了');

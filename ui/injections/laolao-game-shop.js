@@ -36,7 +36,20 @@
   function preview(entry) {
     const box = el('div', 'pks-pv'); box.dataset.kind = entry.kind;
     if (entry.kind === 'form') { const i = el('img'); i.alt = ''; i.decoding = 'async'; const scene = window.__pinkieFormStage?.has(entry.itemId) ? G().art(`form/${entry.itemId}/ult`) : null; i.src = scene || G().portrait(entry.itemId); if (scene) box.classList.add('is-scene'); box.append(i); return box; }
-    // 收藏品：名字的第一个字做成印章式大字 + 类型拉丁小字，像书封。
+    // 特效 / 书封：每件一个自己的徽记（形状分类别，图案和配色分单品），货架上悬停出「试一下」，点了真的播一遍。
+    const lo = window.__pinkieLoadout, st = entry.itemId ? lo?.styleOf(entry.itemId) : null;
+    if (st) {
+      box.classList.add('is-fx'); if (st.pal) box.style.setProperty('--pv-a', st.pal[0]);
+      const em = lo.emblem(entry.itemId); box.append(em);
+      if (lo.canDemo(entry.itemId)) {
+        const t = el('button', 'pkl-try'); t.type = 'button'; t.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.500v9l7.500-4.500z"/></svg>'; t.append(el('span', '', '试一下')); t.setAttribute('aria-label', `试一下 ${entry.name || itemName(entry.itemId)}`);
+        t.addEventListener('click', e => { e.stopPropagation(); lo.demo(entry.itemId, em); });
+        box.append(t);
+      }
+      return box;
+    }
+    if (entry.kind === 'shards') { const card = el('div', 'pks-pv__card'); card.append(el('small', '', 'SHARDS'), el('b', 'pks-pv__glyph', '◆'), el('span', 'pks-pv__name', '通用碎片')); box.append(card); return box; }
+    // 其它收藏品（贴纸 / 称号）：名字的第一个字做成印章式大字 + 类型拉丁小字，像书封。
     const [en] = KIND[entry.kind] || ['ITEM'];
     const name = entry.name || itemName(entry.itemId || '');
     const card = el('div', 'pks-pv__card'); card.append(el('small', '', en), el('b', 'pks-pv__glyph', [...name][0] || '藏'), el('span', 'pks-pv__name', name)); box.append(card); return box;
@@ -60,7 +73,7 @@
       const shelves = [
         ['daily', '每日货架', 'DAILY', `北京 00:00 刷新 · 还有 ${hours} 小时`],
         ['limited', s.season?.name ? `${s.season.name} · 节气限定` : '节气限定', 'SEASONAL', s.quiet ? '考前一周不上限定' : s.season?.until ? `上架到 ${s.season.until.slice(5).replace('-', ' 月 ')} 日` : ''],
-        ['permanent', '常驻货架', 'PERMANENT', '形态、粒子主题、大招过场'],
+        ['permanent', '常驻货架', 'PERMANENT', '形态 · 命中特效 · 粒子主题 · 大招过场 · 结算动画（悬停可以试）'],
         ['seal', '金印专柜', 'SEAL COUNTER', '传说形态 · 过季复刻（万能碎片）'],
       ];
       for (const [key, title, en, note] of shelves) {
@@ -76,9 +89,10 @@
       if (form) { c.dataset.rarity = form.rarity; c.style.setProperty('--tone', RARITY[form.rarity]?.tone || '#B9AEA4'); c.style.setProperty('--fa', form.palette?.[0] || '#F7A8C8'); }
       c.append(preview(it));
       const info = el('div', 'pks-sku__info');
-      const tag = el('small', 'pkg-kicker', form ? `${RARITY[form.rarity]?.label || form.rarity} · ${KIND.form[1]}` : (KIND[it.kind] || ['', ''])[1]);
+      const tag = el('small', 'pkg-kicker', form ? `${RARITY[form.rarity]?.label || form.rarity} · ${KIND.form[1]}` : (KIND[String(it.itemId || '').split(':')[0]] || KIND[it.kind] || ['', ''])[1]);
       info.append(tag, el('b', 'pks-sku__name', it.name));
       if (it.desc) info.append(el('span', 'pks-sku__desc', it.desc));
+      const feel = it.itemId ? window.__pinkieLoadout?.tagOf(it.itemId) : ''; if (feel && !it.desc) info.append(el('span', 'pkl-tag', feel));
       const foot = el('div', 'pks-sku__foot');
       if (it.owned) foot.append(el('span', 'pks-owned', '已拥有'));
       else {
@@ -206,6 +220,23 @@
         for (const id of items) { const slot = id.split(':')[0]; (groups[slot] ||= []).push(id); }
         for (const [slot, ids] of Object.entries(groups)) {
           if (slot === 'stickers') continue;
+          const lo = window.__pinkieLoadout;
+          if (lo && lo.tables[slot]) {
+            // 一排徽记：点一下装上并当场播一遍，再点「跟随」卸下
+            const row = el('div', 'pkl-slot'); row.append(el('span', '', (KIND[slot] || ['', slot])[1]));
+            const list = el('div', 'pkl-slot__list'); list.setAttribute('role', 'group'); list.setAttribute('aria-label', (KIND[slot] || ['', slot])[1]);
+            const now = el('p', 'pkl-slot__now');
+            const paintRow = () => { const on = s.items?.equipped?.[slot] || ''; list.querySelectorAll('.pkl-pick').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.id || '') === on))); now.textContent = on ? `${itemName(on)} · ${lo.tagOf(on)}` : '跟随形态：用现在这个形态自带的'; };
+            const pickBtn = id => {
+              const b = el('button', 'pkl-pick' + (id ? '' : ' is-auto')); b.type = 'button'; b.dataset.id = id; b.title = id ? itemName(id) : '跟随形态'; b.setAttribute('aria-label', b.title);
+              if (id) b.append(lo.emblem(id, {size: 'sm'})); else b.textContent = '跟随';
+              b.addEventListener('click', async () => { try { await g.call('items.equip', {slot, itemId: id || null}); s = await g.refresh(); paintRow(); if (id) lo.demo(id, b); } catch (e) { g.toast(e.message); } });
+              return b;
+            };
+            list.append(pickBtn('')); for (const id of ids) list.append(pickBtn(id));
+            row.append(list, now); eqBox.append(row); paintRow();
+            continue;
+          }
           const row = el('div', 'pks-items__row'); row.append(el('span', '', (KIND[slot] || ['', slot])[1]));
           const sel = el('select'); sel.setAttribute('aria-label', (KIND[slot] || ['', slot])[1]);
           sel.append(new Option('跟随形态', ''));
@@ -445,13 +476,22 @@
       const f = el('div', 'pks-ga__flat'); f.innerHTML = `<svg viewBox="0 0 240 320" aria-hidden="true"><defs><radialGradient id="pks-dome" cx="40%" cy="35%"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity=".06"/></radialGradient></defs><ellipse cx="120" cy="306" rx="96" ry="10" fill="#000" opacity=".35"/><rect x="34" y="170" width="172" height="130" rx="16" fill="#5a1838"/><rect x="34" y="170" width="172" height="130" rx="16" fill="none" stroke="#d8b06a" stroke-opacity=".6"/><rect x="64" y="190" width="112" height="34" rx="3" fill="#1b1117" stroke="#d8b06a" stroke-opacity=".7"/><text x="120" y="213" text-anchor="middle" font-family="Songti SC,serif" font-weight="900" font-size="16" fill="#f2e3c4">${b?.name || '扭蛋'}</text><circle cx="88" cy="256" r="18" fill="#d8b06a"/><rect x="74" y="252" width="28" height="8" rx="3" fill="#b88d48"/><rect x="134" y="242" width="40" height="32" rx="6" fill="#140d12"/><rect x="60" y="160" width="120" height="14" rx="5" fill="#d8b06a"/><circle cx="120" cy="96" r="72" fill="url(#pks-dome)" stroke="#fff" stroke-opacity=".35"/>${[[96, 120, '#B4417F'], [130, 128, '#5E7FC8'], [112, 140, '#D49A2F'], [146, 108, '#4E9A8E'], [84, 104, '#8E6BD8'], [120, 104, '#D8CFC5']].map(([x, y, c]) => `<circle cx="${x}" cy="${y}" r="13" fill="${c}"/><path d="M${x - 13} ${y}a13 13 0 0 0 26 0z" fill="#f3ece4"/>`).join('')}</svg>`;
       box.append(f);
     }
+    // 每一档里实际放了什么（后端 formShare）：形态只占一小份，照实写出来。
+    const rateText = (r, b) => {
+      const fs = b.formShare?.[r], pc = fs != null ? Math.round(fs * 100) : null;
+      if (r === 'SSR') return '传说形态';
+      if (r === 'N') return '贴纸 / 称号 / 碎片';
+      const things = r === 'SR' ? '粒子 / 大招演出 / 碎片' : '封面 / 命中特效 / 结算动画 / 碎片';
+      return pc != null ? `${things}，其中形态约 ${pc}%` : `${RARITY[r]?.name || r}形态或特效`;
+    };
     function paintPanel() {
       panel.replaceChildren();
       const b = banners.find(x => x.id === bannerId) || banners[0]; if (!b) return;
       panel.append(el('small', 'pkg-kicker', b.id === 'seal' ? 'SEAL GACHA' : 'STAR GACHA'), el('h3', 'pks-ga__name', b.name));
       const rates = el('div', 'pks-rates'); rates.append(el('small', 'pkg-kicker', 'RATES'));
-      for (const [r, p] of Object.entries(b.rates || {})) { const row = el('div', 'pks-rate'); row.dataset.r = r; row.style.setProperty('--tone', RARITY[r]?.tone || '#B9AEA4'); row.append(el('b', '', RARITY[r]?.label || r), el('span', '', r === 'N' ? '贴纸 / 称号 / 小特效' : `${RARITY[r]?.name || r}形态或特效`), el('em', 'pkg-num', (p * 100).toFixed(p < .1 ? 1 : 0) + '%')); rates.append(row); }
+      for (const [r, p] of Object.entries(b.rates || {})) { const row = el('div', 'pks-rate'); row.dataset.r = r; row.style.setProperty('--tone', RARITY[r]?.tone || '#B9AEA4'); row.append(el('b', '', RARITY[r]?.label || r), el('span', '', rateText(r, b)), el('em', 'pkg-num', (p * 100).toFixed(p < .1 ? 1 : 0) + '%')); rates.append(row); }
       // 含保底的综合概率也公示（后端按同一套规则算）。
+      if (b.firstTenForm) rates.append(el('p', 'pks-note is-gift', '这个池子的第一次十连，必出 1 个 SR 形态。'));
       if (b.effectiveSSR) rates.append(el('p', 'pks-note', `含保底，SSR 综合约 ${(b.effectiveSSR * 100).toFixed(1)}%（平均 ${Math.round(1 / b.effectiveSSR)} 抽一个）。`));
       panel.append(rates);
       const pity = el('div', 'pks-pity'); pity.append(el('small', 'pkg-kicker', 'PITY'));
@@ -498,8 +538,8 @@
           const card = el('article', 'pks-card'); card.dataset.rarity = x.rarity; card.style.setProperty('--tone', RARITY[x.rarity]?.tone || '#B9AEA4'); card.style.setProperty('--i', i);
           const f = x.kind === 'form' ? g.formOf(x.itemId) : null;
           const face = el('div', 'pks-card__face');
-          face.append(preview({kind: x.kind === 'form' ? 'form' : (x.itemId || '').split(':')[0], itemId: x.itemId, name: f?.name || x.name || itemName(x.itemId)}));
-          face.append(el('small', 'pks-card__r', RARITY[x.rarity]?.label || x.rarity), el('b', 'pks-card__n', f?.name || x.name || itemName(x.itemId)), el('em', 'pks-card__d', x.dup ? `重复 · 碎片 +${x.shards}` : x.kind === 'form' ? '新形态' : 'NEW'));
+          face.append(preview({kind: x.kind === 'form' ? 'form' : x.kind === 'shards' ? 'shards' : (x.itemId || '').split(':')[0], itemId: x.itemId, name: f?.name || x.name || itemName(x.itemId)}));
+          face.append(el('small', 'pks-card__r', RARITY[x.rarity]?.label || x.rarity), el('b', 'pks-card__n', f?.name || x.name || itemName(x.itemId)), el('em', 'pks-card__d', x.kind === 'shards' ? `碎片 +${x.shards}` : x.dup ? `重复 · 碎片 +${x.shards}` : x.kind === 'form' ? '新形态' : 'NEW'));
           card.append(face); grid.append(card);
         });
         const close = el('button', 'pkg-btn pks-results__ok', '收下'); close.type = 'button';

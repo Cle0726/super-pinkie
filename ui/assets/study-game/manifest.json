@@ -704,147 +704,147 @@
   },
   "monster/block-golem": {
    "file": "monster/block-golem.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 138020,
+   "w": 768,
+   "h": 768,
+   "bytes": 80834,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794135766892
+   "date": "2026-11-13",
+   "rawMtime": 1794558233083
   },
   "monster/bookworm": {
    "file": "monster/bookworm.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 124698,
-   "source": "codex",
-   "date": "2026-11-08",
-   "rawMtime": 1794134193345
+   "w": 768,
+   "h": 768,
+   "bytes": 79558,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558233762
   },
   "monster/bridge-troll": {
    "file": "monster/bridge-troll.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 110654,
+   "w": 768,
+   "h": 768,
+   "bytes": 71950,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152618728
+   "date": "2026-11-13",
+   "rawMtime": 1794558234412
   },
   "monster/clock-beetle": {
    "file": "monster/clock-beetle.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 130812,
+   "w": 768,
+   "h": 768,
+   "bytes": 71126,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152618735
+   "date": "2026-11-13",
+   "rawMtime": 1794558235035
   },
   "monster/echo-bat": {
    "file": "monster/echo-bat.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 117080,
+   "w": 768,
+   "h": 768,
+   "bytes": 88898,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152634824
+   "date": "2026-11-13",
+   "rawMtime": 1794558235691
   },
   "monster/eraser-gnome": {
    "file": "monster/eraser-gnome.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 106926,
+   "w": 768,
+   "h": 768,
+   "bytes": 89574,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794135281664
+   "date": "2026-11-13",
+   "rawMtime": 1794558240208
   },
   "monster/fog-puff": {
    "file": "monster/fog-puff.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 88082,
+   "w": 768,
+   "h": 768,
+   "bytes": 59674,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794135507662
+   "date": "2026-11-13",
+   "rawMtime": 1794558241079
   },
   "monster/ink-slime": {
    "file": "monster/ink-slime.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 98918,
-   "source": "codex",
-   "date": "2026-11-08",
-   "rawMtime": 1794133789943
+   "w": 768,
+   "h": 768,
+   "bytes": 60106,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558241805
   },
   "monster/inkpot-imp": {
    "file": "monster/inkpot-imp.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 121606,
+   "w": 768,
+   "h": 768,
+   "bytes": 73558,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794135244381
+   "date": "2026-11-13",
+   "rawMtime": 1794558242468
   },
   "monster/lost-crane": {
    "file": "monster/lost-crane.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 100918,
-   "source": "codex",
-   "date": "2026-11-08",
-   "rawMtime": 1794134301265
+   "w": 768,
+   "h": 768,
+   "bytes": 69104,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558243096
   },
   "monster/paper-fox": {
    "file": "monster/paper-fox.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 105226,
+   "w": 768,
+   "h": 768,
+   "bytes": 78674,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794135447752
+   "date": "2026-11-13",
+   "rawMtime": 1794558243697
   },
   "monster/quiz-shroom": {
    "file": "monster/quiz-shroom.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 86462,
+   "w": 768,
+   "h": 768,
+   "bytes": 60420,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152634842
+   "date": "2026-11-13",
+   "rawMtime": 1794558244341
   },
   "monster/shaving-hog": {
    "file": "monster/shaving-hog.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 131830,
+   "w": 768,
+   "h": 768,
+   "bytes": 90854,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794154657904
+   "date": "2026-11-13",
+   "rawMtime": 1794558245019
   },
   "monster/shell-crab": {
    "file": "monster/shell-crab.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 111586,
+   "w": 768,
+   "h": 768,
+   "bytes": 78714,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152634850
+   "date": "2026-11-13",
+   "rawMtime": 1794558245682
   },
   "monster/sticky-ghost": {
    "file": "monster/sticky-ghost.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 86052,
+   "w": 768,
+   "h": 768,
+   "bytes": 58454,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152634855
+   "date": "2026-11-13",
+   "rawMtime": 1794558246317
   },
   "monster/tangle-yarn": {
    "file": "monster/tangle-yarn.webp",
-   "w": 1024,
-   "h": 1024,
-   "bytes": 119678,
+   "w": 768,
+   "h": 768,
+   "bytes": 113240,
    "source": "chatgpt-web",
-   "date": "2026-11-08",
-   "rawMtime": 1794152634865
+   "date": "2026-11-13",
+   "rawMtime": 1794558246976
   },
   "sticker/cheer": {
    "file": "sticker/cheer.webp",
@@ -1283,7 +1283,7 @@
    "layout": {
     "char": [
      0.1322,
-     0.0,
+     0,
      0.7142,
      0.9609
     ],
@@ -1326,7 +1326,7 @@
    "layout": {
     "char": [
      0.3678,
-     0.0,
+     0,
      0.5885,
      0.875
     ],
@@ -1583,7 +1583,7 @@
    "layout": {
     "char": [
      0.2747,
-     0.0,
+     0,
      0.6868,
      0.875
     ],
@@ -2050,6 +2050,150 @@
    "bytes": 29638,
    "source": "chatgpt-web",
    "date": "2026-11-09"
+  },
+  "battle/boss": {
+   "file": "battle/boss.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 216394,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547305291
+  },
+  "battle/exam": {
+   "file": "battle/exam.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 143052,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547311912
+  },
+  "battle/grammar": {
+   "file": "battle/grammar.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 195896,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547203411
+  },
+  "battle/listening": {
+   "file": "battle/listening.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 231508,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547268349
+  },
+  "battle/reading": {
+   "file": "battle/reading.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 204410,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547195033
+  },
+  "battle/training": {
+   "file": "battle/training.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 271776,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547156184
+  },
+  "battle/translation": {
+   "file": "battle/translation.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 171260,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547252923
+  },
+  "battle/vocab": {
+   "file": "battle/vocab.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 274442,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547214506
+  },
+  "battle/world": {
+   "file": "battle/world.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 292800,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547340010
+  },
+  "battle/writing": {
+   "file": "battle/writing.webp",
+   "w": 1536,
+   "h": 1024,
+   "bytes": 205222,
+   "source": "chatgpt-web",
+   "date": "2026-11-12",
+   "rawMtime": 1794547257110
+  },
+  "monster/elite-dictionary-mimic": {
+   "file": "monster/elite-dictionary-mimic.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 111650,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558236297
+  },
+  "monster/elite-gear-knight": {
+   "file": "monster/elite-gear-knight.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 125560,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558236945
+  },
+  "monster/elite-quill-dragon": {
+   "file": "monster/elite-quill-dragon.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 124024,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558237607
+  },
+  "monster/elite-siren-conch": {
+   "file": "monster/elite-siren-conch.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 103370,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558238253
+  },
+  "monster/elite-tome-owl": {
+   "file": "monster/elite-tome-owl.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 114620,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558238901
+  },
+  "monster/elite-twin-mask": {
+   "file": "monster/elite-twin-mask.webp",
+   "w": 768,
+   "h": 768,
+   "bytes": 82830,
+   "source": "chatgpt-web",
+   "date": "2026-11-13",
+   "rawMtime": 1794558239585
   }
  },
  "updatedAt": "2026-11-09"
