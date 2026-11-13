@@ -64,3 +64,28 @@ export function transformWithStatus(source) {
  if([old,oldMerge,oldPrepare,oldPrepareCall].some(part=>source.split(part).length!==2)) return {changed:false,reason:'unsupported-runtime',text:source};
  return {changed:true,reason:'patched',text:source.replace(old,replacement).replace(oldMerge,replacementMerge).replace(oldPrepare,newPrepare).replace(oldPrepareCall,newPrepareCall)};
 }
+
+// CLI: OPENCLAW_ROOT=<openclaw package> node patch/apply-retry-user-preservation.mjs
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+export function apply(root, {backupRoot} = {}) {
+  const dist = path.join(root, 'dist');
+  const hits = fs.readdirSync(dist).filter(n => /\.m?js$/.test(n)).map(n => path.join(dist, n))
+    .filter(f => { const s = fs.readFileSync(f, 'utf8'); return s.includes(preserveMarker) || s.includes(oldMerge); });
+  if (hits.length !== 1) throw new Error(`retry-user-preservation: expected 1 attempt bundle, found ${hits.length}`);
+  const file = hits[0], original = fs.readFileSync(file, 'utf8'), r = transformWithStatus(original);
+  if (r.reason === 'already-patched') return {changed: false, file};
+  if (!r.changed) throw new Error(`retry-user-preservation: ${r.reason}`);
+  const backup = backupRoot || process.env.PINKIE_PATCH_BACKUP_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie/backups', `retry-user-preservation-${Date.now()}`);
+  fs.mkdirSync(backup, {recursive: true, mode: 0o700});
+  fs.copyFileSync(file, path.join(backup, path.basename(file)));
+  fs.writeFileSync(file, r.text);
+  return {changed: true, file, backup};
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const root = process.env.OPENCLAW_ROOT;
+  if (!root) throw new Error('Set OPENCLAW_ROOT to the active OpenClaw package');
+  console.log(JSON.stringify(apply(root)));
+}
