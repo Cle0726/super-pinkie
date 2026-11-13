@@ -133,11 +133,87 @@ def official_checkout(repo):
 
 
 LATEST_NOTES = {}
+# 设定防护（A6）：latest.json 里的发布签名（version + commit + signature）。正式版只装签名覆盖的提交。
+LATEST_SIGNED = {}
+BUNDLE_ROOT = Path(__file__).resolve().parents[2]
+
+
+def guard_release_build(root=None):
+    """现装 App 是不是正式版：只认包里写死的 build-info.json，不看环境变量。"""
+    root = root or BUNDLE_ROOT
+    try:
+        return json.loads((root / 'build-info.json').read_text(encoding='utf-8')).get('guard') is True
+    except Exception:
+        return False
+
+
+def verify_release_signature(version, commit, signature, root=None):
+    """用包里自带的 node 跑 guard.mjs verify-release（公钥写死在 guard.mjs 里）。"""
+    root = root or BUNDLE_ROOT
+    node, guard = root / 'runtime/bin/node', root / 'installer/guard/guard.mjs'
+    if not node.is_file() or not guard.is_file() or not signature:
+        return False
+    try:
+        return subprocess.run([str(node), str(guard), 'verify-release', str(version), str(commit), str(signature)],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30).returncode == 0
+    except Exception:
+        return False
+
+
+def remember_signed(data, version):
+    if isinstance(data, dict) and str(data.get('version', '')).strip().removeprefix('v') == version:
+        commit, signature = str(data.get('commit', '')).lower(), str(data.get('signature', ''))
+        if re.fullmatch(r'[0-9a-f]{40}', commit) and signature:
+            LATEST_SIGNED.update({'version': version, 'commit': commit, 'signature': signature})
+
+
+def fetch_signed(tag):
+    """版本号是从发布 API 拿到的（没读到 latest.json）时，按 tag 再取一次这一版的 latest.json。"""
+    import urllib.request
+    prefix = ROUTE_PREFIX[0].rstrip('/') + '/' if ROUTE_PREFIX else ''
+    try:
+        request = urllib.request.Request(prefix + RELEASES + f'/download/{tag}/latest.json',
+                                         headers={'User-Agent': 'SuperPinkie-Mac-Updater', 'Accept': 'application/json'})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            remember_signed(json.loads(response.read(256 * 1024).decode('utf-8')), tag[1:])
+    except Exception:
+        pass
+
+
+def require_signed_target(tag, target):
+    """正式版：要装的提交必须是 latest.json 签名覆盖的那个，否则不装（旧版不动）。开发版不检查。"""
+    if not guard_release_build():
+        return None
+    refused = '更新包的签名不对，没有安装，旧版没有改动。'
+    if not tag:
+        raise RuntimeError(refused)
+    if not LATEST_SIGNED:
+        fetch_signed(tag)
+    signed = dict(LATEST_SIGNED)
+    if (signed.get('version') != tag[1:] or signed.get('commit') != str(target).lower()
+            or not verify_release_signature(signed['version'], signed['commit'], signed['signature'])):
+        raise RuntimeError(refused)
+    return signed
+
+
+def save_release_signature(signed):
+    """本地重新打包（build.sh）时把验过的发布签名带进 build-info.json，启动校验据此认包。"""
+    if not signed:
+        return
+    fd, temporary = tempfile.mkstemp(prefix='release-signature-', dir=UPDATES)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as out:
+            json.dump(signed, out)
+        os.replace(temporary, UPDATES / 'release-signature.json')
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def latest_release(repo):
     """最新正式发布的 tag（v2.5.27）。不是官方仓库（自己的分叉、开发用的检出）或查不到时返回 None，照旧跟当前分支。"""
     LATEST_NOTES.clear()
+    LATEST_SIGNED.clear()
     if not official_checkout(repo):
         return None
     import urllib.request
@@ -155,6 +231,8 @@ def latest_release(repo):
             text = data.get('notes') if field == 'version' else data.get('body')
             if release_notes and isinstance(text, str) and text.strip():
                 LATEST_NOTES.update(note_parts(text, value))
+            if field == 'version':
+                remember_signed(data, value)
             return 'v' + value
     return None
 
@@ -317,6 +395,7 @@ def prepare():
                 kind = 'clone'
             emit({'type':'progress','event':{'stage':'verify'}})
             git(repo, 'cat-file', '-e', f'{target}^{{commit}}')
+            signed = require_signed_target(tag, target)
             info = notes(repo, target)
             manifest = {'kind':kind,'repo':str(repo),'branch':branch,'old':old,'target':target,'ref':stage_ref,'route':ROUTE}
             fd, temporary = tempfile.mkstemp(prefix='prepared-', dir=UPDATES)
@@ -326,6 +405,7 @@ def prepare():
                 os.replace(temporary,MANIFEST)
             finally:
                 if os.path.exists(temporary): os.unlink(temporary)
+            save_release_signature(signed)
             emit({'type':'progress','event':{'stage':'metadata',**info}})
             return {'available':True,'ready':True,**info}
         except Exception:

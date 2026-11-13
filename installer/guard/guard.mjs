@@ -9,6 +9,9 @@
 //   node guard.mjs sign DIR KEY.pem                签清单 → DIR/guard-manifest.sig（只在 CI，私钥在 Actions secrets）
 //   node guard.mjs sign-release VERSION COMMIT KEY.pem   打印发布签名（写进 latest.json）
 //   node guard.mjs verify-release VERSION COMMIT SIG     更新前验签：退出码 0 = 通过
+//   node guard.mjs sign-latest latest.json KEY.pem       给 latest.json 加发布签名 + 安装包哈希签名（CI mirror-publish）
+//   node guard.mjs verify-latest latest.json [--asset NAME --sha256 HEX] [--commit SHA]
+//        更新前验 latest.json：签名对、（给了的话）安装包哈希和提交都在签名覆盖范围内。退出码 0 = 通过
 //
 // 只用 node 自带模块。私钥永远不进仓库和安装包；包里只有下面的公钥。
 import crypto from 'node:crypto';
@@ -65,6 +68,32 @@ export function verifyBytes(bytes, signature, key = PUBLIC_KEY) {
 }
 export const releasePayload = (version, commit) => `pinkie-release|v${String(version).replace(/^v/, '')}|${String(commit).toLowerCase()}`;
 export const verifyRelease = (version, commit, signature, key = PUBLIC_KEY) => /^[0-9a-f]{40}$/i.test(String(commit)) && verifyBytes(releasePayload(version, commit), signature, key);
+
+// 安装包哈希签名：版本 + 提交 + 每个文件名=sha256（按文件名排序），一份签名覆盖整套发布文件。
+export function assetsPayload(version, commit, assets) {
+  const lines = Object.keys(assets || {}).sort().map(name => `${name}=${String(assets[name]?.sha256 || '').toLowerCase()}`);
+  return `pinkie-assets|v${String(version).replace(/^v/, '')}|${String(commit).toLowerCase()}\n${lines.join('\n')}`;
+}
+export function signLatest(latest, keyPem) {
+  if (!/^[0-9a-f]{40}$/i.test(String(latest?.commit || ''))) throw new Error('latest.json 缺少发布提交（commit）');
+  if (!latest.assets || !Object.keys(latest.assets).length) throw new Error('latest.json 没有安装包');
+  return {...latest, signature: signBytes(releasePayload(latest.version, latest.commit), keyPem),
+    assetsSignature: signBytes(assetsPayload(latest.version, latest.commit, latest.assets), keyPem)};
+}
+// 返回 {ok, reason}。asset/sha256：要装的那个文件必须在签名覆盖的清单里且哈希一致；commit：要装的提交必须就是签名里的。
+export function verifyLatest(latest, {asset, sha256, commit, key = PUBLIC_KEY} = {}) {
+  if (!latest || typeof latest !== 'object') return {ok: false, reason: '版本清单读不出来'};
+  const version = String(latest.version || '');
+  if (!latest.signature || !latest.commit) return {ok: false, reason: '版本清单没有官方签名'};
+  if (!verifyRelease(version, latest.commit, latest.signature, key)) return {ok: false, reason: '版本清单的签名不对'};
+  if (commit && String(commit).toLowerCase() !== String(latest.commit).toLowerCase()) return {ok: false, reason: '要装的提交和签名里的不一致'};
+  if (asset || sha256) {
+    if (!latest.assetsSignature || !verifyBytes(assetsPayload(version, latest.commit, latest.assets || {}), latest.assetsSignature, key)) return {ok: false, reason: '安装包清单的签名不对'};
+    const entry = latest.assets?.[asset];
+    if (!entry || String(entry.sha256 || '').toLowerCase() !== String(sha256 || '').toLowerCase()) return {ok: false, reason: '安装包的哈希不在签名清单里'};
+  }
+  return {ok: true, reason: ''};
+}
 
 // 包是不是官方签过的：CI 打的包验清单签名；Mac 用 git 更新、在本机打的包验「发布提交签名」（更新时已验过一次）。
 export function bundleTrust(bundle, info, key = PUBLIC_KEY) {
@@ -289,7 +318,8 @@ export function startup({bundle = path.resolve(HERE, '../..'), home = os.homedir
 
 function arg(name, argv) { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isMain = (() => { try { return Boolean(process.argv[1]) && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } })();
+if (isMain) {
   const [command, ...rest] = process.argv.slice(2);
   try {
     if (command === 'startup') {
@@ -307,8 +337,18 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     } else if (command === 'verify-release') {
       const [version, commit, signature] = rest;
       process.exit(verifyRelease(version, commit, signature) ? 0 : 1);
+    } else if (command === 'sign-latest') {
+      const [file, keyFile] = rest;
+      const signed = signLatest(JSON.parse(fs.readFileSync(file, 'utf8')), fs.readFileSync(keyFile, 'utf8'));
+      fs.writeFileSync(file, JSON.stringify(signed, null, 1));
+    } else if (command === 'verify-latest') {
+      let latest = null; try { latest = JSON.parse(fs.readFileSync(rest[0], 'utf8').replace(/^\uFEFF/, '')); } catch {}
+      // --public-key 只给测试用（调用方是我们自己的更新器，参数写死，latest.json 改不了它）。
+      const result = verifyLatest(latest, {asset: arg('--asset', rest), sha256: arg('--sha256', rest), commit: arg('--commit', rest), key: arg('--public-key', rest) || PUBLIC_KEY});
+      if (!result.ok) process.stderr.write(result.reason + '\n');
+      process.exit(result.ok ? 0 : 1);
     } else {
-      process.stderr.write('usage: guard.mjs startup|manifest|sign|sign-release|verify-release\n');
+      process.stderr.write('usage: guard.mjs startup|manifest|sign|sign-release|verify-release|sign-latest|verify-latest\n');
       process.exit(2);
     }
   } catch (error) {
