@@ -1,4 +1,5 @@
-// Every runtime patch must actually be run by the installer. A patch with a
+// Every runtime patch must actually be run by the installer (apply-all.mjs is
+// only a trial harness and does not count). A patch with a
 // passing unit test but no caller looks fixed and never ships (11-13: the
 // retry-user-preservation fix sat unwired for two weeks).
 import test from 'node:test';
@@ -7,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const installer = ['installer/macos/apply-theme.sh', 'patch/apply-all.mjs', 'desktop/macos/build.sh']
+const installer = ['installer/macos/apply-theme.sh', 'desktop/macos/build.sh', 'install.sh', 'install.ps1']
   .map(f => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 // Browser patches ship baked into the shared ui/runtime bundle instead;
 // they count as wired when every marker they write is present there.

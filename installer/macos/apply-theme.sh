@@ -522,6 +522,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # 追加消息时保留流式输出：ack 携带新 runId 时不再清空 chatStream。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-stream-survive-steer.mjs"
     # 立即追加不再和正在跑的一轮抢写会话文件（session file changed while embedded prompt lock was released）。
+    # 上下文压缩失败时留在当前会话里恢复，不先劝用户开新会话（9-13 同步时被误删）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-same-session-recovery.mjs"
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
     # 模型失败自动重试时，同一次发送的失败记录被重试替换，用户那句话不再写两遍。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
