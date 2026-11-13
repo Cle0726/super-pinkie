@@ -80,7 +80,13 @@
       const prefix = `msg:${item.role || 'unknown'}:${item.timestamp}:`;
       return domId.startsWith(prefix) && /^\d+$/.test(domId.slice(prefix.length));
     });
-    return candidates.length === 1 ? candidates[0] : null;
+    if (candidates.length === 1) return candidates[0];
+    // 失败后自动重试的同一次发送：实时记录里会有两条同时间、同 idempotencyKey 的用户消息
+    // （第一次尝试那条已被重试分支替掉）。取最后一条——它才在当前分支上。
+    const send = candidates[0]?.__openclaw?.idempotencyKey;
+    if (candidates.length > 1 && typeof send === 'string' && send
+      && candidates.every(item => item?.__openclaw?.idempotencyKey === send)) return candidates[candidates.length - 1];
+    return null;
   }
   const entryIdOf = item => typeof item?.__openclaw?.id === 'string' ? item.__openclaw.id : '';
   function textOf(item) {
