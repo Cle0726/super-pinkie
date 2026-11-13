@@ -228,7 +228,7 @@ test('tool_result_persist hook restores and tells the model, only for command to
 test('file watch restores a change made by a command that keeps running (write, then sleep / background)', async () => {
   const {ws, home, state, root} = sandbox();
   const cfg = path.join(state, 'openclaw.json');
-  const official = {plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  const official = {plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}}, agents: {list: [{id: 'main', workspace: ws}]}};
   fs.writeFileSync(cfg, JSON.stringify(official));
   fs.writeFileSync(path.join(ws, 'persona', 'voice.md'), 'voice');
   const hooks = {};
@@ -238,10 +238,12 @@ test('file watch restores a change made by a command that keeps running (write, 
   const until = async (check, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (check()) return true; await wait(25); } return false; };
   await wait(150);
   // 没有任何工具钩子被调到：只靠监视
-  const tampered = structuredClone(official); tampered.plugins.entries['pinkie-mode-architecture'].enabled = false; tampered.talk = {voice: 'mine'};
+  // 碧琪真这么干过：整条换成 {enabled: false}，钩子授权跟着没了
+  const tampered = structuredClone(official); tampered.plugins.entries['pinkie-mode-architecture'] = {enabled: false}; tampered.talk = {voice: 'mine'};
   fs.writeFileSync(cfg, JSON.stringify(tampered));
   assert.ok(await until(() => JSON.parse(fs.readFileSync(cfg, 'utf8')).plugins.entries['pinkie-mode-architecture'].enabled === true), 'product key restored by the watcher');
   assert.deepEqual(JSON.parse(fs.readFileSync(cfg, 'utf8')).talk, {voice: 'mine'}, 'user keys kept');
+  assert.deepEqual(JSON.parse(fs.readFileSync(cfg, 'utf8')).plugins.entries['pinkie-mode-architecture'].hooks, {allowPromptInjection: true, allowConversationAccess: true}, 'hook grants restored');
   fs.writeFileSync(path.join(ws, 'SOUL.md'), 'cat with no limits');
   assert.ok(await until(() => fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8') === 'soul'), 'persona restored by the watcher');
   fs.writeFileSync(path.join(ws, 'persona', 'voice.md'), 'changed');

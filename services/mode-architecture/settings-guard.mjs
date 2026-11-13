@@ -468,7 +468,12 @@ function productView(config = {}) {
   }
   return {
     enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null, paths: plugins.load?.paths ?? null,
-    entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => [id, plugins.entries?.[id] ? plugins.entries[id].enabled ?? null : 'absent'])),
+    // 插件开关 + 钩子授权（授权被删，OpenClaw 会挡掉碧琪的对话钩子）。
+    entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => {
+      const entry = plugins.entries?.[id];
+      if (!entry) return [id, 'absent'];
+      return [id, {enabled: entry.enabled ?? null, prompt: entry.hooks?.allowPromptInjection ?? null, conversation: entry.hooks?.allowConversationAccess ?? null}];
+    })),
     agents, hooksInternal: config.hooks?.internal ?? null, extraDirs: config.skills?.load?.extraDirs ?? null,
   };
 }
@@ -484,7 +489,12 @@ function applyProductView(config, official) {
     if (value === 'absent') continue;
     plugins.entries = plugins.entries && typeof plugins.entries === 'object' ? plugins.entries : {};
     if (!plugins.entries[id] || typeof plugins.entries[id] !== 'object') plugins.entries[id] = structuredClone(official.plugins.entries[id]);
-    put(plugins.entries[id], 'enabled', value);
+    const entry = plugins.entries[id];
+    put(entry, 'enabled', value.enabled);
+    if (value.prompt !== null || value.conversation !== null) {
+      entry.hooks = entry.hooks && typeof entry.hooks === 'object' ? entry.hooks : {};
+      put(entry.hooks, 'allowPromptInjection', value.prompt); put(entry.hooks, 'allowConversationAccess', value.conversation);
+    }
   }
   const list = Array.isArray(config.agents?.list) ? config.agents.list : null;
   for (const [id, values] of Object.entries(want.agents)) {
