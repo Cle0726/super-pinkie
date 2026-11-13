@@ -33,7 +33,7 @@ import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths,
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
-import {ModelHealth, configuredModels} from './model-health.mjs';
+import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
@@ -7474,8 +7474,9 @@ export default {
       await tierContinuation.cancel(ctx.sessionKey || '');
       await planContinuation.cancel(ctx.sessionKey || '');
       architecture.parentEnded(event, ctx);
-      modelHealth.turnEnded(ctx.sessionKey || '', {runId: event.runId, success: event.success === true,
-        reason: event.success === true ? '' : failureReasonFromEvent(event)});
+      const healthFailed = turnFailed(event);
+      modelHealth.turnEnded(ctx.sessionKey || '', {runId: event.runId || ctx.runId, success: !healthFailed,
+        reason: healthFailed ? failureReasonFromEvent(event) : ''});
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
         // A side-effecting run can reach agent_end with success=true even

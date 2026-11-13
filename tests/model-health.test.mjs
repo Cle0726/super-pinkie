@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ModelHealth, classifyModelFailure, configuredModels} from '../services/mode-architecture/model-health.mjs';
+import {ModelHealth, classifyModelFailure, configuredModels, turnFailed} from '../services/mode-architecture/model-health.mjs';
 
 test('upstream "no auth available" is an account problem, a 429 is busy', () => {
   assert.equal(classifyModelFailure('503 auth_unavailable: no auth available'), 'account');
@@ -10,6 +10,7 @@ test('upstream "no auth available" is an account problem, a 429 is busy', () => 
   assert.equal(classifyModelFailure('503 service unavailable'), 'down');
   assert.equal(classifyModelFailure('401 invalid api key'), 'key');
   assert.equal(classifyModelFailure('Request timed out'), 'timeout');
+  assert.equal(classifyModelFailure('404 模型 gpt-5.5 不在当前 API Key 的可用模型范围内 error'), 'missing');
   assert.equal(classifyModelFailure(''), 'other');
 });
 
@@ -51,4 +52,29 @@ test('configured candidates: the mode first, then defaults, then other modes\' f
   }};
   assert.deepEqual(configuredModels(config, 'main'),
     ['mm/gemini-3.8-flash-tiered', 'mm/claude-opus-4-6-thinking', 'mm/gemini-3-flash']);
+});
+
+test('a turn whose last assistant message errored is a failure even when agent_end says success', () => {
+  const failed = {success: true, messages: [{role: 'user', content: '你好'},
+    {role: 'assistant', content: [{type: 'text', text: ''}], stopReason: 'error', errorMessage: '503 auth_unavailable: no auth available'}]};
+  assert.equal(turnFailed(failed), true);
+  assert.equal(turnFailed({success: true, messages: [{role: 'assistant', stopReason: 'stop'}]}), false);
+  assert.equal(turnFailed({success: true, messages: [{message: {role: 'assistant', stopReason: 'error'}}]}), true);
+  assert.equal(turnFailed({success: false}), true);
+  assert.equal(turnFailed({success: true}), false);
+});
+
+test('a model whose call "completed" but whose turn failed is not suggested again', () => {
+  let now = 0;
+  const health = new ModelHealth({now: () => ++now});
+  health.callStarted({runId: 'r1', provider: 'mm', model: 'gemini-3.8-flash-tiered'});
+  health.callEnded({runId: 'r1', provider: 'mm', model: 'gemini-3.8-flash-tiered', outcome: 'completed'});
+  health.callEnded({provider: 'mm', model: 'gemini-3-flash', outcome: 'completed'});
+  health.turnEnded('agent:main:a', {runId: 'r1', success: false, reason: 'auth_unavailable'});
+  const {failure, suggestion} = health.failure('agent:main:a', {candidates: ['mm/gemini-3.8-flash-tiered', 'mm/gemini-3-flash']});
+  assert.equal(failure.model, 'mm/gemini-3.8-flash-tiered');
+  assert.equal(suggestion, 'mm/gemini-3-flash');
+  health.turnEnded('agent:main:b', {success: false, reason: 'x', model: 'mm/gemini-3-flash'});
+  assert.equal(health.failure('agent:main:c', {candidates: []}).failure, null);
+  assert.equal(health.failure('agent:main:b', {candidates: ['mm/gemini-3.8-flash-tiered', 'mm/gemini-3-flash']}).suggestion, '');
 });
