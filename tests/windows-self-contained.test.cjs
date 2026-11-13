@@ -75,7 +75,7 @@ test('both packages share the complete Mac browser renderer and preserve the bac
     assert.equal(actual, expected, relative);
   }
   const chat = read('ui/runtime/chat-page-DrPkxqJK.js');
-  assert.match(chat, /\/\* pinkie-chat-timeline:v29 \*\//);
+  assert.match(chat, /\/\* pinkie-chat-timeline:v30 \*\//);
   assert.match(chat, /pinkie-thinking-segments:v1/);
   assert.doesNotMatch(chat, /pinkie-chat-timeline:v25/);
   const index = read('ui/control-ui.index.html');

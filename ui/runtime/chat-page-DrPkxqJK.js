@@ -1428,7 +1428,7 @@ Action:
   state.chatMessages = result;
   return result;
 }
-/* pinkie-chat-timeline:v29 */function userText(message = {}) {
+/* pinkie-chat-timeline:v30 */function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
   if (typeof message.text === 'string') return message.text;
   if (!Array.isArray(message.content)) return '';
@@ -2172,6 +2172,22 @@ function timelineTimestamp(item) {
     ?? item?.messages?.[0]?.timestamp
     ?? 0;
 }
+function timelineEndTimestamp(items) {
+  let end = 0;
+  for (const item of items || []) {
+    const own = Number(item?.timestamp);
+    if (Number.isFinite(own)) end = Math.max(end, own);
+    for (const entry of item?.messages || []) {
+      const message = entry?.message || {};
+      for (const value of [message.__openclaw?.recordTimestampMs, entry?.__openclaw?.recordTimestampMs,
+        message.timestamp, entry?.timestamp]) {
+        const stamp = Number(value);
+        if (Number.isFinite(stamp)) end = Math.max(end, stamp);
+      }
+    }
+  }
+  return end;
+}
 function collapseTimelineRows(rows, maxRows, ownerKey) {
   const rowLimit = Math.max(4, Number.isFinite(maxRows) ? Math.floor(maxRows) : 80);
   if (rows.length <= rowLimit) return rows;
@@ -2452,8 +2468,11 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
   const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
+  // From the user's message to the moment the last piece of this turn was
+  // written, so thinking before the first visible word is counted too.
   const started = Number(timelineTimestamp(head || entries[0]));
-  const ended = Number(timelineTimestamp(lastItem));
+  const ended = Math.max(Number(timelineTimestamp(lastItem)) || 0,
+    timelineEndTimestamp(entries.slice(head ? 1 : 0)));
   const duration = started > 0 && ended > started ? formatProcessDuration(ended - started) : '';
   const card = {
     kind: 'group',
