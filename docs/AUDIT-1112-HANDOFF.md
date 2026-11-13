@@ -13,6 +13,21 @@ Windows 端 11-12 晚整理。做完一项就在这里勾掉，或者在下面�
 - [ ] **真网关 + 真模型重跑子会话**（Mac 有隔离副本）：「开子会话改文件 → 汇报 → 父会话核对」走一遍，确认交付前不再多提醒一次（原因和修法见下一节第 1 条）；再让子会话故意做不成一次，确认父会话说「做好了」仍会被拦。
 - [ ] **打包相关（Windows 端 11-12 晚第一次把这条分支打成 EXE 装上）**：原生桥接按 `app.windows_native` 导入，打包版里没有 `app` 包，托盘、全局快捷键、通知、导出全部起不来（`native.log: ModuleNotFoundError`），已在 `f46907dc` 修好并加了 `tests/windows_frozen_imports_test.py`。Mac 打包不走这段，但如果 Mac 端也有按 `app.xxx` 导入、只在仓库里能跑的写法，同样会在打包后失效。另外 Windows 装好后标题栏的关闭按钮点了没反应、进程也不退出，Windows 端还在查，和 Mac 无关。
 - [ ] **Mac 关窗的行为要不要对齐**：Windows 现在关窗就是退出（网关和它起的进程一起结束，看门狗靠 `gateway-closed-by-app` 标记不再拉起；`PINKIE_KEEP_GATEWAY=1` 恢复常驻）。Mac 关窗后网关是否常驻、`ai.openclaw.watchdog` 会不会把它拉起来，由 Mac 端决定要不要跟。
+- [ ] **WebKit 里看图标动效**（`laolao-icons.css` 是两端共用的，见下一节第 2 条）：悬停 / 按下 / 选中 / 菜单弹出时图标会动；确认 Safari 认 `:where()` 里的 `:not(svg svg)`，原来逐个设计的动作（齿轮、气球、纸杯蛋糕）没被盖掉，开了「减少动态效果」时全停。
+
+## Windows 端 11-12 深夜：标题栏留位、所有图标会动、更新按钮重画（Mac 端先 `git pull`）
+
+用户装上 11-12 晚那一版后提的三条。没合 main、没发版；这台 Windows 上装的 App 还没换成这一版。
+
+**改了什么：**
+
+1. **Windows 顶栏和窗口按钮挤在一起**（`app/windows_desktop.py`，只有 Windows）。按钮组现在五个键、宽 190px，顶栏只写死留了 184px，「累计估算」和「⋯」压到按钮底下约 6px。现在按按钮组的实际宽度 + 14px 算出 `--pinkie-caption-reserve`，`.topbar`、`.pk-workspace-header`、`.pk-wb-tabs`、旧 `.chat-pane__header` 和拖动条都用它，随窗口大小重算。
+2. **所有图标都会动**（`ui/injections/laolao-icons.css`，**两端共用**，缓存号升到 `icons2`）。原来只有侧栏、快捷栏那几颗逐个设计过的会动。现在兜底：按钮、链接、菜单项、选项、标签里的图标，悬停弹一下、按下缩一下；`pk-f` / `pk-a` 小记号悬停时跳；选中的那项小记号慢慢呼吸；菜单、列表弹出时图标依次蹦出；下拉箭头展开时翻转。兜底规则全包在 `:where()` 里、权重为 0，逐个设计的动作和各模块自己的动画都优先。`data-reduce-motion` 和系统「减少动态效果」下全停。
+3. **Windows 更新按钮重画**（只有 Windows，Mac 没有这个按钮）。原来是「星 + 加号」，看不出是更新，点过后留一个 2px 的青色焦点框，有新版时整个方框发光。现在是两道绕圈箭头 + 中间一颗粉星：悬停箭头转三分之一圈、星闪；检查中匀速转；有新版时图标变粉、右上角一颗粉点往外扩散；键盘焦点是柔和的内圈。
+
+**验证了什么：** 用 `capture.mjs` 加载真实的 `BRIDGE_SCRIPT` 量：顶栏最后一个按钮到按钮组间隔 14px（原来重叠 6px）。图标：项目 / 想法 / 学习 / 聊天四个模式 × home、chat、cards、sidebar、learning、power 六个视图扫一遍「按钮里的小图标有没有动效」，最后一处（极致思考菜单标题的星）补上后为 0。更新按钮日 / 夜三种状态截图看过。`windows_update_ui_test`（24，要 `PYTHONPATH=app;.`）、`windows-native-drag-layout`（5）、`windows-self-contained`（15）、`session-cross-mode-ui`（9）都过。
+
+**没验证：** 没装进 App 实机看；WebKit 没看；扫描只覆盖默认画面和打开的菜单，学习台深处的弹窗没逐个点开。
 
 ## Windows 端 11-12 晚：自查——界面状态以后端为准、交付门禁的误报（Mac 端先 `git pull`）
 
