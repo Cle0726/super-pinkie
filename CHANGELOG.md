@@ -4,6 +4,16 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+### 2.5.49
+- 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。
+  - 界面对齐 Claude App：消息编辑/重答/版本/反馈，临时会话，Markdown/PDF/长图导出，@ 提及，会话搜索、按日期分组、批量操作，产物库，原生通知/菜单栏/快捷问答热键（Mac + Windows）。
+  - 子会话：跨模式子会话、分工条、完整回报父会话。
+  - 项目模式编程：code_search / code_edit / run_tests / code_refs，设计方向库，computer_flow 应用操控。
+  - 学习台：背一背 + 奖励层；闯关游戏（营地、变身、错题怪物、真题题库、考场）。
+  - 设定防护：签名清单、启动校验恢复、正式版写保护、小白配模型（预设 + 测连接 + 中文错误）；latest.json 带 commit/签名。
+  - 运行：立即追加不撞会话文件、失败重试不重复写用户消息、过程卡 v30（用时含思考、工具中文名）、模型失败说真实原因、完成通知、打盹/自动减负（默认关）。
+  - 新模式头像（avatars7 / sm3）、线性图标、系统提示碧琪口吻、碧琪口吻更新说明。
+
 ### 2.5.48
 - 代码库瘦身（计划 E）：删掉约 1 万行没人用或重复的代码，功能和用户数据不变。
   - Windows 版不再带一份过期的服务副本：和 Mac 完全相同的 14 个服务文件直接用主线那份；只在 Windows 副本里的修复（工作台用 `explorer.exe` 打开文件、Windows 用 `python`、`PINKIE_PYTHON_BIN`、浏览器说明按平台）并回主线，两边现在跑同一份代码。
