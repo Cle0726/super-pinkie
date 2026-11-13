@@ -419,3 +419,131 @@
 #pinkie-study-desk[data-reduced="true"] .pkq :is(*,*::before,*::after){animation:none!important;transition:none!important}
 #pinkie-study-desk[data-reduced="true"] .pkq-opt__mark :is(.pkq-opt__ok,.pkq-opt__no) path,#pinkie-study-desk[data-reduced="true"] .pkq-fb__seal path,#pinkie-study-desk[data-reduced="true"] .pkq-rank .inner{stroke-dashoffset:0}
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkq :is(*,*::before,*::after){animation:none!important;transition:none!important}#pinkie-study-desk .pkq-opt__mark path,#pinkie-study-desk .pkq-fb__seal path,#pinkie-study-desk .pkq-rank .inner{stroke-dashoffset:0!important}}
+
+/* ───────── 战斗：心 / 技能键 / 增益 / 倒地（v4 第二批） ───────── */
+#pinkie-study-desk .pkq-hearts{display:flex;gap:3px;margin-top:5px;height:17px}
+#pinkie-study-desk .pkq-heart{width:18px;height:17px;display:block;position:relative;transform-origin:50% 60%}
+#pinkie-study-desk .pkq-heart svg{width:100%;height:100%;overflow:visible;display:block}
+#pinkie-study-desk .pkq-heart .back{fill:rgba(255,255,255,.14);stroke:rgba(255,255,255,.34);stroke-width:1.2}
+#pinkie-study-desk .pkq-heart .fill{fill:#FF5C83;stroke:#FFD0DB;stroke-width:1.2;transform-origin:50% 60%;transition:transform .3s var(--pkq-out),opacity .3s}
+#pinkie-study-desk .pkq-heart .shine{fill:none;stroke:#fff;stroke-width:1.4;stroke-linecap:round;opacity:.8;transition:opacity .2s}
+#pinkie-study-desk .pkq-heart .crack{fill:none;stroke:#fff;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;opacity:0}
+#pinkie-study-desk .pkq-heart[data-on="0"] .fill{transform:scale(.2);opacity:0}
+#pinkie-study-desk .pkq-heart[data-on="0"] .shine{opacity:0}
+#pinkie-study-desk .pkq-heart.is-break{animation:pkq-hbreak .6s var(--pkq-out)}
+#pinkie-study-desk .pkq-heart.is-break .crack{animation:pkq-hcrack .5s ease-out}
+#pinkie-study-desk .pkq-heart.is-heal{animation:pkq-hheal .6s var(--pkq-out)}
+#pinkie-study-desk .pkq-hearts[data-low="1"] .pkq-heart[data-on="1"]{animation:pkq-hbeat .9s ease-in-out infinite}
+@keyframes pkq-hbreak{0%{transform:scale(1.5) rotate(-8deg)}30%{transform:scale(.8) rotate(6deg)}100%{transform:none}}
+@keyframes pkq-hcrack{0%{opacity:1;stroke-dashoffset:1}50%{opacity:1;stroke-dashoffset:0}100%{opacity:0;stroke-dashoffset:0}}
+@keyframes pkq-hheal{0%{transform:scale(.3)}55%{transform:scale(1.45)}100%{transform:none}}
+@keyframes pkq-hbeat{0%,100%{transform:none}18%{transform:scale(1.22)}36%{transform:scale(.96)}54%{transform:scale(1.12)}}
+/* 只剩一颗心：舞台边缘泛红 */
+#pinkie-study-desk .pkq-band[data-danger="1"]::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 60px 6px rgba(216,71,92,.55);animation:pkq-danger 1.1s ease-in-out infinite}
+@keyframes pkq-danger{0%,100%{opacity:.45}50%{opacity:1}}
+#pinkie-study-desk .pkq-band[data-down="1"] .pkq-bg{filter:grayscale(.7) brightness(.7);transition:filter .5s}
+#pinkie-study-desk .pkq-hero[data-down="1"] img{animation:none;transform:translateX(-50%) scaleX(-1) rotate(-78deg) translateY(8%);filter:drop-shadow(0 6px 10px rgba(46,14,44,.28)) grayscale(.45) brightness(.86);transition:transform .5s cubic-bezier(.5,0,.8,.4),filter .5s}
+#pinkie-study-desk .pkq-hero.is-rise{animation:pkq-rise .8s var(--pkq-out)}
+@keyframes pkq-rise{0%{transform:translateY(10%) scale(.9)}50%{transform:translateY(-9%) scale(1.06)}100%{transform:none}}
+#pinkie-study-desk .pkq-hero.is-skill{animation:pkq-heroskill .8s var(--pkq-out)}
+#pinkie-study-desk .pkq-hero.is-skill .pkq-hero__aura{opacity:1;animation:pkq-skillring .8s var(--pkq-out)}
+@keyframes pkq-heroskill{0%{transform:scale(1)}30%{transform:scale(1.1) translateY(-6%)}100%{transform:none}}
+@keyframes pkq-skillring{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.2);opacity:0}}
+#pinkie-study-desk .pkq-hero[data-guard="1"]::after{content:"";position:absolute;inset:-4% 6% 0;border-radius:50% 50% 46% 46%;border:2px solid rgba(190,230,255,.85);background:radial-gradient(closest-side,rgba(160,215,255,.05) 60%,rgba(160,215,255,.34));box-shadow:0 0 22px rgba(140,200,255,.6),inset 0 0 18px rgba(255,255,255,.4);animation:pkq-bubble 2.4s ease-in-out infinite}
+@keyframes pkq-bubble{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.04);opacity:1}}
+#pinkie-study-desk .pkq-hero.is-guard{animation:pkq-guard .6s var(--pkq-out)}
+@keyframes pkq-guard{0%{transform:translateX(0)}20%{transform:translateX(-5%) scale(1.04)}100%{transform:none}}
+#pinkie-study-desk .pkq-flash.is-skill{animation:pkq-flashskill .6s ease-out}
+@keyframes pkq-flashskill{0%{opacity:.5;background:radial-gradient(60% 90% at 22% 60%,var(--pkq-c),transparent 70%)}100%{opacity:0;background:radial-gradient(60% 90% at 22% 60%,var(--pkq-c),transparent 70%)}}
+
+#pinkie-study-desk .pkq-skill{all:unset;box-sizing:border-box;position:absolute;left:calc(14px + min(34%,220px) + 12px);bottom:12px;display:grid;grid-template-columns:44px auto;align-items:center;column-gap:8px;padding:4px 12px 4px 4px;border-radius:14px;cursor:pointer;color:#fff;
+  background:linear-gradient(180deg,rgba(52,24,56,.74),rgba(38,16,42,.8));box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 8px 18px -10px rgba(20,4,24,.7);transition:transform .22s var(--pkq-out),box-shadow .22s,filter .2s;--k:0}
+#pinkie-study-desk .pkq-skill[hidden]{display:none}
+#pinkie-study-desk .pkq-skill__svg{grid-area:1/1;width:44px;height:44px;overflow:visible}
+#pinkie-study-desk .pkq-skill .gem{fill:rgba(255,255,255,.1);stroke:rgba(255,255,255,.28);stroke-width:1.5;transition:fill .3s}
+#pinkie-study-desk .pkq-skill .ring{fill:none;stroke:var(--pkq-c);stroke-width:3;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:calc(100 - var(--k) * 100);transition:stroke-dashoffset .5s var(--pkq-out);filter:drop-shadow(0 0 3px var(--pkq-c))}
+#pinkie-study-desk .pkq-skill .glint{fill:none;stroke:#fff;stroke-width:1.5;stroke-linecap:round;opacity:0}
+#pinkie-study-desk .pkq-skill__ico{grid-area:1/1;display:grid;place-items:center;width:44px;height:44px;transition:transform .25s var(--pkq-out)}
+#pinkie-study-desk .pkq-skill__ico svg{width:22px;height:22px;fill:none;stroke:rgba(255,255,255,.7);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .2s}
+#pinkie-study-desk .pkq-skill__t{display:grid;line-height:1.2}
+#pinkie-study-desk .pkq-skill__t b{font:800 13px/1.3 var(--pk-sans);letter-spacing:.04em;white-space:nowrap}
+#pinkie-study-desk .pkq-skill__t small{font:800 10px/1.3 var(--pkq-num);letter-spacing:.14em;color:rgba(255,255,255,.62);white-space:nowrap}
+#pinkie-study-desk .pkq-skill kbd{position:absolute;right:-6px;top:-7px;min-width:18px;height:18px;box-sizing:border-box;padding:0 4px;display:grid;place-items:center;border-radius:6px;font:800 10px/1 var(--pkq-num);color:#3a1c40;background:#fff;box-shadow:0 2px 0 rgba(60,20,60,.45);opacity:0;transform:scale(.6);transition:opacity .2s,transform .25s var(--pkq-out)}
+#pinkie-study-desk .pkq-skill[data-ready="1"]{box-shadow:inset 0 0 0 1.5px var(--pkq-c),0 0 18px -2px var(--pkq-c),0 8px 18px -10px rgba(20,4,24,.7)}
+#pinkie-study-desk .pkq-skill[data-ready="1"] .gem{fill:color-mix(in srgb,var(--pkq-b) 75%,#fff 0%);stroke:#fff;animation:pkq-gem 1.6s ease-in-out infinite}
+#pinkie-study-desk .pkq-skill[data-ready="1"] .pkq-skill__ico svg{stroke:#fff}
+#pinkie-study-desk .pkq-skill[data-ready="1"] .pkq-skill__t small{color:var(--pkq-c)}
+#pinkie-study-desk .pkq-skill[data-ready="1"] kbd{opacity:1;transform:none}
+#pinkie-study-desk .pkq-skill[data-ready="1"] .glint{opacity:.9;stroke-dasharray:14 80;animation:pkq-glint 1.6s linear infinite}
+#pinkie-study-desk .pkq-skill[data-ready="1"]:hover{transform:translateY(-2px) scale(1.03)}
+#pinkie-study-desk .pkq-skill[data-ready="1"]:hover .pkq-skill__ico{transform:rotate(-10deg) scale(1.15)}
+#pinkie-study-desk .pkq-skill[data-ready="1"]:active{transform:scale(.95)}
+#pinkie-study-desk .pkq-skill:focus-visible{outline:2px solid #fff;outline-offset:2px}
+#pinkie-study-desk .pkq-skill[data-busy]{filter:saturate(.4);pointer-events:none}
+#pinkie-study-desk .pkq-skill.is-full{animation:pkq-skillfull .8s var(--pkq-out)}
+#pinkie-study-desk .pkq-skill.is-nope{animation:pkq-nope .36s ease-in-out}
+@keyframes pkq-gem{0%,100%{filter:brightness(1)}50%{filter:brightness(1.35)}}
+@keyframes pkq-glint{from{stroke-dashoffset:94}to{stroke-dashoffset:0}}
+@keyframes pkq-skillfull{0%{transform:scale(1)}30%{transform:scale(1.16)}100%{transform:none}}
+@keyframes pkq-nope{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+#pinkie-study-desk .pkq-band.is-compact .pkq-skill{bottom:8px;grid-template-columns:34px auto;padding:3px 10px 3px 3px;left:calc(14px + min(34%,190px) + 10px)}
+#pinkie-study-desk .pkq-band.is-compact .pkq-skill :is(.pkq-skill__svg,.pkq-skill__ico){width:34px;height:34px}
+#pinkie-study-desk .pkq-band.is-compact .pkq-hearts{height:14px;margin-top:3px}
+#pinkie-study-desk .pkq-band.is-compact .pkq-heart{width:15px;height:14px}
+#pinkie-study-desk .pkq-buffs{position:absolute;left:14px;bottom:calc(12px + 78px);display:flex;gap:6px;pointer-events:none}
+#pinkie-study-desk .pkq-band.is-compact .pkq-buffs{bottom:auto;top:52px}
+#pinkie-study-desk .pkq-buff{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 6px;border-radius:999px;font:800 11px/1.4 var(--pk-sans);color:#fff;background:rgba(38,16,42,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3);animation:pkq-buffin .4s var(--pkq-out)}
+#pinkie-study-desk .pkq-buff em{font-style:normal}
+#pinkie-study-desk .pkq-buff svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#pinkie-study-desk .pkq-buff[data-k="shield"]{color:#CDEBFF;box-shadow:inset 0 0 0 1px rgba(160,215,255,.7),0 0 12px rgba(140,200,255,.4)}
+#pinkie-study-desk .pkq-buff[data-k="double"]{color:#FFE9A8;box-shadow:inset 0 0 0 1px rgba(255,214,120,.7),0 0 12px rgba(255,190,60,.4)}
+@keyframes pkq-buffin{0%{transform:translateY(8px) scale(.8);opacity:0}100%{transform:none;opacity:1}}
+
+/* 被排除的选项 */
+#pinkie-study-desk .pkq-opt.is-out{opacity:.38;filter:grayscale(1);pointer-events:none;transition:opacity .35s,filter .35s}
+#pinkie-study-desk .pkq-opt.is-out .pkq-opt__text{text-decoration:line-through;text-decoration-thickness:1.5px}
+#pinkie-study-desk .pkq-opt.is-out-now{animation:pkq-optout .45s var(--pkq-out)}
+@keyframes pkq-optout{0%{transform:none}30%{transform:translateX(6px) rotate(.6deg)}100%{transform:none}}
+
+/* 倒地卡：先把错题看一遍，再站起来 */
+#pinkie-study-desk .pkq-down{display:grid;gap:14px;padding:6px 2px 2px;animation:pkq-fbin .4s var(--pkq-out)}
+#pinkie-study-desk .pkq-down__head{display:flex;align-items:center;gap:14px}
+#pinkie-study-desk .pkq-down__seal{flex:none;width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--pkq-no-tint);color:var(--pkq-no);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--pkq-no) 40%,transparent)}
+#pinkie-study-desk .pkq-down__seal svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#pinkie-study-desk .pkq-down__seal .crack{stroke-dasharray:1;animation:pkq-hcrack 1s ease-out forwards;opacity:1}
+#pinkie-study-desk .pkq-down h3{margin:0;font:800 22px/1.3 var(--pkq-display);letter-spacing:.04em}
+#pinkie-study-desk .pkq-down__head small{font:800 10px/1.4 var(--pkq-latin);letter-spacing:.3em;color:var(--pkq-no)}
+#pinkie-study-desk .pkq-down p{margin:0;font:400 14px/1.7 var(--pk-sans);color:var(--pk-ink-soft,#6b5a6e)}
+#pinkie-study-desk .pkq-down__list{display:grid;gap:8px}
+#pinkie-study-desk .pkq-down__row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:11px 14px;border-radius:12px;cursor:pointer;background:var(--pkq-card-2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pk-ink) 9%,transparent);transition:box-shadow .2s,transform .2s var(--pkq-out),background .2s}
+#pinkie-study-desk .pkq-down__row:hover{transform:translateX(3px);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--pkq-no) 50%,transparent)}
+#pinkie-study-desk .pkq-down__row:focus-visible{outline:2px solid var(--pkq-no);outline-offset:2px}
+#pinkie-study-desk .pkq-down__row i{font:italic 800 13px/1.6 var(--pkq-num);color:var(--pkq-no)}
+#pinkie-study-desk .pkq-down__row span{font:400 13.5px/1.6 var(--pk-sans);min-width:0}
+#pinkie-study-desk .pkq-down__row span b{display:block;margin-top:4px;font-weight:800;color:var(--pkq-ok)}
+#pinkie-study-desk .pkq-down__row span em{display:block;margin-top:3px;font-style:normal;font-size:12.5px;color:var(--pk-ink-soft,#6b5a6e)}
+#pinkie-study-desk .pkq-down__row span :is(b,em){max-height:0;opacity:0;overflow:hidden;transition:max-height .35s var(--pkq-out),opacity .3s}
+#pinkie-study-desk .pkq-down__row[data-seen="1"] span :is(b,em){max-height:200px;opacity:1}
+#pinkie-study-desk .pkq-down__row u{text-decoration:none;font:800 11px/1.9 var(--pk-sans);color:var(--pkq-no);white-space:nowrap}
+#pinkie-study-desk .pkq-down__row[data-seen="1"]{background:var(--pkq-ok-tint);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--pkq-ok) 34%,transparent)}
+#pinkie-study-desk .pkq-down__row[data-seen="1"] u{color:var(--pkq-ok)}
+#pinkie-study-desk .pkq-down__act{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:4px}
+#pinkie-study-desk .pkq-result[data-rank="D"] .pkq-result__main small{color:var(--pkq-no)}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk :is(.pkq-heart,.pkq-skill,.pkq-buff,.pkq-band[data-danger="1"]::after,.pkq-hero[data-guard="1"]::after,.pkq-skill .gem,.pkq-skill .glint){animation:none!important}}
+#pinkie-study-desk .pkq-act[data-kind="next"]:is([aria-disabled="true"],:disabled){color:var(--pk-ink-3)}
+#pinkie-study-desk .pkq-act[data-kind="next"]:is([aria-disabled="true"],:disabled) .pkq-act__bg{fill:var(--pkq-card-2);filter:none;stroke:var(--pk-rule-2);stroke-width:1}
+#pinkie-study-desk .pkq-act[data-kind="next"]:is([aria-disabled="true"],:disabled) :is(.pkq-act__spark,.pkq-ico--bolt){fill:var(--pk-ink-3);stroke:none}
+#pinkie-study-desk .pkq-hero[data-down="1"] img{transform-origin:50% 72%;transform:translateX(-50%) scaleX(-1) rotate(-82deg) translate(-6%,0)}
+#pinkie-study-desk .pkq-band:not(.is-compact) .pkq-skill{left:14px;bottom:calc(12px + 76px)}
+#pinkie-study-desk .pkq-band:not(.is-compact) .pkq-buffs{left:calc(14px + 150px);bottom:calc(12px + 86px)}
+#pinkie-study-desk .pkq-band[data-down="1"] .pkq-skill{opacity:0;pointer-events:none}
+
+/* ───────── 舞台带嵌进讨伐 / 守关 / 背一背（不在 .view.pkq 里，变量自己带） ───────── */
+#pinkie-study-desk .pkq-band.is-embed{--pkq-ok:#1F9D73;--pkq-no:#D8475C;--pkq-gold:#E2A93B;--pkq-out:cubic-bezier(.16,1,.3,1);
+  --pkq-display:var(--pkg-display,"Noto Serif SC","Source Han Serif SC","Songti SC","STZhongsong","SimSun",serif);
+  --pkq-num:var(--pkg-num,"DIN Alternate","Bahnschrift","Roboto Condensed","Arial Narrow",ui-monospace,sans-serif);
+  --pkq-latin:var(--pkg-latin,"DIN Alternate","Bahnschrift","Avenir Next Condensed","Arial Narrow",sans-serif);
+  flex:0 0 auto;width:100%;border-radius:16px;margin:0 0 6px;height:clamp(128px,18vh,168px);box-shadow:0 14px 28px -22px rgba(40,10,40,.7)}
+#pinkie-study-desk .pkq-band.is-embed .pkq-top{position:absolute;left:14px;top:8px;right:14px;pointer-events:none}
+#pinkie-study-desk .pkq-band.is-embed .pkq-top :is(.pkq-pips,.pkq-gain,.pkq-snd){display:none}
+#pinkie-study-desk .pkq-band.is-embed .pkq-combo{top:46%}

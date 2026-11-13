@@ -932,6 +932,8 @@ export function registerLearningGame(api, store, options = {}) {
   register('practice.answer', via('practice', 'answer', notReady('刷题')));
   register('practice.explain', via('practice', 'explain', notReady('刷题')));
   register('practice.finish', via('practice', 'finish', notReady('刷题')));
+  register('practice.revive', via('practice', 'revive', notReady('刷题')));
+  register('practice.skill', via('practice', 'skill', notReady('刷题')));
   register('practice.unlock', via('practice', 'unlock', notReady('刷题')));
   register('practice.suggest', p => mod('practice').suggest?.(game.read(), p) || null);
   register('line', via('content', 'line', (async () => ({text: '我在呢，一起加油～', source: 'local'}))));

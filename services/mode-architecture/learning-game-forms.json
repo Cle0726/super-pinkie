@@ -39,7 +39,13 @@
    },
    "season1": true,
    "form": "原本的碧琪",
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "打气",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "unrestricted",
@@ -80,7 +86,13 @@
    },
    "season1": true,
    "form": "鬃毛尾巴变长、彩虹挑染、蹄上花纹",
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "double",
+    "name": "彩虹共鸣",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "alicorn",
@@ -122,7 +134,13 @@
     "stage": "form/alicorn/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "日光祝福",
+    "cost": 4,
+    "text": "答对 4 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "crystal",
@@ -164,7 +182,13 @@
     "stage": "form/crystal/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "水晶折光",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "seapony",
@@ -205,7 +229,13 @@
     "stage": "form/seapony/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "潮汐",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "kirin",
@@ -246,7 +276,13 @@
     "stage": "form/kirin/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "double",
+    "name": "麒麟火",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "batpony",
@@ -287,7 +323,13 @@
     "stage": "form/batpony/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "eliminate",
+    "name": "回声定位",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "serious",
@@ -328,7 +370,13 @@
     "stage": "form/serious/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "eliminate",
+    "name": "较真",
+    "cost": 5,
+    "text": "答对 5 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "breezie",
@@ -370,7 +418,13 @@
     "stage": "form/breezie/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "顺风",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "changeling",
@@ -410,7 +464,13 @@
     "stage": "form/changeling/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "拟态",
+    "cost": 3,
+    "text": "答对 3 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "lidong",
@@ -451,7 +511,13 @@
    },
    "season1": true,
    "form": "红围巾把鬃毛扎成低马尾、毛线耳罩、卷毛尖挂霜",
-   "look": "outfit"
+   "look": "outfit",
+   "skill": {
+    "kind": "heal",
+    "name": "一杯热茶",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "detective",
@@ -491,7 +557,13 @@
    },
    "season1": true,
    "form": "猎鹿帽压住卷毛只露刘海和低马尾、短披风、胸前挂放大镜",
-   "look": "outfit"
+   "look": "outfit",
+   "skill": {
+    "kind": "eliminate",
+    "name": "推理",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "learning",
@@ -631,7 +703,13 @@
     "idle": "form/pirate/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "double",
+    "name": "双份宝藏",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "astronaut",
@@ -666,7 +744,13 @@
     "idle": "form/astronaut/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "shield",
+    "name": "舱外护罩",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "dragon-rider",
@@ -806,7 +890,14 @@
     "idle": "form/knight/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "shield",
+    "name": "举盾",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击；多 1 颗心",
+    "hearts": 1
+   }
   },
   {
    "id": "chef",
@@ -841,7 +932,13 @@
     "idle": "form/chef/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "heal",
+    "name": "甜点时间",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "magical-girl",
@@ -876,7 +973,13 @@
     "idle": "form/magical-girl/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "heal",
+    "name": "治愈之光",
+    "cost": 4,
+    "text": "答对 4 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "astrologer",
@@ -911,7 +1014,13 @@
     "idle": "form/astrologer/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "观星",
+    "cost": 3,
+    "text": "答对 3 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "zhuangyuan",
@@ -946,7 +1055,13 @@
     "idle": "form/zhuangyuan/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "破题",
+    "cost": 3,
+    "text": "答对 3 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "idol",
@@ -981,7 +1096,13 @@
     "idle": "form/idol/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "double",
+    "name": "安可",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "cyber",
@@ -1016,7 +1137,13 @@
     "idle": "form/cyber/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "全频扫描",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "ninja",
@@ -1051,7 +1178,13 @@
     "idle": "form/ninja/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "shield",
+    "name": "替身术",
+    "cost": 5,
+    "text": "答对 5 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "xiaoxue",
@@ -1087,7 +1220,13 @@
     "idle": "form/xiaoxue/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "heal",
+    "name": "围炉",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "daxue",
@@ -1157,7 +1296,13 @@
     "idle": "form/graduate/idle"
    },
    "season1": false,
-   "retired": true
+   "retired": true,
+   "skill": {
+    "kind": "double",
+    "name": "上岸",
+    "cost": 3,
+    "text": "答对 3 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "gold-master",
