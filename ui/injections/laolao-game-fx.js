@@ -1216,6 +1216,12 @@
       case 'rank': { const lv = opts.rank === 'S' ? 4 : opts.rank === 'A' ? 3 : opts.rank === 'B' ? 2 : 1; voice(ctx, {type: 'sine', freq: 120, to: 50, dur: .3, level: .45, wet: .1}); noiseHit(ctx, {dur: .1, level: .25, freq: 800, type: 'lowpass', wet: .15});
         [1, 1.25, 1.5, 2, 2.5].slice(0, lv + 1).forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * r, at: .12 + i * .08, dur: 1 + lv * .2, level: .06, wet: .6}));
         if (lv >= 3) sweep(ctx, {at: .1, dur: .6, from: 500, to: 5200, level: .06, wet: .5}); break; }
+      // 战斗（v4 第二批）：回心 / 技能攒满 / 放技能 / 挡住 / 倒地
+      case 'heal': [1, 1.25, 1.5].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2], freq: 660 * r, at: i * .07, dur: .4, level: .07, wet: .5})); sweep(ctx, {dur: .3, from: 700, to: 3000, level: .04, q: .6, wet: .4}); break;
+      case 'skill-ready': voice(ctx, {type: 'sine', partials: [1, 2.76], freq: 1318, dur: .35, level: .06, wet: .5}); voice(ctx, {type: 'sine', partials: [1, 2.76], freq: 1760, at: .09, dur: .5, level: .06, wet: .6}); break;
+      case 'skill': sweep(ctx, {dur: .25, from: 300, to: 4200, level: .1, q: .8, wet: .3}); voice(ctx, {type: 'triangle', freq: base, to: base * 2, dur: .2, level: .1, wet: .3}); [1, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * 2 * r, at: .18 + i * .05, dur: .7, level: .05, wet: .6})); break;
+      case 'guard': voice(ctx, {type: 'sine', partials: [1, 2.4, 5.1], freq: 880, dur: .5, level: .12, wet: .5}); noiseHit(ctx, {dur: .04, level: .16, freq: 2600, q: 2, wet: .2}); voice(ctx, {type: 'sine', freq: 150, to: 90, dur: .16, level: .2, wet: .1}); break;
+      case 'down': voice(ctx, {type: 'sine', freq: 160, to: 46, dur: .6, level: .36, wet: .15}); noiseHit(ctx, {at: .1, dur: .22, level: .18, freq: 500, q: .5, type: 'lowpass', wet: .2}); [1, .84, .75].forEach((r, i) => voice(ctx, {type: 'triangle', freq: 392 * r, at: .12 + i * .16, dur: .34, level: .06, wet: .4})); break;
       case 'tally': voice(ctx, {type: 'sine', freq: 1318 * (1 + (opts.n || 0) * .06), dur: .05, level: .035, wet: .2}); break;
       default: return false;
     }

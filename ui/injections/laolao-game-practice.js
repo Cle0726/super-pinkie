@@ -59,27 +59,62 @@
       empty.append(el('h3', '', '题库还是空的'), el('p', '', '插上放真题的 U 盘、开着 App，碧琪会把每套卷拆好放进考场，题库跟着就有了。'));
       body.append(empty); return;
     }
-    const lede = el('p', 'pkp-lede');
+    const S = window.__pinkieGameStage;
     const papers = ov.papers || 0;
-    lede.append(el('b', 'pkg-num', String(papers)), document.createTextNode(' 套历年真题和官方模拟卷，'), el('b', 'pkg-num', String(ov.total)), document.createTextNode(' 道题。答案和解析都是官方的。'));
     const locked = (ov.reserved || []).filter(r => r.locked);
-    if (locked.length) lede.append(document.createTextNode(` 最新 ${locked.length} 套留给整套模考，不进随机。`));
-    body.append(lede);
+    const st = g.snapshot?.() || await g.state().catch(() => null) || {};
+    const form = g.equippedForm?.() || null;
+    const setsToday = st.today?.jar?.sets || 0, goal = st.today?.jar?.goal || 2;
+    const named = p => p.name && p.name !== '未分类';
+    const weakest = (ov.points || []).find(p => named(p) && p.done >= 3 && p.acc != null && p.acc < 60) || null;
+    const fresh = (ov.points || []).find(p => named(p) && !p.done && p.total >= 5) || null;
+    const rec = weakest ? {kick: 'WEAK POINT', name: weakest.name, why: `做过 ${weakest.done} 道，正确率 ${weakest.acc}%，先把它补上`, params: {mode: 'point', point: weakest.id, count: 10}}
+      : ov.wrong >= 5 ? {kick: 'REMATCH', name: '错题讨伐', why: `有 ${ov.wrong} 道做错的真题等着你`, params: {mode: 'wrong', count: 10}}
+      : fresh ? {kick: 'NEW GROUND', name: fresh.name, why: `${fresh.total} 道题一道都还没碰过`, params: {mode: 'point', point: fresh.id, count: 10}}
+      : {kick: 'RANDOM', name: '随机遭遇', why: '词汇、词形、翻译混着来', params: {mode: 'random', count: 10}};
 
-    // 快速入口
+    // 出击横幅：当前形态站在场景里，今天打了几组，推荐下一仗
+    const hero = el('section', 'pkp-hero'); hero.setAttribute('aria-label', '今日战况');
+    const pal = form?.palette || ['#F7A8C8', '#DB1F74', '#FFE36E']; hero.style.setProperty('--a', pal[0]); hero.style.setProperty('--b', pal[1]); hero.style.setProperty('--c', pal[2]);
+    const hbg = el('i', 'pkp-hero__bg'); const plate = (form && g.art?.(`form/${form.id}/plate`)) || g.art?.('battle/world') || g.art?.('battle/training'); if (plate) hbg.style.backgroundImage = `url("${plate}")`;
+    const hfig = el('img', 'pkp-hero__fig'); hfig.alt = ''; hfig.draggable = false; const psrc = form && (g.art?.(`form/${form.id}/portrait`) || g.portrait?.(form.id)); if (psrc) hfig.src = psrc; else hfig.hidden = true;
+    const htxt = el('div', 'pkp-hero__txt');
+    const jar = el('div', 'pkp-hero__jar'); jar.setAttribute('role', 'img'); jar.setAttribute('aria-label', `今天打了 ${setsToday} / ${goal} 组`);
+    for (let k = 0; k < Math.max(goal, setsToday); k++) { const pip = el('i', 'pkp-pip'); if (k < setsToday) pip.dataset.on = '1'; if (k >= goal) pip.dataset.extra = '1'; pip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.600l2.900 5.900 6.500.9-4.700 4.600 1.100 6.500L12 17.400l-5.800 3.100 1.100-6.500L2.600 9.400l6.500-.9z"/></svg>'; jar.append(pip); }
+    jar.append(el('span', '', setsToday >= goal ? `今天 ${setsToday} 组，目标达成` : `今天 ${setsToday} / ${goal} 组`));
+    const h1 = el('h3', '', rec.name); const kick = el('small', '', `NEXT BATTLE · ${rec.kick}`);
+    const why = el('p', '', rec.why + '。');
+    const sortie = S ? S.actionButton('出击', {hint: ''}) : btn('pk-btn', '出击'); sortie.classList.add('pkp-sortie'); sortie.dataset.q = 'sortie';
+    sortie.addEventListener('click', () => { S?.sfx('ui-go'); go(sortie, rec.params); });
+    const rules = el('ul', 'pkp-hero__rules');
+    const rule = (ico, text) => { const li = el('li'); if (S) li.append(S.icon(ico)); li.append(document.createTextNode(text)); rules.append(li); };
+    rule('heart', '3 颗心，答错掉 1 颗，连对 5 题回 1 颗');
+    if (form?.skill) rule(({eliminate: 'lens', heal: 'heart', shield: 'shield', double: 'twin'})[form.skill.kind] || 'spark', `${form.name} · ${form.skill.name}：${form.skill.text}`);
+    htxt.append(jar, kick, h1, why, sortie, rules);
+    const hstat = el('div', 'pkp-hero__stat');
+    const statOf = (n, label) => { const d = el('div'); d.append(el('b', 'pkg-num', String(n)), el('small', '', label)); hstat.append(d); };
+    statOf(papers, '套真题'); statOf(ov.total, '道题'); statOf(ov.random?.done ?? 0, '已做'); if (ov.wrong) statOf(ov.wrong, '错题');
+    hero.append(hbg, el('i', 'pkp-hero__veil'), hfig, htxt, hstat);
+    body.append(hero);
+    if (locked.length) body.append(el('p', 'pkp-lede', `答案和解析都是官方的。最新 ${locked.length} 套留给整套模考，不进随机。`));
+
+    // 四张关卡卡：各有自己的场景和守关的怪
     const quick = el('nav', 'pkp-quick'); quick.setAttribute('aria-label', '刷题方式');
-    const card = (id, en, zh, sub, run, {hot = false, off = false} = {}) => {
+    const card = (id, en, zh, sub, run, {hot = false, off = false, scene = 'training', foe = ''} = {}) => {
       const b = btn('pkp-qcard'); b.dataset.q = id; if (hot) b.dataset.hot = '1';
+      const bg = el('i', 'pkp-qcard__bg'); const url = g.art?.(`battle/${scene}`); if (url) bg.style.backgroundImage = `url("${url}")`;
+      b.append(bg, el('i', 'pkp-qcard__veil'));
+      const fsrc = foe && g.art?.(`monster/${foe}`); if (fsrc) { const im = el('img', 'pkp-qcard__foe'); im.alt = ''; im.draggable = false; im.loading = 'lazy'; im.src = fsrc; b.append(im); }
       b.append(el('small', '', en), el('b', '', zh), el('em', '', sub), el('i', 'pkp-qcard__rule'));
-      if (off) { b.disabled = true; b.dataset.off = '1'; } else b.addEventListener('click', () => run(b));
+      if (off) { b.disabled = true; b.dataset.off = '1'; } else { b.addEventListener('click', () => { S?.sfx('ui-go'); run(b); }); b.addEventListener('pointerenter', () => S?.sfx('ui-hover')); }
       quick.append(b); return b;
     };
     const r = ov.random || {};
-    card('random', 'RANDOM', '随机 10 题', r.total ? `词汇 · 词形 · 翻译单题 · 已做 ${r.done}/${r.total}` : '单题池是空的', b => go(b, {mode: 'random', count: 10}), {hot: true, off: !r.total});
-    card('wrong', 'RETRY', '错题重刷', ov.wrong ? `${ov.wrong} 道做错的真题原题` : '刷题里还没有做错的题', b => go(b, {mode: 'wrong', count: 10}), {off: !ov.wrong});
+    card('random', 'RANDOM', '随机 10 题', r.total ? `词汇 · 词形 · 翻译单题 · 已做 ${r.done}/${r.total}` : '单题池是空的', b => go(b, {mode: 'random', count: 10}), {hot: true, off: !r.total, scene: 'training', foe: 'fog-puff'});
+    card('wrong', 'RETRY', '错题重刷', ov.wrong ? `${ov.wrong} 道做错的真题原题` : '刷题里还没有做错的题', b => go(b, {mode: 'wrong', count: 10}), {off: !ov.wrong, scene: 'boss', foe: 'sticky-ghost'});
     const lis = (ov.kinds || []).find(k => k.id === 'listening');
-    card('listening', 'LISTENING', '听力 Part I', lis?.total ? '随机一套 · 放原录音' : '没有听力题', b => go(b, {mode: 'listening'}), {off: !lis?.total});
-    card('year', 'BY YEAR', '按年份整套', '进考场，按年份选整卷', () => desk()?.go('gameexam'));
+    card('listening', 'LISTENING', '听力 Part I', lis?.total ? '随机一套 · 放原录音' : '没有听力题', b => go(b, {mode: 'listening'}), {off: !lis?.total, scene: 'listening', foe: 'echo-bat'});
+    card('year', 'BY YEAR', '按年份整套', '进考场，按年份选整卷', () => desk()?.go('gameexam'), {scene: 'exam', foe: 'elite-tome-owl'});
     body.append(quick);
 
     // 考点表（主体）
@@ -94,20 +129,25 @@
       list.replaceChildren();
       const rows = (ov.points || []).filter(p => area === 'all' || p.area === area);
       if (!rows.length) list.append(el('p', 'pkg-empty', '这一类还没有标好考点的题。'));
-      const head = el('div', 'pkp-prow is-head'); head.append(el('span', '', '考点'), el('span', '', '题数'), el('span', '', '做过'), el('span', '', '正确率'), el('span', '', ''));
-      if (rows.length) list.append(head);
-      for (const p of rows) {
-        const row = btn('pkp-prow'); row.dataset.point = p.id;
+      const AREA_FOE = {vocab: 'block-golem', grammar: 'ink-slime', reading: 'bookworm', translation: 'lost-crane', writing: 'inkpot-imp', listening: 'echo-bat'};
+      rows.forEach((p, n) => {
+        const row = btn('pkp-prow'); row.dataset.point = p.id; row.style.setProperty('--n', String(Math.min(n, 14)));
         const weak = p.done >= 3 && p.acc != null && p.acc < 60;
-        if (weak) row.dataset.weak = '1';
+        const state = weak ? 'weak' : !p.done ? 'new' : p.acc != null && p.acc >= 85 && p.done >= Math.min(p.total, 8) ? 'clear' : 'open';
+        row.dataset.state = state; if (weak) row.dataset.weak = '1';
+        // 掌握度环：一圈是正确率，里面是怪
+        const ring = el('span', 'pkp-ring'); const acc = p.acc ?? 0;
+        ring.innerHTML = `<svg viewBox="0 0 44 44" aria-hidden="true"><circle class="t" cx="22" cy="22" r="19"/><circle class="v" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="${acc} 100"/></svg>`;
+        const fsrc = g.art?.(`monster/${AREA_FOE[p.area] || 'fog-puff'}`); if (fsrc) { const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.draggable = false; im.src = fsrc; ring.append(im); }
         const name = el('span', 'pkp-prow__name'); name.append(el('b', '', p.name), el('small', '', p.groupName));
-        const bar = el('i', 'pkp-prow__bar'); bar.style.setProperty('--p', `${p.acc ?? 0}%`); if (p.acc == null) bar.dataset.none = '1';
-        const accCell = el('span', 'pkp-prow__acc'); accCell.append(el('b', 'pkg-num', pct(p.acc)), bar);
-        row.append(name, el('span', 'pkg-num', String(p.total)), el('span', 'pkg-num', String(p.done)), accCell, el('span', 'pkp-prow__go', weak ? '先补这个' : '练'));
+        const nums = el('span', 'pkp-prow__nums'); nums.append(el('b', 'pkg-num', pct(p.acc)), el('small', 'pkg-num', `${p.done} / ${p.total}`));
+        const tag = el('span', 'pkp-prow__go', ({weak: '先补这个', new: '没碰过', clear: '已拿下', open: '练'})[state]);
+        row.append(ring, name, nums, tag);
         row.setAttribute('aria-label', `${p.groupName} ${p.name}：${p.total} 题，做过 ${p.done}，正确率 ${pct(p.acc)}`);
-        row.addEventListener('click', () => go(row, {mode: 'point', point: p.id, count: 10}));
+        row.addEventListener('click', () => { S?.sfx('ui-go'); go(row, {mode: 'point', point: p.id, count: 10}); });
+        row.addEventListener('pointerenter', () => S?.sfx('ui-hover'));
         list.append(row);
-      }
+      });
     };
     for (const a of areas) {
       const b = btn('', a.name); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(a.id === area));
@@ -184,6 +224,24 @@
     let right = Object.values(answered).filter(r => r.correct).length, combo = 0, maxCombo = 0, busy = false, alive = true, finished = Boolean(data.finished), asking = false, stars = 0;
     let picked = null, waveNow = -1; const t0 = Date.now();
     const waves = S.waves(items); stage.setWaveMarks(waves);
+    // 战斗状态（心 / 技能 / 护盾 / 加倍）全以后端为准
+    let battle = data.battle || null;
+    const paintBattle = (opts = {}) => { stage.setHearts(battle?.hp || null, opts); stage.setSkill(battle?.skill ? {...battle.skill, text: form?.skill?.text} : null); stage.setBuffs(battle || {}); };
+    const applyRemoved = () => { const it = items[i]; const out = battle?.removed?.[it?.itemId]; if (!out || !qCol) return; [...qCol.querySelectorAll('.pkq-opt')].forEach((b, k) => { if (out.includes(k) && !b.classList.contains('is-out')) { b.classList.add('is-out', 'is-out-now'); b.disabled = true; b.setAttribute('aria-disabled', 'true'); if (picked?.el === b) { picked = null; b.classList.remove('is-on'); qCol.querySelector('.pkq-fire')?.setAttribute('aria-disabled', 'true'); } } }); };
+    async function useSkill() {
+      const it = items[i]; if (!it || busy || !battle?.skill?.ready || finished || qCol?.querySelector('.pkq-fb, .pkq-down')) return;
+      const key = stage.skillButton; key.dataset.busy = '1';
+      try {
+        const r = await G().call('practice.skill', {setId: data.setId, itemId: it.itemId}, 15000);
+        if (!alive) return;
+        battle = {...battle, ...r}; stage.castSkill(battle.skill); paintBattle();
+        if (r.used?.kind === 'eliminate') applyRemoved();
+        live.textContent = `放了技能：${battle.skill?.name || ''}`;
+      } catch (e) { G().toast(e.message || '技能没放出来'); }
+      finally { delete key.dataset.busy; }
+    }
+    stage.setSkill(null, {onUse: useSkill});
+    paintBattle({instant: true});
     const waveOf = idx => waves.find(w => idx >= w.from && idx < w.from + w.size) || waves.at(-1);
     const waveRight = w => items.slice(w.from, w.from + w.size).filter(it => answered[it.itemId]?.correct).length;
     const threshold = form?.bonus?.kind === 'ultThreshold' ? Number(form.bonus.value) || 10 : 10;
@@ -292,6 +350,38 @@
       }
       qCol.append(bar);
       qCol.scrollTop = 0; if (!matPane) body.scrollTop = 0;
+      applyRemoved();
+    }
+    // 倒地：把这组错的题和官方答案逐条翻开看过，才能站起来（一组一次）
+    function downCard() {
+      stage.knockdown();
+      const missed = items.map((it, k) => ({it, k, r: answered[it.itemId]})).filter(x => x.r && !x.r.correct);
+      const card = el('div', 'pkq-down');
+      const head = el('div', 'pkq-down__head'); const seal = el('span', 'pkq-down__seal');
+      { const t = document.createElement('template'); t.innerHTML = '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 20.500S2.500 14.800 2.500 8.300A5 5 0 0 1 12 6a5 5 0 0 1 9.500 2.300c0 6.500-9.500 12.200-9.500 12.200z"/><path class="crack" d="M12 6.500l-2 4 3.500 2.500-2 4.500" pathLength="1"/></svg>'; seal.append(t.content.firstChild); }
+      const ht = el('div'); ht.append(el('small', '', 'KNOCKED DOWN'), el('h3', '', '碧琪被打倒了'));
+      head.append(seal, ht);
+      card.append(head, el('p', '', `三颗心都掉了。把这 ${missed.length} 道错题的答案逐条翻开看一遍，她就能站起来接着打——一组只有这一次。`));
+      const list = el('div', 'pkq-down__list'); const up = S.actionButton('站起来', {kind: 'next'}); up.setAttribute('aria-disabled', 'true');
+      const check = () => { const ok = [...list.children].every(r => r.dataset.seen === '1'); up.setAttribute('aria-disabled', String(!ok)); if (ok && !S.reduced()) { up.classList.remove('is-ready-pop'); void up.offsetWidth; up.classList.add('is-ready-pop'); } };
+      for (const x of missed) {
+        const row = btn('pkq-down__row'); const txt = el('span', '', (x.it.prompt || QKIND[x.it.qkind] || '').replace(/_{3,}/g, '____').slice(0, 220));
+        txt.append(el('b', '', `官方答案：${x.r.key || ''}`)); if (x.r.why) txt.append(el('em', '', x.r.why));
+        row.append(el('i', '', String(x.k + 1).padStart(2, '0')), txt, el('u', '', '翻开'));
+        row.addEventListener('click', () => { if (row.dataset.seen === '1') return; row.dataset.seen = '1'; row.lastChild.textContent = '看过了'; S.sfx('ui-pick'); check(); });
+        list.append(row);
+      }
+      const act = el('div', 'pkq-down__act'); const quit = S.ghostButton('不打了，结算');
+      up.addEventListener('click', async () => {
+        if (up.getAttribute('aria-disabled') === 'true' || up.dataset.busy) return; up.dataset.busy = '1';
+        try { const r = await G().call('practice.revive', {setId: data.setId}, 15000); if (!alive) return; battle = {...battle, ...r}; stage.rise(); paintBattle(); S.sfx('ui-next'); i++; show(); }
+        catch (e) { delete up.dataset.busy; G().toast(e.message || '没站起来，再点一次'); }
+      });
+      quit.addEventListener('click', () => { S.sfx('ui-next'); finish(); });
+      act.append(up, quit); card.append(list, act);
+      qCol.querySelector('.pkq-bar')?.remove(); qCol.append(card); check();
+      (list.firstChild || up).focus?.({preventScroll: true}); card.scrollIntoView({block: 'nearest', behavior: S.reduced() ? 'auto' : 'smooth'});
+      live.textContent = '碧琪被打倒了，把错题看一遍就能站起来';
     }
     // 点一下选定（还能改），同一项再点一次 / 回车 / 出手键 = 交卷
     function choose(answer, b, list, fire) {
@@ -324,7 +414,9 @@
         right++;
         const crit = combo > 0 && combo % 5 === 0;
         stage.strike({crit, damage: Math.round((96 + combo * 6) * (crit ? 1.8 : 1) + Math.random() * 9), kill: last && waveRight(w) === w.size});
-      } else stage.counter();
+      } else if (r.battle?.guarded) stage.guarded();
+      else stage.counter();
+      if (r.battle) { battle = {...battle, ...r.battle}; paintBattle(); }
       if (last && waveRight(w) < w.size) { const foeNow = stage.enemy; setTimeout(() => { if (alive && stage.enemy === foeNow) stage.flee(w.size - waveRight(w)); }, S.reduced() ? 0 : 620); }
       stage.setCombo(combo); paintGauge(); paintPips();
       if (r.correct && combo > 0 && combo % threshold === 0) ult(combo);
@@ -334,6 +426,12 @@
       qCol.querySelector('.pkq-bar')?.remove();
       feedback(it, r, got);
       live.textContent = r.correct ? '答对了' : '没答对';
+      // 掉光了：第一次倒地 → 看错题站起来；第二次 → 这一组打输，直接结算
+      if (r.battle?.down || r.battle?.failed) {
+        const next = qCol.querySelector('.pkq-fb .pkq-next');
+        if (next) { next.querySelector('.pkq-act__text').textContent = r.battle.failed ? '结算' : '看看哪里错了'; const fresh = next.cloneNode(true); next.replaceWith(fresh); fresh.addEventListener('click', () => { S.sfx('ui-next'); if (r.battle.failed) { stage.knockdown(); finish(); } else { qCol.querySelector('.pkq-fb')?.remove(); qCol.querySelector('.pkq-opts')?.remove(); downCard(); } }); fresh.focus({preventScroll: true}); }
+        if (r.battle.failed) stage.knockdown();
+      }
     }
     async function ult(n) {
       const engine = window.__pinkieGameFx; if (!engine?.cinematic || !form) return;
@@ -402,25 +500,26 @@
       catch (e) { qCol.replaceChildren(el('p', 'pkq-wait', e.message || '结算失败，再点一次')); const retry = S.ghostButton('再结算一次'); retry.addEventListener('click', finish); qCol.append(retry); return; }
       if (!alive) return;
       const scored = r.scored || 0, acc = scored ? r.correct / scored : 0;
-      const rank = scored && r.correct === scored ? 'S' : acc >= .8 ? 'A' : acc >= .6 ? 'B' : 'C';
-      const TITLE = {S: '一题不错', A: '打得漂亮', B: '稳稳过关', C: '这组有点硬'};
+      const lost = Boolean(r.failed) || Boolean(battle?.hp?.down);
+      const rank = lost ? 'D' : scored && r.correct === scored ? 'S' : acc >= .8 ? 'A' : acc >= .6 ? 'B' : 'C';
+      const TITLE = {S: '一题不错', A: '打得漂亮', B: '稳稳过关', C: '这组有点硬', D: '这一组打输了'};
       const got = (r.awards || []).filter(a => a.kind === 'stars').reduce((n, a) => n + (Number(a.amount) || 0), 0); stars += got;
-      stage.setEnemy(null); stage.victory(rank !== 'C'); stage.setProgress(items.map(it => (answered[it.itemId]?.correct ? 'right' : 'wrong')), items.length);
+      stage.setEnemy(null); stage.setSkill(null); stage.setBuffs({}); if (!lost) stage.victory(rank !== 'C'); stage.setProgress(items.map(it => (answered[it.itemId]?.correct ? 'right' : 'wrong')), items.length);
       const card = el('div', 'pkq-result'); card.dataset.rank = rank; card.dataset.passed = String(acc >= .6);
       const badge = S.rankBadge(rank);
       const main = el('div', 'pkq-result__main');
-      main.append(el('small', '', rank === 'S' ? 'PERFECT CLEAR' : 'STAGE CLEAR'), el('h3', '', TITLE[rank]));
+      main.append(el('small', '', lost ? 'DEFEATED' : rank === 'S' ? 'PERFECT CLEAR' : 'STAGE CLEAR'), el('h3', '', TITLE[rank]));
       const stats = el('div', 'pkq-stats');
       const stat = (label, tone) => { const s = el('div', 'pkq-stat'); if (tone) s.dataset.tone = tone; const b = el('b', '', '0'); s.append(el('small', '', label), b); stats.append(s); return b; };
       const sRight = stat('答对'), sCombo = stat('最高连击'), sTime = stat('用时'), sStar = stat('星星', 'gold');
       main.append(stats);
       const foes = el('div', 'pkq-foes');
-      for (const w of waves) { const down = waveRight(w) === w.size; const c = el('span', 'pkq-foechip'); c.dataset.s = down ? 'down' : 'fled'; const src = g.art(`monster/${w.species}`); if (src) { const im = el('img'); im.alt = ''; im.src = src; c.append(im); } c.append(document.createTextNode(w.speciesName), el('em', '', down ? '击破' : '溜了')); foes.append(c); }
+      for (const w of waves) { if (lost && !items.slice(w.from, w.from + w.size).some(it => answered[it.itemId])) continue; const down = waveRight(w) === w.size; const c = el('span', 'pkq-foechip'); c.dataset.s = down ? 'down' : 'fled'; const src = g.art(`monster/${w.species}`); if (src) { const im = el('img'); im.alt = ''; im.src = src; c.append(im); } c.append(document.createTextNode(w.speciesName), el('em', '', down ? '击破' : '溜了')); foes.append(c); }
       main.append(foes);
-      main.append(el('p', 'pkq-result__line', scored > r.correct ? '溜走的怪带着你的错题，过几天会回来；也能在「错题重刷」里再做原题。' : r.maxCombo >= 5 ? `全程没断，最高连击 ${r.maxCombo}。` : '题库里还有很多，换个考点试试。'));
+      main.append(el('p', 'pkq-result__line', lost ? '答对的题星星照拿，只是没有「做完一组」的奖励，也不算今天的组数。错题都在下面，看完再来一组。' : scored > r.correct ? '溜走的怪带着你的错题，过几天会回来；也能在「错题重刷」里再做原题。' : r.maxCombo >= 5 ? `全程没断，最高连击 ${r.maxCombo}。` : '题库里还有很多，换个考点试试。'));
       const act = el('div', 'pkq-result__act');
       const home = backTo();
-      const again = S.actionButton('再来一组', {hint: 'Enter'}); again.classList.add('pkq-again');
+      const again = S.actionButton(lost ? '再战一组' : '再来一组', {hint: 'Enter'}); again.classList.add('pkq-again');
       again.addEventListener('click', async () => { if (again.dataset.busy) return; again.dataset.busy = '1'; S.sfx('ui-go'); try { const pane = desk()?.pane?.(); const params = pane?.state?.practiceParams || {mode: 'random'}; const nx = await G().call('practice.start', {...params, requestId: rid()}, 60000); if (nx?.empty || !nx?.setId) { G().toast(nx?.why || '这一类题现在没有可做的'); delete again.dataset.busy; return; } pane.state.practiceSet = nx; mountAgain(); } catch (e) { delete again.dataset.busy; G().toast(e.message || '没打开'); } });
       const out = S.ghostButton(backName(home)); out.addEventListener('click', leaveNow);
       act.append(again, out);
@@ -436,7 +535,7 @@
       qCol.replaceChildren(card); again.focus({preventScroll: true});
       setTimeout(() => S.sfx('rank', {rank}), S.reduced() ? 0 : 260);
       // 装了结算动画就在结算卡上演一遍（烟花 / 彩带 / 印章雨 / 立体书）
-      setTimeout(() => { if (alive && card.isConnected) window.__pinkieLoadout?.result(card, {rank}); }, S.reduced() ? 0 : 420);
+      setTimeout(() => { if (alive && card.isConnected && !lost) window.__pinkieLoadout?.result(card, {rank}); }, S.reduced() ? 0 : 420);
       countTo(sRight, r.correct, {after: el('em', '', `/ ${scored}`)}); countTo(sCombo, Math.max(r.maxCombo || 0, maxCombo)); sTime.textContent = mmss(Date.now() - t0); countTo(sStar, stars, {ms: 900});
       if (got) stage.addGain(got);
       if (r.awards?.length) setTimeout(() => G().play(r.awards, {from: badge}), 500); else G().pending?.();
@@ -455,6 +554,7 @@
         const tag = event.target?.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         const key = String(event.key || '').toLowerCase();
+        if (key === 'q' && battle?.skill?.ready) { event.preventDefault(); stage.skillButton.click(); return; }
         const choices = [...(qCol?.querySelectorAll('.pkq-opt:not(:disabled)') || [])];
         if (choices.length && !qCol.querySelector('.pkq-fb')) {
           const byKey = choices.findIndex(c => c.dataset.key?.toLowerCase() === key);

@@ -72,6 +72,9 @@
     book: 'viewBox="0 0 24 24"><path d="M4 5.500C6.500 4.500 9.500 4.500 12 6v13c-2.500-1.500-5.500-1.500-8-.5zM20 5.500C17.500 4.500 14.500 4.500 12 6v13c2.500-1.500 5.500-1.500 8-.5z"/>',
     flag: 'viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 5c4-2 7 2 12 0v8c-5 2-8-2-12 0"/>',
     bolt: 'viewBox="0 0 24 24"><path d="M13.500 2.500L5 13.500h6l-1 8 8.500-11h-6z"/>',
+    shield: 'viewBox="0 0 24 24"><path d="M12 2.800l7.500 2.700v6c0 4.600-3.100 8-7.500 9.700-4.400-1.700-7.500-5.100-7.500-9.700v-6z"/><path class="in" d="M8.600 12l2.500 2.500 4.500-5"/>',
+    lens: 'viewBox="0 0 24 24"><circle cx="10.500" cy="10.500" r="6"/><path d="M15 15l5.500 5.500"/><path class="in" d="M8 10.500h5"/>',
+    twin: 'viewBox="0 0 24 24"><path d="M8 3.500l1.500 3.200 3.500.5-2.500 2.500.6 3.500L8 11.500 4.900 13.200l.6-3.500L3 7.200l3.500-.5z"/><path d="M16.500 10.500l1.200 2.500 2.800.4-2 2 .5 2.800-2.500-1.300-2.500 1.300.5-2.800-2-2 2.800-.4z"/>',
     skull: 'viewBox="0 0 24 24"><path d="M5 11a7 7 0 0 1 14 0c0 2.600-1.300 4.300-3 5.300V19H8v-2.700C6.300 15.300 5 13.600 5 11z"/><circle cx="9.300" cy="11.500" r="1.400"/><circle cx="14.700" cy="11.500" r="1.400"/>',
   };
   const icon = (name, cls = '') => svg(ICON[name] || ICON.spark, `pkq-ico pkq-ico--${name} ${cls}`.trim());
@@ -109,7 +112,7 @@
   }
   function ghostButton(text) { const b = el('button', 'pkq-ghost'); b.type = 'button'; b.append(el('span', '', text), svg('viewBox="0 0 100 4" preserveAspectRatio="none"><path d="M0 2h100" pathLength="1"/>', 'pkq-ghost__line')); return b; }
   // 评级徽章：六边盾 + 月桂 + 字母，落下时盖章
-  const RANK_TONE = {S: ['#FFE08A', '#E9A93B', '#8A5A12'], A: ['#FFB7D5', '#DB1F74', '#7A1242'], B: ['#BFD4FF', '#5B7FE0', '#263E86'], C: ['#D9D2DB', '#8E8294', '#4B4252']};
+  const RANK_TONE = {S: ['#FFE08A', '#E9A93B', '#8A5A12'], A: ['#FFB7D5', '#DB1F74', '#7A1242'], B: ['#BFD4FF', '#5B7FE0', '#263E86'], D: ['#E7C9CF', '#A2586A', '#55202E'], C: ['#D9D2DB', '#8E8294', '#4B4252']};
   function rankBadge(rank) {
     const [hi, mid, lo] = RANK_TONE[rank] || RANK_TONE.C; const id = 'pkq-rk-' + Math.random().toString(36).slice(2, 8);
     const w = el('div', 'pkq-rank'); w.dataset.rank = rank;
@@ -147,7 +150,15 @@
     // 名牌：左 = 碧琪 + 气势槽；右 = 怪 + 血条
     const hp = el('div', 'pkq-plate is-hero'); const hpName = el('b', '', form?.name || '碧琪');
     const gauge = el('div', 'pkq-gauge'); const gaugeFill = el('i'); gauge.append(gaugeFill); const gaugeTag = el('small', '', '气势');
-    hp.append(el('span', 'pkq-plate__row'), gauge); hp.firstChild.append(hpName, gaugeTag);
+    const hearts = el('div', 'pkq-hearts'); hearts.hidden = true; hearts.setAttribute('role', 'img');
+    hp.append(el('span', 'pkq-plate__row'), hearts, gauge); hp.firstChild.append(hpName, gaugeTag);
+    // 技能键：一颗切角宝石，外圈是攒了多少（stroke 画出来），攒满后呼吸、可按
+    const SK_ICON = {eliminate: 'lens', heal: 'heart', shield: 'shield', double: 'twin'};
+    const skill = el('button', 'pkq-skill'); skill.type = 'button'; skill.hidden = true; skill.setAttribute('aria-disabled', 'true');
+    const skillIco = el('span', 'pkq-skill__ico'); const skillName = el('b', '', ''); const skillSub = el('small', '', '');
+    const skillTxt = el('span', 'pkq-skill__t'); skillTxt.append(skillName, skillSub);
+    skill.append(svg('viewBox="0 0 48 48"><path class="gem" d="M14 3.500h20L44.500 14v20L34 44.500H14L3.500 34V14z"/><path class="ring" d="M14 3.500h20L44.500 14v20L34 44.500H14L3.500 34V14z" pathLength="100"/><path class="glint" d="M14 3.500h20L44.500 14"/>', 'pkq-skill__svg'), skillIco, skillTxt, el('kbd', '', 'Q'));
+    const buffs = el('div', 'pkq-buffs');
     const fp = el('div', 'pkq-plate is-foe'); const fName = el('b', '', ''); const fLv = el('small', '', '');
     const life = el('div', 'pkq-life'); fp.append(el('span', 'pkq-plate__row'), life); fp.firstChild.append(fLv, fName);
     // 连击
@@ -165,7 +176,44 @@
     top.append(title, pips, gain, snd);
     const banner = el('div', 'pkq-banner'); banner.hidden = true;
     const flash = el('i', 'pkq-flash');
-    root.append(bgB, bgA, haze, motes, world, hp, fp, combo, top, banner, flash);
+    root.append(bgB, bgA, haze, motes, world, hp, fp, skill, buffs, combo, top, banner, flash);
+    let onSkill = null, skillState = null;
+    skill.addEventListener('pointerenter', () => { if (skill.getAttribute('aria-disabled') !== 'true') sfx('ui-hover'); });
+    skill.addEventListener('click', () => { if (skill.getAttribute('aria-disabled') === 'true' || skill.dataset.busy) { if (!reduced()) again(skill, 'is-nope', 400); return; } onSkill?.(); });
+    // 心：max 颗，left 颗亮着。掉心 = 那一颗裂开；回心 = 弹回来。
+    let heartEls = [], heartsLeft = null;
+    function setHearts(hpState, {instant = false} = {}) {
+      if (!hpState) { hearts.hidden = true; return; }
+      hearts.hidden = false;
+      while (heartEls.length < hpState.max) { const h = el('i', 'pkq-heart'); h.append(svg('viewBox="0 0 24 22"><path class="back" d="M12 20.500S2.500 14.800 2.500 8.300A5 5 0 0 1 12 6a5 5 0 0 1 9.500 2.300c0 6.500-9.500 12.200-9.500 12.200z"/><path class="fill" d="M12 20.500S2.500 14.800 2.500 8.300A5 5 0 0 1 12 6a5 5 0 0 1 9.500 2.300c0 6.500-9.500 12.200-9.500 12.200z"/><path class="crack" d="M12 6.500l-2 4 3.500 2.500-2 4.500" pathLength="1"/><path class="shine" d="M6 7.500c.5-1.200 1.500-2 2.800-2"/>')); hearts.append(h); heartEls.push(h); }
+      heartEls.forEach((h, k) => { const on = k < hpState.left; const was = h.dataset.on; h.dataset.on = on ? '1' : '0'; if (instant || was === undefined || was === h.dataset.on || reduced()) return; again(h, on ? 'is-heal' : 'is-break', 700); });
+      hearts.dataset.low = hpState.left === 1 ? '1' : '0'; root.dataset.danger = hpState.left === 1 && !hpState.failed ? '1' : '0';
+      hearts.setAttribute('aria-label', `碧琪还有 ${hpState.left} / ${hpState.max} 颗心`);
+      if (heartsLeft != null && !instant) { if (hpState.left > heartsLeft) { sfx('heal'); pop('+1', {at: 'hero', small: 'HEART'}); } }
+      heartsLeft = hpState.left;
+    }
+    function setSkill(sk, {onUse} = {}) {
+      if (onUse) onSkill = onUse;
+      if (!sk) { skill.hidden = true; skillState = null; return; }
+      const was = skillState; skillState = sk; skill.hidden = false; skill.dataset.kind = sk.kind;
+      if (skillIco.dataset.k !== sk.kind) { skillIco.dataset.k = sk.kind; skillIco.replaceChildren(icon(SK_ICON[sk.kind] || 'spark')); }
+      skillName.textContent = sk.name || '技能'; skillSub.textContent = sk.ready ? '可以放了' : `${sk.charge} / ${sk.cost}`;
+      skill.style.setProperty('--k', String(Math.min(1, sk.charge / sk.cost)));
+      skill.setAttribute('aria-disabled', String(!sk.ready)); skill.dataset.ready = sk.ready ? '1' : '0';
+      skill.title = sk.text || ''; skill.setAttribute('aria-label', `技能 ${sk.name}，${sk.ready ? '可以放了，按 Q' : `攒了 ${sk.charge} / ${sk.cost}`}`);
+      if (sk.ready && !(was?.ready) && !reduced()) { again(skill, 'is-full', 900); sfx('skill-ready'); }
+    }
+    function setBuffs({guard = false, double = false} = {}) {
+      buffs.replaceChildren();
+      if (guard) { const b = el('span', 'pkq-buff'); b.dataset.k = 'shield'; b.append(icon('shield'), el('em', '', '护盾')); buffs.append(b); }
+      if (double) { const b = el('span', 'pkq-buff'); b.dataset.k = 'double'; b.append(icon('twin'), el('em', '', '下一题 ×2')); buffs.append(b); }
+      hero.dataset.guard = guard ? '1' : '0';
+    }
+    // 放技能的一下：碧琪亮一下 + 一圈波纹 + 技能名
+    function castSkill(sk) { setPose('cheer', 900); if (!reduced()) { again(hero, 'is-skill', 800); again(flash, 'is-skill', 600); } sfx('skill'); pop(sk?.name || '技能', {at: 'hero', small: 'SKILL'}); }
+    function guarded() { if (!reduced()) again(hero, 'is-guard', 700); sfx('guard'); pop('挡住了', {at: 'hero', small: 'GUARD'}); }
+    function knockdown() { clearTimeout(poseTimer); setPose('hurt', 0); hero.dataset.down = '1'; root.dataset.down = '1'; sfx('down'); }
+    function rise() { hero.dataset.down = '0'; root.dataset.down = '0'; setPose('cheer', 1000); if (!reduced()) again(hero, 'is-rise', 800); sfx('heal'); }
 
     // 背景：槽位 battle/<scene>；轻微视差跟鼠标
     let sceneNow = '';
@@ -226,7 +274,7 @@
       return an.finished.catch(() => {}).then(() => n.remove());
     }
     // 答对：起手 → 光弹 → 落点（怪受击、掉一格血、伤害数字）
-    async function strike({crit = false, damage = 100, kill = false} = {}) {
+    async function strike({crit = false, damage = 100, kill = false, keepHp = false} = {}) {
       const target = enemy; // 这一下打的是谁；演到一半换了怪，后面的受击 / 击破就不演了
       setPose('cheer', 1100);
       if (!reduced()) again(hero, 'is-cast');
@@ -237,7 +285,7 @@
       if (!reduced()) { again(foe, crit ? 'is-crit' : 'is-hurt'); if (crit) again(root, 'is-quake'); again(flash, 'is-hit'); }
       if (enemy !== target) return;
       pop(damage, {crit, small: crit ? 'CRITICAL' : ''});
-      if (enemy) setEnemyHp(enemy.left - 1);
+      if (enemy && !keepHp) setEnemyHp(enemy.left - 1);
       if (kill) { await wait(reduced() ? 0 : 260); if (enemy === target) defeat(); }
     }
     // 答错：怪扑过来，碧琪一缩
@@ -246,7 +294,7 @@
       await wait(reduced() ? 0 : 170);
       setPose('hurt', 1200); sfx('hurt');
       if (!reduced()) { again(hero, 'is-hit'); again(flash, 'is-hurt'); again(root, 'is-quake'); }
-      pop('MISS', {miss: true, at: 'hero'});
+      pop(hearts.hidden ? 'MISS' : '-1', {miss: true, at: 'hero', small: hearts.hidden ? '' : 'HEART'});
     }
     function defeat() {
       foe.classList.add('is-down'); sfx('defeat');
@@ -272,7 +320,7 @@
     // 美术清单晚到（不经营地直接进作答页）时补一次图
     function refreshArt() { const s = sceneNow; sceneNow = ''; setScene(s); setPose('portrait'); if (enemy) setEnemy(enemy, {instant: true}); }
     function victory(on = true) { root.classList.toggle('is-victory', on); if (on) setPose('cheer', 0); }
-    return {root, top, hero: heroImg, foe: foeBody, gain, setScene, setEnemy, setEnemyHp, strike, counter, defeat, flee, setCombo, setGauge, setProgress, setWaveMarks, setTitle, addGain, banner: showBanner, intro, victory, setPose, refreshArt,
+    return {root, top, hero: heroImg, foe: foeBody, gain, skillButton: skill, setHearts, setSkill, setBuffs, castSkill, guarded, knockdown, rise, setScene, setEnemy, setEnemyHp, strike, counter, defeat, flee, setCombo, setGauge, setProgress, setWaveMarks, setTitle, addGain, banner: showBanner, intro, victory, setPose, refreshArt,
       get enemy() { return enemy; }, destroy() { clearTimeout(poseTimer); root.removeEventListener('pointermove', onMove); }};
   }
 

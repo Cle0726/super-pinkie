@@ -1170,6 +1170,69 @@
    "raw": "mon-tangle-yarn.png",
    "tool": "tools/study-game/art/gpt-web-batch.mjs",
    "date": "2026-11-13"
+  },
+  "form/zhuangyuan/portrait": {
+   "raw": "zhuangyuan-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/zhuangyuan/ult": {
+   "raw": "zhuangyuan-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/knight/portrait": {
+   "raw": "knight-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/knight/ult": {
+   "raw": "knight-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/knight/cheer": {
+   "raw": "knight-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/knight/hurt": {
+   "raw": "knight-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/knight/plate": {
+   "raw": "knight-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/cyber/portrait": {
+   "raw": "cyber-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/cyber/ult": {
+   "raw": "cyber-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
   }
  }
 }

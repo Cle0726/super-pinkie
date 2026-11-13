@@ -22,9 +22,58 @@
   // 纸靶：同心细线圈 + 刻度，纸面描边。不是卡通图标。
   const TARGET_SVG = '<svg viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="pkb-paper" cx="45%" cy="38%"><stop offset="0" stop-color="#FFFDF8"/><stop offset="1" stop-color="#EFE4D8"/></radialGradient></defs><circle cx="60" cy="60" r="54" fill="url(#pkb-paper)" stroke="#3A2A35" stroke-opacity=".28" stroke-width="1"/><circle cx="60" cy="60" r="42" fill="none" stroke="#3A2A35" stroke-opacity=".22"/><circle cx="60" cy="60" r="30" fill="none" stroke="#DB1F74" stroke-opacity=".55" stroke-width="1.2"/><circle cx="60" cy="60" r="18" fill="none" stroke="#3A2A35" stroke-opacity=".22"/><circle cx="60" cy="60" r="7" fill="#DB1F74" fill-opacity=".85"/><path d="M60 2v14M60 104v14M2 60h14M104 60h14" stroke="#3A2A35" stroke-opacity=".35" stroke-width="1"/></svg>';
 
+  // ───────────── v4：讨伐 / 守关也用刷题那条战斗舞台带 ─────────────
+  // 接口和下面的 arena() 一样（setEnemy / setHp / setCombo / strike / dodge / defeat / ult），里面是 laolao-game-stage.js 的舞台。
+  // 舞台带放在状态条下面（band: true → 调用方用 place(top) 放），不塞进状态条里。
+  const SPECIES_SCENE = {'echo-bat': 'listening', 'shell-crab': 'listening', 'block-golem': 'vocab', 'sticky-ghost': 'vocab', 'quiz-shroom': 'vocab', 'ink-slime': 'grammar', 'tangle-yarn': 'grammar', 'clock-beetle': 'grammar',
+    bookworm: 'reading', 'paper-fox': 'reading', 'lost-crane': 'translation', 'bridge-troll': 'translation', 'inkpot-imp': 'writing', 'eraser-gnome': 'writing', 'shaving-hog': 'writing', 'fog-puff': 'training'};
+  const SEGS = 8;
+  function bandArena({form, scene = 'training'} = {}) {
+    const S = window.__pinkieGameStage; if (!S?.create) return null;
+    let stage = S.create({form, scene, compact: true}); stage.root.classList.add('is-embed');
+    let enemy = null, hpFrac = 1, threshold = ultThreshold(form), combo = 0;
+    const gauge = () => stage.setGauge((combo % threshold || (combo ? threshold : 0)) / threshold, {full: combo > 0 && combo % threshold === 0});
+    const api = {
+      band: true,
+      get root() { return stage.root; }, get foe() { return stage.foe; }, get hero() { return stage.hero; },
+      place(top) { top.after(stage.root); top.classList.add('pkb-top--band'); },
+      setForm(f) {
+        if ((f?.id || 'daily') === (form?.id || 'daily')) { stage.refreshArt(); return; }
+        form = f; threshold = ultThreshold(f);
+        const old = stage, next = S.create({form: f, scene: old.root.dataset.scene, compact: true}); next.root.classList.add('is-embed');
+        old.root.replaceWith(next.root); old.destroy(); stage = next;
+        if (enemy) { const e = enemy; enemy = null; api.setEnemy(e, {instant: true}); } api.setCombo(combo);
+      },
+      setEnemy(next, {instant = false} = {}) {
+        const key = next ? `${next.kind}:${next.id || next.species || ''}` : '';
+        if (enemy && key === enemy.key) return;
+        enemy = next ? {...next, key} : null;
+        if (!next) { stage.setEnemy(null); return; }
+        stage.setScene(next.scene || SPECIES_SCENE[next.species] || (next.kind === 'target' ? 'training' : 'boss'));
+        const lv = Math.max(1, Math.min(5, next.level || 1));
+        stage.setEnemy({species: next.species || (next.kind === 'target' ? 'fog-puff' : ''), name: next.name || '纸靶', level: lv, elite: next.kind === 'guard' || Boolean(next.evolved), hp: SEGS, left: Math.round(hpFrac * SEGS)}, {instant});
+        stage.setTitle(next.kind === 'guard' ? 'GUARDIAN' : next.kind === 'monster' ? 'HUNT' : 'TRAINING', next.note || '');
+      },
+      setHp(frac) { hpFrac = Math.max(0, Math.min(1, frac)); stage.setEnemyHp(Math.ceil(hpFrac * SEGS - 1e-6)); },
+      setCombo(n) { combo = n || 0; stage.setCombo(combo); gauge(); },
+      strike({crit = false, damage = 0, partial = false} = {}) { stage.strike({crit, damage: damage || 100, keepHp: true}); void partial; },
+      dodge() { stage.counter(); },
+      defeat() { stage.defeat(); stage.victory(true); },
+      async ult(n) {
+        const engine = fx(); const g = G(); if (!engine || !form) return;
+        const u = window.__pinkieLoadout?.ultOf(form) || {preset: form.ult || 'burst', palette: form.palette};
+        try { await engine.cinematic(u.preset, {text: ULT_TITLE[u.preset] || '大招', sub: `${n} COMBO · ${form.name}`, kicker: form.name, art: g?.ultArt(form.id) || g?.portrait(form.id), palette: u.palette, particle: form.particle, form: g?.fxForm(form)}); } catch { /* 过场被跳过 */ }
+      },
+      destroy() { stage.destroy(); stage.root.remove(); },
+      get threshold() { return threshold; }, get hp() { return hpFrac; },
+    };
+    return api;
+  }
+
   // ───────────── 竞技场：碧琪 ↔ 敌人，血条、连击、伤害数字 ─────────────
   // strip = 状态条版：碧琪和怪缩成题目上方那一条的两端小头像（作答页都用这个；题目才是第一视觉）。
-  function arena({form, compact = false, strip = false} = {}) {
+  function arena({form, compact = false, strip = false, scene} = {}) {
+    if (strip) { const b = bandArena({form, scene}); if (b) return b; }
     const root = el('div', 'pkb-arena' + (compact ? ' is-compact' : '') + (strip ? ' is-strip' : '')); root.setAttribute('aria-hidden', 'true');
     if (form?.palette) root.style.cssText = `--pkb-a:${form.palette[0]};--pkb-b:${form.palette[1]};--pkb-c:${form.palette[2]}`;
     const ground = el('i', 'pkb-ground');
@@ -143,7 +192,7 @@
     const a = arena({form: form0, strip: true});
     root.dataset.battle = '1';
     // 状态条：× · 碧琪 · 连击 · 本组进度 · 怪的名牌和血条 · 怪 · 星星，一行。
-    top.classList.add('pkb-top'); top.append(a.root);
+    top.classList.add('pkb-top'); if (a.band) a.place(top); else top.append(a.root);
     const mark = () => { const r = top.getBoundingClientRect(); if (!r.height) return; const s = document.documentElement.style; s.setProperty('--pkb-arena-bottom', Math.round(r.bottom) + 'px'); s.setProperty('--pkb-arena-cx', Math.round(r.left + r.width / 2) + 'px'); };
     requestAnimationFrame(mark);
     let alive = true, original = 0, correct = 0, combo = 0, shown = 0;
@@ -186,7 +235,7 @@
         if (awards.length) setTimeout(() => g.play(awards, {from: a.foe}), 500);
         else g.pending();
       },
-      detach() { alive = false; a.root.remove(); top.classList.remove('pkb-top'); delete root.dataset.battle; },
+      detach() { alive = false; if (a.band) a.destroy(); else a.root.remove(); top.classList.remove('pkb-top', 'pkb-top--band'); delete root.dataset.battle; },
     };
   }
 
@@ -222,8 +271,8 @@
     back.setAttribute('aria-label', `退出守关战，${backName(backTo())}`); back.title = back.getAttribute('aria-label');
     const payload = opts.payload;
     if (!payload?.items?.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
-    const a = arena({form: g.equippedForm(), strip: true}); top.append(a.root);
-    a.setEnemy({kind: 'guard', species: GUARDIAN[opts.node?.region] || 'fog-puff', name: `${REGION_NAME[opts.node?.region] || '区域'} · 守卫`, level: 3, note: opts.node?.name || ''});
+    const a = arena({form: g.equippedForm(), strip: true, scene: GUARDIAN[opts.node?.region] ? opts.node.region : 'boss'}); if (a.band) a.place(top); else top.append(a.root);
+    a.setEnemy({kind: 'guard', scene: GUARDIAN[opts.node?.region] ? opts.node.region : 'boss', species: GUARDIAN[opts.node?.region] || 'fog-puff', name: `${REGION_NAME[opts.node?.region] || '区域'} · 守卫`, level: 3, note: opts.node?.name || ''});
     a.setHp(1, {instant: true}); a.setCombo(0);
     const stage = el('div', 'pk-drill-stage pkb-guard__stage'); const qWrap = el('section', 'pk-drill-col pkb-guard__q'); stage.append(qWrap); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
@@ -322,7 +371,7 @@
       } catch (e) { qWrap.replaceChildren(el('p', 'pkb-empty', e.message || '结算失败，再点一次')); }
     }
     show();
-    return {unmount() { alive = false; }, keydown(event) {
+    return {unmount() { alive = false; if (a.band) a.destroy(); }, keydown(event) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
       if (host.querySelector('dialog[open]')) return;
