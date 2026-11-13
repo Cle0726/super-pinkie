@@ -97,7 +97,9 @@ test('OpenClaw tap drops reasoning and carries actual assistant/tool events',asy
 test('tool labels retain actual paths and commands instead of fabricated progress',()=>{
   const src=read('ui/injections/laolao-phrases.js');
   assert.doesNotMatch(src,/detail\.textContent = (?:detailPhrase|cardDetailPhrase)/);
-  // Localized in place on Lit's text node; the raw tool name stays visible.
-  assert.match(src,/return label\?`\$\{label\} · \$\{core\}`:null/);
+  // Localized in place on Lit's text node; the label shows only the Chinese name
+  // (ui-audit-1112 C), and an already-localized label is left alone on re-render.
+  assert.match(src,/if\(Object\.values\(toolLabels\)\.includes\(core\)\)return null;\s*return toolLabelFor\(core\);/);
+  assert.doesNotMatch(src,/`\$\{label\} · \$\{core\}`/);
   assert.doesNotMatch(src,/toolLabel\.textContent\s*=/);
 });
