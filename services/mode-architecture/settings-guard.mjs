@@ -9,9 +9,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {agentEntries, agentWorkspace, expandHome, openclawConfigPath, openclawStateDir, readConfigFile} from './openclaw-paths.mjs';
 
-const HERE = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+// fileURLToPath：路径里有中文或空格（中文用户名、Windows 用户名带空格）时 URL.pathname 是 %E7… 编码，会读不到 guard-build.json。
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PRODUCT_AGENTS = ['main', 'project', 'thinking', 'learning'];
 export const USER_SKILLS_DIR = 'user-skills';
 // 工作区里碧琪可以写、但内容要过滤的「记忆区」。

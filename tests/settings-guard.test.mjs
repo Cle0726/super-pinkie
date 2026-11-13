@@ -126,3 +126,17 @@ test('guard mode only comes from the packaged build-info, not env', () => {
   delete process.env.PINKIE_GUARD;
   resetGuardModeCache();
 });
+
+test('installed plugin finds its own guard-build.json under a Chinese or spaced path', async () => {
+  // 11-13 隔离验收发现：URL.pathname 会把中文/空格编码成 %E7…，正式版标记读不到，防护悄悄关掉。
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-路径 带空格-')));
+  const plugin = path.join(root, '张三 的 .openclaw', 'extensions', 'pinkie-mode-architecture');
+  fs.mkdirSync(plugin, {recursive: true});
+  const source = path.resolve(import.meta.dirname, '../services/mode-architecture');
+  for (const name of ['settings-guard.mjs', 'openclaw-paths.mjs']) fs.copyFileSync(path.join(source, name), path.join(plugin, name));
+  fs.writeFileSync(path.join(plugin, 'guard-build.json'), JSON.stringify({guard: true, channel: 'release', version: '9.9.9'}));
+  const copy = await import(new URL(`file://${path.join(plugin, 'settings-guard.mjs').split(path.sep).map(encodeURIComponent).join('/')}`).href);
+  const mode = copy.guardMode({entry: path.join(root, 'nowhere.mjs'), refresh: true});
+  assert.equal(mode.enabled, true);
+  assert.equal(mode.source, path.join(plugin, 'guard-build.json'));
+});
