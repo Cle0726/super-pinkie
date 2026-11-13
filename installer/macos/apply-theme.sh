@@ -503,6 +503,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     if ! OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-computer-v2.mjs"; then
       echo "warning: Computer Use v2 patch skipped because this runtime has no matching chunk" >&2
     fi
+    # 立即追加不再和正在跑的一轮抢写会话文件（session file changed while embedded prompt lock was released）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.
