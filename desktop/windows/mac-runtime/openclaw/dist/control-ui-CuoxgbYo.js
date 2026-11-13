@@ -1,4 +1,4 @@
-/* pinkie-material-preview-csp:v2 */
+/* pinkie-material-preview-csp:v3 */
 import { a as normalizeLowercaseStringOrEmpty } from "./string-coerce-DW4mBlAt.js";
 import { M as resolveTimestampMsToIsoString, o as asDateTimestampMs } from "./number-coercion-CJQ8TR--.js";
 import { C as FsSafeError, c as isWithinDir, x as safeFileURLToPath } from "./path-DILYn_gk.js";
@@ -86,7 +86,7 @@ function buildControlUiCspHeader(opts) {
 		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"img-src 'self' data: blob: clekk-material:",
 		"media-src 'self' data: blob: clekk-material:",
-		"frame-src 'self' clekk-material:",
+		"frame-src 'self' data: clekk-material:",
 		"font-src 'self' https://fonts.gstatic.com",
 		"worker-src 'self'",
 		`connect-src ${connectTokens.join(" ")}`

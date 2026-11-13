@@ -7068,7 +7068,10 @@ async function prepareSessionManagerForRun(params) {
 	}
 	if (params.hadSessionFile && header && !hasAssistant) {
 		const preservesForkedBranch = typeof header.parentSession === "string" && header.parentSession.length > 0;
-		if (sm.wasRecoveredFromCorruptHeader?.() || preservesForkedBranch) {
+		/* pinkie-preserve-pending-user-on-retry:v1 */
+		const preservesPendingUser = params.preservePendingUser === true
+			&& sm.fileEntries.some(e => e.type === 'message' && e.message?.role === 'user');
+		if (sm.wasRecoveredFromCorruptHeader?.() || preservesForkedBranch || preservesPendingUser) {
 			header.id = params.sessionId;
 			header.cwd = params.cwd;
 			sm.sessionId = params.sessionId;
@@ -12494,7 +12497,9 @@ async function runEmbeddedAttempt(params) {
 					sessionFile: params.sessionFile,
 					hadSessionFile,
 					sessionId: params.sessionId,
-					cwd: effectiveCwd
+					cwd: effectiveCwd,
+					preservePendingUser: params.suppressNextUserMessagePersistence === true
+						&& /^agent:(?:main|project|thinking|learning):/.test(String(params.sessionKey || ''))
 				});
 			});
 			const settingsManager = createPreparedEmbeddedAgentSettingsManager({
@@ -13783,10 +13788,20 @@ async function runEmbeddedAttempt(params) {
 					promptForRuntimeContextSplit = runtimePromptMerge.prompt;
 					if (transcriptPromptMerge) transcriptPromptForRuntimeSplit = transcriptPromptMerge.prompt;
 					if (orphanPromptMerge.removeLeaf) {
-						if (leafEntry.parentId) sessionManager.branch(leafEntry.parentId);
-						else sessionManager.resetLeaf();
-						const sessionContext = sessionManager.buildSessionContext();
-						activeSession.agent.state.messages = sessionContext.messages;
+						/* pinkie-preserve-user-leaf-on-retry:v1 */
+						const preserveUserLeaf = params.suppressNextUserMessagePersistence === true
+							&& /^agent:(?:main|project|thinking|learning):/.test(String(params.sessionKey || ''));
+						const current = preserveUserLeaf ? sessionManager.buildSessionContext().messages : null;
+						if (preserveUserLeaf && current?.at(-1)?.role === 'user') {
+							// The retry prompt already merges this user turn. Omit the old
+							// in-memory copy from this model call, but keep its durable leaf.
+							activeSession.agent.state.messages = current.slice(0, -1);
+						} else {
+							if (leafEntry.parentId) sessionManager.branch(leafEntry.parentId);
+							else sessionManager.resetLeaf();
+							const sessionContext = sessionManager.buildSessionContext();
+							activeSession.agent.state.messages = sessionContext.messages;
+						}
 					}
 					const orphanRepairMessage = `${orphanPromptMerge.removeLeaf ? orphanPromptMerge.merged ? "Merged and removed" : "Removed already-queued" : "Preserved"} orphaned user message` + (orphanPromptMerge.removeLeaf ? " to prevent consecutive user turns. " : " without removing the active session leaf. ") + `runId=${params.runId} sessionId=${params.sessionId} trigger=${params.trigger}`;
 					if (shouldWarnOnOrphanedUserRepair(params.trigger)) log$2.warn(orphanRepairMessage);
@@ -14517,6 +14532,13 @@ async function runEmbeddedAttempt(params) {
 						log$2.warn(`failed to persist prompt error entry: ${String(entryErr)}`);
 					}
 					if (activeContextEngine && !beforeAgentFinalizeRevisionReason) flushSessionManagerFile(activeSessionManager);
+                    else if (beforeAgentFinalizeRevisionReason
+                      && /^agent:(?:main|project|thinking|learning):/.test(String(params.sessionKey || ''))
+                      && activeSessionManager.flushed === false
+                      && activeSessionManager.getEntries?.().some(entry => entry?.type === 'message' && entry.message?.role === 'user')) {
+                      /* pinkie-flush-first-user-before-retry:v1 */
+                      flushSessionManagerFile(activeSessionManager);
+                    }
 				});
 				if (activeContextEngine && !beforeAgentFinalizeRevisionReason) {
 					const afterTurnRuntimeContext = buildAfterTurnRuntimeContextFromUsage({

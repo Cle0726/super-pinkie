@@ -1,4 +1,4 @@
-/* pinkie-image-access:v3 */
+/* pinkie-image-access:v4 */
 import os from "node:os";
 import fsSync from "node:fs";
 import { g as assertNoWindowsNetworkPath, i as isPathInside } from "./path-DILYn_gk.js";
@@ -48,7 +48,31 @@ function _pinkieWorkspaceRoots(home) {
     try { return [path.resolve(stateDir, entry.name)]; } catch { return []; }
   });
 }
+let _pinkieProjectRootsCache;
+function _pinkieProjectRoots() {
+  const home = (os && typeof os.homedir === "function") ? os.homedir() : (process.env.HOME || process.env.USERPROFILE || "");
+  const stateRoot = process.env.PINKIE_STATE_ROOT || path.join(home, "Library/Application Support/SuperPinkie");
+  const file = path.join(stateRoot, "project-scope", "bindings.json");
+  let mtime = -1;
+  try { mtime = fsSync.statSync(file).mtimeMs; } catch { return []; }
+  if (_pinkieProjectRootsCache && _pinkieProjectRootsCache.file === file && _pinkieProjectRootsCache.mtime === mtime) return _pinkieProjectRootsCache.roots;
+  let roots = [];
+  try {
+    const data = JSON.parse(fsSync.readFileSync(file, "utf8"));
+    roots = Object.values(data || {}).flatMap((entry) => {
+      const root = entry && typeof entry.root === "string" ? path.resolve(entry.root) : "";
+      if (!root || root === path.parse(root).root || root === path.resolve(home)) return [];
+      return [root];
+    });
+  } catch {}
+  roots = [...new Set(roots)];
+  _pinkieProjectRootsCache = { file, mtime, roots };
+  return roots;
+}
 function _pinkieResolveExtraMediaRoots() {
+  return [..._pinkieStaticMediaRoots(), ..._pinkieProjectRoots()];
+}
+function _pinkieStaticMediaRoots() {
   if (_pinkieExtraMediaRoots) return _pinkieExtraMediaRoots;
   const home = (os && typeof os.homedir === "function")
     ? os.homedir()
