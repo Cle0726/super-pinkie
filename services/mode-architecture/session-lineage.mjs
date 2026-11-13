@@ -102,20 +102,51 @@ function toolDetails(output) {
   return text ? JSON.parse(text) : envelope;
 }
 
+// 门禁存的工具结果最多 12000 字（存档时 6000），带长答案的 pinkie_mode_ask 会被截断成半截 JSON，
+// 整段解析会失败，真的去问过了也被当成没问。解析不了时直接在原文里找那几个字段（内层 JSON 的引号是转义过的）。
+const CHILD_KEY_IN_TEXT = /\\*"key\\*"\s*:\s*\\*"(agent:[^"\\]+:pinkie-child:[^"\\]+)/u;
+function childResult(output) {
+  try { return toolDetails(output) || {}; } catch {
+    const text = String(output || '');
+    return {
+      key: CHILD_KEY_IN_TEXT.exec(text)?.[1] || '',
+      answer: /\\*"answer\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+      id: /\\*"id\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+    };
+  }
+}
+const isChildKey = key => typeof key === 'string' && Boolean(agentOf(key)) && key.includes(':pinkie-child:');
+
 export function isSessionOperationEvidence(entry, prompt) {
   if (entry.name === 'pinkie_mode_ask') {
     // 用户要的就是「替我去问那个模式」：问过了（答了、还在想、那边没答出来）都算真的去办了。
     if (!/模式|那边|mode/iu.test(prompt || '')) return false;
-    try {
-      const result = toolDetails(entry.output);
-      return Boolean(agentOf(result.key) && result.key.includes(':pinkie-child:') || typeof result.answer === 'string' && result.answer);
-    } catch { return false; }
+    const result = childResult(entry.output);
+    return isChildKey(result.key) || typeof result.answer === 'string' && Boolean(result.answer);
   }
   if (!/子会话|会话|sub[- ]?session|child session/iu.test(prompt || '') || entry.name !== 'pinkie_session_start') return false;
-  try {
-    const result = toolDetails(entry.output);
-    return Boolean(agentOf(result.key) && result.key.includes(':pinkie-child:') || typeof result.id === 'string' && result.id.length > 0);
-  } catch { return false; }
+  const result = childResult(entry.output);
+  return isChildKey(result.key) || typeof result.id === 'string' && result.id.length > 0;
+}
+
+// 这一轮把活真的交给了一个子会话（开起来了或已排队），不是只提了一张等用户点的卡片。
+// 那块活由子会话去做，它自己的交付门禁会检查它的改动和验证；父会话这一轮没有自己改文件是对的。
+export function isChildDelegation(entry) {
+  if (!entry || entry.failed || entry.name !== 'pinkie_session_start') return false;
+  return isChildKey(childResult(entry.output).key);
+}
+
+// 子会话交回汇报后叫醒父会话的那一轮，开头带着这个标记（WAKE_PREFIX）。
+export const SESSION_WAKE_MARK = '[pinkie-session-wake]';
+// 父会话最近收到的那份子会话汇报（提问 consult 的答案不算）。failed 表示那边没做成。
+export function latestChildReport(parentKey) {
+  for (const lineage of (globalThis[LINEAGE_INSTANCES] || new Map()).values()) {
+    let cards = [];
+    try { cards = lineage.state(parentKey).cards || []; } catch { continue; }
+    const card = cards.findLast(item => item?.kind === 'report' && !item.consult);
+    if (card) return {failed: Boolean(card.failed), childKey: card.childKey || '', at: Number(card.createdAt) || 0};
+  }
+  return null;
 }
 
 export function normalizeChildRequest(input = {}) {

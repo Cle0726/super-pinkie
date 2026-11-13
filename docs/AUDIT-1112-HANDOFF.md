@@ -3,6 +3,40 @@
 分支 **`audit/pinkie-1112`**。还没合 main、没打 tag、没发版、没装进任何 App。
 这份说明随改动一起更新，最下面的「进度」是做到哪了。Mac 端先读这一份，再看提交。
 
+## Windows 端 11-12 晚：自查——界面状态以后端为准、交付门禁的误报（Mac 端先 `git pull`）
+
+先合了 Mac 端的 `install/unify-1112-live`（和这条分支比只多了换模式头像 avatars7，无冲突）。然后把下午那一版和交接里还开着的项回头查了一遍，重点是「界面显示的和后端实际不一致、状态不实时、显示假数据」。还是没合 main、没发版、没装进 App。
+
+**改了什么：**
+
+1. **交付门禁：活交给子会话后误报**（`index.mjs` 的 `effectVerificationReason` 和执行证据检查，`session-lineage.mjs` 新增 `isChildDelegation`、`latestChildReport`、`SESSION_WAKE_MARK`）。上面「还留着的」第一条（开了跨模式子会话后多提醒一次）查清了，而且不只跨模式：只要是改文件的活交给子会话，**开子会话那一轮**和**汇报叫醒父会话那一轮**都会被判「执行型修改任务没有主机确认的文件变化」（叫醒轮沿用用户上一条原话，父会话这一轮只读文件核对，自然没有改动）。现在：这一轮真的开出了子会话（结果里有 `:pinkie-child:` 的 key，只提卡片不算），或者这一轮是被一份「做成了」的汇报叫醒的，就不要求父会话自己有文件变化——改动由子会话自己的门禁把关。汇报是「没做成」时照旧拦，父会话不能把没做成转述成做成；父会话在叫醒轮自己动了文件，照常要验证。`sessionReport` 也进了门禁的存档（snapshot / restore）。
+2. **`pinkie_mode_ask` 的长答案被当成没问过**：门禁存的工具结果最多 12000 字，答案长时 JSON 被截断、整段解析失败。现在解析不了就在原文里找 `key` / `answer`。
+3. **Windows：命令写出的文件门禁看不见**（`execTargetPaths`）。带反斜杠的路径原来一律丢掉（Mac 上反斜杠是转义），Windows 路径全是反斜杠，于是碧琪用命令生成的 PPT、视频、网页一个都认不出来，误报「没有主机确认的文件变化」。现在只在 Windows（`path.sep === '\\'`）上把反斜杠当分隔符；另外认引号里带空格的 `C:\…` 路径和 PowerShell 的 `Set-Content` / `Out-File` / `Copy-Item` 等写文件命令。Mac 上行为不变。
+4. **Windows：勾检查点被当成改了代码**（`captureVerificationEvidence`）。判断记账文件用的是 JSON 文本里的路径，Windows 的 `\` 在那里是 `\\`，正则只认一个，于是长跑 / 加强档里「先跑测试、再勾检查点」会让测试证据作废，提醒「改完之后还没跑测试」。核心测试集里那两项「改动前就失败」的（`marathon keeps going…`、`ticking the on-screen plan…`）就是它，现在过了。
+5. **会话偏好：界面只显示后端真的存下的**（`session-prefs.mjs`、`laolao-session-tools.js`、`laolao-composer-tray.js`）。
+   - `pinkie.session.prefs.set` 回存下的那一份（原来只回 `{ok:true}`）；界面按它画。「这个会话按效率来」这类提示只在后端确实存下时才说，没存上就说没改成（老网关不认识 `pace` / `lens` 时原来会提示成功、按钮又弹回去）。
+   - 读后端失败时，原来把默认值（联网开、风格默认）当成这个会话的设置缓存并显示，之后再也不读。现在：读到过就沿用上次的；从没读到就把按钮停用、写「还没读到这个会话的设置，会自动重试」，模式按钮不显示，工具菜单里这两行也灰掉、不显示开关和「默认」，6 秒后自己再读。
+   - 换会话、切回窗口、网关重连时都重新读一次（快速提问小窗或别的窗口改过的要看得到）。每 1.5 秒的重画循环不会在一次读取没回来时叠请求。
+   - 风格 / 工作程度 / 取向在下一轮组装提示时才生效：碧琪正在回答时改，提示会说「这一轮已经在回了，从下一条消息开始」。联网开关是调用工具时现读的，立即生效，不加这句。
+6. **首页：等空白会话时被换掉会卡在「忙」**（`laolao-startup-home.js`）。发送时空白会话还在备，等待期间首页重进或换了会话，原来直接返回、`busy` 留着，之后首页的发送全被吞掉。
+
+**查过、不是问题的：** 首页备的空白会话离开首页后不会出现在侧栏（侧栏本来就只列有消息的会话和当前会话）。跨模式子会话「在侧栏里按顶层显示」是因为它在另一个模式的侧栏里；子会话那边有「从X模式转来」角标，父会话这边有「↗去X模式」按钮，后端的 `fromMode` 和前端标签对得上。这一条从「还留着的」里可以划掉。
+
+**验证过的：**
+
+- 新测试 `tests/delegation-gate.test.mjs`（8 项）：开子会话那一轮、做成了的汇报叫醒轮放行；没做成的汇报、没开成的子会话、什么都没做却说做好了、叫醒轮自己改了没验证，照旧拦；截断的 `pinkie_mode_ask` 结果仍算问过。用同一组场景跑改动前的代码，开子会话轮和叫醒轮全部被误拦。
+- `session-prefs` 加一项（存完回的是真正存下的设置），`composer-tray-and-home-draft` 补了「读不到不当真」「提示以后端为准」的断言。
+- Edge + 假网关渲染项目模式对话页：正常时按钮、工作程度、工具菜单和以前一样；让假网关的 `pinkie.session.prefs.get` 返回失败，按钮停用并说明原因，工具菜单两行灰掉、不显示状态值。
+- 核心集（下面「测试」一节的命令）231 项 230 过，剩下 1 项 `computer tool discovers…` 断言的是 Mac 上的提示文字「尚未连接」，Windows 上按设计提示「这台 Windows 电脑上没有 computer 桌面执行器」，不是 BUG。
+
+**没验证的：**
+
+- 没在真网关 + 真模型上重跑「开子会话 → 汇报 → 父会话核对」，误报是否真的消失只靠复现脚本和单测。
+- 没打包、没装进 App；WebKit（Mac App）里没看过停用状态的按钮。
+- Windows 路径的门禁改动只在 Windows 上跑过；Mac 上这段代码走原来的分支，Mac 端全量测试没跑。
+
+**Mac 端要看的：** 门禁和会话偏好的改动两端共用；`pinkie.session.prefs.set` 的回包多了设置字段（`ok` 不变）；仓库里只有 `laolao-session-tools.js` 一处调用，已经跟着改了。
+
 ## Windows 端 11-12 下午：输入框和首页的 BUG、模式专属选项、关窗清理（Mac 端先 `git pull`）
 
 在 08:00 那一版之上，`audit/pinkie-1112` 和 `unify/pinkie-1112` 一起快进到这次的提交。还是没合 main、没发版、没装进 App。
@@ -239,7 +273,7 @@ Windows、Node 24：
 node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mode-architecture.test.mjs tests/user-settings.test.cjs tests/work-cards.test.mjs
 ```
 
-226 项里 223 过。失败的 3 项（`computer tool discovers the complete driver surface…`、`marathon keeps going while the checkpoint…`、`ticking the on-screen plan or the checkpoint…`）在改动前的同一分支上就失败，和这次改动无关。
+11-12 晚：231 项里 230 过。原来「改动前就失败」的 3 项里，`marathon keeps going while the checkpoint…`、`ticking the on-screen plan or the checkpoint…` 是 Windows 上勾检查点被当成改代码（见最上面一节第 4 条），已经修好；剩下的 `computer tool discovers the complete driver surface…` 断言的是 Mac 上的提示文字，Windows 上按设计提示别的，不是 BUG。
 
 全量 `node --test tests/*.test.cjs tests/*.test.mjs` 在这台 Windows 上改动前是 1656 项、69 项失败（多数是依赖 Mac、WebKit 或已安装 App 的测试）。
 
@@ -253,4 +287,6 @@ node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mo
 - [x] 界面和 IP 感：小头像、分工条、排版缺陷、侧栏和快捷栏的线条图标
 - [x] 重复入口和无引用素材清理
 - [x] 用户反馈：首页挂空白新会话、输入框「工具」菜单、项目「工作程度」和想法「取向」、关窗即退出（含看门狗标记）
+- [x] 自查：交付门禁在子会话委派和 Windows 路径上的误报、会话偏好只显示后端存下的、首页等待时卡住
 - [ ] 真实 EXE 里关窗、真网关上首页选模型后发送、WebKit 下的新界面
+- [ ] 真网关上重跑「开子会话 → 汇报 → 父会话核对」，确认交付前提醒不再多提醒

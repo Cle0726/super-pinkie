@@ -58,7 +58,7 @@ test('hooks: before_prompt_build and before_tool_call', async () => {
   };
   registerSessionPrefs(api, {root: tmp()});
   const call = (name, params) => new Promise(resolve => methods[name]({params, respond: (ok, value) => resolve(value)}));
-  assert.deepEqual(await call('pinkie.session.prefs.set', {key: KEY, web: false, style: 'detailed'}), {ok: true});
+  assert.deepEqual(await call('pinkie.session.prefs.set', {key: KEY, web: false, style: 'detailed'}), {ok: true, style: 'detailed', customStyle: '', web: false});
   assert.equal((await call('pinkie.session.prefs.get', {key: KEY})).web, false);
   assert.equal((await call('pinkie.session.prefs.set', {key: KEY, style: 'x'})).ok, false);
   const built = hooks.before_prompt_build[0]({}, {sessionKey: KEY});
@@ -115,4 +115,12 @@ test('mode options: 工作程度 only in project mode, 想法取向 only in idea
   assert.throws(() => prefs.setSession(KEY, {pace: 'fast'}), /这个模式没有这个选项/);
   assert.throws(() => prefs.setSession(project, {lens: 'critic'}), /这个模式没有这个选项/);
   assert.doesNotMatch(prefs.promptContext(KEY), /工作程度|想法取向/);
+});
+test('saving answers with the settings that were actually stored', () => {
+  const prefs = new SessionPrefs(tmp());
+  const project = 'agent:project:dashboard:save-echo';
+  assert.deepEqual(prefs.setSession(project, {pace: 'strict', web: false}), {ok: true, style: 'default', customStyle: '', web: false, pace: 'strict'});
+  // 不认识的字段（比如老界面发来的）不会被说成已经存下。
+  assert.equal('lens' in prefs.setSession(project, {style: 'concise'}), false);
+  assert.deepEqual(prefs.setSession(KEY, {web: true}), {ok: true, style: 'default', customStyle: '', web: true});
 });

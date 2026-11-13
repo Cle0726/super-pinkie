@@ -133,8 +133,11 @@
     }));
     for (const name of ['session', 'window']) {
       group(name, rows.filter(entry => entry.row.group === name).map(({row, node, state}) => {
+        // 原按钮停用时（比如还没读到这个会话的设置），把它自己的说明当副标题，不只是灰掉。
+        const why = node.disabled === true ? node.dataset.pinkieTooltip || node.getAttribute('aria-label') || '' : '';
         const item = rowButton({
-          icon: row.icon, name: row.name, hint: row.hint, state, disabled: node.disabled === true,
+          // 停用时不显示开关或「默认 ›」：那是没读到时的占位，不是这个会话真的设置。
+          icon: row.icon, name: row.name, hint: why || row.hint, state: why ? null : state, disabled: node.disabled === true,
           more: row.more && {...row.more, onClick: () => { close(); row.more.run(node); }},
         }, () => {
           if (row.closes) close();

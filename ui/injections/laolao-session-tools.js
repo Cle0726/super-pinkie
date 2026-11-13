@@ -749,20 +749,41 @@
   // ---------- C3 / C4 composer chips ----------
   const STYLE_LABEL = {default: '默认', concise: '简洁', detailed: '详细讲解', casual: '口语聊天', formal: '正式书面', custom: '自定义'};
   const prefsCache = new Map();
+  // 缺的字段用默认值补上：web 只有明确是 false 才算关。原来整份替换，回包里没有 web 时
+  // 按钮显示「开」、点一下却又写成「开」，看起来就是点了没反应。
+  const normalPrefs = got => ({style: 'default', web: true, ...got, web: got.web !== false});
+  let prefsRetry = 0;
   async function sessionPrefs(key, force = false) {
-    if (!force && prefsCache.has(key)) return prefsCache.get(key);
-    let value = {style: 'default', web: true};
-    // 缺的字段用默认值补上：web 只有明确是 false 才算关。原来整份替换，回包里没有 web 时
-    // 按钮显示「开」、点一下却又写成「开」，看起来就是点了没反应。
-    try { const got = await request('pinkie.session.prefs.get', {key}, 8000); if (got?.ok) value = {...value, ...got, web: got.web !== false}; } catch {}
-    prefsCache.set(key, value);
-    return value;
+    const cached = prefsCache.get(key);
+    if (!force && cached && !cached.unread) return cached;
+    try {
+      const got = await request('pinkie.session.prefs.get', {key}, 8000);
+      if (got?.ok) { const value = normalPrefs(got); prefsCache.set(key, value); return value; }
+    } catch {}
+    // 读不到后端（网关没连上、超时）：不能把默认值当成这个会话的真实设置画出来、存下来。
+    // 读到过就沿用上次的；从没读到过就标「没读到」，按钮停用，过一会儿再读。
+    if (cached && !cached.unread) return cached;
+    const unread = {style: 'default', web: true, unread: true};
+    prefsCache.set(key, unread);
+    window.clearTimeout(prefsRetry);
+    prefsRetry = window.setTimeout(() => { if (currentKey() === key) void paintChips(true); }, 6000);
+    return unread;
   }
+  // 存完以后按后端回的那一份画（session-prefs.mjs 回存下的设置）；老网关只回 {ok:true} 时再读一次。
   async function setSessionPref(key, patch) {
-    await rpcOk('pinkie.session.prefs.set', {key, ...patch});
-    prefsCache.set(key, {...(prefsCache.get(key) || {}), ...patch});
-    paintChips(true);
+    const saved = await rpcOk('pinkie.session.prefs.set', {key, ...patch});
+    const fresh = saved && typeof saved === 'object' && 'web' in saved ? normalPrefs(saved) : await sessionPrefs(key, true);
+    if (!fresh.unread) prefsCache.set(key, fresh);
+    void paintChips(true, fresh);
+    return fresh;
   }
+  // 提示只说后端确实存下的结果：没改成（老网关不认识这个选项）就照实说。
+  const confirmed = (fresh, field, value) => !fresh.unread && fresh[field] === value;
+  const notSaved = '没有改成：这个设置暂时存不上，界面显示的是现在真正生效的那个';
+  // 风格、工作程度、取向在组装下一轮提示时才读（session-prefs.mjs before_prompt_build）：
+  // 碧琪正在回的这一轮不会变，提示里照实说。联网开关每次调用工具时现读，立即生效，不用加。
+  const runningNow = () => { const state = pane()?.state; return Boolean(state?.chatRunId || state?.chatSending); };
+  const nextTurn = text => runningNow() ? text + '（这一轮已经在回了，从下一条消息开始）' : text;
   // 一个从按钮上方弹出的单选菜单：回答风格、项目模式的工作程度、想法模式的取向共用。
   // 按钮被收进「工具」菜单（laolao-composer-tray.js）而自己不可见时，贴着那个工具按钮弹。
   function choiceMenu(anchor, {label, items, current, note, onPick}) {
@@ -804,7 +825,11 @@
           const global = await window.__pinkieNativeBridge?.loadPrefs?.(true);
           if (!String(global?.customStyle || '').trim()) { toast('先在设置「常用」页写好自定义风格'); window.__pinkieNativeBridge?.openSettings?.(); return; }
         }
-        try { await setSessionPref(key, {style}); } catch (error) { toast(error.message); }
+        try {
+          const fresh = await setSessionPref(key, {style});
+          if (!confirmed(fresh, 'style', style)) toast(notSaved);
+          else if (runningNow()) toast(nextTurn('回答风格改成「' + (STYLE_LABEL[style] || style) + '」'));
+        } catch (error) { toast(error.message); }
       },
     });
   }
@@ -851,7 +876,10 @@
     const chip = button(option.label + '：' + item.label + '（' + item.hint + '）', 'pinkie-chip pinkie-chip--mode', event => choiceMenu(event.currentTarget, {
       label: option.label, current: value, items: option.items, note: option.note,
       onPick: async next => {
-        try { await setSessionPref(key, {[option.field]: next}); toast(option.toast[next]); } catch (error) { toast(error.message); }
+        try {
+          const fresh = await setSessionPref(key, {[option.field]: next});
+          toast(confirmed(fresh, option.field, next) ? nextTurn(option.toast[next]) : notSaved);
+        } catch (error) { toast(error.message); }
       },
     }), '');
     chip.dataset.option = option.field;
@@ -861,32 +889,49 @@
     chip.querySelector('span').textContent = value === 'default' ? option.label : option.short + '：' + item.label;
     return chip;
   }
-  let chipKey = '';
-  async function paintChips(force = false) {
+  let chipKey = '', chipsLoading = '';
+  async function paintChips(force = false, given = null) {
     const controls = document.querySelector('openclaw-chat-pane .agent-chat__composer-controls');
     const key = currentKey();
     if (!controls || !key) return;
     let host = controls.querySelector(':scope > .pinkie-composer-chips');
     if (host && !force && host.dataset.key === key) return;
-    const prefs = await sessionPrefs(key, force);
+    // 每 1.5 秒的重画循环在一次读取还没回来时不再叠一次（网关慢的时候会堆出一串请求）。
+    if (!force && !given && chipsLoading === key) return;
+    // 换到另一个会话时重新读一次后端，不拿这个窗口上次缓存的（快速提问小窗、另一个窗口也能改设置）。
+    chipsLoading = key;
+    let prefs;
+    try { prefs = given || await sessionPrefs(key, force || host?.dataset.key !== key); }
+    finally { if (chipsLoading === key) chipsLoading = ''; }
     // A slower load for a session we already left must not repaint the chips.
     if (currentKey() !== key) return;
     host = controls.querySelector(':scope > .pinkie-composer-chips');
     if (!host) { host = el('div', 'pinkie-composer-chips'); controls.append(host); }
     host.dataset.key = key;
+    host.dataset.unread = prefs.unread ? 'true' : 'false';
     chipKey = key;
     const style = button('回答风格：' + (STYLE_LABEL[prefs.style] || '默认'), 'pinkie-chip pinkie-chip--style', event => styleMenu(event.currentTarget, key, prefs),
       '风格：' + (STYLE_LABEL[prefs.style] || '默认') + ' ▾');
     style.dataset.style = prefs.style || 'default';
     const web = button(prefs.web ? '联网已开，点一下关掉' : '联网已关，点一下打开', 'pinkie-chip pinkie-chip--web', async () => {
-      try { await setSessionPref(key, {web: !prefs.web}); toast(prefs.web ? '这个会话不再联网搜索' : '这个会话可以联网了'); }
-      catch (error) { toast(error.message); }
+      const want = !prefs.web;
+      try {
+        const fresh = await setSessionPref(key, {web: want});
+        toast(!confirmed(fresh, 'web', want) ? notSaved : want ? '这个会话可以联网了' : '这个会话不再联网搜索');
+      } catch (error) { toast(error.message); }
     }, '');
     web.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg><span>联网</span>';
     web.setAttribute('aria-pressed', String(prefs.web !== false));
     host.replaceChildren(style, web);
+    // 没读到这个会话的设置时，不让按钮装作知道：停用，悬停说明原因，过几秒自己再读。
+    if (prefs.unread) style.textContent = '风格：… ▾', web.setAttribute('aria-pressed', 'mixed');
+    if (prefs.unread) for (const chip of [style, web]) {
+      chip.disabled = true;
+      chip.dataset.pinkieTooltip = '还没读到这个会话的设置，会自动重试';
+      chip.setAttribute('aria-label', chip.dataset.pinkieTooltip);
+    }
     // 模式专属的那一颗单独放：通用按钮收进「工具」菜单后，它仍然留在输入框下面。
-    const mode = modeChip(key, prefs);
+    const mode = prefs.unread ? null : modeChip(key, prefs);
     const old = controls.querySelector(':scope > .pinkie-chip--mode');
     if (mode) { if (old) old.replaceWith(mode); else controls.append(mode); } else old?.remove();
     window.dispatchEvent(new CustomEvent('pinkie:composer-chips', {detail: {sessionKey: key}}));
@@ -1023,6 +1068,9 @@
   const start = () => { observer.observe(document.body, {childList: true, subtree: true}); scheduleAll(); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
   setInterval(scheduleAll, 1500);
+  // 切回这个窗口时按后端重画一次：别处（快速提问小窗、另一个窗口）改过的设置要立刻看得到。
+  window.addEventListener('focus', () => { if (document.querySelector('.pinkie-composer-chips')) void paintChips(true); });
+  window.addEventListener('pinkie:sidebar-gateway-ready', () => { void paintChips(true); });
 
   window.PinkieSessionTools = Object.freeze({
     isTemp, startTemp, leaveTemp, openExport, runExport, exportHtml, markdownToHtml, openOutline, jumpUser,

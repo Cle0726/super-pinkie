@@ -34,7 +34,15 @@ test('mode-only chips: 工作程度 in project mode, 想法取向 in ideas mode,
   for(const value of ['fast','strict','diverge','converge','critic'])assert.match(tools,new RegExp(`value: '${value}'`));
   assert.match(tools,/controls\.append\(mode\)/);
   // A prefs answer without a field must not flip the web switch the wrong way.
-  assert.match(tools,/value = \{\.\.\.value, \.\.\.got, web: got\.web !== false\}/);
+  assert.match(tools,/normalPrefs = got => \(\{style: 'default', web: true, \.\.\.got, web: got\.web !== false\}\)/);
+  // A failed read is never cached or painted as the session's real settings: the chips are disabled and re-read.
+  assert.match(tools,/const unread = \{style: 'default', web: true, unread: true\}/);
+  assert.match(tools,/if \(prefs\.unread\) for \(const chip of \[style, web\]\)/);
+  // Toasts say what the backend stored, not what was clicked.
+  assert.match(tools,/toast\(confirmed\(fresh, option\.field, next\) \? nextTurn\(option\.toast\[next\]\) : notSaved\)/);
+  // A choice made while a reply is running applies from the next message; the toast says so.
+  assert.match(tools,/runningNow\(\) \? text \+ '（这一轮已经在回了，从下一条消息开始）'/);
+  assert.match(tools,/!confirmed\(fresh, 'web', want\) \? notSaved/);
   // The unbound-folder label is only noise outside project mode.
   assert.match(read('ui/injections/laolao-sidebar.js'),/label\.dataset\.bound=binding\?'true':'false'/);
   assert.match(read('ui/injections/laolao-composer-tray.css'),/html:not\(\[data-laolao-mode="project"\]\) #laolao-project-scope\[data-bound="false"\]/);

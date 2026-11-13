@@ -121,7 +121,8 @@ export class SessionPrefs {
     const keys = Object.keys(data.sessions);
     for (const old of keys.slice(0, Math.max(0, keys.length - MAX_SESSIONS))) delete data.sessions[old];
     this.save();
-    return {ok: true};
+    // 回真正存下、下一轮会生效的那一份：界面按它画，不按自己以为改成了什么画。
+    return {ok: true, ...this.forSession(key)};
   }
   forget(key) {
     const data = this.load();
