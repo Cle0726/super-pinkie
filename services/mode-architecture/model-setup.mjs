@@ -77,10 +77,15 @@ export function explainFailure({status, body = '', error, preset, model} = {}) {
   const text = String(body || '').toLowerCase();
   const intl = PRESET_BY_ID.get(preset)?.region === 'intl';
   if (error) {
-    const code = String(error.code || error.cause?.code || error.name || '');
+    // 不把 TypeError、ECONNREFUSED 这类程序里的英文名给小白看，换成能照着做的话。
+    const cause = error.cause?.errors?.[0] || error.cause || {};
+    const code = String(error.code || cause.code || error.name || '');
     const proxy = intl ? '这是国外服务，可能需要打开代理再试。' : '请检查网络，或稍后再试。';
     if (/Timeout|Abort/i.test(code)) return {kind: 'network', message: `连接超时了。${proxy}`};
-    return {kind: 'network', message: `连不上这个服务商（${code || '网络错误'}）。${proxy}`};
+    if (/ENOTFOUND|EAI_AGAIN/.test(code)) return {kind: 'network', message: `找不到这个地址：接口地址可能写错了，或者网络没连上。${proxy}`};
+    if (/ECONNREFUSED/.test(code)) return {kind: 'network', message: `这个地址没有服务在响应：检查接口地址和端口有没有写错，服务有没有打开。${intl ? proxy : ''}`};
+    if (/CERT|SSL|TLS/i.test(code)) return {kind: 'network', message: `和这个地址的安全连接没建立起来（证书有问题）。${proxy}`};
+    return {kind: 'network', message: `连不上这个服务商。${proxy}`};
   }
   if (status === 402 || /insufficient[_ ]?(balance|quota|credits?)|balance|arrearage|余额|欠费|credit/i.test(text)) {
     return {kind: 'balance', message: '账户余额不足或额度用完了：去服务商那里充值后再试。'};

@@ -30,6 +30,7 @@ const KEEP_NAMES = new Set(['DREAMS.md']);
 // 插件：已装目录 ← 包里的源目录。
 const PLUGINS = {'pinkie-mode-architecture': 'services/mode-architecture', 'pinkie-project-scope': 'services/project-scope', 'pinkie-first-person-renderer': 'services/first-person-renderer'};
 const PRODUCT_PLUGIN_IDS = Object.keys(PLUGINS);
+const HOOK_GRANT_PLUGINS = new Set(['pinkie-mode-architecture', 'pinkie-project-scope']);
 const PRODUCT_AGENTS = {main: 'workspace', project: 'workspace-project', thinking: 'workspace-thinking', learning: 'workspace-learning'};
 // 这些名字的文件放进工作区就会被 OpenClaw 当设定注入；包里没有就不该出现。
 const INJECTED_EXTRAS = ['BOOTSTRAP.md'];
@@ -135,6 +136,13 @@ export function repairConfig(config, {stateDir, userSkillsDir}) {
     const entry = entries[id];
     if (!entry || typeof entry !== 'object') continue; // 没装过的插件由 setup 装，这里不凭空加
     set(`plugins.entries.${id}.enabled`, () => { if (entry.enabled !== true) { entry.enabled = true; return true; } return false; });
+    // 两个插件的钩子授权（setup 写的）：被删掉的话 OpenClaw 会挡掉碧琪的对话钩子，插件「开着但不干活」。
+    if (HOOK_GRANT_PLUGINS.has(id)) set(`plugins.entries.${id}.hooks`, () => {
+      const hooks = entry.hooks && typeof entry.hooks === 'object' ? entry.hooks : (entry.hooks = {});
+      let changed = false;
+      for (const grant of ['allowPromptInjection', 'allowConversationAccess']) if (hooks[grant] !== true) { hooks[grant] = true; changed = true; }
+      return changed;
+    });
     if (Array.isArray(plugins.allow)) set('plugins.allow', () => { if (!plugins.allow.includes(id)) { plugins.allow.push(id); return true; } return false; });
   }
   // 外面塞进来的插件目录（能往提示词里注入东西）：只留 ~/.openclaw/extensions 和包里的。

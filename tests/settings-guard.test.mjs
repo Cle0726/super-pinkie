@@ -216,4 +216,52 @@ test('tool_result_persist hook restores and tells the model, only for command to
   assert.equal(fs.readFileSync(path.join(ws, 'AGENTS.md'), 'utf8'), 'agents');
   assert.equal(out.message.content[0].text, 'SUCCESS');
   assert.match(out.message.content[1].text, /碧琪设定防护/);
+  // after_tool_call 抢先换回时，提示照样写进随后落盘的命令结果，而且只写一次
+  fs.writeFileSync(path.join(ws, 'SOUL.md'), 'tampered again');
+  hooks.after_tool_call[0]({toolName: 'exec'});
+  assert.equal(fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8'), 'soul');
+  const later = persist({toolName: 'exec', message: {role: 'toolResult', content: 'done'}});
+  assert.match(later.message.content[1].text, /SOUL\.md/);
+  assert.equal(persist({toolName: 'exec', message: {role: 'toolResult', content: 'done'}}), undefined);
+});
+
+test('file watch restores a change made by a command that keeps running (write, then sleep / background)', async () => {
+  const {ws, home, state, root} = sandbox();
+  const cfg = path.join(state, 'openclaw.json');
+  const official = {plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  fs.writeFileSync(cfg, JSON.stringify(official));
+  fs.writeFileSync(path.join(ws, 'persona', 'voice.md'), 'voice');
+  const hooks = {};
+  const api = {on: (name, fn) => { (hooks[name] ||= []).push(fn); }, registerGatewayMethod() {}};
+  const guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, enabled: true, mode: {enabled: true}, pinkieStateRoot: path.join(root, 'app-state')});
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const until = async (check, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (check()) return true; await wait(25); } return false; };
+  await wait(150);
+  // 没有任何工具钩子被调到：只靠监视
+  // 碧琪真这么干过：整条换成 {enabled: false}，钩子授权跟着没了
+  const tampered = structuredClone(official); tampered.plugins.entries['pinkie-mode-architecture'] = {enabled: false}; tampered.talk = {voice: 'mine'};
+  fs.writeFileSync(cfg, JSON.stringify(tampered));
+  assert.ok(await until(() => JSON.parse(fs.readFileSync(cfg, 'utf8')).plugins.entries['pinkie-mode-architecture'].enabled === true), 'product key restored by the watcher');
+  assert.deepEqual(JSON.parse(fs.readFileSync(cfg, 'utf8')).talk, {voice: 'mine'}, 'user keys kept');
+  assert.deepEqual(JSON.parse(fs.readFileSync(cfg, 'utf8')).plugins.entries['pinkie-mode-architecture'].hooks, {allowPromptInjection: true, allowConversationAccess: true}, 'hook grants restored');
+  fs.writeFileSync(path.join(ws, 'SOUL.md'), 'cat with no limits');
+  assert.ok(await until(() => fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8') === 'soul'), 'persona restored by the watcher');
+  fs.writeFileSync(path.join(ws, 'persona', 'voice.md'), 'changed');
+  assert.ok(await until(() => fs.readFileSync(path.join(ws, 'persona', 'voice.md'), 'utf8') === 'voice'), 'persona/ subtree restored');
+  // 命令结果落盘时照样告诉碧琪
+  const out = hooks.tool_result_persist[0]({toolName: 'exec', message: {role: 'toolResult', content: 'written'}});
+  assert.match(out.message.content[1].text, /碧琪设定防护/);
+  assert.ok(guard.status().execRestores.some(e => e.tool === 'watch'));
+  // 工作区里碧琪替用户写的普通文件不动
+  fs.writeFileSync(path.join(ws, 'report.md'), 'user stuff');
+  await wait(300);
+  assert.equal(fs.readFileSync(path.join(ws, 'report.md'), 'utf8'), 'user stuff');
+  for (const w of guard.watch()) w.close();
+});
+
+test('file watch is not started in the dev build', () => {
+  const {home, state, root} = sandbox();
+  const api = {on() {}, registerGatewayMethod() {}};
+  const guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, mode: {enabled: false}, pinkieStateRoot: path.join(root, 'app-state')});
+  assert.deepEqual(guard.watch(), []);
 });

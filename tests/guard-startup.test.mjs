@@ -70,6 +70,7 @@ test('release build: restores product files, keeps user data and preferences', (
   assert.equal(config.plugins.enabled, undefined);
   assert.deepEqual(config.plugins.deny, []);
   assert.equal(config.plugins.entries['pinkie-mode-architecture'].enabled, true);
+  assert.deepEqual(config.plugins.entries['pinkie-mode-architecture'].hooks, {allowPromptInjection: true, allowConversationAccess: true}, 'hook grants put back');
   assert.deepEqual(config.plugins.load.paths, [path.join(f.state, 'extensions/pinkie-mode-architecture')]);
   assert.equal(config.agents.list[0].workspace, path.join(f.state, 'workspace'));
   assert.equal(config.agents.list[0].contextInjection, undefined);
