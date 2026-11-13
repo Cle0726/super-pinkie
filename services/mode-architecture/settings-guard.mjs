@@ -207,16 +207,18 @@ export class SettingsGuard {
       if (!root) continue;
       const rel = relativeTo(file, root);
       if (!rel) return {kind: 'protected', label: '碧琪的工作区目录'};
-      const top = rel.split('/')[0];
-      if (MEMORY_FILES.has(rel) || top === 'memory') return {kind: 'memory', rel};
-      if (top === USER_SKILLS_DIR) return {kind: 'user-skill', rel: rel.slice(top.length + 1)};
-      if (WORKSPACE_PROTECTED_FILES.has(rel)) return {kind: 'protected', label: `碧琪的人设和手册（${rel}）`};
+      // 名单都是小写；Mac / Windows 上路径已经整体转小写，Linux 等大小写敏感的系统在这里比对小写名，结果一致。
+      const key = rel.toLowerCase();
+      const top = key.split('/')[0];
+      if (MEMORY_FILES.has(key) || top === 'memory') return {kind: 'memory', rel};
+      if (top === USER_SKILLS_DIR.toLowerCase()) return {kind: 'user-skill', rel: rel.slice(top.length + 1)};
+      if (WORKSPACE_PROTECTED_FILES.has(key)) return {kind: 'protected', label: `碧琪的人设和手册（${rel}）`};
       if (WORKSPACE_PROTECTED_DIRS.includes(top)) return {kind: 'protected', label: top === 'skills' ? '碧琪自带的技能' : `碧琪的人设和手册（${top}/）`};
       return {kind: 'free'};
     }
     if (within(file, this.stateDir)) {
       const rel = relativeTo(file, this.stateDir);
-      const hit = STATE_PROTECTED.find(item => item.match(rel));
+      const hit = STATE_PROTECTED.find(item => item.match(rel.toLowerCase()));
       if (hit) return {kind: 'protected', label: hit.label};
     }
     if (within(file, this.configPath)) return {kind: 'protected', label: '碧琪的配置文件 openclaw.json'};

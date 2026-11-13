@@ -51,7 +51,7 @@ test('mutation observer repaint stays idempotent and changes avatar only on mode
 });
 test('every mode has a face-sized avatar on disk, and the message avatar uses it while the welcome picture stays full',()=>{
   for(const id of ['chat','project','thinking','learning','unrestricted']){
-    assert.ok(source.includes(`avatarSmall: "/laolao-mode-${id}-sm.png?v=sm1"`),id);
+    assert.ok(source.includes(`avatarSmall: "/laolao-mode-${id}-sm.png?v=sm3"`),id);
     const png=fs.readFileSync(path.join(__dirname,`../ui/assets/laolao-mode-${id}-sm.png`));
     assert.deepEqual([png.readUInt32BE(16),png.readUInt32BE(20)],[128,128],id);
     assert.ok(png.length<40000,`${id} stays small`);
