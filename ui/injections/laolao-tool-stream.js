@@ -12,18 +12,21 @@
   let scheduled = false;
   let applying = false;
 
+  // 标签是 laolao-phrases 换好的中文名；搜索 / 看网页要排在「读取」前面
   const KIND_RULES = [
-    [/读取文件|read/i, 'read', '读取'],
+    [/搜索网页|搜索资料|web_search|pinkie_search/i, 'search', '搜索'],
+    [/看网页|读取网页|web_fetch/i, 'fetch', '网页'],
+    [/浏览器|browser/i, 'browser', '浏览器'],
+    [/学习小练习|learning_activity/i, 'quiz', '练习'],
+    [/子会话|pinkie_session/i, 'session', '子会话'],
+    [/读取文件|读取项目资料|\bread\b/i, 'read', '读取'],
     [/写入文件|write/i, 'write', '写入'],
-    [/编辑文件|应用补丁|edit|apply_patch/i, 'edit', '编辑'],
+    [/编辑文件|应用补丁|修改代码|edit|apply_patch/i, 'edit', '编辑'],
     [/执行命令|exec/i, 'exec', '命令'],
     [/查看进程|process/i, 'process', '进程'],
-    [/搜索资料|web_search/i, 'search', '搜索'],
-    [/读取网页|web_fetch/i, 'fetch', '网页'],
-    [/操作浏览器|browser/i, 'browser', '浏览器'],
     [/cron/i, 'cron', '定时'],
     [/image|图片/i, 'image', '图片'],
-    [/memory/i, 'memory', '记忆'],
+    [/记忆|memory/i, 'memory', '记忆'],
   ];
 
   const $ = (sel, root) => (root || document).querySelector(sel);
