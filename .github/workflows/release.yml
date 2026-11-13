@@ -61,7 +61,19 @@ jobs:
           npm install -g "openclaw@$version"
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
       - name: Build self-contained macOS app
-        run: ./desktop/macos/build.sh
+        env:
+          PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+        run: |
+          # 正式版：设定防护开（build-info.json 写死），清单用 Actions secret 里的私钥签名。没配 secret 就失败。
+          if [[ -z "$PINKIE_GUARD_SIGNING_KEY" ]]; then
+            echo "缺少仓库 secret PINKIE_GUARD_SIGNING_KEY（设定防护的签名私钥），正式版不能打包" >&2
+            exit 1
+          fi
+          key_file="$RUNNER_TEMP/guard-signing-key.pem"
+          umask 077
+          printf '%s\n' "$PINKIE_GUARD_SIGNING_KEY" > "$key_file"
+          PINKIE_RELEASE_BUILD=1 PINKIE_GUARD_SIGNING_KEY_FILE="$key_file" ./desktop/macos/build.sh
+          rm -f "$key_file"
       - name: Keep the actual packaged macOS UI manifest
         uses: actions/upload-artifact@v4
         with:
@@ -105,7 +117,16 @@ jobs:
           $settings | ConvertTo-Json | Set-Content -LiteralPath update-mirrors.json -Encoding utf8
       - name: Build Windows exe
         shell: pwsh
-        run: .\build-win.ps1 -LegacyOneFile
+        env:
+          PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+        run: |
+          # 正式版：设定防护开（build-info.json 写死），清单用 Actions secret 里的私钥签名。没配 secret 就失败。
+          if (-not $env:PINKIE_GUARD_SIGNING_KEY) { throw '缺少仓库 secret PINKIE_GUARD_SIGNING_KEY（设定防护的签名私钥），正式版不能打包' }
+          $keyFile = Join-Path $env:RUNNER_TEMP 'guard-signing-key.pem'
+          [System.IO.File]::WriteAllText($keyFile, $env:PINKIE_GUARD_SIGNING_KEY + "`n")
+          $env:PINKIE_RELEASE_BUILD = '1'
+          $env:PINKIE_GUARD_SIGNING_KEY_FILE = $keyFile
+          try { .\build-win.ps1 -LegacyOneFile } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
       - name: Keep the actual packaged Windows UI manifest
         uses: actions/upload-artifact@v4
         with:
@@ -219,6 +240,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
       - uses: actions/download-artifact@v4
         with:
           name: windows-release
@@ -231,7 +255,21 @@ jobs:
         run: |
           git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
           python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
-          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" release-body.md dist mirror/latest.json
+          # 发布签名：tag 指向的提交（tag 推送时 GITHUB_SHA 就是它；再核对一遍 tag 本身）。
+          commit="$(git rev-parse HEAD)"
+          if [[ "$commit" != "$GITHUB_SHA" ]]; then echo "检出的提交 $commit 和 GITHUB_SHA 不一致" >&2; exit 1; fi
+          python3 tools/release/mirror_manifest.py "$GITHUB_REF_NAME" release-body.md dist mirror/latest.json "$commit"
+      - name: Sign latest.json (release commit + every package SHA-256)
+        env:
+          PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+        run: |
+          if [[ -z "$PINKIE_GUARD_SIGNING_KEY" ]]; then echo "缺少仓库 secret PINKIE_GUARD_SIGNING_KEY" >&2; exit 1; fi
+          key_file="$RUNNER_TEMP/guard-signing-key.pem"
+          umask 077
+          printf '%s\n' "$PINKIE_GUARD_SIGNING_KEY" > "$key_file"
+          node installer/guard/guard.mjs sign-latest mirror/latest.json "$key_file"
+          rm -f "$key_file"
+          node installer/guard/guard.mjs verify-latest mirror/latest.json
       - name: Take this version's notes for the release page
         run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
       - uses: softprops/action-gh-release@v2

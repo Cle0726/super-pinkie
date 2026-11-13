@@ -226,6 +226,7 @@ $pyInstallerCommonArgs = @(
     "--add-data", "$serviceStage;services",
     "--add-data", "$uiStage;ui",
     "--add-data", "$windowsInstallerStage;installer\windows",
+    "--add-data", "installer\guard;installer\guard",
     "--add-data", "tools\ui-parity;tools\ui-parity",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
@@ -245,6 +246,33 @@ if (-not (Test-Path -LiteralPath (Join-Path $DistRoot '超級碧琪\超級碧琪
     throw "Windows onedir 构建产物缺失"
 }
 $packageDir = Join-Path $DistRoot '超級碧琪'
+
+# 产品设定防护开关：写死在包里（build-info.json），运行时只认这个文件，不读环境变量。
+# CI 发版（release.yml 设 PINKIE_RELEASE_BUILD=1，并给 PINKIE_GUARD_SIGNING_KEY_FILE）→ 正式版，防护开、清单签名；
+# 其它（本机开发构建）→ 开发版，防护关。Windows 用户只装 CI 打的包，不在本机重新打包。
+$bundleRoot = Join-Path $packageDir '_internal'
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+$guardCommit = (git rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not $guardCommit) { $guardCommit = '' }
+$guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
+$buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = "$guardCommit".Trim() }
+[System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json) + "`n", (New-Object System.Text.UTF8Encoding($false)))
+& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit "$guardCommit".Trim()
+if ($LASTEXITCODE -ne 0) { throw '设定防护清单生成失败' }
+if ($env:PINKIE_GUARD_SIGNING_KEY_FILE) {
+    & (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') sign $bundleRoot $env:PINKIE_GUARD_SIGNING_KEY_FILE
+    if ($LASTEXITCODE -ne 0) { throw '设定防护清单签名失败' }
+} elseif ($guardChannel -eq 'release') {
+    throw '正式版打包缺少防护签名私钥（PINKIE_GUARD_SIGNING_KEY_FILE）'
+}
+$guardStage = Join-Path $RepoRoot 'build\windows-guard'
+if (Test-Path $guardStage) { Remove-Item $guardStage -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $guardStage | Out-Null
+foreach ($name in @('build-info.json', 'guard-manifest.json', 'guard-manifest.sig')) {
+    $file = Join-Path $bundleRoot $name
+    if (Test-Path -LiteralPath $file) { Copy-Item -LiteralPath $file -Destination (Join-Path $guardStage $name) -Force }
+}
+
 python tools/windows-package/clean_ui.py --check-package $packageDir
 if ($LASTEXITCODE -ne 0) { throw "Windows 包含其他产品的素材或缺少安装器" }
 $controlUiPackage = Join-Path $packageDir '_internal\runtime\node_modules\openclaw\dist\control-ui'
@@ -255,7 +283,10 @@ python tools/windows-package/check_runtime.py --package $packageDir
 if ($LASTEXITCODE -ne 0) { throw "Windows 包缺少运行时文件，或打过补丁的文件被改回去了" }
 
 if ($LegacyOneFile) {
-    pyinstaller @pyInstallerCommonArgs --onefile --distpath $DistRoot
+    # 单文件版带同一份 build-info / 签名清单（内容和 onedir 的 _internal 一致）。
+    $guardData = @()
+    foreach ($item in Get-ChildItem -LiteralPath $guardStage -File) { $guardData += @('--add-data', "$($item.FullName);.") }
+    pyinstaller @guardData @pyInstallerCommonArgs --onefile --distpath $DistRoot
     if ($LASTEXITCODE -ne 0) { throw "Windows 兼容 EXE 构建失败" }
     if (-not (Test-Path -LiteralPath (Join-Path $DistRoot '超級碧琪.exe'))) {
         throw "Windows onefile 构建产物缺失"
