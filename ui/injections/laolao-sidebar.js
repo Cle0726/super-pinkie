@@ -442,7 +442,7 @@
     let label=document.getElementById('laolao-project-scope');
     if(label&&label.parentElement===host&&scopeLabelSignature===signature)return;
     if(!label){label=document.createElement('div');label.id='laolao-project-scope';label.setAttribute('role','status');}
-    label.textContent=text;label.title=text;label.dataset.error=error?'true':'false';
+    label.textContent=text;label.title=text;label.dataset.error=error?'true':'false';label.dataset.bound=binding?'true':'false';
     if(label.parentElement!==host)host.prepend(label);scopeLabelSignature=signature;
   }
   let checkedScope='';
@@ -826,7 +826,8 @@
     const inheritedFolder = !name && !options.plain && workbench?.visible && workbench.info?.bound && workbench.key === pageSessionKey() && workbench.info.agentId === agentId
       ? {path:workbench.root,name:workbench.info.name || '当前项目'} : null;
     const ownerMode=stateMode,ownerState=state;
-    const operation=ownerMode+'|'+(name||'');
+    // quiet + stay：首页预先备好的那个空白新会话——不弹提示，也不自己跳过去（首页决定什么时候换）。
+    const operation=ownerMode+'|'+(name||'')+(options.stay?'|stay':'');
     if(creatingSessions.has(operation))return creatingSessions.get(operation);
     const promise=(async()=>{
     try {
@@ -855,12 +856,14 @@
       }
       writeModeState(ownerMode,ownerState);
       window.PinkieSessionList?.invalidate();
-      if(stateMode!==ownerMode){toast('项目会话已在原模式建立');return;}
+      if(stateMode!==ownerMode){if(!options.quiet)toast('项目会话已在原模式建立');return key;}
       sessionIndex = null;
       schedule();
-      navigateSession(key);
-      toast(name?`已在「${name}」中新建会话`:'已新建会话');
+      if(!options.stay)navigateSession(key);
+      if(!options.quiet)toast(name?`已在「${name}」中新建会话`:'已新建会话');
+      return key;
     } catch (error) {
+      if(options.quiet)throw error;
       toast(`新建失败：${error?.message || "请稍后再试"}`);
     }
     })();
@@ -2008,7 +2011,7 @@
     navigateSession,
     sessionMenu,
     openChildSessionDialog,
-    createSession: () => createProjectSession(null, {plain: true}),
+    createSession: (options = {}) => createProjectSession(null, {...options, plain: true}),
     askDeleteAllSessions,
     toast,
     openMenu,

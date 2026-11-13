@@ -676,7 +676,10 @@
     if(newSession&&!newSession.querySelector(':scope > .pinkie-new-session-ic')){const art=window.PinkieIcons?.node('new-session');if(art){art.classList.add('pinkie-new-session-ic');newSession.prepend(art);}}
     const cached = cache.get(key);
     const rows = cached?.rows || [];
-    const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, new Date().toDateString()]);
+    // 首页开着时，输入框挂在一个还没发过消息的空白新会话上；它在发出第一句话之前不进列表。
+    const onHome = document.documentElement.hasAttribute('data-laolao-startup-home');
+    const homeDraft = onHome ? String(window.__laolaoStartupHome?.status?.()?.draft?.key || '') : '';
+    const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, onHome, homeDraft, new Date().toDateString()]);
     if(signature===next)return;signature=next;
     controls.replaceChildren();
     const search=button('','搜索当前模式的会话',()=>openSearch(api));
@@ -693,7 +696,7 @@
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     // H1: temp sessions never join the list; the open one sits on top with a dashed circle.
     const isTemp = key => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(key || ''));
-    const tree = buildTree(rows.filter(s => !isTemp(s.key)), {archive: archived, currentKey: api.currentKey, query});
+    const tree = buildTree(rows.filter(s => !isTemp(s.key) && s.key !== homeDraft), {archive: archived, currentKey: onHome ? '' : api.currentKey, query});
     if (!archived && isTemp(api.currentKey)) {
       const tempRow = row({key: api.currentKey, label: '临时会话', meta: {source: 'system'}, updatedAt: Date.now()}, api);
       tempRow.classList.add('pinkie-session-temp-row');

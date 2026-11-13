@@ -2505,6 +2505,7 @@ class DesktopControlNode:
                 return False
             self.process = process
             self.last_error = ""
+            bind_to_app_lifetime(process, "desktop control node")
             append_log("computer", f"desktop control node started (pid {process.pid})")
             threading.Thread(
                 target=self._watch, args=(process, generation), name="pinkie-computer-watch", daemon=True
@@ -2579,11 +2580,63 @@ class DesktopControlNode:
         }
 
 
+def keep_gateway_after_close():
+    """True only when the user asked for the gateway to outlive the window.
+
+    Closing the window used to leave the gateway (node.exe, a few hundred MB)
+    and everything it had started running "for background sessions". Users
+    saw 碧琪 still holding memory and ports after they had closed her, with no
+    window to stop it from. Closing the window now ends everything; set
+    PINKIE_KEEP_GATEWAY=1 to get the old behaviour back.
+    """
+    return os.environ.get("PINKIE_KEEP_GATEWAY", "0") == "1"
+
+
+def bind_to_app_lifetime(process, name=""):
+    """Put a child process in the app's kill-on-close job.
+
+    Windows ends every process in the job (and whatever those start later)
+    when this process goes away -- also when it crashes or is ended from Task
+    Manager, where no close handler runs. That is the part `taskkill /T` on a
+    normal close cannot cover.
+    """
+    if os.name != "nt" or process is None:
+        return
+    try:
+        from browser_vpn_core import assign_to_kill_job
+
+        assign_to_kill_job(process.pid)
+    except Exception as error:  # never block a start on this
+        append_log("launcher", f"{name or 'child'} not bound to the app lifetime: {error}")
+
+
+def gateway_closed_marker():
+    """Left behind when closing the window also closed the gateway.
+
+    An install that registered the gateway watchdog (install.ps1, or
+    installer/windows/register-bundled-watchdog.ps1) checks every two seconds
+    and starts a gateway whenever none is listening. Without this marker it
+    would bring the gateway back seconds after the user closed 碧琪, which is
+    the very "still running after I closed it" this close path is meant to end.
+    The watchdog stands down while the marker exists; the next launch removes it.
+    """
+    return state_root() / "gateway-closed-by-app"
+
+
+def kill_process_tree(pid, timeout=8):
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
+        **hidden_process_kwargs(),
+    )
+
+
 class GatewaySupervisor:
     def __init__(self, runtime):
         self.runtime = runtime
         self.process = None
         self.closing = threading.Event()
+        self.marker_cleared = False
         self.lock = threading.RLock()
         self.last_restart = 0.0
         self.failure_limit = 2
@@ -2689,6 +2742,18 @@ class GatewaySupervisor:
 
     def start(self):
         with self.lock:
+            # The window is closing: a monitor tick that was already past its
+            # wait must not spawn a gateway after close() stopped the last one.
+            if self.closing.is_set():
+                return
+            if not self.marker_cleared:
+                # 碧琪 is running again, so the gateway watchdog may recover a
+                # crashed gateway again.
+                self.marker_cleared = True
+                try:
+                    gateway_closed_marker().unlink(missing_ok=True)
+                except OSError:
+                    pass
             if http_ready(GATEWAY_URL):
                 return
             if self.process and self.process.poll() is None:
@@ -2729,6 +2794,8 @@ class GatewaySupervisor:
                     **hidden_process_kwargs(),
                 )
                 append_log("launcher", f"gateway started pid={self.process.pid}")
+                if not keep_gateway_after_close():
+                    bind_to_app_lifetime(self.process, "gateway")
                 self._write_record(self.process.pid)
             except OSError as error:
                 output.close()
@@ -2901,9 +2968,35 @@ class GatewaySupervisor:
         self.start()
         return self.wait_ready(seconds)
 
+    def stop_adopted(self):
+        """Stop a gateway this launch attached to instead of starting.
+
+        A gateway left by an earlier run of this same install (kept alive by an
+        older version, or orphaned by a crash) answers on the port, so start()
+        never spawned one and there is no process handle to stop. Only this
+        install's own bundled node.exe is ever ended; a gateway the user runs
+        themselves is left alone.
+        """
+        try:
+            listener = self._listener()
+            image = str((listener or {}).get("image") or "")
+            if not image or os.path.normcase(image) != os.path.normcase(str(self.runtime.node)):
+                return False
+            kill_process_tree(listener["pid"])
+            append_log("launcher", f"stopped adopted gateway pid={listener['pid']}")
+            return True
+        except (OSError, subprocess.SubprocessError, KeyError) as error:
+            append_log("launcher", f"adopted gateway could not be stopped: {error}")
+            return False
+
     def close(self):
         self.closing.set()
+        try:
+            gateway_closed_marker().write_text(f"{time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}\n", encoding="utf-8")
+        except OSError as error:
+            append_log("launcher", f"gateway-closed marker not written: {error}")
         self.stop_process()
+        self.stop_adopted()
 
 
 def load_file_module(name, path):
@@ -3023,6 +3116,7 @@ class LocalServices:
                 stderr=output,
                 **hidden_process_kwargs(),
             )
+            bind_to_app_lifetime(self.relay, "relay")
             append_log("launcher", f"relay started pid={self.relay.pid} on {port} -> {upstream}")
         except OSError as error:
             append_log("launcher", f"relay start failed: {error}")
@@ -5096,15 +5190,25 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             bridge.close_workspace_dock()
         except Exception:
             pass
+        # Same for the quick-ask box (the global hotkey): while any window is
+        # left, webview.start() does not return and finish_exit never runs.
+        try:
+            native = getattr(bridge, "_native_bridge", None)
+            if native is not None:
+                native.quick_close()
+        except Exception:
+            pass
         services.close()
         computer.close()
-        # Keep the gateway alive after the window closes so in-flight sessions
-        # and background jobs are not terminated. The separate bundled
-        # watchdog owns recovery; it will restart the process only if it dies.
-        if os.environ.get("PINKIE_KEEP_GATEWAY", "1") != "1":
-            gateway.close()
-        else:
+        # Closing the window closes 碧琪: the gateway, everything it started and
+        # the helper processes all go with it. Nothing is left holding memory
+        # or ports with no window to stop it from. PINKIE_KEEP_GATEWAY=1 keeps
+        # the gateway for people who do want sessions to finish in the background.
+        if keep_gateway_after_close():
             append_log("launcher", "window closed; keeping gateway for background sessions")
+        else:
+            gateway.close()
+            append_log("launcher", "window closed; gateway and helpers stopped")
 
     window.events.before_show += before_show
     window.events.loaded += loaded
@@ -5134,3 +5238,37 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         gui="edgechromium", debug=False, private_mode=False,
         storage_path=str(webview_storage),
     )
+    finish_exit(bridge, gateway, webview_storage)
+
+
+def finish_exit(bridge, gateway, webview_storage, leave=os._exit):
+    """The last window is gone: leave nothing of the app behind, then exit.
+
+    `closed` already stopped the services. This covers what is left: a close
+    handler that raised half way, the tray icon, WebView2 helper processes that
+    outlive their window, and worker threads (timers, service loops) that would
+    otherwise keep 超級碧琪.exe in Task Manager after its window is gone.
+    """
+    try:
+        if not keep_gateway_after_close():
+            gateway.close()
+    except Exception as error:
+        append_log("launcher", f"gateway stop on exit failed: {error}")
+    try:
+        native = getattr(bridge, "_native_bridge", None)
+        if native is not None:
+            native.stop()
+    except Exception:
+        pass
+    # Registered exit handlers (system proxy restore, the browser window's
+    # host) must run before the hard exit below, which skips them.
+    try:
+        atexit._run_exitfuncs()
+    except Exception as error:
+        append_log("launcher", f"exit handlers failed: {error}")
+    try:
+        cleanup_orphan_webview(webview_storage)
+    except Exception:
+        pass
+    append_log("launcher", "exit complete")
+    leave(0)

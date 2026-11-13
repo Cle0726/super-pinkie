@@ -92,3 +92,27 @@ test('自己分工 is on by default and the settings switch turns it off and bac
   assert.equal(prefs.globalPrefs().autoSplit, false, 'only a real boolean changes it');
   assert.equal(prefs.setGlobal({autoSplit: true}).autoSplit, true);
 });
+
+test('mode options: 工作程度 only in project mode, 想法取向 only in ideas mode', () => {
+  const prefs = new SessionPrefs(tmp());
+  const project = 'agent:project:dashboard:p1', ideas = 'agent:thinking:dashboard:t1';
+  assert.equal(prefs.forSession(project).pace, 'default');
+  assert.equal(prefs.forSession(ideas).lens, 'default');
+  assert.ok(!('pace' in prefs.forSession(KEY)) && !('lens' in prefs.forSession(KEY)));
+  assert.ok(!('lens' in prefs.forSession(project)) && !('pace' in prefs.forSession(ideas)));
+  prefs.setSession(project, {pace: 'fast'});
+  prefs.setSession(ideas, {lens: 'critic'});
+  assert.equal(prefs.forSession(project).pace, 'fast');
+  assert.match(prefs.promptContext(project), /【工作程度：效率】/);
+  assert.match(prefs.promptContext(project), /没验证的就说没验证/);
+  assert.match(prefs.promptContext(ideas), /【想法取向：挑刺】/);
+  prefs.setSession(project, {pace: 'strict'});
+  assert.match(prefs.promptContext(project), /【工作程度：严谨】/);
+  prefs.setSession(project, {pace: 'default'});
+  assert.doesNotMatch(prefs.promptContext(project), /工作程度/);
+  assert.throws(() => prefs.setSession(project, {pace: 'turbo'}), /没有这种工作程度/);
+  assert.throws(() => prefs.setSession(ideas, {lens: 'x'}), /没有这种想法取向/);
+  assert.throws(() => prefs.setSession(KEY, {pace: 'fast'}), /这个模式没有这个选项/);
+  assert.throws(() => prefs.setSession(project, {lens: 'critic'}), /这个模式没有这个选项/);
+  assert.doesNotMatch(prefs.promptContext(KEY), /工作程度|想法取向/);
+});
