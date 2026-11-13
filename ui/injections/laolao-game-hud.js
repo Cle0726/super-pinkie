@@ -280,6 +280,7 @@
     // 右：Boss / 委托 / 今日 / 入口
     const side = el('div', 'pkg-side'); body.append(side);
     side.append(bossBanner(s.boss));
+    if (s.targets?.list?.length) side.append(targetsBar(s));
     const quests = el('section', 'pkg-quests'); quests.setAttribute('aria-label', '今日委托'); side.append(quests);
     paintQuests(quests, s);
     const today = el('section', 'pkg-today'); today.setAttribute('aria-label', '今日'); side.append(today);
@@ -338,6 +339,57 @@
     const apply = () => { raf = 0; far.style.transform = `translate3d(${nx * -6}px,${ny * -3}px,0)`; mid.style.transform = `translate3d(${nx * 10}px,${ny * 4}px,0)`; near.style.transform = `translate3d(${nx * 16}px,${ny * 8}px,0)`; };
     stage.addEventListener('pointermove', e => { if (stage.dataset.still) return; const r = stage.getBoundingClientRect(); nx = (e.clientX - r.left) / r.width - .5; ny = (e.clientY - r.top) / r.height - .5; if (!raf) raf = requestAnimationFrame(apply); });
     stage.addEventListener('pointerleave', () => { nx = ny = 0; if (!raf) raf = requestAnimationFrame(apply); });
+  }
+
+  // 备考目标（v4）：B 级 / 四级 / 六级 / 专升本……每场一枚倒计时牌，最近的一场排第一并写出现在是哪个阶段、今天建议几组。
+  // 日期是学习台 pact 里的那一份（用户自己填的优先，没填的是预估日，牌子上标「预计」）；点牌子改日期，「＋」加一场。
+  function targetsBar(s) {
+    const t = s.targets, bar = el('section', 'pkg-targets'); bar.setAttribute('aria-label', '备考目标');
+    const row = el('div', 'pkg-targets__row');
+    const edit = (item, isNew) => {
+      const d = el('dialog', 'lesson-dialog pkg-target-dlg'); d.setAttribute('aria-label', `${item.name} 考试日期`);
+      const f = el('form'); f.method = 'dialog';
+      const input = el('input'); input.type = 'date'; input.value = item.date || ''; input.setAttribute('aria-label', '考试日期'); input.min = '2026-01-01'; input.max = '2035-12-31';
+      const note = el('p', 'pkg-target-dlg__note', item.estimated || isNew ? '现在这个日期是按往年估的。准考证出来以后改成真的那天，碧琪会按它安排每天的量。' : '改了以后，倒计时和每天建议的组数跟着变。');
+      const act = el('div', 'pk-done-actions'); const ok = el('button', 'pk-btn', isNew ? '加上这场' : '保存'); ok.type = 'submit'; ok.dataset.kind = 'go'; const no = el('button', 'pk-link', '取消'); no.type = 'button'; no.addEventListener('click', () => d.close());
+      act.append(ok, no); f.append(el('h3', '', item.name), el('label', '', '考试日期'), input, note, act); d.append(f); bar.append(d); d.showModal(); input.focus();
+      f.addEventListener('submit', async e => { e.preventDefault(); ok.disabled = true; try { await call('target.set', {exam: item.id, name: item.name, date: input.value || null}); d.close(); const ns = await refresh(); bar.replaceWith(targetsBar(ns)); } catch (err) { ok.disabled = false; note.textContent = err.message || '没存上，再试一次'; } });
+      d.addEventListener('close', () => d.remove(), {once: true});
+    };
+    for (const x of t.list) {
+      const b = el('button', 'pkg-target'); b.type = 'button'; b.dataset.phase = x.phase; if (x.id === t.focus) b.dataset.focus = '1';
+      const n = el('b', 'pkg-num', x.daysLeft == null ? '—' : x.daysLeft < 0 ? '✓' : String(x.daysLeft));
+      const unit = el('small', '', x.daysLeft == null ? '待定' : x.daysLeft < 0 ? '已考' : x.daysLeft === 0 ? '今天' : '天');
+      const cnt = el('span', 'pkg-target__n'); cnt.append(n, unit);
+      const txt = el('span', 'pkg-target__t'); txt.append(el('b', '', x.short || x.name), el('em', '', `${x.label}${x.estimated ? '·估' : ''}`));
+      b.append(cnt, txt);
+      b.title = `${x.name}${x.date ? ' · ' + x.date : ''}${x.estimated ? '（预估日）' : ''} · 点一下改日期`; b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => edit(x, false)); row.append(b);
+    }
+    if (t.addable?.length) {
+      const add = el('button', 'pkg-target is-add'); add.type = 'button'; add.append(el('span', 'pkg-target__n', '＋'), el('span', 'pkg-target__t', ''));
+      add.lastChild.append(el('b', '', '加一场'), el('em', '', t.addable.map(a => a.name.replace('英语', '')).join(' / ')));
+      add.setAttribute('aria-label', '加一场考试');
+      add.addEventListener('click', () => {
+        const menu = el('dialog', 'lesson-dialog pkg-target-dlg'); menu.setAttribute('aria-label', '加一场考试'); menu.append(el('h3', '', '还要准备哪一场'));
+        for (const a of t.addable) { const o = el('button', 'pk-btn', a.name); o.type = 'button'; o.addEventListener('click', () => { menu.close(); edit({...a, estimated: true}, true); }); menu.append(o); }
+        const no = el('button', 'pk-link', '取消'); no.type = 'button'; no.addEventListener('click', () => menu.close()); menu.append(no);
+        bar.append(menu); menu.showModal(); menu.addEventListener('close', () => menu.remove(), {once: true});
+      });
+      row.append(add);
+    }
+    bar.append(row);
+    const f = t.list.find(x => x.id === t.focus);
+    if (f) {
+      const sets = s.today?.jar?.sets || 0, goal = t.goal;
+      const line = f.phase === 'final' ? `${f.name}还有 ${f.daysLeft} 天。这一周不加量，每天 ${goal} 组保持手感，早点睡。`
+        : f.phase === 'day' ? `今天考${f.name}。带好准考证，碧琪在这儿等你回来。`
+        : !f.playable ? `最近的一场是${f.name}（${f.daysLeft} 天）。它的关卡还在做，现在先用学习台的课和生词本准备。`
+        : f.phase === 'sprint' ? `${f.name}进入冲刺期：每天 ${goal} 组真题，今天做了 ${sets} 组。`
+        : `${f.name}还有 ${f.daysLeft} 天，${f.label}：每天 ${goal} 组，今天做了 ${sets} 组。`;
+      bar.append(el('p', 'pkg-targets__line', line));
+    }
+    return bar;
   }
 
   function bossBanner(boss) {

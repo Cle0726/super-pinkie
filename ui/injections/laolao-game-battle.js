@@ -81,7 +81,7 @@
       // 出手：命中特效打在敌人身上；伤害数字从敌人头顶升起。
       strike({crit = false, damage = 0, partial = false} = {}) {
         const engine = fx();
-        try { engine?.hit(form?.hit || 'sparkle', foeBody, {crit, palette: form?.palette, form: G()?.fxForm(form), ...(strip ? {size: 1} : {})}); } catch { /* 没有引擎就只有数字 */ }
+        try { const lo = window.__pinkieLoadout; if (lo) lo.hit(foeBody, {form, crit, ...(strip ? {size: 1} : {})}); else engine?.hit(form?.hit || 'sparkle', foeBody, {crit, palette: form?.palette, form: G()?.fxForm(form), ...(strip ? {size: 1} : {})}); } catch { /* 没有引擎就只有数字 */ }
         pop(damage, {crit, partial}); live?.state('cheer');
         if (!reduced()) { foe.classList.remove('is-hurt', 'is-crit'); void foe.offsetWidth; foe.classList.add(crit ? 'is-crit' : 'is-hurt'); hero.classList.remove('is-lunge'); void hero.offsetWidth; hero.classList.add('is-lunge'); }
       },
@@ -91,12 +91,13 @@
       },
       defeat({capture = false} = {}) {
         foe.classList.add(capture ? 'is-captured' : 'is-down');
-        try { fx()?.burst(capture ? 'ink' : (form?.particle || 'sparkle'), foeBody, {palette: form?.palette, scale: 1.1}); } catch { /* ignore */ }
+        try { const lo = window.__pinkieLoadout; if (lo && !capture) lo.burst(foeBody, {form, scale: 1.1}); else fx()?.burst(capture ? 'ink' : (form?.particle || 'sparkle'), foeBody, {palette: form?.palette, scale: 1.1}); } catch { /* ignore */ }
       },
       async ult(n) {
         const engine = fx(); const g = G();
         if (!engine || !form) return;
-        try { await engine.cinematic(form.ult || 'burst', {text: ULT_TITLE[form.ult] || '大招', sub: `${n} COMBO · ${form.name}`, kicker: form.name, art: g?.ultArt(form.id) || g?.portrait(form.id), palette: form.palette, particle: form.particle, form: g?.fxForm(form)}); }
+        const u = window.__pinkieLoadout?.ultOf(form) || {preset: form.ult || 'burst', palette: form.palette};
+        try { await engine.cinematic(u.preset, {text: ULT_TITLE[u.preset] || '大招', sub: `${n} COMBO · ${form.name}`, kicker: form.name, art: g?.ultArt(form.id) || g?.portrait(form.id), palette: u.palette, particle: form.particle, form: g?.fxForm(form)}); }
         catch { /* 过场被跳过或没有 WebGL */ }
       },
       get threshold() { return threshold; },

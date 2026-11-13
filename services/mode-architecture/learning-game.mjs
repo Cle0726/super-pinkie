@@ -15,7 +15,25 @@ import {GamePractice} from './learning-game-bank.mjs';
 const TZ = 'Asia/Shanghai';
 const DAY = 86400000;
 export const GAME_EXAM = 'pretco-b';
-export const EXAM_DATES = {'pretco-b': '2026-12-13', cet4: '2027-06-12', zsb: '2028-04-22'};
+// 预估考试日（用户没在学习台填日期时用；填了以 pact.exams 里的为准，见 LearningGame.examDate）。
+export const EXAM_DATES = {'pretco-b': '2026-12-13', cet4: '2027-06-12', cet6: '2027-06-12', zsb: '2028-04-22'};
+// 备考目标目录。playable = 这一卷的地图 / 真题题库 / 考场已经做好；没做好的先只有倒计时和节奏，学习走学习台的课和生词。
+export const EXAM_CATALOG = {
+  'pretco-b': {name: '英语 B 级', short: 'B 级', playable: true},
+  cet4: {name: '英语四级', short: '四级', playable: false},
+  cet6: {name: '英语六级', short: '六级', playable: false},
+  zsb: {name: '专升本', short: '专升本', playable: false},
+};
+// 离考试越近催得越紧，最后一周反过来放松（和 quiet 一致）。sets = 这一阶段每天建议做几组。
+export function examPace(daysLeft) {
+  if (!Number.isFinite(daysLeft)) return {phase: 'unset', label: '日期待定', sets: 2};
+  if (daysLeft < 0) return {phase: 'after', label: '已考', sets: 0};
+  if (daysLeft === 0) return {phase: 'day', label: '考试日', sets: 0};
+  if (daysLeft <= 7) return {phase: 'final', label: '考前静心', sets: 1};
+  if (daysLeft <= 30) return {phase: 'sprint', label: '冲刺期', sets: 3};
+  if (daysLeft <= 100) return {phase: 'build', label: '强化期', sets: 2};
+  return {phase: 'far', label: '打底期', sets: 2};
+}
 // 第一季节气窗口（北京日期，含首尾）。第二季起改由 learning-almanac 算。
 export const SEASON_TERMS = [
   {term: 'lidong', name: '立冬', from: '2026-11-07', to: '2026-11-21'},
@@ -38,8 +56,8 @@ export function mondayOf(date) {
 export function seasonOn(date) {
   return SEASON_TERMS.find(t => date >= t.from && date <= t.to) || null;
 }
-export function isQuiet(date, exam = GAME_EXAM, economy = E.loadEconomy()) {
-  const examDate = EXAM_DATES[exam];
+export function isQuiet(date, exam = GAME_EXAM, economy = E.loadEconomy(), examDate = EXAM_DATES[exam]) {
+  if (!examDate) return false;
   const left = daysBetween(date, examDate);
   return left >= 0 && left <= economy.quiet.daysBefore;
 }
@@ -402,17 +420,58 @@ export class LearningGame {
     const streak = this.safe(() => this.store.pact?.drillStreak?.({now: this.now()}), null);
     const monsters = this.modules.monsters?.summary?.(state) || {active: 0, due: 0, captured: state.stats.captures};
     const boss = this.modules.exam?.bossState?.(state, GAME_EXAM) || this.bossFallback(state);
+    const targets = this.targets(date);
     return {
       wallet: {stars: state.wallet.stars, seals: state.wallet.seals, shards: {...state.wallet.shards}},
       rank: E.rankFor({gold: state.stats.gold, predicted: boss.bestPredicted || 0}, this.economy),
       form: {equipped: state.forms.equipped, owned: [...owned], levels, awakened: [...state.forms.awakened], v2note: state.forms.v2note && !state.forms.v2note.seen ? state.forms.v2note : null, v3note: state.forms.v3note && !state.forms.v3note.seen ? state.forms.v3note : null},
       items: {owned: [...(state.items.owned || [])], equipped: {...(state.items.equipped || {})}, names: Object.fromEntries((state.items.owned || []).map(id => [id, this.itemName(id)]))},
-      today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: 2, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened, loop: this.loopToday(state, date, monsters)},
-      boss, monsters,
+      today: {date, jar: {sets: pactDay?.drillFinished || 0, goal: targets.goal, unit: 'sets'}, streak: streak?.current || 0, quests: quests.list, chestReady: quests.chest.ready && !quests.chest.opened, loop: this.loopToday(state, date, monsters)},
+      boss, monsters, targets,
       season: {term: season?.term || null, name: season?.name || '', until: season?.to || null, limitedSkus: this.shelves(state).limited.map(s => s.sku)},
       wishlist: this.wishlistView(state),
-      quiet: isQuiet(date),
+      quiet: this.quiet(date),
     };
+  }
+  // ---------- 备考目标（B 级 / 四级 / 六级 / 专升本 …）----------
+  // 日期以学习台 pact.exams 为准（用户填的）；没填用 EXAM_DATES 的预估日并标 estimated。
+  examDate(exam = GAME_EXAM) {
+    const mine = this.safe(() => (this.store.pact?.get?.()?.exams || []).find(e => e.id === exam)?.date, null);
+    return mine || EXAM_DATES[exam] || null;
+  }
+  quiet(date = this.today(), exam = GAME_EXAM) { return isQuiet(date, exam, this.economy, this.examDate(exam)); }
+  // 全部目标 + 现在最该盯的一场（focus）+ 今天建议做几组（goal）。
+  // 游戏里的一组 = 当前这一卷（B 级）的真题，所以 goal 跟着「可玩的那一场」的阶段走；它考完以后回到每天 2 组。
+  targets(date = this.today()) {
+    const pact = this.safe(() => this.store.pact?.get?.()?.exams || [], []);
+    const byId = new Map(pact.map(e => [e.id, e]));
+    const ids = [...new Set([...pact.map(e => e.id), GAME_EXAM])];
+    const order = t => (t.daysLeft == null ? 2e6 : t.daysLeft < 0 ? 1e6 - t.daysLeft : t.daysLeft);
+    const list = ids.map(id => {
+      const cat = EXAM_CATALOG[id] || {}, mine = byId.get(id);
+      const d = mine?.date || EXAM_DATES[id] || null;
+      const daysLeft = d ? daysBetween(date, d) : null;
+      return {id, name: mine?.name || cat.name || id, short: cat.short || mine?.name || id, date: d, estimated: Boolean(d && !mine?.date), daysLeft,
+        ...examPace(daysLeft), playable: Boolean(cat.playable), current: id === GAME_EXAM};
+    }).sort((a, b) => order(a) - order(b));
+    const focus = list.find(t => t.daysLeft != null && t.daysLeft >= 0) || null;
+    const game = list.find(t => t.current);
+    const goal = game && game.daysLeft != null && game.daysLeft >= 0 ? Math.max(1, game.sets) : 2;
+    const addable = Object.entries(EXAM_CATALOG).filter(([id]) => !ids.includes(id)).map(([id, c]) => ({id, name: c.name, date: EXAM_DATES[id] || null}));
+    return {list, focus: focus?.id || null, goal, addable};
+  }
+  // 改 / 加一场考试的日期。写进学习台的 pact（它是考试日期的唯一来源），学习台和游戏看到的是同一份。
+  setTarget({exam, date, name} = {}) {
+    const id = clean(exam, 40);
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) fail('考试代号不对');
+    const d = date == null || date === '' ? null : String(date);
+    if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`)))) fail('日期写成 2027-06-12 这样');
+    if (!this.store.pact?.set) fail('学习台还没准备好，稍后再改');
+    const known = (this.store.pact.get()?.exams || []).find(e => e.id === id);
+    const label = clean(name, 40) || known?.name || EXAM_CATALOG[id]?.name;
+    if (!label) fail('这场考试叫什么');
+    this.store.pact.set({exams: [{id, name: label, date: d}]});
+    return {targets: this.targets()};
   }
   // 今日闭环（REDO-1109 §5）：学 → 练（真题）→ 背生词 → 笔记回顾 → 讨伐 →（周末）整套模考。每一行做没做完都从当天真实数据算。
   loopToday(state, date, monsters) {
@@ -427,7 +486,7 @@ export class LearningGame {
   safe(fn, fallback) { try { return fn(); } catch { return fallback; } }
   bossFallback() {
     const date = this.today();
-    return {id: 'babel', name: '巴别兽', exam: GAME_EXAM, examDate: EXAM_DATES[GAME_EXAM], daysLeft: Math.max(0, daysBetween(date, EXAM_DATES[GAME_EXAM])),
+    return {id: 'babel', name: '巴别兽', exam: GAME_EXAM, examDate: this.examDate(), daysLeft: Math.max(0, daysBetween(date, this.examDate())),
       hpPercent: 100, bestPredicted: 0, passLine: this.economy.boss.passLine, safeLine: this.economy.boss.safeLine, phase: 'normal'};
   }
 
@@ -458,7 +517,10 @@ export class LearningGame {
       seal.push({sku: `replica:${f.id}`, kind: 'form', itemId: f.id, name: `${f.name}（复刻）`, desc: f.bonus.text, price: {shards: this.economy.prices.limitedReplicaShards}});
     }
     const items = this.catalog.items.filter(i => !i.notForSale && (!i.season || i.season === season?.term));
-    for (const i of items.filter(x => x.kind === 'ult' || x.kind === 'particles')) permanent.push({sku: `item:${i.id}`, kind: i.kind === 'ult' ? 'ult' : 'fx', itemId: i.id, name: i.name, price: E.itemPrice(i, this.economy)});
+    // 命中特效 / 结算动画以前只在每日货架轮到才买得到；装备现在真的生效了（laolao-game-loadout.js），四类特效都常驻。
+    const KIND_ORDER = ['hit', 'particles', 'ult', 'result'];
+    for (const i of items.filter(x => KIND_ORDER.includes(x.kind) && !x.notForSale && !x.season).sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind)))
+      permanent.push({sku: `item:${i.id}`, kind: i.kind === 'particles' ? 'fx' : i.kind, itemId: i.id, name: i.name, price: E.itemPrice(i, this.economy)});
     // 每日货架：北京日期做种子，从没拥有的小商品里挑；1 格打折
     const rng = E.mulberry32(E.seedFrom('daily-shelf', date));
     const slots = this.economy.shop.dailySlots + (this.form(state)?.bonus?.kind === 'dailyShelfExtra' ? this.form(state).bonus.add : 0);
@@ -528,7 +590,7 @@ export class LearningGame {
     return Object.entries(this.economy.gacha).map(([id, b]) => {
       const g = state.gacha[id];
       const cost = {single: b.cost.single, ...(b.cost.ten ? {ten: g.tens === 0 && b.cost.firstTen ? b.cost.firstTen : b.cost.ten} : {}), ...(g.tens === 0 && b.cost.firstTen ? {firstTen: b.cost.firstTen} : {})};
-      return {id, name: b.name, cost, rates: b.rates, effectiveSSR: E.effectiveSSR(id, this.economy), pity: {sr: b.pity.sr || null, ssr: b.pity.ssr, softStart: b.pity.softStart || null, count: {sr: g.sr, ssr: g.ssr}}, pools: E.gachaPools(id, this.catalog)};
+      return {id, name: b.name, cost, rates: b.rates, effectiveSSR: E.effectiveSSR(id, this.economy), pity: {sr: b.pity.sr || null, ssr: b.pity.ssr, softStart: b.pity.softStart || null, count: {sr: g.sr, ssr: g.ssr}}, firstTenForm: Boolean(b.cost.ten && g.tens === 0), formShare: b.formShare || {}, pools: E.gachaPools(id, this.catalog, this.economy)};
     });
   }
   itemName(id) {
@@ -547,13 +609,14 @@ export class LearningGame {
       state.wallet.seals -= cost.seals || 0;
       const owned = new Set([...state.forms.owned, ...state.items.owned]);
       const rng = E.mulberry32(E.seedFrom('gacha', id, requestId, g.pulls));
-      const out = E.gachaPull(id, {pity: {sr: g.sr, ssr: g.ssr}, owned, count: n, rng, economy: this.economy, catalog: this.catalog});
+      const out = E.gachaPull(id, {pity: {sr: g.sr, ssr: g.ssr}, owned, count: n, rng, economy: this.economy, catalog: this.catalog, guaranteeForm: n === 10 && g.tens === 0});
       g.sr = out.pity.sr; g.ssr = out.pity.ssr; g.pulls += n;
       if (n === 10) g.tens += 1;
       const grants = [];
       for (const r of out.results) {
         if (r.rarity === 'SSR') g.ssrHits += 1;
-        if (r.dup) grants.push({kind: 'shards', amount: r.shards, itemId: r.shardTo === 'any' ? 'any' : r.itemId, reason: '重复的变成了碎片', fx: 'small'});
+        if (r.kind === 'shards') grants.push({kind: 'shards', amount: r.shards, itemId: 'any', reason: '扭到了碎片', fx: 'small'});
+        else if (r.dup) grants.push({kind: 'shards', amount: r.shards, itemId: r.shardTo === 'any' ? 'any' : r.itemId, reason: '重复的变成了碎片', fx: 'small'});
         else grants.push({kind: r.kind === 'form' ? 'form' : 'item', itemId: r.itemId, reason: '扭到了', fx: r.rarity === 'SSR' ? 'cinematic' : r.rarity === 'SR' ? 'big' : 'medium'});
       }
       // 扭蛋的结果自己有开蛋动画，awards 里照样记一份（前端可以按 source.type==='gacha' 跳过重复播放）
@@ -860,6 +923,8 @@ export function registerLearningGame(api, store, options = {}) {
       return true;
     }});
   } catch (error) { api.logger?.warn?.(`exam audio route: ${error?.message || error}`); }
+  register('targets', () => game.targets());
+  register('target.set', p => game.setTarget(p));
   register('boss.state', p => (mod('exam').bossState ? mod('exam').bossState(game.read(), p.exam || GAME_EXAM) : game.bossFallback()));
   register('boss.realScore', via('exam', 'realScore', notReady('真实分数')));
   register('practice.overview', via('practice', 'overview', (() => ({total: 0, points: [], kinds: []}))));

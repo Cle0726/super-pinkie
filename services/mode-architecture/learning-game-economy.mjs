@@ -224,12 +224,40 @@ export function itemPrice(item, economy = loadEconomy()) {
 }
 
 // ---------- 扭蛋 ----------
-export function gachaPools(bannerId, catalog = loadForms()) {
+// 小件按种类归档：贴纸 / 称号是 N，封面 / 命中特效 / 结算动画是 R，粒子 / 大招演出是 SR。
+export const ITEM_TIER = {stickers: 'N', title: 'N', cover: 'R', hit: 'R', result: 'R', particles: 'SR', ult: 'SR'};
+// 每一档里放什么。形态只占这一档的一小份（economy.gacha.<池>.formShare，例如 SR 档 35% 是形态、65% 是 SR 小件），
+// 不然 R / SR 档里只有形态，十连保底的那一发加上几个 R 就是三五个形态，形态一下就不值钱了（11-13 用户反馈）。
+// 再留一份直接出通用碎片（shardShare，数量 shardDrop）：小件一共就几十个，全靠扭蛋发的话一个月就集齐了，没东西可肝。
+// 每个候选带权重 w（同一档里加起来 = 1）；SSR 档只有形态。
+export function gachaPools(bannerId, catalog = loadForms(), economy = loadEconomy()) {
   const src = bannerId === 'seal' ? 'gacha-seal' : 'gacha-star';
-  const pools = {N: [], R: [], SR: [], SSR: []};
-  for (const form of catalog.forms) if (form.source.includes(src) && pools[form.rarity]) pools[form.rarity].push({kind: 'form', itemId: form.id, name: form.name});
-  if (bannerId !== 'seal') for (const item of catalog.items) if (!item.notForSale && ['stickers', 'title', 'hit'].includes(item.kind)) pools.N.push({kind: item.kind, itemId: item.id, name: item.name});
+  const share = economy.gacha[bannerId]?.formShare || {};
+  const shardShare = economy.gacha[bannerId]?.shardShare || {}, shardDrop = economy.gacha[bannerId]?.shardDrop || {};
+  const forms = {N: [], R: [], SR: [], SSR: []}, items = {N: [], R: [], SR: [], SSR: []};
+  for (const form of catalog.forms) if (form.source.includes(src) && forms[form.rarity]) forms[form.rarity].push({kind: 'form', itemId: form.id, name: form.name});
+  for (const item of catalog.items) {
+    const tier = ITEM_TIER[item.kind];
+    if (item.notForSale || !tier) continue;
+    if (bannerId === 'seal' && tier !== 'SR') continue;
+    items[tier].push({kind: item.kind, itemId: item.id, name: item.name});
+  }
+  const pools = {};
+  for (const tier of ['N', 'R', 'SR', 'SSR']) {
+    const f = forms[tier], it = items[tier];
+    const fs = !f.length ? 0 : !it.length ? 1 : Math.min(1, Math.max(0, share[tier] ?? 1));
+    const ss = tier !== 'SSR' && shardDrop[tier] > 0 && (f.length || it.length) ? Math.min(1 - fs, Math.max(0, shardShare[tier] || 0)) : 0;
+    const rest = 1 - fs - ss;
+    pools[tier] = [...f.map(x => ({...x, w: fs / f.length})), ...(rest > 0 ? it.map(x => ({...x, w: rest / it.length})) : []),
+      ...(ss > 0 ? [{kind: 'shards', itemId: 'any', name: '通用碎片', amount: shardDrop[tier], w: ss}] : [])];
+  }
   return pools;
+}
+function weightedPick(pool, rng) {
+  const total = pool.reduce((n, x) => n + (x.w ?? 1), 0);
+  let r = rng() * total;
+  for (const x of pool) { r -= x.w ?? 1; if (r < 0) return x; }
+  return pool[pool.length - 1];
 }
 
 // 含保底的综合 SSR 概率（商店页公示用）：按 gachaRarity 同一套规则精确算一个保底周期的期望长度。
@@ -280,8 +308,9 @@ export function gachaRarity(bannerId, pity, rng, economy = loadEconomy()) {
   return {rarity, pity: next};
 }
 
-export function gachaPull(bannerId, {pity = {sr: 0, ssr: 0}, owned = new Set(), count = 1, rng, economy = loadEconomy(), catalog = loadForms()} = {}) {
-  const pools = gachaPools(bannerId, catalog);
+// guaranteeForm：这一次里至少出一个 SR 以上的形态（每个池第一次十连用，新手礼）。没出的话，把一个 SR 小件换成一个还没有的 SR 形态。
+export function gachaPull(bannerId, {pity = {sr: 0, ssr: 0}, owned = new Set(), count = 1, rng, economy = loadEconomy(), catalog = loadForms(), guaranteeForm = false} = {}) {
+  const pools = gachaPools(bannerId, catalog, economy);
   const results = [];
   let state = {sr: pity.sr || 0, ssr: pity.ssr || 0};
   const have = new Set(owned);
@@ -291,11 +320,23 @@ export function gachaPull(bannerId, {pity = {sr: 0, ssr: 0}, owned = new Set(), 
     let rarity = roll.rarity;
     while (!pools[rarity]?.length) rarity = {N: 'R', R: 'SR', SR: 'SSR', SSR: 'SR'}[rarity];
     const pool = pools[rarity];
-    const pick = pool[Math.floor(rng() * pool.length)];
+    const {w: _w, ...pick} = weightedPick(pool, rng);
+    if (pick.kind === 'shards') { results.push({kind: 'shards', itemId: 'any', name: pick.name, rarity, dup: false, shards: pick.amount, shardTo: 'any'}); continue; }
     const dup = have.has(pick.itemId);
     const shards = dup ? economy.dupShards[rarity] : 0;
     have.add(pick.itemId);
     results.push({...pick, rarity, dup, shards, shardTo: dup ? (pick.kind === 'form' ? pick.itemId : 'any') : null});
+  }
+  if (guaranteeForm && !results.some(r => r.kind === 'form' && (r.rarity === 'SR' || r.rarity === 'SSR'))) {
+    const at = results.findIndex(r => r.rarity === 'SR' && r.kind !== 'form');
+    const forms = (pools.SR || []).filter(x => x.kind === 'form');
+    const fresh = forms.filter(x => !owned.has(x.itemId));
+    const from = fresh.length ? fresh : forms;
+    if (at >= 0 && from.length) {
+      const {w: _w, ...pick} = from[Math.floor(rng() * from.length)];
+      const dup = owned.has(pick.itemId);
+      results[at] = {...pick, rarity: 'SR', dup, shards: dup ? economy.dupShards.SR : 0, shardTo: dup ? pick.itemId : null, guaranteed: true};
+    }
   }
   return {results, pity: state};
 }

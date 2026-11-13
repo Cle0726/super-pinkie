@@ -59,14 +59,20 @@
     "star": {
       "name": "星星扭蛋",
       "cost": {"single": {"stars": 160}, "ten": {"stars": 1440}, "firstTen": {"stars": 720}},
-      "rates": {"N": 0.70, "R": 0.22, "SR": 0.065, "SSR": 0.015},
-      "pity": {"sr": 10, "ssr": 50, "softStart": 40, "softStep": 0.05}
+      "rates": {"N": 0.745, "R": 0.19, "SR": 0.05, "SSR": 0.015},
+      "pity": {"sr": 10, "ssr": 50, "softStart": 40, "softStep": 0.05},
+      "formShare": {"R": 0.08, "SR": 0.25},
+      "shardShare": {"N": 0.35, "R": 0.4, "SR": 0.35},
+      "shardDrop": {"N": 1, "R": 2, "SR": 6}
     },
     "seal": {
       "name": "金印扭蛋",
       "cost": {"single": {"seals": 2}},
       "rates": {"SR": 0.95, "SSR": 0.05},
-      "pity": {"ssr": 20}
+      "pity": {"ssr": 20},
+      "formShare": {"SR": 0.3},
+      "shardShare": {"SR": 0.3},
+      "shardDrop": {"SR": 6}
     }
   },
   "dupShards": {"N": 1, "R": 5, "SR": 15, "SSR": 40},
