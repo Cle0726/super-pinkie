@@ -33,6 +33,7 @@ import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths,
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
+import {ModelHealth, configuredModels} from './model-health.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
@@ -6899,6 +6900,9 @@ export default {
       {messageFor: status => status.message, tagName: 'pinkie-plan-', turnName: '碧琪计划续跑', onDispatched: sessionKey => planState.disarm(sessionKey)},
     );
     const usage = new ModelUsageLedger();
+    // 模型失败的真实原因和「换个能用的模型」：聊天记录不保留 errorMessage，在这里记下。
+    const modelHealth = new ModelHealth();
+    sharePluginState(modelHealth, 'modelHealth', ['runs', 'models', 'sessions']);
     api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
     api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
     api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
@@ -6985,6 +6989,20 @@ export default {
     sharePluginState(architecture, 'architecture', ['lastUserPrompts', 'active', 'lastRuns', 'recentCompaction', 'pendingByParent', 'parentByChild', 'lastChildEventAt', 'liveParentRuns', 'lastParentEventAt']);
     sharePluginState(reasoning, 'reasoning', ['completed', 'independent', 'controllers']);
     sharePluginState(fileDelivery, 'fileDelivery', ['active', 'finals']);
+    // 聊天里那张失败卡：这一轮为什么没成、换哪个模型能接着用。
+    api.registerGatewayMethod('pinkie.model.failure', ({params, respond}) => {
+      try {
+        const sessionKey = String(params?.sessionKey || '');
+        const pluginConfig = runtimeConfig(api);
+        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
+        if (!Object.keys(config).length) {
+          try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
+        }
+        respond(true, modelHealth.failure(sessionKey, {candidates: configuredModels(config, agentFromSessionKey(sessionKey))}));
+      } catch (error) {
+        respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
+      }
+    }, {scope: 'operator.read'});
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
         const ctx = memory.contextForSession(String(params?.sessionKey || ''));
@@ -7327,8 +7345,12 @@ export default {
     api.on('model_call_started', event => {
       architecture.modelStarted(event);
       watchdog.modelStarted(event);
+      modelHealth.callStarted(event);
     });
-    api.on('model_call_ended', event => watchdog.modelEnded(event));
+    api.on('model_call_ended', event => {
+      watchdog.modelEnded(event);
+      modelHealth.callEnded(event);
+    });
     api.on('llm_output', event => usage.record(event));
     api.on('before_agent_finalize', (event, ctx) => {
       if (architecture.stopReport(ctx)) {
@@ -7452,6 +7474,8 @@ export default {
       await tierContinuation.cancel(ctx.sessionKey || '');
       await planContinuation.cancel(ctx.sessionKey || '');
       architecture.parentEnded(event, ctx);
+      modelHealth.turnEnded(ctx.sessionKey || '', {runId: event.runId, success: event.success === true,
+        reason: event.success === true ? '' : failureReasonFromEvent(event)});
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
         // A side-effecting run can reach agent_end with success=true even
