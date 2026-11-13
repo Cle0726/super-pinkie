@@ -3,6 +3,17 @@
 分支 **`audit/pinkie-1112`**。还没合 main、没打 tag、没发版、没装进任何 App。
 这份说明随改动一起更新，最下面的「进度」是做到哪了。Mac 端先读这一份，再看提交。
 
+## 交给 Mac 端处理（Windows 这边做不了、或要在 Mac 上确认的）
+
+Windows 端 11-12 晚整理。做完一项就在这里勾掉，或者在下面写一句结论。
+
+- [ ] **WebKit（Mac App）里看这两版的新界面**：输入框的「工具」菜单、项目「工作程度」/ 想法「取向」按钮、首页挂的空白新会话，以及读不到会话设置时停用的按钮（`capture.mjs --rpc` 给一个 `{"pinkie.session.prefs.get":{"ok":false}}` 就能复现：按钮停用、写「还没读到这个会话的设置，会自动重试」，工具菜单两行灰掉、不显示开关和「默认」）。
+- [ ] **这台 Windows 跑不了的测试**：`sidebar-handshake`、`learning-notes-menu`、`study-desk-ui`（要 Playwright WebKit）。另外 6 个学习台界面测试文件在这台 Windows 上 120 秒跑不完（改动前后一样）：`learning-desk`、`study-builtin-model-ui`、`study-desk-chat-entry`、`study-desk-conversation`、`study-desk-panes`、`study-explain-ui`。请在 Mac 上跑一下，看是 Windows 特有的挂起还是测试本身的问题。
+- [ ] **Mac 全量测试**：交付门禁（`index.mjs`、`session-lineage.mjs`）和会话偏好（`session-prefs.mjs` 的写入回包）是两端共用的，确认 Mac 上没有新增失败。门禁里认 Windows 路径的分支按 `path.sep` 判断，Mac 上不走，行为应该和原来一样。
+- [ ] **真网关 + 真模型重跑子会话**（Mac 有隔离副本）：「开子会话改文件 → 汇报 → 父会话核对」走一遍，确认交付前不再多提醒一次（原因和修法见下一节第 1 条）；再让子会话故意做不成一次，确认父会话说「做好了」仍会被拦。
+- [ ] **打包相关（Windows 端 11-12 晚第一次把这条分支打成 EXE 装上）**：原生桥接按 `app.windows_native` 导入，打包版里没有 `app` 包，托盘、全局快捷键、通知、导出全部起不来（`native.log: ModuleNotFoundError`），已在 `f46907dc` 修好并加了 `tests/windows_frozen_imports_test.py`。Mac 打包不走这段，但如果 Mac 端也有按 `app.xxx` 导入、只在仓库里能跑的写法，同样会在打包后失效。另外 Windows 装好后标题栏的关闭按钮点了没反应、进程也不退出，Windows 端还在查，和 Mac 无关。
+- [ ] **Mac 关窗的行为要不要对齐**：Windows 现在关窗就是退出（网关和它起的进程一起结束，看门狗靠 `gateway-closed-by-app` 标记不再拉起；`PINKIE_KEEP_GATEWAY=1` 恢复常驻）。Mac 关窗后网关是否常驻、`ai.openclaw.watchdog` 会不会把它拉起来，由 Mac 端决定要不要跟。
+
 ## Windows 端 11-12 晚：自查——界面状态以后端为准、交付门禁的误报（Mac 端先 `git pull`）
 
 先合了 Mac 端的 `install/unify-1112-live`（和这条分支比只多了换模式头像 avatars7，无冲突）。然后把下午那一版和交接里还开着的项回头查了一遍，重点是「界面显示的和后端实际不一致、状态不实时、显示假数据」。还是没合 main、没发版、没装进 App。
