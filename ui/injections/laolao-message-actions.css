@@ -43,3 +43,16 @@ html[data-pinkie-night] .pinkie-msg-menu { background:#2a2027;color:#f3e9ef;box-
 html[data-pinkie-reduce-motion] :is(.pinkie-msg-row,.pinkie-msg-toast) { transition:none }
 .chat-group.assistant .chat-group-footer:has(.pinkie-msg-row) { justify-content:flex-start }
 .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) { order:-1;margin-left:-5px }
+/* 失败卡：原因 + 换模型再发一次（替换「这次回复没能完成，请稍后再试」那句） */
+.chat-bubble[data-pinkie-fail] > .chat-text { display:none }
+.pinkie-fail { display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-size:14px;line-height:1.6 }
+.pinkie-fail__why,.pinkie-fail__hint { margin:0 }
+.pinkie-fail__hint { font-size:12.5px;color:color-mix(in srgb,currentColor 62%,transparent) }
+.pinkie-fail__switch { height:30px;padding:0 14px;border:0;border-radius:999px;background:var(--accent,#d9508d);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer }
+.pinkie-fail__switch:hover:not(:disabled) { filter:brightness(1.06) }
+.pinkie-fail__switch:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:2px }
+.pinkie-fail__switch:disabled { opacity:.55;cursor:default }
+.pinkie-fail__raw { font-size:11.5px;color:color-mix(in srgb,currentColor 55%,transparent) }
+.pinkie-fail__raw summary { cursor:pointer;list-style:none }
+.pinkie-fail__raw summary::-webkit-details-marker { display:none }
+.pinkie-fail__raw code { display:block;margin-top:4px;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;user-select:text }

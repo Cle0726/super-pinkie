@@ -25,6 +25,9 @@
       (m) => `模型那边要碧琪先歇 ${m[1]} 秒，马上就能继续。`],
     [/Rate-limited — ready in ~(\d+)\s*min/i,
       (m) => `模型那边要碧琪先歇大约 ${m[1]} 分钟，之后再继续。`],
+    // 账号 / 额度用不了：等多久都不会好，别说「太忙」「稍后再试」。要排在 429、503 前面。
+    [/auth[_ ]?unavailable|no auth available|no (?:available )?account|account unavailable|暂无账号|subscription.{0,32}usage limit/i,
+      '这个模型现在用不了：模型那边没有可用的账号，等也不会好。在输入框右下角换一个模型再发吧。'],
     [/All models are temporarily rate-limited|rate.?limit|too many requests|\b429\b/i,
       '模型那边排队的人太多了，碧琪被请到队尾。过一会儿再试就好。'],
     [/insufficient[_ ]?(quota|balance|credit)|quota exceeded|billing|payment required|\b402\b|余额不足/i,
@@ -96,6 +99,7 @@
 .pinkie-biqi-notice-raw-toggle:hover{opacity:1}
 .pinkie-biqi-notice-raw{display:block;margin-top:6px;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;opacity:.72;white-space:pre-wrap;word-break:break-all;user-select:text}
 .pinkie-biqi-notice-raw[hidden]{display:none!important}
+.callout[data-pinkie-dup]{display:none!important}
 `;
   const ensureStyle = () => {
     if (document.getElementById('pinkie-biqi-notices-style')) return;
@@ -167,9 +171,24 @@
 
   // 只有真正的错误框才用兜底话术；警告、更新横幅等只换对得上规则的。
   const ERROR_BOX = '.callout.danger:not(.update-banner), .callout.error, [role="alert"]:not(.update-banner)';
+  // 模型调用失败（账号、额度、限流、上游 5xx、超时……）聊天里已经有一张失败卡说清楚了，
+  // 顶部再挂一条红横幅就是同一件事报两遍。断线、文件、权限这些全局问题照常走横幅。
+  const MODEL_FAILURE = /auth[_ ]?unavailable|no auth available|no (?:available )?account|account unavailable|usage limit|rate.?limit|too many requests|insufficient[_ ]?(?:quota|balance|credit)|quota exceeded|billing|payment required|overloaded|service unavailable|server is busy|The agent run failed before producing a reply|Agent failed before reply|\b(?:402|429|5\d\d)\b|timed? ?out|timeout/i;
+  const FAILURE_CARD = /^\s*这次(?:回复没能完成|没连上模型)/;
+  const chatShowsFailure = (box) => {
+    const pane = box.closest('openclaw-chat-pane') || document;
+    const groups = [...pane.querySelectorAll('.chat-thread-inner > .chat-group')];
+    const last = groups[groups.length - 1];
+    return Boolean(last?.classList.contains('assistant')
+      && FAILURE_CARD.test(last.querySelector('.chat-bubble .chat-text')?.textContent || ''));
+  };
+  const isChatErrorBanner = (box) => box.matches('.callout.danger.callout--dismissible') && Boolean(box.closest('openclaw-chat-pane'));
   const handleNotice = (box) => {
     if (box.closest('.chat-text, .chat-bubble, pre, code, [contenteditable="true"]')) return;
     const content = box.querySelector(':scope > .callout__content') || box;
+    const raw = box.getAttribute('title') || content.getAttribute('title') || content.textContent || '';
+    const duplicate = isChatErrorBanner(box) && MODEL_FAILURE.test(raw) && chatShowsFailure(box);
+    if (box.hasAttribute('data-pinkie-dup') !== duplicate) box.toggleAttribute('data-pinkie-dup', duplicate);
     rewrite(content, { fallback: box.matches(ERROR_BOX), rawHost: content });
   };
 
@@ -189,6 +208,10 @@
     const bubbles = root.matches?.('.chat-group.assistant .chat-bubble[data-message-text]') ? [root] : [];
     root.querySelectorAll?.('.chat-group.assistant .chat-bubble[data-message-text]').forEach((b) => bubbles.push(b));
     bubbles.forEach(handleBubble);
+    // 失败卡比横幅晚到（历史重载后才出现）：聊天里有新消息时，把聊天的错误横幅再看一遍。
+    if (bubbles.length || root.matches?.('.chat-group, .chat-thread-inner') || root.querySelector?.('.chat-group')) {
+      document.querySelectorAll('openclaw-chat-pane .callout.danger.callout--dismissible').forEach(handleNotice);
+    }
   };
 
   const ownerOf = (node) => {

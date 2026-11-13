@@ -365,6 +365,100 @@
     slot.append(row);
   }
 
+  // ── 失败卡：说清楚为什么没成，给一个「换成 xx 再发一次」 ──
+  // 聊天记录不保留失败原因（errorMessage 会被网关删掉），原因由插件记着：pinkie.model.failure。
+  // 只装饰对话里最后一张失败卡（插件只记每个会话最近一次失败）。不改 Lit 管的文字节点：
+  // 原来那句「这次回复没能完成，请稍后再试」用属性藏起来，换成我们自己的一块。
+  const FAILURE_TEXT = /^\s*这次(?:回复没能完成|没连上模型)/;
+  const failures = new Map();   // sessionKey → {at, data, loading}
+  const FAILURE_SAY = {
+    account: (m) => `「${m}」现在用不了：模型那边没有可用的账号（或额度用完了），等多久都不会好。`,
+    key: (m) => `「${m}」现在用不了：模型的密钥不对或过期了。`,
+    missing: (m) => `「${m}」现在用不了：模型那边找不到这个模型。`,
+    busy: (m) => `「${m}」那边正忙，排队的人太多，过一会儿再发就好。`,
+    timeout: (m) => `「${m}」太久没回话，这一轮先停下了。`,
+    network: () => '网络断了一下，碧琪没够着模型。看看网络或代理，再发一次。',
+    down: (m) => `「${m}」那边出了故障，这次没回出来。`,
+    other: (m) => `这次没连上「${m}」，没能回出来。`,
+  };
+  async function modelNames(key) {
+    const catalog = window.__laolaoModelPickerCatalog;
+    const agentId = (key.match(/^agent:([^:]+):/) || [])[1] || 'main';
+    try {
+      const models = catalog ? catalog.present(await catalog.load(agentId)) : [];
+      return new Map(models.map(model => [model.provider + '/' + model.id, model.name || model.id]));
+    } catch { return new Map(); }
+  }
+  const shortModel = (ref, names) => names.get(ref) || String(ref || '').split('/').slice(1).join('/') || '这个模型';
+  function loadFailure(pane, key) {
+    const known = failures.get(key);
+    if (known && (known.loading || Date.now() - known.at < 4000)) return known.data;
+    failures.set(key, {at: Date.now(), data: known?.data || null, loading: true});
+    Promise.all([request('pinkie.model.failure', {sessionKey: key}, 10_000).catch(() => null), modelNames(key)])
+      .then(([data, names]) => {
+        failures.set(key, {at: Date.now(), data: data?.failure ? {...data, names} : null, loading: false});
+        schedule();
+      });
+    return known?.data || null;
+  }
+  async function switchAndResend(pane, key, userId, model, buttonNode) {
+    if (running(pane)) { toast(BUSY); return; }
+    buttonNode.disabled = true;
+    const agentId = (key.match(/^agent:([^:]+):/) || [])[1];
+    try {
+      await request('sessions.patch', {key, ...(agentId ? {agentId} : {}), model}, 15_000);
+    } catch (error) {
+      buttonNode.disabled = false;
+      toast(error?.message || '没换成模型，请稍后再试');
+      return;
+    }
+    failures.delete(key);
+    const ok = await act(pane, key, 'pinkie.chat.regenerate', {entryId: userId, model}, {focus: userId});
+    if (!ok) buttonNode.disabled = false;
+  }
+  function decorateFailure(pane, key, thread, history, editable, busy) {
+    const groups = [...thread.querySelectorAll(':scope > .chat-group')].filter(group => !group.closest('.pinkie-session-cards'));
+    const last = groups[groups.length - 1];
+    const bubble = last?.classList.contains('assistant') ? last.querySelector('.chat-bubble') : null;
+    for (const old of thread.querySelectorAll('.chat-bubble[data-pinkie-fail]')) {
+      if (old === bubble) continue;
+      old.removeAttribute('data-pinkie-fail');
+      old.querySelector(':scope > .pinkie-fail')?.remove();
+    }
+    if (!bubble || !FAILURE_TEXT.test(bubble.querySelector('.chat-text')?.textContent || '')) return;
+    const info = loadFailure(pane, key);
+    if (!info?.failure) return;
+    const {failure, suggestion, names} = info;
+    const userGroup = userGroupBefore(last);
+    const userId = userGroup ? lastEntryIn(userGroup, history) : '';
+    const failed = shortModel(failure.model, names);
+    const say = (FAILURE_SAY[failure.kind] || FAILURE_SAY.other)(failed);
+    const offer = Boolean(suggestion && editable && userId && failure.kind !== 'busy');
+    const next = offer ? shortModel(suggestion, names) : '';
+    const signature = [failure.at, failure.kind, suggestion, userId, busy, offer].join('|');
+    if (bubble.dataset.pinkieFail === signature) return;
+    bubble.dataset.pinkieFail = signature;
+    bubble.querySelector(':scope > .pinkie-fail')?.remove();
+    const box = el('div', 'pinkie-fail');
+    box.append(el('p', 'pinkie-fail__why', say));
+    if (offer) {
+      const action = el('button', 'pinkie-fail__switch', `换成 ${next} 再发一次`);
+      action.type = 'button';
+      action.disabled = busy;
+      action.title = `把这个对话的模型换成 ${next}，再把你刚才那句话发一次`;
+      action.onclick = () => void switchAndResend(pane, key, userId, suggestion, action);
+      box.append(action);
+    } else if (failure.unusable) {
+      box.append(el('p', 'pinkie-fail__hint', '在输入框右下角换一个模型，再发一次就好。'));
+    }
+    if (failure.reason) {
+      const raw = el('details', 'pinkie-fail__raw');
+      raw.append(el('summary', '', '原文'), el('code', '', failure.reason));
+      box.append(raw);
+    }
+    bubble.append(box);
+  }
+
   function paint() {
     frame = 0;
     const pane = activePane();
@@ -387,12 +481,13 @@
       if (group.closest('.pinkie-session-cards') || group.classList.contains('chat-group--timeline-step')) continue;
       decorateAssistant(pane, key, group, history, editable, busy);
     }
+    decorateFailure(pane, key, thread, history, editable, busy);
   }
   let frame = 0;
   function schedule() { if (!frame) frame = requestAnimationFrame(paint); }
   const observer = new MutationObserver(mutations => {
     if (mutations.every(mutation => [...mutation.addedNodes, ...mutation.removedNodes]
-      .every(node => node.nodeType === 1 && node.closest?.('.pinkie-msg-row, .pinkie-msg-menu, .pinkie-msg-toast, .pinkie-msg-edit')))) return;
+      .every(node => node.nodeType === 1 && node.closest?.('.pinkie-msg-row, .pinkie-msg-menu, .pinkie-msg-toast, .pinkie-msg-edit, .pinkie-fail')))) return;
     schedule();
   });
   const start = () => {
@@ -402,5 +497,5 @@
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
   setInterval(schedule, 1500);
 
-  window.__pinkieMessageActions = Object.freeze({plainText, historyItem, reloadHistory, paint: schedule});
+  window.__pinkieMessageActions = Object.freeze({plainText, historyItem, reloadHistory, paint: schedule, failureSay: FAILURE_SAY});
 })();
