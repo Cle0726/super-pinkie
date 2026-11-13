@@ -39,7 +39,12 @@ function runFile(file) {
     let output = "";
     child.stdout.on("data", (chunk) => { output += chunk; });
     child.stderr.on("data", (chunk) => { output += chunk; });
-    child.on("close", (code) => resolve({ file, code, output }));
+    // 一个文件卡住（比如留着文件监视不退出）时，十分钟后结束它并记成失败，不再让发版干等几个小时。
+    const limit = setTimeout(() => {
+      output += `\nnot ok 1 - ${file} did not finish within 10 minutes\n`;
+      child.kill("SIGKILL");
+    }, 10 * 60 * 1000);
+    child.on("close", (code) => { clearTimeout(limit); resolve({ file, code, output }); });
   });
 }
 

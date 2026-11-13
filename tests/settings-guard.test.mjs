@@ -203,11 +203,13 @@ test('command check is off in the dev build and never touches files', () => {
   assert.equal(fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8'), 'dev edit');
 });
 
-test('tool_result_persist hook restores and tells the model, only for command tools', () => {
+test('tool_result_persist hook restores and tells the model, only for command tools', (t) => {
   const {ws, home, state, root} = sandbox();
   const hooks = {};
   const api = {on: (name, fn) => { (hooks[name] ||= []).push(fn); }, registerGatewayMethod() {}};
-  registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, enabled: true, mode: {enabled: true}, pinkieStateRoot: path.join(root, 'app-state')});
+  const guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, enabled: true, mode: {enabled: true}, pinkieStateRoot: path.join(root, 'app-state')});
+  // 递归监视在 Linux / Windows 上会让测试进程一直不退出（11-13 发版卡在这里一个多小时）。
+  t.after(() => { for (const w of guard.watch()) w.close(); });
   fs.writeFileSync(path.join(ws, 'AGENTS.md'), 'tampered');
   const persist = hooks.tool_result_persist[0];
   assert.equal(persist({toolName: 'read', message: {role: 'toolResult', content: [{type: 'text', text: 'ok'}]}}), undefined);
@@ -225,7 +227,7 @@ test('tool_result_persist hook restores and tells the model, only for command to
   assert.equal(persist({toolName: 'exec', message: {role: 'toolResult', content: 'done'}}), undefined);
 });
 
-test('file watch restores a change made by a command that keeps running (write, then sleep / background)', async () => {
+test('file watch restores a change made by a command that keeps running (write, then sleep / background)', async (t) => {
   const {ws, home, state, root} = sandbox();
   const cfg = path.join(state, 'openclaw.json');
   const official = {plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}}, agents: {list: [{id: 'main', workspace: ws}]}};
@@ -234,6 +236,7 @@ test('file watch restores a change made by a command that keeps running (write, 
   const hooks = {};
   const api = {on: (name, fn) => { (hooks[name] ||= []).push(fn); }, registerGatewayMethod() {}};
   const guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, enabled: true, mode: {enabled: true}, pinkieStateRoot: path.join(root, 'app-state')});
+  t.after(() => { for (const w of guard.watch()) w.close(); });
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const until = async (check, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (check()) return true; await wait(25); } return false; };
   await wait(150);
