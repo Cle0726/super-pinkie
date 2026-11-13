@@ -38,6 +38,7 @@ import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} 
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
+import {registerModelSetup} from './model-setup.mjs';
 import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
@@ -6980,6 +6981,7 @@ export default {
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
     registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
+    registerModelSetup(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
