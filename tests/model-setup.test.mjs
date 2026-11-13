@@ -56,6 +56,12 @@ test('failures are explained in plain Chinese', async () => {
     assert.ok(!JSON.stringify(result).includes(KEY));
   }
   assert.match(explainFailure({error: Object.assign(new Error('x'), {code: 'ECONNREFUSED'}), preset: 'gemini'}).message, /代理/);
+  // 11-13 验收：fetch 失败是 TypeError，原因藏在 cause 里；界面上不能出现 TypeError 这类英文名
+  const fetchFailed = Object.assign(new TypeError('fetch failed'), {cause: Object.assign(new Error('connect'), {code: 'ECONNREFUSED'})});
+  const refused = explainFailure({error: fetchFailed, preset: 'custom'}).message;
+  assert.match(refused, /没有服务在响应/); assert.doesNotMatch(refused, /TypeError|ECONN/);
+  assert.doesNotMatch(explainFailure({error: new TypeError('fetch failed'), preset: 'custom'}).message, /TypeError/);
+  assert.match(explainFailure({error: Object.assign(new TypeError('fetch failed'), {cause: {code: 'ENOTFOUND'}}), preset: 'kimi'}).message, /找不到这个地址/);
   // 错模型
   const h = harness(url => (url.endsWith('/models') ? {status: 200, body: models} : {status: 404, body: {error: {message: 'Model Not Exist'}}}));
   const wrong = await h.setup.test({preset: 'deepseek', apiKey: KEY, model: 'deepseek-nope'});

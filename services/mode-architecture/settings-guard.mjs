@@ -312,7 +312,7 @@ export class SettingsGuard {
     const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
       // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
       product: productView(config), official: structuredClone(config), lastGood: structuredClone(config),
-      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: []};
+      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: [], unreported: []};
     shared.set(key, snap);
     return snap;
   }
@@ -370,7 +370,9 @@ export class SettingsGuard {
         } else if (!config || typeof config !== 'object') {
           // 删掉或改成读不出来的样子：整份换回快照（快照就是启动校验之后的官方配置 + 当时的用户设置）。
           if (raw !== null) backup(this.configPath);
-          fs.writeFileSync(this.configPath, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
+          const temp = `${this.configPath}.guard-${process.pid}`;
+          fs.writeFileSync(temp, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
+          fs.renameSync(temp, this.configPath);
           fixed.push(this.configPath);
         }
         if (snap.configKnown && config && typeof config === 'object') snap.lastGood = structuredClone(config);
@@ -381,6 +383,8 @@ export class SettingsGuard {
     if (fixed.length) {
       const event = {at: new Date().toISOString(), tool, restored: fixed.map(f => path.relative(this.stateDir, f) || f)};
       snap.restores.push(event);
+      // 还没告诉碧琪的：after_tool_call 和 tool_result_persist 谁先跑都行，后跑的那个把提示写进命令结果。
+      snap.unreported.push(...fixed.map(file => ({file, at: Date.now()})));
       if (snap.restores.length > 20) snap.restores.splice(0, snap.restores.length - 20);
       this.record({toolName: tool}, `命令改了 ${fixed.length} 个设定文件，已换回`);
       if (this.pinkieStateRoot) {
@@ -390,9 +394,44 @@ export class SettingsGuard {
     return fixed;
   }
 
+  takeUnreported() {
+    const snap = this.enabled ? globalThis[BASELINES]?.get(`${this.stateDir}|${this.configPath}`) : null;
+    if (!snap?.unreported?.length) return [];
+    // 只报最近两分钟换回的（文件监视换回的可能不是这条命令干的，太久以前的就不往这条结果里写了）。
+    const recent = snap.unreported.splice(0).filter(item => Date.now() - item.at < 120_000).map(item => item.file);
+    return [...new Set(recent)];
+  }
+
   execNote(fixed) {
     const names = fixed.map(f => path.relative(this.stateDir, f) || f).slice(0, 6).join('、');
     return `【碧琪设定防护】这条命令改动了碧琪的产品设定（${names}${fixed.length > 6 ? ' 等' : ''}），正式版里不允许，已经换回官方版本（改动前的文件备份在 ${this.pinkieStateRoot ? path.join(this.pinkieStateRoot, 'backups') : '备份目录'}）。如实告诉用户这件事没有做成；用户能改的是记忆、设置里的偏好、自己的模型和密钥、自己的技能（${this.userSkillsDir()}）。命令的其它效果不受影响。`;
+  }
+
+  // 文件监视：命令写完设定后不退出（sleep、后台进程）时，after 钩子来不及——配置热加载会先把插件卸掉。
+  // 11-13 隔离验收里碧琪用「写完 sleep 2 秒」绕过了命令后检查。监视到改动就马上换回，赶在热加载（约 0.7 秒）之前。
+  watch({delay = 80} = {}) {
+    const snap = this.baseline();
+    if (!snap || snap.watchers) return snap?.watchers || [];
+    snap.watchers = [];
+    let timer = null;
+    const kick = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; try { this.verifyAfterCommand('watch'); } catch {} }, delay);
+      timer.unref?.();
+    };
+    const add = (dir, opts, filter) => {
+      try {
+        const watcher = fs.watch(dir, {persistent: false, ...opts}, (type, name) => { if (!filter || !name || filter(String(name))) kick(); });
+        watcher.on?.('error', () => {});
+        snap.watchers.push(watcher);
+      } catch {}
+    };
+    const configName = path.basename(this.configPath);
+    add(path.dirname(this.configPath), {}, name => name === configName);
+    const rootNames = new Set([...EXEC_WATCH_FILES, 'BOOTSTRAP.md']);
+    for (const dir of snap.roots) add(dir, {}, name => rootNames.has(name));
+    for (const dir of snap.dirs) if (fs.existsSync(dir)) add(dir, {recursive: true});
+    return snap.watchers;
   }
 
   status() {
@@ -429,7 +468,12 @@ function productView(config = {}) {
   }
   return {
     enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null, paths: plugins.load?.paths ?? null,
-    entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => [id, plugins.entries?.[id] ? plugins.entries[id].enabled ?? null : 'absent'])),
+    // 插件开关 + 钩子授权（授权被删，OpenClaw 会挡掉碧琪的对话钩子）。
+    entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => {
+      const entry = plugins.entries?.[id];
+      if (!entry) return [id, 'absent'];
+      return [id, {enabled: entry.enabled ?? null, prompt: entry.hooks?.allowPromptInjection ?? null, conversation: entry.hooks?.allowConversationAccess ?? null}];
+    })),
     agents, hooksInternal: config.hooks?.internal ?? null, extraDirs: config.skills?.load?.extraDirs ?? null,
   };
 }
@@ -445,7 +489,12 @@ function applyProductView(config, official) {
     if (value === 'absent') continue;
     plugins.entries = plugins.entries && typeof plugins.entries === 'object' ? plugins.entries : {};
     if (!plugins.entries[id] || typeof plugins.entries[id] !== 'object') plugins.entries[id] = structuredClone(official.plugins.entries[id]);
-    put(plugins.entries[id], 'enabled', value);
+    const entry = plugins.entries[id];
+    put(entry, 'enabled', value.enabled);
+    if (value.prompt !== null || value.conversation !== null) {
+      entry.hooks = entry.hooks && typeof entry.hooks === 'object' ? entry.hooks : {};
+      put(entry.hooks, 'allowPromptInjection', value.prompt); put(entry.hooks, 'allowConversationAccess', value.conversation);
+    }
   }
   const list = Array.isArray(config.agents?.list) ? config.agents.list : null;
   for (const [id, values] of Object.entries(want.agents)) {
@@ -539,12 +588,15 @@ export function registerSettingsGuard(api, options = {}) {
   // tool_result_persist 是同步钩子，赶在配置热加载（约 0.5 秒防抖）之前把产品键改回去；after_tool_call 再查一次兜底。
   const COMMAND_TOOLS = new Set(['exec', 'bash', 'process']);
   try { guard.baseline(); } catch {}
+  try { if (guard.enabled && options.watch !== false) guard.watch(); } catch {}
   api.on?.('tool_result_persist', (event = {}) => {
     try {
       const tool = String(event.toolName || event.message?.toolName || '');
       if (!guard.enabled || !COMMAND_TOOLS.has(tool)) return undefined;
-      const fixed = guard.verifyAfterCommand(tool);
-      if (!fixed.length || !event.message) return undefined;
+      guard.verifyAfterCommand(tool);
+      if (!event.message) return undefined;
+      const fixed = guard.takeUnreported();
+      if (!fixed.length) return undefined;
       const message = {...event.message};
       const note = {type: 'text', text: guard.execNote(fixed)};
       message.content = Array.isArray(message.content) ? [...message.content, note] : [{type: 'text', text: String(message.content ?? '')}, note];
