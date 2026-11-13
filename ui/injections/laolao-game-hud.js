@@ -51,6 +51,18 @@
     return null;
   }
   // 游戏页左上角 ×：回到上一个游戏页（栈在 laolao-study-desk.js 的 goPane 里记），没有就回营地
+  // 调色板 → 能压住白字的强调色
+  const goInk = pal => {
+    const hsl = hex => { const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()); if (!m) return null; const n = parseInt(m[1], 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; if (!d) return [0, 0, l]; const s2 = d / (1 - Math.abs(2 * l - 1)); const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, s2, l]; };
+    const rgb = ([h, s2, l]) => { const c = (1 - Math.abs(2 * l - 1)) * s2, x = c * (1 - Math.abs(h / 60 % 2 - 1)), m = l - c / 2; const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]; return [r + m, g + m, b + m]; };
+    const lum = c => { const [r, g, b] = c.map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * r + .7152 * g + .0722 * b; };
+    const list = [pal[1], pal[0], pal[2]].map(hsl).filter(Boolean);
+    const pick = list.find(c => c[1] >= .35 && c[2] > .12 && c[2] < .93) || list.find(c => c[1] >= .2 && c[2] > .08) || null;
+    if (!pick) return '';
+    const c = [pick[0], Math.min(Math.max(pick[1], .5), .8), Math.min(pick[2], .5)];
+    while (c[2] > .12 && 1.05 / (lum(rgb(c)) + .05) < 4.5) c[2] -= .02;
+    return '#' + rgb(c).map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+  };
   const BACK_NAME = {gamepractice: '回题库', gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
   const backTarget = () => desk()?.pane?.()?.state?.gameStack?.at(-1) || 'today';
   const backLabel = () => desk()?.backName?.(backTarget()) || BACK_NAME[backTarget()] || '回营地';
@@ -236,6 +248,8 @@
       call('forms.v2seen').catch(() => {});
     }
     if (form?.palette) host.style.cssText += `;--pkg-a:${form.palette[0]};--pkg-b:${form.palette[1]};--pkg-c:${form.palette[2]}`;
+    // 「出发」键是白字：形态主色太浅（魔法少女的浅粉、甜点师）或太灰（骑士）时白字看不清。挑调色板里最有颜色的一个，压暗到和白字对比 ≥ 4.5。
+    if (form?.palette) { const go = goInk(form.palette); if (go) host.style.setProperty('--pkg-go', go); else host.style.removeProperty('--pkg-go'); }
     const night = (() => { const h = beijingHour(); return h >= 18 || h < 5; })();
 
     // 左：舞台
