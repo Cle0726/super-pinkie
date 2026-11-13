@@ -290,6 +290,7 @@
       const badge = id === 'hunt' && s.monsters?.due ? `${s.monsters.due} 只到期` : id === 'shop' && s.season?.limitedSkus?.length && !s.quiet ? `${s.season.name}限定` : '';
       b.append(el('small', '', en), el('b', '', zh), badge ? el('em', 'pkg-entry__sub is-hot', badge) : el('span', 'pkg-entry__sub', sub));
       if (badge) b.dataset.hot = '1';
+      if (id === 'map') { const cv = window.__pinkieLoadout?.current?.('cover'); const book = el('i', 'pkg-entry__book'); if (cv?.css) { book.style.background = cv.css; book.dataset.cover = cv.name; } book.append(el('i', 'pkg-entry__spine'), el('i', 'pkg-entry__label')); b.append(book); }
       b.style.setProperty('--e', entries.children.length); b.addEventListener('click', () => openGame(id)); entries.append(b);
     }
     left.append(entries);
@@ -480,7 +481,7 @@
         else openGame('map');
       }});
     const sg = loop.suggest;
-    row({id: 'real', step: '练 · 真题', title: sg ? sg.name : '刷真题', meta: loop.realSets ? `做了 ${loop.realSets} 组 · 答对 ${loop.realCorrect}` : sg?.reason === 'lesson' ? '刚讲完的考点 · 8 题' : sg?.reason === 'weak' ? `弱项${sg.acc != null ? ' · 正确率 ' + sg.acc + '%' : ''} · 8 题` : '真题题库', done: loop.realSets > 0,
+    row({id: 'real', step: '练 · 真题', title: sg ? (sg.name === '未分类' ? (sg.groupName || '刷真题') : sg.name) : '刷真题', meta: loop.realSets ? `做了 ${loop.realSets} 组 · 答对 ${loop.realCorrect}` : sg?.reason === 'lesson' ? '刚讲完的考点 · 8 题' : sg?.reason === 'weak' ? `弱项${sg.acc != null ? ' · 正确率 ' + sg.acc + '%' : ''} · 8 题` : '真题题库', done: loop.realSets > 0,
       run: e => { const P = window.__pinkieGamePractice; if (sg && P) P.startPoint(sg.point, {nodeId: sg.nodeId || '', from: e.currentTarget}); else openGame('practice'); }});
     row({id: 'vocab', step: '背', title: '生词', meta: loop.words ? `背了 ${loop.words} 个` : '打开生词复习', done: loop.words > 0, run: () => d.go('vocab', {review: true})});
     row({id: 'notes', step: '背', title: '笔记回顾', meta: loop.notes ? `回顾了 ${loop.notes} 条` : '今天最多 10 条', done: loop.notes > 0, run: () => d.go('notes', {view: 'review'})});
@@ -509,7 +510,7 @@
         const sg = await call('practice.suggest', {nodeId: next.id}).catch(() => null);
         if (!go.isConnected) return;
         if (sg?.point && sg.reason === 'node') {
-          go.dataset.mode = 'real'; sub.textContent = `练真题 · ${sg.name}`;
+          go.dataset.mode = 'real'; sub.textContent = `练真题 · ${sg.name === '未分类' ? (sg.groupName || '混练') : sg.name}`;
           go.addEventListener('click', () => window.__pinkieGamePractice.startPoint(sg.point, {nodeId: next.id, from: go}));
           return;
         }

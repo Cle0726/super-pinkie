@@ -1221,11 +1221,11 @@
    "note": "同一场景的空镜（没有角色）"
   },
   "form/cyber/portrait": {
-   "raw": "cyber-hero.png",
+   "raw": "cyber-char.png",
    "tool": "tools/study-game/art/gpt-web-batch.mjs",
    "prompt": "tools/study-game/art/forms-v4-src.mjs",
    "date": "2026-11-13",
-   "note": "从主视觉里抠出来的全身立绘"
+   "note": "灰底重画的同一站姿，抠图"
   },
   "form/cyber/ult": {
    "raw": "cyber-hero.png",
@@ -1233,6 +1233,447 @@
    "prompt": "tools/study-game/art/forms-v4-src.mjs",
    "date": "2026-11-13",
    "note": "主视觉（角色在场景里）"
+  },
+  "form/astrologer/portrait": {
+   "raw": "astrologer-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/astrologer/ult": {
+   "raw": "astrologer-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/astronaut/portrait": {
+   "raw": "astronaut-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/astronaut/ult": {
+   "raw": "astronaut-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/chef/portrait": {
+   "raw": "chef-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/chef/ult": {
+   "raw": "chef-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/chef/cheer": {
+   "raw": "chef-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/chef/hurt": {
+   "raw": "chef-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/cyber/cheer": {
+   "raw": "cyber-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/cyber/plate": {
+   "raw": "cyber-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/graduate/portrait": {
+   "raw": "graduate-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/graduate/ult": {
+   "raw": "graduate-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/idol/portrait": {
+   "raw": "idol-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/idol/ult": {
+   "raw": "idol-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/knight/avatar": {
+   "raw": "knight-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/magical-girl/portrait": {
+   "raw": "magical-girl-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/magical-girl/ult": {
+   "raw": "magical-girl-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/magical-girl/cheer": {
+   "raw": "magical-girl-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/magical-girl/hurt": {
+   "raw": "magical-girl-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/magical-girl/plate": {
+   "raw": "magical-girl-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/ninja/portrait": {
+   "raw": "ninja-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/ninja/ult": {
+   "raw": "ninja-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/pirate/portrait": {
+   "raw": "pirate-char.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底重画的同一站姿，抠图"
+  },
+  "form/pirate/ult": {
+   "raw": "pirate-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/pirate/cheer": {
+   "raw": "pirate-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/pirate/hurt": {
+   "raw": "pirate-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/xiaoxue/portrait": {
+   "raw": "xiaoxue-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "从主视觉里抠出来的全身立绘"
+  },
+  "form/xiaoxue/ult": {
+   "raw": "xiaoxue-hero.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "主视觉（角色在场景里）"
+  },
+  "form/zhuangyuan/cheer": {
+   "raw": "zhuangyuan-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/zhuangyuan/hurt": {
+   "raw": "zhuangyuan-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/zhuangyuan/avatar": {
+   "raw": "zhuangyuan-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/chef/plate": {
+   "raw": "chef-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/chef/avatar": {
+   "raw": "chef-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/pirate/plate": {
+   "raw": "pirate-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/pirate/avatar": {
+   "raw": "pirate-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/magical-girl/avatar": {
+   "raw": "magical-girl-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/astronaut/cheer": {
+   "raw": "astronaut-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/astronaut/hurt": {
+   "raw": "astronaut-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/astronaut/avatar": {
+   "raw": "astronaut-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/cyber/hurt": {
+   "raw": "cyber-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/cyber/avatar": {
+   "raw": "cyber-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/ninja/cheer": {
+   "raw": "ninja-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/ninja/hurt": {
+   "raw": "ninja-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/graduate/cheer": {
+   "raw": "graduate-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/graduate/hurt": {
+   "raw": "graduate-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/graduate/avatar": {
+   "raw": "graduate-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/idol/cheer": {
+   "raw": "idol-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/idol/hurt": {
+   "raw": "idol-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/idol/avatar": {
+   "raw": "idol-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/ninja/avatar": {
+   "raw": "ninja-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/astronaut/plate": {
+   "raw": "astronaut-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/astrologer/hurt": {
+   "raw": "astrologer-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/astrologer/plate": {
+   "raw": "astrologer-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/astrologer/avatar": {
+   "raw": "astrologer-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/graduate/plate": {
+   "raw": "graduate-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/idol/plate": {
+   "raw": "idol-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/xiaoxue/cheer": {
+   "raw": "xiaoxue-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/xiaoxue/plate": {
+   "raw": "xiaoxue-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/xiaoxue/avatar": {
+   "raw": "xiaoxue-avatar.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "胸像"
+  },
+  "form/xiaoxue/hurt": {
+   "raw": "xiaoxue-hurt.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/astrologer/cheer": {
+   "raw": "astrologer-cheer.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "灰底姿势，抠图"
+  },
+  "form/ninja/plate": {
+   "raw": "ninja-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
+  },
+  "form/zhuangyuan/plate": {
+   "raw": "zhuangyuan-plate.png",
+   "tool": "tools/study-game/art/gpt-web-batch.mjs",
+   "prompt": "tools/study-game/art/forms-v4-src.mjs",
+   "date": "2026-11-13",
+   "note": "同一场景的空镜（没有角色）"
   }
  }
 }

@@ -34,6 +34,19 @@
     changeling:   {kind: 2, src: [.5, .12], c1: [.35, .9, .78], c2: [1, .62, .82], focus: .58},
     lidong:       {kind: 0, src: [.72, .16], c1: [1, .78, .62], c2: [.72, .86, 1], focus: .6},
     detective:    {kind: 6, src: [.22, .28], c1: [1, .84, .58], c2: [.62, .7, .86], focus: .6},
+    // v4 回归的 12 个（光源位置照各自的主视觉）
+    pirate:       {kind: 1, src: [.12, .4], c1: [1, .78, .5], c2: [.6, .9, .92], focus: .58},
+    astronaut:    {kind: 5, src: [.2, .2], c1: [.72, .84, 1], c2: [1, .8, .9], focus: .58},
+    knight:       {kind: 1, src: [.09, .38], c1: [1, .82, .7], c2: [.8, .78, 1], focus: .58},
+    'magical-girl': {kind: 5, src: [.3, .18], c1: [1, .78, .95], c2: [.8, .78, 1], focus: .58},
+    zhuangyuan:   {kind: 1, src: [.08, .45], c1: [1, .8, .6], c2: [1, .86, .86], focus: .58},
+    cyber:        {kind: 6, src: [.25, .3], c1: [1, .5, .8], c2: [.45, .95, 1], focus: .6},
+    ninja:        {kind: 5, src: [.25, .16], c1: [.8, .86, 1], c2: [1, .6, .8], focus: .58},
+    chef:         {kind: 0, src: [.2, .1], c1: [1, .9, .8], c2: [1, .8, .86], focus: .62},
+    idol:         {kind: 2, src: [.5, .05], c1: [1, .7, .9], c2: [.85, .8, 1], focus: .6},
+    astrologer:   {kind: 5, src: [.4, .08], c1: [.8, .74, 1], c2: [1, .86, .6], focus: .58},
+    xiaoxue:      {kind: 0, src: [.3, .12], c1: [.86, .93, 1], c2: [1, .8, .78], focus: .6},
+    graduate:     {kind: 1, src: [.1, .42], c1: [1, .84, .62], c2: [1, .82, .9], focus: .58},
   };
   const look = id => LOOK[id] || LOOK.daily;
 
@@ -783,7 +796,7 @@ void main() {
     return ctl;
   };
   // 场景明暗：营地文字用深字还是浅字（跟场景走，不跟钟点走）
-  const DARK = new Set(['crystal', 'batpony', 'serious', 'kirin']);
+  const DARK = new Set(['crystal', 'batpony', 'serious', 'kirin', 'astronaut', 'magical-girl', 'cyber', 'ninja', 'idol', 'astrologer']);
   const tone = id => DARK.has(id) ? 'night' : 'day';
   window.__pinkieFormStage = {has, mount, tone, LOOK};
 })();

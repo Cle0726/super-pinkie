@@ -47,12 +47,12 @@
     popup: {pal: ['#F7A8C8', '#8FC6FF', '#FFE08A'], tag: '像立体书一样翻开'},
   };
   const COVER = {
-    sakura: {css: 'radial-gradient(circle at 24% 20%,#fff 0 5%,transparent 6%),radial-gradient(circle at 70% 66%,#ffd9e8 0 7%,transparent 8%),linear-gradient(135deg,#FFC6DC,#F08AB4)', tag: '粉底，落樱'},
-    night: {css: 'radial-gradient(circle at 30% 26%,#fff 0 1.4%,transparent 2%),radial-gradient(circle at 64% 44%,#fff 0 1%,transparent 1.6%),radial-gradient(circle at 78% 20%,#FFE08A 0 6%,transparent 7%),linear-gradient(160deg,#1B1740,#3B2A6B)', tag: '深蓝，一弯月'},
-    kraft: {css: 'repeating-linear-gradient(90deg,rgba(90,60,30,.07) 0 2px,transparent 2px 6px),linear-gradient(135deg,#C9A277,#A67C52)', tag: '牛皮纸，粗纤维'},
-    palace: {css: 'repeating-linear-gradient(45deg,rgba(242,195,91,.22) 0 2px,transparent 2px 12px),repeating-linear-gradient(-45deg,rgba(242,195,91,.22) 0 2px,transparent 2px 12px),linear-gradient(135deg,#8C1730,#5A0F16)', tag: '朱红，金线菱格'},
-    ink: {css: 'radial-gradient(ellipse at 30% 70%,rgba(30,22,32,.75) 0 22%,transparent 46%),radial-gradient(ellipse at 74% 30%,rgba(30,22,32,.4) 0 14%,transparent 38%),linear-gradient(135deg,#F4EFE6,#DDD5C8)', tag: '宣纸，两团墨'},
-    winter: {css: 'radial-gradient(circle at 22% 24%,#fff 0 3%,transparent 4%),radial-gradient(circle at 62% 60%,#fff 0 4%,transparent 5%),radial-gradient(circle at 80% 22%,#fff 0 2%,transparent 3%),linear-gradient(160deg,#CFE6FF,#8FB6E8)', tag: '浅蓝，初雪'},
+    sakura: {board: '#F08AB4', css: 'radial-gradient(circle at 24% 20%,#fff 0 5%,transparent 6%),radial-gradient(circle at 70% 66%,#ffd9e8 0 7%,transparent 8%),linear-gradient(135deg,#FFC6DC,#F08AB4)', tag: '粉底，落樱'},
+    night: {board: '#2A2157', css: 'radial-gradient(circle at 30% 26%,#fff 0 1.4%,transparent 2%),radial-gradient(circle at 64% 44%,#fff 0 1%,transparent 1.6%),radial-gradient(circle at 78% 20%,#FFE08A 0 6%,transparent 7%),linear-gradient(160deg,#1B1740,#3B2A6B)', tag: '深蓝，一弯月'},
+    kraft: {board: '#A67C52', css: 'repeating-linear-gradient(90deg,rgba(90,60,30,.07) 0 2px,transparent 2px 6px),linear-gradient(135deg,#C9A277,#A67C52)', tag: '牛皮纸，粗纤维'},
+    palace: {board: '#7A1426', css: 'repeating-linear-gradient(45deg,rgba(242,195,91,.22) 0 2px,transparent 2px 12px),repeating-linear-gradient(-45deg,rgba(242,195,91,.22) 0 2px,transparent 2px 12px),linear-gradient(135deg,#8C1730,#5A0F16)', tag: '朱红，金线菱格'},
+    ink: {board: '#D6CEC0', css: 'radial-gradient(ellipse at 30% 70%,rgba(30,22,32,.75) 0 22%,transparent 46%),radial-gradient(ellipse at 74% 30%,rgba(30,22,32,.4) 0 14%,transparent 38%),linear-gradient(135deg,#F4EFE6,#DDD5C8)', tag: '宣纸，两团墨'},
+    winter: {board: '#8FB6E8', css: 'radial-gradient(circle at 22% 24%,#fff 0 3%,transparent 4%),radial-gradient(circle at 62% 60%,#fff 0 4%,transparent 5%),radial-gradient(circle at 80% 22%,#fff 0 2%,transparent 3%),linear-gradient(160deg,#CFE6FF,#8FB6E8)', tag: '浅蓝，初雪'},
   };
   const TABLES = {hit: HIT, particles: PARTICLES, ult: ULT, result: RESULT, cover: COVER};
   const split = id => { const s = String(id || ''); const k = s.indexOf(':'); return k < 0 ? ['', s] : [s.slice(0, k), s.slice(k + 1)]; };

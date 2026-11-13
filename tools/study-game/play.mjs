@@ -1,5 +1,5 @@
 // 学习台游戏 · 本机试玩台（开发用）。隔离 harness + 隔离真后端：不连 18789，不碰用户 App 和 learning/。
-// 用法：node tools/study-game/play.mjs [--port=4477] [--papers=<真题卷目录>] [--stars=2860]
+// 用法：node tools/study-game/play.mjs [--port=4477] [--papers=<真题卷目录>] [--stars=2860] [--forms=daily,knight,...] [--form=knight]
 // 打开 http://127.0.0.1:4477/chat 就是学习台；页面上的每个 RPC 都走真后端（临时目录里的存档）。
 // 真题卷受版权保护，不在仓库里：默认读 ../super-pinkie-handoff/papers（没有就空题库）。
 import fs from 'node:fs';
@@ -39,7 +39,7 @@ function roughTag(service) {
 }
 
 const service = await isolatedService();
-seed(service, {stars: Number(opt('stars', 2860)), forms: ['daily', 'learning', 'detective', 'pirate', 'alicorn', 'breezie'], equipped: opt('form', 'daily')});
+seed(service, {stars: Number(opt('stars', 2860)), forms: opt('forms', 'daily,detective,alicorn,breezie,crystal,unrestricted,knight,zhuangyuan,pirate,chef,magical-girl').split(',').filter(Boolean), equipped: opt('form', 'daily')});
 seedMonsters(service);
 let installed = 0;
 if (fs.existsSync(papers)) {

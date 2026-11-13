@@ -129,7 +129,13 @@
 #pinkie-study-desk .pks-ga__stage{position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#1A1220,#120C16);box-shadow:0 0 0 1px rgba(226,192,122,.18) inset,0 30px 60px -40px rgba(20,6,16,.9)}
 #pinkie-study-desk .pks-ga__alcove{position:absolute;inset:0}
 #pinkie-study-desk .pks-ga__alcove canvas{position:absolute;inset:0}
-#pinkie-study-desk .pks-ga__alcove[data-mode="loading"]::after{content:"";position:absolute;left:50%;top:50%;width:28px;height:28px;margin:-14px;border-radius:50%;border:1px solid rgba(226,192,122,.3);border-top-color:#E2C07A;animation:pks-spin .9s linear infinite}
+#pinkie-study-desk .pks-ga__alcove[data-mode="loading"]::after{content:"";position:absolute;left:50%;top:80%;width:28px;height:28px;margin:-14px;border-radius:50%;border:1px solid rgba(226,192,122,.3);border-top-color:#E2C07A;animation:pks-spin .9s linear infinite}
+/* 3D 扭蛋机要几秒才载完（three + 着色器编译）：这段时间不留一块黑，先放一台呼吸的剪影和一句话，载完画面淡入 */
+#pinkie-study-desk .pks-ga__alcove[data-mode="loading"]::before{content:"扭蛋机就位中…";position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding-bottom:12%;box-sizing:border-box;color:rgba(255,244,220,.62);font-size:13px;letter-spacing:.32em;text-indent:.32em;background:radial-gradient(60% 42% at 50% 46%,rgba(226,192,122,.16),transparent 70%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 160'%3E%3Cg fill='none' stroke='%23E2C07A' stroke-opacity='.5' stroke-width='1.6' stroke-linejoin='round'%3E%3Ccircle cx='60' cy='52' r='36'/%3E%3Cpath d='M30 86h60l6 8H24zM28 94h64v48H28zM22 142h76v8H22z'/%3E%3Ccircle cx='46' cy='120' r='9'/%3E%3Cpath d='M39 120h14M68 112h16v16H68z'/%3E%3C/g%3E%3Cg fill='%23E2C07A' fill-opacity='.22'%3E%3Ccircle cx='48' cy='66' r='8'/%3E%3Ccircle cx='64' cy='70' r='8'/%3E%3Ccircle cx='76' cy='60' r='8'/%3E%3Ccircle cx='58' cy='54' r='8'/%3E%3C/g%3E%3C/svg%3E") center 42%/auto 46% no-repeat;animation:pks-ga-wait 1.6s ease-in-out infinite}
+#pinkie-study-desk .pks-ga__alcove[data-mode="3d"] canvas{animation:pks-ga-in .6s ease-out both}
+@keyframes pks-ga-wait{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes pks-ga-in{from{opacity:0;transform:scale(1.03)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk .pks-ga__alcove[data-mode="loading"]::before,#pinkie-study-desk .pks-ga__alcove[data-mode="3d"] canvas{animation:none}}
 @keyframes pks-spin{to{transform:rotate(360deg)}}
 #pinkie-study-desk .pks-ga__flat{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(50% 40% at 50% 30%,rgba(255,236,206,.14),transparent 70%)}
 #pinkie-study-desk .pks-ga__flat svg{height:78%;width:auto}
@@ -179,3 +185,23 @@
 #pinkie-study-desk .pks-wr__art.is-live .pkfs-still--stage{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:none;animation:none}
 #pinkie-study-desk .pks-wr__form{position:absolute;left:14px;bottom:12px;margin:0;padding:6px 10px;border-radius:8px;font-size:12px;letter-spacing:.06em;color:#FBF4EE;background:rgba(14,9,20,.42);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);pointer-events:none}
 #pinkie-study-desk .pks-pv.is-scene img{width:100%;height:100%;object-fit:cover;object-position:60% 35%;filter:none}
+
+/* 小件预览 v4：碎片水晶 / 贴纸原画 / 称号绶带（不再是一个字） */
+#pinkie-study-desk .pks-gem{width:clamp(40px,46%,68px);height:auto;filter:drop-shadow(0 6px 10px rgba(120,90,220,.45));animation:pks-gem 3.2s ease-in-out infinite}
+#pinkie-study-desk .pks-gem .glint{opacity:.9;animation:pks-glint 3.2s ease-in-out infinite}
+@keyframes pks-gem{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-4px) rotate(3deg)}}
+@keyframes pks-glint{0%,60%,100%{opacity:0}70%,80%{opacity:1}}
+#pinkie-study-desk .pks-pv .pks-pv__sticker{width:clamp(48px,62%,92px);height:auto;aspect-ratio:1;object-fit:contain;filter:drop-shadow(0 5px 8px rgba(60,20,50,.3));transform:rotate(-6deg);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+#pinkie-study-desk :is(.pks-item,.pks-card,.pks-tile):hover .pks-pv__sticker{transform:rotate(4deg) scale(1.1)}
+#pinkie-study-desk .pks-ribbon{width:clamp(72px,82%,128px);height:auto;color:var(--pkg-gold,#C99A4A);overflow:visible}
+#pinkie-study-desk .pks-ribbon text{font-family:var(--pkg-display,serif)}
+#pinkie-study-desk .pks-ribbon .star{transform-origin:60px 21px;animation:pks-star 2.8s ease-in-out infinite}
+@keyframes pks-star{0%,100%{transform:scale(1)}50%{transform:scale(1.18) rotate(8deg)}}
+#pinkie-study-desk :is(.pks-item,.pks-card,.pks-tile):hover .pks-ribbon .laurel{animation:pks-laurel .5s cubic-bezier(.16,1,.3,1)}
+@keyframes pks-laurel{0%{transform:scale(.9)}100%{transform:none}}
+#pinkie-study-desk .pks-pv[data-kind="title"] .pks-pv__card,#pinkie-study-desk .pks-pv[data-kind="shards"] .pks-pv__card,#pinkie-study-desk .pks-pv[data-kind="stickers"] .pks-pv__card{gap:6px}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk :is(.pks-gem,.pks-gem .glint,.pks-ribbon .star){animation:none!important}}
+
+#pinkie-study-desk .pks-wr__skill{margin:6px 0 0;display:grid;grid-template-columns:18px 1fr;column-gap:8px;row-gap:2px;align-items:center;font-size:12.5px;line-height:1.55;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pks-wr__skill svg{grid-row:1 / 3;width:18px;height:18px;fill:none;stroke:var(--pkg-b,#DB1F74);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#pinkie-study-desk .pks-wr__skill b{font-weight:800;color:var(--pkg-ink);letter-spacing:.04em}

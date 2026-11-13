@@ -15,7 +15,7 @@ test('扭蛋奖池：每一档权重加起来是 1，形态只占 formShare 那�
       if (!list.length) continue;
       assert.ok(Math.abs(sum(list) - 1) < 1e-9, `${id} ${tier} 权重和 ${sum(list)}`);
       const forms = sum(list.filter(x => x.kind === 'form'));
-      if (tier === 'SSR') assert.equal(forms, 1);
+      if (tier === 'SSR') assert.ok(Math.abs(forms - 1) < 1e-9, `${id} SSR 只有形态（${forms}）`);
       else if (eco.gacha[id].formShare?.[tier] != null && list.some(x => x.kind === 'form')) assert.ok(Math.abs(forms - eco.gacha[id].formShare[tier]) < 1e-9, `${id} ${tier} 形态占 ${forms}`);
     }
   }

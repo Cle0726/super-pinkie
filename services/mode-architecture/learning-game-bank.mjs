@@ -465,7 +465,7 @@ export class GamePractice {
       if (pt && this.countFor({point: pt.id}) >= 5) return {point: pt.id, name: pt.name, reason: nodeId ? 'node' : 'lesson', nodeId: nid, lesson: node?.name || lesson?.name || ''};
     }
     const weak = this.weakPoint(state);
-    return weak ? {point: weak.id, name: weak.name, reason: 'weak', nodeId: '', acc: weak.acc} : null;
+    return weak ? {point: weak.id, name: weak.name, groupName: weak.groupName || '', reason: 'weak', nodeId: '', acc: weak.acc} : null;
   }
   // 守关卷用的真题：这个区域的单选（不带文章），没做过 / 做错过的优先，最多 12 道
   guardItems(region) {
