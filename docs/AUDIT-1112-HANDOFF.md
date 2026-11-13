@@ -28,6 +28,7 @@
 - `session-prefs` 加一项（存完回的是真正存下的设置），`composer-tray-and-home-draft` 补了「读不到不当真」「提示以后端为准」的断言。
 - Edge + 假网关渲染项目模式对话页：正常时按钮、工作程度、工具菜单和以前一样；让假网关的 `pinkie.session.prefs.get` 返回失败，按钮停用并说明原因，工具菜单两行灰掉、不显示状态值。
 - 核心集（下面「测试」一节的命令）231 项 230 过，剩下 1 项 `computer tool discovers…` 断言的是 Mac 上的提示文字「尚未连接」，Windows 上按设计提示「这台 Windows 电脑上没有 computer 桌面执行器」，不是 BUG。
+- 全量（这台 Windows，逐个文件跑、每个文件限时 120 秒，去掉 `sidebar-handshake` / `learning-notes-menu` / `study-desk-ui` 三个要 WebKit 的）：改动前 `86e55134` 通过 1862、失败 48；改动后通过 1877、失败 42。结果不同的只有 `delivery-soft-gates`（失败 4 → 0）、`mode-architecture`（3 → 1）、`session-prefs`（多 1 项），没有新增失败。两边都有同样 6 个学习台界面测试文件跑不完（`learning-desk`、`study-builtin-model-ui`、`study-desk-chat-entry`、`study-desk-conversation`、`study-desk-panes`、`study-explain-ui`）。一次性并发跑全量会卡住不出结果，所以改成逐个文件。
 
 **没验证的：**
 
