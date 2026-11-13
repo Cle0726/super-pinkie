@@ -282,15 +282,10 @@ final class BrowserControlController {
 
     init(access: MaterialPreviewFileAccess = MaterialPreviewFileAccess()) { self.access = access }
 
-    func userDidInteract(now: Date = Date()) {
-        userUntil = now.addingTimeInterval(10)
-        for request in Array(requests.values) where request.isWrite {
-            finish(request, reason: "用户已接管浏览器；操作已停止，请先观察当前页面。")
-        }
-        agentPointer.hide()
-        lastNativeMousePoint = nil
-        BrowserAgentActivation.releaseAll()
-    }
+    // The user touching the browser no longer locks 碧琪 out or cancels its
+    // running operation: accidental clicks were stopping real work. Both can
+    // operate the page at the same time; userUntil stays in the past.
+    func userDidInteract(now: Date = Date()) {}
 
     func didStart(_ navigation: WKNavigation?) {
         navigationGeneration += 1
