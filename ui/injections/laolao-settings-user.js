@@ -543,6 +543,11 @@
     const aboutCard = card(scroll, "🎂", "关于与更新", "查看版本和本机累计用量。" );
     const versionRow = row(aboutCard, "版本");
     state.version = element("span", "pinkie-user-settings__value", versionRow.control, "读取中…");
+    // 设定防护（A8）：正式版 / 开发版一眼区分；设定被改过、不是官方版本时留标记，方便排查反馈。
+    const guardRow = row(aboutCard, "产品设定");
+    state.guardStatus = element("span", "pinkie-user-settings__value pinkie-user-settings__guard", guardRow.control, "读取中…");
+    state.guardDetail = element("p", "pinkie-user-settings__soft-note pinkie-user-settings__guard-detail", aboutCard);
+    state.guardDetail.hidden = true;
     const updateRow = row(aboutCard, "检查更新");
     button("检查更新", "pinkie-user-settings__button", updateRow.control, checkForUpdates);
     makeStatus(aboutCard, "updates");
@@ -998,9 +1003,46 @@
     window.addEventListener("pywebviewready", load, {once: true});
   }
 
+  const guardTime = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  };
+  function renderGuard(data) {
+    if (!state.guardStatus) return;
+    let label = "暂不可用", tone = "", detail = "";
+    if (data && !data.enabled) {
+      label = "开发版（设定防护关闭）"; tone = "dev";
+    } else if (data?.nonOfficial) {
+      label = "非官方版本"; tone = "warn";
+      detail = `这份 App 不是官方签名的版本${data.startup?.reason ? `（${data.startup.reason}）` : ""}，设定没有按官方版本恢复。建议到官网重新下载安装。`;
+    } else if (data?.error) {
+      label = "设定校验出错"; tone = "warn";
+      detail = "启动时没能完成设定校验，碧琪照常可用。反馈问题时请附上这一行。";
+    } else if (data?.enabled) {
+      label = "正式版 · 设定受保护"; tone = "ok";
+      const last = data.lastChange;
+      if (data.modified && last) {
+        label = "正式版 · 设定被修改过"; tone = "warn";
+        const parts = [];
+        if (last.restored) parts.push(`换回了 ${last.restored} 个文件`);
+        if (Array.isArray(last.configFixed) && last.configFixed.length) parts.push(`修好了 ${last.configFixed.length} 处配置`);
+        detail = `${guardTime(last.at)} 启动时发现产品设定被改过，${parts.join("，") || "已恢复"}，现在是官方版本。`
+          + (data.startup?.backup ? `改过的文件备份在：${data.startup.backup}` : "");
+      }
+    }
+    ownText(state.guardStatus, label);
+    state.guardStatus.dataset.tone = tone;
+    state.guardDetail.hidden = !detail;
+    ownText(state.guardDetail, detail);
+  }
+  async function loadGuardStatus(request) {
+    try { renderGuard(await request("pinkie.guard.status", {}, 8000)); }
+    catch { renderGuard(null); }
+  }
   async function loadInitialData() {
     void state.loadBrowserProxy?.();
     const request = rpc();
+    if (typeof request === "function") void loadGuardStatus(request);
     if (typeof request !== "function") {
       setStatus("permissions", "暂时无法读取设置，请检查连接后重试。", "error");
       setStatus("thinking", "暂时无法读取设置，请检查连接后重试。", "error");

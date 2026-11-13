@@ -288,11 +288,14 @@ export class SettingsGuard {
   status() {
     let startup = null;
     if (this.pinkieStateRoot) startup = readJson(path.join(this.pinkieStateRoot, 'guard', 'status.json'));
-    const modified = Boolean(startup && (startup.restored?.length || startup.nonOfficial || startup.error));
+    // 「被修改过」看历史：哪次启动换回过文件、修过配置、发现不是官方包或校验出错，都留着标记，方便排查反馈。
+    const history = Array.isArray(startup?.history) ? startup.history : [];
+    const lastChange = history.length ? history[history.length - 1] : null;
+    const modified = Boolean(startup && (history.length || startup.restored?.length || startup.nonOfficial || startup.error));
     return {
       enabled: this.enabled, channel: this.mode.channel, version: this.mode.version,
       userSkillsDir: this.userSkillsDir(),
-      startup, modified, nonOfficial: Boolean(startup?.nonOfficial),
+      startup, modified, lastChange, error: startup?.error ? String(startup.error) : '', nonOfficial: Boolean(startup?.nonOfficial),
       recentBlocks: this.blocked.slice(-10),
     };
   }
