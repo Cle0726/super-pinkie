@@ -9,7 +9,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isSessionOperationEvidence, registerSessionLineage, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
@@ -778,6 +778,7 @@ function toolTargetPaths(toolName = '', params = {}, baseDir = '') {
 // `cat > notes/a.md <<EOF` 写的笔记都只给了相对路径，前后快照里根本没有它们，
 // 门禁就判「执行型修改任务没有主机确认的文件变化」。顺序：明确的写文件调用 →
 // 重定向/tee/cp/mv/sed -i 等目标 → 其余带引号的路径（调用方只取前若干个做快照）。
+const WINDOWS_PATHS = path.sep === '\\';
 function execTargetPaths(params = {}, baseDir = '') {
   const command = String(params?.command || params?.cmd || '');
   const cwdParam = String(params?.cwd || params?.workdir || '').replace(/^~(?=\/|$)/, os.homedir());
@@ -788,7 +789,10 @@ function execTargetPaths(params = {}, baseDir = '') {
   if (cwdParam && path.isAbsolute(base || '')) out.push(base);
   const add = (raw) => {
     let value = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
-    if (!value || value.length > 400 || value.includes('://') || /[*?$`\\{}<>|\n]/.test(value)) return;
+    // 反斜杠在 Mac / Linux 的命令里是转义，带它的多半不是文件名；Windows 的路径却全是反斜杠
+    // （C:\Users\…\report.pptx）。原来一律丢掉，Windows 上命令写出的文件门禁一个都看不见，
+    // 就误报「执行型修改任务没有主机确认的文件变化」。
+    if (!value || value.length > 400 || value.includes('://') || (WINDOWS_PATHS ? /[*?$`{}<>|\n]/ : /[*?$`\\{}<>|\n]/).test(value)) return;
     if (/^(?:\/dev\/|-)/.test(value) || /^&\d?$/.test(value)) return;
     value = value.replace(/^~(?=\/|$)/, os.homedir());
     if (path.isAbsolute(value)) out.push(value);
@@ -796,13 +800,15 @@ function execTargetPaths(params = {}, baseDir = '') {
   };
   for (const match of command.matchAll(/\b(?:open|writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|write_text|write_bytes|to_csv|to_excel|to_json|savefig|save|Path)\(\s*[rRbBfF]?(["'])([^"'\n]+)\1/g)) add(match[2]);
   for (const match of command.matchAll(/(?<![<0-9&>])>>?\s*(["']?)([^\s"'&|;<>()]+)\1/g)) add(match[2]);
-  for (const match of command.matchAll(/\b(?:touch|mkdir|rm|mv|cp|tee|chmod|sips|ffmpeg|ln)\b([^\n;&|<>]*)/g)) {
+  for (const match of command.matchAll(/\b(?:touch|mkdir|rm|mv|cp|tee|chmod|sips|ffmpeg|ln|Out-File|Set-Content|Add-Content|New-Item|Copy-Item|Move-Item|Remove-Item)\b([^\n;&|<>]*)/gi)) {
     for (const token of match[1].trim().split(/\s+/)) if (token && !token.startsWith('-')) add(token);
   }
   for (const match of command.matchAll(/\bsed\s+-i(?:\s*''|\s*"")?\s+(?:'[^'\n]*'|"[^"\n]*"|\S+)\s+([^\n;&|<>]+)/g)) {
     for (const token of match[1].trim().split(/\s+/)) if (token && !token.startsWith('-')) add(token);
   }
   for (const match of command.matchAll(/["'](\/[^"'\n]+)["']/g)) add(match[1]);
+  // Windows 的绝对路径，引号里可以有空格（"C:\Users\My Name\out.docx"）。
+  if (WINDOWS_PATHS) for (const match of command.matchAll(/["']([A-Za-z]:[\\/][^"'\n]+)["']/g)) add(match[1]);
   for (const match of command.matchAll(/["']((?:~\/|\.{1,2}\/)?[^\s"'\/\n:]+(?:\/[^\s"'\n]+)+|[^\s"'\/\n]+\.[A-Za-z][A-Za-z0-9]{0,7})["']/g)) add(match[1]);
   return out;
 }
@@ -1418,13 +1424,23 @@ function toolIsTestCheck(entry = {}) {
   return /\b(?:pytest|vitest|jest|mocha|Invoke-Pester)\b|\b(?:python\d*(?:\.\d+)?\s+-m\s+(?:pytest|unittest)|node\s+--test|(?:npm|pnpm|yarn|bun)\s+(?:test|run\s+test)|(?:go|cargo|dotnet|mvn|gradle)\s+test)\b/i.test(command);
 }
 
+// 这块要改的活交给了子会话：这一轮真的开出了子会话，或者这一轮是子会话交回「做成了」的汇报叫醒的。
+// 改动和验证由子会话那边的门禁把关，父会话这一轮没有自己的文件变化不算谎报。
+// 汇报是「没做成」时不算：父会话不能把没做成转述成做成了。父会话这一轮自己动了文件，照常检查那些改动。
+function delegatedWork(state) {
+  if (state.tools.some(isChildDelegation)) return true;
+  if (!state.sessionReport) return false;
+  const report = latestChildReport(state.sessionReport);
+  return Boolean(report && !report.failed);
+}
+
 function effectVerificationReason(state, ctx = {}, reply = '') {
   const mutationRun = (isLikelyActionRequest(state.prompt) && isMutationRequest(state.prompt))
     || (workFirstContext(ctx) && hasReportedMutation(reply));
   if (!mutationRun) return '';
   const effectIndex = state.tools.findLastIndex((entry, index) => Boolean(toolEffectKind(entry)) && !isTurnCleanup(state, index)
     && !(workFirstContext(ctx) && workFirstProgressNote(entry, ctx)));
-  if (effectIndex < 0) return '执行型修改任务没有主机确认的文件变化或外部操作结果';
+  if (effectIndex < 0) return delegatedWork(state) ? '' : '执行型修改任务没有主机确认的文件变化或外部操作结果';
   const effect = state.tools[effectIndex];
   const claimed = workFirstContext(ctx) ? claimedVerification(reply) : {check: true, test: false};
   if (!claimed.check) return '';
@@ -1773,6 +1789,8 @@ export class CompletionIntegrityGuard {
     this.runs.set(key, {
       ...contractTimeBoundary(),
       prompt: (injected && this.userPrompts.get(sessionKey)) || raw,
+      // 子会话交回汇报、叫醒父会话的那一轮：活是子会话做的，父会话这轮核对、转告。
+      sessionReport: sessionKey && String(event.prompt || '').includes(SESSION_WAKE_MARK) ? sessionKey : '',
       tools: [],
       skills: new Map(),
       loadedSkills: new Set(),
@@ -1793,6 +1811,7 @@ export class CompletionIntegrityGuard {
       startedAt: state.startedAt,
       contractCutoffNs: state.contractCutoffNs,
       prompt: String(state.prompt || '').slice(0, 12_000),
+      sessionReport: String(state.sessionReport || ''),
       tools: includeTools ? state.tools.slice(-1024).map(compactToolEvidence) : [],
       skills: [...state.skills.entries()].map(([skillFile, contract]) => [skillFile, compactJson(contract)]),
       loadedSkills: [...state.loadedSkills],
@@ -1812,6 +1831,7 @@ export class CompletionIntegrityGuard {
       startedAt: Number(value.startedAt) || Date.now(),
       contractCutoffNs: /^\d+$/.test(String(value.contractCutoffNs || '')) ? String(value.contractCutoffNs) : '',
       prompt: String(value.prompt || '').slice(0, 12_000),
+      sessionReport: typeof value.sessionReport === 'string' ? value.sessionReport : '',
       tools: Array.isArray(value.tools) ? value.tools.slice(-1024).map(entry => ({
         name: String(entry?.name || ''), failed: Boolean(entry?.failed),
         output: String(entry?.output || '').slice(0, 6_000),
@@ -1858,6 +1878,12 @@ export class CompletionIntegrityGuard {
   updatePrompt(event = {}, ctx = {}) {
     const key = completionRunKey(event, ctx);
     const prompt = workFirstPrompt(event.prompt, modeForContext(ctx)).trim();
+    const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
+    if (key && sessionKey && String(event.prompt || '').includes(SESSION_WAKE_MARK)) {
+      const woken = this.runs.get(key);
+      if (woken) woken.sessionReport ||= sessionKey; else this.begin({prompt: event.prompt}, ctx);
+      return;
+    }
     if (!key || !prompt || internalControlText(prompt)) return;
     const state = this.runs.get(key);
     if (!state) {
@@ -2387,7 +2413,7 @@ export class CompletionIntegrityGuard {
       const executed = state.tools.some(entry => !entry.failed && (
         EXECUTION_TOOL.test(entry.name) || isSessionOperationEvidence(entry, state.prompt) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
       ));
-      if (!executed) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
+      if (!executed && !delegatedWork(state)) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
       if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
       }
@@ -5160,7 +5186,9 @@ function captureVerificationEvidence(state, event = {}) {
         : 'other';
   // 更新会话检查点、审议草稿、界面上的任务清单（plan_update）只是记账：算进度，但不算改动产物。
   // 否则「先跑测试、再勾计划」会让测试证据作废（2026-11-01 长跑档实测：最后勾完计划被判「缺测试」，续跑后被系统停掉，用户没收到最终回复）。
-  if (state?.mode !== 'none' && kind === 'mutation' && (/memory[\\/]context[\\/]/.test(params) || /^(?:plan_update|update_plan|todo_?write)$/i.test(name))) kind = 'note';
+  // params 是 JSON 文本：Windows 路径里的 \ 在这里是 \\（memory\\context\\sessions），只认一个分隔符的话，
+  // Windows 上勾检查点永远算成改了代码，跑过的测试跟着作废。
+  if (state?.mode !== 'none' && kind === 'mutation' && (/memory[\\/]{1,2}context[\\/]{1,2}/.test(params) || /^(?:plan_update|update_plan|todo_?write)$/i.test(name))) kind = 'note';
   // 看图、读文件不靠「改了什么」记录，结果为空也要留下（浏览器截图、读图片的结果常常只有一张图）。
   if (!output && !isError && (kind === 'mutation' || (state?.mode !== 'none' && /^(?:read|image|app_browser|browser)$/i.test(name)))) output = '工具操作已返回';
   if (!output && !isError) return null;

@@ -405,8 +405,9 @@
       busy = true; root.setAttribute('data-laolao-startup-busy', '1');
       const entry = draft;
       await Promise.race([entry.promise, pause(12000)]);
-      if (!active || draft !== entry) return false;
       busy = false; root.removeAttribute('data-laolao-startup-busy');
+      // 等的这段时间首页被换掉或重进了：文字还在输入框里，不发；也不能把首页卡在「忙」上，之后的发送全被吞掉。
+      if (!active || draft !== entry) { if (active) mount(); return false; }
       pane = activePane(); input = currentInput(pane);
       if (!input?.value?.trim()) return false;
     }
