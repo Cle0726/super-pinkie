@@ -79,6 +79,24 @@ class PrepareSkipTests(unittest.TestCase):
         self.assertIn('  已补齐 project 模式', self.messages)
         self.assertFalse([m for m in self.messages if '失败' in m])
 
+    def test_a_new_version_registers_once_with_the_retry_and_no_early_warning(self):
+        # A new version also reinstalls the personas; that step must not register the
+        # modes on its own (it logged the CLI failure straight into setup.log).
+        (self.state / 'bundled-setup-2.5.41').unlink()
+        calls = []
+
+        def agents(log):
+            calls.append(1)
+            if len(calls) == 1:
+                log('  ⚠️ 补齐 project 模式失败（返回码 1）：Could not start the CLI.')
+                return False
+            return True
+
+        with mock.patch.object(super_pinkie, 'ensure_prompts'):
+            self.assertEqual(self.prepare(agents=agents), SERVICES)
+        self.assertEqual(len(calls), 2)
+        self.assertFalse([m for m in self.messages if '失败' in m])
+
     def test_a_retry_that_still_fails_logs_both_attempts(self):
         def agents(log):
             log('  ⚠️ 补齐 project 模式失败（返回码 1）：Could not start the CLI.')

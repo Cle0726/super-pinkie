@@ -522,7 +522,7 @@ def ensure_workspace_avatars(log):
             log(f"  ⚠️ 补齐 {workspace} 头像失败：{exc}")
 
 
-def install_personas(log):
+def install_personas(log, register=True):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
     mapping = {
@@ -555,7 +555,9 @@ def install_personas(log):
                             src_file, target / relative, never_replace, backup_root / mode / relative.parent,
                         )
             log(f"  [{mode}] 人格文件 -> {target}")
-    return ensure_mode_agents(log)
+    # prepare_bundled_desktop registers right after this, with a retry once the
+    # plugins are installed, so it asks for the files only.
+    return ensure_mode_agents(log) if register else True
 
 
 def run_openclaw(arguments, timeout):
@@ -1118,7 +1120,7 @@ def prepare_bundled_desktop(log):
         # Once per version: user-authored prompts are kept; persona manuals and
         # playbooks follow this version (old copies backed up), memory untouched.
         ensure_prompts(log, preserve_existing=True)
-        install_personas(log)
+        install_personas(log, register=False)
         marker.write_text("preserved\n", encoding="utf-8")
 
     # Mode registration runs on every launch, including the very first one.
