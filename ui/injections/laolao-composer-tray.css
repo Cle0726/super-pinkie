@@ -1,0 +1,153 @@
+/* 输入框下面的「工具箱」（laolao-composer-tray.js）。
+   通用按钮收进一个礼物盒按钮；只在默认状态时收起，状态不是默认的那一颗自己回到输入框下面。 */
+
+/* —— 收起：只有标了 data-pinkie-tray 才生效，脚本没加载时一切照旧 —— */
+html[data-pinkie-tray="1"]:not([data-laolao-plain-composer]) .agent-chat__input :is(
+  .agent-chat__attach-menu,
+  .laolao-web-gpt-collab:not(.is-active):not([data-stage="sent"]):not([data-stage="failed"]),
+  .laolao-research-btn:not(.is-on),
+  .pinkie-chip--style[data-style="default"],
+  .pinkie-chip--web[aria-pressed="true"],
+  .chat-open-split-view:not([aria-pressed="true"]),
+  openclaw-tooltip:has(.chat-open-split-view:not([aria-pressed="true"]))) {
+  display: none !important;
+}
+/* 两颗都收起时，那个小容器不占间距 */
+html[data-pinkie-tray="1"]:not([data-laolao-plain-composer]) .agent-chat__input .pinkie-composer-chips:not(:has(.pinkie-chip--style:not([data-style="default"]), .pinkie-chip--web[aria-pressed="false"])) {
+  display: none !important;
+}
+
+/* 「未绑定项目文件夹」只对项目模式有意义；别的模式只把文件夹当参考，没绑定时不占一行。
+   绑定了（「当前项目 · …」）或者出错时照常显示（laolao-sidebar.js 的 showScope 标 data-bound）。 */
+html:not([data-laolao-mode="project"]) #laolao-project-scope[data-bound="false"]:not([data-error="true"]) {
+  display: none !important;
+}
+
+/* —— 按钮：排在第 2 行最左 —— */
+.agent-chat__input .pinkie-tray-btn {
+  order: -90;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  margin: 0 2px 0 6px !important;
+  padding: 0 10px 0 7px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent));
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .12s ease;
+}
+html[data-laolao-plain-composer] .agent-chat__input .pinkie-tray-btn { display: none; }
+.agent-chat__input .pinkie-tray-btn svg { width: 17px; height: 17px; flex: none; }
+.agent-chat__input .pinkie-tray-btn:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  background: rgba(255, 255, 255, .66);
+  color: var(--fog-ink, inherit);
+  outline: none;
+}
+.agent-chat__input .pinkie-tray-btn:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #d9508d) 45%, transparent); }
+.agent-chat__input .pinkie-tray-btn:active { transform: scale(.96); }
+html[data-pinkie-night] .agent-chat__input .pinkie-tray-btn:is(:hover, :focus-visible, [aria-expanded="true"]) { background: rgba(255, 255, 255, .08); color: #f1e6ec; }
+/* 回应：盖子抬一下，蝴蝶结跟着 */
+.pinkie-tray-btn .pk-lid { transition: transform .28s cubic-bezier(.3, 1.6, .5, 1); transform-box: fill-box; transform-origin: 15% 100%; }
+.pinkie-tray-btn:is(:hover, :focus-visible) .pk-lid { transform: translateY(-1.6px) rotate(-7deg); }
+.pinkie-tray-btn[aria-expanded="true"] .pk-lid { transform: translateY(-2.8px) rotate(-13deg); }
+
+/* —— 菜单 —— */
+.pinkie-tray {
+  position: fixed;
+  z-index: 2147482400;
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid var(--pt-line, rgba(120, 80, 100, .18));
+  border-radius: 14px;
+  /* 主题里的卡片色是半透明的，压在首页的问候语上会透字，这里用实底。 */
+  background: #fffafc;
+  color: var(--pt-text, #2a2233);
+  box-shadow: 0 14px 38px rgba(40, 20, 32, .18);
+  font-size: 13px;
+  animation: pinkie-tray-in .16s cubic-bezier(.2, .78, .25, 1) both;
+  transform-origin: 18px 100%;
+}
+.pinkie-tray[data-side="down"] { transform-origin: 18px 0; }
+html[data-pinkie-night] .pinkie-tray { background: #2a2027; border-color: rgba(255, 255, 255, .1); box-shadow: 0 14px 38px rgba(0, 0, 0, .5); }
+/* 添加：三样并排成一行小格子，比竖着排三行省一半高度 */
+.pinkie-tray__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 2px; }
+.pinkie-tray__tiles .pinkie-tray__item { flex-direction: column; gap: 4px; padding: 8px 4px 7px; text-align: center; }
+.pinkie-tray__tiles .pinkie-tray__body { justify-items: center; }
+.pinkie-tray__tiles .pinkie-tray__name { font-size: 12px; }
+@keyframes pinkie-tray-in { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+.pinkie-tray__group + .pinkie-tray__group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--pt-line, rgba(120, 80, 100, .14)); }
+.pinkie-tray__title { padding: 5px 10px 3px; font-size: 11px; letter-spacing: .04em; opacity: .5; user-select: none; }
+.pinkie-tray__row { display: flex; align-items: stretch; gap: 2px; }
+.pinkie-tray__item {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pinkie-tray__item:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--pt-accent, #d9508d) 10%, transparent); outline: none; }
+.pinkie-tray__item:disabled { opacity: .5; cursor: default; }
+.pinkie-tray__icon { flex: none; display: grid; place-items: center; width: 20px; height: 20px; color: color-mix(in srgb, currentColor 70%, transparent); }
+.pinkie-tray__icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pinkie-tray__body { flex: 1 1 auto; display: grid; gap: 1px; min-width: 0; }
+.pinkie-tray__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pinkie-tray__hint { font-size: 11.5px; line-height: 1.35; opacity: .58; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pinkie-tray__value { flex: none; font-size: 12px; opacity: .7; white-space: nowrap; }
+.pinkie-tray__switch {
+  flex: none;
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  transition: background .18s ease;
+}
+.pinkie-tray__switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(40, 20, 32, .3);
+  transition: transform .2s cubic-bezier(.3, 1.4, .5, 1);
+}
+.pinkie-tray__item[aria-checked="true"] .pinkie-tray__switch { background: var(--pt-accent, #d9508d); }
+.pinkie-tray__item[aria-checked="true"] .pinkie-tray__switch::after { transform: translateX(12px); }
+.pinkie-tray__more {
+  flex: none;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pinkie-tray__more:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--pt-accent, #d9508d) 10%, transparent); color: var(--pt-accent, #d9508d); outline: none; }
+
+html[data-reduce-motion] .pinkie-tray, html[data-reduce-motion] .pinkie-tray *, html[data-reduce-motion] .pinkie-tray-btn, html[data-reduce-motion] .pinkie-tray-btn * { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .pinkie-tray, .pinkie-tray *, .pinkie-tray-btn, .pinkie-tray-btn * { animation: none !important; transition: none !important; }
+}

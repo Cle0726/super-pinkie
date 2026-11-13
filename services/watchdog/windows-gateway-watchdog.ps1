@@ -9,10 +9,16 @@
 $ErrorActionPreference = "SilentlyContinue"
 $mutex = New-Object System.Threading.Mutex($false, 'Local\SuperPinkieGatewayWatchdog')
 if (-not $mutex.WaitOne(0)) { exit 0 }
+$base = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:USERPROFILE }
+$stateRoot = if ($env:PINKIE_STATE_ROOT) { $env:PINKIE_STATE_ROOT } else { Join-Path $base "SuperPinkie" }
 if (-not $LogPath) {
-  $base = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:USERPROFILE }
-  $LogPath = Join-Path $base "SuperPinkie\logs\gateway-watchdog.log"
+  $LogPath = Join-Path $stateRoot "logs\gateway-watchdog.log"
 }
+# Written by the desktop app (app/windows_desktop.py, gateway_closed_marker)
+# when the user closed the window and the gateway went with it. That is not a
+# crash: bringing the gateway back would undo the close. The next launch of the
+# app removes the marker and recovery resumes.
+$ClosedMarker = Join-Path $stateRoot "gateway-closed-by-app"
 $logDir = Split-Path -Parent $LogPath
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $script:lastStart = [DateTime]::MinValue
@@ -46,6 +52,11 @@ function Test-PortListening {
 
 function Check-GatewayOnce {
   if (Test-GatewayAlive) {
+    $script:missCount = 0
+    return
+  }
+
+  if (Test-Path -LiteralPath $ClosedMarker) {
     $script:missCount = 0
     return
   }

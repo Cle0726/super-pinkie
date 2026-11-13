@@ -2505,6 +2505,7 @@ class DesktopControlNode:
                 return False
             self.process = process
             self.last_error = ""
+            bind_to_app_lifetime(process, "desktop control node")
             append_log("computer", f"desktop control node started (pid {process.pid})")
             threading.Thread(
                 target=self._watch, args=(process, generation), name="pinkie-computer-watch", daemon=True
@@ -2579,11 +2580,63 @@ class DesktopControlNode:
         }
 
 
+def keep_gateway_after_close():
+    """True only when the user asked for the gateway to outlive the window.
+
+    Closing the window used to leave the gateway (node.exe, a few hundred MB)
+    and everything it had started running "for background sessions". Users
+    saw 碧琪 still holding memory and ports after they had closed her, with no
+    window to stop it from. Closing the window now ends everything; set
+    PINKIE_KEEP_GATEWAY=1 to get the old behaviour back.
+    """
+    return os.environ.get("PINKIE_KEEP_GATEWAY", "0") == "1"
+
+
+def bind_to_app_lifetime(process, name=""):
+    """Put a child process in the app's kill-on-close job.
+
+    Windows ends every process in the job (and whatever those start later)
+    when this process goes away -- also when it crashes or is ended from Task
+    Manager, where no close handler runs. That is the part `taskkill /T` on a
+    normal close cannot cover.
+    """
+    if os.name != "nt" or process is None:
+        return
+    try:
+        from browser_vpn_core import assign_to_kill_job
+
+        assign_to_kill_job(process.pid)
+    except Exception as error:  # never block a start on this
+        append_log("launcher", f"{name or 'child'} not bound to the app lifetime: {error}")
+
+
+def gateway_closed_marker():
+    """Left behind when closing the window also closed the gateway.
+
+    An install that registered the gateway watchdog (install.ps1, or
+    installer/windows/register-bundled-watchdog.ps1) checks every two seconds
+    and starts a gateway whenever none is listening. Without this marker it
+    would bring the gateway back seconds after the user closed 碧琪, which is
+    the very "still running after I closed it" this close path is meant to end.
+    The watchdog stands down while the marker exists; the next launch removes it.
+    """
+    return state_root() / "gateway-closed-by-app"
+
+
+def kill_process_tree(pid, timeout=8):
+    subprocess.run(
+        ["taskkill", "/PID", str(pid), "/T", "/F"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout,
+        **hidden_process_kwargs(),
+    )
+
+
 class GatewaySupervisor:
     def __init__(self, runtime):
         self.runtime = runtime
         self.process = None
         self.closing = threading.Event()
+        self.marker_cleared = False
         self.lock = threading.RLock()
         self.last_restart = 0.0
         self.failure_limit = 2
@@ -2689,6 +2742,18 @@ class GatewaySupervisor:
 
     def start(self):
         with self.lock:
+            # The window is closing: a monitor tick that was already past its
+            # wait must not spawn a gateway after close() stopped the last one.
+            if self.closing.is_set():
+                return
+            if not self.marker_cleared:
+                # 碧琪 is running again, so the gateway watchdog may recover a
+                # crashed gateway again.
+                self.marker_cleared = True
+                try:
+                    gateway_closed_marker().unlink(missing_ok=True)
+                except OSError:
+                    pass
             if http_ready(GATEWAY_URL):
                 return
             if self.process and self.process.poll() is None:
@@ -2729,6 +2794,8 @@ class GatewaySupervisor:
                     **hidden_process_kwargs(),
                 )
                 append_log("launcher", f"gateway started pid={self.process.pid}")
+                if not keep_gateway_after_close():
+                    bind_to_app_lifetime(self.process, "gateway")
                 self._write_record(self.process.pid)
             except OSError as error:
                 output.close()
@@ -2901,9 +2968,35 @@ class GatewaySupervisor:
         self.start()
         return self.wait_ready(seconds)
 
+    def stop_adopted(self):
+        """Stop a gateway this launch attached to instead of starting.
+
+        A gateway left by an earlier run of this same install (kept alive by an
+        older version, or orphaned by a crash) answers on the port, so start()
+        never spawned one and there is no process handle to stop. Only this
+        install's own bundled node.exe is ever ended; a gateway the user runs
+        themselves is left alone.
+        """
+        try:
+            listener = self._listener()
+            image = str((listener or {}).get("image") or "")
+            if not image or os.path.normcase(image) != os.path.normcase(str(self.runtime.node)):
+                return False
+            kill_process_tree(listener["pid"])
+            append_log("launcher", f"stopped adopted gateway pid={listener['pid']}")
+            return True
+        except (OSError, subprocess.SubprocessError, KeyError) as error:
+            append_log("launcher", f"adopted gateway could not be stopped: {error}")
+            return False
+
     def close(self):
         self.closing.set()
+        try:
+            gateway_closed_marker().write_text(f"{time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()}\n", encoding="utf-8")
+        except OSError as error:
+            append_log("launcher", f"gateway-closed marker not written: {error}")
         self.stop_process()
+        self.stop_adopted()
 
 
 def load_file_module(name, path):
@@ -3023,6 +3116,7 @@ class LocalServices:
                 stderr=output,
                 **hidden_process_kwargs(),
             )
+            bind_to_app_lifetime(self.relay, "relay")
             append_log("launcher", f"relay started pid={self.relay.pid} on {port} -> {upstream}")
         except OSError as error:
             append_log("launcher", f"relay start failed: {error}")
@@ -3196,7 +3290,15 @@ class NativeBridge(InAppBrowserBridge):
     def _pinkie_native(self):
         native = getattr(self, "_native_bridge", None)
         if native is None:
-            from app.windows_native import WindowsNative
+            # The frozen App puts app/ on the module path (build-win.ps1
+            # --paths app); there is no `app` package in it. Importing only
+            # `app.windows_native` left the packaged build without the tray
+            # icon, global hotkey, notifications and exports
+            # (native.log: ModuleNotFoundError).
+            try:
+                from windows_native import WindowsNative
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app.windows_native import WindowsNative
 
             native = self._native_bridge = WindowsNative(self, state_root() / "native-settings.json")
         return native
@@ -4163,7 +4265,9 @@ BRIDGE_SCRIPT = r"""
     const maximizeIcon = '<rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/>';
     const restoreIcon = '<path d="M7.5 4.5v-1h9v9h-1"/><rect x="3.5" y="6.5" width="10" height="10" rx="1.5"/>';
     controls.innerHTML = '<button type="button" class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="检查更新">'
-      + captionIcon('<path d="m10 2 1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8Z"/><path d="M16 14v4m-2-2h4"/>') + '</button>'
+      + captionIcon('<g class="pk-loop"><path d="M15.6 8.3A6 6 0 0 0 4.9 6.6"/><path d="M4.4 3.6v3.5h3.5"/><path d="M4.4 11.7a6 6 0 0 0 10.7 1.7"/><path d="M15.6 16.4v-3.5h-3.5"/></g>'
+        + '<path class="pk-star" d="M10 6.6c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z"/>')
+      + '<i class="pinkie-update-badge" aria-hidden="true"></i></button>'
       + '<button type="button" data-act="full" aria-label="切换全屏" title="切换全屏（F11）">' + captionIcon('<path d="M7 3.5H3.5V7M13 3.5h3.5V7M7 16.5H3.5V13M13 16.5h3.5V13"/>') + '</button>'
       + '<button type="button" data-act="min" aria-label="最小化" title="最小化">' + captionIcon('<path d="M4.5 12.5h11"/>') + '</button>'
       + '<button type="button" data-act="max" aria-label="最大化" title="最大化" aria-pressed="false">' + captionIcon(maximizeIcon) + '</button>'
@@ -4295,12 +4399,12 @@ BRIDGE_SCRIPT = r"""
     // with familiar Windows actions and full-contrast, accessible SVG icons.
     style.textContent += `
       html[data-pinkie-platform="windows"] #pinkie-native-drag-strip {
-        top:0;left:264px;right:184px;width:auto;height:34px;
+        top:0;left:264px;right:var(--pinkie-caption-reserve,204px);width:auto;height:34px;
         border:0;border-radius:0;background:transparent;
       }
       html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after { display:none }
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls {
-        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);
+        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);--caption-face:#fdf3f8;--pinkie-update-mark:#d9508d;
         top:4px;right:12px;height:36px;gap:3px;padding:2px;box-sizing:border-box;
         border:1px solid rgba(255,255,255,.7);border-radius:14px;
         background:linear-gradient(145deg,rgba(255,254,254,.82),rgba(252,233,242,.7));
@@ -4334,34 +4438,68 @@ BRIDGE_SCRIPT = r"""
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover {
         color:#fff;background:#cc477d;box-shadow:0 3px 9px rgba(185,57,111,.2);
       }
+      /* 检查更新：两道绕圈的箭头，中间一颗粉色小星。悬停转三分之一圈、星星闪；检查中匀速转；
+         有新版时右上角一颗粉点轻轻扩散，图标染成粉色。不再用发光方框。 */
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control {
-        width:32px;height:30px;margin:0;color:var(--accent,#ba487d);background:transparent;
+        position:relative;width:32px;height:30px;margin:0;color:var(--caption-ink);background:transparent;
+        animation:none;box-shadow:none;
       }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover { background:var(--caption-hover) }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg {
-        animation:pinkieUpdateSpin .8s linear infinite;
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control svg { overflow:visible;transform:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control :is(.pk-loop,.pk-star) {
+        transform-box:fill-box;transform-origin:center;
+        transition:transform .55s cubic-bezier(.3,1.5,.5,1),opacity .2s ease;
       }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update {
-        box-shadow:inset 0 0 0 1px rgba(211,75,136,.3),0 0 9px rgba(229,73,142,.16);
-        animation:pinkieUpdateGlow 1.8s ease-in-out infinite;
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control .pk-loop { transform-box:view-box;transform-origin:10px 10px }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control .pk-star {
+        fill:var(--pinkie-update-mark);stroke:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) {
+        background:var(--caption-hover);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) .pk-loop { transform:rotate(120deg) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) .pk-star { animation:pinkieUpdateTwinkle .9s ease-in-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:active .pk-loop { transform:rotate(120deg) scale(.86);transition-duration:.08s }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking .pk-loop { animation:pinkieUpdateSpin .9s linear infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking .pk-star { opacity:.35;transform:scale(.7) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg { animation:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-badge {
+        position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;
+        background:var(--pinkie-update-mark);box-shadow:0 0 0 1.5px var(--caption-face);
+        opacity:0;transform:scale(.3);transition:opacity .2s ease,transform .35s cubic-bezier(.3,1.6,.5,1);pointer-events:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-badge::after {
+        position:absolute;inset:0;border-radius:50%;background:var(--pinkie-update-mark);content:"";
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update { color:var(--pinkie-update-mark) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pinkie-update-badge { opacity:1;transform:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pinkie-update-badge::after { animation:pinkieUpdatePing 2s ease-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pk-loop { animation:pinkieUpdateNudge 3.2s ease-in-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus-visible {
+        outline:none;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--pinkie-update-mark) 55%,transparent);
+      }
+      @keyframes pinkieUpdateTwinkle { 0%,100% { transform:scale(1) rotate(0) } 50% { transform:scale(.6) rotate(45deg);opacity:.6 } }
+      @keyframes pinkieUpdatePing { 0% { transform:scale(1);opacity:.55 } 80%,100% { transform:scale(3);opacity:0 } }
+      @keyframes pinkieUpdateNudge { 0%,78%,100% { transform:rotate(0) } 86% { transform:rotate(-28deg) } 93% { transform:rotate(8deg) } }
+      @media (prefers-reduced-motion: reduce) {
+        html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control * { animation:none!important;transition:none!important }
       }
       html[data-pinkie-platform="windows"][data-pinkie-night] #pinkie-native-window-controls {
-        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);
+        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);--caption-face:#30232f;--pinkie-update-mark:#f28ab8;
         background:linear-gradient(145deg,rgba(54,39,52,.92),rgba(41,31,43,.82));
         border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
       }
-      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:var(--pinkie-caption-reserve,204px)!important }
       html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
-      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:184px!important }
-      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:var(--pinkie-caption-reserve,204px)!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:var(--pinkie-caption-reserve,204px)!important }
       @media(max-width:900px) {
-        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:184px }
+        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:var(--pinkie-caption-reserve,204px) }
         html[data-pinkie-platform="windows"] #pinkie-native-window-controls { top:4px;right:10px }
       }
     `;
     // The shared renderer uses .topbar, not the retired .chat-pane__header.
     // Reserve native caption-button space so link/cost chips remain readable.
-    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:184px!important}';
+    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:var(--pinkie-caption-reserve,204px)!important}';
     document.head.append(style);
     // Keep the native drag surface away from every visible header action.
     (() => {
@@ -4389,7 +4527,15 @@ BRIDGE_SCRIPT = r"""
         if(!drag.isConnected || !controls.isConnected)return;
         const left=innerWidth<=900?54:264;
         const caption=controls.getBoundingClientRect();
-        const right=Math.max(left,caption.width>0 ? Math.min(innerWidth-184,caption.left-8) : innerWidth-12);
+        // Headers reserve the caption cluster's real width (five buttons now,
+        // and it grows with any added later) plus a 14px breathing gap, instead
+        // of a fixed guess that left the topbar's last chip touching it.
+        if(caption.width>0){
+          const reserve=`${Math.ceil(innerWidth-caption.left+14)}px`;
+          if(document.documentElement.style.getPropertyValue('--pinkie-caption-reserve')!==reserve)
+            document.documentElement.style.setProperty('--pinkie-caption-reserve',reserve);
+        }
+        const right=Math.max(left,caption.width>0 ? caption.left-8 : innerWidth-12);
         const occupied=[];
         const candidates=[...document.querySelectorAll(headers)].flatMap(header=>[...header.querySelectorAll(selector)]);
         for(const e of candidates){
@@ -5096,15 +5242,25 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             bridge.close_workspace_dock()
         except Exception:
             pass
+        # Same for the quick-ask box (the global hotkey): while any window is
+        # left, webview.start() does not return and finish_exit never runs.
+        try:
+            native = getattr(bridge, "_native_bridge", None)
+            if native is not None:
+                native.quick_close()
+        except Exception:
+            pass
         services.close()
         computer.close()
-        # Keep the gateway alive after the window closes so in-flight sessions
-        # and background jobs are not terminated. The separate bundled
-        # watchdog owns recovery; it will restart the process only if it dies.
-        if os.environ.get("PINKIE_KEEP_GATEWAY", "1") != "1":
-            gateway.close()
-        else:
+        # Closing the window closes 碧琪: the gateway, everything it started and
+        # the helper processes all go with it. Nothing is left holding memory
+        # or ports with no window to stop it from. PINKIE_KEEP_GATEWAY=1 keeps
+        # the gateway for people who do want sessions to finish in the background.
+        if keep_gateway_after_close():
             append_log("launcher", "window closed; keeping gateway for background sessions")
+        else:
+            gateway.close()
+            append_log("launcher", "window closed; gateway and helpers stopped")
 
     window.events.before_show += before_show
     window.events.loaded += loaded
@@ -5134,3 +5290,37 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         gui="edgechromium", debug=False, private_mode=False,
         storage_path=str(webview_storage),
     )
+    finish_exit(bridge, gateway, webview_storage)
+
+
+def finish_exit(bridge, gateway, webview_storage, leave=os._exit):
+    """The last window is gone: leave nothing of the app behind, then exit.
+
+    `closed` already stopped the services. This covers what is left: a close
+    handler that raised half way, the tray icon, WebView2 helper processes that
+    outlive their window, and worker threads (timers, service loops) that would
+    otherwise keep 超級碧琪.exe in Task Manager after its window is gone.
+    """
+    try:
+        if not keep_gateway_after_close():
+            gateway.close()
+    except Exception as error:
+        append_log("launcher", f"gateway stop on exit failed: {error}")
+    try:
+        native = getattr(bridge, "_native_bridge", None)
+        if native is not None:
+            native.stop()
+    except Exception:
+        pass
+    # Registered exit handlers (system proxy restore, the browser window's
+    # host) must run before the hard exit below, which skips them.
+    try:
+        atexit._run_exitfuncs()
+    except Exception as error:
+        append_log("launcher", f"exit handlers failed: {error}")
+    try:
+        cleanup_orphan_webview(webview_storage)
+    except Exception:
+        pass
+    append_log("launcher", "exit complete")
+    leave(0)

@@ -3,6 +3,100 @@
 分支 **`audit/pinkie-1112`**。还没合 main、没打 tag、没发版、没装进任何 App。
 这份说明随改动一起更新，最下面的「进度」是做到哪了。Mac 端先读这一份，再看提交。
 
+## 交给 Mac 端处理（Windows 这边做不了、或要在 Mac 上确认的）
+
+Windows 端 11-12 晚整理。做完一项就在这里勾掉，或者在下面写一句结论。
+
+- [ ] **WebKit（Mac App）里看这两版的新界面**：输入框的「工具」菜单、项目「工作程度」/ 想法「取向」按钮、首页挂的空白新会话，以及读不到会话设置时停用的按钮（`capture.mjs --rpc` 给一个 `{"pinkie.session.prefs.get":{"ok":false}}` 就能复现：按钮停用、写「还没读到这个会话的设置，会自动重试」，工具菜单两行灰掉、不显示开关和「默认」）。
+- [ ] **这台 Windows 跑不了的测试**：`sidebar-handshake`、`learning-notes-menu`、`study-desk-ui`（要 Playwright WebKit）。另外 6 个学习台界面测试文件在这台 Windows 上 120 秒跑不完（改动前后一样）：`learning-desk`、`study-builtin-model-ui`、`study-desk-chat-entry`、`study-desk-conversation`、`study-desk-panes`、`study-explain-ui`。请在 Mac 上跑一下，看是 Windows 特有的挂起还是测试本身的问题。
+- [ ] **Mac 全量测试**：交付门禁（`index.mjs`、`session-lineage.mjs`）和会话偏好（`session-prefs.mjs` 的写入回包）是两端共用的，确认 Mac 上没有新增失败。门禁里认 Windows 路径的分支按 `path.sep` 判断，Mac 上不走，行为应该和原来一样。
+- [ ] **真网关 + 真模型重跑子会话**（Mac 有隔离副本）：「开子会话改文件 → 汇报 → 父会话核对」走一遍，确认交付前不再多提醒一次（原因和修法见下一节第 1 条）；再让子会话故意做不成一次，确认父会话说「做好了」仍会被拦。
+- [ ] **打包相关（Windows 端 11-12 晚第一次把这条分支打成 EXE 装上）**：原生桥接按 `app.windows_native` 导入，打包版里没有 `app` 包，托盘、全局快捷键、通知、导出全部起不来（`native.log: ModuleNotFoundError`），已在 `f46907dc` 修好并加了 `tests/windows_frozen_imports_test.py`。Mac 打包不走这段，但如果 Mac 端也有按 `app.xxx` 导入、只在仓库里能跑的写法，同样会在打包后失效。另外 Windows 装好后标题栏的关闭按钮点了没反应、进程也不退出，Windows 端还在查，和 Mac 无关。
+- [ ] **Mac 关窗的行为要不要对齐**：Windows 现在关窗就是退出（网关和它起的进程一起结束，看门狗靠 `gateway-closed-by-app` 标记不再拉起；`PINKIE_KEEP_GATEWAY=1` 恢复常驻）。Mac 关窗后网关是否常驻、`ai.openclaw.watchdog` 会不会把它拉起来，由 Mac 端决定要不要跟。
+- [ ] **WebKit 里看图标动效**（`laolao-icons.css` 是两端共用的，见下一节第 2 条）：悬停 / 按下 / 选中 / 菜单弹出时图标会动；确认 Safari 认 `:where()` 里的 `:not(svg svg)`，原来逐个设计的动作（齿轮、气球、纸杯蛋糕）没被盖掉，开了「减少动态效果」时全停。
+
+## Windows 端 11-12 深夜：标题栏留位、所有图标会动、更新按钮重画（Mac 端先 `git pull`）
+
+用户装上 11-12 晚那一版后提的三条。没合 main、没发版；这台 Windows 上装的 App 还没换成这一版。
+
+**改了什么：**
+
+1. **Windows 顶栏和窗口按钮挤在一起**（`app/windows_desktop.py`，只有 Windows）。按钮组现在五个键、宽 190px，顶栏只写死留了 184px，「累计估算」和「⋯」压到按钮底下约 6px。现在按按钮组的实际宽度 + 14px 算出 `--pinkie-caption-reserve`，`.topbar`、`.pk-workspace-header`、`.pk-wb-tabs`、旧 `.chat-pane__header` 和拖动条都用它，随窗口大小重算。
+2. **所有图标都会动**（`ui/injections/laolao-icons.css`，**两端共用**，缓存号升到 `icons2`）。原来只有侧栏、快捷栏那几颗逐个设计过的会动。现在兜底：按钮、链接、菜单项、选项、标签里的图标，悬停弹一下、按下缩一下；`pk-f` / `pk-a` 小记号悬停时跳；选中的那项小记号慢慢呼吸；菜单、列表弹出时图标依次蹦出；下拉箭头展开时翻转。兜底规则全包在 `:where()` 里、权重为 0，逐个设计的动作和各模块自己的动画都优先。`data-reduce-motion` 和系统「减少动态效果」下全停。
+3. **Windows 更新按钮重画**（只有 Windows，Mac 没有这个按钮）。原来是「星 + 加号」，看不出是更新，点过后留一个 2px 的青色焦点框，有新版时整个方框发光。现在是两道绕圈箭头 + 中间一颗粉星：悬停箭头转三分之一圈、星闪；检查中匀速转；有新版时图标变粉、右上角一颗粉点往外扩散；键盘焦点是柔和的内圈。
+
+**验证了什么：** 用 `capture.mjs` 加载真实的 `BRIDGE_SCRIPT` 量：顶栏最后一个按钮到按钮组间隔 14px（原来重叠 6px）。图标：项目 / 想法 / 学习 / 聊天四个模式 × home、chat、cards、sidebar、learning、power 六个视图扫一遍「按钮里的小图标有没有动效」，最后一处（极致思考菜单标题的星）补上后为 0。更新按钮日 / 夜三种状态截图看过。`windows_update_ui_test`（24，要 `PYTHONPATH=app;.`）、`windows-native-drag-layout`（5）、`windows-self-contained`（15）、`session-cross-mode-ui`（9）都过。
+
+**没验证：** 没装进 App 实机看；WebKit 没看；扫描只覆盖默认画面和打开的菜单，学习台深处的弹窗没逐个点开。
+
+## Windows 端 11-12 晚：自查——界面状态以后端为准、交付门禁的误报（Mac 端先 `git pull`）
+
+先合了 Mac 端的 `install/unify-1112-live`（和这条分支比只多了换模式头像 avatars7，无冲突）。然后把下午那一版和交接里还开着的项回头查了一遍，重点是「界面显示的和后端实际不一致、状态不实时、显示假数据」。还是没合 main、没发版、没装进 App。
+
+**改了什么：**
+
+1. **交付门禁：活交给子会话后误报**（`index.mjs` 的 `effectVerificationReason` 和执行证据检查，`session-lineage.mjs` 新增 `isChildDelegation`、`latestChildReport`、`SESSION_WAKE_MARK`）。上面「还留着的」第一条（开了跨模式子会话后多提醒一次）查清了，而且不只跨模式：只要是改文件的活交给子会话，**开子会话那一轮**和**汇报叫醒父会话那一轮**都会被判「执行型修改任务没有主机确认的文件变化」（叫醒轮沿用用户上一条原话，父会话这一轮只读文件核对，自然没有改动）。现在：这一轮真的开出了子会话（结果里有 `:pinkie-child:` 的 key，只提卡片不算），或者这一轮是被一份「做成了」的汇报叫醒的，就不要求父会话自己有文件变化——改动由子会话自己的门禁把关。汇报是「没做成」时照旧拦，父会话不能把没做成转述成做成；父会话在叫醒轮自己动了文件，照常要验证。`sessionReport` 也进了门禁的存档（snapshot / restore）。
+2. **`pinkie_mode_ask` 的长答案被当成没问过**：门禁存的工具结果最多 12000 字，答案长时 JSON 被截断、整段解析失败。现在解析不了就在原文里找 `key` / `answer`。
+3. **Windows：命令写出的文件门禁看不见**（`execTargetPaths`）。带反斜杠的路径原来一律丢掉（Mac 上反斜杠是转义），Windows 路径全是反斜杠，于是碧琪用命令生成的 PPT、视频、网页一个都认不出来，误报「没有主机确认的文件变化」。现在只在 Windows（`path.sep === '\\'`）上把反斜杠当分隔符；另外认引号里带空格的 `C:\…` 路径和 PowerShell 的 `Set-Content` / `Out-File` / `Copy-Item` 等写文件命令。Mac 上行为不变。
+4. **Windows：勾检查点被当成改了代码**（`captureVerificationEvidence`）。判断记账文件用的是 JSON 文本里的路径，Windows 的 `\` 在那里是 `\\`，正则只认一个，于是长跑 / 加强档里「先跑测试、再勾检查点」会让测试证据作废，提醒「改完之后还没跑测试」。核心测试集里那两项「改动前就失败」的（`marathon keeps going…`、`ticking the on-screen plan…`）就是它，现在过了。
+5. **会话偏好：界面只显示后端真的存下的**（`session-prefs.mjs`、`laolao-session-tools.js`、`laolao-composer-tray.js`）。
+   - `pinkie.session.prefs.set` 回存下的那一份（原来只回 `{ok:true}`）；界面按它画。「这个会话按效率来」这类提示只在后端确实存下时才说，没存上就说没改成（老网关不认识 `pace` / `lens` 时原来会提示成功、按钮又弹回去）。
+   - 读后端失败时，原来把默认值（联网开、风格默认）当成这个会话的设置缓存并显示，之后再也不读。现在：读到过就沿用上次的；从没读到就把按钮停用、写「还没读到这个会话的设置，会自动重试」，模式按钮不显示，工具菜单里这两行也灰掉、不显示开关和「默认」，6 秒后自己再读。
+   - 换会话、切回窗口、网关重连时都重新读一次（快速提问小窗或别的窗口改过的要看得到）。每 1.5 秒的重画循环不会在一次读取没回来时叠请求。
+   - 风格 / 工作程度 / 取向在下一轮组装提示时才生效：碧琪正在回答时改，提示会说「这一轮已经在回了，从下一条消息开始」。联网开关是调用工具时现读的，立即生效，不加这句。
+6. **首页：等空白会话时被换掉会卡在「忙」**（`laolao-startup-home.js`）。发送时空白会话还在备，等待期间首页重进或换了会话，原来直接返回、`busy` 留着，之后首页的发送全被吞掉。
+
+**查过、不是问题的：** 首页备的空白会话离开首页后不会出现在侧栏（侧栏本来就只列有消息的会话和当前会话）。跨模式子会话「在侧栏里按顶层显示」是因为它在另一个模式的侧栏里；子会话那边有「从X模式转来」角标，父会话这边有「↗去X模式」按钮，后端的 `fromMode` 和前端标签对得上。这一条从「还留着的」里可以划掉。
+
+**验证过的：**
+
+- 新测试 `tests/delegation-gate.test.mjs`（8 项）：开子会话那一轮、做成了的汇报叫醒轮放行；没做成的汇报、没开成的子会话、什么都没做却说做好了、叫醒轮自己改了没验证，照旧拦；截断的 `pinkie_mode_ask` 结果仍算问过。用同一组场景跑改动前的代码，开子会话轮和叫醒轮全部被误拦。
+- `session-prefs` 加一项（存完回的是真正存下的设置），`composer-tray-and-home-draft` 补了「读不到不当真」「提示以后端为准」的断言。
+- Edge + 假网关渲染项目模式对话页：正常时按钮、工作程度、工具菜单和以前一样；让假网关的 `pinkie.session.prefs.get` 返回失败，按钮停用并说明原因，工具菜单两行灰掉、不显示状态值。
+- 核心集（下面「测试」一节的命令）231 项 230 过，剩下 1 项 `computer tool discovers…` 断言的是 Mac 上的提示文字「尚未连接」，Windows 上按设计提示「这台 Windows 电脑上没有 computer 桌面执行器」，不是 BUG。
+- 全量（这台 Windows，逐个文件跑、每个文件限时 120 秒，去掉 `sidebar-handshake` / `learning-notes-menu` / `study-desk-ui` 三个要 WebKit 的）：改动前 `86e55134` 通过 1862、失败 48；改动后通过 1877、失败 42。结果不同的只有 `delivery-soft-gates`（失败 4 → 0）、`mode-architecture`（3 → 1）、`session-prefs`（多 1 项），没有新增失败。两边都有同样 6 个学习台界面测试文件跑不完（`learning-desk`、`study-builtin-model-ui`、`study-desk-chat-entry`、`study-desk-conversation`、`study-desk-panes`、`study-explain-ui`）。一次性并发跑全量会卡住不出结果，所以改成逐个文件。
+
+**没验证的：**
+
+- 没在真网关 + 真模型上重跑「开子会话 → 汇报 → 父会话核对」，误报是否真的消失只靠复现脚本和单测。
+- 没打包、没装进 App；WebKit（Mac App）里没看过停用状态的按钮。
+- Windows 路径的门禁改动只在 Windows 上跑过；Mac 上这段代码走原来的分支，Mac 端全量测试没跑。
+
+**Mac 端要看的：** 门禁和会话偏好的改动两端共用；`pinkie.session.prefs.set` 的回包多了设置字段（`ok` 不变）；仓库里只有 `laolao-session-tools.js` 一处调用，已经跟着改了。
+
+## Windows 端 11-12 下午：输入框和首页的 BUG、模式专属选项、关窗清理（Mac 端先 `git pull`）
+
+在 08:00 那一版之上，`audit/pinkie-1112` 和 `unify/pinkie-1112` 一起快进到这次的提交。还是没合 main、没发版、没装进 App。
+
+**用户反馈的（旧版 EXE 上看到的）：** 首页显示的模型和上下文占用不是新会话的；首页发送后跳转不同步；在首页选了模型，一发送新会话又回到默认模型，思考强度也不同步；输入框下面左边一排按钮太挤；之前说的项目 / 想法模式专属功能没做；关掉 EXE 窗口后后台还占着内存和端口。
+
+**改了什么：**
+
+1. **首页挂在一个空白新会话上**（`laolao-startup-home.js`）。原来首页借用这个模式上一次的会话：模型、思考强度、上下文显示的都是旧会话的，选模型也改在旧会话上；发送时才新建会话再跳过去，新会话回到默认。现在进首页就备好一个没发过消息的会话（列表里有空白的、且 `chat.history` 确认一条消息都没有才复用，否则 `createSession({quiet, stay})` 新建，不弹提示、不自己跳），输入框下面那一排就是新会话自己的状态，发送直接在这个会话里走，不再建、不再跳。它发出第一句话之前不进侧栏，也不出现在「继续之前的工作」里。备不出来（网关没连上、建会话失败）时退回老办法，并把首页上看到的模型和思考强度带到新会话（`carrySettings`）。模式转场进行中不备、不换。
+2. **输入框左边收进一个「工具」按钮**（`laolao-composer-tray.js` / `.css`，新文件，线条 SVG 礼物盒图标）。附件（拍照 / 照片 / 文件）、联网、回答风格、深度研究、网页 GPT 协作、拆分视图收进一个弹出菜单；原来的按钮一个不删，只是用样式收起，菜单每一行把点击转给原按钮，状态和后端调用还是原来那一份。只收「默认状态」的：深度研究亮着、网页 GPT 开着、联网关了、风格不是默认时，那一颗自己回到输入框下面。脚本没加载时根节点没有 `data-pinkie-tray`，界面和以前一样。
+3. **模式专属选项**（后端 `services/mode-architecture/session-prefs.mjs`，前端 `laolao-session-tools.js` 的模式按钮）。项目模式「工作程度」：默认 / 效率 / 严谨（`pace`）；想法模式「取向」：默认 / 发散 / 收敛 / 挑刺（`lens`）。存在会话偏好里，每轮作为系统上下文加进去；只在自己的模式生效，别的模式设置会报错。效率档只减验证的分量，不放松交付真实性门禁（没验证的照样要说没验证）。按钮留在输入框下面，不收进工具菜单。
+4. **关窗就是退出**（`app/windows_desktop.py`、`app/windows_native.py`）。默认关窗时停掉网关（`PINKIE_KEEP_GATEWAY=1` 恢复旧的常驻行为）。网关、中继、桌面控制节点放进进程退出即结束的作业对象，碧琪崩溃或被任务管理器结束时也一起走；启动时接管的旧网关（只认本安装自带的 `node.exe`）也停掉；托盘图标收掉；快速提问小窗一起关（它开着时 `webview.start()` 不返回，退出清理走不到）；最后跑完 atexit、清掉 WebView2 残留再 `os._exit`。**看门狗：** 装过网关看门狗（`install.ps1` 或 `register-bundled-watchdog.ps1`）的机器，关窗后它会在几秒内把网关拉起来。现在关窗时写一个 `gateway-closed-by-app` 标记，`windows-gateway-watchdog.ps1` 看到就不拉；下次启动碧琪时删掉。
+5. **自查出来顺手改的：**
+   - 会话偏好的回包缺 `web` 字段时，联网开关显示「开」、点一下又写回「开」，像点了没反应 → 缺的字段用默认值补。
+   - 想法、学习等模式的输入框下面常驻「未绑定项目文件夹」→ 只在项目模式显示；别的模式绑定了或出错时才显示。
+   - 首页的空白会话在发出第一句话之前，侧栏列表也明确把它过滤掉。
+   - 网关监控线程在 `close()` 之后仍可能调到 `start()` 把网关拉起来 → 关闭后不再启动。
+
+**验证过的：**
+
+- Edge + 假网关（`tools/ui-parity/capture.mjs`，这次让假网关记住页面新建的会话）：首页 `sessions.create` 只发 1 次，`chat.send` 落在同一个会话上，发送后离开首页；首页的模型选择器和上下文显示的是新会话；侧栏发送前不出现这条空白会话；工具菜单在浅色、夜间、首页、对话页都截图看过；「文件」那一行真的点到原生文件选择框；联网开关点一次就是「不再联网搜索」；想法模式的取向菜单；想法模式下「未绑定项目文件夹」不再显示、项目模式照常显示。
+- Python：`tests/windows_close_cleanup_test.py`（新）连同 `windows_desktop` / `windows_native` / `windows_stale_gateway` / `windows_startup` / `ui_parity` 全过；其中一项真起一个子进程，父进程硬退出（不跑任何关闭处理）后确认系统把子进程结束了。
+- Node：`session-prefs`（8 项）、新的 `composer-tray-and-home-draft`（3 项）、侧栏 / 会话 / 夜间 / 界面减法等相关测试全过。上面「测试」一节的核心集 235 项 232 过，失败的 3 项和改动前同一批。
+
+**没验证的：**
+
+- 没打包、没在真实 EXE 里关过窗；看门狗标记没在装了看门狗的机器上实测。
+- 真网关上首页「复用 / 新建空白会话」、在首页选模型后的持久化没试；假网关不存偏好，开关状态的持久化只靠单测。
+- 工具菜单、模式按钮、首页空白会话都没在 WebKit（Mac App）里看过；`learning-notes-menu`、`study-desk-ui`、`sidebar-handshake` 要 Playwright / WebKit，这台 Windows 上跑不了。
+- 工作程度和取向在真实模型上的效果没跑。
+
+**Mac 端要看的：** 托盘、作业对象、看门狗标记都只在 Windows 上；Mac 关窗的行为没动，Mac 上有没有「关了窗网关还常驻」的同类问题（`ai.openclaw.watchdog`）要 Mac 端自己看。会话偏好、工具菜单、模式按钮、首页空白会话都是两端共用的。
+
 ## Mac 端 11-12 08:00 验收 + 修复（Windows 端先 `git pull`，现在两端都用 `unify/pinkie-1112`）
 
 **分支：** `audit/pinkie-1112` 已快进到和 `unify/pinkie-1112` 同一个提交（它本来就是祖先）。从现在起两端都从这一条拉；它比 06:00 的版本多：自动减负默认关、合了 `dev/study-game`、学习台讲解修复、线上三处界面手改、线上代理的 Gemini 扁平化，以及下面这批验收修复。还是没合 main、没打 tag、没发版。Mac 本机 App 已装这一版。
@@ -206,7 +300,7 @@ Windows、Node 24：
 node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mode-architecture.test.mjs tests/user-settings.test.cjs tests/work-cards.test.mjs
 ```
 
-226 项里 223 过。失败的 3 项（`computer tool discovers the complete driver surface…`、`marathon keeps going while the checkpoint…`、`ticking the on-screen plan or the checkpoint…`）在改动前的同一分支上就失败，和这次改动无关。
+11-12 晚：231 项里 230 过。原来「改动前就失败」的 3 项里，`marathon keeps going while the checkpoint…`、`ticking the on-screen plan or the checkpoint…` 是 Windows 上勾检查点被当成改代码（见最上面一节第 4 条），已经修好；剩下的 `computer tool discovers the complete driver surface…` 断言的是 Mac 上的提示文字，Windows 上按设计提示别的，不是 BUG。
 
 全量 `node --test tests/*.test.cjs tests/*.test.mjs` 在这台 Windows 上改动前是 1656 项、69 项失败（多数是依赖 Mac、WebKit 或已安装 App 的测试）。
 
@@ -219,3 +313,7 @@ node --test tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/mo
 - [x] 同步 Mac 端 11-12 的推送：合入 `fix/append-keeps-cards`
 - [x] 界面和 IP 感：小头像、分工条、排版缺陷、侧栏和快捷栏的线条图标
 - [x] 重复入口和无引用素材清理
+- [x] 用户反馈：首页挂空白新会话、输入框「工具」菜单、项目「工作程度」和想法「取向」、关窗即退出（含看门狗标记）
+- [x] 自查：交付门禁在子会话委派和 Windows 路径上的误报、会话偏好只显示后端存下的、首页等待时卡住
+- [ ] 真实 EXE 里关窗、真网关上首页选模型后发送、WebKit 下的新界面
+- [ ] 真网关上重跑「开子会话 → 汇报 → 父会话核对」，确认交付前提醒不再多提醒

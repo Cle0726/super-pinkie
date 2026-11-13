@@ -372,6 +372,17 @@ class WindowsNative:
         self._thread.start()
         ready.wait(5)
 
+    def stop(self):
+        """Take the tray icon away and end the tray thread (the app is quitting).
+
+        Without this the icon stays in the notification area after the process
+        is gone, until the pointer moves over it -- it looks like 碧琪 is still
+        running.
+        """
+        if self._hwnd is None:
+            return
+        self._call("stop", timeout=2)
+
     def _post(self, command, payload=None):
         self._commands.put((command, payload, None))
         self._wake()
@@ -540,6 +551,9 @@ class WindowsNative:
                     result = register(payload)
                     if not result and self._hotkey and self._hotkey != payload:
                         register(self._hotkey)
+                elif command == "stop":
+                    remove_icon()
+                    user32.PostQuitMessage(0)
                 if done is not None:
                     done.put(result)
 
