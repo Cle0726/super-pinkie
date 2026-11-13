@@ -293,6 +293,43 @@ sed \
 "$PYTHON_DRIVER" "$REPO_ROOT/tools/ui-parity/bundle.py" check \
   --control-ui "$RUNTIME_ROOT/openclaw/dist/control-ui" --output "$OUTPUT_ROOT/macos-ui-manifest.json"
 
+# 产品设定防护开关：写死在包里（build-info.json），运行时只认这个文件，不读环境变量。
+#  - CI 发版（release.yml 设 PINKIE_RELEASE_BUILD=1）→ 正式版，防护开；
+#  - 用户机器上 git 更新后本地重新打包：现装的 App 是正式版就继续是正式版（只会开、不会关），
+#    并带上更新时验过的发布签名（stage-git-update.py 写的 release-signature.json）；
+#  - 其它（作者开发、隔离测试）→ 开发版，防护关。
+PINKIE_STATE_ROOT_FOR_GUARD="${PINKIE_STATE_ROOT:-$HOME/Library/Application Support/SuperPinkie}"
+GUARD_CHANNEL="dev"
+if [[ "${PINKIE_RELEASE_BUILD:-0}" == "1" ]]; then
+  GUARD_CHANNEL="release"
+else
+  for installed_root in "${PINKIE_APP_ROOT:-}" /Applications "$HOME/Applications"; do
+    installed_info="$installed_root/$APP_NAME.app/Contents/Resources/SuperPinkie/build-info.json"
+    if [[ -n "$installed_root" && -f "$installed_info" ]] && grep -q '"guard": *true' "$installed_info"; then
+      GUARD_CHANNEL="release"
+      break
+    fi
+  done
+fi
+GUARD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
+"$RUNTIME_ROOT/bin/node" - "$CONTENTS/Resources/SuperPinkie/build-info.json" "$GUARD_CHANNEL" "$VERSION" "$GUARD_COMMIT" "$PINKIE_STATE_ROOT_FOR_GUARD/updates/release-signature.json" <<'NODE'
+const fs = require('fs');
+const [file, channel, version, commit, sigFile] = process.argv.slice(2);
+const info = {guard: channel === 'release', channel, version, commit};
+try {
+  const sig = JSON.parse(fs.readFileSync(sigFile, 'utf8'));
+  if (channel === 'release' && sig.commit === commit && String(sig.version).replace(/^v/, '') === version) info.release = {version, commit, signature: sig.signature};
+} catch {}
+fs.writeFileSync(file, JSON.stringify(info, null, 2) + '\n');
+NODE
+"$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" manifest "$CONTENTS/Resources/SuperPinkie" --commit "$GUARD_COMMIT"
+if [[ -n "${PINKIE_GUARD_SIGNING_KEY_FILE:-}" ]]; then
+  "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" sign "$CONTENTS/Resources/SuperPinkie" "$PINKIE_GUARD_SIGNING_KEY_FILE"
+elif [[ "$GUARD_CHANNEL" == "release" && "${PINKIE_RELEASE_BUILD:-0}" == "1" ]]; then
+  echo "正式版打包缺少防护签名私钥（PINKIE_GUARD_SIGNING_KEY_FILE）" >&2
+  exit 1
+fi
+
 SIGN_IDENTITY="${PINKIE_CODESIGN_IDENTITY:--}"
 codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" "$APP_PATH"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then

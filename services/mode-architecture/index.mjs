@@ -38,12 +38,14 @@ import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} 
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
+import {registerModelSetup} from './model-setup.mjs';
 import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
+import {registerSettingsGuard} from './settings-guard.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -6881,6 +6883,8 @@ export default {
       const config = runtimeConfig(api, {allowFile: false});
       return config && typeof config === 'object' ? config : {};
     };
+    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置。
+    registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
     // Le Pacte（学习约定 + 每日账本 + 连续天数）：账本挂在学习存储上，由后者的
@@ -7005,6 +7009,7 @@ export default {
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
     registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
+    registerModelSetup(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
