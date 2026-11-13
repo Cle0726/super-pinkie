@@ -373,6 +373,8 @@
     buildStyleCard(scroll);
     buildNotifyCard(scroll);
 
+    // 小白配模型：自己的服务商和密钥（laolao-model-setup.js）。放在「模型与思考」前面。
+    window.__pinkieModelSetup?.mount(scroll);
     const modelCard = card(scroll, "🧠", "模型与思考", "选择碧琪默认使用的模型和回答节奏。" );
     const modelRow = row(modelCard, "默认模型", "显示名称来自可用模型目录。" );
     state.modelButton = button("正在读取…", "pinkie-user-settings__model-button", modelRow.control, () => {
