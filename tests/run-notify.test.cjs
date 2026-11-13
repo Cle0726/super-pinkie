@@ -165,12 +165,42 @@ test('another session finishing while this page is visible: only the list mark',
 });
 
 test('every layer can be switched off in settings', () => {
-  const h = load({hidden: true, prefs: {list: false, title: false, system: false}});
+  const h = load({hidden: true, prefs: {list: false, title: false}});
+  h.fire2 = (detail) => (h.listeners['pinkie:prefs-change'] || []).forEach((fn) => fn({detail}));
+  h.fire2({notify: {done: false, waiting: true}});
   h.start(); h.tick(120_000); h.final();
   assert.equal(h.notifications.length, 0);
   assert.equal(h.document.title, '碧琪');
   assert.equal(h.posted.filter((m) => m.action === 'attention').length, 0);
   assert.equal(h.rows[0].getAttribute('data-pinkie-run'), null);
+});
+
+test('system notifications follow the one switch in 通知与快捷 (pinkie.prefs.notify)', () => {
+  const prefsChange = (h, notify) => (h.listeners['pinkie:prefs-change'] || []).forEach((fn) => fn({detail: {notify}}));
+  // The old local "system" flag no longer decides anything.
+  const legacy = load({hidden: true, prefs: {system: false}});
+  legacy.start(); legacy.tick(90_000); legacy.final();
+  assert.equal(legacy.notifications.length, 1);
+  const off = load({hidden: true});
+  prefsChange(off, {done: false, waiting: true});
+  off.start(); off.tick(90_000); off.final();
+  assert.equal(off.notifications.length, 0, '做完时 off → no notification');
+  off.start(OTHER, 'run-2'); off.tick(5_000);
+  off.fire('agent', {sessionKey: OTHER, runId: 'run-2', stream: 'tool', data: {phase: 'start', name: 'ask_user', args: {question: '用哪个配色？'}}});
+  assert.equal(off.notifications.length, 1, '等我回答时 on → asks at once, however short the run');
+  const quiet = load({hidden: true});
+  prefsChange(quiet, {done: true, waiting: false});
+  quiet.start(); quiet.tick(90_000);
+  quiet.fire('agent', {sessionKey: SK, runId: 'run-1', stream: 'tool', data: {phase: 'start', name: 'ask_user', args: {question: '删吗？'}}});
+  assert.equal(quiet.notifications.length, 0, '等我回答时 off');
+});
+
+test('only one channel sends system notifications: laolao-native no longer posts its own', () => {
+  const native = read('ui/injections/laolao-native.js');
+  assert.doesNotMatch(native, /pinkieNative\(message, 10_000\)/);
+  const settings = read('ui/injections/laolao-settings-user.js');
+  assert.doesNotMatch(settings, /\["system", "系统通知"\]/, 'no second system-notification switch');
+  assert.match(settings, /系统通知在「通知与快捷」里开关/);
 });
 
 test('after a reconnect, a run that ended while offline is reported once', () => {

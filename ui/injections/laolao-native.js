@@ -167,7 +167,8 @@
       : clip(plain(text), 80) || '这轮做完了';
     const message = {type: 'notify', id: runId, sessionKey, title, body, kind};
     window.__pinkieNotifyLog?.push(message);
-    if (hasNative()) pinkieNative(message, 10_000).catch(() => {});
+    // 系统通知只走 laolao-run-notify 一个通道（它读同一份 pinkie.prefs.notify）。这里再发，
+    // App 在后台跑满一轮就会弹两条。保留判断和日志给测试 / 排查用，不再真的发。
   }
   async function onChat(payload) {
     const runId = String(payload.runId || '');

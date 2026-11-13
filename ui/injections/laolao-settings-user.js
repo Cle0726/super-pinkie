@@ -280,7 +280,7 @@
 
   function buildNotifyCard(scroll) {
     const notifyCard = card(scroll, "🔔", "通知与快捷", "碧琪在后台做完事或等你回答时，用系统通知告诉你。");
-    const doneRow = row(notifyCard, "做完时", "一轮用了 20 秒以上、你又不在看它时提醒。");
+    const doneRow = row(notifyCard, "做完时", "一轮跑了 1 分钟以上、你又不在看碧琪时，发一条系统通知。");
     const waitingRow = row(notifyCard, "等我回答时", "碧琪提问、或有事等你拍板时提醒。");
     const save = async (patch, label) => {
       try { const value = await bridge()?.savePrefs(patch); sync(value); setStatus("notify", label, "success"); return value; }
@@ -454,9 +454,10 @@
     syncMotion();
     window.addEventListener("pinkie:motion-change", syncMotion);
     // 计划书 B：看不到页面时的三层提醒，各自能关（laolao-run-notify.js）。
-    const notifyRow = row(appearanceCard, "碧琪做完时提醒我", "切到别的窗口时，做完、出错或等你确认，碧琪会提醒你。点亮的是开着的。" );
+    // 系统通知只在「通知与快捷」开关（同一份 pinkie.prefs.notify），这里只管界面里的两层。
+    const notifyRow = row(appearanceCard, "碧琪做完时提醒我", "切到别的窗口时，做完、出错或等你确认，碧琪会在界面上标出来。点亮的是开着的。系统通知在「通知与快捷」里开关。" );
     const notifyGroup = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", notifyRow.control);
-    const notifyButtons = [["list", "会话列表标记"], ["title", "标题和图标"], ["system", "系统通知"]].map(([key, label]) => {
+    const notifyButtons = [["list", "会话列表标记"], ["title", "标题和图标"]].map(([key, label]) => {
       const node = button(label, "pinkie-user-settings__choice", notifyGroup, () => {
         const api = window.__pinkieRunNotify;
         if (!api) return;

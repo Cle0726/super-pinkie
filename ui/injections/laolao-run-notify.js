@@ -1,6 +1,9 @@
-/* laolao-run-notify:v1 —— 看不到页面时的提醒（计划书 B 第三节，第四节的补发）
+/* laolao-run-notify:v2 —— 看不到页面时的提醒（计划书 B 第三节，第四节的补发）
  *
- * 三层，逐层加强，设置 → 外观与声音 →「碧琪做完时提醒我」里每层都能关：
+ * 全 App 只有这里发「做完 / 等你回答」的系统通知（laolao-native 不再另发一条）。
+ * 前两层在 设置 → 外观与声音 →「碧琪做完时提醒我」里开关；系统通知只有一处开关：
+ * 设置 → 通知与快捷 的「做完时 / 等我回答时」（存在后端 pinkie.prefs.notify）。
+ * 三层，逐层加强：
  *   1. 会话列表：在跑的会话名前一个粉色小圈（有进展时轻跳一下，不循环）；做完未读 = 粉点；
  *      出错或等你确认 = 感叹号。写在行上的 data-pinkie-run，样式在 laolao-run-status.css。
  *   2. 窗口标题前加「✓」「!」「?」，并请原生壳让 Dock / 任务栏图标提醒一下。
@@ -35,8 +38,16 @@
   const visible = () => !document.hidden;
   const viewing = (key) => visible() && key === currentSession();
 
+  // 系统通知的开关在「通知与快捷」（pinkie.prefs.notify），不在本机 localStorage。
+  let notifyPrefs = {done: true, waiting: true};
+  const takeNotifyPrefs = (value) => {
+    const n = value && typeof value === 'object' ? value.notify : null;
+    if (n && typeof n === 'object') notifyPrefs = {done: n.done !== false, waiting: n.waiting !== false};
+  };
+  const systemWanted = (outcome, n = notifyPrefs) => (outcome === 'ask' ? n.waiting !== false : n.done !== false);
+
   /** Which reminders one finished (or waiting) run gets. Pure. */
-  function decide({outcome, isVisible, isCurrent, durationMs, prefs: p = prefs, already = false}) {
+  function decide({outcome, isVisible, isCurrent, durationMs, prefs: p = prefs, notify = notifyPrefs, already = false}) {
     const none = {list: null, title: null, attention: false, system: false};
     if (already) return none;
     if (isVisible && isCurrent) return none;
@@ -46,7 +57,8 @@
       list,
       title: p.title ? PREFIX[outcome] || PREFIX.done : null,
       attention: Boolean(p.title),
-      system: Boolean(p.system) && durationMs >= LONG_RUN_MS,
+      // 等你回答不看跑了多久：人不在就该叫一声。做完 / 出错要跑满 60 秒才发。
+      system: systemWanted(outcome, notify) && (outcome === 'ask' || durationMs >= LONG_RUN_MS),
     };
   }
 
@@ -225,7 +237,7 @@
   window.__pinkieNotifyPermission = (state) => { nativePermission = String(state || ''); };
   try { window.webkit?.messageHandlers?.pinkieNotify?.postMessage({action: 'status'}); } catch {}
   function permissionPrompt() {
-    if (!prefs.system) return null;
+    if (!notifyPrefs.done && !notifyPrefs.waiting) return null;
     if (nativeNotifier()) {
       if (nativePermission !== 'default') return null;
       try { if (localStorage.getItem(ASKED_KEY)) return null; } catch {}
@@ -280,10 +292,18 @@
     if (run && visible() && now() - run.startedAt >= LONG_RUN_MS) showPrompt();
   }, 1500);
   window.addEventListener('storage', (event) => { if (event.key === PREFS_KEY) { prefs = readPrefs(); paintMarks(); } });
+  window.addEventListener('pinkie:prefs-change', (event) => takeNotifyPrefs(event.detail));
+  const loadNotifyPrefs = () => {
+    const bridge = window.__pinkieNativeBridge;
+    if (bridge?.loadPrefs) Promise.resolve(bridge.loadPrefs()).then(takeNotifyPrefs, () => {});
+  };
+  loadNotifyPrefs();
+  window.setInterval(loadNotifyPrefs, 60_000);
 
   window.__pinkieRunNotify = {
     decide, viewed, permissionPrompt, answerPermission,
     get prefs() { return {...prefs}; },
+    get notify() { return {...notifyPrefs}; },
     setPrefs(next) {
       prefs = {...prefs, ...next};
       try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
