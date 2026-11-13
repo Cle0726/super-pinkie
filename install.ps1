@@ -86,6 +86,8 @@ node (Join-Path $RepoDir "patch\apply-same-session-recovery.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Same-session recovery patch failed" }
 node (Join-Path $RepoDir "patch\apply-steer-fallback-wait.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Steer fallback patch failed" }
+node (Join-Path $RepoDir "patch\apply-retry-single-user.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Retry single user patch failed" }
 node (Join-Path $RepoDir "patch\apply-loopback-model-reliability.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Loopback model reliability patch failed" }
 node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")

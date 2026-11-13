@@ -13744,6 +13744,23 @@ async function runEmbeddedAttempt(params) {
 				const effectiveTranscriptPrompt = params.transcriptPrompt === void 0 ? void 0 : params.transcriptPrompt;
 				let transcriptPromptForRuntimeSplit = effectiveTranscriptPrompt;
 				let promptForRuntimeContextSplit = promptBeforePromptBuildHooks;
+				/* pinkie-retry-single-user:v1 */
+				if (!isRawModelRun && params.suppressNextUserMessagePersistence !== true) try {
+					const pinkieRetryKey = typeof preparedUserTurnMessage?.idempotencyKey === "string" ? preparedUserTurnMessage.idempotencyKey : "";
+					const pinkieFailedLeaf = pinkieRetryKey ? sessionManager.getLeafEntry() : void 0;
+					const pinkieFailed = pinkieFailedLeaf?.type === "message" ? pinkieFailedLeaf.message : void 0;
+					const pinkieFailedParts = Array.isArray(pinkieFailed?.content) ? pinkieFailed.content : typeof pinkieFailed?.content === "string" ? [{ type: "text", text: pinkieFailed.content }] : [];
+					const pinkieFailedEmpty = pinkieFailed?.role === "assistant" && pinkieFailed.stopReason === "error" && pinkieFailedParts.every((part) => part && ((part.type === "text" && (!String(part.text || "").trim() || part.text === "[assistant turn failed before producing content]")) || (part.type === "thinking" && !String(part.thinking || "").trim())));
+					const pinkieFailedUser = pinkieFailedEmpty && pinkieFailedLeaf.parentId ? sessionManager.getEntry(pinkieFailedLeaf.parentId) : void 0;
+					if (pinkieFailedUser?.type === "message" && pinkieFailedUser.message?.role === "user" && pinkieFailedUser.message.idempotencyKey === pinkieRetryKey) {
+						if (pinkieFailedUser.parentId) sessionManager.branch(pinkieFailedUser.parentId);
+						else sessionManager.resetLeaf();
+						activeSession.agent.state.messages = sessionManager.buildSessionContext().messages;
+						log$2.warn(`pinkie: retry of the same send replaces its failed attempt (no duplicate user turn) runId=${params.runId} sessionId=${params.sessionId}`);
+					}
+				} catch (pinkieRetryError) {
+					log$2.warn(`pinkie: failed-attempt cleanup skipped: ${String(pinkieRetryError?.message || pinkieRetryError)}`);
+				}
 				const leafEntry = isRawModelRun ? null : sessionManager.getLeafEntry();
 				if (leafEntry?.type === "message" && leafEntry.message.role === "user") {
 					const messageMergeStrategy = resolveMessageMergeStrategy();
