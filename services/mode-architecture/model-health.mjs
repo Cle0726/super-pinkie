@@ -9,7 +9,7 @@
 
 const ACCOUNT = /(?:auth[_ -]?unavailable|no auth available|no (?:available )?account|account unavailable|暂无账号|subscription.{0,32}(?:usage|quota).{0,24}limit|usage limit (?:exceeded|reached)|quota[ _-]+(?:exhausted|exceeded|depleted|reached)|insufficient[_ ]?(?:quota|balance|credits?)|billing|payment required|\b402\b|余额不足)/i;
 const KEY = /(?:invalid[_ ]?api[_ ]?key|incorrect api key|unauthori[sz]ed|\b401\b)/i;
-const MISSING = /(?:model[_ ]?not[_ ]?found|unknown model|unsupported model|no such model|model .{0,40}does not exist)/i;
+const MISSING = /(?:model[_ ]?not[_ ]?found|unknown model|unsupported model|no such model|model .{0,40}does not exist|模型.{0,60}不在.{0,30}(?:可用模型|范围)|不支持(?:该|这个)?模型)/i;
 const BUSY = /(?:\b429\b|rate.?limit|too many requests|overloaded|\b529\b|server is busy)/i;
 const TIMEOUT = /(?:timed? ?out|timeout|ETIMEDOUT|deadline exceeded)/i;
 const NETWORK = /(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|fetch failed|socket hang up|network ?error|connection (?:reset|refused|closed))/i;
@@ -27,6 +27,19 @@ export function classifyModelFailure(reason = '') {
 
 // 等也不会好的那几类：界面直接说「这个模型现在用不了」并给换模型的出路。
 export const UNUSABLE_KINDS = new Set(['account', 'key', 'missing']);
+
+/** 这一轮有没有失败。OpenClaw 在「还没回出内容就失败」时 agent_end 仍给 success: true，
+ *  model_call_ended 也报 completed；真正的信号是最后一条助手消息 stopReason === 'error'。 */
+export function turnFailed(event = {}) {
+  const messages = Array.isArray(event?.messages) ? event.messages : [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const entry = messages[i];
+    const message = entry?.message && typeof entry.message === 'object' ? entry.message : entry;
+    if (message?.role !== 'assistant') continue;
+    return message.stopReason === 'error';
+  }
+  return event?.success !== true;
+}
 
 const ref = (provider, model) => (provider && model ? `${provider}/${model}` : '');
 const modelOf = (value) => (typeof value === 'string' ? value : value && typeof value === 'object' ? value.primary : '') || '';
@@ -85,6 +98,13 @@ export class ModelHealth {
     if (success) { this.sessions.delete(sessionKey); return; }
     const used = model || this.runs.get(String(runId || '')) || '';
     const text = String(reason || '').slice(0, 300);
+    if (used) {
+      // 上游失败时 model_call_ended 也可能报 completed：以这一轮的结果为准，别再把它推荐出去。
+      const record = {...(this.models.get(used) || {}), failAt: this.now(), reason: text || this.models.get(used)?.reason || ''};
+      this.models.delete(used);
+      this.models.set(used, record);
+      this.trim(this.models);
+    }
     this.sessions.delete(sessionKey);
     this.sessions.set(sessionKey, {model: used, reason: text, kind: classifyModelFailure(text), at: this.now()});
     this.trim(this.sessions);
