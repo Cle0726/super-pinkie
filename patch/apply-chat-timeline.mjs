@@ -9,13 +9,13 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
 
-export const marker = '/* pinkie-chat-timeline:v29 */';
+export const marker = '/* pinkie-chat-timeline:v30 */';
 // Keep the v26 marker for the independently maintained optimistic-user patch.
 // This second marker lets older v26 installations upgrade the projection.
 const thinkingSegmentsMarker = '/* pinkie-thinking-segments:v1 */';
 // Installed bundles keep their old runtime between the marker and the history
 // projection function; an upgrade swaps exactly that span.
-const previousMarkers = ['/* pinkie-chat-timeline:v28 */', '/* pinkie-chat-timeline:v27 */', '/* pinkie-chat-timeline:v26 */', '/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
+const previousMarkers = ['/* pinkie-chat-timeline:v29 */', '/* pinkie-chat-timeline:v28 */', '/* pinkie-chat-timeline:v27 */', '/* pinkie-chat-timeline:v26 */', '/* pinkie-chat-timeline:v25 */', '/* pinkie-chat-timeline:v24 */', '/* pinkie-chat-timeline:v23 */', '/* pinkie-chat-timeline:v22 */', '/* pinkie-chat-timeline:v21 */', '/* pinkie-chat-timeline:v20 */', '/* pinkie-chat-timeline:v19 */', '/* pinkie-chat-timeline:v18 */', '/* pinkie-chat-timeline:v17 */', '/* pinkie-chat-timeline:v16 */', '/* pinkie-chat-timeline:v15 */', '/* pinkie-chat-timeline:v14 */', '/* pinkie-chat-timeline:v13 */', '/* pinkie-chat-timeline:v12 */', '/* pinkie-chat-timeline:v11 */', '/* pinkie-chat-timeline:v10 */', '/* pinkie-chat-timeline:v9 */', '/* pinkie-chat-timeline:v8 */', '/* pinkie-chat-timeline:v7 */', '/* pinkie-chat-timeline:v6 */', '/* pinkie-chat-timeline:v5 */', '/* pinkie-chat-timeline:v4 */', '/* pinkie-chat-timeline:v3 */', '/* pinkie-chat-timeline:v2 */', '/* pinkie-chat-timeline:v1 */'];
 export const MAX_TIMELINE_ROWS = 80;
 // These are compatibility exports, not retention caps. Fetching is paginated;
 // the renderer must keep every page the user has already opened reachable.
@@ -824,6 +824,27 @@ function timelineTimestamp(item) {
     ?? 0;
 }
 
+// When the turn really finished. A message's own timestamp is when 碧琪
+// STARTED writing it (thinking and streaming come after), so the finished
+// card's 用时 must read the time each message was written to the transcript
+// (__openclaw.recordTimestampMs from chat.history), and the latest of them.
+function timelineEndTimestamp(items) {
+  let end = 0;
+  for (const item of items || []) {
+    const own = Number(item?.timestamp);
+    if (Number.isFinite(own)) end = Math.max(end, own);
+    for (const entry of item?.messages || []) {
+      const message = entry?.message || {};
+      for (const value of [message.__openclaw?.recordTimestampMs, entry?.__openclaw?.recordTimestampMs,
+        message.timestamp, entry?.timestamp]) {
+        const stamp = Number(value);
+        if (Number.isFinite(stamp)) end = Math.max(end, stamp);
+      }
+    }
+  }
+  return end;
+}
+
 function collapseTimelineRows(rows, maxRows, ownerKey) {
   const rowLimit = Math.max(4, Number.isFinite(maxRows) ? Math.floor(maxRows) : 80);
   if (rows.length <= rowLimit) return rows;
@@ -1126,8 +1147,11 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
 
   const toolCount = steps.filter((row) => String(row.role || '').toLowerCase() === 'tool').length;
   const lastItem = tail.length ? tail[tail.length - 1] : steps[steps.length - 1];
+  // From the user's message to the moment the last piece of this turn was
+  // written, so thinking before the first visible word is counted too.
   const started = Number(timelineTimestamp(head || entries[0]));
-  const ended = Number(timelineTimestamp(lastItem));
+  const ended = Math.max(Number(timelineTimestamp(lastItem)) || 0,
+    timelineEndTimestamp(entries.slice(head ? 1 : 0)));
   const duration = started > 0 && ended > started ? formatProcessDuration(ended - started) : '';
   const card = {
     kind: 'group',
@@ -1326,7 +1350,7 @@ function functionSection(source, markerText) {
 }
 
 function splitRuntimeSource() {
-  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${pinkieHistoryMessageKey.toString()}\n${pinkieHistoryMessageWeight.toString()}\n${pinkieLegacyHistoryView.toString()}\n${pinkieHistoryRenderOptions.toString()}\n${pinkieHistoryPane.toString()}\n${pinkieHistoryRepaint.toString()}\n${pinkieNavigateHistory.toString()}\n${pinkieEarlierHistory.toString()}\n${pinkieTimelineView.toString()}\n${pinkieProcessOpen.toString()}\n${pinkieTimelineRows.toString()}\n${pinkieTimelineUpdate.toString()}\n${pinkieTimelineToggle.toString()}\n${pinkieTimelineMore.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${pinkieTurnRunId.toString()}\n${pinkieGroupCallIds.toString()}\n${pinkieRehomeSteeredRows.toString()}\n${pinkieLearningInlineReferences.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
+  return `${userText.toString()}\n${hasVisibleUserPayload.toString()}\n${isInternalUserMessage.toString()}\n${pinkieSelectMessageWindow.toString()}\n${pinkieHistoryMessageKey.toString()}\n${pinkieHistoryMessageWeight.toString()}\n${pinkieLegacyHistoryView.toString()}\n${pinkieHistoryRenderOptions.toString()}\n${pinkieHistoryPane.toString()}\n${pinkieHistoryRepaint.toString()}\n${pinkieNavigateHistory.toString()}\n${pinkieEarlierHistory.toString()}\n${pinkieTimelineView.toString()}\n${pinkieProcessOpen.toString()}\n${pinkieTimelineRows.toString()}\n${pinkieTimelineUpdate.toString()}\n${pinkieTimelineToggle.toString()}\n${pinkieTimelineMore.toString()}\n${partType.toString()}\n${partCallId.toString()}\n${isToolCallPart.toString()}\n${isToolResultPart.toString()}\n${textParts.toString()}\n${pinkieApplySessionMessage.toString()}\n${isToolPreamble.toString()}\n${pinkieAcceptFinalMessage.toString()}\n${cleanAssistantMessage.toString()}\n${makeToolMessage.toString()}\n${pinkieSplitTimelineMessage.toString()}\n${isFailedAssistantMessage.toString()}\n${failureDetail.toString()}\n${formatFailureSummary.toString()}\n${collapseFailedAssistantEntries.toString()}\n${timelineGroup.toString()}\n${resultParts.toString()}\n${attachToolResults.toString()}\n${isRealUserGroup.toString()}\n${timelineTimestamp.toString()}\n${timelineEndTimestamp.toString()}\n${collapseTimelineRows.toString()}\n${formatProcessDuration.toString()}\n${pinkieRunIsActive.toString()}\n${pinkieProcessTurnKey.toString()}\n${pinkieTurnRunId.toString()}\n${pinkieGroupCallIds.toString()}\n${pinkieRehomeSteeredRows.toString()}\n${pinkieLearningInlineReferences.toString()}\n${projectTimelineTurn.toString()}\n${isCompactionEntry.toString()}\n${projectOrphanEntries.toString()}\n${pinkieBuildTimeline.toString()}`;
 }
 
 function withSessionMessageProgress(source) {

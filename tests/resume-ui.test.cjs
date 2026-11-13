@@ -1233,7 +1233,7 @@ test('history recovery is session-scoped and never trims already loaded pages',(
 test('desktop installers apply the bounded native chat timeline patch',()=>{
   const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-resume.js'], 'assets': []});
   for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']) assert.match(read(file),/bundle\.py["']?\)?\s+install/);
-  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /pinkie-chat-timeline:v29/);
+  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /pinkie-chat-timeline:v30/);
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/HISTORY_RENDER_LIMIT = Infinity/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
