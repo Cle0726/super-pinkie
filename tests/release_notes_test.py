@@ -48,7 +48,7 @@ class ReleaseNotesTest(unittest.TestCase):
         self.assertTrue(release_notes.lint("## 2.6.0\n\n新版本发布。\n", "2.6.0"))
         for jargon in ("修好 `x`", "修好 workboard_list", "改了 app/a.py", "修了网关", "合并 PR"):
             self.assertTrue(release_notes.lint(f"## 2.6.0\n\n碧琪{jargon}。\n", "2.6.0"), jargon)
-        many = "## 2.6.0\n\n碧琪变了。\n\n" + "".join(f"- 第{i}件\n" for i in range(9))
+        many = "## 2.6.0\n\n碧琪变了。\n\n" + "".join(f"- 第{i}件\n" for i in range(release_notes.DETAILS_MAX + 1))
         self.assertTrue(release_notes.lint(many, "2.6.0"))
 
     def test_shipped_notes_are_ready_for_this_version(self):
