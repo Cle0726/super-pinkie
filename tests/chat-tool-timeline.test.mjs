@@ -469,7 +469,7 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v29 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v30 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
 function asLegacyV1Bundle(v4Bundle) {
@@ -489,7 +489,7 @@ function asLegacyV1Bundle(v4Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v29/);
+  assert.match(result.text, /pinkie-chat-timeline:v30/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,e\)/);
   assert.match(result.text, /function Zb\(e\)\{return Infinity\}/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -722,7 +722,7 @@ test('an installed v1 chat bundle upgrades to the current runtime through apply 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v29/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v30/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1\b|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -834,6 +834,36 @@ test('a turn with steps becomes user · process card · final reply', () => {
   assert.equal(card.processMeta, '1 个步骤 · 用时 18 秒');
   assert.deepEqual(card.processRows.map((row) => row.role), ['assistant', 'tool']);
   assert.equal(card.processRows.every((row) => row.isTimelineStep), true);
+});
+
+test('用时 counts from the user message to when the reply was written, thinking included', () => {
+  // A reply message's own timestamp is when 碧琪 started writing it; the
+  // transcript records when it was written (__openclaw.recordTimestampMs).
+  const reply = message('assistant', [
+    {type: 'thinking', thinking: '先想想怎么安慰。'},
+    {type: 'text', text: '累了就歇会儿，我陪你。'},
+  ], 'final', 2800);
+  reply.__openclaw.recordTimestampMs = 26800;
+  const entries = [
+    {...group('user', 'u1', [message('user', '今天有点累', 'u1', 1000)]), timestamp: 1000},
+    {...group('assistant', 'final', [reply]), timestamp: 2800},
+  ];
+  const card = pinkieBuildTimeline(entries, parseToolRows).find((item) => item.isProcessCard);
+  assert.ok(card, 'a reply with recorded thinking keeps its card');
+  assert.match(card.processMeta, /用时 2[56] 秒/);
+});
+
+test('用时 falls back to message times when the transcript time is missing', () => {
+  const entries = [
+    {...group('user', 'u1', [message('user', '跑一下测试', 'u1', 1000)]), timestamp: 1000},
+    {...group('tool', 'tools', [
+      message('assistant', [{type: 'tool_call', callId: 'e1', name: 'exec', arguments: {command: 'npm test'}}], 'call', 2000),
+      message('tool', [{type: 'tool_result', callId: 'e1', name: 'exec', text: 'ok'}], 'result', 3000),
+    ]), timestamp: 2000},
+    {...group('assistant', 'final', [message('assistant', '全部通过。', 'final', 9000)]), timestamp: 9000},
+  ];
+  const card = pinkieBuildTimeline(entries, parseToolRows).find((item) => item.isProcessCard);
+  assert.equal(card.processMeta, '1 个步骤 · 用时 8 秒');
 });
 
 test('a learning activity is placed once after its own answer and keeps its session and turn', () => {
