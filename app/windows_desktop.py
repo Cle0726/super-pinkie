@@ -4265,7 +4265,9 @@ BRIDGE_SCRIPT = r"""
     const maximizeIcon = '<rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/>';
     const restoreIcon = '<path d="M7.5 4.5v-1h9v9h-1"/><rect x="3.5" y="6.5" width="10" height="10" rx="1.5"/>';
     controls.innerHTML = '<button type="button" class="pinkie-update-control" data-act="update" aria-label="主动拉取更新" title="检查更新">'
-      + captionIcon('<path d="m10 2 1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8Z"/><path d="M16 14v4m-2-2h4"/>') + '</button>'
+      + captionIcon('<g class="pk-loop"><path d="M15.6 8.3A6 6 0 0 0 4.9 6.6"/><path d="M4.4 3.6v3.5h3.5"/><path d="M4.4 11.7a6 6 0 0 0 10.7 1.7"/><path d="M15.6 16.4v-3.5h-3.5"/></g>'
+        + '<path class="pk-star" d="M10 6.6c.3 1.8 1.2 2.7 3 3-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3Z"/>')
+      + '<i class="pinkie-update-badge" aria-hidden="true"></i></button>'
       + '<button type="button" data-act="full" aria-label="切换全屏" title="切换全屏（F11）">' + captionIcon('<path d="M7 3.5H3.5V7M13 3.5h3.5V7M7 16.5H3.5V13M13 16.5h3.5V13"/>') + '</button>'
       + '<button type="button" data-act="min" aria-label="最小化" title="最小化">' + captionIcon('<path d="M4.5 12.5h11"/>') + '</button>'
       + '<button type="button" data-act="max" aria-label="最大化" title="最大化" aria-pressed="false">' + captionIcon(maximizeIcon) + '</button>'
@@ -4397,12 +4399,12 @@ BRIDGE_SCRIPT = r"""
     // with familiar Windows actions and full-contrast, accessible SVG icons.
     style.textContent += `
       html[data-pinkie-platform="windows"] #pinkie-native-drag-strip {
-        top:0;left:264px;right:184px;width:auto;height:34px;
+        top:0;left:264px;right:var(--pinkie-caption-reserve,204px);width:auto;height:34px;
         border:0;border-radius:0;background:transparent;
       }
       html[data-pinkie-platform="windows"] #pinkie-native-drag-strip::after { display:none }
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls {
-        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);
+        --caption-ink:#76596a;--caption-hover:rgba(255,255,255,.8);--caption-face:#fdf3f8;--pinkie-update-mark:#d9508d;
         top:4px;right:12px;height:36px;gap:3px;padding:2px;box-sizing:border-box;
         border:1px solid rgba(255,255,255,.7);border-radius:14px;
         background:linear-gradient(145deg,rgba(255,254,254,.82),rgba(252,233,242,.7));
@@ -4436,34 +4438,68 @@ BRIDGE_SCRIPT = r"""
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls button[data-act="close"]:hover {
         color:#fff;background:#cc477d;box-shadow:0 3px 9px rgba(185,57,111,.2);
       }
+      /* 检查更新：两道绕圈的箭头，中间一颗粉色小星。悬停转三分之一圈、星星闪；检查中匀速转；
+         有新版时右上角一颗粉点轻轻扩散，图标染成粉色。不再用发光方框。 */
       html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control {
-        width:32px;height:30px;margin:0;color:var(--accent,#ba487d);background:transparent;
+        position:relative;width:32px;height:30px;margin:0;color:var(--caption-ink);background:transparent;
+        animation:none;box-shadow:none;
       }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:hover { background:var(--caption-hover) }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg {
-        animation:pinkieUpdateSpin .8s linear infinite;
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control svg { overflow:visible;transform:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control :is(.pk-loop,.pk-star) {
+        transform-box:fill-box;transform-origin:center;
+        transition:transform .55s cubic-bezier(.3,1.5,.5,1),opacity .2s ease;
       }
-      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update {
-        box-shadow:inset 0 0 0 1px rgba(211,75,136,.3),0 0 9px rgba(229,73,142,.16);
-        animation:pinkieUpdateGlow 1.8s ease-in-out infinite;
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control .pk-loop { transform-box:view-box;transform-origin:10px 10px }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control .pk-star {
+        fill:var(--pinkie-update-mark);stroke:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) {
+        background:var(--caption-hover);
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) .pk-loop { transform:rotate(120deg) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:is(:hover,:focus-visible) .pk-star { animation:pinkieUpdateTwinkle .9s ease-in-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control:active .pk-loop { transform:rotate(120deg) scale(.86);transition-duration:.08s }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking .pk-loop { animation:pinkieUpdateSpin .9s linear infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking .pk-star { opacity:.35;transform:scale(.7) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.is-checking svg { animation:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-badge {
+        position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;
+        background:var(--pinkie-update-mark);box-shadow:0 0 0 1.5px var(--caption-face);
+        opacity:0;transform:scale(.3);transition:opacity .2s ease,transform .35s cubic-bezier(.3,1.6,.5,1);pointer-events:none;
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-badge::after {
+        position:absolute;inset:0;border-radius:50%;background:var(--pinkie-update-mark);content:"";
+      }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update { color:var(--pinkie-update-mark) }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pinkie-update-badge { opacity:1;transform:none }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pinkie-update-badge::after { animation:pinkieUpdatePing 2s ease-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control.has-update .pk-loop { animation:pinkieUpdateNudge 3.2s ease-in-out infinite }
+      html[data-pinkie-platform="windows"] #pinkie-native-window-controls button:focus-visible {
+        outline:none;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--pinkie-update-mark) 55%,transparent);
+      }
+      @keyframes pinkieUpdateTwinkle { 0%,100% { transform:scale(1) rotate(0) } 50% { transform:scale(.6) rotate(45deg);opacity:.6 } }
+      @keyframes pinkieUpdatePing { 0% { transform:scale(1);opacity:.55 } 80%,100% { transform:scale(3);opacity:0 } }
+      @keyframes pinkieUpdateNudge { 0%,78%,100% { transform:rotate(0) } 86% { transform:rotate(-28deg) } 93% { transform:rotate(8deg) } }
+      @media (prefers-reduced-motion: reduce) {
+        html[data-pinkie-platform="windows"] #pinkie-native-window-controls .pinkie-update-control * { animation:none!important;transition:none!important }
       }
       html[data-pinkie-platform="windows"][data-pinkie-night] #pinkie-native-window-controls {
-        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);
+        --caption-ink:#e9d6e2;--caption-hover:rgba(255,255,255,.11);--caption-face:#30232f;--pinkie-update-mark:#f28ab8;
         background:linear-gradient(145deg,rgba(54,39,52,.92),rgba(41,31,43,.82));
         border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
       }
-      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:var(--pinkie-caption-reserve,204px)!important }
       html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
-      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:184px!important }
-      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:184px!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:var(--pinkie-caption-reserve,204px)!important }
+      html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:var(--pinkie-caption-reserve,204px)!important }
       @media(max-width:900px) {
-        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:184px }
+        html[data-pinkie-platform="windows"] #pinkie-native-drag-strip { left:54px;right:var(--pinkie-caption-reserve,204px) }
         html[data-pinkie-platform="windows"] #pinkie-native-window-controls { top:4px;right:10px }
       }
     `;
     // The shared renderer uses .topbar, not the retired .chat-pane__header.
     // Reserve native caption-button space so link/cost chips remain readable.
-    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:184px!important}';
+    style.textContent += 'html[data-pinkie-platform="windows"]:not(#pinkie-native-header-specificity) body .topbar{padding-right:var(--pinkie-caption-reserve,204px)!important}';
     document.head.append(style);
     // Keep the native drag surface away from every visible header action.
     (() => {
@@ -4491,7 +4527,15 @@ BRIDGE_SCRIPT = r"""
         if(!drag.isConnected || !controls.isConnected)return;
         const left=innerWidth<=900?54:264;
         const caption=controls.getBoundingClientRect();
-        const right=Math.max(left,caption.width>0 ? Math.min(innerWidth-184,caption.left-8) : innerWidth-12);
+        // Headers reserve the caption cluster's real width (five buttons now,
+        // and it grows with any added later) plus a 14px breathing gap, instead
+        // of a fixed guess that left the topbar's last chip touching it.
+        if(caption.width>0){
+          const reserve=`${Math.ceil(innerWidth-caption.left+14)}px`;
+          if(document.documentElement.style.getPropertyValue('--pinkie-caption-reserve')!==reserve)
+            document.documentElement.style.setProperty('--pinkie-caption-reserve',reserve);
+        }
+        const right=Math.max(left,caption.width>0 ? caption.left-8 : innerWidth-12);
         const occupied=[];
         const candidates=[...document.querySelectorAll(headers)].flatMap(header=>[...header.querySelectorAll(selector)]);
         for(const e of candidates){
