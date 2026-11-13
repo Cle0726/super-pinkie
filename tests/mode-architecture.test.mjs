@@ -1860,7 +1860,15 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_mode_ask','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','run_tests','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_mode_ask','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','run_tests','web_gpt_activity','workbench_read','workbench_show']);
+  // A tool registered in code but missing above kills the whole plugin at load
+  // (11-13: pinkie_search). Scan every registerTool name in the plugin source.
+  const dir=path.join(import.meta.dirname,'../services/mode-architecture');
+  const registered=new Set();
+  for(const f of fs.readdirSync(dir).filter(n=>n.endsWith('.mjs')))
+    for(const m of fs.readFileSync(path.join(dir,f),'utf8').matchAll(/registerTool\?*\.?\([^;]*?\{\s*name:\s*['"]([a-z_]+)['"]/g)) registered.add(m[1]);
+  assert.ok(registered.size>5,'registerTool scan found too few tools');
+  assert.deepEqual([...registered].filter(n=>!manifest.contracts.tools.includes(n)),[]);
 });
 
 test('computer tool forwards every CuaDriver action through the private endpoint without a mode allowlist',async()=>{
