@@ -1127,7 +1127,15 @@ def prepare_bundled_desktop(log):
     # effect" until the *next* start -- the exact symptom users reported.
     # It is cheap and idempotent: it reads openclaw.json and only calls the CLI
     # when something is missing, so a failed run is repaired next time.
-    ensure_mode_agents(log)
+    # The CLI it calls loads every plugin. After a broken earlier install (half
+    # a plugin copied) it cannot start until install_runtime_service below has
+    # put the plugin back, so a failure here is held back and the modes are
+    # registered again after the services; only that second result is logged.
+    early = []
+    agents_ok = ensure_mode_agents(early.append)
+    for line in early:
+        if "失败" not in line and "⚠️" not in line:
+            log(line)
 
     # Every step below is idempotent, but together they cost seconds on each
     # Windows start (module imports, hundreds of file compares, one memory
@@ -1138,7 +1146,7 @@ def prepare_bundled_desktop(log):
     # touched extension) runs it again in full.
     fingerprint_file = state / "bundled-prepare.json"
     expected = bundled_prepare_fingerprint(version, config, state)
-    if marker.exists() and read_prepare_fingerprint(fingerprint_file) == expected:
+    if agents_ok and marker.exists() and read_prepare_fingerprint(fingerprint_file) == expected:
         log("启动准备：输入没有变化，跳过重复部署")
         return
 
@@ -1156,6 +1164,10 @@ def prepare_bundled_desktop(log):
     ensure_workspace_avatars(checked)
     for service in ("party", "context", "project-scope", "mode-architecture", "first-person-renderer"):
         install_runtime_service(service, checked)
+    if not agents_ok and not ensure_mode_agents(checked):
+        for line in early:
+            if "失败" in line or "⚠️" in line:
+                log(line)
     if failures:
         fingerprint_file.unlink(missing_ok=True)
         return
