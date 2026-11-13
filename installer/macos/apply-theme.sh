@@ -521,6 +521,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     fi
     # 追加消息时保留流式输出：ack 携带新 runId 时不再清空 chatStream。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-stream-survive-steer.mjs"
+    # 立即追加不再和正在跑的一轮抢写会话文件（session file changed while embedded prompt lock was released）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.

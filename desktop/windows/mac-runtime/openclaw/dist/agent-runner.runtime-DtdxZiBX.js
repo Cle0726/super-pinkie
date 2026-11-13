@@ -7054,6 +7054,12 @@ async function runReplyAgent(params) {
 			...followupRun.userTurnTranscriptRecorder ? { userTurnTranscriptRecorder: followupRun.userTurnTranscriptRecorder } : {}
 		});
 		if (steerOutcome.queued) {
+			/* pinkie-steer-fallback-wait:v1 */
+			const pinkieSteerRecorder = followupRun.userTurnTranscriptRecorder;
+			if (pinkieSteerRecorder && !pinkieSteerRecorder.hasPersisted?.() && !pinkieSteerRecorder.hasRuntimePersistencePending?.() && typeof pinkieSteerRecorder.markRuntimePersistencePending === "function") {
+				const pinkieSteerRunKey = activeReplyOperation?.key ?? sessionKey;
+				if (pinkieSteerRunKey) pinkieSteerRecorder.markRuntimePersistencePending(Promise.resolve(replyRunRegistry.waitForIdle(pinkieSteerRunKey, 6 * 60 * 60 * 1e3)).catch(() => void 0));
+			}
 			try {
 				await opts?.onTurnAdopted?.();
 			} catch (error) {
