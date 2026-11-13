@@ -525,6 +525,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
     # 模型失败自动重试时，同一次发送的失败记录被重试替换，用户那句话不再写两遍。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
+    # 交付前检查要求补一遍时，用户刚发的那句留在会话主线上（以前被当成孤立消息拆掉，切页面回来就不见了）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-user-preservation.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.
