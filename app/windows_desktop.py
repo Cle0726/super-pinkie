@@ -3290,7 +3290,15 @@ class NativeBridge(InAppBrowserBridge):
     def _pinkie_native(self):
         native = getattr(self, "_native_bridge", None)
         if native is None:
-            from app.windows_native import WindowsNative
+            # The frozen App puts app/ on the module path (build-win.ps1
+            # --paths app); there is no `app` package in it. Importing only
+            # `app.windows_native` left the packaged build without the tray
+            # icon, global hotkey, notifications and exports
+            # (native.log: ModuleNotFoundError).
+            try:
+                from windows_native import WindowsNative
+            except ImportError:  # imported as app.windows_desktop (tests)
+                from app.windows_native import WindowsNative
 
             native = self._native_bridge = WindowsNative(self, state_root() / "native-settings.json")
         return native
