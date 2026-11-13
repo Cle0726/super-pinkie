@@ -523,6 +523,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-stream-survive-steer.mjs"
     # 立即追加不再和正在跑的一轮抢写会话文件（session file changed while embedded prompt lock was released）。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
+    # 模型失败自动重试时，同一次发送的失败记录被重试替换，用户那句话不再写两遍。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.

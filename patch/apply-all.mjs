@@ -35,6 +35,7 @@ const ORDER = [
   'reapply-unrestricted-patch.mjs',
   'apply-same-session-recovery.mjs',
   'apply-steer-fallback-wait.mjs',
+  'apply-retry-single-user.mjs',
   // Last: the first-paint layer rewrites index.html, sw.js and the web manifest, so it
   // must run after every patch that also touches the Control UI entry document.
   'apply-startup.mjs',
