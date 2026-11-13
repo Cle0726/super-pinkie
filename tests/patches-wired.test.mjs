@@ -16,6 +16,10 @@ const PENDING_REVIEW = new Set([
   'apply-queue-unconfirmed.mjs',
   'apply-steer-identity.mjs',
   'apply-steer-images.mjs',
+  // Only run by tools/claude-deploy/prepare-work-first-completion.py (live hand-install);
+  // work-first-chat is live, media-gate is not. Neither ships in a build.
+  'apply-work-first-chat.mjs',
+  'apply-work-first-media-gate.mjs',
 ]);
 test('every patch/apply-*.mjs is run by the installer', () => {
   const unwired = fs.readdirSync(path.join(root, 'patch'))
