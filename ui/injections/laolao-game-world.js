@@ -40,7 +40,7 @@
       // 书：封皮板 + 两页纸（略微翘起）+ 书脊
       const [pageTex, coverTex] = await Promise.all([tex(g.art('world/book/page')), tex(g.art('world/book/cover'))]);
       const W = 3.2, H = 2.2;
-      const board = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + .22, .06, H + .2), new THREE.MeshStandardMaterial({color: night ? '#3a1d2e' : '#6b2a45', roughness: .55, map: coverTex || null})); board.position.y = -.05; board.castShadow = true; board.receiveShadow = true; scene.add(board);
+      const board = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + .22, .06, H + .2), new THREE.MeshStandardMaterial({color: window.__pinkieLoadout?.current?.('cover')?.board || (night ? '#3a1d2e' : '#6b2a45'), roughness: .55, map: window.__pinkieLoadout?.current?.('cover')?.board ? null : (coverTex || null)})); board.position.y = -.05; board.castShadow = true; board.receiveShadow = true; scene.add(board);
       const pageGeo = (() => { const geo = new THREE.PlaneGeometry(W, H, 24, 1); const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i); const u = (x + W / 2) / W; p.setZ(i, Math.sin(u * Math.PI) * .02 + (1 - u) ** 6 * .06); } geo.computeVertexNormals(); return geo; })();
       const pageMat = new THREE.MeshStandardMaterial({color: '#fbf6ef', roughness: .92, map: pageTex || null});
       const left = new THREE.Mesh(pageGeo, pageMat); left.rotation.x = -Math.PI / 2; left.position.set(-W / 2, .005, 0); left.scale.x = -1; left.receiveShadow = true; scene.add(left);

@@ -42,8 +42,16 @@ async function one(job, tag) {
     const refs = (job.refs || []).map(r => path.resolve(r));
     if (refs.length) {
       // 直接拿「image/* + multiple」那个 input 的对象句柄（整棵 DOM 用 getDocument 取会卡住）
-      const h = await call('Runtime.evaluate', {expression: `(() => { const all = [...document.querySelectorAll('input[type=file]')]; return all.find(i => i.multiple && i.accept === 'image/*') || all.find(i => i.multiple) || all.pop(); })()`});
-      const objectId = h.result?.result?.objectId; if (!objectId) throw new Error('找不到上传入口');
+      // 页面慢的时候上传入口要等一会儿才出现：最多等 40 秒（以前只看一眼，三次都扑空就整张失败）
+      let objectId = null;
+      for (let k = 0; k < 30 && !objectId; k++) {
+        const h = await call('Runtime.evaluate', {expression: `(() => { const all = [...document.querySelectorAll('input[type=file]')]; return all.find(i => i.multiple && i.accept === 'image/*') || all.find(i => i.multiple) || all.pop(); })()`});
+        objectId = h.result?.result?.objectId || null; if (!objectId) await sleep(2000);
+      }
+      if (!objectId) {
+        const why = await ev(`document.title.slice(0, 80)`);
+        throw new Error('找不到上传入口：' + (why || '页面没加载'));
+      }
       await call('DOM.setFileInputFiles', {files: refs, objectId});
       for (let i = 0; i < 60; i++) {
         await sleep(1000);
@@ -55,8 +63,19 @@ async function one(job, tag) {
     }
     const ok = await focusBox();
     if (!ok) throw new Error('找不到输入框（登录过期？）');
-    await call('Input.insertText', {text: job.prompt});
-    await sleep(900);
+    // 并发时几个标签页共用账号的输入框草稿，会把别的标签页刚打的提示词同步过来（出过「海盗的空镜画成了海盗的欢呼姿势」）。
+    // 发送前核对输入框里就是这一张的提示词，不是就清掉重打；发出去以后再核对一次对话里的那条消息。
+    const norm = t => String(t || '').replace(/\s+/g, ' ').trim();
+    const want = norm(job.prompt);
+    const boxText = () => ev(`(() => { const e = document.querySelector('#prompt-textarea, [contenteditable=true].ProseMirror, div[contenteditable=true]'); return e ? (e.innerText || e.value || '') : ''; })()`);
+    let typed = false;
+    for (let k = 0; k < 4 && !typed; k++) {
+      await call('Input.insertText', {text: job.prompt});
+      await sleep(900 + k * 600);
+      typed = norm(await boxText()) === want;
+      if (!typed) { await focusBox(); await key('a', 'KeyA', 65, 2); await key('Backspace', 'Backspace', 8); await sleep(500); }
+    }
+    if (!typed) throw new Error('输入框里的提示词对不上（草稿被别的标签页改了）');
     let sent = false;
     for (let i = 0; i < 40 && !sent; i++) {
       sent = await ev(`(() => { const b = document.querySelector('[data-testid=send-button]:not([disabled]), button[aria-label="发送"]:not([disabled]), button[aria-label="发送提示"]:not([disabled]), button[aria-label="Send prompt"]:not([disabled])'); if (!b) return false; b.scrollIntoView({block: 'center'}); b.click(); return true; })()`);
@@ -64,6 +83,11 @@ async function one(job, tag) {
     }
     if (!sent) throw new Error('发送按钮一直不可用');
     log(tag, '已发送');
+    {
+      let mine = '';
+      for (let i = 0; i < 20 && !mine; i++) { await sleep(1000); mine = norm(await ev(`(() => { const r = [...document.querySelectorAll('[data-message-author-role=user]')].pop(); return r ? r.innerText : ''; })()`)); }
+      if (mine && mine !== want && !mine.includes(want)) throw new Error('发出去的提示词不是这一张的（草稿串了），重来');
+    }
     let src = null, stable = 0, last = null;
     for (let i = 0; i < 220; i++) {
       await sleep(3000);
@@ -73,6 +97,9 @@ async function one(job, tag) {
       const reply = await ev(`(() => { const r = [...document.querySelectorAll('[data-message-author-role=assistant]')].pop(); return r ? r.innerText.slice(0, 300) : ''; })()`);
       if (i > 20 && reply && !s && !stillGen && /无法|不能|抱歉|违反|can't|unable|policy/i.test(reply)) throw new Error('被拒绝：' + reply.slice(0, 120));
       if (i > 12 && /限制|上限|limit|too quickly|稍后/i.test(reply || '') && !s) throw new Error('额度/限速：' + reply.slice(0, 120));
+      if (i > 15 && reply && !s && !stillGen && /上传参考|参考图|reference image|upload/i.test(reply)) throw new Error('参考图没挂上：' + reply.slice(0, 80));
+      // 成功的一张大约一两分钟就落下来。页面既没有图、也不在生成，就早点重试，不要干等 11 分钟。
+      if (i > 45 && !s && !stillGen) throw new Error('两分多钟还没开始出图');
     }
     if (!src) throw new Error('等不到图（超时）');
     const b64 = await ev(`(async () => { const r = await fetch(${JSON.stringify(src)}, {credentials: 'include'}); const b = new Uint8Array(await r.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); })()`);

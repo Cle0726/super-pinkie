@@ -139,7 +139,7 @@
         const ring = el('span', 'pkp-ring'); const acc = p.acc ?? 0;
         ring.innerHTML = `<svg viewBox="0 0 44 44" aria-hidden="true"><circle class="t" cx="22" cy="22" r="19"/><circle class="v" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="${acc} 100"/></svg>`;
         const fsrc = g.art?.(`monster/${AREA_FOE[p.area] || 'fog-puff'}`); if (fsrc) { const im = el('img'); im.alt = ''; im.loading = 'lazy'; im.draggable = false; im.src = fsrc; ring.append(im); }
-        const name = el('span', 'pkp-prow__name'); name.append(el('b', '', p.name), el('small', '', p.groupName));
+        const name = el('span', 'pkp-prow__name'); { const un = !named(p); name.append(el('b', '', un ? p.groupName : p.name), el('small', '', un ? '考点还没标 · 混着练' : p.groupName)); if (un) row.dataset.untagged = '1'; }  // 没标考点的不写六张「未分类」：直接用题型当名字
         const nums = el('span', 'pkp-prow__nums'); nums.append(el('b', 'pkg-num', pct(p.acc)), el('small', 'pkg-num', `${p.done} / ${p.total}`));
         const tag = el('span', 'pkp-prow__go', ({weak: '先补这个', new: '没碰过', clear: '已拿下', open: '练'})[state]);
         row.append(ring, name, nums, tag);

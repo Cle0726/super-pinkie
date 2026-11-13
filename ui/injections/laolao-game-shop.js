@@ -48,11 +48,23 @@
       }
       return box;
     }
-    if (entry.kind === 'shards') { const card = el('div', 'pks-pv__card'); card.append(el('small', '', 'SHARDS'), el('b', 'pks-pv__glyph', '◆'), el('span', 'pks-pv__name', '通用碎片')); box.append(card); return box; }
-    // 其它收藏品（贴纸 / 称号）：名字的第一个字做成印章式大字 + 类型拉丁小字，像书封。
-    const [en] = KIND[entry.kind] || ['ITEM'];
-    const name = entry.name || itemName(entry.itemId || '');
-    const card = el('div', 'pks-pv__card'); card.append(el('small', '', en), el('b', 'pks-pv__glyph', [...name][0] || '藏'), el('span', 'pks-pv__name', name)); box.append(card); return box;
+    // 碎片：一颗切面水晶；贴纸：那一包的贴纸原画；称号：月桂 + 绶带，名字写在绶带上。都是自己画的 SVG，不再是一个字。
+    const svgOf = markup => { const t = document.createElement('template'); t.innerHTML = markup; return t.content.firstChild; };
+    const name = entry.name || (entry.kind === 'shards' ? '通用碎片' : itemName(entry.itemId || ''));
+    const [en] = entry.kind === 'shards' ? ['SHARDS'] : (KIND[entry.kind] || ['ITEM']);
+    const card = el('div', 'pks-pv__card');
+    if (entry.kind === 'shards') {
+      card.append(el('small', '', en), svgOf('<svg class="pks-gem" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="pks-gem-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#BFD4FF"/><stop offset="1" stop-color="#8E6BD8"/></linearGradient></defs><path d="M32 4l20 18-20 38L12 22z" fill="url(#pks-gem-g)" stroke="#fff" stroke-width="1.500" stroke-linejoin="round"/><path d="M12 22h40M32 4l-8 18 8 38 8-38z" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width="1.200" stroke-linejoin="round"/><path class="glint" d="M20 20l8-10" stroke="#fff" stroke-width="2.400" stroke-linecap="round"/></svg>'), el('span', 'pks-pv__name', name));
+    } else if (entry.kind === 'stickers') {
+      const ART = {pack1: 'cheer', pack2: 'combo', pack3: 'finish', pack4: 'focus', pack5: 'jar', pack6: 'leave', pack7: 'oops', pack8: 'finish'};
+      const src = G().art?.(`sticker/${ART[String(entry.itemId || '').split(':')[1]] || 'cheer'}`);
+      if (src) { const im = el('img', 'pks-pv__sticker'); im.alt = ''; im.decoding = 'async'; im.loading = 'lazy'; im.src = src; card.append(el('small', '', en), im, el('span', 'pks-pv__name', name)); }
+      else card.append(el('small', '', en), el('b', 'pks-pv__glyph', [...name][0] || '贴'), el('span', 'pks-pv__name', name));
+    } else if (entry.kind === 'title') {
+      const short = [...name].slice(0, 5).join('');
+      card.append(el('small', '', en), svgOf(`<svg class="pks-ribbon" viewBox="0 0 120 84" aria-hidden="true"><g class="laurel" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M36 58C22 48 18 30 26 14"/><path d="M84 58c14-10 18-28 10-44"/>${[0, 1, 2, 3].map(i => `<path d="M${25 + i * 3} ${22 + i * 10}c-8-1-11-6-12-12 7 0 11 4 12 12z" fill="currentColor" fill-opacity=".25"/><path d="M${95 - i * 3} ${22 + i * 10}c8-1 11-6 12-12-7 0-11 4-12 12z" fill="currentColor" fill-opacity=".25"/>`).join('')}</g><path class="star" d="M60 8l4.200 8.500 9.400 1.400-6.800 6.600 1.600 9.300L60 29.400l-8.400 4.400 1.600-9.300-6.800-6.600 9.400-1.400z" fill="currentColor"/><path class="tail" d="M10 50l12 4v22l-12-6 5-8zM110 50l-12 4v22l12-6-5-8z" fill="currentColor" fill-opacity=".55"/><path class="band" d="M18 46h84v24H18z" fill="currentColor"/><text x="60" y="63.500" text-anchor="middle" font-size="${short.length > 4 ? 12.500 : 14.500}" font-weight="900" fill="#fff" letter-spacing="1.500">${short.replace(/[<&>]/g, '')}</text></svg>`));
+    } else card.append(el('small', '', en), el('b', 'pks-pv__glyph', [...name][0] || '藏'), el('span', 'pks-pv__name', name));
+    box.append(card); return box;
   }
 
   // ───────────── 商店 ─────────────
@@ -182,6 +194,7 @@
       const info = el('div', 'pks-wr__info');
       info.append(el('small', 'pkg-kicker', `${RARITY[f.rarity]?.label || f.rarity} · ${f.series === 'mode' ? 'MODE' : f.season ? 'SEASONAL' : 'FORM'}`), el('h3', 'pks-wr__name', f.owned || live ? f.name : '还没遇见'));
       { const b = el('p', 'pks-wr__bonus'); b.append(g.bonusText ? g.bonusText(f.bonus?.text) : document.createTextNode(f.bonus?.text || '')); info.append(b); }
+      if (f.skill) { const sk = el('p', 'pks-wr__skill'); const S = window.__pinkieGameStage; if (S) sk.append(S.icon(({eliminate: 'lens', heal: 'heart', shield: 'shield', double: 'twin'})[f.skill.kind] || 'spark')); sk.append(el('b', '', `战斗技能 · ${f.skill.name}`), el('span', '', f.skill.text)); info.append(sk); }
       const pal = el('div', 'pks-wr__pal'); for (const c of f.palette || []) { const d = el('i'); d.style.background = c; pal.append(d); } info.append(pal);
       if (f.owned) {
         const lv = f.level || {lv: 1, xp: 0, next: 100};

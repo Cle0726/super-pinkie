@@ -219,6 +219,12 @@
   background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);transition:transform .35s var(--pkg-out),box-shadow .35s var(--pkg-out)}
 #pinkie-study-desk .pkg-entry[data-entry="map"]{background:linear-gradient(135deg,color-mix(in srgb,var(--pkg-a,#F7A8C8) 20%,var(--pkg-card-solid)),var(--pkg-card-solid))}
 #pinkie-study-desk[data-theme="night"] .pkg-entry[data-entry="map"]{background:linear-gradient(135deg,color-mix(in srgb,var(--pkg-b,#DB1F74) 22%,#231C28),#231C28)}
+/* 「地图」入口上的小书：封皮 = 装备着的书封（商店 / 扭蛋里的那一类），没装是默认酒红封皮 */
+#pinkie-study-desk .pkg-entry__book{position:absolute;top:10px;right:12px;width:30px;height:40px;border-radius:2px 5px 5px 2px;background:linear-gradient(135deg,#8B3A5C,#5E2140);box-shadow:0 8px 12px -6px rgba(40,16,36,.55),inset 0 0 0 1px rgba(255,255,255,.22);overflow:hidden;transform:perspective(300px) rotateY(-16deg) rotate(4deg);transform-origin:left center;transition:transform .45s cubic-bezier(.2,.9,.2,1);pointer-events:none}
+#pinkie-study-desk .pkg-entry:hover .pkg-entry__book{transform:perspective(300px) rotateY(-34deg) rotate(1deg) translateY(-2px)}
+#pinkie-study-desk .pkg-entry__spine{position:absolute;inset:0 auto 0 0;width:13%;background:linear-gradient(90deg,rgba(0,0,0,.3),rgba(0,0,0,0))}
+#pinkie-study-desk .pkg-entry__label{position:absolute;left:26%;right:16%;top:16%;height:18%;border-radius:1px;background:rgba(255,255,255,.82)}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkg-entry__book{transition:none}}
 #pinkie-study-desk .pkg-entry small{font:600 9.5px/1 var(--pkg-latin);letter-spacing:.32em;color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkg-entry b{font:900 19px/1.05 var(--pkg-display);letter-spacing:.1em}
 #pinkie-study-desk .pkg-entry[data-entry="map"] b{font-size:24px}
