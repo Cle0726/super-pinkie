@@ -35,7 +35,7 @@ class PrepareSkipTests(unittest.TestCase):
         self.system_proxy = {'server': '127.0.0.1:8080', 'bypass': ''}
         self.messages = []
 
-    def prepare(self, failing_message=None):
+    def prepare(self, failing_message=None, agents=None):
         def install(name, log):
             if failing_message and name == 'mode-architecture':
                 log(failing_message)
@@ -48,7 +48,7 @@ class PrepareSkipTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(super_pinkie, 'windows_state_root', return_value=self.state))
             stack.enter_context(mock.patch.object(
                 super_pinkie, 'resource_path', side_effect=lambda *parts: self.resources.joinpath(*parts)))
-            stack.enter_context(mock.patch.object(super_pinkie, 'ensure_mode_agents'))
+            self.agents = stack.enter_context(mock.patch.object(super_pinkie, 'ensure_mode_agents', side_effect=agents))
             stack.enter_context(mock.patch.object(super_pinkie, 'repair_provider_models'))
             stack.enter_context(mock.patch.object(super_pinkie, 'ensure_gateway_auth_none'))
             stack.enter_context(mock.patch.object(super_pinkie, 'ensure_workspace_avatars'))
@@ -58,6 +58,35 @@ class PrepareSkipTests(unittest.TestCase):
             installed = stack.enter_context(mock.patch.object(super_pinkie, 'install_runtime_service', side_effect=install))
             super_pinkie.prepare_bundled_desktop(self.messages.append)
         return [call.args[0] for call in installed.call_args_list]
+
+    def test_modes_are_registered_again_after_a_half_installed_plugin_is_repaired(self):
+        # Upgrading over a broken earlier install: the CLI cannot load the half-copied
+        # plugin until install_runtime_service puts it back. The first failure must not
+        # reach setup.log (the smoke test reads every warning there) when the retry works.
+        calls = []
+
+        def agents(log):
+            calls.append(len(calls))
+            if len(calls) == 1:
+                log('  ⚠️ 补齐 project 模式失败（返回码 1）：Could not start the CLI.')
+                return False
+            log('  已补齐 project 模式')
+            return True
+
+        (self.state / 'bundled-prepare.json').write_text('{}', encoding='utf-8')
+        self.assertEqual(self.prepare(agents=agents), SERVICES)
+        self.assertEqual(len(calls), 2)
+        self.assertIn('  已补齐 project 模式', self.messages)
+        self.assertFalse([m for m in self.messages if '失败' in m])
+
+    def test_a_retry_that_still_fails_logs_both_attempts(self):
+        def agents(log):
+            log('  ⚠️ 补齐 project 模式失败（返回码 1）：Could not start the CLI.')
+            return False
+
+        self.assertEqual(self.prepare(agents=agents), SERVICES)
+        self.assertEqual(self.agents.call_count, 2)
+        self.assertEqual(len([m for m in self.messages if '失败' in m]), 2)
 
     def test_second_start_with_unchanged_inputs_skips_the_whole_setup(self):
         self.assertEqual(self.prepare(), SERVICES)

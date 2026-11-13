@@ -262,7 +262,7 @@ class FirstLaunchRegistrationTests(unittest.TestCase):
             mock.patch.object(super_pinkie, "write_prepare_fingerprint", return_value=None),
             mock.patch.object(
                 super_pinkie, "ensure_mode_agents",
-                side_effect=lambda log: self.calls.append("ensure_mode_agents"),
+                side_effect=lambda log: self.calls.append("ensure_mode_agents") or True,
             ),
         ]
         for patch in self.patches:
@@ -281,7 +281,7 @@ class FirstLaunchRegistrationTests(unittest.TestCase):
         marker = self.state / "bundled-setup-9.9.9"
         self.assertFalse(marker.exists(), "this test must start without the marker")
         seen = []
-        super_pinkie.ensure_mode_agents.side_effect = lambda log: seen.append(1)
+        super_pinkie.ensure_mode_agents.side_effect = lambda log: seen.append(1) or True
         super_pinkie.prepare_bundled_desktop(self.logs.append)
         self.assertEqual(len(seen), 1, "a first launch must register the mode agents")
 
