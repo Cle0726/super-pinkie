@@ -69,7 +69,9 @@ test('phrases localizes Lit-owned chat labels only through their text node value
     ['工具进度 · ', '4', ' 项', '']);
 
   const summary = element('chat-tool-msg-summary__label', element('chat-tool-msg-summary', group, 'button'));
-  assert.equal(run(textNode('exec', summary)), '执行命令 · exec');
+  assert.equal(run(textNode('exec', summary)), '执行命令');
+  assert.equal(run(textNode('Web Search', summary)), '搜索网页');
+  assert.equal(run(textNode('learning_activity', summary)), '学习小练习');
   assert.equal(run(textNode('Tool output', summary)), '工具结果');
 
   const footer = element('chat-group-footer', group, 'div');
