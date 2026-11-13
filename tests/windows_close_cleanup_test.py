@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import ntpath
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -63,7 +64,8 @@ class GatewayCloseTest(unittest.TestCase):
         gateway = supervisor()
         with mock.patch.object(gateway, "_listener", return_value={"pid": 4321, "image": NODE.upper()}), \
                 mock.patch.object(windows_desktop, "kill_process_tree") as kill, \
-                mock.patch.object(windows_desktop, "append_log"):
+                mock.patch.object(windows_desktop, "append_log"), \
+                mock.patch.object(windows_desktop.os.path, "normcase", ntpath.normcase):
             self.assertTrue(gateway.stop_adopted())
         kill.assert_called_once_with(4321)
 
