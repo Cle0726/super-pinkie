@@ -119,7 +119,7 @@
         const rows = (result?.sessions || [])
           .filter(item => item.key?.startsWith(`agent:${agent}:`) && !item.key.includes(':subagent:') && !item.archived)
           .map(item => ({key: item.key, title: sessionTitle(item), at: Number(item.updatedAt) || 0}))
-          .filter(item => item.title)
+          .filter(item => item.title && item.key !== draft?.key)
           .sort((x, y) => y.at - x.at).slice(0, 4);
         recent.set(selected, rows);
         schedule();
@@ -169,9 +169,110 @@
     pendingDraft.input.readOnly = false;
     pendingDraft = null;
   };
+  // 首页的输入框挂在一个「空白新会话」上，而不是上一个会话上。
+  //
+  // 原来首页借用的是这个模式上次的会话：模型、思考强度、上下文占用显示的都是那个旧会话的，
+  // 在首页选的模型也是改在旧会话上；发送时才临时新建会话再跳过去，新会话又回到默认模型。
+  // 现在进首页就备好一个还没发过消息的会话（有现成的空白会话就用现成的，没有才新建），
+  // 输入框下面那一排因此就是新会话自己的状态，选什么就是什么，发送也不用再建、再跳。
+  // 这个会话发出第一句话之前不进侧栏（laolao-session-list.js），也不出现在「继续之前的工作」里。
+  let draft = null; // {mode, key, state: 'pending' | 'ready' | 'failed', promise}
+  const BLANK_LABEL = /^(?:新会话(?:\s*\d+)?|New session(?:\s*\d+)?)$/i;
+  const blankSession = (item, agent) => typeof item?.key === 'string' && item.key.startsWith(`agent:${agent}:dashboard:`)
+    && !item.archived && !item.hasActiveRun && !item.lastMessagePreview && !item.parentSessionKey && !item.spawnedBy
+    && BLANK_LABEL.test(String(item.label || '').trim());
+  // 模式转场从「开始」到「结束」之间地址栏和模式标记会先后变化，这段时间一律不备、不换会话。
+  let switchingSince = 0;
+  const transitioning = () => (switchingSince && Date.now() - switchingSince < 45000)
+    || root.hasAttribute('data-laolao-mode-pending') || Boolean(document.querySelector('.laolao-mode-transition'));
+  const draftLive = () => Boolean(draft && draft.state === 'ready' && draft.mode === mode() && sessionKey() === draft.key);
+  const pause = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+  async function findOrCreateBlank(selected) {
+    const api = window.__laolaoSidebar, agent = agentFor(selected);
+    const listed = await api.gwRequest('sessions.list', {agentId: agent, includeLastMessage: true, limit: 200}, 15000);
+    const blanks = (listed?.sessions || []).filter(item => blankSession(item, agent))
+      .sort((x, y) => (Number(y.updatedAt) || 0) - (Number(x.updatedAt) || 0)).slice(0, 2);
+    for (const item of blanks) {
+      // 列表里的摘要只是提示，以会话记录为准：真的一条消息都没有才拿来用。
+      try {
+        const history = await api.gwRequest('chat.history', {sessionKey: item.key, limit: 1}, 8000);
+        if (!(history?.messages || []).length) return item.key;
+      } catch { /* 读不到就不用它。 */ }
+    }
+    const key = await api.createSession({quiet: true, stay: true});
+    if (!key) throw new Error('新会话没有建起来');
+    return key;
+  }
+  async function adoptDraft(entry) {
+    const current = () => active && draft === entry && mode() === entry.mode;
+    // 模式转场还在进行时不换会话：转场自己要落到那个模式的会话上，抢在它前面会打架。
+    for (let waited = 0; current() && transitioning() && waited < 40000; waited += 80) await pause(80);
+    if (!current()) return false;
+    if (sessionKey() !== entry.key) {
+      const before = activePane(), input = currentInput(before);
+      // 用户已经在首页打了字（不是旧会话自己存着的草稿）：带到新会话里，旧会话不留。
+      const typed = input && input.value !== entry.initialText ? input.value : '';
+      const files = typed && Array.isArray(before?.state?.chatAttachments) && before.state.chatAttachments.length
+        ? [...before.state.chatAttachments] : null;
+      if (typed) setDraft(input, entry.initialText || '');
+      window.__laolaoSidebar.navigateSession(entry.key);
+      let pane = null;
+      for (let waited = 0; current() && waited < 20000; waited += 40) {
+        const live = activePane(entry.key);
+        if (sessionKey() === entry.key && paneReady(live, entry.key) && currentInput(live)) { pane = live; break; }
+        await pause(40);
+      }
+      if (!current()) return false;
+      if (!pane) throw new Error('新会话没有打开');
+      if (typed && !currentInput(pane).value) setDraft(currentInput(pane), typed);
+      if (files) { pane.state.chatAttachments = files; pane.requestUpdate?.(); }
+    }
+    return true;
+  }
+  function ensureDraft() {
+    if (!active || busy || handedOff || docked() || transitioning()) return;
+    const selected = mode(), api = window.__laolaoSidebar;
+    if (draft && draft.mode === selected) return;
+    if (typeof api?.gwRequest !== 'function' || typeof api.createSession !== 'function' || typeof api.navigateSession !== 'function') return;
+    // 地址栏还停在别的模式（转场刚开始）时先不动，等它落到这个模式再备。
+    if (!sessionKey().startsWith(`agent:${agentFor(selected)}:`) || api.mode && api.mode !== selected) return;
+    const entry = {mode: selected, key: '', state: 'pending', promise: null, initialText: currentInput()?.value || ''};
+    draft = entry;
+    entry.promise = (async () => {
+      entry.key = await findOrCreateBlank(selected);
+      if (!(await adoptDraft(entry))) return false;
+      entry.state = 'ready';
+      recent.delete(selected); schedule();
+      return true;
+    })().catch(() => {
+      // 备不出来（网关还没连上、建会话失败）：首页照常可用，发送时退回「先建会话再发」的老办法。
+      if (draft === entry) entry.state = 'failed';
+      return false;
+    });
+  }
+  // 老办法（发送时才新建会话）用的：把首页上看到的模型和思考强度带到刚建的会话里，
+  // 不然用户在首页选好的模型，一发送就变回默认。
+  async function carrySettings(from, to, selected) {
+    if (!from || !to || from === to) return;
+    try {
+      for (const prefix of ['pinkie:effort-choice:v1:', 'laolao:reasoning-enhance:v1:', 'laolao:deep-think-tier:']) {
+        const value = localStorage.getItem(prefix + from);
+        if (value !== null) localStorage.setItem(prefix + to, value);
+      }
+    } catch { /* 存不了就只带后端那一份。 */ }
+    try {
+      const api = window.__laolaoSidebar, agent = agentFor(selected);
+      const listed = await api.gwRequest('sessions.list', {agentId: agent, limit: 1000}, 15000);
+      const row = (listed?.sessions || []).find(item => item.key === from);
+      const patch = {};
+      if (row?.model) patch.model = (row.modelProvider ? row.modelProvider + '/' : '') + row.model;
+      if (row?.thinkingLevel) patch.thinkingLevel = row.thinkingLevel;
+      if (Object.keys(patch).length) await api.gwRequest('sessions.patch', {key: to, agentId: agent, ...patch}, 15000);
+    } catch { /* 带不过去时新会话用默认模型，消息照发。 */ }
+  }
   const leave = () => {
     if (!active) return;
-    active = false; busy = false; handedOff = false; operation++; nativeRequest = null;
+    active = false; busy = false; handedOff = false; operation++; nativeRequest = null; draft = null;
     releaseDraft();
     root.removeAttribute('data-laolao-startup-home');
     root.removeAttribute('data-laolao-startup-ready');
@@ -221,6 +322,7 @@
       main.append(list);
     }
     requestRecent(selected);
+    ensureDraft();
     const rows = recent.get(selected) || [];
     const signature = JSON.stringify([selected, busy, rows]);
     if (list.dataset.signature !== signature) {
@@ -298,8 +400,21 @@
   };
   const sendFromHome = async (input, pane, dispatch) => {
     if (!active || busy || !input?.value?.trim()) return false;
+    // 空白新会话还在备：等它一下（通常不到一秒），备好后输入框和文字都已经在新会话里了。
+    if (draft?.state === 'pending') {
+      busy = true; root.setAttribute('data-laolao-startup-busy', '1');
+      const entry = draft;
+      await Promise.race([entry.promise, pause(12000)]);
+      busy = false; root.removeAttribute('data-laolao-startup-busy');
+      // 等的这段时间首页被换掉或重进了：文字还在输入框里，不发；也不能把首页卡在「忙」上，之后的发送全被吞掉。
+      if (!active || draft !== entry) { if (active) mount(); return false; }
+      pane = activePane(); input = currentInput(pane);
+      if (!input?.value?.trim()) return false;
+    }
+    const useDraft = draftLive() && paneReady(activePane(draft.key), draft.key);
+    if (useDraft) { pane = activePane(draft.key); input = currentInput(pane) || input; }
     const create = document.querySelector('.sidebar-new-session'), createPlain = window.__laolaoSidebar?.createSession;
-    if (typeof createPlain !== 'function' && (!create || create.disabled)) { notify('新会话暂时没有准备好，文字还在输入框里。'); return false; }
+    if (!useDraft && typeof createPlain !== 'function' && (!create || create.disabled)) { notify('新会话暂时没有准备好，文字还在输入框里。'); return false; }
     const originalKey = sessionKey(), selected = mode(), text = input.value;
     const attachments = Array.isArray(pane?.state?.chatAttachments) ? [...pane.state.chatAttachments] : null;
     busy = true; const token = ++operation;
@@ -309,12 +424,13 @@
       // Use the existing sidebar workflow, including project binding, names,
       // routing and deduplication. It is the only owner of sessions.create.
       // 首页的第一句话开一个干净的新会话：不进当前项目组，也不继承工作台文件夹。
-      if (typeof createPlain === 'function') void createPlain();
+      if (useDraft) { /* 已经在空白新会话里，不用建也不用跳。 */ }
+      else if (typeof createPlain === 'function') void createPlain();
       else {
         creatingNative = true;
         try { create.click(); } finally { creatingNative = false; }
       }
-      const next = await waitFor(() => {
+      const next = useDraft ? {key: originalKey, pane, input} : await waitFor(() => {
         if (mode() !== selected) return null;
         const key = sessionKey();
         const livePane = activePane(key);
@@ -323,8 +439,11 @@
           ? {key, pane: livePane, input: currentInput(livePane)} : null;
       }, token, 25000);
       next.input.readOnly = true;
-      if (attachments?.length) { next.pane.state.chatAttachments = attachments; next.pane.requestUpdate?.(); }
-      setDraft(next.input, text);
+      if (!useDraft) {
+        await carrySettings(originalKey, next.key, selected);
+        if (attachments?.length) { next.pane.state.chatAttachments = attachments; next.pane.requestUpdate?.(); }
+        setDraft(next.input, text);
+      }
       await Promise.resolve(next.pane.updateComplete);
       if (!active || token !== operation || mode() !== selected || sessionKey() !== next.key
           || !paneReady(next.pane, next.key)) throw new Error('会话已切换，原文已保留。');
@@ -377,7 +496,7 @@
     get active() { return active; }, get busy() { return busy; },
     leave, mount, sendFromHome, delegateNativeSend,
     refreshRecent: () => { recent.clear(); schedule(); },
-    status: () => ({active, busy, ready, mode: mode(), sessionKey: sessionKey()}),
+    status: () => ({active, busy, ready, mode: mode(), sessionKey: sessionKey(), draft: draft ? {key: draft.key, state: draft.state, mode: draft.mode} : null}),
   };
   const materialize = () => {
     const welcome = document.querySelector('.laolao-startup-home .agent-chat__welcome');
@@ -394,8 +513,8 @@
   // home is in place before the new mode's history could ever be seen.
   const enter = () => {
     if (docked()) return;
-    if (active) { remember(); schedule(); return; }
-    active = true; busy = false; ready = true; operation++;
+    if (active) { remember(); draft = null; schedule(); return; }
+    active = true; busy = false; ready = true; operation++; draft = null;
     root.setAttribute('data-laolao-startup-home', '1');
     watch(); mount();
   };
@@ -405,6 +524,8 @@
     if (!active || event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
     const input = pathMatch(event, '.agent-chat__composer-combobox textarea');
     if (!input) return;
+    // 正在选「@ 提及」时，回车是选中那一项，不是发送。
+    if (document.querySelector('body > .pinkie-mention')) return;
     event.preventDefault(); event.stopImmediatePropagation();
     void sendFromHome(input, input.closest?.('openclaw-chat-pane') || activePane());
   }, true);
@@ -420,17 +541,27 @@
   window.addEventListener('pinkie:session-selected', event => {
     if (!active || busy) return;
     if (event.detail?.sessionKey === expectedModeSession) { expectedModeSession = ''; return; }
+    // 首页自己换到空白新会话上，不算离开首页。
+    if (draft?.key && event.detail?.sessionKey === draft.key) return;
     leave();
   });
+  window.addEventListener('laolao:mode-transition-start', () => { switchingSince = Date.now(); });
   window.addEventListener('laolao:mode-session-handoff', event => {
+    if (!switchingSince) switchingSince = Date.now();
     expectedModeSession = event.detail?.sessionKey || '';
     if (event.detail?.mode && expectedModeSession) previous.set(event.detail.mode, expectedModeSession);
     if (busy) { operation++; releaseDraft(); busy = false; root.removeAttribute('data-laolao-startup-busy'); }
     enter();
   });
   window.addEventListener('laolao:mode-transition-finished', () => {
+    switchingSince = 0;
     if (!active) return;
     mount(); materialize();
+  });
+  // 网关刚连上（冷启动、断线重连）：上次没备成的空白新会话再备一次。
+  window.addEventListener('pinkie:sidebar-gateway-ready', () => {
+    if (!active || busy || draft?.state !== 'failed') return;
+    draft = null; schedule();
   });
   window.addEventListener('laolao:modechange', () => {
     if (!active) return;

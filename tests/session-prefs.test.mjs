@@ -58,7 +58,7 @@ test('hooks: before_prompt_build and before_tool_call', async () => {
   };
   registerSessionPrefs(api, {root: tmp()});
   const call = (name, params) => new Promise(resolve => methods[name]({params, respond: (ok, value) => resolve(value)}));
-  assert.deepEqual(await call('pinkie.session.prefs.set', {key: KEY, web: false, style: 'detailed'}), {ok: true});
+  assert.deepEqual(await call('pinkie.session.prefs.set', {key: KEY, web: false, style: 'detailed'}), {ok: true, style: 'detailed', customStyle: '', web: false});
   assert.equal((await call('pinkie.session.prefs.get', {key: KEY})).web, false);
   assert.equal((await call('pinkie.session.prefs.set', {key: KEY, style: 'x'})).ok, false);
   const built = hooks.before_prompt_build[0]({}, {sessionKey: KEY});
@@ -91,4 +91,36 @@ test('自己分工 is on by default and the settings switch turns it off and bac
   prefs.setGlobal({autoSplit: 'yes'});
   assert.equal(prefs.globalPrefs().autoSplit, false, 'only a real boolean changes it');
   assert.equal(prefs.setGlobal({autoSplit: true}).autoSplit, true);
+});
+
+test('mode options: 工作程度 only in project mode, 想法取向 only in ideas mode', () => {
+  const prefs = new SessionPrefs(tmp());
+  const project = 'agent:project:dashboard:p1', ideas = 'agent:thinking:dashboard:t1';
+  assert.equal(prefs.forSession(project).pace, 'default');
+  assert.equal(prefs.forSession(ideas).lens, 'default');
+  assert.ok(!('pace' in prefs.forSession(KEY)) && !('lens' in prefs.forSession(KEY)));
+  assert.ok(!('lens' in prefs.forSession(project)) && !('pace' in prefs.forSession(ideas)));
+  prefs.setSession(project, {pace: 'fast'});
+  prefs.setSession(ideas, {lens: 'critic'});
+  assert.equal(prefs.forSession(project).pace, 'fast');
+  assert.match(prefs.promptContext(project), /【工作程度：效率】/);
+  assert.match(prefs.promptContext(project), /没验证的就说没验证/);
+  assert.match(prefs.promptContext(ideas), /【想法取向：挑刺】/);
+  prefs.setSession(project, {pace: 'strict'});
+  assert.match(prefs.promptContext(project), /【工作程度：严谨】/);
+  prefs.setSession(project, {pace: 'default'});
+  assert.doesNotMatch(prefs.promptContext(project), /工作程度/);
+  assert.throws(() => prefs.setSession(project, {pace: 'turbo'}), /没有这种工作程度/);
+  assert.throws(() => prefs.setSession(ideas, {lens: 'x'}), /没有这种想法取向/);
+  assert.throws(() => prefs.setSession(KEY, {pace: 'fast'}), /这个模式没有这个选项/);
+  assert.throws(() => prefs.setSession(project, {lens: 'critic'}), /这个模式没有这个选项/);
+  assert.doesNotMatch(prefs.promptContext(KEY), /工作程度|想法取向/);
+});
+test('saving answers with the settings that were actually stored', () => {
+  const prefs = new SessionPrefs(tmp());
+  const project = 'agent:project:dashboard:save-echo';
+  assert.deepEqual(prefs.setSession(project, {pace: 'strict', web: false}), {ok: true, style: 'default', customStyle: '', web: false, pace: 'strict'});
+  // 不认识的字段（比如老界面发来的）不会被说成已经存下。
+  assert.equal('lens' in prefs.setSession(project, {style: 'concise'}), false);
+  assert.deepEqual(prefs.setSession(KEY, {web: true}), {ok: true, style: 'default', customStyle: '', web: true});
 });
