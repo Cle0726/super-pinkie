@@ -51,3 +51,16 @@ test('the plugin answers pinkie.model.failure and ships model-health.mjs', () =>
   assert.match(read('services/mode-architecture/setup.py'), /"model-health\.mjs"/);
   assert.match(read('installer/macos/apply-theme.sh'), / model-health\.mjs /);
 });
+
+test('a retried send (two live user entries, same time and idempotencyKey) resolves to the later one', () => {
+  const source = read('ui/injections/laolao-message-actions.js');
+  const body = /function historyItem\(messageId, history\) \{[\s\S]*?\n  \}\n/.exec(source)[0];
+  const historyItem = vm.runInNewContext(`(${body.replace(/^function historyItem/, 'function')})`);
+  const send = {idempotencyKey: 'k:user'};
+  const history = [{role: 'user', timestamp: 5}, {role: 'user', timestamp: 9, __openclaw: {id: 'a1', ...send}},
+    {role: 'user', timestamp: 9, __openclaw: {id: 'a2', ...send}}, {role: 'assistant', timestamp: 12, __openclaw: {id: 'b'}}];
+  assert.equal(historyItem('msg:user:9:0', history).__openclaw.id, 'a2');
+  const different = [{role: 'user', timestamp: 9, __openclaw: {id: 'a1', idempotencyKey: 'x'}}, {role: 'user', timestamp: 9, __openclaw: {id: 'a2', idempotencyKey: 'y'}}];
+  assert.equal(historyItem('msg:user:9:0', different), null);
+  assert.equal(historyItem('msg:assistant:12:3', history).__openclaw.id, 'b');
+});
