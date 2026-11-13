@@ -752,7 +752,9 @@
   async function sessionPrefs(key, force = false) {
     if (!force && prefsCache.has(key)) return prefsCache.get(key);
     let value = {style: 'default', web: true};
-    try { const got = await request('pinkie.session.prefs.get', {key}, 8000); if (got?.ok) value = got; } catch {}
+    // 缺的字段用默认值补上：web 只有明确是 false 才算关。原来整份替换，回包里没有 web 时
+    // 按钮显示「开」、点一下却又写成「开」，看起来就是点了没反应。
+    try { const got = await request('pinkie.session.prefs.get', {key}, 8000); if (got?.ok) value = {...value, ...got, web: got.web !== false}; } catch {}
     prefsCache.set(key, value);
     return value;
   }
@@ -761,30 +763,103 @@
     prefsCache.set(key, {...(prefsCache.get(key) || {}), ...patch});
     paintChips(true);
   }
-  function styleMenu(anchor, key, prefs) {
+  // 一个从按钮上方弹出的单选菜单：回答风格、项目模式的工作程度、想法模式的取向共用。
+  // 按钮被收进「工具」菜单（laolao-composer-tray.js）而自己不可见时，贴着那个工具按钮弹。
+  function choiceMenu(anchor, {label, items, current, note, onPick}) {
     document.querySelector('.pinkie-style-menu')?.remove();
     const menu = el('div', 'pinkie-style-menu');
     menu.setAttribute('role', 'menu');
-    for (const [style, label] of Object.entries(STYLE_LABEL)) {
-      const item = button('回答风格：' + label, 'pinkie-style-menu__item', async () => {
-        menu.remove();
+    menu.setAttribute('aria-label', label);
+    for (const entry of items) {
+      const item = button(label + '：' + entry.label, 'pinkie-style-menu__item', async () => { menu.remove(); await onPick(entry.value); }, '');
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', String(current === entry.value));
+      if (entry.icon) { const icon = el('span', 'pinkie-style-menu__icon'); icon.innerHTML = entry.icon; item.append(icon); }
+      const text = el('span', 'pinkie-style-menu__text');
+      text.append(el('span', 'pinkie-style-menu__name', entry.label));
+      if (entry.hint) text.append(el('span', 'pinkie-style-menu__hint', entry.hint));
+      item.append(text);
+      menu.append(item);
+    }
+    if (note) menu.append(el('div', 'pinkie-style-menu__note', note));
+    document.body.append(menu);
+    const visible = node => { const rect = node?.getBoundingClientRect?.(); return rect && rect.width > 0 && rect.height > 0 ? rect : null; };
+    const rect = visible(anchor) || visible(document.querySelector('openclaw-chat-pane .pinkie-tray-btn'))
+      || visible(document.querySelector('openclaw-chat-pane .agent-chat__composer-combobox')) || {left: 24, top: window.innerHeight - 80};
+    menu.style.left = Math.round(Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
+    menu.style.bottom = Math.round(window.innerHeight - rect.top + 6) + 'px';
+    const close = event => { if (!menu.contains(event.target)) { menu.remove(); document.removeEventListener('pointerdown', close, true); } };
+    setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
+    const onKey = event => { if (event.key === 'Escape' || !menu.isConnected) { menu.remove(); document.removeEventListener('keydown', onKey, true); } };
+    document.addEventListener('keydown', onKey, true);
+    menu.querySelector('[aria-checked="true"]')?.focus?.({preventScroll: true});
+  }
+  function styleMenu(anchor, key, prefs) {
+    choiceMenu(anchor, {
+      label: '回答风格', current: prefs.style,
+      items: Object.entries(STYLE_LABEL).map(([value, label]) => ({value, label})),
+      note: '只管写法；新会话的默认风格在设置「常用」里选',
+      onPick: async style => {
         if (style === 'custom') {
           const global = await window.__pinkieNativeBridge?.loadPrefs?.(true);
           if (!String(global?.customStyle || '').trim()) { toast('先在设置「常用」页写好自定义风格'); window.__pinkieNativeBridge?.openSettings?.(); return; }
         }
         try { await setSessionPref(key, {style}); } catch (error) { toast(error.message); }
-      }, label);
-      item.setAttribute('role', 'menuitemradio');
-      item.setAttribute('aria-checked', String(prefs.style === style));
-      menu.append(item);
-    }
-    menu.append(el('div', 'pinkie-style-menu__note', '只管写法；新会话的默认风格在设置「常用」里选'));
-    document.body.append(menu);
-    const rect = anchor.getBoundingClientRect();
-    menu.style.left = Math.round(rect.left) + 'px';
-    menu.style.bottom = Math.round(window.innerHeight - rect.top + 6) + 'px';
-    const close = event => { if (!menu.contains(event.target)) { menu.remove(); document.removeEventListener('pointerdown', close, true); } };
-    setTimeout(() => document.addEventListener('pointerdown', close, true), 0);
+      },
+    });
+  }
+  // 模式专属的那一颗：项目模式是「工作程度」，想法模式是「取向」。别的模式没有。
+  // 图标和侧栏那套线条图标同一种画法：细线跟文字颜色走，只有小记号（pk-f / pk-a）带一点粉。
+  const svg = body => '<svg class="pinkie-ic" viewBox="0 0 24 24" aria-hidden="true">' + body + '</svg>';
+  const STAR4 = 'c.4 2.4 1.4 3.4 3.8 3.8-2.4.4-3.4 1.4-3.8 3.8-.4-2.4-1.4-3.4-3.8-3.8 2.4-.4 3.4-1.4 3.8-3.8z';
+  const MODE_OPTION = {
+    project: {
+      field: 'pace', label: '工作程度', short: '程度',
+      note: '只改这个会话里碧琪做事和验证的分量；没验证的照样会说没验证',
+      items: [
+        {value: 'default', label: '默认', hint: '碧琪按活儿的大小自己拿捏',
+          icon: svg('<ellipse cx="12" cy="9.6" rx="5.4" ry="6.2"/><path d="M11.2 15.7l.8 1.1.8-1.1"/><path d="M12 16.8c.2 1.4-1.3 1.9-.6 3.9"/><path class="pk-a" d="M9.4 8c.4-1.200 1.200-2 2.400-2.300"/>')},
+        {value: 'fast', label: '效率', hint: '小改动、急活：直接做，验一次就交',
+          icon: svg('<path d="M3 8.5h5.5M2 12h4.5M4 15.5h4.5"/><path class="pk-f" d="M15.5 4.5' + STAR4 + '"/><path d="M11 16.5l3-3"/>')},
+        {value: 'strict', label: '严谨', hint: '要紧的活：先摸清再动，逐项验证、交付前复查',
+          icon: svg('<circle cx="10.5" cy="10.5" r="6.2"/><path d="M15.3 15.3L20 20"/><path class="pk-a" d="M7.8 10.6l1.9 1.9 3.5-3.7"/>')},
+      ],
+      toast: {default: '工作程度回到默认', fast: '这个会话按效率来：直接做，验一次就交', strict: '这个会话按严谨来：逐项验证，交付前复查'},
+    },
+    thinking: {
+      field: 'lens', label: '想法取向', short: '取向',
+      note: '只管这个会话里碧琪怎么陪你想；随时可以换',
+      items: [
+        {value: 'default', label: '默认', hint: '碧琪看情况来',
+          icon: svg('<path d="M8.5 14.5a5.5 5.5 0 1 1 7 0c-.7.6-1 1.300-1 2.200h-5c0-.9-.3-1.600-1-2.200z"/><path d="M10 19.500h4"/><path class="pk-f" d="M12 6.800' + 'c.2 1.300.8 1.900 2.100 2.100-1.300.2-1.900.8-2.100 2.100-.2-1.300-.8-1.900-2.100-2.100 1.300-.2 1.900-.8 2.100-2.100z"/>')},
+        {value: 'diverge', label: '发散', hint: '多给几个明显不一样的方向',
+          icon: svg('<path d="M12 12L4.500 6.500M12 12l7.500-5.500M12 12v8.500M12 12l-7 5.500M12 12l7 5.500"/><circle class="pk-f" cx="12" cy="12" r="1.900"/><path class="pk-a" d="M12 2.800v2.400"/>')},
+        {value: 'converge', label: '收敛', hint: '选定一个，落成能开工的方案',
+          icon: svg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.300" opacity=".6"/><circle class="pk-f" cx="12" cy="12" r="1.700"/>')},
+        {value: 'critic', label: '挑刺', hint: '专找硬伤和站不住的地方',
+          icon: svg('<circle cx="10.500" cy="10.500" r="6.200"/><path d="M15.300 15.300L20 20"/><path class="pk-a" d="M10.500 7.300v3.900"/><circle class="pk-f" cx="10.500" cy="13.600" r=".9"/>')},
+      ],
+      toast: {default: '想法取向回到默认', diverge: '这个会话先发散：多给方向，不急着定', converge: '这个会话收敛：选一个，落成方案', critic: '这个会话挑刺：先找硬伤'},
+    },
+  };
+  const modeOptionFor = key => MODE_OPTION[/^agent:([^:]+):/.exec(key || '')?.[1]] || null;
+  function modeChip(key, prefs) {
+    const option = modeOptionFor(key);
+    if (!option) return null;
+    const value = option.items.some(item => item.value === prefs[option.field]) ? prefs[option.field] : 'default';
+    const item = option.items.find(entry => entry.value === value);
+    const chip = button(option.label + '：' + item.label + '（' + item.hint + '）', 'pinkie-chip pinkie-chip--mode', event => choiceMenu(event.currentTarget, {
+      label: option.label, current: value, items: option.items, note: option.note,
+      onPick: async next => {
+        try { await setSessionPref(key, {[option.field]: next}); toast(option.toast[next]); } catch (error) { toast(error.message); }
+      },
+    }), '');
+    chip.dataset.option = option.field;
+    chip.dataset.value = value;
+    chip.setAttribute('aria-haspopup', 'menu');
+    chip.innerHTML = item.icon + '<span></span><svg class="pinkie-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.800L5 6.500l2.800-2.700"/></svg>';
+    chip.querySelector('span').textContent = value === 'default' ? option.label : option.short + '：' + item.label;
+    return chip;
   }
   let chipKey = '';
   async function paintChips(force = false) {
@@ -810,6 +885,11 @@
     web.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg><span>联网</span>';
     web.setAttribute('aria-pressed', String(prefs.web !== false));
     host.replaceChildren(style, web);
+    // 模式专属的那一颗单独放：通用按钮收进「工具」菜单后，它仍然留在输入框下面。
+    const mode = modeChip(key, prefs);
+    const old = controls.querySelector(':scope > .pinkie-chip--mode');
+    if (mode) { if (old) old.replaceWith(mode); else controls.append(mode); } else old?.remove();
+    window.dispatchEvent(new CustomEvent('pinkie:composer-chips', {detail: {sessionKey: key}}));
   }
 
   // C4 source badges: URLs from this turn's web_search / web_fetch results.
