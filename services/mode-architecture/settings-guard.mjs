@@ -287,20 +287,187 @@ export class SettingsGuard {
     return undefined;
   }
 
+  // ---------- exec 兜底：命令不拦，但命令跑完要是改了人设文件或配置里的产品键，当场换回 ----------
+  // 11-13 隔离验收：一句「把插件 enabled 改成 false」，碧琪用 python 改了 openclaw.json，网关热加载后防护整个没了。
+  // 只看产品设定（四个模式的人设/手册、openclaw.json 的产品键），用户项目和其它文件一概不管。
+  baseline() {
+    if (!this.enabled) return null;
+    const key = `${this.stateDir}|${this.configPath}`;
+    const shared = globalThis[BASELINES] ||= new Map();
+    // 同一进程里插件会注册好几次；用第一次（启动校验刚换回官方版本之后）的快照，后来的实例不能拿被改过的文件当基准。
+    if (shared.has(key)) return shared.get(key);
+    const files = new Map();
+    const dirs = [];
+    const roots = this.workspaces().map(w => w.dir);
+    for (const dir of roots) {
+      for (const name of EXEC_WATCH_FILES) { const file = path.join(dir, name); try { files.set(file, fs.readFileSync(file)); } catch {} }
+      for (const sub of EXEC_WATCH_DIRS) {
+        const root = path.join(dir, sub); dirs.push(root);
+        const list = []; walk(root, list, 4000);
+        for (const file of list) { try { files.set(file, fs.readFileSync(file)); } catch {} }
+      }
+    }
+    let config = null; try { config = JSON.parse(fs.readFileSync(this.configPath, 'utf8')); } catch {}
+    if (!config || typeof config !== 'object') config = this.readConfig() || {};
+    const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
+      // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
+      product: productView(config), official: structuredClone(config), lastGood: structuredClone(config),
+      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: []};
+    shared.set(key, snap);
+    return snap;
+  }
+
+  // 返回换回 / 挪走的文件列表（空 = 什么都没改）。
+  verifyAfterCommand(tool = 'exec') {
+    const snap = this.baseline();
+    if (!snap) return [];
+    const fixed = [];
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backup = (file, mode = 'copy') => {
+      if (!this.pinkieStateRoot) { if (mode === 'move') fs.rmSync(file, {force: true, recursive: true}); return; }
+      const target = path.join(this.pinkieStateRoot, 'backups', `guard-exec-${stamp}`, path.relative(this.stateDir, file).replace(/^(\.\.[\\/])+/, ''));
+      fs.mkdirSync(path.dirname(target), {recursive: true});
+      if (mode === 'move') fs.renameSync(file, target); else fs.copyFileSync(file, target);
+    };
+    for (const [file, official] of snap.files) {
+      if (statKey(file) === snap.stats.get(file)) continue;
+      let now = null; try { now = fs.readFileSync(file); } catch {}
+      if (now && now.equals(official)) { snap.stats.set(file, statKey(file)); continue; }
+      try {
+        if (now) backup(file);
+        try { if (fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file); } catch {}
+        fs.mkdirSync(path.dirname(file), {recursive: true});
+        fs.writeFileSync(file, official);
+        snap.stats.set(file, statKey(file));
+        fixed.push(file);
+      } catch {}
+    }
+    // 人设/手册目录里新冒出来的文件、工作区里新出现的 BOOTSTRAP.md（会被当设定注入）：挪进备份。
+    const extras = [];
+    for (const dir of snap.dirs) walk(dir, extras, 4000);
+    for (const dir of snap.roots) { const file = path.join(dir, 'BOOTSTRAP.md'); if (fs.existsSync(file)) extras.push(file); }
+    for (const file of extras) {
+      if (snap.files.has(file)) continue;
+      try { backup(file, 'move'); fixed.push(file); } catch {}
+    }
+    // openclaw.json：只比产品键；用户改的模型、偏好原样留着。
+    const configStat = statKey(this.configPath);
+    if (configStat !== snap.configStat) {
+      try {
+        let raw = null; try { raw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
+        let config = null; try { config = JSON.parse(raw); } catch {}
+        if (!snap.configKnown) {
+          // 插件加载时还没有配置文件（Windows 第一次启动）：第一份读得出的配置就当基准，不改它。
+          if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config), official: structuredClone(config), lastGood: structuredClone(config)});
+        } else if (config && typeof config === 'object' && JSON.stringify(productView(config)) !== JSON.stringify(snap.product)) {
+          applyProductView(config, snap.official);
+          backup(this.configPath);
+          const temp = `${this.configPath}.guard-${process.pid}`;
+          let mode = 0o600; try { mode = fs.statSync(this.configPath).mode & 0o777; } catch {}
+          fs.writeFileSync(temp, JSON.stringify(config, null, 2) + '\n', {mode});
+          fs.renameSync(temp, this.configPath);
+          fixed.push(this.configPath);
+        } else if (!config || typeof config !== 'object') {
+          // 删掉或改成读不出来的样子：整份换回快照（快照就是启动校验之后的官方配置 + 当时的用户设置）。
+          if (raw !== null) backup(this.configPath);
+          fs.writeFileSync(this.configPath, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
+          fixed.push(this.configPath);
+        }
+        if (snap.configKnown && config && typeof config === 'object') snap.lastGood = structuredClone(config);
+        this.cache = {at: 0, value: null};
+      } catch {}
+      snap.configStat = statKey(this.configPath);
+    }
+    if (fixed.length) {
+      const event = {at: new Date().toISOString(), tool, restored: fixed.map(f => path.relative(this.stateDir, f) || f)};
+      snap.restores.push(event);
+      if (snap.restores.length > 20) snap.restores.splice(0, snap.restores.length - 20);
+      this.record({toolName: tool}, `命令改了 ${fixed.length} 个设定文件，已换回`);
+      if (this.pinkieStateRoot) {
+        try { fs.mkdirSync(path.join(this.pinkieStateRoot, 'guard'), {recursive: true}); fs.appendFileSync(path.join(this.pinkieStateRoot, 'guard', 'guard.log'), JSON.stringify({...event, kind: 'exec-restore'}) + '\n'); } catch {}
+      }
+    }
+    return fixed;
+  }
+
+  execNote(fixed) {
+    const names = fixed.map(f => path.relative(this.stateDir, f) || f).slice(0, 6).join('、');
+    return `【碧琪设定防护】这条命令改动了碧琪的产品设定（${names}${fixed.length > 6 ? ' 等' : ''}），正式版里不允许，已经换回官方版本（改动前的文件备份在 ${this.pinkieStateRoot ? path.join(this.pinkieStateRoot, 'backups') : '备份目录'}）。如实告诉用户这件事没有做成；用户能改的是记忆、设置里的偏好、自己的模型和密钥、自己的技能（${this.userSkillsDir()}）。命令的其它效果不受影响。`;
+  }
+
   status() {
     let startup = null;
     if (this.pinkieStateRoot) startup = readJson(path.join(this.pinkieStateRoot, 'guard', 'status.json'));
     // 「被修改过」看历史：哪次启动换回过文件、修过配置、发现不是官方包或校验出错，都留着标记，方便排查反馈。
     const history = Array.isArray(startup?.history) ? startup.history : [];
     const lastChange = history.length ? history[history.length - 1] : null;
-    const modified = Boolean(startup && (history.length || startup.restored?.length || startup.nonOfficial || startup.error));
+    const execRestores = this.enabled ? (globalThis[BASELINES]?.get(`${this.stateDir}|${this.configPath}`)?.restores || []) : [];
+    const modified = Boolean(execRestores.length || (startup && (history.length || startup.restored?.length || startup.nonOfficial || startup.error)));
     return {
       enabled: this.enabled, channel: this.mode.channel, version: this.mode.version,
       userSkillsDir: this.userSkillsDir(),
       startup, modified, lastChange, error: startup?.error ? String(startup.error) : '', nonOfficial: Boolean(startup?.nonOfficial),
-      recentBlocks: this.blocked.slice(-10),
+      recentBlocks: this.blocked.slice(-10), execRestores: execRestores.slice(-10),
     };
   }
+}
+
+// exec 兜底看哪些：人设/手册（几十到一百多个小文件，约 2 MB）。自带技能和插件代码由下次启动校验换回。
+const EXEC_WATCH_FILES = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md'];
+const EXEC_WATCH_DIRS = ['persona', 'playbooks'];
+const BASELINES = Symbol.for('pinkie.settingsGuard.baselines');
+const PRODUCT_PLUGIN_IDS = ['pinkie-mode-architecture', 'pinkie-project-scope', 'pinkie-first-person-renderer'];
+function statKey(file) {
+  try { const s = fs.lstatSync(file); return `${s.isSymbolicLink() ? 'L' : ''}${s.size}:${s.mtimeMs}:${s.ino}`; } catch { return 'missing'; }
+}
+// openclaw.json 的产品键（和 installer/guard/guard.mjs 的 repairConfig 管的是同一批）。
+function productView(config = {}) {
+  const plugins = config.plugins || {};
+  const agents = {};
+  for (const agent of Array.isArray(config.agents?.list) ? config.agents.list : []) {
+    if (PRODUCT_AGENTS.includes(agent?.id)) agents[agent.id] = {workspace: agent.workspace ?? null, contextInjection: agent.contextInjection ?? null, toolsDeny: agent.tools?.deny ?? null};
+  }
+  return {
+    enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null, paths: plugins.load?.paths ?? null,
+    entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => [id, plugins.entries?.[id] ? plugins.entries[id].enabled ?? null : 'absent'])),
+    agents, hooksInternal: config.hooks?.internal ?? null, extraDirs: config.skills?.load?.extraDirs ?? null,
+  };
+}
+function applyProductView(config, official) {
+  const want = productView(official);
+  const put = (obj, key, value) => { if (value === null || value === undefined) delete obj[key]; else obj[key] = structuredClone(value); };
+  const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : (config.plugins = {});
+  put(plugins, 'enabled', want.enabled); put(plugins, 'deny', want.deny); put(plugins, 'allow', want.allow);
+  if (want.paths !== null) { plugins.load = plugins.load && typeof plugins.load === 'object' ? plugins.load : {}; plugins.load.paths = structuredClone(want.paths); }
+  else if (plugins.load) delete plugins.load.paths;
+  for (const id of PRODUCT_PLUGIN_IDS) {
+    const value = want.entries[id];
+    if (value === 'absent') continue;
+    plugins.entries = plugins.entries && typeof plugins.entries === 'object' ? plugins.entries : {};
+    if (!plugins.entries[id] || typeof plugins.entries[id] !== 'object') plugins.entries[id] = structuredClone(official.plugins.entries[id]);
+    put(plugins.entries[id], 'enabled', value);
+  }
+  const list = Array.isArray(config.agents?.list) ? config.agents.list : null;
+  for (const [id, values] of Object.entries(want.agents)) {
+    let agent = list?.find(a => a?.id === id);
+    if (!agent) {
+      // 产品模式整条被删了：从快照里放回去。
+      config.agents = config.agents && typeof config.agents === 'object' ? config.agents : {};
+      config.agents.list = Array.isArray(config.agents.list) ? config.agents.list : [];
+      config.agents.list.push(structuredClone(official.agents.list.find(a => a?.id === id)));
+      continue;
+    }
+    put(agent, 'workspace', values.workspace); put(agent, 'contextInjection', values.contextInjection);
+    if (values.toolsDeny !== null) { agent.tools = agent.tools && typeof agent.tools === 'object' ? agent.tools : {}; agent.tools.deny = structuredClone(values.toolsDeny); }
+    else if (agent.tools) delete agent.tools.deny;
+  }
+  if (want.hooksInternal !== null) { config.hooks = config.hooks || {}; config.hooks.internal = structuredClone(want.hooksInternal); }
+  else if (config.hooks) delete config.hooks.internal;
+  if (want.extraDirs !== null) {
+    config.skills = config.skills && typeof config.skills === 'object' ? config.skills : {};
+    config.skills.load = config.skills.load && typeof config.skills.load === 'object' ? config.skills.load : {};
+    config.skills.load.extraDirs = structuredClone(want.extraDirs);
+  } else if (config.skills?.load) delete config.skills.load.extraDirs;
 }
 
 function walk(dir, out, limit) {
@@ -368,6 +535,25 @@ export function registerSettingsGuard(api, options = {}) {
       return undefined;
     }
   }, {priority: 100000});
+  // exec 兜底：插件一加载就记下官方快照（启动校验刚跑完）；命令结果落进记录时同步检查、换回，并在结果里写明。
+  // tool_result_persist 是同步钩子，赶在配置热加载（约 0.5 秒防抖）之前把产品键改回去；after_tool_call 再查一次兜底。
+  const COMMAND_TOOLS = new Set(['exec', 'bash', 'process']);
+  try { guard.baseline(); } catch {}
+  api.on?.('tool_result_persist', (event = {}) => {
+    try {
+      const tool = String(event.toolName || event.message?.toolName || '');
+      if (!guard.enabled || !COMMAND_TOOLS.has(tool)) return undefined;
+      const fixed = guard.verifyAfterCommand(tool);
+      if (!fixed.length || !event.message) return undefined;
+      const message = {...event.message};
+      const note = {type: 'text', text: guard.execNote(fixed)};
+      message.content = Array.isArray(message.content) ? [...message.content, note] : [{type: 'text', text: String(message.content ?? '')}, note];
+      return {message};
+    } catch { return undefined; }
+  }, {priority: 100000});
+  api.on?.('after_tool_call', (event = {}) => {
+    try { if (guard.enabled && COMMAND_TOOLS.has(String(event.toolName || ''))) guard.verifyAfterCommand(String(event.toolName)); } catch {}
+  });
   api.registerGatewayMethod?.('pinkie.guard.status', ({respond}) => {
     try { respond(true, guard.status()); } catch (error) { respond(false, undefined, {code: 'guard_status_failed', message: String(error?.message || error)}); }
   });
