@@ -26,3 +26,12 @@ export function transformWithStatus(source) {
   const replacement = anchor + '\n\t\t\t\t\tpayload = workFirstMediaPayload(payload, info, sessionKey, agentId, runAgentHarnessBeforeMessageWriteHook);\n\t\t\t\t\tif (!payload) return;';
   return {changed: true, reason: 'patched', text: `${marker}\n${workFirstMediaPayload.toString()}\n` + source.replace(anchor, replacement)};
 }
+
+// CLI: OPENCLAW_ROOT=<openclaw package> node patch/apply-work-first-media-gate.mjs
+import {applyDist as pinkieApplyDist} from './lib-apply-dist.mjs';
+import {fileURLToPath as pinkieFileURL} from 'node:url';
+import pinkiePath from 'node:path';
+if (process.argv[1] && pinkiePath.resolve(process.argv[1]) === pinkieFileURL(import.meta.url)) {
+  if (!process.env.OPENCLAW_ROOT) throw new Error('Set OPENCLAW_ROOT to the active OpenClaw package');
+  console.log(JSON.stringify(pinkieApplyDist(process.env.OPENCLAW_ROOT, 'work-first-media-gate', [transformWithStatus])));
+}

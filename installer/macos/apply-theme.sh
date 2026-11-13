@@ -527,6 +527,10 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
     # 交付前检查要求补一遍时，用户刚发的那句留在会话主线上（以前被当成孤立消息拆掉，切页面回来就不见了）。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-user-preservation.mjs"
+    # 立即追加带的图片一起送给正在跑的那一轮（以前图片被丢掉）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-images.mjs"
+    # 带图片的回答也走交付前检查，没通过的草稿不会从网关镜像漏出去。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-work-first-media-gate.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.
