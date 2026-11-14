@@ -42,6 +42,15 @@
 | 11-13 夜 | B2 停（§6），不做 `tool_load` | 工具列表每次运行（`runEmbeddedAttempt`）开头建一次，插件钩子改不了；插件自己的工具工厂能按会话返回 null，但只在下一次用户发话时生效，核心工具（`cron`、`image_generate`）插件管不了。方案明说做不到就停在 B1、不改运行时核心 |
 | 11-13 夜 | B3 导出完整系统提示词用 `OPENCLAW_CACHE_TRACE*` 环境变量（只给副本网关，`gateway.py` 的 `TH_PASS_` 前缀） | 会话记录里的 systemPrompt 超过 32768 字就整段丢掉；这是运行时已有的调试开关，不是配置键 |
 | 11-13 夜 | B3-2 的「改前」用 `origin/main`（`5ff2aad2`）的插件代码 + 去掉本分支加的 deny / allow，在副本里跑同两题，跑完原样恢复 | 方案要「改前改后各导出一份」；副本的旧会话记录拿不到完整提示词 |
+| 11-13 夜 | C1 只加那句话，不动并行开关 | 运行时本来就并行执行；mm（openai-completions）不发 `parallel_tool_calls` 时上游默认允许，没有「没传」可补 |
+| 11-13 夜 | C2 的提示每个会话一共一次，不是每类一次 | Fable 那句话三类都说到，还写着「这条只提醒一次」；按类再出现就和原句矛盾 |
+| 11-13 夜 | D2 项目模式 + git 仓库的子会话一律单独建工作树（不先判断有没有别的会话在干活） | 跨会话判断「在干活」容易漏；没改动的会自动清掉，多建一个没有代价 |
+| 11-13 夜 | D4 `pr_status`、D1 连接器工具都是常驻，不进按需层 | B2 停了，没有按需层 |
+| 11-14 | 隔离副本 `iso-th` 整个不见了，用仓库里的 `setup.py` 重建 | 原因不明（不是这条接力做的）；重建脚本就在仓库里，配置照旧只读复制 |
+| 11-14 | C 组实测（C1-2、C1-3、C2-1）记「没测」，不替用户起 1466 的中转 | 上游中转没在跑，20 次全是 network connection error；它是用户正式环境的服务，规矩不碰；不为凑数改题目或口径 |
+| 11-14 | D1 不另起一页，补 `main` 上已有的「连接器」卡片；新接的交给运行时 `openclaw mcp add`（先连再写） | 已有的页面功能齐全，只差「写前先连」和 Windows；运行时自己的命令既连又按它的配置结构校验，比插件里再写一个连接客户端可靠 |
+| 11-14 | D1 预置加高德地图（Key 放 env），不加日历 | 高德有官方包、Key 是用户自己的；日历没有只靠登录、两端都能用的服务 |
+| 11-14 | Z2 照实记「正式配置被改过」，不改回去 | 改它的是用户自己开的另一个会话（见 Z2），不是这条接力；改回去等于又动一次正式环境 |
 
 ## Windows 正式环境只读基线（`session-stats.py --state %USERPROFILE%\.openclaw`，最近 60 个会话）
 
@@ -289,15 +298,122 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 | B3-3 | 过 | `git diff 5ff2aad2 -- personas persona playbooks` 0 行（playbooks 在 `personas/*/playbooks/`） |
 | B-总 | 副本已在线下，降得很少 | 题 9 一次回复的 token（副本 hy4free）：改前 45931 / 45973（`before-h4f`、`b3-prompt-base`）→ A 组后 45563 / 45514 → B1 后 44896 / 44896 / 44839 / 44886 / 44852。Windows 副本本来就 ≤ 5 万（Fable 的 6.4 万是 Mac 正式）；本轮只靠少发工具说明降约 1.1 千（2.3%），B2 没做是主要原因 |
 
+## C 组
+
+### C1 一次调多个工具
+
+**查到的（C1-1）**
+- 运行时**本来就并行跑**一条回复里的多个调用：`proxy-*.js` 的 `executeToolCalls`，`toolExecution` 默认 `parallel`，碧琪这边没有工具标成 `sequential`。
+- 开关：碧琪的模型全走 `mm`（openai-completions）。这种适配器只在配置 params 里写了 `parallel_tool_calls`、或者 openai 的 gpt-5 系列时才发这个字段；不发时上游默认就允许并行。所以**没有「开关没传」要补的**，第 2 步不用做。Anthropic / Google 格式的适配器没有这个开关（它们本来就允许一条回复里多个调用）。
+- 结论：并行占比低不是运行时排队或开关没传，是模型习惯一条一条来。所以只做第 3 步：加 Fable 写的那句话。
+
+**改了什么**：`pinkie_search`、`code_search` 的说明末尾加那句话（插件里）；`read`、`web_fetch` 的说明在运行时里，用补丁 `patch/apply-tool-parallel-hint.mjs` 加（接进 `apply-all.mjs` 和 `apply-theme.sh`；Windows 快照里打过补丁的 `sessions-D8qGY7uC.js`、`openclaw-tools-KulZ1cdH.js` 和 SHA256SUMS 已同步）。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| C1-1 | 过 | 上面的结论 |
+| C1-2 | **没测** | 见下「C 组实测没跑成」 |
+| C1-3 | **没测** | 同上。改前参考：副本 `after-a` 25%、Windows 正式 3%、Mac 正式 14% |
+| 单测 | 过 | `tests/tool-parallel-hint.test.mjs` 4/4：原句一字不差；`read`、`web_fetch` 各加一次、不认识的文件拒绝改；快照里两份说明都带这句；插件的两个搜索工具也以这句结尾。`patches-wired` 过 |
+| `refresh_mac_runtime.py --check` | **待 Mac 端跑** | |
+
+### C2 少用 exec 干别的工具的活
+
+- `services/mode-architecture/exec-hints.mjs`：`exec` 命令的**第一段**是 `cat` / `head` / `sed -n` / `Get-Content`（读文件）、`grep` / `rg` / `Select-String`（搜代码）、`curl` / `wget` / `Invoke-WebRequest` / python `urllib`（抓网页）时，在**正常结果**后面附第五节那句提示。
+- 不拦命令、不标出错；命令本身出错的结果不动。
+- **和方案的差别**：方案写「每类只提示一次」，这里是**每个会话一共最多一次**。因为 Fable 那句话三类都说到了，还自己写着「这条只提醒一次」，按类再出现就和这句话矛盾。决定记在下面决定表。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| C2-1 | **没测** | 见下「C 组实测没跑成」。改前参考：副本 `after-a` 31%、Windows 正式 59%、Mac 正式 58% |
+| C2-2 | 过（单测） | `tests/exec-hints.test.mjs` 4/4：原句一字不差；只看第一段命令；同一会话只附一次、附在正常结果后面、出错结果不动、不拦；插件注册的是不拦的 `before_tool_call` 加同步的 `tool_result_persist` |
+
+### C 组实测没跑成（11-14）
+
+- 交接 8 时 `after-c` 批在后台跑，结果写在隔离副本里。**11-14 接手时整个 `%USERPROFILE%\碧琪实测\iso-th` 已经不在了**：硬盘上哪里都找不到（同一个上级目录里只剩别的工作的 `iso-metre`），`after-c` 的结果一起没了。
+- 用仓库里的 `setup.py` 重建了副本：端口 12794，叠了快照 33 个文件，三个运行时补丁都已在快照里（`changed: false`），`sync` 补了 deny 和 `document-extract`，夹具重造。然后重跑 `after-c`。
+- 20 次**全部**是 `FailoverError: LLM request failed: network connection error`，45 秒内就结束了。原因：模型上游 `127.0.0.1:1466` 那个本机中转**没在跑**，端口上没有进程。它不是本仓库的东西（仓库里的 `proxy/mm-retry-proxy.py` 是挂在它前面的 1467），平时跟着用户的正式环境起来。按规矩不碰正式环境、不替用户起他们的服务，所以**C1-2、C1-3、C2-1 记「没测」**，没有改题目或改口径去凑。
+- 中转起来以后重跑的办法（不用改任何东西）：
+  `python -I -X utf8 tools/tool-health/iso-windows/gateway.py status`（没在听就先 `start`），然后 `python -I -X utf8 tools/tool-health/iso-windows/run_eval.py --label after-c --repeat 2 --jobs 8`，再用 `session-stats.py --state <iso>\home\.openclaw --last 2000 --event-since <results.json 的 started>` 量。
+
+## D 组
+
+### D1 外部连接器
+
+- **方案说「App 里没有入口」，这个过时了**：`main` 上早就有设置里的「连接器」卡片（`ui/injections/laolao-capabilities.js`，提交 `248fa33c`）。后端是 `pinkie.connectors.list / save / toggle / remove / probe / login`（`rich-runtime.mjs`）。卡片能列出已接的、点预置接入、手填地址或一段配置、启用 / 暂停、移除、测试连接、Notion 网页登录。写的就是运行时已有的 `mcp.servers.<名字>`。所以没有另起一页，在它上面补了不合格的地方（提交 `8c5b5aed`）。
+- **补的**：
+  1. **新接的先连一次再写**（D1-2）：原来 `save` 直接写配置，命令写错照样存进去。现在新接的、启用的、非网页登录的连接器，交给运行时自己的 `openclaw mcp add`。它先连一次（probe），连上了再按运行时自己的配置结构校验、写入；连不上或校验不过就不写，页面显示一句中文原因，密钥抹掉。Notion（要先网页登录才连得上）和暂停着保存的，照旧走 `mutateConfigFile`，运行时写前同样校验结构。
+  2. **Windows 能用本地服务**：运行时起本地服务用 `shell:false`，`npx` 在 Windows 上是 `.cmd` 包装，直接起不来。改成用同一个 Node 安装里的 `node.exe` + `npx-cli.js`；没装 Node 就说一句去装。文件夹一栏认 `C:\…` 和 `\\服务器\…`。「选择…」按钮靠 Mac 的原生桥，Windows 上没有，就藏起来、改成贴路径。这和「连接」卡里绑项目文件夹的做法一样。
+  3. **预置**：原来有 GitHub（自己的令牌）、Notion（网页登录）、本地资料夹（只读）、其他服务。加了**高德地图**：官方包 `@amap/amap-maps-mcp-server`，Key 是用户自己在高德开放平台申请的，放在本机配置的 `env` 里，不放进网址（这一页原来就不许网址里带密钥）。**日历没加**：没找到只靠用户自己登录、两端都能用的日历服务（Google 日历的包要用户自己先建一个 OAuth 应用、下载凭据文件），列进「报给 Fable」D1-F1。所以预置是 4 个加「其他服务」，不是方案说的 5 个。
+  4. 已接的那一行显示「起的什么包、开放哪个文件夹」，不显示 `node.exe` 这种启动细节。
+- **和方案的差别**：连接器的工具**直接进工具列表，不进按需层**，因为 B2 没做（§6 停）。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| D1-1 | 过 | 截图（假网关 + 无头 Edge + 仓库界面，项目模式，设置 → 常用）：`%USERPROFILE%\碧琪实测\iso-th\shots\d1-light-chat.png`、`d1-dark-chat.png`。两条已接（启用中的本地资料夹、暂停的 Notion）、5 个可接入、Windows 下的文件夹输入框。添加 / 启用 / 停用 / 删除在副本网关上实测见 D1-2、D1-3 |
+| D1-2 | 过（副本实测 + 单测） | 副本网关调 `pinkie.connectors.save`，命令填 `not-a-real-cmd-xyz` → 返回「没连上：找不到启动命令「not-a-real-cmd-xyz」。检查一下命令有没有写错、对应的程序装了没有。配置没有改动。」；副本 `openclaw.json` 的 sha256 前后一样（`110183b1…`）；网关一直在听 12794。单测 `tests/connectors-d1.test.mjs` 6/6 |
+| D1-3 | **部分**：工具出现了，`tool_load` 没有（B2 没做），真调用没测（上游中转没在跑） | 副本里接本地资料夹（夹具 `fixtures\proj`）：运行时先连上再写（28 秒，第一次要下载包），`probe` 显示 4 个工具（只读过滤后，另 12 个被滤掉）。在 main 模式真开一轮：这一轮 `context.compiled` 的 53 个工具里有 `files__list_allowed_directories`、`files__list_directory`、`files__read_text_file`、`files__search_files`。模型那一步因为上游断了失败。暂停 / 启用 / 移除往返都 `ok`，测完已移除，副本 `mcp.servers` 是空的 |
+| D1-4 | 过 | 本分支对 `5ff2aad2` 的全部新增行里搜 `ghp_…`、`github_pat_…`、`sk-…`、`ntn_…`、`AKIA…`、写死的 `apiKey`：0 条。密钥只进本机 `openclaw.json`（headers / env），返回给页面的只有「有没有凭据」 |
+
+### D2 独立工作树
+
+- `services/mode-architecture/child-worktree.mjs` + `session-lineage.mjs`：项目模式里开子会话（`pinkie_session_start`），目标文件夹是 git 仓库时，用 OpenClaw 自带的受管工作树（`worktrees.create` / `remove`，原生「在工作树中新建聊天」那一套）给子会话单独建工作树和分支。
+- 子会话每次汇报都带分支名和位置。没改动的工作树，汇报时清掉（OpenClaw 删之前先留快照），子会话回到项目文件夹；有改动的留着，并告诉用户在哪。**不合并、不推送。**
+- 副本实测 create / remove 往返正常。发现运行时记的 `baseRef` 是字面的 `"HEAD"`，改成建的时候就解析成提交号。
+- **和方案的差别**：方案说「已有别的会话在这个仓库里干活时才建」；这里只要是项目模式、git 仓库，子会话就一律单独建。判断「有没有别的会话在干活」要跨会话看文件状态，容易漏；一律单独建最稳，没改动的会自动清掉。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| D2-1 | 过（真 git 单测） | `tests/child-worktree.test.mjs`「two children of a git project work in separate branches; parent gets both branch names; clean ones go」：同一仓库两个子会话改同一个文件，互不影响，各在自己的分支上，父会话收到两个分支名 |
+| D2-2 | 过（单测 + 副本往返） | 同一条测试：没改动的清掉、有改动的留下并报位置；测试里断言没有 merge / push。另一条：项目模式外或不是 git 仓库不建 |
+
+### D3 成品导出成一个文件
+
+- `services/mode-architecture/html-bundle.mjs`：把本地的样式表（含 `@import` 和 `url()`）、脚本、图片、`srcset`、图标、内联样式里的网址都换成 `data:` 内嵌；外网网址不动，只计数。不下载、不上传任何东西。
+- `pinkie.artifacts.export` 返回打好的单个文件。作品库里加了「导出成一个文件」按钮，交给浏览器下载，存到用户选的地方。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| D3-1 | 过 | `tests/html-bundle.test.mjs` 2/2。无头 Edge 实测：导出的文件单独放进空文件夹、代理断开后打开，图片、背景图、CSS、脚本都在 |
+
+### D4 项目模式看 PR 和 CI
+
+- 新工具 `pr_status`（`pr-status.mjs`）：只跑 `gh pr view [n] --json …`。没装 `gh` 或没登录，作为正常结果返回怎么装、怎么登录；没有 PR 就说没有。只给 `agent:project:` 会话。
+- **和方案的差别**：方案说放按需层，B2 没做，所以是常驻的。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| D4-1 | 过 | `tests/pr-status.test.mjs` 4/4（含「从不让 gh 写」和本机真 `gh`）。实测：PR #20 → 4 个检查（3 失败、1 通过）；本分支 → 没有 PR |
+
+### D5 用用户自己浏览器的登录状态（只调研，没写代码）
+
+运行时自带三种浏览器配置档：`openclaw`（独立的一个浏览器）、`user`（`driver: existing-session`、`attachOnly`，接上用户正在开的 Chrome，靠远程调试端口）、`chrome`（通过扩展中继）。
+
+| 路 | 工作量 | 风险 |
+|---|---|---|
+| ① 用现成的 `user` 配置档，接用户自己的 Chrome | 小：配置档已有，主要是设置里给一个开关和说明 | 用户要用远程调试参数启动 Chrome；开着的时候本机任何进程都能接管整个浏览器（所有已登录站点）。对普通用户说清楚很难 |
+| ② 从用户浏览器导入**单个站点**的登录（Cookie） | 中：要读各家浏览器的 Cookie 库 | Windows 上 Chrome 127 起用了绑定应用的加密，外部程序解不开；Mac 要钥匙串授权。导进来的 Cookie 会落到碧琪自己的浏览器资料里，多一份可被偷的副本 |
+| ③ 浏览器扩展，按标签页授权 | 大：要写扩展、上架或让用户手动装、按标签页授权的交互 | 最小、用户可控：只给用户点过的那个标签页，随时能撤 |
+
+建议（交 Fable 和用户定）：要做就做③；①只适合开发者自己用。没有写任何实现代码。
+
+| # | 结果 |
+|---|---|
+| D5-1 | 过：上表，没有实现代码 |
+
 ## 报给 Fable 的另开项（这一轮不做）
 
 - **A2-F1　网关刚起来时第一次 `memory_search corpus:"all"` 报 `index metadata is missing`**：运行时记忆管理器的身份状态初始为 `missing`，第一次同步前被调用就整个返回 `disabled`，还附一句「Tell the user… run openclaw memory index --force」——模型会照着跟用户说「记忆检索停用了」。修要动运行时（等首次同步完成再判，或首次调用时先读 meta），是运行时补丁，A2-2 的通过线因此没过。证据见 A2-2。
 
 - **A7-F1　上游「出字前断流」原地快速重试**：`stopReason: error`、内容是 `[assistant turn failed before producing content]`、报错含 `EOF` / `Connection error` 时，同一模型在几秒内原地重试 1 次（不换模型、不加配置键），再不行才交给 watchdog。依据：副本 hy4free 断流 10 次占全部出错 83%，正式 9 次占 27%；现在平均要等约 90 秒才续接，还有漏接。没查：运行时自身有没有同模型重试的开关、插件钩子能不能做到这一步——这一项要 Fable 先定做不做、在哪一层做。
 - **B1-F1　渠道工具按会话发**：面板会话和 QQ 会话共用想法 / 项目 / main 模式时，面板会话仍带 2 个 `qqbot_*`（Mac 上飞书同理带 13 个 `feishu_*`）。运行时没有改工具列表的插件钩子，要么给运行时打补丁（在工具策略里按会话的 `messageChannel` 过滤渠道插件的工具），要么让渠道走单独的模式（改绑定，是用户的配置）。这一轮只做了按模式。
+- **D1-F1　日历连接器**：方案的预置清单里有日历，没找到「不要密钥、只要用户自己登录」、Mac 和 Windows 都能用的日历服务。Google 日历的包要用户先在 Google 云控制台建一个 OAuth 应用、下载凭据文件，对普通用户太难。要不要放、放哪家，交 Fable 和用户定。
 - **B2-F1　工具按需加载要运行时补丁**：每次模型调用前重新取一次工具列表（或给插件一个能改工具列表的钩子），`tool_load` 才能在同一次运行里生效；还要能管核心工具。这一轮按规矩没做。
 
 ## 待 Fable 写
 
 - A6：证书报错的中文提示（暂用）：「这个网站的安全证书有问题（过期、不受信任或和网址对不上），浏览器没有打开它。可以试试把网址换成 http:// 开头，或者换一个来源找同样的内容。」
 - A6：wait / serve 参数说明里加的两句（工具说明，模型看）——如要改口吻请定稿。
+- D1（设置「连接器」卡片，我写的，请过目）：高德一栏「在高德开放平台的控制台里申请（选「Web 服务」）」「怎么申请 Key ↗」「贴一下你的高德 Key。」；Windows 文件夹框的提示「D:\资料（贴完整路径）」；连不上时的几句：「没连上：找不到启动命令「…」。检查一下命令有没有写错、对应的程序装了没有。配置没有改动。」「没连上：服务地址访问不到。检查一下网址和网络。配置没有改动。」「没连上：服务说没有权限，检查一下令牌或 Key。配置没有改动。」「没连上：等了太久没有回应。配置没有改动。」；没装 Node 时「这台电脑还没装 Node.js（接这个要用到它自带的 npx）。到 nodejs.org 装好后，再点一次「接入」。」；接上后「连上了，已保存。新对话会使用这项连接。」
+- D3：作品库按钮「导出成一个文件」。
+- D4：`pr_status` 没装 / 没登录 `gh` 时给模型的安装和登录说明（工具结果，模型转述）。
