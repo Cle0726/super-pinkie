@@ -34,6 +34,7 @@ import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths,
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs, softenWaitNudge} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
+import {registerExecHints} from './exec-hints.mjs';
 import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
 import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
@@ -7016,6 +7017,8 @@ export default {
         return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
       },
     });
+    // exec 在干 read / code_search / web_fetch 的活时，正常结果后面提醒一次（C2，不拦、不标出错）。
+    registerExecHints(api);
     // 「还在后台跑，先干别的」的提醒不算出错：写进会话记录前去掉出错标记（A5）。
     api.on('tool_result_persist', (event) => {
       try {
