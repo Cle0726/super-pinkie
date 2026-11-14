@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metre 黑猫预览</title>
+<style>
+  :root { --bg: #FAF9F5; --ink: #1F1E1D; --ink2: #73726C; --line: #E8E6DC; --accent: #C96442; }
+  :root[data-theme="dark"] { --bg: #262624; --ink: #F0EEE6; --ink2: #A6A39A; --line: #3F3E3A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--ink); font: 14px/1.6 system-ui, "Microsoft YaHei", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font: 600 20px/1.3 ui-serif, Georgia, "Songti SC", SimSun, serif; margin: 0 0 4px; }
+  p { margin: 0; color: var(--ink2); }
+  canvas { image-rendering: pixelated; display: block; }
+  .top { display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; margin: 20px 0; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .top figure { margin: 0; text-align: center; color: var(--ink2); font-size: 12px; }
+  .top img { width: 192px; height: 192px; border-radius: 28px; display: block; margin-bottom: 6px; }
+  .top .big { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 6px; }
+  .sizes { display: flex; gap: 20px; align-items: flex-end; }
+  .bar { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 6px 8px; font-size: 13px; }
+  .tools { display: flex; gap: 8px; margin-left: auto; }
+  button { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .cell { border: 1px solid var(--line); border-radius: 10px; padding: 14px 8px 10px; text-align: center; cursor: pointer; background: transparent; }
+  .cell[aria-pressed="true"] { border-color: var(--accent); }
+  .cell canvas { margin: 0 auto 8px; }
+  .cell small { display: block; color: var(--ink2); font-size: 11px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Metre 黑猫 · 像素预览</h1>
+  <p>16×16 像素、6 个颜色、16 个状态。点下面任何一个状态，左边的大图就换成它。这页用的帧数据和以后接进界面的是同一份文件（metre-cat.js）。</p>
+
+  <div class="top">
+    <figure><img src="cle-cat.png" alt="C.le.控制台图标上的黑猫">原图</figure>
+    <figure><div class="big"><canvas id="big" width="192" height="192"></canvas></div><span id="bigLabel">空闲</span>（放大 12 倍）</figure>
+    <figure>
+      <div class="sizes">
+        <div><canvas id="x3" width="48" height="48"></canvas></div>
+        <div class="bar"><canvas id="x2" width="32" height="32"></canvas><span id="barText">空闲</span></div>
+        <div class="bar"><canvas id="head" width="26" height="18"></canvas>Metre</div>
+      </div>
+      <div style="margin-top:6px">实际大小：看板里 3 倍 · 状态条里 2 倍 · 模式菜单的猫头</div>
+    </figure>
+    <div class="tools">
+      <button id="theme" aria-pressed="false">深色</button>
+      <button id="still" aria-pressed="false">减少动效</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</main>
+<script src="metre-cat.js"></script>
+<script>
+(function () {
+  const cat = window.LaolaoMetreCat;
+  const names = Object.keys(cat.STATES);
+  let current = 'idle', dark = false, still = false, tick = 0;
+  const grid = document.getElementById('grid');
+  const cells = names.map(name => {
+    const state = cat.STATES[name];
+    const cell = document.createElement('button');
+    cell.className = 'cell';
+    cell.innerHTML = '<canvas width="96" height="96"></canvas>' + state.label + '<small>' + state.frames.length + ' 帧</small>';
+    cell.addEventListener('click', () => { current = name; paint(); });
+    grid.appendChild(cell);
+    return {name, cell, canvas: cell.querySelector('canvas')};
+  });
+  function frameOf(name) {
+    const state = cat.STATES[name];
+    if (still) return state.frames[0];
+    // 以 8 拍每秒为底，按各状态自己的 fps 取帧
+    return state.frames[Math.floor(tick * state.fps / 8) % state.frames.length];
+  }
+  function show(canvas, frame, scale) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    cat.draw(ctx, frame, scale, {dark});
+  }
+  function paint() {
+    for (const item of cells) {
+      show(item.canvas, frameOf(item.name), 6);
+      item.cell.setAttribute('aria-pressed', String(item.name === current));
+    }
+    const frame = frameOf(current);
+    show(document.getElementById('big'), frame, 12);
+    show(document.getElementById('x3'), frame, 3);
+    show(document.getElementById('x2'), frame, 2);
+    show(document.getElementById('head'), cat.HEAD, 2);
+    document.getElementById('bigLabel').textContent = cat.STATES[current].label;
+    document.getElementById('barText').textContent = cat.STATES[current].label;
+  }
+  document.getElementById('theme').addEventListener('click', event => {
+    dark = !dark;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    event.currentTarget.setAttribute('aria-pressed', String(dark));
+    paint();
+  });
+  document.getElementById('still').addEventListener('click', event => {
+    still = !still;
+    event.currentTarget.setAttribute('aria-pressed', String(still));
+    paint();
+  });
+  const params = new URLSearchParams(location.search);
+  if (params.get('theme') === 'dark') document.getElementById('theme').click();
+  if (params.get('state') && cat.STATES[params.get('state')]) current = params.get('state');
+  if (params.get('tick')) { tick = Number(params.get('tick')) || 0; still = false; paint(); return; }
+  paint();
+  setInterval(() => { if (!document.hidden && !still) { tick += 1; paint(); } }, 125);
+})();
+</script>
+</body>
+</html>
