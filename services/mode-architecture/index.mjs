@@ -15,6 +15,7 @@ import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
+import {registerToolTrace} from './tool-trace.mjs';
 import {registerArtifacts} from './artifacts.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
@@ -6998,6 +6999,8 @@ export default {
     const sessionPrefs = registerSessionPrefs(api, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
+    // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
+    registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(api, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerProjectSettings(api, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(api, webGptActivity);
