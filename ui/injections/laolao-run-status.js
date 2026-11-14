@@ -18,6 +18,15 @@
     thinking: '碧琪在动小脑瓜…', working: '碧琪在抛气球干活…', writing: '碧琪在比划着回你…',
     asking: '碧琪在等你点头…', done: '完成啦！', stopped: '这一轮停下来了',
   };
+  // 在干哪一类活（PLAN 2.8）。和舞台、话术、工具流三张表对齐（tests/tool-kind-words.test.cjs）。
+  // 只是「在干活」时状态条照旧不出现（过程卡已经在说）；wait / review 是 Metre 一轮的整体状态，要显示。
+  const TOOL_PHRASE = {
+    create: '碧琪在创建文件…', write: '碧琪在写入文件…', delete: '碧琪在删除文件…', move: '碧琪在移动文件…',
+    install: '碧琪在安装依赖…', build: '碧琪在构建…', git: '碧琪在跑 git…', download: '碧琪在下载…',
+    view: '碧琪在看图片…', shot: '碧琪在截图…', dispatch: '碧琪在派发子会话…', wait: '在等子会话做完',
+    review: '在验收子会话交回来的活', manage: '碧琪在整理会话…', models: '碧琪在看可用模型…',
+  };
+  const RUN_KINDS = new Set(['wait', 'review']);
   const USUAL_KINDS = new Set(['review', 'fix', 'alt', 'recheck', 'trial', 'remedy', 'bg']);
   const SKIPPABLE = new Set(['review', 'fix', 'alt', 'recheck', 'trial', 'remedy']);
   const KEEP = 20;
@@ -147,6 +156,8 @@
     else if (live.bg?.startedAt) { kind = 'bg'; text = `等后台命令（已跑 ${duration(now - live.bg.startedAt)}）`; sticker = 'working'; }
     else if (planSteps) { kind = 'steps'; text = planSteps.text; sticker = live.state === 'writing' ? 'writing' : 'working'; }
     else if (stageSteps && status?.workflow) { kind = 'steps'; text = stageSteps.text; sticker = 'working'; }
+    else if (RUN_KINDS.has(live.tool)) { kind = live.tool; text = TOOL_PHRASE[live.tool]; sticker = live.tool === 'wait' ? 'thinking' : 'working'; }
+    else if (live.state === 'working' && TOOL_PHRASE[live.tool]) { text = TOOL_PHRASE[live.tool]; sticker = 'working'; kind = 'plain'; }
     else {
       const state = ['thinking', 'working', 'writing'].includes(live.state) ? live.state : 'thinking';
       text = PHRASE[state]; sticker = state; kind = 'plain';
@@ -169,7 +180,7 @@
   // 断线时这一轮的快照。laolao-resume 在网关回来、socket 还没连上时会整页刷新，
   // 刷新后的页面靠它照常重读状态、结束了补一次提醒（存 sessionStorage，只在这个窗口里）。
   const OFFLINE_MAX_MS = 15 * 60_000;
-  const OFFLINE_SESSION = /^agent:(?:main|project|thinking|learning|unrestricted):/;
+  const OFFLINE_SESSION = /^agent:(?:main|project|thinking|learning|unrestricted|metre):/;
   const packOffline = ({key, runId = '', startedAt = 0}, now = Date.now()) =>
     JSON.stringify({key: String(key || ''), runId: String(runId || ''), startedAt: Number(startedAt) || 0, at: now});
   function unpackOffline(raw, now = Date.now()) {
@@ -180,7 +191,7 @@
     return {key: value.key, runId: String(value.runId || ''), startedAt: Number(value.startedAt) || 0};
   }
 
-  const model = {describe, layoutFor, median, recordDuration, duration, packOffline, unpackOffline, PHRASE};
+  const model = {describe, layoutFor, median, recordDuration, duration, packOffline, unpackOffline, PHRASE, TOOL_PHRASE};
 
   // ---------- 运行时：没有页面（测试）时到这里为止 ----------
   if (typeof HTMLElement === 'undefined') {
@@ -192,7 +203,7 @@
   const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
   const RUNNING = /Command still running \(session ([\w.-]+), pid (\d+|n\/a)\)/;
   const EXITED = /Process exited with (?:code|signal)/;
-  const SESSION = /^agent:(?:main|project|thinking|learning|unrestricted):/;
+  const SESSION = /^agent:(?:main|project|thinking|learning|unrestricted|metre):/;
   const request = (method, params, timeout = 10_000) => {
     const gw = window.__laolaoSidebar?.gwRequest;
     return typeof gw === 'function' ? gw(method, params, timeout) : Promise.reject(new Error('gateway unavailable'));
@@ -271,7 +282,7 @@
     const live = liveOf(key);
     if (!live.active && !live.startedAt) return;
     endings.set(key, {outcome, at: Date.now(), ms: live.startedAt ? Date.now() - live.startedAt : 0});
-    Object.assign(live, {active: false, state: '', ask: null, startedAt: 0});
+    Object.assign(live, {active: false, state: '', ask: null, startedAt: 0, tool: ''});
     // 档位可能接着跑下一段：马上问一次网关，还在跑就继续显示。
     setTimeout(() => void refresh(key), 600);
   }
@@ -297,7 +308,14 @@
           const tool = String(data.name || data.toolName || '');
           if (data.phase === 'start') {
             if (tool === 'ask_user') { live.state = 'asking'; live.ask = {text: String(data.args?.question || data.args?.prompt || '').slice(0, 80)}; }
-            else live.state = 'working';
+            else {
+              live.state = 'working';
+              // 在干哪一类（只用于文案）；判定不了就是空，照旧说「在干活」
+              const tk = window.__pinkieToolKind;
+              const base = /^(?:exec|bash)$/.test(tool) ? 'exec' : /^write$/.test(tool) ? 'write' : '';
+              const k = tk ? tk.refine(base, tool, data.args, null) : '';
+              live.tool = k && TOOL_PHRASE[k] ? k : '';
+            }
             if (/plan_update/.test(tool)) setTimeout(() => void refresh(key, {plan: true}), 200);
           } else if (data.phase === 'result') {
             if (tool === 'ask_user') { live.ask = null; live.state = 'thinking'; }
@@ -402,7 +420,7 @@
     if (value?.active || nativeActive === true) { if (!live.active) { live.active = true; live.state = live.state || 'thinking'; } schedule(); return; }
     if (!value && nativeActive === null) return; // 读不到：什么都不说，等下一个事件
     // 断线期间这一轮已经结束：不在条上冒充「完成啦」，只补一次提醒。
-    Object.assign(live, {active: false, state: '', ask: null, bg: null, startedAt: 0});
+    Object.assign(live, {active: false, state: '', ask: null, bg: null, startedAt: 0, tool: ''});
     let text = '';
     try {
       const history = await request('chat.history', {sessionKey: key, limit: 4}, 8000);
