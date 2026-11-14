@@ -1,6 +1,12 @@
 /**
  * Pinkie image-access patch.
  *
+ * v5 (tools-health 11-13, A4) also installs dist/pinkie-media-inbox.mjs and
+ * patches the image / pdf tools: files outside the allowed folders are read
+ * through the mode workspace's media/inbox (kept 24 h), credentials and keys
+ * stay refused, a PDF over the cap is split by pages or summarised, and an
+ * image over the cap is shrunk instead of refused.
+ *
  * Adds an early-return allowlist check to OpenClaw's
  * `assertLocalMediaAllowed()` so local files under common user
  * directories (~/Desktop, ~/Downloads, ~/Documents, ~/.workbuddy,
@@ -19,7 +25,8 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const marker = "/* pinkie-image-access:v4 */";
+const v4Marker = "/* pinkie-image-access:v4 */";
+const marker = "/* pinkie-image-access:v5 */";
 const legacyMarker = "/* pinkie-image-access:v1 */";
 const previousMarker = "/* pinkie-image-access:v2 */";
 const v3Marker = "/* pinkie-image-access:v3 */";
@@ -63,7 +70,7 @@ function _pinkieResolveExtraMediaRoots() {
 
 function toV4(text) {
   if (text.split(v3RootsHead).length !== 2) throw new Error("图片白名单 v3 结构已变化，未覆盖");
-  return text.replace(v3Marker, marker).replace(v3RootsHead, projectRootsHelpers + v4RootsHead);
+  return text.replace(v3Marker, v4Marker).replace(v3RootsHead, projectRootsHelpers + v4RootsHead);
 }
 
 /**
@@ -139,6 +146,11 @@ function replaceOnce(text, from, to) {
  */
 export function transform(original) {
   if (original.includes(marker)) return original;
+  return toV5(transformV4(original));
+}
+
+export function transformV4(original) {
+  if (original.includes(v4Marker)) return original;
   if (original.includes(v3Marker)) return toV4(original);
 
   /* v2 had the right exact workspace list but only applied it to callers that
@@ -232,34 +244,141 @@ export function transform(original) {
   return toV4(v3Marker + header.slice(marker.length) + text);
 }
 
+/* v5 (tools-health 11-13, A4): credentials and keys are refused even when a
+   bound project or an explicit localRoots entry would contain them, and the
+   image / pdf tools read files from anywhere else through the mode workspace's
+   media/inbox (patch/pinkie-media-inbox.mjs, installed next to the dist). */
+const v5Import = 'import { deniedMediaPath as _pinkieDeniedMediaPath } from "./pinkie-media-inbox.mjs";\n';
+const v5Helpers = `function _pinkieDeniedError(mediaPath) {
+\tconst message = \`Local media path is not under an allowed directory: \${mediaPath}\`;
+\tif (typeof LocalMediaAccessError === "function") return new LocalMediaAccessError("path-not-allowed", message);
+\treturn Object.assign(new Error(message), { code: "path-not-allowed" });
+}
+`;
+const v5Check = '\tif (_pinkieDeniedMediaPath(mediaPath)) throw _pinkieDeniedError(mediaPath);\n';
+
+function toV5(text) {
+  if (text.includes(marker)) return text;
+  if (text.split(v4Marker).length !== 2) throw new Error("图片白名单 v4 结构已变化，未覆盖");
+  let next = text.replace(v4Marker + "\n", marker + "\n" + v5Import);
+  // Refuse first, in every entry point that decides a local media path.
+  let hits = 0;
+  next = next.replace(/((?:async )?function (?:assertLocalMediaAllowed|resolveLocalMediaBoundary)\(mediaPath[^)]*\) \{\n)/gu, (head) => {
+    hits += 1;
+    return head + v5Check;
+  });
+  if (!hits) throw new Error("OpenClaw 图片白名单代码结构已变化，未覆盖: 拒绝目录");
+  const helperAnchor = "let _pinkieExtraMediaRoots;\n";
+  if (next.split(helperAnchor).length !== 2) throw new Error("图片白名单 v4 结构已变化，未覆盖: helpers");
+  return next.replace(helperAnchor, v5Helpers + helperAnchor);
+}
+
+/* The image and pdf tools (OpenClaw 2026.7: openclaw-tools-*.js). Each edit is
+   matched exactly once or the patch refuses, like the boundary patch above. */
+const toolsMarker = "/* pinkie-media-tools:v1 */";
+const toolsHeader = toolsMarker + '\nimport * as _pinkieMediaInbox from "./pinkie-media-inbox.mjs";\n';
+export const toolEdits = [
+  // image: a data: URL over the cap is decoded anyway and then shrunk.
+  [
+    "\t\t\t\t\tconst decoded = decodeDataUrl(resolvedImage, { maxBytes });\n\t\t\t\t\treturn await imageWebMedia.optimizeImageBufferForWebMedia({\n",
+    "\t\t\t\t\tconst decoded = decodeDataUrl(resolvedImage, { maxBytes: _pinkieMediaInbox.dataUrlReadCap(maxBytes) });\n\t\t\t\t\treturn await _pinkieMediaInbox.optimizeImage(imageWebMedia, {\n",
+  ],
+  // image: outside the allowed folders → inbox copy; a GIF over the cap → still.
+  [
+    "\t\t\t\t}) : await imageWebMedia.loadWebMedia(resolvedPath ?? resolvedImage, {\n\t\t\t\t\tmaxBytes,\n\t\t\t\t\tlocalRoots: mediaLocalRoots,\n\t\t\t\t\tinboundRoots: mediaInboundRoots,\n\t\t\t\t\tssrfPolicy: remoteMediaSsrfPolicy,\n\t\t\t\t\t...isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {},\n\t\t\t\t\timageCompression\n\t\t\t\t});\n\t\t\t\tif (media.kind !== \"image\")",
+    "\t\t\t\t}) : await _pinkieMediaInbox.loadImage({ source: resolvedPath ?? resolvedImage, workspaceDir: options?.workspaceDir, maxBytes, imageCompression, webMedia: imageWebMedia, load: (_pinkieSource) => imageWebMedia.loadWebMedia(_pinkieSource, {\n\t\t\t\t\tmaxBytes,\n\t\t\t\t\tlocalRoots: mediaLocalRoots,\n\t\t\t\t\tinboundRoots: mediaInboundRoots,\n\t\t\t\t\tssrfPolicy: remoteMediaSsrfPolicy,\n\t\t\t\t\t...isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {},\n\t\t\t\t\timageCompression\n\t\t\t\t}) });\n\t\t\t\tif (media.kind !== \"image\")",
+  ],
+  // pdf: pages above pdfMaxPages (20) used to match nothing.
+  [
+    "\t\t\tconst pageNumbers = pagesRaw ? parsePageRange(pagesRaw, configuredMaxPages) : void 0;\n",
+    "\t\t\tconst pageNumbers = pagesRaw ? _pinkieMediaInbox.parsePages(pagesRaw, configuredMaxPages, parsePageRange) : void 0;\n",
+  ],
+  // pdf: outside the allowed folders → inbox copy; read past the cap so a big
+  // one can be split (with pages) or summarised (without).
+  [
+    "\t\t\t\t}) : await loadWebMediaRaw(resolvedPathInfo.resolved, {\n\t\t\t\t\tmaxBytes,\n\t\t\t\t\tlocalRoots,\n\t\t\t\t\t...isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {},\n\t\t\t\t\tssrfPolicy: remoteMediaSsrfPolicy\n\t\t\t\t});\n",
+    "\t\t\t\t}) : await _pinkieMediaInbox.loadPdf({ source: resolvedPathInfo.resolved, workspaceDir: options?.workspaceDir, maxBytes, load: (_pinkieSource, _pinkieCap) => loadWebMediaRaw(_pinkieSource, {\n\t\t\t\t\tmaxBytes: _pinkieCap,\n\t\t\t\t\tlocalRoots,\n\t\t\t\t\t...isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {},\n\t\t\t\t\tssrfPolicy: remoteMediaSsrfPolicy\n\t\t\t\t}) });\n",
+  ],
+  [
+    "\t\t\t\tconst base64 = media.buffer.toString(\"base64\");\n",
+    "\t\t\t\tconst _pinkieFit = await _pinkieMediaInbox.fitPdf({ media, maxBytes, pageNumbers, maxPages: configuredMaxPages, password, source: resolvedPathInfo.resolved });\n\t\t\t\tif (_pinkieFit?.overview) return _pinkieFit.overview;\n\t\t\t\tconst _pinkieBuffer = _pinkieFit?.buffer ?? media.buffer;\n\t\t\t\tconst base64 = _pinkieBuffer.toString(\"base64\");\n",
+  ],
+  [
+    "\t\t\t\t\tbuffer: media.buffer,\n\t\t\t\t\tfilename,\n\t\t\t\t\tresolvedPath: resolvedPathInfo.resolved,\n",
+    "\t\t\t\t\tbuffer: _pinkieBuffer,\n\t\t\t\t\tpinkiePages: _pinkieFit?.pages,\n\t\t\t\t\tpinkieNote: _pinkieFit?.note,\n\t\t\t\t\tfilename,\n\t\t\t\t\tresolvedPath: resolvedPathInfo.resolved,\n",
+  ],
+  // A split PDF already holds just the asked pages: read all of it.
+  [
+    "\t\t\t\t\t\tpageNumbers,\n\t\t\t\t\t\tconfig: options?.config\n",
+    "\t\t\t\t\t\tpageNumbers: pdf.pinkiePages ? void 0 : pageNumbers,\n\t\t\t\t\t\tconfig: options?.config\n",
+  ],
+  [
+    "\t\t\t\t...password ? { password } : {},\n\t\t\t\tpageNumbers,\n\t\t\t\tgetExtractions\n\t\t\t});\n",
+    "\t\t\t\t...password ? { password } : {},\n\t\t\t\tpageNumbers: loadedPdfs.every((p) => p.pinkiePages) ? void 0 : pageNumbers,\n\t\t\t\tgetExtractions\n\t\t\t});\n\t\t\tconst _pinkieNotes = loadedPdfs.map((p) => p.pinkieNote).filter(Boolean);\n\t\t\tif (_pinkieNotes.length && typeof result?.text === \"string\") result.text = _pinkieNotes.join(\"\\n\") + \"\\n\\n\" + result.text;\n",
+  ],
+];
+
+/** Patches OpenClaw's image and pdf tool source (openclaw-tools-*.js). */
+export function transformTools(original) {
+  if (original.includes(toolsMarker)) return original;
+  let text = original;
+  for (const [from, to] of toolEdits) {
+    if (text.split(from).length !== 2) throw new Error("OpenClaw image/pdf 工具代码结构已变化，未覆盖: " + from.trim().slice(0, 90));
+    text = text.replace(from, () => to);
+  }
+  return toolsHeader + text;
+}
+
+/** The runtime helper both patched files import, as installed into dist/. */
+export const helperName = "pinkie-media-inbox.mjs";
+export function helperSource() {
+  return fs.readFileSync(path.join(here, helperName), "utf8");
+}
+
+function uniqueDistFile(dist, label, test) {
+  const hits = fs.readdirSync(dist)
+    .filter((n) => /\.m?js$/.test(n) && test(n));
+  if (hits.length !== 1) throw new Error(`无法唯一确认 ${label} 模块: ` + hits.join(", "));
+  return hits[0];
+}
+
 /**
- * Discover the dist/local-media-access-*.js file inside an OpenClaw
- * install, apply the patch atomically, and back up the original.
+ * Discover the dist/local-media-access-*.js file and the image/pdf tool chunk
+ * inside an OpenClaw install, install the helper next to them, patch both,
+ * and back up what was there.
  */
 export function apply(root, { backupRoot } = {}) {
   const dist = path.join(root, "dist");
   // 2026.10 emits .mjs bundles (one is only a re-export shim), 2026.7 used
   // .js; pick the single chunk that actually implements the boundary
   // (2026.10: resolveLocalMediaBoundary, 2026.7: assertLocalMediaAllowed).
-  const candidates = fs.readdirSync(dist)
-    .filter((n) => n.startsWith("local-media-access-") && /\.m?js$/.test(n))
-    .filter((n) => {
-      const source = fs.readFileSync(path.join(dist, n), "utf8");
-      return source.includes(marker)
-        || /function resolveLocalMediaBoundary\(/u.test(source)
-        || /function assertLocalMediaAllowed\(/u.test(source);
-    });
-  if (candidates.length !== 1) {
-    throw new Error("无法唯一确认 local-media-access 模块: " + candidates.join(", "));
+  const accessName = uniqueDistFile(dist, "local-media-access", (n) => {
+    if (!n.startsWith("local-media-access-")) return false;
+    const source = fs.readFileSync(path.join(dist, n), "utf8");
+    return source.includes(marker)
+      || /function resolveLocalMediaBoundary\(/u.test(source)
+      || /function assertLocalMediaAllowed\(/u.test(source);
+  });
+  const toolsName = uniqueDistFile(dist, "image/pdf 工具", (n) => {
+    if (n.startsWith("pinkie-")) return false;
+    const source = fs.readFileSync(path.join(dist, n), "utf8");
+    return source.includes("function createPdfTool(") && source.includes("function createImageTool(");
+  });
+  const plan = [
+    [helperName, fs.existsSync(path.join(dist, helperName)) ? fs.readFileSync(path.join(dist, helperName), "utf8") : null, helperSource()],
+  ];
+  for (const [name, fn] of [[accessName, transform], [toolsName, transformTools]]) {
+    const original = fs.readFileSync(path.join(dist, name), "utf8");
+    plan.push([name, original, fn(original)]);
   }
-  const file = path.join(dist, candidates[0]);
-  const original = fs.readFileSync(file, "utf8");
-  const next = transform(original);
-  if (original === next) return { changed: false };
+  const changed = plan.filter(([, before, after]) => before !== after);
+  if (!changed.length) return { changed: false };
 
-  // Validate that nothing else is mid-write before we touch the file.
-  if (fs.readFileSync(file, "utf8") !== original) {
-    throw new Error("local-media-access 模块正在被更新，未覆盖");
+  // Validate that nothing else is mid-write before we touch the files.
+  for (const [name, before] of changed) {
+    if (before !== null && fs.readFileSync(path.join(dist, name), "utf8") !== before) {
+      throw new Error(name + " 正在被更新，未覆盖");
+    }
   }
 
   const backup =
@@ -270,10 +389,12 @@ export function apply(root, { backupRoot } = {}) {
       "image-access-" + Date.now()
     );
   fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
-  fs.copyFileSync(file, path.join(backup, candidates[0]));
-
-  fs.writeFileSync(file, next);
-  return { changed: true, backup, file: candidates[0] };
+  // The helper first: both patched files import it.
+  for (const [name, before, after] of changed) {
+    if (before !== null) fs.copyFileSync(path.join(dist, name), path.join(backup, name));
+    fs.writeFileSync(path.join(dist, name), after);
+  }
+  return { changed: true, backup, files: changed.map(([name]) => name), file: accessName };
 }
 
 // CLI entry — mirrors apply-context-budget.mjs so apply-theme.sh can
