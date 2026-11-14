@@ -138,9 +138,10 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         agents = {a['id']: a for a in data['agents']['list']}
         for mode in ('main', 'project', 'thinking', 'learning'):
             deny = agents[mode]['tools']['deny']
-            for name in ('workboard_*', 'wiki_*', 'skill_workshop', 'canvas', 'llm-task', 'node_inference'):
+            for name in ('workboard_*', 'wiki_*', 'skill_workshop', 'canvas', 'llm-task', 'node_inference', 'web_search'):
                 self.assertIn(name, deny)
-            for kept in ('cron', 'message', 'nodes', 'gateway'):
+            # A3: one search tool for the model; pinkie_search stays.
+            for kept in ('cron', 'message', 'nodes', 'gateway', 'pinkie_search', 'web_fetch'):
                 self.assertNotIn(kept, deny)
         self.assertEqual(agents['project']['tools']['deny'][0], 'browser')
         self.assertEqual(agents['project']['tools']['exec'], {'pathPrepend': ['/x']})

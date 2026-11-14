@@ -225,3 +225,12 @@ test('the default browser hook is off when PINKIE_APP_BROWSER_ENDPOINT is unset'
     assert.doesNotMatch(value.reason, /browser|浏览器/i);
   } finally { if (saved !== undefined) process.env.PINKIE_APP_BROWSER_ENDPOINT = saved; }
 });
+
+test('A3-3: the plugin never registers a tool named web_search (OpenClaw would drop it as a name conflict)', () => {
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../services/mode-architecture');
+  const index = fs.readFileSync(path.join(dir, 'index.mjs'), 'utf8');
+  assert.match(index, /registerTool\?\.\(\(\) => createPinkieSearchTool\(\), \{name: 'pinkie_search'\}\)/);
+  assert.doesNotMatch(index, /name:\s*'web_search'/);
+  // The built-in one is hidden from the four modes by setup.py (REPLACED_OPENCLAW_TOOLS → agents.list[].tools.deny).
+  assert.match(fs.readFileSync(path.join(dir, 'setup.py'), 'utf8'), /REPLACED_OPENCLAW_TOOLS = \("web_search",\)/);
+});
