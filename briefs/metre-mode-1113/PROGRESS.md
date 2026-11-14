@@ -7,7 +7,7 @@
 | 批 | 状态 | 谁在做 | 开始 | 最后提交 |
 |---|---|---|---|---|
 | 0 基座 | 已自查待验收（11-14 前端补完） | 空闲 | 2026-11-13 | 见 git log |
-| 1 派发（界面叫 Baton） | 进行中 | Windows 并行会话，分支 `metre-b1-baton`（从 926e23a2 切出，做完由主会话合并） | 2026-11-14 | |
+| 1 派发（界面叫 Baton） | 已自查待验收（A1-* 见「批 1」；界面开关没截图看过） | Windows 并行会话，分支 `claude/metre-b1-baton-d11290`（`index.mjs` 只动了 registerSessionLineage 那一处 + import） | 2026-11-14 | 9a415ee7（11-14 主会话合进主线） |
 | 2 会话管理工具 | 已自查待验收 | Windows 并行会话，分支 `claude/metre-b2-sessions-74852b` | 2026-11-14 | 见该分支 git log（批 2 三个提交） |
 | 3 通用补缺（状态词、读图小框） | 进行中 | Windows 并行会话，分支 `metre-b3-gaps`（同上；改 `laolao-phrases.js`） | 2026-11-14 | |
 | M 项目记忆（PLAN 6.2） | 未开始（等批 0；看板部分随批 5） | | | |
@@ -50,6 +50,9 @@
 - F7（11-13，批 0）：设定防护（`settings-guard.mjs`）现有规则会把 `workspace-metre` 当产品工作区保护（聊天改不了 Metre 自己的手册），和群聊 agent 一样。没改代码。是否算「权限限制」由你定。
 - F8（11-14，批 2）：`pinkie_sessions` 里几条 PLAN 2.7 没写死、我定的规则，请看要不要改（细节在下面「批 2」自查的「几条规则」）：① 老模式只能看、管四个老模式的会话，看不到无限制和 Metre 的；Metre 能建五个模式的会话，不能建 Metre 自己的。② 老模式出确认卡片的只有 archive / stop / rename，detach、unarchive、create 直接做。③ 删除的备份放在 `PINKIE_STATE_ROOT/backups/sessions-deleted/<日期>/`（和设定防护的备份同一个 `backups` 目录），另加了 PLAN 没有的 `restore` 动作（只有 Metre）。④ 工具说明会进老模式的工具定义（不进每轮提示词）；老模式的卡片标题写「碧琪想归档「…」」，Metre 不出卡片。
 - F9（11-14，批 2）：唠嗑模式的「只聊天」档（profile minimal）只放行 `MINIMAL_CHILD_TOOLS` 那四个工具，所以那一档里没有 `pinkie_sessions`。PLAN 说四个老模式都有。要不要在只聊天档也开放，由你定（开放要改 `session-lineage.mjs` 的 `MINIMAL_CHILD_TOOLS` 和 `laolao-settings-user.js` 的 `CHILD_SESSION_TOOLS`，批 1 的文件）。
+- F10（11-14，批 1）：`services/mode-architecture/model-tiers.json` 是按本机 mm 目录填的分档初稿（top 只给 opus、gemini-*-pro、gemini-4 argon/hydrogen、grok-4.6/4.7、kimi-k3.1-pro、gpt-6 sol/astra），以及「工具用得不稳」的名单，请过一遍。
+- F11（11-14，批 1）：几处我自己定的规则，请确认或改：Metre 的 in_scope 不看设置页「碧琪自己分工」，只看 Baton / Virtuoso；叫醒轮次只放开 in_scope，user_asked 仍要用户那一轮；用户从界面亲手给 Metre 开的子会话不走 mode / 模型规则；`pinkie_mode_ask` 在 Metre 里也套模型规则、算累计上限，独做和暂停时不给；两个上限（同时在跑、累计）只有后端设置项，没有设置页入口。
+- F12（11-14，批 1）：主 MD 第六节说「不写 model 时用那个模式自己的默认模型」。现在后端在默认模型恰好和 Metre 相同时会拒绝并要求写 model；在大多数用户只配了一个全局默认模型的电脑上，这等于 Metre 每次都必须写 model。主 MD 要不要把这句改成「先用 pinkie_models 选，写上 model」由你定。
 
 ### Fable 的答复（11-14，用户原话：「Fable你决定一下关于 F4（以及 F2、F5–F7）」）
 
@@ -162,3 +165,39 @@
 4. **搜 Metre 自己的会话**：`session-search.mjs` 的 `MODE_AGENTS` 加 `metre: 'metre'`，再把 `session-manage.mjs` 里 `searchSessions` 的模式表加上 metre。
 5. 删除不清项目绑定记录（`bindings.json` 里那条留着，恢复时正好用上）；侧栏里那条会话在下次列表刷新时消失。
 
+### 批 1 · 派发（Windows，Opus 5.5，11-14，分支 `claude/metre-b1-baton-d11290`）
+
+改了什么：`session-lineage.mjs`（所有新规则都按「父会话是不是 Metre」分支，老模式数值、说明、工具清单不变）、`session-prefs.mjs`（`metre: dispatch/solo` 字段、两个上限 `metreMaxRunning` 2–12 默认 8、`metreRequestCap` 默认 24 / 0 不封顶）、新 `metre-models.mjs` + `model-tiers.json`、`openclaw.plugin.json`（登记 `pinkie_models`）、`index.mjs`（只在 `registerSessionLineage(...)` 那一处多传 `modelHealth`、`config`，紧跟一行 `registerMetreModelsTool`，加一个 import）、`ui/injections/laolao-session-tools.js/.css`（Baton｜Virtuoso 两段开关）。测试：新 `tests/metre-dispatch.test.mjs` 15 条；`tests/mode-architecture.test.mjs` 两处「插件工具清单 / 个数」的期望加了 `pinkie_models`（25→26），这两条是插件整体的工具清单，不是老模式行为。
+
+隔离副本：C 盘满了（11-14 一度 0 字节），批 1 的副本建在 `F:\碧琪实测\iso-metre-b1`（`METRE_ISO_ROOT` 指过去，端口 6170），没碰 `iso-metre`、18789。上游账号当天：hy4free 偶发 120 秒无响应、sonnet-5-5 被 403、kimi-k2.7 503；能用的是 glm-5.3、hy4free、hy4std、deepseek-v4-pro、grok-4.6。注意：`ask.py` 的 `--model` 只管那一次调用，被汇报叫醒的轮次会回到会话默认模型；要让 Metre 全程用某个模型，先 `sessions.create {key, agentId:'metre', model}` 把模型钉在会话上（实测 r3 就是叫醒轮回到了 hy4free，后端按 hy4free 判「和自己相同」是对的）。
+
+| 项 | 结果 |
+|---|---|
+| A1-1 8 个 / 第 9 个拒 / 项目仍 4 | 过（单测）：第 9 个报「已有 8 个子会话在跑」；设置改 10 后能开；13、1 被拒；项目模式第 5 个仍报「已有 4 个」。真模型没开满 8 个（上游不稳） |
+| A1-2 叫醒那一轮能 in_scope | 过：单测（叫醒轮 6 个、第 7 个拒；项目模式同轮拒；心跳、记忆整理轮 Metre 也拒；叫醒轮的 user_asked 仍拒）。真模型：r3、r4 都是在被第 3 份汇报叫醒的那一轮自己开了第二批（r4：chat · glm-5.3 合成 summary.txt） |
+| A1-3 累计上限、用户回话归零 | 过（单测）：第 25 个报「已经开了 24 个……先停下来……等用户回话」；用户发消息后 `metreStarts` 归零。真模型没跑到 24 |
+| A1-4 模型规则 | 过：单测覆盖自己的模型、省提供方前缀、只写名字、思考强度后缀（opus-5-5-high 对 -low）、不在列表、生图模型、不健康、目标默认和自己相同没写 model。真模型 r3：传自己的 glm-5.3 被拒（「同一个模型，不能派给自己」）、传 kimi-k2.7 被拒（「最近调用失败（503 auth_unavailable…）」）、叫醒轮里 chat 默认 = 自己 被拒（「必须写 model」）；r4：编造的 `deepseek-v4-pro-high` 被拒（不在列表） |
+| A1-5 子会话真的用了指定模型 | 过（真模型）：r4 子会话的 sessions.json 记录 project 子会话 `model=workbuddy/glm-5.3`、unrestricted 子会话 `grok-4.6`，而那两个模式的默认是 hy4free；learning 子会话 `modelOverride=workbuddy/hy4std`。指定的模型网关不认时如实报错、不退回默认（单测） |
+| A1-6 folder | 过：真模型 r4 unrestricted 子会话绑 `F:\tmp\b1-real\other`、c.txt 写在那里；单测覆盖带引号和末尾反斜杠的 Windows 写法、大小写和正斜杠、不存在、相对路径被拒 |
+| A1-7 pinkie_models | 过：真模型 r4 调了 4 次，第一次 103 个里列 40 个（top 14 / mid 14 / light 12），恰好一个 `self`（deepseek-v4-pro）；单测断开 fetch 照样返回、不健康的排最后带原因、40 个上限里 self 一定在。注意：健康记录在网关内存里，重启后清空（r4 时列表里没有不健康项，因为刚重启过）。`model-tiers.json` 是按本机 mm 目录填的初稿，等 Fable 过 |
+| A1-8 独做 | 过：真模型 `iso-solo-0` 设 solo 后，Metre 自报 pinkie_ 工具只有 search / session_list / session_message / session_title（没有 start、mode_ask），系统提示里是「【本轮：独做】」；单测覆盖默认派发、切回派发后两个工具和【本轮：派发】恢复、后端也拒（防旧工具）。界面开关：代码在 `laolao-session-tools.js`，**没截图看过**（没测：没跑 Edge 界面截图） |
+| A1-9 暂停 | 过：真模型 `iso-pause-0` 暂停后 Metre 拿到原文「用户暂停了派发：已经在跑的子会话照常，新的先不开……」；单测覆盖在跑的不受影响、取消后恢复、只有 Metre 能暂停 |
+| A1-10 全停 | 过：真模型 `iso-stop-0`，Metre 这一轮 + 2 个在跑的子会话（第 3 个已交回）13 秒内停下（含 CLI 启动）；sessions.json 里是 killed、都没有 archivedAt；血缘记录完整，返回每个子会话停前状态。单测：3 个在跑 + 1 个已交回 |
+| A1-11 每份汇报都叫醒、忙时合并 | 过：单测（另外 4 个还在跑也叫醒；忙时到的 3 份合并成 1 次、三份都注入；超过老模式 3 次的上限照样叫）。真模型 r3：三份汇报分三次叫醒（wakes=3）；r4：两份几乎同时到，合并成一次，第三份再叫一次（wakes 合计 3，含第二批） |
+| A1-12 卡片和列表带模型 | 过：真模型 r4 卡片 `model` 分别是 grok-4.6 / glm-5.3 / hy4std / glm-5.3；单测覆盖 `pinkie_session_list` 和注入给 Metre 的汇报里的「模型」 |
+| A1-13 unrestricted | 过：真模型 r3、r4 都开到无限制模式并收到汇报；单测：四个老模式传 unrestricted 仍报「模式只能是…」，谁传 metre 都拒 |
+| A1-14 默认 24、设 0 不封顶 | 过（单测）：设 0 后连开 31 个 |
+| 预算（PROGRESS F4） | 加了【本轮：派发】一行（和联网那句之间只用一个换行）后 Metre 一轮 **5990 / 6000**，在预算内，没改预算 |
+| Z1 全量测试 | 见下 |
+| Z2 正式环境 | 没碰：只用 F 盘副本；18789 上的网关不是本会话起的，没连过 |
+| Z3 老模式不变 | 过：`tests/session-lineage.test.mjs` 一条没改、全过；真模型四个老模式各一句自我介绍，口吻正常（先生 / 老板） |
+| Z4 personas | 过：没改 |
+| Z5 推送 | 推到 `origin/claude/metre-b1-baton-d11290`（主会话负责合进 `feat/metre-mode-1113`） |
+
+几处我自己定的、请 Fable 看：
+- Metre 的 in_scope 不看设置页「碧琪自己分工」（它的开关是 Baton / Virtuoso）。
+- 叫醒轮次里只放开 in_scope；user_asked 仍然要求用户那一轮（那一轮不是用户说的话）。
+- 用户从界面亲手给 Metre 会话开的子会话不走模型 / mode 规则（不强制写 mode、不查模型）。
+- `pinkie_mode_ask` 在 Metre 里也套同样的模型规则、算进累计上限；独做、暂停时同样不给。
+- 汇报卡片、`pinkie_session_list`、血缘记录的 `model` 只在 Metre 子会话上记（老模式的记录没加字段）。
+- 两个上限只有后端（`pinkie.prefs.set` 的 `metreMaxRunning`、`metreRequestCap`），设置页没有入口；暂停 / 全停的按钮在批 5 看板。
