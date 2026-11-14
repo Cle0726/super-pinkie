@@ -62,6 +62,48 @@ def sync_plugins():
             for name in PLUGINS if (STATE / 'extensions' / name / 'index.mjs').exists()}
 
 
+def sync_mode_tool_deny():
+    """照 services/mode-architecture/setup.py：四个模式的 tools.deny 补上 UNUSED/REPLACED_OPENCLAW_TOOLS，
+    plugins.allow 补上 NEEDED_BUNDLED_PLUGINS。
+
+    正式 App 由插件安装器改配置；副本配置是建副本时复制的，换了插件代码后要再补一次。只加不删，
+    用的是已有的 agents.list[].tools.deny，不加新配置键。常量用 ast 从仓库源码里读，不执行它。
+    """
+    import ast
+    tree = ast.parse((REPO / 'services/mode-architecture/setup.py').read_text(encoding='utf-8'))
+    consts = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if node.targets[0].id in ('UNUSED_OPENCLAW_TOOLS', 'REPLACED_OPENCLAW_TOOLS', 'MODE_AGENT_IDS',
+                                      'NEEDED_BUNDLED_PLUGINS'):
+                try:
+                    consts[node.targets[0].id] = ast.literal_eval(node.value)
+                except ValueError:
+                    pass
+    names = tuple(consts.get('UNUSED_OPENCLAW_TOOLS', ())) + tuple(consts.get('REPLACED_OPENCLAW_TOOLS', ()))
+    modes = set(consts.get('MODE_AGENT_IDS') or MODES)
+    cfg_path = STATE / 'openclaw.json'
+    config = json.loads(cfg_path.read_text(encoding='utf-8'))
+    added = {}
+    for agent in config.get('agents', {}).get('list', []):
+        if isinstance(agent, dict) and agent.get('id') in modes:
+            deny = agent.setdefault('tools', {}).setdefault('deny', [])
+            new = [n for n in names if n not in deny]
+            deny.extend(new)
+            if new:
+                added[agent['id']] = new
+    allow = config.get('plugins', {}).get('allow')
+    deny = config.get('plugins', {}).get('deny') or []
+    if isinstance(allow, list):
+        new = [n for n in consts.get('NEEDED_BUNDLED_PLUGINS', ()) if n not in allow and n not in deny]
+        allow.extend(new)
+        if new:
+            added['plugins.allow'] = new
+    if added:
+        cfg_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding='utf-8')
+    return added
+
+
 def overlay_snapshot():
     snapshot = REPO / 'desktop/windows/mac-runtime'
     ai_dirs = [d for d in (OPENCLAW / 'node_modules/@openclaw/ai/dist', RUNTIME / 'node_modules/@openclaw/ai/dist') if d.is_dir()]
@@ -188,7 +230,7 @@ if __name__ == '__main__':
     if cmd == 'build':
         build()
     elif cmd == 'sync':
-        print(json.dumps(sync_plugins()))
+        print(json.dumps({'plugins': sync_plugins(), 'denyAdded': sync_mode_tool_deny()}, ensure_ascii=False))
     elif cmd == 'patch':
         apply_patches(sys.argv[2:])
     else:
