@@ -294,6 +294,10 @@ def _ensure_none_marker(workspace: Path, backup_root: Path) -> bool:
 
 MODE_AGENT_IDS = ("main", "project", "thinking", "learning")
 UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
+# OpenClaw 自带、碧琪有自己替代品的工具。web_search 换成 pinkie_search（必应→搜狗→360→百度→DuckDuckGo，
+# 全挂时自己开浏览器搜）：两个搜索工具同时摆着，模型会两头都试。插件不能注册同名的 web_search
+# （OpenClaw 会以 plugin tool name conflict 丢掉它），按名字 deny 也会连插件的一起拿掉，所以只能关内置的这个。
+REPLACED_OPENCLAW_TOOLS = ("web_search",)
 
 
 def _configure_plugin(data: dict, target: Path) -> bool:
@@ -365,7 +369,7 @@ def _configure_plugin(data: dict, target: Path) -> bool:
             deny = tools.get("deny")
             if not isinstance(deny, list):
                 deny = tools["deny"] = []
-            deny.extend(name for name in UNUSED_OPENCLAW_TOOLS if name not in deny)
+            deny.extend(name for name in UNUSED_OPENCLAW_TOOLS + REPLACED_OPENCLAW_TOOLS if name not in deny)
         if isinstance(agent, dict) and agent.get("id") == "unrestricted":
             # Keep every workspace file on disk, but do not inject AGENTS.md,
             # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
