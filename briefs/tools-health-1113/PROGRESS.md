@@ -105,3 +105,24 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 
 逐题（20 次）：6 次整轮以 `FailoverError: unexpected EOF` 结束（题 1、2、4b、5、6×2 各一次）——hy4free 上游断流，没有后备就直接失败；按规矩不为它改代码。题 3 两遍都读对；题 8 两遍都指出 `admin.js`；题 9 正常。题 7 两遍都是从**副本里实测会话的存档**里还原出「技能大赛」——记忆库里没有，答案被前面几批实测污染了，这一题的结果要打折看。
 原始结果在副本 `evals\before-h4f\`（results.json、stats.json），没提交。
+
+### A6 app_browser 宽容一点
+
+改的都在 `services/mode-architecture/app-browser.mjs`：
+1. `wait`：`text / selector / ref / name` 四选一，可再加 `ms` → `ms` 换成 `timeout_ms` 传给原生侧（原生侧不会把它当成先睡 ms 毫秒），就是最长等待；只给 `ms` 是纯等待；上限 15 秒不变；两个目标一起给仍报错。
+2. `serve`：`dir + port` 合法，静态服务就起在这个端口；`dir` 和 `command / cwd` 一起给才报错。
+3. Mac 上 `tab`：`op: new` 带 `url` 等价 `open`；其他 tab 操作（含不带 url 的 new）返回「Mac 版只有一个页面，直接用 open 换网址。」，`ok: true`，不标出错。
+4. 工具说明里补了 wait 和 serve 的参数写法（`name+ms=4000`、「静态页填dir（可加port指定端口）」）。
+5. 证书无效类报错（`ERR_CERT_*`、`ERR_SSL_*`、certificate、self-signed…）换成一句中文 + 下一步（换 http、换来源）。这句是我写的，列进「待 Fable 写」请过目。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| A6-1 | 单元测试过；题 6 实测：副本没有侧栏浏览器端点，**没测**（需在真 App 里走） | `tests/app-browser-lenient.test.mjs` 4/4：wait name+ms 传给原生侧的是 `timeout_ms: 4000`、请求超时 4 秒；serve dir+port 真的在该端口起服务并取回页面 |
+| A6-2 | 单元测试过；真机**没测（需 Mac 端）** | 同上：Mac 下 `tab op=new url` 发出去的是 `open`，其他 4 种 tab 调用 `isError: false` 且只返回说明 |
+
+回归：`app-browser-windows-endpoint`、`app-browser-windows-fallback`、`browser-pointer` 全过；`browser-fast`、`browser-memory` 各 1 条红，**基线（改前）同样红**，不是这次的；`mode-architecture` 只剩 Windows 上本来就红的 `computer tool discovers…`。
+
+## 待 Fable 写
+
+- A6：证书报错的中文提示（暂用）：「这个网站的安全证书有问题（过期、不受信任或和网址对不上），浏览器没有打开它。可以试试把网址换成 http:// 开头，或者换一个来源找同样的内容。」
+- A6：wait / serve 参数说明里加的两句（工具说明，模型看）——如要改口吻请定稿。
