@@ -149,3 +149,35 @@ test('waiting right after a job goes to the background is turned into the while-
     if (shared?.timer) clearInterval(shared.timer);
   }
 });
+
+// tools-health-1113 A5: the "still running, do something else" reminder is a
+// normal result in the transcript; real failures stay errors.
+import {isWaitNudgeResult, softenWaitNudge} from '../services/mode-architecture/background-jobs.mjs';
+
+function blockedResult(reason, deniedReason = 'plugin-before-tool-call') {
+  // Exactly what OpenClaw's buildBlockedToolResult + the tool-result guard persist for a vetoed call.
+  return {role: 'toolResult', toolName: 'process', toolCallId: 'c1', isError: true,
+    content: [{type: 'text', text: reason}], details: {status: 'blocked', deniedReason, reason}};
+}
+
+test('A5: the polling reminder loses its error mark, text unchanged', () => {
+  const reason = waitNudge([{command: 'python render.py', startedAt: 0}], ['video'], 40_000);
+  const message = blockedResult(reason);
+  assert.equal(isWaitNudgeResult(message), true);
+  const soft = softenWaitNudge(message);
+  assert.equal(soft.isError, false);
+  assert.equal(soft.details.status, 'deferred');
+  assert.equal(soft.details.ok, true);
+  assert.deepEqual(soft.content, message.content, 'text untouched');
+  assert.equal(soft.details.reason, reason);
+});
+
+test('A5: real failures keep their error mark', () => {
+  assert.equal(softenWaitNudge(blockedResult('No session found for sessionId bad-id')), null, 'unknown job');
+  assert.equal(softenWaitNudge(blockedResult('改设置要先问先生', 'plugin-before-tool-call')), null, 'other plugin vetoes');
+  const loop = blockedResult(waitNudge([{command: 'x', startedAt: 0}], [], 5000), 'tool-loop');
+  assert.equal(softenWaitNudge(loop), null, 'loop detector blocks are not ours');
+  const crashed = {role: 'toolResult', toolName: 'process', isError: true, content: [{type: 'text', text: 'Process exited with code 1'}], details: {status: 'failed'}};
+  assert.equal(softenWaitNudge(crashed), null, 'a crashed job is still an error');
+  assert.equal(softenWaitNudge({role: 'assistant'}), null);
+});

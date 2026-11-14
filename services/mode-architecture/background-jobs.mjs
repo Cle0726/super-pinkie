@@ -62,6 +62,26 @@ export function waitNudge(jobs = [], kinds = [], now = Date.now()) {
     + '。真的一件都不剩了，就用一句话告诉先生在跑什么、大概要多久，然后结束这一轮。';
 }
 
+// 上面这段等待清单是「先干别的」的提醒，不是出错（tools-health-1113 A5）。它只能借 before_tool_call 的
+// block 送到碧琪手里，运行时把被拦的调用记成 status: blocked → isError，碧琪会以为后台任务挂了
+// （Windows 正式环境 481 条全被标成出错）。这里认出这条提醒，写进会话记录前改成正常结果：
+// 文字一字不动；不是这条提醒的拦截（任务不存在、设定防护、循环检测……）照旧是出错。
+const NUDGE_TEXT = /还在后台跑，跑完系统会自动叫你，不用再查。现在先做不依赖它的事：/;
+
+export function isWaitNudgeResult(message = {}) {
+  if (message?.role !== 'toolResult') return false;
+  const details = message.details || {};
+  if (details.status !== 'blocked' || details.deniedReason !== 'plugin-before-tool-call') return false;
+  const text = (Array.isArray(message.content) ? message.content : []).map(part => part?.text || '').join('');
+  return NUDGE_TEXT.test(text) && NUDGE_TEXT.test(String(details.reason || text));
+}
+
+// tool_result_persist（同步钩子）：只换掉出错标记，内容原样。
+export function softenWaitNudge(message = {}) {
+  if (!isWaitNudgeResult(message)) return null;
+  return {...message, isError: false, details: {...message.details, status: 'deferred', ok: true}};
+}
+
 // 只读：这个会话里还在跑的后台命令（新的一轮开始时告诉碧琪「还有这些在跑」）。不新建守望实例。
 export function runningBackgroundJobs(sessionKey = '') {
   const jobs = globalThis[STATE]?.jobs;

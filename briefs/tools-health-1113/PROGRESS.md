@@ -74,3 +74,13 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 |---|---|---|
 | A2-1 | 单元测试过；隔离网关实测待 | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 |
 | A2-2 | 待实测（题 7） | |
+
+### A5 process 的提醒不算出错
+
+- 根因比方案说的深一层：这段「还在后台跑，先干别的」的提醒是 `background-jobs.mjs` 在 `before_tool_call` 里用 `block` 送出去的；运行时把被拦的调用做成 `details.status: "blocked"`，再由 `isToolResultError`（`tool-result-error-*.js`）判成出错。插件钩子的返回值经过 `runBeforeToolCall` 合并时只留 `params / block / blockReason / requireApproval`，**插件这一层没法让它不标出错**。Windows 正式会话里这条提醒 481 条，全部 `isError: true`（占 process 458 次失败的绝大多数）。
+- 做法（不改运行时核心）：`background-jobs.mjs` 新增 `isWaitNudgeResult` / `softenWaitNudge`，`index.mjs` 注册同步钩子 `tool_result_persist`：只认这段提醒（`deniedReason: plugin-before-tool-call` + 提醒原文），写进会话记录前改成 `isError: false`、`status: deferred`、`ok: true`，**文字一字不动**。任务不存在、进程崩了、别的插件 / 循环检测的拦截都不碰，照旧是出错。
+- 剩下的一截（照实写）：同一轮里运行时内存中的那条结果仍是出错。碧琪现在的模型都走 `mm`（openai-completions），这种格式**根本不把出错标记发给模型**，模型只看到文字，所以对模型无影响；会话记录、界面、体检统计、下一轮的上下文都已是正常结果。若以后走 Anthropic / Google 格式（会带 `is_error`），要彻底去掉得做一个三处的运行时补丁（钩子合并保留一个字段、veto 分支带出去、`buildBlockedToolResult` 写 `ok: true`）——没做，报给 Fable 定。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| A5-1 | 过（单元测试）；题 5 实测待「改后」批 | `tests/background-jobs.test.mjs` 8/8：提醒去掉出错标记且内容不变；任务不存在、其他拦截、循环检测、进程崩溃仍是出错 |
