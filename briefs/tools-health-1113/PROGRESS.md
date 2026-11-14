@@ -84,3 +84,24 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 | # | 结果 | 证据 |
 |---|---|---|
 | A5-1 | 过（单元测试）；题 5 实测待「改后」批 | `tests/background-jobs.test.mjs` 8/8：提醒去掉出错标记且内容不变；任务不存在、其他拦截、循环检测、进程崩溃仍是出错 |
+
+## 体检数字（隔离副本，hy4free 无后备）
+
+### 改前：`before-h4f`（10 题 × 2 遍 = 20 次，并发 8，2026-11-13 晚；插件 = A1 之前的代码，运行时没打 A1 补丁）
+
+`session-stats.py --state <iso>\home\.openclaw --since <started> --last 500`（含碧琪自己叫醒的后续轮，共 56 个会话文件）：
+
+| 指标 | 改前（副本） |
+|---|---|
+| 模型回复 / 工具调用 | 362 / 466 |
+| `exec` 占比 | 30% |
+| 一次调多个工具 | 26% |
+| 出错或中断 | 5.0% |
+| 系统提示词中位数 | 47370 字 |
+| 工具说明中位数 | 61320 字（52 个工具） |
+| 平均每次回复 token | 53423 |
+
+工具失败：`pdf` 9/9（全是 `Local media path is not under an allowed directory`，A4）、`web_search` 7/7（`disabled or no provider`）、`pinkie_search` 11/14（`duckduckgo: 被反机器人验证拦下`，A3）、`browser` 17/17（`browser control disabled`，副本里没开浏览器控制）、`process` 15/22（几乎全是「还在后台跑…」提醒，A5）、`app_browser` 16/27（例「启动服务请二选一：填写 dir，或同时填写 command、cwd、port。」，A6；另有副本没有侧栏浏览器端点）、`image` 19/51（`hy4free: unexpected EOF`、60 秒超时——上游问题）、`web_fetch` 10/77（重定向循环、429 等，**没有一条 special-use IP**：副本运行时本来就拿掉了 ssrf 解析检查，见 A1）、`exec` 15/142、`memory_search` 0/4。
+
+逐题（20 次）：6 次整轮以 `FailoverError: unexpected EOF` 结束（题 1、2、4b、5、6×2 各一次）——hy4free 上游断流，没有后备就直接失败；按规矩不为它改代码。题 3 两遍都读对；题 8 两遍都指出 `admin.js`；题 9 正常。题 7 两遍都是从**副本里实测会话的存档**里还原出「技能大赛」——记忆库里没有，答案被前面几批实测污染了，这一题的结果要打折看。
+原始结果在副本 `evals\before-h4f\`（results.json、stats.json），没提交。
