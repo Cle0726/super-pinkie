@@ -294,6 +294,16 @@
       host.append(img);
     } else if (item.kind === 'html') {
       host.append(htmlFrame(preview.data, {scripts: true, title: item.title}));
+      // D3：打成一个自带样式和图片的文件，先生自己选位置存；只在本机打包，不上传。
+      host.append(button('导出成一个文件', 'pinkie-art-btn pinkie-art-export', async () => {
+        try {
+          const out = await rpcOk('pinkie.artifacts.export', {id: item.id, ...(v ? {v} : {})}, 60_000);
+          const url = URL.createObjectURL(new Blob([out.html], {type: 'text/html;charset=utf-8'})), a = el('a');
+          a.href = url; a.download = out.name; document.body.append(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+          toast(out.remote?.length ? `导出好了。页面里还有 ${out.remote.length} 处用的是网上的东西，断网时那几处会空着` : '导出好了，断网也能完整打开');
+        } catch (error) { toast(error.message); }
+      }));
     } else if (ext === 'md') {
       const doc = el('div', 'pinkie-art-view__md');
       const render = window.PinkieSessionTools?.markdownToHtml;
