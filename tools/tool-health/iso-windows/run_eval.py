@@ -14,7 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REAL_HOME = Path(os.environ.get('USERPROFILE') or Path.home())
 ROOT = Path(os.environ.get('TH_ISO_ROOT') or REAL_HOME / '碧琪实测' / 'iso-th')
-DEFAULT_MODELS = 'mm/workbuddy/deepseek-v4.1-flash,mm/grok-4.7,mm/gemini-3.8-flash-tiered'
+DEFAULT_MODELS = 'mm/workbuddy/hy4free'  # 用户 11-13：实测统一用 hy4free（看图：它自己能看，image/pdf 工具走 imageModel/pdfModel）
 
 
 def gateway_env():

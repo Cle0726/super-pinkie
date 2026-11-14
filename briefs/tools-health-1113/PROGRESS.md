@@ -19,6 +19,13 @@
 - 模型配置从正式配置只读复制（上游是本机 `127.0.0.1:1466` 的中转），密钥没打印、没进仓库。
 - 第一次启动时运行时自己的 doctor 往**副本**里装了 `brave`、`deepseek` 两个插件（正式环境没动）。
 
+## 实测模型（用户 11-13 定）
+
+- 用户 11-13 傍晚：**实测统一用 `mm/workbuddy/hy4free`**，看图让它自己看（配置里它是 `text + image`），或者走 image / pdf 工具用能看图的模型。和 ACCEPTANCE「三个模型各跑 2 遍」不一样，这里以用户为准；各项里的「3 个模型 × 2 遍」都换成「hy4free × 2 遍」，通过线按比例算（如 ≥ 5/6 → ≥ 2/2）。
+- 隔离副本配置：`agents.defaults.model` / `imageModel` / `pdfModel` 都是 `{primary: mm/workbuddy/hy4free, fallbacks: [mm/workbuddy/hy4std, mm/workbuddy/deepseek-v4.1-flash]}`，各模式去掉单独的 model。`imageModel`、`pdfModel` 是运行时 zod 结构里**已有**的键（`AgentDefaultsSchema`，string 或 `{primary, fallbacks, timeoutMs}`），不是新键；改完网关正常启动。
+- Windows 正式环境的 `image` 16/16 失败，原因是没配 `imageModel` 时运行时退到 `google/gemini-2.0-flash` 之类上游没有的模型（`Unknown model`）。正式配置**没改**（规矩：正式环境只读）；要不要在正式碧琪上也这样配，等用户 / Fable 定。
+- 之前按三个模型开跑的「改前」批中途停了，作废；重新按 hy4free 跑（label `before-hy4free`）。
+
 ## Windows 正式环境只读基线（`session-stats.py --state %USERPROFILE%\.openclaw`，最近 60 个会话）
 
 | 指标 | Windows 正式 | Mac 正式（Fable 量的） |

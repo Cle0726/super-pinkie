@@ -15,7 +15,8 @@
 - 改了 `services/` 后：`setup.py sync`（重新复制插件）再重启网关。打运行时补丁：`setup.py patch apply-xxx.mjs`（只改副本运行时）。**A1 补丁还没打进副本**，跑「改后」那批之前要先 `setup.py patch apply-web-fetch-fakeip-v6.mjs`。
 - 注意：副本运行时是 Windows 包那份（叠了 Mac 快照），它的 `ssrf` 解析检查本来就被拿掉了，所以 A1 在副本里**看不出差别**；A1 的复现和验证用的是 npm 原包 `F:\tmp\th-sandbox\openclaw-pristine`（脚本 `F:\tmp\th-sandbox\repro-a1.mjs <dist>`），见 PROGRESS。
 - 批量跑题：`python -I -X utf8 tools/tool-health/iso-windows/run_eval.py --label <名字> --repeat 2 --jobs 8 [--only 1,2]`，结果在 `iso-th\evals\<名字>\results.json`（里面有 `started` 时间戳）。量数字：`python -I tools/tool-health/session-stats.py --state %USERPROFILE%\碧琪实测\iso-th\home\.openclaw --since <started> --last 500 --json <仓库外>`。
-- **「改前」那批（label `before`，10 题 × 3 模型 × 2 遍）交接时还在后台跑**，输出 `iso-th\logs\eval-before.out`。跑完把 session-stats 数字填进 PROGRESS「体检数字」。会话文件在副本里，`--since` 用 results.json 的 `started`。
+- **实测模型统一是 hy4free（用户 11-13 定，见 PROGRESS「实测模型」）**；`run_eval.py` 默认就是它。三模型的 `before` 批已作废。
+- **「改前」那批（label `before-hy4free`，10 题 × hy4free × 2 遍）交接时还在后台跑**，输出 `iso-th\logs\eval-before-hy4free.out`。跑完把 session-stats 数字填进 PROGRESS「体检数字」。会话文件在副本里，`--since` 用 results.json 的 `started`。
 - 夹具：`fixtures.py` 已跑过：`%LOCALAPPDATA%\Temp\th-test\note-1..3.png`、`iso-th\fixtures\scan-book.pdf`（34.9 MB，30 页 JPEG，第 2–3 页目录）、`fixtures\site\`、`fixtures\proj\`。
 - 题 6（app_browser）在副本里没有侧栏浏览器端点（故意不设 `PINKIE_APP_BROWSER_ENDPOINT`），会失败，A6 主要靠单元测试；要真机走通得另想办法，先记「没测」。
 
