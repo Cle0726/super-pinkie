@@ -7,14 +7,14 @@
 主工作区多半停在 `dev/study-game` 上并带着没提交的改动，不要切走它：
 
 ```bash
-git worktree add ../brain-mode feat/brain-mode-1113
+git worktree add ../metre-mode feat/metre-mode-1113
 ```
 
 ## 二、隔离副本
 
 Mac 的隔离副本在仓库外，你那边没有，自己搭一个（如果之前做「工具整改」时已经搭过 `tools/tool-health/iso-windows/`，直接复用它的脚本）：
 
-- 放在仓库外，例如 `%USERPROFILE%\碧琪实测\iso-brain\`，状态目录、配置、工作区、日志、临时目录全在它下面。
+- 放在仓库外，例如 `%USERPROFILE%\碧琪实测\iso-metre\`，状态目录、配置、工作区、日志、临时目录全在它下面。
 - 网关用随机空闲端口，**不能是 18789**，只绑 `127.0.0.1`，自己的令牌。环境变量参照 `tools/windows-smoke/smoke.py` 的 `profile_env`。
 - 运行时从仓库产物或已装 App 的运行时目录复制一份再用，不在安装目录里直接跑。
 - 模型配置从正式配置只读复制；密钥不打印、不进仓库、不进 `PROGRESS.md`。
@@ -28,7 +28,7 @@ Mac 的隔离副本在仓库外，你那边没有，自己搭一个（如果之�
 
 | 批 | Windows 上能不能做 | 注意 |
 |---|---|---|
-| 0 基座 | 能 | `setup.py` 和 Windows 安装脚本两边都要登记主脑；验收 A0-3 在 Windows 的工作区路径上验 |
+| 0 基座 | 能 | `setup.py` 和 Windows 安装脚本两边都要登记 Metre；验收 A0-3 在 Windows 的工作区路径上验 |
 | 1 派发 | 能 | 纯后端加一个开关，两端一样 |
 | 2 会话管理 | 能 | `folder` 参数要认盘符和反斜杠 |
 | 3 通用补缺 | **最适合** | 命令分类要包含 `del`、`move`、`ren`、`Remove-Item`、`winget`、`Invoke-WebRequest`；读图小框要过 A3-9 |
