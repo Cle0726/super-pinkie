@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {apply,transform,transformV4,transformTools,toolEdits} from '../patch/apply-image-access.mjs';
 
 const anchor='/** Verifies that a local media path is managed inbound media or lives under allowed roots. */\nasync function assertLocalMediaAllowed(';
@@ -165,7 +166,7 @@ test('2026.7 picks the unpatched .js chunk (the runtime the release build instal
 
 // Windows ships the patched runtime as a snapshot, not by running the patch.
 test('the Windows snapshot carries image-access v5, the patched image/pdf tools and the same helper',()=>{
-  const snap=path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/,'')),'..','desktop/windows/mac-runtime/openclaw/dist');
+  const snap=path.join(path.dirname(fileURLToPath(import.meta.url)),'..','desktop/windows/mac-runtime/openclaw/dist');
   const read=(n)=>fs.readFileSync(path.join(snap,n),'utf8');
   const access=read('local-media-access-olAlkTss.js');
   assert.match(access,/^\/\* pinkie-image-access:v5 \*\//);
