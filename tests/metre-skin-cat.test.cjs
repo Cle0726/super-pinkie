@@ -131,7 +131,8 @@ test('A4-1/A4-2: every skin rule is scoped to Metre (or to Metre-only classes), 
       assert.ok(scoped, `没限定在 Metre 下的规则：${sel}`);
     }
   }
-  assert.doesNotMatch(css, /#e94f91|#ff7aa2|#d64f79|#b72d6b|233,\s*79,\s*145|pink/i);
+  // 类名里的 pinkie（.pinkie-baton 这类）不算粉色：先去掉再查颜色。
+  assert.doesNotMatch(css.replace(/pinkie/gi, ''), /#e94f91|#ff7aa2|#d64f79|#b72d6b|233,\s*79,\s*145|pink/i);
   assert.match(css, /backdrop-filter: none !important/);
   for (const token of ['#FAF9F5', '#1F1E1D', '#73726C', '#E8E6DC', '#C96442', '#262624', '#F0EEE6']) assert.ok(css.includes(token), token);
   const cat = read(INJ + 'laolao-metre-cat.css').replace(/\/\*[\s\S]*?\*\//g, '');

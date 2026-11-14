@@ -15,6 +15,9 @@ const label = args.label || process.platform;
 const captureMode = args.mode || 'project';
 if (!['chat','project','thinking','learning','unrestricted','metre'].includes(captureMode)) throw Error('--mode is not a Pinkie mode');
 const captureAgent = captureMode === 'chat' ? 'main' : captureMode;
+// --theme dark, --width / --height: the same capture in the dark theme or a narrower window (defaults: light, 1280x800).
+const captureTheme = args.theme === 'dark' ? 'dark' : 'light';
+const captureSize = {width: Number(args.width) || 1280, height: Number(args.height) || 800};
 const require = createRequire(process.env.PINKIE_UI_DEPS ? path.join(process.env.PINKIE_UI_DEPS,'package.json') : import.meta.url);
 let playwright, ws;
 try { playwright=require('playwright'); ws=require('ws'); }
@@ -104,12 +107,12 @@ try {
     currentView=view;
     const entryAgent=view==='home'?(captureAgent==='main'?'project':'main'):(view==='learning'?'learning':captureAgent);
     const context=args.cdp ? browser.contexts()[0]
-      : await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:1,colorScheme:'light',locale:'zh-CN',reducedMotion:'no-preference'});
+      : await browser.newContext({viewport:captureSize,deviceScaleFactor:1,colorScheme:captureTheme,locale:'zh-CN',reducedMotion:'no-preference'});
     if(!context)throw Error('the packaged WebView2 has no debuggable context');
     await context.route('**/*',route=>{const u=new URL(route.request().url());if(['http:','https:'].includes(u.protocol)&&u.origin!==origin){requests.push({view,url:u.href,blockedExternal:true});return route.abort();}return route.continue();});
-    await context.addInitScript(({view,origin,entryAgent,nativePlatform,mockNative})=>{
+    await context.addInitScript(({view,origin,entryAgent,nativePlatform,mockNative,captureTheme})=>{
       const key=new URL(location.href).searchParams.get('session')||`agent:${entryAgent}:parity`;
-      const settings={gatewayUrl:origin.replace('http','ws'),sessionKey:key,lastActiveSessionKey:key,themeMode:'light',token:'parity'};
+      const settings={gatewayUrl:origin.replace('http','ws'),sessionKey:key,lastActiveSessionKey:key,themeMode:captureTheme,token:'parity'};
       for(const suffix of ['',':default',':'+settings.gatewayUrl])localStorage.setItem('openclaw.control.settings.v1'+suffix,JSON.stringify(settings));
       localStorage.setItem('openclaw.i18n.locale','zh-CN');
       const Socket=window.WebSocket; window.WebSocket=class extends Socket {constructor(url,protocols){const next=new URL(url,location.href);next.host=new URL(origin).host;super(next.href,protocols);}};
@@ -123,13 +126,13 @@ try {
           if(!handlers[name])try{Object.defineProperty(handlers,name,{value:{postMessage(){}},configurable:true});}catch{}
         }
       }
-    },{view,origin,entryAgent,nativePlatform:args['native-platform']||'mac',mockNative:browserName!=='webkit'});
+    },{view,origin,entryAgent,nativePlatform:args['native-platform']||'mac',mockNative:browserName!=='webkit',captureTheme});
     const page=args.cdp ? context.pages().find(p=>p.url().startsWith('http'))||context.pages()[0] : await context.newPage();
     if(!page)throw Error('the packaged WebView2 has no page');
     activePage=page;
     // A CDP target is a native window. Preserve its real viewport rather than
     // emulating a browser size over the host's differently sized surface.
-    if(!args.cdp)await page.setViewportSize({width:1280,height:800});
+    if(!args.cdp)await page.setViewportSize(captureSize);
     page.setDefaultTimeout(30000);
     page.on('pageerror',error=>errors.push({view,kind:'page',message:String(error)}));
     page.on('console',message=>{if(['error','warning'].includes(message.type()))errors.push({view,kind:message.type(),message:message.text()});});
@@ -193,6 +196,8 @@ try {
     if(states[view].mode!==expectedMode)throw Error(`wrong mode for ${view}: ${states[view].mode}, expected ${expectedMode}`);
     // --probe file.js: run in the page right before the shot (stage something, or read layout back).
     if(args.probe){console.log('probe',view,JSON.stringify(await page.evaluate(fs.readFileSync(args.probe,'utf8'))));await page.waitForTimeout(Number(args['probe-wait'])||800);}
+    // --shot-width / --shot-height: resize after the page has settled (a narrow window hides the sidebar the mode switch lives in).
+    if(!args.cdp&&(args['shot-width']||args['shot-height'])){await page.setViewportSize({width:Number(args['shot-width'])||captureSize.width,height:Number(args['shot-height'])||captureSize.height});await page.waitForTimeout(1200);}
     await page.screenshot({path:path.join(out,`${label}-${view}.png`),timeout:30000});
     if(args['desktop-python']){
       if(!args.cdp||!args['app-pid'])throw Error('desktop evidence requires the actual packaged App and its PID');
