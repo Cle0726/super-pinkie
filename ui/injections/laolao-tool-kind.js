@@ -13,13 +13,14 @@
 
   // PLAN 2.8 表里的新类别（顺序即表的顺序）
   const KINDS = ['create', 'write', 'delete', 'move', 'install', 'build', 'git', 'download', 'view', 'shot',
-    'dispatch', 'wait', 'review', 'manage', 'models'];
+    'dispatch', 'wait', 'review', 'manage', 'models', 'memory'];
 
   // 进行中
   const ING = {
     create: '正在创建', write: '正在写入', delete: '正在删除', move: '正在移动', install: '正在安装',
     build: '正在构建', git: '正在提交', download: '正在下载', view: '正在看图片', shot: '正在截图',
     dispatch: '正在派发', wait: '在等子会话', review: '正在验收', manage: '正在整理会话', models: '正在看可用模型',
+    memory: '正在翻项目记忆',
   };
   const GIT_ING = {commit: '正在提交', push: '正在推送', pull: '正在拉取', fetch: '正在拉取'};
 
@@ -40,6 +41,7 @@
     review: () => '验收了',
     manage: () => '整理了会话',
     models: () => '看了可用模型',
+    memory: () => '翻了项目记忆',
   };
 
   const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|bmp|heic|avif|tiff?)$/i;
@@ -116,6 +118,7 @@
     if (n === 'pinkie_session_start') return 'dispatch';
     if (n === 'pinkie_sessions') return 'manage';
     if (n === 'pinkie_models') return 'models';
+    if (n === 'metre_memory') return 'memory';
     if (n === 'image') return 'view';
     if ((n === 'browser' || n === 'computer' || n === 'computer_flow' || n === 'app_browser') && /screenshot|snapshot_image|capture/i.test(String(a.action || a.kind || ''))) return 'shot';
     if (n === 'read' || n === 'workbench_read') {

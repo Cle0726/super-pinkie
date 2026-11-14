@@ -280,7 +280,7 @@
     clekk_memory:'长期记忆',pinkie_session_start:'开子会话',pinkie_session_message:'给子会话发消息',pinkie_session_list:'查看子会话',pinkie_session_title:'给会话起名',
     web_gpt_activity:'网页 GPT 协作'};
   // 批 1、批 2 的新工具（PLAN 2.5、2.7）
-  Object.assign(toolLabels,{pinkie_sessions:'整理会话',pinkie_models:'看可用模型'});
+  Object.assign(toolLabels,{pinkie_sessions:'整理会话',pinkie_models:'看可用模型',metre_memory:'项目记忆'});
   globalThis.__pinkieToolLabels=toolLabels;
   const toolLabelFor=(core)=>toolLabels[core.toLowerCase()]||toolLabels[core.toLowerCase().replace(/[\s.-]+/g,'_')]||null;
   const queueSteerBadge = (parent) => {

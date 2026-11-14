@@ -28,7 +28,7 @@ if (!window.__laolaoCleStage) {
     // PLAN 2.8 补全（和 laolao-tool-kind.js 的 ING 一致，tests/tool-kind-words.test.cjs 守着）
     create: '正在创建', delete: '正在删除', move: '正在移动', install: '正在安装', build: '正在构建', git: '正在提交',
     download: '正在下载', view: '正在看图片', shot: '正在截图', dispatch: '正在派发', wait: '在等子会话', review: '正在验收',
-    manage: '正在整理会话', models: '正在看可用模型'};
+    manage: '正在整理会话', models: '正在看可用模型', memory: '正在翻项目记忆'};
   // 工具名 → 类别。类别决定标题行的动作词、展开后那一行的说法和色点。
   // 碧琪自己的工具（services/mode-architecture 里注册的）和 OpenClaw 原生工具都在这里；
   // 不认识的工具归「tool」，不再一律当成「运行命令」。
@@ -44,7 +44,7 @@ if (!window.__laolaoCleStage) {
     ask_user: 'ask', pinkie_mode_ask: 'ask',
     learning_activity: 'quiz', learning_desk: 'note',
     clekk_memory: 'memory', memory_search: 'memory',
-    pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
+    pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', metre_memory: 'memory', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
     sessions_spawn: 'session', sessions_send: 'session', subagents: 'session',
     workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', cron: 'cron',
   };
@@ -612,7 +612,7 @@ if (!window.__laolaoCleStage) {
     shot: (n) => (n === 1 ? '截了一张图' : `截了 ${n} 张图`),
     dispatch: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('dispatch', w) : `派出了 ${n} 个子会话`),
     wait: () => '等子会话', review: () => '验收了',
-    manage: (n) => (n === 1 ? '整理了会话' : `整理了 ${n} 次会话`), models: () => '看了可用模型',
+    manage: (n) => (n === 1 ? '整理了会话' : `整理了 ${n} 次会话`), models: () => '看了可用模型', memory: () => '翻了项目记忆',
   };
   const openRuns = new Set();         // 用户点开的工具组（按第一步的 toolCallId 记，重绘后照样展开）
   const seenSteps = new WeakSet();    // 已经出场过的步骤；运行中新来的依次淡入
