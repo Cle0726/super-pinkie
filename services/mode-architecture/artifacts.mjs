@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {agentWorkspace, openclawStateDir, runtimeConfig} from './openclaw-paths.mjs';
 import {agentOf, readSessionJson, registerSessionMethod, writeSessionJson} from './session-titles.mjs';
 import {agentForMode, isTempKey} from './session-temp.mjs';
+import {bundleHtmlFile} from './html-bundle.mjs';
 
 // W1 artifact index (PLAN §7). Every file Biqi writes, edits, patches or
 // generates with one of the listed extensions, inside a mode workspace, the
@@ -235,6 +236,19 @@ export class ArtifactStore {
       ? {ok: true, v: version.v, size, mime: ext === 'svg' ? 'image/svg+xml' : 'text/plain', encoding: 'utf8', data: buffer.toString('utf8')}
       : {ok: true, v: version.v, size, mime: IMAGE_MIME[ext], encoding: 'base64', data: buffer.toString('base64')};
   }
+  // D3：网页成品打成一个自带样式和图片的 HTML，交给界面让用户自己选位置保存。相对路径按原文件所在文件夹找。
+  exportHtml(id, v) {
+    const item = this.item(id);
+    if (!['html', 'htm'].includes(extOf(item.path))) throw new Error('只有网页成品能导出成单个文件');
+    const version = v ? item.versions.find(entry => entry.v === Number(v)) : item.versions.at(-1);
+    if (!version) throw new Error('没有这个版本');
+    const file = version.snapshot && fs.existsSync(version.snapshot) ? version.snapshot
+      : version === item.versions.at(-1) ? item.path : '';
+    if (!file || !fs.existsSync(file)) throw new Error('这个版本没有存副本');
+    const result = bundleHtmlFile(file, {baseDir: path.dirname(item.path)});
+    const base = String(item.title || path.basename(item.path, path.extname(item.path))).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 80) || 'page';
+    return {ok: true, v: version.v, name: `${base}.html`, ...result};
+  }
   remove(id) {
     const data = this.load();
     const item = data.items[String(id || '')];
@@ -273,6 +287,7 @@ export function registerArtifacts(api, {root, stateDir = openclawStateDir(), bin
   method('pinkie.artifacts.restore', ({id, v, key}) => store.restore(id, v, {sessionKey: key}));
   method('pinkie.artifacts.remove', ({id}) => store.remove(id));
   method('pinkie.artifacts.read', ({id, v}) => store.read(id, v));
+  method('pinkie.artifacts.export', ({id, v}) => store.exportHtml(id, v));
   // after_tool_call's ctx carries no workspace; remember the one the tool
   // started with, and fall back to the agent's configured workspace.
   const started = new Map();
