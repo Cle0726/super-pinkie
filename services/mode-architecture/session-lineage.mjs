@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {endsWithUserQuestion} from './ask.mjs';
+import {prepareChildWorktree, settleChildWorktree, worktreeBrief, worktreeReportLine} from './child-worktree.mjs';
 import {
   agentOf, channelTitle, clipGraphemes, graphemeCount, isBadTitle, isInternalMessage, isInternalSessionKey, isPersona,
   logSessionFailure, messageText, numberedTitle, readSessionJson, registerSessionMethod, safeText, sessionTool, writeSessionJson,
@@ -411,17 +412,26 @@ export class SessionLineage {
         throw error;
       }
     }
-    if (binding) await this.access.rpc('pinkie.project.bind', {key, path: binding.root, name: binding.name});
+    // D2：项目模式、项目文件夹是 git 仓库 → 子会话进自己的工作树和分支（OpenClaw 受管工作树），互不踩文件。
+    let worktree = already?.worktree && !already.worktree.removed ? already.worktree : null;
+    if (binding && !cross && !worktree) {
+      try { worktree = await prepareChildWorktree({rpc: (method, params, options) => this.access.rpc(method, params, options), root: binding.root, mode: modeOfKey(parentKey), id}); }
+      catch { worktree = null; logSessionFailure(this.api, 'session-lineage', key, 'worktree-create'); }
+    }
+    if (binding) await this.access.rpc('pinkie.project.bind', worktree
+      ? {key, path: worktree.path, name: `${binding.name || ''}（${worktree.branch}）`}
+      : {key, path: binding.root, name: binding.name});
     const startRun = 'pinkie-child-start-' + nowId(key);
     this.updateLineage(key, {parentKey, title: child.label || request.title || '新会话', initiation: request.initiation,
       context: request.context, createdAt: already?.createdAt || this.now(), detached: already?.detached || false,
       lastReportAt: already?.lastReportAt || 0, startRun,
-      ...(cross ? {mode: request.mode, fromMode: modeOfKey(parentKey)} : {})});
+      ...(cross ? {mode: request.mode, fromMode: modeOfKey(parentKey)} : {}),
+      ...(worktree ? {worktree: {...worktree, projectRoot: binding.root, projectName: binding.name || ''}} : {})});
     if (!request.autoTitle && this.titles.record(key)?.source !== 'user') {
       this.titles.record(key, {title: child.label || request.title, source: request.userAuthored ? 'user' : 'system'});
     }
     this.reserved.set(key, this.now());
-    const brief = this.briefFor(parentKey, request);
+    const brief = this.briefFor(parentKey, request) + (worktree ? worktreeBrief(worktree) : '');
     try {
       await this.send(key, brief, startRun, BRIEF_PREFIX);
       this.updateLineage(key, {started: true});
@@ -910,6 +920,17 @@ export class SessionLineage {
   async report(key, child, text, runId, {delivered = false, failed = false} = {}) {
     const parent = await this.access.entry(child.parentKey);
     if (!parent) return;
+    // D2：把工作树的分支报回父会话；没改动的清掉（之后再接着做就回到项目文件夹本身）。不合并、不推送。
+    if (child.worktree && !child.worktree.removed) {
+      try {
+        const settled = await settleChildWorktree({rpc: (method, params, options) => this.access.rpc(method, params, options), wt: child.worktree});
+        text = String(text || '') + worktreeReportLine(settled);
+        if (settled?.cleaned) {
+          this.updateLineage(key, {worktree: {...child.worktree, removed: true}});
+          await this.access.rpc('pinkie.project.bind', {key, path: child.worktree.projectRoot, name: child.worktree.projectName});
+        }
+      } catch { logSessionFailure(this.api, 'session-lineage', key, 'worktree-settle'); }
+    }
     const id = (failed ? 'report-failed-' : 'report-') + nowId(key, runId);
     let added = false;
     const entry = await this.access.entry(key);
