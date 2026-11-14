@@ -28,6 +28,7 @@ import {codeWatch} from './code-work.mjs';
 import {sessionHintBlock, noteCompaction} from './session-hints.mjs';
 import {designDirectionBlock} from './design-directions.mjs';
 import {ensureManualLimits} from './config-floor.mjs';
+import {quarantineNewerAgentDatabases, runtimeDistDir, supportedAgentSchemaVersion} from './agent-db-guard.mjs';
 import {createDeskTool, deskHintBlock} from './desk.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, independentViews, isViewRole, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
 import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
@@ -6942,6 +6943,15 @@ export default {
     api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
+    // 更新版 OpenClaw 写的模式库（结构版本更高）运行时打不开，memory_search 每调必错：
+    // 启动时原样挪进 backups/agent-db-<日期>/<模式>/，让运行时重建（只挪不删）。
+    api.on('gateway_start', () => {
+      try {
+        const supported = supportedAgentSchemaVersion(runtimeDistDir());
+        const report = quarantineNewerAgentDatabases({config: pluginConfig(), stateDir: openclawStateDir(), supported});
+        for (const item of report) api.logger?.warn?.(`agent db ${item.agent}: schema ${item.version} > ${item.supported}, ${item.action}${item.to ? ` -> ${item.to}` : ''}${item.error ? ` (${item.error})` : ''}`);
+      } catch { /* 不能影响启动 */ }
+    });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
     api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
