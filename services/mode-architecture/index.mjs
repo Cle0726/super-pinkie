@@ -17,6 +17,7 @@ import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
 import {registerSessionManage} from './session-manage.mjs';
 import {registerToolTrace} from './tool-trace.mjs';
+import {registerMetreMemory} from './metre-memory.mjs';
 import {registerArtifacts} from './artifacts.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
@@ -7010,6 +7011,10 @@ export default {
     // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
     registerSessionManage(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, lineage: sessionLineage,
       stateRoot: pinkieStateRoot(), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    // Metre 项目记忆（PLAN 6.2，批 M）：按文件夹隔离，metre_memory 工具 + 每轮项目档案 + pinkie.metre.memory。
+    registerMetreMemory(api, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
+      bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json'),
+      childrenRunning: async key => (await sessionLineage.list(key)).children.some(child => child.status === '运行中')});
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
     registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(api, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});

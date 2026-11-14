@@ -34,7 +34,7 @@
   const KIND_CN = {
     create: '创建', write: '写入', delete: '删除', move: '移动', install: '安装', build: '构建', git: 'git',
     download: '下载', view: '看图', shot: '截图', dispatch: '派发', wait: '等子会话', review: '验收',
-    manage: '整理会话', models: '看模型',
+    manage: '整理会话', models: '看模型', memory: '项目记忆',
   };
 
   const $ = (sel, root) => (root || document).querySelector(sel);

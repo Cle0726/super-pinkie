@@ -24,7 +24,7 @@
     create: '碧琪在创建文件…', write: '碧琪在写入文件…', delete: '碧琪在删除文件…', move: '碧琪在移动文件…',
     install: '碧琪在安装依赖…', build: '碧琪在构建…', git: '碧琪在跑 git…', download: '碧琪在下载…',
     view: '碧琪在看图片…', shot: '碧琪在截图…', dispatch: '碧琪在派发子会话…', wait: '在等子会话做完',
-    review: '在验收子会话交回来的活', manage: '碧琪在整理会话…', models: '碧琪在看可用模型…',
+    review: '在验收子会话交回来的活', manage: '碧琪在整理会话…', models: '碧琪在看可用模型…', memory: '在翻项目记忆…',
   };
   const RUN_KINDS = new Set(['wait', 'review']);
   const USUAL_KINDS = new Set(['review', 'fix', 'alt', 'recheck', 'trial', 'remedy', 'bg']);

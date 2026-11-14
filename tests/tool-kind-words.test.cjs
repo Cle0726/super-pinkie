@@ -11,7 +11,7 @@ const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const TK = require('../ui/injections/laolao-tool-kind.js');
 
 const PLAN_KINDS = ['create', 'write', 'delete', 'move', 'install', 'build', 'git', 'download', 'view', 'shot',
-  'dispatch', 'wait', 'review', 'manage', 'models'];
+  'dispatch', 'wait', 'review', 'manage', 'models', 'memory'];
 
 test('the shared table lists exactly the PLAN 2.8 categories', () => {
   assert.deepEqual(TK.KINDS, PLAN_KINDS);
@@ -160,6 +160,7 @@ test('the stage knows the new tools, and the shared table loads before the stage
   const phrases = read('ui/injections/laolao-phrases.js');
   assert.match(phrases, /pinkie_sessions:'整理会话'/);
   assert.match(phrases, /pinkie_models:'看可用模型'/);
+  assert.match(phrases, /metre_memory:'项目记忆'/);
   assert.match(phrases, /image:'看图片',image_generate:'生成图片'/);
 });
 
