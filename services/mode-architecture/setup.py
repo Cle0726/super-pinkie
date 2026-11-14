@@ -293,7 +293,14 @@ def _ensure_none_marker(workspace: Path, backup_root: Path) -> bool:
 
 
 MODE_AGENT_IDS = ("main", "project", "thinking", "learning")
-UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
+UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference",
+                         # tools-health B1：Mac 和 Windows 正式环境最近 60 个会话都是 0 次调用，打法、手册、代码都不指望它们。
+                         # gateway 不在里面：Windows 正式 60 个会话里调了 11 次。
+                         "nodes", "agents_list", "dir_fetch", "dir_list", "file_fetch", "file_write")
+# 渠道插件的工具：只有这个渠道的消息会落到的模式才发（tools-health B1）。按 bindings 算，
+# 没被 bindings 按账号整个接走的消息落到默认模式（agents.list 里 default: true 的，没有就是第一个）。
+# 这些名字由这里管：渠道接到某个模式时，从该模式的 deny 里拿掉，其余 deny 条目只加不删。
+CHANNEL_TOOLS = {"qqbot": ("qqbot_*",), "feishu": ("feishu_*",)}
 # OpenClaw 自带、碧琪有自己替代品的工具。web_search 换成 pinkie_search（必应→搜狗→360→百度→DuckDuckGo，
 # 全挂时自己开浏览器搜）：两个搜索工具同时摆着，模型会两头都试。插件不能注册同名的 web_search
 # （OpenClaw 会以 plugin tool name conflict 丢掉它），按名字 deny 也会连插件的一起拿掉，所以只能关内置的这个。
@@ -302,6 +309,36 @@ REPLACED_OPENCLAW_TOOLS = ("web_search",)
 # document-extract 不在，pdf 工具对不能直接读 PDF 的模型（mm 走 openai-completions）一律报
 # 「PDF extraction disabled or unavailable」。只往已有的 allow 清单里加，用户 deny 了就不加。
 NEEDED_BUNDLED_PLUGINS = ("document-extract",)
+
+
+def _channel_modes(data: dict) -> dict:
+    """{渠道: 这个渠道的消息会落到的模式 id 集合}；只算配置里开着的渠道。"""
+    channels = data.get("channels") if isinstance(data.get("channels"), dict) else {}
+    agents = [a for a in data.get("agents", {}).get("list", []) if isinstance(a, dict) and a.get("id")]
+    default = next((a["id"] for a in agents if a.get("default") is True), agents[0]["id"] if agents else "main")
+    bindings = [b for b in data.get("bindings", []) if isinstance(b, dict)] if isinstance(data.get("bindings"), list) else []
+    result = {}
+    for channel in CHANNEL_TOOLS:
+        conf = channels.get(channel)
+        if not isinstance(conf, dict) or conf.get("enabled") is False:
+            result[channel] = set()
+            continue
+        modes, whole = set(), set()
+        for binding in bindings:
+            match = binding.get("match") if isinstance(binding.get("match"), dict) else {}
+            if match.get("channel") != channel or not binding.get("agentId"):
+                continue
+            modes.add(binding["agentId"])
+            # 只按账号整个接走的才算这个账号「不会再落到默认模式」；带 peer / guild 之类细分的不算。
+            if set(match) <= {"channel", "accountId"}:
+                whole.add(match.get("accountId") or "*")
+        accounts = set(conf.get("accounts", {}).keys()) if isinstance(conf.get("accounts"), dict) else set()
+        if not accounts or any(k in conf for k in ("appId", "appSecret", "clientSecret", "token")):
+            accounts.add("default")
+        if "*" not in whole and not accounts <= whole:
+            modes.add(default)
+        result[channel] = modes
+    return result
 
 
 def _configure_plugin(data: dict, target: Path) -> bool:
@@ -366,6 +403,7 @@ def _configure_plugin(data: dict, target: Path) -> bool:
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+    channel_modes = _channel_modes(data)
     for agent in data["agents"].get("list", []):
         if isinstance(agent, dict) and agent.get("id") in MODE_AGENT_IDS:
             # OpenClaw 自带、碧琪的代码、手册和技能都不用的工具：每轮少发约 2.5 万字的工具说明，
@@ -377,6 +415,11 @@ def _configure_plugin(data: dict, target: Path) -> bool:
             if not isinstance(deny, list):
                 deny = tools["deny"] = []
             deny.extend(name for name in UNUSED_OPENCLAW_TOOLS + REPLACED_OPENCLAW_TOOLS if name not in deny)
+            for channel, names in CHANNEL_TOOLS.items():
+                if agent["id"] in channel_modes[channel]:
+                    deny[:] = [name for name in deny if name not in names]
+                else:
+                    deny.extend(name for name in names if name not in deny)
         if isinstance(agent, dict) and agent.get("id") == "unrestricted":
             # Keep every workspace file on disk, but do not inject AGENTS.md,
             # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
