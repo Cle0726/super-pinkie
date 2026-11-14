@@ -1860,7 +1860,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_mode_ask','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','run_tests','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_mode_ask','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','pr_status','run_tests','web_gpt_activity','workbench_read','workbench_show']);
   // A tool registered in code but missing above kills the whole plugin at load
   // (11-13: pinkie_search). Scan every registerTool name in the plugin source.
   const dir=path.join(import.meta.dirname,'../services/mode-architecture');
