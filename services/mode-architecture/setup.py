@@ -298,6 +298,10 @@ UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "l
 # 全挂时自己开浏览器搜）：两个搜索工具同时摆着，模型会两头都试。插件不能注册同名的 web_search
 # （OpenClaw 会以 plugin tool name conflict 丢掉它），按名字 deny 也会连插件的一起拿掉，所以只能关内置的这个。
 REPLACED_OPENCLAW_TOOLS = ("web_search",)
+# OpenClaw 自带、碧琪要用到的插件。plugins.allow 一旦是清单，不在清单里的自带插件就不加载：
+# document-extract 不在，pdf 工具对不能直接读 PDF 的模型（mm 走 openai-completions）一律报
+# 「PDF extraction disabled or unavailable」。只往已有的 allow 清单里加，用户 deny 了就不加。
+NEEDED_BUNDLED_PLUGINS = ("document-extract",)
 
 
 def _configure_plugin(data: dict, target: Path) -> bool:
@@ -356,6 +360,9 @@ def _configure_plugin(data: dict, target: Path) -> bool:
         allow = plugins["allow"] = []
     if isinstance(allow, list) and plugin_id not in allow:
         allow.append(plugin_id)
+    if isinstance(allow, list):
+        denied = plugins.get("deny") if isinstance(plugins.get("deny"), list) else []
+        allow.extend(name for name in NEEDED_BUNDLED_PLUGINS if name not in allow and name not in denied)
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})

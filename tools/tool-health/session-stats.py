@@ -11,10 +11,23 @@
 """
 import argparse
 import collections
+import datetime
 import glob
 import json
 import os
 import sys
+
+
+def ts_of(o):
+    t = o.get('timestamp') or o.get('ts')
+    if isinstance(t, (int, float)):
+        return t / 1000 if t > 1e11 else t
+    if isinstance(t, str):
+        try:
+            return datetime.datetime.fromisoformat(t.replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def main():
@@ -26,6 +39,9 @@ def main():
     ap.add_argument('--state', default=os.path.expanduser('~/.openclaw'))
     ap.add_argument('--last', type=int, default=60, help='只看最近多少个会话文件')
     ap.add_argument('--since', type=float, default=0, help='只看这个 Unix 秒之后改过的会话文件')
+    ap.add_argument('--event-since', type=float, default=0,
+                    help='只数事件时间（timestamp）在这个 Unix 秒之后的事件；会话文件里混着旧批次时用')
+    ap.add_argument('--event-until', type=float, default=0, help='只数事件时间在这个 Unix 秒之前的事件（0 = 不限）')
     ap.add_argument('--json', default='')
     a = ap.parse_args()
 
@@ -49,6 +65,10 @@ def main():
                 o = json.loads(line)
             except Exception:
                 continue
+            if a.event_since or a.event_until:
+                t = ts_of(o)
+                if t is None or t < a.event_since or (a.event_until and t >= a.event_until):
+                    continue
             if o.get('type') == 'context.compiled':
                 d = o.get('data') or {}
                 sp = d.get('systemPrompt')

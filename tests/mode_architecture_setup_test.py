@@ -151,6 +151,21 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertFalse(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
         self.assertEqual(json.dumps(data, sort_keys=True), before)
 
+    def test_pdf_extraction_plugin_joins_an_allow_list_unless_denied(self):
+        # A4 live (11-13): with plugins.allow = [three pinkie plugins], the bundled document-extract
+        # plugin never loads and the pdf tool fails with "PDF extraction disabled or unavailable".
+        data = {'plugins': {'allow': ['pinkie-project-scope', 'pinkie-mode-architecture']}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertIn('document-extract', data['plugins']['allow'])
+        self.assertEqual(data['plugins']['allow'].count('document-extract'), 1)
+        self.assertNotIn('document-extract', data['plugins']['entries'])  # no new entry, only the allow list
+        before = json.dumps(data, sort_keys=True)
+        self.assertFalse(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
+        self.assertEqual(json.dumps(data, sort_keys=True), before)
+        denied = {'plugins': {'allow': ['pinkie-mode-architecture'], 'deny': ['document-extract']}}
+        setup._configure_plugin(denied, Path('/tmp/pinkie-mode-test'))
+        self.assertNotIn('document-extract', denied['plugins']['allow'])
+
     def test_only_verified_gemini_model_gains_native_xhigh_without_changing_permissions(self):
         data = {
             'models': {'providers': {'mm': {'models': [
