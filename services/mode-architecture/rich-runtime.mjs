@@ -316,7 +316,7 @@ export function resolveLaunch(server, {platform = process.platform, env = proces
     const cli = path.win32.join(base, 'node_modules', 'npm', 'bin', 'npx-cli.js');
     if (exists(path.win32.join(base, 'npx.cmd')) && exists(node) && exists(cli)) return {...server, command: node, args: [cli, ...(server.args || [])]};
   }
-  throw new Error('这台电脑还没装 Node.js（接这个要用到它自带的 npx）。到 nodejs.org 装好后，再点一次「接入」。');
+  throw new Error('这台电脑还没装 Node.js，接这一项要用到它。到 nodejs.org 装好后，再点一次「接入」。');
 }
 
 // 运行时 `openclaw mcp add` 的参数：它先连一次（probe），连上了再按运行时自己的配置结构校验、写入。
@@ -347,11 +347,11 @@ export function mcpAddArgs(name, server) {
 export function friendlyProbeError(text) {
   const raw = String(text || '').replace(/\s+in\s+[A-Za-z]:\\[^:]*?openclaw\.json|\s+in\s+\/[^:]*?openclaw\.json/g, '').trim();
   const missing = raw.match(/spawn\s+(\S+)\s+ENOENT/i);
-  if (missing) return `没连上：找不到启动命令「${missing[1]}」。检查一下命令有没有写错、对应的程序装了没有。配置没有改动。`;
-  if (/ECONNREFUSED|ENOTFOUND|fetch failed|getaddrinfo/i.test(raw)) return `没连上：服务地址访问不到。检查一下网址和网络。配置没有改动。（${raw.slice(0, 200)}）`;
-  if (/\b401\b|\b403\b|unauthori[sz]ed|forbidden/i.test(raw)) return `没连上：服务说没有权限，检查一下令牌或 Key。配置没有改动。`;
-  if (/timed? ?out|timeout/i.test(raw)) return `没连上：等了太久没有回应。配置没有改动。（${raw.slice(0, 200)}）`;
-  return `没连上，配置没有改动。（${raw.replace(/^error:\s*/i, '').slice(0, 300) || '原因不明'}）`;
+  if (missing) return `没连上：这台电脑上找不到启动命令「${missing[1]}」。看看是不是写错了，或者对应的程序还没装。这次没有保存。`;
+  if (/ECONNREFUSED|ENOTFOUND|fetch failed|getaddrinfo/i.test(raw)) return `没连上：服务地址打不开。看看网址有没有写错、网络通不通。这次没有保存。（${raw.slice(0, 200)}）`;
+  if (/\b401\b|\b403\b|unauthori[sz]ed|forbidden/i.test(raw)) return `没连上：对方说没有权限。看看令牌或 Key 有没有贴错、过期了没有。这次没有保存。`;
+  if (/timed? ?out|timeout/i.test(raw)) return `没连上：等了很久，对方一直没有回应。过一会儿再试一次。这次没有保存。（${raw.slice(0, 200)}）`;
+  return `没连上，这次没有保存。（${raw.replace(/^error:\s*/i, '').slice(0, 300) || '原因不明'}）`;
 }
 
 // 本地服务那一行给用户看「起的是什么、开放哪个文件夹」，不给 node.exe / npx-cli.js 这种启动细节。
@@ -498,7 +498,7 @@ export function registerRichRuntime(api, options = {}) {
           }
           throw new Error(text);
         }
-        return {ok: true, probed: true, message: '连上了，已保存。新对话会使用这项连接。'};
+        return {ok: true, probed: true, message: '连上了，已经保存。新开的对话就能用。'};
       }
       params = {...params, config: server};
     }

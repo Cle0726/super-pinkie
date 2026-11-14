@@ -386,7 +386,7 @@
       } else if (recipe.kind === 'oauth') {
         sheet.append(node('p', 'pk-cap__note', '点「接入」后会打开 Notion 的登录页，你选好要给碧琪看的页面，再把页面给的授权码贴回来就行。'));
       } else if (recipe.kind === 'env') {
-        const body = line(sheet, 'Key', '在高德开放平台的控制台里申请（选「Web 服务」）');
+        const body = line(sheet, 'Key', '到高德开放平台的控制台新建一个，服务平台选「Web 服务」');
         key = input(body, 'password', '', '一串字母和数字'); key.autocomplete = 'new-password'; key.classList.add('pk-cap__mono');
         if (item?.source) { const a = node('a', 'pk-cap__source', '怎么申请 Key ↗'); a.href = item.source; a.target = '_blank'; a.rel = 'noopener noreferrer'; body.append(a); }
       } else if (recipe.kind === 'folder') {

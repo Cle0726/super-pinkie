@@ -3,8 +3,8 @@
 import {execFile} from 'node:child_process';
 
 const FIELDS = 'number,title,state,isDraft,url,headRefName,baseRefName,author,reviewDecision,mergeable,statusCheckRollup,comments,reviews,updatedAt';
-const INSTALL = '本机没有 gh（GitHub CLI）。装法：Windows 用 `winget install --id GitHub.cli`，Mac 用 `brew install gh`，或到 https://cli.github.com 下载；装好后在终端运行 `gh auth login` 登录一次。';
-const LOGIN = 'gh 还没登录 GitHub。请先生在终端运行 `gh auth login` 登录一次（只需一次），之后再查。';
+const INSTALL = '这台电脑没装 gh（GitHub 的命令行工具），所以现在看不了 PR。可以自己装：Windows 用 `winget install --id GitHub.cli`，Mac 用 `brew install gh`，都不行就到 https://cli.github.com 下载。装好后还要登录一次 GitHub，这一步要用户本人确认，碧琪代替不了：请用户在终端运行 `gh auth login`，照提示在浏览器里确认。登录好了再查。';
+const LOGIN = 'gh 已经装了，但还没登录 GitHub。登录要用户本人确认，碧琪代替不了：请用户在终端运行 `gh auth login`，照提示在浏览器里确认，登录一次以后就不用再登。登录好了再查。';
 
 export function runGh(args, {cwd, timeout = 20_000} = {}) {
   return new Promise(resolve => {

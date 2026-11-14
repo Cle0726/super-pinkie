@@ -347,7 +347,7 @@ test('A4-3 over the cap with pages: just those pages, in a file under the cap', 
   assert.ok(tight.buffer.length <= 6_000);
   assert.ok(tight.pages.length >= 1 && tight.pages.length < 8);
   assert.equal((await pdfHelper.pdfInfo(tight.buffer)).pageCount, tight.pages.length);
-  assert.match(tight.note, /^（PDF 太大，这次只读了第 1(-\d)? 页；第 \d+-8 页请再用 pages 分开读。）$/u);
+  assert.match(tight.note, /^（这几页合起来还是太大，这次只读了第 1(-\d)? 页。第 \d+-8 页还没读，请再用 pages 单独读。）$/u);
   // Never sends an over-cap file: one page that cannot fit keeps OpenClaw's refusal.
   await assert.rejects(pdfHelper.fitPdf({media: {buffer}, maxBytes: 500, pageNumbers: [1], maxPages: 20}), /^Error: Media exceeds/);
   await assert.rejects(pdfHelper.fitPdf({media: {buffer: Buffer.from('%PDF-1.7 broken'.padEnd(2000, ' '))}, maxBytes: 1000, pageNumbers: [1], maxPages: 20}), /Media exceeds/);

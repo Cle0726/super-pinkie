@@ -386,15 +386,15 @@ function megabytes(bytes) {
 export function overviewText({pageCount, sizeBytes, maxPages, outline = []}) {
   let text = `这份 PDF 有 ${pageCount} 页、${megabytes(sizeBytes)} MB，太大了没法整本读。请用 pages 指定要读的页，一次最多 ${maxPages} 页。`;
   if (outline.length) {
-    // 待 Fable 写：目录条目的排法（这里先用「标题（第 N 页）」，二级缩进两格）。
+    // 目录条目：「- 标题（第 N 页）」，二级缩进两格。（Fable 11-14 定稿，照用。）
     text += "目录如下：\n" + outline.map(({title, page, depth}) => `${"  ".repeat(depth)}- ${title}${page ? `（第 ${page} 页）` : ""}`).join("\n");
   }
   return text;
 }
 
-/** 待 Fable 写：抽出来的页仍超上限、只送了前面几页时，加在结果前面的一句。 */
+/** 抽出来的页仍超上限、只送了前面几页时，加在结果前面的一句。（Fable 11-14 定稿。） */
 export function partialPagesNote(sent, asked) {
-  return `（PDF 太大，这次只读了第 ${rangeText(sent)} 页；第 ${rangeText(asked.filter((page) => !sent.includes(page)))} 页请再用 pages 分开读。）`;
+  return `（这几页合起来还是太大，这次只读了第 ${rangeText(sent)} 页。第 ${rangeText(asked.filter((page) => !sent.includes(page)))} 页还没读，请再用 pages 单独读。）`;
 }
 
 /**

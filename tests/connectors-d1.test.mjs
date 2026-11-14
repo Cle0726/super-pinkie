@@ -50,7 +50,7 @@ test('mcp add 的参数：以 - 开头的值写成 --arg=-y，不会被当成选
 test('连不上的原因说成一句中文，去掉配置文件路径', () => {
   const msg = friendlyProbeError('MCP probe failed for "bad" in C:\\Users\\x\\.openclaw\\openclaw.json: spawn not-a-real-cmd ENOENT');
   assert.match(msg, /找不到启动命令「not-a-real-cmd」/);
-  assert.match(msg, /配置没有改动/);
+  assert.match(msg, /这次没有保存/);
   assert.doesNotMatch(msg, /openclaw\.json/);
 });
 
