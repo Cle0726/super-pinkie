@@ -435,6 +435,7 @@ html:not(#p1):not(#p2):not(#p3) body[data-pinkie-user-settings="1"] .settings-se
 #laolao-user-settings .pk-tile--github { background: linear-gradient(140deg, #3a3340, #1f1a24); }
 #laolao-user-settings .pk-tile--notion { background: #fff; color: #191919; box-shadow: inset 0 0 0 1.5px #2b2b2b; font-family: Georgia, "Times New Roman", serif; font-size: 17px; }
 #laolao-user-settings .pk-tile--files { background: linear-gradient(140deg, #ffd38a, #f2a54a); }
+#laolao-user-settings .pk-tile--amap { background: linear-gradient(140deg, #6fb7ff, #2f7fe6); font-size: 15px; }
 #laolao-user-settings .pk-tile--custom { background: linear-gradient(140deg, #b9a2ff, #8a6cf0); }
 #laolao-user-settings .pk-conn__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #laolao-user-settings .pk-conn__state { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--pinkie-settings-muted); }

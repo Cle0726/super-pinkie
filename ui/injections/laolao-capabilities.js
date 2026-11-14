@@ -326,9 +326,12 @@
     {id: 'github', title: 'GitHub', mark: 'GH', text: '查仓库、议题和代码', kind: 'token'},
     {id: 'notion', title: 'Notion', mark: 'N', text: '读写你授权的页面', kind: 'oauth'},
     {id: 'files', title: '本地资料夹', svg: FOLDER, text: '只读打开一个文件夹', kind: 'folder'},
+    {id: 'amap', title: '高德地图', mark: '高', text: '查地点、路线和天气', kind: 'env'},
     {id: 'custom', title: '其他服务', svg: PLUG, text: '填服务地址接入', kind: 'custom'},
   ];
-  const recipeOf = (server) => RECIPES.find((r) => r.id === server.name.replace(/-\d+$/, '')) || RECIPES[3];
+  const recipeOf = (server) => RECIPES.find((r) => r.id === server.name.replace(/-\d+$/, '')) || RECIPES.find((r) => r.id === 'custom');
+  // 完整路径：Mac 的 /… 或 Windows 的 C:\… / \服务器\共享
+  const isFullPath = (value) => /^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(value);
   function tile(recipe) {
     const t = node('span', 'pk-tile pk-tile--' + recipe.id); t.setAttribute('aria-hidden', 'true');
     if (recipe.svg) t.innerHTML = recipe.svg; else t.textContent = recipe.mark;
@@ -375,18 +378,23 @@
       const s = status(sheet);
       const actions = node('div', 'pk-cap__actions');
       const item = catalog.find((c) => c.id === recipe.id);
-      let token, folder, url, auth, json;
+      let token, folder, url, auth, json, key;
       if (recipe.kind === 'token') {
         const body = line(sheet, '访问令牌', '在 GitHub 设置里生成');
         token = input(body, 'password', '', 'ghp_… 或 github_pat_…'); token.autocomplete = 'new-password'; token.classList.add('pk-cap__mono');
         if (item?.source) { const a = node('a', 'pk-cap__source', '怎么生成令牌 ↗'); a.href = item.source; a.target = '_blank'; a.rel = 'noopener noreferrer'; body.append(a); }
       } else if (recipe.kind === 'oauth') {
         sheet.append(node('p', 'pk-cap__note', '点「接入」后会打开 Notion 的登录页，你选好要给碧琪看的页面，再把页面给的授权码贴回来就行。'));
+      } else if (recipe.kind === 'env') {
+        const body = line(sheet, 'Key', '在高德开放平台的控制台里申请（选「Web 服务」）');
+        key = input(body, 'password', '', '一串字母和数字'); key.autocomplete = 'new-password'; key.classList.add('pk-cap__mono');
+        if (item?.source) { const a = node('a', 'pk-cap__source', '怎么申请 Key ↗'); a.href = item.source; a.target = '_blank'; a.rel = 'noopener noreferrer'; body.append(a); }
       } else if (recipe.kind === 'folder') {
         const body = line(sheet, '哪个文件夹', '碧琪只能读，不会改');
         const rowEl = node('div', 'pk-cap__inline'); body.append(rowEl);
-        folder = input(rowEl, 'text', '', '/Users/…/Documents/资料');
-        rowEl.append(button('选择…', () => pickFolder(folder), 'small'));
+        const canPick = typeof window.webkit?.messageHandlers?.laolaoProjectFolder?.postMessage === 'function';
+        folder = input(rowEl, 'text', '', canPick ? '/Users/…/Documents/资料' : 'D:\\资料（贴完整路径）');
+        if (canPick) rowEl.append(button('选择…', () => pickFolder(folder), 'small'));
       } else {
         url = input(line(sheet, '服务地址', '以 https:// 开头'), 'url', '', 'https://example.com/mcp'); url.classList.add('pk-cap__mono');
         auth = input(line(sheet, '访问令牌', '没有就不填'), 'password', ''); auth.autocomplete = 'new-password'; auth.classList.add('pk-cap__mono');
@@ -407,14 +415,15 @@
           if (!item) throw new Error('列表还没读到，稍等再试。');
           config = structuredClone(item.config);
           if (recipe.kind === 'token') { if (!token.value.trim()) throw new Error('贴一下你的 GitHub 令牌。'); config.headers = {Authorization: 'Bearer ' + token.value.trim()}; }
-          if (recipe.kind === 'folder') { if (!folder.value.trim().startsWith('/')) throw new Error('选一个文件夹，或者贴完整路径。'); config.args = [...config.args, folder.value.trim()]; }
+          if (recipe.kind === 'folder') { if (!isFullPath(folder.value.trim())) throw new Error('选一个文件夹，或者贴完整路径。'); config.args = [...config.args, folder.value.trim()]; }
+          if (recipe.kind === 'env') { if (!key.value.trim()) throw new Error('贴一下你的高德 Key。'); config.env = {[item.envKey]: key.value.trim()}; }
         }
         let host = '';
         try { host = config.url ? new URL(config.url).hostname.split('.').slice(-2, -1)[0] || '' : ''; } catch {}
         const nameBase = recipe.kind === 'custom' ? (host || 'service').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || 'service' : recipe.id;
         const name = uniqueName(nameBase);
-        await request('pinkie.connectors.save', {name, config});
-        if (token) token.value = ''; if (auth) auth.value = '';
+        await request('pinkie.connectors.save', {name, config}, 200000);
+        if (token) token.value = ''; if (auth) auth.value = ''; if (key) key.value = '';
         await load();
         sheet.hidden = true; current = null;
         grid.querySelectorAll('.pk-cap__recipe').forEach((b) => b.classList.remove('is-selected'));
@@ -425,7 +434,7 @@
       actions.append(connect, textButton('取消', () => { sheet.hidden = true; grid.querySelectorAll('.pk-cap__recipe').forEach((b) => b.classList.remove('is-selected')); }));
       sheet.append(actions);
       sheet.hidden = false;
-      (token || folder || url || connect).focus();
+      (token || key || folder || url || connect).focus();
     }
     function serverRow(server) {
       const recipe = recipeOf(server);
@@ -436,7 +445,7 @@
       const head = node('div', 'pk-conn__head');
       head.append(node('strong', '', server.name === recipe.id ? recipe.title : server.name));
       const dot = node('span', 'pk-conn__state', state[1]); dot.dataset.state = state[0]; head.append(dot);
-      main.append(head, node('small', 'pk-conn__meta', server.url || [server.command].filter(Boolean).join(' ') || ''));
+      main.append(head, node('small', 'pk-conn__meta', server.url || server.detail || [server.command].filter(Boolean).join(' ') || ''));
       const ops = node('div', 'pk-job__ops');
       const test = textButton('测试', attempt(out, async () => {
         const result = await request('pinkie.connectors.probe', {name: server.name}, 70000);

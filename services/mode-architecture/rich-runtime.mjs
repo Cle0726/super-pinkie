@@ -302,9 +302,61 @@ export const CONNECTOR_CATALOG = [
   {id: 'github', name: 'GitHub', description: '查仓库、议题与代码；使用你自己的 GitHub 凭据。', source: 'https://github.com/github/github-mcp-server', config: {url: 'https://api.githubcopilot.com/mcp/', transport: 'streamable-http'}, credential: 'bearer'},
   {id: 'notion', name: 'Notion', description: '读写你授权的页面与数据库，网页登录授权。', source: 'https://developers.notion.com/guides/mcp/overview', config: {url: 'https://mcp.notion.com/mcp', transport: 'streamable-http', auth: 'oauth'}, credential: 'oauth'},
   {id: 'files', name: '本地资料夹', description: '把选定资料夹交给官方文件服务；默认只开放读取。', source: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem', config: {command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], toolFilter: {include: ['read_file', 'read_text_file', 'read_multiple_files', 'list_directory', 'search_files', 'get_file_info', 'list_allowed_directories']}}, credential: 'folder'},
+  // 高德官方的 MCP 包；Key 是用户在高德开放平台自己申请的，只放进本机配置的 env（不放进网址）。
+  {id: 'amap', name: '高德地图', description: '查地点、路线和天气；用你自己在高德开放平台申请的 Key。', source: 'https://lbs.amap.com/api/mcp-server/summary', config: {command: 'npx', args: ['-y', '@amap/amap-maps-mcp-server']}, credential: 'env', envKey: 'AMAP_MAPS_API_KEY'},
 ];
 
-const publicConnector = (name, config) => ({name, enabled: config.enabled !== false, transport: config.url ? config.transport || 'streamable-http' : 'stdio', url: config.url ? new URL(config.url).origin + new URL(config.url).pathname : '', command: config.command || '', auth: config.auth === 'oauth' ? 'oauth' : config.headers?.Authorization ? 'token' : 'none', hasCredentials: !!(config.headers && Object.keys(config.headers).length || config.env && Object.keys(config.env).length), toolFilter: config.toolFilter || null});
+// Windows 上运行时用 shell:false 起本地服务，npx 是 .cmd 包装，直接起会失败。
+// 换成同一个 Node 安装里的 node.exe + npm 自带的 npx-cli.js（不经过命令行解释器，参数原样传）。
+export function resolveLaunch(server, {platform = process.platform, env = process.env, exists = fs.existsSync} = {}) {
+  if (platform !== 'win32' || !server?.command || !/^npx(?:\.cmd)?$/i.test(server.command)) return server;
+  const dirs = String(env.PATH || env.Path || '').split(';').map(d => d.trim().replace(/^"|"$/g, '')).filter(Boolean);
+  for (const base of [...dirs, env.ProgramFiles && path.win32.join(env.ProgramFiles, 'nodejs')].filter(Boolean)) {
+    const node = path.win32.join(base, 'node.exe');
+    const cli = path.win32.join(base, 'node_modules', 'npm', 'bin', 'npx-cli.js');
+    if (exists(path.win32.join(base, 'npx.cmd')) && exists(node) && exists(cli)) return {...server, command: node, args: [cli, ...(server.args || [])]};
+  }
+  throw new Error('这台电脑还没装 Node.js（接这个要用到它自带的 npx）。到 nodejs.org 装好后，再点一次「接入」。');
+}
+
+// 运行时 `openclaw mcp add` 的参数：它先连一次（probe），连上了再按运行时自己的配置结构校验、写入。
+// 参数一律写成 --flag=value，免得以「-」开头的值（比如 npx 的 -y）被当成选项。
+export function mcpAddArgs(name, server) {
+  const args = ['add', name];
+  const kv = (flag, obj) => { for (const [k, v] of Object.entries(obj || {})) args.push(`${flag}=${k}=${v}`); };
+  if (server.url) {
+    args.push(`--url=${server.url}`);
+    if (server.transport) args.push(`--transport=${server.transport}`);
+    kv('--header', server.headers);
+    if (server.auth === 'oauth') args.push('--auth=oauth');
+  } else {
+    args.push(`--command=${server.command}`);
+    for (const value of server.args || []) args.push(`--arg=${value}`);
+    kv('--env', server.env);
+    if (server.cwd) args.push(`--cwd=${server.cwd}`);
+  }
+  if (server.toolFilter?.include?.length) args.push(`--include=${server.toolFilter.include.join(',')}`);
+  if (server.toolFilter?.exclude?.length) args.push(`--exclude=${server.toolFilter.exclude.join(',')}`);
+  if (server.timeout) args.push(`--timeout=${server.timeout}`);
+  if (server.connectTimeout) args.push(`--connect-timeout=${server.connectTimeout}`);
+  if (server.enabled === false) args.push('--disabled');
+  return args;
+}
+
+// 运行时的报错是英文、带配置文件路径；给设置页一句能看懂的。
+export function friendlyProbeError(text) {
+  const raw = String(text || '').replace(/\s+in\s+[A-Za-z]:\\[^:]*?openclaw\.json|\s+in\s+\/[^:]*?openclaw\.json/g, '').trim();
+  const missing = raw.match(/spawn\s+(\S+)\s+ENOENT/i);
+  if (missing) return `没连上：找不到启动命令「${missing[1]}」。检查一下命令有没有写错、对应的程序装了没有。配置没有改动。`;
+  if (/ECONNREFUSED|ENOTFOUND|fetch failed|getaddrinfo/i.test(raw)) return `没连上：服务地址访问不到。检查一下网址和网络。配置没有改动。（${raw.slice(0, 200)}）`;
+  if (/\b401\b|\b403\b|unauthori[sz]ed|forbidden/i.test(raw)) return `没连上：服务说没有权限，检查一下令牌或 Key。配置没有改动。`;
+  if (/timed? ?out|timeout/i.test(raw)) return `没连上：等了太久没有回应。配置没有改动。（${raw.slice(0, 200)}）`;
+  return `没连上，配置没有改动。（${raw.replace(/^error:\s*/i, '').slice(0, 300) || '原因不明'}）`;
+}
+
+// 本地服务那一行给用户看「起的是什么、开放哪个文件夹」，不给 node.exe / npx-cli.js 这种启动细节。
+const launchDetail = config => (config.args || []).filter(a => !/^-/.test(a) && !/[\\/]npx-cli\.js$/i.test(a)).join('  ');
+const publicConnector = (name, config) => ({name, enabled: config.enabled !== false, transport: config.url ? config.transport || 'streamable-http' : 'stdio', url: config.url ? new URL(config.url).origin + new URL(config.url).pathname : '', command: config.command || '', detail: config.url ? '' : launchDetail(config), auth: config.auth === 'oauth' ? 'oauth' : config.headers?.Authorization ? 'token' : 'none', hasCredentials: !!(config.headers && Object.keys(config.headers).length || config.env && Object.keys(config.env).length), toolFilter: config.toolFilter || null});
 
 export function parseCliJson(stdout) {
   const value = String(stdout).trim();
@@ -375,7 +427,7 @@ export function registerRichRuntime(api, options = {}) {
   const stateDir = options.stateDir || api.runtime.state.resolveStateDir();
   const store = options.store || new RichStore(path.join(stateDir, 'pinkie-rich'));
   const cli = options.cli || path.resolve(path.dirname(process.argv[1] || ''), 'openclaw.mjs');
-  const runner = options.runner || (args => exec(process.execPath, [cli, 'mcp', ...args], {timeout: 60_000, maxBuffer: 2 * 1024 * 1024, env: {...process.env, FORCE_COLOR: '0'}}));
+  const runner = options.runner || ((args, opts = {}) => exec(process.execPath, [cli, 'mcp', ...args], {timeout: opts.timeout || 60_000, maxBuffer: 2 * 1024 * 1024, windowsHide: true, env: {...process.env, FORCE_COLOR: '0'}}));
   const config = () => api.runtime.config.current();
   const safeError = error => {
     let text = String(error?.message || '操作未完成。').slice(0, 600);
@@ -431,6 +483,25 @@ export function registerRichRuntime(api, options = {}) {
   method('pinkie.connectors.list', 'operator.admin', () => ({catalog: CONNECTOR_CATALOG, servers: Object.entries(config()?.mcp?.servers || {}).map(([name, cfg]) => publicConnector(name, cfg))}));
   method('pinkie.connectors.save', 'operator.admin', async params => {
     if (!NAME.test(String(params.name || ''))) throw new Error('名称请用 1–64 个字母、数字、短横线或下划线。');
+    const existing = config()?.mcp?.servers?.[params.name];
+    if (existing && !params.replace) throw new Error('同名连接器已经存在，请编辑它或换一个名称。');
+    // 新接的、要马上用的：交给运行时 `openclaw mcp add`，先连一次，连不上或配置结构不对就不写（D1-2）。
+    // 网页登录授权的（Notion）要先登录才连得上，暂停着保存的也不用连：照旧直接写，运行时写前同样会校验结构。
+    if (!existing) {
+      const server = resolveLaunch(connectorConfig(params.config));
+      if (server.auth !== 'oauth' && server.enabled !== false) {
+        try { await runner(mcpAddArgs(params.name, server), {timeout: 180_000}); }
+        catch (error) {
+          let text = friendlyProbeError(`${error?.stderr || ''}\n${error?.stdout || ''}\n${error?.killed ? 'timed out' : error?.message || ''}`);
+          for (const value of [...Object.values(server.headers || {}), ...Object.values(server.env || {})]) {
+            if (typeof value === 'string' && value.length > 5) text = text.split(value).join('•••');
+          }
+          throw new Error(text);
+        }
+        return {ok: true, probed: true, message: '连上了，已保存。新对话会使用这项连接。'};
+      }
+      params = {...params, config: server};
+    }
     const result = await api.runtime.config.mutateConfigFile({base: 'source', afterWrite: {mode: 'auto'}, mutate(draft) {
       draft.mcp ||= {}; draft.mcp.servers ||= {};
       const old = draft.mcp.servers[params.name];
