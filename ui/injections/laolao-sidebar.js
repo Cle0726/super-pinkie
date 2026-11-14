@@ -2005,6 +2005,42 @@
   window.addEventListener("popstate", schedule);
   window.addEventListener("laolao:modechange", schedule);
 
+  // pinkie_sessions 的 create 在后端建好会话、绑好文件夹后，记一笔「放进哪个项目」；侧栏的项目分组存在这边，
+  // 这里把它挂进同名（或同文件夹）的项目，没有就新建一个，然后告诉后端放好了。
+  let adopting = null;
+  function adoptPlacements() {
+    if (adopting) return adopting;
+    const ownerMode = stateMode, ownerState = state, agentId = currentModeAgent();
+    adopting = (async () => {
+      const {placements = {}} = await gwRequest('pinkie.session.manage.placements', {agentId}, 15000);
+      const keys = Object.keys(placements);
+      if (!keys.length) return;
+      const sameFolder = (a, b) => String(a || '').replace(/[\\/]+$/, '').toLowerCase() === String(b || '').replace(/[\\/]+$/, '').toLowerCase();
+      for (const key of keys) {
+        const {project, folder} = placements[key] || {};
+        if (!folder || Object.values(ownerState.projects).some(list => Array.isArray(list) && list.includes(key))) continue;
+        let name = Object.keys(ownerState.projectFolders).find(each => sameFolder(ownerState.projectFolders[each], folder));
+        if (!name) {
+          const base = String(project || folder.split(/[\\/]/).filter(Boolean).pop() || '项目').slice(0, 80);
+          name = base;
+          for (let n = 2; ownerState.projectFolders[name] || ownerState.projects[name]?.length; n++) name = base + '（' + n + '）';
+          ownerState.projectFolders[name] = folder;
+        }
+        if (!ownerState.projects[name]) ownerState.projects[name] = [];
+        ownerState.projects[name].push(key);
+      }
+      writeModeState(ownerMode, ownerState);
+      await gwRequest('pinkie.session.manage.placed', {keys}, 15000).catch(() => {});
+      sessionIndex = null;
+      window.PinkieSessionList?.invalidate?.();
+      schedule();
+    })().catch(() => {}).finally(() => { adopting = null; });
+    return adopting;
+  }
+  window.addEventListener('laolao:sessions-changed', () => { void adoptPlacements(); });
+  window.addEventListener('pinkie:sidebar-gateway-ready', () => { void adoptPlacements(); });
+  window.addEventListener('laolao:modechange', () => { void adoptPlacements(); });
+
   /* 调试句柄（只读排查用） */
   window.__laolaoSidebar = {
     gwRequest,
@@ -2013,6 +2049,7 @@
     openChildSessionDialog,
     createSession: (options = {}) => createProjectSession(null, {...options, plain: true}),
     askDeleteAllSessions,
+    adoptPlacements,
     toast,
     openMenu,
     closeMenu,
