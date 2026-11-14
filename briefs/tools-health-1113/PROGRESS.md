@@ -122,6 +122,48 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 
 回归：`app-browser-windows-endpoint`、`app-browser-windows-fallback`、`browser-pointer` 全过；`browser-fast`、`browser-memory` 各 1 条红，**基线（改前）同样红**，不是这次的；`mode-architecture` 只剩 Windows 上本来就红的 `computer tool discovers…`。
 
+### A7 出错和中断的回复（只查不改）
+
+脚本：`tools/tool-health/error-classes.py`（只读，只输出报错原文和计数，不输出用户内容）。数两样：assistant 消息 `stopReason` 为 `error` / `aborted` 的条数（和 session-stats「出错或中断」同口径），以及 `openclaw:prompt-error` 事件条数。分类看运行时记的报错原文；同一会话 10 秒内有 prompt-error 时用它补原因；「中断」里，120 秒内用户自己发了话的算「用户停止」，其余算「系统 / 原因不明」。「其后自动续接」= 下一条用户消息是碧琪的 `[pinkie-watchdog]` / `[pinkie-tier]`。
+
+数据（2026-11-13 夜量，都在这台 Windows 上）：
+- **副本**：隔离副本 `iso-th`，`before-h4f` 批起（`--since 1794621066.8`，即 results.json 的 `started`，2026-11-14 01:51 UTC），之后没有别的批次；最后一条回复 02:09 UTC（批次结束后 watchdog 续接的几轮）。**按事件时间过滤**：同一批会话文件里还混着作废批（`before`、`before-hy4free`）的旧事件，不过滤的话 session-stats 会数成 376 次回复，过滤后是 238 次。全部 `mm/workbuddy/hy4free`，无后备。
+- **Windows 正式**：`%USERPROFILE%\.openclaw` 最近 60 个会话（只读，和 session-stats 一样的取法）。原始 JSON 没提交。
+
+**出错 / 中断的回复**
+
+| 原因 | 副本 `before-h4f`（238 次回复） | 其后自动续接 | Windows 正式（2741 次回复） | 其后自动续接 |
+|---|---|---|---|---|
+| 上游断流（`unexpected EOF`、`502 Post …copilot.tencent.com…: EOF`、`Connection error.`） | **10（83%）** | 9 | **9（27%）** | 5 |
+| 上游限流（`429 {"code":6004,"msg":"您的使用量已超出频率限制…"}`） | 0 | — | 8（24%） | 4 |
+| 上游超时（`LLM idle timeout (120s)`；`Request was aborted` + prompt-error `request timed out`） | 2（17%） | 2 | 7（21%） | 3 |
+| 鉴权（`503 auth_unavailable: no auth available` 5、`502 Post "https://oauth2.googleapis.com/token": EOF` 1） | 0 | — | 6（18%） | 4 |
+| 上下文超长 | 0 | — | 0 | — |
+| 中断：用户停止（`This operation was aborted`，之后 120 秒内用户重发 / 说「继续」） | 0 | — | 2（6%） | 0 |
+| 中断：系统 / 原因不明（`This operation was aborted`，之后是后台任务完成的自动续接） | 0 | — | 1（3%） | 1 |
+| 其他 | 0 | — | 0 | — |
+| **合计** | **12（5.0%）**：error 10、aborted 2 | 11 | **33（1.2%）**：error 23、aborted 10 | 17 |
+
+按模型：副本全是 hy4free（断流 10、超时 2）。Windows 正式：`deepseek-v4.1-flash` 断流 8、限流 8、鉴权 5、中断 2；`gemini-3.8-flash-tiered` 超时 4、鉴权 1、用户停止 1；`hy4free` 超时 3、断流 1。
+
+**`openclaw:prompt-error` 事件**：副本 2 条（`request timed out` 1、`LLM idle timeout (120s)` 1）；Windows 正式 10 条（`LLM idle timeout (120s)` 7、`This operation was aborted | 20` 3）。运行时只在「这一轮没跑完」（超时 / 中断）时记它，上游直接回 4xx / 5xx / EOF 的那几类不记，所以它比出错回复少，两边的数不能直接相加。
+
+和 Mac 的差别：Fable 在 Mac 上量的是 32 条 prompt-error、36 次出错回复（5.3%）；Windows 正式只有 1.2%，副本（hy4free 无后备）5.0%。三边都**没有一条上下文超长**。
+
+**结论**
+- 两边占比最高的都是**上游断流**。根因在上游（hy4free / 腾讯中转 copilot.tencent.com 在出第一个字之前断开），不在碧琪。
+- 但有一截是碧琪这边能改的：这类回复全部是 `[assistant turn failed before producing content]`（一个字都没出），可以安全地原地重试；现在要等 `pinkie-watchdog` 续接，副本里出错到续接间隔 10–123 秒（中位数约 90 秒），且 1 次没被续接（那次评测直接以 `FailoverError: unexpected EOF` 结束）。**另开一项报给 Fable（见下「报给 Fable 的另开项」A7-F1），这一轮没改。**
+- 限流（429）和鉴权（`auth_unavailable`）都是本机中转 `127.0.0.1:1466` 后面的账号问题，碧琪修不了；要不要给正式环境配后备模型是用户的决定（同 PLAN 一、「换不换主模型不在本方案里」）。
+- 上游超时都是 `LLM idle timeout (120s)`，已由 watchdog 续接一部分，不建议动 120 秒这个值（没有证据说明更短会更好）。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| A7-1 | 过 | 上表；`python tools/tool-health/error-classes.py --state <状态目录> [--since <秒> --last 500]` |
+
+## 报给 Fable 的另开项（这一轮不做）
+
+- **A7-F1　上游「出字前断流」原地快速重试**：`stopReason: error`、内容是 `[assistant turn failed before producing content]`、报错含 `EOF` / `Connection error` 时，同一模型在几秒内原地重试 1 次（不换模型、不加配置键），再不行才交给 watchdog。依据：副本 hy4free 断流 10 次占全部出错 83%，正式 9 次占 27%；现在平均要等约 90 秒才续接，还有漏接。没查：运行时自身有没有同模型重试的开关、插件钩子能不能做到这一步——这一项要 Fable 先定做不做、在哪一层做。
+
 ## 待 Fable 写
 
 - A6：证书报错的中文提示（暂用）：「这个网站的安全证书有问题（过期、不受信任或和网址对不上），浏览器没有打开它。可以试试把网址换成 http:// 开头，或者换一个来源找同样的内容。」
