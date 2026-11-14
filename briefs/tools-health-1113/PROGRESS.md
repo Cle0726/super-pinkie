@@ -55,3 +55,15 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 | A1-2 | 过 | `tests/web-fetch-fakeip-v6.test.mjs`：开关为真时 `10.0.0.1`、`192.168.1.1`、`127.0.0.1`、`169.254.169.254`、`fd00::1`、`fc00::1`、`fe80::1`、`::1`、`2001:2:1::1`、`2001:db8::1`、`::ffff:10.0.0.1` 仍判为内网；`2001:2::e` 只在开关为真时放行。测试跑的是本机真实运行时的 ip 判定代码（打补丁的副本写到临时目录，不动原文件），快照版也跑了一遍 |
 | A1-3 | 没新增配置键：过；网关启动：待 | 补丁只改代码；副本配置是正式配置的复制 |
 | A1-4 | `patches-wired` 过；`refresh_mac_runtime.py --check` **待 Mac 端跑** | `node --test tests/patches-wired.test.mjs`：pass 1；`python -m unittest tests.windows_mac_snapshot_test`：6 个都过 |
+
+### A2 memory_search 要么能用，要么不出现
+
+- Windows 正式环境 4 个模式库都是结构版本 1，`memory_search` 0/4 失败；Mac 的「版本 19」问题这边没有。
+- **走第一条路（留着）**：Windows 正式会话里（只读看的），库能打开、`provider: none` 时 `memory_search` 走关键词检索，能返回 `memory/INDEX.md`、`memory/2026-11-07.md` 这类命中（另有 3 次 0 条）。所以库重建后不用把工具拿掉，也没用到第五节那句「记忆检索暂时停用」。
+- 实现：`services/mode-architecture/agent-db-guard.mjs` + `index.mjs` 里 `gateway_start` 钩子。读 SQLite 文件头第 60 字节的 `user_version`（不打开库、不加依赖），和运行时打包代码里的 `OPENCLAW_AGENT_SCHEMA_VERSION` 比；更新的就把库和 `-wal/-shm/-journal` 一起 `rename` 到 `<状态目录>/backups/agent-db-<日期>/<模式>/`。最近 60 秒有改动的不动；任何一个文件挪不动（Windows 上被占用改名会失败）就整组放回。只挪不删，不降级。
+- 和方案的差别：运行时认的版本号读不到时什么都不做（不猜）。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| A2-1 | 单元测试过；隔离网关实测待 | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 |
+| A2-2 | 待实测（题 7） | |
