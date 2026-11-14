@@ -20,6 +20,14 @@ const WRITE_ACTIONS = new Set(['serve','stop_serve','open','back','forward','rel
 const WINDOWS_ONLY_ACTIONS = new Set(['tab','window','vpn']);
 export const VPN_OPS = Object.freeze(['status','test','best','select','enable','auto','ip','refresh','add']);
 const TAB_OPS = ['list','new','switch','close'];
+export const MAC_TAB_NOTE = 'Mac 版只有一个页面，直接用 open 换网址。';
+// A6：证书无效之类的英文系统原话换成一句中文，并给出下一步。（文字待 Fable 过目，见 PROGRESS「待 Fable 写」。）
+export const CERT_ERROR_NOTE = '这个网站的安全证书有问题（过期、不受信任或和网址对不上），浏览器没有打开它。可以试试把网址换成 http:// 开头，或者换一个来源找同样的内容。';
+const CERT_ERROR = /ERR_CERT_|ERR_SSL_|SSL_ERROR|CERT_(?:DATE_INVALID|AUTHORITY_INVALID|COMMON_NAME_INVALID|INVALID)|certificate|self[- ]signed|unable to verify the first certificate/i;
+export function friendlyBrowserReason(reason = '') {
+  const text = String(reason || '');
+  return CERT_ERROR.test(text) ? CERT_ERROR_NOTE : text;
+}
 const browserBatches = new WeakMap();
 const NAVIGATION_ACTIONS = new Set(['open', 'back', 'forward', 'reload', 'show_file']);
 const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 Windows 暂不支持），请改用 browser 工具。';
@@ -69,7 +77,8 @@ function aborted(signal) {
 }
 
 export function appBrowserTimeout(action, params = {}) {
-  if (action === 'wait') return 15_000;
+  // wait：给了 text/selector/ref/name 时，timeout_ms（模型写的 ms 会换成它）就是最长等待，上限 15 秒。
+  if (action === 'wait') return Math.min(15_000, Math.max(1, Number(params.timeout_ms) || 15_000));
   // Testing every node, then possibly relaunching the window with the proxy.
   if (action === 'vpn') return 60_000;
   const ceiling = NAVIGATION_ACTIONS.has(action) ? 30_000 : 15_000;
@@ -404,9 +413,11 @@ export class AppBrowserServers {
     // Windows 没有侧栏时服务照样起，网页交给系统浏览器（见 systemFallback）。
     if (!(this.systemBrowser && !appBrowserAvailable(this.environment))) appBrowserEndpoint(this.environment);
     const staticMode = typeof params.dir === 'string' && params.dir.trim();
-    if (staticMode ? params.command !== undefined || params.cwd !== undefined || params.port !== undefined
+    // A6：dir + port 合法（用这个端口起静态服务）；dir 和 command / cwd 一起给才是写错了。
+    const portOk = params.port === undefined || (Number.isInteger(params.port) && params.port >= 1 && params.port <= 65535);
+    if (staticMode ? params.command !== undefined || params.cwd !== undefined || !portOk
       : !params.command || !params.cwd || !Number.isInteger(params.port) || params.port < 1 || params.port > 65535) {
-      throw new Error('启动服务请二选一：填写 dir，或同时填写 command、cwd、port。');
+      throw new Error('启动服务请二选一：填写 dir（可加 port 指定端口），或同时填写 command、cwd、port。');
     }
     const record = {...sessionContext(ctx), owner: sessionOwner(ctx), logs: [], partial: '', kind: staticMode ? 'static' : 'command', pid: process.pid, stopped: false};
     const onAbort = () => { void this.stopRecord(record); };
@@ -418,7 +429,7 @@ export class AppBrowserServers {
         record.ready = new Promise((resolve, reject) => {
           const onError = () => reject(new Error('无法启动本地网页服务，请检查端口和目录。'));
           record.http.once('error', onError);
-          record.http.listen(0, '127.0.0.1', () => { record.http.off('error', onError); resolve(); });
+          record.http.listen(Number.isInteger(params.port) ? params.port : 0, '127.0.0.1', () => { record.http.off('error', onError); resolve(); });
         });
         this.servers.add(record);
         await record.ready;
@@ -861,14 +872,15 @@ function validateNativeAction(action, params) {
   if (action === 'scroll' && !Number.isFinite(params.dy) && !Number.isFinite(params.dx) && !params.ref && !params.selector) throw new Error('滚动需要 dx/dy、ref 或 selector。');
   if (action === 'eval' && !(typeof params.js === 'string' && params.js.trim())) throw new Error('本地网页执行需要 js。');
   if (action === 'wait') {
-    const criteria = [params.text !== undefined, params.selector !== undefined, params.ref !== undefined, params.name !== undefined, params.ms !== undefined].filter(Boolean).length;
-    if (criteria !== 1 || (params.text !== undefined && !(typeof params.text === 'string' && params.text.trim()))
+    // A6：目标四选一，再加 ms 表示「最多等这么久」；只给 ms 就是纯等待（11-13 模型常写 name + ms）。
+    const targets = [params.text !== undefined, params.selector !== undefined, params.ref !== undefined, params.name !== undefined].filter(Boolean).length;
+    if (targets > 1 || (targets === 0 && params.ms === undefined) || (params.text !== undefined && !(typeof params.text === 'string' && params.text.trim()))
       || (params.selector !== undefined && !(typeof params.selector === 'string' && params.selector.trim()))
       || (params.ref !== undefined && !(typeof params.ref === 'string' && params.ref.trim()))
       || (params.name !== undefined && !(typeof params.name === 'string' && params.name.trim()))
       || (params.waitFor !== undefined && !['visible','hidden','attached','detached','enabled'].includes(params.waitFor))
       || (params.ms !== undefined && (!Number.isInteger(params.ms) || params.ms < 0 || params.ms > 15_000))) {
-      throw new Error('等待请只填写 text、selector、ref、name 或 ms 之一，最多 15 秒。');
+      throw new Error('等待请填写 text、selector、ref、name 之一（可再加 ms 作为最长等待），或只填 ms 纯等待；最多 15 秒。');
     }
   }
 }
@@ -879,7 +891,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
   return {
     name: 'app_browser',
     label: 'App 浏览器',
-    description: (servers.systemBrowser ? (appBrowserAvailable(servers.environment) ? WINDOWS_INAPP_BROWSER_NOTE : WINDOWS_APP_BROWSER_NOTE) : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
+    description: (servers.systemBrowser ? (appBrowserAvailable(servers.environment) ? WINDOWS_INAPP_BROWSER_NOTE : WINDOWS_APP_BROWSER_NOTE) : '') + '所有模式共用的内置悬浮浏览器，操作用户当前看得到的页面。【最快路径，少回合】①open拿精简observation；结果里有known（这一页以前成功过的操作）就直接replay recipe=id，vars改要填的值，一次完成。②没有记录就看observation把能确定的步骤合成一次batch（可带url先打开再操作）：type/select/set_slider/hover→click菜单/drag，最后用wait text或name校验结果；表单直接fill fields=[{name:字段名,value:值}]，submitName填提交按钮名。③不要一回合只做一个动作，不要每步后再snapshot（操作已自带observation）。成功的步骤会按role+名称自动记住；完成多步任务时在最后那次调用加remember="简短标题"，下次同一页就能一步replay。replay失败说明页面改版：看返回的observation改用batch，成功后带remember覆盖。recipes列出本页记录，forget删除过期记录。【细节】ref在同一文档内稳定，失效时用locate按role/name定位，不猜坐标；snapshot可用since传snapshotId省略未变内容，可传ref或selector只观察局部，scope=page看屏幕外控件。select优先用快照options里的value，也可传text匹配显示文字；read单独读取正文。scroll加selector/ref和dy可滚动表格等内部容器。batch内每步重新定位并检查遮挡，失败会返回已完成部分和failedStep，先看新观察再继续，不能整批重发。open默认等待DOM可操作，不等广告和图片；动态内容用wait selector/name和waitFor=visible/hidden/enabled，避免固定sleep；wait的text/selector/ref/name四选一，可再加ms当最长等待（如name+ms=4000），只给ms是纯等待，最多15秒。set_slider用sliderValue直接设原生range滑杆并回读，不要猜坐标。move/hover控制浏览器内独立鼠标；drag从ref/selector/name或x/y拖到toRef/toSelector/toName或toX/toY，用于滑块、Canvas、选中文字。click默认快速定位，input=native或提供坐标、button、clickCount时走原生指针。坐标是当前可见网页的CSS像素，不能用全页截图坐标。文件弹窗或仍不能处理的原生控件改用computer，不要循环试点。ChatGPT协作时写操作会拒绝，不要强行重试。不要并发发多个独立写操作。serve用于本地项目预览（127.0.0.1）：静态页填dir（可加port指定端口），要跑命令就填command+cwd+port，dir和command不能一起给；stop_serve/serve_logs仅管理本会话服务。eval仍只允许本地页面；操控其他应用用computer。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -927,6 +939,15 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
       return params;
     },
     async execute(_toolCallId, params = {}, signal) {
+      // A6：Mac 版侧栏只有一个页面。tab op=new 带 url 就当 open；其他 tab 操作说明一下，不算出错。
+      if (params?.action === 'tab' && !servers.systemBrowser) {
+        const op = params.op ?? 'list';
+        if (op === 'new' && typeof params.url === 'string' && params.url.trim()) {
+          params = {action: 'open', url: params.url, ...(params.focus !== undefined ? {focus: params.focus} : {}), ...(params.remember ? {remember: params.remember} : {})};
+        } else {
+          return toolResult({ok: true, message: MAC_TAB_NOTE});
+        }
+      }
       const memory = servers.memory ||= new BrowserSiteMemory('');
       const owner = sessionOwner(activeContext);
       const remember = typeof params.remember === 'string' && params.remember.trim() ? params.remember.trim() : '';
@@ -1019,10 +1040,15 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
         if (WINDOWS_ONLY_ACTIONS.has(action) && !servers.systemBrowser) throw new Error(`${action} 只有 Windows 版碧琪自己的浏览器窗口支持；这里请用 open、snapshot 等操作。`);
         validateNativeAction(action, params);
         const {remember: _remember, ...native} = params;
+        // A6：等某个元素再加 ms → ms 是最长等待，不让原生侧把它当成先睡 ms 毫秒。
+        if (action === 'wait' && native.ms !== undefined && ['text', 'selector', 'ref', 'name'].some(key => native[key] !== undefined)) {
+          native.timeout_ms = Math.max(1, native.ms);
+          delete native.ms;
+        }
         const reply = await servers.request(action, native, {signal});
         if (!reply.ok) {
           if (action === 'vpn') return toolResult({...failure(String(reply.reason || '节点操作没有完成。')), ...(reply.result?.network ? {network: reply.result.network} : {})});
-          return toolResult({...failure(String(reply.reason || 'App 浏览器没有完成这个操作。')),mayHaveExecuted:reply.mayHaveExecuted===true,nextAction:reply.nextAction||'snapshot-before-retry'});
+          return toolResult({...failure(friendlyBrowserReason(reply.reason) || 'App 浏览器没有完成这个操作。'),mayHaveExecuted:reply.mayHaveExecuted===true,nextAction:reply.nextAction||'snapshot-before-retry'});
         }
         const result = reply.result && typeof reply.result === 'object' ? reply.result : {};
         if (['open', 'show_file'].includes(action) || (action === 'tab' && result.page)) memory.start(owner, result.page?.url || result.url || params.url || '');
@@ -1036,7 +1062,7 @@ export function createAppBrowserTool(ctx = {}, {servers = defaultServers ||= new
           : result.nodeSwitched?.message ? `已打开。${result.nodeSwitched.message}` : 'App 浏览器操作已完成。';
         return toolResult(saved({...result, ...(known ? {known} : {}), ok: true, message}));
       } catch (error) {
-        return toolResult(failure(error instanceof Error ? error.message : 'App 浏览器调用失败，请检查后重试。'));
+        return toolResult(failure(error instanceof Error ? friendlyBrowserReason(error.message) : 'App 浏览器调用失败，请检查后重试。'));
       }
     },
   };
