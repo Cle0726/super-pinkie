@@ -31,7 +31,7 @@ import {ensureManualLimits} from './config-floor.mjs';
 import {quarantineNewerAgentDatabases, runtimeDistDir, supportedAgentSchemaVersion} from './agent-db-guard.mjs';
 import {createDeskTool, deskHintBlock} from './desk.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, independentViews, isViewRole, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
-import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
+import {BackgroundJobs, rememberKinds, runningBackgroundJobs, softenWaitNudge} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
 import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
@@ -7015,6 +7015,13 @@ export default {
         const activity = architecture.activityFor(sessionKey) || {};
         return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
       },
+    });
+    // 「还在后台跑，先干别的」的提醒不算出错：写进会话记录前去掉出错标记（A5）。
+    api.on('tool_result_persist', (event) => {
+      try {
+        const message = softenWaitNudge(event?.message);
+        return message ? {message} : undefined;
+      } catch { return undefined; }
     });
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
     registerWorkGateway(api, {reasoning, architecture, background});
