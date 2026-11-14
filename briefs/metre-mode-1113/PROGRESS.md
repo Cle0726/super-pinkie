@@ -227,3 +227,12 @@
 - 批 2 留下的第 1 条（阶段条 `manage`）批 3 已经做了；第 2 条（和批 1 撞）合并时解了。第 3 条（只聊天档放不放 `pinkie_sessions`）仍等 F9，第 4、5 条没动。
 - 预算：合并后 Metre 一轮 **6413 / 6500**（工作区 5651 + 插件注入 762），工具 24 个。
 - 测试：批 0–3 相关的 29 个测试文件 453 条，失败 3 条都和本次合并无关、合并前就失败：`computer tool discovers ...`（这台 Windows 没有 computer 执行器，文案不同）、`sidebar-handshake` 一条、`cross-process audit writers` 偶发（合并前后各跑两次都有过有不过）。
+
+### 批 M、批 4（Windows，Opus 5.5，11-14 晚，主会话；额度用完时停在这里）
+
+- **批 M 后端已完成**（fe147011）：`metre-memory.mjs`，按文件夹隔离的项目记忆、`metre_memory` 工具、每轮项目档案（≤1800 字，不算进 6500）、`_user` 偏好（≤400 字）、换文件夹提示、做完一件事提醒一次、审计、300 条上限；`pinkie.metre.memory`（看板 / 芯片用）、`pinkie.metre.today`（引导语彩蛋用，复用学习台历法和节假日表，不联网）。`tests/metre-memory.test.mjs` 12 条全过（AM-1～6、8）。AM-7 的看板记忆区随批 5；芯片 `◆ N` 和 9 格了解程度浮层已做（在状态条猫旁边）。
+- **批 4 前端大部分完成，还没验收**：像素黑猫接进状态条（帧数据 `laolao-metre-cat-frames.js` 和 `ref/metre-cat.js` 逐字节相同），菜单猫头 SVG 由同一份帧数据生成（`tools/metre/cat-head-svg.cjs`），空状态引导语（`laolao-metre-prompts.js` 由 JSON 原样生成，`laolao-metre-home.js`），Baton｜Virtuoso 的切换提示改成只写英文。
+- **用户 11-14 重申 R6**：「和 Claude 界面一样禁止使用碧琪的任何素材的 UI/边框」「跟 Claude 一样不需要头像」，并给了 Claude 桌面版截图。所以改成：`laolao-metre-skin.js` 进 Metre 时整张停用碧琪的纯装饰样式表（redesign、divider、night、companion、splash、转场 / 菜单特效、学习台、游戏），离开时恢复；`laolao-metre-skin.css` 把留下的结构改成 Claude 的样子（不要头像和发言人名字、用户消息浅灰圆角块、助手不放气泡、中间 768px 一栏、输入框一个圆角框、顶栏无分隔线、选中会话灰底圆角、侧栏深一档）。**和 PLAN 2.10 不同**：助手回答按截图用无衬线（PLAN 原写衬线），引导语仍用衬线。
+- 截图自查（假网关，Edge）：浅色、深色两张都没有粉色、头像、墙纸、玻璃；猫 16 个状态在页面里按事件切换，芯片显示条数。**没做**：窄窗口截图、A4-2 其他模式逐像素对比、A4-7 CPU 实测、真网关隔离副本里跑一轮。
+- **没收尾的**：`tests/metre-skin-cat.test.cjs` 里「每条皮肤规则都限定在 Metre 下」那一条还没过（选择器切分或某条规则没加前缀，没来得及查）；其余 12 条过。run-status、tool-kind、metre-memory 测试全过。预算没重新量（批 M 的档案不算进 6500，没绑文件夹时 0 字）。
+- 待 Fable：没有「用户称呼」设置，问候和「下午好，C.le.」那句先不带名字（读本机 `pinkie-metre-name`，没有就省掉）；天气没有现成数据，没做。

@@ -89,16 +89,17 @@
       sessionKey: "agent:unrestricted:main",
     },
     {
-      // Metre is not a Pinkie room: plain text and a placeholder monogram, no
-      // transition scene, no portrait burst, nothing preloaded for it. Its skin
-      // and the cat come in batch 4 (briefs/metre-mode-1113/PLAN.md).
+      // Metre is not a Pinkie room: the word "Metre" and the pixel cat's head
+      // (ui/assets/laolao-mode-metre.svg, drawn from the approved frames by
+      // tools/metre/cat-head-svg.cjs), no transition scene, no portrait burst,
+      // nothing preloaded for it. Its skin is laolao-metre-skin.css.
       id: "metre",
       label: "Metre",
       alt: "Metre",
       address: "",
       plain: true,
-      avatar: "/laolao-mode-metre.svg?v=placeholder1",
-      avatarSmall: "/laolao-mode-metre.svg?v=placeholder1",
+      avatar: "/laolao-mode-metre.svg?v=cathead1",
+      avatarSmall: "/laolao-mode-metre.svg?v=cathead1",
       phrases: ["切换到 Metre"],
       readyPhrase: "Metre",
       sessionKey: "agent:metre:main",

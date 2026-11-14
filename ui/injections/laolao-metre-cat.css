@@ -1,0 +1,74 @@
+/* laolao-metre-cat —— 状态条里的像素黑猫、记忆芯片、芯片浮层、换文件夹提示（只在 Metre 下出现） */
+html:not([data-laolao-mode="metre"]) .pk-metre-cat,
+html:not([data-laolao-mode="metre"]) .pk-metre-mem,
+html:not([data-laolao-mode="metre"]) .pk-metre-pop,
+html:not([data-laolao-mode="metre"]) .pk-metre-switch { display: none !important; }
+
+/* 猫代替碧琪表情 */
+html[data-laolao-mode="metre"] .pk-run__face,
+html[data-laolao-mode="metre"] .pk-run__dot-face { display: none !important; }
+.pk-metre-cat {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.pk-metre-cat--dot { width: 32px; height: 32px; }
+
+.pk-metre-mem {
+  flex: none;
+  appearance: none;
+  border: 1px solid var(--metre-line, #E8E6DC);
+  background: transparent;
+  color: var(--metre-muted, #73726C);
+  font: 500 11px/1 ui-monospace, "SFMono-Regular", Consolas, monospace;
+  padding: 4px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.pk-metre-mem:hover { color: var(--metre-text, #1F1E1D); border-color: var(--metre-muted, #73726C); }
+.pk-metre-mem.is-flash { animation: pk-metre-flash 900ms ease-out 1; }
+@keyframes pk-metre-flash {
+  0% { color: var(--metre-accent, #C96442); border-color: var(--metre-accent, #C96442); opacity: 0.55; }
+  100% { opacity: 1; }
+}
+
+.pk-metre-pop {
+  position: fixed;
+  z-index: 60;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--metre-bg, #FAF9F5);
+  color: var(--metre-text, #1F1E1D);
+  border: 1px solid var(--metre-line, #E8E6DC);
+  box-shadow: 0 6px 20px rgba(31, 30, 29, 0.08);
+  font-size: 12px;
+}
+.pk-metre-pop[hidden] { display: none; }
+.pk-metre-pop__head { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-metre-pop__meta { color: var(--metre-muted, #73726C); margin: 4px 0 8px; }
+.pk-metre-known { display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; }
+.pk-metre-known i { display: block; height: 6px; border-radius: 1px; background: var(--metre-line, #E8E6DC); }
+.pk-metre-known i.is-on { background: var(--metre-text, #1F1E1D); }
+
+.pk-metre-switch {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--metre-bg, #FAF9F5);
+  border: 1px solid var(--metre-line, #E8E6DC);
+  color: var(--metre-muted, #73726C);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: opacity 500ms ease;
+}
+.pk-metre-switch.is-out { opacity: 0; }
+
+html[data-pinkie-reduce-motion] .pk-metre-mem.is-flash { animation: none; }
+html[data-pinkie-reduce-motion] .pk-metre-switch { transition: none; }

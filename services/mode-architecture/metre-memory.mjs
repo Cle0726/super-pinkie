@@ -14,6 +14,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {agentOf, registerSessionMethod, sessionTool} from './session-titles.mjs';
 import {boundProjectRoot} from './project-brief.mjs';
+import {festivals, holiday, season, termOn} from './learning-almanac.mjs';
 
 export const CATEGORIES = Object.freeze(['overview', 'structure', 'commands', 'conventions', 'decisions',
   'preferences', 'pitfalls', 'people', 'open']);
@@ -421,7 +422,27 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
     if (action === 'audit') return {ok: true, entries: store.auditLog(key, Math.min(200, Number(params.limit) || 50))};
     throw new Error('action 只能是 stats / list / search / pin / edit / delete / audit');
   });
+  // 空状态引导语的彩蛋（PLAN 6.3）：今天的节气、节日、法定假日、季节。纯计算、不联网，复用学习台的历法和节假日表。
+  // 「最近的记忆」也从这里给：当前文件夹里最近的一条 open / decisions（没绑文件夹或没有就不给）。
+  method('pinkie.metre.today', params => {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : localDate(new Date());
+    const term = termOn(date);
+    const off = holiday(date);
+    let recent = null;
+    if (params.sessionKey && isMetreKey(params.sessionKey) && folderFor(params.sessionKey)) {
+      const key = keyForSession(params.sessionKey);
+      const pick = store.items(key).filter(item => item.category === 'open' || item.category === 'decisions')
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      if (pick) recent = {category: pick.category, text: clip(pick.text, 60), folderName: store.stats(key).name};
+    }
+    return {ok: true, date, term: term ? term.name : '', festivals: festivals(date).map(item => ({id: item.id, name: item.name, kind: item.kind})),
+      holiday: off.off ? off.name : '', season: season(date), recent};
+  });
   return store;
+}
+
+function localDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function recallResult(items) {

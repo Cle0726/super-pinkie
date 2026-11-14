@@ -1,6 +1,8 @@
 <!-- Single UI entry source for Mac and Windows. Keep native-assets at this position. -->
 <script src="/laolao-night.js?v=ui1101"></script>
 <script src="/laolao-motion-preference.js?v=motion1"></script>
+<!-- Metre：进 Metre 时停用碧琪纯装饰的样式表（同步加载，第一帧前生效；离开 Metre 原样恢复） -->
+<script src="/laolao-metre-skin.js?v=metreskin1"></script>
 <script src="/laolao-tuning.js?v=tuning2"></script>
 <link rel="stylesheet" href="/laolao-icons.css?v=icons2">
 <script src="/laolao-icons.js?v=icons2"></script>
@@ -79,7 +81,13 @@
 <link rel="stylesheet" href="/laolao-process-card.css?v=ui1101">
 <script defer src="/laolao-process-card.js?v=power1"></script>
 <link rel="stylesheet" href="/laolao-run-status.css?v=runstatus2">
-<script defer src="/laolao-run-status.js?v=runstatus3"></script>
+<script defer src="/laolao-run-status.js?v=runstatus4"></script>
+<!-- Metre（批 4、批 M）：像素黑猫（帧数据和预览页同一份）、记忆芯片、空状态引导语 -->
+<script defer src="/laolao-metre-cat-frames.js?v=metrecat1"></script>
+<link rel="stylesheet" href="/laolao-metre-cat.css?v=metrecat1">
+<script defer src="/laolao-metre-cat.js?v=metrecat1"></script>
+<script defer src="/laolao-metre-prompts.js?v=metreprompts1"></script>
+<script defer src="/laolao-metre-home.js?v=metrehome1"></script>
 <script defer src="/laolao-run-notify.js?v=runnotify4"></script>
 <script defer src="/laolao-laser-pointer.js?v=power2"></script>
 <script defer src="/laolao-desensitize.js?v=desensitize1"></script>
@@ -88,7 +96,7 @@
 <link rel="stylesheet" href="/laolao-companion.css?v=companion9">
 <link rel="stylesheet" href="/laolao-redesign.css?v=redesign8">
 <script defer src="/laolao-buddy-rig.js?v=buddyrig6"></script>
-<script defer src="/laolao-companion.js?v=companion15"></script>
+<script defer src="/laolao-companion.js?v=companion16"></script>
 <script defer src="/laolao-immersion.js?v=immersion2"></script>
 <link rel="stylesheet" href="/laolao-startup-home.css?v=startuphome6">
 <script src="/laolao-startup-home.js?v=startuphome11"></script>
@@ -120,6 +128,8 @@
 <script defer src="/laolao-splash-fx.js?v=splashfx2"></script>
 <script defer src="/laolao-splash.js?v=splash28"></script>
 <link rel="stylesheet" href="/laolao-night.css?v=night3">
+<!-- Metre 的素净皮肤：在黑夜模式之后加载，只对 data-laolao-mode="metre" 生效 -->
+<link rel="stylesheet" href="/laolao-metre-skin.css?v=metreskin1">
 <link rel="stylesheet" href="/laolao-reading-view.css?v=readingview3">
 <script defer src="/laolao-reading-view.js?v=readingview2"></script>
 <!-- Study desk: local vendors and complete nested artwork. -->

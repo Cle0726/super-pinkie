@@ -1947,7 +1947,7 @@
       footer.prepend(status);
     }
     const state=connectionState(dot.classList.contains('sidebar-connection-status--online'),window.__laolaoUsage?.link?.latency);
-    const label={online:'碧琪在线',slow:'连接较慢',offline:'连接断开'}[state];
+    const label={online:document.documentElement.getAttribute('data-laolao-mode')==='metre'?'在线':'碧琪在线',slow:'连接较慢',offline:'连接断开'}[state];
     if(status.dataset.state!==state)status.dataset.state=state;
     if(status.getAttribute('aria-label')!==label+'，查看连接详情')status.setAttribute('aria-label',label+'，查看连接详情');
     const text=status.querySelector('.pinkie-connection-status__label');if(text.textContent!==label)text.textContent=label;
