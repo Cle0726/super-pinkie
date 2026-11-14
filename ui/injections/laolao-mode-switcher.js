@@ -100,6 +100,9 @@
       plain: true,
       avatar: "/laolao-mode-metre.svg?v=cathead1",
       avatarSmall: "/laolao-mode-metre.svg?v=cathead1",
+      // 用户 11-14：「meter不需要像碧琪一样的头像当入口用一个按键就行」。Metre 的入口（侧栏顶上的按钮和
+      // 模式菜单里的那一项）只有字，不放头像；avatar 留着给开场和经典外壳用。
+      plain: true,
       phrases: ["切换到 Metre"],
       readyPhrase: "Metre",
       sessionKey: "agent:metre:main",
@@ -719,7 +722,9 @@
     outgoingMode = null,
   } = {}) => {
     const currentPortrait = button.querySelector(".laolao-mode-button__portrait");
-    const isCurrent = currentPortrait?.classList.contains("is-current") || false;
+    const isCurrent = mode.plain && !currentPortrait
+      ? button.dataset.plainCurrent === "1"
+      : currentPortrait?.classList.contains("is-current") || false;
     if (!force && button.dataset.mode === mode.id && button.querySelector(".laolao-mode-button__label") && isCurrent === current) {
       return false;
     }
@@ -752,6 +757,16 @@
     const arrow = document.createElement("span");
     arrow.className = "laolao-mode-button__arrow";
     arrow.setAttribute("aria-hidden", "true");
+    if (mode.plain) {
+      button.classList.add("laolao-mode-button--plain");
+      button.dataset.plainCurrent = current ? "1" : "0";
+      button.replaceChildren(label, arrow);
+      return true;
+    }
+    if (button.dataset.plainCurrent !== undefined) {
+      button.classList.remove("laolao-mode-button--plain");
+      delete button.dataset.plainCurrent;
+    }
     button.replaceChildren(portrait, label, arrow);
     return true;
   };

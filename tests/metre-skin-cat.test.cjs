@@ -288,3 +288,23 @@ test('A4-12: prompt animation only moves opacity / transform; keywords stand out
   assert.ok(home.charDelay(200) * 200 <= 1200, '最长 1.2 秒');
   assert.equal(home.stripMarks('先把[[哪块基石]]落位'), '先把哪块基石落位');
 });
+
+// ---------- 第三版：入口是一个按钮；总控台骨架只占位、不发请求 ----------
+test('Metre entry is a text-only button; the board skeleton has all slots, placeholders only, and no timers or requests', () => {
+  const switcher = read(INJ + 'laolao-mode-switcher.js');
+  assert.match(switcher, /id: "metre"[\s\S]{0,900}plain: true/, 'Metre 的入口不放头像');
+  assert.match(switcher, /if \(mode\.plain\) \{[\s\S]{0,200}button\.replaceChildren\(label, arrow\)/);
+  const head = read(INJ + 'laolao-head.fragment.html');
+  assert.match(head, /laolao-metre-board\.css/);
+  assert.match(head, /laolao-metre-board\.js/);
+  const board = read(INJ + 'laolao-metre-board.js');
+  for (const slot of ['plan', 'sessions', 'pending', 'timeline', 'changes', 'runtime', 'memory', 'raw']) assert.match(board, new RegExp(`\{id: '${slot}'`), slot);
+  assert.match(board, /dataset\.metreSlot = 'overview'/);
+  assert.match(board, /待接入/);
+  assert.doesNotMatch(board, /setInterval|requestAnimationFrame|gwRequest|fetch\(/, '骨架不轮询、不发请求');
+  const css = read(INJ + 'laolao-metre-board.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(css, /html:not\(\[data-laolao-mode="metre"\]\) \.pk-metre-board/);
+  assert.doesNotMatch(css.replace(/pinkie/gi, ''), /#e94f91|#ff7aa2|pink|backdrop-filter/i);
+  const skin = read(INJ + 'laolao-metre-skin.css');
+  assert.match(skin, /aside\.sidebar::after \{ content: none !important/, '侧栏那条亮线去掉了');
+});

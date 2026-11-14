@@ -5382,3 +5382,8 @@ html[data-laolao-mode="learning"] .chat-group .chat-text th { background: var(--
 
 /* 表情符号别抢眼 */
 html[data-laolao-mode="learning"] .chat-group .chat-text img.emoji { width: 1.05em; height: 1.05em; vertical-align: -.15em; }
+
+/* Metre 的入口不放头像（用户 11-14：「用一个按键就行」）：在其他模式的菜单里它是最下面一个只有字的按钮，上面一道细线隔开。 */
+.laolao-mode-menu__option.laolao-mode-button--plain { justify-content: center; padding-inline: 12px; margin-top: 6px; }
+.laolao-mode-menu__option.laolao-mode-button--plain::before { content: ""; position: absolute; left: 10px; right: 10px; top: -4px; height: 1px; background: currentColor; opacity: 0.16; }
+.laolao-mode-menu__option.laolao-mode-button--plain .laolao-mode-button__arrow { display: none; }

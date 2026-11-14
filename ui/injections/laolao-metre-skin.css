@@ -645,3 +645,210 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] { --metre-
 @media (max-width: 920px) {
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail.chat-workspace-rail--collapsed { top: 15px !important; }
 }
+
+/* ====================================================================================================
+ * 第三版（Fable 11-14 晚）：用户看了第二版，原话：「对比Claude还是差太多」「现在跟碧琪还是太像」「我不要求跟Claude完全一样
+ * 但起码像一个成熟的大厂设计」「这个名字跟音乐有关（所有UI也不完全没有自己的风格不全Claude）」。
+ * 这一段做三件事：
+ *   1. 把还像碧琪的地方改掉：输入框里那一排控件挪到框外；字体换系统字体（不再用碧琪随包的字体）；侧栏那条亮线去掉。
+ *   2. Metre 自己的样子：强调色用黄铜色（节拍器、铜管），不用 Claude 的陶土橙；入口是一个纯文字按钮，前面一个「强-弱-弱-弱」的拍号记号。
+ *   3. 深色按用户截图里量到的明度重配（内容区比侧栏更暗）。
+ * 上面两版里被这里覆盖的规则没有删，方便对照；同样的选择器，后写的生效。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
+  --metre-accent: #96681C;
+  --accent-rgb: 150, 104, 28 !important;
+  --accent-hover: #7F5714 !important;
+  --accent-muted: rgba(150, 104, 28, 0.14) !important;
+  --accent-subtle: rgba(150, 104, 28, 0.08) !important;
+  --metre-side-hover: #EAE8DF;
+  --metre-side-active: #E3E0D5;
+  --metre-card: #FFFFFF;
+  --metre-art: #FAF9F5;
+  --metre-ph: #EFEDE5;
+  --metre-ph-strong: #DAD7CC;
+  --metre-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --metre-ic-board: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 4.5h13v11h-13zM3.5 8.5h13M8.5 8.5v7'/%3E%3C/svg%3E");
+  --metre-ic-beat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+  --metre-ic-send: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 15.5v-11M5.5 9L10 4.5 14.5 9'/%3E%3C/svg%3E");
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
+  --metre-bg: #191817;
+  --metre-side: #201F1D;
+  --metre-surface: #2C2B28;
+  --metre-card: #1F1E1C;
+  --metre-art: #191817;
+  --metre-text: #E4E2DB;
+  --metre-muted: #9E9C95;
+  --metre-line: #2E2D2A;
+  --metre-line-strong: #3D3B37;
+  --metre-hover: #262523;
+  --metre-side-hover: #2B2A27;
+  --metre-side-active: #363430;
+  --metre-ph: #2A2927;
+  --metre-ph-strong: #3F3D39;
+  --metre-accent: #D2A85C;
+  --accent-rgb: 210, 168, 92 !important;
+  --accent-hover: #E0BA74 !important;
+  --accent-foreground: #191817 !important;
+  --primary-foreground: #191817 !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body { font-family: var(--metre-sans) !important; }
+
+/* ---------- 侧栏 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar::after { content: none !important; display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar { border-right: 1px solid var(--metre-line) !important; }
+/* 入口：一个按钮，没有头像。前面的记号是一小节四拍：一长三短。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-switcher { gap: 8px !important; padding: 6px 8px !important; height: 34px !important; min-height: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-switcher.laolao-mode-button--plain::before {
+  content: "" !important;
+  display: block !important;
+  position: static !important;
+  flex: none !important;
+  width: 18px !important;
+  height: 18px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--metre-accent) !important;
+  -webkit-mask: var(--metre-ic-beat) center / contain no-repeat;
+  mask: var(--metre-ic-beat) center / contain no-repeat;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-button__label { font: 400 19px/1.1 var(--metre-serif) !important; letter-spacing: 0.01em !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry) { height: 34px !important; min-height: 34px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry):hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button):hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session:hover { background: var(--metre-side-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active:hover { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pk-metre-nav--board { --metre-ic: var(--metre-ic-board); width: 100% !important; cursor: pointer; text-align: left; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .pk-metre-nav--board { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .sidebar-recent-session--active { background: transparent !important; }
+/* 模式菜单：一张平的浅色卡片，每行只有字 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu {
+  padding: 6px !important;
+  gap: 1px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 12px !important;
+  background: var(--metre-surface) !important;
+  background-image: none !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14) !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option {
+  height: 34px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  gap: 8px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--metre-text) !important;
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option[aria-checked="true"] { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option :is(.laolao-mode-button__portrait, .laolao-mode-button__arrow) { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option .laolao-mode-button__label { font: 400 14px/1 var(--metre-sans) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option[aria-checked="true"]::after {
+  content: "" !important;
+  display: block !important;
+  position: static !important;
+  margin-left: auto !important;
+  width: 6px !important;
+  height: 6px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--metre-accent) !important;
+}
+
+/* ---------- 输入框：框里只有字（和发送键），控件在框外下面一排 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input:focus-within {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0 2px !important;
+  position: relative !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox {
+  order: 1 !important;
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box !important;
+  min-height: 104px !important;
+  align-items: flex-start !important;
+  margin: 0 0 8px !important;
+  padding: 12px 16px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 16px !important;
+  background: var(--metre-surface) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 16px rgba(0, 0, 0, 0.04) !important;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox:focus-within { border-color: color-mix(in srgb, var(--metre-muted) 45%, var(--metre-line-strong)) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input textarea { min-height: 52px !important; padding: 0 !important; font: 400 16px/1.55 var(--metre-sans) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.agent-chat__composer-actions, .agent-chat__composer-controls, .agent-chat__composer-meta) > * { order: 6 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-tray-btn { order: 2 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton { order: 3 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .chat-composer-model-control { order: 7 !important; margin-left: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-deep-think-btn { order: 8 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-context-viewer { order: 9 !important; }
+/* 发送 / 停止：框内右下角一个圆钮 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn {
+  position: absolute !important;
+  right: 10px !important;
+  bottom: 46px !important;
+  z-index: 3 !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--metre-accent) !important;
+  background-image: none !important;
+  color: var(--accent-foreground, #FFFFFF) !important;
+  box-shadow: none !important;
+  animation: none !important;
+  transform: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn:hover { background: var(--accent-hover) !important; transform: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn svg { width: 16px !important; height: 16px !important; color: inherit !important; stroke: currentColor !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn.chat-send-btn--stop { background: var(--metre-text) !important; color: var(--metre-bg) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg[aria-checked="true"] { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-laolao-startup-home="1"] { --laolao-home-col: min(680px, calc(100% - 48px)); }
+
+/* ---------- 首页引导语：类别小标签两边各一小段谱线 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind { display: inline-flex; align-items: center; gap: 12px; color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind::after { content: ""; width: 28px; height: 1px; background: var(--metre-line-strong); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind[hidden] { display: none; }
+
+/* ---------- 对话页 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-bubble { background: var(--metre-ph) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group .chat-text,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group .chat-text :is(p, li) { font-size: 15.5px !important; line-height: 1.7 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text :is(h1, h2, h3) { font-family: var(--metre-serif) !important; font-weight: 500 !important; letter-spacing: 0.01em; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text a { color: var(--metre-accent) !important; }
+@media (max-width: 920px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { padding-top: 48px !important; }
+}
