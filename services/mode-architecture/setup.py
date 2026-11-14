@@ -293,6 +293,41 @@ def _ensure_none_marker(workspace: Path, backup_root: Path) -> bool:
 
 
 MODE_AGENT_IDS = ("main", "project", "thinking", "learning")
+# Metre（briefs/metre-mode-1113）：工作区只放 AGENTS / IDENTITY / SOUL。`openclaw agents add` 和每次运行都会把缺的
+# TOOLS / USER / HEARTBEAT 补成英文模板（缺了不补时又会注入一行 [MISSING]）；按 agent 关掉的 skipBootstrap 在 2026.7 的
+# 配置校验里不认。办法是放空文件占位：存在就不补，空内容不注入。原样未动的模板挪进备份再换成空文件。
+METRE_WORKSPACE = ".openclaw/workspace-metre"
+METRE_STOCK_TEMPLATES = {
+    "TOOLS.md": "# TOOLS.md - Local Notes",
+    "USER.md": "# USER.md - About Your Human",
+    "HEARTBEAT.md": "<!-- Heartbeat template",
+    "BOOTSTRAP.md": "# BOOTSTRAP.md",
+}
+
+
+METRE_PLACEHOLDERS = ("TOOLS.md", "USER.md", "HEARTBEAT.md")
+
+
+def _tidy_metre_workspace(home: Path, backup_root: Path) -> bool:
+    """模板换成空占位；用户自己写过的同名文件不动。"""
+    workspace = home / METRE_WORKSPACE
+    if not workspace.is_dir():
+        return False
+    changed = False
+    for name, head in METRE_STOCK_TEMPLATES.items():
+        file = workspace / name
+        if not file.is_file() or not file.read_text(encoding="utf-8", errors="ignore").lstrip().startswith(head):
+            continue
+        target = backup_root / "metre-templates" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(file), str(target))
+        changed = True
+    for name in METRE_PLACEHOLDERS:
+        file = workspace / name
+        if not file.exists():
+            file.write_text("", encoding="utf-8")
+            changed = True
+    return changed
 UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
 
 
@@ -543,6 +578,7 @@ def install(home=None) -> bool:
             changed |= _copy_if_changed(research_skill, workspace / "skills/pinkie-deep-research/SKILL.md")
 
     changed |= _install_web_gpt_collab(repo_root, state)
+    changed |= _tidy_metre_workspace(home, backup_root)
 
     before_choice = json.dumps(data, ensure_ascii=False, sort_keys=True)
     try:

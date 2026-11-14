@@ -99,7 +99,21 @@ if [[ ! -f "$MARKER" ]]; then
     if [[ "$LEARNING_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" learning "* ]]; then
       "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
     fi
-    if [[ ("$PROJECT_AGENT_ADDED" == "1" || "$LEARNING_AGENT_ADDED" == "1") && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
+    # Metre（briefs/metre-mode-1113）：工作区只有 AGENTS / IDENTITY / SOUL 三份，由 sync-personas.sh 放好。
+    METRE_AGENT_ADDED=0
+    if [[ "$LEARNING_AGENT_ADDED" == "1" ]]; then
+      if ! AGENTS_JSON="$("$OPENCLAW_BIN" agents list --json 2>/dev/null)"; then
+        AGENTS_JSON=""
+      fi
+    fi
+    if ! printf '%s\n' "$AGENTS_JSON" | grep -Eq '"id"[[:space:]]*:[[:space:]]*"metre"'; then
+      "$OPENCLAW_BIN" agents add metre --non-interactive --workspace "$HOME/.openclaw/workspace-metre"
+      METRE_AGENT_ADDED=1
+    fi
+    if [[ "$METRE_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" metre "* ]]; then
+      "$OPENCLAW_BIN" agents set-identity --agent metre --identity-file "$HOME/.openclaw/workspace-metre/IDENTITY.md" >/dev/null
+    fi
+    if [[ ("$PROJECT_AGENT_ADDED" == "1" || "$LEARNING_AGENT_ADDED" == "1" || "$METRE_AGENT_ADDED" == "1") && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
       "$OPENCLAW_BIN" gateway restart >/dev/null 2>&1 || true
     fi
   fi

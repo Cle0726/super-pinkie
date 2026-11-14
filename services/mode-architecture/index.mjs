@@ -53,6 +53,8 @@ const MODE_BY_AGENT = Object.freeze({
   thinking: 'ideas',
   learning: 'learning',
   unrestricted: 'none',
+  // Metre：给最强模型用的总控模式（briefs/metre-mode-1113）。没有人设文件，注入按 METRE_* 规则取舍。
+  metre: 'metre',
 });
 
 const PERSONA_FILES = Object.freeze({
@@ -61,6 +63,7 @@ const PERSONA_FILES = Object.freeze({
   ideas: ['persona/core.md', 'persona/voice_examples.md'],
   learning: ['persona/core.md', 'persona/voice_examples.md', 'persona/methods.md'],
   none: [],
+  metre: [],
 });
 
 const ALWAYS_MEMORY_FILES = Object.freeze([
@@ -601,6 +604,9 @@ const BACKGROUND_WORK_RULES = `
 - 等的时候做的事要有用：不推翻已经定下的东西、不为了显得忙去改无关文件、不重复开同一个命令。真的没有不依赖它的事了，才结束这一轮；命令结束时系统会自动叫你继续，那时先读完整输出核对成败，再把等待时做好的部分合进来、补上亲眼验证，然后汇报。
 - 后台还没结束的事情不能说成已完成；也不要承诺一个具体时间点会主动汇报。
 `.trim();
+
+// Metre 的手册里没有这条运行时事实（后台命令结束会叫醒），压成一句给它；完整版只给老模式。
+const METRE_BACKGROUND_LINE = '\n【后台命令】长命令用 exec 的 background: true 放后台，跑完会叫醒你。\n';
 
 // Independent system module shared by all five modes. Keep it separate from
 // persona, aesthetics and opinion style so teaching can never dilute the
@@ -1369,7 +1375,7 @@ function isTurnCleanup(state, index) {
 
 // Work-first changes are limited to the four ordinary parent sessions.
 function workFirstContext(ctx = {}) {
-  return /^agent:(?:main|project|thinking|learning):/.test(String(ctx.sessionKey || ''))
+  return /^agent:(?:main|project|thinking|learning|metre):/.test(String(ctx.sessionKey || ''))
     && !/:(?:subagent|internal-session-effects|cron|heartbeat):/.test(String(ctx.sessionKey || ''));
 }
 function workFirstTextTask(prompt = '') {
@@ -5914,15 +5920,18 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const tierPrompt = Boolean(requestedTier || existingTierRun?.active);
     /* “挥洒模式”保留工具、档位和真实性门禁，但不把任何工作区
        人格或记忆 Markdown 塞给模型。文件本身保留，不删除。 */
-    const injectWorkspaceMarkdown = mode !== 'none';
+    // Metre 只读自己的 AGENTS.md：人设、做事标准、App 指南、边做边学、记忆回放、打法和技能路由都不给
+    // （清点和取舍见 briefs/metre-mode-1113/INJECTION-INVENTORY.md）。门禁、进度说明、后台命令、提问卡照旧。
+    const metre = mode === 'metre';
+    const injectWorkspaceMarkdown = mode !== 'none' && !metre;
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
-      '\n' + TOOL_PROGRESS_RULES + '\n',
-      '\n' + BACKGROUND_WORK_RULES + '\n',
-      ...(mode !== 'none' ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
-      ...(mode !== 'none' ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
-      ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
-      '\n' + LEARN_WHILE_DOING_RULES + '\n',
+      ...(!metre ? ['\n' + TOOL_PROGRESS_RULES + '\n'] : []),
+      ...(!metre ? ['\n' + BACKGROUND_WORK_RULES + '\n'] : [METRE_BACKGROUND_LINE]),
+      ...(mode !== 'none' && !metre ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
+      ...(mode !== 'none' && !metre ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
+      ...(mode !== 'none' && !metre ? ['\n' + ASK_USER_RULES + '\n'] : []),
+      ...(!metre ? ['\n' + LEARN_WHILE_DOING_RULES + '\n'] : []),
     ];
     if (mode === 'learning') {
       blocks.push('\n' + LEARNING_MODE_RULES + '\n');
@@ -5991,7 +6000,15 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠先生点名、不靠模型自己翻）。
     if (mode !== 'none') {
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
-      if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
+      if (metre) {
+        // Metre：只留项目速览（绑定项目里真实的命令和目录）和改完自动查语法，两样都是现场事实，不是打法。
+        try {
+          const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
+          if (brief) blocks.push('\n' + brief + '\n');
+          const broken = codeWatch.block(sessionKey);
+          if (broken) blocks.push('\n' + broken + '\n');
+        } catch {}
+      } else if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
         try {
           const routed = routingKinds(classifyWorkKind(routedPrompt, {mode}), routedPrompt, {mode});
           if (routed.kinds?.length && !['simple', 'pending'].includes(routed.kind)) rememberKinds(sessionKey, routed.kinds);
@@ -7128,7 +7145,7 @@ export default {
     // pretending that they are already one per-run contract.
     api.registerGatewayMethod('pinkie.run.status', ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
-      if (!/^agent:(?:main|project|thinking|learning|unrestricted):[^\s]+$/.test(sessionKey)) {
+      if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):[^\s]+$/.test(sessionKey)) {
         return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少有效会话标识'});
       }
       const tier = architecture.status(sessionKey);
@@ -7166,7 +7183,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
-        if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
+        if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
         webGptActivity.append(sessionKey, {
@@ -7182,7 +7199,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.inject', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
-        if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
+        if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
         const plan = stripWebGptProtocol(String(params?.plan || '').replace(/\u0000/g, '')).slice(0, WEB_GPT_PLAN_MAX_CHARS);
@@ -7479,7 +7496,7 @@ export default {
       // model/session text untouched; only the user-visible outbound payload
       // receives Pinkie's first-person display name.
       const text = typeof payload?.text === 'string'
-        ? renderFirstPerson(workFirstReplyText(payload.text, ctx))
+        ? (modeForContext(ctx) === 'metre' ? workFirstReplyText(payload.text, ctx) : renderFirstPerson(workFirstReplyText(payload.text, ctx)))
         : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))

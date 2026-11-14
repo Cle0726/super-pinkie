@@ -5,7 +5,7 @@ import {createHash, randomUUID} from 'node:crypto';
 
 const MAX_EVENTS = 40;
 const MAX_TEXT = 16_000;
-const VALID_SESSION = /^agent:(?:main|project|thinking|learning|unrestricted):/;
+const VALID_SESSION = /^agent:(?:main|project|thinking|learning|unrestricted|metre):/;
 const VALID_STAGE = new Set(['queued', 'sent', 'received', 'failed', 'note']);
 
 function stateRoot() {

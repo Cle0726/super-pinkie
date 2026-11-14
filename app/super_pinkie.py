@@ -470,6 +470,8 @@ MODE_AGENTS = {
     "thinking": "workspace-thinking",
     "learning": "workspace-learning",
     "unrestricted": "workspace-unrestricted",
+    # Metre：只放 AGENTS / IDENTITY / SOUL 三份（briefs/metre-mode-1113 PLAN 2.2），工具不设 deny，和无限制一样。
+    "metre": "workspace-metre",
 }
 
 
@@ -530,7 +532,8 @@ def install_personas(log, register=True):
         "project": home / ".openclaw" / "workspace-project",
         "thinking": home / ".openclaw" / "workspace-thinking",
         "learning": home / ".openclaw" / "workspace-learning",
-        "neutral": home / ".openclaw" / "workspace-unrestricted"
+        "neutral": home / ".openclaw" / "workspace-unrestricted",
+        "metre": home / ".openclaw" / "workspace-metre",
     }
     src_root = resource_path("personas")
     backup_root = windows_state_root() / "backups" / ("personas-" + time.strftime("%Y%m%d-%H%M%S"))
@@ -554,6 +557,11 @@ def install_personas(log, register=True):
                         _install_persona_file(
                             src_file, target / relative, never_replace, backup_root / mode / relative.parent,
                         )
+            if mode == "metre":
+                # 空占位：免得 `openclaw agents add` 和每次运行补进英文模板（见 mode-architecture/setup.py 的 _tidy_metre_workspace）。
+                for placeholder in ("TOOLS.md", "USER.md", "HEARTBEAT.md"):
+                    if not (target / placeholder).exists():
+                        (target / placeholder).write_text("", encoding="utf-8")
             log(f"  [{mode}] 人格文件 -> {target}")
     # prepare_bundled_desktop registers right after this, with a retry once the
     # plugins are installed, so it asks for the files only.

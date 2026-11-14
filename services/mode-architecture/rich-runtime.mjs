@@ -405,6 +405,8 @@ export function registerRichRuntime(api, options = {}) {
   api.on('before_prompt_build', (event, ctx) => {
     const key = String(ctx.sessionKey || '');
     const turn = key ? research.take(key, event?.prompt) : '';
+    // Metre 的手册自己讲了 plan_update 和提问卡，富回复说明不再给（PLAN 2.2 的固定开销预算）。
+    if (key.startsWith('agent:metre:')) return turn ? {appendContext: turn} : undefined;
     return {
       appendSystemContext: RICH_RULES + (key.startsWith('agent:unrestricted:') ? '\n无限模式只用组件展示结果，不用 ui 表单或选择按钮让用户确认、挑方案；沿用当前模式规则直接执行。' : ''),
       ...(turn ? {appendContext: turn} : {}),
