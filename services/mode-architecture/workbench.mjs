@@ -16,6 +16,7 @@ import {fileURLToPath} from 'node:url';
 import {LspHub, CodeAssistant, CodeChecker} from './workbench-lsp.mjs';
 import {ExtensionMarket, formatText, formatters} from './workbench-ext.mjs';
 import {agentWorkspace, openclawAgentEnvPath} from './openclaw-paths.mjs';
+import {createPrStatusTool} from './pr-status.mjs';
 
 const exec = promisify(execFile);
 export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。找代码用 code_search（搜内容、找文件、看文件大纲；Mac 和 Windows 都能用，不用写 grep / find）；一个函数在哪定义、被谁调用用 code_refs。改已有的代码文件用 code_edit（原文差一点空白也能对上，对不上会给出文件里最像的一段，改完自动查语法）。跑测试用 run_tests（自动认项目的测试命令，记住改之前的基线，告诉你哪些是这次弄坏的）：动手前跑一次，改完再跑一次。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
@@ -836,6 +837,8 @@ export function registerWorkbench(api, options = {}) {
   api.registerTool?.(ctx => createCodeEditTool(ctx, {rootFor: toolRoot, watch: codeWatch}), {name: 'code_edit'});
   api.registerTool?.(ctx => createCodeRefsTool(ctx, {rootFor: toolRoot}), {name: 'code_refs'});
   api.registerTool?.(ctx => createRunTestsTool(ctx, {rootFor: toolRoot}), {name: 'run_tests'});
+  // 项目模式看当前分支的 PR 和 CI（D4，只读，靠本机 gh）。
+  api.registerTool?.(ctx => (/^agent:project:/.test(String(ctx.sessionKey || '')) ? createPrStatusTool(ctx, {rootFor: toolRoot}) : null), {name: 'pr_status'});
   api.registerTool?.(ctx => (/^agent:(project|learning|unrestricted):/.test(String(ctx.sessionKey || '')) ? {
     name: 'workbench_show', label: '在工作台打开',
     description: '在先生的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',

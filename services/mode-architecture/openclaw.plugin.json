@@ -27,6 +27,7 @@
       "code_edit",
       "code_refs",
       "run_tests",
+      "pr_status",
       "workbench_show",
       "workbench_read",
       "learning_library",
