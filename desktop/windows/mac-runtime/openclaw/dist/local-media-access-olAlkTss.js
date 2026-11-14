@@ -1,4 +1,5 @@
-/* pinkie-image-access:v4 */
+/* pinkie-image-access:v5 */
+import { deniedMediaPath as _pinkieDeniedMediaPath } from "./pinkie-media-inbox.mjs";
 import os from "node:os";
 import fsSync from "node:fs";
 import { g as assertNoWindowsNetworkPath, i as isPathInside } from "./path-DILYn_gk.js";
@@ -35,6 +36,11 @@ async function resolveLocalMediaRoots(localRoots) {
 		if (resolvedRoot === path.parse(resolvedRoot).root) throw new LocalMediaAccessError("invalid-root", `Invalid localRoots entry (refuses filesystem root): ${root}. Pass a narrower directory.`);
 		return resolvedRoot;
 	}));
+}
+function _pinkieDeniedError(mediaPath) {
+	const message = `Local media path is not under an allowed directory: ${mediaPath}`;
+	if (typeof LocalMediaAccessError === "function") return new LocalMediaAccessError("path-not-allowed", message);
+	return Object.assign(new Error(message), { code: "path-not-allowed" });
 }
 let _pinkieExtraMediaRoots;
 function _pinkieWorkspaceRoots(home) {
@@ -101,6 +107,7 @@ function _pinkiePathIsUnderRoots(mediaPath, roots) {
 }
 /** Verifies that a local media path is managed inbound media or lives under allowed roots. */
 async function assertLocalMediaAllowed(mediaPath, localRoots, options) {
+	if (_pinkieDeniedMediaPath(mediaPath)) throw _pinkieDeniedError(mediaPath);
 	if (localRoots === "any") return;
 	if (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;
 	if (_pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;

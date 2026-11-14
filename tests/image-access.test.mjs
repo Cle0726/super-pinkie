@@ -3,15 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {apply,transform} from '../patch/apply-image-access.mjs';
+import {fileURLToPath} from 'node:url';
+import {apply,transform,transformV4,transformTools,toolEdits} from '../patch/apply-image-access.mjs';
 
 const anchor='/** Verifies that a local media path is managed inbound media or lives under allowed roots. */\nasync function assertLocalMediaAllowed(';
 const legacy=`import path from "node:path";\n${anchor}mediaPath, localRoots) {\n\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n}`;
 const current=`import path from "node:path";\nasync function resolveLocalMediaBoundary(mediaPath, localRoots) {\n\tconst roots = localRoots ?? getDefaultLocalRootsCore();\n\tconst resolved = await resolveLocalMediaPathForContainment(mediaPath);\n\treturn {roots,resolved};\n}\n${anchor}mediaPath, localRoots) {}`;
 
+// The image/pdf tool chunk every real dist has (v5 patches it too).
+const toolsSource='function createImageTool(options) {}\nfunction createPdfTool(options) {}\n'+toolEdits.map(([from])=>from).join('\n');
+function addTools(dist){fs.writeFileSync(path.join(dist,'openclaw-tools-TEST.js'),toolsSource);}
+
 // A v3 install as it exists on users' machines: v4 minus the project-root helpers.
 function v3Of(source){
-  const text=transform(source);
+  const text=transformV4(source);
   const start=text.indexOf('let _pinkieProjectRootsCache;'),end=text.indexOf('function _pinkieStaticMediaRoots() {');
   return (text.slice(0,start)+text.slice(end).replace('function _pinkieStaticMediaRoots() {','function _pinkieResolveExtraMediaRoots() {')).replace('pinkie-image-access:v4','pinkie-image-access:v3');
 }
@@ -45,11 +50,11 @@ test('image access lets 碧琪 look at screenshots inside a bound project folder
   assert.equal(under(path.join(home,'Desktop','a.png'),roots()),true);
 });
 
-test('image access upgrades a v3 install to v4 in place',()=>{
+test('image access upgrades a v3 install to v5 in place',()=>{
   const v3=v3Of(current);
   assert.match(v3,/pinkie-image-access:v3/);assert.doesNotMatch(v3,/_pinkieProjectRoots/);
   const upgraded=transform(v3);
-  assert.match(upgraded,/pinkie-image-access:v4/);assert.doesNotMatch(upgraded,/pinkie-image-access:v3/);
+  assert.match(upgraded,/pinkie-image-access:v5/);assert.doesNotMatch(upgraded,/pinkie-image-access:v3/);
   assert.match(upgraded,/_pinkieProjectRoots\(\)/);
   assert.equal(upgraded,transform(current));
   assert.equal(transform(upgraded),upgraded);
@@ -70,7 +75,7 @@ test('image access supports both legacy and current OpenClaw boundary layouts',(
 test('image access upgrades the previous narrow v1 patch in place',()=>{
   const v1=`/* pinkie-image-access:v1 */\nimport os from "node:os";\nlet _pinkieExtraMediaRoots;\nfunction _pinkieResolveExtraMediaRoots() { return []; }\nfunction _pinkiePathIsUnderRoots() { return false; }\n${anchor}mediaPath, localRoots) {\n\tif (await resolveInboundMediaReference(mediaPath).catch(() => null)) return;\n\tif (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;\n}`;
   const upgraded=transform(v1);
-  assert.match(upgraded,/pinkie-image-access:v4/);
+  assert.match(upgraded,/pinkie-image-access:v5/);
   assert.doesNotMatch(upgraded,/pinkie-image-access:v1/);
   assert.match(upgraded,/_pinkieWorkspaceRoots/);
   assert.match(upgraded,/import fsSync from "node:fs"/);
@@ -84,7 +89,7 @@ test('image access upgrades v2 so Control UI agent-scoped roots include exact wo
       'if (localRoots === void 0 && _pinkiePathIsUnderRoots(mediaPath, _pinkieResolveExtraMediaRoots())) return;'
     );
   const upgraded=transform(v2);
-  assert.match(upgraded,/pinkie-image-access:v4/);
+  assert.match(upgraded,/pinkie-image-access:v5/);
   assert.match(upgraded,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return/);
   assert.doesNotMatch(upgraded,/localRoots === void 0 && _pinkiePathIsUnderRoots/);
   assert.equal(transform(upgraded),upgraded);
@@ -92,7 +97,7 @@ test('image access upgrades v2 so Control UI agent-scoped roots include exact wo
 
 test('image access patch validates before changing the runtime and is idempotent',()=>{  const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-'));
   try{
-    const dist=path.join(root,'dist');fs.mkdirSync(dist);
+    const dist=path.join(root,'dist');fs.mkdirSync(dist);addTools(dist);
     const file=path.join(dist,'local-media-access-test.js');
     fs.writeFileSync(file,current);
     const backup=path.join(root,'backup');
@@ -128,7 +133,7 @@ async function assertLocalMediaAllowed(mediaPath, localRoots, options) {
 test('2026.10 boundary check allows the extra roots before inbound resolution and in the default root list',()=>{
   const patched=transform(current2026);
   assert.notEqual(patched,current2026);
-  assert.match(patched,/pinkie-image-access:v4/);
+  assert.match(patched,/pinkie-image-access:v5/);
   assert.match(patched,/if \(_pinkiePathIsUnderRoots\(mediaPath, _pinkieResolveExtraMediaRoots\(\)\)\) return \{\n\t\trejectHardlinks: false,\n\t\troots: \[path\.dirname\(path\.resolve\(mediaPath\)\)\]\n\t\};/);
   assert.match(patched,/const roots = \[\.\.\.\(localRoots \?\? getDefaultMediaLocalRoots\(\)\), \.\.\._pinkieResolveExtraMediaRoots\(\)\];/);
   assert.match(patched,/try \{\n\t\tinboundReference = await resolveInboundMediaReference\(mediaPath\);/,'the managed-reference branch is kept');
@@ -138,12 +143,12 @@ test('2026.10 boundary check allows the extra roots before inbound resolution an
 test('2026.10 picks the real .mjs chunk, not a re-export shim',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-2026-'));
   try{
-    const dist=path.join(root,'dist');fs.mkdirSync(dist);
+    const dist=path.join(root,'dist');fs.mkdirSync(dist);addTools(dist);
     fs.writeFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'export { a as b } from "./local-media-access-REAL.mjs";\n');
     const real=path.join(dist,'local-media-access-REAL.mjs');
     fs.writeFileSync(real,current2026);
     assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-REAL.mjs');
-    assert.match(fs.readFileSync(real,'utf8'),/pinkie-image-access:v4/);
+    assert.match(fs.readFileSync(real,'utf8'),/pinkie-image-access:v5/);
     assert.doesNotMatch(fs.readFileSync(path.join(dist,'local-media-access-REEXPORT.mjs'),'utf8'),/pinkie/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
@@ -151,10 +156,24 @@ test('2026.10 picks the real .mjs chunk, not a re-export shim',()=>{
 test('2026.7 picks the unpatched .js chunk (the runtime the release build installs)',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'cle-kk-image-access-2026-7-'));
   try{
-    const dist=path.join(root,'dist');fs.mkdirSync(dist);
+    const dist=path.join(root,'dist');fs.mkdirSync(dist);addTools(dist);
     const file=path.join(dist,'local-media-access-olAlkTss.js');
     fs.writeFileSync(file,legacy);
     assert.equal(apply(root,{backupRoot:path.join(root,'backup')}).file,'local-media-access-olAlkTss.js');
-    assert.match(fs.readFileSync(file,'utf8'),/pinkie-image-access:v4/);
+    assert.match(fs.readFileSync(file,'utf8'),/pinkie-image-access:v5/);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+// Windows ships the patched runtime as a snapshot, not by running the patch.
+test('the Windows snapshot carries image-access v5, the patched image/pdf tools and the same helper',()=>{
+  const snap=path.join(path.dirname(fileURLToPath(import.meta.url)),'..','desktop/windows/mac-runtime/openclaw/dist');
+  const read=(n)=>fs.readFileSync(path.join(snap,n),'utf8');
+  const access=read('local-media-access-olAlkTss.js');
+  assert.match(access,/^\/\* pinkie-image-access:v5 \*\//);
+  assert.equal(transform(access),access,'already v5');
+  assert.match(access,/async function assertLocalMediaAllowed\(mediaPath, localRoots, options\) \{\n\tif \(_pinkieDeniedMediaPath\(mediaPath\)\) throw/);
+  const tools=read('openclaw-tools-KulZ1cdH.js');
+  assert.match(tools,/^\/\* pinkie-media-tools:v1 \*\/\nimport \* as _pinkieMediaInbox from "\.\/pinkie-media-inbox\.mjs";/);
+  assert.equal(transformTools(tools),tools,'already patched');
+  assert.equal(read('pinkie-media-inbox.mjs'),fs.readFileSync(new URL('../patch/pinkie-media-inbox.mjs',import.meta.url),'utf8'),'the snapshot helper is the repository one');
 });
