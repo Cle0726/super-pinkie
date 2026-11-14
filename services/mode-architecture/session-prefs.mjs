@@ -25,10 +25,18 @@ export const LENS_TEXT = Object.freeze({
   converge: '【想法取向：收敛】用户这次要的是定下来。不再铺新方向：从已有的想法里选一个最值得做的，说明为什么选它、为什么不选别的，然后把它落成能开工的东西：要做的范围、第一版只做什么、先后步骤、需要用户决定的事。有拿不准的前提就标出来，不要含糊带过。',
   critic: '【想法取向：挑刺】用户这次要的是找毛病。站在最挑剔的用户、对手和投资人的位置看这个想法：先说最致命的一两个问题，再说次要的；每个问题都要具体（哪一步会卡、谁不会买账、哪句话站不住），并给出能验证它的办法或补救的方向。不要先夸一轮，也不要为了显得平衡硬凑优点；确实没问题的地方直接说没问题。',
 });
+// Metre「派发 / 独做」（界面叫 Baton / Virtuoso，PLAN 2.6、6.1）：默认派发。每轮注入的标记是主 MD 第四节认的那两个词，
+// 一直注入（默认也注入）；独做时 session-lineage 把派发工具摘掉。
+export const DISPATCH_MODES = ['dispatch', 'solo'];
+export const DISPATCH_TEXT = Object.freeze({dispatch: '【本轮：派发】', solo: '【本轮：独做】'});
 const MODE_OPTIONS = Object.freeze({
   project: {field: 'pace', values: PACES, text: PACE_TEXT, error: '没有这种工作程度'},
   thinking: {field: 'lens', values: LENSES, text: LENS_TEXT, error: '没有这种想法取向'},
+  metre: {field: 'dispatch', values: DISPATCH_MODES, text: DISPATCH_TEXT, error: '只能是 dispatch（Baton）或 solo（Virtuoso）', fallback: 'dispatch'},
 });
+// Metre 父会话的两个上限（PLAN 2.4）：同时在跑的子会话 2–12（默认 8）；一次用户请求累计开的子会话（默认 24，0 = 不封顶）。
+export const METRE_RUNNING = Object.freeze({min: 2, max: 12, fallback: 8});
+export const METRE_REQUEST_CAP = Object.freeze({max: 200, fallback: 24});
 const MAX_CUSTOM = 1000;
 const MAX_SESSIONS = 5000;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -37,6 +45,7 @@ export const DEFAULT_GLOBAL = Object.freeze({
   defaultStyle: 'default', customStyle: '', notify: {done: true, waiting: true}, menubar: true, hotkey: 'default',
   // 碧琪自己分工：用户这条消息要的活里互不依赖的大块，直接开子会话并行做（session-lineage 的 in_scope）。关掉后只提卡片等用户点。
   autoSplit: true,
+  metreMaxRunning: METRE_RUNNING.fallback, metreRequestCap: METRE_REQUEST_CAP.fallback,
 });
 
 let styleCache = null;
@@ -85,6 +94,16 @@ export class SessionPrefs {
     }
     if (typeof params.menubar === 'boolean') g.menubar = params.menubar;
     if (typeof params.autoSplit === 'boolean') g.autoSplit = params.autoSplit;
+    if ('metreMaxRunning' in params) {
+      const value = Number(params.metreMaxRunning);
+      if (!Number.isInteger(value) || value < METRE_RUNNING.min || value > METRE_RUNNING.max) throw new Error('同时在跑的子会话只能是 2 到 12 个');
+      g.metreMaxRunning = value;
+    }
+    if ('metreRequestCap' in params) {
+      const value = Number(params.metreRequestCap);
+      if (!Number.isInteger(value) || value < 0 || value > METRE_REQUEST_CAP.max) throw new Error('累计上限只能是 0（不封顶）到 200');
+      g.metreRequestCap = value;
+    }
     if ('hotkey' in params) g.hotkey = params.hotkey === null ? null : clip(params.hotkey, 40) || null;
     this.save();
     return {ok: true, ...this.globalPrefs()};
@@ -98,7 +117,7 @@ export class SessionPrefs {
       web: own.web !== false,
     };
     const option = MODE_OPTIONS[agentOf(key)];
-    if (option) prefs[option.field] = option.values.includes(own[option.field]) ? own[option.field] : 'default';
+    if (option) prefs[option.field] = option.values.includes(own[option.field]) ? own[option.field] : option.fallback || 'default';
     return prefs;
   }
   setSession(key, params = {}) {
@@ -141,8 +160,20 @@ export class SessionPrefs {
     if (prefs.web) parts.push(agentOf(key) === 'metre' ? METRE_WEB_ON : WEB_ON);
     const option = MODE_OPTIONS[agentOf(key)];
     const extra = option && option.text[prefs[option.field]];
+    // Metre 的标记只有一行，紧跟在联网那句后面（单个换行，省预算：PROGRESS F4）。
+    if (extra && agentOf(key) === 'metre') return [parts.join('\n\n'), extra].filter(Boolean).join('\n');
     if (extra) parts.push(extra);
     return parts.join('\n\n');
+  }
+  // Metre 这个会话现在是独做（Virtuoso）：派发工具不提供。
+  solo(key) { return validKey(key) && agentOf(key) === 'metre' && this.forSession(key).dispatch === 'solo'; }
+  metreLimits() {
+    const g = this.load().global;
+    const running = Number.isInteger(g.metreMaxRunning) && g.metreMaxRunning >= METRE_RUNNING.min && g.metreMaxRunning <= METRE_RUNNING.max
+      ? g.metreMaxRunning : METRE_RUNNING.fallback;
+    const cap = Number.isInteger(g.metreRequestCap) && g.metreRequestCap >= 0 && g.metreRequestCap <= METRE_REQUEST_CAP.max
+      ? g.metreRequestCap : METRE_REQUEST_CAP.fallback;
+    return {maxRunning: running, requestCap: cap};
   }
   blocksTool(key, toolName) {
     return validKey(key) && WEB_TOOLS.has(String(toolName || '')) && this.forSession(key).web === false;
@@ -153,10 +184,14 @@ export class SessionPrefs {
 // them must read the same cache, or a choice saved through one is never seen
 // by the prompt hook of another.
 const PREFS_INSTANCES = Symbol.for('pinkie.session-prefs.instances');
-export function registerSessionPrefs(api, {root}) {
+// 同一个状态目录只有一份偏好：session-lineage 用它读 Metre 的派发 / 独做和上限，不用经过 index.mjs 传。
+export function sharedSessionPrefs(root) {
   const shared = globalThis[PREFS_INSTANCES] ??= new Map();
   if (!shared.has(root)) shared.set(root, new SessionPrefs(root));
-  const prefs = shared.get(root);
+  return shared.get(root);
+}
+export function registerSessionPrefs(api, {root}) {
+  const prefs = sharedSessionPrefs(root);
   const method = (name, fn) => registerSessionMethod(api, name, async params => {
     try { return await fn(params); } catch (error) { return {ok: false, error: error.message}; }
   });

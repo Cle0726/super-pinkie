@@ -868,6 +868,39 @@
     },
   };
   const modeOptionFor = key => MODE_OPTION[/^agent:([^:]+):/.exec(key || '')?.[1]] || null;
+  // Metre 的「派发 / 独做」（briefs/metre-mode-1113 PLAN 2.6、6.1）：界面上只写 Baton｜Virtuoso，常驻在输入框下面、
+  // 不收进工具箱；中文的意思和作用只在悬停时出现。没有悬停的屏幕（触屏、窄窗口）点旁边的小 i 看同样的说明。
+  // 后端字段仍是 dispatch / solo，每轮注入【本轮：派发】/【本轮：独做】。
+  const BATON = [
+    {value: 'dispatch', label: 'Baton', tip: '指挥棒 · 把活拆开派给其他模式里的轻量模型，Metre 把关、验收、汇报'},
+    {value: 'solo', label: 'Virtuoso', tip: '独奏 · Metre 亲手做完，不开子会话'},
+  ];
+  function metreSwitch(key, prefs) {
+    if (!/^agent:metre:/.test(key || '')) return null;
+    const value = prefs.dispatch === 'solo' ? 'solo' : 'dispatch';
+    const host = el('div', 'pinkie-chip pinkie-chip--mode pinkie-baton');
+    host.setAttribute('role', 'radiogroup');
+    host.setAttribute('aria-label', 'Baton / Virtuoso');
+    host.dataset.option = 'dispatch';
+    host.dataset.value = value === 'dispatch' ? 'default' : value;
+    for (const item of BATON) {
+      const seg = button(item.label, 'pinkie-baton__seg', async () => {
+        if (item.value === value) return;
+        try {
+          const fresh = await setSessionPref(key, {dispatch: item.value});
+          toast(confirmed(fresh, 'dispatch', item.value) ? nextTurn(item.label) : notSaved);
+        } catch (error) { toast(error.message); }
+      });
+      seg.setAttribute('role', 'radio');
+      seg.setAttribute('aria-checked', String(item.value === value));
+      seg.dataset.pinkieTooltip = item.tip;
+      host.append(seg);
+    }
+    const info = button('Baton / Virtuoso', 'pinkie-baton__info', () => toast(BATON.map(item => item.label + '：' + item.tip).join('\n')), 'i');
+    info.dataset.pinkieTooltip = BATON.map(item => item.label + '：' + item.tip).join('\n');
+    host.append(info);
+    return host;
+  }
   function modeChip(key, prefs) {
     const option = modeOptionFor(key);
     if (!option) return null;
@@ -931,7 +964,7 @@
       chip.setAttribute('aria-label', chip.dataset.pinkieTooltip);
     }
     // 模式专属的那一颗单独放：通用按钮收进「工具」菜单后，它仍然留在输入框下面。
-    const mode = prefs.unread ? null : modeChip(key, prefs);
+    const mode = prefs.unread ? null : metreSwitch(key, prefs) || modeChip(key, prefs);
     const old = controls.querySelector(':scope > .pinkie-chip--mode');
     if (mode) { if (old) old.replaceWith(mode); else controls.append(mode); } else old?.remove();
     window.dispatchEvent(new CustomEvent('pinkie:composer-chips', {detail: {sessionKey: key}}));
