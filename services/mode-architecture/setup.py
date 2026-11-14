@@ -531,7 +531,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "model-tiers.json", "tool-trace.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",

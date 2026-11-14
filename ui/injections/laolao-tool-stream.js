@@ -29,8 +29,22 @@
     [/记忆|memory/i, 'memory', '记忆'],
   ];
 
+  // PLAN 2.8 细分的类别：laolao-cle-stage 已经按工具名、参数和后端记录算好写在行上
+  // （data-tool-kind），这里只给它们配短名。和舞台、话术、状态条三张表对齐（tests/tool-kind-words.test.cjs）。
+  const KIND_CN = {
+    create: '创建', write: '写入', delete: '删除', move: '移动', install: '安装', build: '构建', git: 'git',
+    download: '下载', view: '看图', shot: '截图', dispatch: '派发', wait: '等子会话', review: '验收',
+    manage: '整理会话', models: '看模型',
+  };
+
   const $ = (sel, root) => (root || document).querySelector(sel);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+  function kindOfRow(btn, labelText) {
+    const known = btn && btn.getAttribute && btn.getAttribute('data-tool-kind');
+    if (known && KIND_CN[known]) return {kind: known, cn: KIND_CN[known]};
+    return kindOf(labelText);
+  }
 
   function kindOf(labelText) {
     for (const [re, kind, cn] of KIND_RULES) {
@@ -75,7 +89,7 @@
     summaries.forEach((btn, i) => {
       const label = $('.chat-tool-msg-summary__label', btn);
       const text = label ? label.textContent || '' : '';
-      const { kind } = kindOf(text);
+      const { kind } = kindOfRow(btn, text);
       /* 类型色点 */
       let dot = $('.laolao-tool-dot', btn);
       if (!dot) {
@@ -109,7 +123,7 @@
     if (!body || !count) return;
     const counts = new Map();
     $$('.chat-tool-msg-summary__label', body).forEach((el) => {
-      const { kind, cn } = kindOf(el.textContent || '');
+      const { kind, cn } = kindOfRow(el.closest('.chat-tool-msg-summary'), el.textContent || '');
       counts.set(cn + '|' + kind, (counts.get(cn + '|' + kind) || 0) + 1);
     });
     const parts = Array.from(counts.entries())
@@ -170,5 +184,5 @@
     start();
   }
   window.addEventListener('laolao:modechange', schedule);
-  window.__laolaoToolStream = { refresh: schedule };
+  window.__laolaoToolStream = { refresh: schedule, KIND_CN };
 })();
