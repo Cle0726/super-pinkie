@@ -14,7 +14,17 @@
     return card.expiresAt <= now ? 'expired' : 'pending';
   }
 
+  // pinkie_sessions 在老模式里对别的会话 archive / stop / rename 时出的确认卡片（Metre 计划 2.7）。
+  const manageLabels = {done: '已执行', failed: '没做成', dismissed: '已跳过', expired: '已过期'};
+  function manageSummary(card) {
+    const what = (card.actionName || card.action) + '「' + (card.targetTitle || '会话') + '」';
+    return card.action === 'rename' && card.title ? what + ' → 「' + card.title + '」' : what;
+  }
+
   function cardActions(card, now) {
+    if (card.kind === 'manage') {
+      return proposalState(card, now) === 'pending' ? [['run', '确认' + (card.actionName || '')], ['dismiss', '不用了']] : [];
+    }
     if (card.kind !== 'proposal' || proposalState(card, now) !== 'pending') return [];
     return card.initiation === 'offer' ? [['start', '开新会话'], ['here', '就在这里做']]
       : [['start', '开始'], ['dismiss', '不用了']];
@@ -175,7 +185,49 @@
     }
   }
 
+  function renderManageCard(card, key) {
+    const state = proposalState(card);
+    const box = el('section', 'pinkie-session-card pinkie-session-card--manage');
+    box.dataset.sessionCard = card.id;
+    box.dataset.state = state;
+    if (state !== 'pending') {
+      const header = el('div', 'pinkie-session-card__compact');
+      const icon = {done: '✓', failed: '!', dismissed: '—', expired: '◷'}[state] || '•';
+      header.append(el('span', 'pinkie-session-card__compact-toggle', `${icon} ${manageLabels[state] || state} · ${manageSummary(card)}`));
+      box.append(header);
+      if (card.error) box.append(el('div', 'pinkie-session-card__error', card.error));
+      return box;
+    }
+    box.append(el('div', 'pinkie-session-card__title', '碧琪想' + manageSummary(card)),
+      el('div', 'pinkie-session-card__body', '这是别的会话，要你点头才做。'));
+    const actions = el('div', 'pinkie-session-card__actions');
+    actions.append(link(card.target, '先去看看 ›'));
+    for (const [action, label] of cardActions(card)) {
+      const button = cardButton(label, null, action === 'run' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
+      button.disabled = busy.has(card.id);
+      button.onclick = async () => {
+        if (busy.has(card.id) || key !== selected) return;
+        busy.add(card.id); errors.delete(card.id); paint();
+        try {
+          const result = await request('pinkie.session.manage.confirm', {key, id: card.id, action}, 45_000);
+          if (key === selected && data && result?.card) data.cards = data.cards.map(item => item.id === card.id ? result.card : item);
+          window.PinkieSessionList?.invalidate();
+        } catch (error) {
+          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
+        } finally {
+          busy.delete(card.id);
+          if (key === selected) paint();
+        }
+      };
+      actions.append(button);
+    }
+    if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
+    box.append(actions);
+    return box;
+  }
+
   function renderCard(card, key) {
+    if (card.kind === 'manage') return renderManageCard(card, key);
     const proposal = card.kind === 'proposal';
     const state = proposal ? proposalState(card) : 'report';
     const box = el('section', 'pinkie-session-card');
@@ -331,12 +383,14 @@
     const requestId = ++sequence;
     try {
       const agentId = key.split(':')[1];
-      const [result, list, lineage] = await Promise.all([
+      const [result, list, lineage, managed] = await Promise.all([
         request('pinkie.session.cards', {key}),
         request('sessions.list', {agentId, archived:false, limit:1000}).catch(() => null),
         request('pinkie.session.lineage', {agentId}).catch(() => null),
+        request('pinkie.session.manage.cards', {key}).catch(() => null),
       ]);
       if (requestId !== sequence || key !== currentKey()) return;
+      result.cards = [...(result.cards || []), ...(managed?.cards || [])];
       result.childStates = Object.fromEntries((list?.sessions || []).map(row => {
         const phase = window.PinkieSessionList?.sessionStatus({...row, phase:lineage?.states?.[row.key]?.phase});
         return [row.key, {running:'运行中', waiting:'等你回复', error:'出错'}[phase] || '已完成'];
@@ -381,7 +435,7 @@
     refreshTimer = setTimeout(() => void refresh(), 180);
   }
 
-  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor, forkEntryId, cardMeasure};
+  window.PinkieSessionCards = {cardActions, manageSummary, proposalState, chooseAnchor, forkEntryId, cardMeasure};
   if (typeof MutationObserver !== 'function') return;
   new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
   window.addEventListener('popstate', reconcile);

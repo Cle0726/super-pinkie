@@ -19,6 +19,7 @@
       "pinkie_session_start",
       "pinkie_session_message",
       "pinkie_session_list",
+      "pinkie_sessions",
       "pinkie_mode_ask",
       "plan_update",
       "code_check",

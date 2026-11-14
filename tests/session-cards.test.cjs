@@ -55,3 +55,13 @@ test('card alignment follows assistant text while staying inside the composer', 
   assert.deepEqual(plain(cardMeasure(input, {left: 0, right: 0, width: 0})), {left: 100, width: 800});
   assert.equal(cardMeasure({left: 0, right: 0, width: 0}, null), null);
 });
+
+test('pinkie_sessions confirmation cards: confirm / skip while pending, nothing once handled or expired', () => {
+  const {cardActions, manageSummary} = load();
+  const card = {kind: 'manage', action: 'archive', actionName: '归档', targetTitle: '做网站', state: 'pending', expiresAt: 2000};
+  assert.deepEqual(plain(cardActions(card, 1000)), [['run', '确认归档'], ['dismiss', '不用了']]);
+  assert.deepEqual(plain(cardActions(card, 2000)), []);
+  for (const state of ['done', 'failed', 'dismissed']) assert.deepEqual(plain(cardActions({...card, state}, 1000)), []);
+  assert.equal(manageSummary(card), '归档「做网站」');
+  assert.equal(manageSummary({...card, action: 'rename', actionName: '改名', title: '新名'}), '改名「做网站」 → 「新名」');
+});

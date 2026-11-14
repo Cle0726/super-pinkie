@@ -15,6 +15,7 @@ import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
+import {registerSessionManage} from './session-manage.mjs';
 import {registerArtifacts} from './artifacts.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
@@ -6998,6 +6999,9 @@ export default {
     const sessionPrefs = registerSessionPrefs(api, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
+    // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
+    registerSessionManage(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, lineage: sessionLineage,
+      stateRoot: pinkieStateRoot(), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     const artifacts = registerArtifacts(api, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerProjectSettings(api, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(api, webGptActivity);
