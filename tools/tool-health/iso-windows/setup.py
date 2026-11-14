@@ -157,7 +157,8 @@ def build():
     config['agents'].setdefault('defaults', {})['workspace'] = str(STATE / 'workspace')
     config['agents']['defaults']['heartbeat'] = {'every': '0m'}
     # 用户 11-13：实测统一用 hy4free；它自己能看图，image / pdf 工具也走它（imageModel / pdfModel 是运行时已有的键）。
-    vision = {'primary': 'mm/workbuddy/hy4free', 'fallbacks': ['mm/workbuddy/hy4std', 'mm/workbuddy/deepseek-v4.1-flash']}
+    # 只用 hy4free，不设后备（用户 11-13：hy4std、deepseek 不能用）。
+    vision = {'primary': 'mm/workbuddy/hy4free', 'fallbacks': []}
     config['agents']['defaults']['model'] = dict(vision)
     config['agents']['defaults']['imageModel'] = dict(vision)
     config['agents']['defaults']['pdfModel'] = dict(vision)
