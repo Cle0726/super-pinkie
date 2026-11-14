@@ -8,7 +8,7 @@
   const MODE_KEY = "laolao:active-mode";
   const MODE_OPTIONS = [
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
-    ["learning", "学习"], ["unrestricted", "无限制"],
+    ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
   const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask"]);
   const PRESET_MAP = Object.freeze({

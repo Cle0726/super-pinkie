@@ -88,6 +88,21 @@
       readyPhrase: "彩虹力量全开！",
       sessionKey: "agent:unrestricted:main",
     },
+    {
+      // Metre is not a Pinkie room: plain text and a placeholder monogram, no
+      // transition scene, no portrait burst, nothing preloaded for it. Its skin
+      // and the cat come in batch 4 (briefs/metre-mode-1113/PLAN.md).
+      id: "metre",
+      label: "Metre",
+      alt: "Metre",
+      address: "",
+      plain: true,
+      avatar: "/laolao-mode-metre.svg?v=placeholder1",
+      avatarSmall: "/laolao-mode-metre.svg?v=placeholder1",
+      phrases: ["切换到 Metre"],
+      readyPhrase: "Metre",
+      sessionKey: "agent:metre:main",
+    },
   ];
 
   let menu = null;
@@ -217,6 +232,7 @@
     if (session.startsWith("agent:thinking:")) return "thinking";
     if (session.startsWith("agent:learning:")) return "learning";
     if (session.startsWith("agent:unrestricted:")) return "unrestricted";
+    if (session.startsWith("agent:metre:")) return "metre";
     if (session.startsWith("agent:main:")) return "chat";
     return null;
   };
@@ -231,6 +247,7 @@
     if (String(key).startsWith("agent:thinking:")) return "thinking";
     if (String(key).startsWith("agent:learning:")) return "learning";
     if (String(key).startsWith("agent:unrestricted:")) return "unrestricted";
+    if (String(key).startsWith("agent:metre:")) return "metre";
     if (String(key).startsWith("agent:main:")) return "chat";
     return null;
   };
@@ -335,8 +352,9 @@
       if (avatar.getAttribute("data-laolao-mode-avatar") !== mode.id) {
         avatar.setAttribute("data-laolao-mode-avatar", mode.id);
       }
-      if (avatar.getAttribute("alt") !== `碧琪·${mode.label}`) {
-        avatar.setAttribute("alt", `碧琪·${mode.label}`);
+      const alt = mode.alt || `碧琪·${mode.label}`;
+      if (avatar.getAttribute("alt") !== alt) {
+        avatar.setAttribute("alt", alt);
       }
     });
 
@@ -360,12 +378,20 @@
     // All assets are local. Pre-decode them during the first idle window so a
     // later mode switch does not wait behind a 3.6s timer plus four serial
     // image groups. Promise deduplication in PinkieMotion keeps this cheap.
-    modes.forEach((mode) => window.PinkieModeTransitionFx?.warm?.(mode.id));
-    await Promise.all(modes.map(mode => motion.preload(mode.transition)));
-    await Promise.all(modes.map(mode => motion.modeAssets(mode.id)));
+    const decorated = modes.filter((mode) => !mode.plain);
+    decorated.forEach((mode) => window.PinkieModeTransitionFx?.warm?.(mode.id));
+    await Promise.all(decorated.map(mode => motion.preload(mode.transition)));
+    await Promise.all(decorated.map(mode => motion.modeAssets(mode.id)));
   };
 
   const playModeTransition = async (mode) => {
+    if (mode.plain) {
+      // No cover at all: the route changes in place. The fx-shaped stub lets
+      // finishModeTransition wait for the destination without drawing anything.
+      const overlay = document.createElement("section");
+      const fx = {waiting() {}, abort() {}, finish: async () => {}};
+      return {overlay, fx, assets: Promise.resolve()};
+    }
     // The FX module deliberately declines when graphics acceleration is unavailable or the
     // system asks for reduced motion. In that case the established transition
     // below remains the complete, accessible fallback.
@@ -579,7 +605,7 @@
   // ghost on body first so the selected portrait can grow and burst without
   // delaying either the transition cover or the router handoff.
   const launchSelectionBurst = (sourceOption, mode) => {
-    if (modeFxReduced()) return;
+    if (modeFxReduced() || mode.plain) return;
     const sourcePortrait = sourceOption?.querySelector(".laolao-mode-button__portrait");
     if (!sourcePortrait) return;
     const bounds = sourcePortrait.getBoundingClientRect();
@@ -805,6 +831,7 @@
     option.style.setProperty("--laolao-mode-fx-delay", `${index * 40}ms`);
     renderModeButton(option, mode, {current});
     const warm = () => {
+      if (mode.plain) return;
       void motion.modeAssets(mode.id);
       window.PinkieModeTransitionFx?.warm?.(mode.id, {soon: true});
     };

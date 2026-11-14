@@ -21,6 +21,8 @@
   const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|learning|unrestricted)$/i;
+  // Metre is not Pinkie: its bare agent id becomes its own name, never 碧琪.
+  const metreName=/^metre$/i;
   const askAssistantLabel=/(?:Ask|询问|问问).*(?:OpenClaw|CLE\s*Kk)/i;
   // The compact toolbar gives the Home shortcut and the Ask shortcut a shared
   // OpenClaw-flavoured title.  The Home aria-label is the reliable difference,
@@ -359,6 +361,11 @@
       return;
     }
     if(isProtectedContent(node))return;
+    if(metreName.test(core) && core!=='Metre' && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
+      node.nodeValue=node.nodeValue.replace(core,'Metre');
+      if(parent.hasAttribute('title'))parent.setAttribute('title','Metre');
+      return;
+    }
     if(fallbackName.test(core) && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
       node.nodeValue=node.nodeValue.replace(core,'碧琪');
       if(parent.hasAttribute('title'))parent.setAttribute('title','碧琪');

@@ -7,7 +7,7 @@
   if (window.PinkieSessionTools) return;
 
   // ---------- shared ----------
-  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted'};
+  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted', metre: 'metre'};
   const TEMP_KEY = /^agent:[a-z\d][a-z\d_-]*:dashboard:temp-[0-9a-f-]{36}$/i;
   const isTemp = key => TEMP_KEY.test(String(key || ''));
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');

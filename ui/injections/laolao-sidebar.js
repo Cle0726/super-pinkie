@@ -22,7 +22,7 @@
   const reasoningTierKey = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
 
   function reasoningTier(sessionKey) {
-    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    if (!/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(String(sessionKey || ""))) return "";
     try {
       const tier = localStorage.getItem(reasoningTierKey(sessionKey));
       return tier === "max" || tier === "ultra" ? tier : "";
@@ -36,7 +36,7 @@
   }
   // 要不要在发送前登记做法：Max / Ultra / Adaptive，或者所选档位当前模型原生做不到（往上补、往下补）。
   function effortLevel(sessionKey) {
-    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    if (!/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(String(sessionKey || ""))) return "";
     const enhanced = reasoningTier(sessionKey);
     if (enhanced) return enhanced;
     const choice = effortChoice(sessionKey);
@@ -297,8 +297,8 @@
   /* ---------- 1. 状态与模式隔离（localStorage） ----------
      每个模式有独立 agent、会话、置顶、项目与文件夹绑定。旧版共享
      数据只迁移一次，并按会话所属 agent 拆开；旧 key 留着作为恢复副本。 */
-  const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
-  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted" };
+  const MODES = ["chat", "project", "thinking", "learning", "unrestricted", "metre"];
+  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted", metre: "metre" };
   const AGENT_MODE = Object.fromEntries(Object.entries(MODE_AGENT).map(([mode, agent]) => [agent, mode]));
   const LEGACY_LS_KEY = "laolao.sidebar.v1";
   const MIGRATION_KEY = "laolao.sidebar.v2.migrated";

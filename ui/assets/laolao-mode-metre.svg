@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Metre">
+  <!-- Batch 0 placeholder for Metre: a plain monogram. The skin and the cat come in batch 4. -->
+  <rect width="64" height="64" rx="16" fill="#1f2328"/>
+  <path d="M17 45V19h4.6L32 33.4 42.4 19H47v26h-4.8V27.6L32 41.2 21.8 27.6V45z" fill="#f2f2f0"/>
+</svg>

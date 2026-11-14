@@ -23,7 +23,7 @@
   try {
     handoff = JSON.parse(sessionStorage.getItem("laolao:mode-handoff") || "null");
   } catch {}
-  if (!handoff || !["chat", "project", "thinking", "learning", "unrestricted"].includes(handoff.mode)) return;
+  if (!handoff || !["chat", "project", "thinking", "learning", "unrestricted", "metre"].includes(handoff.mode)) return;
 
   const splash = document.getElementById("laolao-splash");
   const fill = document.getElementById("laolao-splash-fill");
@@ -38,18 +38,20 @@
     thinking: { label: "想法模式", waiting: "灵感房间正在亮灯…" },
     learning: { label: "学习模式", waiting: "学习小屋正在亮灯…" },
     unrestricted: { label: "无限制模式", waiting: "彩虹力量正在接管房间…" },
+    metre: { label: "Metre", waiting: "正在打开…", plain: true },
   }[handoff.mode];
   const carriedProgress = Math.max(68, Math.min(96, Number(handoff.progress) || 68));
 
   splash.dataset.handoffBootstrapped = "1";
   splash.classList.add("is-mode-progress", `is-mode-progress--${handoff.mode}`);
-  splash.style.setProperty(
+  // Metre has no transition scene (batch 0); the splash keeps its own background.
+  if (!details.plain) splash.style.setProperty(
     "--laolao-mode-progress-image",
     `url("/laolao-mode-transition-${handoff.mode}.png?v=transition2")`,
   );
   const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
   const title = splash.querySelector(".laolao-splash__title");
-  if (eyebrow) eyebrow.textContent = "碧琪的模式切换";
+  if (eyebrow) eyebrow.textContent = details.plain ? "切换模式" : "碧琪的模式切换";
   if (title) {
     title.removeAttribute("aria-label");
     title.textContent = details.label;

@@ -2088,6 +2088,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         "thinking": "agent:thinking:main",
         "learning": "agent:learning:main",
         "unrestricted": "agent:unrestricted:main",
+        "metre": "agent:metre:main",
     ]
 
     private let workspaceLabels: [String: String] = [
@@ -2096,6 +2097,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         "thinking": "想法模式",
         "learning": "学习模式",
         "unrestricted": "无限制模式",
+        "metre": "Metre",
     ]
 
     @objc func openParty(_ sender: Any?) {

@@ -155,7 +155,7 @@ export class Workbench {
     const bound = unavailable ? null : binding;
     const root = realish(bound?.root || workspaceRoot);
     if (!fs.existsSync(root)) fs.mkdirSync(root, {recursive: true});
-    return {key, agentId, root, workspaceRoot, bound: Boolean(bound), unavailableRoot: unavailable, name: bound?.name || path.basename(root), unrestricted: agentId === 'unrestricted'};
+    return {key, agentId, root, workspaceRoot, bound: Boolean(bound), unavailableRoot: unavailable, name: bound?.name || path.basename(root), unrestricted: agentId === 'unrestricted' || agentId === 'metre'};
   }
 
   resolve(scope, raw = '', {read = false} = {}) {
