@@ -504,6 +504,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # 假地址代理（fake-ip）下网址会解析出 198.18.x 和 2001:2::x 两个基准测试地址；
     # allowRfc2544BenchmarkRange 原来只放行 IPv4 那一半，web_fetch 全被拦。同一个开关也放行 2001:2::/48。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-web-fetch-fakeip-v6.mjs"
+    # read / web_fetch 的说明末尾加一句「互不依赖的几次调用放在同一条回复里一起发」（运行时本来就并行执行）。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-tool-parallel-hint.mjs"
     # The native material viewer uses an opaque clekk-material: URL. Keep the
     # strict Control UI CSP, but allow that one in-app scheme for image/PDF
     # rendering; this does not grant the agent any new filesystem or tool access.

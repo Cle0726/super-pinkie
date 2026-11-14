@@ -26,6 +26,7 @@ const ORDER = [
   'apply-thinking-capabilities.mjs',
   'apply-image-access.mjs',
   'apply-web-fetch-fakeip-v6.mjs',
+  'apply-tool-parallel-hint.mjs',
   'apply-control-ui-workspace-media.mjs',
   'apply-control-ui-file-delivery.mjs',
   'apply-material-preview-csp.mjs',

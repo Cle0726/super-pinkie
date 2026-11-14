@@ -14016,7 +14016,7 @@ function createWebFetchTool(options) {
 	return setToolTerminalPresentation({
 		label: "Web Fetch",
 		name: "web_fetch",
-		description: "Fetch URL and extract readable markdown/text. Lightweight page access; no browser automation.",
+		description: "Fetch URL and extract readable markdown/text. Lightweight page access; no browser automation. 互不依赖的几次调用，放在同一条回复里一起发，不要一条一条来。", /* pinkie-tool-parallel-hint:v1 */
 		parameters: WebFetchSchema,
 		execute: async (_toolCallId, args, signal, onUpdate) => {
 			const { config, preferRuntimeProviders, runtimeWebFetch } = resolveWebFetchToolRuntimeContext({
