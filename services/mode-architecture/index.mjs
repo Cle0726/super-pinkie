@@ -9,7 +9,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
@@ -6991,7 +6991,14 @@ export default {
       },
       // 设置页「碧琪自己分工」开关（pinkie.prefs 的 autoSplit，默认开）。sessionPrefs 在下面才注册，这里到用的时候才读。
       autoSplit: () => { try { return sessionPrefs.globalPrefs().autoSplit !== false; } catch { return true; } },
+      // Metre 批 1：派活时的模型规则和 pinkie_models 读同一份模型目录和健康记录（不联网）。
+      modelHealth, config: () => {
+        const current = runtimeConfig(api);
+        if (current && Object.keys(current).length) return current;
+        try { return JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch { return {}; }
+      },
     });
+    registerMetreModelsTool(api, sessionLineage);
     registerSessionBranches(api, {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
       isBusy: key => architecture.activityFor(key).parentRunning,

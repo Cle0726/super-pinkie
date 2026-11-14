@@ -96,6 +96,14 @@ html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
 .pinkie-chip--mode:not([data-value="default"]) { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 10%,transparent);font-weight:600 }
 .pinkie-chip--mode:not([data-value="default"]):hover { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 16%,transparent) }
 .pinkie-style-menu__note { padding:6px 10px 4px;font-size:11px;opacity:.5;max-width:220px }
+/* Metre 的 Baton｜Virtuoso 两段开关：一颗按钮里两段，选中的那段实底；右边一个小 i 给没有悬停的屏幕看说明。 */
+.pinkie-baton { display:inline-flex;align-items:center;gap:2px;padding:2px;cursor:default }
+.pinkie-baton[data-value] { color:inherit;background:transparent;font-weight:400 }
+.pinkie-baton__seg { border:0;background:transparent;color:inherit;font:inherit;font-size:12px;letter-spacing:.01em;padding:2px 9px;border-radius:999px;cursor:pointer;opacity:.62 }
+.pinkie-baton__seg:hover { opacity:.9 }
+.pinkie-baton__seg[aria-checked="true"] { opacity:1;font-weight:600;color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 12%,transparent) }
+.pinkie-baton__info { border:0;background:transparent;color:inherit;font:italic 600 11px/1 Georgia,serif;width:18px;height:18px;border-radius:50%;opacity:.45;cursor:pointer }
+.pinkie-baton__info:hover { opacity:.85 }
 
 /* C4 sources */
 .pinkie-sources { display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:6px 0 2px;font-size:12px;color:color-mix(in srgb,currentColor 60%,transparent) }

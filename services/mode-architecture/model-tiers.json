@@ -1,0 +1,22 @@
+{
+  "_note": "Metre 的 pinkie_models 用这张表给模型分档（briefs/metre-mode-1113 PLAN 2.5）。按顺序匹配归一化后的模型名（去掉提供方和路由前缀、思考强度后缀，小写），第一条命中的算数。top 只给这里明确列出的；表里没有的，名字里带 light 关键词的归 light，其余归 mid。toolsWeak 命中的标「工具用得不稳」。初稿按 11-14 Windows 隔离副本里 mm 提供方的实际目录填，等 Fable 验收时过一遍。",
+  "rules": [
+    {"match": "^claude-opus-", "tier": "top"},
+    {"match": "^gpt-6(?:\\.\\d+)?-sol$", "tier": "top"},
+    {"match": "^gpt-6-astra$", "tier": "top"},
+    {"match": "^gemini-\\d+(?:\\.\\d+)?-pro(?:-preview)?$", "tier": "top"},
+    {"match": "^gemini-4-(?:argon|hydrogen)$", "tier": "top"},
+    {"match": "^grok-4\\.(?:6|7)$", "tier": "top"},
+    {"match": "^kimi-k3\\.1-pro$", "tier": "top"},
+    {"match": "^deepseek-v4-pro$", "tier": "mid"},
+    {"match": "^claude-sonnet-", "tier": "mid"},
+    {"match": "^claude-haiku-", "tier": "light"},
+    {"match": "^claude-3-5-haiku", "tier": "light"},
+    {"match": "^gpt-6-luna$", "tier": "light"},
+    {"match": "^hy4free$", "tier": "light"},
+    {"match": "^hy4std$", "tier": "mid"},
+    {"match": "^auto$", "tier": "mid"}
+  ],
+  "light": ["mini", "flash", "lite", "haiku", "luna", "nano", "small", "fast", "free", "turbo"],
+  "toolsWeak": ["^tab_", "^gpt-oss-", "-lite(?:-preview)?$", "^grok-3-mini", "non-reasoning", "^space-bunny$"]
+}
