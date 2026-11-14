@@ -81,7 +81,7 @@ export async function isolatedService() {
   };
   return {handler, store, routes, close: async () => { await store.lessons?.saveChain; await store.recall?.running; await materials.close(); fs.rmSync(root, {recursive: true, force: true}); }};
 }
-export async function startHarness({vendor = true, handler = () => ({}), realUI = false, legacyUI = false, initialMessages = [], routes = []} = {}) {
+export async function startHarness({vendor = true, handler = () => ({}), realUI = false, legacyUI = false, initialMessages = [], routes = [], port = 0} = {}) {
   const calls = [];
   const chatMessages = [...initialMessages], deskHistories = new Map();
   const injectionRoot = process.env.PINKIE_QA_INJECTION_ROOT || path.join(repo, 'ui/injections');
@@ -148,7 +148,7 @@ export async function startHarness({vendor = true, handler = () => ({}), realUI 
       });
     });
   }
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
   return {url: `http://127.0.0.1:${server.address().port}/chat?session=agent:learning:study-desk-qa`, calls, realUI, close: () => { for (const client of wss?.clients || []) client.terminate(); wss?.close(); return new Promise(resolve => server.close(resolve)); }};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

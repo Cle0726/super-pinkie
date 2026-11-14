@@ -39,7 +39,13 @@
    },
    "season1": true,
    "form": "原本的碧琪",
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "打气",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "unrestricted",
@@ -80,7 +86,13 @@
    },
    "season1": true,
    "form": "鬃毛尾巴变长、彩虹挑染、蹄上花纹",
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "double",
+    "name": "彩虹共鸣",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "alicorn",
@@ -122,7 +134,13 @@
     "stage": "form/alicorn/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "日光祝福",
+    "cost": 4,
+    "text": "答对 4 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "crystal",
@@ -164,7 +182,13 @@
     "stage": "form/crystal/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "水晶折光",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "seapony",
@@ -205,7 +229,13 @@
     "stage": "form/seapony/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "heal",
+    "name": "潮汐",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "kirin",
@@ -246,7 +276,13 @@
     "stage": "form/kirin/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "double",
+    "name": "麒麟火",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   }
   },
   {
    "id": "batpony",
@@ -287,7 +323,13 @@
     "stage": "form/batpony/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "eliminate",
+    "name": "回声定位",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "serious",
@@ -328,7 +370,13 @@
     "stage": "form/serious/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "eliminate",
+    "name": "较真",
+    "cost": 5,
+    "text": "答对 5 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "breezie",
@@ -370,7 +418,13 @@
     "stage": "form/breezie/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "顺风",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "changeling",
@@ -410,7 +464,13 @@
     "stage": "form/changeling/plate"
    },
    "season1": true,
-   "look": "transform"
+   "look": "transform",
+   "skill": {
+    "kind": "shield",
+    "name": "拟态",
+    "cost": 3,
+    "text": "答对 3 题攒满：下一次答错不掉心、不断连击"
+   }
   },
   {
    "id": "lidong",
@@ -451,7 +511,13 @@
    },
    "season1": true,
    "form": "红围巾把鬃毛扎成低马尾、毛线耳罩、卷毛尖挂霜",
-   "look": "outfit"
+   "look": "outfit",
+   "skill": {
+    "kind": "heal",
+    "name": "一杯热茶",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   }
   },
   {
    "id": "detective",
@@ -491,7 +557,13 @@
    },
    "season1": true,
    "form": "猎鹿帽压住卷毛只露刘海和低马尾、短披风、胸前挂放大镜",
-   "look": "outfit"
+   "look": "outfit",
+   "skill": {
+    "kind": "eliminate",
+    "name": "推理",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   }
   },
   {
    "id": "learning",
@@ -601,9 +673,13 @@
   {
    "id": "pirate",
    "name": "海盗船长碧琪",
-   "series": "mystery",
+   "series": "v4",
    "rarity": "SR",
-   "source": [],
+   "source": [
+    "shop",
+    "gacha-star",
+    "gacha-seal"
+   ],
    "palette": [
     "#F2C14E",
     "#3A2A35",
@@ -628,17 +704,29 @@
     "portrait": "form/pirate/portrait",
     "ult": "form/pirate/ult",
     "icon": "form/pirate/icon",
-    "idle": "form/pirate/idle"
+    "avatar": "form/pirate/avatar",
+    "idle": "form/pirate/idle",
+    "stage": "form/pirate/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "double",
+    "name": "双份宝藏",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   },
+   "look": "outfit",
+   "form": "酒红三角帽插大粉羽、鬃毛编成一条粗辫、金扣船长外套、胸前挂铜望远镜"
   },
   {
    "id": "astronaut",
    "name": "宇航员碧琪",
-   "series": "mystery",
+   "series": "v4",
    "rarity": "SR",
-   "source": [],
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
    "palette": [
     "#F7B6D2",
     "#1B2A5C",
@@ -663,10 +751,19 @@
     "portrait": "form/astronaut/portrait",
     "ult": "form/astronaut/ult",
     "icon": "form/astronaut/icon",
-    "idle": "form/astronaut/idle"
+    "avatar": "form/astronaut/avatar",
+    "idle": "form/astronaut/idle",
+    "stage": "form/astronaut/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "shield",
+    "name": "舱外护罩",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击"
+   },
+   "look": "outfit",
+   "form": "珍珠白配玫粉的宇航服、透明球形头盔、卷毛在头盔里失重飘起"
   },
   {
    "id": "dragon-rider",
@@ -776,9 +873,12 @@
   {
    "id": "knight",
    "name": "骑士碧琪",
-   "series": "royal",
+   "series": "v4",
    "rarity": "SR",
-   "source": [],
+   "source": [
+    "shop",
+    "gacha-star"
+   ],
    "palette": [
     "#F7A8C8",
     "#8C9BB0",
@@ -803,17 +903,30 @@
     "portrait": "form/knight/portrait",
     "ult": "form/knight/ult",
     "icon": "form/knight/icon",
-    "idle": "form/knight/idle"
+    "avatar": "form/knight/avatar",
+    "idle": "form/knight/idle",
+    "stage": "form/knight/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "shield",
+    "name": "举盾",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一次答错不掉心、不断连击；多 1 颗心",
+    "hearts": 1
+   },
+   "look": "outfit",
+   "form": "玫瑰金板甲、露脸头盔、鬃毛从盔顶冲成一束高马尾、绯红短披风"
   },
   {
    "id": "chef",
    "name": "甜点师碧琪",
-   "series": "royal",
+   "series": "v4",
    "rarity": "R",
-   "source": [],
+   "source": [
+    "shop",
+    "gacha-star"
+   ],
    "palette": [
     "#FFF4E0",
     "#F48FB1",
@@ -838,17 +951,29 @@
     "portrait": "form/chef/portrait",
     "ult": "form/chef/ult",
     "icon": "form/chef/icon",
-    "idle": "form/chef/idle"
+    "avatar": "form/chef/avatar",
+    "idle": "form/chef/idle",
+    "stage": "form/chef/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "heal",
+    "name": "甜点时间",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   },
+   "look": "outfit",
+   "form": "白色双排扣甜点师服、高帽下两团蓬蓬的丸子头、粉格领巾、鼻尖一点面粉"
   },
   {
    "id": "magical-girl",
    "name": "魔法少女碧琪",
-   "series": "magic",
+   "series": "v4",
    "rarity": "SSR",
-   "source": [],
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
    "palette": [
     "#FF6FAE",
     "#FFD1E8",
@@ -873,17 +998,29 @@
     "portrait": "form/magical-girl/portrait",
     "ult": "form/magical-girl/ult",
     "icon": "form/magical-girl/icon",
-    "idle": "form/magical-girl/idle"
+    "avatar": "form/magical-girl/avatar",
+    "idle": "form/magical-girl/idle",
+    "stage": "form/magical-girl/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "heal",
+    "name": "治愈之光",
+    "cost": 4,
+    "text": "答对 4 题攒满：回 1 颗心"
+   },
+   "look": "transform",
+   "form": "星星缎带扎的双马尾、发尾渐变成发光的淡紫、背后一对光之缎带翼、心形宝石胸针"
   },
   {
    "id": "astrologer",
    "name": "星砂占星师碧琪",
-   "series": "magic",
+   "series": "v4",
    "rarity": "SSR",
-   "source": [],
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
    "palette": [
     "#1F1B4D",
     "#B9A4FF",
@@ -908,17 +1045,29 @@
     "portrait": "form/astrologer/portrait",
     "ult": "form/astrologer/ult",
     "icon": "form/astrologer/icon",
-    "idle": "form/astrologer/idle"
+    "avatar": "form/astrologer/avatar",
+    "idle": "form/astrologer/idle",
+    "stage": "form/astrologer/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "观星",
+    "cost": 3,
+    "text": "答对 3 题攒满：这道选择题排除两个错项"
+   },
+   "look": "transform",
+   "form": "鬃毛和尾巴变成缓缓流动的星砂（洋红渐变到深蓝）、银河里衬的午夜蓝斗篷、新月额饰、星盘吊坠"
   },
   {
    "id": "zhuangyuan",
    "name": "古风状元碧琪",
-   "series": "east",
+   "series": "v4",
    "rarity": "SSR",
-   "source": [],
+   "source": [
+    "seal-shop",
+    "gacha-seal"
+   ],
    "palette": [
     "#C8102E",
     "#1F1A17",
@@ -943,17 +1092,29 @@
     "portrait": "form/zhuangyuan/portrait",
     "ult": "form/zhuangyuan/ult",
     "icon": "form/zhuangyuan/icon",
-    "idle": "form/zhuangyuan/idle"
+    "avatar": "form/zhuangyuan/avatar",
+    "idle": "form/zhuangyuan/idle",
+    "stage": "form/zhuangyuan/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "破题",
+    "cost": 3,
+    "text": "答对 3 题攒满：这道选择题排除两个错项"
+   },
+   "look": "outfit",
+   "form": "大红金云纹圆领袍、簪金花的乌纱帽、胸前大红绸花、鬃毛盘成高髻留两缕卷鬓"
   },
   {
    "id": "idol",
    "name": "偶像碧琪",
-   "series": "stage",
+   "series": "v4",
    "rarity": "SR",
-   "source": [],
+   "source": [
+    "shop",
+    "gacha-seal"
+   ],
    "palette": [
     "#FF8AC2",
     "#7C4DFF",
@@ -978,17 +1139,29 @@
     "portrait": "form/idol/portrait",
     "ult": "form/idol/ult",
     "icon": "form/idol/icon",
-    "idle": "form/idol/idle"
+    "avatar": "form/idol/avatar",
+    "idle": "form/idol/idle",
+    "stage": "form/idol/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "double",
+    "name": "安可",
+    "cost": 4,
+    "text": "答对 4 题攒满：下一题答对星星翻倍"
+   },
+   "look": "outfit",
+   "form": "星星发夹扎的高侧马尾、白粉亮片打歌服、背后大蝴蝶结、耳麦"
   },
   {
    "id": "cyber",
    "name": "赛博荧光碧琪",
-   "series": "tech",
+   "series": "v4",
    "rarity": "SR",
-   "source": [],
+   "source": [
+    "gacha-star",
+    "gacha-seal"
+   ],
    "palette": [
     "#0E0B1F",
     "#FF3EA5",
@@ -1013,17 +1186,29 @@
     "portrait": "form/cyber/portrait",
     "ult": "form/cyber/ult",
     "icon": "form/cyber/icon",
-    "idle": "form/cyber/idle"
+    "avatar": "form/cyber/avatar",
+    "idle": "form/cyber/idle",
+    "stage": "form/cyber/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "eliminate",
+    "name": "全频扫描",
+    "cost": 4,
+    "text": "答对 4 题攒满：这道选择题排除两个错项"
+   },
+   "look": "outfit",
+   "form": "侧分不对称卷发里有青与粉的荧光发丝、黑色机能短外套、推到额头的透明护目镜、颈挂耳机"
   },
   {
    "id": "ninja",
    "name": "忍者碧琪",
-   "series": "tech",
+   "series": "v4",
    "rarity": "R",
-   "source": [],
+   "source": [
+    "shop",
+    "gacha-star"
+   ],
    "palette": [
     "#F7A8C8",
     "#2B2340",
@@ -1048,17 +1233,28 @@
     "portrait": "form/ninja/portrait",
     "ult": "form/ninja/ult",
     "icon": "form/ninja/icon",
-    "idle": "form/ninja/idle"
+    "avatar": "form/ninja/avatar",
+    "idle": "form/ninja/idle",
+    "stage": "form/ninja/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "shield",
+    "name": "替身术",
+    "cost": 5,
+    "text": "答对 5 题攒满：下一次答错不掉心、不断连击"
+   },
+   "look": "outfit",
+   "form": "靛蓝忍装配洋红腰带、面罩拉到颈间、护额、鬃毛扎成高马尾"
   },
   {
    "id": "xiaoxue",
    "name": "小雪碧琪",
    "series": "season",
    "rarity": "limited",
-   "source": [],
+   "source": [
+    "limited:xiaoxue"
+   ],
    "palette": [
     "#E3F2FD",
     "#F48FB1",
@@ -1084,10 +1280,19 @@
     "portrait": "form/xiaoxue/portrait",
     "ult": "form/xiaoxue/ult",
     "icon": "form/xiaoxue/icon",
-    "idle": "form/xiaoxue/idle"
+    "avatar": "form/xiaoxue/avatar",
+    "idle": "form/xiaoxue/idle",
+    "stage": "form/xiaoxue/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "heal",
+    "name": "围炉",
+    "cost": 5,
+    "text": "答对 5 题攒满：回 1 颗心"
+   },
+   "look": "outfit",
+   "form": "冰蓝白毛领短斗篷、红绳扎的两条低辫、雪花发簪和一小枝红果、白绒短靴"
   },
   {
    "id": "daxue",
@@ -1130,7 +1335,9 @@
    "name": "毕业碧琪",
    "series": "honor",
    "rarity": "exclusive",
-   "source": [],
+   "source": [
+    "achievement:realPass"
+   ],
    "palette": [
     "#1A1A2E",
     "#F2C14E",
@@ -1154,10 +1361,19 @@
     "portrait": "form/graduate/portrait",
     "ult": "form/graduate/ult",
     "icon": "form/graduate/icon",
-    "idle": "form/graduate/idle"
+    "avatar": "form/graduate/avatar",
+    "idle": "form/graduate/idle",
+    "stage": "form/graduate/plate"
    },
-   "season1": false,
-   "retired": true
+   "season1": true,
+   "skill": {
+    "kind": "double",
+    "name": "上岸",
+    "cost": 3,
+    "text": "答对 3 题攒满：下一题答对星星翻倍"
+   },
+   "look": "outfit",
+   "form": "藏青学位袍配粉缎兜帽、金穗学位帽、鬃毛梳成顺滑的侧分波浪、粉绶带金奖章"
   },
   {
    "id": "gold-master",

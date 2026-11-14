@@ -95,7 +95,14 @@
   };
   // 命中招式：形态目录的 hit 字段 → [底层配方, 额外层]。fx.hit(name, 目标, {crit, palette, angle, form})。
   const HITS = {
-    pop: ['confetti', [streaks(12)]], stamp: ['ink', [ring(.8, {c: [2]})]], shard: ['crystal', []],
+    pop: ['confetti', [streaks(12)]], shard: ['crystal', []],
+    // 商店的命中特效（hit:<名字>）。每个一套自己的材质和动势，配色由 laolao-game-loadout.js 给。
+    stamp: ['ink', [ring(.9, {c: [2]}), L(E.FOIL, 12, {sp: [260, 700], life: [1, 1.6], size: [5, 9], aspect: .7, g: 520, drag: 2, tumble: [5, 11], c: [2]}), L(E.PILLAR, 1, {life: [.3, .36], size: [60, 70], c: [2]})]],
+    ink: ['ink', [crescent(1.2, {c: [2], normal: true}), crescent(.8, {c: [2], normal: true, delay: .07}), L(E.INK, 16, {sp: [260, 760], life: [.4, .8], size: [4, 10], g: 640, drag: 2.6, c: [2]})]],
+    star: ['stars', [glints(10, {size: [30, 64]}), L(E.RING, 1, {life: [.5, .6], size: [150, 170], c: [0]}), streaks(14, {sp: [500, 1200], c: ['h', 0]})]],
+    bubble: ['bubbles', [L(E.RIPPLE, 2, {life: [.45, .6], size: [110, 170], c: [0, 1], delay: [0, .08]}), L(E.BUBBLE, 10, {sp: [200, 520], life: [.6, 1.1], size: [8, 18], g: -60, drag: 2.4, c: [0, 2]})]],
+    petal: ['petals', [crescent(.95, {c: [1]}), L(E.PETAL, 14, {sp: [300, 760], life: [1, 1.8], size: [9, 15], aspect: .72, g: 120, drag: 2.4, turb: [30, 2], spin: [-3, 3], tumble: [3, 7], c: [0, 1]})]],
+    neon: ['neon', [L(E.ARC, 4, {life: [.12, .22], size: [90, 170], c: [0, 1], randomAngle: true}), L(E.NEON, 14, {sp: [400, 1000], life: [.25, .5], size: [2, 4], aspect: [10, 22], drag: 4, alignV: true, c: [1, 2]}), ring(.55, {c: [1]})]],
     rainbow: ['sparkle', [streaks(20, {c: ['#ff6f9f', '#ffd36e', '#6fd3ff', '#9be27f']})]], lens: ['sparkle', [flash(1.3), glints(8, {size: [30, 64]})]],
     coin: ['coins', []], ping: ['sparkle', [L(E.RIPPLE, 1, {life: [.5, .6], size: [140, 160], c: [0]})]], flame: ['embers', []], carpet: ['gold', [streaks(10)]],
     sparkle: ['sparkle', []], slash: ['sparkle', [crescent(1)]], sprinkle: ['confetti', []], heart: ['hearts', []], constellation: ['stars', [glints(10)]],
@@ -823,7 +830,7 @@
   // 命中：闪光 + 冲击环 + 形态的碎屑 + 招式特有的一层；暴击加顿帧、震屏、第二道环和更快的火花。
   async function hit(name = 'sparkle', at, opts = {}) {
     const def = HITS[name] || HITS.sparkle, spec = KINDS[def[0]] || KINDS.sparkle, crit = Boolean(opts.crit);
-    if (opts.sound !== false) sfx(crit ? 'crit' : 'hit', {form: opts.form});
+    if (opts.sound !== false) { if (opts.sfxName) { sfx(opts.sfxName, {form: opts.form, crit}); if (crit) sfx('crit', {form: opts.form}); } else sfx(crit ? 'crit' : 'hit', {form: opts.form}); }
     if (crit) { shake(opts.shake ?? 1.1); hitstop(opts.hitstop ?? 80); }
     const ok = await begin(); if (ok === false) return 0; if (ok === null) return domBurst(def[0], at, opts);
     const k = crit ? 1.35 : 1;
@@ -1186,6 +1193,36 @@
       case 'levelup': voice(ctx, {type: 'sine', freq: base * .5, dur: 1, level: .07, wet: .4}); [1, 1.25, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * r, at: i * .07, dur: .9, level: .07, wet: .55})); break;
       case 'boss-hit': voice(ctx, {type: 'sine', freq: 75, to: 35, dur: .5, level: .5, wet: .2}); noiseHit(ctx, {dur: .3, level: .35, freq: 400, q: .4, type: 'lowpass'}); break;
       case 'miss': voice(ctx, {type: 'sine', freq: 392, to: 330, dur: .22, level: .07, wet: .2}); break;
+      // 商店的命中特效各有自己的声音（loadout 传 sfxName）：笔尖划纸 / 玻璃星响 / 泡泡啵 / 花瓣拂过 / 霓虹电音 / 印章落下
+      case 'hit-ink': sweep(ctx, {dur: .11, from: 6200, to: 1400, level: .16, q: 2.2, rise: false, wet: .05}); noiseHit(ctx, {at: .07, dur: .05, level: .12, freq: 900, q: .7, type: 'lowpass', wet: .05}); voice(ctx, {type: 'triangle', freq: 311, to: 233, at: .06, dur: .12, level: .1, wet: .1}); break;
+      case 'hit-star': [1, 1.5, 2, 3].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: 1046 * r, at: i * .028, dur: .5, level: .05, wet: .6})); noiseHit(ctx, {dur: .02, level: .08, freq: 7000, type: 'highpass', wet: .2}); break;
+      case 'hit-bubble': voice(ctx, {type: 'sine', freq: 280, to: 880, dur: .07, level: .2, wet: .1, attack: .002}); voice(ctx, {type: 'sine', freq: 620, to: 1500, at: .075, dur: .05, level: .1, wet: .25, attack: .002}); noiseHit(ctx, {at: .07, dur: .012, level: .1, freq: 3000, type: 'highpass', wet: 0}); break;
+      case 'hit-petal': sweep(ctx, {dur: .22, from: 800, to: 3200, level: .07, q: .5, wet: .4}); voice(ctx, {type: 'sine', partials: [1, 4], freq: 784, at: .05, dur: .5, level: .06, wet: .6}); voice(ctx, {type: 'sine', partials: [1, 4], freq: 1175, at: .12, dur: .5, level: .04, wet: .6}); break;
+      case 'hit-neon': voice(ctx, {type: 'sawtooth', partials: [1, 1.005], freq: 1760, to: 220, dur: .13, level: .09, wet: .15}); voice(ctx, {type: 'square', freq: 110, to: 55, dur: .1, level: .07, wet: 0}); noiseHit(ctx, {dur: .03, level: .12, freq: 5200, q: 4, wet: .1}); break;
+      case 'hit-stamp': voice(ctx, {type: 'sine', freq: 130, to: 52, dur: .22, level: .42, wet: 0}); noiseHit(ctx, {dur: .05, level: .26, freq: 600, q: .5, type: 'lowpass', wet: .05}); noiseHit(ctx, {at: .012, dur: .02, level: .14, freq: 3200, type: 'highpass', wet: 0}); voice(ctx, {type: 'triangle', freq: 392, at: .05, dur: .16, level: .05, wet: .3}); break;
+      // 结算动画的声音：烟花升空炸开 / 彩带抖开 / 立体书翻开
+      case 'firework': sweep(ctx, {dur: .28, from: 500, to: 2600, level: .06, q: 3, wet: .2}); noiseHit(ctx, {at: .28, dur: .3, level: .2, freq: 1800, q: .4, wet: .5}); voice(ctx, {type: 'sine', freq: 90, to: 45, at: .28, dur: .3, level: .25, wet: .2}); [1, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76], freq: base * 2 * r * (opts.pitch2 || 1), at: .3 + i * .04, dur: .7, level: .035, wet: .7})); break;
+      case 'ribbon': sweep(ctx, {dur: .35, from: 3000, to: 700, level: .09, q: .6, rise: false, wet: .3}); [1, 1.25, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'triangle', partials: [1, 2, 3], freq: base * r, at: .1 + i * .07, dur: .35, level: .06, wet: .4})); break;
+      case 'popup': noiseHit(ctx, {dur: .08, level: .16, freq: 1200, q: .6, wet: .1}); sweep(ctx, {at: .03, dur: .2, from: 400, to: 2400, level: .07, q: .8, wet: .2}); voice(ctx, {type: 'sine', partials: [1, 3, 4.2], freq: base * 1.5, at: .2, dur: .8, level: .07, wet: .6}); voice(ctx, {type: 'sine', partials: [1, 3, 4.2], freq: base * 2, at: .28, dur: .8, level: .05, wet: .6}); break;
+      // 作答页（v4 舞台）：界面声要轻、短、有音高；受击 / 击破 / 逃跑 / 评级各一套
+      case 'ui-hover': voice(ctx, {type: 'sine', freq: 1760, dur: .05, level: .018, wet: .15, attack: .002}); break;
+      case 'ui-pick': voice(ctx, {type: 'sine', partials: [1, 2], freq: 880, to: 1046, dur: .09, level: .06, wet: .2}); noiseHit(ctx, {dur: .012, level: .04, freq: 5200, type: 'highpass', wet: 0}); break;
+      case 'ui-go': voice(ctx, {type: 'triangle', freq: 392, to: 784, dur: .13, level: .08, wet: .25}); sweep(ctx, {dur: .16, from: 900, to: 3600, level: .05, q: .6, wet: .2}); break;
+      case 'ui-next': voice(ctx, {type: 'sine', freq: 660, dur: .06, level: .05, wet: .2}); voice(ctx, {type: 'sine', freq: 990, at: .055, dur: .1, level: .05, wet: .3}); break;
+      case 'hurt': voice(ctx, {type: 'sine', freq: 196, to: 98, dur: .26, level: .3, wet: .1}); noiseHit(ctx, {dur: .09, level: .18, freq: 900, q: .5, type: 'lowpass', wet: .1}); voice(ctx, {type: 'triangle', freq: 330, to: 262, at: .04, dur: .2, level: .06, wet: .25}); break;
+      case 'defeat': noiseHit(ctx, {dur: .2, level: .2, freq: 1400, q: .5, wet: .3}); voice(ctx, {type: 'sine', freq: 110, to: 48, dur: .34, level: .34, wet: .1});
+        [1, 1.5, 2, 3].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76], freq: base * r, at: .06 + i * .05, dur: .5, level: .05, wet: .6})); break;
+      case 'flee': sweep(ctx, {dur: .3, from: 2200, to: 500, level: .09, q: .7, rise: false, wet: .3}); voice(ctx, {type: 'sine', freq: 520, to: 300, dur: .26, level: .05, wet: .3}); break;
+      case 'rank': { const lv = opts.rank === 'S' ? 4 : opts.rank === 'A' ? 3 : opts.rank === 'B' ? 2 : 1; voice(ctx, {type: 'sine', freq: 120, to: 50, dur: .3, level: .45, wet: .1}); noiseHit(ctx, {dur: .1, level: .25, freq: 800, type: 'lowpass', wet: .15});
+        [1, 1.25, 1.5, 2, 2.5].slice(0, lv + 1).forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * r, at: .12 + i * .08, dur: 1 + lv * .2, level: .06, wet: .6}));
+        if (lv >= 3) sweep(ctx, {at: .1, dur: .6, from: 500, to: 5200, level: .06, wet: .5}); break; }
+      // 战斗（v4 第二批）：回心 / 技能攒满 / 放技能 / 挡住 / 倒地
+      case 'heal': [1, 1.25, 1.5].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2], freq: 660 * r, at: i * .07, dur: .4, level: .07, wet: .5})); sweep(ctx, {dur: .3, from: 700, to: 3000, level: .04, q: .6, wet: .4}); break;
+      case 'skill-ready': voice(ctx, {type: 'sine', partials: [1, 2.76], freq: 1318, dur: .35, level: .06, wet: .5}); voice(ctx, {type: 'sine', partials: [1, 2.76], freq: 1760, at: .09, dur: .5, level: .06, wet: .6}); break;
+      case 'skill': sweep(ctx, {dur: .25, from: 300, to: 4200, level: .1, q: .8, wet: .3}); voice(ctx, {type: 'triangle', freq: base, to: base * 2, dur: .2, level: .1, wet: .3}); [1, 1.5, 2].forEach((r, i) => voice(ctx, {type: 'sine', partials: [1, 2.76, 5.4], freq: base * 2 * r, at: .18 + i * .05, dur: .7, level: .05, wet: .6})); break;
+      case 'guard': voice(ctx, {type: 'sine', partials: [1, 2.4, 5.1], freq: 880, dur: .5, level: .12, wet: .5}); noiseHit(ctx, {dur: .04, level: .16, freq: 2600, q: 2, wet: .2}); voice(ctx, {type: 'sine', freq: 150, to: 90, dur: .16, level: .2, wet: .1}); break;
+      case 'down': voice(ctx, {type: 'sine', freq: 160, to: 46, dur: .6, level: .36, wet: .15}); noiseHit(ctx, {at: .1, dur: .22, level: .18, freq: 500, q: .5, type: 'lowpass', wet: .2}); [1, .84, .75].forEach((r, i) => voice(ctx, {type: 'triangle', freq: 392 * r, at: .12 + i * .16, dur: .34, level: .06, wet: .4})); break;
+      case 'tally': voice(ctx, {type: 'sine', freq: 1318 * (1 + (opts.n || 0) * .06), dur: .05, level: .035, wet: .2}); break;
       default: return false;
     }
     return true;

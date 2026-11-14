@@ -1,0 +1,72 @@
+/* 碧琪上岸记 · 装备生效（v4）。配 laolao-game-loadout.js：徽记、书封小样、四种结算动画。只动 transform / opacity。 */
+#pinkie-study-desk .pkl-emblem{position:relative;display:grid;place-items:center;width:64%;aspect-ratio:1;color:#fff;--a:#F7A8C8;--b:#DB1F74;--c:#FFE36E;transition:transform .45s cubic-bezier(.2,.9,.2,1)}
+#pinkie-study-desk .pkl-emblem.is-sm{width:34px}
+#pinkie-study-desk .pkl-emblem__svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 8px 12px color-mix(in srgb,var(--b) 45%,transparent))}
+#pinkie-study-desk .pkl-emblem .rim{stroke:var(--c);stroke-width:1.600;opacity:.75;stroke-dasharray:6 5;transform-origin:32px 32px;animation:pkl-rim 14s linear infinite}
+#pinkie-study-desk .pkl-emblem .motif{transform-origin:32px 32px}
+@keyframes pkl-rim{to{transform:rotate(360deg)}}
+/* 每一类一个待机小动作：命中 = 顿一下；粒子 = 浮；大招 = 慢转；结算 = 弹 */
+#pinkie-study-desk .pkl-emblem[data-slot="hit"] .motif{animation:pkl-jab 2.4s cubic-bezier(.3,0,.2,1) infinite}
+#pinkie-study-desk .pkl-emblem[data-slot="particles"] .motif{animation:pkl-float 3.2s ease-in-out infinite}
+#pinkie-study-desk .pkl-emblem[data-slot="ult"] .pkl-emblem__svg{animation:pkl-turn 9s ease-in-out infinite}
+#pinkie-study-desk .pkl-emblem[data-slot="result"] .motif{animation:pkl-pop 2.800s cubic-bezier(.3,1.5,.4,1) infinite}
+@keyframes pkl-jab{0%,70%,100%{translate:0 0;scale:1}78%{translate:-3px 3px;scale:.92}86%{translate:4px -4px;scale:1.12}}
+@keyframes pkl-float{0%,100%{translate:0 2px}50%{translate:0 -3px}}
+@keyframes pkl-turn{0%,100%{rotate:-6deg}50%{rotate:6deg}}
+@keyframes pkl-pop{0%,72%,100%{scale:1}82%{scale:1.16}}
+#pinkie-study-desk :is(.pks-sku,.pks-dex__card,.pks-card):hover .pkl-emblem{transform:translateY(-3px) scale(1.06)}
+/* 书封小样 */
+#pinkie-study-desk .pkl-emblem.is-cover{width:58%;aspect-ratio:3/4}
+#pinkie-study-desk .pkl-cover{position:absolute;inset:0;border-radius:4px 9px 9px 4px;box-shadow:0 12px 18px -8px rgba(40,16,36,.5),inset 0 0 0 1px rgba(255,255,255,.25);overflow:hidden;transform:perspective(500px) rotateY(-14deg);transition:transform .5s cubic-bezier(.2,.9,.2,1)}
+#pinkie-study-desk :is(.pks-sku,.pks-dex__card):hover .pkl-cover{transform:perspective(500px) rotateY(-28deg)}
+#pinkie-study-desk .pkl-cover__spine{position:absolute;inset:0 auto 0 0;width:11%;background:linear-gradient(90deg,rgba(0,0,0,.28),rgba(0,0,0,0))}
+#pinkie-study-desk .pkl-cover__label{position:absolute;left:24%;right:16%;top:16%;height:20%;border-radius:2px;background:rgba(255,255,255,.82);box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+/* 货架上的一句话和试玩键 */
+#pinkie-study-desk .pks-pv.is-fx{background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--pv-a,#F7A8C8) 26%,transparent),transparent 68%),var(--pkg-card-solid,#fff)}
+#pinkie-study-desk .pkl-tag{display:block;margin-top:3px;font:500 11.500px/1.45 var(--pk-sans,system-ui);color:var(--pkg-ink-3,#8a7d86)}
+#pinkie-study-desk .pkl-try{appearance:none;position:absolute;right:8px;bottom:8px;z-index:2;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;border:0;border-radius:13px;background:rgba(36,23,31,.82);color:#fff;font:700 11px/1 var(--pk-sans,system-ui);letter-spacing:.08em;cursor:pointer;opacity:.0;transform:translateY(4px);transition:opacity .2s,transform .3s cubic-bezier(.2,.9,.2,1),background .2s}
+#pinkie-study-desk .pkl-try svg{width:11px;height:11px;fill:currentColor}
+#pinkie-study-desk :is(.pks-sku,.pks-dex__card):is(:hover,:focus-within) .pkl-try,#pinkie-study-desk .pkl-try:focus-visible{opacity:1;transform:none}
+#pinkie-study-desk .pkl-try:hover{background:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkl-try:active{transform:scale(.94)}
+#pinkie-study-desk .pkl-try:focus-visible{outline:2px solid var(--pkg-b,#DB1F74);outline-offset:2px}
+@media (hover:none){#pinkie-study-desk .pkl-try{opacity:1;transform:none}}
+/* 衣橱装备栏：一排可点的徽记，代替下拉框 */
+#pinkie-study-desk .pkl-slot{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:10px;font-size:12.500px;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkl-slot__list{display:flex;flex-wrap:wrap;gap:6px}
+#pinkie-study-desk .pkl-pick{appearance:none;display:grid;place-items:center;width:44px;height:44px;padding:0;border-radius:11px;border:1px solid var(--pkg-line-2,#e6dcd6);background:var(--pkg-card-solid,#fff);cursor:pointer;transition:transform .25s cubic-bezier(.2,.9,.2,1),border-color .2s,box-shadow .2s}
+#pinkie-study-desk .pkl-pick:hover{transform:translateY(-2px)}
+#pinkie-study-desk .pkl-pick[aria-pressed="true"]{border-color:var(--pkg-b,#DB1F74);box-shadow:0 0 0 2px color-mix(in srgb,var(--pkg-b,#DB1F74) 28%,transparent)}
+#pinkie-study-desk .pkl-pick.is-auto{font:700 10.500px/1.15 var(--pk-sans,system-ui);color:var(--pkg-ink-3);letter-spacing:.04em}
+#pinkie-study-desk .pkl-pick:focus-visible{outline:2px solid var(--pkg-b,#DB1F74);outline-offset:2px}
+#pinkie-study-desk .pkl-pick .pkl-emblem{width:34px}
+#pinkie-study-desk .pkl-pick .pkl-emblem.is-cover{width:26px}
+#pinkie-study-desk .pkl-slot__now{grid-column:2;margin:-2px 0 4px;font-size:11.500px;color:var(--pkg-ink-3)}
+
+/* ───── 结算动画 ───── */
+#pinkie-study-desk .pkl-res-host{position:relative}
+#pinkie-study-desk .pkl-res{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:3}
+/* 烟花：一道上升的尾迹，炸开交给粒子引擎 */
+#pinkie-study-desk .pkl-rocket{position:absolute;bottom:0;width:3px;height:calc(100% - var(--y));margin-left:-1px;border-radius:2px;background:linear-gradient(to top,transparent,var(--tone) 70%,#fff);transform-origin:50% 100%;animation:pkl-rocket .3s cubic-bezier(.2,.7,.3,1) both}
+@keyframes pkl-rocket{0%{transform:scaleY(0);opacity:.9}80%{transform:scaleY(1);opacity:.9}100%{transform:scaleY(1);opacity:0}}
+/* 彩带：两条缎带从两边抖开，在上沿交汇 */
+#pinkie-study-desk .pkl-ribbon{position:absolute;top:-10px;height:34px;width:56%;display:grid;place-items:center;background:linear-gradient(180deg,var(--a),color-mix(in srgb,var(--a) 70%,#000));color:var(--c);font:800 12px/1 var(--pkg-latin,ui-sans-serif);letter-spacing:.34em;box-shadow:0 8px 14px -8px rgba(40,10,30,.6),inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 0 rgba(0,0,0,.14)}
+#pinkie-study-desk .pkl-ribbon::after{content:"";position:absolute;top:0;width:20px;height:100%;background:inherit}
+#pinkie-study-desk .pkl-ribbon.is-l{left:-4%;clip-path:polygon(0 0,100% 0,100% 100%,0 100%,14px 50%);transform-origin:0 50%;animation:pkl-ribl 2.800s cubic-bezier(.2,.9,.2,1) both}
+#pinkie-study-desk .pkl-ribbon.is-r{right:-4%;top:18px;background:linear-gradient(180deg,var(--b),color-mix(in srgb,var(--b) 70%,#000));color:#3a1a10;clip-path:polygon(0 0,100% 0,calc(100% - 14px) 50%,100% 100%,0 100%);transform-origin:100% 50%;animation:pkl-ribr 2.800s .08s cubic-bezier(.2,.9,.2,1) both}
+@keyframes pkl-ribl{0%{transform:translateX(-110%) rotate(-8deg);opacity:0}14%{transform:translateX(3%) rotate(2deg);opacity:1}20%{transform:rotate(-1.500deg)}26%,82%{transform:none;opacity:1}100%{transform:translateY(-14px);opacity:0}}
+@keyframes pkl-ribr{0%{transform:translateX(110%) rotate(8deg);opacity:0}14%{transform:translateX(-3%) rotate(-2deg);opacity:1}20%{transform:rotate(1.500deg)}26%,82%{transform:none;opacity:1}100%{transform:translateY(-14px);opacity:0}}
+/* 印章雨：一枚枚从上面盖下来，落定时压一下 */
+#pinkie-study-desk .pkl-seal{position:absolute;display:grid;place-items:center;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:9px;border:3.500px solid var(--a);color:var(--a);font:900 30px/1 var(--pkg-display,serif);background:color-mix(in srgb,var(--a) 7%,transparent);mix-blend-mode:multiply;animation:pkl-seal 2.600s cubic-bezier(.2,.9,.2,1) both}
+#pinkie-study-desk .pkl-seal:nth-child(3n){border-color:var(--b);color:var(--b)}
+#pinkie-study-desk .pkl-seal:nth-child(4n){border-radius:50%}
+@keyframes pkl-seal{0%{transform:translateY(-140px) rotate(var(--rot)) scale(2.200);opacity:0}6%{transform:rotate(var(--rot)) scale(.86);opacity:1}10%{transform:rotate(var(--rot)) scale(1.060)}14%,78%{transform:rotate(var(--rot)) scale(1);opacity:.9}100%{transform:rotate(var(--rot)) scale(1);opacity:0}}
+:root[data-theme-mode="dark"] #pinkie-study-desk .pkl-seal{mix-blend-mode:screen}
+/* 立体书：整张结算卡从平躺翻起来，几片纸折页跟着立起 */
+#pinkie-study-desk .pkl-popup{animation:pkl-popup 1.100s cubic-bezier(.2,1.250,.3,1) both;transform-origin:50% 100%}
+@keyframes pkl-popup{0%{transform:perspective(900px) rotateX(78deg) scale(.9);opacity:0}45%{transform:perspective(900px) rotateX(-8deg);opacity:1}70%{transform:perspective(900px) rotateX(3deg)}100%{transform:none}}
+#pinkie-study-desk .pkl-fold{position:absolute;bottom:100%;width:54px;height:calc(46px + var(--i) * 9px);margin-left:-27px;transform-origin:50% 100%;clip-path:polygon(50% 0,100% 100%,0 100%);background:linear-gradient(90deg,var(--a) 0 50%,color-mix(in srgb,var(--a) 72%,#000) 50%);animation:pkl-fold 2.300s calc(.2s + var(--i) * .07s) cubic-bezier(.2,1.400,.3,1) both}
+#pinkie-study-desk .pkl-fold:nth-child(2n){background:linear-gradient(90deg,var(--b) 0 50%,color-mix(in srgb,var(--b) 72%,#000) 50%)}
+#pinkie-study-desk .pkl-fold:nth-child(3n){background:linear-gradient(90deg,var(--c) 0 50%,color-mix(in srgb,var(--c) 72%,#000) 50%)}
+@keyframes pkl-fold{0%{transform:perspective(600px) rotateX(92deg);opacity:0}22%{transform:perspective(600px) rotateX(-10deg);opacity:1}32%,80%{transform:none;opacity:1}100%{transform:perspective(600px) rotateX(60deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){#pinkie-study-desk .pkl-emblem *,#pinkie-study-desk .pkl-emblem__svg{animation:none!important}}

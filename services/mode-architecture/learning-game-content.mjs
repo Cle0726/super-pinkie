@@ -242,8 +242,7 @@ export class GameContent {
   async line({event = 'default', context = {}} = {}) {
     void context;
     const date = this.game.today();
-    const {isQuiet} = await import('./learning-game.mjs');
-    const quiet = isQuiet(date);
+    const quiet = this.game.quiet(date);
     const ev = clean(event, 30) || 'default';
     const seed = Math.floor(this.game.now() / 60000);
     const key = `${date}|${quiet ? 1 : 0}`;
@@ -287,7 +286,7 @@ export class GameContent {
       const quests = q.list.map(x => ({id: x.id, kind: x.target.kind, count: x.target.count, meaning: (QUEST_MEANING[x.target.kind] || (n => `${x.text}（${n}）`))(x.target.count), draft: `${x.title}｜${x.text}`}));
       const recent = Object.entries(state.quests || {}).filter(([d, day]) => d < date && day?.text === 'model').sort(([a], [b]) => b.localeCompare(a)).slice(0, 3)
         .flatMap(([, day]) => day.list.map(x => `${x.title}｜${x.text}`));
-      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: isQuiet(date), quests, recent}, {validate: v => validQuestText(v, ids, counts), timeoutMs: 60000, maxTokens: 800});
+      const r = await modelJson(this.game.requestModel, QUEST_TEXT_RULES, {date, term: seasonOn(date)?.name || '', quiet: this.game.quiet(date), quests, recent}, {validate: v => validQuestText(v, ids, counts), timeoutMs: 60000, maxTokens: 800});
       this.game.mutate(s => {
         const day = s.quests?.[date];
         if (!day) return;
