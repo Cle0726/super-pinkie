@@ -7,7 +7,7 @@
   'use strict';
   if (window.PinkieArtifacts) return;
 
-  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted'};
+  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted', metre: 'metre'};
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');
   const isWindows = /Windows/i.test(navigator.userAgent || '') || document.documentElement.dataset.pinkiePlatform === 'windows';
   const revealLabel = () => isWindows ? '在文件夹中显示' : '在访达中显示';

@@ -7,6 +7,7 @@
     thinking: { label: "想法模式", agent: "thinking", avatar: "/laolao-mode-thinking-hd.png?v=avatars7" },
     learning: { label: "学习模式", agent: "learning", avatar: "/laolao-mode-learning-hd.png?v=avatars7" },
     unrestricted: { label: "无限制模式", agent: "unrestricted", avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7" },
+    metre: { label: "Metre", agent: "metre", avatar: "/laolao-mode-metre.svg?v=placeholder1" },
   };
 
   const activeMode = () => {
@@ -288,6 +289,7 @@
     thinking: "有什么想法，说给碧琪听听",
     learning: "先生，今天想学点什么？",
     unrestricted: "想说什么都可以～",
+    metre: "要做什么？",
   };
   const ensureComposerBrand = () => {
     const hint = COMPOSER_HINTS[document.documentElement.getAttribute("data-laolao-mode")] || "给碧琪发消息";

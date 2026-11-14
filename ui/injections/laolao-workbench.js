@@ -20,8 +20,8 @@
   const BASE = new URL('.', document.currentScript?.src || location.href).href;
   const MONACO = BASE + 'laolao-vendor-monaco/';
   const WORKERS = {json: 'json.worker-Csf_TLih.js', css: 'css.worker-BpD9FCKP.js', html: 'html.worker-CLuInTTy.js', ts: 'ts.worker-g3pjEjl4.js', editor: 'editor.worker-_vAIFJDs.js'};
-  const MODES = new Set(['project', 'learning', 'unrestricted']);
-  const MODE_NAME = {project: '项目模式', learning: '学习模式', unrestricted: '无限模式'};
+  const MODES = new Set(['project', 'learning', 'unrestricted', 'metre']);
+  const MODE_NAME = {project: '项目模式', learning: '学习模式', unrestricted: '无限模式', metre: 'Metre'};
   const TEXT_LIMIT = 8 * 1024 * 1024;
 
   /* ───────── 小工具 ───────── */
@@ -133,7 +133,7 @@
     return snapshot;
   }
   function publishContext(forMessage = false, key = sessionKey(), closed = false) {
-    if (!/^agent:(project|learning|unrestricted):/.test(key)) return Promise.resolve();
+    if (!/^agent:(project|learning|unrestricted|metre):/.test(key)) return Promise.resolve();
     if (!forMessage && !closed && contextBusy) return Promise.resolve();
     contextBusy++;
     const task = contextQueue.catch(()=>{}).then(async()=>{
@@ -150,7 +150,7 @@
   const contextSoon = debounce(()=>void publishContext().catch(()=>{}), 180);
   // 聊天发送流程会等待这一帧现场同步完成，避免用户刚运行出错就发送时读到旧状态。
   window.__pinkieWorkbench.flushContext = async key => {
-    if (/^agent:(project|learning|unrestricted):/.test(key) && wanted() && key === sessionKey() && (state.key !== key || !state.info?.root)) await switchSession(key);
+    if (/^agent:(project|learning|unrestricted|metre):/.test(key) && wanted() && key === sessionKey() && (state.key !== key || !state.info?.root)) await switchSession(key);
     return publishContext(true, key);
   };
 
@@ -278,7 +278,7 @@
   const mainContent = () => document.querySelector('main.content.content--chat');
   function wanted() {
     const mode = document.documentElement.dataset.laolaoMode || '';
-    return MODES.has(mode) && !document.documentElement.matches('[data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]') && /\/chat\/?$/.test(location.pathname) && !!mainContent() && innerWidth >= 600 && /^agent:(project|learning|unrestricted):/.test(sessionKey());
+    return MODES.has(mode) && !document.documentElement.matches('[data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]') && /\/chat\/?$/.test(location.pathname) && !!mainContent() && innerWidth >= 600 && /^agent:(project|learning|unrestricted|metre):/.test(sessionKey());
   }
   const sessionKey = () => new URLSearchParams(location.search).get('session') || '';
   function sync() {

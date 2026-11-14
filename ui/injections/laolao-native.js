@@ -39,9 +39,9 @@
     const rpc = window.__laolaoSidebar?.gwRequest;
     return typeof rpc === 'function' ? rpc(method, params, timeout) : Promise.reject(new Error('网关未连接'));
   };
-  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted'};
+  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted', metre: 'metre'};
   const AGENT_MODE = Object.fromEntries(Object.entries(MODE_AGENT).map(([mode, agent]) => [agent, mode]));
-  const MODE_LABEL = {chat: '唠嗑', project: '项目', thinking: '想法', learning: '学习', unrestricted: '无限制'};
+  const MODE_LABEL = {chat: '唠嗑', project: '项目', thinking: '想法', learning: '学习', unrestricted: '无限制', metre: 'Metre'};
   const agentOf = key => /^agent:([^:]+):/.exec(String(key || ''))?.[1] || '';
   const modeOf = key => AGENT_MODE[agentOf(key)] || '';
   const currentKey = () => new URL(location.href).searchParams.get('session') || '';
