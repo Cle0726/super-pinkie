@@ -14,9 +14,14 @@ import collections
 import glob
 import json
 import os
+import sys
 
 
 def main():
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')  # Windows 控制台默认不是 UTF-8
+    except Exception:
+        pass
     ap = argparse.ArgumentParser()
     ap.add_argument('--state', default=os.path.expanduser('~/.openclaw'))
     ap.add_argument('--last', type=int, default=60, help='只看最近多少个会话文件')
@@ -39,7 +44,7 @@ def main():
     replies = 0
 
     for path in files:
-        for line in open(path, errors='ignore'):
+        for line in open(path, encoding='utf-8', errors='ignore'):
             try:
                 o = json.loads(line)
             except Exception:
@@ -113,7 +118,7 @@ def main():
             print(f'      例：{s}')
     print('模型：', out['models'])
     if a.json:
-        with open(a.json, 'w') as f:
+        with open(a.json, 'w', encoding='utf-8') as f:
             json.dump(out, f, ensure_ascii=False, indent=1)
 
 

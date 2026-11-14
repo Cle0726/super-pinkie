@@ -1,0 +1,12 @@
+[
+ {"id": "1", "messages": ["查 2026 年世界职业院校技能大赛人工智能赛道的金奖项目，给出 3 个来源网址并各摘一段原文"]},
+ {"id": "2", "messages": ["逐个读这 5 个网页，各给出正文前 200 字：\nhttps://www.sohu.com/\nhttp://www.moe.gov.cn/\nhttp://jyt.gxzf.gov.cn/\nhttps://zhuanlan.zhihu.com/\nhttps://www.bilibili.com/read/home"]},
+ {"id": "3", "messages": ["{TEMP}\\th-test\\ 下有 3 张图（note-1.png、note-2.png、note-3.png），把每张图里的字读出来"]},
+ {"id": "4a", "messages": ["{FIX}\\scan-book.pdf 是一本扫描书，读第 1–15 页，列出目录"]},
+ {"id": "4b", "messages": ["{FIX}\\scan-book.pdf 是一本扫描书，帮我看看讲了什么"]},
+ {"id": "5", "timeout": 600, "messages": ["在后台跑这个命令：python -c \"import time; time.sleep(40); print('done-40s')\"，跑的同时告诉我 1 到 100 的和是多少，等它跑完再告诉我它输出了什么"]},
+ {"id": "6", "messages": ["用 app_browser 在 {FIX}\\site 起一个本地静态页（端口 8765），打开它，等 id 为 go 的按钮出现（最多 4 秒）再点它，告诉我页面上 msg 那行变成了什么"]},
+ {"id": "7", "messages": ["上次我们说技能大赛说到哪了"]},
+ {"id": "8", "agent": "project", "messages": ["在 {FIX}\\proj 这个小项目里，找出所有调用 send_order 的地方，读这 4 个文件，告诉我哪个有问题"]},
+ {"id": "9", "messages": ["今天好累"]}
+]
