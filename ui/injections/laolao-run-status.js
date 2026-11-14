@@ -26,6 +26,20 @@
     view: '碧琪在看图片…', shot: '碧琪在截图…', dispatch: '碧琪在派发子会话…', wait: '在等子会话做完',
     review: '在验收子会话交回来的活', manage: '碧琪在整理会话…', models: '碧琪在看可用模型…', memory: '在翻项目记忆…',
   };
+  // Metre（PLAN 2.10）：平实说法，不带碧琪口吻；干哪一类活用和舞台同一张表（laolao-tool-kind.js 的 ING）。
+  const METRE_PHRASE = {thinking: '思考中', working: '在处理', writing: '正在回复', asking: '等你确认', done: '完成', stopped: '已停下'};
+  // 没细分类别的工具，Metre 按工具名给一句平实的说法（PLAN 2.10：「思考中」「正在读取」…）。
+  const METRE_TOOL_WORD = [
+    [/^(?:read|workbench_read|code_search|code_refs|code_check|grep|glob|ls|find|pinkie_session_list|learning_library|clekk_memory)$/, '正在读取'],
+    [/^(?:web_search|web_fetch|pinkie_search|browser|app_browser|web_gpt_activity)$/, '正在搜索'],
+    [/^(?:write|edit|apply_patch|code_edit|multi_edit)$/, '正在修改'],
+    [/^(?:exec|bash|process|run_tests)$/, '正在执行命令'],
+    [/^(?:computer|computer_flow)$/, '正在操作电脑'],
+    [/^(?:pinkie_session_message)$/, '在给子会话发消息'],
+    [/^(?:plan_update)$/, '在更新计划'],
+  ];
+  const metreToolWord = (name) => (METRE_TOOL_WORD.find(([re]) => re.test(String(name || ''))) || [null, ''])[1];
+  const metreToolPhrase = (kind) => (kind === 'wait' ? '在等子会话' : kind === 'review' ? '在验收' : (window.__pinkieToolKind?.ING?.[kind] || ''));
   const RUN_KINDS = new Set(['wait', 'review']);
   const USUAL_KINDS = new Set(['review', 'fix', 'alt', 'recheck', 'trial', 'remedy', 'bg']);
   const SKIPPABLE = new Set(['review', 'fix', 'alt', 'recheck', 'trial', 'remedy']);
@@ -119,27 +133,32 @@
     const active = Boolean(live.active || status?.active);
     const hidden = {visible: false, text: '', meta: '', sticker: 'thinking', tone: 'run', actions: [], kind: '', slow: false};
     const elapsed = live.startedAt ? `已用 ${duration(now - live.startedAt)}` : '';
+    const metre = Boolean(input.metre);
+    const P = metre ? METRE_PHRASE : PHRASE;
+    const TP = metre ? new Proxy({}, {get: (_, kind) => metreToolPhrase(kind)}) : TOOL_PHRASE;
+    // Metre 的状态条常驻（猫一直在），空闲时只有猫和记忆芯片，没有字。
+    const idle = metre ? {...hidden, visible: true, kind: 'idle', tone: 'idle', sticker: 'idle'} : hidden;
 
     const justEnded = ended && now - Number(ended.at || 0) <= SHOW_STOPPED_MS;
     if (conn.online === false) {
-      if (!active && !justEnded) return hidden;
+      if (!active && !justEnded) return metre ? {...idle, kind: 'offline-idle', sticker: 'stopped'} : hidden;
       return {...hidden, visible: true, kind: 'offline', tone: 'warn', sticker: 'oops',
         text: `连接断了，正在重连（第 ${Math.max(1, Number(conn.attempt) || 1)} 次）`, meta: elapsed};
     }
     if (active && (live.state === 'asking' || live.ask)) {
       return {...hidden, visible: true, kind: 'ask', tone: 'ask', sticker: 'asking',
-        text: String(live.ask?.text || '').trim() || PHRASE.asking, meta: elapsed,
+        text: String(live.ask?.text || '').trim() || P.asking, meta: elapsed,
         actions: [{id: 'answer', label: '去确认'}]};
     }
     if (!active) {
-      if (!ended) return hidden;
+      if (!ended) return idle;
       const stopped = ended.outcome === 'stopped' || ended.outcome === 'error';
-      if (ended.outcome !== 'done' && !stopped) return hidden;
-      if (now - Number(ended.at || 0) > (stopped ? SHOW_STOPPED_MS : SHOW_DONE_MS)) return hidden;
-      // 「完成啦」聊天里的过程卡已经说了，这里不再重复；只有被停下 / 出错才短暂提示。
-      if (!stopped) return hidden;
+      if (ended.outcome !== 'done' && !stopped) return idle;
+      if (now - Number(ended.at || 0) > (stopped ? SHOW_STOPPED_MS : SHOW_DONE_MS)) return idle;
+      // 「完成啦」聊天里的过程卡已经说了，这里不再重复；只有被停下 / 出错才短暂提示。Metre 的猫要开花，留着。
+      if (!stopped && !metre) return hidden;
       return {...hidden, visible: true, kind: stopped ? 'stopped' : 'done', tone: stopped ? 'stop' : 'done',
-        sticker: stopped ? 'oops' : 'done', text: stopped ? PHRASE.stopped : PHRASE.done,
+        sticker: stopped ? (metre && ended.outcome === 'error' ? 'error' : 'oops') : 'done', text: stopped ? P.stopped : P.done,
         meta: ended.ms ? `用了 ${duration(ended.ms)}` : ''};
     }
 
@@ -156,11 +175,12 @@
     else if (live.bg?.startedAt) { kind = 'bg'; text = `等后台命令（已跑 ${duration(now - live.bg.startedAt)}）`; sticker = 'working'; }
     else if (planSteps) { kind = 'steps'; text = planSteps.text; sticker = live.state === 'writing' ? 'writing' : 'working'; }
     else if (stageSteps && status?.workflow) { kind = 'steps'; text = stageSteps.text; sticker = 'working'; }
-    else if (RUN_KINDS.has(live.tool)) { kind = live.tool; text = TOOL_PHRASE[live.tool]; sticker = live.tool === 'wait' ? 'thinking' : 'working'; }
-    else if (live.state === 'working' && TOOL_PHRASE[live.tool]) { text = TOOL_PHRASE[live.tool]; sticker = 'working'; kind = 'plain'; }
+    else if (RUN_KINDS.has(live.tool)) { kind = live.tool; text = TP[live.tool]; sticker = live.tool === 'wait' ? 'thinking' : 'working'; }
+    else if (live.state === 'working' && TP[live.tool]) { text = TP[live.tool]; sticker = 'working'; kind = 'plain'; }
+    else if (metre && live.state === 'working' && metreToolWord(live.toolName)) { text = metreToolWord(live.toolName); sticker = 'working'; kind = 'plain'; }
     else {
       const state = ['thinking', 'working', 'writing'].includes(live.state) ? live.state : 'thinking';
-      text = PHRASE[state]; sticker = state; kind = 'plain';
+      text = P[state]; sticker = state; kind = 'plain';
     }
 
     const actions = [{id: 'stop', label: '停下'}];
@@ -173,7 +193,7 @@
         meta: [text, `这一步 ${duration(phaseFor)}`].join(' · '), actions};
     }
     // 只是「在想 / 在干活 / 在回复」时，聊天里的过程卡已经在显示同一句话和计时，这条不再重复出现。
-    if (kind === 'plain') return {...hidden, kind, sticker, text, meta};
+    if (kind === 'plain') return metre ? {visible: true, kind, slow: false, tone: 'run', sticker, text, meta, actions} : {...hidden, kind, sticker, text, meta};
     return {visible: true, kind, slow: false, tone: 'run', sticker, text, meta, actions};
   }
 
@@ -200,7 +220,10 @@
   }
 
   const DURATIONS_KEY = 'pinkie:run-status:durations:v1';
-  const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
+  const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
+  // Metre 的几种（idle / stopped / error）没有碧琪表情图：表情在 Metre 下本来就隐藏（猫代替），这里只防 404。
+  const STICKERS = new Set(['asking', 'done', 'oops', 'thinking', 'working', 'writing']);
+  const STICKER = (state) => `./laolao-pinkie-status-${STICKERS.has(state) ? state : 'thinking'}.png`;
   const RUNNING = /Command still running \(session ([\w.-]+), pid (\d+|n\/a)\)/;
   const EXITED = /Process exited with (?:code|signal)/;
   const SESSION = /^agent:(?:main|project|thinking|learning|unrestricted|metre):/;
@@ -298,7 +321,7 @@
         if (data.phase === 'start') begin(key, payload.runId);
         else if (data.phase === 'end' || data.phase === 'error') {
           const stopped = data.phase === 'error' || data.aborted === true || /abort|error/i.test(String(data.stopReason || ''));
-          end(key, stopped ? 'stopped' : 'done');
+          end(key, data.phase === 'error' && data.aborted !== true ? 'error' : stopped ? 'stopped' : 'done');
         }
       } else if (['thinking', 'assistant', 'tool'].includes(payload.stream)) {
         if (!live.active) begin(key, payload.runId);
@@ -315,11 +338,13 @@
               const base = /^(?:exec|bash)$/.test(tool) ? 'exec' : /^write$/.test(tool) ? 'write' : '';
               const k = tk ? tk.refine(base, tool, data.args, null) : '';
               live.tool = k && TOOL_PHRASE[k] ? k : '';
+              live.toolName = tool;
             }
             if (/plan_update/.test(tool)) setTimeout(() => void refresh(key, {plan: true}), 200);
           } else if (data.phase === 'result') {
             if (tool === 'ask_user') { live.ask = null; live.state = 'thinking'; }
             else if (live.state === 'working') live.state = 'thinking';
+            if (data.isError === true) live.toolError = Date.now();
             const out = textOf(data.result ?? data.partialResult ?? data.output);
             if (RUNNING.test(out)) live.bg = {startedAt: live.bg?.startedAt || Date.now()};
             else if (live.bg && EXITED.test(out)) live.bg = null;
@@ -342,7 +367,8 @@
     }
     if (name === 'chat') {
       if (payload.state === 'final') end(key, 'done');
-      else if (['aborted', 'error'].includes(payload.state)) end(key, 'stopped');
+      else if (payload.state === 'error') end(key, 'error');
+      else if (payload.state === 'aborted') end(key, 'stopped');
       schedule();
     }
   });
@@ -526,7 +552,7 @@
     const status = freshStatus(key);
     const now = Date.now();
     const input = {now, live, status: skipped === key && status ? {...status, review: {phase: 'idle'}, missing: [], continuations: {tier: 0}} : status,
-      plan: plans.get(key), conn, ended: endings.get(key), durations, phaseSince: phase.since, phaseKind: phase.kind};
+      plan: plans.get(key), conn, ended: endings.get(key), durations, phaseSince: phase.since, phaseKind: phase.kind, metre: isMetre()};
     let view = describe(input);
     // 阶段换了：记下上一个阶段用了多久（只记有「平时要多久」的那几类，断线不算）。
     if (view.kind !== phase.kind && view.kind !== 'offline') {
@@ -536,6 +562,12 @@
       Object.assign(phase, {kind: view.kind, since: now});
       view = describe({...input, phaseSince: phase.since, phaseKind: phase.kind});
     }
+    // 给 Metre 的猫（laolao-metre-cat.js）：这一刻在干什么。只读，不影响状态条自己。
+    try {
+      window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {key, kind: view.kind, sticker: view.sticker, tone: view.tone,
+        live: {active: Boolean(live.active), state: live.state || '', tool: live.tool || '', toolName: live.toolName || '', toolError: live.toolError || 0},
+        ended: endings.get(key) || null}}));
+    } catch {}
     if (!view.visible) {
       if (bar && !bar.hidden) { bar.classList.remove('is-shown'); bar.hidden = true; open = false; }
       document.documentElement.classList.remove('pk-run-on');
@@ -582,11 +614,12 @@
     const active = live.active || freshStatus(key)?.active;
     if (conn.online && active && beat % 3 === 0) void refresh(key);
     if (beat % 5 === 0) placeDirty = true;
-    if (active || bar && !bar.hidden) render();
+    if (active || bar && !bar.hidden || isMetre()) render();
   }, 1000);
   window.addEventListener('resize', () => { placeDirty = true; schedule(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { void refresh(currentSession()); schedule(); } });
   window.addEventListener('pinkie:motion-change', schedule);
+  window.addEventListener('laolao:modechange', () => { lastSig = ''; schedule(); });
 
   window.__pinkieRunStatus = {...model, refresh: () => refresh(currentSession(), {plan: true}), render: () => render(true),
     get state() { return {key: currentSession(), live: liveOf(currentSession()), status: freshStatus(currentSession()), conn: {...conn}, phase: {...phase}, durations}; }};

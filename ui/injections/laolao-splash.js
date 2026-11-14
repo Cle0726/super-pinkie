@@ -59,7 +59,7 @@
   // settle too, so a failed image can never hold the user behind this screen.
   let assetsReady = false;
   Promise.all([motion.modeAssets(mode), motion.preload(switching
-    ? (details.plain ? '/laolao-mode-metre.svg?v=placeholder1' : `/laolao-mode-transition-${mode}.png?v=transition2`) : '/laolao-splash.png')])
+    ? (details.plain ? '/laolao-mode-metre.svg?v=cathead1' : `/laolao-mode-transition-${mode}.png?v=transition2`) : '/laolao-splash.png')])
     .then(() => { assetsReady = true; splash.classList.add('is-art-ready'); });
   const started = performance.now();
   const minimum = motion.reduced() ? 400 : switching ? 700 : 2600;

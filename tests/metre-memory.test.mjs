@@ -242,3 +242,27 @@ test('finishing a piece of work reminds once next turn; not while children are s
   assert.match(env.prompt(key), /【记一下】/);
   assert.doesNotMatch(env.prompt(key), /【记一下】/);   // 只提醒一次
 });
+
+test('pinkie.metre.today: solar term, festivals, holiday and season offline; recent memory only when bound', async t => {
+  const env = setup(t);
+  const qingming = await env.rpc('pinkie.metre.today', {date: '2026-04-05'});
+  assert.equal(qingming.term, '清明');
+  assert.ok(qingming.festivals.some(item => item.name === '清明节'));
+  assert.equal(qingming.season, 'spring');
+  const national = await env.rpc('pinkie.metre.today', {date: '2026-10-01'});
+  assert.ok(national.festivals.some(item => item.name === '国庆节'));
+  assert.equal(national.holiday, '国庆节');
+  assert.equal(national.recent, null);
+  assert.equal((await env.rpc('pinkie.metre.today', {date: '2026-07-15'})).term, '');
+  // 没绑文件夹：不给最近的记忆
+  await env.call('agent:metre:free', {action: 'remember', category: 'open', text: '没绑时的待办'});
+  assert.equal((await env.rpc('pinkie.metre.today', {sessionKey: 'agent:metre:free'})).recent, null);
+  env.bind('agent:metre:a', env.folders.A);
+  await env.call('agent:metre:a', {action: 'remember', category: 'commands', text: '用 npm 跑'});
+  assert.equal((await env.rpc('pinkie.metre.today', {sessionKey: 'agent:metre:a'})).recent, null);
+  await env.call('agent:metre:a', {action: 'remember', category: 'open', text: '登录页的表单校验还没写完'});
+  const today = await env.rpc('pinkie.metre.today', {sessionKey: 'agent:metre:a'});
+  assert.equal(today.recent.category, 'open');
+  assert.match(today.recent.text, /表单校验/);
+  assert.equal(today.recent.folderName, 'A');
+});

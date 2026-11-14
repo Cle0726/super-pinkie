@@ -7,7 +7,7 @@
     thinking: { label: "想法模式", agent: "thinking", avatar: "/laolao-mode-thinking-hd.png?v=avatars7" },
     learning: { label: "学习模式", agent: "learning", avatar: "/laolao-mode-learning-hd.png?v=avatars7" },
     unrestricted: { label: "无限制模式", agent: "unrestricted", avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7" },
-    metre: { label: "Metre", agent: "metre", avatar: "/laolao-mode-metre.svg?v=placeholder1" },
+    metre: { label: "Metre", agent: "metre", avatar: "/laolao-mode-metre.svg?v=cathead1" },
   };
 
   const activeMode = () => {

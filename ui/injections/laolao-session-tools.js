@@ -888,7 +888,8 @@
         if (item.value === value) return;
         try {
           const fresh = await setSessionPref(key, {dispatch: item.value});
-          toast(confirmed(fresh, 'dispatch', item.value) ? nextTurn(item.label) : notSaved);
+          // 切换提示只写英文（PLAN 6.1）。
+          toast(confirmed(fresh, 'dispatch', item.value) ? (runningNow() ? item.label + ' · from your next message' : item.label) : notSaved);
         } catch (error) { toast(error.message); }
       });
       seg.setAttribute('role', 'radio');

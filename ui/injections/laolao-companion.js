@@ -1174,7 +1174,7 @@
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
     const sync = () => {
       const card = document.querySelector(".card.chat");
-      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
+      const want = prefs.ambient && !reduced() && !document.hidden && card && document.documentElement.getAttribute("data-laolao-mode") !== "metre" && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       // 没人在看（窗口在后台、很久没动）：停在当前这一帧，不消失；回来就接着动。见 laolao-rest.js。
       if (window.__pinkieRest?.away && canvas && canvas.parentElement === card && currentMode === mode()) { stop(); return; }
