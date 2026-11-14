@@ -69,10 +69,11 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 - **走第一条路（留着）**：Windows 正式会话里（只读看的），库能打开、`provider: none` 时 `memory_search` 走关键词检索，能返回 `memory/INDEX.md`、`memory/2026-11-07.md` 这类命中（另有 3 次 0 条）。所以库重建后不用把工具拿掉，也没用到第五节那句「记忆检索暂时停用」。
 - 实现：`services/mode-architecture/agent-db-guard.mjs` + `index.mjs` 里 `gateway_start` 钩子。读 SQLite 文件头第 60 字节的 `user_version`（不打开库、不加依赖），和运行时打包代码里的 `OPENCLAW_AGENT_SCHEMA_VERSION` 比；更新的就把库和 `-wal/-shm/-journal` 一起 `rename` 到 `<状态目录>/backups/agent-db-<日期>/<模式>/`。最近 60 秒有改动的不动；任何一个文件挪不动（Windows 上被占用改名会失败）就整组放回。只挪不删，不降级。
 - 和方案的差别：运行时认的版本号读不到时什么都不做（不猜）。
+- **实测发现（11-13，Windows 副本）**：运行时在网关启动早期（插件加载之前，比 `gateway_start` 早约 8 秒）就会打开每个模式库，读到版本 19 报错后关掉，不占着文件（改名探测三个文件都能改），但这一下已经重写了 `-shm`。原来的「60 秒内改过就不动」把 `-shm` 也算上，所以每次启动都是 `skipped-busy`，**永远挪不动**。修法：判断「有人在写」只看库本身和 `-wal` / `-journal`（真写入一定动这两个），`-shm` 不算；被占用改名失败整组放回的保护不变。同一处 Mac 也会中（打开库就会动 `-shm`），Mac 副本没测。
 
 | # | 结果 | 证据 |
 |---|---|---|
-| A2-1 | 单元测试过；隔离网关实测待 | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 |
+| A2-1 | 过（Windows 副本实测，修了一处后） | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 | 5 条全过（新增「-shm 刚被重写不算在写」）。**副本实测 11-13**：learning 模式放假库（版本 19，库 77824 B / -wal 4096 B / -shm 32768 B，mtime 5 分钟前）→ `setup.py sync` + 重启。第一次：日志 `agent db learning: schema 19 > 1, skipped-busy`，没挪（原因见上「实测发现」）；修后再 sync + 重启：`agent db learning: schema 19 > 1, moved -> …\iso-th\home\.openclawackupsgent-db-20261113\learning`，库和 -wal 的大小、sha256 与放进去时一致（`11a2dca6…` / `baf2ad89…`），-shm 与挪之前磁盘上的一致（`fd4c9fda…`，运行时第一次启动已重写过它），模式目录里只剩 `models.json`；网关 `ready`、端口 1425 在听；第三次启动没有 `agent db` 日志（没东西可挪） |
 | A2-2 | 待实测（题 7） | |
 
 ### A5 process 的提醒不算出错

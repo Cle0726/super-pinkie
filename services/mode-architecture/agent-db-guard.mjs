@@ -4,8 +4,10 @@
 //
 // 网关启动时检查一遍：版本更新的库连同 -wal / -shm / -journal 原样挪到
 // <状态目录>/backups/agent-db-<日期>/<模式>/，让运行时下次用到时重建一个它认得的空库。
-// 只挪不删，不做降级转换；挪之前确认没人在写（库和旁边的日志文件最近 60 秒没动过，
+// 只挪不删，不做降级转换；挪之前确认没人在写（库和 -wal / -journal 最近 60 秒没动过，
 // Windows 上被占用的文件改名会失败，失败就整组放回、这次不动）。
+// -shm 不算：运行时启动时（早于插件的 gateway_start）会打开每个模式库，读到版本太新就报错关掉，
+// 但打开这一下已经重写了 -shm；按它算「有人在写」就永远挪不动（Windows 副本实测 11-13）。
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -72,7 +74,7 @@ export function quarantineNewerAgentDatabases({config, stateDir, supported, now 
     const version = sqliteUserVersion(db);
     if (version === null || version <= supported) continue;
     const files = [db, ...SIDECARS.map(suffix => db + suffix)].filter(file => fs.existsSync(file));
-    const busy = files.some(file => now - fs.statSync(file).mtimeMs < quietMs);
+    const busy = files.some(file => !file.endsWith('-shm') && now - fs.statSync(file).mtimeMs < quietMs);
     if (busy) {
       report.push({agent: agent.id, version, supported, action: 'skipped-busy', file: db});
       continue;

@@ -66,6 +66,16 @@ test('a database touched in the last minute is not moved (someone may be writing
   assert.equal(sqliteUserVersion(dbOf('thinking')), 19);
 });
 
+test('a -shm rewritten just now (the runtime opened the db at startup and gave up) does not count as busy', () => {
+  const {stateDir, dbOf} = setup();
+  fakeDb(dbOf('learning'), 19);
+  const now = Date.now();
+  fs.utimesSync(dbOf('learning') + '-shm', new Date(now - 8000), new Date(now - 8000));
+  const report = quarantineNewerAgentDatabases({config: {agents: {list: [{id: 'learning'}]}}, stateDir, supported: 1, now});
+  assert.equal(report[0].action, 'moved');
+  assert.equal(fs.existsSync(dbOf('learning')), false);
+});
+
 test('if any file of the set cannot be moved, the whole set goes back', () => {
   const {stateDir, dbOf} = setup();
   fakeDb(dbOf('main'), 19);
