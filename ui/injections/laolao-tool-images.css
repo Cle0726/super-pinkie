@@ -28,5 +28,10 @@
   min-width: 0; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 12px; color: color-mix(in srgb, currentColor 70%, transparent);
 }
-/* 折起来的那一行本身是按钮：小框跟在文字后面，不被裁掉 */
-.pinkie-process .cle-run .pinkie-tool-thumbs { margin-left: 4px; }
+/* 折起来的那一行本身是按钮：小框跟在文字后面，不被裁掉。
+   laolao-tool-rows.css 给行里所有 span 设了不换行、溢出隐藏，这里按同样的权重改回来。 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumbs { flex: none; overflow: visible; margin-left: 4px; font-size: 12px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumb { flex: none; min-width: 40px; overflow: hidden; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumb.is-gone { white-space: normal; font-size: 9px; line-height: 11px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumbs__more { flex: none; overflow: visible; font-size: 12px; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumbs__name { flex: 0 1 auto; font-size: 12px; }

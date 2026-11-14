@@ -143,7 +143,10 @@ if (!window.__laolaoCleStage) {
   function callIdOf(row) {
     const host = row.closest('[data-message-id]');
     const m = host && /^tool:[^:]+:([^:]+)/.exec(host.dataset.messageId || '');
-    return m ? m[1] : '';
+    if (m) return m[1];
+    // 时间线排法（工具调用嵌在助手消息里）：到消息列表里找
+    const tk = window.__pinkieToolKind;
+    return tk && tk.rowCallId ? tk.rowCallId(row) : '';
   }
 
   // 先看工具名（「执行命令 · Exec」），判断不了才看模型写的说明文字
@@ -152,7 +155,16 @@ if (!window.__laolaoCleStage) {
     if (rec && rec.k) return rec.k;
     const label = row.querySelector('.chat-tool-msg-summary__label');
     const byName = label ? kindOf(label.textContent) : 'exec';
-    if (byName !== 'exec' || (label && /exec|执行|命令|bash|shell|terminal/i.test(label.textContent))) return byName;
+    // 后端记录说这次读到了图片：读文件 → 看图片
+    const traced = window.__pinkieToolImages && window.__pinkieToolImages.traces[callIdOf(row)];
+    if (byName === 'read' && traced && traced.images && traced.images.length) return 'view';
+    if (byName === 'exec' && label && /exec|执行|命令|bash|shell|terminal/i.test(label.textContent)) {
+      // 换了浏览器 / 清过本机记录时没有参数：用行上显示的命令原文细分（删除 / 安装 / git…），认不出就还是「命令」
+      const names = row.querySelector('.chat-tool-msg-summary__names');
+      const tk = window.__pinkieToolKind;
+      return (tk && names && tk.ofCommand(names.textContent)) || byName;
+    }
+    if (byName !== 'exec') return byName;
     return kindOf(row.textContent);
   }
 
@@ -539,12 +551,25 @@ if (!window.__laolaoCleStage) {
   window.addEventListener('pinkie:tool-trace', (e) => {
     const {callId, trace} = (e && e.detail) || {};
     if (!callId || !trace) return;
+    const tk = window.__pinkieToolKind;
     const rec = ARGS[callId];
-    const base = rec ? rec.k : (trace.created === true ? 'write' : '');
-    if (!base) return;
-    const k = window.__pinkieToolKind ? window.__pinkieToolKind.refine(base === 'create' ? 'write' : base, rec?.n || (trace.created === true ? 'write' : ''), null, trace) : base;
-    if (rec && rec.k === k) return;
-    ARGS[callId] = {...(rec || {t: trace.name || '', m: true, at: Date.now()}), k};
+    let k = '', t = '';
+    if (rec) {
+      // 本机记过参数（运行时看到的）：只在后端事实上细分
+      k = tk ? tk.refine(rec.k === 'create' ? 'write' : rec.k, rec.n || '', null, trace) : rec.k;
+      if (k === rec.k) return;
+    } else if (trace.created === true || trace.created === false) {
+      k = trace.created ? 'create' : 'write'; t = trace.name || '';
+    } else if (trace.command) {
+      // 换了浏览器、历史里没有参数：后端记下的命令原文
+      k = (tk && tk.ofCommand(trace.command)) || 'exec'; t = trace.command;
+    } else {
+      // 只有图片：交给 kindOfRow 按行上的工具名判断（读文件 → 看图片；生图仍是生图）
+      document.querySelectorAll('.pinkie-process .chat-tool-msg-summary[data-tool-kind]').forEach((b) => { if (callIdOf(b) === callId) b.removeAttribute('data-tool-kind'); });
+      schedule();
+      return;
+    }
+    ARGS[callId] = {...(rec || {t, m: true, at: Date.now()}), k};
     saveArgs();
     const all = run.cur ? [run.cur, ...run.queue] : run.queue;
     const step = all.find((x) => x.id === callId);
