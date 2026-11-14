@@ -73,7 +73,7 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 
 | # | 结果 | 证据 |
 |---|---|---|
-| A2-1 | 过（Windows 副本实测，修了一处后） | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 | 5 条全过（新增「-shm 刚被重写不算在写」）。**副本实测 11-13**：learning 模式放假库（版本 19，库 77824 B / -wal 4096 B / -shm 32768 B，mtime 5 分钟前）→ `setup.py sync` + 重启。第一次：日志 `agent db learning: schema 19 > 1, skipped-busy`，没挪（原因见上「实测发现」）；修后再 sync + 重启：`agent db learning: schema 19 > 1, moved -> …\iso-th\home\.openclawackupsgent-db-20261113\learning`，库和 -wal 的大小、sha256 与放进去时一致（`11a2dca6…` / `baf2ad89…`），-shm 与挪之前磁盘上的一致（`fd4c9fda…`，运行时第一次启动已重写过它），模式目录里只剩 `models.json`；网关 `ready`、端口 1425 在听；第三次启动没有 `agent db` 日志（没东西可挪） |
+| A2-1 | 过（Windows 副本实测，修了一处后） | `tests/agent-db-guard.test.mjs`：用 `node:sqlite` 造真库（200 行，`PRAGMA user_version = 19`）+ 随机内容的 `-wal/-shm`，挪完三个文件 sha256 和大小都一致，版本 1 的库不动，第二次启动不再动；60 秒内改过的跳过；挪一半失败整组放回 | 5 条全过（新增「-shm 刚被重写不算在写」）。**副本实测 11-13**：learning 模式放假库（版本 19，库 77824 B / -wal 4096 B / -shm 32768 B，mtime 5 分钟前）→ `setup.py sync` + 重启。第一次：日志 `agent db learning: schema 19 > 1, skipped-busy`，没挪（原因见上「实测发现」）；修后再 sync + 重启：`agent db learning: schema 19 > 1, moved -> …\iso-th\home\.openclaw\backups\agent-db-20261113\learning`，库和 -wal 的大小、sha256 与放进去时一致（`11a2dca6…` / `baf2ad89…`），-shm 与挪之前磁盘上的一致（`fd4c9fda…`，运行时第一次启动已重写过它），模式目录里只剩 `models.json`；网关 `ready`、端口 1425 在听；第三次启动没有 `agent db` 日志（没东西可挪） |
 | A2-2 | 待实测（题 7） | |
 
 ### A5 process 的提醒不算出错
