@@ -39,6 +39,9 @@
 | 11-13 夜 | A3-1 的「另外 20 条中文查询」自己定了题（`questions-search.json`），单独一批 `after-a-search` | 方案没给题目；放进同一批会和其他题的统计混在一起 |
 | 11-13 夜 | B1 渠道工具按「这个渠道的消息会落到哪个模式」在模式 `tools.deny` 里收放，不做按会话 | 运行时没有能改工具列表的插件钩子（钩子清单里没有一个返回 tools），按会话只能改运行时核心，方案明确只用已有机制；QQ 落到想法 / 项目模式，和面板会话共用，按模式是已有机制能做到的最细 |
 | 11-13 夜 | B1 `gateway` 不拿掉，另外 6 个拿掉 | 方案要求「0 次且普通用户用不到」；`gateway` 在 Windows 正式 60 个会话里调了 11 次 |
+| 11-13 夜 | B2 停（§6），不做 `tool_load` | 工具列表每次运行（`runEmbeddedAttempt`）开头建一次，插件钩子改不了；插件自己的工具工厂能按会话返回 null，但只在下一次用户发话时生效，核心工具（`cron`、`image_generate`）插件管不了。方案明说做不到就停在 B1、不改运行时核心 |
+| 11-13 夜 | B3 导出完整系统提示词用 `OPENCLAW_CACHE_TRACE*` 环境变量（只给副本网关，`gateway.py` 的 `TH_PASS_` 前缀） | 会话记录里的 systemPrompt 超过 32768 字就整段丢掉；这是运行时已有的调试开关，不是配置键 |
+| 11-13 夜 | B3-2 的「改前」用 `origin/main`（`5ff2aad2`）的插件代码 + 去掉本分支加的 deny / allow，在副本里跑同两题，跑完原样恢复 | 方案要「改前改后各导出一份」；副本的旧会话记录拿不到完整提示词 |
 
 ## Windows 正式环境只读基线（`session-stats.py --state %USERPROFILE%\.openclaw`，最近 60 个会话）
 
@@ -241,12 +244,58 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 
 全量：`python -X utf8 -m unittest tests.mode_architecture_setup_test` 10 条，1 条错（`test_scaffolds_four_isolated_modes…`，找不到 `Library/Application Support/SuperPinkie/web-gpt-collab`，Mac 路径；不改代码时同样错，Windows 本来就红）。
 
+### B2 不常用的工具按需加载：**没做**（§6：插件钩子做不到）
+
+- 查了运行时：发给模型的工具列表在每次运行（`selection-*.js` 的 `runEmbeddedAttempt`）开头由 `createOpenClawCodingTools` 建一次，整次运行（含中间多次模型调用）不再变；插件钩子（40 个）没有一个的返回值能改工具列表；工具策略只有全局 / 模式 / 模型 / 群组几层。
+- 插件自己的工具（`computer`、`computer_flow`、学习台、`code_*`）工厂可以按会话返回 `null`，但 `tool_load` 之后**本次运行里**拿不到（下一次用户发话才有），B2-2「先 `tool_load` 再用 `computer`，一次成功」做不到；`cron`、`image_generate` 是核心工具，插件管不了。
+- 按方案「做不到就停在 B1，不改运行时核心发送逻辑」。B2-1 / B2-2 / B2-3 记「没做」。要做得给运行时打补丁（每次模型调用前重新取工具列表），列进 B2-F1。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| B2-1 | 没做 | 见上。副本 main 工具说明现在 57847 字（Windows 正式中位数 61638） |
+| B2-2 | 没做 | 同上 |
+| B2-3 | 没做 | 同上 |
+
+### B3 系统提示词只拆账，不删任何字
+
+- 新脚本 `tools/tool-health/prompt-breakdown.py`（只读）：读 cache trace 里真正发给模型的 system，按段落标记归类数字数、找逐字重复行，只输出字数和标题。完整提示词导出放仓库外（`F:\tmp\…\scratchpad\sp-*.txt`、`trace*.jsonl`，含副本工作区路径，不提交）。
+- 数据：Windows 隔离副本，hy4free，题 9（main / 聊天模式）和题 8（project / 项目模式），本分支代码，2026-11-13 夜。Fable 说的「6.2 万字」是 Mac 正式环境；Windows 副本 main **45998 字**、project **54222–54972 字**（随会话内容略变）。
+
+| 部分 | main 字数 | 占比 | project 字数 | 占比 |
+|---|---:|---:|---:|---:|
+| 打法：模式手册 AGENTS.md | 15110 | 32.8% | 23293 | 42.4% |
+| 技能列表（`## Skills` + `<available_skills>` 18 个技能） | 6988 | 15.2% | 6988 | 12.7% |
+| 工具用法：OpenClaw 自带（Tooling 工具清单、Tool Call Style、Execution Bias、Messaging） | 5891 | 12.8% | 6675 | 12.1% |
+| OpenClaw 框架（Safety、Control、Self-Update、Workspace、Docs、时间、Runtime 行、Silent Replies、HEARTBEAT） | 4486 | 9.8% | 4951 | 9.0% |
+| 人设（SOUL.md、IDENTITY.md、persona/core、voice_examples） | 3573 | 7.8% | 1283 | 2.3% |
+| 打法：插件注入（工作过程展示、交付真实性门禁、进度说明、做事标准、边做边学） | 3334 | 7.2% | 3334 | 6.1% |
+| 界面组件 / 回复格式（Control UI Embed、富回复组件） | 1658 | 3.6% | 1658 | 3.0% |
+| 工具用法：插件注入（联网、长命令放后台、碧琪自己就能用的、主动提问） | 1593 | 3.5% | 1593 | 2.9% |
+| 记忆（Memory Recall、长期记忆引擎、memory/INDEX、identity、模式记忆规则） | 1378 | 3.0% | 1558 | 2.8% |
+| 工具用法：TOOLS.md（OpenClaw 默认模板：Cameras / SSH / TTS 示例） | 1335 | 2.9% | 2979 | 5.4% |
+| 用户资料 USER.md | 598 | 1.3% | 606 | 1.1% |
+| 项目速览 | 0 | — | 0 | — |
+
+- **项目速览**：两个模式的提示词里都没有单独的项目速览段（project 模式的项目信息在 AGENTS.md 手册里）。
+- **机器拼出来、逐字重复的**：同一份提示词里只有 1 行重复（OpenClaw 文档链接 `[Agent workspace](…)`，46 字 × 2）。跨模式：main 和 project 有 **281 行、26845 字完全相同**（框架、技能列表、工具用法、插件注入几块），每个模式各发一遍；同一模式内每轮都一样（便于缓存）。逐行看会随会话变的只有 3 处：`Runtime:` 行的会话名、记忆规则里的会话检查点路径、当前时间。
+- 技能列表 18 个技能每个 300–370 字，main 和 project 完全一样。
+- TOOLS.md 是 OpenClaw 的空模板（Cameras / SSH / TTS 举例），没有碧琪自己的内容。
+- **这一轮不删不改**；要不要动、动哪里，交给用户和 Fable 看了再定。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| B3-1 | 过 | 上表；`prompt-breakdown.py` |
+| B3-2 | 过 | 副本里用 `origin/main`（`5ff2aad2`）插件 + 原 deny 跑题 9 / 题 8 导出「改前」，本分支导出「改后」，逐行 diff：只差工具清单 3 行（`web_search`、`nodes`、`agents_list`，A3 / B1 拿掉的）+ 会话名 + 检查点路径。另：网关刚重启后的**第一轮** main 有时少 `## Memory Recall` 3 行（OpenClaw 记忆插件按当时工具可用性拼的；同一代码第二轮就有，改前那次第一轮恰好有）——是运行时冷启动的时序，和 A2-F1 同一类，不是本分支改的 |
+| B3-3 | 过 | `git diff 5ff2aad2 -- personas persona playbooks` 0 行（playbooks 在 `personas/*/playbooks/`） |
+| B-总 | 副本已在线下，降得很少 | 题 9 一次回复的 token（副本 hy4free）：改前 45931 / 45973（`before-h4f`、`b3-prompt-base`）→ A 组后 45563 / 45514 → B1 后 44896 / 44896 / 44839 / 44886 / 44852。Windows 副本本来就 ≤ 5 万（Fable 的 6.4 万是 Mac 正式）；本轮只靠少发工具说明降约 1.1 千（2.3%），B2 没做是主要原因 |
+
 ## 报给 Fable 的另开项（这一轮不做）
 
 - **A2-F1　网关刚起来时第一次 `memory_search corpus:"all"` 报 `index metadata is missing`**：运行时记忆管理器的身份状态初始为 `missing`，第一次同步前被调用就整个返回 `disabled`，还附一句「Tell the user… run openclaw memory index --force」——模型会照着跟用户说「记忆检索停用了」。修要动运行时（等首次同步完成再判，或首次调用时先读 meta），是运行时补丁，A2-2 的通过线因此没过。证据见 A2-2。
 
 - **A7-F1　上游「出字前断流」原地快速重试**：`stopReason: error`、内容是 `[assistant turn failed before producing content]`、报错含 `EOF` / `Connection error` 时，同一模型在几秒内原地重试 1 次（不换模型、不加配置键），再不行才交给 watchdog。依据：副本 hy4free 断流 10 次占全部出错 83%，正式 9 次占 27%；现在平均要等约 90 秒才续接，还有漏接。没查：运行时自身有没有同模型重试的开关、插件钩子能不能做到这一步——这一项要 Fable 先定做不做、在哪一层做。
 - **B1-F1　渠道工具按会话发**：面板会话和 QQ 会话共用想法 / 项目 / main 模式时，面板会话仍带 2 个 `qqbot_*`（Mac 上飞书同理带 13 个 `feishu_*`）。运行时没有改工具列表的插件钩子，要么给运行时打补丁（在工具策略里按会话的 `messageChannel` 过滤渠道插件的工具），要么让渠道走单独的模式（改绑定，是用户的配置）。这一轮只做了按模式。
+- **B2-F1　工具按需加载要运行时补丁**：每次模型调用前重新取一次工具列表（或给插件一个能改工具列表的钩子），`tool_load` 才能在同一次运行里生效；还要能管核心工具。这一轮按规矩没做。
 
 ## 待 Fable 写
 

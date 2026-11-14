@@ -34,6 +34,9 @@ def environment():
         PINKIE_RUNTIME_CONFIG_SCHEMA='2026.7', PINKIE_GATEWAY_URL=f'http://127.0.0.1:{port}',
         CLE_KK_LOCAL_UNRESTRICTED='1', PYTHONUTF8='1', PYTHONDONTWRITEBYTECODE='1',
         npm_config_cache=str(ROOT / 'cache/npm'), PIP_CACHE_DIR=str(ROOT / 'cache/pip'), UV_CACHE_DIR=str(ROOT / 'cache/uv'))
+    # 只给副本网关的调试开关：TH_PASS_OPENCLAW_CACHE_TRACE=1 → OPENCLAW_CACHE_TRACE=1（环境变量，不是配置键）。
+    # B3 用它导出完整系统提示词（会话记录里的 systemPrompt 超过 32768 字会被截掉）。
+    env.update({k[len('TH_PASS_'):]: v for k, v in os.environ.items() if k.upper().startswith('TH_PASS_')})
     skills = Path(manifest['runtime']).parents[2] / 'bundled-skills'
     if skills.is_dir():
         env['PINKIE_MANAGED_SKILLS_DIR'] = str(skills)
