@@ -37,6 +37,8 @@
 | 11-13 夜 | A2-2 记「没过」、不修，报 A2-F1 | 根因在运行时记忆管理器，修要打运行时补丁，超出 A2 的范围（§6「要动运行时核心就停下记录」）；和 A2 的库挪动无关 |
 | 11-13 夜 | 体检脚本加 `--event-since/--event-until`，改前改后都按事件时间重算 | 副本会话文件里混着作废批和续接的旧事件，按文件修改时间量会多数（HANDOFF-4 提醒过）；旧口径的「改前」表保留不删，两种口径都写明 |
 | 11-13 夜 | A3-1 的「另外 20 条中文查询」自己定了题（`questions-search.json`），单独一批 `after-a-search` | 方案没给题目；放进同一批会和其他题的统计混在一起 |
+| 11-13 夜 | B1 渠道工具按「这个渠道的消息会落到哪个模式」在模式 `tools.deny` 里收放，不做按会话 | 运行时没有能改工具列表的插件钩子（钩子清单里没有一个返回 tools），按会话只能改运行时核心，方案明确只用已有机制；QQ 落到想法 / 项目模式，和面板会话共用，按模式是已有机制能做到的最细 |
+| 11-13 夜 | B1 `gateway` 不拿掉，另外 6 个拿掉 | 方案要求「0 次且普通用户用不到」；`gateway` 在 Windows 正式 60 个会话里调了 11 次 |
 
 ## Windows 正式环境只读基线（`session-stats.py --state %USERPROFILE%\.openclaw`，最近 60 个会话）
 
@@ -222,11 +224,29 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 |---|---|---|
 | A7-1 | 过 | 上表；`python tools/tool-health/error-classes.py --state <状态目录> [--since <秒> --last 500]` |
 
+## B 组
+
+### B1 按模式、按场合发工具
+
+- **按会话做不到，按模式做**：运行时的插件钩子（`hook-runner-global-*.js` 里 40 个）没有一个能改发给模型的工具列表；工具策略只有全局 / 模式 / 模型 / 群组（只对渠道群会话）这几层。QQ 的工具是 `@openclaw/qqbot` 插件对所有会话一律注册的（`api.registerTool({name:"qqbot_channel_api"})`，没看渠道）。所以用已有的 `agents.list[].tools.deny`：渠道的消息会落到的模式才发它的工具。
+- **怎么算落到哪个模式**（`services/mode-architecture/setup.py` 的 `_channel_modes`）：`bindings` 里 `match.channel` 是这个渠道的 → 那些模式；某个账号没被「按账号整个接走」（只有 `channel`+`accountId` 的绑定才算，带 peer / 群的细分不算）→ 还会落到默认模式（`default: true` 的，没有就是列表第一个）。渠道关了或没配 → 哪个模式都不发。`CHANNEL_TOOLS = {qqbot: qqbot_*, feishu: feishu_*}` 这几个名字归这段代码管：渠道接进来了就从该模式 deny 里拿掉，用户自己的 deny 条目只加不删。无限制模式不动（和原来一样）。
+- **0 次调用的工具**：`nodes`、`agents_list`、`dir_fetch`、`dir_list`、`file_fetch`、`file_write` 加进 `UNUSED_OPENCLAW_TOOLS`（Mac 基线 `baseline-1113.json` 60 个会话全是 0；Windows 正式 60 个会话也是 0，后四个在 Windows 根本没有）。代码、打法、手册、技能里没有指望它们的（`skills/` 里的 `nodes` 都是图表节点，不是这个工具）。`gateway` 在 Windows 正式调了 11 次，留着。
+- 副本 `setup.py sync` 照读这两个常量；副本没配渠道，所以四个模式都 deny 了 `qqbot_*`、`feishu_*`。
+
+| # | 结果 | 证据 |
+|---|---|---|
+| B1-1 | 过（单测）；按会话**部分**：按模式 | `tests/mode_architecture_setup_test.py::test_channel_tools_only_reach_modes_the_channel_lands_in`：照 Windows 正式的 QQ 绑定（idea*→想法、proj*→项目、顶层账号没绑）算下来 learning 不发 `qqbot_*`，main / 想法 / 项目照发；四个模式都不发 `feishu_*`；账号全绑走时 main 也不发；后来把 QQ 接进学习模式，自动从 deny 拿掉、用户自己的 `browser` 不动；按群细分的绑定不算接走。**限制**：Windows 正式的面板会话在 main / 想法 / 项目模式里仍会看到 2 个 QQ 工具（同模式也接 QQ）。要做到按会话得改运行时核心，按规矩不做，报 B1-F1 |
+| B1-2 | 单测过；真机没测 | 绑了渠道的模式 deny 里没有该渠道工具（同一条测试）。真发 QQ / 飞书消息要用用户的真实机器人账号，不碰 |
+| B1-3 | **没过**（B1 单靠自己到不了 45） | 副本 main 模式题 9（`after-b1`，2 遍）：51 → **49** 个工具，工具说明 60092 → 57847 字。Windows 正式 main 估算 49 → 47。剩下的要靠 B2（按需加载） |
+
+全量：`python -X utf8 -m unittest tests.mode_architecture_setup_test` 10 条，1 条错（`test_scaffolds_four_isolated_modes…`，找不到 `Library/Application Support/SuperPinkie/web-gpt-collab`，Mac 路径；不改代码时同样错，Windows 本来就红）。
+
 ## 报给 Fable 的另开项（这一轮不做）
 
 - **A2-F1　网关刚起来时第一次 `memory_search corpus:"all"` 报 `index metadata is missing`**：运行时记忆管理器的身份状态初始为 `missing`，第一次同步前被调用就整个返回 `disabled`，还附一句「Tell the user… run openclaw memory index --force」——模型会照着跟用户说「记忆检索停用了」。修要动运行时（等首次同步完成再判，或首次调用时先读 meta），是运行时补丁，A2-2 的通过线因此没过。证据见 A2-2。
 
 - **A7-F1　上游「出字前断流」原地快速重试**：`stopReason: error`、内容是 `[assistant turn failed before producing content]`、报错含 `EOF` / `Connection error` 时，同一模型在几秒内原地重试 1 次（不换模型、不加配置键），再不行才交给 watchdog。依据：副本 hy4free 断流 10 次占全部出错 83%，正式 9 次占 27%；现在平均要等约 90 秒才续接，还有漏接。没查：运行时自身有没有同模型重试的开关、插件钩子能不能做到这一步——这一项要 Fable 先定做不做、在哪一层做。
+- **B1-F1　渠道工具按会话发**：面板会话和 QQ 会话共用想法 / 项目 / main 模式时，面板会话仍带 2 个 `qqbot_*`（Mac 上飞书同理带 13 个 `feishu_*`）。运行时没有改工具列表的插件钩子，要么给运行时打补丁（在工具策略里按会话的 `messageChannel` 过滤渠道插件的工具），要么让渠道走单独的模式（改绑定，是用户的配置）。这一轮只做了按模式。
 
 ## 待 Fable 写
 

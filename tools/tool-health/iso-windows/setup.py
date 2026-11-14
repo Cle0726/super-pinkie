@@ -75,7 +75,7 @@ def sync_mode_tool_deny():
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             if node.targets[0].id in ('UNUSED_OPENCLAW_TOOLS', 'REPLACED_OPENCLAW_TOOLS', 'MODE_AGENT_IDS',
-                                      'NEEDED_BUNDLED_PLUGINS'):
+                                      'NEEDED_BUNDLED_PLUGINS', 'CHANNEL_TOOLS'):
                 try:
                     consts[node.targets[0].id] = ast.literal_eval(node.value)
                 except ValueError:
@@ -84,6 +84,9 @@ def sync_mode_tool_deny():
     modes = set(consts.get('MODE_AGENT_IDS') or MODES)
     cfg_path = STATE / 'openclaw.json'
     config = json.loads(cfg_path.read_text(encoding='utf-8'))
+    # 副本没配任何渠道：渠道工具（B1）在四个模式都不发。配了渠道的副本照正式安装器自己算，这里不猜。
+    if not config.get('channels'):
+        names += tuple(n for group in consts.get('CHANNEL_TOOLS', {}).values() for n in group)
     added = {}
     for agent in config.get('agents', {}).get('list', []):
         if isinstance(agent, dict) and agent.get('id') in modes:

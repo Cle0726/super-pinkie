@@ -141,7 +141,10 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             for name in ('workboard_*', 'wiki_*', 'skill_workshop', 'canvas', 'llm-task', 'node_inference', 'web_search'):
                 self.assertIn(name, deny)
             # A3: one search tool for the model; pinkie_search stays.
-            for kept in ('cron', 'message', 'nodes', 'gateway', 'pinkie_search', 'web_fetch'):
+            # B1: zero calls in 60 sessions on both machines; gateway was used on Windows, so it stays.
+            for name in ('nodes', 'agents_list', 'dir_fetch', 'dir_list', 'file_fetch', 'file_write'):
+                self.assertIn(name, deny)
+            for kept in ('cron', 'message', 'gateway', 'pinkie_search', 'web_fetch'):
                 self.assertNotIn(kept, deny)
         self.assertEqual(agents['project']['tools']['deny'][0], 'browser')
         self.assertEqual(agents['project']['tools']['exec'], {'pathPrepend': ['/x']})
@@ -150,6 +153,50 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         before = json.dumps(data, sort_keys=True)
         self.assertFalse(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
         self.assertEqual(json.dumps(data, sort_keys=True), before)
+
+    def test_channel_tools_only_reach_modes_the_channel_lands_in(self):
+        # B1: qq accounts idea*/proj* are routed to thinking/project; the top-level (default) account
+        # is not, so its messages land in the default mode (first in the list: main). No feishu at all.
+        def config():
+            return {'channels': {'qqbot': {'appId': 'x', 'clientSecret': 'y', 'accounts': {'default': {}, 'idea1': {}, 'proj1': {}}}},
+                    'bindings': [{'type': 'route', 'agentId': 'thinking', 'match': {'channel': 'qqbot', 'accountId': 'idea1'}},
+                                 {'type': 'route', 'agentId': 'project', 'match': {'channel': 'qqbot', 'accountId': 'proj1'}}],
+                    'agents': {'list': [{'id': 'main'}, {'id': 'project'}, {'id': 'thinking'}, {'id': 'learning'}, {'id': 'unrestricted'}]}}
+        data = config()
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        deny = {a['id']: a.get('tools', {}).get('deny', []) for a in data['agents']['list']}
+        self.assertEqual([m for m in ('main', 'project', 'thinking', 'learning') if 'qqbot_*' in deny[m]], ['learning'])
+        for mode in ('main', 'project', 'thinking', 'learning'):
+            self.assertIn('feishu_*', deny[mode])
+        self.assertEqual(deny['unrestricted'], [])
+        # Every account routed whole: the default mode no longer gets qq tools.
+        data = config()
+        data['channels']['qqbot'] = {'accounts': {'idea1': {}, 'proj1': {}}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        deny = {a['id']: a.get('tools', {}).get('deny', []) for a in data['agents']['list']}
+        self.assertEqual([m for m in ('main', 'project', 'thinking', 'learning') if 'qqbot_*' not in deny[m]], ['project', 'thinking'])
+        # Later the user routes qq into learning: the deny this code added is taken back, the user's own entries stay.
+        data['bindings'].append({'agentId': 'learning', 'match': {'channel': 'qqbot', 'accountId': 'idea1'}})
+        learning = next(a for a in data['agents']['list'] if a['id'] == 'learning')
+        learning['tools']['deny'].append('browser')
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertNotIn('qqbot_*', learning['tools']['deny'])
+        self.assertIn('browser', learning['tools']['deny'])
+        # A binding narrowed to one peer still leaves the rest of that account to the default mode.
+        data = config()
+        data['channels']['qqbot'] = {'accounts': {'idea1': {}}}
+        data['bindings'] = [{'agentId': 'thinking', 'match': {'channel': 'qqbot', 'accountId': 'idea1', 'peer': {'kind': 'group', 'id': 'g'}}}]
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        main = data['agents']['list'][0]
+        self.assertNotIn('qqbot_*', main['tools']['deny'])
+        # Feishu bound and disabled qq: feishu tools reach that mode, qq tools reach none.
+        data = config()
+        data['channels'] = {'qqbot': {'enabled': False, 'appId': 'x'}, 'feishu': {'accounts': {'work': {}}}}
+        data['bindings'] = [{'agentId': 'project', 'match': {'channel': 'feishu', 'accountId': 'work'}}]
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        deny = {a['id']: a.get('tools', {}).get('deny', []) for a in data['agents']['list']}
+        self.assertEqual([m for m in ('main', 'project', 'thinking', 'learning') if 'feishu_*' not in deny[m]], ['project'])
+        self.assertTrue(all('qqbot_*' in deny[m] for m in ('main', 'project', 'thinking', 'learning')))
 
     def test_pdf_extraction_plugin_joins_an_allow_list_unless_denied(self):
         # A4 live (11-13): with plugins.allow = [three pinkie plugins], the bundled document-extract
