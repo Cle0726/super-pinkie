@@ -29,6 +29,9 @@ class MacSnapshotTest(unittest.TestCase):
             "pinkie-oversized-user-record:v1",
             "pinkie-context-breakdown:v1",  # context panel per-category breakdown
             "pinkie-work-first-media-gate:v2",
+            "pinkie-image-access:v5",  # A4: credentials refused, files elsewhere via media/inbox
+            "pinkie-media-tools:v1",  # A4: image/pdf tools: inbox copy, big PDFs split, big images shrunk
+            "pinkie-media-inbox:v1",
         ):
             self.assertIn(marker, text)
 
