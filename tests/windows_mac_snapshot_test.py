@@ -32,6 +32,7 @@ class MacSnapshotTest(unittest.TestCase):
             "pinkie-image-access:v5",  # A4: credentials refused, files elsewhere via media/inbox
             "pinkie-media-tools:v1",  # A4: image/pdf tools: inbox copy, big PDFs split, big images shrunk
             "pinkie-media-inbox:v1",
+            "pinkie-tool-parallel-hint:v1",  # C1: read / web_fetch descriptions ask for batched calls
         ):
             self.assertIn(marker, text)
 

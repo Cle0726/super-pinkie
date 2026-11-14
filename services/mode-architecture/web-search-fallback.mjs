@@ -287,7 +287,7 @@ export function createPinkieSearchTool({search = searchWeb} = {}) {
   return {
     name: 'pinkie_search',
     label: '网页搜索',
-    description: '网页搜索（不用 Key）。依次试必应、搜狗、360、百度、DuckDuckGo，一家被拦自动换下一家，都不行时自己在碧琪浏览器里搜。返回最多 10 条，每条有标题、网址、摘要和来源（source）；要看正文再用 web_fetch 读网址。',
+    description: '网页搜索（不用 Key）。依次试必应、搜狗、360、百度、DuckDuckGo，一家被拦自动换下一家，都不行时自己在碧琪浏览器里搜。返回最多 10 条，每条有标题、网址、摘要和来源（source）；要看正文再用 web_fetch 读网址。互不依赖的几次调用，放在同一条回复里一起发，不要一条一条来。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {query: {type: 'string', minLength: 1}, count: {type: 'integer', minimum: 1, maximum: MAX_RESULTS}},

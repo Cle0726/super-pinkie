@@ -301,6 +301,8 @@ export function createCodeSearchTool(ctx, {rootFor} = {}) {
       '- files：按名字找文件。query 是名字里的词，或通配写法（*.py、src/**/*.ts）。',
       '- outline：看一个文件的大纲（函数、类、标题各在第几行）。path 传那个文件。大文件先看大纲，再只读要改的那一段。',
       '改代码前先用它找到该改的地方：搜界面上看得见的那行字、报错原文、函数名；改了函数之后搜它的名字，把每个调用处都找出来。',
+      // tools-health C1：PLAN 第五节 Fable 写好的原文。
+      '互不依赖的几次调用，放在同一条回复里一起发，不要一条一条来。',
     ].join('\n'),
     parameters: {
       type: 'object', additionalProperties: false,
