@@ -151,6 +151,7 @@ function isPrivateIpAddress(address, policy) {
 	const strictIp = parseCanonicalIpAddress(normalized);
 	if (strictIp) {
 		if (isIpv4Address(strictIp)) return isBlockedSpecialUseIpv4Address(strictIp, blockOptions);
+		/* pinkie-web-fetch-fakeip-v6:v1 */ if (blockOptions.allowRfc2544BenchmarkRange === true && Array.isArray(strictIp.parts) && strictIp.parts[0] === 0x2001 && strictIp.parts[1] === 0x0002 && strictIp.parts[2] === 0) return false;
 		if (isBlockedSpecialUseIpv6Address(strictIp, ipv6BlockOptions)) return true;
 		const embeddedIpv4 = extractEmbeddedIpv4FromIpv6(strictIp);
 		if (embeddedIpv4) return isBlockedSpecialUseIpv4Address(embeddedIpv4, blockOptions);

@@ -501,6 +501,9 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     # 图片白名单扩展：允许个人目录和精确的 ~/.openclaw/workspace* 工作区
     # 显示本轮产出；整个 ~/.openclaw 配置目录仍不在白名单中。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-image-access.mjs"
+    # 假地址代理（fake-ip）下网址会解析出 198.18.x 和 2001:2::x 两个基准测试地址；
+    # allowRfc2544BenchmarkRange 原来只放行 IPv4 那一半，web_fetch 全被拦。同一个开关也放行 2001:2::/48。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-web-fetch-fakeip-v6.mjs"
     # The native material viewer uses an opaque clekk-material: URL. Keep the
     # strict Control UI CSP, but allow that one in-app scheme for image/PDF
     # rendering; this does not grant the agent any new filesystem or tool access.
