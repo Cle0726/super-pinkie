@@ -48,6 +48,8 @@
 - F5（11-13，批 0）：为了进预算，Metre 不注入【工具调用前的进度说明】【主动提问】富回复说明【工作过程展示】，因为主 MD 第二、三、九节讲了同样的事（进度说明那条和主 MD 第九节是相反的）。【长时间命令放后台】压成一句。门禁原文没动。详见 `INJECTION-INVENTORY.md`。如果你认为哪条该留，告诉我放回。
 - F6（11-13，批 0）：OpenClaw 会往新工作区补 TOOLS / USER / HEARTBEAT 三份英文模板（缺了又会注入一行 `[MISSING]`），按 agent 关的 `skipBootstrap` 在 2026.7 配置校验里报错（实测 `agents.list.5: Invalid input`）。现在用空文件占位（空文件不注入，0 字）。A0-3 说「只有三份文件」，实际是三份 + 三个空占位 + OpenClaw 自己的 `openclaw-workspace-state.json`。请确认可以。
 - F7（11-13，批 0）：设定防护（`settings-guard.mjs`）现有规则会把 `workspace-metre` 当产品工作区保护（聊天改不了 Metre 自己的手册），和群聊 agent 一样。没改代码。是否算「权限限制」由你定。
+- F8（11-14，批 2）：`pinkie_sessions` 里几条 PLAN 2.7 没写死、我定的规则，请看要不要改（细节在下面「批 2」自查的「几条规则」）：① 老模式只能看、管四个老模式的会话，看不到无限制和 Metre 的；Metre 能建五个模式的会话，不能建 Metre 自己的。② 老模式出确认卡片的只有 archive / stop / rename，detach、unarchive、create 直接做。③ 删除的备份放在 `PINKIE_STATE_ROOT/backups/sessions-deleted/<日期>/`（和设定防护的备份同一个 `backups` 目录），另加了 PLAN 没有的 `restore` 动作（只有 Metre）。④ 工具说明会进老模式的工具定义（不进每轮提示词）；老模式的卡片标题写「碧琪想归档「…」」，Metre 不出卡片。
+- F9（11-14，批 2）：唠嗑模式的「只聊天」档（profile minimal）只放行 `MINIMAL_CHILD_TOOLS` 那四个工具，所以那一档里没有 `pinkie_sessions`。PLAN 说四个老模式都有。要不要在只聊天档也开放，由你定（开放要改 `session-lineage.mjs` 的 `MINIMAL_CHILD_TOOLS` 和 `laolao-settings-user.js` 的 `CHILD_SESSION_TOOLS`，批 1 的文件）。
 
 ### Fable 的答复（11-14，用户原话：「Fable你决定一下关于 F4（以及 F2、F5–F7）」）
 
@@ -147,14 +149,14 @@
 | Z2 正式环境 | 没碰。收工时 `openclaw.json` 2026-11-13T23:50:37（本会话开工前），安装目录 2026-11-03T14:57:22，18789 没有监听。开工时没记，补记的是收工数 |
 | Z3 老模式不变 | 过（只加不改）：老模式只多了一个工具，原有工具和注入没动；`session-lineage.mjs` 没改 |
 | Z4 personas | 过：没碰 |
-| Z5 推送 | 推到自己的分支 `claude/metre-b2-sessions-74852b`，由主会话合进 `feat/metre-mode-1113` |
+| Z5 推送 | 过：分支 `claude/metre-b2-sessions-74852b` 已推，并由本会话合进 `feat/metre-mode-1113` 推送（11-14 用户改的安排） |
 
 预算：`pinkie_sessions` 的说明只在工具定义里，不进每轮的提示词（PLAN 2.2「不含工具定义」）。`node tools/metre/inject-inventory.mjs project metre` 本批前后 Metre 的注入字数不变，工具数 22 → 23。说明本身：Metre 版 499 字、参数 691 字（JSON）；老模式版 349 字、参数 622 字。
 
 隔离副本：C 盘快满，本批的副本建在 F 盘（`METRE_ISO_ROOT=F:\tmp\claude\…\scratchpad\iso-metre-b2`，端口 2548，已停）；第一次在 `%USERPROFILE%\碧琪实测\iso-metre-b2` 建到一半 C 盘满了，已删。真模型统一 `mm/workbuddy/hy4free`。
 
-留给合并 / 后续（我没改，避免撞别的批）：
-1. **状态词（批 3 的文件）**：`laolao-phrases.js` 的 `toolLabels` 加 `pinkie_sessions:'整理会话'`；`laolao-cle-stage.js` 的工具类别表加 `pinkie_sessions: 'session'`（或批 3 新加的 `manage` 类，PLAN 2.8：进行中「正在整理会话」）。
+后续（11-14 用户改了安排：批 2 自己合进主线，主会话不再代合。下面是合并时还没做、留给别的批的）：
+1. **状态词**：`laolao-phrases.js` 已加工具名「整理会话」（单独一行 `toolLabels.pinkie_sessions=…`，没动批 3 改的那张表）。阶段条的类别（PLAN 2.8 的 `manage`：进行中「正在整理会话」）在 `laolao-cle-stage.js` 的三张表里，是批 3 的活，我没加；批 3 合进来之前，`pinkie_sessions` 在阶段条上按「正在用工具」显示。
 2. **和批 1 撞的地方**：`openclaw.plugin.json` 的 `contracts.tools` 和 `mode-architecture.test.mjs` 的工具数（批 1 加 `pinkie_models` 后是 27）。批 1 的 `pinkie.metre.stopAll` 可以直接用 `SessionManager.stopChildren(parentKey)`（只停不归档，清掉排队的启动和消息，12 秒超时）。
 3. **唠嗑模式「只聊天」档**（profile minimal）只放行 `MINIMAL_CHILD_TOOLS` 那四个，`pinkie_sessions` 在那一档里用不了。要开放就在 `session-lineage.mjs` 的 `MINIMAL_CHILD_TOOLS` 和 `laolao-settings-user.js` 的 `CHILD_SESSION_TOOLS` 各加一项（批 1 的文件，留给合并时定）。
 4. **搜 Metre 自己的会话**：`session-search.mjs` 的 `MODE_AGENTS` 加 `metre: 'metre'`，再把 `session-manage.mjs` 里 `searchSessions` 的模式表加上 metre。

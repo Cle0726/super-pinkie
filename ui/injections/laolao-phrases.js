@@ -279,6 +279,8 @@
     learning_activity:'学习小练习',learning_desk:'记进手账',learning_library:'查学习资料',learning_material:'看学习资料',
     clekk_memory:'长期记忆',pinkie_session_start:'开子会话',pinkie_session_message:'给子会话发消息',pinkie_session_list:'查看子会话',pinkie_session_title:'给会话起名',
     web_gpt_activity:'网页 GPT 协作'};
+  // 批 2（Metre 计划 2.7）的会话管理工具；单独一行，不和批 3 改的那张表撞。
+  toolLabels.pinkie_sessions='整理会话';
   globalThis.__pinkieToolLabels=toolLabels;
   const toolLabelFor=(core)=>toolLabels[core.toLowerCase()]||toolLabels[core.toLowerCase().replace(/[\s.-]+/g,'_')]||null;
   const queueSteerBadge = (parent) => {
