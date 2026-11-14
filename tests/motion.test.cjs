@@ -148,7 +148,10 @@ test('startup cannot force success on timeout; animation survives while error re
 });
 test('mode switching prewarms every local scene and has no old multi-second artificial gate',()=>{
   const mode=read('ui/injections/laolao-mode-switcher.js');
-  assert.match(mode,/Promise\.all\(modes\.map\(mode => motion\.preload\(mode\.transition\)\)\)/);
+  // Every decorated mode is prewarmed; Metre (plain) has no scene to warm.
+  assert.match(mode,/const decorated = modes\.filter\(\(mode\) => !mode\.plain\);/);
+  assert.match(mode,/Promise\.all\(decorated\.map\(mode => motion\.preload\(mode\.transition\)\)\)/);
+  assert.match(mode,/id: "metre",[\s\S]*?plain: true,/);
   assert.match(mode,/requestIdleCallback/);
   assert.match(mode,/pointerenter/);
   assert.match(mode,/runDuration = motion\.reduced\(\) \? 100 : 420/);
