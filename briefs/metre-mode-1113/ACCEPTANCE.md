@@ -14,8 +14,8 @@
 
 - A0-1 `INJECTION-INVENTORY.md` 存在，列出项目模式一轮里每段注入的来源文件、钩子、字数，每项标了留 / 去 / 待定。
 - A0-2 隔离副本里能切到 Metre 模式，新建会话的 key 以 `agent:metre:` 开头。
-- A0-3 `.openclaw/workspace-metre` 里只有 `AGENTS.md`、`IDENTITY.md`、`SOUL.md`（加用户自己的文件），内容和仓库里一致；跑过一轮之后没有多出系统自动生成的人设文件。
-- A0-4 Metre 一轮的固定文字开销不超过 6000 字，数字和项目模式的对照数都记在 `PROGRESS.md`。
+- A0-3 `.openclaw/workspace-metre` 里有内容的只有 `AGENTS.md`、`IDENTITY.md`、`SOUL.md`（加用户自己的文件），内容和仓库里一致；另允许 `TOOLS.md`、`USER.md`、`HEARTBEAT.md` 三个 0 字节占位和 OpenClaw 自己的 `openclaw-workspace-state.json`；跑过一轮之后没有多出系统自动生成的人设文件。
+- A0-4 Metre 一轮的固定文字开销不超过 6500 字（11-14 从 6000 放宽，见 PLAN 2.2），数字和项目模式的对照数都记在 `PROGRESS.md`。
 - A0-5 Metre 的一轮里没有这些内容：打法卡、技能路由、工具箱提示、「别的模式更拿手」、陪伴、第一人称改写。用测试断言（抓 `before_prompt_build` 的产出）。
 - A0-6 门禁还在：Metre 改了文件却没验证就说「做完了」，交付检查照常拦下。用现有门禁测试的同款用例跑一遍 Metre。
 - A0-7 别的模式的 `pinkie_session_start` / `pinkie_mode_ask` 传 `mode: metre` 被拒；`session-hints` 的产出里不出现 Metre。
