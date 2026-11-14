@@ -40,6 +40,9 @@
     requestAnimationFrame(() => viewer.classList.add("is-open"));
   };
 
+  // 读图小框（laolao-tool-images）点缩略图时直接调用
+  window.__laolaoImageViewer = { open, close };
+
   document.addEventListener("click", (event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const image = event.target.closest?.(".chat-message-image, .chat-tool-card__preview-image, .cm-image img");

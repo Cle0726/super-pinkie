@@ -24,7 +24,11 @@ if (!window.__laolaoCleStage) {
     search: '正在搜索', fetch: '正在看网页', browse: '正在用浏览器', find: '正在查代码', test: '正在跑测试',
     quiz: '正在出题', lab: '正在搭小互动', grade: '正在批改', note: '正在记进手账', memory: '正在翻记忆',
     session: '正在安排子会话', show: '正在打开工作台', computer: '正在操作电脑', webgpt: '正在和网页 GPT 协作',
-    cron: '正在设定时', tool: '正在用工具'};
+    cron: '正在设定时', tool: '正在用工具',
+    // PLAN 2.8 补全（和 laolao-tool-kind.js 的 ING 一致，tests/tool-kind-words.test.cjs 守着）
+    create: '正在创建', delete: '正在删除', move: '正在移动', install: '正在安装', build: '正在构建', git: '正在提交',
+    download: '正在下载', view: '正在看图片', shot: '正在截图', dispatch: '正在派发', wait: '在等子会话', review: '正在验收',
+    manage: '正在整理会话', models: '正在看可用模型'};
   // 工具名 → 类别。类别决定标题行的动作词、展开后那一行的说法和色点。
   // 碧琪自己的工具（services/mode-architecture 里注册的）和 OpenClaw 原生工具都在这里；
   // 不认识的工具归「tool」，不再一律当成「运行命令」。
@@ -40,15 +44,17 @@ if (!window.__laolaoCleStage) {
     ask_user: 'ask', pinkie_mode_ask: 'ask',
     learning_activity: 'quiz', learning_desk: 'note',
     clekk_memory: 'memory', memory_search: 'memory',
-    pinkie_session_start: 'session', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
+    pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
     sessions_spawn: 'session', sessions_send: 'session', subagents: 'session',
     workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', cron: 'cron',
   };
   const QUIZ_KINDS = /^(?:single_choice|multiple_choice|fill_blank|short_answer|batch)$/;
   const normTool = (s) => String(s || '').trim().toLowerCase().replace(/[\s.-]+/g, '_');
   // 一次工具调用归哪一类：看名字；出题工具再看它这次是出题、批改还是搭互动
-  function kindOfCall(name, args) {
+  function kindOfCall(name, args, trace) {
     const k = TOOL_KIND[normTool(name)];
+    // 细分（创建 / 删除 / 安装 / 看图片 / 截图 / 派发…）：判定不了就是原来的类别
+    if (k && k !== 'quiz') return window.__pinkieToolKind ? window.__pinkieToolKind.refine(k, normTool(name), args, trace) : k;
     if (k !== 'quiz') return k || '';
     const a = args && typeof args === 'object' ? args : {};
     if (a.action && a.action !== 'present') return 'grade';
@@ -77,7 +83,7 @@ if (!window.__laolaoCleStage) {
     // 标签上是中文名（laolao-phrases 把工具名换成了中文）：反查工具名
     const labels = window.__pinkieToolLabels || {};
     const label = String(text || '').trim();
-    for (const name of Object.keys(labels)) if (labels[name] === label && TOOL_KIND[name]) return TOOL_KIND[name];
+    for (const name of Object.keys(labels)) if (labels[name] === label && TOOL_KIND[name]) return kindOfCall(name);
     const s = String(text || '').toLowerCase();
     // 原生标签里夹着工具名（「网页搜索 · web_search」、「Web Search」）
     for (const name of Object.keys(TOOL_KIND)) if (name.length > 4 && normTool(s).includes(name)) return TOOL_KIND[name];
@@ -100,6 +106,7 @@ if (!window.__laolaoCleStage) {
       try { localStorage.setItem(ARGS_KEY, JSON.stringify(ARGS)); } catch {}
     }, 500);
   }
+  const MODE_CN = {chat: '唠嗑模式', ideas: '想法模式', project: '项目模式', learning: '学习模式', unrestricted: '无限制模式', metre: 'Metre'};
   const firstLine = (s) => String(s == null ? '' : s).split('\n').map((x) => x.trim()).find(Boolean) || '';
   const homeless = (p) => String(p).replace(/^\/Users\/[^/]+/, '~');
   // 状态行里要能一眼看出「在跑什么」：命令原文、文件路径、搜索词、网址
@@ -112,6 +119,8 @@ if (!window.__laolaoCleStage) {
       const item = a.items.find((x) => x && x.status === 'in_progress') || a.items.find((x) => x && x.status !== 'completed');
       return {text: item ? firstLine(item.text) : '全部完成', mono: false};
     }
+    // 派发：状态行说派给了哪个模式
+    if (name === 'pinkie_session_start' && MODE_CN[a.mode]) return {text: MODE_CN[a.mode], mono: false};
     if (a.command || a.cmd) t = firstLine(a.command || a.cmd);
     else if (path) {
       t = homeless(path);
@@ -134,7 +143,10 @@ if (!window.__laolaoCleStage) {
   function callIdOf(row) {
     const host = row.closest('[data-message-id]');
     const m = host && /^tool:[^:]+:([^:]+)/.exec(host.dataset.messageId || '');
-    return m ? m[1] : '';
+    if (m) return m[1];
+    // 时间线排法（工具调用嵌在助手消息里）：到消息列表里找
+    const tk = window.__pinkieToolKind;
+    return tk && tk.rowCallId ? tk.rowCallId(row) : '';
   }
 
   // 先看工具名（「执行命令 · Exec」），判断不了才看模型写的说明文字
@@ -143,7 +155,16 @@ if (!window.__laolaoCleStage) {
     if (rec && rec.k) return rec.k;
     const label = row.querySelector('.chat-tool-msg-summary__label');
     const byName = label ? kindOf(label.textContent) : 'exec';
-    if (byName !== 'exec' || (label && /exec|执行|命令|bash|shell|terminal/i.test(label.textContent))) return byName;
+    // 后端记录说这次读到了图片：读文件 → 看图片
+    const traced = window.__pinkieToolImages && window.__pinkieToolImages.traces[callIdOf(row)];
+    if (byName === 'read' && traced && traced.images && traced.images.length) return 'view';
+    if (byName === 'exec' && label && /exec|执行|命令|bash|shell|terminal/i.test(label.textContent)) {
+      // 换了浏览器 / 清过本机记录时没有参数：用行上显示的命令原文细分（删除 / 安装 / git…），认不出就还是「命令」
+      const names = row.querySelector('.chat-tool-msg-summary__names');
+      const tk = window.__pinkieToolKind;
+      return (tk && names && tk.ofCommand(names.textContent)) || byName;
+    }
+    if (byName !== 'exec') return byName;
     return kindOf(row.textContent);
   }
 
@@ -224,7 +245,7 @@ if (!window.__laolaoCleStage) {
   function write(lab, kind, text, right, mono) {
     if (lab.dataset.kind !== kind) lab.dataset.kind = kind;
     const b = lab.querySelector('b'), span = lab.querySelector('span'), em = span.querySelector('em'), i = lab.querySelector('i');
-    const verb = VERB[kind] || VERB.think;
+    const verb = (kind === 'git' && window.__pinkieToolKind ? window.__pinkieToolKind.ing('git', text) : VERB[kind]) || VERB.think;
     if (b.textContent !== verb) b.textContent = verb;
     if (em.textContent !== (text || '')) em.textContent = text || '';
     span.toggleAttribute('data-mono', !!(mono && text));
@@ -500,7 +521,7 @@ if (!window.__laolaoCleStage) {
           if (d.phase === 'start') {
             const k = kindOfCall(d.name, d.args) || kindOf(d.name);
             const a = argText(d.name, d.args, d.meta);
-            if (id) { ARGS[id] = {k, t: a.text, m: a.mono, at: Date.now()}; saveArgs(); }
+            if (id) { ARGS[id] = {k, t: a.text, m: a.mono, n: normTool(d.name), at: Date.now()}; saveArgs(); }
             run.queue.push({id, kind: d.name === 'ask_user' ? 'ask' : k, text: a.text, mono: a.mono, done: false});
             pump();
           } else if (d.phase === 'result') {
@@ -525,6 +546,36 @@ if (!window.__laolaoCleStage) {
     }
   }
   window.addEventListener('pinkie:gateway-event', onEvent);
+  // 后端（tool-trace.mjs）查过的事实：写入前路径不存在 → 「创建」；读到了图片 → 「看图片」。
+  // laolao-tool-images 拿到后逐条广播；没有记录的调用保持原来的说法，不猜。
+  window.addEventListener('pinkie:tool-trace', (e) => {
+    const {callId, trace} = (e && e.detail) || {};
+    if (!callId || !trace) return;
+    const tk = window.__pinkieToolKind;
+    const rec = ARGS[callId];
+    let k = '', t = '';
+    if (rec) {
+      // 本机记过参数（运行时看到的）：只在后端事实上细分
+      k = tk ? tk.refine(rec.k === 'create' ? 'write' : rec.k, rec.n || '', null, trace) : rec.k;
+      if (k === rec.k) return;
+    } else if (trace.created === true || trace.created === false) {
+      k = trace.created ? 'create' : 'write'; t = trace.name || '';
+    } else if (trace.command) {
+      // 换了浏览器、历史里没有参数：后端记下的命令原文
+      k = (tk && tk.ofCommand(trace.command)) || 'exec'; t = trace.command;
+    } else {
+      // 只有图片：交给 kindOfRow 按行上的工具名判断（读文件 → 看图片；生图仍是生图）
+      document.querySelectorAll('.pinkie-process .chat-tool-msg-summary[data-tool-kind]').forEach((b) => { if (callIdOf(b) === callId) b.removeAttribute('data-tool-kind'); });
+      schedule();
+      return;
+    }
+    ARGS[callId] = {...(rec || {t, m: true, at: Date.now()}), k};
+    saveArgs();
+    const all = run.cur ? [run.cur, ...run.queue] : run.queue;
+    const step = all.find((x) => x.id === callId);
+    if (step) { step.kind = k; if (run.cur === step) show(step); }
+    schedule();
+  });
   window.addEventListener('pinkie:session-selected', () => {
     if (live) { live.removeAttribute('data-cle-run'); live = null; }
     clearInterval(tick);
@@ -549,6 +600,19 @@ if (!window.__laolaoCleStage) {
     note: (n) => `记了 ${n} 条手账`, memory: (n) => `翻了 ${n} 次记忆`, session: (n) => `安排了 ${n} 次子会话`,
     show: (n) => `在工作台打开了 ${n} 个文件`, computer: (n) => `操作了 ${n} 次电脑`, webgpt: (n) => `和网页 GPT 协作了 ${n} 次`,
     image: (n) => `生成了 ${n} 张图`, ask: (n) => `问了你 ${n} 次`, cron: (n) => `设了 ${n} 个定时`, tool: (n) => `用了 ${n} 个工具`,
+    // PLAN 2.8 补全：一次时说清对象（「创建了 a.txt」），多次时说个数
+    create: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('create', w) : `创建了 ${n} 个文件`),
+    delete: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('delete', w) : `删除了 ${n} 次`),
+    move: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('move', w) : `移动了 ${n} 次`),
+    install: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('install', w) : `安装了 ${n} 次`),
+    build: (n) => (n === 1 ? '构建完成' : `构建了 ${n} 次`),
+    git: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('git', w) : `git 操作了 ${n} 次`),
+    download: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('download', w) : `下载了 ${n} 个文件`),
+    view: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('view', w) : `看了 ${n} 张图片`),
+    shot: (n) => (n === 1 ? '截了一张图' : `截了 ${n} 张图`),
+    dispatch: (n, w) => (n === 1 && window.__pinkieToolKind ? window.__pinkieToolKind.done('dispatch', w) : `派出了 ${n} 个子会话`),
+    wait: () => '等子会话', review: () => '验收了',
+    manage: (n) => (n === 1 ? '整理了会话' : `整理了 ${n} 次会话`), models: () => '看了可用模型',
   };
   const openRuns = new Set();         // 用户点开的工具组（按第一步的 toolCallId 记，重绘后照样展开）
   const seenSteps = new WeakSet();    // 已经出场过的步骤；运行中新来的依次淡入
@@ -564,13 +628,20 @@ if (!window.__laolaoCleStage) {
     const count = {};
     rows.forEach((r) => { const k = r.getAttribute('data-tool-kind') || 'exec'; count[k] = (count[k] || 0) + 1; });
     const kinds = Object.keys(count);
-    const said = kinds.slice(0, 2).map((k) => (DONE_WORD[k] || DONE_WORD.tool)(count[k])).join('，');
+    const said = kinds.slice(0, 2).map((k) => {
+      const one = count[k] === 1 ? rows.find((r) => (r.getAttribute('data-tool-kind') || 'exec') === k) : null;
+      const a = one && typeof argsOf === 'function' ? argsOf(one) : null;
+      return (DONE_WORD[k] || DONE_WORD.tool)(count[k], a ? a.t : '');
+    }).join('，');
     return kinds.length > 2 ? said + '，共 ' + rows.length + ' 步' : said;
   }
 
   function shapeRows() {
     document.querySelectorAll('.pinkie-process .chat-tool-msg-summary').forEach((b) => {
-      if (!b.hasAttribute('data-tool-kind')) b.setAttribute('data-tool-kind', kindOfRow(b));
+      // 类别可能在后端记录到达后被细分（写入 → 创建）：有记录的每次以记录为准，没有的只算一次
+      const known = ARGS[callIdOf(b)];
+      if (known && known.k) { if (b.getAttribute('data-tool-kind') !== known.k) b.setAttribute('data-tool-kind', known.k); }
+      else if (!b.hasAttribute('data-tool-kind')) b.setAttribute('data-tool-kind', kindOfRow(b));
       if (b.querySelector(':scope > .cle-args')) return;
       const rec = ARGS[callIdOf(b)];
       if (!rec || !rec.t) return;

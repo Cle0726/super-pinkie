@@ -7,9 +7,9 @@
 | 批 | 状态 | 谁在做 | 开始 | 最后提交 |
 |---|---|---|---|---|
 | 0 基座 | 已自查待验收（11-14 前端补完） | 空闲 | 2026-11-13 | 见 git log |
-| 1 派发（界面叫 Baton） | 已自查待验收（A1-* 见「批 1」；界面开关没截图看过） | Windows 并行会话，分支 `claude/metre-b1-baton-d11290`（`index.mjs` 只动了 registerSessionLineage 那一处 + import） | 2026-11-14 | 9a415ee7（11-14 主会话合进主线） |
+| 1 派发（界面叫 Baton） | 已自查待验收（A1-* 见「批 1」；界面开关没截图看过） | 空闲（分支 `claude/metre-b1-baton-d11290`，11-14 主会话合进主线） | 2026-11-14 | b16e9727（合并） |
 | 2 会话管理工具 | 已自查待验收 | Windows 并行会话，分支 `claude/metre-b2-sessions-74852b` | 2026-11-14 | 见该分支 git log（批 2 三个提交） |
-| 3 通用补缺（状态词、读图小框） | 进行中 | Windows 并行会话，分支 `metre-b3-gaps`（同上；改 `laolao-phrases.js`） | 2026-11-14 | |
+| 3 通用补缺（状态词、读图小框） | 已自查待验收（A3-* 见「批 3」；单测全过，合并后没在界面里再截图） | 空闲（分支 `claude/metre-b3-gaps-008419`，11-14 主会话合进主线） | 2026-11-14 | 见 git log（批 3 合并） |
 | M 项目记忆（PLAN 6.2） | 未开始（等批 0；看板部分随批 5） | | | |
 | 4 皮肤、黑猫、Baton/Virtuoso 开关、空状态引导语 | 未开始（等批 0；黑猫等用户点头） | | | |
 | 5 总控台 | 未开始（等批 1、批 4） | | | |
@@ -201,3 +201,29 @@
 - `pinkie_mode_ask` 在 Metre 里也套同样的模型规则、算进累计上限；独做、暂停时同样不给。
 - 汇报卡片、`pinkie_session_list`、血缘记录的 `model` 只在 Metre 子会话上记（老模式的记录没加字段）。
 - 两个上限只有后端（`pinkie.prefs.set` 的 `metreMaxRunning`、`metreRequestCap`），设置页没有入口；暂停 / 全停的按钮在批 5 看板。
+
+### 批 3 · 通用补缺（Windows，Opus 5.5，11-14，分支 `claude/metre-b3-gaps-008419`；本节由合并的主会话补写，批 3 会话没写）
+
+改了什么：新 `ui/injections/laolao-tool-kind.js`（命令 / 工具调用分类和 PLAN 2.8 那张话术表，macOS 和 Windows 命令都认）；舞台 `laolao-cle-stage.js`、工具流 `laolao-tool-stream.js`、状态条 `laolao-run-status.js` 的文案表补齐同一组类别（含 `manage`「正在整理会话」、`models`「正在看可用模型」）；后端新 `tool-trace.mjs`（写入前查文件在不在 → 「创建」还是「写入」；记下工具真读过的图片，`/pinkie-tool-image/` 只给这些图，按 id + key 取、不暴露路径；exec 的命令首行留着，刷新后还能说「删除了 / 安装了」）；新 `laolao-tool-images.js/.css`（40px 缩略图，最多 4 张 +N，图没了是灰框，点开走 `laolao-image-viewer`）。`laolao-phrases.js` 加了 `pinkie_sessions`「整理会话」、`pinkie_models`「看可用模型」。
+
+| 项 | 结果 |
+|---|---|
+| A3-1 创建 / 写入 | 过（单测，每个模式） |
+| A3-2 每个类别一条用例、判定不了不猜 | 过（单测） |
+| A3-3 看图片 ≠ 生图 | 过（单测） |
+| A3-4 四张表类别一致 | 过（单测守着） |
+| A3-5 缩略图、点开大图、5 张显示 4+1 | 过（单测） |
+| A3-6 刷新、重开后还在 | 过（单测：网关重启后照样能取；第二个提交专修了「新开浏览器」的情况） |
+| A3-7 越权 | 过（单测：没被读过的路径取不到） |
+| A3-8 图删了显示灰框、不发请求 | 过（单测） |
+| A3-9 Windows 路径 | 过（单测：盘符、反斜杠、中文名、相对工作区） |
+| 界面实看 | 没测：合并后没在隔离副本里截图（R1 要求 A3-1、A3-5 真机各过一遍，留给批 7） |
+
+### 11-14 主会话合并批 1、批 3（Windows，Opus 5.5）
+
+- 批 1 会话做完没提交最后一步（工具清单登记 `pinkie_models`、PROGRESS 自查），主会话代提交（9a415ee7）后合并。批 3 两个提交直接合并。
+- 冲突：工具清单测试改成 27 个（`pinkie_models` + `pinkie_sessions` 都在）；`index.mjs` 两处 import / 注册都留；`laolao-phrases.js` 用批 3 那行（两个新工具一起登记）；批 1 给 Fable 的问题改号 F10–F12，原 F8（预算 5990 / 6000）已被 F4 的答复（6500）取代，删了。
+- **合并时补的漏**：`setup.py` 和 `installer/macos/apply-theme.sh` 的服务文件清单没有 `metre-models.mjs`、`model-tiers.json`、`tool-trace.mjs`，装好的包会在加载插件时缺文件。已补，`every relative import ... installer list` 测试转过。
+- 批 2 留下的第 1 条（阶段条 `manage`）批 3 已经做了；第 2 条（和批 1 撞）合并时解了。第 3 条（只聊天档放不放 `pinkie_sessions`）仍等 F9，第 4、5 条没动。
+- 预算：合并后 Metre 一轮 **6413 / 6500**（工作区 5651 + 插件注入 762），工具 24 个。
+- 测试：批 0–3 相关的 29 个测试文件 453 条，失败 3 条都和本次合并无关、合并前就失败：`computer tool discovers ...`（这台 Windows 没有 computer 执行器，文案不同）、`sidebar-handshake` 一条、`cross-process audit writers` 偶发（合并前后各跑两次都有过有不过）。
