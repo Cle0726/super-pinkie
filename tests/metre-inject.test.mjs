@@ -56,10 +56,10 @@ test('老模式的注入没被 Metre 的分支改动（项目模式仍有整套�
   assert.doesNotMatch(project.text, /【后台命令】长命令/);
 });
 
-test('A0-4 Metre 一轮的固定文字开销不超过 6000 字（工作区文件 + 插件注入）', async () => {
+test('A0-4 Metre 一轮的固定文字开销不超过 6500 字（工作区文件 + 插件注入）', async () => {
   for (const prompt of PROMPTS) {
     const metre = await collect('metre', {prompt});
-    assert.ok(metre.total <= 6000, `${metre.total} 字：${prompt}`);
+    assert.ok(metre.total <= 6500, `${metre.total} 字：${prompt}`);
   }
   const workspace = fs.readdirSync(path.resolve('personas/metre')).sort();
   assert.deepEqual(workspace, ['AGENTS.md', 'IDENTITY.md', 'SOUL.md']);

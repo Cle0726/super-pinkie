@@ -41,7 +41,7 @@
 
 ### 2.2 少读文件
 
-Metre 的工作区只放三份文件：`AGENTS.md`（主 MD）、`IDENTITY.md`、`SOUL.md`（后两份各只有几行，作用是占位，防止系统放进默认的长模板）。不放 `playbooks/`、`HEARTBEAT.md`、`DREAMS.md`、`AESTHETICS.md`、`METHODS.md`。
+Metre 的工作区只放三份文件：`AGENTS.md`（主 MD）、`IDENTITY.md`、`SOUL.md`（后两份各只有几行，作用是占位，防止系统放进默认的长模板）。不放 `playbooks/`、`DREAMS.md`、`AESTHETICS.md`、`METHODS.md`。OpenClaw 会给新工作区补 `TOOLS.md`、`USER.md`、`HEARTBEAT.md` 的英文模板，所以这三份放 0 字节的占位（空文件不注入）；`TOOLS.md`、`USER.md` 归用户，他写了东西就照常注入，安装和更新不覆盖非空的这两份。
 
 对照：项目模式光 `AGENTS.md` 就是 57 KB，另有 31 张打法卡按需注入；Metre 的 `AGENTS.md` 是 12.5 KB。
 
@@ -57,7 +57,7 @@ Metre 的工作区只放三份文件：`AGENTS.md`（主 MD）、`IDENTITY.md`�
 
 拿不准该留该去的，一律留，并记进 `PROGRESS.md` 等 Fable 定。这条不能反着来。
 
-**预算**：Metre 一轮的固定文字开销（工作区文件 + 插件注入，不含工具定义）不超过 6000 字。批 0 量出项目模式的同口径数字写进 `PROGRESS.md` 作对照。
+**预算**：Metre 一轮的固定文字开销（工作区文件 + 插件注入，不含工具定义）不超过 6500 字（11-14 Fable 从 6000 放宽：批 0 量出 5982，主 MD 加第十五节「项目记忆」后 6358，加批 1 的【本轮】一行约 6368；项目模式同口径是 32485。之后主 MD 再加内容，先从主 MD 里省出同样多的字，不再放宽）。批 0 量出项目模式的同口径数字写进 `PROGRESS.md` 作对照。
 
 ### 2.3 权限
 
