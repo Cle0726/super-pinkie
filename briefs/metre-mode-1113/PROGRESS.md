@@ -6,10 +6,10 @@
 
 | 批 | 状态 | 谁在做 | 开始 | 最后提交 |
 |---|---|---|---|---|
-| 0 基座 | 进行中（后端、安装、清点、测试已完成；前端模式菜单在做，见「批 0 剩下的」） | Windows，Opus 5.5（11-14 起改 `ui/injections/` 含 `laolao-phrases.js`，不动 `index.mjs`） | 2026-11-13 | 见 git log |
-| 1 派发（界面叫 Baton） | 未开始（等批 0） | | | |
-| 2 会话管理工具 | 未开始（等批 0） | | | |
-| 3 通用补缺（状态词、读图小框） | 未开始（随时可做） | | | |
+| 0 基座 | 已自查待验收（11-14 前端补完） | 空闲 | 2026-11-13 | 见 git log |
+| 1 派发（界面叫 Baton） | 进行中 | Windows 并行会话，分支 `metre-b1-baton`（从 926e23a2 切出，做完由主会话合并） | 2026-11-14 | |
+| 2 会话管理工具 | 进行中 | Windows 并行会话，分支 `metre-b2-sessions`（同上） | 2026-11-14 | |
+| 3 通用补缺（状态词、读图小框） | 进行中 | Windows 并行会话，分支 `metre-b3-gaps`（同上；改 `laolao-phrases.js`） | 2026-11-14 | |
 | M 项目记忆（PLAN 6.2） | 未开始（等批 0；看板部分随批 5） | | | |
 | 4 皮肤、黑猫、Baton/Virtuoso 开关、空状态引导语 | 未开始（等批 0；黑猫等用户点头） | | | |
 | 5 总控台 | 未开始（等批 1、批 4） | | | |
@@ -95,13 +95,13 @@
 | 项 | 结果 |
 |---|---|
 | A0-1 清点 | 过：`INJECTION-INVENTORY.md` |
-| A0-2 能切到 Metre、key 以 `agent:metre:` 开头 | 后端过：隔离副本 `agent:metre:iso-b0-0` 正常回答（「我是 Metre，负责把你的需求读懂、拆成几块……」）。**界面没做**：模式菜单还没有 Metre 项（见下「批 0 剩下的」） |
+| A0-2 能切到 Metre、key 以 `agent:metre:` 开头 | 后端过：隔离副本 `agent:metre:iso-b0-0` 正常回答（「我是 Metre，负责把你的需求读懂、拆成几块……」）。界面过（11-14）：假网关 + Edge 抓图（`tools/ui-parity/capture.mjs --mode metre`，已加 Metre），从模式菜单点 Metre 切过去，`data-laolao-mode=metre`、地址 `agent:metre:parity`、没有转场层、头像是占位单字母图标、输入框提示「要做什么？」、0 个页面错误。截图里还有粉色壁纸和小碧琪，分别归批 4（皮肤）和批 6（资源关停） |
 | A0-3 工作区只有三份 | 过（附带条件，见 F6）：跑过两轮后 `workspace-metre` 里是 AGENTS / IDENTITY / SOUL + 三个 0 字节占位 + `openclaw-workspace-state.json`，没有多出模板；内容和仓库一致 |
 | A0-4 ≤ 6000 字 | 过：5982（对照项目模式 32485）。余量只有 18 字，见 F4 |
 | A0-5 没有打法卡 / 路由 / 工具箱 / 更拿手 / 陪伴 / 第一人称改写 | 过：`tests/metre-inject.test.mjs` 用四条消息抓 `before_prompt_build` 真实产出断言；第一人称改写另有一条用例 |
 | A0-6 门禁还在 | 过：同一测试文件里三组门禁用例（没执行就说完成、最后一步失败、改了文件测试失败还说通过），Metre 和项目模式的结论逐条相同，都是 revise |
 | A0-7 别的模式派不进 Metre、提醒里不出现 Metre | 过：`normalizeMode('metre')` 拒绝（`pinkie_session_start` 和 `pinkie_mode_ask` 都走它）；四个老模式 × 四条消息的 session-hints 里没有 Metre |
-| A0-8 枚举清单 | 后端和安装脚本过（清单见下）；前端 19 个文件没做 |
+| A0-8 枚举清单 | 过（11-14 补完前端，清单见下） |
 | A0-9 权限 | 过：插件工具 22 个和项目模式同一套；`openclaw.json` 里 `metre` 和 `unrestricted` 一样没有 `tools` 键（项目模式有 6 类 deny），对比：`project: tools.deny=[workboard_*, wiki_*, skill_workshop, canvas, llm-task, node_inference]`，`unrestricted: 无 tools`，`metre: 无 tools`；无限制模式另有 `contextInjection: never`，Metre 不带（它要读自己的手册）。本机放行补丁 `apply-local-unrestricted-policy.mjs` 按网关环境变量对所有本地模式生效，Metre 自动在内。隔离副本里让 Metre 删文件 + 跑 `echo metre-ok`：直接执行，没有确认，文件确实没了，它还按主 MD 第十一节先留了备份 |
 | A0-10 没有无限制的运行时标记 | 过：测试断言注入里没有 `OPENCLAW_UR_INJECT`；工作区文件里也没有 |
 | Z1 全量测试 | **没过（判断不是本批引起）**：`node tools/release-gate/run-tests.mjs` 报 232 个文件、81 条失败、53 条已知、28 条「新失败」，分布在 18 个文件（browser、learning-materials、web-gpt-connection 等，和 Metre 无关的居多）。把这 18 个文件在基线提交 `e16a36f8`（本批之前）和本分支上各单独跑一遍：两边都是 0 条失败。所以这 28 条是全量并行跑时的相互干扰（当时用户的 App 也在启动），不是本批的改动。没在安静的机器上重跑全量。新增的 `tests/metre-inject.test.mjs` 7 条全过；`windows_mode_agents_test.py` 18 条全过；`mode_architecture_setup_test.py` 新增 2 条过，原有的 `test_scaffolds_four_isolated_modes…` 在 Windows 上报错（找不到 `Library/Application Support/...web-gpt-collab`，是 Mac 路径，和本批无关，不在全量门禁里） |
@@ -116,7 +116,7 @@
 - 安装：`app/super_pinkie.py`（`MODE_AGENTS`、`install_personas` + 空占位）、`app/windows_desktop.py`（分屏会话表）、`install.ps1`、`installer/macos/sync-personas.sh`、`installer/macos/apply-bundled.sh`（Mac 没测）、`installer/guard/guard.mjs`（Metre 手册按官方版本守护）、`services/mode-architecture/setup.py`（模板换空占位）。
 - `tools/pinkie-toolbox/sync.mjs`、`build-win.ps1`、`personas/README.md` 没有按模式枚举的地方，不用改（`personas/README.md` 也不许改）。
 
-**批 0 剩下的（下一个会话接着做）**：
-1. 前端登记 Metre（PLAN 三节批 0 第 6 条，A0-2 界面部分、A0-8 前端部分）：`grep -ln "agent:unrestricted:\|'unrestricted'\|\"unrestricted\"" ui/injections/*.js` 列出的 19 个文件，重点 `laolao-mode-switcher.js`（`modes` 数组、`modeFromSession`、`modeIdForSession`、`modeSignatureAnimation`）、`laolao-sidebar.js`、`laolao-session-tools.js`、`laolao-phrases.js`、`laolao-page-warmup.js`、`laolao-splash.js`、`laolao-handoff-bootstrap.js`、`laolao-deep-think.js`、`laolao-classic-shell.js`。Metre 项先用文字「Metre」+ 一个素净的占位小图标，不放转场、不放立绘、不预加载别的模式素材。Mac 的 `desktop/macos/pinkie/Sources/Launcher.swift`（2090 行附近的模式表）也要加，Windows 上只能改不能验。
-2. 在隔离副本里用界面切一次 Metre（Edge + 隔离网关，做法见记忆里的 UI render check），截图看。
-3. 补完后把批 0 接力棒改成「已自查待验收」。
+**批 0 前端（11-14，Windows，Opus 5.5）**：
+- 加了 Metre：`laolao-mode-switcher.js`（模式表加 `plain: true` 项：文字「Metre」+ 占位图标 `ui/assets/laolao-mode-metre.svg`；不放转场、不放选择爆点、不预热、悬停不预加载；会话 key 识别）、`laolao-motion.js`（`modeAssets('metre')` 直接返回，不去拉不存在的图）、`laolao-sidebar.js`、`laolao-workbench.js`、`laolao-deep-think.js`、`laolao-classic-shell.js`、`laolao-splash.js` / `laolao-handoff-bootstrap.js`（切换兜底时不贴转场图、不说碧琪的话）、`laolao-phrases.js`（名字是 `metre` 时显示 Metre，不换成碧琪）、`laolao-settings-user.js`（默认模式可选 Metre）、`laolao-artifacts.js`、`laolao-session-tools.js`、`laolao-native.js`；Mac `Launcher.swift` 两张模式表（只改没验）；`workbench.mjs` 让 Metre 和无限制一样能写项目外的文件（按「权限全开」）。
+- 刻意没加：`laolao-companion.js`、`laolao-immersion.js`（不服务 Metre，Metre 下暂时按唠嗑处理，批 6 关掉）、`laolao-mode-transition-fx.js`（没有 Metre 就自动不播）、`laolao-page-warmup.js`（不预热 Metre）、`laolao-capabilities.js`（定时任务不交给 Metre）、`laolao-desensitize.js`、`laolao-game-shop.js`、`laolao-update-dialog.js`、`laolao-queue-steer.js`（和无限制同样处理）、`laolao-session-list.js` / `laolao-session-cards.js` / `laolao-crew.js`（派活相关，留给批 1）。
+- 测试：动到 `ui/injections` 的 106 个测试文件 920 过 18 没过；`motion.test.cjs` 一条是本批改了预热写法，已同步断言；其余逐个文件和本批前的 `bae9c4ec` 对照，失败数相同或更少（`companion` 的文件权限 0o600 在 Windows 上不成立；`learning-notes-menu`、`sidebar-handshake`、`study-desk-ui` 在本机跑不了）。

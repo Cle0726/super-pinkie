@@ -13,7 +13,7 @@ if (!fs.existsSync(path.join(root,'index.html'))) throw Error('--control-ui must
 const out = path.resolve(args.out || 'parity-shots'); fs.mkdirSync(out,{recursive:true});
 const label = args.label || process.platform;
 const captureMode = args.mode || 'project';
-if (!['chat','project','thinking','learning','unrestricted'].includes(captureMode)) throw Error('--mode is not a Pinkie mode');
+if (!['chat','project','thinking','learning','unrestricted','metre'].includes(captureMode)) throw Error('--mode is not a Pinkie mode');
 const captureAgent = captureMode === 'chat' ? 'main' : captureMode;
 const require = createRequire(process.env.PINKIE_UI_DEPS ? path.join(process.env.PINKIE_UI_DEPS,'package.json') : import.meta.url);
 let playwright, ws;
@@ -26,7 +26,7 @@ catch {
 }
 const models=[{id:'gemini-3-pro-preview',provider:'google',name:'Gemini 3 Pro',reasoning:true,input:['text','image'],contextWindow:1048576},
   {id:'gpt-5.2',provider:'openai',name:'GPT-5.2',reasoning:true,input:['text','image'],contextWindow:400000}];
-const modes=['main','project','thinking','learning','unrestricted'];
+const modes=['main','project','thinking','learning','unrestricted','metre'];
 const now=Date.now();
 const example=[{role:'user',content:[{type:'text',text:'碧琪，帮我整理一下今天的计划。'}],timestamp:now-20000},
   {role:'assistant',content:[{type:'text',text:'先把最要紧的事定下来，再留一点时间给自己。\n\n1. 上午完成手头的重点工作。\n2. 下午学习一个新知识，顺手记下心得。\n3. 晚上一起回顾今天，再安排明天。'}],timestamp:now-10000}];
@@ -49,7 +49,7 @@ function rpc(method,p={}) {
   if((method==='chat.history'||method==='pinkie.chat.history')&&created.some(row=>row.key===(p.key||p.sessionKey))) return {sessionKey:p.key||p.sessionKey,messages:[],thinkingLevel:'high',hasMore:false,totalMessages:0};
   const key=p.key||p.sessionKey||'agent:main:parity';
   if(method==='connect') return {type:'hello-ok',protocol:3,server:{version:'parity-fixture',connId:'parity'},features:{methods:['models.list','sessions.list','sessions.patch','chat.history','agents.list'],events:['chat']},snapshot:{presence:[],health:{ok:true},sessionDefaults:{defaultAgentId:'main',mainSessionKey:'agent:main:parity',defaultModel:'google/gemini-3-pro-preview'}},auth:{role:'operator',scopes:['operator.admin','operator.read'],deviceToken:'isolated-parity'},policy:{tickIntervalMs:30000}};
-  if(method==='agents.list') return {defaultId:'main',mainKey:'agent:main:parity',agents:modes.map(id=>({id,name:'碧琪',identity:{name:'碧琪'}}))};
+  if(method==='agents.list') return {defaultId:'main',mainKey:'agent:main:parity',agents:modes.map(id=>({id,name:id==='metre'?'Metre':'碧琪',identity:{name:id==='metre'?'Metre':'碧琪'}}))};
   if(method==='agent.identity.get') return {agentId:p.agentId||'main',name:'碧琪',avatar:'/laolao-mode-chat-hd.png'};
   if(method==='models.list') return {models};
   if(method==='sessions.list') return {sessions:modes.filter(id=>!p.agentId||p.agentId===id).map(id=>session(`agent:${id}:parity`)).concat((canned['+sessions']||[]).filter(s=>!p.agentId||s.key.startsWith(`agent:${p.agentId}:`)).map(s=>({...session(s.key),...s}))).concat(created.filter(s=>!p.agentId||s.key.startsWith(`agent:${p.agentId}:`))),defaults:{modelProvider:'google',model:'gemini-3-pro-preview',contextTokens:1048576,thinkingLevel:'high'}};
