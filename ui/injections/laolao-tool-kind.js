@@ -165,7 +165,27 @@
     return '';
   }
 
-  const api = {KINDS, ING, DONE, GIT_ING, IMAGE_EXT, ofCommand, gitSub, refine, ing, done, runKind, baseName, isImagePath};
+  /** 过程里一行工具对应的 toolCallId。两种排法：
+   *  - 工具结果单独一条：data-message-id = tool:<role>:<callId>
+   *  - 时间线（工具调用嵌在助手消息里）：msg:assistant:<时间戳>:<第几条>:timeline:tool:<第几次调用>，
+   *    到聊天面板的消息列表里按位置（时间戳核对）找那条助手消息的第 n 个 toolCall。找不到返回 ''。 */
+  function rowCallId(row) {
+    const host = row && row.closest && row.closest('[data-message-id]');
+    const id = host ? String(host.dataset.messageId || '') : '';
+    let m = /^tool:[^:]+:([^:]+)/.exec(id);
+    if (m) return m[1];
+    m = /^msg:assistant:(\d+):(\d+):timeline:tool:(\d+)/.exec(id);
+    if (!m || typeof document === 'undefined') return '';
+    const pane = document.querySelector('openclaw-chat-pane');
+    const msgs = pane && pane.state && Array.isArray(pane.state.chatMessages) ? pane.state.chatMessages : [];
+    let msg = msgs[Number(m[2])];
+    if (!msg || String(msg.timestamp) !== m[1]) msg = msgs.find((x) => x && x.role === 'assistant' && String(x.timestamp) === m[1]);
+    const calls = msg && Array.isArray(msg.content) ? msg.content.filter((b) => b && b.type === 'toolCall') : [];
+    const call = calls[Number(m[3])];
+    return call && typeof call.id === 'string' ? call.id : '';
+  }
+
+  const api = {KINDS, rowCallId, ING, DONE, GIT_ING, IMAGE_EXT, ofCommand, gitSub, refine, ing, done, runKind, baseName, isImagePath};
   root.__pinkieToolKind = api;
   if (typeof module === 'object' && module && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

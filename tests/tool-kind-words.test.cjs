@@ -178,3 +178,20 @@ test('run status follows Metre sessions too and words a working run by its kind'
   assert.equal(wait.visible, true);
   assert.equal(wait.text, '在等子会话做完');
 });
+
+test('rowCallId finds the call id in both layouts (tool result rows and timeline rows)', () => {
+  const row = (messageId) => ({closest: () => ({dataset: {messageId}})});
+  const messages = [
+    {role: 'user', timestamp: 1},
+    {role: 'assistant', timestamp: 1794647759985, content: [{type: 'text'}, {type: 'toolCall', id: 'call-a'}, {type: 'toolCall', id: 'call-b'}]},
+  ];
+  const doc = {querySelector: (sel) => (sel === 'openclaw-chat-pane' ? {state: {chatMessages: messages}} : null)};
+  const ctx = {document: doc, window: {}, module: {exports: {}}};
+  vm.runInNewContext(read('ui/injections/laolao-tool-kind.js'), ctx);
+  const api = ctx.module.exports;
+  assert.equal(api.rowCallId(row('tool:toolResult:chatcmpl-tool-9c7d')), 'chatcmpl-tool-9c7d');
+  assert.equal(api.rowCallId(row('msg:assistant:1794647759985:1:timeline:tool:0:timeline:tool:0')), 'call-a');
+  assert.equal(api.rowCallId(row('msg:assistant:1794647759985:1:timeline:tool:1')), 'call-b');
+  assert.equal(api.rowCallId(row('msg:assistant:1794647759985:7:timeline:tool:1')), 'call-b', 'index moved: found by timestamp');
+  assert.equal(api.rowCallId(row('msg:assistant:42:1:timeline:tool:0')), '', 'unknown message → no guess');
+});

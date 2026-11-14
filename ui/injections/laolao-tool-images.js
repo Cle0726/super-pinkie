@@ -64,6 +64,8 @@
   }
 
   function callIdOf(row) {
+    const tk = window.__pinkieToolKind;
+    if (tk && tk.rowCallId) return tk.rowCallId(row);
     const host = row.closest('[data-message-id]');
     const m = host && /^tool:[^:]+:([^:]+)/.exec(host.dataset.messageId || '');
     return m ? m[1] : '';

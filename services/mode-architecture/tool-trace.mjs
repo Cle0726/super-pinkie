@@ -16,6 +16,7 @@ const MAX_CALLS = 400;          // 每个会话最多记这么多次调用（够
 const MAX_IMAGES = 24;          // 一次调用最多记这么多张
 const ROUTE = '/pinkie-tool-image/';
 const WRITE_TOOLS = new Set(['write']);
+const EXEC_TOOLS = new Set(['exec', 'bash', 'exec_command']);
 const SESSION = /^agent:[a-z0-9_-]+:/i;
 
 const sessionId = key => createHash('sha256').update(String(key)).digest('hex').slice(0, 24);
@@ -119,8 +120,14 @@ export class ToolTraceStore {
     const failed = Boolean(event.error || event.isError || event.result?.isError);
     const patch = {};
     if (pending && failed) patch.created = false;
+    const params = event.params && typeof event.params === 'object' ? event.params : {};
+    // 命令原文第一行：历史里只有工具结果没有参数，换了浏览器也要能说「删除了 / 安装了」
+    const tool = String(event.toolName || event.name || '').toLowerCase();
+    if (EXEC_TOOLS.has(tool) && typeof (params.command || params.cmd) === 'string') {
+      const line = String(params.command || params.cmd).split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
+      if (line) patch.command = line.length > 200 ? line.slice(0, 199) + '…' : line;
+    }
     if (!failed) {
-      const params = event.params && typeof event.params === 'object' ? event.params : {};
       const images = [];
       for (const candidate of imageCandidates(event.toolName || event.name, params, event.result)) {
         if (images.length >= MAX_IMAGES) break;
@@ -162,6 +169,7 @@ export class ToolTraceStore {
       const out = {};
       if (typeof call.created === 'boolean') out.created = call.created;
       if (call.name) out.name = call.name;
+      if (call.command) out.command = call.command;
       if (Array.isArray(call.images) && call.images.length) {
         out.images = call.images.map(img => ({
           name: img.name,

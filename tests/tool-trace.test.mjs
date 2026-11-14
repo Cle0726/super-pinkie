@@ -183,3 +183,14 @@ test('index.mjs registers the tool trace', () => {
   assert.match(src, /import \{registerToolTrace\} from '\.\/tool-trace\.mjs';/);
   assert.match(src, /registerToolTrace\(api, \{root: path\.join\(pinkieStateRoot\(\), 'tool-trace'\)/);
 });
+
+test('the first line of an exec command is kept so a fresh browser can still say 删除了 / 安装了', () => {
+  const dir = tmp();
+  const store = new ToolTraceStore({root: path.join(dir, 'state')});
+  store.afterTool({toolName: 'exec', toolCallId: 'x1', params: {command: 'Remove-Item "D:\旧\a.txt"\necho done'}, result: {}}, {sessionKey: KEY});
+  store.afterTool({toolName: 'exec', toolCallId: 'x2', params: {command: 'winget install ' + 'x'.repeat(400)}, result: {}}, {sessionKey: KEY});
+  const calls = store.list(KEY).calls;
+  assert.equal(calls.x1.command, 'Remove-Item "D:\旧\a.txt"');
+  assert.equal(calls.x2.command.length, 200);
+  assert.equal(store.list(KEY).calls.x1.images, undefined);
+});
