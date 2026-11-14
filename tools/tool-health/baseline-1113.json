@@ -1,0 +1,211 @@
+{
+ "sessions": 60,
+ "replies": 1287,
+ "tool_calls": 1256,
+ "exec_share": 0.579,
+ "parallel_share": 0.143,
+ "error_or_aborted_share": 0.053,
+ "system_prompt_chars_median": 61658,
+ "tool_schema_chars_median": 75563,
+ "tool_count_median": 65,
+ "avg_tokens_per_reply": 166050,
+ "tools": {
+  "exec": {
+   "calls": 727,
+   "failed": 25,
+   "rate": 0.034
+  },
+  "app_browser": {
+   "calls": 161,
+   "failed": 17,
+   "rate": 0.106
+  },
+  "read": {
+   "calls": 68,
+   "failed": 3,
+   "rate": 0.044
+  },
+  "web_search": {
+   "calls": 47,
+   "failed": 15,
+   "rate": 0.319
+  },
+  "process": {
+   "calls": 47,
+   "failed": 18,
+   "rate": 0.383
+  },
+  "plan_update": {
+   "calls": 31,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "edit": {
+   "calls": 23,
+   "failed": 2,
+   "rate": 0.087
+  },
+  "image": {
+   "calls": 19,
+   "failed": 11,
+   "rate": 0.579
+  },
+  "write": {
+   "calls": 17,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "workbench_read": {
+   "calls": 14,
+   "failed": 1,
+   "rate": 0.071
+  },
+  "clekk_memory": {
+   "calls": 13,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "web_fetch": {
+   "calls": 9,
+   "failed": 9,
+   "rate": 1.0
+  },
+  "sessions_history": {
+   "calls": 9,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "pdf": {
+   "calls": 8,
+   "failed": 4,
+   "rate": 0.5
+  },
+  "memory_search": {
+   "calls": 6,
+   "failed": 6,
+   "rate": 1.0
+  },
+  "computer": {
+   "calls": 6,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "browser": {
+   "calls": 5,
+   "failed": 1,
+   "rate": 0.2
+  },
+  "code_search": {
+   "calls": 4,
+   "failed": 1,
+   "rate": 0.25
+  },
+  "sessions_list": {
+   "calls": 4,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "code_check": {
+   "calls": 4,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "learning_material": {
+   "calls": 4,
+   "failed": 1,
+   "rate": 0.25
+  },
+  "pinkie_search": {
+   "calls": 3,
+   "failed": 2,
+   "rate": 0.667
+  },
+  "session_status": {
+   "calls": 3,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "ask_user": {
+   "calls": 3,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "learning_activity": {
+   "calls": 3,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "workbench_show": {
+   "calls": 2,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "code_edit": {
+   "calls": 2,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "computer_flow": {
+   "calls": 2,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "pinkie_session_message": {
+   "calls": 2,
+   "failed": 1,
+   "rate": 0.5
+  },
+  "cron": {
+   "calls": 2,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "workboard_list": {
+   "calls": 2,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "get_goal": {
+   "calls": 1,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "subagents": {
+   "calls": 1,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "run_tests": {
+   "calls": 1,
+   "failed": 1,
+   "rate": 1.0
+  },
+  "pinkie_session_start": {
+   "calls": 1,
+   "failed": 0,
+   "rate": 0.0
+  },
+  "message": {
+   "calls": 1,
+   "failed": 1,
+   "rate": 1.0
+  },
+  "learning_library": {
+   "calls": 1,
+   "failed": 0,
+   "rate": 0.0
+  }
+ },
+ "models": {
+  "workbuddy/deepseek-v4.1-flash": 412,
+  "grok-4.7": 285,
+  "workbuddy/hy4free": 285,
+  "gemini-3.8-flash-tiered": 263,
+  "gemini-3-flash": 34,
+  "gemini-2.5-flash": 2,
+  "gpt-5.6-luna": 1,
+  "gateway-injected": 1,
+  "workbuddy/deepseek-v4-pro": 1,
+  "workbuddy/minimax-m3.1-flash": 1
+ }
+}
