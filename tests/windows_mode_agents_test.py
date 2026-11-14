@@ -82,13 +82,13 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         fake = FakeOpenClaw()
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted"])
+        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted", "metre"])
 
     def test_log_lines_before_json_are_tolerated(self):
         fake = FakeOpenClaw(listing=b"[plugins] loading pinkie-mode-architecture\n" + FRESH_LIST + b"\n")
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(len(fake.added), 4)
+        self.assertEqual(len(fake.added), 5)
 
     def test_non_json_listing_is_logged_and_reported(self):
         fake = FakeOpenClaw(listing=b"Error: config invalid")
@@ -113,7 +113,7 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertTrue(self.logs)
 
     def test_complete_config_skips_the_cli(self):
-        self.write_config(["main", "project", "thinking", "learning", "unrestricted"])
+        self.write_config(["main", "project", "thinking", "learning", "unrestricted", "metre"])
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("CLI must not run")):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
 
@@ -124,7 +124,7 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         fake = FakeOpenClaw()
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
-        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted"])
+        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted", "metre"])
 
     def test_main_is_added_first_ahead_of_the_party_agents(self):
         # What services/party leaves in a fresh profile: no main at all, so
@@ -138,7 +138,7 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertEqual(config["agents"]["list"][0]["workspace"], str(self.home / ".openclaw/workspace"))
 
     def test_existing_main_is_moved_back_to_the_default_position(self):
-        self.write_config(["pinkie-party", "main", "project", "thinking", "learning", "unrestricted"])
+        self.write_config(["pinkie-party", "main", "project", "thinking", "learning", "unrestricted", "metre"])
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
         self.assertEqual(super_pinkie.configured_agent_ids()[:2], ["main", "pinkie-party"])
@@ -206,6 +206,23 @@ class ModeAgentRegistrationTests(unittest.TestCase):
             super_pinkie.install_personas(self.logs.append)
         self.assertEqual((free / "IDENTITY.md").read_text(encoding="utf-8"), "旧身份")
         self.assertEqual((project / "DREAMS.md").read_text(encoding="utf-8"), "旧梦")
+
+    def test_metre_workspace_gets_its_three_files_and_empty_placeholders(self):
+        # briefs/metre-mode-1113 A0-3：只放 AGENTS / IDENTITY / SOUL；TOOLS / USER / HEARTBEAT 是空占位，
+        # 免得 `openclaw agents add` 写进英文模板。用户自己写过的同名文件不动。
+        source = self.resources / "personas/metre"
+        source.mkdir(parents=True)
+        for name in ("AGENTS.md", "IDENTITY.md", "SOUL.md"):
+            (source / name).write_text(f"metre {name}", encoding="utf-8")
+        metre = self.home / ".openclaw/workspace-metre"
+        metre.mkdir(parents=True)
+        (metre / "USER.md").write_text("我自己写的", encoding="utf-8")
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw()):
+            super_pinkie.install_personas(self.logs.append)
+        self.assertEqual(sorted(p.name for p in metre.iterdir()), ["AGENTS.md", "HEARTBEAT.md", "IDENTITY.md", "SOUL.md", "TOOLS.md", "USER.md"])
+        self.assertEqual((metre / "AGENTS.md").read_text(encoding="utf-8"), "metre AGENTS.md")
+        self.assertEqual((metre / "TOOLS.md").read_text(encoding="utf-8"), "")
+        self.assertEqual((metre / "USER.md").read_text(encoding="utf-8"), "我自己写的")
 
     def test_missing_workspace_avatars_are_filled_but_user_images_are_kept(self):
         assets = self.resources / "ui/assets"

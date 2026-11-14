@@ -26,7 +26,7 @@ import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, inde
 // 2026-11-02 档位升级：按「活儿种类」（work-kinds.mjs）变用途——答题类独立解答；动手的活（网页、PPT、视频……）
 // 改成独立写验收清单；文案、点子独立写一版。审稿员带只读工具（read / image / pdf / web_fetch / web_search），
 // 打开交付物本身核对，不再只看文字。九档补强和四档思考强度同时选时合并成一次验收。
-const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
+const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
 export const LEVELS = LADDER_LEVELS;
 const RANK = new Map(LEVELS.map((name, index) => [name, index]));
 const LABELS = {off: '关闭', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', adaptive: 'Adaptive', max: 'Max', ultra: 'Ultra'};
@@ -36,7 +36,7 @@ const LABELS = {off: '关闭', minimal: 'Minimal', low: 'Low', medium: 'Medium',
 const WORK_TIERS = Object.freeze(Object.fromEntries(['boost', 'full', 'marathon'].map((tier) => [tier, rigorLayers(tier)])));
 // 审稿员只给只读工具：能打开截图、文档、网页，不能执行、写文件、操作浏览器。
 export const REVIEW_TOOLS = Object.freeze(['read', 'image', 'pdf', 'web_fetch', 'web_search']);
-const MODE_BY_AGENT = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
+const MODE_BY_AGENT = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none', metre: 'metre'});
 // The unrestricted mode retains its existing review behavior and is not part
 // of the four work-mode contract migration.
 const LEGACY_MERGE_WINDOW_MS = 10 * 60_000;

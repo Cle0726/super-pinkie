@@ -63,6 +63,37 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(none_identity, 'CUSTOM IDENTITY\n')
             self.assertFalse(setup.install(home))
 
+    def test_metre_stock_templates_become_empty_placeholders(self):
+        # briefs/metre-mode-1113 A0-3：agents add 写进的英文模板挪进备份、换成空文件；用户写的不动；不加 persona/ 和 memory/。
+        with tempfile.TemporaryDirectory(prefix='pinkie-metre-setup-') as temp:
+            home = Path(temp)
+            ws = home / setup.METRE_WORKSPACE
+            ws.mkdir(parents=True)
+            (ws / 'AGENTS.md').write_text('metre manual', encoding='utf-8')
+            (ws / 'TOOLS.md').write_text('# TOOLS.md - Local Notes\n\nSkills define...', encoding='utf-8')
+            (ws / 'HEARTBEAT.md').write_text('<!-- Heartbeat template; comments-only -->\n', encoding='utf-8')
+            (ws / 'USER.md').write_text('我是 C.le.', encoding='utf-8')
+            backup = home / 'backup'
+            self.assertTrue(setup._tidy_metre_workspace(home, backup))
+            self.assertEqual((ws / 'TOOLS.md').read_text(encoding='utf-8'), '')
+            self.assertEqual((ws / 'HEARTBEAT.md').read_text(encoding='utf-8'), '')
+            self.assertEqual((ws / 'USER.md').read_text(encoding='utf-8'), '我是 C.le.')
+            self.assertTrue((backup / 'metre-templates/TOOLS.md').read_text(encoding='utf-8').startswith('# TOOLS.md'))
+            self.assertEqual(sorted(p.name for p in ws.iterdir()), ['AGENTS.md', 'HEARTBEAT.md', 'TOOLS.md', 'USER.md'])
+            self.assertFalse(setup._tidy_metre_workspace(home, backup))
+            self.assertNotIn('metre', setup.MODE_WORKSPACES)
+
+    def test_metre_agent_tools_match_unrestricted(self):
+        # A0-9：工具放行照无限制模式，不加 deny；但不像无限制那样关掉工作区注入。
+        data = {'agents': {'list': [{'id': 'project'}, {'id': 'unrestricted'}, {'id': 'metre'}]}, 'plugins': {}}
+        setup._configure_plugin(data, Path('/x'))
+        agents = {a['id']: a for a in data['agents']['list']}
+        self.assertEqual(agents['metre'].get('tools'), agents['unrestricted'].get('tools'))
+        self.assertIsNone(agents['metre'].get('tools'))
+        self.assertIn('deny', agents['project']['tools'])
+        self.assertNotIn('contextInjection', agents['metre'])
+        self.assertNotIn('skipBootstrap', agents['metre'])
+
     def test_existing_none_marker_and_custom_limits_are_preserved(self):
         with tempfile.TemporaryDirectory(prefix='pinkie-mode-marker-') as temp:
             home=Path(temp);config=home/'.openclaw/openclaw.json';config.parent.mkdir()

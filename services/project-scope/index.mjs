@@ -4,7 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
-const modes = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
+const modes = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
 const defaultStateRoot = (home, useEnvironment) => useEnvironment && process.env.PINKIE_STATE_ROOT
   ? process.env.PINKIE_STATE_ROOT
   : path.join(home, 'Library/Application Support/SuperPinkie');
@@ -169,7 +169,8 @@ export default {
     },{scope:'operator.admin'});
     api.on('before_prompt_build',(_event,ctx)=>{
       const scoped=guard.prompt(ctx);
-      if(!modes.test(ctx.sessionKey||''))return scoped;
+      // Metre 不要「工作过程展示」：它的手册第九节自己规定怎么汇报进展。项目绑定照旧。
+      if(!modes.test(ctx.sessionKey||'')||/^agent:metre:/.test(ctx.sessionKey||''))return scoped;
       return {appendSystemContext:(scoped?.appendSystemContext||'')+progressInstruction};
     },{priority:-10000});
     api.on('before_tool_call',(event,ctx)=>guard.before(event,ctx),{priority:-10000});

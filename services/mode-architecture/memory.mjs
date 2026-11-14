@@ -11,11 +11,12 @@ const MODE_ROOTS = Object.freeze({
   ideas: '.openclaw/workspace-thinking',
   learning: '.openclaw/workspace-learning',
   none: '.openclaw/workspace-unrestricted',
+  metre: '.openclaw/workspace-metre',
 });
 // 运行时由 agentWorkspace(config, agentId) 算工作区；这张表只是兜底（没有配置、没有 agent 时）。
-const MODE_AGENT = Object.freeze({chat: 'main', project: 'project', ideas: 'thinking', learning: 'learning', none: 'unrestricted'});
+const MODE_AGENT = Object.freeze({chat: 'main', project: 'project', ideas: 'thinking', learning: 'learning', none: 'unrestricted', metre: 'metre'});
 
-const MODE_AGENTS = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none'});
+const MODE_AGENTS = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none', metre: 'metre'});
 const MEMORY_KINDS = new Set(['identity', 'preference', 'feedback', 'decision', 'fact', 'reference']);
 const SECRET_PATTERN = /(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|bearer|password|passwd|密码|密钥|令牌)\s*[:=]\s*\S+/i;
 const EXPLICIT_MEMORY = /(?:^|[，。；！？\s])(?:请记住|记住[：:]|从今以后|以后(?:都|请|不要|别|必须|一律)|始终|永远|每次都|我的偏好(?:是)?|我(?:很)?喜欢|我不喜欢|不要再|别再|不得)/i;
@@ -26,7 +27,7 @@ const digest = value => createHash('sha256').update(String(value || '')).digest(
 const normalized = value => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 const canonicalKey = value => normalized(value).toLocaleLowerCase().slice(0, 160);
 const boundedText = value => normalized(value).slice(0, 2400);
-const validSession = value => /^agent:(main|project|thinking|learning|unrestricted):[^\s]{1,260}$/.test(String(value || ''));
+const validSession = value => /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]{1,260}$/.test(String(value || ''));
 const isChild = value => /:subagent:/.test(String(value || ''));
 // H1: temp sessions never write long-term memory.
 const isTemp = value => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(value || ''));

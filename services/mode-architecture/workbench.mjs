@@ -22,7 +22,7 @@ export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工
 const LEARNING_WORKBENCH_RULES = '【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循学习模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按先生当前要求。需要指给先生看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
 const fsp = fs.promises;
 const SESSION = /^agent:([a-z0-9_-]+):.{1,500}$/i;
-const WORKBENCH_AGENTS = new Set(['project', 'learning', 'unrestricted']);
+const WORKBENCH_AGENTS = new Set(['project', 'learning', 'unrestricted', 'metre']);
 const MAX_TEXT = 8 * 1024 * 1024;
 const MAX_IMAGE = 12 * 1024 * 1024;
 const MAX_LIST = 3000;
@@ -144,7 +144,7 @@ export class Workbench {
     const match = SESSION.exec(key);
     if (!match) throw fail('没有找到当前会话，请先打开一段对话。');
     const agentId = match[1].toLowerCase();
-    if (!WORKBENCH_AGENTS.has(agentId)) throw fail('工作台可在项目模式、学习模式和无限模式里使用。');
+    if (!WORKBENCH_AGENTS.has(agentId)) throw fail('工作台可在项目模式、学习模式、无限模式和 Metre 模式里使用。');
     const binding = this.binding(key);
     const workspaceRoot = realish(this.agentWorkspace(agentId));
     // Only the app's own mode workspace may be created here. A folder the user
@@ -591,7 +591,7 @@ export class Workbench {
 }
 
 export function createWorkbenchReadTool(bench, ctx = {}) {
-  if (!/^agent:(project|learning|unrestricted):/.test(String(ctx.sessionKey || ''))) return null;
+  if (!/^agent:(project|learning|unrestricted|metre):/.test(String(ctx.sessionKey || ''))) return null;
   return {
     name: 'workbench_read', label: '读取项目与参考资料',
     description: '读取当前项目、当前模式自己的工作区，或电脑上明确指定的其他文件夹。list 列目录，read 读文件，search 查正文，context 查看当前工作台页面的文件、编辑器诊断和最近终端输出。读取参考资料不会切换当前项目、终端或 Git 目录。',
@@ -836,7 +836,7 @@ export function registerWorkbench(api, options = {}) {
   api.registerTool?.(ctx => createCodeEditTool(ctx, {rootFor: toolRoot, watch: codeWatch}), {name: 'code_edit'});
   api.registerTool?.(ctx => createCodeRefsTool(ctx, {rootFor: toolRoot}), {name: 'code_refs'});
   api.registerTool?.(ctx => createRunTestsTool(ctx, {rootFor: toolRoot}), {name: 'run_tests'});
-  api.registerTool?.(ctx => (/^agent:(project|learning|unrestricted):/.test(String(ctx.sessionKey || '')) ? {
+  api.registerTool?.(ctx => (/^agent:(project|learning|unrestricted|metre):/.test(String(ctx.sessionKey || '')) ? {
     name: 'workbench_show', label: '在工作台打开',
     description: '在先生的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',
     parameters: {type: 'object', additionalProperties: false, properties: {path: {type: 'string'}, line: {type: 'integer', minimum: 1}}, required: ['path']},
@@ -851,6 +851,11 @@ export function registerWorkbench(api, options = {}) {
   } : null), {name: 'workbench_show'});
   // 让碧琪知道工作台的能力（只在项目 / 学习 / 无限模式）
   api.on?.('before_prompt_build', (_event, ctx) => {
+    // Metre：工具照给，规则说明不给（固定开销预算），只在工作台真的同步了现场时带上现场。
+    if (String(ctx?.sessionKey || '').startsWith('agent:metre:')) {
+      const live = bench.context.prompt(ctx.sessionKey);
+      return live ? {appendContext: live} : undefined;
+    }
     if (!/^agent:(project|learning|unrestricted):/.test(String(ctx?.sessionKey || ''))) return;
     let location = '';
     try {

@@ -25,7 +25,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // 清单覆盖的包内目录（runtime/ 很大，由系统代码签名管）。
 const MANIFEST_ROOTS = ['VERSION', 'build-info.json', 'personas', 'services', 'installer', 'bundled-skills', 'skills', 'ui'];
 // 模式 → 工作区；neutral（无限制模式）归用户，DREAMS.md 是碧琪自己写的梦，都不恢复（沿用 sync-personas 的规则）。
-const MODE_WORKSPACES = {chat: 'workspace', project: 'workspace-project', thinking: 'workspace-thinking', learning: 'workspace-learning'};
+const MODE_WORKSPACES = {chat: 'workspace', project: 'workspace-project', thinking: 'workspace-thinking', learning: 'workspace-learning', metre: 'workspace-metre'};
 const KEEP_NAMES = new Set(['DREAMS.md']);
 // 插件：已装目录 ← 包里的源目录。
 const PLUGINS = {'pinkie-mode-architecture': 'services/mode-architecture', 'pinkie-project-scope': 'services/project-scope', 'pinkie-first-person-renderer': 'services/first-person-renderer'};

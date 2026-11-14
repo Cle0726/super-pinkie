@@ -10,7 +10,7 @@ const EXITED = /Process exited with (?:code|signal)/;
 const POLL_MS = 3_000;
 const MAX_WATCH_MS = 6 * 60 * 60_000;
 export const WAKE_PREFIX = '[pinkie-tier] 后台任务完成';
-const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
+const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
 
 function resultText(result) {
