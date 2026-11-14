@@ -357,7 +357,7 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 |---|---|---|
 | D1-1 | 过 | 截图（假网关 + 无头 Edge + 仓库界面，项目模式，设置 → 常用）：`%USERPROFILE%\碧琪实测\iso-th\shots\d1-light-chat.png`、`d1-dark-chat.png`。两条已接（启用中的本地资料夹、暂停的 Notion）、5 个可接入、Windows 下的文件夹输入框。添加 / 启用 / 停用 / 删除在副本网关上实测见 D1-2、D1-3 |
 | D1-2 | 过（副本实测 + 单测） | 副本网关调 `pinkie.connectors.save`，命令填 `not-a-real-cmd-xyz` → 返回「没连上：找不到启动命令「not-a-real-cmd-xyz」。检查一下命令有没有写错、对应的程序装了没有。配置没有改动。」；副本 `openclaw.json` 的 sha256 前后一样（`110183b1…`）；网关一直在听 12794。单测 `tests/connectors-d1.test.mjs` 6/6 |
-| D1-3 | **部分**：工具出现了，`tool_load` 没有（B2 没做），真调用没测（上游中转没在跑） | 副本里接本地资料夹（夹具 `fixtures\proj`）：运行时先连上再写（28 秒，第一次要下载包），`probe` 显示 4 个工具（只读过滤后，另 12 个被滤掉）。在 main 模式真开一轮：这一轮 `context.compiled` 的 53 个工具里有 `files__list_allowed_directories`、`files__list_directory`、`files__read_text_file`、`files__search_files`。模型那一步因为上游断了失败。暂停 / 启用 / 移除往返都 `ok`，测完已移除，副本 `mcp.servers` 是空的 |
+| D1-3 | **过（真调用 11-14 补测）**；`tool_load` 没有（B2 没做，连接器工具常驻） | **11-14 补测**：1466 中转起来后，副本网关 `pinkie.connectors.save` 接本地资料夹（夹具 `fixtures\proj`，20 秒连上并写入），main 模式开新会话（hy4free）要求只用 `files__` 工具：会话记录里 `files__list_allowed_directories`、`files__list_directory`、`files__read_text_file` 各 1 次，0 次出错，52 秒答完，列出 6 个文件、`admin.js` 前 5 行和磁盘原文逐字一致。测完已 `remove`、网关已停。以下是 11-14 之前的记录： | 副本里接本地资料夹（夹具 `fixtures\proj`）：运行时先连上再写（28 秒，第一次要下载包），`probe` 显示 4 个工具（只读过滤后，另 12 个被滤掉）。在 main 模式真开一轮：这一轮 `context.compiled` 的 53 个工具里有 `files__list_allowed_directories`、`files__list_directory`、`files__read_text_file`、`files__search_files`。模型那一步因为上游断了失败。暂停 / 启用 / 移除往返都 `ok`，测完已移除，副本 `mcp.servers` 是空的 |
 | D1-4 | 过 | 本分支对 `5ff2aad2` 的全部新增行里搜 `ghp_…`、`github_pat_…`、`sk-…`、`ntn_…`、`AKIA…`、写死的 `apiKey`：0 条。密钥只进本机 `openclaw.json`（headers / env），返回给页面的只有「有没有凭据」 |
 
 ### D2 独立工作树
@@ -437,7 +437,7 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 | A | A1-1、A1-2、A1-3、A2-1、A3-1～4、A4-1～4、A5-1、A7-1 | A1-4（`refresh_mac_runtime` 待 Mac）、A6-1（单测过，副本没有侧栏浏览器）、A6-2（需 Mac） | A2-2（运行时冷启动，A2-F1） | |
 | B | B1-1（按模式）、B3-1～3 | B1-2（单测过，真渠道没测） | B1-3（51→49，到不了 45） | B2-1～3（§6 停，B2-F1） |
 | C | C1-1、C1-2（hy4free 2/2）、C1-3（40%）、C2-1（28%）、C2-2 | | | |
-| D | D1-1、D1-2、D1-4、D2-1、D2-2、D3-1、D4-1、D5-1 | D1-3（工具出现了，没有按需层，真调用没测） | | |
+| D | D1-1、D1-2、D1-3（真调用 11-14 补测）、D1-4、D2-1、D2-2、D3-1、D4-1、D5-1 | | | |
 | Z | Z1、Z3、Z4、Z5 | | Z2（被用户另一个会话改过） | |
 
 ### 需 Mac 端
