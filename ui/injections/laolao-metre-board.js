@@ -299,7 +299,12 @@
     let row = parent.querySelector(':scope > .pk-metre-quick');
     if (!row) {
       row = h('div', 'pk-metre-quick');
-      row.append(h('h3', 'pk-metre-quick__label', '看板'));
+      const label = h('h3', 'pk-metre-quick__label', '<span>看板</span>');
+      const all = h('button', 'pk-metre-quick__all', '打开总控台');
+      all.type = 'button';
+      all.addEventListener('click', () => api.open());
+      label.append(all);
+      row.append(label);
       const list = h('div', 'pk-metre-quick__list');
       for (const item of HOME_CARDS) {
         const btn = h('button', 'pk-metre-quick__card', `<span class="pk-metre-quick__art">${MINI[item.art]()}</span><span class="pk-metre-quick__title">${item.title}</span><span class="pk-metre-quick__text">${item.text}</span>`);

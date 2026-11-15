@@ -1012,3 +1012,93 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--c
 /* 从底下的身份栏点开的菜单往上弹 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):has(aside.sidebar:not(.sidebar--collapsed)) .laolao-mode-menu:not(.laolao-mode-menu--workspace-dock) { top: auto !important; bottom: 66px !important; left: 12px !important; min-width: 200px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option { width: 100% !important; box-sizing: border-box !important; }
+
+/* ====================================================================================================
+ * 第五版（Fable 11-14 夜）：用户发来两张 Claude 桌面版深色截图（ref/claude-home-dark.png、claude-chat-dark.webp），
+ * 这一段逐项照截图对。截图是 125% 缩放，下面的数都除过 1.25：
+ *   侧栏宽 ≈ 290；入口行高 34、字 14.5；第一行「新建」是一块灰底；最上面单独一行小图标；左下角账号栏，上面一道细线。
+ *   输入框宽 656、高 102、圆角 16：框里只有左下角一个入口和右下角的键；模型那一排在框外下面，左一样、右几样。
+ *   深色：侧栏 #1F1F1F、内容区 #191919、输入框 #303030、选中行 #404040（Metre 保留一点暖色，明度照这几个数）。
+ * 和上面第四版冲突的规则以这一段为准。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --shell-nav-width: 272px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
+  --metre-bg: #191918;
+  --metre-side: #1F1F1E;
+  --metre-surface: #2F2F2D;
+  --metre-card: #1F1F1E;
+  --metre-art: #191918;
+  --metre-line: #2F2F2D;
+  --metre-line-strong: #3A3A38;
+  --metre-hover: #2A2A28;
+  --metre-side-hover: #2C2C2A;
+  --metre-side-active: #3D3D3A;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell--chat aside.sidebar:not(.sidebar--collapsed) { width: 272px !important; }
+/* 侧栏最上面一行小图标：左边收起，右边临时会话 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__actions { top: 10px !important; left: 18px !important; right: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__body { padding-top: 36px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-temp-entry { top: -38px !important; right: 8px !important; }
+/* 入口：四行一样的，第一行「新会话」是一块灰底（照截图的「新建」） */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) :is(.sidebar-new-session, .pinkie-sidebar-entry) {
+  position: static !important;
+  width: auto !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  margin: 0 0 2px !important;
+  padding: 0 10px !important;
+  gap: 11px !important;
+  justify-content: flex-start !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--metre-text) !important;
+  font: 400 14.5px/1 var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session { margin: 0 8px 2px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session:hover { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry:hover { background: var(--metre-side-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) :is(.sidebar-new-session, .pinkie-sidebar-entry)::before { width: 18px !important; height: 18px !important; background: currentColor !important; opacity: 0.9 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search > span { display: inline !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search { order: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--board { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session { background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) #laolao-session-manager { margin-top: 22px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-recent-session__title, .sidebar-recent-session__link, .sidebar-recent-session a) { font-size: 14.5px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session { min-height: 34px !important; }
+/* 左下角账号栏：一行，圆形记号 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__footer { height: 54px !important; min-height: 54px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { left: 18px !important; bottom: 17px !important; width: auto !important; height: 36px !important; padding: 4px 8px 4px 6px !important; align-items: center !important; gap: 9px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain::before { width: 26px !important; height: 26px !important; margin: 0 !important; border-radius: 50% !important; background-size: 15px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__label { font: 500 15.5px/1 var(--metre-serif) !important; margin: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__arrow { margin: 0 0 0 -2px !important; width: 14px !important; height: 14px !important; }
+/* 连接状态：账号栏右边，只留圆点，字在悬停提示里；不正常时字才出现 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status { position: static !important; pointer-events: auto !important; height: 28px !important; padding: 0 6px !important; margin-right: auto !important; margin-left: 112px !important; }
+
+/* ---------- 输入框：照截图——框里只有左下角的「工具」和右下角的发送键；模型那一排在框外下面 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-laolao-startup-home="1"] { --laolao-home-col: min(656px, calc(100% - 48px)); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input:focus-within { padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox:focus-within {
+  min-height: 102px !important;
+  margin: 0 0 8px !important;
+  padding: 14px 16px 46px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 16px !important;
+  background: var(--metre-surface) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 22px rgba(0, 0, 0, 0.05) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox:focus-within { border-color: color-mix(in srgb, var(--metre-accent) 45%, var(--metre-line-strong)) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input textarea { min-height: 28px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-tray-btn { position: absolute !important; left: 8px !important; bottom: 48px !important; z-index: 3 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn { right: 10px !important; bottom: 49px !important; width: 32px !important; height: 32px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-context-viewer { margin-right: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton { margin-left: 2px !important; background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg[aria-checked="true"] { background: var(--metre-side-active) !important; box-shadow: none !important; }
+/* 首页小标题：照截图，左边标题、右边一个入口，不画线 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent > h3::after { content: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent > h3 { font: 400 14.5px/1.4 var(--metre-sans) !important; margin: 0 8px 8px !important; }
