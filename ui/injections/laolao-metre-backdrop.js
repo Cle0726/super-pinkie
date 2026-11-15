@@ -1,91 +1,84 @@
-/* laolao-metre-backdrop —— Metre 对话页的像素背景（11-15）。
+/* laolao-metre-backdrop —— Metre 对话页 / 首页的像素场景（11-15 第八稿「谱之路」）。
  *
- * 用户给的参考视频里，「主题」是一张铺满窗口、会慢慢动的像素画，对话浮在上面；画面一格一格拼成，动起来按格子跳。
- * Metre 的意象是音乐，所以这里是一块 LED 点阵屏：
- *   熄灭的点铺满对话区当底纹（很淡）；
- *   底部一行五线谱从右往左走（每半拍挪一格，♩=72），音符、符杠、小节线全是点亮的点；
- *   左边一根固定的「指挥线」，走过它的那个音符亮成旧铜色，走过去的变淡；指挥线上方四个拍点跟着拍子亮（强-弱-弱-弱）。
- * 配色守「石墨」：中性灰阶 + 一个低饱和旧铜，不发光、不用渐变；正文、输入框、总控台在上面，可读性第一。
- *
- * 资源（批 6「不留常驻动画」）：只在 Metre、对话页（含首页、新会话页）、窗口可见时跑；一个 setTimeout 每半拍走一格，
- * 只在换格时重画（熄灭的点和谱线离屏画一次）；标志页开着时停；减少动态效果时只画一帧。
- * 不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉，什么都不剩。
- *
- * 第六版（11-15）首页：谱子不在首页走；熄灭的点中间淡、四边实，正中留给引导语；
- * 首页三张看板卡片没有卡片底，它们的图由这块屏在 .pk-metre-quick__art 的位置直接点亮（总控台是一条会走的播放线，
- * 项目记忆是四条长短不一的记录，运行环境是一个圈和一条往左走的曲线），鼠标移上去那一块变亮。
- * 引导语上面速度记号的四个拍点也由这里每拍更新（data-beat），不另开计时器。 */
+ * 用户拿参考视频截图对比：「从像素点的密度就知道」差距——参考是实心、有明暗的像素画（约 4px 一格、抖动渐变、实心剪影），
+ * 不是稀疏的点阵线条。第七稿照着画了月亮、山、草、星星，用户：「干嘛抄别人的，自己设计不行吗」。
+ * 这一稿只学密度和手法，画面是 Metre 自己的：
+ *   一条「谱之路」——五线谱像一条路一样铺在地上，从眼前一直透视到地平线；
+ *   地平线上的消失点立着 Metre 的标志（像素 M 节拍器）当纪念碑，背后一片抖动的光，摆杆每半拍跳一格（左-中-右-中），摆锤钴蓝；
+ *   音符沿着谱线一拍一拍朝你走过来，越近越大；离眼前不远有一根钴蓝的「此刻线」（指挥线），音符走过它的那一下亮成钴蓝；
+ *   小节线一格一格往前推。天空只有渐变和光，没有月亮、山、草、星星。
+ *   深色是夜里的蓝紫；浅色是谱纸色，光是暖的。
+ * 画法：每 4 个 CSS 像素一格，整张图先画进一块低分辨率的 ImageData（静的部分算一次，会动的每步叠上去），
+ *   最近邻放大贴到画布上，每格之间压一条 1px 的暗缝，像 LED 屏。渐变用 4×4 Bayer 抖动，不出色带。
+ * 首页：看板三块的图画在路面上（.pk-metre-quick__art 的位置），鼠标移上去那一块变亮；
+ *   引导语上面速度记号的四个拍点也由这里每拍更新（data-beat）。
+ * 资源（批 6「不留常驻动画」）：只在 Metre 的对话页 / 首页、窗口可见时跑；一个 setTimeout 每半拍（♩=72）走一步；
+ *   标志页开着时停；减少动态效果时只画一帧。不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉。 */
 (() => {
   'use strict';
   if (window.__pinkieMetreBackdrop) return;
-
   const root = document.documentElement;
   const BPM = 72;
-  const STEP = 60_000 / BPM / 2;          // 半拍挪一格
-  const PITCH = 8;                        // 一格 8 个 CSS 像素
-  const SPACE = 3;                        // 五线谱两线之间 3 格
-  const NOTE_GAP = 7;                     // 四分音符之间 7 格
-  const BAR = NOTE_GAP * 4 + 3;           // 一小节的宽度（四拍 + 小节线前后的空）
-
+  const STEP = 60_000 / BPM / 2;          // 半拍走一步
+  const PX = 4;                           // 一格 4 个 CSS 像素
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const isHome = () => root.getAttribute('data-laolao-startup-home') === '1';
-  let hovered = -1;
+  const isDark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night');
   const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const mainEl = () => document.querySelector('main.content.content--chat');
-
-  let canvas = null, ctx = null, grid = null, timer = 0, step = 0, observed = null, lastKey = '';
+  let canvas = null, ctx = null, grid = null, timer = 0, step = 0, observed = null, lastKey = '', hovered = -1;
   const mainClass = new MutationObserver(() => queue());
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { if (canvas) { layout(); draw(true); } }) : null;
 
-  // ---------- 谱子：按小节编号算出来，同一小节每次都一样 ----------
-  // 音高 pos：0 = 最下面那条线，每升一级 +1（偶数在线上，奇数在间里），用 1..7。
+  // ---------- 小工具 ----------
   function hash(n) {
     let x = (n | 0) * 374761393 + 668265263;
     x = (x ^ (x >>> 13)) * 1274126177;
     return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
   }
-  const RHYTHMS = [
-    ['q', 'q', 'q', 'q'],
-    ['q', 'ee', 'q', 'q'],
-    ['q', 'q', 'ee', 'q'],
-    ['h', 'q', 'q'],
-    ['ee', 'q', 'ee', 'q'],
-    ['q', 'q', 'h'],
-  ];
-  const barCache = new Map();
-  function bar(index) {
-    if (barCache.has(index)) return barCache.get(index);
-    const rhythm = RHYTHMS[Math.floor(hash(index * 7 + 1) * RHYTHMS.length)];
-    let pos = 2 + Math.floor(hash(index * 13 + 5) * 4);
-    const notes = [];
-    let col = 2;
-    let k = 0;
-    const next = () => {
-      const r = hash(index * 31 + k++ * 17 + 3);
-      pos = Math.max(1, Math.min(7, pos + (r < 0.2 ? -2 : r < 0.45 ? -1 : r < 0.55 ? 0 : r < 0.8 ? 1 : 2)));
-      return pos;
-    };
-    for (const v of rhythm) {
-      if (v === 'ee') {
-        notes.push({col, pos: next(), beam: 'start'});
-        notes.push({col: col + 4, pos: next(), beam: 'end'});
-        col += NOTE_GAP;
-      } else if (v === 'h') {
-        notes.push({col, pos: next(), open: true});
-        col += NOTE_GAP * 2;
-      } else {
-        notes.push({col, pos: next()});
-        col += NOTE_GAP;
-      }
-    }
-    if (barCache.size > 64) barCache.clear();
-    barCache.set(index, notes);
-    return notes;
+  // 一维平滑噪声（山脊用）
+  function noise(x, seed) {
+    const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+    return hash(i * 131 + seed) * (1 - u) + hash((i + 1) * 131 + seed) * u;
   }
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+  const bayer = (x, y) => BAYER[(y & 3) * 4 + (x & 3)];
+  const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const pack = (c) => (255 << 24) | (Math.round(c[2]) << 16) | (Math.round(c[1]) << 8) | Math.round(c[0]);   // ImageData 是小端 ABGR
+
+  const PALETTES = {
+    dark: {
+      skyTop: '#0E0F16', skyLow: '#242244', glow: '#3E3C70', glowHot: '#5B5A98',
+      groundFar: '#1A1A2A', groundNear: '#0C0C13', line: '#3A3B62', lineNear: '#4D4F80', bar: '#26273F',
+      note: '#A3A7CC', noteFar: '#4B4D73', now: '#3D4A86', accent: '#93A5EE',
+      mono: '#06060A', monoRim: '#6A6CA6', ghost: '#1C1C2E',
+      panel: '#151514', art: '#8A87A6', artPast: '#2E2E45', artInk: '#D7D5E6', artLine: '#202033',
+    },
+    light: {
+      skyTop: '#F7F6F3', skyLow: '#EFE6D6', glow: '#F1DFBF', glowHot: '#EBCF9E',
+      groundFar: '#E8E1D3', groundNear: '#DDD4C3', line: '#C3BAA8', lineNear: '#ABA290', bar: '#D5CDBD',
+      note: '#6E6A62', noteFar: '#BDB5A5', now: '#A9B6E2', accent: '#2F4BB0',
+      mono: '#262420', monoRim: '#F7F1E4', ghost: '#D8CDB8',
+      panel: '#F7F6F3', art: '#6E6A62', artPast: '#C7BFB0', artInk: '#2B2925', artLine: '#D7CFC0',
+    },
+  };
+  // 像素 M（和 laolao-metre-brand.js 的 LOGO 同一张图；@ = 摆锤）
+  const LOGO = [
+    '...##...##...',
+    '...##...##...',
+    '...##...##...',
+    '..#..#.@@.#..',
+    '..#..#.@@.#..',
+    '..#..#.#..#..',
+    '..#...#...#..',
+    '.#....#....#.',
+    '.#....#....#.',
+    '.#....#....#.',
+    '#############',
+  ];
 
   // ---------- 画布 ----------
-  const css = (name, fallback) => (canvas && getComputedStyle(canvas).getPropertyValue(name).trim()) || fallback;
-
   function mount() {
     if (canvas) return;
     canvas = document.createElement('canvas');
@@ -104,6 +97,7 @@
     root.removeAttribute('data-pk-metre-backdrop');
   }
 
+  // 静的部分：天空和光、地面、五线谱路、纪念碑（不含摆杆）。算一次存进 base（Uint32，一格一个颜色）
   function layout() {
     const main = mainEl();
     if (!canvas || !main) return;
@@ -114,233 +108,222 @@
     canvas.width = Math.round(w * ratio);
     canvas.height = Math.round(hgt * ratio);
     ctx = canvas.getContext('2d');
-    const cols = Math.ceil(w / PITCH), rows = Math.ceil(hgt / PITCH);
-    // 五线谱：最下面那条线离底边 7 格。输入框那一竖条（左右各留 3 格）让开，谱子只在两边的空地上露出来，
-    // 输入框、它下面的模型 / Baton 那一行和小猫周围都干净。指挥线放在左边那块空地的正中；左边放不下就放右边，都放不下就不画谱。
-    const staffBottom = rows - 7;
-    const staffTop = staffBottom - SPACE * 4;
-    const input = document.querySelector('.agent-chat__input');
-    const ir = input?.getBoundingClientRect();
-    let clear = [cols, cols];
-    if (ir && ir.width > 0) clear = [Math.floor((ir.left - rect.left) / PITCH) - 3, Math.ceil((ir.right - rect.left) / PITCH) + 3];
-    const leftRoom = clear[0], rightRoom = cols - clear[1];
+    const cols = Math.ceil(w / PX), rows = Math.ceil(hgt / PX);
+    const pal = isDark() ? PALETTES.dark : PALETTES.light;
+    const C = Object.fromEntries(Object.entries(pal).map(([k, v]) => [k, rgb(v)]));
+    const P = Object.fromEntries(Object.entries(C).map(([k, v]) => [k, pack(v)]));
     const home = isHome();
-    const conductor = home ? -1 : leftRoom >= 14 ? Math.round(leftRoom / 2) : rightRoom >= 14 ? clear[1] + Math.round(rightRoom / 2) : -1;
-    // 首页看板的三块图：卡片里 .pk-metre-quick__art 那块，对齐到点阵的格子上
+    const base = new Uint32Array(cols * rows);
+    const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < cols && y < rows) base[y * cols + x] = c; };
+
+    // 消失点：偏右，正好在输入框那一栏的右边，纪念碑不被正文和输入框挡住
+    const input = document.querySelector('.agent-chat__input')?.getBoundingClientRect();
+    const rightEdge = input && input.width ? (input.right - rect.left) / PX : cols * 0.7;
+    const vx = Math.round(Math.min(cols - 14, Math.max(cols * 0.72, rightEdge + (cols - rightEdge) / 2)));
+    const vy = Math.round(rows * (home ? 0.6 : 0.56));
+    const M = Math.max(2, Math.min(3, Math.round(rows / 70)));            // 纪念碑：一个标志格 = M×M 格
+    const mono = {x: vx - Math.round(6.5 * M), y: vy - 11 * M, M};
+    const glow = {x: vx, y: vy - Math.round(5.5 * M), r: Math.round(M * 16)};
+
+    // 天空：渐变 + 纪念碑背后的光（抖动成一圈一圈往外淡）
+    for (let y = 0; y < vy; y++) {
+      const t = Math.pow(y / vy, 1.35);
+      for (let x = 0; x < cols; x++) {
+        const v = t * 6, lo = Math.floor(v);
+        let c = mix(C.skyTop, C.skyLow, Math.min(1, (lo + (v - lo > bayer(x, y) ? 1 : 0)) / 6));
+        const d = Math.hypot(x - glow.x, (y - glow.y) * 1.6) / glow.r;
+        if (d < 1) {
+          const g = 1 - d;
+          if (g * 1.3 > bayer(x + 2, y + 1)) c = mix(c, C.glow, 0.55 + g * 0.35);
+          if (g > 0.55 && (g - 0.55) * 2.6 > bayer(x, y + 3)) c = mix(c, C.glowHot, 0.7);
+        }
+        base[y * cols + x] = pack(c);
+      }
+    }
+    // 地面的颜色（抖动渐变 + 纪念碑的光在地上拖出的倒影，往下、往两边淡出）
+    function groundAt(x, y) {
+      const t = (y - vy) / Math.max(1, rows - vy);
+      const v = t * 5, lo = Math.floor(v);
+      let c = mix(C.groundFar, C.groundNear, Math.min(1, (lo + (v - lo > bayer(x, y) ? 1 : 0)) / 5));
+      const rd = Math.hypot((x - vx) / (glow.r * 1.1), (y - vy) / (glow.r * 0.45));
+      if (rd < 1 && (1 - rd) * 1.1 > bayer(x + 1, y)) c = mix(c, C.glow, 0.35 * (1 - rd) + 0.15);
+      return pack(c);
+    }
+    // 地面：靠近地平线淡、越近越深；五线谱的五根线从消失点铺开，靠近眼前的那一段更亮
+    const spread = cols * 0.13;                 // 到底边时相邻两根线隔多少格
+    const swingTo = cols * 0.5 - vx;            // 路朝眼前弯向画面中间偏左，不只占右下角
+    const lineX = (i, y) => { const t = (y - vy) / (rows - vy); return vx + ((i - 2) * spread + swingTo * 1.2) * t; };
+    for (let y = vy; y < rows; y++) {
+      const t = (y - vy) / Math.max(1, rows - vy);
+      for (let x = 0; x < cols; x++) base[y * cols + x] = groundAt(x, y);
+      for (let i = 0; i < 5; i++) {
+        const x = lineX(i, y), x0 = Math.round(x), width = t > 0.55 ? 2 : 1;
+        const c = t > 0.4 ? P.lineNear : P.line;
+        for (let k = 0; k < width; k++) set(x0 + k, y, c);
+      }
+    }
+    for (let x = 0; x < cols; x++) set(x, vy, pack(mix(C.skyLow, C.glow, Math.max(0, 1 - Math.abs(x - vx) / (glow.r * 1.4)))));
+    // 纪念碑：像素 M 的剪影，顶边一圈亮边（朝光那一侧）；中间的 V 是摆过的残影；摆杆和摆锤每步再画
+    const at = (gx, gy) => (LOGO[gy] && LOGO[gy][gx]) || '.';
+    for (let gy = 0; gy < 11; gy++) for (let gx = 0; gx < 13; gx++) {
+      const ch = at(gx, gy);
+      if (ch === '.' || ch === '@') continue;
+      const inner = gx >= 5 && gx <= 7 && gy >= 3 && gy <= 9;
+      for (let sy = 0; sy < M; sy++) for (let sx = 0; sx < M; sx++) {
+        const edgeTop = sy === 0 && (at(gx, gy - 1) === '.' || at(gx, gy - 1) === '@');
+        const c = inner ? P.ghost : edgeTop ? P.monoRim : P.mono;
+        set(mono.x + gx * M + sx, mono.y + gy * M + sy, c);
+      }
+    }
+    // 首页看板的三块图：画在路面上（.pk-metre-quick__art 的位置），对齐到格子
     const arts = home ? [...document.querySelectorAll('.pk-metre-quick__art')].map((node, index) => {
       const r = node.getBoundingClientRect();
-      if (r.width < PITCH * 8 || r.height < PITCH * 4) return null;
-      const x0 = Math.ceil((r.left - rect.left) / PITCH), y0 = Math.ceil((r.top - rect.top) / PITCH);
-      return {index, kind: ['sessions', 'memory', 'runtime'][index] || 'memory', x0, y0, w: Math.floor((r.right - rect.left) / PITCH) - x0, h: Math.floor((r.bottom - rect.top) / PITCH) - y0};
+      if (r.width < PX * 16 || r.height < PX * 8) return null;
+      const x0 = Math.ceil((r.left - rect.left) / PX), y0 = Math.ceil((r.top - rect.top) / PX);
+      return {index, kind: ['sessions', 'memory', 'runtime'][index] || 'memory', x0, y0, w: Math.floor((r.right - rect.left) / PX) - x0, h: Math.floor((r.bottom - rect.top) / PX) - y0};
     }).filter(Boolean) : [];
-    // 场景道具（第六版 · 续，用户：「这些页面就这样？是不是太简单了？」）：
-    //   左边空地一台点阵节拍器，摆杆每半拍跳一格（左-中-右-中），站在谱子上方（首页站在看板那条底线上）；
-    //   右边空地一组电平表（五根柱子跟着拍子跳），从它上面每两拍飘起一个八分音符，越飘越淡。
-    //   两边任一边不够宽就不放那一件；开着总控台时通常都不放。
-    const ground = home ? (arts.length ? Math.max(...arts.map((a) => a.y0 + a.h)) : rows - 8) : staffTop - 2;
-    const metroX = leftRoom >= 18 ? (home ? Math.round(leftRoom / 2) : conductor) : -1;
-    const meterX = rightRoom >= 20 ? clear[1] + Math.round((rightRoom - 14) / 2) : -1;
-    const inArt = (x, y) => arts.some((a) => x >= a.x0 && x < a.x0 + a.w && y >= a.y0 && y < a.y0 + a.h);
-    const open = (x) => conductor >= 0 && (x < clear[0] || x >= clear[1]);
-    const colors = {
-      off: css('--bd-off', '#1F1F23'),
-      line: css('--bd-line', '#2A2A2F'),
-      note: css('--bd-note', '#4A4A52'),
-      past: css('--bd-past', '#323238'),
-      accent: css('--bd-accent', '#C8A15E'),
-      ink: css('--bd-ink', '#8F8B82'),
-    };
-    // 熄灭的点 + 五线谱 + 指挥线：离屏画一次
-    const base = document.createElement('canvas');
-    base.width = canvas.width; base.height = canvas.height;
-    const b = base.getContext('2d');
-    b.setTransform(ratio, 0, 0, ratio, 0, 0);
-    const dot = (g, x, y, r, color) => { g.fillStyle = color; g.beginPath(); g.arc(x * PITCH + PITCH / 2, y * PITCH + PITCH / 2, r, 0, Math.PI * 2); g.fill(); };
-    if (home) {
-      // 首页：离中心（偏上，引导语那里）越近越淡，最淡一成；看板那三块是实的，像三小块屏
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const nx = (x + 0.5) / cols - 0.5, ny = (y + 0.5) / rows - 0.4;
-        const d = Math.hypot(nx / 0.55, ny / 0.6);
-        b.globalAlpha = inArt(x, y) ? 1 : Math.max(0.1, Math.min(1, (d - 0.3) / 0.55));
-        dot(b, x, y, PITCH * 0.16, colors.off);
-      }
-      b.globalAlpha = 1;
-    } else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) dot(b, x, y, PITCH * 0.16, colors.off);
-    for (let i = 0; i < 5; i++) for (let x = 0; x < cols; x++) if (open(x)) dot(b, x, staffTop + i * SPACE, PITCH * 0.24, colors.line);
-    if (conductor >= 0) for (let y = staffTop - 3; y <= staffBottom + 2; y++) dot(b, conductor, y, PITCH * 0.24, colors.line);
-    grid = {cols, rows, ratio, base, staffTop, staffBottom, conductor, colors, dot, open, arts, ground, metroX, meterX};
+    // 看板整张卡片（图和两行字）、输入框那一块下面只留地面，不画谱线，字读得清楚；不画框
+    const quiet = [];
+    // 也让开输入框和它下面那一排（Baton / 模型），那一排没有底色
+    const quietNodes = [...document.querySelectorAll('.agent-chat__composer-shell')].filter((n) => n.getClientRects().length);
+    if (home) quietNodes.push(...document.querySelectorAll('.pk-metre-quick__card'));
+    for (const node of quietNodes) {
+      const r = node.getBoundingClientRect();
+      const x0 = Math.floor((r.left - rect.left) / PX) - 2, x1 = Math.ceil((r.right - rect.left) / PX) + 2;
+      const y0 = Math.floor((r.top - rect.top) / PX) - 2, y1 = Math.ceil((r.bottom - rect.top) / PX) + 2;
+      quiet.push([x0, y0, x1, y1]);
+      for (let y = Math.max(vy + 1, y0); y < Math.min(rows, y1); y++) for (let x = Math.max(0, x0); x < Math.min(cols, x1); x++) set(x, y, groundAt(x, y));
+    }
+    const low = document.createElement('canvas');
+    low.width = cols; low.height = rows;
+    // 此刻线：离眼前不远的那一行（首页让到看板上面）
+    const nowY = Math.round(home ? vy + (rows - vy) * 0.38 : vy + (rows - vy) * 0.62);
+    grid = {cols, rows, ratio, base, low, lowCtx: low.getContext('2d'), C, P, vx, vy, spread, lineX, mono, nowY, arts, quiet};
     lastKey = '';
   }
 
-  // 一帧里点亮哪些格：key "x,y" → 'note' | 'past' | 'accent' | 'line'
-  function scene() {
-    const {cols, staffTop, staffBottom, conductor, open} = grid;
-    const lit = new Map();
-    for (const art of grid.arts) artScene(art, lit);
-    propsScene(lit);
-    if (conductor < 0) return lit;
-    const put = (x, y, kind) => { if (x >= 0 && x < cols && open(x)) { const k = x + ',' + y; if (lit.get(k) !== 'accent') lit.set(k, kind); } };
-    const lineRow = (pos) => staffBottom - (pos / 2) * SPACE;   // pos 偶数时是整数行
-    // 谱带从右往左走：屏幕第 x 列对应谱上第 x + step 格
-    const first = Math.floor(step / BAR) - 1, last = Math.floor((step + cols) / BAR) + 1;
-    for (let i = first; i <= last; i++) {
-      const x0 = i * BAR - step;
-      // 小节线
-      if (i !== first) for (let y = staffTop; y <= staffBottom; y++) put(x0, y, x0 < conductor ? 'past' : 'line');
-      const notes = bar(i);
-      const stems = [];
-      for (const n of notes) {
-        const x = x0 + n.col;
-        const here = x <= conductor && conductor <= x + 2;
-        const kind = here ? 'accent' : x + 2 < conductor ? 'past' : 'note';
-        // 符头：在线上 3×3（缺四角，像个圆点），在间里 3×2；二分音符中间空心
-        let rowsOf;
-        if (n.pos % 2 === 0) rowsOf = [lineRow(n.pos) - 1, lineRow(n.pos), lineRow(n.pos) + 1];
-        else { const below = lineRow(n.pos - 1); rowsOf = [below - 2, below - 1]; }
-        rowsOf.forEach((y, ry) => {
-          for (let dx = 0; dx < 3; dx++) {
-            const corner = rowsOf.length === 3 && ry !== 1 && dx !== 1;
-            if (corner) continue;
-            if (n.open && dx === 1 && (rowsOf.length === 2 || ry === 1)) continue;
-            put(x + dx, y, kind);
-          }
-        });
-        // 符干：高音朝下、低音朝上，7 格
-        const up = n.pos < 4;
-        const sx = up ? x + 2 : x;
-        const from = up ? rowsOf[0] - 1 : rowsOf[rowsOf.length - 1] + 1;
-        const to = up ? from - 6 : from + 6;
-        for (let y = Math.min(from, to); y <= Math.max(from, to); y++) put(sx, y, kind);
-        stems.push({n, sx, end: to, kind});
-      }
-      // 八分音符一对：符杠连起两根符干的端点（取更远的那一端，两根一起拉齐）
-      for (let s = 0; s < stems.length - 1; s++) {
-        if (stems[s].n.beam !== 'start') continue;
-        const a = stems[s], c = stems[s + 1];
-        const up = a.end < lineRow(a.n.pos);
-        const row = up ? Math.min(a.end, c.end) : Math.max(a.end, c.end);
-        for (const st of [a, c]) for (let y = Math.min(st.end, row); y <= Math.max(st.end, row); y++) put(st.sx, y, st.kind);
-        const kind = a.kind === 'accent' || c.kind === 'accent' ? 'accent' : a.kind;
-        for (let x = a.sx; x <= c.sx; x++) { put(x, row, kind); put(x, row + (up ? 1 : -1), kind); }
+  // ---------- 会动的部分 ----------
+  // 透视：地面上一行 y 对应的「远近」z = K / (y - vy)；z 越小越近
+  function dynamic(buf, rawPut) {
+    const {cols, rows, C, P, vx, vy, lineX, mono, nowY, quiet} = grid;
+    // 路上的东西不进看板卡片那几块
+    const put = (x, y, c) => { for (const q of quiet) if (x >= q[0] && x < q[2] && y >= q[1] && y < q[3]) return; rawPut(x, y, c); };
+    const still = reduced();
+    const K = (rows - vy) * 8;
+    const zOf = (y) => K / Math.max(0.5, y - vy);
+    const yOf = (z) => vy + K / z;
+    const zNow = zOf(nowY);
+    // 一小节 = 4 拍 = 8 步；走一步，所有东西往眼前挪 1/8 小节
+    const BARZ = 24, travel = still ? 0 : step * (BARZ / 8);
+    // 小节线：横过五根线
+    for (let j = 0; j < 40; j++) {
+      const z = (j + 1) * BARZ - (travel % BARZ);
+      const y = Math.round(yOf(z + zNow * 0.4));
+      if (y <= vy + 1 || y >= rows) continue;
+      const x0 = Math.round(lineX(0, y)), x1 = Math.round(lineX(4, y));
+      for (let x = x0; x <= x1; x++) if (x >= 0 && x < cols) put(x, y, P.bar);
+    }
+    // 此刻线：钴蓝，横过整条路；有音符正走过时亮
+    let hit = false;
+    // 音符：每小节四拍，每拍一个（有的拍空着），在某根线或某个间上
+    const barNow = Math.floor(travel / BARZ);
+    for (let b = barNow - 1; b < barNow + 26; b++) {
+      for (let q = 0; q < 4; q++) {
+        if (hash(b * 31 + q * 7 + 3) < 0.25) continue;
+        const z = (b * BARZ + q * (BARZ / 4)) - travel + zNow;
+        if (z <= zNow * 0.55) continue;
+        const y = yOf(z);
+        if (y <= vy + 1 || y >= rows + 6) continue;
+        const pos = Math.floor(hash(b * 13 + q * 5 + 1) * 9) / 2;      // 0..4，半步 = 间
+        const x = lineX(pos, y);
+        const near = (y - vy) / (rows - vy);
+        const size = Math.max(1, Math.round(near * 4));
+        const crossing = Math.abs(z - zNow) < BARZ / 8;
+        if (crossing) hit = true;
+        const c = crossing ? P.accent : near < 0.25 ? P.noteFar : P.note;
+        // 符头：椭圆；符干朝上
+        const rx = size * 1.3, ry = size * 0.9;
+        for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) for (let dx = -Math.ceil(rx); dx <= Math.ceil(rx); dx++) {
+          if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1) put(Math.round(x + dx), Math.round(y - ry + dy), c);
+        }
+        if (size >= 2) for (let k = 0; k < size * 4; k++) put(Math.round(x + rx), Math.round(y - ry - k), c);
       }
     }
-    // 四个拍点：指挥线上方，强拍大一点；当前那一拍是强调色（左边放了节拍器时不要，节拍器本身就在打拍子）
-    if (grid.metroX >= 0) return lit;
-    const beat = reduced() ? 0 : Math.floor(step / 2) % 4;
-    const by = staffTop - 7;
-    [[-4, 2], [-1, 1], [1, 1], [3, 1]].forEach(([off, size], i) => {
-      for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) put(conductor + off + dx, by + dy - (size - 1), i === beat ? 'accent' : 'line');
-    });
-    return lit;
+    {
+      const x0 = Math.max(0, Math.round(lineX(0, nowY)) - 2), x1 = Math.min(cols - 1, Math.round(lineX(4, nowY)) + 2);
+      for (let x = x0; x <= x1; x++) put(x, nowY, hit ? P.accent : P.now);
+      if (hit) for (let x = x0; x <= x1; x += 2) { put(x, nowY - 1, P.now); put(x, nowY + 1, P.now); }
+    }
+    // 纪念碑的摆：支点在底座上沿正中，每半拍跳一格（左-中-右-中）
+    const swing = still ? 0 : [-1, 0, 1, 0][step % 4] * 0.34;
+    const M = mono.M;
+    const px = mono.x + 6.5 * M, py = mono.y + 10 * M, len = 8 * M;
+    for (let r = 0; r <= len; r += 0.5) {
+      const x = Math.round(px + Math.sin(swing) * r - 0.5), y = Math.round(py - Math.cos(swing) * r);
+      for (let k = 0; k < Math.max(1, M - 1); k++) put(x + k, y, P.mono);
+    }
+    const bx = Math.round(px + Math.sin(swing) * len * 0.82), by = Math.round(py - Math.cos(swing) * len * 0.82);
+    const half = Math.ceil(M * 0.75);
+    for (let dy = -half; dy < half; dy++) for (let dx = -half; dx < half; dx++) put(bx + dx, by + dy, P.accent);
+    for (const a of grid.arts) artScene(a, rawPut);
   }
 
-  // 节拍器 + 电平表 + 飘起来的音符
-  const NOTE_GLYPH = ['.##.', '.#.#', '.#..', '##..', '##..'];
-  function propsScene(lit) {
-    const {cols, rows, ground, metroX, meterX} = grid;
-    const put = (x, y, kind) => { if (x >= 0 && y >= 0 && x < cols && y < rows) lit.set(x + ',' + y, kind); };
-    const still = reduced();
-    if (metroX >= 0) {
-      const g = ground;
-      for (let x = metroX - 7; x <= metroX + 7; x++) put(x, g, 'note');
-      for (let x = metroX - 6; x <= metroX + 6; x++) put(x, g - 1, 'past');
-      // 机身：梯形，下宽上窄，只画两条边和顶
-      const H = 20;
-      for (let i = 0; i < H; i++) {
-        const half = Math.round(6 - (4 * i) / (H - 1));
-        put(metroX - half, g - 2 - i, 'note');
-        put(metroX + half, g - 2 - i, 'note');
-      }
-      for (let x = metroX - 2; x <= metroX + 2; x++) put(x, g - 2 - H, 'note');
-      // 刻度：机身中间一竖排暗点
-      for (let y = g - 18; y <= g - 8; y += 2) put(metroX, y, 'line');
-      // 摆杆：支点在机身下部，每半拍跳一格（左-中-右-中）
-      const swing = still ? 0 : [-1, 0, 1, 0][step % 4] * 0.34;
-      const px = metroX, py = g - 4, len = 16;
-      for (let r = 0; r <= len; r++) put(Math.round(px + Math.sin(swing) * r), Math.round(py - Math.cos(swing) * r), 'ink');
-      const bx = Math.round(px + Math.sin(swing) * 11), by = Math.round(py - Math.cos(swing) * 11);
-      for (let dy = 0; dy < 2; dy++) for (let dx = -1; dx <= 1; dx++) put(bx + dx, by + dy, 'accent');
-    }
-    if (meterX >= 0) {
-      const g = ground;
-      for (let x = meterX - 1; x <= meterX + 14; x++) put(x, g, 'line');
-      let peak = -1, peakH = 0;
-      const hs = [];
-      for (let i = 0; i < 5; i++) {
-        const v = still ? 0.4 : hash(step * 5 + i * 97) * 0.55 + hash(Math.floor(step / 2) * 3 + i) * 0.45;
-        const h = 2 + Math.floor(v * 12);
-        hs.push(h);
-        if (h > peakH) { peakH = h; peak = i; }
-      }
-      hs.forEach((h, i) => {
-        for (let y = 1; y <= h; y++) for (let dx = 0; dx < 2; dx++) put(meterX + i * 3 + dx, g - 1 - (y - 1), y > h - 2 ? (i === peak && y === h ? 'accent' : 'note') : 'past');
-      });
-      // 每两拍从电平表上方飘起一个八分音符，往上走、越走越淡
-      if (!still) for (let j = 0; j < 3; j++) {
-        const k = Math.floor(step / 4) - j;
-        const age = step - k * 4;
-        if (k < 0 || age > 11) continue;
-        const x0 = meterX + Math.floor(hash(k * 13 + 1) * 11);
-        const y0 = g - 20 - age;
-        const kind = age < 4 ? 'note' : age < 8 ? 'past' : 'line';
-        NOTE_GLYPH.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') put(x0 + x, y0 + y, kind); }));
-      }
-    }
-  }
-  // 看板的图：在一块 w×h 格里点亮。kind 只用 note / past / line / accent；鼠标在这张卡片上时 note 换成更亮的 ink。
-  function artScene(a, lit) {
+  // 看板的图：在一块 w×h 格的屏里，用 2×2 格当一个「点」画
+  function artScene(a, put) {
+    const {P} = grid;
     const hot = a.index === hovered;
-    const put = (x, y, kind) => {
-      if (x < 0 || y < 0 || x >= a.w || y >= a.h) return;
-      lit.set((a.x0 + x) + ',' + (a.y0 + y), hot && kind === 'note' ? 'ink' : kind);
+    const W = Math.floor(a.w / 2), H = Math.floor(a.h / 2);
+    const ink = {note: hot ? P.artInk : P.art, past: P.artPast, line: P.artLine, accent: P.accent};
+    const dot = (x, y, kind) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const c = ink[kind];
+      put(a.x0 + x * 2, a.y0 + y * 2, c);
+      put(a.x0 + x * 2 + 1, a.y0 + y * 2, c);
+      put(a.x0 + x * 2, a.y0 + y * 2 + 1, c);
+      put(a.x0 + x * 2 + 1, a.y0 + y * 2 + 1, c);
     };
     const beat = reduced() ? 0 : Math.floor(step / 2);
-    const mid = Math.floor(a.h / 2);
+    const mid = Math.floor(H / 2);
     if (a.kind === 'sessions') {
-      // 四条子会话的进度块 + 一根往右走的播放线：线左边的块是实的，右边的淡
       const lanes = [[[0, 0.3], [0.34, 0.14]], [[0.08, 0.2], [0.32, 0.36]], [[0.14, 0.16], [0.34, 0.1], [0.46, 0.22]], [[0.62, 0.2], [0.86, 0.12]]];
-      const span = Math.max(4, a.w - 2);
-      const head = 1 + beat % span;
-      const top = Math.max(0, mid - 3);
+      const head = 1 + beat % Math.max(4, W - 2);
+      const top = Math.max(1, mid - 3);
       lanes.forEach((blocks, i) => {
-        const y = top + i * 2;
         for (const [from, len] of blocks) {
-          const x0 = Math.round(from * a.w), x1 = Math.max(x0 + 1, Math.round((from + len) * a.w));
-          for (let x = x0; x < x1; x++) put(x, y, x < head ? 'note' : 'past');
+          const x0 = Math.round(from * W), x1 = Math.max(x0 + 1, Math.round((from + len) * W));
+          for (let x = x0; x < x1; x++) dot(x, top + i * 2, x < head ? 'note' : 'past');
         }
       });
-      for (let y = top - 1; y <= top + 7; y++) put(head, y, 'accent');
+      for (let y = top - 1; y <= top + 7; y++) dot(head, y, 'accent');
     } else if (a.kind === 'memory') {
-      // 四条记录：左边一小段标签，右边一条长短不一的条
-      const fills = [0.82, 0.6, 0.44, 0.26];
-      const top = Math.max(0, mid - 3);
-      fills.forEach((f, i) => {
+      const top = Math.max(1, mid - 3);
+      [0.82, 0.6, 0.44, 0.26].forEach((f, i) => {
         const y = top + i * 2;
-        for (let x = 0; x < 3; x++) put(x, y, 'past');
-        const end = 5 + Math.round((a.w - 5) * f);
-        for (let x = 5; x < a.w; x++) put(x, y, x < end ? 'note' : 'line');
-        if (i === 0) put(end - 1, y, 'accent');
+        for (let x = 1; x < 4; x++) dot(x, y, 'past');
+        const end = 6 + Math.round((W - 7) * f);
+        for (let x = 6; x < W - 1; x++) dot(x, y, x < end ? 'note' : 'line');
+        if (i === 0) dot(end - 1, y, 'accent');
       });
     } else {
-      // 一个圈（上下文用了多少）+ 一条从右往左走的曲线（最近的用量），最新那一格是强调色
-      const r = Math.min(3.2, (a.h - 1) / 2), cx = Math.round(r) + 0.5, cy = mid + 0.5;
-      for (let y = 0; y < a.h; y++) for (let x = 0; x < Math.ceil(r * 2) + 2; x++) {
+      const r = Math.min(3.2, (H - 2) / 2), cx = Math.round(r) + 1.5, cy = mid + 0.5;
+      for (let y = 0; y < H; y++) for (let x = 0; x < Math.ceil(r * 2) + 3; x++) {
         const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
         if (Math.abs(Math.hypot(dx, dy) - r) > 0.62) continue;
-        const angle = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2);
-        put(x, y, angle < Math.PI * 2 * 0.38 ? 'accent' : 'line');
+        const ang = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2);
+        dot(x, y, ang < Math.PI * 2 * 0.38 ? 'accent' : 'line');
       }
-      const x0 = Math.ceil(r * 2) + 4;
+      const x0 = Math.ceil(r * 2) + 5;
       let prev = null;
-      for (let x = x0; x < a.w; x++) {
+      for (let x = x0; x < W - 1; x++) {
         const v = hash(x - x0 + beat) * 0.6 + hash((x - x0 + beat) * 3 + 11) * 0.4;
-        const y = 1 + Math.round((1 - v) * (a.h - 3));
-        if (prev != null) for (let yy = Math.min(prev, y) + 1; yy < Math.max(prev, y); yy++) put(x, yy, 'past');
-        put(x, y, x === a.w - 1 ? 'accent' : 'note');
+        const y = 1 + Math.round((1 - v) * (H - 3));
+        if (prev != null) for (let yy = Math.min(prev, y) + 1; yy < Math.max(prev, y); yy++) dot(x, yy, 'past');
+        dot(x, y, x === W - 2 ? 'accent' : 'note');
         prev = y;
       }
     }
   }
+
   function draw(force = false) {
     if (!ctx || !grid) return;
     const key = `${step},${grid.cols},${grid.rows},${hovered}`;
@@ -348,17 +331,26 @@
     lastKey = key;
     const tempo = document.querySelector('.pk-metre-tempo');
     if (tempo) tempo.dataset.beat = String(reduced() ? 0 : Math.floor(step / 2) % 4);
-    const {base, ratio, colors, dot} = grid;
+    const {cols, rows, ratio, base, low, lowCtx} = grid;
+    const img = lowCtx?.createImageData?.(cols, rows);
+    if (!img?.data) return;
+    const buf = new Uint32Array(img.data.buffer);
+    buf.set(base);
+    const put = (x, y, c) => { if (x >= 0 && y >= 0 && x < cols && y < rows) buf[y * cols + x] = c; };
+    dynamic(buf, put);
+    lowCtx.putImageData(img, 0, 0);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(base, 0, 0);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    for (const [k, kind] of scene()) {
-      const [x, y] = k.split(',').map(Number);
-      dot(ctx, x, y, PITCH * 0.34, colors[kind]);
-    }
+    const cell = PX * ratio;
+    ctx.drawImage(low, 0, 0, cols * cell, rows * cell);
+    // 每格挖一条 1px 的缝（右边和下边），像 LED 屏
+    const gapPx = Math.max(1, Math.round(ratio));
+    // 缝不挖空，只把那一条压暗一点（LED 屏的颗粒感），不然整片天空像一张网
+    ctx.fillStyle = isDark() ? 'rgba(0, 0, 0, 0.32)' : 'rgba(60, 50, 30, 0.05)';
+    for (let x = 1; x <= cols; x++) ctx.fillRect(x * cell - gapPx, 0, gapPx, canvas.height);
+    for (let y = 1; y <= rows; y++) ctx.fillRect(0, y * cell - gapPx, canvas.width, gapPx);
   }
-
   function tick() {
     timer = 0;
     if (!running()) return;
