@@ -16,7 +16,7 @@
   // ---------- 文案与模型（纯函数） ----------
   const PHRASE = {
     thinking: '碧琪在动小脑瓜…', working: '碧琪在抛气球干活…', writing: '碧琪在比划着回你…',
-    asking: '碧琪在等你点头…', done: '完成啦！', stopped: '这一轮停下来了',
+    asking: '碧琪在等你点头…', done: '完成啦！', stopped: '这一轮停下来了', interrupted: '这一轮中断了',
   };
   // 在干哪一类活（PLAN 2.8）。和舞台、话术、工具流三张表对齐（tests/tool-kind-words.test.cjs）。
   // 只是「在干活」时状态条照旧不出现（过程卡已经在说）；wait / review 是 Metre 一轮的整体状态，要显示。
@@ -27,7 +27,7 @@
     review: '在验收子会话交回来的活', manage: '碧琪在整理会话…', models: '碧琪在看可用模型…', memory: '在翻项目记忆…',
   };
   // Metre（PLAN 2.10）：平实说法，不带碧琪口吻；干哪一类活用和舞台同一张表（laolao-tool-kind.js 的 ING）。
-  const METRE_PHRASE = {thinking: '思考中', working: '在处理', writing: '正在回复', asking: '等你确认', done: '完成', stopped: '已停下'};
+  const METRE_PHRASE = {thinking: '思考中', working: '在处理', writing: '正在回复', asking: '等你确认', done: '完成', stopped: '已停下', interrupted: '这一轮中断了'};
   // 没细分类别的工具，Metre 按工具名给一句平实的说法（PLAN 2.10：「思考中」「正在读取」…）。
   const METRE_TOOL_WORD = [
     [/^(?:read|workbench_read|code_search|code_refs|code_check|grep|glob|ls|find|pinkie_session_list|learning_library|clekk_memory)$/, '正在读取'],
@@ -47,6 +47,10 @@
   const SLOW_FACTOR = 3;
   const SHOW_DONE_MS = 4000;
   const SHOW_STOPPED_MS = 6000;
+  // 「中断了」：这一轮没收尾、后端也不在跑（网关重启、连接没断但事件丢了、模型一直不回）。
+  // 用户：「不要后端挂了前端还在转」。如实写停在哪一步，不给停下键；留 5 分钟，下一轮开始就换掉。
+  const SHOW_INTERRUPTED_MS = 5 * 60_000;
+  const QUIET_CHECK_MS = 30_000;   // 一轮在跑却 30 秒没有任何事件：去问原生会话记录还有没有在跑
   // 档位里各种「另做一版」的角色（后端缺口文字里带角色名），换成大白话。
   const ROLE_TEXT = [
     [/独立起草|求解|起草/, 'alt', '另做一版对照', 'working'],
@@ -139,7 +143,7 @@
     // Metre 的状态条常驻（猫一直在），空闲时只有猫和记忆芯片，没有字。
     const idle = metre ? {...hidden, visible: true, kind: 'idle', tone: 'idle', sticker: 'idle'} : hidden;
 
-    const justEnded = ended && now - Number(ended.at || 0) <= SHOW_STOPPED_MS;
+    const justEnded = ended && now - Number(ended.at || 0) <= (ended.outcome === 'interrupted' ? SHOW_INTERRUPTED_MS : SHOW_STOPPED_MS);
     if (conn.online === false) {
       if (!active && !justEnded) return metre ? {...idle, kind: 'offline-idle', sticker: 'stopped'} : hidden;
       return {...hidden, visible: true, kind: 'offline', tone: 'warn', sticker: 'oops',
@@ -152,6 +156,13 @@
     }
     if (!active) {
       if (!ended) return idle;
+      if (ended.outcome === 'interrupted') {
+        if (now - Number(ended.at || 0) > SHOW_INTERRUPTED_MS) return idle;
+        const at = stepsOf(input.plan?.items, (item) => item.text, (item) => item.status === 'completed');
+        return {...hidden, visible: true, kind: 'interrupted', tone: 'stop', sticker: metre ? 'error' : 'oops',
+          text: at ? `${P.interrupted}，停在${at.text.replace(/^在做/, '')}` : P.interrupted,
+          meta: '后端已经不在跑了，发一句「继续」可以接着做'};
+      }
       const stopped = ended.outcome === 'stopped' || ended.outcome === 'error';
       if (ended.outcome !== 'done' && !stopped) return idle;
       if (now - Number(ended.at || 0) > (stopped ? SHOW_STOPPED_MS : SHOW_DONE_MS)) return idle;
@@ -246,6 +257,7 @@
   const statuses = new Map(); // sessionKey → {value, at}
   const plans = new Map();    // sessionKey → plan
   const endings = new Map();  // sessionKey → {outcome, at, ms}
+  const overruled = new Map(); // sessionKey → 判定「中断了」时网关状态里的 runId：同一个 runId 的「还在跑」不再信
   const conn = {online: true, attempt: 0, wasActive: false, runId: '', key: '', startedAt: 0};
   const OFFLINE_KEY = 'pinkie:run-status:offline:v1';
   const offlineStore = () => { try { return window.sessionStorage; } catch { return null; } };
@@ -253,13 +265,37 @@
   let skipped = '';
   const liveOf = (key) => {
     let live = lives.get(key);
-    if (!live) { live = {active: false, state: '', startedAt: 0, runId: '', ask: null, bg: null}; lives.set(key, live); }
+    if (!live) { live = {active: false, state: '', startedAt: 0, runId: '', ask: null, bg: null, lastEventAt: 0}; lives.set(key, live); }
     return live;
   };
   const freshStatus = (key) => {
     const entry = statuses.get(key);
-    return entry && Date.now() - entry.at < 15_000 ? entry.value : null;
+    const value = entry && Date.now() - entry.at < 15_000 ? entry.value : null;
+    if (value?.active && overruled.has(key)) {
+      if (String(value.runId || '') === overruled.get(key)) return {...value, active: false};
+      overruled.delete(key);   // 换了一轮：照常信
+    }
+    return value;
   };
+  // 一轮看着在跑（实时事件开了头没收尾，或网关状态说 active），却好久没有事件：问原生会话记录。
+  // 它也说没在跑，就是中断了——不再写「在做第几步」、不再给停下键。读不到就什么都不改。
+  const checking = new Set();
+  async function verifyAlive(key) {
+    if (checking.has(key)) return;
+    checking.add(key);
+    try {
+      const agentId = key.split(':')[1];
+      const list = await request('sessions.list', {agentId, limit: 200}, 8000);
+      const row = (list?.sessions || []).find((item) => item?.key === key);
+      if (!row || row.hasActiveRun !== false) return;
+      const live = liveOf(key);
+      if (Date.now() - (live.lastEventAt || 0) < QUIET_CHECK_MS) return;   // 问的时候又有事件来了
+      overruled.set(key, String(statuses.get(key)?.value?.runId || ''));
+      endings.set(key, {outcome: 'interrupted', at: Date.now(), ms: live.startedAt ? Date.now() - live.startedAt : 0});
+      Object.assign(live, {active: false, state: '', ask: null, bg: null, startedAt: 0, tool: ''});
+      schedule();
+    } catch { /* 读不到：不下结论 */ } finally { checking.delete(key); }
+  }
 
   // ---------- 读状态 ----------
   // One request per session at a time; a refresh asked for meanwhile runs right
@@ -296,6 +332,7 @@
   };
   function begin(key, runId) {
     const live = liveOf(key);
+    overruled.delete(key);
     if (!live.active) Object.assign(live, {startedAt: Date.now(), ask: null});
     Object.assign(live, {active: true, runId: runId || live.runId, state: live.state === 'asking' ? 'asking' : 'thinking'});
     endings.delete(key);
@@ -317,6 +354,7 @@
     const data = payload.data || {};
     if (name === 'agent' || name === 'session.tool') {
       const live = liveOf(key);
+      live.lastEventAt = Date.now();
       if (payload.stream === 'lifecycle') {
         if (data.phase === 'start') begin(key, payload.runId);
         else if (data.phase === 'end' || data.phase === 'error') {
@@ -613,6 +651,7 @@
     const live = liveOf(key);
     const active = live.active || freshStatus(key)?.active;
     if (conn.online && active && beat % 3 === 0) void refresh(key);
+    if (conn.online && active && beat % 15 === 0 && Date.now() - (live.lastEventAt || live.startedAt || 0) > QUIET_CHECK_MS) void verifyAlive(key);
     if (beat % 5 === 0) placeDirty = true;
     if (active || bar && !bar.hidden || isMetre()) render();
   }, 1000);
@@ -622,5 +661,6 @@
   window.addEventListener('laolao:modechange', () => { lastSig = ''; schedule(); });
 
   window.__pinkieRunStatus = {...model, refresh: () => refresh(currentSession(), {plan: true}), render: () => render(true),
-    get state() { return {key: currentSession(), live: liveOf(currentSession()), status: freshStatus(currentSession()), conn: {...conn}, phase: {...phase}, durations}; }};
+    verifyAlive: (key = currentSession()) => verifyAlive(key),
+    get state() { return {key: currentSession(), live: liveOf(currentSession()), status: freshStatus(currentSession()), conn: {...conn}, phase: {...phase}, durations, ended: endings.get(currentSession()) || null}; }};
 })();

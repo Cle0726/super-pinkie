@@ -103,3 +103,114 @@ html:not([data-laolao-mode="metre"]) :is(.pk-metre-brand, .pk-metre-home-mark) {
   .pk-metre-brand__parts { grid-template-columns: minmax(0, 1fr); }
   .pk-metre-brand__parts div + div { border-left: 0; }
 }
+
+/* ---------- 启动闪屏（Metre 时） ----------
+ * App 启动的大闪屏原来全模式共用碧琪（派对小屋、气球、冲破屏幕的动效）。Metre 时换成：一块熄着灯的点阵底，
+ * 正中一块实底，像素 M + 「Metre」+ 一根细进度线和一行状态。根元素上的 data-laolao-splash-metre
+ * 由 laolao-metre-skin.js 在第一帧之前按上次的模式先打上，laolao-splash.js 算准模式后再改；闪屏走了就拿掉。
+ * 用 ID 选择器压过 laolao-splash.css（那张表在 Metre 进来前还没停用）。 */
+html[data-laolao-splash-metre] #laolao-splash {
+  --sp-bg: #FAFAFA;
+  --sp-off: #ECECEF;
+  --sp-plate: #FAFAFA;
+  --sp-text: #18181B;
+  --sp-muted: #71717A;
+  --sp-track: #E4E4E7;
+  --sp-accent: #8F6526;
+  all: unset;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--sp-text);
+  background-color: var(--sp-bg);
+  /* 一格 8px 的熄灭点阵，和对话页背景同一个格子 */
+  background-image: radial-gradient(circle, var(--sp-off) 1.3px, transparent 1.7px);
+  background-size: 8px 8px;
+  font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 320ms ease, visibility 320ms ease;
+}
+html[data-laolao-splash-metre]:is([data-theme="dark"], [data-pinkie-night]) #laolao-splash {
+  --sp-bg: #131315;
+  --sp-off: #1E1E22;
+  --sp-plate: #131315;
+  --sp-text: #EDEDEF;
+  --sp-muted: #8B8B93;
+  --sp-track: #2A2A2F;
+  --sp-accent: #C8A15E;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-laolao-splash-metre]:not([data-theme="light"]) #laolao-splash {
+    --sp-bg: #131315; --sp-off: #1E1E22; --sp-plate: #131315; --sp-text: #EDEDEF; --sp-muted: #8B8B93; --sp-track: #2A2A2F; --sp-accent: #C8A15E;
+  }
+}
+html[data-laolao-splash-metre] #laolao-splash.is-leaving { opacity: 0; visibility: hidden; }
+html[data-laolao-splash-metre] #laolao-splash::before,
+html[data-laolao-splash-metre] #laolao-splash::after { content: none !important; display: none !important; }
+html[data-laolao-splash-metre] #laolao-splash *,
+html[data-laolao-splash-metre] #laolao-splash *::before,
+html[data-laolao-splash-metre] #laolao-splash *::after { animation: none !important; }
+/* 碧琪动效的画布、粒子、高光都不要；碧琪的头像和「派对小屋」那行也不要 */
+html[data-laolao-splash-metre] #laolao-splash > :not(.laolao-splash__content),
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__eyebrow,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__percentage,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill::before,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill::after { display: none !important; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__content {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 56px 34px;
+  background: var(--sp-plate);
+}
+/* laolao-splash.js 换好内容之前（一两帧）只露点阵底，不露碧琪的字 */
+html[data-laolao-splash-metre] #laolao-splash:not(.is-metre) .laolao-splash__content { visibility: hidden; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__metre-mark { display: block; width: 78px; color: var(--sp-text); }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__metre-mark .pk-metre-logo__bob { fill: var(--sp-accent); }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__title {
+  all: unset;
+  display: block;
+  margin-top: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sp-text);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__title * { all: unset; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-shell {
+  all: unset;
+  position: relative;
+  display: block;
+  width: 168px;
+  height: 2px;
+  margin: 26px 0 36px;
+  background: var(--sp-track);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill {
+  all: unset;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--sp-text);
+  transition: transform 140ms linear;
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__message {
+  all: unset;
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  translate: -50% 0;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--sp-muted);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__recovery { display: flex; gap: 8px; margin-top: 2px; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__recovery button {
+  padding: 5px 10px; font: inherit; font-size: 12px; color: var(--sp-text); background: transparent; border: 1px solid var(--sp-track); border-radius: 6px; cursor: pointer;
+}

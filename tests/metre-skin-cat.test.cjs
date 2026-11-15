@@ -57,9 +57,11 @@ test('A4-4: the shipped frames are byte-identical to the approved preview file; 
   for (const color of new Set(cat.HEAD.join('').replace(/\./g, ''))) assert.ok(svg.includes(cat.PALETTE[color]));
   const head = read(INJ + 'laolao-head.fragment.html');
   assert.ok(head.indexOf('laolao-metre-cat-frames.js') < head.indexOf('laolao-metre-cat.js?'), '帧数据先于控制器加载');
-  for (const file of ['laolao-mode-switcher.js', 'laolao-classic-shell.js', 'laolao-splash.js']) {
+  for (const file of ['laolao-mode-switcher.js', 'laolao-classic-shell.js']) {
     assert.match(read(INJ + file), /laolao-mode-metre\.svg\?v=cathead1/, file);
   }
+  // 启动 / 切换闪屏在 Metre 时用像素 M（11-15），不用猫头，也不用碧琪的图
+  assert.match(read(INJ + 'laolao-splash.js'), /__pinkieMetreBrand\?\.mark/);
 });
 
 // ---------- A4-5 16 个状态都能被对应的事件触发 ----------
@@ -307,4 +309,49 @@ test('Metre entry is a text-only button; the board skeleton has all slots, place
   assert.doesNotMatch(css.replace(/pinkie/gi, ''), /#e94f91|#ff7aa2|pink|backdrop-filter/i);
   const skin = read(INJ + 'laolao-metre-skin.css');
   assert.match(skin, /aside\.sidebar::after \{ content: none !important/, '侧栏那条亮线去掉了');
+});
+
+// ---------- 11-15 对话页的像素背景：只在 Metre 对话页有，只用一个半拍的 setTimeout，减少动态效果时不走 ----------
+test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat timeout, stops for reduced motion, gone outside Metre', () => {
+  const head = read(INJ + 'laolao-head.fragment.html');
+  assert.match(head, /laolao-metre-backdrop\.js/);
+  assert.match(head, /laolao-metre-backdrop\.css/);
+  const src = read(INJ + 'laolao-metre-backdrop.js');
+  assert.doesNotMatch(src, /setInterval|requestAnimationFrame/, '不留常驻动画：只有一个按格子走的 setTimeout');
+  const css = read(INJ + 'laolao-metre-backdrop.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(css.replace(/pinkie/gi, ''), /gradient|box-shadow|filter|#e94f91|pink/i, '不发光、不用渐变、不用碧琪的色');
+
+  const env = sandbox();
+  const {ctx, attrs, timers, document} = env;
+  const removeAttr = (name) => { delete attrs[name]; };
+  document.documentElement.removeAttribute = removeAttr;
+  let canvas = null;
+  const g2d = new Proxy({}, {get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; }});
+  const rect = (left, width) => ({left, right: left + width, top: 44, width, height: 856});
+  const main = {getBoundingClientRect: () => rect(280, 1160)};
+  const input = {getBoundingClientRect: () => rect(476, 768)};
+  document.body = {prepend: (node) => { canvas = node; }};
+  document.querySelector = (sel) => (sel.includes('main.content') ? main : sel === '.agent-chat__input' ? input : null);
+  document.createElement = () => ({style: {}, setAttribute() {}, remove() { canvas = null; }, getContext: () => g2d, width: 0, height: 0});
+  ctx.MutationObserver = class { observe() {} disconnect() {} };
+  ctx.ResizeObserver = class { observe() {} unobserve() {} };
+  ctx.getComputedStyle = () => ({getPropertyValue: () => ''});
+  load(['laolao-metre-backdrop.js'], env);
+  const api = env.window.__pinkieMetreBackdrop;
+  assert.ok(api.mounted && canvas, 'Metre 对话页上有画布');
+  assert.ok('data-pk-metre-backdrop' in attrs);
+  assert.equal(timers.at(-1).ms, 60_000 / 72 / 2, '每半拍（♩=72）走一格');
+  timers.at(-1).fn();
+  assert.equal(api.step, 1);
+
+  attrs['data-pinkie-reduce-motion'] = '';
+  api.sync();
+  assert.equal(api.running, false, '减少动态效果：只画一帧，不走');
+  delete attrs['data-pinkie-reduce-motion'];
+
+  attrs['data-laolao-mode'] = 'chat';
+  api.sync();
+  assert.equal(api.mounted, false, '不在 Metre：画布拿掉');
+  assert.equal(canvas, null);
+  assert.ok(!('data-pk-metre-backdrop' in attrs));
 });

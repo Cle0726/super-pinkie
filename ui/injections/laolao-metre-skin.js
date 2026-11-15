@@ -33,5 +33,16 @@
   }).observe(document.head || root, {childList: true});
   apply();
   window.addEventListener('laolao:modechange', apply);
+  // 启动闪屏：第一帧之前按上次的模式先打上 data-laolao-splash-metre，Metre 就不露碧琪的闪屏
+  // （样式在 laolao-metre-brand.css；laolao-splash.js 算准模式后会再改，闪屏走了就拿掉）。
+  try {
+    const url = new URL(location.href);
+    const switching = url.searchParams.get('laolao-switch') === '1' || sessionStorage.getItem('laolao:skip-entry-splash') === '1';
+    let handoff = null;
+    try { handoff = JSON.parse(sessionStorage.getItem('laolao:mode-handoff') || 'null'); } catch {}
+    const agent = /^agent:([a-z]+):/.exec(url.searchParams.get('session') || '')?.[1];
+    const guess = (switching && handoff?.mode) || (agent ? (agent === 'main' ? 'chat' : agent) : localStorage.getItem('laolao:active-mode'));
+    if (guess === 'metre') root.setAttribute('data-laolao-splash-metre', '');
+  } catch {}
   window.__pinkieMetreSkin = {DECOR, apply, get on() { return applied; }};
 })();

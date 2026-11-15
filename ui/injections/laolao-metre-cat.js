@@ -38,6 +38,7 @@
     if (kind === 'offline' || kind === 'offline-idle') return 'stopped';
     if (kind === 'ask' || live.state === 'asking') return 'ask';
     if (kind === 'stopped') return ended && ended.outcome === 'error' ? 'error' : 'stopped';
+    if (kind === 'interrupted') return 'stopped';   // 一轮没收尾、后端也不在跑：猫停下，不装作在干活
     if (kind === 'done') return 'done';
     if (kind === 'wait') return 'waiting';
     if (kind === 'review' || kind === 'fix') return 'review';
