@@ -81,12 +81,15 @@
   const random = window.__laolaoStartupHomeRandom || Math.random;
   const greetingCache = new Map();
   const agentFor = mode => mode === 'chat' ? 'main' : mode;
+  // Metre 没有自己的问候语（首页用引导语），但它是一个真的模式：会话在 agent:metre: 下面。
+  // 以前这里只认有问候语的模式，Metre 被当成唠嗑，首页发第一句话时一直等一个 agent:main: 的会话，25 秒后失败。
+  const knownMode = value => Object.hasOwn(lines, value) || value === 'metre';
   const mode = () => {
     const selected = root.getAttribute('data-laolao-mode');
-    if (Object.hasOwn(lines, selected)) return selected;
+    if (knownMode(selected)) return selected;
     const session = new URL(window.location.href).searchParams.get('session') || '';
     const agent = /^agent:([^:]+):/.exec(session)?.[1];
-    return agent === 'main' ? 'chat' : Object.hasOwn(lines, agent) ? agent : 'chat';
+    return agent === 'main' ? 'chat' : knownMode(agent) ? agent : 'chat';
   };
   const sessionKey = () => new URL(window.location.href).searchParams.get('session') || '';
   const notify = message => {

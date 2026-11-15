@@ -1189,3 +1189,13 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-ba
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg:not([aria-checked="true"]) { color: var(--metre-muted) !important; opacity: 0.75 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.chat-controls__inline-select-label, .pinkie-external-tier) { font-size: 14px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-laolao-startup-home="1"] .agent-chat__input .laolao-context-viewer { display: none !important; }
+/* 首页比例 · 续：上面是「从下往上排」，窗口一高（1000 以上）输入框就跟着沉到 57%。
+ * 改成输入框上沿固定在窗口高度的 48%（截图 49.7%）；窗口矮到放不下卡片时才让卡片贴底、输入框往上让。
+ * 386 = 输入框那一块 160 + 14 + 看板 30 + 182；窗口不到 640 高时看板不显示，只剩 174。窄窗口（卡片变一列）仍按从下往上排。 */
+@media (min-width: 761px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { flex: 0 1 auto !important; height: min(calc(48vh - 44px), calc(100vh - 446px)) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent { flex: 1 1 16px !important; }
+}
+@media (min-width: 761px) and (max-height: 640px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height: min(calc(48vh - 44px), calc(100vh - 234px)) !important; }
+}
