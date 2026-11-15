@@ -2,6 +2,37 @@
 
 两端的会话都读写这份文件。每次开工先看，每次收工必更新并推送。
 
+## fix：Metre 模式按钮在侧栏重建后无法打开（2026-11-15）
+- 真机现象：进入 Metre 后点左下角模式按钮，菜单不出现，无法切回其他模式；搜索等侧栏按钮正常。
+- 根因：`laolao-mode-switcher.js` 只在首次创建按钮时绑定 `click`；Lit 克隆 / 替换侧栏按钮后，脚本沿用了新 DOM 节点，但 `cloneNode` 不会复制事件监听。DOM 克隆复现得到 `aria-expanded=false`、菜单数为 0。
+- 修复：每次 `render()` 采用按钮后用 `WeakSet` 检查真实节点并补绑，避免重复绑定导致一次点击开又关；脚本缓存版本升到 `mode49`。旧模式 ID 和切换行为不变。
+- 回归：新增 `tests/mode-switcher.test.mjs`；相关 19 项测试通过。CDP 真实 DOM 验证克隆按钮能开菜单，并完成 `Metre → chat → Metre`，session 分别回到 `agent:main:...` 和 `agent:metre:...`。
+- 安装与原生验收（11-15 收口）：Metre 底栏 `.sidebar-shell__footer` / `.sidebar-footer-bar` 的透明层盖在模式按钮上方，`elementFromPoint` 命中底栏而不是按钮；AXPress 能绕过命中测试，所以“AX 能开、鼠标不弹”是真实的命中层问题，不是监听缺失。修复为底栏容器 `pointer-events:none`、底栏内按钮 / 链接和模式按钮 `pointer-events:auto`，皮肤缓存升到 `metreskin7`。已同步 App 两套 UI 并重新签名；重启后原生鼠标点 Metre 按钮弹出菜单，原生点「项目模式」切走，原生从项目菜单点「Metre」切回，均通过。截图 `a4-mac/metre-click-fixed.png`、`a4-mac/native-project-after-fix.png`、`a4-mac/native-metre-after-project.png`。第一次点击只激活窗口时不算失败（macOS 默认不启用 click-through）。
+
+## Mac 端验收收口（2026-11-15）
+
+### 真隔离环境、真模型、真 UI（`workbuddy/hy4free`）
+- 根目录 `/Users/Admin/碧琪实测/iso-thinking`；独立 state / workspace / projects / TMPDIR / 缓存，端口 `64560`，`sandbox-exec` 禁止读写真实 `~/.openclaw` 和 `/Applications/超級碧琪.app`，并拒绝 18789。
+- 启动日志确认 `mm/workbuddy/hy4free (thinking=high)`；直接请求返回 `reasoning_chars=373`。
+- `openclaw agent` 真跑一轮：会话 transcript 有 **2 个 `type:"thinking"` 块、共 344 字**，`reasoningTokens` 309 + 35，调用 1 次 `exec`，最终可见文本是 workspace 路径 + `391`。
+- 真实 Control UI（同一套 App control-ui，接隔离网关）发消息：页面出现 **「思考了 17 秒」**，展开是完整真实推理；`.cle-plan` 数量 **0**，`document.body.innerText.includes("思路")` 为 **false**；捕获 2 个 `stream:"thinking"` 的 `pinkie:gateway-event`。证据 `shots/live-30s.png`，会话 `agent:main:iso-thinking-ui-live`。
+
+### R2 Mac 运行时快照
+- 首次 `python3 tools/windows-package/refresh_mac_runtime.py --check` 退出 1；从已安装 Mac App 重新生成：`1 added, 3 updated, 13 dropped`，随后 `--check` 退出 0。
+- 快照 diff：17 个文件，21 insertions / 10206 deletions。测试：`windows_mac_snapshot_test` 6/6、`windows_runtime_files_test` 3/3、`skill-routes.test.mjs` 9/9。
+- CSS 修复后再次 `--check` 仍为 0，控制 UI 的皮肤改动不影响 Mac runtime 快照。
+
+### A4-2 Mac 原生窗口与批 0 之前对照
+- 真实 App（`Launcher` PID 86077，窗口 13168，1280×800）：项目对话页在进 Metre 前 / 回项目后，主体内容区（2x 坐标 x=800..2360、y=80..900）在阈值 15 / 30 / 60 下 **0 像素差异**；侧栏 2.336% @15（集中在滚动条）、底部猫 0.576% @15（动画帧）；全图平均绝对差 1.311。
+- 批 0 之前基线用 `4b7b5242` 工作树 + pristine `openclaw@2026.7.1-2` control-ui，两边各自 `bundle.py install`：baseline 173 entries / 1577 resources，current 192 / 1598；1280×800、Chrome 确定性 fixture，0 页面错误。
+- 深色：项目对话页主内容区 **0 差异 @15**；顶栏 87 px @15（动态耗时）、侧栏 36 px；全图 >15 仅 0.012%。浅色：主内容区 **0 差异 @8**；顶栏 107 px、侧栏 33 px、底部猫 66 px。结论：项目对话页主体样式在批 0 前后未变。
+- 说明：先前 WebKit 抓图写出 0 字节 PNG，只留下 20 条 preload warning，不能作为像素证据；已改用同 fixture 的 Chrome 抓图，页面错误为 0。
+
+### 回归
+- `node --test tests/mode-switcher.test.mjs` 3/3；`python3 tests/ui_parity_test.py` 8/8；`PYTHONPATH=app:. python3 -m unittest tests.windows_startup_test` 10 项、OK、1 跳过；R2 三组测试 6/6、3/3、9/9。
+- 只推开发分支；未推 main、未打 tag、未创建 Release、未改 `latest.json`，不发布用户更新。
+
+
 ## 接力棒
 
 | 批 | 状态 | 谁在做 | 开始 | 最后提交 |
