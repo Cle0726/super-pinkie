@@ -638,59 +638,7 @@ if (!window.__laolaoCleStage) {
       });
     });
   }
-  /* 长篇推演收进「思路」。模型常把几千字的需求分析、模块设计、代码草稿写在调用工具前的正文里，
-     摊在过程里就找不到碧琪正在做哪一步。最后一段（碧琪接下来要做什么）照常显示，前面的推演收成
-     一行「思路 · N 字 ›」，点开再看；运行中正在写的那一段也照常显示。一两句的说明不受影响。 */
-  const PLAN_MIN = 240;               // 整段超过这么多字才考虑收
-  const PLAN_TAIL = 400;              // 最后一段不超过这么长就留在外面当「说明」
-  const openPlans = new Set();        // 用户点开的思路（按开头文字记，流式输出时也稳定）
-  const planWords = (n) => n < 10000 ? n.toLocaleString('zh-CN') + ' 字' : (n / 10000).toFixed(1) + ' 万字';
-  function shapePlans() {
-    document.querySelectorAll('.pinkie-process .pinkie-process__rows > .chat-group.assistant .chat-text').forEach((box) => {
-      const blocks = [...box.children].filter((c) => !c.classList.contains('cle-plan'));
-      const len = (el) => (el.textContent || '').replace(/\s+/g, '').length;
-      const total = blocks.reduce((n, b) => n + len(b), 0);
-      const last = blocks[blocks.length - 1];
-      const tail = last && len(last) <= PLAN_TAIL ? last : null;
-      const plan = tail ? blocks.slice(0, -1) : blocks;
-      const planLen = plan.reduce((n, b) => n + len(b), 0);
-      let btn = box.querySelector(':scope > .cle-plan');
-      if (total <= PLAN_MIN || blocks.length < 2 || planLen < 160) {
-        if (btn) btn.remove();
-        if (box.hasAttribute('data-cle-planfold')) box.removeAttribute('data-cle-planfold');
-        blocks.forEach((b) => b.hasAttribute('data-cle-plan') && b.removeAttribute('data-cle-plan'));
-        return;
-      }
-      const key = blocks.map((b) => b.textContent || '').join('').replace(/\s+/g, '').slice(0, 64);
-      const open = openPlans.has(key);
-      blocks.forEach((b) => { const want = plan.includes(b); if (b.hasAttribute('data-cle-plan') !== want) b.toggleAttribute('data-cle-plan', want); });
-      const state = open ? 'open' : 'folded';
-      if (box.getAttribute('data-cle-planfold') !== state) box.setAttribute('data-cle-planfold', state);
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cle-run cle-plan';
-        btn.dataset.kind = 'plan';
-        btn.innerHTML = '<i></i><b>思路</b><span></span>';
-      }
-      if (box.firstElementChild !== btn) box.prepend(btn);
-      if (btn.dataset.key !== key) btn.dataset.key = key;
-      if (btn.getAttribute('aria-expanded') !== String(open)) btn.setAttribute('aria-expanded', String(open));
-      const words = planWords(planLen);
-      const span = btn.querySelector('span');
-      if (span.textContent !== words) span.textContent = words;
-    });
-  }
   document.addEventListener('click', (e) => {
-    const plan = e.target.closest && e.target.closest('.cle-plan');
-    if (plan) {
-      e.preventDefault();
-      e.stopPropagation();
-      const key = plan.dataset.key || '';
-      if (openPlans.has(key)) openPlans.delete(key); else openPlans.add(key);
-      shapePlans();
-      return;
-    }
     const btn = e.target.closest && e.target.closest('.cle-run');
     if (btn) {
       e.preventDefault();
@@ -710,7 +658,6 @@ if (!window.__laolaoCleStage) {
   function scan() {
     pending = false;
     shapeRows();
-    shapePlans();
     cards().forEach(decorate);
     // 动画小标被重渲染冲掉时补回
     if (owner && glyph && !glyph.isConnected && owner.isConnected) {

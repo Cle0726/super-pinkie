@@ -273,6 +273,22 @@ test('known WorkBuddy reasoning models get verified high support only on the loc
   assert.equal(newModelEntries([],['workbuddy/auto'],{verifiedWorkBuddy:true})[0].reasoning,false);
 });
 
+test('hy4free is discovered with reasoning and existing placeholders recover',async()=>{
+ const [added]=newModelEntries([],['workbuddy/hy4free'],{verifiedWorkBuddy:true});
+ assert.equal(added.reasoning,true);
+ assert.deepEqual(added.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
+ const placeholder=newModelEntries([],['workbuddy/hy4free'])[0];
+ assert.equal(placeholder.reasoning,false);
+ const config={models:{providers:{mm:{baseUrl:'http://localhost:1467/v1',apiKey:'secret',models:[placeholder]}}}};
+ const sync=createModelSynchronizer({runtime:{config:{current:()=>config,
+   async mutateConfigFile({mutate}){mutate(config);}}}},
+   {fetchImpl:async()=>new Response(JSON.stringify({data:[{id:'workbuddy/hy4free'}]}))});
+ const result=await sync.sync();
+ assert.equal(result.providers.mm.upgraded,1);
+ assert.equal(config.models.providers.mm.models[0].reasoning,true);
+ assert.deepEqual(config.models.providers.mm.models[0].compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
+});
+
 test('existing automatic WorkBuddy placeholders gain reasoning while custom capabilities stay untouched',async()=>{
   const placeholder=newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0];
   placeholder.contextWindow=1000000;placeholder.contextTokens=1000000;

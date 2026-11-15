@@ -15,7 +15,7 @@ const CLEKK_NATIVE_EFFORTS=new Map([
 // additional effort levels from a model name alone.
 const WORKBUDDY_REASONING_IDS = new Set([
   'deepseek-v4-pro', 'deepseek-v4.1-flash', 'glm-5.1', 'glm-5.2', 'glm-5.3',
-  'glm-5.3-flash', 'glm-5v-turbo', 'hy3', 'hy3-x', 'hy4-preview',
+  'glm-5.3-flash', 'glm-5v-turbo', 'hy3', 'hy3-x', 'hy4-preview', 'hy4free',
   'kimi-k2.6', 'kimi-k2.7', 'kimi-k2.8-preview', 'kimi-k3-1', 'minimax-m3',
 ].map((id) => `workbuddy/${id}`));
 const workBuddyThinkingCompat = () => ({supportsReasoningEffort: true, supportedReasoningEfforts: ['high']});
