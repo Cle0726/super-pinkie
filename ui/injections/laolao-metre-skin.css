@@ -852,3 +852,163 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-t
 @media (max-width: 920px) {
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { padding-top: 48px !important; }
 }
+
+/* ====================================================================================================
+ * 第四版（Fable 11-14 夜）：用户看了第三版，原话：「前端页面我还是不满意」。这一版改三处：
+ *   1. 输入框重新合成一张卡片：上面写字，下面一条工具栏（工具、Baton / Virtuoso 在左，模型、思考强度、上下文、发送在右）。
+ *      第三版把控件挪到框外，看着是散的。
+ *   2. Baton / Virtuoso 写成乐谱上的表情记号：斜体衬线。
+ *   3. 看板卡片和总控台换成彩色的版式示例（见 laolao-metre-board.css）。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input:focus-within {
+  gap: 0 2px !important;
+  padding: 0 10px 9px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 18px !important;
+  background: var(--metre-surface) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06) !important;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input:focus-within {
+  border-color: color-mix(in srgb, var(--metre-accent) 55%, var(--metre-line-strong)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.08), 0 0 0 3px color-mix(in srgb, var(--metre-accent) 14%, transparent) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .agent-chat__composer-combobox:focus-within {
+  min-height: 76px !important;
+  margin: 0 0 4px !important;
+  padding: 15px 8px 6px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input textarea { min-height: 50px !important; }
+/* 发送键：工具栏最右，和这一排同一条中线 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input button.chat-send-btn { right: 10px !important; bottom: 9px !important; width: 30px !important; height: 30px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-context-viewer { margin-right: 46px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger, .laolao-deep-think-btn, .laolao-context-viewer > summary) { min-height: 30px !important; }
+/* Baton / Virtuoso：一个小分段开关，字是斜体衬线 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton { padding: 2px !important; margin-left: 4px !important; border-radius: 9px !important; background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg { font: italic 400 14.5px/1 var(--metre-serif) !important; padding: 5px 11px 6px !important; border-radius: 7px !important; letter-spacing: 0.01em !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg[aria-checked="true"] { background: var(--metre-surface) !important; color: var(--metre-text) !important; font-weight: 400 !important; box-shadow: 0 0 0 1px var(--metre-line-strong), 0 1px 2px rgba(0, 0, 0, 0.06) !important; }
+/* 首页：最近的工作和看板同一种小标题 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent { margin-top: 26px !important; padding: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent > h3 { display: flex !important; align-items: center !important; gap: 12px !important; margin: 0 2px 6px !important; font: 500 12.5px/1.4 var(--metre-sans) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent > h3::after { content: ""; flex: 1; height: 1px; background: var(--metre-line); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind { font: italic 400 15px/1.2 var(--metre-serif) !important; letter-spacing: 0.01em !important; text-transform: none !important; opacity: 1 !important; }
+
+/* ---------- 第四版 · 侧栏：换一种排法（用户 11-14 夜：「侧边一点变化没有，禁止跟碧琪用相似的排版方式，能不能对比一下Claude页面」） ----------
+ * 碧琪的排法：顶上是模式入口，下面三行一样的入口，底下一条状态。
+ * Metre 照 Claude 的排法：顶上一行是主按钮「新会话」和几个图标（临时、搜索、收起）；中间两行导航和最近的会话；
+ * 左下角是身份栏（黑底方块里一个拍号记号、Metre、连接状态），点它换模式；右下角是设置和更多。
+ * 只在侧栏展开时这样排；收起成一条时照原来的。DOM 一个都没挪，全是定位。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
+  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23FAF9F5' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+  --metre-ic-updown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 8L10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
+  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23191817' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+}
+/* 顶上：品牌那一行不占高度，只剩右上角的收起图标 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand { position: static !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__identity { position: static !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__actions { position: absolute !important; top: 38px !important; right: 12px !important; z-index: 3 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__actions .sidebar-brand__icon { width: 30px !important; height: 32px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__body { padding-top: 16px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-nav { display: none !important; }
+/* 主按钮：新会话。白底、一道边、黄铜色加号 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session {
+  width: calc(100% - 106px) !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  margin: 0 0 14px 8px !important;
+  padding: 0 12px 0 9px !important;
+  gap: 7px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 9px !important;
+  background: var(--metre-surface) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  font: 500 13.5px/1 var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session:hover { background: var(--metre-surface) !important; border-color: color-mix(in srgb, var(--metre-accent) 50%, var(--metre-line-strong)) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session::before { width: 16px !important; height: 16px !important; background: var(--metre-accent) !important; opacity: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session::after { content: none !important; display: none !important; }
+/* 主按钮右边三个图标：临时、搜索、收起 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-temp-entry { top: 0 !important; right: 62px !important; width: 30px !important; height: 32px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-session-controls { position: static !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search {
+  position: absolute !important;
+  top: 0 !important;
+  right: 31px !important;
+  width: 30px !important;
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  color: var(--metre-muted) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search:hover { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search > span { display: none !important; }
+/* 导航：总控台在前，作品在后 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--board { order: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--artifacts { order: 2 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) #laolao-session-manager { margin-top: 18px !important; }
+/* 左下角的身份栏：就是模式入口，挪到了底下 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__footer { height: 62px !important; min-height: 62px !important; padding: 0 !important; border-top: 1px solid var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-footer-bar { position: static !important; height: 100% !important; padding: 0 2px 0 0 !important; align-items: center !important; justify-content: flex-end !important; gap: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain {
+  position: absolute !important;
+  left: 22px !important;
+  bottom: 18px !important;
+  top: auto !important;
+  z-index: 4 !important;
+  width: 136px !important;
+  height: 44px !important;
+  padding: 4px 8px 4px 6px !important;
+  gap: 10px !important;
+  align-items: flex-start !important;
+  border-radius: 10px !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain::before {
+  width: 32px !important;
+  height: 32px !important;
+  margin-top: 2px !important;
+  border-radius: 9px !important;
+  background: var(--metre-text) var(--metre-ic-beat-on) center / 18px no-repeat !important;
+  -webkit-mask: none !important;
+  mask: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__label { font: 500 16px/1.15 var(--metre-serif) !important; margin-top: 2px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__arrow {
+  width: 16px !important;
+  height: 16px !important;
+  margin: 10px 0 0 auto !important;
+  border: 0 !important;
+  transform: none !important;
+  background: var(--metre-muted) !important;
+  -webkit-mask: var(--metre-ic-updown) center / contain no-repeat;
+  mask: var(--metre-ic-updown) center / contain no-repeat;
+  opacity: 1 !important;
+}
+/* 连接状态：身份栏第二行 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status {
+  position: absolute !important;
+  left: 58px !important;
+  bottom: 14px !important;
+  z-index: 5 !important;
+  height: 16px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  gap: 5px !important;
+  font: 400 11.5px/1 var(--metre-sans) !important;
+  pointer-events: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status__dot { width: 6px !important; height: 6px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-footer-bar__spacer { display: none !important; }
+/* 从底下的身份栏点开的菜单往上弹 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):has(aside.sidebar:not(.sidebar--collapsed)) .laolao-mode-menu:not(.laolao-mode-menu--workspace-dock) { top: auto !important; bottom: 66px !important; left: 12px !important; min-width: 200px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option { width: 100% !important; box-sizing: border-box !important; }

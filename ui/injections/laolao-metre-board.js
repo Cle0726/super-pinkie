@@ -1,7 +1,7 @@
 /* laolao-metre-board —— Metre 总控台的页面骨架（PLAN 2.12、6.2 第 9 区；批 5 的前半）
  *
- * 这份文件现在只做「页面长什么样」：九个区块的位置、标题、说明和示意图都在，数据一格都没接。
- * 每个区块标着「待接入」，示意图是占位 SVG，不是真数据，不许当成真数据看。
+ * 这份文件现在只做「页面长什么样」：九个区块的位置、标题、说明都在，数据一格都没接。
+ * 每个区块里放的是一份版式示例（示例的字、示例的图），右上角标着「示例 · 待接入」，页面顶上有一条说明；不是真数据，不许当成真数据看。
  *
  * 给做批 5 后端的人：
  *   - 接口按 PLAN 2.12：只读的 `pinkie.metre.board`，一次返回九个区块的数据；项目记忆区读已有的 `pinkie.metre.memory`。
@@ -20,66 +20,95 @@
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
 
-  // ---------- 占位示意图（单色线条，颜色全走样式表里的变量） ----------
-  // 类：l 细线、d 虚线、f 浅色填充、s 深一档填充、a 强调色、t 小字。
-  const svg = (w, h, body) => `<svg class="pk-mb-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="示意图，数据待接入" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
-  const bar = (x, y, w, h = 8, cls = 'f') => `<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(4, h / 2)}"/>`;
-  const ART = {
-    plan: () => svg(320, 150, [0, 1, 2, 3, 4].map((i) => {
-      const y = 14 + i * 27;
-      const mark = i < 2
-        ? `<circle class="s" cx="18" cy="${y + 6}" r="7"/><path class="k" d="M14.5 ${y + 6}l2.5 2.5 4.5-5"/>`
-        : i === 2 ? `<circle class="a-ring" cx="18" cy="${y + 6}" r="6.25"/><circle class="a" cx="18" cy="${y + 6}" r="2.5"/>`
-          : `<circle class="l" cx="18" cy="${y + 6}" r="6.25"/>`;
-      return mark + bar(36, y + 2, [168, 210, 132, 190, 150][i], 8, i === 2 ? 's' : 'f') + (i < 4 ? `<path class="d" d="M18 ${y + 15}v10"/>` : '');
-    }).join('')),
-    // 子会话画成一页总谱：一行一个声部（子会话），横向是时间，小块是它在干活的那几段，竖虚线是小节线，黄铜色竖线是「现在」。
+  // ---------- 示例内容（版式示例，不是真数据；颜色全走样式表里的变量） ----------
+  // 每个区块在后端接上之前先放一份「示例」：真实的字、真实的图形，让人看得出接好以后长什么样。
+  // 页面顶上有一条说明，每张卡片右上角标着「示例 · 待接入」。接好后 fill() 会把它整块换掉。
+  const esc = (text) => String(text).replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[ch]));
+  const svg = (w, h, body, cls = '') => `<svg class="pk-mb-svg ${cls}" viewBox="0 0 ${w} ${h}" role="img" aria-label="示意图，数据待接入" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
+  const STATE_TEXT = {done: '已交回', run: '在跑', fail: '打回', wait: '排队'};
+  const SAMPLE = {
+    // 计划：一列步骤，做完的打勾，正在做的一格黄铜色，后面的空心。
+    plan: () => `<ol class="pk-mb-steps">${[
+      ['done', '读懂需求，拆成三块', '2 分'], ['done', '搭页面骨架', '6 分'], ['run', '整理资料摘要', '进行中'],
+      ['wait', '定命名方案', ''], ['wait', '合并、验收、汇报', ''],
+    ].map(([state, text, meta]) => `<li data-state="${state}"><i aria-hidden="true"></i><span>${text}</span><em>${meta}</em></li>`).join('')}</ol>`,
+    // 子会话画成一页总谱：一行一个声部（子会话），横向是时间，竖线是小节线，黄铜色竖线是「现在」。
     sessions: () => {
-      const lanes = [[[0, 150], [170, 96], [286, 60]], [[40, 84], [150, 190]], [[96, 60], [176, 44], [250, 96]], [[210, 136]]];
-      let out = '';
-      for (let x = 120; x <= 600; x += 80) out += `<path class="d faint" d="M${x} 8v134"/>`;
-      lanes.forEach((blocks, i) => {
-        const y = 22 + i * 32;
-        out += `<circle class="${i === 3 ? 'l' : i === 0 ? 'a' : 's'}" cx="12" cy="${y + 6}" r="4"/>${bar(24, y + 2, [64, 50, 70, 56][i], 8, 's')}<path class="l faint" d="M120 ${y + 6}h480"/>`;
-        for (const [x, w] of blocks) out += `<rect class="${i === 0 && x === 286 ? 'a-soft' : x + w > 420 ? 'f' : 's'}" x="${120 + x}" y="${y}" width="${Math.min(w, 480 - x)}" height="12" rx="4"/>`;
-      });
-      return svg(620, 150, out + `<path class="now" d="M466 6v138"/><path class="a" d="M461 4h10l-5 6z"/>`);
+      const rows = [
+        ['页面骨架', '项目模式', 'done', '6:10', [[2, 30, 'done'], [35, 12, 'done']]],
+        ['资料摘要', '学习模式', 'run', '5:02', [[8, 20, 'done'], [32, 36, 'run']]],
+        ['命名方案', '想法模式', 'fail', '4:40', [[14, 17, 'done'], [34, 9, 'fail'], [47, 21, 'run']]],
+        ['合并验收', 'Metre', 'wait', '—', [[74, 18, 'wait']]],
+      ];
+      const ticks = ['0:00', '2:00', '4:00', '6:00', '8:00'];
+      return `<div class="pk-mb-score">
+        <div class="pk-mb-score__ruler"><span></span><div>${ticks.map((t) => `<b>${t}</b>`).join('')}</div><span></span></div>
+        ${rows.map(([name, mode, state, time, blocks]) => `<div class="pk-mb-score__row" data-state="${state}">
+          <div class="pk-mb-score__part"><strong>${name}</strong><small>${mode}</small></div>
+          <div class="pk-mb-score__track">${blocks.map(([x, w, s]) => `<i data-state="${s}" style="left:${x}%;width:${w}%"></i>`).join('')}</div>
+          <div class="pk-mb-score__meta"><span class="pk-mb-chip" data-state="${state}">${STATE_TEXT[state]}</span><time>${time}</time></div>
+        </div>`).join('')}
+        <div class="pk-mb-score__now" aria-hidden="true"><i style="left:68%"></i></div>
+      </div>
+      <div class="pk-mb-legend">${Object.entries(STATE_TEXT).map(([s, t]) => `<span><i data-state="${s}"></i>${t === '打回' ? '出错 / 打回' : t}</span>`).join('')}<span class="pk-mb-legend__now"><i></i>现在</span></div>`;
     },
-    timeline: () => svg(320, 150, `<path class="l" d="M22 10v130"/>` + [0, 1, 2, 3, 4].map((i) => {
-      const y = 14 + i * 27;
-      return `<circle class="${i === 0 ? 'a' : 'dot'}" cx="22" cy="${y + 5}" r="${i === 0 ? 4.5 : 3.5}"/>${bar(38, y, 34, 6)}${bar(82, y - 1, [150, 110, 176, 96, 130][i], 9, i === 0 ? 's' : 'f')}`;
-    }).join('')),
-    changes: () => svg(320, 150, [0, 1, 2, 3, 4].map((i) => {
-      const y = 12 + i * 27;
-      const indent = [0, 16, 16, 0, 16][i];
-      const folder = indent === 0;
-      const icon = folder
-        ? `<path class="l" d="M${10} ${y + 1}h6l2 2.5h8v8.5h-16z"/>`
-        : `<path class="l" d="M${12 + indent} ${y}h6l3 3v9h-9z"/>`;
-      const add = [0, 34, 12, 0, 22][i], del = [0, 10, 4, 0, 16][i];
-      return icon + bar(34 + indent, y + 2, [70, 96, 78, 60, 108][i], 8, folder ? 's' : 'f')
-        + (folder ? '' : `<rect class="s" x="${300 - add - del}" y="${y + 3}" width="${add}" height="6" rx="2"/><rect class="d-fill" x="${302 - del}" y="${y + 3}" width="${del}" height="6" rx="2"/>`);
-    }).join('')),
-    pending: () => svg(320, 150, `<rect class="l" x="60" y="22" width="200" height="46" rx="10"/>${bar(76, 36, 110, 8, 's')}${bar(76, 50, 70, 6)}<rect class="a" x="206" y="35" width="40" height="20" rx="10"/>`
-      + `<rect class="d" x="60" y="82" width="200" height="46" rx="10"/>${bar(76, 96, 90, 8)}${bar(76, 110, 120, 6)}`),
+    pending: () => `<div class="pk-mb-cues">
+      <div class="pk-mb-cue"><small>命名方案 · 等你回答</small><p>界面上的 Baton 要不要配一个中文名？</p><div class="pk-mb-cue__opts"><span>保留英文</span><span>加中文</span><span>你定</span></div></div>
+      <div class="pk-mb-cue"><small>页面骨架 · 等你确认</small><p>骨架搭好了，要先看一眼再往下做吗？</p><div class="pk-mb-cue__opts"><span data-primary>打开看看</span><span>直接继续</span></div></div>
+    </div>`,
+    timeline: () => `<ol class="pk-mb-events">${[
+      ['14:32', 'run', '派发', '「资料摘要」交给学习模式'], ['14:30', 'fail', '打回', '「命名方案」少了第三项'],
+      ['14:27', 'done', '汇报', '「页面骨架」已交回，等验收'], ['14:21', 'run', '派发', '三块同时开始'], ['14:20', 'wait', '读懂', '目标一项、要求四项'],
+    ].map(([time, state, kind, text]) => `<li data-state="${state}"><time>${time}</time><i aria-hidden="true"></i><b>${kind}</b><span>${text}</span></li>`).join('')}</ol>`,
+    changes: () => {
+      const file = (name, add, del) => { const total = Math.max(add + del, 1), on = Math.round((add / total) * 5); return `<li><span>${esc(name)}</span><em class="add">+${add}</em><em class="del">−${del}</em><u aria-hidden="true">${[0, 1, 2, 3, 4].map((i) => `<i class="${i < on ? 'add' : 'del'}"></i>`).join('')}</u></li>`; };
+      return `<div class="pk-mb-files">
+        <h4>页面骨架<small>2 个文件</small></h4><ul>${file('src/pages/home.tsx', 84, 12)}${file('src/styles/home.css', 41, 3)}</ul>
+        <h4>资料摘要<small>1 个文件</small></h4><ul>${file('notes/summary.md', 126, 0)}</ul>
+      </div>`;
+    },
     runtime: () => {
-      const C = 2 * Math.PI * 30;
-      const spark = 'M150 96l14-10 14 6 14-22 14 12 14-18 14 8 14-20 14 14 14-8 14 4';
-      return svg(320, 150, `<circle class="ring" cx="56" cy="62" r="30"/><circle class="ring-a" cx="56" cy="62" r="30" stroke-dasharray="${(C * 0.38).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 56 62)"/>${bar(40, 58, 32, 8, 's')}${bar(30, 108, 52, 6)}`
-        + `<path class="l" d="M150 30h160M150 63h160M150 96h160"/><path class="spark" d="${spark}"/><circle class="a" cx="290" cy="74" r="3.5"/>`
-        + [0, 1, 2].map((i) => `<circle class="${i === 2 ? 'l' : 's'}" cx="${154 + i * 56}" cy="124" r="4"/>${bar(164 + i * 56, 120, 36, 7)}`).join(''));
+      const C = 2 * Math.PI * 34;
+      const pts = [22, 30, 18, 26, 14, 20, 34, 16, 12, 22, 10, 18, 14];
+      const line = pts.map((y, i) => `${i ? 'L' : 'M'}${(i * (200 / (pts.length - 1))).toFixed(1)} ${y + 6}`).join(' ');
+      return `<div class="pk-mb-tempo">
+        <div class="pk-mb-gauge">${svg(92, 92, `<circle class="ring" cx="46" cy="46" r="34"/><circle class="ring-a" cx="46" cy="46" r="34" stroke-dasharray="${(C * 0.38).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 46 46)"/>`)}<div><strong>38%</strong><small>上下文</small></div></div>
+        <div class="pk-mb-spark"><div><small>网关延迟</small><strong>412 ms</strong></div>${svg(200, 52, `<path class="grid" d="M0 12h200M0 30h200M0 48h200"/><path class="area" d="${line} L200 52 L0 52 Z"/><path class="spark" d="${line}"/><circle class="dot" cx="200" cy="${pts[pts.length - 1] + 6}" r="3"/>`, 'pk-mb-svg--fill')}</div>
+      </div>
+      <ul class="pk-mb-health"><li data-state="done"><i></i><span>网关</span><em>已连接</em></li><li data-state="done"><i></i><span>主模型</span><em>正常</em></li><li data-state="fail"><i></i><span>执行模型</span><em>刚才超时 1 次</em></li></ul>`;
     },
-    raw: () => svg(320, 150, `<rect class="f" x="8" y="8" width="304" height="134" rx="8"/>` + [0, 1, 2, 3, 4, 5].map((i) => {
-      const y = 22 + i * 19;
-      return bar(20, y, 38, 6, 's') + bar(66, y, [200, 150, 222, 120, 180, 96][i], 6, 'line-fill');
-    }).join('')),
-    memory: () => svg(320, 150, [0, 1, 2].map((r) => [0, 1, 2].map((c) => {
-      const level = [[3, 2, 1], [2, 3, 0], [1, 0, 0]][r][c];
-      return `<rect class="${['d', 'f', 's', 'a-soft'][level]}" x="${12 + c * 40}" y="${14 + r * 40}" width="34" height="34" rx="7"/>`;
-    }).join('')).join('') + [0, 1, 2, 3].map((i) => {
-      const y = 20 + i * 30;
-      return bar(150, y, 44, 7, 's') + `<rect class="f" x="150" y="${y + 13}" width="158" height="6" rx="3"/><rect class="${i === 0 ? 'a' : 's'}" x="150" y="${y + 13}" width="${[118, 84, 56, 30][i]}" height="6" rx="3"/>`;
-    }).join('')),
+    memory: () => {
+      const cats = [['约定', 12, 'v1'], ['结构', 9, 'v2'], ['决定', 7, 'v3'], ['待办', 4, 'v4'], ['偏好', 3, 'v5']];
+      const max = cats[0][1];
+      return `<div class="pk-mb-memory">
+        <div class="pk-mb-memory__cats"><div class="pk-mb-memory__folder"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 5.5h5l1.5 2H17v8.5H3z"/></svg>示例项目<small>35 条</small></div>
+          ${cats.map(([name, n, v]) => `<div class="pk-mb-bar"><span>${name}</span><u><i data-v="${v}" style="width:${Math.round((n / max) * 100)}%"></i></u><em>${n}</em></div>`).join('')}</div>
+        <ul class="pk-mb-memory__list">${[
+          ['约定', 'v1', '提交前先跑一遍测试，红了不提交', true], ['结构', 'v2', '页面在 src/pages，样式和页面同名', false],
+          ['决定', 'v3', '首页先不做登录，放到下一期', false], ['待办', 'v4', '命名方案还差第三项', false],
+        ].map(([cat, v, text, pin]) => `<li><b data-v="${v}">${cat}</b><span>${text}</span>${pin ? '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-label="已钉住"><path d="M10 12.5V17M6.5 12.5h7l-1-6h-5z"/><path d="M7 3.5h6"/></svg>' : ''}</li>`).join('')}</ul>
+      </div>`;
+    },
+    raw: () => `<pre class="pk-mb-log">${[
+      ['14:32:07', 'dispatch', 'part=资料摘要 mode=learning'], ['14:30:41', 'reject', 'part=命名方案 missing=3'],
+      ['14:27:19', 'report', 'part=页面骨架 files=2'], ['14:21:02', 'dispatch', 'parts=3'], ['14:20:15', 'read', 'goals=1 asks=4'],
+    ].map(([t, k, v]) => `<span><time>${t}</time> <b>${k}</b> ${esc(v)}</span>`).join('\n')}</pre>`,
+  };
+  // 首页三张卡片上的小图：抽象的图形，没有字和数字。
+  const MINI = {
+    sessions: () => {
+      const lanes = [[[0, 70, 'v2'], [78, 34, 'v2']], [[18, 46, 'v2'], [72, 86, 'v1']], [[34, 40, 'v2'], [80, 22, 'v4'], [108, 50, 'v1']], [[150, 44, 'q']]];
+      let out = '';
+      for (let x = 40; x <= 220; x += 45) out += `<path class="grid" d="M${x} 4v72"/>`;
+      lanes.forEach((blocks, i) => { for (const [x, w, c] of blocks) out += `<rect class="${c}" x="${16 + x}" y="${10 + i * 17}" width="${w}" height="9" rx="3"/>`; });
+      return svg(240, 80, out + `<path class="now" d="M178 2v76"/>`);
+    },
+    memory: () => svg(240, 80, [[150, 'v1'], [112, 'v2'], [86, 'v3'], [50, 'v4']].map(([w, c], i) => `<rect class="track" x="52" y="${12 + i * 16}" width="172" height="8" rx="4"/><rect class="${c}" x="52" y="${12 + i * 16}" width="${w}" height="8" rx="4"/><rect class="q" x="16" y="${12 + i * 16}" width="26" height="8" rx="4"/>`).join('')),
+    runtime: () => {
+      const C = 2 * Math.PI * 24;
+      return svg(240, 80, `<circle class="ring" cx="48" cy="40" r="24"/><circle class="ring-a" cx="48" cy="40" r="24" stroke-dasharray="${(C * 0.38).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 48 40)"/>`
+        + `<path class="grid" d="M100 20h124M100 40h124M100 60h124"/><path class="spark" d="M100 50l12-8 12 6 12-20 12 12 12-16 12 8 12-18 12 12 12-6 4 2"/><circle class="dot" cx="224" cy="32" r="3"/>`);
+    },
   };
 
   // ---------- 区块 ----------
@@ -106,10 +135,10 @@
     {id: 'raw', en: 'Log', title: '原始记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];
   const STATS = [
-    {id: 'state', label: '当前状态'},
-    {id: 'elapsed', label: '已用时间'},
-    {id: 'running', label: '在跑 / 上限'},
-    {id: 'returned', label: '已交回 · 失败'},
+    {id: 'state', label: '当前状态', hint: '派发中 · 等你 · 已停'},
+    {id: 'elapsed', label: '已用时间', hint: '从第一次派发算起'},
+    {id: 'running', label: '在跑 / 上限', hint: '同时在跑的子会话'},
+    {id: 'returned', label: '已交回 · 失败', hint: '验收过的和出错的'},
   ];
 
   const h = (tag, cls, html) => { const node = document.createElement(tag); if (cls) node.className = cls; if (html != null) node.innerHTML = html; return node; };
@@ -117,8 +146,10 @@
   let lastFocus = null;
 
   function placeholder(slot) {
-    const body = h('div', 'pk-metre-board__body is-placeholder', ART[slot.id]());
-    body.append(h('p', 'pk-metre-board__note', slot.note));
+    const body = h('div', 'pk-metre-board__body is-placeholder');
+    const sample = h('div', 'pk-metre-board__sample', SAMPLE[slot.id]());
+    sample.setAttribute('aria-label', '版式示例，不是真实数据');
+    body.append(sample, h('p', 'pk-metre-board__note', slot.note));
     return body;
   }
   function build() {
@@ -130,7 +161,7 @@
     page.tabIndex = -1;
 
     const head = h('header', 'pk-metre-board__head');
-    const title = h('div', 'pk-metre-board__title', `<h2><svg class="pk-metre-board__beat" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5"/></svg>总控台</h2><p>页面骨架，数据还没接：每个区块里是示意图，不是这次运行的真实情况。</p>`);
+    const title = h('div', 'pk-metre-board__title', `<h2><svg class="pk-metre-board__beat" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5"/></svg>总控台</h2><p>一次派发的全貌：计划、每个子会话、等你处理的事、改动和运行环境。</p>`);
     const actions = h('div', 'pk-metre-board__actions');
     for (const [id, text] of [['pause', '暂停派发'], ['stop', '全部停下']]) {
       const btn = h('button', `pk-metre-board__btn pk-metre-board__btn--${id}`, text);
@@ -150,7 +181,7 @@
       const value = stat.id === 'running'
         ? `<strong class="pk-metre-board__stat-value pk-metre-board__sig" data-metre-stat="running"><b>—</b><b>—</b></strong>`
         : `<strong class="pk-metre-board__stat-value" data-metre-stat="${stat.id}">—</strong>`;
-      const tile = h('div', 'pk-metre-board__stat', `<span class="pk-metre-board__stat-label">${stat.label}</span>${value}`);
+      const tile = h('div', 'pk-metre-board__stat', `<span class="pk-metre-board__stat-label">${stat.label}</span>${value}<span class="pk-metre-board__stat-hint">${stat.hint}</span>`);
       stats.append(tile);
     }
 
@@ -160,12 +191,14 @@
       card.dataset.metreSlot = slot.id;
       card.dataset.metreState = 'placeholder';
       card.id = 'pk-metre-board-' + slot.id;
-      card.append(h('header', 'pk-metre-board__card-head', `${icon(slot.id)}<h3>${slot.title}</h3><span class="pk-metre-board__en" aria-hidden="true">${slot.en}</span><span class="pk-metre-board__tag" title="数据来源：${slot.source}">待接入</span>`));
+      card.append(h('header', 'pk-metre-board__card-head', `${icon(slot.id)}<h3>${slot.title}</h3><span class="pk-metre-board__en" aria-hidden="true">${slot.en}</span><span class="pk-metre-board__tag" title="数据来源：${slot.source}">示例 · 待接入</span>`));
       card.append(placeholder(slot));
       grid.append(card);
     }
+    const notice = h('p', 'pk-metre-board__notice', '<b>示例</b>数据还没接：下面每一块是接好以后的样子，里面的字和数字是示例，不是这次运行的真实情况。');
+    notice.setAttribute('role', 'note');
     const scroll = h('div', 'pk-metre-board__scroll');
-    scroll.append(stats, grid);
+    scroll.append(notice, stats, grid);
     page.append(head, scroll);
     document.body.append(page);
   }
@@ -269,7 +302,7 @@
       row.append(h('h3', 'pk-metre-quick__label', '看板'));
       const list = h('div', 'pk-metre-quick__list');
       for (const item of HOME_CARDS) {
-        const btn = h('button', 'pk-metre-quick__card', `<span class="pk-metre-quick__art">${ART[item.art]()}</span><span class="pk-metre-quick__title">${item.title}</span><span class="pk-metre-quick__text">${item.text}</span>`);
+        const btn = h('button', 'pk-metre-quick__card', `<span class="pk-metre-quick__art">${MINI[item.art]()}</span><span class="pk-metre-quick__title">${item.title}</span><span class="pk-metre-quick__text">${item.text}</span>`);
         btn.type = 'button';
         btn.addEventListener('click', () => api.open(item.slot));
         list.append(btn);
