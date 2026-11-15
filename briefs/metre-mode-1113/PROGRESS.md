@@ -10,11 +10,11 @@
 | 1 派发（界面叫 Baton） | 已自查待验收（A1-* 见「批 1」；界面开关没截图看过） | 空闲（分支 `claude/metre-b1-baton-d11290`，11-14 主会话合进主线） | 2026-11-14 | b16e9727（合并） |
 | 2 会话管理工具 | 已自查待验收 | Windows 并行会话，分支 `claude/metre-b2-sessions-74852b` | 2026-11-14 | 见该分支 git log（批 2 三个提交） |
 | 3 通用补缺（状态词、读图小框） | 已自查待验收（A3-* 见「批 3」；单测全过，合并后没在界面里再截图） | 空闲（分支 `claude/metre-b3-gaps-008419`，11-14 主会话合进主线） | 2026-11-14 | 见 git log（批 3 合并） |
-| M 项目记忆（PLAN 6.2） | 未开始（等批 0；看板部分随批 5） | | | |
+| M 项目记忆（PLAN 6.2） | 已自查待验收（fe147011；`metre-memory.mjs`、AM-1～6/8 单测 12 条过；看板记忆区随批 5 已做） | 空闲 | 2026-11-14 | fe147011 |
 | 4 皮肤、黑猫、Baton/Virtuoso 开关、空状态引导语 | 已自查待验收（第五版，11-15；有和 Claude 截图的并排对比图；没在真 App 里看过） | 空闲 | 2026-11-14 | 见 git log |
-| 5 总控台 | 进行中：页面骨架和占位图已做，**数据没接**；要求见 `BOARD-HANDOFF.md` | 等用户指派负责人 | 2026-11-14 | 见 git log |
-| 6 资源关停 | 未开始（等批 4） | | | |
-| 7 两端收尾 | 未开始 | | | |
+| 5 总控台 | 已自查待验收（后端 `metre-board.mjs` + 前端 `laolao-metre-board-data.js` 已接真实数据；`metre-board` 单测 9 条过；界面没在真 App 里看） | 空闲 | 2026-11-14 | 9743a13d（前端）/ 9a601292（后端） |
+| 6 资源关停 | 已自查待验收（b716b173；`quiet-mode.mjs` + `laolao-quiet.js` 已做；`metre-quiet` 单测 5 条过；A6 的 CPU/定时器数字没量，见下） | 空闲 | 2026-11-14 | b716b173 |
+| 7 两端收尾 | 进行中（Windows 半边；`tools/metre/iso/drive.py` 未提交，真模型 S1–S9 还没跑） | 收尾会话（本会话 11-14） | 2026-11-14 | 见 git log |
 
 状态只用这几个词：未开始 / 进行中 / 已自查待验收 / 验收通过 / 打回。
 
@@ -340,3 +340,28 @@
 - **对话页多行输入**：四行字时输入框长到 125 高，工具图标留在左下、发送键在右下，字不压图标。首页四行字时框长到 161，正常。
 - **测试**：`metre-skin-cat` 14、`mode-controls` 4、`composer-tray-and-home-draft` 3、`run-status-ui` 12、`metre-dispatch` 15、`metre-inject` 7、`brand-ui` 6、`session-cross-mode-ui` 9、`workbench-startup` 1，全过。`ref/v5-*.png` 和两张对比图重拍。
 - **仍没做**：真网关隔离副本里跑一轮、真 App（WebView2）里看、A4-2 逐像素对比、A4-7 CPU。隔离副本 `iso-metre` 还在 C 盘（C 盘只剩 12G，读它的目录要两分钟以上），插件是批 M 之前拷的，要先 `setup.py sync`；建议下次在 F 盘重建再跑。发送时无头 Edge 报了一条 THREE.WebGLProgram 的着色器警告（X4000），是发送动效的，不是报错。
+
+### 批 5 / 批 6 自查补记（Windows，收尾会话，11-14；接力棒此前落后于代码，这里对齐）
+
+起因：批 5（9743a13d / 9a601292，18:05–18:11）和批 6（b716b173，18:27）的代码已提交并推送，但 `PROGRESS.md` 最后一次更新在 96678918（18:00），接力棒仍写「批 5 数据没接 / 批 6 未开始 / 批 M 未开始」，缺这两批的自查。本会话按方向 1 收尾，先补文档、再推进批 7。
+
+**本会话真凭据（`node --test`，工作目录 `F:\Projects\metre-mode`，node 用已装 App 的运行时）：**
+
+| 测试文件 | 条数 | 结果 |
+|---|---|---|
+| `tests/metre-board.test.mjs`（批 5） | 9 | 全过 |
+| `tests/metre-quiet.test.mjs`（批 6） | 5 | 全过 |
+| `tests/metre-dispatch.test.mjs`（批 1） | 15 | 全过 |
+| `tests/metre-inject.test.mjs`（批 0） | 7 | 全过 |
+| `tests/metre-memory.test.mjs`（批 M） | 12 | 全过 |
+| `tests/metre-skin-cat.test.cjs`（批 4） | 14 | 全过 |
+| `tests/metre-wording.test.mjs` | 1 | 全过 |
+| **合计** | **63** | **63 过 / 0 失败** |
+
+- 这 7 个是 Metre 专属单测，**不是全量门禁**；`tools/release-gate/run-tests.mjs` 全量没在安静机器上重跑（批 0 Z1 记过：并行跑会互相干扰，81 条失败里 28 条「新失败」在基线提交上逐文件跑是 0）。
+- 批 5 代码事实：`metre-board.mjs`（`pinkie.metre.board` 合并血缘 / 计划 / 模型健康的每-Metre 日志，`pinkie.metre.resume` 接着做）、`laolao-metre-board-data.js`（前端接真实数据：子会话总谱、计划、待处理计数、时间线、文件改动打开工作台、运行环境、原始日志、项目记忆，暂停 / 全停 / 接着做按钮，离线灰掉）。A5-1～10 里「真运行一次逐项对记录、2 秒内更新、断网关重连、520 宽浮层」这些界面类还没在真 App / 隔离副本里走，仍待验收。
+- 批 6 代码事实：`quiet-mode.mjs`（Metre 为当前且无别的模式会话在跑时，暂停心跳 / 学习提醒 / 学习资料轮询，设置里可选暂停消息渠道）、`laolao-quiet.js` 调度器（进 / 出 Metre 挂起恢复陪伴循环、销毁 WebGL rig、three.js 改懒加载）、`tools/metre/resource-meter.js` 量资源。**A6-1/2/3/5/6/7 的实测数字（CPU≤1%、WebGL 0、定时器数、切 20 次、渠道开关）没量**，ACCEPTANCE 要求同一机器各量三次取中值写进这里，留给真 App / 隔离副本验收，不能凭单测写成过。
+- Z2 正式环境（本会话开工记）：安装目录 `2026-11-13T23:44:10`、`openclaw.json 2026-11-13T23:50:37`、18789 上有 PID 4904 监听（用户自己开的 App，本会话没碰）。C 盘剩 11.2G、F 盘剩 39.4G。
+- 5 个未提交文件原样保留、没提交：`docs/METRE-MODE.md`、`RELEASE-NOTES-DRAFT.md`、`tools/metre/iso/drive.py`、`docs/SESSION-SIDEBAR.md`、`personas/README.md`（后两者是补的 Metre 说明；`personas/README.md` 按接手硬规矩属「不许改」，留给用户定）。本会话只改 `PROGRESS.md`。
+
+**下一步（批 7）**：F 盘重建隔离副本（`METRE_ISO_ROOT` 指到 F:，端口非 18789），`setup.py sync` 后起网关，用 `drive.py` 跑 S1–S9 两遍；结果和真凭据回填本节，接力棒再按实更新。
