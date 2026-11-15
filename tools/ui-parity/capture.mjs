@@ -44,7 +44,8 @@ const canned=args.rpc?JSON.parse(fs.readFileSync(args.rpc,'utf8')):{};
 const created=[];
 function rpc(method,p={}) {
   calls.push({method,params:p});
-  if(Object.hasOwn(canned,method)) return canned[method];
+  // {"$error": "…"} answers the call with a gateway error carrying that message (a failed save, say).
+  if(Object.hasOwn(canned,method)){if(canned[method]?.$error)throw Error(canned[method].$error);return canned[method];}
   if(method==='sessions.create'){const row={...session(p.key),label:p.label||'',displayName:p.label||'',updatedAt:Date.now(),inputTokens:0,outputTokens:0,fresh:true};created.push(row);return {ok:true,key:p.key,entry:row,session:row};}
   if((method==='chat.history'||method==='pinkie.chat.history')&&created.some(row=>row.key===(p.key||p.sessionKey))) return {sessionKey:p.key||p.sessionKey,messages:[],thinkingLevel:'high',hasMore:false,totalMessages:0};
   const key=p.key||p.sessionKey||'agent:main:parity';

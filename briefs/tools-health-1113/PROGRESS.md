@@ -515,3 +515,19 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 原表四项不变，都只能在 Mac 上做，这台做不了。补：
 - A4：这次改了 `pinkie-media-inbox.mjs` 的一句话，Mac 装好后 `refresh_mac_runtime.py --check` 对的是新内容（sha256 `990a02bb…`）。
 - A4：Mac 上用 `PINKIE_TEST_OPENCLAW_DIST` 跑 `tests/media-inbox.test.mjs`，把这边跳过的 4 条补上（`progress/A4.md` 里写着，原表漏了）。
+
+## 11-15 Windows 补做（碧琪在副本里跑 Metre 批 7 额度测试的同时做的，不碰正式网关、不调模型）
+
+### ② `imageModel` / `pdfModel` 默认值（照「Fable 定的」做完）
+
+- `services/mode-architecture/setup.py` 新增 `_default_vision_models`，在 `_configure_plugin` 最后调用：`agents.defaults.model` 的主模型（字符串或 `{primary}` 写法都认）在 `models.providers.<家>.models[]` 里 `input` 含 `image` 时，`imageModel`、`pdfModel` 缺哪项补哪项，补成 `{primary: 主模型}`。用户配过的那项（哪怕是空的）不动；主模型看不了图、在配置里找不到、或没配主模型，都不补。
+- 单测 `tests/mode_architecture_setup_test.py` 新加 `test_image_and_pdf_models_default_to_a_vision_capable_primary`（补齐、二次运行不再改、只补缺的那项、三种不补的情况）。整个文件 11 条：10 过 1 红；红的是 `test_scaffolds_four_isolated_modes…`，读 Mac 路径 `Library/Application Support/…/pinkie-collab`，在 `fb6f6f26` 的临时工作树上同样红，不是这次带来的。`context_budget_test` 14 过、`memory_search_choice_test` 3 过、`project_scope_setup_test` 过。
+- 对正式配置的**副本**干跑（只在内存里，没写回）：会补成 `imageModel = pdfModel = {primary: "mm/workbuddy/deepseek-v4.1-flash"}`，这个模型在配置里标了 `image`。
+- **还没生效**：正式配置要等下次装或更新时跑 `setup.py` 才会补；没在正式 App 里重跑 `image` 工具看 16/16 失败是不是消失。
+- 已知局限：补的是当时的主模型，用户以后换主模型，这两项不会跟着变（用户已经配过的不动，这是同一条规矩）。
+
+### D1 连接器卡片文案截图（原先「没在真 App 里看」那条）
+
+- 假网关加一项：`--rpc` 文件里某个方法的答案写成 `{"$error": "…"}`，假网关就回这条报错（`tools/ui-parity/capture.mjs`），用来摆「接入失败」的场景。
+- 截图：`%USERPROFILE%\碧琪实测\iso-th\shots\d1-amap-error-light.png`（假网关 + 无头 Edge + 本分支界面，项目模式，设置 → 常用，高德地图）。可以看到：Key 一栏的新提示「到高德开放平台的控制台新建一个，服务平台选「Web 服务」」；接入失败时卡片里显示的那句由 `friendlyProbeError` 实际生成：「没连上：这台电脑上找不到启动命令「npx」。看看是不是写错了，或者对应的程序还没装。这次没有保存。」两处都没有被截断或挤坏。页面那条 `drawImage … width or height of 0` 的报错，11-13 的 D1 截图里也有，是假网关场景本来就有的。
+- **发现一处对不上（没改，交 Fable）**：接入成功后页面显示的是界面自己的一句「接好了「高德地图」，新开的对话里碧琪就能用。」，不用网关返回的定稿「连上了，已经保存。新开的对话就能用。」——定稿那句用户实际看不到。要么界面改用网关的 `message`，要么把定稿改到界面这句上；两句意思一样，界面那句带了服务名。

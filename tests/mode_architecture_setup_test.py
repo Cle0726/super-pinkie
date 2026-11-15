@@ -130,6 +130,33 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertEqual(data['agents']['defaults']['bootstrapMaxChars'], 90_000)
         self.assertEqual(data['agents']['defaults']['bootstrapTotalMaxChars'], 200_000)
 
+    def test_image_and_pdf_models_default_to_a_vision_capable_primary(self):
+        providers = {'mm': {'models': [
+            {'id': 'workbuddy/deepseek-v4.1-flash', 'input': ['text', 'image']},
+            {'id': 'gemini-3.8-flash-tiered', 'input': ['text']},
+        ]}}
+        data = {'models': {'providers': providers}, 'agents': {'defaults': {
+            'model': {'primary': 'mm/workbuddy/deepseek-v4.1-flash', 'fallbacks': ['mm/gemini-3.8-flash-tiered']}}, 'list': []}}
+        self.assertTrue(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
+        defaults = data['agents']['defaults']
+        self.assertEqual(defaults['imageModel'], {'primary': 'mm/workbuddy/deepseek-v4.1-flash'})
+        self.assertEqual(defaults['pdfModel'], {'primary': 'mm/workbuddy/deepseek-v4.1-flash'})
+        self.assertFalse(setup._configure_plugin(data, Path('/tmp/pinkie-mode-test')))
+
+        # 字符串写法的主模型也认；用户自己配过的一项不动，只补缺的那项。
+        data = {'models': {'providers': providers}, 'agents': {'defaults': {
+            'model': 'mm/workbuddy/deepseek-v4.1-flash', 'imageModel': 'mm/other'}, 'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['agents']['defaults']['imageModel'], 'mm/other')
+        self.assertEqual(data['agents']['defaults']['pdfModel'], {'primary': 'mm/workbuddy/deepseek-v4.1-flash'})
+
+        # 主模型看不了图、不在配置里、或者没配主模型：都不补。
+        for model in ('mm/gemini-3.8-flash-tiered', 'mm/missing', None):
+            data = {'models': {'providers': providers}, 'agents': {'defaults': {'model': model}, 'list': []}}
+            setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+            self.assertNotIn('imageModel', data['agents']['defaults'])
+            self.assertNotIn('pdfModel', data['agents']['defaults'])
+
     def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
         data = {'agents': {'list': [
             {'id': 'main'}, {'id': 'project', 'tools': {'deny': ['browser'], 'exec': {'pathPrepend': ['/x']}}},

@@ -447,7 +447,32 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     child_timeout = subagents.get("runTimeoutSeconds")
     if child_timeout != 0 and (not isinstance(child_timeout, (int, float)) or child_timeout < 43_200):
         subagents["runTimeoutSeconds"] = 43_200
+    _default_vision_models(data, defaults)
     return before != json.dumps(data, ensure_ascii=False, sort_keys=True)
+
+
+def _model_takes_images(data: dict, ref: str) -> bool:
+    provider, _, model_id = ref.partition("/")
+    providers = data.get("models", {}).get("providers") if isinstance(data.get("models"), dict) else None
+    entry = providers.get(provider) if isinstance(providers, dict) else None
+    models = entry.get("models") if isinstance(entry, dict) else None
+    for model in models if isinstance(models, list) else []:
+        if isinstance(model, dict) and model.get("id") == model_id:
+            return isinstance(model.get("input"), list) and "image" in model["input"]
+    return False
+
+
+def _default_vision_models(data: dict, defaults: dict) -> None:
+    # 没配 imageModel / pdfModel 时运行时退到 google/gemini-2.0-flash 之类用户没有的模型，
+    # image 工具每次都是 Unknown model。主模型在配置里标了能看图，就让这两项用主模型。
+    # 用户自己配过（哪怕是空的）就不动；主模型看不了图就不补，免得换成另一个报错。
+    model = defaults.get("model")
+    primary = model.get("primary") if isinstance(model, dict) else model
+    if not isinstance(primary, str) or "/" not in primary or not _model_takes_images(data, primary):
+        return
+    for key in ("imageModel", "pdfModel"):
+        if key not in defaults:
+            defaults[key] = {"primary": primary}
 
 
 def _probe_embeddings(base_url: str, api_key: str, timeout: float = 6.0):
