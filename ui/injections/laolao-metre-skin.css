@@ -1166,3 +1166,26 @@ html:not([data-laolao-mode="metre"]) .pk-metre-title,
 html[data-laolao-mode="metre"][data-metre-board="open"] .pk-metre-title { display: none !important; }
 /* 8. 首页「继续之前的工作」右边不写碧琪的模式名，只留时间 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__item-mode { display: none !important; }
+
+/* ---------- 第五版 · 首页比例（Fable 11-15）：用户看了对比图，原话：「两个页面比例排版怎么明显看不出来？」「Metre的简直非常乱」 ----------
+ * 和 claude-home-dark 逐项量过后，乱在三处：
+ *   a. 整块内容顶在上面、下面空一大片。截图里输入框上沿在窗口高度的 49.7%，下面的卡片一直排到窗口底。
+ *      → 首页只留「引导语 / 输入框 / 一排控件 / 看板卡片」四块，从下往上排；「继续之前的工作」不再显示（侧栏「最近」已经有），
+ *        它那个节点留作底下的一小段空白，不显示。1280×800 时输入框上沿在 47.6%。
+ *   b. 引导语（760 宽）比输入框（656 宽）宽，两边对不齐。→ 引导语不超过输入框那一栏，字 28px。
+ *   c. 输入框下面一排有六样东西、四种样子。→ 左边 Baton / Virtuoso 只用字色区分，不要底色块；右边是模型、强度两样字加一个图标；
+ *      「上下文」那个圈在首页没有内容（只有一个「—」），进了对话才出现。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent { visibility: hidden !important; flex: 0.05 1 16px !important; min-height: 16px !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; pointer-events: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick { margin-top: 30px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt { max-width: var(--laolao-home-col) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text { font-size: 28px !important; line-height: 1.4 !important; }
+@media (max-height: 640px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick { display: none !important; }
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton { gap: 14px !important; padding: 0 !important; margin-left: 8px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg[aria-checked="true"] { padding: 5px 0 !important; background: transparent !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg[aria-checked="true"] { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-baton__seg:not([aria-checked="true"]) { color: var(--metre-muted) !important; opacity: 0.75 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.chat-controls__inline-select-label, .pinkie-external-tier) { font-size: 14px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-laolao-startup-home="1"] .agent-chat__input .laolao-context-viewer { display: none !important; }
