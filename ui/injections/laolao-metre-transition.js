@@ -91,10 +91,10 @@
     // 像素 M（一格 = 2×2 个点阵格），下面点阵字 METRE（5×7），再下面 1 2 3 4 四个数拍的数字（3×5）；小黑猫从右边跑进来坐在字的右边。
     // 字和数字用半格的细点（6px 一颗；用户 11-15：「Metre字太大了」），整格画太抢 M。
     const S = 2;
-    const FINE = CELL / 2;
+    const FINE = 5;          // 字、数字、猫都用 5px 的细点
     const blockH = 11 * S + 2 + 4 + 2 + 3;
-    // 猫坐在 M 右边（16 格宽 + 3 格空），整组往左让半只猫，M + 猫合起来居中
-    const mx = Math.floor(cols / 2) - Math.floor((13 * S) / 2) - 9;
+    // M 是视觉焦点，居中（用户 11-15：「保持logo视觉焦点啊把下面的字和猫小一点」）
+    const mx = Math.floor(cols / 2) - Math.floor((13 * S) / 2);
     const my = Math.max(2, Math.floor(rows / 2) - Math.floor(blockH / 2) - 1);
     // 字和数字的位置用 CSS 像素（细点）；M 的中线和整块的中线对齐
     const midPx = (mx + 6.5 * S) * CELL;
@@ -102,13 +102,14 @@
     const wordX = Math.round(midPx - wordW / 2), wordY = (my + 11 * S + 2) * CELL;
     const digitsW = (4 * 5 - 2) * FINE;
     const digitsX = Math.round(midPx - digitsW / 2), digitsY = wordY + 7 * FINE + 2 * CELL;
-    const catFinalX = mx + 13 * S + 3, catY = my + 11 * S - 16;
+    // 小猫坐在 M 底座右边，脚踩在底座那一行的底边上
+    const catFinalX = (mx + 13 * S) * CELL + 10, catY = (my + 11 * S) * CELL - 16 * FINE;
     // 摆：支点在底座上沿正中，摆杆长 8 个标志格；拍子落在两头（像真节拍器，每拍摆到一边「嗒」一下）
     const pivot = {x: mx + 6.5 * S, y: my + 10 * S};
     const ROD = 8 * S, SWING = 0.36;
 
     // cover = 波推到第几圈；lit = M 亮到第几列；beat = 当前拍；sweep = 指挥线到第几列（-1 = 还没落拍）；t = 从开始算的毫秒
-    const state = {cover: -1, lit: 0, beat: -1, sweep: -1, t: 0, letters: 0, catX: cols + 2, catFrame: 0, sitting: false, ripple: -1};
+    const state = {cover: -1, lit: 0, beat: -1, sweep: -1, t: 0, letters: 0, catX: W + 10, catFrame: 0, sitting: false, ripple: -1};
     function cellState(x, y) {
       // 0 = 没盖（透明）；1 = 刚亮的点；2 = 半格；3 = 整格
       const age = state.cover - Math.max(Math.abs(x - ox), Math.abs(y - oy));
@@ -208,9 +209,10 @@
       // 小黑猫：每个像素一颗点，身体用字色，眼睛用强调色
       const frameRows = state.sitting ? sitFrames[state.catFrame % Math.max(1, sitFrames.length)] : runFrames[state.catFrame % Math.max(1, runFrames.length)];
       if (frameRows) frameRows.forEach((row, y) => [...row].forEach((c, x) => {
-        if (c === 'K') lit(state.catX + x, catY + y, colors.on, 0.4);
-        else if (c === 'E' || c === 'H') lit(state.catX + x, catY + y, colors.accent, 0.4);
-        else if (c === 'S') lit(state.catX + x, catY + y, colors.dim, 0.24);
+        const px = state.catX + x * FINE, py = catY + y * FINE;
+        if (c === 'K') fine(px, py, colors.on, 0.46);
+        else if (c === 'E' || c === 'H') fine(px, py, colors.accent, 0.46);
+        else if (c === 'S') fine(px, py, colors.dim, 0.3);
       }));
     }
 
@@ -245,7 +247,7 @@
           state.ripple = Math.floor((t - n * BEAT) / 22);
           if (t < run) {
             state.sitting = false;
-            state.catX = Math.round(cols + 2 - (cols + 2 - catFinalX) * (t / run));
+            state.catX = Math.round(W + 10 - (W + 10 - catFinalX) * (t / run));
             state.catFrame = Math.floor(t / 80);
           } else {
             state.sitting = true;

@@ -478,3 +478,8 @@ html:has(.pk-metre-board.is-resizing) { cursor: col-resize; }
   .pk-mb-score__meta time { display: none; }
   .pk-mb-score__line { flex-wrap: wrap; }
 }
+
+/* 第六版：空状态左边一个点阵四分休止符（这一声部还没开始），字在右边 */
+.pk-mb-empty--rest { display: flex; align-items: center; gap: 14px; margin: 6px 0; }
+.pk-mb-rest { flex: none; width: 15px; height: 27px; fill: var(--metre-muted, #77736B); opacity: 0.55; }
+.pk-metre-board__card:hover .pk-mb-rest { fill: var(--metre-accent, #2F4BB0); }

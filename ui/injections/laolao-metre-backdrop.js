@@ -133,6 +133,13 @@
       const x0 = Math.ceil((r.left - rect.left) / PITCH), y0 = Math.ceil((r.top - rect.top) / PITCH);
       return {index, kind: ['sessions', 'memory', 'runtime'][index] || 'memory', x0, y0, w: Math.floor((r.right - rect.left) / PITCH) - x0, h: Math.floor((r.bottom - rect.top) / PITCH) - y0};
     }).filter(Boolean) : [];
+    // 场景道具（第六版 · 续，用户：「这些页面就这样？是不是太简单了？」）：
+    //   左边空地一台点阵节拍器，摆杆每半拍跳一格（左-中-右-中），站在谱子上方（首页站在看板那条底线上）；
+    //   右边空地一组电平表（五根柱子跟着拍子跳），从它上面每两拍飘起一个八分音符，越飘越淡。
+    //   两边任一边不够宽就不放那一件；开着总控台时通常都不放。
+    const ground = home ? (arts.length ? Math.max(...arts.map((a) => a.y0 + a.h)) : rows - 8) : staffTop - 2;
+    const metroX = leftRoom >= 18 ? (home ? Math.round(leftRoom / 2) : conductor) : -1;
+    const meterX = rightRoom >= 20 ? clear[1] + Math.round((rightRoom - 14) / 2) : -1;
     const inArt = (x, y) => arts.some((a) => x >= a.x0 && x < a.x0 + a.w && y >= a.y0 && y < a.y0 + a.h);
     const open = (x) => conductor >= 0 && (x < clear[0] || x >= clear[1]);
     const colors = {
@@ -161,7 +168,7 @@
     } else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) dot(b, x, y, PITCH * 0.16, colors.off);
     for (let i = 0; i < 5; i++) for (let x = 0; x < cols; x++) if (open(x)) dot(b, x, staffTop + i * SPACE, PITCH * 0.24, colors.line);
     if (conductor >= 0) for (let y = staffTop - 3; y <= staffBottom + 2; y++) dot(b, conductor, y, PITCH * 0.24, colors.line);
-    grid = {cols, rows, ratio, base, staffTop, staffBottom, conductor, colors, dot, open, arts};
+    grid = {cols, rows, ratio, base, staffTop, staffBottom, conductor, colors, dot, open, arts, ground, metroX, meterX};
     lastKey = '';
   }
 
@@ -170,6 +177,7 @@
     const {cols, staffTop, staffBottom, conductor, open} = grid;
     const lit = new Map();
     for (const art of grid.arts) artScene(art, lit);
+    propsScene(lit);
     if (conductor < 0) return lit;
     const put = (x, y, kind) => { if (x >= 0 && x < cols && open(x)) { const k = x + ',' + y; if (lit.get(k) !== 'accent') lit.set(k, kind); } };
     const lineRow = (pos) => staffBottom - (pos / 2) * SPACE;   // pos 偶数时是整数行
@@ -216,7 +224,8 @@
         for (let x = a.sx; x <= c.sx; x++) { put(x, row, kind); put(x, row + (up ? 1 : -1), kind); }
       }
     }
-    // 四个拍点：指挥线上方，强拍大一点；当前那一拍是旧铜色
+    // 四个拍点：指挥线上方，强拍大一点；当前那一拍是强调色（左边放了节拍器时不要，节拍器本身就在打拍子）
+    if (grid.metroX >= 0) return lit;
     const beat = reduced() ? 0 : Math.floor(step / 2) % 4;
     const by = staffTop - 7;
     [[-4, 2], [-1, 1], [1, 1], [3, 1]].forEach(([off, size], i) => {
@@ -225,6 +234,59 @@
     return lit;
   }
 
+  // 节拍器 + 电平表 + 飘起来的音符
+  const NOTE_GLYPH = ['.##.', '.#.#', '.#..', '##..', '##..'];
+  function propsScene(lit) {
+    const {cols, rows, ground, metroX, meterX} = grid;
+    const put = (x, y, kind) => { if (x >= 0 && y >= 0 && x < cols && y < rows) lit.set(x + ',' + y, kind); };
+    const still = reduced();
+    if (metroX >= 0) {
+      const g = ground;
+      for (let x = metroX - 7; x <= metroX + 7; x++) put(x, g, 'note');
+      for (let x = metroX - 6; x <= metroX + 6; x++) put(x, g - 1, 'past');
+      // 机身：梯形，下宽上窄，只画两条边和顶
+      const H = 20;
+      for (let i = 0; i < H; i++) {
+        const half = Math.round(6 - (4 * i) / (H - 1));
+        put(metroX - half, g - 2 - i, 'note');
+        put(metroX + half, g - 2 - i, 'note');
+      }
+      for (let x = metroX - 2; x <= metroX + 2; x++) put(x, g - 2 - H, 'note');
+      // 刻度：机身中间一竖排暗点
+      for (let y = g - 18; y <= g - 8; y += 2) put(metroX, y, 'line');
+      // 摆杆：支点在机身下部，每半拍跳一格（左-中-右-中）
+      const swing = still ? 0 : [-1, 0, 1, 0][step % 4] * 0.34;
+      const px = metroX, py = g - 4, len = 16;
+      for (let r = 0; r <= len; r++) put(Math.round(px + Math.sin(swing) * r), Math.round(py - Math.cos(swing) * r), 'ink');
+      const bx = Math.round(px + Math.sin(swing) * 11), by = Math.round(py - Math.cos(swing) * 11);
+      for (let dy = 0; dy < 2; dy++) for (let dx = -1; dx <= 1; dx++) put(bx + dx, by + dy, 'accent');
+    }
+    if (meterX >= 0) {
+      const g = ground;
+      for (let x = meterX - 1; x <= meterX + 14; x++) put(x, g, 'line');
+      let peak = -1, peakH = 0;
+      const hs = [];
+      for (let i = 0; i < 5; i++) {
+        const v = still ? 0.4 : hash(step * 5 + i * 97) * 0.55 + hash(Math.floor(step / 2) * 3 + i) * 0.45;
+        const h = 2 + Math.floor(v * 12);
+        hs.push(h);
+        if (h > peakH) { peakH = h; peak = i; }
+      }
+      hs.forEach((h, i) => {
+        for (let y = 1; y <= h; y++) for (let dx = 0; dx < 2; dx++) put(meterX + i * 3 + dx, g - 1 - (y - 1), y > h - 2 ? (i === peak && y === h ? 'accent' : 'note') : 'past');
+      });
+      // 每两拍从电平表上方飘起一个八分音符，往上走、越走越淡
+      if (!still) for (let j = 0; j < 3; j++) {
+        const k = Math.floor(step / 4) - j;
+        const age = step - k * 4;
+        if (k < 0 || age > 11) continue;
+        const x0 = meterX + Math.floor(hash(k * 13 + 1) * 11);
+        const y0 = g - 20 - age;
+        const kind = age < 4 ? 'note' : age < 8 ? 'past' : 'line';
+        NOTE_GLYPH.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') put(x0 + x, y0 + y, kind); }));
+      }
+    }
+  }
   // 看板的图：在一块 w×h 格里点亮。kind 只用 note / past / line / accent；鼠标在这张卡片上时 note 换成更亮的 ink。
   function artScene(a, lit) {
     const hot = a.index === hovered;

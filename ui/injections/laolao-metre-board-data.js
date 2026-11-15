@@ -35,7 +35,14 @@
     return m < 60 ? `${m}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
   };
   const tokens = (n) => !(n > 0) ? '0' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
-  const empty = (text) => h('p', 'pk-mb-empty', esc(text));
+  // 空状态（第六版）：左边一个点阵画的四分休止符——「这一声部还没开始」，右边一句说明
+  const REST = ['.#...', '..#..', '...#.', '..#..', '.#...', '..#..', '...#.', '.##..', '#....'];
+  const restGlyph = (() => {
+    let dots = '';
+    REST.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') dots += `<circle cx="${x * 4 + 2}" cy="${y * 4 + 2}" r="1.5"/>`; }));
+    return `<svg class="pk-mb-rest" viewBox="0 0 20 36" aria-hidden="true">${dots}</svg>`;
+  })();
+  const empty = (text) => { const node = h('div', 'pk-mb-empty pk-mb-empty--rest', `${restGlyph}<span>${esc(text)}</span>`); return node; };
   const KIND = {dispatch: ['派发', 'run'], report: ['汇报', 'done'], end: ['跑完', 'done'], error: ['出错', 'fail'], stop: ['叫停', 'wait'], memory: ['记忆', 'done'], message: ['消息', 'wait']};
   // 柱状图左边的短名（两个字，放得下）；完整的类别名在悬停提示里。
   const MEMORY_CATS = {overview: '概况', structure: '结构', commands: '命令', conventions: '规矩', decisions: '决定',
@@ -289,8 +296,10 @@
     const parentQuiet = o.parentRunning && o.parentLastActiveAt ? now - o.parentLastActiveAt : 0;
     b.setStat('state', stale ? '连接断了' : parentQuiet > QUIET_MS && o.state === 'Metre 在做' ? `Metre ${span(parentQuiet)}没动静` : o.state);
     b.setStat('elapsed', o.startedAt ? span(now - o.startedAt) : '—');
-    b.setStat('running', `${o.running}/${o.limit}`);
-    b.setStat('returned', `${o.returned} · ${o.failed}`);
+    // 断线时 overview 可能只剩一半字段：没有的数写「—」，不写 undefined
+    const n = (v) => (v == null || Number.isNaN(v) ? '—' : v);
+    b.setStat('running', `${n(o.running)}/${n(o.limit)}`);
+    b.setStat('returned', `${n(o.returned)} · ${n(o.failed)}`);
     const key = sessionKey();
     b.enableActions({
       pause: async (btn) => { btn.disabled = true; try { await rpc('pinkie.metre.pause', {key, paused: !data?.overview?.paused}); } catch {} refreshSoon(0); },
