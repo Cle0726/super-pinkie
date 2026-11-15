@@ -28,6 +28,10 @@
 - 深色：项目对话页主内容区 **0 差异 @15**；顶栏 87 px @15（动态耗时）、侧栏 36 px；全图 >15 仅 0.012%。浅色：主内容区 **0 差异 @8**；顶栏 107 px、侧栏 33 px、底部猫 66 px。结论：项目对话页主体样式在批 0 前后未变。
 - 说明：先前 WebKit 抓图写出 0 字节 PNG，只留下 20 条 preload warning，不能作为像素证据；已改用同 fixture 的 Chrome 抓图，页面错误为 0。
 
+### 真实思考修复（独立分支）
+- `fix/real-thinking-only` @ `6033109c37ec12200f9c3264ca2b9b77cf6914e9` 已推远端，未合 main，也未合 Metre 分支。
+- Mac 运行版已带“删除思路、只留思考了”和 `hy4free` reasoning 修复；若从 Metre 分支重新打包，必须保留 / 合入 `6033109c`，不能整文件覆盖 App 的 `laolao-cle-stage.js`、`laolao-head.fragment.html`、`model-sync.mjs`。
+
 ### 回归
 - `node --test tests/mode-switcher.test.mjs` 3/3；`python3 tests/ui_parity_test.py` 8/8；`PYTHONPATH=app:. python3 -m unittest tests.windows_startup_test` 10 项、OK、1 跳过；R2 三组测试 6/6、3/3、9/9。
 - 只推开发分支；未推 main、未打 tag、未创建 Release、未改 `latest.json`，不发布用户更新。
