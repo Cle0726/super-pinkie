@@ -279,7 +279,21 @@
     } catch { /* 没数据就不出那几类彩蛋 */ }
   }
 
+  // 对话页左上角的会话标题（照 Claude 对话页：内容区顶上左边是这次会话的名字）。
+  // 名字直接取侧栏里选中的那一行，不另发请求；首页和没有选中会话时不出现。
+  let titleEl = null;
+  function syncTitle() {
+    const root = document.documentElement;
+    const header = isMetre() && root.getAttribute('data-laolao-startup-home') !== '1' ? document.querySelector('.dashboard-header') : null;
+    const name = header ? ([...document.querySelectorAll('aside.sidebar .sidebar-recent-session--active .sidebar-recent-session__name')].find((node) => node.getClientRects().length)?.textContent || '').trim() : '';
+    if (!name) { if (titleEl?.isConnected) titleEl.remove(); return; }
+    if (!titleEl) { titleEl = document.createElement('span'); titleEl.className = 'pk-metre-title'; }
+    if (titleEl.textContent !== name) { titleEl.textContent = name; titleEl.title = name; }
+    if (titleEl.parentElement !== header) header.prepend(titleEl);
+  }
+
   function sync() {
+    syncTitle();
     const welcome = isMetre() ? [...document.querySelectorAll('.agent-chat__welcome')].find((node) => node.getClientRects().length) : null;
     if (!welcome) {
       if (box?.isConnected) { box.remove(); clearTimeout(timer); timer = 0; }

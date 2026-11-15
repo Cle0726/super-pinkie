@@ -341,7 +341,10 @@
           const body = document.createElement('span'); body.className = 'laolao-startup-home__item-body';
           const name = document.createElement('span'); name.className = 'laolao-startup-home__item-title'; name.textContent = item.title;
           const meta = document.createElement('span'); meta.className = 'laolao-startup-home__item-meta';
-          meta.textContent = [MODE_NAMES[selected], when(item.at)].filter(Boolean).join(' · ');
+          // 模式名单独包一层：Metre 的首页不写碧琪的模式名（laolao-metre-skin.css 把这一层藏掉），只留时间。
+          const stamp = when(item.at), modeName = MODE_NAMES[selected];
+          if (modeName) { const tag = document.createElement('span'); tag.className = 'laolao-startup-home__item-mode'; tag.textContent = stamp ? modeName + ' · ' : modeName; meta.append(tag); }
+          if (stamp) meta.append(stamp);
           body.append(name, meta); entry.append(icon, body);
           entry.addEventListener('click', () => openSession(item.key));
           list.append(entry);
