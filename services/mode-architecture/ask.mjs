@@ -121,3 +121,18 @@ export function endsWithUserQuestion(messages = []) {
   return parts.some((part) => /^tool_?(?:call|use)$/i.test(String(part?.type || '').replace(/[-\s]/g, '_')) && isAskName(part?.name))
     && !parts.some((part) => /^tool_?(?:call|use)$/i.test(String(part?.type || '').replace(/[-\s]/g, '_')) && !isAskName(part?.name));
 }
+
+// Metre 看到的工具说明不叫「先生」「碧琪」（PLAN F5 答复里记的小事）：工具定义里的说明文字换成中性说法。
+// 只改给模型看的 description / label，参数名和行为不变；别的模式原样返回。
+export function metreWording(tool, sessionKey = '') {
+  if (!tool || !String(sessionKey || '').startsWith('agent:metre:')) return tool;
+  const plain = text => String(text).replace(/碧琪自带的/g, 'App 自带的').replace(/先生/g, '用户').replace(/碧琪/g, '你');
+  const walk = value => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) =>
+      [key, (key === 'description' || key === 'label') && typeof item === 'string' ? plain(item) : walk(item)]));
+  };
+  const {execute, ...rest} = tool;
+  return {...walk(rest), ...(execute ? {execute} : {})};
+}

@@ -38,7 +38,7 @@ import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
 import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
-import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
+import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion, metreWording} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
@@ -6964,11 +6964,11 @@ export default {
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
-    api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
+    api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 挥洒模式不带碧琪的主动提问卡。
-    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : createAskUserTool()), {name: ASK_USER_TOOL});
+    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerLearningLibrary(api, {learning});
     // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；

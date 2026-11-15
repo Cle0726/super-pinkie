@@ -412,3 +412,20 @@ test('register adds the tool and the card / placement / restore gateway methods'
   assert.equal(tools[0][0]({sessionKey: 'agent:unrestricted:dashboard:x'}), null);
   assert.equal(tools[0][0]({sessionKey: META}).name, 'pinkie_sessions');
 });
+
+test('F8 ②：老模式解绑别人的子会话要先出卡片，解绑自己的子会话直接生效', async () => {
+  const OTHER_CHILD = 'agent:main:pinkie-child:k2';
+  const {access, manager, lineage} = setup({lineageRecords: {[CHILD]: {parentKey: PROJ}, [OTHER_CHILD]: {parentKey: CHAT}}});
+  access.add(PROJ, {label: '做网站'});
+  access.add(CHILD, {label: '子任务'});
+  access.add(CHAT, {label: '闲聊'});
+  access.add(OTHER_CHILD, {label: '唠嗑开的子会话'});
+  const card = await manager.run(PROJ, {action: 'detach', session: OTHER_CHILD});
+  assert.equal(card.pending, true);
+  assert.ok(!lineage.records[OTHER_CHILD].detached, '没点之前不解绑');
+  assert.equal(manager.cards(PROJ).cards[0].actionName, '解绑');
+  assert.equal((await manager.confirm(PROJ, card.id, 'run')).card.state, 'done');
+  assert.equal(lineage.records[OTHER_CHILD].detached, true);
+  assert.deepEqual(await manager.run(PROJ, {action: 'detach', session: CHILD}), {key: CHILD, detached: true});
+  assert.deepEqual(await manager.run(META, {action: 'detach', session: OTHER_CHILD}), {key: OTHER_CHILD, detached: true});
+});

@@ -784,3 +784,11 @@ test('a native spawn is pointed back to a real session once when the user asked 
   f.lineage.begin({runId: 'pinkie-session-wake-x', prompt: '[pinkie-watchdog] [pinkie-session-wake] 子会话 汇报'}, {sessionKey: parent});
   assert.equal(spawnShouldBeSession(parent), '', 'internal turns are not the user asking');
 });
+
+test('F9：只聊天档老配置只有四项时补上 pinkie_sessions，别的不动', () => {
+  const old = ['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list', 'pinkie_mode_ask'];
+  const config = {tools: {profile: 'minimal', alsoAllow: [...old]}};
+  assert.equal(supplementMinimalChildTools(config), true);
+  assert.deepEqual(config.tools.alsoAllow, [...old, 'pinkie_sessions']);
+  assert.ok(MINIMAL_CHILD_TOOLS.includes('pinkie_sessions'));
+});

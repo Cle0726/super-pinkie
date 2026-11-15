@@ -78,7 +78,8 @@ const userBrief = (parentTitle, prompt, forkAt) =>
   + '要做的事：\n' + prompt + '\n'
   + '做完时用几句话说清结果；需要用户拍板的地方明确问出来。完成后父会话会收到你最后一条回复（卡片上显示前 400 字）。';
 
-export const MINIMAL_CHILD_TOOLS = Object.freeze(['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list', 'pinkie_mode_ask']);
+// 「只聊天」档也能管会话（F9，Fable 11-15）：pinkie_sessions 动别人会话的动作有确认卡片挡着。老配置只有前四项时启动时补上。
+export const MINIMAL_CHILD_TOOLS = Object.freeze(['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list', 'pinkie_mode_ask', 'pinkie_sessions']);
 
 export function supplementMinimalChildTools(config) {
   const tools = config?.tools;
