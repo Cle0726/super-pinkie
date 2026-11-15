@@ -417,3 +417,22 @@
 **下一步（等额度恢复）**：先 `ask.py` 用 hy4free 冒烟，再确认几个轻量模型（`deepseek-v4-pro`/`glm-5.2`/`kimi-k2.6` 等）能返回 200，然后 `drive.py all c` 跑第三轮、重点补齐 S5/S7/S9 和 S2 三件并行，凑够「两遍都过」。S8 现场 `.log` 会被 `prepare_files()` 重建，判「删了没」要看当轮 board/turns，别事后看目录。
 
 收工清理：网关已停、6170 释放；18789 上用户自己的 App（PID 4904）没碰；Z2 三样（安装目录 `2026-11-13T23:44:10`、`openclaw.json 23:50:37`、18789 PID）不变；5 个未提交半成品原样保留；本会话只改 `PROGRESS.md`。
+
+### 测试模型规则 + 号池实测（Windows，11-15，tools-health 会话接手批 7）
+
+**规则（用户 11-15）**：现在手上没有更强的模型，**所有实测统一用 `mm/workbuddy/hy4free`**。批 7 也一样：Metre 自己用 hy4free（`METRE_ISO_MODEL=mm/workbuddy/hy4free`）。照 ACCEPTANCE 的口径，这仍是降级跑，不算正式验收；等有顶档模型再补正式那一遍。
+
+**为什么子会话用 hy3**：Metre 有硬规则「不能派给自己」（`metre-models.mjs` `chooseChildModel`，同一个模型直接报错）。如果只放 hy4free，Metre 一个子会话也派不出去。HY4 的另外两个都不能用：hy4std 8 个号全部 429「额度已用完」，hy4-preview 401（登录失效）。所以副本 `F:\碧琪实测\iso-metre-b1` 的模型目录只留 `workbuddy/hy4free` 和 `workbuddy/hy3` 两项，子会话只能挑 hy3。配置备份在 `openclaw.json.bak-pre-hy4only`；没改代码，也没改分档表（hy3 不在表里，按默认算 mid）。
+
+**号池实测（本机 `cle-cliproxy` 1466，10 个 WorkBuddy 号，其中 8 个带 hy4 系列；路由轮询，`request-retry 2`）**，11-15 07:0x UTC：
+
+| 模型 | 结果 |
+|---|---|
+| hy4free | 顺序请求 200；**16 个同时发也全部 200 并完整收尾**（同时另有 8 个并发的评测在跑），最慢 31 秒。hy4free 没有被限流 |
+| hy3 | 8/8 都是 200 |
+| hy4std、kimi-k3.1-pro、minimax-m3.1-flash | 8/8 都是 429（额度用完） |
+| deepseek-v4-pro、deepseek-v4.1-flash、glm-5.2、glm-5.3 | 429 + 503（号池里所有号都在冷却，没有可用的） |
+
+`eval/b` 里那 4 题被 429 拖住，是 Metre 给子会话挑了 kimi / glm / deepseek，这些付费模型的额度在 8 个号上都用完了。hy4free 本身没被限流，路由轮询也没问题。`request-retry 2` 的意思是一次请求最多试 3 个号：只有部分号额度用完时，后面的号可能轮不到。这一点要等以后某个模型只在部分号上用完时才会有影响，这次所有号都用完了，调大也没用。
+
+`eval/c` 第三轮：九题并行，Metre 用 hy4free、子会话用 hy3。结果见下一节。
