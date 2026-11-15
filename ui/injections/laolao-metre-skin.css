@@ -1009,6 +1009,11 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--c
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status__dot { width: 6px !important; height: 6px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-footer-bar__spacer { display: none !important; }
+/* 左下底栏只是透明布局层，不能盖住模式入口的命中层；交互控件各自接收点击。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__footer,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-footer-bar { pointer-events: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-footer-bar :is(button,a,[role="button"]),
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher { pointer-events: auto !important; }
 /* 从底下的身份栏点开的菜单往上弹 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):has(aside.sidebar:not(.sidebar--collapsed)) .laolao-mode-menu:not(.laolao-mode-menu--workspace-dock) { top: auto !important; bottom: 66px !important; left: 12px !important; min-width: 200px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option { width: 100% !important; box-sizing: border-box !important; }

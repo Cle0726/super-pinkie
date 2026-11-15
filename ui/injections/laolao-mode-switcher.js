@@ -115,6 +115,7 @@
   let menuAnchor = null;
   let switching = false;
   let modeTransitionTargetId = null;
+  const menuBoundTriggers = new WeakSet();
   let deferredModeChangeId = null;
   let preloading = false;
   let pendingModePortraitFx = null;
@@ -1077,10 +1078,16 @@
       trigger.className = "laolao-mode-switcher";
       trigger.setAttribute("aria-haspopup", "menu");
       trigger.setAttribute("aria-expanded", "false");
-      trigger.addEventListener("click", openMenu);
       identity.append(trigger);
     }
     if (trigger.parentElement !== identity) { closeMenu(); identity.append(trigger); }
+    // Lit can clone or replace the sidebar without removing this custom button.
+    // cloneNode copies the DOM but never its listeners, so adopting a trigger
+    // must also rebind it. A WeakSet marks real nodes, not cloned data attributes.
+    if (!menuBoundTriggers.has(trigger)) {
+      trigger.addEventListener("click", openMenu);
+      menuBoundTriggers.add(trigger);
+    }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
     const pending = pendingModePortraitFx;
     const shouldHoldOldPortrait = pending && !pending.armed && pending.to === mode.id &&
