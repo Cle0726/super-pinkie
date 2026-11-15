@@ -5966,7 +5966,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			...mergeResult.sessionFileSnapshot
 		} : current, refreshedSnapshot.fingerprint)) {
 			takeoverDetected = true;
-			console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+			throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 		}
 		return {
 			snapshot: refreshedSnapshot,
@@ -5986,7 +5986,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 		const snapshot = await readSessionFileFenceSnapshot(params.lockOptions.sessionFile);
 		if (!sameSessionFileFingerprint(expectedFingerprint, snapshot.fingerprint)) {
 			takeoverDetected = true;
-			console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+			throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 		}
 		return snapshot;
 	}
@@ -6071,7 +6071,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 				const reloadedSnapshot = await reloadPromptReleasedSessionFile(current);
 				if (!reloadedSnapshot) {
 					takeoverDetected = true;
-					console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+					throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 				}
 				fenceFingerprint = reloadedSnapshot.fingerprint;
 				fenceSnapshot = reloadedSnapshot;
@@ -6082,7 +6082,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			const mergedChange = await mergePromptReleasedSessionChange(fenceSnapshot, current, expectedPublishedEntries ? { expectedPublishedEntries } : void 0);
 			if (params.mergePromptReleasedSessionEntries && !mergedChange) {
 				takeoverDetected = true;
-				console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+				throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 			}
 			const mergedFingerprint = mergedChange?.snapshot.fingerprint ?? current;
 			const mergedGeneration = mergedChange && !sameSessionFileFingerprint(current, mergedFingerprint) ? recordOwnedSessionFileWrite(sessionFileFenceKey, mergedFingerprint, mergedChange.postMergePublishedEntries, mergedChange.requiresReload) : ownedWrite.generation;
@@ -6116,7 +6116,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			const mergedChange = await mergePromptReleasedSessionChange(fenceSnapshot, current);
 			if (!mergedChange) {
 				takeoverDetected = true;
-				console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+				throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 			}
 			fenceSnapshot = mergedChange.snapshot;
 			fenceFingerprint = mergedChange.snapshot.fingerprint;
@@ -6124,7 +6124,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			return;
 		}
 		takeoverDetected = true;
-		console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+		throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 	}
 	async function refreshSessionFileFence(beforeWrite) {
 		if (takeoverDetected) return;
@@ -6148,7 +6148,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 		const mergedChange = await mergePromptReleasedSessionChange(beforeWrite, current, expectedPublishedEntries ? { expectedPublishedEntries } : void 0);
 		if (params.mergePromptReleasedSessionEntries && !mergedChange) {
 			takeoverDetected = true;
-			console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+			throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 		}
 		const publishedEntries = mergedChange ? mergedChange.publishedEntries : expectedPublishedEntries;
 		const publishedFingerprint = mergedChange?.snapshot.fingerprint ?? current;
@@ -6283,7 +6283,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			await releaseHeldLockWithFence();
 		}
 		if (!outcome.ok) throw outcome.error;
-		if (takeoverDetected) console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+		if (takeoverDetected) throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 		return outcome.value;
 	}
 	async function runWithRetainedLock(run, releaseRetainedUse) {
@@ -6320,7 +6320,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 			ownedPublicationQueue = previousQueueEntry.then(() => currentQueueEntry);
 			await previousQueueEntry;
 			try {
-				if (takeoverDetected) console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+				if (takeoverDetected) throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 				const beforeWrite = await captureOwnedSessionFileWriteStart();
 				const publicationLockState = {
 					active: true,
@@ -6363,7 +6363,7 @@ async function createEmbeddedAttemptSessionLockController(params) {
 		return await trackWriteLockOperation(state.scope, operation);
 	}
 	async function withSessionWriteLock(run, options) {
-		if (takeoverDetected) console.warn("[PATCH] Suppressed EmbeddedAttemptSessionTakeoverError for:", params.lockOptions.sessionFile); // throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
+		if (takeoverDetected) throw new EmbeddedAttemptSessionTakeoverError(params.lockOptions.sessionFile);
 		const inheritedLockState = activeWriteLock.getStore();
 		if (inheritedLockState && (!inheritedLockState.active || !inheritedLockState.scope.active)) {
 			await inheritedLockState.scope.completion;

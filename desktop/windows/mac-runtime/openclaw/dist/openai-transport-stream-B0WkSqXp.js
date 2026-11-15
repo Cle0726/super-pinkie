@@ -2332,32 +2332,13 @@ function resolveUnrestrictedPrompt(model) {
 		const provider = model && typeof model.provider === "string" ? model.provider : "";
 		const id = modelId.toLowerCase();
 		let fileName = "unrestricted-prompt.txt";
-		if (/claude|anthropic/i.test(modelId) || /anthropic|claude/i.test(provider)) {
-			// Claude 5.x 必须分档：3.5 时代的对齐层描述在 Opus 5 官方提示词里已不成立，
-			// 且 5.x 换了注入范式（<policy> 伪官方策略 / 假警报重定性）。
-			// 匹配顺序从具体到宽泛。
-			// 变体开关：UR_CLAUDE_VARIANT=shared 切到 Shared Lines 首行版
-			// （opus5 → unrestricted-prompt-claude-opus5-shared.txt，
-			//   opus55 → unrestricted-prompt-claude-opus55-shared.txt）
-			const variant = (process.env.UR_CLAUDE_VARIANT || "").toLowerCase();
-			if (/opus-5-5|opus-55|opus_5_5/i.test(id)) {
-				fileName = variant === "shared" ? "unrestricted-prompt-claude-opus55-shared.txt" : "unrestricted-prompt-claude-opus55.txt";
-			} else if (/sonnet-5-5|sonnet-55|sonnet55/i.test(id)) {
-				fileName = variant === "shared" ? "unrestricted-prompt-claude-opus55-shared.txt" : "unrestricted-prompt-claude-opus55.txt";
-			} else if (/opus-5|opus5/i.test(id)) {
-				fileName = variant === "shared" ? "unrestricted-prompt-claude-opus5-shared.txt" : "unrestricted-prompt-claude-opus5.txt";
-			} else if (/sonnet-5|sonnet5/i.test(id)) {
-				fileName = variant === "shared" ? "unrestricted-prompt-claude-opus5-shared.txt" : "unrestricted-prompt-claude-opus5.txt";
-			} else if (/fable/i.test(id)) fileName = "unrestricted-prompt-claude-fable5.txt";
-			else if (/haiku-5-5|haiku-55|haiku55/i.test(id)) fileName = "unrestricted-prompt-claude-haiku55.txt";
-			else if (/claude-(3|4)|claude[34]-|opus-4|sonnet-4|haiku-4|opus4|sonnet4|haiku4/i.test(id)) fileName = "unrestricted-prompt-claude.txt";
-			else fileName = "unrestricted-prompt-claude.txt";
-		}
-		else if (/gemini-3.7-flash-tiered|gemini-pro-agent|gemini-3.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
+		if (/claude|anthropic/i.test(modelId) || /anthropic|claude/i.test(provider)) fileName = "unrestricted-prompt-claude.txt";
+		else if (/gemini-3\.[78]-flash-tiered|gemini-pro-agent|gemini-3\.1-pro-high/.test(id)) fileName = "unrestricted-prompt-gemini-hard.txt";
 		else if (/gemini/.test(id)) fileName = "unrestricted-prompt-gemini.txt";
 		else if (/gpt-oss|gptoss/.test(id)) fileName = "unrestricted-prompt-gptoss.txt";
 		else if (/gpt-5/.test(id) || provider === "codex") fileName = "unrestricted-prompt-gpt5.txt";
-		prompt = fsMod.readFileSync(pathMod.join(home, ".openclaw", fileName), "utf8").trim();
+		const promptsDir = process.env.UR_PROMPTS_DIR || pathMod.join(home, ".openclaw");
+		prompt = fsMod.readFileSync(pathMod.join(promptsDir, fileName), "utf8").trim();
 	} catch {}
 	return prompt;
 }
