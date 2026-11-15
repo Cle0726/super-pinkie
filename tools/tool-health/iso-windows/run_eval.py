@@ -38,7 +38,10 @@ def subst(text):
 
 
 def run_one(env, manifest, label, q, model, rep):
-    key = f"agent:{q.get('agent', 'main')}:th-{label}-q{q['id']}-{model.split('/')[-1]}-r{rep}"
+    # 同一个模型经不同提供方跑（如 mm/ 直连、mmr/ 走中转）时会话键也要分开，否则两路写进同一个会话。
+    provider = model.split('/')[0]
+    slug = model.split('/')[-1] if provider == 'mm' else f"{provider}-{model.split('/')[-1]}"
+    key = f"agent:{q.get('agent', 'main')}:th-{label}-q{q['id']}-{slug}-r{rep}"
     started = time.time()
     replies = []
     for message in q['messages']:
