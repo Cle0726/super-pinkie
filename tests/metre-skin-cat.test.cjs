@@ -355,3 +355,30 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   assert.equal(canvas, null);
   assert.ok(!('data-pk-metre-backdrop' in attrs));
 });
+
+// ---------- 11-15 第六版：切换进 Metre 的「预备拍」过场、首页速度记号、看板亮在点阵上 ----------
+test('Metre v6: count-in transition is wired into the switcher, declines under reduced motion, never leaves a resident loop', () => {
+  const head = read(INJ + 'laolao-head.fragment.html');
+  assert.match(head, /laolao-metre-transition\.js/);
+  const switcher = read(INJ + 'laolao-mode-switcher.js');
+  assert.match(switcher, /if \(mode\.plain\) \{[\s\S]{0,700}PinkieMetreTransition\?\.play/, 'Metre 走自己的过场');
+  const src = read(INJ + 'laolao-metre-transition.js');
+  assert.match(src, /if \(reduced\(\)\) return null;/, '减少动态效果时不放过场');
+  assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /setInterval|WebGL|\.png|\.webp/, '只用 canvas 点阵，不用图片、不留常驻计时器');
+  assert.match(src, /'METRE'/, '过场里有 METRE 字');
+  assert.match(src, /LaolaoMetreCat/, '过场里有像素猫');
+  assert.match(src, /overlay\.remove\(\)/);
+});
+
+test('Metre v6 home: tempo mark above the prompt, board art drawn on the backdrop, cobalt accent', () => {
+  const home = read(INJ + 'laolao-metre-home.js');
+  assert.match(home, /pk-metre-tempo/);
+  assert.match(home, /pk-metre-prompt__head/);
+  const backdrop = read(INJ + 'laolao-metre-backdrop.js');
+  assert.match(backdrop, /\.pk-metre-quick__art/, '看板的图由背景点阵画');
+  assert.match(backdrop, /data-laolao-startup-home/);
+  const skin = read(INJ + 'laolao-metre-skin.css');
+  const v6 = skin.slice(skin.indexOf('第六版「总谱」'));
+  assert.match(v6, /--metre-accent: #2F4BB0;/);
+  assert.match(v6, /\.pk-metre-quick__card:hover \{[\s\S]{0,200}background: transparent !important;/, '看板卡片没有卡片底');
+});

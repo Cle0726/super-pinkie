@@ -390,8 +390,21 @@
 
   const playModeTransition = async (mode) => {
     if (mode.plain) {
-      // No cover at all: the route changes in place. The fx-shaped stub lets
+      // Metre's own cover (laolao-metre-transition.js): a pixel count-in, no
+      // scene art. It declines under reduced motion; then there is no cover at
+      // all and the route changes in place. The fx-shaped stub lets
       // finishModeTransition wait for the destination without drawing anything.
+      let own = null;
+      try { own = window.PinkieMetreTransition?.play?.() || null; } catch {}
+      if (own) {
+        try {
+          await own.ready;
+          await own.covered;
+          return {overlay: own.overlay, fx: own, assets: Promise.resolve()};
+        } catch {
+          own.abort?.();
+        }
+      }
       const overlay = document.createElement("section");
       const fx = {waiting() {}, abort() {}, finish: async () => {}};
       return {overlay, fx, assets: Promise.resolve()};

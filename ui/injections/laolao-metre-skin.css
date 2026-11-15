@@ -1259,3 +1259,146 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-cha
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__avatar--logo { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome { width: min(720px, calc(100% - 48px)) !important; max-width: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome .pk-metre-prompt { max-width: 100% !important; }
+
+/* ====================================================================================================
+ * 第六版「总谱」（11-15）。用户看了第五版首页：「太普通了，没有任何关于 Metre 自己独有风格的设计」「呼吸感留白感太少，就像堆起来的垃圾」
+ * 「对话框下面那三个框融入设计背景」「再调一下配色」「焦点应该突出引导语」。
+ *   1. 配色「谱纸」：暖白谱纸 + 墨色 + 一支钴蓝铅笔（指挥在总谱上做记号的那支笔）。只有一个强调色，状态色降饱和，不发光、不渐变。
+ *      上一稿的旧铜和「出错」的砖红太近，这一稿强调色换成冷色，和红、绿都分得开。
+ *   2. 首页只剩三件事：引导语（主角）、输入框、亮在点阵上的三块看板。
+ *      引导语 32px 衬线、左对齐在输入框那一栏；上面一行是速度记号（类别 + ♩ = 72 + 四个跟拍子亮的拍点）和「换一句」。
+ *      像素 M 不再放在引导语上面（侧栏左下角已有），「看板 / 打开总控台」那一行标题不要了。
+ *   3. 三张看板卡片去掉卡片底、边框和阴影；图由背景点阵（laolao-metre-backdrop.js）直接在卡片的位置点亮，
+ *      卡片本身只剩两行字，鼠标移上去时那块点阵变亮。
+ *   4. 首页的背景点阵中间淡、四边实（在画布里按离中心的距离调淡），谱子不在首页走。
+ * 和上面冲突的以这一段为准。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
+  --metre-bg: #F7F6F3;
+  --metre-side: #F0EFEB;
+  --metre-surface: #FFFFFF;
+  --metre-card: #FFFFFF;
+  --metre-art: #F0EFEB;
+  --metre-text: #1B1A18;
+  --metre-muted: #77736B;
+  --metre-line: #E4E2DC;
+  --metre-line-strong: #D3D0C8;
+  --metre-hover: #EFEDE8;
+  --metre-side-hover: #E8E6E0;
+  --metre-side-active: #E1DED7;
+  --metre-ph: #EBE9E3;
+  --metre-ph-strong: #D3D0C8;
+  --metre-accent: #2F4BB0;
+  --accent-rgb: 47, 75, 176 !important;
+  --accent-hover: #263E93 !important;
+  --accent-muted: rgba(47, 75, 176, 0.12) !important;
+  --accent-subtle: rgba(47, 75, 176, 0.06) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
+  --metre-bg: #151514;
+  --metre-side: #111110;
+  --metre-surface: #232321;
+  --metre-card: #1B1B1A;
+  --metre-art: #151514;
+  --metre-text: #ECEAE4;
+  --metre-muted: #918D84;
+  --metre-line: #272725;
+  --metre-line-strong: #393835;
+  --metre-hover: #1F1F1D;
+  --metre-side-hover: #1C1C1B;
+  --metre-side-active: #292927;
+  --metre-ph: #222220;
+  --metre-ph-strong: #393835;
+  --metre-accent: #93A5EE;
+  --accent-rgb: 147, 165, 238 !important;
+  --accent-hover: #A9B8F2 !important;
+  --accent-muted: rgba(147, 165, 238, 0.14) !important;
+  --accent-subtle: rgba(147, 165, 238, 0.07) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { border-color: var(--metre-line-strong) !important; box-shadow: 0 1px 0 rgba(27, 26, 24, 0.03) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
+
+/* ---------- 引导语：速度记号一行 + 一句大号衬线，左对齐在输入框那一栏 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-home-mark { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome { width: var(--laolao-home-col, min(656px, calc(100% - 48px))) !important; max-width: min(656px, calc(100% - 48px)) !important; flex: 0 0 auto !important; margin-left: auto !important; margin-right: auto !important; padding: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt { width: 100% !important; max-width: none !important; align-items: stretch !important; gap: 0 !important; text-align: left !important; margin: 0 !important; }
+.pk-metre-prompt__head { display: flex; align-items: center; gap: 14px; min-height: 22px; margin: 0 0 18px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind {
+  font: italic 400 15px/1.2 var(--metre-serif) !important;
+  letter-spacing: 0.01em !important;
+  text-transform: none !important;
+  color: var(--metre-muted) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind::after { content: none !important; display: none !important; }
+.pk-metre-tempo { display: inline-flex; align-items: center; gap: 7px; color: var(--metre-muted, #77736B); font: 400 13px/1 var(--metre-serif, serif); white-space: nowrap; }
+.pk-metre-tempo__mark { margin-right: 4px; opacity: 0.85; }
+.pk-metre-tempo i { width: 4px; height: 4px; border-radius: 50%; background: var(--metre-line-strong, #D3D0C8); }
+.pk-metre-tempo i:first-of-type { width: 6px; height: 6px; }
+.pk-metre-tempo[data-beat="0"] i:nth-of-type(1),
+.pk-metre-tempo[data-beat="1"] i:nth-of-type(2),
+.pk-metre-tempo[data-beat="2"] i:nth-of-type(3),
+.pk-metre-tempo[data-beat="3"] i:nth-of-type(4) { background: var(--metre-accent, #2F4BB0); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__next {
+  margin: 0 0 0 auto !important;
+  padding: 3px 2px !important;
+  white-space: nowrap !important;
+  flex: none !important;
+  position: static !important;
+  transform: none !important;
+  opacity: 0.8 !important;
+  font: 400 13px/1 var(--metre-sans) !important;
+  color: var(--metre-muted) !important;
+  opacity: 0.8;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__next:hover { opacity: 1 !important; color: var(--metre-text) !important; transform: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__row { display: block !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text {
+  font: 400 32px/1.5 var(--metre-serif) !important;
+  letter-spacing: 0.01em !important;
+  color: var(--metre-text) !important;
+  text-wrap: pretty;
+}
+/* 关键词：钴蓝，下面一排点（像点阵屏上亮的一行），不是实线 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-kw { color: var(--metre-accent) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-kw::after {
+  bottom: -0.02em !important;
+  height: 3px !important;
+  background: radial-gradient(circle, currentColor 1.1px, transparent 1.5px) 0 0 / 6px 3px repeat-x !important;
+  opacity: 0.7;
+}
+/* 新会话的空白页（不是启动首页）：字小一号 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not([data-laolao-startup-home="1"]) .pk-metre-prompt__text { font-size: 26px !important; }
+
+/* ---------- 首页的竖向节奏：引导语占上半，输入框上沿在 50%，看板贴底，中间都是空白 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__label { display: none !important; }
+@media (min-width: 761px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height: min(calc(50vh - 44px), calc(100vh - 404px)) !important; padding-bottom: 76px !important; box-sizing: border-box !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick { margin: auto auto 44px !important; padding-top: 40px !important; }
+}
+@media (min-width: 761px) and (max-height: 640px) {
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height: min(calc(46vh - 44px), calc(100vh - 230px)) !important; padding-bottom: 56px !important; }
+}
+
+/* ---------- 看板：不要卡片。图亮在背景点阵上（画布按 .pk-metre-quick__art 的位置画），卡片只剩两行字 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__list { gap: 24px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__card,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__card:hover {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  overflow: visible !important;
+  gap: 3px !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__art { height: 72px !important; margin: 0 0 10px !important; padding: 0 !important; background: transparent !important; border: 0 !important; }
+html[data-laolao-mode="metre"][data-pk-metre-backdrop]:not(#_m1):not(#_m2) .pk-metre-quick__art > svg { visibility: hidden !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__title { padding: 0 !important; font: 500 13.5px/1.4 var(--metre-sans) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__text { padding: 0 !important; font: 400 12.5px/1.4 var(--metre-sans) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__card:hover .pk-metre-quick__title { color: var(--metre-accent) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick__card:focus-visible { outline: 2px solid var(--metre-accent) !important; outline-offset: 6px !important; border-radius: 4px !important; }

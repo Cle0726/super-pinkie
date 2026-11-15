@@ -9,7 +9,12 @@
  *
  * 资源（批 6「不留常驻动画」）：只在 Metre、对话页（含首页、新会话页）、窗口可见时跑；一个 setTimeout 每半拍走一格，
  * 只在换格时重画（熄灭的点和谱线离屏画一次）；标志页开着时停；减少动态效果时只画一帧。
- * 不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉，什么都不剩。 */
+ * 不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉，什么都不剩。
+ *
+ * 第六版（11-15）首页：谱子不在首页走；熄灭的点中间淡、四边实，正中留给引导语；
+ * 首页三张看板卡片没有卡片底，它们的图由这块屏在 .pk-metre-quick__art 的位置直接点亮（总控台是一条会走的播放线，
+ * 项目记忆是四条长短不一的记录，运行环境是一个圈和一条往左走的曲线），鼠标移上去那一块变亮。
+ * 引导语上面速度记号的四个拍点也由这里每拍更新（data-beat），不另开计时器。 */
 (() => {
   'use strict';
   if (window.__pinkieMetreBackdrop) return;
@@ -23,6 +28,8 @@
   const BAR = NOTE_GAP * 4 + 3;           // 一小节的宽度（四拍 + 小节线前后的空）
 
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
+  const isHome = () => root.getAttribute('data-laolao-startup-home') === '1';
+  let hovered = -1;
   const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const mainEl = () => document.querySelector('main.content.content--chat');
 
@@ -117,7 +124,16 @@
     let clear = [cols, cols];
     if (ir && ir.width > 0) clear = [Math.floor((ir.left - rect.left) / PITCH) - 3, Math.ceil((ir.right - rect.left) / PITCH) + 3];
     const leftRoom = clear[0], rightRoom = cols - clear[1];
-    const conductor = leftRoom >= 14 ? Math.round(leftRoom / 2) : rightRoom >= 14 ? clear[1] + Math.round(rightRoom / 2) : -1;
+    const home = isHome();
+    const conductor = home ? -1 : leftRoom >= 14 ? Math.round(leftRoom / 2) : rightRoom >= 14 ? clear[1] + Math.round(rightRoom / 2) : -1;
+    // 首页看板的三块图：卡片里 .pk-metre-quick__art 那块，对齐到点阵的格子上
+    const arts = home ? [...document.querySelectorAll('.pk-metre-quick__art')].map((node, index) => {
+      const r = node.getBoundingClientRect();
+      if (r.width < PITCH * 8 || r.height < PITCH * 4) return null;
+      const x0 = Math.ceil((r.left - rect.left) / PITCH), y0 = Math.ceil((r.top - rect.top) / PITCH);
+      return {index, kind: ['sessions', 'memory', 'runtime'][index] || 'memory', x0, y0, w: Math.floor((r.right - rect.left) / PITCH) - x0, h: Math.floor((r.bottom - rect.top) / PITCH) - y0};
+    }).filter(Boolean) : [];
+    const inArt = (x, y) => arts.some((a) => x >= a.x0 && x < a.x0 + a.w && y >= a.y0 && y < a.y0 + a.h);
     const open = (x) => conductor >= 0 && (x < clear[0] || x >= clear[1]);
     const colors = {
       off: css('--bd-off', '#1F1F23'),
@@ -125,6 +141,7 @@
       note: css('--bd-note', '#4A4A52'),
       past: css('--bd-past', '#323238'),
       accent: css('--bd-accent', '#C8A15E'),
+      ink: css('--bd-ink', '#8F8B82'),
     };
     // 熄灭的点 + 五线谱 + 指挥线：离屏画一次
     const base = document.createElement('canvas');
@@ -132,10 +149,19 @@
     const b = base.getContext('2d');
     b.setTransform(ratio, 0, 0, ratio, 0, 0);
     const dot = (g, x, y, r, color) => { g.fillStyle = color; g.beginPath(); g.arc(x * PITCH + PITCH / 2, y * PITCH + PITCH / 2, r, 0, Math.PI * 2); g.fill(); };
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) dot(b, x, y, PITCH * 0.16, colors.off);
+    if (home) {
+      // 首页：离中心（偏上，引导语那里）越近越淡，最淡一成；看板那三块是实的，像三小块屏
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const nx = (x + 0.5) / cols - 0.5, ny = (y + 0.5) / rows - 0.4;
+        const d = Math.hypot(nx / 0.55, ny / 0.6);
+        b.globalAlpha = inArt(x, y) ? 1 : Math.max(0.1, Math.min(1, (d - 0.3) / 0.55));
+        dot(b, x, y, PITCH * 0.16, colors.off);
+      }
+      b.globalAlpha = 1;
+    } else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) dot(b, x, y, PITCH * 0.16, colors.off);
     for (let i = 0; i < 5; i++) for (let x = 0; x < cols; x++) if (open(x)) dot(b, x, staffTop + i * SPACE, PITCH * 0.24, colors.line);
     if (conductor >= 0) for (let y = staffTop - 3; y <= staffBottom + 2; y++) dot(b, conductor, y, PITCH * 0.24, colors.line);
-    grid = {cols, rows, ratio, base, staffTop, staffBottom, conductor, colors, dot, open};
+    grid = {cols, rows, ratio, base, staffTop, staffBottom, conductor, colors, dot, open, arts};
     lastKey = '';
   }
 
@@ -143,6 +169,7 @@
   function scene() {
     const {cols, staffTop, staffBottom, conductor, open} = grid;
     const lit = new Map();
+    for (const art of grid.arts) artScene(art, lit);
     if (conductor < 0) return lit;
     const put = (x, y, kind) => { if (x >= 0 && x < cols && open(x)) { const k = x + ',' + y; if (lit.get(k) !== 'accent') lit.set(k, kind); } };
     const lineRow = (pos) => staffBottom - (pos / 2) * SPACE;   // pos 偶数时是整数行
@@ -198,11 +225,67 @@
     return lit;
   }
 
+  // 看板的图：在一块 w×h 格里点亮。kind 只用 note / past / line / accent；鼠标在这张卡片上时 note 换成更亮的 ink。
+  function artScene(a, lit) {
+    const hot = a.index === hovered;
+    const put = (x, y, kind) => {
+      if (x < 0 || y < 0 || x >= a.w || y >= a.h) return;
+      lit.set((a.x0 + x) + ',' + (a.y0 + y), hot && kind === 'note' ? 'ink' : kind);
+    };
+    const beat = reduced() ? 0 : Math.floor(step / 2);
+    const mid = Math.floor(a.h / 2);
+    if (a.kind === 'sessions') {
+      // 四条子会话的进度块 + 一根往右走的播放线：线左边的块是实的，右边的淡
+      const lanes = [[[0, 0.3], [0.34, 0.14]], [[0.08, 0.2], [0.32, 0.36]], [[0.14, 0.16], [0.34, 0.1], [0.46, 0.22]], [[0.62, 0.2], [0.86, 0.12]]];
+      const span = Math.max(4, a.w - 2);
+      const head = 1 + beat % span;
+      const top = Math.max(0, mid - 3);
+      lanes.forEach((blocks, i) => {
+        const y = top + i * 2;
+        for (const [from, len] of blocks) {
+          const x0 = Math.round(from * a.w), x1 = Math.max(x0 + 1, Math.round((from + len) * a.w));
+          for (let x = x0; x < x1; x++) put(x, y, x < head ? 'note' : 'past');
+        }
+      });
+      for (let y = top - 1; y <= top + 7; y++) put(head, y, 'accent');
+    } else if (a.kind === 'memory') {
+      // 四条记录：左边一小段标签，右边一条长短不一的条
+      const fills = [0.82, 0.6, 0.44, 0.26];
+      const top = Math.max(0, mid - 3);
+      fills.forEach((f, i) => {
+        const y = top + i * 2;
+        for (let x = 0; x < 3; x++) put(x, y, 'past');
+        const end = 5 + Math.round((a.w - 5) * f);
+        for (let x = 5; x < a.w; x++) put(x, y, x < end ? 'note' : 'line');
+        if (i === 0) put(end - 1, y, 'accent');
+      });
+    } else {
+      // 一个圈（上下文用了多少）+ 一条从右往左走的曲线（最近的用量），最新那一格是强调色
+      const r = Math.min(3.2, (a.h - 1) / 2), cx = Math.round(r) + 0.5, cy = mid + 0.5;
+      for (let y = 0; y < a.h; y++) for (let x = 0; x < Math.ceil(r * 2) + 2; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+        if (Math.abs(Math.hypot(dx, dy) - r) > 0.62) continue;
+        const angle = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2);
+        put(x, y, angle < Math.PI * 2 * 0.38 ? 'accent' : 'line');
+      }
+      const x0 = Math.ceil(r * 2) + 4;
+      let prev = null;
+      for (let x = x0; x < a.w; x++) {
+        const v = hash(x - x0 + beat) * 0.6 + hash((x - x0 + beat) * 3 + 11) * 0.4;
+        const y = 1 + Math.round((1 - v) * (a.h - 3));
+        if (prev != null) for (let yy = Math.min(prev, y) + 1; yy < Math.max(prev, y); yy++) put(x, yy, 'past');
+        put(x, y, x === a.w - 1 ? 'accent' : 'note');
+        prev = y;
+      }
+    }
+  }
   function draw(force = false) {
     if (!ctx || !grid) return;
-    const key = `${step},${grid.cols},${grid.rows}`;
+    const key = `${step},${grid.cols},${grid.rows},${hovered}`;
     if (!force && key === lastKey) return;
     lastKey = key;
+    const tempo = document.querySelector('.pk-metre-tempo');
+    if (tempo) tempo.dataset.beat = String(reduced() ? 0 : Math.floor(step / 2) % 4);
     const {base, ratio, colors, dot} = grid;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -245,7 +328,7 @@
   const queue = () => { if (!queued) { queued = true; setTimeout(() => { queued = false; sync(); }, 150); } };
 
   function boot() {
-    new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-theme', 'data-pinkie-night', 'data-pinkie-reduce-motion']});
+    new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-laolao-startup-home', 'data-theme', 'data-pinkie-night', 'data-pinkie-reduce-motion']});
     const shell = document.querySelector('openclaw-app') || document.body;
     // 换页（对话 ↔ 设置等）时 main 的 class 会变；只看结构变化，不看对话流里的字
     new MutationObserver((records) => {
@@ -253,6 +336,13 @@
       if (records.some((r) => !(r.target instanceof Element) || !r.target.closest('.chat-thread, .pk-metre-board, .pk-metre-brand'))) queue();
     }).observe(shell, {childList: true, subtree: true});
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else queue(); });
+    // 首页看板：鼠标在哪张卡片上，那一块点阵就亮一档
+    document.addEventListener('pointerover', (event) => {
+      if (!canvas || !grid?.arts?.length) return;
+      const card = event.target instanceof Element ? event.target.closest('.pk-metre-quick__card') : null;
+      const index = card ? [...card.parentElement.children].indexOf(card) : -1;
+      if (index !== hovered) { hovered = index; draw(true); }
+    }, true);
     window.addEventListener('resize', queue);
     // 标志页开关：它开着时停，关了接着走
     document.addEventListener('keydown', () => setTimeout(() => { if (canvas) { if (running()) start(); else stop(); } }, 0), true);

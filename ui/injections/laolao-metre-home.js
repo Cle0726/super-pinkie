@@ -177,11 +177,20 @@
     next.className = 'pk-metre-prompt__next';
     next.setAttribute('aria-label', '换一句');
     next.title = '换一句';
-    next.textContent = '→';
+    next.textContent = '换一句 →';
+    // 第六版：上面一行是「速度记号」——类别、♩ = 72、四个拍点（背景点阵每拍把 data-beat 改一次），右边「换一句」。
+    const tempo = document.createElement('span');
+    tempo.className = 'pk-metre-tempo';
+    tempo.setAttribute('aria-hidden', 'true');
+    tempo.dataset.beat = '0';
+    tempo.innerHTML = '<span class="pk-metre-tempo__mark">♩ = 72</span><i></i><i></i><i></i><i></i>';
+    const head = document.createElement('div');
+    head.className = 'pk-metre-prompt__head';
+    head.append(label, tempo, next);
     const row = document.createElement('div');
     row.className = 'pk-metre-prompt__row';
-    row.append(line, next);
-    box.append(label, row);
+    row.append(line);
+    box.append(head, row);
     box.addEventListener('mouseenter', () => { hovering = true; });
     box.addEventListener('mouseleave', () => { hovering = false; arm(); });
     line.addEventListener('click', use);

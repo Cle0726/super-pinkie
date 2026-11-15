@@ -2,17 +2,18 @@
  * 画布是 body 的第一个孩子，fixed、z-index -1，盖住 main.content 那一块；
  * 有画布时（根元素 data-pk-metre-backdrop）对话区这一路的底色改成透明，让点阵透出来。
  * 输入框、卡片、总控台、侧栏保持实底：正文和操作的可读性第一。
- * 颜色只用「石墨」：熄灭的点几乎和底色一样，谱线再亮一点，音符是中灰，只有指挥线上那个音符和当前拍点是旧铜色。 */
+ * 颜色用「谱纸」：熄灭的点几乎和底色一样，谱线再亮一点，音符是中灰，只有指挥线上那个音符、当前拍点和看板图里的「现在」是钴蓝。 */
 
 html:not([data-laolao-mode="metre"]) .pk-metre-backdrop { display: none !important; }
 
 .pk-metre-backdrop {
-  /* 浅色：底 #FAFAFA */
-  --bd-off: #EFEFF1;
-  --bd-line: #E2E2E6;
-  --bd-note: #BDBDC4;
-  --bd-past: #DADADF;
-  --bd-accent: #A8844A;
+  /* 浅色「谱纸」（第六版）：底 #F7F6F3 */
+  --bd-off: #E7E5DF;
+  --bd-line: #DDDAD3;
+  --bd-note: #9C988F;
+  --bd-past: #D2CFC7;
+  --bd-ink: #4A4741;
+  --bd-accent: #2F4BB0;
   position: fixed;
   left: 0;
   top: 0;
@@ -23,12 +24,13 @@ html:not([data-laolao-mode="metre"]) .pk-metre-backdrop { display: none !importa
 }
 html[data-theme="dark"] .pk-metre-backdrop,
 html[data-pinkie-night] .pk-metre-backdrop {
-  /* 深色：底 #18181B */
-  --bd-off: #1F1F23;
-  --bd-line: #2A2A2F;
-  --bd-note: #4C4C54;
-  --bd-past: #303036;
-  --bd-accent: #A9884F;
+  /* 深色「谱纸」（第六版）：底 #151514 */
+  --bd-off: #22221F;
+  --bd-line: #2D2C29;
+  --bd-note: #5E5B54;
+  --bd-past: #363531;
+  --bd-ink: #A9A59B;
+  --bd-accent: #8496E6;
 }
 
 /* 底色让开：body 和对话区这一路透明（html 自己仍是 --metre-bg，画布在它上面） */
