@@ -94,7 +94,7 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); else apply(false, false); });
   // 碧琪开始干活：小碧琪和状态动画要动起来，哪怕窗口还在后台。
   new MutationObserver(evaluate).observe(root, {attributes: true, attributeFilter: ["data-pinkie-running"]});
-  setInterval(evaluate, TICK_MS);
+  let tickTimer = setInterval(evaluate, TICK_MS);
 
   // ── 自动减负 ────────────────────────────────────────────────────────────
   // 每一级只比上一级多省一点；都是进阶调节里本来就有的选项，所以和手动选「省着用」是同一套画面。
@@ -136,7 +136,7 @@
       if (level && t - calmSince >= CALM_MS) { calmSince = t; setLevel(level - 1); }
     }
   };
-  const measuring = () => !document.hidden && !away && document.hasFocus();
+  const measuring = () => !document.hidden && !away && document.hasFocus() && !window.__pinkieQuiet?.quiet;
   const frame = (t) => {
     probe = 0;
     if (!measuring()) { lastFrame = 0; return; }
@@ -157,6 +157,20 @@
   document.addEventListener("visibilitychange", kick);
   window.addEventListener("pinkie:tuning-change", () => { if (!allowed() && level) setLevel(0); });
   kick();
+  // Metre 里没有要打盹的装饰，也不用量帧率（批 6）：两样都停；离开 Metre 接着来。
+  window.__pinkieQuiet?.register("rest", {
+    suspend() {
+      clearInterval(tickTimer); tickTimer = 0;
+      if (probe) { cancelAnimationFrame(probe); probe = 0; }
+      lastFrame = 0;
+      apply(false, false);
+      if (level) setLevel(0);
+    },
+    resume() {
+      if (!tickTimer) tickTimer = setInterval(evaluate, TICK_MS);
+      kick();
+    },
+  });
 
   window.__pinkieRest = Object.freeze({
     get away() { return away; },

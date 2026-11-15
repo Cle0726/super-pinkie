@@ -497,6 +497,9 @@ void main() {
     destroy() {
       cancelAnimationFrame(this.raf); this.raf = 0; this.dead = true;
       this.ro?.disconnect(); document.removeEventListener("visibilitychange", this.onVis); window.removeEventListener("pinkie:rest-change", this.onVis);
+      // 真的释放显卡上下文：只把画布拿掉，上下文要等垃圾回收，期间还占着（Metre 批 6 量到的）。
+      try { this.gl?.getExtension("WEBGL_lose_context")?.loseContext(); } catch {}
+      this.gl = null;
       this.canvas.remove();
     }
   }

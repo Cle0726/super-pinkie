@@ -33,14 +33,16 @@ test('user-facing permission presets have explicit mappings and preserve custom 
   assert.equal(rules.matchingPreset({tools: {profile: 'minimal', exec: {security: 'deny'}}, agents: {list: [{id: 'main', tools: {allow: ['read']}}]}, browser: {enabled: false}}), null);
 });
 
-test('chat preset adds only the three child tools, preserves existing rules and avoids allow conflicts', () => {
+test('chat preset adds only the child-session tools, preserves existing rules and avoids allow conflicts', () => {
   const rules=loadSettingsRules();
   const changes=config=>JSON.parse(JSON.stringify(rules.presetChanges('chat',config)));
   const values=changes({tools:{alsoAllow:['existing'],deny:['browser']}});
-  assert.deepEqual(values.at(-1),[['tools','alsoAllow'],['existing','pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask']]);
+  assert.deepEqual(values.at(-1),[['tools','alsoAllow'],['existing','pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']]);
   assert.equal(values.some(([path])=>path.join('.')==='tools.deny'),false);
   assert.equal(changes({tools:{allow:['read']}}).some(([path])=>path.join('.')==='tools.alsoAllow'),false);
+  // 老配置只有前四项（网关启动时会补上 pinkie_sessions）也还认作「只聊天」（F9）。
   assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask']},browser:{enabled:false}}),'chat');
+  assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']},browser:{enabled:false}}),'chat');
   assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['exec']},browser:{enabled:false}}),null);
 });
 

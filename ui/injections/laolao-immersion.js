@@ -167,13 +167,15 @@
     for (let i = Math.max(0, boxes.length - 8); i < boxes.length; i += 1) fixBold(boxes[i]);
   };
 
-  setInterval(() => {
+  const immersionTick = () => {
     watchThread();
     fixRecentBold();
     const run = isRunning();
     if (wasRunning && !run) setTimeout(sheen, 260);
     wasRunning = run;
-  }, 300);
+  };
+  // 沉浸效果在 Metre 里不要（批 6）：Metre 里不轮询，离开后接着来。
+  if (!window.__pinkieQuiet?.interval('immersion', immersionTick, 300)) setInterval(immersionTick, 300);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) kick(); });
 
   window.__pinkieImmersion = {get energy() { return state.energy; }, pointer: null, sheen, floatMark, flyAway, fixBold};

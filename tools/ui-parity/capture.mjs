@@ -127,6 +127,8 @@ try {
         }
       }
     },{view,origin,entryAgent,nativePlatform:args['native-platform']||'mac',mockNative:browserName!=='webkit',captureTheme});
+  // --init file.js: one more script that runs before the page's own (e.g. count timers, animation frames, WebGL contexts).
+  if(args.init) await context.addInitScript({content:fs.readFileSync(args.init,'utf8')});
     const page=args.cdp ? context.pages().find(p=>p.url().startsWith('http'))||context.pages()[0] : await context.newPage();
     if(!page)throw Error('the packaged WebView2 has no page');
     activePage=page;

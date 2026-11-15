@@ -22,7 +22,10 @@ export function availableMemory(runner=runProcess){
 }
 export class LearningMaterialsJobs {
  constructor(materials,{freeMemory=()=>availableMemory(runner),onPower=null,now=()=>new Date(),runner=runProcess,kinds=null}={}){this.materials=materials;this.kinds=kinds;this.freeMemory=freeMemory;this.onPower=onPower||(()=>runner('pmset',['-g','batt'],{timeoutMs:5000}));this.now=now;this.runner=runner;this.active=new Map();this.stopped=false;this.currentKind=null;this.retryAfter=new Map();}
- start(){this.stopped=false;this.timer=setInterval(()=>this.tick().catch(error=>{this.lastError=error.message;}),500);this.timer.unref?.();}
+ start(){this.stopped=false;this.timer=setInterval(()=>this.tick().catch(error=>{this.lastError=error.message;}),500);this.timer.unref?.();globalThis.__pinkieMaterialsJobs=this;}
+ // Metre 批 6：Metre 是当前模式、别的模式没在跑时，停掉每半秒一次的排队轮询；正在做的那件照常做完，新的等恢复后再排。
+ pause(){if(this.stopped||this.quietPaused)return;this.quietPaused=true;clearInterval(this.timer);this.timer=null;}
+ resume(){if(!this.quietPaused)return;this.quietPaused=false;if(this.stopped)return;this.timer=setInterval(()=>this.tick().catch(error=>{this.lastError=error.message;}),500);this.timer.unref?.();}
  async stop(){this.stopped=true;clearInterval(this.timer);for(const entry of this.active.values())entry.controller.abort();await Promise.allSettled([...this.active.values()].map(entry=>entry.promise));}
  async tick(){
   if(this.stopped||this.checking||this.directVision)return;this.checking=true;

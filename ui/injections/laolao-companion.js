@@ -1195,6 +1195,21 @@
     return {sync};
   })();
 
-  setInterval(() => { try { loop(); ambient.sync(); } catch (e) { console.error("[pinkie-buddy]", e); } }, 400);
+  const beat = () => { try { loop(); ambient.sync(); } catch (e) { console.error("[pinkie-buddy]", e); } };
+  let loopTimer = setInterval(beat, 400);
+  // Metre 里小碧琪整个停下（批 6）：不跑状态循环，画布和 WebGL 上下文释放掉；离开 Metre 再建回来。
+  window.__pinkieQuiet?.register("companion", {
+    suspend() {
+      clearInterval(loopTimer); loopTimer = 0;
+      ambient.sync();
+      if (rig) { const old = rig; rig = null; old.destroy(); }
+      buddy?.classList.remove("is-rig");
+      rigTried = false;
+    },
+    resume() {
+      if (!loopTimer) loopTimer = setInterval(beat, 400);
+      beat();
+    },
+  });
   window.__pinkieBuddy = {get rig() { return rig; }, say: (t) => say(esc(t)), setState, explain, startFocus, stopFocus, ambient, prefs, quotes, burst: (k) => burstFrom(figure, k), onSend, toggleMenu, openSettings};
 })();

@@ -838,8 +838,9 @@
     const anchor = rail.querySelector('#laolao-browser-workspace-entry, #pinkie-party-entry');
     rail.insertBefore(btn, anchor || null);
   };
-  setInterval(mountRail, 1500);
-  setInterval(mount, 1500);
+  // Metre 里没有激光笔，不轮询（批 6）。
+  if (window.__pinkieQuiet) { window.__pinkieQuiet.interval('laser-rail', mountRail, 1500); window.__pinkieQuiet.interval('laser', mount, 1500); }
+  else { setInterval(mountRail, 1500); setInterval(mount, 1500); }
   mount();
   mountRail();
 })();
