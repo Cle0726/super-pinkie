@@ -1201,61 +1201,59 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height
 }
 
 /* ====================================================================================================
- * 配色「夜曲」（11-15，用户：「页面配色真的很丑」）。上面几版的黄铜 + 暖灰底改掉：底色和强调色都偏土黄，糊在一起。
- * 这一版：
- *   深色 —— 午夜墨蓝底（内容区比侧栏亮一档），强调色是台灯琥珀；状态色：琥珀 = 在跑，青绿 = 做完，珊瑚红 = 出错，长春花蓝 = 其他。
- *   浅色 —— 冷白纸底、深靛蓝字，琥珀压深一档保证对比度（白底上 ≥ 4.5:1）。
- * 标志页（laolao-metre-brand.css）用同一套深色。和上面冲突的以这一段为准。
+ * 配色「石墨」（11-15 第二稿）。第一稿「夜曲」（墨蓝底 + 琥珀 / 青绿 / 珊瑚红，带发光）用户说「像电子垃圾，没有大厂的感觉」。
+ * 这一稿照成熟产品的做法：
+ *   中性灰阶打底（zinc 一路的冷灰，几乎不带色相），层次只靠明度；
+ *   强调色只留一个低饱和的旧铜色，只用在「当前 / 在跑」和标志的摆锤上；
+ *   状态色全部降饱和，不发光、不用渐变。
+ * 和上面冲突的以这一段为准。
  * ==================================================================================================== */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-bg: #F6F7FB;
-  --metre-side: #EEF0F6;
+  --metre-bg: #FAFAFA;
+  --metre-side: #F4F4F5;
   --metre-surface: #FFFFFF;
   --metre-card: #FFFFFF;
-  --metre-art: #F2F4F9;
-  --metre-text: #151A2E;
-  --metre-muted: #626A85;
-  --metre-line: #E2E5EF;
-  --metre-line-strong: #CDD2E1;
-  --metre-hover: #E9ECF5;
-  --metre-side-hover: #E4E8F2;
-  --metre-side-active: #DADFED;
-  --metre-ph: #E7EAF3;
-  --metre-ph-strong: #CDD2E1;
-  --metre-accent: #A35F0C;
-  --metre-beat: #E09A2E;
-  --accent-rgb: 163, 95, 12 !important;
-  --accent-hover: #8A4F08 !important;
-  --accent-muted: rgba(163, 95, 12, 0.14) !important;
-  --accent-subtle: rgba(163, 95, 12, 0.08) !important;
+  --metre-art: #F4F4F5;
+  --metre-text: #18181B;
+  --metre-muted: #71717A;
+  --metre-line: #E4E4E7;
+  --metre-line-strong: #D4D4D8;
+  --metre-hover: #F0F0F2;
+  --metre-side-hover: #EBEBED;
+  --metre-side-active: #E4E4E7;
+  --metre-ph: #EDEDEF;
+  --metre-ph-strong: #D4D4D8;
+  --metre-accent: #8F6526;
+  --accent-rgb: 143, 101, 38 !important;
+  --accent-hover: #7A5520 !important;
+  --accent-muted: rgba(143, 101, 38, 0.12) !important;
+  --accent-subtle: rgba(143, 101, 38, 0.07) !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
-  --metre-bg: #10142A;
-  --metre-side: #0B0E1C;
-  --metre-surface: #1B2140;
-  --metre-card: #151A33;
-  --metre-art: #10142A;
-  --metre-text: #ECEAF5;
-  --metre-muted: #979EBA;
-  --metre-line: #232A47;
-  --metre-line-strong: #313A5E;
-  --metre-hover: #1A2038;
-  --metre-side-hover: #161B30;
-  --metre-side-active: #222A4A;
-  --metre-ph: #1C2240;
-  --metre-ph-strong: #313A5E;
-  --metre-accent: #F2B35B;
-  --metre-beat: #F2B35B;
-  --accent-rgb: 242, 179, 91 !important;
-  --accent-hover: #F6C47A !important;
-  --accent-muted: rgba(242, 179, 91, 0.16) !important;
-  --accent-subtle: rgba(242, 179, 91, 0.09) !important;
+  --metre-bg: #18181B;
+  --metre-side: #131315;
+  --metre-surface: #26262A;
+  --metre-card: #1E1E21;
+  --metre-art: #18181B;
+  --metre-text: #EDEDEF;
+  --metre-muted: #9D9DA6;
+  --metre-line: #29292D;
+  --metre-line-strong: #3A3A40;
+  --metre-hover: #222226;
+  --metre-side-hover: #1E1E21;
+  --metre-side-active: #2A2A2F;
+  --metre-ph: #232327;
+  --metre-ph-strong: #3A3A40;
+  --metre-accent: #C8A15E;
+  --accent-rgb: 200, 161, 94 !important;
+  --accent-hover: #D4B272 !important;
+  --accent-muted: rgba(200, 161, 94, 0.14) !important;
+  --accent-subtle: rgba(200, 161, 94, 0.08) !important;
 }
-/* 输入框的投影跟着底色换成冷色 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { box-shadow: 0 2px 12px rgba(21, 26, 46, 0.06) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important; }
 /* 新会话的空白页（不是启动首页）：原生欢迎区自带碧琪头像、宽度锁在 320，引导语被挤成一行六七个字。
  * Metre 里头像不要（引导语上方有 Metre 的标志），欢迎区和输入框一样宽。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__avatar--logo { display: none !important; }

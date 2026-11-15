@@ -8,30 +8,30 @@ html:not([data-laolao-mode="metre"]) .pk-metre-quick,
 html:not([data-laolao-mode="metre"]) .pk-metre-nav { display: none !important; }
 
 html[data-laolao-mode="metre"] {
-  /* 「夜曲」配色（11-15）：琥珀 = 在跑，青绿 = 做完，长春花蓝 = 其他，珊瑚红 = 出错，灰 = 排队 */
-  --metre-v1: #C27A12;
-  --metre-v2: #138A73;
-  --metre-v3: #4A5BD6;
-  --metre-v4: #D2493C;
-  --metre-v5: #8A90A8;
-  --metre-v1-soft: #FBEED8;
-  --metre-v2-soft: #DDF3EE;
-  --metre-v3-soft: #E3E7FB;
-  --metre-v4-soft: #FBE3E0;
-  --metre-v5-soft: #ECEEF4;
+  /* 「石墨」配色（11-15 第二稿）：状态色全部降饱和。旧铜 = 在跑，灰绿 = 做完，石板蓝 = 其他，砖红 = 出错，灰 = 排队 */
+  --metre-v1: #8F6526;
+  --metre-v2: #4E7A6B;
+  --metre-v3: #5A6683;
+  --metre-v4: #A6493E;
+  --metre-v5: #A1A1AA;
+  --metre-v1-soft: #F3ECE0;
+  --metre-v2-soft: #E6EEEA;
+  --metre-v3-soft: #E8EAF0;
+  --metre-v4-soft: #F4E5E2;
+  --metre-v5-soft: #EFEFF1;
 }
 html[data-laolao-mode="metre"][data-pinkie-night],
 html[data-laolao-mode="metre"][data-theme="dark"] {
-  --metre-v1: #F2B35B;
-  --metre-v2: #4FD1B5;
-  --metre-v3: #8EA2FF;
-  --metre-v4: #FF7A6B;
-  --metre-v5: #6E7593;
-  --metre-v1-soft: #3A2F1E;
-  --metre-v2-soft: #143631;
-  --metre-v3-soft: #1F2750;
-  --metre-v4-soft: #3E2025;
-  --metre-v5-soft: #20263F;
+  --metre-v1: #C8A15E;
+  --metre-v2: #7FA796;
+  --metre-v3: #8B95B0;
+  --metre-v4: #CF7A6E;
+  --metre-v5: #6B6B73;
+  --metre-v1-soft: #2E2920;
+  --metre-v2-soft: #212A26;
+  --metre-v3-soft: #23252D;
+  --metre-v4-soft: #2F2321;
+  --metre-v5-soft: #252528;
 }
 
 .pk-metre-board {

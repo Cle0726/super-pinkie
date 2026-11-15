@@ -1,170 +1,105 @@
-/* laolao-metre-brand —— Metre 标志和标志页（说明见 laolao-metre-brand.js）。
- * 标志页不跟随浅色 / 深色：它是一张「夜曲」深色海报，颜色在这里写死，和 Metre 深色配色同一套。 */
+/* laolao-metre-brand —— Metre 像素标志和点阵标志页（说明见 laolao-metre-brand.js）。
+ * 标志页固定用深色（一块熄着灯的点阵屏），中性灰阶，只有摆锤和当前拍点用强调色。 */
 
 html:not([data-laolao-mode="metre"]) :is(.pk-metre-brand, .pk-metre-home-mark) { display: none !important; }
 
-/* ---------- 标志本身 ---------- */
-.pk-metre-logo { display: block; width: 100%; height: 100%; overflow: visible; }
-.pk-metre-logo.is-live .pk-metre-logo__v { opacity: 0.3; stroke-width: 2.2; }
-.pk-metre-logo__bob { fill: var(--metre-beat, #F2B35B); }
-.pk-metre-logo__arm { transform-origin: 24px 36px; transform-box: view-box; }
-.pk-metre-brand.is-playing .pk-metre-logo.is-live .pk-metre-logo__arm {
-  animation: pk-metre-swing calc(var(--pk-beat, 833ms) * 2) cubic-bezier(0.45, 0, 0.55, 1) infinite;
-}
-/* 一个来回两拍：左边一拍、右边一拍。起拍在右边（和拍点的第一下对齐） */
-@keyframes pk-metre-swing {
-  0%, 100% { transform: rotate(13.6deg); }
-  50% { transform: rotate(-13.6deg); }
-}
+/* ---------- 像素标志 ---------- */
+.pk-metre-logo { display: block; width: 100%; height: auto; }
+.pk-metre-logo__bob { fill: var(--metre-accent, #A0702A); }
 
-/* 首页引导语上方的小标志 */
+/* 首页 / 新会话页引导语上方的小标志 */
 .pk-metre-home-mark {
   appearance: none;
-  width: 40px;
-  height: 40px;
-  margin: 0 auto 2px;
-  padding: 4px;
+  display: block;
+  width: 44px;
+  margin: 0 auto 6px;
+  padding: 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
-  color: var(--metre-text, #151A2E);
+  color: var(--metre-text, #18181B);
   cursor: pointer;
-  transition: background-color 0.15s, transform 0.2s;
+  transition: background-color 0.15s;
 }
-.pk-metre-home-mark:hover { background: var(--metre-hover, rgba(127, 127, 160, 0.12)); }
-.pk-metre-home-mark:hover .pk-metre-logo__bob { transform: translateY(-1px); }
-.pk-metre-logo__bob { transition: transform 0.2s; }
-.pk-metre-home-mark:focus-visible { outline: 2px solid var(--metre-muted, #646B85); outline-offset: 2px; }
+.pk-metre-home-mark:hover { background: var(--metre-hover, rgba(127, 127, 127, 0.12)); }
+.pk-metre-home-mark:focus-visible { outline: 2px solid var(--metre-muted, #71717A); outline-offset: 2px; }
 
-/* ---------- 标志页 ---------- */
+/* ---------- 点阵标志页 ---------- */
 .pk-metre-brand {
-  --brand-bg: #0B0E1A;
-  --brand-bg-2: #141A33;
-  --brand-text: #EEECF6;
-  --brand-muted: #9AA1BC;
-  --brand-line: rgba(238, 236, 246, 0.12);
-  --brand-staff: rgba(238, 236, 246, 0.11);
-  --metre-beat: #F2B35B;
-  --metre-v1: #F2B35B;
-  --metre-v2: #4FD1B5;
-  --metre-v3: #8EA2FF;
-  --metre-v4: #FF7A6B;
+  --led-bg: #0C0C0E;
+  --led-off: #1C1C20;
+  --led-dim: #3A3A41;
+  --led-on: #ECECEE;
+  --led-accent: #C8A15E;
+  --brand-text: #ECECEE;
+  --brand-muted: #8B8B93;
+  --brand-line: #26262B;
   position: fixed;
   inset: 0;
   z-index: 420;
-  display: grid;
-  place-items: center;
-  overflow: hidden auto;
-  background:
-    radial-gradient(60% 50% at 50% 42%, rgba(242, 179, 91, 0.10), transparent 70%),
-    radial-gradient(80% 70% at 85% 110%, rgba(142, 162, 255, 0.16), transparent 70%),
-    radial-gradient(70% 60% at 10% -10%, rgba(79, 209, 181, 0.10), transparent 70%),
-    linear-gradient(180deg, var(--brand-bg-2), var(--brand-bg));
+  overflow: hidden;
+  background: var(--led-bg);
   color: var(--brand-text);
   font: 400 15px/1.6 var(--metre-sans, system-ui, sans-serif);
 }
 .pk-metre-brand[hidden] { display: none; }
 .pk-metre-brand:focus { outline: none; }
-.pk-metre-brand__staff { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.pk-metre-brand__led { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pk-metre-brand__close {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 16px;
+  right: 16px;
   z-index: 2;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border: 1px solid var(--brand-line);
-  border-radius: 10px;
-  background: rgba(11, 14, 26, 0.4);
+  border-radius: 8px;
+  background: var(--led-bg);
   color: var(--brand-muted);
   cursor: pointer;
 }
 .pk-metre-brand__close svg { width: 18px; height: 18px; }
-.pk-metre-brand__close:hover { color: var(--brand-text); border-color: rgba(238, 236, 246, 0.28); }
+.pk-metre-brand__close:hover { color: var(--brand-text); border-color: #3A3A41; }
+/* 文字放在点阵画面下面（--text-top 由脚本按画面量出来），底下垫一块实底，免得点阵透过来 */
 .pk-metre-brand__body {
-  position: relative;
+  position: absolute;
+  left: 50%;
+  top: var(--text-top, 62vh);
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: min(680px, calc(100% - 48px));
-  padding: 56px 0 40px;
+  width: min(560px, calc(100% - 48px));
+  transform: translateX(-50%);
+  padding: 20px 24px 22px;
+  border: 1px solid var(--brand-line);
+  border-radius: 12px;
+  background: var(--led-bg);
   text-align: center;
 }
-.pk-metre-brand__mark {
-  width: 116px;
-  height: 116px;
-  color: var(--brand-text);
-  filter: drop-shadow(0 10px 40px rgba(242, 179, 91, 0.18));
-}
-.pk-metre-brand__word {
-  margin: 18px 0 0;
-  font: 400 clamp(56px, 8vw, 84px)/1 var(--metre-serif, Georgia, serif);
-  letter-spacing: 0.01em;
-  color: var(--brand-text);
-}
-/* 拍点：强-弱-弱-弱。四拍一小节，每个点在自己那一拍亮 */
-.pk-metre-brand__beats { display: flex; align-items: center; gap: 12px; margin-top: 22px; }
-.pk-metre-brand__beat { width: 8px; height: 8px; border-radius: 50%; background: rgba(238, 236, 246, 0.22); }
-.pk-metre-brand__beat.is-down { width: 11px; height: 11px; }
-.pk-metre-brand.is-playing .pk-metre-brand__beat { animation: pk-metre-beat calc(var(--pk-beat, 833ms) * 4) steps(1, end) infinite; }
-@keyframes pk-metre-beat {
-  0% { background: var(--metre-beat); box-shadow: 0 0 0 4px rgba(242, 179, 91, 0.18), 0 0 18px rgba(242, 179, 91, 0.55); }
-  25%, 100% { background: rgba(238, 236, 246, 0.22); box-shadow: none; }
-}
-.pk-metre-brand__lede {
-  margin: 34px 0 0;
-  font: 400 clamp(28px, 3.6vw, 40px)/1.25 var(--metre-serif, Georgia, serif);
-  color: var(--brand-text);
-  text-wrap: balance;
-}
-.pk-metre-brand__lede em { font-style: italic; color: var(--metre-beat); }
-.pk-metre-brand__sub { max-width: 520px; margin: 16px 0 0; color: var(--brand-muted); font-size: 15px; line-height: 1.75; }
-.pk-metre-brand__parts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  width: 100%;
-  margin: 34px 0 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--brand-line);
-  border-bottom: 1px solid var(--brand-line);
-}
-.pk-metre-brand__parts li { display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; }
-.pk-metre-brand__parts li + li { border-left: 1px solid var(--brand-line); }
-.pk-metre-brand__parts b { font: 400 21px/1.2 var(--metre-serif, Georgia, serif); color: var(--brand-text); }
-.pk-metre-brand__parts b em { font-style: italic; }
-.pk-metre-brand__parts span { font-size: 13px; color: var(--brand-muted); }
+.pk-metre-brand__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pk-metre-brand__lede { margin: 0; font: 500 22px/1.35 var(--metre-sans, system-ui, sans-serif); letter-spacing: 0.01em; color: var(--brand-text); }
+.pk-metre-brand__sub { margin: 8px 0 0; font-size: 14px; line-height: 1.7; color: var(--brand-muted); }
+.pk-metre-brand__parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 0; border-top: 1px solid var(--brand-line); }
+.pk-metre-brand__parts div { padding: 12px 6px 0; }
+.pk-metre-brand__parts div + div { border-left: 1px solid var(--brand-line); }
+.pk-metre-brand__parts dt { font: 600 12px/1.2 var(--metre-mono, ui-monospace, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand-text); }
+.pk-metre-brand__parts dd { margin: 4px 0 0; font-size: 12.5px; color: var(--brand-muted); }
+.pk-metre-brand__actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; }
+.pk-metre-brand__actions span { font: 400 11.5px/1 var(--metre-mono, ui-monospace, monospace); letter-spacing: 0.06em; color: #6B6B73; }
 .pk-metre-brand__go {
   appearance: none;
-  margin-top: 32px;
-  height: 42px;
-  padding: 0 30px;
+  height: 34px;
+  padding: 0 18px;
   border: 0;
-  border-radius: 999px;
-  background: var(--metre-beat);
-  color: #1A1407;
-  font: 600 15px/1 var(--metre-sans, system-ui, sans-serif);
-  letter-spacing: 0.04em;
+  border-radius: 8px;
+  background: var(--led-on);
+  color: #111113;
+  font: 600 13.5px/1 var(--metre-sans, system-ui, sans-serif);
   cursor: pointer;
-  box-shadow: 0 8px 30px rgba(242, 179, 91, 0.28);
-  transition: transform 0.15s, box-shadow 0.15s;
 }
-.pk-metre-brand__go:hover { transform: translateY(-1px); box-shadow: 0 12px 36px rgba(242, 179, 91, 0.36); }
+.pk-metre-brand__go:hover { background: #FFFFFF; }
 .pk-metre-brand :is(button):focus-visible { outline: 2px solid var(--brand-text); outline-offset: 3px; }
-.pk-metre-brand__foot { display: flex; gap: 18px; margin: 26px 0 0; font: 400 12px/1 var(--metre-mono, ui-monospace, monospace); color: rgba(154, 161, 188, 0.75); letter-spacing: 0.06em; }
-
 @media (max-width: 560px) {
   .pk-metre-brand__parts { grid-template-columns: minmax(0, 1fr); }
-  .pk-metre-brand__parts li + li { border-left: 0; border-top: 1px solid var(--brand-line); }
+  .pk-metre-brand__parts div + div { border-left: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .pk-metre-brand.is-playing .pk-metre-logo.is-live .pk-metre-logo__arm,
-  .pk-metre-brand.is-playing .pk-metre-brand__beat,
-  .pk-metre-home-mark:hover .pk-metre-logo__arm { animation: none; }
-}
-html[data-pinkie-reduce-motion] .pk-metre-brand.is-playing :is(.pk-metre-logo__arm, .pk-metre-brand__beat),
-html[data-pinkie-reduce-motion] .pk-metre-home-mark:hover .pk-metre-logo__arm { animation: none; }
