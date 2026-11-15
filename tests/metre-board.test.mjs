@@ -100,7 +100,10 @@ test('A5-1 区块内容和实际一致：派 2 块、1 块失败', async t => {
   assert.equal(a.spans[0].kind, 'done');
   assert.equal(b.spans[0].kind, 'fail');
   assert.ok(a.usage.input === 100 && a.usage.output === 20);
-  assert.deepEqual(view.timeline.map(item => item.kind).slice(0, 2).sort(), ['error', 'report']);
+  // 一轮跑完（end）和真交回汇报（report，来自汇报卡片）分开记；出错的那块记 error
+  const kinds = view.timeline.map(item => item.kind);
+  assert.ok(kinds.includes('end') && kinds.includes('report') && kinds.includes('error'), kinds.join(','));
+  assert.ok(view.timeline.find(item => item.kind === 'report').text.includes('页面骨架'));
   assert.ok(view.timeline.some(item => item.kind === 'dispatch' && item.text.includes('页面骨架')));
   // 运行环境：用过的两个模型，一个健康一个不健康；上下文是 Metre 自己的
   assert.deepEqual(view.runtime.models.map(m => m.health).sort(), ['fail', 'ok']);
@@ -180,4 +183,58 @@ test('A5-2 前端只靠事件刷新：渲染文件没有轮询，已登记在页
   assert.match(src, /连接断了，正在重连/);
   const head = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
   assert.ok(head.indexOf('laolao-metre-board-data.js') > head.indexOf('laolao-metre-board.js'), '数据脚本排在骨架后面');
+});
+test('看门狗：每个子会话和 Metre 都带最后一次动静的时间，上游重试时它不动', async t => {
+  const {fire, rpc, busy, tick} = setup(t);
+  fire('before_agent_run', {}, {sessionKey: PARENT});
+  fire('before_agent_run', {}, {sessionKey: A}); busy.add(A);
+  const started = 1_000_000;
+  tick(5000);
+  fire('after_tool_call', {toolName: 'read', params: {path: 'F:/p/a.txt'}}, {sessionKey: A});
+  let view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  assert.equal(view.sessions.find(s => s.key === A).lastActiveAt, started + 5000);
+  assert.equal(view.overview.parentLastActiveAt, started);
+  // 模型被 429 挡住、一直重试：没有工具调用、没有用量，时间就停在上一次。
+  tick(120_000);
+  view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  const a = view.sessions.find(s => s.key === A);
+  assert.equal(a.status, 'running');
+  assert.equal(view.at - a.lastActiveAt, 120_000);
+  fire('llm_output', {usage: {input: 10, output: 2}}, {sessionKey: A});
+  view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  assert.equal(view.sessions.find(s => s.key === A).lastActiveAt, view.at);
+});
+
+test('网关里有两个实例：一个记账、另一个读数，读数的那个也看得到最新的账', async t => {
+  const {fire, board, root, busy} = setup(t);
+  // 先让读数的实例把账读进缓存
+  const reader = new MetreBoard({root, lineage: board.lineage, plans: board.plans, modelHealth: board.modelHealth, now: board.now, schedule: fn => { fn(); return null; }});
+  fire('before_agent_run', {}, {sessionKey: PARENT});
+  let view = await reader.board(PARENT);
+  assert.equal(view.raw.length, 1);
+  // 记账的实例接着记：子会话开跑、调工具
+  await new Promise(r => setTimeout(r, 20));
+  fire('before_agent_run', {}, {sessionKey: A}); busy.add(A);
+  fire('after_tool_call', {toolName: 'write', params: {path: 'F:/p/a.txt', content: 'x'}}, {sessionKey: A});
+  view = await reader.board(PARENT);
+  assert.equal(view.raw.length, 3);
+  assert.equal(view.sessions.find(s => s.key === A).spans.length, 1);
+  assert.equal(view.changes.length, 1);
+});
+
+test('网关重启把正在跑的子会话打断：一轮开了头没收尾、又不在跑，算「中断了」，不算交回', async t => {
+  const {fire, rpc, busy, tick} = setup(t);
+  fire('before_agent_run', {}, {sessionKey: A}); busy.add(A);
+  fire('before_agent_run', {}, {sessionKey: B}); busy.add(B);
+  tick(3000);
+  fire('agent_end', {success: true}, {sessionKey: B}); busy.delete(B);
+  busy.delete(A);   // 网关被停：A 没有 agent_end
+  const view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  const a = view.sessions.find(s => s.key === A), b = view.sessions.find(s => s.key === B);
+  assert.equal(a.status, 'interrupted');
+  assert.equal(a.statusText, '中断了');
+  assert.match(a.error, /没跑完就断了/);
+  assert.equal(a.spans.at(-1).kind, 'fail');
+  assert.equal(b.status, 'done');
+  assert.equal(view.overview.failed, 1);
 });

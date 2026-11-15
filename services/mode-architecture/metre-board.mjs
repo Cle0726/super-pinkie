@@ -22,8 +22,8 @@ const ERROR_LIMIT = 20;
 const FILE_LIMIT = 80;
 const MODE_NAMES = {chat: '唠嗑模式', project: '项目模式', ideas: '想法模式', learning: '学习模式', unrestricted: '无限制模式', metre: 'Metre'};
 const WRITE_TOOLS = new Set(['write', 'edit', 'multiedit', 'multi_edit', 'apply_patch', 'str_replace', 'create_file', 'write_file', 'edit_file']);
-const STATUS_WORDS = {queued: '排队', running: '在跑', waiting: '等回复', done: '已交回', failed: '失败', stopped: '已停'};
-const BOARD_STATE = {queued: 'wait', running: 'run', waiting: 'wait', done: 'done', failed: 'fail', stopped: 'wait'};
+const STATUS_WORDS = {queued: '排队', running: '在跑', waiting: '等回复', done: '已交回', failed: '失败', stopped: '已停', interrupted: '中断了'};
+const BOARD_STATE = {queued: 'wait', running: 'run', waiting: 'wait', done: 'done', failed: 'fail', stopped: 'wait', interrupted: 'fail'};
 
 const clip = (text, n) => clipGraphemes(String(text ?? '').replace(/\s+/gu, ' ').trim(), n);
 const num = value => Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -73,6 +73,7 @@ export class MetreBoard {
     this.now = now;
     this.schedule = schedule;
     this.cache = new Map();
+    this.loaded = new Map();   // parent → 读进来 / 写出去时文件的修改时间
     this.dirty = new Set();
     this.timer = null;
   }
@@ -86,14 +87,24 @@ export class MetreBoard {
   }
 
   file(parent) { return path.join(this.root, createHash('sha256').update(parent).digest('hex').slice(0, 24) + '.json'); }
+  // 网关里同一个插件可能有不止一个实例（11-15 隔离副本实测：记账的钩子在一个实例里跑，总控台的读数请求落在另一个实例上，
+  // 后者一直拿着自己内存里的旧账，子会话一行时间段都没有）。所以每次取账都看一眼文件：别的实例写过、自己又没有没写出去的改动，就重读。
+  mtime(parent) {
+    try { return fs.statSync(this.file(parent)).mtimeMs; } catch { return 0; }
+  }
   journal(parent) {
     let value = this.cache.get(parent);
+    if (value && !this.dirty.has(parent)) {
+      const mtime = this.mtime(parent);
+      if (mtime > (this.loaded.get(parent) || 0)) value = null;
+    }
     if (!value) {
+      this.loaded.set(parent, this.mtime(parent));
       const stored = readSessionJson(this.file(parent));
       value = {parent, events: [], raw: [], spans: {}, doing: {}, changes: {}, pending: [], errors: [], usage: {}, requestAt: 0,
         ...(stored && stored.parent === parent ? stored : {})};
       this.cache.set(parent, value);
-      if (this.cache.size > 32) this.cache.delete(this.cache.keys().next().value);
+      if (this.cache.size > 32) { const old = this.cache.keys().next().value; this.cache.delete(old); this.loaded.delete(old); }
     }
     return value;
   }
@@ -110,14 +121,20 @@ export class MetreBoard {
       if (!value) continue;
       try {
         fs.mkdirSync(this.root, {recursive: true, mode: 0o700});
-        const file = this.file(parent), temp = `${file}.${process.pid}.tmp`;
+        const file = this.file(parent), temp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
         fs.writeFileSync(temp, JSON.stringify(value), {mode: 0o600});
         fs.renameSync(temp, file);
+        this.loaded.set(parent, this.mtime(parent));
       } catch { /* 总控台的账写不下去不影响干活 */ }
     }
     this.dirty.clear();
   }
 
+  // 每个会话最后一次有动静的时间（开始一轮、调工具、模型回了用量、一轮结束）。上游在重试、卡住时它不动，
+  // 总控台据此把「在跑」但很久没动静的行标出来，不让人以为还在正常跑。
+  touch(j, key) {
+    (j.seen ||= {})[key] = this.now();
+  }
   raw(j, event, data) {
     j.raw.push({at: this.now(), event, data});
     if (j.raw.length > RAW_LIMIT) j.raw.splice(0, j.raw.length - RAW_LIMIT);
@@ -137,6 +154,7 @@ export class MetreBoard {
     const parent = this.parentOf(key);
     if (!parent) return;
     const j = this.journal(parent);
+    this.touch(j, key);
     if (key !== parent) {
       const spans = j.spans[key] ||= [];
       const open = spans.at(-1);
@@ -166,6 +184,7 @@ export class MetreBoard {
     const parent = this.parentOf(key);
     if (!parent) return;
     const j = this.journal(parent);
+    this.touch(j, key);
     const name = String(event.toolName || event.name || '');
     const params = event.params && typeof event.params === 'object' ? event.params : {};
     const failed = Boolean(event.error || event.isError || event.result?.isError);
@@ -213,6 +232,7 @@ export class MetreBoard {
     const parent = this.parentOf(key);
     if (!parent) return;
     const j = this.journal(parent);
+    this.touch(j, key);
     const ok = event.success === true;
     const stopped = /abort|cancel|stop requested|interrupted by/i.test(String(event.error || ''));
     if (key !== parent) {
@@ -221,7 +241,8 @@ export class MetreBoard {
       delete j.doing[key];
       const title = this.title(key);
       if (stopped) this.event(j, 'stop', key, `「${title}」停下了`);
-      else if (ok) this.event(j, 'report', key, `「${title}」交回汇报`);
+      // 一轮跑完不等于交了汇报（汇报是 pinkie_session_report 的卡片，在血缘里另算）：这里只说跑完。
+      else if (ok) this.event(j, 'end', key, `「${title}」这一轮跑完`);
       else this.event(j, 'error', key, `「${title}」出错：${clip(event.error || '没说原因', 80)}`);
     } else if (!ok && !stopped) {
       this.event(j, 'error', key, `Metre 这一轮出错：${clip(event.error || '没说原因', 80)}`);
@@ -239,6 +260,7 @@ export class MetreBoard {
     const parent = this.parentOf(key);
     if (!parent) return;
     const j = this.journal(parent);
+    this.touch(j, key);
     const u = event.usage || {};
     const row = j.usage[key] ||= {input: 0, output: 0, points: []};
     row.input += num(u.input); row.output += num(u.output);
@@ -273,27 +295,32 @@ export class MetreBoard {
       const childReports = reports.filter(card => card.childKey === key);
       const lastReport = childReports.at(-1);
       const failure = this.modelHealth?.sessions?.get?.(key);
-      let status = launch && !record.started ? 'queued' : busy ? 'running'
+      // 一轮开了头、没有收尾（agent_end 没来），会话又不在跑：网关重启或进程被杀，这一轮是被打断的，不能算交回。
+      const openSpan = (j.spans[key] || []).at(-1);
+      const interrupted = !busy && openSpan && !openSpan.to;
+      let status = launch && !record.started ? 'queued' : busy ? 'running' : interrupted ? 'interrupted'
         : state.phase === 'waiting' ? 'waiting'
         : state.phase === 'error' || lastReport?.failed ? 'failed'
         : stoppedKeys.has(key) && !(lastReport && lastReport.createdAt > (parentState.lastStop?.at || 0)) ? 'stopped' : 'done';
       const spans = (j.spans[key] || []).map(span => ({from: span.from, to: span.to || (busy ? now : (state.at || span.from)),
-        kind: span.to ? span.kind : busy ? 'run' : status === 'failed' ? 'fail' : 'done'}));
+        kind: span.to ? span.kind : busy ? 'run' : status === 'failed' || status === 'interrupted' ? 'fail' : 'done'}));
       const usage = j.usage[key] || {};
       return {key, title: row?.label || record.title || launch?.title || '子会话', mode: record.mode || launch?.mode || '',
         modeName: MODE_NAMES[record.mode || launch?.mode] || '', model: record.model || launch?.model || '',
         status, statusText: STATUS_WORDS[status], state: BOARD_STATE[status],
         startedAt: record.createdAt || launch?.at || 0, endedAt: busy ? 0 : (state.at || 0),
-        doing: busy ? (j.doing[key] || '在想') : '',
+        doing: busy ? (j.doing[key] || '想') : '',
         usage: {input: usage.input || num(row?.inputTokens), output: usage.output || num(row?.outputTokens), total: num(row?.totalTokens)},
         reports: childReports.length,
-        error: status === 'failed' ? clip(failure?.reason || lastReport?.text || '没跑起来', 160) : '',
+        lastActiveAt: Math.max(j.seen?.[key] || 0, ...(j.spans[key] || []).map(span => span.to || span.from)),
+        error: status === 'failed' ? clip(failure?.reason || lastReport?.text || '没跑起来', 160)
+          : status === 'interrupted' ? '这一轮没跑完就断了（网关重启或进程退出），结果没交回；可以打开看看停在哪，或发消息让它接着做' : '',
         spans};
     }).sort((a, b) => a.startedAt - b.startedAt);
 
     const running = sessions.filter(item => item.status === 'running').length;
-    const failed = sessions.filter(item => item.status === 'failed').length;
-    const returned = sessions.filter(item => item.reports && item.status !== 'failed').length;
+    const failed = sessions.filter(item => item.status === 'failed' || item.status === 'interrupted').length;
+    const returned = sessions.filter(item => item.reports && item.status !== 'failed' && item.status !== 'interrupted').length;
     const limits = this.lineage.metreLimits();
     const paused = Boolean(parentState.paused);
     const parentBusy = this.lineage.busy(parent, rows.get(parent));
@@ -312,6 +339,9 @@ export class MetreBoard {
       : sessions.length ? '空闲' : '还没派过活';
 
     const timeline = [...j.events];
+    // 真正交回的汇报（血缘里的汇报卡片）：一张一条。
+    for (const card of reports) if (card.createdAt) timeline.push({at: card.createdAt, kind: card.failed ? 'error' : 'report', sessionKey: card.childKey,
+      text: `「${this.title(card.childKey)}」${card.failed ? '汇报失败' : '交回汇报'}${card.text ? '：' + clip(card.text, 60) : ''}`});
     if (lastStop?.at) timeline.push({at: lastStop.at, kind: 'stop', sessionKey: parent,
       text: `全部停下：停了 ${(lastStop.children || []).filter(item => item.stopped).length} 个子会话${lastStop.parent ? '和 Metre 这一轮' : ''}`});
     if (parentState.pausedAt && paused) timeline.push({at: parentState.pausedAt, kind: 'stop', sessionKey: parent, text: '暂停派发'});
@@ -335,7 +365,8 @@ export class MetreBoard {
     const plan = this.plans?.plan?.(parent);
     return {ok: true, sessionKey: parent, at: now,
       overview: {state: stateText, startedAt: j.requestAt || 0, running, limit: limits.maxRunning, started: parentState.metreStarts || 0,
-        cap: limits.requestCap, returned, failed, paused, stopped: Boolean(recentStop), parentRunning: parentBusy},
+        cap: limits.requestCap, returned, failed, paused, stopped: Boolean(recentStop), parentRunning: parentBusy,
+        parentLastActiveAt: j.seen?.[parent] || 0},
       plan: plan ? {title: plan.title || '', updatedAt: plan.updatedAt || 0,
         items: (plan.items || []).map((item, index) => ({id: item.id || String(index + 1), text: item.text,
           status: item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'pending'}))} : null,

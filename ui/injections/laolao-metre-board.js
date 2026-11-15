@@ -1,7 +1,9 @@
 /* laolao-metre-board —— Metre 总控台的页面骨架（PLAN 2.12、6.2 第 9 区；批 5 的前半）
  *
- * 这份文件现在只做「页面长什么样」：九个区块的位置、标题、说明都在，数据一格都没接。
- * 每个区块里放的是一份版式示例（示例的字、示例的图），右上角标着「示例 · 待接入」，页面顶上有一条说明；不是真数据，不许当成真数据看。
+ * 这份文件只做「页面长什么样」；数据由 laolao-metre-board-data.js（批 5）接，接上后示例整块换掉。
+ * 没接上之前每个区块里是一份版式示例，右上角标着「示例 · 待接入」，页面顶上有一条说明；不是真数据。
+ * 摆放（11-15 用户：「不喜欢全屏，看不到 Metre 的流式输出」）：停在窗口右边，对话区让出这块宽度；
+ * 左边沿可拖宽度（记在本机），内容区放不下「对话 520 + 面板 400」时退成浮层。
  *
  * 给做批 5 后端的人：
  *   - 接口按 PLAN 2.12：只读的 `pinkie.metre.board`，一次返回九个区块的数据；项目记忆区读已有的 `pinkie.metre.memory`。
@@ -169,7 +171,7 @@
       actions.append(btn);
     }
     const close = h('button', 'pk-metre-board__close', `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>`);
-    close.type = 'button'; close.title = '回到对话（Esc）'; close.setAttribute('aria-label', '关闭总控台');
+    close.type = 'button'; close.title = '收起总控台'; close.setAttribute('aria-label', '关闭总控台');
     close.addEventListener('click', () => api.close());
     actions.append(close);
     head.append(title, actions);
@@ -199,16 +201,68 @@
     notice.setAttribute('role', 'note');
     const scroll = h('div', 'pk-metre-board__scroll');
     scroll.append(notice, stats, grid);
-    page.append(head, scroll);
+    // 左边沿的拖条：拖动改宽度，双击回到默认宽度；宽度记在本机。
+    const grip = h('div', 'pk-metre-board__grip');
+    grip.setAttribute('role', 'separator');
+    grip.setAttribute('aria-orientation', 'vertical');
+    grip.setAttribute('aria-label', '拖动调整总控台宽度');
+    grip.title = '拖动调整宽度，双击恢复默认';
+    grip.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || !page.classList.contains('is-docked')) return;
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      page.classList.add('is-resizing');
+      const move = (ev) => { savedWidth = Math.round(window.innerWidth - ev.clientX); place(); };
+      const up = () => {
+        grip.removeEventListener('pointermove', move);
+        page.classList.remove('is-resizing');
+        try { localStorage.setItem(WIDTH_KEY, String(savedWidth)); } catch { /* 存不了就只管这一次 */ }
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up, {once: true});
+      grip.addEventListener('pointercancel', up, {once: true});
+    });
+    grip.addEventListener('dblclick', () => { savedWidth = 0; try { localStorage.removeItem(WIDTH_KEY); } catch {} place(); });
+    page.append(grip, head, scroll);
     document.body.append(page);
   }
-  // 贴着侧栏右边铺满内容区；侧栏收起或窄窗口时铺满整个窗口。
+  // 停在右边：对话区让出这块宽度，Metre 的流式输出照常看得见；左边沿可以拖宽拖窄。
+  // 内容区太窄（放不下「对话至少 CHAT_MIN + 面板至少 PANEL_MIN」）时退成盖住内容区的浮层。
+  const WIDTH_KEY = 'pk.metre.board.width';
+  const PANEL_MIN = 400;
+  const CHAT_MIN = 520;
+  let savedWidth = 0;
+  try { savedWidth = Number(localStorage.getItem(WIDTH_KEY)) || 0; } catch { /* 读不到就用默认宽度 */ }
+  // 值没变就不写：总控台数据层监听这个属性，写一次就重读一次。
+  const setMode = (value) => { if (root.getAttribute('data-metre-board') !== value) root.setAttribute('data-metre-board', value); };
   function place() {
     if (!page || page.hidden) return;
     const nav = document.querySelector('.shell-nav');
     const rect = nav?.getBoundingClientRect();
     const left = rect && rect.width > 40 && rect.right < window.innerWidth * 0.6 ? Math.round(rect.right) : 0;
-    page.style.left = left + 'px';
+    const room = window.innerWidth - left;
+    if (room < PANEL_MIN + CHAT_MIN) {
+      page.classList.remove('is-docked');
+      page.classList.add('is-overlay');
+      page.style.left = left + 'px';
+      page.style.width = '';
+      // 浮层停在输入框上面，不挡输入（A5-8）。
+      const input = document.querySelector('.agent-chat__input');
+      const box = input && input.getClientRects().length ? input.getBoundingClientRect() : null;
+      page.style.bottom = box && box.top > window.innerHeight * 0.4 ? Math.round(window.innerHeight - box.top + 8) + 'px' : '';
+      setMode('overlay');
+      root.style.removeProperty('--metre-board-w');
+      return;
+    }
+    const preferred = savedWidth || Math.round(room * 0.42);
+    const width = Math.max(PANEL_MIN, Math.min(preferred, room - CHAT_MIN, 900));
+    page.classList.remove('is-overlay');
+    page.classList.add('is-docked');
+    page.style.left = 'auto';
+    page.style.bottom = '';
+    page.style.width = width + 'px';
+    setMode('dock');
+    root.style.setProperty('--metre-board-w', width + 'px');
   }
   const card = (id) => page?.querySelector(`.pk-metre-board__card[data-metre-slot="${id}"]`);
 
@@ -220,20 +274,22 @@
       if (!page) build();
       if (page.hidden) lastFocus = document.activeElement;
       page.hidden = false;
-      root.setAttribute('data-metre-board', 'open');
       place();
       const target = section && card(section);
       const scroll = page.querySelector('.pk-metre-board__scroll');
       if (target) { scroll.scrollTop = Math.max(0, target.offsetTop - scroll.offsetTop - 12); target.classList.add('is-target'); setTimeout(() => target.classList.remove('is-target'), 1600); }
       else scroll.scrollTop = 0;
-      page.focus({preventScroll: true});
+      // 停靠时不抢输入框的焦点：用户可能正在打字或看流式输出。浮层时才把焦点给面板。
+      if (page.classList.contains('is-overlay')) page.focus({preventScroll: true});
       return true;
     },
     close() {
       if (!page || page.hidden) return;
+      const hadFocus = page.contains(document.activeElement);
       page.hidden = true;
       root.removeAttribute('data-metre-board');
-      lastFocus?.focus?.({preventScroll: true});
+      root.style.removeProperty('--metre-board-w');
+      if (hadFocus) lastFocus?.focus?.({preventScroll: true});
     },
     toggle(section) { return api.isOpen ? (api.close(), false) : api.open(section); },
     fill(id, node) {
@@ -338,10 +394,15 @@
     }).observe(shell, {childList: true, subtree: true});
     new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-laolao-startup-home']});
     window.addEventListener('resize', queue);
-    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && api.isOpen) { event.stopPropagation(); api.close(); } }, true);
-    // 点了侧栏里别的东西（开会话、新会话）就回到对话。
+    // Esc 只在焦点在面板里、或面板是浮层时关：停靠时 Esc 留给对话（比如停止生成）。
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !api.isOpen) return;
+      if (!page.classList.contains('is-overlay') && !page.contains(document.activeElement)) return;
+      event.stopPropagation(); api.close();
+    }, true);
+    // 浮层时点了侧栏里别的东西（开会话、新会话）就回到对话；停靠时面板留着，跟着切过去的会话走。
     document.addEventListener('click', (event) => {
-      if (!api.isOpen) return;
+      if (!api.isOpen || !page.classList.contains('is-overlay')) return;
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest('aside.sidebar') && !target.closest('.pk-metre-nav--board, .laolao-mode-switcher, .laolao-mode-menu')) api.close();
     }, true);

@@ -154,7 +154,8 @@
       let sameOrigin = false;
       try { sameOrigin = new URL(String(url), location.href).host === location.host; } catch {}
       if (/18789/.test(String(url)) || sameOrigin) {
-        ws.addEventListener("close", () => { if (gwSocket === ws) gwSocket = null; });
+        // 正在用的那条连接断了：告诉各处（总控台据此立刻标「断线」，不再显示成还在跑）。重连成功另有 pinkie:sidebar-gateway-ready。
+        ws.addEventListener("close", () => { if (gwSocket === ws) { gwSocket = null; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); } });
         sniff(ws);
         const send = ws.send.bind(ws);
         const sendQueues = new Map();
