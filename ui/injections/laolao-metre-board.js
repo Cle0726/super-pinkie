@@ -163,7 +163,9 @@
     page.tabIndex = -1;
 
     const head = h('header', 'pk-metre-board__head');
-    const title = h('div', 'pk-metre-board__title', `<h2><svg class="pk-metre-board__beat" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5"/></svg>总控台</h2><p>一次派发的全貌：计划、每个子会话、等你处理的事、改动和运行环境。</p>`);
+    // 标题前是 Metre 的标志（laolao-metre-brand.js，先于本文件加载）；没有就退回拍号记号。
+    const logo = window.__pinkieMetreBrand?.mark({title: ''}) || `<svg class="pk-metre-board__beat" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5"/></svg>`;
+    const title = h('div', 'pk-metre-board__title', `<h2><span class="pk-metre-board__beat">${logo}</span>总控台</h2><p>一次派发的全貌：计划、每个子会话、等你处理的事、改动和运行环境。</p>`);
     const actions = h('div', 'pk-metre-board__actions');
     for (const [id, text] of [['pause', '暂停派发'], ['stop', '全部停下']]) {
       const btn = h('button', `pk-metre-board__btn pk-metre-board__btn--${id}`, text);

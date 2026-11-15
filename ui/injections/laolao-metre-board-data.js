@@ -65,7 +65,7 @@
     const list = h('ol', 'pk-mb-steps');
     for (const item of plan.items) {
       const state = {done: 'done', active: 'run', pending: 'wait', blocked: 'fail'}[item.status] || 'wait';
-      const meta = {done: '做完', active: '进行中', pending: '', blocked: '卡住', 'stale-active': '断线前在做'}[item.status] || '';
+      const meta = {done: '做完', active: '进行中', pending: '', blocked: '卡住', 'stale-active': '断线前在做', 'idle-active': '停在这一步'}[item.status] || '';
       list.append(h('li', '', `<i aria-hidden="true"></i><span>${esc(item.text)}</span><em>${meta}</em>`));
       list.lastChild.dataset.state = state;
     }
@@ -373,6 +373,9 @@
     const b = board();
     if (!b) return;
     if (stale) view = staleView(view);
+    // 没人在做了（Metre 和子会话都不在跑），计划里那一步就不是「进行中」，是「停在这一步」。
+    else if (!view.overview?.parentRunning && !(view.overview?.running > 0) && view.plan?.items)
+      view = {...view, plan: {...view.plan, items: view.plan.items.map((item) => item.status === 'active' ? {...item, status: 'idle-active'} : item)}};
     const now = view.at || Date.now();
     if (stale) queueMicrotask(() => b.enableActions({}));   // 断着的时候按钮点了也没用：禁掉，免得以为点了生效
     overview(view.overview, now);

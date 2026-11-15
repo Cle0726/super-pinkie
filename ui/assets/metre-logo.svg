@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Metre 标志：一个 M。两条外腿是节拍器机身的两侧，中间的 V 是摆杆荡到两边的位置，在底下的支点交汇；
+       琥珀色的摆锤停在右边那一笔上（摆杆刚荡到右边）。底下一横是底座。会摆的版本见 ui/injections/laolao-metre-brand.js。 -->
+  <title>Metre</title>
+  <path d="M10.5 40 17 8.5M37.5 40 31 8.5M7.5 40.5h33" stroke="#151A2E" stroke-width="3.2"/>
+  <path d="M17 8.5 24 36 31 8.5" stroke="#151A2E" stroke-width="3.2"/>
+  <circle cx="28.9" cy="17.2" r="3.9" fill="#E09A2E"/>
+</svg>

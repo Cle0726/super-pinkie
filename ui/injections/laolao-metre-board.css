@@ -8,29 +8,30 @@ html:not([data-laolao-mode="metre"]) .pk-metre-quick,
 html:not([data-laolao-mode="metre"]) .pk-metre-nav { display: none !important; }
 
 html[data-laolao-mode="metre"] {
-  --metre-v1: #A8752A;
-  --metre-v2: #3E7C73;
-  --metre-v3: #5B7697;
-  --metre-v4: #B4553A;
-  --metre-v5: #8C887D;
-  --metre-v1-soft: #F3E9D6;
-  --metre-v2-soft: #DCEAE6;
-  --metre-v3-soft: #E1E8F0;
-  --metre-v4-soft: #F4E0D9;
-  --metre-v5-soft: #ECEAE3;
+  /* 「夜曲」配色（11-15）：琥珀 = 在跑，青绿 = 做完，长春花蓝 = 其他，珊瑚红 = 出错，灰 = 排队 */
+  --metre-v1: #C27A12;
+  --metre-v2: #138A73;
+  --metre-v3: #4A5BD6;
+  --metre-v4: #D2493C;
+  --metre-v5: #8A90A8;
+  --metre-v1-soft: #FBEED8;
+  --metre-v2-soft: #DDF3EE;
+  --metre-v3-soft: #E3E7FB;
+  --metre-v4-soft: #FBE3E0;
+  --metre-v5-soft: #ECEEF4;
 }
 html[data-laolao-mode="metre"][data-pinkie-night],
 html[data-laolao-mode="metre"][data-theme="dark"] {
-  --metre-v1: #D2A85C;
-  --metre-v2: #6DB0A5;
-  --metre-v3: #8FAED0;
-  --metre-v4: #DE8468;
-  --metre-v5: #8E8B84;
-  --metre-v1-soft: #3A3122;
-  --metre-v2-soft: #22332F;
-  --metre-v3-soft: #262F3A;
-  --metre-v4-soft: #3B2720;
-  --metre-v5-soft: #2E2D2A;
+  --metre-v1: #F2B35B;
+  --metre-v2: #4FD1B5;
+  --metre-v3: #8EA2FF;
+  --metre-v4: #FF7A6B;
+  --metre-v5: #6E7593;
+  --metre-v1-soft: #3A2F1E;
+  --metre-v2-soft: #143631;
+  --metre-v3-soft: #1F2750;
+  --metre-v4-soft: #3E2025;
+  --metre-v5-soft: #20263F;
 }
 
 .pk-metre-board {
@@ -57,7 +58,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 }
 .pk-metre-board__title h2 { margin: 0; display: flex; align-items: center; gap: 10px; font: 400 30px/1.2 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; color: var(--metre-text, #1F1E1D); }
 .pk-metre-board__title p { margin: 6px 0 0; font-size: 13.5px; color: var(--metre-muted, #73726C); }
-.pk-metre-board__beat { width: 24px; height: 24px; flex: none; color: var(--metre-accent, #96681C); }
+.pk-metre-board__beat { display: inline-block; width: 26px; height: 26px; flex: none; color: var(--metre-text, #151A2E); }
 .pk-metre-board__actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .pk-metre-board__btn {
   appearance: none;

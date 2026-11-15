@@ -1199,3 +1199,65 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent 
 @media (min-width: 761px) and (max-height: 640px) {
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height: min(calc(48vh - 44px), calc(100vh - 234px)) !important; }
 }
+
+/* ====================================================================================================
+ * 配色「夜曲」（11-15，用户：「页面配色真的很丑」）。上面几版的黄铜 + 暖灰底改掉：底色和强调色都偏土黄，糊在一起。
+ * 这一版：
+ *   深色 —— 午夜墨蓝底（内容区比侧栏亮一档），强调色是台灯琥珀；状态色：琥珀 = 在跑，青绿 = 做完，珊瑚红 = 出错，长春花蓝 = 其他。
+ *   浅色 —— 冷白纸底、深靛蓝字，琥珀压深一档保证对比度（白底上 ≥ 4.5:1）。
+ * 标志页（laolao-metre-brand.css）用同一套深色。和上面冲突的以这一段为准。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
+  --metre-bg: #F6F7FB;
+  --metre-side: #EEF0F6;
+  --metre-surface: #FFFFFF;
+  --metre-card: #FFFFFF;
+  --metre-art: #F2F4F9;
+  --metre-text: #151A2E;
+  --metre-muted: #626A85;
+  --metre-line: #E2E5EF;
+  --metre-line-strong: #CDD2E1;
+  --metre-hover: #E9ECF5;
+  --metre-side-hover: #E4E8F2;
+  --metre-side-active: #DADFED;
+  --metre-ph: #E7EAF3;
+  --metre-ph-strong: #CDD2E1;
+  --metre-accent: #A35F0C;
+  --metre-beat: #E09A2E;
+  --accent-rgb: 163, 95, 12 !important;
+  --accent-hover: #8A4F08 !important;
+  --accent-muted: rgba(163, 95, 12, 0.14) !important;
+  --accent-subtle: rgba(163, 95, 12, 0.08) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
+  --metre-bg: #10142A;
+  --metre-side: #0B0E1C;
+  --metre-surface: #1B2140;
+  --metre-card: #151A33;
+  --metre-art: #10142A;
+  --metre-text: #ECEAF5;
+  --metre-muted: #979EBA;
+  --metre-line: #232A47;
+  --metre-line-strong: #313A5E;
+  --metre-hover: #1A2038;
+  --metre-side-hover: #161B30;
+  --metre-side-active: #222A4A;
+  --metre-ph: #1C2240;
+  --metre-ph-strong: #313A5E;
+  --metre-accent: #F2B35B;
+  --metre-beat: #F2B35B;
+  --accent-rgb: 242, 179, 91 !important;
+  --accent-hover: #F6C47A !important;
+  --accent-muted: rgba(242, 179, 91, 0.16) !important;
+  --accent-subtle: rgba(242, 179, 91, 0.09) !important;
+}
+/* 输入框的投影跟着底色换成冷色 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { box-shadow: 0 2px 12px rgba(21, 26, 46, 0.06) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important; }
+/* 新会话的空白页（不是启动首页）：原生欢迎区自带碧琪头像、宽度锁在 320，引导语被挤成一行六七个字。
+ * Metre 里头像不要（引导语上方有 Metre 的标志），欢迎区和输入框一样宽。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__avatar--logo { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome { width: min(720px, calc(100% - 48px)) !important; max-width: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome .pk-metre-prompt { max-width: 100% !important; }
