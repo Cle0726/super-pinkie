@@ -171,3 +171,13 @@ test('改动行数和「在做什么」的说法', () => {
   assert.equal(describeTool('exec', {command: 'npm test\nmore'}), '跑 npm test');
   assert.equal(describeTool('read', {path: 'C:\\a\\b.md'}), '读 b.md');
 });
+
+test('A5-2 前端只靠事件刷新：渲染文件没有轮询，已登记在页头', () => {
+  const src = fs.readFileSync(new URL('../ui/injections/laolao-metre-board-data.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /setInterval|requestAnimationFrame/);
+  assert.match(src, /pinkie:gateway-event/);
+  assert.match(src, /1000 - \(Date\.now\(\) - lastAt\)/, '每秒最多一次');
+  assert.match(src, /连接断了，正在重连/);
+  const head = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
+  assert.ok(head.indexOf('laolao-metre-board-data.js') > head.indexOf('laolao-metre-board.js'), '数据脚本排在骨架后面');
+});

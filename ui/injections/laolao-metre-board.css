@@ -363,3 +363,40 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 }
 html[data-pinkie-reduce-motion] .pk-metre-quick__card { transition: none; }
 html[data-pinkie-reduce-motion] .pk-metre-quick__card:hover { transform: none; }
+
+/* ---------- 批 5：接上真数据以后的零件（laolao-metre-board-data.js 画的） ---------- */
+.pk-mb-empty { margin: 4px 0; font-size: 13px; line-height: 1.6; color: var(--metre-muted, #73726C); }
+.pk-mb-sub { margin: 0 0 8px; font: 500 12.5px/1.4 var(--metre-sans, system-ui, sans-serif); color: var(--metre-muted, #73726C); }
+.pk-mb-fail { font-weight: 500; color: var(--metre-v4); }
+.pk-mb-scroll-x { overflow-x: auto; }
+.pk-mb-scroll-x > .pk-mb-score { min-width: 520px; }
+.pk-mb-score__line { position: relative; z-index: 1; background: var(--metre-card, #FFFFFF); grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-height: 26px; padding-bottom: 6px; font-size: 12px; color: var(--metre-muted, #73726C); }
+.pk-mb-score__line > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-mb-score__acts, .pk-mb-memory__acts { display: inline-flex; flex: none; gap: 4px; }
+.pk-mb-act { padding: 2px 9px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 7px; background: var(--metre-card, #FFFFFF); color: var(--metre-text, #1F1E1D); font: 400 12px/1.5 var(--metre-sans, system-ui, sans-serif); cursor: pointer; }
+.pk-mb-act:hover { border-color: var(--metre-muted, #73726C); }
+.pk-mb-act:disabled { opacity: 0.5; cursor: default; }
+.pk-mb-act[data-primary] { border-color: var(--metre-accent, #96681C); background: var(--metre-accent, #96681C); color: var(--metre-bg, #FAF9F5); }
+.pk-mb-act[data-sure="1"] { border-color: var(--metre-v4); color: var(--metre-v4); }
+.pk-mb-msg { grid-column: 1 / -1; display: flex; gap: 6px; padding-bottom: 8px; }
+.pk-mb-msg input, .pk-mb-search, .pk-mb-edit { flex: 1; min-width: 0; padding: 5px 9px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 8px; background: var(--metre-card, #FFFFFF); color: var(--metre-text, #1F1E1D); font: 400 13px/1.4 var(--metre-sans, system-ui, sans-serif); }
+.pk-mb-msg input:focus, .pk-mb-search:focus, .pk-mb-edit:focus { outline: 2px solid var(--metre-accent, #96681C); outline-offset: -1px; }
+.pk-mb-msg button { padding: 4px 12px; border: 0; border-radius: 8px; background: var(--metre-text, #1F1E1D); color: var(--metre-bg, #FAF9F5); font: 500 12.5px/1.4 var(--metre-sans, system-ui, sans-serif); cursor: pointer; }
+.pk-mb-file { min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: 400 12.5px/1.4 var(--metre-mono, ui-monospace, Consolas, monospace); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; cursor: pointer; }
+.pk-mb-file:hover { text-decoration: underline; }
+.pk-mb-tempo + .pk-mb-health + .pk-mb-sub { margin-top: 12px; }
+.pk-mb-errors { list-style: none; margin: 0; padding: 0; font-size: 12px; line-height: 1.6; color: var(--metre-v4); }
+.pk-mb-errors time { color: var(--metre-muted, #73726C); font-variant-numeric: tabular-nums; }
+.pk-mb-raw summary { cursor: pointer; font-size: 12.5px; color: var(--metre-muted, #73726C); }
+.pk-mb-raw[open] summary { margin-bottom: 8px; }
+.pk-mb-raw .pk-mb-log { max-height: 320px; overflow: auto; }
+.pk-mb-memory__side { display: grid; gap: 8px; min-width: 0; }
+.pk-metre-board__card[data-metre-state="live"] .pk-mb-memory__list li { grid-template-columns: auto minmax(0, 1fr) auto; }
+.pk-mb-memory__acts { display: none; }
+.pk-mb-memory__list li:hover .pk-mb-memory__acts, .pk-mb-memory__list li:focus-within .pk-mb-memory__acts { display: inline-flex; }
+.pk-mb-badge, .pk-mb-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 999px; background: var(--metre-accent, #96681C); color: var(--metre-bg, #FAF9F5); font: 600 11px/1 var(--metre-sans, system-ui, sans-serif); font-variant-numeric: tabular-nums; }
+.pk-metre-board.is-stale .pk-metre-board__grid, .pk-metre-board.is-stale .pk-metre-board__stats { opacity: 0.55; filter: grayscale(0.6); }
+.pk-metre-board.is-stale .pk-metre-board__notice b { background: var(--metre-v4); }
+@media (max-width: 760px) {
+  .pk-mb-memory__acts { display: inline-flex; }
+}
