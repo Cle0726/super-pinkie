@@ -35,12 +35,12 @@
     return m < 60 ? `${m}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
   };
   const tokens = (n) => !(n > 0) ? '0' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n);
-  // 空状态（第六版）：左边一个点阵画的四分休止符——「这一声部还没开始」，右边一句说明
-  const REST = ['.#...', '..#..', '...#.', '..#..', '.#...', '..#..', '...#.', '.##..', '#....'];
+  // 空状态（11-16）：左边一个像素画的没亮灯的谱台——「这一声部还没开始」（和背景里的谱台是同一样东西），右边一句说明
+  const REST = ['...###...', '#########', '#...#...#', '#.#.#.#.#', '#...#...#', '#########', '....#....', '....#....', '....#....', '...###...', '..#.#.#..', '.#..#..#.'];
   const restGlyph = (() => {
     let dots = '';
-    REST.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') dots += `<circle cx="${x * 4 + 2}" cy="${y * 4 + 2}" r="1.5"/>`; }));
-    return `<svg class="pk-mb-rest" viewBox="0 0 20 36" aria-hidden="true">${dots}</svg>`;
+    REST.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') dots += `<rect x="${x * 2}" y="${y * 2}" width="2" height="2"/>`; }));
+    return `<svg class="pk-mb-rest" viewBox="0 0 18 24" shape-rendering="crispEdges" aria-hidden="true">${dots}</svg>`;
   })();
   const empty = (text) => { const node = h('div', 'pk-mb-empty pk-mb-empty--rest', `${restGlyph}<span>${esc(text)}</span>`); return node; };
   const KIND = {dispatch: ['派发', 'run'], report: ['汇报', 'done'], end: ['跑完', 'done'], error: ['出错', 'fail'], stop: ['叫停', 'wait'], memory: ['记忆', 'done'], message: ['消息', 'wait']};

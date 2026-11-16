@@ -195,7 +195,8 @@
     }
     const scope = button('全部模式', 'pinkie-art-chip pinkie-art-chip--scope', () => { state.allModes = !state.allModes; paintFilters(); void load(); });
     filters.append(kinds, scope);
-    const note = el('p', 'pinkie-art-note', '碧琪在这个模式里写出、改过、生成的文件都会放在这里，每次改动都留一个版本。');
+    const plain = document.documentElement.getAttribute('data-laolao-mode') === 'metre';   // Metre 里不带碧琪的称呼
+    const note = el('p', 'pinkie-art-note', (plain ? '' : '碧琪') + '在这个模式里写出、改过、生成的文件都会放在这里，每次改动都留一个版本。');
     const grid = el('div', 'pinkie-art-grid');
     const more = button('再看更多', 'pinkie-art-more', () => void load(true));
     more.hidden = true;
@@ -224,7 +225,7 @@
       for (const agent of new Set(state.items.map(item => item.mode))) for (const [key, value] of await sessionTitles(agent)) titles.set(key, value);
       grid.replaceChildren();
       if (!state.items.length) {
-        grid.append(el('p', 'pinkie-art-empty', state.query || state.kind !== 'all' ? '没有找到符合条件的作品' : '还没有作品。碧琪写出网页、文档、图片后会出现在这里。'));
+        grid.append(el('p', 'pinkie-art-empty', state.query || state.kind !== 'all' ? '没有找到符合条件的作品' : (document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '还没有作品。写出网页、文档、图片后会出现在这里。' : '还没有作品。碧琪写出网页、文档、图片后会出现在这里。')));
       }
       for (const item of state.items) {
         const card = el('article', 'pinkie-art-card');
@@ -285,7 +286,7 @@
     };
     if (!preview?.ok) { fallback(preview?.error || '这个版本打不开'); return; }
     if (preview.tooLarge) { fallback('文件比较大（' + size(preview.size) + '），用默认应用打开更快。'); return; }
-    if (preview.unsupported) { fallback('这类文件在碧琪里还看不了预览。'); return; }
+    if (preview.unsupported) { fallback(document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '这类文件在这里还看不了预览。' : '这类文件在碧琪里还看不了预览。'); return; }
     const ext = (item.path.split('.').pop() || '').toLowerCase();
     if (item.kind === 'image') {
       const img = el('img', 'pinkie-art-view__img');

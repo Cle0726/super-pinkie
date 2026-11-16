@@ -67,7 +67,8 @@
     const cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL);
     const colors = palette();
     const center = (x) => x * CELL + CELL / 2;
-    const dot = (g, x, y, r, color) => { g.fillStyle = color; g.beginPath(); g.arc(center(x), center(y), r, 0, Math.PI * 2); g.fill(); };
+    // 11-16：方的像素块，不再是圆的灯珠（和新背景同一种笔触）。亮透的一格填满，半亮的是居中的小方块。
+    const dot = (g, x, y, r, color) => { g.fillStyle = color; const side = r >= CELL * 0.34 ? CELL : Math.max(2, Math.round(r * 2)); const o = Math.round((CELL - side) / 2); g.fillRect(x * CELL + o, y * CELL + o, side, side); };
     // 盖满以后的样子：底色 + 一整张熄灯的点（离屏画一次）
     const pattern = document.createElement('canvas');
     pattern.width = canvas.width; pattern.height = canvas.height;
@@ -169,7 +170,7 @@
       // 细点：(px, py) 是 CSS 像素；它落在哪个整格，那一格盖着才画
       const fine = (px, py, color, r) => {
         if (!covered(Math.floor(px / CELL), Math.floor(py / CELL))) return;
-        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(px + FINE / 2, py + FINE / 2, FINE * r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = color; const side = r >= 0.4 ? FINE : Math.max(2, Math.round(FINE * r * 2)), o = Math.round((FINE - side) / 2); ctx.fillRect(Math.round(px) + o, Math.round(py) + o, side, side);
       };
       // 每拍从摆锤那里推出一圈声波（方的，按格子走），越远越淡
       if (state.ripple >= 2) {
