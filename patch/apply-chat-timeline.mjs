@@ -1096,7 +1096,7 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   let routedSession = '';
   try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
     || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
-  const segmented = !routedSession || /^agent:(?:main|project|thinking|learning):/.test(routedSession);
+  const segmented = true;
   const historyThinking = segmented ? historySegments.map(segment => segment.text).join('\n\n')
     : entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
       .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))

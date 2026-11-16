@@ -36,9 +36,9 @@
     if (routed) return routed;
     return document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
   };
-  // Only the four included modes get the new segmented presentation. Other
-  // sessions retain the previous single combined thought at the top.
-  const segmentedAllowed = () => /^agent:(?:main|project|thinking|learning):/.test(sessionKey());
+  // Every mode uses the same per-burst presentation. Do not gate this on a
+  // mode name: a new agent id must not silently collapse all thoughts into one.
+  const segmentedAllowed = () => true;
   const publishRunState = (key, active) => {
     if (!key) return;
     const runs = window.__pinkieActiveChatRuns instanceof Map
@@ -391,9 +391,13 @@
     head.addEventListener("click", () => {
       preserveSlot(slot, () => {
         if (openedThoughts.has(id)) openedThoughts.delete(id); else openedThoughts.add(id);
+        box.dataset.pinkieFollow = "1";
         if (slot.isConnected) renderThinking(slot);
       });
     });
+    const stopFollow = () => { box.dataset.pinkieFollow = "0"; };
+    body.addEventListener("wheel", stopFollow, {passive: true});
+    body.addEventListener("touchmove", stopFollow, {passive: true});
     body.append(el("div", "pinkie-thinking__text"));
     box.append(head, body);
     const t = typing.get(id);
@@ -431,8 +435,13 @@
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
     const visibleText = isTyping ? ep.text.slice(0, typed) : ep.text;
-    if (body.textContent !== visibleText) body.textContent = visibleText;
-    if (live && !opened) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
+    const changed = body.textContent !== visibleText;
+    if (changed) body.textContent = visibleText;
+    // Follow new text inside the 68px live window, but never fight a reader
+    // who grabbed the body. Rewriting the full text node every frame and
+    // resetting scrollTop unconditionally is what made the page feel sticky.
+    const shell = box.querySelector(".pinkie-thinking__body");
+    if (live && !opened && changed && box.dataset.pinkieFollow !== "0") shell.scrollTop = shell.scrollHeight;
   }
 
   function renderStatus(slot) {
@@ -515,10 +524,32 @@
     save();
   }
 
+  let scrollHoldSeq = 0;
   function preserveSlot(slot, change) {
     const pane = slot.closest?.('openclaw-chat-pane');
-    return window.__pinkieChatViewport?.preserve
-      ? window.__pinkieChatViewport.preserve(pane, change) : change();
+    const viewport = window.__pinkieChatViewport;
+    const snapshot = viewport?.capture?.(pane);
+    if (viewport?.preserve && !snapshot?.native) return viewport.preserve(pane, change);
+    // Native chat owns its virtualizer, but it does not know that this
+    // injected process card is about to grow or shrink. When the reader is
+    // not pinned at the bottom, mark the thread for one resize so the native
+    // auto-follow ignores the height change, then put the scrollTop back.
+    const thread = pane?.querySelector?.('.chat-thread') || slot.closest?.('.chat-thread');
+    if (!thread) return change();
+    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2;
+    if (atBottom) return change();
+    const top = thread.scrollTop;
+    const token = String(++scrollHoldSeq);
+    thread.dataset.pinkieHold = token;
+    const result = change();
+    thread.scrollTop = top;
+    requestAnimationFrame(() => {
+      if (thread.isConnected) thread.scrollTop = top;
+      setTimeout(() => {
+        if (thread.dataset.pinkieHold === token) delete thread.dataset.pinkieHold;
+      }, 800);
+    });
+    return result;
   }
 
   let frame = 0;

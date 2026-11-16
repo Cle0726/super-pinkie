@@ -16,6 +16,7 @@ test('ordinary assistant prose is never folded into a fake 思路 row', () => {
 test('the real model-thinking presentation remains installed', () => {
   const card = read('laolao-process-card.js');
   const styles = read('laolao-process-card.css');
+  const runtime = readFileSync(new URL('../ui/runtime/chat-page-DrPkxqJK.js', import.meta.url), 'utf8');
   assert.match(card, /思考了/);
   assert.match(card, /pinkie:gateway-event/);
   assert.match(card, /payload\.stream === "thinking"/);
@@ -24,4 +25,6 @@ test('the real model-thinking presentation remains installed', () => {
   assert.doesNotMatch(card, /hurryTyping\(/);
   assert.match(styles, /\.pinkie-thinking\.is-live \.pinkie-thinking__body \{\s*max-height: 68px; overflow: hidden;/);
   assert.doesNotMatch(styles, /background-color: #17151b|\u274f|SFMono-Regular|repeating-linear-gradient/);
+  assert.match(runtime, /const segmented = true;/);
+  assert.match(runtime, /pinkieHold/);
 });
