@@ -1,6 +1,6 @@
 // 隔离副本专用的探针（不进仓库、不进 App）：命中测试 + 碧琪残留扫描。输出尽量短。
 (() => {
-  const vis = (el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
+  const vis = (el) => { if (el.checkVisibility && !el.checkVisibility({checkOpacity: false, checkVisibilityCSS: true})) return false; const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 2 && r.height > 2 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
   const desc = (el) => el ? (el.tagName.toLowerCase() + '.' + [...el.classList].slice(0, 2).join('.')) : 'null';
   const box = (el) => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round).join(','); };
   const hits = () => {

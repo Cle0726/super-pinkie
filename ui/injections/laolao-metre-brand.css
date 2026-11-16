@@ -126,9 +126,8 @@ html[data-laolao-splash-metre] #laolao-splash {
   overflow: hidden;
   color: var(--sp-text);
   background-color: var(--sp-bg);
-  /* 一格 8px 的熄灭点阵，和对话页背景同一个格子 */
-  background-image: radial-gradient(circle, var(--sp-off) 1.3px, transparent 1.7px);
-  background-size: 8px 8px;
+  /* 11-16：不再铺熄灭的点阵（整屏的点发脏，和新背景的 2px 格也对不上），只留一块干净的底 */
+  background-image: none;
   font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   opacity: 1;
   visibility: visible;

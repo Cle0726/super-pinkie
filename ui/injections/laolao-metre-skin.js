@@ -44,5 +44,63 @@
     const guess = (switching && handoff?.mode) || (agent ? (agent === 'main' ? 'chat' : agent) : localStorage.getItem('laolao:active-mode'));
     if (guess === 'metre') root.setAttribute('data-laolao-splash-metre', '');
   } catch {}
-  window.__pinkieMetreSkin = {DECOR, apply, get on() { return applied; }};
+
+  /* ---------- 弹层的位置（11-16）：输入框那一带的弹层一律不许盖住输入框 ----------
+   * 触发键在输入框下面那一排的（模型 / 强度、极致思考、上下文圈）：下面放得下就往下弹，放不下就弹到输入框上沿之上；
+   * 触发键在输入框里面的（工具箱）：弹到输入框上沿之上，上面不够再往下。
+   * 各自的脚本会反复写行内 top / left，所以这里只把量好的位置写进 CSS 变量，由 laolao-metre-skin.css 里
+   * [data-metre-pop] 那条规则（!important）接管；离开 Metre 时把标记拿掉，其他模式的位置不变。 */
+  const POPS = [
+    {sel: '.laolao-deep-think-menu', trig: '.laolao-deep-think-btn', kind: 'row'},
+    {sel: 'details.chat-controls__model[open] > .chat-controls__inline-select-menu--combined', trig: '.chat-composer-model-control', kind: 'row'},
+    {sel: 'details.laolao-context-viewer[open] > .laolao-context-viewer__popover, body > .laolao-context-viewer__popover.is-floating', trig: '.laolao-context-viewer > summary', kind: 'row'},
+    {sel: 'body > .pinkie-tray', trig: '.pinkie-tray-btn', kind: 'inside'},
+  ];
+  const GAP = 8, EDGE = 12;
+  function placeOne(el, trigEl, kind) {
+    const box = document.querySelector('.agent-chat__composer-combobox')?.getBoundingClientRect();
+    const trig = trigEl?.getBoundingClientRect();
+    if (!box || !trig || !trig.width) return;
+    el.setAttribute('data-metre-pop', kind);
+    el.style.setProperty('--mp-top', '0px'); el.style.setProperty('--mp-left', '0px'); el.style.setProperty('--mp-max', 'none');
+    const zero = el.getBoundingClientRect();                      // top:0 left:0 时它落在视口哪里（包含块可能是带 transform 的祖先）
+    const w = zero.width, h = zero.height;
+    const rowBottom = Math.max(box.bottom, kind === 'row' ? trig.bottom : box.bottom + 46);
+    const below = window.innerHeight - EDGE - (rowBottom + GAP), above = box.top - GAP - EDGE;
+    let down = kind === 'row' ? (h <= below || (h > above && below >= above)) : !(h <= above || above >= below);
+    const room = down ? below : above;
+    const hh = Math.min(h, room);
+    const top = down ? rowBottom + GAP : box.top - GAP - hh;
+    let left = trig.left + trig.width / 2 > box.left + box.width / 2 ? trig.right - w : trig.left;
+    left = Math.max(EDGE, Math.min(left, window.innerWidth - EDGE - w));
+    el.style.setProperty('--mp-top', Math.round(top - zero.top) + 'px');
+    el.style.setProperty('--mp-left', Math.round(left - zero.left) + 'px');
+    el.style.setProperty('--mp-max', h > room ? Math.floor(room) + 'px' : 'none');
+    el.setAttribute('data-metre-pop-dir', down ? 'down' : 'up');
+  }
+  function placePops() {
+    if (!isMetre()) { document.querySelectorAll('[data-metre-pop]').forEach((el) => { el.removeAttribute('data-metre-pop'); el.removeAttribute('data-metre-pop-dir'); }); return; }
+    // 上游自带的英文读屏名（别改上游文件，在这里换成中文）
+    for (const b of document.querySelectorAll('.callout__dismiss[aria-label="Dismiss error"]')) b.setAttribute('aria-label', '关闭');
+    for (const {sel, trig, kind} of POPS) for (const el of document.querySelectorAll(sel)) {
+      if (el.hidden || !el.getClientRects().length) continue;
+      placeOne(el, document.querySelector(trig), kind);
+    }
+  }
+  let popQueued = false;
+  const queuePops = () => { if (popQueued) return; popQueued = true; requestAnimationFrame(() => { popQueued = false; placePops(); setTimeout(placePops, 140); }); };
+  const bootPops = () => {
+    new MutationObserver(queuePops).observe(document.body, {childList: true});
+    const chat = () => document.querySelector('section.card.chat');
+    let watched = null;
+    const watchChat = () => { const c = chat(); if (c && c !== watched) { watched = c; new MutationObserver(queuePops).observe(c, {childList: true}); } };
+    watchChat(); document.addEventListener('click', watchChat, true);
+    document.addEventListener('toggle', queuePops, true);
+    document.addEventListener('click', queuePops, true);
+    document.addEventListener('keyup', queuePops, true);
+    window.addEventListener('resize', queuePops);
+  };
+  if (document.body) bootPops(); else document.addEventListener('DOMContentLoaded', bootPops, {once: true});
+  window.addEventListener('laolao:modechange', queuePops);
+  window.__pinkieMetreSkin = {DECOR, apply, placePops, get on() { return applied; }};
 })();

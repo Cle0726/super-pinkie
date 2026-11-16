@@ -74,7 +74,7 @@
     const pg = pattern.getContext('2d');
     pg.setTransform(ratio, 0, 0, ratio, 0, 0);
     pg.fillStyle = colors.bg; pg.fillRect(0, 0, W, H);
-    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) dot(pg, x, y, CELL * 0.14, colors.off);
+    // 11-16：盖满的那一块是一块干净的底，不再铺熄灭的点阵（和新背景一样不要整屏的点）
     const blit = (x0, y0, x1, y1) => {   // 格子范围 [x0, x1) × [y0, y1)
       x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(cols, x1); y1 = Math.min(rows, y1);
       if (x1 <= x0 || y1 <= y0) return;
@@ -124,7 +124,7 @@
       if (x < 0 || y < 0 || x >= cols || y >= rows) return;
       const s = cellState(x, y);
       if (s === 3) blit(x, y, x + 1, y + 1);
-      else if (s === 2) { ctx.fillStyle = colors.bg; ctx.fillRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4); dot(ctx, x, y, CELL * 0.14, colors.off); }
+      else if (s === 2) { ctx.fillStyle = colors.bg; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
       else if (s === 1) dot(ctx, x, y, CELL * 0.3, colors.dim);
     }
     function ring(d) {

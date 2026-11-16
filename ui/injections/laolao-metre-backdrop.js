@@ -5,14 +5,14 @@
  *
  * 现在画的是 Metre 自己的事：一个指挥，一排排等着开工的声部。
  *   夜里的排练厅，从乐手的座位看出去：近处几排谱台，每个谱台上夹着一盏小灯；中间偏右是指挥台，
- *   黑猫坐在上面看着你；最远处是舞台口，里面立着像素 M 节拍器的剪影。
+ *   上面一个背对我们的谱台（指挥的位置空着——猫在输入框上，不在画里重复）；最远处是舞台口，里面立着像素 M 节拍器的剪影。
  *   谱台灯 = 子会话（和总控台同一份数据，laolao-metre-board-data.js）：
  *     没有子会话时只有指挥台那一盏亮着；每派出一个亮一盏——在跑 = 钴蓝，做完 = 暖白（暗一档），出错 = 砖红，排队 = 不亮。
  *   会动的只有两样：指挥台的灯和节拍器的摆锤，按 ♩=72 跳格。减少动态效果时静止。
  * 版面：画只占页面底部一条（首页约 28% 高，对话页约 16% 高、对比度降一半），上面是空的——
  *   只有一层很细的抖动渐变（大厅的暗），不放任何东西。提示语、对话正文都在那片空里。
  * 画法：一格 2 个 CSS 像素（按设备像素取整，格子边永远落在整像素上），整张图先画进一块低分辨率的 Uint32 缓冲，
- *   最近邻放大贴到画布上；不压缝。猫 62 格高（一层一层摆：躯干、腿、尾、头，层间带形体线，暖光亮边 + 冷光背边）；
+ *   最近邻放大贴到画布上；不压缝。
  *   谱台三种大小（谱板 33 / 23 / 15 格宽），谱面上有谱线、音符、小节线，每个谱台不一样；立杆左亮右暗、带箍和三脚；
  *   地板是朝舞台口收拢的木条；舞台口有框、束腰的侧幕、檐幕、台唇和脚灯；渐变和光晕用 4×4 Bayer 抖动。
  * 浅色主题不是把深色反相：是谱纸上的墨线版——暖白底、墨色剪影、灯是钴蓝的点。
@@ -76,6 +76,8 @@
     },
   };
   for (const p of Object.values(PALETTES)) p.wait = p.off;
+  PALETTES.dark.tap = {hi: '#FFF8E4', mid: '#EADFBE', lo: '#C9BD98', line: '#A89C78', ink: '#3A3323', core: '#FFF6DC', glow: '#D9CDA8'};
+  PALETTES.light.tap = {hi: '#F4F6FF', mid: '#E6EBFB', lo: '#D3DBF5', line: '#91A1E0', ink: '#2F4BB0', core: '#2F4BB0', glow: '#2F4BB0'};
   const resolve = (pal) => {
     const out = {};
     for (const [k, v] of Object.entries(pal)) out[k] = typeof v === 'string' ? rgb(v) : Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, vv ? rgb(vv) : null]));
@@ -103,81 +105,7 @@
     '.#....#....#.',
     '#############',
   ];
-  /* 黑猫（C.le. 那只）：56×62 格，坐着，身子略朝左，头转过来压低了看你——大尖耳、一双斜的蓝眼、尾巴从右后绕到脚前。
-   * 一块一块摆的：躯干、后腿、后爪、两条前腿、尾巴、头和耳朵各是一层，后摆的盖住先摆的；
-   * 层和层的交界自己带一条形体线（下巴、前腿之间、后腿的弧）。每格记的是颜色名，深浅两套调色板共用一张图。
-   * 光：暖光从左前方（指挥台的灯）来——左轮廓一圈暖亮边，往里三四格抖动着暗下去；冷光从背后（舞台口）来——顶上和右边一线冷边。 */
-  const CAT_W = 56, CAT_H = 62;
-  const CAT_EYES = [[15, 17], [29, 17]];
-  function buildCat() {
-    const W = CAT_W, H = CAT_H, part = new Uint8Array(W * H), tone = new Array(W * H).fill(null), out = [];
-    const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : part[y * W + x]);
-    const ell = (cx, cy, rx, ry) => (x, y) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
-    const tri = (ax, ay, bx, by, cx, cy) => (x, y) => {
-      const s = (px, py, qx, qy) => (x - qx) * (py - qy) - (px - qx) * (y - qy);
-      const d1 = s(ax, ay, bx, by), d2 = s(bx, by, cx, cy), d3 = s(cx, cy, ax, ay);
-      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
-    };
-    const box = (x0, y0, x1, y1) => (x, y) => x >= x0 && x < x1 && y >= y0 && y < y1;
-    const cap = (ax, ay, bx, by, r) => (x, y) => {
-      const vx = bx - ax, vy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)));
-      return Math.hypot(x - ax - vx * t, y - ay - vy * t) <= r;
-    };
-    const fill = (id, ...tests) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (tests.some((t) => t(x + 0.5, y + 0.5))) part[y * W + x] = id; };
-    fill(1, ell(31, 42, 15, 19.4), ell(22.5, 41, 9, 14));                                   // 躯干 + 胸
-    fill(2, ell(37.5, 49.5, 11, 12));                                                       // 后腿
-    fill(3, ell(31, 59.6, 6.5, 2.4));                                                       // 后爪
-    fill(4, box(14, 36, 20, 59), ell(16.5, 59.4, 4.6, 2.6));                                // 左前腿
-    fill(5, box(21, 38, 26, 59), ell(24, 59.8, 4.2, 2.2));                                  // 右前腿
-    fill(6, cap(48, 47, 51.5, 53, 2.4), cap(51.5, 53, 49.5, 58.6, 2.5), cap(49.5, 58.6, 42, 59.6, 2.3), cap(42, 59.6, 35, 59.4, 2.0)); // 尾巴
-    fill(7, ell(22, 17, 13, 10.6), tri(9.5, 15, 8, 0, 19.5, 8), tri(24.5, 8, 36, 0, 34.5, 15), tri(10, 15, 5.5, 21, 11, 25), tri(34, 15, 38.5, 21, 33, 25)); // 头、耳、腮毛
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const p = at(x, y); if (!p) continue;
-      const L = at(x - 1, y), U = at(x, y - 1), R = at(x + 1, y), D = at(x, y + 1), b = bayer(x, y);
-      let t;
-      if (!L) t = Math.abs(y - 30) < 20 ? 'warmHi' : 'warmMid';
-      else if (!U) t = 'coolRim';
-      else if (!R) t = y < 30 ? 'coolRim' : 'coolDim';
-      else if (L !== p && L < p) t = 'warmLo';
-      else if (U !== p && U < p && !(p === 2 && x > 38)) t = 'cat3';
-      else if (D && D !== p && D < p) t = 'cat2';
-      else {
-        let d = 2; while (d <= 8 && at(x - d, y)) d++;                                       // 离左轮廓几格
-        t = d === 2 ? (b < 0.72 ? 'warmLo' : 'cat3') : d <= 4 ? (b < 0.5 ? 'cat3' : 'cat2') : d <= 7 ? (b < 0.36 ? 'cat2' : 'cat') : 'cat';
-      }
-      tone[y * W + x] = t;
-    }
-    const put = (x, y, t) => { if (at(x, y)) tone[y * W + x] = t; };
-    // 耳朵里面
-    for (let y = 4; y <= 11; y++) for (let x = 0; x < W; x++) {
-      if (tri(11, 12, 10, 4, 16.5, 9)(x + 0.5, y + 0.5) || tri(27.5, 9, 34, 4, 33, 12)(x + 0.5, y + 0.5)) put(x, y, bayer(x, y) < 0.6 ? 'cat3' : 'cat2');
-    }
-    // 眼睛：外眼角高、内眼角低（往鼻子斜下去）；瞳孔一道竖缝，外上角一格高光，下缘暗一档
-    const eyeRows = [[15, 12, 13], [16, 12, 15], [17, 13, 17], [18, 15, 18]];
-    for (const [y, a, b] of eyeRows) for (let x = a; x <= b; x++) {
-      const t = y === 18 || x === b ? 'eyeLo' : 'eye';
-      put(x, y, t); put(44 - x, y, t);
-    }
-    put(13, 16, 'eyeHi'); put(31, 16, 'eyeHi');
-    put(15, 16, 'pupil'); put(15, 17, 'pupil'); put(29, 16, 'pupil'); put(29, 17, 'pupil');
-    // 口鼻两边鼓出来的一点（给脸一点体积）
-    for (let y = 21; y <= 25; y++) for (let x = 15; x <= 29; x++) {
-      if ((ell(18.5, 23.6, 3.4, 2.2)(x + 0.5, y + 0.5) || ell(25.5, 23.6, 3.4, 2.2)(x + 0.5, y + 0.5)) && bayer(x, y) < 0.5) put(x, y, 'cat3');
-    }
-    // 鼻子、嘴
-    put(21, 22, 'nose'); put(22, 22, 'nose'); put(23, 22, 'nose'); put(22, 23, 'nose');
-    put(22, 24, 'cat3'); put(21, 25, 'cat3'); put(20, 25, 'cat3'); put(23, 25, 'cat3'); put(24, 25, 'cat3');
-    // 胸口的毛、爪子的趾缝
-    [[17, 29], [18, 30], [16, 31], [19, 32], [17, 33], [20, 34], [18, 35]].forEach(([x, y]) => put(x, y, 'warmLo'));
-    [[16, 60], [19, 60], [23, 60], [26, 60], [29, 60], [33, 60]].forEach(([x, y]) => put(x, y, 'cat3'));
-    // 胡须：每边三根，头里面是暗的一线，伸出脸外的另记（out）
-    const whisk = (x0, y0, dx, n, slope) => { for (let i = 0; i < n; i++) { const x = x0 + dx * i, y = y0 + Math.round(i * slope); if (at(x, y)) { if (!/eye|pupil|warmHi/.test(tone[y * W + x])) tone[y * W + x] = 'whiskIn'; } else out.push([x, y]); } };
-    whisk(14, 22, -1, 10, -0.25); whisk(14, 24, -1, 9, 0.25);
-    whisk(30, 22, 1, 10, -0.25); whisk(30, 24, 1, 9, 0.25);
-    return {w: W, h: H, tone, out};
-  }
-  const CAT = buildCat();
-  const SPRITES = {LOGO, CAT: Array.from({length: CAT_H}, (_, y) => Array.from({length: CAT_W}, (_, x) => (CAT.tone[y * CAT_W + x] ? '#' : '.')).join(''))};
+  const SPRITES = {LOGO};
 
   // 谱台的三种大小（0 近 / 1 中 / 2 远）：w 谱板宽、dh 谱板高、n 一行谱几条线、gap 行距
   const STAND_SIZES = [
@@ -202,7 +130,7 @@
   /* 画静的那一层。返回 {buf, anchors…}。
    * cols×rows 是整块画布的格数；band 是场景占的行数（贴底），band 上面的行只有大厅的暗（抖动渐变，越往上越接近底色，最上面是透明）。
    * quiet = [x0, x1]：输入框那一栏的格范围（对话页用它把指挥台和舞台口让到两边的空地上）；首页传 null。 */
-  function buildScene({cols, rows, band, dark, home, lamps = [], quiet = null, dim = 0}) {
+  function buildScene({cols, rows, band, dark, home, lamps = [], quiet = null, dim = 0, flash = -1}) {
     const C = resolve(dark ? PALETTES.dark : PALETTES.light);
     const buf = new Uint32Array(cols * rows);            // 0 = 透明（露出页面底色）
     const solid = new Uint8Array(cols * rows);           // 实心的东西占了哪些格（光晕不往上盖）
@@ -243,7 +171,7 @@
 
     // 3. 舞台口：一圈框 + 两边束起来的幕布 + 顶上的檐幕 + 里面的光 + 台唇和脚灯 + 像素 M
     const fr = home ? 3 : 2, lipH = home ? 4 : 3;
-    const archW = Math.max(40, Math.min(232, Math.round(cols * 0.4), 2 * Math.min(stageX, cols - stageX) - 8, home || !quiet ? 999 : stageX < quiet[0] ? 2 * (quiet[0] - stageX) - 4 : 999)), archH = Math.max(34, Math.round(band * 0.58)), archR = Math.min(14, archH >> 1);
+    const archW = Math.max(40, Math.min(232, Math.round(cols * 0.4), 2 * Math.min(stageX, cols - stageX) - 8, home || !quiet ? 999 : stageX < quiet[0] ? 2 * (quiet[0] - stageX) - 4 : 999)), archH = Math.max(34, Math.round(band * (home ? 0.5 : 0.58))), archR = Math.min(14, archH >> 1);
     const ax0 = stageX - (archW >> 1), ax1 = ax0 + archW - 1, ay0 = floorY - archH;
     const inArch = (x, y, k = 0) => {
       const a = ax0 + k, b = ax1 - k, top = ay0 + k, r = Math.max(1, archR - k);
@@ -395,8 +323,8 @@
     const rowOf = (base, gap, depth, phase) => {
       const w = STAND_SIZES[depth].w;
       for (let x = Math.round(gap * phase); x < cols + w; x += gap) {
-        if (depth === 2 && Math.abs(x - stageX) < archW / 2 + w) continue;                   // 远排不挡舞台口
-        if (Math.abs(x - podX) < 50 + w / 2) continue;                                      // 给指挥台和猫让位
+        if ((depth === 2 || (!home && depth === 1)) && Math.abs(x - stageX) < archW / 2 + w) continue;                   // 远排不挡舞台口
+        if (Math.abs(x - podX) < 34 + w / 2) continue;                                      // 给指挥台让位
         if (!home && quiet && x + w / 2 > quiet[0] - 2 && x - w / 2 < quiet[1] + 2) continue; // 对话页：输入框后面不放
         slots.push({cx: x, base, depth});
       }
@@ -406,38 +334,31 @@
     rowOf(rows + 30, 120, 0, 0.5);                        // 近排的立杆伸到画面外，只露出谱板和一截杆
     const order = slots.map((s, i) => i).sort((a, b) => (Math.abs(slots[a].cx - podX) + slots[a].depth * 26) - (Math.abs(slots[b].cx - podX) + slots[b].depth * 26));
     order.forEach((slotIndex, rank) => { slots[slotIndex].state = lamps[rank] || 'off'; });
+    if (slots[flash] && slots[flash].state === 'off') slots[flash].state = 'tap';   // 点了一下的那个谱台：灯亮一拍
     const paintRow = (depth) => slots.forEach((s, i) => { if (s.depth === depth) drawStand(s.cx, s.base, s.depth, s.state, i + 1); });
     paintRow(2);
     paintRow(1);
 
-    // 6. 指挥台：木台子（台面受灯光，正面有嵌板）+ 猫；背对我们的谱台在 paintMoving 里画（它的灯会跳）
-    const podW = 92, podH = home ? 12 : 9, podBase = rows - 3, podTop = podBase - podH + 1, px0 = podX - (podW >> 1);
-    const lead = {cx: podX - 31, base: podTop + 1};
+    // 6. 指挥台：木台子（台面受灯光，正面有嵌板）；背对我们的谱台在 paintMoving 里画（它的灯会跳）
+    const podW = 58, podH = home ? 12 : 9, podBase = rows - 3, podTop = podBase - podH + 1, px0 = podX - (podW >> 1);
+    const lead = {cx: podX, base: podTop + 1};
     for (let x = px0 - 3; x < px0 + podW + 3; x++) for (let dy = 1; dy <= 2; dy++) if (bayer(x, dy) < (dy === 1 ? 0.75 : 0.4)) blend(x, podBase + dy, C.seam, 0.7);   // 台子的影子
     for (let ry = 0; ry < podH; ry++) for (let rx = 0; rx < podW; rx++) {
       const x = px0 + rx, y = podTop + ry;
       let c;
       if (ry < 4) {                                                                         // 台面（往后收一点）
         if (rx < 3 - ry || rx >= podW - (3 - ry)) continue;
-        c = ry === 3 ? C.podTrim : ramp([C.podTop, C.podTopLo], Math.abs(x - lead.cx - 8) / 46 + ry * 0.08, x, y);
+        c = ry === 3 ? C.podTrim : ramp([C.podTop, C.podTopLo], Math.abs(x - lead.cx) / 34 + ry * 0.08, x, y);
       } else {
-        const m = rx % 23, inner = ry >= 6 && ry <= podH - 3 && m >= 3 && m <= 20;
+        const m = rx % 29, inner = ry >= 6 && ry <= podH - 3 && m >= 3 && m <= 25;
         c = ry === podH - 1 ? C.podFaceLo : rx === 0 ? C.podFaceHi : rx === podW - 1 ? C.podFaceLo
-          : inner ? ((ry === 6 || m === 3) ? C.podFaceLo : (ry === podH - 3 || m === 20) ? C.podFaceHi : ramp([C.podFaceHi, C.podFace], rx / 40, x, y)) : C.podFace;
+          : inner ? ((ry === 6 || m === 3) ? C.podFaceLo : (ry === podH - 3 || m === 25) ? C.podFaceHi : ramp([C.podFaceHi, C.podFace], rx / 40, x, y)) : C.podFace;
       }
       hard(x, y, c);
     }
-    const cat = {x: podX - 15, y: podTop + 2 - CAT_H};
-    for (let ry = 1; ry <= 2; ry++) for (let x = cat.x + 22; x < cat.x + 58; x++) if (bayer(x, ry) < 0.6) blend(x, podTop + ry, C.podFaceLo, 0.7);   // 猫落在台面上的影子
-    for (let ry = 0; ry < CAT_H; ry++) for (let rx = 0; rx < CAT_W; rx++) { const t = CAT.tone[ry * CAT_W + rx]; if (t) hard(cat.x + rx, cat.y + ry, C[t]); }
-    for (const [wx, wy] of CAT.out) set(cat.x + wx, cat.y + wy, C.whiskOut);
-    if (dark) for (const [ex, ey] of CAT_EYES) for (let dy = -4; dy <= 4; dy++) for (let dx = -5; dx <= 5; dx++) {   // 眼睛的一点蓝光
-      const t = CAT.tone[(ey + dy) * CAT_W + ex + dx]; if (!t || /eye|pupil|warm|whisk|nose/.test(t)) continue;
-      const g = 1 - Math.hypot(dx / 5, dy / 3.6); if (g > 0 && g * 0.8 > bayer(ex + dx, ey + dy)) blend(cat.x + ex + dx, cat.y + ey + dy, C.eyeLo, 0.3);
-    }
     paintRow(0);
 
-    return {buf, cols, rows, C, dim, dark, solid, anchors: {logo, lead, cat, floorY, y0, stageX, podX, slots}};
+    return {buf, cols, rows, C, dim, dark, solid, anchors: {logo, lead, floorY, y0, stageX, podX, slots}};
   }
 
   /* 会动的两样，叠在静的那一层上：指挥台的灯（每拍亮一下、半拍收回一格）和节拍器的摆锤（左-中-右-中）。
@@ -486,7 +407,7 @@
   const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const mainEl = () => document.querySelector('main.content.content--chat');
   let canvas = null, ctx = null, scene = null, low = null, lowCtx = null, img = null, view = null;
-  let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null;
+  let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null, flashSlot = -1, flashTimer = 0;
   const mainClass = new MutationObserver(() => queue());
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => queue()) : null;
 
@@ -504,7 +425,7 @@
     observed = null;
     mainClass.disconnect();
     canvas?.remove();
-    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = '';
+    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; flashSlot = -1; clearTimeout(flashTimer);
     root.removeAttribute('data-pk-metre-backdrop');
     root.style.removeProperty('--metre-band');
   }
@@ -535,13 +456,13 @@
     const quiet = !home && col && col.width ? [Math.floor((col.left - rect.left) / cellCss) - 4, Math.ceil((col.right - rect.left) / cellCss) + 4] : null;
     const lamps = currentLamps();
     lampSig = lamps.join(',');
-    scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, dim: home ? 0 : 0.5});
+    scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, dim: home ? 0 : 0.5, flash: flashSlot});
     
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');
     img = lowCtx.createImageData(cols, rows);
-    view = {cols, rows, cellDev};
+    view = {cols, rows, cellDev, cellCss};
     lastStep = -1;
   }
 
@@ -577,6 +498,78 @@
   function start() { if (!timer && running()) timer = setTimeout(tick, STEP); }
   function stop() { clearTimeout(timer); timer = 0; }
 
+
+  /* ---------- 点一下（11-16 用户：「加鼠标点击有“特别”的像素动画」） ----------
+   * 在 Metre 的空白处点一下 = 指挥棒点了一拍：点的地方荡开一圈菱形的像素波（抖动着淡掉），冒出三颗像素音符一格一格往上飘；
+   * 点在画带里时，离得最近的那个谱台的灯跟着亮一拍。按钮、输入框、正文、侧栏、总控台、弹层上的点击不触发。
+   * 每次点击临时建一块 2px 格的小画布（不拦鼠标），0.7 秒画完就拿掉——不留常驻动画；减少动态效果时不出现。 */
+  const NOTE = ['...#.', '...##', '...#.', '...#.', '.###.', '####.', '.##..'];
+  const TAP_FRAMES = 24, TAP_MS = 40, TAP_SIZE = 128;
+  const QUIET_HIT = 'button, a, input, textarea, select, summary, label, [role="button"], [role="menu"], [role="dialog"], [role="listbox"], [contenteditable], .chat-text, .chat-group, .agent-chat__input, aside.sidebar, header.topbar, .pk-metre-board, .pk-metre-brand, [data-metre-pop], .laolao-menu, .pinkie-tray';
+  function tapFx(clientX, clientY) {
+    const dpr = window.devicePixelRatio || 1, cellDev = Math.max(2, Math.round(CELL * dpr)), cellCss = cellDev / dpr;
+    const C = resolve(isDark() ? PALETTES.dark : PALETTES.light);
+    const cv = document.createElement('canvas');
+    cv.className = 'pk-metre-tap';
+    cv.setAttribute('aria-hidden', 'true');
+    cv.width = cv.height = TAP_SIZE * cellDev;
+    const half = TAP_SIZE * cellCss / 2;
+    Object.assign(cv.style, {position: 'fixed', left: Math.round((clientX - half) * dpr) / dpr + 'px', top: Math.round((clientY - half) * dpr) / dpr + 'px', width: TAP_SIZE * cellCss + 'px', height: TAP_SIZE * cellCss + 'px', pointerEvents: 'none', zIndex: '2147483000', imageRendering: 'pixelated'});
+    document.body.append(cv);
+    const g = cv.getContext('2d'), mid = TAP_SIZE >> 1;
+    const css = (c) => `rgb(${c.map(Math.round).join(',')})`;
+    const ink = css(C.eye), inkLo = css(C.eyeLo), warm = css(isDark() ? C.lead.core : C.frame);
+    const dot = (x, y, color) => { if (x >= 0 && y >= 0 && x < TAP_SIZE && y < TAP_SIZE) { g.fillStyle = color; g.fillRect(x * cellDev, y * cellDev, cellDev, cellDev); } };
+    const seed = hash(Math.round(clientX) * 7919 + Math.round(clientY));
+    const notes = [0, 1, 2, 3, 4].map((i) => ({dx: [-9, 1, 10, -19, 20][i] + ((seed >>> (i * 3)) & 3) - 1, dy: [2, -3, 1, 6, 5][i], delay: [0, 2, 4, 6, 7][i], color: i === 1 || i === 4 ? warm : ink}));
+    let f = 0;
+    const frame = () => {
+      g.clearRect(0, 0, cv.width, cv.height);
+      const t = f / (TAP_FRAMES - 1);
+      // 两圈菱形波：外圈快、内圈慢半拍；越往外越疏
+      for (const [lag, color] of [[0, ink], [4, inkLo], [8, inkLo]]) {
+        const ff = f - lag; if (ff < 0) continue;
+        const r = Math.round(2 + ff * 2.3), keep = 1 - ff / (TAP_FRAMES - lag);
+        for (let dx = -r; dx <= r; dx++) for (const dy of [r - Math.abs(dx), Math.abs(dx) - r]) if (keep > bayer(mid + dx, mid + dy)) dot(mid + dx, mid + dy, color);
+      }
+      // 四颗小星沿对角线弹出去，一亮一灭
+      if (f >= 2 && f < TAP_FRAMES - 4) for (const [sx, sy] of [[1, -1], [-1, -1], [1, 1], [-1, 1]]) {
+        const d = Math.round(6 + f * 1.5), x = mid + sx * d, y = mid + sy * Math.round(d * 0.7);
+        dot(x, y, warm); if (f & 1) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) dot(x + dx, y + dy, ink);
+      }
+      // 落点：一个小十字，亮两帧
+      if (f < 3) { dot(mid, mid, warm); if (f < 2) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) dot(mid + dx, mid + dy, ink); }
+      // 音符：一格一格往上，每四帧左右晃一格，最后抖动着散掉
+      for (const n of notes) {
+        const nf = f - n.delay; if (nf < 0) continue;
+        const nx = mid + n.dx + ((nf >> 2) & 1) - 2, ny = mid + n.dy - 6 - Math.round(nf * 1.3), keep = Math.min(1, (TAP_FRAMES - f) / 5);
+        NOTE.forEach((row, ry) => [...row].forEach((ch, rx) => { if (ch === '#' && keep > bayer(nx + rx, ny + ry) * 0.999) dot(nx + rx, ny + ry, n.color); }));
+      }
+      if (++f < TAP_FRAMES) setTimeout(frame, TAP_MS); else cv.remove();
+      void t;
+    };
+    frame();
+  }
+  function onTap(e) {
+    if (e.button !== 0 || !canvas || !isMetre() || reduced()) return;
+    const el = e.target instanceof Element ? e.target : null;
+    if (!el || el.closest(QUIET_HIT) || !el.closest('main.content')) return;
+    if (String(window.getSelection?.() || '')) return;
+    tapFx(e.clientX, e.clientY);
+    // 点在画带里：最近的谱台亮一拍
+    const rect = canvas.getBoundingClientRect();
+    if (scene && view && e.clientY >= rect.top && e.clientX >= rect.left) {
+      const cx = (e.clientX - rect.left) / view.cellCss, cy = (e.clientY - rect.top) / view.cellCss;
+      let best = -1, bestD = 46;
+      scene.anchors.slots.forEach((sl, i) => { const z = STAND_SIZES[sl.depth], d = Math.hypot(sl.cx - cx, (sl.base - z.poleH - z.legH - z.dh / 2 - cy) * 1.4); if (d < bestD) { bestD = d; best = i; } });
+      if (best >= 0) {
+        flashSlot = best; layout(); draw(true);
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(() => { flashSlot = -1; if (canvas) { layout(); draw(true); } }, STEP * 2);
+      }
+    }
+  }
+
   // ---------- 什么时候有 ----------
   function sync() {
     const main = isMetre() ? mainEl() : null;
@@ -606,6 +599,7 @@
     }).observe(shell, {childList: true, subtree: true});
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else queue(); });
     window.addEventListener('resize', queue);
+    document.addEventListener('pointerdown', onTap, true);
     // 总控台的数据到了 / 换了会话：灯马上跟上（不等下一拍）
     window.addEventListener('pinkie:session-selected', queue);
     // 标志页开关：它开着时停，关了接着走
@@ -622,6 +616,7 @@
     get step() { return step; },
     get lamps() { return currentLamps(); },
     // 预览 / 验收用：临时指定灯的状态（['run','done','fail',…]），传 null 恢复成跟总控台走
+    tap(x, y) { tapFx(x, y); },
     preview(list) { previewLamps = Array.isArray(list) ? list.slice() : null; if (canvas) { layout(); draw(true); } },
     sync,
   });
