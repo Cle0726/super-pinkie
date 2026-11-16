@@ -358,6 +358,10 @@ def _configure_plugin(data: dict, target: Path) -> bool:
     # Real model reasoning is opt-out, not a per-model UI feature. Preserve an
     # existing user choice (including off); only new/unfinished profiles get high.
     defaults.setdefault("thinkingDefault", "high")
+    # Visibility is separate from model effort. "stream" lets providers that
+    # deliver reasoning incrementally reach the live card as it arrives;
+    # buffered providers still show their complete block when the first chunk lands.
+    defaults.setdefault("reasoningDefault", "stream")
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     for agent in data["agents"].get("list", []):
         if isinstance(agent, dict) and agent.get("id") in MODE_AGENT_IDS:

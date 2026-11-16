@@ -111,6 +111,15 @@ test('live thinking follows its own rows and only fills Lit-owned slots', () => 
   assert.match(processBranchSource('render'), /data-pinkie-thinking-seg/);
 });
 
+test('live label stays 正在思考 while its received text is still being displayed', () => {
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '这是一段需要逐字展示的真实思考'});
+  assert.match(h.top.querySelector('.pinkie-thinking__label')?.textContent || '', /^正在思考/);
+  h.send('assistant', {delta: '开始回答'});
+  assert.match(h.top.querySelector('.pinkie-thinking__label')?.textContent || '', /^正在思考/);
+});
+
 test('historical thinking parts are projected to the same rows', () => {
   const projected = historicalCard();
   assert.deepEqual(projected.processThinkingSegments.map(ep => [ep.text, ep.anchor]), [

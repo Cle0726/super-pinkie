@@ -432,7 +432,7 @@
     if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
     const label = box.querySelector(".pinkie-thinking__label");
     const ms = (ep.legacy ? record.ms : ep.ms) + (thinking ? Date.now() - run.thinkingSince : 0);
-    const text = thinking ? `正在思考 · ${Math.round(ms / 1000)}s`
+    const text = live ? `正在思考 · ${Math.round(ms / 1000)}s`
       : `思考了 ${duration(ms || 1000)}${ep.legacy && record.count > 1 ? ` · ${record.count} 次` : ""}`;
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
