@@ -28,3 +28,18 @@ test('the real model-thinking presentation remains installed', () => {
   assert.match(runtime, /const segmented = true;/);
   assert.match(runtime, /pinkieHold/);
 });
+
+test('a closed card with recorded thinking stays visible', () => {
+  const card = read('laolao-process-card.js');
+  const stage = read('laolao-cle-stage.css');
+  assert.match(card, /dataset\.pinkieHasThinking = "1"/);
+  assert.match(stage, /:not\(\[data-pinkie-has-thinking="1"\]\)/);
+});
+
+test('a summary-only history card gets an injection-owned thinking slot', () => {
+  const card = read('laolao-process-card.js');
+  const styles = read('laolao-process-card.css');
+  assert.match(card, /function ensureFallbackSlot/);
+  assert.match(card, /pinkie-thinking-fallback/);
+  assert.match(styles, /\.pinkie-thinking-fallback \{ order: 3/);
+});

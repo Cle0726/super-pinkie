@@ -198,6 +198,8 @@
     typeOut(id, Math.max(0, before - dropped), ep.text.length);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
+    const card = processCards.get(key);
+    if (card) markThinkingPresence(card);
     save();
   }
   function stopThinking() {
@@ -536,19 +538,26 @@
     const pane = slot.closest?.('openclaw-chat-pane');
     const viewport = window.__pinkieChatViewport;
     const snapshot = viewport?.capture?.(pane);
-    if (viewport?.preserve && !snapshot?.native) return viewport.preserve(pane, change);
+    // The slot can be a detached Lit child while its box is still visible.
+    // Resolve the thread from the slot first, then the pane, then the page.
+    const thread = slot.closest?.('.chat-thread')
+      || pane?.querySelector?.('.chat-thread')
+      || document.querySelector('.chat-thread');
+    if (!thread || !thread.dataset) {
+      return viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
+    }
+    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2;
+    if (atBottom) {
+      return viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
+    }
     // Native chat owns its virtualizer, but it does not know that this
     // injected process card is about to grow or shrink. When the reader is
     // not pinned at the bottom, mark the thread for one resize so the native
     // auto-follow ignores the height change, then put the scrollTop back.
-    const thread = pane?.querySelector?.('.chat-thread') || slot.closest?.('.chat-thread');
-    if (!thread) return change();
-    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2;
-    if (atBottom) return change();
     const top = thread.scrollTop;
     const token = String(++scrollHoldSeq);
     thread.dataset.pinkieHold = token;
-    const result = change();
+    const result = viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
     thread.scrollTop = top;
     requestAnimationFrame(() => {
       if (thread.isConnected) thread.scrollTop = top;
@@ -560,6 +569,37 @@
   }
 
   let frame = 0;
+  function markThinkingPresence(card) {
+    const key = card?.dataset?.pinkieProcess || "";
+    const record = key ? store[key] : null;
+    const has = !!record && (
+      String(record.text || "").trim().length > 0
+      || (Array.isArray(record.eps) && record.eps.some(ep => String(ep?.text || "").trim().length > 0))
+    );
+    const details = card?.querySelector?.("details.pinkie-process");
+    if (details?.dataset) {
+      if (has) details.dataset.pinkieHasThinking = "1";
+      else delete details.dataset.pinkieHasThinking;
+    }
+  }
+  // Older cards are projected as a summary-only shell; Lit removes their row
+  // slots after the run is no longer live. Keep the recorded thought readable
+  // by giving that shell one injection-owned slot after the summary.
+  function ensureFallbackSlot(card) {
+    const key = card?.dataset?.pinkieProcess || "";
+    if (!key || !store[key]) return;
+    const details = card.querySelector("details.pinkie-process");
+    if (!details) return;
+    if ([...card.querySelectorAll("[data-pinkie-thinking]")].some(node => !node.classList.contains("pinkie-thinking-fallback"))) {
+      details.querySelector(".pinkie-thinking-fallback")?.remove();
+      return;
+    }
+    if (details.querySelector(".pinkie-thinking-fallback")) return;
+    const slot = el("div", "pinkie-thinking-fallback");
+    slot.dataset.pinkieThinking = key;
+    slot.dataset.pinkieThinkingSeg = "0";
+    details.append(slot);
+  }
   function markCard(card) {
     if (!card?.matches?.('.chat-group--process[data-pinkie-process]')) return;
     const key = card.dataset.pinkieProcess;
@@ -567,6 +607,8 @@
     if (previous && previous !== key && processCards.get(previous) === card) processCards.delete(previous);
     processCardKeys.set(card, key);
     processCards.set(key, card);
+    markThinkingPresence(card);
+    ensureFallbackSlot(card);
     adoptPrior(card, key);
     dirtyCards.add(card);
   }
