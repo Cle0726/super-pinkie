@@ -115,7 +115,9 @@ async function call(fetchImpl, url, {key, method = 'GET', body, timeoutMs = 1500
 const modelEntry = (id, meta = {}) => {
   const window = Number(meta.context_window || meta.context_length || meta.contextWindow) || 128000;
   const input = Array.isArray(meta.input_modalities) && meta.input_modalities.includes('image') ? ['text', 'image'] : ['text'];
-  const entry = {id, name: meta.name && typeof meta.name === 'string' ? meta.name : id, reasoning: false, input, contextWindow: window, contextTokens: window};
+  // Always enable transport-level reasoning capture. If the provider returns no
+  // reasoning_content/reasoning there is simply nothing to display.
+  const entry = {id, name: meta.name && typeof meta.name === 'string' ? meta.name : id, reasoning: true, input, contextWindow: window, contextTokens: window};
   const max = Number(meta.max_output_tokens || meta.top_provider?.max_completion_tokens);
   if (max > 0) entry.maxTokens = max;
   return entry;

@@ -355,6 +355,10 @@ def _configure_plugin(data: dict, target: Path) -> bool:
 
     # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     defaults = data.setdefault("agents", {}).setdefault("defaults", {})
+    # Real model reasoning is opt-out, not a per-model UI feature. Preserve an
+    # existing user choice (including off); only new/unfinished profiles get high.
+    defaults.setdefault("thinkingDefault", "high")
+    # 只补派生能力的缺省值；不覆盖用户自己的模型、上下文、工作区或更高上限。
     for agent in data["agents"].get("list", []):
         if isinstance(agent, dict) and agent.get("id") in MODE_AGENT_IDS:
             # OpenClaw 自带、碧琪的代码、手册和技能都不用的工具：每轮少发约 2.5 万字的工具说明，

@@ -20,10 +20,10 @@ test('new effort endpoint inherits known sibling capabilities without modifying 
   assert.deepEqual(current[0].input, ['text', 'image']);
 });
 
-test('verified clekk GPT-6 gets slider capabilities while an unverified provider stays conservative', () => {
+test('new models always enable reasoning transport; verified providers add exact capabilities', () => {
   const [unknown] = newModelEntries([], ['gpt-6-sol']);
   assert.equal(unknown.name, 'GPT-6 Sol');
-  assert.equal(unknown.reasoning, false);
+  assert.equal(unknown.reasoning, true);
   assert.equal(unknown.compat, undefined);
   const [verified] = newModelEntries([], ['gpt-6-sol'], {verifiedGpt6: true});
   assert.equal(verified.reasoning, true);
@@ -193,7 +193,7 @@ test('namespaced upstream IDs keep their full routing path and reject malformed 
   assert.equal(entry.id, 'workbuddy/glm-5.3');
   assert.equal(entry.name, 'GLM 5.3');
   assert.equal(newModelEntries([], ['workbuddy/deepseek-v4-pro'])[0].name, 'DeepSeek V4 Pro · WB');
-  assert.equal(entry.reasoning, false, 'ID alone does not prove parameter support');
+  assert.equal(entry.reasoning, true, 'new IDs default to reasoning passthrough');
 });
 
 test('explicit upstream windows initialize new models and ignore output-only metadata', async () => {
@@ -265,19 +265,22 @@ test('context sync respects a concurrent config edit while updating unaffected m
   assert.equal(models[1].contextTokens,256000);
 });
 
-test('known WorkBuddy reasoning models get verified high support only on the local mm route',()=>{
+test('every new WorkBuddy model gets reasoning passthrough and verified high support only on the local mm route',()=>{
   const [known]=newModelEntries([],['workbuddy/glm-5.3'],{verifiedWorkBuddy:true});
   assert.equal(known.reasoning,true);
   assert.deepEqual(known.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
-  assert.equal(newModelEntries([],['workbuddy/glm-5.3'])[0].reasoning,false,'an arbitrary provider is not verified');
-  assert.equal(newModelEntries([],['workbuddy/auto'],{verifiedWorkBuddy:true})[0].reasoning,false);
+  assert.equal(newModelEntries([],['workbuddy/glm-5.3'])[0].reasoning,true,'other providers still capture reasoning without inventing effort levels');
+  const future=newModelEntries([],['workbuddy/future-model'],{verifiedWorkBuddy:true})[0];
+  assert.equal(future.reasoning,true);
+  assert.deepEqual(future.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
 });
 
 test('hy4free is discovered with reasoning and existing placeholders recover',async()=>{
  const [added]=newModelEntries([],['workbuddy/hy4free'],{verifiedWorkBuddy:true});
  assert.equal(added.reasoning,true);
  assert.deepEqual(added.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
- const placeholder=newModelEntries([],['workbuddy/hy4free'])[0];
+ const placeholder={...newModelEntries([],['workbuddy/hy4free'])[0],reasoning:false};
+ delete placeholder.compat;
  assert.equal(placeholder.reasoning,false);
  const config={models:{providers:{mm:{baseUrl:'http://localhost:1467/v1',apiKey:'secret',models:[placeholder]}}}};
  const sync=createModelSynchronizer({runtime:{config:{current:()=>config,
@@ -289,8 +292,9 @@ test('hy4free is discovered with reasoning and existing placeholders recover',as
  assert.deepEqual(config.models.providers.mm.models[0].compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
 });
 
-test('existing automatic WorkBuddy placeholders gain reasoning while custom capabilities stay untouched',async()=>{
-  const placeholder=newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0];
+test('automatic placeholders gain reasoning on every provider while custom capabilities stay untouched',async()=>{
+  const placeholder={...newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0],reasoning:false};
+ delete placeholder.compat;
   placeholder.contextWindow=1000000;placeholder.contextTokens=1000000;
   const custom={...structuredClone(placeholder),id:'workbuddy/glm-5.3',name:'My GLM'};
   const config={models:{providers:{mm:{baseUrl:'http://localhost:1467/v1',apiKey:'secret',models:[placeholder,custom]},
@@ -300,11 +304,13 @@ test('existing automatic WorkBuddy placeholders gain reasoning while custom capa
     {fetchImpl:async()=>new Response(JSON.stringify({data:[{id:placeholder.id},{id:custom.id}]}))});
   const result=await sync.sync();
   assert.equal(result.providers.mm.upgraded,1);
+  assert.equal(result.providers.other.upgraded,1);
   assert.equal(config.models.providers.mm.models[0].reasoning,true);
   assert.deepEqual(config.models.providers.mm.models[0].compat.supportedReasoningEfforts,['high']);
   assert.equal(config.models.providers.mm.models[0].contextTokens,1000000);
   assert.equal(config.models.providers.mm.models[1].reasoning,false);
-  assert.equal(config.models.providers.other.models[0].reasoning,false);
+  assert.equal(config.models.providers.other.models[0].reasoning,true);
+  assert.equal(config.models.providers.other.models[0].compat,undefined);
   assert.equal((await sync.sync({force:true})).upgraded,0);
 });
 
