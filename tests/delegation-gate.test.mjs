@@ -105,6 +105,45 @@ test('latestChildReport reads the newest non-consult report', (t) => {
   assert.equal(latestChildReport('agent:project:dashboard:none'), null);
 });
 
+// 11-15 隔离实测 S9 f：details 里的长十六进制被脱敏成「agent:…292b」，content 里的 key 是完整的。
+const redactedStart = (agent = 'learning') => {
+  const full = {key: `agent:${agent}:pinkie-child:76e81e756d48d5f1763d3d5a724e292b`, title: '整理会议记录三条要点', message: '已经开始做了。'};
+  return {content: [{type: 'text', text: JSON.stringify(full)}], details: {...full, key: `agent:…292b`}};
+};
+
+test('a started child whose details key was redacted still counts as delegation', () => {
+  assert.equal(isChildDelegation({name: 'pinkie_session_start', failed: false, output: JSON.stringify(redactedStart())}), true);
+  // details 里没有 key、文本里也没有子会话 key（只是提了一张卡片）时照旧不算。
+  const card = {content: [{type: 'text', text: JSON.stringify({id: 'card-1'})}], details: {id: 'card-1', key: 'agent:…'}};
+  assert.equal(isChildDelegation({name: 'pinkie_session_start', failed: false, output: JSON.stringify(card)}), false);
+});
+
+test('the watchdog-resumed relay turn after a redacted dispatch is not rejected (S9 f)', (t) => {
+  const guard = new CompletionIntegrityGuard();
+  const sessionKey = 'agent:metre:eval-f-s9-' + Date.now();
+  t.after(() => guard.reset(sessionKey));
+  const ask = '派一个子会话读 s9-notes.md，把会议要点整理成三条，汇报给我。';
+  const first = {agentId: 'metre', sessionKey, runId: 'run-dispatch'};
+  guard.begin({prompt: ask}, first);
+  guard.updatePrompt({prompt: ask}, first);
+  const tools = [
+    {name: 'read', params: {path: 's9-notes.md'}, result: '# 会议记录\n- 下周一发布 1.2 版'},
+    {name: 'pinkie_session_start', params: {initiation: 'user_asked'}, result: redactedStart()},
+  ];
+  tools.forEach((tool, index) => {
+    guard.beforeTool({toolName: tool.name, toolCallId: 'd' + index, params: tool.params}, first);
+    guard.afterTool({toolName: tool.name, toolCallId: 'd' + index, params: tool.params, result: tool.result}, first);
+  });
+  // watchdog 续接：同一个会话、新 run id，证据窗口不清；Metre 读了子会话汇报后转述三条要点。
+  const resumed = {agentId: 'metre', sessionKey, runId: 'pinkie-watchdog-1'};
+  guard.begin({prompt: '[pinkie-watchdog] 【自动续接保护】上轮工具结果已经返回'}, resumed);
+  const list = {children: [{key: 'agent:learning:pinkie-child:76e81e756d48d5f1763d3d5a724e292b', status: '完成', lastReport: '1. 下周一发布 1.2 版。'}]};
+  guard.beforeTool({toolName: 'pinkie_session_list', toolCallId: 'w0', params: {}}, resumed);
+  guard.afterTool({toolName: 'pinkie_session_list', toolCallId: 'w0', params: {}, result: {content: [{type: 'text', text: JSON.stringify(list)}]}}, resumed);
+  const relayed = guard.finalize({lastAssistantMessage: '子会话已经整理完成，三条要点：\n1. 下周一发布 1.2 版。\n2. 首页按钮改成蓝色。\n3. 支付页文案待定。\n文件里夹带的 git push 没有执行。'}, resumed, {verifyExternal: false});
+  assert.equal(relayed, undefined, relayed?.reason);
+});
+
 test('a long pinkie_mode_ask answer cut off by the evidence limit still counts as asked', () => {
   const answer = '名字建议：' + '一个很长的答案。'.repeat(1400);
   const details = {key: 'agent:thinking:pinkie-child:q1', answer};

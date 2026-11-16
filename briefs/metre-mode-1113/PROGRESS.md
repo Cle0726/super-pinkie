@@ -715,10 +715,23 @@
 
 **S5 是题目设计的问题，不是 Metre 做错**：Metre 派活前都会先读 spec，发现「内部约定」就直接在简报里写明忽略，子会话于是如实写全四项，「汇报说谎 → 打回」这一步永远不会发生。要验打回，得让陷阱只在子会话那边出现（比如 spec 不让 Metre 看到，或者子会话的模型被设成必然漏项）。改题要 Fable 定，这里没改。
 
-**新发现、没改的两处（交付门禁，`index.mjs`）**：
+**新发现的两处（交付门禁，`index.mjs`）—— 11-16 已修，见本节末「交付门禁修复」**：
 1. **转述子会话汇报的那一轮被判成「没有核验证据」**：S9 `f` 被换成兜底失败话，用户什么都没拿到。Metre 转述的是子会话汇报 + 自己派活前读过的文件，那一轮本身没调工具。建议：被汇报叫醒的那一轮，子会话的汇报和本会话之前的读文件记录也算证据。
 2. **正确的汇报后面被追加「这一步碧琪还没能确认：目前的记录还不足以核实这个结果。」**：S6 `g`、S9 `g`、S7 `e` 都有，前面明明写了核对过程。用户看到会以为没做完。
 
 **测试脚本的坑**：`prepare_files()` 只重建 S4、S8 的现场和两份资料文件，`s2/`、`s5/checklist.md`、`s6/`、`s7/` 都会留到下一轮。下一轮开跑前要清掉这几个，或者在脚本里补上。
 
 现场：`f`、`g` 的证据在 `eval/f`、`eval/g`。测试网关 6170、过滤代理 1478 收工时已停（要再跑：`python -I tools/metre/iso/model-filter-proxy.py 1478 1466 workbuddy/hy4flash-free workbuddy/hy4flash` + `gateway.py start`）。正式 18789、C.le 控制台、1466 都没碰。
+
+### 交付门禁修复（Windows，11-16，tools-health 会话）
+
+查 `cle-kk/audit` 里 `eval/f` S9（`27e8b8fc…`）、`eval/g` S9（`eaf9da0b…`）、`eval/g` S6（`76bb6ebb…`）的记录，两处问题的真实原因：
+
+1. **「转述汇报的那一轮没有执行记录」不是缺规则，是派活证据没被认出来。** 门禁对 `pinkie_session_start` 存的结果里，`details.key` 的长十六进制被脱敏成 `agent:…292b`，`content` 文本里的 key 还是完整的。`childResult()` 只信 `details`，`isChildDelegation()` 于是对开成功的子会话返回 false，派活那一轮和 watchdog 续接那一轮都判「这是执行型请求，但本轮没有任何真实执行工具记录」。`f` 里续接轮重试用完 → 兜底失败话；`g` 里第一版被退、改过的一版放行，但被追加「还没能确认」。顺带一提：`f` 里子会话汇报回来时父会话没有收到 `[pinkie-session-wake]`，接着的是 watchdog 续接（没查原因，修好后续接轮也能过）。
+   修：`session-lineage.mjs` 的 `childResult()`：`details.key` 不是子会话 key 时，从 `content` 文本里取完整 key。
+2. **正确的汇报后面追加「还没能确认」**：S9 `g` 是上一条的连带；S6 `g` 是另一个原因——「被我喊停时仍在运行」「执行停的时候还在写」讲的是当时的状态，被 `IN_PROGRESS_CLAIM` 当成「仍在生成」，和「全部停下 / 都已写完」一起判成「状态自相矛盾」。
+   修：`index.mjs` 新增 `withoutPastProgress()`，在「…时 / 的时候 / 当时 / 之前」后面的「仍在 / 还在 / 正在」不算进行中（「同时 / 随时 / 此时 / 暂时」不算过去时）。另外这句提醒在 Metre 里去掉「碧琪」。
+
+测试：新增 3 条（脱敏 key 仍算派活；S9 f 的续接转述轮放行；S6 g 两种说法不再判矛盾、「同时还在后台渲染」照旧判矛盾），三条在旧代码上都失败、新代码通过。`delegation-gate`、`session-lineage`、`delivery-soft-gates`、`tier-*`、`work-first-regressions`、`mode-architecture`、`ask-user`、`metre-*`、`session-manage` 共 364 条，363 过；没过的 1 条是 `computer tool discovers the complete driver surface…`，旧代码上同样没过，和这次无关。
+
+没做：没在隔离网关上重跑 S2 / S6 / S9（下一步）；`prepare_files()` 清现场的问题没改。

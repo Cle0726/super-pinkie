@@ -1092,6 +1092,13 @@ function proseOnly(value = '') {
     .replace(/`[^`\n]*`/g, ' ');
 }
 
+// 「被我喊停时仍在运行」「执行停的时候还在写」讲的是当时的状态，不是现在还在跑（11-15 隔离实测 S6 g：
+// 全停之后的汇报被判「已完成又仍在生成」，正确的回复后面被追加「还没能确认」）。
+const PAST_PROGRESS = /(?:的时候|那时|当时|之前|(?<![同随此暂])时)[“”"'「」『』]?\s*(?:仍在|还在|正在)/g;
+function withoutPastProgress(value = '') {
+  return String(value || '').replace(PAST_PROGRESS, ' ');
+}
+
 function actionClaimText(reply = '') {
   return stripNegatedClaims(proseOnly(reply));
 }
@@ -2398,7 +2405,7 @@ export class CompletionIntegrityGuard {
     // 才允许不运行最终验收。
     if (honestIncomplete && !overallCompletion) return;
     if (!completionClaimed && !actionRun) return;
-    if ((honestIncomplete && overallCompletion) || (overallCompletion && IN_PROGRESS_CLAIM.test(proseOnly(reply)))) {
+    if ((honestIncomplete && overallCompletion) || (overallCompletion && IN_PROGRESS_CLAIM.test(withoutPastProgress(proseOnly(reply))))) {
       const verdict = judgeReply({reply, tools: state.tools});
       const reason = verdict.code === 'contradiction'
         ? verdict.missing[0]
@@ -3191,7 +3198,9 @@ export class CleKkSupervisor {
           reply: replyHash,
           displayReply: hashForAudit(renderFirstPerson(workFirstReplyText(reply, ctx))),
           runId,
-          note: '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
+          // Metre 不是碧琪，用户在这个模式里看到「碧琪」会以为串了模式。
+          note: modeForContext(ctx) === 'metre' ? '这一步还没能确认：目前的记录还不足以核实这个结果。'
+            : '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
         };
         this.persist(key, turn);
         return undefined;

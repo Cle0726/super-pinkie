@@ -123,15 +123,23 @@ function toolDetails(output) {
 // 门禁存的工具结果最多 12000 字（存档时 6000），带长答案的 pinkie_mode_ask 会被截断成半截 JSON，
 // 整段解析会失败，真的去问过了也被当成没问。解析不了时直接在原文里找那几个字段（内层 JSON 的引号是转义过的）。
 const CHILD_KEY_IN_TEXT = /\\*"key\\*"\s*:\s*\\*"(agent:[^"\\]+:pinkie-child:[^"\\]+)/u;
+function childResultFromText(text) {
+  return {
+    key: CHILD_KEY_IN_TEXT.exec(text)?.[1] || '',
+    answer: /\\*"answer\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+    id: /\\*"id\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+  };
+}
+// 11-15 隔离实测 S9 f：门禁存的 details 里长十六进制被脱敏成「agent:…292b」，content 文本里的 key 还是完整的。
+// 只信 details 时，开成功的子会话不算派活，转述汇报的那一轮被判「没有任何真实执行工具记录」，重试用完后换成兜底失败话。
 function childResult(output) {
-  try { return toolDetails(output) || {}; } catch {
-    const text = String(output || '');
-    return {
-      key: CHILD_KEY_IN_TEXT.exec(text)?.[1] || '',
-      answer: /\\*"answer\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
-      id: /\\*"id\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
-    };
+  let details;
+  try { details = toolDetails(output) || {}; } catch { return childResultFromText(String(output || '')); }
+  if (details.key !== undefined && !isChildKey(details.key)) {
+    const fromText = childResultFromText(String(output || ''));
+    if (fromText.key) return {...details, key: fromText.key};
   }
+  return details;
 }
 const isChildKey = key => typeof key === 'string' && Boolean(agentOf(key)) && key.includes(':pinkie-child:');
 
