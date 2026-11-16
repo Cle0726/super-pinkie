@@ -88,7 +88,7 @@
   max-height: 0; overflow: hidden;
 }
 .pinkie-thinking.is-live .pinkie-thinking__body {
-  max-height: 240px; overflow: hidden;
+  max-height: 68px; overflow: hidden;
   -webkit-mask-image: linear-gradient(transparent, #000 24px); mask-image: linear-gradient(transparent, #000 24px);
 }
 .pinkie-thinking.is-open:not(.is-live) .pinkie-thinking__body { max-height: 240px; overflow-y: auto; }

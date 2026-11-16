@@ -413,7 +413,7 @@
     }
     const holding = Boolean(t && !isTyping && now - t.doneAt < holdFor(ep));
     if (t && !isTyping && !holding && !thinking) typing.delete(id);
-    if (isTyping || holding) typingFrame = true;
+    if (isTyping) typingFrame = true;
     const live = thinking || isTyping || holding;
     const opened = openedThoughts.has(id);
     // Folding a finished thought shrinks the card; keep the reader in place.

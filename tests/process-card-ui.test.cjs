@@ -49,7 +49,7 @@ test('a thought that arrives in one chunk is typed out instead of popping in', (
   assert.match(script, /setTimeout\(schedule, holdFor\(ep\) \+ 20\)/);
   assert.doesNotMatch(script, /hurryTyping/);
   assert.match(script, /const visibleText = isTyping \? ep\.text\.slice\(0, typed\) : ep\.text;/);
-  assert.match(script, /if \(isTyping \|\| holding\) typingFrame = true;/);
+  assert.match(script, /if \(isTyping\) typingFrame = true;/);
   // Reduced motion collapses the type-out to zero duration instead of starting
   // a timer, so the thought is shown immediately rather than animating.
   assert.match(script, /typing\.set\(key, \{from: reduced\(\) \? length : from, to: length/);
