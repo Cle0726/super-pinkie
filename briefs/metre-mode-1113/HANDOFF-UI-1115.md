@@ -183,3 +183,6 @@
 - 作品页：Metre 底色和细边，三句文案在 Metre 下不带「碧琪」（`laolao-artifacts.js`）。
 - 设置页：从 Metre 进去时套中性配色（卡片、选项、开关、分段键）；文案是全局产品设置，没改。
 - 皮肤 `metreskin9`。相关单测 78 条全过。
+
+- 模式按钮单独设计（用户 11-16「单独设计模式按键」）：像素 M 小牌子（2px 一格，摆锤钴蓝）+ 衬线 Metre + 箭头，整颗悬停 / 展开有底；连接状态是牌子右下角的方形小灯。皮肤 `metreskin10`。
+- 已装进正式 App（11-16）：只拷这次改过的 17 个界面文件到 App 的 `ui/injections`，App 自己的 `laolao-tool-rows.css` / `laolao-cle-stage.js`（比本分支新）没动；`bundle.py install --root <App>` 重建 control-ui 并 check 通过，重新签名（adhoc）。备份在 `/Users/Admin/碧琪实测/backup-app-ui-1116`。
