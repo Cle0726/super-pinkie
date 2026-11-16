@@ -21,7 +21,7 @@ test('模式按钮被侧栏克隆或替换后会重新绑定菜单点击事件',
 test('模式切换脚本使用新的缓存版本，避免安装后继续执行旧监听逻辑', () => {
   assert.match(head, /\/laolao-mode-switcher\.js\?v=mode50/);
   assert.doesNotMatch(head, /\/laolao-mode-switcher\.js\?v=mode48/);
-  assert.match(head, /\/laolao-metre-skin\.css\?v=metreskin10/);
+  assert.match(head, /\/laolao-metre-skin\.css\?v=metreskin11/);
   assert.doesNotMatch(head, /\/laolao-metre-skin\.css\?v=metreskin6/);
 });
 

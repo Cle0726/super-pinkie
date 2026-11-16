@@ -188,3 +188,4 @@
 - 已装进正式 App（11-16）：只拷这次改过的 17 个界面文件到 App 的 `ui/injections`，App 自己的 `laolao-tool-rows.css` / `laolao-cle-stage.js`（比本分支新）没动；`bundle.py install --root <App>` 重建 control-ui 并 check 通过，重新签名（adhoc）。备份在 `/Users/Admin/碧琪实测/backup-app-ui-1116`。
 - 其他模式菜单里的 Metre 项（用户「碧琪外部也看看不然两个样」）：同一个像素 M 小牌子 + 衬线 Metre、中性底，写在 `laolao-metre-brand.css`（`metrebrand5`，所有模式都加载），只管 `[data-mode="metre"]` 这一项。已装进 App。
 - 上一条改版（用户「不要跟碧琪融在一起，可以另类一点」）：菜单里的 Metre 项改成墨黑直角硬牌子——白色像素 M、等宽大写 METRE、♩=72、钴蓝硬投影，深浅主题同一张（`metrebrand6`）。已装进 App。
+- Metre 里的模式按钮也改成黑卡（用户「也改成黑卡」）：和菜单里那张同一张牌，悬停抬一格、按下压回；连接状态是卡右上角的方灯。皮肤 `metreskin11`。已装进 App。
