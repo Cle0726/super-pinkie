@@ -570,3 +570,26 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 - `a6-inapp2`：跑之前副本网关已经停了（12794 没监听），命令行改在自己进程里跑，`app_browser` 仍回「没有侧栏浏览器」；`browser` 工具也连不上网关。两遍模型都自己写 CDP 脚本起无头 Chrome 点到了，答出「点到了」，但没经过 `app_browser`，A6-1 照样没测到。两遍都是 480 秒命令超时：回复其实在 8 分钟内就结束了，是 `serve` 起的本地服务在命令行进程里不退出。
 - `a6-inapp3`：重新带连接信息起网关后再跑，两遍都在十几秒内失败：号池 1466 回 `model_not_available`（「模型 workbuddy/hy4free 不在当前 API Key 的可用模型范围内」），`/v1/models` 里已经没有 hy4free。05:35 还能用。号池是用户的 C.le 控制台，没动；规矩是实测只用 hy4free，没换模型。
 - **结论：A6-1 仍是「单测过、真机没测」**。等 hy4free 回到号池（或用户另定模型）后，照上面起浏览器和网关，重跑 `a6-inapp3` 即可。副本网关已停，副本配置的 `imageModel` / `pdfModel` 和备份 `bak-pre-imgdefault` 一致，不用还原。
+
+### ② `imageModel` / `pdfModel` 默认值 · 副本实测（11-15，hy4free）
+
+原先记的「没在正式 App 里重跑 `image`」：在副本 `iso-th` 上做了对照，正式环境没动。
+- 做法：副本配置先备份（`openclaw.json.bak-pre-imgdefault`），去掉 `imageModel` / `pdfModel` 后重启副本网关，跑题 3（三张图读字）、4a（扫描 PDF 第 1–15 页列目录）、4b（扫描 PDF 讲了什么）各 2 遍，标签 `img-none`。再用本分支 `services/mode-architecture/setup.py` 的 `_default_vision_models` 补这两项（补成 `{primary: mm/workbuddy/hy4free}`），重启后同样跑一批，标签 `img-default`。数字用 `session-stats.py --event-since/--event-until`，按两批各自的事件时间算。跑完配置已还原成备份。
+
+| 批 | `image` 出错 | `pdf` 出错 | 6 次里跑完 | 出错原因 |
+|---|---|---|---|---|
+| `img-none`（没配） | 5/5 | 6/8 | 3（4a、4b 有 3 次撞上 480 秒命令超时） | 运行时退到配置外的模型：`google/gemini-3-flash-preview` 超时、`mm/workbuddy` 找不到、`deepseek-v4.1-flash` 503 号池没号可用 |
+| `img-default`（补上） | 3/15 | 2/15 | 6 | 全是 hy4free 自己慢：`image` 60 秒超时 3 次；`pdf` 一次「没有返回文字」、一次号池 504 |
+
+- 结论：**补上默认值后，「找不到模型 / 退到别的模型」这一类出错没了**，剩下的是 hy4free 本身超时。题 3 两批都答对了（模型能直接看图，不必走 `image` 工具）；题 4a、4b 补上后两遍都答出目录和内容（还指出这本扫描书正文是占位文字）。
+- 这验证的是补出来的配置管用，**不是**正式 App 里 `setup.py` 真跑了一遍：正式配置要等下次安装或更新时才会补，没有在正式环境里看。
+
+### 这一轮没跑的（11-15）
+
+| 项 | 原因 |
+|---|---|
+| A6-1 | 见上一节：外接的 Windows 浏览器起来了，但 hy4free 中途从 1466 号池下线，没测成 |
+| A1-4、A2 `-shm`、A6-2、D1 的 Mac 部分 | 需 Mac |
+| B1-2 | 需真渠道账号（QQ / 飞书机器人），不碰 |
+| 号池修复上线后再用直连量一遍出字前断流 | 正式 1466 还是旧版（C.le v1.1.48 在另一个会话里发布），而且 hy4free 现在不在号池里 |
+| B2-1～3 | §6 停了，没有可跑的 |
