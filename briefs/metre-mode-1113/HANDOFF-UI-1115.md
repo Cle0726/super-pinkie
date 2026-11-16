@@ -76,3 +76,66 @@
 4. 排版留白。
 5. 隔离副本里逐页截图（深 / 浅、首页 / 对话 / 总控台 / 各弹层、1440×900 和 1100×700），跑 `tests/` 里 Metre 相关单测（`metre-skin-cat`、`mode-switcher`、`mode-menu-fx`、`run-status-ui`、`motion` 等，断言跟着新设计改）。
 6. 提交推送；把截图发给用户看，用户点头后再装进 App。更新 `PROGRESS.md`。
+
+---
+
+# 接力 2（11-15 深夜，Fable）：做到哪了、下一个会话从哪接
+
+**用户新说的一句（最要紧）**：「像素细节要高，不要像之前一样，你自己看着办」。——现在这一稿「谱台灯」只算底稿：格子是 2px 了、题材对了，但精灵偏平、偏小、细节少。下一步先把细节加上去再做别的美术（见下面「美术还差什么」）。怎么画自己定，不用再问用户方向。
+
+## 已经做了并推送的
+
+1. **新背景 `laolao-metre-backdrop.js` 整个重写**（月亮 / 山 / 电线杆 / 音符 / 草 / 星星 / LED 缝全删）：
+   - 纯函数 `buildScene({cols, rows, band, dark, home, lamps, quiet, dim})` 画静的一层，`paintMoving()` 叠会动的两样（指挥台灯、节拍器摆锤，♩=72 半拍一步）；挂在 `globalThis.__pinkieMetreScene`，node 里可以直接 `require` 出图。
+   - 精灵都是文件里一格一格写死的字符画：`CAT`（36×44）、`STAND_NEAR`（23×30）、`STAND_MID`（17×22）、`STAND_FAR`（11×16）、`STAND_LEAD`（指挥台上背对我们的谱台）、`LOGO`（像素 M，按舞台口高矮放大 1–3 倍）。
+   - 灯 = 子会话：`lampStates(window.__pinkieMetreBoardData.data.sessions)` → `run / done / fail / wait`，离指挥台最近的谱台先亮；每拍对一次签名，变了就重画静层。验收 / 截图用 `window.__pinkieMetreBackdrop.preview(['run','run','done','fail'])`（传 `null` 恢复）。
+   - 画布贴底：首页场景高约 28%（184–300px），对话页约 16%（112–168px）且颜色往底色退一半；上面再留一段只有抖动渐变的过渡。场景高写进 `--metre-band`（CSS 可以用它保证正文不压画）。格子按设备像素取整（`cellDev = round(2*dpr)`）。
+   - 对话页用 `quiet`（输入框那一栏的格范围）把舞台口和指挥台让到两边空地，输入框后面不放谱台。
+   - **`laolao-metre-backdrop.css` 还没动**（旧的透明链路还能用；`--bd-*` 变量已经没人用，可以删；画布现在自己设 `bottom:0; top:auto`）。
+   - **首页看板三块（`.pk-metre-quick`，在 `laolao-metre-board.js` 357 行附近建的）还在页面上，会压在新画带上**：按「首页只留三样」把它拿掉（总控台侧栏入口里这三样都有）。旧背景里画看板图、鼠标悬停变亮的代码已删。
+2. **离线出图**：`node briefs/metre-mode-1113/ref/render-backdrop.cjs out.png dark|light home|chat 倍数 run,run,done,fail [列数] [场景行数]`，`CROP=x,y,w,h`（单位：格）裁一块放大看。每改一次精灵就出图、放大 6 倍看一遍。草稿：`ref/v11-draft1-band-dark.png`、`ref/v11-draft1-band-light.png`（只有画带，不是整页）。
+3. **按键 BUG 6（搜索面板 Esc 关不掉）**：`laolao-session-list.js` 的 `openSearch` 加了文档级捕获的 Esc（关的时候摘掉）。还没在隔离副本里复测。
+4. **碧琪文案**（Metre 下换成平实说法，其他模式不变）：极致思考按钮 title / aria、「碧琪在回答」「已叫醒碧琪」（`laolao-deep-think.js`）；状态条 aria「运行进度」「看看在做什么」、审批提示（`laolao-run-status.js`，注意 aria 是 `build()` 时定的，条子若先在碧琪模式建好再切 Metre 不会变——可在 `render()` 里顺手更新）；首页 aria（`laolao-startup-home.js`）；模式菜单 aria（`laolao-mode-switcher.js`）；整理上下文提示（`laolao-context-compact.js`）；思考强度的说明文字（`laolao-model-picker.js` 的 `routeDescription` 包了一层）；报错条 28 条规则各配了一句平实版 `PLAIN`（`laolao-biqi-notices.js`，下标和 `RULES` 一一对应，改规则要两边一起改）。
+5. `laolao-head.fragment.html` 的 `?v=` 已同步（backdrop3、deepthink31、runstatus6、mode50、notices3 等）；`tests/mode-switcher.test.mjs` 里钉的版本跟着改成 mode50。
+
+**单测现状**：`metre-skin-cat` 15 过 / **2 条没过**（「Metre backdrop: exists only…」和「Metre v6 home: … board art drawn on the backdrop」——断言还是旧设计的，要跟着新背景改）；`run-status-ui` 13、`mode-switcher` 3、`mode-menu-fx` 9、`motion` 14、`brand-ui` 6、`tool-kind-words` 11、`metre-wording` 1、`metre-board` 12、`model-picker` 37、`sidebar-splash-polish` 8 全过。
+
+**隔离副本里还什么都没装**：`runtime/openclaw/dist/control-ui/` 里仍是旧文件。装法：把改过的同名文件复制过去，并把那边 `index.html` 里对应的 `?v=` 改掉（那份 index.html 每个地址后面还带 `&h=…`，留着不用管）。探针已经放在那边 `zz-metre-probe.js`（仓库里的副本：`ref/metre-probe.js`），页面里先 `await new Promise(r=>{const s=document.createElement('script');s.src='/zz-metre-probe.js';s.onload=r;document.head.append(s)})`，然后：
+- `MP.bad()` → 被别的东西盖住的按钮（模态遮罩盖住的另计 `masked`）；`MP.scan(根元素)` → 碧琪文案 / 图 / 粉紫色；`MP.info(sel)`、`MP.tree(el)`、`MP.over(a, b)`。
+- **探针输出一定要短**：上一轮我把搜索遮罩没关时的整份命中清单打了出来，一次吃掉几万字上下文。每次只打 `bad` 和 `scan`，弹层逐个开、开一个关一个，关不掉就先刷新页面。
+- 页面 token 已经在浏览器里记住了，直接开 `http://127.0.0.1:64560/chat?session=agent%3Ametre%3Amain` 就行；内置浏览器 `resize_window` 设 1440×900 + `colorScheme: dark`。
+
+## 已经量清楚、还没改的（照着改就行）
+
+**按键 BUG**
+- **1 折叠侧边栏点不动**：`.sidebar-brand` 高度是 0、`position: static`，里面的 `.sidebar-brand__actions` 绝对定位在 (24,22)；后面的 `section.sidebar-sessions`（`position: relative`，盒子从 y=22 开始）盖在它上面。改法：Metre 下 `.sidebar-brand { position: relative; z-index: 5 }`。
+- **2 总控台盖住顶栏右上三个按钮**：停靠态 `.pk-metre-board.is-docked { inset: 0 0 0 auto; z-index: 260 }` 从页面最顶开始。改法：停靠态 `top` 让出顶栏高度（或把那三个按钮挪到总控台左边），`laolao-metre-board.css` 409 行。
+- **3 输入框里看不见的按钮**：本轮没复现（上下文弹层关着时按钮是 0×0）。它是上下文圈弹层里的「现在整理上下文」，弹层打开时会被挪到 body 下（`.is-floating`，fixed）。开一次、关一次上下文圈再用 `MP.bad()` 看；若关掉后弹层还留着尺寸，查 `laolao-metre-skin.css` 228 行那条给 `.laolao-context-viewer__popover` 的规则是否把关着的也显示出来了。
+- **4 极致思考卡**：`div.laolao-deep-think-menu`（挂在 body，fixed，`laolao-deep-think.js` 里 `openMenu` 用 `rect.top - menuH - 8` 定位 → Metre 的按钮在输入框下面那一排，所以弹出来正好压住输入框）。结构：`__head`（svg 星 + 「思考强度」）/ `__choices` > `button.__item[data-tier]` >（`__icon` >`img.__poster` + `video.__art` + `__orbit` + `__numeral`）+（`__copy` > `__label` + `__summary`）+ `__recommended` / `__hint` / `__footer`。样式写在 js 文件 618–650 行的内置 `<style>` 里，全是粉玻璃。Metre 版：藏掉 `__poster / __art / __orbit`（碧琪的图和视频），`__numeral`（Ⅰ–Ⅳ）当图标；实底、细边、`__summary` 现在才 8.5px 要放大。
+- **5 模型选择**：`div.chat-controls__inline-select-menu--combined`，`position: absolute; z-index: 30`，在 `details.chat-controls__session` 里往上弹，盖住输入框。「思考强度」按钮（`button.pinkie-effort-trigger`）开的也是这同一个弹层（里面的 `chat-controls__reasoning-panel`）。里面 `span.pinkie-reasoning-stop` 是粉的 `rgb(244,155,216)`。
+- **弹层位置的统一规则（我定的）**：触发键在输入框下面那一排的（模型、强度、极致思考、上下文圈）——下面放得下就往下弹，放不下就弹到输入框上沿之上；触发键在输入框里面的（工具箱 `button.pinkie-tray-btn` → `div.pinkie-tray`，fixed 挂 body）——弹到输入框上沿之上，上面不够高再往下。都不许盖输入框。输入框的可见框 = `.agent-chat__input` 矩形的上面一段（首页 1440×900 时矩形是 532,458,656×140，可见框到 y≈558，下面 568–598 是 Baton / 模型那一排）。做法建议：新开一个小文件 `laolao-metre-popover.js`，弹层出现时（body 的 childList、`details` 的 `toggle` 捕获）量好位置写进 CSS 变量，皮肤里用 `top: var(--mp-top) !important; left: var(--mp-left) !important; bottom: auto !important`（各自的脚本会反复写行内 `top/left/bottom`，直接改行内值会被盖回去）。
+
+**粉 / 紫 / 碧琪图（扫描结果）**
+- 图标：`circle.pk-dot.pk-f` 填充、`path.pk-sweep.pk-a` 描边、工具箱里 `path.pk-a / .pk-f` 都是 `rgb(242,138,184)`（`laolao-icons.js` 的强调色类 `.pk-a` 描边、`.pk-f` 填充）→ Metre 下改成 `currentColor`。
+- 极致思考卡：整张（见上）；`#laolao-deep-think-toast`、`#laolao-deep-think-status` 也是粉玻璃。
+- 工具箱 `div.pinkie-tray`：底 `rgb(42,32,39)`（紫调）；结构 `__group > __title + __tiles > __row > button.__item >（__icon + __body > __name…）`；里面有「网页 GPT 协作」「拆分视图」等碧琪项，Metre 下该不该留逐项看。
+- 搜索：遮罩 `div.pinkie-session-search-mask` 底 `rgba(33,22,30,.28)`；`section.pinkie-session-search-dialog` 字色 `rgb(247,234,240)`；里面 `input.pinkie-session-search-input`、`label.pinkie-session-search-filter`、`.pinkie-session-search-status`、`.pinkie-session-search-results > button.pinkie-session-search-result >（__title / __snippet / __time）`。
+- 「⋯ 更多工具」`div.laolao-footer-overflow`：字 `rgb(119,60,89)`、底 `rgba(255,250,253,.94)`、边 `rgba(218,120,161,.18)`；项 `button.laolao-footer-overflow__item`（`__page` 是页面跳转项）、`__divider`。
+- 通用菜单 `div.laolao-menu`（最近会话菜单、右上会话菜单、连接状态菜单都是它）：边 `rgba(255,255,255,.58)`、圆角 16、阴影 `rgba(84,42,65,.18)`；`button.laolao-menu__item`，危险项 `--danger` 是 `rgb(183,47,103)`（玫红）→ 换砖红。
+- 上下文弹层 `.laolao-context-viewer__popover`（`.lcv-*`）、报错条 `.callout` / `.pinkie-biqi-notice-*`、悬浮提示 `openclaw-tooltip`（自定义元素，可能有 shadow DOM，没细看）、上游自带的英文 `aria-label="Dismiss error"`（在 `ui/runtime/chat-page-*.js` 里，别改上游文件；在 `laolao-biqi-notices.js` 扫到时改成「关闭」）：都还没处理。
+- 模式菜单 `div.laolao-mode-menu` 已经是 Metre 实底（`rgb(35,35,33)`），不用动。
+- 皮肤里现有的弹层规则只有 `laolao-metre-skin.css` 301 行那一条（圆角 12 + 阴影），`laolao-deep-think-menu / pinkie-session-search / laolao-footer-overflow / laolao-menu / pinkie-model-filter / openclaw-tooltip / pinkie-biqi-notice` 在皮肤里一条规则都没有。统一样式：底 `var(--metre-surface)` 不透明、`1px solid var(--metre-line-strong)`、圆角 10、一种阴影、不要 `backdrop-filter`。新规则追加在皮肤文件末尾，选择器前缀比前面的多一个 `:not(#_m3)` 就能压过旧规则，不用回头读那 1400 行。
+
+**还没点过的按钮**（原清单里剩下的）：作品、设置、Baton / Virtuoso 切换、换一句、真发一条消息后的对话页（状态条、工具卡、「思考了」、消息操作键）、浅色主题、切换过场、启动闪屏、1100×700、总控台各区块里的按钮。已点过且能开的：极致思考、思考强度、模型、工具箱、上下文圈、搜索、更多工具、最近会话菜单、右上会话菜单、连接状态、模式菜单。
+
+## 美术还差什么（先做这个）
+
+1. **加细节**（用户刚强调的）。底稿的问题：猫是一块纯黑剪影加一圈边；谱台只有框、纸、线三种颜色；地面只有三道线；舞台口是一道细线拱加一团光；整幅画东西偏小（猫 88px 高）。往上加的方向（自己取舍）：猫画大一档（56–64 格高），身上分三四档明暗（背光面、受光面的毛边、胸口和爪子的分界、耳朵内侧、胡须、瞳孔高光），尾巴有形；谱台的金属杆有高光和节，谱面上有真的音符和小节线（不同谱台不一样），灯罩有形状、灯下谱纸上有一圈亮；地板有木纹拼缝和灯落在地上的光斑；舞台口加幕布褶子、台唇、脚灯；椅子 / 空座位；节拍器 M 的刻度。每种材质 5–6 档色阶现在大多只用了 2–3 档。画完每一处都用 `CROP` 放大看，孤立像素、锯齿错位、脏色当场改。
+2. 浅色主题的墨线版跟着加（不是反相）。
+3. 对话页那一条（`chat`）还没出过图：`node …/render-backdrop.cjs out.png dark chat 2`。
+4. 切换过场（`laolao-metre-transition.js`）、启动闪屏（`laolao-splash.js` 里 Metre 那一支 + `laolao-metre-brand.css`）、总控台空状态小图：还是旧的 8px 点阵 / 休止符，按同样的 2px 密度、同一套题材（谱台、指挥台、猫、M）重画。
+5. 排版留白（原文件「排版和留白」一节）一条都还没做。
+
+## 收尾要求（不变）
+
+隔离副本里逐页看、逐个按钮点；`ref/v11-*.png` 存整页截图（深 / 浅 × 首页 / 对话 / 总控台 / 各弹层，1440×900 和 1100×700），用 SendUserFile 发给用户；改单测断言并跑全；`PROGRESS.md` 加一节；每次提交立刻推送 `fix/metre-native-menu-hit`；不装正式 App、不碰 `~/.openclaw` 和 18789、不动 main / tag。

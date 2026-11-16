@@ -345,7 +345,11 @@
     status.setAttribute('role', 'status');
     dialog.append(input, filter, status, results); mask.append(dialog); document.body.append(mask);
     let timer = 0, serial = 0, items = [], selected = 0, closed = false;
-    const close = () => { closed = true; serial++; clearTimeout(timer); mask.remove(); if (searchView?.mask === mask) searchView = null; };
+    // Esc closes from anywhere: focus can leave the dialog (a click on its blank area, a native menu) and the
+    // dialog's own keydown never sees the key then.
+    const escape = event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close(); } };
+    const close = () => { closed = true; serial++; clearTimeout(timer); document.removeEventListener('keydown', escape, true); mask.remove(); if (searchView?.mask === mask) searchView = null; };
+    document.addEventListener('keydown', escape, true);
     searchView = {mask, mode: api.mode, close};
     const open = item => {
       if (!item) return;

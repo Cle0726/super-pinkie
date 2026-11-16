@@ -496,8 +496,8 @@
       message = "正在整理上下文";
       description = "最近内容会保留，历史记录仍可回看。";
     } else if (state.phase === "retrying") {
-      message = "整理好了，接着处理～";
-      description = "碧琪正在恢复当前任务，工作进度会继续显示。";
+      message = document.documentElement.getAttribute("data-laolao-mode") === "metre" ? "整理好了，接着处理" : "整理好了，接着处理～";
+      description = document.documentElement.getAttribute("data-laolao-mode") === "metre" ? "正在恢复当前任务，工作进度会继续显示。" : "碧琪正在恢复当前任务，工作进度会继续显示。";
     }
     else if (state.phase === "complete") {
       const before = formatTokens(state.beforeTokens);

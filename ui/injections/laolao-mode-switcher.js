@@ -881,7 +881,7 @@
     menu = document.createElement("div");
     menu.className = "laolao-mode-menu laolao-mode-menu--fx laolao-mode-menu--fx-opening";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "选择碧琪的工作模式");
+    menu.setAttribute("aria-label", document.documentElement.getAttribute("data-laolao-mode") === "metre" ? "选择工作模式" : "选择碧琪的工作模式");
     modes.forEach((mode, index) => {
       const option = document.createElement("button");
       option.type = "button";

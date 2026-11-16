@@ -395,7 +395,7 @@
     }
     if (/^(?:exec|plugin)\.approval\.requested$/.test(String(name))) {
       const live = liveOf(key);
-      live.state = 'asking'; live.ask = {text: '碧琪想跑一条命令，可以吗？'};
+      live.state = 'asking'; live.ask = {text: isMetre() ? '要跑一条命令，等你确认' : '碧琪想跑一条命令，可以吗？'};
       schedule(); return;
     }
     if (/^(?:exec|plugin)\.approval\.resolved$/.test(String(name))) {
@@ -512,11 +512,11 @@
   let bar = null, parts = null, open = false, scheduled = false, lastSig = '';
   function build() {
     bar = el('section', 'pk-run');
-    bar.setAttribute('aria-label', '碧琪的进度');
+    bar.setAttribute('aria-label', isMetre() ? '运行进度' : '碧琪的进度');
     bar.hidden = true;
     const dot = el('button', 'pk-run__dot'); dot.type = 'button';
     dot.setAttribute('aria-expanded', 'false');
-    dot.setAttribute('aria-label', '看看碧琪在做什么');
+    dot.setAttribute('aria-label', isMetre() ? '看看在做什么' : '看看碧琪在做什么');
     const dotFace = el('img', 'pk-run__dot-face'); dotFace.alt = ''; dotFace.decoding = 'async';
     dot.append(dotFace);
     dot.addEventListener('click', () => { open = !open; render(true); });

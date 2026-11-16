@@ -585,9 +585,9 @@
         }
       }
       btn.setAttribute("aria-pressed", String(Boolean(tier)));
-      btn.setAttribute("title", tier ? `极致思考：${tier.label}（点击调整或取消）` : "极致思考：让碧琪多想几轮再答");
+      btn.setAttribute("title", tier ? `极致思考：${tier.label}（点击调整或取消）` : (currentMode() === "metre" ? "极致思考：多想几轮再答" : "极致思考：让碧琪多想几轮再答"));
       // 旁边模型那一栏还有一个「思考强度」（模型自己的推理档位）。两个按钮原来叫同一个名字，这个是极致思考。
-      btn.setAttribute("aria-label", tier ? `极致思考已固定为${tier.label}` : "极致思考：让碧琪多想几轮再答");
+      btn.setAttribute("aria-label", tier ? `极致思考已固定为${tier.label}` : (currentMode() === "metre" ? "极致思考：多想几轮再答" : "极致思考：让碧琪多想几轮再答"));
     }
   }
 
@@ -669,7 +669,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   const WORK_ID = "pinkie-work-panel";
   const WORK_PHASES = {
     armed: "正在准备推演",
-    answering: "碧琪在回答", reviewing: "正在批评与核对", fixing: "按批评修改中", passed: "核对通过",
+    get answering() { return currentMode() === "metre" ? "正在回答" : "碧琪在回答"; }, reviewing: "正在批评与核对", fixing: "按批评修改中", passed: "核对通过",
     fixed: "已按批评修正", unresolved: "仍有问题，回复里已说明", unchecked: "这次没核对成", skipped: "这次没核对",
   };
   const WORK_LEVELS = {medium: "Medium", high: "High", xhigh: "XHigh", adaptive: "Adaptive", max: "Max", ultra: "Ultra", boost: "加强档", full: "全开档", marathon: "长跑档"};
@@ -755,7 +755,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     }
     for (const bg of status?.background || []) {
       rows.push({key: `bg:${bg.id}`, kind: "bg", id: bg.id, state: bg.state === "running" ? "running" : "done", title: "后台命令", model: "",
-        summary: bg.state === "running" ? bg.command : `${bg.command}${bg.woke ? " · 已叫醒碧琪" : ""}`, startedAt: bg.startedAt, endedAt: bg.endedAt, hasOutput: false});
+        summary: bg.state === "running" ? bg.command : `${bg.command}${bg.woke ? (currentMode() === "metre" ? " · 已接着做" : " · 已叫醒碧琪") : ""}`, startedAt: bg.startedAt, endedAt: bg.endedAt, hasOutput: false});
     }
     return rows;
   }

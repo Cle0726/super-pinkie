@@ -74,6 +74,39 @@
       '模型那边自己出了点故障，过一会儿再试。'],
   ];
 
+  // Metre 不用碧琪的口吻：同一批规则，平实的说法（下标和 RULES 一一对应）。
+  const PLAIN = [
+    '这条没发出去：另一个任务同时在改这段对话。再发一次。',
+    '上一轮还在收尾，等两秒再发。',
+    '后台正在重启，几秒后再发。',
+    (m) => `模型限流，约 ${m[1]} 秒后可以继续。`,
+    (m) => `模型限流，约 ${m[1]} 分钟后可以继续。`,
+    '这个模型现在用不了：没有可用的账号，等也不会好。在输入框下面换一个模型再发。',
+    '模型限流，过一会儿再试。',
+    '这个模型的额度用完了。换一个模型，或者充值后再试。',
+    '模型密钥不对或已过期。到设置里换一个密钥。',
+    '模型拒绝访问：这个账号可能没开通这个模型。',
+    '对话太长，超过了模型的上下文。先整理上下文（容量圈里的「现在整理上下文」）再继续。',
+    '找不到这个模型，可能改名了。换一个模型。',
+    '模型服务繁忙，稍后再试。',
+    '模型超时没有回复，这一轮已停下。再发一次。',
+    '网络连不上模型。检查网络或代理后再发。',
+    '和后台的连接断了，正在重连。',
+    '模型拒绝处理这段内容。换个说法再试。',
+    '这一轮已停下。',
+    (m) => `文件太大，最多 ${m[1]} MB。`,
+    '磁盘满了，写不进去。清理空间后再试。',
+    '没有权限读写这个文件或文件夹。',
+    '找不到这段对话，新开一个对话试试。',
+    '找不到要用的文件，可能被移走或删掉了。',
+    '这个窗口还没和后台配对，重新连接一下。',
+    '这次没有生成回答，再发一次。',
+    '这次模型调用失败，没有完成回复。',
+    '模型不接受这次的请求格式，换个模型或再试一次。',
+    '模型服务出错，过一会儿再试。',
+  ];
+  const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
+
   const clean = (raw) => String(raw || '')
     .replace(/\s*Logs:\s*openclaw logs --follow\s*$/i, '')
     .replace(/^\s*(?:⚠️|⚠|❌)\s*/, '')
@@ -85,13 +118,16 @@
     if (!text) return null;
     if (CJK.test(text) && !LATIN_WORD.test(text.replace(/[㐀-鿿].*/s, ''))) return null;
     const beforeReply = /^Agent failed before reply:/i.test(text);
-    for (const [re, say] of RULES) {
-      const m = text.match(re);
-      if (m) return typeof say === 'function' ? say(m) : say;
+    const metre = isMetre();
+    for (let i = 0; i < RULES.length; i++) {
+      const m = text.match(RULES[i][0]);
+      if (!m) continue;
+      const say = metre ? PLAIN[i] : RULES[i][1];
+      return typeof say === 'function' ? say(m) : say;
     }
-    if (beforeReply) return '碧琪还没来得及回话就卡住了。再发一次试试；还不行就点「原文」看看具体原因。';
+    if (beforeReply) return metre ? '还没开始回复就出错了。再发一次；还不行就点「原文」看具体原因。' : '碧琪还没来得及回话就卡住了。再发一次试试；还不行就点「原文」看看具体原因。';
     if (!fallback || CJK.test(text) || !LATIN_WORD.test(text)) return null;
-    return '碧琪这里碰到一点小状况，没能做完。点「原文」能看到具体信息。';
+    return metre ? '这一步出错了，没有做完。点「原文」看具体信息。' : '碧琪这里碰到一点小状况，没能做完。点「原文」能看到具体信息。';
   };
 
   const STYLE = `

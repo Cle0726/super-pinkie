@@ -303,7 +303,7 @@
     if (!home) {
       home = document.createElement('section');
       home.className = 'laolao-startup-home';
-      home.setAttribute('aria-label', '碧琪的首页');
+      home.setAttribute('aria-label', document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '首页' : '碧琪的首页');
       const welcome = document.createElement('div');
       welcome.className = 'agent-chat__welcome';
       welcome.setAttribute('data-laolao-minimal-welcome', '1');
