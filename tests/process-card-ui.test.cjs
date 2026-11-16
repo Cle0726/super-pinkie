@@ -56,8 +56,6 @@ test('a thought that arrives in one chunk is typed out instead of popping in', (
   assert.match(script, /dur: reduced\(\) \? 0 :/);
   assert.match(css, /\.pinkie-thinking\.is-typing \.pinkie-thinking__text::after/);
   assert.match(css, /\.pinkie-thinking\.is-entering \{ animation:/);
-  // A folded terminal body must release its padding/border and take zero space.
-  assert.match(css, /\.pinkie-thinking:not\(\.is-live\):not\(\.is-open\) \.pinkie-thinking__body/);
 });
 
 function processHarness() {

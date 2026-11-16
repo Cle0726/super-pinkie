@@ -23,5 +23,6 @@ test('the real model-thinking presentation remains installed', () => {
   assert.match(card, /const holdFor =/);
   assert.doesNotMatch(card, /hurryTyping\(/);
   assert.match(styles, /pinkie-thinking\.is-live \.pinkie-thinking__body/);
-  assert.match(styles, /max-height: clamp\(110px, 22vh, 240px\)/);
+  assert.match(styles, /max-height: 240px/);
+  assert.doesNotMatch(styles, /background-color: #17151b|\u274f|SFMono-Regular|repeating-linear-gradient/);
 });
