@@ -332,6 +332,7 @@ test('a past-tense "still running when stopped" is not a still-running claim (S6
   for (const reply of [
     '已经全部停下了，三篇都已完成（其中《灯》那个是被我喊停时仍在运行的，文件已经写出来了）。',
     '全部完成。关于《灯》：它是我执行“停”的时候还在写的那个，停之前文件已经完整写出。',
+    '已经全部停下，三篇都已完成。所有子会话现在都是完成状态，没有还在运行的。',
   ]) {
     const result=guard.finalize({lastAssistantMessage:reply},ctx,{verifyExternal:false});
     assert.doesNotMatch(result?.reason||'',/状态自相矛盾/,reply);
