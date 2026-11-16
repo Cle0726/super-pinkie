@@ -52,6 +52,9 @@ export function normalizeMode(raw, {metre = false} = {}) {
 const WAKING = new Set(['user_asked', 'in_scope', 'consult']);
 const GENERATED_RUN = /^pinkie-(?:child-start|family-message|session-wake)-/;
 const WAKE_PREFIX = '[pinkie-watchdog] [pinkie-session-wake]';
+// watchdog 补跑同一轮时的提示（index.mjs 的续接文案）或 run id（pinkie-watchdog-<原 run>-N）。
+const isWatchdogResume = (prompt, runId) => /^pinkie-watchdog-/.test(String(runId || ''))
+  || (String(prompt || '').startsWith('[pinkie-watchdog]') && String(prompt || '').includes('【自动续接保护】'));
 const BRIEF_PREFIX = '【子会话简报】';
 const FAMILY_PREFIX = '【来自关联会话的消息】';
 const HERE_PREFIX = '【就在这里继续】';
@@ -1041,6 +1044,16 @@ export class SessionLineage {
     if (child) this.reserved.set(key, this.now());
     // 被子会话汇报叫醒的那一轮（Metre 在这一轮可以接着派下一批）。
     const wake = prompt.includes(SESSION_WAKE_MARK) || /^pinkie-session-wake-/.test(runId);
+    // watchdog 续接（上游卡住 / 断流后补跑同一轮）不是新的一轮：沿用它接着的那一轮的授权和计数。
+    // 否则用户原话要的派发，只要第一轮被上游打断就再也派不出去（批 7 eval/d 的 S2、S7）。
+    const previous = this.turns.get(key);
+    const resumed = !wake && !authored && isWatchdogResume(prompt, runId) && previous
+      && !['memory', 'heartbeat'].includes(previous.trigger) && !['memory', 'heartbeat'].includes(ctx?.trigger);
+    if (resumed) {
+      this.turns.set(key, {...previous, runId, asked: false, resumed: true});
+      if (this.turns.size > 1000) this.turns.delete(this.turns.keys().next().value);
+      return;
+    }
     this.turns.set(key, {runId, prompt, authored, internal, user: !internal, asked: false, trigger: ctx?.trigger || '',
       autoStarts: 0, asks: 0, wake});
     if (this.turns.size > 1000) this.turns.delete(this.turns.keys().next().value);
