@@ -588,8 +588,18 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 
 | 项 | 原因 |
 |---|---|
-| A6-1 | 见上一节：外接的 Windows 浏览器起来了，但 hy4free 中途从 1466 号池下线，没测成 |
 | A1-4、A2 `-shm`、A6-2、D1 的 Mac 部分 | 需 Mac |
 | B1-2 | 需真渠道账号（QQ / 飞书机器人），不碰 |
 | 号池修复上线后再用直连量一遍出字前断流 | 正式 1466 还是旧版（C.le v1.1.48 在另一个会话里发布），而且 hy4free 现在不在号池里 |
 | B2-1～3 | §6 停了，没有可跑的 |
+
+### A6-1 真浏览器实测 · 过（11-15 晚，`hy4flash-free`）
+
+- **模型**：号池里 `workbuddy/hy4free` 改名成了 `workbuddy/hy4flash-free`（返回的额度信息写着 `shared_models: ["hy4free"]`，同一份额度）。实测 3 秒回 200，也能看图（`note-2.png` 读对）。副本 `iso-th` 配置里三处 `hy4free` 换成新名字（备份 `openclaw.json.bak-pre-hy4flash-free`），之后的实测都用它。
+- **为什么前几批没接上**：环境变量从 Git Bash 传进 Windows 进程时，JSON 里的 `\` 被压成单个 `\`，`PINKIE_APP_BROWSER_ENDPOINT` 解析失败，工具就当成「没有侧栏浏览器」。改用正斜杠路径（`F:/…/endpoint.json`）后正常。另外，`openclaw agent` 命令行是在**自己的进程里**跑这一轮的，工具用的是 `run_eval` 的环境变量，所以网关和 `run_eval` 两边都要带。`a6-inapp`～`a6-inapp4` 都作废。
+- **`a6-inapp5`，2/2 过**：这个分支 `app/inapp_browser.py` 的 Windows 浏览器在 App 外单独起来（用开发版 venv 里的 pywebview），副本网关和 `run_eval` 都带上它的连接信息，跑第 6 题。夹具 `site` 复制到了副本主目录 `home\th-site`（`serve` 只认主目录里的目录，这条规矩是对的），题目文字不变。
+  - 第 1 遍：`serve`（回「已在 App 侧栏打开」）→ `batch [wait #go waitFor=visible ms=4000, click #go]` → `read #msg` = 「点到了」，22 秒。
+  - 第 2 遍：`serve` 失败（第 1 遍那个会话的服务还占着 8765），模型查出 8765 上就是这个页面，改用 `open` → `wait #go ms=4000` → `click` → 读到「点到了」。
+  - 两遍都没退回系统浏览器，也没自己写脚本绕路。
+
+**顺带发现的问题（没改，交 Fable）**：静态 `serve` 起在网关进程里，返回的 `pid` 是**网关自己的进程号**。`a6-inapp4` 第 2 遍，模型看到 8765 被「残留的 node 进程」占着，照这个 pid 执行了 `Stop-Process`，把副本网关杀了。`serve_logs` 同时说「本地服务已停止」，端口却还在监听，也会误导模型。建议：静态服务不返回 `pid`（或标明「在网关里，不要结束这个进程」），换会话后同目录同端口的服务直接复用或明确报「被本机另一个会话的服务占着」。
