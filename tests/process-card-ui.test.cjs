@@ -40,18 +40,24 @@ test('the card matches the original bubbles and respects reduced motion', () => 
 
 test('a thought that arrives in one chunk is typed out instead of popping in', () => {
   // Gemini thinks silently and then delivers the whole thought right before acting.
-  assert.match(script, /const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;/);
+  assert.match(script, /const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HOLD = 1800;/);
   // A later chunk resumes from where the previous one stopped, so only the new
   // text is typed out instead of the whole thought popping in.
   assert.match(script, /typeOut\(id, Math\.max\(0, before - dropped\), ep\.text\.length\)/);
-  assert.match(script, /stopThinking\(\);\s*hurryTyping\(\);/);
+  // Completion never rushes the backlog; the reading hold scales with the burst.
+  assert.match(script, /const holdFor = \(ep\) => TYPE_HOLD \+ Math\.min\(1800, Math\.max\(0, ep\.text\.length - 300\) \/ 3\)/);
+  assert.match(script, /setTimeout\(schedule, holdFor\(ep\) \+ 20\)/);
+  assert.doesNotMatch(script, /hurryTyping/);
   assert.match(script, /const visibleText = isTyping \? ep\.text\.slice\(0, typed\) : ep\.text;/);
+  assert.match(script, /if \(isTyping \|\| holding\) typingFrame = true;/);
   // Reduced motion collapses the type-out to zero duration instead of starting
   // a timer, so the thought is shown immediately rather than animating.
   assert.match(script, /typing\.set\(key, \{from: reduced\(\) \? length : from, to: length/);
   assert.match(script, /dur: reduced\(\) \? 0 :/);
   assert.match(css, /\.pinkie-thinking\.is-typing \.pinkie-thinking__text::after/);
   assert.match(css, /\.pinkie-thinking\.is-entering \{ animation:/);
+  // A folded terminal body must release its padding/border and take zero space.
+  assert.match(css, /\.pinkie-thinking:not\(\.is-live\):not\(\.is-open\) \.pinkie-thinking__body/);
 });
 
 function processHarness() {

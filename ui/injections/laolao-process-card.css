@@ -68,10 +68,11 @@
 
 /* thinking */
 .pinkie-thinking.is-entering { animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-/* a soft caret while a thought is being typed out */
+/* a terminal caret while a thought is being typed out */
 .pinkie-thinking.is-typing .pinkie-thinking__text::after {
-  content: ""; display: inline-block; width: 6px; height: 1em; margin-left: 2px; vertical-align: -2px;
-  border-radius: 2px; background: rgba(233, 79, 145, 0.5); animation: pinkie-caret 1s steps(2, jump-none) infinite;
+  content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 3px; vertical-align: -3px;
+  border-radius: 2px; background: #6dffad; box-shadow: 0 0 9px rgba(80, 255, 157, 0.55);
+  animation: pinkie-caret 0.82s steps(2, jump-none) infinite;
 }
 @keyframes pinkie-caret { 50% { opacity: 0; } }
 .pinkie-thinking__head { all: unset; display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12.5px; color: #805269; padding: 2px 0; }
@@ -82,18 +83,38 @@
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: pinkie-shimmer 1.8s linear infinite; font-weight: 600;
 }
 @keyframes pinkie-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+/* Received model reasoning is shown as a compact live console: the newest
+   lines stay in view, while the whole burst is still kept and replayable. */
 .pinkie-thinking__body {
-  margin: 2px 0 6px 4px; padding-left: 12px; border-left: 2px solid rgba(233, 79, 145, 0.22);
-  font-size: 13px; line-height: 1.75; color: #7a5068; white-space: pre-wrap;
+  position: relative; margin: 3px 0 8px 4px; padding: 9px 12px 10px 14px;
+  box-sizing: border-box;
+  border: 1px solid rgba(111, 255, 174, 0.18); border-left: 3px solid #62f5a3; border-radius: 3px 10px 10px 3px;
+  background-color: #17151b;
+  background-image:
+    repeating-linear-gradient(180deg, rgba(116, 255, 178, 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 0 0, rgba(52, 255, 148, 0.07), transparent 65%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 5px 18px rgba(10, 4, 12, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px; line-height: 1.68; color: #c8ffe0; white-space: pre-wrap; overflow-wrap: anywhere;
   max-height: 0; overflow: hidden;
 }
-.pinkie-thinking.is-live .pinkie-thinking__body {
-  max-height: 68px; overflow: hidden;
-  -webkit-mask-image: linear-gradient(transparent, #000 24px); mask-image: linear-gradient(transparent, #000 24px);
+.pinkie-thinking__text::before {
+  content: "❯ "; color: #6dffad; text-shadow: 0 0 7px rgba(80, 255, 157, 0.5); opacity: 0.9;
 }
-.pinkie-thinking.is-open:not(.is-live) .pinkie-thinking__body { max-height: 240px; overflow-y: auto; }
+.pinkie-thinking.is-live .pinkie-thinking__body {
+  max-height: clamp(110px, 22vh, 240px); overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, #000 22px); mask-image: linear-gradient(transparent, #000 22px);
+}
+.pinkie-thinking.is-open:not(.is-live) .pinkie-thinking__body { max-height: 320px; overflow-y: auto; }
 .pinkie-thinking.is-open.is-live .pinkie-thinking__body {
-  max-height: 240px; overflow-y: auto; -webkit-mask-image: none; mask-image: none;
+  max-height: clamp(180px, 32vh, 360px); overflow-y: auto; -webkit-mask-image: none; mask-image: none;
+}
+.pinkie-thinking__body::-webkit-scrollbar { width: 6px; }
+.pinkie-thinking__body::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(109, 255, 173, 0.28); }
+/* A folded card must take exactly zero height: padding and border are part of
+   the box and would otherwise leave a 21px dark strip under the summary. */
+.pinkie-thinking:not(.is-live):not(.is-open) .pinkie-thinking__body {
+  margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none;
 }
 
 /* status pill with Pinkie's stickers */

@@ -111,6 +111,15 @@ test('live thinking follows its own rows and only fills Lit-owned slots', () => 
   assert.match(processBranchSource('render'), /data-pinkie-thinking-seg/);
 });
 
+test('long multi-step thinking is retained past the old 8000-character cap', () => {
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  const burst = '长任务思考'.repeat(1800);
+  h.send('thinking', {delta: burst});
+  const record = Object.values(h.window.__laolaoProcessCard.store).find(item => item?.eps?.length);
+  assert.equal(record?.eps?.reduce((sum, ep) => sum + ep.text.length, 0), burst.length);
+});
+
 test('live label stays 正在思考 while its received text is still being displayed', () => {
   const h = harness();
   h.send('lifecycle', {phase: 'start'});

@@ -15,7 +15,13 @@ test('ordinary assistant prose is never folded into a fake 思路 row', () => {
 
 test('the real model-thinking presentation remains installed', () => {
   const card = read('laolao-process-card.js');
+  const styles = read('laolao-process-card.css');
   assert.match(card, /思考了/);
   assert.match(card, /pinkie:gateway-event/);
   assert.match(card, /payload\.stream === "thinking"/);
+  assert.match(card, /const MAX_TEXT = 32000/);
+  assert.match(card, /const holdFor =/);
+  assert.doesNotMatch(card, /hurryTyping\(/);
+  assert.match(styles, /pinkie-thinking\.is-live \.pinkie-thinking__body/);
+  assert.match(styles, /max-height: clamp\(110px, 22vh, 240px\)/);
 });

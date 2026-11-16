@@ -12,7 +12,7 @@
 
   const STORE = "laolao:process-thinking:v1";
   const MAX_CARDS = 80;
-  const MAX_TEXT = 8000;
+  const MAX_TEXT = 32000;
   // 进阶调节 can change both; untouched they are the constants above.
   const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
   const maxCards = () => tuned("process.maxCards", MAX_CARDS);
@@ -67,7 +67,10 @@
   const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
   // v8: show each received thought before folding, including a block delivered
   // in the same batch as tool.start. Keep this transient state out of storage.
-  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
+  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HOLD = 1800;
+  // Long thoughts need a longer reading window. The card still folds by itself,
+  // but never before the complete burst has been drawn and held briefly.
+  const holdFor = (ep) => TYPE_HOLD + Math.min(1800, Math.max(0, ep.text.length - 300) / 3);
   const typing = new Map();
   let typingFrame = false;
   const typedLength = (t, now) => t.from + (t.to - t.from) * Math.min(1, Math.max(0, (now - t.start) / (t.dur || 1)));
@@ -76,14 +79,6 @@
     const from = current ? Math.min(typedLength(current, now), before) : before;
     typing.set(key, {from: reduced() ? length : from, to: length, start: now,
       dur: reduced() ? 0 : Math.min(TYPE_MAX, Math.max(TYPE_MIN, (length - from) / TYPE_CPS * 1000)), doneAt: 0});
-  }
-  function hurryTyping() {
-    const now = performance.now();
-    for (const t of typing.values()) {
-      if (t.start + t.dur - now > TYPE_HURRY) {
-        t.from = typedLength(t, now); t.start = now; t.dur = TYPE_HURRY;
-      }
-    }
   }
   let saveTimer = 0;
   const save = () => {
@@ -278,7 +273,6 @@
     if (!run.startedAt && state === "done") return;
     resolveKey();
     stopThinking();
-    hurryTyping();
     if (run.key) run.migrate = {from: run.key, session: sessionKey(), until: Date.now() + 20000};
     if (state === "oops" && run.key) run.oops.set(run.key, Date.now());
     publishRunState(run.session, false);
@@ -415,11 +409,11 @@
     const isTyping = typed < ep.text.length;
     if (t && !isTyping && !t.doneAt) {
       t.doneAt = now;
-      setTimeout(schedule, TYPE_HOLD + 20);
+      setTimeout(schedule, holdFor(ep) + 20);
     }
-    const holding = Boolean(t && !isTyping && now - t.doneAt < TYPE_HOLD);
+    const holding = Boolean(t && !isTyping && now - t.doneAt < holdFor(ep));
     if (t && !isTyping && !holding && !thinking) typing.delete(id);
-    if (isTyping) typingFrame = true;
+    if (isTyping || holding) typingFrame = true;
     const live = thinking || isTyping || holding;
     const opened = openedThoughts.has(id);
     // Folding a finished thought shrinks the card; keep the reader in place.
