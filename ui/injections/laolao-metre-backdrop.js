@@ -12,8 +12,9 @@
  * 版面：画只占页面底部一条（首页约 28% 高，对话页约 16% 高、对比度降一半），上面是空的——
  *   只有一层很细的抖动渐变（大厅的暗），不放任何东西。提示语、对话正文都在那片空里。
  * 画法：一格 2 个 CSS 像素（按设备像素取整，格子边永远落在整像素上），整张图先画进一块低分辨率的 Uint32 缓冲，
- *   最近邻放大贴到画布上；不压缝。精灵是一格一格摆的（猫 44 格高，近排谱台 30 格高，远排 16 格高）；
- *   渐变和光晕用 4×4 Bayer 抖动；剪影受光的一侧描一圈亮边。
+ *   最近邻放大贴到画布上；不压缝。猫 62 格高（一层一层摆：躯干、腿、尾、头，层间带形体线，暖光亮边 + 冷光背边）；
+ *   谱台三种大小（谱板 33 / 23 / 15 格宽），谱面上有谱线、音符、小节线，每个谱台不一样；立杆左亮右暗、带箍和三脚；
+ *   地板是朝舞台口收拢的木条；舞台口有框、束腰的侧幕、檐幕、台唇和脚灯；渐变和光晕用 4×4 Bayer 抖动。
  * 浅色主题不是把深色反相：是谱纸上的墨线版——暖白底、墨色剪影、灯是钴蓝的点。
  * 资源（批 6「不留常驻动画」）：只在 Metre 的对话页 / 首页、窗口可见时跑；一个 setTimeout 每半拍走一步，只重画会动的两小块；
  *   标志页开着时停；减少动态效果时只画一帧。不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉。 */
@@ -33,92 +34,62 @@
   const pack = (c) => ((255 << 24) | (Math.round(c[2]) << 16) | (Math.round(c[1]) << 8) | Math.round(c[0])) >>> 0;   // ImageData 是小端 ABGR
 
   // ---------- 颜色 ----------
-  // 每种材质 5–6 级：地（floor0..2）、剪影（sil / silRim）、谱纸（各状态 hi / lo / line）、灯（各状态 core / glow）、大厅的暗（hall1..3）。
+  // 每种材质 4–6 级。深色：夜里的排练厅，暖光来自指挥台的灯，冷光来自舞台口。浅色：谱纸上的墨线版（不是反相）。
   const PALETTES = {
     dark: {
-      bg: '#151514', hall1: '#17171A', hall2: '#191A1F', hall3: '#1C1D25',
-      floor0: '#0F0F11', floor1: '#0C0C0E', floor2: '#09090B', riser: '#24252C', riserDim: '#1A1B20',
-      stage: '#262938', stageHi: '#353A54', arch: '#2C2D36',
-      sil: '#070708', silRim: '#4A4D60', frame: '#17171B', frameRim: '#3A3B46', pole: '#202026',
-      cat: '#050506', catRim: '#5C5A50', eye: '#93A5EE', eyeHi: '#DCE3FF',
-      podium: '#131316', podiumTop: '#2E2F38', podiumFace: '#0D0D10',
-      off: {hi: '#24242A', lo: '#1F1F24', line: '#19191D', core: null, glow: null},
-      run: {hi: '#B4C0F6', lo: '#6272BE', line: '#3D4A8E', core: '#E6EBFF', glow: '#93A5EE'},
-      done: {hi: '#8F897B', lo: '#5A564C', line: '#3D3A33', core: '#D9D0B8', glow: '#8C8470'},
-      fail: {hi: '#9A4B39', lo: '#5E2D22', line: '#3B1B14', core: '#E07A5F', glow: '#B4513B'},
-      wait: {hi: '#26262B', lo: '#1F1F24', line: '#19191C', core: null, glow: null},
-      lead: {hi: '#EDE6D2', lo: '#A79F8A', line: '#6B6556', core: '#FFF6DC', glow: '#D9CDA8'},
+      bg: '#151514', hall1: '#17171A', hall2: '#191A1F', hall3: '#1C1D25', wall: '#22232D', rail: '#2A2C38',
+      f0: '#131316', f1: '#101012', f2: '#0C0C0E', seam: '#070708', edge: '#2E303B', edgeLo: '#050506',
+      arch: '#2B2C38', archHi: '#474A62', archLo: '#191A21',
+      st0: '#1B1D2A', st1: '#252940', st2: '#333A5C', st3: '#4A548A',
+      cu0: '#0D0E18', cu1: '#161A2C', cu2: '#212642', cu3: '#30386A', fringe: '#7A7458',
+      lip: '#30323F', lipHi: '#5E6384', footCore: '#EEF1FF', hood: '#09090C',
+      sil: '#060608', silRim: '#6A72A6', silFace: '#15172A',
+      frame: '#141419', frameHi: '#4E5060', frameLo: '#09090C', pole: '#22222A', poleHi: '#5C5E72', poleLo: '#0C0C10', lampHood: '#26272F',
+      cat: '#060607', cat2: '#101015', cat3: '#1C1C25', warmHi: '#D8C99A', warmMid: '#7A6E50', warmLo: '#352F23',
+      coolRim: '#4C557E', coolDim: '#262A3E', eye: '#7F97F5', eyeHi: '#EAF0FF', eyeLo: '#3F58C4', pupil: '#0A0E24', nose: '#34313A',
+      whiskIn: '#4A473C', whiskOut: '#55524A',
+      podTop: '#4A4030', podTopLo: '#221E17', podFace: '#15120F', podFaceHi: '#2B251C', podFaceLo: '#090807', podTrim: '#5E5239',
+      off: {hi: '#2B2B32', mid: '#25252B', lo: '#1F1F24', line: '#35353E', ink: '#40404B', core: null, glow: null},
+      run: {hi: '#DCE3FF', mid: '#AEBAF4', lo: '#7785D0', line: '#6373BE', ink: '#232C66', core: '#F4F6FF', glow: '#93A5EE'},
+      done: {hi: '#BBB39D', mid: '#938D7E', lo: '#6C675A', line: '#5E5A50', ink: '#2C2923', core: '#E8DEC2', glow: '#8C8470'},
+      fail: {hi: '#C96A53', mid: '#9E4E3B', lo: '#703628', line: '#5A2A1F', ink: '#280F0A', core: '#F28E72', glow: '#B4513B'},
+      lead: {core: '#FFF6DC', glow: '#D9CDA8'},
     },
     light: {
-      bg: '#F7F6F3', hall1: '#F5F3EF', hall2: '#F2F0EA', hall3: '#EEEBE4',
-      floor0: '#ECE9E1', floor1: '#E8E4DB', floor2: '#E3DFD5', riser: '#BDB6A7', riserDim: '#D2CCBF',
-      stage: '#E2DDD0', stageHi: '#D6D0C1', arch: '#B9B2A3',
-      sil: '#2B2925', silRim: '#6B665C', frame: '#4A463F', frameRim: '#8A8478', pole: '#6B665C',
-      cat: '#1B1A18', catRim: '#77736B', eye: '#2F4BB0', eyeHi: '#B9C5F3',
-      podium: '#D9D4C8', podiumTop: '#8A8478', podiumFace: '#CBC5B7',
-      off: {hi: '#F4F2EC', lo: '#EFECE5', line: '#DDD8CC', core: null, glow: null},
-      run: {hi: '#E4E9FA', lo: '#C9D2F4', line: '#2F4BB0', core: '#2F4BB0', glow: '#2F4BB0'},
-      done: {hi: '#EFEAE0', lo: '#E4DED1', line: '#A39C8D', core: '#8A8478', glow: '#B9B2A3'},
-      fail: {hi: '#F3DFD9', lo: '#EAC8BE', line: '#A8432F', core: '#A8432F', glow: '#A8432F'},
-      wait: {hi: '#F4F2EC', lo: '#EFECE5', line: '#DDD8CC', core: null, glow: null},
-      lead: {hi: '#FFFDF7', lo: '#F1ECDF', line: '#4A463F', core: '#2F4BB0', glow: '#2F4BB0'},
+      bg: '#F7F6F3', hall1: '#F5F3EF', hall2: '#F2F0EA', hall3: '#EEEBE4', wall: '#E2DDD2', rail: '#D2CCBF',
+      f0: '#EEEBE3', f1: '#E9E5DC', f2: '#E3DFD5', seam: '#CDC7BA', edge: '#9C9587', edgeLo: '#D6D1C5',
+      arch: '#8A8478', archHi: '#5A554C', archLo: '#B9B2A3',
+      st0: '#E0DBCF', st1: '#E9E5DB', st2: '#F1EEE6', st3: '#FCFBF8',
+      cu0: '#4A463F', cu1: '#6B665C', cu2: '#8F887B', cu3: '#B4AD9F', fringe: '#2B2925',
+      lip: '#A39C8D', lipHi: '#4A463F', footCore: '#2F4BB0', hood: '#3A3732',
+      sil: '#2B2925', silRim: '#77736B', silFace: '#45413B',
+      frame: '#4A463F', frameHi: '#77736B', frameLo: '#2B2925', pole: '#5A554C', poleHi: '#9C9587', poleLo: '#3A3732', lampHood: '#3A3732',
+      cat: '#1B1A18', cat2: '#252320', cat3: '#33302C', warmHi: '#C9C2B2', warmMid: '#77736B', warmLo: '#4A463F',
+      coolRim: '#6B665C', coolDim: '#45413B', eye: '#6C86EA', eyeHi: '#EAF0FF', eyeLo: '#2F4BB0', pupil: '#101633', nose: '#5A554C',
+      whiskIn: '#6B665C', whiskOut: '#5A554C',
+      podTop: '#D6D0C1', podTopLo: '#C4BDAD', podFace: '#E2DDD2', podFaceHi: '#EDEAE2', podFaceLo: '#BDB6A7', podTrim: '#5A554C',
+      off: {hi: '#FCFBF8', mid: '#F5F3EE', lo: '#EDEAE2', line: '#D6D1C5', ink: '#B9B2A3', core: null, glow: null},
+      run: {hi: '#F4F6FF', mid: '#DEE5FB', lo: '#C6D0F3', line: '#91A1E0', ink: '#2F4BB0', core: '#2F4BB0', glow: '#2F4BB0'},
+      done: {hi: '#F7F3EA', mid: '#ECE6D9', lo: '#E0D9C9', line: '#B9B2A3', ink: '#6B665C', core: '#8A8478', glow: '#B9B2A3'},
+      fail: {hi: '#FAE8E2', mid: '#F1D1C7', lo: '#E6B8AB', line: '#CB8876', ink: '#8E3524', core: '#A8432F', glow: '#A8432F'},
+      lead: {core: '#2F4BB0', glow: '#2F4BB0'},
     },
   };
+  for (const p of Object.values(PALETTES)) p.wait = p.off;
   const resolve = (pal) => {
     const out = {};
     for (const [k, v] of Object.entries(pal)) out[k] = typeof v === 'string' ? rgb(v) : Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, vv ? rgb(vv) : null]));
     return out;
   };
+  const hash = (n) => { n = (n ^ 61) ^ (n >>> 16); n = (n + (n << 3)) | 0; n ^= n >>> 4; n = Math.imul(n, 0x27d4eb2d); n ^= n >>> 15; return n >>> 0; };
+  // 在几档颜色之间按 t（0..1）取色，相邻两档之间抖动
+  const ramp = (levels, t, x, y) => {
+    const n = levels.length - 1, v = Math.max(0, Math.min(1, t)) * n, lo = Math.floor(v);
+    return levels[Math.min(n, lo + (v - lo > bayer(x, y) ? 1 : 0))];
+  };
 
-  // ---------- 精灵（一格一格摆的） ----------
-  // 黑猫，正面略侧坐着，44 格高：大尖耳、一双斜的蓝眼、尾巴从右边绕到前面。K 身体，E 眼睛，H 眼睛高光。
-  const CAT = [
-    '....K.................K.............',
-    '....KK...............KK.............',
-    '....KKK.............KKK.............',
-    '....KKKK...........KKKK.............',
-    '....KKKKK.........KKKKK.............',
-    '....KKKKKK.......KKKKKK.............',
-    '....KKKKKKK.....KKKKKKK.............',
-    '....KKKKKKKK...KKKKKKKK.............',
-    '....KKKKKKKKKKKKKKKKKKKK............',
-    '...KKKKKKKKKKKKKKKKKKKKKK...........',
-    '...KKKKKKKKKKKKKKKKKKKKKK...........',
-    '..KKKKKKKKKKKKKKKKKKKKKKKK..........',
-    '..KKKKKKKKKKKKKKKKKKKKKKKK..........',
-    '..KKKEKKKKKKKKKKKKKKKKEKKK..........',
-    '..KKKEEHKKKKKKKKKKKKHEEKKK..........',
-    '..KKKKEEEKKKKKKKKKKEEEKKKK..........',
-    '..KKKKKKEEKKKKKKKKEEKKKKKK..........',
-    '..KKKKKKKKKKKKKKKKKKKKKKKK..........',
-    '...KKKKKKKKKKKKKKKKKKKKKK...........',
-    '...KKKKKKKKKKKKKKKKKKKKKK...........',
-    '....KKKKKKKKKKKKKKKKKKKK............',
-    '.....KKKKKKKKKKKKKKKKKK.............',
-    '......KKKKKKKKKKKKKKKKKK............',
-    '......KKKKKKKKKKKKKKKKKKK...........',
-    '.....KKKKKKKKKKKKKKKKKKKKK..........',
-    '.....KKKKKKKKKKKKKKKKKKKKKK.........',
-    '....KKKKKKKKKKKKKKKKKKKKKKKK........',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKK.......',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKK......',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKK......',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKK.....',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKK.....',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKKKKKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKK.KKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKK.KKKKKKKKKKKKKKKKKKKKK....',
-    '....KKKKKK.KKKKKKKKKKKKKKKKKKKKK..K.',
-    '....KKKKKK.KKKKKKKKKKKKKKKKKKKKK.KK.',
-    '....KKKKKK.KKKKKKKKKKKKKKKKKKKKKKKK.',
-    '...KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.',
-    '.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK..',
-    '..KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK...',
-  ];
-  // 像素 M 节拍器（和 laolao-metre-brand.js 的标志同一张图；摆锤 '@' 单独画，会动）
+  // ---------- 精灵 ----------
+  // 像素 M 节拍器（和 laolao-metre-brand.js 的标志同一张图；摆锤单独画，会动）
   const LOGO = [
     '...##...##...',
     '...##...##...',
@@ -132,108 +103,90 @@
     '.#....#....#.',
     '#############',
   ];
-  // 谱台（正面，看得见谱纸）：三种大小。字符：L 灯罩  B 灯泡  F 谱板边框  S 谱纸  l 谱线  P 立杆和三脚
-  // 一格一格写死，不是算出来的：每一种大小的谱线、折缝、灯罩都单独摆过。
-  const STAND_NEAR = [
-    '.........LLLLL.........',
-    '........LLLLLLL........',
-    '.........BBBBB.........',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSlllllllSSFSSlllllllSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSlllllllSSFSSlllllllSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSlllllllSSFSSlllllllSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSlllllllSSFSSlllllllSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FSlllllSSSSFSSlllllllSF',
-    'FSSSSSSSSSSFSSSSSSSSSSF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    '.FFFFFFFFFFFFFFFFFFFFF.',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '.........PPPPP.........',
-    '.......PPP.P.PPP.......',
-    '.....PPP...P...PPP.....',
-    '...PPP.....P.....PPP...',
+  /* 黑猫（C.le. 那只）：56×62 格，坐着，身子略朝左，头转过来压低了看你——大尖耳、一双斜的蓝眼、尾巴从右后绕到脚前。
+   * 一块一块摆的：躯干、后腿、后爪、两条前腿、尾巴、头和耳朵各是一层，后摆的盖住先摆的；
+   * 层和层的交界自己带一条形体线（下巴、前腿之间、后腿的弧）。每格记的是颜色名，深浅两套调色板共用一张图。
+   * 光：暖光从左前方（指挥台的灯）来——左轮廓一圈暖亮边，往里三四格抖动着暗下去；冷光从背后（舞台口）来——顶上和右边一线冷边。 */
+  const CAT_W = 56, CAT_H = 62;
+  const CAT_EYES = [[15, 17], [29, 17]];
+  function buildCat() {
+    const W = CAT_W, H = CAT_H, part = new Uint8Array(W * H), tone = new Array(W * H).fill(null), out = [];
+    const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : part[y * W + x]);
+    const ell = (cx, cy, rx, ry) => (x, y) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+    const tri = (ax, ay, bx, by, cx, cy) => (x, y) => {
+      const s = (px, py, qx, qy) => (x - qx) * (py - qy) - (px - qx) * (y - qy);
+      const d1 = s(ax, ay, bx, by), d2 = s(bx, by, cx, cy), d3 = s(cx, cy, ax, ay);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    };
+    const box = (x0, y0, x1, y1) => (x, y) => x >= x0 && x < x1 && y >= y0 && y < y1;
+    const cap = (ax, ay, bx, by, r) => (x, y) => {
+      const vx = bx - ax, vy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)));
+      return Math.hypot(x - ax - vx * t, y - ay - vy * t) <= r;
+    };
+    const fill = (id, ...tests) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (tests.some((t) => t(x + 0.5, y + 0.5))) part[y * W + x] = id; };
+    fill(1, ell(31, 42, 15, 19.4), ell(22.5, 41, 9, 14));                                   // 躯干 + 胸
+    fill(2, ell(37.5, 49.5, 11, 12));                                                       // 后腿
+    fill(3, ell(31, 59.6, 6.5, 2.4));                                                       // 后爪
+    fill(4, box(14, 36, 20, 59), ell(16.5, 59.4, 4.6, 2.6));                                // 左前腿
+    fill(5, box(21, 38, 26, 59), ell(24, 59.8, 4.2, 2.2));                                  // 右前腿
+    fill(6, cap(48, 47, 51.5, 53, 2.4), cap(51.5, 53, 49.5, 58.6, 2.5), cap(49.5, 58.6, 42, 59.6, 2.3), cap(42, 59.6, 35, 59.4, 2.0)); // 尾巴
+    fill(7, ell(22, 17, 13, 10.6), tri(9.5, 15, 8, 0, 19.5, 8), tri(24.5, 8, 36, 0, 34.5, 15), tri(10, 15, 5.5, 21, 11, 25), tri(34, 15, 38.5, 21, 33, 25)); // 头、耳、腮毛
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = at(x, y); if (!p) continue;
+      const L = at(x - 1, y), U = at(x, y - 1), R = at(x + 1, y), D = at(x, y + 1), b = bayer(x, y);
+      let t;
+      if (!L) t = Math.abs(y - 30) < 20 ? 'warmHi' : 'warmMid';
+      else if (!U) t = 'coolRim';
+      else if (!R) t = y < 30 ? 'coolRim' : 'coolDim';
+      else if (L !== p && L < p) t = 'warmLo';
+      else if (U !== p && U < p && !(p === 2 && x > 38)) t = 'cat3';
+      else if (D && D !== p && D < p) t = 'cat2';
+      else {
+        let d = 2; while (d <= 8 && at(x - d, y)) d++;                                       // 离左轮廓几格
+        t = d === 2 ? (b < 0.72 ? 'warmLo' : 'cat3') : d <= 4 ? (b < 0.5 ? 'cat3' : 'cat2') : d <= 7 ? (b < 0.36 ? 'cat2' : 'cat') : 'cat';
+      }
+      tone[y * W + x] = t;
+    }
+    const put = (x, y, t) => { if (at(x, y)) tone[y * W + x] = t; };
+    // 耳朵里面
+    for (let y = 4; y <= 11; y++) for (let x = 0; x < W; x++) {
+      if (tri(11, 12, 10, 4, 16.5, 9)(x + 0.5, y + 0.5) || tri(27.5, 9, 34, 4, 33, 12)(x + 0.5, y + 0.5)) put(x, y, bayer(x, y) < 0.6 ? 'cat3' : 'cat2');
+    }
+    // 眼睛：外眼角高、内眼角低（往鼻子斜下去）；瞳孔一道竖缝，外上角一格高光，下缘暗一档
+    const eyeRows = [[15, 12, 13], [16, 12, 15], [17, 13, 17], [18, 15, 18]];
+    for (const [y, a, b] of eyeRows) for (let x = a; x <= b; x++) {
+      const t = y === 18 || x === b ? 'eyeLo' : 'eye';
+      put(x, y, t); put(44 - x, y, t);
+    }
+    put(13, 16, 'eyeHi'); put(31, 16, 'eyeHi');
+    put(15, 16, 'pupil'); put(15, 17, 'pupil'); put(29, 16, 'pupil'); put(29, 17, 'pupil');
+    // 口鼻两边鼓出来的一点（给脸一点体积）
+    for (let y = 21; y <= 25; y++) for (let x = 15; x <= 29; x++) {
+      if ((ell(18.5, 23.6, 3.4, 2.2)(x + 0.5, y + 0.5) || ell(25.5, 23.6, 3.4, 2.2)(x + 0.5, y + 0.5)) && bayer(x, y) < 0.5) put(x, y, 'cat3');
+    }
+    // 鼻子、嘴
+    put(21, 22, 'nose'); put(22, 22, 'nose'); put(23, 22, 'nose'); put(22, 23, 'nose');
+    put(22, 24, 'cat3'); put(21, 25, 'cat3'); put(20, 25, 'cat3'); put(23, 25, 'cat3'); put(24, 25, 'cat3');
+    // 胸口的毛、爪子的趾缝
+    [[17, 29], [18, 30], [16, 31], [19, 32], [17, 33], [20, 34], [18, 35]].forEach(([x, y]) => put(x, y, 'warmLo'));
+    [[16, 60], [19, 60], [23, 60], [26, 60], [29, 60], [33, 60]].forEach(([x, y]) => put(x, y, 'cat3'));
+    // 胡须：每边三根，头里面是暗的一线，伸出脸外的另记（out）
+    const whisk = (x0, y0, dx, n, slope) => { for (let i = 0; i < n; i++) { const x = x0 + dx * i, y = y0 + Math.round(i * slope); if (at(x, y)) { if (!/eye|pupil|warmHi/.test(tone[y * W + x])) tone[y * W + x] = 'whiskIn'; } else out.push([x, y]); } };
+    whisk(14, 22, -1, 10, -0.25); whisk(14, 24, -1, 9, 0.25);
+    whisk(30, 22, 1, 10, -0.25); whisk(30, 24, 1, 9, 0.25);
+    return {w: W, h: H, tone, out};
+  }
+  const CAT = buildCat();
+  const SPRITES = {LOGO, CAT: Array.from({length: CAT_H}, (_, y) => Array.from({length: CAT_W}, (_, x) => (CAT.tone[y * CAT_W + x] ? '#' : '.')).join(''))};
+
+  // 谱台的三种大小（0 近 / 1 中 / 2 远）：w 谱板宽、dh 谱板高、n 一行谱几条线、gap 行距
+  const STAND_SIZES = [
+    {w: 33, dh: 23, lampW: 9, lampH: 3, pole: 3, poleH: 40, legH: 0, n: 3, gap: 2},
+    {w: 23, dh: 16, lampW: 7, lampH: 3, pole: 3, poleH: 13, legH: 4, n: 2, gap: 2},
+    {w: 15, dh: 10, lampW: 5, lampH: 2, pole: 1, poleH: 9, legH: 3, n: 1, gap: 1},
   ];
-  const STAND_MID = [
-    '......LLLLL......',
-    '.......BBB.......',
-    'FFFFFFFFFFFFFFFFF',
-    'FSSSSSSSFSSSSSSSF',
-    'FSlllllSFSlllllSF',
-    'FSSSSSSSFSSSSSSSF',
-    'FSlllllSFSlllllSF',
-    'FSSSSSSSFSSSSSSSF',
-    'FSlllllSFSlllllSF',
-    'FSSSSSSSFSSSSSSSF',
-    'FSlllSSSFSlllllSF',
-    'FSSSSSSSFSSSSSSSF',
-    'FFFFFFFFFFFFFFFFF',
-    '.......PPP.......',
-    '........P........',
-    '........P........',
-    '........P........',
-    '........P........',
-    '........P........',
-    '.......PPP.......',
-    '.....PP.P.PP.....',
-    '...PP...P...PP...',
-  ];
-  const STAND_FAR = [
-    '....LLL....',
-    '.....B.....',
-    'FFFFFFFFFFF',
-    'FSSSSFSSSSF',
-    'FSlllFlllSF',
-    'FSSSSFSSSSF',
-    'FSlllFlllSF',
-    'FSSSSFSSSSF',
-    'FFFFFFFFFFF',
-    '.....P.....',
-    '.....P.....',
-    '.....P.....',
-    '.....P.....',
-    '....PPP....',
-    '...P.P.P...',
-    '..P..P..P..',
-  ];
-  // 指挥台上的谱台（背面，只是一块剪影；它的灯照着猫）
-  const STAND_LEAD = [
-    '.........LLLLL.........',
-    '..........BBB..........',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    'FFFFFFFFFFFFFFFFFFFFFFF',
-    '.FFFFFFFFFFFFFFFFFFFFF.',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '..........PPP..........',
-    '.........PPPPP.........',
-    '.......PPP.P.PPP.......',
-  ];
-  const SPRITES = {CAT, LOGO, STAND_NEAR, STAND_MID, STAND_FAR, STAND_LEAD};
+  const LEAD = {w: 27, dh: 15, lampW: 9, poleH: 11, legH: 4};          // 指挥台上的谱台（背面）
+  LEAD.h = 3 + LEAD.dh + 1 + LEAD.poleH + LEAD.legH;
 
   // ---------- 场景 ----------
   // 把 sessions（总控台那份）变成灯的状态表
@@ -246,202 +199,279 @@
     return out;
   }
 
-  /* 画静的那一层。返回 {buf, anchors}。
+  /* 画静的那一层。返回 {buf, anchors…}。
    * cols×rows 是整块画布的格数；band 是场景占的行数（贴底），band 上面的行只有大厅的暗（抖动渐变，越往上越接近底色，最上面是透明）。
    * quiet = [x0, x1]：输入框那一栏的格范围（对话页用它把指挥台和舞台口让到两边的空地上）；首页传 null。 */
   function buildScene({cols, rows, band, dark, home, lamps = [], quiet = null, dim = 0}) {
     const C = resolve(dark ? PALETTES.dark : PALETTES.light);
     const buf = new Uint32Array(cols * rows);            // 0 = 透明（露出页面底色）
+    const solid = new Uint8Array(cols * rows);           // 实心的东西占了哪些格（光晕不往上盖）
     const y0 = rows - band;                              // 场景顶
-    const floorY = y0 + Math.round(band * 0.42);         // 地平线：上面是后墙和舞台口，下面是地
-    const fade = (c) => dim ? mix(c, C.bg, dim) : c;
-    const set = (x, y, c) => { if (x >= 0 && y >= 0 && x < cols && y < rows) buf[y * cols + x] = pack(fade(c)); };
-    const solid = new Uint8Array(cols * rows);           // 剪影占了哪些格（描亮边用）
+    const floorY = y0 + Math.round(band * 0.4);          // 地平线：上面是后墙和舞台口，下面是地板
+    const floorH = rows - floorY;
+    const fade = (c) => (dim ? mix(c, C.bg, dim) : c);
+    const inb = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows;
+    const set = (x, y, c) => { if (inb(x, y)) buf[y * cols + x] = pack(fade(c)); };
+    const hard = (x, y, c) => { if (inb(x, y)) { buf[y * cols + x] = pack(fade(c)); solid[y * cols + x] = 1; } };
+    const blend = (x, y, c, a) => {                      // 往已有的颜色上叠一层
+      if (!inb(x, y)) return;
+      const v = buf[y * cols + x], under = v ? [v & 255, (v >> 8) & 255, (v >> 16) & 255] : C.bg;
+      buf[y * cols + x] = pack(mix(under, fade(c), a));
+    };
 
-    // 1. 大厅的暗：从画布顶到地平线，底色 → hall1 → hall2 → hall3，相邻两档之间抖动
+    // 1. 大厅的暗：从画布顶到地平线，底色 → hall1 → hall2 → hall3
     const hall = [null, C.hall1, C.hall2, C.hall3];
     for (let y = 0; y < floorY; y++) {
-      const t = Math.pow(y / Math.max(1, floorY), 1.6) * 3;
-      const lo = Math.min(3, Math.floor(t)), frac = t - lo;
-      for (let x = 0; x < cols; x++) {
-        const lvl = Math.min(3, lo + (frac > bayer(x, y) ? 1 : 0));
-        if (hall[lvl]) set(x, y, hall[lvl]);
-      }
+      const t = Math.pow(y / Math.max(1, floorY), 1.6) * 3, lo = Math.min(3, Math.floor(t)), frac = t - lo;
+      for (let x = 0; x < cols; x++) { const lvl = Math.min(3, lo + (frac > bayer(x, y) ? 1 : 0)); if (hall[lvl]) set(x, y, hall[lvl]); }
     }
-    // 2. 地：三档，越近越深（浅色主题是越近越实），抖动；三道台阶线（乐队的阶梯台）
-    const floorH = rows - floorY;
-    for (let y = floorY; y < rows; y++) {
-      const t = ((y - floorY) / Math.max(1, floorH)) * 2;
-      const lo = Math.min(2, Math.floor(t)), frac = t - lo;
-      for (let x = 0; x < cols; x++) set(x, y, [C.floor0, C.floor1, C.floor2][Math.min(2, lo + (frac > bayer(x, y) ? 1 : 0))]);
-    }
-    const risers = [0, Math.round(floorH * 0.2), Math.round(floorH * 0.52)].map((d) => floorY + d);
-    risers.forEach((y, i) => { for (let x = 0; x < cols; x++) set(x, y, i === 0 ? C.riser : (x + i) % 2 ? C.riserDim : C.riser); });
 
-    // 位置：首页舞台口在正中、指挥台中间偏右；对话页两样各让到输入框两边的空地（空地不够宽就留在原处，被输入框挡住也无妨）
-    let stageX = Math.round(cols * 0.5), podX = Math.round(cols * 0.66);
+    // 位置：首页舞台口在正中、指挥台中间偏右；对话页两样各让到输入框两边的空地
+    let stageX = Math.round(cols * 0.5), podX = Math.round(cols * 0.68);
     if (!home && quiet) {
       const left = quiet[0], right = cols - quiet[1];
-      if (right >= 84) podX = quiet[1] + Math.round(right / 2);
-      if (left >= 60) stageX = Math.round(left / 2);
-      else if (right >= 150) { stageX = quiet[1] + Math.round(right * 0.25); podX = quiet[1] + Math.round(right * 0.68); }
+      if (right >= 104) podX = quiet[1] + Math.round(right / 2);
+      if (left >= 80) stageX = Math.round(left / 2);
+      else if (right >= 190) { stageX = quiet[1] + Math.round(right * 0.25); podX = quiet[1] + Math.round(right * 0.7); }
     }
 
-    // 3. 舞台口：一道拱（只有一圈边）+ 里面一片抖动的光 + 像素 M 的剪影
-    const archW = Math.min(196, Math.round(cols * 0.34)), archH = Math.max(18, Math.round(band * 0.6)), archR = Math.min(16, Math.floor(archH / 2));
-    const ax0 = stageX - Math.floor(archW / 2), ax1 = ax0 + archW - 1, ay0 = floorY - archH;
-    const inArch = (x, y) => {
-      if (x < ax0 || x > ax1 || y < ay0 || y >= floorY) return false;
-      if (y >= ay0 + archR) return true;
-      const cx = x < ax0 + archR ? ax0 + archR : x > ax1 - archR ? ax1 - archR : x;
-      return Math.hypot(x - cx, y - (ay0 + archR)) <= archR + 0.2;
+    // 2. 后墙：护墙板的竖线（从上往下抖动着显出来）、腰线、踢脚
+    for (let x = 0; x < cols; x++) {
+      set(x, floorY - 8, C.wall);
+      set(x, floorY - 2, C.wall); set(x, floorY - 1, C.rail);
+    }
+
+    // 3. 舞台口：一圈框 + 两边束起来的幕布 + 顶上的檐幕 + 里面的光 + 台唇和脚灯 + 像素 M
+    const fr = home ? 3 : 2, lipH = home ? 4 : 3;
+    const archW = Math.max(40, Math.min(232, Math.round(cols * 0.4), 2 * Math.min(stageX, cols - stageX) - 8, home || !quiet ? 999 : stageX < quiet[0] ? 2 * (quiet[0] - stageX) - 4 : 999)), archH = Math.max(34, Math.round(band * 0.58)), archR = Math.min(14, archH >> 1);
+    const ax0 = stageX - (archW >> 1), ax1 = ax0 + archW - 1, ay0 = floorY - archH;
+    const inArch = (x, y, k = 0) => {
+      const a = ax0 + k, b = ax1 - k, top = ay0 + k, r = Math.max(1, archR - k);
+      if (x < a || x > b || y < top || y >= floorY) return false;
+      if (y >= top + r) return true;
+      const cx = x < a + r ? a + r : x > b - r ? b - r : x;
+      return Math.hypot(x - cx, y - (top + r)) <= r + 0.2;
     };
+    const iw = archW - 2 * fr, ih = archH - fr, ix0 = ax0 + fr, iy0 = ay0 + fr;
+    const cw = Math.round(iw * 0.16), vh = Math.round(ih * 0.22), tie = 0.64;
+    const curtainW = (t) => (t < tie ? cw - cw * 0.42 * (t / tie) ** 2 : cw * 0.58 + cw * 0.3 * ((t - tie) / (1 - tie)));
+    const swN = Math.max(3, Math.round(iw / 30)), sw = iw / swN;
+    const CU = [C.cu0, C.cu1, C.cu2, C.cu3], ST = [C.st0, C.st1, C.st2, C.st3];
     for (let y = ay0; y < floorY; y++) for (let x = ax0; x <= ax1; x++) {
       if (!inArch(x, y)) continue;
-      const edge = !inArch(x - 1, y) || !inArch(x + 1, y) || !inArch(x, y - 1);
-      if (edge) { set(x, y, C.arch); continue; }
-      const d = Math.hypot((x - stageX) / (archW * 0.52), (y - floorY) / (archH * 1.0));
-      const g = Math.max(0, 1 - d);
-      // 三档：最里面一团亮（stageHi），外面一圈 stage，再外面抖动着融进大厅的暗
-      if (g > 0.5 && (g - 0.5) * 2.6 > bayer(x + 1, y + 2)) set(x, y, C.stageHi);
-      else if (g * 1.9 > bayer(x, y) + 0.1) set(x, y, C.stage);
+      if (!inArch(x, y, fr)) { hard(x, y, !inArch(x, y, 1) ? C.archLo : inArch(x, y, fr - 1) ? C.archHi : C.arch); continue; }
+      const lx = x - ix0, ly = y - iy0, t = ly / ih, side = Math.min(lx, iw - 1 - lx);
+      if (ly >= ih - lipH) { set(x, y, ly === ih - lipH ? C.lipHi : (lx % 6 === 3 && ly > ih - lipH + 1) ? C.archLo : C.lip); continue; }
+      // 檐幕：一串垂下来的弧
+      const fx = (lx % sw) / sw, vEdge = vh * (0.55 + 0.45 * (1 - (2 * fx - 1) ** 2));
+      if (ly < vEdge) {
+        if (ly >= Math.floor(vEdge) - 0 && ly + 1 >= vEdge) { set(x, y, lx & 1 ? C.fringe : C.cu0); continue; }
+        const v = (ly / vEdge) * 2.6 + (2 * fx - 1) ** 2 * 1.4, f = v - Math.floor(v);
+        set(x, y, ramp(CU, (1 - Math.abs(2 * f - 1)) * 0.82, x, y)); continue;
+      }
+      // 侧幕：束腰以上直垂，束腰处收窄，往下再散开；一道道褶子
+      const cwt = curtainW(t);
+      if (side < cwt) {
+        if (Math.abs(ly - Math.round(ih * tie)) < 1) { set(x, y, C.fringe); continue; }
+        if (side >= cwt - 1) { set(x, y, C.cu3); continue; }
+        const f = (side / cwt) * 5, ff = f - Math.floor(f);
+        set(x, y, ramp(CU, (1 - Math.abs(2 * ff - 1)) * 0.86, x, y)); continue;
+      }
+      // 台里面的光：台口中间最亮，往外四档退到暗；顶上打下来一束
+      const d = Math.hypot((x - stageX) / (iw * 0.5), (y - (floorY - lipH)) / (ih * 0.95));
+      const cone = Math.abs(x - stageX) < 5 + ly * 0.2 ? 0.16 : 0;
+      set(x, y, ramp(ST, (1 - d) * 1.25 + cone, x, y));
     }
-    // 舞台口的光落在地上一小片（梯形，越近越疏）
-    for (let dy = 1; dy <= Math.round(floorH * 0.22); dy++) {
-      const y = floorY + dy, half = Math.round(archW * 0.36 + dy * 1.6), k = 1 - dy / (floorH * 0.22 + 1);
-      for (let x = stageX - half; x <= stageX + half; x++) if (k * 0.62 * (1 - Math.abs(x - stageX) / (half + 1)) > bayer(x, y)) set(x, y, mix(C.floor0, C.stage, 0.55));
+    // 脚灯：台唇上一排小灯罩，光往台里打
+    for (let k = 0; ; k++) {
+      const off = 9 + k * 18; if (off > iw / 2 - cw - 6) break;
+      for (const fxp of [stageX - off, stageX + off]) {
+        const fy = floorY - lipH - 1;
+        for (let dx = -1; dx <= 1; dx++) set(fxp + dx, fy, C.hood);
+        set(fxp, fy - 1, C.footCore);
+        for (let dy = 2; dy <= 5; dy++) for (let dx = -dy; dx <= dy; dx++) if ((1 - dy / 6) * 0.8 > bayer(fxp + dx, fy - dy)) blend(fxp + dx, fy - dy, C.st3, 0.5);
+      }
     }
-    const logoS = archH >= 52 ? 3 : archH >= 30 ? 2 : 1;                 // 标志按舞台口的高矮放大（一个标志格 = logoS×logoS 画格）
-    const logo = {x: stageX - Math.floor(13 * logoS / 2), y: floorY - 11 * logoS, s: logoS};
+    const logoS = ih - vh - lipH >= 38 ? 3 : ih - vh - lipH >= 24 ? 2 : 1;       // 标志按舞台口的高矮放大（一个标志格 = logoS×logoS 画格）
+    const logo = {x: stageX - Math.floor(13 * logoS / 2), y: floorY - lipH - 11 * logoS, s: logoS};
     LOGO.forEach((row, ry) => [...row].forEach((ch, rx) => {
       if (ch !== '#') return;
-      for (let dy = 0; dy < logoS; dy++) for (let dx = 0; dx < logoS; dx++) {
-        const x = logo.x + rx * logoS + dx, y = logo.y + ry * logoS + dy;
-        const lit = (ry === 0 || LOGO[ry - 1][rx] !== '#') && dy === 0;      // 顶上一圈亮边
-        set(x, y, lit ? C.silRim : C.sil);
-      }
+      const topEdge = ry === 0 || LOGO[ry - 1][rx] !== '#', leftEdge = rx === 0 || row[rx - 1] !== '#';
+      for (let dy = 0; dy < logoS; dy++) for (let dx = 0; dx < logoS; dx++)
+        hard(logo.x + rx * logoS + dx, logo.y + ry * logoS + dy, topEdge && dy === 0 ? C.silRim : leftEdge && dx === 0 ? C.silFace : C.sil);
     }));
+    for (let x = logo.x - 2; x < logo.x + 13 * logoS + 2; x++) if (bayer(x, 1) < 0.5) blend(x, floorY - lipH, C.sil, 0.6);   // M 落在台唇上的影子
 
-    // 画一个谱台。depth 0 近 / 1 中 / 2 远：越远越往底色里退（大气透视）
-    const drawStand = (sprite, cx, baseY, state, depth) => {
-      const st = C[state] || C.off;
-      const w = sprite[0].length, h = sprite.length, x0 = cx - Math.floor(w / 2), yTop = baseY - h + 1;
-      const far = [0, 0.18, 0.38][depth];
-      const tone = (c) => far ? mix(c, dark ? C.hall3 : C.floor0, far) : c;
-      const lit = Boolean(st.glow);
-      // 灯下的光晕：以灯泡为圆心，抖动着淡出；浅色主题只是一圈很疏的点
+    // 4. 地板：木条朝舞台口收拢（透视），远处的缝抖动着淡掉；两道台阶沿
+    const vpx = stageX, vpy = floorY - Math.round(floorH * 0.16), pk = (rows - vpy) / 26;
+    const plank = (x, y) => Math.floor(((x - vpx) / (y - vpy)) * pk);
+    const FL = [C.f0, C.f1, C.f2];
+    for (let y = floorY; y < rows; y++) {
+      const d = (y - floorY) / floorH;
+      for (let x = 0; x < cols; x++) {
+        const i = plank(x, y), h = hash(i + 4096);
+        let c = ramp(FL, d + (h & 1 ? 0.12 : -0.08), x, y);
+        if (plank(x - 1, y) !== i && d * 2.8 > bayer(x, y)) c = C.seam;
+        else if (d > 0.12 && (y === floorY + 4 + (h >>> 3) % floorH || y === floorY + 4 + (h >>> 11) % floorH)) c = C.seam;   // 木条的接头
+        set(x, y, c);
+      }
+    }
+    // 舞台口的光落在地上一片（越近越疏）
+    const spill = Math.round(floorH * 0.3);
+    for (let dy = 0; dy < spill; dy++) {
+      const y = floorY + dy, half = Math.round(iw * 0.4 + dy * 1.8), k = 1 - dy / spill;
+      for (let x = stageX - half; x <= stageX + half; x++) if (k * 0.7 * (1 - Math.abs(x - stageX) / (half + 1)) > bayer(x, y)) blend(x, y, C.st2, dark ? 0.5 : 0.6);
+    }
+    const risers = [floorY, floorY + Math.round(floorH * 0.22), floorY + Math.round(floorH * 0.5)];
+    for (const y of risers.slice(1)) for (let x = 0; x < cols; x++) { set(x, y, C.edge); set(x, y + 1, C.edgeLo); if (bayer(x, y) < 0.5) blend(x, y + 2, C.edgeLo, 0.6); }
+
+    // 画一个谱台。depth 0 近 / 1 中 / 2 远：越远越往底色里退（大气透视）；seed 决定谱面上的音符（每个谱台不一样）
+    const drawStand = (cx, baseY, depth, state, seed) => {
+      const z = STAND_SIZES[depth], st = C[state] || C.off, lit = Boolean(st.glow);
+      const H = z.lampH + z.dh + 2 + z.poleH + z.legH, yTop = baseY - H + 1, deskTop = yTop + z.lampH, x0 = cx - (z.w >> 1);
+      const far = [0, 0.16, 0.34][depth];
+      const tone = (c) => (far ? mix(c, dark ? C.hall3 : C.f0, far) : c);
+      const P = (x, y, c) => hard(x, y, tone(c));
+      // 灯下的光晕（浅色主题只是一圈很疏的点）
       if (lit) {
-        const bx = cx, by = yTop + (sprite[1].includes('B') ? 1 : 2), r = Math.round(w * (dark ? 0.78 : 0.5));
-        for (let y = by - r; y <= by + r; y++) for (let x = bx - r; x <= bx + r; x++) {
-          if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
-          const d = Math.hypot(x - bx, (y - by) * 1.15) / r;
-          if (d >= 1) continue;
-          const g = 1 - d;
-          if (g * g * (dark ? 0.9 : 0.34) > bayer(x, y)) {
-            const under = buf[y * cols + x];
-            const base = under ? [under & 255, (under >> 8) & 255, (under >> 16) & 255] : C.bg;
-            buf[y * cols + x] = pack(mix(base, fade(tone(st.glow)), dark ? 0.2 + g * 0.3 : 0.5));
-          }
+        const by = deskTop - 1, r = Math.round(z.w * (dark ? 0.82 : 0.5));
+        for (let y = by - r; y <= by + r; y++) for (let x = cx - r; x <= cx + r; x++) {
+          if (!inb(x, y) || solid[y * cols + x]) continue;
+          const g = 1 - Math.hypot(x - cx, (y - by) * 1.15) / r;
+          if (g > 0 && g * g * (dark ? 0.9 : 0.34) > bayer(x, y)) blend(x, y, tone(st.glow), dark ? 0.18 + g * 0.3 : 0.5);
         }
+        // 灯落在地上的光斑
+        if (z.legH) { const rx = Math.round(z.w * 0.8), ry = depth === 1 ? 3 : 2;
+          for (let dy = -ry; dy <= ry; dy++) for (let dx = -rx; dx <= rx; dx++) { const g = 1 - Math.hypot(dx / rx, dy / ry); if (g > 0 && g * 0.9 > bayer(cx + dx, baseY + dy)) blend(cx + dx, baseY + dy, tone(st.glow), dark ? 0.2 : 0.3); } }
       }
-      const sheetRows = sprite.filter((r) => r.includes('S')).length;
-      let sheetRow = -1;
-      sprite.forEach((row, ry) => {
-        if (row.includes('S')) sheetRow++;
-        [...row].forEach((ch, rx) => {
-          if (ch === '.') return;
-          const x = x0 + rx, y = yTop + ry;
-          let c;
-          if (ch === 'L') c = lit ? mix(C.frame, st.glow, 0.35) : C.frame;
-          else if (ch === 'B') c = st.core || C.frame;
-          else if (ch === 'F') c = (ry === 0 || sprite[ry - 1][rx] === '.' || sprite[ry - 1][rx] === 'B' || sprite[ry - 1][rx] === 'L') ? (lit ? mix(C.frameRim, st.glow, 0.55) : C.frameRim) : C.frame;
-          else if (ch === 'P') c = (rx > 0 && row[rx - 1] === '.') ? mix(C.pole, C.frameRim, 0.5) : C.pole;
-          else if (ch === 'l') c = st.line;
-          else c = (sheetRow / Math.max(1, sheetRows - 1)) * 1.15 - 0.1 > bayer(x, y) ? st.lo : st.hi;   // 谱纸：靠灯的一头亮，往下抖动着暗下去
-          set(x, y, tone(c));
-          solid[y * cols + x] = 1;
-        });
-      });
-      // 亮着的灯在地上落一小片光
-      if (lit && dark) for (let x = x0 - 2; x < x0 + w + 2; x++) for (let dy = 0; dy < 2; dy++) {
-        const y = baseY + 1 + dy; if (y >= rows || x < 0 || x >= cols) continue;
-        if (0.55 - dy * 0.25 > bayer(x, y)) set(x, y, mix(C.floor1, tone(st.glow), 0.22));
+      // 夹在谱板上沿的小灯：灯罩两行 + 灯口一行
+      const lw = z.lampW >> 1;
+      if (z.lampH === 3) for (let dx = -lw + 1; dx <= lw - 1; dx++) P(cx + dx, yTop, dx === -lw + 1 ? C.poleHi : C.lampHood);
+      for (let dx = -lw; dx <= lw; dx++) P(cx + dx, deskTop - 2, lit ? mix(C.lampHood, st.glow, dx === -lw ? 0.6 : 0.3) : dx === -lw ? C.frameHi : C.lampHood);
+      for (let dx = -lw + 1; dx <= lw - 1; dx++) P(cx + dx, deskTop - 1, st.core || C.frameLo);
+      // 谱板：框（上、左受光，下、右背光）+ 两页谱纸，中间一道折缝
+      const pw = (z.w - 3) >> 1, unit = 2 * z.n - 1 + z.gap;
+      for (let ry = 0; ry < z.dh; ry++) for (let rx = 0; rx < z.w; rx++) {
+        const x = x0 + rx, y = deskTop + ry;
+        if (ry === 0) { P(x, y, lit ? mix(C.frameHi, st.glow, 0.55) : C.frameHi); continue; }
+        if (ry === z.dh - 1) { P(x, y, C.frameLo); continue; }
+        if (rx === 0) { P(x, y, C.frameHi); continue; }
+        if (rx === z.w - 1) { P(x, y, C.frame); continue; }
+        if (x === cx) { P(x, y, mix(st.lo, st.ink, 0.35)); continue; }
+        let c = ramp([st.hi, st.mid, st.lo], Math.hypot(x - cx, (y - deskTop) * 1.3) / (z.w * 0.62), x, y);
+        const page = x < cx ? 0 : 1, pc = page ? x - cx - 1 : rx - 1, iy = ry - 1;      // pc：这一页里的第几列
+        if (page ? pc === 0 : pc === pw - 1) c = mix(c, st.lo, 0.6);                    // 折缝两边暗一线
+        const sIdx = Math.floor((iy - 1) / unit), r = (iy - 1) - sIdx * unit;
+        if (iy >= 1 && r < 2 * z.n - 1 && (sIdx + 1) * unit - z.gap <= z.dh - 3 && pc >= 1 && pc <= pw - 2) {
+          if (r % 2 === 0) c = st.line;
+          if (pc === pw - 2) c = st.line;                                               // 小节线收尾
+          const k = seed * 131 + page * 17 + sIdx * 5;
+          if (z.n === 3 && pc >= 2 && pc <= pw - 4) {
+            const g0 = 2 + 3 * Math.floor((pc - 2) / 3), o = pc - g0, h = hash(k * 31 + g0), hr = (h >>> 4) % 5;
+            if (h % 6 && o < 2) { if (r === hr) c = st.ink; else if (o === 1 && hr >= 2 && r < hr && r >= hr - 2) c = st.ink; else if (o === 0 && hr < 2 && r > hr && r <= hr + 2) c = st.ink; }
+          } else if (z.n === 2 && pc % 2 === 1 && pc <= pw - 3) { const h = hash(k * 31 + pc); if (h % 5 && r === (h >>> 4) % 3) c = st.ink; }
+          else if (z.n === 1 && pc <= pw - 3 && hash(k * 31 + pc) % 3 === 0) c = st.ink;
+        }
+        P(x, y, c);
+      }
+      // 托谱的沿
+      const ly = deskTop + z.dh;
+      for (let rx = 0; rx < z.w; rx++) P(x0 + rx, ly, lit ? mix(C.frameHi, st.glow, 0.25) : C.frameHi);
+      for (let rx = 1; rx < z.w - 1; rx++) P(x0 + rx, ly + 1, C.frameLo);
+      // 立杆（左亮右暗）+ 锁紧的箍 + 三脚
+      const py0 = ly + 2, legTop = baseY - z.legH + 1;
+      for (let y = py0; y <= baseY; y++) {
+        if (z.pole === 3) { P(cx - 1, y, C.poleHi); P(cx, y, C.pole); P(cx + 1, y, C.poleLo); } else P(cx, y, mix(C.pole, C.poleHi, 0.5));
+      }
+      if (z.pole === 3) { const cy = py0 + Math.round((legTop - py0) * 0.42); for (let dx = -2; dx <= 2; dx++) { P(cx + dx, cy, C.poleHi); P(cx + dx, cy + 1, dx === 2 ? C.poleLo : C.pole); } }
+      for (let i = 0; i < z.legH; i++) {
+        const y = legTop + i, o = z.pole === 3 ? 2 + 2 * i : 1 + i;
+        P(cx - o, y, C.poleHi); P(cx - o - 1, y, C.pole); P(cx + o, y, C.pole); P(cx + o + 1, y, C.poleLo);
       }
     };
 
-    // 4. 谱台的位置：三排，围着指挥台散开。先排好位置，再按离指挥台的远近给灯编号（最近的先亮）
+    // 5. 谱台的位置：三排，围着指挥台散开。先排好位置，再按离指挥台的远近给灯编号（最近的先亮）
     const slots = [];
-    const farBase = risers[1] - 1, midBase = risers[2] - 1, nearBase = rows + 4;       // 近排的三脚落在画面外，只露出谱板和半截杆
-    const rowOf = (sprite, base, gap, depth, phase) => {
-      const w = sprite[0].length;
+    const rowOf = (base, gap, depth, phase) => {
+      const w = STAND_SIZES[depth].w;
       for (let x = Math.round(gap * phase); x < cols + w; x += gap) {
-        if (depth === 2 && Math.abs(x - stageX) < 13 * logoS / 2 + w) continue;             // 远排不挡 M
-        if (depth >= 1 && Math.abs(x - podX) < 34 + w / 2) continue;                        // 中、远排给指挥台和猫让位
-        if (depth === 0 && Math.abs(x - podX) < 30 + w / 2) continue;                       // 近排不挡猫
+        if (depth === 2 && Math.abs(x - stageX) < archW / 2 + w) continue;                   // 远排不挡舞台口
+        if (Math.abs(x - podX) < 50 + w / 2) continue;                                      // 给指挥台和猫让位
         if (!home && quiet && x + w / 2 > quiet[0] - 2 && x - w / 2 < quiet[1] + 2) continue; // 对话页：输入框后面不放
-        slots.push({sprite, cx: x, base, depth});
+        slots.push({cx: x, base, depth});
       }
     };
-    rowOf(STAND_FAR, farBase, 30, 2, 0.5);
-    rowOf(STAND_MID, midBase, 46, 1, 0.82);
-    rowOf(STAND_NEAR, nearBase, 70, 0, 0.45);
+    rowOf(risers[1] - 2, 60, 2, 0);
+    rowOf(risers[2] - 2, 60, 1, 0.5);
+    rowOf(rows + 30, 120, 0, 0.5);                        // 近排的立杆伸到画面外，只露出谱板和一截杆
     const order = slots.map((s, i) => i).sort((a, b) => (Math.abs(slots[a].cx - podX) + slots[a].depth * 26) - (Math.abs(slots[b].cx - podX) + slots[b].depth * 26));
     order.forEach((slotIndex, rank) => { slots[slotIndex].state = lamps[rank] || 'off'; });
-    const paintRow = (depth) => slots.filter((s) => s.depth === depth).forEach((s) => drawStand(s.sprite, s.cx, s.base, s.state, s.depth));
+    const paintRow = (depth) => slots.forEach((s, i) => { if (s.depth === depth) drawStand(s.cx, s.base, s.depth, s.state, i + 1); });
     paintRow(2);
-
-    // 5. 指挥台：一块矮台子 + 背对我们的谱台（它的灯会跳）+ 猫
-    const podW = 74, podH = 8, podBase = Math.min(rows - 3, risers[2] + Math.round((rows - risers[2]) * 0.5));
-    const px0 = podX - Math.floor(podW / 2), podTop = podBase - podH + 1;
-    for (let y = podTop; y <= podBase; y++) for (let x = px0; x < px0 + podW; x++) {
-      if ((y === podTop) && (x === px0 || x === px0 + podW - 1)) continue;
-      const c = y === podTop ? C.podiumTop : y === podTop + 1 ? C.podium : (x - px0) % 12 === 0 ? C.podium : y === podBase ? C.podium : C.podiumFace;
-      set(x, y, c);
-    }
-    const cat = {x: podX - 6, y: podTop - CAT.length};
-    CAT.forEach((row, ry) => [...row].forEach((ch, rx) => {
-      if (ch === '.') return;
-      const x = cat.x + rx, y = cat.y + ry;
-      let c = ch === 'E' ? C.eye : ch === 'H' ? C.eyeHi : C.cat;
-      // 受光的一侧（左、上）描一圈亮边
-      // 受光的一侧（左、上：指挥台的灯在它左前方）描一圈亮边；背光的一侧（右）只描很暗的一线，让尾巴和背不融进地里
-      const edgeL = rx === 0 || row[rx - 1] === '.', edgeT = ry === 0 || CAT[ry - 1][rx] === '.', edgeR = rx === row.length - 1 || row[rx + 1] === '.';
-      if (ch === 'K' && (edgeL || edgeT)) c = edgeL && ry > 20 ? mix(C.catRim, C.cat, 0.35) : C.catRim;
-      else if (ch === 'K' && edgeR) c = mix(C.cat, C.catRim, 0.38);
-      set(x, y, c);
-      solid[y * cols + x] = 1;
-    }));
-    const lead = {cx: podX - 24, base: podTop - 1};
     paintRow(1);
+
+    // 6. 指挥台：木台子（台面受灯光，正面有嵌板）+ 猫；背对我们的谱台在 paintMoving 里画（它的灯会跳）
+    const podW = 92, podH = home ? 12 : 9, podBase = rows - 3, podTop = podBase - podH + 1, px0 = podX - (podW >> 1);
+    const lead = {cx: podX - 31, base: podTop + 1};
+    for (let x = px0 - 3; x < px0 + podW + 3; x++) for (let dy = 1; dy <= 2; dy++) if (bayer(x, dy) < (dy === 1 ? 0.75 : 0.4)) blend(x, podBase + dy, C.seam, 0.7);   // 台子的影子
+    for (let ry = 0; ry < podH; ry++) for (let rx = 0; rx < podW; rx++) {
+      const x = px0 + rx, y = podTop + ry;
+      let c;
+      if (ry < 4) {                                                                         // 台面（往后收一点）
+        if (rx < 3 - ry || rx >= podW - (3 - ry)) continue;
+        c = ry === 3 ? C.podTrim : ramp([C.podTop, C.podTopLo], Math.abs(x - lead.cx - 8) / 46 + ry * 0.08, x, y);
+      } else {
+        const m = rx % 23, inner = ry >= 6 && ry <= podH - 3 && m >= 3 && m <= 20;
+        c = ry === podH - 1 ? C.podFaceLo : rx === 0 ? C.podFaceHi : rx === podW - 1 ? C.podFaceLo
+          : inner ? ((ry === 6 || m === 3) ? C.podFaceLo : (ry === podH - 3 || m === 20) ? C.podFaceHi : ramp([C.podFaceHi, C.podFace], rx / 40, x, y)) : C.podFace;
+      }
+      hard(x, y, c);
+    }
+    const cat = {x: podX - 15, y: podTop + 2 - CAT_H};
+    for (let ry = 1; ry <= 2; ry++) for (let x = cat.x + 22; x < cat.x + 58; x++) if (bayer(x, ry) < 0.6) blend(x, podTop + ry, C.podFaceLo, 0.7);   // 猫落在台面上的影子
+    for (let ry = 0; ry < CAT_H; ry++) for (let rx = 0; rx < CAT_W; rx++) { const t = CAT.tone[ry * CAT_W + rx]; if (t) hard(cat.x + rx, cat.y + ry, C[t]); }
+    for (const [wx, wy] of CAT.out) set(cat.x + wx, cat.y + wy, C.whiskOut);
+    if (dark) for (const [ex, ey] of CAT_EYES) for (let dy = -4; dy <= 4; dy++) for (let dx = -5; dx <= 5; dx++) {   // 眼睛的一点蓝光
+      const t = CAT.tone[(ey + dy) * CAT_W + ex + dx]; if (!t || /eye|pupil|warm|whisk|nose/.test(t)) continue;
+      const g = 1 - Math.hypot(dx / 5, dy / 3.6); if (g > 0 && g * 0.8 > bayer(ex + dx, ey + dy)) blend(cat.x + ex + dx, cat.y + ey + dy, C.eyeLo, 0.3);
+    }
     paintRow(0);
 
-    return {buf, cols, rows, C, dim, solid, anchors: {logo, lead, cat, floorY, y0, stageX, podX, slots}};
+    return {buf, cols, rows, C, dim, dark, solid, anchors: {logo, lead, cat, floorY, y0, stageX, podX, slots}};
   }
 
   /* 会动的两样，叠在静的那一层上：指挥台的灯（每拍亮一下、半拍收回一格）和节拍器的摆锤（左-中-右-中）。
    * put(x, y, [r,g,b]) 由调用方给（它负责 dim 和越界）。step 是半拍数；still = 减少动态效果。 */
   function paintMoving(scene, step, still, put, under) {
-    const {C, anchors: {logo, lead}} = scene;
+    const {C, dark, cols, anchors: {logo, lead}} = scene;
     // 摆锤
     const phase = still ? 1 : step % 4;
     const bobX = logo.x + Math.round((6 + [0, 0.5, 1, 0.5][phase]) * logo.s);
-    for (let y = 0; y < 2 * logo.s; y++) for (let x = 0; x < 2 * logo.s; x++) put(bobX + x, logo.y + 3 * logo.s + y, C.eye);
-    // 指挥台的谱台和灯：强拍光晕大一格
+    for (let y = 0; y < 2 * logo.s; y++) for (let x = 0; x < 2 * logo.s; x++) put(bobX + x, logo.y + 3 * logo.s + y, y === 0 || x === 0 ? C.eye : C.eyeLo);
+    // 指挥台的谱台（背面）和灯：强拍光晕大一格
     const on = still || step % 2 === 0;
-    const sprite = STAND_LEAD, w = sprite[0].length, h = sprite.length, x0 = lead.cx - Math.floor(w / 2), yTop = lead.base - h + 1;
-    const st = C.lead, r = on ? 19 : 17, bx = lead.cx, by = yTop + 1, cols = scene.cols;
-    for (let y = by - r; y <= by + r; y++) for (let x = bx - r; x <= bx + r; x++) {
-      const d = Math.hypot(x - bx, (y - by) * 1.1) / r;
-      if (d >= 1 || x < 0 || y < 0 || x >= cols || scene.solid[y * cols + x]) continue;
-      const g = 1 - d;
-      if (g * g * (scene.dark ? 1.0 : 0.3) > bayer(x, y)) put(x, y, mix(under(x, y), st.glow, scene.dark ? 0.14 + g * 0.34 : 0.45));
+    const z = LEAD, st = C.lead, x0 = lead.cx - (z.w >> 1), yTop = lead.base - z.h + 1, deskTop = yTop + 3;
+    const r = on ? 21 : 19, by = deskTop - 1;
+    for (let y = by - r; y <= by + r; y++) for (let x = lead.cx - r; x <= lead.cx + r; x++) {
+      if (x < 0 || y < 0 || x >= cols || y >= scene.rows || scene.solid[y * cols + x]) continue;
+      const g = 1 - Math.hypot(x - lead.cx, (y - by) * 1.1) / r;
+      if (g > 0 && g * g * (dark ? 1.0 : 0.3) > bayer(x, y)) put(x, y, mix(under(x, y), st.glow, dark ? 0.14 + g * 0.36 : 0.45));
     }
-    sprite.forEach((row, ry) => [...row].forEach((ch, rx) => {
-      if (ch === '.') return;
-      const top = ry === 0 || sprite[ry - 1][rx] === '.' || sprite[ry - 1][rx] === 'B' || sprite[ry - 1][rx] === 'L';
-      const c = ch === 'B' ? (on ? st.core : mix(st.core, st.glow, 0.5)) : ch === 'L' ? mix(C.frame, st.glow, 0.3) : ch === 'P' ? C.pole : top ? mix(C.frameRim, st.glow, on ? 0.7 : 0.45) : C.sil;
-      put(x0 + rx, yTop + ry, c);
-    }));
+    const lw = z.lampW >> 1, hot = mix(C.frameHi, st.glow, on ? 0.75 : 0.5);
+    for (let dx = -lw + 1; dx <= lw - 1; dx++) put(lead.cx + dx, yTop, dx === -lw + 1 ? C.poleHi : C.lampHood);
+    for (let dx = -lw; dx <= lw; dx++) put(lead.cx + dx, yTop + 1, mix(C.lampHood, st.glow, 0.3));
+    for (let dx = -lw + 1; dx <= lw - 1; dx++) put(lead.cx + dx, yTop + 2, on ? st.core : mix(st.core, st.glow, 0.5));
+    for (let ry = 0; ry < z.dh; ry++) for (let rx = 0; rx < z.w; rx++) {
+      // 背板：顶上一线被灯照亮；中间一道筋、两道横撑、四颗铆钉
+      const c = ry === 0 ? hot : rx === z.w - 1 ? mix(C.frameHi, st.glow, 0.3) : rx === 0 ? C.frame : ry === z.dh - 1 ? C.frameLo
+        : rx === z.w >> 1 ? C.pole : (ry === 4 || ry === 10) ? C.frame : ((rx === 3 || rx === z.w - 4) && (ry === 2 || ry === 12)) ? C.frameHi : C.sil;
+      put(x0 + rx, deskTop + ry, c);
+    }
+    const ly = deskTop + z.dh;
+    for (let rx = 1; rx < z.w - 1; rx++) put(x0 + rx, ly, C.frameLo);
+    for (let y = ly + 1; y <= lead.base; y++) { put(lead.cx - 1, y, C.pole); put(lead.cx, y, C.pole); put(lead.cx + 1, y, C.poleHi); }
+    const cy = ly + 4; for (let dx = -2; dx <= 2; dx++) { put(lead.cx + dx, cy, C.poleHi); put(lead.cx + dx, cy + 1, C.pole); }
+    for (let i = 0; i < z.legH; i++) { const y = lead.base - z.legH + 1 + i, o = 2 + 2 * i; put(lead.cx - o, y, C.pole); put(lead.cx - o - 1, y, C.poleLo); put(lead.cx + o, y, C.poleHi); put(lead.cx + o + 1, y, C.pole); }
   }
 
   // 给单测和离线出图用（node 里没有 document）
@@ -506,7 +536,7 @@
     const lamps = currentLamps();
     lampSig = lamps.join(',');
     scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, dim: home ? 0 : 0.5});
-    scene.dark = isDark();
+    
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');
