@@ -513,6 +513,7 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 ### 需 Mac 端（Fable 看过，照原表做，补两条）
 
 原表四项不变，都只能在 Mac 上做，这台做不了。补：
+- B1-2（用户 11-15 定，留给 Mac）：在 Mac 碧琪上，从绑了飞书的那个模式的飞书会话里，让碧琪用飞书工具发一条消息或一个文件（比如「写一个 hello.txt 发给我」）。看会话记录：`feishu_*` 工具都在、调用成功、消息真的收到了。面板会话不算。
 - A4：这次改了 `pinkie-media-inbox.mjs` 的一句话，Mac 装好后 `refresh_mac_runtime.py --check` 对的是新内容（sha256 `990a02bb…`）。
 - A4：Mac 上用 `PINKIE_TEST_OPENCLAW_DIST` 跑 `tests/media-inbox.test.mjs`，把这边跳过的 4 条补上（`progress/A4.md` 里写着，原表漏了）。
 
@@ -589,7 +590,7 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 | 项 | 原因 |
 |---|---|
 | A1-4、A2 `-shm`、A6-2、D1 的 Mac 部分 | 需 Mac |
-| B1-2 | 需真渠道账号（QQ / 飞书机器人），不碰 |
+| B1-2 | 用户 11-15 定：留给 Mac 测（Mac 接的是飞书，正好对上 ACCEPTANCE 原文；这台 Windows 只接了 QQ） |
 | 号池修复上线后再用直连量一遍出字前断流 | 正式 1466 还是旧版（C.le v1.1.48 在另一个会话里发布），而且 hy4free 现在不在号池里 |
 | B2-1～3 | §6 停了，没有可跑的 |
 
