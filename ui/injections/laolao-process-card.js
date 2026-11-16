@@ -333,8 +333,15 @@
     if (target) return target;
     const count = Number(card.dataset.pinkieRowCount);
     if (!Number.isFinite(count)) return slot; // compatible with an older renderer
-    if (ep.anchor >= count) return slots.find(node => node.dataset.pinkieThinkingTail === "1") || slot;
-    return null; // the matching row is inside a closed overflow section
+    const tail = slots.find(node => node.dataset.pinkieThinkingTail === "1") || slot;
+    if (ep.anchor >= count) return tail;
+    // The matching row can be inside the native "前面还有 N 步" overflow.
+    // Dropping the episode there made a later thinking burst disappear
+    // entirely. Keep it visible at the next displayed row, or at the tail.
+    const later = slots
+      .filter(node => Number(node.dataset.pinkieThinkingSeg) > ep.anchor)
+      .sort((a, b) => Number(a.dataset.pinkieThinkingSeg) - Number(b.dataset.pinkieThinkingSeg))[0];
+    return later || tail;
   }
 
   function renderThinking(slot) {

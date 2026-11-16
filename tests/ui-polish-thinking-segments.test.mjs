@@ -142,6 +142,21 @@ test('historical thinking parts are projected to the same rows', () => {
   assert.deepEqual(h.textAt(2), ['第二段思考']);
 });
 
+test('a later burst stays visible when its row sits in the closed overflow', () => {
+  const saved = {[key]: {text: '第一段思考\n\n第二段思考', ms: 0, count: 2, at: 1,
+    eps: [{text: '第一段思考', ms: 0, anchor: 0}, {text: '第二段思考', ms: 0, anchor: 1}]}};
+  const h = harness(saved);
+  h.setRows(2);
+  // The native card only emits a slot for displayed rows; hide row 1 as the
+  // collapsed "前面还有 N 步" section does, leaving the tail as the next slot.
+  const hidden = h.card.querySelectorAll('[data-pinkie-thinking]')
+    .find(node => Number(node.dataset.pinkieThinkingSeg) === 1 && node.dataset.pinkieThinkingTail !== '1');
+  hidden?.remove();
+  h.invalidateHistory();
+  assert.deepEqual(h.textAt(0), ['第一段思考']);
+  assert.deepEqual(h.textAt(2), ['第二段思考']);
+});
+
 test('old localStorage entries remain intact as one top block', () => {
   const h = harness({[key]: {text: '旧的完整思考', ms: 2300, count: 2, at: 1}});
   h.setRows(2);
