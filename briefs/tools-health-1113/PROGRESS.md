@@ -562,3 +562,11 @@ IPv4 `isPrivate=false`，IPv6 `2001:2::e isPrivate=true`，结果 `Blocked: reso
 - `doubao-cli` 0.23.3 已装。扫码登录被字节账号风控拒了三次（`error_code 2156`）。改用 C.le 控制台存的豆包账号 Cookie 登录：8 个里有 1 个带登录会话，已登上（CLI 配置名 `cle3`）。
 - 实测：一次往返约 9 秒；10.5 万字的输入能收下（chat 15 秒，work 模式用 Kimi K3.1 Pro 23 秒）。免费体验账号能用 DeepSeek V4 Pro、DeepSeek V4.1 Flash、Kimi K3.1 Pro、Kimi K3、GLM 5.3、GLM 5.3 Flash、豆包 2.1 Lite。
 - 豆包没有工具调用接口。下一步准备接开源的 Toolify（工具调用转译层）试工具调用准不准，再决定能不能进额度测试。
+
+### A6-1 真浏览器实测（11-15，没测成）
+
+- 做法：这个分支 `app/inapp_browser.py` 的 Windows 侧栏浏览器在 App 外单独起来（接口自测 `open` example.com 成功），副本网关带上它的连接信息（`TH_PASS_PINKIE_APP_BROWSER_ENDPOINT`），跑第 6 题（`app_browser` 起本地页 → 等 `#go` 最多 4 秒 → 点 → 读 `msg`）两遍，只用 hy4free。
+- `a6-inapp`：网关启动时没带连接信息，`app_browser` 回「没有侧栏浏览器」，不算数。
+- `a6-inapp2`：跑之前副本网关已经停了（12794 没监听），命令行改在自己进程里跑，`app_browser` 仍回「没有侧栏浏览器」；`browser` 工具也连不上网关。两遍模型都自己写 CDP 脚本起无头 Chrome 点到了，答出「点到了」，但没经过 `app_browser`，A6-1 照样没测到。两遍都是 480 秒命令超时：回复其实在 8 分钟内就结束了，是 `serve` 起的本地服务在命令行进程里不退出。
+- `a6-inapp3`：重新带连接信息起网关后再跑，两遍都在十几秒内失败：号池 1466 回 `model_not_available`（「模型 workbuddy/hy4free 不在当前 API Key 的可用模型范围内」），`/v1/models` 里已经没有 hy4free。05:35 还能用。号池是用户的 C.le 控制台，没动；规矩是实测只用 hy4free，没换模型。
+- **结论：A6-1 仍是「单测过、真机没测」**。等 hy4free 回到号池（或用户另定模型）后，照上面起浏览器和网关，重跑 `a6-inapp3` 即可。副本网关已停，副本配置的 `imageModel` / `pdfModel` 和备份 `bak-pre-imgdefault` 一致，不用还原。
