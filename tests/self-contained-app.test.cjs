@@ -322,7 +322,7 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(js, /碧琪设置/);
   assert.match(js, /laolao-classic-account-avatar/);
   assert.match(js, /给碧琪发消息/);
-  assert.match(js, /先生，今天想学点什么？/);
+  assert.match(js, /learning: "今天想学点什么？"/);
   assert.match(css, /data-pinkie-native-glass="1"/);
   assert.match(css, /\.laolao-splash, \.laolao-mode-transition/);
   require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-classic-shell.css','laolao-classic-shell.js','laolao-side-layout.css','laolao-side-layout.js','laolao-memory.css','laolao-memory.js']});

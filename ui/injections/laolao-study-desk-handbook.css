@@ -50,7 +50,7 @@
 #pinkie-study-desk .view[data-pk-fit] .pk-clip:not(.pk-clip--small){padding-top:8px;padding-bottom:8px}
 #pinkie-study-desk .view[data-pk-fit] .pk-clip-title{-webkit-line-clamp:1}
 #pinkie-study-desk .view:is([data-pk-fit="2"],[data-pk-fit="3"],[data-pk-fit="4"],[data-pk-fit="5"]) :is(.pk-tonight-list li:nth-child(n+2),.pk-clip+.pk-clip){display:none}
-/* 剪报是先生要的「外面的世界」，比今晚收的清单更晚收起。 */
+/* 剪报是用户要的「外面的世界」，比今晚收的清单更晚收起。 */
 #pinkie-study-desk .view:is([data-pk-fit="3"],[data-pk-fit="4"],[data-pk-fit="5"]) .pk-slot-tonight{display:none}
 #pinkie-study-desk .view:is([data-pk-fit="4"],[data-pk-fit="5"]) .pk-slot-clips{display:none}
 #pinkie-study-desk .view[data-pk-fit="5"] .pk-ask-refs{display:none}

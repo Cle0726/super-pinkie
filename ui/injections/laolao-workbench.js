@@ -2273,7 +2273,7 @@
     if ((name === 'agent' && payload?.stream === 'tool' && /^(write|edit|apply_patch|exec|bash|process)$/i.test(tool) && /result|end|done|complete/i.test(String(data.phase || data.state || 'result')))
       || (name === 'chat' && ['final', 'aborted', 'error'].includes(payload?.state))) refreshSoon();
   });
-  // 碧琪用 workbench_show 指给先生看；写 / 改文件时（跟随开着）在预览标签里打开，不抢输入框的焦点
+  // 碧琪用 workbench_show 指给用户看；写 / 改文件时（跟随开着）在预览标签里打开，不抢输入框的焦点
   const toolArgs = new Map();
   function relativePath(raw) {
     let p = String(raw || '');

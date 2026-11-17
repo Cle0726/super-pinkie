@@ -97,7 +97,7 @@
   function deskReceipt(ref) {
     const k = kit(), box = el('div', 'pk-desk-item');
     const paint = receipt => {
-      const who = receipt.by === 'biqi' ? '碧琪' : '先生';
+      const who = receipt.by === 'biqi' ? '碧琪' : '你';
       const text = receipt.action === 'regrade' ? `${who}更正了判分：${receipt.title}` : `${who}收进了${receipt.targetLabel || '手账'}：${receipt.title}`;
       const node = k.receipt(text, {label: receipt.action === 'regrade' ? '改' : '收', onUndo: receipt.undoable ? async () => {
         await request('pinkie.learning.ref.undo', {receiptId: receipt.receiptId}); cardCache.delete('receipt:' + ref.id); await loadReceipts();

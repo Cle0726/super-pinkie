@@ -290,7 +290,7 @@
               if (res?.text) p.textContent = res.text; else retry(res?.error);
             }).catch(error => retry(error?.message));
           };
-          // 讲解要先生自己点才开始，不自动调用模型。
+          // 讲解要用户自己点才开始，不自动调用模型。
           const ask = el('button', 'pkb-link', '讲给我听'); ask.type = 'button'; ask.addEventListener('click', run); p.append(ask);
         }
       } else {
