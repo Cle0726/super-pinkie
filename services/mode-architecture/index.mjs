@@ -9,7 +9,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
@@ -3200,7 +3200,8 @@ export class CleKkSupervisor {
           reply: replyHash,
           displayReply: hashForAudit(renderFirstPerson(workFirstReplyText(reply, ctx))),
           runId,
-          note: '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
+          // Metre 有自己的口吻，不借碧琪的名字说话。
+          note: modeForContext(ctx) === 'metre' ? '注：这一步还没核实——现有记录不足以证实这个结果。' : '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
         };
         this.persist(key, turn);
         return undefined;
@@ -4330,7 +4331,8 @@ export class UpstreamWatchdog {
     // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
     // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
     const waitingOnChildren = workFirstContext(ctx) && endsWithYield(event.messages)
-      && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey)));
+      && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey))
+        || await lineageRunningChildren(sessionKey) > 0);
     const incompleteToolTurn = !waitingOnChildren && hasIncompleteToolTurn(event, reason, ctx);
     const terminalFailure = this.windows && endedWithFailedAssistant(event);
     if (event.success && !incompleteToolTurn && !terminalFailure) {

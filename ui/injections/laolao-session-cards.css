@@ -36,3 +36,11 @@ openclaw-chat-pane[data-pinkie-session-readonly] :is(.agent-chat__input,.agent-c
 html[data-pinkie-night] .chat-group.assistant .pinkie-fork-action { --pinkie-card-action-bg:#30232d }
 .chat-group.assistant .chat-bubble:is(:hover,:focus-within) .pinkie-fork-action { opacity:1;pointer-events:auto }
 .pinkie-chat-session-menu:focus-visible,.pinkie-fork-action:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px;opacity:1;pointer-events:auto }
+/* 展开后的子会话汇报：Markdown 排成段落、小标题、列表 */
+.pinkie-session-card__body--md { white-space:normal }
+.pinkie-session-card__body--md > :first-child { margin-top:0 }
+.pinkie-session-card__body--md p, .pinkie-session-card__body--md ul, .pinkie-session-card__body--md ol { margin:0 0 6px }
+.pinkie-session-card__body--md ul, .pinkie-session-card__body--md ol { padding-left:1.3em }
+.pinkie-session-card__body--md h4 { margin:8px 0 4px;font-size:inherit;font-weight:600 }
+.pinkie-session-card__body--md code { font-family:ui-monospace,Menlo,monospace;font-size:.92em;padding:0 3px;border-radius:3px;background:rgba(127,127,127,.14) }
+.pinkie-session-card__body--md pre { margin:0 0 6px;padding:6px 8px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,Menlo,monospace;font-size:.88em;border-radius:4px;background:rgba(127,127,127,.12) }

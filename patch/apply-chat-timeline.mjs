@@ -1680,13 +1680,19 @@ export function withRecordedUserOrder(source) {
 
 /** While a steered run is live the runtime briefly holds two copies of the
  *  follow-up with one idempotency key; native chat folded them as "×2", as
- *  if the user had sent it twice. One send stored twice folds without a count. */
-const sameSendFoldMarker = '/*pinkie-same-send-fold:v1*/';
+ *  if the user had sent it twice. One send stored twice folds without a count.
+ *  v2: the page's own copy of a send (no stored seq) next to the stored copy
+ *  is also one send (Metre's first message showed "×2", 11-17 stress run). */
+const sameSendFoldMarker = '/*pinkie-same-send-fold:v2*/';
 export function withSameSendFold(source) {
   if (source.includes(sameSendFoldMarker)) return source;
+  const v1 = '/*pinkie-same-send-fold:v1*/if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||``;return!!k(x)&&k(x)===k(y)})(';
+  if (source.split(v1).length === 2) {
+    return source.replace(v1, `${sameSendFoldMarker}if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||\`\`,q=m=>Number.isFinite(m?.__openclaw?.seq);return!!k(x)&&k(x)===k(y)||q(x)!==q(y)})(`);
+  }
   const pattern = /(let [\w$]+=[\w$]+\(([\w$]+)\.message\),[\w$]+=[\w$]+\(\2\.message\),([\w$]+)=[\w$]+\[[\w$]+\.length-1\];[^;]{0,200}?;?continue\}if\([\w$]+&&[\w$]+===[\w$]+&&\3\?\.kind===`message`&&!\([\w$]+&&[\w$]+&&[\w$]+!==[\w$]+\)\)\{)(\3\.duplicateCount=\(\3\.duplicateCount\?\?1\)\+1;continue\})/gu;
   if ((source.match(pattern) || []).length !== 1) return source;
-  return source.replace(pattern, (_, head, item, last, count) => `${head}${sameSendFoldMarker}if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||\`\`;return!!k(x)&&k(x)===k(y)})(${last}.message,${item}.message))continue;${count}`);
+  return source.replace(pattern, (_, head, item, last, count) => `${head}${sameSendFoldMarker}if(((x,y)=>{let k=m=>m?.idempotencyKey||m?.__openclaw?.idempotencyKey||\`\`,q=m=>Number.isFinite(m?.__openclaw?.seq);return!!k(x)&&k(x)===k(y)||q(x)!==q(y)})(${last}.message,${item}.message))continue;${count}`);
 }
 
 function transformBundle(original) {

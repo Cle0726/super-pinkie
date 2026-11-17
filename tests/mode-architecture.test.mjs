@@ -3097,6 +3097,26 @@ test('a turn that yields to running children is not re-driven by the watchdog',a
   assert.equal(await watchdog.agentEnded({runId:'y2',success:true,messages},{agentId:'main',sessionKey:key}),true);
 });
 
+test('Metre yielding to its own pinkie_session_start children is not woken by the watchdog',async t=>{
+  const scheduled=[];
+  const api={session:{workflow:{scheduleSessionTurn:async job=>{scheduled.push(job);return {id:'x'};},enqueueNextTurnInjection:async()=>({}),unscheduleSessionTurnsByTag:async()=>({removed:0})}}};
+  const watchdog=new UpstreamWatchdog(api,()=>'',async()=>({stdout:'{}'}),'',()=>({pending:0,quietForMs:Infinity}));
+  const key='agent:metre:dashboard:yield-lineage';
+  const instances=globalThis[Symbol.for('pinkie.session-lineage.v1')]??=new Map();
+  let running=2;
+  const fake={familyRows:async()=>new Map(),runningChildren:parent=>parent===key?running:0};
+  instances.set('test-yield-lineage',fake);
+  t.after(()=>{instances.delete('test-yield-lineage');void watchdog.cancel(key);});
+  const messages=[
+    {role:'assistant',stopReason:'toolUse',content:[{type:'toolCall',name:'sessions_yield',arguments:{}}]},
+    {role:'toolResult',toolName:'sessions_yield',content:[{type:'text',text:'{"status":"yielded"}'}],details:{status:'yielded'},isError:false},
+  ];
+  assert.equal(await watchdog.agentEnded({runId:'m1',success:true,messages},{agentId:'metre',sessionKey:key}),false);
+  assert.equal(scheduled.length,0);
+  running=0;
+  assert.equal(await watchdog.agentEnded({runId:'m2',success:true,messages},{agentId:'metre',sessionKey:key}),true);
+});
+
 test('a retry decided for an older parent run is dropped once a newer run has answered',async t=>{
   const calls=[],removed=[];
   const runner=async()=>{calls.push('sent');return {stdout:'{"status":"started"}',stderr:''};};

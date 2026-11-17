@@ -9,6 +9,52 @@
     return node;
   };
 
+  // 子会话的汇报是 Markdown：收起时只露干净的文字（不露 ## ** `），展开时按段落 / 标题 / 列表排好。
+  // 全用 textContent 拼，不走 innerHTML。
+  const inlineMd = (text) => String(text).replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/__([^_\n]+)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1').replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, '$1');
+  function plainMd(text) {
+    return String(text || '').split('\n').map((line) => inlineMd(line
+      .replace(/^\s{0,3}#{1,6}\s+/, '').replace(/^\s{0,3}>\s?/, '').replace(/^\s*[-*+]\s+/, '· ')
+      .replace(/^\s*(?:```|~~~).*$/, '').replace(/^\s*\|?\s*:?-{3,}.*$/, ''))).join('\n')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function inlineNodes(parent, text) {
+    const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parent.append(inlineMd(text.slice(last, m.index)));
+      parent.append(m[1] != null ? el('strong', '', m[1]) : el('code', '', m[2]));
+      last = re.lastIndex;
+    }
+    if (last < text.length) parent.append(inlineMd(text.slice(last)));
+  }
+  function mdBody(className, text) {
+    const box = el('div', className + ' pinkie-session-card__body--md');
+    let list = null, fence = null;
+    for (const raw of String(text || '').split('\n')) {
+      if (/^\s*(?:```|~~~)/.test(raw)) {
+        if (fence) { box.append(fence); fence = null; } else { list = null; fence = el('pre', ''); }
+        continue;
+      }
+      if (fence) { fence.textContent += (fence.textContent ? '\n' : '') + raw; continue; }
+      const heading = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(raw);
+      const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(raw);
+      if (item) {
+        if (!list) { list = el(/^\s*\d/.test(raw) ? 'ol' : 'ul', ''); box.append(list); }
+        const li = el('li', ''); inlineNodes(li, item[1]); list.append(li);
+        continue;
+      }
+      list = null;
+      if (!raw.trim() || /^\s*\|?\s*:?-{3,}/.test(raw)) continue;
+      const node = el(heading ? 'h4' : 'p', '');
+      inlineNodes(node, heading ? heading[2] : raw.replace(/^\s{0,3}>\s?/, ''));
+      box.append(node);
+    }
+    if (fence) box.append(fence);
+    return box;
+  }
+
   function proposalState(card, now = Date.now()) {
     if (card.state !== 'pending') return card.state;
     return card.expiresAt <= now ? 'expired' : 'pending';
@@ -252,8 +298,8 @@
     const where = card.modeName ? card.modeName + ' · ' : '';
     if (proposal) heading.textContent = where + card.title;
     else heading.textContent = where + card.title + (card.failed ? ' 没做成' : card.consult ? ' 的回答' : ' 做完一轮');
-    const body = el('div', 'pinkie-session-card__body', proposal
-      ? (expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary) : card.text);
+    const body = proposal ? el('div', 'pinkie-session-card__body', expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary)
+      : expanded.has(card.id) ? mdBody('pinkie-session-card__body', card.text) : el('div', 'pinkie-session-card__body', plainMd(card.text));
     if (!expanded.has(card.id)) body.classList.add('pinkie-session-card__body--preview');
     box.append(heading, body);
 

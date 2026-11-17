@@ -1224,6 +1224,15 @@ export class SessionLineage {
 }
 
 const LINEAGE_INSTANCES = Symbol.for('pinkie.session-lineage.v1');
+// 看门狗用：这个会话开的子会话（pinkie_session_start）还有在跑的吗。sessions_yield 等它们时不算「没写最终回复」，
+// 汇报回来会叫醒父会话；不然看门狗每隔几秒把 Metre 叫醒一次，它只能一遍遍去查子会话（11-17 压测）。
+export async function lineageRunningChildren(parentKey) {
+  let count = 0;
+  for (const lineage of (globalThis[LINEAGE_INSTANCES] || new Map()).values()) {
+    try { count += lineage.runningChildren(parentKey, await lineage.familyRows(parentKey)); } catch {}
+  }
+  return count;
+}
 // 用户明说「另开一个（子）会话」，模型却去用网关自带的 sessions_spawn（看不见的子代理，用户在侧栏里找不到，
 // 也不走汇报卡片；11-12 隔离实测里项目模式就这么干了）。每轮只拦一次，指回 pinkie_session_start；模型坚持就放行。
 const ASKED_FOR_SESSION = /子会话|(?:另|新|单独|再)开.{0,8}会话|开(?:个|一个)新?会话|sub[- ]?session|new session/i;

@@ -168,6 +168,16 @@ test('two stored copies of one send fold without a duplicate count', async () =>
   const repeat = Fb([item('again', {idempotencyKey: 'a:user'}), item('again', {idempotencyKey: 'b:user'})]);
   assert.equal(repeat.length, 1);
   assert.equal(repeat[0].duplicateCount, 2);
+  // The page's own copy of a send (no stored seq) next to its stored copy is one send.
+  const echo = Fb([item('first ask'), item('first ask', {__openclaw: {seq: 1}})]);
+  assert.equal(echo.length, 1);
+  assert.equal(echo[0].duplicateCount, undefined);
+  const twice = Fb([item('ask', {__openclaw: {seq: 1}}), item('ask', {__openclaw: {seq: 2}})]);
+  assert.equal(twice[0].duplicateCount, 2);
+  // A bundle already carrying v1 is upgraded in place.
+  const v1 = patched.replace('/*pinkie-same-send-fold:v2*/', '/*pinkie-same-send-fold:v1*/')
+    .replace(',q=m=>Number.isFinite(m?.__openclaw?.seq);return!!k(x)&&k(x)===k(y)||q(x)!==q(y)', ';return!!k(x)&&k(x)===k(y)');
+  assert.equal(withSameSendFold(v1), patched);
 });
 
 // 11-12: real sessions. A failed reply earlier in the session used to make

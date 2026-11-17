@@ -130,6 +130,14 @@ if (!window.__laolaoCleStage) {
     }
     // 派发：状态行说派给了哪个模式
     if (name === 'pinkie_session_start' && MODE_CN[a.mode]) return {text: MODE_CN[a.mode], mono: false};
+    // 网关把名叫 session / key 的字段一律打成 ***（当成密钥了）：管会话时说做了什么，不显示那串星号
+    if (name === 'pinkie_sessions') {
+      const SAY = {list: '列会话', search: '搜会话', read: '读会话记录', create: '新建会话', restore: '恢复会话', stop: '停下会话',
+        stop_children: '停下子会话', archive: '归档会话', unarchive: '取消归档', delete: '删除会话', rename: '改会话名', move: '移动会话'};
+      const what = SAY[a.action] || '';
+      const extra = a.action === 'rename' && a.title ? '：' + firstLine(a.title) : a.action === 'search' && a.query ? '：' + firstLine(a.query) : '';
+      if (what) return {text: what + extra, mono: false};
+    }
     if (a.command || a.cmd) t = firstLine(a.command || a.cmd);
     else if (path) {
       t = homeless(path);
@@ -142,8 +150,9 @@ if (!window.__laolaoCleStage) {
       // 先找像标题、题干的字段；action / kind 这类开关值（present、list…）不当说明
       const keys = ['title', 'question', 'stem', 'prompt', 'topic', 'task', 'message', 'text', 'name', 'label'];
       const skip = /^(?:action|kind|mode|area|type|status|format|lesson_phase|activity_id|id)$/;
-      const v = keys.map((k) => a[k]).find((x) => typeof x === 'string' && x.trim())
-        || Object.entries(a).filter(([k]) => !skip.test(k)).map(([, x]) => x).find((x) => typeof x === 'string' && x.trim());
+      const shown = (x) => typeof x === 'string' && x.trim() && !/^\*{3,}$/.test(x.trim());
+      const v = keys.map((k) => a[k]).find(shown)
+        || Object.entries(a).filter(([k]) => !skip.test(k)).map(([, x]) => x).find(shown);
       t = firstLine(v); mono = false;
     }
     if (!t && meta) { t = firstLine(meta); mono = false; }
