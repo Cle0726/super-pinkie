@@ -186,15 +186,43 @@ function homeEnv() {
   return {env, home: env.window.__pinkieMetreHome, bank: env.ctx.LaolaoMetrePrompts};
 }
 
-test('A4-10: the bank is the JSON sentence for sentence — 120, five kinds, the user\'s 40 all there', () => {
+test('A4-10: the bank is the JSON sentence for sentence; every original line the user sent (11-13 and 11-17) is in it', () => {
   const {bank, home} = homeEnv();
   assert.deepEqual(JSON.parse(JSON.stringify(bank)), data);
   const all = home.allPrompts(bank);
-  assert.ok(all.length >= 120);
-  assert.deepEqual([...new Set(all.map((item) => item.category))].sort(), ['heuristic', 'koan', 'powerful', 'reflective', 'socratic']);
-  const user = data.categories.flatMap((c) => c.user);
-  assert.equal(user.length, 40);
-  for (const sentence of user) assert.ok(all.some((item) => item.text === sentence), sentence);
+  const kinds = [...new Set(all.map((item) => item.category))];
+  assert.equal(kinds.length, 37);
+  for (const id of ['heuristic', 'koan', 'powerful', 'reflective', 'socratic', 'orchestral', 'latenight', 'razor', 'warmth', 'cosmic', 'lowtide', 'ultimate']) assert.ok(kinds.includes(id), id);
+  for (const c of data.categories) assert.ok(c.zh && c.en, `${c.id} 有中英文名`);
+  const plain = (s) => s.replace(/\[\[|\]\]/g, '');
+  const user = new Set(data.categories.flatMap((c) => c.user).map(plain));
+  const sent = ['1117', '1117b'].flatMap((day) => read(`briefs/metre-mode-1113/ref/metre-prompts-${day}-user.txt`).split('\n')).map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && !l.startsWith('@'));
+  assert.equal(sent.length, 400);
+  for (const sentence of sent) assert.ok(user.has(sentence), sentence);
+  assert.equal(user.size, 440);
+});
+
+test('A4-10: every kind in the bank can come up, with a few boosted by time of day', () => {
+  const {home, bank} = homeEnv();
+  const ids = bank.categories.map((c) => c.id);
+  for (const hour of [2, 8, 15, 20]) {
+    const w = home.weightsFor(hour, ids);
+    assert.deepEqual(Object.keys(w).sort(), [...ids].sort(), `${hour} 点所有类都有权重`);
+  }
+  assert.equal(home.weightsFor(2, ids).latenight, 3);
+  assert.equal(home.weightsFor(8, ids).ignition, 3);
+  assert.equal(home.weightsFor(20, ids).warmth, 3);
+  assert.equal(home.weightsFor(15, ids).razor, 1);
+  let seed = 11;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const start = new Date(2026, 10, 17, 21, 0, 0).getTime();
+  const history = {};
+  const seen = new Set();
+  for (let i = 0; i < 600; i++) {
+    const item = home.pickPrompt({data: bank, now: start + i * 45_000, history, random});
+    history[item.key] = start + i * 45_000; seen.add(item.category);
+  }
+  assert.equal(seen.size, ids.length, '轮得到每一类');
 });
 
 test('A4-10: interval by hour is 25 / 45 / 90 seconds; categories weighted by time of day', () => {
@@ -525,4 +553,11 @@ test('Metre 11-16 night 3: a tap near a stand lights its lamp for a beat, alongs
   const src = read(INJ + 'laolao-metre-backdrop.js');
   assert.match(src, /const slot = nearestSlot\(scene, x, y\);/, '运行时点击会找最近的谱台');
   assert.match(src, /if \(ripples\.length && canvas\) \{ flashTimer = setTimeout\(off, 120\); return; \}/, '波纹走完再熄灯');
+});
+
+test('Metre guide sentence is read-only: clicking it does not put it into the composer', () => {
+  const source = read('ui/injections/laolao-metre-home.js');
+  assert.doesNotMatch(source, /line\.addEventListener\('click'/);
+  assert.doesNotMatch(source, /composer-combobox textarea/);
+  assert.doesNotMatch(source, /setAttribute\('role', 'button'\)/);
 });

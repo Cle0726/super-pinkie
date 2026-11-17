@@ -3,11 +3,11 @@
  * Metre 的新会话还没说话时，输入框上方一句引导语（不是「有什么可以帮你」）。
  * 题库：laolao-metre-prompts.js（五类各 24 句，原样来自 ref/metre-prompts.json）。
  * 换句：9–12、14–18 点每 25 秒；12–14、18–23 点每 45 秒；23 点到 9 点每 90 秒。鼠标停在句子上不换，页面不可见不换。
- * 类别按时段加权（早上多启发式、强有力；下午多苏格拉底；晚上多反思；深夜多机锋），同一句 24 小时内不重复。
+ * 类别按时段加权（早上多启发式、强有力、点火、微行动；下午多苏格拉底、拖延、第一性原理；晚上多反思、复盘、冷暖；深夜多机锋、暗夜、禅意），同一句 24 小时内不重复。
  * 彩蛋（有数据才出，不编）：时段问候、节气、节日、法定假日、最近的项目记忆；比例不超过三成，同一天同一类最多一次。
  *   数据来自 pinkie.metre.today（后端纯计算、不联网）。天气：App 里没有现成的天气数据，不做，也不为它发请求。
  * 动画：只动 opacity / transform；新句逐字浮现（每字 18 毫秒，最长 1.2 秒）；「减少动效」直接换字。
- * 点句子：放进输入框当开头；右边小箭头换下一句。 */
+ * 句子只是看的，点了不会放进输入框；右边「换一句」换下一句。 */
 (() => {
   'use strict';
   if (window.__pinkieMetreHome) return;
@@ -31,12 +31,18 @@
     if ((hour >= 12 && hour < 14) || (hour >= 18 && hour < 23)) return 45_000;
     return 90_000;
   }
-  function weightsFor(hour) {
-    const w = {heuristic: 1, socratic: 1, reflective: 1, powerful: 1, koan: 1};
-    if (hour >= 5 && hour < 12) { w.heuristic = 3; w.powerful = 3; }
-    else if (hour >= 12 && hour < 18) w.socratic = 3;
-    else if (hour >= 18 && hour < 23) w.reflective = 3;
-    else w.koan = 3;
+  // 每个时段多出几类（×3），其余各 1；题库里有的类都能轮到。
+  const BOOSTS = [
+    [(h) => h >= 5 && h < 12, ['heuristic', 'powerful', 'ignition', 'microaction']],
+    [(h) => h >= 12 && h < 18, ['socratic', 'friction', 'firstprinciples']],
+    [(h) => h >= 18 && h < 23, ['reflective', 'review', 'warmth']],
+    [() => true, ['koan', 'latenight', 'zen']],
+  ];
+  function weightsFor(hour, ids) {
+    const w = {};
+    for (const id of ids || ['heuristic', 'socratic', 'reflective', 'powerful', 'koan']) w[id] = 1;
+    const boosted = BOOSTS.find(([test]) => test(hour))[1];
+    for (const id of boosted) if (id in w || !ids) w[id] = 3;
     return w;
   }
   // 时段：早、上午、午后、傍晚、夜里、深夜
@@ -73,7 +79,7 @@
   function allPrompts(data) {
     const out = [];
     for (const category of (data && data.categories) || []) {
-      for (const text of [...(category.user || []), ...(category.fable || [])]) out.push({category: category.id, en: category.en, zh: category.zh, text});
+      for (const text of [...(category.user || []), ...(category.fable || [])]) out.push({category: category.id, en: category.en, zh: category.zh, note: category.note, text});
     }
     return out;
   }
@@ -92,12 +98,12 @@
     const hour = date.getHours();
     const fresh = (item) => !history[item.text] || now - history[item.text] >= DAY;
     const usable = allPrompts(data).map((item) => ({...item, shown: personalize(item.text, name, hour)})).filter((item) => item.shown);
-    const category = weightedCategory(weightsFor(hour), random);
+    const category = weightedCategory(weightsFor(hour, [...new Set(usable.map((item) => item.category))]), random);
     let pool = usable.filter((item) => item.category === category && fresh(item));
     if (!pool.length) pool = usable.filter(fresh);
     if (!pool.length) pool = [...usable].sort((a, b) => (history[a.text] || 0) - (history[b.text] || 0)).slice(0, 1);
     const item = pool[Math.floor(random() * pool.length) % pool.length];
-    return {kind: 'prompt', category: item.category, en: item.en, zh: item.zh, text: item.shown, key: item.text};
+    return {kind: 'prompt', category: item.category, en: item.en, zh: item.zh, note: item.note, text: item.shown, key: item.text};
   }
 
   // 彩蛋候选：今天还没出过的类，有数据才有。
@@ -170,8 +176,6 @@
     label.className = 'pk-metre-prompt__kind';
     const line = document.createElement('p');
     line.className = 'pk-metre-prompt__text';
-    line.tabIndex = 0;
-    line.setAttribute('role', 'button');
     const next = document.createElement('button');
     next.type = 'button';
     next.className = 'pk-metre-prompt__next';
@@ -193,28 +197,15 @@
     box.append(head, row);
     box.addEventListener('mouseenter', () => { hovering = true; });
     box.addEventListener('mouseleave', () => { hovering = false; arm(); });
-    line.addEventListener('click', use);
-    line.addEventListener('keydown', (event) => { if (event.key === 'Enter') use(); });
     next.addEventListener('click', () => { show(); });
     return box;
-  }
-
-  function use() {
-    if (!current) return;
-    const ta = document.querySelector('.agent-chat__composer-combobox textarea');
-    if (!ta) return;
-    const text = stripMarks(current.text);
-    ta.value = text + (ta.value ? ' ' + ta.value : '');
-    ta.dispatchEvent(new Event('input', {bubbles: true}));
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
   }
 
   function render(item) {
     const label = box.querySelector('.pk-metre-prompt__kind');
     const line = box.querySelector('.pk-metre-prompt__text');
     label.textContent = item.kind === 'egg' ? '' : item.en;
-    label.title = item.kind === 'egg' ? '' : CATEGORY_NOTES[item.category] || item.zh;
+    label.title = item.kind === 'egg' ? '' : CATEGORY_NOTES[item.category] || (item.note ? `${item.zh}：${item.note}` : item.zh);
     label.hidden = item.kind === 'egg';
     line.setAttribute('aria-label', stripMarks(item.text));
     const list = tokens(item.text);
