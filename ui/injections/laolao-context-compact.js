@@ -286,6 +286,12 @@
     ];
   };
 
+  // Metre 用自己的话（briefs/metre-real-app-ui-1116 第四轮）：上下文是一张「谱纸」，整理上下文是「誊清」——
+  // 把写满的部分誊成一页摘要再接着写。别的模式一个字不变。
+  const inMetre = () => document.documentElement.getAttribute("data-laolao-mode") === "metre";
+  const METRE_ROW = {messages: "对话", tools: "工具", rules: "规则", files: "人格与记忆", skills: "技能目录", reserve: "誊清前留白", free: "空白"};
+  const metreRows = (rows) => rows.map((row) => ({...row, label: row.id === "messages" && row.label === "已使用" ? "已写" : METRE_ROW[row.id] || row.label}));
+
   const compactFromPanel = () => {
     const anchor = document.querySelector(`.${BUTTON_CLASS}`) || makeButton();
     void compact(anchor);
@@ -365,10 +371,13 @@
     const meta = metas[0];
     const ratio = usageKey === currentSessionKey() ? usage : null;
     const breakdown = ratio && sessionInfo?.key === usageKey ? sessionInfo.session?.pinkieContextBreakdown || null : null;
+    const metre = inMetre();
     const describeThreshold = (capacity) => {
       const budget = capacity?.compactionBudget;
       if (!budget) return "";
-      return `到约 ${formatTokens(budget.threshold)} 令牌（${Math.round(budget.triggerRatio * 100)}%）时自动整理`;
+      return metre
+        ? `写到 ${Math.round(budget.triggerRatio * 100)}%（约 ${formatTokens(budget.threshold)} 令牌）会自动誊清`
+        : `到约 ${formatTokens(budget.threshold)} 令牌（${Math.round(budget.triggerRatio * 100)}%）时自动整理`;
     };
     let viewer = meta.querySelector(".laolao-context-viewer");
     if (!viewer) {
@@ -394,11 +403,12 @@
     // The panel is only rebuilt while it is open.
     dockPanel(viewer);
     if (!viewer.open) return;
-    setText(".lcv-used", ratio ? `已使用 ${label}` : "等待会话用量数据");
+    setText(".lcv-head strong", metre ? "谱纸" : "上下文");
+    setText(".lcv-used", ratio ? `${metre ? "已写" : "已使用"} ${label}` : metre ? "还没拿到用量" : "等待会话用量数据");
     setText(".lcv-amount", ratio ? `${shortTokens(ratio.used)} / ${shortTokens(ratio.limit)}` : "");
-    setText(".lcv-source", ratio ? (breakdown ? "明细为估算" : "") : "");
-    const rows = ratio ? contextRows(ratio, breakdown) : [];
-    const signature = JSON.stringify(rows.map((row) => [row.id, row.tokens, row.count || ""]));
+    setText(".lcv-source", ratio ? (breakdown ? (metre ? "细目是估的" : "明细为估算") : "") : "");
+    const rows = ratio ? (metre ? metreRows : (list) => list)(contextRows(ratio, breakdown)) : [];
+    const signature = JSON.stringify([metre, rows.map((row) => [row.id, row.tokens, row.count || ""])]);
     if (viewer.dataset.rows !== signature) {
       viewer.dataset.rows = signature;
       const bar = panel.querySelector(".lcv-bar");
@@ -432,15 +442,18 @@
       }));
     }
     const notes = [];
-    if (ratio?.approximate) notes.push("用量为估算");
+    if (ratio?.approximate) notes.push(metre ? "用量是估的" : "用量为估算");
     if (thresholdText) notes.push(thresholdText);
-    if (ratio && !breakdown) notes.push("发一条消息后会显示每一类占多少");
-    setText(".lcv-note", ratio ? notes.join(" · ") : "有用量数据后会自动更新");
+    if (metre && ratio) notes.push("誊清：把前面的对话浓缩成一页摘要，接着写");
+    if (ratio && !breakdown) notes.push(metre ? "发一条消息后分得出每一类" : "发一条消息后会显示每一类占多少");
+    setText(".lcv-note", ratio ? notes.join(metre ? "\n" : " · ") : metre ? "拿到用量后会自己更新" : "有用量数据后会自动更新");
     const main = panel.querySelector(".laolao-context-viewer__compact");
     const state = readCompactionState(usageKey);
     const compacting = busy || ["active", "retrying"].includes(state?.phase);
     const streaming = Boolean(document.querySelector(".chat-send-btn--stop"));
-    const mainText = compacting ? "正在整理上下文…" : streaming ? "回复结束后可以整理" : "现在整理上下文";
+    const mainText = metre
+      ? (compacting ? "正在誊清…" : streaming ? "这一段奏完再誊清" : "现在誊清")
+      : compacting ? "正在整理上下文…" : streaming ? "回复结束后可以整理" : "现在整理上下文";
     if (main.textContent !== mainText) main.textContent = mainText;
     const disabled = compacting || streaming || !ratio;
     if (main.disabled !== disabled) main.disabled = disabled;

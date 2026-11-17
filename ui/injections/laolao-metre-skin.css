@@ -1615,7 +1615,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .agent-chat__input 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-context-viewer__fill { stroke: var(--metre-cobalt) !important; }
 /* 窄窗口（≤1100）：外壳把侧栏收成抽屉（fixed，移出屏外），上面那条「左边固定 280」的规则会留下一列空白 → 这时不占列 */
 @media (min-width: 851px) and (max-width: 1100px) {
-  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .shell.shell--chat:has(> .shell-nav) { grid-template-columns: 0 minmax(0, 1fr) !important; }
+  /* 双开 / 停靠 / 浏览器在旁（laolao-ui-subtraction.css）时外壳只有一列（"topbar" "content"），这里再给两列，正文就落进 0 宽那列、整页空白或被裁（11-16 用户：「模式双开下页面不适配」）→ 那时不管 */
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]) .shell.shell--chat:has(> .shell-nav) { grid-template-columns: 0 minmax(0, 1fr) !important; }
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.chat-workspace-rail--collapsed { right: 88px !important; }   /* 顶栏右边多了搜索键，工作台 / 浏览器两个键再往左让 */
 }
 
@@ -2355,3 +2356,68 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pink
   color: var(--metre-muted) !important;
   white-space: nowrap;
 }
+
+/* ==================================================================================================
+ * 双开（11-16 深夜，用户截图「模式双开下页面不适配」）
+ * ================================================================================================== */
+/* 1. 外壳列数的问题见 1618 行附近（双开时不再给两列）。
+ * 2. 分工条和输入框同宽：双开时输入框是 min(100% - 18px, 680px)（laolao-ui-subtraction.css），分工条还是 780 → 左边对不齐、压到 ◆ 芯片。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):is([data-laolao-workspace-split="1"], [data-laolao-workspace-dock="1"], [data-laolao-browser-workspace="1"]) .pinkie-crew {
+  width: min(100% - 18px, 680px) !important;
+}
+/* 3. 侧栏窄（双开时半个窗口里的抽屉、窄窗）：128px 的黑卡 + 原生底栏的全屏 / 设置 / 魔棒 / 更多放不下，图标压到卡上。
+ *    侧栏不到 250 宽时黑卡只留像素 M 方块和方灯；全屏键收进「更多工具」里（laolao-classic-shell.js 的 footerSecondaryActions 本来就有它）。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) { container: metre-side / inline-size; }
+@container metre-side (max-width: 250px) {
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .laolao-mode-switcher.laolao-mode-button--plain { width: 44px !important; min-width: 0 !important; padding-right: 0 !important; justify-content: center !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .laolao-mode-switcher.laolao-mode-button--plain :is(.laolao-mode-button__label, .laolao-mode-button__arrow) { display: none !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .sidebar-footer-bar :is(#pinkie-window-fullscreen, openclaw-tooltip:has(> #pinkie-window-fullscreen)) { display: none !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .sidebar-footer-bar .pinkie-connection-status { margin-right: 8px !important; }
+}
+/* 4. 双开 / 窄窗里侧栏是盖在正文上的抽屉：没有边，正文像被裁掉了一截。给抽屉右边一条线和一道淡影，看得出是盖在上面。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .shell.shell--nav-drawer-open > .shell-nav {
+  box-shadow: 1px 0 0 var(--metre-line-strong), 18px 0 36px -22px rgba(0, 0, 0, .4) !important;
+}
+
+/* ==================================================================================================
+ * 上下文面板 = 谱纸（11-16 深夜，用户：「这个上下文没有自己的语言设计和视觉」）
+ * 话在 laolao-context-compact.js（inMetre）：谱纸 / 已写 / 誊清。这里是样子：一张纸、墨色分层、钴蓝只给对话；
+ * 用量条画成五线谱（五根细线），写进去的部分是压在谱线上的墨块，誊清前留白是铅笔斜线，空白就是空着的谱线。
+ * ================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover {
+  --lcv-messages: var(--metre-cobalt);
+  --lcv-tools: color-mix(in srgb, var(--metre-text) 78%, transparent);
+  --lcv-rules: color-mix(in srgb, var(--metre-text) 56%, transparent);
+  --lcv-files: color-mix(in srgb, var(--metre-text) 38%, transparent);
+  --lcv-skills: color-mix(in srgb, var(--metre-text) 24%, transparent);
+  --lcv-reserve: color-mix(in srgb, var(--metre-text) 34%, transparent);
+  --lcv-free: transparent;
+  width: min(320px, calc(100vw - 24px)) !important;
+  padding: 16px 16px 14px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 6px !important;
+  background: var(--metre-surface) !important;
+  box-shadow: 0 14px 34px -20px rgba(0, 0, 0, .45) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  font-family: var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-head strong { font: 500 18px/1.1 var(--metre-serif) !important; letter-spacing: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-head strong::after { content: " Manuscript"; font: italic 400 13px/1 var(--metre-serif); color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-used { font: 400 24px/1.1 var(--metre-serif) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-bar {
+  height: 17px !important; gap: 0 !important; margin: 12px 0 14px !important; border-radius: 0 !important; overflow: visible !important;
+  background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--metre-text) 26%, transparent) 0 1px, transparent 1px 4px) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-bar i { border-radius: 0 !important; margin-right: 1px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-bar i.lcv-c-reserve { background: repeating-linear-gradient(135deg, var(--lcv-reserve) 0 1px, transparent 1px 4px) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-row > i { width: 8px !important; height: 8px !important; border-radius: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-row.lcv-c-free > i { background: transparent !important; box-shadow: inset 0 0 0 1px var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-row.lcv-c-reserve > i { background: repeating-linear-gradient(135deg, var(--lcv-reserve) 0 1px, transparent 1px 3px) !important; box-shadow: inset 0 0 0 1px var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-row b { font-weight: 500 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .lcv-note { white-space: pre-line !important; border-top: 1px solid var(--metre-line) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .laolao-context-viewer__compact {
+  height: 34px !important; border: 1px solid var(--metre-text) !important; border-radius: 4px !important;
+  background: transparent !important; color: var(--metre-text) !important; font: 500 13px/1 var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .laolao-context-viewer__compact:hover:not(:disabled) { border-color: var(--metre-cobalt) !important; color: var(--metre-cobalt) !important; background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .laolao-context-viewer__compact:disabled { border-color: var(--metre-line-strong) !important; color: var(--metre-muted) !important; }
