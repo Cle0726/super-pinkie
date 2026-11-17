@@ -248,9 +248,16 @@ final class BrowserControlController {
         var mayHaveExecuted = false
         var hoverAttempts = 0
         let createdAt = Date()
+        // 页面在这次操作里弹出的 alert / confirm / prompt，以及怎么答（默认确定；dialog: "dismiss" 取消）。
+        var agent = false
+        var dialogs: [[String: Any]] = []
+        let dialogAccept: Bool
+        let promptText: String?
 
         init(body: [String: Any], timeout: TimeInterval, completion: @escaping ([String: Any]) -> Void) {
             id = body["id"] ?? ""
+            dialogAccept = (body["dialog"] as? String ?? "accept").lowercased() != "dismiss"
+            promptText = body["promptText"] as? String ?? body["prompt_text"] as? String
             deadline = Date().addingTimeInterval(timeout)
             self.completion = completion
             isWrite = BrowserControlPolicy.writes.contains(body["action"] as? String ?? "")
@@ -279,6 +286,24 @@ final class BrowserControlController {
     private var mutatingRequest: UUID?
     private let agentPointer = BrowserAgentPointer(frame: .zero)
     private var lastNativeMousePoint: NSPoint?
+    // 11-17：删除按钮的「确定删除吗？」被 WebKit 默认直接取消（没有实现对话框回调），删除永远不生效，
+    // 模型只好换到看不见的后台浏览器。现在：碧琪 / Metre 自己的操作引起的对话框按它的要求自动答，并把内容带回结果；
+    // 用户自己点出来的，弹正常的系统对话框。
+    private var agentUntil = Date.distantPast
+    private var lateDialogs: [[String: Any]] = []
+    private var lastDialogAccept = true
+
+    /// nil：不是碧琪的操作引起的，交给界面弹给用户。
+    func answerDialog(kind: String, message: String, defaultText: String?) -> (accept: Bool, text: String?)? {
+        let active = requests.values.filter { $0.agent && !$0.finished }.max { $0.createdAt < $1.createdAt }
+        guard active != nil || agentUntil > Date() else { return nil }
+        let accept = active?.dialogAccept ?? lastDialogAccept
+        let text = active?.promptText ?? defaultText
+        var entry: [String: Any] = ["kind": kind, "message": String(message.prefix(500)), "answer": accept ? "accept" : "dismiss"]
+        if kind == "prompt", accept { entry["text"] = text ?? "" }
+        if let active { active.dialogs.append(entry) } else { lateDialogs.append(entry); if lateDialogs.count > 10 { lateDialogs.removeFirst() } }
+        return (accept, text)
+    }
 
     init(access: MaterialPreviewFileAccess = MaterialPreviewFileAccess()) { self.access = access }
 
@@ -333,6 +358,8 @@ final class BrowserControlController {
         }
         let timeout = BrowserControlPolicy.timeout(for: action, requestedMilliseconds: (body["timeoutMs"] as? NSNumber)?.doubleValue)
         let request = Request(body: body, timeout: timeout, completion: completion)
+        request.agent = !userInitiated && action != "status"
+        if request.agent { lastDialogAccept = request.dialogAccept }
         request.waitsForDOM = ["open", "back", "forward", "reload"].contains(action)
             && (body["waitUntil"] as? String ?? "domcontentloaded") != "load"
         request.completesOnCommit = (userInitiated && action == "show_file") || request.waitsForDOM
@@ -386,8 +413,22 @@ final class BrowserControlController {
         if let navigation = request.navigation { navigations.removeValue(forKey: navigation) }
         if reason != nil { request.cancellation?() }
         request.cancellation = nil
-        if let reason { request.completion(["id": request.id, "ok": false, "reason": reason, "mayHaveExecuted": request.mayHaveExecuted, "nextAction": "snapshot-before-retry"]) }
-        else { request.completion(["id": request.id, "ok": true, "result": result]) }
+        var dialogs = request.dialogs
+        if request.agent {
+            // 点完之后页面才用 setTimeout 弹的框也算这次操作的；再下一次操作的结果里带回去。
+            agentUntil = Date().addingTimeInterval(4)
+            dialogs = lateDialogs + dialogs
+            lateDialogs.removeAll()
+        }
+        if let reason {
+            var failure: [String: Any] = ["id": request.id, "ok": false, "reason": reason, "mayHaveExecuted": request.mayHaveExecuted, "nextAction": "snapshot-before-retry"]
+            if !dialogs.isEmpty { failure["dialogs"] = dialogs }
+            request.completion(failure)
+        } else {
+            var output = result
+            if !dialogs.isEmpty { output["dialogs"] = dialogs }
+            request.completion(["id": request.id, "ok": true, "result": output])
+        }
     }
 
     private func markActivity() {
