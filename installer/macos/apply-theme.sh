@@ -534,6 +534,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-images.mjs"
     # 带图片的回答也走交付前检查，没通过的草稿不会从网关镜像漏出去。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-work-first-media-gate.mjs"
+    # Clash 等「假 IP」代理给每个网站一个 198.18.x.x 加 2001:2:: 的假地址；打开 allowRfc2544BenchmarkRange 时 IPv6 那一半也放行，网页抓取才不会全被当成内网拦掉。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-fake-ip-benchmark-v6.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.

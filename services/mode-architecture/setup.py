@@ -414,6 +414,17 @@ def _configure_plugin(data: dict, target: Path) -> bool:
             # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
             # into unrestricted-mode model requests.
             agent["contextInjection"] = "never"
+    # 网页抓取：Clash / Surge / sing-box 的「假 IP」模式把每个网站都解析成 198.18.x.x（加 2001:2::
+    # 假 IPv6，见 patch/apply-fake-ip-benchmark-v6.mjs），OpenClaw 默认当成内网全部拦下。这两段是
+    # 基准测试专用地址，正常网络里不会有真主机：不开代理的用户解析到的是真实地址，这条对他们没有影响；
+    # 开代理的用户网页抓取才能用。用户自己明确设成 false 的保留。
+    web = data.setdefault("tools", {}).setdefault("web", {})
+    if isinstance(web, dict):
+        fetch = web.setdefault("fetch", {})
+        if isinstance(fetch, dict):
+            policy = fetch.setdefault("ssrfPolicy", {})
+            if isinstance(policy, dict):
+                policy.setdefault("allowRfc2544BenchmarkRange", True)
     # CLE Kk ships a patched, internally consistent runtime. Disable the
     # upstream startup check so only CLE Kk's detached updater can replace it.
     update = data.setdefault("update", {})

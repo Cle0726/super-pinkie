@@ -172,6 +172,17 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(data['agents']['defaults']['thinkingDefault'], choice)
             self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'on')
 
+    def test_web_fetch_accepts_fake_ip_proxies_by_default_but_keeps_user_choice(self):
+        data = {'agents': {'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertIs(data['tools']['web']['fetch']['ssrfPolicy']['allowRfc2544BenchmarkRange'], True)
+        data = {'agents': {'list': []}, 'tools': {'web': {'fetch': {'maxChars': 5000,
+                'ssrfPolicy': {'allowRfc2544BenchmarkRange': False}}, 'search': {'provider': 'brave'}}}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertIs(data['tools']['web']['fetch']['ssrfPolicy']['allowRfc2544BenchmarkRange'], False)
+        self.assertEqual(data['tools']['web']['fetch']['maxChars'], 5000)
+        self.assertEqual(data['tools']['web']['search'], {'provider': 'brave'})
+
     def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
         data = {'agents': {'list': [
             {'id': 'main'}, {'id': 'project', 'tools': {'deny': ['browser'], 'exec': {'pathPrepend': ['/x']}}},
