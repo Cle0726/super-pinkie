@@ -5,6 +5,7 @@
  * 换句：9–12、14–18 点每 25 秒；12–14、18–23 点每 45 秒；23 点到 9 点每 90 秒。鼠标停在句子上不换，页面不可见不换。
  * 类别按时段加权（早上多启发式、强有力、点火、微行动；下午多苏格拉底、拖延、第一性原理；晚上多反思、复盘、冷暖；深夜多机锋、暗夜、禅意），同一句 24 小时内不重复。
  * 彩蛋（有数据才出，不编）：时段问候、节气、节日、法定假日、最近的项目记忆；比例不超过三成，同一天同一类最多一次。
+ * 节日 / 放假当天：第一句就是节日彩蛋，之后节日彩蛋机会是其它彩蛋的 3 倍、一天可出多次，但不连着出。
  *   数据来自 pinkie.metre.today（后端纯计算、不联网）。天气：App 里没有现成的天气数据，不做，也不为它发请求。
  * 动画：只动 opacity / transform；新句逐字浮现（每字 18 毫秒，最长 1.2 秒）；「减少动效」直接换字。
  * 句子只是看的，点了不会放进输入框；右边「换一句」换下一句。 */
@@ -108,8 +109,8 @@
     return {kind: 'prompt', category: item.category, en: item.en, zh: item.zh, note: item.note, text: item.shown, key: item.text};
   }
 
-  // 彩蛋候选：今天还没出过的类，有数据才有。
-  function eggCandidates({today, now, name = '', eggsToday = {}}) {
+  // 彩蛋候选：今天还没出过的类，有数据才有。节日 / 放假当天节日彩蛋不限一次，只是不连着出两次（lastType）。
+  function eggCandidates({today, now, name = '', eggsToday = {}, lastType = ''}) {
     const hour = new Date(now).getHours();
     const out = [];
     const greet = GREETINGS[bucketOf(hour)];
@@ -117,8 +118,9 @@
     if (today) {
       const holiday = today.holiday;
       const festival = (today.festivals || []).find((item) => item.kind === 'big' || item.kind === 'term') || (today.festivals || [])[0];
-      if (festival && !eggsToday.festival) out.push({type: 'festival', text: `今天是[[${festival.name}]]。忙完手上这一段，留一点时间给自己和身边的人。`});
-      else if (holiday && !eggsToday.festival) out.push({type: 'festival', text: `今天放${holiday}的假。要做的事挑[[最小的一件]]做完就好，剩下的交给明天。`});
+      const festivalOpen = lastType !== 'festival';
+      if (festival && festivalOpen) out.push({type: 'festival', text: `今天是[[${festival.name}]]。忙完手上这一段，留一点时间给自己和身边的人。`});
+      else if (holiday && festivalOpen) out.push({type: 'festival', text: `今天放${holiday}的假。要做的事挑[[最小的一件]]做完就好，剩下的交给明天。`});
       if (today.term && !eggsToday.term) out.push({type: 'term', text: `今天[[${today.term}]]。节气换了一格，手上的事要不要也换一换节奏？`});
       else if (today.season && !eggsToday.season && !today.term) {
         out.push({type: 'season', text: `${SEASON_NAMES[today.season] || ''}天了。这个季节里，你[[最想做完]]的是哪一件事？`});
@@ -136,10 +138,23 @@
   }
 
   // 这一次出不出彩蛋：出了之后彩蛋占比不超过三成，且有候选。
+  // 节日当天第一句就是节日彩蛋。
+  const FESTIVAL_WEIGHT = 3;
   function shouldEgg({shownToday = 0, eggsCount = 0, candidates = [], random = Math.random}) {
     if (!candidates.length) return false;
+    if (shownToday === 0 && candidates.some((egg) => egg.type === 'festival')) return true;
     if ((eggsCount + 1) / (shownToday + 1) > EGG_SHARE) return false;
     return random() < EGG_SHARE;
+  }
+
+  // 挑哪一个彩蛋：当天第一句有节日就是节日；之后节日的机会是其它的 3 倍。
+  function pickEgg(candidates, random = Math.random, {first = false} = {}) {
+    const festival = candidates.find((egg) => egg.type === 'festival');
+    if (first && festival) return festival;
+    const weight = (egg) => (egg.type === 'festival' ? FESTIVAL_WEIGHT : 1);
+    let roll = random() * candidates.reduce((sum, egg) => sum + weight(egg), 0);
+    for (const egg of candidates) { roll -= weight(egg); if (roll < 0) return egg; }
+    return candidates[candidates.length - 1];
   }
 
   function tokens(text) {
@@ -154,7 +169,7 @@
   }
   const charDelay = (length) => Math.min(18, 1200 / Math.max(1, length));
 
-  const model = {intervalFor, weightsFor, bucketOf, personalize, pickPrompt, eggCandidates, shouldEgg, tokens, charDelay, allPrompts, stripMarks, dropGlosses, withName, EGG_SHARE};
+  const model = {intervalFor, weightsFor, bucketOf, personalize, pickPrompt, eggCandidates, shouldEgg, pickEgg, tokens, charDelay, allPrompts, stripMarks, dropGlosses, withName, EGG_SHARE};
 
   // ---------- 存取（只在本机浏览器，坏了就当没有） ----------
   const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch { return fallback; } };
@@ -245,14 +260,16 @@
     const eggs = load(EGG_KEY, {});
     const day = eggs.day === stamp ? eggs : {day: stamp, shown: 0, count: 0, types: {}};
     const name = userName();
-    const candidates = eggCandidates({today, now, name, eggsToday: day.types});
+    const candidates = eggCandidates({today, now, name, eggsToday: day.types, lastType: day.last});
     let item;
     if (shouldEgg({shownToday: day.shown, eggsCount: day.count, candidates})) {
-      const egg = candidates[Math.floor(Math.random() * candidates.length)];
+      const egg = pickEgg(candidates, Math.random, {first: day.shown === 0});
       item = {kind: 'egg', text: egg.text};
       day.types[egg.type] = true;
       day.count += 1;
+      day.last = egg.type;
     } else {
+      day.last = '';
       item = pickPrompt({data: window.LaolaoMetrePrompts, now, history, name});
       history[item.key] = now;
       for (const [text, at] of Object.entries(history)) if (now - at >= DAY) delete history[text];

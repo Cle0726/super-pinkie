@@ -591,3 +591,31 @@ test('Metre home eggs (greeting, festival, holiday, term, season, memory) carry 
   for (const egg of eggs) assert.match(egg.text, /\[\[[^\[\]]+\]\]/, egg.text);
   assert.ok(eggs.some((egg) => egg.text.includes('「[[表单校验]]」')));
 });
+
+test('Metre on a festival day: the festival egg opens the day and comes up more than any other egg, never twice in a row', () => {
+  const {home} = homeEnv();
+  let seed = 5;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const today = {festivals: [{name: '国庆节', kind: 'big'}], holiday: '国庆节', season: 'autumn', recent: {category: 'open', text: '表单校验'}};
+  const day = {shown: 0, count: 0, types: {}, last: ''};
+  const seen = [];
+  const start = new Date(2026, 9, 1, 9, 0).getTime();
+  for (let i = 0; i < 600; i++) {
+    const now = start + i * 60_000;
+    const candidates = home.eggCandidates({today, now, eggsToday: day.types, lastType: day.last});
+    if (home.shouldEgg({shownToday: day.shown, eggsCount: day.count, candidates, random})) {
+      const egg = home.pickEgg(candidates, random, {first: day.shown === 0});
+      seen.push(egg.type); day.types[egg.type] = true; day.count += 1; day.last = egg.type;
+    } else { seen.push('prompt'); day.last = ''; }
+    day.shown += 1;
+  }
+  assert.equal(seen[0], 'festival', '第一句是节日彩蛋');
+  const count = (type) => seen.filter((t) => t === type).length;
+  for (const type of ['greeting', 'season', 'memory']) assert.ok(count('festival') > count(type), `${type} ${count(type)} 不该多过节日 ${count('festival')}`);
+  assert.ok(count('festival') > 5, `节日彩蛋一天出了 ${count('festival')} 次`);
+  for (let i = 1; i < seen.length; i++) assert.ok(!(seen[i] === 'festival' && seen[i - 1] === 'festival'), `第 ${i} 句连着出节日`);
+  assert.ok(seen.filter((t) => t !== 'prompt').length / seen.length <= home.EGG_SHARE + 0.01, '彩蛋总数仍不超过三成');
+  const plain = {shown: 0};
+  const normal = home.eggCandidates({today: {festivals: [], season: 'autumn'}, now: start});
+  assert.notEqual(home.shouldEgg({shownToday: plain.shown, eggsCount: 0, candidates: normal, random: () => 0.99}), true, '平常日子第一句不强制出彩蛋');
+});
