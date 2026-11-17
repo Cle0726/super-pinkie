@@ -13,12 +13,13 @@
  * - 运行期间 html[data-cle-live]：其他焦点退后（见 css）。
  * - WebGL 不可用、「减少动态效果」或软件渲染（html[data-pinkie-lite]）：只用静态签名小标，不压暗界面。
  */
-// 三维小标（three.js）用到才加载，Metre 里不加载（批 6）：静态 import 会让每个模式启动时都下载、解析 three。
+// 三维小标（three.js）动态 import（不静态 import，免得拖慢启动）。
+// 11-16 夜用户要回来：Metre 里思考时也用这个「C.le.」粒子签名（批 6 原本在 Metre 里不加载）；
+//   Metre 里只在一轮运行期间占着 WebGL，落款结束就整个拆掉、把上下文还回去（见 endHold）。
 let CleSpace = null, spaceLoading = null;
 const loadSpace = () => spaceLoading ||= import('./laolao-cle-space.js?v=7').then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
 const metreNow = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
-if (!metreNow()) loadSpace();
-new MutationObserver(() => { if (!metreNow()) loadSpace(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-laolao-mode']});
+loadSpace();
 
 if (!window.__laolaoCleStage) {
   window.__laolaoCleStage = true;
@@ -73,8 +74,9 @@ if (!window.__laolaoCleStage) {
   const MIN_STEP = 1400;       // 很快跑完的工具（几十毫秒）也要在状态行上停留一下，不然根本看不到
 
   let space = null, glyph = null, owner = null;   // owner：当前持有动画小标的卡片
-  // 进 Metre 时把三维小标整个拆掉（动画帧、WebGL 上下文都还回去）；离开后下次要用时再建（批 6）。
-  window.__pinkieQuiet?.register('cle-space', {suspend() { if (space) { try { space.dispose(); } catch {} } space = null; glyph?.remove(); glyph = null; }});
+  // 进 Metre 时把三维小标整个拆掉（动画帧、WebGL 上下文都还回去）；下次思考时再建（批 6；Metre 里也会再建，只在运行期间）。
+  const dropSpace = () => { if (space) { try { space.dispose(); } catch {} } space = null; glyph?.remove(); glyph = null; };
+  window.__pinkieQuiet?.register('cle-space', {suspend: dropSpace});
   let live = null, finishing = null, finishInfo = null, liveSince = 0, tick = 0, doneTimer = 0;
   // 本轮运行（来自网关事件）。seen：这一轮收到过事件，之后就只信事件
   const run = {on: false, seen: false, since: 0, endedAt: 0, stopped: false, queue: [], cur: null, bg: 'think', pumpT: 0, kind: 'think', text: '', mono: false, quiet: 0};
@@ -226,7 +228,7 @@ if (!window.__laolaoCleStage) {
   function animGlyph() {
     if (glyph) return glyph;
     if (!canAnimate()) return null;
-    if (!CleSpace) { if (!metreNow()) loadSpace(); return null; }   // 还没加载完：这一次用静态小标
+    if (!CleSpace) { loadSpace(); return null; }   // 还没加载完：这一次用静态小标
     glyph = document.createElement('span');
     glyph.className = 'cle-glyph cle-glyph--live';
     try {
@@ -440,6 +442,7 @@ if (!window.__laolaoCleStage) {
     finishInfo = null;
     root.removeAttribute('data-cle-live');
     release();
+    if (metreNow() && !owner) dropSpace();   // Metre：这一轮落款完了就把 WebGL 还回去，不常驻
     if (f) { f.removeAttribute('data-cle-run'); if (f.isConnected) decorate(f); }
   }
 
