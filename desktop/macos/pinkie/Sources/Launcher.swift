@@ -641,7 +641,7 @@ private final class NativeDictationController {
                     }
                     if error != nil && self.isRecording {
                         self.stop()
-                        self.send(state: "error", message: "听写刚刚断开啦，先生再点一次试试。")
+                        self.send(state: "error", message: "听写刚刚断开啦，再点一次试试。")
                     }
                 }
             }

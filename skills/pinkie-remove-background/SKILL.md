@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 name: pinkie-remove-background
-description: 抠图去背景：人像、商品、宠物、logo 一键抠成透明 PNG，换纯色或换背景图，整个文件夹批量处理（rembg，MIT，本地运行，不上传图片）。先生要抠图、去背景、换背景、白底图、透明底时用。
+description: 抠图去背景：人像、商品、宠物、logo 一键抠成透明 PNG，换纯色或换背景图，整个文件夹批量处理（rembg，MIT，本地运行，不上传图片）。用户要抠图、去背景、换背景、白底图、透明底时用。
 ---
 
 # 抠图 / 去背景（rembg）

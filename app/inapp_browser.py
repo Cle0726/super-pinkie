@@ -859,7 +859,7 @@ class BrowserManager:
         op = str(message.get("op") or "status")
         debug = (self.folder / "debug").is_file()
         if op not in AGENT_VPN_OPS and not debug:
-            return {"id": request_id, "ok": False, "reason": "app_browser 的 vpn 只支持 status、test、best、select、enable、auto、ip、refresh、add；删除订阅请让先生在浏览器「节点」面板里操作。"}
+            return {"id": request_id, "ok": False, "reason": "app_browser 的 vpn 只支持 status、test、best、select、enable、auto、ip、refresh、add；删除订阅请让用户在浏览器「节点」面板里操作。"}
         payload = {k: v for k, v in message.items() if k not in ("id", "action", "op", "token", "timeoutMs")}
         if op == "enable" and "on" not in payload:
             payload["on"] = True
