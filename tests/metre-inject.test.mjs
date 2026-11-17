@@ -44,13 +44,14 @@ test('A0-5/A0-10 Metre 一轮里没有碧琪的人设、打法、路由、陪伴
     const metre = await collect('metre', {prompt});
     for (const [label, pattern] of BIQI_ONLY) assert.doesNotMatch(metre.text, pattern, `${label} 出现在 Metre：${prompt}`);
     assert.match(metre.text, /【全局交付真实性门禁】/, '门禁说明必须还在');
+    assert.match(metre.text, /【少走几步】/, '合并工具调用的规则 Metre 也要有');
   }
 });
 
 test('老模式的注入没被 Metre 的分支改动（项目模式仍有整套）', async () => {
   const project = await collect('project', {prompt: PROMPTS[0]});
   for (const marker of [/【全局交付真实性门禁】/, /【工具调用前的进度说明】/, /【长时间命令放后台】/, /做事标准/, /碧琪的家/,
-    /【主动提问】/, /【独立模块：边做边学】/, /【模式记忆运行规则：project】/, /聊天已支持富回复/, /【工作过程展示】/, /【工作台】/]) {
+    /【主动提问】/, /【少走几步】/, /【独立模块：边做边学】/, /【模式记忆运行规则：project】/, /聊天已支持富回复/, /【工作过程展示】/, /【工作台】/]) {
     assert.match(project.text, marker);
   }
   assert.doesNotMatch(project.text, /【后台命令】长命令/);

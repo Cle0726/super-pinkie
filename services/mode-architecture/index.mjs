@@ -611,6 +611,16 @@ const TOOL_PROGRESS_RULES = `
 - 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
+// 每次工具调用都是一次完整的模型请求（整段上下文重发一遍）。实测 2026-11-16：一轮 7 次请求对应
+// 7 步，其中 5 次 exec 一条一条串行发。像 Claude Code 那样把互不依赖的操作放进同一步，请求次数和等待都少。
+export const TOOL_BATCH_RULES = `
+【少走几步】每调一次工具就要重新请求一次模型，所以：
+- 互不依赖的操作放在同一步里一起调用：要读几个文件、查几个地方、搜几个关键词，一次把这些工具调用全部发出，不要读一个、等结果、再读下一个。
+- 几条 shell 命令能合成一条就合成一条（用 && 或 ; 连起来，或写成一个小脚本），一次 exec 跑完；只有后一条要看前一条的结果才分开。
+- 一次读够：读文件、看日志时直接读需要的范围，不要每次只看几行再回来翻。
+- 只有下一步确实取决于上一步的结果时，才分成先后两步。
+`.trim();
+
 // 后台命令结束时由 background-jobs.mjs 发内部消息叫醒碧琪，所以长命令不必挂着干等。
 const BACKGROUND_WORK_RULES = `
 【长时间命令放后台】
@@ -621,6 +631,7 @@ const BACKGROUND_WORK_RULES = `
 `.trim();
 
 // Metre 的手册里没有这条运行时事实（后台命令结束会叫醒），压成一句给它；完整版只给老模式。
+const METRE_BATCH_LINE = '\n【少走几步】互不依赖的工具调用放同一步一起发；几条命令合成一次 exec。\n';
 const METRE_BACKGROUND_LINE = '\n【后台命令】长命令用 exec 的 background: true 放后台，跑完会叫醒你。\n';
 
 // Independent system module shared by all five modes. Keep it separate from
@@ -5976,6 +5987,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
       ...(!metre ? ['\n' + TOOL_PROGRESS_RULES + '\n'] : []),
+      ...(!metre ? ['\n' + TOOL_BATCH_RULES + '\n'] : [METRE_BATCH_LINE]),
       ...(!metre ? ['\n' + BACKGROUND_WORK_RULES + '\n'] : [METRE_BACKGROUND_LINE]),
       ...(mode !== 'none' && !metre ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
       ...(mode !== 'none' && !metre ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
