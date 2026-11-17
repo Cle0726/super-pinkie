@@ -105,6 +105,10 @@ export function defaultModelFor(config, agentId) {
 }
 
 export const sameModel = (a, b) => Boolean(a && b) && normalizeModelId(a) === normalizeModelId(b);
+// 「不能派给和自己相同的模型」是为了省钱（PLAN 2.4）。免费模型没有这个问题：用户就是要整套都跑在免费模型上
+// （11-17：「统一用 YH4FLASH free，包括调用的子代理」），所以免费的同一个模型可以派。
+export const freeModel = id => /(?:^|[-_/:.])free(?:$|[-_/:.])/iu.test(String(id || ''));
+const blockedAsSelf = (id, selfModel) => sameModel(id, selfModel) && !freeModel(id);
 
 /**
  * pinkie_models 的结果。selfModel 是 Metre 这一轮真正在用的模型。
@@ -155,7 +159,7 @@ export function chooseChildModel({config = {}, health = null, selfModel = '', re
     const list = catalog(config);
     const found = findModel(list, text, config);
     if (!found) throw new Error(`没有「${clip(text, 80)}」这个模型：先用 pinkie_models 看可用的，写它返回的 id`);
-    if (sameModel(found.id, selfModel)) {
+    if (blockedAsSelf(found.id, selfModel)) {
       throw new Error(`「${found.id}」和你自己（${selfModel}）是同一个模型，不能派给自己：选一个更轻的`);
     }
     const state = healthOf(health, found.id);
@@ -163,7 +167,7 @@ export function chooseChildModel({config = {}, health = null, selfModel = '', re
     return {model: found.id, explicit: true};
   }
   const fallback = defaultModelFor(config, targetAgent);
-  if (fallback && sameModel(fallback, selfModel)) {
+  if (fallback && blockedAsSelf(fallback, selfModel)) {
     throw new Error(`这个模式的默认模型（${fallback}）和你自己相同，必须写 model：先用 pinkie_models 选一个更轻的`);
   }
   return {model: fallback, explicit: false};

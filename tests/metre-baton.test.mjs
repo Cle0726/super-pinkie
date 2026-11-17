@@ -52,3 +52,13 @@ test('registering on the same api twice does not double count', () => {
   for (let i = 0; i < BATON_FREE_STEPS; i += 1) assert.equal(run(api, 'before_tool_call', {toolName: 'edit'}, ctx), undefined);
   assert.equal(run(api, 'before_tool_call', {toolName: 'edit'}, ctx)?.block, true);
 });
+
+test('a free model may be dispatched to itself; a paid one may not', async () => {
+  const {chooseChildModel, freeModel} = await import('../services/mode-architecture/metre-models.mjs');
+  assert.equal(freeModel('workbuddy/hy4flash-free'), true);
+  assert.equal(freeModel('openai/gpt-5'), false);
+  assert.equal(freeModel('acme/freedom-1'), false);
+  const config = {models: {providers: {workbuddy: {models: [{id: 'hy4flash-free'}]}, openai: {models: [{id: 'gpt-5'}]}}}};
+  assert.equal(chooseChildModel({config, selfModel: 'workbuddy/hy4flash-free', requested: 'workbuddy/hy4flash-free'}).model, 'workbuddy/hy4flash-free');
+  assert.throws(() => chooseChildModel({config, selfModel: 'openai/gpt-5', requested: 'openai/gpt-5'}), /同一个模型/);
+});

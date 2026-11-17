@@ -1241,7 +1241,7 @@ export function spawnShouldBeSession(sessionKey) {
 // Metre 看到的工具说明（PLAN 2.4 批 1 第 2 条）：没有「只能在用户亲自发来的那一轮」，有 model、folder、unrestricted。
 const METRE_START_TEXT = '开子会话，把一块能独立做完、单独验收的活交给别的模式（侧栏里看得到、停得了；做完的汇报自动送回并叫醒你）。'
   + 'mode 必写：chat、project、ideas、learning、unrestricted（无限制模式，只有你能派）。'
-  + 'model 写 pinkie_models 返回的 id，不能和你自己的模型相同；不写就用那个模式的默认，默认和你相同时必须写。'
+  + 'model 写 pinkie_models 返回的 id，不能和你自己的模型相同（免费模型除外）；不写就用那个模式的默认，默认和你相同时必须写。'
   + 'folder 可选：子会话绑定到这个项目文件夹（绝对路径，盘符和反斜杠都行，必须已存在）；不写就跟你绑定的项目。'
   + 'initiation：in_scope 立刻开跑，用户发来的那一轮和被汇报叫醒的那一轮都能用，一轮最多 6 个；user_asked 用户明说要另开；offer / own_initiative 只提卡片等用户点。'
   + '子会话看不到这段对话，背景全写进简报。同时在跑的有上限（结果里的 slotsLeft 是剩余名额）；一次用户请求累计开的也有上限，到了就停下来告诉用户。';
