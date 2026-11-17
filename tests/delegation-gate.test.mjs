@@ -115,3 +115,14 @@ test('a long pinkie_mode_ask answer cut off by the evidence limit still counts a
   const startOutput = JSON.stringify(started()).slice(0, 60) + JSON.stringify(started()).slice(60);
   assert.equal(isChildDelegation({name: 'pinkie_session_start', failed: false, output: startOutput}), true);
 });
+
+test('pictures made through web_gpt count as a real result, not a missing file change', (t) => {
+  const {root, turn} = harness(t, {agent: 'metre'});
+  const image = path.join(root, '01.png');
+  fs.writeFileSync(image, 'png');
+  const result = turn('帮我生成两张竖版配图，放进这个文件夹', [
+    {name: 'web_gpt', params: {action: 'image', prompt: '竖版配图'}, result: {content: [{type: 'text', text: JSON.stringify({ok: true, files: [image]})}]}},
+    {name: 'exec', params: {command: `ls -la ${root} && file ${image}`}, result: '01.png: PNG image data, 941 x 1672'},
+  ], '两张图已经生成并保存好了，我用 file 核对过尺寸是 941×1672。');
+  assert.equal(result, undefined, result?.reason);
+});

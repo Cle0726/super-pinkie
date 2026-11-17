@@ -1310,6 +1310,10 @@ function toolEffectKind(entry = {}) {
   // 快照发生变化才算实际效果，防止空写工具加一次假 read 绕过。
   if (/^(?:write|edit|apply_patch)$/i.test(name)) return '';
   if (MUTATING_TOOL.test(name)) return 'host-tool';
+  // 网页 GPT 出图 / 出视频、视频生成：文件是工具自己落盘的，成功返回就是一次真实产出
+  // （11-17 网页 GPT 实测：图已出、ls/file 也查过，回复后面还是被挂上「还没核实」）。
+  if (/^(?:video_generate|videogen)$/.test(name)
+      || name === 'web_gpt' && /"action"\s*:\s*"(?:image|video)"/i.test(args)) return 'produced-media';
   if (/(?:browser|computer|screen|cua)/i.test(name)
       && /"(?:action|kind)"\s*:\s*"(?:click|type|fill|upload_file|press|drag|navigate|open|close)"/i.test(args)) {
     return 'ui-action';
