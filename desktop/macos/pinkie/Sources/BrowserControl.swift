@@ -7,7 +7,7 @@ enum BrowserControlPolicy {
     static let writes: Set<String> = ["open", "click", "type", "select", "press", "scroll", "back", "forward", "reload", "eval", "show_file", "close", "move", "hover", "drag", "set_slider"]
 
     static func timeout(for action: String, requestedMilliseconds: Double?) -> TimeInterval {
-        let maximum: TimeInterval = ["open", "back", "forward", "reload", "show_file"].contains(action) ? 30 : 15
+        let maximum: TimeInterval = ["open", "back", "forward", "reload", "show_file", "gpt_web_account"].contains(action) ? 30 : 15
         guard let requestedMilliseconds, requestedMilliseconds.isFinite else { return maximum }
         return min(maximum, max(0.1, requestedMilliseconds / 1000))
     }

@@ -32,6 +32,7 @@
   const METRE_TOOL_WORD = [
     [/^(?:read|workbench_read|code_search|code_refs|code_check|grep|glob|ls|find|pinkie_session_list|learning_library|clekk_memory)$/, '正在读取'],
     [/^(?:web_search|web_fetch|pinkie_search|browser|app_browser|web_gpt_activity)$/, '正在搜索'],
+    [/^(?:web_gpt)$/, '在请网页 GPT 帮忙'],
     [/^(?:write|edit|apply_patch|code_edit|multi_edit)$/, '正在修改'],
     [/^(?:exec|bash|process|run_tests)$/, '正在执行命令'],
     [/^(?:computer|computer_flow)$/, '正在操作电脑'],

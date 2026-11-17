@@ -2076,6 +2076,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     var browserControlForDialogs: BrowserControlController { browserControl }
     var browserWebViewForDialogs: WKWebView? { browserWebView }
     private let browserEndpoint = BrowserControlEndpoint()
+    private var gptWebWorker: ChatGPTBackgroundWorker?
     private var browserUserEventMonitor: Any?
     private var chatGPTControlUntil = Date.distantPast
     private let materialPreview = MaterialPreviewSchemeHandler()
@@ -2877,6 +2878,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         do {
             try browserEndpoint.start { [weak self] request, done in
                 guard let self else { done(["id": request["id"] ?? "", "ok": false, "reason": "App 浏览器已关闭。"]); return }
+                // Background web-GPT work (questions, images) runs in its own hidden page and
+                // never touches the visible browser or a collaboration chat.
+                if (request["action"] as? String)?.hasPrefix("gpt_web_") == true {
+                    Task { @MainActor in
+                        let worker = self.gptWebWorker ?? ChatGPTBackgroundWorker()
+                        self.gptWebWorker = worker
+                        worker.handle(request, completion: done)
+                    }
+                    return
+                }
                 self.browserControl.handle(request, completion: done)
             }
         } catch { NSLog("[碧琪浏览器] %@", error.localizedDescription) }
@@ -5273,6 +5284,7 @@ enum PinkieMotion {
         set { UserDefaults.standard.set(newValue, forKey: "PinkieReduceMotion") }
     }
 }
+
 
 // 内置浏览器里的 alert / confirm / prompt（11-17）。没有这几个回调时 WebKit 直接当「取消」处理，
 // 页面上「确定删除吗？」之类的确认永远不会成功。碧琪 / Metre 的操作引起的由 BrowserControl 按要求自动答；

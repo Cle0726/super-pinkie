@@ -62,6 +62,21 @@ export function waitNudge(jobs = [], kinds = [], now = Date.now()) {
     + '。真的一件都不剩了，就用一句话告诉先生在跑什么、大概要多久，然后结束这一轮。';
 }
 
+// 不是 exec 命令的后台活（例如网页 GPT 批量出图）也登记进同一张表：输入框上方的「后台工作」看得到，
+// 结束时同样用看不见的内部消息叫醒碧琪。isRunning() 返回 false 就算结束，wakeText(job) 是叫醒时的话。
+export function trackBackgroundTask({sessionKey = '', command = '', isRunning, wakeText, now = Date.now()} = {}) {
+  if (!SESSION_KEY.test(String(sessionKey)) || typeof isRunning !== 'function') return null;
+  const shared = globalThis[STATE] ||= {jobs: new Map(), timer: null};
+  const job = {
+    id: `bg-${randomUUID().slice(0, 8)}`, sessionKey, agentId: sessionKey.split(':')[1], execId: '', pid: 0,
+    command: String(command), state: 'running', startedAt: now, endedAt: 0, seenByAgent: false, woke: false,
+    isRunning, wakeText,
+  };
+  shared.jobs.set(job.id, job);
+  (shared.owner || new BackgroundJobs()).ensureTimer();
+  return job;
+}
+
 // 只读：这个会话里还在跑的后台命令（新的一轮开始时告诉碧琪「还有这些在跑」）。不新建守望实例。
 export function runningBackgroundJobs(sessionKey = '') {
   const jobs = globalThis[STATE]?.jobs;
@@ -159,7 +174,8 @@ export class BackgroundJobs {
     let running = 0;
     for (const job of this.jobs.values()) {
       if (job.state === 'running') {
-        if (job.pid && this.alive(job.pid) && now - job.startedAt < MAX_WATCH_MS) { running += 1; continue; }
+        const live = job.isRunning ? job.isRunning() : job.pid && this.alive(job.pid);
+        if (live && now - job.startedAt < MAX_WATCH_MS) { running += 1; continue; }
         job.state = 'done';
         job.endedAt = now;
       }
@@ -184,7 +200,7 @@ export class BackgroundJobs {
     try {
       const {stdout = ''} = await this.runProcess(process.execPath, [
         this.cliEntry, 'gateway', 'call', 'chat.send',
-        '--params', JSON.stringify({sessionKey: job.sessionKey, agentId: job.agentId, message: wakeMessage(job), deliver: false, idempotencyKey: `pinkie-bg-${job.id}`}),
+        '--params', JSON.stringify({sessionKey: job.sessionKey, agentId: job.agentId, message: job.wakeText ? job.wakeText(job) : wakeMessage(job), deliver: false, idempotencyKey: `pinkie-bg-${job.id}`}),
         '--json', '--timeout', '30000',
       ], {timeout: 35_000, maxBuffer: 64 * 1024, windowsHide: true, env: process.env});
       let result;

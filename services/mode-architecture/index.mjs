@@ -24,6 +24,7 @@ import {registerArtifacts} from './artifacts.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
+import {createWebGptTool} from './web-gpt.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
 import {createChannelReasoningGuard} from './channel-reasoning.mjs';
 import {RIGOR_LADDER, SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims, unverifiedNote} from './run-contract.mjs';
@@ -1724,7 +1725,8 @@ function douyinWorkflowReason(state) {
       && /"(?:action|kind)"\s*:\s*"(?:type|fill)"/i.test(args)
       && /chatgpt\.com/i.test(args + entry.output);
   });
-  const imageRequestCount = generatedStoryboards.length + browserStoryboardRequests.length;
+  const webGptStoryboards = active.filter(entry => entry.name === 'web_gpt' && /"action"\s*:\s*"image"/.test(toolArgumentsText(entry)));
+  const imageRequestCount = generatedStoryboards.length + browserStoryboardRequests.length + webGptStoryboards.length;
   if (imageRequestCount === 0) return '本轮没有真实提交新的分镜生成请求；查看旧图或 image_generate list 不算生成';
 
   const submittedVideos = active.filter(entry => {
@@ -7009,6 +7011,10 @@ export default {
     api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    // 网页 GPT（后台）：用先生在内置浏览器登录的 ChatGPT 提问、批量出图。只有 Mac App 有隐藏页面。
+    api.registerTool?.(ctx => (process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
+      projectFor: sessionKey => webGptConnection.workspace(sessionKey, '', {allowUnbound: true}),
+    }), ctx?.sessionKey) : null), {name: 'web_gpt'});
     // 挥洒模式不带碧琪的主动提问卡。
     api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);

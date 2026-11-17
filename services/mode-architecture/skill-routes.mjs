@@ -18,8 +18,8 @@ export const SKILL_ROUTES = Object.freeze([
   {skill: 'pinkie-resume', kinds: ['document', 'writing', 'craft'], when: /简历|履历|\bcv\b|resume/i, why: '简历：填一份 YAML 出排版好的 PDF，多套主题，中英文都行'},
   // 图片 / 印刷 / 电商
   {skill: 'xhs-cover-templates', kinds: ['image_print', 'writing', 'web_ui', 'craft'], when: /小红书|红书|笔记封面|笔记首图|\bxhs\b/i, why: '16 套小红书封面现成模板（亮 / 暗两版）'},
-  {skill: 'taobao-detail-long-image', kinds: ['image_print', 'web_ui', 'craft'], when: /详情页|详情长图|商品详情|淘宝|天猫|拼多多|京东/, why: '电商详情页长图（750 宽，一屏一屏规划）；配图用碧琪自己的生图工具，不用技能里的 API 脚本'},
-  {skill: 'ecommerce-listing-suite', kinds: ['image_print', 'craft'], when: /上架|主图|商品图|产品图|电商图|一套.{0,4}(?:图|主图)/, why: '一套上架图：主图、卖点、场景、细节；配图用碧琪自己的生图工具'},
+  {skill: 'taobao-detail-long-image', kinds: ['image_print', 'web_ui', 'craft'], when: /详情页|详情长图|商品详情|淘宝|天猫|拼多多|京东/, why: '电商详情页长图（750 宽，一屏一屏规划）；配图用碧琪自己的生图工具（Mac 上先生登录了 ChatGPT 就用 web_gpt 批量出图），不用技能里的 API 脚本'},
+  {skill: 'ecommerce-listing-suite', kinds: ['image_print', 'craft'], when: /上架|主图|商品图|产品图|电商图|一套.{0,4}(?:图|主图)/, why: '一套上架图：主图、卖点、场景、细节；配图用碧琪自己的生图工具（Mac 上先生登录了 ChatGPT 就用 web_gpt 批量出图）'},
   {skill: 'selling-point-infographic', kinds: ['image_print', 'craft'], when: /卖点/, why: '商品卖点信息图'},
   {skill: 'size-chart', kinds: ['image_print', 'craft'], when: /尺码/, why: '尺码表'},
   {skill: 'model-try-on', kinds: ['image_print', 'craft'], when: /试穿|上身图|模特.{0,4}(?:穿|上身)/, why: '模特上身图（用碧琪自己的生图工具）'},

@@ -30,7 +30,7 @@
 
   // ---------- 纯函数：这一刻该是哪个状态 ----------
   const READ_TOOLS = /^(?:read|workbench_read|code_search|code_refs|code_check|grep|glob|ls|find|pinkie_session_list|pinkie_sessions|pinkie_models|metre_memory|learning_library|clekk_memory)$/;
-  const SEARCH_TOOLS = /^(?:web_search|web_fetch|pinkie_search|browser|app_browser|web_gpt_activity)$/;
+  const SEARCH_TOOLS = /^(?:web_search|web_fetch|pinkie_search|browser|app_browser|web_gpt_activity|web_gpt)$/;
   const EXEC_TOOLS = /^(?:exec|bash|process|run_tests|computer|computer_flow)$/;
   const WRITE_TOOLS = /^(?:write|edit|apply_patch|code_edit|multi_edit)$/;
   const KIND_STATE = {create: 'create', write: 'write', delete: 'write', move: 'write', install: 'exec', build: 'exec', git: 'exec',

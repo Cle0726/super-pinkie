@@ -52,7 +52,7 @@ if (!window.__laolaoCleStage) {
     clekk_memory: 'memory', memory_search: 'memory',
     pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', metre_memory: 'memory', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
     sessions_spawn: 'session', sessions_send: 'session', subagents: 'session',
-    workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', cron: 'cron',
+    workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', web_gpt: 'webgpt', cron: 'cron',
   };
   const QUIZ_KINDS = /^(?:single_choice|multiple_choice|fill_blank|short_answer|batch)$/;
   const normTool = (s) => String(s || '').trim().toLowerCase().replace(/[\s.-]+/g, '_');

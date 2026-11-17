@@ -357,7 +357,8 @@
             <div><dt>高级连接器（聊天无需）</dt><dd data-field="connector">尚未配对</dd></div>
             <div><dt>ChatGPT 账号</dt><dd data-field="account">由右侧 ChatGPT 页面显示</dd></div>
           </dl>
-          <p>聊天模式会把当前绑定项目中相关文本文件的正文只读发送给 ChatGPT，并记录实际文件路径；无需连接器配对。图片和视频尚未接入这条聊天路径。换号只清除内置浏览器里的 ChatGPT / OpenAI 登录，不动其他网站、聊天记录、项目、权限和本机配置。</p>
+          <p>聊天模式会把当前绑定项目中相关文本文件的正文只读发送给 ChatGPT，并记录实际文件路径；无需连接器配对。图片和视频尚未接入这条聊天路径。</p>
+          <p>另外，只要内置浏览器里登录了 ChatGPT，碧琪和 Metre 也能自己在后台向网页 GPT 提问、批量出图并下载到项目里：用的是一个看不见的页面，不占你的浏览器，关掉浏览器面板、全屏干别的也照常进行。换号只清除内置浏览器里的 ChatGPT / OpenAI 登录，不动其他网站、聊天记录、项目、权限和本机配置。</p>
           <div class="laolao-web-gpt-connection__pairing" hidden><div><span></span><code></code></div><button type="button" data-action="copy-pair">复制配对码</button></div>
           <div class="laolao-web-gpt-connection__actions">
             <button type="button" data-action="open-chatgpt">打开 ChatGPT</button>

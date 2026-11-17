@@ -601,3 +601,80 @@ html[data-pinkie-night] .laolao-delivery-card__visual {
 @media (prefers-reduced-motion: reduce) {
   .laolao-delivery-card, .laolao-delivery-card__button { transition: none; animation: none; }
 }
+
+/* 图片、视频直接显示在聊天里：大图默认可见，点击全屏；视频点封面原地播放。 */
+.chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card.is-media) {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+.chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card.is-media:only-child) {
+  grid-template-columns: minmax(0, min(100%, 520px));
+}
+.chat-bubble .laolao-delivery-card.is-media {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  padding: 8px 8px 10px;
+}
+.chat-bubble .laolao-delivery-card.is-media .laolao-delivery-card__info { padding: 0 4px; }
+.chat-bubble .laolao-delivery-card.is-media .laolao-delivery-card__actions { padding: 0 4px; }
+.laolao-delivery-card__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 140px;
+  max-height: 420px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #c54a85) 7%, transparent);
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+}
+.laolao-delivery-card__stage.is-video { cursor: pointer; aspect-ratio: 16 / 9; min-height: 0; background: #111; }
+.laolao-delivery-card__stage.is-video.is-playing { aspect-ratio: auto; cursor: default; }
+.laolao-delivery-card__stage:not(.is-ready):not(.is-failed)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--accent, #c54a85) 10%, transparent) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: laolao-delivery-shimmer 1.3s linear infinite;
+}
+.laolao-delivery-card__stage.is-video:not(.is-ready)::after { display: none; }
+.laolao-delivery-card__stage.is-failed { cursor: default; }
+.laolao-delivery-card__stage.is-failed::before { content: "图片没有显示出来"; color: var(--muted-strong, #8c6b7c); font-size: .85em; }
+@keyframes laolao-delivery-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.laolao-delivery-card__image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+.laolao-delivery-card__poster { position: absolute; inset: 0; height: 100%; object-fit: cover; }
+.laolao-delivery-card__video { display: block; width: 100%; max-height: 420px; background: #000; }
+.laolao-delivery-card__play {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  padding-left: 4px;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, .55);
+  font-size: 22px;
+  line-height: 1;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .3);
+}
+.laolao-delivery-card__stage.is-loading .laolao-delivery-card__play { opacity: .5; }
+.laolao-delivery-card__stage:hover .laolao-delivery-card__play { background: rgba(0, 0, 0, .72); }
+.laolao-delivery-card__stage:focus-visible { outline: 2px solid var(--accent, #c54a85); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .laolao-delivery-card__stage::after { animation: none !important; }
+}
