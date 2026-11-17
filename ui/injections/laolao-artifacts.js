@@ -459,8 +459,13 @@
         const at = Number(item?.timestamp) || Date.parse(group.querySelector('time[datetime]')?.getAttribute('datetime') || '') || 0;
         turns.push({at, reply: null});
       } else if (group.classList.contains('assistant') && turns.length) {
-        if (!group.querySelector('.chat-bubble.streaming')) turns.at(-1).reply = group;
-        else turns.at(-1).streaming = true;
+        const turn = turns.at(-1);
+        // The answer right after the work card owns the files: replies that a late
+        // background notice woke up come after it and must not pull the cards down.
+        if (group.classList.contains('chat-group--process')) { turn.reply = null; turn.afterCard = true; continue; }
+        if (group.classList.contains('chat-group--learning')) continue;
+        if (group.querySelector('.chat-bubble.streaming')) { turn.streaming = true; continue; }
+        if (!(turn.afterCard && turn.reply)) turn.reply = group;
       }
     }
     const placements = new Map();
@@ -485,7 +490,9 @@
         const next = el('div', 'pinkie-file-cards');
         next.dataset.signature = signature;
         next.setAttribute('aria-label', '这一轮做出的文件');
-        for (const {item, version} of entries.values()) next.append(fileCard(item, version));
+        const ordered = [...entries.values()].sort((a, b) => (Number(a.version.ts) || 0) - (Number(b.version.ts) || 0)
+          || String(a.item.title).localeCompare(String(b.item.title), 'zh-Hans-CN', {numeric: true}));
+        for (const {item, version} of ordered) next.append(fileCard(item, version));
         if (host) host.replaceWith(next); else reply.after(next);
         host = next;
       }

@@ -1432,7 +1432,7 @@ function Ku(e){let t=J(e.id),n=typeof e.text==`string`?e.text:``;if(!t||!n.trim(
   state.chatMessages = result;
   return result;
 }
-/* pinkie-chat-timeline:v30 */function userText(message = {}) {
+/* pinkie-chat-timeline:v31 */function userText(message = {}) {
   if (typeof message.content === 'string') return message.content;
   if (typeof message.text === 'string') return message.text;
   if (!Array.isArray(message.content)) return '';
@@ -1450,6 +1450,14 @@ function hasVisibleUserPayload(message = {}) {
     if (!part || typeof part !== 'object') return false;
     return !['text', 'input_text', 'output_text', 'thinking', 'reasoning'].includes(part.type);
   });
+}
+function isRuntimeNoticeMessage(message = {}) {
+  if (String(message?.role || '').toLowerCase() !== 'user') return false;
+  const visible = userText(message).replace(/[\u200B-\u200D\u2060\u2063\uFEFF]/gu, '').trim();
+  if (/^(?:A background task completed\.|<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>|\[pinkie-watchdog\]\s*\[pinkie-session-wake\])/u.test(visible)) return true;
+  const provenance = message?.provenance;
+  return Boolean(provenance && typeof provenance === 'object' && provenance.kind === 'inter_session'
+    && provenance.isUser !== true && provenance.sourceTool);
 }
 function isInternalUserMessage(message = {}) {
   const raw = userText(message);
@@ -1727,8 +1735,10 @@ function pinkieTimelineView(key) {
 }
 function pinkieProcessOpen(entry) {
   const view = pinkieTimelineView(entry.key);
-  view.processDefault = entry.processLive === true || entry.processCurrent === true;
-  return view.processChoice ?? (view.processDefault || view.open);
+  // User 2026-11-16: every card, finished or not, keeps its narration,
+  // thinking and steps on screen. A folded card showed only its thoughts.
+  view.processDefault = true;
+  return true;
 }
 function pinkieTimelineRows(entry, rows) {
   const view = pinkieTimelineView(entry.key);
@@ -2553,11 +2563,33 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
   const pagePresentation = (timeline) => pageIsLive ? timeline : timeline.map((item) => item?.isProcessCard
     ? {...item, processLive: false, processCurrent: false, processState: '', processTitle: '本页工作过程',
       processMeta: '分页查看'} : item);
-  const visibleEntries = (Array.isArray(entries) ? entries : []).flatMap((item) => {
-    if (item?.kind !== 'group' || String(item.role || '').toLowerCase() !== 'user') return [item];
-    const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {}));
-    return messages.length ? [{...item, messages}] : [];
-  });
+  // A notice that lands after a finished answer becomes an invisible turn
+  // boundary; one that lands mid-run stays folded into that run.
+  const visibleEntries = [];
+  let answerEnded = false;
+  for (const item of Array.isArray(entries) ? entries : []) {
+    if (item?.kind === 'group' && String(item.role || '').toLowerCase() === 'user') {
+      const notice = (item.messages || []).some((entry) => isRuntimeNoticeMessage(entry?.message || {}));
+      const messages = (item.messages || []).filter((entry) => !isInternalUserMessage(entry?.message || {})
+        && !isRuntimeNoticeMessage(entry?.message || {}));
+      if (messages.length) { visibleEntries.push({...item, messages}); answerEnded = false; }
+      else if (notice && answerEnded) {
+        visibleEntries.push({kind: 'pinkie-notice-boundary', key: `${item.key}:notice`, timestamp: item.timestamp});
+        answerEnded = false;
+      }
+      continue;
+    }
+    for (const entry of item?.messages || []) {
+      const message = entry?.message || {};
+      const role = String(message.role || item.role || '').toLowerCase();
+      if (role === 'assistant') {
+        const reason = String(message.stopReason || '').toLowerCase();
+        answerEnded = !textParts(message).some(isToolCallPart)
+          && ['stop', 'end_turn', 'endturn', 'stop_sequence'].includes(reason);
+      } else if (role) answerEnded = false;
+    }
+    visibleEntries.push(item);
+  }
   // Failure summaries can be collapsed past the next user row; remember which
   // turns failed before that, so a failed run never reads as "接上了".
   const failedHeads = new Set();
@@ -2589,8 +2621,13 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
   });
   if (pageIsLive) safeEntries = pinkieRehomeSteeredRows(safeEntries);
   const turnStarts = [];
+  const isBoundary = (item) => item?.kind === 'pinkie-notice-boundary';
   for (let index = 0; index < safeEntries.length; index += 1) {
-    if (isRealUserGroup(safeEntries[index])) turnStarts.push(index);
+    if (isRealUserGroup(safeEntries[index]) || isBoundary(safeEntries[index])) turnStarts.push(index);
+  }
+  if (turnStarts.length && !safeEntries.some(isRealUserGroup)) {
+    safeEntries = safeEntries.filter((item) => !isBoundary(item));
+    turnStarts.length = 0;
   }
   if (!turnStarts.length) {
     if (!safeEntries.length) return [];
@@ -2604,12 +2641,18 @@ function pinkieBuildTimeline(entries = [], getToolCalls = () => [], maxRows = 80
   for (let turnIndex = 0; turnIndex < turnStarts.length; turnIndex += 1) {
     const start = turnStarts[turnIndex];
     const end = turnStarts[turnIndex + 1] ?? safeEntries.length;
+    if (isBoundary(safeEntries[start])) {
+      const latest = turnIndex === turnStarts.length - 1;
+      timeline.push(...projectOrphanEntries(safeEntries.slice(start + 1, end), getToolCalls, maxRows,
+        pageIsLive && latest && pinkieRunIsActive()));
+      continue;
+    }
     timeline.push(...projectTimelineTurn(
       safeEntries.slice(start, end),
       getToolCalls,
       maxRows,
       pageIsLive && turnIndex === turnStarts.length - 1,
-      turnIndex < turnStarts.length - 1
+      turnIndex < turnStarts.length - 1 && isRealUserGroup(safeEntries[turnStarts[turnIndex + 1]])
         && !failedHeads.has(String(safeEntries[start]?.messages?.at?.(-1)?.key || '')),
     ));
   }

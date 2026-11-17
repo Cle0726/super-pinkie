@@ -110,7 +110,7 @@ test('superseded cards leading into the latest turn stay open; finished older tu
   assert.equal(pinkieProcessOpen(first), true, 'first superseded run stays open');
   assert.equal(pinkieProcessOpen(second), true, 'second superseded run stays open');
   assert.equal(pinkieProcessOpen(latest), true);
-  assert.equal(pinkieProcessOpen(older), false, 'a finished earlier job keeps its collapsed default');
+  assert.equal(pinkieProcessOpen(older), true, 'a finished earlier job also keeps its narration, thinking and steps on screen');
 });
 
 
@@ -229,5 +229,5 @@ test('an aborted run stays open while the user carries the same job on; a finish
   assert.equal(pinkieProcessOpen(stopped), true, 'the aborted run before 继续 keeps its rows on screen');
   assert.equal(pinkieProcessOpen(appended), true);
   assert.equal(pinkieProcessOpen(latest), true);
-  assert.equal(pinkieProcessOpen(old), false, 'a stopped run before a finished answer keeps the collapsed default');
+  assert.equal(pinkieProcessOpen(old), true, 'a stopped run before a finished answer also keeps its rows on screen');
 });

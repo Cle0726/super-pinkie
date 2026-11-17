@@ -376,7 +376,7 @@ test('paging backward preserves every loaded user turn and does not mutate the s
   assert.equal(timeline.find(item => item.role === 'user').messages[0].message.__openclaw.id, 'older-0');
 });
 
-test('closed process and overflow cards never call row renderers, and old steps mount in batches', async t => {
+test('process cards always render their rows; overflow cards stay lazy and old steps mount in batches', async t => {
   const previous = globalThis.__pinkieTimelineViews;
   globalThis.__pinkieTimelineViews = new Map();
   t.after(() => { globalThis.__pinkieTimelineViews = previous; });
@@ -391,13 +391,7 @@ test('closed process and overflow cards never call row renderers, and old steps 
     pinkieTimelineToggle, pinkieTimelineMore, row, pinkieProcessOpen);
   const process = {key: 'lazy-process', isProcessCard: true, processRows: Array.from({length: 80}, () => ({kind: 'group'}))};
   call(renderProcess, process);
-  assert.equal(rendered, 0, 'closed process does not construct any row template');
-  pinkieTimelineView(process.key).open = true;
-  call(renderProcess, process);
-  assert.equal(rendered, 80);
-  pinkieTimelineView(process.key).open = false;
-  call(renderProcess, process);
-  assert.equal(rendered, 80, 'closing produces no body, leaving Lit to dispose the previous body');
+  assert.equal(rendered, 80, 'a finished process card still renders its steps');
   const overflow = {key: 'lazy-overflow', timelineOverflow: true,
     overflowItems: Array.from({length: 241}, (_, id) => ({kind: 'group', id}))};
   call(renderOverflow, overflow);
@@ -469,7 +463,7 @@ const legacyV1BuildTimeline = `function pinkieBuildTimeline(entries = [], getToo
 }`;
 
 function asOlderBundle(currentBundle, version) {
-  return currentBundle.replace('/* pinkie-chat-timeline:v30 */', `/* pinkie-chat-timeline:${version} */`);
+  return currentBundle.replace('/* pinkie-chat-timeline:v31 */', `/* pinkie-chat-timeline:${version} */`);
 }
 
 function asLegacyV1Bundle(v4Bundle) {
@@ -489,7 +483,7 @@ function asLegacyV1Bundle(v4Bundle) {
 test('native bundle patch is structural, idempotent, syntax-safe and skips changed upstream code', () => {
   const result = transformWithStatus(bundleFixture);
   assert.equal(result.changed, true, result.reason);
-  assert.match(result.text, /pinkie-chat-timeline:v30/);
+  assert.match(result.text, /pinkie-chat-timeline:v31/);
   assert.match(result.text, /pinkieSelectMessageWindow\(e\.messages,Li,e\)/);
   assert.match(result.text, /function Zb\(e\)\{return Infinity\}/);
   assert.match(result.text, /pinkieBuildTimeline\(/);
@@ -722,7 +716,7 @@ test('an installed v1 chat bundle upgrades to the current runtime through apply 
   const upgraded = transformWithStatus(v1);
   assert.equal(upgraded.changed, true, upgraded.reason);
   assert.equal(upgraded.reason, 'upgraded-v1');
-  assert.match(upgraded.text, /pinkie-chat-timeline:v30/);
+  assert.match(upgraded.text, /pinkie-chat-timeline:v31/);
   assert.doesNotMatch(upgraded.text, /pinkie-chat-timeline:v1\b|const prefix = safeEntries\.slice/);
   assert.doesNotThrow(() => new vm.Script(upgraded.text));
   assert.deepEqual(transformWithStatus(upgraded.text), {
@@ -1050,8 +1044,40 @@ test('a bundle without the 2026.10 group markup is reported, not guessed', () =>
   assert.deepEqual(transformCurrentWithStatus('function other(){}'), {text: 'function other(){}', changed: false, reason: 'chat group row key not found'});
 });
 
-test('the live and latest process stays visible while old turns remain lazy, with explicit collapse respected',async t=>{
+test('every process card stays open: live, latest and finished older turns, even after a click on its status line',async t=>{
  const previous=globalThis.__pinkieTimelineViews;globalThis.__pinkieTimelineViews=new Map();t.after(()=>{globalThis.__pinkieTimelineViews=previous});
- const current={key:'stream-visible',processLive:true,processCurrent:true};assert.equal(pinkieProcessOpen(current),true);assert.equal(pinkieProcessOpen({...current,processLive:false}),true);assert.equal(pinkieProcessOpen({...current,processLive:false,processCurrent:false}),false);
- assert.equal(pinkieProcessOpen(current),true);const event={preventDefault(){},stopPropagation(){},currentTarget:{closest:()=>({requestUpdate(){}})}};await pinkieTimelineToggle(event,current.key);assert.equal(pinkieProcessOpen(current),false);await pinkieTimelineToggle(event,current.key);assert.equal(pinkieProcessOpen(current),true);
+ const current={key:'stream-visible',processLive:true,processCurrent:true};assert.equal(pinkieProcessOpen(current),true);assert.equal(pinkieProcessOpen({...current,processLive:false}),true);assert.equal(pinkieProcessOpen({...current,processLive:false,processCurrent:false}),true);
+ const event={preventDefault(){},stopPropagation(){},currentTarget:{closest:()=>({requestUpdate(){}})}};await pinkieTimelineToggle(event,current.key);assert.equal(pinkieProcessOpen(current),true);
+});
+
+test('a background notice after a finished answer starts its own quiet turn instead of folding the answer', () => {
+  const notice = (id) => group('user', id, [{...message('user', 'A background task completed. Use this result to reply.\n\n[Inter-session message] isUser=false', id),
+    provenance: {kind: 'inter_session', sourceTool: 'image_generate'}}]);
+  const midRun = group('user', 'mid', [{...message('user', [{type: 'text', text: '<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>\nx\n<<<END_OPENCLAW_INTERNAL_CONTEXT>>>'}], 'mid'),
+    provenance: {kind: 'inter_session'}}]);
+  const entries = [
+    group('user', 'ask', [message('user', '加几张图', 'ask')]),
+    group('tool', 'step-1', [
+      {...message('assistant', [{type: 'text', text: '先画图。'}, {type: 'tool_call', callId: 'w1', name: 'write', arguments: {}}], 'call-1'), stopReason: 'toolUse'},
+      message('tool', [{type: 'tool_result', callId: 'w1', name: 'write', text: 'ok'}], 'result-1'),
+    ]),
+    midRun,
+    group('tool', 'step-2', [
+      {...message('assistant', [{type: 'text', text: '接到页面。'}, {type: 'tool_call', callId: 'e1', name: 'code_edit', arguments: {}}], 'call-2'), stopReason: 'toolUse'},
+      message('tool', [{type: 'tool_result', callId: 'e1', name: 'code_edit', text: 'ok'}], 'result-2'),
+    ]),
+    group('assistant', 'answer', [{...message('assistant', '图已经加进练习页。', 'answer'), stopReason: 'stop'}]),
+    notice('n1'),
+    group('assistant', 'late-1', [{...message('assistant', '照片还是没成功。', 'late-1'), stopReason: 'stop'}]),
+    notice('n2'),
+    group('assistant', 'late-2', [{...message('assistant', '这一张也没成功。', 'late-2'), stopReason: 'stop'}]),
+  ];
+  const timeline = pinkieBuildTimeline(entries, parseToolRows);
+  assert.equal(timeline.filter(item => item.role === 'user').length, 1, 'notices never become user bubbles');
+  const cards = timeline.filter(item => item.isProcessCard);
+  assert.equal(cards.length, 1, 'the mid-run notice does not split the run');
+  assert.equal(cards[0].processSteps, 2);
+  const replies = timeline.filter(item => !item.isProcessCard && item.role === 'assistant')
+    .map(item => item.messages[0].message.content);
+  assert.deepEqual(replies, ['图已经加进练习页。', '照片还是没成功。', '这一张也没成功。'], 'the real answer stays visible');
 });

@@ -255,7 +255,7 @@ test('A1-8 Baton / Virtuoso：默认派发；独做时两个派发工具不提�
   const prefs = f.prefs;
   // registerSessionLineage 用的是 options.prefs（同一个 SessionPrefs）。
   assert.equal(prefs.forSession(metre).dispatch, 'dispatch');
-  assert.match(prefs.promptContext(metre), /【本轮：派发】$/);
+  assert.match(prefs.promptContext(metre), /\n【本轮：派发】Baton：[^\n]*pinkie_session_start[^\n]*$/);
   const start = named('pinkie_session_start').factory({sessionKey: metre});
   assert.deepEqual(start.parameters.required, ['title', 'prompt', 'initiation', 'mode']);
   assert.ok(start.parameters.properties.model && start.parameters.properties.folder);
@@ -266,14 +266,14 @@ test('A1-8 Baton / Virtuoso：默认派发；独做时两个派发工具不提�
   assert.equal(named('pinkie_session_start').factory({sessionKey: metre}), null);
   assert.equal(named('pinkie_mode_ask').factory({sessionKey: metre}), null);
   assert.ok(named('pinkie_session_list').factory({sessionKey: metre}), '看自己的子会话不算派发');
-  assert.match(prefs.promptContext(metre), /【本轮：独做】$/);
+  assert.match(prefs.promptContext(metre), /\n【本轮：独做】Virtuoso：[^\n]*$/);
   assert.doesNotMatch(prefs.promptContext(metre), /派发/);
   // 后端也守着（万一工具是更早一轮拿到的）。
   await assert.rejects(f.lineage.start(metre, 'human', job(), 'solo'), /Virtuoso/);
   await assert.rejects(f.lineage.ask(metre, 'human', {mode: 'ideas', question: '配色？', model: 'mm/workbuddy/glm-5.3'}, 'q'), /Virtuoso/);
   prefs.setSession(metre, {dispatch: 'dispatch'});
   assert.ok(named('pinkie_session_start').factory({sessionKey: metre}));
-  assert.match(prefs.promptContext(metre), /【本轮：派发】$/);
+  assert.match(prefs.promptContext(metre), /\n【本轮：派发】Baton：[^\n]*pinkie_session_start[^\n]*$/);
   assert.throws(() => prefs.setSession(metre, {dispatch: 'baton'}), /dispatch（Baton）或 solo（Virtuoso）/);
   assert.throws(() => prefs.setSession(project, {dispatch: 'solo'}), /这个模式没有这个选项/);
   // 老模式：工具和说明原样。

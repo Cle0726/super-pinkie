@@ -870,7 +870,7 @@
   const modeOptionFor = key => MODE_OPTION[/^agent:([^:]+):/.exec(key || '')?.[1]] || null;
   // Metre 的「派发 / 独做」（briefs/metre-mode-1113 PLAN 2.6、6.1）：界面上只写 Baton｜Virtuoso，常驻在输入框下面、
   // 不收进工具箱；中文的意思和作用只在悬停时出现。没有悬停的屏幕（触屏、窄窗口）点旁边的小 i 看同样的说明。
-  // 后端字段仍是 dispatch / solo，每轮注入【本轮：派发】/【本轮：独做】。
+  // 后端字段仍是 dispatch / solo，每轮注入【本轮：派发】/【本轮：独做】开头的一句做法；Baton 动手到上限还没派过会被拦（metre-baton.mjs）。
   const BATON = [
     {value: 'dispatch', label: 'Baton', tip: '指挥棒 · 把活拆开派给其他模式里的轻量模型，Metre 把关、验收、汇报'},
     {value: 'solo', label: 'Virtuoso', tip: '独奏 · Metre 亲手做完，不开子会话'},

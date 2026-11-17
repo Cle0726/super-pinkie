@@ -2421,3 +2421,43 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-c
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .laolao-context-viewer__compact:hover:not(:disabled) { border-color: var(--metre-cobalt) !important; color: var(--metre-cobalt) !important; background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-context-viewer__popover .laolao-context-viewer__compact:disabled { border-color: var(--metre-line-strong) !important; color: var(--metre-muted) !important; }
+
+/* ==================================================================================================
+ * 文件卡 = 分谱目录（11-17，用户：「这个文件 UI 还是用碧琪的吧」）
+ * 碧琪那套是一张张带粉紫底、阴影、圆角的卡片。Metre 这里是一张纸上的一份目录：一块细边框，行与行之间一根发丝线，
+ * 左边是墨线描的小方框，文件名用正文字，大小用等宽小字；「打开 / 在访达中显示」是两个文字按钮，只在悬停时上钴蓝。
+ * 回答没有头像缩进，目录和回答左边对齐。
+ * ================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-cards {
+  gap: 0 !important; padding-left: 0 !important; margin: 4px auto 18px !important;
+  width: min(var(--chat-content-max, 760px), calc(100% - 32px)) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-cards::before {
+  content: "Parts · 这一轮的文件"; display: block; padding: 0 0 6px;
+  font: italic 400 12.5px/1.2 var(--metre-serif); color: var(--metre-muted); letter-spacing: .01em;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card {
+  max-width: 560px !important; gap: 12px !important; padding: 9px 6px 9px 10px !important;
+  border: 1px solid var(--metre-line-strong) !important; border-radius: 0 !important;
+  background: var(--metre-surface) !important; color: var(--metre-text) !important; box-shadow: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card + .pinkie-file-card { border-top-width: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card:first-of-type { border-radius: 4px 4px 0 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card:last-of-type { border-radius: 0 0 4px 4px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card:only-of-type { border-radius: 4px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__icon {
+  width: 26px !important; height: 30px !important; border-radius: 0 !important;
+  background: transparent !important; color: var(--metre-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--metre-text) 55%, transparent) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__icon .pinkie-art-icon { width: 15px !important; height: 15px !important; stroke-width: 1.3 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__name { font: 500 13.5px/1.35 var(--metre-sans) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__name:hover { color: var(--metre-accent) !important; text-decoration-color: color-mix(in srgb, var(--metre-accent) 50%, transparent) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__meta { font: 400 11px/1.4 var(--metre-mono) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn {
+  height: 26px !important; padding: 0 8px !important; border-radius: 3px !important;
+  background: transparent !important; color: var(--metre-muted) !important; font: 400 12.5px/1 var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn:hover:not(:disabled),
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn:focus-visible { background: var(--metre-hover) !important; color: var(--metre-accent) !important; outline: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn + .pinkie-file-card__btn { box-shadow: -1px 0 0 var(--metre-line) !important; border-radius: 0 3px 3px 0 !important; }

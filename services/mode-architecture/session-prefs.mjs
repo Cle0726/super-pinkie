@@ -28,7 +28,12 @@ export const LENS_TEXT = Object.freeze({
 // Metre「派发 / 独做」（界面叫 Baton / Virtuoso，PLAN 2.6、6.1）：默认派发。每轮注入的标记是主 MD 第四节认的那两个词，
 // 一直注入（默认也注入）；独做时 session-lineage 把派发工具摘掉。
 export const DISPATCH_MODES = ['dispatch', 'solo'];
-export const DISPATCH_TEXT = Object.freeze({dispatch: '【本轮：派发】', solo: '【本轮：独做】'});
+// 只写一个标签时模型当没看见（11-17 实测：Baton 下一轮亲手写了十几处、一个子会话没开），所以标签后面跟一句具体做法。
+// 标签放在一行最前面，主 MD 第四节认的仍是这两个词；Baton 的硬约束在 metre-baton.mjs。
+export const DISPATCH_TEXT = Object.freeze({
+  dispatch: '【本轮：派发】Baton：写改文件、画图、批量读资料这类动手的活，用 pinkie_models 选个更轻的模型、pinkie_session_start 派出去，互不依赖的同时派；你做理解、决定、验收和汇报。三四步的小事可自己做。',
+  solo: '【本轮：独做】Virtuoso：全部亲手做，不开子会话、不问别的模式。',
+});
 const MODE_OPTIONS = Object.freeze({
   project: {field: 'pace', values: PACES, text: PACE_TEXT, error: '没有这种工作程度'},
   thinking: {field: 'lens', values: LENSES, text: LENS_TEXT, error: '没有这种想法取向'},

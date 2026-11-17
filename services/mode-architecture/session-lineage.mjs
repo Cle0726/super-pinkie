@@ -1,3 +1,4 @@
+import {registerMetreBaton} from './metre-baton.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
@@ -1257,6 +1258,8 @@ export function registerSessionLineage(api, options) {
   if (options.modelHealth) lineage.modelHealth = options.modelHealth;
   if (options.prefs) lineage.prefsSource = () => options.prefs;
   registerMinimalChildToolsMigration(api);
+  // Baton（派发）真的要派：动手到上限还没派过就拦下（metre-baton.mjs）。只注册一次，实例共用。
+  lineage.baton = registerMetreBaton(api, {isMetre: isMetreKey, solo: key => lineage.solo(key), baton: lineage.baton});
   const protectedHook = (name, work) => (event, ctx) => {
     try { return work(event, ctx); }
     catch { logSessionFailure(api, 'session-lineage', sessionKeyOf(event, ctx), name); }
