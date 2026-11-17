@@ -12,6 +12,7 @@ import {trackBackgroundTask} from './background-jobs.mjs';
 const STATE = Symbol.for('pinkie.webGpt.v1');
 const POLL_MS = 2_500;
 const ASK_WAIT_MS = 4 * 60_000;
+const SLOW_CALL_MS = 45_000;
 const MAX_ITEMS = 60;
 const MAX_COUNT = 4;
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):/;
@@ -143,7 +144,9 @@ export class WebGptRunner {
   }
 
   async call(action, params = {}) {
-    const reply = await this.request(action, params);
+    // 第一次用时隐藏页要先把 chatgpt.com 加载出来（实测 11-17 超过 15 秒），查账号、开始任务多给点时间。
+    const slow = action === 'gpt_web_account' || action === 'gpt_web_start';
+    const reply = await this.request(action, params, slow ? {timeoutMs: SLOW_CALL_MS} : undefined);
     if (!reply?.ok) throw new Error(reply?.reason || '网页 GPT 操作失败');
     return reply.result || {};
   }

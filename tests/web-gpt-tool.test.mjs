@@ -186,3 +186,11 @@ test('images in an ask reply are saved into the output folder and offered as MED
   assert.match(result.details.show, /MEDIA:/);
   assert.equal(fs.existsSync(src), false);
 });
+
+test('account and start calls give the hidden page time to load on first use', async () => {
+  freshState();
+  const seen = [];
+  const runner = new WebGptRunner({request: async (action, params, opts) => { seen.push([action, opts?.timeoutMs]); return {ok: true, result: {loggedIn: true}}; }});
+  await runner.account();
+  assert.deepEqual(seen, [['gpt_web_account', 45_000]]);
+});
