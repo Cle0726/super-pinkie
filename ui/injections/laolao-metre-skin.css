@@ -2461,3 +2461,35 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn:hover:not(:disabled),
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn:focus-visible { background: var(--metre-hover) !important; color: var(--metre-accent) !important; outline: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-file-card__btn + .pinkie-file-card__btn { box-shadow: -1px 0 0 var(--metre-line) !important; border-radius: 0 3px 3px 0 !important; }
+
+/* ==================================================================================================
+ * 后台工作条（「后台命令 · 1 个在跑」，11-17 用户截图：「抓到一个碧琪 UI」）
+ * 碧琪那版是粉色渐变玻璃胶囊 + 粉色转圈。Metre 这里：一张纸上的一行小记号——平的表面、发丝边、墨色字，
+ * 转圈和对勾用钴蓝，展开的列表同一张纸；没有渐变、模糊和阴影。
+ * ================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__pill, .pinkie-work__card) {
+  border: 1px solid var(--metre-line-strong) !important;
+  background: var(--metre-surface) !important;
+  color: var(--metre-text) !important;
+  box-shadow: 0 10px 26px -20px rgba(0, 0, 0, .5) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  font-family: var(--metre-sans) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill { border-radius: 6px !important; padding: 5px 11px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__card { border-radius: 6px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill:hover { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__title, .pinkie-work__name, .pinkie-work__head) { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__count, .pinkie-work__time, .pinkie-work__clock, .pinkie-work__sum, .pinkie-work__chevron, .pinkie-work__detail) {
+  color: var(--metre-muted) !important; font-variant-numeric: tabular-nums;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__count, .pinkie-work__time, .pinkie-work__clock) { font-family: var(--metre-mono) !important; font-size: 11.5px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__icon, .pinkie-work__state) { color: var(--metre-cobalt, var(--metre-accent)) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__row { border-radius: 3px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__row[data-has-output="1"]:hover, .pinkie-work__row.is-open) { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__stop {
+  border: 1px solid var(--metre-line-strong) !important; border-radius: 3px !important;
+  background: transparent !important; color: var(--metre-text) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__stop:hover { border-color: var(--metre-accent) !important; color: var(--metre-accent) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__icon[data-icon="failed"] { color: #B4553A !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__icon[data-icon="done"] { color: var(--metre-muted) !important; }
