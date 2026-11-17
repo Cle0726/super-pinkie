@@ -2316,3 +2316,42 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-con
   font: 500 12px/1.2 var(--metre-sans) !important; letter-spacing: 0 !important; white-space: nowrap !important; color: var(--metre-muted) !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-model-filter[data-pinkie-brand]:is(:hover, [aria-pressed="true"]) { color: var(--metre-text) !important; }
+
+/* ==================================================================================================
+ * 真机第四轮（11-16 深夜，用户截图）：「重叠 / 子会话不显示 / 侧边栏乱弹」
+ * ================================================================================================== */
+
+/* 1. 输入框上方那条「N 个声部在奏」（laolao-crew.js）和运行条的 ◆ 芯片都贴在输入框左上沿，芯片压在字上。
+ *    芯片约 38px 宽，分工条让出左边一格；颜色换成 Metre 的钴蓝，不用碧琪的粉。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-crew {
+  --crew: var(--metre-accent);
+  padding-left: 54px !important;
+  font-family: var(--metre-sans) !important;
+  color: var(--metre-muted) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-crew__label { opacity: 1 !important; }
+
+/* 2. 选中的那一行悬停时，标题链接自己又铺一块浅底（上面 aside.sidebar :is(a, button):hover 那条），成了行里套一块。
+ *    会话行的底色只由整行负责。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .session-row-host .sidebar-recent-session__link,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .session-row-host .sidebar-recent-session__link:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 3. 父会话下面的声部（laolao-session-list.js awayRow）：缩进一级、字小一号、右边写在哪个模式。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part .sidebar-recent-session__name {
+  font-size: 13px !important;
+  color: var(--metre-muted) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part:hover .sidebar-recent-session__name { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part__mode {
+  flex: 0 0 auto;
+  margin-right: 6px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  font: 11px/1.2 var(--metre-sans) !important;
+  color: var(--metre-muted) !important;
+  white-space: nowrap;
+}

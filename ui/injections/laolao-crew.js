@@ -18,19 +18,23 @@
   'use strict';
   if (window.PinkieCrew) return;
   const MODES = {
-    chat: {name: '唠嗑模式'}, project: {name: '项目模式'}, ideas: {name: '想法模式'}, learning: {name: '学习模式'},
+    chat: {name: '唠嗑模式'}, project: {name: '项目模式'}, ideas: {name: '想法模式'}, thinking: {name: '想法模式'},
+    learning: {name: '学习模式'}, unrestricted: {name: '无限制模式'},
   };
+  // Metre 里不说「碧琪」，用它自己的话：子会话 = 声部，在跑 = 在奏，回来 = 交回（和总谱一致）。
+  const inMetre = () => typeof document !== 'undefined' && document.documentElement?.getAttribute('data-laolao-mode') === 'metre';
   const STATUS = {running: '正在忙', waiting: '等你回复', done: '做完了', error: '出错了'};
   const MAX = 5, LINGER_MS = 6000; // 五只：再多就伸到趴在输入框右上角的小碧琪身子底下了
 
   // 只在有人还没回来、或者刚刚全部回来时才出现；排在前面的是还在忙的。
-  function summarize(family) {
+  function summarize(family, metre = inMetre()) {
     const rows = (Array.isArray(family) ? family : []).filter(row => row && row.key && STATUS[row.status]);
     const busy = rows.filter(row => row.status === 'running' || row.status === 'waiting');
     const order = {waiting: 0, running: 1, error: 2, done: 3};
     const shown = [...rows].sort((a, b) => order[a.status] - order[b.status]).slice(0, MAX);
     const back = rows.length - busy.length;
     const label = !rows.length ? ''
+      : metre ? (busy.length ? (back ? `${rows.length} 个声部 · ${back} 个已交回` : `${rows.length} 个声部在奏`) : `${rows.length} 个声部都交回了`)
       : busy.length ? (back ? `碧琪分头在忙 · ${back}/${rows.length} 回来了` : `碧琪分成 ${rows.length} 路在忙`)
       : `${rows.length} 路都回来啦`;
     return {rows: shown, busy: busy.length, total: rows.length, hidden: rows.length - shown.length, label,
@@ -76,7 +80,7 @@
     const button = el('button', 'pinkie-crew__one pinkie-crew__one--' + row.status);
     button.type = 'button';
     button.dataset.mode = row.mode in MODES ? row.mode : 'chat';
-    const title = row.title || '子会话';
+    const title = row.title || (inMetre() ? '声部' : '子会话');
     const tip = `${title} · ${mode.name} · ${STATUS[row.status]}`;
     button.setAttribute('aria-label', tip);
     button.dataset.pinkieTooltip = tip;

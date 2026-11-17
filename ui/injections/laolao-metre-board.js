@@ -239,7 +239,10 @@
   const setMode = (value) => { if (root.getAttribute('data-metre-board') !== value) root.setAttribute('data-metre-board', value); };
   function place() {
     if (!page || page.hidden) return;
-    const nav = document.querySelector('.shell-nav');
+    // 侧栏收起后是浮在页面上的卡片（laolao-sidebar-autohide.js），呼出 / 滑回时不占位置：不能拿它的宽度来排总谱，
+    // 不然侧栏一弹出来，总谱就跟着在停靠和浮层之间来回跳（11-16 用户：「左右两边在运行时都会乱弹」）。
+    const floating = root.getAttribute('data-pinkie-sidebar-auto') === '1';
+    const nav = floating ? null : document.querySelector('.shell-nav');
     const rect = nav?.getBoundingClientRect();
     const left = rect && rect.width > 40 && rect.right < window.innerWidth * 0.6 ? Math.round(rect.right) : 0;
     const room = window.innerWidth - left;

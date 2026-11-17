@@ -60,6 +60,16 @@
     if (collapsed()) nativeToggle();
     requestAnimationFrame(paint);
   };
+  // 最近一次真的移动（有位移、来自真实输入）的时间和位置。
+  let movedAt = -1e9, moveX = -1, moveY = -1;
+  const realMove = event => {
+    if (!event.isTrusted) return false;
+    const moved = event.type === 'pointerenter' ? performance.now() - movedAt < 120
+      : (event.movementX || event.movementY || event.clientX !== moveX || event.clientY !== moveY);
+    if (event.type !== 'pointerenter' && moved) { movedAt = performance.now(); moveX = event.clientX; moveY = event.clientY; }
+    return Boolean(moved);
+  };
+  const revealIfStill = () => { revealTimer = 0; if (edge?.matches(':hover')) reveal(); };
   const conceal = () => {
     clearTimeout(closeTimer);
     if (!peek) return;
@@ -122,8 +132,12 @@
       edge.className = 'pinkie-sidebar-edge';
       edge.type = 'button';
       edge.setAttribute('aria-label', '显示侧栏');
-      edge.addEventListener('pointerenter', () => { clearTimeout(revealTimer); revealTimer = setTimeout(reveal,60); });
-      edge.addEventListener('pointerleave', () => { clearTimeout(revealTimer); laterConceal(); });
+      // 只认真的移动：macOS 的 WebView 在页面重排（流式输出、运行条、侧栏刷新）后会补发一次「鼠标在这里」，
+      // 指针停在左边（比如刚点完左上角的收起键）时，运行中每次重排都会把侧栏弹出来（11-16 用户：「运行时乱弹」）。
+      // 所以要在把手上真的动过、并停留一小会儿才呼出；只是经过（去 Dock、去别的窗口）不呼出。
+      edge.addEventListener('pointerenter', event => { clearTimeout(revealTimer); if (realMove(event)) revealTimer = setTimeout(revealIfStill, 140); });
+      edge.addEventListener('pointermove', event => { if (!peek && !revealTimer && realMove(event)) revealTimer = setTimeout(revealIfStill, 140); });
+      edge.addEventListener('pointerleave', () => { clearTimeout(revealTimer); revealTimer = 0; laterConceal(); });
       edge.addEventListener('click', reveal);
       document.body.append(edge);
     }
@@ -200,6 +214,9 @@
   /* 收起时左边缘的把手：鼠标越靠近越长越亮。 */
   let nearFrame = 0, nearX = 999;
   document.addEventListener('pointermove', event => {
+    if (event.isTrusted && (event.movementX || event.movementY || event.clientX !== moveX || event.clientY !== moveY)) {
+      movedAt = performance.now(); moveX = event.clientX; moveY = event.clientY;
+    }
     if (!edge || !auto || peek) return;
     nearX = event.clientX;
     if (nearFrame) return;
