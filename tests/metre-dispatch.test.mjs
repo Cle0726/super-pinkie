@@ -211,7 +211,7 @@ test('A1-7 pinkie_models：每项有档次、健康、看图、self；恰好一�
   globalThis.fetch = () => { throw new Error('不该联网'); };
   try {
     const result = listModels({config: CONFIG, health, selfModel: SELF});
-    assert.ok(result.models.every(item => ['top', 'mid', 'light'].includes(item.tier) && typeof item.healthy === 'boolean'
+    assert.ok(result.models.every(item => ['top', 'mid', 'light'].includes(item.tier) && (typeof item.healthy === 'boolean' || item.healthy === null && item.health === 'unknown')
       && typeof item.vision === 'boolean' && typeof item.self === 'boolean' && typeof item.toolsStable === 'boolean'));
     assert.equal(result.models.filter(item => item.self).length, 1);
     assert.equal(result.models.find(item => item.self).id, SELF);

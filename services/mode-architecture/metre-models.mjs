@@ -83,7 +83,8 @@ export function findModel(list, raw, config = {}) {
 
 function healthOf(health, id) {
   const record = health?.models?.get?.(id);
-  if (!record) return {healthy: true, health: 'unknown'};
+  // 没调用过的不说「健康」：不知道这把 Key 能不能用它（11-17 压测：标 healthy 的三个一派就 502/404/403）。
+  if (!record) return {healthy: null, health: 'unknown', note: '还没调用过，能不能用不知道；优先选 health=ok 的'};
   if (record.failAt && (!record.okAt || record.failAt > record.okAt)) {
     const kind = classifyModelFailure(record.reason || '');
     return {healthy: false, health: 'failing', reason: clip(record.reason || kind || '最近一次调用失败', 160),
@@ -129,14 +130,14 @@ export function listModels({config = {}, health = null, selfModel = '', tier = '
   }
   const wanted = String(query || '').trim().toLowerCase();
   const filtered = rows.filter(row => row.self || (!tier || row.tier === tier) && (!wanted || row.id.toLowerCase().includes(wanted)));
-  const rank = row => (row.healthy ? 0 : 10) + TIERS.indexOf(row.tier);
+  const rank = row => (row.healthy ? 0 : row.healthy === null ? 5 : 10) + TIERS.indexOf(row.tier);
   // 同一档里：最近确实跑通过的在前，其次按目录顺序。
   filtered.sort((a, b) => rank(a) - rank(b) || (b.okAt || 0) - (a.okAt || 0) || a.order - b.order);
   // 每一档先各占三分之一的名额（不然一长串 top 会把便宜的挤出去，而派活多半要的是便宜的），剩下的名额按顺序补。
   const self = filtered.find(row => row.self);
   const picked = new Set(self ? [self] : []);
   const share = Math.ceil(MAX_LISTED / TIERS.length);
-  for (const name of TIERS) for (const row of filtered.filter(item => item.healthy && item.tier === name).slice(0, share)) {
+  for (const name of TIERS) for (const row of filtered.filter(item => item.healthy !== false && item.tier === name).slice(0, share)) {
     if (picked.size < MAX_LISTED) picked.add(row);
   }
   for (const row of filtered) if (picked.size < MAX_LISTED) picked.add(row);
@@ -163,7 +164,7 @@ export function chooseChildModel({config = {}, health = null, selfModel = '', re
       throw new Error(`「${found.id}」和你自己（${selfModel}）是同一个模型，不能派给自己：选一个更轻的`);
     }
     const state = healthOf(health, found.id);
-    if (!state.healthy) throw new Error(`「${found.id}」最近调用失败（${state.reason}），换一个健康的`);
+    if (state.healthy === false) throw new Error(`「${found.id}」最近调用失败（${state.reason}），换一个健康的`);
     return {model: found.id, explicit: true};
   }
   const fallback = defaultModelFor(config, targetAgent);

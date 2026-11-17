@@ -61,7 +61,7 @@ function isInternalUserMessage(message = {}) {
   const raw = userText(message);
   const visible = raw.replace(/[\u200B-\u200D\u2060\u2063\uFEFF]/gu, '').trim();
   if (message?.__openclaw?.kind === 'pending-send') return true;
-  if (/^\[pinkie-(?:watchdog|tier-control|tier)\]/iu.test(visible)) return true;
+  if (/^(?:\[pinkie-(?:watchdog|tier-control|tier)\]|Continue the OpenClaw runtime event\.?$)/iu.test(visible)) return true;
   return !visible && !hasVisibleUserPayload(message);
 }
 

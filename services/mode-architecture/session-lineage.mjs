@@ -650,12 +650,12 @@ export class SessionLineage {
       const metreWake = metre && Boolean(turn?.wake) && !['memory', 'heartbeat'].includes(turn?.trigger);
       if (request.initiation === 'in_scope') {
         if (!metre && !this.autoSplit(parentKey)) throw new Error('用户关掉了「碧琪自己分工」：改用 offer 提出卡片，或者就在这里做');
-        if (!metreWake && (!turn || turn.internal || !turn.user)) throw new Error('这一轮不是用户亲自发来的，不能自己开子会话；范围外的后续请用 own_initiative 提出卡片');
+        if (!metreWake && !turn?.resumedUser && (!turn || turn.internal || !turn.user)) throw new Error('这一轮不是用户亲自发来的，不能自己开子会话；范围外的后续请用 own_initiative 提出卡片');
         const most = metre ? METRE_AUTO : MAX_AUTO;
         if ((turn.autoStarts || 0) >= most) throw new Error(`一轮最多自己开 ${most} 个子会话，其余的排在这里做，或提出卡片`);
       }
       if (request.initiation === 'user_asked' || request.initiation === 'in_scope') {
-        if (!request.userAuthored && turn?.internal && !(metreWake && request.initiation === 'in_scope')) throw new Error('内部通知不能代替用户授权，请先提出提案');
+        if (!request.userAuthored && turn?.internal && !((metreWake || turn?.resumedUser) && request.initiation === 'in_scope')) throw new Error('内部通知不能代替用户授权，请先提出提案');
         if (request.userAuthored && request.context === 'fork') {
           const rows = await this.activeRows(agentOf(parentKey));
           if (this.busy(parentKey, rows.get(parentKey))) throw new Error('父会话还在运行，请等这轮结束再继承记录');
@@ -1042,8 +1042,15 @@ export class SessionLineage {
     if (child) this.reserved.set(key, this.now());
     // 被子会话汇报叫醒的那一轮（Metre 在这一轮可以接着派下一批）。
     const wake = prompt.includes(SESSION_WAKE_MARK) || /^pinkie-session-wake-/.test(runId);
+    // 看门狗把同一件事接着推（断线、没写完）：还是用户那一轮的活，派子会话的权限和本轮已开的个数都接着算。
+    // 不然续跑轮里 Metre 开不了子会话，只能挂卡片等用户点（11-17 压测）。
+    this.lastUserTurns ??= new Map();
+    const remembered = this.lastUserTurns.get(key);
+    const previous = this.turns.get(key) || (remembered && this.now() - remembered.endedAt < 30 * 60_000 ? remembered : null);
+    const resumed = !wake && /^\[pinkie-watchdog\]/.test(prompt) && Boolean(previous?.user || previous?.resumedUser);
+    if (!internal) this.lastUserTurns.delete(key);
     this.turns.set(key, {runId, prompt, authored, internal, user: !internal, asked: false, trigger: ctx?.trigger || '',
-      autoStarts: 0, asks: 0, wake});
+      autoStarts: resumed ? previous.autoStarts || 0 : 0, asks: resumed ? previous.asks || 0 : 0, wake, resumedUser: resumed});
     if (this.turns.size > 1000) this.turns.delete(this.turns.keys().next().value);
     if (!internal) this.userArrived(key);
   }
@@ -1060,11 +1067,16 @@ export class SessionLineage {
     const runId = runIdOf(event, ctx);
     const turn = this.turns.get(key);
     if (turn?.runId && runId && turn.runId !== runId) return;
+    if (turn && (turn.user || turn.resumedUser)) {
+      this.lastUserTurns ??= new Map();
+      this.lastUserTurns.set(key, {user: true, autoStarts: turn.autoStarts || 0, asks: turn.asks || 0, endedAt: this.now()});
+      if (this.lastUserTurns.size > 500) this.lastUserTurns.delete(this.lastUserTurns.keys().next().value);
+    }
     this.turns.delete(key);
     this.reserved.delete(key);
     const child = this.lineage()[key];
     const stopped = this.stopped(key) || /abort|cancel|stop requested|interrupted by/i.test(event.error || '');
-    const phase = stopped ? 'done' : event.success !== true ? 'error'
+    const phase = stopped ? 'done' : event.success !== true || failedBeforeContent(event) ? 'error'
       : turn?.asked || endsWithUserQuestion(event.messages) ? 'waiting' : 'done';
     this.updateState(key, state => ({...state, phase, at: this.now()}));
     this.notify(key);
@@ -1072,7 +1084,7 @@ export class SessionLineage {
       try { await this.resolveProposalAnchors(key, runId || turn?.runId, event); }
       catch { logSessionFailure(this.api, 'session-lineage', key, 'proposal-anchor'); }
       const waiter = this.waiters.get(key);
-      const reportable = child && !stopped && deliverable && turn?.authored && !turn.user && (runId || turn.runId);
+      const reportable = child && !stopped && deliverable && phase !== 'error' && turn?.authored && !turn.user && (runId || turn.runId);
       const text = reportable ? reportText(event) : '';
       // 有人在等这份答案（pinkie_mode_ask）：答案当场交给它，卡片照留但不再重复塞进上下文、不叫醒。
       if (text) await this.report(key, child, text, runId || turn.runId, {delivered: Boolean(waiter)});
@@ -1223,6 +1235,18 @@ export class SessionLineage {
   }
 }
 
+// 模型一开口就报错（502 登录不可用、404 不在 Key 范围、403…）：网关有时仍报 success，
+// 子会话就成了「完成」、汇报是空的，父会话也收不到「没做成」（11-17 压测）。
+function failedBeforeContent(event = {}) {
+  const messages = Array.isArray(event.messages) ? event.messages : [];
+  const last = [...messages].reverse().map(m => (m?.message && typeof m.message === 'object' ? m.message : m))
+    .find(m => m?.role === 'assistant');
+  if (!last || last.stopReason !== 'error') return false;
+  const text = (Array.isArray(last.content) ? last.content : [{type: 'text', text: String(last.content || '')}])
+    .filter(part => part?.type === 'text').map(part => String(part.text || '')).join('').trim();
+  return !text || text === '[assistant turn failed before producing content]';
+}
+
 const LINEAGE_INSTANCES = Symbol.for('pinkie.session-lineage.v1');
 // 看门狗用：这个会话开的子会话（pinkie_session_start）还有在跑的吗。sessions_yield 等它们时不算「没写最终回复」，
 // 汇报回来会叫醒父会话；不然看门狗每隔几秒把 Metre 叫醒一次，它只能一遍遍去查子会话（11-17 压测）。
@@ -1350,8 +1374,9 @@ export function registerSessionLineage(api, options) {
     (params, callId) => lineage.ask(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_mode_ask'});
   api.registerTool?.(ctx => sessionTool('pinkie_session_message',
     '发消息给自己直接创建的子会话或自己的父会话。使用会话 key，运行中的会话会排队。',
-    {session: {type: 'string'}, message: {type: 'string'}}, ['session', 'message'],
-    (params, callId) => lineage.message(ctx.sessionKey, params.session, params.message, callId)), {name: 'pinkie_session_message'});
+    {target: {type: 'string'}, message: {type: 'string'}}, ['target', 'message'],
+    // target 不叫 session：网关存记录时会把 session 字段打成 ***（见 session-manage.mjs sessionParam）
+    (params, callId) => lineage.message(ctx.sessionKey, params.target ?? params.session, params.message, callId)), {name: 'pinkie_session_message'});
   api.registerTool?.(ctx => sessionTool('pinkie_session_list',
     '列出自己创建的子会话、状态和最近汇报。', {}, [], () => lineage.list(ctx.sessionKey)), {name: 'pinkie_session_list'});
   return lineage;
@@ -1361,7 +1386,7 @@ export function registerSessionLineage(api, options) {
 // 老模式的工具清单一个不变。
 export function registerMetreModelsTool(api, lineage) {
   api.registerTool?.(ctx => isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_models',
-    '列出现在能用的模型（只读本机已同步的目录和健康记录，不联网）：每个带 id、档次 tier（top / mid / light）、healthy、vision（能否看图）、toolsStable（工具用得稳不稳）、self（是不是你自己）。派活前先看，pinkie_session_start 的 model 写这里的 id。最多 40 个，按档次分组，不健康的在最后并写原因；要看更多就用 tier 或 query 缩小范围。',
+    '列出现在能用的模型（只读本机已同步的目录和健康记录，不联网）：每个带 id、档次 tier（top / mid / light）、healthy（true 最近跑通过；false 最近失败；null 还没调用过、不知道能不能用，优先选 true 的）、vision（能否看图）、toolsStable（工具用得稳不稳）、self（是不是你自己）。派活前先看，pinkie_session_start 的 model 写这里的 id。最多 40 个，按档次分组，不健康的在最后并写原因；要看更多就用 tier 或 query 缩小范围。',
     {tier: {type: 'string', enum: TIERS}, query: {type: 'string'}}, [],
     params => lineage.models(ctx.sessionKey, params)) : null, {name: 'pinkie_models'});
 }
