@@ -42,7 +42,12 @@ test('法定假日：只认公告；没公布的年份不编', () => {
   assert.deepEqual(holiday('2026-10-05'), {off: true, workday: false, name: '国庆节', published: true, regionOff: false, regionName: ''});
   assert.equal(holiday('2026-10-10').workday, true);
   assert.equal(holiday('2026-04-17').regionOff, true);
-  assert.deepEqual(holiday('2027-02-06'), {off: false, workday: false, name: '', published: false, regionOff: false, regionName: ''});
+  assert.deepEqual(holiday('2028-01-26'), {off: false, workday: false, name: '', published: false, regionOff: false, regionName: ''});
+  // 2027：国办发明电〔2026〕10号（2026-11-05）
+  assert.deepEqual(holiday('2027-02-05'), {off: true, workday: false, name: '春节', published: true, regionOff: false, regionName: ''});
+  assert.equal(holiday('2027-02-14').workday, true);
+  assert.equal(holiday('2027-06-09').name, '端午节');
+  assert.equal(holiday('2027-10-09').workday, true);
 });
 
 test('季节跟节气走', () => {
