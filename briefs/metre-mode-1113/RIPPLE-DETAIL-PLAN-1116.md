@@ -286,3 +286,24 @@
 - 测试：`metre-skin-cat` 19 条（新加一条「11-16 night」）+ `metre-*`、`mode-switcher`、`motion*` 共 101 条全过。node 里一帧：单个空中点击平均 4ms、最坏 10ms；4 个混合平均 23ms、最坏 31ms（和上一稿差不多）。
 - 出图：`ref/v13-sheet/`：`sheet-home-dark/light.gif`、`sheet-chat-dark.gif`（40ms 一帧：空中 → 后墙 → 地板各点一下）、`sheet-frames.png`（空中一点 60/150/250/330/430/650ms，上深下浅，3 倍）、`cat-idle-dark/light.gif`（空闲 → 点头四拍 → 甩尾 → 舔爪 → 竖耳朵）、`cat-detail.png`。
 - 还没做：用户看图点头 → 装进 App（`bundle.py install` → codesign → 重开，HANDOFF.md §10.2；要把 `laolao-metre-cat-frames.js`、`laolao-metre-cat.js` 也带上，先核对 App 里的 cat 文件是哪一版）；没提交。
+
+---
+
+## §A⁗′ 用户 11-16 夜（二）：下面的交互加回来、谱线跟着波、帧率
+
+用户原话：「把这个点击和下面有交互的效果加回来（现有效果不变最多优化融合一下），然后刚做好的点击效果感觉后面的五线谱没有和波动一起，所以看起来非常生硬。最后就是所有整体帧率太低可以再优化一下」。
+
+### 做了什么（未提交、未装进 App）
+- **空中点击落到地板上**（§A″ 第 3 条加回来）：`makeRipples` 的空中分支多返回一个 `echo`——涟漪走到墙和地板交线的时刻（最晚 360ms）在落点正下方、交线下 2 行起一圈地板水波；落点离灭点很近，按透视把波做大（`k = Dm/d`，最大 7），一秒多里扫过远、中排谱台（谱台跟着起伏、灯闪，用原来地板水波那一套）；离得越远越弱（`amp` 0.45–0.85）。回声没有自己的符头和音符（`paintNotes` 跳过 `rp.echo`）。
+- **谱线跟着波走**：
+  - 位移：`push = kr·坡度 + kh·高度`（`kr` 2.4→4.2，新加 `kh` 1.3）——波峰把谱线往外顶、波谷往里收，谱线在圈上真的弯过去。
+  - 显出的范围不再是一块不动的圆盘：坑压下去时显坑口那一块（`dent`，弹起后 150ms 收掉）；之后只在两圈波峰附近显（`bandOf`：外沿收得快、里沿拖得长），里面一层半显的随涟漪淡（`inner`）；涟漪走完谱纸也隐回去。
+  - 空底上的高光收一档，最亮一档只给谱线（波读起来是纸在动，不是贴上去的一圈管子）。
+- **帧率**：点击的波纹从 33ms 定时器（实测浏览器里 25–30fps）改成跟屏幕刷新走（rAF，120Hz 屏上隔帧画，≈60fps）+ 50ms 保底定时器（窗口被挡住时 rAF 停但页面不算 hidden）；只在点击后约 1.5 秒里排，画完就停，空闲时还是半拍一步的 setTimeout。
+  - 每帧的活减了：谱纸的明暗按「底色 × 档位」缓存（不逐格混色）、坑平了以后跳过两圈里面的空心、地板上坡太缓的像素不再一盏盏灯算光。浏览器实测（1024×768，dpr 2）一帧主线程：空中点击中位 5ms / p95 10ms，地板点击 2.4ms，两次空中点击叠在一起中位 9ms。
+  - 猫没动：走路的位移本来就是 CSS transition（顺的），帧图 6–8fps 是像素画的帧数（单测限 ≤ 8），要更顺得加画帧。
+- 版本号 `metrebackdrop8`；`tests/metre-skin-cat.test.cjs` 20 条全过（rAF 那条改成「只有一处、只给点击的波纹用、另有保底定时器」；新加「11-16 night 2」）；`metre-*`、`mode-switcher`、`motion*` 全过。
+- 出图：`ref/v14-sheet-echo/sheet-echo-home-dark/light.gif`（20ms 一帧，两次空中点击）。
+- **已装进本机 App（11-16 17:34，用户：「Install it」）**：装之前核对 App 里的 `laolao-head.fragment.html` / `laolao-metre-backdrop.js` 和 HEAD 一模一样，只拷这两个 → `bundle.py install --root <App>/Contents/Resources/SuperPinkie --control-ui <同>/runtime/openclaw/dist/control-ui`（OK，192 / 1598）→ `check` OK → `codesign --force --deep --sign -` + verify OK → 退出再打开（Launcher PID 81562），网关 200，页面载入 `metrebackdrop8`。备份：`/Users/Admin/碧琪实测/backup-app-ui-1116/before-sheet-echo-173430`（两个原文件 + 整个 control-ui）。
+- 真机核对：127.0.0.1:18789 的 Metre 对话页上点了一下空处，谱纸圈、音符、地板回声都在。帧率没在可见窗口里量（内置浏览器面板是隐藏的，rAF 不走、走的是 50ms 保底）；在原生窗口里点几下看顺不顺要用户看。
+- 没提交。

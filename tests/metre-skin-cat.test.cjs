@@ -317,7 +317,11 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   assert.match(head, /laolao-metre-backdrop\.js/);
   assert.match(head, /laolao-metre-backdrop\.css/);
   const src = read(INJ + 'laolao-metre-backdrop.js');
-  assert.doesNotMatch(src, /setInterval|requestAnimationFrame/, '不留常驻动画：只有一个按格子走的 setTimeout');
+  assert.doesNotMatch(src, /setInterval/, '不留常驻动画：只有一个按格子走的 setTimeout');
+  // 11-16 夜：点击的波纹跟屏幕刷新走（rAF），只在点击后的那一段里排、画完就停；rAF 只出现在点击那一段
+  assert.equal((src.match(/requestAnimationFrame\(/g) || []).length, 1, 'rAF 只有一处');
+  assert.match(src, /function nextRipple\(\) \{\n    rippleTimer = setTimeout\(rippleTick, [^\n]+\n    if \(!document\.hidden && typeof requestAnimationFrame === 'function'\) rippleRaf = requestAnimationFrame\(rippleTick\)/, 'rAF 只给点击的波纹用，另有保底定时器');
+  assert.match(src, /if \(ripples\.length && canvas\) nextRipple\(\);/, '波纹画完就停');
   const css = read(INJ + 'laolao-metre-backdrop.css').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.doesNotMatch(css.replace(/pinkie/gi, ''), /gradient|box-shadow|filter|#e94f91|pink/i, '不发光、不用渐变、不用碧琪的色');
 
@@ -388,7 +392,7 @@ test('Metre v6 home: tempo mark above the prompt, board art drawn on the backdro
 // ---------- 11-16 第十二稿：点哪里都是「一个音落进水里」（RIPPLE-DETAIL-PLAN-1116 §A‴） ----------
 test('Metre backdrop v12: a tap anywhere drops a note into the backdrop — a 3D ripple where you click, notes jump out, objects ride the floor, nothing is left behind', () => {
   const head = read(INJ + 'laolao-head.fragment.html');
-  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop7/);
+  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop8/);
   const ctx = {console, Math, Date};
   ctx.globalThis = ctx;
   vm.createContext(ctx);
@@ -462,4 +466,39 @@ test('Metre 11-16 night: the plane above the floor is a sheet of staff paper a n
   const source = read(INJ + 'laolao-metre-cat.js');
   assert.match(source, /addEventListener\('pinkie:metre-tap', onTap\)/, '背景被点时竖耳朵');
   assert.match(source, /name: 'nod', own: true/);
+});
+
+// ---------- 11-16 夜（二）：空中点一下，声音落到地板上接着荡开；谱线跟着波走，不留一块不动的谱纸 ----------
+test('Metre 11-16 night 2: a tap above the floor also ripples the floor below (stands ride it, lamps flash), and the staff paper travels with the ring', () => {
+  const ctx = {console, Math, Date};
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read(INJ + 'laolao-metre-backdrop.js'), ctx);
+  const S = ctx.__pinkieMetreScene;
+  const cols = 580, rows = 239, band = 126;
+  const sc = S.buildScene({cols, rows, band, dark: true, home: true, lamps: ['run', 'done']});
+  const {floorY} = sc.anchors;
+  const still = new Uint32Array(cols * rows); S.compose(sc, 0, false, [], 0, still);
+  const rs = S.makeRipples(sc, 250, 90, 0);
+  assert.equal(rs.length, 2, '竖直面一个 + 落到地板上的回声一个');
+  const [air, echo] = rs;
+  assert.ok(air.air && echo.echo && !echo.air, '回声是地板上的波');
+  assert.ok(echo.t0 > air.t0 && echo.t0 - air.t0 <= 360, '涟漪走到墙脚（最晚 360ms）才落到地板上');
+  const rowsChanged = (buf, y0, y1) => { let n = 0; for (let y = y0; y < y1; y++) for (let x = 0; x < cols; x++) if (buf[y * cols + x] !== still[y * cols + x]) n++; return n; };
+  const early = new Uint32Array(cols * rows); S.compose(sc, 0, false, rs, air.t0 + 100, early);
+  assert.equal(rowsChanged(early, floorY, rows), 0, '还没落地时地板不动');
+  const late = new Uint32Array(cols * rows); S.compose(sc, 0, false, rs, echo.t0 + 600, late);
+  assert.ok(rowsChanged(late, floorY, rows) > 300, '落地后地板荡开');
+  // 回声没有自己的符头和音符：只看地板以上，单独画回声和什么都不点一样
+  const only = new Uint32Array(cols * rows); S.compose(sc, 0, false, [echo], echo.t0 + 200, only);
+  const objTop = Math.min(...sc.groups.filter(Boolean).map((g) => g.y0));
+  assert.equal(rowsChanged(only, 0, objTop - 6), 0, '回声不在空中画东西（谱台跟着地板起伏，它们以上不动）');
+  // 谱纸跟着波走：涟漪走完以后不留一块不动的谱纸
+  const tail = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + 1150, tail);
+  // （音符还在往上飘，只看落点下面那半圈）
+  assert.ok(rowsChanged(tail, 110, floorY) < 40, '涟漪走完，谱纸也隐回去');
+  const mid = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + 500, mid);
+  assert.ok(rowsChanged(mid, 110, floorY) > 200, '涟漪走的时候，谱纸跟着亮');
+  const after = new Uint32Array(cols * rows); S.compose(sc, 0, false, rs, echo.t0 + S.RIPPLE_MS + 1, after);
+  assert.deepEqual(Array.from(after), Array.from(still), '都走完了不留残影');
 });

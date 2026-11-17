@@ -28,7 +28,7 @@
   const BPM = 72;
   const STEP = 60_000 / BPM / 2;          // 半拍走一步
   const CELL = 2;                         // 一格 2 个 CSS 像素
-  const RIPPLE_MS = 1300, RIPPLE_FRAME = 33;  // 点击的水波：一共多久、一帧多久
+  const RIPPLE_MS = 1300, RIPPLE_FRAME = 16;  // 点击的水波：一共多久；窗口在后台时退回定时器的一帧多久（前台跟屏幕刷新走）
 
   // ---------- 小工具 ----------
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
@@ -670,6 +670,9 @@
       }
       xa = Math.max(0, xa); xb = Math.min(cols - 1, xb);
       const rowLights = xb >= xa ? lights.filter((L) => L.stage || Math.abs(L.Z - Z) < L.rad) : lights;
+      // 这一行受光最多能有多少：坡太缓、抬得太少，明暗一定落在「不改色」那一档，就不用一盏盏灯算
+      let wTot = 0; for (const L of rowLights) wTot += L.stage ? 1 : L.I;
+      const liftK = RIP.lift / (RIP.amp * sc ** -0.6);
       for (let x = 0; x < cols; x++) {
         let c = base[sy * cols + x], yi = ys;
         if (x >= xa && x <= xb) {
@@ -682,6 +685,8 @@
             any = true; h += WH;
             if (r > 1e-3) { gX += WD * dx / r; gZ += WD * dz / r; }
           }
+          const lift = liftK * h;
+          if (any && RIP.gain * Math.hypot(gX, gZ) * wTot + Math.abs(lift) < 0.12) { any = false; yi = Math.round(ys - h * sc); }
           if (any) {
             yi = Math.round(ys - h * sc);
             // 受光：舞台口（远处正前方，离舞台口越远越弱）+ 每盏亮着的灯（按地面距离衰减），各自的颜色
@@ -694,7 +699,7 @@
               v += wgt * facing;
               if (facing > 0) { const k = wgt * facing; wr += k; cr += L.col[0] * k; cg += L.col[1] * k; cb += L.col[2] * k; if (k > inkW) { inkW = k; ink = L.ink; } }
             }
-            v = v * RIP.gain + RIP.lift * h / (RIP.amp * sc ** -0.6);   // 高处受光多、低处被挡
+            v = v * RIP.gain + lift;   // 高处受光多、低处被挡
             const shaded = shadeTo(scene, unpack(c, bg), v, lc(wr ? [cr / wr, cg / wr, cb / wr] : stageL.col), ink || C.glint, lc);
             if (shaded != null) c = shaded;
           }
@@ -717,7 +722,7 @@
    *   纸弹回来鼓成一个包，把符头弹成 ♪ 飞走 → 一圈圈正圆的涟漪荡开，谱纸跟着隐回黑里。
    *   坑 = 「重力井」1/(1+r²)；画法：坑按透视放缩（陷下去的缩小、鼓起来的放大），涟漪按坡度像透镜一样把后面的线推开；
    *   光从左上来，受光坡推亮、背光坡压暗、越深越暗，不抖动。谱台、椅子、指挥台在纸前面，不被弯；在地平线（墙和地板的交线）截断。 */
-  const SHEET = {s: 12, Rw: 58, Hw: 12, T: 240, tau: 280, Dz: 16, launch: 170, Rs: 12, Hr: 3.4, sig: 4, sp: 30, kr: 2.4, gR: 1.15, gW: 2.4, ao: 0.1, note: 300};
+  const SHEET = {s: 12, Rw: 58, Hw: 12, T: 240, tau: 280, Dz: 16, launch: 170, Rs: 12, Hr: 3.4, sig: 4, sp: 30, kr: 4.2, kh: 1.3, gR: 1.15, gW: 2.4, ao: 0.1, note: 300};
   const STAFF = {gap: 3, lines: 5, period: 22, bar: 28};
   // 谱纸上 (qx, qy) 这一格（一格盖住 span 格谱纸）有没有线：五线（线距 3，一组 5 线，周期 22）+ 小节线（每 28 格，只在五线之间）
   function staffHit(qx, qy, span) {
@@ -735,10 +740,16 @@
     const env = b > 0 ? Math.min(1, b / 80) * Math.exp(-b / 650) * Math.max(0, 1 - (a / RIPPLE_MS) ** 4) : 0;
     const b1 = b - RIP.lag, k1 = b1 > 0 ? RIP.second * Math.min(1, b1 / 60) : 0;
     const sig = S.sig * (1 + Math.max(0, b) / 1600), R0 = b > 0 ? ring(b) : 0;
-    const show = Math.min(1, a / 50) * (a < 650 ? 1 : Math.max(0, 1 - (a - 650) / 550));
-    const Rv = Math.max(S.Rw * Math.min(1, a / 110), env > 0 ? R0 + 1.5 * sig : 0);
-    return {sx: rp.sx, sy: rp.sy, wc, env, A: S.Hr * env, R0, R1: b1 > 0 ? ring(b1) : 0, k1, sig, sp: S.sp, show, Rv, reach: Math.max(S.Rw, env > 0 ? R0 + 4.5 * sig : 0, Rv + 2)};
+    // 谱纸显出来的地方跟着波走：坑压下去时坑口那一块全显（弹起后 150ms 收掉）；之后只在两圈波峰附近显（波推到哪、纸亮到哪），
+    //   波峰里面留一层半显的、随涟漪一起淡——涟漪走完，谱纸也隐回黑里，不留一块不动的谱纸。
+    const dent = a < S.launch + 120 ? Math.min(1, a / 50) : Math.max(0, 1 - (a - S.launch - 120) / 150);
+    const ringVis = clamp((env - 0.12) * 3, 0, 1), inner = 0.55 * clamp((env - 0.3) * 2.5, 0, 1);
+    return {sx: rp.sx, sy: rp.sy, wc, env, A: S.Hr * env, R0, R1: b1 > 0 ? ring(b1) : 0, k1, sig, sp: S.sp, dent, Rd: S.Rw * 0.6, ringVis, inner,
+      // 坑平了、里面那层也淡了以后，两圈波峰里面是空的，不用逐格算
+      hole: wc === 0 && inner === 0 && dent === 0 && env > 0 ? (k1 ? ring(b1) : R0) - 7 * sig : 0, reach: Math.max(S.Rw, env > 0 ? R0 + 4.5 * sig : 0)};
   }
+  // 谱纸显出来的带：波峰外沿收得快（纸是被波推开的，波前面还是黑的），里沿拖得长
+  const bandOf = (u) => (u > 4.5 || u < -7 ? 0 : Math.exp(-u * u / (u > 0 ? 4 : 10)));
   // 坑的形状 G(r) = 1/(1+(r/s)²)，在 Rw 处平滑收到 0；写进 GH（高）、GD（对 r 的导数）
   let GH = 0, GD = 0;
   function wellAt(r) {
@@ -757,6 +768,7 @@
     const voids = new Set([0, fade(C.bg), fade(C.hall1), fade(C.hall2), fade(C.hall3)]);
     const line = lc(dark ? mix(bg, C.glint, 0.28) : mix(bg, C.frame, 0.34)), lineHalf = lc(dark ? mix(bg, C.glint, 0.14) : mix(bg, C.frame, 0.17));
     const Lc = lc(C.glint), paper = lc(C.paper), shade = C.shade, Lx = 0.37, Ly = 0.93;
+    const lineP = pack(line), lineHalfP = pack(lineHalf), tone = new Map();
     let x0 = cols, x1 = -1, y0 = floorY, y1 = -1;
     for (const w of waves) { x0 = Math.min(x0, Math.floor(w.sx - w.reach)); x1 = Math.max(x1, Math.ceil(w.sx + w.reach)); y0 = Math.min(y0, Math.floor(w.sy - w.reach)); y1 = Math.max(y1, Math.ceil(w.sy + w.reach)); }
     x0 = Math.max(0, x0); x1 = Math.min(cols - 1, x1); y0 = Math.max(0, y0); y1 = Math.min(floorY - 1, y1);
@@ -769,34 +781,43 @@
       let h = 0, gx = 0, gy = 0, wx = 0, wy = 0, qx = x, qy = y, span = 1, vis = 0, any = false;
       for (const w of waves) {
         const ux = x - w.sx, uy = y - w.sy, r = Math.hypot(ux, uy);
-        if (r > w.reach) continue;
-        if (w.show > 0 && r < w.Rv) vis = Math.max(vis, w.show * (r < w.Rv * 0.6 ? 1 : 0.5));
-        wellAt(r);
-        const hw = -S.Hw * w.wc * GH, dw = -S.Hw * w.wc * GD;
-        let hr = 0, dr = 0;
-        if (w.env > 0) { waveAt(w, r); hr = WH; dr = WD; }
+        if (r > w.reach || r < w.hole) continue;
+        if (w.dent > 0 && r < w.Rd) vis = Math.max(vis, w.dent * (r < w.Rd * 0.6 ? 1 : 0.5));
+        const u0 = (r - w.R0) / w.sig, u1 = w.k1 ? (r - w.R1) / w.sig : 9;
+        if (w.ringVis > 0) vis = Math.max(vis, Math.max(bandOf(u0), bandOf(u1), r < w.R0 ? w.inner : 0) * w.ringVis);
+        let hw = 0, dw = 0, hr = 0, dr = 0;
+        if (w.wc !== 0 && r < S.Rw) { wellAt(r); hw = -S.Hw * w.wc * GH; dw = -S.Hw * w.wc * GD; }
+        if (w.env > 0 && ((u0 > -4.5 && u0 < 4.5) || (u1 > -4.5 && u1 < 4.5))) { waveAt(w, r); hr = WH; dr = WD; }
         if (hw === 0 && dw === 0 && hr === 0 && dr === 0) continue;
         any = true; h += hw + hr;
         const m = 1 + hw / S.Dz;                                         // 坑：陷下去的缩小、鼓起来的放大（透视）
         if (r > 1e-3) {
           const nx = ux / r, ny = uy / r;
           gx += dr * nx; gy += dr * ny; wx += dw * nx; wy += dw * ny;
-          qx += ux * (1 / m - 1) - S.kr * dr * nx; qy += uy * (1 / m - 1) - S.kr * dr * ny;   // 涟漪：按坡度把后面的线推开
+          // 涟漪：纸面真的跟着起伏——波峰把谱线往外顶、波谷往里收（kh·高度），坡上像透镜一样拉开 / 挤拢（kr·坡度）
+          const push = S.kr * dr + S.kh * hr;
+          qx += ux * (1 / m - 1) - push * nx; qy += uy * (1 / m - 1) - push * ny;
         }
         span = Math.max(span, 1 / m);
       }
       if (!any && !vis) continue;
       const sx = clamp(Math.round(qx), x0, x1), sy = clamp(Math.round(qy), y0, y1), si = sy * cols + sx;
       let v = obj[si] ? base[si] : src[(sy - y0) * W + (sx - x0)], isLine = false;
-      if (vis >= 0.3 && voids.has(v) && staffHit(qx, qy, span)) { isLine = true; v = pack(vis >= 0.75 ? line : lineHalf); }
+      if (vis >= 0.3 && voids.has(v) && staffHit(qx, qy, span)) { isLine = true; v = vis >= 0.75 ? lineP : lineHalfP; }
       let c = v;
       if (any) {
         // 底色按涟漪的坡 + 一点坑的坡受光；谱线按全部的坡受光（坑主要靠谱线的明暗和收拢读出来）；越深越暗
-        const lR = (Lx * gx + Ly * gy) * S.gR, lW = (Lx * wx + Ly * wy) * S.gW, lv = isLine ? lR + lW + 0.3 * S.ao * h : dark ? lR + 0.6 * lW + S.ao * h : lR + 0.25 * lW + 0.6 * S.ao * h, src0 = unpack(v, bg);
+        const lR = (Lx * gx + Ly * gy) * S.gR, lW = (Lx * wx + Ly * wy) * S.gW, lv = isLine ? lR + lW + 0.3 * S.ao * h : dark ? lR + 0.6 * lW + S.ao * h : lR + 0.25 * lW + 0.6 * S.ao * h;
+        // 明暗只有几档：同一个底色、同一档的结果记下来，不每格都重新混色
+        const tier = lv > 0.8 ? 1 : lv > 0.72 ? 2 : lv > 0.4 ? 3 : lv > 0.15 ? 4 : lv < -0.7 ? 5 : lv < -0.3 ? 6 : 0;
+        const key = tier ? v * 16 + tier * 2 + (isLine ? 1 : 0) : 0, hitC = tier ? tone.get(key) : undefined;
+        if (hitC !== undefined) { out[i] = hitC; continue; }
+        const src0 = unpack(v, bg);
         if (dark) {
-          if (lv > 0.72) c = pack(mix(Lc, paper, 0.3));
-          else if (lv > 0.4) c = pack(mix(src0, Lc, 0.6));
-          else if (lv > 0.15) c = pack(mix(src0, Lc, 0.3));
+          // 最亮的一档留给谱线（波是纸在动，读起来靠谱线亮起来）；空底上的高光收一档
+          if (lv > 0.72) c = pack(isLine ? mix(Lc, paper, 0.3) : mix(src0, Lc, 0.5));
+          else if (lv > 0.4) c = pack(mix(src0, Lc, isLine ? 0.7 : 0.36));
+          else if (lv > 0.15) c = pack(mix(src0, Lc, isLine ? 0.4 : 0.18));
           else if (lv < -0.7) c = pack(mix(src0, shade, 0.55));
           else if (lv < -0.3) c = pack(mix(src0, shade, 0.3));
         } else {
@@ -805,6 +826,7 @@
           else if (lv < -0.7) c = pack(mix(src0, lc(shade), 0.45));
           else if (lv < -0.3) c = pack(mix(src0, lc(shade), 0.25));
         }
+        if (tier) tone.set(key, c);
       }
       out[i] = c;
     }
@@ -854,7 +876,7 @@
     });
     for (const rp of ripples) {
       const a = now - rp.t0, ix = rp.px, iy = rp.py;
-      if (a < -HEAD_MS || a > RIPPLE_MS) continue;
+      if (rp.echo || a < -HEAD_MS || a > RIPPLE_MS) continue;     // 落到地板上的回声没有自己的符头和音符
       if (rp.air) {
         // 符头从我们这边飞向纸面：越飞越小；深色纸上是它照出的一圈光斑（越近越小越亮），浅色是它的影子从右下滑到它脚下
         if (a < 0) {
@@ -915,7 +937,14 @@
     const hit = x >= 0 && y >= 0 && x < cols && y < rows ? obj[y * cols + x] : 0;
     if (hit) { const g = groups[hit], fy = Math.min(g.foot, rows - 1); return [{...at(g.cx, fy), t0: now + HEAD_MS, seed, group: hit, px: x, py: y, notes: 3}]; }
     if (y >= floorY + 1) return [{...at(x, y), t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}];
-    return [{air: true, sx: x, sy: y, t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}];
+    // 地板以上：竖直面上压出坑、荡开涟漪；涟漪走到墙和地板的交线时，「声音」落到正下方的地板上接着荡开（谱台跟着起伏、灯闪）。
+    //   落地的时刻 = 涟漪走到交线的时刻（最晚 360ms），离得越远落地的波越弱。
+    //   落点在交线上（离灭点很近、地面上很远），按透视把波做大（k = Dm/d），让它在一秒多里扫过远、中两排谱台。
+    const D = floorY - y, S = SHEET, full = RIP.speed * RIP.ease, q = (D - S.Rs) / full;
+    const lag = Math.min(360, S.launch + (q <= 0 ? 0 : q < 0.95 ? -RIP.ease * Math.log(1 - q) : Infinity));
+    const ey = Math.min(rows - 1, floorY + 2), ed = Math.max(1, ey - vpy);
+    const echo = {...at(x, ey), k: clamp(Dm / ed, 1, 7), t0: now + HEAD_MS + lag, seed, px: x, py: ey, echo: true, amp: clamp(1.05 - D / 280, 0.45, 0.85)};
+    return [{air: true, sx: x, sy: y, t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}, echo];
   }
 
   // 画一帧（运行时和离线出图共用）：静的一层 → 地板上的水波（东西跟着动）→ 会动的两样 → 地板以上的谱纸 → 音符。返回这一帧改动到的最上一行。
@@ -945,7 +974,7 @@
   const mainEl = () => document.querySelector('main.content.content--chat');
   let canvas = null, ctx = null, scene = null, low = null, lowCtx = null, img = null, view = null;
   let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null, prevTop = 0, prevRip = false;
-  let ripples = [], rippleTimer = 0;
+  let ripples = [], rippleTimer = 0, rippleRaf = 0, lastFrame = 0;
   const mainClass = new MutationObserver(() => queue());
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => queue()) : null;
 
@@ -963,7 +992,7 @@
     observed = null;
     mainClass.disconnect();
     canvas?.remove();
-    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; ripples = []; clearTimeout(rippleTimer); rippleTimer = 0;
+    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; ripples = []; stopRipple();
     root.removeAttribute('data-pk-metre-backdrop');
     root.style.removeProperty('--metre-band');
   }
@@ -1036,15 +1065,25 @@
   function start() { if (!timer && running()) timer = setTimeout(tick, STEP); }
   function stop() { clearTimeout(timer); timer = 0; }
 
-  // 点击：只在点击后的约 1.4 秒里用 setTimeout 按 33ms 一帧画，画完就停；按钮、输入框、正文、侧栏、总控台、弹层上不触发；减少动态效果时不出现。
+  // 点击：只在点击后的约 1.5 秒里逐帧画（跟屏幕刷新走，最多 60 帧每秒；窗口在后台时退回 16ms 的定时器），画完就停，平时不常驻；
+  //   按钮、输入框、正文、侧栏、总控台、弹层上不触发；减少动态效果时不出现。
   const QUIET_HIT = 'button, a, input, textarea, select, summary, label, [role="button"], [role="menu"], [role="dialog"], [role="listbox"], [contenteditable], .chat-text, .chat-group, .agent-chat__input, aside.sidebar, header.topbar, .pk-metre-board, .pk-metre-brand, [data-metre-pop], .laolao-menu, .pinkie-tray';
+  // 前台跟屏幕刷新走；同时挂一个 50ms 的保底定时器（窗口被挡住、画面不在前面时 rAF 会停，但页面不算 hidden），哪个先到用哪个
+  function nextRipple() {
+    rippleTimer = setTimeout(rippleTick, document.hidden ? RIPPLE_FRAME : 50);
+    if (!document.hidden && typeof requestAnimationFrame === 'function') rippleRaf = requestAnimationFrame(rippleTick);
+  }
+  function stopRipple() { clearTimeout(rippleTimer); if (rippleRaf) cancelAnimationFrame(rippleRaf); rippleTimer = 0; rippleRaf = 0; }
   function rippleTick() {
-    rippleTimer = 0;
+    stopRipple();
     const now = Date.now();
+    // 120Hz 的屏上隔一帧画一次（60 帧每秒就够顺，省一半的活）
+    if (now - lastFrame < 14 && ripples.length) { nextRipple(); return; }
+    lastFrame = now;
     ripples = ripples.filter((rp) => now - rp.t0 <= RIPPLE_MS);
     if (reduced()) ripples = [];
     draw();
-    if (ripples.length && canvas) rippleTimer = setTimeout(rippleTick, RIPPLE_FRAME);
+    if (ripples.length && canvas) nextRipple();
   }
   // clientX / clientY（页面坐标）→ 荡一圈；返回是否荡了
   function tapAt(clientX, clientY) {
@@ -1053,8 +1092,8 @@
     const x = Math.round((clientX - rect.left) / view.cellCss), y = Math.round((clientY - rect.top) / view.cellCss);
     if (x < 0 || y < 0 || x >= view.cols || y >= view.rows) return false;
     ripples.push(...makeRipples(scene, x, y, Date.now()));
-    if (ripples.length > 4) ripples = ripples.slice(-4);   // 最多同时 4 个（6 个时一帧要 30ms 以上）
-    if (!rippleTimer) rippleTick();
+    if (ripples.length > 4) ripples = ripples.slice(-4);   // 最多同时 4 个（空中点击一次是两个：竖直面 + 落到地板上的回声）
+    if (!rippleTimer && !rippleRaf) rippleTick();
     window.dispatchEvent(new CustomEvent('pinkie:metre-tap', {detail: {x: clientX, y: clientY}}));   // 输入框上的猫听见了，竖起耳朵
     return true;
   }
