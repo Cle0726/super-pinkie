@@ -65,6 +65,8 @@
   const SEASON_NAMES = {spring: '春', summer: '夏', autumn: '秋', winter: '冬'};
 
   const stripMarks = (text) => String(text).replace(/\[\[|\]\]/g, '');
+  // 句子里的英文注释「（Blocking I/O）」只留在题库里，首页不显示。
+  const dropGlosses = (text) => String(text).replace(/（[^（）]*[A-Za-z][^（）]*）/g, '');
   // 「下午好，C.le. 此时此刻……」：只在 12–18 点出；称呼换成设置里的名字，没有名字时从「此时此刻」开始。
   const GREETED = /^下午好，C\.le\.\s*/;
   function personalize(text, name, hour) {
@@ -97,7 +99,7 @@
     const date = new Date(now);
     const hour = date.getHours();
     const fresh = (item) => !history[item.text] || now - history[item.text] >= DAY;
-    const usable = allPrompts(data).map((item) => ({...item, shown: personalize(item.text, name, hour)})).filter((item) => item.shown);
+    const usable = allPrompts(data).map((item) => ({...item, shown: personalize(dropGlosses(item.text), name, hour)})).filter((item) => item.shown);
     const category = weightedCategory(weightsFor(hour, [...new Set(usable.map((item) => item.category))]), random);
     let pool = usable.filter((item) => item.category === category && fresh(item));
     if (!pool.length) pool = usable.filter(fresh);
@@ -151,7 +153,7 @@
   }
   const charDelay = (length) => Math.min(18, 1200 / Math.max(1, length));
 
-  const model = {intervalFor, weightsFor, bucketOf, personalize, pickPrompt, eggCandidates, shouldEgg, tokens, charDelay, allPrompts, stripMarks, withName, EGG_SHARE};
+  const model = {intervalFor, weightsFor, bucketOf, personalize, pickPrompt, eggCandidates, shouldEgg, tokens, charDelay, allPrompts, stripMarks, dropGlosses, withName, EGG_SHARE};
 
   // ---------- 存取（只在本机浏览器，坏了就当没有） ----------
   const load = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || '') || fallback; } catch { return fallback; } };

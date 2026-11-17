@@ -68,7 +68,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     : fs.readdirSync(refDir).filter((name) => /^metre-prompts-.*-user\.txt$/.test(name)).sort().map((name) => path.join(refDir, name));
   let data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
   for (const file of files) data = merge(data, parseUserText(fs.readFileSync(file, 'utf8')));
-  data.note = '「user」是用户给的原句（2026-11-13 第一批，2026-11-17 第二、三批，见 ref/metre-prompts-*-user.txt），除 [[ ]] 关键词标记外一个字不改；「fable」是 Fable 5.2 于 2026-11-14 照用户的例子扩写的。[[…]] 标的是要突出的关键词；后几批只把句中第一处 ‘…’ 标成关键词。新类的 note 是用户写的「特点」。';
+  data.note = '「user」是用户给的原句（2026-11-13 第一批，2026-11-17 第二、三批，见 ref/metre-prompts-*-user.txt），除 [[ ]] 关键词标记外一个字不改；「fable」是 Fable 5.2 于 2026-11-14 照用户的例子扩写的。[[…]] 标的是要突出的关键词；后几批先把句中第一处 ‘…’ 标成关键词，其余按 ref/metre-prompts-keywords-1117.txt 标；句中（英文）注释首页不显示。新类的 note 是用户写的「特点」。';
   fs.writeFileSync(jsonPath, JSON.stringify(data, null, 1) + '\n');
   fs.writeFileSync(jsPath, renderJs(data));
   const count = data.categories.reduce((sum, c) => sum + c.user.length + c.fable.length, 0);

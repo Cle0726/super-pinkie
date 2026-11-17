@@ -561,3 +561,20 @@ test('Metre guide sentence is read-only: clicking it does not put it into the co
   assert.doesNotMatch(source, /composer-combobox textarea/);
   assert.doesNotMatch(source, /setAttribute\('role', 'button'\)/);
 });
+
+test('Metre guide sentences: every one has a highlighted keyword, and the English glosses in brackets are not shown', () => {
+  const {home, bank} = homeEnv();
+  for (const c of bank.categories) for (const s of [...c.user, ...c.fable]) assert.match(s, /\[\[[^\]]+\]\]/, `没有关键词：${s}`);
+  assert.equal(home.dropGlosses('被一个阻塞式的等待（Blocking I/O）卡住'), '被一个阻塞式的等待卡住');
+  assert.equal(home.dropGlosses('‘拱顶石（Keystone）’'), '‘拱顶石’');
+  let seed = 3;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const start = new Date(2026, 10, 17, 15, 0, 0).getTime();
+  const history = {};
+  for (let i = 0; i < 600; i++) {
+    const item = home.pickPrompt({data: bank, now: start + i * 25_000, history, random});
+    history[item.key] = start + i * 25_000;
+    assert.doesNotMatch(item.text, /（[^（）]*[A-Za-z][^（）]*）/, item.text);
+    assert.match(item.text, /\[\[[^\]]+\]\]/, item.text);
+  }
+});
