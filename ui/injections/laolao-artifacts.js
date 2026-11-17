@@ -462,7 +462,8 @@
         const turn = turns.at(-1);
         // The answer right after the work card owns the files: replies that a late
         // background notice woke up come after it and must not pull the cards down.
-        if (group.classList.contains('chat-group--process')) { turn.reply = null; turn.afterCard = true; continue; }
+        // Later small cards (a late notice's reply) never move the files off the answer they belong to.
+        if (group.classList.contains('chat-group--process')) { if (!(turn.afterCard && turn.reply)) { turn.reply = null; turn.afterCard = true; } continue; }
         if (group.classList.contains('chat-group--learning')) continue;
         if (group.querySelector('.chat-bubble.streaming')) { turn.streaming = true; continue; }
         if (!(turn.afterCard && turn.reply)) turn.reply = group;
@@ -490,8 +491,8 @@
         const next = el('div', 'pinkie-file-cards');
         next.dataset.signature = signature;
         next.setAttribute('aria-label', '这一轮做出的文件');
-        const ordered = [...entries.values()].sort((a, b) => (Number(a.version.ts) || 0) - (Number(b.version.ts) || 0)
-          || String(a.item.title).localeCompare(String(b.item.title), 'zh-Hans-CN', {numeric: true}));
+        // By name, numbers in order (01, 02 … 10): files written in one batch share a timestamp.
+        const ordered = [...entries.values()].sort((a, b) => String(a.item.title).localeCompare(String(b.item.title), 'zh-Hans-CN', {numeric: true}));
         for (const {item, version} of ordered) next.append(fileCard(item, version));
         if (host) host.replaceWith(next); else reply.after(next);
         host = next;
