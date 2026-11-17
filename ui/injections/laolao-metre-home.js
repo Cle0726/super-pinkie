@@ -55,12 +55,12 @@
     return 'late';
   }
   const GREETINGS = {
-    early: ['早，{name}。天刚亮，今天第一件想落位的事是什么？', '早上好，{name}。先喝口水，再决定今天从哪一小步开始。'],
-    morning: ['上午好，{name}。脑子最清楚的这几个小时，想留给哪件事？', '上午好，{name}。今天要是只做成一件事，你希望是哪一件？'],
-    afternoon: ['午后好，{name}。上午走到哪了，下午还要接着走同一条路吗？', '午后好，{name}。困意上来的时候，先挑一件最小的事做完。'],
-    dusk: ['傍晚了，{name}。今天哪件事已经可以放下了？', '傍晚好，{name}。天色暗下来之前，还有哪一句话想说完？'],
-    night: ['晚上好，{name}。今天哪个瞬间，你想记得久一点？', '夜里好，{name}。白天没说完的那件事，现在想说说吗？'],
-    late: ['深夜了，{name}。还醒着的话，是什么事放不下？', '这么晚了，{name}。今天先到这里，还是还差最后一小段？'],
+    early: ['早，{name}。天刚亮，今天[[第一件想落位的事]]是什么？', '早上好，{name}。先喝口水，再决定今天从[[哪一小步]]开始。'],
+    morning: ['上午好，{name}。[[脑子最清楚]]的这几个小时，想留给哪件事？', '上午好，{name}。今天要是[[只做成一件事]]，你希望是哪一件？'],
+    afternoon: ['午后好，{name}。上午走到哪了，下午还要接着走[[同一条路]]吗？', '午后好，{name}。困意上来的时候，先挑一件[[最小的事]]做完。'],
+    dusk: ['傍晚了，{name}。今天哪件事已经[[可以放下]]了？', '傍晚好，{name}。天色暗下来之前，还有[[哪一句话]]想说完？'],
+    night: ['晚上好，{name}。今天哪个瞬间，你想[[记得久一点]]？', '夜里好，{name}。[[白天没说完]]的那件事，现在想说说吗？'],
+    late: ['深夜了，{name}。还醒着的话，是什么事[[放不下]]？', '这么晚了，{name}。今天先到这里，还是还差[[最后一小段]]？'],
   };
   const SEASON_NAMES = {spring: '春', summer: '夏', autumn: '秋', winter: '冬'};
 
@@ -117,18 +117,19 @@
     if (today) {
       const holiday = today.holiday;
       const festival = (today.festivals || []).find((item) => item.kind === 'big' || item.kind === 'term') || (today.festivals || [])[0];
-      if (festival && !eggsToday.festival) out.push({type: 'festival', text: `今天是${festival.name}。忙完手上这一段，留一点时间给自己和身边的人。`});
-      else if (holiday && !eggsToday.festival) out.push({type: 'festival', text: `今天放${holiday}的假。要做的事挑最小的一件做完就好，剩下的交给明天。`});
-      if (today.term && !eggsToday.term) out.push({type: 'term', text: `今天${today.term}。节气换了一格，手上的事要不要也换一换节奏？`});
+      if (festival && !eggsToday.festival) out.push({type: 'festival', text: `今天是[[${festival.name}]]。忙完手上这一段，留一点时间给自己和身边的人。`});
+      else if (holiday && !eggsToday.festival) out.push({type: 'festival', text: `今天放${holiday}的假。要做的事挑[[最小的一件]]做完就好，剩下的交给明天。`});
+      if (today.term && !eggsToday.term) out.push({type: 'term', text: `今天[[${today.term}]]。节气换了一格，手上的事要不要也换一换节奏？`});
       else if (today.season && !eggsToday.season && !today.term) {
-        out.push({type: 'season', text: `${SEASON_NAMES[today.season] || ''}天了。这个季节里，你最想做完的是哪一件事？`});
+        out.push({type: 'season', text: `${SEASON_NAMES[today.season] || ''}天了。这个季节里，你[[最想做完]]的是哪一件事？`});
       }
       const recent = today.recent;
       if (recent && recent.text && !eggsToday.memory) {
+        const plain = (t) => String(t).replace(/\[\[|\]\]/g, '');
         const where = recent.folderName ? `在 ${recent.folderName} ` : '';
         out.push({type: 'memory', text: recent.category === 'open'
-          ? `上次你${where}停在了「${recent.text}」，今天要先把它落位吗？`
-          : `上次${where}定下了「${recent.text}」，今天还照这个走吗？`});
+          ? `上次你${where}停在了「[[${plain(recent.text)}]]」，今天要先把它落位吗？`
+          : `上次${where}定下了「[[${plain(recent.text)}]]」，今天还照这个走吗？`});
       }
     }
     return out;

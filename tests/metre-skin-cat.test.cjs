@@ -578,3 +578,16 @@ test('Metre guide sentences: every one has a highlighted keyword, and the Englis
     assert.match(item.text, /\[\[[^\]]+\]\]/, item.text);
   }
 });
+
+test('Metre home eggs (greeting, festival, holiday, term, season, memory) carry a highlighted keyword too', () => {
+  const {home} = homeEnv();
+  const eggs = [];
+  for (let hour = 0; hour < 24; hour++) for (const minute of [0, 1]) {
+    const now = new Date(2026, 10, 17, hour, minute).getTime();
+    eggs.push(...home.eggCandidates({today: {festivals: [{name: '国庆节', kind: 'big'}], term: '立冬', season: 'winter', recent: {category: hour % 2 ? 'open' : 'done', text: '表单[[校验]]', folderName: 'site'}}, now, name: 'C.le.'}));
+    eggs.push(...home.eggCandidates({today: {festivals: [], holiday: '国庆节', season: 'autumn'}, now}));
+  }
+  assert.deepEqual([...new Set(eggs.map((egg) => egg.type))].sort(), ['festival', 'greeting', 'memory', 'season', 'term']);
+  for (const egg of eggs) assert.match(egg.text, /\[\[[^\[\]]+\]\]/, egg.text);
+  assert.ok(eggs.some((egg) => egg.text.includes('「[[表单校验]]」')));
+});
