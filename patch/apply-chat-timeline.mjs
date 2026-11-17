@@ -1096,7 +1096,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
   let routedSession = '';
   try { routedSession = new URLSearchParams(globalThis.location?.search || '').get('session')
     || globalThis.document?.querySelector?.('.sidebar-recent-session--active[data-session-key]')?.dataset?.sessionKey || ''; } catch {}
-  const segmented = !routedSession || /^agent:(?:main|project|thinking|learning):/.test(routedSession);
+  const segmented = true;
+  // Metre is not a Pinkie room: its process card carries no Pinkie name.
+  const metreSession = /^agent:metre:/.test(routedSession);
   const historyThinking = segmented ? historySegments.map(segment => segment.text).join('\n\n')
     : entries.filter(item => item?.kind === 'group' && item.role === 'assistant')
       .flatMap(item => item.messages || []).flatMap(entry => textParts(entry.message))
@@ -1178,9 +1180,9 @@ function projectTimelineTurn(entries, getToolCalls, maxRows, isLatestTurn = fals
       pinkieThinkingAnchor: index, pinkieThinkingKey: processKey})), maxRows, ownerKey),
     processSteps: toolCount,
     processTitle: !hasUserHead ? '接着之前的工作'
-      : live ? '碧琪正在干活'
+      : live ? (metreSession ? '正在处理' : '碧琪正在干活')
         : processSuperseded ? '这一轮被你的新消息接上了'
-        : processInterrupted ? '这一轮停下来了' : '碧琪的工作过程',
+        : processInterrupted ? '这一轮停下来了' : metreSession ? '工作过程' : '碧琪的工作过程',
     processMeta: live
       ? (toolCount ? `已做 ${toolCount} 步` : '')
       : [toolCount ? `${toolCount} 个步骤` : '', duration ? `用时 ${duration}` : '',

@@ -325,6 +325,7 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   const {ctx, attrs, timers, document} = env;
   const removeAttr = (name) => { delete attrs[name]; };
   document.documentElement.removeAttribute = removeAttr;
+  document.documentElement.style = {setProperty() {}, removeProperty() {}};
   let canvas = null;
   const g2d = new Proxy({}, {get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; }});
   const rect = (left, width) => ({left, right: left + width, top: 44, width, height: 856});
@@ -347,6 +348,7 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   attrs['data-pinkie-reduce-motion'] = '';
   api.sync();
   assert.equal(api.running, false, '减少动态效果：只画一帧，不走');
+  assert.equal(api.tap(600, 700), false, '减少动态效果：点击不起波纹');
   delete attrs['data-pinkie-reduce-motion'];
 
   attrs['data-laolao-mode'] = 'chat';
@@ -375,10 +377,89 @@ test('Metre v6 home: tempo mark above the prompt, board art drawn on the backdro
   assert.match(home, /pk-metre-tempo/);
   assert.match(home, /pk-metre-prompt__head/);
   const backdrop = read(INJ + 'laolao-metre-backdrop.js');
-  assert.match(backdrop, /\.pk-metre-quick__art/, '看板的图由背景点阵画');
+  assert.match(read(INJ + 'laolao-metre-board.js'), /pk-metre-quick__art/, '看板卡片的图在看板自己里画（背景不再画）');
   assert.match(backdrop, /data-laolao-startup-home/);
   const skin = read(INJ + 'laolao-metre-skin.css');
   const v6 = skin.slice(skin.indexOf('第六版「总谱」'));
   assert.match(v6, /--metre-accent: #2F4BB0;/);
   assert.match(v6, /\.pk-metre-quick__card:hover \{[\s\S]{0,200}background: transparent !important;/, '看板卡片没有卡片底');
+});
+
+// ---------- 11-16 第十二稿：点哪里都是「一个音落进水里」（RIPPLE-DETAIL-PLAN-1116 §A‴） ----------
+test('Metre backdrop v12: a tap anywhere drops a note into the backdrop — a 3D ripple where you click, notes jump out, objects ride the floor, nothing is left behind', () => {
+  const head = read(INJ + 'laolao-head.fragment.html');
+  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop7/);
+  const ctx = {console, Math, Date};
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read(INJ + 'laolao-metre-backdrop.js'), ctx);
+  const S = ctx.__pinkieMetreScene;
+  const cols = 360, rows = 120, band = 66;
+  const sc = S.buildScene({cols, rows, band, dark: true, home: true, lamps: ['run', 'done']});
+  const {floorY} = sc.anchors;
+  // 静的一层分两份：拿掉东西的 base 和完整的 buf；东西各成一组
+  assert.ok(sc.groups.length > 4, '谱台、椅子、指挥台各记成一组');
+  let diff = 0; for (let i = 0; i < sc.buf.length; i++) if (sc.buf[i] !== sc.base[i]) { diff++; assert.ok(sc.obj[i], 'buf 和 base 只在东西上不同'); }
+  assert.ok(diff > 0);
+  const still = new Uint32Array(cols * rows); S.compose(sc, 0, false, [], 0, still);
+  // 点在地板中段：落点起一圈水波，地板的像素被顶起来
+  const rp = S.makeRipples(sc, 150, floorY + 30, 0);
+  assert.equal(rp.length, 1);
+  const mid = new Uint32Array(cols * rows); const top = S.compose(sc, 0, false, rp, rp[0].t0 + 120, mid);
+  let changed = 0, far = 0;
+  for (let i = 0; i < mid.length; i++) if (mid[i] !== still[i]) { changed++; if (Math.floor(i / cols) < floorY - 40) far++; }
+  assert.ok(changed > 200, '地面在动');
+  assert.equal(far, 0, '刚起波时只有落点附近在动');
+  assert.ok(top >= 0 && top < rows);
+  // 结束之后和没点过一模一样（不留残影）
+  const after = new Uint32Array(cols * rows); S.compose(sc, 0, false, rp, rp[0].t0 + S.RIPPLE_MS + 1, after);
+  assert.deepEqual(Array.from(after), Array.from(still));
+  // 点在上面的空处：波就在点的地方（不是只有下面的地板有反应），还有音符
+  const air = S.makeRipples(sc, 150, 12, 0)[0];
+  assert.ok(air.air, '地板以上的点击是地板以上的水波');
+  const up = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + 300, up);
+  let near = 0; for (let y = 0; y < 40; y++) for (let x = 110; x <= 190; x++) if (up[y * cols + x] !== still[y * cols + x]) near++;
+  assert.ok(near > 100, '点的地方荡开一圈');
+  assert.ok(S.SPRITES.noteEighth && S.SPRITES.noteHead, '音符和符头是像素精灵');
+  // 点在谱台上：波从它脚下起
+  const stand = sc.groups.find((g) => g && g.kind === 'stand' && g.foot < rows);
+  const hit = S.makeRipples(sc, stand.cx, stand.y0 + 3, 0)[0];
+  assert.equal(hit.group, stand.id);
+});
+
+test('Metre 11-16 night: the plane above the floor is a sheet of staff paper a note dents; the cat has more pixels and its own idle moves, and pricks its ears at a tap', () => {
+  const ctx = {console, Math, Date};
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read(INJ + 'laolao-metre-backdrop.js'), ctx);
+  const S = ctx.__pinkieMetreScene;
+  const cols = 360, rows = 160, band = 66;
+  const sc = S.buildScene({cols, rows, band, dark: true, home: true, lamps: ['run']});
+  const still = new Uint32Array(cols * rows); S.compose(sc, 0, false, [], 0, still);
+  const air = S.makeRipples(sc, 150, 30, 0)[0];
+  // 压下去的那一刻：谱纸显出来，坑在点的地方，地平线以下不动
+  const dent = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + 100, dent);
+  let near = 0, below = 0;
+  for (let i = 0; i < dent.length; i++) if (dent[i] !== still[i]) { const y = Math.floor(i / cols), x = i % cols; if (y >= sc.anchors.floorY) below++; else if (Math.hypot(x - 150, y - 30) < 60) near++; }
+  assert.ok(near > 300, '谱纸和坑就在点的地方');
+  assert.equal(below, 0, '竖直面在墙和地板的交线截断');
+  // 同一个时刻画两遍完全一样；结束后不留残影
+  const again = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + 100, again);
+  assert.deepEqual(Array.from(again), Array.from(dent));
+  const after = new Uint32Array(cols * rows); S.compose(sc, 0, false, [air], air.t0 + S.RIPPLE_MS + 1, after);
+  assert.deepEqual(Array.from(after), Array.from(still));
+  assert.match(read(INJ + 'laolao-metre-backdrop.js'), /dispatchEvent\(new CustomEvent\('pinkie:metre-tap'/, '点背景时告诉猫');
+  // 猫：多一档毛的冷光，几段自己的小动作帧，都是 16×16、最高 8 帧每秒
+  const cat = require(path.join(ROOT, INJ, 'laolao-metre-cat-frames.js'));
+  assert.ok(cat.PALETTE.R, '毛的冷光一档');
+  assert.ok(cat.STATES.idle.frames[0].join('').includes('R'));
+  for (const name of ['nod', 'groom', 'swish', 'perk']) {
+    const def = cat.ACTS[name];
+    assert.ok(def && def.fps <= 8, name);
+    for (const f of def.frames) assert.ok(f.length === 16 && f.every((r) => r.length === 16), name);
+  }
+  assert.equal(Math.round(cat.ACTS.nod.frames.length / cat.ACTS.nod.fps * 1000), Math.round(60000 / 72), '点头一拍 = ♩=72');
+  const source = read(INJ + 'laolao-metre-cat.js');
+  assert.match(source, /addEventListener\('pinkie:metre-tap', onTap\)/, '背景被点时竖耳朵');
+  assert.match(source, /name: 'nod', own: true/);
 });

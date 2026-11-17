@@ -334,17 +334,18 @@ export class MetreBoard {
 
     const lastStop = parentState.lastStop;
     const recentStop = lastStop && !parentBusy && running === 0 && lastStop.at >= (j.requestAt || 0);
-    const stateText = paused ? '暂停派发' : recentStop ? '已停'
-      : pending.length ? `等你（${pending.length}）` : running ? `在等 ${running} 个子会话` : parentBusy ? 'Metre 在做'
-      : sessions.length ? '空闲' : '还没派过活';
+    // 用 Metre 自己的话：分谱 = 把活拆给声部（子会话），收住 = 指挥的收拍（全停），起拍 = 开始。
+    const stateText = paused ? '暂停分谱' : recentStop ? '已收住'
+      : pending.length ? `等你（${pending.length}）` : running ? `${running} 个声部在奏` : parentBusy ? 'Metre 在做'
+      : sessions.length ? '休止' : '还没起拍';
 
     const timeline = [...j.events];
     // 真正交回的汇报（血缘里的汇报卡片）：一张一条。
     for (const card of reports) if (card.createdAt) timeline.push({at: card.createdAt, kind: card.failed ? 'error' : 'report', sessionKey: card.childKey,
       text: `「${this.title(card.childKey)}」${card.failed ? '汇报失败' : '交回汇报'}${card.text ? '：' + clip(card.text, 60) : ''}`});
     if (lastStop?.at) timeline.push({at: lastStop.at, kind: 'stop', sessionKey: parent,
-      text: `全部停下：停了 ${(lastStop.children || []).filter(item => item.stopped).length} 个子会话${lastStop.parent ? '和 Metre 这一轮' : ''}`});
-    if (parentState.pausedAt && paused) timeline.push({at: parentState.pausedAt, kind: 'stop', sessionKey: parent, text: '暂停派发'});
+      text: `全体收住：收了 ${(lastStop.children || []).filter(item => item.stopped).length} 个声部${lastStop.parent ? '和 Metre 这一轮' : ''}`});
+    if (parentState.pausedAt && paused) timeline.push({at: parentState.pausedAt, kind: 'stop', sessionKey: parent, text: '暂停分谱'});
     timeline.sort((a, b) => b.at - a.at);
 
     const changes = Object.entries(j.changes).map(([key, files]) => ({sessionKey: key, title: key === parent ? 'Metre' : this.title(key),

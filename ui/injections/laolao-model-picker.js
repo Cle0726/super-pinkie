@@ -377,7 +377,7 @@
   const MODEL_NAME_ORDER = new Intl.Collator("en", {numeric: true, sensitivity: "base"});
   // Availability comes from the gateway catalog, never a client-side list of
   // model-name prefixes: an older model may still be deliberately configured.
-  function hiddenPickerModel(model) { return model?.available === false; }
+  function hiddenPickerModel(model, selected = "") { return model?.available === false || (unnamedModel(model?.id) && !(model?.sources || []).includes(selected) && `${model?.provider || ""}/${model?.id || ""}` !== selected && model?.id !== selected); }
   function modelGroup(model) {
     const fullId = String(model.id || "").toLowerCase();
     const id = fullId.split("/").at(-1);
@@ -405,7 +405,7 @@
   }
 
   function groupedPresentationModels(models, selectedModel = "") {
-    return presentationModels(models, selectedModel).filter((model) => !hiddenPickerModel(model)).sort((left, right) => {
+    return presentationModels(models, selectedModel).filter((model) => !hiddenPickerModel(model, selectedModel)).sort((left, right) => {
       const groupDifference = MODEL_GROUP_ORDER.indexOf(modelGroup(left))
         - MODEL_GROUP_ORDER.indexOf(modelGroup(right));
       return groupDifference || MODEL_NAME_ORDER.compare(left.name || left.id, right.name || right.id)
@@ -413,9 +413,10 @@
     });
   }
 
-  function modelBrand(provider, id) {
+  // 从模型 ID 本身认出它是哪一家的哪个模型；认不出（auto、copilot-search-a、memory4-dream……）返回 ""。
+  // services/mode-architecture/model-sync.mjs 的 recognizedModelId 是同一套规则（tests/model-sync.test.mjs 守着）。
+  function idBrand(id) {
     const model = String(id || "").toLowerCase().split("/").at(-1);
-    const source = String(provider || "").toLowerCase();
     if (/^(?:gemini|gemma|veo)(?:[-_.:]|$)/.test(model)) return "gemini";
     if (/^(?:claude)(?:[-_.:]|$)/.test(model)) return "claude";
     if (/^codex(?:[-_.:]|$)/.test(model)) return "codex";
@@ -436,11 +437,18 @@
     if (/^perplexity(?:[-_.:]|$)/.test(model)) return "perplexity";
     if (/^(?:hunyuan|hy\d+[a-z]*)(?:[-_.:]|$)/.test(model)) return "hunyuan";
     if (/^tab(?:[-_.:]|$)/.test(model)) return "antigravity";
-    if (String(id || "").toLowerCase().startsWith("workbuddy/")) return "workbuddy";
-    return ({anthropic: "claude", openai: "openai", google: "gemini", xai: "grok",
-      deepseek: "deepseek", mistral: "mistral", moonshot: "kimi", alibaba: "alibaba",
-      zai: "zai", ollama: "ollama", groq: "groq", minimax: "minimax", doubao: "doubao"})[source] || "crossmodel";
+    return "";
   }
+  function modelBrand(provider, id) {
+    const source = String(provider || "").toLowerCase();
+    return idBrand(id) || (String(id || "").toLowerCase().startsWith("workbuddy/") ? "workbuddy" : "")
+      || ({anthropic: "claude", openai: "openai", google: "gemini", xai: "grok",
+        deepseek: "deepseek", mistral: "mistral", moonshot: "kimi", alibaba: "alibaba",
+        zai: "zai", ollama: "ollama", groq: "groq", minimax: "minimax", doubao: "doubao"})[source] || "crossmodel";
+  }
+  // 认不出名字的模型（上游自动发现的、ID 里看不出是哪个模型）不在选择器里出现（11-16 用户：「当找不到模型名时就不要显示出来了」）。
+  // 只是不显示：配置里的条目不删；正在用的那个照常显示。
+  function unnamedModel(id) { return !idBrand(id); }
 
   // The user-facing settings page shares this exact catalog, family folding,
   // retirement filter and brand ordering so the two model pickers never drift.
@@ -463,7 +471,7 @@
       const id = separator < 0 ? value : value.slice(separator + 1);
       if (option.dataset) {
         option.dataset.pinkieBrand = modelBrand(provider, id);
-        if (hideRetired && hiddenPickerModel({id})) option.dataset.pinkieHiddenModel = "1";
+        if (hideRetired && hiddenPickerModel({id}, option.getAttribute?.("aria-selected") === "true" ? id : "")) option.dataset.pinkieHiddenModel = "1";
         else delete option.dataset.pinkieHiddenModel;
       }
     });
@@ -1507,6 +1515,7 @@
       const context = meta.match(/(?:^|\s|·)(\d+(?:\.\d+)?\s*[kmb])(?:\b|$)/i)?.[1]?.replace(/\s/g, "") || formatModelContext(row.dataset.pinkieCatalogContext);
       if (row.dataset.pinkieContext !== context) row.dataset.pinkieContext = context;
     }
+    const named = rows.filter((row) => row.getAttribute("aria-selected") === "true" || !unnamedModel((row.getAttribute("data-chat-model-option") || "").replace(/^[^/]*\//, ""))).length;
     const brands = SURFACE_BRANDS.filter((brand) => rows.some((row) => row.dataset.pinkieBrand === brand));
     if (!["all", "common"].includes(state.brand) && !brands.includes(state.brand)) state.brand = "common";
     if (!state.bar?.isConnected) {
@@ -1516,7 +1525,7 @@
       state.bar.setAttribute("aria-label", "按模型品牌筛选，左右方向键切换");
       menu.insertBefore(state.bar, browser);
     }
-    const signature = ["common", "all", ...brands].join("|") + rows.length;
+    const signature = ["common", "all", ...brands].join("|") + rows.length + ":" + named;
     if (state.signature !== signature) {
       state.signature = signature;
       const fragment = document.createDocumentFragment();
@@ -1525,10 +1534,10 @@
         tab.type = "button";
         tab.className = "pinkie-model-filter";
         tab.dataset.pinkieModelFilter = brand;
-        const label = brand === "all" ? `全部 ${rows.length}` : brand === "common" ? "常用模型" : BRAND_NAMES[brand] || "其他";
+        const label = brand === "all" ? `全部 ${named}` : brand === "common" ? "常用模型" : BRAND_NAMES[brand] || "其他";
         if (!["all", "common", "crossmodel"].includes(brand)) surfaceBrand(tab, brand);
         tab.textContent = label;
-        tab.title = brand === "all" ? `全部 ${rows.length} 个可选项` : brand === "common" ? "最近使用的6个模型" : label;
+        tab.title = brand === "all" ? `全部 ${named} 个可选项` : brand === "common" ? "最近使用的6个模型" : label;
         tab.setAttribute("aria-label", label);
         fragment.append(tab);
       }
@@ -1562,7 +1571,8 @@
       // The default All tab always searches the authoritative complete catalog.
       const included = state.brand === "all" || (state.brand === "common"
         ? Boolean(query) || common.has(row.getAttribute("data-chat-model-option")) : row.dataset.pinkieBrand === state.brand);
-      const hidden = !included || Boolean(query && !haystack.includes(query));
+      const unnamed = row !== selected && unnamedModel(value.slice(value.indexOf("/") + 1));
+      const hidden = unnamed || !included || Boolean(query && !haystack.includes(query));
       if (row.hidden !== hidden) row.hidden = hidden;
       if (row.hasAttribute("data-pinkie-filter-hidden") !== hidden) row.toggleAttribute("data-pinkie-filter-hidden", hidden);
       if (!hidden) visible += 1;

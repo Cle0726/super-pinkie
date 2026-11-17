@@ -25,6 +25,7 @@ import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
+import {createChannelReasoningGuard} from './channel-reasoning.mjs';
 import {RIGOR_LADDER, SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims, unverifiedNote} from './run-contract.mjs';
 import {skillRouteBlock, toolboxBlock} from './skill-routes.mjs';
 import {workCardBlock, forgetCards, routingKinds} from './work-cards.mjs';
@@ -6964,6 +6965,9 @@ export default {
     api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
+    // 飞书 / 微信会话不显示实时思考（用户 11-16）；网页保持。网关起来后补一遍，之后每条聊天软件消息再补。
+    const channelReasoning = createChannelReasoningGuard(api);
+    api.on('gateway_start', () => { setTimeout(() => { channelReasoning.sweep().catch(() => {}); }, 8000).unref?.(); });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
     api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
@@ -7370,6 +7374,7 @@ export default {
     // pending *continuations*; neither cancellation aborts the live agent.
     api.on('message_received', async (event, ctx) => {
       const sessionKey = architecture.receiveUserMessage(event, ctx);
+      channelReasoning.onMessage(event, ctx, sessionKey)?.catch?.(() => {});
       if (!sessionKey) return;
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);

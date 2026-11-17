@@ -19,6 +19,36 @@
   const oversizedHistoryPlaceholder='[chat.history omitted: message too large]';
   const restartRecoveryNotice='[System] Your previous turn was interrupted by a gateway restart while OpenClaw was waiting on tool/model work. Continue from the existing transcript and finish the interrupted response.';
   const sessionFenceRecovery=/^(?:⚠️\s*)?Agent failed before reply:\s*(?:EmbeddedAttemptSessionTakeoverError:\s*)?session file changed while embedded prompt lock was released:/i;
+  // Metre never uses Pinkie wording, but it still gets the plain English → Chinese
+  // UI localization ("New messages" → "有新消息"), so only a change that would put
+  // 碧琪 / Pinkie on screen is skipped there. What this script changed is
+  // remembered so entering Metre can put the original text back; detached nodes
+  // are pruned so a long streaming chat cannot grow these maps without bound.
+  const isMetreMode=()=>globalThis.document?.documentElement?.getAttribute?.('data-laolao-mode')==='metre';
+  const pinkieWording=/碧琪|Pinkie/i;
+  const blockedInMetre=value=>isMetreMode()&&pinkieWording.test(String(value??''));
+  const translatedNodes=new Map();
+  const translatedAttributes=new Map();
+  const pruneTranslated=()=>{
+    for(const node of translatedNodes.keys())if(node.isConnected===false)translatedNodes.delete(node);
+    for(const element of translatedAttributes.keys())if(element.isConnected===false)translatedAttributes.delete(element);
+  };
+  const setLocalizedText=(node,value)=>{
+    if(blockedInMetre(value)||node.nodeValue===value)return;
+    if(translatedNodes.size>4000)pruneTranslated();
+    translatedNodes.set(node,{from:translatedNodes.get(node)?.from??node.nodeValue,to:value});
+    node.nodeValue=value;
+  };
+  const setLocalizedAttribute=(element,name,value)=>{
+    if(blockedInMetre(value))return;
+    const current=element.getAttribute(name);
+    if(current===value)return;
+    if(translatedAttributes.size>4000)pruneTranslated();
+    if(!translatedAttributes.has(element))translatedAttributes.set(element,new Map());
+    const values=translatedAttributes.get(element);
+    values.set(name,{from:values.get(name)?.from??current,to:value});
+    element.setAttribute(name,value);
+  };
   const failureNotice='这次模型调用失败，碧琪暂时没能完成回复。';
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|learning|unrestricted)$/i;
   // Metre is not Pinkie: its bare agent id becomes its own name, never 碧琪.
@@ -332,7 +362,7 @@
     const parent=node.parentElement;
     const litLabel=parent?litLabelText(parent,(node.nodeValue||'').trim()):null;
     if(litLabel!==null){
-      if(node.nodeValue!==litLabel)node.nodeValue=litLabel;
+      setLocalizedText(node,litLabel);
       return;
     }
     const core=(node.nodeValue||'').trim();
@@ -340,9 +370,9 @@
     if(startup && parent && !isProtectedContent(node)){
       const leading=(node.nodeValue||'').match(/^\s*/)?.[0]||'';
       const trailing=(node.nodeValue||'').match(/\s*$/)?.[0]||'';
-      node.nodeValue=`${leading}碧琪正在把新模型请进派对… ${startup[1]}秒${trailing}`;
+      setLocalizedText(node,`${leading}碧琪正在把新模型请进派对… ${startup[1]}秒${trailing}`);
       parent.dataset.pinkieModelStartup='true';
-      parent.setAttribute('aria-label',`碧琪正在启动模型，已等待 ${startup[1]} 秒`);
+      setLocalizedAttribute(parent,'aria-label',`碧琪正在启动模型，已等待 ${startup[1]} 秒`);
       return;
     }
     // Only the exact, unquoted gateway failure in an assistant bubble. Never
@@ -350,31 +380,31 @@
     if(core===failureSentinel && parent?.closest('.chat-group.assistant') && !parent.closest('pre, code, blockquote, textarea, input, [contenteditable="true"]')){
       const text=parent.closest('.chat-text'),bubble=parent.closest('.chat-bubble');
       if(text?.textContent.trim()===failureSentinel && bubble?.getAttribute('data-message-text')===failureSentinel){
-        node.nodeValue=node.nodeValue.replace(failureSentinel,failureNotice);
+        setLocalizedText(node,node.nodeValue.replace(failureSentinel,failureNotice));
         bubble.setAttribute('data-pinkie-runtime-error','true');
-        bubble.setAttribute('title','系统运行提示；原始信息：'+failureSentinel);
+        setLocalizedAttribute(bubble,'title','系统运行提示；原始信息：'+failureSentinel);
         return;
       }
     }
     if(parent?.closest?.('select option')){
       const value=node.nodeValue??'';
       const next=translate(value,parent.closest('option'));
-      if(next!==value)node.nodeValue=next;
+      if(next!==value)setLocalizedText(node,next);
       return;
     }
     if(isProtectedContent(node))return;
     if(metreName.test(core) && core!=='Metre' && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
-      node.nodeValue=node.nodeValue.replace(core,'Metre');
-      if(parent.hasAttribute('title'))parent.setAttribute('title','Metre');
+      setLocalizedText(node,node.nodeValue.replace(core,'Metre'));
+      if(parent.hasAttribute('title'))setLocalizedAttribute(parent,'title','Metre');
       return;
     }
     if(fallbackName.test(core) && parent?.closest('.chat-group.assistant .chat-sender-name, .agent-chat__welcome h2, .dashboard-header__breadcrumb-context')){
-      node.nodeValue=node.nodeValue.replace(core,'碧琪');
-      if(parent.hasAttribute('title'))parent.setAttribute('title','碧琪');
+      setLocalizedText(node,node.nodeValue.replace(core,'碧琪'));
+      if(parent.hasAttribute('title'))setLocalizedAttribute(parent,'title','碧琪');
       return;
     }
     const localized = translate(node.nodeValue ?? "", parent);
-    if (localized !== node.nodeValue) node.nodeValue = localized;
+    if (localized !== node.nodeValue) setLocalizedText(node,localized);
   };
 
   const localizeTree = (root) => {
@@ -401,6 +431,7 @@
     || document.querySelector(".chat-thread-inner, .chat-thread, .agent-chat");
 
   const syncBrandTitle = () => {
+    if(isMetreMode())return;
     if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'CLE Kk');
   };
 
@@ -413,14 +444,14 @@
       const next=localizedChromeValue(value,control)
         .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
         .replace(/OpenClaw/g,'CLE Kk');
-      if(next!==value)control.setAttribute('placeholder',next);
+      if(next!==value)setLocalizedAttribute(control,'placeholder',next);
     });
     ownOrDescendants(scope,'[title], [aria-label], img[alt]').forEach(element=>{
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
         const next=localizedChromeValue(value,element).replace(/OpenClaw/g,'CLE Kk');
-        if(next!==value)element.setAttribute(name,next);
+        if(next!==value)setLocalizedAttribute(element,name,next);
       }
     });
     ownOrDescendants(scope,'button, [role="button"]').forEach(element=>{
@@ -434,8 +465,8 @@
       }
       if(!isToolbarCustodian&&!askAssistantLabel.test(label))return;
       element.dataset.pinkieAskClekk='true';
-      element.setAttribute('title','问问碧琪');
-      element.setAttribute('aria-label','问问碧琪');
+      setLocalizedAttribute(element,'title','问问碧琪');
+      setLocalizedAttribute(element,'aria-label','问问碧琪');
     });
   };
 
@@ -598,10 +629,11 @@
   // live. Only the summary's accessible name is set here; it is an attribute,
   // so Lit simply rewrites it on its next change instead of failing.
   const localizeToolActivity = (root) => {
+    if(isMetreMode())return;
     const scope = root?.querySelectorAll ? root : document;
     ownOrDescendants(scope,".chat-activity-group__summary").forEach((summary) => {
       if (summary.getAttribute("aria-label") !== "碧琪的工具小帮手行动记录") {
-        summary.setAttribute("aria-label", "碧琪的工具小帮手行动记录");
+        setLocalizedAttribute(summary,"aria-label","碧琪的工具小帮手行动记录");
       }
     });
   };
@@ -639,13 +671,18 @@
     localizeToolActivity(node);
   };
 
-  const start = () => {
-    // One initial pass is needed for already-mounted chrome. From this point
-    // on, only the exact newly added subtree is touched.
+  // The one full-body pass: at startup, and again only when leaving Metre.
+  const localizeWholePage = () => {
     localizeTree(document.body);
     syncBrandChrome(document);
-    watchBrandTitle();
     localizeToolActivity(document);
+  };
+
+  const start = () => {
+    // One initial pass is needed for already-mounted chrome. From this point
+    // on, only the exact newly added subtree is touched. In Metre the setters
+    // above drop anything that would say 碧琪.
+    localizeWholePage();
     const initialChat = chatScopeFor();
     if (initialChat) {
       syncFailureCards(initialChat);
@@ -653,6 +690,7 @@
       syncFailureProjectionState(initialChat);
       hideLegacyThinkPrefixes(initialChat);
     }
+    watchBrandTitle();
 
     // openclaw-app is the stable application mount. Observing it (rather than
     // document.body) keeps portal/splash/background churn out of localization
@@ -682,6 +720,26 @@
       subtree: true,
     });
   };
+
+  window.addEventListener('laolao:modechange',()=>{
+    if(isMetreMode()){
+      for(const [node,change] of translatedNodes){
+        if(!node.isConnected){translatedNodes.delete(node);continue;}
+        if(pinkieWording.test(change.to)&&node.nodeValue===change.to){node.nodeValue=change.from;translatedNodes.delete(node);}
+      }
+      for(const [element,attributes] of translatedAttributes){
+        if(!element.isConnected){translatedAttributes.delete(element);continue;}
+        for(const [name,change] of attributes){
+          if(!pinkieWording.test(change.to)||element.getAttribute(name)!==change.to)continue;
+          if(change.from===null)element.removeAttribute(name);
+          else element.setAttribute(name,change.from);
+        }
+      }
+      localizeWholePage();
+      return;
+    }
+    localizeWholePage();
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start, { once: true });

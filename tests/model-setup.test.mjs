@@ -85,6 +85,7 @@ test('save writes only models + default model keys; author providers stay; list 
   assert.equal(saved.providerId, 'deepseek-2'); // 作者自己的 deepseek 不被覆盖
   assert.deepEqual(h.cfg.models.providers.mm, initial.models.providers.mm);
   assert.equal(h.cfg.models.providers['deepseek-2'].apiKey, KEY);
+  assert.ok(h.cfg.models.providers['deepseek-2'].models.every(model => model.reasoning === true));
   assert.equal(h.cfg.agents.defaults.model.primary, 'deepseek-2/deepseek-flash');
   assert.deepEqual(h.cfg.agents.defaults.model.fallbacks, ['mm/a']);
   assert.equal(h.cfg.agents.list[0].model, 'deepseek-2/deepseek-flash');

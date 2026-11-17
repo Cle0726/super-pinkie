@@ -1905,6 +1905,12 @@
     return {left,top};
   }
   let sidebarTooltip=null,sidebarTooltipAnchor=null;
+  function sidebarTextFullyShown(anchor,text){
+    const want=String(text).trim();
+    if(!want||String(anchor.textContent||'').replace(/\s+/g,' ').trim().indexOf(want)<0)return false;
+    const nodes=[anchor,...anchor.querySelectorAll('*')].filter(node=>String(node.textContent||'').includes(want));
+    return !nodes.some(node=>node.scrollWidth>node.clientWidth+1||node.scrollHeight>node.clientHeight+1&&getComputedStyle(node).overflowY!=='visible');
+  }
   function hideSidebarTooltip(){sidebarTooltip?.remove();sidebarTooltip=null;sidebarTooltipAnchor=null;}
   function showSidebarTooltip(target){
     const anchor=target?.closest?.('.sidebar [data-pinkie-tooltip], .sidebar [title]');
@@ -1912,6 +1918,13 @@
     const text=anchor.dataset.pinkieTooltip||anchor.getAttribute('title');
     if(!text)return;
     if(anchor.hasAttribute('title')){anchor.dataset.pinkieTooltip=text;anchor.removeAttribute('title');}
+    /* 原生按钮外面已经包了 openclaw-tooltip，它自己会弹提示；这里再弹就是两个。 */
+    const nativeTip=anchor.closest('openclaw-tooltip');
+    if(nativeTip&&String(nativeTip.content||'').trim()){hideSidebarTooltip();return;}
+    /* 提示文字就是按钮上已经完整显示出来的字（会话标题没被截断），不用再弹一遍。 */
+    if(sidebarTextFullyShown(anchor,text)){hideSidebarTooltip();return;}
+    /* Metre：按钮上已经写着字的，悬停不再弹一段介绍（11-16 夜，用户：重复的按键介绍没有必要）。 */
+    if(document.documentElement.getAttribute('data-laolao-mode')==='metre'&&(window.__pinkieMetreShowsText?.(anchor)??sidebarTextFullyShown(anchor,text))){hideSidebarTooltip();return;}
     hideSidebarTooltip();sidebarTooltipAnchor=anchor;
     const tip=document.createElement('div');tip.className='pinkie-sidebar-tooltip';tip.setAttribute('role','tooltip');tip.textContent=text;
     document.body.append(tip);sidebarTooltip=tip;

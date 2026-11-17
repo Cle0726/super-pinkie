@@ -18,6 +18,7 @@
     const on = isMetre();
     for (const link of document.querySelectorAll('link[rel~="stylesheet"]')) {
       if (!DECOR.test(link.getAttribute('href') || '')) continue;
+      if (on && link.dataset.metreKeep === '1') continue;
       if (on && !link.disabled) { link.dataset.metreOff = '1'; link.disabled = true; }
       else if (!on && link.dataset.metreOff === '1') { link.disabled = false; delete link.dataset.metreOff; }
     }
@@ -33,6 +34,21 @@
   }).observe(document.head || root, {childList: true});
   apply();
   window.addEventListener('laolao:modechange', apply);
+  // 从 Metre 切回碧琪的模式时，碧琪的过场覆盖层要靠 laolao-mode-transition-fx.css 才盖得住；
+  // 这张表在 Metre 里是停用的，覆盖层就在没样式的情况下“盖好了”，路由先切、浅色的学习页先露出来（11-16 真机逐帧看到）。
+  // 所以切换一开始就把它放出来（它的规则全都只作用于过场覆盖层自己的类，不碰 Metre 页面），模式真的变了再按常规处理。
+  const TRANSITION_FX = /\/laolao-mode-transition-fx\.css(?:\?|$)/;
+  window.addEventListener('laolao:mode-transition-start', (event) => {
+    if (!isMetre() || event.detail?.mode === 'metre') return;
+    for (const link of document.querySelectorAll('link[rel~="stylesheet"]')) {
+      if (!TRANSITION_FX.test(link.getAttribute('href') || '')) continue;
+      link.dataset.metreKeep = '1';
+      if (link.dataset.metreOff === '1') { link.disabled = false; delete link.dataset.metreOff; }
+    }
+  });
+  const releaseKeep = () => { for (const link of document.querySelectorAll('link[data-metre-keep]')) delete link.dataset.metreKeep; apply(); };
+  window.addEventListener('laolao:mode-transition-finished', releaseKeep);
+  window.addEventListener('laolao:modechange', () => { if (!isMetre()) releaseKeep(); });
   // 启动闪屏：第一帧之前按上次的模式先打上 data-laolao-splash-metre，Metre 就不露碧琪的闪屏
   // （样式在 laolao-metre-brand.css；laolao-splash.js 算准模式后会再改，闪屏走了就拿掉）。
   try {
@@ -57,11 +73,16 @@
     {sel: 'body > .pinkie-tray', trig: '.pinkie-tray-btn', kind: 'inside'},
   ];
   const GAP = 8, EDGE = 12;
+  // A popup can grow after it opened (the model list switches to “全部” and loads 170+ rows).
+  // Re-place it whenever its own size changes, or it keeps the old, shorter position and runs off-screen.
+  const sizeWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(() => queuePops()) : null;
+  const sizeWatched = new WeakSet();
   function placeOne(el, trigEl, kind) {
     const box = document.querySelector('.agent-chat__composer-combobox')?.getBoundingClientRect();
     const trig = trigEl?.getBoundingClientRect();
     if (!box || !trig || !trig.width) return;
     el.setAttribute('data-metre-pop', kind);
+    if (sizeWatch && !sizeWatched.has(el)) { sizeWatched.add(el); sizeWatch.observe(el); }
     el.style.setProperty('--mp-top', '0px'); el.style.setProperty('--mp-left', '0px'); el.style.setProperty('--mp-max', 'none');
     const zero = el.getBoundingClientRect();                      // top:0 left:0 时它落在视口哪里（包含块可能是带 transform 的祖先）
     const w = zero.width, h = zero.height;
@@ -102,5 +123,59 @@
   };
   if (document.body) bootPops(); else document.addEventListener('DOMContentLoaded', bootPops, {once: true});
   window.addEventListener('laolao:modechange', queuePops);
-  window.__pinkieMetreSkin = {DECOR, apply, placePops, get on() { return applied; }};
+  /* ---------- 思考强度 = 速度记号（11-16 夜，用户：「思考滑块太过简陋」）----------
+   * Metre 里思考强度读成节拍器上的速度：想得越多，拍子越慢、越沉。档位名照旧（High、XHigh……）跟在后面一行小字。
+   * Adaptive 对 Rubato（自由速度，随内容伸缩）。只写 data 属性，文字本身仍归 laolao-model-picker.js 管，样式在 laolao-metre-skin.css。 */
+  const TEMPO = {off: ['Prestissimo', 208], minimal: ['Presto', 184], low: ['Allegro', 132], medium: ['Moderato', 108], high: ['Andante', 88],
+    xhigh: ['Adagio', 66], adaptive: ['Rubato', 0], max: ['Lento', 52], ultra: ['Grave', 40]};
+  const LEVEL_OF = {'关闭': 'off', off: 'off', minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', adaptive: 'adaptive', max: 'max', ultra: 'ultra'};
+  function tempoOf(text) {
+    const level = LEVEL_OF[String(text || '').trim().toLowerCase()] || LEVEL_OF[String(text || '').trim()];
+    return level ? {level, name: TEMPO[level][0], bpm: TEMPO[level][1]} : null;
+  }
+  const tempoWatched = new WeakSet();
+  function syncTempo(el) {
+    const t = tempoOf(el.textContent);
+    if (!t) { el.removeAttribute('data-metre-tempo'); return; }
+    const meta = `${t.bpm ? '♩ = ' + t.bpm : '♩ ≈'} · ${el.textContent.trim()}`;
+    if (el.getAttribute('data-metre-tempo') !== t.name) el.setAttribute('data-metre-tempo', t.name);
+    if (el.getAttribute('data-metre-meta') !== meta) el.setAttribute('data-metre-meta', meta);
+  }
+  function watchTempo() {
+    for (const el of document.querySelectorAll('.pinkie-reasoning-current, .pinkie-effort-trigger .pinkie-external-tier')) {
+      syncTempo(el);
+      if (tempoWatched.has(el)) continue;
+      tempoWatched.add(el);
+      new MutationObserver(() => syncTempo(el)).observe(el, {childList: true, characterData: true, subtree: true});
+    }
+  }
+  document.addEventListener('toggle', watchTempo, true);
+  document.addEventListener('click', () => setTimeout(watchTempo, 0), true);
+  window.addEventListener('laolao:modechange', watchTempo);
+  if (document.readyState !== 'loading') setTimeout(watchTempo, 0); else document.addEventListener('DOMContentLoaded', watchTempo, {once: true});
+
+  /* ---------- 悬停不再重复按钮上已经写着的字（11-16 夜，用户：「鼠标靠近显示重复按键介绍，这个没有必要」）----------
+   * Metre 里：按钮 / 链接上已经完整显示了文字的，悬停时不弹原生 title 提示（指针进来时先收起 title，出去再放回，
+   * 不改别的脚本写的属性，所以它们照常工作）；文字被截断的、只有图标的，照旧有提示。侧栏自己的提示在 laolao-sidebar.js 里同样判断。 */
+  function showsItsText(el) {
+    const text = String(el.textContent || '').replace(/\s+/g, '');
+    if (!text) return false;
+    return ![el, ...el.querySelectorAll('*')].some((node) => node.scrollWidth > node.clientWidth + 1 && getComputedStyle(node).overflowX !== 'visible');
+  }
+  let parked = null;
+  document.addEventListener('pointerover', (event) => {
+    if (!isMetre()) return;
+    const el = event.target?.closest?.('[title]');
+    if (!el || el === parked || el.tagName === 'CANVAS' || !showsItsText(el)) return;
+    if (parked && parked.isConnected && parked.dataset.metreTitle != null) { parked.setAttribute('title', parked.dataset.metreTitle); delete parked.dataset.metreTitle; }
+    parked = el; el.dataset.metreTitle = el.getAttribute('title'); el.removeAttribute('title');
+  }, true);
+  document.addEventListener('pointerout', (event) => {
+    if (!parked || parked.contains(event.relatedTarget)) return;
+    if (parked.dataset.metreTitle != null && !parked.hasAttribute('title')) parked.setAttribute('title', parked.dataset.metreTitle);
+    delete parked.dataset.metreTitle; parked = null;
+  }, true);
+  window.__pinkieMetreShowsText = showsItsText;
+
+  window.__pinkieMetreSkin = {DECOR, apply, placePops, tempoOf, get on() { return applied; }};
 })();

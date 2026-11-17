@@ -161,6 +161,17 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertEqual(data['agents']['defaults']['bootstrapMaxChars'], 90_000)
         self.assertEqual(data['agents']['defaults']['bootstrapTotalMaxChars'], 200_000)
 
+    def test_thinking_defaults_on_without_overriding_user_choice(self):
+        data = {'agents': {'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['agents']['defaults']['thinkingDefault'], 'high')
+        self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'stream')
+        for choice in ('off', 'ultra'):
+            data = {'agents': {'defaults': {'thinkingDefault': choice, 'reasoningDefault': 'on'}, 'list': []}}
+            setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+            self.assertEqual(data['agents']['defaults']['thinkingDefault'], choice)
+            self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'on')
+
     def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
         data = {'agents': {'list': [
             {'id': 'main'}, {'id': 'project', 'tools': {'deny': ['browser'], 'exec': {'pathPrepend': ['/x']}}},

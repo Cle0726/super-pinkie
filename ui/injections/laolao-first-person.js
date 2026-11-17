@@ -126,15 +126,21 @@
     return true;
   };
 
+  const renderedNodes = new Map();
+  const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
   const renderText = (node) => {
+    if (isMetre()) return;
     const value = node.nodeValue;
     if (!value || !value.includes('我') || !speaks(node)) return;
     const next = renderFirstPerson(value);
-    if (next !== value) node.nodeValue = next;
+    if (next !== value) {
+      renderedNodes.set(node, {from: renderedNodes.get(node)?.from ?? value, to: next});
+      node.nodeValue = next;
+    }
   };
 
   const renderTree = (root) => {
-    if (!root) return;
+    if (!root || isMetre()) return;
     if (root.nodeType === Node.TEXT_NODE) { renderText(root); return; }
     if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
     // 大多数新增子树（工具输出、侧栏、设置）里没有「我」，先用 textContent 判断，免得逐个走文字节点。
@@ -171,6 +177,18 @@
     });
     renderTree(document.getElementById('pinkie-desk-chat'));
   };
+
+  window.addEventListener('laolao:modechange', () => {
+    if (isMetre()) {
+      for (const [node, change] of renderedNodes) {
+        if (!node.isConnected) { renderedNodes.delete(node); continue; }
+        if (node.nodeValue === change.to) node.nodeValue = change.from;
+      }
+      return;
+    }
+    renderTree(threadRoot());
+    renderTree(document.getElementById('pinkie-desk-chat'));
+  });
 
   window.__pinkieFirstPerson = {render: renderFirstPerson, renderTree};
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});

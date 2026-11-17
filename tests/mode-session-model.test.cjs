@@ -23,6 +23,15 @@ test('mode switching lets the router own session/model handoff without mutating 
   assert.match(resume, /recoverPaneChat\(pane, "session-selected"/);
 });
 
+test('both transition directions paint the destination before removing the cover', () => {
+  const finish = mode.slice(mode.indexOf('const finishModeTransition ='));
+  const commit = finish.indexOf('syncModePresentation(mode);');
+  const settleFrame = finish.indexOf('await motion.frames();');
+  const uncover = finish.indexOf('await ui.fx.finish();');
+  assert.ok(commit >= 0 && settleFrame > commit && uncover > settleFrame);
+  assert.match(finish, /modeTransitionTargetId = null;\s*syncModePresentation\(mode\);/);
+});
+
 test('split view opens its mode root without replaying a stale recent chat or restarting the gateway', () => {
   assert.match(mode, /const sessionKey = mode\.sessionKey/);
   assert.match(mode, /bridge\.postMessage\(\{ action: "open", mode: mode\.id, sessionKey \}\)/);

@@ -3,7 +3,13 @@
  * 帧数据：laolao-metre-cat-frames.js，和 briefs/metre-mode-1113/ref/metre-cat.js 逐字节相同
  * （用户 11-14 看过预览点头的那一版，测试守着，不许改帧）。
  *
- * 位置：运行状态条最左边（代替碧琪表情），窄窗口的小圆点里也是它。别处不放。
+ * 位置：11-16 起坐在输入框右上沿（像 Claude 桌面版输入框上的小螃蟹），脚下的阴影压在边框上；
+ *       状态条里只留记忆芯片。窄窗口的小圆点里的那只照旧隐藏。
+ * 空闲小动作（11-16 用户：「不像 Claude 的小螃蟹一样活跃」）：不改帧，只拿现有状态的帧组合——
+ *   张望（读取帧）、抬眼甩尾（思考帧）、动耳朵（搜索帧）、开小花（完成帧）、沿输入框上沿走一段再坐下（执行帧 + 位移，往右走时水平翻转）。
+ *   每 3～8 秒一个；「减少动效」时一个都不做。
+ * 11-16 夜（用户：「猫的像素也同步优化一些活跃一些」）：多了几段自己的帧（帧数据里的 ACTS）——跟着 ♩=72 点头、舔爪子、甩尾巴；
+ *   间隔缩到 2～5 秒；Metre 背景被点了一下（pinkie:metre-tap）时，它竖起耳朵、睁大眼睛往上看。
  * 状态：听 laolao-run-status 的 pinkie:run-view（这一刻在干什么），换成 16 个状态之一。
  * 节奏：最高 8 帧每秒，一个计时器；页面不可见就停；「减少动效」只画每个状态的第一帧；
  * 空闲时眨一次眼后静止，隔 6～10 秒再眨；空闲超过 10 分钟睡觉。
@@ -83,6 +89,8 @@
   // ---------- 画面 ----------
   let canvases = [], chip = null, pop = null, timer = 0, tick = 0, state = 'idle', lastDrawn = '';
   let idleSince = Date.now(), blinkAt = null, nextBlink = 0, detail = {}, doneUntil = 0, lastDone = 0;
+  // 空闲小动作和坐的位置（perchX：相对输入框右上角的水平偏移，≤ 0）
+  let perch = null, idleAct = null, nextAct = Date.now() + 2500, perchX = 0, facing = 'left';
   let memory = {count: null, key: '', folder: '', name: '', byCategory: {}, known: 0}, memoryFor = '', memoryAt = 0;
 
   function makeCanvas(cls) {
@@ -107,25 +115,98 @@
       c.after(chip);
     }
     if (dot && !dot.querySelector('.pk-metre-cat')) dot.prepend(makeCanvas('pk-metre-cat pk-metre-cat--dot'));
+    mountPerch();
     canvases = [...document.querySelectorAll('.pk-metre-cat')];
     chip = body.querySelector('.pk-metre-mem');
     return true;
   }
 
+  // 输入框右上沿的那只（Lit 重画输入框时可能被带走，每次挂载 / 每拍都检查）
+  function mountPerch() {
+    const host = document.querySelector('.agent-chat__composer-combobox');
+    if (!host || !isMetre()) return;
+    if (perch && perch.isConnected && perch.parentElement === host) return;
+    if (!perch) {
+      perch = document.createElement('span');
+      perch.className = 'pk-metre-perch';
+      perch.setAttribute('aria-hidden', 'true');
+      perch.append(makeCanvas('pk-metre-cat pk-metre-cat--perch'));
+    }
+    perch.style.transition = 'none';
+    perch.style.transform = perchX ? `translateX(${perchX}px)` : '';
+    host.append(perch);
+    lastDrawn = '';
+  }
+
+  // ---------- 空闲小动作 ----------
+  // 每个动作：用哪个状态的帧、按什么 fps、放几遍；stroll 另带位移。
+  const ACTS = [
+    {name: 'look', from: 'read', cycles: 2, weight: 3},
+    {name: 'glance', from: 'think', cycles: 1, weight: 2},
+    {name: 'ears', from: 'search', cycles: 2, weight: 2},
+    {name: 'stroll', from: 'exec', weight: 2},
+    {name: 'flower', from: 'done', cycles: 1, weight: 1},
+    {name: 'nod', own: true, cycles: 4, weight: 3},     // 一小节四拍：跟着 ♩=72 点头
+    {name: 'groom', own: true, cycles: 2, weight: 2},
+    {name: 'swish', own: true, cycles: 2, weight: 3},
+  ];
+  function pickAct() {
+    const total = ACTS.reduce((sum, act) => sum + act.weight, 0);
+    let roll = Math.random() * total;
+    for (const act of ACTS) { roll -= act.weight; if (roll < 0) return act; }
+    return ACTS[0];
+  }
+  function startAct(now, pick) {
+    const api = cat();
+    const act = pick || pickAct();
+    const def = act.own ? api?.ACTS?.[act.name] : api?.STATES[act.from];
+    nextAct = now + 2000 + Math.random() * 3000;
+    if (!def) return;
+    let len = Math.ceil(def.frames.length * (act.cycles || 1) * 8 / def.fps);
+    if (act.name === 'stroll') {
+      const host = perch?.parentElement;
+      if (!perch || !host) return;
+      const room = Math.max(0, Math.min(160, host.clientWidth * 0.35));
+      if (room < 24) return;
+      // 走开一段，或者走回原位；离原位越远越想回去
+      const target = perchX < -8 && Math.random() < 0.6 ? 0 : -Math.round(24 + Math.random() * (room - 24));
+      const dist = Math.abs(target - perchX);
+      if (dist < 12) return;
+      const ms = Math.round(dist * 26);
+      facing = target < perchX ? 'left' : 'right';
+      perch.style.transition = `transform ${ms}ms linear`;
+      perch.style.transform = target ? `translateX(${target}px)` : 'translateX(0)';
+      perchX = target;
+      len = Math.ceil(ms / TICK_MS);
+    }
+    idleAct = {name: act.name, def, start: tick, len};
+  }
+  function actFrame() {
+    if (!idleAct) return null;
+    const def = idleAct.def;
+    const step = Math.floor((tick - idleAct.start) * def.fps / 8);
+    return {index: step % def.frames.length, def};
+  }
+
   function paint(force = false) {
     const api = cat();
     if (!api || !canvases.length) return;
-    const def = api.STATES[state] || api.STATES.idle;
-    const index = frameIndex(state, def, tick, reduced(), blinkAt);
-    const sig = `${state}:${index}:${dark() ? 1 : 0}`;
+    let def = api.STATES[state] || api.STATES.idle;
+    let index = frameIndex(state, def, tick, reduced(), blinkAt);
+    const act = state === 'idle' && !reduced() ? actFrame() : null;
+    if (act) { def = act.def; index = act.index; }
+    const flip = facing === 'right' ? 1 : 0;
+    const sig = `${state}:${act ? idleAct.name : ''}:${index}:${dark() ? 1 : 0}:${flip}`;
     if (!force && sig === lastDrawn) return;
     lastDrawn = sig;
+    const label = (api.STATES[state] || api.STATES.idle).label;
     for (const c of canvases) {
       const ctx = c.getContext('2d');
       ctx.clearRect(0, 0, c.width, c.height);
       api.draw(ctx, def.frames[index], SCALE, {dark: dark()});
       c.dataset.state = state;
-      c.title = def.label;
+      c.dataset.facing = flip ? 'right' : 'left';
+      c.title = label;
     }
   }
 
@@ -145,17 +226,29 @@
     let next = stateFor(detail, now, idleSince);
     if (next === 'done') lastDone = lastDone || now;
     if (doneUntil > now && next === 'idle') next = 'done';
+    if (next !== 'idle') idleAct = null;
     setState(next);
+    if (!perch || !perch.isConnected) { mountPerch(); canvases = [...document.querySelectorAll('.pk-metre-cat')]; }
     tick += 1;
     if (state === 'idle') {
       const def = cat()?.STATES.idle;
       if (blinkAt != null && def && tick - blinkAt >= def.frames.length * 8 / def.fps) blinkAt = null;
-      if (blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + 6000 + Math.random() * 4000; }
+      if (idleAct && tick - idleAct.start >= idleAct.len) idleAct = null;
+      if (!reduced() && !idleAct && blinkAt == null && now >= nextAct) startAct(now);
+      if (!idleAct && blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + 6000 + Math.random() * 4000; }
     }
     paint();
-    // 只有在动的时候才排下一拍；静止帧（空闲没眨眼、睡觉的慢帧也按它自己的 fps）不空转。
-    const moving = !reduced() && (state !== 'idle' || blinkAt != null);
-    timer = setTimeout(loop, moving ? TICK_MS : Math.max(250, Math.min(1000, nextBlink - now)));
+    // 只有在动的时候才排下一拍；静止帧（空闲没眨眼、没做小动作、睡觉的慢帧也按它自己的 fps）不空转。
+    const moving = !reduced() && (state !== 'idle' || blinkAt != null || idleAct != null);
+    const wake = Math.min(nextBlink, reduced() ? Infinity : nextAct);
+    timer = setTimeout(loop, moving ? TICK_MS : Math.max(250, Math.min(1000, wake - now)));
+  }
+  // 背景被点了一下：竖耳朵、睁大眼往上看（在走路就不打断）
+  function onTap() {
+    if (state !== 'idle' || reduced() || (idleAct && idleAct.name === 'stroll')) return;
+    blinkAt = null;
+    startAct(Date.now(), {name: 'perk', own: true, cycles: 1});
+    halt(); kick();
   }
   function kick() { if (!timer && !document.hidden) timer = setTimeout(loop, 0); }
   function halt() { clearTimeout(timer); timer = 0; }
@@ -257,6 +350,7 @@
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) halt(); else { lastDrawn = ''; kick(); } });
   window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; kick(); });
+  window.addEventListener('pinkie:metre-tap', onTap);
   window.addEventListener('laolao:modechange', () => { if (!isMetre()) { halt(); if (pop) pop.hidden = true; } else { lastDrawn = ''; kick(); } });
   // 每分钟兜底读一次条数（别处改了记忆，例如看板）。
   setInterval(() => { if (isMetre() && memoryFor && !document.hidden && Date.now() - memoryAt > 55_000) void refreshMemory(memoryFor); }, 60_000);

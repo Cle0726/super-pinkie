@@ -1579,7 +1579,9 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) openclaw-tooltip { 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is([role="tooltip"], .tooltip, .laolao-tooltip) { background: var(--metre-text) !important; background-image: none !important; color: var(--metre-bg) !important; border: 0 !important; border-radius: 6px !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; font: 400 12px/1.4 var(--metre-sans) !important; }
 
 /* ---------- 选中色、焦点环、滚动条 ---------- */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::selection { background: var(--metre-cobalt-soft) !important; color: inherit !important; }
+/* ::selection 的 inherit 在 WebKit/Chromium 里拿到的是主题里碧琪的深梅色 #3F1D30（深色底上几乎看不见），所以写死正文色；
+ * 底色 14% 的钴蓝在深色底上太淡，提到 34%。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::selection { background: color-mix(in srgb, var(--metre-cobalt) 34%, transparent) !important; color: var(--metre-text) !important; -webkit-text-fill-color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(button, a, summary, [role="button"], [tabindex]):focus-visible { outline: 2px solid var(--metre-cobalt) !important; outline-offset: 2px !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) * { scrollbar-color: var(--metre-line-strong) transparent; }
 
@@ -1695,3 +1697,622 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__arrow { margin: 0 0 0 -4px !important; color: #8496E6 !important; opacity: 1 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status { left: 127px !important; top: 6px !important; width: 10px !important; height: 10px !important; border-radius: 0 !important; background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status__dot { width: 6px !important; height: 6px !important; border-radius: 0 !important; outline: 2px solid var(--metre-side) !important; }
+
+/* ====================================================================================================
+ * 真机回归修复（11-16）：展开/收起侧栏、思考记录、弹层和提问卡必须同属 Metre。
+ * 这一段只使用原生 class / data attribute，不改变 Lit 管理的 DOM 和点击行为。
+ * ==================================================================================================== */
+
+/* ---------- 侧栏交互图标：同一套 18px 线性图标，去掉玻璃、蝴蝶结和粉色 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__collapse, .sidebar-collapse, .pinkie-temp-entry, .sidebar-temp-toggle, .sidebar-settings, .sidebar-brand__icon) {
+  --metre-glyph: none;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--metre-muted) !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__collapse, .sidebar-collapse, .pinkie-temp-entry, .sidebar-temp-toggle, .sidebar-settings, .sidebar-brand__icon)::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--metre-glyph) center / contain no-repeat;
+  mask: var(--metre-glyph) center / contain no-repeat;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__collapse, .sidebar-collapse, .pinkie-temp-entry, .sidebar-temp-toggle, .sidebar-settings, .sidebar-brand__icon) > svg { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__collapse, .sidebar-collapse, .pinkie-temp-entry, .sidebar-temp-toggle, .sidebar-settings, .sidebar-brand__icon):is(:hover, :focus-visible) {
+  background: var(--metre-hover) !important;
+  border-color: var(--metre-line) !important;
+  color: var(--metre-text) !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__icon, .sidebar-temp-toggle) { --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22 stroke-linecap=%22square%22%3E%3Cpath d=%22M12 5v14M5 12h14%22/%3E%3C/svg%3E"); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-brand__collapse, .sidebar-collapse) { --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22 stroke-linecap=%22square%22 stroke-linejoin=%22miter%22%3E%3Crect x=%223%22 y=%224%22 width=%2218%22 height=%2216%22/%3E%3Cpath d=%22M9 4v16M14 9l-3 3 3 3%22/%3E%3C/svg%3E"); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed :is(.sidebar-brand__collapse, .sidebar-collapse) { --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22 stroke-linecap=%22square%22 stroke-linejoin=%22miter%22%3E%3Crect x=%223%22 y=%224%22 width=%2218%22 height=%2216%22/%3E%3Cpath d=%22M9 4v16M11 9l3 3-3 3%22/%3E%3C/svg%3E"); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.sidebar-settings, .sidebar-footer-icon) { color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-settings { --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22%3E%3Ccircle cx=%2212%22 cy=%2212%22 r=%223%22/%3E%3Cpath d=%22M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1%22/%3E%3C/svg%3E"); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand { min-height: 48px !important; padding: 7px 8px !important; gap: 8px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__title { color: var(--metre-text) !important; font: 500 17px/1 var(--metre-serif) !important; letter-spacing: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions > openclaw-tooltip {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions > openclaw-tooltip::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions > openclaw-tooltip::after {
+  content: none !important;
+  display: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions button {
+  all: unset !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  color: var(--metre-muted) !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: pointer !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions button:is(:hover, :focus-visible) { background: var(--metre-hover) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions { margin-left: auto !important; display: flex !important; align-items: center !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-brand {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 6px 2px !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed :is(.sidebar-brand__collapse, .sidebar-brand__icon, .sidebar-collapse, .pinkie-temp-entry, .sidebar-temp-toggle) {
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+  width: 28px !important;
+  height: 32px !important;
+  min-width: 28px !important;
+  margin: 0 !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-brand__actions { margin: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-temp-toggle,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .pinkie-temp-entry { display: flex !important; margin: 4px auto 2px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-temp-entry { font-size: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-shell__footer .sidebar-brand__icon::before { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-shell__footer .sidebar-brand__icon > svg { display: block !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-footer-icon { background: transparent !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-footer-icon svg { stroke: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .laolao-mode-switcher.laolao-mode-button--plain {
+  left: 10px !important;
+  bottom: 76px !important;
+  width: 42px !important;
+  height: 38px !important;
+  padding: 7px !important;
+  border: 1px solid #000 !important;
+  border-radius: 2px !important;
+  background: #131312 var(--metre-mode-mark) center / 26px 22px no-repeat !important;
+  box-shadow: 2px 2px 0 var(--metre-cobalt) !important;
+  transform: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .laolao-mode-switcher.laolao-mode-button--plain:is(:hover, :focus-visible, :active, [aria-expanded="true"]) { transform: none !important; box-shadow: 2px 2px 0 #8496E6 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .laolao-mode-switcher.laolao-mode-button--plain::before {
+  display: block !important;
+  content: "" !important;
+  width: 26px !important;
+  height: 22px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #F2F0EA !important;
+  -webkit-mask: var(--metre-mode-mark) center / contain no-repeat !important;
+  mask: var(--metre-mode-mark) center / contain no-repeat !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .laolao-mode-switcher.laolao-mode-button--plain > :is(img, .laolao-mode-button__label, .laolao-mode-button__arrow) { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .pinkie-connection-status { left: 42px !important; top: 5px !important; width: 8px !important; height: 8px !important; border-radius: 0 !important; background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .pinkie-connection-status__dot { width: 5px !important; height: 5px !important; border-radius: 0 !important; outline: 1px solid var(--metre-side) !important; }
+
+/* ---------- 运行状态：圆点不再放黑猫；正文为输入区和状态条留下真实空间 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) #pk-run :is(.pk-run__dot, .pk-metre-cat--dot) { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) #pk-run .pk-run__body {
+  max-width: min(100%, 720px) !important;
+  background: var(--metre-surface) !important;
+  border: 1px solid var(--metre-line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  color: var(--metre-muted) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not([data-laolao-startup-home="1"]) .chat-thread {
+  padding-bottom: var(--metre-run-space, 190px) !important;
+  scroll-padding-bottom: var(--metre-run-space, 190px) !important;
+}
+
+/* ---------- 思考记录：墨色正文 + 中性标签 + 钴蓝当前状态，不沿用粉色 shimmer ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-thinking, .chat-group--activity) {
+  --pt-label: var(--metre-muted) !important;
+  --pt-text: var(--metre-text) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-thinking__head, .chat-group--activity .chat-group__avatar) { color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__head:is(:hover, :focus-visible) { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-thinking__label, .pinkie-thinking__chev, .chat-group--activity .chat-group__avatar .laolao-activity-summary) {
+  color: var(--metre-muted) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-shadow: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-thinking__label.is-live, .chat-group--activity .chat-group__avatar .laolao-activity-summary.is-live) { color: var(--metre-cobalt) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__label::before {
+  background: var(--metre-cobalt) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__body {
+  background: transparent !important;
+  color: var(--metre-text) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__text {
+  color: var(--metre-text) !important;
+  opacity: 0.82;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-shadow: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__text.is-live { color: var(--metre-text) !important; opacity: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__typing i { background: var(--metre-cobalt) !important; box-shadow: none !important; }
+
+/* ---------- 工具箱 / 模型 / 思考强度：统一的谱纸表面、线性图标和滚动边界 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-tray, .chat-controls__inline-select-menu--combined[data-pinkie-picker-surface]) {
+  --pt-text: var(--metre-text) !important;
+  --pt-line: var(--metre-line) !important;
+  --model-surface: var(--metre-surface) !important;
+  --model-ink: var(--metre-text) !important;
+  --model-muted: var(--metre-muted) !important;
+  --model-faint: var(--metre-muted) !important;
+  --model-line: var(--metre-line) !important;
+  --model-focus: var(--metre-cobalt) !important;
+  --model-gold: var(--metre-cobalt) !important;
+  box-sizing: border-box !important;
+  max-width: calc(100vw - 24px) !important;
+  background: var(--metre-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 12px 32px rgba(27, 26, 24, 0.12) !important;
+  color: var(--metre-text) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  font-family: var(--metre-sans) !important;
+  overscroll-behavior: contain !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-controls__model[data-pinkie-popup-bounded] [data-pinkie-picker-surface] { max-height: var(--pinkie-popup-max-height) !important; overflow: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-tray__title, .pinkie-tray__hint, .pinkie-model-filter, .pinkie-model-group-title, .pinkie-model-empty) { color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-tray__item, .pinkie-tray__more) { color: var(--metre-text) !important; border-radius: 5px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-tray__item, .pinkie-tray__more):is(:hover, :focus-visible) { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-tray__icon { color: var(--metre-muted) !important; background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-tray__switch { background: var(--metre-line-strong) !important; border: 0 !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [aria-checked="true"] .pinkie-tray__switch { background: var(--metre-cobalt) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-tray__switch::after { background: #fff !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [data-pinkie-picker-surface] :is(.chat-controls__model-option, [data-chat-model-option], .pinkie-effort-tier) {
+  background: transparent !important;
+  background-image: none !important;
+  border-color: var(--metre-line) !important;
+  border-radius: 5px !important;
+  color: var(--metre-text) !important;
+  box-shadow: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [data-pinkie-picker-surface] :is(.chat-controls__model-option, [data-chat-model-option], .pinkie-effort-tier):hover { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [data-pinkie-picker-surface] :is(.chat-controls__model-option, [data-chat-model-option], .pinkie-effort-tier):is([aria-selected="true"], .is-selected, [data-selected="true"]) { background: var(--metre-cobalt-soft) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [data-pinkie-picker-surface] :is(svg, .pinkie-model-name, .pinkie-model-meta, .pinkie-effort-name, .pinkie-effort-description) { color: inherit !important; fill: none !important; }
+
+/* ---------- ask_user：无人格头像、无粉色玻璃；问题、选项和补充输入共用同一宽度 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask {
+  box-sizing: border-box !important;
+  max-width: calc(100vw - 24px) !important;
+  padding: 16px !important;
+  border: 1px solid var(--metre-line-strong) !important;
+  border-radius: 8px !important;
+  background: var(--metre-surface) !important;
+  background-image: none !important;
+  box-shadow: 0 12px 32px rgba(27, 26, 24, 0.12) !important;
+  color: var(--metre-text) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  font-family: var(--metre-sans) !important;
+  animation: none !important;
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask :is(.laolao-ask__who, .laolao-ask__question) { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__who { font: 500 13px/1.4 var(--metre-sans) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__question { margin: 12px 0 !important; font-size: 15px !important; font-weight: 500 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.laolao-ask__chip, .laolao-ask__later, .laolao-ask__hint) { background: transparent !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__chip { border: 1px solid var(--metre-line) !important; border-radius: 4px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__option {
+  background: transparent !important;
+  border: 1px solid var(--metre-line) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  color: var(--metre-text) !important;
+  transform: none !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__option:is(:hover, :focus-visible) { background: var(--metre-hover) !important; border-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__option.is-picked { background: var(--metre-cobalt-soft) !important; border-color: var(--metre-cobalt) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__key { background: var(--metre-hover) !important; color: var(--metre-muted) !important; border-radius: 4px !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.laolao-ask__text strong, .laolao-ask__text small) { color: inherit !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__text small { color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__other-input { background: var(--metre-bg) !important; border: 1px solid var(--metre-line-strong) !important; border-radius: 6px !important; box-shadow: none !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.laolao-ask__other-send, .laolao-ask__confirm) { background: var(--metre-text) !important; border: 1px solid var(--metre-text) !important; border-radius: 6px !important; color: var(--metre-bg) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.laolao-ask__other-send, .laolao-ask__confirm):disabled { background: var(--metre-hover) !important; border-color: var(--metre-line) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-buddy-ask { display: none !important; }
+
+/* ---------- 窗口适配：输入区可缩、控件可换行、弹层与提问卡不出屏 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.chat-main, .agent-chat, .agent-chat__composer, .agent-chat__composer-shell, .chat-controls) { min-width: 0 !important; max-width: 100% !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .agent-chat__input textarea { min-width: 0 !important; max-height: min(30vh, 260px) !important; overflow-y: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .agent-chat__input .chat-controls :is(.chat-controls__left, .chat-controls__right) { min-width: 0 !important; flex-wrap: wrap !important; }
+@media (max-width: 720px) {
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .agent-chat__input { width: calc(100% - 24px) !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask { padding: 12px !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__other { flex-wrap: wrap !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-ask__other-input { min-width: 0 !important; flex: 1 1 180px !important; }
+}
+@media (max-height: 640px) {
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-metre-cat--full { width: 36px !important; height: 32px !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .agent-chat__input textarea { max-height: 24vh !important; }
+}
+
+/* Metre has no legacy Pinkie brand tile at the sidebar head. */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__logo,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-native-brand { display: none !important; }
+/* The search button shares .sidebar-brand__icon; keep its native magnifier. */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions .sidebar-brand__icon:not([aria-expanded])::before { content: none !important; display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__actions .sidebar-brand__icon:not([aria-expanded]) > svg { display: block !important; }
+
+/* ====================================================================================================
+ * 真机核对（11-16 下午）：以下三处都是在真实 App 的 DOM 里定位后改的。
+ * 1. 左上角玻璃圆钮 = 原生壳才生成的分屏入口 .laolao-mode-dock-trigger（浏览器里没有 webkit 桥，所以看不到）。
+ *    保留功能，换成 Metre 的扁平线性按钮，挪到侧栏顶行右端，不再压住搜索按钮。
+ * 2. “+” = 折叠侧边栏按钮 [data-pinkie-sidebar-toggle]，它和搜索共用 .sidebar-brand__icon，被套上了加号；改回侧栏图标。
+ * 3. 灰方块 = 临时会话 .pinkie-temp-entry：通用规则把 --metre-glyph 设成 none，mask 失效后整块填色；改回虚线圆。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-temp-entry { --metre-glyph: var(--metre-ic-temp); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__icon[data-pinkie-sidebar-toggle] {
+  --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22 stroke-linecap=%22square%22 stroke-linejoin=%22miter%22%3E%3Crect x=%223%22 y=%224%22 width=%2218%22 height=%2216%22/%3E%3Cpath d=%22M9 4v16M14 9l-3 3 3 3%22/%3E%3C/svg%3E");
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3)[data-pinkie-sidebar-peek="1"] aside.sidebar .sidebar-brand__icon[data-pinkie-sidebar-toggle],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar.sidebar--collapsed .sidebar-brand__icon[data-pinkie-sidebar-toggle] {
+  --metre-glyph: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22black%22 stroke-width=%221.7%22 stroke-linecap=%22square%22 stroke-linejoin=%22miter%22%3E%3Crect x=%223%22 y=%224%22 width=%2218%22 height=%2216%22/%3E%3Cpath d=%22M9 4v16M11 9l3 3-3 3%22/%3E%3C/svg%3E");
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__icon[data-pinkie-sidebar-toggle]::before {
+  content: "" !important;
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  flex: none !important;
+  background: currentColor !important;
+  -webkit-mask: var(--metre-glyph) center / contain no-repeat !important;
+  mask: var(--metre-glyph) center / contain no-repeat !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sidebar-brand__icon[data-pinkie-sidebar-toggle] > svg { display: none !important; }
+
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .laolao-mode-dock-trigger {
+  all: unset !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 32px !important;
+  height: 32px !important;
+  flex: none !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  color: var(--metre-muted) !important;
+  cursor: pointer !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-dock-trigger {
+  position: absolute !important;
+  top: 22px !important;
+  right: 20px !important;
+  left: auto !important;
+  z-index: 6 !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .laolao-mode-dock-trigger svg {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 1.6 !important;
+  filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .laolao-mode-dock-trigger:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  background: var(--metre-hover) !important;
+  border-color: var(--metre-line) !important;
+  color: var(--metre-text) !important;
+  outline: none !important;
+}
+/* 收起后悬停呼出的侧栏卡片要盖过运行条（运行条在 body 上 z=58，比 app 层高）。 */
+/* 窄窗下侧栏是覆盖抽屉（.shell--nav-drawer-open），同理。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3)[data-pinkie-sidebar-peek="1"] .pk-run,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):has(.shell--nav-drawer-open) .pk-run { z-index: 0 !important; }
+
+/* 思考记录 / 工具步骤（真机核对）：展开正文左边线和步骤圆点仍用碧琪的粉（--tr-exec #ff8fbf、rgba(233,79,145,.22)）。
+ * 只在 Metre 下把步骤调色板换成中性色 + 钴蓝；不改 laolao-tool-rows.css 本身。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-process {
+  --tr-read: var(--metre-cobalt) !important;
+  --tr-write: var(--metre-text) !important;
+  --tr-edit: var(--metre-text) !important;
+  --tr-exec: var(--metre-muted) !important;
+  --tr-fg: var(--metre-text) !important;
+  --tr-mute: var(--metre-muted) !important;
+  --tr-hover: var(--metre-hover) !important;
+  --tr-rail: var(--metre-line) !important;
+  --tr-out: transparent !important;
+  --tr-out-line: var(--metre-line) !important;
+  --tr-cmd: var(--metre-muted) !important;
+  --tr-dot-ring: transparent !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-thinking__body { border-left-color: var(--metre-line-strong) !important; }
+
+/* 思考强度滑条（真机核对）：仍是碧琪的紫粉渐变槽、星光填充、流光字和发光圆钮。
+ * Metre：细线槽、实心钴蓝填充、方形滑块、静止的正文色档位名；不动 model-picker 的逻辑和尺寸。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-slider::after {
+  height: 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--metre-line-strong) !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-slider::before {
+  height: 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  opacity: 1 !important;
+  background: var(--metre-cobalt) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-thumb {
+  width: 12px !important;
+  height: 16px !important;
+  margin-top: -1px !important;
+  border: 1px solid var(--metre-bg) !important;
+  border-radius: 1px !important;
+  background: var(--metre-cobalt) !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop { border-radius: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-covered="1"] { background: var(--metre-cobalt) !important; border-color: var(--metre-cobalt) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) :is(.chat-controls__model, .pinkie-effort-trigger) :is(.pinkie-external-tier, .pinkie-reasoning-current) {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  color: var(--metre-text) !important;
+  filter: none !important;
+  text-shadow: none !important;
+  animation: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model [data-pinkie-picker-surface] {
+  background: var(--metre-surface) !important;
+  background-image: none !important;
+  border: 1px solid var(--metre-line) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18) !important;
+}
+
+/* 发送时 laolao-companion.js 会在 body 上建一块全屏特效画布 canvas.pinkie-burst（2×设备像素，2560×1600）。
+ * Metre 停用了 laolao-companion.css，画布失去 position: fixed，变成普通行内元素把整页撑成两倍宽、可横向滚走。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) canvas.pinkie-burst { position: fixed !important; inset: 0 !important; width: 0 !important; height: 0 !important; display: none !important; }
+
+/* 发送 / 语音按钮（真机核对，11-16 用户：「这个不是碧琪的样式？」）：碧琪主题里语音键那条规则权重更高，
+ * 仍画成淡紫圆 + 外发光。Metre：8px 圆角方块、实心钴蓝、无光晕、无动效；停止键是墨色方块。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn.chat-send-btn--voice {
+  border-radius: 8px !important;
+  border: 0 !important;
+  background: var(--metre-cobalt) !important;
+  background-image: none !important;
+  color: #FFFFFF !important;
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+  transform: none !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::after { box-shadow: none !important; background: none !important; animation: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--metre-cobalt) 86%, var(--metre-text)) !important; outline: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn.chat-send-btn--stop { background: var(--metre-text) !important; color: var(--metre-bg) !important; }
+
+/* ---------- 真机回归 2（11-16 用户截图：「排版问题，重复问题」）----------
+ * 1. 黑卡右上角的方灯掉在卡外、压着钴蓝投影：卡宽随字体浮动，灯却是写死的坐标。卡定宽 128px，灯收进卡里右上角，去掉奶白描边。
+ *    不能再宽：原生壳会在底栏最前面插一个「全屏」按钮（Launcher.swift ensureFullScreenButton，浏览器里没有），从 x≈155 开始，
+ *    140px 的卡和灯会压上去。卡在 aside 坐标系（left 16 → x16..144，top = 底栏 +13）；灯在底栏坐标系（底栏 x12），left = 144 - 12 - 4 - 10 = 118。
+ * 2. 临时会话（虚线圆）本该和搜索、收起在顶上同一行：展开态的 .sidebar-brand 本来是 0 高（上面 916 行），
+ *    后来通用的 min-height: 48px 把它撑高，会话区（overflow: hidden）整体下移 48px，按钮掉到第二行。展开态恢复 0 高，
+ *    按钮放在收起键右边（会话区 x12 起，left 80 → x92），右端留给原生壳的分屏按钮。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { width: 128px !important; justify-content: flex-start !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status { left: 118px !important; top: 16px !important; z-index: 3 !important; pointer-events: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status__dot { outline: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand { min-height: 0 !important; height: 0 !important; padding: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-temp-entry { top: 0 !important; left: 80px !important; right: auto !important; }
+/* 3. 对话页照 Claude 的单列排法（11-16 用户：「这个是 Claude 的排版，调整成这样」）：
+ *    回复正文、过程行左边对齐，铺满整列；用户气泡右边贴列的右边；这一列左右各比输入框缩进 6px。
+ *    原来回复只占 68%（约 510px），过程卡还多缩进了 46px 头像位，用户气泡和正文、输入框都对不上。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-thread-inner > .chat-group,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-thread .chat-group { margin-left: 6px !important; margin-right: 6px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-thread .chat-group.chat-group--process { padding-left: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-thread .chat-group.assistant > .chat-group-messages { max-width: 100% !important; width: 100% !important; }
+/* 4. 运行条不画框（11-16 用户：「这个黑框不是删了吗」）：169 行起的 .pk-run__body 有底色 + 1px 内描边（1854 行那段写的是 #pk-run，元素没有这个 id，从没生效），
+ *    运行中就成了一个黑框。照 Claude：只留和页面同色的底（滚动时正文不从字后面透出来），不要描边、圆角、阴影。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run .pk-run__body,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run[data-tone] .pk-run__body {
+  background: var(--metre-bg) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+/* 5. 运行条不再重复状态（11-16 用户：「这种重复显示有必要吗」）：「思考中 · 已用 N 秒」和回复里过程卡的状态、用时是同一件事，
+ *    「停下」和输入框里的原生停止键是同一个键。照 Claude 只在回复里显示一处：正常运行 / 完成 / 等你确认时只留 ◆ 芯片，
+ *    和空闲时一样；变慢、警告、中断、已停下这些别处看不到的情况仍然显示文字。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) .pk-run__body {
+  width: max-content !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) :is(.pk-run__text, .pk-run__meta, .pk-run__actions) { display: none !important; }
+/* 6. 输入框下面原生的「Metre is responding… / Done」也是同一个状态的第三处显示（用户：「也是重复显示」），Metre 里不显示；
+ *    「Interrupted」留着。窄窗时它被包在 .agent-chat__composer-progress 里，一起收掉。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.agent-chat__run-status--in-progress, .agent-chat__run-status--done),
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.agent-chat__composer-progress--in-progress, .agent-chat__composer-progress--done) { display: none !important; }
+
+/* ==================================================================================================
+ * 真机第三轮（11-16 夜，用户截图）：「页面 UI 有一些还是用的碧琪的素材没有改干净，思考滑块太过简陋，Metre 模式下老是有按键涂层不对」
+ * ================================================================================================== */
+
+/* 1. 确认框（删除会话等，laolao-sidebar.js 的 showModal）：原来是粉色玻璃、胶囊粉按钮。Metre：素白卡片、衬线标题、直角按钮，删除用 Metre 的砖红。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal-mask { background: rgba(12, 12, 11, 0.42) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal {
+  width: min(380px, calc(100vw - 48px)) !important; padding: 22px 22px 18px !important; border-radius: 10px !important;
+  border: 1px solid var(--metre-line) !important; background: var(--metre-surface) !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28) !important; color: var(--metre-text) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal::before { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__title { margin: 0 0 10px !important; font: 500 17px/1.3 var(--metre-serif) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__body { margin: 0 0 20px !important; font: 400 13.5px/1.75 var(--metre-sans) !important; color: var(--metre-muted) !important; opacity: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__error { color: var(--metre-danger) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__buttons { gap: 8px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__btn {
+  padding: 7px 14px !important; border-radius: 6px !important; border: 1px solid var(--metre-line-strong) !important;
+  background: transparent !important; color: var(--metre-text) !important; box-shadow: none !important; transform: none !important;
+  font: 500 13px/1.2 var(--metre-sans) !important; transition: background-color 0.12s ease, border-color 0.12s ease !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__btn:hover { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__btn--danger,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__btn--danger:hover { background: var(--metre-danger) !important; border-color: var(--metre-danger) !important; color: #FFFFFF !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-modal__btn--danger:hover { filter: brightness(1.08) !important; }
+
+/* 2. 轻提示（切 Baton / Virtuoso、复制成功……，window.__laolaoToast）：原来是粉色玻璃胶囊。Metre：素色小条，前面一盏钴蓝方灯。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-toast {
+  display: inline-flex !important; align-items: center !important; gap: 9px !important;
+  padding: 8px 14px 8px 12px !important; border-radius: 6px !important; border: 1px solid var(--metre-line) !important;
+  background: var(--metre-surface) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22) !important; color: var(--metre-text) !important; font: 500 13px/1.4 var(--metre-sans) !important;
+  white-space: pre-line !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .laolao-toast::before { content: "" !important; flex: none !important; width: 6px !important; height: 6px !important; background: var(--metre-cobalt) !important; }
+
+/* 3. 侧栏提示（只在字被截断、或只有图标时才弹）：原来是深粉 / 夜里浅粉。Metre：墨色小条。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pinkie-sidebar-tooltip { border-radius: 4px !important; background: var(--metre-text) !important; color: var(--metre-bg) !important; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18) !important; font: 400 12px/1.4 var(--metre-sans) !important; }
+
+/* 4. 模式黑卡：去掉钴蓝硬投影（真机上像一块错位的蓝色涂层垫在卡下面）。卡就是一张平的黑卡，悬停 / 展开时描边变钴蓝，不再上下跳。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .laolao-mode-switcher.laolao-mode-button--plain,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .laolao-mode-switcher.laolao-mode-button--plain:is(:hover, :focus-visible, :active, [aria-expanded="true"]) {
+  box-shadow: none !important; transform: none !important; transition: border-color 0.12s ease !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) aside.sidebar .laolao-mode-switcher.laolao-mode-button--plain:is(:hover, :focus-visible, [aria-expanded="true"]) { border-color: var(--metre-cobalt) !important; }
+
+/* 5. 思考强度 = 节拍器上的速度（laolao-metre-skin.js 写 data-metre-tempo / data-metre-meta）。
+ *    上一行：速度记号（衬线斜体）+ 一行小字「♩ = 88 · High」；下一行：一根标尺——每档一道刻度（原生支持的档长一点，
+ *    补出来的档短一点，走过的是墨色），钴蓝的杆，滑块是节拍器摆杆上的那块梯形摆锤。想得越多，拍子越慢。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-panel { grid-template-columns: minmax(0, 1fr) !important; row-gap: 4px !important; padding: 2px 0 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-current[data-metre-tempo] { display: flex !important; align-items: baseline !important; gap: 10px !important; padding: 0 13px !important; font-size: 0 !important; line-height: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-current[data-metre-tempo]::before { content: attr(data-metre-tempo); font: italic 400 19px/1.15 var(--metre-serif); color: var(--metre-text); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-current[data-metre-tempo]::after { content: attr(data-metre-meta); font: 500 10.5px/1 var(--metre-mono); letter-spacing: 0.06em; color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-slider { height: 30px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-slider::after { top: 19px !important; height: 1px !important; background: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-slider::before { top: 18px !important; height: 2px !important; background: var(--metre-cobalt) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range { position: relative !important; z-index: 3 !important; height: 30px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-runnable-track { height: 14px !important; border: 0 !important; background: transparent !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-thumb {
+  width: 14px !important; height: 14px !important; margin-top: 5px !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; filter: none !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' shape-rendering='crispEdges'%3E%3Cpath d='M4 0h6v2h1v3h1v4h1v5H1V9h1V5h1V2h1z' fill='%232F4BB0'/%3E%3Cpath d='M4 0h6v1H4z' fill='%238496E6'/%3E%3Cpath d='M6 3h2v8H6z' fill='%23FFFFFF'/%3E%3C/svg%3E") center / 14px 14px no-repeat !important;
+  cursor: grab !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):is([data-theme="dark"], [data-pinkie-night]) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-thumb {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' shape-rendering='crispEdges'%3E%3Cpath d='M4 0h6v2h1v3h1v4h1v5H1V9h1V5h1V2h1z' fill='%238496E6'/%3E%3Cpath d='M4 0h6v1H4z' fill='%23C9D2FF'/%3E%3Cpath d='M6 3h2v8H6z' fill='%232C2B28'/%3E%3C/svg%3E") !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stops { z-index: 1 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-covered="1"] {
+  top: 12px !important; width: 1px !important; height: 6px !important; border: 0 !important; border-radius: 0 !important; opacity: 1 !important;
+  background: var(--metre-line-strong) !important; box-shadow: none !important; transform: translateX(-50%) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-route="native"] { top: 9px !important; height: 9px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop[data-pinkie-covered="1"] { background: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-reasoning-stop::after { display: none !important; }
+/* 输入框下面那一格也写速度（和 Baton / Virtuoso 同一种衬线斜体） */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pinkie-effort-trigger .pinkie-external-tier[data-metre-tempo] { font-size: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pinkie-effort-trigger .pinkie-external-tier[data-metre-tempo]::before { content: attr(data-metre-tempo); font: italic 400 14px/1 var(--metre-serif); color: var(--metre-text); }
+/* 真机注入核对时补的三条：滑条那一列原来被 model-picker 排在第 2 列（档位名挤成「Anda」）；碧琪的主题给滑块套了菱形遮罩；
+ * 输入框下那一格的 ::before 被别的规则强制 content: none。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-panel > .pinkie-reasoning-current { grid-column: 1 / -1 !important; grid-row: 1 !important; width: auto !important; max-width: none !important; overflow: visible !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-panel > .chat-controls__reasoning-slider { grid-column: 1 / -1 !important; grid-row: 2 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range::-webkit-slider-thumb,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__reasoning-range:is(:focus-visible, :hover, :active)::-webkit-slider-thumb { -webkit-mask: none !important; mask: none !important; transform: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pinkie-effort-trigger .pinkie-external-tier[data-metre-tempo] { display: inline-block !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pinkie-effort-trigger .pinkie-external-tier[data-metre-tempo]::before { content: attr(data-metre-tempo) !important; display: inline !important; font: italic 400 14px/1 var(--metre-serif) !important; color: var(--metre-text) !important; }
+
+/* 6. 模型不挂 AI 品牌的标（11-16 夜，用户：「Metre 模式下不需要 AI 品牌的涂层，统一用设计一个 Metre 图标」）。
+ *    输入框下的模型键、模型列表每一行、当前模型：一律是 Metre 的像素 M（--metre-mode-mark，深浅主题各一张）；
+ *    品牌筛选那一排原来只有品牌标，改成写字（Gemini、OpenAI……），不再放标。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) :is(.chat-controls__model, .chat-composer-model-control) summary.chat-controls__inline-select-trigger::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model [data-pinkie-brand]:not(.pinkie-model-filter)::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__combined-model-option::before,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__provider-icon {
+  width: 13px !important; height: 11px !important; flex: none !important;
+  background: var(--metre-mode-mark) center / 13px 11px no-repeat !important;
+  -webkit-mask: none !important; mask: none !important; filter: none !important; box-shadow: none !important;
+  border: 0 !important; border-radius: 0 !important; opacity: 1 !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__provider-icon > * { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-model-filter::before { display: none !important; content: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-model-filter[data-pinkie-brand] {
+  width: auto !important; min-width: 0 !important; padding: 5px 9px !important; opacity: 1 !important;
+  font: 500 12px/1.2 var(--metre-sans) !important; letter-spacing: 0 !important; white-space: nowrap !important; color: var(--metre-muted) !important;
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .pinkie-model-filter[data-pinkie-brand]:is(:hover, [aria-pressed="true"]) { color: var(--metre-text) !important; }

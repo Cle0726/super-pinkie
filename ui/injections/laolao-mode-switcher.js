@@ -553,6 +553,17 @@
     const complete = async () => {
       if (completed) return;
       completed = true;
+      // Paint the destination while the cover is still opaque. Removing the
+      // cover first exposed the source mode for a frame in both directions.
+      // Metre and Pinkie share no portrait, so the portrait-swap FX would hold the
+      // source mode's button (“学习模式” + Pinkie, or the METRE card) in the sidebar
+      // while the cover lifts. Into or out of Metre, repaint the button under the
+      // cover instead; switches between Pinkie modes keep their swap.
+      const involvesMetre = mode.id === "metre" || pendingModePortraitFx?.from === "metre";
+      modeTransitionTargetId = null;
+      syncModePresentation(mode);
+      if (involvesMetre) { pendingModePortraitFx = null; render(); }
+      if (!motion.reduced()) await motion.frames();
       if (ui.fx) {
         try {
           await ui.fx.finish();

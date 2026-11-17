@@ -67,6 +67,7 @@
 .pinkie-process .chat-timeline-overflow { margin: 2px 0 4px; font-size: 12.5px; color: #a36b82; }
 
 /* thinking */
+.pinkie-thinking-fallback { order: 3; margin: 2px 0 8px; }
 .pinkie-thinking.is-entering { animation: pinkie-process-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 /* a soft caret while a thought is being typed out */
 .pinkie-thinking.is-typing .pinkie-thinking__text::after {

@@ -59,8 +59,8 @@
       <div class="pk-mb-cue"><small>页面骨架 · 等你确认</small><p>骨架搭好了，要先看一眼再往下做吗？</p><div class="pk-mb-cue__opts"><span data-primary>打开看看</span><span>直接继续</span></div></div>
     </div>`,
     timeline: () => `<ol class="pk-mb-events">${[
-      ['14:32', 'run', '派发', '「资料摘要」交给学习模式'], ['14:30', 'fail', '打回', '「命名方案」少了第三项'],
-      ['14:27', 'done', '汇报', '「页面骨架」已交回，等验收'], ['14:21', 'run', '派发', '三块同时开始'], ['14:20', 'wait', '读懂', '目标一项、要求四项'],
+      ['14:32', 'run', '分谱', '「资料摘要」交给学习模式'], ['14:30', 'fail', '打回', '「命名方案」少了第三项'],
+      ['14:27', 'done', '交回', '「页面骨架」已交回，等验收'], ['14:21', 'run', '分谱', '三个声部同时起拍'], ['14:20', 'wait', '读懂', '目标一项、要求四项'],
     ].map(([time, state, kind, text]) => `<li data-state="${state}"><time>${time}</time><i aria-hidden="true"></i><b>${kind}</b><span>${text}</span></li>`).join('')}</ol>`,
     changes: () => {
       const file = (name, add, del) => { const total = Math.max(add + del, 1), on = Math.round((add / total) * 5); return `<li><span>${esc(name)}</span><em class="add">+${add}</em><em class="del">−${del}</em><u aria-hidden="true">${[0, 1, 2, 3, 4].map((i) => `<i class="${i < on ? 'add' : 'del'}"></i>`).join('')}</u></li>`; };
@@ -127,20 +127,20 @@
   };
   const icon = (name) => `<svg class="pk-mb-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
   const SLOTS = [
-    {id: 'plan', en: 'Score', title: '计划', note: '这件事拆成的步骤，做到哪一步、哪一步卡住。', source: 'pinkie.metre.board → plan'},
-    {id: 'sessions', en: 'Parts', title: '子会话', wide: true, note: '一行一个：标题、模型、状态、用了多久、此刻在做什么、用量；可以打开、停止、发消息。', source: 'pinkie.metre.board → sessions'},
-    {id: 'pending', en: 'Cues', title: '待你处理', note: '等你回答的问题和等你点的确认。有内容时标题上出数字。', source: 'pinkie.metre.board → pending'},
-    {id: 'timeline', en: 'Bars', title: '时间线', note: '派发、汇报、打回、验收、出错、叫停，新的在上。', source: 'pinkie.metre.board → timeline'},
-    {id: 'changes', en: 'Revisions', title: '改动', note: '这一家子会话动过的文件，按会话分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
-    {id: 'runtime', en: 'Tempo', title: '运行环境', note: '网关连接、在用模型的健康状态、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
+    {id: 'plan', en: 'Programme', title: '节目单', note: '这件事拆成的几支曲子（步骤），奏到哪一支、哪一支卡住。', source: 'pinkie.metre.board → plan'},
+    {id: 'sessions', en: 'Parts', title: '声部', wide: true, note: '一个声部一行：谁在奏（模型）、奏到哪、奏了多久、用量；可以打开、停止、递一句话。', source: 'pinkie.metre.board → sessions'},
+    {id: 'pending', en: 'Cues', title: '等你', note: '等你回答的问题和等你点的确认。有内容时标题上出数字。', source: 'pinkie.metre.board → pending'},
+    {id: 'timeline', en: 'Bars', title: '小节', note: '分谱、交回、打回、验收、出错、收住，一小节一行，新的在上。', source: 'pinkie.metre.board → timeline'},
+    {id: 'changes', en: 'Revisions', title: '改谱', note: '各声部动过的文件，按声部分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
+    {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
     {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索。', source: 'pinkie.metre.memory（接口已有，面板没接）'},
-    {id: 'raw', en: 'Log', title: '原始记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
+    {id: 'raw', en: 'Log', title: '排练记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];
   const STATS = [
-    {id: 'state', label: '当前状态', hint: '派发中 · 等你 · 已停'},
-    {id: 'elapsed', label: '已用时间', hint: '从第一次派发算起'},
-    {id: 'running', label: '在跑 / 上限', hint: '同时在跑的子会话'},
-    {id: 'returned', label: '已交回 · 失败', hint: '验收过的和出错的'},
+    {id: 'state', label: '此刻', hint: '在奏 · 等你 · 已收'},
+    {id: 'elapsed', label: '奏了多久', hint: '从第一拍算起'},
+    {id: 'running', label: '在奏 / 上限', hint: '同时在奏的声部'},
+    {id: 'returned', label: '交回 · 出错', hint: '验收过的和出错的'},
   ];
 
   const h = (tag, cls, html) => { const node = document.createElement(tag); if (cls) node.className = cls; if (html != null) node.innerHTML = html; return node; };
@@ -158,22 +158,22 @@
     page = h('section', 'pk-metre-board');
     page.id = 'pk-metre-board';
     page.setAttribute('role', 'region');
-    page.setAttribute('aria-label', '总控台');
+    page.setAttribute('aria-label', '总谱');
     page.hidden = true;
     page.tabIndex = -1;
 
     const head = h('header', 'pk-metre-board__head');
     // 标题前是 Metre 的标志（laolao-metre-brand.js，先于本文件加载）；没有就退回拍号记号。
     const logo = window.__pinkieMetreBrand?.mark({title: ''}) || `<svg class="pk-metre-board__beat" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5"/></svg>`;
-    const title = h('div', 'pk-metre-board__title', `<h2><span class="pk-metre-board__beat">${logo}</span>总控台</h2><p>一次派发的全貌：计划、每个子会话、等你处理的事、改动和运行环境。</p>`);
+    const title = h('div', 'pk-metre-board__title', `<h2><span class="pk-metre-board__beat">${logo}</span>总谱</h2><p>一件事的全部声部：节目单奏到哪、谁在奏、等你的、改了哪些谱。</p>`);
     const actions = h('div', 'pk-metre-board__actions');
-    for (const [id, text] of [['pause', '暂停派发'], ['stop', '全部停下']]) {
+    for (const [id, text] of [['pause', '暂停分谱'], ['stop', '全体收住']]) {
       const btn = h('button', `pk-metre-board__btn pk-metre-board__btn--${id}`, text);
-      btn.type = 'button'; btn.disabled = true; btn.dataset.metreAction = id; btn.title = '待接入：接上派发接口后可用';
+      btn.type = 'button'; btn.disabled = true; btn.dataset.metreAction = id;
       actions.append(btn);
     }
     const close = h('button', 'pk-metre-board__close', `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg>`);
-    close.type = 'button'; close.title = '收起总控台'; close.setAttribute('aria-label', '关闭总控台');
+    close.type = 'button'; close.setAttribute('aria-label', '收起总谱');
     close.addEventListener('click', () => api.close());
     actions.append(close);
     head.append(title, actions);
@@ -207,7 +207,7 @@
     const grip = h('div', 'pk-metre-board__grip');
     grip.setAttribute('role', 'separator');
     grip.setAttribute('aria-orientation', 'vertical');
-    grip.setAttribute('aria-label', '拖动调整总控台宽度');
+    grip.setAttribute('aria-label', '拖动调整总谱宽度');
     grip.title = '拖动调整宽度，双击恢复默认';
     grip.addEventListener('pointerdown', (event) => {
       if (event.button !== 0 || !page.classList.contains('is-docked')) return;
@@ -329,7 +329,7 @@
         const fn = handlers[btn.dataset.metreAction];
         btn.disabled = typeof fn !== 'function';
         btn.onclick = btn.disabled ? null : () => fn(btn);
-        btn.title = btn.disabled ? '待接入：接上派发接口后可用' : '';
+        btn.removeAttribute('title');
       }
     },
   };
@@ -338,15 +338,15 @@
   function sidebarEntry() {
     const controls = document.querySelector('aside.sidebar .laolao-session-controls');
     if (!controls || controls.querySelector('.pk-metre-nav--board')) return;
-    const btn = h('button', 'pinkie-sidebar-entry pk-metre-nav pk-metre-nav--board', '<span>总控台</span>');
-    btn.type = 'button'; btn.title = '总控台：计划、子会话、时间线、改动、运行环境、项目记忆';
+    const btn = h('button', 'pinkie-sidebar-entry pk-metre-nav pk-metre-nav--board', '<span>总谱</span>');
+    btn.type = 'button';
     btn.addEventListener('click', () => api.toggle());
     controls.append(btn);
   }
   const HOME_CARDS = [
-    {slot: '', art: 'sessions', title: '总控台', text: '计划、子会话、时间线'},
+    {slot: '', art: 'sessions', title: '总谱', text: '节目单、声部、小节'},
     {slot: 'memory', art: 'memory', title: '项目记忆', text: '这个文件夹记住了什么'},
-    {slot: 'runtime', art: 'runtime', title: '运行环境', text: '连接、模型、用量'},
+    {slot: 'runtime', art: 'runtime', title: '调音', text: '连接、模型、用量'},
   ];
   function homeCards() {
     const recent = document.querySelector('.laolao-startup-home__recent');
@@ -357,8 +357,8 @@
     let row = parent.querySelector(':scope > .pk-metre-quick');
     if (!row) {
       row = h('div', 'pk-metre-quick');
-      const label = h('h3', 'pk-metre-quick__label', '<span>看板</span>');
-      const all = h('button', 'pk-metre-quick__all', '打开总控台');
+      const label = h('h3', 'pk-metre-quick__label', '<span>谱架</span>');
+      const all = h('button', 'pk-metre-quick__all', '打开总谱');
       all.type = 'button';
       all.addEventListener('click', () => api.open());
       label.append(all);

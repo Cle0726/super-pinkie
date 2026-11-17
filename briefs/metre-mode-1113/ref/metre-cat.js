@@ -1,15 +1,17 @@
 // Metre 的像素黑猫：帧数据和画法。预览页（cat-preview.html）和正式界面用的是同一份文件。
 // 原型是 C.le.控制台图标上的黑猫（ref/cle-cat.png）。用户点头之前不接进界面。
-// 画布 16×16。字符：. 透明  K 身体  E 眼睛  H 眼睛高光  S 蓝影子（也用作闭眼）  G 灰（小花、方块、? !）
+// 画布 16×16。字符：. 透明  K 身体  R 毛的冷光（耳朵里、鼻子、胸口和背上受光的那几格）  E 眼睛  H 眼睛高光  S 蓝影子（也用作闭眼）  G 灰（小花、方块、? !）
+// 11-16 夜（用户：「猫的像素也同步优化一些活跃一些」）：加了 R 一档，光和 Metre 背景同一个方向（左上来的冷光）；
+// 空闲小动作多了几段自己的帧（ACTS：跟着 ♩=72 点头、舔爪子、甩尾巴、听见背景被点了竖起耳朵）。
 (function (root) {
   'use strict';
 
   const SIZE = 16;
-  const PALETTE = {K: '#0E0E10', E: '#2F9BFF', H: '#9AD4FF', S: '#1F3FA8', G: '#8A8A88'};
+  const PALETTE = {K: '#0E0E10', R: '#363948', E: '#2F9BFF', H: '#9AD4FF', S: '#1F3FA8', G: '#8A8A88'};
   const OUTLINE = '#3A3A3C'; // 只在深色主题下画在身体外沿
 
   // ---- 姿势 ----
-  const SIT = [
+  const SIT0 = [
     '................',
     '....K.....K.....',
     '....KK...KK.....',
@@ -157,6 +159,19 @@
     return pose.map(row => row.split('').reverse().join(''));
   }
 
+  // 毛的冷光：耳朵里一格、鼻子一格；坐姿再加额头、胸口、背上受光的几格（光从左上来，和 Metre 背景一样）
+  const SIT = put(SIT0, '5,3,R 9,3,R 7,7,R 4,4,R 5,11,R 5,12,R 12,8,R 13,9,R');
+  const FRONT_D = put(FRONT, '4,3,R 9,3,R 3,5,R 3,11,R');
+  const LOAF_D = put(LOAF, '4,7,R 8,7,R 6,10,R 3,8,R 11,10,R 12,11,R');
+  const RUN_AD = put(RUN_A, '3,4,R 7,4,R 5,7,R 9,8,R 10,8,R');
+  const RUN_BD = put(RUN_B, '3,3,R 7,3,R 5,6,R 9,7,R 10,7,R');
+  const DOWN_D = put(DOWN, '2,10,R 5,10,R 10,11,R 11,11,R');
+  const CURL_D = put(CURL, '4,10,R 5,10,R 9,10,R');
+  // 把 y0..y1 这几行整体往下挪一格（点头用：头低下去，下巴压进脖子）
+  function nodDown(pose, y0, y1) {
+    return pose.map((row, y) => (y === y0 ? '.'.repeat(SIZE) : y > y0 && y <= y1 + 1 ? pose[y - 1] : row));
+  }
+
   // 眼睛（坐姿）：默认是两条平的细长眼，各两格，靠里的一格更亮
   const EYES_SHUT = '4,6,S 5,6,S 9,6,S 10,6,S';
   const EYES_UP = '4,6,K 5,6,K 9,6,K 10,6,K 4,5,E 5,5,H 9,5,H 10,5,E';
@@ -195,21 +210,34 @@
     read: {label: '读取', fps: 4, frames: [sit(EYES_LEFT), sit(), sit(EYES_RIGHT), sit()]},
     write: {label: '写入 / 修改', fps: 6, frames: [sitBare(PAGE + ' 4,12,K'), sitBare(PAGE + ' 4,13,K'), sitBare(PAGE + ' 4,12,K 7,13,K 6,13,.'), sitBare(PAGE + ' 4,13,K 7,13,K 6,13,.')]},
     create: {label: '创建', fps: 4, frames: [sitBare(), sitBare('1,13,G'), sitBare('1,13,G 1,12,G 0,13,G 0,12,G'), sitBare('0,11,G 1,11,G 2,11,G 0,12,G 2,12,G 0,13,G 1,13,G 2,13,G 1,12,H')]},
-    exec: {label: '执行命令', fps: 8, frames: [RUN_A, RUN_B, put(RUN_A, '2,13,. 3,13,. 2,14,. 3,14,K 6,14,. 7,14,K 14,13,. 14,14,. 13,14,K'), RUN_B]},
+    exec: {label: '执行命令', fps: 8, frames: [RUN_AD, RUN_BD, put(RUN_AD, '2,13,. 3,13,. 2,14,. 3,14,K 6,14,. 7,14,K 14,13,. 14,14,. 13,14,K'), RUN_BD]},
     search: {label: '搜索 / 看网页', fps: 4, frames: [slide(sit(), 1, 7, -1), put(sit(), '4,1,. 3,2,K 10,1,. 11,2,K'), slide(sit(), 1, 7, 1), put(sit(), '4,1,. 3,2,K 10,1,. 11,2,K')]},
     image: {label: '看图片', fps: 2, frames: [sit(), slide(slide(sit(), 1, 3, -1), 6, 8, 1)]},
-    dispatch: {label: '派发', fps: 4, frames: [pushFrame(12, false), pushFrame(12, true), pushFrame(13, true), pushFrame(14, false)]},
-    waiting: {label: '等子会话', fps: 2, frames: [put(LOAF, '15,10,K 15,11,K'), put(LOAF, '15,11,K 14,9,K')]},
+    dispatch: {label: '分谱', fps: 4, frames: [pushFrame(12, false), pushFrame(12, true), pushFrame(13, true), pushFrame(14, false)]},
+    waiting: {label: '等声部', fps: 2, frames: [put(LOAF_D, '15,10,K 15,11,K'), put(LOAF_D, '15,11,K 14,9,K')]},
     review: {label: '验收', fps: 2, frames: [sit(EYES_SQUINT), slide(sit(EYES_SQUINT), 1, 8, -1)]},
-    ask: {label: '等你确认', fps: 2, frames: [put(FRONT, '13,1,G 14,1,G 15,2,G 14,3,G 14,5,G'), put(FRONT, '13,0,G 14,0,G 15,1,G 14,2,G 14,4,G')]},
+    ask: {label: '等你确认', fps: 2, frames: [put(FRONT_D, '13,1,G 14,1,G 15,2,G 14,3,G 14,5,G'), put(FRONT_D, '13,0,G 14,0,G 15,1,G 14,2,G 14,4,G')]},
     done: {label: '完成', fps: 3, frames: [sit(), sitBare(HALF + ' ' + TAIL_RAISED), sitBare(BLOOM + ' ' + TAIL_RAISED)]},
     error: {label: '出错', fps: 4, frames: [sitBare(SPIKES + ' ' + BANG + ' ' + EYES_WIDE), sitBare(SPIKES + ' ' + EYES_WIDE + ' 2,5,. 12,5,. 1,6,K 13,5,K')]},
-    stopped: {label: '已停下', fps: 1, frames: [DOWN]},
-    sleep: {label: '睡觉', fps: 1, frames: [put(CURL, '12,7,G'), put(CURL, '11,3,G 12,3,G 13,3,G 14,3,G 13,4,G 12,5,G 11,6,G 12,6,G 13,6,G 14,6,G')]},
+    stopped: {label: '已停下', fps: 1, frames: [DOWN_D]},
+    sleep: {label: '睡觉', fps: 1, frames: [put(CURL_D, '12,7,G'), put(CURL_D, '11,3,G 12,3,G 13,3,G 14,3,G 13,4,G 12,5,G 11,6,G 12,6,G 13,6,G 14,6,G')]},
+  };
+
+  // ---- 空闲小动作自己的帧（控制器按 fps 放几遍）----
+  // 点头：跟着 ♩=72 打拍子，一拍 5 帧 × 6fps ≈ 833ms，低头那一帧尾巴尖也翘一下
+  // 舔爪子：抬起一只前爪到嘴边，眯眼；甩尾巴：尾巴尖贴地 → 甩出去 → 回来 → 翘起来
+  // 竖耳朵：背景被点了一下——耳朵尖竖高一格、眼睛睁大，然后抬眼往上看
+  const PAW = '5,13,. 6,13,. 3,8,K 3,9,K 4,9,K 2,8,R';
+  const PERK = '4,0,K 10,0,K';
+  const ACTS = {
+    nod: {fps: 6, frames: [nodDown(sit(TAIL_UP), 1, 7), nodDown(sit(TAIL_UP), 1, 7), sit(), sit(), sit()]},
+    groom: {fps: 4, frames: [sit(PAW + ' ' + EYES_SQUINT), sit(PAW + ' ' + EYES_SHUT), slide(sit(PAW + ' ' + EYES_SHUT), 1, 7, -1), sit(PAW + ' ' + EYES_SHUT)]},
+    swish: {fps: 4, frames: [sit(), sit(TAIL_OUT), sit(), sit(TAIL_UP), sit(TAIL_UP + ' 4,12,K')]},
+    perk: {fps: 6, frames: [sit(PERK + ' ' + EYES_WIDE), sit(PERK + ' ' + EYES_WIDE), sit(PERK + ' ' + EYES_UP), sit(PERK + ' ' + EYES_UP), sit(PERK + ' ' + EYES_UP), sit(EYES_UP), sit(EYES_UP), sit()]},
   };
 
   // 模式菜单里的静态猫头（同一只猫的头，取坐姿的上半部分）
-  const HEAD = SIT.slice(0, 9).map(row => row.slice(1, 14));
+  const HEAD = SIT0.slice(0, 9).map(row => row.slice(1, 14));
 
   // 画一帧。scale 取整数；dark 为真时在身体外沿加一圈描边。
   function draw(ctx, frame, scale, options) {
@@ -217,11 +245,12 @@
     const ox = (options && options.x) || 0;
     const oy = (options && options.y) || 0;
     const at = (x, y) => (frame[y] && frame[y][x]) || '.';
+    const body = (ch) => ch === 'K' || ch === 'R';
     for (let y = 0; y < frame.length; y += 1) {
       for (let x = 0; x < frame[y].length; x += 1) {
         const ch = at(x, y);
         if (ch === '.') {
-          if (dark && (at(x - 1, y) === 'K' || at(x + 1, y) === 'K' || at(x, y - 1) === 'K' || at(x, y + 1) === 'K')) {
+          if (dark && (body(at(x - 1, y)) || body(at(x + 1, y)) || body(at(x, y - 1)) || body(at(x, y + 1)))) {
             ctx.fillStyle = OUTLINE;
             ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
           }
@@ -233,7 +262,7 @@
     }
   }
 
-  const api = {SIZE, PALETTE, OUTLINE, STATES, HEAD, draw};
+  const api = {SIZE, PALETTE, OUTLINE, STATES, ACTS, HEAD, draw};
   root.LaolaoMetreCat = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

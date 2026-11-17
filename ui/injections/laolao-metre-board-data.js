@@ -43,7 +43,7 @@
     return `<svg class="pk-mb-rest" viewBox="0 0 18 24" shape-rendering="crispEdges" aria-hidden="true">${dots}</svg>`;
   })();
   const empty = (text) => { const node = h('div', 'pk-mb-empty pk-mb-empty--rest', `${restGlyph}<span>${esc(text)}</span>`); return node; };
-  const KIND = {dispatch: ['派发', 'run'], report: ['汇报', 'done'], end: ['跑完', 'done'], error: ['出错', 'fail'], stop: ['叫停', 'wait'], memory: ['记忆', 'done'], message: ['消息', 'wait']};
+  const KIND = {dispatch: ['分谱', 'run'], report: ['交回', 'done'], end: ['奏完', 'done'], error: ['出错', 'fail'], stop: ['收住', 'wait'], memory: ['记忆', 'done'], message: ['消息', 'wait']};
   // 柱状图左边的短名（两个字，放得下）；完整的类别名在悬停提示里。
   const MEMORY_CATS = {overview: '概况', structure: '结构', commands: '命令', conventions: '规矩', decisions: '决定',
     preferences: '偏好', pitfalls: '踩坑', people: '协作', open: '待办'};
@@ -68,7 +68,7 @@
 
   // ---------- 各块 ----------
   function planNode(plan) {
-    if (!plan?.items?.length) return empty('Metre 还没列计划（三步以上的活它会先列一张清单）。');
+    if (!plan?.items?.length) return empty('Metre 还没排节目单（三步以上的活它会先排一张）。');
     const list = h('ol', 'pk-mb-steps');
     for (const item of plan.items) {
       const state = {done: 'done', active: 'run', pending: 'wait', blocked: 'fail'}[item.status] || 'wait';
@@ -83,7 +83,7 @@
   }
 
   function sessionsNode(sessions, now) {
-    if (!sessions.length) return empty('还没有子会话。Metre 派活以后，每个子会话在这里占一行。');
+    if (!sessions.length) return empty('还没有声部。Metre 分谱以后，每个声部在这里占一行。');
     const from = Math.min(...sessions.map((s) => s.spans[0]?.from || s.startedAt || now));
     const total = Math.max(60_000, now - from);
     const pct = (t) => Math.max(0, Math.min(100, ((t - from) / total) * 100));
@@ -129,7 +129,7 @@
     score.append(now$);
     const wrap = h('div', 'pk-mb-scroll-x');
     wrap.append(score);
-    const legend = h('div', 'pk-mb-legend', `${[['done', '做完'], ['run', '在跑'], ['fail', '出错'], ['wait', '排队 / 停下']].map(([s, t]) => `<span><i data-state="${s}"></i>${t}</span>`).join('')}<span class="pk-mb-legend__now"><i></i>现在</span>`);
+    const legend = h('div', 'pk-mb-legend', `${[['done', '奏完'], ['run', '在奏'], ['fail', '出错'], ['wait', '候场 / 收住']].map(([s, t]) => `<span><i data-state="${s}"></i>${t}</span>`).join('')}<span class="pk-mb-legend__now"><i></i>现在</span>`);
     const out = h('div', '');
     out.append(wrap, legend);
     return out;
@@ -184,7 +184,7 @@
   }
 
   function changesNode(changes) {
-    if (!changes.length) return empty('这一家子会话还没改过文件。');
+    if (!changes.length) return empty('还没有声部改过文件。');
     const wrap = h('div', 'pk-mb-files');
     for (const group of changes) {
       wrap.append(h('h4', '', `${esc(group.title)}<small>${group.files.length} 个文件</small>`));
@@ -215,7 +215,7 @@
     const add = (state, name, text) => { const li = h('li', '', `<i></i><span>${esc(name)}</span><em>${esc(text)}</em>`); li.dataset.state = state; health.append(li); };
     add(stale ? 'fail' : 'done', '网关', stale ? '连接断了，正在重连' : '已连接');
     for (const m of rt.models || []) add(m.health === 'fail' ? 'fail' : m.health === 'ok' ? 'done' : 'wait', m.id, m.health === 'fail' ? `出错：${m.lastError || '原因没记下'}` : m.health === 'ok' ? '正常' : '还没调用过');
-    add('wait', '派发上限', `在跑 ${overview.running} / ${overview.limit} · 这一轮已开 ${overview.started} / ${overview.cap}`);
+    add('wait', '声部上限', `在奏 ${overview.running} / ${overview.limit} · 这一轮已开 ${overview.started} / ${overview.cap}`);
     wrap.append(health);
     if (rt.errors?.length) {
       const errs = h('ul', 'pk-mb-errors');
@@ -316,8 +316,8 @@
     const page = document.getElementById('pk-metre-board');
     const pauseBtn = page?.querySelector('[data-metre-action="pause"]');
     const stopBtn = page?.querySelector('[data-metre-action="stop"]');
-    if (pauseBtn) { pauseBtn.textContent = o.paused ? '继续派发' : '暂停派发'; pauseBtn.setAttribute('aria-pressed', String(o.paused)); }
-    if (stopBtn) stopBtn.textContent = o.stopped ? '接着做' : '全部停下';
+    if (pauseBtn) { pauseBtn.textContent = o.paused ? '继续分谱' : '暂停分谱'; pauseBtn.setAttribute('aria-pressed', String(o.paused)); }
+    if (stopBtn) stopBtn.textContent = o.stopped ? '接着奏' : '全体收住';
   }
   function badge(count) {
     const set = (host, cls) => {
@@ -367,7 +367,7 @@
     return {...view, overview: {...view.overview, parentRunning: false},
       plan: view.plan ? {...view.plan, items: (view.plan.items || []).map((item) => item.status === 'active' ? {...item, status: 'stale-active'} : item)} : view.plan,
       sessions: (view.sessions || []).map((s) => s.status === 'running'
-        ? {...s, status: 'unknown', statusText: '断线前在跑', state: 'wait', doing: '',
+        ? {...s, status: 'unknown', statusText: '断线前在奏', state: 'wait', doing: '',
           spans: (s.spans || []).map((sp) => sp.kind === 'run' ? {...sp, kind: 'wait'} : sp)} : s)};
   }
   // 有东西在跑：WATCH_MS 后主动读一次（期间来了事件、刷过了，就从那次往后算）。
@@ -400,7 +400,7 @@
   function renderNoSession() {
     const b = board();
     if (!b) return;
-    b.setStat('state', '还没开始');
+    b.setStat('state', '还没起拍');
     for (const id of ['plan', 'sessions', 'pending', 'timeline', 'changes', 'runtime', 'raw']) {
       b.fill(id, empty('这里显示当前 Metre 会话的情况。先在首页发一句话开始。'));
     }

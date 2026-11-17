@@ -90,7 +90,8 @@ for (const source of sources) {
 
   test(`${source}: default Common only contains actual usage while All retains the complete catalog`, () => {
     const h = harness(source);
-    const rows = Array.from({length: 60}, (_, i) => h.add(`custom/model-${i}`, `Choice ${i}`, '', i === 59));
+    const rows = Array.from({length: 60}, (_, i) => h.add(`custom/gpt-model-${i}`, `Choice ${i}`, '', i === 59));
+    const unnamed = h.add('custom/auto', 'Auto', '');   // 认不出名字的上游模型：哪个标签下都不显示
     h.sync();
     assert.equal(rows.filter((row) => !row.hidden).length, 1);
     h.api.surfaceStates.get(h.details).brand = 'common'; h.sync();
@@ -99,6 +100,8 @@ for (const source of sources) {
     assert.equal(rows[59].hidden, false, 'selected model is present even at the end of a large catalog');
     h.menu.querySelector('.chat-controls__model-search').value = 'Choice 49'; h.sync();
     assert.deepEqual(rows.filter((row) => !row.hidden), [rows[49]]);
+    h.menu.querySelector('.chat-controls__model-search').value = 'Auto'; h.sync();
+    assert.equal(unnamed.hidden, true, '认不出名字的模型搜也搜不出来');
   });
 
   test(`${source}: the recovered catalog excludes hidden native duplicates from counts and keyboard rows`, () => {
@@ -145,7 +148,7 @@ for (const source of sources) {
       {provider: 'a', id: 'gpt-5.4', name: 'Same Name'}, {provider: 'b', id: 'gpt-5.4', name: 'Same Name'},
       {provider: 'mm', id: 'gemini-3.6-flash-low', name: 'Gemini Low'},
       {provider: 'mm', id: 'gemini-3.6-flash-high', name: 'Gemini High'},
-      ...Array.from({length: 56}, (_, i) => ({provider: 'custom', id: `model-${i}`, name: `Choice ${i}`})),
+      ...Array.from({length: 56}, (_, i) => ({provider: 'custom', id: `gpt-model-${i}`, name: `Choice ${i}`})),
     ];
     const browser = {querySelector: () => list, append: (node) => { list = node; }};
     window.__test.renderFallbackCatalog({}, browser, {surface: true, models, selectedModel: 'b/gpt-5.4', session: {}});

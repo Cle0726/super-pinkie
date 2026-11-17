@@ -1,5 +1,6 @@
 /* laolao-metre-cat —— 状态条里的像素黑猫、记忆芯片、芯片浮层、换文件夹提示（只在 Metre 下出现） */
 html:not([data-laolao-mode="metre"]) .pk-metre-cat,
+html:not([data-laolao-mode="metre"]) .pk-metre-perch,
 html:not([data-laolao-mode="metre"]) .pk-metre-mem,
 html:not([data-laolao-mode="metre"]) .pk-metre-pop,
 html:not([data-laolao-mode="metre"]) .pk-metre-switch { display: none !important; }
@@ -72,3 +73,20 @@ html[data-laolao-mode="metre"] .pk-run__dot-face { display: none !important; }
 
 html[data-pinkie-reduce-motion] .pk-metre-mem.is-flash { animation: none; }
 html[data-pinkie-reduce-motion] .pk-metre-switch { transition: none; }
+
+/* 输入框右上沿坐着的那只（11-16）：像 Claude 桌面版输入框上的小螃蟹。脚下的蓝影子压在 1px 边框上；
+ * 状态条最左边那只不再显示（芯片留着）。位移由脚本写 transform（CSS 过渡，不跑 rAF）。 */
+.pk-metre-perch {
+  position: absolute;
+  right: 72px;
+  bottom: calc(100% - 3px);
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  will-change: transform;
+}
+.pk-metre-perch .pk-metre-cat { display: block; width: 32px; height: 32px; }
+.pk-metre-cat[data-facing="right"] { transform: scaleX(-1); }
+html[data-laolao-mode="metre"] .pk-run__body > .pk-metre-cat:not(.pk-metre-cat--perch) { display: none !important; }
+html[data-pinkie-reduce-motion] .pk-metre-perch { transition: none !important; }

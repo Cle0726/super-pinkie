@@ -540,7 +540,14 @@
   function place() {
     const anchor = composer();
     if (!anchor || !bar) return false;
-    if (anchor !== watched) { observer?.disconnect(); observer?.observe(anchor); watched = anchor; placeDirty = true; }
+    if (anchor !== watched) {
+      observer?.disconnect(); observer?.observe(anchor);
+      // Opening / collapsing the sidebar only moves the composer (its size stays), so also watch
+      // the chat card, whose width does change; otherwise the bar lags behind for up to 5 seconds.
+      const card = anchor.closest('section.card.chat, .chat-workspace, main');
+      if (card && card !== anchor) observer?.observe(card);
+      watched = anchor; placeDirty = true;
+    }
     if (!placeDirty && placed) return true;
     placeDirty = false;
     const rect = anchor.getBoundingClientRect();
@@ -549,6 +556,10 @@
     bar.style.left = `${Math.round(rect.left)}px`;
     bar.style.width = bar.dataset.layout === 'bar' ? `${Math.round(rect.width)}px` : '';
     bar.style.bottom = `${Math.round(window.innerHeight - rect.top + 6)}px`;
+    if (isMetre()) {
+      const clearance = Math.ceil(window.innerHeight - rect.top + (bar.hidden ? 28 : 78));
+      document.documentElement.style.setProperty('--metre-run-space', `${clearance}px`);
+    }
     return true;
   }
   function act(id) {

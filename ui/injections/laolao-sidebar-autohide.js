@@ -39,7 +39,15 @@
       setAttr(button, 'data-pinkie-sidebar-toggle', '1');
       const label = active && peek ? '固定侧边栏' : collapsed() ? '展开侧边栏' : '折叠侧边栏';
       setAttr(button, 'aria-label', label);
-      if (button.title !== label) button.title = label;
+      /* 外面的 openclaw-tooltip 负责弹提示，只更新它的文字；再写 title 会多出一个系统提示。 */
+      const tip = button.closest('openclaw-tooltip');
+      if (tip) {
+        if (tip.content !== label) tip.content = label;
+        setAttr(button, 'title', null);
+        if (button.dataset.pinkieTooltip) delete button.dataset.pinkieTooltip;
+      } else if (button.dataset.pinkieTooltip) {
+        if (button.dataset.pinkieTooltip !== label) button.dataset.pinkieTooltip = label;
+      } else if (button.title !== label) button.title = label;
     }
   };
   const reveal = () => {

@@ -129,11 +129,11 @@ test('A5-4 暂停派发的状态从后端来（刷新后还在）；全停后显
   states[PARENT].paused = true; states[PARENT].pausedAt = 7;
   let view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
   assert.equal(view.overview.paused, true);
-  assert.equal(view.overview.state, '暂停派发');
+  assert.equal(view.overview.state, '暂停分谱');
   states[PARENT].paused = false;
   states[PARENT].lastStop = {at: 1_000_500, parent: true, children: [{key: A, stopped: true}]};
   view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
-  assert.equal(view.overview.state, '已停');
+  assert.equal(view.overview.state, '已收住');
   assert.equal(view.overview.stopped, true);
   assert.equal(view.sessions.find(s => s.key === A).status, 'stopped');
   assert.ok(view.timeline.some(item => item.kind === 'stop'));
@@ -154,7 +154,7 @@ test('没派过活：每块都是空的实话，不是假数据', async t => {
   const {rpc, lineageRecords} = setup(t);
   for (const key of Object.keys(lineageRecords)) delete lineageRecords[key];
   const view = await rpc('pinkie.metre.board', {sessionKey: PARENT});
-  assert.equal(view.overview.state, '还没派过活');
+  assert.equal(view.overview.state, '还没起拍');
   assert.deepEqual(view.sessions, []);
   assert.deepEqual(view.changes, []);
 });

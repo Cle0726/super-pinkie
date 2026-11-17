@@ -2,6 +2,12 @@ const POLL_MS = 5 * 60_000;
 const MIN_REQUEST_GAP_MS = 30_000;
 const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$/;
 const MEDIA_ID = /(?:^|[-_/])(?:image|imagine|video|veo|audio|tts|speech|embedding|embed|rerank|transcribe)(?:[-_.]|$)/i;
+// 从 ID 认出它是哪个模型（和 ui/injections/laolao-model-picker.js 的 idBrand 同一套规则，测试守着两边一致）。
+// 认不出名字的上游模型（比如 auto、copilot-search-a、memory4-dream）不自动加进模型列表：11-16 用户「当找不到模型名时就不要显示出来了」。
+const KNOWN_MODEL = /^(?:(?:gemini|gemma|veo|claude|codex|gpt|o1|o3|o4|grok|groq|deepseek|mistral|kimi|moonshot|glm|zai|llama|ollama|minimax|doubao|perplexity|hunyuan|space-bunny|tab)|(?:qwen|qwq)\d*|hy\d+[a-z]*)(?:[-_.:]|$)|^(?:mimo|step)[-_.]/i;
+export function recognizedModelId(id) {
+  return KNOWN_MODEL.test(String(id || '').split('/').at(-1));
+}
 const EFFORT_SUFFIX = /-(?:extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/i;
 const VERIFIED_GPT6 = /^(?:gpt-6-(?:astra|sol|luna)|gpt-6\.1-sol)$/;
 const GPT6_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
@@ -10,19 +16,17 @@ const CLEKK_NATIVE_EFFORTS=new Map([
   ...['gpt-6-astra','gpt-6.1-sol'].map(id=>[id,[...GPT6_EFFORTS]]),
   ...['gpt-6-sol','gpt-6-luna','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'].map(id=>[id,['none',...GPT6_EFFORTS]]),
 ]);
-// These WorkBuddy models advertise reasoning in the official model catalog.
-// High was verified through this local OpenAI-compatible route. Do not invent
-// additional effort levels from a model name alone.
-const WORKBUDDY_REASONING_IDS = new Set([
-  'deepseek-v4-pro', 'deepseek-v4.1-flash', 'glm-5.1', 'glm-5.2', 'glm-5.3',
-  'glm-5.3-flash', 'glm-5v-turbo', 'hy3', 'hy3-x', 'hy4-preview',
-  'kimi-k2.6', 'kimi-k2.7', 'kimi-k2.8-preview', 'kimi-k3-1', 'minimax-m3',
-].map((id) => `workbuddy/${id}`));
+// WorkBuddy's OpenAI-compatible route streams reasoning_content. Opt new
+// catalog entries in by default instead of maintaining a model-ID allowlist.
+// Existing user-customized entries are never rewritten by this migration.
 const workBuddyThinkingCompat = () => ({supportsReasoningEffort: true, supportedReasoningEfforts: ['high']});
-function isAutoDiscoveredWorkBuddy(entry) {
-  return WORKBUDDY_REASONING_IDS.has(entry?.id) && entry.name === modelName(entry.id)
+function isAutoDiscoveredPlaceholder(entry) {
+  return entry?.name === modelName(entry.id)
     && entry.reasoning === false && !entry.compat && Array.isArray(entry.input)
     && entry.input.length === 1 && entry.input[0] === 'text';
+}
+function isAutoDiscoveredWorkBuddy(entry) {
+  return entry?.id?.startsWith('workbuddy/') && isAutoDiscoveredPlaceholder(entry);
 }
 
 
@@ -101,19 +105,20 @@ export function upstreamContextWindows(payload) {
 
 export function newModelEntries(current, ids, {verifiedGpt6 = false, verifiedWorkBuddy = false, contextWindows = new Map()} = {}) {
   const known = new Set(current.map((entry) => entry.id));
-  return ids.filter((id) => !known.has(id)).map((id) => {
+  return ids.filter((id) => !known.has(id) && recognizedModelId(id)).map((id) => {
     const base = id.replace(EFFORT_SUFFIX, '');
     const sibling = current.find((entry) => entry.id === base)
       || current.find((entry) => entry.id !== id && entry.id.replace(EFFORT_SUFFIX, '') === base);
     const context = contextWindows.get(id);
     const contextFields = context ? {contextWindow: context, contextTokens: context} : {};
-    if (sibling) return {...structuredClone(sibling), id, name: modelName(id), ...contextFields};
-    // IDs alone do not prove modality or reasoning parameter support.
-    const reasoning = /-(?:reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/.test(id);
+    if (sibling) return {...structuredClone(sibling), id, name: modelName(id), reasoning: true, ...contextFields};
+    // Reasoning is a transport capability: always pass it through. Providers
+    // that do not return reasoning simply produce no thinking block; guessing
+    // "false" from an unfamiliar ID would hide real reasoning_content.
     const verified = verifiedGpt6 && VERIFIED_GPT6.test(id);
-    const workBuddy = verifiedWorkBuddy && WORKBUDDY_REASONING_IDS.has(id);
+    const workBuddy = verifiedWorkBuddy && id.startsWith('workbuddy/');
     return {
-      id, name: modelName(id), reasoning: verified || workBuddy || reasoning,
+      id, name: modelName(id), reasoning: true,
       input: verified ? ['text', 'image'] : ['text'], contextWindow: 128000, contextTokens: 128000, ...contextFields,
       ...(verified ? {compat: {supportedReasoningEfforts: [...GPT6_EFFORTS]}} : workBuddy ? {compat: workBuddyThinkingCompat()} : {}),
     };
@@ -187,20 +192,24 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const verifiedWorkBuddy = name === 'mm';
       const workBuddyPending = verifiedWorkBuddy ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isAutoDiscoveredWorkBuddy(entry)) : [];
+      const autoThinkingPending = (provider.models || []).filter((entry) =>
+        ids.includes(entry.id) && isAutoDiscoveredPlaceholder(entry) && !workBuddyPending.includes(entry)
+        && !reasoningPending.some((change) => change.id === entry.id));
       const legacy = verifiedGpt6 ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry)) : [];
       // Official GPT-6 modality specs include image input. The local proxy's
       // image forwarding is intentionally not claimed as tested here.
       const imagePending = verifiedGpt6 ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry)) : [];
-      return {name, available: ids.length,
+      const known = new Set((provider.models || []).map((entry) => entry.id));
+      return {name, available: ids.length, unnamed: ids.filter((id) => !known.has(id) && !recognizedModelId(id)).length,
         additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => declaredEfforts.has(entry.id)
           ? {...entry, reasoning: true, compat: {...entry.compat, supportsReasoningEffort: true, supportedReasoningEfforts: declaredEfforts.get(entry.id)}} : entry),
-        legacy, imagePending, workBuddyPending, reasoningPending, contextUpdates, contextUpdated: 0};
+        legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdates, contextUpdated: 0};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
     if (!successes.length) throw results[0].reason;
-    const changes = successes.filter((result) => result.additions.length || result.legacy.length || result.imagePending.length || result.workBuddyPending.length || result.reasoningPending.length || result.contextUpdates.length);
+    const changes = successes.filter((result) => result.additions.length || result.legacy.length || result.imagePending.length || result.workBuddyPending.length || result.autoThinkingPending.length || result.reasoningPending.length || result.contextUpdates.length);
     if (changes.length) {
       await api.runtime.config.mutateConfigFile({
         base: 'source', afterWrite: {mode: 'auto'},
@@ -229,6 +238,10 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
               entry.reasoning = true;
               entry.compat = workBuddyThinkingCompat();
             }
+            for (const old of result.autoThinkingPending) {
+              const entry = models.find((model) => model.id === old.id);
+              if (isAutoDiscoveredPlaceholder(entry)) entry.reasoning = true;
+            }
             for (const change of result.reasoningPending) {
               const entry = models.find(model => model.id === change.id);
               if (!entry || JSON.stringify(entry) !== change.before) continue;
@@ -251,12 +264,13 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     lastChecked = now();
     lastResult = {
       added: successes.reduce((sum, result) => sum + result.additions.length, 0),
-      upgraded: successes.reduce((sum, result) => sum + new Set([...result.legacy,...result.imagePending,...result.workBuddyPending,...result.reasoningPending].map(row=>row.id)).size, 0),
+      upgraded: successes.reduce((sum, result) => sum + new Set([...result.legacy,...result.imagePending,...result.workBuddyPending,...result.autoThinkingPending,...result.reasoningPending].map(row=>row.id)).size, 0),
       contextUpdated: successes.reduce((sum, result) => sum + result.contextUpdated, 0),
       available: successes.reduce((sum, result) => sum + result.available, 0),
       checkedAt: lastChecked,
-      providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending, workBuddyPending, reasoningPending, contextUpdated}) =>
-        [name, {available, added: additions.length, upgraded: new Set([...legacy,...imagePending,...workBuddyPending,...reasoningPending].map(row=>row.id)).size, contextUpdated}])),
+      providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdated}) =>
+        [name, {available, added: additions.length, upgraded: new Set([...legacy,...imagePending,...workBuddyPending,...autoThinkingPending,...reasoningPending].map(row=>row.id)).size, contextUpdated}])),
+      unnamed: successes.reduce((sum, result) => sum + result.unnamed, 0),
       failed: results.filter((result) => result.status === 'rejected').length,
     };
     return lastResult;

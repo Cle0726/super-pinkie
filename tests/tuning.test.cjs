@@ -152,10 +152,12 @@ test('nothing decides by hardware: no GPU, memory, core or OS-flag reads', () =>
   }
 });
 
-test('the config loads third and synchronously; the page loads with the settings page', () => {
+test('the config loads early and synchronously; the page loads with the settings page', () => {
   const head = read('ui/injections/laolao-head.fragment.html');
   const scripts = [...head.matchAll(/<script[^>]*src="\/([^"?]+)/g)].map((m) => m[1]);
-  assert.deepEqual(scripts.slice(0, 3), ['laolao-night.js', 'laolao-motion-preference.js', 'laolao-tuning.js']);
+  // Metre's skin switch and quiet scheduler must also run before the first frame.
+  assert.deepEqual(scripts.slice(0, 5), ['laolao-night.js', 'laolao-motion-preference.js',
+    'laolao-metre-skin.js', 'laolao-quiet.js', 'laolao-tuning.js']);
   assert.doesNotMatch(head.split('laolao-tuning.js')[0], /defer/);
   const power = scripts.indexOf('laolao-power-settings.js');
   assert.ok(power > 0 && power < scripts.indexOf('laolao-settings-user.js'));

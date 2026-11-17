@@ -12,7 +12,7 @@
 
   const STORE = "laolao:process-thinking:v1";
   const MAX_CARDS = 80;
-  const MAX_TEXT = 8000;
+  const MAX_TEXT = 32000;
   // 进阶调节 can change both; untouched they are the constants above.
   const tuned = (key, fallback) => window.PinkieTuning ? window.PinkieTuning.num(key, fallback) : fallback;
   const maxCards = () => tuned("process.maxCards", MAX_CARDS);
@@ -36,9 +36,9 @@
     if (routed) return routed;
     return document.querySelector(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
   };
-  // Only the four included modes get the new segmented presentation. Other
-  // sessions retain the previous single combined thought at the top.
-  const segmentedAllowed = () => /^agent:(?:main|project|thinking|learning):/.test(sessionKey());
+  // Every mode uses the same per-burst presentation. Do not gate this on a
+  // mode name: a new agent id must not silently collapse all thoughts into one.
+  const segmentedAllowed = () => true;
   const publishRunState = (key, active) => {
     if (!key) return;
     const runs = window.__pinkieActiveChatRuns instanceof Map
@@ -67,7 +67,10 @@
   const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
   // v8: show each received thought before folding, including a block delivered
   // in the same batch as tool.start. Keep this transient state out of storage.
-  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HURRY = 400, TYPE_HOLD = 1000;
+  const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HOLD = 1800;
+  // Long thoughts need a longer reading window. The card still folds by itself,
+  // but never before the complete burst has been drawn and held briefly.
+  const holdFor = (ep) => TYPE_HOLD + Math.min(1800, Math.max(0, ep.text.length - 300) / 3);
   const typing = new Map();
   let typingFrame = false;
   const typedLength = (t, now) => t.from + (t.to - t.from) * Math.min(1, Math.max(0, (now - t.start) / (t.dur || 1)));
@@ -76,14 +79,6 @@
     const from = current ? Math.min(typedLength(current, now), before) : before;
     typing.set(key, {from: reduced() ? length : from, to: length, start: now,
       dur: reduced() ? 0 : Math.min(TYPE_MAX, Math.max(TYPE_MIN, (length - from) / TYPE_CPS * 1000)), doneAt: 0});
-  }
-  function hurryTyping() {
-    const now = performance.now();
-    for (const t of typing.values()) {
-      if (t.start + t.dur - now > TYPE_HURRY) {
-        t.from = typedLength(t, now); t.start = now; t.dur = TYPE_HURRY;
-      }
-    }
   }
   let saveTimer = 0;
   const save = () => {
@@ -203,6 +198,8 @@
     typeOut(id, Math.max(0, before - dropped), ep.text.length);
     record.at = Date.now();
     if (!keep.has(key)) keep.add(key);
+    const card = processCards.get(key);
+    if (card) markThinkingPresence(card);
     save();
   }
   function stopThinking() {
@@ -278,7 +275,6 @@
     if (!run.startedAt && state === "done") return;
     resolveKey();
     stopThinking();
-    hurryTyping();
     if (run.key) run.migrate = {from: run.key, session: sessionKey(), until: Date.now() + 20000};
     if (state === "oops" && run.key) run.oops.set(run.key, Date.now());
     publishRunState(run.session, false);
@@ -339,8 +335,15 @@
     if (target) return target;
     const count = Number(card.dataset.pinkieRowCount);
     if (!Number.isFinite(count)) return slot; // compatible with an older renderer
-    if (ep.anchor >= count) return slots.find(node => node.dataset.pinkieThinkingTail === "1") || slot;
-    return null; // the matching row is inside a closed overflow section
+    const tail = slots.find(node => node.dataset.pinkieThinkingTail === "1") || slot;
+    if (ep.anchor >= count) return tail;
+    // The matching row can be inside the native "前面还有 N 步" overflow.
+    // Dropping the episode there made a later thinking burst disappear
+    // entirely. Keep it visible at the next displayed row, or at the tail.
+    const later = slots
+      .filter(node => Number(node.dataset.pinkieThinkingSeg) > ep.anchor)
+      .sort((a, b) => Number(a.dataset.pinkieThinkingSeg) - Number(b.dataset.pinkieThinkingSeg))[0];
+    return later || tail;
   }
 
   function renderThinking(slot) {
@@ -397,9 +400,13 @@
     head.addEventListener("click", () => {
       preserveSlot(slot, () => {
         if (openedThoughts.has(id)) openedThoughts.delete(id); else openedThoughts.add(id);
+        box.dataset.pinkieFollow = "1";
         if (slot.isConnected) renderThinking(slot);
       });
     });
+    const stopFollow = () => { box.dataset.pinkieFollow = "0"; };
+    body.addEventListener("wheel", stopFollow, {passive: true});
+    body.addEventListener("touchmove", stopFollow, {passive: true});
     body.append(el("div", "pinkie-thinking__text"));
     box.append(head, body);
     const t = typing.get(id);
@@ -415,9 +422,9 @@
     const isTyping = typed < ep.text.length;
     if (t && !isTyping && !t.doneAt) {
       t.doneAt = now;
-      setTimeout(schedule, TYPE_HOLD + 20);
+      setTimeout(schedule, holdFor(ep) + 20);
     }
-    const holding = Boolean(t && !isTyping && now - t.doneAt < TYPE_HOLD);
+    const holding = Boolean(t && !isTyping && now - t.doneAt < holdFor(ep));
     if (t && !isTyping && !holding && !thinking) typing.delete(id);
     if (isTyping) typingFrame = true;
     const live = thinking || isTyping || holding;
@@ -432,13 +439,18 @@
     if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
     const label = box.querySelector(".pinkie-thinking__label");
     const ms = (ep.legacy ? record.ms : ep.ms) + (thinking ? Date.now() - run.thinkingSince : 0);
-    const text = thinking ? `正在思考 · ${Math.round(ms / 1000)}s`
+    const text = live ? `正在思考 · ${Math.round(ms / 1000)}s`
       : `思考了 ${duration(ms || 1000)}${ep.legacy && record.count > 1 ? ` · ${record.count} 次` : ""}`;
     if (label.textContent !== text) label.textContent = text;
     const body = box.querySelector(".pinkie-thinking__text");
     const visibleText = isTyping ? ep.text.slice(0, typed) : ep.text;
-    if (body.textContent !== visibleText) body.textContent = visibleText;
-    if (live && !opened) box.querySelector(".pinkie-thinking__body").scrollTop = 1e9;
+    const changed = body.textContent !== visibleText;
+    if (changed) body.textContent = visibleText;
+    // Follow new text inside the 68px live window, but never fight a reader
+    // who grabbed the body. Rewriting the full text node every frame and
+    // resetting scrollTop unconditionally is what made the page feel sticky.
+    const shell = box.querySelector(".pinkie-thinking__body");
+    if (live && !opened && changed && box.dataset.pinkieFollow !== "0") shell.scrollTop = shell.scrollHeight;
   }
 
   function renderStatus(slot) {
@@ -521,13 +533,73 @@
     save();
   }
 
+  let scrollHoldSeq = 0;
   function preserveSlot(slot, change) {
     const pane = slot.closest?.('openclaw-chat-pane');
-    return window.__pinkieChatViewport?.preserve
-      ? window.__pinkieChatViewport.preserve(pane, change) : change();
+    const viewport = window.__pinkieChatViewport;
+    const snapshot = viewport?.capture?.(pane);
+    // The slot can be a detached Lit child while its box is still visible.
+    // Resolve the thread from the slot first, then the pane, then the page.
+    const thread = slot.closest?.('.chat-thread')
+      || pane?.querySelector?.('.chat-thread')
+      || document.querySelector('.chat-thread');
+    if (!thread || !thread.dataset) {
+      return viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
+    }
+    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 2;
+    if (atBottom) {
+      return viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
+    }
+    // Native chat owns its virtualizer, but it does not know that this
+    // injected process card is about to grow or shrink. When the reader is
+    // not pinned at the bottom, mark the thread for one resize so the native
+    // auto-follow ignores the height change, then put the scrollTop back.
+    const top = thread.scrollTop;
+    const token = String(++scrollHoldSeq);
+    thread.dataset.pinkieHold = token;
+    const result = viewport?.preserve && !snapshot?.native ? viewport.preserve(pane, change) : change();
+    thread.scrollTop = top;
+    requestAnimationFrame(() => {
+      if (thread.isConnected) thread.scrollTop = top;
+      setTimeout(() => {
+        if (thread.dataset.pinkieHold === token) delete thread.dataset.pinkieHold;
+      }, 800);
+    });
+    return result;
   }
 
   let frame = 0;
+  function markThinkingPresence(card) {
+    const key = card?.dataset?.pinkieProcess || "";
+    const record = key ? store[key] : null;
+    const has = !!record && (
+      String(record.text || "").trim().length > 0
+      || (Array.isArray(record.eps) && record.eps.some(ep => String(ep?.text || "").trim().length > 0))
+    );
+    const details = card?.querySelector?.("details.pinkie-process");
+    if (details?.dataset) {
+      if (has) details.dataset.pinkieHasThinking = "1";
+      else delete details.dataset.pinkieHasThinking;
+    }
+  }
+  // Older cards are projected as a summary-only shell; Lit removes their row
+  // slots after the run is no longer live. Keep the recorded thought readable
+  // by giving that shell one injection-owned slot after the summary.
+  function ensureFallbackSlot(card) {
+    const key = card?.dataset?.pinkieProcess || "";
+    if (!key || !store[key]) return;
+    const details = card.querySelector("details.pinkie-process");
+    if (!details) return;
+    if ([...card.querySelectorAll("[data-pinkie-thinking]")].some(node => !node.classList.contains("pinkie-thinking-fallback"))) {
+      details.querySelector(".pinkie-thinking-fallback")?.remove();
+      return;
+    }
+    if (details.querySelector(".pinkie-thinking-fallback")) return;
+    const slot = el("div", "pinkie-thinking-fallback");
+    slot.dataset.pinkieThinking = key;
+    slot.dataset.pinkieThinkingSeg = "0";
+    details.append(slot);
+  }
   function markCard(card) {
     if (!card?.matches?.('.chat-group--process[data-pinkie-process]')) return;
     const key = card.dataset.pinkieProcess;
@@ -535,6 +607,8 @@
     if (previous && previous !== key && processCards.get(previous) === card) processCards.delete(previous);
     processCardKeys.set(card, key);
     processCards.set(key, card);
+    markThinkingPresence(card);
+    ensureFallbackSlot(card);
     adoptPrior(card, key);
     dirtyCards.add(card);
   }

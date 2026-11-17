@@ -76,7 +76,7 @@
       <dl class="pk-metre-brand__parts">
         <div><dt>Baton</dt><dd>指挥分派</dd></div>
         <div><dt>Virtuoso</dt><dd>一个人奏完</dd></div>
-        <div><dt>Score</dt><dd>总控台</dd></div>
+        <div><dt>Score</dt><dd>总谱</dd></div>
       </dl>
       <div class="pk-metre-brand__actions"><button type="button" class="pk-metre-brand__go">开始</button><span>4/4 · ♩ = ${BPM} · Esc 关闭</span></div>`);
     body.querySelector('.pk-metre-brand__go').addEventListener('click', () => {
