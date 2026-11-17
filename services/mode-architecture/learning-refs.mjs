@@ -99,7 +99,7 @@ export class LearningRefs {
     return {ok: true, receipt: this.publicReceipt(row)};
   }
 
-  // ---------- 明天计划：便签（先生收的）与提议（碧琪提的，先生采纳才写进约定） ----------
+  // ---------- 明天计划：便签（用户收的）与提议（碧琪提的，用户采纳才写进约定） ----------
   memos() { return readJson(path.join(this.root, 'memos.json'), {memos: []}).memos || []; }
   writeMemos(memos) { writeJson(path.join(this.root, 'memos.json'), {memos: memos.slice(-200)}); }
   memosFor(date) { return this.memos().filter(memo => memo.date === date); }
@@ -191,7 +191,7 @@ export class LearningRefs {
     if (typeof previous !== 'boolean') throw new Error('这次作答还没判分');
     if (previous === correct) return {ok: true, unchanged: true};
     this.store.correctAttempt(ALL, attempt.id, {correct, reason: clean(reason, 600) || '碧琪更正判分'});
-    try { // 记下是碧琪改的，而不是先生。
+    try { // 记下是碧琪改的，而不是用户。
       const fresh = this.store.readAttempt(ALL, attempt.id), last = fresh.corrections?.at(-1);
       if (last) { last.actor = by === 'biqi' ? 'biqi' : 'user'; this.store.writeAttempt(fresh); }
     } catch {}
@@ -224,7 +224,7 @@ export class LearningRefs {
       const q = clean(pub.question, 400);
       return {ref, kind, title: clean(q, 60), subtitle: [pub.topic, a.result.correct ? '答对' : '答错', pub.errorType].filter(Boolean).join(' · '),
         state: a.result.correct ? 'lit' : 'weak', status: a.result.correct ? '答对了' : pub.verifiedBy ? '复测已过' : '待复测',
-        detail: `题目：${q}\n先生的答案：${clean(pub.answerText, 200)}（${a.result.correct ? '对' : '错'}${pub.errorType ? '，错因：' + pub.errorType : ''}）${a.result.explanation ? '\n讲解：' + clean(a.result.explanation, 600) : ''}`,
+        detail: `题目：${q}\n用户的答案：${clean(pub.answerText, 200)}（${a.result.correct ? '对' : '错'}${pub.errorType ? '，错因：' + pub.errorType : ''}）${a.result.explanation ? '\n讲解：' + clean(a.result.explanation, 600) : ''}`,
         open: {view: 'entry', params:{ref}}};
     }
     if (kind === 'note') {
@@ -276,12 +276,12 @@ export class LearningRefs {
       catch (error) { return {ref: ref.ref, kind: ref.kind, ok: false, error: error.message}; }
     })};
   }
-  // 发给模型前：消息里的条目标记换成真实上下文（数据，不是先生手抄的摘要）。
+  // 发给模型前：消息里的条目标记换成真实上下文（数据，不是用户手抄的摘要）。
   context(prompt) {
     const refs = refsInText(prompt);
     if (!refs.length) return '';
     const lines = refs.map(ref => { try { return '- ' + this.resolveOne(ref).detail.replace(/\n/g, '\n  '); } catch (error) { return `- ${ref.ref}：${error.message}`; } });
-    return `【先生从手账里带过来的条目】\n先生这条消息附了手账条目（消息里的 [[DESK_REF_V1 …]] 是界面标记，不要复述它）。下面是这些条目的真实记录，按它回答：\n${lines.join('\n')}`;
+    return `【用户从手账里带过来的条目】\n用户这条消息附了手账条目（消息里的 [[DESK_REF_V1 …]] 是界面标记，不要复述它）。下面是这些条目的真实记录，按它回答：\n${lines.join('\n')}`;
   }
 }
 
@@ -292,12 +292,12 @@ export function createLearningDeskTool(refs, initialContext = {}) {
   return {
     name: 'learning_desk',
     label: '碧琪手账',
-    description: '学习模式专用：把东西放进先生的备考手账，或在消息里贴一张手账卡片。'
-      + ' open {ref}：在你的消息里放一张「翻到这页」卡片（ref 如 point:c5.1、note:<id>、word:<id>、attempt:<id>），先生自己点才会翻页。'
-      + ' collect {target: note|word|wrong|plan, text, ref?}：替先生收进笔记 / 生词本 / 错题 / 明天计划，消息里会出现可撤销的回执卡；只在先生同意或明确要你记下时用。'
-      + ' plan {items:[{kind:"learn",k,i}|{kind:"set",chapter,size}], text}：给明天提一个计划，先生点「采纳」才生效。'
+    description: '学习模式专用：把东西放进用户的备考手账，或在消息里贴一张手账卡片。'
+      + ' open {ref}：在你的消息里放一张「翻到这页」卡片（ref 如 point:c5.1、note:<id>、word:<id>、attempt:<id>），用户自己点才会翻页。'
+      + ' collect {target: note|word|wrong|plan, text, ref?}：替用户收进笔记 / 生词本 / 错题 / 明天计划，消息里会出现可撤销的回执卡；只在用户同意或明确要你记下时用。'
+      + ' plan {items:[{kind:"learn",k,i}|{kind:"set",chapter,size}], text}：给明天提一个计划，用户点「采纳」才生效。'
       + ' regrade {attempt_id, correct, reason}：只在判分确实错了时更正一次作答，会出回执、24 小时内可撤销。'
-      + ' 不能直接改掌握度：掌握度只来自先生自己的作答。',
+      + ' 不能直接改掌握度：掌握度只来自用户自己的作答。',
     parameters: {type: 'object', additionalProperties: false, properties: {
       action: {type: 'string', enum: ['open', 'collect', 'plan', 'regrade']},
       ref: {type: 'string'}, target: {type: 'string', enum: ['note', 'word', 'wrong', 'plan']}, text: {type: 'string'}, title: {type: 'string'},
@@ -316,16 +316,16 @@ export function createLearningDeskTool(refs, initialContext = {}) {
           const ref = parseRef(params.ref); if (!ref) throw new Error('ref 格式不对，例如 point:c5.1');
           const card = refs.resolveOne(ref);
           return toolResult({ok: true, inline: inline('desk_card', ref.ref, card.title), card: {title: card.title, subtitle: card.subtitle, status: card.status},
-            note: '卡片已放进消息，先生点「翻到这页」才会打开。'});
+            note: '卡片已放进消息，用户点「翻到这页」才会打开。'});
         }
         if (params.action === 'collect') {
           const result = refs.collect({sessionKey, target: params.target, text: params.text, ref: params.ref, title: params.title, by: 'biqi'});
           return toolResult({ok: true, inline: inline('desk_receipt', result.receipt.receiptId, result.receipt.title), receipt: result.receipt,
-            note: result.duplicate ? '生词本里已经有这个词，没有重复收。' : '已收进手账，消息里有回执卡，先生可以撤销。'});
+            note: result.duplicate ? '生词本里已经有这个词，没有重复收。' : '已收进手账，消息里有回执卡，用户可以撤销。'});
         }
         if (params.action === 'plan') {
           const plan = refs.propose({sessionKey, items: params.items, text: params.text});
-          return toolResult({ok: true, inline: inline('desk_plan', plan.id, plan.labels.join('；')), plan: {date: plan.date, items: plan.labels}, note: '计划卡已放进消息，先生点「采纳」才写进明天的约定。'});
+          return toolResult({ok: true, inline: inline('desk_plan', plan.id, plan.labels.join('；')), plan: {date: plan.date, items: plan.labels}, note: '计划卡已放进消息，用户点「采纳」才写进明天的约定。'});
         }
         if (params.action === 'regrade') {
           const result = refs.regrade({sessionKey, attemptId: params.attempt_id, correct: params.correct, reason: params.reason, by: 'biqi'});
@@ -359,7 +359,7 @@ export function registerLearningRefs(api, store, options = {}) {
   api.on?.('before_prompt_build', (event, ctx) => {
     if (!isLearning(ctx?.sessionKey)) return undefined;
     try {
-      const fresh=String(ctx.sessionKey).startsWith('agent:learning:desk-chat:') ? '【学习台独立对话】\n这是学习台自己的对话环境，普通学习聊天的记录没有带入。不要沿用外面正在做的题目、套数或轮次；以本会话和先生主动带来的条目为准。\n' : '';
+      const fresh=String(ctx.sessionKey).startsWith('agent:learning:desk-chat:') ? '【学习台独立对话】\n这是学习台自己的对话环境，普通学习聊天的记录没有带入。不要沿用外面正在做的题目、套数或轮次；以本会话和用户主动带来的条目为准。\n' : '';
       const text = fresh + refs.context(event?.prompt || ''); return text ? {prependContext: text} : undefined;
     }
     catch { return undefined; }

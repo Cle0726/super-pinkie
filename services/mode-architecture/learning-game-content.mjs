@@ -98,7 +98,7 @@ export async function pool(items, n, fn) {
   await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } }));
 }
 
-// 做完才讲：提示词在 learning-explain-voice.mjs，从学习模式工作区的先生铁律 / 碧琪人设 / 错题规范实时读。
+// 做完才讲：提示词在 learning-explain-voice.mjs，从学习模式工作区的用户铁律 / 碧琪人设 / 错题规范实时读。
 export function validExplain(v) {
   const text = clean(v?.text, 800);
   return text.length >= 8 ? {text} : null;
@@ -111,7 +111,7 @@ export function explainInput({question, options, standard, note, yours, correct}
 }
 
 // ---------- 错题怪 ----------
-export const MONSTER_NAME_RULES = `你是碧琪上岸记的错题怪命名师。输入一道先生做错的题 {"subject","topic","question","answer","species"}。
+export const MONSTER_NAME_RULES = `你是碧琪上岸记的错题怪命名师。输入一道用户做错的题 {"subject","topic","question","answer","species"}。
 给这只错题怪起名字和一句话介绍。只输出 JSON：{"name":"考点 · 怪名（≤14 字，例：一般现在时 · 迷糊史莱姆）","blurb":"一句话，≤30 字，可爱、俏皮，说清它代表的知识点，不骂人、不说『你忘了』"}`;
 export function validMonsterName(v) {
   const name = clean(v?.name, 24);
@@ -120,7 +120,7 @@ export function validMonsterName(v) {
   return {name, blurb};
 }
 
-export const VARIANT_RULES = `你是英语 B 级 / 专升本的出题老师。输入先生做错过的一道题 {"subject","topic","question","answer","note","avoid"}。
+export const VARIANT_RULES = `你是英语 B 级 / 专升本的出题老师。输入用户做错过的一道题 {"subject","topic","question","answer","note","avoid"}。
 出一道**新的变体题**：考同一个知识点，但换掉句子、语境和选项（不能只是换个顺序或改一两个词），也不要和 avoid 里已经出过的题相同；难度和英语 B 级相当（词汇约 2500 词以内、句子简单）。
 要求：四个选项，只有一个正确；干扰项来自这个知识点的常见错误；不出「以上都对 / 都不对」。
 只输出 JSON：{"stem":"题干（英文题干可以，中文提示可以）","options":["","","",""],"answer":正确选项下标 0-3,"why":"一句中文解析","point":"考点（≤12 字）"}`;
@@ -137,11 +137,11 @@ export const QUEST_MEANING = {
   weekSets: n => `这一周背一背做完 ${n} 组`,
   realCorrect: n => `在刷题页做历年真题，答对 ${n} 道`,
 };
-export const QUEST_TEXT_RULES = `你是碧琪，先生的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}],"recent":[前几天已经用过的文案]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。
+export const QUEST_TEXT_RULES = `你是碧琪，用户的学习搭子。输入今天的委托 {"date","term","quiet","quests":[{"id","kind","count","meaning","draft"}],"recent":[前几天已经用过的文案]}。meaning 是这个委托实际要做的事（代码算好的），draft 是现在的本地文案。
 给每个委托重写一个标题（≤8 字）和一句话（≤24 字）：
 - 意思必须和 meaning 完全一致：不能把「背一背的组」说成「卷子 / 套题」，不能把「答对」说成「做完」；
 - 出现数字时只能是 count，不要写别的数字；
-- 口吻俏皮温暖、像手账上的小便签；可以带一点节气（term）的氛围，但不要编造先生没说过的安排（吃饭、出门、约会之类）；
+- 口吻俏皮温暖、像手账上的小便签；可以带一点节气（term）的氛围，但不要编造用户没说过的安排（吃饭、出门、约会之类）；
 - 不要和 recent 里的说法重复（换个比喻和句式，每天读起来都是新的）；
 - quiet=true（考前一周）时更安静、不催、不比较。
 只输出 JSON：{"quests":[{"id","title","text"}]}`;
@@ -181,8 +181,8 @@ export const LINE_EVENTS = {
   examResult: '模拟考出分',
   examDay: '考试当天',
 };
-export const LINES_RULES = `你是碧琪（粉色小马，先生的学习搭子），用第一人称「我」或「碧琪」说话，叫用户「先生」。输入 {"date","term","quiet","form","events":{事件id:说明}}。
-给每个事件写 3 句不同的台词（每句 ≤30 字）：俏皮、温暖、具体到这个事件；可以偶尔带一点节气（term）氛围；不要编造先生没做过的事；永远不骂、不说「你忘了」「你又错了」、不拿别人比较；quiet=true（考前一周）时安静温柔、不催学习、不推销。
+export const LINES_RULES = `你是碧琪（粉色小马，用户的学习搭子），用第一人称「我」或「碧琪」说话，不加「先生」「老板」之类的称呼，要称呼就用「你」。输入 {"date","term","quiet","form","events":{事件id:说明}}。
+给每个事件写 3 句不同的台词（每句 ≤30 字）：俏皮、温暖、具体到这个事件；可以偶尔带一点节气（term）氛围；不要编造用户没做过的事；永远不骂、不说「你忘了」「你又错了」、不拿别人比较；quiet=true（考前一周）时安静温柔、不催学习、不推销。
 只输出 JSON：{"lines":{"事件id":["","",""]}}`;
 export function validLines(v) {
   const box = v?.lines && typeof v.lines === 'object' ? v.lines : null;
@@ -204,7 +204,7 @@ export function validLines(v) {
   return full >= Math.ceil(Object.keys(LINE_EVENTS).length * 0.75) ? out : null;
 }
 
-export const LINE_RULES = `你是碧琪（粉色小马，先生的学习搭子），用第一人称「我」或「碧琪」说话，叫用户「先生」。输入一个游戏事件 {"event","context"}。
+export const LINE_RULES = `你是碧琪（粉色小马，用户的学习搭子），用第一人称「我」或「碧琪」说话，不加「先生」「老板」之类的称呼，要称呼就用「你」。输入一个游戏事件 {"event","context"}。
 说一句话（≤36 字）：俏皮、温暖、具体到事件；永远不骂、不说「你忘了」「你又错了」；context.quiet=true（考前一周）时安静温柔、不催学习、不推销。
 只输出 JSON：{"text":"..."}`;
 export const LOCAL_LINES = {
@@ -215,7 +215,7 @@ export const LOCAL_LINES = {
   boss: ['巴别兽晃了一下，我们离稳过线更近了。', '再打几下，它就要破防啦。'],
   formSwitch: ['换好衣服啦，出发！', '这身怎么样？'],
   comeback: ['回来啦！我们从这里接着来。'],
-  quiet: ['慢慢来，先生已经准备得很好了。', '今天轻松一点，我陪着你。'],
+  quiet: ['慢慢来，你已经准备得很好了。', '今天轻松一点，我陪着你。'],
   examDay: ['我在考场外等你，放轻松。'],
 };
 export function localLine(event, {quiet = false, seed = 0} = {}) {

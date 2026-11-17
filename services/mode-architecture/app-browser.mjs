@@ -26,11 +26,11 @@ const UNAVAILABLE = '当前 App 的侧栏浏览器尚未连接（旧版 App 或 
 // Windows 版还没有侧栏浏览器（Mac 是 App 原生的 WKWebView）。没有侧栏时，open / show_file / serve
 // 退回到系统默认浏览器或默认程序，让用户仍然看得到；看页面、点按钮这类操作明确指向 browser 工具，
 // 不再让碧琪对着一个永远连不上的侧栏反复重试。
-const SYSTEM_BROWSER_LIMIT = '这台电脑没有 App 侧栏浏览器，系统浏览器里的页面碧琪看不到也点不了。要查看、截图或操作网页，直接改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口），不要重试 app_browser，也不要告诉先生浏览器用不了。';
-export const WINDOWS_INAPP_BROWSER_NOTE = '【Windows 版·碧琪自己的浏览器】这是你自己的独立浏览器窗口（粉色工具栏，可悬浮、停靠右侧或铺满），先生看得到你的每一步：你操作时页面上会出现粉色「碧琪」指针、点击波纹和目标高亮框，工具栏显示「碧琪正在使用浏览器」。status 一次读到当前页、全部标签页 tabList、窗口状态和 network（直连还是走节点、当前节点、延迟、地区、出口 IP、最快的几个可用节点）。'
-  + '标签页：tab op=list/new/switch/close（tabId 来自 list，new 可带 url）。窗口：window mode=float/dock/full，pin=true 置顶；要给先生演示时先 window mode=dock 或 full。'
+const SYSTEM_BROWSER_LIMIT = '这台电脑没有 App 侧栏浏览器，系统浏览器里的页面碧琪看不到也点不了。要查看、截图或操作网页，直接改用 browser 工具（它会打开一个碧琪能控制的浏览器窗口），不要重试 app_browser，也不要告诉用户浏览器用不了。';
+export const WINDOWS_INAPP_BROWSER_NOTE = '【Windows 版·碧琪自己的浏览器】这是你自己的独立浏览器窗口（粉色工具栏，可悬浮、停靠右侧或铺满），用户看得到你的每一步：你操作时页面上会出现粉色「碧琪」指针、点击波纹和目标高亮框，工具栏显示「碧琪正在使用浏览器」。status 一次读到当前页、全部标签页 tabList、窗口状态和 network（直连还是走节点、当前节点、延迟、地区、出口 IP、最快的几个可用节点）。'
+  + '标签页：tab op=list/new/switch/close（tabId 来自 list，new 可带 url）。窗口：window mode=float/dock/full，pin=true 置顶；要给用户演示时先 window mode=dock 或 full。'
   + '网络（只作用于这个浏览器，不改系统代理、不影响模型连接）：vpn op=status 精准读节点；op=test 测全部节点延迟；op=best 测速并切到最快（region=日本/香港/美国等限定地区，on=true 同时开启节点）；op=select node=节点名（写名称里独一无二的一段即可）；op=enable on=true/false 开关节点；op=auto on=true/false 开关自动切换；op=ip 查出口 IP；op=refresh 刷新订阅；op=add url=订阅链接。'
-  + '自动切换默认开启：经节点打开网页失败或超时，会自动测速换到最快的可用节点并重试一次，结果里的 nodeSwitched 告诉你换到了哪个，不要再手动重复切换。直连打不开海外网站（Google、YouTube、X 等）时先 vpn op=best on=true 再 open；国内网站直连更快，用完可 vpn op=enable on=false。nodeCount=0 说明还没有订阅：请先生在浏览器右上角「节点」里粘贴订阅链接，或把链接发给你用 vpn op=add。';
+  + '自动切换默认开启：经节点打开网页失败或超时，会自动测速换到最快的可用节点并重试一次，结果里的 nodeSwitched 告诉你换到了哪个，不要再手动重复切换。直连打不开海外网站（Google、YouTube、X 等）时先 vpn op=best on=true 再 open；国内网站直连更快，用完可 vpn op=enable on=false。nodeCount=0 说明还没有订阅：请用户在浏览器右上角「节点」里粘贴订阅链接，或把链接发给你用 vpn op=add。';
 export const WINDOWS_APP_BROWSER_NOTE = '【Windows 版】没有 App 侧栏浏览器：open / serve / show_file 会在系统默认浏览器或默认程序里打开给用户看（碧琪看不到页面内容）；snapshot、screenshot、click、type、batch 等查看和操作网页的动作请直接用 browser 工具。';
 function defaultSystemOpener(target) {
   return new Promise((resolve, reject) => {

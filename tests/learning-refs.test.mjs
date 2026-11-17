@@ -57,7 +57,7 @@ test('resolve: points carry real evidence, unanswered attempts are refused, answ
   assert.ok(!raw.includes('SECRET-ANSWER') && !raw.includes('OPEN-ANSWER'), 'cards carry no bank answers');
   assert.ok(!('detail' in cards[0]), 'detail stays server-side');
   const context = refs.context(`看看 [[DESK_REF_V1 attempt:${a.id} attempt:a-open]]`);
-  assert.match(context, /先生的答案：do-while 至少执行一次（错/);
+  assert.match(context, /用户的答案：do-while 至少执行一次（错/);
   assert.match(context, /这道题还没作答/);
   assert.ok(!context.includes('SECRET-ANSWER') && !context.includes('OPEN-ANSWER'));
   assert.equal(refs.context('普通消息'), '');
@@ -83,7 +83,7 @@ test('collect into notes, wrong book, vocab and tomorrow memos; every receipt un
   const wrongNote = store.readNotesState().notes.find(item => `note:${item.id}` === wrong.receipt.ref);
   assert.match(wrongNote.title, /^错题 · /);
   assert.ok(wrongNote.tags.includes('错题'));
-  assert.match(wrongNote.content, /先生的答案/);
+  assert.match(wrongNote.content, /用户的答案/);
   assert.ok(!wrongNote.content.includes('SECRET-ANSWER'));
 
   const word = refs.collect({sessionKey: SESSION, target: 'word', text: 'ambulance 救护车'});
@@ -204,5 +204,5 @@ test('gateway: RPCs, tool factory and before_prompt_build hook only act in learn
   assert.equal(hook.handler({prompt}, {sessionKey: 'agent:main:x'}), undefined);
   assert.match(hook.handler({prompt:'普通'},{sessionKey:SESSION}).prependContext,/学习台独立对话[\s\S]*不要沿用/);
   assert.equal(hook.handler({prompt:'普通'},{sessionKey:'agent:learning:ordinary'}),undefined);
-  assert.match(hook.handler({prompt}, {sessionKey: SESSION}).prependContext, /先生从手账里带过来的条目[\s\S]*考点 c5\.1/);
+  assert.match(hook.handler({prompt}, {sessionKey: SESSION}).prependContext, /用户从手账里带过来的条目[\s\S]*考点 c5\.1/);
 });

@@ -292,13 +292,13 @@ export function localSetupFailure(reason = '', attempts = 0) {
 }
 const WATCHDOG_MESSAGE = '\u2063';
 // 续接消息不能只是一个看不见的字符：模型会把它当成空消息/心跳，按 OpenClaw 的规则回 NO_REPLY，
-// 先生就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
+// 用户就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
 // 时间线也把它当内部消息，不会拆开这一轮。
 const WATCHDOG_CONTROL_PREFIX = '[pinkie-watchdog]';
 function watchdogControlMessage(instruction = '') {
   const body = String(instruction || '').replace(/\s+/g, ' ').trim()
-    || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
-  return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
+    || '继续完成当前这一轮用户交代的工作，完成后正常交付。';
+  return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，用户看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
 }
 const PLUGIN_BUILD = '2026-11-02.6-work-kinds';
 
@@ -579,18 +579,18 @@ const COMPLETION_TRUTH_RULES = `
 // 针对的是所有场景里都会出现的三类毛病：顺着说话、说没有依据的事、草草交差。
 export const WORK_STANDARD_RULES = `
 做事标准（每个模式、每个任务都适用）：
-1. 对错直说，不顺着说。先生的说法、答案或方案有错，第一句就指出错在哪、为什么、正确的是什么；语气可以温和，结论不能含糊。只在真的对时才说「对」或「完全正确」，部分对就说清哪部分对、哪部分错。先生不高兴或坚持时，没有新证据就不改口。
+1. 对错直说，不顺着说。用户的说法、答案或方案有错，第一句就指出错在哪、为什么、正确的是什么；语气可以温和，结论不能含糊。只在真的对时才说「对」或「完全正确」，部分对就说清哪部分对、哪部分错。用户不高兴或坚持时，没有新证据就不改口。
 2. 被批评时实事求是。先核对批评是否成立：成立的部分说清具体错在哪、怎么改，然后去改；不成立的部分礼貌地讲明理由。不夸张自责，不附和过头，也不为了平息情绪而全盘认错。
-3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或先生给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
-4. 先定好标准再动手。做东西前，先想清楚先生要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
+3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或用户给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
+4. 先定好标准再动手。做东西前，先想清楚用户要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
 5. 交付前亲自检查成品。看一遍产物本身：视频用 look-video、网页用 look-page、文档用 look-doc 生成预览图，再用 read 打开看；程序要运行，文字要通读；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
 6. 卡住先找原因。报错、下载或安装卡住、结果不对时，先查清原因（网络、依赖、权限、参数、版本）再处理；同一个办法失败两次就换思路，不在原地反复等待或重试。
 7. 降级要说清楚。如果只能做出比要求差的版本（换了更简陋的做法、缩了范围、少了功能），交付时第一句就说明差距和原因，并给出补救办法，不把降级版说成完成。
 8. 做了网页、前端或本地服务，交付前用 app_browser 的 serve 或 open 在 App 侧栏打开，再看一次 snapshot 或截图，确认页面能用。
-9. 先生或老板让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
-10. 做出交给先生或老板的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。网页用 app_browser 打开，回复附截图并给出网页路径，HTML 文件不要写 MEDIA:（附件通道不支持）。
+9. 用户让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
+10. 做出交给用户的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。网页用 app_browser 打开，回复附截图并给出网页路径，HTML 文件不要写 MEDIA:（附件通道不支持）。
 11. 只附本轮实际完成、检查过的成品，不附中间产物、日志或临时文件；MEDIA: 行不要放进代码块。
-12. 本机环境的问题自己解决，不甩给先生。每台电脑的系统、网络和已装软件都不一样：工具报缺命令、缺依赖、没装 Python、连不上、没配 Key、这台电脑不支持某个工具时，先自己查原因、自己装好（装进工作区或用户目录，不用管理员权限）或换一条能走通的路（web_search 不行先用 pinkie_search、再用 browser 打开必应或百度搜，app_browser 或 computer 不可用用 browser 和 exec），做完再交付。不要对先生说「碧琪用不了」「这个功能不支持」「请你去安装」；只有确实需要先生本人提供账号、密码、付款或授权时才请他出手，并说清楚为什么。
+12. 本机环境的问题自己解决，不甩给用户。每台电脑的系统、网络和已装软件都不一样：工具报缺命令、缺依赖、没装 Python、连不上、没配 Key、这台电脑不支持某个工具时，先自己查原因、自己装好（装进工作区或用户目录，不用管理员权限）或换一条能走通的路（web_search 不行先用 pinkie_search、再用 browser 打开必应或百度搜，app_browser 或 computer 不可用用 browser 和 exec），做完再交付。不要对用户说「碧琪用不了」「这个功能不支持」「请你去安装」；只有确实需要用户本人提供账号、密码、付款或授权时才请他出手，并说清楚为什么。
 13. 记忆找不到时自己再翻。memory_search 没结果或报错，不代表没有记忆：换几个短关键词再搜，或直接用 read 读工作区的 MEMORY.md 和 memory/ 目录、用 exec 按关键词搜这些文件；clekk_memory 里的长期记忆也要看。都翻过仍没有，才说「这件事我这里没有记录」，不说「记忆功能用不了」。
 `.trim();
 
@@ -599,7 +599,7 @@ const TOOL_PROGRESS_RULES = `
 - 每次单独调用工具，或开始一组紧密相关的工具调用之前，先用一句简短中文说明接下来要检查、读取或运行什么，以及原因；说清后不要重复。
 - 只描述下一步，例如“我先检查消息排序，看看说明文字和工具记录有没有被合并。”不报告尚未发生的结果，不作完成或交付声明，也不把进度句当作最终回复。
 - 多次工具调用按实际先后交代必要的下一步；整轮工具结束后，再单独给用户最终答复。
-- 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
+- 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从用户需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
 // 后台命令结束时由 background-jobs.mjs 发内部消息叫醒碧琪，所以长命令不必挂着干等。
@@ -632,8 +632,8 @@ const LEARN_WHILE_DOING_RULES = `
 // 混进人格或审美；其他模式不会载入这一段。
 const LEARNING_MODE_RULES = `
 【习作模式方法模块】
-- 默认讲解要短、白话、口语化：先一句说结论，再用短句说明；能三句话讲清就不写三段，除非先生明确要求深入展开。
-- 先锁定先生真正要解决的问题、已有基础和验收标准；能继续推进时不要把决定退回给先生。
+- 默认讲解要短、白话、口语化：先一句说结论，再用短句说明；能三句话讲清就不写三段，除非用户明确要求深入展开。
+- 先锁定用户真正要解决的问题、已有基础和验收标准；能继续推进时不要把决定退回给用户。
 - 根据任务按需选用：苏格拉底提问、双层解释、反向拆解、纵横分析、事实核查、专家会诊、第一性原理、跨领域借解、双向钢人论证、最小实验。
 - 解释是执行的伴随物：先做关键动作，再在关键节点补 1—2 个可复用知识点；不把实际工作改写成教程或报告。
 - 复杂任务必须把方法落成文件、运行结果、测试或其他可验收产物；模型文字、计划和“应该可以”不算完成。
@@ -1048,10 +1048,10 @@ function isLikelyActionRequest(prompt = '') {
 }
 
 // 小应用、表单、图表直接在聊天里交付时，回复里的 ```app / ui / chart / mermaid 代码块
-// 本身就是成品，不需要工具记录。只在先生没有要求文件、目录、运行或测试时这样算。
+// 本身就是成品，不需要工具记录。只在用户没有要求文件、目录、运行或测试时这样算。
 const INLINE_DELIVERABLE = /```(?:app|ui|chart|mermaid)[ \t]*\n[\s\S]{40,}?```/;
 const FILE_OR_RUN_REQUEST = /(?:文件|目录|文件夹|路径|保存|存到|存成|写进|写入|工作区|仓库|项目里|\.(?:html?|jsx?|tsx?|py|md|json|css|txt|csv)\b|运行|执行|跑一下|测试|部署|安装|下载|上传|发布)/i;
-// 只有按钮 / 方案卡片的 ui 块是在问先生下一步，本身不是成品。
+// 只有按钮 / 方案卡片的 ui 块是在问用户下一步，本身不是成品。
 function choiceOnlyUiBlock(body = '') {
   try {
     const value = JSON.parse(body);
@@ -1066,7 +1066,7 @@ function choiceOnlyUiBlock(body = '') {
 // 这里把按钮当成聊天里交付的成品，亲眼看和素材来源两项交付检查整段跳过。
 // 回复交出了文件（MEDIA: 附件，或正文写了成品文件的路径——附件发不出去时运行时会把 MEDIA: 换成
 // 「Media failed」，routes-i R-ad-2 就是这样），或这一轮做出了文件、ui 块只是下一步按钮：成品是文件，照常查。
-// 开工前用按钮问先生（这一轮还没做出文件）保持原样。
+// 开工前用按钮问用户（这一轮还没做出文件）保持原样。
 function inlineDeliveryOnly(prompt = '', reply = '', state = null) {
   const text = String(reply || '');
   if (!INLINE_DELIVERABLE.test(text) || FILE_OR_RUN_REQUEST.test(intentText(prompt))) return false;
@@ -1547,7 +1547,7 @@ function contentInspectionReason(state) {
 // 视频里的画面、配音、音乐是碧琪生成或下载来的，交付时要说清从哪来、能不能商用（motion-and-video.md 第 117 行）。
 // 11-04 隔离实测 R-ad 三轮都漏：手册写了、等待清单也写了，交付那一刻没有东西提醒。
 // 不靠猜它用了哪个工具做素材（routes-e：生图在上一轮、配音是 Python 里调 say、背景音乐是 cp 来的，一条都没认出来）：
-// 交了视频、回复没说来源，除非先生这句话明确是拿他自己的素材来剪，就提醒一次。
+// 交了视频、回复没说来源，除非用户这句话明确是拿他自己的素材来剪，就提醒一次。
 const ASSET_MAKING_TOOL = /^(?:image_generate|video_generate|music_generate|tts|speech|text_to_speech)$/i;
 const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|['"]say['"]\s*,\s*['"]-v|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
 const USER_SUPPLIED_MEDIA = /(?:这(?:个|段|些|条|几个?)(?:视频|片子|素材|照片|图片|录像|音频|录音|镜头)|我(?:拍|录|剪)的|我的(?:视频|素材|照片|录像|录音)|附件|上传的|发给你的|\.(?:mp4|mov|m4v|avi|mkv|mp3|wav|m4a|jpe?g|png|heic)\b)/i;
@@ -1606,15 +1606,15 @@ function sourceDisclosureReason(state, reply = '') {
     || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
   if (!madeAssets && USER_SUPPLIED_MEDIA.test(String(state.prompt || ''))) return '';
   const facts = assetProvenance(state);
-  return `交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」${facts ? `。${facts}` : ''}`;
+  return `交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、用户给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」${facts ? `。${facts}` : ''}`;
 }
 
 // 回复最后说「这就去做」却就此结束：预告不等于做了。
 const PROMISE_TAIL = /(?:这就(?:去|开始|动手|做|弄|安排)|马上(?:去|开始|动手|处理|做|弄|安排)|现在就(?:去|开始|动手)|稍等(?:一下|片刻|一会儿?)?|请稍候|接下来(?:碧琪|我)?(?:会|就|先|来|去|马上)|(?:碧琪|我)(?:先|这就|马上|立刻|立即)(?:去|来|开始|动手)|等(?:碧琪|我)(?:一下|一会儿?|做完|弄好))/;
 const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|老板)(?:确认|决定|选|同意|提供|告诉|回复)|无法|不能|没法|做不到|卡在|卡住|阻塞|失败|报错|权限|缺少|额度|网络/;
 
-// 回复只是「准备向先生汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
-// 最终回复却只有一句「碧琪准备向先生汇报。」）。
+// 回复只是「准备向用户汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
+// 最终回复却只有一句「碧琪准备向用户汇报。」）。
 // 11-04 隔离实测 R-infographic：图做好了，最后一句是「现在进行正式回复。」就结束了。
 const REPORT_ANNOUNCE_TAIL = /(?:准备|这就|马上|现在|下面|接下来|即将|开始)(?:就)?(?:向|给|跟)?(?:先生|老板|您)?(?:做个?|进行|开始|来)?(?:正式|最终的?|最后的?)?(?:汇报|报告|总结|说明结果|交付结果|交付|回复|答复|回答)[。.!！~～]*$/;
 
@@ -1622,7 +1622,7 @@ export function promiseWithoutActionReason(reply = '') {
   const text = String(reply || '').trim();
   const tail = text.slice(-140);
   if (tail && text.length <= 200 && REPORT_ANNOUNCE_TAIL.test(tail) && !/[？?]/.test(tail)) {
-    return '回复最后只说准备汇报，这一轮就结束了，先生并没有看到汇报。直接给出完整的最终汇报：结果是什么、怎么验证的、还有什么没做或要注意';
+    return '回复最后只说准备汇报，这一轮就结束了，用户并没有看到汇报。直接给出完整的最终汇报：结果是什么、怎么验证的、还有什么没做或要注意';
   }
   if (!tail || !PROMISE_TAIL.test(tail) || /[？?]/.test(tail) || PROMISE_BLOCKER.test(tail)) return '';
   return '回复最后说要去做，但这一轮就此结束了，事情并没有做。不要只预告，直接调用工具把它做完，做完再回复';
@@ -1776,7 +1776,7 @@ function verificationFailure(text = '') {
 export class CompletionIntegrityGuard {
   constructor() {
     this.runs = new Map();
-    // 会话 -> 先生最后一条真实的话。生图 / 后台命令完成、看门狗续跑这些内部轮不是新要求。
+    // 会话 -> 用户最后一条真实的话。生图 / 后台命令完成、看门狗续跑这些内部轮不是新要求。
     this.userPrompts = new Map();
   }
 
@@ -1791,8 +1791,8 @@ export class CompletionIntegrityGuard {
   begin(event = {}, ctx = {}) {
     const key = completionRunKey(event, ctx);
     if (!key || this.runs.has(key)) return;
-    // 11-04 隔离实测 R-ad：最后交付的那一轮是「生图任务完成」内部事件开的头，拿它当先生的话，
-    // 判不出是执行型请求，亲眼看和素材来源两项交付检查整段跳过。内部轮沿用先生上一条真实的话。
+    // 11-04 隔离实测 R-ad：最后交付的那一轮是「生图任务完成」内部事件开的头，拿它当用户的话，
+    // 判不出是执行型请求，亲眼看和素材来源两项交付检查整段跳过。内部轮沿用用户上一条真实的话。
     const raw = workFirstPrompt(event.prompt, modeForContext(ctx));
     const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
     const injected = runtimeTurnText(raw) || internalControlText(raw);
@@ -2347,7 +2347,7 @@ export class CompletionIntegrityGuard {
     if (lastTool && !lastTool.failed && /Background task started for \w+ generation\b/.test(String(lastTool.output || ''))) return;
     // 学习题卡的出题和结算本身就是交付：卡片就在聊天里，不需要文件或命令证据。
     // 否则“给我出 3 道程序阅读题”、卡片作答消息都会被当成执行任务再跑一轮。
-    // 只看先生自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
+    // 只看用户自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
     if (state.tools.some(entry => entry.name === 'learning_activity' && !entry.failed)
         && !FILE_OR_RUN_REQUEST.test(intentText(state.prompt).split(/\n\s*【/)[0])) return;
     // In the four work modes this gate checks what the reply claims, not what
@@ -3204,7 +3204,7 @@ export class CleKkSupervisor {
       ...decision,
       retry: {
         ...(decision.retry || {}),
-        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里先生要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
+        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里用户要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
         maxAttempts: 1,
       },
     };
@@ -3349,7 +3349,7 @@ export class CleKkSupervisor {
     const inboundUserMessage = event.__pinkieInboundUserMessage === true;
     let turn = this.turns.get(key) || this.restore(key);
     // 11-04 隔离实测 routes-m R-ad：交付被提醒退回、续跑还在排队时，运行时先插了一轮「压缩前写记忆」
-    // （记录里只显示 Continue the OpenClaw runtime event.）。这一轮被当成先生的新消息，整件活的工具记录
+    // （记录里只显示 Continue the OpenClaw runtime event.）。这一轮被当成用户的新消息，整件活的工具记录
     // 被清空；随后的续跑只看到 ls / ffprobe，误报「做完之后没有亲自看过成品」，把剩下的时间耗光。
     // 整理轮不动正在做的那件活的记录，它自己的工具、收尾也不算进来。
     const housekeepingRunId = String(ctx.runId || event.runId || '');
@@ -3381,7 +3381,7 @@ export class CleKkSupervisor {
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
     const incomingRunId = String(ctx.runId || event.runId || '');
-    // 运行时开的别的内部轮（后台任务完成、运行时事件）接着同一件活，不是先生的新要求。
+    // 运行时开的别的内部轮（后台任务完成、运行时事件）接着同一件活，不是用户的新要求。
     const distinctUserTurn = !control && turn && prompt && !runtimeTurnText(prompt) && (
       turn.corrupted
       || (Boolean(turn.prompt) && (
@@ -3569,7 +3569,7 @@ export class CleKkSupervisor {
     // 只有真正通过门禁的终稿，或明确告诉用户“尚未完成/被阻塞”的诚实
     // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
     // 静默改成成功，否则下一轮又会失去续接依据。
-    // NO_REPLY / HEARTBEAT_OK 先生看不到，不是对被退回那一版的回答：不能把待续跑的提醒清掉。
+    // NO_REPLY / HEARTBEAT_OK 用户看不到，不是对被退回那一版的回答：不能把待续跑的提醒清掉。
     const silentReply = /^(?:NO_REPLY|HEARTBEAT_OK)$/i.test(reply);
     if (reply && !internalControlText(reply) && !(silentReply && hadPending)) {
       if (hadPending && !turn.reminded && isLikelyActionRequest(turn.prompt)
@@ -4307,7 +4307,7 @@ export class UpstreamWatchdog {
       if (event.runId) this.failures.delete(event.runId);
       return false;
     }
-    // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成先生主动停止、不再续跑。
+    // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成用户主动停止、不再续跑。
     const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' | ');
     // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
     // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
@@ -6003,7 +6003,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         if (evidence) blocks.push('\n' + evidence + '\n');
       }
     }
-    // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠先生点名、不靠模型自己翻）。
+    // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠用户点名、不靠模型自己翻）。
     if (mode !== 'none') {
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
       if (metre) {
@@ -6047,11 +6047,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
         }
       }
-      // 先生在后台命令还没跑完时发来新消息：先回这条，回完接着做等待清单，别把在跑的事忘了。
+      // 用户在后台命令还没跑完时发来新消息：先回这条，回完接着做等待清单，别把在跑的事忘了。
       const stillRunning = runningBackgroundJobs(sessionKey);
       if (stillRunning.length) {
         const list = stillRunning.slice(0, 4).map(job => `「${job.command.replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((Date.now() - job.startedAt) / 60_000))} 分钟）`).join('、');
-        blocks.push(`\n【后台还在跑】${list}。先回先生这条消息；回完继续做不依赖它的事，结束时系统会叫你，别重复开同一个命令，也别说成已经做完。\n`);
+        blocks.push(`\n【后台还在跑】${list}。先回用户这条消息；回完继续做不依赖它的事，结束时系统会叫你，别重复开同一个命令，也别说成已经做完。\n`);
       }
     }
     const reloaded = this.recentCompaction.get(sessionKey);
@@ -6482,7 +6482,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const gapKind = workFirst ? retryGapKind(audit.missing) : '';
     const fingerprint = deliberationFingerprint(state);
     // 档位这边已经齐了（或只差终稿内容）时，续跑是在改回复本身：取舍、文案、查事实本来就没有工具证据，
-    // 写出不一样的回复就是进展（11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请先生选择」，全局门禁要求再改一版，
+    // 写出不一样的回复就是进展（11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请用户选择」，全局门禁要求再改一版，
     // 证据指纹没变被当成空转，以「续跑没说明换了什么做法」停掉）。只有回复也一字不差才算空转。
     const replyOnlyGap = workFirst && (gapKind === '' || gapKind === 'final');
     const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint

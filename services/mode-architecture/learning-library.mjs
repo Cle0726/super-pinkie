@@ -313,7 +313,7 @@ export class LearningLibrary {
   }
   async clip(params) {
     learningSession(params.sessionKey);
-    if(params.explicit!==true)throw new Error('只剪藏先生明确输入或选定的网址');
+    if(params.explicit!==true)throw new Error('只剪藏用户明确输入或选定的网址');
     const requestedURL=explicitURL(params.url).href, response=await this.checkedPage(requestedURL);
     if(!/text\/html|application\/xhtml\+xml/i.test(response.headers['content-type']||''))throw new Error('请提供网页文章地址；电子书请用文件入口');
     const raw=response.data.toString('utf8'), {document}=parseHTML(raw);
@@ -415,7 +415,7 @@ export const LIBRARY_RULES = `【学习资料库】
 search 和 read_range 都是本地只读查询，不做对外操作。`;
 export function createLearningLibraryTool(library,ctx) {
   if(ctx.agentId!=='learning'&&!String(ctx.sessionKey||'').startsWith('agent:learning:'))return null;
-  return {name:'learning_library',label:'查阅学习资料',description:'先检索先生本地资料库，再读取指定页码或章节的原文。用返回的 citation 标书名、页码和可点击出处。',
+  return {name:'learning_library',label:'查阅学习资料',description:'先检索用户本地资料库，再读取指定页码或章节的原文。用返回的 citation 标书名、页码和可点击出处。',
     parameters:{type:'object',additionalProperties:false,properties:{action:{type:'string',enum:['search','read_range']},query:{type:'string'},book_id:{type:'string'},start:{type:'integer',minimum:1},end:{type:'integer',minimum:1},limit:{type:'integer',minimum:1,maximum:20}},required:['action']},
     async execute(_id,params) {
       try {

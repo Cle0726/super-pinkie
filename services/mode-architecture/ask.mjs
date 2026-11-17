@@ -1,7 +1,7 @@
-// 碧琪主动提问：给先生一张带 2–4 个选项的提问卡。
+// 碧琪主动提问：给用户一张带 2–4 个选项的提问卡。
 //
 // 这个工具不阻塞等待。它把问题写进工具结果后立即返回，模型随即结束本轮；
-// 先生在聊天页点选后，选择作为下一条普通消息发回来。这样提问不会让一轮
+// 用户在聊天页点选后，选择作为下一条普通消息发回来。这样提问不会让一轮
 // 运行长时间挂起，也不会被看门狗当成“中断”而自动续跑。
 //
 // 工具结果以 ASK_MARKER + JSON 开头：网关的 chat.history 会去掉工具调用参数，
@@ -18,9 +18,9 @@ const MAX_DESCRIPTION = 160;
 
 export const ASK_USER_RULES = `
 【主动提问】
-- 需要先生在几个明确方向里拍板（方案取舍、范围、风格、要不要做有风险或不可撤销的操作），或缺少一个关键偏好、问了能明显少返工时，调用 ask_user，给一个问题和 2–4 个选项，每个选项附一句说明利弊；推荐的放第一个，并在标签后写“（推荐）”。不要在正文里列选项让先生手打。
-- 能从项目、记录或常识自己判断的事不要问；一次只问真正卡住的那一件事。选项互斥；确实需要多选时设 multi_select。先生总能选“其他”自己写，不用为此加选项。
-- 调用 ask_user 后本轮就此停下：最多再说一句“选好我就接着做”，不要继续调用工具，也不要替先生假设答案。先生的选择会以“${ASK_ANSWER_PREFIX}”开头作为下一条消息发来，收到后按选择继续原来的任务。
+- 需要用户在几个明确方向里拍板（方案取舍、范围、风格、要不要做有风险或不可撤销的操作），或缺少一个关键偏好、问了能明显少返工时，调用 ask_user，给一个问题和 2–4 个选项，每个选项附一句说明利弊；推荐的放第一个，并在标签后写“（推荐）”。不要在正文里列选项让用户手打。
+- 能从项目、记录或常识自己判断的事不要问；一次只问真正卡住的那一件事。选项互斥；确实需要多选时设 multi_select。用户总能选“其他”自己写，不用为此加选项。
+- 调用 ask_user 后本轮就此停下：最多再说一句“选好我就接着做”，不要继续调用工具，也不要替用户假设答案。用户的选择会以“${ASK_ANSWER_PREFIX}”开头作为下一条消息发来，收到后按选择继续原来的任务。
 `.trim();
 
 const clean = (value, limit) => String(value ?? '').replace(/\u0000/g, '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -28,7 +28,7 @@ const clean = (value, limit) => String(value ?? '').replace(/\u0000/g, '').repla
 /** Validate and normalize the model's arguments; throws a Chinese message the model can act on. */
 export function normalizeAskParams(params = {}) {
   const question = clean(params.question, MAX_QUESTION);
-  if (!question) throw new Error('ask_user 需要 question：用一句话写清要先生决定什么');
+  if (!question) throw new Error('ask_user 需要 question：用一句话写清要用户决定什么');
   const raw = Array.isArray(params.options) ? params.options : [];
   const options = raw.map((option) => (typeof option === 'string'
     ? {label: clean(option, MAX_LABEL), description: ''}
@@ -46,7 +46,7 @@ export function normalizeAskParams(params = {}) {
 }
 
 export function askToolResultText(record) {
-  return `${ASK_MARKER}${JSON.stringify(record)}\n已把问题展示给先生，正在等先生选择。本轮到此为止：不要继续调用工具，也不要替先生假设答案；先生的选择会作为下一条消息发来。`;
+  return `${ASK_MARKER}${JSON.stringify(record)}\n已把问题展示给用户，正在等用户选择。本轮到此为止：不要继续调用工具，也不要替用户假设答案；用户的选择会作为下一条消息发来。`;
 }
 
 /** Parse a stored ask_user tool result back into its question card. */
@@ -67,12 +67,12 @@ export function createAskUserTool() {
   return {
     name: ASK_USER_TOOL,
     label: '向你提问',
-    description: '需要先生在几个明确方案中拍板、或缺少一个关键偏好时调用：在聊天页弹出一张提问卡，给 2–4 个可点选的选项（先生也可以选“其他”自己写）。调用后本轮立即结束，等先生的选择作为下一条消息发来。不要用正文列选项代替。',
+    description: '需要用户在几个明确方案中拍板、或缺少一个关键偏好时调用：在聊天页弹出一张提问卡，给 2–4 个可点选的选项（用户也可以选“其他”自己写）。调用后本轮立即结束，等用户的选择作为下一条消息发来。不要用正文列选项代替。',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        question: {type: 'string', description: '要先生决定的问题，一句话，以问号结尾'},
+        question: {type: 'string', description: '要用户决定的问题，一句话，以问号结尾'},
         header: {type: 'string', description: '可选，2–6 个字的小标题，例如“方案”“范围”'},
         options: {
           type: 'array', minItems: 2, maxItems: 4,

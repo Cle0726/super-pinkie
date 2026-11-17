@@ -1,4 +1,4 @@
-// 学习台的日历引擎：今天是什么日子。一律按北京时间（先生 2026-10-28 定：人在美国，跟国内的节奏过日子）。
+// 学习台的日历引擎：今天是什么日子。一律按北京时间（作者 2026-10-28 定：人在美国，跟国内的节奏过日子）。
 // 纯计算、零网络：节气按太阳视黄经算，农历用 Intl 中国历，只有法定假日和调休读每年更新的 learning-holidays-cn.json。
 import fs from 'node:fs';
 
@@ -143,7 +143,7 @@ export function examPhase(date, exam) {
 }
 
 // ---------- 时段 ----------
-// 深夜线默认北京时间 0:30；碧琪学到先生常在几点收工后，用 rhythm.lateAfter（24 小时以后的写法，如 24.5）覆盖。
+// 深夜线默认北京时间 0:30；碧琪学到用户常在几点收工后，用 rhythm.lateAfter（24 小时以后的写法，如 24.5）覆盖。
 const PERIODS = [[5, 'dawn', '清晨', '早上好'], [8, 'morning', '上午', '上午好'], [11, 'noon', '中午', '中午好'], [13, 'afternoon', '下午', '下午好'],
   [17, 'dusk', '傍晚', '傍晚好'], [19, 'evening', '晚上', '晚上好']];
 export function period(hour, {lateAfter = 24.5} = {}) {
@@ -166,21 +166,21 @@ export function protagonist(facts, {gapDays = 0, studyDay = 1, studiedToday = fa
   const big = fest.find(item => item.kind === 'big' || item.kind === 'region');
   const examMilestone = nearest.find(exam => [100, 60, 30, 14].includes(exam.daysLeft));
   const anniversary = since && since.slice(5) === date.slice(5) && since < date ? dayDiff(since, date) : 0;
-  const pick = today ? {id: 'exam-day', exam: today.id, greeting: `今天${today.name}，先生`}
-    : eve ? {id: 'exam-eve', exam: eve.id, greeting: '明天就考了，先生'}
-    : birthday && birthday === date.slice(5) ? {id: 'birthday', greeting: '生日快乐，先生'}
-    : final ? {id: 'exam-final', exam: final.id, greeting: `${p.greeting}，先生`}
-    : big ? {id: 'festival', festival: big.id, greeting: `${BIG_GREETING[big.id] || p.greeting}，先生`}
-    : anniversary ? {id: 'anniversary', years: Math.round(anniversary / 365), greeting: `${p.greeting}，先生`}
-    : gapDays >= 3 && !studiedToday ? {id: 'comeback', gapDays, greeting: '欢迎回来，先生'}
-    : examMilestone ? {id: 'exam-milestone', exam: examMilestone.id, days: examMilestone.daysLeft, greeting: `${p.greeting}，先生`}
-    : [30, 100, 200, 365].includes(studyDay) ? {id: 'study-milestone', days: studyDay, greeting: `${p.greeting}，先生`}
-    : term ? {id: 'term', term: term.name, greeting: `${p.greeting}，先生`}
-    : {id: 'ordinary', greeting: `${p.greeting}，先生`};
+  const pick = today ? {id: 'exam-day', exam: today.id, greeting: `今天${today.name}`}
+    : eve ? {id: 'exam-eve', exam: eve.id, greeting: '明天就考了'}
+    : birthday && birthday === date.slice(5) ? {id: 'birthday', greeting: '生日快乐'}
+    : final ? {id: 'exam-final', exam: final.id, greeting: `${p.greeting}`}
+    : big ? {id: 'festival', festival: big.id, greeting: `${BIG_GREETING[big.id] || p.greeting}`}
+    : anniversary ? {id: 'anniversary', years: Math.round(anniversary / 365), greeting: `${p.greeting}`}
+    : gapDays >= 3 && !studiedToday ? {id: 'comeback', gapDays, greeting: '欢迎回来'}
+    : examMilestone ? {id: 'exam-milestone', exam: examMilestone.id, days: examMilestone.daysLeft, greeting: `${p.greeting}`}
+    : [30, 100, 200, 365].includes(studyDay) ? {id: 'study-milestone', days: studyDay, greeting: `${p.greeting}`}
+    : term ? {id: 'term', term: term.name, greeting: `${p.greeting}`}
+    : {id: 'ordinary', greeting: `${p.greeting}`};
   const quiet = ['exam-day', 'exam-eve', 'exam-final'].includes(pick.id);
   const late = p.id === 'late';
   // 深夜劝睡，不庆祝；考试当天和前一天的话照旧。
-  if (late && !['exam-day', 'exam-eve'].includes(pick.id)) pick.greeting = '这么晚了，先生';
+  if (late && !['exam-day', 'exam-eve'].includes(pick.id)) pick.greeting = '这么晚了';
   const tape = quiet ? 'plain' : pick.id === 'festival' ? FESTIVAL_TAPE[pick.festival] || facts.season : facts.season;
   return {...pick, quiet: quiet || late, late, celebrate: !quiet && !late && ['festival', 'birthday', 'anniversary', 'exam-milestone', 'study-milestone'].includes(pick.id), tape};
 }
