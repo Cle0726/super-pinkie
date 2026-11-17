@@ -2011,9 +2011,10 @@ test('an unavailable mm account crosses to clekk without changing the next user 
   assert.deepEqual(watchdog.beforeModelResolve({prompt:'\u2063'},{sessionKey:key}),{providerOverride:'clekk',modelOverride:'gpt-5.6-luna'});
   assert.equal(await watchdog.agentEnded({success:false,error:'本地接入集合暂无账号'},{agentId:'learning',sessionKey:key}),true);
   assert.equal(watchdog.models.get(key),'mm/gemini-3.6-flash-tiered');
-  assert.equal(await watchdog.agentEnded({success:false,error:'auth unavailable'},{agentId:'learning',sessionKey:key}),false);
+  // Both fallbacks used: an outage is waited out on the user's own model instead of giving up (11-17).
+  assert.equal(await watchdog.agentEnded({success:false,error:'auth unavailable'},{agentId:'learning',sessionKey:key}),true);
   assert.equal(watchdog.models.has(key),false);
-  assert.equal(injected.length,2);
+  assert.equal(injected.length,3);
 });
 
 test('watchdog recovers an aborted provider run even when agent_end has no top-level error',async()=>{

@@ -247,6 +247,14 @@ const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|conne
 // provider forever makes the UI look like it is reconnecting and burns quota.
 // The watchdog uses this classifier to make a bounded fallback switch.
 const PROVIDER_ACCOUNT_FAILURE = /(?:you(?:'|’)ve reached (?:your )?(?:codex )?subscription usage limit|subscription usage limit|usage limit(?: exceeded| reached)?|quota(?:[ _-]+(?:exhausted|exceeded|depleted|reached))|insufficient credits|billing limit|rate limit reached|auth[_ -]?unavailable|no auth available|no account|account unavailable|暂无账号)/i;
+// 上游暂时连不上（11-17 实测：免费模型的代理一时「no auth available」/ 503，几秒内重试 5 次全失败，任务就此停住，
+// 之后上游恢复了也没人接着做）。这类不是账号额度用完，换别家模型也不是用户要的：原模型不变，隔得越来越久地接着试，
+// 最长等几个小时，上游一恢复就从断点续上。
+export const PROVIDER_OUTAGE = /(?:\b50[234]\b|auth[_ -]?unavailable|no auth available|service unavailable|temporarily unavailable|bad gateway|gateway time-?out|overloaded|connection (?:refused|reset|closed)|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network error|LLM request failed|upstream (?:error|unavailable)|timed? ?out)/i;
+const PROVIDER_QUOTA = /(?:usage limit|quota(?:[ _-]+(?:exhausted|exceeded|depleted|reached))|insufficient credits|billing limit|subscription)/i;
+export const WATCHDOG_OUTAGE_DELAYS_MS = Object.freeze([10_000, 20_000, 40_000, 80_000, 160_000, 300_000]);
+const WATCHDOG_OUTAGE_MAX_ATTEMPTS = Math.max(6, Number(process.env.PINKIE_WATCHDOG_OUTAGE_MAX_ATTEMPTS) || 60);
+export const isProviderOutage = reason => PROVIDER_OUTAGE.test(String(reason || '')) && !PROVIDER_QUOTA.test(String(reason || ''));
 const WATCHDOG_ACCOUNT_FALLBACKS = Object.freeze([
   'mm/gemini-3.7-flash-tiered',
   'clekk/gpt-5.6-luna',
@@ -4210,6 +4218,7 @@ export class UpstreamWatchdog {
     this.failures = new Map();
     this.models = new Map();
     this.latestRuns = new Map();
+    this.outageSteps = new Map();
     // runId -> 这一轮最后一次模型调用 {startedAt, durationMs, outcome}
     this.lastCalls = new Map();
     this.attempts = new Map();
@@ -4230,6 +4239,13 @@ export class UpstreamWatchdog {
 
   generationFor(sessionKey) {
     return Number(this.generations.get(String(sessionKey || '')) || 0);
+  }
+
+  // 上游断了：10 秒、20 秒、40 秒……最长 5 分钟一次。成功一轮（cancel）后清零。
+  outageDelay(sessionKey) {
+    const step = Number(this.outageSteps.get(sessionKey) || 0);
+    this.outageSteps.set(sessionKey, step + 1);
+    return WATCHDOG_OUTAGE_DELAYS_MS[Math.min(step, WATCHDOG_OUTAGE_DELAYS_MS.length - 1)];
   }
 
   recoveryDelay(sessionKey, reason = '') {
@@ -4301,10 +4317,12 @@ export class UpstreamWatchdog {
     if (workFirstContext(ctx) && endedRun && this.latestRuns.has(sessionKey)
         && this.latestRuns.get(sessionKey) !== endedRun) {
       this.failures.delete(endedRun);
+      if (event.success !== true) this.api.logger?.info?.(`watchdog skipped older run session=${sessionKey} run=${endedRun} newer=${this.latestRuns.get(sessionKey)}`);
       return false;
     }
     if (this.skipNextFailure.delete(sessionKey) || userStoppedRecently(sessionKey)) {
       if (event.runId) this.failures.delete(event.runId);
+      if (event.success !== true) this.api.logger?.info?.(`watchdog skipped user-stopped run session=${sessionKey} run=${endedRun}`);
       return false;
     }
     // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成先生主动停止、不再续跑。
@@ -4356,7 +4374,10 @@ export class UpstreamWatchdog {
     // Keep the user's original model for normal turns, but route the invisible
     // watchdog continuation through the local multi-model pool. Once both
     // fallbacks are exhausted, stop the lease so the real error can surface.
-    if (PROVIDER_ACCOUNT_FAILURE.test(reason)) {
+    const outage = failedParentTurn && isProviderOutage(reason);
+    // 用户选的是免费模型：上游一时没号不切到收费的别家，原模型等它恢复。
+    const freeSession = /(?:^|[-_/:.])free(?:$|[-_/:.])/i.test(String(this.models.get(sessionKey) || ''));
+    if (!(outage && freeSession) && PROVIDER_ACCOUNT_FAILURE.test(reason)) {
       const currentModel = String(this.models.get(sessionKey) || '');
       const fallbackIndex = Number(this.attempts.get(sessionKey) || 0);
       const currentProvider = currentModel.split('/')[0] || '';
@@ -4365,6 +4386,10 @@ export class UpstreamWatchdog {
       if (nextModel && (currentProvider === 'clekk' || currentProvider === 'mm' || !currentModel)) {
         this.models.set(sessionKey, nextModel);
         this.api.logger?.warn?.(`watchdog account fallback selected session=${sessionKey} from=${currentModel || 'unknown'} to=${nextModel}`);
+      } else if (outage) {
+        // 备用的也都试过了：不再换，回到用户原来的模型，隔一阵再试（下面的等待退避）。
+        this.models.delete(sessionKey);
+        this.api.logger?.warn?.(`watchdog account fallback exhausted, waiting on the original model session=${sessionKey} model=${currentModel || 'unknown'}`);
       } else {
         await this.cancel(sessionKey);
         this.api.logger?.warn?.(`watchdog account fallback exhausted session=${sessionKey} model=${currentModel || 'unknown'}`);
@@ -4381,7 +4406,13 @@ export class UpstreamWatchdog {
       }
     }
     const attempt = (this.attempts.get(sessionKey) || 0) + 1;
-    if (this.windows && attempt > WATCHDOG_MAX_ATTEMPTS) {
+    if (outage && attempt > WATCHDOG_OUTAGE_MAX_ATTEMPTS) {
+      await this.cancel(sessionKey);
+      this.api.logger?.warn?.(`watchdog outage wait exhausted session=${sessionKey} attempts=${attempt - 1} reason=${shortReason(reason)}`);
+      return this.windows ? this.giveUp(sessionKey, event.runId, 'exhausted',
+        `上游一直没有恢复，已经等了很久、重试 ${WATCHDOG_OUTAGE_MAX_ATTEMPTS} 次，先停下了。上游好了再发一次「继续」即可。`, reason) : false;
+    }
+    if (!outage && this.windows && attempt > WATCHDOG_MAX_ATTEMPTS) {
       return this.giveUp(sessionKey, event.runId, 'exhausted',
         `上游一直没有恢复，碧琪已经连续重试 ${WATCHDOG_MAX_ATTEMPTS} 次，先停下了。稍后再发一次即可。`, reason);
     }
@@ -4400,7 +4431,10 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog stalled generation session=${sessionKey} run=${endedRun} ms=${stalledMs}`);
     }
     const resumeText = watchdogResumeText({incompleteToolTurn, stalledMs});
-    const recoveryDelay = this.recoveryDelay(sessionKey, reason);
+    // 前两次照旧马上重试（多半是一下抖动）；再不行就是真断了，开始越等越久。
+    const waiting = outage && attempt > 2;
+    const recoveryDelay = this.recoveryDelay(sessionKey, reason) || (waiting ? this.outageDelay(sessionKey) : 0);
+    if (waiting) this.api.logger?.warn?.(`watchdog waiting out provider outage session=${sessionKey} attempt=${attempt} delayMs=${recoveryDelay} reason=${shortReason(reason)}`);
     const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, marathon
       ? 200 + attempt * 75
       : 250 + attempt * 100);
@@ -4814,6 +4848,7 @@ export class UpstreamWatchdog {
   async cancel(sessionKey, suppressNextFailure = false) {
     this.generations.set(sessionKey, this.generationFor(sessionKey) + 1);
     this.attempts.delete(sessionKey);
+    this.outageSteps?.delete(sessionKey);
     this.integrityAttempts.delete(sessionKey);
     this.models.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
