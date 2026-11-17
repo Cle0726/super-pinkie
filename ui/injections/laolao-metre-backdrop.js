@@ -947,6 +947,17 @@
     return [{air: true, sx: x, sy: y, t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}, echo];
   }
 
+  // 点在 (x, y)（格坐标）附近的谱台：按谱板中心算距离（竖向算重一点），46 格以内最近的那个；没有返回 -1。
+  //   点一下，它的灯亮一拍（不亮的灯亮成 tap 色；本来亮着的照旧，波纹另让它闪一下）。
+  function nearestSlot(scene, x, y) {
+    let best = -1, bestD = 46;
+    scene.anchors.slots.forEach((sl, i) => {
+      const z = STAND_SIZES[sl.depth], d = Math.hypot(sl.cx - x, (sl.base - z.poleH - z.legH - z.dh / 2 - y) * 1.4);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    return best;
+  }
+
   // 画一帧（运行时和离线出图共用）：静的一层 → 地板上的水波（东西跟着动）→ 会动的两样 → 地板以上的谱纸 → 音符。返回这一帧改动到的最上一行。
   function compose(scene, step, still, ripples, now, out) {
     const live = ripples && ripples.length ? ripples : null;
@@ -962,7 +973,7 @@
   }
 
   // 给单测和离线出图用（node 里没有 document）
-  G.__pinkieMetreScene = {CELL, BPM, SPRITES, PALETTES, RIPPLE_MS, buildScene, paintMoving, lampStates, paintRipples, makeRipples, compose};
+  G.__pinkieMetreScene = {CELL, BPM, SPRITES, PALETTES, RIPPLE_MS, buildScene, paintMoving, lampStates, paintRipples, makeRipples, nearestSlot, compose};
   if (typeof document === 'undefined') return;
 
   // ==================================================================================================
@@ -974,7 +985,7 @@
   const mainEl = () => document.querySelector('main.content.content--chat');
   let canvas = null, ctx = null, scene = null, low = null, lowCtx = null, img = null, view = null;
   let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null, prevTop = 0, prevRip = false;
-  let ripples = [], rippleTimer = 0, rippleRaf = 0, lastFrame = 0;
+  let ripples = [], rippleTimer = 0, rippleRaf = 0, lastFrame = 0, flashSlot = -1, flashTimer = 0;
   const mainClass = new MutationObserver(() => queue());
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => queue()) : null;
 
@@ -992,7 +1003,7 @@
     observed = null;
     mainClass.disconnect();
     canvas?.remove();
-    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; ripples = []; stopRipple();
+    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer);
     root.removeAttribute('data-pk-metre-backdrop');
     root.style.removeProperty('--metre-band');
   }
@@ -1025,7 +1036,7 @@
     const keepTop = quiet ? Math.floor((col.top - (window.innerHeight - cssH)) / cellCss) : null;
     const lamps = currentLamps();
     lampSig = lamps.join(',');
-    scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, keepTop, dim: home ? 0 : 0.5});
+    scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot});
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');
@@ -1091,6 +1102,18 @@
     const rect = canvas.getBoundingClientRect();
     const x = Math.round((clientX - rect.left) / view.cellCss), y = Math.round((clientY - rect.top) / view.cellCss);
     if (x < 0 || y < 0 || x >= view.cols || y >= view.rows) return false;
+    // 点在谱台附近：最近的那个谱台灯亮一拍（至少两个半拍），静的一层带着它重画一次；
+    //   熄灯也要整层重画（约一帧的活），所以等这一下的波纹走完再熄，不在波纹中间卡一帧
+    const slot = nearestSlot(scene, x, y);
+    if (slot >= 0) {
+      clearTimeout(flashTimer);
+      if (slot !== flashSlot) { flashSlot = slot; layout(); draw(true); }
+      const off = () => {
+        if (ripples.length && canvas) { flashTimer = setTimeout(off, 120); return; }
+        flashSlot = -1; flashTimer = 0; if (canvas) { layout(); draw(true); }
+      };
+      flashTimer = setTimeout(off, STEP * 2);
+    }
     ripples.push(...makeRipples(scene, x, y, Date.now()));
     if (ripples.length > 4) ripples = ripples.slice(-4);   // 最多同时 4 个（空中点击一次是两个：竖直面 + 落到地板上的回声）
     if (!rippleTimer && !rippleRaf) rippleTick();

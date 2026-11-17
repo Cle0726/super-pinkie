@@ -392,7 +392,7 @@ test('Metre v6 home: tempo mark above the prompt, board art drawn on the backdro
 // ---------- 11-16 第十二稿：点哪里都是「一个音落进水里」（RIPPLE-DETAIL-PLAN-1116 §A‴） ----------
 test('Metre backdrop v12: a tap anywhere drops a note into the backdrop — a 3D ripple where you click, notes jump out, objects ride the floor, nothing is left behind', () => {
   const head = read(INJ + 'laolao-head.fragment.html');
-  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop8/);
+  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop9/);
   const ctx = {console, Math, Date};
   ctx.globalThis = ctx;
   vm.createContext(ctx);
@@ -501,4 +501,28 @@ test('Metre 11-16 night 2: a tap above the floor also ripples the floor below (s
   assert.ok(rowsChanged(mid, 110, floorY) > 200, '涟漪走的时候，谱纸跟着亮');
   const after = new Uint32Array(cols * rows); S.compose(sc, 0, false, rs, echo.t0 + S.RIPPLE_MS + 1, after);
   assert.deepEqual(Array.from(after), Array.from(still), '都走完了不留残影');
+});
+
+// ---------- 11-16 夜（三）：点在下面几排谱台附近，最近的那个谱台灯亮一拍（一开始那版的交互，加回来） ----------
+test('Metre 11-16 night 3: a tap near a stand lights its lamp for a beat, alongside the ripple', () => {
+  const ctx = {console, Math, Date};
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(read(INJ + 'laolao-metre-backdrop.js'), ctx);
+  const S = ctx.__pinkieMetreScene;
+  const opts = {cols: 580, rows: 239, band: 126, dark: true, home: true, lamps: ['run', 'done']};
+  const sc = S.buildScene(opts);
+  const off = sc.anchors.slots.findIndex((sl) => sl.state === 'off' && sl.depth === 1);
+  const sl = sc.anchors.slots[off];
+  assert.equal(S.nearestSlot(sc, sl.cx + 2, sl.base - 20), off, '点在谱台上 / 旁边：找到它');
+  assert.equal(S.nearestSlot(sc, sl.cx, 5), -1, '上面空处离谱台远：不亮');
+  const lit = S.buildScene({...opts, flash: off});
+  assert.equal(lit.anchors.slots[off].state, 'tap', '不亮的灯亮成 tap 色');
+  let near = 0, far = 0;
+  for (let i = 0; i < sc.buf.length; i++) if (sc.buf[i] !== lit.buf[i]) { const x = i % opts.cols; if (Math.abs(x - sl.cx) < 40) near++; else far++; }
+  assert.ok(near > 40, '灯和光晕亮起来');
+  assert.equal(far, 0, '只有那一个谱台');
+  const src = read(INJ + 'laolao-metre-backdrop.js');
+  assert.match(src, /const slot = nearestSlot\(scene, x, y\);/, '运行时点击会找最近的谱台');
+  assert.match(src, /if \(ripples\.length && canvas\) \{ flashTimer = setTimeout\(off, 120\); return; \}/, '波纹走完再熄灯');
 });

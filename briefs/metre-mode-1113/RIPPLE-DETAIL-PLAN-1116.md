@@ -307,3 +307,12 @@
 - **已装进本机 App（11-16 17:34，用户：「Install it」）**：装之前核对 App 里的 `laolao-head.fragment.html` / `laolao-metre-backdrop.js` 和 HEAD 一模一样，只拷这两个 → `bundle.py install --root <App>/Contents/Resources/SuperPinkie --control-ui <同>/runtime/openclaw/dist/control-ui`（OK，192 / 1598）→ `check` OK → `codesign --force --deep --sign -` + verify OK → 退出再打开（Launcher PID 81562），网关 200，页面载入 `metrebackdrop8`。备份：`/Users/Admin/碧琪实测/backup-app-ui-1116/before-sheet-echo-173430`（两个原文件 + 整个 control-ui）。
 - 真机核对：127.0.0.1:18789 的 Metre 对话页上点了一下空处，谱纸圈、音符、地板回声都在。帧率没在可见窗口里量（内置浏览器面板是隐藏的，rAF 不走、走的是 50ms 保底）；在原生窗口里点几下看顺不顺要用户看。
 - 没提交。
+
+## §A⁗″ 用户 11-16 夜（三）：「下面这些小排点击交互会亮的效果你没有加回来」
+
+- 一开始那版（288bf9cd）点在画带里时，离得最近的谱台灯亮一拍；场景里 `buildScene({flash})` 一直还在，是第十二稿以后点击处理里没再调用。加回来：新函数 `nearestSlot(scene, x, y)`（按谱板中心、竖向 ×1.4、46 格以内最近的那个，和原来一样），`tapAt` 里找到就 `flashSlot` → `layout()` 重画静的一层（不亮的灯亮成 tap 色：深色暖白、浅色钴蓝，带光晕和地上的光斑；本来亮着的照旧，波纹另让它闪）。
+- 亮至少两个半拍；熄灯也要整层重画（node 里热的约 13–17ms，一帧），所以等这一下的波纹走完再熄，不在波纹中间卡一帧。
+- `render-backdrop.cjs`：最后一次点击附近的谱台和运行时一样亮着（`NOFLASH=1` 关掉）。
+- 版本 `metrebackdrop9`；测试新加「11-16 night 3」，Metre / motion / mode-switcher 104 条全过。
+- 已装进本机 App（17:40，用户：「最后一步做完直接推送同步更新进我的 app」）：App 的两个文件和 HEAD 一致 → 拷入 → bundle install / check OK → 重签 → 重开（Launcher PID 84077），网关 200，页面载入 `metrebackdrop9`，控制台无报错。备份：`/Users/Admin/碧琪实测/backup-app-ui-1116/before-stand-flash-174010`。
+- 真机上那个谱台在窄窗口里被输入框挡住，只量到点下去那块变亮（平均亮度 94 → 131 → 熄后 95），没直接看到灯。

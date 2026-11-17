@@ -10,9 +10,11 @@ const dark=theme==='dark',home=page==='home',cols=+colsArg,band=+bandArg||(home?
 const lamps=lampsArg?lampsArg.split(','):[];
 const quiet=home?null:[Math.round(cols/2-196),Math.round(cols/2+196)];
 const keepTop=process.env.KEEP?+process.env.KEEP:null;
-const sc=S.buildScene({cols,rows,band,dark,home,lamps,quiet,keepTop,dim:home?0:0.5});
-const bg=sc.C.bg;
 const clicks=process.env.RIPPLE?process.env.RIPPLE.split(';').map(p=>p.split(',').map(Number)):[];
+// 和运行时一样：最后一次点击附近的谱台灯亮着（NOFLASH=1 关掉）
+let sc=S.buildScene({cols,rows,band,dark,home,lamps,quiet,keepTop,dim:home?0:0.5});
+if (clicks.length && !process.env.NOFLASH) { const [fx,fy]=clicks[clicks.length-1], flash=S.nearestSlot(sc,fx,fy); if (flash>=0) sc=S.buildScene({cols,rows,band,dark,home,lamps,quiet,keepTop,dim:home?0:0.5,flash}); }
+const bg=sc.C.bg;
 const frames=process.env.FRAMES?process.env.FRAMES.split(',').map(Number):[null];
 const [cx,cy,cw,ch]=(process.env.CROP||`0,0,${cols},${rows}`).split(',').map(Number);
 const crc=(b)=>{let c,t=crc.t||(crc.t=Array.from({length:256},(_,n)=>{c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0}));c=~0;for(const x of b)c=t[(c^x)&255]^(c>>>8);return(~c)>>>0};
