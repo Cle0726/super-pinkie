@@ -13,7 +13,20 @@ const jsonPath = path.join(refDir, 'metre-prompts.json');
 const jsPath = path.join(root, 'ui/injections/laolao-metre-prompts.js');
 
 const strip = (text) => String(text).replace(/\[\[|\]\]/g, '');
-const mark = (text) => text.replace(/‘([^‘’\[\]]{1,12})’/, '‘[[$1]]’');
+const mark = (text) => (text.includes('[[') ? text : text.replace(/‘([^‘’\[\]]{1,12})’/, '‘[[$1]]’'));
+// 首页显示的长度：去掉 [[ ]] 和（English）注释。2026-11-17 第四批加进来时，用户要撤掉原来比较长的句子：
+// 比这批里最长的一句（51 字）还长的都不要；撤空了的类整类去掉。
+export const MAX_LEN = 51;
+export const shownLength = (text) => strip(text).replace(/[（(][A-Za-z][^）)]*[）)]/g, '').length;
+export function prune(data) {
+  const out = JSON.parse(JSON.stringify(data));
+  for (const c of out.categories) {
+    c.user = c.user.filter((s) => shownLength(s) <= MAX_LEN);
+    c.fable = c.fable.filter((s) => shownLength(s) <= MAX_LEN);
+  }
+  out.categories = out.categories.filter((c) => c.user.length + c.fable.length > 0);
+  return out;
+}
 
 export function parseUserText(text) {
   const groups = [];
@@ -68,7 +81,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     : fs.readdirSync(refDir).filter((name) => /^metre-prompts-.*-user\.txt$/.test(name)).sort().map((name) => path.join(refDir, name));
   let data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
   for (const file of files) data = merge(data, parseUserText(fs.readFileSync(file, 'utf8')));
-  data.note = '「user」是用户给的原句（2026-11-13 第一批，2026-11-17 第二、三批，见 ref/metre-prompts-*-user.txt），除 [[ ]] 关键词标记外一个字不改；「fable」是 Fable 5.2 于 2026-11-14 照用户的例子扩写的。[[…]] 标的是要突出的关键词；后几批先把句中第一处 ‘…’ 标成关键词，其余按 ref/metre-prompts-keywords-1117.txt 标；句中（英文）注释首页不显示。新类的 note 是用户写的「特点」。';
+  data = prune(data);
+  data.note = '「user」是用户给的原句（2026-11-13 第一批，2026-11-17 第二、三、四批，见 ref/metre-prompts-*-user.txt），除 [[ ]] 关键词标记外一个字不改；「fable」是 Fable 5.2 于 2026-11-14 照用户的例子扩写的。[[…]] 标的是要突出的关键词；后几批先把句中第一处 ‘…’ 标成关键词，其余按 ref/metre-prompts-keywords-1117.txt 标；第四批的 [[…]] 直接写在 1117c 原句里；首页长度超过 51 字的句子已撤下（build-prompts.mjs 的 MAX_LEN）；句中（英文）注释首页不显示。新类的 note 是用户写的「特点」。';
   fs.writeFileSync(jsonPath, JSON.stringify(data, null, 1) + '\n');
   fs.writeFileSync(jsPath, renderJs(data));
   const count = data.categories.reduce((sum, c) => sum + c.user.length + c.fable.length, 0);

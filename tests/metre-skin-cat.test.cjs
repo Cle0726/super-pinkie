@@ -191,15 +191,24 @@ test('A4-10: the bank is the JSON sentence for sentence; every original line the
   assert.deepEqual(JSON.parse(JSON.stringify(bank)), data);
   const all = home.allPrompts(bank);
   const kinds = [...new Set(all.map((item) => item.category))];
-  assert.equal(kinds.length, 37);
+  assert.equal(kinds.length, 54);
   for (const id of ['heuristic', 'koan', 'powerful', 'reflective', 'socratic', 'orchestral', 'latenight', 'razor', 'warmth', 'cosmic', 'lowtide', 'ultimate']) assert.ok(kinds.includes(id), id);
   for (const c of data.categories) assert.ok(c.zh && c.en, `${c.id} 有中英文名`);
   const plain = (s) => s.replace(/\[\[|\]\]/g, '');
   const user = new Set(data.categories.flatMap((c) => c.user).map(plain));
-  const sent = ['1117', '1117b'].flatMap((day) => read(`briefs/metre-mode-1113/ref/metre-prompts-${day}-user.txt`).split('\n')).map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && !l.startsWith('@'));
+  const lines = (day) => read(`briefs/metre-mode-1113/ref/metre-prompts-${day}-user.txt`).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && !l.startsWith('@'));
+  const sent = ['1117', '1117b'].flatMap(lines);
   assert.equal(sent.length, 400);
-  for (const sentence of sent) assert.ok(user.has(sentence), sentence);
-  assert.equal(user.size, 440);
+  // 11-17 第四批进来时撤掉了原来的长句：首页显示超过 51 字的不在题库里，其余原句都在。
+  const shown = (s) => plain(s).replace(/[（(][A-Za-z][^）)]*[）)]/g, '').length;
+  for (const sentence of sent) assert.equal(user.has(sentence), shown(sentence) <= 51, sentence);
+  for (const c of data.categories) for (const s of [...c.user, ...c.fable]) assert.ok(shown(s) <= 51, s);
+  // 第四批（1117c）200 句原样在题库里，每句都标了关键词。
+  const batch4 = lines('1117c');
+  assert.equal(batch4.length, 200);
+  const marked = new Set(data.categories.flatMap((c) => c.user));
+  for (const sentence of batch4) { assert.match(sentence, /\[\[[^\]]+\]\]/, sentence); assert.ok(marked.has(sentence), sentence); }
+  assert.equal(user.size, 510);
 });
 
 test('A4-10: every kind in the bank can come up, with a few boosted by time of day', () => {
