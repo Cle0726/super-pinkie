@@ -38,7 +38,7 @@
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(location.search).get("session") || "";
-    if (/^agent:(main|project|thinking|learning|unrestricted):/.test(routed)) return routed;
+    if (/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(routed)) return routed;
     const active = document.querySelector(".sidebar-recent-session--active[data-session-key]");
     return active?.dataset?.sessionKey || "";
   };
@@ -547,7 +547,7 @@
     const name = event.detail?.event;
     const payload = event.detail?.payload || {};
     const key = typeof payload.sessionKey === "string" ? payload.sessionKey : "";
-    if (!key || !/^agent:(main|project|thinking|learning|unrestricted):/.test(key)) return;
+    if (!key || !/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(key)) return;
     if (name === "session.message") {
       if (applyLiveMessage(payload)) renderContextViewer();
       return;
