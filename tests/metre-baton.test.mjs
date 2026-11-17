@@ -62,3 +62,14 @@ test('a free model may be dispatched to itself; a paid one may not', async () =>
   assert.equal(chooseChildModel({config, selfModel: 'workbuddy/hy4flash-free', requested: 'workbuddy/hy4flash-free'}).model, 'workbuddy/hy4flash-free');
   assert.throws(() => chooseChildModel({config, selfModel: 'openai/gpt-5', requested: 'openai/gpt-5'}), /同一个模型/);
 });
+
+test('Metre and its children use the floating app browser, never the desktop Chrome browser tool', async () => {
+  const {MetreBaton} = await import('../services/mode-architecture/metre-baton.mjs');
+  const children = {'agent:project:pinkie-child:abc': 'agent:metre:dashboard:p'};
+  const baton = new MetreBaton({isMetre, solo: () => true,
+    metreFamily: key => isMetre(key) || isMetre(children[key] || '')});
+  assert.match(baton.before('agent:metre:dashboard:p', 'browser')?.blockReason || '', /app_browser/);
+  assert.equal(baton.before('agent:project:pinkie-child:abc', 'browser')?.block, true);
+  assert.equal(baton.before('agent:project:main', 'browser'), undefined, 'other modes keep their browser tool');
+  assert.equal(baton.before('agent:metre:dashboard:p', 'app_browser'), undefined);
+});

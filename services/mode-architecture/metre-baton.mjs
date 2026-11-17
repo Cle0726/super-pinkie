@@ -14,10 +14,17 @@ export const BATON_BLOCK = `【Baton · 派发】这一轮是派发：动手的�
   + '用 pinkie_session_start（initiation: in_scope，写 mode 和 model）派出去；你继续读、判断、验收、汇报。'
   + '派发失败了（模式没装、名额满等）才自己接着做。用户想让你亲手做，会把输入框下面切到 Virtuoso。';
 
+// 11-17 用户：「不要让它用我的浏览器，她自己不是有悬浮浏览器吗」。browser 工具会在桌面上另开一个 Chrome 窗口；
+// Metre 和它派出去的子会话一律用 App 里的悬浮浏览器 app_browser（确认框现在也能答了）。
+export const METRE_BROWSER_BLOCK = '【浏览器】Metre 和它的子会话不用 browser（它会在用户桌面上另开一个 Chrome 窗口）。'
+  + '改用 app_browser：App 里的悬浮浏览器，用户看得见；open 打开网址、snapshot/read 看页面、click/type/fill 操作，'
+  + '页面弹出的确认框会自动按 dialog 参数答（默认确定）。本地项目预览用 app_browser 的 serve。操控别的桌面应用用 computer。';
+
 export class MetreBaton {
-  constructor({isMetre, solo}) {
+  constructor({isMetre, solo, metreFamily = isMetre}) {
     this.isMetre = isMetre;
     this.solo = solo;
+    this.metreFamily = metreFamily;
     this.runs = new Map();
   }
   state(key) {
@@ -31,6 +38,7 @@ export class MetreBaton {
     if (this.runs.size > 500) this.runs.delete(this.runs.keys().next().value);
   }
   before(key, toolName) {
+    if (String(toolName || '') === 'browser' && this.metreFamily(key)) return {block: true, blockReason: METRE_BROWSER_BLOCK};
     if (!this.isMetre(key) || this.solo(key) || !BATON_HANDS_ON.has(String(toolName || ''))) return undefined;
     const state = this.state(key);
     if (state.dispatched || state.dispatchFailed) return undefined;
@@ -67,7 +75,7 @@ export function dispatchOutcome(event) {
 }
 
 // 宿主会把插件按运行时各注册一次：钩子挂在每一个 api 上，计数用同一个 baton（传进来的）。
-export function registerMetreBaton(api, {isMetre, solo, baton = new MetreBaton({isMetre, solo})}) {
+export function registerMetreBaton(api, {isMetre, solo, metreFamily, baton = new MetreBaton({isMetre, solo, metreFamily})}) {
   baton.apis ??= new WeakSet();
   if (api && typeof api === 'object') { if (baton.apis.has(api)) return baton; baton.apis.add(api); }
   const guard = (fn) => (event, ctx) => { try { return fn(event, ctx); } catch { return undefined; } };

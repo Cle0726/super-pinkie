@@ -1259,7 +1259,10 @@ export function registerSessionLineage(api, options) {
   if (options.prefs) lineage.prefsSource = () => options.prefs;
   registerMinimalChildToolsMigration(api);
   // Baton（派发）真的要派：动手到上限还没派过就拦下（metre-baton.mjs）。只注册一次，实例共用。
-  lineage.baton = registerMetreBaton(api, {isMetre: isMetreKey, solo: key => lineage.solo(key), baton: lineage.baton});
+  // Metre 自己，或父会话是 Metre 的子会话。
+  const metreFamily = key => isMetreKey(key) || (String(key || '').includes(':pinkie-child:')
+    && isMetreKey(lineage.lineage()[key]?.parentKey));
+  lineage.baton = registerMetreBaton(api, {isMetre: isMetreKey, solo: key => lineage.solo(key), metreFamily, baton: lineage.baton});
   const protectedHook = (name, work) => (event, ctx) => {
     try { return work(event, ctx); }
     catch { logSessionFailure(api, 'session-lineage', sessionKeyOf(event, ctx), name); }
