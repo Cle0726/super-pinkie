@@ -969,9 +969,19 @@
     const input = event.target?.closest?.(".agent-chat__composer-combobox textarea");
     if (input?.value?.trim()) followOwnSend(paneForEvent(event));
   }, true);
+  // Only a move away from the bottom means "I'm reading back". A downward wheel,
+  // or trackpad momentum still arriving after the thread already hit the
+  // bottom, scrolls nothing upward and fires no scroll event, so the native
+  // handler would never unlock again: the next paint then held a stale reading
+  // anchor and pushed the newest message away from the bottom.
   const cancelFollowOnUserScroll = (event) => {
     const pane = paneForEvent(event);
-    if (pane) cancelFollowIntent(pane);
+    if (!pane) return;
+    const thread = pane.querySelector?.(".chat-thread");
+    const atBottom = Boolean(thread && thread.scrollHeight - thread.scrollTop - thread.clientHeight <= 8);
+    const delta = event.type === "wheel" && Number.isFinite(event.deltaY) ? event.deltaY : null;
+    // Touch has no direction here: lock unless the thread is resting at the bottom.
+    cancelFollowIntent(pane, delta === null ? !atBottom : delta < 0);
   };
   document.addEventListener("wheel", cancelFollowOnUserScroll, {capture: true, passive: true});
   document.addEventListener("touchmove", cancelFollowOnUserScroll, {capture: true, passive: true});

@@ -22,7 +22,7 @@
   const reasoningTierKey = (sessionKey) => `laolao:reasoning-enhance:v1:${sessionKey}`;
 
   function reasoningTier(sessionKey) {
-    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    if (!/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(String(sessionKey || ""))) return "";
     try {
       const tier = localStorage.getItem(reasoningTierKey(sessionKey));
       return tier === "max" || tier === "ultra" ? tier : "";
@@ -36,7 +36,7 @@
   }
   // 要不要在发送前登记做法：Max / Ultra / Adaptive，或者所选档位当前模型原生做不到（往上补、往下补）。
   function effortLevel(sessionKey) {
-    if (!/^agent:(main|project|thinking|learning|unrestricted):/.test(String(sessionKey || ""))) return "";
+    if (!/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(String(sessionKey || ""))) return "";
     const enhanced = reasoningTier(sessionKey);
     if (enhanced) return enhanced;
     const choice = effortChoice(sessionKey);
@@ -154,7 +154,8 @@
       let sameOrigin = false;
       try { sameOrigin = new URL(String(url), location.href).host === location.host; } catch {}
       if (/18789/.test(String(url)) || sameOrigin) {
-        ws.addEventListener("close", () => { if (gwSocket === ws) gwSocket = null; });
+        // 正在用的那条连接断了：告诉各处（总控台据此立刻标「断线」，不再显示成还在跑）。重连成功另有 pinkie:sidebar-gateway-ready。
+        ws.addEventListener("close", () => { if (gwSocket === ws) { gwSocket = null; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); } });
         sniff(ws);
         const send = ws.send.bind(ws);
         const sendQueues = new Map();
@@ -297,8 +298,8 @@
   /* ---------- 1. 状态与模式隔离（localStorage） ----------
      每个模式有独立 agent、会话、置顶、项目与文件夹绑定。旧版共享
      数据只迁移一次，并按会话所属 agent 拆开；旧 key 留着作为恢复副本。 */
-  const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
-  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted" };
+  const MODES = ["chat", "project", "thinking", "learning", "unrestricted", "metre"];
+  const MODE_AGENT = { chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted", metre: "metre" };
   const AGENT_MODE = Object.fromEntries(Object.entries(MODE_AGENT).map(([mode, agent]) => [agent, mode]));
   const LEGACY_LS_KEY = "laolao.sidebar.v1";
   const MIGRATION_KEY = "laolao.sidebar.v2.migrated";
@@ -1904,6 +1905,12 @@
     return {left,top};
   }
   let sidebarTooltip=null,sidebarTooltipAnchor=null;
+  function sidebarTextFullyShown(anchor,text){
+    const want=String(text).trim();
+    if(!want||String(anchor.textContent||'').replace(/\s+/g,' ').trim().indexOf(want)<0)return false;
+    const nodes=[anchor,...anchor.querySelectorAll('*')].filter(node=>String(node.textContent||'').includes(want));
+    return !nodes.some(node=>node.scrollWidth>node.clientWidth+1||node.scrollHeight>node.clientHeight+1&&getComputedStyle(node).overflowY!=='visible');
+  }
   function hideSidebarTooltip(){sidebarTooltip?.remove();sidebarTooltip=null;sidebarTooltipAnchor=null;}
   function showSidebarTooltip(target){
     const anchor=target?.closest?.('.sidebar [data-pinkie-tooltip], .sidebar [title]');
@@ -1911,6 +1918,13 @@
     const text=anchor.dataset.pinkieTooltip||anchor.getAttribute('title');
     if(!text)return;
     if(anchor.hasAttribute('title')){anchor.dataset.pinkieTooltip=text;anchor.removeAttribute('title');}
+    /* 原生按钮外面已经包了 openclaw-tooltip，它自己会弹提示；这里再弹就是两个。 */
+    const nativeTip=anchor.closest('openclaw-tooltip');
+    if(nativeTip&&String(nativeTip.content||'').trim()){hideSidebarTooltip();return;}
+    /* 提示文字就是按钮上已经完整显示出来的字（会话标题没被截断），不用再弹一遍。 */
+    if(sidebarTextFullyShown(anchor,text)){hideSidebarTooltip();return;}
+    /* Metre：按钮上已经写着字的，悬停不再弹一段介绍（11-16 夜，用户：重复的按键介绍没有必要）。 */
+    if(document.documentElement.getAttribute('data-laolao-mode')==='metre'&&(window.__pinkieMetreShowsText?.(anchor)??sidebarTextFullyShown(anchor,text))){hideSidebarTooltip();return;}
     hideSidebarTooltip();sidebarTooltipAnchor=anchor;
     const tip=document.createElement('div');tip.className='pinkie-sidebar-tooltip';tip.setAttribute('role','tooltip');tip.textContent=text;
     document.body.append(tip);sidebarTooltip=tip;
@@ -1947,7 +1961,7 @@
       footer.prepend(status);
     }
     const state=connectionState(dot.classList.contains('sidebar-connection-status--online'),window.__laolaoUsage?.link?.latency);
-    const label={online:'碧琪在线',slow:'连接较慢',offline:'连接断开'}[state];
+    const label={online:document.documentElement.getAttribute('data-laolao-mode')==='metre'?'在线':'碧琪在线',slow:'连接较慢',offline:'连接断开'}[state];
     if(status.dataset.state!==state)status.dataset.state=state;
     if(status.getAttribute('aria-label')!==label+'，查看连接详情')status.setAttribute('aria-label',label+'，查看连接详情');
     const text=status.querySelector('.pinkie-connection-status__label');if(text.textContent!==label)text.textContent=label;
@@ -2005,6 +2019,42 @@
   window.addEventListener("popstate", schedule);
   window.addEventListener("laolao:modechange", schedule);
 
+  // pinkie_sessions 的 create 在后端建好会话、绑好文件夹后，记一笔「放进哪个项目」；侧栏的项目分组存在这边，
+  // 这里把它挂进同名（或同文件夹）的项目，没有就新建一个，然后告诉后端放好了。
+  let adopting = null;
+  function adoptPlacements() {
+    if (adopting) return adopting;
+    const ownerMode = stateMode, ownerState = state, agentId = currentModeAgent();
+    adopting = (async () => {
+      const {placements = {}} = await gwRequest('pinkie.session.manage.placements', {agentId}, 15000);
+      const keys = Object.keys(placements);
+      if (!keys.length) return;
+      const sameFolder = (a, b) => String(a || '').replace(/[\\/]+$/, '').toLowerCase() === String(b || '').replace(/[\\/]+$/, '').toLowerCase();
+      for (const key of keys) {
+        const {project, folder} = placements[key] || {};
+        if (!folder || Object.values(ownerState.projects).some(list => Array.isArray(list) && list.includes(key))) continue;
+        let name = Object.keys(ownerState.projectFolders).find(each => sameFolder(ownerState.projectFolders[each], folder));
+        if (!name) {
+          const base = String(project || folder.split(/[\\/]/).filter(Boolean).pop() || '项目').slice(0, 80);
+          name = base;
+          for (let n = 2; ownerState.projectFolders[name] || ownerState.projects[name]?.length; n++) name = base + '（' + n + '）';
+          ownerState.projectFolders[name] = folder;
+        }
+        if (!ownerState.projects[name]) ownerState.projects[name] = [];
+        ownerState.projects[name].push(key);
+      }
+      writeModeState(ownerMode, ownerState);
+      await gwRequest('pinkie.session.manage.placed', {keys}, 15000).catch(() => {});
+      sessionIndex = null;
+      window.PinkieSessionList?.invalidate?.();
+      schedule();
+    })().catch(() => {}).finally(() => { adopting = null; });
+    return adopting;
+  }
+  window.addEventListener('laolao:sessions-changed', () => { void adoptPlacements(); });
+  window.addEventListener('pinkie:sidebar-gateway-ready', () => { void adoptPlacements(); });
+  window.addEventListener('laolao:modechange', () => { void adoptPlacements(); });
+
   /* 调试句柄（只读排查用） */
   window.__laolaoSidebar = {
     gwRequest,
@@ -2013,6 +2063,7 @@
     openChildSessionDialog,
     createSession: (options = {}) => createProjectSession(null, {...options, plain: true}),
     askDeleteAllSessions,
+    adoptPlacements,
     toast,
     openMenu,
     closeMenu,

@@ -1,6 +1,6 @@
 // Read-only presentation API for the existing execution engines. Keep the
 // aggregate contract in one module so packaging and UI tests use the same code.
-const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted):[^\s]+$/;
+const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
 
 export function registerWorkGateway(api, {reasoning, architecture, background}) {
   const sessionFor = (params, respond) => {

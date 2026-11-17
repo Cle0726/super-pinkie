@@ -14,6 +14,9 @@
   font: 14px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
   transform-origin: 50% 100%;
   animation: laolao-ask-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .laolao-ask.is-restored { animation-duration: 0.28s; }
 @keyframes laolao-ask-in { from { opacity: 0; transform: translateY(14px) scale(0.97); } }

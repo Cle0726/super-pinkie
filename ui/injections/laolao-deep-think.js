@@ -106,7 +106,7 @@
   // 当前模式 (优先读 mode-switcher 写在 <html> 上的 data-laolao-mode)
   const currentMode = () => {
     const attr = document.documentElement.getAttribute("data-laolao-mode");
-    if (attr && ["chat", "project", "thinking", "learning", "unrestricted"].includes(attr)) {
+    if (attr && ["chat", "project", "thinking", "learning", "unrestricted", "metre"].includes(attr)) {
       return attr;
     }
     const routed = new URLSearchParams(window.location.search).get("session") || "";
@@ -114,6 +114,7 @@
     if (routed.startsWith("agent:thinking:")) return "thinking";
     if (routed.startsWith("agent:learning:")) return "learning";
     if (routed.startsWith("agent:unrestricted:")) return "unrestricted";
+    if (routed.startsWith("agent:metre:")) return "metre";
     if (routed.startsWith("agent:main:")) return "chat";
     const el = document.querySelector(
       ".sidebar-recent-session--active[data-session-key]"
@@ -123,15 +124,16 @@
     if (key.startsWith("agent:thinking:")) return "thinking";
     if (key.startsWith("agent:learning:")) return "learning";
     if (key.startsWith("agent:unrestricted:")) return "unrestricted";
+    if (key.startsWith("agent:metre:")) return "metre";
     return "chat";
   };
 
   const currentSessionKey = () => {
     const routed = new URLSearchParams(window.location.search).get("session") || "";
-    if (/^agent:(main|project|thinking|learning|unrestricted):/.test(routed)) return routed;
+    if (/^agent:(main|project|thinking|learning|unrestricted|metre):/.test(routed)) return routed;
     const active = document.querySelector("[data-session-key].sidebar-recent-session--active");
     const key = active?.dataset?.sessionKey || "";
-    return /^agent:(main|project|thinking|learning|unrestricted):/.test(key) ? key : "";
+    return /^agent:(main|project|thinking|learning|unrestricted|metre):/.test(key) ? key : "";
   };
 
   const toast = (msg) => {
@@ -583,9 +585,9 @@
         }
       }
       btn.setAttribute("aria-pressed", String(Boolean(tier)));
-      btn.setAttribute("title", tier ? `极致思考：${tier.label}（点击调整或取消）` : "极致思考：让碧琪多想几轮再答");
+      btn.setAttribute("title", tier ? `极致思考：${tier.label}（点击调整或取消）` : (currentMode() === "metre" ? "极致思考：多想几轮再答" : "极致思考：让碧琪多想几轮再答"));
       // 旁边模型那一栏还有一个「思考强度」（模型自己的推理档位）。两个按钮原来叫同一个名字，这个是极致思考。
-      btn.setAttribute("aria-label", tier ? `极致思考已固定为${tier.label}` : "极致思考：让碧琪多想几轮再答");
+      btn.setAttribute("aria-label", tier ? `极致思考已固定为${tier.label}` : (currentMode() === "metre" ? "极致思考：多想几轮再答" : "极致思考：让碧琪多想几轮再答"));
     }
   }
 
@@ -667,7 +669,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   const WORK_ID = "pinkie-work-panel";
   const WORK_PHASES = {
     armed: "正在准备推演",
-    answering: "碧琪在回答", reviewing: "正在批评与核对", fixing: "按批评修改中", passed: "核对通过",
+    get answering() { return currentMode() === "metre" ? "正在回答" : "碧琪在回答"; }, reviewing: "正在批评与核对", fixing: "按批评修改中", passed: "核对通过",
     fixed: "已按批评修正", unresolved: "仍有问题，回复里已说明", unchecked: "这次没核对成", skipped: "这次没核对",
   };
   const WORK_LEVELS = {medium: "Medium", high: "High", xhigh: "XHigh", adaptive: "Adaptive", max: "Max", ultra: "Ultra", boost: "加强档", full: "全开档", marathon: "长跑档"};
@@ -683,7 +685,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   const workSessionKey = () => {
     const key = currentSessionKey();
     const agent = /^agent:([^:]+):/.exec(key)?.[1];
-    const modeAgent = {chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted"}[currentMode()];
+    const modeAgent = {chat: "main", project: "project", thinking: "thinking", learning: "learning", unrestricted: "unrestricted", metre: "metre"}[currentMode()];
     return agent && agent === modeAgent ? key : "";
   };
 
@@ -753,7 +755,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     }
     for (const bg of status?.background || []) {
       rows.push({key: `bg:${bg.id}`, kind: "bg", id: bg.id, state: bg.state === "running" ? "running" : "done", title: "后台命令", model: "",
-        summary: bg.state === "running" ? bg.command : `${bg.command}${bg.woke ? " · 已叫醒碧琪" : ""}`, startedAt: bg.startedAt, endedAt: bg.endedAt, hasOutput: false});
+        summary: bg.state === "running" ? bg.command : `${bg.command}${bg.woke ? (currentMode() === "metre" ? " · 已接着做" : " · 已叫醒碧琪") : ""}`, startedAt: bg.startedAt, endedAt: bg.endedAt, hasOutput: false});
     }
     return rows;
   }
@@ -849,13 +851,16 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     panel.style.maxWidth = `${Math.max(120, Math.min(340, rect.width - 16, window.innerWidth - 24))}px`;
     const card = panel.querySelector(".pinkie-work__card");
     const width = panel.offsetWidth;
-    const left = Math.max(12, Math.min(right - width, window.innerWidth - width - 12));
+    // Metre：贴输入框左边（右边是小猫和发送键），见 11-17 截图。
+    const metre = document.documentElement.getAttribute("data-laolao-mode") === "metre";
+    const left = Math.max(12, Math.min(metre ? rect.left + 8 : right - width, window.innerWidth - width - 12));
     panel.style.left = `${left}px`;
     const pill = panel.querySelector(".pinkie-work__pill").getBoundingClientRect();
     const hit = card && !card.hidden ? panel.getBoundingClientRect() : pill;
     let ceiling = rect.top - 8;
     const pane = shell.closest(".chat-pane, .agent-chat") || shell.parentElement;
-    for (const button of pane.querySelectorAll(".chat-new-messages")) {
+    // 运行状态条（.pk-run）也贴在输入框上沿：叠在它上面，不压住它。
+    for (const button of [...pane.querySelectorAll(".chat-new-messages"), ...document.querySelectorAll(".pk-run")]) {
       if (button.hidden || getComputedStyle(button).visibility === "hidden") continue;
       const b = button.getBoundingClientRect();
       if (b.width && b.height && hit.left < b.right + 8 && hit.right > b.left - 8) ceiling = Math.min(ceiling, b.top - 10);

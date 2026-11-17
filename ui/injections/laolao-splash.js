@@ -35,7 +35,7 @@
     url.searchParams.delete('laolao-switch');
     window.history.replaceState(window.history.state, '', url.href);
   }
-  const ids = ['chat', 'project', 'thinking', 'learning', 'unrestricted'];
+  const ids = ['chat', 'project', 'thinking', 'learning', 'unrestricted', 'metre'];
   const session = url.searchParams.get('session') || '';
   const routed = session.startsWith('agent:main:') ? 'chat' : ids.find(id => session.startsWith(`agent:${id}:`));
   const selected = switching && ids.includes(handoff?.mode) ? handoff.mode : routed || localStorage.getItem('laolao:active-mode');
@@ -46,18 +46,36 @@
     thinking: { label: '想法模式', address: '先生', waiting: '灵感房间正在亮灯…', ready: '想法小屋准备好啦！' },
     learning: { label: '学习模式', address: '先生', waiting: '学习小屋正在亮灯…', ready: '学习小屋准备好啦！' },
     unrestricted: { label: '无限制模式', address: '先生', waiting: '彩虹力量正在接管房间…', ready: '彩虹力量准备好啦！' },
+    metre: { label: 'Metre', address: '', waiting: '正在打开…', ready: 'Metre', plain: true },
   }[mode];
+  // Metre：不用碧琪的闪屏（派对小屋、动效、俏皮话），换成像素 M + 「Metre」+ 一根细进度线（样式在 laolao-metre-brand.css）。
+  // laolao-metre-skin.js 在第一帧前已按上次的模式猜过一次，这里以算准的为准。
+  const metre = mode === 'metre';
+  document.documentElement.toggleAttribute('data-laolao-splash-metre', metre);
+  window.addEventListener('laolao:splash-cleared', () => document.documentElement.removeAttribute('data-laolao-splash-metre'), {once: true});
+  if (metre) {
+    splash.classList.add('is-metre');
+    splash.setAttribute('aria-label', 'Metre 正在启动');
+    const mark = document.createElement('div');
+    mark.className = 'laolao-splash__metre-mark';
+    mark.innerHTML = window.__pinkieMetreBrand?.mark?.({title: ''}) || '';
+    splash.querySelector('.laolao-splash__content')?.prepend(mark);
+    const title = splash.querySelector('.laolao-splash__title');
+    if (title) title.textContent = 'Metre';
+  }
   const initial = switching ? Math.max(68, Math.min(96, Number(handoff?.progress) || 68)) : 8;
   if (switching) {
     splash.classList.add('is-mode-progress', `is-mode-progress--${mode}`);
-    splash.style.setProperty('--laolao-mode-progress-image', `url("/laolao-mode-transition-${mode}.png?v=transition2")`);
-    motion.text(splash.querySelector('.laolao-splash__eyebrow'), '碧琪的模式切换');
-    motion.text(splash.querySelector('.laolao-splash__title'), details.label);
+    if (!details.plain) splash.style.setProperty('--laolao-mode-progress-image', `url("/laolao-mode-transition-${mode}.png?v=transition2")`);
+    if (!metre) {
+      motion.text(splash.querySelector('.laolao-splash__eyebrow'), details.plain ? '切换模式' : '碧琪的模式切换');
+      motion.text(splash.querySelector('.laolao-splash__title'), details.label);
+    }
   }
   // Decode both scene and destination wallpaper. Missing decorative files
   // settle too, so a failed image can never hold the user behind this screen.
   let assetsReady = false;
-  Promise.all([motion.modeAssets(mode), motion.preload(switching
+  Promise.all([motion.modeAssets(mode), metre ? Promise.resolve(true) : motion.preload(switching
     ? `/laolao-mode-transition-${mode}.png?v=transition2` : '/laolao-splash.png')])
     .then(() => { assetsReady = true; splash.classList.add('is-art-ready'); });
   const started = performance.now();
@@ -68,7 +86,7 @@
   let splashFx = null;
   let fxEntered = false;
   const startFx = () => {
-    if (completed || splashFx || switching) return;
+    if (completed || splashFx || switching || metre) return;
     const candidate = window.PinkieSplashFx?.play?.({
       host: splash,
       onImpact: () => { fxEntered = true; motion.enter(); },
@@ -111,7 +129,7 @@
     if (completed) return;
     completed = true;
     if (success) {
-      motion.text(message, switching ? details.ready : `${details.address}，门要开啦！`);
+      motion.text(message, switching ? details.ready : details.plain ? '马上就好' : `${details.address}，门要开啦！`);
       if (splashFx?.active) {
         // 动效版离场：进度走满、碧琪冲向镜头、冲破开屏露出 App。
         await splashFx.finish();
@@ -136,14 +154,14 @@
       }, motion.reduced() ? 0 : 560);
     }, success && !motion.reduced() ? 160 : 0);
   };
-  const phrases = [
+  const phrases = details.plain ? ['正在打开…', '正在连接…', '正在读取会话…', '正在准备界面…'] : [
     `${details.address}稍等，碧琪在给气球打气…`, '卷胡子扶正中，千万别让它跑掉！',
     '纸屑正在排队进场，乖一点点！', '派对大炮预热中，别眨眼！', '最后检查：惊喜有没有藏好？',
   ];
   const tick = () => {
     if (completed) return;
     const now = performance.now(), elapsed = now - started;
-    const phrase = elapsed > 8000 ? `${details.address}，连接比平时慢，碧琪还在等…`
+    const phrase = elapsed > 8000 ? (details.plain ? '连接比平时慢，还在等…' : `${details.address}，连接比平时慢，碧琪还在等…`)
       : switching ? details.waiting : phrases[Math.min(phrases.length - 1, Math.floor(elapsed / 560))];
     setProgress(Math.min(switching ? 96 : 94, initial + elapsed / (switching ? 92 : 28)), phrase);
     if (ready(now) && elapsed >= minimum) return leave();

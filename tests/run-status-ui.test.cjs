@@ -222,3 +222,22 @@ test('wired into the shared entry, native send path untouched, calm motion', () 
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /html\[data-pinkie-night\]/, "has a night variant");
 });
+
+// 11-15 用户：「不要后端挂了前端还在转」。一轮没收尾、后端也不在跑（verifyAlive 判定）：如实写中断，停在哪一步，不给停下键。
+test('an interrupted run says so, names the step it stopped at, and offers no stop button', () => {
+  const {api} = load();
+  const plan = {items: [
+    {id: 'a', text: '拆解需求', status: 'completed'}, {id: 'b', text: '派发子会话', status: 'completed'},
+    {id: 'c', text: '逐块验收', status: 'in_progress'}, {id: 'd', text: '汇总汇报', status: 'pending'}]};
+  for (const metre of [true, false]) {
+    const view = api.describe(base({now: T0 + 60_000, live: {}, metre, plan, ended: {outcome: 'interrupted', at: T0, ms: 0}}));
+    assert.equal(view.visible, true);
+    assert.equal(view.kind, 'interrupted');
+    assert.match(view.text, /^这一轮中断了，停在第 3 步，共 4 步：逐块验收$/);
+    assert.doesNotMatch(view.text, /在做/);
+    assert.equal(view.actions.length, 0, '没有停下键');
+  }
+  const later = api.describe(base({now: T0 + 6 * 60_000, live: {}, metre: true, plan, ended: {outcome: 'interrupted', at: T0, ms: 0}}));
+  assert.notEqual(later.kind, 'interrupted', '5 分钟后回到空闲');
+  assert.match(read(JS), /hasActiveRun !== false\) return/, '读不到原生记录时不下结论');
+});

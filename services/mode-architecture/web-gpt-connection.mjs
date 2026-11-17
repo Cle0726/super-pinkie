@@ -6,7 +6,7 @@ import {promisify} from 'node:util';
 import {projectContext} from './web-gpt-project-context.mjs';
 
 const execFileAsync = promisify(execFile);
-const VALID_SESSION = /^agent:(main|project|thinking|learning|unrestricted):/;
+const VALID_SESSION = /^agent:(main|project|thinking|learning|unrestricted|metre):/;
 const MAX_OUTPUT = 64 * 1024;
 const TRANSIENT_TUNNEL_ERROR = /Tunnel start timed out|fetch failed|public health endpoint|cloudflared exited before|安全隧道暂时没有连通/i;
 const FATAL_TUNNEL_STATUS = /Unauthorized|Tunnel not found|no recent network activity|operation was aborted due to timeout/i;

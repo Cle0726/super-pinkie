@@ -111,6 +111,24 @@ test('live thinking follows its own rows and only fills Lit-owned slots', () => 
   assert.match(processBranchSource('render'), /data-pinkie-thinking-seg/);
 });
 
+test('long multi-step thinking is retained past the old 8000-character cap', () => {
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  const burst = '长任务思考'.repeat(1800);
+  h.send('thinking', {delta: burst});
+  const record = Object.values(h.window.__laolaoProcessCard.store).find(item => item?.eps?.length);
+  assert.equal(record?.eps?.reduce((sum, ep) => sum + ep.text.length, 0), burst.length);
+});
+
+test('live label stays 正在思考 while its received text is still being displayed', () => {
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '这是一段需要逐字展示的真实思考'});
+  assert.match(h.top.querySelector('.pinkie-thinking__label')?.textContent || '', /^正在思考/);
+  h.send('assistant', {delta: '开始回答'});
+  assert.match(h.top.querySelector('.pinkie-thinking__label')?.textContent || '', /^正在思考/);
+});
+
 test('historical thinking parts are projected to the same rows', () => {
   const projected = historicalCard();
   assert.deepEqual(projected.processThinkingSegments.map(ep => [ep.text, ep.anchor]), [
@@ -119,6 +137,21 @@ test('historical thinking parts are projected to the same rows', () => {
   const h = harness();
   h.setRows(2); h.top.pinkieHistorySegments = projected.processThinkingSegments;
   h.top.pinkieHistoryThinking = projected.processThinking;
+  h.invalidateHistory();
+  assert.deepEqual(h.textAt(0), ['第一段思考']);
+  assert.deepEqual(h.textAt(2), ['第二段思考']);
+});
+
+test('a later burst stays visible when its row sits in the closed overflow', () => {
+  const saved = {[key]: {text: '第一段思考\n\n第二段思考', ms: 0, count: 2, at: 1,
+    eps: [{text: '第一段思考', ms: 0, anchor: 0}, {text: '第二段思考', ms: 0, anchor: 1}]}};
+  const h = harness(saved);
+  h.setRows(2);
+  // The native card only emits a slot for displayed rows; hide row 1 as the
+  // collapsed "前面还有 N 步" section does, leaving the tail as the next slot.
+  const hidden = h.card.querySelectorAll('[data-pinkie-thinking]')
+    .find(node => Number(node.dataset.pinkieThinkingSeg) === 1 && node.dataset.pinkieThinkingTail !== '1');
+  hidden?.remove();
   h.invalidateHistory();
   assert.deepEqual(h.textAt(0), ['第一段思考']);
   assert.deepEqual(h.textAt(2), ['第二段思考']);
@@ -164,7 +197,7 @@ test('a live card whose durable key replaces its optimistic key keeps thinking a
 });
 
 
-test('other sessions keep one combined thought in the original top position', () => {
+test('every session uses per-burst thoughts, including unknown agent ids', () => {
   const h = harness({}, 'agent:other:test');
   h.send('lifecycle', {phase: 'start'});
   h.send('thinking', {delta: '第一段'});
@@ -173,29 +206,29 @@ test('other sessions keep one combined thought in the original top position', ()
   h.setRows(2);
   h.send('tool', {phase: 'result', name: 'read'});
   h.send('thinking', {delta: '第二段'});
-  assert.deepEqual(h.textAt(0), ['第一段\n\n第二段']);
-  assert.deepEqual(h.textAt(2), []);
+  assert.deepEqual(h.textAt(0), ['第一段']);
+  assert.deepEqual(h.textAt(2), ['第二段']);
 });
 
-test('other sessions retain the previous history projection', () => {
+test('unknown sessions also project history into per-burst segments', () => {
   const previous = globalThis.location;
   globalThis.location = {search: '?session=agent%3Aother%3Atest'};
   try {
     const projected = historicalCard();
-    assert.deepEqual(projected.processThinkingSegments, []);
-    assert.equal(projected.processThinking, '第二段思考');
+    assert.deepEqual(projected.processThinkingSegments.map(ep => ep.text), ['第一段思考', '第二段思考']);
+    assert.equal(projected.processThinking, '第一段思考\n\n第二段思考');
   } finally {
     if (previous === undefined) delete globalThis.location;
     else globalThis.location = previous;
   }
 });
 
-test('the active sidebar session also keeps other modes on the previous history projection', () => {
+test('the active sidebar session also gets per-burst history segments', () => {
   const oldLocation = globalThis.location, oldDocument = globalThis.document;
   globalThis.location = {search: ''};
   globalThis.document = {querySelector: () => ({dataset: {sessionKey: 'agent:other:test'}}), querySelectorAll: () => []};
   try {
-    assert.deepEqual(historicalCard().processThinkingSegments, []);
+    assert.deepEqual(historicalCard().processThinkingSegments.map(ep => ep.text), ['第一段思考', '第二段思考']);
   } finally {
     if (oldLocation === undefined) delete globalThis.location; else globalThis.location = oldLocation;
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;

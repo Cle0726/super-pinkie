@@ -1,5 +1,5 @@
-/* pinkie-preflight-compaction-events:v1 */
 /* pinkie-same-session-recovery:v1 */
+/* pinkie-preflight-compaction-events:v1 */
 /* pinkie-context-budget:v1 */
 import {compactionBudget as pinkieContextBudget} from "./pinkie-context-budget.mjs";
 import { a as normalizeLowercaseStringOrEmpty, c as normalizeOptionalString, p as readStringValue, t as hasNonEmptyString } from "./string-coerce-DW4mBlAt.js";
@@ -1343,7 +1343,7 @@ function buildPreflightCompactionFailureText(message, options) {
 	const normalizedMessage = collapseRepeatedFailureDetail(message);
 	if (!normalizedMessage.startsWith(PREFLIGHT_COMPACTION_FAILURE_PREFIX)) return null;
 	const reason = sanitizeUserFacingText(normalizedMessage.slice(41), { errorContext: true }).trim().replace(/\s+/gu, " ");
-	return `✦ 已开启历史对话折叠。当前记录正在后台进行浓缩打包以保持内存轻盈，稍后即可在本界面直接继续，无需开启新会话。${options?.includeDetails && reason ? ` 原因：${reason}。` : ""}`;
+	return `⚠️ 当前会话已保留。上下文压缩暂时未完成，系统会在当前会话内继续恢复；请稍后重试，通常不需要使用 /new。${options?.includeDetails && reason ? ` 原因：${reason}。` : ""}`;
 }
 function buildCliBackendTimeoutFailureText(message) {
 	const normalizedMessage = collapseRepeatedFailureDetail(message);
@@ -1649,7 +1649,7 @@ function resolveHeartbeatBleedHint(params) {
 }
 /** Builds recovery instructions for context-overflow failures. */
 function buildContextOverflowRecoveryText(params) {
-	const prefix = params.preserveSessionMapping ? "✦ 已开启历史对话折叠。当前记录正在后台进行浓缩打包以保持内存轻盈，稍后即可在本界面直接继续，无需开启新会话。" : params.duringCompaction ? "✦ 正在后台打包超长日志。您可继续在本界面提问，新内容将自动衔接。" : "✦ 会话已达承载上限。系统正在后台精简历史枝蔓，请在本界面继续，我们将为您无缝恢复核心记忆。";
+	const prefix = params.preserveSessionMapping ? "⚠️ 当前会话已保留。上下文压缩暂时未完成，系统会在当前会话内继续恢复；请稍后重试，通常不需要使用 /new。" : params.duringCompaction ? "⚠️ 上下文压缩暂时未完成，当前会话仍已保留；请稍后在本会话重试。" : "⚠️ 上下文超过当前模型容量，当前会话仍已保留；系统将优先尝试在本会话内恢复。";
 	const primaryContextWindow = resolveContextWindowForCompactionHint({
 		cfg: params.cfg,
 		primaryProvider: params.primaryProvider,

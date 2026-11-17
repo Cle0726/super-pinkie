@@ -11,7 +11,8 @@
   if (window.__laolaoAskUser) return;
 
   const MARKER = "[[PINKIE_ASK_V1]]";
-  const ANSWER_PREFIX = "【回答碧琪的提问】";
+  const answerPrefix = () => document.documentElement.getAttribute("data-laolao-mode") === "metre"
+    ? "【回答提问】" : "【回答碧琪的提问】";
   const STICKER = "./laolao-pinkie-status-asking.png";
   const STORE = "laolao:ask-user:closed:v1";
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -66,10 +67,29 @@
     const anchor = composer();
     if (!anchor) { card.style.visibility = "hidden"; return; }
     const rect = anchor.getBoundingClientRect();
-    card.style.visibility = "";
-    card.style.left = `${Math.round(rect.left)}px`;
-    card.style.width = `${Math.round(rect.width)}px`;
-    card.style.bottom = `${Math.round(window.innerHeight - rect.top + 10)}px`;
+    const view = window.visualViewport;
+    const left = view?.offsetLeft || 0, top = view?.offsetTop || 0;
+    const viewWidth = view?.width || window.innerWidth, viewHeight = view?.height || window.innerHeight;
+    const margin = 12, gap = 10;
+    const width = Math.max(0, Math.min(rect.width || 560, 720, viewWidth - margin * 2));
+    const x = Math.max(left + margin, Math.min(rect.left, left + viewWidth - width - margin));
+    const above = Math.max(0, rect.top - top - gap - margin);
+    const below = Math.max(0, top + viewHeight - rect.bottom - gap - margin);
+    card.style.visibility = "hidden";
+    card.style.left = `${Math.round(x)}px`;
+    card.style.width = `${Math.round(width)}px`;
+    card.style.bottom = "auto";
+    card.style.top = `${top + margin}px`;
+    card.style.maxHeight = `${Math.max(0, viewHeight - margin * 2)}px`;
+    const desired = Math.min(card.scrollHeight, viewHeight - margin * 2);
+    const down = desired > above && below > above;
+    const available = Math.max(0, down ? below : above);
+    card.dataset.side = down ? "down" : "up";
+    card.style.maxHeight = `${Math.floor(available)}px`;
+    const height = Math.min(card.getBoundingClientRect().height, available);
+    const y = down ? rect.bottom + gap : rect.top - gap - height;
+    card.style.top = `${Math.round(Math.max(top + margin, Math.min(y, top + viewHeight - height - margin)))}px`;
+    card.style.visibility = width > 0 && available > 0 ? "" : "hidden";
   }
 
   function close(reason = "dismiss") {
@@ -100,7 +120,7 @@
 
   function submit(labels, other = "") {
     if (!current || (!labels.length && !other.trim())) return;
-    const lines = [`${ANSWER_PREFIX}${current.question}`];
+    const lines = [`${answerPrefix()}${current.question}`];
     if (labels.length) lines.push(`我的选择：${labels.join("、")}`);
     if (other.trim()) lines.push(`${labels.length ? "补充" : "我的想法"}：${other.trim()}`);
     if (!sendThroughComposer(lines.join("\n"))) {
@@ -118,12 +138,13 @@
     const multi = record.multiSelect === true;
     card = el("section", "laolao-ask" + (fromHistory ? " is-restored" : ""));
     card.setAttribute("role", "dialog");
-    card.setAttribute("aria-label", "碧琪的提问");
+    const metre = document.documentElement.getAttribute("data-laolao-mode") === "metre";
+    card.setAttribute("aria-label", metre ? "需要你的选择" : "碧琪的提问");
 
     const head = el("header", "laolao-ask__head");
     const face = el("img", "laolao-ask__face"); face.src = STICKER; face.alt = "";
-    const who = el("span", "laolao-ask__who", "碧琪想问你");
-    head.append(face, who);
+    const who = el("span", "laolao-ask__who", metre ? "需要你的选择" : "碧琪想问你");
+    head.append(...(metre ? [who] : [face, who]));
     if (record.header) head.append(el("span", "laolao-ask__chip", record.header));
     const later = el("button", "laolao-ask__later", "稍后再说"); later.type = "button";
     later.addEventListener("click", () => close("dismiss"));
@@ -176,6 +197,12 @@
     clearInterval(positionTimer);
     positionTimer = setInterval(position, 400);
   }
+
+  window.addEventListener("resize", position, {passive: true});
+  window.visualViewport?.addEventListener("resize", position, {passive: true});
+  window.visualViewport?.addEventListener("scroll", position, {passive: true});
+  document.addEventListener("scroll", position, {capture: true, passive: true});
+  window.addEventListener("laolao:modechange", () => close("dismiss"));
 
   // Number keys pick an option when the user is not typing somewhere else.
   document.addEventListener("keydown", (event) => {

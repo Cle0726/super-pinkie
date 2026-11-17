@@ -2073,7 +2073,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private let tts = TTSService()
     private let desktopControl = DesktopControlService()
     private let browserControl = BrowserControlController()
+    var browserControlForDialogs: BrowserControlController { browserControl }
+    var browserWebViewForDialogs: WKWebView? { browserWebView }
     private let browserEndpoint = BrowserControlEndpoint()
+    private var gptWebWorker: ChatGPTBackgroundWorker?
     private var browserUserEventMonitor: Any?
     private var chatGPTControlUntil = Date.distantPast
     private let materialPreview = MaterialPreviewSchemeHandler()
@@ -2088,6 +2091,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         "thinking": "agent:thinking:main",
         "learning": "agent:learning:main",
         "unrestricted": "agent:unrestricted:main",
+        "metre": "agent:metre:main",
     ]
 
     private let workspaceLabels: [String: String] = [
@@ -2096,6 +2100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         "thinking": "想法模式",
         "learning": "学习模式",
         "unrestricted": "无限制模式",
+        "metre": "Metre",
     ]
 
     @objc func openParty(_ sender: Any?) {
@@ -2873,6 +2878,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         do {
             try browserEndpoint.start { [weak self] request, done in
                 guard let self else { done(["id": request["id"] ?? "", "ok": false, "reason": "App 浏览器已关闭。"]); return }
+                // Background web-GPT work (questions, images) runs in its own hidden page and
+                // never touches the visible browser or a collaboration chat.
+                if (request["action"] as? String)?.hasPrefix("gpt_web_") == true {
+                    Task { @MainActor in
+                        let worker = self.gptWebWorker ?? ChatGPTBackgroundWorker()
+                        self.gptWebWorker = worker
+                        worker.handle(request, completion: done)
+                    }
+                    return
+                }
                 self.browserControl.handle(request, completion: done)
             }
         } catch { NSLog("[碧琪浏览器] %@", error.localizedDescription) }
@@ -5267,5 +5282,45 @@ enum PinkieMotion {
     static var reduce: Bool {
         get { UserDefaults.standard.bool(forKey: "PinkieReduceMotion") }
         set { UserDefaults.standard.set(newValue, forKey: "PinkieReduceMotion") }
+    }
+}
+
+
+// 内置浏览器里的 alert / confirm / prompt（11-17）。没有这几个回调时 WebKit 直接当「取消」处理，
+// 页面上「确定删除吗？」之类的确认永远不会成功。碧琪 / Metre 的操作引起的由 BrowserControl 按要求自动答；
+// 用户自己点出来的弹正常的系统对话框。App 自己的界面不变（保持原来的默认行为）。
+extension AppDelegate {
+    private func browserDialog(_ webView: WKWebView, message: String, buttons: [String], field: String? = nil, done: @escaping (Bool, String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = webView.url?.host ?? "网页"
+        alert.informativeText = message
+        for title in buttons { alert.addButton(withTitle: title) }
+        let input = field.map { value -> NSTextField in
+            let box = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24)); box.stringValue = value; return box
+        }
+        if let input { alert.accessoryView = input }
+        let finish: (NSApplication.ModalResponse) -> Void = { response in done(response == .alertFirstButtonReturn, input?.stringValue) }
+        if let window = webView.window { alert.beginSheetModal(for: window, completionHandler: finish) }
+        else { finish(alert.runModal()) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        guard webView === browserWebViewForDialogs else { completionHandler(); return }
+        if browserControlForDialogs.answerDialog(kind: "alert", message: message, defaultText: nil) != nil { completionHandler(); return }
+        browserDialog(webView, message: message, buttons: ["好"]) { _, _ in completionHandler() }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        guard webView === browserWebViewForDialogs else { completionHandler(false); return }
+        if let answer = browserControlForDialogs.answerDialog(kind: "confirm", message: message, defaultText: nil) { completionHandler(answer.accept); return }
+        browserDialog(webView, message: message, buttons: ["确定", "取消"]) { ok, _ in completionHandler(ok) }
+    }
+
+    func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        guard webView === browserWebViewForDialogs else { completionHandler(nil); return }
+        if let answer = browserControlForDialogs.answerDialog(kind: "prompt", message: prompt, defaultText: defaultText) {
+            completionHandler(answer.accept ? (answer.text ?? defaultText ?? "") : nil); return
+        }
+        browserDialog(webView, message: prompt, buttons: ["确定", "取消"], field: defaultText ?? "") { ok, text in completionHandler(ok ? (text ?? "") : nil) }
     }
 }

@@ -609,6 +609,101 @@
     xls: "表格", xlsx: "表格", zip: "压缩包", tar: "压缩包", gz: "压缩包",
   }[extensionOf(target.path)] || typeLabel(target.kind));
 
+  /* 图片、视频直接在聊天里显示：图片默认大图，点一下全屏看；视频显示封面，点一下就在原地播放。
+     地址每次现取（Mac 的 clekk-material 地址 15 分钟后失效，失效了就重取一次；Windows 是 data: 地址）。 */
+  const mediaSource = (target) => requestNativeAction(target, "open").then((result) => {
+    const source = result?.url || result?.src;
+    if (typeof source !== "string" || !/^(?:clekk-material:|data:(?:image|video)\/)/i.test(source)) throw new Error("这个文件暂时无法显示。");
+    return source;
+  });
+  const openImageLarge = (source, name) => {
+    if (window.__laolaoImageViewer?.open) window.__laolaoImageViewer.open(source, name);
+  };
+  const mountInlineMedia = (card, target, stage, setPoster) => {
+    const alive = () => card.isConnected && deliveryCards.get(card) === target.path;
+    if (target.kind === "image") {
+      const image = document.createElement("img");
+      image.className = "laolao-delivery-card__image";
+      image.alt = target.name;
+      image.decoding = "async";
+      let retried = false;
+      const load = () => mediaSource(target).then((source) => { if (alive()) image.src = source; }).catch(() => { if (alive()) stage.classList.add("is-failed"); });
+      image.addEventListener("load", () => stage.classList.add("is-ready"));
+      image.addEventListener("error", () => {
+        if (retried || !alive()) { stage.classList.add("is-failed"); return; }
+        retried = true;
+        void load();
+      });
+      stage.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (image.currentSrc || image.src) openImageLarge(image.currentSrc || image.src, target.name);
+      });
+      stage.setAttribute("aria-label", `查看大图：${target.name}`);
+      stage.title = "点击查看大图";
+      stage.append(image);
+      if (typeof IntersectionObserver !== "function") { void load(); return; }
+      const seen = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        seen.disconnect();
+        void load();
+      }, { rootMargin: "400px 0px" });
+      seen.observe(stage);
+      return;
+    }
+    // 视频：先放封面（有缩略图就用），点了才取地址开始播，免得一屏几个视频一起加载。
+    stage.setAttribute("aria-label", `播放视频：${target.name}`);
+    stage.title = "点击播放";
+    const play = document.createElement("span");
+    play.className = "laolao-delivery-card__play";
+    play.setAttribute("aria-hidden", "true");
+    play.textContent = "▶";
+    stage.append(play);
+    setPoster((source) => {
+      const poster = document.createElement("img");
+      poster.className = "laolao-delivery-card__image laolao-delivery-card__poster";
+      poster.alt = "";
+      poster.decoding = "async";
+      poster.src = source;
+      poster.addEventListener("load", () => stage.classList.add("is-ready"), { once: true });
+      poster.addEventListener("error", () => poster.remove(), { once: true });
+      stage.prepend(poster);
+    });
+    const start = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (stage.classList.contains("is-loading")) return;
+      stage.classList.add("is-loading");
+      mediaSource(target).then((source) => {
+        if (!alive()) return;
+        const video = document.createElement("video");
+        video.className = "laolao-delivery-card__video";
+        video.controls = true;
+        video.playsInline = true;
+        video.setAttribute("playsinline", "");
+        video.preload = "auto";
+        video.setAttribute("aria-label", target.name);
+        let retried = false;
+        video.addEventListener("error", () => {
+          if (retried || !alive()) return;
+          retried = true;
+          const at = video.currentTime || 0;
+          mediaSource(target).then((fresh) => { video.src = fresh; video.currentTime = at; void video.play().catch(() => {}); }).catch(() => {});
+        });
+        video.src = source;
+        const box = document.createElement("div");
+        box.className = "laolao-delivery-card__stage is-video is-ready is-playing";
+        box.append(video);
+        stage.replaceWith(box);
+        void video.play().catch(() => {});
+      }).catch((error) => {
+        stage.classList.remove("is-loading");
+        showFileActionError(error?.message || "视频没有打开。");
+      });
+    };
+    stage.addEventListener("click", start);
+  };
+
   const decorateDeliveryCard = (card) => {
     const target = targetFromPath(card.getAttribute("data-laolao-material-path"));
     if (!target || deliveryCards.get(card) === target.path) return;
@@ -635,7 +730,9 @@
     const actions = document.createElement("div");
     actions.className = "laolao-delivery-card__actions";
     const buttons = [];
-    for (const [label, action] of [["预览", "preview"], ["保存到下载", "save"], [revealLabel(), "reveal"]]) {
+    const inline = (target.kind === "image" || target.kind === "video") && nativeBridgeAvailable();
+    const entries = [["预览", "preview"], ["保存到下载", "save"], [revealLabel(), "reveal"]].filter(([, action]) => !(inline && action === "preview"));
+    for (const [label, action] of entries) {
       const button = makeButton(label, `laolao-delivery-card__button${action === "preview" ? " is-primary" : ""}`);
       button.textContent = label;
       button.addEventListener("click", (event) => {
@@ -646,7 +743,17 @@
       actions.append(button);
       buttons.push(button);
     }
-    card.append(visual, info, actions);
+    let stage = null;
+    let posterSink = null;
+    if (inline) {
+      card.classList.add("is-media", `is-${target.kind}`);
+      stage = document.createElement("button");
+      stage.type = "button";
+      stage.className = `laolao-delivery-card__stage is-${target.kind}`;
+      card.append(stage, info, actions);
+    } else {
+      card.append(visual, info, actions);
+    }
     card.dispatchEvent(new CustomEvent("laolao-delivery-ready"));
     if (!nativeBridgeAvailable()) {
       meta.textContent = `${deliveryType(target)} · 请在碧琪中打开`;
@@ -656,12 +763,15 @@
       if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
       const size = sizeLabel(result.size);
       meta.textContent = `${deliveryType(target)}${size ? " · " + size : ""}`;
+      if (stage) mountInlineMedia(card, target, stage, (sink) => { posterSink = sink; });
+      if (stage && target.kind === "image") return;
       return requestNativeAction(target, "describe").then((description) => {
         if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
         const size = sizeLabel(description.size);
         meta.textContent = `${deliveryType(target)}${size ? " · " + size : ""}`;
         const source = description.thumbnailUrl || description.thumbnailSrc;
         if (typeof source !== "string" || !/^(?:clekk-material:|data:image\/)/i.test(source)) return;
+        if (stage) { posterSink?.(source); return; }
         const thumbnail = document.createElement("img");
         thumbnail.className = "laolao-delivery-card__thumbnail";
         thumbnail.alt = "";
@@ -674,6 +784,7 @@
     }).catch((error) => {
       if (!card.isConnected || deliveryCards.get(card) !== target.path) return;
       card.classList.add("is-unavailable");
+      if (stage) stage.replaceWith(visual);
       const reason = error?.message || "这个文件暂时无法打开。";
       meta.textContent = /不存在|已移动|已删除|没有找到|原位置/.test(reason) ? "文件已不在原位置" : reason;
       buttons.forEach((button) => { button.disabled = true; });

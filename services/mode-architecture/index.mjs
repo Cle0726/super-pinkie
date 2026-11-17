@@ -9,17 +9,24 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
+import {registerSessionManage} from './session-manage.mjs';
+import {registerToolTrace} from './tool-trace.mjs';
+import {registerMetreMemory} from './metre-memory.mjs';
+import {registerMetreBoard} from './metre-board.mjs';
+import {registerQuietMode} from './quiet-mode.mjs';
 import {registerArtifacts} from './artifacts.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
+import {createWebGptTool} from './web-gpt.mjs';
 import {ReasoningEnhancer, ReviewStore, registerReasoningGateway} from './reasoning.mjs';
+import {createChannelReasoningGuard} from './channel-reasoning.mjs';
 import {RIGOR_LADDER, SPAWN_FALLBACK, buildContract, judgeReply, staleTierContext, stripNegatedClaims, unverifiedNote} from './run-contract.mjs';
 import {skillRouteBlock, toolboxBlock} from './skill-routes.mjs';
 import {workCardBlock, forgetCards, routingKinds} from './work-cards.mjs';
@@ -34,7 +41,7 @@ import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
 import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
-import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion} from './ask.mjs';
+import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion, metreWording} from './ask.mjs';
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
@@ -53,6 +60,8 @@ const MODE_BY_AGENT = Object.freeze({
   thinking: 'ideas',
   learning: 'learning',
   unrestricted: 'none',
+  // Metre：给最强模型用的总控模式（briefs/metre-mode-1113）。没有人设文件，注入按 METRE_* 规则取舍。
+  metre: 'metre',
 });
 
 const PERSONA_FILES = Object.freeze({
@@ -61,6 +70,7 @@ const PERSONA_FILES = Object.freeze({
   ideas: ['persona/core.md', 'persona/voice_examples.md'],
   learning: ['persona/core.md', 'persona/voice_examples.md', 'persona/methods.md'],
   none: [],
+  metre: [],
 });
 
 const ALWAYS_MEMORY_FILES = Object.freeze([
@@ -238,6 +248,14 @@ const TRANSIENT_FAILURE = /(?:timeout|timed out|network|fetch failed|econn|conne
 // provider forever makes the UI look like it is reconnecting and burns quota.
 // The watchdog uses this classifier to make a bounded fallback switch.
 const PROVIDER_ACCOUNT_FAILURE = /(?:you(?:'|’)ve reached (?:your )?(?:codex )?subscription usage limit|subscription usage limit|usage limit(?: exceeded| reached)?|quota(?:[ _-]+(?:exhausted|exceeded|depleted|reached))|insufficient credits|billing limit|rate limit reached|auth[_ -]?unavailable|no auth available|no account|account unavailable|暂无账号)/i;
+// 上游暂时连不上（11-17 实测：免费模型的代理一时「no auth available」/ 503，几秒内重试 5 次全失败，任务就此停住，
+// 之后上游恢复了也没人接着做）。这类不是账号额度用完，换别家模型也不是用户要的：原模型不变，隔得越来越久地接着试，
+// 最长等几个小时，上游一恢复就从断点续上。
+export const PROVIDER_OUTAGE = /(?:\b50[234]\b|auth[_ -]?unavailable|no auth available|service unavailable|temporarily unavailable|bad gateway|gateway time-?out|overloaded|connection (?:refused|reset|closed)|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network error|LLM request failed|upstream (?:error|unavailable)|timed? ?out)/i;
+const PROVIDER_QUOTA = /(?:usage limit|quota(?:[ _-]+(?:exhausted|exceeded|depleted|reached))|insufficient credits|billing limit|subscription)/i;
+export const WATCHDOG_OUTAGE_DELAYS_MS = Object.freeze([10_000, 20_000, 40_000, 80_000, 160_000, 300_000]);
+const WATCHDOG_OUTAGE_MAX_ATTEMPTS = Math.max(6, Number(process.env.PINKIE_WATCHDOG_OUTAGE_MAX_ATTEMPTS) || 60);
+export const isProviderOutage = reason => PROVIDER_OUTAGE.test(String(reason || '')) && !PROVIDER_QUOTA.test(String(reason || ''));
 const WATCHDOG_ACCOUNT_FALLBACKS = Object.freeze([
   'mm/gemini-3.7-flash-tiered',
   'clekk/gpt-5.6-luna',
@@ -593,6 +611,16 @@ const TOOL_PROGRESS_RULES = `
 - 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
+// 每次工具调用都是一次完整的模型请求（整段上下文重发一遍）。实测 2026-11-16：一轮 7 次请求对应
+// 7 步，其中 5 次 exec 一条一条串行发。像 Claude Code 那样把互不依赖的操作放进同一步，请求次数和等待都少。
+export const TOOL_BATCH_RULES = `
+【少走几步】每调一次工具就要重新请求一次模型，所以：
+- 互不依赖的操作放在同一步里一起调用：要读几个文件、查几个地方、搜几个关键词，一次把这些工具调用全部发出，不要读一个、等结果、再读下一个。
+- 几条 shell 命令能合成一条就合成一条（用 && 或 ; 连起来，或写成一个小脚本），一次 exec 跑完；只有后一条要看前一条的结果才分开。
+- 一次读够：读文件、看日志时直接读需要的范围，不要每次只看几行再回来翻。
+- 只有下一步确实取决于上一步的结果时，才分成先后两步。
+`.trim();
+
 // 后台命令结束时由 background-jobs.mjs 发内部消息叫醒碧琪，所以长命令不必挂着干等。
 const BACKGROUND_WORK_RULES = `
 【长时间命令放后台】
@@ -601,6 +629,10 @@ const BACKGROUND_WORK_RULES = `
 - 等的时候做的事要有用：不推翻已经定下的东西、不为了显得忙去改无关文件、不重复开同一个命令。真的没有不依赖它的事了，才结束这一轮；命令结束时系统会自动叫你继续，那时先读完整输出核对成败，再把等待时做好的部分合进来、补上亲眼验证，然后汇报。
 - 后台还没结束的事情不能说成已完成；也不要承诺一个具体时间点会主动汇报。
 `.trim();
+
+// Metre 的手册里没有这条运行时事实（后台命令结束会叫醒），压成一句给它；完整版只给老模式。
+const METRE_BATCH_LINE = '\n【少走几步】互不依赖的工具调用放同一步一起发；几条命令合成一次 exec。\n';
+const METRE_BACKGROUND_LINE = '\n【后台命令】长命令用 exec 的 background: true 放后台，跑完会叫醒你。\n';
 
 // Independent system module shared by all five modes. Keep it separate from
 // persona, aesthetics and opinion style so teaching can never dilute the
@@ -1289,6 +1321,10 @@ function toolEffectKind(entry = {}) {
   // 快照发生变化才算实际效果，防止空写工具加一次假 read 绕过。
   if (/^(?:write|edit|apply_patch)$/i.test(name)) return '';
   if (MUTATING_TOOL.test(name)) return 'host-tool';
+  // 网页 GPT 出图 / 出视频、视频生成：文件是工具自己落盘的，成功返回就是一次真实产出
+  // （11-17 网页 GPT 实测：图已出、ls/file 也查过，回复后面还是被挂上「还没核实」）。
+  if (/^(?:video_generate|videogen)$/.test(name)
+      || name === 'web_gpt' && /"action"\s*:\s*"(?:image|video)"/i.test(args)) return 'produced-media';
   if (/(?:browser|computer|screen|cua)/i.test(name)
       && /"(?:action|kind)"\s*:\s*"(?:click|type|fill|upload_file|press|drag|navigate|open|close)"/i.test(args)) {
     return 'ui-action';
@@ -1369,7 +1405,7 @@ function isTurnCleanup(state, index) {
 
 // Work-first changes are limited to the four ordinary parent sessions.
 function workFirstContext(ctx = {}) {
-  return /^agent:(?:main|project|thinking|learning):/.test(String(ctx.sessionKey || ''))
+  return /^agent:(?:main|project|thinking|learning|metre):/.test(String(ctx.sessionKey || ''))
     && !/:(?:subagent|internal-session-effects|cron|heartbeat):/.test(String(ctx.sessionKey || ''));
 }
 function workFirstTextTask(prompt = '') {
@@ -1704,7 +1740,8 @@ function douyinWorkflowReason(state) {
       && /"(?:action|kind)"\s*:\s*"(?:type|fill)"/i.test(args)
       && /chatgpt\.com/i.test(args + entry.output);
   });
-  const imageRequestCount = generatedStoryboards.length + browserStoryboardRequests.length;
+  const webGptStoryboards = active.filter(entry => entry.name === 'web_gpt' && /"action"\s*:\s*"image"/.test(toolArgumentsText(entry)));
+  const imageRequestCount = generatedStoryboards.length + browserStoryboardRequests.length + webGptStoryboards.length;
   if (imageRequestCount === 0) return '本轮没有真实提交新的分镜生成请求；查看旧图或 image_generate list 不算生成';
 
   const submittedVideos = active.filter(entry => {
@@ -3180,7 +3217,8 @@ export class CleKkSupervisor {
           reply: replyHash,
           displayReply: hashForAudit(renderFirstPerson(workFirstReplyText(reply, ctx))),
           runId,
-          note: '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
+          // Metre 有自己的口吻，不借碧琪的名字说话。
+          note: modeForContext(ctx) === 'metre' ? '注：这一步还没核实——现有记录不足以证实这个结果。' : '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
         };
         this.persist(key, turn);
         return undefined;
@@ -4198,6 +4236,7 @@ export class UpstreamWatchdog {
     this.failures = new Map();
     this.models = new Map();
     this.latestRuns = new Map();
+    this.outageSteps = new Map();
     // runId -> 这一轮最后一次模型调用 {startedAt, durationMs, outcome}
     this.lastCalls = new Map();
     this.attempts = new Map();
@@ -4218,6 +4257,13 @@ export class UpstreamWatchdog {
 
   generationFor(sessionKey) {
     return Number(this.generations.get(String(sessionKey || '')) || 0);
+  }
+
+  // 上游断了：10 秒、20 秒、40 秒……最长 5 分钟一次。成功一轮（cancel）后清零。
+  outageDelay(sessionKey) {
+    const step = Number(this.outageSteps.get(sessionKey) || 0);
+    this.outageSteps.set(sessionKey, step + 1);
+    return WATCHDOG_OUTAGE_DELAYS_MS[Math.min(step, WATCHDOG_OUTAGE_DELAYS_MS.length - 1)];
   }
 
   recoveryDelay(sessionKey, reason = '') {
@@ -4289,10 +4335,12 @@ export class UpstreamWatchdog {
     if (workFirstContext(ctx) && endedRun && this.latestRuns.has(sessionKey)
         && this.latestRuns.get(sessionKey) !== endedRun) {
       this.failures.delete(endedRun);
+      if (event.success !== true) this.api.logger?.info?.(`watchdog skipped older run session=${sessionKey} run=${endedRun} newer=${this.latestRuns.get(sessionKey)}`);
       return false;
     }
     if (this.skipNextFailure.delete(sessionKey) || userStoppedRecently(sessionKey)) {
       if (event.runId) this.failures.delete(event.runId);
+      if (event.success !== true) this.api.logger?.info?.(`watchdog skipped user-stopped run session=${sessionKey} run=${endedRun}`);
       return false;
     }
     // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成先生主动停止、不再续跑。
@@ -4300,7 +4348,8 @@ export class UpstreamWatchdog {
     // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
     // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
     const waitingOnChildren = workFirstContext(ctx) && endsWithYield(event.messages)
-      && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey)));
+      && (Number(this.activityFor(sessionKey)?.pending) > 0 || Boolean(this.tierFor(sessionKey))
+        || await lineageRunningChildren(sessionKey) > 0);
     const incompleteToolTurn = !waitingOnChildren && hasIncompleteToolTurn(event, reason, ctx);
     const terminalFailure = this.windows && endedWithFailedAssistant(event);
     if (event.success && !incompleteToolTurn && !terminalFailure) {
@@ -4344,7 +4393,10 @@ export class UpstreamWatchdog {
     // Keep the user's original model for normal turns, but route the invisible
     // watchdog continuation through the local multi-model pool. Once both
     // fallbacks are exhausted, stop the lease so the real error can surface.
-    if (PROVIDER_ACCOUNT_FAILURE.test(reason)) {
+    const outage = failedParentTurn && isProviderOutage(reason);
+    // 用户选的是免费模型：上游一时没号不切到收费的别家，原模型等它恢复。
+    const freeSession = /(?:^|[-_/:.])free(?:$|[-_/:.])/i.test(String(this.models.get(sessionKey) || ''));
+    if (!(outage && freeSession) && PROVIDER_ACCOUNT_FAILURE.test(reason)) {
       const currentModel = String(this.models.get(sessionKey) || '');
       const fallbackIndex = Number(this.attempts.get(sessionKey) || 0);
       const currentProvider = currentModel.split('/')[0] || '';
@@ -4353,6 +4405,10 @@ export class UpstreamWatchdog {
       if (nextModel && (currentProvider === 'clekk' || currentProvider === 'mm' || !currentModel)) {
         this.models.set(sessionKey, nextModel);
         this.api.logger?.warn?.(`watchdog account fallback selected session=${sessionKey} from=${currentModel || 'unknown'} to=${nextModel}`);
+      } else if (outage) {
+        // 备用的也都试过了：不再换，回到用户原来的模型，隔一阵再试（下面的等待退避）。
+        this.models.delete(sessionKey);
+        this.api.logger?.warn?.(`watchdog account fallback exhausted, waiting on the original model session=${sessionKey} model=${currentModel || 'unknown'}`);
       } else {
         await this.cancel(sessionKey);
         this.api.logger?.warn?.(`watchdog account fallback exhausted session=${sessionKey} model=${currentModel || 'unknown'}`);
@@ -4369,7 +4425,13 @@ export class UpstreamWatchdog {
       }
     }
     const attempt = (this.attempts.get(sessionKey) || 0) + 1;
-    if (this.windows && attempt > WATCHDOG_MAX_ATTEMPTS) {
+    if (outage && attempt > WATCHDOG_OUTAGE_MAX_ATTEMPTS) {
+      await this.cancel(sessionKey);
+      this.api.logger?.warn?.(`watchdog outage wait exhausted session=${sessionKey} attempts=${attempt - 1} reason=${shortReason(reason)}`);
+      return this.windows ? this.giveUp(sessionKey, event.runId, 'exhausted',
+        `上游一直没有恢复，已经等了很久、重试 ${WATCHDOG_OUTAGE_MAX_ATTEMPTS} 次，先停下了。上游好了再发一次「继续」即可。`, reason) : false;
+    }
+    if (!outage && this.windows && attempt > WATCHDOG_MAX_ATTEMPTS) {
       return this.giveUp(sessionKey, event.runId, 'exhausted',
         `上游一直没有恢复，碧琪已经连续重试 ${WATCHDOG_MAX_ATTEMPTS} 次，先停下了。稍后再发一次即可。`, reason);
     }
@@ -4388,7 +4450,10 @@ export class UpstreamWatchdog {
       this.api.logger?.warn?.(`watchdog stalled generation session=${sessionKey} run=${endedRun} ms=${stalledMs}`);
     }
     const resumeText = watchdogResumeText({incompleteToolTurn, stalledMs});
-    const recoveryDelay = this.recoveryDelay(sessionKey, reason);
+    // 前两次照旧马上重试（多半是一下抖动）；再不行就是真断了，开始越等越久。
+    const waiting = outage && attempt > 2;
+    const recoveryDelay = this.recoveryDelay(sessionKey, reason) || (waiting ? this.outageDelay(sessionKey) : 0);
+    if (waiting) this.api.logger?.warn?.(`watchdog waiting out provider outage session=${sessionKey} attempt=${attempt} delayMs=${recoveryDelay} reason=${shortReason(reason)}`);
     const delayMs = recoveryDelay || Math.min(WATCHDOG_RETRY_MAX_DELAY_MS, marathon
       ? 200 + attempt * 75
       : 250 + attempt * 100);
@@ -4802,6 +4867,7 @@ export class UpstreamWatchdog {
   async cancel(sessionKey, suppressNextFailure = false) {
     this.generations.set(sessionKey, this.generationFor(sessionKey) + 1);
     this.attempts.delete(sessionKey);
+    this.outageSteps?.delete(sessionKey);
     this.integrityAttempts.delete(sessionKey);
     this.models.delete(sessionKey);
     this.gatewayBackoff.delete(sessionKey);
@@ -5914,15 +5980,19 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const tierPrompt = Boolean(requestedTier || existingTierRun?.active);
     /* “挥洒模式”保留工具、档位和真实性门禁，但不把任何工作区
        人格或记忆 Markdown 塞给模型。文件本身保留，不删除。 */
-    const injectWorkspaceMarkdown = mode !== 'none';
+    // Metre 只读自己的 AGENTS.md：人设、做事标准、App 指南、边做边学、记忆回放、打法和技能路由都不给
+    // （清点和取舍见 briefs/metre-mode-1113/INJECTION-INVENTORY.md）。门禁、进度说明、后台命令、提问卡照旧。
+    const metre = mode === 'metre';
+    const injectWorkspaceMarkdown = mode !== 'none' && !metre;
     const blocks = [
       ...(!tierPrompt ? ['\n' + COMPLETION_TRUTH_RULES + '\n'] : []),
-      '\n' + TOOL_PROGRESS_RULES + '\n',
-      '\n' + BACKGROUND_WORK_RULES + '\n',
-      ...(mode !== 'none' ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
-      ...(mode !== 'none' ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
-      ...(mode !== 'none' ? ['\n' + ASK_USER_RULES + '\n'] : []),
-      '\n' + LEARN_WHILE_DOING_RULES + '\n',
+      ...(!metre ? ['\n' + TOOL_PROGRESS_RULES + '\n'] : []),
+      ...(!metre ? ['\n' + TOOL_BATCH_RULES + '\n'] : [METRE_BATCH_LINE]),
+      ...(!metre ? ['\n' + BACKGROUND_WORK_RULES + '\n'] : [METRE_BACKGROUND_LINE]),
+      ...(mode !== 'none' && !metre ? ['\n' + WORK_STANDARD_RULES + '\n'] : []),
+      ...(mode !== 'none' && !metre ? ['\n' + APP_GUIDE_RULES + '\n'] : []),
+      ...(mode !== 'none' && !metre ? ['\n' + ASK_USER_RULES + '\n'] : []),
+      ...(!metre ? ['\n' + LEARN_WHILE_DOING_RULES + '\n'] : []),
     ];
     if (mode === 'learning') {
       blocks.push('\n' + LEARNING_MODE_RULES + '\n');
@@ -5991,7 +6061,15 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠先生点名、不靠模型自己翻）。
     if (mode !== 'none') {
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
-      if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
+      if (metre) {
+        // Metre：只留项目速览（绑定项目里真实的命令和目录）和改完自动查语法，两样都是现场事实，不是打法。
+        try {
+          const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
+          if (brief) blocks.push('\n' + brief + '\n');
+          const broken = codeWatch.block(sessionKey);
+          if (broken) blocks.push('\n' + broken + '\n');
+        } catch {}
+      } else if (routedPrompt && !internalControlText(routedPrompt) && !runtimeTurnText(routedPrompt) && !CONTINUATION_ONLY_PROMPT.test(routedPrompt)) {
         try {
           const routed = routingKinds(classifyWorkKind(routedPrompt, {mode}), routedPrompt, {mode});
           if (routed.kinds?.length && !['simple', 'pending'].includes(routed.kind)) rememberKinds(sessionKey, routed.kinds);
@@ -6942,12 +7020,19 @@ export default {
     api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
+    // 飞书 / 微信会话不显示实时思考（用户 11-16）；网页保持。网关起来后补一遍，之后每条聊天软件消息再补。
+    const channelReasoning = createChannelReasoningGuard(api);
+    api.on('gateway_start', () => { setTimeout(() => { channelReasoning.sweep().catch(() => {}); }, 8000).unref?.(); });
     api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
-    api.registerTool?.(() => createPinkieSearchTool(), {name: 'pinkie_search'});
+    api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
     api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
     api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    // 网页 GPT（后台）：用先生在内置浏览器登录的 ChatGPT 提问、批量出图。只有 Mac App 有隐藏页面。
+    api.registerTool?.(ctx => (process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
+      projectFor: sessionKey => webGptConnection.workspace(sessionKey, '', {allowUnbound: true}),
+    }), ctx?.sessionKey) : null), {name: 'web_gpt'});
     // 挥洒模式不带碧琪的主动提问卡。
-    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : createAskUserTool()), {name: ASK_USER_TOOL});
+    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerLearningLibrary(api, {learning});
     // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；
@@ -6973,7 +7058,14 @@ export default {
       },
       // 设置页「碧琪自己分工」开关（pinkie.prefs 的 autoSplit，默认开）。sessionPrefs 在下面才注册，这里到用的时候才读。
       autoSplit: () => { try { return sessionPrefs.globalPrefs().autoSplit !== false; } catch { return true; } },
+      // Metre 批 1：派活时的模型规则和 pinkie_models 读同一份模型目录和健康记录（不联网）。
+      modelHealth, config: () => {
+        const current = runtimeConfig(api);
+        if (current && Object.keys(current).length) return current;
+        try { return JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch { return {}; }
+      },
     });
+    registerMetreModelsTool(api, sessionLineage);
     registerSessionBranches(api, {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
       isBusy: key => architecture.activityFor(key).parentRunning,
@@ -6981,6 +7073,20 @@ export default {
     const sessionPrefs = registerSessionPrefs(api, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
+    // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
+    registerSessionManage(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, lineage: sessionLineage,
+      stateRoot: pinkieStateRoot(), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    // Metre 项目记忆（PLAN 6.2，批 M）：按文件夹隔离，metre_memory 工具 + 每轮项目档案 + pinkie.metre.memory。
+    registerMetreMemory(api, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
+      bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json'),
+      childrenRunning: async key => (await sessionLineage.list(key)).children.some(child => child.status === '运行中')});
+    // Metre 总控台的数据（PLAN 2.12，批 5）：pinkie.metre.board 一次返回九个区块要的东西，pinkie.metre.resume 是「接着做」。
+    registerMetreBoard(api, {root: path.join(pinkieStateRoot(), 'metre-board'), lineage: sessionLineage, plans: planStore, modelHealth});
+    // Metre 批 6（PLAN 2.13 后端）：Metre 是当前模式、别的模式没在跑时，心跳、学习提醒、学习资料的排队轮询都停；渠道看设置。
+    const quietMode = registerQuietMode(api, {root: pinkieStateRoot(), nudge: prompt => Boolean(nudgeKindFromPrompt(prompt))});
+    quietMode.register('learning-materials', {pause: () => globalThis.__pinkieMaterialsJobs?.pause?.(), resume: () => globalThis.__pinkieMaterialsJobs?.resume?.()});
+    // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
+    registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(api, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerProjectSettings(api, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(api, webGptActivity);
@@ -7128,7 +7234,7 @@ export default {
     // pretending that they are already one per-run contract.
     api.registerGatewayMethod('pinkie.run.status', ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
-      if (!/^agent:(?:main|project|thinking|learning|unrestricted):[^\s]+$/.test(sessionKey)) {
+      if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):[^\s]+$/.test(sessionKey)) {
         return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少有效会话标识'});
       }
       const tier = architecture.status(sessionKey);
@@ -7166,7 +7272,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
-        if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
+        if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
         webGptActivity.append(sessionKey, {
@@ -7182,7 +7288,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.inject', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
-        if (!/^agent:(?:main|project|thinking|learning|unrestricted):/.test(sessionKey)) {
+        if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
         const plan = stripWebGptProtocol(String(params?.plan || '').replace(/\u0000/g, '')).slice(0, WEB_GPT_PLAN_MAX_CHARS);
@@ -7327,6 +7433,7 @@ export default {
     // pending *continuations*; neither cancellation aborts the live agent.
     api.on('message_received', async (event, ctx) => {
       const sessionKey = architecture.receiveUserMessage(event, ctx);
+      channelReasoning.onMessage(event, ctx, sessionKey)?.catch?.(() => {});
       if (!sessionKey) return;
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);
@@ -7479,7 +7586,7 @@ export default {
       // model/session text untouched; only the user-visible outbound payload
       // receives Pinkie's first-person display name.
       const text = typeof payload?.text === 'string'
-        ? renderFirstPerson(workFirstReplyText(payload.text, ctx))
+        ? (modeForContext(ctx) === 'metre' ? workFirstReplyText(payload.text, ctx) : renderFirstPerson(workFirstReplyText(payload.text, ctx)))
         : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))

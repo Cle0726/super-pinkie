@@ -8,9 +8,9 @@
   const MODE_KEY = "laolao:active-mode";
   const MODE_OPTIONS = [
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
-    ["learning", "学习"], ["unrestricted", "无限制"],
+    ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
-  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask"]);
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
     work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
@@ -523,6 +523,23 @@
     buildWechatConnection(connectionCard);
     buildMessagingConnection(connectionCard, "feishu");
     buildMessagingConnection(connectionCard, "qq");
+    // Metre 批 6（PLAN 2.13）：Metre 是当前模式时要不要先不处理微信、飞书、QQ 发来的消息。默认照常。
+    const quietRow = row(connectionCard, "Metre 模式下暂停消息渠道", "打开后，用 Metre 时渠道发来的消息先不处理；默认照常。");
+    const quietGroup = element("div", "pinkie-user-settings__segments", quietRow.control);
+    let pauseChannels = false;
+    const paintQuiet = () => { setPressed(quietOn, pauseChannels); setPressed(quietOff, !pauseChannels); };
+    const writeQuiet = async (value) => {
+      const request = rpc();
+      if (!request) return;
+      try { const result = await request("pinkie.quiet.prefs", {pauseChannels: value}, 8000); pauseChannels = Boolean(result?.pauseChannels); } catch {}
+      paintQuiet();
+    };
+    const quietOn = button("暂停", "pinkie-user-settings__choice", quietGroup, () => { void writeQuiet(true); });
+    const quietOff = button("照常", "pinkie-user-settings__choice", quietGroup, () => { void writeQuiet(false); });
+    quietOn.setAttribute("aria-label", "Metre 模式下暂停消息渠道");
+    quietOff.setAttribute("aria-label", "Metre 模式下消息渠道照常");
+    paintQuiet();
+    void (async () => { try { const result = await rpc()?.("pinkie.quiet.status", {}, 8000); pauseChannels = Boolean(result?.pauseChannels); paintQuiet(); } catch {} })();
     state.channelDisclosure = element("details", "pinkie-user-settings__channels", connectionCard);
     const channelSummary = element("summary", "pinkie-user-settings__channels-summary", state.channelDisclosure,
       "已连接的其他应用");

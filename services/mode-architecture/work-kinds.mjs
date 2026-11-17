@@ -602,7 +602,7 @@ export function evidenceSignals(entry = {}) {
   if (name === 'pdf') {
     signals.add('opened_deliverable:pdf');
   }
-  if (name === 'image_generate' || name === 'imagegen') signals.add('produced:image');
+  if (name === 'image_generate' || name === 'imagegen' || (name === 'web_gpt' && action === 'image')) signals.add('produced:image');
   if (BROWSER_TOOL.test(name)) {
     if (/^(?:screenshot|capture)$/.test(action)) {
       signals.add('screenshot');

@@ -3937,6 +3937,7 @@ class NativeBridge(InAppBrowserBridge):
         "thinking": "agent:thinking:main",
         "learning": "agent:learning:main",
         "unrestricted": "agent:unrestricted:main",
+        "metre": "agent:metre:main",
     }
 
     def _dock_url(self, mode, session_key):

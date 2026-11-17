@@ -67,15 +67,26 @@
     if (!menu || !anchor) return;
     if (!anchor.isConnected) { close(); return; }
     const rect = anchor.getBoundingClientRect();
-    menu.style.left = Math.round(Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))) + 'px';
-    // 平时向上弹，压在输入框上方；首页的输入框在屏幕中间，上面放不下就向下弹，不盖住问候语。
-    menu.style.maxHeight = '';
-    const above = rect.top - 16, below = window.innerHeight - rect.bottom - 16, need = menu.offsetHeight;
-    const down = need > above && below > above;
+    const view = window.visualViewport;
+    const viewLeft = view?.offsetLeft || 0, viewTop = view?.offsetTop || 0;
+    const viewWidth = view?.width || window.innerWidth, viewHeight = view?.height || window.innerHeight;
+    const margin = 8, gap = 8;
+    menu.style.top = viewTop + margin + 'px';
+    menu.style.bottom = 'auto';
+    menu.style.maxHeight = Math.max(0, viewHeight - margin * 2) + 'px';
+    const width = menu.offsetWidth, desired = menu.offsetHeight;
+    menu.style.left = Math.round(Math.max(viewLeft + margin, Math.min(rect.left, viewLeft + viewWidth - width - margin))) + 'px';
+    // Prefer the side with room for the whole menu; otherwise use the larger
+    // side and scroll inside it. Never force a 160px menu into a smaller gap.
+    const above = Math.max(0, rect.top - viewTop - gap - margin);
+    const below = Math.max(0, viewTop + viewHeight - rect.bottom - gap - margin);
+    const down = desired > above && below > above;
+    const available = Math.max(0, down ? below : above);
     menu.dataset.side = down ? 'down' : 'up';
-    menu.style.top = down ? Math.round(rect.bottom + 8) + 'px' : '';
-    menu.style.bottom = down ? '' : Math.round(window.innerHeight - rect.top + 8) + 'px';
-    menu.style.maxHeight = Math.max(160, Math.round(down ? below : above)) + 'px';
+    menu.style.maxHeight = Math.floor(available) + 'px';
+    const height = Math.min(menu.offsetHeight, available);
+    const y = down ? rect.bottom + gap : rect.top - gap - height;
+    menu.style.top = Math.round(Math.max(viewTop + margin, Math.min(y, viewTop + viewHeight - height - margin))) + 'px';
   }
   function rowButton({icon, name, hint, state, more, disabled}, onClick) {
     const row = document.createElement('div');
@@ -207,6 +218,9 @@
     items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus?.({preventScroll: true});
   }, true);
   window.addEventListener('resize', place);
+  window.visualViewport?.addEventListener('resize', place, {passive: true});
+  window.visualViewport?.addEventListener('scroll', place, {passive: true});
+  document.addEventListener('scroll', event => { if (menu?.contains(event.target)) return; place(); }, {capture: true, passive: true});
   window.addEventListener('laolao:modechange', () => { close(); mount(); });
   window.addEventListener('pinkie:session-selected', () => close());
   window.addEventListener('pinkie:composer-chips', mount);

@@ -9,12 +9,68 @@
     return node;
   };
 
+  // 子会话的汇报是 Markdown：收起时只露干净的文字（不露 ## ** `），展开时按段落 / 标题 / 列表排好。
+  // 全用 textContent 拼，不走 innerHTML。
+  const inlineMd = (text) => String(text).replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/__([^_\n]+)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1').replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, '$1');
+  function plainMd(text) {
+    return String(text || '').split('\n').map((line) => inlineMd(line
+      .replace(/^\s{0,3}#{1,6}\s+/, '').replace(/^\s{0,3}>\s?/, '').replace(/^\s*[-*+]\s+/, '· ')
+      .replace(/^\s*(?:```|~~~).*$/, '').replace(/^\s*\|?\s*:?-{3,}.*$/, ''))).join('\n')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function inlineNodes(parent, text) {
+    const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parent.append(inlineMd(text.slice(last, m.index)));
+      parent.append(m[1] != null ? el('strong', '', m[1]) : el('code', '', m[2]));
+      last = re.lastIndex;
+    }
+    if (last < text.length) parent.append(inlineMd(text.slice(last)));
+  }
+  function mdBody(className, text) {
+    const box = el('div', className + ' pinkie-session-card__body--md');
+    let list = null, fence = null;
+    for (const raw of String(text || '').split('\n')) {
+      if (/^\s*(?:```|~~~)/.test(raw)) {
+        if (fence) { box.append(fence); fence = null; } else { list = null; fence = el('pre', ''); }
+        continue;
+      }
+      if (fence) { fence.textContent += (fence.textContent ? '\n' : '') + raw; continue; }
+      const heading = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(raw);
+      const item = /^\s*(?:[-*+]|\d+[.)])\s+(.*)$/.exec(raw);
+      if (item) {
+        if (!list) { list = el(/^\s*\d/.test(raw) ? 'ol' : 'ul', ''); box.append(list); }
+        const li = el('li', ''); inlineNodes(li, item[1]); list.append(li);
+        continue;
+      }
+      list = null;
+      if (!raw.trim() || /^\s*\|?\s*:?-{3,}/.test(raw)) continue;
+      const node = el(heading ? 'h4' : 'p', '');
+      inlineNodes(node, heading ? heading[2] : raw.replace(/^\s{0,3}>\s?/, ''));
+      box.append(node);
+    }
+    if (fence) box.append(fence);
+    return box;
+  }
+
   function proposalState(card, now = Date.now()) {
     if (card.state !== 'pending') return card.state;
     return card.expiresAt <= now ? 'expired' : 'pending';
   }
 
+  // pinkie_sessions 在老模式里对别的会话 archive / stop / rename 时出的确认卡片（Metre 计划 2.7）。
+  const manageLabels = {done: '已执行', failed: '没做成', dismissed: '已跳过', expired: '已过期'};
+  function manageSummary(card) {
+    const what = (card.actionName || card.action) + '「' + (card.targetTitle || '会话') + '」';
+    return card.action === 'rename' && card.title ? what + ' → 「' + card.title + '」' : what;
+  }
+
   function cardActions(card, now) {
+    if (card.kind === 'manage') {
+      return proposalState(card, now) === 'pending' ? [['run', '确认' + (card.actionName || '')], ['dismiss', '不用了']] : [];
+    }
     if (card.kind !== 'proposal' || proposalState(card, now) !== 'pending') return [];
     return card.initiation === 'offer' ? [['start', '开新会话'], ['here', '就在这里做']]
       : [['start', '开始'], ['dismiss', '不用了']];
@@ -175,7 +231,49 @@
     }
   }
 
+  function renderManageCard(card, key) {
+    const state = proposalState(card);
+    const box = el('section', 'pinkie-session-card pinkie-session-card--manage');
+    box.dataset.sessionCard = card.id;
+    box.dataset.state = state;
+    if (state !== 'pending') {
+      const header = el('div', 'pinkie-session-card__compact');
+      const icon = {done: '✓', failed: '!', dismissed: '—', expired: '◷'}[state] || '•';
+      header.append(el('span', 'pinkie-session-card__compact-toggle', `${icon} ${manageLabels[state] || state} · ${manageSummary(card)}`));
+      box.append(header);
+      if (card.error) box.append(el('div', 'pinkie-session-card__error', card.error));
+      return box;
+    }
+    box.append(el('div', 'pinkie-session-card__title', '碧琪想' + manageSummary(card)),
+      el('div', 'pinkie-session-card__body', '这是别的会话，要你点头才做。'));
+    const actions = el('div', 'pinkie-session-card__actions');
+    actions.append(link(card.target, '先去看看 ›'));
+    for (const [action, label] of cardActions(card)) {
+      const button = cardButton(label, null, action === 'run' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
+      button.disabled = busy.has(card.id);
+      button.onclick = async () => {
+        if (busy.has(card.id) || key !== selected) return;
+        busy.add(card.id); errors.delete(card.id); paint();
+        try {
+          const result = await request('pinkie.session.manage.confirm', {key, id: card.id, action}, 45_000);
+          if (key === selected && data && result?.card) data.cards = data.cards.map(item => item.id === card.id ? result.card : item);
+          window.PinkieSessionList?.invalidate();
+        } catch (error) {
+          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
+        } finally {
+          busy.delete(card.id);
+          if (key === selected) paint();
+        }
+      };
+      actions.append(button);
+    }
+    if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
+    box.append(actions);
+    return box;
+  }
+
   function renderCard(card, key) {
+    if (card.kind === 'manage') return renderManageCard(card, key);
     const proposal = card.kind === 'proposal';
     const state = proposal ? proposalState(card) : 'report';
     const box = el('section', 'pinkie-session-card');
@@ -200,8 +298,8 @@
     const where = card.modeName ? card.modeName + ' · ' : '';
     if (proposal) heading.textContent = where + card.title;
     else heading.textContent = where + card.title + (card.failed ? ' 没做成' : card.consult ? ' 的回答' : ' 做完一轮');
-    const body = el('div', 'pinkie-session-card__body', proposal
-      ? (expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary) : card.text);
+    const body = proposal ? el('div', 'pinkie-session-card__body', expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary)
+      : expanded.has(card.id) ? mdBody('pinkie-session-card__body', card.text) : el('div', 'pinkie-session-card__body', plainMd(card.text));
     if (!expanded.has(card.id)) body.classList.add('pinkie-session-card__body--preview');
     box.append(heading, body);
 
@@ -331,12 +429,14 @@
     const requestId = ++sequence;
     try {
       const agentId = key.split(':')[1];
-      const [result, list, lineage] = await Promise.all([
+      const [result, list, lineage, managed] = await Promise.all([
         request('pinkie.session.cards', {key}),
         request('sessions.list', {agentId, archived:false, limit:1000}).catch(() => null),
         request('pinkie.session.lineage', {agentId}).catch(() => null),
+        request('pinkie.session.manage.cards', {key}).catch(() => null),
       ]);
       if (requestId !== sequence || key !== currentKey()) return;
+      result.cards = [...(result.cards || []), ...(managed?.cards || [])];
       result.childStates = Object.fromEntries((list?.sessions || []).map(row => {
         const phase = window.PinkieSessionList?.sessionStatus({...row, phase:lineage?.states?.[row.key]?.phase});
         return [row.key, {running:'运行中', waiting:'等你回复', error:'出错'}[phase] || '已完成'];
@@ -381,7 +481,7 @@
     refreshTimer = setTimeout(() => void refresh(), 180);
   }
 
-  window.PinkieSessionCards = {cardActions, proposalState, chooseAnchor, forkEntryId, cardMeasure};
+  window.PinkieSessionCards = {cardActions, manageSummary, proposalState, chooseAnchor, forkEntryId, cardMeasure};
   if (typeof MutationObserver !== 'function') return;
   new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
   window.addEventListener('popstate', reconcile);

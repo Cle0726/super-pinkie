@@ -1052,7 +1052,8 @@
   /* 选中聊天文字时出现「问碧琪」 */
   window.__pinkieSelectionActions?.register('ask', {
     order: 2,
-    when: ({text, library, desk}) => !desk && (library ? text.length <= 20000 : text.length <= 60),
+    when: ({text, library, desk}) => document.documentElement.getAttribute("data-laolao-mode") !== "metre"
+      && !desk && (library ? text.length <= 20000 : text.length <= 60),
     create: () => {
       const askChip = el("button", "pinkie-buddy-ask");
       const ico = el("span", "pinkie-buddy__ico"); ico.innerHTML = ICON.explain;
@@ -1174,7 +1175,7 @@
     const stop = () => { cancelAnimationFrame(raf); raf = 0; };
     const sync = () => {
       const card = document.querySelector(".card.chat");
-      const want = prefs.ambient && !reduced() && !document.hidden && card && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
+      const want = prefs.ambient && !reduced() && !document.hidden && card && document.documentElement.getAttribute("data-laolao-mode") !== "metre" && !document.documentElement.hasAttribute("data-laolao-mode-pending") && !document.getElementById("laolao-splash");
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       // 没人在看（窗口在后台、很久没动）：停在当前这一帧，不消失；回来就接着动。见 laolao-rest.js。
       if (window.__pinkieRest?.away && canvas && canvas.parentElement === card && currentMode === mode()) { stop(); return; }
@@ -1195,6 +1196,21 @@
     return {sync};
   })();
 
-  setInterval(() => { try { loop(); ambient.sync(); } catch (e) { console.error("[pinkie-buddy]", e); } }, 400);
+  const beat = () => { try { loop(); ambient.sync(); } catch (e) { console.error("[pinkie-buddy]", e); } };
+  let loopTimer = setInterval(beat, 400);
+  // Metre 里小碧琪整个停下（批 6）：不跑状态循环，画布和 WebGL 上下文释放掉；离开 Metre 再建回来。
+  window.__pinkieQuiet?.register("companion", {
+    suspend() {
+      clearInterval(loopTimer); loopTimer = 0;
+      ambient.sync();
+      if (rig) { const old = rig; rig = null; old.destroy(); }
+      buddy?.classList.remove("is-rig");
+      rigTried = false;
+    },
+    resume() {
+      if (!loopTimer) loopTimer = setInterval(beat, 400);
+      beat();
+    },
+  });
   window.__pinkieBuddy = {get rig() { return rig; }, say: (t) => say(esc(t)), setState, explain, startFocus, stopFocus, ambient, prefs, quotes, burst: (k) => burstFrom(figure, k), onSend, toggleMenu, openSettings};
 })();

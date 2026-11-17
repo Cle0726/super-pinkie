@@ -232,7 +232,8 @@
   for(const name of ['laolao:modechange','pinkie:session-selected'])window.addEventListener(name,reconcile);
   window.addEventListener('pagehide',()=>{clearTimeout(state.progressTimer);void flushProgress();});
   let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.pdf&&state.reader)void go(state.location,state.quote);},250);});
-  setInterval(reconcile,1200);
+  // 学习资料库只属于学习模式，Metre 里不轮询（批 6）。
+  if(!window.__pinkieQuiet)setInterval(reconcile,1200);else window.__pinkieQuiet.interval('learning-library',reconcile,1200);
   window.__pinkieLibrary={shelf,open,closeReader,chooseFile,importFile,saveSelection,askSelection,selectionSource,highlight,go,get state(){return state;}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',reconcile,{once:true});else reconcile();
 })();

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chatModelIds, createModelSynchronizer, newModelEntries} from '../services/mode-architecture/model-sync.mjs';
+import {chatModelIds, createModelSynchronizer, newModelEntries, recognizedModelId} from '../services/mode-architecture/model-sync.mjs';
 
 test('only chat IDs enter the model catalog, with duplicates removed', () => {
   assert.deepEqual(chatModelIds({data: [
@@ -20,10 +20,10 @@ test('new effort endpoint inherits known sibling capabilities without modifying 
   assert.deepEqual(current[0].input, ['text', 'image']);
 });
 
-test('verified clekk GPT-6 gets slider capabilities while an unverified provider stays conservative', () => {
+test('new models always enable reasoning transport; verified providers add exact capabilities', () => {
   const [unknown] = newModelEntries([], ['gpt-6-sol']);
   assert.equal(unknown.name, 'GPT-6 Sol');
-  assert.equal(unknown.reasoning, false);
+  assert.equal(unknown.reasoning, true);
   assert.equal(unknown.compat, undefined);
   const [verified] = newModelEntries([], ['gpt-6-sol'], {verifiedGpt6: true});
   assert.equal(verified.reasoning, true);
@@ -193,7 +193,7 @@ test('namespaced upstream IDs keep their full routing path and reject malformed 
   assert.equal(entry.id, 'workbuddy/glm-5.3');
   assert.equal(entry.name, 'GLM 5.3');
   assert.equal(newModelEntries([], ['workbuddy/deepseek-v4-pro'])[0].name, 'DeepSeek V4 Pro · WB');
-  assert.equal(entry.reasoning, false, 'ID alone does not prove parameter support');
+  assert.equal(entry.reasoning, true, 'new IDs default to reasoning passthrough');
 });
 
 test('explicit upstream windows initialize new models and ignore output-only metadata', async () => {
@@ -265,16 +265,36 @@ test('context sync respects a concurrent config edit while updating unaffected m
   assert.equal(models[1].contextTokens,256000);
 });
 
-test('known WorkBuddy reasoning models get verified high support only on the local mm route',()=>{
+test('every new WorkBuddy model gets reasoning passthrough and verified high support only on the local mm route',()=>{
   const [known]=newModelEntries([],['workbuddy/glm-5.3'],{verifiedWorkBuddy:true});
   assert.equal(known.reasoning,true);
   assert.deepEqual(known.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
-  assert.equal(newModelEntries([],['workbuddy/glm-5.3'])[0].reasoning,false,'an arbitrary provider is not verified');
-  assert.equal(newModelEntries([],['workbuddy/auto'],{verifiedWorkBuddy:true})[0].reasoning,false);
+  assert.equal(newModelEntries([],['workbuddy/glm-5.3'])[0].reasoning,true,'other providers still capture reasoning without inventing effort levels');
+  const future=newModelEntries([],['workbuddy/glm-9'],{verifiedWorkBuddy:true})[0];
+  assert.equal(future.reasoning,true);
+  assert.deepEqual(future.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
 });
 
-test('existing automatic WorkBuddy placeholders gain reasoning while custom capabilities stay untouched',async()=>{
-  const placeholder=newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0];
+test('hy4free is discovered with reasoning and existing placeholders recover',async()=>{
+ const [added]=newModelEntries([],['workbuddy/hy4free'],{verifiedWorkBuddy:true});
+ assert.equal(added.reasoning,true);
+ assert.deepEqual(added.compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
+ const placeholder={...newModelEntries([],['workbuddy/hy4free'])[0],reasoning:false};
+ delete placeholder.compat;
+ assert.equal(placeholder.reasoning,false);
+ const config={models:{providers:{mm:{baseUrl:'http://localhost:1467/v1',apiKey:'secret',models:[placeholder]}}}};
+ const sync=createModelSynchronizer({runtime:{config:{current:()=>config,
+   async mutateConfigFile({mutate}){mutate(config);}}}},
+   {fetchImpl:async()=>new Response(JSON.stringify({data:[{id:'workbuddy/hy4free'}]}))});
+ const result=await sync.sync();
+ assert.equal(result.providers.mm.upgraded,1);
+ assert.equal(config.models.providers.mm.models[0].reasoning,true);
+ assert.deepEqual(config.models.providers.mm.models[0].compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
+});
+
+test('automatic placeholders gain reasoning on every provider while custom capabilities stay untouched',async()=>{
+  const placeholder={...newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0],reasoning:false};
+ delete placeholder.compat;
   placeholder.contextWindow=1000000;placeholder.contextTokens=1000000;
   const custom={...structuredClone(placeholder),id:'workbuddy/glm-5.3',name:'My GLM'};
   const config={models:{providers:{mm:{baseUrl:'http://localhost:1467/v1',apiKey:'secret',models:[placeholder,custom]},
@@ -284,11 +304,13 @@ test('existing automatic WorkBuddy placeholders gain reasoning while custom capa
     {fetchImpl:async()=>new Response(JSON.stringify({data:[{id:placeholder.id},{id:custom.id}]}))});
   const result=await sync.sync();
   assert.equal(result.providers.mm.upgraded,1);
+  assert.equal(result.providers.other.upgraded,1);
   assert.equal(config.models.providers.mm.models[0].reasoning,true);
   assert.deepEqual(config.models.providers.mm.models[0].compat.supportedReasoningEfforts,['high']);
   assert.equal(config.models.providers.mm.models[0].contextTokens,1000000);
   assert.equal(config.models.providers.mm.models[1].reasoning,false);
-  assert.equal(config.models.providers.other.models[0].reasoning,false);
+  assert.equal(config.models.providers.other.models[0].reasoning,true);
+  assert.equal(config.models.providers.other.models[0].compat,undefined);
   assert.equal((await sync.sync({force:true})).upgraded,0);
 });
 
@@ -310,9 +332,32 @@ test('explicit upstream effort metadata is honored without replacing a custom ca
  const custom={id:'custom',name:'Custom model',reasoning:true,compat:{supportedReasoningEfforts:['high']}};
  const config={models:{providers:{fixture:{baseUrl:'https://example.invalid/v1',apiKey:'fixture',models:[custom,{id:'new-known',name:'New Known',reasoning:false}]}}}};
  const api={runtime:{config:{current:()=>config,mutateConfigFile:async({mutate})=>mutate(config)}}};
- const payload={data:[{id:'custom',reasoning_efforts:['low','max']},{id:'new-known',capabilities:{reasoning:{efforts:['medium','high','max']}}},{id:'discovered',supported_reasoning_efforts:['LOW','HIGH']}]};
+ const payload={data:[{id:'custom',reasoning_efforts:['low','max']},{id:'new-known',capabilities:{reasoning:{efforts:['medium','high','max']}}},{id:'qwen9-discovered',supported_reasoning_efforts:['LOW','HIGH']}]};
  await createModelSynchronizer(api,{fetchImpl:async()=>new Response(JSON.stringify(payload))}).sync();
  const models=config.models.providers.fixture.models;assert.deepEqual(custom.compat.supportedReasoningEfforts,['high']);
  assert.deepEqual(models.find(m=>m.id==='new-known').compat.supportedReasoningEfforts,['medium','high','max']);
- assert.deepEqual(models.find(m=>m.id==='discovered').compat.supportedReasoningEfforts,['low','high']);
+ assert.deepEqual(models.find(m=>m.id==='qwen9-discovered').compat.supportedReasoningEfforts,['low','high']);
+});
+
+// 11-16 用户：「当找不到模型名时就不要显示出来了」——认不出是哪个模型的上游 ID 不自动加进来；选择器用同一套规则把已经在配置里的藏起来。
+test('upstream IDs whose model name cannot be recognised are not added; the picker hides the same ones', async () => {
+  const fs = await import('node:fs');
+  const named = ['gpt-6-sol', 'claude-cli/claude-opus-4-8', 'workbuddy/glm-5.3', 'workbuddy/hy4flash-free', 'gemini-3.6-flash-high', 'o4-mini', 'qwen3-coder-next', 'kimi-k3.1', 'mimo-v2.6-pro', 'step-5-preview', 'workbuddy/space-bunny', 'tab_flash_lite_preview', 'grok-4.7', 'deepseek-v4-pro', 'minimax-m3', 'codex-auto-review'];
+  const unnamed = ['workbuddy/auto', 'auto', 'github-copilot/copilot-search-a', 'memory4-dream', 'github-copilot/mai-code-1-flash-secondary', 'future-model', 'x'];
+  for (const id of named) assert.ok(recognizedModelId(id), id);
+  for (const id of unnamed) assert.ok(!recognizedModelId(id), id);
+  assert.deepEqual(newModelEntries([], [...named.slice(0, 3), ...unnamed]).map((entry) => entry.id), named.slice(0, 3));
+  const config = {models: {providers: {fixture: {baseUrl: 'https://example.invalid/v1', apiKey: 'fixture', models: [{id: 'memory4-dream', name: 'Memory4 Dream'}]}}}};
+  const api = {runtime: {config: {current: () => config, mutateConfigFile: async ({mutate}) => mutate(config)}}};
+  const result = await createModelSynchronizer(api, {fetchImpl: async () => new Response(JSON.stringify({data: [{id: 'gpt-6-sol'}, {id: 'auto'}, {id: 'copilot-search-a'}, {id: 'memory4-dream'}]}))}).sync();
+  assert.equal(result.added, 1);
+  assert.equal(result.unnamed, 2, '认不出名字的两个没加，已经在配置里的不算');
+  assert.deepEqual(config.models.providers.fixture.models.map((entry) => entry.id), ['memory4-dream', 'gpt-6-sol'], '已有的条目不删');
+  // 选择器（laolao-model-picker.js）的 idBrand 和这里同一套规则
+  const picker = fs.readFileSync(new URL('../ui/injections/laolao-model-picker.js', import.meta.url), 'utf8');
+  const body = picker.slice(picker.indexOf('function idBrand(id) {'), picker.indexOf('function modelBrand(provider, id) {'));
+  const idBrand = new Function(`${body}; return idBrand;`)();
+  for (const id of [...named, ...unnamed]) assert.equal(Boolean(idBrand(id)), recognizedModelId(id), id);
+  assert.match(picker, /function hiddenPickerModel\(model, selected = ""\) \{[^\n]*unnamedModel/, '展示目录藏起认不出名字的');
+  assert.match(picker, /const unnamed = row !== selected && unnamedModel\(/, '输入框下的模型列表藏起认不出名字的，正在用的那个除外');
 });

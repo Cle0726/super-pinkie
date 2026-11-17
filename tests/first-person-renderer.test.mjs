@@ -27,6 +27,24 @@ test('the bundled plugin rewrites both outbound reply paths and preserves other 
   assert.equal(await hooks.get('reply_payload_sending')({payload: null}), undefined);
 });
 
+test('Metre bypasses the first-person replacement plugin on both outbound paths', async t => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-renderer-metre-'));
+  t.after(() => fs.rmSync(temporary, {recursive: true, force: true}));
+  const fakeSDK = path.join(temporary, 'node_modules/openclaw');
+  fs.mkdirSync(fakeSDK, {recursive: true});
+  fs.writeFileSync(path.join(fakeSDK, 'package.json'), JSON.stringify({type: 'module', exports: {'./plugin-sdk/plugin-entry': './entry.mjs'}}));
+  fs.writeFileSync(path.join(fakeSDK, 'entry.mjs'), 'export const definePluginEntry = value => value;\n');
+  const entry = path.join(temporary, 'index.mjs');
+  fs.copyFileSync(new URL('../services/first-person-renderer/index.mjs', import.meta.url), entry);
+  const {default: plugin} = await import(pathToFileURL(entry));
+  const hooks = new Map();
+  plugin.register({on: (name, callback) => hooks.set(name, callback)});
+  for (const ctx of [{agentId: 'metre'}, {sessionKey: 'agent:metre:test'}]) {
+    assert.equal(await hooks.get('message_sending')({content: '我来帮你'}, ctx), undefined);
+    assert.equal(await hooks.get('reply_payload_sending')({payload: {text: '我做好了'}}, ctx), undefined);
+  }
+});
+
 test('first-person rendering keeps code, links, 我们 and idioms, and both copies agree', async t => {
   const {renderFirstPerson} = await import('../services/mode-architecture/first-person.mjs');
   const cases = [
@@ -75,6 +93,24 @@ test('the App chat window shows 碧琪 for every mode through one display-only i
   assert.doesNotMatch(ui, /observe\(document\.body,\s*\{[^}]*subtree/);
   assert.match(ui, /pinkie:desk-conversation-rendered/);
   for (const skipped of ['.chat-tool-card', '.chat-timeline-tool-row', 'pre', 'code', 'textarea']) assert.ok(ui.includes(`'${skipped}'`), skipped);
+});
+
+test('Metre skips display replacements and restores originals when modes change', () => {
+  const ui = fs.readFileSync(new URL('../ui/injections/laolao-first-person.js', import.meta.url), 'utf8');
+  const phrases = fs.readFileSync(new URL('../ui/injections/laolao-phrases.js', import.meta.url), 'utf8');
+  assert.match(ui, /const isMetre = \(\) => document\.documentElement\.getAttribute\('data-laolao-mode'\) === 'metre'/);
+  assert.match(ui, /if \(isMetre\(\)\) return;/);
+  assert.match(ui, /renderedNodes/);
+  assert.match(ui, /laolao:modechange/);
+  assert.match(phrases, /const isMetreMode=\(\)=>globalThis\.document\?\.documentElement\?\.getAttribute\?\.\('data-laolao-mode'\)==='metre'/);
+  // Metre keeps plain UI localization ("New messages" → "有新消息"); only changes that would show 碧琪 are dropped.
+  assert.match(phrases, /const blockedInMetre=value=>isMetreMode\(\)&&pinkieWording\.test/);
+  assert.match(phrases, /if\(blockedInMetre\(value\)\|\|node\.nodeValue===value\)return;/);
+  assert.doesNotMatch(phrases, /if \(!node\.nodeValue \|\| !node\.nodeValue\.trim\(\)\) return;\n\s*if \(isMetreMode\(\)\) return;/);
+  assert.match(phrases, /setLocalizedAttribute\(element,'title','问问碧琪'\)/);
+  assert.match(phrases, /translatedNodes/);
+  assert.match(phrases, /translatedAttributes/);
+  assert.match(phrases, /laolao:modechange/);
 });
 
 test('first-person rendering leaves alone what 碧琪 is not saying about herself, and does not repeat the name in one sentence', async () => {

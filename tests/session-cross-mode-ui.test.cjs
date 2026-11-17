@@ -53,11 +53,11 @@ test('the sidebar marks a child that came from another mode and offers a way to 
   has(list, "for (const [childKey, child] of Object.entries(lineage?.away || {})) (awayBy[child.parentKey] ||= []).push({key: childKey, ...child});");
   has(list, "const origin = s.lineage?.cross ? MODE_SHORT[s.lineage.fromMode] : '';");
   has(list, "if (origin) link.append(el('span', 'pinkie-session-origin', origin));");
-  has(list, 'const away = !worker && !archived && s.away || [];', 'never on archived or persona rows');
+  has(list, "const away = !worker && !archived && api.mode !== 'metre' && s.away || [];", 'never on archived or persona rows, and not in Metre');
   has(list, "button('↗' + (away.length > 1 ? away.length : where),", 'one chip per row, so the title is never squeezed out (seen in a real render)');
   has(list, 'if (!phase && !s.unread && !s.away?.length) {', 'the chip takes the place of the time');
   has(list, "new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: child.key}})");
-  has(list, "MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', learning: '学习'}", 'keys are the backend mode names');
+  has(list, "MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', thinking: '想法', learning: '学习', unrestricted: '无限制'}", 'keys are the backend mode names');
   const css = source('laolao-sidebar-surface.css');
   for (const name of ['pinkie-session-origin', 'pinkie-session-away']) has(css, '.' + name + ' {');
 });
@@ -81,6 +81,10 @@ test('crew balloons: nothing without children, busy ones first, five at most, an
   assert.deepEqual(plain(mixed.rows.map(row => row.key)), ['c', 'b', 'd', 'a'], 'waiting for the user comes first, finished last');
   assert.deepEqual([mixed.busy, mixed.waiting, mixed.total], [2, 1, 4], 'unknown statuses are dropped');
   assert.equal(summarize([child('a', 'done'), child('b', 'done')]).label, '2 路都回来啦');
+  // Metre 里不说碧琪：声部 / 在奏 / 交回，和总谱一致。
+  assert.equal(summarize([child('a', 'running'), child('b', 'running'), child('c', 'running')], true).label, '3 个声部在奏');
+  assert.equal(summarize([child('a', 'done'), child('b', 'running')], true).label, '2 个声部 · 1 个已交回');
+  assert.equal(summarize([child('a', 'done'), child('b', 'done')], true).label, '2 个声部都交回了');
   const many = summarize(Array.from({length: 8}, (_, i) => child('k' + i, i < 2 ? 'running' : 'done')));
   assert.deepEqual([many.rows.length, many.hidden, many.total], [5, 3, 8]);
 });
@@ -100,6 +104,14 @@ test('crew balloons draw only from what the cards already fetched: no requests, 
 
 test('the 临时 button no longer sits on top of the new-session shortcut', () => {
   has(source('laolao-session-tools.css'), 'html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }');
+});
+
+test('in Metre the parts it sent to other modes are listed under the parent, not hidden behind a ↗N chip', () => {
+  const list = source('laolao-session-list.js');
+  has(list, "const awayChildren = (s, api) => api.mode === 'metre' && !archived && Array.isArray(s.away) ? s.away : [];");
+  has(list, "host.append(row(node.session, api, {children: node.children.length + parts.length, collapsed}));", 'the fold count includes them');
+  has(list, "if (!collapsed) for (const part of parts) branch.append(awayRow(part));", 'folding hides them like any child');
+  has(list, "window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: part.key}}));", 'a click switches to that mode');
 });
 
 test('the changed scripts are served under new cache names', () => {

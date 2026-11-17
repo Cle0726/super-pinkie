@@ -88,6 +88,25 @@
       readyPhrase: "彩虹力量全开！",
       sessionKey: "agent:unrestricted:main",
     },
+    {
+      // Metre is not a Pinkie room: the word "Metre" and the pixel cat's head
+      // (ui/assets/laolao-mode-metre.svg, drawn from the approved frames by
+      // tools/metre/cat-head-svg.cjs), no transition scene, no portrait burst,
+      // nothing preloaded for it. Its skin is laolao-metre-skin.css.
+      id: "metre",
+      label: "Metre",
+      alt: "Metre",
+      address: "",
+      plain: true,
+      avatar: "/laolao-mode-metre.svg?v=cathead1",
+      avatarSmall: "/laolao-mode-metre.svg?v=cathead1",
+      // 用户 11-14：「meter不需要像碧琪一样的头像当入口用一个按键就行」。Metre 的入口（侧栏顶上的按钮和
+      // 模式菜单里的那一项）只有字，不放头像；avatar 留着给开场和经典外壳用。
+      plain: true,
+      phrases: ["切换到 Metre"],
+      readyPhrase: "Metre",
+      sessionKey: "agent:metre:main",
+    },
   ];
 
   let menu = null;
@@ -96,6 +115,7 @@
   let menuAnchor = null;
   let switching = false;
   let modeTransitionTargetId = null;
+  const menuBoundTriggers = new WeakSet();
   let deferredModeChangeId = null;
   let preloading = false;
   let pendingModePortraitFx = null;
@@ -217,6 +237,7 @@
     if (session.startsWith("agent:thinking:")) return "thinking";
     if (session.startsWith("agent:learning:")) return "learning";
     if (session.startsWith("agent:unrestricted:")) return "unrestricted";
+    if (session.startsWith("agent:metre:")) return "metre";
     if (session.startsWith("agent:main:")) return "chat";
     return null;
   };
@@ -231,6 +252,7 @@
     if (String(key).startsWith("agent:thinking:")) return "thinking";
     if (String(key).startsWith("agent:learning:")) return "learning";
     if (String(key).startsWith("agent:unrestricted:")) return "unrestricted";
+    if (String(key).startsWith("agent:metre:")) return "metre";
     if (String(key).startsWith("agent:main:")) return "chat";
     return null;
   };
@@ -335,8 +357,9 @@
       if (avatar.getAttribute("data-laolao-mode-avatar") !== mode.id) {
         avatar.setAttribute("data-laolao-mode-avatar", mode.id);
       }
-      if (avatar.getAttribute("alt") !== `碧琪·${mode.label}`) {
-        avatar.setAttribute("alt", `碧琪·${mode.label}`);
+      const alt = mode.alt || `碧琪·${mode.label}`;
+      if (avatar.getAttribute("alt") !== alt) {
+        avatar.setAttribute("alt", alt);
       }
     });
 
@@ -360,12 +383,33 @@
     // All assets are local. Pre-decode them during the first idle window so a
     // later mode switch does not wait behind a 3.6s timer plus four serial
     // image groups. Promise deduplication in PinkieMotion keeps this cheap.
-    modes.forEach((mode) => window.PinkieModeTransitionFx?.warm?.(mode.id));
-    await Promise.all(modes.map(mode => motion.preload(mode.transition)));
-    await Promise.all(modes.map(mode => motion.modeAssets(mode.id)));
+    const decorated = modes.filter((mode) => !mode.plain);
+    decorated.forEach((mode) => window.PinkieModeTransitionFx?.warm?.(mode.id));
+    await Promise.all(decorated.map(mode => motion.preload(mode.transition)));
+    await Promise.all(decorated.map(mode => motion.modeAssets(mode.id)));
   };
 
   const playModeTransition = async (mode) => {
+    if (mode.plain) {
+      // Metre's own cover (laolao-metre-transition.js): a pixel count-in, no
+      // scene art. It declines under reduced motion; then there is no cover at
+      // all and the route changes in place. The fx-shaped stub lets
+      // finishModeTransition wait for the destination without drawing anything.
+      let own = null;
+      try { own = window.PinkieMetreTransition?.play?.() || null; } catch {}
+      if (own) {
+        try {
+          await own.ready;
+          await own.covered;
+          return {overlay: own.overlay, fx: own, assets: Promise.resolve()};
+        } catch {
+          own.abort?.();
+        }
+      }
+      const overlay = document.createElement("section");
+      const fx = {waiting() {}, abort() {}, finish: async () => {}};
+      return {overlay, fx, assets: Promise.resolve()};
+    }
     // The FX module deliberately declines when graphics acceleration is unavailable or the
     // system asks for reduced motion. In that case the established transition
     // below remains the complete, accessible fallback.
@@ -509,6 +553,17 @@
     const complete = async () => {
       if (completed) return;
       completed = true;
+      // Paint the destination while the cover is still opaque. Removing the
+      // cover first exposed the source mode for a frame in both directions.
+      // Metre and Pinkie share no portrait, so the portrait-swap FX would hold the
+      // source mode's button (“学习模式” + Pinkie, or the METRE card) in the sidebar
+      // while the cover lifts. Into or out of Metre, repaint the button under the
+      // cover instead; switches between Pinkie modes keep their swap.
+      const involvesMetre = mode.id === "metre" || pendingModePortraitFx?.from === "metre";
+      modeTransitionTargetId = null;
+      syncModePresentation(mode);
+      if (involvesMetre) { pendingModePortraitFx = null; render(); }
+      if (!motion.reduced()) await motion.frames();
       if (ui.fx) {
         try {
           await ui.fx.finish();
@@ -579,7 +634,7 @@
   // ghost on body first so the selected portrait can grow and burst without
   // delaying either the transition cover or the router handoff.
   const launchSelectionBurst = (sourceOption, mode) => {
-    if (modeFxReduced()) return;
+    if (modeFxReduced() || mode.plain) return;
     const sourcePortrait = sourceOption?.querySelector(".laolao-mode-button__portrait");
     if (!sourcePortrait) return;
     const bounds = sourcePortrait.getBoundingClientRect();
@@ -692,7 +747,9 @@
     outgoingMode = null,
   } = {}) => {
     const currentPortrait = button.querySelector(".laolao-mode-button__portrait");
-    const isCurrent = currentPortrait?.classList.contains("is-current") || false;
+    const isCurrent = mode.plain && !currentPortrait
+      ? button.dataset.plainCurrent === "1"
+      : currentPortrait?.classList.contains("is-current") || false;
     if (!force && button.dataset.mode === mode.id && button.querySelector(".laolao-mode-button__label") && isCurrent === current) {
       return false;
     }
@@ -725,6 +782,16 @@
     const arrow = document.createElement("span");
     arrow.className = "laolao-mode-button__arrow";
     arrow.setAttribute("aria-hidden", "true");
+    if (mode.plain) {
+      button.classList.add("laolao-mode-button--plain");
+      button.dataset.plainCurrent = current ? "1" : "0";
+      button.replaceChildren(label, arrow);
+      return true;
+    }
+    if (button.dataset.plainCurrent !== undefined) {
+      button.classList.remove("laolao-mode-button--plain");
+      delete button.dataset.plainCurrent;
+    }
     button.replaceChildren(portrait, label, arrow);
     return true;
   };
@@ -805,6 +872,7 @@
     option.style.setProperty("--laolao-mode-fx-delay", `${index * 40}ms`);
     renderModeButton(option, mode, {current});
     const warm = () => {
+      if (mode.plain) return;
       void motion.modeAssets(mode.id);
       window.PinkieModeTransitionFx?.warm?.(mode.id, {soon: true});
     };
@@ -824,7 +892,7 @@
     menu = document.createElement("div");
     menu.className = "laolao-mode-menu laolao-mode-menu--fx laolao-mode-menu--fx-opening";
     menu.setAttribute("role", "menu");
-    menu.setAttribute("aria-label", "选择碧琪的工作模式");
+    menu.setAttribute("aria-label", document.documentElement.getAttribute("data-laolao-mode") === "metre" ? "选择工作模式" : "选择碧琪的工作模式");
     modes.forEach((mode, index) => {
       const option = document.createElement("button");
       option.type = "button";
@@ -1021,10 +1089,16 @@
       trigger.className = "laolao-mode-switcher";
       trigger.setAttribute("aria-haspopup", "menu");
       trigger.setAttribute("aria-expanded", "false");
-      trigger.addEventListener("click", openMenu);
       identity.append(trigger);
     }
     if (trigger.parentElement !== identity) { closeMenu(); identity.append(trigger); }
+    // Lit can clone or replace the sidebar without removing this custom button.
+    // cloneNode copies the DOM but never its listeners, so adopting a trigger
+    // must also rebind it. A WeakSet marks real nodes, not cloned data attributes.
+    if (!menuBoundTriggers.has(trigger)) {
+      trigger.addEventListener("click", openMenu);
+      menuBoundTriggers.add(trigger);
+    }
     trigger.setAttribute("aria-label", `当前是${mode.label}，点这里切换模式`);
     const pending = pendingModePortraitFx;
     const shouldHoldOldPortrait = pending && !pending.armed && pending.to === mode.id &&

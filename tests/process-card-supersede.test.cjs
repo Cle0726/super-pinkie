@@ -110,7 +110,7 @@ test('superseded cards leading into the latest turn stay open; finished older tu
   assert.equal(pinkieProcessOpen(first), true, 'first superseded run stays open');
   assert.equal(pinkieProcessOpen(second), true, 'second superseded run stays open');
   assert.equal(pinkieProcessOpen(latest), true);
-  assert.equal(pinkieProcessOpen(older), false, 'a finished earlier job keeps its collapsed default');
+  assert.equal(pinkieProcessOpen(older), true, 'a finished earlier job also keeps its narration, thinking and steps on screen');
 });
 
 
@@ -168,6 +168,16 @@ test('two stored copies of one send fold without a duplicate count', async () =>
   const repeat = Fb([item('again', {idempotencyKey: 'a:user'}), item('again', {idempotencyKey: 'b:user'})]);
   assert.equal(repeat.length, 1);
   assert.equal(repeat[0].duplicateCount, 2);
+  // The page's own copy of a send (no stored seq) next to its stored copy is one send.
+  const echo = Fb([item('first ask'), item('first ask', {__openclaw: {seq: 1}})]);
+  assert.equal(echo.length, 1);
+  assert.equal(echo[0].duplicateCount, undefined);
+  const twice = Fb([item('ask', {__openclaw: {seq: 1}}), item('ask', {__openclaw: {seq: 2}})]);
+  assert.equal(twice[0].duplicateCount, 2);
+  // A bundle already carrying v1 is upgraded in place.
+  const v1 = patched.replace('/*pinkie-same-send-fold:v2*/', '/*pinkie-same-send-fold:v1*/')
+    .replace(',q=m=>Number.isFinite(m?.__openclaw?.seq);return!!k(x)&&k(x)===k(y)||q(x)!==q(y)', ';return!!k(x)&&k(x)===k(y)');
+  assert.equal(withSameSendFold(v1), patched);
 });
 
 // 11-12: real sessions. A failed reply earlier in the session used to make
@@ -229,5 +239,5 @@ test('an aborted run stays open while the user carries the same job on; a finish
   assert.equal(pinkieProcessOpen(stopped), true, 'the aborted run before 继续 keeps its rows on screen');
   assert.equal(pinkieProcessOpen(appended), true);
   assert.equal(pinkieProcessOpen(latest), true);
-  assert.equal(pinkieProcessOpen(old), false, 'a stopped run before a finished answer keeps the collapsed default');
+  assert.equal(pinkieProcessOpen(old), true, 'a stopped run before a finished answer also keeps its rows on screen');
 });

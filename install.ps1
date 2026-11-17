@@ -130,6 +130,7 @@ $personaMap = @{
   "thinking"  = "$UserHome\.openclaw\workspace-thinking"
   "learning"  = "$UserHome\.openclaw\workspace-learning"
   "neutral"   = "$UserHome\.openclaw\workspace-unrestricted"
+  "metre"     = "$UserHome\.openclaw\workspace-metre"
 }
 $personaBackupRoot = Join-Path $env:LOCALAPPDATA ("SuperPinkie\backups\personas-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 $personaTemplateFiles = @("SOUL.md","IDENTITY.md","AGENTS.md","AESTHETICS.md","METHODS.md","HEARTBEAT.md","DREAMS.md","memory-system.md")
@@ -193,6 +194,11 @@ if ($null -ne $ocBin) {
     & openclaw agents add learning --non-interactive --workspace "$UserHome\.openclaw\workspace-learning" 2>$null
   }
   & openclaw agents set-identity --agent learning --identity-file "$UserHome\.openclaw\workspace-learning\IDENTITY.md" 2>$null
+  if ($agentList -notmatch '"id"\s*:\s*"metre"') {
+    Write-Host "    registering metre agent"
+    & openclaw agents add metre --non-interactive --workspace "$UserHome\.openclaw\workspace-metre" 2>$null
+  }
+  & openclaw agents set-identity --agent metre --identity-file "$UserHome\.openclaw\workspace-metre\IDENTITY.md" 2>$null
 }
 
 # ── 4/6  UI 皮肤注入 ──────────────────────────────────────────────────────

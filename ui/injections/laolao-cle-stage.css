@@ -41,7 +41,7 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary {
 /* 一轮刚开始、还没有步骤和思考文字时，原卡片是隐藏的（过十几秒第一个工具出来才「突然弹出」）：
    运行中就一直显示状态行；过程父节点不参与入场延迟，状态立即可见 */
 html:not(#p1):not(#p2):not(#p3) .pinkie-process:is([data-live="1"], [data-cle-run]) { display: flex !important; }
-html:not(#p1):not(#p2):not(#p3) .pinkie-process:not([data-live="1"]):not([data-cle-run]):not(:has(.pinkie-process__rows > *)):not(:has(.pinkie-thinking)) { display: none !important; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process:not([data-live="1"]):not([data-cle-run]):not(:has(.pinkie-process__rows > *)):not(:has(.pinkie-thinking)):not([data-pinkie-has-thinking="1"]) { display: none !important; }
 html:not(#p1):not(#p2):not(#p3) .chat-group.chat-group--process { animation: none !important; }
 
 /* 原标题等状态文字就位后再隐藏，中间不留空白 */

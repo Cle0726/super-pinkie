@@ -68,6 +68,8 @@ function renderFirstPerson(value) {
 }
 // --- first-person rules end ---
 const replaceFirstPerson = renderFirstPerson;
+const isMetre = (event, ctx) => ctx?.agentId === "metre"
+  || String(ctx?.sessionKey || event?.sessionKey || "").startsWith("agent:metre:");
 
 export default definePluginEntry({
   id: "pinkie-first-person-renderer",
@@ -75,13 +77,14 @@ export default definePluginEntry({
   register(api) {
     api.on(
       "message_sending",
-      async (event) => ({ content: replaceFirstPerson(event.content) }),
+      async (event, ctx) => isMetre(event, ctx) ? undefined : ({ content: replaceFirstPerson(event.content) }),
       { priority: 1000 },
     );
 
     api.on(
       "reply_payload_sending",
-      async (event) => {
+      async (event, ctx) => {
+        if (isMetre(event, ctx)) return;
         const payload = event.payload;
         if (!payload || typeof payload !== "object") return;
 

@@ -650,6 +650,7 @@ export class CleSpace {
     if (this.doneTL) this.doneTL.kill();
     gsap.killTweensOf([this.u.uMix, this.u.uAlpha, this.u.uSweep, this.u.uQuillOut, this.svg.style]);
     this.renderer.dispose();
+    try { this.renderer.forceContextLoss(); } catch {}   // 上下文当场还给显卡，不等垃圾回收
     this.points.geometry.dispose();
     this.material.dispose();
     this.renderer.domElement.remove();

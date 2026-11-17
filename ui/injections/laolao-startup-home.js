@@ -43,17 +43,32 @@
     return hour >= 5 && hour < 11 ? 'morning' : hour < 13 && hour >= 11 ? 'noon'
       : hour >= 13 && hour < 18 ? 'afternoon' : hour >= 18 && hour < 23 ? 'evening' : 'night';
   };
-  const greeting = (mode, date = new Date(), random = Math.random, cache = new Map()) => {
+  // 节日 / 放假当天：每个模式一句节日问候，{f} 换成节日名。当天第一次打开就是它，之后它被选中的机会是普通问候的 3 倍。
+  const festivalLines = Object.freeze({
+    chat: '今天是{f}，先生，忙完这一段，留一点时间给自己和身边的人',
+    project: '今天是{f}，老板，活儿挑最要紧的做，剩下的留给明天',
+    thinking: '今天是{f}，先生，节日里冒出来的念头，也值得好好记下',
+    learning: '今天是{f}，先生，学一会儿，就去好好过节吧',
+    unrestricted: '今天是{f}，先生，今天想聊什么都行，碧琪陪你过',
+  });
+  const FESTIVAL_WEIGHT = 3;
+  const greeting = (mode, date = new Date(), random = Math.random, cache = new Map(), festival = null) => {
     const selected = Object.hasOwn(lines, mode) ? mode : 'chat';
-    const bucket = timeBucket(date), key = `${selected}:${bucket}`;
+    const bucket = timeBucket(date), name = festival?.name || '';
+    const key = `${selected}:${bucket}:${name}`;
     if (!cache.has(key)) {
       const choices = lines[selected][bucket];
-      const index = Math.max(0, Math.min(choices.length - 1, Math.floor(random() * choices.length)));
-      cache.set(key, choices[index]);
+      const special = name ? festivalLines[selected].replace('{f}', name) : '';
+      if (special && festival.first) cache.set(key, special);
+      else {
+        const total = choices.length + (special ? FESTIVAL_WEIGHT : 0);
+        const roll = Math.max(0, Math.min(total - 0.001, random() * total));
+        cache.set(key, roll >= choices.length ? special : choices[Math.floor(roll)]);
+      }
     }
     return cache.get(key);
   };
-  window.PinkieStartupHomeData = Object.freeze({lines, timeBucket, greeting});
+  window.PinkieStartupHomeData = Object.freeze({lines, festivalLines, timeBucket, greeting});
   if (window.__laolaoStartupHome) return;
 
   const root = document.documentElement;
@@ -81,12 +96,15 @@
   const random = window.__laolaoStartupHomeRandom || Math.random;
   const greetingCache = new Map();
   const agentFor = mode => mode === 'chat' ? 'main' : mode;
+  // Metre 没有自己的问候语（首页用引导语），但它是一个真的模式：会话在 agent:metre: 下面。
+  // 以前这里只认有问候语的模式，Metre 被当成唠嗑，首页发第一句话时一直等一个 agent:main: 的会话，25 秒后失败。
+  const knownMode = value => Object.hasOwn(lines, value) || value === 'metre';
   const mode = () => {
     const selected = root.getAttribute('data-laolao-mode');
-    if (Object.hasOwn(lines, selected)) return selected;
+    if (knownMode(selected)) return selected;
     const session = new URL(window.location.href).searchParams.get('session') || '';
     const agent = /^agent:([^:]+):/.exec(session)?.[1];
-    return agent === 'main' ? 'chat' : Object.hasOwn(lines, agent) ? agent : 'chat';
+    return agent === 'main' ? 'chat' : knownMode(agent) ? agent : 'chat';
   };
   const sessionKey = () => new URL(window.location.href).searchParams.get('session') || '';
   const notify = message => {
@@ -125,6 +143,35 @@
         schedule();
       }).catch(() => { recent.set(selected, []); })
       .finally(() => loadingRecent.delete(selected));
+  };
+  // 今天的节日（pinkie.metre.today：纯计算、不联网）。按日期记在本机，下次打开不用等网关。
+  const dayOf = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const FESTIVAL_KEY = 'laolao:startup-home-festival';
+  let festivalDay = null, loadingFestival = false;
+  try { festivalDay = JSON.parse(localStorage.getItem(FESTIVAL_KEY) || 'null'); } catch { festivalDay = null; }
+  const todayFestival = () => {
+    const day = dayOf(clock());
+    if (!festivalDay || festivalDay.day !== day || !festivalDay.name) return null;
+    return {name: festivalDay.name, first: !festivalDay.greeted};
+  };
+  const markFestivalGreeted = () => {
+    if (!festivalDay || festivalDay.greeted) return;
+    festivalDay = {...festivalDay, greeted: true};
+    try { localStorage.setItem(FESTIVAL_KEY, JSON.stringify(festivalDay)); } catch { /* 只影响「当天第一句」 */ }
+  };
+  const requestFestival = () => {
+    const day = dayOf(clock());
+    if ((festivalDay && festivalDay.day === day) || loadingFestival || typeof window.__laolaoSidebar?.gwRequest !== 'function') return;
+    loadingFestival = true;
+    window.__laolaoSidebar.gwRequest('pinkie.metre.today', {date: day})
+      .then(result => {
+        const list = result?.festivals || [];
+        const pick = list.find(item => item.kind === 'big' || item.kind === 'term') || list[0];
+        festivalDay = {day, name: pick?.name || result?.holiday || '', greeted: false};
+        try { localStorage.setItem(FESTIVAL_KEY, JSON.stringify(festivalDay)); } catch { /* 下次再问 */ }
+        if (festivalDay.name) schedule();
+      }).catch(() => { /* 没数据就照常问候 */ })
+      .finally(() => { loadingFestival = false; });
   };
   const when = at => {
     if (!at) return '';
@@ -300,7 +347,7 @@
     if (!home) {
       home = document.createElement('section');
       home.className = 'laolao-startup-home';
-      home.setAttribute('aria-label', '碧琪的首页');
+      home.setAttribute('aria-label', document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '首页' : '碧琪的首页');
       const welcome = document.createElement('div');
       welcome.className = 'agent-chat__welcome';
       welcome.setAttribute('data-laolao-minimal-welcome', '1');
@@ -312,7 +359,10 @@
     }
     const selected = mode();
     const text = home.querySelector('h2');
-    const line = greeting(selected, clock(), random, greetingCache);
+    requestFestival();
+    const festival = selected === 'metre' ? null : todayFestival();
+    const line = greeting(selected, clock(), random, greetingCache, festival);
+    if (festival && line.startsWith(`今天是${festival.name}`)) markFestivalGreeted();
     if (text.textContent !== line) text.textContent = line;
     let list = Array.from(main.children).find(node => node.classList?.contains('laolao-startup-home__recent'));
     if (!list) {
@@ -341,7 +391,10 @@
           const body = document.createElement('span'); body.className = 'laolao-startup-home__item-body';
           const name = document.createElement('span'); name.className = 'laolao-startup-home__item-title'; name.textContent = item.title;
           const meta = document.createElement('span'); meta.className = 'laolao-startup-home__item-meta';
-          meta.textContent = [MODE_NAMES[selected], when(item.at)].filter(Boolean).join(' · ');
+          // 模式名单独包一层：Metre 的首页不写碧琪的模式名（laolao-metre-skin.css 把这一层藏掉），只留时间。
+          const stamp = when(item.at), modeName = MODE_NAMES[selected];
+          if (modeName) { const tag = document.createElement('span'); tag.className = 'laolao-startup-home__item-mode'; tag.textContent = stamp ? modeName + ' · ' : modeName; meta.append(tag); }
+          if (stamp) meta.append(stamp);
           body.append(name, meta); entry.append(icon, body);
           entry.addEventListener('click', () => openSession(item.key));
           list.append(entry);

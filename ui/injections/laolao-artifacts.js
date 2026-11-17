@@ -7,7 +7,7 @@
   'use strict';
   if (window.PinkieArtifacts) return;
 
-  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted'};
+  const MODE_AGENT = {chat: 'main', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'unrestricted', metre: 'metre'};
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');
   const isWindows = /Windows/i.test(navigator.userAgent || '') || document.documentElement.dataset.pinkiePlatform === 'windows';
   const revealLabel = () => isWindows ? '在文件夹中显示' : '在访达中显示';
@@ -195,7 +195,8 @@
     }
     const scope = button('全部模式', 'pinkie-art-chip pinkie-art-chip--scope', () => { state.allModes = !state.allModes; paintFilters(); void load(); });
     filters.append(kinds, scope);
-    const note = el('p', 'pinkie-art-note', '碧琪在这个模式里写出、改过、生成的文件都会放在这里，每次改动都留一个版本。');
+    const plain = document.documentElement.getAttribute('data-laolao-mode') === 'metre';   // Metre 里不带碧琪的称呼
+    const note = el('p', 'pinkie-art-note', (plain ? '' : '碧琪') + '在这个模式里写出、改过、生成的文件都会放在这里，每次改动都留一个版本。');
     const grid = el('div', 'pinkie-art-grid');
     const more = button('再看更多', 'pinkie-art-more', () => void load(true));
     more.hidden = true;
@@ -224,7 +225,7 @@
       for (const agent of new Set(state.items.map(item => item.mode))) for (const [key, value] of await sessionTitles(agent)) titles.set(key, value);
       grid.replaceChildren();
       if (!state.items.length) {
-        grid.append(el('p', 'pinkie-art-empty', state.query || state.kind !== 'all' ? '没有找到符合条件的作品' : '还没有作品。碧琪写出网页、文档、图片后会出现在这里。'));
+        grid.append(el('p', 'pinkie-art-empty', state.query || state.kind !== 'all' ? '没有找到符合条件的作品' : (document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '还没有作品。写出网页、文档、图片后会出现在这里。' : '还没有作品。碧琪写出网页、文档、图片后会出现在这里。')));
       }
       for (const item of state.items) {
         const card = el('article', 'pinkie-art-card');
@@ -285,7 +286,7 @@
     };
     if (!preview?.ok) { fallback(preview?.error || '这个版本打不开'); return; }
     if (preview.tooLarge) { fallback('文件比较大（' + size(preview.size) + '），用默认应用打开更快。'); return; }
-    if (preview.unsupported) { fallback('这类文件在碧琪里还看不了预览。'); return; }
+    if (preview.unsupported) { fallback(document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? '这类文件在这里还看不了预览。' : '这类文件在碧琪里还看不了预览。'); return; }
     const ext = (item.path.split('.').pop() || '').toLowerCase();
     if (item.kind === 'image') {
       const img = el('img', 'pinkie-art-view__img');
@@ -458,8 +459,14 @@
         const at = Number(item?.timestamp) || Date.parse(group.querySelector('time[datetime]')?.getAttribute('datetime') || '') || 0;
         turns.push({at, reply: null});
       } else if (group.classList.contains('assistant') && turns.length) {
-        if (!group.querySelector('.chat-bubble.streaming')) turns.at(-1).reply = group;
-        else turns.at(-1).streaming = true;
+        const turn = turns.at(-1);
+        // The answer right after the work card owns the files: replies that a late
+        // background notice woke up come after it and must not pull the cards down.
+        // Later small cards (a late notice's reply) never move the files off the answer they belong to.
+        if (group.classList.contains('chat-group--process')) { if (!(turn.afterCard && turn.reply)) { turn.reply = null; turn.afterCard = true; } continue; }
+        if (group.classList.contains('chat-group--learning')) continue;
+        if (group.querySelector('.chat-bubble.streaming')) { turn.streaming = true; continue; }
+        if (!(turn.afterCard && turn.reply)) turn.reply = group;
       }
     }
     const placements = new Map();
@@ -484,7 +491,9 @@
         const next = el('div', 'pinkie-file-cards');
         next.dataset.signature = signature;
         next.setAttribute('aria-label', '这一轮做出的文件');
-        for (const {item, version} of entries.values()) next.append(fileCard(item, version));
+        // By name, numbers in order (01, 02 … 10): files written in one batch share a timestamp.
+        const ordered = [...entries.values()].sort((a, b) => String(a.item.title).localeCompare(String(b.item.title), 'zh-Hans-CN', {numeric: true}));
+        for (const {item, version} of ordered) next.append(fileCard(item, version));
         if (host) host.replaceWith(next); else reply.after(next);
         host = next;
       }

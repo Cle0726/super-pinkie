@@ -173,6 +173,7 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 xcrun swiftc -parse-as-library -O \
   "$NATIVE_SOURCE_DIR/MaterialPreview.swift" \
   "$NATIVE_SOURCE_DIR/BrowserControl.swift" \
+  "$NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" \
   "$NATIVE_SOURCE_DIR/PinkieNative.swift" \
   "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \

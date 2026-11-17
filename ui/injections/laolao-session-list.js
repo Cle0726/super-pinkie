@@ -10,7 +10,10 @@
   const internalKey = key => /:(?:unknown|structured-gap|failed-tool-result)$|:internal-session-effects:/i.test(key || '');
   const internalRow = s => internalKey(s.key) || !s.lineage?.parentKey && Boolean(s.meta?.internal);
   const isPersona = key => /:subagent:/iu.test(key || '');
-  const MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', learning: '学习'};
+  const MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', thinking: '想法', learning: '学习', unrestricted: '无限制'};
+  // Metre 的子会话（声部）一律开在别的模式里（session-lineage：不能开在 Metre 里），所以在 Metre 的列表里永远是「别处的」。
+  // 老模式只挂一个「↗N」去那边的入口；Metre 把它们像自己的子会话一样列在父会话下面，带上在哪个模式。
+  const awayChildren = (s, api) => api.mode === 'metre' && !archived && Array.isArray(s.away) ? s.away : [];
   const parentOf = s => {
     if (s.lineage?.detached) return '';
     const parent = s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy;
@@ -345,7 +348,11 @@
     status.setAttribute('role', 'status');
     dialog.append(input, filter, status, results); mask.append(dialog); document.body.append(mask);
     let timer = 0, serial = 0, items = [], selected = 0, closed = false;
-    const close = () => { closed = true; serial++; clearTimeout(timer); mask.remove(); if (searchView?.mask === mask) searchView = null; };
+    // Esc closes from anywhere: focus can leave the dialog (a click on its blank area, a native menu) and the
+    // dialog's own keydown never sees the key then.
+    const escape = event => { if (event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); close(); } };
+    const close = () => { closed = true; serial++; clearTimeout(timer); document.removeEventListener('keydown', escape, true); mask.remove(); if (searchView?.mask === mask) searchView = null; };
+    document.addEventListener('keydown', escape, true);
     searchView = {mask, mode: api.mode, close};
     const open = item => {
       if (!item) return;
@@ -536,7 +543,7 @@
     }
     // 这个会话在别的模式里开的子会话：点了切到那个模式、落在那个会话上。最多列两个，其余看卡片。
     // 一行只放一个：一个就写去哪个模式，多个写个数（点了去第一个，其余的在聊天里的气球和卡片上）。标题不能被挤没。
-    const away = !worker && !archived && s.away || [];
+    const away = !worker && !archived && api.mode !== 'metre' && s.away || [];
     if (away.length) {
       const child = away[0], where = MODE_SHORT[child.mode] || '另一个';
       const go = button('↗' + (away.length > 1 ? away.length : where),
@@ -577,6 +584,26 @@
     return n;
   }
 
+  // Metre 父会话下面的一个声部：标题 + 在哪个模式；点了切到那个模式、落在这个会话上。
+  function awayRow(part) {
+    const n = el('div', 'sidebar-recent-session session-row-host pinkie-session-part');
+    n.dataset.sessionKey = part.key;
+    const name = part.title || '子会话', where = MODE_SHORT[part.mode] || '';
+    const link = el('a', 'sidebar-recent-session__link');
+    link.href = '/chat?session=' + encodeURIComponent(part.key);
+    link.dataset.pinkieTooltip = where ? name + '（在' + where + '模式，点了切过去）' : name;
+    link.append(el('span', 'sidebar-recent-session__name', name));
+    link.onclick = e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: part.key}}));
+    };
+    const aside = el('span', 'session-row-aside');
+    if (where) aside.append(el('span', 'pinkie-session-origin pinkie-session-part__mode', where));
+    n.append(link, aside);
+    return n;
+  }
+
   function addWorkers(host, node, api) {
     if (!node.workers.length) return;
     const key = 'workers:' + node.session.key;
@@ -593,15 +620,17 @@
   function addTree(host, node, api) {
     const key = archived ? 'archive:' + node.session.key : node.session.key;
     const collapsed = !query.trim() && folded(key, archived);
-    host.append(row(node.session, api, {children: node.children.length, collapsed}));
+    const parts = awayChildren(node.session, api);
+    host.append(row(node.session, api, {children: node.children.length + parts.length, collapsed}));
     const shown = collapsed ? node.children.filter(child => child.session.key === api.currentKey
       || child.workers.some(worker => worker.key === api.currentKey)) : node.children;
-    if (shown.length) {
+    if (shown.length || parts.length && !collapsed) {
       const branch = el('div', 'pinkie-session-branch');
       for (const child of shown) {
         branch.append(row(child.session, api));
         addWorkers(branch, child, api);
       }
+      if (!collapsed) for (const part of parts) branch.append(awayRow(part));
       host.append(branch);
     }
     addWorkers(host, node, api);

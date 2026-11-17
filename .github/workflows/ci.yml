@@ -56,10 +56,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Type-check native launcher
         run: |
+          src=desktop/macos/pinkie/Sources
           xcrun swiftc -parse-as-library -typecheck \
-            desktop/macos/Sources/Launcher.swift \
-            -framework AppKit -framework AVFoundation -framework Foundation \
-            -framework Speech -framework WebKit
+            "$src/MaterialPreview.swift" "$src/BrowserControl.swift" \
+            "$src/PinkieNative.swift" "$src/Launcher.swift" \
+            -framework AppKit -framework AVFoundation -framework Carbon \
+            -framework Foundation -framework Speech -framework UserNotifications \
+            -framework WebKit
       - name: Verify self-contained bundle contract
         run: node --test tests/self-contained-app.test.cjs tests/native-glass.test.cjs
 

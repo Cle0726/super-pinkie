@@ -1791,7 +1791,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.run.status').opts.scope,'operator.read');
-  assert.equal(tools.length,25);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
+  assert.equal(tools.length,29);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','web_gpt','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','pinkie_models','pinkie_sessions','metre_memory','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1860,7 +1860,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','pinkie_mode_ask','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','plan_update','run_tests','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','metre_memory','pinkie_mode_ask','pinkie_models','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','pinkie_sessions','plan_update','run_tests','web_gpt','web_gpt_activity','workbench_read','workbench_show']);
   // A tool registered in code but missing above kills the whole plugin at load
   // (11-13: pinkie_search). Scan every registerTool name in the plugin source.
   const dir=path.join(import.meta.dirname,'../services/mode-architecture');
@@ -2011,9 +2011,10 @@ test('an unavailable mm account crosses to clekk without changing the next user 
   assert.deepEqual(watchdog.beforeModelResolve({prompt:'\u2063'},{sessionKey:key}),{providerOverride:'clekk',modelOverride:'gpt-5.6-luna'});
   assert.equal(await watchdog.agentEnded({success:false,error:'本地接入集合暂无账号'},{agentId:'learning',sessionKey:key}),true);
   assert.equal(watchdog.models.get(key),'mm/gemini-3.6-flash-tiered');
-  assert.equal(await watchdog.agentEnded({success:false,error:'auth unavailable'},{agentId:'learning',sessionKey:key}),false);
+  // Both fallbacks used: an outage is waited out on the user's own model instead of giving up (11-17).
+  assert.equal(await watchdog.agentEnded({success:false,error:'auth unavailable'},{agentId:'learning',sessionKey:key}),true);
   assert.equal(watchdog.models.has(key),false);
-  assert.equal(injected.length,2);
+  assert.equal(injected.length,3);
 });
 
 test('watchdog recovers an aborted provider run even when agent_end has no top-level error',async()=>{
@@ -3094,6 +3095,26 @@ test('a turn that yields to running children is not re-driven by the watchdog',a
   // 没有子任务在跑、也没有档位续跑器会叫醒它：照旧当成没写完，接着推。
   activity={pending:0,quietForMs:Infinity};
   assert.equal(await watchdog.agentEnded({runId:'y2',success:true,messages},{agentId:'main',sessionKey:key}),true);
+});
+
+test('Metre yielding to its own pinkie_session_start children is not woken by the watchdog',async t=>{
+  const scheduled=[];
+  const api={session:{workflow:{scheduleSessionTurn:async job=>{scheduled.push(job);return {id:'x'};},enqueueNextTurnInjection:async()=>({}),unscheduleSessionTurnsByTag:async()=>({removed:0})}}};
+  const watchdog=new UpstreamWatchdog(api,()=>'',async()=>({stdout:'{}'}),'',()=>({pending:0,quietForMs:Infinity}));
+  const key='agent:metre:dashboard:yield-lineage';
+  const instances=globalThis[Symbol.for('pinkie.session-lineage.v1')]??=new Map();
+  let running=2;
+  const fake={familyRows:async()=>new Map(),runningChildren:parent=>parent===key?running:0};
+  instances.set('test-yield-lineage',fake);
+  t.after(()=>{instances.delete('test-yield-lineage');void watchdog.cancel(key);});
+  const messages=[
+    {role:'assistant',stopReason:'toolUse',content:[{type:'toolCall',name:'sessions_yield',arguments:{}}]},
+    {role:'toolResult',toolName:'sessions_yield',content:[{type:'text',text:'{"status":"yielded"}'}],details:{status:'yielded'},isError:false},
+  ];
+  assert.equal(await watchdog.agentEnded({runId:'m1',success:true,messages},{agentId:'metre',sessionKey:key}),false);
+  assert.equal(scheduled.length,0);
+  running=0;
+  assert.equal(await watchdog.agentEnded({runId:'m2',success:true,messages},{agentId:'metre',sessionKey:key}),true);
 });
 
 test('a retry decided for an older parent run is dropped once a newer run has answered',async t=>{

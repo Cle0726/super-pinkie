@@ -489,6 +489,15 @@ test('failure and waiting-for-user phases survive a new instance', async t => {
   assert.equal(states[parent].phase, 'error');
 });
 
+test('a turn whose reply failed before any content reads as an error even when the run says success', async t => {
+  const f = fixture(t);
+  f.lineage.begin({runId: 'e502', prompt: '请继续'}, {sessionKey: parent});
+  const messages = [{role: 'assistant', stopReason: 'error', errorMessage: '502 claude 登录不可用',
+    content: [{type: 'text', text: '[assistant turn failed before producing content]'}]}];
+  await f.lineage.ended({runId: 'e502', success: true, messages}, {sessionKey: parent});
+  assert.equal((await f.lineage.views('project')).states[parent].phase, 'error');
+});
+
 test('the delivery gate counts child creation evidence only for session work', () => {
   const entry = {name: 'pinkie_session_start', output: JSON.stringify({key: 'agent:project:pinkie-child:work', title: '子会话'})};
   assert.equal(isSessionOperationEvidence(entry, '另开子会话处理这件事'), true);
@@ -545,6 +554,17 @@ test('in_scope is refused in internal turns and when the user switched it off', 
   off.begin({prompt: '同时做两件事', runId: 'human'}, {sessionKey: parent});
   await assert.rejects(off.start(parent, 'human', scoped, 'z'), /关掉了/);
   assert.equal(f.sent.length, 0);
+});
+
+test('a watchdog continuation of the user\'s own turn may still start children, and the per-turn count carries on', async t => {
+  const f = fixture(t), scoped = {...request, initiation: 'in_scope'};
+  f.lineage.begin({prompt: '分三块做', runId: 'human'}, {sessionKey: parent});
+  await f.lineage.start(parent, 'human', scoped, 'a');
+  await f.lineage.ended({runId: 'human', success: false, error: 'upstream 503'}, {sessionKey: parent});
+  f.lineage.begin({prompt: '[pinkie-watchdog] 【自动续接保护】接着做', runId: 'resume'}, {sessionKey: parent});
+  const child = await f.lineage.start(parent, 'resume', scoped, 'b');
+  assert.ok(child.key);
+  assert.equal(f.lineage.turns.get(parent).autoStarts, 2);
 });
 
 test('a cross-mode child lives in the other agent, keeps the project folder, and is never forked', async t => {
@@ -783,4 +803,12 @@ test('a native spawn is pointed back to a real session once when the user asked 
   assert.equal(spawnShouldBeSession(parent), '', 'ordinary parallel parts stay with the native tool');
   f.lineage.begin({runId: 'pinkie-session-wake-x', prompt: '[pinkie-watchdog] [pinkie-session-wake] 子会话 汇报'}, {sessionKey: parent});
   assert.equal(spawnShouldBeSession(parent), '', 'internal turns are not the user asking');
+});
+
+test('F9：只聊天档老配置只有四项时补上 pinkie_sessions，别的不动', () => {
+  const old = ['pinkie_session_start', 'pinkie_session_message', 'pinkie_session_list', 'pinkie_mode_ask'];
+  const config = {tools: {profile: 'minimal', alsoAllow: [...old]}};
+  assert.equal(supplementMinimalChildTools(config), true);
+  assert.deepEqual(config.tools.alsoAllow, [...old, 'pinkie_sessions']);
+  assert.ok(MINIMAL_CHILD_TOOLS.includes('pinkie_sessions'));
 });

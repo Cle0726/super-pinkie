@@ -1233,7 +1233,7 @@ test('history recovery is session-scoped and never trims already loaded pages',(
 test('desktop installers apply the bounded native chat timeline patch',()=>{
   const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-resume.js'], 'assets': []});
   for(const file of ['installer/macos/apply-theme.sh','installer/windows/apply-theme.ps1']) assert.match(read(file),/bundle\.py["']?\)?\s+install/);
-  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /pinkie-chat-timeline:v30/);
+  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /pinkie-chat-timeline:v31/);
   const patch=read('patch/apply-chat-timeline.mjs');
   assert.match(patch,/HISTORY_RENDER_LIMIT = Infinity/);
   assert.match(patch,/MAX_TIMELINE_ROWS = 80/);
@@ -1979,4 +1979,25 @@ test('a steered card is confirmed by its text even when the stored run id differ
   assert.equal(delivered({...steered,createdAt:2100},[stored]),false,'an earlier identical message is not proof');
   const retry={id:'q2',text:'（追加 1）补充一句',createdAt:1900,sendRunId:'client-send'};
   assert.equal(delivered(retry,[stored]),false,'a plain retry still needs its exact id');
+});
+
+test('a downward wheel or momentum at the bottom does not lock reading mode', () => {
+  const h = loadTwoPaneHarness(async () => ({messages: [], hasMore: false}));
+  h.panes.pop();
+  const thread = {scrollHeight: 2000, scrollTop: 1500, clientHeight: 500};
+  h.left.querySelector = (sel) => sel === '.chat-thread' ? thread : null;
+  const at = (extra) => ({target: {closest() { return null; }}, composedPath: () => [h.left], ...extra});
+  h.left.state.chatFollowLocked = false; h.left.state.chatUserNearBottom = true;
+  h.dispatch('wheel', at({type: 'wheel', deltaY: 40}));
+  assert.equal(h.left.state.chatFollowLocked, false, 'downward wheel at bottom');
+  h.dispatch('touchmove', at({type: 'touchmove'}));
+  assert.equal(h.left.state.chatFollowLocked, false, 'touch resting at bottom');
+  thread.scrollTop = 900;
+  h.dispatch('wheel', at({type: 'wheel', deltaY: 40}));
+  assert.equal(h.left.state.chatFollowLocked, false, 'downward wheel mid-thread');
+  h.dispatch('wheel', at({type: 'wheel', deltaY: -40}));
+  assert.equal(h.left.state.chatFollowLocked, true, 'upward wheel reads back');
+  h.left.state.chatFollowLocked = false;
+  h.dispatch('touchmove', at({type: 'touchmove'}));
+  assert.equal(h.left.state.chatFollowLocked, true, 'touch away from bottom');
 });

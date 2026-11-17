@@ -63,6 +63,37 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(none_identity, 'CUSTOM IDENTITY\n')
             self.assertFalse(setup.install(home))
 
+    def test_metre_stock_templates_become_empty_placeholders(self):
+        # briefs/metre-mode-1113 A0-3：agents add 写进的英文模板挪进备份、换成空文件；用户写的不动；不加 persona/ 和 memory/。
+        with tempfile.TemporaryDirectory(prefix='pinkie-metre-setup-') as temp:
+            home = Path(temp)
+            ws = home / setup.METRE_WORKSPACE
+            ws.mkdir(parents=True)
+            (ws / 'AGENTS.md').write_text('metre manual', encoding='utf-8')
+            (ws / 'TOOLS.md').write_text('# TOOLS.md - Local Notes\n\nSkills define...', encoding='utf-8')
+            (ws / 'HEARTBEAT.md').write_text('<!-- Heartbeat template; comments-only -->\n', encoding='utf-8')
+            (ws / 'USER.md').write_text('我是 C.le.', encoding='utf-8')
+            backup = home / 'backup'
+            self.assertTrue(setup._tidy_metre_workspace(home, backup))
+            self.assertEqual((ws / 'TOOLS.md').read_text(encoding='utf-8'), '')
+            self.assertEqual((ws / 'HEARTBEAT.md').read_text(encoding='utf-8'), '')
+            self.assertEqual((ws / 'USER.md').read_text(encoding='utf-8'), '我是 C.le.')
+            self.assertTrue((backup / 'metre-templates/TOOLS.md').read_text(encoding='utf-8').startswith('# TOOLS.md'))
+            self.assertEqual(sorted(p.name for p in ws.iterdir()), ['AGENTS.md', 'HEARTBEAT.md', 'TOOLS.md', 'USER.md'])
+            self.assertFalse(setup._tidy_metre_workspace(home, backup))
+            self.assertNotIn('metre', setup.MODE_WORKSPACES)
+
+    def test_metre_agent_tools_match_unrestricted(self):
+        # A0-9：工具放行照无限制模式，不加 deny；但不像无限制那样关掉工作区注入。
+        data = {'agents': {'list': [{'id': 'project'}, {'id': 'unrestricted'}, {'id': 'metre'}]}, 'plugins': {}}
+        setup._configure_plugin(data, Path('/x'))
+        agents = {a['id']: a for a in data['agents']['list']}
+        self.assertEqual(agents['metre'].get('tools'), agents['unrestricted'].get('tools'))
+        self.assertIsNone(agents['metre'].get('tools'))
+        self.assertIn('deny', agents['project']['tools'])
+        self.assertNotIn('contextInjection', agents['metre'])
+        self.assertNotIn('skipBootstrap', agents['metre'])
+
     def test_existing_none_marker_and_custom_limits_are_preserved(self):
         with tempfile.TemporaryDirectory(prefix='pinkie-mode-marker-') as temp:
             home=Path(temp);config=home/'.openclaw/openclaw.json';config.parent.mkdir()
@@ -129,6 +160,28 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
         self.assertEqual(data['agents']['defaults']['bootstrapMaxChars'], 90_000)
         self.assertEqual(data['agents']['defaults']['bootstrapTotalMaxChars'], 200_000)
+
+    def test_thinking_defaults_on_without_overriding_user_choice(self):
+        data = {'agents': {'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['agents']['defaults']['thinkingDefault'], 'high')
+        self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'stream')
+        for choice in ('off', 'ultra'):
+            data = {'agents': {'defaults': {'thinkingDefault': choice, 'reasoningDefault': 'on'}, 'list': []}}
+            setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+            self.assertEqual(data['agents']['defaults']['thinkingDefault'], choice)
+            self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'on')
+
+    def test_web_fetch_accepts_fake_ip_proxies_by_default_but_keeps_user_choice(self):
+        data = {'agents': {'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertIs(data['tools']['web']['fetch']['ssrfPolicy']['allowRfc2544BenchmarkRange'], True)
+        data = {'agents': {'list': []}, 'tools': {'web': {'fetch': {'maxChars': 5000,
+                'ssrfPolicy': {'allowRfc2544BenchmarkRange': False}}, 'search': {'provider': 'brave'}}}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertIs(data['tools']['web']['fetch']['ssrfPolicy']['allowRfc2544BenchmarkRange'], False)
+        self.assertEqual(data['tools']['web']['fetch']['maxChars'], 5000)
+        self.assertEqual(data['tools']['web']['search'], {'provider': 'brave'})
 
     def test_unused_openclaw_tools_are_hidden_from_the_four_modes_only(self):
         data = {'agents': {'list': [

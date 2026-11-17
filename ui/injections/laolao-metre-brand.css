@@ -1,0 +1,250 @@
+/* laolao-metre-brand —— Metre 像素标志和点阵标志页（说明见 laolao-metre-brand.js）。
+ * 标志页固定用深色（一块熄着灯的点阵屏），中性灰阶，只有摆锤和当前拍点用强调色。 */
+
+html:not([data-laolao-mode="metre"]) :is(.pk-metre-brand, .pk-metre-home-mark) { display: none !important; }
+
+/* ---------- 像素标志 ---------- */
+.pk-metre-logo { display: block; width: 100%; height: auto; }
+.pk-metre-logo__bob { fill: var(--metre-accent, #A0702A); }
+
+/* 首页 / 新会话页引导语上方的小标志 */
+.pk-metre-home-mark {
+  appearance: none;
+  display: block;
+  width: 44px;
+  margin: 0 auto 6px;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--metre-text, #18181B);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.pk-metre-home-mark:hover { background: var(--metre-hover, rgba(127, 127, 127, 0.12)); }
+.pk-metre-home-mark:focus-visible { outline: 2px solid var(--metre-muted, #71717A); outline-offset: 2px; }
+
+/* ---------- 点阵标志页 ---------- */
+.pk-metre-brand {
+  --led-bg: #0C0C0E;
+  --led-off: #1C1C20;
+  --led-dim: #3A3A41;
+  --led-on: #ECECEE;
+  --led-accent: #C8A15E;
+  --brand-text: #ECECEE;
+  --brand-muted: #8B8B93;
+  --brand-line: #26262B;
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  overflow: hidden;
+  background: var(--led-bg);
+  color: var(--brand-text);
+  font: 400 15px/1.6 var(--metre-sans, system-ui, sans-serif);
+}
+.pk-metre-brand[hidden] { display: none; }
+.pk-metre-brand:focus { outline: none; }
+.pk-metre-brand__led { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pk-metre-brand__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  background: var(--led-bg);
+  color: var(--brand-muted);
+  cursor: pointer;
+}
+.pk-metre-brand__close svg { width: 18px; height: 18px; }
+.pk-metre-brand__close:hover { color: var(--brand-text); border-color: #3A3A41; }
+/* 文字放在点阵画面下面（--text-top 由脚本按画面量出来），底下垫一块实底，免得点阵透过来 */
+.pk-metre-brand__body {
+  position: absolute;
+  left: 50%;
+  top: var(--text-top, 62vh);
+  z-index: 1;
+  width: min(560px, calc(100% - 48px));
+  transform: translateX(-50%);
+  padding: 20px 24px 22px;
+  border: 1px solid var(--brand-line);
+  border-radius: 12px;
+  background: var(--led-bg);
+  text-align: center;
+}
+.pk-metre-brand__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pk-metre-brand__lede { margin: 0; font: 500 22px/1.35 var(--metre-sans, system-ui, sans-serif); letter-spacing: 0.01em; color: var(--brand-text); }
+.pk-metre-brand__sub { margin: 8px 0 0; font-size: 14px; line-height: 1.7; color: var(--brand-muted); }
+.pk-metre-brand__parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 18px 0 0; border-top: 1px solid var(--brand-line); }
+.pk-metre-brand__parts div { padding: 12px 6px 0; }
+.pk-metre-brand__parts div + div { border-left: 1px solid var(--brand-line); }
+.pk-metre-brand__parts dt { font: 600 12px/1.2 var(--metre-mono, ui-monospace, monospace); letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand-text); }
+.pk-metre-brand__parts dd { margin: 4px 0 0; font-size: 12.5px; color: var(--brand-muted); }
+.pk-metre-brand__actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 18px; }
+.pk-metre-brand__actions span { font: 400 11.5px/1 var(--metre-mono, ui-monospace, monospace); letter-spacing: 0.06em; color: #6B6B73; }
+.pk-metre-brand__go {
+  appearance: none;
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--led-on);
+  color: #111113;
+  font: 600 13.5px/1 var(--metre-sans, system-ui, sans-serif);
+  cursor: pointer;
+}
+.pk-metre-brand__go:hover { background: #FFFFFF; }
+.pk-metre-brand :is(button):focus-visible { outline: 2px solid var(--brand-text); outline-offset: 3px; }
+@media (max-width: 560px) {
+  .pk-metre-brand__parts { grid-template-columns: minmax(0, 1fr); }
+  .pk-metre-brand__parts div + div { border-left: 0; }
+}
+
+/* ---------- 启动闪屏（Metre 时） ----------
+ * App 启动的大闪屏原来全模式共用碧琪（派对小屋、气球、冲破屏幕的动效）。Metre 时换成：一块熄着灯的点阵底，
+ * 正中一块实底，像素 M + 「Metre」+ 一根细进度线和一行状态。根元素上的 data-laolao-splash-metre
+ * 由 laolao-metre-skin.js 在第一帧之前按上次的模式先打上，laolao-splash.js 算准模式后再改；闪屏走了就拿掉。
+ * 用 ID 选择器压过 laolao-splash.css（那张表在 Metre 进来前还没停用）。 */
+html[data-laolao-splash-metre] #laolao-splash {
+  --sp-bg: #FAFAFA;
+  --sp-off: #ECECEF;
+  --sp-plate: #FAFAFA;
+  --sp-text: #18181B;
+  --sp-muted: #71717A;
+  --sp-track: #E4E4E7;
+  --sp-accent: #8F6526;
+  all: unset;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--sp-text);
+  background-color: var(--sp-bg);
+  /* 11-16：不再铺熄灭的点阵（整屏的点发脏，和新背景的 2px 格也对不上），只留一块干净的底 */
+  background-image: none;
+  font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 320ms ease, visibility 320ms ease;
+}
+html[data-laolao-splash-metre]:is([data-theme="dark"], [data-pinkie-night]) #laolao-splash {
+  --sp-bg: #131315;
+  --sp-off: #1E1E22;
+  --sp-plate: #131315;
+  --sp-text: #EDEDEF;
+  --sp-muted: #8B8B93;
+  --sp-track: #2A2A2F;
+  --sp-accent: #C8A15E;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-laolao-splash-metre]:not([data-theme="light"]) #laolao-splash {
+    --sp-bg: #131315; --sp-off: #1E1E22; --sp-plate: #131315; --sp-text: #EDEDEF; --sp-muted: #8B8B93; --sp-track: #2A2A2F; --sp-accent: #C8A15E;
+  }
+}
+html[data-laolao-splash-metre] #laolao-splash.is-leaving { opacity: 0; visibility: hidden; }
+html[data-laolao-splash-metre] #laolao-splash::before,
+html[data-laolao-splash-metre] #laolao-splash::after { content: none !important; display: none !important; }
+html[data-laolao-splash-metre] #laolao-splash *,
+html[data-laolao-splash-metre] #laolao-splash *::before,
+html[data-laolao-splash-metre] #laolao-splash *::after { animation: none !important; }
+/* 碧琪动效的画布、粒子、高光都不要；碧琪的头像和「派对小屋」那行也不要 */
+html[data-laolao-splash-metre] #laolao-splash > :not(.laolao-splash__content),
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__eyebrow,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__percentage,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill::before,
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill::after { display: none !important; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__content {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 56px 34px;
+  background: var(--sp-plate);
+}
+/* laolao-splash.js 换好内容之前（一两帧）只露点阵底，不露碧琪的字 */
+html[data-laolao-splash-metre] #laolao-splash:not(.is-metre) .laolao-splash__content { visibility: hidden; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__metre-mark { display: block; width: 78px; color: var(--sp-text); }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__metre-mark .pk-metre-logo__bob { fill: var(--sp-accent); }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__title {
+  all: unset;
+  display: block;
+  margin-top: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sp-text);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__title * { all: unset; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-shell {
+  all: unset;
+  position: relative;
+  display: block;
+  width: 168px;
+  height: 2px;
+  margin: 26px 0 36px;
+  background: var(--sp-track);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__progress-fill {
+  all: unset;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--sp-text);
+  transition: transform 140ms linear;
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__message {
+  all: unset;
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  translate: -50% 0;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--sp-muted);
+}
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__recovery { display: flex; gap: 8px; margin-top: 2px; }
+html[data-laolao-splash-metre] #laolao-splash .laolao-splash__recovery button {
+  padding: 5px 10px; font: inherit; font-size: 12px; color: var(--sp-text); background: transparent; border: 1px solid var(--sp-track); border-radius: 6px; cursor: pointer;
+}
+
+/* ---------- 其他模式的菜单里的 Metre 这一项（11-16）----------
+ * 用户：「碧琪外部也看看，不然两个样」「不要跟碧琪融在一起，可以另类一点」。
+ * 所以它故意不属于这张粉色菜单：一块墨黑的直角硬牌子，像插在糖果盒里的一张黑色谱卡——
+ * 像素 M（白，摆锤钴蓝）、等宽大写 METRE、右边一个小小的 ♩=72，右下一道钴蓝的硬投影（不模糊）。
+ * 深浅主题都是这一张（它不跟碧琪的主题走）。只管这一项，别的模式项不动。 */
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"] {
+  position: relative !important;
+  display: flex !important; align-items: center !important; justify-content: flex-start !important; gap: 10px !important;
+  margin: 8px 3px 5px 1px !important; padding: 6px 10px 6px 8px !important; min-height: 44px !important; box-sizing: border-box !important;
+  background: #131312 !important; background-image: none !important;
+  border: 1px solid #000 !important; border-radius: 2px !important;
+  box-shadow: 3px 3px 0 #2F4BB0 !important;
+  color: #F2F0EA !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  transform: none !important; transition: transform 0.08s steps(2), box-shadow 0.08s steps(2) !important;
+}
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"]::before {
+  content: "" !important; display: block !important; flex: none !important; position: static !important;
+  width: 26px !important; height: 22px !important; border: 0 !important; border-radius: 0 !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 13 11%22 shape-rendering=%22crispEdges%22%3E%3Cg fill=%22%23F2F0EA%22%3E%3Crect x=%223%22 y=%220%22 width=%221%22 height=%221%22/%3E%3Crect x=%224%22 y=%220%22 width=%221%22 height=%221%22/%3E%3Crect x=%228%22 y=%220%22 width=%221%22 height=%221%22/%3E%3Crect x=%229%22 y=%220%22 width=%221%22 height=%221%22/%3E%3Crect x=%223%22 y=%221%22 width=%221%22 height=%221%22/%3E%3Crect x=%224%22 y=%221%22 width=%221%22 height=%221%22/%3E%3Crect x=%228%22 y=%221%22 width=%221%22 height=%221%22/%3E%3Crect x=%229%22 y=%221%22 width=%221%22 height=%221%22/%3E%3Crect x=%223%22 y=%222%22 width=%221%22 height=%221%22/%3E%3Crect x=%224%22 y=%222%22 width=%221%22 height=%221%22/%3E%3Crect x=%228%22 y=%222%22 width=%221%22 height=%221%22/%3E%3Crect x=%229%22 y=%222%22 width=%221%22 height=%221%22/%3E%3Crect x=%222%22 y=%223%22 width=%221%22 height=%221%22/%3E%3Crect x=%225%22 y=%223%22 width=%221%22 height=%221%22/%3E%3Crect x=%2210%22 y=%223%22 width=%221%22 height=%221%22/%3E%3Crect x=%222%22 y=%224%22 width=%221%22 height=%221%22/%3E%3Crect x=%225%22 y=%224%22 width=%221%22 height=%221%22/%3E%3Crect x=%2210%22 y=%224%22 width=%221%22 height=%221%22/%3E%3Crect x=%222%22 y=%225%22 width=%221%22 height=%221%22/%3E%3Crect x=%225%22 y=%225%22 width=%221%22 height=%221%22/%3E%3Crect x=%227%22 y=%225%22 width=%221%22 height=%221%22/%3E%3Crect x=%2210%22 y=%225%22 width=%221%22 height=%221%22/%3E%3Crect x=%222%22 y=%226%22 width=%221%22 height=%221%22/%3E%3Crect x=%226%22 y=%226%22 width=%221%22 height=%221%22/%3E%3Crect x=%2210%22 y=%226%22 width=%221%22 height=%221%22/%3E%3Crect x=%221%22 y=%227%22 width=%221%22 height=%221%22/%3E%3Crect x=%226%22 y=%227%22 width=%221%22 height=%221%22/%3E%3Crect x=%2211%22 y=%227%22 width=%221%22 height=%221%22/%3E%3Crect x=%221%22 y=%228%22 width=%221%22 height=%221%22/%3E%3Crect x=%226%22 y=%228%22 width=%221%22 height=%221%22/%3E%3Crect x=%2211%22 y=%228%22 width=%221%22 height=%221%22/%3E%3Crect x=%221%22 y=%229%22 width=%221%22 height=%221%22/%3E%3Crect x=%226%22 y=%229%22 width=%221%22 height=%221%22/%3E%3Crect x=%2211%22 y=%229%22 width=%221%22 height=%221%22/%3E%3Crect x=%220%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%221%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%222%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%223%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%224%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%225%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%226%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%227%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%228%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%229%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%2210%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%2211%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3Crect x=%2212%22 y=%2210%22 width=%221%22 height=%221%22/%3E%3C/g%3E%3Crect x=%227%22 y=%223%22 width=%222%22 height=%222%22 fill=%22%238496E6%22/%3E%3C/svg%3E") center / 26px 22px no-repeat !important;
+  image-rendering: pixelated !important; opacity: 1 !important; transform: none !important; animation: none !important; box-shadow: none !important;
+}
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"]::after {
+  content: "\2669 = 72" !important; display: block !important; position: static !important; margin-left: auto !important;
+  width: auto !important; height: auto !important; background: none !important; border: 0 !important; box-shadow: none !important;
+  font: 400 10px/1 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace !important; letter-spacing: 0.04em !important;
+  color: #8496E6 !important; opacity: 1 !important; transform: none !important; animation: none !important;
+}
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"] .laolao-mode-button__label {
+  font: 600 12.5px/1 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace !important; letter-spacing: 0.22em !important; text-transform: uppercase !important;
+  color: #F2F0EA !important; background: none !important; -webkit-text-fill-color: currentColor !important; text-shadow: none !important; margin: 0 !important;
+}
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"] .laolao-mode-button__arrow { display: none !important; }
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"]:is(:hover, :focus-visible) { background: #131312 !important; border-color: #000 !important; transform: translate(-1px, -1px) !important; box-shadow: 4px 4px 0 #8496E6 !important; outline: none !important; }
+html:not([data-laolao-mode="metre"]):not(#_mb1):not(#_mb2) .laolao-mode-menu__option[data-mode="metre"]:active { transform: translate(2px, 2px) !important; box-shadow: 1px 1px 0 #2F4BB0 !important; }
