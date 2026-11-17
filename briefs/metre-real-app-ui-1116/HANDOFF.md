@@ -313,3 +313,11 @@ GCU 注意事项：
 - 版本：metreskin17 / metre-skin.js metreskin4 / sidebar metre1116b / metreboard4（两个）/ metrebrand4。测试：`metre-real-app-ui` 加一条；Metre 相关 108 条全过。
 - 浏览器核对（127.0.0.1:18789，往页面里注入新 CSS / JS，没装进 App）：滑条、输入框下「Andante」、确认框、轻提示、黑卡无投影都看过。没看：总谱面板的新字（要装进 App 才有）、悬停不弹原生提示（WebView 的原生提示截不到）。
 - 没装进 App、没提交。App 里现在仍是：背景「落拍」版、旧猫、旧皮肤。
+
+## 13. Metre 定版已装进本机 App 并推送（2026-11-16 17:04，用户：「做完直接更新推送同步（本机APP也同步）」）
+
+- 追加：模型键 / 模型列表一律用 Metre 像素 M（不挂 AI 品牌标），品牌筛选写字；上游模型自动发现只加认得出名字的（`model-sync.mjs` 的 `recognizedModelId`，和 `laolao-model-picker.js` 的 `idBrand` 同一套规则），选择器把已在配置里、认不出名字的藏起来（不删配置，正在用的照常显示）。真机：「全部」174 → 165，藏起的是 auto 路由、copilot-search、mai-code、memory4-dream。
+- 安装：worktree 与 App 逐文件比对（App 独有的行全是被改掉的旧行，没有 App 更新过的内容），17 个文件拷进 App（ui/injections、ui/runtime 两个、services/mode-architecture 的 metre-board / model-sync、patch/apply-chat-timeline.mjs、installer/macos/apply-theme.sh）→ `bundle.py install` / `check` OK（192 / 1598）→ `codesign --force --deep --sign -` + verify OK → 退出再打开（Launcher 新 PID 65747），网关 200，页面上的版本号、Andante、M 标、「总谱」都核对过。
+- 备份：`/Users/Admin/碧琪实测/backup-app-ui-1116/before-final-170410`（17 个原文件 + 整个 dist/control-ui，FILES.txt 是清单）。
+- 提交 `5ef350c0` 推到 origin/fix/metre-native-menu-hit（连同之前没推的 98b32700）。大于 600KB 的截图 / 动图（34 个）没进仓库，留在本地 briefs 里。
+- 全量测试 2173 条里 32 条失败，都是本轮之前就挂的（学习台 / 学习桌浏览器用例、过期的缓存名断言等），和本轮改的文件无关；Metre / 模型 / 模式相关 466 条里只剩 4 条旧失败。
