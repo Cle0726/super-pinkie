@@ -2493,3 +2493,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__stop 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__stop:hover { border-color: var(--metre-accent) !important; color: var(--metre-accent) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__icon[data-icon="failed"] { color: #B4553A !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__icon[data-icon="done"] { color: var(--metre-muted) !important; }
+/* 小一号：一行小注记，不是一颗按钮。位置在 laolao-deep-think.js：贴输入框左边，叠在运行状态条上面。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill { min-height: 0 !important; padding: 3px 9px !important; gap: 6px !important; font-size: 12px !important; line-height: 18px !important; margin-left: 0 !important; margin-right: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill .pinkie-work__icon { width: 12px !important; height: 12px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill .pinkie-work__icon svg { width: 12px !important; height: 12px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__count, .pinkie-work__time) { font-size: 11px !important; }

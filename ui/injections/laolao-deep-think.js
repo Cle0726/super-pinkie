@@ -851,13 +851,16 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     panel.style.maxWidth = `${Math.max(120, Math.min(340, rect.width - 16, window.innerWidth - 24))}px`;
     const card = panel.querySelector(".pinkie-work__card");
     const width = panel.offsetWidth;
-    const left = Math.max(12, Math.min(right - width, window.innerWidth - width - 12));
+    // Metre：贴输入框左边（右边是小猫和发送键），见 11-17 截图。
+    const metre = document.documentElement.getAttribute("data-laolao-mode") === "metre";
+    const left = Math.max(12, Math.min(metre ? rect.left + 8 : right - width, window.innerWidth - width - 12));
     panel.style.left = `${left}px`;
     const pill = panel.querySelector(".pinkie-work__pill").getBoundingClientRect();
     const hit = card && !card.hidden ? panel.getBoundingClientRect() : pill;
     let ceiling = rect.top - 8;
     const pane = shell.closest(".chat-pane, .agent-chat") || shell.parentElement;
-    for (const button of pane.querySelectorAll(".chat-new-messages")) {
+    // 运行状态条（.pk-run）也贴在输入框上沿：叠在它上面，不压住它。
+    for (const button of [...pane.querySelectorAll(".chat-new-messages"), ...document.querySelectorAll(".pk-run")]) {
       if (button.hidden || getComputedStyle(button).visibility === "hidden") continue;
       const b = button.getBoundingClientRect();
       if (b.width && b.height && hit.left < b.right + 8 && hit.right > b.left - 8) ceiling = Math.min(ceiling, b.top - 10);
