@@ -63,6 +63,29 @@ class ApiConfigTests(unittest.TestCase):
             self.assertIn("openai", messages[0])
             self.assertFalse(super_pinkie.repair_provider_models(messages.append, config))
 
+    def test_launch_marks_local_chat_models_as_seeing_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "openclaw.json"
+            config.write_text(json.dumps({"models": {"providers": {
+                "mm": {"baseUrl": "http://127.0.0.1:1467/v1", "models": [
+                    {"id": "hy4flash", "input": ["text"]},
+                    {"id": "grok-4.6", "input": ["text", "image"]},
+                    {"id": "plain"},
+                    {"id": "grok-imagine-image", "input": ["text"]},
+                ]},
+                "deepseek": {"baseUrl": "https://api.deepseek.com/v1", "models": [{"id": "deepseek-chat", "input": ["text"]}]},
+            }}}), encoding="utf-8")
+            messages = []
+            self.assertTrue(super_pinkie.repair_provider_models(messages.append, config))
+            providers = json.loads(config.read_text(encoding="utf-8"))["models"]["providers"]
+            inputs = {m["id"]: m.get("input") for m in providers["mm"]["models"]}
+            self.assertEqual(inputs, {"hy4flash": ["text", "image"], "grok-4.6": ["text", "image"],
+                                      "plain": ["text", "image"], "grok-imagine-image": ["text"]})
+            # 直连外网的没有本机代理兜底, 不动
+            self.assertEqual(providers["deepseek"]["models"][0]["input"], ["text"])
+            self.assertIn("2 个模型", messages[0])
+            self.assertFalse(super_pinkie.repair_provider_models(messages.append, config))
+
     def test_gateway_auth_none_is_recorded_once_and_a_user_choice_is_kept(self):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "openclaw.json"

@@ -470,6 +470,282 @@ ACCOUNT_UNAVAILABLE = re.compile(
     r'auth[_ -]?unavailable|no auth available|no account|account unavailable|暂无账号',
     re.IGNORECASE,
 )
+# --- 失效模型自救: 上游说「没有这个模型 / 没权限 / 没额度 / 没账号」时, 自己找一个能用的 ---
+# 默认模型会过期(例如 gemini-3-flash 某天起一直 404)。与其等人改配置, 代理在这里:
+#   1. 认出「等多久都不会好」的失败(402/403/404, 或 400/401 里写着模型不存在、账号不可用);
+#   2. 按「最近成功过的 → 配置里的模型链 → 上游 /v1/models 列表」挑候选, 用同一条真实请求去试;
+#      带图的请求只换给配置里写明能看图的模型;
+#   3. 记住: 失效模型 → 能用的替身。之后同一个失效模型的请求直接走替身, 不再先撞一次墙;
+#      过 MODEL_RESCUE_DEAD_TTL 秒再给原模型一次机会, 它恢复了就自动回到原模型。
+# UR_MODEL_RESCUE=0 关闭。与上面「拒绝才降级」(UR_ALLOW_MODEL_FALLBACK) 无关: 那是模型能用但不肯答。
+MODEL_RESCUE_ENABLED = os.environ.get("UR_MODEL_RESCUE", "1") != "0"
+MODEL_RESCUE_MAX_CANDIDATES = max(1, int(os.environ.get("UR_MODEL_RESCUE_MAX", "8")))
+MODEL_RESCUE_DEAD_TTL = max(60.0, float(os.environ.get("UR_MODEL_RESCUE_DEAD_TTL", "1800")))
+MODEL_RESCUE_LIST_TTL = 600.0
+MODEL_RESCUE_DEAD_STATUSES = {402, 403, 404}
+MODEL_RESCUE_HINTED_STATUSES = {400, 401}
+MODEL_RESCUE_HINT = re.compile(
+    r"model[_ ]?not[_ ]?found|unknown model|unsupported model|no such model|model .{0,40}does not exist|"
+    r"not (?:a )?(?:valid|supported) model|invalid model|模型.{0,60}不(?:在|存在|支持)|不支持(?:该|这个)?模型|"
+    r"auth[_ -]?unavailable|no auth available|no (?:available )?account|account unavailable|暂无账号|"
+    r"payment required|insufficient[_ ]?(?:quota|balance|credits?)|quota[ _-]+(?:exhausted|exceeded)|余额不足",
+    re.IGNORECASE,
+)
+# 模型看不了图时上游常见的说法。App 默认把所有聊天模型都当能看图(省得一个个维护),
+# 真看不了的由这里认出来、记住, 带图的请求改给看得了图的模型。
+MODEL_RESCUE_BLIND_HINT = re.compile(
+    r"image|vision|multi-?modal|image_url|content.?type|unsupported content|"
+    r"does not support (?:this )?(?:input|content)|不支持(?:图片|图像|多模态)|图片",
+    re.IGNORECASE,
+)
+MODEL_RESCUE_BLIND_TTL = 7 * 24 * 3600.0
+# 不是聊天模型的(画图、视频、语音、向量), 不拿来当替身。
+MODEL_RESCUE_SKIP = re.compile(
+    r"imagine|image|video|veo-|embed|tts|whisper|speech|audio|transcri|rerank|moderation|search",
+    re.IGNORECASE,
+)
+MODEL_RESCUE_STATE_DIR = os.environ.get(
+    "UR_MODEL_RESCUE_STATE_DIR", os.path.join(os.path.expanduser("~/.openclaw"), "state"))
+OPENCLAW_CONFIG_PATH = os.environ.get(
+    "UR_OPENCLAW_CONFIG", os.path.join(os.path.expanduser("~/.openclaw"), "openclaw.json"))
+
+
+def request_has_images(parsed):
+    for message in (parsed or {}).get("messages") or []:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") in ("image_url", "input_image", "image"):
+                    return True
+    return False
+
+
+def rescue_worthy(status, payload_text):
+    """这次失败是不是「模型本身用不了」(换模型能好, 等着不会好)。"""
+    if status in MODEL_RESCUE_DEAD_STATUSES:
+        return True
+    if status in MODEL_RESCUE_HINTED_STATUSES:
+        return bool(MODEL_RESCUE_HINT.search(payload_text or ""))
+    return False
+
+
+class ModelRescue:
+    """记住哪些模型失效了、换成谁能用。按代理监听端口分文件, 各条上游互不干扰。"""
+
+    def __init__(self, listen_port, upstream_host, upstream_port, now=time.time,
+                 state_dir=None, config_path=None, list_models=None):
+        import threading
+        self.lock = threading.Lock()
+        self.now = now
+        self.listen_port = listen_port
+        self.upstream_host = upstream_host
+        self.upstream_port = upstream_port
+        self.state_path = os.path.join(state_dir or MODEL_RESCUE_STATE_DIR,
+                                       "model-rescue-%s.json" % listen_port)
+        self.config_path = config_path or OPENCLAW_CONFIG_PATH
+        self.list_models_override = list_models
+        self.upstream_models = []
+        self.upstream_models_at = 0.0
+        self.dead = {}     # model -> {"at", "status", "reason"}
+        self.good = {}     # model -> last ok time
+        self.routes = {}   # dead model -> substitute that worked
+        self.blind = {}    # model -> time it turned out not to read images
+        self.sees = {}     # model -> last time it answered a request with images
+        self.load()
+
+    # -- 持久化 --
+    def load(self):
+        try:
+            with open(self.state_path, encoding="utf-8") as handle:
+                data = json.load(handle)
+            self.dead = dict(data.get("dead") or {})
+            self.good = dict(data.get("good") or {})
+            self.routes = dict(data.get("routes") or {})
+            self.blind = dict(data.get("blind") or {})
+            self.sees = dict(data.get("sees") or {})
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+
+    def save(self):
+        try:
+            os.makedirs(os.path.dirname(self.state_path), exist_ok=True)
+            tmp = self.state_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump({"dead": self.dead, "good": self.good, "routes": self.routes,
+                           "blind": self.blind, "sees": self.sees},
+                          handle, ensure_ascii=False, indent=1)
+            os.replace(tmp, self.state_path)
+        except OSError:
+            pass
+
+    # -- 记账 --
+    def is_dead(self, model):
+        record = self.dead.get(model)
+        if not record:
+            return False
+        ttl = MODEL_RESCUE_DEAD_TTL
+        if int(record.get("status") or 0) >= 500:
+            # 5xx 可能只是一阵子: 冷却短一点, 早点回原模型试试。
+            ttl = min(ttl, 300.0)
+        return self.now() - float(record.get("at") or 0) < ttl
+
+    def mark_dead(self, model, status, reason=""):
+        if not model:
+            return
+        with self.lock:
+            self.dead[model] = {"at": self.now(), "status": status, "reason": (reason or "")[:200]}
+            self.good.pop(model, None)
+            self.save()
+
+    def is_blind(self, model):
+        at = self.blind.get(model)
+        return bool(at) and self.now() - float(at) < MODEL_RESCUE_BLIND_TTL
+
+    def mark_blind(self, model):
+        if not model:
+            return
+        with self.lock:
+            self.blind[model] = self.now()
+            self.sees.pop(model, None)
+            self.save()
+
+    def mark_good(self, model, rescued_from=None, with_images=False):
+        if not model:
+            return
+        with self.lock:
+            if with_images:
+                if model in self.blind or model not in self.sees:
+                    self.blind.pop(model, None)
+                    self.sees[model] = self.now()
+                    self.save()
+                self.sees[model] = self.now()
+            changed = model in self.dead or (rescued_from and self.routes.get(rescued_from) != model)
+            self.dead.pop(model, None)
+            if not rescued_from:
+                # 原模型自己好了: 不再绕路。
+                changed = changed or model in self.routes
+                self.routes.pop(model, None)
+            else:
+                self.routes[rescued_from] = model
+            previous = self.good.get(model, 0)
+            self.good[model] = self.now()
+            if changed or self.now() - float(previous or 0) > 60:
+                self.save()
+
+    def route_for(self, model, needs_images=False):
+        """原模型最近失效过、且有试过能用的替身时, 直接给替身。"""
+        if needs_images and self.is_blind(model):
+            # 看不了图的模型收到带图的请求: 直接给最近看过图的模型。
+            with self.lock:
+                seers = sorted(self.sees, key=lambda m: -float(self.sees[m] or 0))
+            for target in seers:
+                if target != model and not self.is_dead(target) and not self.is_blind(target):
+                    return target
+            return None
+        with self.lock:
+            if not self.is_dead(model):
+                return None
+            target = self.routes.get(model)
+        if target and not self.is_dead(target) and (not needs_images or self.can_see(target)):
+            return target
+        return None
+
+    def can_see(self, model):
+        return not self.is_blind(model) and (model in self.sees or self.supports_images(model))
+
+    # -- 候选 --
+    def catalog(self):
+        """openclaw.json 里本条上游的模型目录: id -> 能不能看图; 以及配置里的模型链顺序。"""
+        try:
+            with open(self.config_path, encoding="utf-8") as handle:
+                config = json.load(handle)
+        except (OSError, ValueError):
+            return {}, []
+        providers = ((config.get("models") or {}).get("providers") or {})
+        mine = set()
+        own, other = {}, {}
+        for name, provider in providers.items():
+            base = str((provider or {}).get("baseUrl") or "")
+            same_port = (":%s/" % self.listen_port) in base or base.endswith(":%s" % self.listen_port)
+            if same_port:
+                mine.add(name)
+            for entry in (provider or {}).get("models") or []:
+                mid = (entry or {}).get("id")
+                if not mid:
+                    continue
+                sees = "image" in ((entry or {}).get("input") or [])
+                target = own if same_port else other
+                target[mid] = target.get(mid, False) or sees
+        # 本条上游自己的目录说了算; 没写的才参考别的 provider 里同名模型。
+        vision = {**other, **own}
+        chain = []
+        agents = config.get("agents") or {}
+        defaults = agents.get("defaults") or {}
+
+        def add(value):
+            values = []
+            if isinstance(value, str):
+                values = [value]
+            elif isinstance(value, dict):
+                values = [value.get("primary")] + list(value.get("fallbacks") or [])
+            for ref in values:
+                if isinstance(ref, str) and "/" in ref:
+                    provider, _, mid = ref.partition("/")
+                    if provider in mine and mid not in chain:
+                        chain.append(mid)
+
+        add(defaults.get("model"))
+        for agent in agents.get("list") or []:
+            add((agent or {}).get("model"))
+        add(defaults.get("imageModel"))
+        return vision, chain
+
+    def supports_images(self, model):
+        vision, _ = self.catalog()
+        return bool(vision.get(model))
+
+    def list_upstream(self, headers):
+        if self.list_models_override is not None:
+            return list(self.list_models_override())
+        if self.upstream_models and self.now() - self.upstream_models_at < MODEL_RESCUE_LIST_TTL:
+            return list(self.upstream_models)
+        models = []
+        connection = http.client.HTTPConnection(self.upstream_host, self.upstream_port, timeout=10)
+        try:
+            auth = {k: v for k, v in headers.items() if k.lower() in ("authorization", "x-api-key", "api-key")}
+            connection.request("GET", "/v1/models", headers=auth)
+            response = connection.getresponse()
+            if response.status == 200:
+                data = json.loads(response.read().decode("utf-8", "replace"))
+                models = [m.get("id") for m in data.get("data") or [] if isinstance(m, dict) and m.get("id")]
+        except (OSError, ValueError, http.client.HTTPException):
+            models = []
+        finally:
+            connection.close()
+        if models:
+            self.upstream_models, self.upstream_models_at = models, self.now()
+        return models or list(self.upstream_models)
+
+    def candidates(self, original, tried, needs_images, headers):
+        vision, chain = self.catalog()
+        with self.lock:
+            recent = sorted(self.good, key=lambda m: -float(self.good[m] or 0))
+            seers = sorted(self.sees, key=lambda m: -float(self.sees[m] or 0)) if needs_images else []
+            routed = self.routes.get(original)
+        pool = []
+        for model in seers + ([routed] if routed else []) + recent + chain + self.list_upstream(headers):
+            if not model or model in pool or model in tried or model == original:
+                continue
+            if MODEL_RESCUE_SKIP.search(model) or self.is_dead(model):
+                continue
+            if needs_images and (self.is_blind(model) or not (vision.get(model) or model in self.sees)):
+                continue
+            pool.append(model)
+        return pool
+
+
+MODEL_RESCUE = None
+
 HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -542,6 +818,7 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
 
     def proxy(self):
         self.response_started = False
+        self.rescue_ctx = None
         if self.path == "/health":
             self.respond_json(200, {
                 "ok": True,
@@ -639,6 +916,25 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         if body is not None:
             headers["Content-Length"] = str(len(body))
 
+        self.rescue_ctx = None
+        if MODEL_RESCUE is not None and self.command == "POST" \
+                and self.path.startswith("/v1/chat/completions") and body:
+            try:
+                parsed_request = json.loads(body)
+            except (TypeError, ValueError):
+                parsed_request = None
+            if isinstance(parsed_request, dict) and isinstance(parsed_request.get("model"), str):
+                requested = parsed_request["model"]
+                self.rescue_ctx = {
+                    "original": requested, "current": requested, "tried": {requested},
+                    "images": request_has_images(parsed_request), "swaps": 0, "injected": injected,
+                }
+                routed = MODEL_RESCUE.route_for(requested, self.rescue_ctx["images"])
+                if routed:
+                    print("model-rescue: %s is known dead -> %s" % (requested, routed), flush=True)
+                    body = self.rescue_swap(body, routed)
+                    headers["Content-Length"] = str(len(body))
+
         last_error = None
         refusal_retried = False
         request_started = time.monotonic()
@@ -658,7 +954,23 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                     retryable_status_attempts += 1
                     payload = response.read()
                     ctype = (response.getheader("Content-Type") or "").lower()
-                    if ACCOUNT_UNAVAILABLE.search(payload.decode("utf-8", "replace")):
+                    text = payload.decode("utf-8", "replace")
+                    on_substitute = bool(self.rescue_ctx and self.rescue_ctx["swaps"])
+                    if self.blind_failure(response.status, text):
+                        swapped = self.try_rescue(response.status, text, body, headers, blind=True)
+                        if swapped is not None:
+                            body = swapped
+                            retryable_status_attempts = 0
+                            request_started = time.monotonic()
+                            continue
+                    if ACCOUNT_UNAVAILABLE.search(text) or on_substitute:
+                        # 没账号: 等着不会好。替身也 5xx: 不在它身上耗, 直接试下一个。
+                        swapped = self.try_rescue(response.status, text, body, headers)
+                        if swapped is not None:
+                            body = swapped
+                            retryable_status_attempts = 0
+                            request_started = time.monotonic()
+                            continue
                         self.respond_bytes(response.status, response.getheaders(), payload, ctype)
                         return
                     if attempt < MAX_ATTEMPTS and retryable_status_attempts < HTTP_STATUS_MAX_ATTEMPTS:
@@ -667,6 +979,13 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                         if remaining > delay:
                             time.sleep(delay)
                             continue
+                    # 重试用完还是 5xx: 这个模型眼下就是不通, 换一个能用的。
+                    swapped = self.try_rescue(response.status, text, body, headers)
+                    if swapped is not None:
+                        body = swapped
+                        retryable_status_attempts = 0
+                        request_started = time.monotonic()
+                        continue
                     self.respond_bytes(response.status, response.getheaders(), payload, ctype)
                     return
 
@@ -687,6 +1006,30 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
                         headers["Content-Length"] = str(len(body))
                         response.close()
                         continue
+
+                # 模型本身用不了(没有这个模型 / 没权限 / 没额度): 自己找一个能用的。
+                if self.rescue_ctx and response.status in (
+                        MODEL_RESCUE_DEAD_STATUSES | MODEL_RESCUE_HINTED_STATUSES | {413, 415, 422}):
+                    payload = self.read_limited(response)
+                    text = payload.decode("utf-8", "replace") if payload else ""
+                    if self.blind_failure(response.status, text):
+                        swapped = self.try_rescue(response.status, text, body, headers, blind=True)
+                        if swapped is not None:
+                            body = swapped
+                            retryable_status_attempts = 0
+                            request_started = time.monotonic()
+                            response.close()
+                            continue
+                    elif rescue_worthy(response.status, text):
+                        swapped = self.try_rescue(response.status, text, body, headers)
+                        if swapped is not None:
+                            body = swapped
+                            retryable_status_attempts = 0
+                            request_started = time.monotonic()
+                            response.close()
+                            continue
+                    self.respond_bytes(response.status, response.getheaders(), payload, ctype)
+                    return
 
                 # 拒绝检测: 仅注入请求且未重试过. 先试原模型, 检测到拒绝才降级.
                 if injected and not refusal_retried and response.status == 200:
@@ -835,6 +1178,71 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         text = prefix.decode("utf-8", "replace")
         return prefix, looks_refused(text)
 
+    def rescue_swap(self, body, target):
+        """换模型重发。注入过破甲提示的请求连提示一起换; 普通请求只换 model, 不动系统提示。"""
+        ctx = self.rescue_ctx
+        if ctx is not None:
+            ctx["current"] = target
+            ctx["tried"].add(target)
+        if ctx is not None and ctx.get("injected"):
+            return self.swap_model(body, target)
+        try:
+            parsed = json.loads(body)
+        except (TypeError, ValueError):
+            return body
+        parsed["model"] = target
+        return json.dumps(parsed, ensure_ascii=False).encode("utf-8")
+
+    def blind_failure(self, status, text):
+        """带图的请求被拒, 而且上游说的是图片/多模态的事: 这个模型看不了图(模型本身还能用)。"""
+        ctx = self.rescue_ctx
+        if ctx is None or not ctx["images"] or status not in (400, 413, 415, 422, 500):
+            return False
+        return bool(MODEL_RESCUE_BLIND_HINT.search(text or ""))
+
+    def try_rescue(self, status, text, body, headers, blind=False):
+        """当前模型用不了: 记下它失效(或看不了图), 换下一个候选。没有候选了返回 None。"""
+        ctx = self.rescue_ctx
+        if ctx is None or MODEL_RESCUE is None:
+            return None
+        failed = ctx["current"]
+        if blind:
+            MODEL_RESCUE.mark_blind(failed)
+        else:
+            MODEL_RESCUE.mark_dead(failed, status, text)
+        if ctx["swaps"] >= MODEL_RESCUE_MAX_CANDIDATES:
+            print("model-rescue: gave up after %d substitutes for %s" % (ctx["swaps"], ctx["original"]), flush=True)
+            return None
+        pool = MODEL_RESCUE.candidates(ctx["original"], ctx["tried"], ctx["images"], headers)
+        if not pool:
+            print("model-rescue: no usable substitute for %s" % ctx["original"], flush=True)
+            return None
+        target = pool[0]
+        ctx["swaps"] += 1
+        print("model-rescue: %s %s (HTTP %s) -> trying %s" % (
+            failed, "can't read images" if blind else "failed", status, target), flush=True)
+        swapped = self.rescue_swap(body, target)
+        headers["Content-Length"] = str(len(swapped))
+        return swapped
+
+    def rescue_success(self, status):
+        """回给网关之前: 成功就记账, 并在响应头里写明换过模型。返回要追加的响应头。"""
+        ctx = self.rescue_ctx
+        if ctx is None or MODEL_RESCUE is None or status != 200:
+            return []
+        current, original = ctx["current"], ctx["original"]
+        images = ctx["images"]
+        if current == original:
+            MODEL_RESCUE.mark_good(current, with_images=images)
+            return []
+        if images and MODEL_RESCUE.is_blind(original) and not MODEL_RESCUE.is_dead(original):
+            # 只是看不了图: 不记成「失效模型的替身」, 纯文字请求照旧走原模型。
+            MODEL_RESCUE.mark_good(current, with_images=True)
+        else:
+            MODEL_RESCUE.mark_good(current, rescued_from=original, with_images=images)
+        print("model-rescue: %s answered in place of %s" % (current, original), flush=True)
+        return [("X-Pinkie-Model-Rescued", "%s -> %s" % (original, current))]
+
     def refusal_target(self, fallback_model, body):
         # PINKIE_EXPLICIT_MODEL_FALLBACK: preserve the selected model by default.
         if os.environ.get("UR_ALLOW_MODEL_FALLBACK", "0") != "1":
@@ -905,6 +1313,8 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
             self.send_header(key, value)
         if not sent_cl:
             self.send_header("Content-Length", str(len(payload)))
+        for key, value in self.rescue_success(status):
+            self.send_header(key, value)
         self.send_header("Connection", "close")
         self.end_headers()
         if payload:
@@ -918,6 +1328,8 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         for key, value in response.getheaders():
             if key.lower() not in HOP_BY_HOP_HEADERS:
                 self.send_header(key, value)
+        for key, value in self.rescue_success(response.status):
+            self.send_header(key, value)
         self.send_header("Connection", "close")
         self.end_headers()
         self.close_connection = True
@@ -942,5 +1354,8 @@ class RetryProxyHandler(BaseHTTPRequestHandler):
         print("retry-proxy:", format_string % args, flush=True)
 
 
-print(f"model retry proxy listening on {LISTEN_HOST}:{LISTEN_PORT}", flush=True)
+if MODEL_RESCUE_ENABLED:
+    MODEL_RESCUE = ModelRescue(LISTEN_PORT, UPSTREAM_HOST, UPSTREAM_PORT)
+print(f"model retry proxy listening on {LISTEN_HOST}:{LISTEN_PORT} (model rescue %s)" % (
+    "on" if MODEL_RESCUE is not None else "off"), flush=True)
 ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), RetryProxyHandler).serve_forever()

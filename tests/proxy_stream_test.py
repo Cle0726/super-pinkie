@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import tempfile
 import sys
 import threading
 import time
@@ -113,6 +114,7 @@ class ProxyStreamTests(unittest.TestCase):
             upstream_thread.start()
             proxy_port = self.free_port()
             env = dict(os.environ)
+            env['UR_MODEL_RESCUE_STATE_DIR'] = tempfile.mkdtemp()
             env.update({
                 'UR_PROXY_UPSTREAM_HOST': '127.0.0.1',
                 'UR_PROXY_UPSTREAM_PORT': str(upstream.server_port),
@@ -206,6 +208,7 @@ class ProxyStreamTests(unittest.TestCase):
             upstream_thread.start()
             proxy_port = self.free_port()
             env = dict(os.environ)
+            env['UR_MODEL_RESCUE_STATE_DIR'] = tempfile.mkdtemp()
             env.update({
                 'UR_PROXY_UPSTREAM_HOST': '127.0.0.1',
                 'UR_PROXY_UPSTREAM_PORT': str(upstream.server_port),
@@ -275,6 +278,7 @@ class ProxyStreamTests(unittest.TestCase):
             upstream_thread.start()
             proxy_port = self.free_port()
             env = dict(os.environ)
+            env['UR_MODEL_RESCUE_STATE_DIR'] = tempfile.mkdtemp()
             env.update({
                 'UR_PROXY_UPSTREAM_HOST': '127.0.0.1',
                 'UR_PROXY_UPSTREAM_PORT': str(upstream.server_port),

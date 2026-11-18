@@ -897,8 +897,46 @@ def apply_browser_proxy(log, config_path=None):
         log(f"  ⚠️ 设置浏览器代理失败：{exc}")
 
 
+# 不是聊天模型的(画图、视频、语音、向量): 不给它们标「能看图」。
+NON_CHAT_MODEL = re.compile(
+    r"imagine|image|video|veo-|embed|tts|whisper|speech|audio|transcri|rerank|moderation|search",
+    re.IGNORECASE,
+)
+
+
+def _loopback_base_url(value):
+    host = urllib.parse.urlsplit(str(value or "")).hostname or ""
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
+def mark_models_multimodal(data):
+    """把经本机代理的聊天模型都标成能看图。返回改了几个。
+
+    以前每个模型能不能看图要手写 input: ["text","image"], 漏写的(例如 hy4flash)
+    网关就把图片转给看图工具, 主模型自己看不到。现在默认都能看; 真看不了的,
+    本机代理(proxy/mm-retry-proxy.py)会认出上游的报错、记住, 带图的请求改给看过图的
+    模型。直连外网的 provider 没有这层兜底, 保持原样。"""
+    changed = 0
+    providers = (data.get("models") or {}).get("providers") or {}
+    for provider in providers.values():
+        if not isinstance(provider, dict) or not _loopback_base_url(provider.get("baseUrl")):
+            continue
+        for entry in provider.get("models") or []:
+            if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                continue
+            if NON_CHAT_MODEL.search(entry["id"]):
+                continue
+            current = entry.get("input")
+            if isinstance(current, list) and "image" in current:
+                continue
+            entry["input"] = list(dict.fromkeys((current if isinstance(current, list) else []) + ["text", "image"]))
+            changed += 1
+    return changed
+
+
 def repair_provider_models(log, config_path=None):
-    """Move a provider's stray "model" key into its models list.
+    """Move a provider's stray "model" key into its models list, and mark the
+    chat models behind the local proxy as image-capable.
 
     Earlier control centers wrote one; OpenClaw then rejects the whole config
     and the gateway never starts, which the page shows as 「等待上游恢复」."""
@@ -916,7 +954,8 @@ def repair_provider_models(log, config_path=None):
             if isinstance(model, str) and model and not any(isinstance(item, dict) and item.get("id") == model for item in models):
                 models.append({"id": model, "name": model})
             repaired.append(name)
-        if not repaired:
+        multimodal = mark_models_multimodal(data)
+        if not repaired and not multimodal:
             return False
         fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-provider-")
         try:
@@ -930,7 +969,10 @@ def repair_provider_models(log, config_path=None):
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-        log(f"  已修复模型配置（{', '.join(repaired)}）：网关以前会因为它拒绝启动")
+        if repaired:
+            log(f"  已修复模型配置（{', '.join(repaired)}）：网关以前会因为它拒绝启动")
+        if multimodal:
+            log(f"  已把 {multimodal} 个模型标成能看图：看不了的由本机代理自动换给能看图的模型")
         return True
     except (OSError, ValueError, AttributeError) as exc:
         log(f"  ⚠️ 修复模型配置失败：{exc}")
