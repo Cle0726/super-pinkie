@@ -60,12 +60,16 @@ const DAILY_RULES = `你是碧琪，在用户的备考手账页边写今天的�
 - 句子里出现的数字必须来自输入；没把握就不写数字。
 - 不要和 recentLines 里的句子重复或太像。`;
 
-const CLIP_RULES = `你在为一位正在备考的成年人（先生：广西专升本、英语 B 级、英语四级，跟着中国的节奏生活）找「剪报」：
+function clipRules(exams = []) {
+  const names = (Array.isArray(exams) ? exams : []).map(exam => clean(exam?.name || exam?.id, 40)).filter(Boolean);
+  const target = names.length ? `当前备考目标：${names.join('、')}，` : '';
+  return `你在为一位正在备考或自学的成年学习者（${target}跟着中国的节奏生活）找「剪报」：
 全世界范围、最近两周内发布的真实新闻报道或本人分享，主题是普通人靠学习改变处境、零基础逆袭、成年人重新考试或上学、自学考证（专升本、自考、英语等级、电工、计算机等）、各国普通学习者坚持学习的故事。
 不要：排名焦虑、「XX 天速成」广告、培训机构软文、名人鸡汤、惨剧、政治争议。
 做法：用 web_search 搜（中文和英文都搜），挑 3–4 个候选，用 web_fetch 打开原文，确认发布日期在两周内、内容和标题一致。
 最后只输出 JSON：{"clippings":[{"title":"原文标题（保留原文语言）","source":"媒体或网站名","url":"原文链接","publishedAt":"YYYY-MM-DD","summary":"用你自己的话写的中文摘要，不超过 80 字","quote":"原文里的一句话，不超过 15 个字，可以留空","note":"碧琪写在页边的一句话，温柔，不加称呼，不超过 24 字"}]}
 最多 2 条。找不到合格的就输出 {"clippings":[]}，绝不编造。`;
+}
 const AD = /速成|培训班|报名|优惠|课程推荐|加微信|招生简章|包过|保过/;
 
 export class LearningCompanion {
@@ -232,7 +236,8 @@ export class LearningCompanion {
   async findClippings(date) {
     let result = {date, status: 'none', clippings: [], at: this.now()};
     try {
-      const output = await this.runAgent(`${CLIP_RULES}\n\n今天是北京时间 ${date}。只要 ${addDays(date, -14)} 到 ${date} 之间发布的。`);
+      const rules = clipRules(this.pact?.get?.()?.exams);
+      const output = await this.runAgent(`${rules}\n\n今天是北京时间 ${date}。只要 ${addDays(date, -14)} 到 ${date} 之间发布的。`);
       const parsed = parseJsonLoose(output);
       const candidates = Array.isArray(parsed?.clippings) ? parsed.clippings.slice(0, 6) : [];
       const kept = [];

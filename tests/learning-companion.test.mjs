@@ -115,6 +115,8 @@ test('clippings: verified, recent, ad-free, short quotes, cached a day; quiet be
   const result = await companion.clippings({wait: true});
   assert.equal(prompts.length, 1);
   assert.match(prompts[0], /2026-10-15 到 2026-10-29/);
+  assert.doesNotMatch(prompts[0], /先生|广西专升本/);
+  assert.match(prompts[0], /当前备考目标：英语 B 级、专升本/);
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.clippings.map(clip => clip.url), ['https://example.com/a', 'https://example.com/b']);
   assert.equal(result.clippings[0].quote, '', 'quotes over 15 characters are dropped');
