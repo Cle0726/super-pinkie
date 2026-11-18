@@ -304,6 +304,21 @@ export const CONNECTOR_CATALOG = [
   {id: 'files', name: '本地资料夹', description: '把选定资料夹交给官方文件服务；默认只开放读取。', source: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem', config: {command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], toolFilter: {include: ['read_file', 'read_text_file', 'read_multiple_files', 'list_directory', 'search_files', 'get_file_info', 'list_allowed_directories']}}, credential: 'folder'},
 ];
 
+// Windows cannot execute npx.cmd through the runtime's shell-free process
+// launcher. Invoke the npm CLI with its matching Node executable instead.
+export function resolveConnectorLaunch(server, {platform = process.platform, env = process.env, exists = fs.existsSync} = {}) {
+  if (platform !== 'win32' || !/^npx(?:\.cmd)?$/i.test(server?.command || '')) return server;
+  const dirs = String(env.PATH || env.Path || '').split(';').map(dir => dir.trim().replace(/^"|"$/g, '')).filter(Boolean);
+  if (env.ProgramFiles) dirs.push(path.win32.join(env.ProgramFiles, 'nodejs'));
+  for (const base of dirs) {
+    const node = path.win32.join(base, 'node.exe');
+    const npx = path.win32.join(base, 'npx.cmd');
+    const cli = path.win32.join(base, 'node_modules', 'npm', 'bin', 'npx-cli.js');
+    if (exists(npx) && exists(node) && exists(cli)) return {...server, command: node, args: [cli, ...(server.args || [])]};
+  }
+  throw new Error('这台电脑没有找到 Node.js 自带的 npx。请先安装 Node.js，再接入这个本地服务。');
+}
+
 const publicConnector = (name, config) => ({name, enabled: config.enabled !== false, transport: config.url ? config.transport || 'streamable-http' : 'stdio', url: config.url ? new URL(config.url).origin + new URL(config.url).pathname : '', command: config.command || '', auth: config.auth === 'oauth' ? 'oauth' : config.headers?.Authorization ? 'token' : 'none', hasCredentials: !!(config.headers && Object.keys(config.headers).length || config.env && Object.keys(config.env).length), toolFilter: config.toolFilter || null});
 
 export function parseCliJson(stdout) {
@@ -437,7 +452,7 @@ export function registerRichRuntime(api, options = {}) {
       draft.mcp ||= {}; draft.mcp.servers ||= {};
       const old = draft.mcp.servers[params.name];
       if (old && !params.replace) throw new Error('同名连接器已经存在，请编辑它或换一个名称。');
-      draft.mcp.servers[params.name] = connectorConfig(params.config, old);
+      draft.mcp.servers[params.name] = resolveConnectorLaunch(connectorConfig(params.config, old), options.connectorLaunchOptions);
     }});
     return {ok: true, followUp: result.followUp, message: '已保存。新对话会使用这项连接。'};
   });
