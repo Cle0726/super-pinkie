@@ -610,6 +610,23 @@ def install(home=None) -> bool:
                 if vendor_file.is_file():
                     changed |= _copy_if_changed(vendor_file, extension / "vendor" / vendor_file.relative_to(vendor_dir))
 
+    # 开发版 / 源码覆盖安装时清除旧正式版留在各产品插件里的 guard-build.json，避免把开发版误当正式版。
+    build_info_path = repo_root / "build-info.json"
+    is_release = False
+    try:
+        is_release = build_info_path.is_file() and json.loads(build_info_path.read_text(encoding="utf-8")).get("guard") is True
+    except Exception:
+        is_release = False
+    if not is_release:
+        for plugin_name in ("pinkie-mode-architecture", "pinkie-project-scope", "pinkie-first-person-renderer"):
+            guard_mark = home / ".openclaw/extensions" / plugin_name / "guard-build.json"
+            if guard_mark.exists():
+                try:
+                    guard_mark.unlink()
+                    changed = True
+                except OSError:
+                    pass
+
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative
         workspace.mkdir(parents=True, exist_ok=True)

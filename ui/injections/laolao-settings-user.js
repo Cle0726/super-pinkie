@@ -130,6 +130,49 @@
     return "none";
   };
 
+  const guardTime = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  };
+  const guardPresentation = (data) => {
+    let label = "暂不可用", tone = "", detail = "";
+    if (data && !data.enabled) {
+      label = "开发版（设定防护关闭）"; tone = "dev";
+    } else if (data?.nonOfficial) {
+      label = "非官方构建"; tone = "warn";
+      detail = `这份安装包不是官方签名版本${data.startup?.reason ? `（${data.startup.reason}）` : ""}，设定没有按官方版本恢复。建议到官方渠道重新下载安装。`;
+    } else if (data?.error) {
+      label = "官方正式版 · 设定校验出错"; tone = "warn";
+      detail = "启动时没能完成设定校验，碧琪照常可用。反馈问题时请附上这一行。";
+    } else if (data?.enabled) {
+      label = "官方正式版 · 设定受保护"; tone = "ok";
+      const last = data.lastChange;
+      if (data.modified) {
+        label = "官方正式版 · 设定已被改动"; tone = "warn";
+        const parts = [];
+        if (last) {
+          const when = guardTime(last.at);
+          const phase = last.source === "runtime" ? "运行中" : "启动时";
+          const details = [];
+          if (Array.isArray(last.categories) && last.categories.length) details.push(`涉及${last.categories.join("、")}`);
+          if (last.restored) details.push(`换回了 ${last.restored} 个文件`);
+          if (Array.isArray(last.configFixed) && last.configFixed.length) details.push(`修好了 ${last.configFixed.length} 处配置`);
+          parts.push(`${when ? `${when} ` : ""}${phase}发现设定被改动，${details.join("，") || "已恢复官方版本"}。`);
+        }
+        if (data.counterTampered) parts.push("保护记录文件被删改过，已按上限处理。");
+        if (data.restoreFailedCount > 0) parts.push("有部分文件没能写入恢复，请检查磁盘空间或安全软件。");
+        if (data.strikesIn24h > 0) {
+          const limit = data.strikeLimit || 3;
+          parts.push(`24 小时内异常计数：${data.strikesIn24h}/${limit}${data.limitReached ? "（已达上限）" : ""}。`);
+        }
+        const backup = last?.backup || data.startup?.backup || "";
+        if (backup) parts.push(`改过的文件备份在：${backup}`);
+        detail = parts.join(" ") || "设定曾被改动，当前已恢复为官方版本。";
+      }
+    }
+    return {label, tone, detail};
+  };
+
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,
@@ -141,6 +184,7 @@
     authMode,
     configFromSnapshot,
     presetChanges,
+    guardPresentation,
   });
 
   const state = {
@@ -1022,33 +1066,9 @@
     window.addEventListener("pywebviewready", load, {once: true});
   }
 
-  const guardTime = (value) => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  };
   function renderGuard(data) {
     if (!state.guardStatus) return;
-    let label = "暂不可用", tone = "", detail = "";
-    if (data && !data.enabled) {
-      label = "开发版（设定防护关闭）"; tone = "dev";
-    } else if (data?.nonOfficial) {
-      label = "非官方版本"; tone = "warn";
-      detail = `这份 App 不是官方签名的版本${data.startup?.reason ? `（${data.startup.reason}）` : ""}，设定没有按官方版本恢复。建议到官网重新下载安装。`;
-    } else if (data?.error) {
-      label = "设定校验出错"; tone = "warn";
-      detail = "启动时没能完成设定校验，碧琪照常可用。反馈问题时请附上这一行。";
-    } else if (data?.enabled) {
-      label = "正式版 · 设定受保护"; tone = "ok";
-      const last = data.lastChange;
-      if (data.modified && last) {
-        label = "正式版 · 设定被修改过"; tone = "warn";
-        const parts = [];
-        if (last.restored) parts.push(`换回了 ${last.restored} 个文件`);
-        if (Array.isArray(last.configFixed) && last.configFixed.length) parts.push(`修好了 ${last.configFixed.length} 处配置`);
-        detail = `${guardTime(last.at)} 启动时发现产品设定被改过，${parts.join("，") || "已恢复"}，现在是官方版本。`
-          + (data.startup?.backup ? `改过的文件备份在：${data.startup.backup}` : "");
-      }
-    }
+    const {label, tone, detail} = guardPresentation(data);
     ownText(state.guardStatus, label);
     state.guardStatus.dataset.tone = tone;
     state.guardDetail.hidden = !detail;
@@ -1441,6 +1461,7 @@
     const onSettingsRoute = String(window.location?.pathname || "").startsWith("/settings");
     const toggle = onSettingsRoute ? document.querySelector(".config-view-toggle") : null;
     if (!toggle) {
+      state.lastView = "";
       state.root.hidden = true;
       document.body?.removeAttribute("data-pinkie-user-settings");
       return;
@@ -1451,6 +1472,7 @@
     const common = !advanced && (tabs[0]?.getAttribute("aria-selected") === "true" || tabs.length > 0);
     localizeSettingsTitle(common);
     const view = advanced ? "advanced" : common ? "common" : "";
+    const enteredCommon = state.lastView !== "common" && common;
     const returnedToCommon = state.lastView === "advanced" && common;
     state.lastView = view;
     state.root.hidden = !common;
@@ -1460,6 +1482,9 @@
     if (returnedToCommon) {
       void loadInitialData();
       syncAppearance();
+    } else if (enteredCommon) {
+      const request = rpc();
+      if (typeof request === "function") void loadGuardStatus(request);
     }
     const route = `${window.location.pathname}${window.location.search}`;
     if (route !== state.lastRoute) {

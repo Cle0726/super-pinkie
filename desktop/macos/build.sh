@@ -323,6 +323,7 @@ try {
 } catch {}
 fs.writeFileSync(file, JSON.stringify(info, null, 2) + '\n');
 NODE
+"$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" stamp-personas "$CONTENTS/Resources/SuperPinkie/personas" --version "$VERSION" --commit "$GUARD_COMMIT" --channel "$GUARD_CHANNEL"
 "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" manifest "$CONTENTS/Resources/SuperPinkie" --commit "$GUARD_COMMIT"
 if [[ -n "${PINKIE_GUARD_SIGNING_KEY_FILE:-}" ]]; then
   "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" sign "$CONTENTS/Resources/SuperPinkie" "$PINKIE_GUARD_SIGNING_KEY_FILE"

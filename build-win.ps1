@@ -236,6 +236,15 @@ $pyInstallerCommonArgs = @(
     "app\super_pinkie.py"
 )
 
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+$guardCommitRaw = (git rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not $guardCommitRaw) { $guardCommitRaw = '' }
+$guardCommit = "$guardCommitRaw".Trim()
+$guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
+# 先给暂存目录里的人设写入不可见来源标记，确保 onedir 和 LegacyOneFile 打包到同一份内容，和 guard-manifest.json 哈希一致。
+& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') stamp-personas $personaStage --version $guardVersion --commit $guardCommit --channel $guardChannel
+if ($LASTEXITCODE -ne 0) { throw '人设来源标记写入失败' }
+
 # Build the fast-starting directory layout by default.  PyInstaller keeps all
 # resources next to the launcher, so Windows no longer has to unpack ~700 MB
 # into a temporary _MEI directory before showing the window.
@@ -250,13 +259,9 @@ $packageDir = Join-Path $DistRoot '超級碧琪'
 # CI 发版（release.yml 设 PINKIE_RELEASE_BUILD=1，并给 PINKIE_GUARD_SIGNING_KEY_FILE）→ 正式版，防护开、清单签名；
 # 其它（本机开发构建）→ 开发版，防护关。Windows 用户只装 CI 打的包，不在本机重新打包。
 $bundleRoot = Join-Path $packageDir '_internal'
-$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
-$guardCommit = (git rev-parse HEAD 2>$null)
-if ($LASTEXITCODE -ne 0 -or -not $guardCommit) { $guardCommit = '' }
-$guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
-$buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = "$guardCommit".Trim() }
+$buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = $guardCommit }
 [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json) + "`n", (New-Object System.Text.UTF8Encoding($false)))
-& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit "$guardCommit".Trim()
+& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit $guardCommit
 if ($LASTEXITCODE -ne 0) { throw '设定防护清单生成失败' }
 if ($env:PINKIE_GUARD_SIGNING_KEY_FILE) {
     & (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') sign $bundleRoot $env:PINKIE_GUARD_SIGNING_KEY_FILE

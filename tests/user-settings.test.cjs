@@ -10,7 +10,7 @@ function loadSettingsRules() {
   const window = {};
   const document = {readyState: 'loading', addEventListener() {}};
   vm.runInNewContext(read('ui/injections/laolao-settings-user.js'), {
-    window, document, URL, URLSearchParams, JSON, Object, Array, String, Boolean,
+    window, document, URL, URLSearchParams, JSON, Object, Array, String, Boolean, Date, Number,
   }, {filename: 'laolao-settings-user.js'});
   return window.__laolaoUserSettings;
 }
@@ -75,4 +75,27 @@ test('settings use the native config RPC and do not destructively edit Lit-owned
 test('settings page is loaded by the head fragment and both installers with one cache key', () => {
   const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-settings-user.css', 'laolao-settings-user.js'], 'assets': []});
 
+});
+
+test('About guard status clearly separates official release, unofficial build, modified state, and dev build', () => {
+  const rules = loadSettingsRules();
+  assert.deepEqual(JSON.parse(JSON.stringify(rules.guardPresentation({enabled: false}))), {
+    label: '开发版（设定防护关闭）', tone: 'dev', detail: '',
+  });
+  const ok = rules.guardPresentation({enabled: true, modified: false, nonOfficial: false});
+  assert.equal(ok.label, '官方正式版 · 设定受保护');
+  assert.equal(ok.tone, 'ok');
+  const unofficial = rules.guardPresentation({enabled: true, nonOfficial: true, startup: {reason: '签名清单的签名不对'}});
+  assert.equal(unofficial.label, '非官方构建');
+  assert.equal(unofficial.tone, 'warn');
+  assert.match(unofficial.detail, /签名清单的签名不对/);
+  const modified = rules.guardPresentation({
+    enabled: true, modified: true, strikesIn24h: 2, strikeLimit: 3,
+    lastChange: {at: '2026-11-18T10:00:00.000Z', source: 'runtime', categories: ['人设和工作手册'], restored: 1, backup: '/tmp/bk'},
+  });
+  assert.equal(modified.label, '官方正式版 · 设定已被改动');
+  assert.equal(modified.tone, 'warn');
+  assert.match(modified.detail, /运行中/);
+  assert.match(modified.detail, /2\/3/);
+  assert.match(modified.detail, /\/tmp\/bk/);
 });

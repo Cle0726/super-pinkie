@@ -6,6 +6,7 @@
 //
 // 开关写死在正式包里：App 包里的 build-info.json（release.yml 写入，参与签名清单）。
 // 这里只认包里的文件，不读环境变量、配置、命令行参数来关防护。
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,16 +15,29 @@ import {agentEntries, agentWorkspace, expandHome, openclawConfigPath, openclawSt
 
 // fileURLToPath：路径里有中文或空格（中文用户名、Windows 用户名带空格）时 URL.pathname 是 %E7… 编码，会读不到 guard-build.json。
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const PUBLIC_KEY = 'MCowBQYDK2VwAyEAcejSsqLWnO2o0lFTrm+Lh22s8Qi5XSfTGX4GnQTgnOs=';
+export const STRIKE_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const STRIKE_LIMIT = 3;
 export const PRODUCT_AGENTS = ['main', 'project', 'thinking', 'learning'];
 export const USER_SKILLS_DIR = 'user-skills';
+const MODE_TO_PERSONA_DIR = Object.freeze({chat: 'chat', project: 'project', ideas: 'thinking', thinking: 'thinking', learning: 'learning', metre: 'metre'});
+const CATEGORY_LABELS = Object.freeze({
+  persona: '人设和工作手册',
+  plugin: '模式功能文件',
+  skill: '内置技能',
+  'user-skill-disabled': '与内置技能同名的自建技能',
+  'removed-extra': '额外加入的设定文件',
+  config: '基础运行配置',
+});
 // 工作区里碧琪可以写、但内容要过滤的「记忆区」。
 const MEMORY_FILES = new Set(['memory.md', 'user.md', 'tools.md', 'dreams.md']);
 // 工作区里的产品设定（相对工作区，小写比较）。其它文件（碧琪替用户生成的东西）照常可写。
-const WORKSPACE_PROTECTED_FILES = new Set(['agents.md', 'soul.md', 'identity.md', 'heartbeat.md', 'bootstrap.md']);
+const WORKSPACE_PROTECTED_FILES = new Set(['agents.md', 'soul.md', 'identity.md', 'heartbeat.md', 'methods.md', 'aesthetics.md', 'bootstrap.md']);
 const WORKSPACE_PROTECTED_DIRS = ['persona', 'playbooks', 'skills', '.openclaw'];
 // 状态目录（~/.openclaw）里的产品键和凭据：聊天一律不能写。
 const STATE_PROTECTED = [
   {match: rel => /^openclaw\.json/.test(rel), label: '碧琪的配置文件 openclaw.json'},
+  {match: rel => /^guard-receipt\.json$/.test(rel), label: '碧琪的校验记录'},
   {match: rel => /^extensions(\/|$)/.test(rel), label: '碧琪的插件代码'},
   {match: rel => /^agents\/[^/]+\/agent(\/|$)/.test(rel), label: '模型密钥和模型列表'},
   {match: rel => /^(exec-approvals\.json|identity(\/|$)|devices(\/|$)|credentials(\/|$)|hooks(\/|$)|workspace-attestations(\/|$)|config-journal)/.test(rel), label: '碧琪的运行设定'},
@@ -35,12 +49,187 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
+const sha256Hex = data => crypto.createHash('sha256').update(data).digest('hex');
+
+function atomicWriteFileSync(target, data, {mode} = {}) {
+  fs.mkdirSync(path.dirname(target), {recursive: true});
+  const temp = path.join(path.dirname(target), `.${path.basename(target)}.guard-${process.pid}-${crypto.randomBytes(4).toString('hex')}`);
+  try {
+    fs.writeFileSync(temp, data, mode !== undefined ? {mode} : undefined);
+    let lastError = null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        fs.renameSync(temp, target);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes(error?.code) || attempt === 3) throw error;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 35 * (attempt + 1));
+      }
+    }
+    if (lastError) throw lastError;
+  } catch (error) {
+    try { fs.rmSync(temp, {force: true}); } catch {}
+    throw error;
+  }
+}
+
+function timingSafeHexEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length || !a.length) return false;
+  try { return crypto.timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8')); } catch { return false; }
+}
+
+function verifySignatureBytes(bytes, signature, key = PUBLIC_KEY) {
+  try {
+    const pub = crypto.createPublicKey({key: Buffer.from(key, 'base64'), format: 'der', type: 'spki'});
+    return crypto.verify(null, Buffer.from(bytes), pub, Buffer.from(String(signature || ''), 'base64'));
+  } catch { return false; }
+}
+
+function verifyReleaseSignature(version, commit, signature, key = PUBLIC_KEY) {
+  if (!/^[0-9a-f]{40}$/i.test(String(commit || ''))) return false;
+  return verifySignatureBytes(`pinkie-release|v${String(version).replace(/^v/, '')}|${String(commit).toLowerCase()}`, signature, key);
+}
+
+function verifyBundleManifest(bundleRoot, key = PUBLIC_KEY) {
+  if (!bundleRoot) return {ok: false, reason: '找不到安装包目录', manifest: null, manifestSha: '', info: null};
+  const info = readJson(path.join(bundleRoot, 'build-info.json'));
+  const manifestFile = path.join(bundleRoot, 'guard-manifest.json');
+  let bytes;
+  try { bytes = fs.readFileSync(manifestFile); } catch { return {ok: false, reason: '包里没有签名清单', manifest: null, manifestSha: '', info}; }
+  let manifest;
+  try { manifest = JSON.parse(bytes.toString('utf8')); } catch { return {ok: false, reason: '签名清单读不出来', manifest: null, manifestSha: '', info}; }
+  const manifestSha = sha256Hex(bytes);
+  let sig = '';
+  try { sig = fs.readFileSync(path.join(bundleRoot, 'guard-manifest.sig'), 'utf8').trim(); } catch {}
+  if (sig && verifySignatureBytes(bytes, sig, key)) return {ok: true, how: 'manifest', manifest, manifestSha, info};
+  const release = info?.release;
+  if (release && verifyReleaseSignature(release.version, release.commit, release.signature, key)
+      && manifest.commit === release.commit && String(manifest.version) === String(release.version).replace(/^v/, '')) {
+    return {ok: true, how: 'release-commit', manifest, manifestSha, info};
+  }
+  return {ok: false, reason: sig ? '签名清单的签名不对' : '包没有官方签名', manifest, manifestSha, info};
+}
+
+function readBundleIdentity(bundleRoot, mode = {}) {
+  const info = bundleRoot ? readJson(path.join(bundleRoot, 'build-info.json')) : null;
+  let manifest = null;
+  let manifestSha = '';
+  if (bundleRoot) {
+    try {
+      const raw = fs.readFileSync(path.join(bundleRoot, 'guard-manifest.json'));
+      manifestSha = sha256Hex(raw);
+      manifest = JSON.parse(raw.toString('utf8'));
+    } catch {}
+  }
+  return {
+    channel: String(info?.channel || mode?.channel || 'release'),
+    version: String(info?.version || manifest?.version || mode?.version || ''),
+    commit: String(manifest?.commit || info?.commit || mode?.commit || ''),
+    manifestSha: String(manifestSha || mode?.manifestSha || ''),
+  };
+}
+
+function receiptMatches(record, identity) {
+  if (!record || typeof record !== 'object') return false;
+  const ver = String(identity?.version || '');
+  const commit = String(identity?.commit || '');
+  const sha = String(identity?.manifestSha || '');
+  if (String(record.version || '') !== ver) return false;
+  if (commit && record.commit && String(record.commit) !== commit) return false;
+  if (sha && record.manifestSha && String(record.manifestSha) !== sha) return false;
+  return true;
+}
+
+function modeFromWorkspaceDir(workspaceDir) {
+  const base = path.basename(String(workspaceDir || '')).toLowerCase();
+  if (base === 'workspace') return 'chat';
+  if (base === 'workspace-project') return 'project';
+  if (base === 'workspace-thinking') return 'thinking';
+  if (base === 'workspace-learning') return 'learning';
+  if (base === 'workspace-metre') return 'metre';
+  if (base === 'workspace-unrestricted') return 'none';
+  return '';
+}
+
+function counterPayload(state) {
+  const events = Array.isArray(state.events) ? state.events : [];
+  return [1, String(state.channel || 'release'), String(state.version || ''), String(state.commit || ''), String(state.manifestSha || ''), events.join(','), state.tamperLocked ? '1' : '0', String(state.updatedAt || '')].join('|');
+}
+
+function counterMacs(state, identity, key = PUBLIC_KEY) {
+  const payload = counterPayload({...state, ...identity});
+  const bundleKey = crypto.createHash('sha256')
+    .update(`pinkie-guard-counter-v1|${key}|${identity.channel}|${identity.version}|${identity.commit}|${identity.manifestSha}`)
+    .digest();
+  const chainKey = crypto.createHash('sha256')
+    .update(`pinkie-guard-chain-v1|${key}|${identity.channel}`)
+    .digest();
+  return {
+    mac: crypto.createHmac('sha256', bundleKey).update(payload).digest('hex'),
+    chainMac: crypto.createHmac('sha256', chainKey).update(payload).digest('hex'),
+  };
+}
+
+function verifyCounterState(raw, identity, key = PUBLIC_KEY) {
+  if (!raw || typeof raw !== 'object' || raw.schema !== 1 || !Array.isArray(raw.events)) return false;
+  if (String(raw.channel || '') !== identity.channel || String(raw.version || '') !== identity.version
+      || String(raw.commit || '') !== identity.commit || String(raw.manifestSha || '') !== identity.manifestSha) return false;
+  const expected = counterMacs(raw, identity, key);
+  return timingSafeHexEqual(raw.mac, expected.mac) && timingSafeHexEqual(raw.chainMac, expected.chainMac);
+}
+
+function signCounterState({events = [], tamperLocked = false, updatedAt = new Date().toISOString()}, identity, key = PUBLIC_KEY) {
+  const base = {
+    schema: 1,
+    channel: String(identity.channel || 'release'),
+    version: String(identity.version || ''),
+    commit: String(identity.commit || ''),
+    manifestSha: String(identity.manifestSha || ''),
+    events: events.map(String),
+    tamperLocked: Boolean(tamperLocked),
+    updatedAt: String(updatedAt),
+  };
+  return {...base, ...counterMacs(base, base, key)};
+}
+
+function pruneEvents(events, nowMs) {
+  return (Array.isArray(events) ? events : []).filter(ts => {
+    const ms = Date.parse(ts);
+    return Number.isFinite(ms) && ms <= nowMs + 60_000 && nowMs - ms < STRIKE_WINDOW_MS;
+  });
+}
+
+function isUpdateInProgress(pinkieStateRoot, nowMs = Date.now()) {
+  if (!pinkieStateRoot) return false;
+  const updatesDir = path.join(pinkieStateRoot, 'updates');
+  for (const name of ['in-progress.json', 'install-in-progress.json', 'manual-update.lock']) {
+    const candidate = path.join(updatesDir, name);
+    try {
+      const stat = fs.statSync(candidate);
+      if (nowMs - stat.mtimeMs > 15 * 60 * 1000) continue;
+      if (stat.isDirectory()) return true;
+      const info = readJson(candidate);
+      const pid = Number(info?.pid || 0);
+      if (pid > 1) {
+        try { process.kill(pid, 0); return true; } catch { continue; }
+      }
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
 // 从 OpenClaw 入口往上找包根（有 VERSION 的那一层）里的 build-info.json；
 // Mac：SuperPinkie/runtime/openclaw/openclaw.mjs，Windows：…/runtime/node_modules/openclaw/openclaw.mjs。
 export function findBundleRoot(entry = process.argv[1]) {
   let dir;
-  try { dir = path.dirname(fs.realpathSync(String(entry || ''))); } catch { return ''; }
-  for (let i = 0; i < 5; i += 1) {
+  try {
+    const resolved = fs.realpathSync(String(entry || ''));
+    dir = fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+  } catch { return ''; }
+  for (let i = 0; i < 7; i += 1) {
     if (fs.existsSync(path.join(dir, 'VERSION')) && (fs.existsSync(path.join(dir, 'build-info.json')) || fs.existsSync(path.join(dir, 'personas')))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
@@ -50,21 +239,42 @@ export function findBundleRoot(entry = process.argv[1]) {
 }
 
 let cachedMode = null;
-// 防护是否打开：包里的 build-info.json 或插件目录里随包装进来的 guard-build.json，任一说开就开。
-export function guardMode({entry = process.argv[1], pluginDir = HERE, refresh = false} = {}) {
+// 防护是否打开：包里存在 build-info.json 时以它为准（装了开发版覆盖正式版时不会被旧的 guard-build.json 拉回正式版）；
+// 脱离包运行时才回退到插件目录里的 guard-build.json。
+export function guardMode(options = {}) {
+  const hasExplicitEntry = Object.prototype.hasOwnProperty.call(options, 'entry');
+  const {entry = process.argv[1], pluginDir = HERE, refresh = false} = options;
   if (cachedMode && !refresh) return cachedMode;
-  const bundleRoot = findBundleRoot(entry);
-  const sources = [bundleRoot && path.join(bundleRoot, 'build-info.json'), path.join(pluginDir, 'guard-build.json')].filter(Boolean);
+  let bundleRoot = findBundleRoot(entry);
+  if (!bundleRoot && !hasExplicitEntry) {
+    for (const hint of [process.env.PINKIE_OPENCLAW_ENTRY, process.env.OPENCLAW_ROOT]) {
+      if (!hint) continue;
+      bundleRoot = findBundleRoot(hint);
+      if (bundleRoot) break;
+    }
+  }
+  const bundleInfoFile = bundleRoot ? path.join(bundleRoot, 'build-info.json') : '';
   let info = null;
-  for (const file of sources) {
-    const value = readJson(file);
-    if (value && truthy(value.guard)) { info = {...value, source: file}; break; }
-    if (value && !info) info = {...value, guard: false, source: file};
+  if (bundleInfoFile && fs.existsSync(bundleInfoFile)) {
+    const value = readJson(bundleInfoFile);
+    if (value && typeof value === 'object') info = {...value, guard: truthy(value.guard), source: bundleInfoFile};
+  }
+  if (!info) {
+    const fallback = path.join(pluginDir, 'guard-build.json');
+    const value = readJson(fallback);
+    if (value && typeof value === 'object') {
+      info = {...value, guard: truthy(value.guard), source: fallback};
+      if (!bundleRoot && typeof value.bundleRoot === 'string' && value.bundleRoot && fs.existsSync(path.join(value.bundleRoot, 'build-info.json'))) {
+        bundleRoot = value.bundleRoot;
+      }
+    }
   }
   cachedMode = {
     enabled: Boolean(info && truthy(info.guard)),
     channel: info?.channel || 'dev',
     version: info?.version || '',
+    commit: info?.commit || '',
+    manifestSha: info?.manifestSha || '',
     bundleRoot,
     source: info?.source || '',
   };
@@ -144,10 +354,111 @@ export class SettingsGuard {
     this.readConfig = options.readConfig || (() => readConfigFile({env: this.env, home: this.home}));
     this.workspaceFor = options.workspaceFor || null;
     this.productSkillNames = options.productSkillNames || null;
+    this.key = options.key || PUBLIC_KEY;
+    this.now = options.now || (() => new Date());
     this.blocked = [];
     this.cache = {at: 0, value: null};
+    this.manifestCache = {mtimeMs: -1, trust: null};
   }
   get enabled() { return this.enabledOverride ?? this.mode.enabled; }
+
+  trustedManifest() {
+    const bundleRoot = this.mode?.bundleRoot;
+    if (!bundleRoot) return {ok: false, reason: '找不到安装包目录', manifest: null, manifestSha: '', info: null};
+    const manifestFile = path.join(bundleRoot, 'guard-manifest.json');
+    let mtimeMs = -1;
+    try { mtimeMs = fs.statSync(manifestFile).mtimeMs; } catch { return {ok: false, reason: '包里没有签名清单', manifest: null, manifestSha: '', info: null}; }
+    if (this.manifestCache.trust && this.manifestCache.mtimeMs === mtimeMs) return this.manifestCache.trust;
+    const trust = verifyBundleManifest(bundleRoot, this.key);
+    this.manifestCache = {mtimeMs, trust};
+    return trust;
+  }
+
+  // 每轮注入前核对签名清单里的哈希：不一致或被删就用安装包里的版本，不依赖磁盘上那份。
+  verifyBootstrapFiles(mode, workspaceDir, files) {
+    if (!this.enabled || !Array.isArray(files) || !workspaceDir) return files;
+    const effectiveMode = mode || modeFromWorkspaceDir(workspaceDir);
+    if (!effectiveMode || effectiveMode === 'none') return files;
+    const personaMode = MODE_TO_PERSONA_DIR[effectiveMode];
+    if (!personaMode) return files;
+    const trust = this.trustedManifest();
+    const manifest = trust.ok ? trust.manifest : null;
+    if (!manifest?.files) return files;
+    const bundleRoot = this.mode.bundleRoot;
+    const out = [];
+    for (const file of files) {
+      if (!file || typeof file !== 'object') continue;
+      const name = String(file.name || '');
+      if (name === 'BOOTSTRAP.md' && !manifest.files[`personas/${personaMode}/BOOTSTRAP.md`]) continue;
+      const rel = `personas/${personaMode}/${name}`;
+      const expectedHash = manifest.files[rel];
+      if (!expectedHash) {
+        out.push(file);
+        continue;
+      }
+      const currentHash = file.missing ? null : sha256Hex(Buffer.from(String(file.content || ''), 'utf8'));
+      if (currentHash === expectedHash) {
+        out.push(file);
+        continue;
+      }
+      const bundleFile = path.join(bundleRoot, 'personas', personaMode, name);
+      try {
+        const officialBytes = fs.readFileSync(bundleFile);
+        if (sha256Hex(officialBytes) === expectedHash) {
+          out.push({...file, content: officialBytes.toString('utf8'), missing: false});
+          continue;
+        }
+      } catch {}
+      out.push(file);
+    }
+    return out;
+  }
+
+  // 读取工作区受保护的人设/手册文件时，先核对签名清单（或启动官方快照），不一致则直接取用官方副本。
+  readVerifiedWorkspaceFile(mode, root, relative, maxChars = 25_600) {
+    if (!root || !relative) return '';
+    const requested = path.resolve(root, relative);
+    const normRoot = norm(root);
+    const normReq = norm(requested);
+    if (normReq !== normRoot && !normReq.startsWith(normRoot + '/')) return '';
+    const relPosix = relative.split(path.sep).join('/');
+    let diskText = null;
+    try {
+      const resolved = fs.realpathSync(requested);
+      const normRes = norm(resolved);
+      if ((normRes === normRoot || normRes.startsWith(normRoot + '/')) && fs.statSync(resolved).isFile()) {
+        diskText = fs.readFileSync(resolved, 'utf8');
+      }
+    } catch {}
+    if (this.enabled && mode && mode !== 'none') {
+      const personaMode = MODE_TO_PERSONA_DIR[mode];
+      if (personaMode) {
+        const trust = this.trustedManifest();
+        const manifestRel = `personas/${personaMode}/${relPosix}`;
+        const expectedHash = trust.ok ? trust.manifest?.files?.[manifestRel] : null;
+        if (expectedHash) {
+          if (diskText !== null && sha256Hex(Buffer.from(diskText, 'utf8')) === expectedHash) {
+            return diskText.length <= maxChars ? diskText : `${diskText.slice(0, maxChars)}\n\n[文件超过全量加载上限，请先精简后再继续累积]`;
+          }
+          try {
+            const officialBytes = fs.readFileSync(path.join(this.mode.bundleRoot, 'personas', personaMode, ...relPosix.split('/')));
+            if (sha256Hex(officialBytes) === expectedHash) {
+              const officialText = officialBytes.toString('utf8');
+              return officialText.length <= maxChars ? officialText : `${officialText.slice(0, maxChars)}\n\n[文件超过全量加载上限，请先精简后再继续累积]`;
+            }
+          } catch {}
+        }
+      }
+      const snap = globalThis[BASELINES]?.get(`${this.stateDir}|${this.configPath}`);
+      const officialBuf = snap?.files?.get(requested) || snap?.files?.get(realish(requested));
+      if (officialBuf && (diskText === null || !Buffer.from(diskText, 'utf8').equals(officialBuf))) {
+        const officialText = officialBuf.toString('utf8');
+        return officialText.length <= maxChars ? officialText : `${officialText.slice(0, maxChars)}\n\n[文件超过全量加载上限，请先精简后再继续累积]`;
+      }
+    }
+    if (diskText === null) return '';
+    return diskText.length <= maxChars ? diskText : `${diskText.slice(0, maxChars)}\n\n[文件超过全量加载上限，请先精简后再继续累积]`;
+  }
 
   workspaces() {
     const now = Date.now();
@@ -197,7 +508,7 @@ export class SettingsGuard {
     if (bundle && within(file, bundle)) return {kind: 'protected', label: '碧琪的安装包'};
     if (within(file, '/Applications/超級碧琪.app') || /\/超級碧琪\.app(\/|$)/i.test(norm(file))) return {kind: 'protected', label: '碧琪的安装包'};
     if (this.pinkieStateRoot) {
-      for (const sub of ['guard', 'repository']) {
+      for (const sub of ['guard', 'repository', 'updates']) {
         if (within(file, path.join(this.pinkieStateRoot, sub))) return {kind: 'protected', label: '碧琪的更新和校验数据'};
       }
     }
@@ -232,7 +543,7 @@ export class SettingsGuard {
     if (!stat.isFile() || stat.nlink < 2) return null;
     const candidates = [this.configPath];
     for (const {dir} of this.workspaces()) {
-      for (const name of ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md', 'BOOTSTRAP.md']) candidates.push(path.join(dir, name));
+      for (const name of ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md', 'METHODS.md', 'AESTHETICS.md', 'BOOTSTRAP.md']) candidates.push(path.join(dir, name));
       for (const sub of WORKSPACE_PROTECTED_DIRS) walk(path.join(dir, sub), candidates, 4000);
     }
     for (const other of candidates) {
@@ -323,13 +634,21 @@ export class SettingsGuard {
   verifyAfterCommand(tool = 'exec') {
     const snap = this.baseline();
     if (!snap) return [];
+    if (isUpdateInProgress(this.pinkieStateRoot, this.now().getTime())) return [];
     const fixed = [];
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fixedKinds = new Set();
+    const restoreFailed = [];
+    const nowDate = this.now();
+    const nowIso = nowDate.toISOString();
+    const stamp = nowIso.replace(/[:.]/g, '-');
+    const backupRoot = this.pinkieStateRoot ? path.join(this.pinkieStateRoot, 'backups', `guard-exec-${stamp}`) : '';
+    let backupUsed = false;
     const backup = (file, mode = 'copy') => {
-      if (!this.pinkieStateRoot) { if (mode === 'move') fs.rmSync(file, {force: true, recursive: true}); return; }
-      const target = path.join(this.pinkieStateRoot, 'backups', `guard-exec-${stamp}`, path.relative(this.stateDir, file).replace(/^(\.\.[\\/])+/, ''));
+      if (!backupRoot) { if (mode === 'move') fs.rmSync(file, {force: true, recursive: true}); return; }
+      const target = path.join(backupRoot, path.relative(this.stateDir, file).replace(/^(\.\.[\\/])+/, ''));
       fs.mkdirSync(path.dirname(target), {recursive: true});
       if (mode === 'move') fs.renameSync(file, target); else fs.copyFileSync(file, target);
+      backupUsed = true;
     };
     for (const [file, official] of snap.files) {
       if (statKey(file) === snap.stats.get(file)) continue;
@@ -338,11 +657,15 @@ export class SettingsGuard {
       try {
         if (now) backup(file);
         try { if (fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file); } catch {}
-        fs.mkdirSync(path.dirname(file), {recursive: true});
-        fs.writeFileSync(file, official);
+        atomicWriteFileSync(file, official);
+        const verify = fs.readFileSync(file);
+        if (!verify.equals(official)) throw new Error('写入后内容校验不一致');
         snap.stats.set(file, statKey(file));
         fixed.push(file);
-      } catch {}
+        fixedKinds.add('persona');
+      } catch (error) {
+        restoreFailed.push({file, kind: 'persona', error: String(error?.message || error)});
+      }
     }
     // 人设/手册目录里新冒出来的文件、工作区里新出现的 BOOTSTRAP.md（会被当设定注入）：挪进备份。
     const extras = [];
@@ -350,7 +673,13 @@ export class SettingsGuard {
     for (const dir of snap.roots) { const file = path.join(dir, 'BOOTSTRAP.md'); if (fs.existsSync(file)) extras.push(file); }
     for (const file of extras) {
       if (snap.files.has(file)) continue;
-      try { backup(file, 'move'); fixed.push(file); } catch {}
+      try {
+        backup(file, 'move');
+        fixed.push(file);
+        fixedKinds.add(path.basename(file) === 'BOOTSTRAP.md' ? 'removed-extra' : 'persona');
+      } catch (error) {
+        restoreFailed.push({file, kind: 'removed-extra', error: String(error?.message || error)});
+      }
     }
     // openclaw.json：只比产品键；用户改的模型、偏好原样留着。
     const configStat = statKey(this.configPath);
@@ -364,36 +693,161 @@ export class SettingsGuard {
         } else if (config && typeof config === 'object' && JSON.stringify(productView(config)) !== JSON.stringify(snap.product)) {
           applyProductView(config, snap.official);
           backup(this.configPath);
-          const temp = `${this.configPath}.guard-${process.pid}`;
           let mode = 0o600; try { mode = fs.statSync(this.configPath).mode & 0o777; } catch {}
-          fs.writeFileSync(temp, JSON.stringify(config, null, 2) + '\n', {mode});
-          fs.renameSync(temp, this.configPath);
+          atomicWriteFileSync(this.configPath, JSON.stringify(config, null, 2) + '\n', {mode});
           fixed.push(this.configPath);
+          fixedKinds.add('config');
         } else if (!config || typeof config !== 'object') {
           // 删掉或改成读不出来的样子：整份换回快照（快照就是启动校验之后的官方配置 + 当时的用户设置）。
           if (raw !== null) backup(this.configPath);
-          const temp = `${this.configPath}.guard-${process.pid}`;
-          fs.writeFileSync(temp, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
-          fs.renameSync(temp, this.configPath);
+          atomicWriteFileSync(this.configPath, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
           fixed.push(this.configPath);
+          fixedKinds.add('config');
         }
         if (snap.configKnown && config && typeof config === 'object') snap.lastGood = structuredClone(config);
         this.cache = {at: 0, value: null};
-      } catch {}
+      } catch (error) {
+        restoreFailed.push({file: this.configPath, kind: 'config', error: String(error?.message || error)});
+      }
       snap.configStat = statKey(this.configPath);
     }
-    if (fixed.length) {
-      const event = {at: new Date().toISOString(), tool, restored: fixed.map(f => path.relative(this.stateDir, f) || f)};
-      snap.restores.push(event);
-      // 还没告诉碧琪的：after_tool_call 和 tool_result_persist 谁先跑都行，后跑的那个把提示写进命令结果。
-      snap.unreported.push(...fixed.map(file => ({file, at: Date.now()})));
-      if (snap.restores.length > 20) snap.restores.splice(0, snap.restores.length - 20);
-      this.record({toolName: tool}, `命令改了 ${fixed.length} 个设定文件，已换回`);
-      if (this.pinkieStateRoot) {
-        try { fs.mkdirSync(path.join(this.pinkieStateRoot, 'guard'), {recursive: true}); fs.appendFileSync(path.join(this.pinkieStateRoot, 'guard', 'guard.log'), JSON.stringify({...event, kind: 'exec-restore'}) + '\n'); } catch {}
-      }
+    if (fixed.length || restoreFailed.length) {
+      this.recordRuntimeOutcome({snap, tool, fixed, fixedKinds, restoreFailed, backup: backupUsed ? backupRoot : '', nowDate, nowIso});
     }
     return fixed;
+  }
+
+  hasCounterReceipt(identity, startupStatus = null) {
+    if (!this.pinkieStateRoot) return false;
+    const status = startupStatus ?? readJson(path.join(this.pinkieStateRoot, 'guard', 'status.json'));
+    if (Number(status?.counterSchema) >= 1 && receiptMatches(status, identity)) {
+      return true;
+    }
+    const receipt = readJson(path.join(this.stateDir, 'guard-receipt.json'));
+    if (Number(receipt?.schema) >= 1 && receiptMatches(receipt, identity)) {
+      return true;
+    }
+    for (const id of PRODUCT_PLUGIN_IDS) {
+      const mark = readJson(path.join(this.stateDir, 'extensions', id, 'guard-build.json'));
+      if (mark?.counterReady === true && receiptMatches(mark, identity)) return true;
+    }
+    return false;
+  }
+
+  recordRuntimeOutcome({snap, tool, fixed, fixedKinds, restoreFailed, backup, nowDate, nowIso}) {
+    const categories = [...fixedKinds].map(k => CATEGORY_LABELS[k] || '设定文件');
+    const event = {
+      at: nowIso,
+      tool,
+      restored: fixed.map(f => path.relative(this.stateDir, f) || f),
+      restoreFailed: restoreFailed.length,
+      categories,
+      backup,
+    };
+    if (fixed.length) {
+      snap.restores.push(event);
+      snap.unreported.push(...fixed.map(file => ({file, at: nowDate.getTime()})));
+      if (snap.restores.length > 20) snap.restores.splice(0, snap.restores.length - 20);
+      this.record({toolName: tool}, `命令改了 ${fixed.length} 个设定文件，已换回`);
+    }
+    if (!this.pinkieStateRoot) return;
+    const guardDir = path.join(this.pinkieStateRoot, 'guard');
+    try { fs.mkdirSync(guardDir, {recursive: true}); } catch {}
+    try {
+      fs.appendFileSync(path.join(guardDir, 'guard.log'), JSON.stringify({...event, kind: restoreFailed.length ? 'exec-restore-failed' : 'exec-restore'}) + '\n');
+    } catch {}
+
+    const identity = readBundleIdentity(this.mode.bundleRoot, this.mode);
+    const statusFile = path.join(guardDir, 'status.json');
+    const previousStatus = readJson(statusFile);
+    const counterFile = path.join(guardDir, 'counter.json');
+    const counterRaw = readJson(counterFile);
+    const hasCounterFile = fs.existsSync(counterFile);
+    const receipt = this.hasCounterReceipt(identity, previousStatus);
+
+    let counterTampered = false;
+    let priorEvents = [];
+    if (!hasCounterFile) {
+      if (receipt) counterTampered = true;
+    } else if (verifyCounterState(counterRaw, identity, this.key)) {
+      priorEvents = pruneEvents(counterRaw.events, nowDate.getTime());
+    } else {
+      counterTampered = true;
+    }
+
+    const hasFailedRestore = restoreFailed.length > 0;
+    let nextEvents = priorEvents;
+    let tamperLocked = Boolean(counterRaw?.tamperLocked && verifyCounterState(counterRaw, identity, this.key));
+    if (counterTampered) {
+      nextEvents = [...priorEvents];
+      while (nextEvents.length < STRIKE_LIMIT) nextEvents.push(nowIso);
+      tamperLocked = true;
+    } else if (!hasFailedRestore && fixed.length > 0) {
+      nextEvents = [...priorEvents, nowIso];
+      if (nextEvents.length >= STRIKE_LIMIT) tamperLocked = true;
+    } else if (nextEvents.length < STRIKE_LIMIT) {
+      tamperLocked = false;
+    }
+    const strikesIn24h = nextEvents.length;
+    const limitReached = counterTampered || (!hasFailedRestore && fixed.length > 0 && strikesIn24h >= STRIKE_LIMIT);
+
+    try {
+      const counterOut = signCounterState({events: nextEvents, tamperLocked, updatedAt: nowIso}, identity, this.key);
+      atomicWriteFileSync(counterFile, JSON.stringify(counterOut, null, 2) + '\n');
+    } catch {}
+
+    try {
+      const history = Array.isArray(previousStatus?.history) ? previousStatus.history : [];
+      history.push({
+        at: nowIso,
+        source: 'runtime',
+        tool,
+        restored: fixed.length,
+        restoreFailed: restoreFailed.length,
+        configFixed: fixed.includes(this.configPath) ? ['openclaw.json'] : [],
+        categories,
+        counterTampered,
+        strikesIn24h,
+        backup,
+      });
+      const updatedStatus = {
+        ...(previousStatus || {}),
+        at: nowIso,
+        version: identity.version,
+        commit: identity.commit,
+        manifestSha: identity.manifestSha,
+        counterSchema: 1,
+        strikesIn24h,
+        limitReached,
+        counterTampered,
+        restoreFailed: hasFailedRestore ? restoreFailed : (previousStatus?.restoreFailed || []),
+        backup: backup || previousStatus?.backup || '',
+        history: history.slice(-20),
+      };
+      atomicWriteFileSync(statusFile, JSON.stringify(updatedStatus, null, 2) + '\n');
+    } catch {}
+
+    try {
+      const alertFile = path.join(guardDir, 'pending-alert.json');
+      const existingAlert = readJson(alertFile);
+      const alertPayload = {
+        id: crypto.randomUUID(),
+        source: 'runtime',
+        at: nowIso,
+        categories,
+        backup,
+        count: strikesIn24h,
+        limit: STRIKE_LIMIT,
+        limitReached,
+        counterTampered,
+        restoreFailed: hasFailedRestore,
+        failedCount: restoreFailed.length,
+        nonOfficial: false,
+      };
+      if (!existingAlert?.limitReached || alertPayload.limitReached) {
+        atomicWriteFileSync(alertFile, JSON.stringify(alertPayload, null, 2) + '\n');
+      }
+    } catch {}
   }
 
   takeUnreported() {
@@ -432,29 +886,69 @@ export class SettingsGuard {
     add(path.dirname(this.configPath), {}, name => name === configName);
     const rootNames = new Set([...EXEC_WATCH_FILES, 'BOOTSTRAP.md']);
     for (const dir of snap.roots) add(dir, {}, name => rootNames.has(name));
-    for (const dir of snap.dirs) if (fs.existsSync(dir)) add(dir, {recursive: true});
+    for (const dir of snap.dirs) if (fs.existsSync(dir)) add(dir, {recursive: true}, name => !path.basename(name).includes('.guard-'));
     return snap.watchers;
   }
 
   status() {
     let startup = null;
-    if (this.pinkieStateRoot) startup = readJson(path.join(this.pinkieStateRoot, 'guard', 'status.json'));
-    // 「被修改过」看历史：哪次启动换回过文件、修过配置、发现不是官方包或校验出错，都留着标记，方便排查反馈。
+    let counter = null;
+    if (this.pinkieStateRoot) {
+      startup = readJson(path.join(this.pinkieStateRoot, 'guard', 'status.json'));
+      counter = readJson(path.join(this.pinkieStateRoot, 'guard', 'counter.json'));
+    }
+    const nowMs = this.now().getTime();
+    const identity = readBundleIdentity(this.mode.bundleRoot, this.mode);
+    let strikesIn24h = Number(startup?.strikesIn24h || 0);
+    let counterTampered = Boolean(startup?.counterTampered);
+    if (this.enabled) {
+      if (counter) {
+        if (verifyCounterState(counter, identity, this.key)) {
+          strikesIn24h = pruneEvents(counter.events, nowMs).length;
+          counterTampered = Boolean(counter.tamperLocked && strikesIn24h >= STRIKE_LIMIT && counterTampered);
+        } else {
+          counterTampered = true;
+        }
+      } else if (this.pinkieStateRoot && this.hasCounterReceipt(identity, startup)) {
+        counterTampered = true;
+      }
+    }
+    let nonOfficial = Boolean(startup?.nonOfficial);
+    if (this.enabled && this.mode.bundleRoot && fs.existsSync(path.join(this.mode.bundleRoot, 'guard-manifest.json'))) {
+      if (!this.trustedManifest().ok) nonOfficial = true;
+    }
+    // 「被修改过」看历史：哪次启动或运行中换回过文件、修过配置、发现不是官方包或校验出错，都留着标记，方便排查反馈。
     const history = Array.isArray(startup?.history) ? startup.history : [];
-    const lastChange = history.length ? history[history.length - 1] : null;
     const execRestores = this.enabled ? (globalThis[BASELINES]?.get(`${this.stateDir}|${this.configPath}`)?.restores || []) : [];
-    const modified = Boolean(execRestores.length || (startup && (history.length || startup.restored?.length || startup.nonOfficial || startup.error)));
+    const lastHistory = history.length ? history[history.length - 1] : null;
+    const lastExec = execRestores.length ? execRestores[execRestores.length - 1] : null;
+    const lastChange = lastExec && (!lastHistory || Date.parse(lastExec.at) >= Date.parse(lastHistory.at || 0))
+      ? {...lastExec, source: 'runtime', restored: Array.isArray(lastExec.restored) ? lastExec.restored.length : Number(lastExec.restored || 0)}
+      : lastHistory;
+    const restoreFailedCount = Array.isArray(startup?.restoreFailed) ? startup.restoreFailed.length : 0;
+    const modified = Boolean(execRestores.length || counterTampered || restoreFailedCount || (startup && (history.length || startup.nonOfficial || startup.error)));
     return {
       enabled: this.enabled, channel: this.mode.channel, version: this.mode.version,
       userSkillsDir: this.userSkillsDir(),
-      startup, modified, lastChange, error: startup?.error ? String(startup.error) : '', nonOfficial: Boolean(startup?.nonOfficial),
+      startup, modified, lastChange, error: startup?.error ? String(startup.error) : '', nonOfficial,
+      strikesIn24h, strikeLimit: STRIKE_LIMIT, limitReached: strikesIn24h >= STRIKE_LIMIT || counterTampered,
+      counterTampered, restoreFailedCount,
       recentBlocks: this.blocked.slice(-10), execRestores: execRestores.slice(-10),
     };
   }
 }
 
+export function readVerifiedBundleFile(mode, root, relative, {entry = process.argv[1], maxChars = 25_600} = {}) {
+  const m = guardMode({entry});
+  if (!m.enabled || !m.bundleRoot) {
+    try { return fs.readFileSync(path.join(root, relative), 'utf8'); } catch { return ''; }
+  }
+  const guard = new SettingsGuard({mode: m});
+  return guard.readVerifiedWorkspaceFile(mode, root, relative, maxChars);
+}
+
 // exec 兜底看哪些：人设/手册（几十到一百多个小文件，约 2 MB）。自带技能和插件代码由下次启动校验换回。
-const EXEC_WATCH_FILES = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md'];
+const EXEC_WATCH_FILES = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md', 'METHODS.md', 'AESTHETICS.md'];
 const EXEC_WATCH_DIRS = ['persona', 'playbooks'];
 const BASELINES = Symbol.for('pinkie.settingsGuard.baselines');
 const PRODUCT_PLUGIN_IDS = ['pinkie-mode-architecture', 'pinkie-project-scope', 'pinkie-first-person-renderer'];
@@ -526,6 +1020,7 @@ function walk(dir, out, limit) {
   try { entries = fs.readdirSync(dir, {withFileTypes: true}); } catch { return; }
   for (const entry of entries) {
     if (out.length >= limit) return;
+    if (entry.name.includes('.guard-')) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(full, out, limit); else if (entry.isFile()) out.push(full);
   }
