@@ -53,6 +53,9 @@ export function normalizeMode(raw, {metre = false} = {}) {
 const WAKING = new Set(['user_asked', 'in_scope', 'consult']);
 const GENERATED_RUN = /^pinkie-(?:child-start|family-message|session-wake)-/;
 const WAKE_PREFIX = '[pinkie-watchdog] [pinkie-session-wake]';
+// watchdog 补跑同一轮时的提示（index.mjs 的续接文案）或 run id（pinkie-watchdog-<原 run>-N）。
+const isWatchdogResume = (prompt, runId) => /^pinkie-watchdog-/.test(String(runId || ''))
+  || (String(prompt || '').startsWith('[pinkie-watchdog]') && String(prompt || '').includes('【自动续接保护】'));
 const BRIEF_PREFIX = '【子会话简报】';
 const FAMILY_PREFIX = '【来自关联会话的消息】';
 const HERE_PREFIX = '【就在这里继续】';
@@ -121,15 +124,23 @@ function toolDetails(output) {
 // 门禁存的工具结果最多 12000 字（存档时 6000），带长答案的 pinkie_mode_ask 会被截断成半截 JSON，
 // 整段解析会失败，真的去问过了也被当成没问。解析不了时直接在原文里找那几个字段（内层 JSON 的引号是转义过的）。
 const CHILD_KEY_IN_TEXT = /\\*"key\\*"\s*:\s*\\*"(agent:[^"\\]+:pinkie-child:[^"\\]+)/u;
+function childResultFromText(text) {
+  return {
+    key: CHILD_KEY_IN_TEXT.exec(text)?.[1] || '',
+    answer: /\\*"answer\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+    id: /\\*"id\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
+  };
+}
+// 11-15 隔离实测 S9 f：门禁存的 details 里长十六进制被脱敏成「agent:…292b」，content 文本里的 key 还是完整的。
+// 只信 details 时，开成功的子会话不算派活，转述汇报的那一轮被判「没有任何真实执行工具记录」，重试用完后换成兜底失败话。
 function childResult(output) {
-  try { return toolDetails(output) || {}; } catch {
-    const text = String(output || '');
-    return {
-      key: CHILD_KEY_IN_TEXT.exec(text)?.[1] || '',
-      answer: /\\*"answer\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
-      id: /\\*"id\\*"\s*:\s*\\*"[^"\\]/u.test(text) ? '…' : '',
-    };
+  let details;
+  try { details = toolDetails(output) || {}; } catch { return childResultFromText(String(output || '')); }
+  if (details.key !== undefined && !isChildKey(details.key)) {
+    const fromText = childResultFromText(String(output || ''));
+    if (fromText.key) return {...details, key: fromText.key};
   }
+  return details;
 }
 const isChildKey = key => typeof key === 'string' && Boolean(agentOf(key)) && key.includes(':pinkie-child:');
 
@@ -1042,12 +1053,15 @@ export class SessionLineage {
     if (child) this.reserved.set(key, this.now());
     // 被子会话汇报叫醒的那一轮（Metre 在这一轮可以接着派下一批）。
     const wake = prompt.includes(SESSION_WAKE_MARK) || /^pinkie-session-wake-/.test(runId);
-    // 看门狗把同一件事接着推（断线、没写完）：还是用户那一轮的活，派子会话的权限和本轮已开的个数都接着算。
-    // 不然续跑轮里 Metre 开不了子会话，只能挂卡片等用户点（11-17 压测）。
+    // 续接沿用同一轮的授权与配额；Metre 的汇报唤醒轮被打断时也沿用该轮的权限。
+    // 心跳、记忆整理、子会话自带简报不继承用户或汇报唤醒的授权。
     this.lastUserTurns ??= new Map();
     const remembered = this.lastUserTurns.get(key);
     const previous = this.turns.get(key) || (remembered && this.now() - remembered.endedAt < 30 * 60_000 ? remembered : null);
-    const resumed = !wake && /^\[pinkie-watchdog\]/.test(prompt) && Boolean(previous?.user || previous?.resumedUser);
+    const previousWake = isMetreKey(key) && previous?.wake && !['memory', 'heartbeat'].includes(previous.trigger);
+    const resumed = !wake && !authored && isWatchdogResume(prompt, runId)
+      && !['memory', 'heartbeat'].includes(ctx?.trigger) && !['memory', 'heartbeat'].includes(previous?.trigger)
+      && Boolean(previous?.user || previous?.resumedUser || previousWake);
     if (!internal) this.lastUserTurns.delete(key);
     this.turns.set(key, {runId, prompt, authored, internal, user: !internal, asked: false, trigger: ctx?.trigger || '',
       autoStarts: resumed ? previous.autoStarts || 0 : 0, asks: resumed ? previous.asks || 0 : 0, wake, resumedUser: resumed});
@@ -1067,9 +1081,11 @@ export class SessionLineage {
     const runId = runIdOf(event, ctx);
     const turn = this.turns.get(key);
     if (turn?.runId && runId && turn.runId !== runId) return;
-    if (turn && (turn.user || turn.resumedUser)) {
+    const rememberWake = isMetreKey(key) && turn?.wake && !['memory', 'heartbeat'].includes(turn.trigger);
+    if (turn && (turn.user || turn.resumedUser || rememberWake)) {
       this.lastUserTurns ??= new Map();
-      this.lastUserTurns.set(key, {user: true, autoStarts: turn.autoStarts || 0, asks: turn.asks || 0, endedAt: this.now()});
+      this.lastUserTurns.set(key, {user: Boolean(turn.user || turn.resumedUser), wake: Boolean(rememberWake),
+        trigger: turn.trigger || '', autoStarts: turn.autoStarts || 0, asks: turn.asks || 0, endedAt: this.now()});
       if (this.lastUserTurns.size > 500) this.lastUserTurns.delete(this.lastUserTurns.keys().next().value);
     }
     this.turns.delete(key);

@@ -36,6 +36,14 @@
 - **时机提醒**：`session-hints.mjs` 看到这条消息明显是另一个模式更拿手（且当前模式自己的专长对不上）时，在这一轮的上下文里加一段【别的模式更拿手】，同一个去处隔 6 轮才再提，「以后可以直接去那个模式」只说一次。
 - `pinkie.session.lineage` 的返回里，别的模式转来的子会话带 `cross: true`、`fromMode`，按顶层显示；父会话在别的模式里开的子会话列在 `away` 里。卡片带 `mode`、`modeName`。
 
+## Metre
+
+Metre（`metre`）是第六个模式，规则只在父会话是 Metre 时生效，上面四个模式的数值不变（细节见 `docs/METRE-MODE.md`）：
+
+- 子会话必须开到别的模式（可以是无限制模式，只有 Metre 能派），要写 `mode` 和 `model`；同时在跑最多 8 个，一次用户请求累计最多 24 个，`in_scope` 一轮最多 6 个，被汇报叫醒的那一轮也能接着派。
+- Baton（派发）/ Virtuoso（独做）开关按会话存；独做时不提供派发工具。可以暂停派发、全部停下、接着做。
+- `pinkie_sessions` 管侧栏会话：Metre 能看能管六个模式、能删（先备份）和找回；老模式只看四个老模式，动别人的会话（归档、停、改名、解绑）先出确认卡片，只聊天档也有这个工具。
+- 总谱（`pinkie.metre.board`）展示子会话，并列出待处理、时间线、改动、运行环境和项目记忆。
 ## 状态
 
 运行中用转圈，等你回复用对话气泡，上轮出错用感叹号，未读用圆点。状态由网关会话变化和运行事件刷新。打开未读会话会调用 `sessions.patch` 清除未读标记。应用的「减少动效」会停掉转圈动画。
@@ -44,5 +52,5 @@
 
 - `pinkie.session.title.ensure` 提交一批待检查的会话 key，每批最多 20 个。`pinkie.session.title.metadata` 返回标题来源、渠道和内部记录信息。`pinkie.session.rename` 记录手动改名。
 - `pinkie.session.lineage` 返回血缘和列表状态。`pinkie.session.cards` 读取会话卡片。`pinkie.session.card.act` 确认、转回或跳过提案。`pinkie.session.detach` 将子会话移到顶层。
-- 代理工具为 `pinkie_session_start`、`pinkie_mode_ask`、`pinkie_session_message`、`pinkie_session_list` 和 `pinkie_session_title`。只聊天的权限预设会自动补上前四个。
+- 代理工具为 `pinkie_session_start`、`pinkie_mode_ask`、`pinkie_session_message`、`pinkie_session_list`、`pinkie_sessions` 和 `pinkie_session_title`。只聊天的权限预设会自动补上前五个（老配置在网关启动时补齐）。
 - 插件状态目录的 `sessions/` 下使用 `session-titles.json`、`session-lineage.json` 和 `session-cards.json`。这三份文件原子写入。提案、汇报和唤醒计数会跨刷新和重启保留。
