@@ -132,6 +132,11 @@
   }
 
   function imagesOf(row) {
+    const pane = row.closest && row.closest('openclaw-chat-pane');
+    const paneSession = pane?.state?.sessionKey || pane?.sessionKey || '';
+    // A different split pane may have the same call id; never paint it with
+    // the active session's trace. Its own trace can be loaded when selected.
+    if (paneSession && paneSession !== tracesFor) return [];
     const trace = traces[callIdOf(row)];
     return trace && Array.isArray(trace.images) ? trace.images : [];
   }

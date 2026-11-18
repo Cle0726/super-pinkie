@@ -241,3 +241,14 @@ test('row mapping accepts durable ids and result aliases but refuses ambiguous m
   assert.equal(api.rowCallId(row('msg:assistant:42:7:timeline:tool:1')), '', 'duplicate timestamp with stale index is ambiguous');
   assert.equal(api.rowCallId(row('msg:persisted-2:timeline:tool:1')), '', 'out-of-range does not borrow another call');
 });
+
+test('a tool row in a split pane resolves against its own pane, not the first pane', () => {
+  const first = {state: {chatMessages: [{role: 'assistant', timestamp: 42, content: [{type: 'toolCall', id: 'first-call'}]}]}};
+  const second = {state: {chatMessages: [{role: 'assistant', timestamp: 42, content: [{type: 'toolCall', id: 'second-call'}]}]}};
+  const doc = {querySelector: sel => sel === 'openclaw-chat-pane' ? first : null};
+  const ctx = {document: doc, window: {}, module: {exports: {}}};
+  vm.runInNewContext(read('ui/injections/laolao-tool-kind.js'), ctx);
+  const host = {dataset: {messageId: 'msg:assistant:42:0:timeline:tool:0'}, closest: sel => sel === 'openclaw-chat-pane' ? second : null};
+  const row = {closest: sel => sel === '[data-message-id]' ? host : null};
+  assert.equal(ctx.module.exports.rowCallId(row), 'second-call');
+});

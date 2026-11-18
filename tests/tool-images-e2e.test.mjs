@@ -37,14 +37,16 @@ test(`read-image trace displays the correct image, survives restart, and stays s
     {callId: 'read-a', name: 'read', args: {path: imageA}},
     {callId: 'read-b', name: 'read', args: {path: imageB}},
   ]).filter(row => row.role === 'tool');
-  const fixture = {message, rows: rows.map(row => row.key)};
+  const fixture = {message, sessionKey, rows: rows.map(row => row.key)};
   const html = `<!doctype html><meta charset="utf-8">
     <link rel="stylesheet" href="/laolao-theme.css"><link rel="stylesheet" href="/laolao-tool-rows.css"><link rel="stylesheet" href="/laolao-tool-images.css">
     <style>body{margin:32px;max-width:800px;font-family:sans-serif;background:#faf8fa}.pinkie-process{padding:16px;border:1px solid #ddd;border-radius:12px}.chat-tool-msg-summary{display:flex;align-items:center;min-height:50px}.cle-run{display:flex;align-items:center;min-height:50px}</style>
-    <openclaw-chat-pane></openclaw-chat-pane>
-    <div class="pinkie-process"><div><button class="cle-run">看了图片</button></div><div id="rows" data-cle-member></div></div>
+    <openclaw-chat-pane id="primary"><div class="pinkie-process"><div><button class="cle-run">看了图片</button></div><div id="rows" data-cle-member></div></div></openclaw-chat-pane>
+    <openclaw-chat-pane id="other"><div id="foreign-row"><button class="chat-tool-msg-summary">另一个会话的图片</button></div></openclaw-chat-pane>
     <script>const fixture=${JSON.stringify(fixture).replace(/</g, '\\u003c')};
-      document.querySelector('openclaw-chat-pane').state={chatMessages:[{role:'user'},fixture.message]};
+      document.querySelector('#primary').state={sessionKey:fixture.sessionKey,chatMessages:[{role:'user'},fixture.message]};
+      document.querySelector('#other').state={sessionKey:'agent:metre:other',chatMessages:[{role:'user'},fixture.message]};
+      document.querySelector('#foreign-row').dataset.messageId=fixture.rows[0];
       fixture.rows.forEach((id,i)=>{const el=document.createElement('div');el.dataset.messageId=id;el.id='row'+i;
         el.innerHTML='<button class="chat-tool-msg-summary">读取图片</button>';document.querySelector('#rows').append(el)});
       window.__laolaoSidebar={gwRequest:async (_method,params)=>fetch('/trace?session='+encodeURIComponent(params.sessionKey)).then(r=>r.json())};
@@ -70,6 +72,7 @@ test(`read-image trace displays the correct image, survives restart, and stays s
     await page.locator('#row0 .pinkie-tool-thumb img').waitFor();
     assert.equal(await page.locator('#row0 .pinkie-tool-thumb img').getAttribute('alt'), '第一张.png');
     assert.equal(await page.locator('#row1 .pinkie-tool-thumb img').getAttribute('alt'), '第二张.png');
+    assert.equal(await page.locator('#foreign-row .pinkie-tool-thumb').count(), 0, 'another split session must not borrow this session’s image, even for the same call id');
     for (const [selector, expectedFile] of [['#row0 .pinkie-tool-thumb img', imageA], ['#row1 .pinkie-tool-thumb img', imageB]]) {
       const src = await page.locator(selector).getAttribute('src');
       const response = await page.request.get(new URL(src, page.url()).href);

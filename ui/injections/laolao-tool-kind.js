@@ -178,7 +178,10 @@
     if (standalone) return standalone[1];
     const match = /^(msg:.+?):timeline:(tool|result):(?:(fallback):)?(\d+)(?::timeline:(?:tool|result):(?:(?:fallback):)?\d+)*$/.exec(id);
     if (!match || typeof document === 'undefined') return '';
-    const pane = document.querySelector('openclaw-chat-pane');
+    // Split view can render several sessions. Resolve against the row's own
+    // pane rather than borrowing the first pane's messages.
+    const pane = (typeof host.closest === 'function' && host.closest('openclaw-chat-pane'))
+      || document.querySelector('openclaw-chat-pane');
     const msgs = pane && pane.state && Array.isArray(pane.state.chatMessages) ? pane.state.chatMessages : [];
     const source = match[1];
     const isAssistant = message => String(message?.role || '').toLowerCase() === 'assistant';
