@@ -331,6 +331,47 @@ def _tidy_metre_workspace(home: Path, backup_root: Path) -> bool:
 UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
 
 
+# 不是聊天模型的(画图、视频、语音、向量): 不给它们标「能看图」。
+NON_CHAT_MODEL = re.compile(
+    r"imagine|image|video|veo-|embed|tts|whisper|speech|audio|transcri|rerank|moderation|search",
+    re.IGNORECASE,
+)
+
+
+def _loopback_base_url(value) -> bool:
+    from urllib.parse import urlsplit
+    try:
+        host = urlsplit(str(value or "")).hostname or ""
+    except ValueError:
+        return False
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
+def _mark_models_multimodal(data: dict) -> int:
+    """经本机代理的聊天模型一律标成能看图, 返回改了几个。
+
+    以前每个模型能不能看图要手写 input: ["text","image"]; 漏写的(例如 hy4flash)
+    网关就把图转给看图工具, 主模型自己看不到。现在默认都能看; 真看不了的,
+    本机代理(proxy/mm-retry-proxy.py)认出上游的报错并记住, 带图的请求改给看过图的
+    模型。直连外网的 provider 没有这层兜底, 保持原样。"""
+    changed = 0
+    providers = (data.get("models") or {}).get("providers") or {}
+    for provider in providers.values() if isinstance(providers, dict) else []:
+        if not isinstance(provider, dict) or not _loopback_base_url(provider.get("baseUrl")):
+            continue
+        for entry in provider.get("models") or []:
+            if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                continue
+            if NON_CHAT_MODEL.search(entry["id"]):
+                continue
+            current = entry.get("input")
+            if isinstance(current, list) and "image" in current:
+                continue
+            entry["input"] = list(dict.fromkeys((current if isinstance(current, list) else []) + ["text", "image"]))
+            changed += 1
+    return changed
+
+
 def _configure_plugin(data: dict, target: Path) -> bool:
     before = json.dumps(data, ensure_ascii=False, sort_keys=True)
 
@@ -355,6 +396,8 @@ def _configure_plugin(data: dict, target: Path) -> bool:
         talk = data.get("talk")
         if isinstance(talk, dict):
             talk.pop("agentId", None)
+
+    _mark_models_multimodal(data)
 
     # This model was probed against the user's current mm upstream: xhigh is
     # accepted as a real thinking level. Do not advertise it for other models,

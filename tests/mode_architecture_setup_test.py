@@ -63,6 +63,24 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(none_identity, 'CUSTOM IDENTITY\n')
             self.assertFalse(setup.install(home))
 
+    def test_local_chat_models_count_as_seeing_images(self):
+        data = {"models": {"providers": {
+            "mm": {"baseUrl": "http://127.0.0.1:1467/v1", "models": [
+                {"id": "workbuddy/hy4flash", "input": ["text"]},
+                {"id": "grok-4.6", "input": ["text", "image"]},
+                {"id": "plain"},
+                {"id": "grok-imagine-image", "input": ["text"]},
+            ]},
+            "deepseek": {"baseUrl": "https://api.deepseek.com/v1", "models": [{"id": "deepseek-chat", "input": ["text"]}]},
+        }}}
+        self.assertEqual(setup._mark_models_multimodal(data), 2)
+        inputs = {m["id"]: m.get("input") for m in data["models"]["providers"]["mm"]["models"]}
+        self.assertEqual(inputs, {"workbuddy/hy4flash": ["text", "image"], "grok-4.6": ["text", "image"],
+                                  "plain": ["text", "image"], "grok-imagine-image": ["text"]})
+        # 直连外网的没有本机代理兜底, 不动
+        self.assertEqual(data["models"]["providers"]["deepseek"]["models"][0]["input"], ["text"])
+        self.assertEqual(setup._mark_models_multimodal(data), 0)
+
     def test_metre_stock_templates_become_empty_placeholders(self):
         # briefs/metre-mode-1113 A0-3：agents add 写进的英文模板挪进备份、换成空文件；用户写的不动；不加 persona/ 和 memory/。
         with tempfile.TemporaryDirectory(prefix='pinkie-metre-setup-') as temp:
