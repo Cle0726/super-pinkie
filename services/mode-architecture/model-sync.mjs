@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 const POLL_MS = 5 * 60_000;
 const MIN_REQUEST_GAP_MS = 30_000;
 const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$/;
@@ -147,6 +150,17 @@ async function readLimitedJson(response) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+function disabledVisionSet(api) {
+  try {
+    const dir = api?.runtime?.state?.resolveStateDir?.();
+    if (!dir) return new Set();
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, 'pinkie-model-setup.json'), 'utf8'));
+    const caps = raw?.capabilities;
+    if (!caps || typeof caps !== 'object') return new Set();
+    return new Set(Object.entries(caps).filter(([, item]) => item?.vision === false).map(([key]) => key));
+  } catch { return new Set(); }
+}
+
 export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now} = {}) {
   let pending;
   let lastChecked = 0;
@@ -159,6 +173,7 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     if (!configured.length) {
       throw new Error('模型上游地址或密钥未配置');
     }
+    const disabledVision = disabledVisionSet(api);
     const results = await Promise.allSettled(configured.map(async ([name, provider]) => {
       const base = new URL(provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`);
       if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
@@ -196,11 +211,11 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
         ids.includes(entry.id) && isAutoDiscoveredPlaceholder(entry) && !workBuddyPending.includes(entry)
         && !reasoningPending.some((change) => change.id === entry.id));
       const legacy = verifiedGpt6 ? (provider.models || [])
-        .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry)) : [];
+        .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry) && !disabledVision.has(`${name}/${entry.id}`)) : [];
       // Official GPT-6 modality specs include image input. The local proxy's
       // image forwarding is intentionally not claimed as tested here.
       const imagePending = verifiedGpt6 ? (provider.models || [])
-        .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry)) : [];
+        .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry) && !disabledVision.has(`${name}/${entry.id}`)) : [];
       const known = new Set((provider.models || []).map((entry) => entry.id));
       return {name, available: ids.length, unnamed: ids.filter((id) => !known.has(id) && !recognizedModelId(id)).length,
         additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => declaredEfforts.has(entry.id)

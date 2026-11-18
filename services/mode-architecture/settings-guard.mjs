@@ -245,7 +245,7 @@ export class SettingsGuard {
   }
 
   refusal(label) {
-    return `这是${label}，正式版里不能在聊天中修改，文件没有改动。用户能改的：记忆（memory/、USER.md）、设置里的偏好、自己的模型和密钥（设置 → 模型）、自己的技能（写到 ${this.userSkillsDir()}）。如果是在帮用户写代码，请把文件写在用户的项目目录里。`;
+    return `这是${label}，正式版里不能在聊天中修改，文件没有改动。如果是要改已有模型能不能看图，请用 pinkie_model_capability 工具，或让用户在「设置 → 模型服务」里开关；用户还能改的：记忆（memory/、USER.md）、设置里的偏好、自己的模型和密钥（设置 → 模型服务）、自己的技能（写到 ${this.userSkillsDir()}）。如果是在帮用户写代码，请把文件写在用户的项目目录里。`;
   }
 
   record(event, reason) {
@@ -262,13 +262,13 @@ export class SettingsGuard {
     if (tool === 'gateway') {
       const action = String(params.action || '');
       if (/^(config\.(apply|patch|set)|update\.run)$/.test(action)) {
-        return decide('正式版里聊天不能修改碧琪的配置或触发更新。模型、密钥和偏好请用户在「设置」里改；更新请用设置里的「检查更新」。');
+        return decide('正式版里聊天不能修改碧琪的配置或触发更新。如果是要改已有模型能不能看图，请用 pinkie_model_capability 工具，或让用户在「设置 → 模型服务」里开关；其他模型、密钥和偏好请用户在「设置」里改；更新请用设置里的「检查更新」。');
       }
       return undefined;
     }
     if (tool === 'exec' || tool === 'bash' || tool === 'process') {
       const command = String(params.command ?? params.cmd ?? params.input ?? '');
-      if (CONFIG_COMMAND.test(command)) return decide('正式版里聊天不能用命令修改碧琪的配置、插件或更新。模型、密钥和偏好请用户在「设置」里改。其它命令照常可以用。');
+      if (CONFIG_COMMAND.test(command)) return decide('正式版里聊天不能用命令修改碧琪的配置、插件或更新。如果是要改已有模型能不能看图，请用 pinkie_model_capability 工具，或让用户在「设置 → 模型服务」里开关；其他模型、密钥和偏好请用户在「设置」里改。其它命令照常可以用。');
       return undefined;
     }
     const writes = writeTargets(tool, params);
@@ -406,7 +406,7 @@ export class SettingsGuard {
 
   execNote(fixed) {
     const names = fixed.map(f => path.relative(this.stateDir, f) || f).slice(0, 6).join('、');
-    return `【碧琪设定防护】这条命令改动了碧琪的产品设定（${names}${fixed.length > 6 ? ' 等' : ''}），正式版里不允许，已经换回官方版本（改动前的文件备份在 ${this.pinkieStateRoot ? path.join(this.pinkieStateRoot, 'backups') : '备份目录'}）。如实告诉用户这件事没有做成；用户能改的是记忆、设置里的偏好、自己的模型和密钥、自己的技能（${this.userSkillsDir()}）。命令的其它效果不受影响。`;
+    return `【碧琪设定防护】这条命令改动了碧琪的产品设定（${names}${fixed.length > 6 ? ' 等' : ''}），正式版里不允许，已经换回官方版本（改动前的文件备份在 ${this.pinkieStateRoot ? path.join(this.pinkieStateRoot, 'backups') : '备份目录'}）。如实告诉用户这件事没有做成；要改已有模型能不能看图请用 pinkie_model_capability 工具或让用户在「设置 → 模型服务」里开关；用户还能改的是记忆、设置里的偏好、自己的模型和密钥、自己的技能（${this.userSkillsDir()}）。命令的其它效果不受影响。`;
   }
 
   // 文件监视：命令写完设定后不退出（sleep、后台进程）时，after 钩子来不及——配置热加载会先把插件卸掉。

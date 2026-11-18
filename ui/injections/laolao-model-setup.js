@@ -31,13 +31,53 @@
     return request(method, params, timeout);
   }
 
-  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null};
+  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null, openCaps: new Set(), capFilters: new Map()};
 
   function setStatus(text, tone = "") {
     if (!state.status) return;
     state.status.textContent = text || "";
     state.status.dataset.tone = tone;
     state.status.hidden = !text;
+  }
+
+  function visionSwitch(label, checked, onChange) {
+    const node = el("button", "pinkie-user-settings__switch", null);
+    node.type = "button";
+    node.setAttribute("role", "switch");
+    node.setAttribute("aria-label", label);
+    node.setAttribute("aria-checked", String(Boolean(checked)));
+    el("span", "pinkie-user-settings__switch-knob", node);
+    node.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const next = node.getAttribute("aria-checked") !== "true";
+      onChange(next, node);
+    });
+    return node;
+  }
+
+  async function toggleVision(providerRow, model, next, buttonNode) {
+    if (buttonNode) buttonNode.disabled = true;
+    setStatus("正在保存看图设置…");
+    try {
+      state.data = await call("pinkie.modelSetup.setCapability", {
+        providerId: providerRow.id,
+        modelId: model.id,
+        vision: next,
+      });
+      renderList();
+      const display = model.name && model.name !== model.id ? model.name : model.id;
+      setStatus(
+        next
+          ? `已打开「${display}」的能看图片；如果上游其实不支持，发图时会报错，可以再关掉。`
+          : `已关闭「${display}」的能看图片。`,
+        "success",
+      );
+      window.dispatchEvent(new CustomEvent("pinkie:models-changed"));
+    } catch (error) {
+      if (buttonNode) buttonNode.disabled = false;
+      setStatus(plainError(error), "error");
+    }
   }
 
   function renderList() {
@@ -49,23 +89,69 @@
       el("p", "pinkie-model-setup__empty", host, "还没有接上任何服务商。点「添加服务商」，选一家、粘贴密钥就行。");
       return;
     }
+    const defaultModel = state.data?.defaultModel || "";
     for (const row of rows) {
       const item = el("div", "pinkie-model-setup__provider", host);
       item.dataset.enabled = String(row.enabled);
-      const copy = el("div", "pinkie-model-setup__provider-copy", item);
+      const head = el("div", "pinkie-model-setup__provider-head", item);
+      const copy = el("div", "pinkie-model-setup__provider-copy", head);
       const title = el("div", "pinkie-model-setup__provider-title", copy, row.label);
       if (row.isDefault) el("span", "pinkie-model-setup__badge pinkie-model-setup__badge--default", title, "默认");
       if (!row.enabled) el("span", "pinkie-model-setup__badge", title, "已停用");
       if (!row.managed) el("span", "pinkie-model-setup__badge", title, "本机已有");
       const meta = [row.modelCount ? `${row.modelCount} 个模型` : "", row.keyTail ? `密钥 ${row.keyTail}` : (row.hasKey ? "" : "没有密钥")].filter(Boolean).join(" · ");
       el("div", "pinkie-model-setup__provider-meta", copy, meta);
-      if (!row.managed) continue;
-      const actions = el("div", "pinkie-model-setup__provider-actions", item);
-      if (row.enabled) btn("编辑", `${B} ${B}--small`, actions, () => openWizard(row));
-      btn(row.enabled ? "停用" : "启用", `${B} ${B}--small`, actions, () => act(row.enabled ? "disable" : "enable", row));
-      btn("删除", `${B} ${B}--small pinkie-model-setup__danger`, actions, () => {
-        if (window.confirm(`删除「${row.label}」？它的密钥也会从这台电脑上删掉。`)) act("remove", row);
+      if (row.managed) {
+        const actions = el("div", "pinkie-model-setup__provider-actions", head);
+        if (row.enabled) btn("编辑", `${B} ${B}--small`, actions, () => openWizard(row));
+        btn(row.enabled ? "停用" : "启用", `${B} ${B}--small`, actions, () => act(row.enabled ? "disable" : "enable", row));
+        btn("删除", `${B} ${B}--small pinkie-model-setup__danger`, actions, () => {
+          if (window.confirm(`删除「${row.label}」？它的密钥也会从这台电脑上删掉。`)) act("remove", row);
+        });
+      }
+      if (!row.enabled || !Array.isArray(row.models) || !row.models.length) continue;
+
+      const details = el("details", "pinkie-model-setup__caps", item);
+      details.open = state.openCaps.has(row.id);
+      details.addEventListener("toggle", () => {
+        if (details.open) state.openCaps.add(row.id);
+        else state.openCaps.delete(row.id);
       });
+      const visionCount = row.models.filter((m) => Boolean(m.vision)).length;
+      el("summary", "pinkie-model-setup__caps-summary", details, `模型能力（${visionCount}/${row.models.length} 个能看图片）`);
+      const capsBody = el("div", "pinkie-model-setup__caps-body", details);
+      const capRows = [];
+      let filterInput = null;
+      if (row.models.length > 8) {
+        filterInput = el("input", "pinkie-model-setup__input pinkie-model-setup__filter", capsBody);
+        filterInput.type = "search";
+        filterInput.placeholder = `搜索 ${row.models.length} 个模型…`;
+        filterInput.value = state.capFilters.get(row.id) || "";
+      }
+      const listBox = el("div", "pinkie-model-setup__caps-list", capsBody);
+      for (const model of row.models) {
+        const capRow = el("div", "pinkie-model-setup__cap-row", listBox);
+        const capCopy = el("div", "pinkie-model-setup__cap-name", capRow);
+        const displayName = model.name && model.name !== model.id ? `${model.name}（${model.id}）` : model.id;
+        el("span", "", capCopy, displayName);
+        if (`${row.id}/${model.id}` === defaultModel) {
+          el("span", "pinkie-model-setup__badge pinkie-model-setup__badge--default", capCopy, "默认");
+        }
+        const capCtrl = el("div", "pinkie-model-setup__cap-control", capRow);
+        el("span", "pinkie-model-setup__cap-label", capCtrl, "能看图片");
+        const sw = visionSwitch(`${row.label} ${model.id} 能看图片`, Boolean(model.vision), (next, node) => toggleVision(row, model, next, node));
+        capCtrl.appendChild(sw);
+        capRows.push({node: capRow, text: `${model.id} ${model.name || ""}`.toLowerCase()});
+      }
+      if (filterInput) {
+        const applyFilter = () => {
+          const q = filterInput.value.trim().toLowerCase();
+          state.capFilters.set(row.id, filterInput.value);
+          for (const entry of capRows) entry.node.hidden = Boolean(q && !entry.text.includes(q));
+        };
+        filterInput.addEventListener("input", applyFilter);
+        applyFilter();
+      }
     }
   }
 
@@ -154,30 +240,44 @@
     function renderPick(res) {
       pick.replaceChildren(); pick.hidden = false;
       el("div", "pinkie-model-setup__step", pick, "第 3 步 · 勾选要用的模型");
-      const already = new Set((editing?.models || []).map((m) => m.id));
+      const existingById = new Map((editing?.models || []).map((m) => [m.id, m]));
+      const already = new Set(existingById.keys());
       const recommended = new Set(res.recommended || []);
       const all = res.models.length ? res.models : (res.recommended || []).map((id) => ({id, name: id}));
       all.sort((a, b) => Number(recommended.has(b.id)) - Number(recommended.has(a.id)));
+      const visionState = new Map();
+      for (const model of all) {
+        const prev = existingById.get(model.id);
+        visionState.set(model.id, prev ? Boolean(prev.vision) : Boolean(model.vision));
+      }
       let filter = null;
       if (all.length > 12) { filter = el("input", "pinkie-model-setup__input pinkie-model-setup__filter", pick); filter.placeholder = `搜索 ${all.length} 个模型`; }
       const box = el("div", "pinkie-model-setup__models", pick);
-      const checks = [];
+      const rows = [];
       for (const model of all) {
-        const label = el("label", "pinkie-model-setup__model", box);
+        const rowEl = el("div", "pinkie-model-setup__model", box);
+        const label = el("label", "pinkie-model-setup__model-pick", rowEl);
         const check = el("input", "", label); check.type = "checkbox"; check.value = model.id;
-        check.checked = already.size ? already.has(model.id) : recommended.has(model.id) || (!recommended.size && checks.length < 3);
+        check.checked = already.size ? already.has(model.id) : recommended.has(model.id) || (!recommended.size && rows.length < 3);
         el("span", "", label, model.name && model.name !== model.id ? `${model.name}（${model.id}）` : model.id);
         if (recommended.has(model.id)) el("span", "pinkie-model-setup__badge", label, "推荐");
+        const visWrap = el("div", "pinkie-model-setup__model-vision", rowEl);
+        el("span", "pinkie-model-setup__cap-label", visWrap, "能看图片");
+        const visSwitch = visionSwitch(`${model.id} 能看图片`, visionState.get(model.id), (next, node) => {
+          visionState.set(model.id, next);
+          node.setAttribute("aria-checked", String(next));
+        });
+        visWrap.appendChild(visSwitch);
         check.addEventListener("change", syncDefault);
-        checks.push(check);
+        rows.push({rowEl, check});
       }
       if (preset.id === "custom" || !all.length) {
         const manual = el("input", "pinkie-model-setup__input", pick); manual.placeholder = "列表里没有？手动填模型名，回车添加";
         manual.addEventListener("keydown", (event) => {
           if (event.key !== "Enter" || !manual.value.trim()) return;
-          all.push({id: manual.value.trim(), name: manual.value.trim()}); renderPick({...res, models: all}); });
+          all.push({id: manual.value.trim(), name: manual.value.trim(), vision: false}); renderPick({...res, models: all}); });
       }
-      filter?.addEventListener("input", () => { const q = filter.value.trim().toLowerCase(); for (const c of checks) c.parentElement.hidden = q && !c.value.toLowerCase().includes(q); });
+      filter?.addEventListener("input", () => { const q = filter.value.trim().toLowerCase(); for (const r of rows) r.rowEl.hidden = q && !r.check.value.toLowerCase().includes(q); });
       const defRow = el("label", "pinkie-model-setup__field", pick);
       el("span", "", defRow, "默认模型");
       const select = el("select", "pinkie-model-setup__input", defRow);
@@ -188,13 +288,16 @@
         const keep = select.value;
         select.replaceChildren();
         el("option", "", select, "不改默认模型").value = "";
-        for (const c of checks.filter((c) => c.checked)) el("option", "", select, c.value).value = c.value;
-        select.value = [...select.options].some((o) => o.value === keep) ? keep : (state.data?.needsSetup || !state.data?.defaultModel ? (checks.find((c) => c.checked)?.value || "") : "");
+        for (const r of rows.filter((r) => r.check.checked)) el("option", "", select, r.check.value).value = r.check.value;
+        select.value = [...select.options].some((o) => o.value === keep) ? keep : (state.data?.needsSetup || !state.data?.defaultModel ? (rows.find((r) => r.check.checked)?.check.value || "") : "");
       }
       syncDefault();
       const saveRow = el("div", "pinkie-user-settings__actions", pick);
       const save = btn("保存", `${B} ${B}--primary`, saveRow, async () => {
-        const models = checks.filter((c) => c.checked).map((c) => ({id: c.value, name: all.find((m) => m.id === c.value)?.name}));
+        const models = rows.filter((r) => r.check.checked).map((r) => {
+          const found = all.find((m) => m.id === r.check.value);
+          return {id: r.check.value, name: found?.name, vision: Boolean(visionState.get(r.check.value)), ...(found?.meta ? {meta: found.meta} : {})};
+        });
         if (!models.length) { show("至少勾选一个模型。", "error"); return; }
         save.disabled = true;
         try {

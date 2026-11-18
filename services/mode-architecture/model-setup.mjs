@@ -4,12 +4,13 @@
 //   pinkie.modelSetup.list               已配好的服务商（密钥只给末四位）、默认模型、要不要引导首次配置
 //   pinkie.modelSetup.test               用填的密钥实际请求一次：列模型；给了 model 就再发一句极短对话
 //   pinkie.modelSetup.save               新增 / 编辑一个服务商（编辑时不填密钥 = 沿用原来的）
+//   pinkie.modelSetup.setCapability      打开 / 关闭某个已有模型的「能看图片」（写 models.providers.<p>.models[].input）
 //   pinkie.modelSetup.setDefault         设默认模型（可选四个模式一起换）
 //   pinkie.modelSetup.disable / enable   停用（挪出 openclaw.json，放进只有本机能读的旁存文件）/ 重新启用
 //   pinkie.modelSetup.remove             删除（只删这个页面加的服务商；作者自己的 mm/litellm/clekk… 不让在这里删）
 //
 // 写配置走插件自己的受控写入（runtime.config.mutateConfigFile），不是聊天工具，所以不受设定防护 A3 拦；
-// 聊天里的碧琪也调不到这些方法（它们只在设置界面里通过网关 RPC 调用）。
+// 聊天里的碧琪也调不到这些方法（它们只在设置界面里通过网关 RPC 调用），只通过 pinkie_model_capability 窄工具调 setCapability。
 // 密钥：只存在 openclaw.json 的 models.providers.<id>.apiKey（现有的凭据位置）；返回给界面的只有末四位；
 // 不写日志、不进模型上下文；出错信息里出现密钥会被抹掉。
 import fs from 'node:fs';
@@ -112,27 +113,111 @@ async function call(fetchImpl, url, {key, method = 'GET', body, timeoutMs = 1500
   return {ok: response.ok, status: response.status, text: text.slice(0, 2000), json};
 }
 
+export const hasVisionInput = entry => Array.isArray(entry?.input) && entry.input.includes('image');
+
+export function withVisionInput(input, vision) {
+  const base = Array.isArray(input) ? input.filter(item => typeof item === 'string' && item) : [];
+  const list = base.length ? base : ['text'];
+  if (vision) {
+    const next = [...list];
+    if (!next.includes('text')) next.unshift('text');
+    if (!next.includes('image')) next.push('image');
+    return next;
+  }
+  const filtered = list.filter(item => item !== 'image');
+  return filtered.length ? filtered : ['text'];
+}
+
+export function resolveConfiguredModel(cfg = {}, {providerId = '', modelId = '', model = ''} = {}) {
+  const providers = cfg?.models?.providers || {};
+  const pid = String(providerId || '').trim();
+  const mid = String(modelId || '').trim();
+  if (pid && mid) {
+    const entry = (providers[pid]?.models || []).find(m => m && m.id === mid);
+    if (!entry) throw new Error(`没有找到模型「${pid}/${mid}」（可能服务商还没配置或已被停用）`);
+    return {providerId: pid, modelId: mid, entry};
+  }
+  const raw = String(model || '').trim();
+  if (!raw) throw new Error('请提供要修改的模型名（例如 服务商/模型名）');
+  const all = [];
+  for (const [pKey, provider] of Object.entries(providers)) {
+    for (const entry of Array.isArray(provider?.models) ? provider.models : []) {
+      if (entry && typeof entry.id === 'string' && entry.id) all.push({providerId: pKey, modelId: entry.id, entry});
+    }
+  }
+  if (!all.length) throw new Error('当前还没有配置任何模型，请先在「设置 → 模型服务」里添加服务商。');
+
+  const lower = raw.toLowerCase();
+  const fullExact = all.filter(item => `${item.providerId}/${item.modelId}` === raw);
+  if (fullExact.length === 1) return fullExact[0];
+  const fullLower = all.filter(item => `${item.providerId}/${item.modelId}`.toLowerCase() === lower);
+  if (fullLower.length === 1) return fullLower[0];
+
+  const idExact = all.filter(item => item.modelId === raw);
+  if (idExact.length === 1) return idExact[0];
+  if (idExact.length > 1) {
+    throw new Error(`有多个服务商都有「${raw}」：${idExact.map(item => `${item.providerId}/${item.modelId}`).join('、')}，请写全「服务商/模型名」。`);
+  }
+  const idLower = all.filter(item => item.modelId.toLowerCase() === lower);
+  if (idLower.length === 1) return idLower[0];
+  if (idLower.length > 1) {
+    throw new Error(`有多个服务商都有「${raw}」：${idLower.map(item => `${item.providerId}/${item.modelId}`).join('、')}，请写全「服务商/模型名」。`);
+  }
+
+  const nameLower = all.filter(item => typeof item.entry.name === 'string' && item.entry.name.trim().toLowerCase() === lower);
+  if (nameLower.length === 1) return nameLower[0];
+  if (nameLower.length > 1) {
+    throw new Error(`有多个模型都叫「${raw}」：${nameLower.map(item => `${item.providerId}/${item.modelId}`).join('、')}，请写全「服务商/模型名」。`);
+  }
+
+  const defaults = cfg?.agents?.defaults?.model;
+  const primary = typeof defaults === 'string' ? defaults : defaults?.primary || '';
+  const similar = all
+    .filter(item => `${item.providerId}/${item.modelId}`.toLowerCase().includes(lower) || String(item.entry.name || '').toLowerCase().includes(lower))
+    .slice(0, 6)
+    .map(item => `${item.providerId}/${item.modelId}`);
+  const sample = (similar.length ? similar : all.slice(0, 10).map(item => `${item.providerId}/${item.modelId}`)).join('、');
+  const defaultHint = primary ? `当前默认模型是 ${primary}；` : '';
+  throw new Error(similar.length
+    ? `没有找到完全叫「${raw}」的模型。${defaultHint}相近的有：${sample}。请写里面的「服务商/模型名」。`
+    : `没有在已配置的服务商里找到模型「${raw}」。${defaultHint}已配置的模型有：${sample}${all.length > 10 ? ' 等' : ''}。`);
+}
+
 const modelEntry = (id, meta = {}) => {
   const window = Number(meta.context_window || meta.context_length || meta.contextWindow) || 128000;
-  const input = Array.isArray(meta.input_modalities) && meta.input_modalities.includes('image') ? ['text', 'image'] : ['text'];
+  let input;
+  if (typeof meta.vision === 'boolean') {
+    input = withVisionInput(meta.input, meta.vision);
+  } else if (Array.isArray(meta.input_modalities)) {
+    input = meta.input_modalities.includes('image') ? ['text', 'image'] : ['text'];
+  } else if (Array.isArray(meta.input) && meta.input.length) {
+    input = [...meta.input];
+  } else {
+    input = ['text'];
+  }
   // Always enable transport-level reasoning capture. If the provider returns no
   // reasoning_content/reasoning there is simply nothing to display.
   const entry = {id, name: meta.name && typeof meta.name === 'string' ? meta.name : id, reasoning: true, input, contextWindow: window, contextTokens: window};
-  const max = Number(meta.max_output_tokens || meta.top_provider?.max_completion_tokens);
+  const max = Number(meta.max_output_tokens || meta.top_provider?.max_completion_tokens || meta.maxTokens);
   if (max > 0) entry.maxTokens = max;
+  if (meta.compat && typeof meta.compat === 'object') entry.compat = structuredClone(meta.compat);
   return entry;
 };
 
 export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir, now = () => new Date()}) {
   const registryFile = stateDir ? path.join(stateDir, REGISTRY) : '';
   const readRegistry = () => {
-    try { const data = JSON.parse(fs.readFileSync(registryFile, 'utf8')); return {providers: data.providers || {}, disabled: data.disabled || {}}; }
-    catch { return {providers: {}, disabled: {}}; }
+    try {
+      const data = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
+      return {providers: data.providers || {}, disabled: data.disabled || {}, capabilities: data.capabilities || {}};
+    }
+    catch { return {providers: {}, disabled: {}, capabilities: {}}; }
   };
   const writeRegistry = data => {
     if (!registryFile) return;
+    fs.mkdirSync(path.dirname(registryFile), {recursive: true});
     const temp = `${registryFile}.${process.pid}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n', {mode: 0o600});
+    fs.writeFileSync(temp, JSON.stringify({providers: data.providers || {}, disabled: data.disabled || {}, capabilities: data.capabilities || {}}, null, 2) + '\n', {mode: 0o600});
     fs.renameSync(temp, registryFile);
   };
   const current = () => config.current() || {};
@@ -162,19 +247,19 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       } else if (list.status !== 404 && list.status !== 405) {
         return fail({status: list.status, body: scrub(list.text, key)});
       }
-      // 列不了模型（有些服务商没有这个接口），或者用户点名要验一个模型：发一句极短的对话。
+      // 列不了模型（有些服务商没有这个接口），或者用户点名要验一个模型：发一句极短对话。
       const probe = model || (!listed ? preset.models[0] : '');
       if (probe) {
         const chat = await call(fetchImpl, `${base}/chat/completions`, {key, method: 'POST', timeoutMs: 30000,
           body: {model: probe, messages: [{role: 'user', content: '回一个字：好'}], max_tokens: 8, stream: false}});
-        if (!chat.ok) return {...fail({status: chat.status, body: scrub(chat.text, key)}), model: probe, models: models.map(({id, name}) => ({id, name}))};
+        if (!chat.ok) return {...fail({status: chat.status, body: scrub(chat.text, key)}), model: probe, models: models.map(({id, name, meta}) => ({id, name, vision: Boolean(Array.isArray(meta?.input_modalities) && meta.input_modalities.includes('image')), ...(meta ? {meta} : {})}))};
         if (!listed) models = preset.models.map(id => ({id, name: id}));
       }
     } catch (error) {
       return fail({error});
     }
     const recommended = preset.models.filter(id => !listed || models.some(row => row.id === id));
-    return {ok: true, listed, baseUrl: base, models: models.map(({id, name}) => ({id, name})), recommended,
+    return {ok: true, listed, baseUrl: base, models: models.map(({id, name, meta}) => ({id, name, vision: Boolean(Array.isArray(meta?.input_modalities) && meta.input_modalities.includes('image')), ...(meta ? {meta} : {})})), recommended,
       message: listed ? `连上了，这个账号能用 ${models.length} 个聊天模型。` : '连上了（这个服务商不提供模型列表，先用推荐的模型）。'};
   }
 
@@ -187,7 +272,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const rows = Object.entries(providers).map(([id, provider]) => ({
       id, preset: registry.providers[id]?.preset || '', label: registry.providers[id]?.label || PRESET_BY_ID.get(registry.providers[id]?.preset)?.label || id,
       baseUrl: provider?.baseUrl || '', keyTail: keyTail(provider?.apiKey), hasKey: Boolean(provider?.apiKey),
-      models: (provider?.models || []).map(m => ({id: m.id, name: m.name || m.id})).slice(0, 400), modelCount: (provider?.models || []).length,
+      models: (provider?.models || []).map(m => ({id: m.id, name: m.name || m.id, vision: hasVisionInput(m), input: Array.isArray(m.input) ? [...m.input] : ['text']})).slice(0, 400), modelCount: (provider?.models || []).length,
       enabled: true, managed: Boolean(registry.providers[id]),
       isDefault: primary.startsWith(`${id}/`),
     }));
@@ -230,7 +315,17 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const chosen = (Array.isArray(params.models) ? params.models : []).map(row => (typeof row === 'string' ? {id: row} : row))
       .filter(row => row && MODEL_ID.test(String(row.id || ''))).slice(0, 200);
     if (!chosen.length) throw new Error('至少选一个模型');
-    const entries = chosen.map(row => modelEntry(String(row.id), row.meta || {name: row.name}));
+    const existingById = new Map((editing ? providers[editing]?.models || [] : []).map(m => [m.id, m]));
+    const entries = chosen.map(row => {
+      const prev = existingById.get(String(row.id));
+      const meta = {
+        ...(prev ? {contextWindow: prev.contextWindow, maxTokens: prev.maxTokens, input: prev.input, compat: prev.compat} : {}),
+        ...(row.meta && typeof row.meta === 'object' ? row.meta : {}),
+        ...(row.name ? {name: row.name} : prev?.name ? {name: prev.name} : {}),
+        ...(typeof row.vision === 'boolean' ? {vision: row.vision} : {}),
+      };
+      return modelEntry(String(row.id), meta);
+    });
     const defaultModel = params.defaultModel && chosen.some(row => row.id === params.defaultModel) ? `${id}/${params.defaultModel}` : '';
     await mutate(draft => {
       draft.models ||= {}; draft.models.providers ||= {};
@@ -239,8 +334,39 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       if (defaultModel) applyDefault(draft, defaultModel, params.everywhere !== false);
     });
     registry.providers[id] = {preset: preset.id, label: String(params.label || '').trim().slice(0, 40) || preset.label, updatedAt: now().toISOString()};
+    for (const row of chosen) {
+      if (typeof row.vision === 'boolean') registry.capabilities[`${id}/${row.id}`] = {vision: row.vision, updatedAt: now().toISOString()};
+    }
     writeRegistry(registry);
     return {ok: true, providerId: id, defaultModel, ...list()};
+  }
+
+  async function setCapability(params = {}) {
+    if (typeof params.vision !== 'boolean') throw new Error('请明确说明是要打开还是关闭看图能力（vision 需为 true 或 false）');
+    const vision = params.vision;
+    const target = resolveConfiguredModel(current(), params);
+    let updated = null;
+    await mutate(draft => {
+      const provider = draft.models?.providers?.[target.providerId];
+      const entry = Array.isArray(provider?.models) ? provider.models.find(m => m && m.id === target.modelId) : null;
+      if (!entry) throw new Error(`模型「${target.providerId}/${target.modelId}」已经不在配置里了`);
+      const beforeVision = hasVisionInput(entry);
+      const nextInput = withVisionInput(entry.input, vision);
+      entry.input = nextInput;
+      updated = {
+        model: `${target.providerId}/${target.modelId}`,
+        providerId: target.providerId,
+        modelId: target.modelId,
+        name: entry.name || target.modelId,
+        vision,
+        changed: beforeVision !== vision,
+        input: [...nextInput],
+      };
+    });
+    const registry = readRegistry();
+    registry.capabilities[`${updated.providerId}/${updated.modelId}`] = {vision, updatedAt: now().toISOString()};
+    writeRegistry(registry);
+    return {ok: true, ...updated, ...list()};
   }
 
   async function setDefault(params = {}) {
@@ -289,12 +415,69 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       if (draft.models?.providers) delete draft.models.providers[id];
     });
     delete registry.providers[id];
+    for (const key of Object.keys(registry.capabilities || {})) {
+      if (key.startsWith(`${id}/`)) delete registry.capabilities[key];
+    }
     writeRegistry(registry);
     return {ok: true, ...list()};
   }
 
   const presets = () => ({presets: PRESETS.map(({id, label, region, baseUrl, models, keyUrl, steps}) => ({id, label, region, baseUrl, models, keyUrl, steps}))});
-  return {presets, list, test, save, setDefault, disable, enable, remove};
+  return {presets, list, test, save, setCapability, setDefault, disable, enable, remove};
+}
+
+export function createModelCapabilityTool(setup) {
+  return {
+    name: 'pinkie_model_capability',
+    label: '设置模型看图能力',
+    description: '只做一件事：打开或关闭某个已有模型能不能看图片（修改该模型条目里的 input 是否包含 image），不碰其他配置。内部走和「设置 → 模型服务」同一条安全保存通道。打开后必须提醒用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        model: {
+          type: 'string',
+          minLength: 1,
+          description: '要改的已有模型（写「服务商/模型名」或单独的模型名，例如 deepseek/deepseek-chat、mm/workbuddy/hy4flash）。不确定准确名字时传你想找的模型名关键字，报错会列出已配好的模型名。',
+        },
+        vision: {
+          type: 'boolean',
+          description: 'true = 打开「能看图片」；false = 关闭「能看图片」。',
+        },
+      },
+      required: ['model', 'vision'],
+    },
+    async execute(_toolCallId, params = {}) {
+      try {
+        const res = await setup.setCapability({model: params.model, vision: params.vision});
+        const payload = {
+          ok: true,
+          model: res.model,
+          name: res.name,
+          vision: res.vision,
+          changed: res.changed,
+          input: res.input,
+          message: res.vision
+            ? `已打开「${res.model}」的看图能力。请告诉用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。`
+            : `已关闭「${res.model}」的看图能力。`,
+        };
+        return {content: [{type: 'text', text: JSON.stringify(payload, null, 2)}], details: payload, isError: false};
+      } catch (error) {
+        const payload = {ok: false, error: error instanceof Error ? error.message : String(error)};
+        return {content: [{type: 'text', text: JSON.stringify(payload, null, 2)}], details: payload, isError: true};
+      }
+    },
+  };
+}
+
+export function supplementMinimalModelCapability(config) {
+  const tools = config?.tools;
+  if (!tools || tools.profile !== 'minimal' || Object.hasOwn(tools, 'allow')
+      || tools.alsoAllow !== undefined && !Array.isArray(tools.alsoAllow)) return false;
+  const present = new Set((tools.alsoAllow || []).map(name => String(name).toLowerCase()));
+  if (present.has('pinkie_model_capability')) return false;
+  tools.alsoAllow = [...(tools.alsoAllow || []), 'pinkie_model_capability'];
+  return true;
 }
 
 export function registerModelSetup(api) {
@@ -302,12 +485,23 @@ export function registerModelSetup(api) {
   try { stateDir = api.runtime.state.resolveStateDir(); } catch {}
   const setup = createModelSetup({config: api.runtime.config, stateDir});
   for (const [name, scope] of [['presets', 'operator.read'], ['list', 'operator.read'], ['test', 'operator.admin'], ['save', 'operator.admin'],
-    ['setDefault', 'operator.admin'], ['disable', 'operator.admin'], ['enable', 'operator.admin'], ['remove', 'operator.admin']]) {
+    ['setCapability', 'operator.admin'], ['setDefault', 'operator.admin'], ['disable', 'operator.admin'], ['enable', 'operator.admin'], ['remove', 'operator.admin']]) {
     api.registerGatewayMethod(`pinkie.modelSetup.${name}`, async ({params, respond}) => {
       try { respond(true, await setup[name](params || {})); }
       // 只回错误说明，不回参数（里面有密钥）。
       catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: scrub(String(error?.message || error), cleanKey(params?.apiKey))}); }
     }, {scope});
+  }
+  const config = api.runtime?.config;
+  if (config?.current && config?.mutateConfigFile && api.on) {
+    api.on('gateway_start', async () => {
+      try {
+        if (!supplementMinimalModelCapability(structuredClone(config.current() || {}))) return;
+        await config.mutateConfigFile({base: 'source', afterWrite: {mode: 'auto'}, mutate: supplementMinimalModelCapability});
+      } catch {
+        api.logger?.warn?.('[model-setup] 无法补齐只聊天下的看图设置工具权限');
+      }
+    });
   }
   return setup;
 }

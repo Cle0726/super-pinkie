@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {SettingsGuard, registerSettingsGuard, instructionLike, guardMode, resetGuardModeCache, writeTargets} from '../services/mode-architecture/settings-guard.mjs';
+import {registerModelSetup, createModelCapabilityTool} from '../services/mode-architecture/model-setup.mjs';
 
 function sandbox() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-')));
@@ -267,4 +268,132 @@ test('file watch is not started in the dev build', () => {
   const api = {on() {}, registerGatewayMethod() {}};
   const guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, mode: {enabled: false}, pinkieStateRoot: path.join(root, 'app-state')});
   assert.deepEqual(guard.watch(), []);
+});
+
+test('refusal messages point to pinkie_model_capability while openclaw.json and agents/*/agent stay protected', () => {
+  const {guard, state} = sandbox();
+  const writeCfg = guard.beforeTool(write(path.join(state, 'openclaw.json'), '{}'));
+  assert.equal(writeCfg?.block, true);
+  assert.match(writeCfg.blockReason, /pinkie_model_capability/);
+  assert.match(writeCfg.blockReason, /设置 → 模型服务/);
+
+  const writeModelsJson = guard.beforeTool(write(path.join(state, 'agents/main/agent/models.json'), '{}'));
+  assert.equal(writeModelsJson?.block, true);
+  assert.match(writeModelsJson.blockReason, /pinkie_model_capability/);
+
+  const gw = guard.beforeTool({toolName: 'gateway', params: {action: 'config.patch'}});
+  assert.equal(gw?.block, true);
+  assert.match(gw.blockReason, /pinkie_model_capability/);
+
+  const ex = guard.beforeTool({toolName: 'exec', params: {command: 'openclaw config set models.providers.x {}'}});
+  assert.equal(ex?.block, true);
+  assert.match(ex.blockReason, /pinkie_model_capability/);
+
+  // The narrow dedicated tool itself is never blocked by beforeTool
+  assert.equal(guard.beforeTool({toolName: 'pinkie_model_capability', params: {model: 'deepseek/deepseek-chat', vision: true}}), undefined);
+});
+
+test('verifyAfterCommand keeps user model input capability changes while still restoring product keys', () => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const initial = {
+    plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}},
+    agents: {list: [{id: 'main', workspace: ws}]},
+    models: {providers: {deepseek: {baseUrl: 'https://api.deepseek.com', apiKey: 'sk-x', models: [{id: 'deepseek-chat', input: ['text']}]}}},
+  };
+  fs.writeFileSync(configFile, JSON.stringify(initial));
+  guard.baseline();
+
+  const updated = structuredClone(initial);
+  updated.models.providers.deepseek.models[0].input = ['text', 'image'];
+  fs.writeFileSync(configFile, JSON.stringify(updated));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).models.providers.deepseek.models[0].input, ['text', 'image']);
+});
+
+test('release (guard-build.json) and dev mode end-to-end: pinkie_model_capability + RPC work while protected config/persona stay locked', async () => {
+  for (const isRelease of [true, false]) {
+    const {root, home, state, ws} = sandbox();
+    const pluginDir = path.join(root, 'plugin');
+    fs.mkdirSync(pluginDir, {recursive: true});
+    fs.writeFileSync(path.join(pluginDir, 'guard-build.json'), JSON.stringify({guard: isRelease, channel: isRelease ? 'release' : 'dev'}));
+    const configFile = path.join(state, 'openclaw.json');
+    const initial = {
+      plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}},
+      agents: {list: [{id: 'main', workspace: ws}]},
+      models: {providers: {deepseek: {baseUrl: 'https://api.deepseek.com', apiKey: 'sk-x', models: [{id: 'deepseek-chat', input: ['text']}]}}},
+    };
+    fs.writeFileSync(configFile, JSON.stringify(initial));
+    const readCfg = () => JSON.parse(fs.readFileSync(configFile, 'utf8'));
+
+    const hooks = new Map();
+    const methods = new Map();
+    let registeredTool = null;
+    const api = {
+      on(name, fn) { (hooks.get(name) || hooks.set(name, []).get(name)).push(fn); },
+      registerGatewayMethod(name, fn, opts) { methods.set(name, {fn, opts}); },
+      runtime: {
+        state: {resolveStateDir: () => state},
+        config: {
+          current: readCfg,
+          async mutateConfigFile({mutate}) {
+            const draft = readCfg();
+            mutate(draft);
+            fs.writeFileSync(configFile, JSON.stringify(draft));
+            return draft;
+          },
+        },
+      },
+    };
+    let guard;
+    try {
+      const mode = guardMode({pluginDir, refresh: true});
+      assert.equal(mode.enabled, isRelease);
+      guard = registerSettingsGuard(api, {home, env: {OPENCLAW_STATE_DIR: state}, mode, pinkieStateRoot: path.join(root, 'app-state')});
+      const setup = registerModelSetup(api);
+      registeredTool = createModelCapabilityTool(setup);
+
+      const beforeToolCalls = hooks.get('before_tool_call') || [];
+      const runBeforeTool = (event) => {
+        for (const fn of beforeToolCalls) {
+          const res = fn(event, {workspaceDir: ws});
+          if (res?.block) return res;
+        }
+        return undefined;
+      };
+
+      // pinkie_model_capability passes before_tool_call in both release and dev mode
+      const capParams = {model: 'deepseek/deepseek-chat', vision: true};
+      assert.equal(runBeforeTool({toolName: 'pinkie_model_capability', params: capParams}), undefined);
+      const toolOut = await registeredTool.execute('c1', capParams);
+      assert.equal(toolOut.details.ok, true);
+      assert.equal(toolOut.details.vision, true);
+      assert.match(toolOut.details.message, /已打开，如果上游其实不支持，发图时会报错，可以再关掉/);
+      assert.deepEqual(readCfg().models.providers.deepseek.models[0].input, ['text', 'image']);
+
+      // Watcher does not revert or flag pinkie_model_capability's config mutation
+      await new Promise(r => setTimeout(r, 150));
+      assert.deepEqual(readCfg().models.providers.deepseek.models[0].input, ['text', 'image']);
+      assert.equal(guard.verifyAfterCommand('exec').length, 0);
+
+      // RPC pinkie.modelSetup.setCapability works in both modes
+      let rpcResult;
+      await methods.get('pinkie.modelSetup.setCapability').fn({
+        params: {providerId: 'deepseek', modelId: 'deepseek-chat', vision: false},
+        respond: (ok, data) => { rpcResult = {ok, data}; },
+      });
+      assert.equal(rpcResult.ok, true);
+      assert.deepEqual(readCfg().models.providers.deepseek.models[0].input, ['text']);
+      const reg = JSON.parse(fs.readFileSync(path.join(state, 'pinkie-model-setup.json'), 'utf8'));
+      assert.equal(reg.capabilities['deepseek/deepseek-chat'].vision, false);
+
+      // Direct writes to protected files/commands: blocked in release, unblocked in dev
+      assert.equal(Boolean(runBeforeTool(write(configFile, '{}'))?.block), isRelease);
+      assert.equal(Boolean(runBeforeTool(write(path.join(ws, 'SOUL.md'), 'hack'))?.block), isRelease);
+      assert.equal(Boolean(runBeforeTool({toolName: 'gateway', params: {action: 'config.patch'}})?.block), isRelease);
+    } finally {
+      if (guard) for (const w of guard.watch()) w.close();
+      resetGuardModeCache();
+    }
+  }
 });

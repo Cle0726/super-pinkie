@@ -117,7 +117,7 @@
     const a = args && typeof args === 'object' ? args : {};
     if (n === 'pinkie_session_start') return 'dispatch';
     if (n === 'pinkie_sessions') return 'manage';
-    if (n === 'pinkie_models') return 'models';
+    if (n === 'pinkie_models' || n === 'pinkie_model_capability') return 'models';
     if (n === 'metre_memory') return 'memory';
     if (n === 'image') return 'view';
     if ((n === 'browser' || n === 'computer' || n === 'computer_flow' || n === 'app_browser') && /screenshot|snapshot_image|capture/i.test(String(a.action || a.kind || ''))) return 'shot';

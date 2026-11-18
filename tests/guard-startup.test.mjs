@@ -35,7 +35,7 @@ function fixture({guard = true, sign = true} = {}) {
   put(path.join(state, 'user-skills/mine/SKILL.md'), '---\nname: mine\n---\n');
   put(path.join(state, 'user-skills/fake/SKILL.md'), '---\nname: xlsx\n---\n');
   put(path.join(state, 'openclaw.json'), JSON.stringify({
-    models: {providers: {mine: {baseUrl: 'https://x', apiKey: 'sk-user'}}}, talk: {voice: 'v'},
+    models: {providers: {mine: {baseUrl: 'https://x', apiKey: 'sk-user', models: [{id: 'm1', input: ['text']}, {id: 'm2', input: ['text', 'image']}]}}}, talk: {voice: 'v'},
     plugins: {enabled: false, deny: ['pinkie-mode-architecture'], allow: [], entries: {'pinkie-mode-architecture': {enabled: false}}, load: {paths: [path.join(state, 'extensions/pinkie-mode-architecture'), '/tmp/evil-plugin']}},
     agents: {defaults: {model: {primary: 'mine/m1'}}, list: [{id: 'main', workspace: '/tmp/fake-ws', model: 'mine/m1', contextInjection: 'never', tools: {deny: []}}, {id: 'unrestricted', workspace: '/tmp/free'}]},
     hooks: {internal: {entries: {'bootstrap-extra-files': {enabled: true}}}},
@@ -79,6 +79,7 @@ test('release build: restores product files, keeps user data and preferences', (
   assert.deepEqual(config.skills.load.extraDirs, [path.join(f.state, 'user-skills')]);
   // 用户白名单键原样保留
   assert.equal(config.models.providers.mine.apiKey, 'sk-user');
+  assert.deepEqual(config.models.providers.mine.models, [{id: 'm1', input: ['text']}, {id: 'm2', input: ['text', 'image']}]);
   assert.equal(config.agents.defaults.model.primary, 'mine/m1');
   assert.equal(config.agents.list[0].model, 'mine/m1');
   assert.equal(config.talk.voice, 'v');

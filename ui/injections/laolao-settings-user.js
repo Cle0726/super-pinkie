@@ -10,7 +10,7 @@
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
     ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
-  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions"]);
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions", "pinkie_model_capability"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
     work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
@@ -1451,12 +1451,16 @@
     const common = !advanced && (tabs[0]?.getAttribute("aria-selected") === "true" || tabs.length > 0);
     localizeSettingsTitle(common);
     const view = advanced ? "advanced" : common ? "common" : "";
+    const wasHidden = state.root.hidden;
     const returnedToCommon = state.lastView === "advanced" && common;
     state.lastView = view;
     state.root.hidden = !common;
     if (common) document.body?.setAttribute("data-pinkie-user-settings", "1");
     else document.body?.removeAttribute("data-pinkie-user-settings");
     if (common) updatePosition();
+    if (returnedToCommon || (wasHidden && common)) {
+      void window.__pinkieModelSetup?.refresh?.();
+    }
     if (returnedToCommon) {
       void loadInitialData();
       syncAppearance();

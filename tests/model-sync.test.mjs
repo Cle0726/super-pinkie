@@ -361,3 +361,27 @@ test('upstream IDs whose model name cannot be recognised are not added; the pick
   assert.match(picker, /function hiddenPickerModel\(model, selected = ""\) \{[^\n]*unnamedModel/, '展示目录藏起认不出名字的');
   assert.match(picker, /const unnamed = row !== selected && unnamedModel\(/, '输入框下的模型列表藏起认不出名字的，正在用的那个除外');
 });
+
+test('sync respects an explicit vision=false override in pinkie-model-setup.json', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-cap-'));
+  fs.writeFileSync(path.join(stateDir, 'pinkie-model-setup.json'), JSON.stringify({
+    providers: {}, disabled: {}, capabilities: {'clekk/gpt-6-sol': {vision: false}},
+  }));
+  const config = {models: {providers: {clekk: {baseUrl: 'http://127.0.0.1:49684/v1', apiKey: 'fixture', models: [
+    {id: 'gpt-6-sol', name: 'GPT-6 Sol', reasoning: true, input: ['text'], contextWindow: 128000, contextTokens: 128000,
+      compat: {supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max']}},
+  ]}}}};
+  let writes = 0;
+  const api = {runtime: {
+    state: {resolveStateDir: () => stateDir},
+    config: {current: () => config, mutateConfigFile: async ({mutate}) => { writes++; mutate(config); }},
+  }};
+  const sync = createModelSynchronizer(api, {fetchImpl: async () => new Response(JSON.stringify({data: [{id: 'gpt-6-sol'}]}))});
+  const result = await sync.sync();
+  assert.equal(result.upgraded, 0);
+  assert.equal(writes, 0);
+  assert.deepEqual(config.models.providers.clekk.models[0].input, ['text']);
+});
