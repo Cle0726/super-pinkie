@@ -62,6 +62,18 @@ export function waitNudge(jobs = [], kinds = [], now = Date.now()) {
     + '。真的一件都不剩了，就用一句话告诉先生在跑什么、大概要多久，然后结束这一轮。';
 }
 
+// Only our own waiting reminder should be stored as a deferred result; other
+// blocked calls and real process failures must keep their error status.
+const NUDGE_TEXT = /还在后台跑，跑完系统会自动叫你，不用再查。现在先做不依赖它的事：/;
+export function softenWaitNudge(message = {}) {
+  const details = message?.details || {};
+  const text = (Array.isArray(message?.content) ? message.content : []).map(part => part?.text || '').join('');
+  if (message?.role !== 'toolResult' || details.status !== 'blocked' ||
+      details.deniedReason !== 'plugin-before-tool-call' || !NUDGE_TEXT.test(text) ||
+      !NUDGE_TEXT.test(String(details.reason || text))) return null;
+  return {...message, isError: false, details: {...details, status: 'deferred', ok: true}};
+}
+
 // 不是 exec 命令的后台活（例如网页 GPT 批量出图）也登记进同一张表：输入框上方的「后台工作」看得到，
 // 结束时同样用看不见的内部消息叫醒碧琪。isRunning() 返回 false 就算结束，wakeText(job) 是叫醒时的话。
 export function trackBackgroundTask({sessionKey = '', command = '', isRunning, wakeText, now = Date.now()} = {}) {

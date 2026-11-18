@@ -23,7 +23,7 @@ test('state dir: default ~/.openclaw', () => {
 
 test('state dir: OPENCLAW_STATE_DIR wins over OPENCLAW_PROFILE', () => {
   const env = {OPENCLAW_STATE_DIR: '/opt/oc-state', OPENCLAW_PROFILE: 'work'};
-  assert.equal(openclawStateDir(env, HOME), '/opt/oc-state');
+  assert.equal(openclawStateDir(env, HOME), path.resolve('/opt/oc-state'));
 });
 
 test('state dir: OPENCLAW_PROFILE becomes ~/.openclaw-<profile>', () => {
@@ -41,7 +41,7 @@ test('~ is expanded in OPENCLAW_STATE_DIR and OPENCLAW_CONFIG_PATH', () => {
   assert.equal(openclawStateDir({OPENCLAW_STATE_DIR: '~/profile-state'}, HOME), path.join(HOME, 'profile-state'));
   assert.equal(openclawConfigPath({env: {OPENCLAW_CONFIG_PATH: '~/cfg/openclaw.json'}, home: HOME}),
     path.join(HOME, 'cfg/openclaw.json'));
-  assert.equal(openclawConfigPath({env: {OPENCLAW_STATE_DIR: '/srv/oc'}, home: HOME}), '/srv/oc/openclaw.json');
+  assert.equal(openclawConfigPath({env: {OPENCLAW_STATE_DIR: '/srv/oc'}, home: HOME}), path.join(path.resolve('/srv/oc'), 'openclaw.json'));
   assert.equal(openclawConfigPath({env: {OPENCLAW_PROFILE: 'p1'}, home: HOME}), path.join(HOME, '.openclaw-p1/openclaw.json'));
   assert.equal(openclawConfigPath({env: {}, home: HOME}), path.join(HOME, '.openclaw/openclaw.json'));
 });
