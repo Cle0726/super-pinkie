@@ -53,6 +53,7 @@ import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
+import {registerFeedback, resolveFeedbackRoot} from './feedback.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -7137,6 +7138,7 @@ export default {
     registerModelSetup(api);
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
+    const feedback = registerFeedback(api, {root: resolveFeedbackRoot({stateRoot: process.env.PINKIE_STATE_ROOT || ''})});
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
     sharePluginState(planContinuation, 'plan', ['timers', 'dispatching']);
@@ -7454,6 +7456,13 @@ export default {
       const sessionKey = architecture.receiveUserMessage(event, ctx);
       channelReasoning.onMessage(event, ctx, sessionKey)?.catch?.(() => {});
       if (!sessionKey) return;
+      const rawSession = String(ctx.sessionKey || event.sessionKey || sessionKey);
+      feedback.onUserPrompt({
+        sessionKey: rawSession,
+        mode: modeForContext({sessionKey: rawSession}) || 'chat',
+        prompt: String(event.content ?? event.body ?? event.prompt ?? ''),
+        runId: String(ctx.runId || event.runId || ''),
+      });
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);
       planState.userMessage(sessionKey);
@@ -7464,6 +7473,16 @@ export default {
       ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
+      const promptText = String(event?.prompt || '');
+      const rawSession = String(ctx?.sessionKey || '');
+      if (rawSession && promptText && !internalControlText(promptText) && !runtimeTurnText(promptText) && !isInternalExecutionSession(rawSession)) {
+        feedback.onUserPrompt({
+          sessionKey: rawSession,
+          mode: modeForContext(ctx) || 'chat',
+          prompt: promptText,
+          runId: String(ctx?.runId || event?.runId || ''),
+        });
+      }
       cleKk.begin(event, ctx);
       fileDelivery.noteTurn(event, ctx);
       return architecture.prompt(event, ctx);
@@ -7484,6 +7503,7 @@ export default {
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);
+      feedback.onToolAfter(event, ctx);
       try {
         const watchKey = String(ctx.sessionKey || '');
         if (watchKey) codeWatch.afterTool(event, ctx, {baseDirs: [boundProjectRoot(watchKey, {stateRoot: pinkieStateRoot()}), String(event.params?.cwd || ''), agentWorkspaceDir(ctx)]});
@@ -7505,10 +7525,12 @@ export default {
       architecture.modelStarted(event);
       watchdog.modelStarted(event);
       modelHealth.callStarted(event);
+      feedback.onModelStarted(event);
     });
     api.on('model_call_ended', event => {
       watchdog.modelEnded(event);
       modelHealth.callEnded(event);
+      feedback.onModelEnded(event);
     });
     api.on('llm_output', event => usage.record(event));
     api.on('before_agent_finalize', (event, ctx) => {
@@ -7638,6 +7660,7 @@ export default {
         reason: healthFailed ? failureReasonFromEvent(event) : ''});
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
+        feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
         // A side-effecting run can reach agent_end with success=true even
         // though the final claim was rejected.  Keep the evidence window and
         // force the integrity retry path. Do not also arm the ordinary
@@ -7665,12 +7688,22 @@ export default {
             runId: event.runId || ctx.runId || '',
           });
           if (resumed) {
+            feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
             fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
             return;
           }
         }
         const retrying = await watchdog.agentEnded(event, ctx);
-        if (retrying) return;
+        if (retrying) {
+          feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
+          return;
+        }
+        feedback.onAgentEnd(event, ctx, {
+          retrying: false,
+          stopped: Boolean(architecture.stopReport(ctx) || userStoppedRecently(ctx.sessionKey || '')),
+          errorReason: failureReasonFromEvent(event),
+          mode: modeForContext(ctx) || 'chat',
+        });
         architecture.finishTurn(ctx, event);
         // 只核对真正交出去的最终回复：被拦截、要重试的回合在上面已经返回。
         if (hasDeliverableAssistantReply(event)) void reasoning.agentEnded(event, ctx).catch(() => {});

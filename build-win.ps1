@@ -255,7 +255,15 @@ $guardCommit = (git rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $guardCommit) { $guardCommit = '' }
 $guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
 $buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = "$guardCommit".Trim() }
-[System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json) + "`n", (New-Object System.Text.UTF8Encoding($false)))
+if ($guardChannel -eq 'release') {
+    $fb = [ordered]@{}
+    if ($env:PINKIE_FEEDBACK_REPO) { $fb.repo = $env:PINKIE_FEEDBACK_REPO.Trim() }
+    if ($env:PINKIE_FEEDBACK_PUBLIC_KEY) { $fb.publicKey = $env:PINKIE_FEEDBACK_PUBLIC_KEY.Trim() }
+    if ($env:PINKIE_FEEDBACK_TOKEN) { $fb.token = $env:PINKIE_FEEDBACK_TOKEN.Trim() }
+    if ($env:PINKIE_FEEDBACK_RELAY_URL) { $fb.endpoint = $env:PINKIE_FEEDBACK_RELAY_URL.Trim() }
+    if ($fb.Count -gt 0) { $buildInfo.feedback = $fb }
+}
+[System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json -Depth 4) + "`n", (New-Object System.Text.UTF8Encoding($false)))
 & (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit "$guardCommit".Trim()
 if ($LASTEXITCODE -ne 0) { throw '设定防护清单生成失败' }
 if ($env:PINKIE_GUARD_SIGNING_KEY_FILE) {

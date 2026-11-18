@@ -317,6 +317,14 @@ GUARD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
 const fs = require('fs');
 const [file, channel, version, commit, sigFile] = process.argv.slice(2);
 const info = {guard: channel === 'release', channel, version, commit};
+if (channel === 'release') {
+  const fb = {};
+  if (process.env.PINKIE_FEEDBACK_REPO) fb.repo = process.env.PINKIE_FEEDBACK_REPO.trim();
+  if (process.env.PINKIE_FEEDBACK_PUBLIC_KEY) fb.publicKey = process.env.PINKIE_FEEDBACK_PUBLIC_KEY.trim();
+  if (process.env.PINKIE_FEEDBACK_TOKEN) fb.token = process.env.PINKIE_FEEDBACK_TOKEN.trim();
+  if (process.env.PINKIE_FEEDBACK_RELAY_URL) fb.endpoint = process.env.PINKIE_FEEDBACK_RELAY_URL.trim();
+  if (Object.keys(fb).length) info.feedback = fb;
+}
 try {
   const sig = JSON.parse(fs.readFileSync(sigFile, 'utf8'));
   if (channel === 'release' && sig.commit === commit && String(sig.version).replace(/^v/, '') === version) info.release = {version, commit, signature: sig.signature};
