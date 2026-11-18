@@ -8,7 +8,7 @@ import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runt
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
-import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
+import {createSessionAccess, isUnresolvedSessionKey, logSessionFailure, registerSessionTitles, scopeUpgradeFallbackRunner} from './session-titles.mjs';
 import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
@@ -6988,11 +6988,14 @@ export default {
     // summary, so a resumed turn can distinguish completed mutations from
     // work that still needs doing.
     architecture.setCompactionEvidenceProvider(sessionKey => integrity.snapshot(sessionKey, {includeTools: true}));
+    const gatewayCliEntry = resolveGatewayCliEntry();
+    const gatewayAccess = createSessionAccess(api, {cli: gatewayCliEntry, runProcess});
+    const resumeProcess = scopeUpgradeFallbackRunner(api, {cli: gatewayCliEntry, runProcess, access: gatewayAccess});
     const watchdog = new UpstreamWatchdog(
       api,
       sessionKey => architecture.tierFor(sessionKey),
-      runProcess,
-      resolveGatewayCliEntry(),
+      resumeProcess,
+      gatewayCliEntry,
       sessionKey => architecture.activityFor(sessionKey),
     );
     const cleKk = new CleKkSupervisor({integrity, logger: api.logger});
@@ -7004,6 +7007,8 @@ export default {
       api,
       sessionKey => architecture.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
+      resumeProcess,
+      gatewayCliEntry,
     );
     // 计划清单是合同：plan_update 列的清单还有没做完的项，这一轮结束后用同一条续跑通道接着做，不看档位。
     let planStore = null;
@@ -7013,8 +7018,8 @@ export default {
       api,
       sessionKey => planState.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
-      undefined,
-      undefined,
+      resumeProcess,
+      gatewayCliEntry,
       {messageFor: status => status.message, tagName: 'pinkie-plan-', turnName: '碧琪计划续跑', onDispatched: sessionKey => planState.disarm(sessionKey)},
     );
     const usage = new ModelUsageLedger();
@@ -7113,8 +7118,8 @@ export default {
     }));
     // 后台命令结束时叫醒碧琪（OpenClaw 自带的心跳叫醒在这几个模式里不生效，见 background-jobs.mjs）。
     const background = new BackgroundJobs({
-      runProcess,
-      cliEntry: resolveGatewayCliEntry(),
+      runProcess: resumeProcess,
+      cliEntry: gatewayCliEntry,
       isBusy: sessionKey => {
         const activity = architecture.activityFor(sessionKey) || {};
         return Boolean(activity.parentRunning) || Number(activity.pending) > 0;

@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +22,22 @@ def case():
 
 
 class UpstreamProbeTests(unittest.TestCase):
+    def test_read_only_cli_pairing_is_verified_without_reporting_tokens(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            exe = root / 'app' / 'pinkie.exe'
+            node = root / 'app' / '_internal' / 'runtime' / 'bin' / 'node.exe'
+            node.parent.mkdir(parents=True)
+            node.touch()
+            auth = root / 'profile' / 'home' / '.openclaw' / 'identity' / 'device-auth.json'
+            auth.parent.mkdir(parents=True)
+            auth.write_text(json.dumps({'tokens': {'operator': {'token': 'private', 'scopes': ['operator.read']}}}))
+            with patch.object(probe.subprocess, 'run', return_value=SimpleNamespace(returncode=0)):
+                self.assertEqual(probe.seed_read_only_cli(exe, root / 'profile', {}), {'read_only': True})
+                auth.write_text(json.dumps({'tokens': {'operator': {'scopes': ['operator.read', 'operator.write']}}}))
+                with self.assertRaises(RuntimeError):
+                    probe.seed_read_only_cli(exe, root / 'profile', {})
+
     def test_outage_probe_uses_the_packaged_app_webview(self):
         page = SimpleNamespace(url="http://127.0.0.1:18789/chat")
         splash = SimpleNamespace(url="file:///isolated/launcher-loading.html")
