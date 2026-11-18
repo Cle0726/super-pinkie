@@ -830,3 +830,5 @@
 - 同步此前本机未提交的 Metre 使用文档和发布说明草稿，并修正旧的句库数量、总谱入口及三维状态标记描述。发布说明仍是草稿，不能直接当正式发布说明。
 - Windows 本机隔离测试：Metre / 会话 / 门禁等 17 个 Node 测试文件，361/362 通过；剩下 `computer tool discovers...` 期望「尚未连接」，Windows 实际提示没有桌面执行器，在线上 main 未修改的相同测试上复现。`tests.windows_mode_agents_test` 18/18 通过。Metre 固定注入预算 6483/6500。
 - 未做：Mac 原生 App / 真实模型在合并版上的复测；顶档模型正式验收；GitHub 上已有的 `fix/tools-health-1113` 与 main 另有大量差异和冲突，本次未混入。线上 main 的 macOS CI 在 `ChatGPTBackgroundWorker` 类型检查处失败，不能据此宣称两端发布门禁通过。
+
+- CI 跟进：`desktop/macos/build.sh` 本来就编译 `ChatGPTBackgroundWorker.swift`，但 GitHub CI 的 Swift 检查命令漏了这个文件，导致线上主线和同步分支报 `cannot find type`。现已让 CI 检查相同的源文件，并加入源文件清单一致性的回归测试；Mac GitHub 新一轮结果待查，不能提前宣称全部通过。
