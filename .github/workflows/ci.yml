@@ -16,9 +16,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
       - name: Check JavaScript injections
         run: find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Run all execution, recovery, UI and desktop regression tests
+        timeout-minutes: 30
         run: |
           node --test tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
@@ -54,6 +62,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
       - name: Type-check native launcher
         run: |
           src=desktop/macos/pinkie/Sources
@@ -65,6 +76,18 @@ jobs:
             -framework WebKit
       - name: Verify self-contained bundle contract
         run: node --test tests/self-contained-app.test.cjs tests/native-glass.test.cjs tests/macos-ci-contract.test.cjs
+      - name: Install WebKit regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Verify tool image trace in WebKit on macOS
+        timeout-minutes: 5
+        env:
+          PINKIE_IMAGE_UI_ENGINE: webkit
+        run: node --test tests/tool-images-e2e.test.mjs
 
   windows-build:
     needs: [portable-checks, macos-check]
@@ -117,7 +140,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install browser regression dependencies
+        shell: pwsh
+        run: |
+          $deps = Join-Path $env:RUNNER_TEMP 'pinkie-ci-deps'
+          $version = (Get-Content 'tools/pinkie-toolbox/toolbox-manifest.json' -Raw | ConvertFrom-Json).playwrightVersion
+          npm install --prefix $deps --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install browser test dependencies' }
+          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
+          "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Run the execution, recovery, UI and desktop suites on Windows
+        timeout-minutes: 30
         # bash keeps this step identical to portable-checks: the default shell
         # here is PowerShell, which does not expand globs for native commands.
         # Node expands them itself, but matching the ubuntu job exactly removes

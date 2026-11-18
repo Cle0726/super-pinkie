@@ -257,9 +257,9 @@ test('subject warnings count real attempts and attributed focus, and Sunday even
 });
 
 async function withBoard(t, {engine = 'chromium', vendor = true, handler, reduce = false} = {}, run) {
-  const {startHarness, playwright} = await import('../tools/study-desk/harness.mjs');
+  const {startHarness, playwright, launchWithHarness} = await import('../tools/study-desk/harness.mjs');
   const harness = await startHarness({vendor, handler});
-  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  const browser = await launchWithHarness(harness, () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})}));
   try {
     const page = await browser.newPage({viewport: {width: 1440, height: 900}, reducedMotion: reduce ? 'reduce' : 'no-preference'});
     const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -267,7 +267,7 @@ async function withBoard(t, {engine = 'chromium', vendor = true, handler, reduce
     await page.getByRole('button', {name: '看板', exact: true}).click();
     await run(page, harness);
     assert.deepEqual(errors, []);
-  } finally { await browser.close(); await harness.close(); }
+  } finally { try { await browser.close(); } finally { await harness.close(); } }
 }
 const deskHandler = desk => (method, params) => method.startsWith('pinkie.learning.desk.') ? desk[method.split('.').at(-1)](params) : {};
 

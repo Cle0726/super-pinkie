@@ -94,7 +94,7 @@ const after = (log, first, then) => log.indexOf(first) >= 0 && log.indexOf(first
 
 test('a gwRequest sent before connect is held until hello-ok, and again after the gateway restarts', async () => {
   const gateway = await fakeGateway();
-  const browser = await harnessModule.playwright().webkit.launch({headless: true});
+  const browser = await harnessModule.launchWithHarness(gateway, () => harnessModule.playwright().webkit.launch({headless: true}));
   try {
     const tab = await browser.newPage();
     const errors = []; tab.on('pageerror', (error) => errors.push(error.message));
@@ -120,5 +120,5 @@ test('a gwRequest sent before connect is held until hello-ok, and again after th
     assert.equal(gateway.log.find((entry) => entry.startsWith('2:')), '2:connect');
     assert.ok(gateway.log.filter((entry) => entry === '2:desk.today').length === 2 && after(gateway.log, '2:hello-ok', '2:desk.today'), gateway.log.join(' '));
     assert.deepEqual(errors, []);
-  } finally { await browser.close(); await gateway.close(); }
+  } finally { try { await browser.close(); } finally { await gateway.close(); } }
 });

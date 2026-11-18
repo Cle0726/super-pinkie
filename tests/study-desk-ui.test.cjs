@@ -5,9 +5,9 @@ test.before(async () => { harnessModule = await import('../tools/study-desk/harn
 async function run(options, fn) {
   const harness = await harnessModule.startHarness(options);
   const engine = options?.engine || 'webkit';
-  const browser = await harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true});
+  const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}));
   try { const page = await browser.newPage({viewport: {width: 1440, height: 900}}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
-  finally { await browser.close(); await harness.close(); }
+  finally { try { await browser.close(); } finally { await harness.close(); } }
 }
 test('learning shell mounts once, restores native chat, and cleans up across ten mode changes', async () => {
   await run({}, async page => {
@@ -110,7 +110,7 @@ test('today, exam settings and a complete set use B real RPC; Enter never submit
       assert.equal(new Set(answers.map(c => c.params.questionId)).size, answers.length);
       assert.equal(service.store.pact.today().progress.questions, answers.length);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('only unknown method activates mock; gateway errors are surfaced', async () => {
   await run({handler: () => { throw Error('unknown method'); }}, async page => {
@@ -167,7 +167,7 @@ test('real control-ui Chromium hosts flashcards, an experiment, a mock paper, bo
       await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers: ['Alt']});
       assert.equal(await page.locator('.q-text').innerText(), stem);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('WebKit reuses real flashcard scheduling and inline experiment cards without the host shell', async () => {
   const service = await harnessModule.isolatedService();
@@ -185,7 +185,7 @@ test('WebKit reuses real flashcard scheduling and inline experiment cards withou
       await page.locator('.desk-inline-slot .pinkie-learning-inline').waitFor();
       await page.waitForFunction(() => __pinkieLearningInline.stats().loaded > 0);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('macOS registration upgrades stale duplicate desk tags in order and is idempotent', () => {
   const fs = require('node:fs'), path = require('node:path'), {execFileSync} = require('node:child_process');
@@ -301,7 +301,7 @@ test('board model chip reports the real model, generation time, duration and usa
       await page.waitForFunction(() => document.querySelector('.b-model-chip')?.textContent.includes('tokens'));
       assert.equal(await page.locator('.b-model-chip').innerText(), 'Gemini 3.8 Flash Tiered · 18:38 · 用时 17.2 秒 · 6,607 tokens');
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('today retries quietly while the gateway handshake is still pending, but surfaces other errors', async () => {
   let rejected = 0;
@@ -350,7 +350,7 @@ test('desk buttons keep their own colours in day and night: the control reset ne
         assert.ok(await contrast(page.locator('.confirm-answer')) >= 4.5, `${theme}: 确认`);
       }
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 
 async function v2Run(options, fn) {
