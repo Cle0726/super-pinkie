@@ -63,8 +63,12 @@ test('Windows exe embeds its own Node and OpenClaw runtime', () => {
 test('both packages share the complete Mac browser renderer and preserve the backend snapshot', () => {
   const snapshot = path.join(root, 'desktop/windows/mac-runtime');
   const sums = fs.readFileSync(path.join(snapshot, 'SHA256SUMS'), 'utf8').trim().split('\n');
-  const backend = sums.filter(line => !line.includes('  services/'));
-  assert.ok(backend.length >= 30, `the Mac snapshot is incomplete: ${backend.length} backend files`);
+  const backend = sums.filter(line => line.includes('  openclaw/'));
+  const backendText = backend.map(line => fs.readFileSync(path.join(snapshot, line.split('  ')[1]), 'utf8')).join('\n');
+  for (const marker of ['pinkie-history-image-thumbnails:v1', 'pinkie-oversized-user-record:v1',
+    'pinkie-context-breakdown:v1', 'pinkie-work-first-media-gate:v2']) {
+    assert.ok(backendText.includes(marker), `the Mac snapshot is missing ${marker}`);
+  }
   for (const line of sums) {
     const splitAt = line.indexOf('  ');
     assert.ok(splitAt > 0, line);

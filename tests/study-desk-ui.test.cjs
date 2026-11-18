@@ -354,7 +354,7 @@ test('desk buttons keep their own colours in day and night: the control reset ne
 });
 
 async function v2Run(options, fn) {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs');
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs');
   const fixture = createV2Fixture(options);
   try { await run({handler: fixture.handler, engine: 'chromium', legacyUI: true}, (page, harness) => fn(page, fixture, harness)); }
   finally { fixture.release(); }
@@ -406,7 +406,7 @@ test('v2 A2: offline and document sources remain readable, downgraded outlines a
   });
 });
 test('v2 A2: prepare can be cancelled, late results are ignored and 45 second timeout offers a retry', async () => {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs');
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs');
   const f = createV2Fixture({pending: true});
   try { await run({handler: f.handler, engine: 'chromium'}, async page => {
     await page.locator('.task').click(); await page.locator('.lesson-skeleton').waitFor();
@@ -484,7 +484,7 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
   });
 });
 test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', async () => {
-  const {createV2Fixture}=await import('../tools/study-desk/v2-fixtures.mjs');const f=createV2Fixture({ready:true});
+  const {createV2Fixture}=await import('./fixtures/study-desk-v2.mjs');const f=createV2Fixture({ready:true});
   try{await run({handler:f.handler,engine:'chromium',realUI:true},async page=>{
     await page.locator('.task').click();await page.getByRole('button',{name:'开始上课',exact:true}).click();await page.locator('#pinkie-desk-chat .lesson-bar').waitFor();
     for(const width of [1440,1024]){await page.setViewportSize({width,height:800});await page.waitForFunction(()=>{const n=document.querySelector('#pinkie-desk-chat .lesson-bar'),paper=document.getElementById('pinkie-desk-chat');if(!n||!paper)return false;const a=n.getBoundingClientRect(),b=paper.getBoundingClientRect();return a.left>=b.left&&a.right<=b.right+1&&a.height<=48;},{},{polling:100});}
@@ -493,7 +493,7 @@ test('v2 A3: independent conversation controls fit their paper and the notebook 
   });}finally{f.release();}
 });
 test('v2 A2: retrying an opening message never begins the same lesson twice', async () => {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs'); const f = createV2Fixture(); let failed = false;
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs'); const f = createV2Fixture(); let failed = false;
   try { await run({engine: 'chromium', handler: (method, params) => { if (method === 'chat.send' && !failed) { failed = true; throw Error('消息发送暂时失败'); } return f.handler(method, params); }}, async page => {
     await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.getByText('消息发送暂时失败', {exact: true}).waitFor();
     await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();

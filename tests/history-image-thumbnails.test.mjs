@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {transform, marker} from '../patch/apply-history-image-thumbnails.mjs';
 
 const handler = `const CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES = 400;
@@ -15,10 +18,10 @@ async function history(historyPage, maxHistoryBytes) {
 
 // Evaluate the patched handler with a fake image sanitizer module.
 async function load(source, sanitizer) {
-  const dir = fs.mkdtempSync('/tmp/pinkie-thumb-');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-thumb-'));
   fs.writeFileSync(`${dir}/tool-images-test.js`, `export const t = ${sanitizer};`);
   fs.writeFileSync(`${dir}/chat.mjs`, `${source}\nexport {history};`);
-  try { return (await import(`${dir}/chat.mjs`)).history; } finally { setTimeout(() => fs.rmSync(dir, {recursive: true, force: true}), 1000); }
+  try { return (await import(pathToFileURL(path.join(dir, 'chat.mjs')).href)).history; } finally { setTimeout(() => fs.rmSync(dir, {recursive: true, force: true}), 1000); }
 }
 
 test('an oversized user image becomes a thumbnail and the words stay', async () => {

@@ -29,6 +29,9 @@ class MacSnapshotTest(unittest.TestCase):
             "pinkie-oversized-user-record:v1",
             "pinkie-context-breakdown:v1",  # context panel per-category breakdown
             "pinkie-work-first-media-gate:v2",
+            "pinkie-fake-ip-benchmark-v6:ip:v1",
+            "pinkie-fake-ip-benchmark-v6:ssrf:v1",
+            "pinkie-overflow-compaction-events:v1",
         ):
             self.assertIn(marker, text)
 

@@ -55,16 +55,16 @@ test('image prompt carries style, aspect and a do-not-ask line', () => {
 });
 
 test('output folder stays in an ordinary folder inside home', () => {
-  const home = '/Users/someone';
+  const home = path.resolve('/Users/someone');
   const date = new Date('2026-11-17T08:00:00Z');
-  assert.equal(resolveOutputDir({home, date, sessionKey: 'agent:main:x'}), '/Users/someone/Documents/碧琪出图/2026-11-17');
-  assert.equal(resolveOutputDir({home, date, sessionKey: 'agent:metre:x'}), '/Users/someone/Documents/Metre 出图/2026-11-17');
-  assert.equal(resolveOutputDir({home, date, project: '/Users/someone/shop'}), '/Users/someone/shop/出图/2026-11-17');
-  assert.equal(resolveOutputDir({home, outDir: '分镜/第1集', project: '/Users/someone/drama'}), '/Users/someone/drama/分镜/第1集');
-  assert.throws(() => resolveOutputDir({home, outDir: '/etc'}), /用户目录/);
+  assert.equal(resolveOutputDir({home, date, sessionKey: 'agent:main:x'}), path.join(home, 'Documents', '碧琪出图', '2026-11-17'));
+  assert.equal(resolveOutputDir({home, date, sessionKey: 'agent:metre:x'}), path.join(home, 'Documents', 'Metre 出图', '2026-11-17'));
+  assert.equal(resolveOutputDir({home, date, project: path.join(home, 'shop')}), path.join(home, 'shop', '出图', '2026-11-17'));
+  assert.equal(resolveOutputDir({home, outDir: '分镜/第1集', project: path.join(home, 'drama')}), path.join(home, 'drama', '分镜', '第1集'));
+  assert.throws(() => resolveOutputDir({home, outDir: path.resolve('/etc')}), /用户目录/);
   assert.throws(() => resolveOutputDir({home, outDir: '~/.openclaw/x'}), /隐藏目录/);
   assert.throws(() => resolveOutputDir({home, outDir: '~/Library/x'}), /Library/);
-  assert.throws(() => resolveOutputDir({home, outDir: '../../etc', project: '/Users/someone/p'}), /用户目录/);
+  assert.throws(() => resolveOutputDir({home, outDir: '../../etc', project: path.join(home, 'p')}), /用户目录/);
 });
 
 test('ask waits for the reply and continue reuses the same web conversation', async t => {
