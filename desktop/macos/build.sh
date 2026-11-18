@@ -311,6 +311,10 @@ else
     fi
   done
 fi
+if [[ "$GUARD_CHANNEL" == "release" ]]; then
+  cp "$REPO_ROOT/ui/assets/laolao-splash-release.mp4" "$CONTENTS/Resources/SuperPinkie/ui/assets/laolao-splash.mp4"
+  cp "$REPO_ROOT/ui/assets/laolao-splash-video-poster-release.png" "$CONTENTS/Resources/SuperPinkie/ui/assets/laolao-splash-video-poster.png"
+fi
 GUARD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
 "$RUNTIME_ROOT/bin/node" - "$CONTENTS/Resources/SuperPinkie/build-info.json" "$GUARD_CHANNEL" "$VERSION" "$GUARD_COMMIT" "$PINKIE_STATE_ROOT_FOR_GUARD/updates/release-signature.json" <<'NODE'
 const fs = require('fs');
