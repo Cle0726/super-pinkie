@@ -567,6 +567,14 @@
     state.guardStatus = element("span", "pinkie-user-settings__value pinkie-user-settings__guard", guardRow.control, "读取中…");
     state.guardDetail = element("p", "pinkie-user-settings__soft-note pinkie-user-settings__guard-detail", aboutCard);
     state.guardDetail.hidden = true;
+    const metreRow = row(aboutCard, "开发者模式");
+    metreRow.item.hidden = true;
+    state.metreRow = metreRow.item;
+    const metreControls = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", metreRow.control);
+    state.metreStatus = element("span", "pinkie-user-settings__value pinkie-user-settings__guard", metreControls, "已上锁");
+    state.metreAction = button("重新上锁", "pinkie-user-settings__button pinkie-user-settings__button--small", metreControls, () => {
+      void handleMetreAction();
+    });
     const updateRow = row(aboutCard, "检查更新");
     button("检查更新", "pinkie-user-settings__button", updateRow.control, checkForUpdates);
     makeStatus(aboutCard, "updates");
@@ -1054,9 +1062,56 @@
     state.guardDetail.hidden = !detail;
     ownText(state.guardDetail, detail);
   }
+  function renderMetreLock(data) {
+    if (!state.metreRow || !state.metreStatus || !state.metreAction) return;
+    if (!data || !data.required) {
+      state.metreRow.hidden = true;
+      return;
+    }
+    state.metreRow.hidden = false;
+    state.metreData = data;
+    if (data.unlocked) {
+      ownText(state.metreStatus, "已解锁");
+      state.metreStatus.dataset.tone = "ok";
+      ownText(state.metreAction, "重新上锁");
+      state.metreAction.disabled = false;
+      return;
+    }
+    const inCooldown = Number(data.retryAfterMs || 0) > 0;
+    ownText(state.metreStatus, data.configured === false ? "未配置" : (inCooldown ? "冷却中" : "已上锁"));
+    state.metreStatus.dataset.tone = data.configured === false || inCooldown ? "warn" : "";
+    ownText(state.metreAction, "解锁");
+    state.metreAction.disabled = data.configured === false;
+  }
+  async function handleMetreAction() {
+    if (!state.metreAction) return;
+    state.metreAction.disabled = true;
+    try {
+      if (state.metreData?.unlocked) {
+        if (window.__pinkieMetreLock?.lock) {
+          renderMetreLock(await window.__pinkieMetreLock.lock());
+        } else {
+          const request = rpc();
+          if (request) renderMetreLock(await request("pinkie.guard.metreLock", {}, 8000));
+        }
+      } else if (window.__pinkieMetreLock?.ensureUnlocked) {
+        await window.__pinkieMetreLock.ensureUnlocked();
+        if (window.__pinkieMetreLock?.status) renderMetreLock(await window.__pinkieMetreLock.status(true));
+      }
+    } catch {} finally {
+      if (state.metreAction) state.metreAction.disabled = state.metreData?.configured === false;
+    }
+  }
   async function loadGuardStatus(request) {
     try { renderGuard(await request("pinkie.guard.status", {}, 8000)); }
     catch { renderGuard(null); }
+    try {
+      if (window.__pinkieMetreLock?.status) {
+        renderMetreLock(await window.__pinkieMetreLock.status(true));
+      } else {
+        renderMetreLock(await request("pinkie.guard.metreStatus", {}, 8000));
+      }
+    } catch { renderMetreLock(null); }
   }
   async function loadInitialData() {
     void state.loadBrowserProxy?.();
@@ -1485,6 +1540,7 @@
     }, true);
     window.addEventListener("popstate", syncPage);
     window.addEventListener("resize", updatePosition, {passive: true});
+    window.addEventListener("pinkie:metre-lock-change", (event) => renderMetreLock(event?.detail));
     window.setInterval(() => {
       syncPage();
       syncUsage();

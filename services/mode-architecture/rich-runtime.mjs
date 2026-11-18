@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const exec = promisify(execFile);
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
@@ -400,16 +401,23 @@ export function registerRichRuntime(api, options = {}) {
     return text.replace(/Bearer\s+\S+/gi, 'Bearer •••').replace(/(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|ntn_[A-Za-z0-9_]+)/g, '•••');
   };
   const method = (name, scope, fn) => api.registerGatewayMethod(name, async ({params, respond}) => {
-    try { respond(true, await fn(params || {})); }
+    try {
+      const blocked = getActiveMetreLock()?.checkGatewayRequest?.(name, params || {});
+      if (blocked) throw new Error(blocked);
+      respond(true, await fn(params || {}));
+    }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: safeError(error)}); }
   }, {scope});
 
-  api.registerTool?.(ctx => ({
+  api.registerTool?.(ctx => getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey) ? null : ({
     name: 'plan_update', label: '更新工作计划',
     description: '三步以上的长任务用这个工具维护一张实时清单。传入完整列表，每项用 pending、in_progress 或 completed；同时最多一项进行中。做完实际工作才标 completed。短答不用。',
     parameters: {type: 'object', additionalProperties: false, properties: {title: {type: 'string'}, explanation: {type: 'string'}, items: {type: 'array', minItems: 1, maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {id: {type: 'string'}, text: {type: 'string'}, status: {type: 'string', enum: ['pending', 'in_progress', 'completed']}}, required: ['text', 'status']}}}, required: ['items']},
     async execute(toolCallId, params) {
-      try { return reply(store.updatePlan(ctx.sessionKey, params, {...ctx, toolCallId})); }
+      try {
+        getActiveMetreLock()?.assertSessionAllowed?.(ctx?.sessionKey);
+        return reply(store.updatePlan(ctx.sessionKey, params, {...ctx, toolCallId}));
+      }
       catch (error) { return {...reply({error: safeError(error)}), isError: true}; }
     },
   }), {name: 'plan_update'});
@@ -419,6 +427,7 @@ export function registerRichRuntime(api, options = {}) {
   const research = globalThis.__pinkieResearchSwitch ||= new ResearchSwitch();
   api.on('before_prompt_build', (event, ctx) => {
     const key = String(ctx.sessionKey || '');
+    if (getActiveMetreLock()?.isLockedSession?.(key)) return undefined;
     const turn = key ? research.take(key, event?.prompt) : '';
     // Metre 的手册自己讲了 plan_update 和提问卡，富回复说明不再给（PLAN 2.2 的固定开销预算）。
     if (key.startsWith('agent:metre:')) return turn ? {appendContext: turn} : undefined;

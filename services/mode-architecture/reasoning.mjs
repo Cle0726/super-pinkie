@@ -6,6 +6,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {agentWorkspace, findAgent, openclawStateDir} from './openclaw-paths.mjs';
 import {LEVELS as LADDER_LEVELS, NO_LAYERS, depthLayers, mergeLayers, messageWeight, proportion, rigorLayers} from './run-contract.mjs';
 import {adaptiveHint, artifactPaths, classifyWorkKind, entriesFromMessages, independentViews, isHandsOnKind, kindLabel, solverModeFor, tierName} from './work-kinds.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 // 输入框思考等级滑块的 9 档属于碧琪，不属于任何模型的原生等级表。每一档先按当前模型真正支持的
 // 原生等级就近发送；原生够不到的部分，用流程补：
@@ -1170,18 +1171,31 @@ export class ReasoningEnhancer {
 }
 
 export function registerReasoningGateway(api, enhancer = new ReasoningEnhancer(api)) {
-  api.on('before_prompt_build', (event, ctx) => enhancer.beforePromptBuild(event, ctx), {priority: -11900});
+  const rejectIfMetreLocked = (params, respond) => {
+    const blocked = getActiveMetreLock()?.checkGatewayRequest?.('pinkie.reasoning', params || {});
+    if (!blocked) return false;
+    respond(false, undefined, {code: 'INVALID_REQUEST', message: blocked});
+    return true;
+  };
+  api.on('before_prompt_build', (event, ctx) => {
+    if (getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey)) return undefined;
+    return enhancer.beforePromptBuild(event, ctx);
+  }, {priority: -11900});
   api.registerGatewayMethod('pinkie.reasoning.prepare', async ({params, respond}) => {
+    if (rejectIfMetreLocked(params, respond)) return;
     try { respond(true, await enhancer.prepare(params)); }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message}); }
   }, {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.reasoning.cancel', ({params, respond}) => {
+    if (rejectIfMetreLocked(params, respond)) return;
     respond(true, enhancer.cancel(params));
   }, {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.reasoning.status', ({params, respond}) => {
+    if (rejectIfMetreLocked(params, respond)) return;
     respond(true, enhancer.status(params));
   }, {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.reasoning.job', ({params, respond}) => {
+    if (rejectIfMetreLocked(params, respond)) return;
     respond(true, enhancer.job(params));
   }, {scope: 'operator.admin'});
   return enhancer;

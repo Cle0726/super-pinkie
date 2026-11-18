@@ -874,6 +874,11 @@
 
   function navigateSession(key){
     if(modeForSession(key)!==stateMode)return;
+    if(modeForSession(key)==="metre"&&window.__pinkieMetreLock?.isKnownLocked?.()){
+      closeNavigationDrawer();
+      void window.__pinkieMetreLock.ensureUnlocked();
+      return;
+    }
     closeNavigationDrawer();
     const current=new URL(window.location.href).searchParams.get('session');
     const requestVisibleSync=()=>window.setTimeout?.(()=>window.dispatchEvent(

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {createHash, randomBytes} from 'node:crypto';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 export const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i;
 const MIME = {png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif'};
@@ -227,7 +228,10 @@ export function registerToolTrace(api, {root, baseFor = () => ''} = {}) {
     try { store.afterTool(event, ctx, bases(ctx)); } catch {}
   });
   api.registerGatewayMethod?.('pinkie.toolTrace.list', ({params, respond}) => {
-    try { respond(true, store.list(params?.sessionKey)); }
+    try {
+      getActiveMetreLock()?.assertSessionAllowed?.(params?.sessionKey);
+      respond(true, store.list(params?.sessionKey));
+    }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message}); }
   }, {scope: 'operator.read'});
   try {

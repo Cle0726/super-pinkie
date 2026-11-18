@@ -118,7 +118,8 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-control-ui-cache.mjs',
                 'apply-local-unrestricted-policy.mjs',
                 'apply-computer-v2.mjs',
-                'apply-stream-survive-steer.mjs'
+                'apply-stream-survive-steer.mjs',
+                'apply-metre-lock.mjs'
             ) | ForEach-Object { Join-Path $RepoRoot "patch\$_" } | Where-Object { Test-Path $_ }
             if ($node -and $runtimePatches.Count -gt 0) {
                 $previousRoot = $env:OPENCLAW_ROOT
