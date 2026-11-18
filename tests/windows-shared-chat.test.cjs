@@ -35,7 +35,7 @@ test('Windows build checks the shared chat actually referenced by the entry, not
       fs.writeFileSync(path.join(assets, 'chat-page-shared.js'), chat + '// changed');
       result = run(); assert.notEqual(result.status, 0, 'changed packaged renderer must fail');
       fs.writeFileSync(path.join(assets, 'chat-page-shared.js'), chat);
-      fs.writeFileSync(path.join(assets, 'index-entry.js'), 'import("./chat-page-old.js")');
+      fs.writeFileSync(path.join(assets, 'index-entry.js'), 'const decoy="./chat-page-shared.js"; import("./chat-page-old.js")');
       result = run(); assert.notEqual(result.status, 0, 'entry referencing the old renderer must fail');
       fs.writeFileSync(path.join(assets, 'index-entry.js'), 'import("./chat-page-shared.js")');
       fs.writeFileSync(path.join(source, 'chat-page-second.js'), chat);

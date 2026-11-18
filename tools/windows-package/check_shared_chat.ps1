@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$SourceRuntime,
     [Parameter(Mandatory = $true)][string]$PackagedAssets
 )
@@ -19,7 +19,10 @@ if ((Get-FileHash -LiteralPath $chats[0].FullName -Algorithm SHA256).Hash -ne (G
     throw 'The packaged chat renderer differs from shared source'
 }
 $entryText = Get-Content -LiteralPath $packagedEntry -Raw -Encoding UTF8
-if (-not $entryText.Contains('./' + $chats[0].Name)) { throw 'The packaged entry does not import the shared chat renderer' }
+$quote = '[\x22\x27\x60]'
+$target = [regex]::Escape('./' + $chats[0].Name)
+$importPattern = '\bimport\s*\(\s*' + $quote + $target + '(?:\?[^\x22\x27\x60]*)?' + $quote + '\s*\)'
+if ($entryText -notmatch $importPattern) { throw 'The packaged entry does not import the shared chat renderer' }
 $chatText = Get-Content -LiteralPath $packagedChat -Raw -Encoding UTF8
 foreach ($marker in @('pinkie-chat-timeline:v31', 'pinkie-thinking-segments:v1')) {
     if (-not $chatText.Contains($marker)) { throw "The shared chat renderer is missing $marker" }
