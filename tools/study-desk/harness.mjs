@@ -12,6 +12,17 @@ export function playwright() {
   try { return require('playwright-core'); }
   catch { return require('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/node_modules/playwright-core'); }
 }
+// When browser resolution or launch fails, the server was already started.
+// Close it before propagating the original failure; otherwise Node never exits.
+export async function launchWithHarness(harness, launch) {
+  try {
+    return await launch();
+  } catch (error) {
+    try { await harness.close(); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Browser launch and harness cleanup both failed'); }
+    throw error;
+  }
+}
 // 笔记本 v2 专用内存 mock。只在显式传给 harness.handler 时启用，不写学习数据。
 export function createNotebookV2Mock() {
   const now = Date.now(), calls = [], backups = new Map();
@@ -63,6 +74,11 @@ export async function isolatedService() {
   const {LearningInteractionStore, LearningNotesOrganizer, registerLearningGateway} = await import('../../services/mode-architecture/learning.mjs');
   const {LearningPact} = await import('../../services/mode-architecture/learning-pact.mjs');
   const root = fs.mkdtempSync(path.join(repo, 'tools/study-desk/isolated-'));
+  const isolatedParent = fs.realpathSync(path.dirname(root));
+  const isolatedRoot = fs.realpathSync(root);
+  if (path.dirname(isolatedRoot) !== isolatedParent || !path.basename(isolatedRoot).startsWith('isolated-')) {
+    throw new Error('Refusing an isolated test root outside the study-desk workspace');
+  }
   const store = new LearningInteractionStore({root, workspace: path.join(root, 'workspace')}); store.pact = new LearningPact(store);
   const methods = new Map();
   const organizer = new LearningNotesOrganizer({}, store);
@@ -79,7 +95,13 @@ export async function isolatedService() {
     if (!methods.has(method)) throw Error('unknown method: ' + method);
     return new Promise((resolve, reject) => methods.get(method)({params, respond: (ok, value, error) => ok ? resolve(value) : reject(Error(error?.message || 'RPC failed'))}));
   };
-  return {handler, store, routes, close: async () => { await store.lessons?.saveChain; await store.recall?.running; await materials.close(); fs.rmSync(root, {recursive: true, force: true}); }};
+  return {handler, store, routes, close: async () => {
+    await store.lessons?.saveChain; await store.recall?.running; await materials.close();
+    if (!fs.existsSync(root)) return;
+    const target = fs.realpathSync(root);
+    if (target !== isolatedRoot || path.dirname(target) !== isolatedParent) throw new Error('Refusing to remove a changed isolated test root');
+    fs.rmSync(target, {recursive: true, force: true});
+  }};
 }
 export async function startHarness({vendor = true, handler = () => ({}), realUI = false, legacyUI = false, initialMessages = [], routes = []} = {}) {
   const calls = [];
@@ -155,7 +177,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--capture')) { await (await import('./capture.mjs')).capture({startHarness, isolatedService, playwright}); }
   else {
   const harness = await startHarness();
-  const browser = await playwright().webkit.launch({headless: true});
+  const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
   try {
     const output = process.env.PINKIE_QA_OUTPUT || path.join(repo, 'tools/study-desk/shots'); fs.mkdirSync(output, {recursive: true});
     const page = await browser.newPage({viewport: {width: 1440, height: 900}, deviceScaleFactor: 2});
@@ -163,6 +185,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     await page.waitForTimeout(1800);
     const screenshot = await page.screenshot({path: path.join(output, 'webkit-a1-shell.png')});
     console.log(JSON.stringify({status: screenshot.length ? 'captured' : 'screenshot-unavailable', bytes: screenshot.length, output}));
-  } finally { await browser.close(); await harness.close(); }
+  } finally { try { await browser.close(); } finally { await harness.close(); } }
   }
 }

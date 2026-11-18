@@ -6,9 +6,9 @@ const root = path.join(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('full-page note menus escape cards, fit inside the view, restore focus and close on navigation', {timeout:45000}, async () => {
-  const {startHarness, playwright, createNotebookV2Mock} = await import('../tools/study-desk/harness.mjs');
+  const {startHarness, playwright, createNotebookV2Mock, launchWithHarness} = await import('../tools/study-desk/harness.mjs');
   const mock = createNotebookV2Mock(), server = await startHarness({handler:mock.handler});
-  const browser = await playwright().chromium.launch({headless:true,channel:'chrome'});
+  const browser = await launchWithHarness(server, () => playwright().chromium.launch({headless:true,channel:'chrome'}));
   try {
     const page = await browser.newPage({viewport:{width:1024,height:700}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(server.url);await page.waitForFunction(()=>!!window.__pinkieStudyDesk);
@@ -20,7 +20,7 @@ test('full-page note menus escape cards, fit inside the view, restore focus and 
     await page.keyboard.press('Escape');await menu.waitFor({state:'detached'});assert.equal(await more.evaluate(n=>n===document.activeElement),true);
     await more.click();await page.evaluate(()=>__pinkieStudyDesk.go('today'));assert.equal(await page.locator('.n-menu').count(),0);
     assert.deepEqual(errors,[]);
-  } finally {await browser.close();await server.close();}
+  } finally {try {await browser.close();} finally {await server.close();}}
 });
 
 test('learning stage cache keys match across the head fragment and both installers', () => {

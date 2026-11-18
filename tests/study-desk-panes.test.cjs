@@ -29,13 +29,13 @@ function handler(){
 }
 async function run(fn,{width=1440,custom=handler()}={}){
  const server=await h.startHarness({handler:custom,legacyUI:true});
- const browser=await h.playwright().chromium.launch({headless:true,channel:'chrome'});
+ const browser=await h.launchWithHarness(server,()=>h.playwright().chromium.launch({headless:true,channel:'chrome'}));
  try{
   const page=await browser.newPage({viewport:{width,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(server.url);await page.waitForFunction(()=>!!window.__pinkieStudyDesk);
   await page.evaluate(()=>__pinkieStudyDesk.go('today'));await page.locator('.desk-page .view').first().waitFor();
   await fn(page,server);assert.deepEqual(errors,[]);
- }finally{await browser.close();await server.close();}
+ }finally{try{await browser.close();}finally{await server.close();}}
 }
 // 11-08：学习台改成一次一页，「两张卡各做一组题」和「对开装订」两条多卡用例随功能删除。
 test('one page at a time: the chat card docks on the right, old multi-card workspaces migrate, and there are no drag handles',{timeout:60000},async()=>{
@@ -95,7 +95,7 @@ test('notes review opens the drill, shows the question before the answer, and fi
 test('paper remains visible when a background WebView suspends its first animation frame',{timeout:45000},async()=>{
  for(const engine of ['chromium','webkit']){
   const server=await h.startHarness({handler:handler(),legacyUI:true});
-  const browser=await h.playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true});
+  const browser=await h.launchWithHarness(server,()=>h.playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true}));
   try{
    const p=await browser.newPage({viewport:{width:840,height:1050}});await p.goto(server.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation,{},{polling:100});
    await p.evaluate(()=>{__pinkieStudyDesk.go('deskchat');for(const a of document.querySelector('.view').getAnimations()){a.pause();a.currentTime=0;}});
@@ -106,6 +106,6 @@ test('paper remains visible when a background WebView suspends its first animati
    await p.evaluate(()=>__pinkieStudyDesk.focusPane(__pinkieStudyDesk.pages().find(x=>x.view==='deskchat').id));
    const marginContent=await p.locator('.side .ln,.side .fig img').evaluateAll(ns=>ns.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName})));
    assert.ok(marginContent.length>1);assert.ok(marginContent.every(x=>x.opacity==='1'&&x.animation==='none'),engine+' freezes the page-edge note and sticker in their readable state');
-  }finally{await browser.close();await server.close();}
+  }finally{try{await browser.close();}finally{await server.close();}}
  }
 });

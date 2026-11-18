@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BackgroundJobs, WAKE_PREFIX, rememberKinds, runningBackgroundJobs, waitNudge, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
+import {BackgroundJobs, WAKE_PREFIX, rememberKinds, runningBackgroundJobs, softenWaitNudge, waitNudge, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
 
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
 function fresh(options = {}) {
@@ -21,6 +21,19 @@ function fresh(options = {}) {
 }
 const running = (id, pid) => ({toolName: 'exec', params: {command: 'npm run build', background: true}, result: {content: [{type: 'text', text: `Command still running (session ${id}, pid ${pid}). Use process (list/poll/log/write/send-keys/submit/paste/kill/clear/remove) for follow-up.`}]}});
 const ctx = {sessionKey: 'agent:project:abc'};
+
+test('only the background waiting reminder is recorded as deferred instead of an error', () => {
+  const reason = waitNudge([{command: 'render', startedAt: 0}], [], 5000);
+  const message = {role: 'toolResult', isError: true, content: [{type: 'text', text: reason}],
+    details: {status: 'blocked', deniedReason: 'plugin-before-tool-call', reason}};
+  const softened = softenWaitNudge(message);
+  assert.equal(softened.isError, false);
+  assert.equal(softened.details.status, 'deferred');
+  assert.deepEqual(softened.content, message.content);
+  assert.equal(softenWaitNudge({...message, details: {...message.details, deniedReason: 'tool-loop'}}), null);
+  assert.equal(softenWaitNudge({...message, content: [{text: 'Process exited with code 1'}]}), null);
+  assert.equal(softenWaitNudge({role: 'assistant'}), null);
+});
 
 test('a backgrounded exec is watched and wakes the same session with a hidden message when it exits', async () => {
   const {jobs, sent, live, advance} = fresh();

@@ -5,9 +5,9 @@ test.before(async () => { harnessModule = await import('../tools/study-desk/harn
 async function run(options, fn) {
   const harness = await harnessModule.startHarness(options);
   const engine = options?.engine || 'webkit';
-  const browser = await harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true});
+  const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}));
   try { const page = await browser.newPage({viewport: {width: 1440, height: 900}}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
-  finally { await browser.close(); await harness.close(); }
+  finally { try { await browser.close(); } finally { await harness.close(); } }
 }
 test('learning shell mounts once, restores native chat, and cleans up across ten mode changes', async () => {
   await run({}, async page => {
@@ -110,7 +110,7 @@ test('today, exam settings and a complete set use B real RPC; Enter never submit
       assert.equal(new Set(answers.map(c => c.params.questionId)).size, answers.length);
       assert.equal(service.store.pact.today().progress.questions, answers.length);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('only unknown method activates mock; gateway errors are surfaced', async () => {
   await run({handler: () => { throw Error('unknown method'); }}, async page => {
@@ -167,7 +167,7 @@ test('real control-ui Chromium hosts flashcards, an experiment, a mock paper, bo
       await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers: ['Alt']});
       assert.equal(await page.locator('.q-text').innerText(), stem);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('WebKit reuses real flashcard scheduling and inline experiment cards without the host shell', async () => {
   const service = await harnessModule.isolatedService();
@@ -185,7 +185,7 @@ test('WebKit reuses real flashcard scheduling and inline experiment cards withou
       await page.locator('.desk-inline-slot .pinkie-learning-inline').waitFor();
       await page.waitForFunction(() => __pinkieLearningInline.stats().loaded > 0);
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('macOS registration upgrades stale duplicate desk tags in order and is idempotent', () => {
   const fs = require('node:fs'), path = require('node:path'), {execFileSync} = require('node:child_process');
@@ -301,7 +301,7 @@ test('board model chip reports the real model, generation time, duration and usa
       await page.waitForFunction(() => document.querySelector('.b-model-chip')?.textContent.includes('tokens'));
       assert.equal(await page.locator('.b-model-chip').innerText(), 'Gemini 3.8 Flash Tiered · 18:38 · 用时 17.2 秒 · 6,607 tokens');
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 test('today retries quietly while the gateway handshake is still pending, but surfaces other errors', async () => {
   let rejected = 0;
@@ -350,11 +350,11 @@ test('desk buttons keep their own colours in day and night: the control reset ne
         assert.ok(await contrast(page.locator('.confirm-answer')) >= 4.5, `${theme}: 确认`);
       }
     });
-  } finally { service.close(); }
+  } finally { await service.close(); }
 });
 
 async function v2Run(options, fn) {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs');
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs');
   const fixture = createV2Fixture(options);
   try { await run({handler: fixture.handler, engine: 'chromium', legacyUI: true}, (page, harness) => fn(page, fixture, harness)); }
   finally { fixture.release(); }
@@ -406,7 +406,7 @@ test('v2 A2: offline and document sources remain readable, downgraded outlines a
   });
 });
 test('v2 A2: prepare can be cancelled, late results are ignored and 45 second timeout offers a retry', async () => {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs');
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs');
   const f = createV2Fixture({pending: true});
   try { await run({handler: f.handler, engine: 'chromium'}, async page => {
     await page.locator('.task').click(); await page.locator('.lesson-skeleton').waitFor();
@@ -484,7 +484,7 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
   });
 });
 test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', async () => {
-  const {createV2Fixture}=await import('../tools/study-desk/v2-fixtures.mjs');const f=createV2Fixture({ready:true});
+  const {createV2Fixture}=await import('./fixtures/study-desk-v2.mjs');const f=createV2Fixture({ready:true});
   try{await run({handler:f.handler,engine:'chromium',realUI:true},async page=>{
     await page.locator('.task').click();await page.getByRole('button',{name:'开始上课',exact:true}).click();await page.locator('#pinkie-desk-chat .lesson-bar').waitFor();
     for(const width of [1440,1024]){await page.setViewportSize({width,height:800});await page.waitForFunction(()=>{const n=document.querySelector('#pinkie-desk-chat .lesson-bar'),paper=document.getElementById('pinkie-desk-chat');if(!n||!paper)return false;const a=n.getBoundingClientRect(),b=paper.getBoundingClientRect();return a.left>=b.left&&a.right<=b.right+1&&a.height<=48;},{},{polling:100});}
@@ -493,7 +493,7 @@ test('v2 A3: independent conversation controls fit their paper and the notebook 
   });}finally{f.release();}
 });
 test('v2 A2: retrying an opening message never begins the same lesson twice', async () => {
-  const {createV2Fixture} = await import('../tools/study-desk/v2-fixtures.mjs'); const f = createV2Fixture(); let failed = false;
+  const {createV2Fixture} = await import('./fixtures/study-desk-v2.mjs'); const f = createV2Fixture(); let failed = false;
   try { await run({engine: 'chromium', handler: (method, params) => { if (method === 'chat.send' && !failed) { failed = true; throw Error('消息发送暂时失败'); } return f.handler(method, params); }}, async page => {
     await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.getByText('消息发送暂时失败', {exact: true}).waitFor();
     await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();

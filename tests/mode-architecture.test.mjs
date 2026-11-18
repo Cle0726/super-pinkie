@@ -324,6 +324,24 @@ test('global integrity gate rejects contradictory completed and still-running cl
   assert.match(blocked.reason,/状态自相矛盾/);
 });
 
+test('a past-tense "still running when stopped" is not a still-running claim (S6 g)',()=>{
+  const guard=new CompletionIntegrityGuard();
+  const ctx={agentId:'project',sessionKey:'agent:project:past-progress',runId:'past-progress'};
+  guard.begin({prompt:'生成视频'},ctx);
+  guard.afterTool({toolName:'exec',result:'ok'},ctx);
+  for (const reply of [
+    '已经全部停下了，三篇都已完成（其中《灯》那个是被我喊停时仍在运行的，文件已经写出来了）。',
+    '全部完成。关于《灯》：它是我执行“停”的时候还在写的那个，停之前文件已经完整写出。',
+    '已经全部停下，三篇都已完成。所有子会话现在都是完成状态，没有还在运行的。',
+  ]) {
+    const result=guard.finalize({lastAssistantMessage:reply},ctx,{verifyExternal:false});
+    assert.doesNotMatch(result?.reason||'',/状态自相矛盾/,reply);
+  }
+  // 现在时的「同时还在跑」照旧算矛盾。
+  const still=guard.finalize({lastAssistantMessage:'视频已经全部完成，同时还在后台渲染第二版。'},ctx,{verifyExternal:false});
+  assert.match(still?.reason||'',/状态自相矛盾/);
+});
+
 test('a completed stage with later work in progress is not an overall-completion contradiction',()=>{
   const guard=new CompletionIntegrityGuard();
   const ctx={agentId:'learning',sessionKey:'agent:learning:stage-progress',runId:'stage-progress'};

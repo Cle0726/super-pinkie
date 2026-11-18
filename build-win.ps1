@@ -170,10 +170,9 @@ if ($LASTEXITCODE -ne 0) { throw "Windows 资源隔离失败" }
 # the shared repository source AFTER all overlays and package cleanup.
 python tools/ui-parity/bundle.py install --control-ui $controlUi --output (Join-Path $runtimeStage 'windows-ui-manifest.json')
 if ($LASTEXITCODE -ne 0) { throw "Mac/Windows shared UI installation failed" }
-$chat = Get-ChildItem -Path (Join-Path $openclawRoot "dist\control-ui\assets") -Filter "chat-page-*.js" | Select-Object -First 1
-if (-not $chat) { throw "缺少聊天页" }
-$chatText = Get-Content -LiteralPath $chat.FullName -Raw
-if ($chatText -notmatch 'pinkie-chat-timeline:v30' -or $chatText -notmatch 'pinkie-thinking-segments:v1') { throw "聊天页不是本机 Mac 的完整时间线 v30" }
+& (Join-Path $RepoRoot "tools\windows-package\check_shared_chat.ps1") `
+    -SourceRuntime (Join-Path $RepoRoot "ui\runtime") `
+    -PackagedAssets (Join-Path $openclawRoot "dist\control-ui\assets")
 $indexText = Get-Content -LiteralPath (Join-Path $openclawRoot "dist\control-ui\index.html") -Raw
 foreach ($needle in @('pinkie-surface=6', 'pinkie-browser=3', 'pinkie-learning=8')) {
     if ($indexText -notlike "*$needle*") { throw "页面入口缺少 $needle" }

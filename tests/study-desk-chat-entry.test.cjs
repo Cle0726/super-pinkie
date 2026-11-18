@@ -2,8 +2,10 @@ const test=require('node:test'),assert=require('node:assert/strict');
 for(const engine of ['chromium','webkit']) test(engine+': new learning chats stay in chat; explicit desk views remain session-local',async()=>{
   const {startHarness,playwright,isolatedService}=await import('../tools/study-desk/harness.mjs');
   const service=await isolatedService();
-  const harness=await startHarness({vendor:false,handler:service.handler}),browser=await playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true});
+  let harness,browser;
   try{
+    harness=await startHarness({vendor:false,handler:service.handler});
+    browser=await playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true});
     const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(harness.url);await page.locator('#pinkie-study-desk').waitFor({state:'attached'});
     assert.equal(await page.locator('html').getAttribute('data-pinkie-study-desk'),'chat');
@@ -44,5 +46,5 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
     await page.getByRole('button',{name:'今日',exact:true}).click({modifiers:['Alt']});
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'today','Manual desk entry continues to work');
     assert.deepEqual(errors,[]);
-  }finally{await browser.close();await harness.close();service.close();}
+  }finally{try{await browser?.close();}finally{try{await harness?.close();}finally{await service.close();}}}
 });

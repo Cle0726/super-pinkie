@@ -6,7 +6,7 @@ test.before(async () => { h = await import('../tools/study-desk/harness.mjs'); }
 
 async function run(handler, fn) {
   const harness = await h.startHarness({handler, legacyUI: true});
-  const browser = await h.playwright().chromium.launch({headless: true, channel: 'chrome'});
+  const browser = await h.launchWithHarness(harness, () => h.playwright().chromium.launch({headless: true, channel: 'chrome'}));
   try {
     const page = await browser.newPage({viewport: {width: 1000, height: 760}});
     const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -14,7 +14,7 @@ async function run(handler, fn) {
     await page.evaluate(() => __pinkieStudyDesk.go('today'));
     await fn(page, harness);
     assert.deepEqual(errors, []);
-  } finally { await browser.close(); await harness.close(); }
+  } finally { try { await browser.close(); } finally { await harness.close(); } }
 }
 function status(selected = '') {
   const models = [{id: 'local/first', name: '第一号', provider: 'local', image: true}, {id: 'other/second', name: '第二号', provider: 'other', image: false}];

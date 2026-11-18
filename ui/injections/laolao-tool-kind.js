@@ -168,24 +168,54 @@
     return '';
   }
 
-  /** 过程里一行工具对应的 toolCallId。两种排法：
-   *  - 工具结果单独一条：data-message-id = tool:<role>:<callId>
-   *  - 时间线（工具调用嵌在助手消息里）：msg:assistant:<时间戳>:<第几条>:timeline:tool:<第几次调用>，
-   *    到聊天面板的消息列表里按位置（时间戳核对）找那条助手消息的第 n 个 toolCall。找不到返回 ''。 */
+  /** Resolve a row against the same original content index used by the active
+   * timeline renderer. If the message or call cannot be identified uniquely,
+   * return an empty id rather than showing another call's image. */
   function rowCallId(row) {
     const host = row && row.closest && row.closest('[data-message-id]');
     const id = host ? String(host.dataset.messageId || '') : '';
-    let m = /^tool:[^:]+:([^:]+)/.exec(id);
-    if (m) return m[1];
-    m = /^msg:assistant:(\d+):(\d+):timeline:tool:(\d+)/.exec(id);
-    if (!m || typeof document === 'undefined') return '';
-    const pane = document.querySelector('openclaw-chat-pane');
+    const standalone = /^tool:[^:]+:([^:]+)/.exec(id);
+    if (standalone) return standalone[1];
+    const match = /^(msg:.+?):timeline:(tool|result):(?:(fallback):)?(\d+)(?::timeline:(?:tool|result):(?:(?:fallback):)?\d+)*$/.exec(id);
+    if (!match || typeof document === 'undefined') return '';
+    // Split view can render several sessions. Resolve against the row's own
+    // pane rather than borrowing the first pane's messages.
+    const pane = (typeof host.closest === 'function' && host.closest('openclaw-chat-pane'))
+      || document.querySelector('openclaw-chat-pane');
     const msgs = pane && pane.state && Array.isArray(pane.state.chatMessages) ? pane.state.chatMessages : [];
-    let msg = msgs[Number(m[2])];
-    if (!msg || String(msg.timestamp) !== m[1]) msg = msgs.find((x) => x && x.role === 'assistant' && String(x.timestamp) === m[1]);
-    const calls = msg && Array.isArray(msg.content) ? msg.content.filter((b) => b && b.type === 'toolCall') : [];
-    const call = calls[Number(m[3])];
-    return call && typeof call.id === 'string' ? call.id : '';
+    const source = match[1];
+    const isAssistant = message => String(message?.role || '').toLowerCase() === 'assistant';
+    const explicitId = source.slice(4);
+    const byId = msgs.filter(message => isAssistant(message)
+      && (message.id === explicitId || message.messageId === explicitId));
+    let msg = byId.length === 1 ? byId[0] : null;
+    if (byId.length > 1) return '';
+    const timestamp = /^msg:assistant:(\d+):(\d+)$/.exec(source);
+    if (!msg && timestamp) {
+      const indexed = msgs[Number(timestamp[2])];
+      if (isAssistant(indexed) && String(indexed.timestamp) === timestamp[1]) msg = indexed;
+      else {
+        const matches = msgs.filter(message => isAssistant(message) && String(message.timestamp) === timestamp[1]);
+        if (matches.length === 1) msg = matches[0];
+      }
+    }
+    if (!msg) return '';
+    const content = Array.isArray(msg.content) ? msg.content : [];
+    const typeOf = part => String(part?.type || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isCall = part => part && typeof part === 'object' && (['toolcall', 'tooluse'].includes(typeOf(part))
+      || (typeof part.name === 'string' && (part.arguments != null || part.args != null || part.input != null)));
+    const callId = part => part?.callId || part?.toolCallId || part?.tool_call_id || part?.id
+      || msg.toolCallId || msg.tool_call_id || msg.toolUseId || msg.tool_use_id || '';
+    const index = Number(match[4]);
+    if (match[3]) {
+      // The native parser may create a single call from top-level tool fields.
+      // Never guess among multiple fallback calls or when normal parts exist.
+      if (index !== 0 || content.some(part => isCall(part) || typeOf(part) === 'toolresult')) return '';
+      return String(callId({}) || '');
+    }
+    const part = content[index];
+    if (match[2] === 'tool' ? !isCall(part) : typeOf(part) !== 'toolresult') return '';
+    return String(callId(part) || '');
   }
 
   const api = {KINDS, rowCallId, ING, DONE, GIT_ING, IMAGE_EXT, ofCommand, gitSub, refine, ing, done, runKind, baseName, isImagePath};

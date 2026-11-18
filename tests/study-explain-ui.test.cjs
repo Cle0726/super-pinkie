@@ -12,7 +12,7 @@ test('刷题讲解失败可切模型重试，成功后显示结果并等足后�
     return {};
   };
   const server = await h.startHarness({handler, legacyUI: true});
-  const browser = await h.playwright().chromium.launch({headless:true, channel:'chrome'});
+  const browser = await h.launchWithHarness(server, () => h.playwright().chromium.launch({headless:true, channel:'chrome'}));
   try {
     const page = await browser.newPage({viewport:{width:1200,height:800}}), errors = [];
     page.setDefaultTimeout(5000); page.on('pageerror', e => errors.push(e.message));
@@ -40,5 +40,5 @@ test('刷题讲解失败可切模型重试，成功后显示结果并等足后�
     assert.equal(attempts, 2);
     assert.equal(await box.getByText(/限流或额度不足/).count(), 0);
     assert.deepEqual(errors, []);
-  } finally { await browser.close(); await server.close(); }
+  } finally { try { await browser.close(); } finally { await server.close(); } }
 });

@@ -2,7 +2,7 @@
 
 Runs on a GitHub windows-latest runner (or any Windows box).  Each scenario
 starts the real packaged exe against an isolated USERPROFILE/LOCALAPPDATA,
-waits for the bundled gateway on 18789, checks that all five mode agents are
+waits for the bundled gateway on 18789, checks that all six mode agents are
 registered, then drives http://127.0.0.1:18789/chat in Edge with Playwright and
 switches through every mode.  No model key is configured: only the shell,
 gateway, plugins and mode switching are exercised.
@@ -36,8 +36,9 @@ MODES = [
     ("thinking", "agent:thinking:"),
     ("learning", "agent:learning:"),
     ("unrestricted", "agent:unrestricted:"),
+    ("metre", "agent:metre:"),
 ]
-AGENTS = ["main", "project", "thinking", "learning", "unrestricted"]
+AGENTS = ["main", "project", "thinking", "learning", "unrestricted", "metre"]
 SECRET = re.compile(r"(key|token|secret|password|authorization)", re.I)
 
 
@@ -210,7 +211,8 @@ def redact(value):
 
 def fresh_mode_identities_ok(label, agents):
     # Existing users may have deliberately customized their identities.
-    return label != "fresh" or all(agents.get("identities", {}).get(agent) == "碧琪" for agent in AGENTS)
+    identities = agents.get("identities", {})
+    return label != "fresh" or all(identities.get(agent) == ("Metre" if agent == "metre" else "碧琪") for agent in AGENTS)
 
 
 def collect_files(profile, out, label):
@@ -311,12 +313,16 @@ def drive_ui(out, label):
               const checks = [
                 ['usage', 'pinkie.usage.get', {}],
                 ['workbench', 'pinkie.fs.status', {sessionKey: 'agent:project:main'}],
+                ['metre_board', 'pinkie.metre.board', {sessionKey: 'agent:metre:main'}],
               ];
               const result = {};
               for (const [name, method, params] of checks) {
                 try {
                   if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
-                  await window.__laolaoSidebar.gwRequest(method, params, 15000);
+                  const value = await window.__laolaoSidebar.gwRequest(method, params, 15000);
+                  if (name === 'metre_board' && (!value?.ok || !value.overview || !Array.isArray(value.sessions))) {
+                    throw new Error('Metre board did not return a valid overview and session list');
+                  }
                   result[name] = {ok: true};
                 } catch (error) { result[name] = {ok: false, error: String(error)}; }
               }
@@ -535,7 +541,7 @@ def scenario(label, exe, profile, out, old_exe=None):
         and summary.get("native_ui", {}).get("passed")
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
-        and len(plugin_methods) == 2
+        and set(plugin_methods) == {"usage", "workbench", "metre_board"}
         and all(entry.get("ok") for entry in plugin_methods.values())
         and all(summary.get("service_health", {}).get(name) for name in ("party", "roundtable"))
         and not summary.get("ui", {}).get("page_errors")

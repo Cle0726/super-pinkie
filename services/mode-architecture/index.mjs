@@ -8,7 +8,7 @@ import {agentEntries, agentWorkspace, openclawConfigPath, openclawStateDir, runt
 import {LearningInteractionStore, createLearningActivityTool, learningPrompt, registerLearningGateway} from './learning.mjs';
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
-import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
+import {createSessionAccess, isUnresolvedSessionKey, logSessionFailure, registerSessionTitles, scopeUpgradeFallbackRunner} from './session-titles.mjs';
 import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
@@ -37,7 +37,7 @@ import {designDirectionBlock} from './design-directions.mjs';
 import {ensureManualLimits} from './config-floor.mjs';
 import {createDeskTool, deskHintBlock} from './desk.mjs';
 import {WORK_KINDS, WORK_ROLES, waitingSection, WORK_ROLE_LABELS, artifactPaths, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, hasEvidenceBackedReview, independentViews, isViewRole, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workRoleGate, workRoleTask, workStages} from './work-kinds.mjs';
-import {BackgroundJobs, rememberKinds, runningBackgroundJobs} from './background-jobs.mjs';
+import {BackgroundJobs, rememberKinds, runningBackgroundJobs, softenWaitNudge} from './background-jobs.mjs';
 import {registerWorkGateway} from './work-status.mjs';
 import {createPinkieSearchTool} from './web-search-fallback.mjs';
 import {ModelHealth, configuredModels, turnFailed} from './model-health.mjs';
@@ -1111,6 +1111,14 @@ function proseOnly(value = '') {
   return String(value || '')
     .replace(/```[\s\S]*?(?:```|$)/g, ' ')
     .replace(/`[^`\n]*`/g, ' ');
+}
+
+// 「被我喊停时仍在运行」「执行停的时候还在写」讲的是当时的状态，不是现在还在跑（11-15 隔离实测 S6 g：
+// 全停之后的汇报被判「已完成又仍在生成」，正确的回复后面被追加「还没能确认」）。
+// 11-16 隔离实测 S6 h：「所有子会话都是完成状态，没有还在运行的」是否定，也不算还在跑。
+const PAST_PROGRESS = /(?:(?:的时候|那时|当时|之前|(?<![同随此暂])时)[“”"'「」『』]?\s*|(?:没有|没|并没有|不再|不是|并非)\s*)(?:仍在|还在|正在)/g;
+function withoutPastProgress(value = '') {
+  return String(value || '').replace(PAST_PROGRESS, ' ');
 }
 
 function actionClaimText(reply = '') {
@@ -2424,7 +2432,7 @@ export class CompletionIntegrityGuard {
     // 才允许不运行最终验收。
     if (honestIncomplete && !overallCompletion) return;
     if (!completionClaimed && !actionRun) return;
-    if ((honestIncomplete && overallCompletion) || (overallCompletion && IN_PROGRESS_CLAIM.test(proseOnly(reply)))) {
+    if ((honestIncomplete && overallCompletion) || (overallCompletion && IN_PROGRESS_CLAIM.test(withoutPastProgress(proseOnly(reply))))) {
       const verdict = judgeReply({reply, tools: state.tools});
       const reason = verdict.code === 'contradiction'
         ? verdict.missing[0]
@@ -6980,11 +6988,14 @@ export default {
     // summary, so a resumed turn can distinguish completed mutations from
     // work that still needs doing.
     architecture.setCompactionEvidenceProvider(sessionKey => integrity.snapshot(sessionKey, {includeTools: true}));
+    const gatewayCliEntry = resolveGatewayCliEntry();
+    const gatewayAccess = createSessionAccess(api, {cli: gatewayCliEntry, runProcess});
+    const resumeProcess = scopeUpgradeFallbackRunner(api, {cli: gatewayCliEntry, runProcess, access: gatewayAccess});
     const watchdog = new UpstreamWatchdog(
       api,
       sessionKey => architecture.tierFor(sessionKey),
-      runProcess,
-      resolveGatewayCliEntry(),
+      resumeProcess,
+      gatewayCliEntry,
       sessionKey => architecture.activityFor(sessionKey),
     );
     const cleKk = new CleKkSupervisor({integrity, logger: api.logger});
@@ -6996,6 +7007,8 @@ export default {
       api,
       sessionKey => architecture.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
+      resumeProcess,
+      gatewayCliEntry,
     );
     // 计划清单是合同：plan_update 列的清单还有没做完的项，这一轮结束后用同一条续跑通道接着做，不看档位。
     let planStore = null;
@@ -7005,8 +7018,8 @@ export default {
       api,
       sessionKey => planState.status(sessionKey),
       sessionKey => architecture.activityFor(sessionKey),
-      undefined,
-      undefined,
+      resumeProcess,
+      gatewayCliEntry,
       {messageFor: status => status.message, tagName: 'pinkie-plan-', turnName: '碧琪计划续跑', onDispatched: sessionKey => planState.disarm(sessionKey)},
     );
     const usage = new ModelUsageLedger();
@@ -7105,12 +7118,18 @@ export default {
     }));
     // 后台命令结束时叫醒碧琪（OpenClaw 自带的心跳叫醒在这几个模式里不生效，见 background-jobs.mjs）。
     const background = new BackgroundJobs({
-      runProcess,
-      cliEntry: resolveGatewayCliEntry(),
+      runProcess: resumeProcess,
+      cliEntry: gatewayCliEntry,
       isBusy: sessionKey => {
         const activity = architecture.activityFor(sessionKey) || {};
         return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
       },
+    });
+    api.on('tool_result_persist', (event) => {
+      try {
+        const message = softenWaitNudge(event?.message);
+        return message ? {message} : undefined;
+      } catch { return undefined; }
     });
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
     registerWorkGateway(api, {reasoning, architecture, background});

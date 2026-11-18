@@ -132,6 +132,57 @@ test('A1-2 Metre 在被汇报叫醒的那一轮能 in_scope（一轮 6 个）；
   await assert.rejects(f.lineage.start(metre, 'human-2', scoped({title: '用户轮7'}), 'h7'), /一轮最多自己开 6 个/);
 });
 
+test('watchdog 续接沿用被打断那一轮的授权：用户轮次续接能 in_scope、计数不清零；心跳轮次续接仍不行', async t => {
+  const f = fixture(t), scoped = extra => job('块', {initiation: 'in_scope', ...extra});
+  const resume = (runId, key = metre) => f.lineage.begin({prompt: '[pinkie-watchdog] 【自动续接保护】上轮因临时上游连接中断，没有完整结束。', runId}, {sessionKey: key});
+  userTurn(f, metre, 'human-r');
+  await f.lineage.start(metre, 'human-r', scoped({title: '第一段'}), 'r0');
+  resume('pinkie-watchdog-human-r-1');
+  free(f);
+  await f.lineage.start(metre, 'pinkie-watchdog-human-r-1', scoped({title: '续接里派第二段'}), 'r1');
+  for (let i = 2; i < 6; i++) { free(f); await f.lineage.start(metre, 'pinkie-watchdog-human-r-1', scoped({title: '块' + i}), 'r' + i); }
+  free(f);
+  await assert.rejects(f.lineage.start(metre, 'pinkie-watchdog-human-r-1', scoped({title: '第七'}), 'r7'), /一轮最多自己开 6 个/);
+  // 被汇报叫醒那一轮的续接，照样能派。
+  wakeTurn(f, metre, 'pinkie-session-wake-r');
+  resume('pinkie-watchdog-pinkie-session-wake-r-1');
+  free(f);
+  await f.lineage.start(metre, 'pinkie-watchdog-pinkie-session-wake-r-1', scoped({title: '叫醒后续接'}), 'wr');
+  // 项目模式：用户轮次续接也沿用授权（碧琪自己分工开着时）。
+  userTurn(f, project, 'human-p');
+  resume('pinkie-watchdog-human-p-1', project);
+  assert.equal(f.lineage.turns.get(project).resumedUser, true); // Mac implementation keeps internal turns distinct from user messages.
+  // 心跳轮次的续接不变成用户轮次。
+  f.lineage.begin({prompt: 'Read HEARTBEAT.md', runId: 'beat'}, {sessionKey: metre, trigger: 'heartbeat'});
+  resume('pinkie-watchdog-beat-1');
+  await assert.rejects(f.lineage.start(metre, 'pinkie-watchdog-beat-1', scoped({title: '心跳续接'}), 'hb'), /不是用户亲自发来的/);
+});
+
+test('Metre 汇报唤醒轮结束后自动续接仍可派发，次数保留且不能冒充用户', async t => {
+  const f = fixture(t), scoped = extra => job('块', {initiation: 'in_scope', ...extra});
+  const wake = 'pinkie-session-wake-after-end';
+  wakeTurn(f, metre, wake);
+  await f.lineage.start(metre, wake, scoped({title: '续接前'}), 'before-end');
+  await f.lineage.ended({success: false, runId: wake, error: 'upstream connection dropped'}, {sessionKey: metre, runId: wake});
+  const resumed = 'pinkie-watchdog-pinkie-session-wake-after-end-1';
+  f.lineage.begin({prompt: '[pinkie-watchdog] 【自动续接保护】接着完成', runId: resumed}, {sessionKey: metre});
+  assert.equal(f.lineage.turns.get(metre).autoStarts, 1, 'the original wake turn count survives agent_end');
+  free(f);
+  await f.lineage.start(metre, resumed, scoped({title: '续接后'}), 'after-end');
+  await assert.rejects(f.lineage.start(metre, resumed, job('不能冒充用户'), 'pretend-user'), /内部通知不能代替用户授权/);
+});
+
+test('心跳及记忆轮不会借用先前的自动续接授权', async t => {
+  const f = fixture(t), scoped = extra => job('块', {initiation: 'in_scope', ...extra});
+  for (const trigger of ['heartbeat', 'memory']) {
+    userTurn(f, metre, `human-${trigger}`);
+    f.lineage.begin({prompt: 'internal work', runId: `internal-${trigger}`}, {sessionKey: metre, trigger});
+    const runId = `pinkie-watchdog-${trigger}-1`;
+    f.lineage.begin({prompt: '[pinkie-watchdog] 【自动续接保护】继续', runId}, {sessionKey: metre, trigger});
+    await assert.rejects(f.lineage.start(metre, runId, scoped({title: trigger}), `try-${trigger}`), /不是用户亲自发来的/);
+  }
+});
+
 test('A1-3 / A1-14 一次用户请求累计到上限（默认 24）就停下来告诉用户；用户回话后归零；设成 0 不封顶', async t => {
   const f = fixture(t);
   assert.equal(f.prefs.metreLimits().requestCap, 24);

@@ -291,20 +291,39 @@ function runtimeDist(cli) {
   return path.basename(cli) === 'openclaw.mjs' ? path.join(path.dirname(cli), 'dist') : path.dirname(cli);
 }
 
-export function createSessionAccess(api, {cli, runProcess} = {}) {
+// The desktop's own gateway is explicitly started on loopback without auth.
+// Its backend can use OpenClaw's local backend client instead of pairing the
+// shared CLI identity with only the scope of whichever request happened first.
+// Never apply this to external, remotely configured, or authenticated gateways.
+export function isManagedLoopbackNoAuth(api, env = process.env) {
+  const gateway = runtimeConfig(api, {allowFile: false})?.gateway;
+  return env.PINKIE_MANAGED_GATEWAY === '1'
+    && !String(env.OPENCLAW_GATEWAY_URL || '').trim()
+    && gateway?.auth?.mode === 'none'
+    && (!gateway.mode || gateway.mode === 'local')
+    && (!gateway.bind || gateway.bind === 'loopback');
+}
+
+export function createSessionAccess(api, {cli, runProcess, loadSdk, env = process.env} = {}) {
   const dist = runtimeDist(cli);
-  const sdk = name => dist ? import(pathToFileURL(path.join(dist, 'plugin-sdk', name + '.js')).href).catch(() => null) : null;
+  const sdk = loadSdk || (name => dist ? import(pathToFileURL(path.join(dist, 'plugin-sdk', name + '.js')).href).catch(() => null) : null);
   let gateway, sessionStore;
   async function rpc(method, params, options = {}) {
     gateway ??= Promise.resolve(sdk('gateway-runtime'));
     const direct = (await gateway)?.callGatewayFromCli;
-    if (direct) return direct(method, {json: true, timeout: '15000'}, params,
-      options.admin ? {scopes: ['operator.admin']} : undefined);
+    if (direct) {
+      const extra = options.admin ? {scopes: ['operator.admin']} : {};
+      if (isManagedLoopbackNoAuth(api, env)) Object.assign(extra, {
+        clientName: 'gateway-client', mode: 'backend', deviceIdentity: null,
+      });
+      return direct(method, {json: true, timeout: '15000'}, params,
+        Object.keys(extra).length ? extra : undefined);
+    }
     if (options.admin) throw new Error('session-admin-gateway-unavailable');
     if (!cli || !runProcess) throw new Error('session-gateway-unavailable');
     const {stdout} = await runProcess(process.execPath, [cli, 'gateway', 'call', method,
       '--params', JSON.stringify(params), '--json', '--timeout', '15000'],
-    {timeout: 17_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true, env: process.env});
+    {timeout: 17_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true, env});
     return JSON.parse(stdout);
   }
   async function list(agentId) {
@@ -325,6 +344,30 @@ export function createSessionAccess(api, {cli, runProcess} = {}) {
     return sessionEntry(entries, dir, key);
   }
   return {rpc, list, entry, sdk};
+}
+
+// Existing installs can already have a read-only CLI pairing. A rejected
+// scope upgrade happens before chat.send reaches the gateway; only in that
+// case retry through the managed local backend, keeping the same idempotency
+// key. Never retry an ambiguous timeout or a different command this way.
+export function scopeUpgradeFallbackRunner(api, {cli, runProcess, access, env = process.env}) {
+  return async (file, args, options) => {
+    try { return await runProcess(file, args, options); }
+    catch (error) {
+      const detail = `${error?.message || ''} ${error?.stdout || ''} ${error?.stderr || ''}`;
+      const isSend = file === process.execPath && args?.[0] === cli
+        && args?.[1] === 'gateway' && args?.[2] === 'call' && args?.[3] === 'chat.send';
+      if (!isSend || !isManagedLoopbackNoAuth(api, env)
+          || !/scope upgrade pending approval|pairing required: device is asking for more scopes/i.test(detail)) throw error;
+      const index = args.indexOf('--params');
+      if (index < 0 || typeof args[index + 1] !== 'string') throw error;
+      let params;
+      try { params = JSON.parse(args[index + 1]); } catch { throw error; }
+      if (!params || typeof params !== 'object' || !params.sessionKey || !params.idempotencyKey) throw error;
+      const result = await access.rpc('chat.send', params);
+      return {stdout: JSON.stringify(result), stderr: ''};
+    }
+  };
 }
 
 function sessionEntry(entries, dir, key) {

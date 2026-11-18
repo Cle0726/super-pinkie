@@ -6,8 +6,10 @@ test('desk conversation is independent; ordinary learning chat has no tonight st
   if(m==='chat.send'){assert.match(p.sessionKey,/^agent:learning:desk-chat:/);const list=histories.get(p.sessionKey)||[];list.push({role:'user',content:p.message,id:'u'+serial,timestamp:Date.now()},{role:'assistant',content:'do-while 先执行后判断，所以至少执行一次。',id:'a'+serial,timestamp:Date.now()+1});histories.set(p.sessionKey,list);return{runId:'run-'+(++serial)};}
   if(m==='chat.abort')return{ok:true};return service.handler(m,p);
  };
- const h=await startHarness({handler,legacyUI:true}),b=await playwright().chromium.launch({headless:true,channel:'chrome'});
+ let h,b;
  try{
+  h=await startHarness({handler,legacyUI:true});
+  b=await playwright().chromium.launch({headless:true,channel:'chrome'});
   const p=await b.newPage({viewport:{width:1440,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(h.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation);
   await p.locator('.shell .chat-thread').evaluate(n=>{n.innerHTML='<article class="chat-group assistant"><div class="chat-bubble" data-message-id="outer" data-message-text="外部原聊天记录">外部原聊天记录</div></article>';});
   await p.locator('.shell .chat-bubble').hover();assert.equal(await p.locator('.pk-tonight:visible').count(),0);assert.equal(await p.locator('.pk-collect-btn:visible').count(),0);assert.equal(h.calls.filter(c=>c.method==='chat.history').length,0);
@@ -25,5 +27,5 @@ test('desk conversation is independent; ordinary learning chat has no tonight st
   await p.evaluate(()=>{__pinkieStudyDesk.go('today');__pinkieStudyDesk.setLayout('single-chat');});await bubble.waitFor();assert.equal(await p.evaluate(()=>__pinkieStudyConversation.sessionKey()),key);
   await p.evaluate(()=>{history.replaceState({},'', '/chat?session=agent:learning:another-external-chat');dispatchEvent(new CustomEvent('pinkie:session-selected',{detail:{sessionKey:'agent:learning:another-external-chat'}}));__pinkieStudyDesk.go('today');__pinkieStudyDesk.setLayout('single-chat');});
   assert.notEqual(await p.evaluate(()=>__pinkieStudyConversation.sessionKey()),key);await p.locator('.pk-chat-empty').waitFor();assert.deepEqual(errors,[]);
- }finally{await b.close();await h.close();await service.close();}
+ }finally{try{await b?.close();}finally{try{await h?.close();}finally{await service.close();}}}
 });

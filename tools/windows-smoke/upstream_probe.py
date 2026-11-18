@@ -630,6 +630,26 @@ def connect_packaged_webview(playwright, endpoint, timeout=45):
     raise RuntimeError(f"packaged WebView2 did not become available: {last_error}")
 
 
+def seed_read_only_cli(exe, profile, env):
+    """Reproduce an existing desktop whose CLI was first paired for reading.
+
+    The profile belongs only to this smoke run. Verify the actual approved
+    scopes without recording its device token or modifying user credentials.
+    """
+    node = next(exe.parent.rglob("runtime/bin/node.exe"))
+    cli = node.parent.parent / "node_modules/openclaw/openclaw.mjs"
+    result = subprocess.run([str(node), str(cli), "gateway", "call", "sessions.list",
+                             "--params", '{"agentId":"main","limit":1}', "--json", "--timeout", "15000"],
+                            env=env, capture_output=True, timeout=20)
+    if result.returncode:
+        raise RuntimeError("could not prepare the read-only CLI pairing")
+    auth = json.loads((profile / "home/.openclaw/identity/device-auth.json").read_text(encoding="utf-8"))
+    scopes = set(auth.get("tokens", {}).get("operator", {}).get("scopes", []))
+    if "operator.read" not in scopes or scopes.intersection({"operator.write", "operator.admin"}):
+        raise RuntimeError("smoke profile did not get a read-only CLI pairing")
+    return {"read_only": True}
+
+
 def run(exe, profile, out, launch, kill_app, profile_env):
     from playwright.sync_api import sync_playwright
 
@@ -652,6 +672,9 @@ def run(exe, profile, out, launch, kill_app, profile_env):
         summary["gateway_ready"], summary["seconds"] = ready, seconds
         if not ready:
             return summary
+        # The watchdog must recover an interrupted turn even if an older
+        # read-only call paired the shared CLI identity before it tried to send.
+        summary["prior_cli_pairing"] = seed_read_only_cli(exe, profile, env)
         profiler = start_gateway_profiler(exe, log_path, log_offset, out) if profile_enabled else None
         with sync_playwright() as playwright:
             browser, context, page = connect_packaged_webview(playwright, env.get("PINKIE_SMOKE_WEBVIEW_CDP"))
