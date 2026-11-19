@@ -1,0 +1,49 @@
+{
+  "role": "ui-replicator",
+  "samples": [
+    {
+      "id": "ui-replicator-1",
+      "title": "按 SVG 参考图还原双档定价卡片页（1280px/375px + 浅/深色）",
+      "brief": "目标：照 `ref/pricing-card.svg` 和 `ref/tokens.md` 的规范，用单文件 HTML/CSS/JS 在 `out/index.html` 还原定价卡片页面。\n背景：需要支持 1280px 桌面端（双列并排）和 375px 手机端（单列堆叠），同时提供浅色与深色模式切换。\n边界：只写入 `out/` 目录，不改动 `ref/` 下的参考文件；页面断网可打开，不引用外部 CDN。\n做到什么样算完：`out/index.html` 控制台 0 报错；产出参考图与实现图的并排对比图、4 张视口与明暗态截图（1280 浅/深、375 浅/深），并用计算样式逐项量出间距、字号和 HEX 色值差异清单。",
+      "files": [
+        {
+          "path": "ref/pricing-card.svg",
+          "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"880\" height=\"420\" viewBox=\"0 0 880 420\">\n  <rect width=\"880\" height=\"420\" fill=\"#F8FAFC\"/>\n  <text x=\"40\" y=\"56\" font-family=\"sans-serif\" font-size=\"24\" font-weight=\"600\" fill=\"#0F172A\">选择适合你的方案</text>\n  <text x=\"40\" y=\"82\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#475569\">按月订阅，随时取消，无隐藏费用</text>\n  <rect x=\"40\" y=\"110\" width=\"388\" height=\"270\" rx=\"12\" fill=\"#FFFFFF\" stroke=\"#E5E7EB\" stroke-width=\"1\"/>\n  <text x=\"64\" y=\"148\" font-family=\"sans-serif\" font-size=\"18\" font-weight=\"600\" fill=\"#0F172A\">个人版</text>\n  <text x=\"64\" y=\"192\" font-family=\"sans-serif\" font-size=\"32\" font-weight=\"600\" fill=\"#0F172A\">¥29</text>\n  <text x=\"126\" y=\"192\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#475569\">/ 月</text>\n  <text x=\"64\" y=\"230\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 无限本地文档与离线检索</text>\n  <text x=\"64\" y=\"256\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 支持 3 台设备同步</text>\n  <text x=\"64\" y=\"282\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 30 天版本历史回溯</text>\n  <rect x=\"64\" y=\"314\" width=\"340\" height=\"44\" rx=\"8\" fill=\"#FFFFFF\" stroke=\"#CBD5E1\" stroke-width=\"1\"/>\n  <text x=\"234\" y=\"341\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"600\" fill=\"#0F172A\">开始个人版</text>\n  <rect x=\"452\" y=\"110\" width=\"388\" height=\"270\" rx=\"12\" fill=\"#FFFFFF\" stroke=\"#1D4ED8\" stroke-width=\"2\"/>\n  <rect x=\"752\" y=\"128\" width=\"64\" height=\"24\" rx=\"12\" fill=\"#DCFCE7\"/>\n  <text x=\"784\" y=\"144\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"600\" fill=\"#16A34A\">推荐</text>\n  <text x=\"476\" y=\"148\" font-family=\"sans-serif\" font-size=\"18\" font-weight=\"600\" fill=\"#0F172A\">团队版</text>\n  <text x=\"476\" y=\"192\" font-family=\"sans-serif\" font-size=\"32\" font-weight=\"600\" fill=\"#0F172A\">¥99</text>\n  <text x=\"538\" y=\"192\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#475569\">/ 月</text>\n  <text x=\"476\" y=\"230\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 包含个人版全部能力</text>\n  <text x=\"476\" y=\"256\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 共享空间与细粒度权限</text>\n  <text x=\"476\" y=\"282\" font-family=\"sans-serif\" font-size=\"14\" fill=\"#334155\">• 180 天审计日志与优先支持</text>\n  <rect x=\"476\" y=\"314\" width=\"340\" height=\"44\" rx=\"8\" fill=\"#1D4ED8\"/>\n  <text x=\"646\" y=\"341\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"600\" fill=\"#FFFFFF\">选择团队版</text>\n</svg>\n"
+        },
+        {
+          "path": "ref/tokens.md",
+          "content": "# 补充尺寸与深色规范\n\n- 容器最大宽度：880px，水平外边距 40px（桌面）/ 16px（手机 375px），双卡间距 24px，卡片内边距 24px，卡片圆角 12px，按钮高度 44px 圆角 8px\n- 浅色模式：画布 `#F8FAFC`，卡片 `#FFFFFF`，主字 `#0F172A`，次字 `#475569`，边框 `#E5E7EB`，推荐卡边框与主按钮 `#1D4ED8`\n- 深色模式：画布 `#0B0C0E`，卡片 `#18191A`，主字 `#F7F8F8`，次字 `#8A8F98`，边框 `#23252A`，推荐卡边框与主按钮 `#3B82F6`\n"
+        }
+      ],
+      "checks": [
+        "存在 `out/index.html`，浏览器打开无 console error / pageerror，且源码不含外部 CDN URL",
+        "存在参考图与实现图的并排对比 PNG，以及 1280px 浅色、1280px 深色、375px 浅色、375px 深色共 4 张截图",
+        "375px 手机宽度下双卡片垂直堆叠，无横向滚动条（`scrollWidth <= innerWidth`）",
+        "「差异清单」包含通过 DOM 计算样式实测的数值对照表（至少涵盖卡片间距 24px、内边距 24px、圆角 12px、主标题字号 24px、价格字号 32px、按钮高度 44px、主色与背景 HEX）",
+        "汇报包含「并排对比图」「差异清单」「产出路径」「没做的和拿不准的」段落，原 `ref/` 文件未改动"
+      ]
+    },
+    {
+      "id": "ui-replicator-2",
+      "title": "按 SVG 设计稿还原四格 KPI 顶栏指标条（1000px/375px + 浅/深色）",
+      "brief": "目标：照 `ref/kpi-strip.svg` 和 `ref/kpi-spec.md`，在 `out/kpi.html` 还原四格 KPI 指标条组件页面。\n背景：指标条将嵌入内部监控看板顶部，要求桌面 1000px 下 4 列等宽、手机 375px 下 2x2 网格，支持浅色与深色模式，所有数字等宽对齐。\n边界：只写入 `out/` 目录，不改 `ref/` 目录内容。\n做到什么样算完：页面控制台 0 报错；产出并排对比图、1000px 与 375px 浅深色共 4 张截图及量化差异清单。",
+      "files": [
+        {
+          "path": "ref/kpi-strip.svg",
+          "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1000\" height=\"180\" viewBox=\"0 0 1000 180\">\n  <rect width=\"1000\" height=\"180\" fill=\"#FFFFFF\"/>\n  <rect x=\"24\" y=\"24\" width=\"226\" height=\"132\" rx=\"10\" fill=\"#F7F8FA\" stroke=\"#E5E7EB\"/>\n  <rect x=\"24\" y=\"24\" width=\"226\" height=\"4\" rx=\"2\" fill=\"#0EA5E9\"/>\n  <text x=\"44\" y=\"60\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#475569\">今日活跃用户</text>\n  <text x=\"44\" y=\"104\" font-family=\"sans-serif\" font-size=\"28\" font-weight=\"600\" fill=\"#0F172A\">12,480</text>\n  <text x=\"44\" y=\"134\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#16A34A\">较昨日 +8.4%</text>\n  <rect x=\"266\" y=\"24\" width=\"226\" height=\"132\" rx=\"10\" fill=\"#F7F8FA\" stroke=\"#E5E7EB\"/>\n  <text x=\"286\" y=\"60\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#475569\">接口 P99 耗时</text>\n  <text x=\"286\" y=\"104\" font-family=\"sans-serif\" font-size=\"28\" font-weight=\"600\" fill=\"#0F172A\">142 ms</text>\n  <text x=\"286\" y=\"134\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#16A34A\">较昨日 -11 ms</text>\n  <rect x=\"508\" y=\"24\" width=\"226\" height=\"132\" rx=\"10\" fill=\"#F7F8FA\" stroke=\"#E5E7EB\"/>\n  <text x=\"528\" y=\"60\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#475569\">5xx 错误率</text>\n  <text x=\"528\" y=\"104\" font-family=\"sans-serif\" font-size=\"28\" font-weight=\"600\" fill=\"#0F172A\">0.18%</text>\n  <text x=\"528\" y=\"134\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#D97706\">较昨日 +0.04%</text>\n  <rect x=\"750\" y=\"24\" width=\"226\" height=\"132\" rx=\"10\" fill=\"#F7F8FA\" stroke=\"#E5E7EB\"/>\n  <text x=\"770\" y=\"60\" font-family=\"sans-serif\" font-size=\"13\" fill=\"#475569\">排队任务数</text>\n  <text x=\"770\" y=\"104\" font-family=\"sans-serif\" font-size=\"28\" font-weight=\"600\" fill=\"#0F172A\">37</text>\n  <text x=\"770\" y=\"134\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#475569\">正常水位 (&lt;100)</text>\n</svg>\n"
+        },
+        {
+          "path": "ref/kpi-spec.md",
+          "content": "# KPI 指标条规格\n\n- 桌面 1000px：4 列等宽，卡片间距 16px，外边距 24px，卡片内边距 20px，圆角 10px，仅首卡带 4px 顶部 `#0EA5E9` 强调条\n- 手机 375px：2x2 网格，间距 12px，外边距 16px，无横向滚动\n- 深色模式：画布 `#0B0C0E`，卡片 `#18191A`，边框 `#23252A`，主数字 `#F7F8F8`，标签 `#8A8F98`\n- 指标数字必须使用 `font-variant-numeric: tabular-nums`\n"
+        }
+      ],
+      "checks": [
+        "存在 `out/kpi.html`，控制台 0 报错，数字元素应用了 `font-variant-numeric: tabular-nums`",
+        "存在参考图与实现图的并排对比图，以及 1000px 浅色、1000px 深色、375px 浅色、375px 深色共 4 张截图",
+        "「差异清单」包含实测的卡片间距、内边距、圆角、指标字号 28px、标签字号 13px 与明暗背景/文字 HEX 色值对照",
+        "375px 视口下呈现 2x2 网格且无横向溢出",
+        "汇报包含「并排对比图」「差异清单」「产出路径」「没做的和拿不准的」段落"
+      ]
+    }
+  ]
+}

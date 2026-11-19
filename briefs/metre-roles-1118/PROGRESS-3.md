@@ -17,8 +17,8 @@
 | 1 | `research` 6 张角色卡 | 已完成 | `81d63c22` |
 | 2 | `content` 9 张角色卡 | 已完成 | `c4f3f622` |
 | 3 | `gate` 3 张角色卡 | 已完成 | `7a43419b` |
-| 4 | `research` 6 份样题 JSON | 已完成 | 待写入 |
-| 5 | `content` 9 份样题 JSON | 未开始 | |
+| 4 | `research` 6 份样题 JSON | 已完成 | `b4c9c2e3` |
+| 5 | `content` 9 份样题 JSON | 已完成 | 待写入 |
 | 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 未开始 | |
 | 7 | `lint-cards.mjs` 检查（如已推送）+ 全量自查与 R3 核对表 | 未开始 | |
 
@@ -75,3 +75,8 @@
 
 - 新增 6 份样题（共 12 题）：`researcher.json`、`deep-reader.json`、`domain-expert.json`、`advisor.json`、`data-analyst.json`、`competitor-analyst.json`。
 - 自检结果：全部为合法 JSON、LF 换行；每份 2 题，含 `brief`、`files`、`checks`；全部检查项无主观词；`data-analyst` 两题的 CSV 夹具与期望汇总数经脚本精确核验一致（Q3 门店总有效 335.00 元；渠道总有效 540.00 元）。
+
+### 2026-11-18 步骤 5：`content` 9 份样题 JSON
+
+- 新增 9 份样题（共 18 题）：`visual-designer.json`、`ui-replicator.json`、`viral-creator.json`、`writer.json`、`editor.json`、`translator.json`、`doc-maker.json`、`motion-video.json`、`modeler-3d.json`。
+- 自检结果：15 份样题 JSON 全部合法解析、LF 换行；内嵌 SVG 与 JSON 夹具均合法；每题检查项 ≥ 4 条且全部可客观判断，无主观措辞。
