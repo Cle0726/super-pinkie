@@ -233,6 +233,7 @@ function toolSignals(entry = {}) {
   const output = typeof entry.output === 'string' ? entry.output : JSON.stringify(entry.result || entry.output || '');
   const signals = new Set();
   if (/^(?:write|edit|apply_patch)$/.test(name) || entry.changed) signals.add('mutation');
+  if (name === 'pinkie_model_capability') { signals.add('mutation'); signals.add('check'); }
   if (/(?:^|[._:-])exec(?:$|[._:-])/.test(name) || name === 'exec' || name.endsWith('.exec_command')) {
     if (/(?:pytest|unittest|node\s+--test|npm\s+test|pnpm\s+test|go\s+test|cargo\s+test)/i.test(command)) signals.add('test');
     if (/(?:Get-Content|Get-Item|Get-ChildItem|Test-Path|Select-String|Get-FileHash|type\s|dir\s|fc\s)/i.test(command)

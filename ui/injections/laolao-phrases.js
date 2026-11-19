@@ -308,6 +308,7 @@
     computer:'操作电脑',computer_flow:'操作电脑',workbench_read:'读取项目资料',workbench_show:'在工作台打开',
     learning_activity:'学习小练习',learning_desk:'记进手账',learning_library:'查学习资料',learning_material:'看学习资料',
     clekk_memory:'长期记忆',pinkie_session_start:'开子会话',pinkie_session_message:'给子会话发消息',pinkie_session_list:'查看子会话',pinkie_session_title:'给会话起名',
+    pinkie_model_capability:'设置模型能力',
     web_gpt_activity:'网页 GPT 协作',web_gpt:'请网页 GPT 帮忙'};
   // 批 1、批 2 的新工具（PLAN 2.5、2.7）
   Object.assign(toolLabels,{pinkie_sessions:'整理会话',pinkie_models:'看可用模型',metre_memory:'项目记忆'});

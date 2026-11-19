@@ -10,10 +10,11 @@
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
     ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
-  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions"]);
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions", "pinkie_model_capability"]);
+  const WORK_ALLOW_TOOLS = Object.freeze(["pinkie_model_capability"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
-    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
+    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false, alsoAllow: WORK_ALLOW_TOOLS}),
     open: Object.freeze({profile: "full", execSecurity: "full", browserEnabled: true}),
   });
   const PRESET_CARDS = Object.freeze([
@@ -68,7 +69,11 @@
     const hasRules = (value, root = false) => isObject(value) && (
       (Array.isArray(value.allow) && value.allow.length > 0)
       || (Array.isArray(value.deny) && value.deny.length > 0)
-      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => !root || baseProfile !== "minimal" || !CHILD_SESSION_TOOLS.includes(tool)))
+      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => {
+        if (!root) return true;
+        if (baseProfile === "minimal" || baseProfile === "coding") return !CHILD_SESSION_TOOLS.includes(tool);
+        return true;
+      }))
       || (typeof value.profile === "string" && value.profile.trim() && value.profile.trim() !== baseProfile)
     );
     if (hasRules(config?.tools, true) || hasRules(config?.agents?.defaults?.tools)) return true;
@@ -95,6 +100,33 @@
     if (preset.alsoAllow && !Object.hasOwn(tools, "allow")) {
       const existing = Array.isArray(tools.alsoAllow) ? tools.alsoAllow : [];
       changes.push([["tools", "alsoAllow"], [...new Set([...existing, ...preset.alsoAllow])]]);
+    }
+    return changes;
+  };
+  const thinkingValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    if (typeof defaults.thinkingDefault === "string" && defaults.thinkingDefault.trim()) return defaults.thinkingDefault.trim();
+    if (typeof defaults.thinkingLevel === "string" && defaults.thinkingLevel.trim()) return defaults.thinkingLevel.trim();
+    return "off";
+  };
+  const thinkingChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "thinkingDefault"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "thinkingLevel")) {
+      changes.push([["agents", "defaults", "thinkingLevel"], undefined]);
+    }
+    return changes;
+  };
+  const fastModeValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    const raw = isObject(defaults.params) && Object.hasOwn(defaults.params, "fastMode")
+      ? defaults.params.fastMode
+      : defaults.fastMode;
+    return raw === "auto" ? "auto" : raw === true ? "true" : "false";
+  };
+  const fastModeChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "params", "fastMode"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "fastMode")) {
+      changes.push([["agents", "defaults", "fastMode"], undefined]);
     }
     return changes;
   };
@@ -141,6 +173,10 @@
     authMode,
     configFromSnapshot,
     presetChanges,
+    thinkingValue,
+    thinkingChanges,
+    fastModeValue,
+    fastModeChanges,
   });
 
   const state = {
@@ -394,14 +430,14 @@
     const thinkingGroup = element("div", "pinkie-user-settings__segments", thinkingRow.control);
     for (const [value, label] of REASONING_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", thinkingGroup,
-        () => saveConfigPatch([["agents", "defaults", "thinkingLevel", value]], "thinking"));
+        () => saveConfigPatch(config => thinkingChanges(value, config), "thinking"));
       state.reasoningButtons.set(value, node);
     }
     const speedRow = row(modelCard, "回复速度");
     const speedGroup = element("div", "pinkie-user-settings__segments", speedRow.control);
     for (const [value, label] of SPEED_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", speedGroup,
-        () => saveConfigPatch([["agents", "defaults", "fastMode", value]], "thinking"));
+        () => saveConfigPatch(config => fastModeChanges(value, config), "thinking"));
       state.speedButtons.set(String(value), node);
     }
     makeStatus(modelCard, "thinking");
@@ -1159,22 +1195,24 @@
     if (!config) return;
     const model = configuredModelValue(config);
     ownText(state.modelButton, displayModelName(model));
-    const defaults = config.agents?.defaults || {};
-    const thinking = typeof defaults.thinkingLevel === "string" ? defaults.thinkingLevel : "off";
+    const thinking = thinkingValue(config);
     for (const [value, node] of state.reasoningButtons) setPressed(node, value === thinking);
-    const fast = defaults.fastMode === "auto" ? "auto" : defaults.fastMode === true ? "true" : "false";
+    const fast = fastModeValue(config);
     for (const [value, node] of state.speedButtons) setPressed(node, String(value) === fast);
     const activePreset = matchingPreset(config);
     state.customPreset.hidden = Boolean(activePreset);
     for (const [id, node] of state.presetButtons) setPressed(node, id === activePreset);
   }
   function setPath(target, path, value) {
+    if (!Array.isArray(path) || !path.length) return;
     let current = target;
     for (const key of path.slice(0, -1)) {
+      if (value === undefined && !isObject(current[key])) return;
       if (!isObject(current[key])) current[key] = {};
       current = current[key];
     }
-    current[path.at(-1)] = value;
+    if (value === undefined) delete current[path.at(-1)];
+    else current[path.at(-1)] = value;
   }
   function saveConfigPatch(changes, statusKey) {
     state.saveQueue = state.saveQueue.then(async () => {
@@ -1451,12 +1489,16 @@
     const common = !advanced && (tabs[0]?.getAttribute("aria-selected") === "true" || tabs.length > 0);
     localizeSettingsTitle(common);
     const view = advanced ? "advanced" : common ? "common" : "";
+    const wasHidden = state.root.hidden;
     const returnedToCommon = state.lastView === "advanced" && common;
     state.lastView = view;
     state.root.hidden = !common;
     if (common) document.body?.setAttribute("data-pinkie-user-settings", "1");
     else document.body?.removeAttribute("data-pinkie-user-settings");
     if (common) updatePosition();
+    if (returnedToCommon || (wasHidden && common)) {
+      void window.__pinkieModelSetup?.refresh?.();
+    }
     if (returnedToCommon) {
       void loadInitialData();
       syncAppearance();

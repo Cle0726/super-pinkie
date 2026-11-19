@@ -347,20 +347,35 @@ def _loopback_base_url(value) -> bool:
     return host in ("127.0.0.1", "localhost", "::1")
 
 
-def _mark_models_multimodal(data: dict) -> int:
+def _disabled_vision_overrides(state_dir: Path) -> set[str]:
+    """用户明确关掉「能看图片」的模型（存在 pinkie-model-setup.json），启动时不再强行改回能看图。"""
+    try:
+        raw = json.loads((state_dir / "pinkie-model-setup.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    caps = raw.get("capabilities")
+    if not isinstance(caps, dict):
+        return set()
+    return {key for key, item in caps.items() if isinstance(key, str) and isinstance(item, dict) and item.get("vision") is False}
+
+
+def _mark_models_multimodal(data: dict, disabled_vision: set[str] | None = None) -> int:
     """经本机代理的聊天模型一律标成能看图, 返回改了几个。
 
     以前每个模型能不能看图要手写 input: ["text","image"]; 漏写的(例如 hy4flash)
     网关就把图转给看图工具, 主模型自己看不到。现在默认都能看; 真看不了的,
     本机代理(proxy/mm-retry-proxy.py)认出上游的报错并记住, 带图的请求改给看过图的
-    模型。直连外网的 provider 没有这层兜底, 保持原样。"""
+    模型。用户明确关掉的模型（disabled_vision）不再自动补回。直连外网的 provider 没有这层兜底, 保持原样。"""
     changed = 0
+    blocked = disabled_vision or set()
     providers = (data.get("models") or {}).get("providers") or {}
-    for provider in providers.values() if isinstance(providers, dict) else []:
+    for provider_id, provider in providers.items() if isinstance(providers, dict) else []:
         if not isinstance(provider, dict) or not _loopback_base_url(provider.get("baseUrl")):
             continue
         for entry in provider.get("models") or []:
             if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                continue
+            if f"{provider_id}/{entry['id']}" in blocked:
                 continue
             if NON_CHAT_MODEL.search(entry["id"]):
                 continue
@@ -372,7 +387,7 @@ def _mark_models_multimodal(data: dict) -> int:
     return changed
 
 
-def _configure_plugin(data: dict, target: Path) -> bool:
+def _configure_plugin(data: dict, target: Path, disabled_vision: set[str] | None = None) -> bool:
     before = json.dumps(data, ensure_ascii=False, sort_keys=True)
 
     # A short-lived 2026.9 installation can leave newer schema fields in the
@@ -397,7 +412,7 @@ def _configure_plugin(data: dict, target: Path) -> bool:
         if isinstance(talk, dict):
             talk.pop("agentId", None)
 
-    _mark_models_multimodal(data)
+    _mark_models_multimodal(data, disabled_vision=disabled_vision)
 
     # This model was probed against the user's current mm upstream: xhigh is
     # accepted as a real thinking level. Do not advertise it for other models,
@@ -647,7 +662,7 @@ def install(home=None) -> bool:
         _choose_memory_search(data, state)
     except Exception as error:  # never block setup on a probe
         print(f"记忆检索方式没有探测成功：{error}")
-    config_changed = _configure_plugin(data, extension) or json.dumps(data, ensure_ascii=False, sort_keys=True) != before_choice
+    config_changed = _configure_plugin(data, extension, disabled_vision=_disabled_vision_overrides(config.parent)) or json.dumps(data, ensure_ascii=False, sort_keys=True) != before_choice
     if config_changed:
         backup_root.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config, backup_root / "openclaw.json")
