@@ -150,8 +150,15 @@ sync_launcher_resources() {
     done
   done
   copy_if_changed "$REPO_ROOT/ui/launcher-loading.html" "$bundled_root/ui/launcher-loading.html"
-  copy_if_changed "$ASSET_ROOT/laolao-splash.mp4" "$bundled_root/ui/assets/laolao-splash.mp4"
-  copy_if_changed "$ASSET_ROOT/laolao-splash-video-poster.png" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
+  local splash_video="$ASSET_ROOT/laolao-splash.mp4"
+  local splash_poster="$ASSET_ROOT/laolao-splash-video-poster.png"
+  if [[ "${PINKIE_RELEASE_BUILD:-0}" == "1" ]] \
+    || { [[ -f "$bundled_root/build-info.json" ]] && grep -Eq '"channel": *"release"|"guard": *true' "$bundled_root/build-info.json"; }; then
+    splash_video="$ASSET_ROOT/laolao-splash-release.mp4"
+    splash_poster="$ASSET_ROOT/laolao-splash-video-poster-release.png"
+  fi
+  copy_if_changed "$splash_video" "$bundled_root/ui/assets/laolao-splash.mp4"
+  copy_if_changed "$splash_poster" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
   # Keep every bundled web surface aligned with the hotfix source. Party and
   # Roundtable are served from this source tree rather than control-ui, while
   # a future repair/manual install may consume the raw injection tree. Leaving
@@ -179,6 +186,9 @@ sync_launcher_resources() {
   done
   for source_file in "$ASSET_ROOT"/*; do
     [[ -f "$source_file" ]] || continue
+    case "$(basename "$source_file")" in
+      laolao-splash.mp4|laolao-splash-video-poster.png) continue ;;
+    esac
     copy_if_changed "$source_file" "$bundled_root/ui/assets/$(basename "$source_file")"
   done
   for source_file in "$REPO_ROOT/ui/party"/*; do

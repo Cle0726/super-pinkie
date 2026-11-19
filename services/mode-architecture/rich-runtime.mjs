@@ -106,7 +106,7 @@ export class PlanContinuationState {
   // 一轮结束时问一次：要不要接着做。facts 由引擎给，全是这一轮的事实。
   consider(sessionKey, facts = {}) {
     const no = reason => { const entry = this.sessions.get(sessionKey); if (entry) { entry.armed = null; entry.tools = 0; } return {continue: false, reason}; };
-    // 学习模式停下来等先生作答是常态，不自动接着做；无限制模式不加任何新机制。
+    // 学习模式停下来等用户作答是常态，不自动接着做；无限制模式不加任何新机制。
     if (!sessionKey || facts.internalSession || !['chat', 'project', 'ideas'].includes(facts.mode)) return no('not-applicable');
     let plan = null;
     try { plan = this.store?.plan(sessionKey); } catch { plan = null; }
@@ -360,7 +360,7 @@ export function pushTargets(stateDir, limit = 12) {
 // 生成提示词时带上研究要求；同一条消息的重试继续带，换一条消息就结束。关掉开关随时撤销。
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const RESEARCH_TTL = 6 * 3600_000;
-export const RESEARCH_TURN = '先生在输入框打开了「深度研究」：这一条按 pinkie-deep-research 技能完成。先用 plan_update 列出要回答的 3–6 个问题，实际阅读原始来源并交叉核对，最终回复就是完整报告：先给结论，再用表格比较，关键结论旁放可点开的原文链接，写明局限。信息不足时按最合理的理解直接开工，开头说明你的假设，不先停下来追问。';
+export const RESEARCH_TURN = '用户在输入框打开了「深度研究」：这一条按 pinkie-deep-research 技能完成。先用 plan_update 列出要回答的 3–6 个问题，实际阅读原始来源并交叉核对，最终回复就是完整报告：先给结论，再用表格比较，关键结论旁放可点开的原文链接，写明局限。信息不足时按最合理的理解直接开工，开头说明你的假设，不先停下来追问。';
 export class ResearchSwitch {
   constructor(clock = Date.now) { this.clock = clock; this.map = new Map(); }
   arm(key, on = true) {

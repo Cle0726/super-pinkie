@@ -332,7 +332,7 @@ test('composeNudgeContext carries the real numbers for all kinds and intensities
       for (const needle of ['12/30', '7/20', '12', '6', '11', '62', '现', '短语', intensity, '80']) {
         assert.ok(context.includes(needle), `${kind}/${intensity} misses ${needle}`);
       }
-      assert.match(context, /先生/);
+      assert.match(context, /不加「先生」「老板」之类的称呼/);
       assert.doesNotMatch(context, new RegExp(PACT_NO_REPLY));
     }
   }

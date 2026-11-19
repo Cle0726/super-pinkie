@@ -43,8 +43,8 @@
 
 | 模式插画 | 模式名称 | 角色定位与交互特点 |
 | :---: | :--- | :--- |
-| <img src="ui/assets/laolao-mode-transition-chat.png" width="220" alt="唠嗑模式"> | **唠嗑模式**<br>`Chat` | **日常陪伴与随手问答**<br>称呼你为「先生」，语气鲜活自然、有观察有笑点；适合日常闲聊、快速查资料、语音对讲与生活记录。 |
-| <img src="ui/assets/laolao-mode-transition-project.png" width="220" alt="项目模式"> | **项目模式**<br>`Project` | **工程交付与代码工作台**<br>认真干活的碧琪，专称「老板」；左侧直接绑定本地项目文件夹，支持代码编辑、`.ipynb` 笔记本内核执行、终端命令与成品文件一键预览。 |
+| <img src="ui/assets/laolao-mode-transition-chat.png" width="220" alt="唠嗑模式"> | **唠嗑模式**<br>`Chat` | **日常陪伴与随手问答**<br>不给你乱套头衔，你说想被怎么叫就怎么叫；语气鲜活自然、有观察有笑点；适合日常闲聊、快速查资料、语音对讲与生活记录。 |
+| <img src="ui/assets/laolao-mode-transition-project.png" width="220" alt="项目模式"> | **项目模式**<br>`Project` | **工程交付与代码工作台**<br>认真干活的碧琪；左侧直接绑定本地项目文件夹，支持代码编辑、`.ipynb` 笔记本内核执行、终端命令与成品文件一键预览。 |
 | <img src="ui/assets/laolao-mode-transition-thinking.png" width="220" alt="想法模式"> | **想法模式**<br>`Thinking` | **方案推演与审美设计**<br>配备灵感气泡动效、多档深度推理与审美规范（`AESTHETICS.md`），适合架构推演、产品设计、长文撰稿与复杂决策拆解。 |
 | <img src="ui/assets/laolao-mode-transition-learning.png" width="220" alt="学习模式"> | **学习模式**<br>`Learning` | **备考手账与随堂私教**<br>温柔但对错毫不含糊的碧琪老师；内置 **学习书桌 v2**，把今日计划、144 考纲关卡、互动讲义、双页错题本与生词手账摊开在同一张桌面上。 |
 | <img src="ui/assets/laolao-mode-transition-unrestricted.png" width="220" alt="无限制模式"> | **无限制模式**<br>`Unrestricted` | **自由探索与高阶测试**<br>零预设条框束缚，配合本地 HTTP 注入代理与双传输层补丁，按模型自动路由提示词策略。 |
@@ -52,7 +52,7 @@
 <p align="center">
   <img src="docs/screenshots/mode-project-day.jpg" width="92%" alt="项目模式首页">
   <br>
-  <sub>项目模式 · 独立目录绑定、专属「老板」工作口吻与右侧快捷工具栏</sub>
+  <sub>项目模式 · 独立目录绑定、认真干活的工作口吻与右侧快捷工具栏</sub>
 </p>
 
 ---

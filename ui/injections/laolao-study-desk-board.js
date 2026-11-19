@@ -196,7 +196,7 @@
       try {
         const result = await request('adoptPlan', {planId: insight.plan.id});
         if (!alive || token !== revision) return;
-        adopt.textContent = '已采纳'; adoptMsg.textContent = `明早 ${result.reminderAt}，碧琪会按这个计划提醒先生。`; motion.confettiAt?.(adopt, 'small');
+        adopt.textContent = '已采纳'; adoptMsg.textContent = `明早 ${result.reminderAt}，碧琪会按这个计划提醒你。`; motion.confettiAt?.(adopt, 'small');
       } catch (error) { if (alive && token === revision) { adopt.disabled = false; adopt.textContent = '重试采纳'; adoptMsg.textContent = error.message; } }
     };
     const changes = el('section', 'b-receipts'); changes.append(el('h3', '', '最近改动')); root.append(changes);

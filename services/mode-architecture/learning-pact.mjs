@@ -414,7 +414,7 @@ function clockLabel(minutes) {
 const INTENSITY_LINES = {
   gentle: '口气要温和，先肯定已经做的，再轻轻提醒。',
   firm: '口气要直接，明确指出今天哪一项没做到、差多少，不要绕弯子。',
-  relentless: '口气要硬，用连续天数和考试倒计时施压，但不许侮辱、羞辱或贬低先生。',
+  relentless: '口气要硬，用连续天数和考试倒计时施压，但不许侮辱、羞辱或贬低用户。',
 };
 
 export function composeNudgeContext(kind, today = {}) {
@@ -456,7 +456,7 @@ export function composeNudgeContext(kind, today = {}) {
     : countdown >= 0 ? `考试倒计时：距离 ${text(pact.exam?.name, 40) || 'PRETCO-B'} 还有 ${countdown} 天。` : `考试倒计时：考试日期已过去 ${-countdown} 天。`);
   lines.push(weakTopics.length ? `最薄弱的部分：${weakTopics.map(item => `${item.tag}（错 ${item.wrong}/${item.total}）`).join('、')}。`
     : '最薄弱的部分：还没有足够的错题记录。');
-  if (nudge === 'morning' && today.adoptedPlan) lines.push(`先生已采纳的今日计划：${text(today.adoptedPlan.text, 600)}。优先依据它提醒，不再替先生换计划。`);
+  if (nudge === 'morning' && today.adoptedPlan) lines.push(`用户已采纳的今日计划：${text(today.adoptedPlan.text, 600)}。优先依据它提醒，不再替用户换计划。`);
   if (nudge === 'morning' && today.adoptedPlan?.items?.some(item => item.kind === 'learn')) lines.push('已采纳的上课安排（数据）：' + JSON.stringify({items: today.adoptedPlan.items.filter(item => item.kind === 'learn').map(item => ({kind: 'learn', k: item.k, i: item.i}))}));
   if (today.subjectWarnings?.length) lines.push(`偏科提醒（只按带科目的记录）：${today.subjectWarnings.map(item => `${text(item.name, 30)}已有 ${item.daysIdle} 天没有作答或专注记录`).join('；')}。`);
   if (nudge === 'evening' && today.weeklyReport) lines.push(`周日晚间周报素材（真实摘要与最近分析，不编补缺失结论）：${JSON.stringify(today.weeklyReport)}`);
@@ -474,12 +474,12 @@ export function composeNudgeContext(kind, today = {}) {
     lines.push(plan.length ? `今天的下一步：${plan.join('，')}。` : '今天的目标已经全部达成：一句鼓励即可。');
   } else if (nudge === 'evening') {
     if (complete) {
-      lines.push('evening：今天已经完成，只用一句话认可先生，不要布置新任务。');
+      lines.push('evening：今天已经完成，只用一句话认可用户，不要布置新任务。');
     } else if (!started) {
       const smallest = dueForToday > 0 ? `先把 ${Math.min(dueForToday, 12)} 张复习卡翻完`
         : remainQuestions > 0 ? `先做 10 道单选`
           : `先专注 ${Math.min(remainMinutes, 10)} 分钟`;
-      lines.push('evening：今天还没开始，推先生现在就开始，只给最小的第一步。');
+      lines.push('evening：今天还没开始，推用户现在就开始，只给最小的第一步。');
       lines.push(`最小的第一步：${smallest}。`);
     } else {
       lines.push('evening：今天已经开始但没做完，直接说清还剩什么。');
@@ -488,7 +488,7 @@ export function composeNudgeContext(kind, today = {}) {
   } else if (complete) {
     return PACT_NO_REPLY;
   } else {
-    lines.push('lastcall：今天的最后提醒，态度坚定，告诉先生今天背一组就能把连续章盖下去，催先生马上补完。不许说「断」，不许挖苦。');
+    lines.push('lastcall：今天的最后提醒，态度坚定，告诉用户今天背一组就能把连续章盖下去，催用户马上补完。不许说「断」，不许挖苦。');
     if (streakCurrent > 0) {
       lines.push(`现在就差：${remainders.join('，') || '补齐今天的目标'}；今天背一组，连续章就能盖到第 ${streakCurrent + 1} 天。`);
     } else {
@@ -497,7 +497,7 @@ export function composeNudgeContext(kind, today = {}) {
   }
   lines.push([
     '写作规则：',
-    '- 一条消息，不超过 80 个汉字，称呼先生，用碧琪自己的声音。',
+    '- 一条消息，不超过 80 个汉字，不加「先生」「老板」之类的称呼，要称呼就用「你」，用碧琪自己的声音。',
     '- 必须给具体的下一步和数字，例如“先把 12 张复习卡翻完，再做 10 道单选”。',
     '- 不要寒暄，不要 emoji 堆砌，不要 Markdown 标题、列表或加粗。',
     '- 不要提到本段上下文、内部字段名或规则。',
@@ -943,7 +943,7 @@ export function nudgeKindFromPrompt(prompt) {
   return NUDGE_KINDS.includes(matches.at(-1)[1]) ? matches.at(-1)[1] : null;
 }
 
-// 只有当天的提醒能触达先生，这样补跑昨天错过的定时任务也只会静默。
+// 只有当天的提醒能触达用户，这样补跑昨天错过的定时任务也只会静默。
 export function nudgeContextFor(pact, now = Date.now()) {
   if (!pact) return null;
   const today = pact.today({now});

@@ -63,7 +63,7 @@ test('explicit helper configuration uses the configured provider without modifyi
   await assistant.ask({kind: 'explain', mode: 'project', text: '怎么安排工作'});
   assert.equal(request.url, 'http://127.0.0.1:1468/v1/chat/completions');
   assert.equal(JSON.parse(request.body).model, 'small');
-  assert.match(JSON.parse(request.body).messages[0].content, /老板/);
+  assert.match(JSON.parse(request.body).messages[0].content, /不加「先生」「老板」之类的称呼/);
   assert.equal(JSON.stringify(config), before);
 });
 

@@ -4,13 +4,13 @@
 // Windows 的 app_browser 是独立窗口（带粉色指针、标签页、窗口停靠和节点切换），Mac 上嵌在 App 右侧。
 export function appBrowserPlace(platform = process.platform) {
   return platform === 'win32'
-    ? 'Windows 上它是碧琪自己的独立浏览器窗口：操作时页面上有粉色「碧琪」指针，先生看得到；tab 管理标签页，window 停靠或铺满；vpn 查看和切换只作用于这个浏览器的节点（status 读节点和出口 IP，best 挑最快，节点不通会自动换）。'
+    ? 'Windows 上它是碧琪自己的独立浏览器窗口：操作时页面上有粉色「碧琪」指针，用户看得到；tab 管理标签页，window 停靠或铺满；vpn 查看和切换只作用于这个浏览器的节点（status 读节点和出口 IP，best 挑最快，节点不通会自动换）。'
     : '都显示在 App 右侧的浏览器里。';
 }
 const APP_BROWSER_PLACE = appBrowserPlace();
 
 export const APP_GUIDE_RULES = `
-碧琪的家（超級碧琪 App）里有这些本事，用得上就用，先生或老板问起就准确指路：
+碧琪的家（超級碧琪 App）里有这些本事，用得上就用，用户问起就准确指路：
 碧琪自己就能用的：
 - 要让对方亲眼看到网页、本地服务、视频或本机文件 → app_browser：open 打开网页，serve 起本地服务并打开，show_file 预览本机文件，snapshot/click/type 操作页面，screenshot 自己看效果。${APP_BROWSER_PLACE}
 - 交付成品文件 → 回复末尾单独一行 MEDIA:/绝对路径，聊天里会变成能预览、保存到下载、在访达中显示的文件卡。

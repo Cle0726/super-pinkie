@@ -2,10 +2,10 @@
 
 这里保存「超級碧琪」使用的四套模式人格与工作手册文件：
 
-- `chat/`：唠嗑模式（称呼「先生」）
-- `project/`：项目模式（独立项目人格与工作区，称呼「老板」）
-- `thinking/`：想法模式（含 `AESTHETICS.md` 审美规范，称呼「先生」）
-- `learning/`：学习模式（含 `METHODS.md` 方法卡与辅导规则，称呼「先生」）
+- `chat/`：唠嗑模式
+- `project/`：项目模式（独立项目人格与工作区）
+- `thinking/`：想法模式（含 `AESTHETICS.md` 审美规范）
+- `learning/`：学习模式（含 `METHODS.md` 方法卡与辅导规则）
 - `neutral/`：无限制模式使用的无碧琪人格工作区文件（保持原样，不随改版改写）
 - `metre/`：Metre 模式（不用碧琪的人格和称呼；只有 `AGENTS.md`、`IDENTITY.md`、`SOUL.md` 三份，`TOOLS.md`、`USER.md`、`HEARTBEAT.md` 装成 0 字节占位，见 `docs/METRE-MODE.md`）
 

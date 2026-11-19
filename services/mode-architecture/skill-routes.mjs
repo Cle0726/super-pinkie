@@ -1,4 +1,4 @@
-// 技能路由：碧琪按这条消息自己挑出最合适的 1–3 个技能，把路径直接给模型，不用先生指定用哪个。
+// 技能路由：碧琪按这条消息自己挑出最合适的 1–3 个技能，把路径直接给模型，不用用户指定用哪个。
 // 纯函数、无 OpenClaw 依赖：classifyWorkKind 给出活儿种类，这里再按说法挑具体技能；
 // index.mjs 负责把名字解析成本机真实路径（工作区 > ~/.openclaw/skills > 碧琪自带），找不到的跳过。
 import fs from 'node:fs';
@@ -232,7 +232,7 @@ export function skillRouteBlock(kinds = [], prompt = '', {workspace = '', stateD
     if (found.length >= 3) break;
   }
   if (!found.length) return '';
-  const lines = ['【这件活先用这些现成的技能】系统已按这条消息挑好，不用问先生用哪个。动手前把下面每个 SKILL.md 读完（标了读到哪一行的读到那一行；同一会话读过、还记得清楚的不用重读），照它的做法、模板和素材做；读的时候不用告诉先生。'];
+  const lines = ['【这件活先用这些现成的技能】系统已按这条消息挑好，不用问用户用哪个。动手前把下面每个 SKILL.md 读完（标了读到哪一行的读到那一行；同一会话读过、还记得清楚的不用重读），照它的做法、模板和素材做；读的时候不用告诉用户。'];
   found.forEach((r, i) => {
     const range = readRange(r.file);
     lines.push(`${i + 1}. ${r.skill}：${r.why}。路径：${r.file}${range ? `。${range}` : ''}`);
@@ -269,6 +269,6 @@ export function toolboxBlock(kinds = [], {workspaces = [], mode = ''} = {}) {
   const command = check && !caps.length ? `node "${file}" check` : `node "${file}" ensure ${caps.join(' ')}`;
   return [
     `【先备好工具】开工前先跑一次 \`${command}\`。已经有的它马上回 ok，缺的它装进碧琪自己的环境、装完真试一次；照它报的路径和命令做。`,
-    '它报装不上，再按 playbooks/environment.md 手动装进用户空间。不要自己现想安装命令，不要让先生自己去装软件；同一会话里它已经报过 ok 的能力不用再跑。',
+    '它报装不上，再按 playbooks/environment.md 手动装进用户空间。不要自己现想安装命令，不要让用户自己去装软件；同一会话里它已经报过 ok 的能力不用再跑。',
   ].join('\n');
 }

@@ -105,6 +105,12 @@ test('explicit user memory is captured once, secrets are rejected and forgetting
   assert.equal(memory.list(ctx, {query: '完全无关'}).records.length, 0);
   assert.equal(memory.forget(ctx, {id}).deleted, true);
   assert.equal(memory.list(ctx).records.length, 0);
+
+  // 说一句「以后叫我阿明」，自动写入 USER.md 的 What to call them 和长期记忆，新会话仍生效。
+  fs.writeFileSync(path.join(roots.chat, 'USER.md'), '');
+  memory.captureExplicit(ctx, '以后叫我阿明');
+  assert.match(fs.readFileSync(path.join(roots.chat, 'USER.md'), 'utf8'), /What to call them:\*\* 阿明/);
+  assert.equal(memory.retrieve(ctx, '完全无关的新会话首轮提问').records[0].text, '以后叫我阿明');
 });
 
 test('prompt injection recalls only current-mode data and treats it as quoted history', t => {

@@ -31,7 +31,7 @@
       const subjects = desk.local().today?.mastery?.subjects || [];
       let point = {subject: '电工电子', chapter: p.k, chapterTitle: '动态电路', text: '换路定律', level: '掌握'};
       for (const s of subjects) for (const ch of s.chapters || []) if (ch.k === p.k) point = {subject: s.name, chapter: ch.k, chapterTitle: ch.t, text: ch.items[p.i]?.text || ch.t, level: ch.lv?.[p.i] === 1 ? '了解' : '掌握'};
-      return {lessonId: 'demo-' + crypto.randomUUID(), status: 'ready', point, outline: {segments: [{n: 1, title: '先认清是什么', goal: '用自己的话说出定义', sources: [page.ref]}, {n: 2, title: '动手看一看', goal: '观察变化前后的关系', sources: [page.ref], lab: 'rc_transient'}, {n: 3, title: '试着用一次', goal: '独立完成一个小例子', sources: [page.ref]}], estMinutes: 15, opening: '先生，我们先看清换路前后，哪些量不能突然改变。', watchOut: '先找初始条件，再计算。'}, sources: [page], videos: [{id: 'demo-video', title: '第 37 讲 换路定律', durationSec: 2520, available: page.original === 'available', transcript: true}], record: {lessonCount: 1, lastStuck: '换路前后哪些量不能突变', worked: ['动手实验'], failed: ['水流类比']}, model: null, usage: {total: 0}};
+      return {lessonId: 'demo-' + crypto.randomUUID(), status: 'ready', point, outline: {segments: [{n: 1, title: '先认清是什么', goal: '用自己的话说出定义', sources: [page.ref]}, {n: 2, title: '动手看一看', goal: '观察变化前后的关系', sources: [page.ref], lab: 'rc_transient'}, {n: 3, title: '试着用一次', goal: '独立完成一个小例子', sources: [page.ref]}], estMinutes: 15, opening: '我们先看清换路前后，哪些量不能突然改变。', watchOut: '先找初始条件，再计算。'}, sources: [page], videos: [{id: 'demo-video', title: '第 37 讲 换路定律', durationSec: 2520, available: page.original === 'available', transcript: true}], record: {lessonCount: 1, lastStuck: '换路前后哪些量不能突变', worked: ['动手实验'], failed: ['水流类比']}, model: null, usage: {total: 0}};
     }
     if (method === 'lesson.begin') { local.mockCurrent = {...local.prepared, status: 'active', segment: 1, checks: {asked: 0, correct: 0}, startedAt: Date.now(), minutes: 0}; return {status: 'active', message: `开始上课：${pointTitle(local.prepared)}`}; }
     if (method === 'lesson.event') { if (!local.mockCurrent) throw Error('示意课程已结束'); if (p.type !== 'stuck') local.mockCurrent.status = p.type === 'pause' ? 'paused' : 'active'; return structuredClone(local.mockCurrent); }
@@ -172,7 +172,7 @@
         else { await desk.askBiqi(begun.result.message); begun.sent = true; }
       } finally { b.disabled = false; }
     }, 'lesson-pink'));
-    paper.append(actions); demo(paper, local); const stuckList = [lesson.record?.lastStuck].flat().map(item => typeof item === 'string' ? item : item?.what || item?.title || '').filter(Boolean), stuck = stuckList.join('、'); renderSide(host, 'question', (outline.opening || '先生，我们先把这个考点学清楚。') + (stuck ? `\n上次我们卡在${stuck}，这次换个讲法。` : ''));
+    paper.append(actions); demo(paper, local); const stuckList = [lesson.record?.lastStuck].flat().map(item => typeof item === 'string' ? item : item?.what || item?.title || '').filter(Boolean), stuck = stuckList.join('、'); renderSide(host, 'question', (outline.opening || '我们先把这个考点学清楚。') + (stuck ? `\n上次我们卡在${stuck}，这次换个讲法。` : ''));
     desk.motion.splitIn(paper.querySelector('h1'));
   }
   async function openPage(source, sources = [source]) {
@@ -317,7 +317,7 @@
     const notes = btn('看笔记', () => desk.go('notes', {noteId: result.noteId}), 'lesson-secondary', 'notes'); notes.disabled = !result.noteId;
     actions.append(notes, btn(desk.backName?.(desk.backView?.()) || '回今日', () => (desk.back ? desk.back() : desk.go('today')), 'link')); paper.append(actions);
     if (lesson.sources?.length) paper.append(btn('查看本节出处', () => openPage(lesson.sources[0], lesson.sources), 'lesson-ghost', 'file-text'));
-    demo(paper, local); renderSide(host, result.failed ? 'working' : 'happy', summary.next || (result.failed ? '课程还在，稍后可以再试一次。' : '先生，这节课学过了，接着试一小组。'));
+    demo(paper, local); renderSide(host, result.failed ? 'working' : 'happy', summary.next || (result.failed ? '课程还在，稍后可以再试一次。' : '这节课学过了，接着试一小组。'));
   }
   function sync() {
     clearBar(); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!root()?.isConnected || !window.__pinkieDeskChat?.active?.() || document.hidden || desk.pane() !== globalDesk.pane()) return;

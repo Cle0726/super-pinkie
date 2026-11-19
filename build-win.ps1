@@ -100,6 +100,10 @@ foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerSt
 Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
+if ($env:PINKIE_RELEASE_BUILD -eq '1') {
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "ui\assets\laolao-splash-release.mp4") -Destination (Join-Path $uiStage "assets\laolao-splash.mp4") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "ui\assets\laolao-splash-video-poster-release.png") -Destination (Join-Path $uiStage "assets\laolao-splash-video-poster.png") -Force
+}
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
 # 社区技能按 skills/community-skills.json 一起打包；技能路由（skill-routes.mjs）把路径直接给模型。
 $skillManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $RepoRoot "skills\community-skills.json") | ConvertFrom-Json
@@ -251,6 +255,10 @@ $packageDir = Join-Path $DistRoot '超級碧琪'
 # 其它（本机开发构建）→ 开发版，防护关。Windows 用户只装 CI 打的包，不在本机重新打包。
 $bundleRoot = Join-Path $packageDir '_internal'
 $guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+if ($guardChannel -eq 'release') {
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'ui\assets\laolao-splash-release.mp4') -Destination (Join-Path $bundleRoot 'ui\assets\laolao-splash.mp4') -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'ui\assets\laolao-splash-video-poster-release.png') -Destination (Join-Path $bundleRoot 'ui\assets\laolao-splash-video-poster.png') -Force
+}
 $guardCommit = (git rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $guardCommit) { $guardCommit = '' }
 $guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
