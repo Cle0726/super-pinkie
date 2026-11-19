@@ -104,18 +104,14 @@ async function runCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
   console.log('设置正式版 Metre 开发者密码（输入内容不会显示在屏幕上）。');
-  console.log('建议：使用 16 位以上的长密码或短语（哈希文件随安装包公开，短密码更容易被离线猜解）。\n');
+  console.log('至少 6 位；字母和数字混着用更难被猜到。\n');
   const first = (await promptHidden('请输入新密码：')).normalize('NFC');
-  if ([...first].length < 8) {
-    console.error('密码至少需要 8 个字符；建议 16 位以上。');
+  if ([...first].length < 6) {
+    console.error('密码至少需要 6 个字符。');
     process.exit(1);
   }
-  if ([...first].length < 16) {
-    const answer = (await promptLine('提示：当前密码不足 16 位。仍要使用这个密码吗？(y/N) ')).trim().toLowerCase();
-    if (answer !== 'y' && answer !== 'yes') {
-      console.log('已取消，未写入任何文件。');
-      process.exit(1);
-    }
+  if (/^\d+$/.test(first)) {
+    console.log('提示：纯数字密码比较好猜，混入字母会更安全（仍可继续使用）。');
   }
   const second = (await promptHidden('请再输入一次确认：')).normalize('NFC');
   if (first !== second) {
