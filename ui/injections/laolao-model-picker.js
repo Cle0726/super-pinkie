@@ -646,7 +646,7 @@
   // Metre 不带碧琪口吻：同一句话，把主语拿掉。
   function routeDescription(level, natives) {
     const text = routeDescriptionRaw(level, natives);
-    return document.documentElement?.getAttribute?.("data-laolao-mode") === "metre" ? text.replace(/碧琪替当前模型多做一步/g, "替当前模型多做一步").replace(/碧琪/g, "") : text;
+    return typeof document !== "undefined" && document.documentElement?.getAttribute?.("data-laolao-mode") === "metre" ? text.replace(/碧琪替当前模型多做一步/g, "替当前模型多做一步").replace(/碧琪/g, "") : text;
   }
   function routeDescriptionRaw(level, natives) {
     const pool = natives.filter(value => MATERIAL_RANK.has(value) && value !== "adaptive");

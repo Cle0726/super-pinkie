@@ -28,7 +28,7 @@ test('new read, locate and select actions are available through the shared tool 
  assert.deepEqual(calls.map(c=>c[0]),['locate','read','select']);assert.ok(tool.parameters.properties.action.enum.includes('batch'));
 });
 
-test('aborting a socket request sends cancellation for its exact native request, without repeating the action', async()=>{
+test('aborting a socket request sends cancellation for its exact native request, without repeating the action', {skip: process.platform === 'win32' && 'Unix socket test'}, async()=>{
  const {requestAppBrowser}=await import('../services/mode-architecture/app-browser.mjs');const net=await import('node:net');const os=await import('node:os');const path=await import('node:path');
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-browser-cancel-test-'));fs.chmodSync(root,0o700);const socketPath=path.join(root,'control.sock'),bodies=[],clients=new Set();let accepted;const started=new Promise(r=>accepted=r);let cancelled;const cancelledCall=new Promise(r=>cancelled=r);
  const server=net.createServer(socket=>{clients.add(socket);socket.on('close',()=>clients.delete(socket));socket.on('error',()=>{});let buffer='';socket.on('data',data=>{buffer+=data;const at=buffer.indexOf('\n');if(at<0)return;const body=JSON.parse(buffer.slice(0,at));buffer='';bodies.push(body);if(body.action==='cancel'){cancelled(body);socket.end(JSON.stringify({id:body.id,ok:true,result:{cancelled:true}})+'\n');}else accepted(body);});});

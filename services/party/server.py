@@ -377,7 +377,9 @@ class Store:
         if path:
             directory = Path(path).expanduser().resolve()
             # Broad roots should not become a coding job's writable workspace.
-            if directory in (Path('/'), Path.home(), Path('/Users'), Path.home() / '.openclaw', ROOT):
+            # 任何盘的根目录都算（Windows 上 '/' 解析成 'D:\\'，和 Path('/') 不相等）；其它几个也按解析后的路径比。
+            broad = {Path(p).expanduser().resolve() for p in ('/', '~', '/Users', '~/.openclaw')} | {Path(ROOT).resolve()}
+            if directory == Path(directory.anchor) or directory in broad:
                 raise ValueError('请选择具体项目文件夹，不要选择主目录、系统根目录或 App 源码目录')
             if not directory.is_dir():
                 raise ValueError('项目文件夹不存在')

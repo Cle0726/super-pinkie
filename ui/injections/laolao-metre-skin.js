@@ -179,3 +179,115 @@
 
   window.__pinkieMetreSkin = {DECOR, apply, placePops, tempoOf, get on() { return applied; }};
 })();
+
+// ---- Metre 里不出现「碧琪」：设置、工作台、链接预览等共用界面的措辞 ----
+// 这些界面所有模式共用，源码里写的是碧琪。在 Metre 里就地换成 Metre 的说法，离开时原样换回；
+// 只看这几个界面的根节点，不碰聊天内容。只在 Metre 里挂观察器，空闲时没有开销。
+(() => {
+  'use strict';
+  const root = document.documentElement;
+  const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
+  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer';
+  const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
+  // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
+  const RULES = [
+    [/超[級级]碧琪/g, 'Metre'],
+    [/碧琪的常用设置/g, '常用设置'],
+    [/碧琪工作台/g, '工作台'],
+    [/碧琪的链接预览/g, '链接预览'],
+    [/碧琪的?回收站/g, '回收站'],
+    [/碧琪经典/g, '经典'],
+    [/由碧琪自动选择/g, '自动选择'],
+    [/这台碧琪/g, '这台电脑'],
+    [/连接碧琪(?=[^，。]*模式)/g, '连接'],
+    [/，碧琪用(?=[^，。]*模式)/g, '，用'],
+    [/(还没|暂时没有)连上碧琪/g, '$1连上后台'],
+    [/，碧琪照常可用/g, '，照常可用'],
+    [/用哪个模式的碧琪/g, '用哪个模式'],
+    [/碧琪/g, 'Metre'],
+  ];
+  const word = (text) => {
+    if (!text || !text.includes('碧琪')) return text;
+    let out = text;
+    for (const [pattern, to] of RULES) out = out.replace(pattern, to);
+    return out.replace(/她/g, '它');
+  };
+  // 记下换过的地方：节点 → {原文, 换后}；离开 Metre 时只还原没被模块重新写过的。
+  const texts = new Map();
+  const attrs = new Map();
+  function rewriteText(node) {
+    const value = node.nodeValue;
+    const next = word(value);
+    if (next === value) return;
+    texts.set(node, {original: value, rewritten: next});
+    node.nodeValue = next;
+  }
+  function rewriteAttrs(el) {
+    for (const name of ATTRS) {
+      const value = el.getAttribute(name);
+      const next = word(value);
+      if (next === value) continue;
+      let saved = attrs.get(el);
+      if (!saved) attrs.set(el, saved = {});
+      saved[name] = {original: value, rewritten: next};
+      el.setAttribute(name, next);
+    }
+  }
+  function rewrite(scope) {
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) if (node.nodeValue.includes('碧琪')) rewriteText(node);
+    rewriteAttrs(scope);
+    for (const el of scope.querySelectorAll('[title],[aria-label],[placeholder],[alt],[data-pinkie-tooltip]')) rewriteAttrs(el);
+  }
+  const watched = new Map();
+  function onChange(records) {
+    for (const record of records) {
+      if (record.type === 'characterData') { if (record.target.nodeValue.includes('碧琪')) rewriteText(record.target); }
+      else if (record.type === 'attributes') rewriteAttrs(record.target);
+      else for (const node of record.addedNodes) {
+        if (node.nodeType === 3) { if (node.nodeValue.includes('碧琪')) rewriteText(node); }
+        else if (node.nodeType === 1) rewrite(node);
+      }
+    }
+  }
+  function attach() {
+    if (!isMetre()) return;
+    for (const scope of document.querySelectorAll(SCOPE)) {
+      if (watched.has(scope)) continue;
+      rewrite(scope);
+      const observer = new MutationObserver(onChange);
+      observer.observe(scope, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS});
+      watched.set(scope, observer);
+    }
+    titleOn();
+  }
+  function detach() {
+    for (const observer of watched.values()) observer.disconnect();
+    watched.clear();
+    for (const [node, {original, rewritten}] of texts) if (node.nodeValue === rewritten) node.nodeValue = original;
+    for (const [el, saved] of attrs) for (const [name, {original, rewritten}] of Object.entries(saved)) if (el.getAttribute(name) === rewritten) el.setAttribute(name, original);
+    texts.clear(); attrs.clear();
+    titleOff();
+  }
+  // 窗口 / 标签页标题：Metre 里叫 Metre（保留跑完提示的 ✓ ! ? 前缀）。
+  let titleObserver = null;
+  const titleWord = (title) => title.replace(/超[級级]碧琪|碧琪/g, 'Metre');
+  function fixTitle() { const next = titleWord(document.title); if (next !== document.title) document.title = next; }
+  function titleOn() {
+    fixTitle();
+    const el = document.querySelector('title');
+    if (el && !titleObserver) { titleObserver = new MutationObserver(fixTitle); titleObserver.observe(el, {childList: true, characterData: true, subtree: true}); }
+  }
+  function titleOff() {
+    titleObserver?.disconnect(); titleObserver = null;
+    if (/Metre$/.test(document.title)) document.title = document.title.replace(/Metre$/, '超級碧琪');
+  }
+  const sync = () => (isMetre() ? attach() : detach());
+  new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode']});
+  window.addEventListener('laolao:modechange', sync);
+  // 设置页、工作台、链接预览都是点出来的：点完再找一次新出现的根节点。
+  document.addEventListener('click', () => { if (isMetre()) setTimeout(attach, 0); }, true);
+  window.addEventListener('popstate', () => { if (isMetre()) setTimeout(attach, 0); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, {once: true}); else sync();
+  window.__pinkieMetreWords = {word, attach, detach};
+})();

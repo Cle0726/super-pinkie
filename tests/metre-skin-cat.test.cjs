@@ -174,7 +174,7 @@ test('A4-9: the switch shows only Baton｜Virtuoso; Chinese only in the tooltip 
   assert.match(block, /label: 'Virtuoso', tip: '独奏/);
   assert.match(block, /dataset\.pinkieTooltip = item\.tip/);
   assert.match(block, /pinkie-baton__info/);
-  assert.match(block, /item\.label \+ ' · from your next message' : item\.label/);
+  assert.match(block, /item\.label \+ ' · next turn' : item\.label/);
   assert.doesNotMatch(block, /nextTurn\(/);
 });
 
@@ -382,6 +382,9 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   const api = env.window.__pinkieMetreBackdrop;
   assert.ok(api.mounted && canvas, 'Metre 对话页上有画布');
   assert.ok('data-pk-metre-backdrop' in attrs);
+  assert.equal(api.running, false, 'idle chat has no backdrop timer');
+  api.preview(['run']);
+  api.sync();
   assert.equal(timers.at(-1).ms, 60_000 / 72 / 2, '每半拍（♩=72）走一格');
   timers.at(-1).fn();
   assert.equal(api.step, 1);
@@ -627,4 +630,15 @@ test('Metre on a festival day: the festival egg opens the day and comes up more 
   const plain = {shown: 0};
   const normal = home.eggCandidates({today: {festivals: [], season: 'autumn'}, now: start});
   assert.notEqual(home.shouldEgg({shownToday: plain.shown, eggsCount: 0, candidates: normal, random: () => 0.99}), true, '平常日子第一句不强制出彩蛋');
+});
+
+test('idle CPU: the cat wakes only when a frame changes and slows its idle acts when nobody is at the keys', () => {
+  const src = read('ui/injections/laolao-metre-cat.js');
+  // 1 fps sleep must not tick eight times a second
+  assert.match(src, /stride = Math\.max\(1, Math\.floor\(8 \/ Math\.min\(8, playing\?\.fps \|\| 8\)\)\)/);
+  assert.match(src, /timer = setTimeout\(loop, TICK_MS \* stride\)/);
+  assert.match(src, /tick \+= stride;/);
+  assert.match(src, /ACT_GAP_UNWATCHED = \[20_000, 20_000\]/);
+  assert.match(src, /now - Math\.max\(lastInput, idleSince\) < LIVELY_MS \? ACT_GAP : ACT_GAP_UNWATCHED/);
+  assert.match(src, /\['pointerdown', 'pointermove', 'keydown', 'wheel'\]\) window\.addEventListener\(type, noticeInput/);
 });

@@ -3,6 +3,7 @@
 All executables, ports, configuration and update files belong to a temporary
 fixture. No installed App, real gateway, account data or system proxy is used.
 """
+import contextlib
 import ctypes
 import hashlib
 import json
@@ -80,6 +81,8 @@ from pathlib import Path
 import sys
 repo,exe,payload,digest,result=sys.argv[1:]
 sys.path.insert(0,repo)
+# 打包的 App 里 app/ 就是脚本目录，windows_desktop 直接 import release_notes。
+sys.path.insert(0,os.path.join(repo,'app'))
 import app.windows_desktop as desktop
 desktop.GATEWAY_URL='http://127.0.0.1:'+os.environ['FIXTURE_PORT']+'/'
 WindowsUpdater=desktop.WindowsUpdater
@@ -219,8 +222,30 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
         # left empty. Now the previous version is copied back instead.
         self._run_case('locked_rollback')
 
+    @contextlib.contextmanager
+    def _reporting_tempdir(self):
+        holder=tempfile.TemporaryDirectory(prefix='pinkie-portable-update-')
+        try:yield holder.name
+        finally:
+            self._report_holders(holder.name)
+            holder.cleanup()
+    def _report_holders(self,temp):
+        # Before the temporary folder is removed: name every process still inside it.
+        name=Path(temp).name
+        probe=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%s*' -or $_.ExecutablePath -like '*%s*' } | "
+            "ForEach-Object { '{0}#{1} {2}' -f $_.Name,$_.ProcessId,$_.CommandLine }"%(name,name)],
+            capture_output=True,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        text=probe.stdout.decode('utf-8',errors='replace').strip()
+        if text:print('\n[still running inside %s]\n%s'%(name,text[-4000:]),file=sys.stderr)
+        # The update helper can outlive a case (it waits for the new window); stop everything left in
+        # this case's folder so the folder can be removed and the next case starts clean.
+        subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*%s*' -or $_.ExecutablePath -like '*%s*') -and $_.ProcessId -ne $PID } | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500"%(name,name)],
+            capture_output=True,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     def _run_case(self, gateway_kind):
-        with tempfile.TemporaryDirectory(prefix='pinkie-portable-update-') as temp:
+        with self._reporting_tempdir() as temp:
             root=Path(temp).resolve()
             csc=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
             self.assertTrue(csc.is_file(),'Windows .NET Framework compiler is required for the process fixture')
@@ -233,7 +258,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             parent=root/'acl-test-parent' if gateway_kind=='acl_denied' else root
             target=parent/'PortableFixture';(target/'_internal/runtime/bin').mkdir(parents=True)
             executable=target/'超級碧琪.exe';executable.write_bytes(binary)
-            gateway_exe=(target if gateway_kind in ('same_install','acl_denied') else root/'previous-copy')/'_internal/runtime/bin/node.exe'
+            # slow_ready / scanner_lock test timing and file locks, not gateway identity: their gateway is the install's own.
+            gateway_exe=(target if gateway_kind in ('same_install','acl_denied','slow_ready','scanner_lock') else root/'previous-copy')/'_internal/runtime/bin/node.exe'
             gateway_exe.parent.mkdir(parents=True,exist_ok=True);gateway_exe.write_bytes(binary)
             (target/'old-version.txt').write_text('old')
             outside=root/'outside';outside.mkdir();outside_exe=outside/'node.exe';outside_exe.write_bytes(binary)
@@ -303,7 +329,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                       capture_output=True,creationflags=hidden)
                 if result.returncode:raise RuntimeError('fixture ACL error: '+result.stderr.decode(errors='replace'))
             try:
-                gateway_args=(['--gateway'] if gateway_kind in ('same_install','acl_denied','wrong_command') else
+                gateway_args=(['--gateway'] if gateway_kind in ('same_install','acl_denied','wrong_command','slow_ready','scanner_lock') else
                               ['openclaw.mjs','gateway','run','--port',str(port)])
                 gateway=subprocess.Popen([str(gateway_exe),*gateway_args],env=env,creationflags=hidden);children.append(gateway)
                 relay=subprocess.Popen([str(executable),'--hold'],env=env,creationflags=hidden);children.append(relay)
@@ -339,6 +365,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                           str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE,creationflags=hidden)
                 out,err=process.communicate(timeout=30)
+                self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
                 if gateway_kind in ('unknown_external','mismatched_record','wrong_command','acl_denied'):
                     self.assertEqual(process.returncode,1,err.decode('utf-8',errors='replace'))
@@ -352,7 +379,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
-                self.assertEqual(process.returncode,0,err.decode('utf-8',errors='replace'))
+                updater_log=lambda:(state/'logs/updater.log').read_text(encoding='utf-8-sig',errors='replace')[-6000:] if (state/'logs/updater.log').exists() else '(no updater.log)'
+                self.assertEqual(process.returncode,0,'%s\noutcome=%s\nstdout=%s\n--- updater.log ---\n%s'%(err.decode('utf-8',errors='replace')[-3000:],json.dumps(outcome,ensure_ascii=False),out.decode('utf-8',errors='replace')[-2000:],updater_log()))
                 self.assertTrue(outcome['started'])
                 update_started=True
                 log=state/'logs/updater.log';deadline=time.monotonic()+60;text=''
@@ -366,7 +394,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertIn('new version attached to a different install gateway',text)
                     until=time.monotonic()+20
                     while time.monotonic()<until and not (target/'old-version.txt').is_file():time.sleep(.2)
-                    self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored')
+                    self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored\n--- updater.log ---\n'+updater_log())
                     self.assertFalse((target/'new-version.txt').exists())
                     if gateway_kind=='locked_rollback':
                         self.assertTrue(lock_seen,'the fixture never held the previous folder open')
@@ -380,7 +408,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
-                self.assertIn('portable update completed',text)
+                self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
                 if gateway_kind=='slow_ready':
                     self.assertIn('new version started; waiting for its gateway',text)
                 if gateway_kind=='scanner_lock':

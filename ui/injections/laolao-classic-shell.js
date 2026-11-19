@@ -176,9 +176,10 @@
   const actionNode = (spec) => [...document.querySelectorAll(spec.selectors)]
     .find((node) => !node.closest?.(".laolao-footer-overflow")) || null;
 
-  const renderFooterMenu = () => {
+  const renderFooterMenu = (build = true) => {
     if (!footerMenu) return 0;
     const rows = [];
+    let actionCount = 0;
     for (const spec of footerSecondaryActions) {
       const original = actionNode(spec);
       if (!original) continue;
@@ -190,8 +191,10 @@
         }
         continue;
       }
-      if (originalItem) originalItem.dataset.laolaoFooterSecondary = "1";
-      if (spec.key.startsWith("presentation") && originalItem) originalItem.dataset.laolaoPolishSecondary = "1";
+      if (originalItem && originalItem.dataset.laolaoFooterSecondary !== "1") originalItem.dataset.laolaoFooterSecondary = "1";
+      if (spec.key.startsWith("presentation") && originalItem && originalItem.dataset.laolaoPolishSecondary !== "1") originalItem.dataset.laolaoPolishSecondary = "1";
+      actionCount++;
+      if (!build) continue;
       const row = document.createElement("button");
       row.type = "button";
       row.className = "laolao-footer-overflow__item";
@@ -218,6 +221,7 @@
     const home = document.querySelector('aside.sidebar .sidebar-nav a.nav-item[href$="/overview"]') || document.querySelector("aside.sidebar .nav-item--home");
     const pages = [home, ...(moreSection?.querySelectorAll(".nav-section__items a[href], .nav-section__items .nav-item") || [])]
       .filter((node, index, list) => node && list.indexOf(node) === index);
+    if (!build) return actionCount + pages.length;
     if (pages.length) {
       const divider = document.createElement("div");
       divider.className = "laolao-footer-overflow__divider";
@@ -277,8 +281,8 @@
       });
       host.append(footerMenuButton);
     }
-    const count = renderFooterMenu();
-    footerMenuButton.hidden = count === 0;
+    const hidden = renderFooterMenu(false) === 0;
+    if (footerMenuButton.hidden !== hidden) footerMenuButton.hidden = hidden;
     if (!footerMenu.hidden) positionFooterMenu();
   };
 
@@ -386,7 +390,7 @@
     pending = false;
     const shell = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
     if (!shell) return;
-    document.documentElement.setAttribute("data-laolao-classic-shell", "1");
+    if (document.documentElement.getAttribute?.("data-laolao-classic-shell") !== "1") document.documentElement.setAttribute("data-laolao-classic-shell", "1");
     ensureBreadcrumbs();
     ensureNavigation();
     ensureFooterBrand();
@@ -414,7 +418,20 @@
     if (event.key === "Escape") closeFooterMenu();
   });
   window.addEventListener("pagehide", () => railObserver?.disconnect(), { once: true });
-  setInterval(schedule, 1200);
+  const mountSelector = '.shell--chat, .chat-workbench, .sidebar-shell__footer, .sidebar-nav, .dashboard-header__breadcrumb, .agent-chat__input, .sidebar-footer-actions';
+  if (typeof MutationObserver === "function") {
+    const mounts = new MutationObserver(records => {
+      if (records.some(rec => [...rec.addedNodes, ...rec.removedNodes].some(
+        node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
+          || (node.nodeType === 1 && rec.target.matches?.('.sidebar-footer-actions, .sidebar-footer-bar'))
+      ))) schedule();
+    });
+    mounts.observe(document.documentElement, {childList: true, subtree: true});
+  } else {
+    setInterval(schedule, 1200);
+  }
+  window.addEventListener("pinkie:session-selected", schedule);
+  window.addEventListener("pinkie:sidebar-gateway-ready", schedule);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedule, { once: true });
   else schedule();
 })();

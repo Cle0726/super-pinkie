@@ -25,7 +25,7 @@ test('a remembered trail is stored as portable role+name steps and announced on 
  const disk=JSON.parse(fs.readFileSync(file,'utf8')),recipe=disk.pages['local/lab.html'].recipes[0];
  assert.equal(recipe.steps.some(step=>step.ref),false);assert.deepEqual(recipe.steps[0],{action:'hover',name:'高级实验',exact:true,role:'button'});
  assert.equal(recipe.steps[1].text,'{{备注}}');assert.deepEqual(recipe.vars,{备注:'广西专升本验收',专业:'dz',进度:'73'});
- assert.equal(fs.statSync(file).mode&0o077,0);
+ if(process.platform!=='win32')assert.equal(fs.statSync(file).mode&0o077,0);
  // A new session (fresh memory from disk, different port) sees it immediately.
  const next=fakeServers(file),tool2=createAppBrowserTool({sessionKey:'agent:learning:other'},{servers:next});
  const opened=await tool2.execute('o2',{action:'open',url:'http://127.0.0.1:50001/lab.html'});

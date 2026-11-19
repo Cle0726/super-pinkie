@@ -96,7 +96,7 @@ test('save writes only models + default model keys; author providers stay; list 
   assert.ok(!JSON.stringify(listed).includes(KEY)); assert.ok(!JSON.stringify(listed).includes('author-secret'));
   assert.equal(listed.providers.find(p => p.id === 'deepseek-2').keyTail, '••••abcd');
   assert.equal(listed.needsSetup, false);
-  assert.equal(fs.statSync(path.join(h.stateDir, 'pinkie-model-setup.json')).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(h.stateDir, 'pinkie-model-setup.json')).mode & 0o777, 0o600);
   // 作者自己的服务商在这里删不了
   await assert.rejects(h.setup.remove({providerId: 'mm'}), /只能删除/);
   // 编辑时不填密钥 = 沿用

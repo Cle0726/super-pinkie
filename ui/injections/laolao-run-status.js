@@ -627,9 +627,10 @@
     if (!bar) build();
     const layout = layoutFor(window.innerWidth);
     if (bar.dataset.layout !== layout) { bar.dataset.layout = layout; open = false; force = true; placeDirty = true; }
-    bar.dataset.tone = view.tone;
+    if (bar.dataset.tone !== view.tone) bar.dataset.tone = view.tone;
     bar.classList.toggle('is-open', layout === 'dot' && open);
-    parts.dot.setAttribute('aria-expanded', String(layout === 'dot' && open));
+    const expanded = String(layout === 'dot' && open);
+    if (parts.dot.getAttribute('aria-expanded') !== expanded) parts.dot.setAttribute('aria-expanded', expanded);
     const sig = [view.text, view.meta, view.sticker, view.tone].join('|');
     if (force || sig !== lastSig) {
       lastSig = sig;

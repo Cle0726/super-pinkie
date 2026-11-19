@@ -7,6 +7,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
 
 import {
   MetreLock,
@@ -137,6 +138,11 @@ async function callGatewayMethod(methods, name, params = {}) {
     }
   });
 }
+
+// The full-plugin case registers the real plugin, whose services keep handles open on Windows
+// (the file never exited there and the CI step hit its 30-minute limit). Once every test in this
+// file has finished, leave explicitly; process.exitCode still carries any failure.
+test.after(() => { setTimeout(() => process.exit(), 2000); });
 
 test('repo ships either the placeholder or a valid scrypt hash (never a plaintext password) and set-password generates valid scrypt record', async () => {
   const shippedFile = path.join(ROOT, 'services/mode-architecture/metre-lock-hash.json');
@@ -492,7 +498,7 @@ test('full mode-architecture plugin reads disk guard-build.json, blocks locked M
 
   try {
     const installedEntry = path.join(stateDir, 'extensions', 'pinkie-mode-architecture', 'index.mjs');
-    const {default: isolatedPlugin} = await import(`${installedEntry}?t=${Date.now()}`);
+    const {default: isolatedPlugin} = await import(`${pathToFileURL(installedEntry).href}?t=${Date.now()}`);
     const {api, methods, tools, hooks} = createPluginApiMock({agents: {list: [{id: 'main'}, {id: 'metre'}]}}, stateDir);
     isolatedPlugin.register(api);
     const stRes = await callGatewayMethod(methods, 'pinkie.guard.metreStatus', {});
@@ -577,7 +583,7 @@ test('full mode-architecture plugin reads disk guard-build.json, blocks locked M
       }
       assert.equal(postUnlockToolBlock?.block, true, `SettingsGuard still blocks ${targetFile}`);
     }
-    const {SettingsGuard: IsoSettingsGuard} = await import(path.join(stateDir, 'extensions', 'pinkie-mode-architecture', 'settings-guard.mjs'));
+    const {SettingsGuard: IsoSettingsGuard} = await import(pathToFileURL(path.join(stateDir, 'extensions', 'pinkie-mode-architecture', 'settings-guard.mjs')).href);
     const sg = new IsoSettingsGuard({home, stateDir, appState: pinkieRoot});
     assert.equal(sg.enabled, true);
     assert.equal(sg.status().channel, 'release');
@@ -620,7 +626,7 @@ test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent / nested 
 
   const ctx = await makeTempLock({channel: 'release', fastVerify: true});
   try {
-    const {handleGatewayRequest: fn} = await import(`${patchedFile}?t=${Date.now()}`);
+    const {handleGatewayRequest: fn} = await import(`${pathToFileURL(patchedFile).href}?t=${Date.now()}`);
     const invoke = async (method, params) => {
       let response = null;
       await fn({

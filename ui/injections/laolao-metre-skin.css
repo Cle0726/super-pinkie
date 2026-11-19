@@ -220,6 +220,9 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier {
   animation: none !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn { background-image: none !important; box-shadow: none !important; }
+/* 共用按钮的字色默认是碧琪粉 #ad4f7f（--mode-button-ink 没定义时）；Metre 用正文色。设置页「高级」的按钮就是这样露粉的。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --mode-button-ink: var(--metre-text); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn:not(.btn--xs):not(.primary):not(.danger) { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn.btn--xs { background-color: transparent !important; color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-fork-action,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-power-entry { background: transparent !important; box-shadow: none !important; }
@@ -2314,6 +2317,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-con
   width: 13px !important; height: 11px !important; flex: none !important;
   background: var(--metre-mode-mark) center / 13px 11px no-repeat !important;
   -webkit-mask: none !important; mask: none !important; filter: none !important; box-shadow: none !important;
+  animation: none !important;
   border: 0 !important; border-radius: 0 !important; opacity: 1 !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__provider-icon > * { display: none !important; }
@@ -2346,12 +2350,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .sess
   box-shadow: none !important;
 }
 
-/* 3. 父会话下面的声部（laolao-session-list.js awayRow）：缩进一级、字小一号、右边写在哪个模式。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part .sidebar-recent-session__name {
-  font-size: 13px !important;
-  color: var(--metre-muted) !important;
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part:hover .sidebar-recent-session__name { color: var(--metre-text) !important; }
+/* 3. 派发的会话沿用普通会话标题样式；右侧标出子会话所在的模式。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar .pinkie-session-part__mode {
   flex: 0 0 auto;
   margin-right: 6px;
@@ -2504,3 +2503,90 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill .pinkie-work__icon { width: 12px !important; height: 12px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-work__pill .pinkie-work__icon svg { width: 12px !important; height: 12px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-work__count, .pinkie-work__time) { font-size: 11px !important; }
+
+/* ---- 设置页（常用 / 能力 / 定时 / 连接 / 模型接入）在 Metre 里换成 Metre 的颜色 ----
+ * 这些面板所有模式共用，自带一整套碧琪粉（字、边框、浅粉底、粉色阴影）。先把它们的色板变量换掉，
+ * 再把写死粉色的规则逐条覆盖（由设置相关 CSS 里含粉色的声明对照生成）。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(#laolao-user-settings, #pinkie-model-setup) {
+  --pinkie-settings-ink: var(--metre-text);
+  --pinkie-settings-muted: var(--metre-muted);
+  --pinkie-settings-accent: var(--metre-accent);
+  --pinkie-settings-border: var(--metre-line);
+  --pinkie-settings-card: var(--metre-surface);
+  --pinkie-settings-soft: var(--metre-hover);
+  --pinkie-settings-control: var(--metre-surface);
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__title { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__card { box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__row { border-top-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__advanced-link:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__button:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__model-button:hover,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__text-button:hover { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand.is-selected,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; color: var(--metre-text) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings button:focus-visible,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings summary:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__messaging-input:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand[data-brand="claude"],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand[data-brand="codex"],
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand[data-brand="gemini"] { border-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__model-choice { border-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset:hover { border-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__custom { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__button--primary { border-color: var(--metre-line) !important; background: var(--metre-surface) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__advanced-link,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__text-button { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__channels { border-top-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__count { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__usage-chip { border-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand.is-selected,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice.is-selected,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch-knob { box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch[aria-checked="true"] { background: var(--metre-hover) !important; border-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__textarea:focus { outline-color: var(--metre-line-strong) !important; border-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch-knob { background: var(--metre-surface) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__link:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pk-job, .pk-conn):hover { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__history li[data-ok="false"] span { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch i { box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch[aria-checked="true"] { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea { border-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea:hover { box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__line { border-bottom-color: var(--metre-line) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__input:focus { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-tile { background: var(--metre-surface) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-conn__state[data-state="bad"] { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-conn__state[data-state="bad"]::before { background: var(--metre-surface) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe:hover { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__recipe.is-selected { background: var(--metre-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
+
+/* ---- 工作台在 Metre 里用 Metre 的颜色 ----
+ * 工作台所有模式共用，浅色时是碧琪的藕粉（底 #eadde6、字 #563f50 / #735d6a）、强调是粉色。换掉它的色板变量即可；
+ * Git 的增删改颜色是语义色，不动。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.pk-wb, .pk-wb.is-light) {
+  --wb-text: var(--metre-text);
+  --wb-mute: var(--metre-muted);
+  --wb-line: var(--metre-line);
+  --wb-card-line: var(--metre-line);
+  --wb-card: var(--metre-surface);
+  --wb-card-shadow: none;
+  --wb-accent: var(--metre-accent);
+  --wb-cle: var(--metre-accent);
+  --wb-hover: var(--metre-hover);
+  --wb-sel: color-mix(in srgb, var(--metre-accent) 12%, transparent);
+  --wb-glass: var(--metre-bg);
+  --wb-editor: var(--metre-surface);
+  --wb-sig: linear-gradient(90deg, var(--metre-accent), var(--metre-accent));
+}

@@ -199,7 +199,9 @@
       mounted = true;
     }
     // 标在根节点上：样式据此收起通用按钮。没有输入框的页面不标。
-    if (mounted) root.setAttribute('data-pinkie-tray', '1'); else root.removeAttribute('data-pinkie-tray');
+    // 根节点属性一改整页都要重算样式，没变就不动。
+    const current = root.getAttribute('data-pinkie-tray');
+    if (mounted && current !== '1') root.setAttribute('data-pinkie-tray', '1'); else if (!mounted && current !== null) root.removeAttribute('data-pinkie-tray');
     if (menu && !anchor?.isConnected) close();
   }
 

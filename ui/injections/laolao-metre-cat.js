@@ -25,6 +25,8 @@
   const DONE_MS = 3000;
   const ERROR_MS = 2500;
   const TICK_MS = 125;   // 8 拍每秒；各状态按自己的 fps 取帧（和预览页同一算法）
+  // 有人在用时 2～5 秒来一个空闲小动作；一分钟没碰键盘鼠标，就隔 20～40 秒才动一下（没人看，不白耗电）
+  const LIVELY_MS = 60_000, ACT_GAP = [2000, 3000], ACT_GAP_UNWATCHED = [20_000, 20_000];
   const CATEGORY_NAMES = {overview: '项目概况', structure: '目录和关键文件', commands: '怎么跑、测、打包', conventions: '规矩',
     decisions: '定下的事', preferences: '偏好', pitfalls: '踩过的坑', people: '协作者', open: '没做完的'};
 
@@ -82,8 +84,9 @@
   const model = {stateFor, frameIndex, SLEEP_AFTER_MS};
   const cat = () => window.LaolaoMetreCat;
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
+  const motionPreference = !window.__pinkieMotion && window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const reduced = () => document.documentElement.hasAttribute('data-pinkie-reduce-motion')
-    || Boolean(window.__pinkieMotion?.reduce) || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    || Boolean(window.__pinkieMotion?.reduce || motionPreference?.matches);
   const dark = () => document.documentElement.hasAttribute('data-pinkie-night') || document.documentElement.dataset.theme === 'dark';
 
   // ---------- 画面 ----------
@@ -91,6 +94,8 @@
   let idleSince = Date.now(), blinkAt = null, nextBlink = 0, detail = {}, doneUntil = 0, lastDone = 0;
   // 空闲小动作和坐的位置（perchX：相对输入框右上角的水平偏移，≤ 0）
   let perch = null, idleAct = null, nextAct = Date.now() + 2500, perchX = 0, facing = 'left';
+  // lastInput：最近一次键盘鼠标；stride：下一拍隔几个 125ms 再醒（只在帧真的会变时醒）
+  let lastInput = Date.now(), stride = 1;
   let memory = {count: null, key: '', folder: '', name: '', byCategory: {}, known: 0}, memoryFor = '', memoryAt = 0;
 
   function makeCanvas(cls) {
@@ -102,22 +107,18 @@
   }
   function mount() {
     const body = document.querySelector('.pk-run__body');
-    const dot = document.querySelector('.pk-run__dot');
     if (!body || !isMetre()) return false;
-    if (!body.querySelector('.pk-metre-cat')) {
-      const c = makeCanvas('pk-metre-cat');
-      body.prepend(c);
+    chip = body.querySelector('.pk-metre-mem');
+    if (!chip) {
       chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'pk-metre-mem';
       chip.hidden = true;
       chip.addEventListener('click', (event) => { event.stopPropagation(); togglePop(); });
-      c.after(chip);
+      body.prepend(chip);
     }
-    if (dot && !dot.querySelector('.pk-metre-cat')) dot.prepend(makeCanvas('pk-metre-cat pk-metre-cat--dot'));
     mountPerch();
-    canvases = [...document.querySelectorAll('.pk-metre-cat')];
-    chip = body.querySelector('.pk-metre-mem');
+    canvases = perch?.isConnected ? [perch.firstElementChild] : [];
     return true;
   }
 
@@ -156,11 +157,14 @@
     for (const act of ACTS) { roll -= act.weight; if (roll < 0) return act; }
     return ACTS[0];
   }
+  // 眨眼：有人在 6～10 秒一次，一分钟没人碰就 20～30 秒一次
+  const blinkGap = (now) => (now - Math.max(lastInput, idleSince) < LIVELY_MS ? 6000 + Math.random() * 4000 : 20_000 + Math.random() * 10_000);
   function startAct(now, pick) {
     const api = cat();
     const act = pick || pickAct();
     const def = act.own ? api?.ACTS?.[act.name] : api?.STATES[act.from];
-    nextAct = now + 2000 + Math.random() * 3000;
+    const gap = now - Math.max(lastInput, idleSince) < LIVELY_MS ? ACT_GAP : ACT_GAP_UNWATCHED;
+    nextAct = now + gap[0] + Math.random() * gap[1];
     if (!def) return;
     let len = Math.ceil(def.frames.length * (act.cycles || 1) * 8 / def.fps);
     if (act.name === 'stroll') {
@@ -188,6 +192,21 @@
     return {index: step % def.frames.length, def};
   }
 
+  // 每一帧只画一次：缓存成小画布，之后每拍只是一次 drawImage，不再逐格 fillRect（空闲时猫一直在做小动作）。
+  const sprites = new WeakMap();
+  function sprite(api, frame, isDark) {
+    let entry = sprites.get(frame);
+    if (!entry) sprites.set(frame, entry = {});
+    const key = isDark ? 'dark' : 'light';
+    if (!entry[key]) {
+      const c = document.createElement('canvas');
+      c.width = 16 * SCALE; c.height = 16 * SCALE;
+      api.draw(c.getContext('2d'), frame, SCALE, {dark: isDark});
+      entry[key] = c;
+    }
+    return entry[key];
+  }
+
   function paint(force = false) {
     const api = cat();
     if (!api || !canvases.length) return;
@@ -200,13 +219,15 @@
     if (!force && sig === lastDrawn) return;
     lastDrawn = sig;
     const label = (api.STATES[state] || api.STATES.idle).label;
+    const image = sprite(api, def.frames[index], dark());
     for (const c of canvases) {
       const ctx = c.getContext('2d');
       ctx.clearRect(0, 0, c.width, c.height);
-      api.draw(ctx, def.frames[index], SCALE, {dark: dark()});
-      c.dataset.state = state;
-      c.dataset.facing = flip ? 'right' : 'left';
-      c.title = label;
+      ctx.drawImage(image, 0, 0);
+      if (c.dataset.state !== state) c.dataset.state = state;
+      const direction = flip ? 'right' : 'left';
+      if (c.dataset.facing !== direction) c.dataset.facing = direction;
+      if (c.title !== label) c.title = label;
     }
   }
 
@@ -215,7 +236,7 @@
     state = next;
     tick = 0;
     blinkAt = null;
-    nextBlink = Date.now() + 6000 + Math.random() * 4000;
+    nextBlink = Date.now() + blinkGap(Date.now());
     paint(true);
   }
 
@@ -228,20 +249,26 @@
     if (doneUntil > now && next === 'idle') next = 'done';
     if (next !== 'idle') idleAct = null;
     setState(next);
-    if (!perch || !perch.isConnected) { mountPerch(); canvases = [...document.querySelectorAll('.pk-metre-cat')]; }
-    tick += 1;
+    tick += stride;
     if (state === 'idle') {
       const def = cat()?.STATES.idle;
       if (blinkAt != null && def && tick - blinkAt >= def.frames.length * 8 / def.fps) blinkAt = null;
       if (idleAct && tick - idleAct.start >= idleAct.len) idleAct = null;
       if (!reduced() && !idleAct && blinkAt == null && now >= nextAct) startAct(now);
-      if (!idleAct && blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + 6000 + Math.random() * 4000; }
+      if (!idleAct && blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + blinkGap(now); }
     }
     paint();
     // 只有在动的时候才排下一拍；静止帧（空闲没眨眼、没做小动作、睡觉的慢帧也按它自己的 fps）不空转。
-    const moving = !reduced() && (state !== 'idle' || blinkAt != null || idleAct != null);
-    const wake = Math.min(nextBlink, reduced() ? Infinity : nextAct);
-    timer = setTimeout(loop, moving ? TICK_MS : Math.max(250, Math.min(1000, wake - now)));
+    if (reduced()) return;
+    const fps = cat()?.STATES[state]?.fps || 0;
+    const moving = idleAct || blinkAt != null || (state !== 'idle' && fps > 0);
+    const wake = Math.min(nextBlink, nextAct, idleSince + SLEEP_AFTER_MS);
+    // 帧按 fps 换（8 拍里取 fps 帧），所以每隔 ⌊8/fps⌋ 拍醒一次就不会漏帧：睡觉 1fps 一秒醒一次，不是八次
+    const playing = idleAct ? idleAct.def : (state === 'idle' ? cat()?.STATES.idle : cat()?.STATES[state]);
+    stride = Math.max(1, Math.floor(8 / Math.min(8, playing?.fps || 8)));
+    if (idleAct && idleAct.name === 'stroll') stride = 1;
+    if (moving) timer = setTimeout(loop, TICK_MS * stride);
+    else if (state === 'idle') { stride = 1; timer = setTimeout(loop, Math.max(250, wake - now)); }
   }
   // 背景被点了一下：竖耳朵、睁大眼往上看（在走路就不打断）
   function onTap() {
@@ -336,7 +363,10 @@
     if (d.live?.active || d.kind !== 'idle') idleSince = Date.now();
     if (d.kind === 'done' && !doneUntil) doneUntil = Date.now() + DONE_MS;
     if (d.kind !== 'done' && d.kind !== 'idle') doneUntil = 0;
-    if (mount()) kick();
+    if (mount()) {
+      if (stateFor(detail, Date.now(), idleSince) !== state) halt();
+      kick();
+    }
     // 一轮开始（注入）和结束（可能写了）各读一次条数；换会话也读。
     const started = d.live?.active && !wasActive;
     if (d.key !== memoryFor || started || (wasActive && !d.live?.active)) void refreshMemory(d.key, started);
@@ -349,8 +379,19 @@
     }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) halt(); else { lastDrawn = ''; kick(); } });
-  window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; kick(); });
+  window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; halt(); kick(); });
   window.addEventListener('pinkie:metre-tap', onTap);
+  // 有人回来了：小动作恢复 2～5 秒一次（正在等长间隔的话当场改排，不用等满 20 秒）
+  const noticeInput = () => {
+    const now = Date.now(), away = now - lastInput >= LIVELY_MS;
+    if (now - lastInput < 1000) return;
+    lastInput = now;
+    if (!away || idleAct || blinkAt != null || !timer) return;
+    nextAct = Math.min(nextAct, now + ACT_GAP[0] + Math.random() * ACT_GAP[1]);
+    nextBlink = Math.min(nextBlink, now + 6000 + Math.random() * 4000);
+    halt(); kick();
+  };
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel']) window.addEventListener(type, noticeInput, {capture: true, passive: true});
   window.addEventListener('laolao:modechange', () => { if (!isMetre()) { halt(); if (pop) pop.hidden = true; } else { lastDrawn = ''; kick(); } });
   // 每分钟兜底读一次条数（别处改了记忆，例如看板）。
   setInterval(() => { if (isMetre() && memoryFor && !document.hidden && Date.now() - memoryAt > 55_000) void refreshMemory(memoryFor); }, 60_000);

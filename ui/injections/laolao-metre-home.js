@@ -329,8 +329,29 @@
   }
 
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); timer = 0; } else arm(); });
-  window.addEventListener('laolao:modechange', () => setTimeout(sync, 0));
-  setInterval(() => { try { sync(); } catch (error) { console.error('[metre-home]', error); } }, 700);
+  let syncQueued = false;
+  const queueSync = () => {
+    if (syncQueued) return;
+    syncQueued = true;
+    setTimeout(() => { syncQueued = false; sync(); }, 0);
+  };
+  window.addEventListener('laolao:modechange', queueSync);
+  window.addEventListener('pinkie:session-selected', queueSync);
+  window.addEventListener('laolao:sessions-changed', queueSync);
+  if (typeof MutationObserver === 'function') {
+    const mountSelector = '.agent-chat__welcome, .dashboard-header, .sidebar-recent-session--active, .sidebar-recent-session__name';
+    const root = document.documentElement;
+    new MutationObserver(records => {
+      if (!isMetre() && !box?.isConnected && !titleEl?.isConnected) return;
+      if (records.some(rec => rec.type === 'attributes'
+        ? rec.target === root || rec.target.matches?.('.sidebar-recent-session')
+        : rec.target.closest?.('.sidebar-recent-session--active') || [...rec.addedNodes, ...rec.removedNodes].some(
+          node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
+        ))) queueSync();
+    }).observe(root, {childList: true, subtree: true, attributes: true,
+      attributeFilter: ['class', 'data-laolao-startup-home', 'data-laolao-mode']});
+  }
+  queueSync();
 
   window.__pinkieMetreHome = {...model, show: () => box && show(), get current() { return current; }};
 })();

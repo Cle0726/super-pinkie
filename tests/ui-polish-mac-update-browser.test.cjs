@@ -10,7 +10,7 @@ let playwright;
 try { playwright = require(process.env.PINKIE_PLAYWRIGHT_PATH || 'playwright'); } catch {}
 const root=path.join(__dirname,'..'),ui=path.join(root,'ui/injections'),worker=path.join(root,'installer/macos/stage-git-update.py');
 
-test('Mac dialog receives real Git download events while the installed checkout stays untouched', {skip: !playwright, timeout:60000}, async () => {
+test('Mac dialog receives real Git download events while the installed checkout stays untouched', {skip: process.platform === 'win32' ? 'macOS update worker (installer/macos)' : !playwright, timeout:60000}, async () => {
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-mac-ui-'));
   const env={...process.env,HOME:path.join(temp,'home'),PINKIE_STATE_ROOT:path.join(temp,'state'),PINKIE_CONFIG_ROOT:path.join(temp,'config'),GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0'};
   fs.mkdirSync(env.HOME,{recursive:true});fs.mkdirSync(env.PINKIE_CONFIG_ROOT,{recursive:true});

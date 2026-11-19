@@ -124,3 +124,41 @@ test('saving answers with the settings that were actually stored', () => {
   assert.equal('lens' in prefs.setSession(project, {style: 'concise'}), false);
   assert.deepEqual(prefs.setSession(KEY, {web: true}), {ok: true, style: 'default', customStyle: '', web: true});
 });
+
+test('Metre keeps the active turn’s policy while a saved switch applies to the next run', t => {
+  const root = tmp();
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const key = 'agent:metre:dashboard:turn-test';
+  const hooks = {};
+  const prefs = registerSessionPrefs({on(name, handler) { hooks[name] = handler; }}, {root});
+  hooks.before_agent_run({runId: 'baton-run'}, {sessionKey: key});
+  // Another window saves Virtuoso while a Baton response is in flight.
+  const other = new SessionPrefs(root);
+  other.setSession(key, {dispatch: 'solo'});
+  assert.equal(prefs.solo(key), false);
+  assert.match(hooks.before_prompt_build({}, {sessionKey: key}).appendSystemContext, /本轮：派发/);
+  hooks.before_agent_run({runId: 'baton-run'}, {sessionKey: key});
+  assert.equal(prefs.solo(key), false, 'duplicate hook must not change the policy of an active run');
+  hooks.agent_end({runId: 'baton-run'}, {sessionKey: key});
+  hooks.before_agent_run({runId: 'solo-run'}, {sessionKey: key});
+  assert.equal(prefs.solo(key), true);
+  assert.match(hooks.before_prompt_build({}, {sessionKey: key}).appendSystemContext, /本轮：独做/);
+  prefs.setSession(key, {dispatch: 'dispatch'});
+  hooks.agent_end({runId: 'baton-run'}, {sessionKey: key});
+  assert.equal(prefs.solo(key), true, 'a late end event must not clear the new turn');
+  hooks.agent_end({runId: 'solo-run'}, {sessionKey: key});
+  assert.equal(prefs.solo(key), false);
+});
+
+test('a failed Metre preference write leaves the previously confirmed strategy in use', t => {
+  const root = tmp();
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const prefs = new SessionPrefs(root);
+  const key = 'agent:metre:dashboard:write-failure';
+  prefs.setSession(key, {dispatch: 'solo'});
+  // A directory at the target prevents the atomic file replacement on every OS.
+  fs.unlinkSync(prefs.file);
+  fs.mkdirSync(prefs.file);
+  assert.throws(() => prefs.setSession(key, {dispatch: 'dispatch'}));
+  assert.equal(prefs.forSession(key).dispatch, 'solo');
+});

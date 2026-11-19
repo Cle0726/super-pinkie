@@ -107,7 +107,8 @@ export async function startHarness({vendor = true, handler = () => ({}), realUI 
   const calls = [];
   const chatMessages = [...initialMessages], deskHistories = new Map();
   const injectionRoot = process.env.PINKIE_QA_INJECTION_ROOT || path.join(repo, 'ui/injections');
-  const tags = fs.readFileSync(path.join(injectionRoot, 'laolao-head.fragment.html'), 'utf8').split('<!-- Study desk:')[1].split('-->')[1];
+  const tags = fs.readFileSync(path.join(injectionRoot, 'laolao-head.fragment.html'), 'utf8').split('<!-- Study desk:')[1].split('-->')[1]
+    .replaceAll('type="application/x-pinkie-legacy"', 'defer');
   const scripts = vendor ? tags : tags.replace(/<script[^>]+vendor\/[^>]+><\/script>/g, '');
   const installedControl = '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui';
   const controlRoot = process.env.PINKIE_CONTROL_UI_ROOT || (fs.existsSync(installedControl) ? installedControl : path.resolve(repo, '../sandbox/try/dist/control-ui'));

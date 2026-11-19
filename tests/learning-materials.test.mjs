@@ -7,6 +7,9 @@ import {fileURLToPath} from 'node:url';
 import {countPDFPages, excluded, snapshot, compareSnapshots, surveyRoot, toolStatus, main, matchTranscripts} from '../tools/study-desk-materials/survey.mjs';
 import {makeFixtures} from '../tools/study-desk-materials/make-fixtures.mjs';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const localTools=await toolStatus();
+const missingTools=['pdftotext','pdfinfo','pdftoppm','bsdtar','python3'].filter(name=>!localTools[name]);
+const needsTools=missingTools.length?{skip:'缺少 '+missingTools.join(', ')}:{};
 
 test('survey counts form-feed pages using the 40 non-whitespace character threshold',()=>{
   assert.deepEqual(countPDFPages('a'.repeat(40)+'\f \n\f'),{pages:2,textPages:1,noTextPages:1,lowTextPages:[2]});
@@ -60,7 +63,7 @@ test('material role and subject rules keep all answer/practice paths out of teac
  for(const name of ['课件/a.pdf','讲义/a.txt','知识点/a.docx','考点/a.pdf','笔记/a.md','视频转写稿/a.txt','学习指南.md','词汇.pdf','作文手册.pdf','速记.pdf','口袋书.pdf','参考书.pdf','教案.pdf','重点.pdf'])assert.equal(materialRole(name),'teach',name);
  assert.equal(materialRole('其他/readme.txt'),'other');assert.equal(materialSubject('zsb','02_高数/讲义.pdf'),'math');assert.equal(materialSubject('pretco-b-usb','任意/讲义.pdf'),'pretco');assert.equal(materialSubject('zsb','05_计算机网络/a.pptx'),'net');
 });
-test('incremental extraction preserves original mtimes, reads GBK archive members, retains gone text, and pauses on detach',async t=>{
+test('incremental extraction preserves original mtimes, reads GBK archive members, retains gone text, and pauses on detach',needsTools,async t=>{
  const {input,teach,materials:m}=await indexFixture(t);const before=await snapshot(input);await m.scanRoot(m.status().roots[0]);const count=m.status().pages.total,jobs=m.one('SELECT count(*) n FROM jobs').n;
  const gbk=m.one("SELECT * FROM sources WHERE member='中文讲义.txt'");assert.equal(gbk.status,'indexed');assert.match(m.one('SELECT text FROM pages WHERE source=?',gbk.id).text,/Synthetic archive/);
  assert.ok(m.unsupported().some(item=>item.path.endsWith('legacy.ppt')));assert.ok(m.unsupported().some(item=>item.reason.includes('加密')));
@@ -74,14 +77,14 @@ test('search/read expose only teach data; P5 validates ranges and chapters, and 
  const source=m.one("SELECT * FROM sources WHERE rel LIKE '%电流0.md'");await m.mapSource(source.id);assert.equal(mapCalls,1);assert.equal(JSON.parse(m.one('SELECT map_json FROM sources WHERE id=?',source.id).map_json).parts.length,1);assert.equal(m.one('SELECT role FROM sources WHERE id=?',source.id).role,'teach');await m.mapSource(source.id);assert.equal(mapCalls,1);
  const hidden=m.one("SELECT * FROM sources WHERE rel LIKE '%答案.md'");await m.mapSource(hidden.id);assert.equal(mapCalls,1);await assert.rejects(m.read(`m:${hidden.id}:1`),/讲解类资料/);
  const hits=m.search({query:'电流'}).hits;assert.ok(hits.length);assert.equal(hits.some(p=>p.title.includes('答案')),false);const located=await m.locate({k:'ee1',i:0});assert.equal(located.pages.length,6);await m.locate({k:'ee1',i:0});assert.equal(pickCalls,1);assert.equal(createLearningMaterialTool(m,{sessionKey:'agent:project:x'}),null);const tool=createLearningMaterialTool(m,{sessionKey:'agent:learning:x'});assert.equal((await tool.execute('x',{action:'read',ref:`m:${hidden.id}:1`})).isError,true);
-});test('interactive reads use a 512 MB memory gate, background vision keeps 1 GB',async t=>{
+});test('interactive reads use a 512 MB memory gate, background vision keeps 1 GB',needsTools,async t=>{
  let free=768*1024**2,calls=0;const f=await indexFixture(t,{freeMemory:()=>free,requestModel:async()=>{calls++;return {value:'# 合成原页\n这是一段足够长的模型抄录文字，含公式 $r_i=U_i/I_i$。\n<!-- quality: good -->',model:{name:'fixture'},usage:{total:3},ms:1};}}),m=f.materials;await m.scanRoot(m.status().roots[0]);const blank=m.one("SELECT * FROM sources WHERE rel LIKE '%/blank.pdf'"),row=m.one('SELECT * FROM pages WHERE source=? AND loc=1',blank.id);
  assert.equal(await m.readVision(blank,row),null);assert.equal(calls,0);
  assert.equal((await m.read(`m:${blank.id}:1`)).pages[0].readBy,'vision');assert.equal(calls,1);
  m.exec('DELETE FROM reads');free=256*1024**2;const low=(await m.read(`m:${blank.id}:1`)).pages[0];assert.equal(low.readBy,'unread');assert.match(low.note,/看原页/);assert.equal(calls,1);
 });
 
-test('vision cache, daily budget and unreadable fallback preserve OCR; original preview and reveal enforce root bounds',async t=>{
+test('vision cache, daily budget and unreadable fallback preserve OCR; original preview and reveal enforce root bounds',needsTools,async t=>{
  let calls=0;const requests=[];const f=await indexFixture(t,{visionDaily:1,requestModel:async(rules,payload,options)=>{assert.equal(rules,P4);requests.push(options);calls++;return {value:'# 合成原页\n这是一段足够长的模型抄录文字，含准确公式 $u_C(0^-)=u_C(0^+)$。\n<!-- quality: good -->',model:{name:'fixture'},usage:{input:10,output:20,total:30},ms:1};}}),m=f.materials;await m.scanRoot(m.status().roots[0]);const source=m.one("SELECT * FROM sources WHERE rel LIKE '%/text.pdf'");const ref=`m:${source.id}:2`;
  const first=await m.read(ref);assert.equal(first.pages[0].readBy,'vision');assert.equal(calls,1);assert.ok(requests[0].images[0].base64.length);assert.match(requests[0].userText,/第 2 页/);assert.equal((await m.read(ref)).pages[0].readBy,'vision');assert.equal(calls,1);
  const blank=m.one("SELECT * FROM sources WHERE rel LIKE '%/blank.pdf'");const unread=(await m.read(`m:${blank.id}:1`)).pages[0];assert.equal(unread.readBy,'unread');assert.match(unread.note,/还没认字/);assert.equal(calls,1);assert.match(m.status().visionBudget.reason,/额度用完/);
@@ -90,7 +93,7 @@ test('vision cache, daily budget and unreadable fallback preserve OCR; original 
  await fs.writeFile(path.join(f.root,'outside.pdf'),'outside');m.exec("UPDATE sources SET rel='../outside.pdf' WHERE id=?",source.id);await assert.rejects(m.reveal({ref}),/越界/);
  const g=await indexFixture(t,{requestModel:async()=>({value:'看不清\n<!-- quality: unreadable -->',usage:{total:1},model:{name:'fixture'},ms:1})});await g.materials.scanRoot(g.materials.status().roots[0]);const gs=g.materials.one("SELECT * FROM sources WHERE rel LIKE '%/blank.pdf'");assert.equal((await g.materials.read(`m:${gs.id}:1`)).pages[0].readBy,'unread');assert.equal(g.materials.one('SELECT count(*) n FROM reads').n,0);
 });
-test('OCR TSV keeps words in line order, flags math risk, and uses array process args at nice 15',async t=>{
+test('OCR TSV keeps words in line order, flags math risk, and uses array process args at nice 15',needsTools,async t=>{
  const tsv='level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t0\t0\t10\t10\t80\t电\n5\t1\t1\t1\t1\t2\t10\t0\t10\t10\t60\t压\n';assert.deepEqual(parseTSV(tsv),{text:'电压',confidence:70});assert.equal(formulaRisk('math','x = y + z / 2',90),true);assert.equal(formulaRisk('en','x = y + z / 2',20),false);
  const {materials:m}=await indexFixture(t);await m.scanRoot(m.status().roots[0]);const row=m.one("SELECT p.* FROM pages p JOIN sources s ON s.id=p.source WHERE s.ext='.pdf' AND p.method='pending' LIMIT 1"),calls=[];
  const jobs=new LearningMaterialsJobs(m,{runner:async(command,args,options)=>{calls.push({command,args,options});return command==='pdftoppm'?Buffer.from('fixture'):tsv;}});await jobs.ocr({source:row.source,loc:row.loc});assert.equal(m.one('SELECT method FROM pages WHERE source=? AND loc=?',row.source,row.loc).method,'ocr');assert.ok(calls.every(c=>Array.isArray(c.args)&&c.options.nice===15));assert.equal(calls[1].args.at(-1),'tsv');
@@ -109,7 +112,7 @@ test('index output cannot resolve inside a read-only source, including through a
 test('low-memory jobs never spawn work; manual pause persists across reopen and explicit resume restores waiting',async t=>{
  const {materials:m}=await indexFixture(t);await m.scan();const jobs=new LearningMaterialsJobs(m,{freeMemory:()=>0});await jobs.tick();assert.equal(jobs.active.size,0);assert.match(m.status().jobs.find(j=>j.kind==='scan').reason,/低于 1 GB/);m.jobsControl({kind:'scan',action:'pause'});assert.equal(m.status().jobs.find(j=>j.kind==='scan').state,'paused');const options={root:m.root,roots:m.definitions};await m.close();const restored=new LearningMaterials(options);try{await restored.init();assert.equal(restored.status().jobs.find(j=>j.kind==='scan').state,'paused');restored.jobsControl({kind:'scan',action:'resume'});assert.equal(restored.status().jobs.find(j=>j.kind==='scan').state,'waiting');}finally{await restored.close();}
 });
-test('a direct vision render is interrupted on root detach and returns retained OCR without calling the model',async t=>{
+test('a direct vision render is interrupted on root detach and returns retained OCR without calling the model',needsTools,async t=>{
  let modelCalls=0;const f=await indexFixture(t,{requestModel:async()=>{modelCalls++;throw new Error('must not call');}}),m=f.materials;await m.scanRoot(m.status().roots[0]);const source=m.one("SELECT * FROM sources WHERE rel LIKE '%/blank.pdf'");let ready;const started=new Promise(resolve=>{ready=resolve;});let aborted=false;
  m.runProcess=async(_command,_args,{signal})=>new Promise((_resolve,reject)=>{signal.addEventListener('abort',()=>{aborted=true;reject(new Error('aborted'));},{once:true});ready();});
  const pending=m.read(`m:${source.id}:1`);await started;await fs.rename(f.input,f.input+'-off');await m.discover();const read=await pending;assert.equal(aborted,true);assert.equal(modelCalls,0);assert.equal(read.pages[0].readBy,'unread');assert.match(read.pages[0].note,/U盘没插/);assert.equal(read.original,'offline');await fs.rename(f.input+'-off',f.input);

@@ -41,6 +41,7 @@ jobs:
           test -s personas/chat/SOUL.md && test -s personas/project/SOUL.md && test -s personas/thinking/SOUL.md && test -s personas/neutral/SOUL.md
           grep -Fq '不加「先生」「老板」这类头衔' personas/project/SOUL.md
           grep -Fq '工程搭档' personas/project/SOUL.md
+          grep -Fq '每个新会话都重新完整读取它的 `SKILL.md`' personas/project/AGENTS.md
       - name: Confirm four-mode UI assets are present
         run: |
           test -s ui/assets/laolao-mode-project-hd.png
@@ -83,11 +84,11 @@ jobs:
           npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
           "$deps/node_modules/.bin/playwright" install webkit
           echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
-      - name: Verify tool image trace in WebKit on macOS
+      - name: Verify tool image trace and Metre sidebar in WebKit on macOS
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: webkit
-        run: node --test tests/tool-images-e2e.test.mjs
+        run: node --test --test-concurrency=1 tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
 
   windows-build:
     needs: [portable-checks, macos-check]
@@ -150,11 +151,11 @@ jobs:
           & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
           if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
           "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Verify tool image trace in Chrome on Windows
+      - name: Verify tool image trace and Metre sidebar in Chrome on Windows
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: chromium
-        run: node --test tests/tool-images-e2e.test.mjs
+        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
       - name: Run the execution, recovery, UI and desktop suites on Windows
         timeout-minutes: 30
         # bash keeps this step identical to portable-checks: the default shell
@@ -173,8 +174,11 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: |
-          node --test tests/*.test.cjs tests/*.test.mjs
-          python -m unittest discover -s tests -p '*_test.py' -v
+          # Both suites always run, so a Node failure never hides the Python results; the step still fails if either does.
+          status=0
+          node --test tests/*.test.cjs tests/*.test.mjs || status=1
+          python -m unittest discover -s tests -p '*_test.py' -v || status=1
+          exit $status
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py

@@ -423,6 +423,7 @@
       const view = await rpc('pinkie.metre.board', {sessionKey: key}, RPC_MS);
       if (!view || view.ok === false) throw new Error(view?.error || 'bad');
       data = view; dataAt = Date.now();
+      window.dispatchEvent(new CustomEvent('pinkie:metre-board-data'));
       setStale(false);
       document.querySelector('#pk-metre-board .pk-metre-board__notice')?.remove();
       render(view);

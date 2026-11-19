@@ -265,8 +265,8 @@
       return mode.sessionKey;
     }
   };
-  const resolveTargetSession = async (mode) => {
-    const preferred = storedSession(mode);
+  const resolveTargetSession = async (mode, requestedKey) => {
+    const preferred = requestedKey || storedSession(mode);
     const rpc = window.__laolaoSidebar?.gwRequest;
     if (typeof rpc !== "function") return preferred;
     try {
@@ -276,6 +276,15 @@
       const sessions = Array.isArray(result?.sessions) ? result.sessions : [];
       const usable = sessions.filter((item) => item?.key && !item.key.includes(":subagent:") && item.archived !== true);
       if (usable.some((item) => item.key === preferred)) return preferred;
+      // An explicitly clicked session may be older than the capped list. Resolve the
+      // exact key rather than opening an unrelated conversation in that mode.
+      if (requestedKey) {
+        const [resolved, metadata] = await Promise.all([
+          rpc('sessions.resolve', {key: requestedKey, allowMissing: true}, 8_000),
+          rpc('pinkie.session.title.metadata', {keys: [requestedKey]}, 8_000),
+        ]);
+        return resolved?.key === requestedKey && metadata?.rows?.[requestedKey]?.archived !== true ? requestedKey : null;
+      }
       if (usable.some((item) => item.key === mode.sessionKey)) return mode.sessionKey;
       return usable[0]?.key || mode.sessionKey;
     } catch {
@@ -373,7 +382,8 @@
   };
 
   const preloadTransitions = async () => {
-    if (preloading) return;
+    if (preloading || document.documentElement.getAttribute('data-laolao-mode') === 'metre'
+      || document.documentElement.hasAttribute('data-laolao-splash-metre')) return;
     preloading = true;
     // All assets are local. Pre-decode them during the first idle window so a
     // later mode switch does not wait behind a 3.6s timer plus four serial
@@ -682,7 +692,7 @@
       return false;
     }
   };
-  const switchMode = async (mode, sourceOption = null) => {
+  const switchMode = async (mode, sourceOption = null, requestedKey = "") => {
     if (switching) return;
     if (mode.id === activeMode()) {
       closeMenu();
@@ -692,6 +702,32 @@
     switching = true;
     modeTransitionTargetId = mode.id;
     try {
+      const exactTarget = requestedKey ? await resolveTargetSession(mode, requestedKey) : null;
+      if (requestedKey && !exactTarget) {
+        window.__laolaoSidebar?.toast?.("这条会话已归档或不存在");
+        window.PinkieSessionList?.invalidate();
+        return;
+      }
+      // Opening a dispatched conversation is a session link, not a mode tour.
+      // Route it directly so a slow transition cannot trap a live child behind it.
+      if (exactTarget && activeMode() === "metre") {
+        rememberSession(currentSessionKey());
+        rememberSession(exactTarget);
+        localStorage.setItem(storageKey, mode.id);
+        const next = new URL(window.location.href);
+        next.searchParams.set("session", exactTarget);
+        next.searchParams.delete(skipEntrySplashParam);
+        next.searchParams.delete("draft");
+        const target = {...mode, sessionKey: exactTarget};
+        modeTransitionTargetId = null;
+        switching = false;
+        closeMenu();
+        // The sidebar helper deliberately accepts only same-mode keys.
+        navigateWithinApp(target, next);
+        window.setTimeout(render, 0);
+        window.dispatchEvent(new CustomEvent("pinkie:session-selected", {detail: {sessionKey: exactTarget}}));
+        return;
+      }
       window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
         detail: {mode: mode.id, fromSessionKey: currentSessionKey()},
       }));
@@ -700,7 +736,7 @@
       rememberSession(currentSessionKey());
       const [transition, targetSessionKey] = await Promise.all([
         playModeTransition(mode),
-        resolveTargetSession(mode),
+        exactTarget || resolveTargetSession(mode),
       ]);
       const targetMode = {...mode, sessionKey: targetSessionKey};
       localStorage.setItem(storageKey, mode.id);
@@ -877,7 +913,7 @@
     option.style.setProperty("--laolao-mode-fx-delay", `${index * 40}ms`);
     renderModeButton(option, mode, {current});
     const warm = () => {
-      if (mode.plain) return;
+      if (mode.plain || document.documentElement.getAttribute('data-laolao-mode') === 'metre') return;
       void motion.modeAssets(mode.id);
       window.PinkieModeTransitionFx?.warm?.(mode.id, {soon: true});
     };
@@ -1195,15 +1231,13 @@
 
   // A session that lives in another mode (a cross-mode sub-session, or the parent
   // it came from), opened from a card or a sidebar row: play the normal switch and
-  // land on that session instead of the mode's last one. If it is gone or archived,
-  // resolveTargetSession falls back to the mode's usual session.
+  // land on the exact session. If it is gone or archived, stay in the current mode.
   window.addEventListener("pinkie:open-session-in-mode", (event) => {
     const key = String(event.detail?.sessionKey || "");
     const modeId = modeIdForSession(key);
     if (!modeId || key.includes(":subagent:") || switching) return;
     if (modeId === activeMode()) { window.__laolaoSidebar?.navigateSession(key); return; }
-    rememberSession(key);
-    void switchMode(modeById(modeId));
+    void switchMode(modeById(modeId), null, key);
   });
 
   window.addEventListener("load", schedulePreload, { once: true });

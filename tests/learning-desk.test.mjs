@@ -11,7 +11,11 @@ const SESSION = 'agent:learning:desk-test';
 const AT = Date.parse('2026-10-19T01:00:00Z');
 function fixture(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-desk-'));
-  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  // 注册网关会打开资料库（SQLite）；Windows 上句柄不关就删不掉临时目录。
+  t.after(async () => {
+    await store.materials?.close?.();
+    fs.rmSync(root, {recursive: true, force: true});
+  });
   let clock = AT;
   const store = new LearningInteractionStore({root: path.join(root, 'state'), workspace: path.join(root, 'workspace')});
   const pact = new LearningPact(store, {now: () => clock}); store.pact = pact;
@@ -301,7 +305,7 @@ test('board renders real metrics, evidence, range switches, themes and plan adop
     await page.getByRole('button', {name: '采纳为明天的计划'}).click();
     await page.getByRole('button', {name: '已采纳', exact: true}).waitFor();
     assert.equal(ref.pact.get().tomorrowPlan.items[0].chapter, 'c5');
-    await page.getByRole('button', {name: '对话', exact: true}).click();
+    await page.getByRole('button', {name: '切换模式', exact: true}).click();
     assert.equal(await page.locator('.pinkie-desk-board').count(), 0);
   });
 });
@@ -328,7 +332,7 @@ test('board has loading/failure/retry states and ignores late replies after unmo
     await page.getByRole('button', {name: '重试', exact: true}).click();
     const finishRetry = await receive();
     await page.locator('.b-skeleton').first().waitFor();
-    await page.getByRole('button', {name: '对话', exact: true}).click();
+    await page.getByRole('button', {name: '切换模式', exact: true}).click();
     const response = page.waitForResponse(res => res.url().endsWith('/rpc') && res.request().postDataJSON()?.method.endsWith('insight'));
     finishRetry(); await response;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -385,8 +389,7 @@ test('analysis distinguishes attempt counts from correct counts and validates Ch
 });
 
 test('missing learning model never silently falls back to a different model; missing usage stays null', async t => {
-  const missing = modelFixture(t);
-  missing.organizer.api.config.agents.list[0].model = 'test/unavailable';
+  const missing = modelFixture(t, {unavailable: true});
   assert.equal((await missing.desk.insight({sessionKey: SESSION})).status, 'unavailable'); assert.equal(missing.calls(), 0);
   const noUsage = modelFixture(t, {usage: {prompt_tokens: null, completion_tokens: null, total_tokens: null}});
   assert.deepEqual((await noUsage.desk.insight({sessionKey: SESSION})).usage, {input: null, output: null, total: null});

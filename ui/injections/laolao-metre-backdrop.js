@@ -981,9 +981,11 @@
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const isHome = () => root.getAttribute('data-laolao-startup-home') === '1';
   const isDark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night');
-  const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  const motionPreference = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(motionPreference?.matches);
   const mainEl = () => document.querySelector('main.content.content--chat');
   let canvas = null, ctx = null, scene = null, low = null, lowCtx = null, img = null, view = null;
+  let sceneKey = '', runActive = false;
   let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null, prevTop = 0, prevRip = false;
   let ripples = [], rippleTimer = 0, rippleRaf = 0, lastFrame = 0, flashSlot = -1, flashTimer = 0;
   const mainClass = new MutationObserver(() => queue());
@@ -1003,7 +1005,7 @@
     observed = null;
     mainClass.disconnect();
     canvas?.remove();
-    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer);
+    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; sceneKey = ''; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer);
     root.removeAttribute('data-pk-metre-backdrop');
     root.style.removeProperty('--metre-band');
   }
@@ -1026,30 +1028,37 @@
     const rows = Math.max(band + Math.round(band * (home ? 0.9 : 0.6)), Math.ceil(fullH / cellCss));
     const cols = Math.ceil(rect.width / cellCss);
     const cssW = cols * cellCss, cssH = rows * cellCss;
-    Object.assign(canvas.style, {left: Math.round(rect.left * dpr) / dpr + 'px', top: 'auto', bottom: '0px', width: cssW + 'px', height: cssH + 'px'});
-    canvas.width = cols * cellDev;
-    canvas.height = rows * cellDev;
-    ctx = canvas.getContext('2d');
-    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px');
     const col = document.querySelector('.agent-chat__input')?.getBoundingClientRect();
     const quiet = !home && col && col.width ? [Math.floor((col.left - rect.left) / cellCss) - 4, Math.ceil((col.right - rect.left) / cellCss) + 4] : null;
     const keepTop = quiet ? Math.floor((col.top - (window.innerHeight - cssH)) / cellCss) : null;
     const lamps = currentLamps();
+    const left = Math.round(rect.left * dpr) / dpr;
+    const dark = isDark();
+    const signature = JSON.stringify([left, cssW, cssH, cols, rows, band, cellDev, dark, home, lamps, quiet, keepTop, flashSlot]);
+    if (sceneKey === signature) return false;
+    sceneKey = signature;
+    Object.assign(canvas.style, {left: left + 'px', top: 'auto', bottom: '0px', width: cssW + 'px', height: cssH + 'px'});
+    canvas.width = cols * cellDev;
+    canvas.height = rows * cellDev;
+    ctx = canvas.getContext('2d');
+    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px');
     lampSig = lamps.join(',');
-    scene = buildScene({cols, rows, band, dark: isDark(), home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot});
+    scene = buildScene({cols, rows, band, dark, home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot});
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');
     img = lowCtx.createImageData(cols, rows);
     view = {cols, rows, cellDev, cellCss};
     lastStep = -1;
+    return true;
   }
 
   // force：整张重画（量过位置之后）；否则只重画这一帧和上一帧改动到的那几行（会动的两样在画带里，波纹的光点可能更高）
   function draw(force = false) {
     if (!ctx || !scene || !img) return;
     const tempo = document.querySelector('.pk-metre-tempo');
-    if (tempo) tempo.dataset.beat = String(reduced() ? 0 : Math.floor(step / 2) % 4);
+    const beat = String(reduced() ? 0 : Math.floor(step / 2) % 4);
+    if (tempo && tempo.dataset.beat !== beat) tempo.dataset.beat = beat;
     if (!force && step === lastStep && !ripples.length && !prevRip) return;
     lastStep = step;
     const {cols, rows, cellDev} = view;
@@ -1072,7 +1081,8 @@
     if (currentLamps().join(',') !== lampSig) { layout(); draw(true); } else draw();
     timer = setTimeout(tick, STEP);
   }
-  const running = () => Boolean(canvas) && !document.hidden && !window.__pinkieMetreBrand?.isOpen && !reduced();
+  const running = () => Boolean(canvas) && (runActive || currentLamps().includes('run'))
+    && !document.hidden && !window.__pinkieMetreBrand?.isOpen && !reduced();
   function start() { if (!timer && running()) timer = setTimeout(tick, STEP); }
   function stop() { clearTimeout(timer); timer = 0; }
 
@@ -1140,8 +1150,7 @@
       mainClass.disconnect();
       mainClass.observe(main, {attributes: true, attributeFilter: ['class']});
     }
-    layout();
-    draw(true);
+    if (layout()) draw(true);
     if (running()) start(); else stop();
   }
   let queued = false;
@@ -1159,7 +1168,12 @@
     window.addEventListener('resize', queue);
     document.addEventListener('pointerdown', onTap, true);
     // 总控台的数据到了 / 换了会话：灯马上跟上（不等下一拍）
-    window.addEventListener('pinkie:session-selected', queue);
+    window.addEventListener('pinkie:session-selected', () => { runActive = false; queue(); });
+    window.addEventListener('pinkie:metre-board-data', queue);
+    window.addEventListener('pinkie:run-view', (event) => {
+      const active = Boolean(event.detail?.live?.active);
+      if (active !== runActive) { runActive = active; queue(); }
+    });
     // 标志页开关：它开着时停，关了接着走
     document.addEventListener('keydown', () => setTimeout(() => { if (canvas) { if (running()) start(); else stop(); } }, 0), true);
     document.addEventListener('click', () => setTimeout(() => { if (canvas) { if (running()) start(); else stop(); } }, 0), true);

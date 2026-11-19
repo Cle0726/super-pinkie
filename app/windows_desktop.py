@@ -1792,17 +1792,25 @@ function Test-UpdateWriteAccess([string]$Folder) {
     $stream.Dispose()
   } finally { if ($created) { [IO.File]::Delete($probe) } }
 }
+function Move-Folder([string]$From, [string]$To) {
+  # A plain rename. Move-Item on Windows PowerShell can fall back to copying
+  # when the rename is refused, leaving a half-copied folder at the target;
+  # every retry then fails with "already exists" long after the file that
+  # blocked the rename was closed (a scanner holding the fresh unpack, 11-19).
+  [IO.Directory]::Move($From, $To)
+}
 function Invoke-WithRetry([scriptblock]$Action, [string]$What, [int]$Seconds) {
   # Windows refuses to rename a folder while any file inside is open. Right
   # after a 30,000-file unpack, the virus scanner, the search indexer or a
   # OneDrive/Desktop sync client routinely holds some of them for a while.
   $deadline = (Get-Date).AddSeconds($Seconds)
-  $logged = $false
+  $logged = ''
   while ($true) {
     try { & $Action; return }
     catch {
       if ((Get-Date) -ge $deadline) { throw "$What is still in use: $($_.Exception.Message)" }
-      if (-not $logged) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $true }
+      # Log the first refusal and every different one after it, so a changed cause is visible.
+      if ($logged -ne $_.Exception.Message) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $_.Exception.Message }
       Start-Sleep -Milliseconds 500
     }
   }
@@ -1829,14 +1837,49 @@ function Stop-InstallLeftovers([string]$Root) {
   $stopped = @()
   $alive = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
   $helpers = @('msedgewebview2.exe', 'msedge.exe', 'chrome.exe', 'node.exe', 'python.exe', 'pythonw.exe', 'cmd.exe', 'conhost.exe')
-  $rootText = if ($Root -and (Test-Path -LiteralPath $Root)) { (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') } else { '' }
-  $stateText = if ($StateRoot) { [IO.Path]::GetFullPath($StateRoot).TrimEnd('\') } else { '' }
+  # A command line may spell the folder in 8.3 form (C:\Users\RUNNER~1\...,
+  # what %TEMP% often is) while Get-Item gives the long name, or the other
+  # way round, so both spellings count.
+  function Get-PathSpellings([string]$Path) {
+    $forms = @()
+    if (-not $Path) { return $forms }
+    # Exactly as given first: on Windows PowerShell (.NET Framework) GetFullPath
+    # and Get-Item expand 8.3 names, so a mixed spelling (short parent, long
+    # leaf -- what a child started from %TEMP% sees) is only kept this way.
+    $forms += $Path.TrimEnd('\')
+    try { $forms += [IO.Path]::GetFullPath($Path).TrimEnd('\') } catch {}
+    if (Test-Path -LiteralPath $Path) {
+      try { $forms += (Get-Item -LiteralPath $Path).FullName.TrimEnd('\') } catch {}
+      try {
+        $fso = New-Object -ComObject Scripting.FileSystemObject
+        $short = [string]$fso.GetFolder($Path).ShortPath
+        if ($short) { $forms += $short.TrimEnd('\') }
+        $leaf = Get-Item -LiteralPath $Path
+        if ($leaf.Parent) { $forms += (Join-Path ([string]$fso.GetFolder($leaf.Parent.FullName).ShortPath).TrimEnd('\') $leaf.Name) }
+        # The long form: walk up resolving each segment to its real name
+        # (a directory filter matches the 8.3 name as well as the long one).
+        $parts = @(); $item = Get-Item -LiteralPath $Path
+        while ($item -and $item.Parent) {
+          $real = Get-ChildItem -LiteralPath $item.Parent.FullName -Filter $item.Name -Force -ErrorAction Stop | Select-Object -First 1
+          $parts = @($(if ($real) { $real.Name } else { $item.Name })) + $parts
+          $item = $item.Parent
+        }
+        if ($item) { $forms += (Join-Path $item.FullName.TrimEnd('\') ($parts -join '\')).TrimEnd('\') }
+      } catch {}
+    }
+    return @($forms | Where-Object { $_ } | Sort-Object -Unique)
+  }
+  $rootForms = if ($Root -and (Test-Path -LiteralPath $Root)) { @(Get-PathSpellings $Root) } else { @() }
+  $stateForms = if ($StateRoot) { @(Get-PathSpellings $StateRoot) } else { @() }
   foreach ($process in $alive) {
     if ($process.ProcessId -eq $PID -or -not $process.CommandLine) { continue }
     if ($helpers -notcontains $process.Name.ToLowerInvariant()) { continue }
     $line = [string]$process.CommandLine
-    $ours = ($rootText -and $line.IndexOf($rootText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-      ($stateText -and $line -match '--user-data-dir=' -and $line.IndexOf($stateText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+    $ours = $false
+    foreach ($form in $rootForms) { if ($line.IndexOf($form, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $ours = $true } }
+    if (-not $ours -and $line -match '--user-data-dir=') {
+      foreach ($form in $stateForms) { if ($line.IndexOf($form, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $ours = $true } }
+    }
     if ($ours) { $stopped += $process }
   }
   $stopped = @($stopped | Sort-Object ProcessId -Unique)
@@ -1901,9 +1944,13 @@ function Get-GatewayListeners {
 }
 function Get-VerifiedGateway([int]$GatewayId) {
   $process = Get-CimInstance Win32_Process -Filter "ProcessId=$GatewayId" -ErrorAction Stop
-  if (-not $process -or -not $process.ExecutablePath) { throw 'gateway-owned-by-another-app' }
+  if (-not $process -or -not $process.ExecutablePath) {
+    Write-UpdateLog "gateway port $GatewayPort is held by #$GatewayId whose executable cannot be read"
+    throw 'gateway-owned-by-another-app'
+  }
   $prefix = (Get-Item -LiteralPath $TargetDir).FullName.TrimEnd('\') + '\'
   if ($process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return $process }
+  Write-UpdateLog "gateway port $GatewayPort is held by $($process.Name)#$GatewayId at $($process.ExecutablePath), outside $prefix; checking the owner record $GatewayRecord"
 
   # A previous copy can leave its gateway behind. Only its recorded listener
   # with the expected bundled node executable and gateway arguments is ours.
@@ -1960,7 +2007,14 @@ function Confirm-NewInstallGateway {
 function Copy-PreviousVersion {
   # Fallback when the previous folder cannot be renamed back. Returns $true
   # only when a complete copy (with its exe) is in place at $TargetDir.
-  if (Test-Path -LiteralPath $TargetDir) { return $false }
+  if (Test-Path -LiteralPath $TargetDir) {
+    if (Test-Path -LiteralPath $TargetExe -PathType Leaf) { Write-UpdateLog 'not copying the previous version: the install folder already has its exe'; return $false }
+    # A rename that failed half-way can leave an empty or partial folder at the
+    # target. It holds nothing the user needs; move it aside so the copy can land.
+    $stray = $TargetDir.TrimEnd('\') + '.partial-' + $Token
+    try { Move-Folder $TargetDir $stray; Write-UpdateLog "an incomplete install folder was in the way; moved it to $stray" }
+    catch { Write-UpdateLog "not copying the previous version: the install folder is in the way ($($_.Exception.Message))"; return $false }
+  }
   $copying = $TargetDir.TrimEnd('\') + '.restoring-' + $Token
   try {
     Remove-Item -LiteralPath $copying -Recurse -Force -ErrorAction SilentlyContinue
@@ -1969,7 +2023,7 @@ function Copy-PreviousVersion {
     if ($code -ge 8) { throw "robocopy exit code $code" }
     if (-not (Test-Path -LiteralPath (Join-Path $copying (Split-Path -Leaf $TargetExe)) -PathType Leaf)) { throw 'copied version has no exe' }
     # The copy was made beside the target; this rename touches only new files.
-    Invoke-WithRetry { Move-Item -LiteralPath $copying -Destination $TargetDir } 'copied previous version' 30
+    Invoke-WithRetry { Move-Folder $copying $TargetDir } 'copied previous version' 30
     Write-UpdateLog "previous version restored by copy; the original stays at $Backup"
     return $true
   } catch {
@@ -1990,10 +2044,10 @@ function Restore-PreviousVersion {
       # either happens completely or not at all, so a half-deleted tree can
       # never be left where the user starts the App.
       $failed = $TargetDir.TrimEnd('\') + '.failed-' + $Token
-      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
+      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Folder $TargetDir $failed } 'new install folder' $SwapSeconds
     }
     try {
-      Invoke-WithRetry { try { Stop-InstallProcesses $Backup } catch {}; Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
+      Invoke-WithRetry { try { Stop-InstallProcesses $Backup } catch {}; Move-Folder $Backup $TargetDir } 'previous version folder' $SwapSeconds
     } catch {
       Write-UpdateLog "rename back failed, copying the previous version instead: $($_.Exception.Message)"
       # A scanner, indexer or a stray child process can keep a handle in the
@@ -2001,7 +2055,7 @@ function Restore-PreviousVersion {
       # Copying it back leaves the user a working App on the same path.
       if (-not (Copy-PreviousVersion)) {
         if (-not (Test-Path -LiteralPath $TargetDir) -and $failed -and (Test-Path -LiteralPath $failed)) {
-          try { Move-Item -LiteralPath $failed -Destination $TargetDir -Force } catch {}
+          try { Move-Folder $failed $TargetDir } catch {}
         }
         throw
       }
@@ -2078,12 +2132,12 @@ try {
   Stop-VerifiedGateway
   Invoke-WithRetry {
     Stop-InstallProcesses $TargetDir
-    Move-Item -LiteralPath $TargetDir -Destination $Backup
+    Move-Folder $TargetDir $Backup
     $script:backupCreated = $true
   } 'install folder' $SwapSeconds
   # This rename used to have no retry at all: one file of the fresh unpack
   # still open in the virus scanner failed the whole update and rolled back.
-  Invoke-WithRetry { Move-Item -LiteralPath $newDir -Destination $TargetDir } 'unpacked new version' $SwapSeconds
+  Invoke-WithRetry { Move-Folder $newDir $TargetDir } 'unpacked new version' $SwapSeconds
   if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'new version is missing after the swap' }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
@@ -4976,7 +5030,8 @@ def take_pending_launch_token(root=None, max_age=900.0, now=None):
             path.unlink()
         except OSError:
             pass
-    if not re.fullmatch(r"[0-9a-f]{32}", token) or not 0 <= age <= max_age:
+    # Windows 上文件修改时间可能比 time.time() 早走几毫秒（不同时钟），刚写的文件 age 会是小负数。
+    if not re.fullmatch(r"[0-9a-f]{32}", token) or not -2.0 <= age <= max_age:
         return None
     if not (path.parents[1] / f"apply-{token}.ps1").is_file():
         return None

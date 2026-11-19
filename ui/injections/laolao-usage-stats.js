@@ -214,7 +214,7 @@
     if (!chip) return;
     const runtime = runtimeSnapshot();
     if (chip.valueEl.textContent !== runtime.text) chip.valueEl.textContent = runtime.text;
-    chip.el.dataset.state = runtime.state;
+    if (chip.el.dataset.state !== runtime.state) chip.el.dataset.state = runtime.state;
   }
 
   const CHIP_DEFS = [
@@ -287,6 +287,7 @@
       cost: { text: cost != null ? fmtCost(cost) : "—", raw: cost },
     };
 
+    let needsFit = false;
     for (const c of list) {
       const v = values[c.key];
       if (!v) continue;
@@ -294,20 +295,20 @@
       const increased =
         typeof v.raw === "number" && typeof prev === "number" && v.raw > prev;
       const changed = c.valueEl.textContent !== v.text;
-      if (changed) c.valueEl.textContent = v.text;
+      if (changed) { c.valueEl.textContent = v.text; needsFit = true; }
       if (increased) {
         pulse(c.el.closest ? c.el : c.el);
       }
-      if (c.key === "runtime") c.el.dataset.state = v.state;
+      if (c.key === "runtime" && c.el.dataset.state !== v.state) c.el.dataset.state = v.state;
       if (c.def.naWhenNull) {
         c.el.classList.toggle("laolao-usage__chip--na", v.raw == null);
       }
       prevRaw[c.key] = v.raw;
     }
 
-    queueFit();
+    if (needsFit) queueFit();
 
-    wrap.title = [
+    const title = [
       `${view.source}：输入 ${fmtTok(view.input)} · 输出 ${fmtTok(view.output)}` +
         (view.cacheRead != null ? ` · 缓存读 ${fmtTok(view.cacheRead)}` : ""),
       view.requests != null
@@ -319,6 +320,7 @@
       view.stale ? '统计源暂不可用，显示最后保存的累计值。' : null,
       view.sourceUpdatedAt ? '统计源更新时间：'+new Date(view.sourceUpdatedAt).toLocaleString() : null,
     ].filter(Boolean).join("\n");
+    if (wrap.title !== title) wrap.title = title;
   }
 
   /* ---------- 启动 ---------- */
@@ -350,8 +352,14 @@
     // v9：rAF 节流。流式期间 mutation 批次极密，回调必须与帧率对齐，
     // 不能每批次都跑（雪崩教训：回调频率 × 成本 才是主线程杀手）。
     let queued = false;
-    new MutationObserver(() => {
-      if (queued) return;
+    const mountSelector = ".dashboard-header, .chat-pane__header, #party-usage, .chat-send-btn, #jobs .job";
+    new MutationObserver((records) => {
+      if (queued || !records.some((rec) => {
+        if (rec.type === "attributes") return rec.target.matches?.(".chat-send-btn, #jobs .job");
+        return [...rec.addedNodes, ...rec.removedNodes].some(
+          node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
+        );
+      })) return;
       queued = true;
       requestAnimationFrame(() => { queued = false; render(); syncLive(); });
     }).observe(document.documentElement, {

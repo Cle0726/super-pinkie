@@ -169,8 +169,11 @@
     panel.setAttribute("aria-label", "当前模式的独立长期记忆");
     const head = node("header", "laolao-memory-head");
     const title = node("div", "laolao-memory-title");
-    title.append(node("strong", "", `${modeLabels[mode()] || "当前模式"} · 记忆匣`), node("span", "", "物理独立保存，不会串到其他模式"));
-    const closeButton = node("button", "laolao-memory-close", "×"); closeButton.type = "button"; closeButton.setAttribute("aria-label", "关闭记忆匣"); closeButton.addEventListener("click", close);
+    const activeMode = mode();
+    const metre = activeMode === "metre";
+    title.append(node("strong", "", metre ? "Metre · 长期记忆" : `${modeLabels[activeMode] || "当前模式"} · 记忆匣`),
+      node("span", "", metre ? "只在 Metre 中保存和使用" : "物理独立保存，不会串到其他模式"));
+    const closeButton = node("button", "laolao-memory-close", "×"); closeButton.type = "button"; closeButton.setAttribute("aria-label", metre ? "关闭长期记忆" : "关闭记忆匣"); closeButton.addEventListener("click", close);
     head.append(title, closeButton);
     const toolbar = node("div", "laolao-memory-toolbar");
     const search = node("input", "laolao-memory-search"); search.type = "search"; search.placeholder = "搜索当前模式记忆"; search.setAttribute("aria-label", "搜索当前模式记忆");

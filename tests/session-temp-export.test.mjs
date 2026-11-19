@@ -107,8 +107,11 @@ test('memory never records from a temp session', () => {
 });
 
 test('media path detection stays inside the state media folder', () => {
-  const state = '/tmp/st';
-  assert.deepEqual(mediaPathsIn('a /tmp/st/media/inbound/a.png, b /tmp/st/other/x.png "/tmp/st/media/../x"', state), ['/tmp/st/media/inbound/a.png']);
+  const state = path.resolve('/tmp/st');
+  const at = (...parts) => path.join(state, ...parts);
+  assert.deepEqual(mediaPathsIn(`a ${at('media', 'inbound', 'a.png')}, b ${at('other', 'x.png')} "${state}${path.sep}media${path.sep}..${path.sep}x"`, state), [at('media', 'inbound', 'a.png')]);
+  // Windows 上传进来的状态目录不带盘符时，按同一个盘解析，不会因此一个都认不出来。
+  if (process.platform === 'win32') assert.deepEqual(mediaPathsIn(`${at('media', 'b.png')}`, '/tmp/st'), [at('media', 'b.png')]);
 });
 
 const branch = [

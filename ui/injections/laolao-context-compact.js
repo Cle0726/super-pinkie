@@ -398,7 +398,9 @@
     const summary = viewer.querySelector("summary");
     const aria = ratio ? `上下文容量：已用${label}，${formatTokens(ratio.used)} / ${formatTokens(ratio.limit)} 令牌${thresholdText ? `；${thresholdText}` : ""}` : "上下文容量：等待用量数据";
     if (summary.getAttribute("aria-label") !== aria) summary.setAttribute("aria-label", aria);
-    viewer.dataset.level = !ratio ? "" : ratio.compactionBudget && ratio.used >= ratio.compactionBudget.threshold * 0.9 ? "high" : ratio.percent >= 50 ? "mid" : "low";
+    const level = !ratio ? "" : ratio.compactionBudget && ratio.used >= ratio.compactionBudget.threshold * 0.9 ? "high" : ratio.percent >= 50 ? "mid" : "low";
+    // 每次渲染都写同一个值也会触发样式失效；没变就不写。
+    if (viewer.dataset.level !== level) viewer.dataset.level = level;
 
     // The panel is only rebuilt while it is open.
     dockPanel(viewer);

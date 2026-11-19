@@ -886,7 +886,11 @@ export class SettingsGuard {
     };
     const add = (dir, opts, filter) => {
       try {
-        const watcher = fs.watch(dir, {persistent: false, ...opts}, (type, name) => { if (!filter || !name || filter(String(name))) kick(); });
+        // Windows 上目录名可能是 8.3 短名（C:\Users\RUNNER~1），libuv 收到长名事件时会直接断言崩溃，
+        // 整个网关进程跟着退出。先换成真实长路径再监视。
+        let real = dir;
+        try { real = fs.realpathSync.native(dir); } catch {}
+        const watcher = fs.watch(real, {persistent: false, ...opts}, (type, name) => { if (!filter || !name || filter(String(name))) kick(); });
         watcher.on?.('error', () => {});
         snap.watchers.push(watcher);
       } catch {}

@@ -21,7 +21,7 @@ test('a link to a session in another mode goes through the mode switcher, same-m
   has(source('laolao-sidebar.js'), 'if(modeForSession(key)!==stateMode)return;', 'the sidebar itself still refuses other modes');
 });
 
-test('the mode switcher opens the asked session: remembers it for that mode, then plays the normal switch', () => {
+test('the mode switcher carries the exact requested key through the normal switch', () => {
   const switcher = source('laolao-mode-switcher.js');
   const start = switcher.indexOf('window.addEventListener("pinkie:open-session-in-mode", (event) => {');
   assert.ok(start > 0, 'handler present');
@@ -32,25 +32,23 @@ test('the mode switcher opens the asked session: remembers it for that mode, the
     const handler = vm.runInNewContext('(' + body + ')', {
       String, switching, activeMode: () => active,
       modeIdForSession: k => ({main: 'chat', project: 'project', thinking: 'thinking', learning: 'learning'})[String(k).split(':')[1]] || null,
-      rememberSession: k => calls.push(['remember', k]), modeById: id => ({id}), switchMode: mode => calls.push(['switch', mode.id]),
+      modeById: id => ({id}), switchMode: (mode, _option, key) => calls.push(['switch', mode.id, key]),
       window: {__laolaoSidebar: {navigateSession: k => calls.push(['navigate', k])}},
     });
     handler({detail: {sessionKey: key}});
     return plain(calls);
   };
-  assert.deepEqual(run('agent:thinking:pinkie-child:1'), [['remember', 'agent:thinking:pinkie-child:1'], ['switch', 'thinking']]);
+  assert.deepEqual(run('agent:thinking:pinkie-child:1'), [['switch', 'thinking', 'agent:thinking:pinkie-child:1']]);
   assert.deepEqual(run('agent:project:abc'), [['navigate', 'agent:project:abc']], 'same mode: plain navigation, no transition');
   assert.deepEqual(run('agent:thinking:x', {switching: true}), [], 'never interrupts a switch already playing');
   assert.deepEqual(run('agent:thinking:subagent:x'), []);
   assert.deepEqual(run('nonsense'), []);
   assert.deepEqual(run(undefined), []);
-  // The remembered key is only kept if that session is still listed; otherwise the mode's usual one.
-  has(switcher, 'if (usable.some((item) => item.key === preferred)) return preferred;');
 });
 
 test('the sidebar marks a child that came from another mode and offers a way to the ones it sent away', () => {
   const list = source('laolao-session-list.js');
-  has(list, "for (const [childKey, child] of Object.entries(lineage?.away || {})) (awayBy[child.parentKey] ||= []).push({key: childKey, ...child});");
+  has(list, "if (api.mode !== 'metre') for (const child of away) (awayBy[child.parentKey] ||= []).push(child);");
   has(list, "const origin = s.lineage?.cross ? MODE_SHORT[s.lineage.fromMode] : '';");
   has(list, "if (origin) link.append(el('span', 'pinkie-session-origin', origin));");
   has(list, "const away = !worker && !archived && api.mode !== 'metre' && s.away || [];", 'never on archived or persona rows, and not in Metre');
@@ -106,17 +104,34 @@ test('the 临时 button no longer sits on top of the new-session shortcut', () =
   has(source('laolao-session-tools.css'), 'html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }');
 });
 
-test('in Metre the parts it sent to other modes are listed under the parent, not hidden behind a ↗N chip', () => {
-  const list = source('laolao-session-list.js');
-  has(list, "const awayChildren = (s, api) => api.mode === 'metre' && !archived && Array.isArray(s.away) ? s.away : [];");
-  has(list, "host.append(row(node.session, api, {children: node.children.length + parts.length, collapsed}));", 'the fold count includes them');
-  has(list, "if (!collapsed) for (const part of parts) branch.append(awayRow(part));", 'folding hides them like any child');
-  has(list, "window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: part.key}}));", 'a click switches to that mode');
+test('explicit cross-mode navigation resolves a child outside the listed page, and skips archived ones', async () => {
+  const src = source('laolao-mode-switcher.js');
+  const start = src.indexOf('const resolveTargetSession = '), end = src.indexOf('\n  };', start);
+  const child = 'agent:project:pinkie-child:outside-the-page', defaultKey = 'agent:project:main';
+  async function run(archived, found) {
+    const rpc = async (method, params) => {
+      if (method === 'sessions.list') return {sessions: [{key: defaultKey}]};
+      if (method === 'sessions.resolve') {
+        assert.equal(params.key, child);
+        return {ok: found, ...(found ? {key: child} : {})};
+      }
+      assert.equal(method, 'pinkie.session.title.metadata');
+      assert.equal(params.keys[0], child);
+      return {rows: {[child]: {archived}}};
+    };
+    const resolve = vm.runInNewContext('(' + src.slice(start + 'const resolveTargetSession = '.length, end) + '\n  })', {
+      window: {__laolaoSidebar: {gwRequest: rpc}}, agentIdForMode: id => id,
+    });
+    return resolve({id: 'project', sessionKey: defaultKey}, child);
+  }
+  assert.equal(await run(false, true), child);
+  assert.equal(await run(true, true), null);
+  assert.equal(await run(false, false), null);
 });
 
 test('the changed scripts are served under new cache names', () => {
   const head = source('laolao-head.fragment.html');
-  for (const name of ['laolao-session-list.js?v=audit1112.', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode48']) has(head, name);
+  for (const name of ['laolao-session-list.js?v=metre1118', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode53']) has(head, name);
 });
 
 // Clean-up from the same audit (duplicates seen on a real render of the chat page).

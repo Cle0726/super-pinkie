@@ -1917,7 +1917,8 @@ test('computer tool discovers the complete driver surface and fails clearly befo
   assert.deepEqual(calls[0].args,['list-tools','--socket','/tmp/driver.sock']);
   const unavailable=await createCuaComputerTool({},async()=>assert.fail('runner must not start'),{}).execute('call-2',{action:'list_apps'});
   assert.equal(unavailable.isError,true);
-  assert.match(unavailable.content[0].text,/尚未连接/);
+  // Windows 上没有 CUA 执行器，直接让模型改用 computer_flow；其它系统说 App 端点还没连上。
+  assert.match(unavailable.content[0].text,process.platform==='win32'?/没有 computer 桌面执行器/:/尚未连接/);
 });
 
 test('a rejected next-turn injection cannot leave a ghost tier lock',async t=>{

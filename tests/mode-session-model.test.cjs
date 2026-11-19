@@ -46,6 +46,7 @@ test('mode changes defer repaint and session observers until the transition is f
   assert.match(mode, /if \(modeTransitionTargetId\) \{[\s\S]*?return;\s*\}/);
   assert.match(mode, /progressAnimation = motion\.animateProgress\(ui\.fill, ui\.percentage, ui\.progress, 68, 96, 28 \* 92, "linear"\)/);
   assert.match(mode, /const visualValue = motion\.displayedProgress\(ui\.fill\) \?\? 68;\s*progressAnimation\.cancel\(\);\s*progressAnimation = null;\s*ui\.fill\.style\.transform = `scaleX\(\$\{visualValue \/ 100\}\)`/);
-  assert.ok(mode.indexOf('await finishModeTransition(targetMode, transition)') < mode.indexOf('"pinkie:session-selected"'));
+  const crossMode = mode.slice(mode.indexOf('await finishModeTransition(targetMode, transition)'));
+  assert.match(crossMode, /^await finishModeTransition[\s\S]*?"pinkie:session-selected", \{detail: \{sessionKey: targetSessionKey\}\}/);
   assert.doesNotMatch(mode, /setTimeout\(\(\) => window\.dispatchEvent\(new CustomEvent\(\s*"pinkie:session-selected"/);
 });

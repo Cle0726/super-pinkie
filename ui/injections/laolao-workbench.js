@@ -300,7 +300,7 @@
       if (document.documentElement.dataset.pinkieWb !== 'on') document.documentElement.dataset.pinkieWb = 'on';
     } else {
       cancelSashDrag?.();
-      workspaceHeader.hidden = true;
+      if (!workspaceHeader.hidden) workspaceHeader.hidden = true;
       for (const key of ['pinkieWb', 'pkWbCompact', 'pkWbNarrow', 'pkWbView']) {
         if (key in document.documentElement.dataset) delete document.documentElement.dataset[key];
       }

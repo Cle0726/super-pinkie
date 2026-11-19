@@ -18,6 +18,7 @@ SPEC.loader.exec_module(PLAN)
 IDENTITIES = {
     "project": {"name": "碧琪", "theme": "项目搭档", "emoji": "🎈", "avatar": "avatars/pinkie.png"},
     "learning": {"name": "碧琪", "theme": "学习搭档", "emoji": "🎈", "avatar": "avatars/pinkie.png"},
+    "metre": {"name": "Metre", "theme": "Metre 模式"},
 }
 
 
@@ -48,7 +49,7 @@ class BundledSetupTest(unittest.TestCase):
             target.parent.mkdir(parents=True)
             target.write_text("\n".join(f"- **{key.title()}:** {value}" for key, value in identity.items()) + "\n")
 
-    def write_config(self, agents=("project", "learning")):
+    def write_config(self, agents=tuple(IDENTITIES)):
         self.config.write_text(json.dumps({"agents": {"list": [
             {"id": agent, "identity": IDENTITIES[agent]} for agent in agents
         ]}}, ensure_ascii=False))
@@ -57,7 +58,7 @@ class BundledSetupTest(unittest.TestCase):
         with mock.patch.dict(os.environ, extra_env or {}, clear=True):
             return PLAN.unchanged_agents(self.home, self.package, self.cli)
 
-    def run_setup(self, agents=("project", "learning"), extra_env=None):
+    def run_setup(self, agents=tuple(IDENTITIES), extra_env=None):
         agent_state = self.root / "agents.json"
         agent_state.write_text(json.dumps(list(agents)))
         log = self.root / "calls.jsonl"
@@ -93,10 +94,10 @@ elif args[:2] == ["agents", "add"]:
         return [json.loads(line) for line in log.read_text().splitlines()]
 
     def test_only_unambiguously_matching_identities_are_skipped(self):
-        self.assertEqual(self.plan(), ["project", "learning"])
+        self.assertEqual(self.plan(), ["project", "learning", "metre"])
         project = self.home / ".openclaw/workspace-project/IDENTITY.md"
         project.write_text(project.read_text() + "- Name: 不同的名字\n")
-        self.assertEqual(self.plan(), ["learning"])
+        self.assertEqual(self.plan(), ["learning", "metre"])
         self.assertEqual(self.plan({"OPENCLAW_CONFIG_PATH": "/custom/config.json"}), [])
         self.assertEqual(self.plan({"OPENCLAW_STATE_DIR": "/custom/state"}), [])
         self.assertEqual(self.plan({"OPENCLAW_HOME": "/custom/home"}), [])
@@ -112,12 +113,12 @@ elif args[:2] == ["agents", "add"]:
         self.config.write_text('{not-json}')
         self.assertEqual(self.plan(), [])
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
     def test_existing_identities_reuse_one_validated_list(self):
         calls = self.run_setup()
         self.assertEqual(calls, [["agents", "list", "--json"]])
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
     def test_changed_identity_still_uses_original_cli(self):
         path = self.home / ".openclaw/workspace-project/IDENTITY.md"
         path.write_text(path.read_text().replace("项目搭档", "新项目搭档"))
@@ -125,35 +126,37 @@ elif args[:2] == ["agents", "add"]:
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1][:4], ["agents", "set-identity", "--agent", "project"])
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
     def test_missing_project_refreshes_list_and_installs_identity(self):
-        self.write_config(("learning",))
-        calls = self.run_setup(agents=("learning",))
+        self.write_config(("learning", "metre"))
+        calls = self.run_setup(agents=("learning", "metre"))
         self.assertEqual([call[:3] for call in calls], [
             ["agents", "list", "--json"], ["agents", "add", "project"],
             ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
         ])
         self.assertEqual(calls[2][3], "project")
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
-    def test_fresh_profile_adds_both_modes(self):
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
+    def test_fresh_profile_adds_all_managed_modes(self):
         self.write_config(())
         calls = self.run_setup(agents=())
         self.assertEqual([call[:3] for call in calls], [
             ["agents", "list", "--json"], ["agents", "add", "project"],
             ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
             ["agents", "add", "learning"], ["agents", "set-identity", "--agent"],
+            ["agents", "list", "--json"], ["agents", "add", "metre"],
+            ["agents", "set-identity", "--agent"],
         ])
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
     def test_failed_list_output_is_not_treated_as_valid(self):
         calls = self.run_setup(extra_env={"FAKE_FAIL_LIST": "1"})
-        self.assertEqual([call[2] for call in calls if call[1] == "add"], ["project", "learning"])
+        self.assertEqual([call[2] for call in calls if call[1] == "add"], list(IDENTITIES))
 
-    @unittest.skipUnless(shutil.which("bash"), "requires bash")
-    def test_custom_config_uses_both_original_identity_commands(self):
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
+    def test_custom_config_uses_each_original_identity_command(self):
         calls = self.run_setup(extra_env={"OPENCLAW_CONFIG_PATH": "/custom/config.json"})
-        self.assertEqual([call[3] for call in calls if call[1] == "set-identity"], ["project", "learning"])
+        self.assertEqual([call[3] for call in calls if call[1] == "set-identity"], list(IDENTITIES))
 
 
 if __name__ == "__main__":

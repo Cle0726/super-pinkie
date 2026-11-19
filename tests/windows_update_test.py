@@ -295,7 +295,7 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertIn("update package checksum mismatch", helper)
         verify = helper.index("Get-FileHash")
         self.assertLess(verify, helper.index("Expand-Archive"))
-        self.assertLess(verify, helper.index("Move-Item -LiteralPath $TargetDir -Destination $Backup"))
+        self.assertLess(verify, helper.index("Move-Folder $TargetDir $Backup"))
 
     def test_replacer_ready_requires_exact_token_and_a_live_child(self):
         marker = Path(self.temporary.name) / 'helper-ready'
@@ -347,6 +347,8 @@ class WindowsUpdateTests(unittest.TestCase):
                 process = mock.Mock()
                 process.poll.return_value = None
                 def spawn(command, **_):
+                    # Windows 上进度窗口也走 Popen，先放过它，只接管更新助手。
+                    if '-Token' not in command: return mock.Mock()
                     token = command[command.index('-Token') + 1]
                     marker = Path(command[command.index('-ReadyMarker') + 1])
                     marker.write_text(token, encoding='ascii')
@@ -379,6 +381,7 @@ class WindowsUpdateTests(unittest.TestCase):
         updater.prepared = {'payload': payload, 'sha256': updater._file_hash(payload), 'version': '9.9.9'}
         process = mock.Mock(); process.poll.return_value = 1
         def denied(command, **_):
+            if '-ReadyMarker' not in command: return mock.Mock()  # Windows 上的进度窗口
             marker = Path(command[command.index('-ReadyMarker') + 1] + '.error')
             marker.write_text(json.dumps({'kind':'UnauthorizedAccessException','hresult':-2147024891}), encoding='utf-8')
             return process

@@ -559,7 +559,12 @@ def main():
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--upstream-probe", action="store_true",
                         help="after the fresh scenario, check how failed model turns are retried")
+    parser.add_argument("--metre-sidebar", action="store_true",
+                        help="also dispatch a local fixture task and open its sidebar row in packaged WebView2")
+    parser.add_argument("--metre-sidebar-only", action="store_true", help="run only the packaged Metre sidebar case")
     args = parser.parse_args()
+    if args.metre_sidebar and not args.upstream_probe:
+        parser.error("--metre-sidebar requires --upstream-probe")
 
     subprocess.run([sys.executable, str(Path(__file__).with_name('desktop_shot.py')), '--prepare'], check=True)
 
@@ -577,15 +582,27 @@ def main():
     }
     if http_ready():
         raise SystemExit("port 18789 is already in use before the smoke test")
+    if args.metre_sidebar_only:
+        import upstream_probe
+        try:
+            result = upstream_probe.run_metre_sidebar_only(exe, work / "fresh", out, launch, kill_app, profile_env)
+        except Exception as error:
+            result = {"passed": False, "error": str(error)}
+        (out / "summary.json").write_text(json.dumps({"metre_sidebar": result}, ensure_ascii=False, indent=2), encoding="utf-8")
+        log(f"[probe] metre-sidebar: {result}")
+        return 0 if result["passed"] else 1
     summaries["fresh"] = scenario("fresh", exe, work / "fresh", out)
     if args.upstream_probe:
         import upstream_probe
 
         try:
-            summaries["upstream_probe"] = upstream_probe.run(exe, work / "fresh", out, launch, kill_app, profile_env)
+            summaries["upstream_probe"] = upstream_probe.run(
+                exe, work / "fresh", out, launch, kill_app, profile_env, metre_sidebar=args.metre_sidebar)
         except Exception as error:
             summaries["upstream_probe"] = {"passed": False, "error": repr(error), "cases": {}}
             kill_app(exe.parent)
+        if args.metre_sidebar:
+            log(f"[probe] metre-sidebar: {summaries['upstream_probe'].get('metre_sidebar', {})}")
         for name, result in summaries["upstream_probe"].get("cases", {}).items():
             log(f"[probe] {name}: requests={result.get('requests')} final={result.get('final')} problems={result['problems']}")
     if args.old_app:
@@ -598,4 +615,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

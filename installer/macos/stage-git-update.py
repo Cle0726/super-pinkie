@@ -5,7 +5,6 @@ This does not install anything. `apply` is run by the existing detached helper
 only after the old process exits; it refuses a changed repository or commit.
 """
 from __future__ import annotations
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -353,6 +352,7 @@ def prepare():
     UPDATES.mkdir(parents=True, exist_ok=True)
     with (UPDATES / 'git-stage.lock').open('a+') as lock:
         try:
+            import fcntl  # macOS 专用；放在这里，Windows 上的发布说明测试也能导入本文件
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RuntimeError('已有更新正在下载。')

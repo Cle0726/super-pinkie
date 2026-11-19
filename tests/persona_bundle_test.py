@@ -26,7 +26,7 @@ class PersonaBundleTests(unittest.TestCase):
         data = (PERSONAS / "project/playbooks/machine-check.ps1").read_bytes()
         self.assertTrue(data.startswith(b"\xef\xbb\xbf"), "Windows PowerShell 5.1 needs the BOM to read Chinese text")
 
-    @unittest.skipUnless(shutil.which("bash"), "needs bash")
+    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "needs bash on macOS/Linux")
     def test_mac_sync_makes_manuals_follow_the_official_version_and_keeps_memory(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

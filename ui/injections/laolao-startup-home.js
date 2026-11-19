@@ -316,6 +316,13 @@
       if (row?.thinkingLevel) patch.thinkingLevel = row.thinkingLevel;
       if (Object.keys(patch).length) await api.gwRequest('sessions.patch', {key: to, agentId: agent, ...patch}, 15000);
     } catch { /* 带不过去时新会话用默认模型，消息照发。 */ }
+    if (selected === 'metre') {
+      const rpc = window.__laolaoSidebar.gwRequest;
+      const prefs = await rpc('pinkie.session.prefs.get', {key: from}, 8000);
+      if (!prefs?.ok || !['dispatch', 'solo'].includes(prefs.dispatch)) throw new Error('没能读取 Baton / Virtuoso，原文已保留。');
+      const saved = await rpc('pinkie.session.prefs.set', {key: to, dispatch: prefs.dispatch}, 8000);
+      if (!saved?.ok || saved.dispatch !== prefs.dispatch) throw new Error('没能保存 Baton / Virtuoso，原文已保留。');
+    }
   }
   const leave = () => {
     if (!active) return;
@@ -453,6 +460,7 @@
   };
   const sendFromHome = async (input, pane, dispatch) => {
     if (!active || busy || !input?.value?.trim()) return false;
+    if (window.PinkieSessionTools?.dispatchSavePending?.(pane?.state?.sessionKey || sessionKey())) return false;
     // 空白新会话还在备：等它一下（通常不到一秒），备好后输入框和文字都已经在新会话里了。
     if (draft?.state === 'pending') {
       busy = true; root.setAttribute('data-laolao-startup-busy', '1');
@@ -469,6 +477,7 @@
     const create = document.querySelector('.sidebar-new-session'), createPlain = window.__laolaoSidebar?.createSession;
     if (!useDraft && typeof createPlain !== 'function' && (!create || create.disabled)) { notify('新会话暂时没有准备好，文字还在输入框里。'); return false; }
     const originalKey = sessionKey(), selected = mode(), text = input.value;
+    if (selected === 'metre' && window.PinkieSessionTools?.dispatchSavePending?.(pane?.state?.sessionKey || originalKey)) return false;
     const attachments = Array.isArray(pane?.state?.chatAttachments) ? [...pane.state.chatAttachments] : null;
     busy = true; const token = ++operation;
     pendingDraft = {text, input}; input.readOnly = true;

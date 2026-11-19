@@ -490,6 +490,8 @@ export class SessionLineage {
       this.titles.record(key, {title: child.label || request.title, source: request.userAuthored ? 'user' : 'system'});
     }
     this.reserved.set(key, this.now());
+    // The session already exists. Show the sidebar entry while the first send is pending.
+    if (metre && cross && request.initiation !== 'consult') this.notify(parentKey);
     const brief = this.briefFor(parentKey, request);
     try {
       await this.send(key, brief, startRun, BRIEF_PREFIX);
@@ -906,8 +908,31 @@ export class SessionLineage {
     }
     const active = parents.size ? await this.activeRows(agentId) : new Map();
     const elsewhere = new Set(Object.keys(away).map(agentOf));
-    for (const other of elsewhere) {
-      try { for (const [key, row] of await this.activeRows(other)) active.set(key, row); } catch {}
+    const destinationStores = new Map();
+    await Promise.all([...elsewhere].map(async other => {
+      const [rows, store] = await Promise.all([
+        this.activeRows(other).catch(() => null),
+        agentId === 'metre' ? this.access.list(other).catch(() => null) : null,
+      ]);
+      for (const [key, row] of rows || []) active.set(key, row);
+      if (store) destinationStores.set(other, store.entries);
+    }));
+    if (agentId === 'metre') {
+      for (const [key, part] of Object.entries(away)) {
+        const store = destinationStores.get(agentOf(key));
+        const entry = store?.[key], row = active.get(key), state = storedStates[key];
+        // The list RPC is capped. Use the actual session store to distinguish an older
+        // child from a deleted/archived one, without depending on the parent's row.
+        if (store && (!entry?.sessionId || entry.archivedAt) || row?.archived) {
+          delete away[key];
+          continue;
+        }
+        Object.assign(part, {
+          title: row?.label || entry?.label || part.title,
+          updatedAt: row?.updatedAt || entry?.updatedAt || state?.at || lineage[key].createdAt,
+          hasActiveRun: this.busy(key, row), phase: state?.phase, status: row?.status,
+        });
+      }
     }
     for (const parent of parents) {
       states[parent] = {...states[parent], runningChildren: this.runningChildren(parent, active, lineage, storedStates[parent] || {})};
@@ -933,6 +958,7 @@ export class SessionLineage {
   }
 
   async message(from, to, raw, callId) {
+    if (isMetreKey(from) && this.solo(from)) throw new Error('这个会话本轮是 Virtuoso（独做）：不给其他会话加活');
     if (!agentOf(from) || !agentOf(to) || isPersona(from) || isPersona(to)) throw new Error('只能给自己的父会话或子会话发消息');
     const lineage = this.lineage();
     if (lineage[to]?.parentKey !== from && lineage[from]?.parentKey !== to) throw new Error('只能给自己的父会话或子会话发消息');

@@ -169,6 +169,7 @@ test('images in an ask reply are saved into the output folder and offered as MED
   freshState();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'web-gpt-ask-'));
   const home = os.homedir();
+  fs.mkdirSync(path.join(home, 'Documents'), {recursive: true});
   const project = fs.mkdtempSync(path.join(home, 'Documents', 'web-gpt-proj-'));
   t.after(() => { fs.rmSync(tmp, {recursive: true, force: true}); fs.rmSync(project, {recursive: true, force: true}); });
   const job = randomUUID();
