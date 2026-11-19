@@ -128,11 +128,11 @@
   const icon = (name) => `<svg class="pk-mb-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
   const SLOTS = [
     {id: 'plan', en: 'Score', title: '计划', note: '这件事拆成的步骤，做到哪一步、哪一步卡住。', source: 'pinkie.metre.board → plan'},
-    {id: 'sessions', en: 'Parts', title: '子会话', wide: true, note: '一行一个：标题、模型、状态、用了多久、此刻在做什么、用量；可以打开、停止、发消息。', source: 'pinkie.metre.board → sessions'},
+    {id: 'sessions', en: 'Parts', title: '子会话', wide: true, note: '一行一个：标题、角色与模型、状态、用了多久、此刻在做什么、用量；可以打开、停止、发消息。', source: 'pinkie.metre.board → sessions'},
     {id: 'pending', en: 'Cues', title: '待你处理', note: '等你回答的问题和等你点的确认。有内容时标题上出数字。', source: 'pinkie.metre.board → pending'},
     {id: 'timeline', en: 'Bars', title: '时间线', note: '派发、汇报、打回、验收、出错、叫停，新的在上。', source: 'pinkie.metre.board → timeline'},
     {id: 'changes', en: 'Revisions', title: '改动', note: '这一家子会话动过的文件，按会话分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
-    {id: 'runtime', en: 'Tempo', title: '运行环境', note: '网关连接、在用模型的健康状态、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
+    {id: 'runtime', en: 'Tempo', title: '运行环境', note: '网关连接、模型健康、角色卡检查、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
     {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索。', source: 'pinkie.metre.memory（接口已有，面板没接）'},
     {id: 'raw', en: 'Log', title: '原始记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];

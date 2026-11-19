@@ -30,6 +30,33 @@ const num = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const lines = text => typeof text === 'string' && text ? text.split(/\r?\n/u).length : 0;
 const baseName = file => String(file || '').split(/[\\/]/u).filter(Boolean).pop() || '';
 
+// The role mechanism is developed separately. An absent reader (e.g. an
+// older bundle) must not break the board or look like zero validated cards.
+async function loadMetreRoleCatalog() {
+  const {loadRoles} = await import('./metre-roles.mjs');
+  return loadRoles();
+}
+
+function metreRoleFields(record, launch, catalog) {
+  const role = record.metreRole || launch?.metreRole || '';
+  if (!role) return {role: '', roleName: '', roleSource: ''};
+  const roleSource = record.metreRoleSource || launch?.metreRoleSource || '';
+  const card = catalog.get(role);
+  const matchingCard = !roleSource || roleSource === card?.source ? card : null;
+  return {role, roleName: record.metreRoleName || launch?.metreRoleName || matchingCard?.name || role,
+    roleSource: roleSource || matchingCard?.source || ''};
+}
+
+function summarizeMetreRoleCatalog(catalog) {
+  if (!Array.isArray(catalog?.roles) && !(catalog?.roles instanceof Map)) return null;
+  if (!Array.isArray(catalog.invalid)) return null;
+  const roles = new Map(Array.from(catalog.roles.values(), card => [card.id, card]));
+  return {roles, status: {valid: Number.isSafeInteger(catalog.validCount) ? catalog.validCount : roles.size,
+    invalid: catalog.invalid.length,
+    issues: catalog.invalid.map(issue => ({file: baseName(issue.file || issue.filename || issue.id),
+      source: issue.source === 'user' ? 'user' : 'official', reason: clip(issue.reason || issue.error || '未提供原因', 240)}))}};
+}
+
 // 一次工具调用「在做什么」：工具名 + 对象（文件名、命令第一行、搜索词）。和界面上的状态词同一个意思，不另起一套话术。
 export function describeTool(name = '', params = {}) {
   const tool = String(name || '').toLowerCase();
@@ -65,11 +92,13 @@ export function changeOf(name = '', params = {}) {
 }
 
 export class MetreBoard {
-  constructor({root, lineage, plans = null, modelHealth = null, now = () => Date.now(), schedule = setTimeout}) {
+  constructor({root, lineage, plans = null, modelHealth = null, metreRoleCatalog = loadMetreRoleCatalog,
+    now = () => Date.now(), schedule = setTimeout}) {
     this.root = root;
     this.lineage = lineage;
     this.plans = plans;
     this.modelHealth = modelHealth;
+    this.metreRoleCatalog = metreRoleCatalog;
     this.now = now;
     this.schedule = schedule;
     this.cache = new Map();
@@ -278,6 +307,10 @@ export class MetreBoard {
     const parentState = this.lineage.state(parent);
     let rows = new Map();
     try { rows = await this.lineage.familyRows(parent); } catch { /* 网关列表暂时拿不到：用量和「在跑」退回账本里的记录 */ }
+    let metreRoleCatalog = null;
+    try { metreRoleCatalog = summarizeMetreRoleCatalog(await this.metreRoleCatalog()); }
+    catch { /* diagnostics must never hide the rest of a Metre board */ }
+    const metreRoles = metreRoleCatalog?.roles || new Map();
     const now = this.now();
     const launches = Object.values(parentState.launches || {});
     const reports = (parentState.cards || []).filter(card => card.kind === 'report');
@@ -307,6 +340,7 @@ export class MetreBoard {
       const usage = j.usage[key] || {};
       return {key, title: row?.label || record.title || launch?.title || '子会话', mode: record.mode || launch?.mode || '',
         modeName: MODE_NAMES[record.mode || launch?.mode] || '', model: record.model || launch?.model || '',
+        ...metreRoleFields(record, launch, metreRoles),
         status, statusText: STATUS_WORDS[status], state: BOARD_STATE[status],
         startedAt: record.createdAt || launch?.at || 0, endedAt: busy ? 0 : (state.at || 0),
         doing: busy ? (j.doing[key] || '想') : '',
@@ -340,8 +374,16 @@ export class MetreBoard {
 
     const timeline = [...j.events];
     // 真正交回的汇报（血缘里的汇报卡片）：一张一条。
-    for (const card of reports) if (card.createdAt) timeline.push({at: card.createdAt, kind: card.failed ? 'error' : 'report', sessionKey: card.childKey,
-      text: `「${this.title(card.childKey)}」${card.failed ? '汇报失败' : '交回汇报'}${card.text ? '：' + clip(card.text, 60) : ''}`});
+    const sessionsByKey = new Map(sessions.map(row => [row.key, row]));
+    for (const card of reports) {
+      if (!card.createdAt) continue;
+      // Consultations don't occupy rows in the score, but their report can
+      // still carry a name from the role snapshot.
+      const row = sessionsByKey.get(card.childKey) || metreRoleFields(lineage[card.childKey] || {}, null, metreRoles);
+      const roleName = card.metreRoleName || row.roleName;
+      timeline.push({at: card.createdAt, kind: card.failed ? 'error' : 'report', sessionKey: card.childKey,
+        text: `「${this.title(card.childKey)}」${roleName ? `（${roleName}）` : ''}${card.failed ? '汇报失败' : '交回汇报'}${card.text ? '：' + clip(card.text, 60) : ''}`});
+    }
     if (lastStop?.at) timeline.push({at: lastStop.at, kind: 'stop', sessionKey: parent,
       text: `全部停下：停了 ${(lastStop.children || []).filter(item => item.stopped).length} 个子会话${lastStop.parent ? '和 Metre 这一轮' : ''}`});
     if (parentState.pausedAt && paused) timeline.push({at: parentState.pausedAt, kind: 'stop', sessionKey: parent, text: '暂停派发'});
@@ -372,7 +414,8 @@ export class MetreBoard {
           status: item.status === 'completed' ? 'done' : item.status === 'in_progress' ? 'active' : 'pending'}))} : null,
       sessions, pending, timeline: timeline.slice(0, 60), changes,
       runtime: {models: models.map(health), context: {used: num(own?.totalTokens), max: num(own?.contextTokens)},
-        usage: usageTotal, series: series.slice(-60), errors: j.errors.slice(-8).reverse()},
+        usage: usageTotal, series: series.slice(-60), errors: j.errors.slice(-8).reverse(),
+        metreRoles: metreRoleCatalog?.status || null},
       raw: j.raw.slice(-RAW_LIMIT)};
   }
 
@@ -392,8 +435,8 @@ export class MetreBoard {
   }
 }
 
-export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null}) {
-  const board = new MetreBoard({root, lineage, plans, modelHealth});
+export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null, metreRoleCatalog}) {
+  const board = new MetreBoard({root, lineage, plans, modelHealth, metreRoleCatalog});
   const safe = work => (event, ctx) => { try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ } };
   api.on?.('before_agent_run', safe((event, ctx) => board.runStarted(event, ctx)), {priority: -10900});
   api.on?.('message_received', safe((event, ctx) => board.messageReceived(event, ctx)));

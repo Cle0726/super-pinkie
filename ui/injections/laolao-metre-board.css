@@ -205,6 +205,17 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 .pk-mb-score__part { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .pk-mb-score__part strong { font: 500 13.5px/1.3 var(--metre-sans, system-ui, sans-serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk-mb-score__part small { font-size: 11.5px; color: var(--metre-muted, #73726C); }
+.pk-mb-role-label { overflow-wrap: anywhere; }
+.pk-mb-role-badge {
+  display: inline-block;
+  margin-inline-start: 4px;
+  padding-inline: 4px;
+  border-radius: 4px;
+  background: var(--metre-v3-soft);
+  color: var(--metre-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
 /* 小节线：每四分之一一条 */
 .pk-mb-score__track { position: relative; align-self: stretch; background: repeating-linear-gradient(to right, var(--metre-line, #E8E6DC) 0 1px, transparent 1px 25%); border-right: 1px solid var(--metre-line, #E8E6DC); }
 .pk-mb-score__track i { position: absolute; top: 50%; height: 14px; margin-top: -7px; border-radius: 4px; background: var(--mb-c); }
@@ -271,6 +282,9 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 .pk-mb-health i { width: 8px; height: 8px; border-radius: 50%; background: var(--mb-c); }
 .pk-mb-health em { font-style: normal; text-align: right; font-size: 12.5px; color: var(--metre-muted, #73726C); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk-mb-health li[data-state="fail"] em { color: var(--metre-v4); }
+.pk-mb-role-issues { margin-top: 4px; font-size: 12.5px; }
+.pk-mb-role-issues summary { cursor: pointer; color: var(--metre-muted); }
+.pk-mb-role-issues li { overflow-wrap: anywhere; }
 
 /* 项目记忆 */
 .pk-mb-memory { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }

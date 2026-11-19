@@ -53,3 +53,11 @@
 - 验证：Windows 临时文件夹测试 19/19、persona bundle 3/3、Node self-contained-app 25/25 通过；Shell/PowerShell/guard 语法检查、git diff --check 通过。Mac 包安装/导入检查用 Windows 的 Node 对当前源码根运行（返回 Mac mode plugin fresh-install import OK），**不是打包后的 Mac 快照**。
 - 既有 mode_architecture_setup_test.py 在 Windows 为 9/10：第 45 行硬编码 Mac 状态目录，曾在 9dba1a4c 原版 setup.py 上单独重跑并得到同一 FileNotFoundError；未改老测试。macos_bundled_setup_test.py 初跑在 Windows 默认编码（cp1252）读取/写入中文 fixture 时失败，不作为 Mac 验收证据。
 - R4-2 的覆盖、退休两种备份均在临时 fixture 通过。R4-1 只验证重装/升级时同 ID 用户卡字节、修改时间不变；列卡、派活待网关。R1-18 只验证初装工作区内容及复制哈希，运行一轮后检查仍待网关。下一步：看板和三种截图。
+
+## 2026-11-18 · 看板
+
+- 每个子会话带 role / roleName / roleSource；老会话仍显示模式和模型。有派发快照名时优先用快照，没快照才从同来源目录找名字；看板时间线汇报也带角色名。运行环境接角色卡校验统计，原因可展开；目录读不到会标「暂时读不到」，不伪报零张。
+- 交接给窗口 1：看板默认调用 metre-roles.mjs 导出的 loadRoles()，期望结果 roles（卡对象数组或 Map，卡有 id/name/source）、invalid（不合格项数组，包含 file 或 filename、reason 或 error、source）。可选 validCount 指明合格张数；如窗口 1 的读卡需要依赖，可在 registerMetreBoard 的参数传入同口径 metreRoleCatalog 回调。血缘/排队记录可写 metreRoleName 来保留派发时的名称。实际读卡接线、侧栏角色名、汇报卡和 pinkie_session_list 仍待窗口 1 的代码；本车道不改 index.mjs、session-lineage.mjs 或共用旧模式注入。
+- \`node --test tests/metre-board.test.mjs tests/metre-skin-cat.test.cjs\`：31/31；Node 语法和 \`git diff --check\` 通过。新增 CSS 用既有 --metre-*，\`git diff -U0 -- ui/injections/laolao-metre-board.css\` 的新增行无十六进制或 rgb/hsl 颜色。
+- \`ref/board-fixture.html\` 调用真实页面骨架及数据渲染，假 RPC，不连网关；打开时带 \`?session=agent:metre:main&theme=light\`（深色用 dark）。Chrome headless 用 \`--force-device-scale-factor=1 --virtual-time-budget=1500\`，\`--dump-dom\` 检查 data-fixture="passed" 和布局类；分别用 \`--window-size=1360,1120\`（两种主题）和 \`--window-size=700,1440\` 截图。三张 PNG 均目检：角色名与模型、自定义标记、合格/不合格数量和展开原因在同一画面内。
+- 下一步：移植并校对旧草稿、验收表收尾。
