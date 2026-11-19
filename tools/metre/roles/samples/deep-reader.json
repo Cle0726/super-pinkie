@@ -1,5 +1,6 @@
 {
   "role": "deep-reader",
+  "name": "资料精读",
   "samples": [
     {
       "id": "deep-reader-1",

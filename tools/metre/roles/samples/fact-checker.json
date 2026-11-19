@@ -1,5 +1,6 @@
 {
   "role": "fact-checker",
+  "name": "事实核查",
   "samples": [
     {
       "id": "fact-checker-1",

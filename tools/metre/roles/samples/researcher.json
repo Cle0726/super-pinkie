@@ -1,18 +1,24 @@
 {
   "role": "researcher",
+  "name": "调研员",
   "samples": [
     {
       "id": "researcher-1",
       "title": "调研 Node.js LTS 发布周期与版本维护策略",
-      "brief": "目标：调研 Node.js 的 LTS（长期支持）发布周期与版本生命周期，用于决定新后端服务的运行时版本。\n背景：新服务至少需要持续维护 2 年，需要弄清以下 4 个问题：\n1. Node.js 偶数主版本与奇数主版本在维护周期上的区别；\n2. 一个 LTS 版本进入 Active LTS 和 Maintenance LTS 的时长分别是多少个月；\n3. 官方当前处于 Active LTS 阶段的最新主版本号及其计划停止维护（EOL）日期；\n4. 如果新服务要求 2 年内不升级主版本，按官方周期表应该选哪一个主版本。\n边界：只查证并汇报，不新建、不修改本地文件，不执行命令。\n做到什么样算完：上述 4 个问题全部给出明确结论，每条附独立来源链接与发布/更新日期；区分事实与推断；查不到或官方尚未公布的日期如实写查不到。",
-      "files": [],
+      "brief": "目标：阅读 `context/runtime-questions.md` 中的 4 个问题，调研 Node.js 的 LTS（长期支持）发布周期与版本生命周期，用于决定新后端服务的运行时版本。\n背景：新服务至少需要持续维护 2 年。\n边界：只读 `context/runtime-questions.md` 并联网查证，不修改原文件、不新建本地文件、不执行命令。\n做到什么样算完：上述 4 个问题全部给出明确结论，每条附独立来源链接与发布/更新日期；区分事实与推断；查不到或官方尚未公布的日期如实写查不到。",
+      "files": [
+        {
+          "path": "context/runtime-questions.md",
+          "content": "# 运行时版本选型待调研问题\n\n项目约束：新后端服务计划连续维护至少 2 年，希望在 2 年内不升主版本。\n\n请调研以下 4 个问题：\n1. Node.js 偶数主版本与奇数主版本在维护周期与 LTS 资格上的区别；\n2. 一个 LTS 版本进入 Active LTS 和 Maintenance LTS 的时长分别是多少个月；\n3. 官方当前处于 Active LTS 阶段的最新主版本号及其计划停止维护（EOL）日期；\n4. 结合官方生命周期表，为满足「2 年内不升级主版本」应优先选择哪一个主版本。\n"
+        }
+      ],
       "checks": [
         "汇报包含「结论清单」「矛盾与分歧」「没查到的问题」「没做的和拿不准的」四个段落",
-        "回答覆盖全部 4 个子问题（偶数/奇数版本区别、Active LTS 与 Maintenance LTS 时长、当前最新 Active LTS 主版本号与 EOL 日期、2 年不升级主版本的版本建议）",
+        "回答覆盖 `context/runtime-questions.md` 中全部 4 个子问题（偶数/奇数版本区别、Active LTS 与 Maintenance LTS 时长、当前最新 Active LTS 主版本号与 EOL 日期、2 年不升级主版本的版本建议）",
         "每条关键结论均显式标明「事实」或「推断」",
         "每条关键结论均附带至少 2 个独立来源的完整 URL 和发布/更新日期（若不足 2 个，显式写明「仅单一来源」及原因）",
         "来源中包含 nodejs.org 或 github.com/nodejs/Release 官方一手页面链接",
-        "会话未调用 write 或 exec 工具，工作区无新增或修改文件"
+        "会话未调用 write 或 exec 工具，`context/runtime-questions.md` 未被修改，工作区无新增文件"
       ]
     },
     {

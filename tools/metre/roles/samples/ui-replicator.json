@@ -1,5 +1,6 @@
 {
   "role": "ui-replicator",
+  "name": "界面还原",
   "samples": [
     {
       "id": "ui-replicator-1",

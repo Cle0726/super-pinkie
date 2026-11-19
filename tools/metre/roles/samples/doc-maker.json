@@ -1,5 +1,6 @@
 {
   "role": "doc-maker",
+  "name": "文档和幻灯片",
   "samples": [
     {
       "id": "doc-maker-1",

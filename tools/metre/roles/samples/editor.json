@@ -1,5 +1,6 @@
 {
   "role": "editor",
+  "name": "编辑校对",
   "samples": [
     {
       "id": "editor-1",

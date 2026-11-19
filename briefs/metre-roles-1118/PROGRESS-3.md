@@ -1,14 +1,16 @@
 # Metre 角色 agent · 车道 3 进度记录（研究、内容、把关）
 
 - 分支：`feat/metre-roles-1118-3`，从 `origin/feat/metre-roles-1118`（`9dba1a4c`）切出，独立工作树：`F:\Projects\metre-roles-3`。
-- 范围：仅改动 `personas/metre/roles/` 下 18 张角色卡（`research` 6 张、`content` 9 张、`gate` 3 张）、`tools/metre/roles/samples/` 下对应 18 份样题，以及本文件 `briefs/metre-roles-1118/PROGRESS-3.md`。不改代码、界面、安装脚本、`lint-cards.mjs`、五个老模式人设与手册。不建隔离副本，不跑网关。
+- 范围：仅改动 `personas/metre/roles/` 下 18 张角色卡（`research` 6 张、`content` 9 张、`gate` 3 张）、`tools/metre/roles/samples/` 下对应 18 份样题，以及本文件 `briefs/metre-roles-1118/PROGRESS-3.md`。不改代码、界面、安装脚本、`lint-cards.mjs`、`PROGRESS.md` 及五个老模式人设与手册。不建隔离副本，不跑网关。
 
 ## 正式环境基线（PLAN 第八节第 2 条 / Z2）
 
 - 开工记录（2026-11-18T21:11:34-08:00）：
   - `C:\Users\34786\.openclaw\openclaw.json` 修改时间：`2026-11-13T23:50:37.9293033-08:00`
   - 18789 端口监听进程：无监听进程（未运行）
-- 收工记录：待收工时复核。
+- 收工记录（2026-11-18T21:40:43-08:00）：
+  - `C:\Users\34786\.openclaw\openclaw.json` 修改时间：`2026-11-13T23:50:37.9293033-08:00`（与开工一致）
+  - 18789 端口监听进程：无监听进程（与开工一致）
 
 ## 分步进度
 
@@ -19,72 +21,75 @@
 | 3 | `gate` 3 张角色卡 | 已完成 | `7a43419b` |
 | 4 | `research` 6 份样题 JSON | 已完成 | `b4c9c2e3` |
 | 5 | `content` 9 份样题 JSON | 已完成 | `daa0a072` |
-| 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 已完成 | 待写入 |
-| 7 | `lint-cards.mjs` 检查（如已推送）+ 全量自查与 R3 核对表 | 未开始 | |
+| 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 已完成 | `285ed9d4` |
+| 7 | `lint-cards.mjs` 全量复核（含 `--samples` 对齐）+ R3 自查表 | 已完成 | 本次提交 |
 
 ## 设计小事说明（PLAN 第八节第 7 条）
 
-- `reads` 字段：只引用 `workspace-roles` 中实际存在的打法/审美参考文件（`playbooks/*.md`、`refs/AESTHETICS.md`），且仅在手册内容与角色职责高度匹配且无权限/工具冲突时引用，避免给轻档或只读角色注入无关的写文件/建流程指令。
+- `reads` 字段：只引用 `workspace-roles` 中实际存在的打法/审美参考文件（`playbooks/*.md`、`refs/AESTHETICS.md`），且仅在手册内容与角色职责高度匹配且无权限/工具冲突时引用，避免给轻档或只读角色注入无关的写文件或流程指令。
 - `deny_commands` 字段：严格对照 PLAN 第四节表；本车道 18 张卡表中均未列 `deny_commands`，因此不在元数据中添加表外 `deny_commands`，确保与 R3-3 的表对比一致。
 - `## 交回` 格式：每条均采用 `- <段落标题>：<具体证据说明>`，便于 PLAN 第 3.9 节汇报段落标题检查解析。
-- 样题 JSON 格式（`tools/metre/roles/samples/<id>.json`）：`{ role, samples: [{ id, title, brief, files: [{ path, content }], checks: [...] }] }`；把关类（`reviewer`、`fact-checker`、`qa-tester`）每题另附 `planted_issues` 数组记录故意埋入的 3 个问题（含 `id`、`severity`、`location`、`description`、`evidence`），便于客观计算召回与误报。
+- 样题 JSON 格式（`tools/metre/roles/samples/<id>.json`）：与窗口 2 `lint-cards.mjs`（`origin/feat/metre-roles-1118-2@efa12d22`）的 `lintSampleFile` 完全对齐，顶层为 `{ role, name, samples }`，每题含 `id`、`title`、`brief`、非空 `files`（`[{ path, content }]`）、可客观判定的 `checks`；把关类（`reviewer`、`fact-checker`、`qa-tester`）全部 6 道样题每题均附 3 项 `planted_issues`。
 
 ## 待用户定
 
 （暂无）
 
-## 记录
+## ACCEPTANCE 自查（R3-1 ~ R3-6、R3-8、R3-9，仅本车道 18 张卡范围）
 
-### 2026-11-18 步骤 1：`research` 6 张角色卡
+| 条目 | 结论 | 证据 / 原因 |
+|---|---|---|
+| **R3-1 ★** 角色清单与 `id` 一致、无导员 | **过** | 本车道 18 张卡（`research` 6 + `content` 9 + `gate` 3）的 `id` 与 PLAN 第四节完全一致，无「导员」或任何表外卡。与窗口 2 `origin/feat/metre-roles-1118-2` 的 15 张卡合并核对：`lane2Count: 15, lane3Count: 18, overlap: [], totalUnique: 33, missing: [], extra: []`。 |
+| **R3-2 ★** 格式检查与「不抄手册」检查 | **过** | 使用窗口 2 最新 `origin/feat/metre-roles-1118-2@efa12d22` 的 `tools/metre/roles/lint-cards.mjs` 实跑检查全部 18 张卡，**18/18 全部通过（0 error、0 warning）**；全部 LF 换行，正文 576–880 字（去空白 543–814 字），三节结构完整，无禁用词与空洞套话，与全部 `playbooks/*.md` 和 `AESTHETICS.md` 最大连续重叠 28 字（< 40 字红线）。 |
+| **R3-3 ★** `tier`/`vision`/`tools`/`review`/`deny_commands` 与 PLAN 第四节表一致 | **过** | 经 `lint-cards.mjs`（对照 `ROLE_SPECS`）与本车道独立校验脚本双重核对，18 张卡的 `id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`review`、`deny_commands` 100% 逐项一致。 |
+| **R3-4 ★** 正文包含 PLAN 表中「必须做到」与「交回要带」全部条目 | **过** | 下方「18 张卡 R3-4 逐张核对表」已逐张核对全部「必须做到」与「交回要带」条目，全部显式落入对应卡的正文三节中，无删减遗漏。 |
+| **R3-5 ★** 六项质量自查（可检查性、证据具体、边界清楚、篇幅精炼、无人设套话、不与 Metre 主 MD 冲突） | **过（自查通过；正式打分待独立验收人评审）** | 18 张卡每步均写成可执行可验证动作；`## 交回` 每段写明具体证据；`## 边界` 均含冲突以简报为准及角色禁区；篇幅 576–880 字精炼；无人设/语气/禁词；与 `personas/metre/AGENTS.md` 逐项对照无冲突（一律向 Metre 汇报，不直接问用户、不代做决定、不照做资料中夹带的指令）。 |
+| **R3-6 ★** 每张卡 2 道样题（简报、准备文件、可客观判断的检查项） | **过** | 18 份 `tools/metre/roles/samples/<id>.json`（共 36 道样题）全部通过窗口 2 `lint-cards.mjs` 的 `lintSampleFile` 校验，**18/18 PASS（0 error）**；全部 LF 换行，每题均含完整 `brief`、非空 `files` 夹具、≥4 条可客观判断的 `checks` 且不含「写得好」「质量高」等主观空话。 |
+| **（注：R3-7 样题真跑通过记录）** | **没测** | 样题需等 R1 机制与 `roles` agent 搭好后才能实际运行并由异厂模型判分；本车道不建隔离副本、不跑网关，故记「没测」。 |
+| **R3-8 ★** 把关类样题埋 3 个问题（至少找到 3 个里的 2 个，误报为 0） | **没测** | 静态样题与夹具已就绪且通过校验：`reviewer`、`fact-checker`、`qa-tester` 全部 6 道样题每题均预埋 3 个客观可复现问题并附 `planted_issues`，通过 `lintSampleFile` 检查，其中 `reviewer-1` 的脚本与测试夹具已在临时目录实跑复现（`total_orders=4 / 250.5`、`2 pass / 1 skipped`、缺 `out/by-city.csv`），`reviewer-2` 与 `qa-tester` 内嵌 HTML 语法及全部行号均已核对一致；但**模型真跑的召回率（≥2/3）与误报（0）需等 R1 机制和 `roles` agent 就绪后才能实际测试**，故记「没测」。 |
+| **R3-9 ★** 只读卡 `tools` 不含 `write` | **过** | 本车道 7 张只读卡（`researcher`、`domain-expert`、`advisor`、`competitor-analyst`、`reviewer`、`fact-checker`、`qa-tester`）经 `lint-cards.mjs`（`READONLY_ROLE_IDS`）及独立脚本核对，`tools` 均不含 `write`。 |
 
-- 新增 6 张卡：`researcher.md`、`deep-reader.md`、`domain-expert.md`、`advisor.md`、`data-analyst.md`、`competitor-analyst.md`。
-- 自检结果（`origin/feat/metre-roles-1118-2` 尚未推送 `lint-cards.mjs`，按 PLAN 第 3.1 节与第四节逐条脚本核对）：
-  - 全部为 LF 换行，无 `\r`。
-  - 元数据字段与 PLAN 第四节表逐项一致，`name` 3–5 字（≤8），`when` 6–18 字（≤30），`tools` 只读卡均不含 `write`。
-  - 正文固定三节（`## 做法`、`## 边界`、`## 交回`），总字数 593–699（去空白 558–666），全部在 300–1200 范围内。
-  - 无禁用词（「碧琪」「先生」「老板」「注意质量」「认真细致」）；对照全部 `playbooks/*.md` 与 `AESTHETICS.md` 检查连续重叠，最大重叠 19 字符（仅文件名 `data-and-charts.md`），远低于 40 字符红线。
+## 18 张卡 R3-4 逐张核对表
 
-### 2026-11-18 步骤 2：`content` 9 张角色卡
+| id | 字数 | `tools` | 「必须做到」覆盖核对 | 「交回要带」覆盖核对 | 状态 |
+|---|---|---|---|---|---|
+| `researcher` | 637 | `[read, net]` | 只读 ✓；链接+日期 ✓；≥2 独立来源 ✓；事实/推断分开 ✓；矛盾并列写出 ✓；查不到写查不到 ✓ | 结论清单（带出处）✓；没查到的问题 ✓ | 过 |
+| `deep-reader` | 597 | `[read, write]` | 每个文件读完 ✓；每条要点标文件+页码/行号 ✓；写明读全与只读部分 ✓ | 要点（带出处）✓；读完情况表 ✓ | 过 |
+| `domain-expert` | 679 | `[read, net]` | 依据官方文件/法规/标准/论文带出处 ✓；分开确定/推断/不知道 ✓；法医财税只给信息不拍板、写地区日期、高风险建议找专业人士 ✓ | 回答 ✓；出处 ✓；不确定的地方 ✓ | 过 |
+| `advisor` | 640 | `[read, net]` | 2–3 个真正不同方案 ✓；代价/风险/耗时/能不能回头 ✓；推荐一个说理由+改推荐条件 ✓ | 对比表 ✓；推荐和理由 ✓ | 过 |
+| `data-analyst` | 699 | `[read, write, exec]` | 先抽查定单位/日期/去重口径 ✓；脚本分析可重跑 ✓；数字追到数据行 ✓；图表标题写结论 ✓ | 结论 ✓；脚本路径 ✓；口径说明 ✓；图表 ✓ | 过 |
+| `competitor-analyst` | 593 | `[read, net, browser]` | 功能对比表/价格/定位 ✓；每项带来源与查看日期 ✓；截图存档 ✓ | 对比表 ✓；截图 ✓；来源 ✓ | 过 |
+| `visual-designer` | 719 | `[read, write, exec, browser, media]` | 读 `refs/AESTHETICS.md` ✓；2–3 个差别明显方向 ✓；每个渲染截图 ✓；检查目标尺寸下字清不清 ✓ | 每个方向的图 ✓；说明 ✓；文件路径 ✓ | 过 |
+| `ui-replicator` | 721 | `[read, write, exec, browser]` | 与参考图并排对比图 ✓；逐项量间距/字号/颜色 ✓；每种要求宽度与浅/深色看过 ✓ | 并排对比图 ✓；差异清单（量出来的数）✓ | 过 |
+| `viral-creator` | 702 | `[read, write, net]` | 按平台写法和长度 ✓；开头 1–2 秒或第一行钩子 ✓；3–5 版标题及角度 ✓；封面文案与标签 ✓；不编数据评价 ✓；不教刷量搬运 ✓ | 各版本和角度说明 ✓；所用平台规则出处 ✓ | 过 |
+| `writer` | 633 | `[read, write, net]` | 先列提纲再写全文 ✓；口吻照简报 ✓；字数 ±10% 内 ✓；事实带出处 ✓ | 成稿路径 ✓；字数 ✓；出处 ✓ | 过 |
+| `editor` | 576 | `[read, write]` | 不改文风（除非简报要求）✓；需核实事实标出来 ✓ | 修改清单（原文、改后、理由）✓ | 过 |
+| `translator` | 686 | `[read, write, net]` | 先建术语表 ✓；保留格式/代码/占位符 ✓；单位日期当地写法 ✓；3 段关键内容回译检查 ✓ | 译文 ✓；术语表 ✓；回译对照 ✓；没法翻的地方 ✓ | 过 |
+| `doc-maker` | 745 | `[read, write, exec]` | 照 `playbooks/documents-and-slides.md` ✓；每页渲染成图查出框与字体 ✓；标题写结论 ✓ | 文件路径 ✓；每页预览图 ✓ | 过 |
+| `motion-video` | 880 | `[read, write, exec, media]` | 照 `playbooks/motion-and-video.md` ✓；先配音再定时长 ✓；先出低清样片 ✓；抽帧拼总览图检查 ✓；响度 -14 LUFS ✓；渲染前看磁盘剩余 ✓ | 成片路径 ✓；抽帧总览图 ✓；响度数值 ✓；素材来源 ✓ | 过 |
+| `modeler-3d` | 799 | `[read, write, exec]` | Blender Python / Three.js 程序化建模 ✓；导出 `.glb` ✓；4 角度渲染预览 ✓；面数和文件大小 ✓；外部素材查授权 ✓ | 模型路径 ✓；4 个角度预览图 ✓；面数和大小 ✓ | 过 |
+| `reviewer` | 697 | `[read, exec, browser]` | `review: cross-vendor` ✓；对照「做到什么样算完」逐条判 ✓；亲自看文件跑一下不信汇报 ✓；只挑不改 ✓ | 每一条过/不过和证据 ✓；问题清单（严重程度、怎么复现）✓ | 过 |
+| `fact-checker` | 709 | `[read, net]` | `review: cross-vendor` ✓；每个数字/日期/人名/引语判对/错/查不到并带出处 ✓ | 核查表 ✓ | 过 |
+| `qa-tester` | 703 | `[read, exec, browser]` | 主流程+六类边界（空数据、超长文字、手机宽度、连续点击、刷新、断网）✓；每个问题截图 ✓ | 问题清单（复现步骤和截图）✓；测过的场景列表 ✓ | 过 |
 
-- 新增 9 张卡：`visual-designer.md`、`ui-replicator.md`、`viral-creator.md`、`writer.md`、`editor.md`、`translator.md`、`doc-maker.md`、`motion-video.md`、`modeler-3d.md`。
-- 自检结果：
-  - 全部为 LF 换行，无 `\r`。
-  - 元数据字段（`id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`reads`）与 PLAN 第四节表逐项核对一致。
-  - 正文固定三节，总字数 576–880（去空白 543–814），均在 300–1200 范围内。
-  - 自检时捕获 `motion-video.md` 中「先生成配音」包含禁用子串「先生」，已改为「先合成配音」并重验全部 15 张卡无禁用子串。
-  - 对照全部 `playbooks/*.md` 与 `AESTHETICS.md` 检查连续重叠，最大重叠 28 字符（仅路径字符串 `` `playbooks/design-review.md` ``），远低于 40 字符红线。
+## 过程记录
 
-### 2026-11-18 步骤 3：`gate` 3 张角色卡及 18 张卡全量初验
+### 2026-11-18 步骤 1：`research` 6 张角色卡（`81d63c22`）
+- 新增 `researcher.md`、`deep-reader.md`、`domain-expert.md`、`advisor.md`、`data-analyst.md`、`competitor-analyst.md`，脚本逐条通过格式、字数、禁词和重叠检查。
 
-- 新增 3 张卡：`reviewer.md`、`fact-checker.md`、`qa-tester.md`。
-- 18 张卡全量脚本核对结果（`ERRORS: NONE`）：
-  - 数量：18 张（`research` 6 + `content` 9 + `gate` 3），无「导员」或表外卡。
-  - 元数据：`id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`review`、`deny_commands` 与 PLAN 第四节表逐项一致；7 张只读卡（`researcher`、`domain-expert`、`advisor`、`competitor-analyst`、`reviewer`、`fact-checker`、`qa-tester`）的 `tools` 均不含 `write`。
-  - `reads` 路径全部在 `workspace-roles` 合法相对路径内，无 `..` 或绝对路径。
-  - 换行与正文：全部 LF，固定三节，正文长度 576–880 字（去空白 543–814 字），全在 300–1200 字范围内；无禁用词与空洞套话；与全部 `playbooks/*.md` 和 `AESTHETICS.md` 最大连续重叠 28 字（远小于 40 字）。
+### 2026-11-18 步骤 2：`content` 9 张角色卡（`c4f3f622`）
+- 新增 `visual-designer.md`、`ui-replicator.md`、`viral-creator.md`、`writer.md`、`editor.md`、`translator.md`、`doc-maker.md`、`motion-video.md`、`modeler-3d.md`。
+- 自检时捕获 `motion-video.md` 中「先生成配音」含禁用子串「先生」，改为「先合成配音」后全过。
 
-### 2026-11-18 窗口 2 `lint-cards.mjs` 首次联调（`origin/feat/metre-roles-1118-2@50c4766d`）
+### 2026-11-18 步骤 3：`gate` 3 张角色卡（`7a43419b`）
+- 新增 `reviewer.md`、`fact-checker.md`、`qa-tester.md`，18 张卡全量初验 `ERRORS: NONE`。
 
-- 在临时路径调用窗口 2 推送的 `tools/metre/roles/lint-cards.mjs` 检查本车道全部 18 张卡（未改动本分支的 `lint-cards.mjs`）：
-  - 直接按 `repoRoot` 运行：17/18 通过，唯一报错为 `visual-designer` 的 `reads 引用的文件在角色工作区中不存在：refs/AESTHETICS.md`。
-  - 原因定位：`lint-cards.mjs` 的 `resolveReadFile()`（第 301 行）和 `collectAllWorkspaceManuals()`（第 336 行）按 `personas/thinking/refs/AESTHETICS.md` 查找，而仓库实际源文件在 `personas/thinking/AESTHETICS.md`，安装时才按 PLAN 第 3.6 节复制到 `workspace-roles/refs/AESTHETICS.md`；PLAN 第四节也明确要求 `visual-designer` 读 `refs/AESTHETICS.md`。
-  - 用临时 `workspaceRoot` 放置 `refs/AESTHETICS.md`（从 `personas/thinking/AESTHETICS.md` 复制）调用 `lintCardFile('personas/metre/roles/visual-designer.md', {repoRoot, workspaceRoot})` 复测：`ok: true, errors: [], warnings: []`（18/18 全部通过，含对 `AESTHETICS.md` 的 40 字不抄检查）。
-  - 备注：按边界不修改 `lint-cards.mjs`，合并或窗口 2 维护时建议在 `lint-cards.mjs` 补充 `refs/<file>` → `personas/thinking/<file>` 的仓库回退映射。
+### 2026-11-18 步骤 4–6：18 份样题 JSON（`b4c9c2e3`、`daa0a072`、`285ed9d4`）
+- 新增 `research` 6 份、`content` 9 份、`gate` 3 份，共 18 份 36 道样题。
+- `data-analyst` 两题 CSV 夹具经脚本精确核对总有效金额（335.00 元、540.00 元）；`reviewer-1` 夹具在临时目录实跑确认复现 P1/P2/P3；`reviewer-2`、`qa-tester-1/2` 内嵌 HTML 脚本通过语法校验并精确校准全部 `planted_issues` 行号。
 
-### 2026-11-18 步骤 4：`research` 6 份样题 JSON
-
-- 新增 6 份样题（共 12 题）：`researcher.json`、`deep-reader.json`、`domain-expert.json`、`advisor.json`、`data-analyst.json`、`competitor-analyst.json`。
-- 自检结果：全部为合法 JSON、LF 换行；每份 2 题，含 `brief`、`files`、`checks`；全部检查项无主观词；`data-analyst` 两题的 CSV 夹具与期望汇总数经脚本精确核验一致（Q3 门店总有效 335.00 元；渠道总有效 540.00 元）。
-
-### 2026-11-18 步骤 5：`content` 9 份样题 JSON
-
-- 新增 9 份样题（共 18 题）：`visual-designer.json`、`ui-replicator.json`、`viral-creator.json`、`writer.json`、`editor.json`、`translator.json`、`doc-maker.json`、`motion-video.json`、`modeler-3d.json`。
-- 自检结果：15 份样题 JSON 全部合法解析、LF 换行；内嵌 SVG 与 JSON 夹具均合法；每题检查项 ≥ 4 条且全部可客观判断，无主观措辞。
-
-### 2026-11-18 步骤 6：`gate` 3 份样题 JSON（每题埋 3 个问题）
-
-- 新增 3 份样题（共 6 题，每题埋 3 个确定可复现问题，总计 18 个预设问题）：`reviewer.json`、`fact-checker.json`、`qa-tester.json`。
-- 夹具实测核验：
-  - 将 `reviewer-1` 的 5 个夹具文件落盘临时目录实际运行：`node deliverable/summarize.mjs` 输出 `{"total_orders":4,"total_amount":250.5,"by_city":{"北京":100,"上海":101,"深圳":49.5}}`（复现 P1 未去重）；`node --test deliverable/summarize.test.mjs` 输出 `tests 3 / pass 2 / fail 0 / skipped 1`（复现 P2 测试被跳过）；`out/by-city.csv` 不存在（复现 P3 缺失产物）。
-  - 验证 `reviewer-2`、`qa-tester-1`、`qa-tester-2` 内嵌 HTML 中的 JS 全部通过语法解析，且全部 `planted_issues` 行号均经脚本逐行校对精确一致。
-  - `fact-checker` 两题各含 3 处确凿且不受时间变化影响的事实错误（HTTPS 端口 8080、1974 年 TCP 论文作者 Linus Torvalds、TLS 1.3 RFC 8446 发布于 2010 年；Python 3.0 发布于 2015 年 12 月、PEP 20 引语颠倒、Git 许可证 MIT）与清晰正确的对照事实，避免误报争议。
+### 2026-11-18 步骤 7：窗口 2 `lint-cards.mjs`（`origin/feat/metre-roles-1118-2@efa12d22`）全量终验
+- 拉取窗口 2 最新提交 `efa12d22`（已补全 `refs/AESTHETICS.md` 仓库回退映射并新增 `lintSampleFile`），在临时路径运行校验：
+  - 首次 `lintSampleFile` 捕获 4 道纯联网样题的 `files` 为空数组，随即补齐 `context/*.md` 需求背景夹具文件，并统一在全部 18 份样题顶层加上 `name` 字段与窗口 2 对齐。
+  - 重跑全量校验结果：**18/18 角色卡 PASS（repoRoot 与 workspaceRoot 均 18/18）**、**18/18 样题 JSON PASS**；与窗口 2 的 15 张卡合并核对恰好 33/33 官方卡（0 重叠、0 缺失、0 多余）。
+- 边界核对：`git diff --name-only origin/feat/metre-roles-1118` 仅包含本车道 18 张角色卡、18 份样题 JSON 与 `PROGRESS-3.md`（共 37 个文件），未触碰任何代码、界面、安装脚本、`lint-cards.mjs`、`PROGRESS.md` 或碧琪五个老模式人设手册；Z2 正式环境未改动。
