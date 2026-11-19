@@ -153,6 +153,8 @@ class FakeUpstream:
         self.requests = []
         self.server = None
         self.release_sidebar_child = threading.Event()
+        self.dispatch_issued = threading.Event()
+        self.dispatch_lock = threading.Lock()
 
     def start(self):
         upstream = self
@@ -183,15 +185,17 @@ class FakeUpstream:
                 if isinstance(last, list):
                     last = " ".join(str(part.get("text", "")) for part in last if isinstance(part, dict))
                 tool_call = None
-                if DISPATCH_PROMPT in str(last) and not any(
-                    call.get("id") == DISPATCH_TOOL_ID
-                    for message in payload.get("messages", []) for call in (message.get("tool_calls") or [])
-                ) and any(tool.get("function", {}).get("name") == "pinkie_session_start" for tool in payload.get("tools", [])):
-                    tool_call = {"id": DISPATCH_TOOL_ID, "type": "function", "function": {
-                        "name": "pinkie_session_start", "arguments": json.dumps({
-                            "initiation": "user_asked", "mode": "project", "title": DISPATCH_TITLE,
-                            "model": f"probe/{DISPATCH_CHILD_MODEL}", "prompt": "只回复：侧栏验收完成。"
-                        }, ensure_ascii=False)}}
+                if DISPATCH_PROMPT in str(last) and any(
+                    tool.get("function", {}).get("name") == "pinkie_session_start" for tool in payload.get("tools", [])
+                ):
+                    with upstream.dispatch_lock:
+                        if not upstream.dispatch_issued.is_set():
+                            upstream.dispatch_issued.set()
+                            tool_call = {"id": DISPATCH_TOOL_ID, "type": "function", "function": {
+                                "name": "pinkie_session_start", "arguments": json.dumps({
+                                    "initiation": "user_asked", "mode": "project", "title": DISPATCH_TITLE,
+                                    "model": f"probe/{DISPATCH_CHILD_MODEL}", "prompt": "只回复：侧栏验收完成。"
+                                }, ensure_ascii=False)}}
                 if payload.get("model") == DISPATCH_CHILD_MODEL:
                     upstream.release_sidebar_child.wait(90)
                 upstream.requests.append({
