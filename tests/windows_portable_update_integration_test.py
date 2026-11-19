@@ -408,7 +408,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
-                self.assertIn('portable update completed',text)
+                self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
                 if gateway_kind=='slow_ready':
                     self.assertIn('new version started; waiting for its gateway',text)
                 if gateway_kind=='scanner_lock':
