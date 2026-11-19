@@ -80,3 +80,26 @@ test('settings page is loaded by the head fragment and both installers with one 
   const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-settings-user.css', 'laolao-settings-user.js'], 'assets': []});
 
 });
+
+test('thinking and speed buttons use schema-valid paths and preserve custom thinking tiers', () => {
+  const rules = loadSettingsRules();
+  assert.equal(rules.thinkingValue({}), 'off');
+  assert.equal(rules.thinkingValue({agents: {defaults: {thinkingDefault: 'high'}}}), 'high');
+  for (const tier of ['minimal', 'xhigh', 'adaptive', 'max', 'ultra']) {
+    assert.equal(rules.thinkingValue({agents: {defaults: {thinkingDefault: tier}}}), tier, `preserves custom thinking tier ${tier}`);
+  }
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(rules.thinkingChanges('medium', {agents: {defaults: {thinkingDefault: 'high'}}}))),
+    [[['agents', 'defaults', 'thinkingDefault'], 'medium']],
+  );
+  const cleanedThinking = rules.thinkingChanges('high', {agents: {defaults: {thinkingLevel: 'low'}}});
+  assert.equal(cleanedThinking.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(cleanedThinking[0])), [['agents', 'defaults', 'thinkingDefault'], 'high']);
+  assert.equal(cleanedThinking[1][1], undefined);
+
+  assert.equal(rules.fastModeValue({agents: {defaults: {thinkingDefault: 'ultra'}}}), 'false');
+  assert.equal(rules.fastModeValue({agents: {defaults: {params: {fastMode: 'auto'}, thinkingDefault: 'ultra'}}}), 'auto');
+  assert.equal(rules.fastModeValue({agents: {defaults: {params: {fastMode: true}, thinkingDefault: 'xhigh'}}}), 'true');
+  const speedPatch = JSON.parse(JSON.stringify(rules.fastModeChanges(true, {agents: {defaults: {thinkingDefault: 'ultra'}}})));
+  assert.deepEqual(speedPatch, [[['agents', 'defaults', 'params', 'fastMode'], true]]);
+});

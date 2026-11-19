@@ -103,6 +103,33 @@
     }
     return changes;
   };
+  const thinkingValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    if (typeof defaults.thinkingDefault === "string" && defaults.thinkingDefault.trim()) return defaults.thinkingDefault.trim();
+    if (typeof defaults.thinkingLevel === "string" && defaults.thinkingLevel.trim()) return defaults.thinkingLevel.trim();
+    return "off";
+  };
+  const thinkingChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "thinkingDefault"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "thinkingLevel")) {
+      changes.push([["agents", "defaults", "thinkingLevel"], undefined]);
+    }
+    return changes;
+  };
+  const fastModeValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    const raw = isObject(defaults.params) && Object.hasOwn(defaults.params, "fastMode")
+      ? defaults.params.fastMode
+      : defaults.fastMode;
+    return raw === "auto" ? "auto" : raw === true ? "true" : "false";
+  };
+  const fastModeChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "params", "fastMode"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "fastMode")) {
+      changes.push([["agents", "defaults", "fastMode"], undefined]);
+    }
+    return changes;
+  };
   const hostIsOutsideThisComputer = (host) => {
     const value = String(host || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
     if (!value || value === "localhost" || value === "::1" || value === "0:0:0:0:0:0:0:1") return false;
@@ -146,6 +173,10 @@
     authMode,
     configFromSnapshot,
     presetChanges,
+    thinkingValue,
+    thinkingChanges,
+    fastModeValue,
+    fastModeChanges,
   });
 
   const state = {
@@ -399,14 +430,14 @@
     const thinkingGroup = element("div", "pinkie-user-settings__segments", thinkingRow.control);
     for (const [value, label] of REASONING_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", thinkingGroup,
-        () => saveConfigPatch([["agents", "defaults", "thinkingLevel", value]], "thinking"));
+        () => saveConfigPatch(config => thinkingChanges(value, config), "thinking"));
       state.reasoningButtons.set(value, node);
     }
     const speedRow = row(modelCard, "回复速度");
     const speedGroup = element("div", "pinkie-user-settings__segments", speedRow.control);
     for (const [value, label] of SPEED_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", speedGroup,
-        () => saveConfigPatch([["agents", "defaults", "fastMode", value]], "thinking"));
+        () => saveConfigPatch(config => fastModeChanges(value, config), "thinking"));
       state.speedButtons.set(String(value), node);
     }
     makeStatus(modelCard, "thinking");
@@ -1164,22 +1195,24 @@
     if (!config) return;
     const model = configuredModelValue(config);
     ownText(state.modelButton, displayModelName(model));
-    const defaults = config.agents?.defaults || {};
-    const thinking = typeof defaults.thinkingLevel === "string" ? defaults.thinkingLevel : "off";
+    const thinking = thinkingValue(config);
     for (const [value, node] of state.reasoningButtons) setPressed(node, value === thinking);
-    const fast = defaults.fastMode === "auto" ? "auto" : defaults.fastMode === true ? "true" : "false";
+    const fast = fastModeValue(config);
     for (const [value, node] of state.speedButtons) setPressed(node, String(value) === fast);
     const activePreset = matchingPreset(config);
     state.customPreset.hidden = Boolean(activePreset);
     for (const [id, node] of state.presetButtons) setPressed(node, id === activePreset);
   }
   function setPath(target, path, value) {
+    if (!Array.isArray(path) || !path.length) return;
     let current = target;
     for (const key of path.slice(0, -1)) {
+      if (value === undefined && !isObject(current[key])) return;
       if (!isObject(current[key])) current[key] = {};
       current = current[key];
     }
-    current[path.at(-1)] = value;
+    if (value === undefined) delete current[path.at(-1)];
+    else current[path.at(-1)] = value;
   }
   function saveConfigPatch(changes, statusKey) {
     state.saveQueue = state.saveQueue.then(async () => {
