@@ -1310,7 +1310,8 @@ export class SessionLineage {
     const key = sessionKeyOf(event, ctx);
     if (!agentOf(key) || isPersona(key) || isInternalSessionKey(key)) return;
     const child = this.lineage()[key];
-    const existingRun = this.turns.get(key)?.runId;
+    const previousTurn = this.turns.get(key);
+    const existingRun = previousTurn?.runId;
     const continuingParent = existingRun && existingRun === runIdOf(event, ctx);
     if (this.stopping.has(key) && !continuingParent || child && this.stopping.has(child.parentKey)) {
       return {outcome: 'block', reason: 'session-parent-archiving', message: '父会话正在停止子会话并归档，请稍后再试'};
@@ -1321,7 +1322,12 @@ export class SessionLineage {
     }
     const prompt = String(event.prompt || '').trim();
     const runId = runIdOf(event, ctx);
-    const authored = generated(event, ctx) || prompt.startsWith(BRIEF_PREFIX) || prompt.startsWith(FAMILY_PREFIX);
+    // 自动续接用新的内部消息和 runId；角色仍在做 Metre 原先派的那件事。
+    // 仅继承同一角色会话正在续接的派活轮，子会话里用户直接发的话仍不算汇报。
+    const retryPrefix = existingRun ? `pinkie-watchdog-${existingRun}-` : '';
+    const roleRetry = child?.metreRole && previousTurn?.authored && !previousTurn.user && retryPrefix
+      && runId.startsWith(retryPrefix) && /^[1-9]\d*$/.test(runId.slice(retryPrefix.length));
+    const authored = generated(event, ctx) || prompt.startsWith(BRIEF_PREFIX) || prompt.startsWith(FAMILY_PREFIX) || Boolean(roleRetry);
     const internal = isInternalMessage(prompt) || authored || ctx?.trigger === 'memory' || ctx?.trigger === 'heartbeat';
     if (child) this.reserved.set(key, this.now());
     // 被子会话汇报叫醒的那一轮（Metre 在这一轮可以接着派下一批）。
@@ -1330,7 +1336,7 @@ export class SessionLineage {
     // 心跳、记忆整理、子会话自带简报不继承用户或汇报唤醒的授权。
     this.lastUserTurns ??= new Map();
     const remembered = this.lastUserTurns.get(key);
-    const previous = this.turns.get(key) || (remembered && this.now() - remembered.endedAt < 30 * 60_000 ? remembered : null);
+    const previous = previousTurn || (remembered && this.now() - remembered.endedAt < 30 * 60_000 ? remembered : null);
     const previousWake = isMetreKey(key) && previous?.wake && !['memory', 'heartbeat'].includes(previous.trigger);
     const resumed = !wake && !authored && isWatchdogResume(prompt, runId)
       && !['memory', 'heartbeat'].includes(ctx?.trigger) && !['memory', 'heartbeat'].includes(previous?.trigger)

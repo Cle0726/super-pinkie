@@ -17,6 +17,7 @@ import {
   registerMetreRolesTool, registerSessionLineage, SessionLineage,
 } from '../services/mode-architecture/session-lineage.mjs';
 import {SessionPrefs} from '../services/mode-architecture/session-prefs.mjs';
+import {MetreBoard} from '../services/mode-architecture/metre-board.mjs';
 import {ModelHealth} from '../services/mode-architecture/model-health.mjs';
 import {sessionHintBlock} from '../services/mode-architecture/session-hints.mjs';
 import {registerMetreMemory} from '../services/mode-architecture/metre-memory.mjs';
@@ -637,6 +638,47 @@ test('R1-20 ★ / R1-21 ★ / R1-22 ★ / R1-23 工具归类完整性、只读�
   const reportCard = f.lineage.state(METRE).cards.at(-1);
   assert.match(reportCard.text, /注意：只读角色 挑刺验收员 改了这些文件：sneaky\.txt/);
   assert.equal(reportCard.roleName, '挑刺验收员');
+});
+
+test('a role child that completes on an automatic retry still reports to Metre once', async t => {
+  const env = makeRoleEnv(t);
+  fs.writeFileSync(path.join(env.officialDir, 'backend-fix.md'), makeCard(), 'utf8');
+  const f = makeLineageFixture(t, {roleDirs: env});
+  const board = new MetreBoard({root: path.join(f.root, 'board'), lineage: f.lineage,
+    metreRoleCatalog: () => f.lineage.rolesRegistry()});
+  const task = await f.lineage.start(METRE, 'parent-run', {
+    title: '恢复后汇报', prompt: '检查失败的回归', initiation: 'user_asked', role: 'backend-fix',
+  }, 'dispatch-once');
+  const [dispatch] = f.sent;
+  const ctx = {sessionKey: task.key};
+  assert.equal(dispatch.sessionKey, task.key);
+  f.lineage.begin({runId: dispatch.idempotencyKey, prompt: dispatch.message}, ctx);
+  const report = '## 结论\n修好了\n## 根因\n测试夹具\n## 改动\n无\n## 证据\n两项测试通过\n## 没做的和拿不准的\n无';
+  const success = runId => ({runId, success: true, messages: [{role: 'assistant', content: report, stopReason: 'stop'}]});
+  // index.mjs delegates a retrying turn to the watchdog before it calls lineage.ended.
+  // The original dispatched turn is still in the map, but the new prompt is internal.
+  const retry = `pinkie-watchdog-${dispatch.idempotencyKey}-1`;
+  f.lineage.begin({runId: retry, prompt: '[pinkie-watchdog] 【自动续接保护】从未完成处继续'}, ctx);
+  await f.lineage.ended(success(retry), ctx);
+  await f.lineage.ended(success(retry), ctx); // repeated end event
+  const official = (await f.lineage.cards(METRE)).cards.filter(card => card.kind === 'report');
+  assert.equal(official.length, 1);
+  assert.equal(official[0].childKey, task.key);
+  assert.equal(official[0].role, 'backend-fix');
+  assert.equal(official[0].roleName, '后端修 bug');
+  assert.equal(official[0].text, report);
+  const view = await board.board(METRE);
+  assert.equal(view.overview.returned, 1);
+  assert.equal(view.sessions[0].reports, 1);
+  assert.equal(view.sessions[0].status, 'done');
+  assert.equal(view.timeline.filter(event => event.kind === 'report').length, 1);
+  assert.equal(f.sent.filter(item => item.sessionKey === task.key).length, 1);
+
+  // Neither a direct user turn nor a watchdog replay of that user turn is a report.
+  f.lineage.begin({runId: 'direct', prompt: '我只是在子会话里问，你不用汇报'}, ctx);
+  f.lineage.begin({runId: 'pinkie-watchdog-direct-1', prompt: '[pinkie-watchdog] 【自动续接保护】继续'}, ctx);
+  await f.lineage.ended(success('pinkie-watchdog-direct-1'), ctx);
+  assert.equal((await board.board(METRE)).sessions[0].reports, 1);
 });
 
 // ---------- R1-24 ★ & R1-25 ★ ----------
