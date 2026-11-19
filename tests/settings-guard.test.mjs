@@ -73,14 +73,44 @@ test('edit, apply_patch and code_edit are checked too', () => {
 });
 
 test('chat cannot change config through gateway or openclaw CLI; ordinary exec passes', () => {
-  const {guard} = sandbox();
+  const {guard, root} = sandbox();
+  const spoofPlugin = path.join(root, 'spoof-plugin');
+  fs.mkdirSync(spoofPlugin, {recursive: true});
+  fs.writeFileSync(path.join(spoofPlugin, 'openclaw.plugin.json'), JSON.stringify({id: 'pinkie-mode-architecture'}));
   for (const action of ['config.patch', 'config.apply', 'update.run']) assert.equal(guard.beforeTool({toolName: 'gateway', params: {action}})?.block, true, action);
   assert.equal(guard.beforeTool({toolName: 'gateway', params: {action: 'restart'}}), undefined);
   assert.equal(guard.beforeTool({toolName: 'gateway', params: {action: 'config.get'}}), undefined);
-  for (const command of ['openclaw config set tools.profile minimal', 'node ~/x/openclaw.mjs config unset plugins', 'openclaw gateway call config.patch --params {}', 'openclaw plugins disable pinkie-mode-architecture']) {
+  for (const command of [
+    'openclaw config set tools.profile minimal',
+    'node ~/x/openclaw.mjs config unset plugins',
+    'openclaw gateway call config.patch --params {}',
+    'openclaw plugins disable pinkie-mode-architecture',
+    'openclaw plugins remove pinkie-project-scope',
+    `openclaw plugins install "${spoofPlugin}"`,
+    'openclaw plugins enable my-weather && openclaw plugins disable pinkie-mode-architecture',
+    'openclaw plugins disable --all',
+    'openclaw plugins disable $TARGET',
+    'openclaw skills disable deep-think',
+    'openclaw skills remove xlsx',
+    'openclaw skills remove "*"',
+  ]) {
     assert.equal(guard.beforeTool({toolName: 'exec', params: {command}})?.block, true, command);
   }
-  for (const command of ['npm test', 'cat ~/.openclaw/workspace/SOUL.md', 'git commit -m "config set"', 'openclaw --version', 'openclaw status', 'python3 -m pytest']) {
+  for (const command of [
+    'npm test',
+    'cat ~/.openclaw/workspace/SOUL.md',
+    'git commit -m "config set"',
+    'openclaw --version',
+    'openclaw status',
+    'python3 -m pytest',
+    'openclaw plugins install my-weather',
+    'openclaw plugins enable my-weather',
+    'openclaw plugins disable my-weather',
+    'openclaw plugins uninstall my-weather',
+    'openclaw skills disable my-custom-skill',
+    'openclaw skills remove my-custom-skill',
+    'openclaw skills install my-custom-skill',
+  ]) {
     assert.equal(guard.beforeTool({toolName: 'exec', params: {command}}), undefined, command);
   }
 });
@@ -352,6 +382,24 @@ test('verifyAfterCommand preserves user external skill dirs and plugin paths whi
   const restored = JSON.parse(fs.readFileSync(configFile, 'utf8'));
   assert.deepEqual(restored.plugins.load.paths, [officialExt, userPlugin]);
   assert.deepEqual(restored.skills.load.extraDirs, [userExtraSkills, path.join(state, 'user-skills')]);
+
+  // Managing user's own plugins in plugins.allow/deny/entries is kept, while product plugin allow/deny is still enforced
+  const userManaged = structuredClone(restored);
+  userManaged.plugins.entries['my-ext-plugin'] = {enabled: true};
+  userManaged.plugins.allow = ['pinkie-mode-architecture', 'my-ext-plugin'];
+  userManaged.plugins.deny = ['some-other-user-plugin'];
+  fs.writeFileSync(configFile, JSON.stringify(userManaged));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+
+  const tamperedAllowDeny = structuredClone(userManaged);
+  tamperedAllowDeny.plugins.allow = ['my-ext-plugin'];
+  tamperedAllowDeny.plugins.deny = ['some-other-user-plugin', 'pinkie-mode-architecture'];
+  fs.writeFileSync(configFile, JSON.stringify(tamperedAllowDeny));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  const afterFix = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  assert.deepEqual(afterFix.plugins.allow, ['my-ext-plugin', 'pinkie-mode-architecture']);
+  assert.deepEqual(afterFix.plugins.deny, ['some-other-user-plugin']);
+  assert.deepEqual(afterFix.plugins.entries['my-ext-plugin'], {enabled: true});
 });
 
 test('release (guard-build.json) and dev mode end-to-end: pinkie_model_capability + RPC work while protected config/persona stay locked', async () => {

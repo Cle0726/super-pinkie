@@ -268,7 +268,9 @@ export class SettingsGuard {
     }
     if (tool === 'exec' || tool === 'bash' || tool === 'process') {
       const command = String(params.command ?? params.cmd ?? params.input ?? '');
-      if (CONFIG_COMMAND.test(command)) return decide('正式版里聊天不能用命令修改碧琪的配置、插件或更新。如果是要改已有模型能不能看图，请用 pinkie_model_capability 工具，或让用户在「设置 → 模型服务」里开关；其他模型、密钥和偏好请用户在「设置」里改。其它命令照常可以用。');
+      if (CONFIG_COMMAND.test(command)) return decide('正式版里聊天不能用命令修改碧琪的配置或触发更新。如果是要改已有模型能不能看图，请用 pinkie_model_capability 工具，或让用户在「设置 → 模型服务」里开关；其他模型、密钥和偏好请用户在「设置」里改。其它命令照常可以用。');
+      const blockedManaged = blockedProductManageCommand(command, {stateDir: this.stateDir, home: this.home, skillNames: this.skillNames()});
+      if (blockedManaged) return decide(blockedManaged);
       return undefined;
     }
     const writes = writeTargets(tool, params);
@@ -359,10 +361,12 @@ export class SettingsGuard {
       try {
         let raw = null; try { raw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
         let config = null; try { config = JSON.parse(raw); } catch {}
-        const viewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
+        const baseViewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
+        const requiredAllowed = PRODUCT_PLUGIN_IDS.filter(id => Boolean(snap.official?.plugins?.entries?.[id]) || (Array.isArray(snap.official?.plugins?.allow) && snap.official.plugins.allow.includes(id)));
+        const viewCtx = {...baseViewCtx, requiredAllowed};
         if (!snap.configKnown) {
           // 插件加载时还没有配置文件（Windows 第一次启动）：第一份读得出的配置就当基准，不改它。
-          if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config, viewCtx), official: structuredClone(config), lastGood: structuredClone(config)});
+          if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config, baseViewCtx), official: structuredClone(config), lastGood: structuredClone(config)});
         } else if (config && typeof config === 'object' && JSON.stringify(productView(config, viewCtx)) !== JSON.stringify(snap.product)) {
           applyProductView(config, snap.official, viewCtx);
           backup(this.configPath);
@@ -493,7 +497,7 @@ function sameResolvedPath(a, b, home = os.homedir()) {
   return norm(path.resolve(expandHome(a, home))) === norm(path.resolve(expandHome(b, home)));
 }
 // openclaw.json 的产品键（和 installer/guard/guard.mjs 的 repairConfig 管的是同一批）。
-function productView(config = {}, {stateDir = '', home = os.homedir(), userSkillsDir = ''} = {}) {
+function productView(config = {}, {stateDir = '', home = os.homedir(), userSkillsDir = '', requiredAllowed = null} = {}) {
   const plugins = config.plugins || {};
   const agents = {};
   for (const agent of Array.isArray(config.agents?.list) ? config.agents.list : []) {
@@ -501,8 +505,13 @@ function productView(config = {}, {stateDir = '', home = os.homedir(), userSkill
   }
   const loadPaths = Array.isArray(plugins.load?.paths) ? plugins.load.paths : null;
   const extraDirs = Array.isArray(config.skills?.load?.extraDirs) ? config.skills.load.extraDirs : null;
+  const mustAllow = Array.isArray(requiredAllowed)
+    ? requiredAllowed
+    : PRODUCT_PLUGIN_IDS.filter(id => Boolean(plugins.entries?.[id]) || (Array.isArray(plugins.allow) && plugins.allow.includes(id)));
   return {
-    enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null,
+    enabled: plugins.enabled ?? null,
+    productDenied: Array.isArray(plugins.deny) ? plugins.deny.filter(id => PRODUCT_PLUGIN_IDS.includes(id)) : [],
+    missingProductAllow: Array.isArray(plugins.allow) ? mustAllow.filter(id => !plugins.allow.includes(id)) : [],
     officialPaths: loadPaths ? loadPaths.filter(p => isOfficialPluginPath(p, stateDir, home)) : null,
     shadowingPaths: loadPaths ? loadPaths.filter(p => shadowsProductPlugin(p, stateDir, home)) : [],
     // 插件开关 + 钩子授权（授权被删，OpenClaw 会挡掉碧琪的对话钩子）。
@@ -517,10 +526,15 @@ function productView(config = {}, {stateDir = '', home = os.homedir(), userSkill
 }
 function applyProductView(config, official, ctx = {}) {
   const {stateDir = '', home = os.homedir(), userSkillsDir = ''} = ctx;
-  const want = productView(official, ctx);
+  const requiredAllowed = PRODUCT_PLUGIN_IDS.filter(id => Boolean(official?.plugins?.entries?.[id]) || (Array.isArray(official?.plugins?.allow) && official.plugins.allow.includes(id)));
+  const want = productView(official, {...ctx, requiredAllowed});
   const put = (obj, key, value) => { if (value === null || value === undefined) delete obj[key]; else obj[key] = structuredClone(value); };
   const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : (config.plugins = {});
-  put(plugins, 'enabled', want.enabled); put(plugins, 'deny', want.deny); put(plugins, 'allow', want.allow);
+  put(plugins, 'enabled', want.enabled);
+  if (Array.isArray(plugins.deny)) plugins.deny = plugins.deny.filter(id => !PRODUCT_PLUGIN_IDS.includes(id));
+  if (Array.isArray(plugins.allow)) {
+    for (const id of requiredAllowed) if (!plugins.allow.includes(id)) plugins.allow.push(id);
+  }
   if (want.officialPaths !== null || Array.isArray(plugins.load?.paths)) {
     plugins.load = plugins.load && typeof plugins.load === 'object' ? plugins.load : {};
     const existing = Array.isArray(plugins.load.paths) ? plugins.load.paths : [];
@@ -576,8 +590,58 @@ function walk(dir, out, limit) {
   }
 }
 
-// 改 openclaw 配置 / 插件 / 更新的命令（只拦这几条，其它 exec 一律放行）。
-const CONFIG_COMMAND = /\bopenclaw(?:\.mjs|\.cmd)?["']?\s+(?:--[\w-]+(?:[ =]\S+)?\s+)*(?:config\s+(?:set|unset|apply|patch|edit|reset)\b|gateway\s+call\s+(?:config\.(?:apply|patch|set)|update\.run)\b|plugins?\s+(?:disable|uninstall|remove|install|enable)\b|update\b|skills\s+(?:disable|remove|uninstall)\b)/i;
+// 改 openclaw 配置 / 更新的命令（一律拦）；插件与技能管理命令按目标区分，只拦碧琪自带的、放开用户自己的。
+const CONFIG_COMMAND = /\bopenclaw(?:\.mjs|\.cmd)?["']?\s+(?:--[\w-]+(?:[ =]\S+)?\s+)*(?:config\s+(?:set|unset|apply|patch|edit|reset)\b|gateway\s+call\s+(?:config\.(?:apply|patch|set)|update\.run)\b|update\b)/i;
+const PRODUCT_MANAGE_RE = /\bopenclaw(?:\.mjs|\.cmd)?["']?\s+(?:--[\w-]+(?:[ =]\S+)?\s+)*(plugins?|skills)\s+(disable|uninstall|remove|install|enable|update)\b([^;\r\n|&]*)/gi;
+const PRODUCT_PLUGIN_PATTERNS = [
+  ...PRODUCT_PLUGIN_IDS,
+  'mode-architecture', 'project-scope', 'first-person-renderer',
+];
+
+function splitShellTokens(segment = '') {
+  const out = [];
+  const re = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^']*)'|(\S+)/g;
+  let m;
+  while ((m = re.exec(segment))) out.push(m[1] ?? m[2] ?? m[3]);
+  return out;
+}
+
+function blockedProductManageCommand(command = '', {stateDir = '', home = os.homedir(), skillNames = new Set()} = {}) {
+  const text = String(command || '');
+  for (const match of text.matchAll(PRODUCT_MANAGE_RE)) {
+    const kind = match[1].toLowerCase().startsWith('plugin') ? 'plugin' : 'skill';
+    const segment = String(match[3] || '');
+    const tokens = splitShellTokens(segment);
+    const unsafeExpansion = /[$`*?]/.test(segment) || tokens.some(t => /^(-a|--all)$/i.test(t));
+    const targets = tokens.filter(t => t && !t.startsWith('-'));
+    if (unsafeExpansion || !targets.length) {
+      return '这条命令目标不明确或带通配符，可能会影响到碧琪自带的插件或技能。请写出具体的第三方插件或技能名再操作。';
+    }
+    if (kind === 'plugin') {
+      const hitsProduct = targets.some(raw => {
+        const lower = raw.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '');
+        const base = path.posix.basename(lower);
+        if (PRODUCT_PLUGIN_IDS.includes(lower) || PRODUCT_PLUGIN_IDS.includes(base)) return true;
+        if (/(?:^|\/)(?:services|extensions)\/(?:pinkie-)?(?:mode-architecture|project-scope|first-person-renderer)$/.test(lower)) return true;
+        if (PRODUCT_PLUGIN_PATTERNS.some(id => lower === id)) return true;
+        return shadowsProductPlugin(raw, stateDir, home);
+      });
+      if (hitsProduct) {
+        return '这是碧琪自带的核心插件，正式版里不能停用、卸载或覆盖；用户自己装的第三方插件可以照常安装、启停或卸载。';
+      }
+    } else {
+      const hitsSkill = targets.some(raw => {
+        const lower = raw.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '');
+        const base = path.posix.basename(lower).replace(/\.md$/i, '');
+        return skillNames.has(lower) || skillNames.has(base);
+      });
+      if (hitsSkill) {
+        return '这是碧琪自带的技能，正式版里不能停用、删除或覆盖；用户自己装的技能可以照常管理。';
+      }
+    }
+  }
+  return '';
+}
 
 function patchTargets(text) {
   const out = [];
