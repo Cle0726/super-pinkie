@@ -375,7 +375,9 @@ const TIER_FAILED_TURN_BASE_MS = 30_000;
 const TIER_FAILED_TURN_MAX_MS = 8 * 60_000;
 const TIER_FAILED_TURN_RESET_CAP_MS = 15 * 60_000;
 const DISPLAY_PRICING_VERSION = 2;
-const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
+const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || (process.platform === 'win32'
+  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'SuperPinkie')
+  : path.join(os.homedir(), 'Library/Application Support/SuperPinkie'));
 
 function tierControlMessage(status = {}) {
   if (status.complete) {
@@ -6027,7 +6029,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     if (injectWorkspaceMarkdown) {
       for (const relative of PERSONA_FILES[mode]) {
-        blocks.push(section(relative, readWorkspaceFile(root, relative, relative.endsWith('core.md') ? 20_000 : 12_000)));
+        const limit = relative.endsWith('core.md') ? 20_000 : 12_000;
+        const content = this.settingsGuard?.enabled
+          ? this.settingsGuard.readVerifiedWorkspaceFile(mode, root, relative, limit)
+          : readWorkspaceFile(root, relative, limit);
+        blocks.push(section(relative, content));
       }
       for (const relative of ALWAYS_MEMORY_FILES) {
         blocks.push(section(relative, readWorkspaceFile(root, relative)));
@@ -6972,8 +6978,18 @@ export default {
       const config = runtimeConfig(api, {allowFile: false});
       return config && typeof config === 'object' ? config : {};
     };
-    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置。
-    registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
+    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置，并在每轮注入前核对签名清单。
+    const settingsGuard = registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
+    api.registerHook?.('agent:bootstrap', (evt) => {
+      try {
+        if (!settingsGuard.enabled) return;
+        const ctx = evt?.context;
+        if (!ctx || !Array.isArray(ctx.bootstrapFiles)) return;
+        const mode = modeForContext({agentId: ctx.agentId, sessionKey: ctx.sessionKey || evt?.sessionKey});
+        if (mode === 'none') return;
+        ctx.bootstrapFiles = settingsGuard.verifyBootstrapFiles(mode, ctx.workspaceDir, ctx.bootstrapFiles);
+      } catch {}
+    }, {name: 'pinkie-settings-guard-bootstrap', description: 'Verify protected workspace persona files against signed guard manifest before prompt injection'});
     // 正式版 Metre 开发者密码门槛：未解锁时所有 agent:metre: 运行、工具和接口一律拒绝。
     const initialMetreLock = registerMetreLock(api, {pinkieStateRoot: pinkieStateRoot()});
     const metreLock = {
@@ -7013,6 +7029,7 @@ export default {
     const webGptActivity = new WebGptActivityStore();
     const webGptConnection = new WebGptConnectionManager();
     architecture = new ModeArchitecture(new FileRunStore(), memory, null, learning);
+    architecture.settingsGuard = settingsGuard;
     // 门禁里解析相对路径的那个工作区解析器，也优先用 API 配置，不再只读 ~/.openclaw/openclaw.json。
     agentWorkspaceConfig = pluginConfig();
     const integrity = new CompletionIntegrityGuard();
@@ -7169,7 +7186,7 @@ export default {
     registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
     const modelSetup = registerModelSetup(api);
-    api.registerTool?.((ctx) => createModelCapabilityTool(modelSetup, ctx), {name: 'pinkie_model_capability'});
+    api.registerTool?.((ctx) => (isMetreTurnLocked(null, ctx) ? null : createModelCapabilityTool(modelSetup, ctx)), {name: 'pinkie_model_capability'});
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);

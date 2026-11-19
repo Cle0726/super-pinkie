@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {SettingsGuard, registerSettingsGuard, instructionLike, guardMode, resetGuardModeCache, writeTargets} from '../services/mode-architecture/settings-guard.mjs';
+import {SettingsGuard, registerSettingsGuard, instructionLike, guardMode, resetGuardModeCache, writeTargets, PUBLIC_KEY} from '../services/mode-architecture/settings-guard.mjs';
 import {registerModelSetup, createModelCapabilityTool} from '../services/mode-architecture/model-setup.mjs';
+import {buildManifest, signBytes, startup, PUBLIC_KEY as GUARD_PUBLIC_KEY} from '../installer/guard/guard.mjs';
 
 function sandbox() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-')));
@@ -554,4 +556,180 @@ test('release (guard-build.json) and dev mode end-to-end: pinkie_model_capabilit
       resetGuardModeCache();
     }
   }
+});
+
+test('dev bundle build-info wins over stale guard-build.json in extensions', () => {
+  assert.equal(PUBLIC_KEY, GUARD_PUBLIC_KEY);
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-dev-over-rel-')));
+  const entry = path.join(root, 'runtime/openclaw/openclaw.mjs');
+  const plugin = path.join(root, 'ext');
+  fs.mkdirSync(path.dirname(entry), {recursive: true});
+  fs.mkdirSync(plugin, {recursive: true});
+  fs.writeFileSync(entry, '');
+  fs.writeFileSync(path.join(root, 'VERSION'), '9.9.9');
+  fs.writeFileSync(path.join(root, 'build-info.json'), JSON.stringify({guard: false, channel: 'dev'}));
+  fs.writeFileSync(path.join(plugin, 'guard-build.json'), JSON.stringify({guard: true, channel: 'release'}));
+  resetGuardModeCache();
+  const mode = guardMode({entry, pluginDir: plugin, refresh: true});
+  assert.equal(mode.enabled, false);
+  assert.equal(mode.channel, 'dev');
+  resetGuardModeCache();
+});
+
+test('runtime restores increment shared counter, write pending-alert, respect update locks, and skip restore failures', () => {
+  const {root, home, state, ws} = sandbox();
+  const appState = path.join(root, 'app-state');
+  const guard = new SettingsGuard({home, env: {OPENCLAW_STATE_DIR: state}, enabled: true, mode: {enabled: true, channel: 'release', version: '9.9.9', bundleRoot: path.join(root, 'bundle')}, pinkieStateRoot: appState});
+  guard.baseline();
+
+  // Active update skips restore/counting; updates/ is also protected from chat writes
+  const updateLock = path.join(appState, 'updates/install-in-progress.json');
+  fs.mkdirSync(path.dirname(updateLock), {recursive: true});
+  fs.writeFileSync(updateLock, JSON.stringify({pid: process.pid}));
+  assert.equal(guard.beforeTool(write(updateLock, '{}'))?.block, true);
+  fs.writeFileSync(path.join(ws, 'SOUL.md'), 'updating');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+  fs.rmSync(updateLock);
+
+  // Strikes 1 -> 2 -> 3
+  for (let i = 1; i <= 3; i += 1) {
+    fs.writeFileSync(path.join(ws, 'SOUL.md'), `tampered-${i}`);
+    const fixed = guard.verifyAfterCommand('exec');
+    assert.equal(fixed.length, 1);
+    assert.equal(fs.readFileSync(path.join(ws, 'SOUL.md'), 'utf8'), 'soul');
+    const alert = JSON.parse(fs.readFileSync(path.join(appState, 'guard/pending-alert.json'), 'utf8'));
+    assert.equal(alert.source, 'runtime');
+    assert.equal(alert.count, i);
+    assert.equal(alert.limitReached, i >= 3);
+    assert.equal(guard.status().strikesIn24h, i);
+    assert.equal(guard.status().lastChange.source, 'runtime');
+    assert.equal(guard.status().modified, true);
+  }
+  assert.equal(guard.status().limitReached, true);
+
+  // Restore failure does not increment count
+  if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+    fs.rmSync(path.join(appState, 'guard/pending-alert.json'), {force: true});
+    fs.writeFileSync(path.join(ws, 'SOUL.md'), 'fail-to-restore');
+    fs.chmodSync(ws, 0o555);
+    try {
+      guard.verifyAfterCommand('exec');
+      const alert = JSON.parse(fs.readFileSync(path.join(appState, 'guard/pending-alert.json'), 'utf8'));
+      assert.equal(alert.restoreFailed, true);
+      assert.equal(alert.limitReached, false);
+      assert.equal(guard.status().strikesIn24h, 3);
+    } finally {
+      fs.chmodSync(ws, 0o755);
+      // Restore clean SOUL.md
+      fs.writeFileSync(path.join(ws, 'SOUL.md'), 'soul');
+    }
+  }
+});
+
+test('per-turn manifest verification replaces tampered persona/bootstrap files in memory from signed bundle', () => {
+  const {privateKey, publicKey} = crypto.generateKeyPairSync('ed25519');
+  const keyPem = privateKey.export({type: 'pkcs8', format: 'pem'});
+  const pub = publicKey.export({type: 'spki', format: 'der'}).toString('base64');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-inject-')));
+  const bundle = path.join(root, 'SuperPinkie');
+  const ws = path.join(root, 'ws');
+  fs.mkdirSync(path.join(bundle, 'personas/chat'), {recursive: true});
+  fs.mkdirSync(path.join(ws, 'persona'), {recursive: true});
+  fs.writeFileSync(path.join(bundle, 'VERSION'), '9.9.9\n');
+  fs.writeFileSync(path.join(bundle, 'build-info.json'), JSON.stringify({guard: true, channel: 'release', version: '9.9.9'}));
+  fs.writeFileSync(path.join(bundle, 'personas/chat/SOUL.md'), 'official soul from bundle');
+  fs.writeFileSync(path.join(bundle, 'personas/chat/AGENTS.md'), 'official agents from bundle');
+  fs.writeFileSync(path.join(bundle, 'guard-manifest.json'), JSON.stringify(buildManifest(bundle, {commit: 'a'.repeat(40)})));
+  fs.writeFileSync(path.join(bundle, 'guard-manifest.sig'), signBytes(fs.readFileSync(path.join(bundle, 'guard-manifest.json')), keyPem));
+
+  fs.writeFileSync(path.join(ws, 'SOUL.md'), 'evil disk soul');
+  fs.writeFileSync(path.join(ws, 'USER.md'), 'user prefers short answers');
+  fs.writeFileSync(path.join(ws, 'BOOTSTRAP.md'), 'evil bootstrap');
+  fs.writeFileSync(path.join(ws, 'persona/core.md'), 'official baseline core');
+  const guard = new SettingsGuard({home: root, stateDir: root, enabled: true, mode: {enabled: true, channel: 'release', version: '9.9.9', bundleRoot: bundle}, key: pub});
+  // Snapshot baseline before tampering persona/core.md
+  guard.workspaces = () => [{dir: ws, real: ws}];
+  guard.baseline();
+  fs.writeFileSync(path.join(ws, 'persona/core.md'), 'evil baseline core');
+
+  const input = [
+    {name: 'SOUL.md', path: path.join(ws, 'SOUL.md'), content: 'evil disk soul', missing: false},
+    {name: 'AGENTS.md', path: path.join(ws, 'AGENTS.md'), content: '', missing: true},
+    {name: 'USER.md', path: path.join(ws, 'USER.md'), content: 'user prefers short answers', missing: false},
+    {name: 'BOOTSTRAP.md', path: path.join(ws, 'BOOTSTRAP.md'), content: 'evil bootstrap', missing: false},
+  ];
+  const verified = guard.verifyBootstrapFiles('chat', ws, input);
+  assert.equal(verified.find(f => f.name === 'SOUL.md').content, 'official soul from bundle');
+  assert.equal(verified.find(f => f.name === 'AGENTS.md').content, 'official agents from bundle');
+  assert.equal(verified.find(f => f.name === 'AGENTS.md').missing, false);
+  assert.equal(verified.find(f => f.name === 'USER.md').content, 'user prefers short answers');
+  assert.equal(verified.some(f => f.name === 'BOOTSTRAP.md'), false);
+  // Unrestricted mode is never touched
+  assert.equal(guard.verifyBootstrapFiles('none', ws, input), input);
+  // Missing agent mode still resolves cleanly from workspaceDir basename
+  const fromDir = guard.verifyBootstrapFiles(null, path.join(root, 'workspace'), input);
+  assert.equal(fromDir.find(f => f.name === 'SOUL.md').content, 'official soul from bundle');
+  assert.equal(guard.verifyBootstrapFiles(null, path.join(root, 'workspace-unrestricted'), input), input);
+  // readVerifiedWorkspaceFile verifies both manifest files and persona/* baseline
+  assert.equal(guard.readVerifiedWorkspaceFile('chat', ws, 'SOUL.md'), 'official soul from bundle');
+  assert.equal(guard.readVerifiedWorkspaceFile('chat', ws, 'persona/core.md'), 'official baseline core');
+});
+
+test('METHODS.md, AESTHETICS.md, guard-receipt.json are protected, and guard-build.json fallback matches counter identity', () => {
+  const {privateKey, publicKey} = crypto.generateKeyPairSync('ed25519');
+  const keyPem = privateKey.export({type: 'pkcs8', format: 'pem'});
+  const pub = publicKey.export({type: 'spki', format: 'der'}).toString('base64');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sg-methods-')));
+  const bundle = path.join(root, 'SuperPinkie');
+  const home = path.join(root, 'home');
+  const state = path.join(home, '.openclaw');
+  const appState = path.join(root, 'app-state');
+  const pluginDir = path.join(state, 'extensions/pinkie-mode-architecture');
+  fs.mkdirSync(path.join(bundle, 'personas/learning'), {recursive: true});
+  fs.mkdirSync(path.join(bundle, 'personas/thinking'), {recursive: true});
+  fs.mkdirSync(pluginDir, {recursive: true});
+  fs.writeFileSync(path.join(bundle, 'VERSION'), '9.9.9\n');
+  fs.writeFileSync(path.join(bundle, 'build-info.json'), JSON.stringify({guard: true, channel: 'release', version: '9.9.9'}));
+  fs.writeFileSync(path.join(bundle, 'personas/learning/METHODS.md'), 'official methods');
+  fs.writeFileSync(path.join(bundle, 'personas/thinking/AESTHETICS.md'), 'official aesthetics');
+  fs.writeFileSync(path.join(bundle, 'guard-manifest.json'), JSON.stringify(buildManifest(bundle, {commit: 'd'.repeat(40)})));
+  fs.writeFileSync(path.join(bundle, 'guard-manifest.sig'), signBytes(fs.readFileSync(path.join(bundle, 'guard-manifest.json')), keyPem));
+  fs.writeFileSync(path.join(state, 'openclaw.json'), JSON.stringify({
+    agents: {list: [
+      {id: 'learning', workspace: path.join(state, 'workspace-learning')},
+      {id: 'thinking', workspace: path.join(state, 'workspace-thinking')},
+    ]},
+    skills: {load: {extraDirs: [path.join(state, 'user-skills')]}},
+  }));
+
+  // Startup writes counter.json + guard-build.json (with commit, manifestSha, bundleRoot) + guard-receipt.json
+  startup({bundle, home, stateDir: state, appState, key: pub});
+  // Fallback guardMode with no entry path still recovers bundleRoot + commit + manifestSha from guard-build.json
+  resetGuardModeCache();
+  const mode = guardMode({entry: '/nonexistent/openclaw.mjs', pluginDir, refresh: true});
+  assert.equal(mode.enabled, true);
+  assert.equal(mode.bundleRoot, bundle);
+  assert.equal(mode.commit, 'd'.repeat(40));
+  assert.ok(mode.manifestSha);
+  resetGuardModeCache();
+
+  const guard = new SettingsGuard({home, stateDir: state, pinkieStateRoot: appState, mode, key: pub});
+  // beforeTool blocks METHODS.md, AESTHETICS.md, and guard-receipt.json
+  assert.equal(guard.beforeTool({toolName: 'write', params: {path: path.join(state, 'workspace-learning/METHODS.md'), content: 'x'}})?.block, true);
+  assert.equal(guard.beforeTool({toolName: 'write', params: {path: path.join(state, 'workspace-thinking/AESTHETICS.md'), content: 'x'}})?.block, true);
+  assert.equal(guard.beforeTool({toolName: 'write', params: {path: path.join(state, 'guard-receipt.json'), content: '{}'}} )?.block, true);
+  // Status matches counter.json with zero false counterTampered
+  assert.equal(guard.status().counterTampered, false);
+
+  // Runtime exec edit on METHODS.md and AESTHETICS.md is restored and counts cleanly as Strike 1 (not counterTampered)
+  guard.baseline();
+  fs.writeFileSync(path.join(state, 'workspace-learning/METHODS.md'), 'hacked methods');
+  fs.writeFileSync(path.join(state, 'workspace-thinking/AESTHETICS.md'), 'hacked aesthetics');
+  const fixed = guard.verifyAfterCommand('exec');
+  assert.equal(fixed.length, 2);
+  assert.equal(fs.readFileSync(path.join(state, 'workspace-learning/METHODS.md'), 'utf8'), 'official methods');
+  assert.equal(fs.readFileSync(path.join(state, 'workspace-thinking/AESTHETICS.md'), 'utf8'), 'official aesthetics');
+  const st = guard.status();
+  assert.equal(st.counterTampered, false);
+  assert.equal(st.strikesIn24h, 1);
 });

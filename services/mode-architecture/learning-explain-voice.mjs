@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {agentWorkspace, readConfigFile} from './openclaw-paths.mjs';
+import {readVerifiedBundleFile} from './settings-guard.mjs';
 
 // 这几类铁律是「出题 / 做题流程」的，讲解时不适用（讲解发生在作答之后）。
 const NOT_FOR_EXPLAIN = /阅读题专属|填表题专属|剧透|暗示|学代码|做题节奏|严格做题|滚动温故|温故/;
@@ -97,7 +98,7 @@ export function loadVoice({dir = workspace(), now = Date.now()} = {}) {
   if (cache.value && cache.key === key && now - cache.at < 20_000) return cache.value;
   const user = read(path.join(dir, 'USER.md'));
   const rules = tutoringRules(user);
-  const soul = soulRules(read(path.join(dir, 'SOUL.md')));
+  const soul = soulRules(readVerifiedBundleFile('learning', dir, 'SOUL.md'));
   const steps = reviewSteps(read(path.join(dir, 'memory/feedback/mistake_review.md')));
   const value = {
     rules: rules.length ? cut(rules, 3200) : FALLBACK_RULES,

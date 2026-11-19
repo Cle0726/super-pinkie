@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CommonCrypto
 import Darwin
 import Foundation
 import Speech
@@ -1714,6 +1715,230 @@ private enum BundledSetup {
     }
 }
 
+private enum SettingsGuardNative {
+    static let publicKey = "MCowBQYDK2VwAyEAcejSsqLWnO2o0lFTrm+Lh22s8Qi5XSfTGX4GnQTgnOs="
+    static let strikeLimit = 3
+
+    struct BundleIdentity {
+        let channel: String
+        let version: String
+        let commit: String
+        let manifestSha: String
+    }
+
+    static func stateRoot() -> URL {
+        if let configured = ProcessInfo.processInfo.environment["PINKIE_STATE_ROOT"], !configured.isEmpty {
+            return URL(fileURLWithPath: configured, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/SuperPinkie", isDirectory: true)
+    }
+
+    static func isReleaseBuild() -> Bool {
+        guard let root = BundledRuntime.resourceRoot,
+              let data = try? Data(contentsOf: root.appendingPathComponent("build-info.json")),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return obj["guard"] as? Bool == true
+    }
+
+    static func isUpdateInProgress(stateRoot: URL) -> Bool {
+        let updatesDir = stateRoot.appendingPathComponent("updates", isDirectory: true)
+        let now = Date()
+        for name in ["in-progress.json", "install-in-progress.json", "manual-update.lock"] {
+            let candidate = updatesDir.appendingPathComponent(name)
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: candidate.path),
+                  let mtime = attrs[.modificationDate] as? Date,
+                  now.timeIntervalSince(mtime) <= 15 * 60 else { continue }
+            if (attrs[.type] as? FileAttributeType) == .typeDirectory { return true }
+            if let data = try? Data(contentsOf: candidate),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let pid = obj["pid"] as? Int32, pid > 1 {
+                if Darwin.kill(pid, 0) == 0 || errno == EPERM { return true }
+                continue
+            }
+            return true
+        }
+        return false
+    }
+
+    private static func sha256Data(_ data: Data) -> Data {
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        data.withUnsafeBytes { bytes in
+            _ = CC_SHA256(bytes.baseAddress, CC_LONG(data.count), &digest)
+        }
+        return Data(digest)
+    }
+
+    private static func hexString(_ data: Data) -> String {
+        data.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func hmacSha256Hex(key: Data, message: Data) -> String {
+        var out = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        key.withUnsafeBytes { keyBytes in
+            message.withUnsafeBytes { msgBytes in
+                CCHmac(
+                    CCHmacAlgorithm(kCCHmacAlgSHA256),
+                    keyBytes.baseAddress, key.count,
+                    msgBytes.baseAddress, message.count,
+                    &out
+                )
+            }
+        }
+        return out.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func bundleIdentity() -> BundleIdentity? {
+        guard let root = BundledRuntime.resourceRoot else { return nil }
+        let info = (try? Data(contentsOf: root.appendingPathComponent("build-info.json")))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        var manifestSha = ""
+        var manifest: [String: Any] = [:]
+        if let manifestBytes = try? Data(contentsOf: root.appendingPathComponent("guard-manifest.json")) {
+            manifestSha = hexString(sha256Data(manifestBytes))
+            manifest = (try? JSONSerialization.jsonObject(with: manifestBytes) as? [String: Any]) ?? [:]
+        }
+        return BundleIdentity(
+            channel: (info["channel"] as? String) ?? "release",
+            version: (info["version"] as? String) ?? (manifest["version"] as? String) ?? "",
+            commit: (manifest["commit"] as? String) ?? (info["commit"] as? String) ?? "",
+            manifestSha: manifestSha
+        )
+    }
+
+    static func openclawStateDir() -> URL {
+        if let configured = ProcessInfo.processInfo.environment["OPENCLAW_STATE_DIR"], !configured.isEmpty {
+            return URL(fileURLWithPath: configured, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".openclaw", isDirectory: true)
+    }
+
+    private static func receiptMatches(_ record: [String: Any], identity: BundleIdentity) -> Bool {
+        guard (record["version"] as? String ?? "") == identity.version else { return false }
+        let recCommit = (record["commit"] as? String) ?? ""
+        if !identity.commit.isEmpty && !recCommit.isEmpty && recCommit != identity.commit { return false }
+        let recSha = (record["manifestSha"] as? String) ?? ""
+        if !identity.manifestSha.isEmpty && !recSha.isEmpty && recSha != identity.manifestSha { return false }
+        return true
+    }
+
+    static func hasReceipt(stateRoot: URL, identity: BundleIdentity) -> Bool {
+        let guardDir = stateRoot.appendingPathComponent("guard", isDirectory: true)
+        if let data = try? Data(contentsOf: guardDir.appendingPathComponent("status.json")),
+           let status = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           (status["counterSchema"] as? Int ?? 0) >= 1,
+           receiptMatches(status, identity: identity) {
+            return true
+        }
+        let openclawDir = openclawStateDir()
+        if let data = try? Data(contentsOf: openclawDir.appendingPathComponent("guard-receipt.json")),
+           let receipt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           (receipt["schema"] as? Int ?? 0) >= 1,
+           receiptMatches(receipt, identity: identity) {
+            return true
+        }
+        for plugin in ["pinkie-mode-architecture", "pinkie-project-scope", "pinkie-first-person-renderer"] {
+            let mark = openclawDir.appendingPathComponent("extensions/\(plugin)/guard-build.json")
+            if let data = try? Data(contentsOf: mark),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               obj["counterReady"] as? Bool == true,
+               receiptMatches(obj, identity: identity) {
+                return true
+            }
+        }
+        return false
+    }
+
+    static func verifyCounter(stateRoot: URL, identity: BundleIdentity) -> Bool {
+        let file = stateRoot.appendingPathComponent("guard/counter.json")
+        guard let data = try? Data(contentsOf: file),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (obj["schema"] as? Int) == 1,
+              let events = obj["events"] as? [String],
+              (obj["channel"] as? String ?? "") == identity.channel,
+              (obj["version"] as? String ?? "") == identity.version,
+              (obj["commit"] as? String ?? "") == identity.commit,
+              (obj["manifestSha"] as? String ?? "") == identity.manifestSha,
+              let updatedAt = obj["updatedAt"] as? String,
+              let mac = obj["mac"] as? String,
+              let chainMac = obj["chainMac"] as? String else {
+            return false
+        }
+        let locked = (obj["tamperLocked"] as? Bool == true) ? "1" : "0"
+        let payload = "1|\(identity.channel)|\(identity.version)|\(identity.commit)|\(identity.manifestSha)|\(events.joined(separator: ","))|\(locked)|\(updatedAt)"
+        guard let payloadData = payload.data(using: .utf8),
+              let bundleKeyInput = "pinkie-guard-counter-v1|\(publicKey)|\(identity.channel)|\(identity.version)|\(identity.commit)|\(identity.manifestSha)".data(using: .utf8),
+              let chainKeyInput = "pinkie-guard-chain-v1|\(publicKey)|\(identity.channel)".data(using: .utf8) else {
+            return false
+        }
+        let expectedMac = hmacSha256Hex(key: sha256Data(bundleKeyInput), message: payloadData)
+        let expectedChain = hmacSha256Hex(key: sha256Data(chainKeyInput), message: payloadData)
+        return mac.lowercased() == expectedMac && chainMac.lowercased() == expectedChain
+    }
+
+    static func lockTamperedCounter(stateRoot: URL) {
+        guard let node = BundledRuntime.nodeURL, BundledRuntime.exists(node),
+              let root = BundledRuntime.resourceRoot else { return }
+        let guardScript = root.appendingPathComponent("installer/guard/guard.mjs")
+        guard FileManager.default.fileExists(atPath: guardScript.path) else { return }
+        let task = Process()
+        task.executableURL = node
+        task.arguments = [guardScript.path, "lock-tampered", "--bundle", root.path, "--app-state", stateRoot.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        task.waitUntilExit()
+    }
+
+    static func presentAlert(from payload: [String: Any]) -> Bool {
+        let counterTampered = payload["counterTampered"] as? Bool == true
+        let limitReached = payload["limitReached"] as? Bool == true
+        let restoreFailed = payload["restoreFailed"] as? Bool == true
+        let nonOfficial = payload["nonOfficial"] as? Bool == true
+        let categories = (payload["categories"] as? [String])?.filter { !$0.isEmpty } ?? []
+        let catText = categories.isEmpty ? "产品设定" : categories.joined(separator: "、")
+        let backup = (payload["backup"] as? String) ?? ""
+        let count = (payload["count"] as? Int) ?? strikeLimit
+        let limit = (payload["limit"] as? Int) ?? strikeLimit
+
+        let alert = NSAlert()
+        alert.alertStyle = (limitReached || counterTampered) ? .critical : .warning
+        if counterTampered {
+            alert.messageText = "保护记录文件被删除或改动，应用即将退出"
+            alert.informativeText = "正式版的设定保护记录不完整或被修改，按保护规则这次会先退出应用。\n\n下次可以正常打开，并会先检查恢复官方设定；24 小时内再改动仍会直接退出。你的记忆和设置都还在。"
+            alert.addButton(withTitle: "退出应用")
+        } else if restoreFailed {
+            alert.messageText = "部分碧琪设定文件没能自动恢复"
+            alert.informativeText = "检查时发现有设定文件需要恢复，但写入没有成功（可能是磁盘空间不足、文件夹权限不够，或者被安全软件拦住了）。\n\n这次没有计入异常次数。请检查磁盘空间或安全软件后重试，你的记忆和设置没有改动。"
+            alert.addButton(withTitle: "我知道了")
+        } else if nonOfficial {
+            alert.messageText = "当前安装包不是官方完整版本"
+            alert.informativeText = "这个安装包缺少官方校验签名，或者安装包里的文件被改动过，无法用来恢复设定。建议到官方渠道重新下载安装，你的记忆和设置都在。"
+            alert.addButton(withTitle: "我知道了")
+        } else if limitReached {
+            alert.messageText = "24 小时内已有 \(count) 次改动碧琪的设定，应用即将退出"
+            var info = "刚才发现的\(catText)改动已经换回官方版本。"
+            if !backup.isEmpty { info += "\n\n原文件备份在：\n\(backup)" }
+            info += "\n\n24 小时内多次改动产品设定会触发保护退出。下次可以正常打开使用；如果 24 小时内再次改动，仍会直接退出。你的记忆、偏好设置和项目文件都没有受影响。"
+            alert.informativeText = info
+            alert.addButton(withTitle: "退出应用")
+        } else {
+            alert.messageText = "碧琪发现自己的\(catText)被改动了，已经换回官方版本"
+            var info = "为了保证碧琪正常说话和做事，正式版不允许修改这些设定。你的记忆、偏好设置和项目文件都没有动。"
+            if !backup.isEmpty { info += "\n\n被改过的文件已备份到：\n\(backup)" }
+            info += "\n\n（24 小时内第 \(count) 次恢复；达到 \(limit) 次后应用会自动退出）"
+            alert.informativeText = info
+            alert.addButton(withTitle: "我知道了")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+        return limitReached || counterTampered
+    }
+}
+
 /// Stays on screen after the main App exits, while the updater replaces the bundle.
 /// Launched as a copy of this executable so deleting /Applications/超級碧琪.app does not kill it.
 private enum UpdateProgressHold {
@@ -2052,6 +2277,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
     private var gatewayProbeInFlight = false
+    private var guardMonitor: Timer?
+    private var guardAlertInFlight = false
+    private var guardCounterVerified = false
+    private var guardSeenAlertIDs: Set<String> = []
     private let dictation = NativeDictationController()
     private let dictationHandlerName = "laolaoNativeDictation"
     private let liveSpeech = NativeLiveSpeechController()
@@ -2177,6 +2406,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applicationWillTerminate(_ notification: Notification) {
         gatewayMonitor?.invalidate()
         gatewayMonitor = nil
+        guardMonitor?.invalidate()
+        guardMonitor = nil
         tts.stop()
         party.stop()
         roundtable.stop()
@@ -2592,7 +2823,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             BundledSetup.apply()
             DispatchQueue.main.async {
-                self?.startBundledServices()
+                guard let self else { return }
+                if self.checkSettingsGuard(startup: true) {
+                    NSApp.terminate(nil)
+                    return
+                }
+                self.startSettingsGuardMonitor()
+                self.startBundledServices()
+            }
+        }
+    }
+
+    @discardableResult
+    private func checkSettingsGuard(startup: Bool) -> Bool {
+        guard !guardAlertInFlight, SettingsGuardNative.isReleaseBuild() else { return false }
+        let stateRoot = SettingsGuardNative.stateRoot()
+        if SettingsGuardNative.isUpdateInProgress(stateRoot: stateRoot) { return false }
+        guardAlertInFlight = true
+        defer { guardAlertInFlight = false }
+
+        let guardDir = stateRoot.appendingPathComponent("guard", isDirectory: true)
+        let alertURL = guardDir.appendingPathComponent("pending-alert.json")
+        var pendingPayload: [String: Any]?
+        if let data = try? Data(contentsOf: alertURL),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            try? FileManager.default.removeItem(at: alertURL)
+            let id = (obj["id"] as? String) ?? ""
+            if id.isEmpty || !guardSeenAlertIDs.contains(id) || (obj["limitReached"] as? Bool == true) {
+                if !id.isEmpty { guardSeenAlertIDs.insert(id) }
+                pendingPayload = obj
+            }
+        }
+
+        if let identity = SettingsGuardNative.bundleIdentity() {
+            let counterValid = SettingsGuardNative.verifyCounter(stateRoot: stateRoot, identity: identity)
+            if counterValid {
+                guardCounterVerified = true
+            } else if guardCounterVerified || (startup && SettingsGuardNative.hasReceipt(stateRoot: stateRoot, identity: identity)) {
+                SettingsGuardNative.lockTamperedCounter(stateRoot: stateRoot)
+                if pendingPayload == nil {
+                    pendingPayload = ["counterTampered": true, "limitReached": true]
+                } else {
+                    pendingPayload?["counterTampered"] = true
+                    pendingPayload?["limitReached"] = true
+                }
+            }
+        }
+
+        guard let payload = pendingPayload else { return false }
+        return SettingsGuardNative.presentAlert(from: payload)
+    }
+
+    private func startSettingsGuardMonitor() {
+        guard guardMonitor == nil, SettingsGuardNative.isReleaseBuild() else { return }
+        guardMonitor = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if self.checkSettingsGuard(startup: false) {
+                self.guardMonitor?.invalidate()
+                self.guardMonitor = nil
+                NSApp.terminate(nil)
             }
         }
     }
