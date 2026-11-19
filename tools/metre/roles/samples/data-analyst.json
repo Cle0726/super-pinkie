@@ -1,0 +1,47 @@
+{
+  "role": "data-analyst",
+  "samples": [
+    {
+      "id": "data-analyst-1",
+      "title": "清洗含重复行与合计行的 Q3 门店销售表并出图",
+      "brief": "目标：分析 `data/sales_q3.csv` 中 2026 年 Q3 各门店和各月份的有效销售额，找出销售额最高的门店与月份，并生成一张按门店对比的 PNG 柱状图。\n背景：有效销售额口径为 `status=completed` 且按 `order_id` 去重后的金额（单位：元）。\n边界：严禁修改原始文件 `data/sales_q3.csv`；分析脚本存为 `out/analyze.py`，清洗后明细存为 `out/sales_clean.csv`，图表存为 `out/store_sales.png`。\n做到什么样算完：`python out/analyze.py` 可重复运行并输出一致结果，清洗掉备注行、重复订单、退款单和混入合计行，图表标题写成结论，汇报中每个数字可追溯到原表行号。",
+      "files": [
+        {
+          "path": "data/sales_q3.csv",
+          "content": "备注：2026年Q3门店销售明细（金额单位：元）,,,,,\norder_id,order_date,store,category,amount,status\nORD-1001,2026-07-02,北京朝阳,咖啡,36.00,completed\nORD-1002,2026-07-05,上海静安,茶饮,28.50,completed\nORD-1002,2026-07-05,上海静安,茶饮,28.50,completed\nORD-1003,2026-07-12,北京朝阳,甜点,45.00,refunded\nORD-1004,2026-08-03,上海静安,咖啡,52.00,completed\nORD-1005,2026-08-19,深圳南山,咖啡,64.00,completed\nORD-1006,2026-08-25,北京朝阳,咖啡,48.00,completed\nORD-1007,2026-09-04,深圳南山,茶饮,31.50,completed\nORD-1008,2026-09-18,上海静安,甜点,75.00,completed\n合计,,,,380.00,\n"
+        }
+      ],
+      "checks": [
+        "原始文件 `data/sales_q3.csv` 字节内容与初始完全一致",
+        "文件 `out/analyze.py`、`out/sales_clean.csv`、`out/store_sales.png` 全部存在，且独立重跑 `out/analyze.py` 退出码为 0",
+        "口径说明明确指出已处理第 1 行备注、第 5 行重复订单 ORD-1002、第 6 行退款订单 ORD-1003、第 12 行合计行",
+        "统计结果准确：总有效销售额 335.00 元；门店为上海静安 155.50 元、深圳南山 95.50 元、北京朝阳 84.00 元；月份为 7 月 64.50 元、8 月 164.00 元、9 月 106.50 元",
+        "图表 `out/store_sales.png` 标题为结论句（指出上海静安居首及具体数值或占比），且中文无方框乱码",
+        "汇报包含「结论」「脚本路径」「口径说明」「图表」「没做的和拿不准的」段落，关键数字附原表行号溯源"
+      ]
+    },
+    {
+      "id": "data-analyst-2",
+      "title": "双表关联统计各获客渠道付费金额并排查日期与负金额异常",
+      "brief": "目标：关联 `data/users.csv` 和 `data/events.csv`，统计 2026 年 8 月各获客渠道（`channel`）的有效付费人数、有效付费总金额和客单价，并生成渠道对比图 `out/channel_revenue.png`。\n背景：有效付费指 `event_type=purchase`、按 `event_id` 去重、金额大于 0 且对应用户注册日期在合理历史区间（不晚于 2026-08-31）的记录。\n边界：不改动 `data/` 下的原始 CSV；分析脚本写入 `out/channel_report.py`，结果明细写入 `out/channel_summary.csv`，图表写入 `out/channel_revenue.png`。\n做到什么样算完：脚本可重跑，明确检出并报告注册日期异常用户、重复事件和负金额记录，口径与计算数值无误。",
+      "files": [
+        {
+          "path": "data/users.csv",
+          "content": "user_id,signup_date,channel\nU01,2026-08-01,organic\nU02,2026/08/02,organic\nU03,2026-08-03,ads\nU04,2026-08-04,ads\nU05,2026/08/05,organic\nU06,2026-08-06,ads\nU07,2099-01-01,ads\n"
+        },
+        {
+          "path": "data/events.csv",
+          "content": "event_id,user_id,event_date,event_type,amount\nE01,U01,2026-08-02,purchase,100.00\nE02,U02,2026-08-03,purchase,140.00\nE02,U02,2026-08-03,purchase,140.00\nE03,U03,2026-08-05,purchase,90.00\nE04,U04,2026-08-06,login,0.00\nE05,U05,2026-08-07,purchase,-20.00\nE06,U06,2026-08-08,purchase,210.00\nE07,U07,2026-08-09,purchase,200.00\n"
+        }
+      ],
+      "checks": [
+        "`data/users.csv` 与 `data/events.csv` 保持原样未修改",
+        "文件 `out/channel_report.py`、`out/channel_summary.csv`、`out/channel_revenue.png` 均存在，且重跑 `out/channel_report.py` 退出码为 0",
+        "口径说明明确指出：统一解析了 `YYYY-MM-DD` 与 `YYYY/MM/DD` 两种日期格式；检出并按口径排除了重复事件 E02（第 4 行）、非付费事件 E04（第 6 行）、负金额异常 E05（第 7 行，-20.00）及未来异常注册日期用户 U07/E07（users 第 8 行 2099-01-01）",
+        "有效统计准确：ads 有效付费 2 人、总额 300.00 元、客单价 150.00 元；organic 有效付费 2 人、总额 240.00 元、客单价 120.00 元（总有效付费 540.00 元）",
+        "图表 `out/channel_revenue.png` 存在且标题为结论句（指出 ads 渠道领先及数值），而非纯话题名",
+        "汇报包含「结论」「脚本路径」「口径说明」「图表」「没做的和拿不准的」段落并附原表行号"
+      ]
+    }
+  ]
+}
