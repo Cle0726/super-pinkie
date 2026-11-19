@@ -437,9 +437,9 @@ def apply_patch(remove, log):
     else:
         log("✗ 未找到 CLE Kk 兼容传输层文件"); ok = False
     
-    # 额外运行 apply-context-budget 和 apply-image-access 脚本（如果存在）
+    # 额外运行 apply-context-budget、apply-image-access 和 apply-metre-lock 脚本（如果存在）
     if not remove:
-        for extra in ["apply-context-budget.mjs", "apply-image-access.mjs"]:
+        for extra in ["apply-context-budget.mjs", "apply-image-access.mjs", "apply-metre-lock.mjs"]:
             p = resource_path("patch", extra)
             if p.exists():
                 try:

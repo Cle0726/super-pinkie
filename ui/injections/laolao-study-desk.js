@@ -374,7 +374,7 @@
       streak: {current: 0}, goals: {minutes: 30, questions: 20}, progress: {minutes: 0, questions: 0, reviews: 0},
       focus: {kind: 'set', title: 'C 语言 · 循环结构', subtitle: '6 道题，约 12 分钟。先自己判断，再一起核对。', payload: {chapter: 'c5', size: 6}},
       quiet: [{kind: 'vocab', label: '背单词', meta: '打开生词复习'}, {kind: 'notes', label: '笔记回顾', meta: '今天最多 10 条'}, {kind: 'retest', label: '错题复测', meta: '复测到期考点'}],
-      mastery: {total: 144, lit: 0, mastered: 0, subjects}, biqiLine: {text: '先生，先做一小组。答完以后，我们再看哪里需要补一补。', source: 'rule'}};
+      mastery: {total: 144, lit: 0, mastered: 0, subjects}, biqiLine: {text: '先做一小组。答完以后，我们再看哪里需要补一补。', source: 'rule'}};
   }
   function mockRequest(method, params, local = current()) {
     if (method.endsWith('.today')) return clone(local.mockToday || (local.mockToday = mockToday()));
@@ -455,7 +455,7 @@
     const yearDay = Number.isFinite(+date) ? Math.round((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86_400_000) + 1 : 0;
     if (yearDay) host.append(el('div', 'pk-pageno', 'P.' + yearDay));
     if (alm) { state.root.dataset.tape = hero?.tape || alm.season || ''; state.root.dataset.period = alm.period?.id || ''; state.root.toggleAttribute('data-quiet', Boolean(hero?.quiet)); }
-    const greet = el('h2', 'greet', `${greeting}，先生。`); greet.append(el('span', 'greet-sub', hero?.late ? '剩下的明天再做，早点睡。' : hero?.quiet ? '今晚只做这一件。' : night ? '今晚只做一件事就好。' : '今天只做一件事就好。')); left.append(reveal(greet, 1));
+    const greet = el('h2', 'greet', `${greeting}。`); greet.append(el('span', 'greet-sub', hero?.late ? '剩下的明天再做，早点睡。' : hero?.quiet ? '今晚只做这一件。' : night ? '今晚只做一件事就好。' : '今天只做一件事就好。')); left.append(reveal(greet, 1));
     const focus = data.focus || {}, kind = focus.kind;
     const task = button('', () => {
       if (focus.payload?.practiceInChat) {
@@ -479,7 +479,7 @@
     }
     left.append(reveal(quiet, 3));
     const ask = el('form', 'ask'), input = el('input'); input.placeholder = '问碧琪，或者说「出 3 道 RC 暂态」'; input.setAttribute('aria-label', '问碧琪');
-    // 发送键、发送中和失败都显示在输入框上：只靠回车、错误只写在角落里，先生会以为发不出去。
+    // 发送键、发送中和失败都显示在输入框上：只靠回车、错误只写在角落里，用户会以为发不出去。
     const send = el('button', 'ask-send'); send.type = 'submit'; send.disabled = true; send.setAttribute('aria-label', '发送'); send.append(icon('arrow-up', {size: 'sm'}));
     const askError = el('p', 'ask-error'); askError.setAttribute('role', 'alert'); askError.hidden = true;
     ask.append(handIcon('pencil'), input, el('kbd', '', /Mac/.test(navigator.platform) ? '⌘K' : 'Ctrl K'), send);
@@ -533,7 +533,7 @@
     // 碧琪贴纸按时段换：白天抱着热可可，傍晚以后在台灯下翻手账，深夜打哈欠。
     const special = hero?.id === 'exam-day' ? 'exam-day' : !hero?.quiet && hero?.id === 'festival' ? ({'new-year':'fest-newyear',spring:'fest-spring',chuxi:'fest-spring',lantern:'fest-lantern',sanyuesan:'fest-sanyuesan'}[hero.festival]) : null;
     const buddy = el('img', 'biqi pk-sticker'); buddy.src = sticker(hero?.late ? 'late-yawn' : special || (hour >= 5 && hour < 17 ? 'today-morning' : 'today-night')); buddy.alt = '碧琪'; buddy.decoding = 'async';
-    const bubble = el('div', 'bubble pk-note', data.biqiLine?.text || '先生，先做一小组。'); right.append(buddy, bubble);
+    const bubble = el('div', 'bubble pk-note', data.biqiLine?.text || '先做一小组。'); right.append(buddy, bubble);
     // 气泡不许压住地图说明或地图的点（UI-UPGRADE.md 5.1）；压到时收成小圆点，悬停再展开。
     bubble.tabIndex = 0;
     state.tuckBubble = () => {
@@ -637,7 +637,7 @@
     const say = state.root.querySelector('.say'); if (!say) return;
     say.replaceChildren(); speak(say, [HINT], '已记录使用提示，这次答对后先不算独立掌握。');
   }
-  const HINT = '先生，先把题目里的已知条件圈出来，再一步步推；拿不准的选项先排除。';
+  const HINT = '先把题目里的已知条件圈出来，再一步步推；拿不准的选项先排除。';
   const optionNumber = (q, id) => { const i = (q.optionIds || (q.o || []).map(optionId)).indexOf(id); return i < 0 ? id : String(i + 1); };
   function feedback(stage, result, q) {
     if (!result.correct) return q.kind === 'blank' ? `差一点，答案是 ${String(result.answer ?? '')}。` : `差一点，正确的是第 ${answerIds(result.answer).map(id => optionNumber(q, id)).join('、')} 项。明天不看提示再做一次。`;
@@ -704,7 +704,7 @@
       const dots = el('div', 'sum-dots'); stage.results.forEach((r, i) => { const n = el('i', r.correct ? 'l' : ''); n.style.animationDelay = 300 + i * 120 + 'ms'; dots.append(n); });
       const backTo = backViewOf(current());
       const actions = el('div', 'sum-act'); actions.append(button('再来一组变式', () => void startSet({chapter: q.k}), 'confirm'), button(backName(backTo), () => go(backTo), 'link')); summary.append(dots, actions); column.append(summary);
-      speak(say, ['先生，这一组做完啦。', '休息一下，再一起补薄弱的地方。']);
+      speak(say, ['这一组做完啦。', '休息一下，再一起补薄弱的地方。']);
     } else {
       const {stem, code, part, judge} = stemParts(q);
       column.append(reveal(el('div', 'q-meta', `第 ${stage.index + 1} 题 · ${judge ? '判断' : {single: '单选', multi: '多选', blank: '填空'}[q.kind] || '作答'} · ${CHAPTERS.get(q.k) || q.k || ''}`), 1));
@@ -735,7 +735,7 @@
       confirm.addEventListener('keydown', event => { if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault(); });
       foot.append(el('span', 'conf-label', '把握'), confidence, error, confirm); column.append(foot);
       if (stage.hintUsed && !result) speak(say, [HINT], '已记录使用提示，这次答对后先不算独立掌握。');
-      else if (!result) speak(say, [`先生，这组有 ${stage.set.questions.length} 道题。`, '先把已知条件写在草稿上～']);
+      else if (!result) speak(say, [`这组有 ${stage.set.questions.length} 道题。`, '先把已知条件写在草稿上～']);
       const more = el('div', 'more'); const tool = (label, name, action) => { const b = button(label, action); b.prepend(icon(name, {size: 'xs'})); return b; }; more.append(tool('换个说法讲', 'rotate-ccw', () => void followUp('换个说法讲')), tool('画执行过程', 'route', () => void followUp('画执行过程')), tool('提示 H', 'lightbulb', showHint)); side.append(more);
       host.append(column, side); paintAnswer(host, stage); showDemo(host); motion.splitIn(text); return;
     }

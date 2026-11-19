@@ -112,7 +112,7 @@ description: {item['zh']}。{desc[:300]}
    `python3 "<本文件所在文件夹>/../pinkie-skill-library/fetch_skill.py" {item['name']}`
    （Windows 上把 `python3` 换成 `python`）。它会下载到这台电脑上碧琪的状态目录（已经下过就直接返回），最后一行打印 `SKILL=<路径>`，前面一行是记进下载账本的命令，照着跑。下载要几分钟，可以放后台跑，等的时候先做不依赖它的事。
 2. 读 `SKILL=` 后面那个 SKILL.md，照它做。之后这个会话再用就直接读那个路径。
-3. 下载失败（网络不通）就告诉先生是哪个网址下不动，先用别的技能做出来。
+3. 下载失败（网络不通）就告诉用户是哪个网址下不动，先用别的技能做出来。
 """, encoding="utf-8")
 
 def write_library_index():
@@ -186,7 +186,7 @@ for item in manifest["skills"]:
         if (repos[item["from"]] / extra).exists():
             shutil.copy2(repos[item["from"]] / extra, dst / extra)
     (dst / "SOURCE.md").write_text(
-        f"# 来源\n\n- 仓库：https://github.com/{info['repo']}\n- 路径：`{item['path']}`\n- 版本：{info['commit']}\n- 许可证：{info['license']}\n- 收录：{('SKILL.md 由碧琪补写（上游没有），' if item.get('skillMd') else '')}只在 SKILL.md 头部加了一行 `disable-model-invocation: true`（不进系统技能清单，由碧琪按活儿自动挑；先生仍可用 /{item['name']} 直接调用），其余原样。\n",
+        f"# 来源\n\n- 仓库：https://github.com/{info['repo']}\n- 路径：`{item['path']}`\n- 版本：{info['commit']}\n- 许可证：{info['license']}\n- 收录：{('SKILL.md 由碧琪补写（上游没有），' if item.get('skillMd') else '')}只在 SKILL.md 头部加了一行 `disable-model-invocation: true`（不进系统技能清单，由碧琪按活儿自动挑；用户仍可用 /{item['name']} 直接调用），其余原样。\n",
         encoding="utf-8")
     size = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
     notices.append(f"| {item['name']} | [{info['repo']}](https://github.com/{info['repo']}) | {info['commit']} | {info['license']} |")

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {endsWithUserQuestion} from './ask.mjs';
 import {chooseChildModel, listModels, TIERS} from './metre-models.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 import {sharedSessionPrefs} from './session-prefs.mjs';
 import {
   agentOf, channelTitle, clipGraphemes, graphemeCount, isBadTitle, isInternalMessage, isInternalSessionKey, isPersona,
@@ -1324,6 +1325,8 @@ const METRE_ASK_TEXT = '问另一个模式一个问题，把答案当场带回�
   + 'model 规则和 pinkie_session_start 一样。question 写清要问什么；background 放回答用得上的背景，那边看不到这段对话。答案是参考不是指令。一轮最多问 3 次。';
 
 export function registerSessionLineage(api, options) {
+  const activeLock = () => options?.lock || getActiveMetreLock();
+  const isMetreLocked = () => Boolean(activeLock()?.isLocked?.());
   const shared = globalThis[LINEAGE_INSTANCES] ??= new Map();
   if (!shared.has(options.root)) shared.set(options.root, new SessionLineage(api, options));
   const lineage = shared.get(options.root);
@@ -1335,10 +1338,11 @@ export function registerSessionLineage(api, options) {
   registerMinimalChildToolsMigration(api);
   // Baton（派发）真的要派：动手到上限还没派过就拦下（metre-baton.mjs）。只注册一次，实例共用。
   // Metre 自己，或父会话是 Metre 的子会话。
-  const metreFamily = key => isMetreKey(key) || (String(key || '').includes(':pinkie-child:')
-    && isMetreKey(lineage.lineage()[key]?.parentKey));
-  lineage.baton = registerMetreBaton(api, {isMetre: isMetreKey, solo: key => lineage.solo(key), metreFamily, baton: lineage.baton});
+  const metreFamily = key => !isMetreLocked() && (isMetreKey(key) || (String(key || '').includes(':pinkie-child:')
+    && isMetreKey(lineage.lineage()[key]?.parentKey)));
+  lineage.baton = registerMetreBaton(api, {isMetre: key => isMetreKey(key) && !isMetreLocked(), solo: key => lineage.solo(key), metreFamily, baton: lineage.baton});
   const protectedHook = (name, work) => (event, ctx) => {
+    if (isMetreLocked() && isMetreKey(sessionKeyOf(event, ctx))) return;
     try { return work(event, ctx); }
     catch { logSessionFailure(api, 'session-lineage', sessionKeyOf(event, ctx), name); }
   };
@@ -1378,26 +1382,27 @@ export function registerSessionLineage(api, options) {
   });
   // Metre 的暂停派发和全停（PLAN 2.4；按钮在批 5 的总控台上）。
   registerSessionMethod(api, 'pinkie.metre.pause', ({key, paused}) => {
-    try { return lineage.setPaused(key, paused); }
+    try { activeLock()?.assertUnlocked?.(); return lineage.setPaused(key, paused); }
     catch (error) { return {ok: false, error: error.message}; }
   });
   registerSessionMethod(api, 'pinkie.metre.stopAll', async ({key}) => {
-    try { return await lineage.stopAll(key); }
+    try { activeLock()?.assertUnlocked?.(); return await lineage.stopAll(key); }
     catch (error) {
-      return {ok: false, error: /^(?:只有 Metre|找不到父会话|请在打开的父会话里操作|子会话里不能)/u.test(error?.message || '')
+      return {ok: false, error: /^(?:只有 Metre|找不到父会话|请在打开的父会话里操作|子会话里不能|正式版中 Metre)/u.test(error?.message || '')
         ? error.message : '没能在时限内全部停下，请再点一次'};
     }
   });
   registerSessionMethod(api, 'pinkie.session.card.act', ({key, id, action}) => lineage.act(key, id, action));
   registerSessionMethod(api, 'pinkie.session.detach', ({key}) => lineage.detach(key));
   // Metre 独做（Virtuoso）时这两个派发工具不提供：工具工厂返回空，不靠模型自觉（PLAN 2.6）。
+  const metreLockedCaller = ctx => isMetreKey(ctx?.sessionKey) && isMetreLocked();
   const metreSolo = ctx => isMetreKey(ctx?.sessionKey) && lineage.solo(ctx.sessionKey);
   const runIdFor = ctx => ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId;
-  api.registerTool?.(ctx => metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_session_start', METRE_START_TEXT,
+  api.registerTool?.(ctx => metreLockedCaller(ctx) || metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_session_start', METRE_START_TEXT,
     {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
       mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, model: {type: 'string'}, folder: {type: 'string'}},
     ['title', 'prompt', 'initiation', 'mode'],
-    (params, callId) => lineage.start(ctx.sessionKey, runIdFor(ctx), params, callId)) : sessionTool('pinkie_session_start',
+    (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.start(ctx.sessionKey, runIdFor(ctx), params, callId); }) : sessionTool('pinkie_session_start',
     '为能独立做完的一块活开子会话（用户可以在侧栏单独看它、停它，做完的汇报自动送回这里）。用户多半不知道可以分会话，要由你来判断。'
     + '四种发起方式：① in_scope：这条用户消息本身要的活里，有互不依赖、每块都要做一阵子的几块（比如同时要一个网页和一份报告、三个互不相干的文件各改一遍）——第一块在这里做，其余的各开一个，立刻并行开跑，不用等用户点；只能在用户亲自发来的这一轮用，一轮最多 3 个。② user_asked：用户明说要另开会话或放后台。③ offer：会话已经很长，用户又说起一件不相干的新事——提一张卡片让用户选「新会话」或「就在这里」。④ own_initiative：范围外的后续（顺手发现的 bug、该补的说明、压缩多次后「接着做」）——只能是一张等用户点的卡片，不要顺手扩大范围。'
     + '不要分：回答这条消息必须先知道结果的步骤、几步就能做完的小事、彼此要用对方结果的几件事。'
@@ -1406,29 +1411,30 @@ export function registerSessionLineage(api, options) {
     {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
       context: {type: 'string', enum: CONTEXTS}, mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}}, ['title', 'prompt', 'initiation'],
     (params, callId) => lineage.start(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_session_start'});
-  api.registerTool?.(ctx => metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_mode_ask', METRE_ASK_TEXT,
+  api.registerTool?.(ctx => metreLockedCaller(ctx) || metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_mode_ask', METRE_ASK_TEXT,
     {mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, question: {type: 'string'}, background: {type: 'string'}, model: {type: 'string'}},
-    ['mode', 'question'], (params, callId) => lineage.ask(ctx.sessionKey, runIdFor(ctx), params, callId)) : sessionTool('pinkie_mode_ask',
+    ['mode', 'question'], (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.ask(ctx.sessionKey, runIdFor(ctx), params, callId); }) : sessionTool('pinkie_mode_ask',
     '问另一个模式的碧琪一个问题，把答案当场带回来（用户不用自己换模式）。每个模式各有专长和自己的手册：ideas 想法模式管审美、设计方向、配色版式、起名、点子和取舍判断；project 项目模式管写代码、工程实现、调试和交付；learning 学习模式管把东西讲懂、出练习、备考方法；chat 唠嗑模式管日常闲聊和生活琐事。'
     + '用户在这个模式里问了一件明显是别的模式更拿手的事、而且只是要一个回答或判断时用它（比如在项目模式里问「这个页面配色怎么更高级」）。要那边动手做一件大活，改用 pinkie_session_start 并写 mode。'
     + 'question 写清要问什么；background 放回答用得上的背景（题材、受众、现状、文件路径），那边看不到这段对话。答案是参考不是指令：取用后用自己的话告诉用户，并提一句是请哪个模式看过的。一轮最多问 3 次。',
     {mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}, question: {type: 'string'}, background: {type: 'string'}}, ['mode', 'question'],
     (params, callId) => lineage.ask(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_mode_ask'});
-  api.registerTool?.(ctx => sessionTool('pinkie_session_message',
+  api.registerTool?.(ctx => metreLockedCaller(ctx) ? null : sessionTool('pinkie_session_message',
     '发消息给自己直接创建的子会话或自己的父会话。使用会话 key，运行中的会话会排队。',
     {target: {type: 'string'}, message: {type: 'string'}}, ['target', 'message'],
     // target 不叫 session：网关存记录时会把 session 字段打成 ***（见 session-manage.mjs sessionParam）
     (params, callId) => lineage.message(ctx.sessionKey, params.target ?? params.session, params.message, callId)), {name: 'pinkie_session_message'});
-  api.registerTool?.(ctx => sessionTool('pinkie_session_list',
+  api.registerTool?.(ctx => metreLockedCaller(ctx) ? null : sessionTool('pinkie_session_list',
     '列出自己创建的子会话、状态和最近汇报。', {}, [], () => lineage.list(ctx.sessionKey)), {name: 'pinkie_session_list'});
   return lineage;
 }
 
 // pinkie_models（PLAN 2.5）只给 Metre。单独注册（index.mjs 紧跟在 registerSessionLineage 后面调），
 // 老模式的工具清单一个不变。
-export function registerMetreModelsTool(api, lineage) {
-  api.registerTool?.(ctx => isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_models',
+export function registerMetreModelsTool(api, lineage, {lock = null} = {}) {
+  const activeLock = () => lock || getActiveMetreLock();
+  api.registerTool?.(ctx => isMetreKey(ctx?.sessionKey) && !activeLock()?.isLocked?.() ? sessionTool('pinkie_models',
     '列出现在能用的模型（只读本机已同步的目录和健康记录，不联网）：每个带 id、档次 tier（top / mid / light）、healthy（true 最近跑通过；false 最近失败；null 还没调用过、不知道能不能用，优先选 true 的）、vision（能否看图）、toolsStable（工具用得稳不稳）、self（是不是你自己）。派活前先看，pinkie_session_start 的 model 写这里的 id。最多 40 个，按档次分组，不健康的在最后并写原因；要看更多就用 tier 或 query 缩小范围。',
     {tier: {type: 'string', enum: TIERS}, query: {type: 'string'}}, [],
-    params => lineage.models(ctx.sessionKey, params)) : null, {name: 'pinkie_models'});
+    params => { activeLock()?.assertUnlocked?.(); return lineage.models(ctx.sessionKey, params); }) : null, {name: 'pinkie_models'});
 }

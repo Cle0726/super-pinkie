@@ -4,6 +4,7 @@ import path from 'node:path';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {projectContext} from './web-gpt-project-context.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const execFileAsync = promisify(execFile);
 const VALID_SESSION = /^agent:(main|project|thinking|learning|unrestricted|metre):/;
@@ -374,6 +375,7 @@ export function registerWebGptConnectionGateway(api, manager) {
   api.registerGatewayMethod('pinkie.webGpt.connection.get', handle('status'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.chatStatus', async ({params, respond}) => {
     try {
+      getActiveMetreLock()?.assertSessionAllowed?.(params?.sessionKey);
       respond(true, manager.chatStatus(String(params?.sessionKey || ''), String(params?.workspace || '')));
     } catch (error) {
       respond(false, undefined, {code: 'INVALID_REQUEST', message: error instanceof Error ? error.message : String(error)});
@@ -385,6 +387,7 @@ export function registerWebGptConnectionGateway(api, manager) {
   api.registerGatewayMethod('pinkie.webGpt.connection.clearConversation', handle('clearConversation'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.connection.bindConversation', async ({params, respond}) => {
     try {
+      getActiveMetreLock()?.assertSessionAllowed?.(params?.sessionKey);
       const result = await manager.bindConversation(
         String(params?.sessionKey || ''),
         String(params?.workspace || ''),
@@ -399,6 +402,7 @@ export function registerWebGptConnectionGateway(api, manager) {
   api.registerGatewayMethod('pinkie.webGpt.connection.unpair', handle('unpair'), {scope: 'operator.admin'});
   api.registerGatewayMethod('pinkie.webGpt.projectContext', async ({params, respond}) => {
     try {
+      getActiveMetreLock()?.assertSessionAllowed?.(params?.sessionKey);
       const result = await manager.projectContext(
         String(params?.sessionKey || ''),
         String(params?.workspace || ''),

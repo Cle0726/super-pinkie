@@ -68,8 +68,8 @@
     ["粘贴来自", "粘贴 CLE Kk 的访问令牌；需要时可复制"],
     ["如果未配置令牌，请在 Gateway 主机上运行", "还没有访问令牌时，可在本机终端运行"],
     ["更新凭据后再次点击 Connect。", "填好后再次点击“连接”。"],
-    ["Loading…", "先生稍等，碧琪在找派对用品…"],
-    ["Loading...", "先生稍等，碧琪在找派对用品…"],
+    ["Loading…", "稍等，碧琪在找派对用品…"],
+    ["Loading...", "稍等，碧琪在找派对用品…"],
     ["Loading config schema…", "碧琪正在整理配置小卡片…"],
     ["Loading schema…", "碧琪正在翻找说明小卡…"],
     ["Loading runtime tool catalog…", "碧琪正在清点工具小帮手…"],
@@ -96,7 +96,7 @@
     ["Interrupted", "碧琪先把小蹄子收回来啦"],
     ["Stopped", "碧琪已经乖乖停下啦"],
     ["Cancelled", "这件小事先不做啦"],
-    ["Aborted", "碧琪先停在这里等先生"],
+    ["Aborted", "碧琪先停在这里等你"],
     ["Error rendering content", "这块内容被奶油糊住啦"],
     ["An error occurred:", "哎呀，碧琪碰到一点小意外："],
     [failureSentinel, failureNotice],
@@ -308,6 +308,7 @@
     computer:'操作电脑',computer_flow:'操作电脑',workbench_read:'读取项目资料',workbench_show:'在工作台打开',
     learning_activity:'学习小练习',learning_desk:'记进手账',learning_library:'查学习资料',learning_material:'看学习资料',
     clekk_memory:'长期记忆',pinkie_session_start:'开子会话',pinkie_session_message:'给子会话发消息',pinkie_session_list:'查看子会话',pinkie_session_title:'给会话起名',
+    pinkie_model_capability:'设置模型能力',
     web_gpt_activity:'网页 GPT 协作',web_gpt:'请网页 GPT 帮忙'};
   // 批 1、批 2 的新工具（PLAN 2.5、2.7）
   Object.assign(toolLabels,{pinkie_sessions:'整理会话',pinkie_models:'看可用模型',metre_memory:'项目记忆'});

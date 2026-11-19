@@ -286,12 +286,12 @@
     if (!footerMenu.hidden) positionFooterMenu();
   };
 
-  // 输入框提示按模式换成碧琪的口吻，称呼和各模式的人格一致（项目叫老板，学习叫先生）。
+  // 输入框提示按模式换成碧琪的口吻；不带「先生」「老板」之类的称呼（用户想被怎么叫由人设按 USER.md 决定）。
   const COMPOSER_HINTS = {
     chat: "和碧琪聊点什么吧～",
-    project: "老板，这次要碧琪做什么？",
+    project: "这次要碧琪做什么？",
     thinking: "有什么想法，说给碧琪听听",
-    learning: "先生，今天想学点什么？",
+    learning: "今天想学点什么？",
     unrestricted: "想说什么都可以～",
     metre: "要做什么？",
   };

@@ -64,7 +64,7 @@ export function localWorld() {
   return {regions};
 }
 
-export const GUARD_RULES = `你是英语 B 级出题老师。输入 {"region","format":该区对应的 B 级题型,"nodes":本区考点,"weak":先生的错题考点}。
+export const GUARD_RULES = `你是英语 B 级出题老师。输入 {"region","format":该区对应的 B 级题型,"nodes":本区考点,"weak":用户的错题考点}。
 出一套守关小卷：12 道四选一题，覆盖本区考点、难度对标 B 级真题（词汇 2500 以内、句子简单），每题答案唯一、干扰项是常见错误。听力区：题干写成「[听力原文] … 问题：…」的文字版。
 只输出 JSON：{"items":[{"stem":"","options":["","","",""],"answer":0-3,"why":"一句中文解析","point":"考点 ≤12 字"}]}`;
 

@@ -131,7 +131,7 @@ test('explicit cross-mode navigation resolves a child outside the listed page, a
 
 test('the changed scripts are served under new cache names', () => {
   const head = source('laolao-head.fragment.html');
-  for (const name of ['laolao-session-list.js?v=metre1118', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode52']) has(head, name);
+  for (const name of ['laolao-session-list.js?v=metre1118', 'laolao-session-cards.js?v=audit1112.', 'laolao-sidebar-surface.css?v=audit1112.', 'laolao-mode-switcher.js?v=mode53']) has(head, name);
 });
 
 // Clean-up from the same audit (duplicates seen on a real render of the chat page).

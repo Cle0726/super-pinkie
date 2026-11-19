@@ -20,7 +20,7 @@ html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .
   background:linear-gradient(90deg,transparent 22px,#6B3352 22px 23.5px,transparent 23.5px),repeating-linear-gradient(to bottom,transparent 0 31px,#2A2231 31px 32px) 0 14px,#1C1620!important}
 html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{background:#F2EBE4!important}
 html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell{background:#141017!important}
-/* 先生 10-29：便签栏不要「框里套框」。原生外壳四周 25px 的留白、阴影和卡片圆角都去掉，聊天纸一直铺到窗口边，和学习台之间只留一条细线。 */
+/* 用户 10-29：便签栏不要「框里套框」。原生外壳四周 25px 的留白、阴影和卡片圆角都去掉，聊天纸一直铺到窗口边，和学习台之间只留一条细线。 */
 html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell{padding:0!important;box-shadow:-1px 0 0 rgba(46,34,54,.10)!important;background:#FAF6F1!important}
 html[data-pinkie-desk-split][data-pinkie-night][data-pinkie-study-desk="desk"] .shell{box-shadow:-1px 0 0 rgba(0,0,0,.5)!important;background:#1C1620!important}
 html[data-pinkie-desk-split][data-pinkie-study-desk="desk"] .shell .card.chat{border:0!important;border-radius:0!important;box-shadow:none!important;margin:0!important}

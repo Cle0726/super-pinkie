@@ -249,7 +249,7 @@
     const plinth = el('div', 'pkg-stage__plinth');
     const copy = el('div', 'pkg-stage__copy');
     const hour = beijingHour();
-    const hello = s.quiet ? '考前，稳住。' : hour < 5 ? '夜深了，先生。' : hour < 12 ? '早上好，先生。' : hour < 18 ? '下午好，先生。' : '晚上好，先生。';
+    const hello = s.quiet ? '考前，稳住。' : hour < 5 ? '夜深了。' : hour < 12 ? '早上好。' : hour < 18 ? '下午好。' : '晚上好。';
     const head = el('div', 'pkg-stage__head');
     head.append(el('small', 'pkg-kicker', `CAMP · ${s.season?.name ? s.season.name + '季' : '营地'}`), el('h2', 'pkg-hello', hello));
     const line = el('p', 'pkg-line', '…'); head.append(line);

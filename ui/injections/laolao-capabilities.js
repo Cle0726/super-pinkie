@@ -2,7 +2,7 @@
  *
  * 用的是 OpenClaw 自带的调度器（cron.*）和 MCP 登记（pinkie.connectors.*），这里只是碧琪风格的外壳：
  * 和设置页其它卡片同一套写法（图标标题、圆角选项、粉色按钮），不出现「MCP」「会话 ID」这类工程词。
- * 推送对象从已有的微信 / 飞书 / QQ 聊天里取（pinkie.cron.targets），不用先生手抄 ID。 */
+ * 推送对象从已有的微信 / 飞书 / QQ 聊天里取（pinkie.cron.targets），不用用户手抄 ID。 */
 (() => {
   'use strict';
   if (window.__pinkieCapabilities) return;
@@ -234,7 +234,7 @@
       const patch = {agentId: who.get(), schedule: schedule(), delivery: delivery(),
         payload: {...(job?.payload || {}), kind: 'agentTurn', message: text}};
       if (job) {
-        // 只改先生动过的名字：有中文显示名的任务改显示名，内部代号保持不变
+        // 只改用户动过的名字：有中文显示名的任务改显示名，内部代号保持不变
         if (label !== (job.displayName || job.name)) patch[job.displayName ? 'displayName' : 'name'] = label;
         await request('cron.update', {id: editing, patch});
       } else {

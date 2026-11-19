@@ -102,7 +102,7 @@ test('visual teaching stays automatic when quizzes are paused and does not award
   const store = fixture(t); store.setEnabled(key, false);
   const tool = createLearningActivityTool(store, {sessionKey: key}), result = await tool.execute('device-present', {action: 'present', kind: 'device_lab', visual: {device: 'counter161'}});
   assert.equal(result.isError, false); assert.equal(result.details.inline.kind, 'device_lab');
-  const prompt = learningPrompt(store, key); assert.match(prompt, /不用等先生点按钮/); assert.match(prompt, /暂停的是主动出题/); assert.match(prompt, /memory_lab/); assert.doesNotMatch(prompt, /点输入框下方/);
+  const prompt = learningPrompt(store, key); assert.match(prompt, /不用等用户点按钮/); assert.match(prompt, /暂停的是主动出题/); assert.match(prompt, /memory_lab/); assert.doesNotMatch(prompt, /点输入框下方/);
   assert.equal(store.listAttempts(key).total, 0); assert.equal(store.status(key).enabled, false);
   const resumed = await tool.execute('resume-quiz', {action:'present', resume:true, kind:'single_choice', question:'练习', options:['甲','乙'], correct_answer:'1'});
   assert.equal(resumed.isError, false); assert.equal(store.status(key).enabled, true);

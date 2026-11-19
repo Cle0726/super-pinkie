@@ -15,6 +15,6 @@
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>用于碧琪的语音输入功能。</string>
-  <key>NSSpeechRecognitionUsageDescription</key><string>用于把先生的语音转换成聊天输入。</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>用于把你的语音转换成聊天输入。</string>
 </dict>
 </plist>

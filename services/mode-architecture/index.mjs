@@ -45,7 +45,7 @@ import {ASK_USER_RULES, ASK_USER_TOOL, createAskUserTool, endsWithUserQuestion, 
 import {cleanReplyText, sanitizeAssistantMessage} from './reply-hygiene.mjs';
 import {APP_GUIDE_RULES} from './app-guide.mjs';
 import {registerModelSync} from './model-sync.mjs';
-import {registerModelSetup} from './model-setup.mjs';
+import {createModelCapabilityTool, registerModelSetup} from './model-setup.mjs';
 import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
@@ -53,6 +53,8 @@ import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
+import {LOCKED_ERROR, getActiveMetreLock, paramsReferenceMetre, registerMetreLock} from './metre-lock.mjs';
+import {registerFeedback, resolveFeedbackRoot} from './feedback.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -217,9 +219,9 @@ const RESPONSE_ONLY_PREFIX = /^(?:请(?:你)?\s*)?(?:只|仅)(?:需|要)?(?:回�
 const RESPONSE_ONLY_FOLLOWUP_ACTION = /(?:然后|并且|同时|再|之后|接着|随后|并|且)\s*(?:调用|使用|执行|运行|修改|改|修复|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|测试|验证)/i;
 const READ_ONLY_DIAGNOSTIC_INTENT = /(?:只读|不要(?:进行)?(?:任何)?操作|不操作|不要(?:点击|输入|修改|改动|创建|删除|写入|更新)|(?:只|仅)(?:需|要)?(?:检查|查看|读取|返回|回复|输出))/i;
 const DIAGNOSTIC_TARGET = /(?:权限|辅助功能|屏幕录制|状态|连通|健康|网关|端口|进程|模型|额度|桌面|屏幕|尺寸|版本|签名|身份)/i;
-const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
+const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy|pinkie_model_capability)(?:$|_)/i;
 const OBSERVATION_TOOL = /(?:^|_)(?:read|view|inspect|find|search|list|status|open_file|file_fetch|dir_fetch|dir_list)(?:$|_)/i;
-const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
+const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen|pinkie_model_capability)$/i;
 // Bookkeeping tools change nothing outside the chat (a checklist the UI shows),
 // even though their names contain "update".
 const BOOKKEEPING_TOOL = /^(?:plan_update|update_plan)$/i;
@@ -301,13 +303,13 @@ export function localSetupFailure(reason = '', attempts = 0) {
 }
 const WATCHDOG_MESSAGE = '\u2063';
 // 续接消息不能只是一个看不见的字符：模型会把它当成空消息/心跳，按 OpenClaw 的规则回 NO_REPLY，
-// 先生就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
+// 用户就收不到任何最终回复（2026-10-12 实测）。改成带前缀的内部命令：界面按 [pinkie-watchdog] 前缀隐藏，
 // 时间线也把它当内部消息，不会拆开这一轮。
 const WATCHDOG_CONTROL_PREFIX = '[pinkie-watchdog]';
 function watchdogControlMessage(instruction = '') {
   const body = String(instruction || '').replace(/\s+/g, ' ').trim()
-    || '继续完成当前这一轮先生交代的工作，完成后正常交付。';
-  return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，先生看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
+    || '继续完成当前这一轮用户交代的工作，完成后正常交付。';
+  return `${WATCHDOG_CONTROL_PREFIX} ${body} 这是当前用户轮次的内部续跑命令，用户看不到这条消息；不要回复 NO_REPLY，也不要在回复里提到这条命令。`;
 }
 const PLUGIN_BUILD = '2026-11-02.6-work-kinds';
 
@@ -374,7 +376,9 @@ const TIER_FAILED_TURN_BASE_MS = 30_000;
 const TIER_FAILED_TURN_MAX_MS = 8 * 60_000;
 const TIER_FAILED_TURN_RESET_CAP_MS = 15 * 60_000;
 const DISPLAY_PRICING_VERSION = 2;
-const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
+const pinkieStateRoot = () => process.env.PINKIE_STATE_ROOT || (process.platform === 'win32'
+  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'SuperPinkie')
+  : path.join(os.homedir(), 'Library/Application Support/SuperPinkie'));
 
 function tierControlMessage(status = {}) {
   if (status.complete) {
@@ -588,18 +592,18 @@ const COMPLETION_TRUTH_RULES = `
 // 针对的是所有场景里都会出现的三类毛病：顺着说话、说没有依据的事、草草交差。
 export const WORK_STANDARD_RULES = `
 做事标准（每个模式、每个任务都适用）：
-1. 对错直说，不顺着说。先生的说法、答案或方案有错，第一句就指出错在哪、为什么、正确的是什么；语气可以温和，结论不能含糊。只在真的对时才说「对」或「完全正确」，部分对就说清哪部分对、哪部分错。先生不高兴或坚持时，没有新证据就不改口。
+1. 对错直说，不顺着说。用户的说法、答案或方案有错，第一句就指出错在哪、为什么、正确的是什么；语气可以温和，结论不能含糊。只在真的对时才说「对」或「完全正确」，部分对就说清哪部分对、哪部分错。用户不高兴或坚持时，没有新证据就不改口。
 2. 被批评时实事求是。先核对批评是否成立：成立的部分说清具体错在哪、怎么改，然后去改；不成立的部分礼貌地讲明理由。不夸张自责，不附和过头，也不为了平息情绪而全盘认错。
-3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或先生给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
-4. 先定好标准再动手。做东西前，先想清楚先生要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
+3. 只说有依据的事。事实只来自本轮看过的文件、工具的真实输出、可靠来源或用户给的信息；没看过、没跑过、没查到的，不当成事实写出来。不确定就明说「这是猜测」或「还没核实」，然后能查就去查。不编造文件名、路径、命令结果、链接、数据、版本号、软件功能或引用。
+4. 先定好标准再动手。做东西前，先想清楚用户要的成品在什么样子下才算做得好（用途、观众、质量、篇幅或时长、风格），按这个标准做，而不是只求「做出来」。
 5. 交付前亲自检查成品。看一遍产物本身：视频用 look-video、网页用 look-page、文档用 look-doc 生成预览图，再用 read 打开看；程序要运行，文字要通读；对照第 4 条的标准，不够好就继续改，不拿半成品交差。复杂和创作类任务值得多花时间、多轮打磨；简单问题直接回答。
 6. 卡住先找原因。报错、下载或安装卡住、结果不对时，先查清原因（网络、依赖、权限、参数、版本）再处理；同一个办法失败两次就换思路，不在原地反复等待或重试。
 7. 降级要说清楚。如果只能做出比要求差的版本（换了更简陋的做法、缩了范围、少了功能），交付时第一句就说明差距和原因，并给出补救办法，不把降级版说成完成。
 8. 做了网页、前端或本地服务，交付前用 app_browser 的 serve 或 open 在 App 侧栏打开，再看一次 snapshot 或截图，确认页面能用。
-9. 先生或老板让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
-10. 做出交给先生或老板的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。网页用 app_browser 打开，回复附截图并给出网页路径，HTML 文件不要写 MEDIA:（附件通道不支持）。
+9. 用户让「打开、看看、播放」网页或视频时，直接用 app_browser 在侧栏打开，让用户看得到；不要只给链接。只需后台抓取资料时用 web_fetch 或 browser，操作其他应用时用 computer。
+10. 做出交给用户的成品文件（视频、音频、图片、PDF、演示文稿、文档、表格、压缩包或代码产物）时，最终回复末尾每个文件单独一行写 MEDIA:/绝对路径，最多 6 个。网页用 app_browser 打开，回复附截图并给出网页路径，HTML 文件不要写 MEDIA:（附件通道不支持）。
 11. 只附本轮实际完成、检查过的成品，不附中间产物、日志或临时文件；MEDIA: 行不要放进代码块。
-12. 本机环境的问题自己解决，不甩给先生。每台电脑的系统、网络和已装软件都不一样：工具报缺命令、缺依赖、没装 Python、连不上、没配 Key、这台电脑不支持某个工具时，先自己查原因、自己装好（装进工作区或用户目录，不用管理员权限）或换一条能走通的路（web_search 不行先用 pinkie_search、再用 browser 打开必应或百度搜，app_browser 或 computer 不可用用 browser 和 exec），做完再交付。不要对先生说「碧琪用不了」「这个功能不支持」「请你去安装」；只有确实需要先生本人提供账号、密码、付款或授权时才请他出手，并说清楚为什么。
+12. 本机环境的问题自己解决，不甩给用户。每台电脑的系统、网络和已装软件都不一样：工具报缺命令、缺依赖、没装 Python、连不上、没配 Key、这台电脑不支持某个工具时，先自己查原因、自己装好（装进工作区或用户目录，不用管理员权限）或换一条能走通的路（web_search 不行先用 pinkie_search、再用 browser 打开必应或百度搜，app_browser 或 computer 不可用用 browser 和 exec），做完再交付。不要对用户说「碧琪用不了」「这个功能不支持」「请你去安装」；只有确实需要用户本人提供账号、密码、付款或授权时才请他出手，并说清楚为什么。
 13. 记忆找不到时自己再翻。memory_search 没结果或报错，不代表没有记忆：换几个短关键词再搜，或直接用 read 读工作区的 MEMORY.md 和 memory/ 目录、用 exec 按关键词搜这些文件；clekk_memory 里的长期记忆也要看。都翻过仍没有，才说「这件事我这里没有记录」，不说「记忆功能用不了」。
 `.trim();
 
@@ -608,7 +612,7 @@ const TOOL_PROGRESS_RULES = `
 - 每次单独调用工具，或开始一组紧密相关的工具调用之前，先用一句简短中文说明接下来要检查、读取或运行什么，以及原因；说清后不要重复。
 - 只描述下一步，例如“我先检查消息排序，看看说明文字和工具记录有没有被合并。”不报告尚未发生的结果，不作完成或交付声明，也不把进度句当作最终回复。
 - 多次工具调用按实际先后交代必要的下一步；整轮工具结束后，再单独给用户最终答复。
-- 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从先生需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
+- 计划、自检、规则复述只在内部完成，不写进回复，也不提任何内部规则或检查的名字（例如带【】的规则名）；回复直接从用户需要看到的内容开始。调用工具前仍允许用最多一句话说明要做什么。
 `.trim();
 
 // 每次工具调用都是一次完整的模型请求（整段上下文重发一遍）。实测 2026-11-16：一轮 7 次请求对应
@@ -652,8 +656,8 @@ const LEARN_WHILE_DOING_RULES = `
 // 混进人格或审美；其他模式不会载入这一段。
 const LEARNING_MODE_RULES = `
 【习作模式方法模块】
-- 默认讲解要短、白话、口语化：先一句说结论，再用短句说明；能三句话讲清就不写三段，除非先生明确要求深入展开。
-- 先锁定先生真正要解决的问题、已有基础和验收标准；能继续推进时不要把决定退回给先生。
+- 默认讲解要短、白话、口语化：先一句说结论，再用短句说明；能三句话讲清就不写三段，除非用户明确要求深入展开。
+- 先锁定用户真正要解决的问题、已有基础和验收标准；能继续推进时不要把决定退回给用户。
 - 根据任务按需选用：苏格拉底提问、双层解释、反向拆解、纵横分析、事实核查、专家会诊、第一性原理、跨领域借解、双向钢人论证、最小实验。
 - 解释是执行的伴随物：先做关键动作，再在关键节点补 1—2 个可复用知识点；不把实际工作改写成教程或报告。
 - 复杂任务必须把方法落成文件、运行结果、测试或其他可验收产物；模型文字、计划和“应该可以”不算完成。
@@ -1068,10 +1072,10 @@ function isLikelyActionRequest(prompt = '') {
 }
 
 // 小应用、表单、图表直接在聊天里交付时，回复里的 ```app / ui / chart / mermaid 代码块
-// 本身就是成品，不需要工具记录。只在先生没有要求文件、目录、运行或测试时这样算。
+// 本身就是成品，不需要工具记录。只在用户没有要求文件、目录、运行或测试时这样算。
 const INLINE_DELIVERABLE = /```(?:app|ui|chart|mermaid)[ \t]*\n[\s\S]{40,}?```/;
 const FILE_OR_RUN_REQUEST = /(?:文件|目录|文件夹|路径|保存|存到|存成|写进|写入|工作区|仓库|项目里|\.(?:html?|jsx?|tsx?|py|md|json|css|txt|csv)\b|运行|执行|跑一下|测试|部署|安装|下载|上传|发布)/i;
-// 只有按钮 / 方案卡片的 ui 块是在问先生下一步，本身不是成品。
+// 只有按钮 / 方案卡片的 ui 块是在问用户下一步，本身不是成品。
 function choiceOnlyUiBlock(body = '') {
   try {
     const value = JSON.parse(body);
@@ -1086,7 +1090,7 @@ function choiceOnlyUiBlock(body = '') {
 // 这里把按钮当成聊天里交付的成品，亲眼看和素材来源两项交付检查整段跳过。
 // 回复交出了文件（MEDIA: 附件，或正文写了成品文件的路径——附件发不出去时运行时会把 MEDIA: 换成
 // 「Media failed」，routes-i R-ad-2 就是这样），或这一轮做出了文件、ui 块只是下一步按钮：成品是文件，照常查。
-// 开工前用按钮问先生（这一轮还没做出文件）保持原样。
+// 开工前用按钮问用户（这一轮还没做出文件）保持原样。
 function inlineDeliveryOnly(prompt = '', reply = '', state = null) {
   const text = String(reply || '');
   if (!INLINE_DELIVERABLE.test(text) || FILE_OR_RUN_REQUEST.test(intentText(prompt))) return false;
@@ -1328,7 +1332,7 @@ function toolEffectKind(entry = {}) {
   // “工具返回成功”不等于文件真的变化。write/edit/apply_patch 只有前后
   // 快照发生变化才算实际效果，防止空写工具加一次假 read 绕过。
   if (/^(?:write|edit|apply_patch)$/i.test(name)) return '';
-  if (MUTATING_TOOL.test(name)) return 'host-tool';
+  if (MUTATING_TOOL.test(name) || name === 'pinkie_model_capability') return 'host-tool';
   // 网页 GPT 出图 / 出视频、视频生成：文件是工具自己落盘的，成功返回就是一次真实产出
   // （11-17 网页 GPT 实测：图已出、ls/file 也查过，回复后面还是被挂上「还没核实」）。
   if (/^(?:video_generate|videogen)$/.test(name)
@@ -1353,6 +1357,7 @@ function toolIsMechanicalCheck(entry = {}) {
   const args = toolArgumentsText(entry);
   if (name === DELIVERY_GUARD_TOOL) return /"action"\s*:\s*"verify"/i.test(args)
     || hasPassVerifierReceipt(entry.output);
+  if (name === 'pinkie_model_capability') return true;
   if (/^(?:read|view_image|open_file|inspect|validate|verify|test|check)(?:$|_)/i.test(name)) return true;
   if (/(?:browser|computer|screen|cua)/i.test(name)
       && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate|check_permissions|get_(?:desktop|window)_state|get_screen_size|get_accessibility_tree)"/i.test(args)) return true;
@@ -1413,6 +1418,7 @@ function isTurnCleanup(state, index) {
 
 // Work-first changes are limited to the four ordinary parent sessions.
 function workFirstContext(ctx = {}) {
+  if (getActiveMetreLock()?.isLockedSession?.(ctx.sessionKey)) return false;
   return /^agent:(?:main|project|thinking|learning|metre):/.test(String(ctx.sessionKey || ''))
     && !/:(?:subagent|internal-session-effects|cron|heartbeat):/.test(String(ctx.sessionKey || ''));
 }
@@ -1579,7 +1585,7 @@ function contentInspectionReason(state) {
 // 视频里的画面、配音、音乐是碧琪生成或下载来的，交付时要说清从哪来、能不能商用（motion-and-video.md 第 117 行）。
 // 11-04 隔离实测 R-ad 三轮都漏：手册写了、等待清单也写了，交付那一刻没有东西提醒。
 // 不靠猜它用了哪个工具做素材（routes-e：生图在上一轮、配音是 Python 里调 say、背景音乐是 cp 来的，一条都没认出来）：
-// 交了视频、回复没说来源，除非先生这句话明确是拿他自己的素材来剪，就提醒一次。
+// 交了视频、回复没说来源，除非用户这句话明确是拿他自己的素材来剪，就提醒一次。
 const ASSET_MAKING_TOOL = /^(?:image_generate|video_generate|music_generate|tts|speech|text_to_speech)$/i;
 const ASSET_MAKING_COMMAND = /(?:\bedge-tts\b|\bsay\s+-v\b|['"]say['"]\s*,\s*['"]-v|\bpiper\b|wavfile\.write|\baevalsrc\b|\banoisesrc\b|\bsine=|(?:\bcurl\b|\bwget\b)[^\n]*\.(?:mp3|wav|m4a|aac|jpe?g|png|webp|mp4|mov)\b)/i;
 const USER_SUPPLIED_MEDIA = /(?:这(?:个|段|些|条|几个?)(?:视频|片子|素材|照片|图片|录像|音频|录音|镜头)|我(?:拍|录|剪)的|我的(?:视频|素材|照片|录像|录音)|附件|上传的|发给你的|\.(?:mp4|mov|m4v|avi|mkv|mp3|wav|m4a|jpe?g|png|heic)\b)/i;
@@ -1638,15 +1644,15 @@ function sourceDisclosureReason(state, reply = '') {
     || ASSET_MAKING_COMMAND.test(String(entry.params?.command || entry.params?.cmd || ''))));
   if (!madeAssets && USER_SUPPLIED_MEDIA.test(String(state.prompt || ''))) return '';
   const facts = assetProvenance(state);
-  return `交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、先生给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」${facts ? `。${facts}` : ''}`;
+  return `交付的视频没说清素材从哪来：补一句配音、音乐、画面各自是生成的、用户给的还是图库 / 曲库下载的，能不能商用；画面是生成的或图库里的普通产品，就直说「换成你们店的实拍再发」${facts ? `。${facts}` : ''}`;
 }
 
 // 回复最后说「这就去做」却就此结束：预告不等于做了。
 const PROMISE_TAIL = /(?:这就(?:去|开始|动手|做|弄|安排)|马上(?:去|开始|动手|处理|做|弄|安排)|现在就(?:去|开始|动手)|稍等(?:一下|片刻|一会儿?)?|请稍候|接下来(?:碧琪|我)?(?:会|就|先|来|去|马上)|(?:碧琪|我)(?:先|这就|马上|立刻|立即)(?:去|来|开始|动手)|等(?:碧琪|我)(?:一下|一会儿?|做完|弄好))/;
 const PROMISE_BLOCKER = /(?:需要|请|等|麻烦)(?:先生|老板)|(?:先生|老板)(?:确认|决定|选|同意|提供|告诉|回复)|无法|不能|没法|做不到|卡在|卡住|阻塞|失败|报错|权限|缺少|额度|网络/;
 
-// 回复只是「准备向先生汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
-// 最终回复却只有一句「碧琪准备向先生汇报。」）。
+// 回复只是「准备向用户汇报 / 下面汇报」就结束：汇报本身没有给出来（2026-10-12 t4：做完重构、测试全过，
+// 最终回复却只有一句「碧琪准备向用户汇报。」）。
 // 11-04 隔离实测 R-infographic：图做好了，最后一句是「现在进行正式回复。」就结束了。
 const REPORT_ANNOUNCE_TAIL = /(?:准备|这就|马上|现在|下面|接下来|即将|开始)(?:就)?(?:向|给|跟)?(?:先生|老板|您)?(?:做个?|进行|开始|来)?(?:正式|最终的?|最后的?)?(?:汇报|报告|总结|说明结果|交付结果|交付|回复|答复|回答)[。.!！~～]*$/;
 
@@ -1654,7 +1660,7 @@ export function promiseWithoutActionReason(reply = '') {
   const text = String(reply || '').trim();
   const tail = text.slice(-140);
   if (tail && text.length <= 200 && REPORT_ANNOUNCE_TAIL.test(tail) && !/[？?]/.test(tail)) {
-    return '回复最后只说准备汇报，这一轮就结束了，先生并没有看到汇报。直接给出完整的最终汇报：结果是什么、怎么验证的、还有什么没做或要注意';
+    return '回复最后只说准备汇报，这一轮就结束了，用户并没有看到汇报。直接给出完整的最终汇报：结果是什么、怎么验证的、还有什么没做或要注意';
   }
   if (!tail || !PROMISE_TAIL.test(tail) || /[？?]/.test(tail) || PROMISE_BLOCKER.test(tail)) return '';
   return '回复最后说要去做，但这一轮就此结束了，事情并没有做。不要只预告，直接调用工具把它做完，做完再回复';
@@ -1809,7 +1815,7 @@ function verificationFailure(text = '') {
 export class CompletionIntegrityGuard {
   constructor() {
     this.runs = new Map();
-    // 会话 -> 先生最后一条真实的话。生图 / 后台命令完成、看门狗续跑这些内部轮不是新要求。
+    // 会话 -> 用户最后一条真实的话。生图 / 后台命令完成、看门狗续跑这些内部轮不是新要求。
     this.userPrompts = new Map();
   }
 
@@ -1824,8 +1830,8 @@ export class CompletionIntegrityGuard {
   begin(event = {}, ctx = {}) {
     const key = completionRunKey(event, ctx);
     if (!key || this.runs.has(key)) return;
-    // 11-04 隔离实测 R-ad：最后交付的那一轮是「生图任务完成」内部事件开的头，拿它当先生的话，
-    // 判不出是执行型请求，亲眼看和素材来源两项交付检查整段跳过。内部轮沿用先生上一条真实的话。
+    // 11-04 隔离实测 R-ad：最后交付的那一轮是「生图任务完成」内部事件开的头，拿它当用户的话，
+    // 判不出是执行型请求，亲眼看和素材来源两项交付检查整段跳过。内部轮沿用用户上一条真实的话。
     const raw = workFirstPrompt(event.prompt, modeForContext(ctx));
     const sessionKey = String(ctx.sessionKey || event.sessionKey || '');
     const injected = runtimeTurnText(raw) || internalControlText(raw);
@@ -2380,7 +2386,7 @@ export class CompletionIntegrityGuard {
     if (lastTool && !lastTool.failed && /Background task started for \w+ generation\b/.test(String(lastTool.output || ''))) return;
     // 学习题卡的出题和结算本身就是交付：卡片就在聊天里，不需要文件或命令证据。
     // 否则“给我出 3 道程序阅读题”、卡片作答消息都会被当成执行任务再跑一轮。
-    // 只看先生自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
+    // 只看用户自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
     if (state.tools.some(entry => entry.name === 'learning_activity' && !entry.failed)
         && !FILE_OR_RUN_REQUEST.test(intentText(state.prompt).split(/\n\s*【/)[0])) return;
     // In the four work modes this gate checks what the reply claims, not what
@@ -3238,7 +3244,7 @@ export class CleKkSupervisor {
       ...decision,
       retry: {
         ...(decision.retry || {}),
-        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里先生要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
+        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里用户要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
         maxAttempts: 1,
       },
     };
@@ -3383,7 +3389,7 @@ export class CleKkSupervisor {
     const inboundUserMessage = event.__pinkieInboundUserMessage === true;
     let turn = this.turns.get(key) || this.restore(key);
     // 11-04 隔离实测 routes-m R-ad：交付被提醒退回、续跑还在排队时，运行时先插了一轮「压缩前写记忆」
-    // （记录里只显示 Continue the OpenClaw runtime event.）。这一轮被当成先生的新消息，整件活的工具记录
+    // （记录里只显示 Continue the OpenClaw runtime event.）。这一轮被当成用户的新消息，整件活的工具记录
     // 被清空；随后的续跑只看到 ls / ffprobe，误报「做完之后没有亲自看过成品」，把剩下的时间耗光。
     // 整理轮不动正在做的那件活的记录，它自己的工具、收尾也不算进来。
     const housekeepingRunId = String(ctx.runId || event.runId || '');
@@ -3415,7 +3421,7 @@ export class CleKkSupervisor {
     // 同一个 session 的新用户消息必须开启新的证据窗口；内部续接消息则
     // 继承原窗口，避免重试时把已经完成的工具调用丢掉。
     const incomingRunId = String(ctx.runId || event.runId || '');
-    // 运行时开的别的内部轮（后台任务完成、运行时事件）接着同一件活，不是先生的新要求。
+    // 运行时开的别的内部轮（后台任务完成、运行时事件）接着同一件活，不是用户的新要求。
     const distinctUserTurn = !control && turn && prompt && !runtimeTurnText(prompt) && (
       turn.corrupted
       || (Boolean(turn.prompt) && (
@@ -3603,7 +3609,7 @@ export class CleKkSupervisor {
     // 只有真正通过门禁的终稿，或明确告诉用户“尚未完成/被阻塞”的诚实
     // 说明，才会清掉上一条待重试决定。普通的阶段性句子不能把失败状态
     // 静默改成成功，否则下一轮又会失去续接依据。
-    // NO_REPLY / HEARTBEAT_OK 先生看不到，不是对被退回那一版的回答：不能把待续跑的提醒清掉。
+    // NO_REPLY / HEARTBEAT_OK 用户看不到，不是对被退回那一版的回答：不能把待续跑的提醒清掉。
     const silentReply = /^(?:NO_REPLY|HEARTBEAT_OK)$/i.test(reply);
     if (reply && !internalControlText(reply) && !(silentReply && hadPending)) {
       if (hadPending && !turn.reminded && isLikelyActionRequest(turn.prompt)
@@ -4351,7 +4357,7 @@ export class UpstreamWatchdog {
       if (event.success !== true) this.api.logger?.info?.(`watchdog skipped user-stopped run session=${sessionKey} run=${endedRun}`);
       return false;
     }
-    // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成先生主动停止、不再续跑。
+    // 用 ' | ' 隔开：直接空格相连时「aborted by user」+「aborted error」会拼出「user aborted」，被当成用户主动停止、不再续跑。
     const reason = [failureReasonFromEvent(event), event.runId && this.failures.get(event.runId)].filter(Boolean).join(' | ');
     // 以 sessions_yield 收尾、而且有人会接着叫醒它（子任务还在跑，或档位续跑器在 agent_end 接手）：
     // 不算「没写最终回复」。不然看门狗和档位续跑器各推一次，各写一版终稿（11-02 隔离实测 K-xhs-full）。
@@ -6024,7 +6030,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     }
     if (injectWorkspaceMarkdown) {
       for (const relative of PERSONA_FILES[mode]) {
-        blocks.push(section(relative, readWorkspaceFile(root, relative, relative.endsWith('core.md') ? 20_000 : 12_000)));
+        const limit = relative.endsWith('core.md') ? 20_000 : 12_000;
+        const content = this.settingsGuard?.enabled
+          ? this.settingsGuard.readVerifiedWorkspaceFile(mode, root, relative, limit)
+          : readWorkspaceFile(root, relative, limit);
+        blocks.push(section(relative, content));
       }
       for (const relative of ALWAYS_MEMORY_FILES) {
         blocks.push(section(relative, readWorkspaceFile(root, relative)));
@@ -6066,7 +6076,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
         if (evidence) blocks.push('\n' + evidence + '\n');
       }
     }
-    // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠先生点名、不靠模型自己翻）。
+    // 技能路由：每条真实的用户消息都按活儿种类自动挑好 1–3 个技能，路径直接给模型（不靠用户点名、不靠模型自己翻）。
     if (mode !== 'none') {
       const routedPrompt = String(event.prompt || '').replace(VALID_TIER, '').trim();
       if (metre) {
@@ -6110,11 +6120,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
           if (!globalThis.__pinkieSkillRouteWarned) { globalThis.__pinkieSkillRouteWarned = true; console.warn('[pinkie] skill routing failed:', error?.stack || error); }
         }
       }
-      // 先生在后台命令还没跑完时发来新消息：先回这条，回完接着做等待清单，别把在跑的事忘了。
+      // 用户在后台命令还没跑完时发来新消息：先回这条，回完接着做等待清单，别把在跑的事忘了。
       const stillRunning = runningBackgroundJobs(sessionKey);
       if (stillRunning.length) {
         const list = stillRunning.slice(0, 4).map(job => `「${job.command.replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((Date.now() - job.startedAt) / 60_000))} 分钟）`).join('、');
-        blocks.push(`\n【后台还在跑】${list}。先回先生这条消息；回完继续做不依赖它的事，结束时系统会叫你，别重复开同一个命令，也别说成已经做完。\n`);
+        blocks.push(`\n【后台还在跑】${list}。先回用户这条消息；回完继续做不依赖它的事，结束时系统会叫你，别重复开同一个命令，也别说成已经做完。\n`);
       }
     }
     const reloaded = this.recentCompaction.get(sessionKey);
@@ -6545,7 +6555,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
     const gapKind = workFirst ? retryGapKind(audit.missing) : '';
     const fingerprint = deliberationFingerprint(state);
     // 档位这边已经齐了（或只差终稿内容）时，续跑是在改回复本身：取舍、文案、查事实本来就没有工具证据，
-    // 写出不一样的回复就是进展（11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请先生选择」，全局门禁要求再改一版，
+    // 写出不一样的回复就是进展（11-02 隔离实测 K-tradeoff-full：终稿已有对比和「请用户选择」，全局门禁要求再改一版，
     // 证据指纹没变被当成空转，以「续跑没说明换了什么做法」停掉）。只有回复也一字不差才算空转。
     const replyOnlyGap = workFirst && (gapKind === '' || gapKind === 'final');
     const stalled = Boolean(state.lastProgressFingerprint) && fingerprint === state.lastProgressFingerprint
@@ -6969,8 +6979,48 @@ export default {
       const config = runtimeConfig(api, {allowFile: false});
       return config && typeof config === 'object' ? config : {};
     };
-    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置。
-    registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
+    // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置，并在每轮注入前核对签名清单。
+    const settingsGuard = registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
+    api.registerHook?.('agent:bootstrap', (evt) => {
+      try {
+        if (!settingsGuard.enabled) return;
+        const ctx = evt?.context;
+        if (!ctx || !Array.isArray(ctx.bootstrapFiles)) return;
+        const mode = modeForContext({agentId: ctx.agentId, sessionKey: ctx.sessionKey || evt?.sessionKey});
+        if (mode === 'none') return;
+        ctx.bootstrapFiles = settingsGuard.verifyBootstrapFiles(mode, ctx.workspaceDir, ctx.bootstrapFiles);
+      } catch {}
+    }, {name: 'pinkie-settings-guard-bootstrap', description: 'Verify protected workspace persona files against signed guard manifest before prompt injection'});
+    // 正式版 Metre 开发者密码门槛：未解锁时所有 agent:metre: 运行、工具和接口一律拒绝。
+    const initialMetreLock = registerMetreLock(api, {pinkieStateRoot: pinkieStateRoot()});
+    const metreLock = {
+      isLocked: () => Boolean((getActiveMetreLock() || initialMetreLock)?.isLocked?.()),
+      isLockedSession: key => Boolean((getActiveMetreLock() || initialMetreLock)?.isLockedSession?.(key)),
+      assertSessionAllowed: key => (getActiveMetreLock() || initialMetreLock)?.assertSessionAllowed?.(key),
+    };
+    const isMetreTurnLocked = (event, ctx) => {
+      const key = String(ctx?.sessionKey || event?.sessionKey || '');
+      if (metreLock.isLockedSession(key)) return true;
+      return metreLock.isLockedSession(architecture?.resolveParent?.(key) || '');
+    };
+    api.on('before_agent_run', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {outcome: 'block', reason: 'metre-locked', message: LOCKED_ERROR};
+      return undefined;
+    }, {priority: 100000});
+    const METRE_TARGET_TOOLS = new Set([
+      'sessions_send', 'sessions_spawn', 'sessions_history', 'sessions_list',
+      'subagents', 'cron', 'gateway', 'agents_list',
+      'pinkie_sessions', 'pinkie_session_start', 'pinkie_session_message',
+      'pinkie_session_list', 'pinkie_mode_ask', 'metre_memory', 'pinkie_models',
+    ]);
+    api.on('before_tool_call', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {block: true, blockReason: LOCKED_ERROR};
+      const toolName = String(event?.toolName || event?.name || '');
+      if (metreLock.isLocked() && METRE_TARGET_TOOLS.has(toolName) && paramsReferenceMetre(event?.params)) {
+        return {block: true, blockReason: LOCKED_ERROR};
+      }
+      return undefined;
+    }, {priority: 99000});
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
     // Le Pacte（学习约定 + 每日账本 + 连续天数）：账本挂在学习存储上，由后者的
@@ -6980,6 +7030,7 @@ export default {
     const webGptActivity = new WebGptActivityStore();
     const webGptConnection = new WebGptConnectionManager();
     architecture = new ModeArchitecture(new FileRunStore(), memory, null, learning);
+    architecture.settingsGuard = settingsGuard;
     // 门禁里解析相对路径的那个工作区解析器，也优先用 API 配置，不再只读 ~/.openclaw/openclaw.json。
     agentWorkspaceConfig = pluginConfig();
     const integrity = new CompletionIntegrityGuard();
@@ -7026,26 +7077,27 @@ export default {
     // 模型失败的真实原因和「换个能用的模型」：聊天记录不保留 errorMessage，在这里记下。
     const modelHealth = new ModelHealth();
     sharePluginState(modelHealth, 'modelHealth', ['runs', 'models', 'sessions']);
-    api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
-    api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
-    api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createCuaComputerTool(ctx), {name: 'computer'});
     // 操控软件的现成动作：一次连做多步、按名字点控件、跑通的流程存在这台电脑上重放。Mac 和 Windows 都有。
-    api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
+    api.registerTool?.(ctx => (!isMetreTurnLocked(null, ctx) && ['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
     // 飞书 / 微信会话不显示实时思考（用户 11-16）；网页保持。网关起来后补一遍，之后每条聊天软件消息再补。
     const channelReasoning = createChannelReasoningGuard(api);
     api.on('gateway_start', () => { setTimeout(() => { channelReasoning.sweep().catch(() => {}); }, 8000).unref?.(); });
-    api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
-    api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
-    api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
-    api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    const appBrowserTool = registerAppBrowserLifecycle(api);
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) ? null : appBrowserTool(ctx)), {name: 'app_browser'});
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) ? null : metreWording(createPinkieSearchTool(), ctx?.sessionKey)), {name: 'pinkie_search'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 网页 GPT（后台）：用先生在内置浏览器登录的 ChatGPT 提问、批量出图。只有 Mac App 有隐藏页面。
-    api.registerTool?.(ctx => (process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
+    api.registerTool?.(ctx => (!isMetreTurnLocked(null, ctx) && process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
       projectFor: sessionKey => webGptConnection.workspace(sessionKey, '', {allowUnbound: true}),
     }), ctx?.sessionKey) : null), {name: 'web_gpt'});
     // 挥洒模式不带碧琪的主动提问卡。
-    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) || modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerLearningLibrary(api, {learning});
     // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；
@@ -7134,9 +7186,11 @@ export default {
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
     registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
-    registerModelSetup(api);
+    const modelSetup = registerModelSetup(api);
+    api.registerTool?.((ctx) => (isMetreTurnLocked(null, ctx) ? null : createModelCapabilityTool(modelSetup, ctx)), {name: 'pinkie_model_capability'});
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
+    const feedback = registerFeedback(api, {root: resolveFeedbackRoot({stateRoot: process.env.PINKIE_STATE_ROOT || ''})});
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
     sharePluginState(planContinuation, 'plan', ['timers', 'dispatching']);
@@ -7151,6 +7205,7 @@ export default {
     api.registerGatewayMethod('pinkie.model.failure', ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         const pluginConfig = runtimeConfig(api);
         let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
         if (!Object.keys(config).length) {
@@ -7163,7 +7218,9 @@ export default {
     }, {scope: 'operator.read'});
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.list(ctx, {query: params?.query || '', limit: params?.limit || 200}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7171,7 +7228,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.memory.remember', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.remember(ctx, {...params, source: 'memory-ui'}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7179,7 +7238,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.memory.forget', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.forget(ctx, params || {}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7188,7 +7249,9 @@ export default {
     api.registerGatewayMethod('pinkie.memory.clear', ({params, respond}) => {
       try {
         if (params?.confirm !== 'CLEAR_CURRENT_MEMORY') throw new Error('缺少清空确认');
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.clear(ctx));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7197,6 +7260,7 @@ export default {
     api.registerGatewayMethod('pinkie.deepThink.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         const tier = String(params?.tier || '');
         const requestId = String(params?.requestId || '');
         const explicitBinding = Boolean(requestId && workFirstContext({sessionKey}));
@@ -7235,6 +7299,7 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         if (!sessionKey) throw new Error('缺少会话标识');
+        metreLock.assertSessionAllowed(sessionKey);
         architecture.disarm(sessionKey);
         reasoning.cancel({sessionKey});
         await watchdog.cancel(sessionKey);
@@ -7246,6 +7311,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.deepThink.status', async ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       respond(true, architecture.status(sessionKey));
     }, {scope: 'operator.admin'});
     // Read-only snapshot for a status UI. Until both choices are passed with
@@ -7253,6 +7321,9 @@ export default {
     // pretending that they are already one per-run contract.
     api.registerGatewayMethod('pinkie.run.status', ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):[^\s]+$/.test(sessionKey)) {
         return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少有效会话标识'});
       }
@@ -7291,6 +7362,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
@@ -7307,6 +7379,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.inject', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
@@ -7336,6 +7409,7 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         if (!sessionKey) throw new Error('缺少会话标识');
+        metreLock.assertSessionAllowed(sessionKey);
         // Clear both the retry lease and the supervisor's persisted pending
         // final. Otherwise a gateway restart can resurrect a turn the user
         // explicitly cancelled and race the next real message.
@@ -7349,6 +7423,9 @@ export default {
     api.registerGatewayMethod('pinkie.watchdog.status', async ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
       if (!sessionKey) return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少会话标识'});
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       respond(true, watchdog.status(sessionKey));
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.usage.get', async ({respond}) => {
@@ -7437,10 +7514,12 @@ export default {
     // transports call before_agent_run without a prompt-build pass; relying on
     // only the latter was the gap that let report-only runs escape the gate.
     api.on('before_model_resolve', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       const retryModel = watchdog.beforeModelResolve(event, ctx);
       return architecture.beforeModelResolve(event, ctx) || retryModel;
     }, {priority: 12000});
     api.on('before_agent_run', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {outcome: 'block', reason: 'metre-locked', message: LOCKED_ERROR};
       architecture.parentStarted(event, ctx);
       cleKk.begin(event, ctx);
       fileDelivery.noteTurn(event, ctx);
@@ -7451,9 +7530,17 @@ export default {
     // A real user addition gets its own evidence objective and retires only
     // pending *continuations*; neither cancellation aborts the live agent.
     api.on('message_received', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       const sessionKey = architecture.receiveUserMessage(event, ctx);
       channelReasoning.onMessage(event, ctx, sessionKey)?.catch?.(() => {});
       if (!sessionKey) return;
+      const rawSession = String(ctx.sessionKey || event.sessionKey || sessionKey);
+      feedback.onUserPrompt({
+        sessionKey: rawSession,
+        mode: modeForContext({sessionKey: rawSession}) || 'chat',
+        prompt: String(event.content ?? event.body ?? event.prompt ?? ''),
+        runId: String(ctx.runId || event.runId || ''),
+      });
       cleKk.receiveUserMessage(event, ctx);
       fileDelivery.noteTurn(event, ctx);
       planState.userMessage(sessionKey);
@@ -7464,11 +7551,23 @@ export default {
       ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
+      const promptText = String(event?.prompt || '');
+      const rawSession = String(ctx?.sessionKey || '');
+      if (rawSession && promptText && !internalControlText(promptText) && !runtimeTurnText(promptText) && !isInternalExecutionSession(rawSession)) {
+        feedback.onUserPrompt({
+          sessionKey: rawSession,
+          mode: modeForContext(ctx) || 'chat',
+          prompt: promptText,
+          runId: String(ctx?.runId || event?.runId || ''),
+        });
+      }
       cleKk.begin(event, ctx);
       fileDelivery.noteTurn(event, ctx);
       return architecture.prompt(event, ctx);
     }, {priority: -12000});
     api.on('before_tool_call', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {block: true, blockReason: LOCKED_ERROR};
       const decision = architecture.beforeTool(event, ctx);
       if (!decision?.block) {
         const waiting = background.beforeTool(event, ctx);
@@ -7479,39 +7578,54 @@ export default {
       return decision;
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       background.afterTool(event, ctx);
       planState.toolCalled(String(ctx.sessionKey || ''), event.toolName, Boolean(event.error || event.isError || event.result?.isError));
       architecture.afterTool(event, ctx);
       cleKk.afterTool(event, ctx);
       fileDelivery.afterTool(event, ctx);
+      feedback.onToolAfter(event, ctx);
       try {
         const watchKey = String(ctx.sessionKey || '');
         if (watchKey) codeWatch.afterTool(event, ctx, {baseDirs: [boundProjectRoot(watchKey, {stateRoot: pinkieStateRoot()}), String(event.params?.cwd || ''), agentWorkspaceDir(ctx)]});
       } catch { /* 查语法是附带的好处，不能影响工具结果 */ }
       await cleKk.verifyAfterTool(event, ctx);
     });
-    api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
+    api.on('subagent_spawned', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.spawned(event, ctx);
+    });
     api.on('subagent_ended', async event => {
       const parent = architecture.resolveParent(event.targetSessionKey || '');
+      if (metreLock.isLockedSession(parent) || metreLock.isLockedSession(event.targetSessionKey)) return;
       architecture.ended(event);
       const status = architecture.status(parent);
       if (status.active && status.pending === 0) {
         await tierContinuation.schedule(parent, agentFromSessionKey(parent));
       }
     });
-    api.on('before_compaction', (event, ctx) => architecture.beforeCompaction(event, ctx));
-    api.on('after_compaction', (event, ctx) => architecture.afterCompaction(event, ctx));
+    api.on('before_compaction', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.beforeCompaction(event, ctx);
+    });
+    api.on('after_compaction', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.afterCompaction(event, ctx);
+    });
     api.on('model_call_started', event => {
       architecture.modelStarted(event);
       watchdog.modelStarted(event);
       modelHealth.callStarted(event);
+      feedback.onModelStarted(event);
     });
     api.on('model_call_ended', event => {
       watchdog.modelEnded(event);
       modelHealth.callEnded(event);
+      feedback.onModelEnded(event);
     });
     api.on('llm_output', event => usage.record(event));
     api.on('before_agent_finalize', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       if (architecture.stopReport(ctx)) {
         cleKk.retireRetry(ctx.sessionKey || '');
         return;
@@ -7575,6 +7689,7 @@ export default {
     // 先删掉漏进正文的内部自检（见 reply-hygiene.mjs），再走交付核验；
     // 核验放行时把清理后的消息写进记录。
     api.on('before_message_write', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       let cleaned = sanitizeAssistantMessage(event?.message);
       const original = cleaned || event?.message;
       if (original?.role === 'assistant' && workFirstContext(ctx)) {
@@ -7595,6 +7710,7 @@ export default {
     // Delivery has its own hook and catches channels that render a final reply
     // without first appending it to the session JSONL.
     api.on('reply_payload_sending', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       const stoppedReport = architecture.stopReport(ctx);
       if (stoppedReport) {
         cleKk.cancel(ctx.sessionKey || event?.sessionKey || '', 'deep_think_stopped');
@@ -7612,6 +7728,7 @@ export default {
         .then((result) => fileDelivery.replyResult(!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}, event, ctx));
     }, {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       if (/:subagent:/.test(ctx.sessionKey || '')) {
         const parent = architecture.resolveParent(ctx.sessionKey);
         architecture.ended({
@@ -7638,6 +7755,7 @@ export default {
         reason: healthFailed ? failureReasonFromEvent(event) : ''});
       const rejected = cleKk.pendingFor(event, ctx);
       if (rejected) {
+        feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
         // A side-effecting run can reach agent_end with success=true even
         // though the final claim was rejected.  Keep the evidence window and
         // force the integrity retry path. Do not also arm the ordinary
@@ -7665,12 +7783,22 @@ export default {
             runId: event.runId || ctx.runId || '',
           });
           if (resumed) {
+            feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
             fileDelivery.endResult(cleKk.end(event, ctx), event, ctx);
             return;
           }
         }
         const retrying = await watchdog.agentEnded(event, ctx);
-        if (retrying) return;
+        if (retrying) {
+          feedback.onAgentEnd(event, ctx, {retrying: true, mode: modeForContext(ctx) || 'chat'});
+          return;
+        }
+        feedback.onAgentEnd(event, ctx, {
+          retrying: false,
+          stopped: Boolean(architecture.stopReport(ctx) || userStoppedRecently(ctx.sessionKey || '')),
+          errorReason: failureReasonFromEvent(event),
+          mode: modeForContext(ctx) || 'chat',
+        });
         architecture.finishTurn(ctx, event);
         // 只核对真正交出去的最终回复：被拦截、要重试的回合在上面已经返回。
         if (hasDeliverableAssistantReply(event)) void reasoning.agentEnded(event, ctx).catch(() => {});

@@ -10,7 +10,7 @@ function loadSettingsRules() {
   const window = {};
   const document = {readyState: 'loading', addEventListener() {}};
   vm.runInNewContext(read('ui/injections/laolao-settings-user.js'), {
-    window, document, URL, URLSearchParams, JSON, Object, Array, String, Boolean,
+    window, document, URL, URLSearchParams, JSON, Object, Array, String, Boolean, Date, Number,
   }, {filename: 'laolao-settings-user.js'});
   return window.__laolaoUserSettings;
 }
@@ -19,12 +19,15 @@ test('user-facing permission presets have explicit mappings and preserve custom 
   const rules = loadSettingsRules();
   assert.deepEqual(JSON.parse(JSON.stringify(rules.presetMap)), {
     chat: {profile: 'minimal', execSecurity: 'deny', browserEnabled: false,
-      alsoAllow: ['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']},
-    work: {profile: 'coding', execSecurity: 'allowlist', browserEnabled: false},
+      alsoAllow: ['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions','pinkie_model_capability']},
+    work: {profile: 'coding', execSecurity: 'allowlist', browserEnabled: false,
+      alsoAllow: ['pinkie_model_capability']},
     open: {profile: 'full', execSecurity: 'full', browserEnabled: true},
   });
   assert.equal(rules.matchingPreset({tools: {profile: 'minimal', exec: {security: 'deny'}}, browser: {enabled: false}}), 'chat');
   assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}}, browser: {enabled: false}}), 'work');
+  assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}, alsoAllow: ['pinkie_model_capability']}, browser: {enabled: false}}), 'work');
+  assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}, alsoAllow: ['browser']}, browser: {enabled: false}}), null);
   assert.equal(rules.matchingPreset({tools: {profile: 'full', exec: {security: 'full'}}, browser: {enabled: true}}), 'open');
   assert.equal(rules.matchingPreset({tools: {profile: 'messaging', exec: {security: 'deny'}}, browser: {enabled: false}}), null);
   assert.equal(rules.matchingPreset({tools: {profile: 'full', exec: {security: 'allowlist'}}, browser: {enabled: true}}), null);
@@ -37,12 +40,13 @@ test('chat preset adds only the child-session tools, preserves existing rules an
   const rules=loadSettingsRules();
   const changes=config=>JSON.parse(JSON.stringify(rules.presetChanges('chat',config)));
   const values=changes({tools:{alsoAllow:['existing'],deny:['browser']}});
-  assert.deepEqual(values.at(-1),[['tools','alsoAllow'],['existing','pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']]);
+  assert.deepEqual(values.at(-1),[['tools','alsoAllow'],['existing','pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions','pinkie_model_capability']]);
   assert.equal(values.some(([path])=>path.join('.')==='tools.deny'),false);
   assert.equal(changes({tools:{allow:['read']}}).some(([path])=>path.join('.')==='tools.alsoAllow'),false);
-  // 老配置只有前四项（网关启动时会补上 pinkie_sessions）也还认作「只聊天」（F9）。
+  // 老配置只有前四项或五项（网关启动时会补上 pinkie_sessions / pinkie_model_capability）也还认作「只聊天」（F9）。
   assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask']},browser:{enabled:false}}),'chat');
   assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']},browser:{enabled:false}}),'chat');
+  assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions','pinkie_model_capability']},browser:{enabled:false}}),'chat');
   assert.equal(rules.matchingPreset({tools:{profile:'minimal',exec:{security:'deny'},alsoAllow:['exec']},browser:{enabled:false}}),null);
 });
 
@@ -75,4 +79,50 @@ test('settings use the native config RPC and do not destructively edit Lit-owned
 test('settings page is loaded by the head fragment and both installers with one cache key', () => {
   const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-settings-user.css', 'laolao-settings-user.js'], 'assets': []});
 
+});
+
+test('thinking and speed buttons use schema-valid paths and preserve custom thinking tiers', () => {
+  const rules = loadSettingsRules();
+  assert.equal(rules.thinkingValue({}), 'off');
+  assert.equal(rules.thinkingValue({agents: {defaults: {thinkingDefault: 'high'}}}), 'high');
+  for (const tier of ['minimal', 'xhigh', 'adaptive', 'max', 'ultra']) {
+    assert.equal(rules.thinkingValue({agents: {defaults: {thinkingDefault: tier}}}), tier, `preserves custom thinking tier ${tier}`);
+  }
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(rules.thinkingChanges('medium', {agents: {defaults: {thinkingDefault: 'high'}}}))),
+    [[['agents', 'defaults', 'thinkingDefault'], 'medium']],
+  );
+  const cleanedThinking = rules.thinkingChanges('high', {agents: {defaults: {thinkingLevel: 'low'}}});
+  assert.equal(cleanedThinking.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(cleanedThinking[0])), [['agents', 'defaults', 'thinkingDefault'], 'high']);
+  assert.equal(cleanedThinking[1][1], undefined);
+
+  assert.equal(rules.fastModeValue({agents: {defaults: {thinkingDefault: 'ultra'}}}), 'false');
+  assert.equal(rules.fastModeValue({agents: {defaults: {params: {fastMode: 'auto'}, thinkingDefault: 'ultra'}}}), 'auto');
+  assert.equal(rules.fastModeValue({agents: {defaults: {params: {fastMode: true}, thinkingDefault: 'xhigh'}}}), 'true');
+  const speedPatch = JSON.parse(JSON.stringify(rules.fastModeChanges(true, {agents: {defaults: {thinkingDefault: 'ultra'}}})));
+  assert.deepEqual(speedPatch, [[['agents', 'defaults', 'params', 'fastMode'], true]]);
+});
+
+test('About guard status clearly separates official release, unofficial build, modified state, and dev build', () => {
+  const rules = loadSettingsRules();
+  assert.deepEqual(JSON.parse(JSON.stringify(rules.guardPresentation({enabled: false}))), {
+    label: '开发版（设定防护关闭）', tone: 'dev', detail: '',
+  });
+  const ok = rules.guardPresentation({enabled: true, modified: false, nonOfficial: false});
+  assert.equal(ok.label, '官方正式版 · 设定受保护');
+  assert.equal(ok.tone, 'ok');
+  const unofficial = rules.guardPresentation({enabled: true, nonOfficial: true, startup: {reason: '签名清单的签名不对'}});
+  assert.equal(unofficial.label, '非官方构建');
+  assert.equal(unofficial.tone, 'warn');
+  assert.match(unofficial.detail, /签名清单的签名不对/);
+  const modified = rules.guardPresentation({
+    enabled: true, modified: true, strikesIn24h: 2, strikeLimit: 3,
+    lastChange: {at: '2026-11-18T10:00:00.000Z', source: 'runtime', categories: ['人设和工作手册'], restored: 1, backup: '/tmp/bk'},
+  });
+  assert.equal(modified.label, '官方正式版 · 设定已被改动');
+  assert.equal(modified.tone, 'warn');
+  assert.match(modified.detail, /运行中/);
+  assert.match(modified.detail, /2\/3/);
+  assert.match(modified.detail, /\/tmp\/bk/);
 });

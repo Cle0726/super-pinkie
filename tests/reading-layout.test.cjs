@@ -48,8 +48,8 @@ test("continuous effects stay cheap: hidden glow paused, no animated blur, sheen
 
 test("composer hint speaks in each mode's voice", () => {
   const shell = read("laolao-classic-shell.js");
-  assert.match(shell, /learning: "先生，今天想学点什么？"/);
-  assert.match(shell, /project: "老板，这次要碧琪做什么？"/);
+  assert.match(shell, /learning: "今天想学点什么？"/);
+  assert.match(shell, /project: "这次要碧琪做什么？"/);
   assert.match(shell, /\|\| "给碧琪发消息"/);
 });
 

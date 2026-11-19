@@ -63,6 +63,10 @@ jobs:
       - name: Build self-contained macOS app
         env:
           PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+          PINKIE_FEEDBACK_TOKEN: ${{ secrets.PINKIE_FEEDBACK_TOKEN }}
+          PINKIE_FEEDBACK_PUBLIC_KEY: ${{ secrets.PINKIE_FEEDBACK_PUBLIC_KEY || vars.PINKIE_FEEDBACK_PUBLIC_KEY }}
+          PINKIE_FEEDBACK_REPO: ${{ vars.PINKIE_FEEDBACK_REPO || secrets.PINKIE_FEEDBACK_REPO }}
+          PINKIE_FEEDBACK_RELAY_URL: ${{ vars.PINKIE_FEEDBACK_RELAY_URL || secrets.PINKIE_FEEDBACK_RELAY_URL }}
         run: |
           # 正式版：设定防护开（build-info.json 写死），清单用 Actions secret 里的私钥签名。没配 secret 就失败。
           if [[ -z "$PINKIE_GUARD_SIGNING_KEY" ]]; then
@@ -119,6 +123,10 @@ jobs:
         shell: pwsh
         env:
           PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+          PINKIE_FEEDBACK_TOKEN: ${{ secrets.PINKIE_FEEDBACK_TOKEN }}
+          PINKIE_FEEDBACK_PUBLIC_KEY: ${{ secrets.PINKIE_FEEDBACK_PUBLIC_KEY || vars.PINKIE_FEEDBACK_PUBLIC_KEY }}
+          PINKIE_FEEDBACK_REPO: ${{ vars.PINKIE_FEEDBACK_REPO || secrets.PINKIE_FEEDBACK_REPO }}
+          PINKIE_FEEDBACK_RELAY_URL: ${{ vars.PINKIE_FEEDBACK_RELAY_URL || secrets.PINKIE_FEEDBACK_RELAY_URL }}
         run: |
           # 正式版：设定防护开（build-info.json 写死），清单用 Actions secret 里的私钥签名。没配 secret 就失败。
           if (-not $env:PINKIE_GUARD_SIGNING_KEY) { throw '缺少仓库 secret PINKIE_GUARD_SIGNING_KEY（设定防护的签名私钥），正式版不能打包' }

@@ -468,7 +468,7 @@
   }
   function placeInThread(inner) {
     const clear = () => inner.querySelectorAll('.pk-follow').forEach((n) => n.remove());
-    // 只跟在整段对话的最后一条上：先生已经接着说话了，旧的建议就不再出现
+    // 只跟在整段对话的最后一条上：用户已经接着说话了，旧的建议就不再出现
     const last = inner && inner.lastElementChild;
     if (!last || !last.classList.contains('chat-group') || !last.classList.contains('assistant') || last.querySelector('.chat-bubble.streaming')) { clear(); return; }
     const code = [...last.querySelectorAll('code.language-followups')].pop();

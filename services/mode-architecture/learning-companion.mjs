@@ -23,47 +23,53 @@ function writeJson(file, value) {
 
 // ---------- 每天一句：模板兜底（每类 6–10 句，按日期轮换）。不数落，不提漏了几天。 ----------
 export const TEMPLATES = {
-  ordinary: ['先生，今天也只做一件事就好，做完我们再看下一件。', '一小组就够了，先生，做完我给你盖章。', '先生，慢慢来，我在旁边陪着。',
-    '今天的那一件，我已经替你挑好了，先生。', '先生，先做，做完再想难不难。', '不用一口气学完，先生，一颗星一颗星地点。', '我们今天把一个考点弄懂就很好了，先生。'],
-  comeback: ['欢迎回来，先生。我们从一件小事开始。', '先生回来啦，今天先热热身。', '回来就好，先生，手账一直给你留着。',
-    '先生，先做一小组找找手感，别着急。', '欢迎回来，今天轻一点也没关系，先生。', '我把今天那一件挑得简单一点，先生。'],
-  term: ['先生，换节气了，今天也照常做一件。', '节气一换，日子就往前走一格，先生也往前走一格。', '先生，今天的手账我贴了新胶带。',
-    '先生，天气变了，记得照顾好自己，再做今天那一件。', '换季的日子，我们也换一页新的，先生。', '先生，今天是个新节气，开个好头。'],
-  festival: ['先生，节日快乐。想学就做一小组，不想学就好好过节。', '今天过节，先生，开开心心的最重要。', '先生节日快乐，手账今天也贴了节日胶带。',
-    '先生，过节也能学一点点，学多少都算数。', '节日快乐，先生。我在手账里给你留了位置。', '先生，今天好好过节，明天我们接着来。'],
-  'exam-final': ['先生，最后几天，只做最要紧的那一件。', '先生，稳住节奏，按平时那样来就好。', '先生，这几天早点睡，比多做一题更重要。',
-    '最后这几天，先生只要把会的做对。', '先生，翻翻错题就好，不用开新的。', '先生，你已经准备了很久了，我陪你到考场门口。'],
-  'exam-eve': ['先生，明天就考了，今晚早点睡。', '明天加油，先生，今晚别熬夜。', '先生，准考证、笔、水都放好了吗？早点睡。',
-    '先生，今晚只翻翻错题，然后睡觉。', '明天放轻松，先生，会的都会在。', '先生，我明天在这儿等你回来。'],
-  'exam-day': ['先生，考试加油，我等你回来。', '今天放轻松，先生，按平时那样做。', '先生，加油，考完我们一起看。',
-    '先生，深呼吸，会的先做。', '今天先生是主角，加油。', '先生，考完记得回来跟我说说。'],
-  'exam-milestone': ['先生，又近了一格，按我们的节奏来。', '先生，这一段路走得很稳。', '先生，倒数又翻了一页，今天照常做一件。',
-    '先生，离考试近了，我们不慌，一件一件来。', '先生，今天也往考场近了一步。', '先生，我们的节奏没有乱，继续。'],
-  'study-milestone': ['先生，我们一起学了好多天了。', '先生，这本手账越来越厚了。', '先生，回头看看，已经走了好远。',
-    '先生，今天是个小纪念日，也照常做一件。', '先生，谢谢你每天都来。', '先生，坚持到今天，真的很了不起。'],
-  birthday: ['生日快乐，先生！今天想学就学，不想学就好好过生日。', '先生生日快乐，今天手账给你贴满星星。', '生日快乐，先生，新的一岁也一起加油。',
-    '先生，生日快乐！今天最重要的是开心。', '生日快乐，先生，我给你留了一个大印章。', '先生，生日快乐，愿望里有考试顺利吗？'],
-  anniversary: ['先生，今天是我们一起学习的纪念日。', '先生，谢谢你这一年都在。', '先生，纪念日快乐，手账又翻过了一大本。',
-    '先生，一起学了这么久，我很开心。', '先生，今天值得盖一个大章。', '纪念日快乐，先生，我们接着往前走。'],
-  late: ['这么晚了，先生，剩下的明天再做，早点睡。', '先生，很晚了，今天到这儿就好。', '先生，睡觉也是备考的一部分，去睡吧。',
-    '先生，明天我还在这儿，先去睡。', '已经很晚了，先生，手账我替你合上。', '先生，熬夜记不住的，明天再来。'],
+  ordinary: ['今天也只做一件事就好，做完我们再看下一件。', '一小组就够了，做完我给你盖章。', '慢慢来，我在旁边陪着。',
+    '今天的那一件，我已经替你挑好了。', '先做，做完再想难不难。', '不用一口气学完，一颗星一颗星地点。', '我们今天把一个考点弄懂就很好了。'],
+  comeback: ['欢迎回来。我们从一件小事开始。', '你回来啦，今天先热热身。', '回来就好，手账一直给你留着。',
+    '先做一小组找找手感，别着急。', '欢迎回来，今天轻一点也没关系。', '我把今天那一件挑得简单一点。'],
+  term: ['换节气了，今天也照常做一件。', '节气一换，日子就往前走一格，你也往前走一格。', '今天的手账我贴了新胶带。',
+    '天气变了，记得照顾好自己，再做今天那一件。', '换季的日子，我们也换一页新的。', '今天是个新节气，开个好头。'],
+  festival: ['节日快乐。想学就做一小组，不想学就好好过节。', '今天过节，开开心心的最重要。', '节日快乐，手账今天也贴了节日胶带。',
+    '过节也能学一点点，学多少都算数。', '节日快乐。我在手账里给你留了位置。', '今天好好过节，明天我们接着来。'],
+  'exam-final': ['最后几天，只做最要紧的那一件。', '稳住节奏，按平时那样来就好。', '这几天早点睡，比多做一题更重要。',
+    '最后这几天，你只要把会的做对。', '翻翻错题就好，不用开新的。', '你已经准备了很久了，我陪你到考场门口。'],
+  'exam-eve': ['明天就考了，今晚早点睡。', '明天加油，今晚别熬夜。', '准考证、笔、水都放好了吗？早点睡。',
+    '今晚只翻翻错题，然后睡觉。', '明天放轻松，会的都会在。', '我明天在这儿等你回来。'],
+  'exam-day': ['考试加油，我等你回来。', '今天放轻松，按平时那样做。', '加油，考完我们一起看。',
+    '深呼吸，会的先做。', '今天你是主角，加油。', '考完记得回来跟我说说。'],
+  'exam-milestone': ['又近了一格，按我们的节奏来。', '这一段路走得很稳。', '倒数又翻了一页，今天照常做一件。',
+    '离考试近了，我们不慌，一件一件来。', '今天也往考场近了一步。', '我们的节奏没有乱，继续。'],
+  'study-milestone': ['我们一起学了好多天了。', '这本手账越来越厚了。', '回头看看，已经走了好远。',
+    '今天是个小纪念日，也照常做一件。', '谢谢你每天都来。', '坚持到今天，真的很了不起。'],
+  birthday: ['生日快乐！今天想学就学，不想学就好好过生日。', '生日快乐，今天手账给你贴满星星。', '生日快乐，新的一岁也一起加油。',
+    '生日快乐！今天最重要的是开心。', '生日快乐，我给你留了一个大印章。', '生日快乐，愿望里有考试顺利吗？'],
+  anniversary: ['今天是我们一起学习的纪念日。', '谢谢你这一年都在。', '纪念日快乐，手账又翻过了一大本。',
+    '一起学了这么久，我很开心。', '今天值得盖一个大章。', '纪念日快乐，我们接着往前走。'],
+  late: ['这么晚了，剩下的明天再做，早点睡。', '很晚了，今天到这儿就好。', '睡觉也是备考的一部分，去睡吧。',
+    '明天我还在这儿，先去睡。', '已经很晚了，手账我替你合上。', '熬夜记不住的，明天再来。'],
 };
+// 不加称呼：用户没说过怎么叫，就不替用户定一个。
+const ADDRESS = /先生|老板/;
 const SCOLD = /漏了|偷懒|又没|怎么不|没坚持|落下了|浪费|拖延|懒/;
-const DAILY_RULES = `你是碧琪，在先生的备考手账页边写今天的一句话。
+const DAILY_RULES = `你是碧琪，在用户的备考手账页边写今天的一句话。
 输入是今天的日历事实、学习节奏和最近 14 天写过的句子。只输出 JSON：{"line":"…"}。
 要求：
-- 一句话，口语、温柔、具体，称呼「先生」，不超过 40 个字；不用 emoji。
+- 一句话，口语、温柔、具体，不加「先生」「老板」之类的称呼（要称呼就用「你」），不超过 40 个字；不用 emoji。
 - 围绕「今天的主角」（protagonist）写：节日就说节日，隔了几天回来就说「回来就好」，考前 7 天要安静、稳，深夜就劝早点睡。
 - 绝不数落、绝不提漏了几天、不制造焦虑；节日当天没学习也不提。
 - 句子里出现的数字必须来自输入；没把握就不写数字。
 - 不要和 recentLines 里的句子重复或太像。`;
 
-const CLIP_RULES = `你在为一位正在备考的成年人（先生：广西专升本、英语 B 级、英语四级，跟着中国的节奏生活）找「剪报」：
+function clipRules(exams = []) {
+  const names = (Array.isArray(exams) ? exams : []).map(exam => clean(exam?.name || exam?.id, 40)).filter(Boolean);
+  const target = names.length ? `当前备考目标：${names.join('、')}，` : '';
+  return `你在为一位正在备考或自学的成年学习者（${target}跟着中国的节奏生活）找「剪报」：
 全世界范围、最近两周内发布的真实新闻报道或本人分享，主题是普通人靠学习改变处境、零基础逆袭、成年人重新考试或上学、自学考证（专升本、自考、英语等级、电工、计算机等）、各国普通学习者坚持学习的故事。
 不要：排名焦虑、「XX 天速成」广告、培训机构软文、名人鸡汤、惨剧、政治争议。
 做法：用 web_search 搜（中文和英文都搜），挑 3–4 个候选，用 web_fetch 打开原文，确认发布日期在两周内、内容和标题一致。
-最后只输出 JSON：{"clippings":[{"title":"原文标题（保留原文语言）","source":"媒体或网站名","url":"原文链接","publishedAt":"YYYY-MM-DD","summary":"用你自己的话写的中文摘要，不超过 80 字","quote":"原文里的一句话，不超过 15 个字，可以留空","note":"碧琪写在页边的一句话，温柔，称呼先生，不超过 24 字"}]}
+最后只输出 JSON：{"clippings":[{"title":"原文标题（保留原文语言）","source":"媒体或网站名","url":"原文链接","publishedAt":"YYYY-MM-DD","summary":"用你自己的话写的中文摘要，不超过 80 字","quote":"原文里的一句话，不超过 15 个字，可以留空","note":"碧琪写在页边的一句话，温柔，不加称呼，不超过 24 字"}]}
 最多 2 条。找不到合格的就输出 {"clippings":[]}，绝不编造。`;
+}
 const AD = /速成|培训班|报名|优惠|课程推荐|加微信|招生简章|包过|保过/;
 
 export class LearningCompanion {
@@ -76,7 +82,7 @@ export class LearningCompanion {
   get desk() { return this.store.desk; }
   get pact() { return this.store.pact; }
 
-  // ---------- 个人纪念日（先生答过才有，不猜） ----------
+  // ---------- 个人纪念日（用户答过才有，不猜） ----------
   personalFile() { return path.join(this.store.root, 'pact', 'personal.json'); }
   personal() { const p = readJson(this.personalFile(), {}); return {birthday: /^\d{2}-\d{2}$/.test(p.birthday || '') ? p.birthday : '', since: /^\d{4}-\d{2}-\d{2}$/.test(p.since || '') ? p.since : '', askedAt: Number(p.askedAt) || 0}; }
   setPersonal({birthday, since} = {}) {
@@ -190,7 +196,7 @@ export class LearningCompanion {
       exams.forEach((exam, i) => { values['exam' + i] = exam.daysLeft; });
       const rows = [{id: 'F1', values}, {id: 'D1', values: {date}}];
       const recent = input.recentLines;
-      if (text && text.length <= 48 && text.includes('先生') && !SCOLD.test(text) && !/[\u{1F300}-\u{1FAFF}]/u.test(text) && !recent.includes(text) && deskJustified(text, rows))
+      if (text && text.length <= 48 && !ADDRESS.test(text) && !SCOLD.test(text) && !/[\u{1F300}-\u{1FAFF}]/u.test(text) && !recent.includes(text) && deskJustified(text, rows))
         line = {text, source: 'model', kind, model: response.model?.name || response.model?.ref || ''};
     } catch {}
     writeJson(this.dailyFile(date), {date, at: this.now(), line});
@@ -230,7 +236,8 @@ export class LearningCompanion {
   async findClippings(date) {
     let result = {date, status: 'none', clippings: [], at: this.now()};
     try {
-      const output = await this.runAgent(`${CLIP_RULES}\n\n今天是北京时间 ${date}。只要 ${addDays(date, -14)} 到 ${date} 之间发布的。`);
+      const rules = clipRules(this.pact?.get?.()?.exams);
+      const output = await this.runAgent(`${rules}\n\n今天是北京时间 ${date}。只要 ${addDays(date, -14)} 到 ${date} 之间发布的。`);
       const parsed = parseJsonLoose(output);
       const candidates = Array.isArray(parsed?.clippings) ? parsed.clippings.slice(0, 6) : [];
       const kept = [];
@@ -242,7 +249,7 @@ export class LearningCompanion {
         if (age < 0 || age > 14) continue;
         if (AD.test(clip.title + clip.summary)) continue;
         if ([...clip.quote].length > 15) clip.quote = '';
-        if (!clip.note.includes('先生')) clip.note = '';
+        if (ADDRESS.test(clip.note)) clip.note = '';
         if (!(await this.fetchUrl(clip.url))) continue; // 原文打不开就丢掉
         kept.push(clip);
         if (kept.length >= 2) break;
@@ -301,7 +308,7 @@ async function defaultFetch(url) {
   } catch { return false; } finally { clearTimeout(timer); }
 }
 
-// 隔离会话跑一轮联网检索：不进先生的聊天记录，只开 web_search / web_fetch。
+// 隔离会话跑一轮联网检索：不进用户的聊天记录，只开 web_search / web_fetch。
 export function embeddedClippingAgent(api) {
   if (typeof api?.runtime?.agent?.runEmbeddedAgent !== 'function') return null;
   return async prompt => {

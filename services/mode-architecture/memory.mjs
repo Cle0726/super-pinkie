@@ -19,7 +19,17 @@ const MODE_AGENT = Object.freeze({chat: 'main', project: 'project', ideas: 'thin
 const MODE_AGENTS = Object.freeze({main: 'chat', project: 'project', thinking: 'ideas', learning: 'learning', unrestricted: 'none', metre: 'metre'});
 const MEMORY_KINDS = new Set(['identity', 'preference', 'feedback', 'decision', 'fact', 'reference']);
 const SECRET_PATTERN = /(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|bearer|password|passwd|密码|密钥|令牌)\s*[:=]\s*\S+/i;
-const EXPLICIT_MEMORY = /(?:^|[，。；！？\s])(?:请记住|记住[：:]|从今以后|以后(?:都|请|不要|别|必须|一律)|始终|永远|每次都|我的偏好(?:是)?|我(?:很)?喜欢|我不喜欢|不要再|别再|不得)/i;
+const EXPLICIT_MEMORY = /(?:^|[，。；！？\s])(?:请记住|记住[：:]|从今以后|以后(?:都|请|不要|别|必须|一律|叫我|称呼我|喊我)|(?:请|你可以|可以|直接)(?:叫我|称呼我|喊我)|称呼我为|始终|永远|每次都|我的偏好(?:是)?|我(?:很)?喜欢|我不喜欢|不要再|别再|不得)/i;
+const ADDRESS_CAPTURE = /(?:^|[，。；！？\s])(?:以后|从今以后|之后|平时)?(?:请|都|就|你可以|可以|直接)?(?:叫我|称呼我为?|喊我)[「“"'\s]*([^\s，。！？；,."”'」]{1,16}?)(?:就好|吧|就行|即可|啦|哦|呀)?[」”"']*(?:$|[，。；！？\s])/u;
+
+export function extractPreferredAddress(prompt = '') {
+  const text = boundedText(prompt);
+  if (!text || /(?:不要|别|不用|不必)(?:再)?(?:叫我|称呼我|喊我)/u.test(text)) return '';
+  const match = ADDRESS_CAPTURE.exec(text);
+  const address = normalized(match?.[1] || '');
+  if (!address || address.length > 16 || /^(?:什么|怎么|谁|啥|那个|这个)$/u.test(address)) return '';
+  return address;
+}
 const INTERNAL_TEXT = /(?:\u2063|\[pinkie-|pinkie-(?:tier|watchdog|integrity|marathon)|自动续接保护|档位控制器|全局交付真实性门禁)/i;
 
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
@@ -271,9 +281,28 @@ export class LongTermMemoryStore {
     const text = explicitMemoryCandidate(prompt);
     if (!text) return null;
     if ((this.guardEnabled ?? guardMode().enabled) && instructionLike(text)) return null;
+    const address = extractPreferredAddress(prompt);
+    if (address) {
+      try {
+        const scope = this.safeContext(ctx);
+        const userFile = path.join(scope.root, 'USER.md');
+        if (!fs.existsSync(userFile) || !fs.lstatSync(userFile).isSymbolicLink()) {
+          const current = fs.existsSync(userFile) ? fs.readFileSync(userFile, 'utf8') : '';
+          const lineRe = /^([-*\s]*\*{0,2}What to call them:?\*{0,2}:?[ \t]*).*$/mi;
+          const next = lineRe.test(current)
+            ? current.replace(lineRe, `$1${address}`)
+            : `${current ? current.replace(/\s*$/, '\n\n') : '# USER.md - About Your Human\n\n'}- **What to call them:** ${address}\n`;
+          if (next !== current) fs.writeFileSync(userFile, next, 'utf8');
+        }
+      } catch {}
+    }
     return this.remember(ctx, {
-      kind: 'feedback', text, key: `explicit:${digest(text).slice(0, 20)}`,
-      tags: ['用户明确记忆'], pinned: true, source: 'explicit-user',
+      kind: address ? 'identity' : 'feedback',
+      text,
+      key: address ? 'identity:address' : `explicit:${digest(text).slice(0, 20)}`,
+      tags: address ? ['用户明确记忆', '称呼'] : ['用户明确记忆'],
+      pinned: true,
+      source: 'explicit-user',
     });
   }
 }

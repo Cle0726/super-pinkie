@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {createModelSetup, cleanKey, explainFailure, PRESETS} from '../services/mode-architecture/model-setup.mjs';
+import vm from 'node:vm';
+import {createModelCapabilityTool, createModelSetup, cleanKey, explainFailure, PRESETS, supplementMinimalModelCapability} from '../services/mode-architecture/model-setup.mjs';
 
 const KEY = 'sk-test-1234567890abcd';
 function harness(routes, initial = {}) {
@@ -115,4 +116,321 @@ test('save writes only models + default model keys; author providers stay; list 
 
 test('a blank profile needs setup', () => {
   assert.equal(harness(() => ({status: 200})).setup.list().needsSetup, true);
+});
+
+test('test preserves upstream vision/context metadata and save keeps explicit vision choice', async () => {
+  const upstream = {data: [
+    {id: 'vision-1', name: 'Vision One', context_window: 262144, input_modalities: ['text', 'image']},
+    {id: 'text-1', name: 'Text One', context_window: 65536},
+  ]};
+  const h = harness(url => (url.endsWith('/models') ? {status: 200, body: upstream} : {status: 200, body: {}}));
+  const tested = await h.setup.test({preset: 'openai', apiKey: KEY});
+  assert.equal(tested.models.find(m => m.id === 'vision-1').vision, true);
+  assert.equal(tested.models.find(m => m.id === 'text-1').vision, false);
+  await h.setup.save({
+    preset: 'openai',
+    apiKey: KEY,
+    models: [
+      {id: 'vision-1', name: 'Vision One', vision: false, meta: tested.models[0].meta},
+      {id: 'text-1', name: 'Text One', vision: true, meta: tested.models[1].meta},
+    ],
+  });
+  const savedModels = h.cfg.models.providers.openai.models;
+  assert.deepEqual(savedModels.find(m => m.id === 'vision-1').input, ['text']);
+  assert.equal(savedModels.find(m => m.id === 'vision-1').contextWindow, 262144);
+  assert.deepEqual(savedModels.find(m => m.id === 'text-1').input, ['text', 'image']);
+  // Editing without overriding vision preserves existing input
+  await h.setup.save({providerId: 'openai', preset: 'openai', models: ['text-1']});
+  assert.deepEqual(h.cfg.models.providers.openai.models[0].input, ['text', 'image']);
+});
+
+test('setCapability and pinkie_model_capability toggle image input safely without leaking secrets', async () => {
+  const initial = {
+    models: {
+      providers: {
+        mm: {
+          baseUrl: 'http://127.0.0.1:1467/v1',
+          apiKey: 'mm-secret-xyz',
+          models: [
+            {id: 'workbuddy/hy4flash', name: 'HY4 Flash', input: ['text', 'audio']},
+            {id: 'shared-id', name: 'Shared MM', input: ['text']},
+          ],
+        },
+        deepseek: {
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: KEY,
+          models: [
+            {id: 'deepseek-chat', name: 'DeepSeek Chat', input: ['text']},
+            {id: 'shared-id', name: 'Shared DS', input: ['text']},
+          ],
+        },
+      },
+    },
+    agents: {defaults: {model: {primary: 'deepseek/deepseek-chat'}}},
+  };
+  const h = harness(() => ({status: 200}), initial);
+  const tool = createModelCapabilityTool(h.setup);
+
+  // Full provider/modelId with nested slash works and preserves other modalities like audio
+  const r1 = await tool.execute('c1', {model: 'mm/workbuddy/hy4flash', vision: true});
+  assert.equal(r1.isError, false);
+  assert.deepEqual(h.cfg.models.providers.mm.models[0].input, ['text', 'audio', 'image']);
+  assert.match(r1.details.message, /如果上游其实不支持，发图时会报错，可以再关掉/);
+  assert.ok(!JSON.stringify(r1).includes('mm-secret-xyz'));
+
+  // Unique short model id works
+  const r2 = await tool.execute('c2', {model: 'deepseek-chat', vision: true});
+  assert.equal(r2.isError, false);
+  assert.deepEqual(h.cfg.models.providers.deepseek.models[0].input, ['text', 'image']);
+
+  // Turning off removes image, keeps text + audio, and records override in pinkie-model-setup.json
+  const r3 = await tool.execute('c3', {model: 'mm/workbuddy/hy4flash', vision: false});
+  assert.equal(r3.isError, false);
+  assert.deepEqual(h.cfg.models.providers.mm.models[0].input, ['text', 'audio']);
+  const reg = JSON.parse(fs.readFileSync(path.join(h.stateDir, 'pinkie-model-setup.json'), 'utf8'));
+  assert.equal(reg.capabilities['mm/workbuddy/hy4flash'].vision, false);
+
+  // Ambiguous short id across providers fails clearly
+  const r4 = await tool.execute('c4', {model: 'shared-id', vision: true});
+  assert.equal(r4.isError, true);
+  assert.match(r4.details.error, /多个服务商.*mm\/shared-id.*deepseek\/shared-id/);
+
+  // Unknown model suggests configured models and default without leaking keys
+  const r5 = await tool.execute('c5', {model: 'deepseek', vision: true});
+  assert.equal(r5.isError, true);
+  assert.match(r5.details.error, /deepseek\/deepseek-chat/);
+  assert.ok(!JSON.stringify(r5).includes(KEY));
+  assert.ok(!JSON.stringify(r5).includes('mm-secret-xyz'));
+
+  // list() exposes vision per model
+  const listed = h.setup.list();
+  assert.equal(listed.providers.find(p => p.id === 'deepseek').models.find(m => m.id === 'deepseek-chat').vision, true);
+  assert.equal(listed.providers.find(p => p.id === 'mm').models.find(m => m.id === 'workbuddy/hy4flash').vision, false);
+});
+
+test('supplementMinimalModelCapability allows pinkie_model_capability in restrictive profiles only when no allow override exists', () => {
+  const cfg = {tools: {profile: 'minimal', alsoAllow: ['pinkie_sessions']}};
+  assert.equal(supplementMinimalModelCapability(cfg), true);
+  assert.deepEqual(cfg.tools.alsoAllow, ['pinkie_sessions', 'pinkie_model_capability']);
+  assert.equal(supplementMinimalModelCapability(cfg), false);
+  const coding = {tools: {profile: 'coding'}};
+  assert.equal(supplementMinimalModelCapability(coding), true);
+  assert.deepEqual(coding.tools.alsoAllow, ['pinkie_model_capability']);
+  const messaging = {tools: {profile: 'messaging'}};
+  assert.equal(supplementMinimalModelCapability(messaging), true);
+  assert.deepEqual(messaging.tools.alsoAllow, ['pinkie_model_capability']);
+  assert.equal(supplementMinimalModelCapability({tools: {profile: 'minimal', allow: ['read']}}), false);
+  assert.equal(supplementMinimalModelCapability({tools: {profile: 'coding', allow: ['read']}}), false);
+  assert.equal(supplementMinimalModelCapability({tools: {profile: 'full'}}), false);
+});
+
+test('pinkie_model_capability supports current-session model alias and uses committed nextConfig over stale snapshot', async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-model-setup-stale-'));
+  let stored = {
+    agents: {defaults: {model: {primary: 'deepseek/deepseek-chat'}}},
+    models: {providers: {deepseek: {baseUrl: 'https://api.deepseek.com', apiKey: KEY, models: [{id: 'deepseek-chat', input: ['text']}]}}},
+  };
+  const staleSnapshot = structuredClone(stored);
+  const setup = createModelSetup({
+    stateDir,
+    config: {
+      // Simulates a runtime whose current() hasn't reloaded yet right after mutateConfigFile
+      current: () => staleSnapshot,
+      async mutateConfigFile({mutate}) {
+        const draft = structuredClone(stored);
+        await mutate(draft);
+        stored = draft;
+        return {nextConfig: structuredClone(stored)};
+      },
+    },
+  });
+  const tool = createModelCapabilityTool(setup, {modelProvider: 'deepseek', modelId: 'deepseek-chat'});
+  const out = await tool.execute('c-cur', {model: 'current', vision: true});
+  assert.equal(out.isError, false);
+  assert.equal(out.details.vision, true);
+  // RPC wrapper calls setup.list(params || {}) with an empty object; list must ignore RPC params
+  assert.equal(setup.list({}).providers.length, 1);
+  const res = await setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', vision: false});
+  assert.equal(res.providers[0].models[0].vision, false, 'returned list reflects committed nextConfig even if current() is stale');
+});
+
+test('setCapability and pinkie_model_capability support reasoning, contextWindow, and maxTokens with validation and merged overrides', async () => {
+  const h = harness(() => ({status: 404}), {
+    agents: {defaults: {model: {primary: 'deepseek/deepseek-chat'}}},
+    models: {
+      providers: {
+        deepseek: {
+          baseUrl: 'https://api.deepseek.com', apiKey: KEY, api: 'openai-completions',
+          models: [{id: 'deepseek-chat', name: 'DeepSeek Chat', reasoning: true, input: ['text'], contextWindow: 128000, contextTokens: 128000}],
+        },
+      },
+    },
+  });
+  const tool = createModelCapabilityTool(h.setup);
+
+  // Set contextWindow + maxTokens + reasoning=false in one tool call
+  const r1 = await tool.execute('c-params-1', {model: 'deepseek/deepseek-chat', reasoning: false, contextWindow: 200000, maxTokens: 16384});
+  assert.equal(r1.isError, false);
+  assert.equal(r1.details.reasoning, false);
+  assert.equal(r1.details.contextWindow, 200000);
+  assert.equal(r1.details.maxTokens, 16384);
+  const entry = h.cfg.models.providers.deepseek.models[0];
+  assert.equal(entry.reasoning, false);
+  assert.equal(entry.contextWindow, 200000);
+  assert.equal(entry.contextTokens, 200000);
+  assert.equal(entry.maxTokens, 16384);
+
+  // Shorthand string in RPC setCapability + preserving prior overrides in pinkie-model-setup.json
+  const r2 = await h.setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', vision: true, contextWindow: '1M'});
+  assert.equal(r2.contextWindow, 1000000);
+  assert.equal(r2.vision, true);
+  assert.equal(r2.reasoning, false, 'untouched reasoning flag stays false');
+  const reg = JSON.parse(fs.readFileSync(path.join(h.stateDir, 'pinkie-model-setup.json'), 'utf8'));
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].vision, true);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].reasoning, false);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].contextWindow, 1000000);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].maxTokens, 16384);
+
+  // Clearing maxTokens with 0 deletes the override cleanly
+  const r3 = await tool.execute('c-params-clear', {model: 'deepseek/deepseek-chat', maxTokens: 0});
+  assert.equal(r3.isError, false);
+  assert.equal(h.cfg.models.providers.deepseek.models[0].maxTokens, undefined);
+  assert.equal(r3.details.maxTokens, 0);
+
+  // Editing the provider via save() preserves custom reasoning/contextWindow/maxTokens overrides
+  await h.setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', maxTokens: 8192});
+  await h.setup.save({
+    providerId: 'deepseek',
+    preset: 'deepseek',
+    models: [{id: 'deepseek-chat', vision: false, meta: {context_window: 128000}}],
+  });
+  const afterSave = h.cfg.models.providers.deepseek.models[0];
+  assert.equal(afterSave.reasoning, false, 'provider edit keeps custom reasoning=false');
+  assert.equal(afterSave.contextWindow, 1000000, 'provider edit keeps custom contextWindow over upstream metadata');
+  assert.equal(afterSave.maxTokens, 8192, 'provider edit keeps custom maxTokens');
+  const regAfterSave = JSON.parse(fs.readFileSync(path.join(h.stateDir, 'pinkie-model-setup.json'), 'utf8'));
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].vision, false);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].reasoning, false);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].contextWindow, 1000000);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].maxTokens, 8192);
+
+  // Validation rejects missing fields, out-of-range contextWindow, and maxTokens > contextWindow
+  const badEmpty = await tool.execute('c-bad-1', {model: 'deepseek/deepseek-chat'});
+  assert.equal(badEmpty.isError, true);
+  const badSmall = await tool.execute('c-bad-2', {model: 'deepseek/deepseek-chat', contextWindow: 100});
+  assert.equal(badSmall.isError, true);
+  const badMaxGtCtx = await tool.execute('c-bad-3', {model: 'deepseek/deepseek-chat', contextWindow: 8192, maxTokens: 16384});
+  assert.equal(badMaxGtCtx.isError, true);
+  assert.match(badMaxGtCtx.details.error, /不能超过上下文长度/);
+});
+
+test('laolao-model-setup UI renders per-model vision switches for managed and existing providers and saves toggles', async () => {
+  function makeNode(tag) {
+    const listeners = new Map();
+    const attrs = new Map();
+    const children = [];
+    const node = {
+      tagName: tag.toUpperCase(),
+      className: '',
+      id: '',
+      type: '',
+      value: '',
+      textContent: '',
+      hidden: false,
+      disabled: false,
+      open: false,
+      checked: false,
+      placeholder: '',
+      dataset: {},
+      children,
+      isConnected: true,
+      setAttribute(k, v) { attrs.set(k, String(v)); },
+      getAttribute(k) { return attrs.has(k) ? attrs.get(k) : null; },
+      addEventListener(type, fn) { (listeners.get(type) || listeners.set(type, []).get(type)).push(fn); },
+      dispatchEvent(ev) { for (const fn of listeners.get(ev.type) || []) fn(ev); },
+      appendChild(child) { children.push(child); child.parentElement = node; return child; },
+      insertBefore(child, before = null) {
+        const idx = before ? children.indexOf(before) : -1;
+        if (idx >= 0) children.splice(idx, 0, child);
+        else children.push(child);
+        child.parentElement = node;
+        return child;
+      },
+      after(child) { if (node.parentElement) node.parentElement.appendChild(child); },
+      replaceChildren(...items) { children.length = 0; for (const c of items) node.appendChild(c); },
+      remove() { node.isConnected = false; },
+      scrollIntoView() {},
+      focus() {},
+      click() { node.dispatchEvent({type: 'click', preventDefault() {}, stopPropagation() {}}); },
+      querySelectorAll(sel) {
+        const out = [];
+        const walk = cur => {
+          for (const ch of cur.children || []) {
+            if (sel.startsWith('.') && ch.className.split(/\s+/).includes(sel.slice(1))) out.push(ch);
+            if (sel === 'button[role="switch"]' && ch.tagName === 'BUTTON' && ch.getAttribute('role') === 'switch') out.push(ch);
+            walk(ch);
+          }
+        };
+        walk(node);
+        return out;
+      },
+    };
+    return node;
+  }
+  const rpcCalls = [];
+  let currentList = {
+    needsSetup: false,
+    defaultModel: 'mm/plain-m',
+    providers: [
+      {id: 'mm', label: 'mm', enabled: true, managed: false, isDefault: true, modelCount: 1, hasKey: true, keyTail: '••••1234', models: [{id: 'plain-m', name: 'Plain M', vision: false}]},
+      {id: 'custom', label: '自配', enabled: true, managed: true, isDefault: false, modelCount: 1, hasKey: true, keyTail: '••••5678', models: [{id: 'vl-m', name: 'VL M', vision: true}]},
+    ],
+  };
+  const windowObj = {
+    location: {pathname: '/settings/general', hash: ''},
+    sessionStorage: {getItem() { return null; }, setItem() {}, removeItem() {}},
+    addEventListener() {},
+    dispatchEvent() {},
+    CustomEvent: class { constructor(type) { this.type = type; } },
+    confirm: () => true,
+    __laolaoSidebar: {
+      async gwRequest(method, params) {
+        rpcCalls.push({method, params});
+        if (method === 'pinkie.modelSetup.presets') return {presets: PRESETS};
+        if (method === 'pinkie.modelSetup.list') return currentList;
+        if (method === 'pinkie.modelSetup.setCapability') {
+          currentList = {
+            ...currentList,
+            providers: currentList.providers.map(p => p.id === params.providerId ? {...p, models: [{...p.models[0], vision: params.vision}]} : p),
+          };
+          return {ok: true, ...currentList};
+        }
+        return {ok: true};
+      },
+    },
+  };
+  const doc = {
+    readyState: 'complete',
+    body: makeNode('body'),
+    createElement: makeNode,
+    addEventListener() {},
+    querySelector() { return null; },
+    getElementById() { return null; },
+  };
+  const src = fs.readFileSync(new URL('../ui/injections/laolao-model-setup.js', import.meta.url), 'utf8');
+  vm.runInNewContext(src, {window: windowObj, document: doc, location: windowObj.location, CustomEvent: windowObj.CustomEvent, setTimeout, clearTimeout, setInterval, clearInterval, Set, Map, Promise, Error});
+  const host = makeNode('div');
+  windowObj.__pinkieModelSetup.mount(host);
+  await new Promise(r => setTimeout(r, 20));
+  const switches = host.querySelectorAll('button[role="switch"]');
+  assert.equal(switches.length, 2, 'renders vision switches for both existing and managed providers');
+  assert.equal(switches[0].getAttribute('aria-checked'), 'false');
+  assert.equal(switches[1].getAttribute('aria-checked'), 'true');
+  switches[0].click();
+  await new Promise(r => setTimeout(r, 20));
+  const capCall = rpcCalls.find(c => c.method === 'pinkie.modelSetup.setCapability');
+  assert.deepEqual(JSON.parse(JSON.stringify(capCall?.params)), {providerId: 'mm', modelId: 'plain-m', vision: true});
+  const updatedSwitches = host.querySelectorAll('button[role="switch"]');
+  assert.equal(updatedSwitches[0].getAttribute('aria-checked'), 'true');
+  assert.equal(updatedSwitches[1].getAttribute('aria-checked'), 'true');
 });

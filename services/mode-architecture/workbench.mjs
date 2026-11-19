@@ -17,10 +17,11 @@ import {LspHub, CodeAssistant, CodeChecker} from './workbench-lsp.mjs';
 import {ExtensionMarket, formatText, formatters} from './workbench-ext.mjs';
 import {agentWorkspace, openclawAgentEnvPath} from './openclaw-paths.mjs';
 import {metreWording} from './ask.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const exec = promisify(execFile);
-export const WORKBENCH_RULES = '【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。找代码用 code_search（搜内容、找文件、看文件大纲；Mac 和 Windows 都能用，不用写 grep / find）；一个函数在哪定义、被谁调用用 code_refs。改已有的代码文件用 code_edit（原文差一点空白也能对上，对不上会给出文件里最像的一段，改完自动查语法）。跑测试用 run_tests（自动认项目的测试命令，记住改之前的基线，告诉你哪些是这次弄坏的）：动手前跑一次，改完再跑一次。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给先生看时用 workbench_show。命令直接执行，不需要先生批准。';
-const LEARNING_WORKBENCH_RULES = '【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循学习模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按先生当前要求。需要指给先生看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
+export const WORKBENCH_RULES = '【工作台】用户可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。找代码用 code_search（搜内容、找文件、看文件大纲；Mac 和 Windows 都能用，不用写 grep / find）；一个函数在哪定义、被谁调用用 code_refs。改已有的代码文件用 code_edit（原文差一点空白也能对上，对不上会给出文件里最像的一段，改完自动查语法）。跑测试用 run_tests（自动认项目的测试命令，记住改之前的基线，告诉你哪些是这次弄坏的）：动手前跑一次，改完再跑一次。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。要指出某个文件或某一行给用户看时用 workbench_show。命令直接执行，不需要用户批准。';
+const LEARNING_WORKBENCH_RULES = '【学习工作台】用户可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。继续遵循学习模式原有的设定、称呼和教学方式，资料、笔记和互动学习流程照常生效；讲解、带做或直接完成按用户当前要求。需要指给用户看某个文件或某一行时用 workbench_show。实际编写或修改代码后用 code_check 检查，能运行的练习再运行或测试，修好错误再交付。';
 const fsp = fs.promises;
 const SESSION = /^agent:([a-z0-9_-]+):.{1,500}$/i;
 const WORKBENCH_AGENTS = new Set(['project', 'learning', 'unrestricted', 'metre']);
@@ -729,7 +730,11 @@ export function registerWorkbench(api, options = {}) {
   const bench = options.workbench || new Workbench({...options, config});
   bench.context = options.contextStore || new WorkbenchContext();
   const method = (name, scope, fn) => api.registerGatewayMethod(name, async ({params, respond}) => {
-    try { respond(true, await fn(params || {})); }
+    try {
+      const blocked = getActiveMetreLock()?.checkGatewayRequest?.(name, params || {});
+      if (blocked) throw new Error(blocked);
+      respond(true, await fn(params || {}));
+    }
     catch (error) { respond(false, undefined, {code: error.code === 'CONFLICT' ? 'CONFLICT' : 'INVALID_REQUEST', message: String(error.message || '操作未完成。').slice(0, 400)}); }
   }, {scope});
   method('pinkie.fs.status', 'operator.read', params => bench.status(params));
@@ -759,7 +764,11 @@ export function registerWorkbench(api, options = {}) {
   // 语言服务器：一个进程只有一个管理器（插件会被加载多次）
   const hub = options.lspHub || (globalThis.__pinkieLspHub ||= new LspHub());
   const raw = (name, scope, fn) => api.registerGatewayMethod(name, async (opts) => {
-    try { opts.respond(true, await fn(opts.params || {}, opts)); }
+    try {
+      const blocked = getActiveMetreLock()?.checkGatewayRequest?.(name, opts?.params || {});
+      if (blocked) throw new Error(blocked);
+      opts.respond(true, await fn(opts.params || {}, opts));
+    }
     catch (error) { opts.respond(false, undefined, {code: 'INVALID_REQUEST', message: String(error.message || '操作未完成。').slice(0, 400)}); }
   }, {scope});
   raw('pinkie.lsp.servers', 'operator.read', () => ({servers: hub.available()}));
@@ -804,10 +813,11 @@ export function registerWorkbench(api, options = {}) {
     if (typeof params.content !== 'string' || params.content.length > 4 * 1024 * 1024) throw new Error('没有要格式化的内容。');
     return formatText({language: String(params.language || ''), content: params.content, filePath: file, cwd: path.dirname(file)});
   });
-  // 给碧琪的工具：改完代码自己检查；把文件在先生的工作台里打开给他看
+  // 给碧琪的工具：改完代码自己检查；把文件在用户的工作台里打开给他看
   const checker = options.checker || new CodeChecker();
   const reply = value => ({content: [{type: 'text', text: JSON.stringify(value)}], details: value});
-  api.registerTool?.(ctx => createWorkbenchReadTool(bench, ctx), {name: 'workbench_read'});
+  const guardTool = factory => ctx => (getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey) ? null : factory(ctx));
+  api.registerTool?.(guardTool(ctx => createWorkbenchReadTool(bench, ctx)), {name: 'workbench_read'});
   const toolRoot = ctx => {
     try { return bench.scope({sessionKey: ctx.sessionKey}).root; }
     catch {
@@ -819,7 +829,7 @@ export function registerWorkbench(api, options = {}) {
       const dir = String(ctx.workspaceDir || ''); if (path.isAbsolute(dir)) return dir; throw new Error('没有找到当前项目目录。');
     }
   };
-  api.registerTool?.(ctx => ({
+  api.registerTool?.(guardTool(ctx => ({
     name: 'code_check', label: '检查代码',
     description: '改完代码后用它做真实检查：Python 用 Pyright，TS 用项目的 tsc，JS 用 node --check，Go 用 go vet，Rust 用 cargo check / rustc，C/C++/ObjC 用 clang，Swift 用 swiftc，Shell 用 bash -n，JSON 解析。传 files（相对项目根目录的路径）只查这些文件；不传则检查整个项目（Python/TS/Go/Rust）。返回带文件名和行列号的错误、警告。只读，不改文件。交付代码前应该检查到没有错误。',
     parameters: {type: 'object', additionalProperties: false, properties: {files: {type: 'array', items: {type: 'string'}, maxItems: 200, description: '要检查的文件，相对项目根目录'}}},
@@ -830,28 +840,29 @@ export function registerWorkbench(api, options = {}) {
         return reply(await checker.check(root, files));
       } catch (error) { return {...reply({error: String(error.message || error)}), isError: true}; }
     },
-  }), {name: 'code_check'});
+  })), {name: 'code_check'});
   // 找代码：搜内容、找文件、看大纲。两种系统一样用，不靠命令行的 grep / find。
-  api.registerTool?.(ctx => createCodeSearchTool(ctx, {rootFor: toolRoot}), {name: 'code_search'});
+  api.registerTool?.(guardTool(ctx => createCodeSearchTool(ctx, {rootFor: toolRoot})), {name: 'code_search'});
   // 改代码（对不上时给出最像的一段）、查引用、跑测试（记基线，分清哪些是这次弄坏的）。
-  api.registerTool?.(ctx => createCodeEditTool(ctx, {rootFor: toolRoot, watch: codeWatch}), {name: 'code_edit'});
-  api.registerTool?.(ctx => createCodeRefsTool(ctx, {rootFor: toolRoot}), {name: 'code_refs'});
-  api.registerTool?.(ctx => createRunTestsTool(ctx, {rootFor: toolRoot}), {name: 'run_tests'});
-  api.registerTool?.(ctx => metreWording(/^agent:(project|learning|unrestricted|metre):/.test(String(ctx.sessionKey || '')) ? {
+  api.registerTool?.(guardTool(ctx => createCodeEditTool(ctx, {rootFor: toolRoot, watch: codeWatch})), {name: 'code_edit'});
+  api.registerTool?.(guardTool(ctx => createCodeRefsTool(ctx, {rootFor: toolRoot})), {name: 'code_refs'});
+  api.registerTool?.(guardTool(ctx => createRunTestsTool(ctx, {rootFor: toolRoot})), {name: 'run_tests'});
+  api.registerTool?.(guardTool(ctx => /^agent:(project|learning|unrestricted|metre):/.test(String(ctx.sessionKey || '')) ? metreWording({
     name: 'workbench_show', label: '在工作台打开',
-    description: '在先生的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让先生看结果时用。path 相对项目根目录；line 可选。',
+    description: '在用户的工作台编辑器里打开一个文件并定位到某一行（项目模式、学习模式、无限模式）。讲解代码、指出问题位置、或改完想让用户看结果时用。path 相对项目根目录；line 可选。',
     parameters: {type: 'object', additionalProperties: false, properties: {path: {type: 'string'}, line: {type: 'integer', minimum: 1}}, required: ['path']},
     async execute(toolCallId, params) {
       try {
         const scope = bench.scope({sessionKey: ctx.sessionKey});
         const target = bench.resolve(scope, String(params.path || ''), {read: true});
         if (!fs.existsSync(target)) return {...reply({error: '文件不存在：' + params.path}), isError: true};
-        return reply({ok: true, path: bench.display(scope, target), line: params.line || null, note: '已在工作台打开（先生的窗口开着工作台时可见）。'});
+        return reply({ok: true, path: bench.display(scope, target), line: params.line || null, note: '已在工作台打开（用户的窗口开着工作台时可见）。'});
       } catch (error) { return {...reply({error: String(error.message || error)}), isError: true}; }
     },
-  } : null, ctx?.sessionKey), {name: 'workbench_show'});
+  }, ctx?.sessionKey) : null), {name: 'workbench_show'});
   // 让碧琪知道工作台的能力（只在项目 / 学习 / 无限模式）
   api.on?.('before_prompt_build', (_event, ctx) => {
+    if (getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey)) return;
     // Metre：工具照给，规则说明不给（固定开销预算），只在工作台真的同步了现场时带上现场。
     if (String(ctx?.sessionKey || '').startsWith('agent:metre:')) {
       const live = bench.context.prompt(ctx.sessionKey);

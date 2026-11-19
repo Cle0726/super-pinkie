@@ -6,6 +6,7 @@ import base64
 import atexit
 import importlib.util
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -265,6 +266,262 @@ def verify_signed_latest(resource_root, latest, asset, sha256, public_key=None):
             os.unlink(temporary)
         except OSError:
             pass
+
+
+GUARD_PUBLIC_KEY = "MCowBQYDK2VwAyEAcejSsqLWnO2o0lFTrm+Lh22s8Qi5XSfTGX4GnQTgnOs="
+GUARD_STRIKE_LIMIT = 3
+
+
+def guard_bundle_identity(resource_root):
+    root = Path(resource_root)
+    info = {}
+    try:
+        info = json.loads((root / "build-info.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        info = {}
+    manifest = {}
+    manifest_sha = ""
+    manifest_file = root / "guard-manifest.json"
+    if manifest_file.is_file():
+        try:
+            raw = manifest_file.read_bytes()
+            manifest_sha = hashlib.sha256(raw).hexdigest()
+            manifest = json.loads(raw.decode("utf-8"))
+        except (OSError, ValueError):
+            manifest = {}
+    return {
+        "channel": str(info.get("channel") or "release"),
+        "version": str(info.get("version") or manifest.get("version") or ""),
+        "commit": str(manifest.get("commit") or info.get("commit") or ""),
+        "manifestSha": manifest_sha,
+    }
+
+
+def _guard_receipt_matches(record, version="", commit="", manifest_sha=""):
+    if not isinstance(record, dict):
+        return False
+    if str(record.get("version") or "") != str(version or ""):
+        return False
+    rec_commit = str(record.get("commit") or "")
+    if commit and rec_commit and rec_commit != commit:
+        return False
+    rec_sha = str(record.get("manifestSha") or "")
+    if manifest_sha and rec_sha and rec_sha != manifest_sha:
+        return False
+    return True
+
+
+def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", manifest_sha=""):
+    app_dir = Path(app_state)
+    status_file = app_dir / "guard" / "status.json"
+    try:
+        status = json.loads(status_file.read_text(encoding="utf-8-sig"))
+        if int(status.get("counterSchema") or 0) >= 1 and _guard_receipt_matches(status, version, commit, manifest_sha):
+            return True
+    except (OSError, ValueError, TypeError):
+        pass
+    oc_dir = Path(openclaw_state) if openclaw_state else openclaw_config_path().parent
+    receipt_file = oc_dir / "guard-receipt.json"
+    try:
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8-sig"))
+        if int(receipt.get("schema") or 0) >= 1 and _guard_receipt_matches(receipt, version, commit, manifest_sha):
+            return True
+    except (OSError, ValueError, TypeError):
+        pass
+    for plugin in ("pinkie-mode-architecture", "pinkie-project-scope", "pinkie-first-person-renderer"):
+        mark = oc_dir / "extensions" / plugin / "guard-build.json"
+        try:
+            obj = json.loads(mark.read_text(encoding="utf-8-sig"))
+            if obj.get("counterReady") is True and _guard_receipt_matches(obj, version, commit, manifest_sha):
+                return True
+        except (OSError, ValueError):
+            pass
+    return False
+
+
+def verify_guard_counter(resource_root, app_state, key=GUARD_PUBLIC_KEY):
+    identity = guard_bundle_identity(resource_root)
+    counter_file = Path(app_state) / "guard" / "counter.json"
+    raw_text = None
+    for attempt in range(3):
+        try:
+            raw_text = counter_file.read_text(encoding="utf-8-sig")
+            break
+        except PermissionError:
+            if attempt == 2:
+                return False
+            time.sleep(0.05 * (attempt + 1))
+        except OSError:
+            return False
+    if raw_text is None:
+        return False
+    try:
+        obj = json.loads(raw_text)
+    except ValueError:
+        return False
+    if not isinstance(obj, dict) or obj.get("schema") != 1 or not isinstance(obj.get("events"), list):
+        return False
+    for field in ("channel", "version", "commit", "manifestSha"):
+        if str(obj.get(field) or "") != identity[field]:
+            return False
+    updated_at = obj.get("updatedAt")
+    mac = obj.get("mac")
+    chain_mac = obj.get("chainMac")
+    if not isinstance(updated_at, str) or not isinstance(mac, str) or not isinstance(chain_mac, str):
+        return False
+    locked = "1" if obj.get("tamperLocked") is True else "0"
+    events = ",".join(str(x) for x in obj["events"])
+    payload = f"1|{identity['channel']}|{identity['version']}|{identity['commit']}|{identity['manifestSha']}|{events}|{locked}|{updated_at}".encode("utf-8")
+    bundle_key = hashlib.sha256(
+        f"pinkie-guard-counter-v1|{key}|{identity['channel']}|{identity['version']}|{identity['commit']}|{identity['manifestSha']}".encode("utf-8")
+    ).digest()
+    chain_key = hashlib.sha256(
+        f"pinkie-guard-chain-v1|{key}|{identity['channel']}".encode("utf-8")
+    ).digest()
+    expected_mac = hmac.new(bundle_key, payload, hashlib.sha256).hexdigest()
+    expected_chain = hmac.new(chain_key, payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(mac.lower(), expected_mac) and hmac.compare_digest(chain_mac.lower(), expected_chain)
+
+
+def lock_tampered_guard_counter(resource_root, app_state):
+    root = Path(resource_root)
+    node = root / "runtime" / "bin" / ("node.exe" if os.name == "nt" else "node")
+    if not node.is_file():
+        which_node = shutil.which("node")
+        if which_node:
+            node = Path(which_node)
+    guard = root / "installer" / "guard" / "guard.mjs"
+    if not node.is_file() or not guard.is_file():
+        return False
+    kwargs = hidden_process_kwargs() if os.name == "nt" else {}
+    try:
+        return subprocess.run(
+            [str(node), str(guard), "lock-tampered", "--bundle", str(root), "--app-state", str(app_state)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, **kwargs,
+        ).returncode == 0
+    except Exception:
+        return False
+
+
+def format_guard_alert(payload):
+    counter_tampered = payload.get("counterTampered") is True
+    limit_reached = payload.get("limitReached") is True
+    restore_failed = payload.get("restoreFailed") is True
+    non_official = payload.get("nonOfficial") is True
+    categories = [str(c) for c in (payload.get("categories") or []) if str(c).strip()]
+    cat_text = "、".join(categories) if categories else "产品设定"
+    backup = str(payload.get("backup") or "")
+    count = int(payload.get("count") or GUARD_STRIKE_LIMIT)
+    limit = int(payload.get("limit") or GUARD_STRIKE_LIMIT)
+
+    if counter_tampered:
+        title = "保护记录文件被删除或改动，应用即将退出"
+        body = (
+            "正式版的设定保护记录不完整或被修改，按保护规则这次会先退出应用。\n\n"
+            "下次可以正常打开，并会先检查恢复官方设定；24 小时内再改动仍会直接退出。你的记忆和设置都还在。"
+        )
+        return title, body, True, True
+    if restore_failed:
+        title = "部分碧琪设定文件没能自动恢复"
+        body = (
+            "检查时发现有设定文件需要恢复，但写入没有成功（可能是磁盘空间不足、文件夹权限不够，或者被安全软件拦住了）。\n\n"
+            "这次没有计入异常次数。请检查磁盘空间或安全软件后重试，你的记忆和设置没有改动。"
+        )
+        return title, body, False, False
+    if non_official:
+        title = "当前安装包不是官方完整版本"
+        body = "这个安装包缺少官方校验签名，或者安装包里的文件被改动过，无法用来恢复设定。建议到官方渠道重新下载安装，你的记忆和设置都在。"
+        return title, body, False, False
+    if limit_reached:
+        title = f"24 小时内已有 {count} 次改动碧琪的设定，应用即将退出"
+        body = f"刚才发现的{cat_text}改动已经换回官方版本。"
+        if backup:
+            body += f"\n\n原文件备份在：\n{backup}"
+        body += (
+            "\n\n24 小时内多次改动产品设定会触发保护退出。下次可以正常打开使用；"
+            "如果 24 小时内再次改动，仍会直接退出。你的记忆、偏好设置和项目文件都没有受影响。"
+        )
+        return title, body, True, True
+    title = f"碧琪发现自己的{cat_text}被改动了，已经换回官方版本"
+    body = "为了保证碧琪正常说话和做事，正式版不允许修改这些设定。你的记忆、偏好设置和项目文件都没有动。"
+    if backup:
+        body += f"\n\n被改过的文件已备份到：\n{backup}"
+    body += f"\n\n（24 小时内第 {count} 次恢复；达到 {limit} 次后应用会自动退出）"
+    return title, body, False, False
+
+
+def show_guard_dialog(title, body, is_critical=False):
+    message = f"{title}\n\n{body}"
+    append_log("guard", f"alert: {title}")
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        flags = (0x10 if is_critical else 0x30) | 0x10000 | 0x40000
+        ctypes.windll.user32.MessageBoxW(None, message, "超級碧琪", flags)
+    except Exception:
+        pass
+
+
+def process_guard_alerts(
+    resource_root,
+    *,
+    startup=False,
+    app_state=None,
+    openclaw_state=None,
+    seen_ids=None,
+    counter_verified=False,
+    presenter=show_guard_dialog,
+    locker=lock_tampered_guard_counter,
+    is_updating=None,
+    key=GUARD_PUBLIC_KEY,
+):
+    if not guard_release_build(resource_root):
+        return False, False
+    app_dir = Path(app_state or state_root())
+    updating = is_updating(app_dir) if callable(is_updating) else (os.name == "nt" and bool(update_in_progress(app_dir)))
+    if updating:
+        return False, bool(counter_verified)
+
+    guard_dir = app_dir / "guard"
+    alert_file = guard_dir / "pending-alert.json"
+    pending_payload = None
+    if alert_file.is_file():
+        try:
+            obj = json.loads(alert_file.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            obj = None
+        try:
+            alert_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        if isinstance(obj, dict):
+            alert_id = str(obj.get("id") or "")
+            already_seen = seen_ids is not None and alert_id and alert_id in seen_ids
+            if not already_seen or obj.get("limitReached") is True:
+                if seen_ids is not None and alert_id:
+                    seen_ids.add(alert_id)
+                pending_payload = obj
+
+    identity = guard_bundle_identity(resource_root)
+    valid = verify_guard_counter(resource_root, app_dir, key=key)
+    if valid:
+        counter_verified = True
+    elif counter_verified or (
+        startup and has_guard_receipt(app_dir, openclaw_state, identity["version"], identity["commit"], identity["manifestSha"])
+    ):
+        locker(resource_root, app_dir)
+        if pending_payload is None:
+            pending_payload = {"counterTampered": True, "limitReached": True}
+        else:
+            pending_payload["counterTampered"] = True
+            pending_payload["limitReached"] = True
+
+    if pending_payload is None:
+        return False, counter_verified
+    title, body, is_critical, should_exit = format_guard_alert(pending_payload)
+    presenter(title, body, is_critical)
+    return should_exit, counter_verified
 
 
 def app_version(resource_root):
@@ -5250,6 +5507,46 @@ def run_desktop(resource_root, prepare, update_health_token=None):
             append_log("launcher", f"local services failed: {error}")
         startup_timing("services", started)
 
+    guard_stop = threading.Event()
+    guard_seen_ids = set()
+    guard_state = {"verified": False}
+    guard_force_exit = {"active": False}
+    exit_lock = threading.Lock()
+    exit_done = {"ran": False}
+
+    def run_finish_exit(force_close_gateway=False):
+        with exit_lock:
+            if exit_done["ran"]:
+                return
+            exit_done["ran"] = True
+        finish_exit(bridge, gateway, webview_storage, force_close_gateway=force_close_gateway)
+
+    def enforce_guard_exit():
+        guard_force_exit["active"] = True
+        guard_stop.set()
+        for fn in (services.close, computer.close, gateway.close):
+            try:
+                fn()
+            except Exception:
+                pass
+        try:
+            window.destroy()
+        except Exception:
+            pass
+        run_finish_exit(force_close_gateway=True)
+
+    def monitor_guard():
+        while not guard_stop.wait(1.2):
+            try:
+                should_exit, guard_state["verified"] = process_guard_alerts(
+                    resource_root, startup=False, seen_ids=guard_seen_ids, counter_verified=guard_state["verified"],
+                )
+                if should_exit:
+                    enforce_guard_exit()
+                    return
+            except Exception as error:
+                append_log("guard", f"runtime guard check failed: {error}")
+
     def bootstrap():
         # Party, roundtable, TTS and the relay do not feed the gateway's
         # startup. They used to run (with their port probes) between setup and
@@ -5265,6 +5562,17 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         except Exception as error:
             append_log("launcher", f"startup setup failed: {error}")
         startup_timing("setup", started)
+        try:
+            should_exit, guard_state["verified"] = process_guard_alerts(
+                resource_root, startup=True, seen_ids=guard_seen_ids, counter_verified=guard_state["verified"],
+            )
+            if should_exit:
+                enforce_guard_exit()
+                return
+        except Exception as error:
+            append_log("guard", f"startup guard alert check failed: {error}")
+        if guard_release_build(resource_root):
+            threading.Thread(target=monitor_guard, name="pinkie-guard-monitor", daemon=True).start()
         if config_changed and http_ready(GATEWAY_URL):
             # A gateway that was already running (kept alive after the last
             # window closed) holds the plugin set it started with. Setup just
@@ -5325,6 +5633,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         sync_window_state(False)
 
     def closed(*_):
+        guard_stop.set()
         bridge.stop_dictation()
         # The companion has no life of its own: leaving it behind after the main
         # window closes leaves a stray window with no app behind it.
@@ -5346,7 +5655,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # the helper processes all go with it. Nothing is left holding memory
         # or ports with no window to stop it from. PINKIE_KEEP_GATEWAY=1 keeps
         # the gateway for people who do want sessions to finish in the background.
-        if keep_gateway_after_close():
+        if keep_gateway_after_close() and not guard_force_exit["active"]:
             append_log("launcher", "window closed; keeping gateway for background sessions")
         else:
             gateway.close()
@@ -5380,10 +5689,10 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         gui="edgechromium", debug=False, private_mode=False,
         storage_path=str(webview_storage),
     )
-    finish_exit(bridge, gateway, webview_storage)
+    run_finish_exit(force_close_gateway=guard_force_exit["active"])
 
 
-def finish_exit(bridge, gateway, webview_storage, leave=os._exit):
+def finish_exit(bridge, gateway, webview_storage, leave=os._exit, force_close_gateway=False):
     """The last window is gone: leave nothing of the app behind, then exit.
 
     `closed` already stopped the services. This covers what is left: a close
@@ -5392,7 +5701,7 @@ def finish_exit(bridge, gateway, webview_storage, leave=os._exit):
     otherwise keep 超級碧琪.exe in Task Manager after its window is gone.
     """
     try:
-        if not keep_gateway_after_close():
+        if force_close_gateway or not keep_gateway_after_close():
             gateway.close()
     except Exception as error:
         append_log("launcher", f"gateway stop on exit failed: {error}")

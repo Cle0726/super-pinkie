@@ -10,10 +10,11 @@
     ["chat", "唠嗑"], ["project", "项目"], ["thinking", "想法"],
     ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
-  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions"]);
+  const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions", "pinkie_model_capability"]);
+  const WORK_ALLOW_TOOLS = Object.freeze(["pinkie_model_capability"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
-    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
+    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false, alsoAllow: WORK_ALLOW_TOOLS}),
     open: Object.freeze({profile: "full", execSecurity: "full", browserEnabled: true}),
   });
   const PRESET_CARDS = Object.freeze([
@@ -68,7 +69,11 @@
     const hasRules = (value, root = false) => isObject(value) && (
       (Array.isArray(value.allow) && value.allow.length > 0)
       || (Array.isArray(value.deny) && value.deny.length > 0)
-      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => !root || baseProfile !== "minimal" || !CHILD_SESSION_TOOLS.includes(tool)))
+      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => {
+        if (!root) return true;
+        if (baseProfile === "minimal" || baseProfile === "coding") return !CHILD_SESSION_TOOLS.includes(tool);
+        return true;
+      }))
       || (typeof value.profile === "string" && value.profile.trim() && value.profile.trim() !== baseProfile)
     );
     if (hasRules(config?.tools, true) || hasRules(config?.agents?.defaults?.tools)) return true;
@@ -95,6 +100,33 @@
     if (preset.alsoAllow && !Object.hasOwn(tools, "allow")) {
       const existing = Array.isArray(tools.alsoAllow) ? tools.alsoAllow : [];
       changes.push([["tools", "alsoAllow"], [...new Set([...existing, ...preset.alsoAllow])]]);
+    }
+    return changes;
+  };
+  const thinkingValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    if (typeof defaults.thinkingDefault === "string" && defaults.thinkingDefault.trim()) return defaults.thinkingDefault.trim();
+    if (typeof defaults.thinkingLevel === "string" && defaults.thinkingLevel.trim()) return defaults.thinkingLevel.trim();
+    return "off";
+  };
+  const thinkingChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "thinkingDefault"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "thinkingLevel")) {
+      changes.push([["agents", "defaults", "thinkingLevel"], undefined]);
+    }
+    return changes;
+  };
+  const fastModeValue = (config) => {
+    const defaults = isObject(config?.agents?.defaults) ? config.agents.defaults : {};
+    const raw = isObject(defaults.params) && Object.hasOwn(defaults.params, "fastMode")
+      ? defaults.params.fastMode
+      : defaults.fastMode;
+    return raw === "auto" ? "auto" : raw === true ? "true" : "false";
+  };
+  const fastModeChanges = (value, config) => {
+    const changes = [[["agents", "defaults", "params", "fastMode"], value]];
+    if (isObject(config?.agents?.defaults) && Object.hasOwn(config.agents.defaults, "fastMode")) {
+      changes.push([["agents", "defaults", "fastMode"], undefined]);
     }
     return changes;
   };
@@ -130,6 +162,49 @@
     return "none";
   };
 
+  const guardTime = (value) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  };
+  const guardPresentation = (data) => {
+    let label = "暂不可用", tone = "", detail = "";
+    if (data && !data.enabled) {
+      label = "开发版（设定防护关闭）"; tone = "dev";
+    } else if (data?.nonOfficial) {
+      label = "非官方构建"; tone = "warn";
+      detail = `这份安装包不是官方签名版本${data.startup?.reason ? `（${data.startup.reason}）` : ""}，设定没有按官方版本恢复。建议到官方渠道重新下载安装。`;
+    } else if (data?.error) {
+      label = "官方正式版 · 设定校验出错"; tone = "warn";
+      detail = "启动时没能完成设定校验，碧琪照常可用。反馈问题时请附上这一行。";
+    } else if (data?.enabled) {
+      label = "官方正式版 · 设定受保护"; tone = "ok";
+      const last = data.lastChange;
+      if (data.modified) {
+        label = "官方正式版 · 设定已被改动"; tone = "warn";
+        const parts = [];
+        if (last) {
+          const when = guardTime(last.at);
+          const phase = last.source === "runtime" ? "运行中" : "启动时";
+          const details = [];
+          if (Array.isArray(last.categories) && last.categories.length) details.push(`涉及${last.categories.join("、")}`);
+          if (last.restored) details.push(`换回了 ${last.restored} 个文件`);
+          if (Array.isArray(last.configFixed) && last.configFixed.length) details.push(`修好了 ${last.configFixed.length} 处配置`);
+          parts.push(`${when ? `${when} ` : ""}${phase}发现设定被改动，${details.join("，") || "已恢复官方版本"}。`);
+        }
+        if (data.counterTampered) parts.push("保护记录文件被删改过，已按上限处理。");
+        if (data.restoreFailedCount > 0) parts.push("有部分文件没能写入恢复，请检查磁盘空间或安全软件。");
+        if (data.strikesIn24h > 0) {
+          const limit = data.strikeLimit || 3;
+          parts.push(`24 小时内异常计数：${data.strikesIn24h}/${limit}${data.limitReached ? "（已达上限）" : ""}。`);
+        }
+        const backup = last?.backup || data.startup?.backup || "";
+        if (backup) parts.push(`改过的文件备份在：${backup}`);
+        detail = parts.join(" ") || "设定曾被改动，当前已恢复为官方版本。";
+      }
+    }
+    return {label, tone, detail};
+  };
+
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,
@@ -141,6 +216,11 @@
     authMode,
     configFromSnapshot,
     presetChanges,
+    thinkingValue,
+    thinkingChanges,
+    fastModeValue,
+    fastModeChanges,
+    guardPresentation,
   });
 
   const state = {
@@ -394,14 +474,14 @@
     const thinkingGroup = element("div", "pinkie-user-settings__segments", thinkingRow.control);
     for (const [value, label] of REASONING_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", thinkingGroup,
-        () => saveConfigPatch([["agents", "defaults", "thinkingLevel", value]], "thinking"));
+        () => saveConfigPatch(config => thinkingChanges(value, config), "thinking"));
       state.reasoningButtons.set(value, node);
     }
     const speedRow = row(modelCard, "回复速度");
     const speedGroup = element("div", "pinkie-user-settings__segments", speedRow.control);
     for (const [value, label] of SPEED_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", speedGroup,
-        () => saveConfigPatch([["agents", "defaults", "fastMode", value]], "thinking"));
+        () => saveConfigPatch(config => fastModeChanges(value, config), "thinking"));
       state.speedButtons.set(String(value), node);
     }
     makeStatus(modelCard, "thinking");
@@ -567,6 +647,14 @@
     state.guardStatus = element("span", "pinkie-user-settings__value pinkie-user-settings__guard", guardRow.control, "读取中…");
     state.guardDetail = element("p", "pinkie-user-settings__soft-note pinkie-user-settings__guard-detail", aboutCard);
     state.guardDetail.hidden = true;
+    const metreRow = row(aboutCard, "开发者模式");
+    metreRow.item.hidden = true;
+    state.metreRow = metreRow.item;
+    const metreControls = element("div", "pinkie-user-settings__segments pinkie-user-settings__segments--wrap", metreRow.control);
+    state.metreStatus = element("span", "pinkie-user-settings__value pinkie-user-settings__guard", metreControls, "已上锁");
+    state.metreAction = button("重新上锁", "pinkie-user-settings__button pinkie-user-settings__button--small", metreControls, () => {
+      void handleMetreAction();
+    });
     const updateRow = row(aboutCard, "检查更新");
     button("检查更新", "pinkie-user-settings__button", updateRow.control, checkForUpdates);
     makeStatus(aboutCard, "updates");
@@ -1022,41 +1110,64 @@
     window.addEventListener("pywebviewready", load, {once: true});
   }
 
-  const guardTime = (value) => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "" : `${date.getMonth() + 1}月${date.getDate()}日 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-  };
   function renderGuard(data) {
     if (!state.guardStatus) return;
-    let label = "暂不可用", tone = "", detail = "";
-    if (data && !data.enabled) {
-      label = "开发版（设定防护关闭）"; tone = "dev";
-    } else if (data?.nonOfficial) {
-      label = "非官方版本"; tone = "warn";
-      detail = `这份 App 不是官方签名的版本${data.startup?.reason ? `（${data.startup.reason}）` : ""}，设定没有按官方版本恢复。建议到官网重新下载安装。`;
-    } else if (data?.error) {
-      label = "设定校验出错"; tone = "warn";
-      detail = "启动时没能完成设定校验，碧琪照常可用。反馈问题时请附上这一行。";
-    } else if (data?.enabled) {
-      label = "正式版 · 设定受保护"; tone = "ok";
-      const last = data.lastChange;
-      if (data.modified && last) {
-        label = "正式版 · 设定被修改过"; tone = "warn";
-        const parts = [];
-        if (last.restored) parts.push(`换回了 ${last.restored} 个文件`);
-        if (Array.isArray(last.configFixed) && last.configFixed.length) parts.push(`修好了 ${last.configFixed.length} 处配置`);
-        detail = `${guardTime(last.at)} 启动时发现产品设定被改过，${parts.join("，") || "已恢复"}，现在是官方版本。`
-          + (data.startup?.backup ? `改过的文件备份在：${data.startup.backup}` : "");
-      }
-    }
+    const {label, tone, detail} = guardPresentation(data);
     ownText(state.guardStatus, label);
     state.guardStatus.dataset.tone = tone;
     state.guardDetail.hidden = !detail;
     ownText(state.guardDetail, detail);
   }
+  function renderMetreLock(data) {
+    if (!state.metreRow || !state.metreStatus || !state.metreAction) return;
+    if (!data || !data.required) {
+      state.metreRow.hidden = true;
+      return;
+    }
+    state.metreRow.hidden = false;
+    state.metreData = data;
+    if (data.unlocked) {
+      ownText(state.metreStatus, "已解锁");
+      state.metreStatus.dataset.tone = "ok";
+      ownText(state.metreAction, "重新上锁");
+      state.metreAction.disabled = false;
+      return;
+    }
+    const inCooldown = Number(data.retryAfterMs || 0) > 0;
+    ownText(state.metreStatus, data.configured === false ? "未配置" : (inCooldown ? "冷却中" : "已上锁"));
+    state.metreStatus.dataset.tone = data.configured === false || inCooldown ? "warn" : "";
+    ownText(state.metreAction, "解锁");
+    state.metreAction.disabled = data.configured === false;
+  }
+  async function handleMetreAction() {
+    if (!state.metreAction) return;
+    state.metreAction.disabled = true;
+    try {
+      if (state.metreData?.unlocked) {
+        if (window.__pinkieMetreLock?.lock) {
+          renderMetreLock(await window.__pinkieMetreLock.lock());
+        } else {
+          const request = rpc();
+          if (request) renderMetreLock(await request("pinkie.guard.metreLock", {}, 8000));
+        }
+      } else if (window.__pinkieMetreLock?.ensureUnlocked) {
+        await window.__pinkieMetreLock.ensureUnlocked();
+        if (window.__pinkieMetreLock?.status) renderMetreLock(await window.__pinkieMetreLock.status(true));
+      }
+    } catch {} finally {
+      if (state.metreAction) state.metreAction.disabled = state.metreData?.configured === false;
+    }
+  }
   async function loadGuardStatus(request) {
     try { renderGuard(await request("pinkie.guard.status", {}, 8000)); }
     catch { renderGuard(null); }
+    try {
+      if (window.__pinkieMetreLock?.status) {
+        renderMetreLock(await window.__pinkieMetreLock.status(true));
+      } else {
+        renderMetreLock(await request("pinkie.guard.metreStatus", {}, 8000));
+      }
+    } catch { renderMetreLock(null); }
   }
   async function loadInitialData() {
     void state.loadBrowserProxy?.();
@@ -1159,22 +1270,24 @@
     if (!config) return;
     const model = configuredModelValue(config);
     ownText(state.modelButton, displayModelName(model));
-    const defaults = config.agents?.defaults || {};
-    const thinking = typeof defaults.thinkingLevel === "string" ? defaults.thinkingLevel : "off";
+    const thinking = thinkingValue(config);
     for (const [value, node] of state.reasoningButtons) setPressed(node, value === thinking);
-    const fast = defaults.fastMode === "auto" ? "auto" : defaults.fastMode === true ? "true" : "false";
+    const fast = fastModeValue(config);
     for (const [value, node] of state.speedButtons) setPressed(node, String(value) === fast);
     const activePreset = matchingPreset(config);
     state.customPreset.hidden = Boolean(activePreset);
     for (const [id, node] of state.presetButtons) setPressed(node, id === activePreset);
   }
   function setPath(target, path, value) {
+    if (!Array.isArray(path) || !path.length) return;
     let current = target;
     for (const key of path.slice(0, -1)) {
+      if (value === undefined && !isObject(current[key])) return;
       if (!isObject(current[key])) current[key] = {};
       current = current[key];
     }
-    current[path.at(-1)] = value;
+    if (value === undefined) delete current[path.at(-1)];
+    else current[path.at(-1)] = value;
   }
   function saveConfigPatch(changes, statusKey) {
     state.saveQueue = state.saveQueue.then(async () => {
@@ -1441,6 +1554,7 @@
     const onSettingsRoute = String(window.location?.pathname || "").startsWith("/settings");
     const toggle = onSettingsRoute ? document.querySelector(".config-view-toggle") : null;
     if (!toggle) {
+      state.lastView = "";
       if (!state.root.hidden) state.root.hidden = true;
       document.body?.removeAttribute("data-pinkie-user-settings");
       return;
@@ -1451,15 +1565,23 @@
     const common = !advanced && (tabs[0]?.getAttribute("aria-selected") === "true" || tabs.length > 0);
     localizeSettingsTitle(common);
     const view = advanced ? "advanced" : common ? "common" : "";
+    const wasHidden = state.root.hidden;
+    const enteredCommon = state.lastView !== "common" && common;
     const returnedToCommon = state.lastView === "advanced" && common;
     state.lastView = view;
     state.root.hidden = !common;
     if (common) document.body?.setAttribute("data-pinkie-user-settings", "1");
     else document.body?.removeAttribute("data-pinkie-user-settings");
     if (common) updatePosition();
+    if (returnedToCommon || (wasHidden && common)) {
+      void window.__pinkieModelSetup?.refresh?.();
+    }
     if (returnedToCommon) {
       void loadInitialData();
       syncAppearance();
+    } else if (enteredCommon || (wasHidden && common)) {
+      const request = rpc();
+      if (typeof request === "function") void loadGuardStatus(request);
     }
     const route = `${window.location.pathname}${window.location.search}`;
     if (route !== state.lastRoute) {
@@ -1467,6 +1589,10 @@
       syncVersion();
       syncAppearance();
       syncUsage();
+      if (common) {
+        const request = rpc();
+        if (typeof request === "function") void loadGuardStatus(request);
+      }
     }
   }
   function updatePosition() {
@@ -1485,6 +1611,14 @@
     }, true);
     window.addEventListener("popstate", syncPage);
     window.addEventListener("resize", updatePosition, {passive: true});
+    window.addEventListener("pinkie:metre-lock-change", (event) => renderMetreLock(event?.detail));
+    window.addEventListener("pinkie:sidebar-gateway-ready", () => {
+      const request = rpc();
+      if (typeof request === "function") void loadGuardStatus(request);
+    });
+    if (window.__pinkieMetreLock?.cachedStatus?.()) {
+      renderMetreLock(window.__pinkieMetreLock.cachedStatus());
+    }
     window.setInterval(() => {
       syncPage();
       if (state.root.hidden) return;

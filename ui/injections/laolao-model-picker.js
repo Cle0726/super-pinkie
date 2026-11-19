@@ -95,6 +95,7 @@
   document.addEventListener("scroll", schedulePopupLayouts, true);
   window.visualViewport?.addEventListener("resize", schedulePopupLayouts);
   window.visualViewport?.addEventListener("scroll", schedulePopupLayouts);
+  window.addEventListener("pinkie:models-changed", () => catalogRequests.clear());
 
   function loadCatalog(rpc, agentId) {
     const cached = catalogRequests.get(agentId);

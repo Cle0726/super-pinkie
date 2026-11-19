@@ -156,7 +156,7 @@ export class GameMonsters {
     const used = (m.usedStems || []).map(fold);
     for (let i = 0; i < 2; i += 1) {
       const r = await modelJson(rm, VARIANT_RULES, {subject: m.subject, topic: m.topic, question: seed.question, answer: seed.answer,
-        note: m.wins.length ? '先生已经打赢过一次，换一个角度' : '', avoid: (m.usedStems || []).slice(-4)}, {
+        note: m.wins.length ? '用户已经打赢过一次，换一个角度' : '', avoid: (m.usedStems || []).slice(-4)}, {
         validate: v => { const c = validChoice(v, {seedQuestion: seed.question}); return c && !used.includes(fold(c.stem)) ? c : null; }, timeoutMs: 60000, maxTokens: 1200,
       });
       if (!r) break;

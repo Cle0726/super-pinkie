@@ -164,10 +164,15 @@ export default {
       catch(error){respond(false,undefined,{code:'INVALID_REQUEST',message:error.message});}
     },{scope:'operator.admin'});
     api.registerGatewayMethod('pinkie.project.bind',({params,respond})=>{
-      try{const binding=guard.bind(params.key,params.path,params.name);respond(true,{binding,version:1});}
+      try{
+        const blocked=globalThis[Symbol.for('pinkie.metreLock.v1')]?.checkGatewayRequest?.('pinkie.project.bind',params||{});
+        if(blocked)throw new Error(blocked);
+        const binding=guard.bind(params.key,params.path,params.name);respond(true,{binding,version:1});
+      }
       catch(error){respond(false,undefined,{code:'INVALID_REQUEST',message:error.message});}
     },{scope:'operator.admin'});
     api.on('before_prompt_build',(_event,ctx)=>{
+      if(globalThis[Symbol.for('pinkie.metreLock.v1')]?.isLockedSession?.(ctx?.sessionKey))return undefined;
       const scoped=guard.prompt(ctx);
       // Metre 不要「工作过程展示」：它的手册第九节自己规定怎么汇报进展。项目绑定照旧。
       if(!modes.test(ctx.sessionKey||'')||/^agent:metre:/.test(ctx.sessionKey||''))return scoped;

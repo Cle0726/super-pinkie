@@ -100,6 +100,10 @@ foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerSt
 Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
+if ($env:PINKIE_RELEASE_BUILD -eq '1') {
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "ui\assets\laolao-splash-release.mp4") -Destination (Join-Path $uiStage "assets\laolao-splash.mp4") -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot "ui\assets\laolao-splash-video-poster-release.png") -Destination (Join-Path $uiStage "assets\laolao-splash-video-poster.png") -Force
+}
 Copy-Item -Path (Join-Path $RepoRoot "installer\windows\*") -Destination $windowsInstallerStage -Recurse -Force
 # 社区技能按 skills/community-skills.json 一起打包；技能路由（skill-routes.mjs）把路径直接给模型。
 $skillManifest = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $RepoRoot "skills\community-skills.json") | ConvertFrom-Json
@@ -236,6 +240,15 @@ $pyInstallerCommonArgs = @(
     "app\super_pinkie.py"
 )
 
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+$guardCommitRaw = (git rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or -not $guardCommitRaw) { $guardCommitRaw = '' }
+$guardCommit = "$guardCommitRaw".Trim()
+$guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
+# 先给暂存目录里的人设写入不可见来源标记，确保 onedir 和 LegacyOneFile 打包到同一份内容，和 guard-manifest.json 哈希一致。
+& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') stamp-personas $personaStage --version $guardVersion --commit $guardCommit --channel $guardChannel
+if ($LASTEXITCODE -ne 0) { throw '人设来源标记写入失败' }
+
 # Build the fast-starting directory layout by default.  PyInstaller keeps all
 # resources next to the launcher, so Windows no longer has to unpack ~700 MB
 # into a temporary _MEI directory before showing the window.
@@ -250,13 +263,21 @@ $packageDir = Join-Path $DistRoot '超級碧琪'
 # CI 发版（release.yml 设 PINKIE_RELEASE_BUILD=1，并给 PINKIE_GUARD_SIGNING_KEY_FILE）→ 正式版，防护开、清单签名；
 # 其它（本机开发构建）→ 开发版，防护关。Windows 用户只装 CI 打的包，不在本机重新打包。
 $bundleRoot = Join-Path $packageDir '_internal'
-$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
-$guardCommit = (git rev-parse HEAD 2>$null)
-if ($LASTEXITCODE -ne 0 -or -not $guardCommit) { $guardCommit = '' }
-$guardVersion = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
-$buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = "$guardCommit".Trim() }
-[System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json) + "`n", (New-Object System.Text.UTF8Encoding($false)))
-& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit "$guardCommit".Trim()
+if ($guardChannel -eq 'release') {
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'ui\assets\laolao-splash-release.mp4') -Destination (Join-Path $bundleRoot 'ui\assets\laolao-splash.mp4') -Force
+    Copy-Item -LiteralPath (Join-Path $RepoRoot 'ui\assets\laolao-splash-video-poster-release.png') -Destination (Join-Path $bundleRoot 'ui\assets\laolao-splash-video-poster.png') -Force
+}
+$buildInfo = [ordered]@{ guard = ($guardChannel -eq 'release'); channel = $guardChannel; version = $guardVersion; commit = $guardCommit }
+if ($guardChannel -eq 'release') {
+    $fb = [ordered]@{}
+    if ($env:PINKIE_FEEDBACK_REPO) { $fb.repo = $env:PINKIE_FEEDBACK_REPO.Trim() }
+    if ($env:PINKIE_FEEDBACK_PUBLIC_KEY) { $fb.publicKey = $env:PINKIE_FEEDBACK_PUBLIC_KEY.Trim() }
+    if ($env:PINKIE_FEEDBACK_TOKEN) { $fb.token = $env:PINKIE_FEEDBACK_TOKEN.Trim() }
+    if ($env:PINKIE_FEEDBACK_RELAY_URL) { $fb.endpoint = $env:PINKIE_FEEDBACK_RELAY_URL.Trim() }
+    if ($fb.Count -gt 0) { $buildInfo.feedback = $fb }
+}
+[System.IO.File]::WriteAllText((Join-Path $bundleRoot 'build-info.json'), ($buildInfo | ConvertTo-Json -Depth 4) + "`n", (New-Object System.Text.UTF8Encoding($false)))
+& (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') manifest $bundleRoot --commit $guardCommit
 if ($LASTEXITCODE -ne 0) { throw '设定防护清单生成失败' }
 if ($env:PINKIE_GUARD_SIGNING_KEY_FILE) {
     & (Join-Path $runtimeBin 'node.exe') (Join-Path $RepoRoot 'installer\guard\guard.mjs') sign $bundleRoot $env:PINKIE_GUARD_SIGNING_KEY_FILE

@@ -75,10 +75,10 @@ test('时段：深夜线默认 0:30，可以被学到的节奏覆盖', () => {
 test('一天只有一个主角，优先级照计划', () => {
   const pick = (iso, rhythm = {}, personal = {}) => almanac(at(iso), {exams: EXAMS, rhythm, personal}).protagonist;
   assert.equal(pick('2026-12-13T08:00:00+08:00').id, 'exam-day');
-  assert.equal(pick('2026-12-12T20:00:00+08:00').greeting, '明天就考了，先生');
+  assert.equal(pick('2026-12-12T20:00:00+08:00').greeting, '明天就考了');
   assert.equal(pick('2026-12-08T20:00:00+08:00').quiet, true);
   assert.equal(pick('2028-03-28T20:00:00+08:00').tape, 'wuse');
-  assert.equal(pick('2026-11-04T20:00:00+08:00', {gapDays: 4}).greeting, '欢迎回来，先生');
+  assert.equal(pick('2026-11-04T20:00:00+08:00', {gapDays: 4}).greeting, '欢迎回来');
   assert.equal(pick('2026-11-04T20:00:00+08:00', {gapDays: 4, studiedToday: true}).id, 'ordinary');
   assert.equal(pick('2026-11-07T20:00:00+08:00').term, '立冬');
   assert.equal(pick('2026-11-13T20:00:00+08:00').id, 'exam-milestone');
@@ -90,10 +90,10 @@ test('一天只有一个主角，优先级照计划', () => {
 test('深夜不庆祝；考前一天的话照旧', () => {
   const late = almanac(at('2027-02-06T01:10:00+08:00'), {exams: EXAMS}).protagonist;
   assert.equal(late.id, 'festival');
-  assert.equal(late.greeting, '这么晚了，先生');
+  assert.equal(late.greeting, '这么晚了');
   assert.equal(late.celebrate, false);
   const eve = almanac(at('2026-12-13T01:00:00+08:00'), {exams: [{id: 'x', name: '考试', date: '2026-12-14'}]}).protagonist;
-  assert.equal(eve.greeting, '明天就考了，先生');
+  assert.equal(eve.greeting, '明天就考了');
 });
 
 test('页眉小字：农历 + 最多一条别的事实', () => {

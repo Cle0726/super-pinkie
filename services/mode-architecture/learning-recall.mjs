@@ -19,7 +19,7 @@ export function splitRecallSource(text, size = 12000) {
 }
 const comparable = text => clean(text).toLowerCase().replace(/[\s\p{P}\p{S}]/gu, '');
 const active = note => !['moved', 'merged'].includes(note.status);
-export const RECALL_RULES = `你是碧琪的笔记回忆卡整理助手。先生习惯把整段对话、例句、解释连同答案全部复制进笔记。
+export const RECALL_RULES = `你是碧琪的笔记回忆卡整理助手。用户习惯把整段对话、例句、解释连同答案全部复制进笔记。
 把每条原笔记拆成若干独立知识点，并为每个知识点写真正可以回忆的问题和答案。长笔记要覆盖所有独立知识点；不要把全文当成一个标题，也不要因为长度或费用省略知识点。
 只输出 JSON：{"notes":[{"id":"原笔记id","cards":[{"question":"只含问题的正面","answer":"翻面后才显示的完整答案","quote":"原笔记里逐字相同的一段依据"}]}]}。
 问题必须能独立理解，明确要求回忆什么，但绝不能把所求答案写在正面。不要把答案换个排版再问“是什么意思”。

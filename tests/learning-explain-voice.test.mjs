@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {explainRules, loadVoice, tutoringRules, validVoicedExplain, _resetVoiceCache} from '../services/mode-architecture/learning-explain-voice.mjs';
+import {explainRules, loadVoice, preferredAddress, tutoringRules, validVoicedExplain, _resetVoiceCache} from '../services/mode-architecture/learning-explain-voice.mjs';
 
 const USER = `# USER
 - **教学/辅导铁律**：
@@ -39,7 +39,11 @@ test('工作区有规则就用工作区的，改了规则下一次就变；没�
     assert.deepEqual(voice.steps.length, 3);
     assert.ok(voice.soul.some(s => s.includes('对错不含糊')) && !voice.soul.some(s => s.includes('聊天用')));
     const rules = explainRules({dir});
-    assert.match(rules, /答对也必讲/); assert.match(rules, /先生/); assert.doesNotMatch(rules, /滚动温故/);
+    assert.match(rules, /答对也必讲/); assert.doesNotMatch(rules, /滚动温故/);
+    assert.match(rules, /不加「先生」「老板」之类的称呼/, 'no address unless USER.md names one');
+    fs.writeFileSync(path.join(dir, 'USER.md'), '- **What to call them:** 先生\n' + USER);
+    _resetVoiceCache();
+    assert.match(explainRules({dir}), /用户希望被叫「先生」/, 'the address from USER.md reaches the side call');
     fs.writeFileSync(path.join(dir, 'USER.md'), USER.replace('严禁超纲！', '只讲 B 级范围。'));
     assert.match(explainRules({dir}), /严禁超纲/, '20 秒内读缓存');
     _resetVoiceCache();
@@ -63,3 +67,9 @@ test('当场讲解短而轻、不分步骤；整卷回看更短', () => {
 });
 
 test('英语题讲解带一句中文翻译', () => { assert.match(explainRules(), /中文翻译/); });
+
+test('USER.md 里的称呼：OpenClaw 模板那一行，空的和 (optional) 都算没写', () => {
+  assert.equal(preferredAddress('- **What to call them:** 小王\n'), '小王');
+  assert.equal(preferredAddress('- **What to call them:**\n- **Pronouns:** _(optional)_'), '');
+  assert.equal(preferredAddress('# 没有这一行'), '');
+});

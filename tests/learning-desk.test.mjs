@@ -243,7 +243,7 @@ test('adopted plans persist to the next morning reminder, use the configured tim
   assert.equal(pact.get().tomorrowPlan.date, '2026-10-20');
   assert.throws(() => desk.adoptPlan({sessionKey: SESSION, planId: 'forged'}), /计划/);
   setClock(AT + 86400000);
-  assert.match(pact.nudgeContext('morning').context, /先生已采纳的今日计划：明天做4道循环题/);
+  assert.match(pact.nudgeContext('morning').context, /用户已采纳的今日计划：明天做4道循环题/);
   assert.equal(pact.get().tomorrowPlan.items[0].chapter, 'c5');
 });
 

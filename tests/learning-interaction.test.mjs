@@ -33,12 +33,12 @@ test('interaction starts on so 碧琪 can place cards herself, and only the stud
   const shown = store.present(sessionKey, {kind: 'single_choice', question: 'auto?', options: ['A', 'B'], correct_answer: 'A'});
   assert.equal(shown.current.phase, 'asking');
   const prompt = learningPrompt(store, sessionKey);
-  assert.match(prompt, /不用等先生点按钮或开口要/);
+  assert.match(prompt, /不用等用户点按钮或开口要/);
   assert.match(prompt, /ee4 RC\/RL 暂态/);
   assert.match(prompt, /net4 子网划分/);
   store.setEnabled(sessionKey, false);
   assert.match(learningPrompt(store, sessionKey), /暂停的是主动出题/);
-  assert.match(learningPrompt(store, sessionKey), /不用等先生点按钮/);
+  assert.match(learningPrompt(store, sessionKey), /不用等用户点按钮/);
   assert.equal(store.status(sessionKey).enabled, false);
 });
 
@@ -161,11 +161,11 @@ test('gateway methods are admin-scoped and ordinary learning chat stays normal u
   for (const item of legacyMethods.values()) assert.equal(item.opts.scope, 'operator.admin');
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /碧琪学习笔记/);
   assert.doesNotMatch(learningPrompt(store, 'agent:learning:prompt'), /CLEKK_NOTE_|learning_notes/);
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /用户作答之前，不写解题思路、考点分析或答案/);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /题目消息只放题干、选项和必要的生词注释/);
   store.setEnabled('agent:learning:prompt', true);
   assert.match(learningPrompt(store, 'agent:learning:prompt'), /普通学习聊天仍照常回答/);
-  assert.match(learningPrompt(store, 'agent:learning:prompt'), /先生作答之前，不写解题思路、考点分析或答案/);
+  assert.match(learningPrompt(store, 'agent:learning:prompt'), /用户作答之前，不写解题思路、考点分析或答案/);
   assert.equal(learningPrompt(store, 'agent:project:prompt'), '');
 });
 
