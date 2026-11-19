@@ -957,6 +957,7 @@ export class SessionLineage {
   }
 
   async message(from, to, raw, callId) {
+    if (isMetreKey(from) && this.solo(from)) throw new Error('这个会话本轮是 Virtuoso（独做）：不给其他会话加活');
     if (!agentOf(from) || !agentOf(to) || isPersona(from) || isPersona(to)) throw new Error('只能给自己的父会话或子会话发消息');
     const lineage = this.lineage();
     if (lineage[to]?.parentKey !== from && lineage[from]?.parentKey !== to) throw new Error('只能给自己的父会话或子会话发消息');

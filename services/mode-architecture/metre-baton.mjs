@@ -2,15 +2,31 @@
 // 实测：选着 Baton，Metre 一轮里自己写了 5 个文件、改了 6 处、发了 6 次画图，一个子会话都没开。
 // 现在的规则：Baton 下一轮里亲手「动手」的工具调用（写文件、改代码、画图……）到了上限，而这一轮还没派出去过，
 // 再动手就被拦下，并告诉它怎么派。派发失败过（模式没装、名额满了等）就不再拦，它可以自己做完。
-// 读、搜、跑命令验证、看页面这些「验收」动作不算动手，任何时候都不拦。Virtuoso 不经过这里（派发工具本来就摘掉了）。
+// 读、搜和单条验证命令不算动手。Virtuoso 仍在执行时拒绝其他派发入口。
 
 export const BATON_HANDS_ON = Object.freeze(new Set([
-  'write', 'file_write', 'edit', 'code_edit', 'apply_patch', 'image_generate', 'canvas', 'computer', 'computer_flow',
+  'write', 'file_write', 'edit', 'code_edit', 'apply_patch', 'image_generate', 'imagegen', 'canvas', 'computer', 'computer_flow',
 ]));
 // 「几步就能做完的小事自己做」（主 MD 第四节）：这么多次以内不拦。
 export const BATON_FREE_STEPS = 4;
-export const BATON_BLOCK = `【Baton · 派发】这一轮是派发：动手的活你已经亲手做了 ${BATON_FREE_STEPS} 步，后面的不要再自己做。`
-  + '先用 pinkie_models 选一个比你轻的模型，把剩下要动手的部分写成简报（目标、文件路径、做到什么样算完、怎么验证），'
+const BATON_INTEGRATION_STEPS = 2;
+const SOLO_BLOCK = '【Virtuoso · 独做】本轮由 Metre 自己完成，不能派发、另开会话执行或给子会话加活。';
+const VISIBLE_DISPATCH_BLOCK = '【Baton · 派发】请用 pinkie_session_start 派活，子会话才会出现在用户的侧栏。';
+const DELEGATION_TOOLS = new Set(['sessions_spawn', 'sessions_send', 'pinkie_session_start', 'pinkie_mode_ask', 'pinkie_session_message']);
+const SHELL_TOOLS = new Set(['exec', 'bash', 'shell', 'terminal', 'run_command']);
+const READ_ONLY_CHECK = /^(?:pwd(?: |$)|ls(?: |$)|rg(?: |$)|grep(?: |$)|git (?:status|diff|log|show|rev-parse)(?: |$)|node --(?:test|check)(?: |$)|(?:pnpm|npm|yarn) (?:test|lint)(?: |$)|(?:python3?|py) -m (?:unittest|pytest)(?: |$)|pytest(?: |$))/u;
+function handsOn(name, params) {
+  if (BATON_HANDS_ON.has(name)) return true;
+  if (name === 'app_browser') return /^(?:evaluate|type|fill|click|press|drag|upload|submit|act)$/i.test(String(params.action || ''));
+  if (name === 'run_tests' && !params.command) return /[;&|<>$\x60\r\n\\]/u.test(String(params.filter || ''));
+  if (!SHELL_TOOLS.has(name) && name !== 'run_tests') return false;
+  const command = String(params.command || '').trim();
+  // Unknown shell commands count toward the budget. A known check with a
+  // pipeline, substitution or redirect is no longer a single verification.
+  return Boolean(params.background || !READ_ONLY_CHECK.test(command) || /(?:^|\s)--output(?:[=\s]|$)/u.test(command) || /[;&|<>$\x60\r\n\\]/u.test(command));
+}
+export const BATON_BLOCK = `【Baton · 派发】这一轮是派发：动手的活你已经亲手做了 ${BATON_FREE_STEPS} 步，请把剩余的独立工作派出去。`
+  + '用 pinkie_models 选一个比你轻的模型，把剩下要动手的部分写成简报（目标、文件路径、做到什么样算完、怎么验证），'
   + '用 pinkie_session_start（initiation: in_scope，写 mode 和 model）派出去；你继续读、判断、验收、汇报。'
   + '派发失败了（模式没装、名额满等）才自己接着做。用户想让你亲手做，会把输入框下面切到 Virtuoso。';
 
@@ -37,23 +53,32 @@ export class MetreBaton {
     this.runs.delete(key);
     if (this.runs.size > 500) this.runs.delete(this.runs.keys().next().value);
   }
-  before(key, toolName) {
-    if (String(toolName || '') === 'browser' && this.metreFamily(key)) return {block: true, blockReason: METRE_BROWSER_BLOCK};
-    if (!this.isMetre(key) || this.solo(key) || !BATON_HANDS_ON.has(String(toolName || ''))) return undefined;
+  before(key, toolName, params = {}) {
+    const name = String(toolName || '').toLowerCase();
+    if (name === 'browser' && this.metreFamily(key)) return {block: true, blockReason: METRE_BROWSER_BLOCK};
+    if (!this.isMetre(key)) return undefined;
+    const solo = this.solo(key);
+    if (solo && (DELEGATION_TOOLS.has(name)
+        || name === 'subagents' && String(params.action) === 'steer'
+        || name === 'pinkie_sessions' && params.action === 'create' && String(params.message || '').trim())) {
+      return {block: true, blockReason: SOLO_BLOCK};
+    }
+    if (name === 'sessions_spawn' || name === 'sessions_send') return {block: true, blockReason: VISIBLE_DISPATCH_BLOCK};
+    if (solo || !handsOn(name, params)) return undefined;
     const state = this.state(key);
-    if (state.dispatched || state.dispatchFailed) return undefined;
-    if (state.handsOn >= BATON_FREE_STEPS) {
+    if (state.dispatchFailed) return undefined;
+    if (state.handsOn >= BATON_FREE_STEPS + (state.dispatched ? BATON_INTEGRATION_STEPS : 0)) {
       state.blocked += 1;
       return {block: true, blockReason: BATON_BLOCK};
     }
     state.handsOn += 1;
     return undefined;
   }
-  // outcome: 'started'（真开出了子会话）、'failed'（报错）、其他（只提了张卡片）不改状态。
+  // Only a real dispatch grants integration steps; only unavailability permits fallback.
   after(key, toolName, outcome) {
     if (!this.isMetre(key) || String(toolName || '') !== 'pinkie_session_start') return;
     const state = this.state(key);
-    if (outcome === 'failed') state.dispatchFailed = true;
+    if (outcome === 'unavailable') state.dispatchFailed = true;
     else if (outcome === 'started') state.dispatched = true;
   }
 }
@@ -61,16 +86,15 @@ export class MetreBaton {
 const toolNameOf = event => event?.toolName || event?.name || '';
 const keyOf = (event, ctx) => String(ctx?.sessionKey || event?.sessionKey || '');
 export function dispatchOutcome(event) {
-  if (event?.error) return 'failed';
   const result = event?.result;
-  if (!result || typeof result !== 'object') return '';
-  if (result.isError === true || result.ok === false) return 'failed';
-  let details = result.details;
-  if (!details) {
-    const text = Array.isArray(result.content) ? result.content.map(part => part?.text || '').join('') : '';
-    try { details = JSON.parse(text); } catch { details = null; }
+  const text = Array.isArray(result?.content) ? result.content.map(part => part?.text || '').join('') : '';
+  let details = result?.details;
+  if (!details) { try { details = JSON.parse(text); } catch {} }
+  if (event?.error || result?.isError === true || result?.ok === false || details?.ok === false || details?.error) {
+    const reason = [event.error, result?.error, details?.error, text].filter(Boolean).join(' ');
+    return /(?:^|\s)(?:名额满了|这个父会话已有 [0-9]+ 个子会话在跑|这台电脑上还没有|模型「.+」开不起来|会话消息未送达)/u.test(reason)
+      ? 'unavailable' : 'failed';
   }
-  if (details?.ok === false || details?.error) return 'failed';
   return typeof details?.key === 'string' && details.key.includes(':pinkie-child:') ? 'started' : '';
 }
 
@@ -80,7 +104,7 @@ export function registerMetreBaton(api, {isMetre, solo, metreFamily, baton = new
   if (api && typeof api === 'object') { if (baton.apis.has(api)) return baton; baton.apis.add(api); }
   const guard = (fn) => (event, ctx) => { try { return fn(event, ctx); } catch { return undefined; } };
   api.on?.('before_agent_run', guard((event, ctx) => { baton.begin(keyOf(event, ctx)); }));
-  api.on?.('before_tool_call', guard((event, ctx) => baton.before(keyOf(event, ctx), toolNameOf(event))), {priority: -10870});
+  api.on?.('before_tool_call', guard((event, ctx) => baton.before(keyOf(event, ctx), toolNameOf(event), event?.params || {})), {priority: -10870});
   api.on?.('after_tool_call', guard((event, ctx) => { baton.after(keyOf(event, ctx), toolNameOf(event), dispatchOutcome(event)); }));
   return baton;
 }

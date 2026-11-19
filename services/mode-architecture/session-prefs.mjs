@@ -75,7 +75,25 @@ export function styleText(style, customStyle) {
 }
 
 export class SessionPrefs {
-  constructor(root) { this.file = path.join(root, 'prefs.json'); this.cache = null; }
+  constructor(root) {
+    this.file = path.join(root, 'prefs.json');
+    this.cache = null;
+    this.activeDispatch = new Map();
+  }
+  beginDispatch(key, runId) {
+    if (agentOf(key) !== 'metre') return;
+    const current = this.activeDispatch.get(key);
+    if (runId && current?.runId === runId) return;
+    // A separate host runtime may have saved the preference on disk.
+    if (fs.existsSync(this.file)) this.cache = null;
+    this.activeDispatch.set(key, {runId, value: this.forSession(key).dispatch});
+    if (this.activeDispatch.size > MAX_SESSIONS) this.activeDispatch.delete(this.activeDispatch.keys().next().value);
+  }
+  endDispatch(key, runId) {
+    const current = this.activeDispatch.get(key);
+    if (current && (!runId || !current.runId || current.runId === runId)) this.activeDispatch.delete(key);
+  }
+  dispatchFor(key) { return this.activeDispatch.get(key)?.value || this.forSession(key).dispatch; }
   load() {
     if (this.cache) return this.cache;
     let data = {};
@@ -141,11 +159,14 @@ export class SessionPrefs {
       own[option.field] = params[option.field];
     }
     own.updatedAt = Date.now();
-    delete data.sessions[key];
-    data.sessions[key] = own;
-    const keys = Object.keys(data.sessions);
-    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_SESSIONS))) delete data.sessions[old];
-    this.save();
+    const sessions = {...data.sessions};
+    delete sessions[key];
+    sessions[key] = own;
+    const keys = Object.keys(sessions);
+    for (const old of keys.slice(0, Math.max(0, keys.length - MAX_SESSIONS))) delete sessions[old];
+    const next = {...data, sessions};
+    writeSessionJson(this.file, next);
+    this.cache = next;
     // 回真正存下、下一轮会生效的那一份：界面按它画，不按自己以为改成了什么画。
     return {ok: true, ...this.forSession(key)};
   }
@@ -164,14 +185,14 @@ export class SessionPrefs {
     // Metre 的手册只有一份、固定开销有预算（briefs/metre-mode-1113 PLAN 2.2）：联网开关照旧，说明压成一句。
     if (prefs.web) parts.push(agentOf(key) === 'metre' ? METRE_WEB_ON : WEB_ON);
     const option = MODE_OPTIONS[agentOf(key)];
-    const extra = option && option.text[prefs[option.field]];
+    const extra = option && option.text[agentOf(key) === 'metre' ? this.dispatchFor(key) : prefs[option.field]];
     // Metre 的标记只有一行，紧跟在联网那句后面（单个换行，省预算：PROGRESS F4）。
     if (extra && agentOf(key) === 'metre') return [parts.join('\n\n'), extra].filter(Boolean).join('\n');
     if (extra) parts.push(extra);
     return parts.join('\n\n');
   }
   // Metre 这个会话现在是独做（Virtuoso）：派发工具不提供。
-  solo(key) { return validKey(key) && agentOf(key) === 'metre' && this.forSession(key).dispatch === 'solo'; }
+  solo(key) { return validKey(key) && agentOf(key) === 'metre' && this.dispatchFor(key) === 'solo'; }
   metreLimits() {
     const g = this.load().global;
     const running = Number.isInteger(g.metreMaxRunning) && g.metreMaxRunning >= METRE_RUNNING.min && g.metreMaxRunning <= METRE_RUNNING.max
@@ -207,8 +228,12 @@ export function registerSessionPrefs(api, {root}) {
     return {ok: true, ...prefs.forSession(key)};
   });
   method('pinkie.session.prefs.set', ({key, ...rest}) => prefs.setSession(key, rest));
+  const turnKey = (event, ctx) => String(ctx?.sessionKey || event?.sessionKey || '');
+  const runId = (event, ctx) => String(event?.runId || ctx?.runId || '');
+  api.on?.('before_agent_run', (event, ctx) => { prefs.beginDispatch(turnKey(event, ctx), runId(event, ctx)); });
+  api.on?.('agent_end', (event, ctx) => { prefs.endDispatch(turnKey(event, ctx), runId(event, ctx)); });
   api.on?.('before_prompt_build', (event, ctx) => {
-    const text = prefs.promptContext(String(ctx?.sessionKey || ''));
+    const text = prefs.promptContext(turnKey(event, ctx));
     return text ? {appendSystemContext: `\n${text}\n`} : undefined;
   }, {priority: -10880});
   api.on?.('before_tool_call', (event, ctx) => {

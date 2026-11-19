@@ -561,7 +561,12 @@ export class SessionManager {
     if (action === 'list') return this.list(caller, params);
     if (action === 'search') return this.searchSessions(caller, params);
     if (action === 'read') return this.read(caller, params);
-    if (action === 'create') return this.create(caller, params);
+    if (action === 'create') {
+      if (caller.metre && plainText(params.message) && this.lineage?.solo?.(callerKey)) {
+        throw new Error('这个会话本轮是 Virtuoso（独做）：不能新建会话来执行任务');
+      }
+      return this.create(caller, params);
+    }
     if (action === 'restore') return this.restore(params.backup || params.folder);
     if (action === 'stop_children') {
       const parent = sessionParam(params) ? this.target(caller, sessionParam(params)) : caller.key;

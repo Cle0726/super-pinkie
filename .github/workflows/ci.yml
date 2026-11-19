@@ -87,7 +87,7 @@ jobs:
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: webkit
-        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs
+        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
 
   windows-build:
     needs: [portable-checks, macos-check]
@@ -154,7 +154,7 @@ jobs:
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: chromium
-        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs
+        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
       - name: Run the execution, recovery, UI and desktop suites on Windows
         timeout-minutes: 30
         # bash keeps this step identical to portable-checks: the default shell

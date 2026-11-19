@@ -50,3 +50,26 @@ test('the page asks the gateway for today once a day, keeps it locally, and Metr
   assert.match(source, /localStorage\.setItem\(FESTIVAL_KEY/);
   assert.match(source, /selected === 'metre' \? null : todayFestival\(\)/);
 });
+
+test('home fallback keeps the Metre strategy on the actual new session and rejects a failed write', async () => {
+  const start = source.indexOf('  async function carrySettings(');
+  const end = source.indexOf('\n  const leave =', start);
+  const from = 'agent:metre:old', to = 'agent:metre:new';
+  const calls = [];
+  let acknowledge = 'solo';
+  const carry = vm.runInNewContext('(' + source.slice(start, end).trim() + ')', {
+    agentFor: mode => mode, localStorage: {getItem: () => null},
+    window: {__laolaoSidebar: {gwRequest: async (method, params) => {
+      calls.push([method, {...params}]);
+      if (method === 'sessions.list') return {sessions: []};
+      if (method === 'pinkie.session.prefs.get') return {ok: true, dispatch: 'solo'};
+      return {ok: true, dispatch: acknowledge};
+    }}},
+  });
+  await carry(from, to, 'metre');
+  assert.deepEqual(calls.slice(1), [
+    ['pinkie.session.prefs.get', {key: from}], ['pinkie.session.prefs.set', {key: to, dispatch: 'solo'}],
+  ]);
+  acknowledge = 'dispatch';
+  await assert.rejects(carry(from, to, 'metre'), /没能保存 Baton \/ Virtuoso/);
+});

@@ -685,7 +685,7 @@
     const state = input.closest('openclaw-chat-pane')?.state || pane()?.state;
     const key = state?.sessionKey || currentKey();
     if (!state || typeof state.handleSendChat !== 'function') return false;
-    if (sendingExpanded) return true;
+    if (sendingExpanded || dispatchSavePending(key)) return true;
     sendingExpanded = true;
     try {
       const pastes = pasteItems(state);
@@ -749,6 +749,18 @@
   // ---------- C3 / C4 composer chips ----------
   const STYLE_LABEL = {default: '默认', concise: '简洁', detailed: '详细讲解', casual: '口语聊天', formal: '正式书面', custom: '自定义'};
   const prefsCache = new Map();
+  const dispatchSaving = new Map();
+  const prefsPane = () => {
+    if (document.documentElement.dataset.laolaoMode !== 'metre') return pane();
+    const all = [...document.querySelectorAll('openclaw-chat-pane')];
+    return all.find(item => item.active === true || item.hasAttribute('active'))
+      || all.find(item => item.state?.sessionKey === currentKey()) || all[0];
+  };
+  const prefsKey = () => {
+    const live = prefsPane()?.state?.sessionKey;
+    return /^agent:metre:/.test(live || '') && document.documentElement.dataset.laolaoMode === 'metre'
+      ? live : currentKey();
+  };
   // 缺的字段用默认值补上：web 只有明确是 false 才算关。原来整份替换，回包里没有 web 时
   // 按钮显示「开」、点一下却又写成「开」，看起来就是点了没反应。
   const normalPrefs = got => ({style: 'default', web: true, ...got, web: got.web !== false});
@@ -758,6 +770,8 @@
     if (!force && cached && !cached.unread) return cached;
     try {
       const got = await request('pinkie.session.prefs.get', {key}, 8000);
+      const latest = prefsCache.get(key);
+      if (latest && latest !== cached && !latest.unread) return latest;
       if (got?.ok) { const value = normalPrefs(got); prefsCache.set(key, value); return value; }
     } catch {}
     // 读不到后端（网关没连上、超时）：不能把默认值当成这个会话的真实设置画出来、存下来。
@@ -766,7 +780,7 @@
     const unread = {style: 'default', web: true, unread: true};
     prefsCache.set(key, unread);
     window.clearTimeout(prefsRetry);
-    prefsRetry = window.setTimeout(() => { if (currentKey() === key) void paintChips(true); }, 6000);
+    prefsRetry = window.setTimeout(() => { if (prefsKey() === key) void paintChips(true); }, 6000);
     return unread;
   }
   // 存完以后按后端回的那一份画（session-prefs.mjs 回存下的设置）；老网关只回 {ok:true} 时再读一次。
@@ -774,7 +788,7 @@
     const saved = await rpcOk('pinkie.session.prefs.set', {key, ...patch});
     const fresh = saved && typeof saved === 'object' && 'web' in saved ? normalPrefs(saved) : await sessionPrefs(key, true);
     if (!fresh.unread) prefsCache.set(key, fresh);
-    void paintChips(true, fresh);
+    if (prefsKey() === key) void paintChips(true, fresh);
     return fresh;
   }
   // 提示只说后端确实存下的结果：没改成（老网关不认识这个选项）就照实说。
@@ -885,12 +899,19 @@
     host.dataset.value = value === 'dispatch' ? 'default' : value;
     for (const item of BATON) {
       const seg = button(item.label, 'pinkie-baton__seg', async () => {
-        if (item.value === value) return;
+        if (item.value === value || dispatchSaving.has(key)) return;
+        const saving = setSessionPref(key, {dispatch: item.value});
+        dispatchSaving.set(key, saving);
+        for (const option of host.querySelectorAll('[role="radio"]')) option.disabled = true;
         try {
-          const fresh = await setSessionPref(key, {dispatch: item.value});
+          const fresh = await saving;
           // 切换提示只写英文（PLAN 6.1）。
-          toast(confirmed(fresh, 'dispatch', item.value) ? (runningNow() ? item.label + ' · from your next message' : item.label) : notSaved);
+          toast(confirmed(fresh, 'dispatch', item.value) ? (runningNow() ? item.label + ' · next turn' : item.label) : notSaved);
         } catch (error) { toast(error.message); }
+        finally {
+          dispatchSaving.delete(key);
+          for (const option of host.querySelectorAll('[role="radio"]')) option.disabled = false;
+        }
       });
       seg.setAttribute('role', 'radio');
       seg.setAttribute('aria-checked', String(item.value === value));
@@ -925,8 +946,8 @@
   }
   let chipKey = '', chipsLoading = '';
   async function paintChips(force = false, given = null) {
-    const controls = document.querySelector('openclaw-chat-pane .agent-chat__composer-controls');
-    const key = currentKey();
+    const key = prefsKey();
+    const controls = prefsPane()?.querySelector('.agent-chat__composer-controls');
     if (!controls || !key) return;
     let host = controls.querySelector(':scope > .pinkie-composer-chips');
     if (host && !force && host.dataset.key === key) return;
@@ -938,7 +959,7 @@
     try { prefs = given || await sessionPrefs(key, force || host?.dataset.key !== key); }
     finally { if (chipsLoading === key) chipsLoading = ''; }
     // A slower load for a session we already left must not repaint the chips.
-    if (currentKey() !== key) return;
+    if (prefsKey() !== key || !controls.isConnected) return;
     host = controls.querySelector(':scope > .pinkie-composer-chips');
     if (!host) { host = el('div', 'pinkie-composer-chips'); controls.append(host); }
     host.dataset.key = key;
@@ -970,6 +991,27 @@
     if (mode) { if (old) old.replaceWith(mode); else controls.append(mode); } else old?.remove();
     window.dispatchEvent(new CustomEvent('pinkie:composer-chips', {detail: {sessionKey: key}}));
   }
+
+  function dispatchSavePending(key) {
+    if (!dispatchSaving.has(key)) return false;
+    toast('正在保存 Baton / Virtuoso，保存后再发送。');
+    return true;
+  }
+  function waitForDispatchSave(event, composer) {
+    const key = composer?.closest('openclaw-chat-pane')?.state?.sessionKey || prefsKey();
+    if (!dispatchSavePending(key)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+  document.addEventListener('click', event => {
+    const send = event.target?.closest?.('.chat-send-btn');
+    if (send && !/--(?:stop|voice|laolao-dictation)\b/.test(send.className)) waitForDispatchSave(event, send);
+  }, true);
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+    const input = event.target?.closest?.('.agent-chat__composer-combobox textarea');
+    if (input) waitForDispatchSave(event, input);
+  }, true);
 
   // C4 source badges: URLs from this turn's web_search / web_fetch results.
   const WEB_TOOLS = new Set(['web_search', 'web_fetch', 'pinkie_search']);
@@ -1108,6 +1150,6 @@
 
   window.PinkieSessionTools = Object.freeze({
     isTemp, startTemp, leaveTemp, openExport, runExport, exportHtml, markdownToHtml, openOutline, jumpUser,
-    isLongPaste, pasteAttachment, foldPastes, expandMentions, mentionMap, sessionPrefs, paintChips, turnSources, sourcesFromResult,
+    isLongPaste, pasteAttachment, foldPastes, expandMentions, mentionMap, sessionPrefs, paintChips, dispatchSavePending, turnSources, sourcesFromResult,
   });
 })();

@@ -689,12 +689,20 @@ def verify_metre_sidebar(page, out, upstream):
       && !document.getElementById('laolao-splash') && Boolean(window.__laolaoSidebar?.gwRequest)
       && Boolean(document.querySelector('#laolao-session-manager'))""", timeout=90_000)
     try:
-        await_dispatch = page.evaluate("""async ([key, prompt]) => {
+        page.evaluate("""async key => {
           const rpc = window.__laolaoSidebar.gwRequest;
           await rpc('sessions.create', {key, agentId: 'metre', model: 'probe/probe-model'}, 15000);
           localStorage.setItem('pinkie:session-sidebar:fold:' + key, '1');
-          return rpc('chat.send', {sessionKey: key, message: prompt, deliver: false, idempotencyKey: key}, 20000);
-        }""", [parent, DISPATCH_PROMPT])
+        }""", parent)
+        for label, value in (("Virtuoso", "solo"), ("Baton", "dispatch")):
+            page.get_by_role("radio", name=label, exact=True).click(timeout=20_000)
+            page.locator(f'.pinkie-baton__seg[aria-label="{label}"][aria-checked="true"]').wait_for(timeout=20_000)
+            saved = page.evaluate("""key => window.__laolaoSidebar.gwRequest('pinkie.session.prefs.get', {key})""", parent)
+            if saved.get("dispatch") != value:
+                raise RuntimeError(f"{label} was not saved for the conversation receiving the message")
+        await_dispatch = page.evaluate("""([key, prompt]) => window.__laolaoSidebar.gwRequest(
+          'chat.send', {sessionKey: key, message: prompt, deliver: false, idempotencyKey: key}, 20000)
+        """, [parent, DISPATCH_PROMPT])
         if await_dispatch.get("status") not in ("started", "ok"):
             raise RuntimeError("Metre test message did not start")
         entry = page.locator('[data-laolao-group="__metre-dispatched"] [data-session-key]').filter(has_text=DISPATCH_TITLE)
