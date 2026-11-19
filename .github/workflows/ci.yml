@@ -174,9 +174,13 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: |
-          # Both suites always run, so a Node failure never hides the Python results; the step still fails if either does.
+          # Browser-heavy files launch real Chrome and WebKit concurrently.
+          # On the small Windows runner, an input click and a desk mount timed
+          # out under the default process fan-out. Run every file, but bound
+          # the number of processes instead of extending those test deadlines.
+          # Both suites still run even if the other fails.
           status=0
-          node --test tests/*.test.cjs tests/*.test.mjs || status=1
+          node --test --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
           python -m unittest discover -s tests -p '*_test.py' -v || status=1
           exit $status
       - name: Check Python services

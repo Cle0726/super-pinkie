@@ -22,7 +22,7 @@ import {ModelHealth} from '../services/mode-architecture/model-health.mjs';
 import {sessionHintBlock} from '../services/mode-architecture/session-hints.mjs';
 import {registerMetreMemory} from '../services/mode-architecture/metre-memory.mjs';
 import modeArchitecturePlugin, {CompletionIntegrityGuard, modeForContext} from '../services/mode-architecture/index.mjs';
-import {collect, verifyBaseline} from '../tools/metre/inject-inventory.mjs';
+import {collect, portableBaselineSample, verifyBaseline} from '../tools/metre/inject-inventory.mjs';
 
 const METRE = 'agent:metre:dashboard:boss';
 const PROJECT = 'agent:project:dashboard:parent';
@@ -1051,8 +1051,19 @@ test('R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 汇报检查、主 MD 字数、
   }
 });
 
-// ---------- Z3a ★ & Z3c ★: 五个老模式逐字一致性快照回归 ----------
-test('Z3a ★ & Z3c ★ 五个老模式注入与工具定义快照和 R0 基准逐字一致', async () => {
+// This regression snapshot is pinned to main before Roles, not the historical
+// R0 artifact. Historical comparison is reported separately during acceptance.
+test('five legacy mode snapshots match the pinned main regression baseline', async () => {
   const res = await verifyBaseline(path.resolve('briefs/metre-roles-1118/main-inject-baseline.json'));
   assert.equal(res.ok, true, `老模式基线被意外改动：${res.diffs.join('; ')}`);
+});
+
+test('legacy snapshot tolerates only platform separators in recorded fixture paths', () => {
+  const win = String.raw`读 <WORKSPACE>\playbooks\toolbox.mjs。记 <STATE_ROOT>\目录\state.json；正则 \d+。`;
+  const posix = String.raw`读 <WORKSPACE>/playbooks/toolbox.mjs。记 <STATE_ROOT>/目录/state.json；正则 \d+。`;
+  const compare = text => portableBaselineSample(text, 'main');
+  assert.equal(compare(win), compare(posix));
+  assert.notEqual(compare(win), compare(posix.replace('toolbox.mjs', 'other.mjs')));
+  assert.notEqual(compare(win), compare(posix.replace(String.raw`\d+`, '/d+')));
+  assert.notEqual(compare(win), compare(posix.replace('正则', '改正文')));
 });

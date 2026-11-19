@@ -240,12 +240,23 @@ function profileNeutralSample(text, mode, stateDir) {
   }).join('\n');
 }
 
+// Only compare filesystem suffixes attached to the inventory's own fixture
+// markers across OSs. Backslashes elsewhere (commands, regexes, user prose)
+// and changed relative filenames are still part of the snapshot.
+export function portableBaselineSample(text, mode, stateDir) {
+  const profileNeutral = profileNeutralSample(text, mode, stateDir);
+  return typeof profileNeutral === 'string'
+    ? profileNeutral.replace(/<(?:WORKSPACE|STATE_ROOT)>[\\/][\p{L}\p{N}_.\\/-]*/gu, value => value.replaceAll('\\', '/'))
+    : profileNeutral;
+}
+
 export async function verifyBaseline(baselinePath) {
   const expected = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
   const stateDir = openclawStateDir();
   const actual = await collectBaseline({modes: Object.keys(expected.modes), prompts: expected.prompts});
   const diffs = [];
   let profileReplacements = 0;
+  let portableMatches = 0;
   if (sha256(JSON.stringify(expected.modes)) !== expected.overallSha256) {
     diffs.push('archived baseline hash does not match its contents');
   }
@@ -266,12 +277,16 @@ export async function verifyBaseline(baselinePath) {
           profileReplacements++;
           continue;
         }
+        if (actSample && portableBaselineSample(expSample.text, mode) === portableBaselineSample(actSample.text, mode, stateDir)) {
+          portableMatches++;
+          continue;
+        }
         diffs.push(`${mode} sample #${i + 1}: sha256 mismatch (${expSample.sha256} != ${actSample?.sha256})`);
       }
     }
   }
-  return {ok: diffs.length === 0 && (expected.overallSha256 === actual.overallSha256 || profileReplacements > 0),
-    expectedOverall: expected.overallSha256, actualOverall: actual.overallSha256, profileReplacements, diffs, actual};
+  return {ok: diffs.length === 0 && (expected.overallSha256 === actual.overallSha256 || profileReplacements + portableMatches > 0),
+    expectedOverall: expected.overallSha256, actualOverall: actual.overallSha256, profileReplacements, portableMatches, diffs, actual};
 }
 
 // 每段注入的「块」：按【标题】或 ## 标题切开，方便逐项标留 / 去。
@@ -296,7 +311,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const target = path.resolve(args[verifyIdx + 1] || 'briefs/metre-roles-1118/legacy-inject-baseline.json');
     const res = await verifyBaseline(target);
     console.log(JSON.stringify({ok: res.ok, expectedOverall: res.expectedOverall, actualOverall: res.actualOverall,
-      profileReplacements: res.profileReplacements, diffs: res.diffs}, null, 2));
+      profileReplacements: res.profileReplacements, portableMatches: res.portableMatches, diffs: res.diffs}, null, 2));
     process.exit(res.ok ? 0 : 1);
   }
   const json = args.includes('--json');

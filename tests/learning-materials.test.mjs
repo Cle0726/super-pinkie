@@ -53,7 +53,15 @@ test('synthetic survey reads PDF PPTX GBK archives and encrypted flags while lea
 });
 import {LearningMaterials,materialRole,materialSubject,createLearningMaterialTool,P4,P5,P6} from '../services/mode-architecture/learning-materials.mjs';
 import {LearningMaterialsJobs,parseTSV,formulaRisk,nightWindow,acPower} from '../services/mode-architecture/learning-materials-jobs.mjs';
-import {subtitlePages} from '../services/mode-architecture/learning-materials-extract.mjs';
+import {extractFile,subtitlePages} from '../services/mode-architecture/learning-materials-extract.mjs';
+test('text extraction uses the bundled Node worker on Windows without a Git Bash PATH',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'pinkie-text-worker-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'含 空格.md');await fs.writeFile(file,'# 电流\n电荷定向移动。');
+ const original=process.env.PATH;
+ if(process.platform==='win32')process.env.PATH=path.dirname(process.execPath);
+ try{assert.deepEqual((await extractFile(file)).map(p=>p.text),['# 电流\n电荷定向移动。']);}
+ finally{if(original===undefined)delete process.env.PATH;else process.env.PATH=original;}
+});
 async function indexFixture(t,options={}){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'pinkie-materials-'));const input=path.join(root,'source'),teach=path.join(input,'04_电工电子','01_课件');await fs.mkdir(teach,{recursive:true});await makeFixtures(teach);
  const materials=new LearningMaterials({root:path.join(root,'index'),roots:[{id:'zsb',path:input,label:'合成讲义'}],freeMemory:()=>4*1024**3,...options});await materials.init();t.after(async()=>{await materials.close();await fs.rm(root,{recursive:true,force:true});});return {root,input,teach,materials};
