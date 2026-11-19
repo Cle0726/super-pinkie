@@ -18,8 +18,8 @@
 | 步骤 | 状态 | 说明 |
 |---|---|---|
 | 1. `tools/metre/roles/lint-cards.mjs` + 样板卡 `backend-fix.md` | 已完成 | 支持 33 张官方卡格式/表一致性与 40 字不抄手册检查，先行推送供窗口 3 使用 |
-| 2. 其余 8 张「编码（coding）」角色卡 | 进行中 | `feature-dev`、`frontend-fix`、`test-engineer`、`code-reviewer`、`refactor`、`perf-tuner`、`security-auditor`、`upgrader` |
-| 3. 6 张「执行（execution）」角色卡 | 待开始 | `plan-executor`、`batch-runner`、`env-setup`、`automation-builder`、`release-prep`、`web-operator` |
+| 2. 其余 8 张「编码（coding）」角色卡 | 已完成 | `feature-dev`、`frontend-fix`、`test-engineer`、`code-reviewer`、`refactor`、`perf-tuner`、`security-auditor`、`upgrader` 全部通过 `lint-cards.mjs` |
+| 3. 6 张「执行（execution）」角色卡 | 进行中 | `plan-executor`、`batch-runner`、`env-setup`、`automation-builder`、`release-prep`、`web-operator` |
 | 4. 15 份角色样题（30 道题） | 待开始 | `tools/metre/roles/samples/<id>.json` |
 | 5. `ACCEPTANCE.md` 逐条自查与收工核对 | 待开始 | R1-2、R3-1..R3-6、R3-8、R3-9 |
 
@@ -33,3 +33,9 @@
   - 校验 `reads` 路径安全性（禁止 `..` 与绝对路径）并解析工作区手册文件，检查正文任何连续 40 个字以上不得原样出现在引用文件或工作区手册中。
   - 内置 PLAN 第四节全部 33 张角色卡的规格表（`id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`review`、`deny_commands`）以及 R3-9 只读角色无 `write` 规则。
 - 写入 `personas/metre/roles/backend-fix.md` 并通过 `node tools/metre/roles/lint-cards.mjs` 验证；同时用故意从 `playbooks/debugging.md` 复制 40 字的临时卡验证脚本能准确报错拦截。
+
+### Step 2：完成「编码（coding）」全部 9 张角色卡
+
+- 新增 8 张角色卡：`feature-dev.md`、`frontend-fix.md`、`test-engineer.md`、`code-reviewer.md`、`refactor.md`、`perf-tuner.md`、`security-auditor.md`、`upgrader.md`。
+- 逐张核对 PLAN 第四节表格中的 `when`、`tier`、`vision`、`tools`、「必须做到」与「交回要带」全部覆盖，只读卡 `code-reviewer`、`security-auditor` 的 `tools` 均不含 `write`。
+- 运行 `node tools/metre/roles/lint-cards.mjs`，9/9 张全部 PASS。
