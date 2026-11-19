@@ -150,7 +150,7 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
             $opened | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}
         """))
         deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and (by_path.poll() is None or by_profile.poll() is None):
+        while time.monotonic() < deadline and (opener.poll() is None or by_path.poll() is None or by_profile.poll() is None):
             time.sleep(.2)
         self.assertIsNotNone(opener.poll(), "the helper that opened a program kept running")
         self.assertIsNotNone(by_path.poll(), "a helper naming the install folder kept running")

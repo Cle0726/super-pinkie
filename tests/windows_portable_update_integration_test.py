@@ -339,6 +339,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                           str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE,creationflags=hidden)
                 out,err=process.communicate(timeout=30)
+                self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
                 if gateway_kind in ('unknown_external','mismatched_record','wrong_command','acl_denied'):
                     self.assertEqual(process.returncode,1,err.decode('utf-8',errors='replace'))

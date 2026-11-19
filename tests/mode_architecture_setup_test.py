@@ -42,7 +42,7 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertIn('碧琪', chat_core)
             self.assertNotIn('公猫', chat_core)
             self.assertNotIn('雅叙', chat_core)
-            collab_wrapper = (home / 'Library/Application Support/SuperPinkie/web-gpt-collab/pinkie-collab').read_text()
+            collab_wrapper = (Path(setup.state_root(home)) / 'web-gpt-collab/pinkie-collab').read_text()
             self.assertIn('C2C_TUNNEL_PROTOCOL', collab_wrapper)
             self.assertIn('http2', collab_wrapper)
             manifest = json.loads((home / '.openclaw/extensions/pinkie-mode-architecture/openclaw.plugin.json').read_text())

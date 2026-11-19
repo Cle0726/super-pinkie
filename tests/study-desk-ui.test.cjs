@@ -5,7 +5,7 @@ const controlUIRoots = [process.env.PINKIE_CONTROL_UI_ROOT, '/Applications/超�
 const needsControlUI = controlUIRoots.some(root => require('node:fs').existsSync(require('node:path').join(root, 'index.html'))) ? {} : {skip: '没有构建好的 control-ui'};
 test.before(async () => { harnessModule = await import('../tools/study-desk/harness.mjs'); });
 async function run(options, fn) {
-  const {handler = () => ({}), ...settings} = options;
+  const {handler = () => ({}), reducedMotion, ...settings} = options;
   const harness = await harnessModule.startHarness({
     ...settings,
     handler(method, params) {
@@ -16,7 +16,7 @@ async function run(options, fn) {
   });
   const engine = options?.engine || 'webkit';
   const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}));
-  try { const page = await browser.newPage({viewport: {width: 1440, height: 900}}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
+  try { const page = await browser.newPage({viewport: {width: 1440, height: 900}, ...(reducedMotion ? {reducedMotion} : {})}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
   finally { try { await browser.close(); } finally { await harness.close(); } }
 }
 test('learning shell mounts once, restores native chat, and cleans up across ten mode changes', async () => {
@@ -60,12 +60,8 @@ test('pinned GSAP stays isolated, exact prototype tokens follow night mode', asy
   });
 });
 test('missing libraries and reduced motion render without exceptions or animation', async () => {
-  await run({vendor: false}, async page => {
-    await page.emulateMedia({reducedMotion: 'reduce'});
-    // WebKit reports RPCs cut off by a reload as page errors; let the first load settle.
-    await page.waitForLoadState('networkidle');
-    await page.reload();
-    await page.locator('#pinkie-study-desk').waitFor();
+  // 一开页就是减少动态，不再靠刷新：WebKit 会把刷新时被切断的 RPC 报成页面错误，等 networkidle 也躲不干净（轮询一直在发）。
+  await run({vendor: false, reducedMotion: 'reduce'}, async page => {
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.motion.reduced), true);
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.motion.gsap), null);
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.motion.splitIn(document.querySelector('.greet'))), null);
