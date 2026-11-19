@@ -16,7 +16,7 @@ on:
         description: "Release to test when package=release"
         default: v2.5.26
       old_tag:
-        description: "Older release that seeds the upgrade profile (empty = fresh profile only)"
+        description: "Older release for upgrade; empty = fresh only; metre-only = only check Metre in a fresh profile"
         default: v2.5.16
   workflow_call:
     inputs:
@@ -83,7 +83,7 @@ jobs:
           path: smoke-app
 
       - name: Download older release for the upgrade profile
-        if: env.OLD_TAG != ''
+        if: env.OLD_TAG != '' && env.OLD_TAG != 'metre-only'
         shell: pwsh
         run: |
           gh release download "$env:OLD_TAG" -R "${{ github.repository }}" -p "*-portable.zip" -D smoke-old-dl
@@ -103,6 +103,7 @@ jobs:
           $arguments = @('tools\windows-smoke\smoke.py', '--app', 'smoke-app', '--out', 'smoke-out', '--strict', '--upstream-probe')
           if ($env:PACKAGE -ne 'release') { $arguments += '--metre-sidebar' }
           if (Test-Path smoke-old) { $arguments += @('--old-app', 'smoke-old') }
+          if ($env:OLD_TAG -eq 'metre-only') { $arguments += '--metre-sidebar-only' }
           python @arguments
 
       - name: Upload evidence
