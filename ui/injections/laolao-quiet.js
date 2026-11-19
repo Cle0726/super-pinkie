@@ -30,6 +30,38 @@
     }
     try { window.dispatchEvent(new CustomEvent('pinkie:quiet-change', {detail: {quiet}})); } catch {}
   }
+  let legacyLoaded;
+  const stopLegacyMotion = () => {
+    window.gsap?.ticker?.sleep();
+    window.__pinkieDeskVendors?.gsap?.ticker?.sleep();
+  };
+  const legacySelector = 'script[type="application/x-pinkie-legacy"][src]';
+  let signatureLoaded;
+  function activateScript(entry) {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.async = false;
+      script.src = entry.src;
+      script.onload = resolve;
+      script.onerror = resolve;
+      entry.replaceWith(script);
+    });
+  }
+  function loadSignature() {
+    const entry = document.querySelector(legacySelector + '[data-pinkie-signature]');
+    if (entry) signatureLoaded = activateScript(entry);
+    return signatureLoaded;
+  }
+  function loadLegacy() {
+    if (want() || (!root.hasAttribute('data-laolao-mode') && root.hasAttribute('data-laolao-splash-metre'))) return;
+    if (legacyLoaded) return legacyLoaded;
+    const scripts = [...document.querySelectorAll(legacySelector + ':not([data-pinkie-signature])')];
+    // Dynamic classic scripts with async=false execute in insertion order.
+    // The study vendors snapshot and restore window.gsap around their own copy.
+    legacyLoaded = Promise.all([loadSignature(), ...scripts.map(activateScript)])
+      .then(() => { if (want()) stopLegacyMotion(); });
+    return legacyLoaded;
+  }
   window.__pinkieQuiet = Object.freeze({
     get quiet() { return quiet; },
     register(name, hooks = {}) {
@@ -47,6 +79,7 @@
       if (quiet) rec.suspended = true; else id = setInterval(fn, ms);
       return true;
     },
+    loadSignature,
     list: () => [...modules].map(([name, rec]) => ({name, suspended: rec.suspended})),
   });
   // 后端那一半（services/mode-architecture/quiet-mode.mjs）：告诉网关现在是不是 Metre。网关那边 30 分钟不续就当不是，
@@ -57,11 +90,13 @@
     if (typeof request === 'function') request('pinkie.quiet.set', {quiet}, 8000).catch(() => {});
   };
   window.addEventListener('pinkie:quiet-change', () => {
+    if (quiet) stopLegacyMotion(); else loadLegacy();
     tell();
     clearInterval(renew); renew = quiet ? setInterval(tell, 10 * 60_000) : 0;
   });
   window.addEventListener('pinkie:sidebar-gateway-ready', tell);
   new MutationObserver(apply).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode']});
   apply();
+  document.addEventListener('DOMContentLoaded', loadLegacy, {once: true});
   if (quiet && !renew) renew = setInterval(tell, 10 * 60_000);
 })();

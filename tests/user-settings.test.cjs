@@ -19,7 +19,7 @@ test('user-facing permission presets have explicit mappings and preserve custom 
   const rules = loadSettingsRules();
   assert.deepEqual(JSON.parse(JSON.stringify(rules.presetMap)), {
     chat: {profile: 'minimal', execSecurity: 'deny', browserEnabled: false,
-      alsoAllow: ['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask']},
+      alsoAllow: ['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions']},
     work: {profile: 'coding', execSecurity: 'allowlist', browserEnabled: false},
     open: {profile: 'full', execSecurity: 'full', browserEnabled: true},
   });

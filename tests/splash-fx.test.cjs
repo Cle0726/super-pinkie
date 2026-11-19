@@ -70,7 +70,7 @@ test('first paint stays CSS-only: blurred art that focuses by itself and letters
 test('splash.js hands the cold start to the FX only after first paint and keeps every gate', () => {
   const splash = read('ui/injections/laolao-splash.js');
   assert.match(splash, /window\.requestAnimationFrame\(\(\) => \{[\s\S]*?requestIdleCallback\(startFx, \{timeout: 400\}\)/);
-  assert.match(splash, /if \(completed \|\| splashFx \|\| switching\) return;/);
+  assert.match(splash, /if \(completed \|\| splashFx \|\| switching(?: \|\| metre)?\) return;/);
   assert.match(splash, /onImpact: \(\) => \{ fxEntered = true; motion\.enter\(\); \}/);
   assert.match(splash, /if \(splashFx\?\.active\) \{/);
   for (const gate of [/elapsed >= 6500/, /loginReady\(now\) && elapsed >= 5000/, /\}, 30000\);/, /const minimum = motion\.reduced\(\) \? 400 : switching \? 700 : 2600/]) {

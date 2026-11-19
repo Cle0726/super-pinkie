@@ -780,9 +780,19 @@
     root.setTimeout(go, 15000);   // 开屏万一没发出结束信号，也不能永远不预备
   });
   const warmQueue = [];
+  const isMetre = () => root.document?.documentElement?.getAttribute?.('data-laolao-mode') === 'metre';
+  function releaseWarmStage() {
+    warmQueue.length = 0;
+    if (!stage || stage.busy) return;
+    const idle = stage;
+    stage = null;
+    idle.lost = true;
+    idle.gl.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+  root.__pinkieQuiet?.register('mode-transition-fx', {suspend: releaseWarmStage});
   let warming = false;
   function warm(id, {soon = false} = {}) {
-    if (!supported(id) || stage?.modes.has(id)) return;
+    if (isMetre() || !supported(id) || stage?.modes.has(id)) return;
     const at = warmQueue.indexOf(id);
     if (at >= 0 && soon) warmQueue.splice(at, 1);
     if (at < 0 || soon) soon ? warmQueue.unshift(id) : warmQueue.push(id);
@@ -790,7 +800,7 @@
     warming = true;
     void (async () => {
       await appIdle();
-      while (warmQueue.length) {
+      while (warmQueue.length && !isMetre()) {
         const current = root.document.documentElement?.getAttribute?.('data-laolao-mode');
         const index = Math.max(0, warmQueue.findIndex((queued) => queued !== current));
         const [next] = warmQueue.splice(index, 1);
@@ -1161,7 +1171,8 @@
         s.busy = false;
         s.canvas.remove();
         s.canvas.width = s.canvas.height = 2;   // 放掉全屏大小的绘图缓冲，贴图留着下次用
-        if (s !== stage) try { s.gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
+        if (s === stage && isMetre()) releaseWarmStage();
+        else if (s !== stage) try { s.gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
       }
       ui.overlay.remove();
       resolveCovered();

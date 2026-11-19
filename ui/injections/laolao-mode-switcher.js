@@ -387,7 +387,8 @@
   };
 
   const preloadTransitions = async () => {
-    if (preloading) return;
+    if (preloading || document.documentElement.getAttribute('data-laolao-mode') === 'metre'
+      || document.documentElement.hasAttribute('data-laolao-splash-metre')) return;
     preloading = true;
     // All assets are local. Pre-decode them during the first idle window so a
     // later mode switch does not wait behind a 3.6s timer plus four serial
@@ -907,7 +908,7 @@
     option.style.setProperty("--laolao-mode-fx-delay", `${index * 40}ms`);
     renderModeButton(option, mode, {current});
     const warm = () => {
-      if (mode.plain) return;
+      if (mode.plain || document.documentElement.getAttribute('data-laolao-mode') === 'metre') return;
       void motion.modeAssets(mode.id);
       window.PinkieModeTransitionFx?.warm?.(mode.id, {soon: true});
     };

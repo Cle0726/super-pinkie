@@ -486,13 +486,14 @@
     const latest = events[events.length - 1];
     for (const button of $$("." + BUTTON_CLASS)) {
       button.classList.toggle("is-active", active);
-      button.dataset.stage = latest?.stage || (active ? "idle" : "off");
-      button.setAttribute("aria-pressed", String(active));
+      const stage = latest?.stage || (active ? "idle" : "off");
+      if (button.dataset.stage !== stage) button.dataset.stage = stage;
+      if (button.getAttribute("aria-pressed") !== String(active)) button.setAttribute("aria-pressed", String(active));
       const hint = active
         ? "网页 GPT 协作已开启：单击关闭，双击管理"
         : "单击开启网页 GPT 协作，双击管理";
-      button.setAttribute("aria-label", hint);
-      button.setAttribute("title", hint);
+      if (button.getAttribute("aria-label") !== hint) button.setAttribute("aria-label", hint);
+      if (button.title !== hint) button.title = hint;
     }
   };
 

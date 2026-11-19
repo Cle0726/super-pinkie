@@ -104,8 +104,8 @@ test('前端：调度器排在重模块前面，重模块都登记了 suspend / 
 
 test('11-16 夜：Metre 里思考时也有「C.le.」粒子签名，但只在运行期间占着 WebGL', () => {
   const src = fs.readFileSync(new URL('../ui/injections/laolao-cle-stage.js', import.meta.url), 'utf8');
-  assert.match(src, /^loadSpace\(\);$/m, '不再按模式挡住 three 的加载');
-  assert.doesNotMatch(src, /if \(!metreNow\(\)\) loadSpace\(\)/, 'Metre 里也加载');
+  assert.match(src, /if \(!metreNow\(\) && !document\.documentElement\.hasAttribute\('data-laolao-splash-metre'\)\) loadSpace\(\)/, 'Metre 冷启动不加载 three');
+  assert.match(src, /if \(!CleSpace\) \{ loadSpace\(\); return null; \}/, '运行时按需加载 three');
   assert.match(src, /register\('cle-space', \{suspend: dropSpace\}\)/, '进 Metre 时仍先拆掉');
   assert.match(src, /release\(\);\n    if \(metreNow\(\) && !owner\) dropSpace\(\);/, 'Metre：一轮落款完就把 WebGL 还回去');
 });

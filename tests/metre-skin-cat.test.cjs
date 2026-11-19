@@ -382,6 +382,9 @@ test('Metre backdrop: exists only in Metre chat pages, steps on a half-beat time
   const api = env.window.__pinkieMetreBackdrop;
   assert.ok(api.mounted && canvas, 'Metre 对话页上有画布');
   assert.ok('data-pk-metre-backdrop' in attrs);
+  assert.equal(api.running, false, 'idle chat has no backdrop timer');
+  api.preview(['run']);
+  api.sync();
   assert.equal(timers.at(-1).ms, 60_000 / 72 / 2, '每半拍（♩=72）走一格');
   timers.at(-1).fn();
   assert.equal(api.step, 1);

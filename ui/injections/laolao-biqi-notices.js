@@ -105,7 +105,7 @@
     '模型不接受这次的请求格式，换个模型或再试一次。',
     '模型服务出错，过一会儿再试。',
   ];
-  const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
+  const isMetre = () => typeof document !== 'undefined' && document.documentElement?.getAttribute?.('data-laolao-mode') === 'metre';
 
   const clean = (raw) => String(raw || '')
     .replace(/\s*Logs:\s*openclaw logs --follow\s*$/i, '')

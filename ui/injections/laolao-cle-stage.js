@@ -17,9 +17,10 @@
 // 11-16 夜用户要回来：Metre 里思考时也用这个「C.le.」粒子签名（批 6 原本在 Metre 里不加载）；
 //   Metre 里只在一轮运行期间占着 WebGL，落款结束就整个拆掉、把上下文还回去（见 endHold）。
 let CleSpace = null, spaceLoading = null;
-const loadSpace = () => spaceLoading ||= import('./laolao-cle-space.js?v=7').then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
+const loadSpace = () => spaceLoading ||= Promise.resolve(window.__pinkieQuiet?.loadSignature())
+  .then(() => import('./laolao-cle-space.js?v=7')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
 const metreNow = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
-loadSpace();
+if (!metreNow() && !document.documentElement.hasAttribute('data-laolao-splash-metre')) loadSpace();
 
 if (!window.__laolaoCleStage) {
   window.__laolaoCleStage = true;

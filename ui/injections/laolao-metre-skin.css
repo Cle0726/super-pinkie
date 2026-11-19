@@ -2308,6 +2308,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-con
   width: 13px !important; height: 11px !important; flex: none !important;
   background: var(--metre-mode-mark) center / 13px 11px no-repeat !important;
   -webkit-mask: none !important; mask: none !important; filter: none !important; box-shadow: none !important;
+  animation: none !important;
   border: 0 !important; border-radius: 0 !important; opacity: 1 !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .chat-controls__model .chat-controls__provider-icon > * { display: none !important; }

@@ -82,8 +82,9 @@
   const model = {stateFor, frameIndex, SLEEP_AFTER_MS};
   const cat = () => window.LaolaoMetreCat;
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
+  const motionPreference = !window.__pinkieMotion && window.matchMedia?.('(prefers-reduced-motion: reduce)');
   const reduced = () => document.documentElement.hasAttribute('data-pinkie-reduce-motion')
-    || Boolean(window.__pinkieMotion?.reduce) || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    || Boolean(window.__pinkieMotion?.reduce || motionPreference?.matches);
   const dark = () => document.documentElement.hasAttribute('data-pinkie-night') || document.documentElement.dataset.theme === 'dark';
 
   // ---------- 画面 ----------
@@ -204,9 +205,10 @@
       const ctx = c.getContext('2d');
       ctx.clearRect(0, 0, c.width, c.height);
       api.draw(ctx, def.frames[index], SCALE, {dark: dark()});
-      c.dataset.state = state;
-      c.dataset.facing = flip ? 'right' : 'left';
-      c.title = label;
+      if (c.dataset.state !== state) c.dataset.state = state;
+      const direction = flip ? 'right' : 'left';
+      if (c.dataset.facing !== direction) c.dataset.facing = direction;
+      if (c.title !== label) c.title = label;
     }
   }
 
@@ -239,9 +241,12 @@
     }
     paint();
     // 只有在动的时候才排下一拍；静止帧（空闲没眨眼、没做小动作、睡觉的慢帧也按它自己的 fps）不空转。
-    const moving = !reduced() && (state !== 'idle' || blinkAt != null || idleAct != null);
-    const wake = Math.min(nextBlink, reduced() ? Infinity : nextAct);
-    timer = setTimeout(loop, moving ? TICK_MS : Math.max(250, Math.min(1000, wake - now)));
+    if (reduced()) return;
+    const fps = cat()?.STATES[state]?.fps || 0;
+    const moving = idleAct || blinkAt != null || (state !== 'idle' && fps > 0);
+    const wake = Math.min(nextBlink, nextAct, idleSince + SLEEP_AFTER_MS);
+    if (moving) timer = setTimeout(loop, TICK_MS);
+    else if (state === 'idle') timer = setTimeout(loop, Math.max(250, wake - now));
   }
   // 背景被点了一下：竖耳朵、睁大眼往上看（在走路就不打断）
   function onTap() {
@@ -336,7 +341,10 @@
     if (d.live?.active || d.kind !== 'idle') idleSince = Date.now();
     if (d.kind === 'done' && !doneUntil) doneUntil = Date.now() + DONE_MS;
     if (d.kind !== 'done' && d.kind !== 'idle') doneUntil = 0;
-    if (mount()) kick();
+    if (mount()) {
+      if (stateFor(detail, Date.now(), idleSince) !== state) halt();
+      kick();
+    }
     // 一轮开始（注入）和结束（可能写了）各读一次条数；换会话也读。
     const started = d.live?.active && !wasActive;
     if (d.key !== memoryFor || started || (wasActive && !d.live?.active)) void refreshMemory(d.key, started);
@@ -349,7 +357,7 @@
     }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) halt(); else { lastDrawn = ''; kick(); } });
-  window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; kick(); });
+  window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; halt(); kick(); });
   window.addEventListener('pinkie:metre-tap', onTap);
   window.addEventListener('laolao:modechange', () => { if (!isMetre()) { halt(); if (pop) pop.hidden = true; } else { lastDrawn = ''; kick(); } });
   // 每分钟兜底读一次条数（别处改了记忆，例如看板）。
