@@ -18,8 +18,8 @@
 | 2 | `content` 9 张角色卡 | 已完成 | `c4f3f622` |
 | 3 | `gate` 3 张角色卡 | 已完成 | `7a43419b` |
 | 4 | `research` 6 份样题 JSON | 已完成 | `b4c9c2e3` |
-| 5 | `content` 9 份样题 JSON | 已完成 | 待写入 |
-| 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 未开始 | |
+| 5 | `content` 9 份样题 JSON | 已完成 | `daa0a072` |
+| 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 已完成 | 待写入 |
 | 7 | `lint-cards.mjs` 检查（如已推送）+ 全量自查与 R3 核对表 | 未开始 | |
 
 ## 设计小事说明（PLAN 第八节第 7 条）
@@ -80,3 +80,11 @@
 
 - 新增 9 份样题（共 18 题）：`visual-designer.json`、`ui-replicator.json`、`viral-creator.json`、`writer.json`、`editor.json`、`translator.json`、`doc-maker.json`、`motion-video.json`、`modeler-3d.json`。
 - 自检结果：15 份样题 JSON 全部合法解析、LF 换行；内嵌 SVG 与 JSON 夹具均合法；每题检查项 ≥ 4 条且全部可客观判断，无主观措辞。
+
+### 2026-11-18 步骤 6：`gate` 3 份样题 JSON（每题埋 3 个问题）
+
+- 新增 3 份样题（共 6 题，每题埋 3 个确定可复现问题，总计 18 个预设问题）：`reviewer.json`、`fact-checker.json`、`qa-tester.json`。
+- 夹具实测核验：
+  - 将 `reviewer-1` 的 5 个夹具文件落盘临时目录实际运行：`node deliverable/summarize.mjs` 输出 `{"total_orders":4,"total_amount":250.5,"by_city":{"北京":100,"上海":101,"深圳":49.5}}`（复现 P1 未去重）；`node --test deliverable/summarize.test.mjs` 输出 `tests 3 / pass 2 / fail 0 / skipped 1`（复现 P2 测试被跳过）；`out/by-city.csv` 不存在（复现 P3 缺失产物）。
+  - 验证 `reviewer-2`、`qa-tester-1`、`qa-tester-2` 内嵌 HTML 中的 JS 全部通过语法解析，且全部 `planted_issues` 行号均经脚本逐行校对精确一致。
+  - `fact-checker` 两题各含 3 处确凿且不受时间变化影响的事实错误（HTTPS 端口 8080、1974 年 TCP 论文作者 Linus Torvalds、TLS 1.3 RFC 8446 发布于 2010 年；Python 3.0 发布于 2015 年 12 月、PEP 20 引语颠倒、Git 许可证 MIT）与清晰正确的对照事实，避免误报争议。

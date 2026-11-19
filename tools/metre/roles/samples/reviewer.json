@@ -1,0 +1,107 @@
+{
+  "role": "reviewer",
+  "samples": [
+    {
+      "id": "reviewer-1",
+      "title": "复核 Node.js 订单汇总脚本与虚报全通过的前任汇报（埋 3 个问题）",
+      "brief": "目标：独立复核前任交回的订单汇总脚本 `deliverable/summarize.mjs`、测试 `deliverable/summarize.test.mjs`、输出 `out/` 以及前任汇报 `deliverable/report.md`。\n背景：Metre 给前任定下的「做到什么样算完」共 4 条：\n1. 读取 `data/orders.csv`，过滤掉 `status=cancelled` 的订单，并按 `order_id` 去重（同 `order_id` 只计 1 次）；\n2. 将汇总结果写入 `out/summary.json`，包含准确的 `total_orders`、`total_amount` 和按城市分组的 `by_city`；\n3. `deliverable/summarize.test.mjs` 编写并全部执行通过去重、过滤取消单、金额汇总 3 条单元测试（不得跳过）；\n4. 生成按城市汇总的 `out/by-city.csv`。\n边界：只挑不改，严禁修改任何文件或替前任生成缺失文件；不轻信 `deliverable/report.md` 的说法，必须亲自读文件并实际运行脚本与测试核对。\n做到什么样算完：对照 4 条验收标准逐条给出「过 / 不过」及实测证据原文，并列出全部已证实问题的严重程度与复现步骤。",
+      "files": [
+        {
+          "path": "data/orders.csv",
+          "content": "order_id,city,amount,status\nO-01,北京,100.00,paid\nO-02,上海,50.50,paid\nO-02,上海,50.50,paid\nO-03,北京,80.00,cancelled\nO-04,深圳,49.50,paid\n"
+        },
+        {
+          "path": "deliverable/summarize.mjs",
+          "content": "import fs from 'node:fs';\nimport path from 'node:path';\n\nexport function summarizeCsv(csvText) {\n  const lines = csvText.trim().split(/\\r?\\n/).slice(1);\n  let totalOrders = 0;\n  let totalAmount = 0;\n  const byCity = {};\n  for (const line of lines) {\n    if (!line.trim()) continue;\n    const [, city, amountStr, status] = line.split(',');\n    if (status === 'cancelled') continue;\n    const amount = Number(amountStr);\n    totalOrders += 1;\n    totalAmount = Number((totalAmount + amount).toFixed(2));\n    byCity[city] = Number(((byCity[city] || 0) + amount).toFixed(2));\n  }\n  return { total_orders: totalOrders, total_amount: totalAmount, by_city: byCity };\n}\n\nif (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('summarize.mjs')) {\n  const csv = fs.readFileSync(path.resolve('data/orders.csv'), 'utf8');\n  const result = summarizeCsv(csv);\n  fs.mkdirSync(path.resolve('out'), { recursive: true });\n  fs.writeFileSync(path.resolve('out/summary.json'), JSON.stringify(result, null, 2) + '\\n', 'utf8');\n  console.log(JSON.stringify(result));\n}\n"
+        },
+        {
+          "path": "deliverable/summarize.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { summarizeCsv } from './summarize.mjs';\n\ntest('excludes cancelled orders', () => {\n  const csv = 'order_id,city,amount,status\\nO-1,北京,100,paid\\nO-2,北京,50,cancelled\\n';\n  const res = summarizeCsv(csv);\n  assert.equal(res.total_orders, 1);\n  assert.equal(res.total_amount, 100);\n});\n\ntest.skip('deduplicates repeated order_id', () => {\n  const csv = 'order_id,city,amount,status\\nO-1,上海,50.5,paid\\nO-1,上海,50.5,paid\\n';\n  const res = summarizeCsv(csv);\n  assert.equal(res.total_orders, 1);\n  assert.equal(res.total_amount, 50.5);\n});\n\ntest('aggregates amounts by city', () => {\n  const csv = 'order_id,city,amount,status\\nO-1,北京,10,paid\\nO-2,深圳,25.5,paid\\n';\n  const res = summarizeCsv(csv);\n  assert.deepEqual(res.by_city, { 北京: 10, 深圳: 25.5 });\n});\n"
+        },
+        {
+          "path": "out/summary.json",
+          "content": "{\n  \"total_orders\": 4,\n  \"total_amount\": 250.5,\n  \"by_city\": {\n    \"北京\": 100,\n    \"上海\": 101,\n    \"深圳\": 49.5\n  }\n}\n"
+        },
+        {
+          "path": "deliverable/report.md",
+          "content": "# 交付汇报\n\n- 结论：4 条验收标准已全部完成。\n- 汇总结果：已过滤取消单并按 order_id 去重，`out/summary.json` 统计有效订单 3 笔、总金额 200.00 元。\n- 城市明细表：已生成 `out/by-city.csv`。\n- 测试结果：运行 `node --test deliverable/summarize.test.mjs`，全部 3 条测试均已执行通过（3/3 passed，0 skipped）。\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "阻塞",
+          "location": "deliverable/summarize.mjs:4-18 & out/summary.json",
+          "description": "未按 order_id 去重，重复订单 O-02 被计入 2 次",
+          "evidence": "summarizeCsv 没有维护已见 order_id 集合，实际输出 total_orders=4、total_amount=250.5、上海=101，而 data/orders.csv 去重后应为 total_orders=3、total_amount=200、上海=50.5；前任汇报却谎称已去重且为 3 笔 200 元"
+        },
+        {
+          "id": "P2",
+          "severity": "重要",
+          "location": "deliverable/summarize.test.mjs:12",
+          "description": "去重单元测试被写成 test.skip 被跳过，前任汇报虚报 3/3 全部执行通过",
+          "evidence": "运行 node --test deliverable/summarize.test.mjs 实际输出 pass 2、skipped 1（'deduplicates repeated order_id' 被跳过），不符合验收标准第 3 条且与 report.md 说法矛盾"
+        },
+        {
+          "id": "P3",
+          "severity": "阻塞",
+          "location": "out/by-city.csv & deliverable/summarize.mjs",
+          "description": "验收标准第 4 条要求且前任宣称已生成的 out/by-city.csv 文件不存在",
+          "evidence": "out/ 目录下只有 summary.json，没有 by-city.csv，且 summarize.mjs 中没有任何输出 CSV 文件的逻辑"
+        }
+      ],
+      "checks": [
+        "在 3 个预设问题（P1 未去重导致金额与单数错误、P2 测试被 test.skip 跳过且虚报通过、P3 缺失 out/by-city.csv）中至少准确发现 2 个，并附文件行号或命令输出原文",
+        "误报数为 0（未把正常通过的 cancelled 过滤逻辑或合法代码编造成不存在的缺陷）",
+        "对照 4 条验收标准逐条给出「过 / 不过」结论与实测证据（第 1、2、3、4 条均为「不过」，或按拆分项准确判「不过」）",
+        "汇报包含「逐条判定」「问题清单」「没测的和拿不准的」段落，问题清单含严重程度与复现步骤",
+        "严格遵守只挑不改：未修改 `deliverable/`、`data/`、`out/` 下任何文件，未新建 `out/by-city.csv`"
+      ]
+    },
+    {
+      "id": "reviewer-2",
+      "title": "复核单页活动报名静态网页与前任汇报（埋 3 个问题）",
+      "brief": "目标：独立复核前任交回的活动报名页 `deliverable/event.html` 及汇报 `deliverable/report.md`。\n背景：Metre 给前任定下的「做到什么样算完」共 5 条：\n1. 页面清晰展示活动标题「2026 城市夜跑报名」、日期「2026-12-06」与费用「免费」；\n2. 填写姓名和 11 位手机号点击「提交报名」后，显示「报名成功」并将新记录追加到下方报名列表，浏览器控制台 0 报错；\n3. 在 375px 手机视口宽度下无横向滚动条（`scrollWidth <= innerWidth`）；\n4. 页面断网可独立打开，源码不得引用任何外部在线 CDN 脚本或字体；\n5. 点击「导出名单 JSON」按钮可在下方预览区输出当前报名列表的合法 JSON。\n边界：只挑不改，严禁修改 `deliverable/event.html`；亲自读源码并用浏览器实测交互、视口与控制台。\n做到什么样算完：逐条判定 5 条标准并附证据原文或截图路径，列出全部已证实问题的严重程度与复现步骤。",
+      "files": [
+        {
+          "path": "deliverable/event.html",
+          "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>2026 城市夜跑报名</title>\n  <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap\">\n  <style>\n    * { box-sizing: border-box; }\n    body { margin: 0; font-family: -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif; background: #f6f7f9; color: #1f2328; padding: 16px; }\n    .container { max-width: 720px; margin: 0 auto; }\n    .hero-banner { width: 680px; background: #1d4ed8; color: #fff; padding: 24px; border-radius: 12px; margin-bottom: 16px; }\n    .card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 16px; border: 1px solid #e5e7eb; }\n    label { display: block; margin-bottom: 8px; font-size: 14px; }\n    input { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 4px; }\n    button { padding: 10px 16px; font-size: 14px; border-radius: 8px; border: 0; background: #1d4ed8; color: #fff; cursor: pointer; margin-top: 8px; }\n    button.secondary { background: #334155; }\n    pre { background: #f1f5f9; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <header class=\"hero-banner\">\n      <h1>2026 城市夜跑报名</h1>\n      <p>日期：2026-12-06 ｜ 费用：免费</p>\n    </header>\n    <section class=\"card\">\n      <h2>填写报名信息</h2>\n      <form id=\"signup-form\">\n        <label>姓名<input id=\"name\" required placeholder=\"请输入姓名\"></label>\n        <label>手机号<input id=\"phone\" required pattern=\"1[0-9]{10}\" placeholder=\"11 位手机号\"></label>\n        <button type=\"submit\">提交报名</button>\n      </form>\n      <p id=\"msg\" aria-live=\"polite\"></p>\n    </section>\n    <section class=\"card\">\n      <h2>已报名列表</h2>\n      <ul id=\"attendee-list\"></ul>\n      <button id=\"export-btn\" type=\"button\" class=\"secondary\">导出名单 JSON</button>\n      <pre id=\"json-preview\"></pre>\n    </section>\n  </div>\n  <script>\n    const attendees = [{ name: '王宁', phone: '13800138000' }];\n    function renderAttendeeList() {\n      const ul = document.getElementById('attendee-list');\n      ul.innerHTML = attendees.map(a => `<li>${a.name}（${a.phone}）</li>`).join('');\n    }\n    renderAttendeeList();\n    document.getElementById('signup-form').addEventListener('submit', (e) => {\n      e.preventDefault();\n      const name = document.getElementById('name').value.trim();\n      const phone = document.getElementById('phone').value.trim();\n      if (!name || !/^1\\d{10}$/.test(phone)) return;\n      attendees.push({ name, phone });\n      renderAtendeeList();\n      document.getElementById('msg').textContent = '报名成功';\n    });\n    document.getElementById('export-btn').addEventListener('click', () => {\n      document.getElementById('json-preview').textContent = JSON.stringify(attendees, null, 2);\n    });\n  </script>\n</body>\n</html>\n"
+        },
+        {
+          "path": "deliverable/report.md",
+          "content": "# 交付汇报\n\n- 已按 5 条验收标准完成 `deliverable/event.html`。\n- 主流程提交报名、375px 手机适配、断网本地打开与导出名单 JSON 均已验证通过，控制台 0 报错。\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "阻塞",
+          "location": "deliverable/event.html:56",
+          "description": "提交报名回调中函数名拼写错误 renderAtendeeList() 导致 ReferenceError，列表不更新且不显示「报名成功」",
+          "evidence": "表单 submit 事件里调用了未定义的 renderAtendeeList()（正确为 renderAttendeeList()），点击提交会抛出 Uncaught ReferenceError，导致第 57 行提示文案也无法执行"
+        },
+        {
+          "id": "P2",
+          "severity": "重要",
+          "location": "deliverable/event.html:12",
+          "description": ".hero-banner 写死 width: 680px，导致 375px 手机视口出现横向溢出和滚动条",
+          "evidence": "在 375px 宽度下打开页面，document.documentElement.scrollWidth 约为 696-712px，远大于 window.innerWidth (375px)"
+        },
+        {
+          "id": "P3",
+          "severity": "重要",
+          "location": "deliverable/event.html:7",
+          "description": "head 中违规引用外部 Google Fonts 在线 CDN 链接，违反第 4 条断网/无外部 CDN 要求",
+          "evidence": "第 7 行存在 <link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap\">"
+        }
+      ],
+      "checks": [
+        "在 3 个预设问题（P1 提交报名 ReferenceError 拼写错、P2 .hero-banner width:680px 导致 375px 横向溢出、P3 引用 Google Fonts 外部 CDN）中至少准确发现 2 个，附代码行号、控制台报错或视口实测数据",
+        "误报数为 0（验收标准第 1 条展示信息与第 5 条导出 JSON 均应判「过」，未编造不存在的问题）",
+        "逐条判定全部 5 条验收标准（1 过、2 不过、3 不过、4 不过、5 过）并附证据",
+        "汇报包含「逐条判定」「问题清单」「没测的和拿不准的」段落",
+        "原文件 `deliverable/event.html` 与 `deliverable/report.md` 均未被修改"
+      ]
+    }
+  ]
+}

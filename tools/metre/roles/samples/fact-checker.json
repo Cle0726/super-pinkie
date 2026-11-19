@@ -1,0 +1,87 @@
+{
+  "role": "fact-checker",
+  "samples": [
+    {
+      "id": "fact-checker-1",
+      "title": "核查科普短文《互联网基础协议简史》（埋 3 处确凿事实错误）",
+      "brief": "目标：逐条核查 `draft/web-protocols.md` 中的所有客观事实声明（数字、端口号、年份日期、人名归属、协议标准编号），输出带一手权威出处的核查表。\n背景：这篇文章准备作为技术科普发布，需要提前排雷事实错误。\n边界：只读文件并联网查证，严禁修改 `draft/web-protocols.md`，不新建本地文件。\n做到什么样算完：每条可核查事实明确判「对」「错」或「查不到」，每项附一手出处链接与日期，单列所有错误条目及正确值。",
+      "files": [
+        {
+          "path": "draft/web-protocols.md",
+          "content": "# 互联网基础协议简史\n\n1. 万维网（World Wide Web）的构想提案由 Tim Berners-Lee 于 1989 年在欧洲核子研究中心（CERN）提出。\n2. 在 IANA 官方端口分配中，明文 HTTP 的默认传输层端口是 80，而加密 HTTPS 的默认端口是 8080。\n3. HTTP/2 协议规范最初作为 RFC 7540 于 2015 年 5 月正式发布。\n4. 奠定互联网传输层基础的经典论文《A Protocol for Packet Network Intercommunication》于 1974 年发表，作者是 Linus Torvalds 与 Bob Kahn。\n5. 在 HTTP 语义规范中，状态码 404 的标准原因短语是 Not Found，用于表示服务器未找到目标资源的当前表示。\n6. 互联网工程任务组（IETF）于 2010 年正式发布了 TLS 1.3 协议标准（RFC 8446）。\n7. UTF-8 字符编码规范定义在 RFC 3629（2003 年 11 月发布），向下兼容 ASCII。\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "高",
+          "location": "draft/web-protocols.md:4（第 2 条）",
+          "description": "HTTPS 默认端口错写为 8080",
+          "evidence": "IANA Service Name and Transport Protocol Port Number Registry 规定 HTTPS 默认端口为 443，不是 8080"
+        },
+        {
+          "id": "P2",
+          "severity": "高",
+          "location": "draft/web-protocols.md:6（第 4 条）",
+          "description": "1974 年 TCP 核心论文作者错写为 Linus Torvalds",
+          "evidence": "1974 年 IEEE Transactions on Communications 发表的《A Protocol for Packet Network Intercommunication》作者为 Vint Cerf（Vinton G. Cerf）与 Bob Kahn（Robert E. Kahn），而非 Linus Torvalds"
+        },
+        {
+          "id": "P3",
+          "severity": "高",
+          "location": "draft/web-protocols.md:8（第 6 条）",
+          "description": "TLS 1.3（RFC 8446）发布年份错写为 2010 年",
+          "evidence": "IETF RFC 8446 正式发布日期为 2018 年 8 月，而非 2010 年"
+        }
+      ],
+      "checks": [
+        "在 3 处预设事实错误（P1 HTTPS 端口应为 443、P2 1974 年论文作者应为 Vint Cerf 与 Bob Kahn、P3 TLS 1.3 / RFC 8446 发布于 2018 年 8 月）中至少准确判「错」2 条，并给出正确事实",
+        "误报数为 0（第 1、3、5、7 条真实事实均判「对」，未误判为「错」）",
+        "核查表中每一行均标明原文位置、类别、判定（对 / 错 / 查不到）及一手权威出处链接与日期（如 ietf.org / rfc-editor.org / iana.org / cern.ch）",
+        "汇报包含「核查表」「错误汇总」「没查清和拿不准的」三段",
+        "未调用 write 或 exec 工具，`draft/web-protocols.md` 保持原样未修改"
+      ]
+    },
+    {
+      "id": "fact-checker-2",
+      "title": "核查开源简史短稿《Python 与 Git 关键节点》（埋 3 处确凿事实错误）",
+      "brief": "目标：逐条核查 `draft/oss-history.md` 中的日期、人物、直接引语和开源许可证声明，输出核查表。\n背景：稿件将用于新人技术培训材料，禁止出现引语篡改、年份或协议写错。\n边界：只读文件并联网查证一手官方文档，严禁改动原稿，不执行系统命令。\n做到什么样算完：每条事实明确判「对 / 错 / 查不到」并附官方文档链接和日期，错误汇总准确列出所有错误及正确原文。",
+      "files": [
+        {
+          "path": "draft/oss-history.md",
+          "content": "# Python 与 Git 关键节点\n\n1. Python 语言由 Guido van Rossum 创建，首个公开发布版本 0.9.0 推出于 1991 年 2 月。\n2. Python 3.0 正式发布于 2015 年 12 月，引入了不向后兼容的语法与原生 Unicode 字符串设计。\n3. 分布式版本控制系统 Git 由 Linus Torvalds 于 2005 年发起开发，最初用于管理 Linux 内核源码。\n4. Tim Peters 撰写的《The Zen of Python》（PEP 20）中明确写着两句名言：\"Explicit is better than implicit.\" 以及 \"Complex is better than simple.\"\n5. Git 使用内容寻址哈希标识提交对象，历史上采用 SHA-1，并在较新版本中加入了 SHA-256 支持。\n6. Git 项目本身采用 MIT 许可证（MIT License）发布其源代码。\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "高",
+          "location": "draft/oss-history.md:4（第 2 条）",
+          "description": "Python 3.0 发布年份错写为 2015 年 12 月",
+          "evidence": "Python 官方发布历史显示 Python 3.0 正式发布于 2008 年 12 月 3 日，而非 2015 年 12 月"
+        },
+        {
+          "id": "P2",
+          "severity": "高",
+          "location": "draft/oss-history.md:6（第 4 条）",
+          "description": "PEP 20 直接引语被颠倒篡改为 \"Complex is better than simple.\"",
+          "evidence": "peps.python.org/pep-0020 原文为 \"Simple is better than complex.\"（简单优于复杂），稿件把主宾语颠倒导致意思完全相反"
+        },
+        {
+          "id": "P3",
+          "severity": "高",
+          "location": "draft/oss-history.md:8（第 6 条）",
+          "description": "Git 开源许可证错写为 MIT 许可证",
+          "evidence": "git-scm.com 与 Git 仓库 COPYING 文件明确声明 Git 采用 GNU General Public License version 2 (GPLv2)，并非 MIT License"
+        }
+      ],
+      "checks": [
+        "在 3 处预设错误（P1 Python 3.0 应为 2008 年 12 月 3 日、P2 PEP 20 原文应为 \"Simple is better than complex.\"、P3 Git 许可证应为 GPLv2）中至少准确判「错」2 条，并给出正确值",
+        "误报数为 0（第 1、3、5 条正确陈述均判「对」，未误判为「错」）",
+        "核查表中每一项附权威一手链接（如 python.org、peps.python.org、git-scm.com）及日期",
+        "汇报包含「核查表」「错误汇总」「没查清和拿不准的」三段",
+        "未调用 write 或 exec 工具，`draft/oss-history.md` 未被修改"
+      ]
+    }
+  ]
+}
