@@ -157,6 +157,8 @@
     for (const act of ACTS) { roll -= act.weight; if (roll < 0) return act; }
     return ACTS[0];
   }
+  // 眨眼：有人在 6～10 秒一次，一分钟没人碰就 20～30 秒一次
+  const blinkGap = (now) => (now - Math.max(lastInput, idleSince) < LIVELY_MS ? 6000 + Math.random() * 4000 : 20_000 + Math.random() * 10_000);
   function startAct(now, pick) {
     const api = cat();
     const act = pick || pickAct();
@@ -234,7 +236,7 @@
     state = next;
     tick = 0;
     blinkAt = null;
-    nextBlink = Date.now() + 6000 + Math.random() * 4000;
+    nextBlink = Date.now() + blinkGap(Date.now());
     paint(true);
   }
 
@@ -253,7 +255,7 @@
       if (blinkAt != null && def && tick - blinkAt >= def.frames.length * 8 / def.fps) blinkAt = null;
       if (idleAct && tick - idleAct.start >= idleAct.len) idleAct = null;
       if (!reduced() && !idleAct && blinkAt == null && now >= nextAct) startAct(now);
-      if (!idleAct && blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + 6000 + Math.random() * 4000; }
+      if (!idleAct && blinkAt == null && now >= nextBlink) { blinkAt = tick; nextBlink = now + blinkGap(now); }
     }
     paint();
     // 只有在动的时候才排下一拍；静止帧（空闲没眨眼、没做小动作、睡觉的慢帧也按它自己的 fps）不空转。
@@ -386,6 +388,7 @@
     lastInput = now;
     if (!away || idleAct || blinkAt != null || !timer) return;
     nextAct = Math.min(nextAct, now + ACT_GAP[0] + Math.random() * ACT_GAP[1]);
+    nextBlink = Math.min(nextBlink, now + 6000 + Math.random() * 4000);
     halt(); kick();
   };
   for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel']) window.addEventListener(type, noticeInput, {capture: true, passive: true});

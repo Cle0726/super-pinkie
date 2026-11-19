@@ -110,9 +110,11 @@ test('11-16 夜：Metre 里思考时也有「C.le.」粒子签名，但只在运
   assert.match(src, /release\(\);\n    if \(metreNow\(\) && !owner\) dropSpace\(\);/, 'Metre：一轮落款完就把 WebGL 还回去');
 });
 
-test('空闲 CPU：短轮询空闲 5 秒放到 5 秒一次，一分钟没人动再放到 15 秒一次，有输入或对话事件立即恢复', () => {
+test('空闲 CPU：短轮询空闲 5 秒放到 5 秒一次，一分钟没人动再放到 30 秒一次，有输入或对话事件立即恢复', () => {
   const src = fs.readFileSync(new URL('../ui/injections/laolao-quiet.js', import.meta.url), 'utf8');
-  assert.match(src, /DEEP_AFTER = 60_000, DEEP_FLOOR = 15_000/);
+  assert.match(src, /DEEP_AFTER = 60_000, DEEP_FLOOR = 30_000/);
+  // 正好 5 秒一次的轮询（续跑兜底探针）也算短轮询，深空闲时一起放慢
+  assert.match(src, /typeof fn !== 'function' \|\| delay > SHORT\) return nativeSetInterval/);
   assert.match(src, /still > DEEP_AFTER \? Math\.max\(rec\.ms, DEEP_FLOOR\) : still > IDLE_AFTER \? Math\.max\(rec\.ms, IDLE_FLOOR\) : rec\.ms/);
   assert.match(src, /if \(rec\.due - lastActive > rec\.ms\) \{ nativeClearTimeout\.call\(window, rec\.timer\); arm\(rec, 0\); \}/);
 });

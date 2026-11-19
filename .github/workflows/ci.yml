@@ -174,8 +174,11 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: |
-          node --test tests/*.test.cjs tests/*.test.mjs
-          python -m unittest discover -s tests -p '*_test.py' -v
+          # Both suites always run, so a Node failure never hides the Python results; the step still fails if either does.
+          status=0
+          node --test tests/*.test.cjs tests/*.test.mjs || status=1
+          python -m unittest discover -s tests -p '*_test.py' -v || status=1
+          exit $status
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
