@@ -263,8 +263,8 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       message: listed ? `连上了，这个账号能用 ${models.length} 个聊天模型。` : '连上了（这个服务商不提供模型列表，先用推荐的模型）。'};
   }
 
-  function list() {
-    const cfg = current();
+  function listFrom(overrideCfg) {
+    const cfg = overrideCfg && typeof overrideCfg === 'object' ? overrideCfg : current();
     const providers = cfg.models?.providers || {};
     const registry = readRegistry();
     const defaults = cfg.agents?.defaults?.model;
@@ -283,6 +283,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const usable = rows.some(row => row.enabled && row.modelCount && (row.hasKey || /^http:\/\/(127\.0\.0\.1|localhost)/.test(row.baseUrl)));
     return {providers: rows, defaultModel: primary, needsSetup: !usable};
   }
+  const list = () => listFrom(current());
 
   const mutate = (fn) => config.mutateConfigFile({base: 'source', afterWrite: {mode: 'auto'}, mutate: fn});
 
@@ -327,7 +328,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       return modelEntry(String(row.id), meta);
     });
     const defaultModel = params.defaultModel && chosen.some(row => row.id === params.defaultModel) ? `${id}/${params.defaultModel}` : '';
-    await mutate(draft => {
+    const committed = await mutate(draft => {
       draft.models ||= {}; draft.models.providers ||= {};
       const before = draft.models.providers[id] || {};
       draft.models.providers[id] = {...before, baseUrl, apiKey: key, api: before.api || preset.api, models: entries};
@@ -338,7 +339,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       if (typeof row.vision === 'boolean') registry.capabilities[`${id}/${row.id}`] = {vision: row.vision, updatedAt: now().toISOString()};
     }
     writeRegistry(registry);
-    return {ok: true, providerId: id, defaultModel, ...list()};
+    return {ok: true, providerId: id, defaultModel, ...listFrom(committed?.nextConfig)};
   }
 
   async function setCapability(params = {}) {
@@ -346,7 +347,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const vision = params.vision;
     const target = resolveConfiguredModel(current(), params);
     let updated = null;
-    await mutate(draft => {
+    const committed = await mutate(draft => {
       const provider = draft.models?.providers?.[target.providerId];
       const entry = Array.isArray(provider?.models) ? provider.models.find(m => m && m.id === target.modelId) : null;
       if (!entry) throw new Error(`模型「${target.providerId}/${target.modelId}」已经不在配置里了`);
@@ -363,10 +364,15 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
         input: [...nextInput],
       };
     });
+    const persistedCfg = committed?.nextConfig || current();
+    const persistedEntry = (persistedCfg?.models?.providers?.[updated.providerId]?.models || []).find(m => m && m.id === updated.modelId);
+    if (persistedEntry && hasVisionInput(persistedEntry) !== vision) {
+      throw new Error(`模型「${updated.model}」的看图设置没有保存成功，请重试`);
+    }
     const registry = readRegistry();
     registry.capabilities[`${updated.providerId}/${updated.modelId}`] = {vision, updatedAt: now().toISOString()};
     writeRegistry(registry);
-    return {ok: true, ...updated, ...list()};
+    return {ok: true, ...updated, ...listFrom(committed?.nextConfig)};
   }
 
   async function setDefault(params = {}) {
@@ -374,8 +380,8 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const [providerId, ...rest] = model.split('/');
     const provider = current().models?.providers?.[providerId];
     if (!provider || !rest.length || !(provider.models || []).some(m => m.id === rest.join('/'))) throw new Error('这个模型不在已配置的服务商里');
-    await mutate(draft => applyDefault(draft, model, params.everywhere !== false));
-    return {ok: true, ...list()};
+    const committed = await mutate(draft => applyDefault(draft, model, params.everywhere !== false));
+    return {ok: true, ...listFrom(committed?.nextConfig)};
   }
 
   async function disable(params = {}) {
@@ -383,7 +389,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const registry = readRegistry();
     if (!registry.providers[id]) throw new Error('只能停用在这里添加的服务商');
     let saved = null;
-    await mutate(draft => {
+    const committed = await mutate(draft => {
       saved = draft.models?.providers?.[id];
       if (!saved) throw new Error('服务商不存在');
       if (String(draft.agents?.defaults?.model?.primary || draft.agents?.defaults?.model || '').startsWith(`${id}/`)) throw new Error('它正在当默认模型：先把默认换成别的，再停用');
@@ -391,7 +397,7 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     });
     registry.disabled[id] = saved;
     writeRegistry(registry);
-    return {ok: true, ...list()};
+    return {ok: true, ...listFrom(committed?.nextConfig)};
   }
 
   async function enable(params = {}) {
@@ -399,18 +405,19 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const registry = readRegistry();
     const saved = registry.disabled[id];
     if (!saved) throw new Error('没有找到停用的服务商');
-    await mutate(draft => { draft.models ||= {}; draft.models.providers ||= {}; draft.models.providers[id] = saved; });
+    const committed = await mutate(draft => { draft.models ||= {}; draft.models.providers ||= {}; draft.models.providers[id] = saved; });
     delete registry.disabled[id];
     writeRegistry(registry);
-    return {ok: true, ...list()};
+    return {ok: true, ...listFrom(committed?.nextConfig)};
   }
 
   async function remove(params = {}) {
     const id = String(params.providerId || '');
     const registry = readRegistry();
     if (!registry.providers[id]) throw new Error('只能删除在这里添加的服务商');
+    let committed = null;
     if (registry.disabled[id]) delete registry.disabled[id];
-    else await mutate(draft => {
+    else committed = await mutate(draft => {
       if (String(draft.agents?.defaults?.model?.primary || draft.agents?.defaults?.model || '').startsWith(`${id}/`)) throw new Error('它正在当默认模型：先把默认换成别的，再删除');
       if (draft.models?.providers) delete draft.models.providers[id];
     });
@@ -419,14 +426,14 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       if (key.startsWith(`${id}/`)) delete registry.capabilities[key];
     }
     writeRegistry(registry);
-    return {ok: true, ...list()};
+    return {ok: true, ...listFrom(committed?.nextConfig)};
   }
 
   const presets = () => ({presets: PRESETS.map(({id, label, region, baseUrl, models, keyUrl, steps}) => ({id, label, region, baseUrl, models, keyUrl, steps}))});
   return {presets, list, test, save, setCapability, setDefault, disable, enable, remove};
 }
 
-export function createModelCapabilityTool(setup) {
+export function createModelCapabilityTool(setup, ctx = {}) {
   return {
     name: 'pinkie_model_capability',
     label: '设置模型看图能力',
@@ -438,7 +445,7 @@ export function createModelCapabilityTool(setup) {
         model: {
           type: 'string',
           minLength: 1,
-          description: '要改的已有模型（写「服务商/模型名」或单独的模型名，例如 deepseek/deepseek-chat、mm/workbuddy/hy4flash）。不确定准确名字时传你想找的模型名关键字，报错会列出已配好的模型名。',
+          description: '要改的已有模型（写「服务商/模型名」或单独的模型名，例如 deepseek/deepseek-chat、mm/workbuddy/hy4flash；要改当前正在对话的模型也可写 current）。不确定准确名字时传你想找的模型名关键字，报错会列出已配好的模型名。',
         },
         vision: {
           type: 'boolean',
@@ -449,7 +456,15 @@ export function createModelCapabilityTool(setup) {
     },
     async execute(_toolCallId, params = {}) {
       try {
-        const res = await setup.setCapability({model: params.model, vision: params.vision});
+        let modelArg = String(params.model || '').trim();
+        if (/^(?:current|this|当前|当前模型)$/i.test(modelArg)) {
+          if (ctx?.modelProvider && ctx?.modelId) modelArg = `${ctx.modelProvider}/${ctx.modelId}`;
+          else {
+            const listed = setup.list?.();
+            if (listed?.defaultModel) modelArg = listed.defaultModel;
+          }
+        }
+        const res = await setup.setCapability({model: modelArg, vision: params.vision});
         const payload = {
           ok: true,
           model: res.model,
@@ -470,15 +485,18 @@ export function createModelCapabilityTool(setup) {
   };
 }
 
-export function supplementMinimalModelCapability(config) {
+const RESTRICTIVE_TOOL_PROFILES = new Set(['minimal', 'coding', 'messaging']);
+
+export function supplementModelCapabilityTool(config) {
   const tools = config?.tools;
-  if (!tools || tools.profile !== 'minimal' || Object.hasOwn(tools, 'allow')
+  if (!tools || !RESTRICTIVE_TOOL_PROFILES.has(tools.profile) || Object.hasOwn(tools, 'allow')
       || tools.alsoAllow !== undefined && !Array.isArray(tools.alsoAllow)) return false;
   const present = new Set((tools.alsoAllow || []).map(name => String(name).toLowerCase()));
   if (present.has('pinkie_model_capability')) return false;
   tools.alsoAllow = [...(tools.alsoAllow || []), 'pinkie_model_capability'];
   return true;
 }
+export const supplementMinimalModelCapability = supplementModelCapabilityTool;
 
 export function registerModelSetup(api) {
   let stateDir = '';

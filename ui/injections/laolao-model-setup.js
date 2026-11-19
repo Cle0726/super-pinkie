@@ -31,7 +31,7 @@
     return request(method, params, timeout);
   }
 
-  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null, openCaps: new Set(), capFilters: new Map()};
+  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null, openCaps: new Set(), capFilters: new Map(), capScrolls: new Map()};
 
   function setStatus(text, tone = "") {
     if (!state.status) return;
@@ -129,6 +129,7 @@
         filterInput.value = state.capFilters.get(row.id) || "";
       }
       const listBox = el("div", "pinkie-model-setup__caps-list", capsBody);
+      listBox.addEventListener("scroll", () => { state.capScrolls.set(row.id, listBox.scrollTop || 0); });
       for (const model of row.models) {
         const capRow = el("div", "pinkie-model-setup__cap-row", listBox);
         const capCopy = el("div", "pinkie-model-setup__cap-name", capRow);
@@ -143,6 +144,7 @@
         capCtrl.appendChild(sw);
         capRows.push({node: capRow, text: `${model.id} ${model.name || ""}`.toLowerCase()});
       }
+      if (state.capScrolls.has(row.id)) listBox.scrollTop = state.capScrolls.get(row.id);
       if (filterInput) {
         const applyFilter = () => {
           const q = filterInput.value.trim().toLowerCase();
@@ -225,6 +227,7 @@
     const show = (text, tone) => { result.textContent = text; result.dataset.tone = tone; result.hidden = !text; };
     const params = () => ({preset: preset.id, providerId: editing?.id, apiKey: key.value, baseUrl: baseUrl?.value || undefined});
     let tested = null;
+    const visionState = new Map();
 
     async function runTest() {
       if (!key.value.trim() && !editing) { show("先粘贴密钥。", "error"); key.focus(); return; }
@@ -232,7 +235,7 @@
       try {
         const res = await call("pinkie.modelSetup.test", params(), 45000);
         if (!res.ok) { show(res.message, "error"); pick.hidden = true; return; }
-        tested = res; show(res.message, "success"); renderPick(res);
+        tested = res; visionState.clear(); show(res.message, "success"); renderPick(res);
       } catch (error) { show(plainError(error), "error"); }
       finally { testButton.disabled = false; }
     }
@@ -245,10 +248,11 @@
       const recommended = new Set(res.recommended || []);
       const all = res.models.length ? res.models : (res.recommended || []).map((id) => ({id, name: id}));
       all.sort((a, b) => Number(recommended.has(b.id)) - Number(recommended.has(a.id)));
-      const visionState = new Map();
       for (const model of all) {
-        const prev = existingById.get(model.id);
-        visionState.set(model.id, prev ? Boolean(prev.vision) : Boolean(model.vision));
+        if (!visionState.has(model.id)) {
+          const prev = existingById.get(model.id);
+          visionState.set(model.id, prev ? Boolean(prev.vision) : Boolean(model.vision));
+        }
       }
       let filter = null;
       if (all.length > 12) { filter = el("input", "pinkie-model-setup__input pinkie-model-setup__filter", pick); filter.placeholder = `搜索 ${all.length} 个模型`; }

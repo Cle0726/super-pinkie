@@ -208,13 +208,50 @@ test('setCapability and pinkie_model_capability toggle image input safely withou
   assert.equal(listed.providers.find(p => p.id === 'mm').models.find(m => m.id === 'workbuddy/hy4flash').vision, false);
 });
 
-test('supplementMinimalModelCapability allows pinkie_model_capability in minimal chat profile only when no allow override exists', () => {
+test('supplementMinimalModelCapability allows pinkie_model_capability in restrictive profiles only when no allow override exists', () => {
   const cfg = {tools: {profile: 'minimal', alsoAllow: ['pinkie_sessions']}};
   assert.equal(supplementMinimalModelCapability(cfg), true);
   assert.deepEqual(cfg.tools.alsoAllow, ['pinkie_sessions', 'pinkie_model_capability']);
   assert.equal(supplementMinimalModelCapability(cfg), false);
+  const coding = {tools: {profile: 'coding'}};
+  assert.equal(supplementMinimalModelCapability(coding), true);
+  assert.deepEqual(coding.tools.alsoAllow, ['pinkie_model_capability']);
+  const messaging = {tools: {profile: 'messaging'}};
+  assert.equal(supplementMinimalModelCapability(messaging), true);
+  assert.deepEqual(messaging.tools.alsoAllow, ['pinkie_model_capability']);
   assert.equal(supplementMinimalModelCapability({tools: {profile: 'minimal', allow: ['read']}}), false);
-  assert.equal(supplementMinimalModelCapability({tools: {profile: 'coding'}}), false);
+  assert.equal(supplementMinimalModelCapability({tools: {profile: 'coding', allow: ['read']}}), false);
+  assert.equal(supplementMinimalModelCapability({tools: {profile: 'full'}}), false);
+});
+
+test('pinkie_model_capability supports current-session model alias and uses committed nextConfig over stale snapshot', async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-model-setup-stale-'));
+  let stored = {
+    agents: {defaults: {model: {primary: 'deepseek/deepseek-chat'}}},
+    models: {providers: {deepseek: {baseUrl: 'https://api.deepseek.com', apiKey: KEY, models: [{id: 'deepseek-chat', input: ['text']}]}}},
+  };
+  const staleSnapshot = structuredClone(stored);
+  const setup = createModelSetup({
+    stateDir,
+    config: {
+      // Simulates a runtime whose current() hasn't reloaded yet right after mutateConfigFile
+      current: () => staleSnapshot,
+      async mutateConfigFile({mutate}) {
+        const draft = structuredClone(stored);
+        await mutate(draft);
+        stored = draft;
+        return {nextConfig: structuredClone(stored)};
+      },
+    },
+  });
+  const tool = createModelCapabilityTool(setup, {modelProvider: 'deepseek', modelId: 'deepseek-chat'});
+  const out = await tool.execute('c-cur', {model: 'current', vision: true});
+  assert.equal(out.isError, false);
+  assert.equal(out.details.vision, true);
+  // RPC wrapper calls setup.list(params || {}) with an empty object; list must ignore RPC params
+  assert.equal(setup.list({}).providers.length, 1);
+  const res = await setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', vision: false});
+  assert.equal(res.providers[0].models[0].vision, false, 'returned list reflects committed nextConfig even if current() is stale');
 });
 
 test('laolao-model-setup UI renders per-model vision switches for managed and existing providers and saves toggles', async () => {

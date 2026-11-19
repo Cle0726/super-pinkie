@@ -11,9 +11,10 @@
     ["learning", "学习"], ["unrestricted", "无限制"], ["metre", "Metre"],
   ];
   const CHILD_SESSION_TOOLS = Object.freeze(["pinkie_session_start", "pinkie_session_message", "pinkie_session_list", "pinkie_mode_ask", "pinkie_sessions", "pinkie_model_capability"]);
+  const WORK_ALLOW_TOOLS = Object.freeze(["pinkie_model_capability"]);
   const PRESET_MAP = Object.freeze({
     chat: Object.freeze({profile: "minimal", execSecurity: "deny", browserEnabled: false, alsoAllow: CHILD_SESSION_TOOLS}),
-    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false}),
+    work: Object.freeze({profile: "coding", execSecurity: "allowlist", browserEnabled: false, alsoAllow: WORK_ALLOW_TOOLS}),
     open: Object.freeze({profile: "full", execSecurity: "full", browserEnabled: true}),
   });
   const PRESET_CARDS = Object.freeze([
@@ -68,7 +69,11 @@
     const hasRules = (value, root = false) => isObject(value) && (
       (Array.isArray(value.allow) && value.allow.length > 0)
       || (Array.isArray(value.deny) && value.deny.length > 0)
-      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => !root || baseProfile !== "minimal" || !CHILD_SESSION_TOOLS.includes(tool)))
+      || (Array.isArray(value.alsoAllow) && value.alsoAllow.some(tool => {
+        if (!root) return true;
+        if (baseProfile === "minimal" || baseProfile === "coding") return !CHILD_SESSION_TOOLS.includes(tool);
+        return true;
+      }))
       || (typeof value.profile === "string" && value.profile.trim() && value.profile.trim() !== baseProfile)
     );
     if (hasRules(config?.tools, true) || hasRules(config?.agents?.defaults?.tools)) return true;

@@ -217,9 +217,9 @@ const RESPONSE_ONLY_PREFIX = /^(?:请(?:你)?\s*)?(?:只|仅)(?:需|要)?(?:回�
 const RESPONSE_ONLY_FOLLOWUP_ACTION = /(?:然后|并且|同时|再|之后|接着|随后|并|且)\s*(?:调用|使用|执行|运行|修改|改|修复|生成|创建|制作|下载|上传|发布|删除|安装|部署|打包|写入|更新|替换|移动|重命名|测试|验证)/i;
 const READ_ONLY_DIAGNOSTIC_INTENT = /(?:只读|不要(?:进行)?(?:任何)?操作|不操作|不要(?:点击|输入|修改|改动|创建|删除|写入|更新)|(?:只|仅)(?:需|要)?(?:检查|查看|读取|返回|回复|输出))/i;
 const DIAGNOSTIC_TARGET = /(?:权限|辅助功能|屏幕录制|状态|连通|健康|网关|端口|进程|模型|额度|桌面|屏幕|尺寸|版本|签名|身份)/i;
-const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy)(?:$|_)/i;
+const EXECUTION_TOOL = /(?:^|_)(?:exec|write|edit|apply_patch|browser|computer|cua|imagegen|create|update|delete|move|send|publish|upload|download|install|deploy|pinkie_model_capability)(?:$|_)/i;
 const OBSERVATION_TOOL = /(?:^|_)(?:read|view|inspect|find|search|list|status|open_file|file_fetch|dir_fetch|dir_list)(?:$|_)/i;
-const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen)$/i;
+const MUTATING_TOOL = /^(?:write|edit|apply_patch|create|update|delete|move|upload|download|image_generate|imagegen|pinkie_model_capability)$/i;
 // Bookkeeping tools change nothing outside the chat (a checklist the UI shows),
 // even though their names contain "update".
 const BOOKKEEPING_TOOL = /^(?:plan_update|update_plan)$/i;
@@ -1328,7 +1328,7 @@ function toolEffectKind(entry = {}) {
   // “工具返回成功”不等于文件真的变化。write/edit/apply_patch 只有前后
   // 快照发生变化才算实际效果，防止空写工具加一次假 read 绕过。
   if (/^(?:write|edit|apply_patch)$/i.test(name)) return '';
-  if (MUTATING_TOOL.test(name)) return 'host-tool';
+  if (MUTATING_TOOL.test(name) || name === 'pinkie_model_capability') return 'host-tool';
   // 网页 GPT 出图 / 出视频、视频生成：文件是工具自己落盘的，成功返回就是一次真实产出
   // （11-17 网页 GPT 实测：图已出、ls/file 也查过，回复后面还是被挂上「还没核实」）。
   if (/^(?:video_generate|videogen)$/.test(name)
@@ -1353,6 +1353,7 @@ function toolIsMechanicalCheck(entry = {}) {
   const args = toolArgumentsText(entry);
   if (name === DELIVERY_GUARD_TOOL) return /"action"\s*:\s*"verify"/i.test(args)
     || hasPassVerifierReceipt(entry.output);
+  if (name === 'pinkie_model_capability') return true;
   if (/^(?:read|view_image|open_file|inspect|validate|verify|test|check)(?:$|_)/i.test(name)) return true;
   if (/(?:browser|computer|screen|cua)/i.test(name)
       && /"(?:action|kind)"\s*:\s*"(?:snapshot|screenshot|status|inspect|find|open|navigate|check_permissions|get_(?:desktop|window)_state|get_screen_size|get_accessibility_tree)"/i.test(args)) return true;
@@ -7135,7 +7136,7 @@ export default {
     registerWorkGateway(api, {reasoning, architecture, background});
     registerModelSync(api);
     const modelSetup = registerModelSetup(api);
-    api.registerTool?.(() => createModelCapabilityTool(modelSetup), {name: 'pinkie_model_capability'});
+    api.registerTool?.((ctx) => createModelCapabilityTool(modelSetup, ctx), {name: 'pinkie_model_capability'});
     registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
     registerWorkbench(api);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);

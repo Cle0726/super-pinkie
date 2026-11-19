@@ -20,11 +20,14 @@ test('user-facing permission presets have explicit mappings and preserve custom 
   assert.deepEqual(JSON.parse(JSON.stringify(rules.presetMap)), {
     chat: {profile: 'minimal', execSecurity: 'deny', browserEnabled: false,
       alsoAllow: ['pinkie_session_start','pinkie_session_message','pinkie_session_list','pinkie_mode_ask','pinkie_sessions','pinkie_model_capability']},
-    work: {profile: 'coding', execSecurity: 'allowlist', browserEnabled: false},
+    work: {profile: 'coding', execSecurity: 'allowlist', browserEnabled: false,
+      alsoAllow: ['pinkie_model_capability']},
     open: {profile: 'full', execSecurity: 'full', browserEnabled: true},
   });
   assert.equal(rules.matchingPreset({tools: {profile: 'minimal', exec: {security: 'deny'}}, browser: {enabled: false}}), 'chat');
   assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}}, browser: {enabled: false}}), 'work');
+  assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}, alsoAllow: ['pinkie_model_capability']}, browser: {enabled: false}}), 'work');
+  assert.equal(rules.matchingPreset({tools: {profile: 'coding', exec: {security: 'allowlist'}, alsoAllow: ['browser']}, browser: {enabled: false}}), null);
   assert.equal(rules.matchingPreset({tools: {profile: 'full', exec: {security: 'full'}}, browser: {enabled: true}}), 'open');
   assert.equal(rules.matchingPreset({tools: {profile: 'messaging', exec: {security: 'deny'}}, browser: {enabled: false}}), null);
   assert.equal(rules.matchingPreset({tools: {profile: 'full', exec: {security: 'allowlist'}}, browser: {enabled: true}}), null);

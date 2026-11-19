@@ -529,9 +529,10 @@ export function evidenceSignals(entry = {}) {
   const {name, action, command, output} = n;
   const okish = n.ok && !(name !== 'exec' && ERROR_OUTPUT.test(output.slice(0, 400)));
   if (n.kind === 'note') { signals.add('note'); return [...signals]; }
-  if (n.kind === 'mutation' || /^(?:write|edit|apply_patch|create|update|delete|move)$/.test(name)) {
+  if (n.kind === 'mutation' || /^(?:write|edit|apply_patch|create|update|delete|move|pinkie_model_capability)$/.test(name)) {
     if (!n.ok) return [];
     signals.add('mutation');
+    if (name === 'pinkie_model_capability') { signals.add('machine_probe'); return [...signals]; }
     // 参数在记录里会被截到 2000 字，内容在前时路径就丢了；写入结果里还有一份（「Successfully wrote N bytes to PATH」）。
     // 知道写的是哪个文件时只看它：README 正文里提到 index.html 不算改了网页（11-02 隔离实测 K-web-boost）。
     const own = ownTargets(n);

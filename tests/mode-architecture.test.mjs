@@ -3278,3 +3278,15 @@ test('a tier continuation after a failed turn backs off and stops after repeated
   assert.equal(continuation.failedTurns.has(sessionKey),false);
   assert.equal(calls.length,0);
 });
+
+test('global integrity gate accepts pinkie_model_capability mutations in normal and unrestricted modes',()=>{
+  for(const [agentId,sessionKey] of [['main','agent:main:vision-toggle'],['project','agent:project:vision-toggle'],['unrestricted','agent:unrestricted:vision-toggle'],['metre','agent:metre:vision-toggle']]){
+    const guard=new CompletionIntegrityGuard();
+    const ctx={agentId,sessionKey,runId:`run-${agentId}`};
+    guard.begin({prompt:'把 deepseek-chat 改成能看图片'},ctx);
+    guard.beforeTool({toolName:'pinkie_model_capability',toolCallId:'cap-1',params:{model:'deepseek/deepseek-chat',vision:true}},ctx);
+    guard.afterTool({toolName:'pinkie_model_capability',toolCallId:'cap-1',params:{model:'deepseek/deepseek-chat',vision:true},result:{details:{ok:true,model:'deepseek/deepseek-chat',vision:true,input:['text','image']}}},ctx);
+    const verdict=guard.finalize({lastAssistantMessage:'已经把 deepseek/deepseek-chat 修改好了：已打开，如果上游其实不支持，发图时会报错，可以再关掉。'},ctx);
+    assert.equal(verdict,undefined,`${agentId} should accept confirmed pinkie_model_capability mutation`);
+  }
+});
