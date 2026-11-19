@@ -96,6 +96,61 @@
     clearInterval(renew); renew = quiet ? setInterval(tell, 10 * 60_000) : 0;
   });
   window.addEventListener('pinkie:sidebar-gateway-ready', tell);
+
+  // 空闲节拍：Metre 里 5 秒没有输入、也没有对话/运行事件时，页面里的短轮询（< 5 秒）一律放慢到 5 秒一次；
+  // 一有输入或网关的 chat / agent 事件就马上恢复原节拍，被拖住的轮询当场补跑一次。
+  // 几十个模块各自 300–1500ms 的轮询加起来，是 Metre 空闲 CPU 下不到 1% 的主要原因，在这里统一放慢，
+  // 不用逐个模块改。只认 chat / agent 事件，不认 RPC 回包：否则轮询自己发的请求会把自己一直叫醒。
+  const IDLE_AFTER = 5_000, IDLE_FLOOR = 5_000, SHORT = 5_000;
+  const nativeSetInterval = window.setInterval, nativeClearInterval = window.clearInterval;
+  const nativeSetTimeout = window.setTimeout, nativeClearTimeout = window.clearTimeout;
+  const paced = new Map();
+  let nextPaced = 0x40000000, lastActive = Date.now();
+  const idle = () => quiet && Date.now() - lastActive > IDLE_AFTER;
+  const arm = (rec, delay) => { rec.due = Date.now() + delay; rec.timer = nativeSetTimeout.call(window, () => tick(rec), delay); };
+  function tick(rec) {
+    if (!paced.has(rec.id)) return;
+    arm(rec, idle() ? Math.max(rec.ms, IDLE_FLOOR) : rec.ms);
+    rec.fn.apply(window, rec.args);
+  }
+  window.setInterval = function setInterval(fn, ms, ...args) {
+    const delay = Math.max(0, Number(ms) || 0);
+    if (typeof fn !== 'function' || delay >= SHORT) return nativeSetInterval.call(window, fn, ms, ...args);
+    const rec = {id: ++nextPaced, fn, ms: delay, args, timer: 0, due: 0};
+    paced.set(rec.id, rec);
+    arm(rec, delay);
+    return rec.id;
+  };
+  const clearPaced = native => function (id) {
+    const rec = paced.get(id);
+    if (!rec) return native.call(window, id);
+    paced.delete(id);
+    nativeClearTimeout.call(window, rec.timer);
+  };
+  window.clearInterval = clearPaced(nativeClearInterval);
+  window.clearTimeout = clearPaced(nativeClearTimeout);
+  function wake() {
+    const was = idle();
+    lastActive = Date.now();
+    if (!was) return;
+    for (const rec of paced.values()) if (rec.due - lastActive > rec.ms) { nativeClearTimeout.call(window, rec.timer); arm(rec, 0); }
+  }
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'focusin', 'visibilitychange']) {
+    window.addEventListener(type, wake, {capture: true, passive: true});
+  }
+  window.addEventListener('pinkie:quiet-change', wake);
+  const NativeSocket = window.WebSocket;
+  if (typeof NativeSocket === 'function' && typeof Proxy === 'function') {
+    const RUN_EVENT = /"event":"(?:chat|agent)"/;
+    window.WebSocket = new Proxy(NativeSocket, {
+      construct(target, args, newTarget) {
+        const socket = Reflect.construct(target, args, newTarget);
+        socket.addEventListener('message', event => { if (typeof event.data === 'string' && RUN_EVENT.test(event.data.slice(0, 200))) wake(); });
+        return socket;
+      },
+    });
+  }
+
   new MutationObserver(apply).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode']});
   apply();
   document.addEventListener('DOMContentLoaded', loadLegacy, {once: true});
