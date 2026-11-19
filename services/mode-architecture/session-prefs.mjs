@@ -46,6 +46,8 @@ export const DEFAULT_GLOBAL = Object.freeze({
   // 碧琪自己分工：用户这条消息要的活里互不依赖的大块，直接开子会话并行做（session-lineage 的 in_scope）。关掉后只提卡片等用户点。
   autoSplit: true,
   metreMaxRunning: METRE_RUNNING.fallback, metreRequestCap: METRE_REQUEST_CAP.fallback,
+  // Metre 角色 agent 总开关（briefs/metre-roles-1118 PLAN 3.4）：默认开；关掉后 role / of / pinkie_roles 全部消失。
+  metreRoles: true,
 });
 
 let styleCache = null;
@@ -104,6 +106,7 @@ export class SessionPrefs {
       if (!Number.isInteger(value) || value < 0 || value > METRE_REQUEST_CAP.max) throw new Error('累计上限只能是 0（不封顶）到 200');
       g.metreRequestCap = value;
     }
+    if (typeof params.metreRoles === 'boolean') g.metreRoles = params.metreRoles;
     if ('hotkey' in params) g.hotkey = params.hotkey === null ? null : clip(params.hotkey, 40) || null;
     this.save();
     return {ok: true, ...this.globalPrefs()};
@@ -153,6 +156,8 @@ export class SessionPrefs {
   promptContext(key) {
     if (!validKey(key)) return '';
     const prefs = this.forSession(key);
+    // roles 角色子会话（PLAN 3.6）：不注入回答风格，联网开关沿用 Metre 的单行版本。
+    if (agentOf(key) === 'roles') return prefs.web ? METRE_WEB_ON : '';
     const parts = [];
     const style = styleText(prefs.style, prefs.customStyle);
     if (style) parts.push(style);
@@ -167,6 +172,7 @@ export class SessionPrefs {
   }
   // Metre 这个会话现在是独做（Virtuoso）：派发工具不提供。
   solo(key) { return validKey(key) && agentOf(key) === 'metre' && this.forSession(key).dispatch === 'solo'; }
+  metreRolesEnabled() { return this.load().global.metreRoles !== false; }
   metreLimits() {
     const g = this.load().global;
     const running = Number.isInteger(g.metreMaxRunning) && g.metreMaxRunning >= METRE_RUNNING.min && g.metreMaxRunning <= METRE_RUNNING.max

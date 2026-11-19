@@ -329,6 +329,19 @@ def _tidy_metre_workspace(home: Path, backup_root: Path) -> bool:
             changed = True
     return changed
 UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
+# Metre 角色 agent（briefs/metre-roles-1118 PLAN 3.6 & R0 MEASURE.md）：
+# 不是模式（不进 MODE_AGENT_IDS），按 R0 实测把所有角色都不用的内建工具和会话/记忆/计划/渠道工具一并砍掉，
+# 使固定输入压到 ~14.5k token（远低于 30k 目标）。
+ROLES_DENY_TOOLS = (
+    *UNUSED_OPENCLAW_TOOLS,
+    "cron", "message", "nodes", "gateway",
+    "sessions_spawn", "sessions_list", "sessions_send", "sessions_history", "sessions_yield",
+    "session_status", "subagents", "agents_list",
+    "memory_search", "memory_get",
+    "create_goal", "update_goal", "get_goal",
+    "dir_fetch", "dir_list", "file_fetch", "file_write",
+    "qqbot_*", "feishu_*",
+)
 
 
 def _configure_plugin(data: dict, target: Path) -> bool:
@@ -406,6 +419,16 @@ def _configure_plugin(data: dict, target: Path) -> bool:
             # SOUL.md, USER.md, IDENTITY.md, TOOLS.md, HEARTBEAT.md or MEMORY.md
             # into unrestricted-mode model requests.
             agent["contextInjection"] = "never"
+        if isinstance(agent, dict) and agent.get("id") == "roles":
+            # Metre 角色代理（PLAN 3.6）：不注入工作区任何文件，砍掉角色不用的工具，只靠插件注入底座 + 角色卡。
+            agent["contextInjection"] = "never"
+            tools = agent.get("tools")
+            if not isinstance(tools, dict):
+                tools = agent["tools"] = {}
+            deny = tools.get("deny")
+            if not isinstance(deny, list):
+                deny = tools["deny"] = []
+            deny.extend(name for name in ROLES_DENY_TOOLS if name not in deny)
     # CLE Kk ships a patched, internally consistent runtime. Disable the
     # upstream startup check so only CLE Kk's detached updater can replace it.
     update = data.setdefault("update", {})
@@ -531,7 +554,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-roles.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",

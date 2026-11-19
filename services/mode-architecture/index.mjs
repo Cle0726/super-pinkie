@@ -9,7 +9,8 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {isUnresolvedSessionKey, logSessionFailure, registerSessionTitles} from './session-titles.mjs';
-import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerMetreModelsTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, registerMetreModelsTool, registerMetreRolesTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {checkRoleToolCall, formatRoleCardPrompt, isRolePluginToolAllowed, isRolesContext, ROLES_BASE, RoleMutationAuditor} from './metre-roles.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
@@ -3200,7 +3201,7 @@ export class CleKkSupervisor {
           displayReply: hashForAudit(renderFirstPerson(workFirstReplyText(reply, ctx))),
           runId,
           // Metre 不是碧琪，用户在这个模式里看到「碧琪」会以为串了模式。
-          note: modeForContext(ctx) === 'metre' ? '这一步还没能确认：目前的记录还不足以核实这个结果。'
+          note: modeForContext(ctx) === 'metre' || isRolesContext(ctx) ? '这一步还没能确认：目前的记录还不足以核实这个结果。'
             : '这一步碧琪还没能确认：目前的记录还不足以核实这个结果。',
         };
         this.persist(key, turn);
@@ -5926,6 +5927,34 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
   }
 
   prompt(event, ctx) {
+    // roles 角色子会话（briefs/metre-roles-1118 PLAN 3.5 / 3.6）：
+    // 不是模式（不进 MODE_BY_AGENT），每轮只注入全局交付真实性门禁、后台命令一句、ROLES_BASE、角色卡、
+    // 以及 Metre 留下的现场事实（项目速览、改完自动查语法、后台还在跑、压缩续工恢复）。
+    if (isRolesContext(ctx)) {
+      const sessionKey = ctx.sessionKey || '';
+      const blocks = [
+        '\n' + COMPLETION_TRUTH_RULES + '\n',
+        METRE_BACKGROUND_LINE,
+        '\n' + ROLES_BASE + '\n',
+      ];
+      const card = this.roleCardForSession?.(sessionKey);
+      if (card) blocks.push('\n' + formatRoleCardPrompt(card) + '\n');
+      try {
+        const brief = projectBriefBlock(sessionKey, {stateRoot: pinkieStateRoot()});
+        if (brief) blocks.push('\n' + brief + '\n');
+        const broken = codeWatch.block(sessionKey);
+        if (broken) blocks.push('\n' + broken + '\n');
+      } catch {}
+      const stillRunning = runningBackgroundJobs(sessionKey);
+      if (stillRunning.length) {
+        const list = stillRunning.slice(0, 4).map(job => `「${job.command.replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((Date.now() - job.startedAt) / 60_000))} 分钟）`).join('、');
+        blocks.push(`\n【后台还在跑】${list}。先继续做不依赖它的事，结束时系统会通知你，别重复开同一个命令，也别说成已经做完。\n`);
+      }
+      this.recentCompaction.delete(sessionKey);
+      const compactionResume = this.compactionResumeContext(sessionKey);
+      if (compactionResume) blocks.push(`\n${compactionResume}\n`);
+      return {appendSystemContext: blocks.filter(Boolean).join('')};
+    }
     const mode = modeForContext(ctx);
     const root = safeWorkspace(ctx);
     if (!mode || !root) return;
@@ -6967,21 +6996,47 @@ export default {
     // 模型失败的真实原因和「换个能用的模型」：聊天记录不保留 errorMessage，在这里记下。
     const modelHealth = new ModelHealth();
     sharePluginState(modelHealth, 'modelHealth', ['runs', 'models', 'sessions']);
-    api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
-    api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
-    api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    // roles 角色子会话按角色卡 tools 类别在插件工具注册时过滤（PLAN 3.6）；非 roles 会话原样透传。
+    let sessionLineageRef = null;
+    const roleMutations = globalThis[Symbol.for('pinkie.metre-roles.mutations.v1')] ??= new RoleMutationAuditor();
+    const origRegisterTool = api.registerTool?.bind(api);
+    const toolApi = origRegisterTool ? Object.create(api, {
+      registerTool: {
+        enumerable: true,
+        configurable: true,
+        value(factory, opts) {
+          return origRegisterTool(ctx => {
+            if (isRolesContext(ctx)) {
+              const card = sessionLineageRef?.roleCardForSession?.(ctx?.sessionKey) || null;
+              if (opts?.name && !isRolePluginToolAllowed(opts.name, card)) return null;
+              const made = factory(ctx);
+              if (!made) return null;
+              if (Array.isArray(made)) {
+                const kept = made.filter(item => isRolePluginToolAllowed(item?.name || '', card));
+                return kept.length ? kept : null;
+              }
+              return isRolePluginToolAllowed(made?.name || '', card) ? made : null;
+            }
+            return factory(ctx);
+          }, opts);
+        },
+      },
+    }) : api;
+    toolApi.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
+    toolApi.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
+    toolApi.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
     // 操控软件的现成动作：一次连做多步、按名字点控件、跑通的流程存在这台电脑上重放。Mac 和 Windows 都有。
-    api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
+    toolApi.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
-    api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
-    api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
-    api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
-    api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    toolApi.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
+    toolApi.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
+    toolApi.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
+    toolApi.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 挥洒模式不带碧琪的主动提问卡。
-    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
-    registerLearningGateway(api, learning);
-    registerLearningLibrary(api, {learning});
+    toolApi.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
+    registerLearningGateway(toolApi, learning);
+    registerLearningLibrary(toolApi, {learning});
     // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；
     // 这里把当天的真实进度换成给碧琪的系统上下文，用完即弃。
     api.on('before_prompt_build', (event, ctx) => {
@@ -6992,10 +7047,10 @@ export default {
       if (!nudge) return;
       return {appendSystemContext: `\n${composeNudgeContext(kind, nudge.today)}\n`};
     }, {priority: -10870});
-    const companion = registerCompanionGateway(api, learning);
-    const sessionTitles = registerSessionTitles(api, {root: path.join(pinkieStateRoot(), 'sessions'), assistant: companion, cli: resolveGatewayCliEntry(), runProcess});
-    registerSessionSearch(api, {titles: sessionTitles});
-    const sessionLineage = registerSessionLineage(api, {
+    const companion = registerCompanionGateway(toolApi, learning);
+    const sessionTitles = registerSessionTitles(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), assistant: companion, cli: resolveGatewayCliEntry(), runProcess});
+    registerSessionSearch(toolApi, {titles: sessionTitles});
+    const sessionLineage = registerSessionLineage(toolApi, {
       root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, stopped: userStoppedRecently,
       parentForWorker: key => architecture.resolveParent(key),
       isBusy: key => {
@@ -7011,35 +7066,39 @@ export default {
         if (current && Object.keys(current).length) return current;
         try { return JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch { return {}; }
       },
+      roleMutatedFiles: key => roleMutations.list(key),
     });
-    registerMetreModelsTool(api, sessionLineage);
-    registerSessionBranches(api, {
+    sessionLineageRef = sessionLineage;
+    architecture.roleCardForSession = key => sessionLineage.roleCardForSession(key);
+    registerMetreModelsTool(toolApi, sessionLineage);
+    registerMetreRolesTool(toolApi, sessionLineage);
+    registerSessionBranches(toolApi, {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
       isBusy: key => architecture.activityFor(key).parentRunning,
     });
-    const sessionPrefs = registerSessionPrefs(api, {root: path.join(pinkieStateRoot(), 'sessions')});
-    const sessionTemp = registerSessionTemp(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
-    const sessionExport = registerSessionExport(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
+    const sessionPrefs = registerSessionPrefs(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    const sessionTemp = registerSessionTemp(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
+    const sessionExport = registerSessionExport(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
     // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
-    registerSessionManage(api, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, lineage: sessionLineage,
+    registerSessionManage(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, lineage: sessionLineage,
       stateRoot: pinkieStateRoot(), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     // Metre 项目记忆（PLAN 6.2，批 M）：按文件夹隔离，metre_memory 工具 + 每轮项目档案 + pinkie.metre.memory。
-    registerMetreMemory(api, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
+    registerMetreMemory(toolApi, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
       bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json'),
       childrenRunning: async key => (await sessionLineage.list(key)).children.some(child => child.status === '运行中')});
     // Metre 总控台的数据（PLAN 2.12，批 5）：pinkie.metre.board 一次返回九个区块要的东西，pinkie.metre.resume 是「接着做」。
-    registerMetreBoard(api, {root: path.join(pinkieStateRoot(), 'metre-board'), lineage: sessionLineage, plans: planStore, modelHealth});
+    registerMetreBoard(toolApi, {root: path.join(pinkieStateRoot(), 'metre-board'), lineage: sessionLineage, plans: planStore, modelHealth});
     // Metre 批 6（PLAN 2.13 后端）：Metre 是当前模式、别的模式没在跑时，心跳、学习提醒、学习资料的排队轮询都停；渠道看设置。
-    const quietMode = registerQuietMode(api, {root: pinkieStateRoot(), nudge: prompt => Boolean(nudgeKindFromPrompt(prompt))});
+    const quietMode = registerQuietMode(toolApi, {root: pinkieStateRoot(), nudge: prompt => Boolean(nudgeKindFromPrompt(prompt))});
     quietMode.register('learning-materials', {pause: () => globalThis.__pinkieMaterialsJobs?.pause?.(), resume: () => globalThis.__pinkieMaterialsJobs?.resume?.()});
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
-    registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
-    const artifacts = registerArtifacts(api, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
-    registerProjectSettings(api, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
-    registerWebGptActivityGateway(api, webGptActivity);
-    registerWebGptConnectionGateway(api, webGptConnection);
+    registerToolTrace(toolApi, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
+    const artifacts = registerArtifacts(toolApi, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    registerProjectSettings(toolApi, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    registerWebGptActivityGateway(toolApi, webGptActivity);
+    registerWebGptConnectionGateway(toolApi, webGptConnection);
     // 思考等级的 Max / Ultra：答完之后的交付验收（见 reasoning.mjs 顶部的实测说明）。
-    const reasoning = registerReasoningGateway(api, new ReasoningEnhancer(api, {
+    const reasoning = registerReasoningGateway(toolApi, new ReasoningEnhancer(toolApi, {
       runProcess,
       cliEntry: resolveGatewayCliEntry(),
       isBusy: sessionKey => {
@@ -7060,11 +7119,11 @@ export default {
       },
     });
     // 输入框上方「后台工作」小面板读的就是这一份：子代理、独立解答与批评、后台命令。
-    registerWorkGateway(api, {reasoning, architecture, background});
-    registerModelSync(api);
-    registerModelSetup(api);
-    registerRichRuntime(api, {cli: resolveGatewayCliEntry()});
-    registerWorkbench(api);
+    registerWorkGateway(toolApi, {reasoning, architecture, background});
+    registerModelSync(toolApi);
+    registerModelSetup(toolApi);
+    registerRichRuntime(toolApi, {cli: resolveGatewayCliEntry()});
+    registerWorkbench(toolApi);
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
     sharePluginState(planContinuation, 'plan', ['timers', 'dispatching']);
@@ -7181,7 +7240,7 @@ export default {
     // pretending that they are already one per-run contract.
     api.registerGatewayMethod('pinkie.run.status', ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
-      if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):[^\s]+$/.test(sessionKey)) {
+      if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre|roles):[^\s]+$/.test(sessionKey)) {
         return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少有效会话标识'});
       }
       const tier = architecture.status(sessionKey);
@@ -7396,6 +7455,22 @@ export default {
       return architecture.prompt(event, ctx);
     }, {priority: -12000});
     api.on('before_tool_call', (event, ctx) => {
+      if (isRolesContext(ctx)) {
+        const card = sessionLineage.roleCardForSession(ctx.sessionKey);
+        const roleCheck = checkRoleToolCall(card, event.toolName, event.params);
+        if (roleCheck?.block) return roleCheck;
+        if (card && !card.tools.includes('write') && ['exec', 'run_tests'].includes(String(event.toolName || ''))) {
+          try {
+            const watchKey = String(ctx.sessionKey || '');
+            roleMutations.beforeExec(watchKey, event.toolCallId || ctx.toolCallId || event.runId, [
+              boundProjectRoot(watchKey, {stateRoot: pinkieStateRoot()}),
+              String(event.params?.workdir || ''),
+              String(event.params?.cwd || ''),
+              agentWorkspaceDir(ctx),
+            ]);
+          } catch {}
+        }
+      }
       const decision = architecture.beforeTool(event, ctx);
       if (!decision?.block) {
         const waiting = background.beforeTool(event, ctx);
@@ -7406,6 +7481,19 @@ export default {
       return decision;
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
+      if (isRolesContext(ctx)) {
+        try {
+          const card = sessionLineage.roleCardForSession(ctx.sessionKey);
+          if (card && !card.tools.includes('write')) {
+            const name = String(event.toolName || '');
+            if (['exec', 'run_tests'].includes(name)) {
+              roleMutations.afterExec(String(ctx.sessionKey || ''), event.toolCallId || ctx.toolCallId || event.runId);
+            } else if (['write', 'edit', 'apply_patch', 'code_edit'].includes(name) && !event.error && !event.isError) {
+              roleMutations.record(String(ctx.sessionKey || ''), toolTargetPaths(name, event.params, agentWorkspaceDir(ctx)));
+            }
+          }
+        } catch {}
+      }
       background.afterTool(event, ctx);
       planState.toolCalled(String(ctx.sessionKey || ''), event.toolName, Boolean(event.error || event.isError || event.result?.isError));
       architecture.afterTool(event, ctx);
@@ -7532,7 +7620,7 @@ export default {
       // model/session text untouched; only the user-visible outbound payload
       // receives Pinkie's first-person display name.
       const text = typeof payload?.text === 'string'
-        ? (modeForContext(ctx) === 'metre' ? workFirstReplyText(payload.text, ctx) : renderFirstPerson(workFirstReplyText(payload.text, ctx)))
+        ? (modeForContext(ctx) === 'metre' || isRolesContext(ctx) ? workFirstReplyText(payload.text, ctx) : renderFirstPerson(workFirstReplyText(payload.text, ctx)))
         : null;
       const cleaned = text !== null && text !== payload.text ? {...payload, text} : null;
       return Promise.resolve(cleKk.beforeReplyPayload(cleaned ? {...event, payload: cleaned} : event, ctx))
