@@ -14,8 +14,8 @@
 
 | 步骤 | 内容 | 状态 | 提交 |
 |---|---|---|---|
-| 1 | `research` 6 张角色卡 | 已完成 | 待写入 |
-| 2 | `content` 9 张角色卡 | 未开始 | |
+| 1 | `research` 6 张角色卡 | 已完成 | `81d63c22` |
+| 2 | `content` 9 张角色卡 | 已完成 | 待写入 |
 | 3 | `gate` 3 张角色卡 | 未开始 | |
 | 4 | `research` 6 份样题 JSON | 未开始 | |
 | 5 | `content` 9 份样题 JSON | 未开始 | |
@@ -42,3 +42,13 @@
   - 元数据字段与 PLAN 第四节表逐项一致，`name` 3–5 字（≤8），`when` 6–18 字（≤30），`tools` 只读卡均不含 `write`。
   - 正文固定三节（`## 做法`、`## 边界`、`## 交回`），总字数 593–699（去空白 558–666），全部在 300–1200 范围内。
   - 无禁用词（「碧琪」「先生」「老板」「注意质量」「认真细致」）；对照全部 `playbooks/*.md` 与 `AESTHETICS.md` 检查连续重叠，最大重叠 19 字符（仅文件名 `data-and-charts.md`），远低于 40 字符红线。
+
+### 2026-11-18 步骤 2：`content` 9 张角色卡
+
+- 新增 9 张卡：`visual-designer.md`、`ui-replicator.md`、`viral-creator.md`、`writer.md`、`editor.md`、`translator.md`、`doc-maker.md`、`motion-video.md`、`modeler-3d.md`。
+- 自检结果：
+  - 全部为 LF 换行，无 `\r`。
+  - 元数据字段（`id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`reads`）与 PLAN 第四节表逐项核对一致。
+  - 正文固定三节，总字数 576–880（去空白 543–814），均在 300–1200 范围内。
+  - 自检时捕获 `motion-video.md` 中「先生成配音」包含禁用子串「先生」，已改为「先合成配音」并重验全部 15 张卡无禁用子串。
+  - 对照全部 `playbooks/*.md` 与 `AESTHETICS.md` 检查连续重叠，最大重叠 28 字符（仅路径字符串 `` `playbooks/design-review.md` ``），远低于 40 字符红线。
