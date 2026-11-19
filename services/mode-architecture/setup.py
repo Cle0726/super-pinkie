@@ -499,6 +499,11 @@ def _choose_memory_search(data: dict, state: Path, probe=_probe_embeddings) -> N
             defaults.pop("memorySearch")
 
 
+def _install_metre_role_assets(repo_root: Path, home: Path, backup_root: Path) -> bool:
+    assets = runpy.run_path(str(Path(__file__).with_name("metre_role_assets.py")))
+    return assets["sync_metre_role_assets"](repo_root / "personas", home / ".openclaw", backup_root)
+
+
 def install(home=None) -> bool:
     home = Path(home or Path.home())
     config = home / ".openclaw/openclaw.json"
@@ -542,6 +547,10 @@ def install(home=None) -> bool:
         ):
             if (source / name).is_file():
                 changed |= _copy_if_changed(source / name, extension / name)
+        # The role-card reader is supplied by the separate Metre mechanism lane.
+        role_reader = source / "metre-roles.mjs"
+        if role_reader.is_file():
+            changed |= _copy_if_changed(role_reader, extension / role_reader.name)
         vendor_dir = source / "vendor"
         if vendor_dir.is_dir():
             for vendor_file in vendor_dir.rglob("*"):
@@ -579,6 +588,7 @@ def install(home=None) -> bool:
 
     changed |= _install_web_gpt_collab(repo_root, state)
     changed |= _tidy_metre_workspace(home, backup_root)
+    changed |= _install_metre_role_assets(repo_root, home, backup_root)
 
     before_choice = json.dumps(data, ensure_ascii=False, sort_keys=True)
     try:

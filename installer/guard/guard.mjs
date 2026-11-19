@@ -221,6 +221,9 @@ export function startup({bundle = path.resolve(HERE, '../..'), home = os.homedir
       for (const [rel, hash] of Object.entries(manifest.files)) {
         if (!rel.startsWith(prefix)) continue;
         const inner = rel.slice(prefix.length);
+        // The role asset installer owns this subtree (including retirement
+        // backups); never let the generic restorer write inside user/ or drafts/.
+        if (mode === 'metre' && (inner === 'roles' || inner.startsWith('roles/'))) continue;
         if (KEEP_NAMES.has(path.basename(inner))) continue;
         const target = path.join(workspace, ...inner.split('/'));
         if (!isLink(target) && hashFile(target) === hash) continue;

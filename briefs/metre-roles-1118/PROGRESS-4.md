@@ -42,3 +42,14 @@
 | R4-2 | 没测：尚未实现官方卡同步。 |
 | R4-4 | 没测：未执行新装、升级或 Mac 快照。 |
 | R4-5 | 没测：三份文档尚未改。 |
+
+## 2026-11-18 · 安装资产同步
+
+- 用户确认继续；复测 F 盘 37,400,276,992 字节（37.40 GB），超过停线。仍不构建安装包、不建隔离副本、不启动网关。
+- Windows 入口（install.ps1、App 安装/更新）、Mac 源安装及 App（sync-personas.sh、apply-bundled.sh，兼容热修脚本），以及以后使用的 iso 脚本均复用 metre_role_assets.py；guard 的通用恢复循环跳过整个 metre/roles 子树。打包核对官方卡字节和角色工作区资源；未构建包。
+- 官方顶层 Markdown 同字节不重写；不同文件先备份；源目录存在时退休的官方卡移到备份。旧包没有 roles 源目录时不当成全量删除；不进入 user/ 或 drafts/。工作区只复制项目打法、想法视觉规范并创建空占位，不复制人格和 memory/。
+- 本提交 services/mode-architecture/setup.py **502–504、550–553、591**：调用资产复制、把其他车道提供的 metre-roles.mjs 加入插件安装复制、调用工作区同步。没有改 agent 配置或工具。
+- 正式 App 安装目录补记：C:/Users/34786/AppData/Local/Programs/SuperPinkie，最后修改 UTC 2026-11-03T22:57:22.1522954Z；此前记录的 SuperPinkie 同名目录是 App 状态目录。
+- 验证：Windows 临时文件夹测试 19/19、persona bundle 3/3、Node self-contained-app 25/25 通过；Shell/PowerShell/guard 语法检查、git diff --check 通过。Mac 包安装/导入检查用 Windows 的 Node 对当前源码根运行（返回 Mac mode plugin fresh-install import OK），**不是打包后的 Mac 快照**。
+- 既有 mode_architecture_setup_test.py 在 Windows 为 9/10：第 45 行硬编码 Mac 状态目录，曾在 9dba1a4c 原版 setup.py 上单独重跑并得到同一 FileNotFoundError；未改老测试。macos_bundled_setup_test.py 初跑在 Windows 默认编码（cp1252）读取/写入中文 fixture 时失败，不作为 Mac 验收证据。
+- R4-2 的覆盖、退休两种备份均在临时 fixture 通过。R4-1 只验证重装/升级时同 ID 用户卡字节、修改时间不变；列卡、派活待网关。R1-18 只验证初装工作区内容及复制哈希，运行一轮后检查仍待网关。下一步：看板和三种截图。

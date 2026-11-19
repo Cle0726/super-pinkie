@@ -47,7 +47,13 @@ sync_mode() {
       keep=1
     fi
     install_file "$src" "$target/$rel" "$mode/$rel" "$keep"
-  done < <(find "$PERSONAS_DIR/$mode" -type f ! -name '.DS_Store' -print0 | sort -z)
+  done < <(
+    if [[ "$mode" == "metre" ]]; then
+      find "$PERSONAS_DIR/$mode" -path "$PERSONAS_DIR/$mode/roles" -prune -o -type f ! -name '.DS_Store' -print0
+    else
+      find "$PERSONAS_DIR/$mode" -type f ! -name '.DS_Store' -print0
+    fi | sort -z
+  )
   if [[ -d "$target/playbooks" ]]; then
     find "$target/playbooks" -maxdepth 1 -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
   fi
@@ -59,3 +65,6 @@ sync_mode thinking "$OPENCLAW_HOME/workspace-thinking"
 sync_mode learning "$OPENCLAW_HOME/workspace-learning"
 sync_mode neutral "$OPENCLAW_HOME/workspace-unrestricted"
 sync_mode metre "$OPENCLAW_HOME/workspace-metre"
+
+ROLE_ASSETS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/services/mode-architecture/metre_role_assets.py"
+"${PINKIE_PYTHON_BIN:-python3}" "$ROLE_ASSETS" "$PERSONAS_DIR" "$OPENCLAW_HOME" "$BACKUP_DIR"
