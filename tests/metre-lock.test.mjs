@@ -139,6 +139,11 @@ async function callGatewayMethod(methods, name, params = {}) {
   });
 }
 
+// The full-plugin case registers the real plugin, whose services keep handles open on Windows
+// (the file never exited there and the CI step hit its 30-minute limit). Once every test in this
+// file has finished, leave explicitly; process.exitCode still carries any failure.
+test.after(() => { setTimeout(() => process.exit(), 2000); });
+
 test('repo ships either the placeholder or a valid scrypt hash (never a plaintext password) and set-password generates valid scrypt record', async () => {
   const shippedFile = path.join(ROOT, 'services/mode-architecture/metre-lock-hash.json');
   const shipped = JSON.parse(fs.readFileSync(shippedFile, 'utf8'));
