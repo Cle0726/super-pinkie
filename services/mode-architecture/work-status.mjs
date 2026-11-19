@@ -2,7 +2,7 @@
 // aggregate contract in one module so packaging and UI tests use the same code.
 import {getActiveMetreLock} from './metre-lock.mjs';
 
-const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
+const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre|roles):[^\s]+$/;
 
 export function registerWorkGateway(api, {reasoning, architecture, background}) {
   const sessionFor = (params, respond) => {

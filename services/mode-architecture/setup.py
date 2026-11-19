@@ -330,6 +330,55 @@ def _tidy_metre_workspace(home: Path, backup_root: Path) -> bool:
             changed = True
     return changed
 UNUSED_OPENCLAW_TOOLS = ("workboard_*", "wiki_*", "skill_workshop", "canvas", "llm-task", "node_inference")
+# Metre 角色 agent（briefs/metre-roles-1118 PLAN 3.6 & R0 MEASURE.md）：
+# 不是模式（不进 MODE_AGENT_IDS），按 R0 实测把所有角色都不用的内建工具和会话/记忆/计划/渠道工具一并砍掉，
+# 使固定输入压到 ~14.5k token（远低于 30k 目标）。
+ROLES_DENY_TOOLS = (
+    *UNUSED_OPENCLAW_TOOLS,
+    "cron", "message", "nodes", "gateway",
+    "sessions_spawn", "sessions_list", "sessions_send", "sessions_history", "sessions_yield",
+    "session_status", "subagents", "agents_list",
+    "memory_search", "memory_get",
+    "create_goal", "update_goal", "get_goal",
+    "dir_fetch", "dir_list", "file_fetch", "file_write",
+    "qqbot_*", "feishu_*",
+)
+
+
+def _ensure_roles_agent(data: dict, workspace: Path) -> None:
+    """Register the private agent without putting it in the mode lists."""
+    agents = data.setdefault("agents", {})
+    entries = agents.get("entries")
+    if isinstance(entries, dict):
+        # Keep the implicit main agent as the first/default agent on a fresh
+        # profile. A lone roles entry must not become the default chat.
+        if not entries:
+            entries["main"] = {}
+        agent = entries.setdefault("roles", {})
+        if not isinstance(agent, dict):
+            agent = entries["roles"] = {}
+    else:
+        listing = agents.setdefault("list", [])
+        if not listing:
+            listing.append({"id": "main"})
+        agent = next((item for item in listing if isinstance(item, dict) and item.get("id") == "roles"), None)
+        if agent is None:
+            agent = {"id": "roles"}
+            listing.append(agent)
+    agent["workspace"] = str(workspace)
+    agent["contextInjection"] = "never"
+    for key, name, value in (("heartbeat", "every", "0m"), ("memorySearch", "enabled", False)):
+        options = agent.get(key)
+        if not isinstance(options, dict):
+            options = agent[key] = {}
+        options[name] = value
+    tools = agent.get("tools")
+    if not isinstance(tools, dict):
+        tools = agent["tools"] = {}
+    deny = tools.get("deny")
+    if not isinstance(deny, list):
+        deny = tools["deny"] = []
+    deny.extend(name for name in ROLES_DENY_TOOLS if name not in deny)
 
 
 # 不是聊天模型的(画图、视频、语音、向量): 不给它们标「能看图」。
@@ -577,6 +626,11 @@ def _choose_memory_search(data: dict, state: Path, probe=_probe_embeddings) -> N
             defaults.pop("memorySearch")
 
 
+def _install_metre_role_assets(repo_root: Path, home: Path, backup_root: Path) -> bool:
+    assets = runpy.run_path(str(Path(__file__).with_name("metre_role_assets.py")))
+    return assets["sync_metre_role_assets"](repo_root / "personas", home / ".openclaw", backup_root)
+
+
 def install(home=None) -> bool:
     home = Path(home or Path.home())
     config = home / ".openclaw/openclaw.json"
@@ -609,7 +663,7 @@ def install(home=None) -> bool:
             "learning-materials-extract.mjs", "learning-zsb.mjs",
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
-            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-baton.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "channel-reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
+            "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-roles.mjs", "metre-baton.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "channel-reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
             "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs", "metre-lock.mjs", "metre-lock-hash.json",
             "feedback.mjs", "feedback-crypto.mjs", "feedback-sanitize.mjs", "feedback-transport.mjs", "feedback-public.json",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt.mjs",
@@ -675,8 +729,10 @@ def install(home=None) -> bool:
 
     changed |= _install_web_gpt_collab(repo_root, state)
     changed |= _tidy_metre_workspace(home, backup_root)
+    changed |= _install_metre_role_assets(repo_root, home, backup_root)
 
     before_choice = json.dumps(data, ensure_ascii=False, sort_keys=True)
+    _ensure_roles_agent(data, home / ".openclaw/workspace-roles")
     try:
         _choose_memory_search(data, state)
     except Exception as error:  # never block setup on a probe

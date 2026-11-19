@@ -1,0 +1,86 @@
+{
+  "role": "code-reviewer",
+  "name": "代码审查",
+  "samples": [
+    {
+      "id": "code-reviewer-1",
+      "title": "审查库存扣减与批量预订模块的改动",
+      "brief": "目标：对工作目录 `src/inventory.mjs` 进行交付前代码审查。\n背景：该模块提供 `reserveStock(stockMap, orderItems)` 和 `restock(stockMap, sku, count)` 两个函数，要求：\n1. 扣减库存前若任一商品库存不足（所需数量大于现有库存），应整体拒绝预订且不得部分修改 `stockMap`。\n2. 同一订单里同一个 `sku` 可能出现多行，扣减时应累加该 `sku` 的总需求量。\n3. `restock` 补货数量必须为正整数，否则抛出错误。\n请只读审查 `src/inventory.mjs`，可运行验证命令核实，按角色卡格式交回问题清单。",
+      "files": [
+        {
+          "path": "src/inventory.mjs",
+          "content": "export function reserveStock(stockMap, orderItems = []) {\n  if (!stockMap || typeof stockMap !== 'object') {\n    throw new TypeError('INVALID_STOCK_MAP');\n  }\n  for (const item of orderItems) {\n    const current = stockMap[item.sku] ?? 0;\n    if (item.qty >= current) {\n      return {ok: false, reason: `INSUFFICIENT:${item.sku}`};\n    }\n    stockMap[item.sku] = current - item.qty;\n  }\n  return {ok: true};\n}\n\nexport function restock(stockMap, sku, count) {\n  try {\n    if (!Number.isInteger(count) || count <= 0) {\n      throw new RangeError('INVALID_COUNT');\n    }\n    stockMap[sku] = (stockMap[sku] ?? 0) + count;\n    return stockMap[sku];\n  } catch {\n    return 0;\n  }\n}\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": 1,
+          "file": "src/inventory.mjs",
+          "line": 7,
+          "severity": "重要",
+          "description": "边界条件写反：`if (item.qty >= current)` 把刚好等于库存数量的合法预订（`item.qty === current`）也当成库存不足拒绝了，应为 `item.qty > current`"
+        },
+        {
+          "id": 2,
+          "file": "src/inventory.mjs",
+          "line": 10,
+          "severity": "阻塞",
+          "description": "非原子原地修改：在单次循环里边检查边修改 `stockMap[item.sku]`，当第 2 个商品库存不足返回 `{ok: false}` 时，第 1 个商品的库存已经被扣减，造成部分修改脏数据"
+        },
+        {
+          "id": 3,
+          "file": "src/inventory.mjs",
+          "line": 22,
+          "severity": "重要",
+          "description": "空 `catch` 吞掉异常：`restock` 在第 18 行抛出的 `RangeError('INVALID_COUNT')` 被第 22 行 `catch { return 0; }` 直接吞掉并返回 0，违反非法补货数量必须抛错的要求"
+        }
+      ],
+      "checks": [
+        "工作目录所有文件零修改（只读角色未改动 src/inventory.mjs，也未遗留临时文件）",
+        "问题清单至少准确找出 3 个预埋问题中的 2 个（指明 src/inventory.mjs 对应行号、触发输入和出错结果）",
+        "误报数为 0（未捏造不存在的语法错误，也未把代码缩进或命名风格列为问题）",
+        "交回汇报包含严重程度、文件和行号、出错场景、建议改法，以及已查范围说明"
+      ]
+    },
+    {
+      "id": "code-reviewer-2",
+      "title": "审查异步任务重试与超时封装模块的改动",
+      "brief": "目标：对工作目录 `src/retry-runner.mjs` 进行交付前代码审查。\n背景：`runWithRetry(taskFn, {retries, delayMs, timeoutMs})` 用于执行返回 Promise 的异步任务 `taskFn(attempt)`：\n1. 初次执行加最多 `retries` 次重试（例如 `retries = 2` 时最多调用 `taskFn` 共 3 次）。\n2. 每次调用若超过 `timeoutMs` 未完成则判定本次超时失败，任务正常完成后必须清理定时器避免句柄泄漏。\n3. 每次失败后等待 `delayMs` 毫秒再进入下一次重试。\n请只读审查 `src/retry-runner.mjs` 并核实问题，按角色卡格式交回。",
+      "files": [
+        {
+          "path": "src/retry-runner.mjs",
+          "content": "function sleep(ms) {\n  return new Promise(resolve => setTimeout(resolve, ms));\n}\n\nfunction withTimeout(promise, timeoutMs) {\n  return new Promise((resolve, reject) => {\n    setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs);\n    promise.then(resolve, reject);\n  });\n}\n\nexport async function runWithRetry(taskFn, {retries = 2, delayMs = 50, timeoutMs = 1000} = {}) {\n  let lastErr;\n  for (let attempt = 1; attempt <= retries; attempt++) {\n    try {\n      return await withTimeout(taskFn(attempt), timeoutMs);\n    } catch (err) {\n      lastErr = err;\n      if (attempt < retries) {\n        sleep(delayMs);\n      }\n    }\n  }\n  throw lastErr;\n}\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": 1,
+          "file": "src/retry-runner.mjs",
+          "line": 7,
+          "severity": "重要",
+          "description": "定时器句柄泄漏：`withTimeout` 中的 `setTimeout` 在 `promise` 正常 resolve 或 reject 后没有 `clearTimeout`，会导致 Node 进程在 `timeoutMs` 到期前无法退出"
+        },
+        {
+          "id": 2,
+          "file": "src/retry-runner.mjs",
+          "line": 14,
+          "severity": "阻塞",
+          "description": "循环次数差一错误：`for (let attempt = 1; attempt <= retries; attempt++)` 在 `retries = 2` 时总共只执行 2 次（且 `retries = 0` 时一次都不执行并抛出 `undefined`），应为 `attempt <= retries + 1` 或从 `0` 到 `<= retries`"
+        },
+        {
+          "id": 3,
+          "file": "src/retry-runner.mjs",
+          "line": 20,
+          "severity": "重要",
+          "description": "异步等待缺失：`sleep(delayMs)` 前面漏写了 `await`，导致失败后不会等待 `delayMs` 就立刻发起下一次重试"
+        }
+      ],
+      "checks": [
+        "工作目录所有文件零修改（src/retry-runner.mjs 未被修改）",
+        "问题清单至少准确找出 3 个预埋问题中的 2 个（包含 src/retry-runner.mjs 行号、出错场景与建议改法）",
+        "误报数为 0（未虚构不存在的问题，未挑剔格式毛病）",
+        "交回汇报包含严重程度、文件和行号、出错场景、建议改法"
+      ]
+    }
+  ]
+}

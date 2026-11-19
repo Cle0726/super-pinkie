@@ -62,7 +62,9 @@ test('A0-4 Metre 一轮的固定文字开销不超过 6500 字（工作区文件
     const metre = await collect('metre', {prompt});
     assert.ok(metre.total <= 6500, `${metre.total} 字：${prompt}`);
   }
-  const workspace = fs.readdirSync(path.resolve('personas/metre')).sort();
+  // Subdirectories such as roles/ are not bootstrap files.
+  const workspace = fs.readdirSync(path.resolve('personas/metre'), {withFileTypes: true})
+    .filter(entry => !entry.isDirectory()).map(entry => entry.name).sort();
   assert.deepEqual(workspace, ['AGENTS.md', 'IDENTITY.md', 'SOUL.md']);
 });
 

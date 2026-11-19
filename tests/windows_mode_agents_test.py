@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -223,6 +224,70 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertEqual((metre / "AGENTS.md").read_text(encoding="utf-8"), "metre AGENTS.md")
         self.assertEqual((metre / "TOOLS.md").read_text(encoding="utf-8"), "")
         self.assertEqual((metre / "USER.md").read_text(encoding="utf-8"), "我自己写的")
+
+    def test_role_assets_install_reinstall_and_upgrade_without_touching_user_cards(self):
+        helper = Path(__file__).resolve().parents[1] / "services/mode-architecture/metre_role_assets.py"
+        bundled = self.resources / "services/mode-architecture"
+        bundled.mkdir(parents=True)
+        shutil.copyfile(helper, bundled / helper.name)
+        personas = self.resources / "personas"
+        cards = personas / "metre/roles"
+        cards.mkdir(parents=True)
+        (cards / "backend.md").write_bytes(b"first official version\n")
+        (cards / "retired.md").write_bytes(b"retired official version\n")
+        # Accidentally bundled nested cards must never be copied.
+        (cards / "user").mkdir()
+        (cards / "user/backend.md").write_bytes(b"not a bundled asset")
+        aesthetics = personas / "thinking/AESTHETICS.md"
+        aesthetics.parent.mkdir()
+        aesthetics.write_bytes("谱纸".encode("utf-8"))
+        playbooks = personas / "project/playbooks"
+        (playbooks / "nested").mkdir()
+        (playbooks / "nested/toolbox.mjs").write_bytes(b"export {};")
+
+        state = self.home / ".openclaw"
+        self.assertTrue(super_pinkie.install_personas(self.logs.append, register=False))
+        installed = state / "workspace-metre/roles"
+        workspace = state / "workspace-roles"
+        self.assertEqual((installed / "backend.md").read_bytes(), b"first official version\n")
+        self.assertFalse((installed / "user").exists())
+        self.assertEqual(
+            {p.name for p in workspace.iterdir()},
+            {"playbooks", "refs", "AGENTS.md", "SOUL.md", "IDENTITY.md", "TOOLS.md",
+             "USER.md", "HEARTBEAT.md", "BOOTSTRAP.md"},
+        )
+        for file in workspace.glob("*.md"):
+            self.assertEqual(file.read_bytes(), b"", file.name)
+        for file in playbooks.rglob("*"):
+            if file.is_file():
+                copy = workspace / "playbooks" / file.relative_to(playbooks)
+                self.assertEqual(hashlib.sha256(copy.read_bytes()).digest(),
+                                 hashlib.sha256(file.read_bytes()).digest())
+        self.assertEqual((workspace / "refs/AESTHETICS.md").read_bytes(), aesthetics.read_bytes())
+        self.assertNotIn("roles", super_pinkie.MODE_AGENTS)
+
+        user = installed / "user/backend.md"
+        user.parent.mkdir()
+        user.write_bytes("用户角色\r\n".encode("utf-8"))
+        custom = user.read_bytes(), user.stat().st_mtime_ns
+        (installed / "backend.md").write_bytes(b"local edit")
+        (cards / "backend.md").write_bytes(b"second official version")
+        (cards / "retired.md").unlink()
+        draft = installed / "drafts/retired.md"
+        draft.parent.mkdir()
+        draft.write_bytes(b"draft")
+        self.assertTrue(super_pinkie.install_personas(self.logs.append, register=False))
+        self.assertEqual((installed / "backend.md").read_bytes(), b"second official version")
+        self.assertFalse((installed / "retired.md").exists())
+        backups = list(self.state.glob("backups/personas-*/metre/roles"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual((backups[0] / "backend.md").read_bytes(), b"local edit")
+        self.assertEqual((backups[0] / "retired.md").read_bytes(), b"retired official version\n")
+
+        self.assertTrue(super_pinkie.install_personas(self.logs.append, register=False))
+        self.assertEqual((user.read_bytes(), user.stat().st_mtime_ns), custom)
+        self.assertEqual(draft.read_bytes(), b"draft")
+        self.assertEqual(len(list(backups[0].iterdir())), 2)
 
     def test_missing_workspace_avatars_are_filled_but_user_images_are_kept(self):
         assets = self.resources / "ui/assets"

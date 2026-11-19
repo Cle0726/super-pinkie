@@ -3,8 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {endsWithUserQuestion} from './ask.mjs';
-import {chooseChildModel, listModels, TIERS} from './metre-models.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
+import {chooseChildModel, chooseRoleModel, listModels, TIERS, vendorOf} from './metre-models.mjs';
+import {
+  checkRoleReportSections, formatReadonlyMutationNotice, formatRoleDetailResponse,
+  formatRolesBriefCatalog, formatRolesListResponse, loadRoles, ROLES_AGENT_ID,
+} from './metre-roles.mjs';
 import {sharedSessionPrefs} from './session-prefs.mjs';
 import {
   agentOf, channelTitle, clipGraphemes, graphemeCount, isBadTitle, isInternalMessage, isInternalSessionKey, isPersona,
@@ -69,7 +73,7 @@ const nowId = (...values) => createHash('sha256').update(JSON.stringify(values))
 const statusName = {running: '运行中', waiting: '等你回复', done: '完成', error: '出错'};
 const plainText = raw => safeText(raw).replace(/[^\S\n\t]+/gu, ' ').replace(/[\u0000-\u0008\u000B-\u001F\u007F]/gu, '').trim();
 const keyFor = (parentKey, id, agentId = agentOf(parentKey)) => `agent:${agentId}:pinkie-child:${nowId(parentKey, id).slice(0, 32)}`;
-const targetAgent = (parentKey, request) => request?.mode ? METRE_TARGETS[request.mode] : agentOf(parentKey);
+const targetAgent = (parentKey, request) => request?.metreRole ? ROLES_AGENT_ID : request?.mode ? METRE_TARGETS[request.mode] : agentOf(parentKey);
 const generated = (event, ctx) => [ctx?.runId, event?.runId, event?.messageId].some(id => GENERATED_RUN.test(String(id || '')));
 const sessionKeyOf = (event, ctx) => ctx?.sessionKey || event?.sessionKey || '';
 const runIdOf = (event, ctx) => String(ctx?.runId || event?.runId || '');
@@ -177,7 +181,30 @@ export function latestChildReport(parentKey) {
   return null;
 }
 
-export function normalizeChildRequest(input = {}, {metre = false} = {}) {
+function normalizeRoleInput(raw) {
+  if (typeof raw !== 'string') throw new Error('role 必须是角色 id 字符串');
+  const text = raw.trim();
+  if (!text || text.length > 64 || !/^[a-z][a-z0-9-]{1,31}$/.test(text)) {
+    throw new Error(`role 不合法（${clipGraphemes(text, 40)}）：必须写 pinkie_roles 返回的角色 id`);
+  }
+  return text;
+}
+
+function normalizeOfInput(raw) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new Error('of 必须是被复核子会话 key 的数组');
+  if (raw.length > 20) throw new Error('of 最多填 20 个子会话 key');
+  const out = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') throw new Error('of 里的每一项都必须是会话 key 字符串');
+    const text = item.trim();
+    if (!text || text.length > 200) throw new Error('of 里的会话 key 格式不对');
+    if (!out.includes(text)) out.push(text);
+  }
+  return out;
+}
+
+export function normalizeChildRequest(input = {}, {metre = false, rolesEnabled = false} = {}) {
   const title = plainText(input.title).replace(/\s+/gu, ' ');
   if (!title || graphemeCount(title, 40) > 40) throw new Error('子会话名称需要 1 到 40 个字');
   const prompt = plainText(input.prompt);
@@ -186,12 +213,17 @@ export function normalizeChildRequest(input = {}, {metre = false} = {}) {
   if (!CONTEXTS.includes(context)) throw new Error('请选择新上下文或继承父会话');
   if (!INITIATIONS.includes(input.initiation)) throw new Error('请选择子会话发起方式');
   const mode = normalizeMode(input.mode, {metre});
-  // model / folder 只有 Metre 的工具说明里有（PLAN 2.4）；老模式传了也不读，行为不变。
+  // model / folder / role / of 只有 Metre 的工具说明里有；老模式传了也不读，行为不变。
   const model = metre && input.model !== undefined && input.model !== null ? String(input.model).trim() : '';
   if (model.length > 200) throw new Error('model 写 pinkie_models 返回的 id');
   const folder = metre && input.folder !== undefined && input.folder !== null ? String(input.folder).trim() : '';
   if (folder.length > 1024) throw new Error('folder 太长');
-  return {title, prompt, context, initiation: input.initiation, ...(mode ? {mode} : {}), ...(model ? {model} : {}), ...(folder ? {folder} : {})};
+  const hasRole = metre && rolesEnabled && input.role !== undefined && input.role !== null;
+  const metreRole = hasRole ? normalizeRoleInput(input.role) : '';
+  const of = metre && rolesEnabled ? normalizeOfInput(input.of) : [];
+  return {title, prompt, context, initiation: input.initiation, ...(mode ? {mode} : {}),
+    ...(model ? {model} : {}), ...(folder ? {folder} : {}),
+    ...(metreRole ? {metreRole} : {}), ...(of.length ? {of} : {})};
 }
 
 // folder 参数：认盘符和反斜杠（D:\work\site、d:/work/site）、~ 开头、两头带引号的写法；必须是已经存在的文件夹。
@@ -218,7 +250,9 @@ const FAILED_REPORT = '这个子会话没有跑起来（模型调用失败或中
 
 function reportContext(card) {
   // 卡片上只放前 400 字；交给父会话的是完整的那份（最多 6000 字），不然结论常常被截在开场白里。
-  const data = JSON.stringify({title: card.title, ...(card.mode ? {来自: TARGET_NAMES[card.mode]} : {}), ...(card.model ? {模型: card.model} : {}),
+  const data = JSON.stringify({title: card.title,
+    ...(card.roleName ? {角色: card.roleName} : card.mode ? {来自: TARGET_NAMES[card.mode]} : {}),
+    ...(card.model ? {模型: card.model} : {}),
     text: card.full || card.text})
     .replace(/[<>]/g, char => char === '<' ? '\\u003c' : '\\u003e');
   return `【子会话汇报】${REPORT_RULE}\n${data}\n【汇报结束】`;
@@ -235,12 +269,13 @@ function reportText(event) {
 export class SessionLineage {
   constructor(api, {root, titles, isBusy = () => false, stopped = () => false, parentForWorker = () => '', now = Date.now,
     schedule = setTimeout, stopTimeoutMs = 12_000, askTimeoutMs = ASK_TIMEOUT, autoSplit = () => true, failGraceMs = 20_000,
-    prefs = null, config = null, modelHealth = null}) {
+    prefs = null, config = null, modelHealth = null, roleDirs = null, roleMutatedFiles = null}) {
     this.api = api;
     this.titles = titles;
     this.access = titles.access;
     this.file = path.join(root, 'session-lineage.json');
     this.cardsFile = path.join(root, 'session-cards.json');
+    this.roleSnapshotsFile = path.join(root, 'session-role-snapshots.json');
     this.isBusy = isBusy;
     this.stopped = stopped;
     this.parentForWorker = parentForWorker;
@@ -261,10 +296,37 @@ export class SessionLineage {
     this.prefsSource = prefs ? () => prefs : null;
     this.configSource = config;
     this.modelHealth = modelHealth;
+    this.roleDirs = roleDirs;
+    this.roleMutatedFiles = roleMutatedFiles;
   }
 
   lineage() { return readSessionJson(this.file); }
   state(key) { return readSessionJson(this.cardsFile)[key] || {}; }
+  roleSnapshot(key) { return readSessionJson(this.roleSnapshotsFile)[key] || null; }
+  saveRoleSnapshot(key, card) {
+    if (!key || !card) return;
+    const all = readSessionJson(this.roleSnapshotsFile);
+    all[key] = {
+      id: card.id, name: card.name, group: card.group, groupName: card.groupName,
+      when: card.when, tier: card.tier, vision: Boolean(card.vision),
+      tools: [...(card.tools || [])], deny_commands: [...(card.deny_commands || [])],
+      reads: [...(card.reads || [])], readsResolved: [...(card.readsResolved || [])],
+      skills: [...(card.skills || [])], skillsResolved: [...(card.skillsResolved || [])],
+      review: card.review || '', source: card.source || 'official',
+      sourceLabel: card.sourceLabel || (card.source === 'user' ? '自定义' : '官方'),
+      body: card.body || '', bodyHash: card.bodyHash || '',
+      reportSections: [...(card.reportSections || [])],
+    };
+    writeSessionJson(this.roleSnapshotsFile, all);
+  }
+  roleCardForSession(key) {
+    if (!key) return null;
+    const snap = this.roleSnapshot(key);
+    if (snap) return snap;
+    const rec = this.lineage()[key];
+    if (!rec?.metreRole) return null;
+    return this.rolesRegistry().byId[rec.metreRole] || null;
+  }
   updateLineage(key, fields) {
     const records = this.lineage();
     records[key] = {...records[key], ...fields};
@@ -395,6 +457,11 @@ export class SessionLineage {
   // 实际发给子会话的简报；卡片上「看完整简报」给用户看的也是这一份。
   // 别的模式里的碧琪不知道这件事从哪来：说清是谁转过来的。代理写的简报末尾提醒「最后一条回复就是汇报」。
   briefFor(parentKey, request) {
+    if (isMetreKey(parentKey) && request.metreRole && request.initiation !== 'consult' && !request.userAuthored) {
+      // PLAN 3.5：带角色时改用角色版开头，不加 REPORT_NOTE（卡里有「交回」一节）。
+      return `（这份简报来自 Metre，角色：${request.metreRoleName || request.metreRole}。做法和汇报格式见角色卡。）\n`
+        + request.prompt;
+    }
     if (isMetreKey(parentKey) && request.initiation !== 'consult' && !request.userAuthored) {
       return '（这份简报来自 Metre：它负责理解用户的整件事、拆分和验收，这一块交给你。用你这边的方法做。）\n'
         + request.prompt + REPORT_NOTE;
@@ -411,7 +478,10 @@ export class SessionLineage {
     const agentId = targetAgent(parentKey, request), cross = agentId !== agentOf(parentKey);
     const key = keyFor(parentKey, id, agentId);
     const already = this.lineage()[key];
-    if (already?.started) return {key, title: already.title, ...(cross ? {mode: request.mode} : {})};
+    if (already?.started) {
+      return {key, title: already.title,
+        ...(already.metreRole ? {role: already.metreRole, roleName: already.metreRoleName, roleSource: already.metreRoleSource} : cross ? {mode: request.mode} : {})};
+    }
     const rows = await this.familyRows(parentKey, agentId);
     const limit = this.maxRunning(parentKey);
     if (this.runningChildren(parentKey, rows) >= limit && !this.busy(key, rows.get(key))) {
@@ -456,7 +526,8 @@ export class SessionLineage {
         } catch (error) {
           if (/label already in use/i.test(error.message)) continue;
           if (cross && /unknown agent|agent[^.]{0,40}not (?:found|configured)|no such agent/i.test(error.message)) {
-            throw new Error(`这台电脑上还没有${TARGET_NAMES[request.mode]}，这件事就在这里做`);
+            throw new Error(request.metreRole ? '这台电脑上还没有安装 roles 角色代理，这件事请先改用 mode 或在这里做'
+              : `这台电脑上还没有${TARGET_NAMES[request.mode]}，这件事就在这里做`);
           }
           if (request.context === 'fork' && /parent session.*still active/i.test(error.message)) {
             throw new Error('父会话还在运行，结束后从提案卡片开启继承上下文的子会话');
@@ -481,10 +552,20 @@ export class SessionLineage {
     }
     if (binding) await this.access.rpc('pinkie.project.bind', {key, path: binding.root, name: binding.name});
     const startRun = 'pinkie-child-start-' + nowId(key);
+    // 带角色派活：先固化这一单的角色卡快照和哈希，再发第一条消息，保证中途改卡不影响正在跑的会话（PLAN 3.5 / R1-14）。
+    if (request.metreRole && request._roleCard) {
+      this.saveRoleSnapshot(key, request._roleCard);
+    }
     this.updateLineage(key, {parentKey, title: child.label || request.title || '新会话', initiation: request.initiation,
       context: request.context, createdAt: already?.createdAt || this.now(), detached: already?.detached || false,
       lastReportAt: already?.lastReportAt || 0, startRun,
-      ...(cross ? {mode: request.mode, fromMode: metre ? 'metre' : modeOfKey(parentKey)} : {}),
+      ...(cross ? {fromMode: metre ? 'metre' : modeOfKey(parentKey), ...(request.mode ? {mode: request.mode} : {})} : {}),
+      ...(request.metreRole ? {
+        metreRole: request.metreRole,
+        metreRoleName: request.metreRoleName || request.metreRole,
+        metreRoleSource: request.metreRoleSource || 'official',
+        metreRoleHash: request.metreRoleHash || request._roleCard?.bodyHash || '',
+      } : {}),
       ...(choice?.model ? {model: choice.model} : {}), ...(folder ? {folder} : {})});
     if (!request.autoTitle && this.titles.record(key)?.source !== 'user') {
       this.titles.record(key, {title: child.label || request.title, source: request.userAuthored ? 'user' : 'system'});
@@ -505,7 +586,12 @@ export class SessionLineage {
       this.notify(parentKey);
       this.notify(key);
     }
-    return {key, title: child.label || request.title || '新会话', ...(cross ? {mode: request.mode} : {}),
+    return {key, title: child.label || request.title || '新会话',
+      ...(request.metreRole ? {
+        role: request.metreRole,
+        roleName: request.metreRoleName || request.metreRole,
+        roleSource: request.metreRoleSource || 'official',
+      } : cross ? {mode: request.mode} : {}),
       ...(choice?.model ? {model: choice.model} : {}), ...(folder ? {folder} : {})};
   }
 
@@ -515,6 +601,25 @@ export class SessionLineage {
   }
   metreLimits() {
     try { return this.prefs()?.metreLimits?.() || {maxRunning: 8, requestCap: 24}; } catch { return {maxRunning: 8, requestCap: 24}; }
+  }
+  metreRolesEnabled() {
+    try { return this.prefs()?.metreRolesEnabled?.() !== false; } catch { return true; }
+  }
+  rolesAgentConfigured() {
+    const list = this.modelConfig()?.agents?.list;
+    return !Array.isArray(list) || !list.length || list.some(item => item?.id === ROLES_AGENT_ID);
+  }
+  rolesRegistry(opts = {}) {
+    return loadRoles({...(this.roleDirs || {}), ...opts});
+  }
+  rolesInfo(parentKey, {id} = {}) {
+    if (!isMetreKey(parentKey)) throw new Error('只有 Metre 能查看角色列表');
+    if (!this.metreRolesEnabled()) throw new Error('角色功能已关闭（metreRoles=false）');
+    const reg = this.rolesRegistry();
+    if (id !== undefined && id !== null && String(id).trim() !== '') {
+      return formatRoleDetailResponse(reg, id);
+    }
+    return formatRolesListResponse(reg);
   }
   maxRunning(parentKey) { return isMetreKey(parentKey) ? this.metreLimits().maxRunning : MAX_RUNNING; }
   solo(key) { try { return Boolean(this.prefs()?.solo?.(key)); } catch { return false; } }
@@ -539,6 +644,26 @@ export class SessionLineage {
   }
   async childModel(parent, request, agentId) {
     const selfModel = await this.selfModel(parent.key, parent);
+    if (request?.metreRole) {
+      const card = request._roleCard || this.rolesRegistry().byId[request.metreRole];
+      const excludeVendors = [];
+      if (card?.review === 'cross-vendor' && Array.isArray(request.of) && request.of.length) {
+        const lineage = this.lineage();
+        for (const targetKey of request.of) {
+          const modelId = lineage[targetKey]?.model || '';
+          const v = vendorOf(modelId);
+          if (v && !excludeVendors.includes(v)) excludeVendors.push(v);
+        }
+      }
+      return chooseRoleModel({
+        config: this.modelConfig(),
+        health: this.modelHealth,
+        selfModel,
+        requested: request.model,
+        roleCard: card,
+        excludeVendors,
+      });
+    }
     return chooseChildModel({config: this.modelConfig(), health: this.modelHealth, selfModel, requested: request.model, targetAgent: agentId});
   }
   async models(parentKey, {tier = '', query = ''} = {}) {
@@ -602,14 +727,28 @@ export class SessionLineage {
   }
 
   async start(parentKey, runId, input, callId) {
-    return this.startRequest(parentKey, runId, normalizeChildRequest(input, {metre: isMetreKey(parentKey)}), callId);
+    const metre = isMetreKey(parentKey);
+    const rolesEnabled = metre && this.metreRolesEnabled();
+    return this.startRequest(parentKey, runId, normalizeChildRequest(input, {metre, rolesEnabled}), callId);
   }
 
-  // Metre 自己开子会话前的几道关（PLAN 2.4、2.6）。用户从界面亲手开的不走这里。
+  // Metre 自己开子会话前的几道关（PLAN 2.4、2.6；角色卡 PLAN 3.4）。用户从界面亲手开的不走这里。
   metreGate(parentKey, request) {
     if (this.solo(parentKey)) throw new Error('这个会话现在是 Virtuoso（独做）：不开子会话，自己做');
     if (this.paused(parentKey)) throw new Error('用户暂停了派发：已经在跑的子会话照常，新的先不开。这块活就在这里做，或者告诉用户在等他取消暂停');
-    if (!request.mode) throw new Error('Metre 的子会话要写 mode（chat、project、ideas、learning、unrestricted），不能开在 Metre 里');
+    if (request.metreRole) {
+      if (!this.metreRolesEnabled()) throw new Error('角色功能已关闭（metreRoles=false），请改用 mode 派活');
+      const reg = this.rolesRegistry();
+      if (!reg.byId[request.metreRole]) {
+        const bad = reg.invalid.find(item => item.id === request.metreRole);
+        const avail = reg.validIds.length ? reg.validIds.join('、') : '（暂无合格角色卡）';
+        throw new Error(bad
+          ? `角色「${request.metreRole}」不合格，不能派活（${bad.reason}）。可用角色：${avail}`
+          : `没有「${request.metreRole}」这个角色。可用角色：${avail}`);
+      }
+    } else if (!request.mode) {
+      throw new Error('Metre 的子会话要写 mode（chat、project、ideas、learning、unrestricted），不能开在 Metre 里');
+    }
     if (!['user_asked', 'in_scope'].includes(request.initiation)) return;
     const cap = this.metreLimits().requestCap, used = this.state(parentKey).metreStarts || 0;
     if (cap > 0 && used >= cap) {
@@ -644,19 +783,41 @@ export class SessionLineage {
     return this.serial(parentKey, async () => {
       const parent = await this.parentEntry(parentKey);
       let request = input.userAuthored ? {...input, prompt: userBrief(titleFor(parent, parentKey), input.prompt, input.forkAt)} : input;
-      let note = '';
+      const notes = [];
       const metre = isMetreKey(parentKey) && !input.userAuthored;
       if (metre) this.metreGate(parentKey, request);
-      if (request.mode) {
+      if (metre && request.metreRole) {
+        const card = this.rolesRegistry().byId[request.metreRole];
+        if (request.mode) {
+          const {mode: _ignored, ...rest} = request;
+          request = rest;
+          notes.push('带角色时 mode 不起作用');
+        }
+        if (request.context === 'fork') {
+          request = {...request, context: 'fresh'};
+          notes.push('角色子会话看不到这段对话，已改用新上下文（fresh）；背景要写在简报里');
+        }
+        if (card.review === 'cross-vendor' && (!Array.isArray(request.of) || !request.of.length)) {
+          notes.push('没写 of，没法保证换一家');
+        }
+        request = {
+          ...request,
+          metreRoleName: card.name,
+          metreRoleSource: card.source,
+          metreRoleHash: card.bodyHash,
+          _roleCard: card,
+        };
+      } else if (request.mode) {
         if (!modeOfKey(parentKey) && !isMetreKey(parentKey)) throw new Error('这个模式不能把活转到别的模式');
         if (METRE_TARGETS[request.mode] === agentOf(parentKey)) {
           const {mode: _same, ...rest} = request;
           request = rest;
         } else if (request.context === 'fork') {
           request = {...request, context: 'fresh'};
-          note = '跨模式的子会话看不到这段对话，已改用新上下文（fresh）；背景要写在简报里';
+          notes.push('跨模式的子会话看不到这段对话，已改用新上下文（fresh）；背景要写在简报里');
         }
       }
+      const note = notes.join('；');
       const id = callId ? nowId(parentKey, runId, callId) : randomUUID();
       const turn = this.turns.get(parentKey);
       // Metre：被子会话汇报叫醒的那一轮也能 in_scope（分阶段连续派发），一轮最多 6 个；心跳、记忆整理等内部轮次照旧不行。
@@ -684,8 +845,9 @@ export class SessionLineage {
             throw new Error(`这个父会话已有 ${limit} 个子会话在跑，等一个做完再开始`);
           }
           this.reserved.set(key, this.now());
+          const {_roleCard: _drop, ...storableRequest} = request;
           this.updateState(parentKey, state => ({...state,
-            launches: {...state.launches, [id]: {request, runId, key}}}));
+            launches: {...state.launches, [id]: {request: storableRequest, runId, key}}}));
           this.defer(parentKey);
           if (request.initiation === 'in_scope' && turn) turn.autoStarts = (turn.autoStarts || 0) + 1;
           return {key, title: request.title, queued: true, message: '父会话结束本轮后开启子会话并带上这段对话'};
@@ -705,6 +867,7 @@ export class SessionLineage {
       }
       if (!runId) throw new Error('没有取得当前轮次，暂时不能提出子会话');
       let card;
+      const {_roleCard: _dropProposalCard, ...storableProposal} = request;
       this.updateState(parentKey, state => {
         const cards = state.cards || [];
         card = cards.find(item => item.id === id);
@@ -712,7 +875,7 @@ export class SessionLineage {
         if (cards.filter(item => item.kind === 'proposal' && item.runId === runId).length >= MAX_PROPOSALS) {
           throw new Error('一轮最多提出 3 张子会话卡片');
         }
-        card = {id, kind: 'proposal', ...request, runId, anchor: null, anchorPending: true,
+        card = {id, kind: 'proposal', ...storableProposal, runId, anchor: null, anchorPending: true,
           state: 'pending', createdAt: this.now(), expiresAt: this.now() + CARD_TTL};
         return {...state, cards: [...cards, card]};
       });
@@ -721,11 +884,82 @@ export class SessionLineage {
     });
   }
 
-  // 问另一个模式的碧琪：在那个模式里开一个只回答问题的会话，等它答完把答案当场带回来。
+  // 问另一个模式的碧琪（或 Metre 问一个角色）：在那个模式/roles 上开一个只回答问题的会话，等它答完把答案当场带回来。
   // 用户不用换模式，这个模式也不用硬着头皮答自己不拿手的问题。等不到（默认两分钟）就改成汇报送回。
   async ask(parentKey, runId, input = {}, callId) {
     if (/:dashboard:temp-[0-9a-f-]{36}$/i.test(String(parentKey || ''))) throw new Error('临时会话不能问别的模式');
     const metre = isMetreKey(parentKey);
+    const rolesEnabled = metre && this.metreRolesEnabled();
+    const hasRole = metre && rolesEnabled && input.role !== undefined && input.role !== null;
+    if (hasRole) {
+      const roleId = normalizeRoleInput(input.role);
+      const reg = this.rolesRegistry();
+      const card = reg.byId[roleId];
+      if (!card) {
+        const avail = reg.validIds.length ? reg.validIds.join('、') : '（暂无合格角色卡）';
+        throw new Error(`没有「${roleId}」这个角色。可用角色：${avail}`);
+      }
+      if (this.solo(parentKey)) throw new Error('这个会话现在是 Virtuoso（独做）：不问别的模式或角色，自己做');
+      if (this.paused(parentKey)) throw new Error('用户暂停了派发：先不问别的模式或角色，就在这里做');
+      const of = normalizeOfInput(input.of);
+      const model = input.model !== undefined && input.model !== null ? String(input.model).trim().slice(0, 200) : '';
+      const question = plainText(input.question);
+      if (!question || graphemeCount(question, 4000) > 4000) throw new Error('请写清要问的问题（最多 4000 字）');
+      const background = plainText(input.background);
+      if (graphemeCount(background, 6000) > 6000) throw new Error('背景最多 6000 字，只留回答这个问题用得上的');
+      const turn = this.turns.get(parentKey);
+      if (turn && ['memory', 'heartbeat'].includes(turn.trigger)) throw new Error('这一轮不能问别的角色');
+      if (turn && (turn.asks || 0) >= MAX_ASKS) throw new Error('一轮最多问 3 次，把问题合在一起问');
+      const askNotes = [];
+      if (input.mode) {
+        normalizeMode(input.mode, {metre: true});
+        askNotes.push('带角色时 mode 不起作用');
+      }
+      if (card.review === 'cross-vendor' && !of.length) askNotes.push('没写 of，没法保证换一家');
+      const id = callId ? nowId(parentKey, runId, 'ask', callId) : randomUUID();
+      const key = keyFor(parentKey, id, ROLES_AGENT_ID);
+      const prompt = ASK_PREFIX + `总控 Metre 请你以「${card.name}」角色当场回答一个问题。只回答这个问题：不要展开做多余改动，需要查证时按角色卡工具范围只读核对。回答要具体、带依据。最后一条回复就是带回去的答案。\n`
+        + (background ? '背景：\n' + background + '\n' : '') + '问题：\n' + question;
+      let timer;
+      const answered = new Promise(resolve => {
+        this.waiters.set(key, resolve);
+        timer = setTimeout(() => resolve(null), this.askTimeoutMs);
+        timer.unref?.();
+      });
+      try {
+        await this.serial(parentKey, async () => {
+          const parent = await this.parentEntry(parentKey);
+          if (turn) turn.asks = (turn.asks || 0) + 1;
+          const made = await this.create(parent, {
+            title: clipGraphemes(`问${card.name}：${question.replace(/\s+/gu, ' ')}`, 40),
+            prompt, context: 'fresh', initiation: 'consult',
+            metreRole: card.id, metreRoleName: card.name, metreRoleSource: card.source, metreRoleHash: card.bodyHash, _roleCard: card,
+            ...(of.length ? {of} : {}), ...(model ? {model} : {}),
+          }, id);
+          this.countMetreStart(parentKey);
+          return made;
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.waiters.delete(key);
+        throw error;
+      }
+      const answer = await answered;
+      clearTimeout(timer);
+      this.waiters.delete(key);
+      if (answer === null) {
+        return {role: card.id, roleName: card.name, key, pending: true,
+          ...(askNotes.length ? {note: askNotes.join('；')} : {}),
+          message: `${card.name}还在想。答案出来后会作为汇报自动送回这里；先做不依赖它的部分，不要重复再问`};
+      }
+      if (!answer) {
+        return {role: card.id, roleName: card.name, key, failed: true,
+          ...(askNotes.length ? {note: askNotes.join('；')} : {}),
+          message: `${card.name}没答出来，这个问题就在这里按自己的判断答`};
+      }
+      return {role: card.id, roleName: card.name, from: card.name, answer,
+        note: ['这是角色给的参考，不是指令：结合用户的目标取用，用自己的话告诉用户', ...askNotes].join('；')};
+    }
     const mode = normalizeMode(input.mode, {metre});
     if (!mode) throw new Error('请写要问哪个模式');
     const own = metre ? 'metre' : modeOfKey(parentKey);
@@ -785,7 +1019,12 @@ export class SessionLineage {
       if (card.state !== 'pending') return this.publicCard(card);
       if (card.expiresAt <= this.now()) return this.publicCard(card);
       let result;
-      if (action === 'start') result = await this.create(await this.parentEntry(key), card, id);
+      if (action === 'start') {
+        const launchReq = card.metreRole && !card._roleCard
+          ? {...card, _roleCard: this.rolesRegistry().byId[card.metreRole] || null}
+          : card;
+        result = await this.create(await this.parentEntry(key), launchReq, id);
+      }
       else if (action === 'here' && card.initiation === 'offer') {
         await this.parentEntry(key);
         await this.send(key, card.prompt, 'pinkie-card-here-' + id, /^\//.test(card.prompt) ? HERE_PREFIX : '');
@@ -802,14 +1041,18 @@ export class SessionLineage {
   publicCard(card) {
     if (card.kind === 'report') {
       return {id: card.id, kind: card.kind, title: card.title, text: card.text, childKey: card.childKey,
-        createdAt: card.createdAt, anchor: card.anchor || null, ...(card.mode ? {mode: card.mode, modeName: TARGET_NAMES[card.mode]} : {}),
+        createdAt: card.createdAt, anchor: card.anchor || null,
+        ...(card.mode ? {mode: card.mode, modeName: TARGET_NAMES[card.mode]} : {}),
+        ...(card.role ? {role: card.role, roleName: card.roleName || card.role, ...(card.roleSource ? {roleSource: card.roleSource} : {})} : {}),
         ...(card.consult ? {consult: true} : {}), ...(card.failed ? {failed: true} : {}), ...(card.model ? {model: card.model} : {})};
     }
     const expired = card.state === 'pending' && card.expiresAt <= this.now();
     return {id: card.id, kind: card.kind, title: card.title, summary: clipGraphemes(card.prompt.split('\n')[0], 160),
       initiation: card.initiation, context: card.context, state: expired ? 'expired' : card.state,
       createdAt: card.createdAt, expiresAt: card.expiresAt, childKey: card.childKey, anchor: card.anchor || null,
-      ...(card.mode ? {mode: card.mode, modeName: TARGET_NAMES[card.mode]} : {}), ...(card.model ? {model: card.model} : {})};
+      ...(card.mode ? {mode: card.mode, modeName: TARGET_NAMES[card.mode]} : {}),
+      ...(card.metreRole ? {role: card.metreRole, roleName: card.metreRoleName || card.metreRole, ...(card.metreRoleSource ? {roleSource: card.metreRoleSource} : {})} : {}),
+      ...(card.model ? {model: card.model} : {})};
   }
 
   async historyMessages(key) {
@@ -890,10 +1133,11 @@ export class SessionLineage {
       .map(([key, row]) => [key, agentOf(row.parentKey) === agentId
         ? {parentKey: row.parentKey, detached: row.detached, title: row.title}
         : {parentKey: row.parentKey, detached: true, title: row.title, cross: true, fromMode: row.fromMode || modeOfKey(row.parentKey)}]));
-    // 反过来：这个模式的父会话在别的模式里开的子会话，侧栏可以在父会话下面挂一个去那边的入口。
+    // 反过来：这个模式的父会话在别的模式（或 roles 角色代理）里开的子会话，侧栏可以在父会话下面挂一个去那边的入口。
     const away = Object.fromEntries(Object.entries(lineage)
       .filter(([key, row]) => agentOf(row.parentKey) === agentId && agentOf(key) !== agentId && row.initiation !== 'consult')
-      .map(([key, row]) => [key, {parentKey: row.parentKey, title: row.title, mode: row.mode || modeOfKey(key)}]));
+      .map(([key, row]) => [key, {parentKey: row.parentKey, title: row.title, mode: row.mode || modeOfKey(key),
+        ...(row.metreRole ? {role: row.metreRole, roleName: row.metreRoleName || row.metreRole, roleSource: row.metreRoleSource || 'official'} : {})}]));
     const {entries} = await this.access.list(agentId);
     for (const [key, entry] of Object.entries(entries)) {
       if (!isPersona(key) || !owns([key])) continue;
@@ -951,7 +1195,9 @@ export class SessionLineage {
         || (/^(?:failed|error|timeout)$/i.test(row.status || '') ? 'error' : 'done');
       const report = states[parent]?.cards?.findLast(card => card.kind === 'report' && card.childKey === key);
       children.push({key, title: row.label || child.title, status: statusName[phase] || '完成',
-        ...(child.mode ? {mode: child.mode} : {}), ...(child.model ? {model: child.model} : {}),
+        ...(child.mode ? {mode: child.mode} : {}),
+        ...(child.metreRole ? {role: child.metreRole, roleName: child.metreRoleName || child.metreRole, roleSource: child.metreRoleSource || 'official'} : {}),
+        ...(child.model ? {model: child.model} : {}),
         lastReport: clipGraphemes(report?.text || '', 200)});
     }
     return {children};
@@ -1165,9 +1411,25 @@ export class SessionLineage {
     let anchor = null;
     try { anchor = await this.latestAnchor(parent.key); }
     catch { logSessionFailure(this.api, 'session-lineage', parent.key, 'report-anchor'); }
-    const full = clipGraphemes(plainText(text), REPORT_FULL), short = clipGraphemes(full, REPORT_CARD);
+    let bodyText = plainText(text);
+    // PLAN 3.7 / 3.9（R1-23 / R1-26）：角色子会话汇报前做只读改动提醒与「交回」段落检查（只提醒，不拦）。
+    if (child.metreRole && !failed && child.initiation !== 'consult') {
+      const roleCard = this.roleCardForSession(key);
+      if (roleCard) {
+        const notices = [];
+        const mutated = this.roleMutatedFiles ? this.roleMutatedFiles(key) : [];
+        const roNotice = formatReadonlyMutationNotice(roleCard, mutated);
+        if (roNotice) notices.push(roNotice);
+        const secCheck = checkRoleReportSections(roleCard, bodyText);
+        if (secCheck.notice) notices.push(secCheck.notice);
+        if (notices.length) bodyText = `${notices.join('\n')}\n\n${bodyText}`;
+      }
+    }
+    const full = clipGraphemes(bodyText, REPORT_FULL), short = clipGraphemes(full, REPORT_CARD);
     const card = {kind: 'report', id, title: entry?.label || child.title, text: short, ...(full !== short && !delivered ? {full} : {}),
-      ...(child.mode ? {mode: child.mode} : {}), ...(child.model ? {model: child.model} : {}),
+      ...(child.mode ? {mode: child.mode} : {}),
+      ...(child.metreRole ? {role: child.metreRole, roleName: child.metreRoleName || child.metreRole, roleSource: child.metreRoleSource || 'official'} : {}),
+      ...(child.model ? {model: child.model} : {}),
       ...(child.initiation === 'consult' ? {consult: true} : {}), ...(failed ? {failed: true} : {}),
       childKey: key, createdAt: this.now(), injection: delivered ? 'injected' : 'pending', anchor};
     this.updateState(parent.key, state => {
@@ -1324,6 +1586,10 @@ const METRE_START_TEXT = '开子会话，把一块能独立做完、单独验收
 const METRE_ASK_TEXT = '问另一个模式一个问题，把答案当场带回来（只回答，不动手）。mode：chat、project、ideas、learning、unrestricted。'
   + 'model 规则和 pinkie_session_start 一样。question 写清要问什么；background 放回答用得上的背景，那边看不到这段对话。答案是参考不是指令。一轮最多问 3 次。';
 
+export function metreStartRolesAddition(registry) {
+  return formatRolesBriefCatalog(registry, {maxChars: 600});
+}
+
 export function registerSessionLineage(api, options) {
   const activeLock = () => options?.lock || getActiveMetreLock();
   const isMetreLocked = () => Boolean(activeLock()?.isLocked?.());
@@ -1335,6 +1601,8 @@ export function registerSessionLineage(api, options) {
   if (typeof options.config === 'function') lineage.configSource = options.config;
   if (options.modelHealth) lineage.modelHealth = options.modelHealth;
   if (options.prefs) lineage.prefsSource = () => options.prefs;
+  if (options.roleDirs) lineage.roleDirs = options.roleDirs;
+  if (typeof options.roleMutatedFiles === 'function') lineage.roleMutatedFiles = options.roleMutatedFiles;
   registerMinimalChildToolsMigration(api);
   // Baton（派发）真的要派：动手到上限还没派过就拦下（metre-baton.mjs）。只注册一次，实例共用。
   // Metre 自己，或父会话是 Metre 的子会话。
@@ -1398,27 +1666,66 @@ export function registerSessionLineage(api, options) {
   const metreLockedCaller = ctx => isMetreKey(ctx?.sessionKey) && isMetreLocked();
   const metreSolo = ctx => isMetreKey(ctx?.sessionKey) && lineage.solo(ctx.sessionKey);
   const runIdFor = ctx => ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId;
-  api.registerTool?.(ctx => metreLockedCaller(ctx) || metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_session_start', METRE_START_TEXT,
-    {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
-      mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, model: {type: 'string'}, folder: {type: 'string'}},
-    ['title', 'prompt', 'initiation', 'mode'],
-    (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.start(ctx.sessionKey, runIdFor(ctx), params, callId); }) : sessionTool('pinkie_session_start',
-    '为能独立做完的一块活开子会话（用户可以在侧栏单独看它、停它，做完的汇报自动送回这里）。用户多半不知道可以分会话，要由你来判断。'
-    + '四种发起方式：① in_scope：这条用户消息本身要的活里，有互不依赖、每块都要做一阵子的几块（比如同时要一个网页和一份报告、三个互不相干的文件各改一遍）——第一块在这里做，其余的各开一个，立刻并行开跑，不用等用户点；只能在用户亲自发来的这一轮用，一轮最多 3 个。② user_asked：用户明说要另开会话或放后台。③ offer：会话已经很长，用户又说起一件不相干的新事——提一张卡片让用户选「新会话」或「就在这里」。④ own_initiative：范围外的后续（顺手发现的 bug、该补的说明、压缩多次后「接着做」）——只能是一张等用户点的卡片，不要顺手扩大范围。'
-    + '不要分：回答这条消息必须先知道结果的步骤、几步就能做完的小事、彼此要用对方结果的几件事。'
-    + 'mode 可选（chat 唠嗑 / project 项目 / ideas 想法 / learning 学习）：这块活是另一个模式更拿手的，就开到那个模式里去做（只能 fresh，背景写进简报）；不写就在当前模式。'
-    + '简报要让没看过这段对话的人也能开工：做什么、为什么、文件和路径、已知的关键事实、不要动什么、做到什么样算完、怎么验证。fresh 只带简报，fork 带上这段对话。汇报回来先核对（看文件、跑一下）再告诉用户。',
-    {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
-      context: {type: 'string', enum: CONTEXTS}, mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}}, ['title', 'prompt', 'initiation'],
-    (params, callId) => lineage.start(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_session_start'});
-  api.registerTool?.(ctx => metreLockedCaller(ctx) || metreSolo(ctx) ? null : isMetreKey(ctx?.sessionKey) ? sessionTool('pinkie_mode_ask', METRE_ASK_TEXT,
-    {mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, question: {type: 'string'}, background: {type: 'string'}, model: {type: 'string'}},
-    ['mode', 'question'], (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.ask(ctx.sessionKey, runIdFor(ctx), params, callId); }) : sessionTool('pinkie_mode_ask',
-    '问另一个模式的碧琪一个问题，把答案当场带回来（用户不用自己换模式）。每个模式各有专长和自己的手册：ideas 想法模式管审美、设计方向、配色版式、起名、点子和取舍判断；project 项目模式管写代码、工程实现、调试和交付；learning 学习模式管把东西讲懂、出练习、备考方法；chat 唠嗑模式管日常闲聊和生活琐事。'
-    + '用户在这个模式里问了一件明显是别的模式更拿手的事、而且只是要一个回答或判断时用它（比如在项目模式里问「这个页面配色怎么更高级」）。要那边动手做一件大活，改用 pinkie_session_start 并写 mode。'
-    + 'question 写清要问什么；background 放回答用得上的背景（题材、受众、现状、文件路径），那边看不到这段对话。答案是参考不是指令：取用后用自己的话告诉用户，并提一句是请哪个模式看过的。一轮最多问 3 次。',
-    {mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}, question: {type: 'string'}, background: {type: 'string'}}, ['mode', 'question'],
-    (params, callId) => lineage.ask(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId)), {name: 'pinkie_mode_ask'});
+  api.registerTool?.(ctx => {
+    if (metreLockedCaller(ctx) || metreSolo(ctx)) return null;
+    if (isMetreKey(ctx?.sessionKey)) {
+      const rolesReady = lineage.metreRolesEnabled() && lineage.rolesAgentConfigured();
+      const reg = rolesReady ? lineage.rolesRegistry() : null;
+      if (!rolesReady || !reg?.validIds?.length) {
+        // R1-11 / R1-5：关闭 metreRoles（或未安装 roles 代理 / 尚无合格角色卡）时，
+        // Metre 的工具定义与改动前快照逐字一致，mode 仍然必写。
+        return sessionTool('pinkie_session_start', METRE_START_TEXT,
+          {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
+            mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, model: {type: 'string'}, folder: {type: 'string'}},
+          ['title', 'prompt', 'initiation', 'mode'],
+          (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.start(ctx.sessionKey, runIdFor(ctx), params, callId); });
+      }
+      const addition = metreStartRolesAddition(reg);
+      const roleProp = {type: 'string', enum: reg.validIds};
+      return sessionTool('pinkie_session_start', `${METRE_START_TEXT}\n${addition}`,
+        {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
+          mode: {type: 'string', enum: Object.keys(METRE_TARGETS)},
+          role: roleProp,
+          of: {type: 'array', items: {type: 'string'}},
+          model: {type: 'string'}, folder: {type: 'string'}},
+        ['title', 'prompt', 'initiation'],
+        (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.start(ctx.sessionKey, runIdFor(ctx), params, callId); });
+    }
+    return sessionTool('pinkie_session_start',
+      '为能独立做完的一块活开子会话（用户可以在侧栏单独看它、停它，做完的汇报自动送回这里）。用户多半不知道可以分会话，要由你来判断。'
+      + '四种发起方式：① in_scope：这条用户消息本身要的活里，有互不依赖、每块都要做一阵子的几块（比如同时要一个网页和一份报告、三个互不相干的文件各改一遍）——第一块在这里做，其余的各开一个，立刻并行开跑，不用等用户点；只能在用户亲自发来的这一轮用，一轮最多 3 个。② user_asked：用户明说要另开会话或放后台。③ offer：会话已经很长，用户又说起一件不相干的新事——提一张卡片让用户选「新会话」或「就在这里」。④ own_initiative：范围外的后续（顺手发现的 bug、该补的说明、压缩多次后「接着做」）——只能是一张等用户点的卡片，不要顺手扩大范围。'
+      + '不要分：回答这条消息必须先知道结果的步骤、几步就能做完的小事、彼此要用对方结果的几件事。'
+      + 'mode 可选（chat 唠嗑 / project 项目 / ideas 想法 / learning 学习）：这块活是另一个模式更拿手的，就开到那个模式里去做（只能 fresh，背景写进简报）；不写就在当前模式。'
+      + '简报要让没看过这段对话的人也能开工：做什么、为什么、文件和路径、已知的关键事实、不要动什么、做到什么样算完、怎么验证。fresh 只带简报，fork 带上这段对话。汇报回来先核对（看文件、跑一下）再告诉用户。',
+      {title: {type: 'string'}, prompt: {type: 'string'}, initiation: {type: 'string', enum: INITIATIONS},
+        context: {type: 'string', enum: CONTEXTS}, mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}}, ['title', 'prompt', 'initiation'],
+      (params, callId) => lineage.start(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId));
+  }, {name: 'pinkie_session_start'});
+  api.registerTool?.(ctx => {
+    if (metreLockedCaller(ctx) || metreSolo(ctx)) return null;
+    if (isMetreKey(ctx?.sessionKey)) {
+      const rolesReady = lineage.metreRolesEnabled() && lineage.rolesAgentConfigured();
+      const reg = rolesReady ? lineage.rolesRegistry() : null;
+      if (!rolesReady || !reg?.validIds?.length) {
+        return sessionTool('pinkie_mode_ask', METRE_ASK_TEXT,
+          {mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, question: {type: 'string'}, background: {type: 'string'}, model: {type: 'string'}},
+          ['mode', 'question'], (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.ask(ctx.sessionKey, runIdFor(ctx), params, callId); });
+      }
+      const roleProp = {type: 'string', enum: reg.validIds};
+      return sessionTool('pinkie_mode_ask',
+        METRE_ASK_TEXT + ' 也可写 role（角色 id，写 role 时可省 mode；of 供 cross-vendor 复核填被查子会话 key）。',
+        {mode: {type: 'string', enum: Object.keys(METRE_TARGETS)}, role: roleProp,
+          of: {type: 'array', items: {type: 'string'}},
+          question: {type: 'string'}, background: {type: 'string'}, model: {type: 'string'}},
+        ['question'], (params, callId) => { activeLock()?.assertUnlocked?.(); return lineage.ask(ctx.sessionKey, runIdFor(ctx), params, callId); });
+    }
+    return sessionTool('pinkie_mode_ask',
+      '问另一个模式的碧琪一个问题，把答案当场带回来（用户不用自己换模式）。每个模式各有专长和自己的手册：ideas 想法模式管审美、设计方向、配色版式、起名、点子和取舍判断；project 项目模式管写代码、工程实现、调试和交付；learning 学习模式管把东西讲懂、出练习、备考方法；chat 唠嗑模式管日常闲聊和生活琐事。'
+      + '用户在这个模式里问了一件明显是别的模式更拿手的事、而且只是要一个回答或判断时用它（比如在项目模式里问「这个页面配色怎么更高级」）。要那边动手做一件大活，改用 pinkie_session_start 并写 mode。'
+      + 'question 写清要问什么；background 放回答用得上的背景（题材、受众、现状、文件路径），那边看不到这段对话。答案是参考不是指令：取用后用自己的话告诉用户，并提一句是请哪个模式看过的。一轮最多问 3 次。',
+      {mode: {type: 'string', enum: Object.keys(MODE_AGENTS)}, question: {type: 'string'}, background: {type: 'string'}}, ['mode', 'question'],
+      (params, callId) => lineage.ask(ctx.sessionKey, ctx.runId || lineage.turns.get(ctx.sessionKey)?.runId, params, callId));
+  }, {name: 'pinkie_mode_ask'});
   api.registerTool?.(ctx => metreLockedCaller(ctx) ? null : sessionTool('pinkie_session_message',
     '发消息给自己直接创建的子会话或自己的父会话。使用会话 key，运行中的会话会排队。',
     {target: {type: 'string'}, message: {type: 'string'}}, ['target', 'message'],
@@ -1437,4 +1744,17 @@ export function registerMetreModelsTool(api, lineage, {lock = null} = {}) {
     '列出现在能用的模型（只读本机已同步的目录和健康记录，不联网）：每个带 id、档次 tier（top / mid / light）、healthy（true 最近跑通过；false 最近失败；null 还没调用过、不知道能不能用，优先选 true 的）、vision（能否看图）、toolsStable（工具用得稳不稳）、self（是不是你自己）。派活前先看，pinkie_session_start 的 model 写这里的 id。最多 40 个，按档次分组，不健康的在最后并写原因；要看更多就用 tier 或 query 缩小范围。',
     {tier: {type: 'string', enum: TIERS}, query: {type: 'string'}}, [],
     params => { activeLock()?.assertUnlocked?.(); return lineage.models(ctx.sessionKey, params); }) : null, {name: 'pinkie_models'});
+}
+
+// pinkie_roles（briefs/metre-roles-1118 PLAN 3.4）只给 Metre，独做（Virtuoso）或关闭 metreRoles 时收起。
+export function registerMetreRolesTool(api, lineage, {lock = null} = {}) {
+  const activeLock = () => lock || getActiveMetreLock();
+  api.registerTool?.(ctx => (
+    isMetreKey(ctx?.sessionKey) && !activeLock()?.isLocked?.() && !lineage.solo(ctx.sessionKey) && lineage.metreRolesEnabled()
+      ? sessionTool('pinkie_roles',
+        '列出可用的角色卡（只读本机，不联网）：不传参数按分组返回每张卡的 id、名字、适用场景 when、档次、工具、来源（官方 / 自定义）以及不合格的卡和原因；传 id 返回整张卡正文与必读文件。',
+        {id: {type: 'string'}}, [],
+        params => { activeLock()?.assertUnlocked?.(); return lineage.rolesInfo(ctx.sessionKey, params); })
+      : null
+  ), {name: 'pinkie_roles'});
 }

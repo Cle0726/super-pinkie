@@ -19,5 +19,23 @@
     {"match": "^auto$", "tier": "mid"}
   ],
   "light": ["mini", "flash", "lite", "haiku", "luna", "nano", "small", "fast", "free", "turbo"],
-  "toolsWeak": ["^tab_", "^gpt-oss-", "-lite(?:-preview)?$", "^grok-3-mini", "non-reasoning", "^space-bunny$"]
+  "toolsWeak": ["^tab_", "^gpt-oss-", "-lite(?:-preview)?$", "^grok-3-mini", "non-reasoning", "^space-bunny$"],
+  "vendors": [
+    {"match": "(?:^|[-_])deepseek(?:[-_.]|$)", "vendor": "deepseek"},
+    {"match": "(?:^|[-_])(?:glm|zhipu|chatglm)(?:[-_.]|$|\\d)", "vendor": "zhipu"},
+    {"match": "(?:^|[-_])(?:kimi|moonshot)(?:[-_.]|$)", "vendor": "moonshot"},
+    {"match": "(?:^|[-_])(?:hunyuan|hy\\d)(?:[-_.]|$|[a-z])", "vendor": "tencent"},
+    {"match": "(?:^|[-_])(?:qwen|qwq|tongyi)(?:[-_.]|$|\\d)", "vendor": "qwen"},
+    {"match": "(?:^|[-_])(?:doubao|seed-)(?:[-_.]|$|[a-z0-9])", "vendor": "bytedance"},
+    {"match": "(?:^|[-_])claude(?:[-_.]|$)", "vendor": "anthropic"},
+    {"match": "(?:^|[-_])(?:gpt|chatgpt|openai|o[134](?:-|$))(?:[-_.]|$)", "vendor": "openai"},
+    {"match": "(?:^|[-_])(?:gemini|gemma)(?:[-_.]|$)", "vendor": "google"},
+    {"match": "(?:^|[-_])grok(?:[-_.]|$)", "vendor": "xai"},
+    {"match": "(?:^|[-_])(?:minimax|abab)(?:[-_.]|$)", "vendor": "minimax"},
+    {"match": "(?:^|[-_])mimo(?:[-_.]|$)", "vendor": "xiaomi"},
+    {"match": "(?:^|[-_])step-?\\d", "vendor": "stepfun"},
+    {"match": "(?:^|[-_])(?:mistral|mixtral|codestral|pixtral)(?:[-_.]|$)", "vendor": "mistral"},
+    {"match": "(?:^|[-_])llama(?:[-_.]|$|\\d)", "vendor": "meta"},
+    {"match": "(?:^|[-_])command(?:-|$)", "vendor": "cohere"}
+  ]
 }
