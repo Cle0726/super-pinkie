@@ -704,12 +704,22 @@
       }
       // Opening a dispatched conversation is a session link, not a mode tour.
       // Route it directly so a slow transition cannot trap a live child behind it.
-      if (exactTarget && activeMode() === "metre" && typeof window.__laolaoSidebar?.navigateSession === "function") {
+      if (exactTarget && activeMode() === "metre") {
         rememberSession(currentSessionKey());
         rememberSession(exactTarget);
+        localStorage.setItem(storageKey, mode.id);
+        const next = new URL(window.location.href);
+        next.searchParams.set("session", exactTarget);
+        next.searchParams.delete(skipEntrySplashParam);
+        next.searchParams.delete("draft");
+        const target = {...mode, sessionKey: exactTarget};
         modeTransitionTargetId = null;
         switching = false;
-        window.__laolaoSidebar.navigateSession(exactTarget);
+        closeMenu();
+        // The sidebar helper deliberately accepts only same-mode keys.
+        navigateWithinApp(target, next);
+        window.setTimeout(render, 0);
+        window.dispatchEvent(new CustomEvent("pinkie:session-selected", {detail: {sessionKey: exactTarget}}));
         return;
       }
       window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
