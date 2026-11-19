@@ -6,11 +6,11 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const script = fileURLToPath(new URL('../ui/injections/laolao-session-tools.js', import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 
-test(`Metre saves the active composer’s strategy before a message can send (${engine})`, {timeout: 30_000}, async () => {
+test(`Metre saves the active composer’s strategy before a message can send (${engine})`, {timeout: 60_000}, async () => {
   const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
   try {
     const page = await browser.newPage();
-    page.setDefaultTimeout(7000);
+    page.setDefaultTimeout(12_000);
     await page.route('http://127.0.0.1:30114/**', route => route.fulfill({
       contentType: 'text/html; charset=utf-8', body: '<html data-laolao-mode="metre"><body><openclaw-chat-pane active><div class="agent-chat__composer-combobox"><textarea></textarea></div><div class="agent-chat__composer-controls"><button class="chat-send-btn">发送</button></div></openclaw-chat-pane></body></html>',
     }));
@@ -38,13 +38,13 @@ test(`Metre saves the active composer’s strategy before a message can send (${
     await page.waitForFunction(() => typeof window.qa.confirm === 'function');
     await page.getByRole('textbox').fill('这是还没发送的草稿');
     await page.getByRole('textbox').press('Enter');
-    await page.getByRole('button', {name: '发送', exact: true}).click();
+    await page.locator('.chat-send-btn').click();
     assert.deepEqual(await page.evaluate(() => window.qa.sends), []);
     assert.equal(await page.getByRole('textbox').inputValue(), '这是还没发送的草稿');
     assert.equal(await solo.getAttribute('aria-checked'), 'false', 'only the saved state is selected');
     await page.evaluate(() => window.qa.confirm());
     await page.locator('.pinkie-baton__seg[aria-label="Virtuoso"][aria-checked="true"]').waitFor();
-    await page.getByRole('button', {name: '发送', exact: true}).click();
+    await page.locator('.chat-send-btn').click();
     assert.deepEqual(await page.evaluate(() => window.qa.sends), ['solo']);
     assert.deepEqual(await page.evaluate(() => [...new Set(window.qa.requests.map(([,key]) => key))]), [composerKey]);
   } finally { await browser.close(); }

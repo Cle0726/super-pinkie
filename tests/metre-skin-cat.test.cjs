@@ -174,7 +174,7 @@ test('A4-9: the switch shows only Baton｜Virtuoso; Chinese only in the tooltip 
   assert.match(block, /label: 'Virtuoso', tip: '独奏/);
   assert.match(block, /dataset\.pinkieTooltip = item\.tip/);
   assert.match(block, /pinkie-baton__info/);
-  assert.match(block, /item\.label \+ ' · from your next message' : item\.label/);
+  assert.match(block, /item\.label \+ ' · next turn' : item\.label/);
   assert.doesNotMatch(block, /nextTurn\(/);
 });
 
