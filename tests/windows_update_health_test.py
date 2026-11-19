@@ -208,7 +208,10 @@ class NewHelperTest(unittest.TestCase):
 
     def test_every_folder_rename_is_retried(self):
         helper = WindowsUpdater._directory_helper_source()
-        self.assertIn("Invoke-WithRetry { Move-Item -LiteralPath $newDir -Destination $TargetDir }", helper)
+        self.assertIn("Invoke-WithRetry { Move-Folder $newDir $TargetDir }", helper)
+        # A plain rename: Move-Item could leave a half copy at the target, so every retry then failed.
+        self.assertIn("[IO.Directory]::Move($From, $To)", helper)
+        self.assertNotIn("Move-Item -LiteralPath $newDir", helper)
         self.assertIn("'install folder' $SwapSeconds", helper)
         self.assertIn("'previous version folder' $SwapSeconds", helper)
         self.assertNotIn("Remove-Item -LiteralPath $TargetDir -Recurse", helper,

@@ -30,7 +30,7 @@ def function_body(name):
 class LeftoverOrderTest(unittest.TestCase):
     def test_leftovers_are_stopped_before_each_folder_rename(self):
         self.assertIn("Stop-InstallLeftovers $Root", function_body("Stop-InstallProcesses"))
-        swap = HELPER.index("Move-Item -LiteralPath $TargetDir -Destination $Backup")
+        swap = HELPER.index("Move-Folder $TargetDir $Backup")
         self.assertLess(HELPER.index("Stop-InstallProcesses $TargetDir\n"), swap)
 
     def test_each_leftover_is_stopped_alone(self):

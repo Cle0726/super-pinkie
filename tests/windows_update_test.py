@@ -295,7 +295,7 @@ class WindowsUpdateTests(unittest.TestCase):
         self.assertIn("update package checksum mismatch", helper)
         verify = helper.index("Get-FileHash")
         self.assertLess(verify, helper.index("Expand-Archive"))
-        self.assertLess(verify, helper.index("Move-Item -LiteralPath $TargetDir -Destination $Backup"))
+        self.assertLess(verify, helper.index("Move-Folder $TargetDir $Backup"))
 
     def test_replacer_ready_requires_exact_token_and_a_live_child(self):
         marker = Path(self.temporary.name) / 'helper-ready'

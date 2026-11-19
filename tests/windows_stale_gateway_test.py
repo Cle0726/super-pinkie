@@ -103,7 +103,7 @@ class RetireStaleTest(unittest.TestCase):
 class ReplacerTest(unittest.TestCase):
     def test_portable_swap_stops_processes_from_the_install_first(self):
         helper = WindowsUpdater._directory_helper_source()
-        swap = helper.index("Move-Item -LiteralPath $TargetDir -Destination $Backup")
+        swap = helper.index("Move-Folder $TargetDir $Backup")
         self.assertLess(helper.index("Stop-InstallProcesses $TargetDir\n"), swap)
         self.assertIn("ExecutablePath.StartsWith($prefix", helper)
         self.assertIn("Invoke-WithRetry", helper)
