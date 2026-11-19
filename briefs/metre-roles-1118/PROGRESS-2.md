@@ -20,8 +20,8 @@
 | 1. `tools/metre/roles/lint-cards.mjs` + 样板卡 `backend-fix.md` | 已完成 | 支持 33 张官方卡格式/表一致性与 40 字不抄手册检查，先行推送供窗口 3 使用 |
 | 2. 其余 8 张「编码（coding）」角色卡 | 已完成 | `feature-dev`、`frontend-fix`、`test-engineer`、`code-reviewer`、`refactor`、`perf-tuner`、`security-auditor`、`upgrader` 全部通过 `lint-cards.mjs` |
 | 3. 6 张「执行（execution）」角色卡 | 已完成 | `plan-executor`、`batch-runner`、`env-setup`、`automation-builder`、`release-prep`、`web-operator` 全部通过 `lint-cards.mjs` |
-| 4. 15 份角色样题（30 道题） | 进行中 | `tools/metre/roles/samples/<id>.json` |
-| 5. `ACCEPTANCE.md` 逐条自查与收工核对 | 待开始 | R1-2、R3-1..R3-6、R3-8、R3-9 |
+| 4. 15 份角色样题（30 道题） | 已完成 | `tools/metre/roles/samples/<id>.json` 全部通过 `lint-cards.mjs --samples` |
+| 5. `ACCEPTANCE.md` 逐条自查与收工核对 | 进行中 | R1-2、R3-1..R3-6、R3-8、R3-9 |
 
 ## 记录
 
@@ -45,3 +45,9 @@
 - 新增 6 张角色卡：`plan-executor.md`、`batch-runner.md`、`env-setup.md`、`automation-builder.md`、`release-prep.md`、`web-operator.md`。
 - 逐张核对 PLAN 第四节表格中的 `when`、`tier`、`vision`、`tools`、`deny_commands`（「必须做到」与「交回要带」）全部覆盖；`release-prep` 已包含 `deny_commands: [git push, npm publish, gh release]`，只读卡 `web-operator` 的 `tools` 不含 `write`。
 - 运行 `node tools/metre/roles/lint-cards.mjs`，15/15 张全部 PASS。
+
+### Step 4：完成 15 份角色样题（30 道样题）
+
+- 在 `tools/metre/roles/samples/<id>.json` 下为 15 张角色卡各编写 2 道样题（共 30 道），每题包含 `brief`（简报）、`files`（要准备的现场文件与完整内容）、`checks`（可客观验证的检查项，不含任何主观评价词）。
+- `code-reviewer.json` 与 `security-auditor.json` 的每道样题均各埋入 3 个客观可定位的缺陷或安全漏洞（见 `planted_issues`）。
+- 为 `tools/metre/roles/lint-cards.mjs` 增加 `--samples` 校验支持，运行 `node tools/metre/roles/lint-cards.mjs --samples`，15 张卡与 15 份样题全部 PASS。

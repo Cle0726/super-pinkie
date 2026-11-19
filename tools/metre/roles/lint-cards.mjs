@@ -35,6 +35,11 @@ export const READONLY_ROLE_IDS = new Set([
   'qa-tester', 'web-operator',
 ]);
 
+export const PLANTED_ISSUE_ROLE_IDS = new Set([
+  'code-reviewer', 'security-auditor', 'reviewer', 'fact-checker', 'qa-tester',
+]);
+export const DEFAULT_SAMPLES_DIR = path.join(REPO_ROOT, 'tools/metre/roles/samples');
+
 // PLAN.md 第四节：33 张官方角色卡规格表
 export const ROLE_SPECS = Object.freeze({
   // 编码（coding）9 张
@@ -675,13 +680,86 @@ export function lintCards({
   return {ok, count: results.length, results, globalErrors};
 }
 
+export function lintSampleFile(samplePath) {
+  const absPath = path.resolve(samplePath);
+  const fileId = path.basename(absPath, '.json');
+  const errors = [];
+  let raw;
+  try {
+    raw = fs.readFileSync(absPath, 'utf8');
+  } catch (err) {
+    return {file: absPath, id: fileId, ok: false, errors: [`无法读取样题文件：${err.message}`]};
+  }
+  if (raw.includes('\r\n')) {
+    errors.push('样题文件包含 CRLF (\\r\\n) 换行符，仓库要求 LF');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    return {file: absPath, id: fileId, ok: false, errors: [...errors, `JSON 解析失败：${err.message}`]};
+  }
+  if (parsed.role !== fileId) {
+    errors.push(`role (${parsed.role}) 与文件名 (${fileId}.json) 不一致`);
+  }
+  if (!Array.isArray(parsed.samples) || parsed.samples.length !== 2) {
+    errors.push(`每张卡必须配 2 道样题（当前 ${Array.isArray(parsed.samples) ? parsed.samples.length : 0} 道）`);
+  } else {
+    parsed.samples.forEach((s, idx) => {
+      const tag = `第 ${idx + 1} 题 (${s?.id || '?'})`;
+      if (!s || typeof s.brief !== 'string' || s.brief.trim().length < 20) {
+        errors.push(`${tag} 缺少有效 brief`);
+      }
+      if (!Array.isArray(s?.files) || s.files.length === 0) {
+        errors.push(`${tag} 缺少要准备的文件列表 files`);
+      } else {
+        for (const f of s.files) {
+          if (!f?.path || typeof f.content !== 'string') {
+            errors.push(`${tag} files 项缺少 path 或 content`);
+          }
+        }
+      }
+      if (!Array.isArray(s?.checks) || s.checks.length < 2) {
+        errors.push(`${tag} checks 检查项不足 2 条`);
+      } else {
+        for (const c of s.checks) {
+          if (typeof c !== 'string' || !c.trim()) {
+            errors.push(`${tag} checks 含空检查项`);
+          } else {
+            for (const vague of FORBIDDEN_VAGUE_PHRASES) {
+              if (c.includes(vague)) {
+                errors.push(`${tag} 检查项包含主观空话「${vague}」：${c}`);
+              }
+            }
+          }
+        }
+      }
+      if (PLANTED_ISSUE_ROLE_IDS.has(fileId)) {
+        if (!Array.isArray(s?.planted_issues) || s.planted_issues.length !== 3) {
+          errors.push(`${tag} 审查/把关类角色 (${fileId}) 的样题必须埋 3 个问题（planted_issues 长度为 3）`);
+        }
+      }
+    });
+  }
+  return {file: absPath, id: fileId, ok: errors.length === 0, errors};
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   const args = process.argv.slice(2);
   const json = args.includes('--json');
   const requireAll33 = args.includes('--all-33');
+  const checkSamples = args.includes('--samples');
   const targets = args.filter(a => !a.startsWith('--'));
 
   const summary = lintCards({targets, requireAll33});
+  if (checkSamples) {
+    summary.sampleResults = summary.results.map(r =>
+      lintSampleFile(path.join(DEFAULT_SAMPLES_DIR, `${r.id}.json`)),
+    );
+    if (!summary.sampleResults.every(sr => sr.ok)) {
+      summary.ok = false;
+    }
+  }
   if (json) {
     console.log(JSON.stringify(summary, null, 2));
   } else {
@@ -697,6 +775,18 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
         for (const e of r.errors) console.error(`  - ${e}`);
       }
       for (const w of r.warnings) console.warn(`  ! ${w}`);
+    }
+    if (checkSamples && summary.sampleResults) {
+      console.log('');
+      for (const sr of summary.sampleResults) {
+        const rel = path.relative(REPO_ROOT, sr.file).replace(/\\/g, '/');
+        if (sr.ok) {
+          console.log(`PASS  sample:${sr.id.padEnd(13)}  ${rel}`);
+        } else {
+          console.error(`FAIL  sample:${sr.id.padEnd(13)}  ${rel}`);
+          for (const e of sr.errors) console.error(`  - ${e}`);
+        }
+      }
     }
     for (const ge of summary.globalErrors) {
       console.error(`GLOBAL FAIL: ${ge}`);

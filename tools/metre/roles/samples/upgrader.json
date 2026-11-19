@@ -1,0 +1,88 @@
+{
+  "role": "upgrader",
+  "name": "升级迁移",
+  "samples": [
+    {
+      "id": "upgrader-1",
+      "title": "分步将内部日期库与货币库从 v1 迁移到 v2",
+      "brief": "目标：按 `CHANGELOG.md` 的不兼容变更说明，将工作目录 `src/report.mjs` 依赖的两个本地模块依次从 v1 升级到 v2：\n第一步：把 `./vendor/date-v1.mjs` 升级为 `./vendor/date-v2.mjs` 并跑测试；\n第二步：把 `./vendor/money-v1.mjs` 升级为 `./vendor/money-v2.mjs` 并跑测试。\n要求：\n1. 先读 `CHANGELOG.md` 里的 Breaking Changes，先跑一次基线测试 `node --test test/report.test.mjs`。\n2. 一次只升一个模块，每升完一个跑一次 `node --test test/report.test.mjs`，保留每一步的测试输出。\n3. 严禁修改 `src/vendor/` 下的库文件和 `test/report.test.mjs`。",
+      "files": [
+        {
+          "path": "CHANGELOG.md",
+          "content": "# 内部库 v2 升级日志（Breaking Changes）\n\n## 1. date-v2.mjs（替代 date-v1.mjs）\n- `formatIsoDate(y, m, d)` 改名为 `toIsoDateString({year, month, day})`，入参由三个位置参数改为单个对象。\n\n## 2. money-v2.mjs（替代 money-v1.mjs）\n- `formatYuan(cents, symbol)` 的第二个字符串参数 `symbol` 改为配置对象 `{currencySymbol: '¥'}`；若直接传字符串会抛出 `TypeError('OPTIONS_MUST_BE_OBJECT')`。\n"
+        },
+        {
+          "path": "src/vendor/date-v1.mjs",
+          "content": "export function formatIsoDate(y, m, d) {\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\n"
+        },
+        {
+          "path": "src/vendor/date-v2.mjs",
+          "content": "export function toIsoDateString({year, month, day} = {}) {\n  if (!year || !month || !day) throw new TypeError('INVALID_DATE_OBJECT');\n  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;\n}\n"
+        },
+        {
+          "path": "src/vendor/money-v1.mjs",
+          "content": "export function formatYuan(cents, symbol = '¥') {\n  return `${symbol}${(cents / 100).toFixed(2)}`;\n}\n"
+        },
+        {
+          "path": "src/vendor/money-v2.mjs",
+          "content": "export function formatYuan(cents, options = {currencySymbol: '¥'}) {\n  if (typeof options !== 'object' || options === null) {\n    throw new TypeError('OPTIONS_MUST_BE_OBJECT');\n  }\n  const sym = options.currencySymbol ?? '¥';\n  return `${sym}${(cents / 100).toFixed(2)}`;\n}\n"
+        },
+        {
+          "path": "src/report.mjs",
+          "content": "import {formatIsoDate} from './vendor/date-v1.mjs';\nimport {formatYuan} from './vendor/money-v1.mjs';\n\nexport function buildDailySummary({year, month, day, totalCents}) {\n  const dateStr = formatIsoDate(year, month, day);\n  const amountStr = formatYuan(totalCents, '¥');\n  return `${dateStr}: ${amountStr}`;\n}\n"
+        },
+        {
+          "path": "test/report.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {buildDailySummary} from '../src/report.mjs';\n\ntest('buildDailySummary formats date and currency', () => {\n  assert.equal(buildDailySummary({year: 2026, month: 11, day: 8, totalCents: 12500}), '2026-11-08: ¥125.00');\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/report.mjs，src/vendor/ 下的文件和 test/report.test.mjs 未被修改",
+        "src/report.mjs 已改为从 ./vendor/date-v2.mjs 导入 toIsoDateString 并从 ./vendor/money-v2.mjs 导入 formatYuan，不再引用 *-v1.mjs",
+        "运行 node --test test/report.test.mjs 退出码为 0",
+        "交回汇报包含「升了什么」「每一步的测试结果」（分步记录）和「没升成的和原因」"
+      ]
+    },
+    {
+      "id": "upgrader-2",
+      "title": "分步迁移配置加载器与校验器并在遇到不兼容环境要求时回退受阻项",
+      "brief": "目标：按 `MIGRATION.md` 将 `src/app-config.mjs` 引用到的两个模块分步从 v1 升级到 v2：\n1. `./lib/loader-v1.mjs` -> `./lib/loader-v2.mjs`\n2. `./lib/validator-v1.mjs` -> `./lib/validator-v2.mjs`\n要求：\n1. 先读 `MIGRATION.md`，跑基线测试 `node --test test/app-config.test.mjs`。\n2. 一次只升一个，每升一个跑一次测试；如果某一个 v2 模块本身不兼容当前运行环境或存在致命缺陷导致测试无法通过，按角色卡规定回退该模块到 v1 并记录原因，保留已成功升级的另一个模块。\n3. 不修改 `src/lib/` 下的文件和 `test/app-config.test.mjs`。",
+      "files": [
+        {
+          "path": "MIGRATION.md",
+          "content": "# 迁移指南\n\n## loader-v2.mjs\n- `parseKv(text)` 改名为 `parseKeyValueLines(text)`，返回值从 `[[k, v]]` 键值对数组改为普通对象 `{[k]: v}`。\n\n## validator-v2.mjs\n- `validatePort(port)` 要求必须传入字符串类型且仅允许大于 10000 的特权外端口（注：与现有业务常用的 8080 端口冲突）。\n"
+        },
+        {
+          "path": "src/lib/loader-v1.mjs",
+          "content": "export function parseKv(text = '') {\n  return text.split('\\n').map(l => l.trim()).filter(Boolean).map(l => l.split('='));\n}\n"
+        },
+        {
+          "path": "src/lib/loader-v2.mjs",
+          "content": "export function parseKeyValueLines(text = '') {\n  const out = {};\n  for (const line of text.split('\\n').map(l => l.trim()).filter(Boolean)) {\n    const [k, v] = line.split('=');\n    out[k.trim()] = v.trim();\n  }\n  return out;\n}\n"
+        },
+        {
+          "path": "src/lib/validator-v1.mjs",
+          "content": "export function validatePort(p) {\n  const n = Number(p);\n  return Number.isInteger(n) && n >= 1 && n <= 65535;\n}\n"
+        },
+        {
+          "path": "src/lib/validator-v2.mjs",
+          "content": "export function validatePort(p) {\n  throw new Error('UNSUPPORTED_PLATFORM_BINDING_V2');\n}\n"
+        },
+        {
+          "path": "src/app-config.mjs",
+          "content": "import {parseKv} from './lib/loader-v1.mjs';\nimport {validatePort} from './lib/validator-v1.mjs';\n\nexport function loadAppConfig(rawText) {\n  const entries = parseKv(rawText);\n  const obj = Object.fromEntries(entries);\n  const port = Number(obj.PORT || 8080);\n  if (!validatePort(port)) throw new Error('BAD_PORT');\n  return {host: obj.HOST || '127.0.0.1', port};\n}\n"
+        },
+        {
+          "path": "test/app-config.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {loadAppConfig} from '../src/app-config.mjs';\n\ntest('loads HOST and PORT=8080', () => {\n  assert.deepEqual(loadAppConfig('HOST=0.0.0.0\\nPORT=8080'), {host: '0.0.0.0', port: 8080});\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/app-config.mjs，src/lib/ 和 test/app-config.test.mjs 未被修改",
+        "src/app-config.mjs 已升级使用 ./lib/loader-v2.mjs 的 parseKeyValueLines，而 validator 因 validator-v2 抛 UNSUPPORTED_PLATFORM_BINDING_V2 已回退保持 ./lib/validator-v1.mjs",
+        "运行 node --test test/app-config.test.mjs 退出码为 0",
+        "交回汇报包含「升了什么」「每一步的测试结果」和「没升成的和原因」（说明 validator-v2 报错回退的原因）"
+      ]
+    }
+  ]
+}

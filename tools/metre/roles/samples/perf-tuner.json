@@ -1,0 +1,56 @@
+{
+  "role": "perf-tuner",
+  "name": "性能优化",
+  "samples": [
+    {
+      "id": "perf-tuner-1",
+      "title": "优化订单与用户列表关联匹配的双重循环瓶颈",
+      "brief": "目标：优化工作目录 `src/join-orders.mjs` 中 `attachUserNames(orders, users)` 的执行耗时，目标是 15,000 条订单与 10,000 名用户关联时单次耗时降到 20ms 以内（至少比改前快 10 倍）。\n要求：\n1. 先跑 `node bench.mjs`（同一方法至少量 3 次）记录改前每次耗时及中位数，并跑 `node --test test/join-orders.test.mjs`。\n2. 优化 `src/join-orders.mjs`，不改函数签名和返回结果顺序。\n3. 改完后再用 `node bench.mjs` 量至少 3 次，跑通功能测试，在汇报中给出前后数字表、测量命令和改动说明。",
+      "files": [
+        {
+          "path": "src/join-orders.mjs",
+          "content": "export function attachUserNames(orders = [], users = []) {\n  return orders.map(order => {\n    const found = users.find(u => u.id === order.userId);\n    return {\n      orderId: order.orderId,\n      userId: order.userId,\n      userName: found ? found.name : 'UNKNOWN',\n      amount: order.amount,\n    };\n  });\n}\n"
+        },
+        {
+          "path": "bench.mjs",
+          "content": "import {performance} from 'node:perf_hooks';\nimport {attachUserNames} from './src/join-orders.mjs';\n\nconst users = Array.from({length: 10000}, (_, i) => ({id: `u-${i}`, name: `User ${i}`}));\nconst orders = Array.from({length: 15000}, (_, i) => ({orderId: i + 1, userId: `u-${(i * 7) % 10000}`, amount: i * 10}));\n\nfor (let run = 1; run <= 3; run++) {\n  const t0 = performance.now();\n  const out = attachUserNames(orders, users);\n  const elapsed = (performance.now() - t0).toFixed(2);\n  console.log(`run ${run}: ${elapsed} ms (rows=${out.length})`);\n}\n"
+        },
+        {
+          "path": "test/join-orders.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {attachUserNames} from '../src/join-orders.mjs';\n\ntest('attaches matching userName and defaults to UNKNOWN', () => {\n  const users = [{id: 'u1', name: 'Alice'}];\n  const orders = [{orderId: 1, userId: 'u1', amount: 50}, {orderId: 2, userId: 'u9', amount: 20}];\n  assert.deepEqual(attachUserNames(orders, users), [\n    {orderId: 1, userId: 'u1', userName: 'Alice', amount: 50},\n    {orderId: 2, userId: 'u9', userName: 'UNKNOWN', amount: 20}\n  ]);\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/join-orders.mjs，bench.mjs 和 test/join-orders.test.mjs 未被修改",
+        "运行 node --test test/join-orders.test.mjs 退出码为 0",
+        "运行 node bench.mjs 3 次测量的中位数耗时 <= 20 ms，且比改前降低 80% 以上",
+        "交回汇报包含「前后数字表」（改前与改后各至少 3 次测量数据）、「测量命令」和「改了什么」"
+      ]
+    },
+    {
+      "id": "perf-tuner-2",
+      "title": "优化日志去重函数中数组 includes 与重复字符串拼接的性能瓶颈",
+      "brief": "目标：优化工作目录 `src/dedup-logs.mjs` 中 `dedupLogLines(lines)` 的耗时，目标是在 `node bench.mjs`（20,000 行日志）下单次耗时降到 15ms 以内。\n要求：\n1. 改前用 `node bench.mjs` 至少量 3 次，记录每次数值。\n2. 优化 `src/dedup-logs.mjs`，保持首次出现顺序和返回值完全一致。\n3. 改后用 `node bench.mjs` 再量 3 次并跑通 `node --test test/dedup-logs.test.mjs`。",
+      "files": [
+        {
+          "path": "src/dedup-logs.mjs",
+          "content": "export function dedupLogLines(lines = []) {\n  const seen = [];\n  const result = [];\n  for (const raw of lines) {\n    const key = String(raw).trim();\n    if (!key) continue;\n    if (!seen.includes(key)) {\n      seen.push(key);\n      result.push(key);\n    }\n  }\n  return result;\n}\n"
+        },
+        {
+          "path": "bench.mjs",
+          "content": "import {performance} from 'node:perf_hooks';\nimport {dedupLogLines} from './src/dedup-logs.mjs';\n\nconst lines = Array.from({length: 20000}, (_, i) => `  [INFO] event-id-${i % 12000}  `);\nfor (let run = 1; run <= 3; run++) {\n  const t0 = performance.now();\n  const out = dedupLogLines(lines);\n  const elapsed = (performance.now() - t0).toFixed(2);\n  console.log(`run ${run}: ${elapsed} ms (unique=${out.length})`);\n}\n"
+        },
+        {
+          "path": "test/dedup-logs.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {dedupLogLines} from '../src/dedup-logs.mjs';\n\ntest('dedupLogLines trims, skips empty and keeps first occurrence order', () => {\n  assert.deepEqual(dedupLogLines([' a ', '', 'b', 'a', '  ', 'b', 'c']), ['a', 'b', 'c']);\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/dedup-logs.mjs，bench.mjs 和 test/dedup-logs.test.mjs 未被修改",
+        "运行 node --test test/dedup-logs.test.mjs 退出码为 0",
+        "运行 node bench.mjs 3 次测量的中位数耗时 <= 15 ms",
+        "交回汇报包含「前后数字表」（改前与改后各 3 次数字）、「测量命令」和「改了什么」"
+      ]
+    }
+  ]
+}

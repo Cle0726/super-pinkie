@@ -1,0 +1,48 @@
+{
+  "role": "test-engineer",
+  "name": "测试工程师",
+  "samples": [
+    {
+      "id": "test-engineer-1",
+      "title": "为阶梯运费计算函数补齐边界测试并排查产品缺陷",
+      "brief": "目标：为工作目录 `src/shipping.mjs` 的 `calcShippingFee(weightKg, isRemote)` 补齐单元测试，写入 `test/shipping.test.mjs`。\n背景：业务规则说明（写在 `src/shipping.mjs` 顶部注释）：\n1. `weightKg <= 0` 或非有限数字应抛出 `RangeError`。\n2. 首重 `1kg` 以内（含 `1kg`）基础运费 `10` 元；超过 `1kg` 的部分每满或不足 `1kg`（向上取整）加收 `4` 元。\n3. 偏远地区（`isRemote === true`）在总运费基础上加收 `15` 元。\n要求：\n1. 只改 `test/shipping.test.mjs`，严禁修改 `src/shipping.mjs`。\n2. 列出并覆盖边界情况（0、负数、NaN、恰好 1kg、1.1kg 向上取整、偏远地区叠加）。\n3. 每条测试先证明在错误预期或缺陷下会失败，若发现 `src/shipping.mjs` 与注释规格不符的产品 bug，只报不修。",
+      "files": [
+        {
+          "path": "src/shipping.mjs",
+          "content": "// 规则：\n// 1. weightKg <= 0 或 !Number.isFinite(weightKg) 抛 RangeError\n// 2. weightKg <= 1 基础运费 10 元；超过 1kg 部分按 Math.ceil(weightKg - 1) * 4 加收\n// 3. isRemote === true 额外加 15 元\nexport function calcShippingFee(weightKg, isRemote = false) {\n  if (!Number.isFinite(weightKg) || weightKg < 0) {\n    throw new RangeError('INVALID_WEIGHT');\n  }\n  const extraKg = weightKg > 1 ? Math.ceil(weightKg - 1) : 0;\n  const base = 10 + extraKg * 4;\n  return isRemote ? base + 15 : base;\n}\n"
+        },
+        {
+          "path": "test/shipping.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {calcShippingFee} from '../src/shipping.mjs';\n\ntest('1kg normal shipping', () => {\n  assert.equal(calcShippingFee(1, false), 10);\n});\n"
+        }
+      ],
+      "checks": [
+        "src/shipping.mjs 零改动（内容与初始哈希完全一致），只修改了 test/shipping.test.mjs",
+        "test/shipping.test.mjs 覆盖了负数、NaN、1kg 临界值、小数续重（如 1.1kg -> 14 元）以及 isRemote === true 的测试",
+        "交回汇报包含「新测试清单」「失败到通过的输出」「发现的产品代码问题」三段",
+        "交回汇报在「发现的产品代码问题」中准确指出 src/shipping.mjs 第 6 行写成了 weightKg < 0，导致 weightKg === 0 时未按规则抛 RangeError 而是返回了 10"
+      ]
+    },
+    {
+      "id": "test-engineer-2",
+      "title": "为配置合并工具函数编写边界测试并把已知 bug 变成回归测试",
+      "brief": "目标：为工作目录 `src/merge-config.mjs` 的 `mergeConfig(defaults, overrides)` 补齐单元测试，写入 `test/merge-config.test.mjs`。\n背景：设计要求：\n1. 返回合并后的新对象，不得修改 `defaults` 和 `overrides` 原对象。\n2. `overrides` 中值为 `undefined` 的键应忽略（保留 `defaults` 的值），但值为 `0`、`false`、`''`（空字符串）的合法假值必须覆盖 `defaults`。\n要求：\n1. 只改 `test/merge-config.test.mjs`，不改 `src/merge-config.mjs`。\n2. 覆盖正常覆盖、`undefined` 忽略、`0`/`false`/`''` 假值覆盖、空对象及入参不可变性检查。\n3. 报告发现的产品代码 bug（只报不修）。",
+      "files": [
+        {
+          "path": "src/merge-config.mjs",
+          "content": "export function mergeConfig(defaults = {}, overrides = {}) {\n  const out = {...defaults};\n  for (const [k, v] of Object.entries(overrides || {})) {\n    if (v) {\n      out[k] = v;\n    }\n  }\n  return out;\n}\n"
+        },
+        {
+          "path": "test/merge-config.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {mergeConfig} from '../src/merge-config.mjs';\n\ntest('overrides string field', () => {\n  assert.deepEqual(mergeConfig({host: 'localhost'}, {host: '127.0.0.1'}), {host: '127.0.0.1'});\n});\n"
+        }
+      ],
+      "checks": [
+        "src/merge-config.mjs 未被修改，只修改了 test/merge-config.test.mjs",
+        "test/merge-config.test.mjs 包含对 undefined、0、false、空字符串以及原对象未被修改的断言",
+        "交回汇报包含「新测试清单」「失败到通过的输出」「发现的产品代码问题」三段",
+        "交回汇报在「发现的产品代码问题」中明确指出 src/merge-config.mjs 第 4 行用 if (v) 判断，导致 overrides 中 0、false、'' 等合法假值被错误丢弃"
+      ]
+    }
+  ]
+}
