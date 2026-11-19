@@ -122,7 +122,38 @@ function backupAndCopy(source, target, backupRoot, key, restored, kind) {
 const isLink = file => { try { return fs.lstatSync(file).isSymbolicLink(); } catch { return false; } };
 
 // openclaw.json：只修产品键，其它（模型、密钥、偏好、渠道……）原样保留。
-export function repairConfig(config, {stateDir, userSkillsDir}) {
+function expandTilde(value, home = os.homedir()) {
+  return typeof value === 'string' ? value.replace(/^~(?=$|[\\/])/, home) : '';
+}
+
+function isOfficialPluginPath(raw, stateDir, home = os.homedir()) {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  const resolved = path.resolve(expandTilde(raw, home));
+  const extRoot = path.resolve(path.join(stateDir, 'extensions'));
+  return resolved === extRoot || resolved.startsWith(extRoot + path.sep) || /SuperPinkie[\\/]services[\\/]/.test(raw) || /超級碧琪\.app/.test(raw);
+}
+
+function shadowsProductPlugin(raw, stateDir, home = os.homedir()) {
+  if (typeof raw !== 'string' || !raw.trim() || isOfficialPluginPath(raw, stateDir, home)) return false;
+  const resolved = path.resolve(expandTilde(raw, home));
+  const manifests = [path.join(resolved, 'openclaw.plugin.json')];
+  try {
+    const stat = fs.statSync(resolved);
+    if (stat.isFile()) manifests.push(path.join(path.dirname(resolved), 'openclaw.plugin.json'));
+    else if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(resolved, {withFileTypes: true}).slice(0, 200)) {
+        if (entry.isDirectory()) manifests.push(path.join(resolved, entry.name, 'openclaw.plugin.json'));
+      }
+    }
+  } catch { return false; }
+  for (const file of manifests) {
+    const data = readJson(file);
+    if (data && PRODUCT_PLUGIN_IDS.includes(String(data.id || ''))) return true;
+  }
+  return false;
+}
+
+export function repairConfig(config, {stateDir, userSkillsDir, home = os.homedir()}) {
   const fixed = [];
   const set = (label, apply) => { if (apply()) fixed.push(label); };
   const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : (config.plugins = {});
@@ -145,12 +176,15 @@ export function repairConfig(config, {stateDir, userSkillsDir}) {
     });
     if (Array.isArray(plugins.allow)) set('plugins.allow', () => { if (!plugins.allow.includes(id)) { plugins.allow.push(id); return true; } return false; });
   }
-  // 外面塞进来的插件目录（能往提示词里注入东西）：只留 ~/.openclaw/extensions 和包里的。
+  // 保留用户自己挂的外部插件目录，只拦截冒充产品插件 ID 的外部目录。
   if (Array.isArray(plugins.load?.paths)) {
     set('plugins.load.paths', () => {
-      const before = plugins.load.paths.length;
-      plugins.load.paths = plugins.load.paths.filter(p => typeof p === 'string' && (path.resolve(p).startsWith(path.join(stateDir, 'extensions')) || /SuperPinkie[\\/]services[\\/]/.test(p) || /超級碧琪\.app/.test(p)));
-      return plugins.load.paths.length !== before;
+      const before = plugins.load.paths;
+      const filtered = before.filter(p => typeof p === 'string' && p.trim() && !shadowsProductPlugin(p, stateDir, home));
+      const changed = filtered.length !== before.length || filtered.some((p, i) => p !== before[i]);
+      if (!changed) return false;
+      plugins.load.paths = filtered;
+      return true;
     });
   }
   // 四个模式的工作区必须是官方位置：换个目录就能换一套人设。
@@ -160,7 +194,7 @@ export function repairConfig(config, {stateDir, userSkillsDir}) {
     if (!dir) continue;
     const official = path.join(stateDir, dir);
     set(`agents.list.${agent.id}.workspace`, () => {
-      const current = typeof agent.workspace === 'string' ? agent.workspace.replace(/^~(?=[\\/])/, os.homedir()) : '';
+      const current = typeof agent.workspace === 'string' ? agent.workspace.replace(/^~(?=[\\/])/, home) : '';
       if (current && path.resolve(current) === path.resolve(official)) return false;
       agent.workspace = official; return true;
     });
@@ -173,14 +207,16 @@ export function repairConfig(config, {stateDir, userSkillsDir}) {
   }
   // 往工作区额外注入文件的内部钩子。
   set('hooks.internal', () => { if (config.hooks?.internal) { delete config.hooks.internal; return true; } return false; });
-  // 技能额外目录：只留用户技能目录（排在自带技能之后，同名由启动校验停用）。
+  // 技能额外目录：保留用户自己加的目录，只确保默认的用户技能目录也在里面。
   const skills = config.skills && typeof config.skills === 'object' ? config.skills : (config.skills = {});
   const load = skills.load && typeof skills.load === 'object' ? skills.load : (skills.load = {});
   set('skills.load.extraDirs', () => {
-    const want = [userSkillsDir];
-    const current = Array.isArray(load.extraDirs) ? load.extraDirs : [];
-    if (current.length === 1 && path.resolve(current[0]) === path.resolve(userSkillsDir)) return false;
-    load.extraDirs = want; return true;
+    const current = Array.isArray(load.extraDirs) ? load.extraDirs.filter(p => typeof p === 'string' && p.trim()) : [];
+    const targetResolved = path.resolve(expandTilde(userSkillsDir, home));
+    const hasDefault = current.some(p => path.resolve(expandTilde(p, home)) === targetResolved);
+    if (hasDefault && Array.isArray(load.extraDirs) && current.length === load.extraDirs.length) return false;
+    load.extraDirs = hasDefault ? current : [...current, userSkillsDir];
+    return true;
   });
   return fixed;
 }
@@ -293,7 +329,7 @@ export function startup({bundle = path.resolve(HERE, '../..'), home = os.homedir
   try {
     const raw = fs.readFileSync(configFile, 'utf8');
     const config = JSON.parse(raw);
-    configFixed = repairConfig(config, {stateDir, userSkillsDir: path.join(stateDir, 'user-skills')});
+    configFixed = repairConfig(config, {stateDir, userSkillsDir: path.join(stateDir, 'user-skills'), home});
     if (configFixed.length) {
       const backup = path.join(backupRoot, 'openclaw.json');
       fs.mkdirSync(path.dirname(backup), {recursive: true});

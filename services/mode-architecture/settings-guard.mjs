@@ -311,9 +311,10 @@ export class SettingsGuard {
     }
     let config = null; try { config = JSON.parse(fs.readFileSync(this.configPath, 'utf8')); } catch {}
     if (!config || typeof config !== 'object') config = this.readConfig() || {};
+    const viewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
     const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
       // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
-      product: productView(config), official: structuredClone(config), lastGood: structuredClone(config),
+      product: productView(config, viewCtx), official: structuredClone(config), lastGood: structuredClone(config),
       configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: [], unreported: []};
     shared.set(key, snap);
     return snap;
@@ -358,11 +359,12 @@ export class SettingsGuard {
       try {
         let raw = null; try { raw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
         let config = null; try { config = JSON.parse(raw); } catch {}
+        const viewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
         if (!snap.configKnown) {
           // 插件加载时还没有配置文件（Windows 第一次启动）：第一份读得出的配置就当基准，不改它。
-          if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config), official: structuredClone(config), lastGood: structuredClone(config)});
-        } else if (config && typeof config === 'object' && JSON.stringify(productView(config)) !== JSON.stringify(snap.product)) {
-          applyProductView(config, snap.official);
+          if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config, viewCtx), official: structuredClone(config), lastGood: structuredClone(config)});
+        } else if (config && typeof config === 'object' && JSON.stringify(productView(config, viewCtx)) !== JSON.stringify(snap.product)) {
+          applyProductView(config, snap.official, viewCtx);
           backup(this.configPath);
           const temp = `${this.configPath}.guard-${process.pid}`;
           let mode = 0o600; try { mode = fs.statSync(this.configPath).mode & 0o777; } catch {}
@@ -461,31 +463,72 @@ const PRODUCT_PLUGIN_IDS = ['pinkie-mode-architecture', 'pinkie-project-scope', 
 function statKey(file) {
   try { const s = fs.lstatSync(file); return `${s.isSymbolicLink() ? 'L' : ''}${s.size}:${s.mtimeMs}:${s.ino}`; } catch { return 'missing'; }
 }
+function isOfficialPluginPath(raw, stateDir, home = os.homedir()) {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  const resolved = path.resolve(expandHome(raw, home));
+  const extRoot = path.resolve(path.join(stateDir, 'extensions'));
+  return resolved === extRoot || resolved.startsWith(extRoot + path.sep) || /SuperPinkie[\\/]services[\\/]/.test(raw) || /超級碧琪\.app/.test(raw);
+}
+function shadowsProductPlugin(raw, stateDir, home = os.homedir()) {
+  if (typeof raw !== 'string' || !raw.trim() || isOfficialPluginPath(raw, stateDir, home)) return false;
+  const resolved = path.resolve(expandHome(raw, home));
+  const manifests = [path.join(resolved, 'openclaw.plugin.json')];
+  try {
+    const stat = fs.statSync(resolved);
+    if (stat.isFile()) manifests.push(path.join(path.dirname(resolved), 'openclaw.plugin.json'));
+    else if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(resolved, {withFileTypes: true}).slice(0, 200)) {
+        if (entry.isDirectory()) manifests.push(path.join(resolved, entry.name, 'openclaw.plugin.json'));
+      }
+    }
+  } catch { return false; }
+  for (const file of manifests) {
+    const data = readJson(file);
+    if (data && PRODUCT_PLUGIN_IDS.includes(String(data.id || ''))) return true;
+  }
+  return false;
+}
+function sameResolvedPath(a, b, home = os.homedir()) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !a.trim() || !b.trim()) return false;
+  return norm(path.resolve(expandHome(a, home))) === norm(path.resolve(expandHome(b, home)));
+}
 // openclaw.json 的产品键（和 installer/guard/guard.mjs 的 repairConfig 管的是同一批）。
-function productView(config = {}) {
+function productView(config = {}, {stateDir = '', home = os.homedir(), userSkillsDir = ''} = {}) {
   const plugins = config.plugins || {};
   const agents = {};
   for (const agent of Array.isArray(config.agents?.list) ? config.agents.list : []) {
     if (PRODUCT_AGENTS.includes(agent?.id)) agents[agent.id] = {workspace: agent.workspace ?? null, contextInjection: agent.contextInjection ?? null, toolsDeny: agent.tools?.deny ?? null};
   }
+  const loadPaths = Array.isArray(plugins.load?.paths) ? plugins.load.paths : null;
+  const extraDirs = Array.isArray(config.skills?.load?.extraDirs) ? config.skills.load.extraDirs : null;
   return {
-    enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null, paths: plugins.load?.paths ?? null,
+    enabled: plugins.enabled ?? null, deny: plugins.deny ?? null, allow: plugins.allow ?? null,
+    officialPaths: loadPaths ? loadPaths.filter(p => isOfficialPluginPath(p, stateDir, home)) : null,
+    shadowingPaths: loadPaths ? loadPaths.filter(p => shadowsProductPlugin(p, stateDir, home)) : [],
     // 插件开关 + 钩子授权（授权被删，OpenClaw 会挡掉碧琪的对话钩子）。
     entries: Object.fromEntries(PRODUCT_PLUGIN_IDS.map(id => {
       const entry = plugins.entries?.[id];
       if (!entry) return [id, 'absent'];
       return [id, {enabled: entry.enabled ?? null, prompt: entry.hooks?.allowPromptInjection ?? null, conversation: entry.hooks?.allowConversationAccess ?? null}];
     })),
-    agents, hooksInternal: config.hooks?.internal ?? null, extraDirs: config.skills?.load?.extraDirs ?? null,
+    agents, hooksInternal: config.hooks?.internal ?? null,
+    hasUserSkillsDir: extraDirs && userSkillsDir ? extraDirs.some(p => sameResolvedPath(p, userSkillsDir, home)) : null,
   };
 }
-function applyProductView(config, official) {
-  const want = productView(official);
+function applyProductView(config, official, ctx = {}) {
+  const {stateDir = '', home = os.homedir(), userSkillsDir = ''} = ctx;
+  const want = productView(official, ctx);
   const put = (obj, key, value) => { if (value === null || value === undefined) delete obj[key]; else obj[key] = structuredClone(value); };
   const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : (config.plugins = {});
   put(plugins, 'enabled', want.enabled); put(plugins, 'deny', want.deny); put(plugins, 'allow', want.allow);
-  if (want.paths !== null) { plugins.load = plugins.load && typeof plugins.load === 'object' ? plugins.load : {}; plugins.load.paths = structuredClone(want.paths); }
-  else if (plugins.load) delete plugins.load.paths;
+  if (want.officialPaths !== null || Array.isArray(plugins.load?.paths)) {
+    plugins.load = plugins.load && typeof plugins.load === 'object' ? plugins.load : {};
+    const existing = Array.isArray(plugins.load.paths) ? plugins.load.paths : [];
+    const keptUser = existing.filter(p => typeof p === 'string' && p.trim() && !isOfficialPluginPath(p, stateDir, home) && !shadowsProductPlugin(p, stateDir, home));
+    const merged = [...(want.officialPaths || [])];
+    for (const p of keptUser) if (!merged.some(cur => sameResolvedPath(cur, p, home))) merged.push(p);
+    plugins.load.paths = merged;
+  }
   for (const id of PRODUCT_PLUGIN_IDS) {
     const value = want.entries[id];
     if (value === 'absent') continue;
@@ -514,11 +557,13 @@ function applyProductView(config, official) {
   }
   if (want.hooksInternal !== null) { config.hooks = config.hooks || {}; config.hooks.internal = structuredClone(want.hooksInternal); }
   else if (config.hooks) delete config.hooks.internal;
-  if (want.extraDirs !== null) {
+  if (want.hasUserSkillsDir && userSkillsDir) {
     config.skills = config.skills && typeof config.skills === 'object' ? config.skills : {};
     config.skills.load = config.skills.load && typeof config.skills.load === 'object' ? config.skills.load : {};
-    config.skills.load.extraDirs = structuredClone(want.extraDirs);
-  } else if (config.skills?.load) delete config.skills.load.extraDirs;
+    const existing = Array.isArray(config.skills.load.extraDirs) ? config.skills.load.extraDirs.filter(p => typeof p === 'string' && p.trim()) : [];
+    if (!existing.some(p => sameResolvedPath(p, userSkillsDir, home))) existing.push(userSkillsDir);
+    config.skills.load.extraDirs = existing;
+  }
 }
 
 function walk(dir, out, limit) {

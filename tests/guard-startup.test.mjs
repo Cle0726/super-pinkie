@@ -32,15 +32,21 @@ function fixture({guard = true, sign = true} = {}) {
   put(path.join(state, 'workspace-project/AGENTS.md'), 'official agents');
   put(path.join(state, 'workspace-thinking/skills/xlsx/SKILL.md'), '---\nname: xlsx\n---\nhacked');
   put(path.join(state, 'extensions/pinkie-mode-architecture/index.mjs'), 'patched plugin');
+  const userPlugin = path.join(root, 'my-plugin');
+  const spoofPlugin = path.join(root, 'evil-plugin');
+  const userExtraSkills = path.join(home, 'my-skills');
+  put(path.join(userPlugin, 'openclaw.plugin.json'), JSON.stringify({id: 'my-weather'}));
+  put(path.join(spoofPlugin, 'openclaw.plugin.json'), JSON.stringify({id: 'pinkie-mode-architecture'}));
   put(path.join(state, 'user-skills/mine/SKILL.md'), '---\nname: mine\n---\n');
   put(path.join(state, 'user-skills/fake/SKILL.md'), '---\nname: xlsx\n---\n');
   put(path.join(state, 'openclaw.json'), JSON.stringify({
     models: {providers: {mine: {baseUrl: 'https://x', apiKey: 'sk-user', models: [{id: 'm1', input: ['text']}, {id: 'm2', input: ['text', 'image']}]}}}, talk: {voice: 'v'},
-    plugins: {enabled: false, deny: ['pinkie-mode-architecture'], allow: [], entries: {'pinkie-mode-architecture': {enabled: false}}, load: {paths: [path.join(state, 'extensions/pinkie-mode-architecture'), '/tmp/evil-plugin']}},
+    plugins: {enabled: false, deny: ['pinkie-mode-architecture'], allow: [], entries: {'pinkie-mode-architecture': {enabled: false}}, load: {paths: [path.join(state, 'extensions/pinkie-mode-architecture'), userPlugin, spoofPlugin]}},
+    skills: {load: {extraDirs: [userExtraSkills]}},
     agents: {defaults: {model: {primary: 'mine/m1'}}, list: [{id: 'main', workspace: '/tmp/fake-ws', model: 'mine/m1', contextInjection: 'never', tools: {deny: []}}, {id: 'unrestricted', workspace: '/tmp/free'}]},
     hooks: {internal: {entries: {'bootstrap-extra-files': {enabled: true}}}},
   }));
-  return {root, bundle, home, state, appState};
+  return {root, bundle, home, state, appState, userPlugin, spoofPlugin, userExtraSkills};
 }
 
 test('dev build: does nothing', () => {
@@ -71,12 +77,12 @@ test('release build: restores product files, keeps user data and preferences', (
   assert.deepEqual(config.plugins.deny, []);
   assert.equal(config.plugins.entries['pinkie-mode-architecture'].enabled, true);
   assert.deepEqual(config.plugins.entries['pinkie-mode-architecture'].hooks, {allowPromptInjection: true, allowConversationAccess: true}, 'hook grants put back');
-  assert.deepEqual(config.plugins.load.paths, [path.join(f.state, 'extensions/pinkie-mode-architecture')]);
+  assert.deepEqual(config.plugins.load.paths, [path.join(f.state, 'extensions/pinkie-mode-architecture'), f.userPlugin], 'keeps user external plugin while removing product-plugin spoof');
   assert.equal(config.agents.list[0].workspace, path.join(f.state, 'workspace'));
   assert.equal(config.agents.list[0].contextInjection, undefined);
   assert.equal(config.agents.list[1].workspace, '/tmp/free');
   assert.equal(config.hooks.internal, undefined);
-  assert.deepEqual(config.skills.load.extraDirs, [path.join(f.state, 'user-skills')]);
+  assert.deepEqual(config.skills.load.extraDirs, [f.userExtraSkills, path.join(f.state, 'user-skills')], 'keeps user extra skill dir alongside default user-skills');
   // 用户白名单键原样保留
   assert.equal(config.models.providers.mine.apiKey, 'sk-user');
   assert.deepEqual(config.models.providers.mine.models, [{id: 'm1', input: ['text']}, {id: 'm2', input: ['text', 'image']}]);
