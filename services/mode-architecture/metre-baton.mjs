@@ -14,16 +14,17 @@ const SOLO_BLOCK = '【Virtuoso · 独做】本轮由 Metre 自己完成，不�
 const VISIBLE_DISPATCH_BLOCK = '【Baton · 派发】请用 pinkie_session_start 派活，子会话才会出现在用户的侧栏。';
 const DELEGATION_TOOLS = new Set(['sessions_spawn', 'sessions_send', 'pinkie_session_start', 'pinkie_mode_ask', 'pinkie_session_message']);
 const SHELL_TOOLS = new Set(['exec', 'bash', 'shell', 'terminal', 'run_command']);
-const READ_ONLY_CHECK = /^(?:pwd(?: |$)|ls(?: |$)|rg(?: |$)|grep(?: |$)|git (?:status|diff|log|show|rev-parse)(?: |$)|node --(?:test|check)(?: |$)|(?:pnpm|npm|yarn) (?:test|lint)(?: |$)|(?:python3?|py) -m (?:unittest|pytest)(?: |$)|pytest(?: |$))/u;
+const READ_ONLY_CHECK = /^(?:(?:pwd|ls|rg|grep|cat|head|tail|wc|stat|Get-Location|Get-Item|Get-ChildItem|Get-Content|Get-FileHash|Select-String|Test-Path)(?: |$)|git (?:status|diff|log|show|rev-parse)(?: |$)|node --(?:test|check)(?: |$)|(?:pnpm|npm|yarn) (?:test|lint)(?: |$)|(?:python3?|py) -m (?:unittest|pytest)(?: |$)|pytest(?: |$))/iu;
+const SHELL_OPERATORS = /[;&|<>$\x60\r\n]/u;
 function handsOn(name, params) {
   if (BATON_HANDS_ON.has(name)) return true;
   if (name === 'app_browser') return /^(?:evaluate|type|fill|click|press|drag|upload|submit|act)$/i.test(String(params.action || ''));
-  if (name === 'run_tests' && !params.command) return /[;&|<>$\x60\r\n\\]/u.test(String(params.filter || ''));
+  if (name === 'run_tests' && !params.command) return SHELL_OPERATORS.test(String(params.filter || ''));
   if (!SHELL_TOOLS.has(name) && name !== 'run_tests') return false;
   const command = String(params.command || '').trim();
   // Unknown shell commands count toward the budget. A known check with a
   // pipeline, substitution or redirect is no longer a single verification.
-  return Boolean(params.background || !READ_ONLY_CHECK.test(command) || /(?:^|\s)--output(?:[=\s]|$)/u.test(command) || /[;&|<>$\x60\r\n\\]/u.test(command));
+  return Boolean(params.background || !READ_ONLY_CHECK.test(command) || /(?:^|\s)--output(?:[=\s]|$)/u.test(command) || SHELL_OPERATORS.test(command));
 }
 export const BATON_BLOCK = `【Baton · 派发】这一轮是派发：动手的活你已经亲手做了 ${BATON_FREE_STEPS} 步，请把剩余的独立工作派出去。`
   + '用 pinkie_models 选一个比你轻的模型，把剩下要动手的部分写成简报（目标、文件路径、做到什么样算完、怎么验证），'

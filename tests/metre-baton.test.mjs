@@ -83,6 +83,8 @@ test('Baton cannot bypass its budget through the shell, rejected dispatch or hid
   assert.ok(baton.before(key, 'exec', {command: 'git diff; python3 update.py'})?.block);
   assert.ok(baton.before(key, 'exec', {command: 'git diff > review.txt'})?.block);
   assert.equal(baton.before(key, 'exec', {command: 'git diff --check'}), undefined);
+  assert.equal(baton.before(key, 'exec', {command: String.raw`Get-Content 'C:\workspace\notes.txt'`}), undefined);
+  assert.ok(baton.before(key, 'exec', {command: 'Get-Content notes.txt | Set-Content out.txt'})?.block);
   assert.ok(baton.before(key, 'run_tests', {command: 'python3 update.py'})?.block);
   assert.ok(baton.before(key, 'run_tests', {filter: '; python3 update.py'})?.block);
   assert.ok(baton.before(key, 'sessions_spawn', {task: '改文件'})?.block);
