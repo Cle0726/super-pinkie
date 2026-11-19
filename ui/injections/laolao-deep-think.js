@@ -561,27 +561,35 @@
     positionStatus();
   };
 
+  const selectionByButton = new WeakMap();
   function syncSelectionUi() {
     const tier = selectedDefinition();
+    const metre = currentMode() === "metre";
+    const reduced = Boolean(window.__pinkieMotion?.reduce);
+    const selection = (tier?.id || "") + ":" + metre + ":" + reduced;
     for (const btn of $$("." + BTN_CLASS)) {
+      if (selectionByButton.get(btn) === selection) continue;
+      selectionByButton.set(btn, selection);
       btn.classList.toggle("is-selected", Boolean(tier));
       btn.dataset.tier = tier?.id || "";
       btn.dataset.tierSymbol = tier?.numeral || "";
+      const showArt = Boolean(tier) && !metre;
       const poster = btn.querySelector(".laolao-deep-think-btn__poster");
       if (poster) {
-        poster.hidden = !tier;
-        if (tier && poster.getAttribute("src") !== tier.art) poster.setAttribute("src", tier.art);
+        poster.hidden = !showArt;
+        if (showArt && poster.getAttribute("src") !== tier.art) poster.setAttribute("src", tier.art);
       }
       const art = btn.querySelector(".laolao-deep-think-btn__art");
       if (art) {
-        art.hidden = !tier;
-        if (tier) {
+        art.hidden = !showArt;
+        if (showArt) {
           art.setAttribute("poster", tier.art);
           if (art.getAttribute("src") !== tier.motion) art.setAttribute("src", tier.motion);
-          if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) void art.play?.().catch(()=>{});
+          if (reduced) art.pause?.();
+          else void art.play?.().catch(() => {});
         } else {
           art.pause?.();
-          art.removeAttribute("src");
+          if (art.hasAttribute("src")) { art.removeAttribute("src"); art.load?.(); }
         }
       }
       btn.setAttribute("aria-pressed", String(Boolean(tier)));

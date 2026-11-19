@@ -103,22 +103,18 @@
   }
   function mount() {
     const body = document.querySelector('.pk-run__body');
-    const dot = document.querySelector('.pk-run__dot');
     if (!body || !isMetre()) return false;
-    if (!body.querySelector('.pk-metre-cat')) {
-      const c = makeCanvas('pk-metre-cat');
-      body.prepend(c);
+    chip = body.querySelector('.pk-metre-mem');
+    if (!chip) {
       chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'pk-metre-mem';
       chip.hidden = true;
       chip.addEventListener('click', (event) => { event.stopPropagation(); togglePop(); });
-      c.after(chip);
+      body.prepend(chip);
     }
-    if (dot && !dot.querySelector('.pk-metre-cat')) dot.prepend(makeCanvas('pk-metre-cat pk-metre-cat--dot'));
     mountPerch();
-    canvases = [...document.querySelectorAll('.pk-metre-cat')];
-    chip = body.querySelector('.pk-metre-mem');
+    canvases = perch?.isConnected ? [perch.firstElementChild] : [];
     return true;
   }
 
@@ -230,7 +226,6 @@
     if (doneUntil > now && next === 'idle') next = 'done';
     if (next !== 'idle') idleAct = null;
     setState(next);
-    if (!perch || !perch.isConnected) { mountPerch(); canvases = [...document.querySelectorAll('.pk-metre-cat')]; }
     tick += 1;
     if (state === 'idle') {
       const def = cat()?.STATES.idle;
