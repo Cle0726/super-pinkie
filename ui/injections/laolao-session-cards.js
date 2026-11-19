@@ -295,7 +295,9 @@
       return box;
     }
     const heading = el('div', 'pinkie-session-card__title');
-    const where = card.modeName ? card.modeName + ' · ' : '';
+    const role = /^agent:roles:pinkie-child:/.test(card.childKey) || card.consult ? card.roleName : '';
+    const label = role || card.modeName;
+    const where = label ? label + ' · ' : '';
     if (proposal) heading.textContent = where + card.title;
     else heading.textContent = where + card.title + (card.failed ? ' 没做成' : card.consult ? ' 的回答' : ' 做完一轮');
     const body = proposal ? el('div', 'pinkie-session-card__body', expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary)
