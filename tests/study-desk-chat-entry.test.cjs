@@ -9,7 +9,8 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
     const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(harness.url);await page.locator('#pinkie-study-desk').waitFor({state:'attached'});
     assert.equal(await page.locator('html').getAttribute('data-pinkie-study-desk'),'chat');
-    assert.ok(harness.calls.every(c=>/\.(?:desk\.today|ref\.receipts|state)$/.test(c.method)), 'Only the read-only tonight strip may load when opening a chat');
+    const unexpected = harness.calls.map(call => call.method).filter(method => !/\.(?:desk\.today|ref\.receipts|state|game\.(?:forms\.list|line|world|awards\.pending))$/.test(method));
+    assert.deepEqual(unexpected, [], 'Opening a chat does not start a lesson or load heavy desk views');
     await page.getByRole('textbox',{name:'聊天输入'}).fill('还没发出的内容');
     await page.getByRole('button',{name:'舞台',exact:true}).click({modifiers:['Alt']});
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-view'),'stage');

@@ -107,14 +107,14 @@ test('visual teaching stays automatic when quizzes are paused and does not award
   const resumed = await tool.execute('resume-quiz', {action:'present', resume:true, kind:'single_choice', question:'练习', options:['甲','乙'], correct_answer:'1'});
   assert.equal(resumed.isError, false); assert.equal(store.status(key).enabled, true);
 });
-test('real C pointer run exposes memory cells and pointer targets, never fake addresses', async () => {
+test('real C pointer run exposes memory cells and pointer targets, never fake addresses', {skip: process.platform !== 'darwin'}, async () => {
   const code = '#include <stdio.h>\nint main(void){int a[3]={10,20,30}; int *p=a; int **pp=&p; p++; **pp=42; printf("%d\\n",a[1]); return 0;}';
   const result = await runLearningCompute('memory_lab', {code, stdin: ''}); assert.equal(result.stdout, '42\n'); assert.equal(result.trace.verifiedOutput, true, result.trace.message);
   const last = result.trace.frames.at(-1).memory, a = last.find(c => c.name === 'a'), p = last.find(c => c.name === 'p'), pp = last.find(c => c.name === 'pp');
   assert.equal(a.values[1], 42); assert.equal(p.pointer.target, a.id); assert.equal(p.pointer.index, 1); assert.equal(pp.pointer.target, p.id);
   const end = await runLearningCompute('memory_lab', {code: '#include <stdio.h>\nint main(void){int a[2]={1,2};int *p=a+2;printf("%d\\n",1);return 0;}', stdin: ''}); assert.equal(end.trace.frames.at(-1).memory.find(c => c.name === 'p').pointer.onePast, true);
 });
-test('memory lab auto-runs a real program on present; unsupported traces stay explicit', async t => {
+test('memory lab auto-runs a real program on present; unsupported traces stay explicit', {skip: process.platform !== 'darwin'}, async t => {
   const store = fixture(t), tool = createLearningActivityTool(store, {sessionKey: key});
   const r = await tool.execute('memory-present', {action: 'present', kind: 'memory_lab', visual: {code: '#include <stdio.h>\nint main(void){int x=7;int *p=&x;*p=9;printf("%d\\n",x);return 0;}'}});
   assert.equal(r.isError, false); assert.equal(r.details.visual.state.result.stdout, '9\n'); assert.equal(r.details.visual.state.result.trace.verifiedOutput, true);

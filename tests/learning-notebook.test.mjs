@@ -37,7 +37,10 @@ test('legacy notebook remains searchable, editable, reviewable and exportable af
   const markdown = fs.readFileSync(notes.markdownPath, 'utf8');
   assert.match(markdown, /推迟到以后/); assert.match(markdown, /语法/); assert.match(markdown, /deleted-chat/);
   assert.equal(reopened.listNotes({sessionKey: 'agent:learning:new-chat'}).notes.length, 0);
-  assert.equal(reopened.listNotes({sessionKey: LEARNING_NOTEBOOK_SESSION}).notes.length, 2);
+  const remaining = reopened.listNotes({sessionKey: LEARNING_NOTEBOOK_SESSION});
+  assert.deepEqual(remaining.notes.map(note => note.id), ['other']);
+  const resting = reopened.listNotes({sessionKey: LEARNING_NOTEBOOK_SESSION, view: 'resting'});
+  assert.deepEqual(resting.notes.map(note => note.id), ['old']);
 });
 
 test('notebook delete and undo work across source sessions and keep both exports in sync', t => {
