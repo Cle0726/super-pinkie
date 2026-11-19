@@ -9,7 +9,7 @@ import {LearningInteractionStore, createLearningActivityTool, learningPrompt, re
 import {LearningPact, composeNudgeContext, learningPactPrompt, nudgeContextFor, nudgeKindFromPrompt} from './learning-pact.mjs';
 import {registerCompanionGateway} from './companion.mjs';
 import {createSessionAccess, isUnresolvedSessionKey, logSessionFailure, registerSessionTitles, scopeUpgradeFallbackRunner} from './session-titles.mjs';
-import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerMetreRolesTool, registerSessionLineage, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
+import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineageRunningChildren, registerMetreModelsTool, registerMetreRolesTool, registerSessionLineage, roleBriefTask, SESSION_WAKE_MARK, spawnShouldBeSession} from './session-lineage.mjs';
 import {checkRoleToolCall, formatRoleCardPrompt, isRolePluginToolAllowed, isRolesContext, ROLES_BASE, RoleMutationAuditor} from './metre-roles.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
@@ -2354,6 +2354,13 @@ export class CompletionIntegrityGuard {
     return {ok: true, verified: true, at: state.verification.at};
   }
 
+  deliveryState(key, ctx) {
+    const state = this.runs.get(key);
+    if (!state || !isRolesContext({...ctx, sessionKey: ctx.sessionKey || key})) return state;
+    const prompt = roleBriefTask(state.prompt);
+    return prompt === state.prompt ? state : {...state, prompt};
+  }
+
   // 一轮只提醒一次（remindOnce）：先命中的别的提醒（比如最后一个工具失败）会把「视频没说素材来源」挤掉。
   // 11-04 routes-i R-ad-2：侧栏浏览器没连上 → 提醒「最后一次工具调用失败」→ 来源那条再也没机会发。所以并进同一条。
   finalize(event = {}, ctx = {}, options = {}) {
@@ -2361,7 +2368,7 @@ export class CompletionIntegrityGuard {
     if (decision?.action !== 'revise') return decision;
     if (workFirstContext(ctx)) return decision;
     const key = completionRunKey(event, ctx);
-    const state = this.runs.get(key);
+    const state = this.deliveryState(key, ctx);
     if (!state) return decision;
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     // 只在这条回复是交付时并：「这就去做」那种预告还没到交付，不提来源。
@@ -2376,7 +2383,7 @@ export class CompletionIntegrityGuard {
 
   finalizeChecks(event = {}, ctx = {}, options = {}) {
     const key = completionRunKey(event, ctx);
-    const state = this.runs.get(key);
+    const state = this.deliveryState(key, ctx);
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     if (!state) return;
     // Asking the user is a legitimate pause, not a delivery claim.

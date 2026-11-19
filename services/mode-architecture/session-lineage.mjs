@@ -62,6 +62,16 @@ const WAKE_PREFIX = '[pinkie-watchdog] [pinkie-session-wake]';
 const isWatchdogResume = (prompt, runId) => /^pinkie-watchdog-/.test(String(runId || ''))
   || (String(prompt || '').startsWith('[pinkie-watchdog]') && String(prompt || '').includes('【自动续接保护】'));
 const BRIEF_PREFIX = '【子会话简报】';
+const ROLE_BRIEF_START = '（这份简报来自 Metre，角色：';
+const ROLE_BRIEF_END = '。做法和汇报格式见角色卡。）';
+
+// 交付门禁只判断真实简报，固定的来历说明和角色名不算任务指令。
+export function roleBriefTask(prompt) {
+  const prefix = `${BRIEF_PREFIX}\n${ROLE_BRIEF_START}`;
+  if (!prompt?.startsWith(prefix)) return prompt;
+  const end = prompt.indexOf('\n', prefix.length);
+  return end >= 0 && prompt.slice(prefix.length, end).endsWith(ROLE_BRIEF_END) ? prompt.slice(end + 1) : prompt;
+}
 const FAMILY_PREFIX = '【来自关联会话的消息】';
 const HERE_PREFIX = '【就在这里继续】';
 const ASK_PREFIX = '【跨模式提问】';
@@ -459,8 +469,7 @@ export class SessionLineage {
   briefFor(parentKey, request) {
     if (isMetreKey(parentKey) && request.metreRole && request.initiation !== 'consult' && !request.userAuthored) {
       // PLAN 3.5：带角色时改用角色版开头，不加 REPORT_NOTE（卡里有「交回」一节）。
-      return `（这份简报来自 Metre，角色：${request.metreRoleName || request.metreRole}。做法和汇报格式见角色卡。）\n`
-        + request.prompt;
+      return `${ROLE_BRIEF_START}${request.metreRoleName || request.metreRole}${ROLE_BRIEF_END}\n` + request.prompt;
     }
     if (isMetreKey(parentKey) && request.initiation !== 'consult' && !request.userAuthored) {
       return '（这份简报来自 Metre：它负责理解用户的整件事、拆分和验收，这一块交给你。用你这边的方法做。）\n'

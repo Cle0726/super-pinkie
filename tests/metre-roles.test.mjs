@@ -681,6 +681,35 @@ test('a role child that completes on an automatic retry still reports to Metre o
   assert.equal((await board.board(METRE)).sessions[0].reports, 1);
 });
 
+test('a role brief heading does not make a read-only request require a write', async t => {
+  const env = makeRoleEnv(t);
+  fs.writeFileSync(path.join(env.officialDir, 'researcher.md'), makeCard({
+    id: 'researcher', name: '调研员', group: 'research', tier: 'light', tools: ['read', 'net'],
+  }), 'utf8');
+  const f = makeLineageFixture(t, {roleDirs: env});
+  const source = path.join(f.root, 'source-a.md');
+  fs.writeFileSync(source, '本地夹具', 'utf8');
+  async function decision(prompt, withRead) {
+    const task = await f.lineage.start(METRE, 'test-parent', {
+      title: '核对门禁', prompt, initiation: 'user_asked', role: 'researcher',
+    }, prompt);
+    const sent = f.sent.find(item => item.sessionKey === task.key);
+    const ctx = {agentId: 'roles', sessionKey: task.key, runId: sent.idempotencyKey};
+    const guard = new CompletionIntegrityGuard();
+    guard.begin({prompt: sent.message}, ctx);
+    if (withRead) {
+      const tool = {toolName: 'read', toolCallId: 'one-read', params: {path: source}};
+      guard.beforeTool(tool, ctx);
+      guard.afterTool({...tool, result: '本地夹具'}, ctx);
+    }
+    return guard.finalize({lastAssistantMessage: '原文：本地夹具。'}, ctx);
+  }
+  const onlyRead = '请调用工具读取 source-a.md 并告诉我内容。不修改文件。';
+  assert.equal(await decision(onlyRead, true), undefined);
+  assert.match((await decision(onlyRead, false))?.reason || '', /没有任何真实执行工具记录/);
+  assert.match((await decision('请修改文件 source-a.md 并运行测试', true))?.reason || '', /没有任何真实执行工具记录/);
+});
+
 // ---------- R1-24 ★ & R1-25 ★ ----------
 test('R1-24 ★ / R1-25 ★ 模型挑选（五条件逐一测 + 缺条件报错 + okAt 优先）与 14 厂家 vendorOf + cross-vendor 校验', async t => {
   // R1-25 ★: 至少 12 个厂家（这里测 15 个），含路由前缀、:free、思考强度后缀
