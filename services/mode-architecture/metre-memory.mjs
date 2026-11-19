@@ -15,6 +15,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {agentOf, registerSessionMethod, sessionTool} from './session-titles.mjs';
 import {boundProjectRoot} from './project-brief.mjs';
 import {festivals, holiday, season, termOn} from './learning-almanac.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 export const CATEGORIES = Object.freeze(['overview', 'structure', 'commands', 'conventions', 'decisions',
   'preferences', 'pitfalls', 'people', 'open']);
@@ -296,7 +297,9 @@ const TOOL_DESCRIPTION = '你在当前项目文件夹里的记忆（只属于这
   + `类别：${CATEGORIES.map(name => `${name}（${CATEGORY_NAMES[name]}）`).join('、')}。`
   + 'confidence：user（用户亲口说的）/ verified（你看文件或验收确认的）/ guess（推测）。子会话的汇报要你验收过才能记，标 verified。';
 
-export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childrenRunning = async () => false, memory = null} = {}) {
+export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childrenRunning = async () => false, memory = null, lock = null} = {}) {
+  const activeLock = () => lock || getActiveMetreLock();
+  const isLocked = () => Boolean(activeLock()?.isLocked?.());
   const store = memory || new MetreMemory(root);
   const folderFor = key => boundProjectRoot(key, {stateRoot, bindingsFile});
   const keyForSession = key => store.keyFor(folderFor(key));
@@ -305,6 +308,7 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
   const remind = new Set();      // 下一轮要带「记一下」的会话
 
   const run = (ctx, params) => {
+    activeLock()?.assertUnlocked?.();
     const sessionKey = String(ctx?.sessionKey || '');
     const folder = folderFor(sessionKey);
     const key = store.keyFor(folder);
@@ -351,7 +355,7 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
     throw new Error('action 只能是 recall / remember / update / forget / list');
   };
 
-  api.registerTool?.(ctx => isMetreKey(ctx?.sessionKey) ? sessionTool('metre_memory', TOOL_DESCRIPTION, {
+  api.registerTool?.(ctx => isMetreKey(ctx?.sessionKey) && !isLocked() ? sessionTool('metre_memory', TOOL_DESCRIPTION, {
     action: {type: 'string', enum: ['recall', 'remember', 'update', 'forget', 'list']},
     query: {type: 'string'}, category: {type: 'string', enum: CATEGORIES},
     text: {type: 'string'}, confidence: {type: 'string', enum: CONFIDENCE},
@@ -361,7 +365,7 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
 
   api.on?.('before_prompt_build', (event, ctx) => {
     const sessionKey = String(ctx?.sessionKey || '');
-    if (!isMetreKey(sessionKey)) return;
+    if (!isMetreKey(sessionKey) || isLocked()) return;
     const key = keyForSession(sessionKey);
     const previous = lastKey.get(sessionKey);
     lastKey.set(sessionKey, key);
@@ -379,13 +383,13 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
   api.on?.('after_tool_call', (event, ctx) => {
     const sessionKey = String(ctx?.sessionKey || '');
     const name = String(event?.toolName || event?.name || '');
-    if (isMetreKey(sessionKey) && name !== 'metre_memory') worked.add(sessionKey);
+    if (isMetreKey(sessionKey) && !isLocked() && name !== 'metre_memory') worked.add(sessionKey);
   }, {priority: -10870});
 
   // 一件事做完（这一轮结束时没有子会话还在跑，且上次提醒之后动过手）：下一轮提醒一次，写不写由 Metre 定。
   api.on?.('agent_end', async (event, ctx) => {
     const sessionKey = String(ctx?.sessionKey || '');
-    if (!isMetreKey(sessionKey) || !worked.has(sessionKey)) return;
+    if (!isMetreKey(sessionKey) || isLocked() || !worked.has(sessionKey)) return;
     let running = false;
     try { running = await childrenRunning(sessionKey); } catch { running = true; }
     if (running) return;
@@ -407,6 +411,7 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
     throw new Error('要给 sessionKey 或 folder');
   };
   method('pinkie.metre.memory', params => {
+    activeLock()?.assertUnlocked?.();
     const key = scopeOf(params);
     const action = params.action || 'stats';
     if (action === 'stats') return {ok: true, ...store.stats(key)};
@@ -425,6 +430,7 @@ export function registerMetreMemory(api, {root, stateRoot, bindingsFile, childre
   // 空状态引导语的彩蛋（PLAN 6.3）：今天的节气、节日、法定假日、季节。纯计算、不联网，复用学习台的历法和节假日表。
   // 「最近的记忆」也从这里给：当前文件夹里最近的一条 open / decisions（没绑文件夹或没有就不给）。
   method('pinkie.metre.today', params => {
+    if (params.sessionKey || params.folder || params.scope) activeLock()?.assertUnlocked?.();
     const date = /^\d{4}-\d{2}-\d{2}$/.test(params.date || '') ? params.date : localDate(new Date());
     const term = termOn(date);
     const off = holiday(date);

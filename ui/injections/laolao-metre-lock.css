@@ -1,0 +1,167 @@
+/* 正式版 Metre 开发者密码弹窗与分屏遮罩 */
+.laolao-metre-lock-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 17, 22, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.laolao-metre-lock-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483590;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f6f7f9;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-curtain {
+  background: #14161b;
+}
+
+.laolao-metre-lock-dialog {
+  width: min(400px, 100%);
+  box-sizing: border-box;
+  border-radius: 16px;
+  padding: 22px 24px 20px;
+  background: #ffffff;
+  color: #17191f;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 22px 56px rgba(15, 23, 42, 0.22);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog {
+  background: #1a1d24;
+  color: #f3f4f6;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.laolao-metre-lock-dialog__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.laolao-metre-lock-dialog__desc {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5b6270;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__desc {
+  color: #9ca3af;
+}
+
+.laolao-metre-lock-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.laolao-metre-lock-dialog__input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: #f8fafc;
+  color: #17191f;
+  font-size: 14px;
+  outline: none;
+}
+
+.laolao-metre-lock-dialog__input:focus {
+  border-color: #17191f;
+  background: #ffffff;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__input {
+  background: #111318;
+  color: #f3f4f6;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__input:focus {
+  border-color: #d1d5db;
+  background: #0d0f13;
+}
+
+.laolao-metre-lock-dialog__error {
+  margin: 0;
+  min-height: 18px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #c62828;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__error {
+  color: #fca5a5;
+}
+
+.laolao-metre-lock-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.laolao-metre-lock-dialog__btn {
+  appearance: none;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.laolao-metre-lock-dialog__btn:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__btn {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.laolao-metre-lock-dialog__btn--primary {
+  border-color: transparent;
+  background: #17191f;
+  color: #ffffff;
+}
+
+.laolao-metre-lock-dialog__btn--primary:hover:not(:disabled) {
+  background: #2b2f3a;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__btn--primary {
+  background: #f3f4f6;
+  color: #111318;
+}
+
+html[data-pinkie-night] .laolao-metre-lock-dialog__btn--primary:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.laolao-metre-lock-dialog__btn:disabled,
+.laolao-metre-lock-dialog__input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

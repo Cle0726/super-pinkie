@@ -50,7 +50,7 @@ if (!window.__laolaoCleStage) {
     ask_user: 'ask', pinkie_mode_ask: 'ask',
     learning_activity: 'quiz', learning_desk: 'note',
     clekk_memory: 'memory', memory_search: 'memory',
-    pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', metre_memory: 'memory', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
+    pinkie_session_start: 'session', pinkie_sessions: 'manage', pinkie_models: 'models', pinkie_model_capability: 'models', metre_memory: 'memory', pinkie_session_message: 'session', pinkie_session_list: 'session', pinkie_session_title: 'session',
     sessions_spawn: 'session', sessions_send: 'session', subagents: 'session',
     workbench_show: 'show', computer: 'computer', computer_flow: 'computer', web_gpt_activity: 'webgpt', web_gpt: 'webgpt', cron: 'cron',
   };
@@ -131,6 +131,17 @@ if (!window.__laolaoCleStage) {
     // 派发：状态行说派给了哪个模式
     if (name === 'pinkie_session_start' && MODE_CN[a.mode]) return {text: MODE_CN[a.mode], mono: false};
     // 网关把名叫 session / key 的字段一律打成 ***（当成密钥了）：管会话时说做了什么，不显示那串星号
+    if (name === 'pinkie_model_capability' && a.model) {
+      const bits = [];
+      if (a.vision === true) bits.push('开启看图');
+      else if (a.vision === false) bits.push('关闭看图');
+      if (a.reasoning === true) bits.push('开启思考');
+      else if (a.reasoning === false) bits.push('关闭思考');
+      if (a.contextWindow) bits.push(`上下文 ${a.contextWindow}`);
+      if (a.maxTokens === 0) bits.push('回复上限恢复默认');
+      else if (a.maxTokens) bits.push(`最大回复 ${a.maxTokens}`);
+      return {text: bits.length ? `${firstLine(a.model)}（${bits.join('、')}）` : firstLine(a.model), mono: false};
+    }
     if (name === 'pinkie_sessions') {
       const SAY = {list: '列会话', search: '搜会话', read: '读会话记录', create: '新建会话', restore: '恢复会话', stop: '停下会话',
         stop_children: '停下子会话', archive: '归档会话', unarchive: '取消归档', delete: '删除会话', rename: '改会话名', move: '移动会话'};
@@ -296,8 +307,8 @@ if (!window.__laolaoCleStage) {
   }
 
   // image_generate 发起后台任务后这一轮就结束了，图片要再等一两分钟才会由
-  // 完成事件发回来。这段时间不能把最后一张卡片写成「完成」，否则先生会以为
-  // 碧琪忘了发图。依据：先生最后一句话之后，已发起的后台生图多于已交付的
+  // 完成事件发回来。这段时间不能把最后一张卡片写成「完成」，否则用户会以为
+  // 碧琪忘了发图。依据：用户最后一句话之后，已发起的后台生图多于已交付的
   // MEDIA 行。10 分钟后不再提示，免得失败的任务把状态永远挂住。
   function messageText(m) {
     const c = m && m.content;

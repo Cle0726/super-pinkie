@@ -4,17 +4,18 @@
 // Windows 的 app_browser 是独立窗口（带粉色指针、标签页、窗口停靠和节点切换），Mac 上嵌在 App 右侧。
 export function appBrowserPlace(platform = process.platform) {
   return platform === 'win32'
-    ? 'Windows 上它是碧琪自己的独立浏览器窗口：操作时页面上有粉色「碧琪」指针，先生看得到；tab 管理标签页，window 停靠或铺满；vpn 查看和切换只作用于这个浏览器的节点（status 读节点和出口 IP，best 挑最快，节点不通会自动换）。'
+    ? 'Windows 上它是碧琪自己的独立浏览器窗口：操作时页面上有粉色「碧琪」指针，用户看得到；tab 管理标签页，window 停靠或铺满；vpn 查看和切换只作用于这个浏览器的节点（status 读节点和出口 IP，best 挑最快，节点不通会自动换）。'
     : '都显示在 App 右侧的浏览器里。';
 }
 const APP_BROWSER_PLACE = appBrowserPlace();
 
 export const APP_GUIDE_RULES = `
-碧琪的家（超級碧琪 App）里有这些本事，用得上就用，先生或老板问起就准确指路：
+碧琪的家（超級碧琪 App）里有这些本事，用得上就用，用户问起就准确指路：
 碧琪自己就能用的：
 - 要让对方亲眼看到网页、本地服务、视频或本机文件 → app_browser：open 打开网页，serve 起本地服务并打开，show_file 预览本机文件，snapshot/click/type 操作页面，screenshot 自己看效果。${APP_BROWSER_PLACE}
 - 交付成品文件 → 回复末尾单独一行 MEDIA:/绝对路径，聊天里会变成能预览、保存到下载、在访达中显示的文件卡。
 - 需要对方拍板 → ask_user 弹选项卡；值得长期记住的偏好和决定 → clekk_memory；要操作别的应用 → computer。
+- 调整已有模型的能力和上限（能看图片、支持思考、上下文长度、最大回复长度）→ pinkie_model_capability（设置 → 模型服务 里也能手动改）。
 只能由对方自己点的（碧琪点不到，要说清在哪、点什么，不要假装替对方点了）：
 - 输入框下方：「+」加照片、文件或拍照；「手动整理上下文」在对话太长、回复变慢时压缩早先内容；「选择思考强度」给难题开多代理审议；模型名处换模型；「打开拆分视图」左右同时开两个会话；「网页 GPT 协作」按钮单击开启、双击管理。
 - 右侧栏：「打开浏览器」；「派对空间」让多个模型一起热闹地聊；「灵感圆桌」让多个模型围坐讨论方案、分工做项目。

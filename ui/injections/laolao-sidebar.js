@@ -653,7 +653,7 @@
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         folderRequests.delete(requestId);
-        toast("文件夹选择没有响应，先生再试一次吧");
+        toast("文件夹选择没有响应，再试一次吧");
         resolve(null);
       }, 120000);
       folderRequests.set(requestId, { resolve, timer });
@@ -874,6 +874,11 @@
 
   function navigateSession(key){
     if(modeForSession(key)!==stateMode)return;
+    if(modeForSession(key)==="metre"&&window.__pinkieMetreLock?.isKnownLocked?.()){
+      closeNavigationDrawer();
+      void window.__pinkieMetreLock.ensureUnlocked();
+      return;
+    }
     closeNavigationDrawer();
     const current=new URL(window.location.href).searchParams.get('session');
     const requestVisibleSync=()=>window.setTimeout?.(()=>window.dispatchEvent(

@@ -1809,7 +1809,7 @@ test('plugin exposes persistent arm/disarm RPC and lifecycle hooks',async t=>{
   assert.equal(methods.get('pinkie.deepThink.disarm').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.deepThink.status').opts.scope,'operator.admin');
   assert.equal(methods.get('pinkie.run.status').opts.scope,'operator.read');
-  assert.equal(tools.length,29);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','web_gpt','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','pinkie_models','pinkie_sessions','metre_memory','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
+  assert.equal(tools.length,30);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>name.startsWith('pinkie_session_')).sort(),['pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title']);assert.deepEqual(tools.map(item=>item.opts.name).filter(name=>!name.startsWith('pinkie_session_')),['delivery_guard','clekk_memory','computer','computer_flow','app_browser','pinkie_search','learning_activity','web_gpt_activity','web_gpt','ask_user','learning_material','learning_desk','learning_library','pinkie_mode_ask','pinkie_models','pinkie_sessions','metre_memory','pinkie_model_capability','plan_update','workbench_read','code_check','code_search','code_edit','code_refs','run_tests','workbench_show']);
   const askFactory=tools.find(item=>item.opts.name==='ask_user').factory;
   assert.equal(askFactory({agentId:'project',sessionKey:'agent:project:ask'}).name,'ask_user');
   assert.equal(askFactory({agentId:'learning',sessionKey:'agent:learning:ask'}).name,'ask_user');
@@ -1878,7 +1878,7 @@ test('plugin manifest declares every agent tool before registration',()=>{
   const manifest=JSON.parse(fs.readFileSync(path.join(import.meta.dirname,'../services/mode-architecture/openclaw.plugin.json'),'utf8'));
   // The manifest is the agent-facing contract: every tool the session actually
   // exposes must be declared here first, or the host refuses to register it.
-  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','metre_memory','pinkie_mode_ask','pinkie_models','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','pinkie_sessions','plan_update','run_tests','web_gpt','web_gpt_activity','workbench_read','workbench_show']);
+  assert.deepEqual([...manifest.contracts.tools].sort(),['app_browser','ask_user','clekk_memory','code_check','code_edit','code_refs','code_search','computer','computer_flow','delivery_guard','learning_activity','learning_desk','learning_library','learning_material','metre_memory','pinkie_mode_ask','pinkie_model_capability','pinkie_models','pinkie_search','pinkie_session_list','pinkie_session_message','pinkie_session_start','pinkie_session_title','pinkie_sessions','plan_update','run_tests','web_gpt','web_gpt_activity','workbench_read','workbench_show']);
   // A tool registered in code but missing above kills the whole plugin at load
   // (11-13: pinkie_search). Scan every registerTool name in the plugin source.
   const dir=path.join(import.meta.dirname,'../services/mode-architecture');
@@ -3277,4 +3277,16 @@ test('a tier continuation after a failed turn backs off and stops after repeated
   assert.equal(await continuation.schedule(sessionKey,'project'),true);
   assert.equal(continuation.failedTurns.has(sessionKey),false);
   assert.equal(calls.length,0);
+});
+
+test('global integrity gate accepts pinkie_model_capability mutations in normal and unrestricted modes',()=>{
+  for(const [agentId,sessionKey] of [['main','agent:main:vision-toggle'],['project','agent:project:vision-toggle'],['unrestricted','agent:unrestricted:vision-toggle'],['metre','agent:metre:vision-toggle']]){
+    const guard=new CompletionIntegrityGuard();
+    const ctx={agentId,sessionKey,runId:`run-${agentId}`};
+    guard.begin({prompt:'把 deepseek-chat 改成能看图片'},ctx);
+    guard.beforeTool({toolName:'pinkie_model_capability',toolCallId:'cap-1',params:{model:'deepseek/deepseek-chat',vision:true}},ctx);
+    guard.afterTool({toolName:'pinkie_model_capability',toolCallId:'cap-1',params:{model:'deepseek/deepseek-chat',vision:true},result:{details:{ok:true,model:'deepseek/deepseek-chat',vision:true,input:['text','image']}}},ctx);
+    const verdict=guard.finalize({lastAssistantMessage:'已经把 deepseek/deepseek-chat 修改好了：已打开，如果上游其实不支持，发图时会报错，可以再关掉。'},ctx);
+    assert.equal(verdict,undefined,`${agentId} should accept confirmed pinkie_model_capability mutation`);
+  }
 });

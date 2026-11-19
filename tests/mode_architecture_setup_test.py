@@ -238,5 +238,29 @@ class ModeArchitectureSetupTests(unittest.TestCase):
         self.assertNotIn('ultra', models[0]['compat']['supportedReasoningEfforts'])
 
 
+        # 用户在 pinkie-model-setup.json 里明确关掉看图的模型, 启动时不再被强行补回 image
+        with tempfile.TemporaryDirectory(prefix='pinkie-vision-override-') as temp:
+            home = Path(temp)
+            openclaw = home / '.openclaw'
+            openclaw.mkdir()
+            (openclaw / 'openclaw.json').write_text(json.dumps({
+                'models': {'providers': {'mm': {'baseUrl': 'http://127.0.0.1:1467/v1', 'models': [
+                    {'id': 'workbuddy/hy4flash', 'input': ['text']},
+                    {'id': 'plain', 'input': ['text']},
+                ]}}},
+                'agents': {'list': []},
+                'plugins': {},
+            }))
+            (openclaw / 'pinkie-model-setup.json').write_text(json.dumps({
+                'providers': {}, 'disabled': {},
+                'capabilities': {'mm/workbuddy/hy4flash': {'vision': False}},
+            }))
+            setup.install(home)
+            installed = json.loads((openclaw / 'openclaw.json').read_text())
+            by_id = {m['id']: m.get('input') for m in installed['models']['providers']['mm']['models']}
+            self.assertEqual(by_id['workbuddy/hy4flash'], ['text'])
+            self.assertEqual(by_id['plain'], ['text', 'image'])
+
+
 if __name__ == '__main__':
     unittest.main()

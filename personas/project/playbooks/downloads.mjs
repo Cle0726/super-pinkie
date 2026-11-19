@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// 下载账本：碧琪为了做活自己下载/安装的东西都记在这里，作品交付后再问先生要不要删。
+// 下载账本：碧琪为了做活自己下载/安装的东西都记在这里，作品交付后再问用户要不要删。
 // 用法（node 是碧琪自带的，Mac / Windows 一样）：
 //   node downloads.mjs add --path <装在哪> --what <是什么> [--for <为了哪件活>] [--source <从哪下的>]
 //   node downloads.mjs list [--pending] [--json]
-//   node downloads.mjs ask [--for <活>]          生成一句交付后问先生的话（没有要问的就什么都不说）
-//   node downloads.mjs keep <编号|路径|all>       先生说留着：以后不再问
-//   node downloads.mjs remove <编号|路径|pending> 先生说删：移进废纸篓 / 回收站
+//   node downloads.mjs ask [--for <活>]          生成一句交付后问用户的话（没有要问的就什么都不说）
+//   node downloads.mjs keep <编号|路径|all>       用户说留着：以后不再问
+//   node downloads.mjs remove <编号|路径|pending> 用户说删：移进废纸篓 / 回收站
 // 账本位置：$PINKIE_DOWNLOADS_LEDGER，或 <OpenClaw 状态目录>/pinkie/downloads.json。
 import fs from 'node:fs';
 import os from 'node:os';
@@ -114,7 +114,7 @@ export function pending(data) {
 export function add(data, {path: target, what, for: task = '', source = ''}) {
   if (!target || !what) throw new Error('add 要写 --path 和 --what');
   const resolved = path.resolve(target);
-  if (isProtected(resolved)) throw new Error(`${resolved} 是系统或先生的大文件夹，不能登记成可删的下载`);
+  if (isProtected(resolved)) throw new Error(`${resolved} 是系统或用户的大文件夹，不能登记成可删的下载`);
   const now = new Date().toISOString();
   let item = data.items.find(i => path.resolve(i.path) === resolved && !i.removed);
   if (!item) {

@@ -55,7 +55,10 @@ for command_name in git node python3 xcrun; do
   }
 done
 
-mkdir -p "$STATE_ROOT" "$CONFIG_ROOT" "$BACKUP_ROOT"
+mkdir -p "$STATE_ROOT" "$STATE_ROOT/updates" "$CONFIG_ROOT" "$BACKUP_ROOT"
+INSTALL_PROGRESS_FILE="$STATE_ROOT/updates/install-in-progress.json"
+printf '{"pid":%s}\n' "$$" > "$INSTALL_PROGRESS_FILE" 2>/dev/null || true
+trap 'rm -f "$INSTALL_PROGRESS_FILE" >/dev/null 2>&1 || true' EXIT
 if [[ ! -f "$CONFIG_ROOT/config.json" ]]; then
   cp "$REPO_ROOT/config.example.json" "$CONFIG_ROOT/config.json"
 fi
@@ -173,6 +176,7 @@ LEGACY_APP="$APP_ROOT/来啦～老弟.app"
 APP_SWAP_ACTIVE=1
 restore_app_on_failure() {
   local status=$?
+  rm -f "$INSTALL_PROGRESS_FILE" >/dev/null 2>&1 || true
   if [[ "$status" -ne 0 && "$APP_SWAP_ACTIVE" == "1" ]]; then
     rm -rf "$TARGET_APP"
     if [[ -d "$BACKUP_ROOT/app/超級碧琪.app" ]]; then
@@ -246,6 +250,7 @@ fi
 
 APP_SWAP_ACTIVE=0
 trap - EXIT
+rm -f "$INSTALL_PROGRESS_FILE" >/dev/null 2>&1 || true
 
 # 成功切换后只保留当前安装，清理本安装器留下的旧版回滚副本。
 # 仅操作 updater 自己的 backups/*/app，不触碰用户数据、配置、会话或素材。

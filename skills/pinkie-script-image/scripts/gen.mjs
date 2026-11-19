@@ -80,7 +80,7 @@ const ENGINES = {
       if (!r.found) return {ok: false, why: '没有 chatgpt.com 标签页（跑 scripts/ensure-chrome.mjs --url https://chatgpt.com/）'};
       if (r.value === undefined) return {ok: false, why: '页面连上了但读不到内容（可能还在加载或卡住）'};
       const st = JSON.parse(r.value);
-      if (st.signedOut) return {ok: false, why: 'ChatGPT 没登录，需要先生本人在这个窗口登录一次'};
+      if (st.signedOut) return {ok: false, why: 'ChatGPT 没登录，需要用户本人在这个窗口登录一次'};
       return {ok: true};
     },
   },
@@ -99,7 +99,7 @@ const ENGINES = {
       if (!r.found) return {ok: false, why: '没有 gemini.google.com 标签页（跑 scripts/ensure-chrome.mjs --url https://gemini.google.com/app）'};
       if (r.value === undefined) return {ok: false, why: '页面连上了但读不到内容（可能还在加载）'};
       const st = JSON.parse(r.value);
-      if (st.signedOut) return {ok: false, why: 'Gemini 没登录（页面是 viewer-signed-out），需要先生本人在这个窗口登录一次'};
+      if (st.signedOut) return {ok: false, why: 'Gemini 没登录（页面是 viewer-signed-out），需要用户本人在这个窗口登录一次'};
       if (!st.hasBox && st.len < 50) return {ok: false, why: `Gemini 页面几乎空白（${st.len} 字符），可能没登录或没加载完`};
       return {ok: true};
     },

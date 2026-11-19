@@ -1,5 +1,5 @@
 {
-  "_note": "随碧琪发布的社区技能（四个普通模式能用，无限制模式没有）。tools/skills/vendor_community_skills.py 按这份清单拉取、带上原许可证和来源。只收许可证允许再分发的；2026-11-04 逐个核过。 收录时给每个 SKILL.md 头部加一行 disable-model-invocation: true（不进系统技能清单，免得挤掉其他技能的说明；碧琪按活儿自动挑、或者从 pinkie-skill-library 目录里找；先生仍可以用 /技能名 直接调用），其余原样。",
+  "_note": "随碧琪发布的社区技能（四个普通模式能用，无限制模式没有）。tools/skills/vendor_community_skills.py 按这份清单拉取、带上原许可证和来源。只收许可证允许再分发的；2026-11-04 逐个核过。 收录时给每个 SKILL.md 头部加一行 disable-model-invocation: true（不进系统技能清单，免得挤掉其他技能的说明；碧琪按活儿自动挑、或者从 pinkie-skill-library 目录里找；用户仍可以用 /技能名 直接调用），其余原样。",
   "repos": {
     "ui-ux-pro-max": {"repo": "nextlevelbuilder/ui-ux-pro-max-skill", "commit": "dd9a1b4", "license": "MIT", "licenseFile": "LICENSE"},
     "anthropic": {"repo": "anthropics/skills", "commit": "ca45fc4", "license": "Apache-2.0（只收文件夹里带 LICENSE.txt 的；仓库整体没有许可证，doc-coauthoring 和 docx/pdf/pptx/xlsx 不收）", "licenseFile": "per-skill LICENSE.txt"},

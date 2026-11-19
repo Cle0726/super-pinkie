@@ -211,7 +211,7 @@ for scope_file in index.mjs setup.py package.json openclaw.plugin.json; do
   cp "$REPO_ROOT/services/project-scope/$scope_file" "$CONTENTS/Resources/SuperPinkie/services/project-scope/"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/services/mode-architecture"
-for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs work-kinds.mjs run-contract.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs setup.py package.json openclaw.plugin.json first-person.mjs; do
+for architecture_file in index.mjs memory.mjs learning.mjs reasoning.mjs work-kinds.mjs run-contract.mjs model-sync.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs setup.py package.json openclaw.plugin.json first-person.mjs settings-guard.mjs metre-lock.mjs metre-lock-hash.json openclaw-paths.mjs; do
   cp "$REPO_ROOT/services/mode-architecture/$architecture_file" "$CONTENTS/Resources/SuperPinkie/services/mode-architecture/"
 done
 # setup.py also installs the imported learning, workbench and vendor modules.
@@ -312,17 +312,30 @@ else
     fi
   done
 fi
+if [[ "$GUARD_CHANNEL" == "release" ]]; then
+  cp "$REPO_ROOT/ui/assets/laolao-splash-release.mp4" "$CONTENTS/Resources/SuperPinkie/ui/assets/laolao-splash.mp4"
+  cp "$REPO_ROOT/ui/assets/laolao-splash-video-poster-release.png" "$CONTENTS/Resources/SuperPinkie/ui/assets/laolao-splash-video-poster.png"
+fi
 GUARD_COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || true)"
 "$RUNTIME_ROOT/bin/node" - "$CONTENTS/Resources/SuperPinkie/build-info.json" "$GUARD_CHANNEL" "$VERSION" "$GUARD_COMMIT" "$PINKIE_STATE_ROOT_FOR_GUARD/updates/release-signature.json" <<'NODE'
 const fs = require('fs');
 const [file, channel, version, commit, sigFile] = process.argv.slice(2);
 const info = {guard: channel === 'release', channel, version, commit};
+if (channel === 'release') {
+  const fb = {};
+  if (process.env.PINKIE_FEEDBACK_REPO) fb.repo = process.env.PINKIE_FEEDBACK_REPO.trim();
+  if (process.env.PINKIE_FEEDBACK_PUBLIC_KEY) fb.publicKey = process.env.PINKIE_FEEDBACK_PUBLIC_KEY.trim();
+  if (process.env.PINKIE_FEEDBACK_TOKEN) fb.token = process.env.PINKIE_FEEDBACK_TOKEN.trim();
+  if (process.env.PINKIE_FEEDBACK_RELAY_URL) fb.endpoint = process.env.PINKIE_FEEDBACK_RELAY_URL.trim();
+  if (Object.keys(fb).length) info.feedback = fb;
+}
 try {
   const sig = JSON.parse(fs.readFileSync(sigFile, 'utf8'));
   if (channel === 'release' && sig.commit === commit && String(sig.version).replace(/^v/, '') === version) info.release = {version, commit, signature: sig.signature};
 } catch {}
 fs.writeFileSync(file, JSON.stringify(info, null, 2) + '\n');
 NODE
+"$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" stamp-personas "$CONTENTS/Resources/SuperPinkie/personas" --version "$VERSION" --commit "$GUARD_COMMIT" --channel "$GUARD_CHANNEL"
 "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" manifest "$CONTENTS/Resources/SuperPinkie" --commit "$GUARD_COMMIT"
 if [[ -n "${PINKIE_GUARD_SIGNING_KEY_FILE:-}" ]]; then
   "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/installer/guard/guard.mjs" sign "$CONTENTS/Resources/SuperPinkie" "$PINKIE_GUARD_SIGNING_KEY_FILE"

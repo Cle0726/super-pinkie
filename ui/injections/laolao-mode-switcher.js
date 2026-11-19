@@ -11,15 +11,14 @@
     {
       id: "chat",
       label: "唠嗑模式",
-      address: "先生",
       asset: "/laolao-mode-chat.svg?v=states6",
       avatar: "/laolao-mode-chat-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-chat-sm.png?v=sm3",
       transition: "/laolao-mode-transition-chat.png?v=transition2",
       phrases: [
-        "先生稍等，碧琪把聊天气球牵过来啦…",
-        "杯子蛋糕摆好，马上陪先生唠个痛快！",
-        "耳朵竖起来——碧琪来听先生说啦！",
+        "稍等，碧琪把聊天气球牵过来啦…",
+        "杯子蛋糕摆好，马上陪你唠个痛快！",
+        "耳朵竖起来——碧琪来听你说啦！",
       ],
       readyPhrase: "唠嗑时间到！",
       sessionKey: "agent:main:main",
@@ -27,13 +26,12 @@
     {
       id: "project",
       label: "项目模式",
-      address: "老板",
       asset: "/laolao-mode-project.svg?v=states6",
       avatar: "/laolao-mode-project-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-project-sm.png?v=sm3",
       transition: "/laolao-mode-transition-project.png?v=transition2",
       phrases: [
-        "老板稍等，碧琪正在把项目档案摊开…",
+        "稍等，碧琪正在把项目档案摊开…",
         "目标、文件和下一步都在排队报到啦！",
         "铅笔夹好，碧琪再核对一遍现场…",
       ],
@@ -43,13 +41,12 @@
     {
       id: "thinking",
       label: "想法模式",
-      address: "先生",
       asset: "/laolao-mode-thinking.svg?v=states6",
       avatar: "/laolao-mode-thinking-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-thinking-sm.png?v=sm3",
       transition: "/laolao-mode-transition-thinking.png?v=transition2",
       phrases: [
-        "先生稍等，碧琪在把点子排成彩带…",
+        "稍等，碧琪在把点子排成彩带…",
         "卷卷鬃毛转一圈，好主意正在冒泡！",
         "先把最亮的那颗想法星星捞出来…",
       ],
@@ -59,13 +56,12 @@
     {
       id: "learning",
       label: "学习模式",
-      address: "先生",
       asset: "/laolao-mode-learning.svg?v=states1",
       avatar: "/laolao-mode-learning-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-learning-sm.png?v=sm3",
       transition: "/laolao-mode-transition-learning.png?v=transition1",
       phrases: [
-        "先生稍等，碧琪把学习桌和笔记本摆好啦…",
+        "稍等，碧琪把学习桌和笔记本摆好啦…",
         "先找到最关键的那个概念，再把它弄懂弄会！",
         "小实验准备好了，学会以后马上用起来…",
       ],
@@ -75,13 +71,12 @@
     {
       id: "unrestricted",
       label: "无限制模式",
-      address: "先生",
       asset: "/laolao-mode-unrestricted.svg?v=states6",
       avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7",
       avatarSmall: "/laolao-mode-unrestricted-sm.png?v=sm3",
       transition: "/laolao-mode-transition-unrestricted.png?v=transition2",
       phrases: [
-        "先生，彩虹力量开始升温啦…",
+        "彩虹力量开始升温啦…",
         "星星和纸屑让一让，想象力要冲出去啦！",
         "最后一条彩带系好——马上自由开跑！",
       ],
@@ -491,7 +486,7 @@
       if (handedOff) return;
       handedOff = true;
       motion.progress(fill, percentage, progress, 68);
-      message.textContent = `模式小屋正在开门，${mode.address}稍等…`;
+      message.textContent = `模式小屋正在开门，稍等…`;
       resolve({ overlay, progress, fill, message, percentage, assets });
     };
 
@@ -539,7 +534,7 @@
     let fallbackStarted = false;
     let assetsReady = false;
     ui.assets.then(() => { assetsReady = true; });
-    const waitingText = `模式小屋正在开门，${mode.address}稍等…`;
+    const waitingText = `模式小屋正在开门，稍等…`;
     if (ui.fx) ui.fx.waiting(waitingText);
     else if (!motion.reduced()) {
       progressAnimation = motion.animateProgress(ui.fill, ui.percentage, ui.progress, 68, 96, 28 * 92, "linear");
@@ -678,12 +673,22 @@
     render();
   };
 
+  const ensureModeUnlocked = async (mode) => {
+    if (mode?.id !== "metre" || !window.__pinkieMetreLock?.ensureUnlocked) return true;
+    closeMenu();
+    try {
+      return Boolean(await window.__pinkieMetreLock.ensureUnlocked());
+    } catch {
+      return false;
+    }
+  };
   const switchMode = async (mode, sourceOption = null) => {
     if (switching) return;
     if (mode.id === activeMode()) {
       closeMenu();
       return;
     }
+    if (!(await ensureModeUnlocked(mode))) return;
     switching = true;
     modeTransitionTargetId = mode.id;
     try {
@@ -918,6 +923,7 @@
   const openWorkspaceDock = async (mode) => {
     const bridge = dockBridge();
     if (!bridge || isDockedWorkspace()) return;
+    if (!(await ensureModeUnlocked(mode))) return;
     closeMenu();
     // A dock is a clean second workspace, not a copy of a cached recent chat.
     // Older native shells only accept the stable root session for each mode;

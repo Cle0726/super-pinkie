@@ -11,8 +11,6 @@
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const mode = () => { const m = document.documentElement.getAttribute("data-laolao-mode"); return MODES.includes(m) ? m : "chat"; };
   const ART = (m, s) => `./laolao-pinkie-buddy-${m}-${s}.png`;
-  const CALL = {project: "老板"};
-  const callUser = () => CALL[mode()] || "先生";
   const PREF_KEY = "pinkie-buddy-prefs-v1";
   const SLEEPY_AFTER = 10 * 60_000;
   const FOCUS_MINUTES = 25;
@@ -465,7 +463,7 @@
     const sel = String(window.getSelection?.() || "").trim();
     if (sel && sel.length <= 60) return explain(sel);
     const terms = pickTerms(latestReply().group);
-    if (!terms.length) return say(`${callUser()}在聊天里选中看不懂的词，碧琪就用大白话讲给你听。`);
+    if (!terms.length) return say(`在聊天里选中看不懂的词，碧琪就用大白话讲给你听。`);
     say(`最新回复里这几个词可能不好懂，点一个：<div class="pinkie-buddy__chips"></div>`, {sticky: true});
     const box = bubble.querySelector(".pinkie-buddy__chips");
     terms.forEach((t) => { const c = el("button", "pinkie-buddy__chip", t); c.type = "button"; c.addEventListener("click", (e) => { e.stopPropagation(); explain(t); }); box.append(c); });
@@ -483,7 +481,7 @@
   const legacyClarifyFlow = async () => {
     const ta = document.querySelector(".agent-chat__composer-combobox textarea");
     const draft = (ta?.value || "").trim();
-    if (!draft) return say(`${callUser()}先在输入框里随便写几句，碧琪帮你整理成更清楚的问题。`);
+    if (!draft) return say(`先在输入框里随便写几句，碧琪帮你整理成更清楚的问题。`);
     const ticket = ++requestVersion, originMode = mode();
     setState("working"); say(`碧琪在帮你理一理 ${thinkingDots}`, {sticky: true, close: false});
     const res = await ask("clarify", {text: draft, context: latestReply().text.slice(0, 1200)});
@@ -663,13 +661,13 @@
   const startFocus = () => {
     focus = {start: Date.now(), end: Date.now() + FOCUS_MINUTES * 60_000};
     document.documentElement.setAttribute("data-pinkie-focus", "");
-    say(`好，接下来 ${FOCUS_MINUTES} 分钟碧琪陪${callUser()}专心，时间到了叫你休息。`);
+    say(`好，接下来 ${FOCUS_MINUTES} 分钟碧琪陪你专心，时间到了叫你休息。`);
   };
   const stopFocus = (done = false) => {
     focus = null; document.documentElement.removeAttribute("data-pinkie-focus");
     document.documentElement.style.removeProperty("--pinkie-focus-progress");
     caption.classList.remove("is-shown");
-    if (done === true) { happyUntil = Date.now() + 3000; setState("happy"); burstFrom(figure, "done"); say(`${callUser()}专注了 ${FOCUS_MINUTES} 分钟，超棒！起来伸个懒腰、看看远处、喝口水吧。`, {sticky: true}); }
+    if (done === true) { happyUntil = Date.now() + 3000; setState("happy"); burstFrom(figure, "done"); say(`你专注了 ${FOCUS_MINUTES} 分钟，超棒！起来伸个懒腰、看看远处、喝口水吧。`, {sticky: true}); }
   };
   const tickFocus = () => {
     if (!focus) return;

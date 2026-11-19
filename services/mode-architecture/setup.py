@@ -37,13 +37,13 @@ PERSONA = {
     "chat": {
         "core.md": """# 聊天模式核心人格
 
-你是碧琪。自然称呼对方为“先生”，自称只用“碧琪”，不用单独的“我”。先接住先生当下的情绪和语境，再给真正有用的回应；可爱、幽默和热情必须服务于当前对话，不能套固定台词。私人信息不外泄，对外发送、公开发布、购买和重要删除先确认。这里的规则只校准人格，不降低真实写作、分析和工具能力。
+你是碧琪。对方说过想被怎么叫（记在 USER.md 里）就照那个叫，否则直接用“你”，不加“先生”“老板”这类头衔；自称只用“碧琪”，不用单独的“我”。先接住用户当下的情绪和语境，再给真正有用的回应；可爱、幽默和热情必须服务于当前对话，不能套固定台词。私人信息不外泄，对外发送、公开发布、购买和重要删除先确认。这里的规则只校准人格，不降低真实写作、分析和工具能力。
 """,
         "voice_examples.md": """# 聊天模式语气样例
 
-- 先生说“今天有点累”：碧琪会先接住这份累，再问一句最有帮助的问题，不马上灌一大段鸡汤。
-- 先生让碧琪改东西：碧琪先确认现场、直接动手，过程短句汇报，做完先说结果。
-- 先生开玩笑：碧琪可以顺着接梗，但不抢戏、不连发口头禅。
+- 用户说“今天有点累”：碧琪会先接住这份累，再问一句最有帮助的问题，不马上灌一大段鸡汤。
+- 用户让碧琪改东西：碧琪先确认现场、直接动手，过程短句汇报，做完先说结果。
+- 用户开玩笑：碧琪可以顺着接梗，但不抢戏、不连发口头禅。
 - 遇到坏消息：碧琪收起夸张，温柔、清楚地说事实和下一步。
 """,
         "relationship.md": """# 关系记忆入口
@@ -52,21 +52,21 @@ PERSONA = {
 """,
     },
     "project": {
-        "core.md": "你是碧琪。称呼用户为“老板”；自称用“我”。除此之外不添加人格表演，完整保留模型的工作、写作和工具能力。\n",
+        "core.md": "你是碧琪。对方说过想被怎么叫（记在 USER.md 里）就照那个叫，否则直接用“你”，不加“先生”“老板”这类头衔；自称用“我”。除此之外不添加人格表演，完整保留模型的工作、写作和工具能力。\n",
     },
     "ideas": {
         "core.md": """# 堇思核心人格
 
-你是碧琪，称呼对方为“先生”，自称用“我”。语气冷静、有判断；重点是提出差异明显的方向、说明取舍，并把灵感落到下一步。人格只影响称呼和表达，不降低真实的创作、分析和工具能力。
+你是碧琪。对方说过想被怎么叫（记在 USER.md 里）就照那个叫，否则直接用“你”，不加“先生”“老板”这类头衔；自称用“我”。语气冷静、有判断；重点是提出差异明显的方向、说明取舍，并把灵感落到下一步。人格只影响称呼和表达，不降低真实的创作、分析和工具能力。
 
 ## 判断与主见
 
 - 做有判断力的创意合作者，不做被动附和者。先给出我最推荐的方向，再说明决定它胜出的关键理由。
-- 默认主推一个方案；确有价值时再给最多两个备选，不用平均罗列来回避取舍，也不把本可判断的决定重新推给先生。
+- 默认主推一个方案；确有价值时再给最多两个备选，不用平均罗列来回避取舍，也不把本可判断的决定重新推给用户。
 - 发现想法平庸、矛盾、成本失控或偏离目标时要直接指出，但不能只否定；必须同时给出更好、可执行的替代方案。
 - 信息不完整但风险可控时，明确写出关键假设并继续推进；只有缺少会实质改变结果的必要信息时才追问。
 - 主见来自目标、证据和取舍，不来自嘴硬。新证据推翻旧判断时，坦率修正。
-- 多代理或圆桌可以负责发散，主会话必须负责筛选、合并和定案，不能把未经取舍的一堆观点原样交给先生。
+- 多代理或圆桌可以负责发散，主会话必须负责筛选、合并和定案，不能把未经取舍的一堆观点原样交给用户。
 """,
         "voice_examples.md": """# 堇思语气样例
 
@@ -81,14 +81,14 @@ PERSONA = {
     "learning": {
         "core.md": """# 习作核心人格
 
-你是碧琪，称呼对方为“先生”，自称用“我”。这里是一起把知识弄懂、把技能练会的工作台。温和、清楚、有耐心，但不放任：先生说过没人推就会偷懒，所以每次先对照今天的学习约定与真实进度，说清还差什么，再把目标落成今天能完成的一小步；“学完了”要有作答、笔记或专注记录作证。
+你是碧琪。对方说过想被怎么叫（记在 USER.md 里）就照那个叫，否则直接用“你”，不加“先生”“老板”这类头衔；自称用“我”。这里是一起把知识弄懂、把技能练会的工作台。温和、清楚、有耐心，但不放任：用户说过没人推就会偷懒，所以每次先对照今天的学习约定与真实进度，说清还差什么，再把目标落成今天能完成的一小步；“学完了”要有作答、笔记或专注记录作证。
 
 学习不是输出长篇报告：先做事，在关键节点用一两句解释可复用的原理、术语和当前层次。遇到模糊目标时先用苏格拉底式短问句找到真正要解决的问题；风险可控时写明假设继续推进。
 """,
         "voice_examples.md": """# 习作语气样例
 
 - 开场先对账：“今天还差 12 张卡和一组题，先把卡清掉，十分钟。”
-- 先生想拖到明天：先说代价，再给一个马上能开始的最小动作，不说教。
+- 用户想拖到明天：先说代价，再给一个马上能开始的最小动作，不说教。
 - 先给结论或下一步，再补一个最有用的知识点；不先倒一整章教程。
 - 解释使用“专业术语（English） = 一句大白话”，然后继续执行。
 - 达成目标时简短落款：完成了什么、连续几天；不空洞夸奖。
@@ -109,7 +109,7 @@ PERSONA = {
 9. 双向钢人：先把相反方案都说到最强，再依据目标与证据决断。
 10. 最小实验：能运行就先做小实验，用真实反馈替代空想。
 
-挖掘天赋与人生设计类任务只在先生主动要求时启用；要把角色、理念、约束、原型行动和复盘落成可执行记录，不输出漂亮但空泛的长文。
+挖掘天赋与人生设计类任务只在用户主动要求时启用；要把角色、理念、约束、原型行动和复盘落成可执行记录，不输出漂亮但空泛的长文。
 """,
     },
     "none": {},
@@ -347,20 +347,35 @@ def _loopback_base_url(value) -> bool:
     return host in ("127.0.0.1", "localhost", "::1")
 
 
-def _mark_models_multimodal(data: dict) -> int:
+def _disabled_vision_overrides(state_dir: Path) -> set[str]:
+    """用户明确关掉「能看图片」的模型（存在 pinkie-model-setup.json），启动时不再强行改回能看图。"""
+    try:
+        raw = json.loads((state_dir / "pinkie-model-setup.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    caps = raw.get("capabilities")
+    if not isinstance(caps, dict):
+        return set()
+    return {key for key, item in caps.items() if isinstance(key, str) and isinstance(item, dict) and item.get("vision") is False}
+
+
+def _mark_models_multimodal(data: dict, disabled_vision: set[str] | None = None) -> int:
     """经本机代理的聊天模型一律标成能看图, 返回改了几个。
 
     以前每个模型能不能看图要手写 input: ["text","image"]; 漏写的(例如 hy4flash)
     网关就把图转给看图工具, 主模型自己看不到。现在默认都能看; 真看不了的,
     本机代理(proxy/mm-retry-proxy.py)认出上游的报错并记住, 带图的请求改给看过图的
-    模型。直连外网的 provider 没有这层兜底, 保持原样。"""
+    模型。用户明确关掉的模型（disabled_vision）不再自动补回。直连外网的 provider 没有这层兜底, 保持原样。"""
     changed = 0
+    blocked = disabled_vision or set()
     providers = (data.get("models") or {}).get("providers") or {}
-    for provider in providers.values() if isinstance(providers, dict) else []:
+    for provider_id, provider in providers.items() if isinstance(providers, dict) else []:
         if not isinstance(provider, dict) or not _loopback_base_url(provider.get("baseUrl")):
             continue
         for entry in provider.get("models") or []:
             if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
+                continue
+            if f"{provider_id}/{entry['id']}" in blocked:
                 continue
             if NON_CHAT_MODEL.search(entry["id"]):
                 continue
@@ -372,7 +387,7 @@ def _mark_models_multimodal(data: dict) -> int:
     return changed
 
 
-def _configure_plugin(data: dict, target: Path) -> bool:
+def _configure_plugin(data: dict, target: Path, disabled_vision: set[str] | None = None) -> bool:
     before = json.dumps(data, ensure_ascii=False, sort_keys=True)
 
     # A short-lived 2026.9 installation can leave newer schema fields in the
@@ -397,7 +412,7 @@ def _configure_plugin(data: dict, target: Path) -> bool:
         if isinstance(talk, dict):
             talk.pop("agentId", None)
 
-    _mark_models_multimodal(data)
+    _mark_models_multimodal(data, disabled_vision=disabled_vision)
 
     # This model was probed against the user's current mm upstream: xhigh is
     # accepted as a real thinking level. Do not advertise it for other models,
@@ -594,7 +609,8 @@ def install(home=None) -> bool:
             "learning-zsb-gen.mjs", "learning-zsb-data.json",
             "learning-zsb-items.json", "learning-library.mjs",
             "openclaw-paths.mjs", "companion.mjs", "session-titles.mjs", "session-lineage.mjs", "session-search.mjs", "session-branch.mjs", "reply-styles.json", "session-prefs.mjs", "session-temp.mjs", "session-export.mjs", "session-manage.mjs", "metre-models.mjs", "metre-baton.mjs", "model-tiers.json", "tool-trace.mjs", "metre-memory.mjs", "metre-board.mjs", "quiet-mode.mjs", "artifacts.mjs", "project-settings.mjs", "first-person.mjs", "reasoning.mjs", "channel-reasoning.mjs", "work-kinds.mjs", "run-contract.mjs", "skill-routes.mjs", "work-cards.mjs", "project-brief.mjs", "code-tools.mjs", "code-work.mjs", "session-hints.mjs", "design-directions.mjs", "desk.mjs", "desk-win.mjs", "config-floor.mjs",
-            "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs",
+            "background-jobs.mjs", "work-status.mjs", "model-sync.mjs", "model-setup.mjs", "settings-guard.mjs", "metre-lock.mjs", "metre-lock-hash.json",
+            "feedback.mjs", "feedback-crypto.mjs", "feedback-sanitize.mjs", "feedback-transport.mjs", "feedback-public.json",
             "web-gpt-activity.mjs", "web-gpt-connection.mjs", "web-gpt.mjs",
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
             "app-browser.mjs", "web-search-fallback.mjs", "model-health.mjs", "file-delivery.mjs", "app-guide.mjs",
@@ -609,6 +625,23 @@ def install(home=None) -> bool:
             for vendor_file in vendor_dir.rglob("*"):
                 if vendor_file.is_file():
                     changed |= _copy_if_changed(vendor_file, extension / "vendor" / vendor_file.relative_to(vendor_dir))
+
+    # 开发版 / 源码覆盖安装时清除旧正式版留在各产品插件里的 guard-build.json，避免把开发版误当正式版。
+    build_info_path = repo_root / "build-info.json"
+    is_release = False
+    try:
+        is_release = build_info_path.is_file() and json.loads(build_info_path.read_text(encoding="utf-8")).get("guard") is True
+    except Exception:
+        is_release = False
+    if not is_release:
+        for plugin_name in ("pinkie-mode-architecture", "pinkie-project-scope", "pinkie-first-person-renderer"):
+            guard_mark = home / ".openclaw/extensions" / plugin_name / "guard-build.json"
+            if guard_mark.exists():
+                try:
+                    guard_mark.unlink()
+                    changed = True
+                except OSError:
+                    pass
 
     for mode, relative in MODE_WORKSPACES.items():
         workspace = home / relative
@@ -647,7 +680,7 @@ def install(home=None) -> bool:
         _choose_memory_search(data, state)
     except Exception as error:  # never block setup on a probe
         print(f"记忆检索方式没有探测成功：{error}")
-    config_changed = _configure_plugin(data, extension) or json.dumps(data, ensure_ascii=False, sort_keys=True) != before_choice
+    config_changed = _configure_plugin(data, extension, disabled_vision=_disabled_vision_overrides(config.parent)) or json.dumps(data, ensure_ascii=False, sort_keys=True) != before_choice
     if config_changed:
         backup_root.mkdir(parents=True, exist_ok=True)
         shutil.copy2(config, backup_root / "openclaw.json")

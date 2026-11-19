@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const MAX_EVENTS = 40;
 const MAX_TEXT = 16_000;
@@ -148,6 +149,7 @@ export function createWebGptActivityTool(store, initialContext = {}) {
 export function registerWebGptActivityGateway(api, store) {
   api.registerGatewayMethod('pinkie.webGpt.activity.get', async ({params, respond}) => {
     try {
+      getActiveMetreLock()?.assertSessionAllowed?.(params?.sessionKey);
       respond(true, store.status(String(params?.sessionKey || ''), {limit: params?.limit, offset: params?.offset}));
     } catch (error) {
       respond(false, undefined, {code: 'INVALID_REQUEST', message: error instanceof Error ? error.message : String(error)});
@@ -156,6 +158,7 @@ export function registerWebGptActivityGateway(api, store) {
   api.registerGatewayMethod('pinkie.webGpt.activity.append', async ({params, respond}) => {
     try {
       const sessionKey = String(params?.sessionKey || '');
+      getActiveMetreLock()?.assertSessionAllowed?.(sessionKey);
       store.append(sessionKey, {
         stage: params?.stage,
         label: params?.label,

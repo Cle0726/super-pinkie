@@ -150,8 +150,15 @@ sync_launcher_resources() {
     done
   done
   copy_if_changed "$REPO_ROOT/ui/launcher-loading.html" "$bundled_root/ui/launcher-loading.html"
-  copy_if_changed "$ASSET_ROOT/laolao-splash.mp4" "$bundled_root/ui/assets/laolao-splash.mp4"
-  copy_if_changed "$ASSET_ROOT/laolao-splash-video-poster.png" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
+  local splash_video="$ASSET_ROOT/laolao-splash.mp4"
+  local splash_poster="$ASSET_ROOT/laolao-splash-video-poster.png"
+  if [[ "${PINKIE_RELEASE_BUILD:-0}" == "1" ]] \
+    || { [[ -f "$bundled_root/build-info.json" ]] && grep -Eq '"channel": *"release"|"guard": *true' "$bundled_root/build-info.json"; }; then
+    splash_video="$ASSET_ROOT/laolao-splash-release.mp4"
+    splash_poster="$ASSET_ROOT/laolao-splash-video-poster-release.png"
+  fi
+  copy_if_changed "$splash_video" "$bundled_root/ui/assets/laolao-splash.mp4"
+  copy_if_changed "$splash_poster" "$bundled_root/ui/assets/laolao-splash-video-poster.png"
   # Keep every bundled web surface aligned with the hotfix source. Party and
   # Roundtable are served from this source tree rather than control-ui, while
   # a future repair/manual install may consume the raw injection tree. Leaving
@@ -179,6 +186,9 @@ sync_launcher_resources() {
   done
   for source_file in "$ASSET_ROOT"/*; do
     [[ -f "$source_file" ]] || continue
+    case "$(basename "$source_file")" in
+      laolao-splash.mp4|laolao-splash-video-poster.png) continue ;;
+    esac
     copy_if_changed "$source_file" "$bundled_root/ui/assets/$(basename "$source_file")"
   done
   for source_file in "$REPO_ROOT/ui/party"/*; do
@@ -234,7 +244,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/first-person-renderer/$service_file" \
       "$bundled_root/services/first-person-renderer/$service_file"
   done
-  for service_file in index.mjs memory.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-drill.mjs learning-explain-voice.mjs learning-game-bank.mjs learning-game-real.mjs learning-game-content.mjs learning-game-economy.json learning-game-economy.mjs learning-game-exam.mjs learning-game-forms.json learning-game-monsters.mjs learning-game-world.mjs learning-game.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json learning-library.mjs openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs reply-styles.json session-prefs.mjs session-temp.mjs session-export.mjs session-manage.mjs metre-models.mjs metre-baton.mjs model-tiers.json tool-trace.mjs metre-memory.mjs metre-board.mjs quiet-mode.mjs artifacts.mjs project-settings.mjs reasoning.mjs channel-reasoning.mjs work-kinds.mjs run-contract.mjs skill-routes.mjs work-cards.mjs project-brief.mjs code-tools.mjs code-work.mjs session-hints.mjs design-directions.mjs desk.mjs desk-win.mjs config-floor.mjs background-jobs.mjs work-status.mjs model-sync.mjs model-setup.mjs settings-guard.mjs web-gpt-activity.mjs web-gpt-connection.mjs web-gpt.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs model-health.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-drill.mjs learning-explain-voice.mjs learning-game-bank.mjs learning-game-real.mjs learning-game-content.mjs learning-game-economy.json learning-game-economy.mjs learning-game-exam.mjs learning-game-forms.json learning-game-monsters.mjs learning-game-world.mjs learning-game.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json learning-library.mjs openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs reply-styles.json session-prefs.mjs session-temp.mjs session-export.mjs session-manage.mjs metre-models.mjs metre-baton.mjs model-tiers.json tool-trace.mjs metre-memory.mjs metre-board.mjs quiet-mode.mjs artifacts.mjs project-settings.mjs reasoning.mjs channel-reasoning.mjs work-kinds.mjs run-contract.mjs skill-routes.mjs work-cards.mjs project-brief.mjs code-tools.mjs code-work.mjs session-hints.mjs design-directions.mjs desk.mjs desk-win.mjs config-floor.mjs background-jobs.mjs work-status.mjs model-sync.mjs model-setup.mjs settings-guard.mjs feedback.mjs feedback-crypto.mjs feedback-sanitize.mjs feedback-transport.mjs feedback-public.json metre-lock.mjs metre-lock-hash.json web-gpt-activity.mjs web-gpt-connection.mjs web-gpt.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs model-health.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
     if [[ -f "$REPO_ROOT/services/mode-architecture/$service_file" ]]; then
       copy_if_changed \
         "$REPO_ROOT/services/mode-architecture/$service_file" \
@@ -536,6 +546,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-work-first-media-gate.mjs"
     # Clash 等「假 IP」代理给每个网站一个 198.18.x.x 加 2001:2:: 的假地址；打开 allowRfc2544BenchmarkRange 时 IPv6 那一半也放行，网页抓取才不会全被当成内网拦掉。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-fake-ip-benchmark-v6.mjs"
+    # 正式版 Metre 密码门槛：在网关请求入口拦住未解锁时的 agent:metre: / agentId=metre 调用。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-metre-lock.mjs"
   fi
   # Runtime patches can regenerate the entrypoint. The FINAL skin must always
   # come from the shared source, after every patch, just like Windows overlays.

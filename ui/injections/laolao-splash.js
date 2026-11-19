@@ -41,12 +41,12 @@
   const selected = switching && ids.includes(handoff?.mode) ? handoff.mode : routed || localStorage.getItem('laolao:active-mode');
   const mode = ids.includes(selected) ? selected : 'chat';
   const details = {
-    chat: { label: '唠嗑模式', address: '先生', waiting: '新聊天正在铺开彩带…', ready: '唠嗑小屋准备好啦！' },
-    project: { label: '项目模式', address: '老板', waiting: '项目档案正在摊开…', ready: '项目工作台准备好啦！' },
-    thinking: { label: '想法模式', address: '先生', waiting: '灵感房间正在亮灯…', ready: '想法小屋准备好啦！' },
-    learning: { label: '学习模式', address: '先生', waiting: '学习小屋正在亮灯…', ready: '学习小屋准备好啦！' },
-    unrestricted: { label: '无限制模式', address: '先生', waiting: '彩虹力量正在接管房间…', ready: '彩虹力量准备好啦！' },
-    metre: { label: 'Metre', address: '', waiting: '正在打开…', ready: 'Metre', plain: true },
+    chat: { label: '唠嗑模式', waiting: '新聊天正在铺开彩带…', ready: '唠嗑小屋准备好啦！' },
+    project: { label: '项目模式', waiting: '项目档案正在摊开…', ready: '项目工作台准备好啦！' },
+    thinking: { label: '想法模式', waiting: '灵感房间正在亮灯…', ready: '想法小屋准备好啦！' },
+    learning: { label: '学习模式', waiting: '学习小屋正在亮灯…', ready: '学习小屋准备好啦！' },
+    unrestricted: { label: '无限制模式', waiting: '彩虹力量正在接管房间…', ready: '彩虹力量准备好啦！' },
+    metre: { label: 'Metre', waiting: '正在打开…', ready: 'Metre', plain: true },
   }[mode];
   // Metre：不用碧琪的闪屏（派对小屋、动效、俏皮话），换成像素 M + 「Metre」+ 一根细进度线（样式在 laolao-metre-brand.css）。
   // laolao-metre-skin.js 在第一帧前已按上次的模式猜过一次，这里以算准的为准。
@@ -129,7 +129,7 @@
     if (completed) return;
     completed = true;
     if (success) {
-      motion.text(message, switching ? details.ready : details.plain ? '马上就好' : `${details.address}，门要开啦！`);
+      motion.text(message, switching ? details.ready : details.plain ? '马上就好' : '门要开啦！');
       if (splashFx?.active) {
         // 动效版离场：进度走满、碧琪冲向镜头、冲破开屏露出 App。
         await splashFx.finish();
@@ -155,13 +155,13 @@
     }, success && !motion.reduced() ? 160 : 0);
   };
   const phrases = details.plain ? ['正在打开…', '正在连接…', '正在读取会话…', '正在准备界面…'] : [
-    `${details.address}稍等，碧琪在给气球打气…`, '卷胡子扶正中，千万别让它跑掉！',
+    '稍等，碧琪在给气球打气…', '卷胡子扶正中，千万别让它跑掉！',
     '纸屑正在排队进场，乖一点点！', '派对大炮预热中，别眨眼！', '最后检查：惊喜有没有藏好？',
   ];
   const tick = () => {
     if (completed) return;
     const now = performance.now(), elapsed = now - started;
-    const phrase = elapsed > 8000 ? (details.plain ? '连接比平时慢，还在等…' : `${details.address}，连接比平时慢，碧琪还在等…`)
+    const phrase = elapsed > 8000 ? (details.plain ? '连接比平时慢，还在等…' : '连接比平时慢，碧琪还在等…')
       : switching ? details.waiting : phrases[Math.min(phrases.length - 1, Math.floor(elapsed / 560))];
     setProgress(Math.min(switching ? 96 : 94, initial + elapsed / (switching ? 92 : 28)), phrase);
     if (ready(now) && elapsed >= minimum) return leave();

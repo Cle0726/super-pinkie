@@ -43,7 +43,7 @@ test('the toolbox line appears only when the toolbox is there, and finds it in t
   const block = toolboxBlock(video, {workspaces: [project, ws], mode: 'project'});
   assert.match(block, /【先备好工具】/);
   assert.ok(block.includes(`node "${path.join(ws, 'playbooks', 'toolbox.mjs')}" ensure video`));
-  assert.match(block, /不要让先生自己去装软件/);
+  assert.match(block, /不要让用户自己去装软件/);
   assert.equal(toolboxBlock(video, {workspaces: [project], mode: 'project'}), '', 'no toolbox, no line');
   assert.equal(toolboxBlock(video, {workspaces: [ws], mode: 'none'}), '', 'unrestricted mode gets nothing');
   assert.equal(toolboxBlock(classifyWorkKind('你好', {mode: 'project'}).kinds, {workspaces: [ws], mode: 'project'}), '');

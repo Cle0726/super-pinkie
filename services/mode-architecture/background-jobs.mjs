@@ -59,7 +59,7 @@ export function waitNudge(jobs = [], kinds = [], now = Date.now()) {
   const list = jobs.slice(0, 3).map((job) => `「${String(job.command || '').replace(/\s+/g, ' ').slice(0, 80)}」（已跑约 ${Math.max(1, Math.round((now - job.startedAt) / 1000))} 秒）`).join('、');
   return `${list}还在后台跑，跑完系统会自动叫你，不用再查。现在先做不依赖它的事：`
     + waitingItems(kinds).map((item, i) => `${i + 1}）${item}`).join('；')
-    + '。真的一件都不剩了，就用一句话告诉先生在跑什么、大概要多久，然后结束这一轮。';
+    + '。真的一件都不剩了，就用一句话告诉用户在跑什么、大概要多久，然后结束这一轮。';
 }
 
 // Only our own waiting reminder should be stored as a deferred result; other

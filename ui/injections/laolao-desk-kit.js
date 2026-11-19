@@ -97,7 +97,7 @@
     if (onOpen) node.append(button(action, onOpen, {kind: 'link'}));
     return node;
   }
-  // 回执：碧琪或先生往手账里写了东西，可撤销（PLAN §3.1-4）。
+  // 回执：碧琪或用户往手账里写了东西，可撤销（PLAN §3.1-4）。
   function receipt(text, {onUndo, label = '收'} = {}) {
     const node = el('div', 'pk-receipt'); node.setAttribute('role', 'status');
     node.append(stamp(label, {size: 'sm'}), el('span', '', text));

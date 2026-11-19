@@ -264,7 +264,7 @@
     // ---- 收集箱 ----
     function inboxFollowUp() {
       const notes = data.notes || [], triage = data.triage || {};
-      // 进收集箱时，没建议的笔记自动交给碧琪看一次；失败了等先生点「重新建议」。
+      // 进收集箱时，没建议的笔记自动交给碧琪看一次；失败了等用户点「重新建议」。
       if (!autoSuggested && triage.state !== 'running' && triage.state !== 'failed' && notes.some(note => !note.suggestion)) {
         autoSuggested = true;
         rpc('notes.triage.suggest').then(result => { if (alive && result.running) schedulePoll(); }).catch(error => toast(error.message));

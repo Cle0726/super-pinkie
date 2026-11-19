@@ -90,7 +90,7 @@ def main():
         work = pathlib.Path(temp)
         root = via_git(repo, commit, path, work) or via_tarball(repo, commit, path, work)
         if not root:
-            sys.exit(f"下载失败：github.com/{repo} 连不上。告诉先生是这个网址下不动，先用别的技能把活做出来。")
+            sys.exit(f"下载失败：github.com/{repo} 连不上。告诉用户是这个网址下不动，先用别的技能把活做出来。")
         staged = work / "staged"
         shutil.copytree(root / path, staged, ignore=shutil.ignore_patterns(".git"))
         for extra in ("LICENSE", "LICENSE.txt", "LICENSE.md", "NOTICE"):

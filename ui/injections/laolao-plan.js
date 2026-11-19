@@ -49,7 +49,7 @@
     const named = plan.title && plan.title !== '工作计划' ? plan.title : '';
     card.querySelector('.pk-plan__title').textContent = finished ? (named ? named + ' · ' : '') + total + ' 项都完成了' : named || '这次要做的 ' + total + ' 件事';
     card.querySelector('.pk-plan__count').textContent = finished ? '' : done + ' / ' + total;
-    // 做完自动收起；先生自己点开过就尊重他的选择
+    // 做完自动收起；用户自己点开过就尊重他的选择
     if (!view.userFolded) view.folded = finished;
     card.classList.toggle('is-folded', !!view.folded);
     card.querySelector('.pk-plan__head').setAttribute('aria-expanded', String(!view.folded));

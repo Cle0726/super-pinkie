@@ -60,14 +60,14 @@ test('comeback after three quiet days; the yesterday win is a real event from th
 });
 
 test('daily line: templates without a model; the model is called once per day and its line is validated', async t => {
-  assert.ok(Object.values(TEMPLATES).every(list => list.length >= 6 && list.every(line => line.includes('先生') && !/漏了|偷懒|又没/.test(line))));
+  assert.ok(Object.values(TEMPLATES).every(list => list.length >= 6 && list.every(line => !/先生|老板/.test(line) && !/漏了|偷懒|又没/.test(line))));
   const plain = fixture(t);
   const offline = await plain.companion.daily();
   assert.equal(offline.line.source, 'template');
   assert.ok(TEMPLATES.ordinary.includes(offline.line.text));
 
   const calls = [];
-  let reply = '先生，今天把循环结构弄懂就好。';
+  let reply = '今天把循环结构弄懂就好。';
   const {companion, setClock} = fixture(t, {model: async (rules, input) => { calls.push(input); return {value: {line: reply}, model: {name: 'fake'}}; }});
   const first = await companion.daily();
   assert.equal(first.line.pending, true, 'first open answers at once with the template');
@@ -77,21 +77,21 @@ test('daily line: templates without a model; the model is called once per day an
   assert.equal((await companion.daily()).line.text, reply, 'cached for the rest of the day');
   assert.ok(!JSON.stringify(calls[0]).includes('answer'), 'input carries facts only');
 
-  for (const [bad, why] of [['先生，你又没学，偷懒了。', 'scolding'], ['今天也加油。', 'no 先生'], ['先生，你已经答对 37 题了！', 'made-up number']]) {
+  for (const [bad, why] of [['你又没学，偷懒了。', 'scolding'], ['先生，今天也加油。', 'adds an address the user never asked for'], ['你已经答对 37 题了！', 'made-up number']]) {
     setClock(Date.parse('2026-11-0' + (calls.length + 1) + 'T12:00:00Z'));
     reply = bad;
     const line = (await companion.daily({wait: true})).line;
     assert.equal(line.source, 'template', why);
   }
-  setClock(bj('2026-11-10', 20)); reply = '先生，B 级还有 33 天，我们一件一件来。';
+  setClock(bj('2026-11-10', 20)); reply = 'B 级还有 33 天，我们一件一件来。';
   assert.equal((await companion.daily({wait: true})).line.source, 'model', 'numbers from the facts pass');
-  setClock(bj('2026-11-11', 20)); reply = '先生，B 级还有 33 天，我们一件一件来。';
+  setClock(bj('2026-11-11', 20)); reply = 'B 级还有 33 天，我们一件一件来。';
   assert.equal((await companion.daily({wait: true})).line.source, 'template', 'a stale number fails the next day');
 });
 
 test('late night: a fixed go-to-sleep line, no model call, no clippings', async t => {
   let calls = 0, agents = 0;
-  const {companion, setClock} = fixture(t, {model: async () => { calls++; return {value: {line: '先生，再来一组吧'}}; }, agent: async () => { agents++; return '{"clippings":[]}'; }});
+  const {companion, setClock} = fixture(t, {model: async () => { calls++; return {value: {line: '再来一组吧'}}; }, agent: async () => { agents++; return '{"clippings":[]}'; }});
   setClock(bj('2026-10-29', 25)); // 北京时间 01:00
   const daily = await companion.daily({wait: true});
   assert.deepEqual([daily.line.kind, daily.line.source, daily.protagonist.late], ['late', 'template', true]);
@@ -115,10 +115,13 @@ test('clippings: verified, recent, ad-free, short quotes, cached a day; quiet be
   const result = await companion.clippings({wait: true});
   assert.equal(prompts.length, 1);
   assert.match(prompts[0], /2026-10-15 到 2026-10-29/);
+  assert.doesNotMatch(prompts[0], /先生|广西专升本/);
+  assert.match(prompts[0], /当前备考目标：英语 B 级、专升本/);
   assert.equal(result.status, 'ok');
   assert.deepEqual(result.clippings.map(clip => clip.url), ['https://example.com/a', 'https://example.com/b']);
   assert.equal(result.clippings[0].quote, '', 'quotes over 15 characters are dropped');
-  assert.equal(result.clippings[1].note, '', 'margin notes must address 先生');
+  assert.equal(result.clippings[0].note, '', 'margin notes that add an address are dropped');
+  assert.equal(result.clippings[1].note, '加油', 'margin notes without an address are kept');
   assert.ok(!fetched.includes('https://example.com/old') && !fetched.includes('https://example.com/ad'), 'filter before fetching');
   assert.equal((await companion.clippings()).clippings.length, 2);
   assert.equal(prompts.length, 1, 'cached for the day');

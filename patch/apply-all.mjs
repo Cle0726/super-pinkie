@@ -41,6 +41,7 @@ const ORDER = [
   'apply-steer-images.mjs',
   'apply-work-first-media-gate.mjs',
   'apply-fake-ip-benchmark-v6.mjs',
+  'apply-metre-lock.mjs',
   // Last: the first-paint layer rewrites index.html, sw.js and the web manifest, so it
   // must run after every patch that also touches the Control UI entry document.
   'apply-startup.mjs',

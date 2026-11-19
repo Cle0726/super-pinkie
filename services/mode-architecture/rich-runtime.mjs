@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash, randomBytes, timingSafeEqual} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const exec = promisify(execFile);
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
@@ -106,7 +107,7 @@ export class PlanContinuationState {
   // 一轮结束时问一次：要不要接着做。facts 由引擎给，全是这一轮的事实。
   consider(sessionKey, facts = {}) {
     const no = reason => { const entry = this.sessions.get(sessionKey); if (entry) { entry.armed = null; entry.tools = 0; } return {continue: false, reason}; };
-    // 学习模式停下来等先生作答是常态，不自动接着做；无限制模式不加任何新机制。
+    // 学习模式停下来等用户作答是常态，不自动接着做；无限制模式不加任何新机制。
     if (!sessionKey || facts.internalSession || !['chat', 'project', 'ideas'].includes(facts.mode)) return no('not-applicable');
     let plan = null;
     try { plan = this.store?.plan(sessionKey); } catch { plan = null; }
@@ -360,7 +361,7 @@ export function pushTargets(stateDir, limit = 12) {
 // 生成提示词时带上研究要求；同一条消息的重试继续带，换一条消息就结束。关掉开关随时撤销。
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const RESEARCH_TTL = 6 * 3600_000;
-export const RESEARCH_TURN = '先生在输入框打开了「深度研究」：这一条按 pinkie-deep-research 技能完成。先用 plan_update 列出要回答的 3–6 个问题，实际阅读原始来源并交叉核对，最终回复就是完整报告：先给结论，再用表格比较，关键结论旁放可点开的原文链接，写明局限。信息不足时按最合理的理解直接开工，开头说明你的假设，不先停下来追问。';
+export const RESEARCH_TURN = '用户在输入框打开了「深度研究」：这一条按 pinkie-deep-research 技能完成。先用 plan_update 列出要回答的 3–6 个问题，实际阅读原始来源并交叉核对，最终回复就是完整报告：先给结论，再用表格比较，关键结论旁放可点开的原文链接，写明局限。信息不足时按最合理的理解直接开工，开头说明你的假设，不先停下来追问。';
 export class ResearchSwitch {
   constructor(clock = Date.now) { this.clock = clock; this.map = new Map(); }
   arm(key, on = true) {
@@ -400,16 +401,23 @@ export function registerRichRuntime(api, options = {}) {
     return text.replace(/Bearer\s+\S+/gi, 'Bearer •••').replace(/(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|ntn_[A-Za-z0-9_]+)/g, '•••');
   };
   const method = (name, scope, fn) => api.registerGatewayMethod(name, async ({params, respond}) => {
-    try { respond(true, await fn(params || {})); }
+    try {
+      const blocked = getActiveMetreLock()?.checkGatewayRequest?.(name, params || {});
+      if (blocked) throw new Error(blocked);
+      respond(true, await fn(params || {}));
+    }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: safeError(error)}); }
   }, {scope});
 
-  api.registerTool?.(ctx => ({
+  api.registerTool?.(ctx => getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey) ? null : ({
     name: 'plan_update', label: '更新工作计划',
     description: '三步以上的长任务用这个工具维护一张实时清单。传入完整列表，每项用 pending、in_progress 或 completed；同时最多一项进行中。做完实际工作才标 completed。短答不用。',
     parameters: {type: 'object', additionalProperties: false, properties: {title: {type: 'string'}, explanation: {type: 'string'}, items: {type: 'array', minItems: 1, maxItems: 20, items: {type: 'object', additionalProperties: false, properties: {id: {type: 'string'}, text: {type: 'string'}, status: {type: 'string', enum: ['pending', 'in_progress', 'completed']}}, required: ['text', 'status']}}}, required: ['items']},
     async execute(toolCallId, params) {
-      try { return reply(store.updatePlan(ctx.sessionKey, params, {...ctx, toolCallId})); }
+      try {
+        getActiveMetreLock()?.assertSessionAllowed?.(ctx?.sessionKey);
+        return reply(store.updatePlan(ctx.sessionKey, params, {...ctx, toolCallId}));
+      }
       catch (error) { return {...reply({error: safeError(error)}), isError: true}; }
     },
   }), {name: 'plan_update'});
@@ -419,6 +427,7 @@ export function registerRichRuntime(api, options = {}) {
   const research = globalThis.__pinkieResearchSwitch ||= new ResearchSwitch();
   api.on('before_prompt_build', (event, ctx) => {
     const key = String(ctx.sessionKey || '');
+    if (getActiveMetreLock()?.isLockedSession?.(key)) return undefined;
     const turn = key ? research.take(key, event?.prompt) : '';
     // Metre 的手册自己讲了 plan_update 和提问卡，富回复说明不再给（PLAN 2.2 的固定开销预算）。
     if (key.startsWith('agent:metre:')) return turn ? {appendContext: turn} : undefined;

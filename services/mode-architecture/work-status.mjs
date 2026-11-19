@@ -1,10 +1,17 @@
 // Read-only presentation API for the existing execution engines. Keep the
 // aggregate contract in one module so packaging and UI tests use the same code.
+import {getActiveMetreLock} from './metre-lock.mjs';
+
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]+$/;
 
 export function registerWorkGateway(api, {reasoning, architecture, background}) {
   const sessionFor = (params, respond) => {
     const key = String(params?.sessionKey || '');
+    const blocked = getActiveMetreLock()?.checkGatewayRequest?.('pinkie.work', {sessionKey: key});
+    if (blocked) {
+      respond(false, undefined, {code: 'INVALID_REQUEST', message: blocked});
+      return '';
+    }
     if (SESSION_KEY.test(key) && !/:(?:subagent|internal-session-effects):/.test(key)) return key;
     respond(false, undefined, {code: 'INVALID_REQUEST', message: '工作面板会话无效'});
     return '';

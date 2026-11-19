@@ -11,7 +11,7 @@ import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learn
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
 const clean = (v, n = 2000) => String(v ?? '').replace(/\u0000/g, '').trim().slice(0, n);
-const PART_RULES = `你是高等学校英语应用能力考试 B 级的命题老师。输入 {"section":这一部分的官方题型,"seed":随机种子,"learner":先生的薄弱考点}。
+const PART_RULES = `你是高等学校英语应用能力考试 B 级的命题老师。输入 {"section":这一部分的官方题型,"seed":随机种子,"learner":用户的薄弱考点}。
 按题型出这一部分的全部题目，难度对标 B 级真题（词汇约 2500 以内、句子简单、话题贴近日常和职场）。四选一题答案唯一、干扰项是常见错误。
 只输出 JSON：{"parts":[{"id":"题型 id（和输入一致）","material":"本题组共用的材料（听力原文 / 阅读短文 / 实用文 / 术语表；没有就空字符串）","items":[ITEM]}]}
 ITEM 按题型：

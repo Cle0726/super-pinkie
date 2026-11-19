@@ -1,4 +1,4 @@
-/* 碧琪学习台 · 生词本。先生写词，内置模型按所备考试整理中文谐音和常考搭配；复习沿用笔记本的记忆曲线。 */
+/* 碧琪学习台 · 生词本。用户写词，内置模型按所备考试整理中文谐音和常考搭配；复习沿用笔记本的记忆曲线。 */
 (() => {
   'use strict';
   if (window.__pinkieStudyDeskVocabLoaded) return;
@@ -43,7 +43,7 @@
     const model = el('span', 'v-model', '内置模型');
     const reviewButton = el('button', 'v-review', '背一组新的'); reviewButton.type = 'button'; reviewButton.setAttribute('aria-label', '背一背');
     reviewButton.addEventListener('click', () => window.__pinkieDrill?.start({source: 'vocab', scope: data?.counts?.due ? {kind: 'due'} : {kind: 'more'}, size: 10, returnTo: 'vocab'}));
-    // 页眉：小字「英语 · N 个词」+ 宋体页名；右边一个粉色复习键。页边批注是碧琪写给先生的提醒。
+    // 页眉：小字「英语 · N 个词」+ 宋体页名；右边一个粉色复习键。页边批注是碧琪写给用户的提醒。
     const heading = el('div', 'v-heading'), bookKicker = el('div', 'v-book-kicker pk-kicker', '生词本'); count.classList.add('pk-kicker'); heading.append(bookKicker, count, title);
     top.append(heading, filters, model, reviewButton);
     const aside = el('aside', 'v-aside'), wordCard = el('img', 'pk-sticker'); wordCard.src = desk.sticker?.('vocab-card') || ''; wordCard.alt = ''; wordCard.setAttribute('aria-hidden', 'true');
@@ -281,7 +281,7 @@
       }
       if (word.meaning) item.append(el('p', 'v-meaning', word.meaning));
       if (word.userHomophone || word.homophone || word.memory) {
-        // 先生自己写的谐音排在前面，碧琪给的放后面。
+        // 用户自己写的谐音排在前面，碧琪给的放后面。
         const sound = el('div', 'v-sound');
         sound.append(el('span', 'v-label', word.userHomophone || word.homophone ? '谐音' : '记忆'));
         const body = el('div');

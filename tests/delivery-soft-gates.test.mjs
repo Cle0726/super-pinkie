@@ -90,7 +90,7 @@ test('a turn that presented or graded a learning card is delivered without file 
   for (const prompt of ['专升本：给我出 3 道 C 语言循环和数组的题，要有程序阅读题',
     '[[CLEKK_LEARNING_ANSWER_V1]] activity_id: q1 item_id: zsb-c6-80 answer: "4"\n请只对这一小题调用 learning_activity resolve，使用 item_results 并保留 item_id，给出简短讲解和具体错因。',
     // The host appends mode context to the prompt; its “运行练习” is not the user's request.
-    '[[CLEKK_LEARNING_START_V1]] 调用 learning_activity present 出一道互动题。\n\n【学习工作台】先生可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。']) {
+    '[[CLEKK_LEARNING_START_V1]] 调用 learning_activity present 出一道互动题。\n\n【学习工作台】用户可以一边学习，一边在左边的编辑器和终端里查看资料、编写并运行练习。']) {
     const {guard, ctx} = setup(t, prompt);
     guard.afterTool({toolName: 'learning_activity', toolCallId: 'card', params: {action: 'present'}, result: 'ok'}, ctx);
     assert.equal(guard.finalize({lastAssistantMessage: '题卡已经出好，直接作答就行。'}, ctx, {verifyExternal: false}), undefined, prompt);
@@ -103,7 +103,7 @@ test('a turn that presented or graded a learning card is delivered without file 
 
 // 工作台插件把【工作台】说明接在每条项目消息后面（2026-11-01 实测：「你是什么模型？」因此被当成
 // 执行型请求打回重写，多花一轮、聊天记录里先生那句也被改写掉）。
-const WORKBENCH = '\n\n【工作台】先生可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。\n当前项目/默认工作目录："/tmp/x"';
+const WORKBENCH = '\n\n【工作台】用户可以使用 VS Code 式工作台和你一起写代码（左边编辑器、终端，右边是你）。写或改完代码，用 code_check 做真实检查（类型、语法、编译），有错误就继续修，直到没有错误再交付；能运行的就运行或跑测试确认。\n当前项目/默认工作目录："/tmp/x"';
 test('the workbench note appended to a question does not turn it into an execution request', (t) => {
   for (const question of ['你是什么模型？', '给我的奶茶店想个名字']) {
     const {guard, ctx} = setup(t, question + WORKBENCH);

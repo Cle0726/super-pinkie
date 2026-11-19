@@ -14,16 +14,16 @@ const GATE_HEADER = new RegExp(`^\\s*(?:[-*•+]\\s*)?(?:\\*\\*)?(?:严格)?(?:�
 // 整行都是在宣布执行自检：「严格执行【出题自检门禁】：纯净裸题…」
 const GATE_LINE = new RegExp(`^\\s*(?:[-*•+]\\s*)?[（(]?\\s*(?:\\*\\*)?(?:严格)?(?:执行|启动|进行|完成)\\s*${GATE}`, 'u');
 const LIST_ITEM = /^\s*(?:[-*•+]|\d+[.)、])\s+/u;
-// 写给先生看的话总会称呼先生；解题草稿不会。
-const ADDRESSED = /先生|碧琪/u;
+// 写给用户看的话会对人说（你 / 您，或用户要求的称呼，或碧琪自称）；解题草稿不会。
+const ADDRESSED = /先生|老板|碧琪|你|您/u;
 const MIN_KEPT = 30;   // 去掉草稿前，后面至少要剩这么多正文
 const MIN_LEFT = 12;   // 清理后至少要剩这么多字
 
 const meaningful = (text) => text.replace(/[\s\p{P}\p{S}]/gu, '').length;
 
 // 模型有时把真正的正文直接粘在清单最后一条后面：
-// 「- 格式规范：单道题，等待先生作答！**太帅了先生！全中！** 🎯」
-// 「- 只有纯净裸题，等待先生作答！### 📝 真题 · 第 34 题」
+// 「- 格式规范：单道题，等待用户作答！**太帅了用户！全中！** 🎯」
+// 「- 只有纯净裸题，等待用户作答！### 📝 真题 · 第 34 题」
 // 去掉清单时把粘着的标题或加粗正文留下来。
 function salvageGlued(item = '') {
   const heading = item.search(/#{1,6}\s/u);
@@ -43,7 +43,7 @@ export function cleanReplyText(text = '') {
   let lines = original.split('\n');
 
   // 「解题草稿 + 自检清单 + 正文」：清单标题和它下面的条目一起去掉；标题前面
-  // 那段如果不是对先生说的话，就是草稿（常常连答案都写了），也一起去掉。
+  // 那段如果不是对用户说的话，就是草稿（常常连答案都写了），也一起去掉。
   const header = lines.findIndex((line) => GATE_HEADER.test(line));
   if (header >= 0) {
     let end = header;

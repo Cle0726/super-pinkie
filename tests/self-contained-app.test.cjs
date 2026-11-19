@@ -255,7 +255,15 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(watchdog, /PINKIE_RELAY_CHECK_INTERVAL:-1/);
   assert.match(watchdog, /PINKIE_RELAY_RESTART_COOLDOWN:-10/);
   assert.doesNotMatch(watchdog, /STATUS" != "200"/);
-  assert.match(updater, /copy_if_changed "\$ASSET_ROOT\/laolao-splash\.mp4"/);
+  assert.match(updater, /splash_video="\$ASSET_ROOT\/laolao-splash\.mp4"/);
+  assert.match(updater, /splash_video="\$ASSET_ROOT\/laolao-splash-release\.mp4"/);
+  assert.match(updater, /splash_poster="\$ASSET_ROOT\/laolao-splash-video-poster-release\.png"/);
+  assert.match(updater, /copy_if_changed "\$splash_video" "\$bundled_root\/ui\/assets\/laolao-splash\.mp4"/);
+  assert.match(updater, /copy_if_changed "\$splash_poster" "\$bundled_root\/ui\/assets\/laolao-splash-video-poster\.png"/);
+  assert.ok(fs.existsSync(path.join(root, 'ui/assets/laolao-splash-release.mp4')));
+  assert.ok(fs.existsSync(path.join(root, 'ui/assets/laolao-splash-video-poster-release.png')));
+  assert.match(read('desktop/macos/build.sh'), /laolao-splash-release\.mp4/);
+  assert.match(read('build-win.ps1'), /laolao-splash-release\.mp4/);
   assert.match(updater, /apply_ui_skin "\$bundled_ui"/);
 });
 
@@ -322,7 +330,7 @@ test('current runtime keeps the classic single-chat shell instead of the upstrea
   assert.match(js, /碧琪设置/);
   assert.match(js, /laolao-classic-account-avatar/);
   assert.match(js, /给碧琪发消息/);
-  assert.match(js, /先生，今天想学点什么？/);
+  assert.match(js, /learning: "今天想学点什么？"/);
   assert.match(css, /data-pinkie-native-glass="1"/);
   assert.match(css, /\.laolao-splash, \.laolao-mode-transition/);
   require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-classic-shell.css','laolao-classic-shell.js','laolao-side-layout.css','laolao-side-layout.js','laolao-memory.css','laolao-memory.js']});
