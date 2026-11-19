@@ -56,6 +56,13 @@
 - 新增真正打包用的角色收据检查：Mac 对包内插件和 33 张卡做临时 profile 快照；Windows 工作流对真实桌面侧栏、看板、33 张卡、上一版升级与用户字节保存取证。Windows 本机 Python 的 Mac 包结构夹具 2/2（含故意缺卡拒绝）、Windows mode agent 19/19、角色安装 2/2，回环测试桩能分别发旧方式和新角色两种调用。实际发行包没有动用正式本机配置，由 CI 另跑，夹具通过不能代替桌面实测。
 - 用户确认缩成 8 轮且模型都免费。此条不是任何真实轮次完成证明；需要四题 A/C 成对证据、真实 usage 和异厂免费判分。顶档流程和原扩展规模留作后续。本轮任何必过项未齐仍不合并。
 
+### 8 轮可执行计划与路由预检
+
+- `node tools/metre/roles/compose.mjs --release-matrix <免费执行路由> <异厂免费判分路由>` 固定 4 题、各 A/C 一次，同题有相同简报和夹具 SHA-256，研究与修复题含隔离哨兵。它只生成 `prepared-not-run`。两家实际路由的可用、免费和看图能力仍要在运行前核实。
+- 模型代理现在校验实际 POST 的模型 ID，不只过滤 GET 目录；免费试跑以 `METRE_PROXY_FREE_ONLY=1` 和 `METRE_PROXY_MAX_POSTS` 限定具体模型及转发额度，无付费回退。代理回环单测 2/2；矩阵用例 3/3，均不发真实模型请求。
+- 复查原隔离模型配置所指的本机目录（只读 `GET /v1/models`）返回 200，共 75 项；实际目录唯一明确标为免费的 `workbuddy/hy4flash-free` 配置只支持文字。原静态配置里标图像输入的 `workbuddy/hy4free` 没在当前目录出现。没有可核的异厂免费视觉执行路由；目录条目存在也不等于实跑成功。本轮真实执行 **0/8**、独立判分 **0/8**，没有猜测费用或转向普通型号。
+- 本机装好仓库固定版本的 Playwright，用其 Chromium Headless Shell 复跑（系统 Chrome 在本机拒绝自动化临时调试配置），实际 6 个 Metre/旧学习界面浏览器用例全部通过。全量原命令 `node tools/release-gate/run-tests.mjs --jobs 2` 得到 `271 test files, 0 failing tests, 53 known`，退出 1 原因只剩旧台账：42 项已过、8 项旧超时未重现、1 项在主线上已经改名（新名 `shared UI registration upgrades stale duplicate desk tags in order and is idempotent` 单跑 1/1）。据此只删除这 51 条，保留两个未执行项和其它平台项；未用 `--update`、未加已知失败。
+
 ## 记录
 
 ### 11-18 计划（Windows，Opus 5.5）

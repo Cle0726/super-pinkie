@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {composeMetreArms, metrePilotMatrix} from '../tools/metre/roles/compose.mjs';
+import {composeMetreArms, metrePilotMatrix, metreReleaseMatrix} from '../tools/metre/roles/compose.mjs';
 
 test('Metre roles A/B/C share the brief and only B pastes the card in the user message', () => {
   const brief = '看 fixture 中的结果，只报告三条证据。';
@@ -31,4 +31,35 @@ test('Metre roles offline pilot fixture has 8 cases, 3 arms, 2 runs per arm and 
     assert.ok(runs.every(r => !r.checks && !r.plantedIssues));
   }
   assert.throws(() => metrePilotMatrix(''), /三组共用/);
+});
+
+test('release trial has eight matched A/C runs, no paid route or same-vendor judge', () => {
+  // These ids model syntax and vendor discovery, not live route availability.
+  const tencent = 'mm/workbuddy/hy4flash-free', qwen = 'example/qwen-3:free';
+  const result = metreReleaseMatrix(tencent, qwen);
+  assert.equal(result.status, 'prepared-not-run');
+  assert.equal(result.allowPaidFallback, false);
+  assert.equal(result.execution.vendor, 'tencent');
+  assert.equal(result.judge.vendor, 'qwen');
+  assert.equal(result.runs.length, 8);
+  assert.equal(new Set(result.runs.map(run => run.id)).size, 8);
+  assert.deepEqual(result.cases.filter(row => row.needsVision).map(row => row.role), ['ui-replicator']);
+  for (const item of result.cases) {
+    const [a, c] = result.runs.filter(run => run.caseId === item.id);
+    assert.deepEqual([a.group, c.group], ['A', 'C']);
+    assert.equal(a.model, tencent);
+    assert.equal(c.dispatch.model, tencent);
+    assert.equal(a.briefSha256, c.briefSha256);
+    assert.equal(a.fixtureSha256, item.fixtureSha256);
+    assert.equal(c.fixtureSha256, item.fixtureSha256);
+    assert.ok(!a.checks && !c.plantedIssues);
+    if (['researcher', 'backend-fix'].includes(item.role)) {
+      assert.ok(item.files.some(file => file.path === 'probe/preserve.txt'));
+      assert.match(c.dispatch.prompt, /probe\/internal-note\.md/);
+      assert.ok(item.checks.some(check => check.startsWith('X4：')));
+    }
+  }
+  assert.throws(() => metreReleaseMatrix(tencent, 'router/workbuddy/hy4free'), /异厂/);
+  assert.throws(() => metreReleaseMatrix(tencent, 'qwen-3'), /指定免费路由/);
+  assert.throws(() => metreReleaseMatrix(tencent, 'unknown/free'), /厂家无法确认/);
 });
