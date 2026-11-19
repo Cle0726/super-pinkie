@@ -150,15 +150,14 @@ async function readLimitedJson(response) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-function disabledVisionSet(api) {
+function capabilityOverrides(api) {
   try {
     const dir = api?.runtime?.state?.resolveStateDir?.();
-    if (!dir) return new Set();
+    if (!dir) return {};
     const raw = JSON.parse(fs.readFileSync(path.join(dir, 'pinkie-model-setup.json'), 'utf8'));
     const caps = raw?.capabilities;
-    if (!caps || typeof caps !== 'object') return new Set();
-    return new Set(Object.entries(caps).filter(([, item]) => item?.vision === false).map(([key]) => key));
-  } catch { return new Set(); }
+    return caps && typeof caps === 'object' ? caps : {};
+  } catch { return {}; }
 }
 
 export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now} = {}) {
@@ -173,7 +172,10 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     if (!configured.length) {
       throw new Error('模型上游地址或密钥未配置');
     }
-    const disabledVision = disabledVisionSet(api);
+    const capOverrides = capabilityOverrides(api);
+    const hasCustomContext = (providerName, modelId) => typeof capOverrides[`${providerName}/${modelId}`]?.contextWindow === 'number';
+    const disabledVision = (providerName, modelId) => capOverrides[`${providerName}/${modelId}`]?.vision === false;
+    const disabledReasoning = (providerName, modelId) => capOverrides[`${providerName}/${modelId}`]?.reasoning === false;
     const results = await Promise.allSettled(configured.map(async ([name, provider]) => {
       const base = new URL(provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`);
       if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
@@ -190,13 +192,14 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const contextWindows = upstreamContextWindows(payload);
       const declaredEfforts = upstreamReasoningCapabilities(payload);
       const reasoningPending = (provider.models || []).flatMap(entry => {
-        if (entry.compat || !ids.includes(entry.id)) return [];
+        if (entry.compat || !ids.includes(entry.id) || disabledReasoning(name, entry.id)) return [];
         const generated=[modelName(entry.id),modelName(entry.id).replace(/^GPT-/, 'GPT ')].includes(entry.name);
         const efforts = declaredEfforts.get(entry.id)
           || (name === 'clekk' && (generated || entry.reasoning===true) ? CLEKK_NATIVE_EFFORTS.get(entry.id) : null);
         return efforts ? [{id: entry.id, before: JSON.stringify(entry), efforts}] : [];
       });
       const contextUpdates = (provider.models || []).flatMap((entry) => {
+        if (hasCustomContext(name, entry.id)) return [];
         const window = contextWindows.get(entry.id);
         return window && (entry.contextWindow !== window || entry.contextTokens !== window)
           ? [{id: entry.id, window, beforeWindow: entry.contextWindow, beforeTokens: entry.contextTokens}] : [];
@@ -206,16 +209,17 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const verifiedGpt6 = name === 'clekk';
       const verifiedWorkBuddy = name === 'mm';
       const workBuddyPending = verifiedWorkBuddy ? (provider.models || [])
-        .filter((entry) => ids.includes(entry.id) && isAutoDiscoveredWorkBuddy(entry)) : [];
+        .filter((entry) => ids.includes(entry.id) && isAutoDiscoveredWorkBuddy(entry) && !disabledReasoning(name, entry.id)) : [];
       const autoThinkingPending = (provider.models || []).filter((entry) =>
-        ids.includes(entry.id) && isAutoDiscoveredPlaceholder(entry) && !workBuddyPending.includes(entry)
+        ids.includes(entry.id) && isAutoDiscoveredPlaceholder(entry) && !disabledReasoning(name, entry.id)
+        && !workBuddyPending.includes(entry)
         && !reasoningPending.some((change) => change.id === entry.id));
       const legacy = verifiedGpt6 ? (provider.models || [])
-        .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry) && !disabledVision.has(`${name}/${entry.id}`)) : [];
+        .filter((entry) => ids.includes(entry.id) && isLegacyAutoDiscoveredGpt6(entry) && !disabledVision(name, entry.id) && !disabledReasoning(name, entry.id)) : [];
       // Official GPT-6 modality specs include image input. The local proxy's
       // image forwarding is intentionally not claimed as tested here.
       const imagePending = verifiedGpt6 ? (provider.models || [])
-        .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry) && !disabledVision.has(`${name}/${entry.id}`)) : [];
+        .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry) && !disabledVision(name, entry.id)) : [];
       const known = new Set((provider.models || []).map((entry) => entry.id));
       return {name, available: ids.length, unnamed: ids.filter((id) => !known.has(id) && !recognizedModelId(id)).length,
         additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => declaredEfforts.has(entry.id)

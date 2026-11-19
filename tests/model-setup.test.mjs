@@ -254,6 +254,76 @@ test('pinkie_model_capability supports current-session model alias and uses comm
   assert.equal(res.providers[0].models[0].vision, false, 'returned list reflects committed nextConfig even if current() is stale');
 });
 
+test('setCapability and pinkie_model_capability support reasoning, contextWindow, and maxTokens with validation and merged overrides', async () => {
+  const h = harness(() => ({status: 404}), {
+    agents: {defaults: {model: {primary: 'deepseek/deepseek-chat'}}},
+    models: {
+      providers: {
+        deepseek: {
+          baseUrl: 'https://api.deepseek.com', apiKey: KEY, api: 'openai-completions',
+          models: [{id: 'deepseek-chat', name: 'DeepSeek Chat', reasoning: true, input: ['text'], contextWindow: 128000, contextTokens: 128000}],
+        },
+      },
+    },
+  });
+  const tool = createModelCapabilityTool(h.setup);
+
+  // Set contextWindow + maxTokens + reasoning=false in one tool call
+  const r1 = await tool.execute('c-params-1', {model: 'deepseek/deepseek-chat', reasoning: false, contextWindow: 200000, maxTokens: 16384});
+  assert.equal(r1.isError, false);
+  assert.equal(r1.details.reasoning, false);
+  assert.equal(r1.details.contextWindow, 200000);
+  assert.equal(r1.details.maxTokens, 16384);
+  const entry = h.cfg.models.providers.deepseek.models[0];
+  assert.equal(entry.reasoning, false);
+  assert.equal(entry.contextWindow, 200000);
+  assert.equal(entry.contextTokens, 200000);
+  assert.equal(entry.maxTokens, 16384);
+
+  // Shorthand string in RPC setCapability + preserving prior overrides in pinkie-model-setup.json
+  const r2 = await h.setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', vision: true, contextWindow: '1M'});
+  assert.equal(r2.contextWindow, 1000000);
+  assert.equal(r2.vision, true);
+  assert.equal(r2.reasoning, false, 'untouched reasoning flag stays false');
+  const reg = JSON.parse(fs.readFileSync(path.join(h.stateDir, 'pinkie-model-setup.json'), 'utf8'));
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].vision, true);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].reasoning, false);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].contextWindow, 1000000);
+  assert.equal(reg.capabilities['deepseek/deepseek-chat'].maxTokens, 16384);
+
+  // Clearing maxTokens with 0 deletes the override cleanly
+  const r3 = await tool.execute('c-params-clear', {model: 'deepseek/deepseek-chat', maxTokens: 0});
+  assert.equal(r3.isError, false);
+  assert.equal(h.cfg.models.providers.deepseek.models[0].maxTokens, undefined);
+  assert.equal(r3.details.maxTokens, 0);
+
+  // Editing the provider via save() preserves custom reasoning/contextWindow/maxTokens overrides
+  await h.setup.setCapability({providerId: 'deepseek', modelId: 'deepseek-chat', maxTokens: 8192});
+  await h.setup.save({
+    providerId: 'deepseek',
+    preset: 'deepseek',
+    models: [{id: 'deepseek-chat', vision: false, meta: {context_window: 128000}}],
+  });
+  const afterSave = h.cfg.models.providers.deepseek.models[0];
+  assert.equal(afterSave.reasoning, false, 'provider edit keeps custom reasoning=false');
+  assert.equal(afterSave.contextWindow, 1000000, 'provider edit keeps custom contextWindow over upstream metadata');
+  assert.equal(afterSave.maxTokens, 8192, 'provider edit keeps custom maxTokens');
+  const regAfterSave = JSON.parse(fs.readFileSync(path.join(h.stateDir, 'pinkie-model-setup.json'), 'utf8'));
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].vision, false);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].reasoning, false);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].contextWindow, 1000000);
+  assert.equal(regAfterSave.capabilities['deepseek/deepseek-chat'].maxTokens, 8192);
+
+  // Validation rejects missing fields, out-of-range contextWindow, and maxTokens > contextWindow
+  const badEmpty = await tool.execute('c-bad-1', {model: 'deepseek/deepseek-chat'});
+  assert.equal(badEmpty.isError, true);
+  const badSmall = await tool.execute('c-bad-2', {model: 'deepseek/deepseek-chat', contextWindow: 100});
+  assert.equal(badSmall.isError, true);
+  const badMaxGtCtx = await tool.execute('c-bad-3', {model: 'deepseek/deepseek-chat', contextWindow: 8192, maxTokens: 16384});
+  assert.equal(badMaxGtCtx.isError, true);
+  assert.match(badMaxGtCtx.details.error, /不能超过上下文长度/);
+});
+
 test('laolao-model-setup UI renders per-model vision switches for managed and existing providers and saves toggles', async () => {
   function makeNode(tag) {
     const listeners = new Map();

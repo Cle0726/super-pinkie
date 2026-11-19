@@ -31,7 +31,15 @@
     return request(method, params, timeout);
   }
 
-  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null, openCaps: new Set(), capFilters: new Map(), capScrolls: new Map()};
+  const state = {card: null, list: null, wizard: null, status: null, presets: [], data: null, openCaps: new Set(), openModelParams: new Set(), capFilters: new Map(), capScrolls: new Map()};
+
+  function formatTokens(n) {
+    const num = Number(n) || 0;
+    if (!num) return "";
+    if (num >= 1_000_000 && num % 1_000_000 === 0) return `${num / 1_000_000}M`;
+    if (num >= 1000 && num % 1000 === 0) return `${num / 1000}K`;
+    return num.toLocaleString("en-US");
+  }
 
   function setStatus(text, tone = "") {
     if (!state.status) return;
@@ -40,7 +48,7 @@
     state.status.hidden = !text;
   }
 
-  function visionSwitch(label, checked, onChange) {
+  function capSwitch(label, checked, onChange) {
     const node = el("button", "pinkie-user-settings__switch", null);
     node.type = "button";
     node.setAttribute("role", "switch");
@@ -55,29 +63,44 @@
     });
     return node;
   }
+  const visionSwitch = capSwitch;
 
-  async function toggleVision(providerRow, model, next, buttonNode) {
-    if (buttonNode) buttonNode.disabled = true;
-    setStatus("正在保存看图设置…");
+  async function saveCapability(providerRow, model, patch, {busyText, doneText, disableNode} = {}) {
+    if (disableNode) disableNode.disabled = true;
+    setStatus(busyText || "正在保存模型参数…");
     try {
       state.data = await call("pinkie.modelSetup.setCapability", {
         providerId: providerRow.id,
         modelId: model.id,
-        vision: next,
+        ...patch,
       });
       renderList();
-      const display = model.name && model.name !== model.id ? model.name : model.id;
-      setStatus(
-        next
-          ? `已打开「${display}」的能看图片；如果上游其实不支持，发图时会报错，可以再关掉。`
-          : `已关闭「${display}」的能看图片。`,
-        "success",
-      );
+      setStatus(typeof doneText === "function" ? doneText(state.data) : doneText || "已保存。", "success");
       window.dispatchEvent(new CustomEvent("pinkie:models-changed"));
     } catch (error) {
-      if (buttonNode) buttonNode.disabled = false;
+      if (disableNode) disableNode.disabled = false;
       setStatus(plainError(error), "error");
     }
+  }
+
+  function toggleVision(providerRow, model, next, buttonNode) {
+    const display = model.name && model.name !== model.id ? model.name : model.id;
+    return saveCapability(providerRow, model, {vision: next}, {
+      busyText: "正在保存看图设置…",
+      doneText: next
+        ? `已打开「${display}」的能看图片；如果上游其实不支持，发图时会报错，可以再关掉。`
+        : `已关闭「${display}」的能看图片。`,
+      disableNode: buttonNode,
+    });
+  }
+
+  function toggleReasoning(providerRow, model, next, buttonNode) {
+    const display = model.name && model.name !== model.id ? model.name : model.id;
+    return saveCapability(providerRow, model, {reasoning: next}, {
+      busyText: "正在保存思考设置…",
+      doneText: next ? `已打开「${display}」的思考支持。` : `已关闭「${display}」的思考支持。`,
+      disableNode: buttonNode,
+    });
   }
 
   function renderList() {
@@ -131,17 +154,89 @@
       const listBox = el("div", "pinkie-model-setup__caps-list", capsBody);
       listBox.addEventListener("scroll", () => { state.capScrolls.set(row.id, listBox.scrollTop || 0); });
       for (const model of row.models) {
+        const modelKey = `${row.id}/${model.id}`;
         const capRow = el("div", "pinkie-model-setup__cap-row", listBox);
-        const capCopy = el("div", "pinkie-model-setup__cap-name", capRow);
+        const capMain = el("div", "pinkie-model-setup__cap-main", capRow);
+        const capCopy = el("div", "pinkie-model-setup__cap-name", capMain);
         const displayName = model.name && model.name !== model.id ? `${model.name}（${model.id}）` : model.id;
         el("span", "", capCopy, displayName);
-        if (`${row.id}/${model.id}` === defaultModel) {
+        if (modelKey === defaultModel) {
           el("span", "pinkie-model-setup__badge pinkie-model-setup__badge--default", capCopy, "默认");
         }
-        const capCtrl = el("div", "pinkie-model-setup__cap-control", capRow);
+        const metaBits = [
+          model.contextWindow ? `上下文 ${formatTokens(model.contextWindow)}` : "",
+          model.maxTokens ? `回复 ${formatTokens(model.maxTokens)}` : "",
+          model.reasoning ? "思考" : "",
+        ].filter(Boolean);
+        if (metaBits.length) {
+          el("span", "pinkie-model-setup__cap-meta", capCopy, metaBits.join(" · "));
+        }
+        const capCtrl = el("div", "pinkie-model-setup__cap-control", capMain);
         el("span", "pinkie-model-setup__cap-label", capCtrl, "能看图片");
-        const sw = visionSwitch(`${row.label} ${model.id} 能看图片`, Boolean(model.vision), (next, node) => toggleVision(row, model, next, node));
+        const sw = capSwitch(`${row.label} ${model.id} 能看图片`, Boolean(model.vision), (next, node) => toggleVision(row, model, next, node));
         capCtrl.appendChild(sw);
+        const expanded = state.openModelParams.has(modelKey);
+        const moreBtn = btn(expanded ? "收起" : "参数", "pinkie-model-setup__more-btn", capCtrl, () => {
+          if (state.openModelParams.has(modelKey)) state.openModelParams.delete(modelKey);
+          else state.openModelParams.add(modelKey);
+          renderList();
+        });
+        moreBtn.setAttribute("aria-expanded", String(expanded));
+        moreBtn.setAttribute("aria-label", `${row.label} ${model.id} 更多参数`);
+        if (expanded) {
+          const more = el("div", "pinkie-model-setup__cap-more", capRow);
+          const reasonRow = el("div", "pinkie-model-setup__cap-more-row", more);
+          const reasonCopy = el("div", "pinkie-model-setup__cap-more-copy", reasonRow);
+          el("span", "pinkie-model-setup__cap-more-title", reasonCopy, "支持思考");
+          el("span", "pinkie-model-setup__cap-more-hint", reasonCopy, "模型本身带思考/推理过程时打开。");
+          reasonRow.appendChild(capSwitch(`${row.label} ${model.id} 支持思考`, Boolean(model.reasoning), (next, node) => toggleReasoning(row, model, next, node)));
+
+          const fields = el("div", "pinkie-model-setup__cap-fields", more);
+          const ctxField = el("label", "pinkie-model-setup__field", fields);
+          el("span", "", ctxField, "上下文长度上限（token）");
+          const ctxInput = el("input", "pinkie-model-setup__input", ctxField);
+          ctxInput.type = "number"; ctxInput.min = "1024"; ctxInput.max = "10000000"; ctxInput.step = "1000";
+          ctxInput.placeholder = "例如 128000";
+          ctxInput.value = model.contextWindow ? String(model.contextWindow) : "";
+
+          const maxField = el("label", "pinkie-model-setup__field", fields);
+          el("span", "", maxField, "最大回复长度（token，留空用默认）");
+          const maxInput = el("input", "pinkie-model-setup__input", maxField);
+          maxInput.type = "number"; maxInput.min = "0"; maxInput.max = "2000000"; maxInput.step = "1024";
+          maxInput.placeholder = "默认不限";
+          maxInput.value = model.maxTokens ? String(model.maxTokens) : "";
+
+          const footer = el("div", "pinkie-model-setup__cap-more-actions", more);
+          const presets = el("div", "pinkie-model-setup__cap-presets", footer);
+          for (const [label, val] of [["64K", 64000], ["128K", 128000], ["200K", 200000], ["1M", 1000000]]) {
+            btn(label, "pinkie-model-setup__chip", presets, () => { ctxInput.value = String(val); });
+          }
+          const saveLimits = () => {
+            const patch = {};
+            const rawCtx = ctxInput.value.trim();
+            const rawMax = maxInput.value.trim();
+            if (rawCtx) patch.contextWindow = Number(rawCtx);
+            if (rawMax) patch.maxTokens = Number(rawMax);
+            else if (model.maxTokens) patch.maxTokens = 0;
+            if (!Object.keys(patch).length) { setStatus("先填上下文长度或最大回复长度再保存。", "error"); return; }
+            const display = model.name && model.name !== model.id ? model.name : model.id;
+            return saveCapability(row, model, patch, {
+              busyText: "正在保存模型上限…",
+              doneText: () => {
+                const parts = [];
+                if (patch.contextWindow !== undefined) parts.push(`上下文 ${formatTokens(patch.contextWindow)}`);
+                if (patch.maxTokens === 0) parts.push("最大回复已恢复默认");
+                else if (patch.maxTokens !== undefined) parts.push(`最大回复 ${formatTokens(patch.maxTokens)}`);
+                return `已保存「${display}」的上限：${parts.join("，")}。`;
+              },
+              disableNode: saveBtn,
+            });
+          };
+          const saveBtn = btn("保存上限", `${B} ${B}--small ${B}--primary`, footer, saveLimits);
+          const onEnter = (event) => { if (event.key === "Enter") { event.preventDefault(); void saveLimits(); } };
+          ctxInput.addEventListener("keydown", onEnter);
+          maxInput.addEventListener("keydown", onEnter);
+        }
         capRows.push({node: capRow, text: `${model.id} ${model.name || ""}`.toLowerCase()});
       }
       if (state.capScrolls.has(row.id)) listBox.scrollTop = state.capScrolls.get(row.id);

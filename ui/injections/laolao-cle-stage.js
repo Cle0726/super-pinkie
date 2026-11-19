@@ -132,7 +132,15 @@ if (!window.__laolaoCleStage) {
     if (name === 'pinkie_session_start' && MODE_CN[a.mode]) return {text: MODE_CN[a.mode], mono: false};
     // 网关把名叫 session / key 的字段一律打成 ***（当成密钥了）：管会话时说做了什么，不显示那串星号
     if (name === 'pinkie_model_capability' && a.model) {
-      return {text: `${firstLine(a.model)}（${a.vision === false ? '关闭看图' : '开启看图'}）`, mono: false};
+      const bits = [];
+      if (a.vision === true) bits.push('开启看图');
+      else if (a.vision === false) bits.push('关闭看图');
+      if (a.reasoning === true) bits.push('开启思考');
+      else if (a.reasoning === false) bits.push('关闭思考');
+      if (a.contextWindow) bits.push(`上下文 ${a.contextWindow}`);
+      if (a.maxTokens === 0) bits.push('回复上限恢复默认');
+      else if (a.maxTokens) bits.push(`最大回复 ${a.maxTokens}`);
+      return {text: bits.length ? `${firstLine(a.model)}（${bits.join('、')}）` : firstLine(a.model), mono: false};
     }
     if (name === 'pinkie_sessions') {
       const SAY = {list: '列会话', search: '搜会话', read: '读会话记录', create: '新建会话', restore: '恢复会话', stop: '停下会话',

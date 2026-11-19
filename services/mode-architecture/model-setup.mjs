@@ -183,8 +183,26 @@ export function resolveConfiguredModel(cfg = {}, {providerId = '', modelId = '',
     : `没有在已配置的服务商里找到模型「${raw}」。${defaultHint}已配置的模型有：${sample}${all.length > 10 ? ' 等' : ''}。`);
 }
 
+export function parseTokenBudget(raw, {label = '长度上限', min = 64, max = 10_000_000, allowClear = false} = {}) {
+  if (raw === undefined) return undefined;
+  if (allowClear && (raw === null || raw === '' || raw === 0 || String(raw).trim() === '0')) return null;
+  let value = raw;
+  if (typeof value === 'string') {
+    const cleaned = value.trim().replace(/[,\s_]+/g, '');
+    if (!cleaned) return allowClear ? null : (() => { throw new Error(`请填写「${label}」的整数数值`); })();
+    const match = /^(\d+(?:\.\d+)?)([kKmM])?$/.exec(cleaned);
+    if (!match) throw new Error(`「${label}」格式不对，请填整数（如 128000 或 128k）`);
+    const unit = match[2] ? (match[2].toLowerCase() === 'm' ? 1_000_000 : 1000) : 1;
+    value = Math.round(Number(match[1]) * unit);
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`「${label}」请填 ${min} 到 ${max} 之间的整数`);
+  }
+  return value;
+}
+
 const modelEntry = (id, meta = {}) => {
-  const window = Number(meta.context_window || meta.context_length || meta.contextWindow) || 128000;
+  const window = Number(meta.contextWindow || meta.context_window || meta.context_length) || 128000;
   let input;
   if (typeof meta.vision === 'boolean') {
     input = withVisionInput(meta.input, meta.vision);
@@ -195,9 +213,9 @@ const modelEntry = (id, meta = {}) => {
   } else {
     input = ['text'];
   }
-  // Always enable transport-level reasoning capture. If the provider returns no
-  // reasoning_content/reasoning there is simply nothing to display.
-  const entry = {id, name: meta.name && typeof meta.name === 'string' ? meta.name : id, reasoning: true, input, contextWindow: window, contextTokens: window};
+  // Always enable transport-level reasoning capture unless explicitly turned off.
+  const reasoning = typeof meta.reasoning === 'boolean' ? meta.reasoning : true;
+  const entry = {id, name: meta.name && typeof meta.name === 'string' ? meta.name : id, reasoning, input, contextWindow: window, contextTokens: window};
   const max = Number(meta.max_output_tokens || meta.top_provider?.max_completion_tokens || meta.maxTokens);
   if (max > 0) entry.maxTokens = max;
   if (meta.compat && typeof meta.compat === 'object') entry.compat = structuredClone(meta.compat);
@@ -272,7 +290,15 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const rows = Object.entries(providers).map(([id, provider]) => ({
       id, preset: registry.providers[id]?.preset || '', label: registry.providers[id]?.label || PRESET_BY_ID.get(registry.providers[id]?.preset)?.label || id,
       baseUrl: provider?.baseUrl || '', keyTail: keyTail(provider?.apiKey), hasKey: Boolean(provider?.apiKey),
-      models: (provider?.models || []).map(m => ({id: m.id, name: m.name || m.id, vision: hasVisionInput(m), input: Array.isArray(m.input) ? [...m.input] : ['text']})).slice(0, 400), modelCount: (provider?.models || []).length,
+      models: (provider?.models || []).map(m => ({
+        id: m.id,
+        name: m.name || m.id,
+        vision: hasVisionInput(m),
+        reasoning: m.reasoning === true,
+        contextWindow: Number(m.contextWindow || m.contextTokens) || 0,
+        maxTokens: Number(m.maxTokens) || 0,
+        input: Array.isArray(m.input) ? [...m.input] : ['text'],
+      })).slice(0, 400), modelCount: (provider?.models || []).length,
       enabled: true, managed: Boolean(registry.providers[id]),
       isDefault: primary.startsWith(`${id}/`),
     }));
@@ -320,10 +346,11 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     const entries = chosen.map(row => {
       const prev = existingById.get(String(row.id));
       const meta = {
-        ...(prev ? {contextWindow: prev.contextWindow, maxTokens: prev.maxTokens, input: prev.input, compat: prev.compat} : {}),
+        ...(prev ? {reasoning: prev.reasoning, contextWindow: prev.contextWindow || prev.contextTokens, maxTokens: prev.maxTokens, input: prev.input, compat: prev.compat} : {}),
         ...(row.meta && typeof row.meta === 'object' ? row.meta : {}),
         ...(row.name ? {name: row.name} : prev?.name ? {name: prev.name} : {}),
         ...(typeof row.vision === 'boolean' ? {vision: row.vision} : {}),
+        ...(typeof row.reasoning === 'boolean' ? {reasoning: row.reasoning} : {}),
       };
       return modelEntry(String(row.id), meta);
     });
@@ -336,15 +363,36 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
     });
     registry.providers[id] = {preset: preset.id, label: String(params.label || '').trim().slice(0, 40) || preset.label, updatedAt: now().toISOString()};
     for (const row of chosen) {
-      if (typeof row.vision === 'boolean') registry.capabilities[`${id}/${row.id}`] = {vision: row.vision, updatedAt: now().toISOString()};
+      if (typeof row.vision === 'boolean') {
+        const key = `${id}/${row.id}`;
+        const prevCap = registry.capabilities[key] && typeof registry.capabilities[key] === 'object' ? registry.capabilities[key] : {};
+        registry.capabilities[key] = {...prevCap, vision: row.vision, updatedAt: now().toISOString()};
+      }
     }
     writeRegistry(registry);
     return {ok: true, providerId: id, defaultModel, ...listFrom(committed?.nextConfig)};
   }
 
   async function setCapability(params = {}) {
-    if (typeof params.vision !== 'boolean') throw new Error('请明确说明是要打开还是关闭看图能力（vision 需为 true 或 false）');
-    const vision = params.vision;
+    const hasVision = params.vision !== undefined;
+    const hasReasoning = params.reasoning !== undefined;
+    const hasContext = params.contextWindow !== undefined;
+    const hasMax = params.maxTokens !== undefined;
+    if (!hasVision && !hasReasoning && !hasContext && !hasMax) {
+      throw new Error('请至少提供一项要调整的参数：vision（看图）、reasoning（思考）、contextWindow（上下文长度）或 maxTokens（最大回复长度）');
+    }
+    if (hasVision && typeof params.vision !== 'boolean') {
+      throw new Error('请明确说明是要打开还是关闭看图能力（vision 需为 true 或 false）');
+    }
+    if (hasReasoning && typeof params.reasoning !== 'boolean') {
+      throw new Error('请明确说明是要打开还是关闭思考能力（reasoning 需为 true 或 false）');
+    }
+    const nextContextWindow = hasContext
+      ? parseTokenBudget(params.contextWindow, {label: '上下文长度', min: 1024, max: 10_000_000})
+      : undefined;
+    const nextMaxTokens = hasMax
+      ? parseTokenBudget(params.maxTokens, {label: '最大回复长度', min: 64, max: 2_000_000, allowClear: true})
+      : undefined;
     const target = resolveConfiguredModel(current(), params);
     let updated = null;
     const committed = await mutate(draft => {
@@ -352,25 +400,72 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
       const entry = Array.isArray(provider?.models) ? provider.models.find(m => m && m.id === target.modelId) : null;
       if (!entry) throw new Error(`模型「${target.providerId}/${target.modelId}」已经不在配置里了`);
       const beforeVision = hasVisionInput(entry);
-      const nextInput = withVisionInput(entry.input, vision);
-      entry.input = nextInput;
+      const beforeReasoning = entry.reasoning === true;
+      const beforeWindow = Number(entry.contextWindow || entry.contextTokens) || 0;
+      const beforeMax = Number(entry.maxTokens) || 0;
+
+      const effectiveWindow = nextContextWindow !== undefined ? nextContextWindow : beforeWindow;
+      const effectiveMax = nextMaxTokens !== undefined ? (nextMaxTokens || 0) : beforeMax;
+      if (effectiveMax && effectiveWindow && effectiveMax > effectiveWindow) {
+        throw new Error(`最大回复长度（${effectiveMax}）不能超过上下文长度（${effectiveWindow}）`);
+      }
+
+      if (hasVision) entry.input = withVisionInput(entry.input, params.vision);
+      if (hasReasoning) entry.reasoning = params.reasoning;
+      if (nextContextWindow !== undefined) {
+        entry.contextWindow = nextContextWindow;
+        entry.contextTokens = nextContextWindow;
+      }
+      if (nextMaxTokens !== undefined) {
+        if (nextMaxTokens === null) delete entry.maxTokens;
+        else entry.maxTokens = nextMaxTokens;
+      }
+
+      const afterVision = hasVisionInput(entry);
+      const afterReasoning = entry.reasoning === true;
+      const afterWindow = Number(entry.contextWindow || entry.contextTokens) || 0;
+      const afterMax = Number(entry.maxTokens) || 0;
       updated = {
         model: `${target.providerId}/${target.modelId}`,
         providerId: target.providerId,
         modelId: target.modelId,
         name: entry.name || target.modelId,
-        vision,
-        changed: beforeVision !== vision,
-        input: [...nextInput],
+        vision: afterVision,
+        reasoning: afterReasoning,
+        contextWindow: afterWindow,
+        maxTokens: afterMax,
+        changed: beforeVision !== afterVision || beforeReasoning !== afterReasoning || beforeWindow !== afterWindow || beforeMax !== afterMax,
+        input: Array.isArray(entry.input) ? [...entry.input] : ['text'],
       };
     });
     const persistedCfg = committed?.nextConfig || current();
     const persistedEntry = (persistedCfg?.models?.providers?.[updated.providerId]?.models || []).find(m => m && m.id === updated.modelId);
-    if (persistedEntry && hasVisionInput(persistedEntry) !== vision) {
-      throw new Error(`模型「${updated.model}」的看图设置没有保存成功，请重试`);
+    if (persistedEntry) {
+      if (hasVision && hasVisionInput(persistedEntry) !== params.vision) {
+        throw new Error(`模型「${updated.model}」的看图设置没有保存成功，请重试`);
+      }
+      if (hasReasoning && (persistedEntry.reasoning === true) !== params.reasoning) {
+        throw new Error(`模型「${updated.model}」的思考设置没有保存成功，请重试`);
+      }
+      if (nextContextWindow !== undefined && Number(persistedEntry.contextWindow) !== nextContextWindow) {
+        throw new Error(`模型「${updated.model}」的上下文长度没有保存成功，请重试`);
+      }
+      if (nextMaxTokens !== undefined && (nextMaxTokens === null ? persistedEntry.maxTokens !== undefined : Number(persistedEntry.maxTokens) !== nextMaxTokens)) {
+        throw new Error(`模型「${updated.model}」的最大回复长度没有保存成功，请重试`);
+      }
     }
     const registry = readRegistry();
-    registry.capabilities[`${updated.providerId}/${updated.modelId}`] = {vision, updatedAt: now().toISOString()};
+    const key = `${updated.providerId}/${updated.modelId}`;
+    const prevCap = registry.capabilities[key] && typeof registry.capabilities[key] === 'object' ? registry.capabilities[key] : {};
+    const nextCap = {...prevCap, updatedAt: now().toISOString()};
+    if (hasVision) nextCap.vision = params.vision;
+    if (hasReasoning) nextCap.reasoning = params.reasoning;
+    if (nextContextWindow !== undefined) nextCap.contextWindow = nextContextWindow;
+    if (nextMaxTokens !== undefined) {
+      if (nextMaxTokens === null) delete nextCap.maxTokens;
+      else nextCap.maxTokens = nextMaxTokens;
+    }
+    registry.capabilities[key] = nextCap;
     writeRegistry(registry);
     return {ok: true, ...updated, ...listFrom(committed?.nextConfig)};
   }
@@ -436,8 +531,8 @@ export function createModelSetup({config, fetchImpl = globalThis.fetch, stateDir
 export function createModelCapabilityTool(setup, ctx = {}) {
   return {
     name: 'pinkie_model_capability',
-    label: '设置模型看图能力',
-    description: '只做一件事：打开或关闭某个已有模型能不能看图片（修改该模型条目里的 input 是否包含 image），不碰其他配置。内部走和「设置 → 模型服务」同一条安全保存通道。打开后必须提醒用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。',
+    label: '设置模型能力参数',
+    description: '只修改已有模型的能力和上限参数：能不能看图片（vision）、是否支持思考（reasoning）、上下文长度上限（contextWindow）、最大回复长度（maxTokens）。至少传其中一项，不碰其他配置。内部走和「设置 → 模型服务」同一条安全保存通道。打开看图后必须提醒用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -449,10 +544,26 @@ export function createModelCapabilityTool(setup, ctx = {}) {
         },
         vision: {
           type: 'boolean',
-          description: 'true = 打开「能看图片」；false = 关闭「能看图片」。',
+          description: '可选：true = 打开「能看图片」；false = 关闭「能看图片」。',
+        },
+        reasoning: {
+          type: 'boolean',
+          description: '可选：true = 标记该模型支持思考；false = 关闭思考支持。',
+        },
+        contextWindow: {
+          type: 'integer',
+          minimum: 1024,
+          maximum: 10000000,
+          description: '可选：上下文长度上限（token 数，例如 128000、200000、1000000）。',
+        },
+        maxTokens: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 2000000,
+          description: '可选：单次最大回复长度（token 数，例如 8192、16384；传 0 表示清除自定义上限、恢复默认）。',
         },
       },
-      required: ['model', 'vision'],
+      required: ['model'],
     },
     async execute(_toolCallId, params = {}) {
       try {
@@ -464,17 +575,32 @@ export function createModelCapabilityTool(setup, ctx = {}) {
             if (listed?.defaultModel) modelArg = listed.defaultModel;
           }
         }
-        const res = await setup.setCapability({model: modelArg, vision: params.vision});
+        const res = await setup.setCapability({
+          model: modelArg,
+          ...(params.vision !== undefined ? {vision: params.vision} : {}),
+          ...(params.reasoning !== undefined ? {reasoning: params.reasoning} : {}),
+          ...(params.contextWindow !== undefined ? {contextWindow: params.contextWindow} : {}),
+          ...(params.maxTokens !== undefined ? {maxTokens: params.maxTokens} : {}),
+        });
+        const notes = [];
+        if (params.vision === true) notes.push('打开了看图能力');
+        else if (params.vision === false) notes.push('关闭了看图能力');
+        if (params.reasoning === true) notes.push('打开了思考支持');
+        else if (params.reasoning === false) notes.push('关闭了思考支持');
+        if (params.contextWindow !== undefined) notes.push(`上下文长度设为 ${res.contextWindow}`);
+        if (params.maxTokens !== undefined) notes.push(res.maxTokens ? `最大回复长度设为 ${res.maxTokens}` : '最大回复长度恢复默认');
+        const visionReminder = params.vision === true ? '请告诉用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。' : '';
         const payload = {
           ok: true,
           model: res.model,
           name: res.name,
           vision: res.vision,
+          reasoning: res.reasoning,
+          contextWindow: res.contextWindow,
+          maxTokens: res.maxTokens,
           changed: res.changed,
           input: res.input,
-          message: res.vision
-            ? `已打开「${res.model}」的看图能力。请告诉用户：已打开，如果上游其实不支持，发图时会报错，可以再关掉。`
-            : `已关闭「${res.model}」的看图能力。`,
+          message: `已更新「${res.model}」：${notes.join('，')}。${visionReminder}`,
         };
         return {content: [{type: 'text', text: JSON.stringify(payload, null, 2)}], details: payload, isError: false};
       } catch (error) {
