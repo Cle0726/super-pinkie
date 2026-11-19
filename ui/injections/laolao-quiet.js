@@ -101,7 +101,8 @@
   // 一有输入或网关的 chat / agent 事件就马上恢复原节拍，被拖住的轮询当场补跑一次。
   // 几十个模块各自 300–1500ms 的轮询加起来，是 Metre 空闲 CPU 下不到 1% 的主要原因，在这里统一放慢，
   // 不用逐个模块改。只认 chat / agent 事件，不认 RPC 回包：否则轮询自己发的请求会把自己一直叫醒。
-  const IDLE_AFTER = 5_000, IDLE_FLOOR = 5_000, SHORT = 5_000;
+  // 一分钟都没人动、也没有对话事件，再放慢到 15 秒一次（几十个轮询每 5 秒一轮，原生 WebKit 里仍有约 1–2% 空闲 CPU）。
+  const IDLE_AFTER = 5_000, IDLE_FLOOR = 5_000, SHORT = 5_000, DEEP_AFTER = 60_000, DEEP_FLOOR = 15_000;
   const nativeSetInterval = window.setInterval, nativeClearInterval = window.clearInterval;
   const nativeSetTimeout = window.setTimeout, nativeClearTimeout = window.clearTimeout;
   const paced = new Map();
@@ -110,7 +111,8 @@
   const arm = (rec, delay) => { rec.due = Date.now() + delay; rec.timer = nativeSetTimeout.call(window, () => tick(rec), delay); };
   function tick(rec) {
     if (!paced.has(rec.id)) return;
-    arm(rec, idle() ? Math.max(rec.ms, IDLE_FLOOR) : rec.ms);
+    const still = quiet ? Date.now() - lastActive : 0;
+    arm(rec, still > DEEP_AFTER ? Math.max(rec.ms, DEEP_FLOOR) : still > IDLE_AFTER ? Math.max(rec.ms, IDLE_FLOOR) : rec.ms);
     rec.fn.apply(window, rec.args);
   }
   window.setInterval = function setInterval(fn, ms, ...args) {
