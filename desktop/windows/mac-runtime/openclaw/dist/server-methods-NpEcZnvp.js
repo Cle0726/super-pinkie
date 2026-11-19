@@ -532,9 +532,60 @@ async function handleGatewayRequest(opts) {
 		respond(false, void 0, authError);
 		return;
 	}
-	/* pinkie-metre-lock:v1 */
+	/* pinkie-metre-lock:v2 */
 	const metreGate = globalThis[Symbol.for("pinkie.metreLock.v1")];
-	const metreBlock = metreGate?.checkGatewayRequest?.(req.method, req.params);
+	let metreBlock = metreGate?.checkGatewayRequest?.(req.method, req.params);
+	if (!metreGate && !metreBlock) {
+		const releaseCheckKey = Symbol.for("pinkie.metreLock.releaseRuntime.v1");
+		if (globalThis[releaseCheckKey] === void 0) {
+			let isRelease = false;
+			try {
+				const fsMod = process.getBuiltinModule?.("node:fs");
+				const pathMod = process.getBuiltinModule?.("node:path");
+				const urlMod = process.getBuiltinModule?.("node:url");
+				const osMod = process.getBuiltinModule?.("node:os");
+				if (fsMod && pathMod && urlMod) {
+					const here = pathMod.dirname(urlMod.fileURLToPath(import.meta.url));
+					const stateDir = process.env.OPENCLAW_STATE_DIR || (osMod ? pathMod.join(osMod.homedir(), ".openclaw") : "");
+					const candidates = [
+						pathMod.resolve(here, "../../../build-info.json"),
+						pathMod.resolve(here, "../../../../build-info.json"),
+						...(stateDir ? [pathMod.join(stateDir, "extensions", "pinkie-mode-architecture", "guard-build.json")] : []),
+					];
+					for (const candidate of candidates) {
+						try {
+							const info = JSON.parse(fsMod.readFileSync(candidate, "utf8"));
+							if (info && (info.channel === "release" || info.guard === true)) { isRelease = true; break; }
+						} catch {}
+					}
+				}
+			} catch {}
+			globalThis[releaseCheckKey] = isRelease;
+		}
+		if (globalThis[releaseCheckKey] === true) {
+			const m = String(req.method || "").trim();
+			const p = req.params && typeof req.params === "object" ? req.params : {};
+			const isMetreKey = (v) => /^agent:metre(?::|$)/i.test(String(v ?? "").trim());
+			const hasMetre = (obj, d = 0) => {
+				if (!obj || typeof obj !== "object" || d > 4) return false;
+				if (Array.isArray(obj)) return obj.some((x) => typeof x === "string" ? isMetreKey(x) : hasMetre(x, d + 1));
+				for (const k of ["sessionKey", "key", "target", "session", "parentSessionKey", "targetSessionKey", "childSessionKey", "requesterSessionKey", "parentKey", "sourceKey", "fromKey", "from", "to", "sessionId", "id"]) {
+					if (isMetreKey(obj[k])) return true;
+				}
+				if (String(obj.agentId ?? "").trim().toLowerCase() === "metre" || String(obj.agent ?? "").trim().toLowerCase() === "metre" || String(obj.mode ?? "").trim().toLowerCase() === "metre") return true;
+				for (const [k, v] of Object.entries(obj)) {
+					if (k === "message" || k === "content" || k === "prompt" || k === "text" || k === "body" || k === "plan" || k === "query") continue;
+					if (v && typeof v === "object" && hasMetre(v, d + 1)) return true;
+				}
+				return false;
+			};
+			const allowToday = m === "pinkie.metre.today" && !p.sessionKey && !p.folder && !p.scope && !hasMetre(p);
+			const allowGuard = m === "pinkie.guard.status" || m === "pinkie.guard.metreStatus" || m === "pinkie.guard.metreUnlock" || m === "pinkie.guard.metreLock";
+			if (!allowGuard && !allowToday && (m.startsWith("pinkie.metre.") || (m.startsWith("agents.") && String(p.id ?? "").trim().toLowerCase() === "metre") || (m === "pinkie.quiet.set" && p.quiet === true) || hasMetre(p))) {
+				metreBlock = "正式版中 Metre 需要先输入开发者密码解锁。";
+			}
+		}
+	}
 	if (metreBlock) {
 		respond(false, void 0, errorShape(ErrorCodes.INVALID_REQUEST, metreBlock));
 		return;

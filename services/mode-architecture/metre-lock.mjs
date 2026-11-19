@@ -16,6 +16,7 @@ import {guardMode} from './settings-guard.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ACTIVE_LOCK_SYMBOL = Symbol.for('pinkie.metreLock.v1');
+const SHARED_LOCKS_SYMBOL = Symbol.for('pinkie.metreLockInstances.v1');
 const COOLDOWN_THRESHOLD = 5;
 const BASE_COOLDOWN_MS = 10 * 60_000;
 const MAX_COOLDOWN_MS = 24 * 60 * 60_000;
@@ -34,14 +35,33 @@ export function isMetreMode(mode) {
   return String(mode ?? '').trim().toLowerCase() === 'metre';
 }
 
-export function paramsReferenceMetre(params) {
-  if (!params || typeof params !== 'object') return false;
-  for (const field of ['sessionKey', 'key', 'target', 'session', 'parentSessionKey', 'from', 'to']) {
+const METRE_SESSION_FIELDS = [
+  'sessionKey', 'key', 'target', 'session', 'parentSessionKey',
+  'targetSessionKey', 'childSessionKey', 'requesterSessionKey',
+  'parentKey', 'sourceKey', 'fromKey', 'from', 'to', 'sessionId', 'id',
+];
+const METRE_TEXT_SKIP_FIELDS = new Set([
+  'message', 'content', 'prompt', 'text', 'body', 'plan', 'query', 'title',
+  'label', 'summary', 'description', 'background', 'question', 'password', 'note',
+]);
+
+export function paramsReferenceMetre(params, depth = 0) {
+  if (!params || typeof params !== 'object' || depth > 4) return false;
+  if (Array.isArray(params)) {
+    return params.some(item => (typeof item === 'string' ? isMetreSession(item) : paramsReferenceMetre(item, depth + 1)));
+  }
+  for (const field of METRE_SESSION_FIELDS) {
     if (isMetreSession(params[field])) return true;
   }
   if (isMetreAgent(params.agentId) || isMetreAgent(params.agent)) return true;
   if (isMetreMode(params.mode)) return true;
   if (Array.isArray(params.keys) && params.keys.some(item => isMetreSession(item))) return true;
+  if (Array.isArray(params.sessionKeys) && params.sessionKeys.some(item => isMetreSession(item))) return true;
+  if (Array.isArray(params.agentIds) && params.agentIds.some(item => isMetreAgent(item))) return true;
+  for (const [k, v] of Object.entries(params)) {
+    if (METRE_TEXT_SKIP_FIELDS.has(k)) continue;
+    if (v && typeof v === 'object' && paramsReferenceMetre(v, depth + 1)) return true;
+  }
   return false;
 }
 
@@ -386,6 +406,7 @@ export class MetreLock {
       return LOCKED_ERROR;
     }
     if (name.startsWith('pinkie.metre.')) return LOCKED_ERROR;
+    if (name.startsWith('agents.') && isMetreAgent(params?.id)) return LOCKED_ERROR;
     if (name === 'pinkie.quiet.set' && params?.quiet === true) return LOCKED_ERROR;
     if (paramsReferenceMetre(params)) return LOCKED_ERROR;
     return '';
@@ -402,22 +423,38 @@ export function setActiveMetreLock(lock) {
 }
 
 export function registerMetreLock(api, options = {}) {
-  const lock = options.lock instanceof MetreLock ? options.lock : new MetreLock(options);
+  let lock;
+  if (options.lock instanceof MetreLock) {
+    lock = options.lock;
+  } else {
+    const candidate = new MetreLock(options);
+    // OpenClaw 同一网关进程内会多次加载/注册同一插件：按目录和配置复用同一个锁实例，
+    // 避免某份旧注册句柄执行 unlock / lock 时改的不是当前全局生效的那一份。
+    const cacheKey = `${candidate.channel}|${candidate.stateFile}|${candidate.hashFile}|${candidate.machineId}|${candidate.hashRecord?.hash || ''}`;
+    const shared = (globalThis[SHARED_LOCKS_SYMBOL] ??= new Map());
+    if (shared.has(cacheKey)) {
+      lock = shared.get(cacheKey);
+    } else {
+      shared.set(cacheKey, candidate);
+      lock = candidate;
+    }
+  }
   if (options.activate !== false) setActiveMetreLock(lock);
+  const current = () => (options.lock instanceof MetreLock ? lock : (getActiveMetreLock() || lock));
   api?.registerGatewayMethod?.('pinkie.guard.metreStatus', ({respond}) => {
-    try { respond(true, {ok: true, ...lock.status()}); }
+    try { respond(true, {ok: true, ...current().status()}); }
     catch (error) { respond(false, undefined, {code: 'METRE_LOCK_ERROR', message: String(error?.message || error)}); }
   }, {scope: 'operator.read'});
   api?.registerGatewayMethod?.('pinkie.guard.metreUnlock', async ({params, respond}) => {
     try {
-      const result = await lock.unlock(typeof params?.password === 'string' ? params.password : '');
+      const result = await current().unlock(typeof params?.password === 'string' ? params.password : '');
       respond(true, result);
     } catch (error) {
       respond(false, undefined, {code: 'METRE_LOCK_ERROR', message: String(error?.message || error)});
     }
   }, {scope: 'operator.admin'});
   api?.registerGatewayMethod?.('pinkie.guard.metreLock', ({respond}) => {
-    try { respond(true, lock.lock()); }
+    try { respond(true, current().lock()); }
     catch (error) { respond(false, undefined, {code: 'METRE_LOCK_ERROR', message: String(error?.message || error)}); }
   }, {scope: 'operator.admin'});
   return lock;

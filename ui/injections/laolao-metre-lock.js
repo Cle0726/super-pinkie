@@ -74,11 +74,15 @@
     enforcingExit = true;
     try {
       try { localStorage.setItem(ACTIVE_MODE_KEY, 'chat'); } catch {}
+      try { window.__pinkieMetreBoard?.close?.(); } catch {}
       document.documentElement.setAttribute('data-laolao-mode', 'chat');
       document.documentElement.removeAttribute('data-laolao-mode-pending');
       document.documentElement.removeAttribute('data-laolao-splash-metre');
       const next = new URL(location.href);
-      if (/^agent:metre(?::|$)/i.test(next.searchParams.get('session') || '') || !next.searchParams.get('session')) {
+      const currentSession = next.searchParams.get('session') || '';
+      const onSettingsRoute = String(next.pathname || '').startsWith('/settings');
+      const hasMetreSession = /^agent:metre(?::|$)/i.test(currentSession);
+      if (hasMetreSession || (!onSettingsRoute && !currentSession)) {
         next.searchParams.set('session', 'agent:main:main');
         const shell = document.querySelector('openclaw-app-shell');
         if (typeof shell?.navigate === 'function') shell.navigate('chat', {search: next.search});
@@ -344,6 +348,7 @@
       startupInFlight = false;
     });
   };
+  window.addEventListener('pinkie:sidebar-gateway-ready', checkOnceOnReady);
   window.addEventListener('pinkie:gateway-event', checkOnceOnReady);
   window.addEventListener('laolao:splash-cleared', () => {
     if (!startupChecked) checkOnceOnReady();
@@ -351,6 +356,11 @@
   });
   window.addEventListener('laolao:modechange', (event) => {
     if (event.detail?.mode !== 'metre') return;
+    if (cachedStatus) handleLockedMetreContext(cachedStatus);
+    else void enforcePageLock();
+  });
+  window.addEventListener('popstate', () => {
+    if (!isMetreContext()) return;
     if (cachedStatus) handleLockedMetreContext(cachedStatus);
     else void enforcePageLock();
   });

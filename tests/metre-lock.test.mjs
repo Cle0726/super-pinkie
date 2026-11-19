@@ -254,7 +254,27 @@ test('release build fails closed when unconfigured and requires password + machi
     assert.equal((await afterTamper.unlock(TEST_PASSPHRASE)).ok, true);
     assert.equal(afterTamper.lock().locked, true);
     assert.equal(ctx.create().status().locked, true);
+
+    // Dual plugin registration in one gateway process shares one live lock instance (no split-brain on unlock/relock).
+    const firstApi = createPluginApiMock();
+    const secondApi = createPluginApiMock();
+    const regOpts = {
+      mode: {enabled: true, channel: 'release', version: '9.9.9', bundleRoot: ctx.dir},
+      pinkieStateRoot: ctx.stateRoot,
+      hashFile: ctx.hashFile,
+      machineId: 'darwin:machine-alpha',
+    };
+    const lockA = registerMetreLock(firstApi.api, regOpts);
+    const lockB = registerMetreLock(secondApi.api, regOpts);
+    assert.equal(lockA, lockB, 'duplicate registerMetreLock calls share one instance');
+    const unlockedDual = await callGatewayMethod(firstApi.methods, 'pinkie.guard.metreUnlock', {password: TEST_PASSPHRASE});
+    assert.equal(unlockedDual.payload?.unlocked, true);
+    assert.equal(lockB.isLocked(), false);
+    const relockedDual = await callGatewayMethod(firstApi.methods, 'pinkie.guard.metreLock', {});
+    assert.equal(relockedDual.payload?.locked, true);
+    assert.equal(lockB.isLocked(), true);
   } finally {
+    setActiveMetreLock(null);
     ctx.cleanup();
   }
 });
@@ -484,7 +504,7 @@ test('full mode-architecture plugin reads disk guard-build.json, blocks locked M
     assert.equal(blockedDecision?.outcome, 'block');
     assert.equal(blockedDecision?.reason, 'metre-locked');
 
-    // 2. before_tool_call must block tools for agent:metre:main while locked!
+    // 2. before_tool_call must block tools for agent:metre:main AND cross-mode tools targeting Metre while locked!
     const toolHooks = hooks.get('before_tool_call') || [];
     let toolBlocked = null;
     for (const h of toolHooks) {
@@ -493,6 +513,27 @@ test('full mode-architecture plugin reads disk guard-build.json, blocks locked M
     }
     assert.equal(toolBlocked?.block, true);
     assert.match(toolBlocked?.blockReason || '', /密码/);
+
+    for (const [toolName, params] of [
+      ['sessions_send', {sessionKey: 'agent:metre:main', message: 'bypass'}],
+      ['sessions_spawn', {agentId: 'metre', prompt: 'bypass'}],
+      ['cron', {job: {agentId: 'metre', sessionKey: 'agent:metre:main'}}],
+      ['pinkie_sessions', {action: 'read', target: 'agent:metre:main'}],
+    ]) {
+      let crossBlocked = null;
+      for (const h of toolHooks) {
+        const out = await h.handler({toolName, params}, {sessionKey: 'agent:unrestricted:main', agentId: 'unrestricted'});
+        if (out?.block === true) { crossBlocked = out; break; }
+      }
+      assert.equal(crossBlocked?.block, true, `cross-mode ${toolName} targeting Metre blocked while locked`);
+    }
+    // Ordinary non-Metre tool calls remain unaffected.
+    let normalCrossBlocked = null;
+    for (const h of toolHooks) {
+      const out = await h.handler({toolName: 'sessions_send', params: {sessionKey: 'agent:project:main', message: 'mention metre in text'}}, {sessionKey: 'agent:main:main', agentId: 'main'});
+      if (out?.block === true) { normalCrossBlocked = out; break; }
+    }
+    assert.equal(normalCrossBlocked, null);
 
     // 3. Gateway RPCs targeting agent:metre:main must fail while locked; pinkie.guard.metreStatus proceeds!
     for (const method of ['pinkie.run.status', 'pinkie.webGpt.arm', 'pinkie.webGpt.inject', 'pinkie.watchdog.status', 'pinkie.reasoning.status']) {
@@ -543,12 +584,12 @@ test('full mode-architecture plugin reads disk guard-build.json, blocks locked M
   }
 });
 
-test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent when locked and is idempotent', async () => {
+test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent / nested params, is idempotent, and fails closed when plugin missing in release', async () => {
   const sample = [
     'const ErrorCodes = { INVALID_REQUEST: "INVALID_REQUEST" };',
     'const errorShape = (code, message) => ({ code, message });',
     'function authorizeGatewayMethod() {}',
-    'async function handleGatewayRequest({ req, respond }) {',
+    'export async function handleGatewayRequest({ req, respond }) {',
     '\tconst authError = authorizeGatewayMethod();',
     '\tif (authError) {',
     '\t\trespond(false, void 0, authError);',
@@ -565,12 +606,14 @@ test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent when lock
   assert.equal(second.changed, false);
   assert.equal(second.reason, 'already-patched');
 
+  const simRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-gw-patch-')));
+  const patchedFile = path.join(simRoot, 'runtime', 'openclaw', 'dist', 'server-methods-test.mjs');
+  put(path.join(simRoot, 'build-info.json'), JSON.stringify({guard: true, channel: 'release', version: '9.9.9'}));
+  put(patchedFile, first.text);
+
   const ctx = await makeTempLock({channel: 'release', fastVerify: true});
   try {
-    const lock = ctx.create();
-    setActiveMetreLock(lock);
-    const fn = new Function(`${first.text}; return handleGatewayRequest;`)();
-
+    const {handleGatewayRequest: fn} = await import(`${patchedFile}?t=${Date.now()}`);
     const invoke = async (method, params) => {
       let response = null;
       await fn({
@@ -580,7 +623,19 @@ test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent when lock
       return response;
     };
 
-    // Locked release rejects direct gateway chat.send, sessions.*, agent targeting metre.
+    // Fail-closed test: even if plugin failed to load (activeMetreLock === null) on a release runtime, Metre calls stay blocked!
+    setActiveMetreLock(null);
+    delete globalThis[Symbol.for('pinkie.metreLock.releaseRuntime.v1')];
+    assert.equal((await invoke('chat.send', {sessionKey: 'agent:metre:main', message: 'hi'})).ok, false);
+    assert.equal((await invoke('cron.add', {job: {agentId: 'metre', sessionKey: 'agent:metre:main'}})).ok, false);
+    assert.equal((await invoke('pinkie.metre.board', {})).ok, false);
+    assert.equal((await invoke('pinkie.metre.today', {date: '2026-11-18'})).ok, true);
+    assert.equal((await invoke('chat.send', {sessionKey: 'agent:main:main', message: 'hi'})).ok, true);
+
+    const lock = ctx.create();
+    setActiveMetreLock(lock);
+
+    // Locked release rejects direct gateway chat.send, sessions.*, agent, agents.*, cron.add targeting metre.
     for (const [method, params] of [
       ['chat.send', {sessionKey: 'agent:metre:main', message: 'hi'}],
       ['sessions.create', {agentId: 'metre', key: 'agent:metre:new'}],
@@ -588,6 +643,8 @@ test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent when lock
       ['sessions.steer', {sessionKey: 'agent:metre:main', message: 'hi'}],
       ['agent', {sessionKey: 'agent:metre:main', prompt: 'hi'}],
       ['chat.inject', {sessionKey: 'agent:metre:main'}],
+      ['agents.update', {id: 'metre', name: 'x'}],
+      ['cron.add', {job: {agentId: 'metre', payload: {message: 'hi'}}}],
     ]) {
       const res = await invoke(method, params);
       assert.equal(res.ok, false, `${method} blocked while locked`);
@@ -598,14 +655,16 @@ test('OpenClaw gateway patch intercepts chat.send / sessions.* / agent when lock
     // Allows unlock RPCs and non-metre requests while locked!
     assert.equal((await invoke('pinkie.guard.metreStatus', {})).ok, true);
     assert.equal((await invoke('pinkie.guard.metreUnlock', {password: TEST_PASSPHRASE})).ok, true);
-    assert.equal((await invoke('chat.send', {sessionKey: 'agent:main:main', message: 'hi'})).ok, true);
+    assert.equal((await invoke('chat.send', {sessionKey: 'agent:main:main', message: 'talk about metre'})).ok, true);
 
     // After unlocking, Metre gateway requests succeed!
     await lock.unlock(TEST_PASSPHRASE);
     assert.equal((await invoke('chat.send', {sessionKey: 'agent:metre:main', message: 'hi'})).ok, true);
   } finally {
     setActiveMetreLock(null);
+    delete globalThis[Symbol.for('pinkie.metreLock.releaseRuntime.v1')];
     ctx.cleanup();
+    fs.rmSync(simRoot, {recursive: true, force: true});
   }
 });
 
@@ -640,11 +699,13 @@ test('simulated release bundle & dev bundle guard verification preserve hash fil
     fs.writeFileSync(path.join(bundle, 'guard-manifest.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(bundle, 'guard-manifest.sig'), signBytes(fs.readFileSync(path.join(bundle, 'guard-manifest.json')), keyPem));
 
-    // Suppose someone tampers the installed copy in ~/.openclaw/extensions -> guard startup restores the hash file!
+    // Suppose someone tampers the hash file AND deletes metre-lock.mjs in ~/.openclaw/extensions -> guard startup restores BOTH!
     put(path.join(state, 'extensions/pinkie-mode-architecture/metre-lock-hash.json'), '{"configured":true,"algorithm":"scrypt","hash":"evil"}');
+    assert.equal(fs.existsSync(path.join(state, 'extensions/pinkie-mode-architecture/metre-lock.mjs')), false);
     const res = startup({bundle, home, appState, key: pub});
     assert.equal(res.trusted, true);
     assert.equal(res.nonOfficial, false);
+    assert.equal(fs.existsSync(path.join(state, 'extensions/pinkie-mode-architecture/metre-lock.mjs')), true, 'deleted metre-lock.mjs restored');
     const restoredHash = JSON.parse(fs.readFileSync(path.join(state, 'extensions/pinkie-mode-architecture/metre-lock-hash.json'), 'utf8'));
     assert.equal(restoredHash.hash, hashData.record.hash);
 
@@ -923,4 +984,15 @@ test('frontend metre-lock module enforces prompts, cooldowns, dock curtains, and
   assert.equal(normalEnv.storage.get('laolao:active-mode'), 'chat');
   assert.equal(normalEnv.htmlEl.getAttribute('data-laolao-mode'), 'chat');
   assert.match(normalEnv.getHistoryHref(), /session=agent%3Amain%3Amain/);
+
+  // Case 4: Relocking from /settings keeps the user on /settings while resetting active mode to chat.
+  const settingsEnv = runFrontend('http://127.0.0.1:18789/settings', {
+    statusSequence: [{required: true, unlocked: true, locked: false, configured: true}],
+    lockHandler: async () => lockedStatus,
+    initialAttrs: {'data-laolao-mode': 'metre'},
+  });
+  await settingsEnv.api.lock();
+  assert.equal(settingsEnv.storage.get('laolao:active-mode'), 'chat');
+  assert.equal(settingsEnv.htmlEl.getAttribute('data-laolao-mode'), 'chat');
+  assert.equal(settingsEnv.getHistoryHref(), 'http://127.0.0.1:18789/settings');
 });

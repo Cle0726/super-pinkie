@@ -1506,6 +1506,7 @@
     const common = !advanced && (tabs[0]?.getAttribute("aria-selected") === "true" || tabs.length > 0);
     localizeSettingsTitle(common);
     const view = advanced ? "advanced" : common ? "common" : "";
+    const wasHidden = state.root.hidden;
     const returnedToCommon = state.lastView === "advanced" && common;
     state.lastView = view;
     state.root.hidden = !common;
@@ -1515,6 +1516,9 @@
     if (returnedToCommon) {
       void loadInitialData();
       syncAppearance();
+    } else if (wasHidden && common) {
+      const request = rpc();
+      if (typeof request === "function") void loadGuardStatus(request);
     }
     const route = `${window.location.pathname}${window.location.search}`;
     if (route !== state.lastRoute) {
@@ -1522,6 +1526,10 @@
       syncVersion();
       syncAppearance();
       syncUsage();
+      if (common) {
+        const request = rpc();
+        if (typeof request === "function") void loadGuardStatus(request);
+      }
     }
   }
   function updatePosition() {
@@ -1541,6 +1549,13 @@
     window.addEventListener("popstate", syncPage);
     window.addEventListener("resize", updatePosition, {passive: true});
     window.addEventListener("pinkie:metre-lock-change", (event) => renderMetreLock(event?.detail));
+    window.addEventListener("pinkie:sidebar-gateway-ready", () => {
+      const request = rpc();
+      if (typeof request === "function") void loadGuardStatus(request);
+    });
+    if (window.__pinkieMetreLock?.cachedStatus?.()) {
+      renderMetreLock(window.__pinkieMetreLock.cachedStatus());
+    }
     window.setInterval(() => {
       syncPage();
       syncUsage();

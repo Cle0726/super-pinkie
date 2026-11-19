@@ -8,7 +8,7 @@ import {
 } from './session-titles.mjs';
 import {SessionSearch} from './session-search.mjs';
 import {isTempKey} from './session-temp.mjs';
-import {getActiveMetreLock, isMetreAgent, isMetreSession} from './metre-lock.mjs';
+import {LOCKED_ERROR, getActiveMetreLock, isMetreAgent, isMetreSession, paramsReferenceMetre} from './metre-lock.mjs';
 
 // pinkie_sessions（Metre 计划 2.7）：管理侧栏会话的工具。
 // Metre 里所有动作直接生效；四个老模式里对自己开出的子会话直接生效，对别的会话的 archive / stop / rename / detach
@@ -556,6 +556,9 @@ export class SessionManager {
   }
 
   async run(callerKey, params = {}) {
+    if (getActiveMetreLock()?.isLocked?.() && (isMetreSession(callerKey) || paramsReferenceMetre(params))) {
+      throw new Error(LOCKED_ERROR);
+    }
     const caller = this.caller(callerKey);
     const action = String(params.action || '').trim();
     if (!ACTIONS.includes(action)) throw new Error('action 只能是 ' + ACTIONS.filter(item => caller.metre || !METRE_ONLY.has(item)).join(' / '));

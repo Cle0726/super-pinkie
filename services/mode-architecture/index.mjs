@@ -53,7 +53,7 @@ import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
-import {LOCKED_ERROR, getActiveMetreLock, registerMetreLock} from './metre-lock.mjs';
+import {LOCKED_ERROR, getActiveMetreLock, paramsReferenceMetre, registerMetreLock} from './metre-lock.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -6989,8 +6989,18 @@ export default {
       if (isMetreTurnLocked(event, ctx)) return {outcome: 'block', reason: 'metre-locked', message: LOCKED_ERROR};
       return undefined;
     }, {priority: 100000});
+    const METRE_TARGET_TOOLS = new Set([
+      'sessions_send', 'sessions_spawn', 'sessions_history', 'sessions_list',
+      'subagents', 'cron', 'gateway', 'agents_list',
+      'pinkie_sessions', 'pinkie_session_start', 'pinkie_session_message',
+      'pinkie_session_list', 'pinkie_mode_ask', 'metre_memory', 'pinkie_models',
+    ]);
     api.on('before_tool_call', (event, ctx) => {
       if (isMetreTurnLocked(event, ctx)) return {block: true, blockReason: LOCKED_ERROR};
+      const toolName = String(event?.toolName || event?.name || '');
+      if (metreLock.isLocked() && METRE_TARGET_TOOLS.has(toolName) && paramsReferenceMetre(event?.params)) {
+        return {block: true, blockReason: LOCKED_ERROR};
+      }
       return undefined;
     }, {priority: 99000});
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
