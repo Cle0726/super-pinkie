@@ -708,6 +708,13 @@ test('a role brief heading does not make a read-only request require a write', a
   assert.equal(await decision(onlyRead, true), undefined);
   assert.match((await decision(onlyRead, false))?.reason || '', /没有任何真实执行工具记录/);
   assert.match((await decision('请修改文件 source-a.md 并运行测试', true))?.reason || '', /没有任何真实执行工具记录/);
+
+  const original = f.sent[0];
+  const ctx = {agentId: 'roles', sessionKey: original.sessionKey, runId: original.idempotencyKey};
+  const guard = new CompletionIntegrityGuard();
+  guard.begin({prompt: original.message}, ctx);
+  assert.equal(guard.finalize({lastAssistantMessage: '碧琪这就去做。'}, ctx)?.action, 'revise');
+  assert.ok(guard.snapshot(ctx.sessionKey).softGates.promise, 'the one-time reminder must stay on the durable run');
 });
 
 // ---------- R1-24 ★ & R1-25 ★ ----------

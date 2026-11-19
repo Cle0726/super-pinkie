@@ -1488,8 +1488,13 @@ function delegatedWork(state) {
   return Boolean(report && !report.failed);
 }
 
+function deliveryTaskPrompt(prompt, ctx, key = '') {
+  return isRolesContext({agentId: ctx.agentId, sessionKey: ctx.sessionKey || key}) ? roleBriefTask(prompt) : prompt;
+}
+
 function effectVerificationReason(state, ctx = {}, reply = '') {
-  const mutationRun = (isLikelyActionRequest(state.prompt) && isMutationRequest(state.prompt))
+  const prompt = deliveryTaskPrompt(state.prompt, ctx);
+  const mutationRun = (isLikelyActionRequest(prompt) && isMutationRequest(prompt))
     || (workFirstContext(ctx) && hasReportedMutation(reply));
   if (!mutationRun) return '';
   const effectIndex = state.tools.findLastIndex((entry, index) => Boolean(toolEffectKind(entry)) && !isTurnCleanup(state, index)
@@ -2354,13 +2359,6 @@ export class CompletionIntegrityGuard {
     return {ok: true, verified: true, at: state.verification.at};
   }
 
-  deliveryState(key, ctx) {
-    const state = this.runs.get(key);
-    if (!state || !isRolesContext({...ctx, sessionKey: ctx.sessionKey || key})) return state;
-    const prompt = roleBriefTask(state.prompt);
-    return prompt === state.prompt ? state : {...state, prompt};
-  }
-
   // 一轮只提醒一次（remindOnce）：先命中的别的提醒（比如最后一个工具失败）会把「视频没说素材来源」挤掉。
   // 11-04 routes-i R-ad-2：侧栏浏览器没连上 → 提醒「最后一次工具调用失败」→ 来源那条再也没机会发。所以并进同一条。
   finalize(event = {}, ctx = {}, options = {}) {
@@ -2368,12 +2366,12 @@ export class CompletionIntegrityGuard {
     if (decision?.action !== 'revise') return decision;
     if (workFirstContext(ctx)) return decision;
     const key = completionRunKey(event, ctx);
-    const state = this.deliveryState(key, ctx);
+    const state = this.runs.get(key);
     if (!state) return decision;
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     // 只在这条回复是交付时并：「这就去做」那种预告还没到交付，不提来源。
     const delivering = COMPLETION_CLAIM.test(reply) || DELIVERY_CLAIM.test(reply) || replyDeliveredKinds(reply).length > 0;
-    if (!delivering && (!isLikelyActionRequest(state.prompt) || promiseWithoutActionReason(reply))) return decision;
+    if (!delivering && (!isLikelyActionRequest(deliveryTaskPrompt(state.prompt, ctx, key)) || promiseWithoutActionReason(reply))) return decision;
     const note = sourceDisclosureReason(state, reply);
     const reason = String(decision.reason || '').replace(/^全局交付真实性门禁：/, '');
     if (!note || reason.includes(note)) return decision;
@@ -2383,9 +2381,10 @@ export class CompletionIntegrityGuard {
 
   finalizeChecks(event = {}, ctx = {}, options = {}) {
     const key = completionRunKey(event, ctx);
-    const state = this.deliveryState(key, ctx);
+    const state = this.runs.get(key);
     const reply = String(event.lastAssistantMessage || assistantTextFromMessages(event.messages) || '');
     if (!state) return;
+    const prompt = deliveryTaskPrompt(state.prompt, ctx, key);
     // Asking the user is a legitimate pause, not a delivery claim.
     const lastTool = state.tools.at(-1);
     if (lastTool && lastTool.name === ASK_USER_TOOL && !lastTool.failed) return;
@@ -2396,7 +2395,7 @@ export class CompletionIntegrityGuard {
     // 否则“给我出 3 道程序阅读题”、卡片作答消息都会被当成执行任务再跑一轮。
     // 只看用户自己的话：模式注入的【学习工作台】等说明里有“运行练习”，不代表这轮要运行什么。
     if (state.tools.some(entry => entry.name === 'learning_activity' && !entry.failed)
-        && !FILE_OR_RUN_REQUEST.test(intentText(state.prompt).split(/\n\s*【/)[0])) return;
+        && !FILE_OR_RUN_REQUEST.test(intentText(prompt).split(/\n\s*【/)[0])) return;
     // In the four work modes this gate checks what the reply claims, not what
     // the user's wording appears to ask. A pause or plan is not a false claim
     // that an action was completed. The unrestricted mode keeps its old path.
@@ -2412,7 +2411,7 @@ export class CompletionIntegrityGuard {
     if (workFirstContext(ctx) && state.tools.filter(entry => !entry.failed).length >= 3
         && reply.trim() && [...reply.replace(/\s/g, '')].length < 10
         && !COMPLETION_CLAIM.test(reply) && !DELIVERY_CLAIM.test(reply) && !isHonestIncomplete(reply)
-        && !RESPONSE_ONLY_PREFIX.test(intentText(state.prompt))
+        && !RESPONSE_ONLY_PREFIX.test(intentText(prompt))
         && !/^(?:NO_REPLY|HEARTBEAT_OK)$/i.test(reply.trim())
         && !/MEDIA:|```|https?:\/\//i.test(reply)) {
       const nudged = this.softRevise(key, state, 'short-final', reply, '已经做过多步工作，但最终回复过短或被截断；请补上真实结果和打开方式，不要重做已完成的操作');
@@ -2420,16 +2419,16 @@ export class CompletionIntegrityGuard {
     }
     // Naming and prose are delivered in the answer itself. They do not need
     // fictitious file changes, even when an optional illustration was made.
-    if (workFirstContext(ctx) && workFirstTextTask(state.prompt)
+    if (workFirstContext(ctx) && workFirstTextTask(prompt)
         && !REPORTED_EXTERNAL_ACTION.test(actionClaimText(reply)) && !ENGLISH_EXTERNAL_ACTION.test(actionClaimText(reply))) return;
-    const actionRun = isLikelyActionRequest(state.prompt);
+    const actionRun = isLikelyActionRequest(prompt);
     // Reading or summarizing an attached document needs no tool/effect proof.
     // Its quoted wording ("正在生成", "未完成"...) is source content, not the
     // assistant's status report, and must not trigger a retry loop.
-    if (!actionRun && !reportedMutation && hasAttachedSourceContent(state.prompt)) return;
+    if (!actionRun && !reportedMutation && hasAttachedSourceContent(prompt)) return;
     // The same holds for text pasted inline to translate, polish or summarise,
     // as long as the instruction itself does not ask for a file or other effect.
-    const inline = inlineSourceInstruction(state.prompt);
+    const inline = inlineSourceInstruction(prompt);
     if (!reportedMutation && inline !== null && !isLikelyActionRequest(inline)
         && !/(?:保存|存成|存到|写入|导出|生成.{0,4}文件|发送|发到|发给|上传|发布)/.test(inline)) return;
     if (backgroundStillRunning(state) && !BACKGROUND_FINISHED_CLAIM.test(proseOnly(reply)) && !DELIVERY_CLAIM.test(reply)) return;
@@ -2465,18 +2464,18 @@ export class CompletionIntegrityGuard {
     // A bare "continue" is ambiguous, but a terminal completion claim is not:
     // it must never be accepted with zero execution evidence merely because
     // this turn's short follow-up omitted the original action wording.
-    if (!reportedMutation && inlineDeliveryOnly(state.prompt, reply, state)) return;
-    const requiresExecution = actionRun || (completionClaimed && (workClaim || !QUESTION_ONLY.test(state.prompt)));
+    if (!reportedMutation && inlineDeliveryOnly(prompt, reply, state)) return;
+    const requiresExecution = actionRun || (completionClaimed && (workClaim || !QUESTION_ONLY.test(prompt)));
     if (requiresExecution) {
       // A read/inspect request is still real work, but it does not need a
       // mutating tool. Count a successful observation only for non-mutation
       // requests; a request to edit/create/delete can never pass with reads.
-      const mutationRun = isMutationRequest(state.prompt) || reportedMutation;
+      const mutationRun = isMutationRequest(prompt) || reportedMutation;
       const executed = state.tools.some(entry => !entry.failed && (
-        EXECUTION_TOOL.test(entry.name) || isSessionOperationEvidence(entry, state.prompt) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
+        EXECUTION_TOOL.test(entry.name) || isSessionOperationEvidence(entry, prompt) || (!mutationRun && OBSERVATION_TOOL.test(entry.name))
       ));
       if (!executed && !delegatedWork(state)) return this.revise(key, '这是执行型请求，但本轮没有任何真实执行工具记录');
-      if (/skill|技能/i.test(state.prompt) && state.loadedSkills.size === 0) {
+      if (/skill|技能/i.test(prompt) && state.loadedSkills.size === 0) {
         return this.revise(key, '用户要求调用 Skill，但本轮没有读取 SKILL.md');
       }
     }
@@ -2490,7 +2489,7 @@ export class CompletionIntegrityGuard {
       const nudged = unseen && this.softRevise(key, state, 'inspection', reply, unseen);
       if (nudged) return nudged;
     }
-    if (isReadOnlyDiagnosticRequest(state.prompt)) {
+    if (isReadOnlyDiagnosticRequest(prompt)) {
       if (!state.tools.some(toolIsMechanicalCheck)) {
         return this.revise(key, '只读诊断尚未取得真实的主机检查结果');
       }
