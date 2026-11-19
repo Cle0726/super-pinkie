@@ -390,7 +390,7 @@
     pending = false;
     const shell = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
     if (!shell) return;
-    if (!document.documentElement.hasAttribute("data-laolao-classic-shell")) document.documentElement.setAttribute("data-laolao-classic-shell", "1");
+    if (document.documentElement.getAttribute?.("data-laolao-classic-shell") !== "1") document.documentElement.setAttribute("data-laolao-classic-shell", "1");
     ensureBreadcrumbs();
     ensureNavigation();
     ensureFooterBrand();
@@ -419,13 +419,17 @@
   });
   window.addEventListener("pagehide", () => railObserver?.disconnect(), { once: true });
   const mountSelector = '.shell--chat, .chat-workbench, .sidebar-shell__footer, .sidebar-nav, .dashboard-header__breadcrumb, .agent-chat__input, .sidebar-footer-actions';
-  const mounts = new MutationObserver(records => {
-    if (records.some(rec => [...rec.addedNodes, ...rec.removedNodes].some(
-      node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
-        || (node.nodeType === 1 && rec.target.matches?.('.sidebar-footer-actions, .sidebar-footer-bar'))
-    ))) schedule();
-  });
-  mounts.observe(document.documentElement, {childList: true, subtree: true});
+  if (typeof MutationObserver === "function") {
+    const mounts = new MutationObserver(records => {
+      if (records.some(rec => [...rec.addedNodes, ...rec.removedNodes].some(
+        node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
+          || (node.nodeType === 1 && rec.target.matches?.('.sidebar-footer-actions, .sidebar-footer-bar'))
+      ))) schedule();
+    });
+    mounts.observe(document.documentElement, {childList: true, subtree: true});
+  } else {
+    setInterval(schedule, 1200);
+  }
   window.addEventListener("pinkie:session-selected", schedule);
   window.addEventListener("pinkie:sidebar-gateway-ready", schedule);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", schedule, { once: true });

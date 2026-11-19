@@ -36,7 +36,7 @@
     window.__pinkieDeskVendors?.gsap?.ticker?.sleep();
   };
   const legacySelector = 'script[type="application/x-pinkie-legacy"][src]';
-  let signatureLoaded;
+  let signatureLoaded, signatureMotion;
   function activateScript(entry) {
     return new Promise((resolve) => {
       const script = document.createElement('script');
@@ -49,7 +49,7 @@
   }
   function loadSignature() {
     const entry = document.querySelector(legacySelector + '[data-pinkie-signature]');
-    if (entry) signatureLoaded = activateScript(entry);
+    if (entry) signatureLoaded = activateScript(entry).then(() => { signatureMotion = window.gsap; });
     return signatureLoaded;
   }
   function loadLegacy() {
@@ -80,6 +80,7 @@
       return true;
     },
     loadSignature,
+    get signatureMotion() { return signatureMotion; },
     list: () => [...modules].map(([name, rec]) => ({name, suspended: rec.suspended})),
   });
   // 后端那一半（services/mode-architecture/quiet-mode.mjs）：告诉网关现在是不是 Metre。网关那边 30 分钟不续就当不是，

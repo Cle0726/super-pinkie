@@ -1441,7 +1441,7 @@
     const onSettingsRoute = String(window.location?.pathname || "").startsWith("/settings");
     const toggle = onSettingsRoute ? document.querySelector(".config-view-toggle") : null;
     if (!toggle) {
-      state.root.hidden = true;
+      if (!state.root.hidden) state.root.hidden = true;
       document.body?.removeAttribute("data-pinkie-user-settings");
       return;
     }
@@ -1487,9 +1487,10 @@
     window.addEventListener("resize", updatePosition, {passive: true});
     window.setInterval(() => {
       syncPage();
+      if (state.root.hidden) return;
       syncUsage();
-      if (!state.root.hidden && state.wechat && Date.now() - state.wechat.lastPoll > 2500) void pollWechat();
-      if (!state.root.hidden) for (const key of Object.keys(MESSAGING_CONNECTIONS)) {
+      if (state.wechat && Date.now() - state.wechat.lastPoll > 2500) void pollWechat();
+      for (const key of Object.keys(MESSAGING_CONNECTIONS)) {
         if (state[key] && Date.now() - state[key].lastPoll > 2500) void pollMessaging(key);
       }
     }, 1000);

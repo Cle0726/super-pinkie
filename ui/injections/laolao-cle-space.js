@@ -13,7 +13,7 @@
  */
 import * as THREE from './laolao-vendor-three.module.min.js';
 
-const gsap = window.gsap;
+const gsap = window.__pinkieQuiet?.signatureMotion || window.gsap;
 const SIG = window.CleSignature;
 const STATES = {idle: 0, think: 1, read: 2, write: 3, edit: 4, done: 5};
 const VIEW = {cx: 96, cy: 54, k: 1 / 19};
