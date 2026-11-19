@@ -1,7 +1,7 @@
 // Metre 角色 agent（briefs/metre-roles-1118 PLAN 3.1 / 3.3 / 3.5 / 3.6 / 3.7 / 3.9）。
-// 纯函数 + 只读文件操作（除外部传入的快照读写外不修改工作区），支持按文件 mtime 缓存并在多插件实例间即时感知变更。
+// 读卡按文件 mtime 缓存；草稿是单独的工作区文件，从不参与读卡，只有显式采用才发布到 user/。
 // 注意：按 PLAN 2.8 与 R1-31 规定，一律用 metreRole / metre-roles 命名，不与极致思考的 ROLE_LABELS / childRoles 混用。
-import {createHash} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {openclawStateDir} from './openclaw-paths.mjs';
@@ -85,6 +85,50 @@ export const TOOL_CATEGORY_MAP = Object.freeze({
   video_generate: 'media',
   music_generate: 'media',
   tts: 'media',
+  // Inventory still classifies disabled tools by their widest effect. This
+  // does not grant them: the deny sets below always win over the category.
+  agents_list: 'read',
+  get_goal: 'read',
+  memory_get: 'read',
+  memory_search: 'read',
+  pinkie_model_capability: 'read',
+  pinkie_models: 'read',
+  pinkie_session_list: 'read',
+  session_status: 'read',
+  sessions_history: 'read',
+  sessions_list: 'read',
+  workbench_show: 'read',
+  ask_user: 'write',
+  canvas: 'write',
+  clekk_memory: 'write',
+  create_goal: 'write',
+  delivery_guard: 'write',
+  learning_activity: 'write',
+  learning_desk: 'write',
+  learning_library: 'write',
+  learning_material: 'write',
+  metre_memory: 'write',
+  pinkie_roles: 'write',
+  pinkie_session_message: 'write',
+  pinkie_session_title: 'write',
+  plan_update: 'write',
+  sessions_send: 'write',
+  skill_workshop: 'write',
+  update_goal: 'write',
+  cron: 'exec',
+  gateway: 'exec',
+  'llm-task': 'exec',
+  node_inference: 'exec',
+  nodes: 'exec',
+  pinkie_mode_ask: 'exec',
+  pinkie_session_start: 'exec',
+  pinkie_sessions: 'exec',
+  sessions_spawn: 'exec',
+  sessions_yield: 'exec',
+  subagents: 'exec',
+  message: 'net',
+  web_gpt: 'browser',
+  web_gpt_activity: 'browser',
 });
 
 // PLAN 3.6：roles 永远不给的工具（会话、记忆、计划、ask_user、定时、渠道、网关、学习、工作台 UI、桌面控制等）。
@@ -167,16 +211,15 @@ export function matchesWildcard(name, pattern) {
 }
 
 export function isToolKnown(toolName) {
-  const name = String(toolName || '').trim();
-  if (!name) return false;
-  return Object.hasOwn(TOOL_CATEGORY_MAP, name)
-    || ROLE_DISALLOWED_TOOLS.has(name)
-    || ROLE_DENIED_WILDCARDS.some(pat => matchesWildcard(name, pat));
+  return Boolean(toolCategory(toolName));
 }
 
 export function toolCategory(toolName) {
   const name = String(toolName || '').trim();
-  return Object.hasOwn(TOOL_CATEGORY_MAP, name) ? TOOL_CATEGORY_MAP[name] : '';
+  if (Object.hasOwn(TOOL_CATEGORY_MAP, name)) return TOOL_CATEGORY_MAP[name];
+  if (/^(?:workboard|wiki)_.+/.test(name)) return 'write';
+  if (/^(?:qqbot|feishu)_.+/.test(name)) return 'net';
+  return '';
 }
 
 export function assertAllToolsClassified(toolNames = KNOWN_GATEWAY_TOOLS) {
@@ -527,6 +570,89 @@ export function defaultRoleDirs(stateDir = openclawStateDir()) {
   };
 }
 
+const MAX_METRE_ROLE_DRAFT_BYTES = 16 * 1024;
+const METRE_ROLE_DRAFT_REF = /^[a-f0-9]{64}$/;
+
+function metreRoleDraftPaths(ref, options) {
+  const {id, metreRoleId} = ref;
+  if (!METRE_ROLE_DRAFT_REF.test(id || '') || !ROLE_ID_RE.test(metreRoleId || '')) throw new Error('找不到这张角色草稿');
+  options ??= {};
+  const stateDir = options.stateDir || openclawStateDir();
+  const defaults = defaultRoleDirs(stateDir);
+  const officialDir = options.officialDir ?? defaults.officialDir;
+  const userDir = options.userDir ?? defaults.userDir;
+  const rolesWorkspaceDir = options.rolesWorkspaceDir ?? defaults.rolesWorkspaceDir;
+  return {draft: path.join(officialDir, 'drafts', `${id}.md`), user: path.join(userDir, `${metreRoleId}.md`),
+    validation: {fileNameId: metreRoleId, source: 'user', rolesWorkspaceDir, stateDir, managedDir: options.managedDir}};
+}
+
+const metreRoleDraftHash = bytes => createHash('sha256').update(bytes).digest('hex');
+
+function readMetreRoleDraftBytes(file) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.size > MAX_METRE_ROLE_DRAFT_BYTES) throw new Error('角色草稿不是可读的小文件');
+  return fs.readFileSync(file);
+}
+
+export function saveMetreRoleDraft(ref, content, options) {
+  const {draft, validation} = metreRoleDraftPaths(ref, options);
+  if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > MAX_METRE_ROLE_DRAFT_BYTES) {
+    throw new Error('角色草稿需要一份不超过 16 KiB 的 Markdown');
+  }
+  const card = validateRoleCard(content, validation);
+  if (!card.ok) throw new Error(`角色草稿不合格：${card.errors.join('；')}`);
+  const bytes = Buffer.from(content, 'utf8');
+  const metreRoleDraftSha256 = metreRoleDraftHash(bytes);
+  fs.mkdirSync(path.dirname(draft), {recursive: true, mode: 0o700});
+  try { fs.writeFileSync(draft, bytes, {flag: 'wx', mode: 0o600}); }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    if (metreRoleDraftHash(readMetreRoleDraftBytes(draft)) !== metreRoleDraftSha256) throw new Error('已有不同内容的草稿，请重新起草');
+  }
+  return {card, metreRoleDraftSha256};
+}
+
+export function readMetreRoleDraft(ref, options) {
+  const bytes = readMetreRoleDraftBytes(metreRoleDraftPaths(ref, options).draft);
+  if (metreRoleDraftHash(bytes) !== ref.metreRoleDraftSha256) throw new Error('角色草稿已变更，请不要采用，重新起草后再看');
+  return bytes.toString('utf8');
+}
+
+// Publish the bytes just reviewed, not a mutable link to the draft; the
+// exclusive link exposes the complete card without replacing a user file.
+export function adoptMetreRoleDraft(ref, options) {
+  const {draft, user, validation} = metreRoleDraftPaths(ref, options);
+  const sameUserBytes = () => {
+    try { return metreRoleDraftHash(readMetreRoleDraftBytes(user)) === ref.metreRoleDraftSha256; }
+    catch { return false; }
+  };
+  let content;
+  try { content = readMetreRoleDraft(ref, options); }
+  catch (error) {
+    if (error.code === 'ENOENT' && sameUserBytes()) return;
+    throw error;
+  }
+  const card = validateRoleCard(content, validation);
+  if (!card.ok) throw new Error(`角色草稿不合格：${card.errors.join('；')}`);
+  fs.mkdirSync(path.dirname(user), {recursive: true, mode: 0o700});
+  const staged = path.join(path.dirname(user), `.metre-role-${randomUUID()}.tmp`);
+  fs.writeFileSync(staged, content, {flag: 'wx', mode: 0o600});
+  try {
+    try { fs.linkSync(staged, user); }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      if (!sameUserBytes()) throw new Error('已有同 ID 的自定义卡，原卡不会被覆盖；请换个 ID');
+    }
+  } finally {
+    fs.rmSync(staged, {force: true});
+  }
+  fs.rmSync(draft, {force: true});
+}
+
+export function rejectMetreRoleDraft(ref, options) {
+  fs.rmSync(metreRoleDraftPaths(ref, options).draft, {force: true});
+}
+
 function scanDirSignature(dir) {
   if (!dir) return {exists: false, files: [], sig: ''};
   let entries;
@@ -627,7 +753,7 @@ export function loadRoles(options = {}) {
   const userCount = roles.filter(r => r.source === 'user').length;
   const result = {
     roles,
-    byId: Object.fromEntries(roles.map(r => [r.id, r])),
+    byId: Object.assign(Object.create(null), Object.fromEntries(roles.map(r => [r.id, r]))),
     validIds: roles.map(r => r.id),
     invalid,
     warnings,

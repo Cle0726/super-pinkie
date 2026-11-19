@@ -100,44 +100,46 @@
 
 ### 2.2 `roles` 砍掉的 36 个工具（均由 `roles.tools.deny` 或插件按会话不注册剔除）
 
+收尾时补齐禁用项目在六类中的归属：按工具所能产生的主要作用分类，多用工具按可变更状态的用途归类。对照 `metre-roles.mjs` 验证了原抓包表的 58 个名称，原字数和估算 token 没有改动；归类不改变禁用规则。
+
 | 工具名 | 归类（3.7 节对照 / 角色不给原因） | JSON 字数 | 估算 token | 来源 |
 |---|---|---:|---:|---|
-| `cron` | 非六类 / 角色禁用（定时任务） | 14,750 | 4,336 | OpenClaw 内建 |
-| `learning_activity` | 非六类 / 角色禁用（学习模式专用） | 13,264 | 3,899 | 插件 |
-| `message` | 非六类 / 角色禁用（外部渠道发消息） | 6,498 | 1,910 | OpenClaw 内建 |
-| `skill_workshop` | 非六类 / 角色禁用（`UNUSED_OPENCLAW_TOOLS`） | 2,675 | 786 | OpenClaw 内建 |
+| `cron` | `exec`（角色禁用：定时任务） | 14,750 | 4,336 | OpenClaw 内建 |
+| `learning_activity` | `write`（角色禁用：学习模式专用） | 13,264 | 3,899 | 插件 |
+| `message` | `net`（角色禁用：外部渠道发消息） | 6,498 | 1,910 | OpenClaw 内建 |
+| `skill_workshop` | `write`（角色禁用：`UNUSED_OPENCLAW_TOOLS`） | 2,675 | 786 | OpenClaw 内建 |
 | `computer_flow` | `exec`（桌面自动化 / 角色不给） | 2,248 | 661 | 插件 |
-| `nodes` | 非六类 / 角色禁用（配对节点） | 2,182 | 641 | OpenClaw 内建 |
-| `sessions_spawn` | 非六类 / 角色禁用（禁止多层派活） | 1,926 | 566 | OpenClaw 内建 |
-| `gateway` | 非六类 / 角色禁用（网关控制） | 1,367 | 402 | OpenClaw 内建 |
-| `metre_memory` | 非六类 / 角色禁用（Metre 专属项目记忆） | 1,180 | 347 | 插件 |
-| `pinkie_sessions` | 非六类 / 角色禁用（会话管理） | 1,149 | 338 | 插件 |
-| `pinkie_session_start` | 非六类 / 角色禁用（禁止多层派活） | 1,110 | 326 | 插件 |
-| `memory_search` | 非六类 / 角色禁用（记忆工具不给） | 974 | 286 | OpenClaw 内建 |
-| `ask_user` | 非六类 / 角色禁用（用户看不到角色子会话） | 819 | 241 | 插件 |
-| `sessions_list` | 非六类 / 角色禁用（会话工具不给） | 758 | 223 | OpenClaw 内建 |
+| `nodes` | `exec`（角色禁用：配对节点） | 2,182 | 641 | OpenClaw 内建 |
+| `sessions_spawn` | `exec`（角色禁用：禁止多层派活） | 1,926 | 566 | OpenClaw 内建 |
+| `gateway` | `exec`（角色禁用：网关控制） | 1,367 | 402 | OpenClaw 内建 |
+| `metre_memory` | `write`（角色禁用：Metre 专属项目记忆） | 1,180 | 347 | 插件 |
+| `pinkie_sessions` | `exec`（角色禁用：会话管理） | 1,149 | 338 | 插件 |
+| `pinkie_session_start` | `exec`（角色禁用：禁止多层派活） | 1,110 | 326 | 插件 |
+| `memory_search` | `read`（角色禁用：记忆工具不给） | 974 | 286 | OpenClaw 内建 |
+| `ask_user` | `write`（角色禁用：用户看不到角色子会话） | 819 | 241 | 插件 |
+| `sessions_list` | `read`（角色禁用：会话工具不给） | 758 | 223 | OpenClaw 内建 |
 | `workbench_read` | `read`（工作台专用 / 角色已有 `read`/`code_search`） | 750 | 220 | 插件 |
 | `computer` | `exec`（桌面操控 / 角色不给） | 749 | 220 | 插件 |
-| `pinkie_mode_ask` | 非六类 / 角色禁用（禁止多层派活） | 717 | 211 | 插件 |
-| `sessions_send` | 非六类 / 角色禁用（会话工具不给） | 680 | 200 | OpenClaw 内建 |
-| `clekk_memory` | 非六类 / 角色禁用（记忆工具不给） | 665 | 195 | 插件 |
-| `plan_update` | 非六类 / 角色禁用（计划工具不给） | 643 | 189 | 插件 |
-| `memory_get` | 非六类 / 角色禁用（记忆工具不给） | 597 | 175 | OpenClaw 内建 |
-| `delivery_guard` | 非六类 / 角色禁用（内部门禁工具） | 584 | 172 | 插件 |
-| `create_goal` | 非六类 / 角色禁用（目标管理） | 528 | 155 | OpenClaw 内建 |
-| `update_goal` | 非六类 / 角色禁用（目标管理） | 528 | 155 | OpenClaw 内建 |
-| `pinkie_models` | 非六类 / 角色禁用（Metre 专属） | 479 | 141 | 插件 |
-| `session_status` | 非六类 / 角色禁用（会话工具不给） | 472 | 139 | OpenClaw 内建 |
-| `sessions_history` | 非六类 / 角色禁用（会话工具不给） | 468 | 138 | OpenClaw 内建 |
-| `web_gpt_activity` | 非六类 / 角色禁用（网页 GPT 协作） | 413 | 121 | 插件 |
-| `subagents` | 非六类 / 角色禁用（禁止多层派活） | 356 | 105 | OpenClaw 内建 |
-| `workbench_show` | 非六类 / 角色禁用（工作台 UI） | 340 | 100 | 插件 |
-| `pinkie_session_message` | 非六类 / 角色禁用（会话工具不给） | 307 | 90 | 插件 |
-| `pinkie_session_title` | 非六类 / 角色禁用（会话工具不给） | 261 | 77 | 插件 |
-| `sessions_yield` | 非六类 / 角色禁用（禁止多层派活） | 239 | 70 | OpenClaw 内建 |
-| `pinkie_session_list` | 非六类 / 角色禁用（会话工具不给） | 202 | 59 | 插件 |
-| `get_goal` | 非六类 / 角色禁用（目标管理） | 196 | 58 | OpenClaw 内建 |
-| `agents_list` | 非六类 / 角色禁用（禁止多层派活） | 193 | 57 | OpenClaw 内建 |
+| `pinkie_mode_ask` | `exec`（角色禁用：禁止多层派活） | 717 | 211 | 插件 |
+| `sessions_send` | `write`（角色禁用：会话工具不给） | 680 | 200 | OpenClaw 内建 |
+| `clekk_memory` | `write`（角色禁用：记忆工具不给） | 665 | 195 | 插件 |
+| `plan_update` | `write`（角色禁用：计划工具不给） | 643 | 189 | 插件 |
+| `memory_get` | `read`（角色禁用：记忆工具不给） | 597 | 175 | OpenClaw 内建 |
+| `delivery_guard` | `write`（角色禁用：内部门禁工具） | 584 | 172 | 插件 |
+| `create_goal` | `write`（角色禁用：目标管理） | 528 | 155 | OpenClaw 内建 |
+| `update_goal` | `write`（角色禁用：目标管理） | 528 | 155 | OpenClaw 内建 |
+| `pinkie_models` | `read`（角色禁用：Metre 专属） | 479 | 141 | 插件 |
+| `session_status` | `read`（角色禁用：会话工具不给） | 472 | 139 | OpenClaw 内建 |
+| `sessions_history` | `read`（角色禁用：会话工具不给） | 468 | 138 | OpenClaw 内建 |
+| `web_gpt_activity` | `browser`（角色禁用：网页 GPT 协作） | 413 | 121 | 插件 |
+| `subagents` | `exec`（角色禁用：禁止多层派活） | 356 | 105 | OpenClaw 内建 |
+| `workbench_show` | `read`（角色禁用：工作台 UI） | 340 | 100 | 插件 |
+| `pinkie_session_message` | `write`（角色禁用：会话工具不给） | 307 | 90 | 插件 |
+| `pinkie_session_title` | `write`（角色禁用：会话工具不给） | 261 | 77 | 插件 |
+| `sessions_yield` | `exec`（角色禁用：禁止多层派活） | 239 | 70 | OpenClaw 内建 |
+| `pinkie_session_list` | `read`（角色禁用：会话工具不给） | 202 | 59 | 插件 |
+| `get_goal` | `read`（角色禁用：目标管理） | 196 | 58 | OpenClaw 内建 |
+| `agents_list` | `read`（角色禁用：禁止多层派活） | 193 | 57 | OpenClaw 内建 |
 
 > R1 插件层按角色卡 `tools` 类别动态决定是否注册插件工具（如 `app_browser` 占 6,312 chars / ~1,855 tok，非 `browser` 角色根本不发此工具定义），实际非浏览器角色（如 `researcher`、`backend-fix`）固定输入还会进一步降到 **~12k–13k token**。
 

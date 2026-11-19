@@ -71,6 +71,7 @@
     if (card.kind === 'manage') {
       return proposalState(card, now) === 'pending' ? [['run', '确认' + (card.actionName || '')], ['dismiss', '不用了']] : [];
     }
+    if (card.kind === 'metre-role-draft') return card.state === 'pending' ? [['adopt', '采用'], ['reject', '不要']] : [];
     if (card.kind !== 'proposal' || proposalState(card, now) !== 'pending') return [];
     return card.initiation === 'offer' ? [['start', '开新会话'], ['here', '就在这里做']]
       : [['start', '开始'], ['dismiss', '不用了']];
@@ -272,8 +273,59 @@
     return box;
   }
 
+  function appendDecisionActions(actions, card, key) {
+    for (const [action, label] of cardActions(card)) {
+      const primary = action === 'start' || action === 'adopt';
+      const button = cardButton(label, null, primary ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
+      button.disabled = busy.has(card.id);
+      button.onclick = async () => {
+        if (busy.has(card.id) || key !== selected) return;
+        busy.add(card.id);
+        errors.delete(card.id);
+        paint();
+        try {
+          const result = await request('pinkie.session.card.act', {key, id: card.id, action}, 45_000);
+          if (key === selected && data) data.cards = data.cards.map(item => item.id === card.id ? result : item);
+          window.PinkieSessionList?.invalidate();
+        } catch (error) {
+          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
+        } finally {
+          busy.delete(card.id);
+          if (key === selected) paint();
+        }
+      };
+      actions.append(button);
+    }
+    if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
+  }
+
+  function renderMetreRoleDraft(card, key) {
+    const box = el('section', 'pinkie-session-card');
+    box.dataset.sessionCard = card.id;
+    box.dataset.state = card.state;
+    const title = `${card.title}（${card.metreRoleId}）`;
+    if (card.state !== 'pending') {
+      box.append(el('div', 'pinkie-session-card__compact', (card.state === 'adopted' ? '已采用 · ' : '已丢弃 · ') + title));
+      return box;
+    }
+    box.append(el('div', 'pinkie-session-card__title', '角色草稿 · ' + title),
+      el('div', 'pinkie-session-card__body', `${card.summary}。尚未生效，采用后才可派活。${card.overridesOfficial ? '采用后将优先用这张卡，而不是同 ID 的官方卡。' : ''}`));
+    const open = expanded.has(card.id);
+    const preview = cardButton(loadingFull.has(card.id) ? '正在读取草稿…' : open ? '收起草稿 ⌃' : '看完整草稿 ⌄',
+      () => void showFullPrompt(card, key), 'pinkie-session-card__text-button');
+    preview.disabled = loadingFull.has(card.id);
+    preview.setAttribute('aria-expanded', String(open));
+    box.append(preview);
+    if (open) box.append(el('pre', 'pinkie-session-card__body', fullPrompts.get(card.id) || ''));
+    const actions = el('div', 'pinkie-session-card__actions');
+    appendDecisionActions(actions, card, key);
+    box.append(actions);
+    return box;
+  }
+
   function renderCard(card, key) {
     if (card.kind === 'manage') return renderManageCard(card, key);
+    if (card.kind === 'metre-role-draft') return renderMetreRoleDraft(card, key);
     const proposal = card.kind === 'proposal';
     const state = proposal ? proposalState(card) : 'report';
     const box = el('section', 'pinkie-session-card');
@@ -291,13 +343,13 @@
       if (state === 'started' && card.childKey) header.append(link(card.childKey, card.modeName ? '去' + card.modeName + '打开 ›' : '打开 ›'));
       box.append(header);
       if (expanded.has(card.id)) box.append(el('div', 'pinkie-session-card__body', fullPrompts.get(card.id) || card.summary || ''));
+      if (card.roleSuggestion) box.append(el('div', 'pinkie-session-card__body', card.roleSuggestion));
       if (errors.has(card.id)) box.append(el('div', 'pinkie-session-card__error', errors.get(card.id)));
       return box;
     }
     const heading = el('div', 'pinkie-session-card__title');
     const role = /^agent:roles:pinkie-child:/.test(card.childKey) || card.consult ? card.roleName : '';
-    const label = role || card.modeName;
-    const where = label ? label + ' · ' : '';
+    const where = role ? role + ' · ' : (card.modeName ? card.modeName + ' · ' : '');
     if (proposal) heading.textContent = where + card.title;
     else heading.textContent = where + card.title + (card.failed ? ' 没做成' : card.consult ? ' 的回答' : ' 做完一轮');
     const body = proposal ? el('div', 'pinkie-session-card__body', expanded.has(card.id) ? fullPrompts.get(card.id) : card.summary)
@@ -320,28 +372,7 @@
       actions.append(full);
       if (!card.consult) actions.append(link(card.childKey, card.modeName ? '去' + card.modeName + '打开 ›' : '打开子会话 ›'));
     }
-    for (const [action, label] of cardActions(card)) {
-      const button = cardButton(label, null, action === 'start' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
-      button.disabled = busy.has(card.id);
-      button.onclick = async () => {
-        if (busy.has(card.id) || key !== selected) return;
-        busy.add(card.id);
-        errors.delete(card.id);
-        paint();
-        try {
-          const result = await request('pinkie.session.card.act', {key, id: card.id, action}, 45_000);
-          if (key === selected && data) data.cards = data.cards.map(item => item.id === card.id ? result : item);
-          window.PinkieSessionList?.invalidate();
-        } catch (error) {
-          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
-        } finally {
-          busy.delete(card.id);
-          if (key === selected) paint();
-        }
-      };
-      actions.append(button);
-    }
-    if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
+    appendDecisionActions(actions, card, key);
     if (actions.childNodes.length) box.append(actions);
     return box;
   }
@@ -418,7 +449,7 @@
     alignCards(thread, composer);
 
     clearTimeout(expiryTimer);
-    const expiresAt = Math.min(...cards.filter(card => cardActions(card).length).map(card => card.expiresAt));
+    const expiresAt = Math.min(...pending.map(card => card.expiresAt).filter(Number.isFinite));
     if (Number.isFinite(expiresAt)) expiryTimer = setTimeout(paint, Math.max(0, expiresAt - Date.now()));
   }
 

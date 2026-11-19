@@ -219,8 +219,9 @@ export function chooseRoleModel({config = {}, health = null, selfModel = '', req
   if (text) {
     const chosen = chooseChildModel({config, health, selfModel, requested: text, targetAgent: 'roles'});
     const vendor = vendorOf(chosen.model);
-    if (crossVendor && excluded.length > 0 && vendor && excluded.includes(vendor)) {
-      throw new Error(`「${chosen.model}」和被复核会话属于同一厂家（${vendor}），cross-vendor 复核必须换一家：用 pinkie_models 选另一家模型`);
+    if (crossVendor && excluded.length > 0) {
+      if (!vendor) throw new Error(`认不出「${chosen.model}」的厂家，无法确认跨厂家复核：用 pinkie_models 选已知厂家的一项`);
+      if (excluded.includes(vendor)) throw new Error(`「${chosen.model}」和被复核会话属于同一厂家（${vendor}），cross-vendor 复核必须换一家：用 pinkie_models 选另一家模型`);
     }
     return {...chosen, vendor};
   }

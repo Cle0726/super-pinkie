@@ -9,7 +9,7 @@ import {
   assertAllToolsClassified, checkDeniedCommand, checkRoleReportSections, checkRoleToolCall,
   clearRolesCache, extractReportSections, formatReadonlyMutationNotice, formatRoleCardPrompt,
   formatRolesBriefCatalog, isRolePluginToolAllowed, KNOWN_GATEWAY_TOOLS, loadRoles,
-  ROLES_AGENT_ID, ROLES_BASE, RoleMutationAuditor, validateRoleCard,
+  ROLES_AGENT_ID, ROLES_BASE, ROLE_DISALLOWED_TOOLS, toolCategory, RoleMutationAuditor, validateRoleCard,
 } from '../services/mode-architecture/metre-roles.mjs';
 import {chooseRoleModel, vendorOf} from '../services/mode-architecture/metre-models.mjs';
 import {
@@ -197,8 +197,127 @@ function makeLineageFixture(t, {roleDirs, config = null, roleMutatedFiles = null
     askTimeoutMs: 2000,
   };
   const lineage = new SessionLineage({logger: {warn() {}}}, options);
-  return {root, lineage, prefs, health, entries, running, stopped, sent, calls, options, config: defaultConfig};
+  return {root, lineage, prefs, health, entries, bindings, add, running, stopped, sent, calls, options, config: defaultConfig};
 }
+
+test('R4-3 ★ the third successful role-less dispatch is counted by the parent project and kind in 14 days', async t => {
+  const env = makeRoleEnv(t);
+  const f = makeLineageFixture(t, {roleDirs: env});
+  const sameProject = 'agent:metre:dashboard:same-project';
+  const differentProject = 'agent:metre:dashboard:different-project';
+  f.add(sameProject); f.bindings.set(sameProject, f.bindings.get(METRE));
+  f.add(differentProject); f.bindings.set(differentProject, {root: env.root});
+  let now = new Date('2026-11-19T00:00:00Z').getTime();
+  f.lineage.now = () => now;
+  const code = {title: '补测试', prompt: '给 Python 函数补一条单元测试', mode: 'project', initiation: 'user_asked', model: 'mm/workbuddy/glm-5.3'};
+  const dispatch = (key, id, extra) => f.lineage.start(key, 'some-run', {...code, ...extra}, id);
+  assert.equal((await dispatch(METRE, 'first')).roleSuggestion, undefined);
+  assert.equal((await dispatch(METRE, 'first')).roleSuggestion, undefined, 'idempotent resend is not a new dispatch');
+  assert.equal((await dispatch(differentProject, 'first')).roleSuggestion, undefined);
+  assert.equal((await dispatch(sameProject, 'writing', {prompt: '写一篇公众号的文章，主题是书店'})).roleSuggestion, undefined);
+  assert.equal((await dispatch(sameProject, 'second', {folder: env.root})).roleSuggestion, undefined, 'different task folder keeps the parent project');
+  assert.match((await dispatch(METRE, 'third')).roleSuggestion, /第 3 次没有合适的角色/);
+  assert.equal((await dispatch(METRE, 'fourth')).roleSuggestion, undefined);
+  now += 14 * 24 * 60 * 60_000 + 1;
+  assert.equal((await dispatch(METRE, 'after-window')).roleSuggestion, undefined);
+  const data = fs.readFileSync(path.join(f.root, 'metre-role-work.json'), 'utf8');
+  assert.doesNotMatch(data, /单元测试|公众号|agent:|test-proj/);
+  assert.equal(Object.keys(JSON.parse(data)).length, 1, 'expired records pruned');
+});
+
+test('R4-3 ★ only the user decision publishes a validated draft; reject and conflict never replace a card', async t => {
+  const env = makeRoleEnv(t);
+  const f = makeLineageFixture(t, {roleDirs: env});
+  const methods = new Map(), factories = new Map();
+  const api = {on() {}, registerGatewayMethod(name, handler, contract) { methods.set(name, {handler, contract}); },
+    registerTool(factory, {name}) { factories.set(name, factory); }};
+  let locked = false;
+  const lock = {isLocked: () => locked, assertUnlocked() { if (locked) throw new Error('Metre 已锁定'); }};
+  const lineage = registerSessionLineage(api, {...f.options, lock});
+  registerMetreRolesTool(api, lineage, {lock});
+  const tool = factories.get('pinkie_roles')({sessionKey: METRE, runId: 'draft-turn'});
+  assert.equal(factories.get('pinkie_roles')({sessionKey: PROJECT}), null);
+  const {handler, contract} = methods.get('pinkie.session.card.act');
+  assert.equal(contract.scope, 'operator.admin');
+  const decide = (id, action, key = METRE) => new Promise(resolve => handler({params: {id, key, action},
+    respond: (ok, value, error) => resolve({ok, value, error})}));
+  const prepare = (id, card, callId = id) => tool.execute(callId, {action: 'draft', id, card});
+  const draftDir = path.join(env.officialDir, 'drafts');
+  const draftFile = pending => path.join(draftDir, `${pending.id}.md`);
+  assert.equal((await prepare('broken-draft', 'no headers')).isError, true);
+  assert.equal(fs.existsSync(draftDir), false, 'invalid card never hits disk');
+  assert.equal((await prepare('../out', makeCard())).isError, true);
+  const raw = makeCard({id: 'custom-draft', name: '自长卡'});
+  const pending = (await prepare('custom-draft', raw)).details.draft;
+  assert.equal(pending.state, 'pending');
+  assert.equal((await prepare('custom-draft', raw)).details.draft.id, pending.id, 'retry is idempotent');
+  assert.equal(fs.readFileSync(draftFile(pending), 'utf8'), raw);
+  assert.equal(lineage.card(METRE, pending.id).card.prompt, raw);
+  assert.ok((await lineage.cards(METRE)).cards.some(card => card.id === pending.id));
+  assert.ok(!lineage.rolesRegistry().validIds.includes('custom-draft'));
+  const job = {title: '修回调', prompt: '修复回调后重跑测试', initiation: 'user_asked', model: 'mm/workbuddy/glm-5.3', role: 'custom-draft'};
+  await assert.rejects(lineage.start(METRE, 'try-draft', job, 'before'), /没有「custom-draft」这个角色/);
+  assert.equal((await tool.execute('cannot-adopt', {action: 'adopt', id: pending.id})).isError, true);
+  assert.equal((await decide(pending.id, 'adopt', PROJECT)).ok, false);
+  locked = true;
+  assert.equal((await decide(pending.id, 'adopt')).ok, false);
+  locked = false;
+  f.prefs.setGlobal({metreRoles: false});
+  assert.equal((await decide(pending.id, 'adopt')).ok, false);
+  f.prefs.setGlobal({metreRoles: true});
+  fs.writeFileSync(draftFile(pending), raw + '\n');
+  assert.match((await decide(pending.id, 'adopt')).error.message, /草稿已变更/);
+  assert.ok(!lineage.rolesRegistry().validIds.includes('custom-draft'));
+  fs.writeFileSync(draftFile(pending), raw);
+  const adopted = await decide(pending.id, 'adopt');
+  assert.equal(adopted.value.state, 'adopted');
+  assert.equal(fs.existsSync(draftFile(pending)), false);
+  assert.equal(fs.readFileSync(path.join(env.userDir, 'custom-draft.md'), 'utf8'), raw);
+  assert.equal((await decide(pending.id, 'adopt')).value.state, 'adopted');
+  assert.equal((await lineage.start(METRE, 'try-draft', job, 'after')).roleSource, 'user');
+  assert.equal(lineage.rolesRegistry().byId['custom-draft'].sourceLabel, '自定义');
+
+  const other = makeCard({id: 'other-draft'});
+  const reject = (await prepare('other-draft', other)).details.draft;
+  assert.equal((await decide(reject.id, 'reject')).value.state, 'rejected');
+  assert.equal(fs.existsSync(draftFile(reject)), false);
+  assert.ok(!lineage.rolesRegistry().validIds.includes('other-draft'));
+  const conflict = (await prepare('custom-draft', raw.replace('自长卡', '另一个名字'), 'conflict')).details.draft;
+  assert.match((await decide(conflict.id, 'adopt')).error.message, /原卡不会被覆盖/);
+  assert.equal(fs.readFileSync(path.join(env.userDir, 'custom-draft.md'), 'utf8'), raw);
+  assert.equal(fs.existsSync(draftFile(conflict)), true);
+});
+
+test('a pending role dispatch cannot start after roll-back or a role-card change', async t => {
+  const env = makeRoleEnv(t);
+  const f = makeLineageFixture(t, {roleDirs: env});
+  const source = path.join(env.officialDir, 'backend-fix.md');
+  fs.writeFileSync(source, makeCard());
+  const offer = await f.lineage.start(METRE, 'pending', {title: '修回调', prompt: '只处理调用方', role: 'backend-fix', initiation: 'offer'}, 'proposal');
+  f.prefs.setGlobal({metreRoles: false});
+  await assert.rejects(f.lineage.act(METRE, offer.id, 'start'), /角色功能当前不可用/);
+  f.prefs.setGlobal({metreRoles: true});
+  fs.writeFileSync(source, makeCard().replace('复现不了就停下', '复现不了先记录再停下'));
+  await assert.rejects(f.lineage.act(METRE, offer.id, 'start'), /角色卡已变更/);
+  assert.equal(f.sent.length, 0);
+});
+
+test('R4-3 uses the configured isolated state when no role directory override was supplied', async t => {
+  const env = makeRoleEnv(t);
+  const previous = process.env.OPENCLAW_STATE_DIR;
+  process.env.OPENCLAW_STATE_DIR = env.stateDir;
+  t.after(() => {
+    if (previous === undefined) delete process.env.OPENCLAW_STATE_DIR;
+    else process.env.OPENCLAW_STATE_DIR = previous;
+  });
+  const f = makeLineageFixture(t);
+  const id = 'default-dir';
+  const {draft} = await f.lineage.draftMetreRole(METRE, 'real-shape', {id, card: makeCard({id})}, 'already-known');
+  assert.equal(draft.state, 'pending');
+  assert.ok(fs.existsSync(path.join(env.stateDir, 'workspace-metre/roles/drafts', `${draft.id}.md`)));
+  assert.ok(!f.lineage.rolesRegistry().validIds.includes(id));
+  assert.equal((await f.lineage.act(METRE, draft.id, 'reject')).state, 'rejected');
+});
 
 // ---------- R1-1 ★ & X2 ★ ----------
 test('R1-1 ★ 读卡与校验：逐项覆盖全部必填字段、格式、字数、工具、reads 越界、skills 降级、用户覆盖、坏格式不抛异常、mtime 即时重载', t => {
@@ -564,6 +683,9 @@ test('R1-12..R1-15 & X3 ★ 每轮注入、压缩后仍在、运行中改卡不�
 test('R1-20 ★ / R1-21 ★ / R1-22 ★ / R1-23 工具归类完整性、只读拦截、deny_commands 对抗、只读改动审计提醒', async t => {
   // R1-20 ★: 全部 58 个网关工具均有归类；加一个未归类假工具立刻报错
   assert.equal(assertAllToolsClassified(KNOWN_GATEWAY_TOOLS), true);
+  assert.equal(assertAllToolsClassified([...ROLE_DISALLOWED_TOOLS]), true, 'disabled is not a category');
+  assert.equal(toolCategory('pinkie_roles'), 'write');
+  assert.equal(isRolePluginToolAllowed('pinkie_roles', {tools: ['write']}), false, 'category never overrides deny');
   assert.throws(() => assertAllToolsClassified([...KNOWN_GATEWAY_TOOLS, 'mystery_unmapped_tool_999']), /mystery_unmapped_tool_999/);
 
   // 插件按卡过滤
@@ -835,6 +957,13 @@ test('R1-24 ★ / R1-25 ★ 模型挑选（五条件逐一测 + 缺条件报错 
     title: '复核换厂', prompt: '检查', initiation: 'user_asked', role: 'reviewer', of: [devChild.key],
   }, 'c-rev-auto');
   assert.notEqual(vendorOf(revAuto.model), 'deepseek');
+  const verify = {title: '复核', prompt: '检查', initiation: 'user_asked', role: 'reviewer'};
+  await assert.rejects(f.lineage.start(METRE, 'r-cv', {...verify, of: ['agent:roles:pinkie-child:missing']}, 'missing'), /当前 Metre 会话/);
+  f.config.models.providers.mm.models.push({id: 'custom-route-unidentified', input: ['text']});
+  f.health.models.set('mm/custom-route-unidentified', {okAt: 1});
+  await assert.rejects(f.lineage.start(METRE, 'r-cv', {...verify, of: [devChild.key], model: 'mm/custom-route-unidentified'}, 'unknown'), /认不出.*厂家/);
+  f.lineage.updateLineage(devChild.key, {metreRoleOutputModel: 'mm/workbuddy/glm-5.3'});
+  await assert.rejects(f.lineage.start(METRE, 'r-cv', {...verify, of: [devChild.key], model: 'mm/workbuddy/glm-5.3'}, 'actual'), /同一厂家（zhipu）/);
   // 没写 of 时放行，结果里有提醒
   const revNoOf = await f.lineage.start(METRE, 'r-cv', {
     title: '无of复核', prompt: '检查', initiation: 'user_asked', role: 'reviewer',

@@ -728,8 +728,10 @@ def install(home=None) -> bool:
             changed |= _copy_if_changed(research_skill, workspace / "skills/pinkie-deep-research/SKILL.md")
 
     changed |= _install_web_gpt_collab(repo_root, state)
-    changed |= _tidy_metre_workspace(home, backup_root)
+    # The role payload can create workspace-metre on a fresh profile. Tidy
+    # that directory on this pass too, rather than changing it on reinstall.
     changed |= _install_metre_role_assets(repo_root, home, backup_root)
+    changed |= _tidy_metre_workspace(home, backup_root)
 
     before_choice = json.dumps(data, ensure_ascii=False, sort_keys=True)
     _ensure_roles_agent(data, home / ".openclaw/workspace-roles")
