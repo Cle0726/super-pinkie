@@ -1936,9 +1936,13 @@ function Get-GatewayListeners {
 }
 function Get-VerifiedGateway([int]$GatewayId) {
   $process = Get-CimInstance Win32_Process -Filter "ProcessId=$GatewayId" -ErrorAction Stop
-  if (-not $process -or -not $process.ExecutablePath) { throw 'gateway-owned-by-another-app' }
+  if (-not $process -or -not $process.ExecutablePath) {
+    Write-UpdateLog "gateway port $GatewayPort is held by #$GatewayId whose executable cannot be read"
+    throw 'gateway-owned-by-another-app'
+  }
   $prefix = (Get-Item -LiteralPath $TargetDir).FullName.TrimEnd('\') + '\'
   if ($process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return $process }
+  Write-UpdateLog "gateway port $GatewayPort is held by $($process.Name)#$GatewayId at $($process.ExecutablePath) (install: $prefix; record: $GatewayRecord)"
 
   # A previous copy can leave its gateway behind. Only its recorded listener
   # with the expected bundled node executable and gateway arguments is ours.

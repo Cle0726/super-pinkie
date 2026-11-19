@@ -3,6 +3,7 @@
 All executables, ports, configuration and update files belong to a temporary
 fixture. No installed App, real gateway, account data or system proxy is used.
 """
+import contextlib
 import ctypes
 import hashlib
 import json
@@ -221,8 +222,24 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
         # left empty. Now the previous version is copied back instead.
         self._run_case('locked_rollback')
 
+    @contextlib.contextmanager
+    def _reporting_tempdir(self):
+        holder=tempfile.TemporaryDirectory(prefix='pinkie-portable-update-')
+        try:yield holder.name
+        finally:
+            self._report_holders(holder.name)
+            holder.cleanup()
+    def _report_holders(self,temp):
+        # Before the temporary folder is removed: name every process still inside it.
+        name=Path(temp).name
+        probe=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*%s*' -or $_.ExecutablePath -like '*%s*' } | "
+            "ForEach-Object { '{0}#{1} {2}' -f $_.Name,$_.ProcessId,$_.CommandLine }"%(name,name)],
+            capture_output=True,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        text=probe.stdout.decode('utf-8',errors='replace').strip()
+        if text:print('\n[still running inside %s]\n%s'%(name,text[-4000:]),file=sys.stderr)
     def _run_case(self, gateway_kind):
-        with tempfile.TemporaryDirectory(prefix='pinkie-portable-update-') as temp:
+        with self._reporting_tempdir() as temp:
             root=Path(temp).resolve()
             csc=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
             self.assertTrue(csc.is_file(),'Windows .NET Framework compiler is required for the process fixture')
