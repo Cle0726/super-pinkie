@@ -14,7 +14,11 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 import {openclawStateDir} from '../../services/mode-architecture/openclaw-paths.mjs';
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// CI replays the same instrument against a detached, pinned main checkout.
+// Only this tool honors the override; the product does not.
+const REPO = process.env.PINKIE_INVENTORY_SOURCE_ROOT
+  ? fs.realpathSync(path.resolve(process.env.PINKIE_INVENTORY_SOURCE_ROOT))
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PERSONA_DIR = {main: 'chat', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'neutral', metre: 'metre'};
 export const SAMPLE_PROMPT = '帮我把登录页的按钮改成蓝色，顺便跑一下测试，看看有没有别的地方也要改';
 export const LEGACY_MODES = Object.freeze(['main', 'project', 'thinking', 'learning', 'unrestricted']);

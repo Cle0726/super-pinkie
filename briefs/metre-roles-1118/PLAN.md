@@ -4,6 +4,7 @@
 - 计划：Windows 端 Opus 5.5，2026-11-18。执行：别的 AI，Mac 端、Windows 端都可以，靠 `PROGRESS.md` 交接。验收：另一个 AI，按 `ACCEPTANCE.md` 做。
 - 配套文件：`ACCEPTANCE.md`（每项怎样算过）、`PROGRESS.md`（接力记录，执行者每做完一步就写）。
 - 写计划时核对过的代码，都以 `1d83ad3b` 为准，文中的行号也是这一版的。动手前先 `git pull`，行号变了以实际为准。
+- 2026-11-19 用户确认：保留 `1d83ad3b` / R0 做历史对照；实际集成后的 Z1/Z3/Z4 回归验收锚定在角色功能之前的主线 `99c3716a30370f74c371f981083522eb18af4e31`。历史快照不改，两份结果分别写；其他必过项目不变。
 
 ---
 
@@ -171,6 +172,7 @@ reads: [playbooks/debugging.md, playbooks/code-stacks.md]
 - **工具**：`tools.deny` 先照碧琪 agent 的 `UNUSED_OPENCLAW_TOOLS` 砍，再按 R0 量出来的表继续砍角色都用不上的；会话、记忆、计划、`ask_user` 这些插件工具不给。按卡的 `tools` 类别，插件工具在注册时就按会话决定给不给。目标是固定输入不超过 30k token（G4）。
 - **权限**：放行策略和 Metre 一致，命令直接执行、不弹确认。**但是不带无限制模式的破甲注入**：验收时会抓一份 `roles` 的请求原文，查里面有没有破甲提示词和 `OPENCLAW_UR_INJECT` 标记。
 - **工作区内容**：`playbooks/`（从 `personas/project/playbooks/` 复制，包括 `toolbox.mjs`、`machine-check.*`；只是放在磁盘上，不注入）、`refs/AESTHETICS.md`（从 `personas/thinking/` 复制）。另放几个空的占位文件，免得 OpenClaw 自动生成默认模板（Metre 批 0 的做法，见 `setup.py` 的 `_tidy_metre_workspace`）。复制是单向的，源文件一个字不改。
+- OpenClaw 自维护的 `openclaw-workspace-state.json` 是运行状态，不是人设也不注入；验收单独清点。OpenClaw 可以在首轮消耗空的 `BOOTSTRAP.md`，不为过验收删除运行状态。
 - 不建 `memory/`，不接记忆引擎，不跑心跳，不读也不写 Metre 的项目记忆。
 
 ### 3.7 工具类别和拦截
@@ -299,7 +301,7 @@ reads: [playbooks/debugging.md, playbooks/code-stacks.md]
 
 ### R2 · 试点对比
 
-按第六节跑。达到判定标准才进 R3；达不到就停下，把数字报给用户，不要自己改判定标准。
+按第六节的本次 8 轮门槛跑。达不到就写具体证据和差距，不补造记录或擅自扩大模型用量。
 
 ### R3 · 余下 29 张卡
 
@@ -307,7 +309,7 @@ reads: [playbooks/debugging.md, playbooks/code-stacks.md]
 
 - 过格式检查和「不抄手册」检查。
 - 附 2 道样题，放在 `tools/metre/roles/samples/<id>.json`，内容有简报、要准备的文件、检查项。
-- 每道样题在 `roles` agent 上跑 1 遍，由验收用的模型（和执行模型不同厂家）按检查项判，两题都要过。不过的改卡重跑，最多改两次；还不过，就在 `PROGRESS.md` 里标「未达标」，不要放宽检查项。
+- 本次先完成 66 份题的静态校验与 8 轮中的独立实跑判分。扩展评估再对每题用 `roles` agent 实跑 1 次，两题都须过；判分仍要异厂，未达标不得改判据来记过。
 
 ### R4 · 用户卡、自长卡、安装更新、文档
 
@@ -322,6 +324,10 @@ Metre 用顶档模型，子会话用轻档或中档，按 `ACCEPTANCE.md` 的 R5
 ---
 
 ## 六、对比实验怎么做（R2）
+
+**本次（用户 2026-11-19 确认）**：四张试点卡各取一题，按 A/C 配对跑 8 轮。实跑前固定样题、夹具种子与免费模型，A/C 简报和执行模型一致。执行与异厂判分均用明确免费的路由，不加付费回退。研究/修复题的 X4 夹具随同一简报复测，不用额外模型轮次。完成标准以 `ACCEPTANCE.md` 的 8 轮规则为准。
+
+**后续扩展方案（保留原设计，不作为本次 8 轮的通过证据）**：
 
 - 4 张试点卡，每张 2 道样题，一共 8 题。
 - 三组：

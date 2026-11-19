@@ -1054,7 +1054,8 @@ test('R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 汇报检查、主 MD 字数、
 // This regression snapshot is pinned to main before Roles, not the historical
 // R0 artifact. Historical comparison is reported separately during acceptance.
 test('five legacy mode snapshots match the pinned main regression baseline', async () => {
-  const res = await verifyBaseline(path.resolve('briefs/metre-roles-1118/main-inject-baseline.json'));
+  const baseline = process.env.PINKIE_METRE_MAIN_BASELINE || 'briefs/metre-roles-1118/main-inject-baseline.json';
+  const res = await verifyBaseline(path.resolve(baseline));
   assert.equal(res.ok, true, `老模式基线被意外改动：${res.diffs.join('; ')}`);
 });
 

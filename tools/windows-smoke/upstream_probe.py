@@ -42,6 +42,9 @@ DISPATCH_PROMPT = "METRE-SIDEBAR-PROBE"
 DISPATCH_TITLE = "整理侧栏验收提纲"
 DISPATCH_CHILD_MODEL = "sidebar-worker-free"
 DISPATCH_TOOL_ID = "call_sidebar_acceptance"
+ROLE_PROBE = "METRE-ROLE-PACKAGE-PROBE"
+ROLE_TITLE = "角色验收：整理本机夹具"
+ROLE_CHILD_MODEL = "role-worker-free"
 # Mid-turn retries are hidden control messages with this prefix.
 WATCHDOG_PREFIX = "[pinkie-watchdog]"
 # The file whose absence kept the plugin from loading in v2.5.23.
@@ -154,6 +157,8 @@ class FakeUpstream:
         self.server = None
         self.release_sidebar_child = threading.Event()
         self.dispatch_issued = threading.Event()
+        self.release_role_child = threading.Event()
+        self.role_dispatch_issued = threading.Event()
         self.dispatch_lock = threading.Lock()
 
     def start(self):
@@ -185,9 +190,19 @@ class FakeUpstream:
                 if isinstance(last, list):
                     last = " ".join(str(part.get("text", "")) for part in last if isinstance(part, dict))
                 tool_call = None
-                if DISPATCH_PROMPT in str(last) and any(
-                    tool.get("function", {}).get("name") == "pinkie_session_start" for tool in payload.get("tools", [])
-                ):
+                session_start = next((tool["function"] for tool in payload.get("tools", [])
+                                      if tool.get("function", {}).get("name") == "pinkie_session_start"), None)
+                if ROLE_PROBE in str(last) and session_start:
+                    options = session_start.get("parameters", {}).get("properties", {}).get("role", {}).get("enum", [])
+                    with upstream.dispatch_lock:
+                        if "researcher" in options and not upstream.role_dispatch_issued.is_set():
+                            upstream.role_dispatch_issued.set()
+                            tool_call = {"id": "call_role_package_probe", "type": "function", "function": {
+                                "name": "pinkie_session_start", "arguments": json.dumps({
+                                    "initiation": "user_asked", "role": "researcher", "title": ROLE_TITLE,
+                                    "model": f"probe/{ROLE_CHILD_MODEL}", "prompt": "只读本机隔离夹具，不联网。"
+                                }, ensure_ascii=False)}}
+                elif DISPATCH_PROMPT in str(last) and session_start:
                     with upstream.dispatch_lock:
                         if not upstream.dispatch_issued.is_set():
                             upstream.dispatch_issued.set()
@@ -196,8 +211,7 @@ class FakeUpstream:
                                     "initiation": "user_asked", "mode": "project", "title": DISPATCH_TITLE,
                                     "model": f"probe/{DISPATCH_CHILD_MODEL}", "prompt": "只回复：侧栏验收完成。"
                                 }, ensure_ascii=False)}}
-                if payload.get("model") == DISPATCH_CHILD_MODEL:
-                    upstream.release_sidebar_child.wait(90)
+                role_card = payload.get("model") == ROLE_CHILD_MODEL and "【角色卡：调研员】" in json.dumps(payload, ensure_ascii=False)
                 upstream.requests.append({
                     "at": round(time.time(), 1),
                     "path": self.path,
@@ -205,7 +219,12 @@ class FakeUpstream:
                     "model": payload.get("model"),
                     "dispatch_tool": bool(tool_call),
                     "watchdog": WATCHDOG_PREFIX in str(last),
+                    "role_card": role_card,
                 })
+                if payload.get("model") == DISPATCH_CHILD_MODEL:
+                    upstream.release_sidebar_child.wait(90)
+                elif payload.get("model") == ROLE_CHILD_MODEL:
+                    upstream.release_role_child.wait(90)
                 if behaviour == "not-found":
                     body = json.dumps({"error": {"message": "404 page not found", "type": "not_found_error"}}).encode()
                     self.send_response(404)
@@ -277,6 +296,8 @@ class FakeUpstream:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     def stop(self):
+        self.release_role_child.set()
+        self.release_sidebar_child.set()
         if self.server:
             self.server.shutdown()
             self.server.server_close()
@@ -293,6 +314,7 @@ def configure(profile, port):
         providers[name] = provider(port)
     providers["probe"] = provider(port)
     providers["probe"]["models"].append({**providers["probe"]["models"][0], "id": DISPATCH_CHILD_MODEL})
+    providers["probe"]["models"].append({**providers["probe"]["models"][0], "id": ROLE_CHILD_MODEL})
     data.setdefault("agents", {}).setdefault("defaults", {})["model"] = {"primary": "probe/probe-model", "fallbacks": []}
     config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -760,6 +782,78 @@ def verify_metre_sidebar(page, out, upstream):
     return {"passed": True, "child": child, "engine": "packaged WebView2"}
 
 
+def verify_metre_role_sidebar(page, out, upstream):
+    """Dispatch an official role through the packaged UI and inspect its real board."""
+    parent = f"agent:metre:roles-smoke-{uuid.uuid4().hex[:8]}"
+    upstream.plan = ["ok"]
+    first_request = len(upstream.requests)
+    page.goto(f"http://127.0.0.1:18789/chat?session={parent}", wait_until="domcontentloaded", timeout=90_000)
+    page.wait_for_function("""() => document.documentElement.dataset.laolaoMode === 'metre'
+      && !document.getElementById('laolao-splash') && Boolean(window.__laolaoSidebar?.gwRequest)
+      && Boolean(window.__pinkieMetreBoard?.open)""", timeout=90_000)
+    try:
+        page.evaluate("""async key => {
+          const rpc = window.__laolaoSidebar.gwRequest;
+          await rpc('sessions.create', {key, agentId: 'metre', model: 'probe/probe-model'}, 15000);
+          localStorage.setItem('pinkie:session-sidebar:fold:' + key, '1');
+        }""", parent)
+        baton = page.get_by_role("radio", name="Baton", exact=True)
+        if baton.get_attribute("aria-checked") != "true":
+            baton.click(timeout=20_000)
+        page.locator('.pinkie-baton__seg[aria-label="Baton"][aria-checked="true"]').wait_for(timeout=20_000)
+        result = page.evaluate("""([key, prompt]) => window.__laolaoSidebar.gwRequest(
+          'chat.send', {sessionKey: key, message: prompt, deliver: false, idempotencyKey: key}, 20000)
+        """, [parent, ROLE_PROBE])
+        if result.get("status") not in ("started", "ok"):
+            raise RuntimeError("Metre role test message did not start")
+
+        entry = page.locator('[data-laolao-group="__metre-dispatched"] [data-session-key]').filter(has_text=ROLE_TITLE)
+        entry.get_by_text("调研员", exact=True).wait_for(timeout=75_000)
+        child = entry.get_attribute("data-session-key")
+        if not child or not child.startswith("agent:roles:pinkie-child:"):
+            raise RuntimeError("packaged Metre sidebar did not group the role child correctly")
+        board = page.evaluate("""key => window.__laolaoSidebar.gwRequest(
+          'pinkie.metre.board', {sessionKey: key}, 15000)""", parent)
+        row = next((s for s in board.get("sessions", []) if s["key"] == child), None)
+        cards = board.get("runtime", {}).get("metreRoles") or {}
+        if not row or row.get("role") != "researcher" or row.get("roleName") != "调研员" or row.get("roleSource") != "official":
+            raise RuntimeError("role task identity is missing on the packaged board")
+        if cards.get("valid") != 33 or cards.get("invalid") != 0:
+            raise RuntimeError("the fresh packaged gateway did not load 33 valid official roles")
+
+        menu_button = page.locator("button.laolao-mode-switcher:visible").first
+        modes_by_theme = {}
+        for theme in ("light", "dark"):
+            page.emulate_media(color_scheme=theme)
+            # Set the isolated WebView's app theme as well as the OS media query:
+            # the package can persist a scheme independently of the OS.
+            page.evaluate("""theme => {
+              document.documentElement.dataset.theme = theme;
+              document.documentElement.dataset.themeMode = theme;
+            }""", theme)
+            menu_button.click(timeout=15_000)
+            menu = page.locator(".laolao-mode-menu:visible")
+            menu.wait_for(timeout=15_000)
+            modes = menu.locator("button[data-mode]").evaluate_all("(rows) => rows.map(row => row.dataset.mode)")
+            if "metre" not in modes or "roles" in modes:
+                raise RuntimeError(f"unexpected user-visible mode menu: {modes}")
+            modes_by_theme[theme] = modes
+            page.screenshot(path=str(out / f"metre-roles-menu-{theme}.png"), timeout=15_000)
+            menu_button.click(timeout=15_000)
+            menu.wait_for(state="hidden", timeout=15_000)
+        page.evaluate("() => window.__pinkieMetreBoard.open()")
+        page.locator("#pk-metre-board .pk-mb-role-label").filter(has_text="调研员").wait_for(timeout=25_000)
+        page.screenshot(path=str(out / "metre-roles-board.png"), timeout=15_000)
+        role_requests = [r for r in upstream.requests[first_request:] if r["model"] == ROLE_CHILD_MODEL]
+        if not role_requests or not role_requests[0]["role_card"]:
+            raise RuntimeError("the isolated model capture did not contain the official role card")
+        return {"passed": True, "child": child, "role": row["role"], "model": row.get("model"),
+                "validCards": cards["valid"], "invalidCards": cards["invalid"], "modes": modes_by_theme,
+                "engine": "packaged WebView2", "provider": "synthetic loopback only"}
+    finally:
+        upstream.release_role_child.set()
+
+
 def run_metre_sidebar_only(exe, profile, out, launch, kill_app, profile_env):
     """Re-run this one acceptance case with an isolated, real packaged window."""
     from playwright.sync_api import sync_playwright
@@ -790,7 +884,7 @@ def run_metre_sidebar_only(exe, profile, out, launch, kill_app, profile_env):
         upstream.stop()
 
 
-def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False):
+def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False, metre_roles=False):
     from playwright.sync_api import sync_playwright
 
     port = free_port()
@@ -837,6 +931,12 @@ def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False
                     summary["metre_sidebar"] = verify_metre_sidebar(page, out, upstream)
                 except Exception as error:
                     summary["metre_sidebar"] = {"passed": False, "error": str(error)}
+            if metre_roles:
+                sampler.label = "metre-roles"
+                try:
+                    summary["metre_roles"] = verify_metre_role_sidebar(page, out, upstream)
+                except Exception as error:
+                    summary["metre_roles"] = {"passed": False, "error": str(error)}
             browser.close()
         stop_gateway_profiler(profiler)
         profiler = None
@@ -871,6 +971,9 @@ def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False
             shutil.copytree(sessions, out / "probe-transcripts", dirs_exist_ok=True)
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
-    summary["passed"] = (not metre_sidebar or summary.get("metre_sidebar", {}).get("passed") is True) and len(summary["cases"]) == 6 and not any(
-        result["problems"] for result in summary["cases"].values())
+    summary["passed"] = (
+        (not metre_sidebar or summary.get("metre_sidebar", {}).get("passed") is True)
+        and (not metre_roles or summary.get("metre_roles", {}).get("passed") is True)
+        and len(summary["cases"]) == 6 and not any(result["problems"] for result in summary["cases"].values())
+    )
     return summary

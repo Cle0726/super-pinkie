@@ -505,9 +505,37 @@ def measure_loads(browser, out, label, reloads=2):
     return runs
 
 
-def scenario(label, exe, profile, out, old_exe=None):
+def metre_install_receipt(exe, profile):
+    import runpy
+
+    helper = Path(__file__).resolve().parents[1] / "metre/roles/package-receipt.py"
+    return runpy.run_path(str(helper))["snapshot"](runtime_dir(exe).parent, profile / "home")
+
+
+def seed_metre_user_data(exe, profile):
+    state = profile / "home/.openclaw"
+    template = (runtime_dir(exe).parent / "personas/metre/roles/researcher.md").read_text(encoding="utf-8-sig")
+    role = template.replace("id: researcher", "id: upgrade-smoke-probe", 1)
+    if role == template:
+        raise RuntimeError("role specimen missing its official id")
+    files = {
+        "workspace-metre/roles/user/upgrade-smoke-probe.md": role.encode("utf-8"),
+        "workspace/metre-upgrade-user-note.txt": "原用户笔记 · Windows 安装验收\n".encode("utf-8"),
+    }
+    for name, data in files.items():
+        target = state / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # The older app has already initialized this isolated profile.
+        # Do not replace an existing file even in a test profile.
+        with target.open("xb") as output:
+            output.write(data)
+    return files
+
+
+def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary = {"label": label, "exe": str(exe)}
     env = profile_env(profile)
+    preserved = {}
     if old_exe:
         process, ready, seconds = launch(old_exe, env, out, f"{label}-old")
         summary["old"] = {"exe": str(old_exe), "gateway_ready": ready, "seconds": seconds}
@@ -516,6 +544,8 @@ def scenario(label, exe, profile, out, old_exe=None):
         summary["old"]["files"] = collect_files(profile, out, f"{label}-old")
         kill_app(old_exe.parent)
         process.wait(timeout=30) if process.poll() is None else None
+        if metre_roles and ready:
+            preserved = seed_metre_user_data(exe, profile)
         # Judge the new version on its own log lines only.
         shutil.rmtree(profile / "local/SuperPinkie/logs", ignore_errors=True)
     process, ready, seconds = launch(exe, env, out, label)
@@ -523,6 +553,17 @@ def scenario(label, exe, profile, out, old_exe=None):
     try:
         if ready:
             summary["agents"] = agents_list(runtime_dir(exe), env, out, label)
+            if metre_roles:
+                receipt = metre_install_receipt(exe, profile)
+                if old_exe:
+                    if not preserved:
+                        raise RuntimeError("the older packaged App did not start; upgrade not verified")
+                    state = profile / "home/.openclaw"
+                    receipt["preservedUserFiles"] = {
+                        name: (state / name).read_bytes() == value for name, value in preserved.items()}
+                    if not all(receipt["preservedUserFiles"].values()):
+                        raise RuntimeError("the packaged update modified fixture user data")
+                summary["metre_roles"] = receipt
             summary["ui"] = drive_ui(out, label)
             summary["service_health"] = service_health()
             summary["native_ui"] = capture_native_ui(exe, env, out, label, process.pid)
@@ -535,6 +576,7 @@ def scenario(label, exe, profile, out, old_exe=None):
     plugin_methods = summary.get("ui", {}).get("plugin_methods", {})
     summary["passed"] = bool(
         ready
+        and (not metre_roles or bool(summary.get("metre_roles")))
         and not summary.get("agents", {}).get("missing", AGENTS)
         and fresh_mode_identities_ok(label, summary.get("agents", {}))
         and not summary["files"]["log_problems"]
@@ -562,9 +604,13 @@ def main():
     parser.add_argument("--metre-sidebar", action="store_true",
                         help="also dispatch a local fixture task and open its sidebar row in packaged WebView2")
     parser.add_argument("--metre-sidebar-only", action="store_true", help="run only the packaged Metre sidebar case")
+    parser.add_argument("--metre-roles", action="store_true",
+                        help="also verify the private agent, 33 cards, user data and native role dispatch")
     args = parser.parse_args()
     if args.metre_sidebar and not args.upstream_probe:
         parser.error("--metre-sidebar requires --upstream-probe")
+    if args.metre_roles and (not args.upstream_probe or not args.old_app or args.metre_sidebar_only):
+        parser.error("--metre-roles requires --upstream-probe and --old-app")
 
     subprocess.run([sys.executable, str(Path(__file__).with_name('desktop_shot.py')), '--prepare'], check=True)
 
@@ -591,13 +637,14 @@ def main():
         (out / "summary.json").write_text(json.dumps({"metre_sidebar": result}, ensure_ascii=False, indent=2), encoding="utf-8")
         log(f"[probe] metre-sidebar: {result}")
         return 0 if result["passed"] else 1
-    summaries["fresh"] = scenario("fresh", exe, work / "fresh", out)
+    summaries["fresh"] = scenario("fresh", exe, work / "fresh", out, metre_roles=args.metre_roles)
     if args.upstream_probe:
         import upstream_probe
 
         try:
             summaries["upstream_probe"] = upstream_probe.run(
-                exe, work / "fresh", out, launch, kill_app, profile_env, metre_sidebar=args.metre_sidebar)
+                exe, work / "fresh", out, launch, kill_app, profile_env, metre_sidebar=args.metre_sidebar,
+                metre_roles=args.metre_roles)
         except Exception as error:
             summaries["upstream_probe"] = {"passed": False, "error": repr(error), "cases": {}}
             kill_app(exe.parent)
@@ -606,7 +653,8 @@ def main():
         for name, result in summaries["upstream_probe"].get("cases", {}).items():
             log(f"[probe] {name}: requests={result.get('requests')} final={result.get('final')} problems={result['problems']}")
     if args.old_app:
-        summaries["upgrade"] = scenario("upgrade", exe, work / "upgrade", out, old_exe=find_exe(args.old_app))
+        summaries["upgrade"] = scenario("upgrade", exe, work / "upgrade", out, old_exe=find_exe(args.old_app),
+                                        metre_roles=args.metre_roles)
     (out / "summary.json").write_text(json.dumps(summaries, ensure_ascii=False, indent=2), encoding="utf-8")
     passed = all(value.get("passed") for key, value in summaries.items() if key != "host")
     log(f"overall passed={passed}")

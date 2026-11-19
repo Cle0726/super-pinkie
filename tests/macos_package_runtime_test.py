@@ -35,6 +35,15 @@ class MacPackageRuntimeTests(unittest.TestCase):
             shutil.copy2(ROOT / "services/state_root.py", services / "state_root.py")
             shutil.copytree(ROOT / "services/mode-architecture", services / "mode-architecture")
             checker.check(root, node)
+            for part in ("metre/roles", "project/playbooks"):
+                shutil.copytree(ROOT / "personas" / part, root / "personas" / part)
+            visual = root / "personas/thinking"
+            visual.mkdir(parents=True)
+            shutil.copy2(ROOT / "personas/thinking/AESTHETICS.md", visual)
+            self.assertEqual(checker.check(root, node, metre_roles=True)["officialCount"], 33)
+            (root / "personas/metre/roles/researcher.md").unlink()
+            with self.assertRaisesRegex(RuntimeError, "33 byte-identical"):
+                checker.check(root, node, metre_roles=True)
             (services / "mode-architecture/openclaw-paths.mjs").unlink()
             with self.assertRaisesRegex(RuntimeError, "openclaw-paths"):
                 checker.check(root, node)

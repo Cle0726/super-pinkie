@@ -48,6 +48,14 @@
 
 复跑定向 Node：`node --test --test-reporter=tap --test-concurrency=1 tests/metre-roles.test.mjs tests/metre-role-pilot.test.mjs tests/metre-role-navigation.test.cjs tests/session-cross-mode-ui.test.cjs tests/metre-dispatch.test.mjs tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/metre-board.test.mjs`。相关 Python 单文件用 `python -B -X utf8 -m unittest discover -s tests -p <测试文件.py> -v`。全量使用 `node tools/release-gate/run-tests.mjs --jobs <并发数>`，**未**用 `--update`。
 
+## 11-19 复修 · 执行记录，不是独立验收
+
+- `e4a28ec0`：调研卡和题目不准把单一来源当结论；修正 PATCH 的标准出处；视觉样题以结构、媒介等选项和原图／小图对照判定。33 卡与 66 题静态 linter 通过；未用模型判分。
+- `6d7758b3`：修复 Windows 资料抽取依赖 POSIX `nice` 的问题，用不含 Git Bash 的 PATH 验证，原有资料搜索／缓存断言保留。用 Windows CI 有界并发完整重跑，原两个 Chromium 失败均恢复；[CI 44542940731](https://github.com/Cle0726/super-pinkie/actions/runs/44542940731) 中 Windows 和 macOS 检查过，Ubuntu 仍失败在旧模式跨平台快照（不是待测模型质量）。
+- 用户确认以 `99c3716a` 判实际回归，并保留 `1d83ad3b` 与 R0 为历史对照。Linux CI 改为在同一 runner 使用同一量具，从固定主线重采比较输入，不覆盖历史或 Windows 归档；Windows 本机同一隔离 HOME 两端重放的 15 条及工具快照整体 SHA-256 均为 `b2db9ecccd1a2484d12756e2c10347ea787c8967a15bc87355605cd0ca89e4fe`，`diffs=[]`、路径等价替换 0 次。新 Node 定向 31 过、0 败、6 个外部资料工具依赖项跳过。
+- 新增真正打包用的角色收据检查：Mac 对包内插件和 33 张卡做临时 profile 快照；Windows 工作流对真实桌面侧栏、看板、33 张卡、上一版升级与用户字节保存取证。Windows 本机 Python 的 Mac 包结构夹具 2/2（含故意缺卡拒绝）、Windows mode agent 19/19、角色安装 2/2，回环测试桩能分别发旧方式和新角色两种调用。实际发行包没有动用正式本机配置，由 CI 另跑，夹具通过不能代替桌面实测。
+- 用户确认缩成 8 轮且模型都免费。此条不是任何真实轮次完成证明；需要四题 A/C 成对证据、真实 usage 和异厂免费判分。顶档流程和原扩展规模留作后续。本轮任何必过项未齐仍不合并。
+
 ## 记录
 
 ### 11-18 计划（Windows，Opus 5.5）
