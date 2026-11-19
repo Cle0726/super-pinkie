@@ -402,6 +402,62 @@ test('verifyAfterCommand preserves user external skill dirs and plugin paths whi
   assert.deepEqual(afterFix.plugins.entries['my-ext-plugin'], {enabled: true});
 });
 
+test('verifyAfterCommand preserves user custom tools.deny entries while always enforcing skill_workshop', () => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const initial = {
+    plugins: {enabled: true, entries: {'pinkie-mode-architecture': {enabled: true, hooks: {allowPromptInjection: true, allowConversationAccess: true}}}},
+    agents: {
+      list: [
+        {id: 'main', workspace: ws, tools: {deny: ['workboard_*', 'skill_workshop', 'canvas']}},
+        {id: 'project', workspace: path.join(state, 'workspace-project')},
+        {id: 'unrestricted', workspace: path.join(state, 'workspace-unrestricted'), tools: {deny: ['custom_u']}},
+      ],
+    },
+  };
+  fs.writeFileSync(configFile, JSON.stringify(initial));
+  guard.baseline();
+
+  // Adding a user deny entry and removing an optional entry like canvas is kept with zero restore
+  const userEdit = structuredClone(initial);
+  userEdit.agents.list[0].tools.deny = ['workboard_*', 'skill_workshop', 'web_fetch'];
+  userEdit.agents.list[2].tools.deny = [];
+  fs.writeFileSync(configFile, JSON.stringify(userEdit));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).agents.list[0].tools.deny, ['workboard_*', 'skill_workshop', 'web_fetch']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).agents.list[2].tools.deny, []);
+
+  // Removing skill_workshop triggers restore, puts skill_workshop back, and keeps user's web_fetch
+  const strippedWorkshop = structuredClone(userEdit);
+  strippedWorkshop.agents.list[0].tools.deny = ['workboard_*', 'web_fetch'];
+  fs.writeFileSync(configFile, JSON.stringify(strippedWorkshop));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).agents.list[0].tools.deny, ['workboard_*', 'web_fetch', 'skill_workshop']);
+
+  // Tampering with another product key restores that key without wiping user's custom tools.deny
+  const tamperedPlugin = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  tamperedPlugin.plugins.entries['pinkie-mode-architecture'].enabled = false;
+  fs.writeFileSync(configFile, JSON.stringify(tamperedPlugin));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  const afterPluginFix = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  assert.equal(afterPluginFix.plugins.entries['pinkie-mode-architecture'].enabled, true);
+  assert.deepEqual(afterPluginFix.agents.list[0].tools.deny, ['workboard_*', 'web_fetch', 'skill_workshop']);
+
+  // Deleting agent.tools completely restores skill_workshop
+  const deletedTools = structuredClone(afterPluginFix);
+  delete deletedTools.agents.list[0].tools;
+  fs.writeFileSync(configFile, JSON.stringify(deletedTools));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).agents.list[0].tools.deny, ['skill_workshop']);
+
+  // On a mode that started without tools, adding tools.deny enforces skill_workshop while keeping user entries
+  const addedProjectTools = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  addedProjectTools.agents.list[1].tools = {deny: ['browser']};
+  fs.writeFileSync(configFile, JSON.stringify(addedProjectTools));
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')).agents.list[1].tools.deny, ['browser', 'skill_workshop']);
+});
+
 test('release (guard-build.json) and dev mode end-to-end: pinkie_model_capability + RPC work while protected config/persona stay locked', async () => {
   for (const isRelease of [true, false]) {
     const {root, home, state, ws} = sandbox();

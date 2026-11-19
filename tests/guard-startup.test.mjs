@@ -125,4 +125,21 @@ test('repairConfig leaves an already-official config untouched', () => {
   const state = '/u/.openclaw';
   const config = {plugins: {entries: {}}, agents: {list: [{id: 'main', workspace: '/u/.openclaw/workspace'}]}, skills: {load: {extraDirs: ['/u/.openclaw/user-skills']}}};
   assert.deepEqual(repairConfig(config, {stateDir: state, userSkillsDir: '/u/.openclaw/user-skills'}), []);
+
+  // User custom tools.deny entries stay untouched as long as skill_workshop is denied; missing skill_workshop is appended without dropping user entries
+  const withCustomDeny = {
+    plugins: {entries: {}},
+    agents: {list: [{id: 'main', workspace: '/u/.openclaw/workspace', tools: {deny: ['skill_workshop', 'web_fetch']}}]},
+    skills: {load: {extraDirs: ['/u/.openclaw/user-skills']}},
+  };
+  assert.deepEqual(repairConfig(withCustomDeny, {stateDir: state, userSkillsDir: '/u/.openclaw/user-skills'}), []);
+  assert.deepEqual(withCustomDeny.agents.list[0].tools.deny, ['skill_workshop', 'web_fetch']);
+
+  const missingWorkshop = {
+    plugins: {entries: {}},
+    agents: {list: [{id: 'main', workspace: '/u/.openclaw/workspace', tools: {deny: ['web_fetch']}}]},
+    skills: {load: {extraDirs: ['/u/.openclaw/user-skills']}},
+  };
+  assert.deepEqual(repairConfig(missingWorkshop, {stateDir: state, userSkillsDir: '/u/.openclaw/user-skills'}), ['agents.list.main.tools.deny']);
+  assert.deepEqual(missingWorkshop.agents.list[0].tools.deny, ['web_fetch', 'skill_workshop']);
 });

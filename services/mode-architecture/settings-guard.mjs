@@ -363,7 +363,8 @@ export class SettingsGuard {
         let config = null; try { config = JSON.parse(raw); } catch {}
         const baseViewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
         const requiredAllowed = PRODUCT_PLUGIN_IDS.filter(id => Boolean(snap.official?.plugins?.entries?.[id]) || (Array.isArray(snap.official?.plugins?.allow) && snap.official.plugins.allow.includes(id)));
-        const viewCtx = {...baseViewCtx, requiredAllowed};
+        const requiredAgentDeny = requiredAgentDenyMap(snap.official);
+        const viewCtx = {...baseViewCtx, requiredAllowed, requiredAgentDeny};
         if (!snap.configKnown) {
           // 插件加载时还没有配置文件（Windows 第一次启动）：第一份读得出的配置就当基准，不改它。
           if (config && typeof config === 'object') Object.assign(snap, {configKnown: true, product: productView(config, baseViewCtx), official: structuredClone(config), lastGood: structuredClone(config)});
@@ -464,6 +465,16 @@ const EXEC_WATCH_FILES = ['AGENTS.md', 'SOUL.md', 'IDENTITY.md', 'HEARTBEAT.md']
 const EXEC_WATCH_DIRS = ['persona', 'playbooks'];
 const BASELINES = Symbol.for('pinkie.settingsGuard.baselines');
 const PRODUCT_PLUGIN_IDS = ['pinkie-mode-architecture', 'pinkie-project-scope', 'pinkie-first-person-renderer'];
+const REQUIRED_AGENT_DENY = ['skill_workshop'];
+function requiredAgentDenyMap(config = {}) {
+  const out = {};
+  for (const agent of Array.isArray(config.agents?.list) ? config.agents.list : []) {
+    if (!PRODUCT_AGENTS.includes(agent?.id)) continue;
+    const hasTools = Boolean(agent.tools && typeof agent.tools === 'object');
+    out[agent.id] = hasTools ? [...REQUIRED_AGENT_DENY] : [];
+  }
+  return out;
+}
 function statKey(file) {
   try { const s = fs.lstatSync(file); return `${s.isSymbolicLink() ? 'L' : ''}${s.size}:${s.mtimeMs}:${s.ino}`; } catch { return 'missing'; }
 }
@@ -497,11 +508,23 @@ function sameResolvedPath(a, b, home = os.homedir()) {
   return norm(path.resolve(expandHome(a, home))) === norm(path.resolve(expandHome(b, home)));
 }
 // openclaw.json 的产品键（和 installer/guard/guard.mjs 的 repairConfig 管的是同一批）。
-function productView(config = {}, {stateDir = '', home = os.homedir(), userSkillsDir = '', requiredAllowed = null} = {}) {
+function productView(config = {}, {stateDir = '', home = os.homedir(), userSkillsDir = '', requiredAllowed = null, requiredAgentDeny = null} = {}) {
   const plugins = config.plugins || {};
   const agents = {};
   for (const agent of Array.isArray(config.agents?.list) ? config.agents.list : []) {
-    if (PRODUCT_AGENTS.includes(agent?.id)) agents[agent.id] = {workspace: agent.workspace ?? null, contextInjection: agent.contextInjection ?? null, toolsDeny: agent.tools?.deny ?? null};
+    if (!PRODUCT_AGENTS.includes(agent?.id)) continue;
+    const hasTools = Boolean(agent.tools && typeof agent.tools === 'object');
+    const deny = Array.isArray(agent.tools?.deny) ? agent.tools.deny : [];
+    const mustDeny = requiredAgentDeny
+      ? (Array.isArray(requiredAgentDeny[agent.id]) && requiredAgentDeny[agent.id].length
+        ? requiredAgentDeny[agent.id]
+        : (hasTools ? REQUIRED_AGENT_DENY : []))
+      : [];
+    agents[agent.id] = {
+      workspace: agent.workspace ?? null,
+      contextInjection: agent.contextInjection ?? null,
+      missingToolsDeny: mustDeny.filter(name => !deny.includes(name)),
+    };
   }
   const loadPaths = Array.isArray(plugins.load?.paths) ? plugins.load.paths : null;
   const extraDirs = Array.isArray(config.skills?.load?.extraDirs) ? config.skills.load.extraDirs : null;
@@ -527,7 +550,8 @@ function productView(config = {}, {stateDir = '', home = os.homedir(), userSkill
 function applyProductView(config, official, ctx = {}) {
   const {stateDir = '', home = os.homedir(), userSkillsDir = ''} = ctx;
   const requiredAllowed = PRODUCT_PLUGIN_IDS.filter(id => Boolean(official?.plugins?.entries?.[id]) || (Array.isArray(official?.plugins?.allow) && official.plugins.allow.includes(id)));
-  const want = productView(official, {...ctx, requiredAllowed});
+  const requiredAgentDeny = requiredAgentDenyMap(official);
+  const want = productView(official, {...ctx, requiredAllowed, requiredAgentDeny});
   const put = (obj, key, value) => { if (value === null || value === undefined) delete obj[key]; else obj[key] = structuredClone(value); };
   const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : (config.plugins = {});
   put(plugins, 'enabled', want.enabled);
@@ -566,8 +590,15 @@ function applyProductView(config, official, ctx = {}) {
       continue;
     }
     put(agent, 'workspace', values.workspace); put(agent, 'contextInjection', values.contextInjection);
-    if (values.toolsDeny !== null) { agent.tools = agent.tools && typeof agent.tools === 'object' ? agent.tools : {}; agent.tools.deny = structuredClone(values.toolsDeny); }
-    else if (agent.tools) delete agent.tools.deny;
+    // 禁用工具清单：和启动校验一致，只守住必须禁用的内部项（skill_workshop），保留用户自己加减的禁用项。
+    const mustDeny = Array.isArray(requiredAgentDeny[id]) && requiredAgentDeny[id].length
+      ? requiredAgentDeny[id]
+      : (agent.tools && typeof agent.tools === 'object' ? REQUIRED_AGENT_DENY : []);
+    if (mustDeny.length) {
+      agent.tools = agent.tools && typeof agent.tools === 'object' ? agent.tools : {};
+      const deny = Array.isArray(agent.tools.deny) ? agent.tools.deny : (agent.tools.deny = []);
+      for (const name of mustDeny) if (!deny.includes(name)) deny.push(name);
+    }
   }
   if (want.hooksInternal !== null) { config.hooks = config.hooks || {}; config.hooks.internal = structuredClone(want.hooksInternal); }
   else if (config.hooks) delete config.hooks.internal;
