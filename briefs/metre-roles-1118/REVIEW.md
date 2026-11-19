@@ -1,213 +1,183 @@
-# Metre 角色 agent · 独立验收
+# Metre 角色 agent · 最终验收报告
 
-- 日期：2026-11-19（Pacific Time）。审查对象：远端 `origin/feat/metre-roles-1118` 在开工时的 `9dba1a4c6c47238527c4fbc56f913babc496d12e`；基线：`1d83ad3b6e5001880143fea68392161897c4c1a7`。报告提交不改变被测代码。
-- **结论：不通过。** 四条执行分支都已推送，但成果没有汇入指定总分支。指定分支只新增三份文档，没有角色 agent、角色卡、样题或角色测试。不能拿其他分支的可运行代码替它通过验收。
-- 只引用 Git、实测日志、快照和采样原始 `usage`；`PROGRESS*.md` 只用于找证据。没有可供本轮正式抽签的 R2/R3 记录和可验收的产品构建，**没有进行模型判分**，也没有把定向单测、静态校验或执行者自评当成异厂判分。补测须记录执行与判分两侧的实际模型 ID 和厂家，先确认不同厂家再打分。
-- 验收人与执行者分开：本次只增写本报告，不改产品代码、不变更验收阈值、不合并任何分支。问题见文末交接表。
+**最终判定：不通过，不合并 `main`。** 角色机制和草稿链路有实测证据；全量门禁未绿，原基线逐字要求未达，真实模型与正式安装验收仍缺证据。
 
-## 交付去向（独立核对，不计入总分支的通过项）
+- 日期：2026-11-19（Pacific Time）。被测源码：`afcb23869f8ca1a6229de405bd476d7d9e161c46`，远端 `feat/metre-roles-1118`、[草稿 PR #29](https://github.com/Cle0726/super-pinkie/pull/29)。对照：原基线 `1d83ad3b6e5001880143fea68392161897c4c1a7`，重基主线 `99c3716a30370f74c371f981083522eb18af4e31`。上一份对仅含文档的分支的验收保留在 `68d6d732`；不把它当本候选的结果。
+- 这次另建干净工作树亲自复跑。不把任何 `PROGRESS*.md` 的判定当证据。本轮仅写验收报告，不修产品。用户保留原模型限制；本轮没有外部模型调用、没有提交任何同厂或身份无法核实的判分。模拟模型只用来验证代码路径，不作为作者、独立判分方或真实 usage。
 
-`git ls-remote --heads origin 'feat/metre-roles-1118*' '*metre*role*'` 查到五条远端分支，HEAD 如下。对 `-1` 至 `-4` 分别执行 `git merge-base --is-ancestor <执行分支的远端 SHA> 9dba1a4c`，全部退出 `1`。对本机 `7334a743` 做同样的祖先检查，四条都退出 `0`。`gh pr list --repo Cle0726/super-pinkie --state all --limit 100 --json number,headRefName,baseRefName,state,title,url` 返回 26 个 PR；按源/目标分支和 Metre roles/角色标题检查，未匹配相关 PR。
+## 证据与命令
 
-| 远端执行分支 | 实际提交 | 核对到的交付 |
-|---|---|---|
-| `feat/metre-roles-1118-1` | `a6d2d998`（领先总分支 7 个提交） | R0 测量、旧模式注入基准；读卡、派发、每轮注入、选模及拦截机制和单测。前置归档 `d58d37e2` 早于产品实现 `d713f082`。读取原隔离会话 `4d082840-8de9-4d59-a6a8-e9a383782d35.jsonl`，`usage.input=14480`、`cacheRead=0`、`cacheWrite=0`，精简原型固定输入复算得 14,480；不是本次目标的成品测量。 |
-| `feat/metre-roles-1118-2` | `5544f045`（5 个提交） | 15 张编码/执行卡、15 份样题文件（30 题）、格式/抄手册/样题校验器。 |
-| `feat/metre-roles-1118-3` | `aebb3aaf`（7 个提交） | 18 张研究/内容/把关卡、18 份样题文件（36 题），把关样题含预埋问题。 |
-| `feat/metre-roles-1118-4` | `882e5ce2`（5 个提交） | 角色资产安装和备份、看板、三份文档及三张看板夹具截图。截图不是正式 App 新装和升级实测。 |
+本机证据根目录：`C:/Users/34786/Documents/Codex/2026-11-19/origin-feat-metre-roles-1118-briefs/work/final-review-20261119-123915`。下文证据文件相对于此目录。`target/` 是被测提交；原始提示、会话及请求体留在隔离证据目录，不提交。复现命令在对应的工作树运行，使用临时的 HOME、OpenClaw、App 和临时目录。
 
-本机有两份整合：`7334a743` 是原基线上的四分支合并；`fc525a6e` 是在当时的 `main`（`14037f66`）上重新整合的版本，已有本地交接和一份旧 `REVIEW.md`，并非四条提交的 Git 原样合并。未发现这两个整合提交由远端分支承载。开工时 `origin/main=99c3716a`，原 Metre 基线已在 `main`；`git rev-list --left-right --count origin/main...fc525a6e` 得 `36  9`。不能把旧本地整合版当作已对齐最新 `main` 的候选。
-
-对 `fc525a6e` 做了只读抽检（**不是本次签字对象**）：
-
-- `node tools/metre/roles/lint-cards.mjs --all-33 --samples --json` 退出 0：`ok: true`、`count: 33`、`globalErrors: []`，33 份双题 JSON 共 66 道。另从 `personas/project/playbooks/debugging.md` 取 48 字插入临时 `backend-fix.md`，针对该副本运行 `node tools/metre/roles/lint-cards.mjs --json <临时卡>`，退出 1：`正文存在与 playbooks/debugging.md 连续 40 字以上完全相同的片段`。这两项都是静态检查。
-- `node --test --test-concurrency=1 tests/metre-roles.test.mjs tests/metre-role-navigation.test.cjs tests/metre-board.test.mjs`：`tests 26 / pass 26 / fail 0`。`python -B -X utf8 -m unittest discover -s tests -p metre_roles_install_test.py -v`：`Ran 2 tests`、`OK`。后者是临时目录安装测试，不是正式安装包。
-- `node --test tests/session-cross-mode-ui.test.cjs` 在 `fc525a6e` 得 8/10，失败包括 `the card names the other mode` 与 `the changed scripts are served under new cache names`；在开工时的 `origin/main` 得 10/10，指定分支则为 8/9（旧缓存名断言红）。这是源代码断言的证据，不等于抓到真实桌面故障。
-- `git show fc525a6e:services/mode-architecture/session-lineage.mjs` 中 `registerMetreRolesTool` 的工具调用只有 `{id: {type: 'string'}}`，执行只走 `rolesInfo`；未找到计划 3.12 的第三次提示、`draft` 与采用/不要流程。`git ls-tree -r fc525a6e -- tools/metre/roles/compose.mjs` 也为空。在检查的分支中没有完整 48 轮记录、66 道通过或真实平台发布证据，不能说已经做到验收可合并。
-
-## 复现与证据索引
-
-工作树 `target/`、`base/`、`local-candidate/`、`current-main/` 均为钉住 SHA 的隔离工作树；日志和脚本仅留本机，不把会话原文、提示原文或凭据提交到仓库。证据根目录：`C:/Users/34786/Documents/Codex/2026-11-19/origin-feat-metre-roles-1118-briefs/work/acceptance-20261119-110426`。下表日志名相对于此目录。
-
-| 索引 | 在目标工作树的复现命令 / 观察到的输出 |
+| 索引 | 本轮亲自复跑与原文 |
 |---|---|
-| **GIT** | `git diff --name-status 1d83ad3b 9dba1a4c` 只出 `A` 的 `briefs/metre-roles-1118/{ACCEPTANCE,PLAN,PROGRESS}.md`（见 `target-diff.txt`）。`git ls-tree -r --name-only 9dba1a4c -- services/mode-architecture/metre-roles.mjs personas/metre/roles tools/metre/roles briefs/metre-roles-1118/MEASURE.md` 输出为空。后面的 `R1/R2/R3/R4` 不使用旁支文件替代。 |
-| **GATE** | `node tools/release-gate/run-tests.mjs`（无 `--update`）→ `Z1-gate.txt`/`Z1-gate.exit`。以同一 Node `v24.16.0`、Python `3.12.10`、临时 profile 做单文件对照；Python：`python -B -X utf8 -m unittest discover -s tests -p <文件名> -v`，Node：`node --test --test-reporter=tap tests/<文件名>`，见 `z1-related/summary.json` 与 `z1-failed/summary.json`。 |
-| **HOST** | 开工/收工各 `Get-Item -LiteralPath "$HOME\.openclaw\openclaw.json", "$env:LOCALAPPDATA\Programs\SuperPinkie"` 取 `LastWriteTimeUtc`；`netstat.exe -ano -p tcp` 查本地 `:18789` 的 `LISTENING` PID，输出 `Z2-before.json`、`Z2-after.json`。 |
-| **SNAP** | 用 `git show d58d37e2:tools/metre/inject-inventory.mjs` 和同提交的 `legacy-inject-baseline.json` 重跑 R0 的三样例版核对工具（目标的初版只支持单样例）。仅把临时工具的 `REPO` 指到两份工作树，不改待测代码：`python -B -X utf8 <本机 work/review-z3.py> <证据根目录>` 调 `node <r0-inventory.mjs> --save-baseline <当前快照>` 和 `--verify-baseline <历史快照>`。`z3/Z3.json`：`targetEqualsFreshBase: true`，目标和基线的 15 条注入和工具快照全等，整体哈希均 `d752478a537749a64a2e40e1b3b5fa2fd736abe7abff90c904595199932898c6`；历史快照哈希 `293054e40619ddac97fffee51571d01e3e8999c848f337f960c6998e6c003fba`。 |
-| **CONFIG** | SNAP 同时在两个临时 profile 放同样的五 agent 种子（含 tools / deny / workspace / model），用各版 `services/mode-architecture/setup.py` 的 `install(Path(<临时Home>))` 实际生成配置，只把各副本自己的工作区路径前缀替换为 `<HOME>` 后比较。`z3/Z3.json` 五项 `matchesBase: true`；目标 `targetInstalledIds` 是 `main,project,thinking,learning,unrestricted`，无 `roles`。 |
-| **UNIT** | `node --test tests/metre-roles.test.mjs` → `R1-target-role-test.txt`：退出 1，`Could not find 'tests/metre-roles.test.mjs'`。`node --test tests/session-lineage.test.mjs`、`node --test tests/metre-dispatch.test.mjs` 分别 38/38、16/16。`node --test tests/session-hints.test.mjs` 8/8。 |
-| **MODES** | 快照两工具的 schema 中五个旧模式均没有 `role`；在目标用 `node --input-type=module` 导入 `normalizeMode` 和 `sessionHintBlock`，分别按 `chat/project/ideas/learning/none/metre` 检查 `normalizeMode('roles', {metre})` 和三类问句（派活、并行、咨询）。`R1-target-legacy-modes.txt` 6 行均 `mode=roles rejected; role-less session hints (3 prompts)`。 |
-| **CARDS** | `node tools/metre/roles/lint-cards.mjs --all-33 --samples` → `R3-target-lint.txt`：退出 1，`Cannot find module '…\tools\metre\roles\lint-cards.mjs'`；GIT 确认卡和样题均 0。 |
+| **GATE** | 候选、当前主线分别运行 `node tools/release-gate/run-tests.mjs --jobs 4`，没有 `--update`。日志 `gate-finished.txt` / `gate-baseline.txt`。单文件对照 `node --test --test-reporter=tap tests/<文件>` → 当前主线 `z1-failed/summary.json`，原基线 `z1-original-baseline/z1-failed/summary.json`；Python 用 `python -B -X utf8 -m unittest discover -s tests -p <文件>`，六份 `pkg-*.txt`。 |
+| **NODE** | `node --test --test-reporter=tap --test-concurrency=1 tests/metre-roles.test.mjs tests/metre-role-pilot.test.mjs tests/metre-role-navigation.test.cjs tests/session-cross-mode-ui.test.cjs tests/metre-dispatch.test.mjs tests/session-lineage.test.mjs tests/session-hints.test.mjs tests/metre-board.test.mjs tests/metre-inject.test.mjs tests/sidebar-mode-isolation.test.mjs tests/delivery-soft-gates.test.mjs tests/reasoning-enhance.test.mjs` → `focused-node.txt`：`tests 156 / pass 156 / fail 0 / skipped 0`。这不是全量门禁。 |
+| **SNAP** | 用 `d58d37e2:tools/metre/inject-inventory.mjs` 的 5×3 量具在同一个空隔离 HOME 针对每对源码重跑（工作目录参数是临时脚本唯一修改）。`review-z3.py <证据根> <target> <99c3716a 工作树>` 生成 `z3/Z3.json`；再以 `1d83ad3b` 重跑到 `z3-original-baseline/z3/Z3.json`；同时对照 `legacy-inject-baseline.json`。`Z3-historical.patch` 是 15 条不同的原文 diff；仅将机器路径差异分开列，不删除内容差异。用各版 `services/mode-architecture/setup.py` 的 `install(Path(<临时Home>))` 重跑同样种子配置。 |
+| **LIVE** | `python -B -X utf8 tools/metre/roles/smoke-isolated.py --runtime-root <已有隔离运行时> --out <新的隔离目录>`，不读取正式配置。`isolated-gateway/result.json`：`pendingNotDispatched / adoptedBytesEqual / rejectedNoFile / reportReturned = true`，`upstreamRequests=0`。按回环代理收到的完整角色请求做检查。附加负向输入与全停检查见 **EXTRA**。 |
+| **EXTRA** | `python -B -X utf8 <work/final-review-runtime-extra.py> --target <target> --runtime-root <已有隔离运行时> --out <新的隔离目录>`。只扩充本机模拟模型与验证逻辑，不改产品。初跑漏写量具状态路径的 `sessions/`，修正后从空副本重跑。X1 以 `CHECK-INVALIDS.txt` 指向的原网关会话为准，`python -B -X utf8 <work/review-x1-transcript.py> <额外隔离目录>` 将工具输入与结果按标识连接；全停看 `additional-gateway-r2/review-stop.json`。 |
+| **CARDS** | `node tools/metre/roles/lint-cards.mjs --all-33 --samples --json` → `cards-33.json`（33/33，`globalErrors=[]`）。再用不依赖量具解析器的 `card-plan-check.py` 逐一比较 PLAN 元数据 → `R3-plan.json`，`metadataMismatch=[]`、66 题、309 检查项；33 张正文又逐张和 PLAN 表比对，见下表。 |
+| **R0** | `python -B -X utf8 <work/review-r0-evidence.py> <target>` 只读 `MEASURE.md` 引用的原始会话和抓包，`R0-evidence.json`；另用 `git show d58d37e2:briefs/metre-roles-1118/legacy-inject-baseline.json` 对照当前 blob 及前置历史。 |
 
-## Z · 通用
+## Z · 通用门槛
 
-| 编号 | 判定 | 抽核、输出 / 复现 |
+| 编号 | 判定 | 实测与复现 |
 |---|---|---|
-| Z1 ★ | **没过** | GATE 退出 1，原文 `244 test files, 90 failing tests, 53 known`，37 条 `NEW FAILURE`（未列入清单，不等于本次引入）。将 32 个涉及文件在目标与 `1d83ad3b` 分别单文件重跑，32/32 的退出与已输出失败名一致；其中 9 个文件两边都触发单文件复跑的 18 秒上限，不能据此宣称已重现基线的 10 分钟挂起。37 条清单外失败中 36 条以单文件 TAP 复现，剩余 `mode-architecture` 用 `node --test --test-reporter=tap --test-name-pattern "computer tool discovers the complete driver surface" tests/mode-architecture.test.mjs` 定向重跑，两端均为期待 `尚未连接`、实际缺 Windows 桌面执行器（`z1-failed/*-driver-only.tap`）。仍不算门禁过。 `git rev-parse 1d83ad3b:tools/release-gate/known-failures.json 9dba1a4c:tools/release-gate/known-failures.json` 两次均 `706164d38b288e6c77851858514c1b19a72b4d22`，没有新增已知失败。六份相关 Python 单文件依次为模式安装 9/10、Windows agent 18/18、人设打包 3/3、Mac shell 夹具 2/8、Mac 打包加载夹具 1/1、签名测试导入失败 `No module named 'release_notes'`；两端坏项名称完全相同。Windows 上跑的 Mac 夹具不算 Mac 平台验收。 |
-| Z2 ★ | **过** | HOST：UTC `2026-11-19T11:04:26.6588048Z` 开工与 `2026-11-19T11:27:37.0076728Z` 收工一致：配置修改时间 `2026-11-14T07:50:37.9293033Z`，App 安装目录修改时间 `2026-11-03T22:57:22.1522954Z`，`18789` 两次均没有监听 PID。 |
-| Z3a ★ | **历史原始哈希没过，实测差异仅路径** | SNAP。目标 vs 新跑的同环境 `1d83ad3b`：15/15 逐字一致。目标 vs 历史 R0 有 9 处原文差异（项目、学习、无限制各 3 条），在 `当前项目/默认工作目录` 与 `当前模式自己的工作区` 两行：`"<历史 HOME>\\.openclaw\\workspace-…"` → `"<临时 HOME>\\.openclaw\\workspace-…"`。只替换这两个位置上的隔离目录前缀，15/15 与历史档相同；不是模式正文改动，不把归一化后的结果写成历史原文相等。 |
-| Z3b ★ | **过（隔离安装配置）** | CONFIG：五个旧 agent 的完整对象对比一致，包含工具、deny、工作区、模型。 |
-| Z3c ★ | **过（工具定义）** | SNAP：五组 `pinkie_session_start` / `pinkie_mode_ask` 都存在；参数+说明与历史档和基线一致，每组同一 SHA-256 `b92b908d63553356db47ab4d82fe86f7b8dc64091c8bb79bd7220e69bdd676df`。 |
-| Z3d ★ | **没过** | `git diff --name-only 1d83ad3b 9dba1a4c -- tests` 为空；五份重点旧模式相关单测合计 70/70，但 `tests/session-cross-mode-ui.test.cjs` 8/9，`the changed scripts are served under new cache names` 同样在原基线重现；全套也没有全绿（Z1）。 |
-| Z3e ★ | **没测** | 无五个独立隔离会话真实模型回复记录；注入快照和单测不等于口吻实测。复测：隔离网关给五个旧模式各发同一条可辨认口吻的消息，留会话原文或截图。**Z3 总项不通过。** |
-| Z4 ★ | **没过（未交付规定的一句）** | `git diff 1d83ad3b 9dba1a4c -- personas ':!personas/metre/roles'` 全空：没改旧人设，但也没加第七节指定句；不把“没有产品改动”算完成。 |
-| Z5 | **没过** | 上面 Git 远端/祖先检查；四条执行分支推送了各自成果，未归入总分支。`main` 和 `feat/metre-mode-1113` 也不是角色实现的交付分支。 |
-| Z6 ★ | **没测（不可捕获）** | 亲自检查安装目标和派活入口：CONFIG 中没有 `roles`，SNAP 的 Metre `pinkie_session_start` 只有 `title,prompt,initiation,mode,model,folder`，无 `role`；UNIT 缺失。无法生成一份角色真实请求体。不能扫空日志得到「0 命中」。复测：候选建成后，隔离网关抓一份角色请求；对 `git ls-tree -r --name-only HEAD -- prompts` 所列 7 份 `unrestricted-prompt*.txt` 各取 5 个 ≥20 字片段，以及 `OPENCLAW_UR_INJECT` 作本地逐字扫描，报告只留计数和采样标识。 |
-| Z7 | **没测** | 没有 S2/S5/S7/S9 的本轮两次隔离新会话，旁支首轮不能替代。用 `tools/metre/iso/drive.py` 按 `briefs/metre-mode-1113/PROGRESS.md` 批 7 的输入和口径各跑两遍再对照原始记录。 |
+| Z1 ★ | **没过** | GATE：候选 `270 test files, 44 failing tests, 53 known`，当前主线 `267 test files, 44 failing tests, 53 known`，均退出 1，`NEW FAILURE / NOW PASSING / MISSING / SKIPPED` 项一致。13 个失败文件单独重跑，44 个失败用例的名称和各文件退出码与当前主线一致。按原标准再对照 `1d83ad3b`：13 份中只有 1 份完整一致，8 份旧版到本轮每文件 30 秒限时仍未退出（已有部分 TAP），3 份旧版不存在，余下 `learning-materials` 有同名失败但失败集合不同。由此只能证明和当前主线相同，不能把原基线验证签为通过。两基线的 `git diff <基线> afcb2386 -- tools/release-gate/known-failures.json` 都为空。六份相关 Python：模式安装 13/13、角色安装 2/2、Windows agent 19/19、打包加载夹具 2/2、人设 2 过 1 跳过、Mac shell 2 过 6 跳过。 |
+| Z2 ★ | **过** | 本轮起止 UTC `12:39:15` → `13:01:36`；正式配置 `LastWriteTimeUtc=2026-11-14T07:50:37.9293033Z`、App 目录 `2026-11-03T22:57:22.1522954Z` 均未变，18789 前后均无监听 PID。复现：两次 `Get-Item` 取修改时间，`netstat.exe -ano -p tcp` 取监听 PID；证据 `Z2-{before,after}.json`。 |
+| Z3a ★ | **原门槛没过**；与当前主线一致 | SNAP：同隔离 HOME 下候选和 `99c3716a` 的 15 条原文逐字相同，整体 SHA-256 `d6c0a941b2b599861cddfd829af374d12468f2c76909046bfe9b1f692fb3e22e`。对照原 R0 档，替换机器路径后 15/15 条仍不同；例如新文本有 `【少走几步】每调一次工具就要重新请求一次模型，所以：`（详 `Z3-historical.patch`）。由于当前主线重跑就已不同，不能归为角色功能引入，但也不能自行换掉验收的原基线。 |
+| Z3b ★ | **过** | SNAP：安装器在临时 profile 中生成 `main/project/thinking/learning/unrestricted`；五项配置对两基线均 `matchesBase: true`（工具、deny、工作区、模型）。候选另有 `roles`。 |
+| Z3c ★ | **过** | 再读 `z3/Z3.json`：五组 `pinkie_session_start` / `pinkie_mode_ask` 定义均 `matchesBase: true, matchesHistorical: true`，SHA-256 都为 `b92b908d63553356db47ab4d82fe86f7b8dc64091c8bb79bd7220e69bdd676df`。 |
+| Z3d ★ | **没过** | `git diff --stat 1d83ad3b afcb2386 -- tests/session-lineage.test.mjs tests/metre-dispatch.test.mjs tests/session-cross-mode-ui.test.cjs`：3 文件、+124/−14；改以 `99c3716a` 对照则为空，NODE 定向通过。但旧模式全量失败还在 Z1，原基准的零改动要求也不满足。 |
+| Z3e ★ | **没测** | 没有本轮对五个旧模式各发一条并核对真实回复口吻，不能用快照或模拟替代。补测：同一隔离配置下发五条，保存原文及模式。 |
+| Z4 ★ | **严格原命令没过** | `git diff --name-only 1d83ad3b afcb2386 -- personas ':!personas/metre/roles'` 有 27 个路径。改比较基准为 `99c3716a` 只剩 `personas/metre/AGENTS.md` 第七节与 R4 要求的 `personas/README.md`。都留证，未经用户确认不放宽成「以重基为准」。 |
+| Z5 | **过（本候选交付）** | `git ls-remote --heads origin main feat/metre-roles-1118 feat/metre-mode-1113`：功能 `afcb2386` 已到远端，`main=99c3716a`、`feat/metre-mode-1113=1d83ad3b`、PR 仍开且为草稿；确认未合并或发布。提交及验证说明见 `git log 99c3716a..afcb2386`。 |
+| Z6 ★ | **过** | LIVE：真实网关角色请求体 2 份；脚本枚举 `prompts/unrestricted-prompt*.txt`，每个文件取 5 个去重长行片段（每段 28–40 字符），在 JSON 全部字符串字段做字面查找（`any(marker in part for part in parts)`）并额外查 `OPENCLAW_UR_INJECT`。结果 `promptFiles=7, promptSegments=35, unrestrictedHits=0`，且请求中确有角色卡。请求 SHA-256 `e010651e147f11e4fa2aed4cb5d23295b98352ee11f5f040dacd479c847f32a6` / `45b2f30f89a1fbc58d07b97800f9e35a6afaf1f95a4c654c70b4b3986c920a90`；复现命令见 LIVE，不公布提示原文。 |
+| Z7 | **没测** | 本轮没有 S2/S5/S7/S9 各两遍真实模型记录；`tools/metre/iso/drive.py` 与旧批 7 的同题复跑留待额度授权，旧侧首轮不能代替。 |
+
+### CI 与平台证据（同一候选 SHA）
+
+- [候选 CI `44521891652`](https://github.com/Cle0726/super-pinkie/actions/runs/44521891652) 的 `headSha=afcb2386`，结论 `failure`。Windows 的定向 Chrome UI 步骤过，但全执行套件退出 1：`chromium: new learning chats stay in chat; explicit desk views remain session-local` 和 `desk conversation is independent; ordinary learning chat has no tonight strip or collect controls`。对照相同基准 [主线 CI `44492211209`](https://github.com/Cle0726/super-pinkie/actions/runs/44492211209)，该两条也失败，不能据此归为角色新回归。重现日志：`gh run view 44521891652 --job 135552336293 --log-failed --repo Cle0726/super-pinkie` 和 `gh run view 44492211209 --job 135450434845 --log-failed --repo Cle0726/super-pinkie`。
+- `portable-checks` 在 `Install browser regression dependencies` 阶段报 `E: Failed to fetch`，可见 Ubuntu 包源连接失败/503；没跑到可移植测试。`macos-check=cancelled`，`windows-build=skipped`，该候选 CI 工件列表 `total_count=0`（`gh api repos/Cle0726/super-pinkie/actions/runs/44521891652/artifacts`）。Ubuntu 网络问题不等于产品缺陷，也不能把其它提交的 Mac 或 Windows 包拿来签收候选。
 
 ## R0 · 量和清点
 
 | 编号 | 判定 | 证据 / 复现 |
 |---|---|---|
-| R0-1 ★ | **没过（目标缺产物）** | GIT 无 `MEASURE.md`；`git show 9dba1a4c:briefs/metre-roles-1118/MEASURE.md` 失败。旁支确有 4 组表，且原隔离日志中亲自抽算了一组，见交接表；不计入目标。 |
-| R0-2 ★ | **没过（目标缺产物）** | 同 `git show …:MEASURE.md`；没有本目标的工具大小/归类表可与网关逐个对照。 |
-| R0-3 ★ | **没过（未入目标）** | `git ls-tree -r 9dba1a4c -- briefs/metre-roles-1118/legacy-inject-baseline.json` 为空；`git show -s d58d37e2 d713f082` 和 SNAP 证明另一分支前置档实际存在且先于代码。 |
-| R0-4 | **没测（原始开工）** | `PROGRESS.md` 的旧磁盘数字不是本轮见证。HOST 的本次开工 F 盘 `28,393,832,448` 字节（26.44 GiB），超过停线；本轮没有删除旧备份。原执行者是否按规定先停再继续，不能仅凭其汇报给过。 |
-| R0-5 | **没过（目标无结论）** | `git show 9dba1a4c:briefs/metre-roles-1118/MEASURE.md` 无文件；R0 未在该分支完成。「14,480 ≤ 30,000」只证明旁支抽到的精简原型测量，不是目标交付。 |
+| R0-1 ★ | **过** | R0，四组复算 `49887+1280=51167`、`37269+0=37269`、`32246+256=32502`、`14480+0=14480`，与表值相同；原 `usage` 路径见 `MEASURE.md`。实测口径是短简报首次模型调用的 `input + cacheRead`，不把原型数冒充新候选 R1-17。 |
+| R0-2 ★ | **过（明示估算口径）** | R0，四抓包的工具数 `52/58/53/22`，并集 58，测量表 58 行，缺漏 `[]`，每行有字符数、估算 token 和六类之一。工具被禁用不等于不归类。 |
+| R0-3 ★ | **过** | `git merge-base --is-ancestor d58d37e2 d713f082` 退出 0。`git rev-parse afcb2386:briefs/metre-roles-1118/legacy-inject-baseline.json d58d37e2:briefs/metre-roles-1118/legacy-inject-baseline.json` 均 `3cecfe90522ddd614a3b133df9c08bd597b801e1`。 |
+| R0-4 | **原执行过程没测** | `Z2-before.json` 本轮 F 盘 `59,090,567,168` 字节并且未删文件；无法独立证实早期磁盘不足时的原用户授权与暂停过程，不把交接文字视为现场证据。 |
+| R0-5 | **过** | R0 的 `14,480 ≤ 30,000` 支持 R0 原型继续做；不代替真实实验。 |
 
 ## R1 · 机制
 
 | 编号 | 判定 | 证据 / 复现 |
 |---|---|---|
-| R1-1 ★ | **没过（未交付）** | UNIT：卡加载用例文件不存在；GIT：`metre-roles.mjs` 也不存在，必填项/边界/覆盖/热加载无法在目标重跑。 |
-| R1-2 ★ | **没过（未交付）** | CARDS：无脚本、无卡。旁支整合上故意抄 48 字的负例退出 1，见上文，不能记到目标。 |
-| R1-3 | **没测** | CONFIG + UNIT；没有卡目录、`pinkie_roles` 和看板诊断入口来核对坏卡。 |
-| R1-4 ★ | **没过（未交付）** | SNAP 的 Metre 开工参数缺 `role`、`of` 且 `mode` 必填；CONFIG 无角色 agent；没有 role key、来源或哈希血缘。 |
-| R1-5 ★ | **过（仅旧路径）** | UNIT，`git diff 1d83ad3b 9dba1a4c -- tests/session-lineage.test.mjs tests/metre-dispatch.test.mjs` 为空；原用例断言 Metre 不写 mode 报 `要写 mode`。 |
-| R1-6 ★ | **过（旧路径和模式防线）** | SNAP 五旧模式无 `role`；MODES 运行 mode 校验和 session hints 无 `roles`。不是角色路径存在的证明。 |
-| R1-7 | **没测** | 根本无角色枚举（SNAP），不存在可触发的「未知角色 + 合法值列表」。 |
-| R1-8 ★ | **没过（未交付）** | SNAP 确认说明没有角色段；CARDS/UNIT 不存在，不能造 40 张卡量该功能；无新增固定输入实测。 |
-| R1-9 | **没过（未交付）** | `node tools/metre/inject-inventory.mjs --json metre` 的工具名中没有 `pinkie_roles`。 |
-| R1-10 | **没过（未交付）** | SNAP 的 `pinkie_mode_ask` schema 为 `mode,question,background,model`，不接 `role`，不能触发角色工具管控。 |
-| R1-11 ★ | **没过（未交付）** | `git grep -n metreRoles 9dba1a4c -- services/mode-architecture` 无结果；没有开关/开关前后两态。 |
-| R1-12 ★ | **没测** | CONFIG/UNIT。没有角色可派，无法重跑第 1/2/3 轮的卡注入与 `REPORT_NOTE` 断言。 |
-| R1-13 ★ | **没测** | UNIT 缺角色压缩恢复测试；没有可压缩的角色会话。 |
-| R1-14 ★ | **没测** | UNIT/CARDS，无法在运行中改卡比哈希。 |
-| R1-15 ★ | **没测** | `git grep -n ROLES_BASE 9dba1a4c -- services` 无结果；不存在可查纯度和字数的角色注入。 |
-| R1-16 ★ | **没测** | CONFIG 无 agent；未生成角色子会话，菜单没有 `roles` 不是“角色能挂在 Metre 下”的验证。无浅色/深色实图。 |
-| R1-17 ★ | **没测** | CONFIG/CARDS；三张角色不存在，无法得到三份 `usage` 与会话。 |
-| R1-18 | **没测** | CONFIG 的隔离安装没有 `workspace-roles`；无一轮结束后清单可比。 |
-| R1-19 | **没测** | 无角色会话，不能观察执行/写入是否会弹确认。 |
-| R1-20 ★ | **没测** | UNIT/CONFIG 缺角色工具表与真实请求；无法加未知工具重跑完整性测试。 |
-| R1-21 ★ | **没测** | UNIT/CARDS，无 `researcher` 拦截可跑。 |
-| R1-22 ★ | **没测** | UNIT/CARDS，无 `deny_commands` 角色拦截器可跑；不在实际仓库执行用例列出的命令。 |
-| R1-23 | **没测** | UNIT；没有角色命令审计及角色汇报供对照。 |
-| R1-24 ★ | **没测** | UNIT；原 Metre 通用选模已存在，但找不到 `chooseRoleModel`，无法做角色五条件及缺项测试。 |
-| R1-25 ★ | **没测** | `git grep -n 'function vendorOf' 9dba1a4c -- services/mode-architecture` 无结果；UNIT 缺厂家与 `of` 测试。 |
-| R1-26 | **没测** | UNIT；无法送缺段/齐段的角色报告进入真实交付门禁。 |
-| R1-27 | **没过（未交付）** | `git ls-tree -r 9dba1a4c -- briefs/metre-roles-1118/ref` 无输出；没有本目标的看板角色行、张数和三种图。 |
-| R1-28 ★ | **没过（未交付）** | Z4 的 diff 为空。`node tools/metre/inject-inventory.mjs --json metre`（`target-metre-inventory.json`）的 `workspace['AGENTS.md'] = 5428` 是文件计数，不是新增角色句后的实测注入。 |
-| R1-29 ★ | **没测** | UNIT/CONFIG；旧上限测试不等于角色计入上限，不能跑多个角色及 15 秒全停。 |
-| R1-30 | **没测** | UNIT/CONFIG，无角色会话的记忆读写可断言。 |
-| R1-31 | **没过** | GIT 无新角色代码可查命名；`node --test tests/reasoning-enhance.test.mjs` 单文件为 25/26，`the reviewer is told which folder the files were made in and that file deliverables need no pasted source` 在目标和基线都失败（`z1-leads/` 的原始 TAP）。 |
+| R1-1 ★ | **过** | NODE 的读卡用例：六必填字段逐个、格式、长度、工具、路径、技能缺失、用户覆盖和更新重读。 |
+| R1-2 ★ | **过** | CARDS。另从 `personas/project/playbooks/debugging.md` 复制 48 字到临时 `backend-fix.md`，`node tools/metre/roles/lint-cards.mjs --json <临时卡>` 退出 1，`正文存在与 playbooks/debugging.md 连续 40 字以上完全相同的片段`（`copy-negative.json`）。 |
+| R1-3 | **过（机制）** | NODE 中坏卡不进合法枚举，返回原因并和看板卡数对照。 |
+| R1-4 ★ | **过** | NODE 断言 `agent:roles:pinkie-child:`、卡来源、64 个十六进制字符的哈希、可不填 mode、带 mode 时提示不起作用；LIVE 的 `TRY-ADOPTED` 能派活并回报。 |
+| R1-5 ★ | **过（当前主线对照）** | NODE 原血缘与派活测试未相对主线改动，Metre 无角色仍要求 mode；按历史基线的测试修改另见 Z3d。 |
+| R1-6 ★ | **过** | NODE + SNAP：老模式工具无 role，`mode:roles` 被拒，`session-hints` 无 roles。 |
+| R1-7 | **过** | NODE：不存在角色的错误含合法值列表。 |
+| R1-8 ★ | **没测完整** | `budgets.json`：真实 33 张官方卡的新增段 594 字，造 40 张用户卡后 585 字，有「还有 N 张」。缺以同一真实模型同一口径对照的固定输入 ≤+1k token。 |
+| R1-9 | **过** | NODE 确认单详情/整列表、Metre 专属、独做收起；LIVE 的真实网关在采用后才把新卡纳入 role 枚举。 |
+| R1-10 | **过（机制）** | NODE：`pinkie_mode_ask` 带 role 走 roles 及卡权限，旧模式不变。 |
+| R1-11 ★ | **过（当前主线快照）** | NODE：`metreRoles=false` 后 `role`、`of`、`pinkie_roles` 消失，恢复当前主线定义；已有未确认角色提案也不得绕过。 |
+| R1-12 ★ | **过** | NODE 前 3 轮 `before_prompt_build` 的卡格式与首条简报断言；首消息不带 `REPORT_NOTE`，LIVE 真请求也含卡。 |
+| R1-13 ★ | **过** | NODE 用压缩后首轮测试卡还在，属于标准允许的单测模拟。 |
+| R1-14 ★ | **过** | NODE 改盘后旧会话哈希/正文不变，新会话使用新版。 |
+| R1-15 ★ | **过（注入单测）** | NODE 白名单/禁词断言；`budgets.json` 中 `ROLES_BASE_chars=295`。没有把工具定义或网关协议消息算成角色人设。 |
+| R1-16 ★ | **没测完整** | NODE 角色挂在 Metre、保留运行状态、点击跳转、没有 roles 模式；CI Windows Chrome 有定向回归。没取得已安装 App 的浅/深模式菜单及侧栏截图；`ref/board-roles-*.png` 是看板演示，不顶侧栏。 |
+| R1-17 ★ | **没测** | 没有候选 `researcher/backend-fix/ui-replicator` 三次真实 usage。LIVE 的本地模拟 token 不采用。 |
+| R1-18 | **没过（指定文件清单）** | LIVE 一轮后工作区无 `memory/`，只是上游生成 `openclaw-workspace-state.json` 并去掉空 `BOOTSTRAP.md`；`playbooks` 及视觉规范隔离安装有拷贝校验，不把额外元数据隐去。 |
+| R1-19 | **没测完整** | LIVE 用的是只读卡，执行命令与写文件是否免确认未在本轮实际 App/隔离用户流程验证。 |
+| R1-20 ★ | **过（实捕和清单覆盖）** | `budgets.json` 中 LIVE 的 14 个唯一工具都分类；R0 原捕获 58 个全覆盖；NODE 新增一个无归类假工具必失败。 |
+| R1-21 ★ | **过（单测）** | NODE 的 `researcher` write/exec 被拦和 `blockReason` 逐字断言。 |
+| R1-22 ★ | **过（单测）** | NODE 重跑命令边界、大/小写、空格及管道/连接词用例；只验证拦截逻辑，不在实际仓库执行这些命令。 |
+| R1-23 | **过（隔离单测）** | NODE 的只读角色可写命令的违规审计模拟，汇报必须列出现场变动文件。 |
+| R1-24 ★ | **过** | NODE 按档位、视觉、工具、健康、自身逐个断言及缺项错误。 |
+| R1-25 ★ | **过（机制）** | NODE 的 14 厂家/routing 格式、同厂拒绝、无 `of` 警告；未知模型厂家或错误 `of` 也拒绝。这不是 R2/R3 的实际异厂判分。 |
+| R1-26 | **过（机制）** | NODE 缺交回段落时提示，齐全不多加；`delivery-soft-gates` 定向绿，LIVE 真网关报告正常返回。 |
+| R1-27 | **过（看板夹具）** | 亲自查看 `ref/board-roles-{light,dark,700}.png`：有角色名、模型、自定义标记、`合格 34 张 · 不合格 1 张` 和原因。CSS `git diff 99c3716a afcb2386 -- ui/injections/laolao-metre-board.css` 查新增 hex/rgb/hsl 为零。演示数字不当成用户当天数据。 |
+| R1-28 ★ | **过（相对重基主线）** | `budgets.json`：`metreChars=6498`；`git diff 99c3716a afcb2386 -- personas/metre/AGENTS.md` 只改第七节，绝对基线见 Z4。 |
+| R1-29 ★ | **过（单测与隔离实测）** | NODE 核并发、累计限制与全停。EXTRA 让三个角色子会话实际停留在本机模拟模型请求里，再调 `pinkie.metre.stopAll`：看板运行 `3→0`，返回 `stopped=3, ok=true`；服务端 `3402ms`、含命令行调用 `14016ms`，均低于 15 秒；见 `review-stop.json` 和前后 `board-*.json`。 |
+| R1-30 | **过（机制）** | NODE 无角色项目记忆工具、提示和读取；LIVE 的角色工作区无 `memory/`。 |
+| R1-31 | **过（定向）** | NODE 的 `reasoning-enhance.test.mjs` 通过，新的角色字段使用 `metreRole`/`metre-roles`，未拿极致思考 `childRoles` 复用。 |
 
-## R2 · 对比试点
+## R2 · 试点
 
-| 编号 | 判定 | 证据 / 复现 |
-|---|---|---|
-| R2-1 ★ | **没过（缺记录）** | GIT `MEASURE.md` 缺失，无 48 个原始会话路径、失败重跑记录可抽。 |
-| R2-2 ★ | **没测** | `git ls-tree -r 9dba1a4c -- tools/metre/roles/compose.mjs` 无输出；无 A/B/C 的简报哈希或三组同模型记录。 |
-| R2-3 ★ | **没测** | R2-1/2 阻塞。无总通过数、证据齐全率差、固定输入上限和 reviewer 命中/误报分母。 |
-| R2-4 ★ | **没测** | R2-1 无 48 轮抽样总体，抽 0/6；无执行侧厂家，不能做独立异厂复判。 |
-| R2-5 ★ | **没测** | CARDS，无 reviewer 两题的交回和现场，不能逐条核实召回/误报。 |
-
-## R3 · 卡质量
-
-| 编号 | 判定 | 证据 / 复现 |
-|---|---|---|
-| R3-1 ★ | **没过** | `git ls-tree -r --name-only 9dba1a4c -- personas/metre/roles` 为空，实际 0/33。 |
-| R3-2 ★ | **没过** | CARDS，不能跑 33 张卡的格式及抄手册检查。 |
-| R3-3 ★ | **没过** | CARDS，无 33 张元数据可与 PLAN 对照。 |
-| R3-4 ★ | **没过** | GIT，预期逐卡清单见下；33 张正文均缺，无可打勾项。 |
-| R3-5 ★ | **没测** | GIT，无正文；不生成六维分数或伪造「未达标」名单。 |
-| R3-6 ★ | **没过** | `git ls-tree -r 9dba1a4c -- tools/metre/roles/samples` 为空，0/66 道，无法核对客观检查项。 |
-| R3-7 ★ | **没测** | CARDS 无题面或通过记录，重跑 0/10；五组无法抽样。 |
-| R3-8 ★ | **没测** | CARDS，无五张审查卡的预埋题与结果。 |
-| R3-9 ★ | **没过** | 预期 10 张只读卡均缺；不能以「没找到 write」算权限正确。 |
-
-| 角色 ID（PLAN §4） | 本目标正文 |
+| 编号 | 判定及证据 |
 |---|---|
-| `feature-dev` | 缺 |
-| `frontend-fix` | 缺 |
-| `backend-fix` | 缺 |
-| `test-engineer` | 缺 |
-| `code-reviewer` | 缺 |
-| `refactor` | 缺 |
-| `perf-tuner` | 缺 |
-| `security-auditor` | 缺 |
-| `upgrader` | 缺 |
-| `plan-executor` | 缺 |
-| `batch-runner` | 缺 |
-| `env-setup` | 缺 |
-| `automation-builder` | 缺 |
-| `release-prep` | 缺 |
-| `web-operator` | 缺 |
-| `researcher` | 缺 |
-| `deep-reader` | 缺 |
-| `domain-expert` | 缺 |
-| `advisor` | 缺 |
-| `data-analyst` | 缺 |
-| `competitor-analyst` | 缺 |
-| `visual-designer` | 缺 |
-| `ui-replicator` | 缺 |
-| `viral-creator` | 缺 |
-| `writer` | 缺 |
-| `editor` | 缺 |
-| `translator` | 缺 |
-| `doc-maker` | 缺 |
-| `motion-video` | 缺 |
-| `modeler-3d` | 缺 |
-| `reviewer` | 缺 |
-| `fact-checker` | 缺 |
-| `qa-tester` | 缺 |
+| R2-1 ★ | **没过（缺证据）**：`MEASURE.md` 只有 R0，不含 48 个实验原始会话。`node tools/metre/roles/compose.mjs --matrix <模型 id>` 产出 `prepared-not-run`，不是完成记录。 |
+| R2-2 ★ | **没测实际运行**：NODE 验出三组定义的简报哈希一致，实际执行方的会话和模型标识都未齐，不能验实际是否一样。 |
+| R2-3 ★ | **没测**：没有原始数据重算完成数、证据差值、固定输入和 reviewer 召回/误报。 |
+| R2-4 ★ | **没测**：无可核的 48 项总体，抽样和异厂判分均 0/6；不从离线计划虚抽。 |
+| R2-5 ★ | **没测**：`R3-plan.json` 可证实 reviewer 两题各预埋 3 问题，不是它实际检出了至少 2 个且无误报。 |
 
-## R4 · 用户卡、安装和文档
+## R3 · 卡与样题
 
-| 编号 | 判定 | 证据 / 复现 |
-|---|---|---|
-| R4-1 ★ | **没测** | CONFIG/UNIT，无 `pinkie_roles` 或角色派活入口，无法验证采用自定义卡和新装/升级字节一致。 |
-| R4-2 ★ | **没测** | CONFIG/CARDS，无官方卡资产或升级路径；无法从新旧包比对备份。 |
-| R4-3 ★ | **没过（未交付）** | GIT，连 `pinkie_roles` 都无。另查 `fc525a6e` 的工具定义也只有 `id`，自长卡仍未交付。 |
-| R4-4 ★ | **没测** | CONFIG 无角色 agent；没有可接受的 Windows 角色安装包、上一版升级记录、Mac 实际运行时快照。GATE 的 Windows 测试不替代这三项。 |
-| R4-5 | **没过** | `git diff 1d83ad3b 9dba1a4c -- docs/METRE-MODE.md personas/README.md briefs/metre-mode-1113/RELEASE-NOTES-DRAFT.md` 为空；角色文档改动只在别的分支。 |
-
-## R5 · 真实流程
-
-整批 **没测**：目标缺角色实现且未运行外部模型。本轮未验证号池能否提供顶档模型，不声称号池可用或不可用；不以免费或本地模拟替代。每条按 `ACCEPTANCE.md` 原题隔离复现两次，再做关闭 `metreRoles` 的对照。
-
-| 编号 | 判定及阻塞 |
+| 编号 | 判定及证据 |
 |---|---|
-| R-1 | 没测：无前端角色派活、简报或开关对照。 |
-| R-2 | 没测：无三路角色派活和异厂 `of` 记录。 |
-| R-3 | 没测：无带角色版本可核查未硬派角色。 |
-| R-4 | 没测：无 reviewer 和角色写拦截。 |
-| R-5 | 没测：无自定义角色和看板标记。 |
-| R-6 | 没测：无三个实际角色子会话。 |
-| R-7 | 没测：无角色报告可供隔离测试。 |
+| R3-1 ★ | **过**：CARDS，33 个 ID 与 PLAN 集合相等，无导员。 |
+| R3-2 ★ | **过**：CARDS + R1-2，官方全过、故意抄写卡被拒。 |
+| R3-3 ★ | **过**：`R3-plan.json` 逐字段比较 `tier/vision/tools/review/deny_commands`，`metadataMismatch=[]`。 |
+| R3-4 ★ | **没过**：逐张实读如下。`researcher` 允许不足两个独立来源的条目进「结论清单」，与 PLAN 要求的至少两个独立来源不符；同一例外进入样题评分。 |
+| R3-5 ★ | **没测正式评分**：没调用独立判分模型，不为 33 张卡填执行者同源分数。静态阅读见 `visual-designer.md:15` 额外要求「无 AI 模板味」无操作化标准，应先改成能核对的条件。 |
+| R3-6 ★ | **没过（结构齐，可核性有缺口）**：CARDS/`R3-plan.json` 33 份 × 2，简报、夹具、309 个检查项齐。`visual-designer.json:17,36` 的「实质区分／本质不同」有排除项或示例，但没有明确的通过线；两位验收人可能对同一组图给不同结果。 |
+| R3-7 ★ | **没测**：没有 66 题全部通过的独立原始记录，也没有真实模型按五组 2 题的复跑；0/10。 |
+| R3-8 ★ | **没测**：`R3-plan.json` 五张审查卡各两题、每题三处预埋；没有独立跑出逐题 2/3、0 误报的数据。 |
+| R3-9 ★ | **过**：CARDS 与 PLAN 对照的 10 张只读卡均无 `write`。 |
 
-## X · 对抗；P · 发布
+逐卡正文核对（`personas/metre/roles/<id>.md` 的「做法」「边界」「交回」；✓ 是所列条款存在，不是运行判分）：
 
-| 编号 | 判定 | 证据 / 复现 |
-|---|---|---|
-| X1 ★ | **没测** | SNAP 未暴露 `role`、UNIT 缺测试；不能把拒绝 `mode: roles` 当成三种非法 `role` 输入的网关行为。候选就绪后在隔离网关送 `../x`、空值及过长值。 |
-| X2 ★ | **没测** | UNIT/CARDS，无用户卡加载器；不能核查万字卡不进可选列表/注入。 |
-| X3 ★ | **没测** | UNIT，无读卡机制；无法用两个插件实例重跑同文件更新。 |
-| X4 ★ | **没测** | CONFIG/CARDS，不能对只读/可写角色各跑一遍故意夹带指令的临时文件；不得用旧模式或真实工作区代替。 |
-| X5 | **没测** | 目标无 `pinkie_roles` 与角色选模；未运行离线角色调用，不能从「没有流量」推断通过。 |
-| P1 ★ | **没测** | 无待验 Windows 包与角色真机截图；旁支看板夹具图不算。 |
-| P2 ★ | **没测** | 无待验 Mac 包或 Mac 快照；Windows 上的导入夹具不是 Mac 实测。 |
-| P3 | **没过** | `git diff 1d83ad3b 9dba1a4c -- briefs/metre-mode-1113/RELEASE-NOTES-DRAFT.md` 为空，角色更新说明只存在旁支。 |
-| P4 ★ | **没过（未进入合并批准）** | 用户授权核对与推送报告，不等于批准将未过的功能合并；没有发版或主线写入。 |
+| 角色 | 条款核对 |
+|---|---|
+| `feature-dev` | ✓ 约定/现有测试、按惯例实现、命令输出与未覆盖项。 |
+| `frontend-fix` | ✓ 浏览器修前复现、根因/控制台、修后桌面和 375 截图。 |
+| `backend-fix` | ✓ 样板的最小复现、只修根因、修前后命令与输出。 |
+| `test-engineer` | ✓ 测试先红、边界清单、只改测试/问题只报。 |
+| `code-reviewer` | ✓ 只读核实、不挑风格，位置严重程度与出错场景。 |
+| `refactor` | ✓ 同套双测、不改接口、输出和改动统计。 |
+| `perf-tuner` | ✓ 同方法至少三次、收益目标、不快撤回、数表与命令。 |
+| `security-auditor` | ✓ 四类检查、只读、不打外部、打码和修法。 |
+| `upgrader` | ✓ 读迁移日志、逐一升级与测试、回退原因。 |
+| `plan-executor` | ✓ 不跳步、逐步输出和不符时停手。 |
+| `batch-runner` | ✓ 清单、前三试跑、CSV、备份、熔断、跳过已成功。 |
+| `env-setup` | ✓ 用户空间、镜像、账本、装后验证与卸载。 |
+| `automation-builder` | ✓ dry-run/真跑证据、日志、撤回与停机方式。 |
+| `release-prep` | ✓ 本地包/哈希/更新稿、发布操作只交回命令。 |
+| `web-operator` | ✓ 截图、拒绝登录/支付、提交受授权限制。 |
+| `researcher` | 待修：有双来源、事实/推断、矛盾与查不到项；第 12/20 行却让不足两来源的项写进「结论清单」，需要标未证实、不计已证实结论。 |
+| `deep-reader` | ✓ 每份读完、行/页证据、未读范围和完成表。 |
+| `domain-expert` | ✓ 权威出处、地区日期、确定/推断/不知、专业风险。 |
+| `advisor` | ✓ 2–3 个不同路线、四维对比、推荐及改选条件。 |
+| `data-analyst` | ✓ 输入/去重口径、可重跑、原始行、结论图。 |
+| `competitor-analyst` | ✓ 功能/价格/定位，有一手链接、查看日和图。 |
+| `visual-designer` | ✓ 读审美规范、2–3 方向渲染、两尺寸和文件。附加「无 AI 模板味」的问题另列。 |
+| `ui-replicator` | ✓ 并排图、尺寸/颜色数据、明暗和视口。 |
+| `viral-creator` | ✓ 平台字数/钩子/标题/封面/标签和来源，禁刷量。 |
+| `writer` | ✓ 提纲/口吻/±10%/出处与交付路径。 |
+| `editor` | ✓ 保留文风、待核事实、原文/改后/理由。 |
+| `translator` | ✓ 术语/格式/本地化、三段回译和无法转译项。 |
+| `doc-maker` | ✓ 按手册、结论标题、最终文件逐页预览。 |
+| `motion-video` | ✓ 磁盘检查、配音先行、低清、抽帧、实测响度及来源。 |
+| `modeler-3d` | ✓ 程序化 `.glb`、四视角、体积与外部素材授权。 |
+| `reviewer` | ✓ 异厂元数据、自己核实、逐条证据、只挑不改。 |
+| `fact-checker` | ✓ 异厂元数据、逐项数字日期人名引语、三态和出处。 |
+| `qa-tester` | ✓ 主流程加六边界，问题截图/复现与场景列表。 |
+
+## R4 / R5 / 对抗 / 发布
+
+| 编号 | 判定及证据 |
+|---|---|
+| R4-1 ★ | **过（隔离与安装夹具）**：LIVE 采用后新用户卡进入角色枚举、给出实回报，解析器标「自定义」。`windows_mode_agents_test.py` 重装/升级夹具比字节；不代表正式包。 |
+| R4-2 ★ | **过（资产同步夹具）**：`windows_mode_agents_test.py` 的覆盖/退役备份测试，退出 0，并确认更新不覆盖用户卡。 |
+| R4-3 ★ | **过（机制/隔离）**：NODE 按项目同类第三次提醒、坏卡不落盘、采用前禁派与用户动作；LIVE 的真实请求从待采用到可派活和丢弃无文件。真 App 证据另看 P1。 |
+| R4-4 ★ | **没测完整**：Windows 安装与升级夹具绿；不是正式包。候选 `windows-build=skipped`，`macos-check=cancelled`，没有候选平台产物及真机快照。 |
+| R4-5 | **过**：核 `docs/METRE-MODE.md`、`personas/README.md`、`briefs/metre-mode-1113/RELEASE-NOTES-DRAFT.md`：模式非用户菜单项→导航测试；读卡/派活→NODE；草稿用户决定→LIVE；官方备份/用户保护→安装夹具；角色名/自定义/计数→已看三图和看板测试。 |
+| R5（R-1～R-7） | **每题都没测**：R-1 简报缩减、R-2 三分工/异厂、R-3 不硬派、R-4 只读拦截的真实流程、R-5 实际用户卡交办、R-6 用户说停的真实流程、R-7 伪授权汇报均无两轮真实模型证据。本轮不查改号池，不用免费或模拟模型代顶档。 |
+| X1 ★ | **过（真实隔离网关）**：EXTRA 按次向 `pinkie_session_start` 传 `../x`、空串、81 字符串。按工具调用 ID 直接对照会话原文第 25–27 行，三个都是 `isError: true`、`role: must be equal to one of the allowed values`；无新子会话，网关会话状态 `ok`，之后仍能派活并全停。早期量具过滤器把连字符当下划线，故报 0/3；更正以可重算的原文 `X1-transcript.json` 为准。 |
+| X2 ★ | **过（单测）**：NODE 的一万字卡拒绝、无注入。 |
+| X3 ★ | **过（两实例单测）**：NODE 两实例共用文件、下一次派活读新卡。 |
+| X4 ★ | **没测**：没有真实模型的只读/可写角色分别处理带指令的隔离资料的执行和前后文件证据。不能用规定好回答的模拟模型打安全行为分。 |
+| X5 | **过（机制）**：NODE 禁止联网 fetch，角色仍可列可选模型；LIVE 无外部模型请求。 |
+| P1 ★ | **没测**：没有 Windows 正式候选安装和真桌面界面截图（CI Chrome fixture 不等于 App）。 |
+| P2 ★ | **没测**：候选 Mac 检查取消，无 Mac 包运行时快照。 |
+| P3 | **过（草稿）**：`RELEASE-NOTES-DRAFT.md` 包含角色派活、看板、自定义卡保护和草稿确认。 |
+| P4 ★ | **合并条件未达成**：用户同意「验收通过后」合并。当前没有无条件授权，且多个必过项未过，所以保持草稿，不发布。 |
 
 ## 交回执行者的问题
 
-| 严重程度 | 位置 | 复现步骤及输出 | 建议 |
-|---|---|---|---|
-| 阻塞 | 指定总分支，Z5 / R0–R5 | `git diff --name-status 1d83ad3b 9dba1a4c` 只有三份文档，四条执行分支均不在目标历史；GitHub PR 无匹配。 | 保留已推送产物；由执行者对齐最新 `origin/main`，整理独立远端验收候选，明确交付 SHA，不要把未验收实现直接合进 `main`。 |
-| 阻塞 | Z1 / Z3d，`tests/session-cross-mode-ui.test.cjs` | GATE 及单文件对照；`fc525a6e` 有 `the card names the other mode` 和缓存名断言失败，当前 `origin/main` 10/10。 | 在最新基线上隔离重跑旧跨模式界面测试，保留旧行为和断言，区分既有红项和新增回归；不加 `known-failures.json` 条目规避。 |
-| 阻塞 | R4-3，整合版 `registerMetreRolesTool` | 在 `fc525a6e` 查看 tool schema 和执行分支，只有 `id`/`rolesInfo`。 | 实现第 3 次提示、草稿校验、用户采用/拒绝；增加真实隔离验证，确认采用前不可派。 |
-| 阻塞 | Z6 / R2 / R3-7/8 / R4-4 / R5 / X / P | 查目标的 role runtime、原始记录以及可发布安装包，全缺；旁支静态和夹具结果不足。 | 先交明确候选和公开可复现的、不含凭据的证据索引，再按原条款跑。异厂身份可验证才评分；模型额度和跨平台安排先遵从用户限制。 |
-| 重要 | Z3a，历史基准 | SNAP 9 个历史哈希差异全部只由采集 profile 路径造成。 | 以后归档时固定测试 profile 或把确切路径字段单列，保留完整原文和旧哈希，不覆盖旧档。 |
+| 严重程度 | 位置 | 复现与建议 |
+|---|---|---|
+| 阻塞 | Z1、两条平台链 | GATE 与候选、主线两次真实 CI 的失败同项对照。先清理主线已有的学习 UI Windows 失败，给通用 job 可用 apt 依赖；在同一候选完整跑 Win/Mac。不要增大已知失败表或把跳过当过。 |
+| 阻塞 | Z3a / Z3d / Z4 原基准 | SNAP、`git diff 1d83ad3b ... -- personas` 和 Z3d 测试文件。重基后主线已有差异；请明确用哪个基准签字，保留两份结果。未经批准不按新口径自动签过。 |
+| 阻塞 | R1 实测、R2、R3、R5、X4 | 候选的离线计划与本地模拟不是模型效果。按已授权范围、在可用模型池重跑，保存两侧厂商和原始记录；重点补 R1-17、R2 择六、R3 分层十题，以及顶档流程与对抗。 |
+| 阻塞 | R4-4、P1、P2 | `windows-build=skipped`、`macos-check=cancelled`、工件零。交付与候选 SHA 对应的 Windows 包：隔离新装/上一正式版升级/桌面截图；Mac 交实际 App 运行时快照。 |
+| 阻塞 | R3-4、R3-6：`researcher.md:12,20`、`samples/researcher.json:19`；`samples/visual-designer.json:17,36` | 对读卡和 PLAN §4，把单来源移到未证实项，不计为核实结论，样题同改。视觉样题要求交回可比布局表和对应图，并预先列出必须在哪两个维度不同，避免临时判断「本质不同」。 |
+| 重要 | `visual-designer.md:15` | 将「无 AI 模板味」改成可核的布局/视觉条件，再交独立评分。 |
+| 次要 | R1-18 工作区清单 | LIVE 后实际多 `openclaw-workspace-state.json`。是上游元数据，不建议为过验收删除运行状态；明确是否接受该文件例外。 |
 
-**总判定：指定分支不通过；阻塞为四项：实施成果未汇交、门禁和跨模式断言未全绿、自长卡未实现、真机与模型验收证据不齐。**
+**总判定：候选 `afcb2386` 不通过；阻塞为 Z1 全量红、Z3/Z4 原基准差异、R3 卡与样题标准未满足、真实模型及异厂评分证据不齐、Windows/Mac 正式安装及快照缺失。保持草稿，不合并主线。**
