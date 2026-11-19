@@ -35,7 +35,7 @@ def unchanged_agents(home, runtime_package, openclaw_bin):
         return []
 
     unchanged = []
-    for agent in ("project", "learning"):
+    for agent in ("project", "learning", "metre"):
         matching = [entry for entry in entries if isinstance(entry, dict) and entry.get("id") == agent]
         if len(matching) != 1 or not isinstance(matching[0].get("identity"), dict):
             continue
@@ -62,7 +62,10 @@ def unchanged_agents(home, runtime_package, openclaw_bin):
                 break
             parsed[label] = value
         identity = matching[0]["identity"]
-        if valid and all(field in parsed and identity.get(field) == parsed[field] for field in FIELDS):
+        required = ("name", "theme") if agent == "metre" else FIELDS
+        if valid and all(field in parsed for field in required) and all(
+            identity.get(field) == parsed.get(field) for field in FIELDS
+        ):
             unchanged.append(agent)
     return unchanged
 
