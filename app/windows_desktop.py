@@ -1572,14 +1572,43 @@ function Stop-InstallLeftovers([string]$Root) {
   $stopped = @()
   $alive = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
   $helpers = @('msedgewebview2.exe', 'msedge.exe', 'chrome.exe', 'node.exe', 'python.exe', 'pythonw.exe', 'cmd.exe', 'conhost.exe')
-  $rootText = if ($Root -and (Test-Path -LiteralPath $Root)) { (Get-Item -LiteralPath $Root).FullName.TrimEnd('\') } else { '' }
-  $stateText = if ($StateRoot) { [IO.Path]::GetFullPath($StateRoot).TrimEnd('\') } else { '' }
+  # A command line may spell the folder in 8.3 form (C:\Users\RUNNER~1\...,
+  # what %TEMP% often is) while Get-Item gives the long name, or the other
+  # way round, so both spellings count.
+  function Get-PathSpellings([string]$Path) {
+    $forms = @()
+    if (-not $Path) { return $forms }
+    try { $forms += [IO.Path]::GetFullPath($Path).TrimEnd('\') } catch {}
+    if (Test-Path -LiteralPath $Path) {
+      try { $forms += (Get-Item -LiteralPath $Path).FullName.TrimEnd('\') } catch {}
+      try {
+        $fso = New-Object -ComObject Scripting.FileSystemObject
+        $short = [string]$fso.GetFolder($Path).ShortPath
+        if ($short) { $forms += $short.TrimEnd('\') }
+        # The long form: walk up resolving each segment to its real name
+        # (a directory filter matches the 8.3 name as well as the long one).
+        $parts = @(); $item = Get-Item -LiteralPath $Path
+        while ($item -and $item.Parent) {
+          $real = Get-ChildItem -LiteralPath $item.Parent.FullName -Filter $item.Name -Force -ErrorAction Stop | Select-Object -First 1
+          $parts = @($(if ($real) { $real.Name } else { $item.Name })) + $parts
+          $item = $item.Parent
+        }
+        if ($item) { $forms += (Join-Path $item.FullName.TrimEnd('\') ($parts -join '\')).TrimEnd('\') }
+      } catch {}
+    }
+    return @($forms | Where-Object { $_ } | Sort-Object -Unique)
+  }
+  $rootForms = if ($Root -and (Test-Path -LiteralPath $Root)) { @(Get-PathSpellings $Root) } else { @() }
+  $stateForms = if ($StateRoot) { @(Get-PathSpellings $StateRoot) } else { @() }
   foreach ($process in $alive) {
     if ($process.ProcessId -eq $PID -or -not $process.CommandLine) { continue }
     if ($helpers -notcontains $process.Name.ToLowerInvariant()) { continue }
     $line = [string]$process.CommandLine
-    $ours = ($rootText -and $line.IndexOf($rootText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -or
-      ($stateText -and $line -match '--user-data-dir=' -and $line.IndexOf($stateText, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+    $ours = $false
+    foreach ($form in $rootForms) { if ($line.IndexOf($form, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $ours = $true } }
+    if (-not $ours -and $line -match '--user-data-dir=') {
+      foreach ($form in $stateForms) { if ($line.IndexOf($form, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $ours = $true } }
+    }
     if ($ours) { $stopped += $process }
   }
   $stopped = @($stopped | Sort-Object ProcessId -Unique)
