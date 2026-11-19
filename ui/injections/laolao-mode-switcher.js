@@ -702,6 +702,16 @@
         window.PinkieSessionList?.invalidate();
         return;
       }
+      // Opening a dispatched conversation is a session link, not a mode tour.
+      // Route it directly so a slow transition cannot trap a live child behind it.
+      if (exactTarget && activeMode() === "metre" && typeof window.__laolaoSidebar?.navigateSession === "function") {
+        rememberSession(currentSessionKey());
+        rememberSession(exactTarget);
+        modeTransitionTargetId = null;
+        switching = false;
+        window.__laolaoSidebar.navigateSession(exactTarget);
+        return;
+      }
       window.dispatchEvent(new CustomEvent("laolao:mode-transition-start", {
         detail: {mode: mode.id, fromSessionKey: currentSessionKey()},
       }));

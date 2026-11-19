@@ -738,9 +738,21 @@ def verify_metre_sidebar(page, out, upstream):
     finally:
         upstream.release_sidebar_child.set()
     entry.get_by_role("link", name=DISPATCH_TITLE, exact=True).click(timeout=15_000)
-    page.wait_for_function("""(key) => new URL(location.href).searchParams.get('session') === key
-      && document.documentElement.dataset.laolaoMode === 'project'
-      && !document.querySelector('.laolao-mode-transition')""", arg=child, timeout=60_000)
+    try:
+        page.wait_for_function("""(key) => new URL(location.href).searchParams.get('session') === key
+          && document.documentElement.dataset.laolaoMode === 'project'
+          && !document.querySelector('.laolao-mode-transition')""", arg=child, timeout=35_000)
+    except Exception:
+        view = page.evaluate("""() => ({
+          url: location.href, mode: document.documentElement.dataset.laolaoMode,
+          pending: document.documentElement.dataset.laolaoModePending,
+          transition: Boolean(document.querySelector('.laolao-mode-transition')),
+          pane: document.querySelector('openclaw-chat-pane[active]')?.state?.sessionKey,
+          note: [...document.querySelectorAll('.laolao-toast')].map(node => node.textContent).slice(-2),
+        })""")
+        print("[metre-sidebar] after click: " + json.dumps(view, ensure_ascii=False), flush=True)
+        page.screenshot(path=str(out / "metre-dispatched-click-diagnostic.png"), timeout=10_000)
+        raise
     owned = page.locator(f'#laolao-session-manager [data-session-key="{child}"]')
     owned.wait_for(state="visible", timeout=30_000)
     if parse_qs(urlparse(page.url).query).get("session") != [child]:
