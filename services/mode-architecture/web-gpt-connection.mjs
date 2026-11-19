@@ -183,14 +183,30 @@ export class WebGptConnectionManager {
     };
   }
 
+  // Windows 上 Node 不再直接执行 .cmd（不开 shell 就报 EINVAL，开 shell 又要处理 cmd 的转义），
+  // 所以照 pinkie-collab.cmd 的做法自己设好环境，用 Node 直接跑桥接脚本。
+  bridgeCommand(args) {
+    if (process.platform !== 'win32') return fs.existsSync(this.cli) ? {file: this.cli, args, env: process.env} : null;
+    const script = path.join(this.root, 'runtime', 'bin', 'c2c.js');
+    if (!fs.existsSync(script)) return null;
+    const state = path.join(this.root, 'state');
+    fs.mkdirSync(state, {recursive: true});
+    return {
+      file: process.execPath,
+      args: [script, ...args],
+      env: {...process.env, C2C_STATE_DIR: state, C2C_TUNNEL_PROTOCOL: process.env.C2C_TUNNEL_PROTOCOL || 'http2'},
+    };
+  }
+
   async run(args, {timeout = 30_000, allowPlain = false} = {}) {
-    if (!fs.existsSync(this.cli)) throw new Error('网页 GPT 本地桥接还没有安装');
+    const command = this.bridgeCommand(args);
+    if (!command) throw new Error('网页 GPT 本地桥接还没有安装');
     try {
-      const {stdout = '', stderr = ''} = await execFileAsync(this.cli, args, {
+      const {stdout = '', stderr = ''} = await execFileAsync(command.file, command.args, {
         timeout,
         maxBuffer: MAX_OUTPUT,
         windowsHide: true,
-        env: process.env,
+        env: command.env,
       });
       const parsed = parseJsonOutput(stdout);
       if (parsed) return parsed;

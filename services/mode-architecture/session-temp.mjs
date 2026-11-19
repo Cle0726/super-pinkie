@@ -26,7 +26,7 @@ export function agentForMode(mode) {
 
 // Media files the transcript mentions under the OpenClaw state media folder.
 export function mediaPathsIn(text, stateDir) {
-  const media = path.join(stateDir, 'media') + path.sep;
+  const media = path.resolve(stateDir, 'media') + path.sep;
   const found = new Set();
   const pattern = /(?:[A-Za-z]:)?[\\/][^"'\s<>|*?]+/g;
   for (const raw of String(text || '').match(pattern) || []) {

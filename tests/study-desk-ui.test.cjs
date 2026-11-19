@@ -502,8 +502,11 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
     await page.emulateMedia({reducedMotion: 'reduce'}); await page.evaluate(() => __pinkieStudyDeskLesson.open({k: 'ee4', i: 2})); await page.locator('.lesson-outline').waitFor();
     assert.equal(await page.evaluate(() => document.querySelector('#pinkie-study-desk').getAnimations({subtree: true}).length), 0);
     await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
-    await page.evaluate(() => __pinkieStudyDesk.go('today')); await page.locator('#pinkie-desk-chat .pk-chat-stop').waitFor({state:'hidden'}); await page.waitForTimeout(500); const before = f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
-    await page.waitForTimeout(4200); assert.equal(f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length, before);
+    await page.evaluate(() => __pinkieStudyDesk.go('today')); await page.locator('#pinkie-desk-chat .pk-chat-stop').waitFor({state:'hidden'});
+    // 聊天区最后一次变动会让课程条按消息刷新一次（250ms 防抖），这不是轮询；等调用数稳定后再看 4 秒内有没有定时轮询。
+    const currentCalls = () => f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
+    let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
+    await page.waitForTimeout(4200); assert.equal(currentCalls(), before);
   });
 });
 test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', needsControlUI, async () => {

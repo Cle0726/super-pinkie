@@ -467,14 +467,17 @@ const REVIEW_FOCUS = {
 
 // 本轮做出来的文件（绝对路径）共同所在的文件夹；路径太散（只剩 / 或主目录）就不给。
 function workFolder(files = []) {
-  const dirs = files.map(String).filter(file => path.isAbsolute(file)).map(file => path.dirname(file).split(path.sep));
+  // 工具记录里的路径可能用 / 也可能用 \（Windows 上两种都会出现），按两种分隔符切。
+  const absolute = files.map(String).filter(file => path.isAbsolute(file));
+  const dirs = absolute.map(file => path.dirname(file).split(/[\\/]+/));
   if (!dirs.length) return '';
+  const sep = absolute[0].includes('\\') ? '\\' : '/';
   const common = [];
   for (let i = 0; i < dirs[0].length; i += 1) {
     if (dirs.every(parts => parts[i] === dirs[0][i])) common.push(dirs[0][i]); else break;
   }
-  const folder = common.join(path.sep);
-  return common.length >= 4 && folder !== os.homedir() ? folder : '';
+  const folder = common.join(sep);
+  return common.length >= 4 && path.resolve(folder) !== path.resolve(os.homedir()) ? folder : '';
 }
 
 export function auditPrompt({message, history, reply, evidence, independent, quality = false, workKind = '', artifacts = [], tools = false, earlier = '', previous = []}) {

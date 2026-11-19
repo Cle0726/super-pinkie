@@ -5,6 +5,19 @@ import os from 'node:os';
 import path from 'node:path';
 import {WebGptConnectionManager} from '../services/mode-architecture/web-gpt-connection.mjs';
 
+// 假桥接：Node 脚本放在 runtime/bin/c2c.js（Windows 上由 Node 直接跑它），
+// 其它系统再套一个 pinkie-collab 外壳，和安装出来的结构一致。
+function fakeBridge(root, body) {
+  const script = path.join(root, 'runtime', 'bin', 'c2c.js');
+  fs.mkdirSync(path.dirname(script), {recursive: true});
+  fs.writeFileSync(script, `const fs = require('node:fs');
+const [cmd, sub] = process.argv.slice(2);
+const out = value => console.log(typeof value === 'string' ? value : JSON.stringify(value));
+${body}
+`);
+  fs.writeFileSync(path.join(root, 'pinkie-collab'), `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`, {mode: 0o700});
+}
+
 test('connection status is read-only, workspace-scoped and keeps destructive actions confirmed', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-web-gpt-connection-'));
   const workspace = path.join(root, 'project');
@@ -13,18 +26,14 @@ test('connection status is read-only, workspace-scoped and keeps destructive act
   const sessionKey = 'agent:project:connection-test';
   fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace, name: '测试项目'}}));
   const cli = path.join(root, 'pinkie-collab');
-  fs.writeFileSync(cli, `#!/bin/sh
-case "$1" in
-  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://pinkie.example","tunnel":{"running":true}}' ;;
-  prefs) printf '%s\\n' '{"ok":true,"developerModeEnabled":true}' ;;
-  session)
-    if [ "$2" = "set" ]; then printf '%s\\n' "$*" > "$0.bind"; printf '%s\\n' '已保存';
-    else printf '%s\\n' '{"ok":true,"conversation":{"connectorName":"只读项目连接器"}}'; fi ;;
-  doctor) printf '%s\\n' '{"report":{"oauth":{"ok":true},"tunnel":{"ok":true}},"chatgptRepair":{"connectorName":"只读项目连接器"}}' ;;
-  pair) printf '%s\\n' '{"ok":true,"pairingCode":"ABCD-1234","expiresAt":1900000000000}' ;;
-  unpair) printf '%s\\n' '已撤销' ;;
-esac
-`, {mode: 0o700});
+  fakeBridge(root, `if (cmd === 'status') out({ok: true, running: true, publicUrl: 'https://pinkie.example', tunnel: {running: true}});
+else if (cmd === 'prefs') out({ok: true, developerModeEnabled: true});
+else if (cmd === 'session') {
+  if (sub === 'set') { fs.writeFileSync(${JSON.stringify(`${cli}.bind`)}, process.argv.slice(2).join(' ') + '\\n'); out('已保存'); }
+  else out({ok: true, conversation: {connectorName: '只读项目连接器'}});
+} else if (cmd === 'doctor') out({report: {oauth: {ok: true}, tunnel: {ok: true}}, chatgptRepair: {connectorName: '只读项目连接器'}});
+else if (cmd === 'pair') out({ok: true, pairingCode: 'ABCD-1234', expiresAt: 1900000000000});
+else if (cmd === 'unpair') out('已撤销');`);
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const manager = new WebGptConnectionManager({root, bindingFile});
   const chatOnly = manager.chatStatus(sessionKey, workspace);
@@ -91,15 +100,12 @@ test('browser conversation state is isolated by Pinkie session even inside one p
     [second]: {root: workspace, name: '同一项目'},
   }));
   const cli = path.join(root, 'pinkie-collab');
-  fs.writeFileSync(cli, `#!/bin/sh
-case "$1" in
-  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://pinkie.example","tunnel":{"running":true}}' ;;
-  prefs|doctor) printf '%s\\n' '{"ok":true}' ;;
-  session)
-    if [ "$2" = "set" ]; then printf '%s\\n' '已保存';
-    else printf '%s\\n' '{"ok":true,"conversation":{"chatUrl":"https://chatgpt.com/c/legacy-shared-chat","connectorName":"只读项目连接器"}}'; fi ;;
-esac
-`, {mode: 0o700});
+  fakeBridge(root, `if (cmd === 'status') out({ok: true, running: true, publicUrl: 'https://pinkie.example', tunnel: {running: true}});
+else if (cmd === 'prefs' || cmd === 'doctor') out({ok: true});
+else if (cmd === 'session') {
+  if (sub === 'set') out('已保存');
+  else out({ok: true, conversation: {chatUrl: 'https://chatgpt.com/c/legacy-shared-chat', connectorName: '只读项目连接器'}});
+}`);
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
 
   const manager = new WebGptConnectionManager({root, bindingFile});
@@ -167,13 +173,9 @@ test('stale tunnel URLs are never reported as ready or accepted for pairing', as
   const sessionKey = 'agent:project:stale-test';
   fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace, name: '测试项目'}}));
   const cli = path.join(root, 'pinkie-collab');
-  fs.writeFileSync(cli, `#!/bin/sh
-case "$1" in
-  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://stale.example","tunnel":{"running":true,"detail":"Unauthorized: Tunnel not found"}}' ;;
-  prefs|session|doctor) printf '%s\\n' '{"ok":true}' ;;
-  pair) printf '%s\\n' '{"ok":true,"pairingCode":"MUST-NOT-RUN"}' ;;
-esac
-`, {mode: 0o700});
+  fakeBridge(root, `if (cmd === 'status') out({ok: true, running: true, publicUrl: 'https://stale.example', tunnel: {running: true, detail: 'Unauthorized: Tunnel not found'}});
+else if (cmd === 'prefs' || cmd === 'session' || cmd === 'doctor') out({ok: true});
+else if (cmd === 'pair') out({ok: true, pairingCode: 'MUST-NOT-RUN'});`);
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const manager = new WebGptConnectionManager({root, bindingFile});
   const status = await manager.status(sessionKey, workspace);
@@ -189,14 +191,10 @@ test('a running tunnel with an unreachable public URL is not reported as connect
   const sessionKey = 'agent:project:unreachable-test';
   fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace}}));
   const cli = path.join(root, 'pinkie-collab');
-  fs.writeFileSync(cli, `#!/bin/sh
-case "$1" in
-  status) printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://unreachable.example","tunnel":{"running":true}}' ;;
-  doctor) printf '%s\\n' '{"report":{"tunnel":{"ok":false,"detail":"公网地址无法访问"}}}' ;;
-  prefs|session) printf '%s\\n' '{"ok":true}' ;;
-  pair) printf '%s\\n' '{"ok":true,"pairingCode":"MUST-NOT-RUN"}' ;;
-esac
-`, {mode: 0o700});
+  fakeBridge(root, `if (cmd === 'status') out({ok: true, running: true, publicUrl: 'https://unreachable.example', tunnel: {running: true}});
+else if (cmd === 'doctor') out({report: {tunnel: {ok: false, detail: '公网地址无法访问'}}});
+else if (cmd === 'prefs' || cmd === 'session') out({ok: true});
+else if (cmd === 'pair') out({ok: true, pairingCode: 'MUST-NOT-RUN'});`);
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const manager = new WebGptConnectionManager({root, bindingFile});
   const status = await manager.status(sessionKey, workspace);
@@ -212,23 +210,18 @@ test('transient quick-tunnel timeout is retried once and then reports the live p
   const sessionKey = 'agent:project:retry-test';
   fs.writeFileSync(bindingFile, JSON.stringify({[sessionKey]: {root: workspace, name: '测试项目'}}));
   const cli = path.join(root, 'pinkie-collab');
-  fs.writeFileSync(cli, `#!/bin/sh
-counter="$0.counter"
-[ -f "$counter" ] || printf '0' > "$counter"
-count=$(cat "$counter")
-case "$1" in
-  start)
-    count=$((count + 1)); printf '%s' "$count" > "$counter"
-    if [ "$count" -eq 1 ]; then printf '%s\\n' '{"error":"Tunnel start timed out"}' >&2; exit 1; fi
-    printf '%s\\n' '{"ok":true,"mcpUrl":"https://pinkie.example/mcp"}' ;;
-  status)
-    if [ "$count" -ge 2 ]; then printf '%s\\n' '{"ok":true,"running":true,"publicUrl":"https://pinkie.example","tunnel":{"running":true},"tokenCount":0}'
-    else printf '%s\\n' '{"ok":true,"running":true,"publicUrl":null,"tunnel":{"running":false},"tokenCount":0}'; fi ;;
-  prefs) printf '%s\\n' '{"ok":true}' ;;
-  session) printf '%s\\n' '{"ok":true}' ;;
-  doctor) printf '%s\\n' '{"report":{"oauth":{"ok":true}}}' ;;
-esac
-`, {mode: 0o700});
+  fakeBridge(root, `const counter = ${JSON.stringify(`${cli}.counter`)};
+if (!fs.existsSync(counter)) fs.writeFileSync(counter, '0');
+let count = Number(fs.readFileSync(counter, 'utf8'));
+if (cmd === 'start') {
+  count += 1; fs.writeFileSync(counter, String(count));
+  if (count === 1) { console.error(JSON.stringify({error: 'Tunnel start timed out'})); process.exit(1); }
+  out({ok: true, mcpUrl: 'https://pinkie.example/mcp'});
+} else if (cmd === 'status') out(count >= 2
+  ? {ok: true, running: true, publicUrl: 'https://pinkie.example', tunnel: {running: true}, tokenCount: 0}
+  : {ok: true, running: true, publicUrl: null, tunnel: {running: false}, tokenCount: 0});
+else if (cmd === 'prefs' || cmd === 'session') out({ok: true});
+else if (cmd === 'doctor') out({report: {oauth: {ok: true}}});`);
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   const manager = new WebGptConnectionManager({root, bindingFile});
   const result = await manager.start(sessionKey, workspace);

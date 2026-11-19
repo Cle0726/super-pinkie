@@ -11,7 +11,11 @@ const SESSION = 'agent:learning:desk-test';
 const AT = Date.parse('2026-10-19T01:00:00Z');
 function fixture(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-desk-'));
-  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  // 注册网关会打开资料库（SQLite）；Windows 上句柄不关就删不掉临时目录。
+  t.after(async () => {
+    await store.materials?.close?.();
+    fs.rmSync(root, {recursive: true, force: true});
+  });
   let clock = AT;
   const store = new LearningInteractionStore({root: path.join(root, 'state'), workspace: path.join(root, 'workspace')});
   const pact = new LearningPact(store, {now: () => clock}); store.pact = pact;
