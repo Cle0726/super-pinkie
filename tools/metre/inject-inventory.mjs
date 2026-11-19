@@ -6,6 +6,7 @@
 //   node tools/metre/inject-inventory.mjs --json project metre  # 机器可读
 //
 // 测试（tests/metre-inject.test.mjs）也用这里导出的 collect()。
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,6 +15,13 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PERSONA_DIR = {main: 'chat', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'neutral', metre: 'metre'};
 export const SAMPLE_PROMPT = '帮我把登录页的按钮改成蓝色，顺便跑一下测试，看看有没有别的地方也要改';
+export const LEGACY_MODES = Object.freeze(['main', 'project', 'thinking', 'learning', 'unrestricted']);
+export const BASELINE_PROMPTS = Object.freeze([
+  '帮我把登录页的按钮改成蓝色，顺便跑一下测试，看看有没有别的地方也要改',
+  '帮我写一份市场调研报告，再做一个展示页面',
+  '给这个新产品起几个名字，顺便想想海报怎么设计',
+]);
+const sha256 = text => crypto.createHash('sha256').update(String(text), 'utf8').digest('hex');
 
 function sourceOf(stack) {
   for (const line of String(stack).split('\n').slice(2)) {
@@ -55,8 +63,12 @@ export async function pluginHooks() {
   return loadPlugins();
 }
 
-function makeWorkspace(agentId) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `metre-inv-${agentId}-`));
+function makeWorkspace(agentId, fixedName = '') {
+  const root = fixedName
+    ? (fs.rmSync(path.join(os.tmpdir(), fixedName), {recursive: true, force: true}),
+      fs.mkdirSync(path.join(os.tmpdir(), fixedName), {recursive: true}),
+      path.join(os.tmpdir(), fixedName))
+    : fs.mkdtempSync(path.join(os.tmpdir(), `metre-inv-${agentId}-`));
   const src = path.join(REPO, 'personas', PERSONA_DIR[agentId] || agentId);
   if (fs.existsSync(src)) fs.cpSync(src, root, {recursive: true});
   return fs.realpathSync(root);
@@ -73,12 +85,12 @@ export function workspaceFileChars(agentId) {
   return out;
 }
 
-export async function collect(agentId, {prompt = SAMPLE_PROMPT, sessionSuffix = 'inventory'} = {}) {
+export async function collect(agentId, {prompt = SAMPLE_PROMPT, sessionSuffix = 'inventory', fixedWorkspace = '', sessionKey: fixedKey = '', runId: fixedRunId = ''} = {}) {
   if (!process.env.PINKIE_STATE_ROOT) process.env.PINKIE_STATE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'metre-inv-state-'));
   const {hooks, tools} = await loadPlugins();
-  const workspaceDir = makeWorkspace(agentId);
-  const sessionKey = `agent:${agentId}:${sessionSuffix}-${Date.now().toString(36)}`;
-  const ctx = {agentId, sessionKey, sessionId: sessionKey, workspaceDir, runId: `run-${Date.now()}`, trigger: 'user'};
+  const workspaceDir = makeWorkspace(agentId, fixedWorkspace);
+  const sessionKey = fixedKey || `agent:${agentId}:${sessionSuffix}-${Date.now().toString(36)}`;
+  const ctx = {agentId, sessionKey, sessionId: sessionKey, workspaceDir, runId: fixedRunId || `run-${Date.now()}`, trigger: 'user'};
   const event = {prompt, messages: [], runId: ctx.runId};
   const rows = [];
   for (const hook of hooks.filter(h => h.name === 'before_agent_run' || h.name === 'message_received')) {
@@ -91,15 +103,144 @@ export async function collect(agentId, {prompt = SAMPLE_PROMPT, sessionSuffix = 
     const text = [out?.prependSystemContext, out?.appendSystemContext, out?.prependContext, out?.appendContext, out?.systemPrompt].filter(Boolean).join('\n');
     rows.push({source: hook.source, priority: hook.priority, chars: text.length, text, error: out?.error});
   }
-  const toolNames = tools.map(t => {
-    try { const made = t.factory({agentId, sessionKey, workspaceDir}); return made ? (Array.isArray(made) ? made.map(m => m.name) : made.name || t.name) : null; } catch { return null; }
+  const madeTools = tools.map(t => {
+    try { const made = t.factory({agentId, sessionKey, workspaceDir}); return made ? (Array.isArray(made) ? made : [made]) : []; } catch { return []; }
   }).flat().filter(Boolean);
+  const toolNames = madeTools.map(m => m.name).filter(Boolean);
+  const toolDefs = Object.fromEntries(madeTools.filter(m => m?.name).map(m => [m.name, {
+    name: m.name,
+    label: m.label || m.name,
+    description: m.description || '',
+    parameters: m.parameters || null,
+  }]));
   fs.rmSync(workspaceDir, {recursive: true, force: true});
   const workspace = workspaceFileChars(agentId);
   const pluginChars = rows.reduce((n, r) => n + r.chars, 0);
   const workspaceChars = Object.values(workspace).reduce((n, v) => n + v, 0);
-  return {agentId, rows, toolNames, workspace, pluginChars, workspaceChars, total: pluginChars + workspaceChars,
+  return {agentId, workspaceDir, rows, toolNames, toolDefs, workspace, pluginChars, workspaceChars, total: pluginChars + workspaceChars,
     text: rows.map(r => r.text).filter(Boolean).join('\n')};
+}
+
+function normalizeBaselineText(text, workspaceDir, stateRoot) {
+  let out = String(text || '');
+  for (const [needle, repl] of [
+    [workspaceDir, '<WORKSPACE>'],
+    [workspaceDir.replace(/\\/g, '/'), '<WORKSPACE>'],
+    [stateRoot, '<STATE_ROOT>'],
+    [stateRoot.replace(/\\/g, '/'), '<STATE_ROOT>'],
+  ]) {
+    if (needle) out = out.replaceAll(needle, repl);
+  }
+  // 学习约定包含实时日期（Asia/Shanghai），跨天校验时归一化，不影响内容逐字比对。
+  out = out.replace(/今天是 \d{4}-\d{2}-\d{2}（Asia\/Shanghai）/g, '今天是 <DATE>（Asia/Shanghai）');
+  return out;
+}
+
+export async function collectBaseline({modes = LEGACY_MODES, prompts = BASELINE_PROMPTS} = {}) {
+  const fixedState = fs.realpathSync((() => {
+    const dir = path.join(os.tmpdir(), 'metre-inv-baseline-state');
+    fs.rmSync(dir, {recursive: true, force: true});
+    fs.mkdirSync(dir, {recursive: true});
+    return dir;
+  })());
+  process.env.PINKIE_STATE_ROOT = fixedState;
+  loaded = null;
+  const origRandom = Math.random;
+  let seed = 42;
+  Math.random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  try {
+    const ddPath = path.join(REPO, 'services/mode-architecture/design-directions.mjs');
+    if (fs.existsSync(ddPath)) {
+      const dd = await import(pathToFileURL(ddPath).href);
+      dd.forgetDirections?.();
+    }
+  } catch {}
+  try {
+    const modeEntries = {};
+    for (const agentId of modes) {
+      const samples = [];
+      let toolSnapshots = {};
+      let workspace = {};
+      for (let i = 0; i < prompts.length; i++) {
+        const prompt = prompts[i];
+        const res = await collect(agentId, {
+          prompt,
+          fixedWorkspace: `metre-inv-baseline-${agentId}`,
+          sessionKey: `agent:${agentId}:baseline-${i + 1}`,
+          runId: `run-baseline-${agentId}-${i + 1}`,
+        });
+        if (i === 0) {
+          workspace = res.workspace;
+          toolSnapshots = {
+            pinkie_session_start: res.toolDefs.pinkie_session_start || null,
+            pinkie_mode_ask: res.toolDefs.pinkie_mode_ask || null,
+          };
+        }
+        const normalizedText = normalizeBaselineText(res.text, res.workspaceDir, fixedState);
+        samples.push({
+          index: i + 1,
+          prompt,
+          workspaceChars: res.workspaceChars,
+          pluginChars: res.pluginChars,
+          total: res.total,
+          sha256: sha256(normalizedText),
+          text: normalizedText,
+        });
+      }
+      const toolsJson = JSON.stringify(toolSnapshots);
+      modeEntries[agentId] = {
+        workspace,
+        workspaceSha256: sha256(JSON.stringify(workspace)),
+        toolSnapshots,
+        toolSnapshotsSha256: sha256(toolsJson),
+        samples,
+      };
+    }
+    const metreRes = await collect('metre', {
+      prompt: prompts[0],
+      fixedWorkspace: 'metre-inv-baseline-metre',
+      sessionKey: 'agent:metre:baseline-1',
+      runId: 'run-baseline-metre-1',
+    });
+    const metreToolsBefore = {
+      pinkie_session_start: metreRes.toolDefs.pinkie_session_start || null,
+      pinkie_mode_ask: metreRes.toolDefs.pinkie_mode_ask || null,
+    };
+    const overallSha256 = sha256(JSON.stringify(modeEntries));
+    return {
+      overallSha256,
+      prompts,
+      modes: modeEntries,
+      metreToolsBefore,
+      metreToolsBeforeSha256: sha256(JSON.stringify(metreToolsBefore)),
+    };
+  } finally {
+    Math.random = origRandom;
+  }
+}
+
+export async function verifyBaseline(baselinePath) {
+  const expected = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+  const actual = await collectBaseline({modes: Object.keys(expected.modes), prompts: expected.prompts});
+  const diffs = [];
+  for (const [mode, expMode] of Object.entries(expected.modes)) {
+    const actMode = actual.modes[mode];
+    if (!actMode) { diffs.push(`${mode}: missing mode`); continue; }
+    if (expMode.workspaceSha256 !== actMode.workspaceSha256) {
+      diffs.push(`${mode}: workspace changed (${expMode.workspaceSha256} != ${actMode.workspaceSha256})`);
+    }
+    if (expMode.toolSnapshotsSha256 !== actMode.toolSnapshotsSha256) {
+      diffs.push(`${mode}: pinkie_session_start / pinkie_mode_ask changed (${expMode.toolSnapshotsSha256} != ${actMode.toolSnapshotsSha256})`);
+    }
+    for (let i = 0; i < expMode.samples.length; i++) {
+      const expSample = expMode.samples[i];
+      const actSample = actMode.samples[i];
+      if (expSample.sha256 !== actSample?.sha256) {
+        diffs.push(`${mode} sample #${i + 1}: sha256 mismatch (${expSample.sha256} != ${actSample?.sha256})`);
+      }
+    }
+  }
+  return {ok: diffs.length === 0 && expected.overallSha256 === actual.overallSha256, expectedOverall: expected.overallSha256, actualOverall: actual.overallSha256, diffs, actual};
 }
 
 // 每段注入的「块」：按【标题】或 ## 标题切开，方便逐项标留 / 去。
@@ -110,12 +251,28 @@ export function blocksOf(text) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
+  const saveIdx = args.indexOf('--save-baseline');
+  if (saveIdx >= 0) {
+    const target = path.resolve(args[saveIdx + 1] || 'briefs/metre-roles-1118/legacy-inject-baseline.json');
+    const data = await collectBaseline();
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    console.log(JSON.stringify({saved: target, overallSha256: data.overallSha256, metreToolsBeforeSha256: data.metreToolsBeforeSha256}, null, 2));
+    process.exit(0);
+  }
+  const verifyIdx = args.indexOf('--verify-baseline');
+  if (verifyIdx >= 0) {
+    const target = path.resolve(args[verifyIdx + 1] || 'briefs/metre-roles-1118/legacy-inject-baseline.json');
+    const res = await verifyBaseline(target);
+    console.log(JSON.stringify({ok: res.ok, expectedOverall: res.expectedOverall, actualOverall: res.actualOverall, diffs: res.diffs}, null, 2));
+    process.exit(res.ok ? 0 : 1);
+  }
   const json = args.includes('--json');
   const agents = args.filter(a => !a.startsWith('--'));
   const out = [];
   for (const agent of agents.length ? agents : ['project', 'metre']) out.push(await collect(agent));
   if (json) {
-    console.log(JSON.stringify(out.map(o => ({...o, text: undefined, rows: o.rows.map(r => ({...r, text: undefined, blocks: blocksOf(r.text)}))})), null, 1));
+    console.log(JSON.stringify(out.map(o => ({...o, text: undefined, toolDefs: undefined, rows: o.rows.map(r => ({...r, text: undefined, blocks: blocksOf(r.text)}))})), null, 1));
   } else {
     for (const o of out) {
       console.log(`\n== ${o.agentId}：工作区文件 ${o.workspaceChars} 字 + 插件注入 ${o.pluginChars} 字 = ${o.total} 字；工具 ${o.toolNames.length} 个`);
