@@ -185,6 +185,21 @@
     return {index: step % def.frames.length, def};
   }
 
+  // 每一帧只画一次：缓存成小画布，之后每拍只是一次 drawImage，不再逐格 fillRect（空闲时猫一直在做小动作）。
+  const sprites = new WeakMap();
+  function sprite(api, frame, isDark) {
+    let entry = sprites.get(frame);
+    if (!entry) sprites.set(frame, entry = {});
+    const key = isDark ? 'dark' : 'light';
+    if (!entry[key]) {
+      const c = document.createElement('canvas');
+      c.width = 16 * SCALE; c.height = 16 * SCALE;
+      api.draw(c.getContext('2d'), frame, SCALE, {dark: isDark});
+      entry[key] = c;
+    }
+    return entry[key];
+  }
+
   function paint(force = false) {
     const api = cat();
     if (!api || !canvases.length) return;
@@ -197,10 +212,11 @@
     if (!force && sig === lastDrawn) return;
     lastDrawn = sig;
     const label = (api.STATES[state] || api.STATES.idle).label;
+    const image = sprite(api, def.frames[index], dark());
     for (const c of canvases) {
       const ctx = c.getContext('2d');
       ctx.clearRect(0, 0, c.width, c.height);
-      api.draw(ctx, def.frames[index], SCALE, {dark: dark()});
+      ctx.drawImage(image, 0, 0);
       if (c.dataset.state !== state) c.dataset.state = state;
       const direction = flip ? 'right' : 'left';
       if (c.dataset.facing !== direction) c.dataset.facing = direction;
