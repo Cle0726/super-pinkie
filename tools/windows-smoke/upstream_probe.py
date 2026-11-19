@@ -34,9 +34,14 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 RECOVERED = "PROBE-RECOVERED-OK"
 PARTIAL = "碧琪先说到一半"
+DISPATCH_PROMPT = "METRE-SIDEBAR-PROBE"
+DISPATCH_TITLE = "整理侧栏验收提纲"
+DISPATCH_CHILD_MODEL = "sidebar-worker-free"
+DISPATCH_TOOL_ID = "call_sidebar_acceptance"
 # Mid-turn retries are hidden control messages with this prefix.
 WATCHDOG_PREFIX = "[pinkie-watchdog]"
 # The file whose absence kept the plugin from loading in v2.5.23.
@@ -147,6 +152,7 @@ class FakeUpstream:
         self.plan = ["ok"]
         self.requests = []
         self.server = None
+        self.release_sidebar_child = threading.Event()
 
     def start(self):
         upstream = self
@@ -176,10 +182,24 @@ class FakeUpstream:
                 last = users[-1].get("content", "") if users else ""
                 if isinstance(last, list):
                     last = " ".join(str(part.get("text", "")) for part in last if isinstance(part, dict))
+                tool_call = None
+                if DISPATCH_PROMPT in str(last) and not any(
+                    call.get("id") == DISPATCH_TOOL_ID
+                    for message in payload.get("messages", []) for call in (message.get("tool_calls") or [])
+                ) and any(tool.get("function", {}).get("name") == "pinkie_session_start" for tool in payload.get("tools", [])):
+                    tool_call = {"id": DISPATCH_TOOL_ID, "type": "function", "function": {
+                        "name": "pinkie_session_start", "arguments": json.dumps({
+                            "initiation": "user_asked", "mode": "project", "context": "fresh", "title": DISPATCH_TITLE,
+                            "model": f"probe/{DISPATCH_CHILD_MODEL}", "prompt": "只回复：侧栏验收完成。"
+                        }, ensure_ascii=False)}}
+                if payload.get("model") == DISPATCH_CHILD_MODEL:
+                    upstream.release_sidebar_child.wait(90)
                 upstream.requests.append({
                     "at": round(time.time(), 1),
                     "path": self.path,
                     "behaviour": behaviour,
+                    "model": payload.get("model"),
+                    "dispatch_tool": bool(tool_call),
                     "watchdog": WATCHDOG_PREFIX in str(last),
                 })
                 if behaviour == "not-found":
@@ -191,6 +211,11 @@ class FakeUpstream:
                     self.wfile.write(body)
                     return
                 text = PARTIAL if behaviour == "drop" else f"续上了，{RECOVERED}"
+                message = {"role": "assistant", "content": text}
+                finish = "stop"
+                if tool_call:
+                    message = {"role": "assistant", "content": None, "tool_calls": [tool_call]}
+                    finish = "tool_calls"
                 if not payload.get("stream"):
                     if behaviour == "drop":
                         self.connection.shutdown(socket.SHUT_RDWR)
@@ -198,7 +223,7 @@ class FakeUpstream:
                         return
                     body = json.dumps({
                         "id": "probe", "object": "chat.completion", "created": int(time.time()), "model": "probe-model",
-                        "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+                        "choices": [{"index": 0, "message": message, "finish_reason": finish}],
                         "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
                     }, ensure_ascii=False).encode()
                     self.send_response(200)
@@ -224,7 +249,10 @@ class FakeUpstream:
                         data["usage"] = usage
                     chunk(("data: " + json.dumps(data, ensure_ascii=False) + "\n\n").encode())
 
-                frame({"role": "assistant", "content": text})
+                if tool_call:
+                    frame({"role": "assistant", "tool_calls": [{"index": 0, **tool_call}]})
+                else:
+                    frame({"role": "assistant", "content": text})
                 if behaviour == "drop":
                     time.sleep(0.5)
                     # Break the connection mid-body with a reset: no
@@ -235,7 +263,7 @@ class FakeUpstream:
                     self.connection.close()
                     self.close_connection = True
                     return
-                frame({}, "stop", {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20})
+                frame({}, finish, {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20})
                 chunk(b"data: [DONE]\n\n")
                 self.wfile.write(b"0\r\n\r\n")
                 self.wfile.flush()
@@ -260,6 +288,7 @@ def configure(profile, port):
     for name in CASE_PROVIDERS.values():
         providers[name] = provider(port)
     providers["probe"] = provider(port)
+    providers["probe"]["models"].append({**providers["probe"]["models"][0], "id": DISPATCH_CHILD_MODEL})
     data.setdefault("agents", {}).setdefault("defaults", {})["model"] = {"primary": "probe/probe-model", "fallbacks": []}
     config.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -650,6 +679,45 @@ def seed_read_only_cli(exe, profile, env):
     return {"read_only": True}
 
 
+def verify_metre_sidebar(page, out, upstream):
+    """The real gateway dispatches with a local tool response, never a paid model."""
+    parent = f"agent:metre:sidebar-smoke-{uuid.uuid4().hex[:8]}"
+    upstream.plan = ["ok"]
+    first_request = len(upstream.requests)
+    page.goto(f"http://127.0.0.1:18789/chat?session={parent}", wait_until="domcontentloaded", timeout=90_000)
+    page.wait_for_function("""() => document.documentElement.dataset.laolaoMode === 'metre'
+      && !document.getElementById('laolao-splash') && Boolean(window.__laolaoSidebar?.gwRequest)
+      && Boolean(document.querySelector('#laolao-session-manager'))""", timeout=90_000)
+    try:
+        await_dispatch = page.evaluate("""async ([key, prompt]) => {
+          const rpc = window.__laolaoSidebar.gwRequest;
+          await rpc('sessions.create', {key, agentId: 'metre', model: 'probe/probe-model'}, 15000);
+          localStorage.setItem('pinkie:session-sidebar:fold:' + key, '1');
+          return rpc('chat.send', {sessionKey: key, message: prompt, deliver: false, idempotencyKey: key}, 20000);
+        }""", [parent, DISPATCH_PROMPT])
+        if await_dispatch.get("status") not in ("started", "ok"):
+            raise RuntimeError("Metre test message did not start")
+        entry = page.locator('[data-laolao-group="__metre-dispatched"] [data-session-key]').filter(has_text=DISPATCH_TITLE)
+        entry.wait_for(state="visible", timeout=75_000)
+        child = entry.get_attribute("data-session-key")
+        if not child or not child.startswith("agent:project:pinkie-child:"):
+            raise RuntimeError("Metre sidebar did not show the dispatched project session")
+        if not any(item["dispatch_tool"] for item in upstream.requests[first_request:]):
+            raise RuntimeError("the packaged gateway did not request the scripted dispatch tool")
+        page.screenshot(path=str(out / "metre-dispatched-sidebar.png"), timeout=15_000)
+    finally:
+        upstream.release_sidebar_child.set()
+    entry.get_by_role("link", name=DISPATCH_TITLE, exact=True).click(timeout=15_000)
+    page.wait_for_function("""(key) => new URL(location.href).searchParams.get('session') === key
+      && document.documentElement.dataset.laolaoMode === 'project'
+      && !document.querySelector('.laolao-mode-transition')""", arg=child, timeout=60_000)
+    owned = page.locator(f'#laolao-session-manager [data-session-key="{child}"]')
+    owned.wait_for(state="visible", timeout=30_000)
+    if parse_qs(urlparse(page.url).query).get("session") != [child]:
+        raise RuntimeError("Metre sidebar opened a different session")
+    return {"passed": True, "child": child, "engine": "packaged WebView2"}
+
+
 def run(exe, profile, out, launch, kill_app, profile_env):
     from playwright.sync_api import sync_playwright
 
@@ -691,6 +759,11 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             sampler.label = "disconnect-action"
             summary["cases"]["disconnect-action"] = run_case(
                 page, out, "disconnect-action", upstream, ["drop", "ok"], log_path, profile, 120, True)
+            sampler.label = "metre-sidebar"
+            try:
+                summary["metre_sidebar"] = verify_metre_sidebar(page, out, upstream)
+            except Exception as error:
+                summary["metre_sidebar"] = {"passed": False, "error": str(error)}
             browser.close()
         stop_gateway_profiler(profiler)
         profiler = None
@@ -725,6 +798,6 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             shutil.copytree(sessions, out / "probe-transcripts", dirs_exist_ok=True)
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
-    summary["passed"] = len(summary["cases"]) == 6 and not any(
+    summary["passed"] = bool(summary.get("metre_sidebar", {}).get("passed")) and len(summary["cases"]) == 6 and not any(
         result["problems"] for result in summary["cases"].values())
     return summary

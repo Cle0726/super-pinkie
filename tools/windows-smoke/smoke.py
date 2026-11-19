@@ -586,6 +586,7 @@ def main():
         except Exception as error:
             summaries["upstream_probe"] = {"passed": False, "error": repr(error), "cases": {}}
             kill_app(exe.parent)
+        log(f"[probe] metre-sidebar: {summaries['upstream_probe'].get('metre_sidebar', {})}")
         for name, result in summaries["upstream_probe"].get("cases", {}).items():
             log(f"[probe] {name}: requests={result.get('requests')} final={result.get('final')} problems={result['problems']}")
     if args.old_app:

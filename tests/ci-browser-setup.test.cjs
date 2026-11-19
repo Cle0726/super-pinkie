@@ -22,6 +22,8 @@ test('CI installs pinned browser dependencies and does not wait indefinitely', (
   assert.match(job('windows-checks'), /timeout-minutes: 30/);
   assert.match(job('windows-checks'), /PINKIE_IMAGE_UI_ENGINE: chromium/);
   assert.match(job('windows-checks'), /tool-images-e2e\.test\.mjs/);
+  assert.match(job('windows-checks'), /metre-sidebar-e2e\.test\.mjs/);
   assert.match(job('macos-check'), /PINKIE_IMAGE_UI_ENGINE: webkit/);
   assert.match(job('macos-check'), /tool-images-e2e\.test\.mjs/);
+  assert.match(job('macos-check'), /metre-sidebar-e2e\.test\.mjs/);
 });

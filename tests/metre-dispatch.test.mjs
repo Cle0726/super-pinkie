@@ -434,3 +434,41 @@ test('chooseChildModel 的边界：没有目录时只按默认比较；目标模
   assert.deepEqual(chooseChildModel({config: {}, selfModel: SELF, targetAgent: 'project'}), {model: '', explicit: false});
   assert.throws(() => chooseChildModel({config: CONFIG, selfModel: SELF, targetAgent: 'learning'}), /必须写 model/);
 });
+
+test('Metre publishes a sidebar entry before the brief returns and retains it without a parent row', async t => {
+  const f = fixture(t);
+  const rpc = f.lineage.access.rpc;
+  let sendPending, release;
+  const sending = new Promise(resolve => { sendPending = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  t.after(release);
+  const notices = [];
+  f.lineage.broadcast = (event, payload) => notices.push([event, payload.sessionKey]);
+  f.lineage.access.rpc = async (method, params) => {
+    if (method === 'chat.send') { sendPending(params.sessionKey); await gate; }
+    if (method === 'sessions.list' && params.agentId === 'project') return {sessions: []};
+    return rpc(method, params);
+  };
+  const launched = f.lineage.start(metre, 'human', job('派发侧栏测试'), 'sidebar');
+  void launched.catch(() => {});
+  try {
+    const key = await sending;
+    assert.deepEqual(notices, [['sessions.changed', metre]], 'refresh while the first send is still pending');
+    assert.equal((await f.lineage.views('metre')).away[key].hasActiveRun, true);
+    release();
+    assert.equal((await launched).key, key);
+    free(f);
+    f.entries.delete(metre);
+    f.entries.get(key).label = '更新后的标题';
+    const views = await f.lineage.views('metre');
+    assert.equal(views.away[key].title, '更新后的标题', 'the stored child is visible even outside a capped list');
+    assert.equal(views.away[key].parentKey, metre);
+    assert.equal(views.away[key].hasActiveRun, false);
+    assert.equal((await f.lineage.views('project')).children[key].cross, true, 'the owning mode also has the independent row');
+    f.entries.get(key).archivedAt = Date.now();
+    assert.equal((await f.lineage.views('metre')).away, undefined);
+    delete f.entries.get(key).archivedAt;
+    f.entries.delete(key);
+    assert.equal((await f.lineage.views('metre')).away, undefined);
+  } finally { release(); }
+});

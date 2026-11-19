@@ -11,9 +11,8 @@
   const internalRow = s => internalKey(s.key) || !s.lineage?.parentKey && Boolean(s.meta?.internal);
   const isPersona = key => /:subagent:/iu.test(key || '');
   const MODE_SHORT = {chat: '唠嗑', project: '项目', ideas: '想法', thinking: '想法', learning: '学习', unrestricted: '无限制'};
-  // Metre 的子会话（声部）一律开在别的模式里（session-lineage：不能开在 Metre 里），所以在 Metre 的列表里永远是「别处的」。
-  // 老模式只挂一个「↗N」去那边的入口；Metre 把它们像自己的子会话一样列在父会话下面，带上在哪个模式。
-  const awayChildren = (s, api) => api.mode === 'metre' && !archived && Array.isArray(s.away) ? s.away : [];
+  const dispatchedGroupId = '__metre-dispatched';
+  const openInMode = sessionKey => window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey}}));
   const parentOf = s => {
     if (s.lineage?.detached) return '';
     const parent = s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy;
@@ -37,7 +36,7 @@
     if (internalRow(s)) return '后台记录';
     if (isPersona(s.key)) return s.label && !badTitle.test(s.label) ? s.label : s.subagentRole === 'orchestrator' ? '协调分身' : '分身';
     if (['user', 'system'].includes(s.meta?.source) && s.label) return s.label;
-    if (s.lineage?.title && !s.label) return s.lineage.title;
+    if (s.lineage?.title && (!s.label || !hasMessages(s))) return s.label || s.lineage.title;
     if (!hasMessages(s)) return '新会话';
     const label = typeof s.label === 'string' ? s.label.trim() : '';
     if (label && !isBadTitle(label, s.key, s.sessionId)) return label;
@@ -61,7 +60,8 @@
       const activeRows = (active?.sessions || []).filter(owned);
       const allRows = [...rows, ...activeRows];
       const awayBy = {};
-      for (const [childKey, child] of Object.entries(lineage?.away || {})) (awayBy[child.parentKey] ||= []).push({key: childKey, ...child});
+      const away = Object.entries(lineage?.away || {}).map(([key, child]) => ({...child, key}));
+      if (api.mode !== 'metre') for (const child of away) (awayBy[child.parentKey] ||= []).push(child);
       for (const s of allRows) {
         s.away = awayBy[s.key];
         s.lineage = lineage?.children?.[s.key];
@@ -78,10 +78,12 @@
       const archivedRunning = Object.entries(lineage?.states || {}).reduce((count, [parent, value]) =>
         count + (!activeKeys.has(parent) ? Math.max(0, Number(value?.runningChildren) || 0) : 0), 0);
       cache.set(key, {rows: archiveView ? [...rows, ...activeRows.filter(s => internalRow(s) || s.parentArchived)] : rows,
+        dispatched: !archiveView && api.mode === 'metre'
+          ? lineage ? away.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)) : cache.get(key)?.dispatched : [],
         archivedRunning, version: ++dataVersion});
     } catch (error) {
       if (version !== revision) return;
-      cache.set(key, {rows: cache.get(key)?.rows || [], version: ++dataVersion});
+      cache.set(key, {rows: [], ...cache.get(key), stale: false, version: ++dataVersion});
       if (current?.api.mode === api.mode) api.toast('会话列表暂未刷新：' + error.message);
     } finally {
       if (loading.get(key) === job) loading.delete(key);
@@ -356,7 +358,9 @@
     searchView = {mask, mode: api.mode, close};
     const open = item => {
       if (!item) return;
-      close(); api.navigateSession(item.key); scrollToSearchHit(api, item);
+      close();
+      if (item.dispatched) openInMode(item.key);
+      else { api.navigateSession(item.key); scrollToSearchHit(api, item); }
     };
     function paint() {
       results.replaceChildren();
@@ -386,6 +390,11 @@
           if (reply?.ok === false) throw new Error(reply.error || '搜索暂不可用');
           items = Array.isArray(reply?.results) ? reply.results.filter(item =>
             String(item?.key || '').startsWith('agent:' + api.agentId + ':')) : [];
+          if (api.mode === 'metre') {
+            const matches = (cache.get('metre|false')?.dispatched || []).filter(part =>
+              String(part.title || '').toLowerCase().includes(queryText.toLowerCase()));
+            items.push(...matches.map(part => ({...part, dispatched: true})));
+          }
           status.textContent = items.length ? `找到 ${items.length} 条结果` : '没有找到匹配的会话';
           paint();
         } catch (error) {
@@ -452,7 +461,7 @@
   }
   function selectFromClick(key, event) {
     if (archived || isPersona(key) || !(event.metaKey || event.ctrlKey || event.shiftKey)) return false;
-    const order = [...current.section.querySelectorAll('.session-row-host:not(.pinkie-session-persona)')]
+    const order = [...current.section.querySelectorAll('.session-row-host:not(.pinkie-session-persona,.pinkie-session-part)')]
       .map(row => row.dataset.sessionKey).filter(Boolean);
     const next = nextSelection(order, selectedKeys, selectionAnchor, key, event.shiftKey, event.metaKey || event.ctrlKey);
     selectedKeys.clear(); for (const item of next) selectedKeys.add(item);
@@ -584,7 +593,7 @@
     return n;
   }
 
-  // Metre 父会话下面的一个声部：标题 + 在哪个模式；点了切到那个模式、落在这个会话上。
+  // One entry per dispatch, independent of the parent’s position or fold state.
   function awayRow(part) {
     const n = el('div', 'sidebar-recent-session session-row-host pinkie-session-part');
     n.dataset.sessionKey = part.key;
@@ -596,12 +605,29 @@
     link.onclick = e => {
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
       e.preventDefault();
-      window.dispatchEvent(new CustomEvent('pinkie:open-session-in-mode', {detail: {sessionKey: part.key}}));
+      openInMode(part.key);
     };
     const aside = el('span', 'session-row-aside');
     if (where) aside.append(el('span', 'pinkie-session-origin pinkie-session-part__mode', where));
+    const phase = sessionStatus(part);
+    if (phase) aside.append(sessionIcon(phase, statusLabels[phase], 'pinkie-session-icon pinkie-session-status--' + phase));
+    else {
+      const time = dateLabel(part.updatedAt);
+      if (time) aside.append(el('time', 'pinkie-session-time', time));
+    }
     n.append(link, aside);
     return n;
+  }
+
+  function dispatchedGroup(parts) {
+    const section = el('section', 'laolao-group');
+    section.dataset.laolaoGroup = dispatchedGroupId;
+    const head = el('div', 'laolao-group__head');
+    head.append(el('span', 'laolao-group__label', '派发的会话'), el('span', 'laolao-group__count', String(parts.length)));
+    const list = el('div', 'laolao-group__list');
+    list.append(...parts.map(awayRow));
+    section.append(head, list);
+    return section;
   }
 
   function addWorkers(host, node, api) {
@@ -620,17 +646,15 @@
   function addTree(host, node, api) {
     const key = archived ? 'archive:' + node.session.key : node.session.key;
     const collapsed = !query.trim() && folded(key, archived);
-    const parts = awayChildren(node.session, api);
-    host.append(row(node.session, api, {children: node.children.length + parts.length, collapsed}));
+    host.append(row(node.session, api, {children: node.children.length, collapsed}));
     const shown = collapsed ? node.children.filter(child => child.session.key === api.currentKey
       || child.workers.some(worker => worker.key === api.currentKey)) : node.children;
-    if (shown.length || parts.length && !collapsed) {
+    if (shown.length) {
       const branch = el('div', 'pinkie-session-branch');
       for (const child of shown) {
         branch.append(row(child.session, api));
         addWorkers(branch, child, api);
       }
-      if (!collapsed) for (const part of parts) branch.append(awayRow(part));
       host.append(branch);
     }
     addWorkers(host, node, api);
@@ -740,6 +764,7 @@
       const pinned = node => [node, ...node.children].some(item => api.state.pins.includes(item.session.key));
       const pinnedRows = tree.filter(pinned);
       if (pinnedRows.length) groups.append(group('__pins', '置顶', pinnedRows, api));
+      if (cached?.dispatched?.length) groups.append(dispatchedGroup(cached.dispatched));
       if(Object.keys(api.state.projects).length) {
         const heading = el('div', 'laolao-group__head pinkie-project-heading');
         heading.append(el('span', 'laolao-group__label', '项目'));
@@ -790,16 +815,16 @@
     const index=links.indexOf(row.querySelector('a.sidebar-recent-session__link'));
     if(event.key==='ArrowDown'||event.key==='ArrowUp'){
       event.preventDefault();links[Math.max(0,Math.min(links.length-1,index+(event.key==='ArrowDown'?1:-1)))]?.focus();
-    } else if(event.key==='F2' && !isPersona(row.dataset.sessionKey)) {
+    } else if(event.key==='F2' && !isPersona(row.dataset.sessionKey) && !row.classList.contains('pinkie-session-part')) {
       event.preventDefault();beginRename(row.dataset.sessionKey);
-    } else if(event.key==='Delete' && !archived && !isPersona(row.dataset.sessionKey)) {
+    } else if(event.key==='Delete' && !archived && !isPersona(row.dataset.sessionKey) && !row.classList.contains('pinkie-session-part')) {
       event.preventDefault();void current.api.archiveWithUndo(row.dataset.sessionKey);
     }
   });
   let refreshTimer;
   function refreshSoon() {
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(invalidate, 250);
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(() => { refreshTimer = null; invalidate(); }, 250);
   }
   window.addEventListener('laolao:sessions-changed', refreshSoon);
   window.addEventListener('pinkie:sidebar-gateway-ready', refreshSoon);
