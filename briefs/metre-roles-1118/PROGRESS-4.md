@@ -61,3 +61,10 @@
 - \`node --test tests/metre-board.test.mjs tests/metre-skin-cat.test.cjs\`：31/31；Node 语法和 \`git diff --check\` 通过。新增 CSS 用既有 --metre-*，\`git diff -U0 -- ui/injections/laolao-metre-board.css\` 的新增行无十六进制或 rgb/hsl 颜色。
 - \`ref/board-fixture.html\` 调用真实页面骨架及数据渲染，假 RPC，不连网关；打开时带 \`?session=agent:metre:main&theme=light\`（深色用 dark）。Chrome headless 用 \`--force-device-scale-factor=1 --virtual-time-budget=1500\`，\`--dump-dom\` 检查 data-fixture="passed" 和布局类；分别用 \`--window-size=1360,1120\`（两种主题）和 \`--window-size=700,1440\` 截图。三张 PNG 均目检：角色名与模型、自定义标记、合格/不合格数量和展开原因在同一画面内。
 - 下一步：移植并校对旧草稿、验收表收尾。
+
+## 2026-11-18 · 文档
+
+- 先读取 F:/Projects/_saved/metre-mode-uncommitted-1118 的两份旧稿，再用 git ls-tree 对照远端基线 9dba1a4c：远端没有这两个同名路径，只有 Metre 原计划及过程文档。移入有用的身份、派发、总控台、资源关停和用户可感知的更新说明，修正旧稿「子会话总要写 mode」和「看板只靠事件刷新」；实际已实施的安装/看板与待其他窗口合入的派活接口在文档中分开。
+- 三处：docs/METRE-MODE.md 新增「角色」；personas/README.md 登记独立的 roles agent、卡目录和单向复制；briefs/metre-mode-1113/RELEASE-NOTES-DRAFT.md 更新说明（保留版本号占位，未改正式发布稿）。
+- R4-5 抽核五处：① 本机覆盖前备份（metre_role_assets.py:61–69）；② 官方退役挪进备份、用户/草稿不进入（同文件 80–101）；③ 工作区打法和视觉规范及空占位（同文件 104–129；实测仓库 31 个 playbook 的 SHA-256 逐一一致、视觉规范字节相同、7 空占位、无 memory/、重跑不改）；④ 非用户模式（app/super_pinkie.py 的 MODE_AGENTS 没有 roles）；⑤ 看板自定义、合格/不合格及原因（laolao-metre-board-data.js:96–100、223–240；Chrome fixture 通过）。
+- 用 app/release_notes.py 给更新稿临时填当前版本号、在内存跑 lint，通过；未改版本号或已发布文件。
