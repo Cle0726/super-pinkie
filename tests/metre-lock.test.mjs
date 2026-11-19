@@ -138,13 +138,20 @@ async function callGatewayMethod(methods, name, params = {}) {
   });
 }
 
-test('repo ships unconfigured hash placeholder with zero secrets and set-password generates valid scrypt record', async () => {
-  const shipped = JSON.parse(fs.readFileSync(path.join(ROOT, 'services/mode-architecture/metre-lock-hash.json'), 'utf8'));
+test('repo ships either the placeholder or a valid scrypt hash (never a plaintext password) and set-password generates valid scrypt record', async () => {
+  const shippedFile = path.join(ROOT, 'services/mode-architecture/metre-lock-hash.json');
+  const shipped = JSON.parse(fs.readFileSync(shippedFile, 'utf8'));
   assert.equal(shipped.algorithm, 'scrypt');
-  assert.equal(shipped.configured, false);
-  assert.equal(shipped.hash, undefined);
-  assert.equal(shipped.salt, undefined);
-  assert.equal(loadHashRecord(path.join(ROOT, 'services/mode-architecture/metre-lock-hash.json')), null);
+  assert.deepEqual(Object.keys(shipped).filter(k => /pass|plain|secret/i.test(k)), []);
+  if (shipped.configured === true) {
+    const record = loadHashRecord(shippedFile);
+    assert.ok(record, 'configured hash must be a valid scrypt record');
+    assert.ok(record.N >= 16384);
+  } else {
+    assert.equal(shipped.hash, undefined);
+    assert.equal(shipped.salt, undefined);
+    assert.equal(loadHashRecord(shippedFile), null);
+  }
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-setpw-'));
   try {

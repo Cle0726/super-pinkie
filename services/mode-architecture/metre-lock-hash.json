@@ -1,5 +1,11 @@
 {
   "algorithm": "scrypt",
-  "configured": false,
-  "note": "正式版 Metre 开发者密码哈希：请在本机运行 node tools/metre/set-password.mjs 生成后提交，不要把明文密码放进仓库或聊天。"
+  "configured": true,
+  "N": 32768,
+  "r": 8,
+  "p": 1,
+  "keylen": 64,
+  "salt": "faf0340020d0291722087eafe73929e8ef42659a6356f150d3cf986b7e537fef",
+  "hash": "d79c573ee5c02f6b771cb3674aa43da1a56741466aac50ba50b7e0bf8c7bc6676e9fd6f1c303f5623ffcf9dfad9e9cbdb8ebbf959c8f3ee88a271b2e90ab31ba",
+  "updatedAt": "2026-11-19T04:48:57.326Z"
 }
