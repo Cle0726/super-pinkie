@@ -238,6 +238,12 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             capture_output=True,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         text=probe.stdout.decode('utf-8',errors='replace').strip()
         if text:print('\n[still running inside %s]\n%s'%(name,text[-4000:]),file=sys.stderr)
+        # The update helper can outlive a case (it waits for the new window); stop everything left in
+        # this case's folder so the folder can be removed and the next case starts clean.
+        subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -like '*%s*' -or $_.ExecutablePath -like '*%s*') -and $_.ProcessId -ne $PID } | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 500"%(name,name)],
+            capture_output=True,timeout=60,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     def _run_case(self, gateway_kind):
         with self._reporting_tempdir() as temp:
             root=Path(temp).resolve()
@@ -252,7 +258,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             parent=root/'acl-test-parent' if gateway_kind=='acl_denied' else root
             target=parent/'PortableFixture';(target/'_internal/runtime/bin').mkdir(parents=True)
             executable=target/'超級碧琪.exe';executable.write_bytes(binary)
-            gateway_exe=(target if gateway_kind in ('same_install','acl_denied') else root/'previous-copy')/'_internal/runtime/bin/node.exe'
+            # slow_ready / scanner_lock test timing and file locks, not gateway identity: their gateway is the install's own.
+            gateway_exe=(target if gateway_kind in ('same_install','acl_denied','slow_ready','scanner_lock') else root/'previous-copy')/'_internal/runtime/bin/node.exe'
             gateway_exe.parent.mkdir(parents=True,exist_ok=True);gateway_exe.write_bytes(binary)
             (target/'old-version.txt').write_text('old')
             outside=root/'outside';outside.mkdir();outside_exe=outside/'node.exe';outside_exe.write_bytes(binary)
@@ -322,7 +329,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                       capture_output=True,creationflags=hidden)
                 if result.returncode:raise RuntimeError('fixture ACL error: '+result.stderr.decode(errors='replace'))
             try:
-                gateway_args=(['--gateway'] if gateway_kind in ('same_install','acl_denied','wrong_command') else
+                gateway_args=(['--gateway'] if gateway_kind in ('same_install','acl_denied','wrong_command','slow_ready','scanner_lock') else
                               ['openclaw.mjs','gateway','run','--port',str(port)])
                 gateway=subprocess.Popen([str(gateway_exe),*gateway_args],env=env,creationflags=hidden);children.append(gateway)
                 relay=subprocess.Popen([str(executable),'--hold'],env=env,creationflags=hidden);children.append(relay)

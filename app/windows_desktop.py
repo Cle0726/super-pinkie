@@ -1942,7 +1942,7 @@ function Get-VerifiedGateway([int]$GatewayId) {
   }
   $prefix = (Get-Item -LiteralPath $TargetDir).FullName.TrimEnd('\') + '\'
   if ($process.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return $process }
-  Write-UpdateLog "gateway port $GatewayPort is held by $($process.Name)#$GatewayId at $($process.ExecutablePath) (install: $prefix; record: $GatewayRecord)"
+  Write-UpdateLog "gateway port $GatewayPort is held by $($process.Name)#$GatewayId at $($process.ExecutablePath), outside $prefix; checking the owner record $GatewayRecord"
 
   # A previous copy can leave its gateway behind. Only its recorded listener
   # with the expected bundled node executable and gateway arguments is ours.
@@ -1999,7 +1999,14 @@ function Confirm-NewInstallGateway {
 function Copy-PreviousVersion {
   # Fallback when the previous folder cannot be renamed back. Returns $true
   # only when a complete copy (with its exe) is in place at $TargetDir.
-  if (Test-Path -LiteralPath $TargetDir) { return $false }
+  if (Test-Path -LiteralPath $TargetDir) {
+    if (Test-Path -LiteralPath $TargetExe -PathType Leaf) { Write-UpdateLog 'not copying the previous version: the install folder already has its exe'; return $false }
+    # A rename that failed half-way can leave an empty or partial folder at the
+    # target. It holds nothing the user needs; move it aside so the copy can land.
+    $stray = $TargetDir.TrimEnd('\') + '.partial-' + $Token
+    try { Move-Item -LiteralPath $TargetDir -Destination $stray -ErrorAction Stop; Write-UpdateLog "an incomplete install folder was in the way; moved it to $stray" }
+    catch { Write-UpdateLog "not copying the previous version: the install folder is in the way ($($_.Exception.Message))"; return $false }
+  }
   $copying = $TargetDir.TrimEnd('\') + '.restoring-' + $Token
   try {
     Remove-Item -LiteralPath $copying -Recurse -Force -ErrorAction SilentlyContinue
