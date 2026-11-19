@@ -7092,7 +7092,7 @@ export default {
     const quietMode = registerQuietMode(toolApi, {root: pinkieStateRoot(), nudge: prompt => Boolean(nudgeKindFromPrompt(prompt))});
     quietMode.register('learning-materials', {pause: () => globalThis.__pinkieMaterialsJobs?.pause?.(), resume: () => globalThis.__pinkieMaterialsJobs?.resume?.()});
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
-    registerToolTrace(toolApi, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
+    registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(toolApi, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerProjectSettings(toolApi, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(toolApi, webGptActivity);
