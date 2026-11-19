@@ -80,6 +80,8 @@ from pathlib import Path
 import sys
 repo,exe,payload,digest,result=sys.argv[1:]
 sys.path.insert(0,repo)
+# 打包的 App 里 app/ 就是脚本目录，windows_desktop 直接 import release_notes。
+sys.path.insert(0,os.path.join(repo,'app'))
 import app.windows_desktop as desktop
 desktop.GATEWAY_URL='http://127.0.0.1:'+os.environ['FIXTURE_PORT']+'/'
 WindowsUpdater=desktop.WindowsUpdater

@@ -4719,7 +4719,8 @@ def take_pending_launch_token(root=None, max_age=900.0, now=None):
             path.unlink()
         except OSError:
             pass
-    if not re.fullmatch(r"[0-9a-f]{32}", token) or not 0 <= age <= max_age:
+    # Windows 上文件修改时间可能比 time.time() 早走几毫秒（不同时钟），刚写的文件 age 会是小负数。
+    if not re.fullmatch(r"[0-9a-f]{32}", token) or not -2.0 <= age <= max_age:
         return None
     if not (path.parents[1] / f"apply-{token}.ps1").is_file():
         return None

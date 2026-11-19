@@ -143,6 +143,8 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
             $StateRoot = '{self.state}'
             {functions}
             'before=' + @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }}).Count
+            'root=' + (Get-Item -LiteralPath '{self.install}').FullName
+            @(Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object {{ $_.CommandLine -like '*rem *' }}) | ForEach-Object {{ 'cmd#' + $_.ProcessId + ' ' + $_.CommandLine }}
             Stop-InstallLeftovers '{self.install}'
             Start-Sleep -Milliseconds 800
             $opened = @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }})
@@ -152,7 +154,8 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and (opener.poll() is None or by_path.poll() is None or by_profile.poll() is None):
             time.sleep(.2)
-        self.assertIsNotNone(opener.poll(), "the helper that opened a program kept running")
+        diagnostics = out + "\n--- updater.log ---\n" + (log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no log)")
+        self.assertIsNotNone(opener.poll(), "the helper that opened a program kept running\n" + diagnostics)
         self.assertIsNotNone(by_path.poll(), "a helper naming the install folder kept running")
         self.assertIsNotNone(by_profile.poll(), "a process on the App's WebView2 profile kept running")
         self.assertIsNone(bystander.poll(), "an unrelated process was stopped")

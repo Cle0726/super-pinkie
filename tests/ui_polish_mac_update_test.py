@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -20,6 +21,7 @@ def run(*args, cwd=None):
     return result.stdout.strip()
 
 
+@unittest.skipIf(sys.platform == "win32", "macOS Git update stager (fcntl, POSIX shell)")
 class StageGitUpdateTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(prefix='pinkie-git-update-')

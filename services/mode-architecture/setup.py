@@ -154,7 +154,8 @@ def _copy_if_changed(source: Path, target: Path) -> bool:
 def _write_managed(path: Path, content: str, mode: int = 0o644) -> bool:
     encoded = content.encode("utf-8")
     if path.is_file() and path.read_bytes() == encoded:
-        if (path.stat().st_mode & 0o777) != mode:
+        # Windows 只有只读一位，权限永远对不上 0o755/0o644；不比，免得每次安装都算「有改动」。
+        if os.name != "nt" and (path.stat().st_mode & 0o777) != mode:
             os.chmod(path, mode)
             return True
         return False
