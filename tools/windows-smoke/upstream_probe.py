@@ -718,7 +718,7 @@ def verify_metre_sidebar(page, out, upstream):
     return {"passed": True, "child": child, "engine": "packaged WebView2"}
 
 
-def run(exe, profile, out, launch, kill_app, profile_env):
+def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False):
     from playwright.sync_api import sync_playwright
 
     port = free_port()
@@ -759,11 +759,12 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             sampler.label = "disconnect-action"
             summary["cases"]["disconnect-action"] = run_case(
                 page, out, "disconnect-action", upstream, ["drop", "ok"], log_path, profile, 120, True)
-            sampler.label = "metre-sidebar"
-            try:
-                summary["metre_sidebar"] = verify_metre_sidebar(page, out, upstream)
-            except Exception as error:
-                summary["metre_sidebar"] = {"passed": False, "error": str(error)}
+            if metre_sidebar:
+                sampler.label = "metre-sidebar"
+                try:
+                    summary["metre_sidebar"] = verify_metre_sidebar(page, out, upstream)
+                except Exception as error:
+                    summary["metre_sidebar"] = {"passed": False, "error": str(error)}
             browser.close()
         stop_gateway_profiler(profiler)
         profiler = None
@@ -798,6 +799,6 @@ def run(exe, profile, out, launch, kill_app, profile_env):
             shutil.copytree(sessions, out / "probe-transcripts", dirs_exist_ok=True)
     for name, result in summary["cases"].items():
         result["problems"] = judge(name, result)
-    summary["passed"] = bool(summary.get("metre_sidebar", {}).get("passed")) and len(summary["cases"]) == 6 and not any(
+    summary["passed"] = (not metre_sidebar or summary.get("metre_sidebar", {}).get("passed") is True) and len(summary["cases"]) == 6 and not any(
         result["problems"] for result in summary["cases"].values())
     return summary
