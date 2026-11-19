@@ -32,12 +32,13 @@ test('product files are refused, user work is not', () => {
   const {guard, ws, wsp, state, home} = sandbox();
   for (const target of [path.join(ws, 'SOUL.md'), path.join(ws, 'AGENTS.md'), path.join(ws, 'persona/core.md'), path.join(wsp, 'playbooks/x.md'),
     path.join(ws, 'skills/deep-think/SKILL.md'), path.join(state, 'openclaw.json'), path.join(state, 'openclaw.json.bak'),
-    path.join(state, 'extensions/pinkie-mode-architecture/index.mjs'), path.join(state, 'agents/main/agent/auth-profiles.json')]) {
+    path.join(state, 'extensions/pinkie-mode-architecture/index.mjs'), path.join(state, 'agents/main/agent/auth-profiles.json'),
+    path.join(state, 'identity/device.json'), path.join(state, 'credentials/token.json')]) {
     const result = guard.beforeTool(write(target));
     assert.equal(result?.block, true, target);
     assert.match(result.blockReason, /正式版/);
   }
-  for (const target of [path.join(home, 'proj/app.js'), path.join(ws, 'notes.md'), path.join(ws, 'output/report.html'), path.join(ws, 'memory/2026-11-12.md'), path.join(ws, 'USER.md')]) {
+  for (const target of [path.join(home, 'proj/app.js'), path.join(ws, 'notes.md'), path.join(ws, 'output/report.html'), path.join(ws, 'memory/2026-11-12.md'), path.join(ws, 'USER.md'), path.join(state, 'exec-approvals.json')]) {
     assert.equal(guard.beforeTool(write(target, '用户喜欢简短的回复')), undefined, target);
   }
 });

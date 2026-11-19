@@ -26,7 +26,7 @@ const STATE_PROTECTED = [
   {match: rel => /^openclaw\.json/.test(rel), label: '碧琪的配置文件 openclaw.json'},
   {match: rel => /^extensions(\/|$)/.test(rel), label: '碧琪的插件代码'},
   {match: rel => /^agents\/[^/]+\/agent(\/|$)/.test(rel), label: '模型密钥和模型列表'},
-  {match: rel => /^(exec-approvals\.json|identity(\/|$)|devices(\/|$)|credentials(\/|$)|hooks(\/|$)|workspace-attestations(\/|$)|config-journal)/.test(rel), label: '碧琪的运行设定'},
+  {match: rel => /^(identity(\/|$)|devices(\/|$)|credentials(\/|$)|hooks(\/|$)|workspace-attestations(\/|$)|config-journal)/.test(rel), label: '碧琪的运行设定'},
 ];
 
 const truthy = value => value === true || value === 'true' || value === 1 || value === '1';
