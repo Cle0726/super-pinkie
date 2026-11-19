@@ -1792,17 +1792,25 @@ function Test-UpdateWriteAccess([string]$Folder) {
     $stream.Dispose()
   } finally { if ($created) { [IO.File]::Delete($probe) } }
 }
+function Move-Folder([string]$From, [string]$To) {
+  # A plain rename. Move-Item on Windows PowerShell can fall back to copying
+  # when the rename is refused, leaving a half-copied folder at the target;
+  # every retry then fails with "already exists" long after the file that
+  # blocked the rename was closed (a scanner holding the fresh unpack, 11-19).
+  [IO.Directory]::Move($From, $To)
+}
 function Invoke-WithRetry([scriptblock]$Action, [string]$What, [int]$Seconds) {
   # Windows refuses to rename a folder while any file inside is open. Right
   # after a 30,000-file unpack, the virus scanner, the search indexer or a
   # OneDrive/Desktop sync client routinely holds some of them for a while.
   $deadline = (Get-Date).AddSeconds($Seconds)
-  $logged = $false
+  $logged = ''
   while ($true) {
     try { & $Action; return }
     catch {
       if ((Get-Date) -ge $deadline) { throw "$What is still in use: $($_.Exception.Message)" }
-      if (-not $logged) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $true }
+      # Log the first refusal and every different one after it, so a changed cause is visible.
+      if ($logged -ne $_.Exception.Message) { Write-UpdateLog "$What is busy, retrying: $($_.Exception.Message)"; $logged = $_.Exception.Message }
       Start-Sleep -Milliseconds 500
     }
   }
@@ -2004,7 +2012,7 @@ function Copy-PreviousVersion {
     # A rename that failed half-way can leave an empty or partial folder at the
     # target. It holds nothing the user needs; move it aside so the copy can land.
     $stray = $TargetDir.TrimEnd('\') + '.partial-' + $Token
-    try { Move-Item -LiteralPath $TargetDir -Destination $stray -ErrorAction Stop; Write-UpdateLog "an incomplete install folder was in the way; moved it to $stray" }
+    try { Move-Folder $TargetDir $stray; Write-UpdateLog "an incomplete install folder was in the way; moved it to $stray" }
     catch { Write-UpdateLog "not copying the previous version: the install folder is in the way ($($_.Exception.Message))"; return $false }
   }
   $copying = $TargetDir.TrimEnd('\') + '.restoring-' + $Token
@@ -2015,7 +2023,7 @@ function Copy-PreviousVersion {
     if ($code -ge 8) { throw "robocopy exit code $code" }
     if (-not (Test-Path -LiteralPath (Join-Path $copying (Split-Path -Leaf $TargetExe)) -PathType Leaf)) { throw 'copied version has no exe' }
     # The copy was made beside the target; this rename touches only new files.
-    Invoke-WithRetry { Move-Item -LiteralPath $copying -Destination $TargetDir } 'copied previous version' 30
+    Invoke-WithRetry { Move-Folder $copying $TargetDir } 'copied previous version' 30
     Write-UpdateLog "previous version restored by copy; the original stays at $Backup"
     return $true
   } catch {
@@ -2036,10 +2044,10 @@ function Restore-PreviousVersion {
       # either happens completely or not at all, so a half-deleted tree can
       # never be left where the user starts the App.
       $failed = $TargetDir.TrimEnd('\') + '.failed-' + $Token
-      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Item -LiteralPath $TargetDir -Destination $failed } 'new install folder' $SwapSeconds
+      Invoke-WithRetry { try { Stop-InstallProcesses $TargetDir } catch {}; Move-Folder $TargetDir $failed } 'new install folder' $SwapSeconds
     }
     try {
-      Invoke-WithRetry { try { Stop-InstallProcesses $Backup } catch {}; Move-Item -LiteralPath $Backup -Destination $TargetDir } 'previous version folder' $SwapSeconds
+      Invoke-WithRetry { try { Stop-InstallProcesses $Backup } catch {}; Move-Folder $Backup $TargetDir } 'previous version folder' $SwapSeconds
     } catch {
       Write-UpdateLog "rename back failed, copying the previous version instead: $($_.Exception.Message)"
       # A scanner, indexer or a stray child process can keep a handle in the
@@ -2047,7 +2055,7 @@ function Restore-PreviousVersion {
       # Copying it back leaves the user a working App on the same path.
       if (-not (Copy-PreviousVersion)) {
         if (-not (Test-Path -LiteralPath $TargetDir) -and $failed -and (Test-Path -LiteralPath $failed)) {
-          try { Move-Item -LiteralPath $failed -Destination $TargetDir -Force } catch {}
+          try { Move-Folder $failed $TargetDir } catch {}
         }
         throw
       }
@@ -2124,12 +2132,12 @@ try {
   Stop-VerifiedGateway
   Invoke-WithRetry {
     Stop-InstallProcesses $TargetDir
-    Move-Item -LiteralPath $TargetDir -Destination $Backup
+    Move-Folder $TargetDir $Backup
     $script:backupCreated = $true
   } 'install folder' $SwapSeconds
   # This rename used to have no retry at all: one file of the fresh unpack
   # still open in the virus scanner failed the whole update and rolled back.
-  Invoke-WithRetry { Move-Item -LiteralPath $newDir -Destination $TargetDir } 'unpacked new version' $SwapSeconds
+  Invoke-WithRetry { Move-Folder $newDir $TargetDir } 'unpacked new version' $SwapSeconds
   if (-not (Test-Path -LiteralPath $TargetExe -PathType Leaf)) { throw 'new version is missing after the swap' }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $StartedMarker -Force -ErrorAction SilentlyContinue
