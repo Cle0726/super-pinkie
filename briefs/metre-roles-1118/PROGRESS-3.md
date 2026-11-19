@@ -15,8 +15,8 @@
 | 步骤 | 内容 | 状态 | 提交 |
 |---|---|---|---|
 | 1 | `research` 6 张角色卡 | 已完成 | `81d63c22` |
-| 2 | `content` 9 张角色卡 | 已完成 | 待写入 |
-| 3 | `gate` 3 张角色卡 | 未开始 | |
+| 2 | `content` 9 张角色卡 | 已完成 | `c4f3f622` |
+| 3 | `gate` 3 张角色卡 | 已完成 | 待写入 |
 | 4 | `research` 6 份样题 JSON | 未开始 | |
 | 5 | `content` 9 份样题 JSON | 未开始 | |
 | 6 | `gate` 3 份样题 JSON（每题埋 3 个问题） | 未开始 | |
@@ -52,3 +52,12 @@
   - 正文固定三节，总字数 576–880（去空白 543–814），均在 300–1200 范围内。
   - 自检时捕获 `motion-video.md` 中「先生成配音」包含禁用子串「先生」，已改为「先合成配音」并重验全部 15 张卡无禁用子串。
   - 对照全部 `playbooks/*.md` 与 `AESTHETICS.md` 检查连续重叠，最大重叠 28 字符（仅路径字符串 `` `playbooks/design-review.md` ``），远低于 40 字符红线。
+
+### 2026-11-18 步骤 3：`gate` 3 张角色卡及 18 张卡全量初验
+
+- 新增 3 张卡：`reviewer.md`、`fact-checker.md`、`qa-tester.md`。
+- 18 张卡全量脚本核对结果（`ERRORS: NONE`）：
+  - 数量：18 张（`research` 6 + `content` 9 + `gate` 3），无「导员」或表外卡。
+  - 元数据：`id`、`name`、`group`、`when`、`tier`、`vision`、`tools`、`review`、`deny_commands` 与 PLAN 第四节表逐项一致；7 张只读卡（`researcher`、`domain-expert`、`advisor`、`competitor-analyst`、`reviewer`、`fact-checker`、`qa-tester`）的 `tools` 均不含 `write`。
+  - `reads` 路径全部在 `workspace-roles` 合法相对路径内，无 `..` 或绝对路径。
+  - 换行与正文：全部 LF，固定三节，正文长度 576–880 字（去空白 543–814 字），全在 300–1200 字范围内；无禁用词与空洞套话；与全部 `playbooks/*.md` 和 `AESTHETICS.md` 最大连续重叠 28 字（远小于 40 字）。
