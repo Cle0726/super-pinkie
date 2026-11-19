@@ -12,7 +12,7 @@ const selected = (brand) => execFileSync('/bin/bash', [
   'native-source-test', path.join(mac, 'native-sources.sh'), mac, brand,
 ], { encoding: 'utf8' }).trim();
 
-test('default Pinkie and explicit C.le. builds select separate native sources', () => {
+test('default Pinkie and explicit C.le. builds select separate native sources', {skip: process.platform === 'win32' && 'macOS native build script'}, () => {
   const pinkie = selected('0');
   assert.equal(pinkie, path.join(mac, 'pinkie/Sources'));
   assert.throws(() => selected('1'), /only the 超級碧琪/);

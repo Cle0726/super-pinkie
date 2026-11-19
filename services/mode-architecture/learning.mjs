@@ -2316,7 +2316,7 @@ export function materialSourceGuard(event = {}, ctx = {}, materials = null) {
   const roots = materials?.status?.().roots?.map(root => root.path).filter(Boolean) || [];
   const indexRoot = materials?.root || process.env.PINKIE_MATERIALS_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie/learning-materials');
   roots.push(indexRoot, path.join(os.homedir(), 'Downloads/03_学习资料_英语考试'));
-  if (!/\/Volumes\/[^/\n]+\/学习(?:\/|["\s])/.test(text) && !roots.some(root => text.includes(root.normalize('NFC')))) return undefined;
+  if (!/\/Volumes\/[^/\n]+\/学习(?:\/|["\s])/.test(text) && !roots.some(root => text.includes(root.normalize('NFC').replace(/\\/g, '/')))) return undefined;
   return {block: true, blockReason: 'U盘讲义请用 learning_material 查；出题请用 learning_activity 的 bank'};
 }
 

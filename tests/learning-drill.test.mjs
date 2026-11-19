@@ -336,7 +336,7 @@ test('a changed recall card drops the old generated question', async t => {
   drill.write(data);
   const opened = drill.session({sessionKey: KEY, source: 'notes', size: 5});
   assert.equal(opened.items.some(item => item.prompt === 'OLD_STEM'), false);
-  assert.equal(fs.statSync(drill.file).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(drill.file).mode & 0o777, 0o600);
 });
 
 test('settings reject unknown sizes and sessions keep only the latest twenty', async t => {

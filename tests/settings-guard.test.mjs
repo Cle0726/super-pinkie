@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {pathToFileURL} from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import {SettingsGuard, registerSettingsGuard, instructionLike, guardMode, resetGuardModeCache, writeTargets} from '../services/mode-architecture/settings-guard.mjs';
@@ -135,7 +136,7 @@ test('installed plugin finds its own guard-build.json under a Chinese or spaced 
   const source = path.resolve(import.meta.dirname, '../services/mode-architecture');
   for (const name of ['settings-guard.mjs', 'openclaw-paths.mjs']) fs.copyFileSync(path.join(source, name), path.join(plugin, name));
   fs.writeFileSync(path.join(plugin, 'guard-build.json'), JSON.stringify({guard: true, channel: 'release', version: '9.9.9'}));
-  const copy = await import(new URL(`file://${path.join(plugin, 'settings-guard.mjs').split(path.sep).map(encodeURIComponent).join('/')}`).href);
+  const copy = await import(pathToFileURL(path.join(plugin, 'settings-guard.mjs')).href);
   const mode = copy.guardMode({entry: path.join(root, 'nowhere.mjs'), refresh: true});
   assert.equal(mode.enabled, true);
   assert.equal(mode.source, path.join(plugin, 'guard-build.json'));

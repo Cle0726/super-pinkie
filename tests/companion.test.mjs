@@ -107,7 +107,7 @@ test('model and parameters persist per mode, survive restart and can sync to all
     assistant.setSettings({mode:'learning',settings});assert.deepEqual(assistant.status('learning').settings,settings);
     assert.equal(assistant.status('project').model,DEFAULT_COMPANION_MODEL);
     const reloaded=fixture({settingsFile}).assistant;assert.deepEqual(reloaded.status('learning').settings,settings);
-    assert.equal(fs.statSync(settingsFile).mode & 0o777,0o600);assert.equal(JSON.stringify(config),before);
+    if(process.platform!=='win32')assert.equal(fs.statSync(settingsFile).mode & 0o777,0o600);assert.equal(JSON.stringify(config),before);
     reloaded.setSettings({mode:'learning',settings,allModes:true});
     for(const mode of ['chat','project','thinking','learning','unrestricted'])assert.deepEqual(reloaded.status(mode).settings,settings);
     assert.doesNotMatch(fs.readFileSync(settingsFile,'utf8'),/test-key|baseUrl|chat-large/);

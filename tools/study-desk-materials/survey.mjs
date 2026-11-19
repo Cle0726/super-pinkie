@@ -14,7 +14,7 @@ const SKIP = new Set(['.DS_Store', '$RECYCLE.BIN', '.Trashes', 'System Volume In
 const DOCS = new Set(['.doc', '.docx', '.rtf']);
 const compact = text => String(text).replace(/\s/gu, '');
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export const excluded = relative => relative.split(path.sep).some(n => SKIP.has(n) || n.startsWith('._'));
+export const excluded = relative => relative.split(/[\\/]/).some(n => SKIP.has(n) || n.startsWith('._'));
 const inside = (base, target) => target === base || target.startsWith(base + path.sep);
 const cleanError = error => String(error.stderr || error.message || error).slice(0, 1500).trim();
 
