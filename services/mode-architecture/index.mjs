@@ -7254,7 +7254,7 @@ export default {
           text: armed.text,
           placement: 'append_context',
           ttlMs: 120_000,
-          idempotencyKey: `deep-think-${Date.now()}`,
+          idempotencyKey: `deep-think-${Date.now()}-${tier}`,
           metadata: {tier, mode: armed.mode},
         });
         // 2026.7 hosts return the enqueue record, while a few compatible
