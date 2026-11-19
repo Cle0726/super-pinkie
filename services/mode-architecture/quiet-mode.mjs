@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {agentOf, registerSessionMethod} from './session-titles.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 export const QUIET_TTL_MS = 30 * 60_000;
 const APP_PROVIDERS = new Set(['', 'webchat', 'control-ui', 'internal', 'gateway', 'cli', 'pinkie']);
@@ -98,13 +99,18 @@ export class QuietMode {
   }
 }
 
-export function registerQuietMode(api, {root, nudge} = {}) {
+export function registerQuietMode(api, {root, nudge, lock = null} = {}) {
+  const activeLock = () => lock || getActiveMetreLock();
   const quiet = new QuietMode({file: root ? path.join(root, 'quiet-mode.json') : '', nudge});
   api.on?.('before_agent_run', (event, ctx) => {
+    if (activeLock()?.isLocked?.() && agentOf(String(ctx?.sessionKey || event?.sessionKey || '')) === 'metre') return undefined;
     try { return quiet.gate(event, ctx); } catch { return undefined; }
   }, {priority: 10900});
   api.on?.('agent_end', (event, ctx) => { try { quiet.ended(event, ctx); } catch {} });
-  registerSessionMethod(api, 'pinkie.quiet.set', ({quiet: on}) => quiet.set(on === true));
+  registerSessionMethod(api, 'pinkie.quiet.set', ({quiet: on}) => {
+    if (on === true) activeLock()?.assertUnlocked?.();
+    return quiet.set(on === true);
+  });
   registerSessionMethod(api, 'pinkie.quiet.status', () => quiet.status());
   registerSessionMethod(api, 'pinkie.quiet.prefs', params => quiet.setPrefs(params || {}));
   return quiet;

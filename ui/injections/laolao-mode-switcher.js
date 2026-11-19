@@ -673,12 +673,22 @@
     render();
   };
 
+  const ensureModeUnlocked = async (mode) => {
+    if (mode?.id !== "metre" || !window.__pinkieMetreLock?.ensureUnlocked) return true;
+    closeMenu();
+    try {
+      return Boolean(await window.__pinkieMetreLock.ensureUnlocked());
+    } catch {
+      return false;
+    }
+  };
   const switchMode = async (mode, sourceOption = null) => {
     if (switching) return;
     if (mode.id === activeMode()) {
       closeMenu();
       return;
     }
+    if (!(await ensureModeUnlocked(mode))) return;
     switching = true;
     modeTransitionTargetId = mode.id;
     try {
@@ -913,6 +923,7 @@
   const openWorkspaceDock = async (mode) => {
     const bridge = dockBridge();
     if (!bridge || isDockedWorkspace()) return;
+    if (!(await ensureModeUnlocked(mode))) return;
     closeMenu();
     // A dock is a clean second workspace, not a copy of a cached recent chat.
     // Older native shells only accept the stable root session for each mode;

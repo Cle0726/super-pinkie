@@ -14,6 +14,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {agentOf, clipGraphemes, isInternalMessage, messageText, readSessionJson, registerSessionMethod} from './session-titles.mjs';
 import {isMetreKey} from './session-lineage.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 export const RAW_LIMIT = 200;
 export const TIMELINE_LIMIT = 120;
@@ -393,19 +394,25 @@ export class MetreBoard {
   }
 }
 
-export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null}) {
+export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null, lock = null} = {}) {
+  const activeLock = () => lock || getActiveMetreLock();
   const board = new MetreBoard({root, lineage, plans, modelHealth});
-  const safe = work => (event, ctx) => { try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ } };
+  const safe = work => (event, ctx) => {
+    if (activeLock()?.isLocked?.()) return;
+    try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ }
+  };
   api.on?.('before_agent_run', safe((event, ctx) => board.runStarted(event, ctx)), {priority: -10900});
   api.on?.('message_received', safe((event, ctx) => board.messageReceived(event, ctx)));
   api.on?.('after_tool_call', safe((event, ctx) => board.toolCalled(event, ctx)));
   api.on?.('agent_end', safe((event, ctx) => board.runEnded(event, ctx)), {priority: -10900});
   api.on?.('llm_output', safe((event, ctx) => board.usage(event, ctx)));
   registerSessionMethod(api, 'pinkie.metre.board', async ({sessionKey}) => {
-    try { return await board.board(sessionKey); } catch (error) { return {ok: false, error: error.message}; }
+    try { activeLock()?.assertUnlocked?.(); return await board.board(sessionKey); }
+    catch (error) { return {ok: false, error: error.message}; }
   });
   registerSessionMethod(api, 'pinkie.metre.resume', async ({sessionKey}) => {
-    try { return await board.resume(sessionKey); } catch (error) { return {ok: false, error: error.message}; }
+    try { activeLock()?.assertUnlocked?.(); return await board.resume(sessionKey); }
+    catch (error) { return {ok: false, error: error.message}; }
   });
   return board;
 }

@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {pathToFileURL} from 'node:url';
 import {CompanionAssistant, TITLE_MODEL} from './companion.mjs';
 import {expandHome, openclawStateDir, runtimeConfig} from './openclaw-paths.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 const segmenter = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
 const INVALID_UNICODE = /[\uD800-\uDFFF\uFFFD]/gu;
@@ -618,7 +619,11 @@ export class SessionTitles {
 
 export function registerSessionMethod(api, name, fn) {
   api.registerGatewayMethod?.(name, async ({params, respond, context}) => {
-    try { respond(true, await fn(params || {}, context)); }
+    try {
+      const blocked = getActiveMetreLock()?.checkGatewayRequest?.(name, params || {});
+      if (blocked) throw new Error(blocked);
+      respond(true, await fn(params || {}, context));
+    }
     catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message}); }
   }, {scope: 'operator.admin'});
 }
@@ -650,12 +655,12 @@ export function registerSessionTitles(api, options) {
   registerSessionMethod(api, 'pinkie.session.title.metadata', ({keys}) => titles.metadata(
     Array.isArray(keys) ? [...new Set(keys.slice(0, 1000).filter(key => agentOf(key)))] : []));
   registerSessionMethod(api, 'pinkie.session.rename', ({key, title}) => titles.rename(key, title, 'user'));
-  api.registerTool?.(ctx => sessionTool('pinkie_session_title',
+  api.registerTool?.(ctx => (getActiveMetreLock()?.isLockedSession?.(ctx?.sessionKey) ? null : sessionTool('pinkie_session_title',
     '只改当前会话的名字。仅在主题已经明显改变、旧名字会误导用户时使用。用户自己起的名不改。',
     {title: {type: 'string'}}, ['title'], async ({title}) => {
       const record = await titles.rename(ctx.sessionKey, title, 'auto');
       if (!record) throw new Error('会话名称已变更，请保留当前名称');
       return {title: record.title};
-    }), {name: 'pinkie_session_title'});
+    })), {name: 'pinkie_session_title'});
   return titles;
 }

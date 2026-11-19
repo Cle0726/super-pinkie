@@ -53,6 +53,7 @@ import {registerWorkbench} from './workbench.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
+import {LOCKED_ERROR, getActiveMetreLock, paramsReferenceMetre, registerMetreLock} from './metre-lock.mjs';
 
 const MODE_BY_AGENT = Object.freeze({
   main: 'chat',
@@ -1414,6 +1415,7 @@ function isTurnCleanup(state, index) {
 
 // Work-first changes are limited to the four ordinary parent sessions.
 function workFirstContext(ctx = {}) {
+  if (getActiveMetreLock()?.isLockedSession?.(ctx.sessionKey)) return false;
   return /^agent:(?:main|project|thinking|learning|metre):/.test(String(ctx.sessionKey || ''))
     && !/:(?:subagent|internal-session-effects|cron|heartbeat):/.test(String(ctx.sessionKey || ''));
 }
@@ -6972,6 +6974,36 @@ export default {
     };
     // 产品设定防护（正式版才打开）：最先跑的 before_tool_call，只拦写受保护路径和改配置。
     registerSettingsGuard(api, {pinkieStateRoot: pinkieStateRoot(), baseFor: ctx => agentWorkspaceDir(ctx)});
+    // 正式版 Metre 开发者密码门槛：未解锁时所有 agent:metre: 运行、工具和接口一律拒绝。
+    const initialMetreLock = registerMetreLock(api, {pinkieStateRoot: pinkieStateRoot()});
+    const metreLock = {
+      isLocked: () => Boolean((getActiveMetreLock() || initialMetreLock)?.isLocked?.()),
+      isLockedSession: key => Boolean((getActiveMetreLock() || initialMetreLock)?.isLockedSession?.(key)),
+      assertSessionAllowed: key => (getActiveMetreLock() || initialMetreLock)?.assertSessionAllowed?.(key),
+    };
+    const isMetreTurnLocked = (event, ctx) => {
+      const key = String(ctx?.sessionKey || event?.sessionKey || '');
+      if (metreLock.isLockedSession(key)) return true;
+      return metreLock.isLockedSession(architecture?.resolveParent?.(key) || '');
+    };
+    api.on('before_agent_run', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {outcome: 'block', reason: 'metre-locked', message: LOCKED_ERROR};
+      return undefined;
+    }, {priority: 100000});
+    const METRE_TARGET_TOOLS = new Set([
+      'sessions_send', 'sessions_spawn', 'sessions_history', 'sessions_list',
+      'subagents', 'cron', 'gateway', 'agents_list',
+      'pinkie_sessions', 'pinkie_session_start', 'pinkie_session_message',
+      'pinkie_session_list', 'pinkie_mode_ask', 'metre_memory', 'pinkie_models',
+    ]);
+    api.on('before_tool_call', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {block: true, blockReason: LOCKED_ERROR};
+      const toolName = String(event?.toolName || event?.name || '');
+      if (metreLock.isLocked() && METRE_TARGET_TOOLS.has(toolName) && paramsReferenceMetre(event?.params)) {
+        return {block: true, blockReason: LOCKED_ERROR};
+      }
+      return undefined;
+    }, {priority: 99000});
     const memory = new LongTermMemoryStore({config: pluginConfig, parentForChild: sessionKey => architecture?.resolveParent(sessionKey) || sessionKey});
     const learning = new LearningInteractionStore();
     // Le Pacte（学习约定 + 每日账本 + 连续天数）：账本挂在学习存储上，由后者的
@@ -7027,26 +7059,27 @@ export default {
     // 模型失败的真实原因和「换个能用的模型」：聊天记录不保留 errorMessage，在这里记下。
     const modelHealth = new ModelHealth();
     sharePluginState(modelHealth, 'modelHealth', ['runs', 'models', 'sessions']);
-    api.registerTool?.(ctx => createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
-    api.registerTool?.(ctx => createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
-    api.registerTool?.(ctx => createCuaComputerTool(ctx), {name: 'computer'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createDeliveryGuardTool(cleKk, ctx), {name: DELIVERY_GUARD_TOOL});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createLongTermMemoryTool(memory, ctx), {name: 'clekk_memory'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createCuaComputerTool(ctx), {name: 'computer'});
     // 操控软件的现成动作：一次连做多步、按名字点控件、跑通的流程存在这台电脑上重放。Mac 和 Windows 都有。
-    api.registerTool?.(ctx => (['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
+    api.registerTool?.(ctx => (!isMetreTurnLocked(null, ctx) && ['darwin', 'win32'].includes(process.platform) ? createDeskTool(ctx) : null), {name: 'computer_flow'});
     // 手册长度上限由引擎自己保障，不靠用户跑安装脚本。
     api.on('gateway_start', () => { try { ensureManualLimits(openclawConfigPath(), {log: message => api.logger?.info?.(message)}); } catch { /* 不能影响启动 */ } });
     // 飞书 / 微信会话不显示实时思考（用户 11-16）；网页保持。网关起来后补一遍，之后每条聊天软件消息再补。
     const channelReasoning = createChannelReasoningGuard(api);
     api.on('gateway_start', () => { setTimeout(() => { channelReasoning.sweep().catch(() => {}); }, 8000).unref?.(); });
-    api.registerTool?.(registerAppBrowserLifecycle(api), {name: 'app_browser'});
-    api.registerTool?.(ctx => metreWording(createPinkieSearchTool(), ctx?.sessionKey), {name: 'pinkie_search'});
-    api.registerTool?.(ctx => createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
-    api.registerTool?.(ctx => createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
+    const appBrowserTool = registerAppBrowserLifecycle(api);
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) ? null : appBrowserTool(ctx)), {name: 'app_browser'});
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) ? null : metreWording(createPinkieSearchTool(), ctx?.sessionKey)), {name: 'pinkie_search'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createLearningActivityTool(learning, ctx), {name: 'learning_activity'});
+    api.registerTool?.(ctx => isMetreTurnLocked(null, ctx) ? null : createWebGptActivityTool(webGptActivity, ctx), {name: 'web_gpt_activity'});
     // 网页 GPT（后台）：用先生在内置浏览器登录的 ChatGPT 提问、批量出图。只有 Mac App 有隐藏页面。
-    api.registerTool?.(ctx => (process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
+    api.registerTool?.(ctx => (!isMetreTurnLocked(null, ctx) && process.platform === 'darwin' ? metreWording(createWebGptTool(ctx, {
       projectFor: sessionKey => webGptConnection.workspace(sessionKey, '', {allowUnbound: true}),
     }), ctx?.sessionKey) : null), {name: 'web_gpt'});
     // 挥洒模式不带碧琪的主动提问卡。
-    api.registerTool?.(ctx => (modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
+    api.registerTool?.(ctx => (isMetreTurnLocked(null, ctx) || modeForContext(ctx) === 'none' ? null : metreWording(createAskUserTool(), ctx?.sessionKey)), {name: ASK_USER_TOOL});
     registerLearningGateway(api, learning);
     registerLearningLibrary(api, {learning});
     // 定时任务由界面通过 gateway 自己的 cron.add 创建，只会发一条固定标记；
@@ -7153,6 +7186,7 @@ export default {
     api.registerGatewayMethod('pinkie.model.failure', ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         const pluginConfig = runtimeConfig(api);
         let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
         if (!Object.keys(config).length) {
@@ -7165,7 +7199,9 @@ export default {
     }, {scope: 'operator.read'});
     api.registerGatewayMethod('pinkie.memory.list', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.list(ctx, {query: params?.query || '', limit: params?.limit || 200}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7173,7 +7209,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.memory.remember', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.remember(ctx, {...params, source: 'memory-ui'}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7181,7 +7219,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.memory.forget', ({params, respond}) => {
       try {
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.forget(ctx, params || {}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7190,7 +7230,9 @@ export default {
     api.registerGatewayMethod('pinkie.memory.clear', ({params, respond}) => {
       try {
         if (params?.confirm !== 'CLEAR_CURRENT_MEMORY') throw new Error('缺少清空确认');
-        const ctx = memory.contextForSession(String(params?.sessionKey || ''));
+        const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
+        const ctx = memory.contextForSession(sessionKey);
         respond(true, memory.clear(ctx));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -7199,6 +7241,7 @@ export default {
     api.registerGatewayMethod('pinkie.deepThink.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         const tier = String(params?.tier || '');
         const requestId = String(params?.requestId || '');
         const explicitBinding = Boolean(requestId && workFirstContext({sessionKey}));
@@ -7237,6 +7280,7 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         if (!sessionKey) throw new Error('缺少会话标识');
+        metreLock.assertSessionAllowed(sessionKey);
         architecture.disarm(sessionKey);
         reasoning.cancel({sessionKey});
         await watchdog.cancel(sessionKey);
@@ -7248,6 +7292,9 @@ export default {
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.deepThink.status', async ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       respond(true, architecture.status(sessionKey));
     }, {scope: 'operator.admin'});
     // Read-only snapshot for a status UI. Until both choices are passed with
@@ -7255,6 +7302,9 @@ export default {
     // pretending that they are already one per-run contract.
     api.registerGatewayMethod('pinkie.run.status', ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):[^\s]+$/.test(sessionKey)) {
         return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少有效会话标识'});
       }
@@ -7293,6 +7343,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.arm', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
@@ -7309,6 +7360,7 @@ export default {
     api.registerGatewayMethod('pinkie.webGpt.inject', async ({params, respond}) => {
       try {
         const sessionKey = String(params?.sessionKey || '');
+        metreLock.assertSessionAllowed(sessionKey);
         if (!/^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(sessionKey)) {
           throw new Error('缺少有效会话标识');
         }
@@ -7338,6 +7390,7 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         if (!sessionKey) throw new Error('缺少会话标识');
+        metreLock.assertSessionAllowed(sessionKey);
         // Clear both the retry lease and the supervisor's persisted pending
         // final. Otherwise a gateway restart can resurrect a turn the user
         // explicitly cancelled and race the next real message.
@@ -7351,6 +7404,9 @@ export default {
     api.registerGatewayMethod('pinkie.watchdog.status', async ({params, respond}) => {
       const sessionKey = String(params?.sessionKey || '');
       if (!sessionKey) return respond(false, undefined, {code: 'INVALID_REQUEST', message: '缺少会话标识'});
+      if (metreLock.isLockedSession(sessionKey)) {
+        return respond(false, undefined, {code: 'INVALID_REQUEST', message: LOCKED_ERROR});
+      }
       respond(true, watchdog.status(sessionKey));
     }, {scope: 'operator.admin'});
     api.registerGatewayMethod('pinkie.usage.get', async ({respond}) => {
@@ -7439,10 +7495,12 @@ export default {
     // transports call before_agent_run without a prompt-build pass; relying on
     // only the latter was the gap that let report-only runs escape the gate.
     api.on('before_model_resolve', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       const retryModel = watchdog.beforeModelResolve(event, ctx);
       return architecture.beforeModelResolve(event, ctx) || retryModel;
     }, {priority: 12000});
     api.on('before_agent_run', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {outcome: 'block', reason: 'metre-locked', message: LOCKED_ERROR};
       architecture.parentStarted(event, ctx);
       cleKk.begin(event, ctx);
       fileDelivery.noteTurn(event, ctx);
@@ -7453,6 +7511,7 @@ export default {
     // A real user addition gets its own evidence objective and retires only
     // pending *continuations*; neither cancellation aborts the live agent.
     api.on('message_received', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       const sessionKey = architecture.receiveUserMessage(event, ctx);
       channelReasoning.onMessage(event, ctx, sessionKey)?.catch?.(() => {});
       if (!sessionKey) return;
@@ -7466,11 +7525,13 @@ export default {
       ]);
     }, {priority: -12000});
     api.on('before_prompt_build', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       cleKk.begin(event, ctx);
       fileDelivery.noteTurn(event, ctx);
       return architecture.prompt(event, ctx);
     }, {priority: -12000});
     api.on('before_tool_call', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return {block: true, blockReason: LOCKED_ERROR};
       const decision = architecture.beforeTool(event, ctx);
       if (!decision?.block) {
         const waiting = background.beforeTool(event, ctx);
@@ -7481,6 +7542,7 @@ export default {
       return decision;
     }, {priority: -12000});
     api.on('after_tool_call', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       background.afterTool(event, ctx);
       planState.toolCalled(String(ctx.sessionKey || ''), event.toolName, Boolean(event.error || event.isError || event.result?.isError));
       architecture.afterTool(event, ctx);
@@ -7492,17 +7554,27 @@ export default {
       } catch { /* 查语法是附带的好处，不能影响工具结果 */ }
       await cleKk.verifyAfterTool(event, ctx);
     });
-    api.on('subagent_spawned', (event, ctx) => architecture.spawned(event, ctx));
+    api.on('subagent_spawned', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.spawned(event, ctx);
+    });
     api.on('subagent_ended', async event => {
       const parent = architecture.resolveParent(event.targetSessionKey || '');
+      if (metreLock.isLockedSession(parent) || metreLock.isLockedSession(event.targetSessionKey)) return;
       architecture.ended(event);
       const status = architecture.status(parent);
       if (status.active && status.pending === 0) {
         await tierContinuation.schedule(parent, agentFromSessionKey(parent));
       }
     });
-    api.on('before_compaction', (event, ctx) => architecture.beforeCompaction(event, ctx));
-    api.on('after_compaction', (event, ctx) => architecture.afterCompaction(event, ctx));
+    api.on('before_compaction', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.beforeCompaction(event, ctx);
+    });
+    api.on('after_compaction', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
+      architecture.afterCompaction(event, ctx);
+    });
     api.on('model_call_started', event => {
       architecture.modelStarted(event);
       watchdog.modelStarted(event);
@@ -7514,6 +7586,7 @@ export default {
     });
     api.on('llm_output', event => usage.record(event));
     api.on('before_agent_finalize', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       if (architecture.stopReport(ctx)) {
         cleKk.retireRetry(ctx.sessionKey || '');
         return;
@@ -7577,6 +7650,7 @@ export default {
     // 先删掉漏进正文的内部自检（见 reply-hygiene.mjs），再走交付核验；
     // 核验放行时把清理后的消息写进记录。
     api.on('before_message_write', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       let cleaned = sanitizeAssistantMessage(event?.message);
       const original = cleaned || event?.message;
       if (original?.role === 'assistant' && workFirstContext(ctx)) {
@@ -7597,6 +7671,7 @@ export default {
     // Delivery has its own hook and catches channels that render a final reply
     // without first appending it to the session JSONL.
     api.on('reply_payload_sending', (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return undefined;
       const stoppedReport = architecture.stopReport(ctx);
       if (stoppedReport) {
         cleKk.cancel(ctx.sessionKey || event?.sessionKey || '', 'deep_think_stopped');
@@ -7614,6 +7689,7 @@ export default {
         .then((result) => fileDelivery.replyResult(!cleaned || result?.payload || result?.block || result?.cancel ? result : {...(result || {}), payload: cleaned}, event, ctx));
     }, {priority: -20000});
     api.on('agent_end', async (event, ctx) => {
+      if (isMetreTurnLocked(event, ctx)) return;
       if (/:subagent:/.test(ctx.sessionKey || '')) {
         const parent = architecture.resolveParent(ctx.sessionKey);
         architecture.ended({

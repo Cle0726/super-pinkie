@@ -69,16 +69,25 @@
   function openSession(key) {
     if (!key) return;
     const mode = modeOf(key);
-    if (mode && mode !== currentMode()) {
-      // Another mode: hand the key to the mode switcher's own restore path.
-      try { localStorage.setItem('laolao:last-session:' + mode, key); localStorage.setItem('laolao:active-mode', mode); } catch {}
-      const next = new URL(location.href);
-      next.searchParams.set('session', key);
-      next.searchParams.set('laolao-switch', '1');
-      location.assign(next.href);
+    const go = () => {
+      if (mode && mode !== currentMode()) {
+        // Another mode: hand the key to the mode switcher's own restore path.
+        try { localStorage.setItem('laolao:last-session:' + mode, key); localStorage.setItem('laolao:active-mode', mode); } catch {}
+        const next = new URL(location.href);
+        next.searchParams.set('session', key);
+        next.searchParams.set('laolao-switch', '1');
+        location.assign(next.href);
+        return;
+      }
+      window.__laolaoSidebar?.navigateSession?.(key);
+    };
+    if (mode === 'metre' && window.__pinkieMetreLock?.ensureUnlocked) {
+      void window.__pinkieMetreLock.ensureUnlocked().then((ok) => {
+        if (ok) go();
+      });
       return;
     }
-    window.__laolaoSidebar?.navigateSession?.(key);
+    go();
   }
   function openSettings() {
     // The shell's own sidebar link carries the router's click handling.
@@ -208,6 +217,9 @@
 
   // ---------- native → page ----------
   async function quickAsk(mode, text) {
+    if (mode === 'metre' && window.__pinkieMetreLock?.ensureUnlocked) {
+      if (!(await window.__pinkieMetreLock.ensureUnlocked())) return;
+    }
     const agentId = MODE_AGENT[mode] || MODE_AGENT[currentMode()] || 'main';
     const key = `agent:${agentId}:dashboard:${crypto.randomUUID?.() || Date.now().toString(36)}`;
     try {

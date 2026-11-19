@@ -29,9 +29,10 @@ const MODE_WORKSPACES = {chat: 'workspace', project: 'workspace-project', thinki
 const KEEP_NAMES = new Set(['DREAMS.md']);
 // 插件：已装目录 ← 包里的源目录。
 const PLUGINS = {'pinkie-mode-architecture': 'services/mode-architecture', 'pinkie-project-scope': 'services/project-scope', 'pinkie-first-person-renderer': 'services/first-person-renderer'};
+const REQUIRED_PLUGIN_FILES = {'pinkie-mode-architecture': new Set(['index.mjs', 'settings-guard.mjs', 'metre-lock.mjs', 'metre-lock-hash.json'])};
 const PRODUCT_PLUGIN_IDS = Object.keys(PLUGINS);
 const HOOK_GRANT_PLUGINS = new Set(['pinkie-mode-architecture', 'pinkie-project-scope']);
-const PRODUCT_AGENTS = {main: 'workspace', project: 'workspace-project', thinking: 'workspace-thinking', learning: 'workspace-learning'};
+const PRODUCT_AGENTS = {main: 'workspace', project: 'workspace-project', thinking: 'workspace-thinking', learning: 'workspace-learning', metre: 'workspace-metre'};
 // 这些名字的文件放进工作区就会被 OpenClaw 当设定注入；包里没有就不该出现。
 const INJECTED_EXTRAS = ['BOOTSTRAP.md'];
 
@@ -281,7 +282,8 @@ export function startup({bundle = path.resolve(HERE, '../..'), home = os.homedir
         const inner = rel.slice(source.length + 1);
         if (/^(setup\.py|README|tests?\/)/.test(inner)) continue;
         const target = path.join(installed, ...inner.split('/'));
-        if (!fs.existsSync(target) && !isLink(target)) continue; // setup 没装的文件不凭空加
+        const required = REQUIRED_PLUGIN_FILES[plugin]?.has(inner);
+        if (!required && !fs.existsSync(target) && !isLink(target)) continue; // setup 没装的文件不凭空加；核心防护与密码门槛文件即使被删也要补回
         if (!isLink(target) && hashFile(target) === hash) continue;
         backupAndCopy(path.join(bundle, rel), target, backupRoot, `extensions/${plugin}/${inner}`, restored, 'plugin');
       }

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {renderFirstPerson} from './first-person.mjs';
+import {getActiveMetreLock} from './metre-lock.mjs';
 
 // This model belongs to the helper. Never resolve a model from a chat session
 // or fall back to the conversation agent when the helper is unavailable.
@@ -294,7 +295,11 @@ export function registerCompanionGateway(api, store, {assistant = new CompanionA
     ['pinkie.companion.ask', params => assistant.ask(params)],
   ]) {
     api.registerGatewayMethod(method, async ({params, respond}) => {
-      try { respond(true, await handler(params || {})); }
+      try {
+        const blocked = getActiveMetreLock()?.checkGatewayRequest?.(method, params || {});
+        if (blocked) throw new Error(blocked);
+        respond(true, await handler(params || {}));
+      }
       catch (error) { respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message}); }
     }, {scope: 'operator.admin'});
   }

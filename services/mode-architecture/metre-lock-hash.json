@@ -1,0 +1,5 @@
+{
+  "algorithm": "scrypt",
+  "configured": false,
+  "note": "正式版 Metre 开发者密码哈希：请在本机运行 node tools/metre/set-password.mjs 生成后提交，不要把明文密码放进仓库或聊天。"
+}

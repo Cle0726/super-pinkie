@@ -8,6 +8,7 @@ import {
 } from './session-titles.mjs';
 import {SessionSearch} from './session-search.mjs';
 import {isTempKey} from './session-temp.mjs';
+import {LOCKED_ERROR, getActiveMetreLock, isMetreAgent, isMetreSession, paramsReferenceMetre} from './metre-lock.mjs';
 
 // pinkie_sessions（Metre 计划 2.7）：管理侧栏会话的工具。
 // Metre 里所有动作直接生效；四个老模式里对自己开出的子会话直接生效，对别的会话的 archive / stop / rename / detach
@@ -470,6 +471,7 @@ export class SessionManager {
     try { meta = JSON.parse(fs.readFileSync(path.join(dir, 'session.json'), 'utf8')); } catch { throw new Error('这个备份里没有 session.json'); }
     const key = meta.key, agentId = agentOf(key);
     if (!agentId || agentId !== meta.agentId) throw new Error('备份说明不对');
+    if (isMetreSession(key) || isMetreAgent(agentId)) getActiveMetreLock()?.assertUnlocked?.();
     if (await this.access.entry(key)) throw new Error('这条会话还在（没删或已经恢复过）');
     const {label} = await this.uniqueLabel(agentId, meta.entry?.label || meta.title || '恢复的会话');
     await this.access.rpc('sessions.create', {agentId, key, label});
@@ -554,6 +556,9 @@ export class SessionManager {
   }
 
   async run(callerKey, params = {}) {
+    if (getActiveMetreLock()?.isLocked?.() && (isMetreSession(callerKey) || paramsReferenceMetre(params))) {
+      throw new Error(LOCKED_ERROR);
+    }
     const caller = this.caller(callerKey);
     const action = String(params.action || '').trim();
     if (!ACTIONS.includes(action)) throw new Error('action 只能是 ' + ACTIONS.filter(item => caller.metre || !METRE_ONLY.has(item)).join(' / '));
@@ -602,6 +607,7 @@ const MODE_DESCRIPTION = '管理侧栏里的会话。action：list 列会话（�
 
 export function sessionManageTool(manager, ctx) {
   const key = String(ctx?.sessionKey || '');
+  if (getActiveMetreLock()?.isLockedSession?.(key)) return null;
   let caller;
   try { caller = manager.caller(key); } catch { return null; }
   const actions = ACTIONS.filter(item => caller.metre || !METRE_ONLY.has(item));
@@ -612,7 +618,10 @@ export function sessionManageTool(manager, ctx) {
     query: {type: 'string'}, status: {type: 'string', enum: ['running', 'idle', 'archived']}, archived: {type: 'boolean'},
     before: {type: 'integer'}, limit: {type: 'integer'},
     ...(caller.metre ? {backup: {type: 'string'}} : {}),
-  }, ['action'], params => manager.run(key, params));
+  }, ['action'], params => {
+    getActiveMetreLock()?.assertSessionAllowed?.(key);
+    return manager.run(key, params);
+  });
 }
 
 const MANAGE_INSTANCES = Symbol.for('pinkie.session-manage.v1');
