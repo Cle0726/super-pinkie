@@ -304,6 +304,7 @@ export function resolveReadFile(relPath, {repoRoot = REPO_ROOT, workspaceRoot = 
     workspaceRoot && path.join(workspaceRoot, relPath),
     path.join(repoRoot, 'personas/project', relPath),
     path.join(repoRoot, 'personas/thinking', relPath),
+    relPath.startsWith('refs/') && path.join(repoRoot, 'personas/thinking', relPath.slice('refs/'.length)),
     path.join(repoRoot, 'personas/metre', relPath),
   ].filter(Boolean);
   for (const c of candidates) {
@@ -351,6 +352,12 @@ function collectAllWorkspaceManuals(repoRoot = REPO_ROOT) {
         }
       } catch {}
     }
+  }
+  const aesthetics = path.join(repoRoot, 'personas/thinking/AESTHETICS.md');
+  if (fs.existsSync(aesthetics)) {
+    try {
+      manuals.set('refs/AESTHETICS.md', fs.readFileSync(aesthetics, 'utf8').replace(/\r\n/g, '\n'));
+    } catch {}
   }
   return manuals;
 }
