@@ -68,3 +68,20 @@
 - 三处：docs/METRE-MODE.md 新增「角色」；personas/README.md 登记独立的 roles agent、卡目录和单向复制；briefs/metre-mode-1113/RELEASE-NOTES-DRAFT.md 更新说明（保留版本号占位，未改正式发布稿）。
 - R4-5 抽核五处：① 本机覆盖前备份（metre_role_assets.py:61–69）；② 官方退役挪进备份、用户/草稿不进入（同文件 80–101）；③ 工作区打法和视觉规范及空占位（同文件 104–129；实测仓库 31 个 playbook 的 SHA-256 逐一一致、视觉规范字节相同、7 空占位、无 memory/、重跑不改）；④ 非用户模式（app/super_pinkie.py 的 MODE_AGENTS 没有 roles）；⑤ 看板自定义、合格/不合格及原因（laolao-metre-board-data.js:96–100、223–240；Chrome fixture 通过）。
 - 用 app/release_notes.py 给更新稿临时填当前版本号、在内存跑 lint，通过；未改版本号或已发布文件。
+
+## 2026-11-18 · 车道自查（最终）
+
+| 条目 | 结果 | 证据或原因 |
+|---|---|---|
+| R1-16 | 没测 | 静态确认未把 roles 加入模式枚举；真实模式切换、侧栏筛选和角色子会话显示需其他车道的血缘接线及网关，未拍真实侧栏截图。 |
+| R1-18 | 没测 | 磁盘子项已过：真实源的 31 个 playbook、视觉规范一致，7 个空占位、无 memory/；未跑一轮，不能确认运行后不会新增文件。 |
+| R1-27 | 过 | 本车道的仿真检查：看板 RPC 单测、Chrome 假数据浅色/深色/700px 三张图、角色名和模型/自定义标识/统计与原因均可见，无新增 CSS 色值。真实读卡接线未测。 |
+| R4-1 | 没测 | 重装和更新 fixture 的同 ID 用户卡字节及 mtime 一致；pinkie_roles 能否列出、派活仍待网关。 |
+| R4-2 | 过 | Windows 安装入口的临时 fixture 中，临时旧内容已入 backups，退役卡字节相同且离开官方目录；重装不产生重复备份。 |
+| R4-4 | 没测 | 未打包、未测 Windows 真机新装及上一版升级，也未在 Mac 跑包内快照；Windows 上跑的是源代码安装/导入检查，不替代平台验收。 |
+| R4-5 | 过 | 已改三份文档，五处核对见文档段落；发布说明草稿格式检查通过。 |
+
+- 收工复查：正式 openclaw.json（2026-11-14T07:50:37.9293033Z）、正式 App 安装目录（2026-11-03T22:57:22.1522954Z）、App 状态目录（2026-11-15T11:20:15.9964807Z）修改时间与前次只读记录相同，18789 仍没有监听 PID。没跑真网关、没建运行时隔离副本、没打包、没有改五个旧模式的人设/手册/注入/工具。
+- 最后离线回归：Metre Node 测试加 guard-startup/self-contained-app 共 102/102；Windows persona 安装 19/19、persona bundle 3/3；git diff --check 通过。
+- 全量 Node gate（不带 --update）未跑完：四个学习浏览器测试长时间没有退出（learning-desk、learning-notes-menu、study-builtin-model-ui、study-desk-chat-entry，仓库 known-failures 已列各自超时），本次停止自己的测试进程，**不记 Z1 通过**。未改 known-failures.json。单跑 windows-self-contained 遇到快照条目只有 18，既有测试要求至少 30；确认该测试及 SHA256SUMS 相对基线未变，9dba1a4c 同样 18 条。Mac mock 脚本改用 UTF-8 复查后，8 条里 6 处旧断言还只认项目/学习，与基线 9dba1a4c 在同一 fixture 重跑的失败集合完全相同。
+- 下一步：等窗口 1 的读卡/血缘/agent 配置和其他车道的官方卡合入后，按上面的看板接口验证真实接线，再补 Windows/Mac 完整验收。本车道不合并上游分支。
