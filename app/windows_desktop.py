@@ -1835,6 +1835,10 @@ function Stop-InstallLeftovers([string]$Root) {
   function Get-PathSpellings([string]$Path) {
     $forms = @()
     if (-not $Path) { return $forms }
+    # Exactly as given first: on Windows PowerShell (.NET Framework) GetFullPath
+    # and Get-Item expand 8.3 names, so a mixed spelling (short parent, long
+    # leaf -- what a child started from %TEMP% sees) is only kept this way.
+    $forms += $Path.TrimEnd('\')
     try { $forms += [IO.Path]::GetFullPath($Path).TrimEnd('\') } catch {}
     if (Test-Path -LiteralPath $Path) {
       try { $forms += (Get-Item -LiteralPath $Path).FullName.TrimEnd('\') } catch {}
@@ -1842,6 +1846,8 @@ function Stop-InstallLeftovers([string]$Root) {
         $fso = New-Object -ComObject Scripting.FileSystemObject
         $short = [string]$fso.GetFolder($Path).ShortPath
         if ($short) { $forms += $short.TrimEnd('\') }
+        $leaf = Get-Item -LiteralPath $Path
+        if ($leaf.Parent) { $forms += (Join-Path ([string]$fso.GetFolder($leaf.Parent.FullName).ShortPath).TrimEnd('\') $leaf.Name) }
         # The long form: walk up resolving each segment to its real name
         # (a directory filter matches the 8.3 name as well as the long one).
         $parts = @(); $item = Get-Item -LiteralPath $Path

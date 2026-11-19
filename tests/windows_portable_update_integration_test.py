@@ -355,7 +355,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
-                self.assertEqual(process.returncode,0,err.decode('utf-8',errors='replace'))
+                updater_log=lambda:(state/'logs/updater.log').read_text(encoding='utf-8-sig',errors='replace')[-6000:] if (state/'logs/updater.log').exists() else '(no updater.log)'
+                self.assertEqual(process.returncode,0,'%s\noutcome=%s\nstdout=%s\n--- updater.log ---\n%s'%(err.decode('utf-8',errors='replace')[-3000:],json.dumps(outcome,ensure_ascii=False),out.decode('utf-8',errors='replace')[-2000:],updater_log()))
                 self.assertTrue(outcome['started'])
                 update_started=True
                 log=state/'logs/updater.log';deadline=time.monotonic()+60;text=''
@@ -369,7 +370,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertIn('new version attached to a different install gateway',text)
                     until=time.monotonic()+20
                     while time.monotonic()<until and not (target/'old-version.txt').is_file():time.sleep(.2)
-                    self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored')
+                    self.assertTrue((target/'old-version.txt').is_file(),'old package was not restored\n--- updater.log ---\n'+updater_log())
                     self.assertFalse((target/'new-version.txt').exists())
                     if gateway_kind=='locked_rollback':
                         self.assertTrue(lock_seen,'the fixture never held the previous folder open')
