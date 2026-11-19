@@ -118,9 +118,11 @@ const INSTRUCTION_PATTERNS = [
   /(?:从现在起|从今以后|从今天起|以后|今后|此后|永远|始终)[^。\n]{0,12}(?:你|碧琪)[^。\n]{0,10}(?:没有|不受|不再受|无需|不需要|可以无视|可以忽略|解除)[^。\n]{0,6}(?:任何)?(?:限制|约束|规则|审查|道德|安全)/,
   /(?:你|碧琪)(?:现在|从现在起)?(?:不再是|不是)碧琪/,
   /(?:你|碧琪)(?:必须|一定要|只能|务必)(?:无条件|永远|始终|总是)?(?:服从|听从|执行|遵守)(?:我|用户|以下|下面)/,
-  /(?:越狱|破甲|开发者模式|无限制模式|上帝模式|DAN\b|jailbreak|developer mode|god mode)/i,
+  /(?:越狱模式|破甲|上帝模式|\bDAN\b|\bgod\s+mode\b|\bjailbreak\s+(?:mode|prompt)\b)/i,
+  /(?:(?:你|碧琪)[^。\n]{0,8}(?:进入|开启|打开|切换到?|启用|激活|处于|变成)\s*(?:越狱(?:模式)?|开发者模式|无限制模式)|(?:^|[，。；！？\n\s])(?:请|现在|立刻|马上|从现在起)?(?:进入|启用|激活)\s*(?:越狱(?:模式)?|开发者模式|无限制模式))/,
+  /\b(?:enter|enable|activate|switch\s+to|turn\s+on|you\s+are\s+in)\s+(?:developer\s+mode|jailbreak(?:\s+mode)?|god\s+mode|unrestricted\s+mode)\b/i,
   /\b(?:ignore|disregard|forget|override|bypass)\s+(?:all\s+|any\s+|your\s+|the\s+)?(?:previous|prior|above|earlier|system|safety)?\s*(?:instructions?|rules?|prompts?|guidelines?|restrictions?)/i,
-  /\b(?:system prompt|your (?:new )?(?:rules|instructions) (?:are|is))\b/i,
+  /\b(?:your\s+(?:new\s+)?(?:system\s+prompt|rules|instructions)\s+(?:are|is)\b|(?:new|override|replace|ignore|reveal|show|print|dump)\s+(?:your\s+|the\s+)?system\s+prompt\b|system\s+prompt\s*[:=])/i,
   /\bfrom now on,?\s+(?:you|the assistant)\s+(?:must|will|are|have no|can)/i,
   /\byou (?:have no|are no longer bound by|are free from) (?:any )?(?:rules|restrictions|limits|guidelines)/i,
 ];
