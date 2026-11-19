@@ -9,7 +9,7 @@ ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 PINKIE_NATIVE_SOURCE_DIR="$REPO_ROOT/desktop/macos/pinkie/Sources"
 LAUNCHER_SOURCE="$PINKIE_NATIVE_SOURCE_DIR/Launcher.swift"
-LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift")
+LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -145,7 +145,7 @@ sync_launcher_resources() {
   local native_file native_target
   for native_target in "$bundled_root/desktop/macos/Sources" "$bundled_root/desktop/macos/pinkie/Sources"; do
     mkdir -p "$native_target"
-    for native_file in Launcher.swift MaterialPreview.swift BrowserControl.swift BrowserControl.js; do
+    for native_file in Launcher.swift MaterialPreview.swift BrowserControl.swift ChatGPTBackgroundWorker.swift PinkieNative.swift BrowserControl.js; do
       copy_if_changed "$PINKIE_NATIVE_SOURCE_DIR/$native_file" "$native_target/$native_file"
     done
   done
