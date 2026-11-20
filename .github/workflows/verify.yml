@@ -14,6 +14,10 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # Same historical baseline as portable-checks; generate it on Linux
+      # rather than using the checked-in examples captured on another OS.
+      METRE_MAIN_REFERENCE: a85a7449103efa49674ed4f49725c1e93b943de0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,6 +30,20 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils libarchive-tools tesseract-ocr
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-release-verify-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Capture the pinned main Metre regression baseline on Linux
+        run: |
+          git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
+          git worktree add --detach "$RUNNER_TEMP/metre-main-reference" "$METRE_MAIN_REFERENCE"
+          PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
+            node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
+          echo "PINKIE_METRE_MAIN_BASELINE=$RUNNER_TEMP/metre-main.json" >> "$GITHUB_ENV"
       - name: Node tests against the known-failure list
         run: node tools/release-gate/run-tests.mjs
       - name: Python tests

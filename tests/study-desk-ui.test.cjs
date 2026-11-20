@@ -168,8 +168,11 @@ test('real control-ui Chromium hosts flashcards, an experiment, a mock paper, bo
       const stem = await page.locator('.q-text').innerText();
       await activate(page.getByRole('button', {name: '换个说法讲', exact: true}));
       await page.waitForFunction(() => __pinkieStudyConversation.active());
-      const chat = harness.calls.find(c => c.method === 'chat.send'); assert.match(chat.params.message, /我还没提交答案/); assert.ok(chat.params.message.includes(stem));
+      // The pane becomes active before its async session and send finish.
       await page.getByText('隔离验收回复：已收到这道题的追问，点左侧舞台可回原题。', {exact: true}).waitFor();
+      const chat = harness.calls.find(c => c.method === 'chat.send');
+      assert.ok(chat, 'the follow-up must send a gateway request');
+      assert.match(chat.params.message, /我还没提交答案/); assert.ok(chat.params.message.includes(stem));
       assert.equal(await page.locator('#pinkie-study-desk .rail').isVisible(), true);
       assert.equal(await page.locator('#pinkie-desk-chat .pk-chat-thread').isVisible(), true);
       assert.match(chat.params.sessionKey,/^agent:learning:desk-chat:/);

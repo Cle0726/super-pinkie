@@ -49,6 +49,9 @@ CALLER = r'''
 import importlib.util, json, os, sys
 from pathlib import Path
 source, exe, payload, digest, version, result = sys.argv[1:]
+# Resolve sibling modules (for example release_notes and inapp_browser) from
+# the old release's source tree, not from the checkout being installed.
+sys.path.insert(0, str(Path(source).resolve().parent))
 spec = importlib.util.spec_from_file_location("old_windows_desktop", source)
 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 exe = Path(exe)
@@ -264,17 +267,21 @@ def main():
                                 env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     outcome = json.loads(read(result_file) or "{}")
     summary["launch"] = outcome
+    helper_started = caller_run.returncode == 0 and outcome.get("started") is True
     if caller_run.returncode:
         summary["problems"].append("caller failed: " + caller_run.stderr[-800:])
+    elif not helper_started:
+        summary["problems"].append("replacer did not start: " + str(outcome.get("message") or outcome))
     # The App closes its own window 0.6 s after the helper reports ready; the
     # gateway it started is intentionally left running.
-    subprocess.run(["taskkill", "/PID", str(app.pid), "/F"], capture_output=True)
+    if helper_started:
+        subprocess.run(["taskkill", "/PID", str(app.pid), "/F"], capture_output=True)
 
     log_path = state / "logs/updater.log"
     deadline = time.monotonic() + args.timeout
     finished = None
     failure_window_closed = False
-    while time.monotonic() < deadline:
+    while helper_started and time.monotonic() < deadline:
         if args.expect == "failure-window" and watch.failure_window and not failure_window_closed:
             time.sleep(3)  # let the screenshot catch it with its buttons
             watch._shot(time.monotonic() - watch.started_at, "failure-window")
@@ -288,7 +295,7 @@ def main():
                 break
         time.sleep(2)
     summary["helper_seconds"] = finished
-    if args.expect != "failure-window":
+    if helper_started and args.expect != "failure-window":
         # Watch until the new (or restored) App window is on screen.
         until = time.monotonic() + 120
         while time.monotonic() < until and APP_TITLE not in (watch.samples[-1]["titles"] if watch.samples else []):
@@ -299,7 +306,8 @@ def main():
     visibility = watch.report()
     summary["visibility"] = {key: value for key, value in visibility.items() if key != "samples"}
     (out / f"update-{args.case}-windows.json").write_text(json.dumps(visibility, ensure_ascii=False, indent=2), encoding="utf-8")
-    time.sleep(20)  # the restored/new window loads and consumes last-failure.json
+    if helper_started:
+        time.sleep(20)  # the restored/new window loads and consumes last-failure.json
     summary["installed_version"] = read(target / "_internal/VERSION").strip()
     summary["updater_log"] = read(log_path).splitlines()[-40:]
     summary["launcher_log"] = [line for line in read(state / "logs/launcher.log").splitlines()
@@ -309,7 +317,7 @@ def main():
     summary["failure_note_pending"] = (state / "updates/last-failure.json").exists()
     summary["gateway_owner"] = gateway_owner()
 
-    if finished is None:
+    if helper_started and finished is None:
         summary["problems"].append("replacer did not finish")
     if args.expect == "landed":
         if summary["installed_version"] != new_version:

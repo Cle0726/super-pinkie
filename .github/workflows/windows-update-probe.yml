@@ -16,6 +16,15 @@ on:
       baseline_tag:
         description: "Unfixed release to update TO first, to measure the old behaviour (empty = skip)"
         default: v2.5.31
+  workflow_call:
+    inputs:
+      candidate_artifact:
+        description: "Signed portable candidate from this workflow run"
+        type: string
+        required: true
+      from_tags:
+        type: string
+        default: v2.5.49
 
 permissions:
   contents: read
@@ -28,7 +37,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PYTHONUTF8: "1"
       FROM_TAGS: ${{ inputs.from_tags || 'v2.5.30 v2.5.27' }}
-      BASELINE_TAG: ${{ github.event_name == 'push' && 'v2.5.31' || inputs.baseline_tag }}
+      BASELINE_TAG: ${{ inputs.candidate_artifact == '' && (github.event_name == 'push' && 'v2.5.31' || inputs.baseline_tag) || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,7 +59,23 @@ jobs:
           Get-MpComputerStatus | Select-Object AMRunningMode, RealTimeProtectionEnabled, OnAccessProtectionEnabled |
             ConvertTo-Json | Set-Content probe-out\defender.json
 
+      - name: Download the signed release candidate
+        if: inputs.candidate_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.candidate_artifact }}
+          path: portable-candidate
+
+      - name: Stage the exact candidate portable ZIP
+        if: inputs.candidate_artifact != ''
+        shell: pwsh
+        run: |
+          $zip = @(Get-ChildItem -LiteralPath portable-candidate -File -Filter '*-rc-portable.zip')
+          if ($zip.Count -ne 1) { throw 'Expected exactly one release candidate portable ZIP' }
+          Copy-Item -LiteralPath $zip[0].FullName -Destination new-portable.zip
+
       - name: Build this ref and pack it the way release.yml does
+        if: inputs.candidate_artifact == ''
         shell: pwsh
         run: |
           .\build-win.ps1
@@ -68,9 +93,11 @@ jobs:
             gh release download $tag -R "${{ github.repository }}" -p "*-portable.zip" -D "dl-$tag"
             if ($LASTEXITCODE -ne 0) { throw "download $tag failed" }
             Expand-Archive -Path (Get-ChildItem "dl-$tag\*-portable.zip").FullName -DestinationPath "old-$tag"
-            # Raw bytes: a PowerShell pipe would re-encode the Chinese folder name.
-            python -c "import subprocess,sys; open(sys.argv[2],'wb').write(subprocess.check_output(['git','show',sys.argv[1]]))" "${tag}:app/windows_desktop.py" "old-$tag.py"
+            # The replacer imports sibling modules. Keep the whole app source
+            # tree from that release, separate from the checkout under test.
+            git archive --format=zip --output="source-$tag.zip" "refs/tags/$tag" -- app
             if ($LASTEXITCODE -ne 0) { throw "source of $tag not found" }
+            Expand-Archive -LiteralPath "source-$tag.zip" -DestinationPath "source-$tag"
           }
 
       - name: Baseline - unfixed release with its predecessor's replacer
@@ -81,7 +108,7 @@ jobs:
           $from = ($env:FROM_TAGS -split '\s+' | Where-Object { $_ })[0]
           $zip = (Get-ChildItem "dl-$env:BASELINE_TAG\*-portable.zip").FullName
           python tools\windows-smoke\update_probe.py --case "baseline-$from-to-$env:BASELINE_TAG" `
-            --old-app "old-$from" --old-source "old-$from.py" --new-zip $zip --out probe-out
+            --old-app "old-$from" --old-source "source-$from/app/windows_desktop.py" --new-zip $zip --out probe-out
 
       - name: Update from each release to this build
         shell: pwsh
@@ -89,14 +116,14 @@ jobs:
           $failed = @()
           foreach ($tag in @($env:FROM_TAGS -split '\s+' | Where-Object { $_ })) {
             python tools\windows-smoke\update_probe.py --case "$tag-to-build" --old-app "old-$tag" `
-              --old-source "old-$tag.py" --new-zip new-portable.zip --out probe-out
+              --old-source "source-$tag/app/windows_desktop.py" --new-zip new-portable.zip --out probe-out
             if ($LASTEXITCODE -ne 0) { $failed += $tag }
             Write-Host "machine PSModulePath: $([Environment]::GetEnvironmentVariable('PSModulePath','Machine'))"
           }
           if ($failed) { throw "update did not land from: $($failed -join ', ')" }
 
       - name: This build updates itself from a Chinese Desktop-like path
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.candidate_artifact == '' }}
         shell: pwsh
         run: |
           Expand-Archive -Path new-portable.zip -DestinationPath built-app
@@ -105,7 +132,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'self update failed' }
 
       - name: A broken package is refused and the user is told
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.candidate_artifact == '' }}
         shell: pwsh
         run: |
           python tools\windows-smoke\update_probe.py --case "build-broken-package" --expect rolled-back `
@@ -113,7 +140,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'failed update was not handled' }
 
       - name: A failed rollback shows the failure window with the admin repair button
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.candidate_artifact == '' }}
         shell: pwsh
         run: |
           python tools\windows-smoke\update_probe.py --case "build-failure-window" --expect failure-window `

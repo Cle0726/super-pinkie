@@ -1,7 +1,8 @@
 name: Release candidate
 
 # Builds the real user (release-channel) packages — guard on, manifest signed
-# with the release key, release splash. Windows also runs fresh + upgrade smoke.
+# with the release key, release splash. The candidate exercises startup,
+# Windows in-place update and the same UI manifest gate as the tag workflow.
 # Nothing is published: no GitHub release, no latest.json, no mirror.
 # Push a release/** branch (or run it by hand) before tagging a version.
 on:
@@ -21,6 +22,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   notes:
     runs-on: ubuntu-latest
     steps:
@@ -68,6 +72,7 @@ jobs:
           unset PINKIE_GUARD_SIGNING_KEY
           PINKIE_RELEASE_BUILD=1 PINKIE_GUARD_SIGNING_KEY_FILE="$key_file" ./desktop/macos/build.sh
       - name: Verify the Mac release ZIP, channel, guard signature and opening assets
+        id: mac_archive
         shell: bash
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
@@ -107,6 +112,48 @@ jobs:
           console.log(`Mac release archive OK: ${version} @ ${commit}`);
           NODE
 
+      - name: Exercise the signed package UI in WebKit (not published)
+        timeout-minutes: 10
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ui-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install webkit
+          control="dist/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui"
+          PINKIE_UI_DEPS="$deps" node tools/ui-parity/capture.mjs --control-ui "$control" \
+            --browser webkit --label mac-release-webkit --out mac-ui-proof --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-release-ui-proof
+          path: mac-ui-proof
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.mac_archive.outcome == 'success' }}
+        with:
+          name: macos-ui-manifest
+          path: dist/macos-ui-manifest.json
+          if-no-files-found: error
+
+      - name: Launch the exact Mac ZIP on fresh and upgraded profiles
+        if: ${{ !cancelled() && steps.mac_archive.outcome == 'success' }}
+        timeout-minutes: 16
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD_TAG: ${{ inputs.old_tag || 'v2.5.49' }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          smoke="$RUNNER_TEMP/mac-native-smoke"
+          mkdir -p "$smoke/new" "$smoke/old" "$smoke/download"
+          gh release download "$OLD_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'super-pinkie-macos-*.zip' --dir "$smoke/download"
+          ditto -x -k "dist/super-pinkie-macos-$version.zip" "$smoke/new"
+          ditto -x -k "$smoke/download/super-pinkie-macos-${OLD_TAG#v}.zip" "$smoke/old"
+          unset GH_TOKEN
+          python3 tools/macos-package/smoke_launch.py --app "$smoke/new" --old-app "$smoke/old"
+
   windows:
     runs-on: windows-latest
     timeout-minutes: 90
@@ -132,7 +179,7 @@ jobs:
           [System.IO.File]::WriteAllText($keyFile, $env:PINKIE_GUARD_SIGNING_KEY + "`n")
           $env:PINKIE_RELEASE_BUILD = '1'
           $env:PINKIE_GUARD_SIGNING_KEY_FILE = $keyFile
-          try { .\build-win.ps1 } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
+          try { .\build-win.ps1 -LegacyOneFile } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
       - name: Pack the portable zip for hand checks
         shell: pwsh
         run: |
@@ -150,6 +197,11 @@ jobs:
           name: windows-rc-portable
           path: dist/super-pinkie-windows-*-rc-portable.zip
           retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: dist/windows-ui-manifest.json
+          if-no-files-found: error
 
   windows-smoke:
     needs: windows
@@ -157,3 +209,26 @@ jobs:
     with:
       app_artifact: windows-onedir
       old_tag: ${{ inputs.old_tag || 'v2.5.49' }}
+
+  windows-in-place-update:
+    needs: windows
+    uses: ./.github/workflows/windows-update-probe.yml
+    with:
+      candidate_artifact: windows-rc-portable
+      from_tags: ${{ inputs.old_tag || 'v2.5.49' }}
+
+  ui-parity:
+    needs: [macos-release-package, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-ui-manifest
+          path: parity/mac
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-ui-manifest
+          path: parity/windows
+      - name: Compare the signed candidate UI manifests
+        run: python3 tools/ui-parity/bundle.py compare parity/mac/macos-ui-manifest.json parity/windows/windows-ui-manifest.json
