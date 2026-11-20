@@ -1080,6 +1080,61 @@
     });
   }
 
+  // Metre「派发的会话」：子会话住在别的模式里。归档/删除只动那一条会话本身，
+  // 不碰当前模式的本地分组状态，所以不用先切过去。
+  function dispatchedAgent(key){return MODE_AGENT[modeForSession(key)]||String(key).split(':')[1];}
+  function dispatchedChanged(){window.PinkieSessionList?.invalidate();sessionIndex=null;schedule();}
+  async function archiveDispatched(keys){
+    let done=0;const failed=[];
+    for(const key of keys){
+      try{await gwRequest('sessions.patch',{key,agentId:dispatchedAgent(key),archived:true});done++;}
+      catch(error){failed.push(error?.message||'未知错误');}
+    }
+    dispatchedChanged();
+    if(failed.length)toast(`已归档 ${done} 个，${failed.length} 个没成功：${failed[0]}`);
+    else toast(done>1?`已归档 ${done} 个派发的会话；记录保留，可在各自模式的「归档」里找回`:'已归档；记录保留，可在原模式的「归档」里找回');
+  }
+  function dispatchedMenu(anchor,key,title,{open,live=false}={}){
+    openMenu(anchor,menu=>{
+      menuItem(menu,ICONS.external,'去所在模式打开',()=>{closeMenu();open?.();});
+      menuItem(menu,ICONS.archive,'归档（保留记录）',()=>{
+        closeMenu();
+        if(live){toast('它还在运行，先打开它停掉再归档');return;}
+        void archiveDispatched([key]);
+      });
+      const divider=document.createElement('div');divider.className='laolao-menu__divider';menu.appendChild(divider);
+      const remove=menuItem(menu,ICONS.trash,'删除会话和记录…',()=>{
+        closeMenu();
+        if(live){toast('它还在运行，先打开它停掉再删除');return;}
+        showModal({
+          title:'删除会话',
+          body:`确定删除「${title}」吗？聊天记录会一起删除，项目文件夹里的真实文件不会被动。此操作不可撤销。`,
+          dangerText:'确认删除',busyText:'删除中…',
+          onConfirm:async()=>{
+            await gwRequest('sessions.delete',{key,agentId:dispatchedAgent(key),deleteTranscript:true});
+            dispatchedChanged();toast('会话和聊天记录已删除');
+          },
+        });
+      });
+      remove.classList.add('laolao-menu__item--danger');
+    });
+  }
+  function dispatchedGroupMenu(anchor,{idle=[],total=0}={}){
+    openMenu(anchor,menu=>{
+      const item=menuItem(menu,ICONS.archive,idle.length?`归档全部已结束的（${idle.length}）`:'没有已结束的可归档',()=>{
+        closeMenu();
+        if(!idle.length)return;
+        showModal({
+          title:'归档派发的会话',
+          body:`把 ${idle.length} 个已经结束的派发会话归档？记录都保留，可在各自模式的「归档」里找回。`+(total>idle.length?`还在运行或等你回复的 ${total-idle.length} 个不动。`:''),
+          dangerText:'归档',busyText:'归档中…',
+          onConfirm:()=>archiveDispatched(idle),
+        });
+      });
+      if(!idle.length)item.disabled=true;
+    });
+  }
+
   async function archiveMany(keys) {
     const done=[];
     for(const key of keys) {
@@ -1992,7 +2047,7 @@
       syncModeState();
       if(window.PinkieSessionList){
         window.PinkieSessionList.render(section,{mode:stateMode,agentId:currentModeAgent(),state,currentKey:pageSessionKey(),
-          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany,openBulkProjectMenu,askDeleteSelected,assignToProject,archiveWithUndo,toast,
+          gwRequest,navigateSession,createProjectSession,addFolderProject,openProjectSettings,revealProject:revealNativeFolder,sessionMenu,togglePin,patchSession,askDeleteAllSessions,openSessionManagement,openRecentMenu,archiveMany,dispatchedMenu,dispatchedGroupMenu,openBulkProjectMenu,askDeleteSelected,assignToProject,archiveWithUndo,toast,
           toggleGroup:id=>{state.collapsed[id]=!state.collapsed[id];save();schedule();}});
         refreshScopeLabel();return;
       }
