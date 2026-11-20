@@ -1039,12 +1039,28 @@ export function checkRoleReportSections(card, reportText = '') {
     ? [...card.reportSections]
     : extractReportSections(card?.body || '');
   if (!expected.length) return {ok: true, expected: [], missing: [], notice: ''};
-  const text = String(reportText || '');
+  const headings = [];
+  const ordinal = /^(?:\d+|[〇零一二三四五六七八九十百]+)[.．)）、][ \t]*/u;
+  let fence = '';
+  for (const raw of String(reportText || '').split(/\r?\n|\r/u)) {
+    const line = raw.trimStart();
+    const marker = /^(`{3,}|~{3,})/u.exec(line)?.[1];
+    if (marker) {
+      if (!fence) fence = marker;
+      else if (marker[0] === fence[0] && marker.length >= fence.length && !line.slice(marker.length).trim()) fence = '';
+      continue;
+    }
+    if (fence) continue;
+    // A regular label, a Markdown heading and a numbered heading are all
+    // real sections. The report often uses Markdown + a Chinese ordinal.
+    headings.push(line.replace(/^#{1,6}[ \t]*/u, '').replace(/^[-*•][ \t]+/u, '')
+      .replace(ordinal, '').replace(/^(?:\*\*|__|【)/u, '').replace(ordinal, ''));
+  }
   const missing = [];
   for (const title of expected) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(?:^|[\\n\\r])\\s*(?:#{1,6}\\s*|[-*•]\\s*|\\d+[.)、]\\s*)?(?:\\*\\*|__|【)?${escaped}(?:\\*\\*|__|】)?(?:\\s*[：:]|\\s|$)`, 'm');
-    if (!re.test(text)) missing.push(title);
+    const re = new RegExp(`^${escaped}(?:\\*\\*|__|】)?(?=$|[\\s：:（(])`, 'u');
+    if (!headings.some(heading => re.test(heading))) missing.push(title);
   }
   if (!missing.length) return {ok: true, expected, missing: [], notice: ''};
   return {

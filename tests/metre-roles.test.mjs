@@ -971,6 +971,19 @@ test('R1-24 ★ / R1-25 ★ 模型挑选（五条件逐一测 + 缺条件报错 
   assert.match(revNoOf.note, /没写 of，没法保证换一家/);
 });
 
+test('R1-26 recognizes numbered headings with parentheticals but not examples inside code fences', () => {
+  const sections = ['逐条判定','问题清单','没测的和拿不准的'];
+  const card = {name:'挑刺验收员',reportSections:sections};
+  const actual = '## 一、逐条判定（对照 4 条验收标准）\n内容\n### 2. **问题清单**\n内容\n**三、没测的和拿不准的：** 无';
+  assert.deepEqual(checkRoleReportSections(card,actual),{ok:true,expected:sections,missing:[],notice:''});
+  const incomplete = [
+    '## 一、逐条判定（对照 4 条验收标准）',
+    '~~~markdown','### 2. 问题清单','### 3. 没测的和拿不准的','~~~',
+    '## 问题清单示例','这里只复述文件，不是本轮结论。',
+  ].join('\n');
+  assert.deepEqual(checkRoleReportSections(card,incomplete).missing,['问题清单','没测的和拿不准的']);
+});
+
 // ---------- R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 ----------
 test('R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 汇报检查、主 MD 字数、上限与全停、不碰 Metre 记忆、断网可用', async t => {
   const env = makeRoleEnv(t);
