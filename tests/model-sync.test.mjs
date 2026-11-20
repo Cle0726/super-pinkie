@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {chatModelIds, createModelSynchronizer, newModelEntries, recognizedModelId} from '../services/mode-architecture/model-sync.mjs';
+import http from 'node:http';
+import {setTimeout as delay} from 'node:timers/promises';
+import {chatModelIds, createModelSynchronizer, newModelEntries, recognizedModelId, registerModelSync} from '../services/mode-architecture/model-sync.mjs';
 
 test('only chat IDs enter the model catalog, with duplicates removed', () => {
   assert.deepEqual(chatModelIds({data: [
@@ -65,6 +67,74 @@ test('sync adds upstream models once, preserves configured entries, and does not
   ]);
   assert.equal((await sync.sync({force: true})).added, 0);
   assert.equal(writes, 1);
+});
+
+test('the gateway automatically refreshes /models after startup and adds image input immediately on loopback', async (t) => {
+  let rows = [{id: 'workbuddy/hy4flash'}];
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push([req.method, req.url, req.headers.authorization]);
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    res.end(JSON.stringify({data: rows}));
+  });
+  await new Promise((resolve, reject) => server.once('error', reject).listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => {server.close(resolve); server.closeAllConnections();}));
+  const provider = {baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'catalog-fixture', models: []};
+  const cfg = {models: {providers: {mm: provider}}};
+  const warnings = [];
+  let service;
+  t.mock.timers.enable({apis: ['setInterval', 'Date'], now: 10_000});
+  registerModelSync({registerService(value) {service = value;}, registerGatewayMethod() {}, runtime: {config: {
+    current: () => cfg, async mutateConfigFile({mutate}) {mutate(cfg);},
+  }}});
+  service.start({logger: {warn: message => warnings.push(message)}});
+  t.after(() => service.stop());
+  async function untilSize(size) {
+    for (let i = 0; i < 300 && provider.models.length < size; i++) await delay(10);
+    assert.equal(provider.models.length, size, warnings.join('\n'));
+  }
+  await untilSize(1);
+  assert.deepEqual(provider.models[0].input, ['text', 'image']);
+  rows = [...rows, {id: 'qwen3-coder-next'}, {id: 'gpt-image-2'}, {id: 'unrecognised-route'}];
+  t.mock.timers.tick(5 * 60_000);
+  await untilSize(2);
+  assert.deepEqual(provider.models.map(({id, input}) => [id, input]), [
+    ['workbuddy/hy4flash', ['text', 'image']], ['qwen3-coder-next', ['text', 'image']],
+  ]);
+  assert.deepEqual(requests, Array(2).fill(['GET', '/v1/models', 'Bearer catalog-fixture']));
+  assert.deepEqual(warnings, []);
+});
+
+test('new loopback models honor saved vision settings, and external catalogs do not default to image input', async (t) => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-new-vision-'));
+  t.after(() => fs.rmSync(state, {recursive: true, force: true}));
+  fs.writeFileSync(path.join(state, 'pinkie-model-setup.json'), JSON.stringify({capabilities: {
+    'clekk/gpt-6-sol': {vision: false}, 'local/gemini-2.5-flash-high': {vision: false},
+  }}));
+  const sibling = {id: 'gemini-2.5-flash', name: 'Saved Gemini', reasoning: true, input: ['text', 'image']};
+  const providers = {
+    local: {baseUrl: 'http://[::1]:1467/v1', apiKey: 'fixture', models: [sibling]},
+    clekk: {baseUrl: 'http://localhost:1467/v1', apiKey: 'fixture', models: []},
+    direct: {baseUrl: 'https://provider.invalid/v1', apiKey: 'fixture', models: []},
+  };
+  const cfg = {models: {providers}};
+  const sync = createModelSynchronizer({runtime: {state: {resolveStateDir: () => state}, config: {
+    current: () => cfg, async mutateConfigFile({mutate}) {mutate(cfg);},
+  }}}, {fetchImpl: async () => new Response(JSON.stringify({data: [
+    {id: 'gpt-6-sol'}, {id: 'gemini-2.5-flash-high'}, {id: 'workbuddy/hy4flash'}, {id: 'gpt-4o-search-preview'},
+  ]}))});
+  await sync.sync();
+  const input = (provider, id) => providers[provider].models.find(model => model.id === id).input;
+  assert.deepEqual(input('local', 'workbuddy/hy4flash'), ['text', 'image']);
+  assert.deepEqual(input('local', 'gemini-2.5-flash-high'), ['text']);
+  assert.deepEqual(input('clekk', 'gpt-6-sol'), ['text']);
+  assert.deepEqual(input('direct', 'workbuddy/hy4flash'), ['text']);
+  assert.deepEqual(input('local', 'gpt-4o-search-preview'), ['text']);
+  assert.deepEqual(sibling.input, ['text', 'image']);
+  assert.equal((await sync.sync({force: true})).added, 0);
 });
 
 test('failed upstream fetch never mutates local models', async () => {

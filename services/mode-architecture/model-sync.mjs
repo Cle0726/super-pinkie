@@ -1,10 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {withVisionInput} from './model-setup.mjs';
 
 const POLL_MS = 5 * 60_000;
 const MIN_REQUEST_GAP_MS = 30_000;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 const MODEL_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(?:\/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$/;
 const MEDIA_ID = /(?:^|[-_/])(?:image|imagine|video|veo|audio|tts|speech|embedding|embed|rerank|transcribe)(?:[-_.]|$)/i;
+// Keep the default's scope consistent with the startup migration in setup.py.
+const NON_CHAT_VISION_ID = /imagine|image|video|veo-|embed|tts|whisper|speech|audio|transcri|rerank|moderation|search/i;
 // 从 ID 认出它是哪个模型（和 ui/injections/laolao-model-picker.js 的 idBrand 同一套规则，测试守着两边一致）。
 // 认不出名字的上游模型（比如 auto、copilot-search-a、memory4-dream）不自动加进模型列表：11-16 用户「当找不到模型名时就不要显示出来了」。
 const KNOWN_MODEL = /^(?:(?:gemini|gemma|veo|claude|codex|gpt|o1|o3|o4|grok|groq|deepseek|mistral|kimi|moonshot|glm|zai|llama|ollama|minimax|doubao|perplexity|hunyuan|space-bunny|tab)|(?:qwen|qwq)\d*|hy\d+[a-z]*)(?:[-_.:]|$)|^(?:mimo|step)[-_.]/i;
@@ -178,8 +182,9 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
     const disabledReasoning = (providerName, modelId) => capOverrides[`${providerName}/${modelId}`]?.reasoning === false;
     const results = await Promise.allSettled(configured.map(async ([name, provider]) => {
       const base = new URL(provider.baseUrl.endsWith('/') ? provider.baseUrl : `${provider.baseUrl}/`);
+      const loopback = LOOPBACK_HOSTS.has(base.hostname);
       if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password ||
-          (base.protocol === 'http:' && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(base.hostname))) {
+          (base.protocol === 'http:' && !loopback)) {
         throw new Error(`${name} 模型上游地址不安全`);
       }
       const response = await fetchImpl(new URL('models', base), {
@@ -221,9 +226,17 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       const imagePending = verifiedGpt6 ? (provider.models || [])
         .filter((entry) => ids.includes(entry.id) && isVerifiedTextOnlyGpt6(entry) && !disabledVision(name, entry.id)) : [];
       const known = new Set((provider.models || []).map((entry) => entry.id));
+      const additions = newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => {
+        const vision = capOverrides[`${name}/${entry.id}`]?.vision;
+        // Discovery runs after setup.py, so new loopback models need the same
+        // default immediately. A saved toggle wins, even over a sibling clone.
+        if (typeof vision === 'boolean') entry.input = withVisionInput(entry.input, vision);
+        else if (loopback && !NON_CHAT_VISION_ID.test(entry.id)) entry.input = withVisionInput(entry.input, true);
+        const efforts = declaredEfforts.get(entry.id);
+        return efforts ? {...entry, reasoning: true, compat: {...entry.compat, supportsReasoningEffort: true, supportedReasoningEfforts: efforts}} : entry;
+      });
       return {name, available: ids.length, unnamed: ids.filter((id) => !known.has(id) && !recognizedModelId(id)).length,
-        additions: newModelEntries(provider.models || [], ids, {verifiedGpt6, verifiedWorkBuddy, contextWindows}).map(entry => declaredEfforts.has(entry.id)
-          ? {...entry, reasoning: true, compat: {...entry.compat, supportsReasoningEffort: true, supportedReasoningEfforts: declaredEfforts.get(entry.id)}} : entry),
+        additions,
         legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdates, contextUpdated: 0};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);

@@ -5,6 +5,7 @@ fixture. No installed App, real gateway, account data or system proxy is used.
 """
 import contextlib
 import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
@@ -156,6 +157,34 @@ def fixture_unlink_executable(path, root, timeout=15):
             time.sleep(.1)
 
 
+@contextlib.contextmanager
+def lock_log_exclusively(path):
+    path.touch()
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    create.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    # GENERIC_READ, no sharing, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL.
+    handle = create(str(path), 0x80000000, 0, None, 3, 0x80, None)
+    if handle == ctypes.c_void_p(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        yield
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def read_updater_log(path, previous=''):
+    try:
+        return path.read_text(encoding='utf-8-sig', errors='replace')
+    except (FileNotFoundError, PermissionError):
+        # PowerShell may briefly hold an exclusive handle while appending.
+        # Keep polling for the actual result; a locked log isn't that result.
+        return previous
+
+
 @unittest.skipUnless(os.name=='nt', 'portable process replacement requires Windows')
 class PortableUpdateIntegrationTests(unittest.TestCase):
     def test_fixture_cleanup_waits_for_the_actual_image_lock_and_stays_in_root(self):
@@ -191,6 +220,9 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
 
     def test_verified_gateway_from_previous_install_is_replaced(self):
         self._run_case('verified_external')
+
+    def test_an_exclusively_held_diagnostic_log_does_not_block_the_update(self):
+        self._run_case('log_lock')
 
     def test_unknown_gateway_is_left_running_and_update_does_not_start(self):
         self._run_case('unknown_external')
@@ -339,7 +371,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertTrue(child_pid.is_file(),'test gateway did not start')
                 child_id=int(child_pid.read_text())
                 self.assertTrue(fixture_child_alive(child_id,outside_exe))
-                if gateway_kind in ('verified_external','mismatched_record','wrong_command','external_reappears','locked_rollback'):
+                if gateway_kind in ('verified_external','log_lock','mismatched_record','wrong_command','external_reappears','locked_rollback'):
                     recorded_exe=str(gateway_exe)+('.wrong' if gateway_kind=='mismatched_record' else '')
                     (state/'gateway-owner.json').write_text(json.dumps({'pid':gateway.pid,'node':recorded_exe}),encoding='utf-8')
                 if gateway_kind in ('external_reappears','locked_rollback'):
@@ -361,10 +393,14 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     fixture_acl('deny');acl_changed=True
                 if locker:locker.start()
                 repo=Path(__file__).resolve().parents[1]
-                process=subprocess.Popen([sys.executable,'-X','utf8',str(caller),str(repo),str(executable),
-                                          str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE,creationflags=hidden)
-                out,err=process.communicate(timeout=30)
+                log=state/'logs/updater.log'
+                with (lock_log_exclusively(log) if gateway_kind=='log_lock' else contextlib.nullcontext()):
+                    if gateway_kind=='log_lock':
+                        with self.assertRaises(PermissionError):log.read_text(encoding='utf-8')
+                    process=subprocess.Popen([sys.executable,'-X','utf8',str(caller),str(repo),str(executable),
+                                              str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
+                                             stderr=subprocess.PIPE,creationflags=hidden)
+                    out,err=process.communicate(timeout=30)
                 self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
                 if gateway_kind in ('unknown_external','mismatched_record','wrong_command','acl_denied'):
@@ -379,13 +415,13 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
                     return
-                updater_log=lambda:(state/'logs/updater.log').read_text(encoding='utf-8-sig',errors='replace')[-6000:] if (state/'logs/updater.log').exists() else '(no updater.log)'
+                updater_log=lambda:read_updater_log(log,'(updater.log unavailable)')[-6000:]
                 self.assertEqual(process.returncode,0,'%s\noutcome=%s\nstdout=%s\n--- updater.log ---\n%s'%(err.decode('utf-8',errors='replace')[-3000:],json.dumps(outcome,ensure_ascii=False),out.decode('utf-8',errors='replace')[-2000:],updater_log()))
                 self.assertTrue(outcome['started'])
                 update_started=True
-                log=state/'logs/updater.log';deadline=time.monotonic()+60;text=''
+                deadline=time.monotonic()+60;text=''
                 while time.monotonic()<deadline:
-                    if log.exists():text=log.read_text(encoding='utf-8-sig',errors='replace')
+                    text=read_updater_log(log,text)
                     if 'portable update completed' in text or 'portable update failed' in text:break
                     time.sleep(.2)
                 if gateway_kind in ('external_reappears','locked_rollback'):
@@ -400,7 +436,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         self.assertTrue(lock_seen,'the fixture never held the previous folder open')
                         until=time.monotonic()+20
                         while time.monotonic()<until and 'previous version restored by copy' not in text:
-                            time.sleep(.2);text=log.read_text(encoding='utf-8-sig',errors='replace')
+                            time.sleep(.2);text=read_updater_log(log,text)
                         self.assertIn('previous version folder is busy, retrying',text)
                         self.assertIn('previous version restored by copy',text)
                         self.assertTrue(executable.is_file(),'the restored copy has no exe')
