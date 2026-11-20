@@ -12,7 +12,7 @@
 | 门槛 | 本轮证据及复现 |
 |---|---|
 | **Z1 · 全量** | **本机门禁过**：在干净 `5212d255`、新的隔离 profile，`gate-final.txt` 原文 `271 test files, 0 failing tests, 2 known`、`gate-final.exit=0`。两条已知控制台用例仍为明确跳过，没记过。先用仓库所钉 Playwright，系统 Chrome 拒绝本机调试配置，故本机显式使用同版 Chromium Headless Shell + WebKit；CI Windows 实际用 Chrome。6 个浏览器环节单独实跑 `6 pass, 0 fail, 0 skipped`（`browser-bundled.txt`）。命令 `node tools/release-gate/run-tests.mjs --jobs 2`，没有 `--update`。旧台账 42 条确证通过、8 条旧超时未复现、1 条在主线已改名且新名单跑过（`renamed-known-test.txt`），共删除 51 条，未新增或更改任何剩余豁免。 |
-| **Z1 · Python 与 CI** | 用 `python -B -X utf8 -m unittest discover -s tests -p <文件> -v` 逐一重跑 7 套相关测试，49 个案例：42 过、7 个平台依赖明确跳过，0 败（`final-*_test.py.txt`）。[打包输入 069a7fc3 的 CI 44639706045](https://github.com/Cle0726/super-pinkie/actions/runs/44639706045) Linux、Windows、macOS 与 Windows 打包均通过。[复验源码 5212d255 的 CI 44641296534](https://github.com/Cle0726/super-pinkie/actions/runs/44641296534) 的 Windows / macOS 已通过；记录时 Linux 仍在安装浏览器依赖，没记为通过。 |
+| **Z1 · Python 与 CI** | 用 `python -B -X utf8 -m unittest discover -s tests -p <文件> -v` 逐一重跑 7 套相关测试，49 个案例：42 过、7 个平台依赖明确跳过，0 败（`final-*_test.py.txt`）。[打包输入 069a7fc3 的 CI 44639706045](https://github.com/Cle0726/super-pinkie/actions/runs/44639706045) 与[复验源码 5212d255 的 CI 44641296534](https://github.com/Cle0726/super-pinkie/actions/runs/44641296534) 的 Linux 套件、Windows 套件、macOS 检查和 Windows 构建四项均为 `success`。 |
 | **Z2** | 真网关隔离复跑前后 UTC `23:45:28`、`23:52:42` 的正式配置及 App 安装目录修改时间相同，18789 前后均无监听。`Z2-before-smoke.json`、`Z2-after.json`；`Get-Item` + `netstat.exe -ano -p tcp`。没有用本机正式 App 跑安装或模型。 |
 | **Z3a–d / Z4** | 从独立固定主线工作树运行 `PINKIE_INVENTORY_SOURCE_ROOT=<99c3716a checkout> node tools/metre/inject-inventory.mjs --save-baseline <临时 JSON>`，清除源码覆盖后候选运行 `node tools/metre/inject-inventory.mjs --verify-baseline <临时 JSON>`：15 份与工具快照整体 SHA-256 都为 `b2db9ecccd1a2484d12756e2c10347ea787c8967a15bc87355605cd0ca89e4fe`，`diffs=[]`、路径等价替换 0，见 `main-compare-after.json`。五老模式隔离配置见前次报告的准确两树对照；本轮没有相关产品改动。`git diff 99c3716a -- tests/session-lineage.test.mjs tests/metre-dispatch.test.mjs tests/session-cross-mode-ui.test.cjs` 为空；`git diff --name-only 99c3716a -- personas ':!personas/metre/roles'` 只有 `personas/README.md` 和 `personas/metre/AGENTS.md` 第 7 节。 |
 | **Z3e / Z7** | 用户确认的八轮门槛不含额外旧模式真实话术和八次综合回归。后续，未记为过。 |
@@ -23,7 +23,7 @@
 | **R1-29** | 三个子会话实在运行，`pinkie.metre.stopAll` 报停止 3 个，看板 `3→0`，网关 RPC `4304ms`；含新启 Node CLI 的调用整体 `16531ms`（`review-stop.json`）。前者是实际停机操作，不把后者写成 15 秒内。并发与累计上限亦在单测中。 |
 | **R2 / R3-7 / X4** | **没测：0/8**。以原隔离配置对本机认证模型目录做只读 GET，HTTP 200 列 75 项，只有 `workbuddy/hy4flash-free` 明确是免费条目，配置输入只有 `text`；旧配置标为可看图的 `workbuddy/hy4free` 不在返回目录（`free-route-catalog.json`，不含凭据）。不能同时满足可看图执行和异厂免费判分，不消耗试跑、不自动回退、不用模拟补结果。 |
 | **R3 静态** | `node tools/metre/roles/lint-cards.mjs --all-33 --samples --json` 33/33；`final-plan-check.json` 的 `metadataMismatch=[]`、66 题、310 检查项。单来源已明确只可列「未证实」，视觉两题的出图规格、对比维度和取值明确；不声称 33 张卡已有异厂 6 项正式评分（R3-5 未测）。 |
-| **R4-4 / P1 / R1-16 · Windows** | **待证据**：实际 Windows 包构建过；[同包 Windows smoke](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039/job/135968814091) 已进 `Run smoke test`（以前一正式版 `v2.5.49` 做升级输入），记录时未返回专项结果或新装／升级、真实侧栏／看板截图。源代码安装夹具 Windows 19/19、角色安装 2/2，不替代真包证据。复现：`gh workflow run ui-parity.yml --ref feat/metre-roles-1118 -f old_tag=v2.5.49 -f metre_roles=true`，对照实际运行 SHA。 |
+| **R4-4 / P1 / R1-16 · Windows** | **过（实际 Windows 包、隔离用户数据）**：[同包 Windows smoke](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039/job/135968814091) 成功。工件 `windows-smoke-44639696039/summary.json`（SHA-256 `df0bef2e893f877f469209fc15a63147cbf6bfb2cc0f8bac2fea885a315c4583`）显示新装、旧版 `v2.5.49` 启动与升级均成功，两边 33 张卡，升级前写入的自定义卡和用户笔记字节相等。实际 WebView2 拍了 `metre-roles-menu-{light,dark}.png` 和 `metre-roles-board.png`；亲读三图：模式菜单不出现 roles，侧栏派发项和看板都见「调研员」，看板行有模型名。模型是本机回环夹具，只验真实 App 派活、不验模型质量。复现：`gh workflow run ui-parity.yml --ref feat/metre-roles-1118 -f old_tag=v2.5.49 -f metre_roles=true`，对照实际运行 SHA。 |
 | **R4-4 / P2 · macOS** | **过（实际包内运行时快照）**：[UI parity `44639696039`](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039) macOS runner 实际打包、临时 profile 安装并导入 `index.mjs`，日志 `Mac mode plugin fresh-install import OK`。工件 `ui-parity-macos/macos-metre-roles-runtime.json`：`roles`、33 张卡字节一致、无 memory，SHA-256 `fc037dd2160617d0e6f1ebdf35d3395ae7d4fa21fdddec4b18f714642646ce5c`。复现 `python tools/macos-package/check_runtime.py --resource-root <包内 SuperPinkie> --node <包内 node> --metre-roles-snapshot <输出>`。额外的打包 UI WebKit 截图步骤在 `document.fonts.status` 等待超时，并未称 UI parity 整绿。 |
 | **R5 / P4** | 顶档是后续，不拿免费模型替代首版实验，也不是本次 8 轮新增的硬门槛。按用户「通过才合并」执行，当前不合并、不发布。 |
 
@@ -32,7 +32,13 @@
 | 严重程度 | 位置 | 复现与建议 |
 |---|---|---|
 | 阻塞 | R2、R1-17、R3-5/7、X4 | 核对 `free-route-catalog.json`、再用 `node tools/metre/roles/compose.mjs --release-matrix <免费执行路由> <异厂免费判分路由>` 预备四题配对。可补接一家非腾讯、可看图的免费执行路由，再确认原腾讯免费路由可用作独立判分。钉住实际路由和预算，八轮每组从新夹具开始，贴原始会话、工具记录、现场文件和实际 usage；`prepared-not-run` 不算实跑。 |
-| 待复核 | 平台 / 远端 CI | 取 Windows smoke 的 fresh/upgrade 字节比较、实际角色派活及看板图；最后留存相同源码的 CI 结果并核对 Linux 依赖步骤。能构建不等于已经实际运行。 |
+| 阻塞 | 合并时的主线变化（Z3） | 截至取证，远端 `main=a85a7449`，没有本候选。旧侧 Z3 仍用已批准的 `99c3716a`。新主线的 #31 本身已让 12 个旧模式样例多出记忆写入规则，见下段；不得通过更新固定期望值掩掉差异。 |
 | 重要 | Mac WebKit 截图 | [同包工作流](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039)，`tools/ui-parity/capture.mjs:155` 等待字体 20 秒超时。补采在途字体和资源状态，不能直接取消判据。 |
 
-**总判定：没有任何真实模型或异厂判分被记过。候选仍不满足合并条件；主线不动。**
+### 新主线的单独整合预检
+
+- `git merge-tree --write-tree --name-only a85a7449 b68c0930` 确认唯一文本冲突是 `ui/injections/laolao-head.fragment.html` 的看板资源版本。已在机上独立整合分支 `integration/metre-roles-1118-main-a85-review` 解决（`34d9b403`）；保留新主线的滚动修复和本分支角色展示，使用新的缓存键。不把该分支合入验收分支或主线。
+- 用同一量具从单独的 `a85a7449` 工作树采集快照，对该本地整合树比较：15 条及两工具快照完全一致（`new-main-comparison.json`，两端 SHA-256 `48bb0a418c3555068eea93333b9a0bd6ea641d7616b844f1c431edfa3f4efef5`，`diffs=[]`）。定向 Node 118 过、0 败、1 跳过（`main-sync-node.txt`，包括两个 WebKit 看板宽度和长期记忆回归）。
+- 固定 `99c3716a` 对整合树仍有 12 条正文差异，跟两份独立主线工作树之间的差异一致（`main-sync-snapshot.json`、`upstream-snapshot-delta.json`）。这是新主线的真实变化，不是角色新回归；要让整合树成为正式验收对象，先确认如何登记这项上游预期变化，再重跑整合版全量及打包。
+
+**总判定：代码复验与两平台的角色包证据已留档；8 轮免费模型没有执行、没有异厂判分，最新主线整合另待确认，未合并。**
