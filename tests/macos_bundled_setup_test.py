@@ -35,6 +35,8 @@ class BundledSetupTest(unittest.TestCase):
         shutil.copy2(INSTALLER / "apply-bundled.sh", installer)
         shutil.copy2(INSTALLER / "agent-setup-plan.py", installer)
         (installer / "sync-personas.sh").write_text("#!/bin/bash\nexit 0\n")
+        (installer / "apply-theme.sh").write_text("#!/bin/bash\nexit 0\n")
+        (installer / "apply-theme.sh").chmod(0o755)
         (self.repo / "VERSION").write_text("2.5.29\n")
         self.package = self.repo / "runtime/openclaw/package.json"
         self.package.parent.mkdir(parents=True)
@@ -91,7 +93,7 @@ elif args[:2] == ["agents", "add"]:
         result = subprocess.run(["bash", str(self.repo / "installer/macos/apply-bundled.sh")],
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        return [json.loads(line) for line in log.read_text().splitlines()]
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def test_only_unambiguously_matching_identities_are_skipped(self):
         self.assertEqual(self.plan(), ["project", "learning", "metre"])
@@ -113,49 +115,42 @@ elif args[:2] == ["agents", "add"]:
         self.config.write_text('{not-json}')
         self.assertEqual(self.plan(), [])
 
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_existing_identities_reuse_one_validated_list(self):
-        calls = self.run_setup()
-        self.assertEqual(calls, [["agents", "list", "--json"]])
+    def test_atomic_stage_keeps_existing_modes_preferences_and_identities(self):
+        config = json.loads(self.config.read_text(encoding='utf-8'))
+        config['models'] = {'providers': {'local': {'models': []}}}
+        existing = config['agents']['list'][0]
+        existing['workspace'] = '/existing/project'
+        self.config.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
+        self.assertTrue(PLAN.stage_bundled_agents(self.config))
+        updated = json.loads(self.config.read_text(encoding='utf-8'))
+        rows = updated['agents']['list']
+        self.assertEqual(rows[0]['id'], 'main')
+        self.assertEqual(set(row['id'] for row in rows), set(PLAN.BUNDLED_MODES))
+        self.assertEqual(next(row for row in rows if row['id'] == 'project'), existing)
+        self.assertEqual(updated['models'], config['models'])
+        self.assertFalse(PLAN.stage_bundled_agents(self.config))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_changed_identity_still_uses_original_cli(self):
-        path = self.home / ".openclaw/workspace-project/IDENTITY.md"
-        path.write_text(path.read_text().replace("项目搭档", "新项目搭档"))
-        calls = self.run_setup()
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[1][:4], ["agents", "set-identity", "--agent", "project"])
-
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_missing_project_refreshes_list_and_installs_identity(self):
-        self.write_config(("learning", "metre"))
-        calls = self.run_setup(agents=("learning", "metre"))
-        self.assertEqual([call[:3] for call in calls], [
-            ["agents", "list", "--json"], ["agents", "add", "project"],
-            ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
-        ])
-        self.assertEqual(calls[2][3], "project")
-
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_fresh_profile_adds_all_managed_modes(self):
+    def test_fresh_profile_registers_all_six_modes_before_the_managed_gateway(self):
         self.write_config(())
         calls = self.run_setup(agents=())
-        self.assertEqual([call[:3] for call in calls], [
-            ["agents", "list", "--json"], ["agents", "add", "project"],
-            ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
-            ["agents", "add", "learning"], ["agents", "set-identity", "--agent"],
-            ["agents", "list", "--json"], ["agents", "add", "metre"],
-            ["agents", "set-identity", "--agent"],
-        ])
+        self.assertEqual(calls, [])
+        rows = json.loads(self.config.read_text(encoding='utf-8'))['agents']['list']
+        self.assertEqual([row['id'] for row in rows], list(PLAN.BUNDLED_MODES))
+        for row in rows:
+            self.assertEqual(row['workspace'], str(self.config.parent / PLAN.BUNDLED_MODES[row['id']]))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_failed_list_output_is_not_treated_as_valid(self):
-        calls = self.run_setup(extra_env={"FAKE_FAIL_LIST": "1"})
-        self.assertEqual([call[2] for call in calls if call[1] == "add"], list(IDENTITIES))
+    def test_existing_version_marker_does_not_hide_missing_registrations(self):
+        self.state.mkdir()
+        (self.state / 'bundled-personas-2.5.29').touch()
+        self.assertEqual(self.run_setup(), [])
+        rows = json.loads(self.config.read_text(encoding='utf-8'))['agents']['list']
+        self.assertEqual(set(row['id'] for row in rows), set(PLAN.BUNDLED_MODES))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_custom_config_uses_each_original_identity_command(self):
-        calls = self.run_setup(extra_env={"OPENCLAW_CONFIG_PATH": "/custom/config.json"})
+    def test_manual_external_runtime_still_uses_the_cli_identity_commands(self):
+        calls = self.run_setup(extra_env={"PINKIE_MANAGED_GATEWAY": "0"})
         self.assertEqual([call[3] for call in calls if call[1] == "set-identity"], list(IDENTITIES))
 
 

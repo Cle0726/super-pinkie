@@ -131,6 +131,7 @@ sync_launcher_resources() {
   # by an older self-mutating bootstrap on the next cold launch.
   copy_if_changed "$REPO_ROOT/installer/macos/apply-bundled.sh" "$bundled_root/installer/macos/apply-bundled.sh"
   copy_if_changed "$REPO_ROOT/installer/macos/sync-personas.sh" "$bundled_root/installer/macos/sync-personas.sh"
+  copy_if_changed "$REPO_ROOT/installer/macos/agent-setup-plan.py" "$bundled_root/installer/macos/agent-setup-plan.py"
   copy_if_changed "$REPO_ROOT/installer/macos/apply-theme.sh" "$bundled_root/installer/macos/apply-theme.sh"
   mkdir -p "$bundled_root/tools/ui-parity"
   copy_if_changed "$REPO_ROOT/tools/ui-parity/bundle.py" "$bundled_root/tools/ui-parity/bundle.py"

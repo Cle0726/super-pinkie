@@ -58,14 +58,17 @@ if [[ ! -f "$MARKER" ]]; then
   BACKUP_ROOT="$STATE_ROOT/backups/bundled-$(date +%Y%m%d-%H%M%S)"
   # Once per version: manuals and playbooks follow this version (old copies backed up); memory untouched.
   PINKIE_PYTHON_BIN="$PYTHON_BIN" bash "$SCRIPT_DIR/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" "$BACKUP_ROOT/personas"
-  OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
-  if [[ -z "$OPENCLAW_BIN" ]]; then
-    for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do
-      if [[ -x "$candidate" ]]; then
-        OPENCLAW_BIN="$candidate"
-        break
-      fi
-    done
+  OPENCLAW_BIN=""
+  if [[ "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
+    OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
+    if [[ -z "$OPENCLAW_BIN" ]]; then
+      for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do
+        if [[ -x "$candidate" ]]; then
+          OPENCLAW_BIN="$candidate"
+          break
+        fi
+      done
+    fi
   fi
   if [[ -n "$OPENCLAW_BIN" ]]; then
     PROJECT_AGENT_ADDED=0
@@ -75,17 +78,11 @@ if [[ ! -f "$MARKER" ]]; then
     if ! AGENTS_JSON="$("$OPENCLAW_BIN" agents list --json 2>/dev/null)"; then
       AGENTS_JSON=""
     fi
-    UNCHANGED_IDENTITIES=""
-    if [[ "${PINKIE_MANAGED_GATEWAY:-0}" == "1" && -f "$SCRIPT_DIR/agent-setup-plan.py" ]]; then
-      UNCHANGED_IDENTITIES="$("$PYTHON_BIN" "$SCRIPT_DIR/agent-setup-plan.py" "$REPO_ROOT/runtime/openclaw/package.json" "$OPENCLAW_BIN" 2>/dev/null || true)"
-    fi
     if ! printf '%s\n' "$AGENTS_JSON" | grep -Eq '"id"[[:space:]]*:[[:space:]]*"project"'; then
       "$OPENCLAW_BIN" agents add project --non-interactive --workspace "$HOME/.openclaw/workspace-project"
       PROJECT_AGENT_ADDED=1
     fi
-    if [[ "$PROJECT_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" project "* ]]; then
-      "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
-    fi
+    "$OPENCLAW_BIN" agents set-identity --agent project --identity-file "$HOME/.openclaw/workspace-project/IDENTITY.md" >/dev/null
     if [[ "$PROJECT_AGENT_ADDED" == "1" ]]; then
       # Adding a mode changes the config, so fetch a fresh view for learning.
       if ! AGENTS_JSON="$("$OPENCLAW_BIN" agents list --json 2>/dev/null)"; then
@@ -96,9 +93,7 @@ if [[ ! -f "$MARKER" ]]; then
       "$OPENCLAW_BIN" agents add learning --non-interactive --workspace "$HOME/.openclaw/workspace-learning"
       LEARNING_AGENT_ADDED=1
     fi
-    if [[ "$LEARNING_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" learning "* ]]; then
-      "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
-    fi
+    "$OPENCLAW_BIN" agents set-identity --agent learning --identity-file "$HOME/.openclaw/workspace-learning/IDENTITY.md" >/dev/null
     # Metre（briefs/metre-mode-1113）：工作区只有 AGENTS / IDENTITY / SOUL 三份，由 sync-personas.sh 放好。
     METRE_AGENT_ADDED=0
     if [[ "$LEARNING_AGENT_ADDED" == "1" ]]; then
@@ -110,14 +105,20 @@ if [[ ! -f "$MARKER" ]]; then
       "$OPENCLAW_BIN" agents add metre --non-interactive --workspace "$HOME/.openclaw/workspace-metre"
       METRE_AGENT_ADDED=1
     fi
-    if [[ "$METRE_AGENT_ADDED" == "1" || " $UNCHANGED_IDENTITIES " != *" metre "* ]]; then
-      "$OPENCLAW_BIN" agents set-identity --agent metre --identity-file "$HOME/.openclaw/workspace-metre/IDENTITY.md" >/dev/null
-    fi
+    "$OPENCLAW_BIN" agents set-identity --agent metre --identity-file "$HOME/.openclaw/workspace-metre/IDENTITY.md" >/dev/null
     if [[ ("$PROJECT_AGENT_ADDED" == "1" || "$LEARNING_AGENT_ADDED" == "1" || "$METRE_AGENT_ADDED" == "1") && "${PINKIE_MANAGED_GATEWAY:-0}" != "1" ]]; then
       "$OPENCLAW_BIN" gateway restart >/dev/null 2>&1 || true
     fi
   fi
   touch "$MARKER"
+fi
+
+# An App can already have a persona-copy marker and still be missing a mode
+# registration. Repair missing rows in one write on every managed launch,
+# before loading the services and starting the Gateway.
+if [[ "${PINKIE_MANAGED_GATEWAY:-0}" == "1" ]]; then
+  CLAW_HOME="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+  "$PYTHON_BIN" "$SCRIPT_DIR/agent-setup-plan.py" --stage "${OPENCLAW_CONFIG_PATH:-$CLAW_HOME/openclaw.json}" "$CLAW_HOME"
 fi
 
 # Dedicated group agents only; never rewrite the four existing personas here.

@@ -15,6 +15,7 @@
 - Windows 升级的诊断日志被占用时不再中断文件替换或触发回滚；回归测试会在真实独占文件句柄下验证升级仍然继续。
 - 启动后自动从上游同步到本机的聊天模型立即采用默认图片输入，无需重启；保留手动的看图开关，不给外网直连模型猜测看图能力。
 - 修复 Windows 正式版从较老配置升级时，逐个注册自带模式被设定防护误报的问题：在加载插件前一次写齐缺失的模式。发标签前额外检查 v2.5.16 配置升级。
+- Mac 正式版的新装和升级都会补齐六种自带模式（包括此前全新配置漏注册的两种）；Mac、Windows 正式包必须通过实际代理、插件、服务与界面接口的启用检查才发布。
 
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。
