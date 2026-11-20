@@ -549,10 +549,16 @@ def state_root():
 
 
 def append_log(name, message):
-    directory = state_root() / "logs"
-    directory.mkdir(parents=True, exist_ok=True)
-    with (directory / f"{name}.log").open("a", encoding="utf-8") as handle:
-        handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    try:
+        directory = state_root() / "logs"
+        directory.mkdir(parents=True, exist_ok=True)
+        with (directory / f"{name}.log").open("a", encoding="utf-8") as handle:
+            handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except OSError:
+        # The App and the update helper can append to this file at the same
+        # time. Diagnostic I/O must not interrupt the update handoff.
+        if name != "updater":
+            raise
 
 
 # Loopback probes must never go through a proxy. Without an HTTP(S)_PROXY
@@ -1082,6 +1088,24 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
 '''
 
 # Shared by both replacers (injected at "#@@UPDATE_UI@@").
+UPDATE_LOG_PS = r'''function Write-UpdateLog([string]$Message) {
+  $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+  # Readers and the App's own writer can briefly deny access on Windows.
+  # Retry sharing/lock violations only; an unavailable diagnostic log must
+  # never throw into the file swap, readiness check, or rollback path.
+  for ($attempt = 0; $attempt -lt 4; $attempt++) {
+    try { Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value $line -ErrorAction Stop; return }
+    catch {
+      $cause = $_.Exception
+      while ($cause.InnerException) { $cause = $cause.InnerException }
+      if ($attempt -eq 3 -or ($cause.HResult -band 0xFFFF) -notin @(32, 33)) { break }
+      Start-Sleep -Milliseconds 80
+    }
+  }
+  try { [Console]::Error.WriteLine($line) } catch {}
+}
+'''
+
 UPDATE_UI_PS = r'''$ProgressFile = Join-Path $UpdateRoot ('progress-' + $Token + '.json')
 $script:PinkieArtDir = Join-Path $UpdateRoot 'art'
 $script:repairStarted = $false
@@ -1531,12 +1555,12 @@ class WindowsUpdater:
 
     @staticmethod
     def _helper_source():
-        return WindowsUpdater._onefile_helper_template().replace("#@@UPDATE_UI@@", UPDATE_UI_PS.rstrip())
+        return WindowsUpdater._onefile_helper_template().replace("#@@UPDATE_UI@@", UPDATE_LOG_PS + UPDATE_UI_PS.rstrip())
 
     @staticmethod
     def _directory_helper_source():
         """PowerShell replacer for the portable onedir package."""
-        return WindowsUpdater._directory_helper_template().replace("#@@UPDATE_UI@@", UPDATE_UI_PS.rstrip())
+        return WindowsUpdater._directory_helper_template().replace("#@@UPDATE_UI@@", UPDATE_LOG_PS + UPDATE_UI_PS.rstrip())
 
     @staticmethod
     def _onefile_helper_template():
@@ -1569,9 +1593,6 @@ $StartedMarker = [IO.Path]::ChangeExtension($HealthMarker, '.started')
 $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $ErrorActionPreference = 'Stop'
 $script:backupCreated = $false
-function Write-UpdateLog([string]$Message) {
-  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
-}
 function Write-UpdateFailure([string]$Message) {
   # The restored old version reads this once and tells the user the update
   # did not land, instead of silently coming back unchanged.
@@ -1759,9 +1780,6 @@ $InProgress = Join-Path $UpdateRoot 'in-progress.json'
 $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
 $ErrorActionPreference = 'Stop'
 $script:backupCreated = $false
-function Write-UpdateLog([string]$Message) {
-  Add-Content -LiteralPath $LogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
-}
 function Write-UpdateFailure([string]$Message) {
   # The restored old version reads this once and tells the user the update
   # did not land, instead of silently coming back unchanged.
@@ -1898,8 +1916,9 @@ function Register-RestoreAtLogon {
     $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
     @(
       "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
-      "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target'; Add-Content -LiteralPath '$log' -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] previous version restored at sign-in') }",
-      "  catch { Add-Content -LiteralPath '$log' -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] restore at sign-in failed: ' + `$_.Exception.Message) }",
+      "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target' -ErrorAction Stop; `$message = 'previous version restored at sign-in' }",
+      "  catch { `$message = 'restore at sign-in failed: ' + `$_.Exception.Message }",
+      "  try { Add-Content -LiteralPath '$log' -Encoding UTF8 -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] ' + `$message) -ErrorAction Stop } catch {}",
       "}",
       "Remove-Item -LiteralPath `$PSCommandPath -Force -ErrorAction SilentlyContinue"
     ) | Set-Content -LiteralPath $restore -Encoding UTF8

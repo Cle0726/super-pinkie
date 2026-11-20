@@ -11,6 +11,8 @@
 - 候选版验收修的问题：新装第二次启动、从 2.5.49 升级后正式版设定防护误报「设定被改动」并卡住启动（`main` 没写工作区；Metre roles 工作区里 OpenClaw 自建的 BOOTSTRAP.md）；Windows 侧栏「设置」链接被原生桥截去 `open_chat`，一直打不开设置；节日问候去掉「先生/老板」；PR #34 Metre 派发会话可收起/归档/删除。
 - Windows 冒烟认正式版包：不进 Metre，改查开场视频哈希、Metre 锁、反馈询问默认关；任何设定防护弹窗直接判失败。
 - 修复 Windows 窄窗中输入框失焦时工具箱、上下文等按钮移动而漏接点击，以及聊天画布暂时没有尺寸时的前端异常。
+- Windows 升级的诊断日志被占用时不再中断文件替换或触发回滚；回归测试会在真实独占文件句柄下验证升级仍然继续。
+- 启动后自动从上游同步到本机的聊天模型立即采用默认图片输入，无需重启；保留手动的看图开关，不给外网直连模型猜测看图能力。
 
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。
