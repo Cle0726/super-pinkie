@@ -29,6 +29,19 @@ class WindowsSmokeTests(unittest.TestCase):
         identities = {agent: "碧琪" for agent in smoke.AGENTS}
         self.assertFalse(smoke.fresh_mode_identities_ok("fresh", {"identities": identities}))
 
+    def test_a_guard_notice_is_spotted_from_the_profile_log(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as scratch:
+            env = {"LOCALAPPDATA": scratch}
+            self.assertEqual(smoke.guard_alert(env), "")
+            logs = Path(scratch) / "SuperPinkie/logs"
+            logs.mkdir(parents=True)
+            (logs / "guard.log").write_text("[t] runtime guard check failed: x\n", encoding="utf-8")
+            self.assertEqual(smoke.guard_alert(env), "")
+            with (logs / "guard.log").open("a", encoding="utf-8") as handle:
+                handle.write("[t] alert: 碧琪发现自己的基础运行配置被改动了，已经换回官方版本\n")
+            self.assertIn("基础运行配置", smoke.guard_alert(env))
+
     def test_service_health_requires_both_expected_identities(self):
         responses = [
             io.BytesIO(json.dumps({"service": "super-pinkie-party"}).encode()),

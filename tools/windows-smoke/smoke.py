@@ -177,6 +177,15 @@ def desktop_shot(path):
         log(f"desktop screenshot failed: {error}")
 
 
+def guard_alert(env):
+    path = Path(env["LOCALAPPDATA"]) / "SuperPinkie/logs/guard.log"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    return next((line.strip()[:200] for line in lines if "alert:" in line), "")
+
+
 def launch(exe, env, out, label, timeout=480):
     log(f"[{label}] launching {exe}")
     process = subprocess.Popen([str(exe)], env=env, cwd=str(exe.parent))
@@ -186,6 +195,10 @@ def launch(exe, env, out, label, timeout=480):
             break
         if process.poll() is not None:
             log(f"[{label}] exe exited early with {process.returncode}")
+            break
+        if guard_alert(env):
+            # The guard's message box holds startup until someone clicks it.
+            log(f"[{label}] guard notice raised: {guard_alert(env)}")
             break
         time.sleep(2)
     ready = http_ready()
@@ -274,6 +287,9 @@ def collect_files(profile, out, label):
         ("setup.log", r"安装失败|⚠️"),
         ("launcher.log", r"service failed|startup failed|gateway start failed"),
         ("gateway.log", r"failed to load|plugin\(s\) failed"),
+        # A guard notice on an untouched profile means the App flagged its
+        # own setup as tampering (and the box blocks startup until clicked).
+        ("guard.log", r"alert:"),
     ):
         path = logs / name
         if path.is_file():
@@ -340,6 +356,31 @@ def drive_ui(out, label, release=False):
             if scheme == "dark":
                 context.close()
                 break
+            if release:
+                # The user build asks once whether to send usage summaries. It
+                # is a modal over the whole window: answer 暂不开启 like a user
+                # who skips it, and check nothing is sent before they choose.
+                prompt = {"ok": False}
+                try:
+                    page.wait_for_selector("#pinkie-feedback-onboarding", state="visible", timeout=45_000)
+                    prompt["status_before"] = page.evaluate("""async () => {
+                      const s = await window.__laolaoSidebar.gwRequest('pinkie.feedback.status', {}, 15000);
+                      return {ok: s?.ok, isRelease: s?.isRelease, asked: s?.asked, consent: s?.consent};
+                    }""")
+                    page.screenshot(path=str(out / f"{label}-feedback-prompt.png"))
+                    page.click('#pinkie-feedback-onboarding [data-choice="decline"]', timeout=10_000)
+                    page.wait_for_selector("#pinkie-feedback-onboarding", state="detached", timeout=15_000)
+                    prompt["status_after"] = page.evaluate("""async () => {
+                      const s = await window.__laolaoSidebar.gwRequest('pinkie.feedback.status', {}, 15000);
+                      return {ok: s?.ok, asked: s?.asked, consent: s?.consent};
+                    }""")
+                    before, after = prompt["status_before"], prompt["status_after"]
+                    prompt["ok"] = bool(before.get("isRelease") is True and before.get("consent") is not True
+                                        and after.get("asked") is True and after.get("consent") is not True)
+                except Exception as error:
+                    prompt["error"] = str(error)
+                result["feedback_prompt"] = prompt
+                log(f"[{label}] feedback prompt: ok={prompt['ok']}")
             # A plugin may fail to register without a visible load error. Ask
             # the real gateway for two read-only methods supplied by it.
             # In the user (release) build Metre stays behind the developer
@@ -652,6 +693,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary["passed"] = bool(
         ready
         and (not release or summary["release"]["passed"])
+        and (not release or summary.get("ui", {}).get("feedback_prompt", {}).get("ok"))
         and (not metre_roles or bool(summary.get("metre_roles")))
         and not summary.get("agents", {}).get("missing", AGENTS)
         and fresh_mode_identities_ok(label, summary.get("agents", {}))
