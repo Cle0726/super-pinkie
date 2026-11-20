@@ -8,6 +8,8 @@
 - main 自 2.5.49（`16f37915`）以来的全部合并：Metre 模式（#21，正式版需开发者密码，#25/#26/#27）、Windows Metre 同步与图片记录归属/断线续接修复（#22）、Metre 子会话与调度策略（#24）、正式版/开发版区分批 A–E（#25：开场视频、称呼、模型能力开关、Metre 门槛、设定防护弹窗与计数、可选反馈上报——令牌未配置，正式版保持关闭）、Mac apply-theme 编译修复（#28）、Metre 角色 agent（#29）、总谱滚动位置（#30）、长期记忆合并（#31）、侧边栏子会话常显与学习台下课确认（#32）、输入区遮挡与立即追加（#33）。
 - 模型自动换用：上游 404/402/403/无账号或重试后仍 5xx 时本地代理换一个能答的模型，原模型恢复后换回（`6ce0a76f`）；本地聊天模型默认看图（`06fae028`）。
 - 新增 `.github/workflows/release-candidate.yml`：推 `release/**` 分支即用正式签名打 Windows 正式版包并跑 Windows 冒烟（含从 v2.5.49 升级），不发布任何东西。
+- 候选版验收修的问题：新装第二次启动、从 2.5.49 升级后正式版设定防护误报「设定被改动」并卡住启动（`main` 没写工作区；Metre roles 工作区里 OpenClaw 自建的 BOOTSTRAP.md）；Windows 侧栏「设置」链接被原生桥截去 `open_chat`，一直打不开设置；节日问候去掉「先生/老板」；PR #34 Metre 派发会话可收起/归档/删除。
+- Windows 冒烟认正式版包：不进 Metre，改查开场视频哈希、Metre 锁、反馈询问默认关；任何设定防护弹窗直接判失败。
 
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。

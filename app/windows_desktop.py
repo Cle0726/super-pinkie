@@ -4959,7 +4959,13 @@ BRIDGE_SCRIPT = r"""
     const link = event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    if (url.hostname === '127.0.0.1' && url.port === '18789') { event.preventDefault(); call('open_chat'); return; }
+    if (url.hostname === '127.0.0.1' && url.port === '18789') {
+      // Inside the chat UI its own router handles links such as 设置
+      // (/settings/general); only other pages (party, roundtable, dock)
+      // are sent back to the chat window.
+      if (location.host === url.host) return;
+      event.preventDefault(); call('open_chat'); return;
+    }
     if (url.protocol.startsWith('http') && !['127.0.0.1','localhost'].includes(url.hostname)) {
       event.preventDefault(); call('open_external',url.href);
     }
