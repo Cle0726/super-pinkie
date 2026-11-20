@@ -26,6 +26,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils libarchive-tools tesseract-ocr
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-release-verify-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
       - name: Node tests against the known-failure list
         run: node tools/release-gate/run-tests.mjs
       - name: Python tests
