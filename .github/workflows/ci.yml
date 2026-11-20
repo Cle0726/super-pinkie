@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  METRE_MAIN_REFERENCE: a85a7449103efa49674ed4f49725c1e93b943de0
+
 jobs:
   portable-checks:
     runs-on: ubuntu-latest
@@ -23,6 +26,13 @@ jobs:
           npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
           "$deps/node_modules/.bin/playwright" install --with-deps webkit
           echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Capture the pinned main Metre regression baseline on Linux
+        run: |
+          git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
+          git worktree add --detach "$RUNNER_TEMP/metre-main-reference" "$METRE_MAIN_REFERENCE"
+          PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
+            node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
+          echo "PINKIE_METRE_MAIN_BASELINE=$RUNNER_TEMP/metre-main.json" >> "$GITHUB_ENV"
       - name: Check JavaScript injections
         run: find ui/injections -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Run all execution, recovery, UI and desktop regression tests
@@ -174,9 +184,13 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: |
-          # Both suites always run, so a Node failure never hides the Python results; the step still fails if either does.
+          # Browser-heavy files launch real Chrome and WebKit concurrently.
+          # On the small Windows runner, an input click and a desk mount timed
+          # out under the default process fan-out. Run every file, but bound
+          # the number of processes instead of extending those test deadlines.
+          # Both suites still run even if the other fails.
           status=0
-          node --test tests/*.test.cjs tests/*.test.mjs || status=1
+          node --test --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
           python -m unittest discover -s tests -p '*_test.py' -v || status=1
           exit $status
       - name: Check Python services

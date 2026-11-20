@@ -1,0 +1,48 @@
+{
+  "role": "refactor",
+  "name": "重构整理",
+  "samples": [
+    {
+      "id": "refactor-1",
+      "title": "提取账单汇总模块中的重复税率与金额舍入逻辑",
+      "brief": "目标：重构工作目录 `src/invoice.mjs`，消除 `summarizeRetailInvoice` 与 `summarizeWholesaleInvoice` 中重复的明细金额计算、税率叠加和两位小数四舍五入代码。\n要求：\n1. 改前先跑 `node --test test/invoice.test.mjs` 记录基线。\n2. 在 `src/invoice.mjs` 内部提取共用的辅助函数，禁止修改对外导出的函数名 `summarizeRetailInvoice`、`summarizeWholesaleInvoice` 及其参数和返回字段结构。\n3. 改后重跑同一组测试 `node --test test/invoice.test.mjs`，确认结果完全一致，不改 `test/invoice.test.mjs`。",
+      "files": [
+        {
+          "path": "src/invoice.mjs",
+          "content": "export function summarizeRetailInvoice(lines = []) {\n  let raw = 0;\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i];\n    if (line && line.qty > 0 && line.unitPrice > 0) {\n      raw += line.qty * line.unitPrice;\n    }\n  }\n  const subtotal = Math.round(raw * 100) / 100;\n  const tax = Math.round(subtotal * 0.13 * 100) / 100;\n  const total = Math.round((subtotal + tax) * 100) / 100;\n  return {tier: 'retail', subtotal, tax, total};\n}\n\nexport function summarizeWholesaleInvoice(lines = []) {\n  let raw = 0;\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i];\n    if (line && line.qty > 0 && line.unitPrice > 0) {\n      raw += line.qty * line.unitPrice;\n    }\n  }\n  const subtotal = Math.round(raw * 100) / 100;\n  const tax = Math.round(subtotal * 0.09 * 100) / 100;\n  const total = Math.round((subtotal + tax) * 100) / 100;\n  return {tier: 'wholesale', subtotal, tax, total};\n}\n"
+        },
+        {
+          "path": "test/invoice.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {summarizeRetailInvoice, summarizeWholesaleInvoice} from '../src/invoice.mjs';\n\ntest('retail and wholesale invoice calculation', () => {\n  const lines = [{qty: 2, unitPrice: 19.99}, {qty: 0, unitPrice: 100}, {qty: 1, unitPrice: 10.02}];\n  assert.deepEqual(summarizeRetailInvoice(lines), {tier: 'retail', subtotal: 50, tax: 6.5, total: 56.5});\n  assert.deepEqual(summarizeWholesaleInvoice(lines), {tier: 'wholesale', subtotal: 50, tax: 4.5, total: 54.5});\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/invoice.mjs，test/invoice.test.mjs 未被修改",
+        "src/invoice.mjs 仍然导出 summarizeRetailInvoice 和 summarizeWholesaleInvoice，且消除了重复的明细求和与四舍五入代码",
+        "运行 node --test test/invoice.test.mjs 退出码为 0，改前与改后测试结果完全一致",
+        "交回汇报包含「改前改后的测试输出」「改动统计」「行为没变的依据」三段"
+      ]
+    },
+    {
+      "id": "refactor-2",
+      "title": "拉平嵌套的权限判定函数并保持全部导出接口不变",
+      "brief": "目标：重构工作目录 `src/access.mjs` 中的 `canAccessDocument(user, doc, action)`，用卫语句（早返回）消除深层 `if/else` 嵌套，拆清只读与写权限判断。\n要求：\n1. 改前跑 `node --test test/access.test.mjs`。\n2. 不改对外导出的 `canAccessDocument` 签名与返回值（`{allowed: boolean, reason: string}`），不改 `test/access.test.mjs`。\n3. 改后跑同一组测试，确认全部通过且输出一致。",
+      "files": [
+        {
+          "path": "src/access.mjs",
+          "content": "export function canAccessDocument(user, doc, action) {\n  if (user && !user.disabled) {\n    if (doc && !doc.deleted) {\n      if (user.role === 'admin') {\n        return {allowed: true, reason: 'ADMIN'};\n      } else {\n        if (action === 'read') {\n          if (doc.isPublic || doc.ownerId === user.id) {\n            return {allowed: true, reason: 'READ_OK'};\n          } else {\n            return {allowed: false, reason: 'FORBIDDEN'};\n          }\n        } else if (action === 'write') {\n          if (doc.ownerId === user.id && !doc.locked) {\n            return {allowed: true, reason: 'WRITE_OK'};\n          } else {\n            return {allowed: false, reason: 'FORBIDDEN'};\n          }\n        } else {\n          return {allowed: false, reason: 'UNKNOWN_ACTION'};\n        }\n      }\n    } else {\n      return {allowed: false, reason: 'DOC_UNAVAILABLE'};\n    }\n  } else {\n    return {allowed: false, reason: 'USER_INVALID'};\n  }\n}\n"
+        },
+        {
+          "path": "test/access.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {canAccessDocument} from '../src/access.mjs';\n\ntest('all branches of canAccessDocument', () => {\n  assert.deepEqual(canAccessDocument(null, {}, 'read'), {allowed: false, reason: 'USER_INVALID'});\n  assert.deepEqual(canAccessDocument({id: 1, disabled: true}, {}, 'read'), {allowed: false, reason: 'USER_INVALID'});\n  assert.deepEqual(canAccessDocument({id: 1}, {deleted: true}, 'read'), {allowed: false, reason: 'DOC_UNAVAILABLE'});\n  assert.deepEqual(canAccessDocument({id: 1, role: 'admin'}, {ownerId: 2}, 'write'), {allowed: true, reason: 'ADMIN'});\n  assert.deepEqual(canAccessDocument({id: 1}, {ownerId: 2, isPublic: true}, 'read'), {allowed: true, reason: 'READ_OK'});\n  assert.deepEqual(canAccessDocument({id: 1}, {ownerId: 1, locked: false}, 'write'), {allowed: true, reason: 'WRITE_OK'});\n  assert.deepEqual(canAccessDocument({id: 1}, {ownerId: 1, locked: true}, 'write'), {allowed: false, reason: 'FORBIDDEN'});\n  assert.deepEqual(canAccessDocument({id: 1}, {ownerId: 1}, 'delete'), {allowed: false, reason: 'UNKNOWN_ACTION'});\n});\n"
+        }
+      ],
+      "checks": [
+        "只修改了 src/access.mjs，test/access.test.mjs 未被修改",
+        "src/access.mjs 中不再包含 else 分支嵌套，且 canAccessDocument 导出签名与返回值结构完全不变",
+        "运行 node --test test/access.test.mjs 退出码为 0，8 条断言全部通过",
+        "交回汇报包含「改前改后的测试输出」「改动统计」「行为没变的依据」三段"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "role": "automation-builder",
+  "name": "自动化脚本",
+  "samples": [
+    {
+      "id": "automation-builder-1",
+      "title": "编写带试运行与一键撤回的下载目录按扩展名自动归档脚本",
+      "brief": "目标：编写工作目录 `scripts/organize-inbox.mjs`，将 `inbox/` 目录下的文件按扩展名分类移动到 `sorted/docs/`（`.txt`, `.md`）和 `sorted/images/`（`.png`, `.jpg`），跳过正在下载的 `.part` 文件。\n要求：\n1. 支持 `--dry-run` 试运行模式（只打印计划移动的文件，不实际移动）。\n2. 正常运行时将移动记录写入 `logs/organize.log`（含原路径与新路径），并支持 `--rollback` 按日志把文件还原回 `inbox/`。\n3. 先在当前 `inbox/` 上跑一次 `--dry-run`，再真跑一次完成归档（保留归档后的状态和日志供验收），并在汇报里写明怎么停、怎么撤回、日志在哪。",
+      "files": [
+        {
+          "path": "inbox/report.txt",
+          "content": "quarterly report\n"
+        },
+        {
+          "path": "inbox/photo.png",
+          "content": "fake-png-bytes\n"
+        },
+        {
+          "path": "inbox/unfinished.zip.part",
+          "content": "downloading\n"
+        }
+      ],
+      "checks": [
+        "scripts/organize-inbox.mjs 存在且支持 --dry-run 和 --rollback 参数",
+        "真跑后 sorted/docs/report.txt 和 sorted/images/photo.png 已存在，而 inbox/unfinished.zip.part 仍留在 inbox/ 未被移动",
+        "logs/organize.log 已生成且包含 report.txt 和 photo.png 的原路径与新路径记录",
+        "交回汇报包含「脚本路径」「试运行和真跑的输出」「停止和撤回的方法」（写明怎么停、怎么撤回、日志在哪）"
+      ]
+    },
+    {
+      "id": "automation-builder-2",
+      "title": "编写过期快照自动清理归档脚本（带试运行、撤回与日志）",
+      "brief": "目标：编写 `scripts/archive-snapshots.mjs`，扫描 `snapshots/` 目录下文件名含 `2025-` 的旧快照文件，移动到 `archive/2025/`（不直接删除原件），保留 `2026-` 的文件在原处。\n要求：\n1. 支持 `--dry-run` 试运行模式和 `--rollback` 撤回模式，操作记录写进 `logs/archive.log`。\n2. 先跑一次 `--dry-run`，再真跑一次。\n3. 交回脚本路径、试运行和真跑的输出、停止和撤回的方法。",
+      "files": [
+        {
+          "path": "snapshots/snap-2025-10.json",
+          "content": "{\"year\": 2025, \"month\": 10}\n"
+        },
+        {
+          "path": "snapshots/snap-2025-12.json",
+          "content": "{\"year\": 2025, \"month\": 12}\n"
+        },
+        {
+          "path": "snapshots/snap-2026-11.json",
+          "content": "{\"year\": 2026, \"month\": 11}\n"
+        }
+      ],
+      "checks": [
+        "scripts/archive-snapshots.mjs 存在且支持 --dry-run 与 --rollback",
+        "真跑后 archive/2025/snap-2025-10.json 和 archive/2025/snap-2025-12.json 已存在，snapshots/snap-2026-11.json 仍在原处",
+        "logs/archive.log 存在且记录了 2 个移动文件的原位置与新位置",
+        "交回汇报包含「脚本路径」「试运行和真跑的输出」「停止和撤回的方法」"
+      ]
+    }
+  ]
+}

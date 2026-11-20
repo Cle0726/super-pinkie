@@ -524,6 +524,16 @@ def ensure_workspace_avatars(log):
             log(f"  ⚠️ 补齐 {workspace} 头像失败：{exc}")
 
 
+def _install_metre_role_assets(personas, openclaw_home, backup_root):
+    import runpy
+
+    helper = resource_path("services", "mode-architecture", "metre_role_assets.py")
+    if helper.is_file():
+        assets = runpy.run_path(str(helper))
+        return assets["sync_metre_role_assets"](personas, openclaw_home, backup_root)
+    return False
+
+
 def install_personas(log, register=True):
     log("==> 正在安装 CLE Kk 模式人格文件...")
     home = Path.home()
@@ -563,6 +573,8 @@ def install_personas(log, register=True):
                     if not (target / placeholder).exists():
                         (target / placeholder).write_text("", encoding="utf-8")
             log(f"  [{mode}] 人格文件 -> {target}")
+    if _install_metre_role_assets(src_root, home / ".openclaw", backup_root):
+        log("  [metre] 已同步官方角色卡和角色工作区")
     # prepare_bundled_desktop registers right after this, with a retry once the
     # plugins are installed, so it asks for the files only.
     return ensure_mode_agents(log) if register else True

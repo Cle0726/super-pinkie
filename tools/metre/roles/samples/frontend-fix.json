@@ -1,0 +1,40 @@
+{
+  "role": "frontend-fix",
+  "name": "前端修 bug",
+  "samples": [
+    {
+      "id": "frontend-fix-1",
+      "title": "清单页在 375 手机宽度横向溢出且点击清空按钮控制台报错",
+      "brief": "目标：修复工作目录 `index.html` 的两个前端问题：\n1. 在 375px 手机宽度下，顶部工具栏（`.toolbar`）写死了 `width: 960px`，导致页面出现严重横向滚动条、右侧按钮被截断。\n2. 点击「清空已选」（`#clear-btn`）没有任何反应，且浏览器控制台报 `TypeError: Cannot set properties of null`。\n要求：\n1. 先在浏览器里打开 `index.html` 复现并保存修前截图，抓下控制台报错原文。\n2. 找到样式和脚本根因并修复，保持原有视觉配色不变。\n3. 修好后验证点击 `#clear-btn` 能清空列表并显示 `#empty-tip`，在桌面宽度（1440px）和 375 宽度各截一张图，确认两张截图无横向滚动且控制台 0 条报错。",
+      "files": [
+        {
+          "path": "index.html",
+          "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>采购清单</title>\n  <style>\n    * { box-sizing: border-box; }\n    body { margin: 0; padding: 16px; font-family: -apple-system, \"Microsoft YaHei\", sans-serif; background: #f7f8fa; color: #1f2329; }\n    .toolbar { width: 960px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: #fff; border: 1px solid #dcdfe6; border-radius: 8px; }\n    .actions { display: flex; gap: 8px; }\n    button { min-height: 40px; padding: 8px 16px; border: 1px solid #2b5aed; background: #2b5aed; color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }\n    #record-list { margin-top: 16px; padding: 0; list-style: none; display: grid; gap: 8px; }\n    #record-list li { padding: 12px; background: #fff; border: 1px solid #e4e7ed; border-radius: 6px; }\n    #empty-tip { display: none; margin-top: 16px; color: #606266; }\n  </style>\n</head>\n<body>\n  <div class=\"toolbar\">\n    <strong>本周采购清单</strong>\n    <div class=\"actions\">\n      <button id=\"clear-btn\" type=\"button\">清空已选</button>\n    </div>\n  </div>\n  <ul id=\"record-list\">\n    <li>A4 打印纸 × 5 包</li>\n    <li>签字笔 × 2 盒</li>\n  </ul>\n  <p id=\"empty-tip\">暂无采购项</p>\n  <script>\n    document.getElementById('clear-btn').addEventListener('click', () => {\n      const listEl = document.getElementById('item-list');\n      listEl.innerHTML = '';\n      document.getElementById('empty-tip').style.display = 'block';\n    });\n  </script>\n</body>\n</html>\n"
+        }
+      ],
+      "checks": [
+        "只修改了 index.html，且存在修前截图、修后桌面宽度截图和修后 375 宽度截图共至少 3 个真实 PNG 文件",
+        "在 375px 视口宽度下 document.documentElement.scrollWidth <= 375（无横向溢出）",
+        "点击 #clear-btn 后 #record-list 的子元素数量变为 0，#empty-tip 的计算样式 display 为 block，且控制台 error 与 pageerror 数量为 0",
+        "交回汇报包含「修前修后截图」「控制台输出」「根因」段落，且根因准确指出 index.html 第 10 行 .toolbar 固定 width: 960px 与第 32 行 getElementById('item-list') ID 写错"
+      ]
+    },
+    {
+      "id": "frontend-fix-2",
+      "title": "统计切换标签页点击报错不切换且窄屏卡片撑破视口",
+      "brief": "目标：修复工作目录 `index.html` 中切换到「月度汇总」标签页（`#tab-monthly`）时页面无反应、控制台报 `ReferenceError`，以及 375px 宽度下 `.summary-grid` 强制 `min-width: 720px` 撑破手机屏幕的问题。\n要求：\n1. 先在浏览器里复现并截图，记录控制台报错原文。\n2. 定位 `index.html` 的脚本与样式根因并修复，点击 `#tab-monthly` 应隐藏 `#panel-daily`、显示 `#panel-monthly`。\n3. 修好后在桌面宽度和 375 宽度各截一张图，确认控制台无新报错。",
+      "files": [
+        {
+          "path": "index.html",
+          "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>门店营收看板</title>\n  <style>\n    * { box-sizing: border-box; }\n    body { margin: 0; padding: 16px; font-family: -apple-system, \"Microsoft YaHei\", sans-serif; }\n    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }\n    .tabs button { padding: 10px 16px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; cursor: pointer; }\n    .tabs button.active { background: #0f172a; color: #fff; }\n    .summary-grid { min-width: 720px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }\n    .card { padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; }\n    .hidden { display: none; }\n  </style>\n</head>\n<body>\n  <div class=\"tabs\">\n    <button id=\"tab-daily\" class=\"active\" type=\"button\">今日明细</button>\n    <button id=\"tab-monthly\" type=\"button\">月度汇总</button>\n  </div>\n  <section id=\"panel-daily\" class=\"summary-grid\">\n    <div class=\"card\">今日订单：42</div>\n    <div class=\"card\">今日营收：¥3,680</div>\n    <div class=\"card\">客单价：¥87.6</div>\n  </section>\n  <section id=\"panel-monthly\" class=\"summary-grid hidden\">\n    <div class=\"card\">本月订单：1,120</div>\n    <div class=\"card\">本月营收：¥98,400</div>\n    <div class=\"card\">复购率：34%</div>\n  </section>\n  <script>\n    function switchTab(mode) {\n      const isDaily = targetMode === 'daily';\n      document.getElementById('panel-daily').classList.toggle('hidden', !isDaily);\n      document.getElementById('panel-monthly').classList.toggle('hidden', isDaily);\n      document.getElementById('tab-daily').classList.toggle('active', isDaily);\n      document.getElementById('tab-monthly').classList.toggle('active', !isDaily);\n    }\n    document.getElementById('tab-daily').addEventListener('click', () => switchTab('daily'));\n    document.getElementById('tab-monthly').addEventListener('click', () => switchTab('monthly'));\n  </script>\n</body>\n</html>\n"
+        }
+      ],
+      "checks": [
+        "只修改了 index.html，且生成了修前截图、修后桌面宽度截图和修后 375 宽度截图",
+        "点击 #tab-monthly 后 #panel-monthly 不含 hidden 类且可见，#panel-daily 含 hidden 类，控制台 error 数量为 0",
+        "在 375px 视口宽度下 document.documentElement.scrollWidth <= 375（无横向溢出）",
+        "交回汇报包含修前修后截图路径、控制台输出原文，且根因明确指出 index.html 第 13 行 min-width: 720px 与第 35 行未定义变量 targetMode"
+      ]
+    }
+  ]
+}

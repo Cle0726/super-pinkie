@@ -28,7 +28,7 @@ class ModeArchitectureSetupTests(unittest.TestCase):
                 (ws / 'IDENTITY.md').write_text('CUSTOM IDENTITY\n')
             self.assertTrue(setup.install(home))
             installed = json.loads(config.read_text())
-            self.assertEqual([x['id'] for x in installed['agents']['list']], ['main','project','thinking','unrestricted'])
+            self.assertEqual([x['id'] for x in installed['agents']['list']], ['main','project','thinking','unrestricted','roles'])
             self.assertEqual(installed['agents']['defaults']['compaction']['keepRecentTokens'], 800000)
             self.assertEqual(installed['agents']['defaults']['subagents']['maxSpawnDepth'], 2)
             self.assertEqual(installed['agents']['defaults']['timeoutSeconds'], 43200)

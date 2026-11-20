@@ -1,0 +1,57 @@
+{
+  "role": "backend-fix",
+  "name": "后端修 bug",
+  "samples": [
+    {
+      "id": "backend-fix-1",
+      "title": "订单结算接口优惠券抵扣与已取消商品计价错误",
+      "brief": "目标：修复工作目录 `src/order-total.mjs` 中 `calcOrderCents(items, coupon)` 的计算错误。\n背景：线上反馈当订单里包含 `status: 'cancelled'` 的商品且使用百分比折扣券（`coupon.type === 'percent'`，如 `value: 20` 表示打八折即减免 20%）时，结算金额把已取消商品的金额也算进了小计，而且折扣后出现小数分（未四舍五入为整数分）。\n要求：\n1. 先用命令复现当前报错或错误输出。\n2. 定位 `src/order-total.mjs` 的根因并修复，只算 `status !== 'cancelled'` 的有效商品，百分比折扣后用 `Math.round` 取整，最低不小于 0。\n3. 在 `test/order-total.test.mjs` 中补一条包含已取消商品和百分比折扣的回归测试，并跑通全部测试。",
+      "files": [
+        {
+          "path": "package.json",
+          "content": "{\n  \"name\": \"sample-backend-fix-1\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test test/order-total.test.mjs\"\n  }\n}\n"
+        },
+        {
+          "path": "src/order-total.mjs",
+          "content": "export function calcOrderCents(items = [], coupon = null) {\n  let subtotal = 0;\n  for (const item of items) {\n    subtotal += item.priceCents * item.qty;\n  }\n  if (!coupon) return subtotal;\n  if (coupon.type === 'fixed') {\n    return Math.max(0, subtotal - coupon.value);\n  }\n  if (coupon.type === 'percent') {\n    return subtotal * (1 - coupon.value / 100);\n  }\n  return subtotal;\n}\n"
+        },
+        {
+          "path": "test/order-total.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {calcOrderCents} from '../src/order-total.mjs';\n\ntest('fixed coupon on active items', () => {\n  const items = [{priceCents: 1000, qty: 2, status: 'active'}];\n  assert.equal(calcOrderCents(items, {type: 'fixed', value: 500}), 1500);\n});\n"
+        }
+      ],
+      "checks": [
+        "改动的文件只限 src/order-total.mjs 和 test/order-total.test.mjs，package.json 未被修改",
+        "调用 calcOrderCents([{priceCents: 999, qty: 1, status: 'active'}, {priceCents: 500, qty: 1, status: 'cancelled'}], {type: 'percent', value: 15}) 返回整数 849",
+        "test/order-total.test.mjs 中新增了包含 status 为 cancelled 和 type 为 percent 的断言用例",
+        "运行 node --test test/order-total.test.mjs 退出码为 0，所有测试均通过",
+        "交回汇报包含「结论」「根因」「改动」「证据」段落，且根因明确指出 src/order-total.mjs 第 3-5 行未过滤 cancelled 商品及第 11 行未取整"
+      ]
+    },
+    {
+      "id": "backend-fix-2",
+      "title": "列表分页函数查询参数字符串拼接导致第二页返回数量错误",
+      "brief": "目标：修复工作目录 `src/paginate.mjs` 中 `paginateList(list, query)` 在传入 URL 字符串参数（如 `{page: '2', limit: '3'}`）时返回条数和切片位置错误的问题。\n背景：HTTP 查询参数解析出来的 `query.page` 和 `query.limit` 是字符串，现在调用 `paginateList([1,2,3,4,5,6,7,8,9,10], {page: '2', limit: '3'})` 期望返回 `[4, 5, 6]`，实际却返回了 `[4, 5, 6, 7, 8, 9, 10]`（共 7 条）。\n要求：\n1. 先复现该错误输出。\n2. 找到 `src/paginate.mjs` 中的根因并修复，同时确保非法的负数或 NaN 页码回退到默认值（`page=1, limit=10`）。\n3. 在 `test/paginate.test.mjs` 补充字符串参数的分页测试并跑通。",
+      "files": [
+        {
+          "path": "package.json",
+          "content": "{\n  \"name\": \"sample-backend-fix-2\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test test/paginate.test.mjs\"\n  }\n}\n"
+        },
+        {
+          "path": "src/paginate.mjs",
+          "content": "export function paginateList(list = [], query = {}) {\n  const page = query.page || 1;\n  const limit = query.limit || 10;\n  const offset = (page - 1) * limit;\n  const items = list.slice(offset, offset + limit);\n  return {\n    page,\n    limit,\n    total: list.length,\n    items,\n  };\n}\n"
+        },
+        {
+          "path": "test/paginate.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {paginateList} from '../src/paginate.mjs';\n\ntest('numeric page and limit', () => {\n  const res = paginateList([1, 2, 3, 4, 5], {page: 1, limit: 2});\n  assert.deepEqual(res.items, [1, 2]);\n});\n"
+        }
+      ],
+      "checks": [
+        "改动的文件只限 src/paginate.mjs 和 test/paginate.test.mjs",
+        "调用 paginateList([1,2,3,4,5,6,7,8,9,10], {page: '2', limit: '3'}).items 严格等于 [4, 5, 6]，且返回的 page 为数字 2、limit 为数字 3",
+        "test/paginate.test.mjs 中包含传入字符串 {page: '2', limit: '3'} 的测试且运行 node --test test/paginate.test.mjs 退出码为 0",
+        "交回汇报包含修前失败、修后通过的命令和输出原文，且根因明确指出 src/paginate.mjs 第 5 行 offset + limit 发生字符串拼接"
+      ]
+    }
+  ]
+}

@@ -57,7 +57,7 @@ fi
 if [[ ! -f "$MARKER" ]]; then
   BACKUP_ROOT="$STATE_ROOT/backups/bundled-$(date +%Y%m%d-%H%M%S)"
   # Once per version: manuals and playbooks follow this version (old copies backed up); memory untouched.
-  bash "$SCRIPT_DIR/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" "$BACKUP_ROOT/personas"
+  PINKIE_PYTHON_BIN="$PYTHON_BIN" bash "$SCRIPT_DIR/sync-personas.sh" "$REPO_ROOT/personas" "$HOME/.openclaw" "$BACKUP_ROOT/personas"
   OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
   if [[ -z "$OPENCLAW_BIN" ]]; then
     for candidate in "$HOME"/.nvm/versions/node/*/bin/openclaw /opt/homebrew/bin/openclaw /usr/local/bin/openclaw; do
@@ -135,6 +135,8 @@ fi
 if [[ -f "$REPO_ROOT/services/project-scope/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/project-scope/setup.py"
 fi
+# Runs even when the persona version marker exists: mode setup owns roles
+# registration and refreshes its workspace and official cards.
 if [[ -f "$REPO_ROOT/services/mode-architecture/setup.py" ]]; then
   "$PYTHON_BIN" "$REPO_ROOT/services/mode-architecture/setup.py"
 fi

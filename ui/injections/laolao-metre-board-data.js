@@ -93,7 +93,11 @@
     for (const s of sessions) {
       const row = h('div', 'pk-mb-score__row');
       row.dataset.state = s.state;
-      const part = h('div', 'pk-mb-score__part', `<strong title="${esc(s.title)}">${esc(s.title)}</strong><small>${esc([s.modeName, s.model].filter(Boolean).join(' · '))}</small>`);
+      const role = s.roleName || s.role;
+      const label = [role || s.modeName, s.model].filter(Boolean).join(' · ');
+      const custom = role && s.roleSource === 'user' ? '<span class="pk-mb-role-badge">自定义</span>' : '';
+      const part = h('div', 'pk-mb-score__part', `<strong title="${esc(s.title)}">${esc(s.title)}</strong>`);
+      part.append(h('small', role ? 'pk-mb-role-label' : '', esc(label) + custom));
       const track = h('div', 'pk-mb-score__track');
       for (const sp of s.spans) {
         const block = h('i');
@@ -216,7 +220,23 @@
     add(stale ? 'fail' : 'done', '网关', stale ? '连接断了，正在重连' : '已连接');
     for (const m of rt.models || []) add(m.health === 'fail' ? 'fail' : m.health === 'ok' ? 'done' : 'wait', m.id, m.health === 'fail' ? `出错：${m.lastError || '原因没记下'}` : m.health === 'ok' ? '正常' : '还没调用过');
     add('wait', '声部上限', `在奏 ${overview.running} / ${overview.limit} · 这一轮已开 ${overview.started} / ${overview.cap}`);
+    const roles = rt.metreRoles;
+    const counts = roles ? `合格 ${roles.valid} 张 · 不合格 ${roles.invalid} 张` : '暂时读不到';
+    add(!roles ? 'wait' : roles.invalid ? 'fail' : 'done', '角色卡', counts);
     wrap.append(health);
+    if (roles?.issues?.length) {
+      const details = h('details', 'pk-mb-role-issues');
+      // The dashboard replaces its nodes when fresh data arrives. Keep the
+      // reasons open if the reader had already expanded them.
+      details.open = Boolean(document.querySelector('#pk-metre-board .pk-mb-role-issues')?.open);
+      const issues = h('ul', 'pk-mb-errors');
+      for (const issue of roles.issues) {
+        const source = issue.source === 'user' ? '自定义' : '官方';
+        issues.append(h('li', '', `${esc(issue.file || '角色卡')}（${source}）：${esc(issue.reason)}`));
+      }
+      details.append(h('summary', '', '查看不合格原因'), issues);
+      wrap.append(details);
+    }
     if (rt.errors?.length) {
       const errs = h('ul', 'pk-mb-errors');
       for (const e of rt.errors) errs.append(h('li', '', `<time>${clock(e.at)}</time> ${esc(e.text)}`));

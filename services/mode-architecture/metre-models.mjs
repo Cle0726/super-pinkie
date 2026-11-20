@@ -25,7 +25,10 @@ export function tierTable() {
   const toolsWeak = (Array.isArray(raw.toolsWeak) ? raw.toolsWeak : []).flatMap(pattern => {
     try { return [new RegExp(pattern, 'i')]; } catch { return []; }
   });
-  tierCache = {rules, light, toolsWeak};
+  const vendors = (Array.isArray(raw.vendors) ? raw.vendors : []).flatMap(rule => {
+    try { return rule?.vendor ? [{match: new RegExp(rule.match, 'i'), vendor: String(rule.vendor).toLowerCase()}] : []; } catch { return []; }
+  });
+  tierCache = {rules, light, toolsWeak, vendors};
   return tierCache;
 }
 
@@ -172,4 +175,103 @@ export function chooseChildModel({config = {}, health = null, selfModel = '', re
     throw new Error(`这个模式的默认模型（${fallback}）和你自己相同，必须写 model：先用 pinkie_models 选一个更轻的`);
   }
   return {model: fallback, explicit: false};
+}
+
+// 通用中转路由段不代表模型厂家，判断厂家时跳过。
+const RELAY_SEGMENTS = new Set(['mm', 'workbuddy', 'kiro', 'openrouter', 'proxy', 'relay', 'router', 'custom', 'v1']);
+
+/**
+ * 判断模型属于哪家厂商（briefs/metre-roles-1118 PLAN 3.8 / R1-25）。
+ * 先按归一化后的模型名（去掉路由前缀、:free/@eu、思考强度后缀）匹配 vendors 表；
+ * 命中不到（例如 mm/doubao-web/auto）时再从非中转路由段里找厂家。未知返回空串。
+ */
+export function vendorOf(id) {
+  const raw = String(id || '').trim().toLowerCase();
+  if (!raw) return '';
+  const vendors = tierTable().vendors || [];
+  const norm = normalizeModelId(raw);
+  if (norm) {
+    const hit = vendors.find(item => item.match.test(norm));
+    if (hit) return hit.vendor;
+  }
+  const segments = raw.split('/').filter(Boolean);
+  for (let i = segments.length - 2; i >= 0; i--) {
+    const seg = segments[i].replace(/[@:].*$/u, '');
+    if (!seg || RELAY_SEGMENTS.has(seg)) continue;
+    const hit = vendors.find(item => item.match.test(seg));
+    if (hit) return hit.vendor;
+  }
+  return '';
+}
+
+/**
+ * Metre 带角色派活时的模型挑选（briefs/metre-roles-1118 PLAN 3.8 / R1-24 / R1-25）：
+ * - 写了 model：规则沿用 chooseChildModel，并在 review === 'cross-vendor' 且给了 excludeVendors 时校验换一家；
+ * - 没写 model：按角色卡自动选，满足 档位 == tier、健康、不是 Metre 自己、vision（需要看图时）、
+ *   toolsStable（卡含 exec 或 write 时）、换一家（cross-vendor 且有 excludeVendors 时）。
+ *   同档排序沿用 listModels（最近跑通过的 okAt 在前，其次按目录顺序）。
+ *   挑不到时报错，明确写清缺少哪个条件，让 Metre 用 pinkie_models 自己选。
+ */
+export function chooseRoleModel({config = {}, health = null, selfModel = '', requested = '', roleCard = null, excludeVendors = []} = {}) {
+  const crossVendor = roleCard?.review === 'cross-vendor';
+  const excluded = [...new Set((Array.isArray(excludeVendors) ? excludeVendors : []).map(v => String(v || '').trim().toLowerCase()).filter(Boolean))];
+  const text = String(requested || '').trim();
+  if (text) {
+    const chosen = chooseChildModel({config, health, selfModel, requested: text, targetAgent: 'roles'});
+    const vendor = vendorOf(chosen.model);
+    if (crossVendor && excluded.length > 0) {
+      if (!vendor) throw new Error(`认不出「${chosen.model}」的厂家，无法确认跨厂家复核：用 pinkie_models 选已知厂家的一项`);
+      if (excluded.includes(vendor)) throw new Error(`「${chosen.model}」和被复核会话属于同一厂家（${vendor}），cross-vendor 复核必须换一家：用 pinkie_models 选另一家模型`);
+    }
+    return {...chosen, vendor};
+  }
+
+  const all = catalog(config);
+  if (!all.length) {
+    throw new Error('当前没有同步到可用模型目录：先用 pinkie_models 检查并显式指定 model');
+  }
+
+  const needTier = String(roleCard?.tier || 'mid');
+  const needVision = Boolean(roleCard?.vision);
+  const needTools = Array.isArray(roleCard?.tools) && (roleCard.tools.includes('exec') || roleCard.tools.includes('write'));
+
+  const annotated = all.map((item, order) => ({
+    ...item,
+    order,
+    tier: tierOf(item.id),
+    ...healthOf(health, item.id),
+    toolsStable: toolsStable(item.id),
+    vendor: vendorOf(item.id),
+  }));
+
+  const steps = [
+    {label: `档位为 ${needTier}`, test: item => item.tier === needTier},
+    {label: `与 Metre 自身（${selfModel || '当前模型'}）不同`, test: item => !sameModel(item.id, selfModel)},
+    {label: '模型健康', test: item => item.healthy},
+    ...(needVision ? [{label: '支持看图（vision）', test: item => item.vision}] : []),
+    ...(needTools ? [{label: '工具调用稳定（toolsStable）', test: item => item.toolsStable}] : []),
+    ...(crossVendor && excluded.length > 0
+      ? [{label: `不同厂家（避开 ${excluded.join('、')}）`, test: item => Boolean(item.vendor) && !excluded.includes(item.vendor)}]
+      : []),
+  ];
+
+  let pool = annotated;
+  let failedStep = '';
+  for (const step of steps) {
+    const next = pool.filter(step.test);
+    if (!next.length) {
+      failedStep = step.label;
+      break;
+    }
+    pool = next;
+  }
+
+  if (failedStep) {
+    throw new Error(`自动为角色「${roleCard?.name || roleCard?.id || '角色'}」挑选模型失败：缺少满足「${failedStep}」条件的模型。请用 pinkie_models 自己选一个 model`);
+  }
+
+  // 同档排序沿用 listModels：最近确实跑通过的在前，其次按目录顺序。
+  pool.sort((a, b) => (b.okAt || 0) - (a.okAt || 0) || a.order - b.order);
+  const picked = pool[0];
+  return {model: picked.id, explicit: true, autoPicked: true, vendor: picked.vendor};
 }

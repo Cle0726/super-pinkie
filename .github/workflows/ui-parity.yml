@@ -5,6 +5,15 @@ on:
   push:
     branches: ["fix/windows-*"]
   workflow_dispatch:
+    inputs:
+      old_tag:
+        description: "Published portable release to upgrade from"
+        type: string
+        default: v2.5.16
+      metre_roles:
+        description: "Verify installed Metre roles on Windows"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,6 +46,7 @@ jobs:
         run: |
           control="dist/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui"
           python3 tools/ui-parity/bundle.py check --control-ui "$control" --output parity/macos-ui-manifest.json
+          cp dist/macos-metre-roles-runtime.json parity/macos-metre-roles-runtime.json
           node tools/ui-parity/capture.mjs --control-ui "$control" --browser chromium --label mac-chromium --out parity/shots --strict
       - name: Verify the packaged Mac UI in WebKit
         timeout-minutes: 8
@@ -78,6 +88,8 @@ jobs:
     uses: ./.github/workflows/windows-smoke.yml
     with:
       app_artifact: ui-parity-windows-app
+      old_tag: ${{ inputs.old_tag || 'v2.5.16' }}
+      metre_roles: ${{ inputs.metre_roles == true }}
 
   compare:
     needs: [macos, windows, windows-smoke]

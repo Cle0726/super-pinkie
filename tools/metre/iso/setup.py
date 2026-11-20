@@ -21,7 +21,7 @@
 ROOT 默认 %USERPROFILE%\\碧琪实测\\iso-th，可用环境变量 TH_ISO_ROOT 改。
 """
 from pathlib import Path
-import copy, hashlib, json, os, secrets, shutil, socket, subprocess, sys
+import copy, hashlib, json, os, runpy, secrets, shutil, socket, subprocess, sys, time
 
 REAL_HOME = Path(os.environ.get('USERPROFILE') or Path.home())
 LIVE = REAL_HOME / '.openclaw'
@@ -243,6 +243,14 @@ def openclaw_cli(*args):
     return r.returncode, (r.stdout or '')[-2000:], (r.stderr or '')[-2000:]
 
 
+def sync_metre_role_assets():
+    helper = runpy.run_path(str(REPO / 'services/mode-architecture/metre_role_assets.py'))
+    return helper['sync_metre_role_assets'](
+        REPO / 'personas', STATE,
+        ROOT / 'local/SuperPinkie/backups' / f'roles-{time.time_ns()}',
+    )
+
+
 def install_metre():
     """照 app/super_pinkie.py：install_personas 先放 personas/metre 的文件，再 register_mode_agents 用 CLI 注册。"""
     ws = STATE / 'workspace-metre'
@@ -250,6 +258,7 @@ def install_metre():
     for f in (REPO / 'personas' / 'metre').iterdir():
         if f.is_file():
             shutil.copy2(f, ws / f.name)
+    assets_changed = sync_metre_role_assets()
     before = sorted(p.name for p in ws.iterdir())
     code, out, err = openclaw_cli('agents', 'add', 'metre', '--non-interactive', '--workspace', ws)
     code2, _, err2 = openclaw_cli('agents', 'set-identity', '--agent', 'metre', '--identity-file', ws / 'IDENTITY.md')
@@ -259,7 +268,7 @@ def install_metre():
         agent_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_models, agent_dir / 'models.json')
     after = sorted(p.name for p in ws.iterdir())
-    return {'add': code, 'addErr': err[-300:], 'identity': code2, 'identityErr': err2[-300:], 'filesBefore': before, 'filesAfter': after}
+    return {'add': code, 'addErr': err[-300:], 'identity': code2, 'identityErr': err2[-300:], 'filesBefore': before, 'filesAfter': after, 'roleAssetsChanged': assets_changed}
 
 
 if __name__ == '__main__':
@@ -267,7 +276,8 @@ if __name__ == '__main__':
     if cmd == 'build':
         build()
     elif cmd == 'sync':
-        print(json.dumps({'plugins': sync_plugins(), 'denyAdded': sync_mode_tool_deny()}, ensure_ascii=False))
+        print(json.dumps({'plugins': sync_plugins(), 'denyAdded': sync_mode_tool_deny(),
+                          'roleAssetsChanged': sync_metre_role_assets()}, ensure_ascii=False))
     elif cmd == 'metre':
         print(json.dumps(install_metre(), ensure_ascii=False))
     elif cmd == 'patch':

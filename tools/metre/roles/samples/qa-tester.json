@@ -1,0 +1,88 @@
+{
+  "role": "qa-tester",
+  "name": "体验测试员",
+  "samples": [
+    {
+      "id": "qa-tester-1",
+      "title": "个人记账网页体验测试（埋 3 个边界问题：空提交 NaN、375px 溢出、刷新丢数据）",
+      "brief": "目标：像真实用户一样把个人记账单页应用 `app/expense.html` 完整用一遍，验证主流程及空数据、超长文字、手机宽度（375px）、连续点击、刷新、断网六类边界场景。\n背景：页面标明适合日常离线记账且数据自动保存、刷新不丢失，上线前需要排查真实体验问题。\n边界：只测不改，严禁修改 `app/expense.html`；发现的每个问题必须复现并截图存档。\n做到什么样算完：列出测过的全部场景状态，给出已复现问题清单（含严重程度、复现步骤、截图路径与控制台日志），不报未复现的假问题。",
+      "files": [
+        {
+          "path": "app/expense.html",
+          "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>日常记账本</title>\n  <style>\n    * { box-sizing: border-box; }\n    body { margin: 0; font-family: -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif; background: #f5f6f8; color: #1f2328; padding: 16px; }\n    .wrap { max-width: 720px; margin: 0 auto; }\n    .header { margin-bottom: 16px; }\n    .header p { color: #475569; font-size: 14px; margin: 4px 0 0; }\n    .summary-bar { display: flex; flex-wrap: nowrap; gap: 12px; min-width: 560px; margin-bottom: 16px; }\n    .stat { flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; }\n    .stat .label { font-size: 13px; color: #475569; }\n    .stat .val { font-size: 24px; font-weight: 600; margin-top: 4px; }\n    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }\n    .row { display: flex; gap: 10px; flex-wrap: wrap; }\n    input { flex: 1; min-width: 140px; padding: 10px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; }\n    button { padding: 10px 16px; font-size: 14px; border-radius: 8px; border: 0; background: #2563eb; color: #fff; cursor: pointer; min-height: 44px; }\n    ul { list-style: none; padding: 0; margin: 12px 0 0; }\n    li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }\n    .item-name { overflow-wrap: anywhere; word-break: break-word; flex: 1; }\n    .item-amt { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }\n    .empty { color: #64748b; padding: 16px 0; text-align: center; }\n  </style>\n</head>\n<body>\n  <div class=\"wrap\">\n    <div class=\"header\">\n      <h1>日常记账本</h1>\n      <p>离线可用，数据自动保存在本机浏览器，刷新页面不丢失。</p>\n    </div>\n    <div class=\"summary-bar\">\n      <div class=\"stat\"><div class=\"label\">总支出</div><div class=\"val\" id=\"total-val\">¥0.00</div></div>\n      <div class=\"stat\"><div class=\"label\">记账笔数</div><div class=\"val\" id=\"count-val\">0</div></div>\n      <div class=\"stat\"><div class=\"label\">单笔均值</div><div class=\"val\" id=\"avg-val\">¥0.00</div></div>\n    </div>\n    <div class=\"card\">\n      <form id=\"add-form\" class=\"row\" novalidate>\n        <input id=\"item-name\" type=\"text\" placeholder=\"支出项目（如 午餐）\">\n        <input id=\"item-amount\" type=\"number\" step=\"0.01\" placeholder=\"金额（元）\">\n        <button id=\"add-btn\" type=\"submit\">添加支出</button>\n      </form>\n    </div>\n    <div class=\"card\">\n      <h2>支出明细</h2>\n      <div id=\"empty-tip\" class=\"empty\">暂无支出记录，请在上方添加第一笔。</div>\n      <ul id=\"expense-list\"></ul>\n    </div>\n  </div>\n  <script>\n    const items = [];\n    function render() {\n      const ul = document.getElementById('expense-list');\n      const empty = document.getElementById('empty-tip');\n      empty.style.display = items.length ? 'none' : 'block';\n      ul.innerHTML = '';\n      for (const it of items) {\n        const li = document.createElement('li');\n        const nameSpan = document.createElement('span');\n        nameSpan.className = 'item-name';\n        nameSpan.textContent = it.name;\n        const amtSpan = document.createElement('span');\n        amtSpan.className = 'item-amt';\n        amtSpan.textContent = '¥' + it.amount.toFixed(2);\n        li.append(nameSpan, amtSpan);\n        ul.appendChild(li);\n      }\n      const total = items.reduce((s, x) => s + x.amount, 0);\n      document.getElementById('total-val').textContent = '¥' + total.toFixed(2);\n      document.getElementById('count-val').textContent = String(items.length);\n      document.getElementById('avg-val').textContent = '¥' + (items.length ? (total / items.length).toFixed(2) : '0.00');\n    }\n    document.getElementById('add-form').addEventListener('submit', (e) => {\n      e.preventDefault();\n      const nameEl = document.getElementById('item-name');\n      const amtEl = document.getElementById('item-amount');\n      items.unshift({ name: nameEl.value.trim(), amount: parseFloat(amtEl.value) });\n      nameEl.value = '';\n      amtEl.value = '';\n      render();\n    });\n    render();\n  </script>\n</body>\n</html>\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "重要",
+          "location": "app/expense.html:75-83",
+          "description": "空表单直接提交缺少校验，写入空名称和 ¥NaN 记录并污染总支出与单笔均值",
+          "evidence": "不填任何内容直接点击「添加支出」，第 79 行 parseFloat('') 得到 NaN，明细新增一条空白/¥NaN 行，总支出与单笔均值均变为 ¥NaN"
+        },
+        {
+          "id": "P2",
+          "severity": "重要",
+          "location": "app/expense.html:13",
+          "description": "375px 手机视口下 .summary-bar 因 min-width: 560px 与 flex-wrap: nowrap 导致页面横向溢出",
+          "evidence": "切至 375px 宽度时 document.documentElement.scrollWidth >= 576px，大于 375px，出现横向滚动条且右侧统计卡被裁出视口"
+        },
+        {
+          "id": "P3",
+          "severity": "重要",
+          "location": "app/expense.html:53-84",
+          "description": "页面明确声明「数据自动保存在本机浏览器，刷新页面不丢失」，但实际仅存内存数组，刷新后记录全部清空",
+          "evidence": "添加一笔有效支出后刷新页面，明细回到空状态，总支出归零，源码完全未读写 localStorage"
+        }
+      ],
+      "checks": [
+        "在 3 个预设问题（P1 空表单提交出现 ¥NaN、P2 375px 手机宽度横向溢出、P3 刷新页面丢失已记数据）中至少准确复现并报告 2 个，每个问题附复现步骤与截图路径",
+        "误报数为 0（正常添加主流程、超长文字自动换行、断网离线本地可用均未误报为故障）",
+        "「测过的场景列表」明确列出主流程及全部 6 类边界（空数据、超长文字、手机宽度、连续点击、刷新、断网）的实测状态",
+        "汇报包含「问题清单」「测过的场景列表」「没测的和拿不准的」三段",
+        "只测不改：原文件 `app/expense.html` 未被修改"
+      ]
+    },
+    {
+      "id": "qa-tester-2",
+      "title": "工单提交工具页体验测试（埋 3 个边界问题：连点重复提交、超长标题溢出、断网卡死）",
+      "brief": "目标：像真实用户一样把工单提交单页应用 `app/ticket.html` 完整试用一遍，覆盖主流程和空数据、超长文字、手机宽度（375px）、连续点击、刷新、断网六类边界场景。\n背景：内部客服准备用该页面快速登记问题单，需要确认连点防重、长文本排版与弱网/断网容错是否可靠。\n边界：只测不改，严禁修改 `app/ticket.html`；发现的每个问题须实测复现并截图。\n做到什么样算完：给出完整场景测试表与已复现问题清单（含严重程度、复现步骤、截图路径）。",
+      "files": [
+        {
+          "path": "app/ticket.html",
+          "content": "<!doctype html>\n<html lang=\"zh-CN\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>快速工单登记</title>\n  <style>\n    * { box-sizing: border-box; }\n    body { margin: 0; font-family: -apple-system, \"PingFang SC\", \"Microsoft YaHei\", sans-serif; background: #f8fafc; color: #0f172a; padding: 16px; }\n    .wrap { max-width: 640px; margin: 0 auto; }\n    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 16px; }\n    label { display: block; margin-bottom: 12px; font-size: 14px; }\n    input, textarea { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 4px; }\n    button { padding: 10px 18px; font-size: 14px; border-radius: 8px; border: 0; background: #0f766e; color: #fff; cursor: pointer; min-height: 44px; }\n    #status { margin-top: 10px; font-size: 14px; color: #334155; min-height: 20px; }\n    .ticket { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px; }\n    .ticket-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: visible; }\n    .ticket-desc { font-size: 13px; color: #475569; margin-top: 4px; overflow-wrap: anywhere; }\n    .empty { color: #64748b; font-size: 14px; }\n  </style>\n</head>\n<body>\n  <div class=\"wrap\">\n    <h1>快速工单登记</h1>\n    <div class=\"card\">\n      <form id=\"ticket-form\">\n        <label>工单标题<input id=\"title\" type=\"text\" placeholder=\"简述问题\"></label>\n        <label>详细说明<textarea id=\"desc\" rows=\"3\" placeholder=\"填写复现条件\"></textarea></label>\n        <button id=\"submit-btn\" type=\"submit\">提交工单</button>\n        <div id=\"status\" aria-live=\"polite\"></div>\n      </form>\n    </div>\n    <div class=\"card\">\n      <h2>已登记工单（<span id=\"ticket-count\">0</span>）</h2>\n      <div id=\"empty-tip\" class=\"empty\">暂无工单</div>\n      <div id=\"ticket-list\"></div>\n    </div>\n  </div>\n  <script>\n    const STORAGE_KEY = 'qa_sample_tickets_v1';\n    let tickets = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');\n    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets)); }\n    function render() {\n      document.getElementById('ticket-count').textContent = String(tickets.length);\n      document.getElementById('empty-tip').style.display = tickets.length ? 'none' : 'block';\n      const list = document.getElementById('ticket-list');\n      list.innerHTML = '';\n      for (const t of tickets) {\n        const div = document.createElement('div');\n        div.className = 'ticket';\n        const h = document.createElement('div');\n        h.className = 'ticket-title';\n        h.textContent = t.title;\n        const p = document.createElement('div');\n        p.className = 'ticket-desc';\n        p.textContent = t.desc;\n        div.append(h, p);\n        list.appendChild(div);\n      }\n    }\n    document.getElementById('ticket-form').addEventListener('submit', (e) => {\n      e.preventDefault();\n      const title = document.getElementById('title').value.trim();\n      const desc = document.getElementById('desc').value.trim();\n      const status = document.getElementById('status');\n      if (!title) {\n        status.textContent = '请先填写工单标题';\n        return;\n      }\n      status.textContent = '提交中…';\n      if (!navigator.onLine) {\n        return;\n      }\n      setTimeout(() => {\n        tickets.unshift({ id: Date.now() + '-' + Math.random(), title, desc });\n        save();\n        render();\n        document.getElementById('title').value = '';\n        document.getElementById('desc').value = '';\n        status.textContent = '提交成功';\n      }, 450);\n    });\n    render();\n  </script>\n</body>\n</html>\n"
+        }
+      ],
+      "planted_issues": [
+        {
+          "id": "P1",
+          "severity": "阻塞",
+          "location": "app/ticket.html:61-82",
+          "description": "连续快速点击「提交工单」缺少按钮禁用或防重锁，导致同内容重复提交多条工单",
+          "evidence": "在 450ms 提交延迟内连续点击 3 次「提交工单」，会在列表里生成 3 条完全相同的工单记录"
+        },
+        {
+          "id": "P2",
+          "severity": "重要",
+          "location": "app/ticket.html:17",
+          "description": "超长工单标题因 .ticket-title 设置了 white-space: nowrap; overflow: visible 冲出卡片右边界并引发页面横向溢出",
+          "evidence": "提交包含 80+ 字符的长标题后，标题文本直接穿透卡片边框溢出页面，导致 scrollWidth > innerWidth"
+        },
+        {
+          "id": "P3",
+          "severity": "重要",
+          "location": "app/ticket.html:70-73",
+          "description": "断网状态下点击提交，界面显示「提交中…」后提前 return，既不提示离线错误也不结束状态，界面卡死",
+          "evidence": "模拟浏览器 offline 后提交工单，第 71-73 行 !navigator.onLine 分支直接 return，状态区永久停留在「提交中…」且无任何断网失败提示"
+        }
+      ],
+      "checks": [
+        "在 3 个预设问题（P1 连续点击生成重复工单、P2 超长标题穿透卡片并引发横向溢出、P3 断网提交卡死在「提交中…」无错误提示）中至少准确复现并报告 2 个，每个问题附复现步骤与截图路径",
+        "误报数为 0（正常单次提交主流程、空标题提示拦截、375px 正常文本无溢出、刷新后 localStorage 保持工单列表均未误报为故障）",
+        "「测过的场景列表」明确列出主流程及 6 类边界（空数据、超长文字、手机宽度、连续点击、刷新、断网）的测试结果",
+        "汇报包含「问题清单」「测过的场景列表」「没测的和拿不准的」三段",
+        "只测不改：原文件 `app/ticket.html` 未被修改"
+      ]
+    }
+  ]
+}
