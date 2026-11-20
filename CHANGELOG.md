@@ -4,6 +4,11 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+### 2.5.50
+- main 自 2.5.49（`16f37915`）以来的全部合并：Metre 模式（#21，正式版需开发者密码，#25/#26/#27）、Windows Metre 同步与图片记录归属/断线续接修复（#22）、Metre 子会话与调度策略（#24）、正式版/开发版区分批 A–E（#25：开场视频、称呼、模型能力开关、Metre 门槛、设定防护弹窗与计数、可选反馈上报——令牌未配置，正式版保持关闭）、Mac apply-theme 编译修复（#28）、Metre 角色 agent（#29）、总谱滚动位置（#30）、长期记忆合并（#31）、侧边栏子会话常显与学习台下课确认（#32）、输入区遮挡与立即追加（#33）。
+- 模型自动换用：上游 404/402/403/无账号或重试后仍 5xx 时本地代理换一个能答的模型，原模型恢复后换回（`6ce0a76f`）；本地聊天模型默认看图（`06fae028`）。
+- 新增 `.github/workflows/release-candidate.yml`：推 `release/**` 分支即用正式签名打 Windows 正式版包并跑 Windows 冒烟（含从 v2.5.49 升级），不发布任何东西。
+
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。
   - 界面对齐 Claude App：消息编辑/重答/版本/反馈，临时会话，Markdown/PDF/长图导出，@ 提及，会话搜索、按日期分组、批量操作，产物库，原生通知/菜单栏/快捷问答热键（Mac + Windows）。

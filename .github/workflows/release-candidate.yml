@@ -1,0 +1,81 @@
+name: Release candidate
+
+# Builds the real user (release-channel) Windows package exactly like
+# release.yml — guard on, manifest signed with the release key, release splash —
+# and opens it on a Windows runner (fresh + upgrade from the current user
+# version). Nothing is published: no GitHub release, no latest.json, no mirror.
+# Push a release/** branch (or run it by hand) before tagging a version.
+on:
+  push:
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      old_tag:
+        description: "Current user version to upgrade from"
+        default: v2.5.49
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require 碧琪-voice release notes for this version (docs/RELEASE-NOTES.md)
+        run: python3 tools/release/release_notes.py check "v$(tr -d '[:space:]' < VERSION)"
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the release-channel Windows package (not published)
+        shell: pwsh
+        env:
+          PINKIE_GUARD_SIGNING_KEY: ${{ secrets.PINKIE_GUARD_SIGNING_KEY }}
+          PINKIE_FEEDBACK_TOKEN: ${{ secrets.PINKIE_FEEDBACK_TOKEN }}
+          PINKIE_FEEDBACK_PUBLIC_KEY: ${{ secrets.PINKIE_FEEDBACK_PUBLIC_KEY || vars.PINKIE_FEEDBACK_PUBLIC_KEY }}
+          PINKIE_FEEDBACK_REPO: ${{ vars.PINKIE_FEEDBACK_REPO || secrets.PINKIE_FEEDBACK_REPO }}
+          PINKIE_FEEDBACK_RELAY_URL: ${{ vars.PINKIE_FEEDBACK_RELAY_URL || secrets.PINKIE_FEEDBACK_RELAY_URL }}
+        run: |
+          if (-not $env:PINKIE_GUARD_SIGNING_KEY) { throw '缺少仓库 secret PINKIE_GUARD_SIGNING_KEY，正式版不能打包' }
+          $keyFile = Join-Path $env:RUNNER_TEMP 'guard-signing-key.pem'
+          [System.IO.File]::WriteAllText($keyFile, $env:PINKIE_GUARD_SIGNING_KEY + "`n")
+          $env:PINKIE_RELEASE_BUILD = '1'
+          $env:PINKIE_GUARD_SIGNING_KEY_FILE = $keyFile
+          try { .\build-win.ps1 } finally { Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue }
+      - name: Pack the portable zip for hand checks
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION).Trim()
+          Compress-Archive -Path 'dist\超級碧琪' -DestinationPath "dist\super-pinkie-windows-$version-rc-portable.zip" -Force
+      - name: Keep the onedir for the smoke test
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-onedir
+          path: dist/超級碧琪
+          retention-days: 3
+      - name: Keep the candidate portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-rc-portable
+          path: dist/super-pinkie-windows-*-rc-portable.zip
+          retention-days: 7
+
+  windows-smoke:
+    needs: windows
+    uses: ./.github/workflows/windows-smoke.yml
+    with:
+      app_artifact: windows-onedir
+      old_tag: ${{ inputs.old_tag || 'v2.5.49' }}
