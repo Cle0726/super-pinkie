@@ -54,6 +54,39 @@ def find_exe(app_dir):
     raise SystemExit(f"no 超級碧琪.exe under {app_dir}")
 
 
+REPO = Path(__file__).resolve().parents[2]
+
+
+def release_info(exe):
+    """The user (release-channel) build: guard on, channel release, written into the package."""
+    for base in (exe.parent / "_internal", exe.parent):
+        info_file = base / "build-info.json"
+        if info_file.is_file():
+            try:
+                info = json.loads(info_file.read_text(encoding="utf-8-sig"))
+            except ValueError:
+                return None
+            return info if info.get("guard") is True and info.get("channel") == "release" else None
+    return None
+
+
+def release_package_checks(exe):
+    """A release package ships the release opening video and poster, never the dev ones."""
+    import hashlib
+
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    expected = {
+        "laolao-splash.mp4": digest(REPO / "ui/assets/laolao-splash-release.mp4"),
+        "laolao-splash-video-poster.png": digest(REPO / "ui/assets/laolao-splash-video-poster-release.png"),
+    }
+    found = {name: [] for name in expected}
+    for name in expected:
+        for path in exe.parent.rglob(name):
+            found[name].append({"path": str(path.relative_to(exe.parent)), "release": digest(path) == expected[name]})
+    passed = all(found[name] and all(item["release"] for item in found[name]) for name in expected)
+    return {"passed": passed, "splash": found}
+
+
 def runtime_dir(exe):
     for base in (exe.parent / "_internal", exe.parent):
         if (base / "runtime/bin/node.exe").is_file():
@@ -271,7 +304,7 @@ PAGE_STATE = r"""() => {
 }"""
 
 
-def drive_ui(out, label):
+def drive_ui(out, label, release=False):
     # Let the context report the service worker's own requests (see measure_loads).
     os.environ.setdefault("PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS", "1")
     from playwright.sync_api import sync_playwright
@@ -309,17 +342,34 @@ def drive_ui(out, label):
                 break
             # A plugin may fail to register without a visible load error. Ask
             # the real gateway for two read-only methods supplied by it.
-            result["plugin_methods"] = page.evaluate("""async () => {
+            # In the user (release) build Metre stays behind the developer
+            # password: the board must be refused and the lock must report
+            # itself configured and locked. A dev build must answer it.
+            result["plugin_methods"] = page.evaluate("""async (release) => {
               const checks = [
                 ['usage', 'pinkie.usage.get', {}],
                 ['workbench', 'pinkie.fs.status', {sessionKey: 'agent:project:main'}],
                 ['metre_board', 'pinkie.metre.board', {sessionKey: 'agent:metre:main'}],
               ];
               const result = {};
+              const rpc = (method, params) => {
+                if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
+                return window.__laolaoSidebar.gwRequest(method, params, 15000);
+              };
               for (const [name, method, params] of checks) {
                 try {
-                  if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
-                  const value = await window.__laolaoSidebar.gwRequest(method, params, 15000);
+                  if (name === 'metre_board' && release) {
+                    const status = await rpc('pinkie.guard.metreStatus', {});
+                    if (!status?.required || !status.locked || status.unlocked || status.configured === false) {
+                      throw new Error('release build: Metre lock is not required, configured and locked: ' + JSON.stringify(status));
+                    }
+                    let refused = '';
+                    try { await rpc(method, params); } catch (error) { refused = String(error?.message || error); }
+                    if (!refused.includes('开发者密码')) throw new Error('release build: locked Metre board was not refused: ' + (refused || 'answered'));
+                    result[name] = {ok: true, locked: true, refused};
+                    continue;
+                  }
+                  const value = await rpc(method, params);
                   if (name === 'metre_board' && (!value?.ok || !value.overview || !Array.isArray(value.sessions))) {
                     throw new Error('Metre board did not return a valid overview and session list');
                   }
@@ -327,9 +377,31 @@ def drive_ui(out, label):
                 } catch (error) { result[name] = {ok: false, error: String(error)}; }
               }
               return result;
-            }""")
+            }""", release)
             for index, (mode, prefix) in enumerate(MODES):
                 entry = {"ok": False}
+                if release and mode == "metre":
+                    # The user build asks for the developer password and stays
+                    # where it was when the prompt is cancelled.
+                    try:
+                        before = page.evaluate(PAGE_STATE)
+                        page.click(".laolao-mode-switcher", timeout=15_000)
+                        page.wait_for_selector(".laolao-mode-menu__option", timeout=10_000)
+                        page.locator(".laolao-mode-menu__option").nth(index).click(timeout=10_000)
+                        page.wait_for_selector(".laolao-metre-lock-dialog", state="visible", timeout=20_000)
+                        page.screenshot(path=str(out / f"{label}-mode-{index + 1}-metre-locked.png"))
+                        page.keyboard.press("Escape")
+                        page.wait_for_selector(".laolao-metre-lock-dialog", state="detached", timeout=10_000)
+                        page.wait_for_timeout(1500)
+                        entry["state"] = page.evaluate(PAGE_STATE)
+                        entry["locked_prompt"] = True
+                        entry["ok"] = entry["state"]["mode"] == before["mode"] and not entry["state"]["mode"] == "metre"
+                    except Exception as error:
+                        entry["error"] = str(error)
+                    page.screenshot(path=str(out / f"{label}-mode-{index + 1}-{mode}.png"))
+                    result["modes"][mode] = entry
+                    log(f"[{label}] mode {mode}: locked prompt ok={entry['ok']}")
+                    continue
                 try:
                     page.click(".laolao-mode-switcher", timeout=15_000)
                     page.wait_for_selector(".laolao-mode-menu__option", timeout=10_000)
@@ -534,6 +606,9 @@ def seed_metre_user_data(exe, profile):
 
 def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary = {"label": label, "exe": str(exe)}
+    release = release_info(exe)
+    if release:
+        summary["release"] = {"build_info": release, **release_package_checks(exe)}
     env = profile_env(profile)
     preserved = {}
     if old_exe:
@@ -564,7 +639,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
                     if not all(receipt["preservedUserFiles"].values()):
                         raise RuntimeError("the packaged update modified fixture user data")
                 summary["metre_roles"] = receipt
-            summary["ui"] = drive_ui(out, label)
+            summary["ui"] = drive_ui(out, label, release=bool(release))
             summary["service_health"] = service_health()
             summary["native_ui"] = capture_native_ui(exe, env, out, label, process.pid)
     except Exception as error:
@@ -576,6 +651,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     plugin_methods = summary.get("ui", {}).get("plugin_methods", {})
     summary["passed"] = bool(
         ready
+        and (not release or summary["release"]["passed"])
         and (not metre_roles or bool(summary.get("metre_roles")))
         and not summary.get("agents", {}).get("missing", AGENTS)
         and fresh_mode_identities_ok(label, summary.get("agents", {}))
@@ -628,6 +704,15 @@ def main():
     }
     if http_ready():
         raise SystemExit("port 18789 is already in use before the smoke test")
+    if release_info(exe):
+        # Dispatching from Metre needs the developer password in the user
+        # build; its lock is checked in the scenarios instead.
+        if args.metre_sidebar_only:
+            log("release build: Metre is locked, nothing to probe in the Metre sidebar")
+            return 0
+        if args.metre_sidebar or args.metre_roles:
+            log("release build: skipping the Metre sidebar / role dispatch probes (Metre is locked)")
+        args.metre_sidebar = args.metre_roles = False
     if args.metre_sidebar_only:
         import upstream_probe
         try:
