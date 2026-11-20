@@ -1,0 +1,48 @@
+name: Legacy Guard Diagnostic
+
+on:
+  push:
+    branches: ['diagnose/legacy-2.5.50']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check playwright pillow psutil pywin32
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-onedir
+          path: legacy-current
+          run-id: 44740858224
+          github-token: ${{ github.token }}
+      - name: Import v2.5.16 public package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download v2.5.16 -R $env:GITHUB_REPOSITORY -p '*-portable.zip' -D legacy-download
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Expand-Archive -Path (Get-ChildItem legacy-download\*-portable.zip).FullName -DestinationPath legacy-old
+      - name: Exercise only the failing upgrade and capture the exact guard events
+        run: |
+          python tools/windows-smoke/desktop_shot.py --prepare
+          python tools/windows-smoke/legacy_guard_diagnostic.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy-guard-diagnostic
+          path: legacy-evidence
+          retention-days: 3
