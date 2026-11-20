@@ -1053,14 +1053,22 @@ export function checkRoleReportSections(card, reportText = '') {
     if (fence) continue;
     // A regular label, a Markdown heading and a numbered heading are all
     // real sections. The report often uses Markdown + a Chinese ordinal.
-    headings.push(line.replace(/^#{1,6}[ \t]*/u, '').replace(/^[-*•][ \t]+/u, '')
-      .replace(ordinal, '').replace(/^(?:\*\*|__|【)/u, '').replace(ordinal, ''));
+    const heading = /^#{1,6}[ \t]*/u.exec(line)?.[0] || '';
+    headings.push({
+      explicit: Boolean(heading),
+      label: line.slice(heading.length).replace(/^[-*•][ \t]+/u, '')
+        .replace(ordinal, '').replace(/^(?:\*\*|__|【)/u, '').replace(ordinal, ''),
+    });
   }
   const missing = [];
   for (const title of expected) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`^${escaped}(?:\\*\\*|__|】)?(?=$|[\\s：:（(])`, 'u');
-    if (!headings.some(heading => re.test(heading))) missing.push(title);
+    // An explicit heading can extend the card's label, e.g. “产出路径与打开方式”.
+    // Do not treat an ordinary sentence or an example heading as a section.
+    const compound = new RegExp(`^${escaped}(?:\\*\\*|__|】)?[ \\t]*(?:与|和|及)[ \\t]*[^\\s：:（(]+`, 'u');
+    if (!headings.some(({label, explicit}) => re.test(label)
+      || (explicit && compound.test(label) && !/示例|范例|模板/u.test(label)))) missing.push(title);
   }
   if (!missing.length) return {ok: true, expected, missing: [], notice: ''};
   return {

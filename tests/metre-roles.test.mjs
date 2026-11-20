@@ -984,6 +984,21 @@ test('R1-26 recognizes numbered headings with parentheticals but not examples in
   assert.deepEqual(checkRoleReportSections(card,incomplete).missing,['问题清单','没测的和拿不准的']);
 });
 
+test('R1-26 recognizes compound Markdown headings without treating body text or templates as sections', () => {
+  const sections = ['并排对比图','差异清单','产出路径','没做的和拿不准的'];
+  const card = {name:'界面还原',reportSections:sections};
+  const report = [
+    '## 一、并排对比图与截图路径','out/comparison.png',
+    '## 二、差异清单（DOM 计算样式实测）','间距实测 24px。',
+    '## 三、产出路径与打开方式','双击 out/index.html。',
+    '## 四、没做的和拿不准的（如实标注）','未逐像素量测。',
+  ];
+  assert.deepEqual(checkRoleReportSections(card,report.join('\n')),{ok:true,expected:sections,missing:[],notice:''});
+  report[0]='并排对比图与截图路径见旧文档。';
+  report[4]='### 产出路径与打开方式模板';
+  assert.deepEqual(checkRoleReportSections(card,report.join('\n')).missing,['并排对比图','产出路径']);
+});
+
 // ---------- R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 ----------
 test('R1-26 / R1-28 ★ / R1-29 ★ / R1-30 / X5 汇报检查、主 MD 字数、上限与全停、不碰 Metre 记忆、断网可用', async t => {
   const env = makeRoleEnv(t);
