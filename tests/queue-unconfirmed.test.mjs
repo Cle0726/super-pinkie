@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import { pinkieQueueUnconfirmed, transformWithStatus } from '../patch/apply-queue-unconfirmed.mjs';
 
 const fixture = [
@@ -45,4 +47,16 @@ test('already bundled v1 can be upgraded in place without duplicating the native
   assert.equal(upgrade.changed, true);
   assert.equal(upgrade.text, patched);
   assert.equal(transformWithStatus(upgrade.text).reason, 'already-patched');
+});
+
+test('native entry loads the versioned queued-message bundle after an upgrade', () => {
+  const runtime = new URL('../ui/runtime/', import.meta.url);
+  const file = 'chat-page-DrPkxqJK.js';
+  const body = readFileSync(new URL(file,runtime));
+  const digest = createHash('sha256').update(body).digest('hex').slice(0,12);
+  const entry = readFileSync(new URL('index-Bvtt7vVx.js',runtime),'utf8');
+  const imports = [...entry.matchAll(/\.\/chat-page-DrPkxqJK\.js\?v=clekk-history59&h=([a-f0-9]+)/g)];
+  assert.ok(imports.length > 0);
+  assert.ok(imports.every(([, hash]) => hash === digest));
+  assert.equal(transformWithStatus(body.toString('utf8')).reason, 'already-patched');
 });
