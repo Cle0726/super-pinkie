@@ -210,6 +210,16 @@ jobs:
       app_artifact: windows-onedir
       old_tag: ${{ inputs.old_tag || 'v2.5.49' }}
 
+  windows-legacy-smoke:
+    # The tag workflow also exercises this older profile. Don't discover a
+    # legacy migration failure only after a tag has been pushed.
+    needs: windows
+    uses: ./.github/workflows/windows-smoke.yml
+    with:
+      app_artifact: windows-onedir
+      old_tag: v2.5.16
+      evidence_suffix: '-legacy'
+
   windows-in-place-update:
     needs: windows
     uses: ./.github/workflows/windows-update-probe.yml

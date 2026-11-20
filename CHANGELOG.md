@@ -13,6 +13,7 @@
 - 修复 Windows 窄窗中输入框失焦时工具箱、上下文等按钮移动而漏接点击，以及聊天画布暂时没有尺寸时的前端异常。
 - Windows 升级的诊断日志被占用时不再中断文件替换或触发回滚；回归测试会在真实独占文件句柄下验证升级仍然继续。
 - 启动后自动从上游同步到本机的聊天模型立即采用默认图片输入，无需重启；保留手动的看图开关，不给外网直连模型猜测看图能力。
+- 修复 Windows 正式版从较老配置升级时，逐个注册自带模式被设定防护误报的问题：在加载插件前一次写齐缺失的模式。发标签前额外检查 v2.5.16 配置升级。
 
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。
