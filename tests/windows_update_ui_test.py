@@ -5,10 +5,18 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import tempfile
 import time
 import unittest
 from unittest import mock
+
+ROOT = Path(__file__).resolve().parents[1]
+# PyInstaller adds app/ to its top-level import path; do the same for an
+# isolated test run, before importing the desktop and its sibling modules.
+APP_DIR = str(ROOT / "app")
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
 
 from app import windows_desktop
 from app.windows_desktop import (
@@ -20,7 +28,6 @@ from app.windows_desktop import (
     update_health_token_from_argv,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("update_probe", ROOT / "tools/windows-smoke/update_probe.py")
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
