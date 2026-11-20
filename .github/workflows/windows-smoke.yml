@@ -105,7 +105,7 @@ jobs:
           & $node.FullName --test tests/windows-workbench.test.mjs tests/app-browser-windows-fallback.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Windows workbench test failed' }
 
-      - name: Click the compact composer controls with the input focused
+      - name: Check compact composer clicks and ambient canvas resize
         if: env.PACKAGE != 'release'
         shell: pwsh
         run: |
@@ -114,7 +114,7 @@ jobs:
             Select-Object -First 1
           if (-not $control) { throw 'Packaged Control UI not found' }
           node tools/ui-parity/capture.mjs --control-ui $control.FullName --browser msedge --native-platform windows `
-            --views compact-composer --label compact-windows --out smoke-out --strict
+            --views 'compact-composer,ambient-resize' --label compact-windows --out smoke-out --strict
 
       - name: Run smoke test
         shell: pwsh

@@ -1,6 +1,7 @@
 """Launch packaged macOS release apps on an isolated GitHub runner only."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import signal
@@ -27,32 +28,55 @@ def gateway_listening():
 def gateway_up():
     try:
         with HTTP.open(GATEWAY + "/readyz", timeout=2) as response:
-            return response.status == 200
-    except OSError:
+            body = json.load(response)
+            return response.status == 200 and isinstance(body, dict) and body.get("ready") is True
+    except (OSError, ValueError):
         return False
 
 
-def stop_group(process):
-    def send(sig):
-        try:
-            os.killpg(process.pid, sig)
-        except ProcessLookupError:
-            pass
+def process_table():
+    result = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,state=,lstart="],
+                            env={**os.environ, "LC_ALL": "C"},
+                            text=True, check=True, capture_output=True)
+    table = {}
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        pid, parent, state, started = line.split(maxsplit=3)
+        if not state.startswith("Z"):
+            table[int(pid)] = (int(parent), started)
+    return table
 
-    send(signal.SIGTERM)
-    try:
-        process.wait(timeout=12)
-    except subprocess.TimeoutExpired:
-        send(signal.SIGKILL)
-        process.wait(timeout=10)
-    for _ in range(8):
-        if not gateway_listening():
-            return
-        time.sleep(1)
-    send(signal.SIGKILL)
-    time.sleep(1)
-    if gateway_listening():
-        raise RuntimeError("the isolated launcher gateway did not stop")
+
+def owned_processes(owned, table):
+    active = {pid for pid, (_, started) in table.items() if owned.get(pid) == started}
+    while True:
+        children = {pid: started for pid, (parent, started) in table.items()
+                    if parent in active and pid not in active}
+        if not children:
+            return active
+        owned.update(children)
+        active.update(children)
+
+
+def stop_owned(process, owned):
+    # Swift's Process can create a new process group. Follow the already
+    # observed descendants, even after they are reparented on launcher exit.
+    for sig, grace in ((signal.SIGTERM, 12), (signal.SIGKILL, 10)):
+        sent = set()
+        deadline = time.monotonic() + grace
+        while time.monotonic() < deadline:
+            active = owned_processes(owned, process_table())
+            if not active and process.poll() is not None and not gateway_listening():
+                return
+            for pid in sorted(active - sent):
+                try:
+                    os.kill(pid, sig)
+                except ProcessLookupError:
+                    pass
+                sent.add(pid)
+            time.sleep(.5)
+    raise RuntimeError("the isolated launcher or its gateway did not stop")
 
 
 def launch(package, profile, label):
@@ -69,9 +93,15 @@ def launch(package, profile, label):
     with (profile / f"{label}-launcher.log").open("wb") as log:
         process = subprocess.Popen([str(executable)], cwd=app, env=env,
                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        owned = {}
         started = time.monotonic()
         try:
+            initial = process_table().get(process.pid)
+            if initial is None:
+                raise RuntimeError(f"{label}: native launcher did not remain running")
+            owned[process.pid] = initial[1]
             while time.monotonic() - started < 180:
+                owned_processes(owned, process_table())
                 if process.poll() is not None:
                     raise RuntimeError(f"{label}: native launcher exited ({process.returncode})")
                 if gateway_up() and (claw / "openclaw.json").is_file():
@@ -88,7 +118,7 @@ def launch(package, profile, label):
                                f"(port={gateway_listening()}, ready={gateway_up()}, "
                                f"config={(claw / 'openclaw.json').is_file()})")
         finally:
-            stop_group(process)
+            stop_owned(process, owned)
 
 
 def main():
@@ -98,7 +128,8 @@ def main():
     parser.add_argument("--app", type=Path, required=True, help="extracted candidate ZIP directory")
     parser.add_argument("--old-app", type=Path, required=True, help="extracted published ZIP directory")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="pinkie-native-smoke-", dir=os.environ.get("RUNNER_TEMP")) as folder:
+    with tempfile.TemporaryDirectory(prefix="pinkie-native-smoke-", dir=os.environ.get("RUNNER_TEMP"),
+                                     ignore_cleanup_errors=True) as folder:
         root = Path(folder)
         launch(args.app.resolve(), root / "fresh", "fresh")
         profile = root / "upgrade"

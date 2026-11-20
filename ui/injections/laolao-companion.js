@@ -1105,17 +1105,22 @@
       }
     };
     const resize = () => {
-      const r = canvas.parentElement.getBoundingClientRect();
+      const r = canvas.parentElement?.getBoundingClientRect();
+      if (!r) return;
       // 柔光类（学习、想法、无限制）糊糊的，一倍分辨率看不出差别，像素少一半多；气球和网格保留高清
       const soft = ["learning", "thinking", "unrestricted"].includes(currentMode);
       // 「渲染清晰度」：标准 keeps exactly this rule; 低 is 1×; 原生 is the screen's own density.
       const pick = window.PinkieTuning?.get("render.pixelRatio", "standard") || "standard";
       const d = pick === "standard" ? (soft ? 1 : Math.min(1.5, devicePixelRatio || 1)) : canvasRatio(1.5);
-      w = r.width; h = r.height; canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); ctx.setTransform(d, 0, 0, d, 0, 0);
+      w = r.width; h = r.height; canvas.width = Math.round(w * d); canvas.height = Math.round(h * d);
+      if (!canvas.width || !canvas.height) { layer = null; parts = []; return; }
+      ctx.setTransform(d, 0, 0, d, 0, 0);
       seed(); bakeLayer(d);
     };
     const draw = (now) => {
       raf = requestAnimationFrame(draw);
+      // A hidden or transitioning chat card can briefly have no draw area.
+      if (!canvas.width || !canvas.height) return;
       // 30 fps unless 进阶调节 picks another rate.
       const fps = tuned("effects.ambientFps", 30);
       if (fps === 30 ? now - last < 33 : now - last < 1000 / fps - 1) return;

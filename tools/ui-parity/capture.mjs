@@ -182,6 +182,24 @@ try {
         console.log('compact composer click passed',name);
       }
     }
+    if(view==='ambient-resize'){
+      const ambient='.card.chat .pinkie-ambient.is-on';
+      const hasSize=(selector)=>{const canvas=document.querySelector(selector);return !!(canvas?.width&&canvas?.height);};
+      await page.waitForFunction(hasSize,ambient);
+      const card=page.locator('.card.chat').first();
+      const oldDisplay=await card.evaluate(el=>el.style.display);
+      try {
+        // Temporarily collapse the chat card as a layout change would. The
+        // real ResizeObserver must see zero dimensions before it is restored.
+        await card.evaluate(el=>el.style.display='none');
+        await page.waitForFunction((selector)=>{const canvas=document.querySelector(selector);return canvas?.width===0&&canvas.height===0;},ambient);
+        await page.waitForTimeout(175); // Several frames of the real ambient loop.
+      } finally {
+        await card.evaluate((el,value)=>el.style.display=value,oldDisplay);
+      }
+      await page.waitForFunction(hasSize,ambient);
+      console.log('ambient canvas recovered from a collapsed chat card');
+    }
     if(view==='home'){
       await page.locator('.laolao-mode-switcher').first().click();
       await page.locator(`.laolao-mode-menu__option[data-mode="${captureMode}"]`).click();
