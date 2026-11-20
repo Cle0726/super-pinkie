@@ -17,6 +17,7 @@
 - 修复 Windows 正式版从较老配置升级时，逐个注册自带模式被设定防护误报的问题：在加载插件前一次写齐缺失的模式。发标签前额外检查 v2.5.16 配置升级。
 - Mac 正式版的新装和升级都会补齐六种自带模式（包括此前全新配置漏注册的两种）；Mac、Windows 正式包必须通过实际代理、插件、服务与界面接口的启用检查才发布。
 - Mac 正式版首次启动为内置本机网关配置私有令牌，由原生聊天界面安全接入；发布检查验证真实内嵌页面已连通，不只检查进程启动。
+- 发布时先在草稿中校对两平台安装包、完整源码和签名更新清单，全部上传一致后才公开为最新版本；候选版也验证 GitHub 实际更新通道曾指向的 v2.5.32 可以原地升级。
 
 ### 2.5.49
 - 一次合并发版：`install/all-1113-live`（unify/audit/ui-audit-1112、claude-parity-1111、project-coding-1111、toolbox、tier-contract、run-status-ui、persona-work-method、context-meter-live、append-keeps-cards、biqi-update-notes、study-desk-drill、review/study-game）+ `feat/settings-guard`。

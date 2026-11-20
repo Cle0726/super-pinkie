@@ -117,6 +117,12 @@ def verify_installed_features(app, config_path, state, env, label, log_path):
     deadline = time.monotonic() + 55
     while DASHBOARD_PROOF not in log_path.read_bytes():
         if time.monotonic() >= deadline:
+            # The exact signed Launcher exposes only these fixed QA labels,
+            # never page content, environment values or gateway credentials.
+            diagnostics = [line for line in log_path.read_bytes().splitlines()
+                           if line.startswith(b"pinkie-release-smoke:")]
+            for line in diagnostics[-12:]:
+                print(line.decode("utf-8", errors="replace"), flush=True)
             raise RuntimeError(f'{label}: native WebKit did not reach its actual Gateway and model setup')
         time.sleep(1)
     print(f'{label}: core agents, plugins, model sync, services, live Gateway methods and native WebKit verified',

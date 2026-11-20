@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   tag:
@@ -26,23 +26,6 @@ jobs:
   verify:
     needs: tag
     uses: ./.github/workflows/verify.yml
-
-  source:
-    needs: [windows-smoke, ui-parity]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Pack full installer source
-        run: |
-          mkdir -p dist
-          git archive --format=zip --output="dist/super-pinkie-full-${GITHUB_REF_NAME#v}.zip" HEAD
-      - name: Take this version's notes for the release page
-        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
-      - uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-body.md
-          fail_on_unmatched_files: true
-          files: dist/super-pinkie-full-*.zip
 
   macos:
     needs: verify
@@ -210,49 +193,13 @@ jobs:
       - name: Require the same injection order and resource hashes
         run: python tools/ui-parity/bundle.py compare parity/mac/macos-ui-manifest.json parity/windows/windows-ui-manifest.json
 
-  macos-publish:
+  publish:
     needs: [windows-smoke, ui-parity]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: macos-release
-          path: dist
-      - name: Take this version's notes for the release page
-        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
-      - uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-body.md
-          fail_on_unmatched_files: true
-          files: dist/super-pinkie-macos-*.zip
-
-  windows-publish:
-    needs: [windows-smoke, ui-parity]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-release
-          path: dist
-      - name: Take this version's notes for the release page
-        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
-      - uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-body.md
-          fail_on_unmatched_files: true
-          files: |
-            dist/super-pinkie-windows-*.exe
-            dist/super-pinkie-windows-*.exe.sha256
-            dist/super-pinkie-windows-*-portable.zip
-            dist/super-pinkie-windows-*-portable.zip.sha256
-
-  # 国内线路：每个版本附一份 latest.json；配置了国内存储桶（S3 兼容：阿里云 OSS / 腾讯云 COS）就把整套文件传一份过去。
-  # 需要：仓库变量 CN_MIRROR_BASE_URL（下载用的 https 地址，结尾 /）、CN_MIRROR_S3_ENDPOINT、CN_MIRROR_S3_BUCKET、
-  # CN_MIRROR_S3_PREFIX（可空）；密钥 CN_MIRROR_ACCESS_KEY_ID、CN_MIRROR_SECRET_ACCESS_KEY。没配置就只发 latest.json。
-  mirror-publish:
-    needs: [source, macos-publish, windows-publish]
+    permissions:
+      contents: write
+    concurrency:
+      group: publish-release-${{ github.repository }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -282,17 +229,15 @@ jobs:
           if [[ -z "$PINKIE_GUARD_SIGNING_KEY" ]]; then echo "缺少仓库 secret PINKIE_GUARD_SIGNING_KEY" >&2; exit 1; fi
           key_file="$RUNNER_TEMP/guard-signing-key.pem"
           umask 077
+          trap 'rm -f -- "$key_file"' EXIT
           printf '%s\n' "$PINKIE_GUARD_SIGNING_KEY" > "$key_file"
           node installer/guard/guard.mjs sign-latest mirror/latest.json "$key_file"
-          rm -f "$key_file"
-          node installer/guard/guard.mjs verify-latest mirror/latest.json
-      - name: Take this version's notes for the release page
-        run: python3 tools/release/release_notes.py body "$GITHUB_REF_NAME" > release-body.md
-      - uses: softprops/action-gh-release@v2
-        with:
-          body_path: release-body.md
-          fail_on_unmatched_files: true
-          files: mirror/latest.json
+          node installer/guard/guard.mjs verify-latest mirror/latest.json --commit "$GITHUB_SHA"
+      - name: Stage every asset before making this version public and latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release/publish-github.sh
+      # 国内线路可选：先传所有发布文件，最后才切换目录外的 latest.json。
       - name: Copy the release to the China bucket
         if: ${{ vars.CN_MIRROR_S3_BUCKET != '' }}
         env:

@@ -776,6 +776,9 @@ private enum Gateway {
     private(set) static var lastError: String?
     private static let bundledNodeSuffix = "/Contents/Resources/SuperPinkie/runtime/bin/node"
     private static let nativeAuthScriptMarker = "/* super-pinkie managed Gateway auth */"
+    static func nativeControlAuthPrepared(for webView: WKWebView) -> Bool {
+        webView.configuration.userContentController.userScripts.contains { $0.source.hasPrefix(nativeAuthScriptMarker) }
+    }
 
     static func prepareNativeControlAuth(for webView: WKWebView) {
         // Share a credential only with our own bundled Gateway's loopback
@@ -787,7 +790,7 @@ private enum Gateway {
               origin.user == nil, origin.password == nil, origin.query == nil, origin.fragment == nil,
               origin.path.isEmpty || origin.path == "/" else { return }
         let controller = webView.configuration.userContentController
-        guard !controller.userScripts.contains(where: { $0.source.hasPrefix(nativeAuthScriptMarker) }) else { return }
+        guard !nativeControlAuthPrepared(for: webView) else { return }
 
         let env = task.environment ?? [:]
         let config = env["OPENCLAW_CONFIG_PATH"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
@@ -2332,7 +2335,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var companionRetries = 0
     private var startupVideoStartedAt: Date?
     private var dashboardLoadPending = false
-    private var releaseDashboardProbeStarted = false
+    private var releaseDashboardProbeGeneration = 0
+    private var releaseDashboardProbeStatus = ""
+    private let releaseDashboardProbeEnabled = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+        && ProcessInfo.processInfo.environment["PINKIE_RELEASE_SMOKE"] == "1"
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
     private var gatewayProbeInFlight = false
@@ -4817,29 +4823,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
             startupVideoStartedAt = nil
         }
-        if let webView { Gateway.prepareNativeControlAuth(for: webView) }
+        if let webView {
+            Gateway.prepareNativeControlAuth(for: webView)
+            if releaseDashboardProbeEnabled {
+                releaseDashboardProbeGeneration += 1
+                let generation = releaseDashboardProbeGeneration
+                logReleaseDashboardProbe("navigation queued (native auth: \(Gateway.nativeControlAuthPrepared(for: webView)))")
+                DispatchQueue.main.async { [weak self, weak webView] in
+                    if let webView { self?.probeReleaseDashboard(webView, generation: generation) }
+                }
+            }
+        }
         webView?.load(URLRequest(url: Gateway.defaultChatURL))
     }
 
-    private func probeReleaseDashboard(_ view: WKWebView, remaining: Int = 45) {
+    private func logReleaseDashboardProbe(_ status: String) {
+        guard status != releaseDashboardProbeStatus else { return }
+        releaseDashboardProbeStatus = status
+        FileHandle.standardError.write(Data("pinkie-release-smoke: \(status)\n".utf8))
+    }
+
+    private func probeReleaseDashboard(_ view: WKWebView, generation: Int, remaining: Int = 45) {
         // Disposable release QA exercises the actual embedded WebKit view.
         // This is a read-only check; it does not alter navigation or auth.
-        guard view === webView, view.url?.scheme == Gateway.url.scheme,
-              view.url?.host == Gateway.url.host, view.url?.port == Gateway.url.port else { return }
-        let check = """
-        try {
-          const data = await window.__laolaoSidebar?.gwRequest('pinkie.modelSetup.list', {}, 2500);
-          return Array.isArray(data?.providers);
-        } catch { return false; }
-        """
-        view.callAsyncJavaScript(check, arguments: [:], in: nil, in: .page) { [weak self, weak view] result in
-            if case .success(let value) = result, (value as? Bool) == true {
-                FileHandle.standardError.write(Data("pinkie-release-smoke: dashboard connected and model setup loaded\n".utf8))
-            } else if remaining > 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak view] in
-                    if let view { self?.probeReleaseDashboard(view, remaining: remaining - 1) }
-                }
+        guard view === webView, generation == releaseDashboardProbeGeneration else { return }
+        func retry() {
+            guard remaining > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak view] in
+                if let view { self?.probeReleaseDashboard(view, generation: generation, remaining: remaining - 1) }
             }
+        }
+        guard view.url?.scheme == Gateway.url.scheme, view.url?.host == Gateway.url.host,
+              view.url?.port == Gateway.url.port else {
+            logReleaseDashboardProbe("waiting for local dashboard navigation")
+            retry()
+            return
+        }
+        let check = """
+        const sidebar = window.__laolaoSidebar;
+        if (!sidebar?.gwRequest) {
+          return document.body?.innerText.includes('Gateway Token')
+            ? 'local dashboard asks for a token'
+            : 'local dashboard sidebar not initialized';
+        }
+        try {
+          const data = await sidebar.gwRequest('pinkie.modelSetup.list', {}, 2500);
+          return Array.isArray(data?.providers) ? 'dashboard connected and model setup loaded' : 'missing model providers';
+        } catch {
+          return document.body?.innerText.includes('Gateway Token')
+            ? 'local dashboard asks for a token'
+            : 'waiting for live model setup';
+        }
+        """
+        view.callAsyncJavaScript(check, arguments: [:], in: nil, in: .page) { [weak self] result in
+            guard let self, generation == self.releaseDashboardProbeGeneration else { return }
+            if case .success(let value) = result, let status = value as? String {
+                self.logReleaseDashboardProbe(status)
+                if status == "dashboard connected and model setup loaded" { return }
+            } else if case .failure(let error) = result {
+                self.logReleaseDashboardProbe("WebKit callback error \((error as NSError).code)")
+            }
+            retry()
         }
     }
 
@@ -4862,13 +4906,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             syncWorkspacePresentation(force:true)
         }
         guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
-        if webView === self.webView, !releaseDashboardProbeStarted,
-           webView.url?.scheme == Gateway.url.scheme,
-           ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true",
-           ProcessInfo.processInfo.environment["PINKIE_RELEASE_SMOKE"] == "1" {
-            releaseDashboardProbeStarted = true
-            probeReleaseDashboard(webView)
-        }
         // WebKit 导航结束后仍保持透明，避免重新加载时把系统玻璃背景盖成实心粉色。
         window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     }

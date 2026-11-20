@@ -138,6 +138,7 @@ jobs:
           if-no-files-found: error
 
       - name: Launch the exact Mac ZIP on fresh and upgraded profiles
+        id: mac_activation
         if: ${{ !cancelled() && steps.mac_archive.outcome == 'success' }}
         timeout-minutes: 16
         env:
@@ -153,6 +154,15 @@ jobs:
           ditto -x -k "$smoke/download/super-pinkie-macos-${OLD_TAG#v}.zip" "$smoke/old"
           unset GH_TOKEN
           python3 tools/macos-package/smoke_launch.py --app "$smoke/new" --old-app "$smoke/old"
+      - name: Keep failed Mac candidate for isolated diagnostics
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.mac_activation.outcome == 'failure' }}
+        with:
+          name: macos-failed-candidate
+          path: dist/super-pinkie-macos-*.zip
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
 
   windows:
     runs-on: windows-latest
@@ -226,6 +236,17 @@ jobs:
     with:
       candidate_artifact: windows-rc-portable
       from_tags: ${{ inputs.old_tag || 'v2.5.49' }}
+
+  windows-live-channel-update:
+    # GitHub's /releases/latest was pinned to v2.5.32. Users following that
+    # channel must be able to update as well as users on the highest tag.
+    if: inputs.old_tag != 'v2.5.32'
+    needs: windows
+    uses: ./.github/workflows/windows-update-probe.yml
+    with:
+      candidate_artifact: windows-rc-portable
+      from_tags: v2.5.32
+      evidence_suffix: '-live-channel'
 
   ui-parity:
     needs: [macos-release-package, windows]

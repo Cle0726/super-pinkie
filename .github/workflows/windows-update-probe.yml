@@ -25,6 +25,9 @@ on:
       from_tags:
         type: string
         default: v2.5.49
+      evidence_suffix:
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -151,6 +154,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-update-probe-${{ github.run_id }}
+          name: windows-update-probe-${{ github.run_id }}${{ inputs.evidence_suffix }}
           path: probe-out
           if-no-files-found: warn
