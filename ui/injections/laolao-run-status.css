@@ -75,8 +75,12 @@
 .pk-run__btn[data-act="answer"], .pk-run__btn[data-act="skip"] { color: #fff; background: #e94f91; box-shadow: none; }
 .pk-run__btn[data-act="answer"]:hover, .pk-run__btn[data-act="skip"]:hover { color: #fff; background: #c2457c; }
 
-/* 原生「有新消息」小胶囊和状态条在同一个位置：条在的时候它往上让一行。 */
-html.pk-run-on .chat-new-messages { transform: translateY(-40px); }
+/* Give both fixed indicators a real slot; queue rows and New messages stay
+   in their own native rows instead of being translated over one another. */
+.agent-chat__composer-shell[data-pinkie-composer-dock] {
+  padding-block-start: var(--pinkie-composer-dock-space, 0px);
+}
+html[data-laolao-mode="metre"].pk-run-on .chat-new-messages { transform: translateY(-40px); }
 
 /* 等你确认：整条换强调色，要确认的那句话就在条上。 */
 .pk-run[data-tone="ask"] .pk-run__body { background: linear-gradient(135deg, #ffe6f0, rgba(255, 238, 246, 0.92)); box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.5), 0 6px 20px rgba(233, 79, 145, 0.12); }
@@ -100,6 +104,9 @@ html.pk-run-on .chat-new-messages { transform: translateY(-40px); }
   border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.16), 0 6px 18px rgba(111, 45, 74, 0.08);
 }
+/* The dot's `all: unset` would otherwise inherit pointer-events: none
+   from the fixed wrapper and let the composer swallow the click. */
+html:not([data-laolao-mode="metre"]) .pk-run.is-shown[data-layout="dot"] .pk-run__dot { pointer-events: auto; }
 .pk-run[data-layout="dot"][data-tone="ask"] .pk-run__dot { box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.6), 0 6px 18px rgba(233, 79, 145, 0.14); }
 .pk-run__dot-face { width: 26px; height: 26px; object-fit: contain; }
 .pk-run[data-layout="dot"] .pk-run__body {
@@ -119,6 +126,10 @@ html.pk-run-on .chat-new-messages { transform: translateY(-40px); }
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 .pk-run[data-layout="dot"].is-open .pk-run__body { opacity: 1; transform: none; visibility: visible; }
+html:not([data-laolao-mode="metre"]) .pk-run[data-layout="dot"] .pk-run__body {
+  width: min(360px, var(--pinkie-composer-dock-width, calc(100vw - 32px)));
+  bottom: calc(100% + 6px); max-height: 36vh; overflow: auto;
+}
 /* 浮层盖在聊天文字上：底色要实，不能靠模糊（WebKit 里不一定生效）。 */
 .pk-run[data-layout="dot"] .pk-run__body:not(#_n) { background: linear-gradient(135deg, #fffdfe, #fff7fb); }
 .pk-run[data-layout="dot"][data-tone="ask"] .pk-run__body:not(#_n) { background: linear-gradient(135deg, #ffe6f0, #fff0f6); }

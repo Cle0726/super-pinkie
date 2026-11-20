@@ -2,12 +2,18 @@
 // A different user instruction with the same text must not be merged or retried.
 export function pinkieQueueUnconfirmed(item) {
   return item?.sendState === 'unconfirmed'
-    && /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ''));
+    && /^agent:(?:main|project|thinking|learning|unrestricted):/.test(String(item?.sessionKey || ''));
 }
 
 export function transformWithStatus(source) {
-  const marker = '/* pinkie-queue-unconfirmed:v1 */';
+  const marker = '/* pinkie-queue-unconfirmed:v2 */';
   if (source.includes(marker)) return { changed: false, reason: 'already-patched', text: source };
+  const previous = '/* pinkie-queue-unconfirmed:v1 */';
+  if (source.includes(previous)) {
+    const old = previous + pinkieQueueUnconfirmed.toString().replace('|learning|unrestricted)', '|learning)');
+    if (source.split(old).length !== 2) return { changed: false, reason: 'unsupported-ui', text: source };
+    return { changed: true, reason: 'patched', text: source.replace(old, marker + pinkieQueueUnconfirmed.toString()) };
+  }
   const changes = [
     ['function Ku(e){', `${marker}${pinkieQueueUnconfirmed.toString()}\nfunction Ku(e){`],
     ['if(!t||!n.trim()&&!e.attachments?.length||e.pendingRunId||e.sendState===`sending`)return null',

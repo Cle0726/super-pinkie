@@ -292,12 +292,19 @@ test('a native submission already in progress is not steered a second time', asy
 });
 
 test('a busy native queue item with only a reserved run id is steered once', async () => {
-  const {api} = loadQueueSteer();
-  const pane = queuePane([{id:'reserved',text:'新要求',sessionKey:'agent:learning:test',sendAttempts:0,sendRunId:'reserved-id',sendSubmittedAtMs:123}]);
-  pane.state.sessionKey='agent:learning:test';let calls=0;
-  pane.state.steerQueuedChatMessage=async function(id){calls++;this.chatQueue=this.chatQueue.map(x=>x.id===id?{...x,kind:'steered',pendingRunId:this.chatRunId}:x)};
-  assert.equal((await api.steerQueued(pane,'reserved')).state,'steered');
-  assert.equal(calls,1);assert.equal(pane.state.chatQueue[0].sendRunId,'reserved-id');
+  for (const mode of ['learning', 'unrestricted']) {
+    const {api} = loadQueueSteer();
+    const sessionKey = `agent:${mode}:test`;
+    const pane = queuePane([{id:'reserved',text:'新要求',sessionKey,sendAttempts:0,sendRunId:'reserved-id',sendSubmittedAtMs:123}]);
+    pane.state.sessionKey=sessionKey;
+    let calls=0;
+    pane.state.steerQueuedChatMessage=async function(id){calls++;this.chatQueue=this.chatQueue.map(x=>x.id===id?{...x,kind:'steered',pendingRunId:this.chatRunId}:x)};
+    assert.equal((await api.steerQueued(pane,'reserved')).state,'steered',mode);
+    assert.equal(calls,1,mode);
+    assert.equal(pane.state.chatQueue[0].sendRunId,'reserved-id');
+    assert.equal((await api.steerQueued(pane,'reserved')).state,'unconfirmed',mode);
+    assert.equal(calls,1,'a reserved ID must not be sent again after acceptance');
+  }
 });
 
 test('queue presentation follows the native stable item ID instead of a filtered array index', () => {
@@ -313,9 +320,9 @@ test('queue presentation follows the native stable item ID instead of a filtered
   assert.equal(row.dataset.pinkieQueueLabel, '结束后发送');
 });
 
-test('clicking .chat-queue__steer on a queued card delegates through steerQueued with prune and disconnect protection', async () => {
-  const pane = queuePane([{id: 'q-manual', text: '排队转立即追加', sessionKey: 'agent:learning:test'}]);
-  pane.state.sessionKey = 'agent:learning:test';
+test('clicking .chat-queue__steer in Pinkie unrestricted delegates with prune and disconnect protection', async () => {
+  const pane = queuePane([{id: 'q-manual', text: '排队转立即追加', sessionKey: 'agent:unrestricted:test', sendRunId: 'reserved-manual', sendAttempts: 0}]);
+  pane.state.sessionKey = 'agent:unrestricted:test';
   let prunes = 0, steerCalls = 0;
   const {api, listeners, notices} = loadQueueSteer({
     panes: [pane],
