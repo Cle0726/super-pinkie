@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const { runInNewContext } = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
@@ -41,6 +42,32 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
   assert.match(launcher, /if ready \{\s+self\?\.validateReadyGatewayAndLoad\(\)/);
   assert.match(launcher, /Gateway\.repair\(\)/);
   assert.match(launcher, /gatewayMonitor\?\.invalidate\(\)/);
+});
+
+test('the macOS Gateway credential reaches only the exact loopback main frame', () => {
+  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const helper = launcher.slice(launcher.indexOf('static func prepareNativeControlAuth('),
+    launcher.indexOf('private static func endpoint('));
+  assert.match(helper, /task\.isRunning, task\.executableURL == BundledRuntime\.nodeURL/);
+  assert.match(helper, /injectionTime: \.atDocumentStart, forMainFrameOnly: true/);
+  const script = helper.match(/let source = """([\s\S]+?)"""/)?.[1];
+  assert.ok(script);
+  const origin = 'http://127.0.0.1:18789';
+  const token = 'fixture "quote", \n line and </script>';
+  function loadFrame(location, isMain) {
+    const window = {};
+    window.top = isMain ? window : {};
+    runInNewContext(script.replace('\\(nativeAuthScriptMarker)', '').replace('\\(json)',
+      JSON.stringify({origin, token})), {window, location: new URL(location), URL});
+    return window.__OPENCLAW_NATIVE_CONTROL_AUTH__;
+  }
+  assert.equal(loadFrame(origin + '/chat', true)?.token, token);
+  assert.equal(loadFrame(origin + '/chat', true)?.gatewayUrl, 'ws://127.0.0.1:18789');
+  assert.equal(loadFrame(origin + '/chat', false), undefined);
+  for (const other of ['http://127.0.0.1:9999', 'http://localhost:18789',
+    'https://127.0.0.1:18789', 'https://example.test']) {
+    assert.equal(loadFrame(other, true), undefined);
+  }
 });
 
 test('macOS updater selects a build Node with npm when the bundled runtime has none', () => {

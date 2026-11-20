@@ -18,6 +18,7 @@ from tools.release.runtime_inventory import cli_json, inspect_activation
 
 GATEWAY = "http://127.0.0.1:18789"
 HTTP = build_opener(ProxyHandler({}))
+DASHBOARD_PROOF = b"pinkie-release-smoke: dashboard connected and model setup loaded"
 
 
 def gateway_listening(port=18789):
@@ -82,7 +83,7 @@ def stop_owned(process, owned):
     raise RuntimeError("the isolated launcher or its gateway did not stop")
 
 
-def verify_installed_features(app, config_path, state, env, label):
+def verify_installed_features(app, config_path, state, env, label, log_path):
     runtime = app / 'Contents/Resources/SuperPinkie/runtime'
     command = [runtime / 'bin/node', runtime / 'openclaw/openclaw.mjs']
     report = inspect_activation(command, env)
@@ -113,7 +114,13 @@ def verify_installed_features(app, config_path, state, env, label):
     guard = json.loads((state / 'guard/status.json').read_text(encoding='utf-8'))
     if not guard.get('trusted') or guard.get('limitReached') or guard.get('counterTampered') or guard.get('strikesIn24h') != 0:
         raise RuntimeError(f'{label}: official settings guard is not clean after startup')
-    print(f'{label}: all core agents, plugins, model sync, services and live Gateway methods verified', flush=True)
+    deadline = time.monotonic() + 55
+    while DASHBOARD_PROOF not in log_path.read_bytes():
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f'{label}: native WebKit did not reach its actual Gateway and model setup')
+        time.sleep(1)
+    print(f'{label}: core agents, plugins, model sync, services, live Gateway methods and native WebKit verified',
+          flush=True)
 
 
 def launch(package, profile, label, *, verify_features=False):
@@ -128,7 +135,10 @@ def launch(package, profile, label, *, verify_features=False):
         raise RuntimeError(f'{label}: the fixture ports were already in use: {occupied}')
     env = {**os.environ, "HOME": str(home), "PINKIE_STATE_ROOT": str(state),
            "OPENCLAW_STATE_DIR": str(claw), "PINKIE_GATEWAY_URL": GATEWAY + "/"}
-    with (profile / f"{label}-launcher.log").open("wb") as log:
+    if verify_features:
+        env["PINKIE_RELEASE_SMOKE"] = "1"
+    log_path = profile / f"{label}-launcher.log"
+    with log_path.open("wb") as log:
         process = subprocess.Popen([str(executable)], cwd=app, env=env,
                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         owned = {}
@@ -147,7 +157,7 @@ def launch(package, profile, label, *, verify_features=False):
                     if process.poll() is not None or not gateway_up():
                         raise RuntimeError(f"{label}: native app did not stay up")
                     if verify_features:
-                        verify_installed_features(app, claw / 'openclaw.json', state, env, label)
+                        verify_installed_features(app, claw / 'openclaw.json', state, env, label, log_path)
                     print(f"{label}: native launcher and bundled gateway ready ({time.monotonic()-started:.1f}s)", flush=True)
                     return
                 time.sleep(2)

@@ -1,9 +1,10 @@
-"""Identify strictly unchanged bundled agent identities; uncertainty means redo setup."""
+"""Prepare managed macOS-profile defaults and identify unchanged external agents."""
 
 import json
 import os
 from pathlib import Path
 import re
+import secrets
 import sys
 import tempfile
 
@@ -14,6 +15,48 @@ BUNDLED_MODES = {
     "main": "workspace", "project": "workspace-project", "thinking": "workspace-thinking",
     "learning": "workspace-learning", "unrestricted": "workspace-unrestricted", "metre": "workspace-metre",
 }
+GATEWAY_CREDENTIALS = ("OPENCLAW_GATEWAY_TOKEN", "OPENCLAW_GATEWAY_PASSWORD")
+DOTENV_CREDENTIAL = re.compile(r"^\s*(?:export\s+)?OPENCLAW_GATEWAY_(?:TOKEN|PASSWORD)\s*(?:=|:\s)", re.M)
+
+
+def stage_local_gateway_auth(config, workspace_root, raw):
+    # A plain `gateway run` with no configured credential starts with an
+    # ephemeral upstream token. The native UI cannot retrieve that token.
+    # Persist a private token on the default managed loopback profile only.
+    if raw and b'"$include"' in raw:
+        return False
+    gateway = config.get("gateway", {})
+    if (not isinstance(gateway, dict) or gateway.get("mode", "local") != "local"
+            or gateway.get("bind", "loopback") != "loopback" or gateway.get("remote")):
+        return False
+    tailscale = gateway.get("tailscale", {})
+    if not isinstance(tailscale, dict) or tailscale.get("mode", "off") != "off":
+        return False
+    auth = gateway.get("auth", {})
+    if (not isinstance(auth, dict) or auth.get("mode", "token") != "token"
+            or "token" in auth or "password" in auth or auth.get("allowTailscale")):
+        return False
+    # Don't shadow anything the user supplies through OpenClaw's config /
+    # process env or its dotenv files. Only write when those sources are clear.
+    if any(os.environ.get(key, "").strip() for key in GATEWAY_CREDENTIALS):
+        return False
+    configured_env = config.get("env", {})
+    for source in (configured_env, configured_env.get("vars", {}) if isinstance(configured_env, dict) else None):
+        if not isinstance(source, dict) or any(key in source for key in GATEWAY_CREDENTIALS):
+            return False
+    for path in {workspace_root / ".env", Path.cwd() / ".env"}:
+        try:
+            if DOTENV_CREDENTIAL.search(path.read_text(encoding="utf-8-sig")):
+                return False
+        except FileNotFoundError:
+            pass
+        except (OSError, UnicodeError):
+            return False
+    config["gateway"] = {
+        "mode": "local", "bind": "loopback", **gateway,
+        "auth": {**auth, "mode": "token", "token": secrets.token_urlsafe(32)},
+    }
+    return True
 
 
 def stage_bundled_agents(config_path, state_dir=None):
@@ -28,7 +71,7 @@ def stage_bundled_agents(config_path, state_dir=None):
         raise ValueError('agents.list is not a list; the config has not been changed')
     existing = {entry.get('id'): entry for entry in entries
                 if isinstance(entry, dict) and isinstance(entry.get('id'), str)}
-    changed = False
+    changed = stage_local_gateway_auth(config, workspace_root, raw)
     for agent, folder in BUNDLED_MODES.items():
         workspace = str(workspace_root / folder)
         if agent not in existing:
@@ -50,6 +93,7 @@ def stage_bundled_agents(config_path, state_dir=None):
         return False
     # The bundled personas already supply IDENTITY.md. Avoid launching the
     # CLI's per-agent config mutations just to rediscover those identities.
+    # mkstemp limits the temporary (and therefore final) config to the owner.
     fd, temporary = tempfile.mkstemp(prefix='.pinkie-mode-agents-', dir=config_path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as file:

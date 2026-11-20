@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -49,12 +50,13 @@ class BundledSetupTest(unittest.TestCase):
         for agent, identity in IDENTITIES.items():
             target = self.home / f".openclaw/workspace-{agent}/IDENTITY.md"
             target.parent.mkdir(parents=True)
-            target.write_text("\n".join(f"- **{key.title()}:** {value}" for key, value in identity.items()) + "\n")
+            target.write_text("\n".join(f"- **{key.title()}:** {value}" for key, value in identity.items()) + "\n",
+                              encoding="utf-8")
 
     def write_config(self, agents=tuple(IDENTITIES)):
         self.config.write_text(json.dumps({"agents": {"list": [
             {"id": agent, "identity": IDENTITIES[agent]} for agent in agents
-        ]}}, ensure_ascii=False))
+        ]}}, ensure_ascii=False), encoding="utf-8")
 
     def plan(self, extra_env=None):
         with mock.patch.dict(os.environ, extra_env or {}, clear=True):
@@ -98,7 +100,7 @@ elif args[:2] == ["agents", "add"]:
     def test_only_unambiguously_matching_identities_are_skipped(self):
         self.assertEqual(self.plan(), ["project", "learning", "metre"])
         project = self.home / ".openclaw/workspace-project/IDENTITY.md"
-        project.write_text(project.read_text() + "- Name: 不同的名字\n")
+        project.write_text(project.read_text(encoding="utf-8") + "- Name: 不同的名字\n", encoding="utf-8")
         self.assertEqual(self.plan(), ["learning", "metre"])
         self.assertEqual(self.plan({"OPENCLAW_CONFIG_PATH": "/custom/config.json"}), [])
         self.assertEqual(self.plan({"OPENCLAW_STATE_DIR": "/custom/state"}), [])
@@ -129,6 +131,43 @@ elif args[:2] == ["agents", "add"]:
         self.assertEqual(next(row for row in rows if row['id'] == 'project'), existing)
         self.assertEqual(updated['models'], config['models'])
         self.assertFalse(PLAN.stage_bundled_agents(self.config))
+
+    def test_default_managed_loopback_has_a_private_stable_profile_token(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            PLAN.stage_bundled_agents(self.config)
+            gateway = json.loads(self.config.read_text(encoding='utf-8'))['gateway']
+            self.assertEqual((gateway['mode'], gateway['bind'], gateway['auth']['mode']),
+                             ('local', 'loopback', 'token'))
+            self.assertRegex(gateway['auth']['token'], r'^[A-Za-z0-9_-]{43}$')
+            if os.name == 'posix':
+                self.assertEqual(stat.S_IMODE(self.config.stat().st_mode), 0o600)
+            self.assertFalse(PLAN.stage_bundled_agents(self.config))
+            other = self.root / 'other.json'
+            PLAN.stage_bundled_agents(other)
+            self.assertNotEqual(json.loads(other.read_text(encoding='utf-8'))['gateway']['auth']['token'],
+                                gateway['auth']['token'])
+
+    def test_explicit_gateway_and_credential_sources_are_untouched(self):
+        cases = [
+            ({'auth': {'mode': 'none'}}, {}),
+            ({'auth': {'mode': 'token', 'token': 'existing-test-token'}}, {}),
+            ({'auth': {'mode': 'password', 'password': 'existing-test-password'}}, {}),
+            ({'auth': {'token': {'source': 'env', 'provider': 'default', 'id': 'MY_TEST_TOKEN'}}}, {}),
+            ({'mode': 'remote', 'remote': {'url': 'wss://example.test'}}, {}),
+            ({'bind': 'lan'}, {}),
+            ({'tailscale': {'mode': 'serve'}}, {}),
+            ({}, {'OPENCLAW_GATEWAY_TOKEN': 'test-env-token'}),
+        ]
+        for gateway, env in cases:
+            with self.subTest(gateway=gateway, env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.config.write_text(json.dumps({'gateway': gateway}), encoding='utf-8')
+                PLAN.stage_bundled_agents(self.config)
+                self.assertEqual(json.loads(self.config.read_text(encoding='utf-8'))['gateway'], gateway)
+        (self.config.parent / '.env').write_text('export OPENCLAW_GATEWAY_PASSWORD="test-value"\n', encoding='utf-8')
+        self.config.write_text('{}', encoding='utf-8')
+        with mock.patch.dict(os.environ, {}, clear=True):
+            PLAN.stage_bundled_agents(self.config)
+            self.assertNotIn('gateway', json.loads(self.config.read_text(encoding='utf-8')))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
     def test_fresh_profile_registers_all_six_modes_before_the_managed_gateway(self):

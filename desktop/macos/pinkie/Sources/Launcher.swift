@@ -775,6 +775,64 @@ private enum Gateway {
     private static var logHandle: FileHandle?
     private(set) static var lastError: String?
     private static let bundledNodeSuffix = "/Contents/Resources/SuperPinkie/runtime/bin/node"
+    private static let nativeAuthScriptMarker = "/* super-pinkie managed Gateway auth */"
+
+    static func prepareNativeControlAuth(for webView: WKWebView) {
+        // Share a credential only with our own bundled Gateway's loopback
+        // Control UI. Never expose it to the separate browser or a remote URL.
+        guard let task = process, task.isRunning, task.executableURL == BundledRuntime.nodeURL,
+              var origin = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = origin.scheme, scheme == "http" || scheme == "https",
+              let host = origin.host?.lowercased(), ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host),
+              origin.user == nil, origin.password == nil, origin.query == nil, origin.fragment == nil,
+              origin.path.isEmpty || origin.path == "/" else { return }
+        let controller = webView.configuration.userContentController
+        guard !controller.userScripts.contains(where: { $0.source.hasPrefix(nativeAuthScriptMarker) }) else { return }
+
+        let env = task.environment ?? [:]
+        let config = env["OPENCLAW_CONFIG_PATH"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? SettingsGuardNative.openclawStateDir().appendingPathComponent("openclaw.json")
+        guard let data = try? Data(contentsOf: config),
+              data.range(of: Data("\"$include\"".utf8)) == nil,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let gateway = root["gateway"] as? [String: Any],
+              (gateway["mode"] as? String ?? "local") == "local",
+              (gateway["bind"] as? String ?? "loopback") == "loopback",
+              ((gateway["tailscale"] as? [String: Any])?["mode"] as? String ?? "off") == "off" else { return }
+        let auth = gateway["auth"] as? [String: Any] ?? [:]
+        func literal(_ name: String, environment: String) -> String? {
+            guard auth[name] == nil || auth[name] is String else { return nil }  // SecretRef is resolved only by OpenClaw.
+            for candidate in [auth[name] as? String, env[environment]] {
+                guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { continue }
+                return value.contains("${") ? nil : value
+            }
+            return nil
+        }
+        let token = literal("token", environment: "OPENCLAW_GATEWAY_TOKEN")
+        let password = literal("password", environment: "OPENCLAW_GATEWAY_PASSWORD")
+        let mode = auth["mode"] as? String ?? (password != nil ? "password" : "token")
+        let credential: String?
+        switch mode {
+        case "token": credential = token
+        case "password": credential = password
+        default: return
+        }
+        origin.path = ""
+        guard let address = origin.string, let credential,
+              let payload = try? JSONSerialization.data(withJSONObject: ["origin": address, mode: credential]),
+              let json = String(data: payload, encoding: .utf8) else { return }
+        let source = """
+        \(nativeAuthScriptMarker)
+        (() => {
+          const auth = \(json);
+          if (window !== window.top || location.origin !== new URL(auth.origin).origin) return;
+          delete auth.origin;
+          auth.gatewayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+          window.__OPENCLAW_NATIVE_CONTROL_AUTH__ = auth;
+        })();
+        """
+        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
 
     private static func endpoint(_ path: String) -> URL {
         url.appendingPathComponent(path)
@@ -2274,6 +2332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var companionRetries = 0
     private var startupVideoStartedAt: Date?
     private var dashboardLoadPending = false
+    private var releaseDashboardProbeStarted = false
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
     private var gatewayProbeInFlight = false
@@ -4717,6 +4776,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // primary's full navigation rail visible at half width is what made
         // each reply collapse into a skinny vertical strip.
         companionRetries = 0
+        Gateway.prepareNativeControlAuth(for: companion)
         companion.load(URLRequest(url: chatURL(sessionKey: targetSession, docked: true)))
         window.makeFirstResponder(companion)
     }
@@ -4757,7 +4817,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
             startupVideoStartedAt = nil
         }
+        if let webView { Gateway.prepareNativeControlAuth(for: webView) }
         webView?.load(URLRequest(url: Gateway.defaultChatURL))
+    }
+
+    private func probeReleaseDashboard(_ view: WKWebView, remaining: Int = 45) {
+        // Disposable release QA exercises the actual embedded WebKit view.
+        // This is a read-only check; it does not alter navigation or auth.
+        guard view === webView, view.url?.scheme == Gateway.url.scheme,
+              view.url?.host == Gateway.url.host, view.url?.port == Gateway.url.port else { return }
+        let check = """
+        try {
+          const data = await window.__laolaoSidebar?.gwRequest('pinkie.modelSetup.list', {}, 2500);
+          return Array.isArray(data?.providers);
+        } catch { return false; }
+        """
+        view.callAsyncJavaScript(check, arguments: [:], in: nil, in: .page) { [weak self, weak view] result in
+            if case .success(let value) = result, (value as? Bool) == true {
+                FileHandle.standardError.write(Data("pinkie-release-smoke: dashboard connected and model setup loaded\n".utf8))
+            } else if remaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak view] in
+                    if let view { self?.probeReleaseDashboard(view, remaining: remaining - 1) }
+                }
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
@@ -4779,6 +4862,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             syncWorkspacePresentation(force:true)
         }
         guard webView.url?.host == Gateway.url.host, webView.url?.port == Gateway.url.port else { return }
+        if webView === self.webView, !releaseDashboardProbeStarted,
+           webView.url?.scheme == Gateway.url.scheme,
+           ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true",
+           ProcessInfo.processInfo.environment["PINKIE_RELEASE_SMOKE"] == "1" {
+            releaseDashboardProbeStarted = true
+            probeReleaseDashboard(webView)
+        }
         // WebKit 导航结束后仍保持透明，避免重新加载时把系统玻璃背景盖成实心粉色。
         window?.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     }
