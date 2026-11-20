@@ -1,0 +1,31 @@
+name: Mac Activation Diagnostic
+
+on:
+  push:
+    branches: ['diagnose/macos-activation']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: mac-diagnostic-download
+          run-id: 44740858224
+          github-token: ${{ github.token }}
+      - run: |
+          mkdir mac-diagnostic-app
+          ditto -x -k mac-diagnostic-download/super-pinkie-macos-2.5.50.zip mac-diagnostic-app
+          python3 tools/macos-package/activation_diagnostic.py mac-diagnostic-app
