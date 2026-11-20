@@ -845,10 +845,17 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
   // native New messages control occupies the same area in a narrow pane.
   const positionWork = () => {
     const panel = document.getElementById(WORK_ID);
+    if (currentMode() !== 'metre' && window.__pinkieComposerDock) {
+      if (panel && !panel.hidden && !ownsWorkPanel(panel)) resetWorkSession();
+      window.__pinkieComposerDock.track('work', panel);
+      return;
+    }
     const actions = $(".agent-chat__composer-actions");
     const shell = $(".agent-chat__input") || $(".agent-chat__composer-shell") || actions;
     if (!panel || panel.hidden || !shell?.isConnected) return;
     if (!ownsWorkPanel(panel)) { resetWorkSession(); return; }
+    // Clear the shared dock's inline width when switching back to Metre.
+    panel.style.removeProperty("width");
     if (workAnchor !== shell) {
       workAnchor = shell;
       workAnchorResize.disconnect(); workAnchorResize.observe(shell);
@@ -895,7 +902,7 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
     panel.hidden = !visible;
     panel.dataset.sessionKey = sessionKey;
     document.documentElement.toggleAttribute("data-pinkie-work", visible);
-    if (!visible) { workExpanded = false; workDetail = ""; return; }
+    if (!visible) { workExpanded = false; workDetail = ""; positionWork(); return; }
     if (workDetail && !rows.some((row) => row.key === workDetail)) workDetail = "";
     panel.classList.toggle("is-active", active);
     setIcon(panel.querySelector(".pinkie-work__dot"), active ? "running" : rows.some((row) => row.state === "failed") && !rows.some((row) => row.state === "done") ? "failed" : "done");
@@ -938,7 +945,8 @@ html[data-theme-mode="dark"] .laolao-deep-think-menu{color:#57364a;background:li
       const detail = panel.querySelector(".pinkie-work__detail");
       detail.hidden = !workDetail;
     }
-    requestAnimationFrame(positionWork);
+    if (currentMode() !== 'metre' && window.__pinkieComposerDock) window.__pinkieComposerDock.track('work', panel, true);
+    else requestAnimationFrame(positionWork);
   }
 
   async function refreshWork() {
@@ -985,6 +993,7 @@ html[data-pinkie-work] #laolao-deep-think-status,html[data-pinkie-work] #pinkie-
 #${WORK_ID}.is-expanded .pinkie-work__chevron{transform:rotate(180deg)}
 .pinkie-work__card{margin-top:6px;padding:9px 10px 10px;overflow:auto;overscroll-behavior:contain;border:1px solid rgba(255,255,255,.72);border-radius:14px;background:linear-gradient(145deg,rgba(255,252,253,.94),rgba(249,229,240,.9));box-shadow:0 14px 34px rgba(97,48,73,.16),inset 0 1px rgba(255,255,255,.78);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
 .pinkie-work__card[hidden]{display:none}
+html:has(.agent-chat__composer-shell[data-pinkie-composer-dock]) #${WORK_ID} .pinkie-work__card{position:absolute;right:0;bottom:calc(100% + 6px);width:100%;max-height:min(36vh,230px);box-sizing:border-box;margin:0}
 .pinkie-work__head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:650}
 .pinkie-work__stop{padding:2px 9px;border:1px solid rgba(176,80,124,.28);border-radius:999px;background:transparent;color:#a3426c;font:inherit;font-size:11px;cursor:pointer}
 .pinkie-work__stop[hidden]{display:none}
@@ -1052,8 +1061,17 @@ html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pi
       .some((name) => button.classList.contains(name))) return null;
     return /send|发送/i.test(button.getAttribute("aria-label") || "") ? button : null;
   };
+  const isBusyFollowUp = (event) => {
+    if (currentMode() === 'metre') return false;
+    const pane = (event.composedPath?.() || []).find((node) => node?.matches?.('openclaw-chat-pane'))
+      || event.target?.closest?.('openclaw-chat-pane');
+    const state = pane?.state;
+    return Boolean(state?.chatRunId || state?.chatSending || state?.chatStream);
+  };
   document.addEventListener("click", (event) => {
-    if (bypassSend || !selectedTier) return;
+    // A supplement belongs to the running task. Do not re-arm a new task
+    // or replay the gesture while native queue steering handles it.
+    if (bypassSend || !selectedTier || isBusyFollowUp(event)) return;
     const button = realSendButton(event.target);
     if (!button) return;
     event.preventDefault();
@@ -1061,7 +1079,7 @@ html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pi
     if (!window.__laolaoStartupHome?.delegateNativeSend?.(button, afterArm)) void afterArm(() => button.click());
   }, true);
   document.addEventListener("keydown", (event) => {
-    if (bypassSend || !selectedTier || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    if (bypassSend || !selectedTier || isBusyFollowUp(event) || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
     const input = event.target?.closest?.(".agent-chat__composer-combobox textarea");
     if (!input || !input.value.trim()) return;
     event.preventDefault();

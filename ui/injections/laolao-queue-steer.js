@@ -49,6 +49,7 @@
     pane?.requestUpdate?.();
   };
   const normalizedText = (value) => String(value || "").trim();
+  const supportedQueueSession = (key) => /^agent:(?:main|project|thinking|learning|unrestricted):/.test(String(key || ""));
   const sameSession = (pane, item) => !item?.sessionKey || !pane?.state?.sessionKey
     || item.sessionKey === pane.state.sessionKey;
   const itemFor = (pane, id) => queueFor(pane).find((item) => item?.id === id && sameSession(pane, item)) || null;
@@ -56,7 +57,7 @@
     // The native busy queue allocates its future send ID and timestamp before
     // sending anything. Treat that exact untouched state as queued; an ID by
     // itself is not a receipt or an in-flight submission.
-    const reservedOnly = /^agent:(?:main|project|thinking|learning):/.test(String(item?.sessionKey || ""))
+    const reservedOnly = supportedQueueSession(item?.sessionKey)
       && item?.sendAttempts === 0 && !item?.sendState && !item?.pendingRunId
       && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer" && item?.kind !== "steered";
     if (reservedOnly) return false;
@@ -308,9 +309,9 @@
   const followUpModeByPane = new WeakMap();
   const isIncludedModePane = (pane) => {
     const key = String(pane?.state?.sessionKey || "");
-    if (key) return /^agent:(?:main|project|thinking|learning):/.test(key);
+    if (key) return supportedQueueSession(key);
     const mode = document.documentElement?.getAttribute?.("data-laolao-mode") || "";
-    return !mode || ["chat", "main", "project", "thinking", "learning"].includes(mode);
+    return !mode || ["chat", "main", "project", "thinking", "learning", "unrestricted"].includes(mode);
   };
   const getFollowUpMode = (pane) => {
     const entry = pane && followUpModeByPane.get(pane);
@@ -351,7 +352,7 @@
         );
         toggle.setAttribute(
           "title",
-          mode === "queue" ? "本轮结束后自动发送（点击切换为立即追加）" : "立即追加到当前任务（点击切换为本轮结束后发送，或按 Option+Enter）"
+          mode === "queue" ? "当前发送方式：本轮结束后发。点此切换为立即追加。" : "当前发送方式：立即追加。输入后按 Enter 或点发送；点此切换为结束后发。"
         );
       }
     }

@@ -12,9 +12,12 @@
   transition: right .25s ease, opacity .2s ease, transform .25s ease, visibility .2s;
 }
 /* 输入框的弹层（模型、设置、附件、容量）往上展开时，碧琪先低头躲开，别挡住菜单 */
-.agent-chat__composer-shell:has(details[open], .chat-settings-popover--open) > .pinkie-buddy {
+.agent-chat__composer-shell:has(details[open], .chat-settings-popover--open) > .pinkie-buddy,
+.agent-chat__composer-shell[data-pinkie-composer-dock] > .pinkie-buddy {
   opacity: 0; visibility: hidden; transform: translateY(10px);
 }
+/* Invisible front buttons must never take queued messages' clicks. */
+.agent-chat__composer-shell[data-pinkie-composer-dock] .pinkie-buddy__figure { pointer-events: none; }
 .pinkie-buddy__figure {
   position: absolute; inset: 0;
   padding: 0; border: 0; background: none; cursor: pointer;

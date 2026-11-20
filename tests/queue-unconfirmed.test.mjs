@@ -14,19 +14,20 @@ const fixture = [
 ].join('\n');
 
 test('unconfirmed delivery is scoped to included sessions and distinct from ordinary queue states', () => {
-  for (const mode of ['main', 'project', 'thinking', 'learning']) {
+  for (const mode of ['main', 'project', 'thinking', 'learning', 'unrestricted']) {
     assert.equal(pinkieQueueUnconfirmed({ sessionKey: `agent:${mode}:qa`, sendState: 'unconfirmed' }), true);
     assert.equal(pinkieQueueUnconfirmed({ sessionKey: `agent:${mode}:qa`, sendState: 'failed' }), false);
     assert.equal(pinkieQueueUnconfirmed({ sessionKey: `agent:${mode}:qa` }), false);
   }
   assert.equal(pinkieQueueUnconfirmed({ sessionKey: 'agent:other:qa', sendState: 'unconfirmed' }), false);
+  assert.equal(pinkieQueueUnconfirmed({ sessionKey: 'agent:metre:qa', sendState: 'unconfirmed' }), false);
   assert.equal(pinkieQueueUnconfirmed(null), false);
 });
 
 test('UI patch preserves status, exposes retry and blocks implicit draining; unknown bundles fail closed', () => {
   const result = transformWithStatus(fixture);
   assert.equal(result.changed, true);
-  assert.match(result.text, /pinkie-queue-unconfirmed:v1/);
+  assert.match(result.text, /pinkie-queue-unconfirmed:v2/);
   assert.match(result.text, /pinkieQueueUnconfirmed\(e\)\?e.sendState:void 0/);
   assert.match(result.text, /pinkieQueueUnconfirmed\(t\)\?o.sendState=t.sendState/);
   assert.match(result.text, /pinkieQueueUnconfirmed\(t\)&&!t.pendingRunId/);
@@ -34,4 +35,14 @@ test('UI patch preserves status, exposes retry and blocks implicit draining; unk
   assert.equal(transformWithStatus(result.text).reason, 'already-patched');
   assert.equal(transformWithStatus('different UI').reason, 'unsupported-ui');
   assert.equal(transformWithStatus(fixture + '\n' + fixture).reason, 'unsupported-ui');
+});
+
+test('already bundled v1 can be upgraded in place without duplicating the native hook', () => {
+  const patched = transformWithStatus(fixture).text;
+  const legacy = patched.replace('pinkie-queue-unconfirmed:v2', 'pinkie-queue-unconfirmed:v1')
+    .replace('|learning|unrestricted)', '|learning)');
+  const upgrade = transformWithStatus(legacy);
+  assert.equal(upgrade.changed, true);
+  assert.equal(upgrade.text, patched);
+  assert.equal(transformWithStatus(upgrade.text).reason, 'already-patched');
 });
