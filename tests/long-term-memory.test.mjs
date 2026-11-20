@@ -142,3 +142,45 @@ test('clear removes only the active project namespace and never silently prunes 
   assert.equal(memory.list(a).records.length, 0);
   assert.equal(memory.list(b).records[0].text, 'B');
 });
+
+// 11-19 用户：「碧琪不会改和优化，只会不断往里面加，说到关键的东西会翻到以前的内容」。
+test('saying the same thing again updates the old memory instead of piling up a new one', t => {
+  const {home, roots, stateRoot} = fixture(t);
+  let clock = 1_900_000_000_000;
+  const memory = new LongTermMemoryStore({home, stateRoot, now: () => (clock += 60_000)});
+  memory.guardEnabled = false;
+  const chat = context(roots.chat, 'main');
+  const first = memory.captureExplicit(chat, '请记住我喜欢简洁的回复，不要太长');
+  const again = memory.captureExplicit(chat, '记住：我喜欢简洁一点的回复，别写太长');
+  assert.equal(again.merged, true);
+  assert.equal(again.record.id, first.record.id);
+  assert.equal(again.record.revisions, 1);
+  const agent = memory.remember(chat, {kind: 'preference', text: '我喜欢简洁的回复，不要写太长'});
+  assert.equal(agent.record.id, first.record.id, 'an unkeyed save of the same preference updates it too');
+  const records = memory.list(chat).records;
+  assert.equal(records.length, 1);
+  assert.match(records[0].text, /简洁的回复/);
+});
+
+test('look-alike memories about different things stay separate; deliberate keys are never merged', t => {
+  const {memory, roots} = fixture(t);
+  memory.guardEnabled = false;
+  const chat = context(roots.chat, 'main');
+  for (const text of ['做海报不要用亮色', '做PPT不要用亮色', '我喜欢猫', '我喜欢狗', '以后回复都用中文']) memory.captureExplicit(chat, '请记住' + text);
+  memory.remember(chat, {kind: 'preference', key: 'reply:length', text: '回复简洁，不要太长'});
+  memory.remember(chat, {kind: 'preference', key: 'reply:length-in-reports', text: '回复简洁，不要太长，报告除外'});
+  assert.equal(memory.list(chat).records.length, 7);
+});
+
+test('an explicit id rewrites that memory, and recalled memory tells Pinkie how to tidy it', t => {
+  const {memory, roots} = fixture(t);
+  memory.guardEnabled = false;
+  const chat = context(roots.chat, 'main');
+  const old = memory.remember(chat, {kind: 'preference', text: '做海报用粉色'});
+  const fixed = memory.remember(chat, {id: old.record.id, kind: 'preference', text: '做海报用蓝色，粉色太甜'});
+  assert.equal(fixed.record.id, old.record.id);
+  assert.deepEqual(memory.list(chat).records.map(record => record.text), ['做海报用蓝色,粉色太甜']);
+  const prompt = renderRetrievedMemory(memory.retrieve(chat, '海报'));
+  assert.match(prompt, /更新于 \d{4}-\d{2}-\d{2}/);
+  assert.match(prompt, /带上它的记忆ID 改写这一条/);
+});
