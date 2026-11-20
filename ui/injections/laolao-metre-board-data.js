@@ -307,7 +307,7 @@
   }
   async function fillMemory(key) {
     if (!key) { board()?.fill('memory', empty('先在 Metre 里开一个会话，这里显示它所在文件夹的记忆。')); return; }
-    try { board()?.fill('memory', await memoryNode(key)); } catch { /* 断线时保留上一次 */ }
+    try { const node = await memoryNode(key); keep(() => board()?.fill('memory', node)); } catch { /* 断线时保留上一次 */ }
   }
 
   // ---------- 总览、按钮、数字 ----------
@@ -356,10 +356,13 @@
     const page = document.getElementById('pk-metre-board');
     if (!page) return;
     let note = page.querySelector('.pk-metre-board__notice');
-    if (!html) { note?.remove(); return; }
-    if (!note) { note = h('p', 'pk-metre-board__notice'); page.querySelector('.pk-metre-board__scroll')?.prepend(note); }
-    note.setAttribute('role', 'status');
-    note.innerHTML = html;
+    // 这一条在滚动区最顶上：加上、拿掉、换字都会把下面整片往下推或往上拽，也走 keepPlace。
+    keep(() => {
+      if (!html) { note?.remove(); return; }
+      if (!note) { note = h('p', 'pk-metre-board__notice'); page.querySelector('.pk-metre-board__scroll')?.prepend(note); }
+      note.setAttribute('role', 'status');
+      note.innerHTML = html;
+    });
   }
   // 两种「拿不到现在的情况」：连接断了（lost），或者连着但后端 RPC_MS 都没回话（timeout，卡住或太忙）。
   // 两种都按断线处理：数据变灰、「在跑」改成「断线前在跑」，不显示成还在跑，也不显示成做完。
@@ -407,6 +410,11 @@
       view = {...view, plan: {...view.plan, items: view.plan.items.map((item) => item.status === 'active' ? {...item, status: 'idle-active'} : item)}};
     const now = view.at || Date.now();
     if (stale) queueMicrotask(() => b.enableActions({}));   // 断着的时候按钮点了也没用：禁掉，免得以为点了生效
+    keep(() => paint(b, view, now));
+  }
+  // 重画都经过面板的 keepPlace：正在看哪一块，换完还停在那一块（WebKit 换内容会把滚动区打回顶上）。
+  const keep = (fn) => (typeof board()?.keepPlace === 'function' ? board().keepPlace(fn) : fn());
+  function paint(b, view, now) {
     overview(view.overview, now);
     b.fill('plan', planNode(view.plan));
     b.fill('sessions', sessionsNode(view.sessions || [], now));
@@ -445,7 +453,6 @@
       data = view; dataAt = Date.now();
       window.dispatchEvent(new CustomEvent('pinkie:metre-board-data'));
       setStale(false);
-      document.querySelector('#pk-metre-board .pk-metre-board__notice')?.remove();
       render(view);
       watch(view);
       void fillMemory(key);

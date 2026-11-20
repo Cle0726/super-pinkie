@@ -297,6 +297,21 @@
       if (hadFocus) lastFocus?.focus?.({preventScroll: true});
     },
     toggle(section) { return api.isOpen ? (api.close(), false) : api.open(section); },
+    // 重画时保住读到的位置（11-19 用户：「总谱页面乱跳」）。数据层每秒最多刷一次，把数字和各块整块换掉：
+    // WebKit 没有滚动锚定，换掉滚动区里的内容会把滚动区打回顶上，上面的块变高变矮也会把正在看的往下推、往上拽。
+    // 换之前记下视口顶上那一块和它离视口顶的距离，换完把它摆回原处；人在滚动区顶上时不动。
+    keepPlace(fn) {
+      const scroll = page?.querySelector('.pk-metre-board__scroll');
+      if (!scroll || page.hidden || scroll.scrollTop <= 0) return fn();
+      const top = scroll.scrollTop;
+      const blocks = [...scroll.children].flatMap((node) => node.classList.contains('pk-metre-board__grid') ? [...node.children] : [node]);
+      const anchor = blocks.find((node) => node.offsetTop + node.offsetHeight > top + scroll.offsetTop);
+      const gap = anchor ? anchor.offsetTop - top : 0;
+      try { return fn(); } finally {
+        const want = anchor?.isConnected ? anchor.offsetTop - gap : top;
+        if (Math.abs(scroll.scrollTop - want) >= 1) scroll.scrollTop = want;
+      }
+    },
     fill(id, node) {
       if (!page) build();
       const host = card(id);

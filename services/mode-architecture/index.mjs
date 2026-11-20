@@ -6882,7 +6882,7 @@ function createLongTermMemoryTool(memory, context = {}) {
   return {
     name: 'clekk_memory',
     label: '独立长期记忆',
-    description: '管理当前模式、当前项目的独立长期记忆。remember/forget 只能由主会话执行；子代理仅可 search/list。不同模式使用不同物理记忆库，不会串库。',
+    description: '管理当前模式、当前项目的独立长期记忆。remember 带 id 是改写那一条（改、并都用它），不带 id 是新存一条；forget 删掉过时、错了或已并掉的。存之前先 search 有没有同类的旧记录。remember/forget 只能由主会话执行；子代理仅可 search/list。不同模式使用不同物理记忆库，不会串库。',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
