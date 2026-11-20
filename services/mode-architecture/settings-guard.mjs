@@ -473,6 +473,9 @@ export class SettingsGuard {
     // 群聊等专用 agent 的工作区也带产品手册；无限制模式归用户，不在内。
     for (const agent of agentEntries(config)) {
       if (!agent?.id || agent.id === 'unrestricted' || PRODUCT_AGENTS.includes(agent.id)) continue;
+      // 不注入工作区文件的 agent（Metre 的私有 roles agent）：里面的文件进不了提示词，不是设定。
+      // OpenClaw 会给这种新工作区写 BOOTSTRAP.md，当成「额外加入的设定文件」会让升级后的用户看到误报。
+      if (agent.contextInjection === 'never') continue;
       const dir = expandHome(agent.workspace, this.home);
       if (dir && path.isAbsolute(dir) && /[\\/]\.openclaw[^\\/]*[\\/]workspace-/.test(dir) && !/workspace-unrestricted/.test(dir)) list.add(dir);
     }

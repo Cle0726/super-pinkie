@@ -1,7 +1,11 @@
 {
   "native_only_assets": {
-    "PinkieAppIcon.icns": "macOS native App icon, outside the browser surface"
+    "PinkieAppIcon.icns": "macOS native App icon, outside the browser surface",
+    "laolao-splash.mp4": "Development opening video, loaded by the native launcher",
+    "laolao-splash-release.mp4": "Release opening video, staged by the native packager",
+    "laolao-splash-video-poster.png": "Development opening poster, loaded by the native launcher",
+    "laolao-splash-video-poster-release.png": "Release opening poster, staged by the native packager"
   },
   "platform_differences": [],
-  "notes": "The browser surface has no platform exclusions. Native runtimes, window controls and app icons are outside its manifest."
+  "notes": "The browser surface has no platform exclusions. Native runtimes, window controls, app icons and launcher opening assets are outside its manifest."
 }

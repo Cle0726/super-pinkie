@@ -144,6 +144,20 @@ class ModeAgentRegistrationTests(unittest.TestCase):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
         self.assertEqual(super_pinkie.configured_agent_ids()[:2], ["main", "pinkie-party"])
 
+    def test_bare_main_gets_its_workspace_written_out(self):
+        # services/mode-architecture can leave {"id": "main"} first in the list.
+        # The release guard would fill the workspace in on the next start and
+        # report it as tampering, so setup writes it out itself.
+        config = self.home / ".openclaw/openclaw.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(json.dumps({"agents": {"list": [{"id": "main", "tools": {"deny": ["canvas"]}}, {"id": "roles"}]}}), encoding="utf-8")
+        self.assertTrue(super_pinkie.ensure_main_agent(self.logs.append, config))
+        main = json.loads(config.read_text(encoding="utf-8"))["agents"]["list"][0]
+        self.assertEqual(main, {"id": "main", "tools": {"deny": ["canvas"]}, "workspace": str(self.home / ".openclaw/workspace")})
+        before = config.read_bytes()
+        self.assertTrue(super_pinkie.ensure_main_agent(self.logs.append, config))
+        self.assertEqual(config.read_bytes(), before)
+
     def test_main_is_repaired_even_when_the_cli_fails(self):
         self.write_config(["pinkie-party"])
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):

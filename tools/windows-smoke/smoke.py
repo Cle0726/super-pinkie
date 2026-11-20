@@ -54,6 +54,39 @@ def find_exe(app_dir):
     raise SystemExit(f"no 超級碧琪.exe under {app_dir}")
 
 
+REPO = Path(__file__).resolve().parents[2]
+
+
+def release_info(exe):
+    """The user (release-channel) build: guard on, channel release, written into the package."""
+    for base in (exe.parent / "_internal", exe.parent):
+        info_file = base / "build-info.json"
+        if info_file.is_file():
+            try:
+                info = json.loads(info_file.read_text(encoding="utf-8-sig"))
+            except ValueError:
+                return None
+            return info if info.get("guard") is True and info.get("channel") == "release" else None
+    return None
+
+
+def release_package_checks(exe):
+    """A release package ships the release opening video and poster, never the dev ones."""
+    import hashlib
+
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    expected = {
+        "laolao-splash.mp4": digest(REPO / "ui/assets/laolao-splash-release.mp4"),
+        "laolao-splash-video-poster.png": digest(REPO / "ui/assets/laolao-splash-video-poster-release.png"),
+    }
+    found = {name: [] for name in expected}
+    for name in expected:
+        for path in exe.parent.rglob(name):
+            found[name].append({"path": str(path.relative_to(exe.parent)), "release": digest(path) == expected[name]})
+    passed = all(found[name] and all(item["release"] for item in found[name]) for name in expected)
+    return {"passed": passed, "splash": found}
+
+
 def runtime_dir(exe):
     for base in (exe.parent / "_internal", exe.parent):
         if (base / "runtime/bin/node.exe").is_file():
@@ -144,8 +177,23 @@ def desktop_shot(path):
         log(f"desktop screenshot failed: {error}")
 
 
+def guard_alerts(env):
+    path = Path(env["LOCALAPPDATA"]) / "SuperPinkie/logs/guard.log"
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    return [line.strip()[:200] for line in lines if "alert:" in line]
+
+
+def guard_alert(env, since=0):
+    """The first guard notice raised after the first `since` ones."""
+    return next(iter(guard_alerts(env)[since:]), "")
+
+
 def launch(exe, env, out, label, timeout=480):
     log(f"[{label}] launching {exe}")
+    seen = len(guard_alerts(env))
     process = subprocess.Popen([str(exe)], env=env, cwd=str(exe.parent))
     started = time.monotonic()
     while time.monotonic() - started < timeout:
@@ -153,6 +201,10 @@ def launch(exe, env, out, label, timeout=480):
             break
         if process.poll() is not None:
             log(f"[{label}] exe exited early with {process.returncode}")
+            break
+        if guard_alert(env, seen):
+            # The guard's message box holds startup until someone clicks it.
+            log(f"[{label}] guard notice raised: {guard_alert(env, seen)}")
             break
         time.sleep(2)
     ready = http_ready()
@@ -241,6 +293,9 @@ def collect_files(profile, out, label):
         ("setup.log", r"安装失败|⚠️"),
         ("launcher.log", r"service failed|startup failed|gateway start failed"),
         ("gateway.log", r"failed to load|plugin\(s\) failed"),
+        # A guard notice on an untouched profile means the App flagged its
+        # own setup as tampering (and the box blocks startup until clicked).
+        ("guard.log", r"alert:"),
     ):
         path = logs / name
         if path.is_file():
@@ -271,10 +326,50 @@ PAGE_STATE = r"""() => {
 }"""
 
 
-def drive_ui(out, label):
+METRE_DIALOG = ".laolao-metre-lock-dialog"
+METRE_LOCK_READY = r"""async () => {
+  const status = await window.__laolaoSidebar?.gwRequest('pinkie.guard.metreStatus', {}, 8000);
+  return status?.required === true && status.configured === true && status.locked === true && !status.unlocked;
+}"""
+
+
+def still_outside_metre(before, state):
+    return bool(before["mode"] and before["mode"] != "metre"
+                and state["mode"] == before["mode"] and state["pending"] != "metre"
+                and not any(state[key].lower().startswith("agent:metre:") for key in ("session", "shellSession")))
+
+
+def open_release_metre_prompt(page, before, timeout_error, label):
+    password = page.locator(f'{METRE_DIALOG} input[type="password"]')
+
+    def select_metre():
+        page.click(".laolao-mode-switcher", timeout=15_000)
+        page.locator('.laolao-mode-menu__option[data-mode="metre"]').click(timeout=10_000)
+
+    select_metre()
+    try:
+        password.wait_for(state="visible", timeout=20_000)
+        return "first"
+    except timeout_error:
+        # A previous mode switch reloads the chat page. Its new gateway socket
+        # can still be connecting, and the status request can outlast this wait.
+        # Retry only this missing prompt, and only once the real lock answers.
+        if not still_outside_metre(before, page.evaluate(PAGE_STATE)):
+            raise RuntimeError("mode/session changed without showing the Metre password prompt")
+        if not page.evaluate(METRE_LOCK_READY):
+            raise RuntimeError("gateway did not confirm the configured Metre lock before retry")
+        if password.is_visible():
+            return "late"
+        log(f"[{label}] Metre password prompt timed out; retrying once after the lock answered")
+        select_metre()
+        password.wait_for(state="visible", timeout=20_000)
+        return "retry"
+
+
+def drive_ui(out, label, release=False):
     # Let the context report the service worker's own requests (see measure_loads).
     os.environ.setdefault("PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS", "1")
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
     result = {"modes": {}, "console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": []}
     console = []
@@ -307,19 +402,61 @@ def drive_ui(out, label):
             if scheme == "dark":
                 context.close()
                 break
+            if release:
+                # The user build asks once whether to send usage summaries. It
+                # is a modal over the whole window: answer 暂不开启 like a user
+                # who skips it, and check nothing is sent before they choose.
+                prompt = {"ok": False}
+                try:
+                    page.wait_for_selector("#pinkie-feedback-onboarding", state="visible", timeout=45_000)
+                    prompt["status_before"] = page.evaluate("""async () => {
+                      const s = await window.__laolaoSidebar.gwRequest('pinkie.feedback.status', {}, 15000);
+                      return {ok: s?.ok, isRelease: s?.isRelease, asked: s?.asked, consent: s?.consent};
+                    }""")
+                    page.screenshot(path=str(out / f"{label}-feedback-prompt.png"))
+                    page.click('#pinkie-feedback-onboarding [data-choice="decline"]', timeout=10_000)
+                    page.wait_for_selector("#pinkie-feedback-onboarding", state="detached", timeout=15_000)
+                    prompt["status_after"] = page.evaluate("""async () => {
+                      const s = await window.__laolaoSidebar.gwRequest('pinkie.feedback.status', {}, 15000);
+                      return {ok: s?.ok, asked: s?.asked, consent: s?.consent};
+                    }""")
+                    before, after = prompt["status_before"], prompt["status_after"]
+                    prompt["ok"] = bool(before.get("isRelease") is True and before.get("consent") is not True
+                                        and after.get("asked") is True and after.get("consent") is not True)
+                except Exception as error:
+                    prompt["error"] = str(error)
+                result["feedback_prompt"] = prompt
+                log(f"[{label}] feedback prompt: ok={prompt['ok']}")
             # A plugin may fail to register without a visible load error. Ask
             # the real gateway for two read-only methods supplied by it.
-            result["plugin_methods"] = page.evaluate("""async () => {
+            # In the user (release) build Metre stays behind the developer
+            # password: the board must be refused and the lock must report
+            # itself configured and locked. A dev build must answer it.
+            result["plugin_methods"] = page.evaluate("""async (release) => {
               const checks = [
                 ['usage', 'pinkie.usage.get', {}],
                 ['workbench', 'pinkie.fs.status', {sessionKey: 'agent:project:main'}],
                 ['metre_board', 'pinkie.metre.board', {sessionKey: 'agent:metre:main'}],
               ];
               const result = {};
+              const rpc = (method, params) => {
+                if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
+                return window.__laolaoSidebar.gwRequest(method, params, 15000);
+              };
               for (const [name, method, params] of checks) {
                 try {
-                  if (!window.__laolaoSidebar?.gwRequest) throw new Error('gateway client unavailable');
-                  const value = await window.__laolaoSidebar.gwRequest(method, params, 15000);
+                  if (name === 'metre_board' && release) {
+                    const status = await rpc('pinkie.guard.metreStatus', {});
+                    if (!status?.required || !status.locked || status.unlocked || status.configured === false) {
+                      throw new Error('release build: Metre lock is not required, configured and locked: ' + JSON.stringify(status));
+                    }
+                    let refused = '';
+                    try { await rpc(method, params); } catch (error) { refused = String(error?.message || error); }
+                    if (!refused.includes('开发者密码')) throw new Error('release build: locked Metre board was not refused: ' + (refused || 'answered'));
+                    result[name] = {ok: true, locked: true, refused};
+                    continue;
+                  }
+                  const value = await rpc(method, params);
                   if (name === 'metre_board' && (!value?.ok || !value.overview || !Array.isArray(value.sessions))) {
                     throw new Error('Metre board did not return a valid overview and session list');
                   }
@@ -327,9 +464,28 @@ def drive_ui(out, label):
                 } catch (error) { result[name] = {ok: false, error: String(error)}; }
               }
               return result;
-            }""")
+            }""", release)
             for index, (mode, prefix) in enumerate(MODES):
                 entry = {"ok": False}
+                if release and mode == "metre":
+                    # The user build asks for the developer password and stays
+                    # where it was when the prompt is cancelled.
+                    try:
+                        before = page.evaluate(PAGE_STATE)
+                        entry["prompt_delivery"] = open_release_metre_prompt(page, before, PlaywrightTimeoutError, label)
+                        page.screenshot(path=str(out / f"{label}-mode-{index + 1}-metre-locked.png"))
+                        page.keyboard.press("Escape")
+                        page.wait_for_selector(METRE_DIALOG, state="detached", timeout=10_000)
+                        page.wait_for_timeout(1500)
+                        entry["state"] = page.evaluate(PAGE_STATE)
+                        entry["locked_prompt"] = True
+                        entry["ok"] = still_outside_metre(before, entry["state"])
+                    except Exception as error:
+                        entry["error"] = str(error)
+                    page.screenshot(path=str(out / f"{label}-mode-{index + 1}-{mode}.png"))
+                    result["modes"][mode] = entry
+                    log(f"[{label}] mode {mode}: locked prompt ok={entry['ok']}")
+                    continue
                 try:
                     page.click(".laolao-mode-switcher", timeout=15_000)
                     page.wait_for_selector(".laolao-mode-menu__option", timeout=10_000)
@@ -534,6 +690,9 @@ def seed_metre_user_data(exe, profile):
 
 def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary = {"label": label, "exe": str(exe)}
+    release = release_info(exe)
+    if release:
+        summary["release"] = {"build_info": release, **release_package_checks(exe)}
     env = profile_env(profile)
     preserved = {}
     if old_exe:
@@ -564,7 +723,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
                     if not all(receipt["preservedUserFiles"].values()):
                         raise RuntimeError("the packaged update modified fixture user data")
                 summary["metre_roles"] = receipt
-            summary["ui"] = drive_ui(out, label)
+            summary["ui"] = drive_ui(out, label, release=bool(release))
             summary["service_health"] = service_health()
             summary["native_ui"] = capture_native_ui(exe, env, out, label, process.pid)
     except Exception as error:
@@ -576,6 +735,8 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     plugin_methods = summary.get("ui", {}).get("plugin_methods", {})
     summary["passed"] = bool(
         ready
+        and (not release or summary["release"]["passed"])
+        and (not release or summary.get("ui", {}).get("feedback_prompt", {}).get("ok"))
         and (not metre_roles or bool(summary.get("metre_roles")))
         and not summary.get("agents", {}).get("missing", AGENTS)
         and fresh_mode_identities_ok(label, summary.get("agents", {}))
@@ -628,6 +789,15 @@ def main():
     }
     if http_ready():
         raise SystemExit("port 18789 is already in use before the smoke test")
+    if release_info(exe):
+        # Dispatching from Metre needs the developer password in the user
+        # build; its lock is checked in the scenarios instead.
+        if args.metre_sidebar_only:
+            log("release build: Metre is locked, nothing to probe in the Metre sidebar")
+            return 0
+        if args.metre_sidebar or args.metre_roles:
+            log("release build: skipping the Metre sidebar / role dispatch probes (Metre is locked)")
+        args.metre_sidebar = args.metre_roles = False
     if args.metre_sidebar_only:
         import upstream_probe
         try:

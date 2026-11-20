@@ -734,3 +734,23 @@ test('METHODS.md, AESTHETICS.md, guard-receipt.json are protected, and guard-bui
   assert.equal(st.counterTampered, false);
   assert.equal(st.strikesIn24h, 1);
 });
+
+test('a workspace whose files are never injected (Metre roles) is not watched as a persona', () => {
+  const {state, ws, wsp, guard} = sandbox();
+  const roles = path.join(state, 'workspace-roles');
+  const party = path.join(state, 'workspace-pinkie-party');
+  for (const dir of [roles, party]) fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(path.join(state, 'openclaw.json'), JSON.stringify({agents: {list: [
+    {id: 'main', workspace: ws}, {id: 'project', workspace: wsp},
+    {id: 'roles', workspace: roles, contextInjection: 'never'},
+    {id: 'pinkie-party', workspace: party},
+  ]}}));
+  const dirs = guard.workspaces().map(w => w.dir);
+  assert.equal(dirs.includes(roles), false);
+  assert.equal(dirs.includes(party), true);
+  guard.baseline();
+  // OpenClaw seeds a new workspace with BOOTSTRAP.md; for roles that is not a settings change.
+  fs.writeFileSync(path.join(roles, 'BOOTSTRAP.md'), '# BOOTSTRAP.md - Hello, World');
+  assert.deepEqual(guard.verifyAfterCommand('watch'), []);
+  assert.equal(fs.existsSync(path.join(roles, 'BOOTSTRAP.md')), true);
+});

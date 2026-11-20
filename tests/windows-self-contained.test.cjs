@@ -399,3 +399,44 @@ test('the injected bridge waits for a document it can actually append to', () =>
   assert.ok(controls, 'the window controls must appear once the document can take them');
   assert.ok(document.body.children.includes(controls), 'the controls must land in the body');
 });
+
+test('links inside the chat UI stay with its router; other local pages go back to chat', () => {
+  // The bridge used to send every 127.0.0.1:18789 link to open_chat, so the
+  // sidebar's 设置 (/settings/general) reloaded the chat page instead of
+  // opening settings.
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  const run = (pageUrl) => {
+    const clicks = [];
+    const calls = [];
+    const element = () => {
+      const node = {
+        id: '', className: '', textContent: '', innerHTML: '', children: [], style: {}, dataset: {},
+        classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+        toggleAttribute() {}, setAttribute() {}, getAttribute: () => null, append(...kids) { node.children.push(...kids); },
+        prepend() {}, querySelector: () => null, querySelectorAll: () => [], remove() {}, addEventListener() {},
+      };
+      return node;
+    };
+    const document = {
+      documentElement: element(), body: null, head: element(),
+      getElementById: () => null, querySelector: () => null, querySelectorAll: () => [], createElement: element,
+      addEventListener: (type, handler) => { if (type === 'click') clicks.push(handler); },
+    };
+    const api = new Proxy({}, { get: (_, name) => (...args) => { calls.push([name, ...args]); return Promise.resolve(); } });
+    const url = new URL(pageUrl);
+    vm.runInNewContext(found[1], {
+      document, URL, URLSearchParams, Promise,
+      window: { addEventListener() {}, dispatchEvent() {}, pywebview: { api } },
+      location: { protocol: url.protocol, host: url.host, search: url.search, href: url.href },
+      Event: class { constructor(type) { this.type = type; } },
+      setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
+    });
+    const link = { href: new URL('/settings/general', 'http://127.0.0.1:18789/').href };
+    const event = { target: { closest: selector => (selector === 'a[href]' ? link : null) }, defaultPrevented: false,
+      preventDefault() { this.defaultPrevented = true; } };
+    for (const handler of clicks) handler(event);
+    return { prevented: event.defaultPrevented, opened: calls.some(([name]) => name === 'open_chat') };
+  };
+  assert.deepEqual(run('http://127.0.0.1:18789/chat?session=agent%3Amain%3Amain'), { prevented: false, opened: false });
+  assert.deepEqual(run('http://127.0.0.1:18790/party'), { prevented: true, opened: true });
+});

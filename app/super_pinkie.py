@@ -637,15 +637,23 @@ def ensure_main_agent(log, config_path=None):
             log("  ⚠️ openclaw.json 的 agents.list 不是列表，没有改动")
             return False
         index = next((i for i, item in enumerate(listed) if isinstance(item, dict) and item.get("id") == "main"), None)
+        workspace = str(path.parent / "workspace")
         if index == 0:
-            return True
-        if index is None:
-            entry = {"id": "main", "workspace": str(path.parent / "workspace")}
+            if listed[0].get("workspace"):
+                return True
+            # Other setup steps may add a bare {"id": "main"}. The release
+            # guard expects main's workspace to be written out and would
+            # otherwise "repair" it on the next start with a tampering notice.
+            listed[0]["workspace"] = workspace
+            message = "  已写明 main（唠嗑）模式的工作区"
+        elif index is None:
+            listed.insert(0, {"id": "main", "workspace": workspace})
             message = "  已补齐 main（唠嗑）模式"
         else:
             entry = listed.pop(index)
+            entry.setdefault("workspace", workspace)
+            listed.insert(0, entry)
             message = "  已把 main（唠嗑）模式放回默认位置"
-        listed.insert(0, entry)
         # The gateway may still be running after the window was closed. Do
         # check for an edit made since we read the configuration.
         fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-main-")

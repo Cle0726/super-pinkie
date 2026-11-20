@@ -45,11 +45,11 @@
   };
   // 节日 / 放假当天：每个模式一句节日问候，{f} 换成节日名。当天第一次打开就是它，之后它被选中的机会是普通问候的 3 倍。
   const festivalLines = Object.freeze({
-    chat: '今天是{f}，先生，忙完这一段，留一点时间给自己和身边的人',
-    project: '今天是{f}，老板，活儿挑最要紧的做，剩下的留给明天',
-    thinking: '今天是{f}，先生，节日里冒出来的念头，也值得好好记下',
-    learning: '今天是{f}，先生，学一会儿，就去好好过节吧',
-    unrestricted: '今天是{f}，先生，今天想聊什么都行，碧琪陪你过',
+    chat: '今天是{f}，忙完这一段，留一点时间给自己和身边的人',
+    project: '今天是{f}，活儿挑最要紧的做，剩下的留给明天',
+    thinking: '今天是{f}，节日里冒出来的念头，也值得好好记下',
+    learning: '今天是{f}，学一会儿，就去好好过节吧',
+    unrestricted: '今天是{f}，想聊什么都行，碧琪陪你过',
   });
   const FESTIVAL_WEIGHT = 3;
   const greeting = (mode, date = new Date(), random = Math.random, cache = new Map(), festival = null) => {

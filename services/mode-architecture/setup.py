@@ -360,7 +360,10 @@ def _ensure_roles_agent(data: dict, workspace: Path) -> None:
     else:
         listing = agents.setdefault("list", [])
         if not listing:
-            listing.append({"id": "main"})
+            # Same workspace the guard expects for main; a bare entry is
+            # "repaired" by the release guard on the next start and shown
+            # to the user as a tampering notice.
+            listing.append({"id": "main", "workspace": str(workspace.parent / "workspace")})
         agent = next((item for item in listing if isinstance(item, dict) and item.get("id") == "roles"), None)
         if agent is None:
             agent = {"id": "roles"}

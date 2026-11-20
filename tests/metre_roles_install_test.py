@@ -95,6 +95,9 @@ class MetreRolesInstallTests(unittest.TestCase):
                 settings = json.loads(first)
                 main, roles = settings["agents"]["list"]
                 self.assertEqual((main["id"], roles["id"]), ("main", "roles"))
+                # The release guard rewrites a bare main entry and tells the user
+                # their settings were tampered with; setup must write it out.
+                self.assertEqual(Path(main["workspace"]), state / "workspace")
                 self.assertEqual(Path(roles["workspace"]), state / "workspace-roles")
                 self.assertEqual(roles["contextInjection"], "never")
                 self.assertFalse((state / "workspace-roles/memory").exists())
