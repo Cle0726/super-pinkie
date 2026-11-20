@@ -27,7 +27,9 @@ jobs:
           deps="$RUNNER_TEMP/pinkie-ui-activation-diagnostic"
           version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
           npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version"
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pinkie-playwright-browsers"
           "$deps/node_modules/.bin/playwright" install webkit
+          echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" >> "$GITHUB_ENV"
           echo "PINKIE_UI_DEPS=$deps" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:

@@ -6,7 +6,7 @@ const {webkit} = require('playwright');
 const origin = 'http://127.0.0.1:18789';
 const browser = await webkit.launch({headless: true});
 try {
-  const page = await browser.newPage();
+  const page = await browser.newPage({serviceWorkers: 'block'});
   await page.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await page.goto(origin + '/chat', {waitUntil: 'domcontentloaded', timeout: 25_000});
   let ready = true;
