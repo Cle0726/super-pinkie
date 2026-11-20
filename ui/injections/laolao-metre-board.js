@@ -128,11 +128,11 @@
   const icon = (name) => `<svg class="pk-mb-ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
   const SLOTS = [
     {id: 'plan', en: 'Programme', title: '节目单', note: '这件事拆成的几支曲子（步骤），奏到哪一支、哪一支卡住。', source: 'pinkie.metre.board → plan'},
-    {id: 'sessions', en: 'Parts', title: '声部', wide: true, note: '一个声部一行：谁在奏（模型）、奏到哪、奏了多久、用量；可以打开、停止、递一句话。', source: 'pinkie.metre.board → sessions'},
+    {id: 'sessions', en: 'Parts', title: '声部', wide: true, note: '一个声部一行：谁在奏（角色与模型）、奏到哪、奏了多久、用量；可以打开、停止、递一句话。', source: 'pinkie.metre.board → sessions'},
     {id: 'pending', en: 'Cues', title: '等你', note: '等你回答的问题和等你点的确认。有内容时标题上出数字。', source: 'pinkie.metre.board → pending'},
     {id: 'timeline', en: 'Bars', title: '小节', note: '分谱、交回、打回、验收、出错、收住，一小节一行，新的在上。', source: 'pinkie.metre.board → timeline'},
     {id: 'changes', en: 'Revisions', title: '改谱', note: '各声部动过的文件，按声部分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
-    {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
+    {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、角色卡检查、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
     {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索。', source: 'pinkie.metre.memory（接口已有，面板没接）'},
     {id: 'raw', en: 'Log', title: '排练记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];

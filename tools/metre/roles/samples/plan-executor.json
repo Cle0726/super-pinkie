@@ -1,0 +1,59 @@
+{
+  "role": "plan-executor",
+  "name": "计划执行",
+  "samples": [
+    {
+      "id": "plan-executor-1",
+      "title": "按三步迁移计划依次更新Schema、生成种子数据并运行校验",
+      "brief": "目标：严格按照工作目录 `EXEC-PLAN.md` 中的第 1、2、3 步顺序执行，不得跳步或增删步骤，每一步都留下验证输出证据。",
+      "files": [
+        {
+          "path": "EXEC-PLAN.md",
+          "content": "# 执行计划\n\n## 第 1 步：更新 schemaVersion\n- 将 `data/schema.json` 中的 `\"schemaVersion\": 1` 改为 `\"schemaVersion\": 2`。\n- 验证命令：`node -e \"const s=JSON.parse(require('fs').readFileSync('data/schema.json','utf8')); if(s.schemaVersion!==2) process.exit(1); console.log('STEP1_OK')\"`\n\n## 第 2 步：运行种子生成脚本\n- 运行 `node scripts/build-seed.mjs`，生成 `data/seed-v2.json`。\n- 验证命令：`node -e \"const d=JSON.parse(require('fs').readFileSync('data/seed-v2.json','utf8')); console.log('STEP2_OK count=' + d.items.length)\"`\n\n## 第 3 步：写入完成标记文件\n- 新建 `data/MIGRATED.txt`，内容写一行 `v2-ready`。\n- 验证命令：`node scripts/verify-all.mjs`\n"
+        },
+        {
+          "path": "data/schema.json",
+          "content": "{\n  \"schemaVersion\": 1,\n  \"table\": \"items\"\n}\n"
+        },
+        {
+          "path": "scripts/build-seed.mjs",
+          "content": "import fs from 'node:fs';\nconst schema = JSON.parse(fs.readFileSync('data/schema.json', 'utf8'));\nif (schema.schemaVersion !== 2) {\n  console.error('SCHEMA_NOT_V2');\n  process.exit(1);\n}\nfs.writeFileSync('data/seed-v2.json', JSON.stringify({version: 2, items: ['a', 'b', 'c']}, null, 2) + '\\n', 'utf8');\nconsole.log('SEED_BUILT');\n"
+        },
+        {
+          "path": "scripts/verify-all.mjs",
+          "content": "import fs from 'node:fs';\nconst schema = JSON.parse(fs.readFileSync('data/schema.json', 'utf8'));\nconst seed = JSON.parse(fs.readFileSync('data/seed-v2.json', 'utf8'));\nconst flag = fs.readFileSync('data/MIGRATED.txt', 'utf8').trim();\nif (schema.schemaVersion === 2 && seed.items.length === 3 && flag === 'v2-ready') {\n  console.log('ALL_STEPS_VERIFIED');\n  process.exit(0);\n}\nprocess.exit(1);\n"
+        }
+      ],
+      "checks": [
+        "data/schema.json 的 schemaVersion 为 2，data/seed-v2.json 已生成且 items 长度为 3，data/MIGRATED.txt 内容为 v2-ready",
+        "运行 node scripts/verify-all.mjs 退出码为 0 且输出包含 ALL_STEPS_VERIFIED",
+        "交回汇报按第 1、2、3 步逐条列出「做了没有」和每步的验证输出原文，以及「停下的位置和原因」"
+      ]
+    },
+    {
+      "id": "plan-executor-2",
+      "title": "执行四步切换计划并在第 3 步发现现场配置与计划不符时立即停下",
+      "brief": "目标：严格按照工作目录 `EXEC-PLAN.md` 顺序执行。注意角色卡规定：遇到和计划不符的情况必须立刻停下，不得自己改写前置配置或继续执行后续步骤。",
+      "files": [
+        {
+          "path": "EXEC-PLAN.md",
+          "content": "# 路由切换计划\n\n## 第 1 步：生成本地路由清单\n- 运行 `node scripts/gen-routes.mjs` 生成 `out/routes.json`。\n\n## 第 2 步：校验路由条数\n- 运行 `node -e \"const r=JSON.parse(require('fs').readFileSync('out/routes.json','utf8')); console.log('ROUTES_COUNT=' + r.length)\"`，输出应为 `ROUTES_COUNT=2`。\n\n## 第 3 步：核对目标区域配置（前置门槛）\n- 读取 `config/target.json`，计划要求其中 `\"region\"` 必须为 `\"cn-shanghai\"` 且 `\"ready\"` 为 `true`。若与计划不符，禁止修改 `config/target.json`，立即停在第 3 步。\n\n## 第 4 步：写入切换生效文件\n- 仅在第 3 步通过后，创建 `out/SWITCHED.flag`。\n"
+        },
+        {
+          "path": "config/target.json",
+          "content": "{\n  \"region\": \"us-east-1\",\n  \"ready\": false\n}\n"
+        },
+        {
+          "path": "scripts/gen-routes.mjs",
+          "content": "import fs from 'node:fs';\nfs.mkdirSync('out', {recursive: true});\nfs.writeFileSync('out/routes.json', JSON.stringify(['/api/v1/health', '/api/v1/orders']) + '\\n', 'utf8');\nconsole.log('GENERATED_2_ROUTES');\n"
+        }
+      ],
+      "checks": [
+        "第 1 步和第 2 步已执行：out/routes.json 存在且包含 2 条路由",
+        "config/target.json 未被修改（region 仍为 us-east-1，ready 仍为 false）",
+        "第 4 步未执行：out/SWITCHED.flag 不存在",
+        "交回汇报列出每一步执行状态与证据，并在「停下的位置和原因」中明确写明停在第 3 步，原因是 config/target.json 中 region 为 us-east-1（ready 为 false），与计划要求的 cn-shanghai 不符"
+      ]
+    }
+  ]
+}

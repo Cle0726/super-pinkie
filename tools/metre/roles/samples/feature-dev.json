@@ -1,0 +1,62 @@
+{
+  "role": "feature-dev",
+  "name": "功能开发",
+  "samples": [
+    {
+      "id": "feature-dev-1",
+      "title": "为记账导出模块新增按月份导出 CSV 功能",
+      "brief": "目标：在工作目录现有的记账项目里，参照 `src/exporter.mjs` 中已有的 `exportAllCsv(records)` 写法，在同一个文件中新增导出函数 `exportByMonthCsv(records, yearMonth)`。\n背景：项目约定见 `README.md`。`yearMonth` 格式为 `'YYYY-MM'`（如 `'2026-11'`）。\n要求：\n1. 先读 `README.md` 和已有测试 `test/exporter.test.mjs`。\n2. `exportByMonthCsv(records, yearMonth)` 只筛选 `record.date.startsWith(yearMonth)` 的记录，表头和列顺序与 `exportAllCsv` 一致（`id,date,category,amount`），按 `date` 升序排列；若 `yearMonth` 格式不是 `^\\d{4}-\\d{2}$` 则抛出 `TypeError('INVALID_YEAR_MONTH')`；若该月无匹配记录，只返回表头行 `id,date,category,amount`。\n3. 在 `test/exporter.test.mjs` 中补齐正常月份、空月份、跨年月份及非法 `yearMonth` 参数的测试，跑通测试和语法检查。",
+      "files": [
+        {
+          "path": "README.md",
+          "content": "# Ledger Exporter\n\n## 项目约定\n- 使用 Node.js ES Module（`.mjs`），零第三方依赖。\n- 所有 CSV 导出函数放在 `src/exporter.mjs`，换行统一使用 `\\n`，首行为 `id,date,category,amount`。\n- 参数校验失败统一抛 `TypeError`，错误信息使用全大写下划线错误码。\n- 测试命令：`node --test test/exporter.test.mjs`；语法检查命令：`node --check src/exporter.mjs`。\n"
+        },
+        {
+          "path": "package.json",
+          "content": "{\n  \"name\": \"sample-feature-dev-1\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test test/exporter.test.mjs\",\n    \"check\": \"node --check src/exporter.mjs\"\n  }\n}\n"
+        },
+        {
+          "path": "src/exporter.mjs",
+          "content": "const HEADER = 'id,date,category,amount';\n\nexport function exportAllCsv(records = []) {\n  if (!Array.isArray(records)) {\n    throw new TypeError('INVALID_RECORDS');\n  }\n  const sorted = [...records].sort((a, b) => String(a.date).localeCompare(String(b.date)));\n  const rows = sorted.map(r => `${r.id},${r.date},${r.category},${r.amount}`);\n  return [HEADER, ...rows].join('\\n');\n}\n"
+        },
+        {
+          "path": "test/exporter.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {exportAllCsv} from '../src/exporter.mjs';\n\ntest('exportAllCsv sorts by date and formats rows', () => {\n  const list = [\n    {id: 2, date: '2026-11-05', category: 'food', amount: 35},\n    {id: 1, date: '2026-10-20', category: 'book', amount: 50}\n  ];\n  assert.equal(\n    exportAllCsv(list),\n    'id,date,category,amount\\n1,2026-10-20,book,50\\n2,2026-11-05,food,35'\n  );\n});\n"
+        }
+      ],
+      "checks": [
+        "src/exporter.mjs 导出了 exportByMonthCsv 函数，且保留原有的 exportAllCsv 行为不变",
+        "调用 exportByMonthCsv([{id:1,date:'2026-11-12',category:'a',amount:10},{id:2,date:'2026-10-01',category:'b',amount:20}], '2026-11') 返回 'id,date,category,amount\\n1,2026-11-12,a,10'",
+        "调用 exportByMonthCsv([], '2026-11') 返回 'id,date,category,amount'",
+        "调用 exportByMonthCsv([], '2026/11') 抛出 TypeError 且 message 包含 INVALID_YEAR_MONTH",
+        "运行 node --check src/exporter.mjs 和 node --test test/exporter.test.mjs 退出码均为 0",
+        "交回汇报包含「改动清单」「测试命令和输出原文」「没覆盖到的情况」三段"
+      ]
+    },
+    {
+      "id": "feature-dev-2",
+      "title": "为待办存储模块新增按标签与未完成状态组合筛选功能",
+      "brief": "目标：在工作目录 `src/todo-store.mjs` 中参照已有方法的风格，新增 `filterTodos(todos, {tag, onlyPending})` 函数。\n背景：项目约定见 `CLAUDE.md`。\n要求：\n1. 先读 `CLAUDE.md`、`src/todo-store.mjs` 和 `test/todo-store.test.mjs`。\n2. `filterTodos(todos, options = {})` 接收待办数组和可选筛选条件：当传入非空字符串 `tag` 时，只保留 ` Array.isArray(item.tags) && item.tags.includes(tag)` 的项；当 `onlyPending === true` 时，只保留 `item.done === false` 的项；返回新数组，不得修改原数组。\n3. 在 `test/todo-store.test.mjs` 补齐按 tag、按 onlyPending、两者组合、以及空条件返回浅拷贝的测试，并跑通全部测试。",
+      "files": [
+        {
+          "path": "CLAUDE.md",
+          "content": "# Todo Store 约定\n- 所有函数都是纯函数，不修改入参对象或数组。\n- 代码在 `src/todo-store.mjs`，测试在 `test/todo-store.test.mjs`。\n- 测试运行命令：`node --test test/todo-store.test.mjs`。\n"
+        },
+        {
+          "path": "src/todo-store.mjs",
+          "content": "export function addTodo(todos = [], {id, title, tags = []}) {\n  return [...todos, {id, title: String(title).trim(), tags: [...tags], done: false}];\n}\n\nexport function toggleTodo(todos = [], id) {\n  return todos.map(item => (item.id === id ? {...item, done: !item.done} : item));\n}\n"
+        },
+        {
+          "path": "test/todo-store.test.mjs",
+          "content": "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {addTodo, toggleTodo} from '../src/todo-store.mjs';\n\ntest('addTodo and toggleTodo keep immutability', () => {\n  const list1 = addTodo([], {id: 't1', title: 'Read docs', tags: ['work']});\n  const list2 = toggleTodo(list1, 't1');\n  assert.equal(list1[0].done, false);\n  assert.equal(list2[0].done, true);\n});\n"
+        }
+      ],
+      "checks": [
+        "src/todo-store.mjs 导出了 filterTodos 函数，且未引入任何外部依赖",
+        "filterTodos 在同时传入 {tag: 'work', onlyPending: true} 时只返回包含 'work' 标签且 done === false 的项，且不修改传入的原数组",
+        "test/todo-store.test.mjs 新增了针对 filterTodos 的测试用例，运行 node --test test/todo-store.test.mjs 退出码为 0",
+        "交回汇报包含「改动清单」「测试命令和输出原文」「没覆盖到的情况」三段"
+      ]
+    }
+  ]
+}

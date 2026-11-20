@@ -321,7 +321,9 @@
   });
 
   const modeForSession = (key) => {
-    const agent = String(key || "").match(/^agent:([^:]+):/)?.[1];
+    const session = String(key || "");
+    if (/^agent:roles:pinkie-child:[^:\s]+$/.test(session)) return "metre";
+    const agent = session.match(/^agent:([^:]+):/)?.[1];
     return AGENT_MODE[agent] || null;
   };
 

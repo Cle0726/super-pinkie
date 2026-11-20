@@ -1,0 +1,102 @@
+{
+  "role": "batch-runner",
+  "name": "批量处理",
+  "samples": [
+    {
+      "id": "batch-runner-1",
+      "title": "按清单批量为商品 JSON 文件补齐 currency 字段并跳过已成功项",
+      "brief": "目标：按工作目录 `targets.txt` 列出的 5 个文件路径，为每个 JSON 对象添加 `\"currency\": \"CNY\"` 并写回原路径。\n背景：\n- `batch-log.csv` 中已经有一条 `items/item-1.json` 的成功记录，重跑时必须跳过该文件。\n- `items/extra.json` 不在 `targets.txt` 清单里，严禁改动。\n要求：\n1. 动手前先把待处理文件备份到 `backup/` 目录。\n2. 先试前 3 个，核对无误后跑完剩余项，逐个记入 `batch-log.csv`。\n3. 交回成功和失败的数量、日志路径、备份路径、失败的原因。",
+      "files": [
+        {
+          "path": "targets.txt",
+          "content": "items/item-1.json\nitems/item-2.json\nitems/item-3.json\nitems/item-4.json\nitems/item-5.json\n"
+        },
+        {
+          "path": "batch-log.csv",
+          "content": "target,status,input,output,error,timestamp\nitems/item-1.json,success,items/item-1.json,items/item-1.json,,2026-11-18T00:00:00Z\n"
+        },
+        {
+          "path": "items/item-1.json",
+          "content": "{\"id\": 1, \"price\": 10, \"currency\": \"CNY\", \"marker\": \"already-done\"}\n"
+        },
+        {
+          "path": "items/item-2.json",
+          "content": "{\"id\": 2, \"price\": 20}\n"
+        },
+        {
+          "path": "items/item-3.json",
+          "content": "{\"id\": 3, \"price\": 30}\n"
+        },
+        {
+          "path": "items/item-4.json",
+          "content": "{\"id\": 4, \"price\": 40}\n"
+        },
+        {
+          "path": "items/item-5.json",
+          "content": "{\"id\": 5, \"price\": 50}\n"
+        },
+        {
+          "path": "items/extra.json",
+          "content": "{\"id\": 99, \"price\": 990}\n"
+        }
+      ],
+      "checks": [
+        "backup/ 目录下存在改动前的原始文件备份",
+        "items/item-2.json 到 items/item-5.json 均已包含 \"currency\": \"CNY\"",
+        "items/item-1.json 被跳过未重复改写，items/extra.json（不在清单内）未被修改且不含 currency 字段",
+        "batch-log.csv 包含全部 5 个目标文件的成功记录，失败数为 0",
+        "交回汇报包含「成功和失败的数量」「日志路径」「备份路径」「失败的原因」四项"
+      ]
+    },
+    {
+      "id": "batch-runner-2",
+      "title": "批量标准化记录文件并在前 10 个里失败超过 2 个时触发熔断停下",
+      "brief": "目标：按工作目录 `targets.txt` 的顺序依次解析每个 JSON 文件，将 `name` 字段转为大写后写回，记录到 `batch-log.csv`，备份放到 `backup/`。\n要求：\n1. 严格遵守角色卡熔断规则：前 10 个对象里累计失败超过 2 个（即出现第 3 个失败）时必须立即停下，不得继续处理后面的文件。\n2. 交回成功和失败的数量、日志路径、备份路径、失败的原因。",
+      "files": [
+        {
+          "path": "targets.txt",
+          "content": "records/r1.json\nrecords/r2.json\nrecords/r3.json\nrecords/r4.json\nrecords/r5.json\nrecords/r6.json\nrecords/r7.json\nrecords/r8.json\n"
+        },
+        {
+          "path": "records/r1.json",
+          "content": "{\"name\": \"alpha\"}\n"
+        },
+        {
+          "path": "records/r2.json",
+          "content": "{\"name\": \"beta\"}\n"
+        },
+        {
+          "path": "records/r3.json",
+          "content": "{\"name\": \"gamma\"}\n"
+        },
+        {
+          "path": "records/r4.json",
+          "content": "{BROKEN_JSON_4\n"
+        },
+        {
+          "path": "records/r5.json",
+          "content": "{BROKEN_JSON_5\n"
+        },
+        {
+          "path": "records/r6.json",
+          "content": "{BROKEN_JSON_6\n"
+        },
+        {
+          "path": "records/r7.json",
+          "content": "{\"name\": \"eta\"}\n"
+        },
+        {
+          "path": "records/r8.json",
+          "content": "{\"name\": \"theta\"}\n"
+        }
+      ],
+      "checks": [
+        "backup/ 目录存在原始文件备份",
+        "前 3 个文件 records/r1.json、r2.json、r3.json 处理成功（name 变为大写 ALPHA、BETA、GAMMA）",
+        "records/r4.json、r5.json、r6.json 因非法 JSON 失败并记录在 batch-log.csv 中，累计失败达到 3 个（超过 2 个）后触发熔断",
+        "熔断生效：records/r7.json 和 records/r8.json 未被修改（name 仍为小写 eta 和 theta）",
+        "交回汇报包含「成功和失败的数量」（成功 3、失败 3、未执行 2）、「日志路径」「备份路径」「失败的原因」"
+      ]
+    }
+  ]
+}

@@ -180,6 +180,11 @@ foreach ($mode in $personaMap.Keys) {
   }
 }
 
+# Sync role assets even if mode-architecture setup ran before persona install
+# (or a fresh home does not have openclaw.json yet). Registration is in setup.py.
+python (Join-Path $RepoDir "services\mode-architecture\metre_role_assets.py") (Join-Path $RepoDir "personas") (Join-Path $UserHome ".openclaw") $personaBackupRoot
+if ($LASTEXITCODE -ne 0) { throw "Metre role assets setup failed" }
+
 # 注册 project agent（如果 openclaw 可用）
 $ocBin = Get-Command "openclaw" -ErrorAction SilentlyContinue
 if ($null -ne $ocBin) {

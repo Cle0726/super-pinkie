@@ -226,13 +226,14 @@
     return document.querySelector("openclaw-app-shell")?.context?.gateway?.snapshot?.sessionKey || "";
   };
 
+  const metreRoleChild = (key) => /^agent:roles:pinkie-child:[^:\s]+$/.test(String(key || ""));
   const modeFromSession = () => {
     const session = currentSessionKey();
     if (session.startsWith("agent:project:")) return "project";
     if (session.startsWith("agent:thinking:")) return "thinking";
     if (session.startsWith("agent:learning:")) return "learning";
     if (session.startsWith("agent:unrestricted:")) return "unrestricted";
-    if (session.startsWith("agent:metre:")) return "metre";
+    if (session.startsWith("agent:metre:") || metreRoleChild(session)) return "metre";
     if (session.startsWith("agent:main:")) return "chat";
     return null;
   };
@@ -247,14 +248,14 @@
     if (String(key).startsWith("agent:thinking:")) return "thinking";
     if (String(key).startsWith("agent:learning:")) return "learning";
     if (String(key).startsWith("agent:unrestricted:")) return "unrestricted";
-    if (String(key).startsWith("agent:metre:")) return "metre";
+    if (String(key).startsWith("agent:metre:") || metreRoleChild(key)) return "metre";
     if (String(key).startsWith("agent:main:")) return "chat";
     return null;
   };
   const agentIdForMode = (modeId) => modeId === "chat" ? "main" : modeId;
   const rememberSession = (key) => {
     const modeId = modeIdForSession(key);
-    if (!modeId || String(key).includes(":subagent:")) return;
+    if (!modeId || String(key).includes(":subagent:") || metreRoleChild(key)) return;
     try { const name = lastSessionStorageKey(modeId), value = String(key); if (localStorage.getItem(name) !== value) localStorage.setItem(name, value); } catch {}
   };
   const storedSession = (mode) => {

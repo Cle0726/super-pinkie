@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN" data-laolao-mode="metre" data-pinkie-reduce-motion>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Metre 总控台 · 假数据</title>
+  <link rel="stylesheet" href="../../../ui/injections/laolao-metre-skin.css">
+  <link rel="stylesheet" href="../../../ui/injections/laolao-metre-board.css">
+  <style>
+    body { margin: 0; background: var(--metre-bg); color: var(--metre-text); font: 14px/1.6 var(--metre-sans); }
+    .preview { padding: 42px 32px; max-width: 460px; }
+    .preview small { color: var(--metre-muted); }
+    .preview h1 { margin: 12px 0; font: 400 32px/1.2 var(--metre-serif); }
+  </style>
+  <script>
+    const theme = new URL(location.href).searchParams.get('theme') === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = theme;
+    if (theme === 'dark') document.documentElement.setAttribute('data-pinkie-night', '');
+    localStorage.setItem('pk.metre.board.width', '780');
+  </script>
+</head>
+<body>
+  <main class="preview">
+    <small>本地界面样例 · 无网关 · 所有数据为演示</small>
+    <h1>Metre</h1>
+    <p>先排查支付回调，再整理复现结果；保留一行旧模式子会话作为对照。</p>
+  </main>
+  <script>
+    const now = new Date('2026-11-18T14:32:00').getTime();
+    const minutes = (n) => now - n * 60000;
+    const view = {
+      ok: true, at: now,
+      overview: {state: '在等 1 个子会话', startedAt: minutes(6), running: 1, limit: 8, started: 3, cap: 24, returned: 2, failed: 0},
+      plan: {title: '排查并验证支付回调', items: [
+        {status: 'done', text: '定位回调失败条件'},
+        {status: 'active', text: '跑回归并对照原始日志'},
+      ]},
+      sessions: [
+        {key: 'agent:roles:pinkie-child:official', title: '修复支付回调', role: 'backend-fix',
+          roleName: '后端修 bug', roleSource: 'official', model: 'deepseek-v4-pro', status: 'done',
+          statusText: '已交回', state: 'done', startedAt: minutes(6), endedAt: minutes(2),
+          spans: [{from: minutes(6), to: minutes(2), kind: 'done'}], usage: {input: 7300, output: 600}},
+        {key: 'agent:roles:pinkie-child:custom', title: '核对回调日志', role: 'log-check',
+          roleName: '日志核对', roleSource: 'user', model: 'kimi-k3', status: 'running',
+          statusText: '在跑', state: 'run', startedAt: minutes(4), lastActiveAt: now,
+          spans: [{from: minutes(4), to: now, kind: 'run'}], doing: '读日志'},
+        {key: 'agent:learning:pinkie-child:legacy', title: '整理回归记录', modeName: '学习模式',
+          model: 'glm-5', status: 'done', statusText: '已交回', state: 'done',
+          startedAt: minutes(3), endedAt: minutes(1), spans: [{from: minutes(3), to: minutes(1), kind: 'done'}]},
+      ],
+      pending: [],
+      timeline: [{at: minutes(2), kind: 'report', text: '「修复支付回调」（后端修 bug）交回汇报：回归通过'}],
+      changes: [{title: '修复支付回调', files: [{path: 'src/callback.ts', added: 8, removed: 3}]}],
+      runtime: {
+        models: [{id: 'deepseek-v4-pro', health: 'ok'}, {id: 'kimi-k3', health: 'ok'}],
+        context: {used: 26000, max: 128000}, usage: {input: 18500, output: 1970},
+        series: [4, 7, 5, 10, 7, 14].map((v, i) => [minutes(6 - i), v * 1000]),
+        metreRoles: {valid: 34, invalid: 1, issues: [{source: 'user', file: 'broken.md', reason: '缺少必填字段 when'}]},
+      },
+      raw: [],
+    };
+    window.__laolaoSidebar = {gwRequest(method) {
+      if (method === 'pinkie.metre.board') return Promise.resolve(view);
+      if (method === 'pinkie.metre.memory') return Promise.resolve({ok: true, count: 0, known: 0, items: []});
+      return Promise.reject(new Error('该样例没有网关'));
+    }};
+  </script>
+  <script src="../../../ui/injections/laolao-metre-board.js"></script>
+  <script src="../../../ui/injections/laolao-metre-board-data.js"></script>
+  <script>
+    const observer = new MutationObserver(() => {
+      const details = document.querySelector('.pk-mb-role-issues');
+      if (!details) return;
+      observer.disconnect();
+      details.open = true;
+      // Keep the changed sections in the same frame, including at 700 px.
+      const scroll = document.querySelector('.pk-metre-board__scroll');
+      const sessions = document.querySelector('[data-metre-slot="sessions"]');
+      scroll.scrollTop += sessions.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 12;
+      const roles = [...document.querySelectorAll('.pk-mb-role-label')].map(node => node.textContent);
+      const ok = roles[0] === '后端修 bug · deepseek-v4-pro' && roles[1] === '日志核对 · kimi-k3自定义'
+        && document.querySelector('.pk-mb-health').textContent.includes('合格 34 张 · 不合格 1 张')
+        && details.textContent.includes('broken.md（自定义）：缺少必填字段 when')
+        && details.getBoundingClientRect().bottom <= innerHeight;
+      document.documentElement.dataset.fixture = ok ? 'passed' : 'failed';
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+    window.__pinkieMetreBoard.open();
+  </script>
+</body>
+</html>
