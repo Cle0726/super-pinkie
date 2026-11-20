@@ -74,6 +74,27 @@ class SharedUiBundleTests(unittest.TestCase):
             self.assertEqual(first.count(b'laolao-handoff-bootstrap.js'), 1)
             self.assertIn(b'pinkie-surface=6', first)
 
+    def test_native_opening_movie_and_poster_stay_out_of_both_control_ui_bundles(self):
+        names = (
+            'laolao-splash.mp4', 'laolao-splash-release.mp4',
+            'laolao-splash-video-poster.png', 'laolao-splash-video-poster-release.png',
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mac, windows = self.fixture(root)
+            policy = (ROOT / 'ui/parity-policy.json').read_bytes()
+            (root / 'ui/parity-policy.json').write_bytes(policy)
+            for name in names:
+                (root / 'ui/assets' / name).write_bytes(b'native startup asset')
+                (windows / name).write_bytes(b'left over from the runtime overlay')
+            for control in (mac, windows):
+                manifest = bundle.install(root, control)
+                for name in names:
+                    with self.subTest(control=control.name, asset=name):
+                        self.assertNotIn(name, manifest['resources'])
+                        self.assertFalse((control / name).exists())
+                        self.assertTrue((root / 'ui/assets' / name).is_file())
+
     def test_native_chat_is_shared_and_other_upstream_chunks_are_compared_too(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
