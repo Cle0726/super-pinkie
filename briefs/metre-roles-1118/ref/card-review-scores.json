@@ -1,0 +1,499 @@
+{
+  "candidate": "66bd70130c1e56a5789edec574cae32728c04c19",
+  "requestModel": "workbuddy/hy4flash-free",
+  "responseModel": "hy4-flash-free",
+  "independentVendor": false,
+  "newContext": true,
+  "dimensions": [
+    "要求可检查",
+    "证据具体",
+    "边界清楚",
+    "篇幅精炼",
+    "无空泛套话",
+    "与 Metre 主 MD 无实质冲突"
+  ],
+  "minRequiredPerDimension": 4,
+  "lowestObserved": 5,
+  "scope": "33 official card texts; not wording/behavior or sample execution scores",
+  "localScoresSha256": "ee33027fb1a9d3c2b5c435524adcb7b514b5b3dceaf2bd023272174631977cc8",
+  "batches": [
+    {
+      "artifact": "cs-194255/batch-1",
+      "requestSha256": "b649cf7a817d2a8e7be671c6417c0d450a8dd02d4e169742b1f782a4c4b4bd97",
+      "responseSha256": "e559e5a8be3f61b478005d3a0f5f474533101a45fcc8ebd559ccd39d11c46df4",
+      "promptTokens": 9976,
+      "completionTokens": 4706,
+      "credit": 0
+    },
+    {
+      "artifact": "cs-194255/batch-2",
+      "requestSha256": "a39ec9242906ab37f1179749f5fbb473ee289dcb9c9c72dfa9bb821fc6499f0b",
+      "responseSha256": "691c612516f69bbc1ba091a5c12af378490760acded01e1ac6a4c963639dbeb0",
+      "promptTokens": 10483,
+      "completionTokens": 7627,
+      "credit": 0
+    },
+    {
+      "artifact": "cs-194255/batch-3",
+      "requestSha256": "2c019cfcce2cf99c3e43d2e0b38533f17a12be49bcc43e3a80c9ec76b45a94a4",
+      "responseSha256": "bcd9d0175eac6bdb34c2ee079e415bd789e8e8dce7ee3871f58989d81ad11aac",
+      "promptTokens": 10597,
+      "completionTokens": 7008,
+      "credit": 0
+    }
+  ],
+  "cards": [
+    {
+      "id": "advisor",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "automation-builder",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "backend-fix",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "batch-runner",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "code-reviewer",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "competitor-analyst",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "data-analyst",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "deep-reader",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "doc-maker",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "domain-expert",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "editor",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "env-setup",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "fact-checker",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "feature-dev",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "frontend-fix",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "modeler-3d",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "motion-video",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "perf-tuner",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "plan-executor",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "qa-tester",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "refactor",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "release-prep",
+      "issues": [],
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ]
+    },
+    {
+      "id": "researcher",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "reviewer",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "security-auditor",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "test-engineer",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "translator",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "ui-replicator",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "upgrader",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "viral-creator",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "visual-designer",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "web-operator",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    },
+    {
+      "id": "writer",
+      "scores": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "issues": []
+    }
+  ],
+  "calibration": {
+    "fixture": "A disposable backend-fix body with non-specific instructions and no evidence requirements; the official card was not edited for this control.",
+    "receipt": {
+      "artifact": "control-cards-194917",
+      "requestSha256": "f453a72221cb595ef39732ff7fd2945d7419e7ba03d1e0d2f13986d32c861ccf",
+      "responseSha256": "a9eaa7e359811359e9ecafcfa823e004b98c9a86752f2dcf4a54f40a5fef60a7",
+      "promptTokens": 5366,
+      "completionTokens": 4287,
+      "credit": 0
+    },
+    "scores": [
+      {
+        "id": "backend-fix",
+        "scores": [
+          1,
+          1,
+          1,
+          3,
+          2,
+          1
+        ],
+        "issues": [
+          "维度1：PLAN写‘见第3.1节样板卡’，资料未提供样板卡；卡内做法‘看情况做，操作随意’、交回‘做完只回复：处理完了’，没有任何可检查的完成标准。",
+          "维度2：交回只有‘做完只回复：处理完了’，未要求文件路径、命令输出、测试结果或改动说明等证据。",
+          "维度3：边界写‘没有具体范围’，且未写明禁止动的路径/对象、删除覆盖推送的确认范围、备份或退路。",
+          "维度4：篇幅虽短，但‘做法/边界/交回’三节分别只有‘看情况做，操作随意’‘没有具体范围’‘做完只回复：处理完了’，短是因为必要信息缺失，不是有效精炼。",
+          "维度5：‘看情况做，操作随意’‘没有具体范围’‘做完只回复：处理完了’都是空泛话，没有具体要求。",
+          "维度6：Metre第十节要求看实际文件、跑测试并核对证据，第十一节要求确认范围、留退路、做完说明收不回动作；卡却写‘操作随意’‘没有具体范围’‘做完只回复：处理完了’。"
+        ]
+      },
+      {
+        "id": "researcher",
+        "scores": [
+          5,
+          5,
+          5,
+          4,
+          5,
+          5
+        ],
+        "issues": []
+      },
+      {
+        "id": "reviewer",
+        "scores": [
+          5,
+          5,
+          5,
+          4,
+          5,
+          5
+        ],
+        "issues": []
+      }
+    ]
+  }
+}

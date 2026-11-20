@@ -24,14 +24,14 @@
 | **看图前置确认（不计 8 轮）** | 已 `git pull --ff-only`，分支包含之前的 Mac 修复 `06fae028`。隔离旧配置 `input=[text]`，新 profile 跑共用安装步骤变为 `[text,image]`；明确关闭图片输入的对照仍为 `[text]`。直连 `workbuddy/hy4flash-free` 附 PNG，不在消息里写随机数字，响应正确读出图片中的 `514410`（HTTP 200，3.219 秒）。证明实际能看图；不把它写成视觉还原完成。 |
 | **R2 / R3-7 / X4** | **未完成：0/8**。固定的 `backend-fix-1` A/C 已真派发并实际收到上游 HTTP 200，但 A 的无害状态与测试命令被测试夹具误拦，C 的第二次流转中断，没有交回。之后分离默认工作区和夹具、补足允许指令并改为逐帧转发；入口几次恢复又拒绝连接，后续 A 仍有复现命令被验收白名单拦截。其余六场未派发；X4 哨兵未改但缺完整交回与调研组，不能算过。[请求与用量见 MEASURE](MEASURE.md#五本次八轮免费模型验收补记)。 |
 | **R3-1–4 / R3-6 / R3-8–9** | `node tools/metre/roles/lint-cards.mjs --all-33 --samples --json` 33/33；`final-plan-check.json` 的 `metadataMismatch=[]`、66 题、310 检查项。下列逐卡核对保留前次实读结果，本轮逐一比较，确认 31 张未改、两张整改内容符合对应条款。审查卡的召回与误报仍待真实样题完成。 |
-| **R3-5 · 六维评分** | **未完成**。同一个免费模型在新上下文收到了 33 张卡和评分表；HTTP 200 但 `finish_reason=length`，没有可解析的六维分。缩小批次后的第一次连接被拒，未产生新的评分。静态格式通过不能代替逐卡六维评分。 |
+| **R3-5 · 六维评分** | **门槛已核**。同一免费模型分三批、各开新上下文，返回全部 33 张卡的六维分；按原量表，没有任何一项低于 4。结构化原分、调用指纹和盲评对照见 [card-review-scores.json](ref/card-review-scores.json)。原卡分数集中在 5；另给缺少要求、证据、范围的临时卡，它把这三项各判 1，并指出具体原文。分数只用于静态过线，不代表异厂评估或真实样题质量。 |
 | **R4-4 / P1 / R1-16 · Windows** | **过（实际 Windows 包、隔离用户数据）**：[同包 Windows smoke](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039/job/135968814091) 成功。工件 `windows-smoke-44639696039/summary.json`（SHA-256 `df0bef2e893f877f469209fc15a63147cbf6bfb2cc0f8bac2fea885a315c4583`）显示新装、旧版 `v2.5.49` 启动与升级均成功，两边 33 张卡，升级前写入的自定义卡和用户笔记字节相等。实际 WebView2 拍了 `metre-roles-menu-{light,dark}.png` 和 `metre-roles-board.png`；亲读三图：模式菜单不出现 roles，侧栏派发项和看板都见「调研员」，看板行有模型名。模型是本机回环夹具，只验真实 App 派活、不验模型质量。复现：`gh workflow run ui-parity.yml --ref feat/metre-roles-1118 -f old_tag=v2.5.49 -f metre_roles=true`，对照实际运行 SHA。 |
 | **R4-4 / P2 · macOS** | **过（实际包内运行时快照）**：[UI parity `44639696039`](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039) macOS runner 实际打包、临时 profile 安装并导入 `index.mjs`，日志 `Mac mode plugin fresh-install import OK`。工件 `ui-parity-macos/macos-metre-roles-runtime.json`：`roles`、33 张卡字节一致、无 memory，SHA-256 `fc037dd2160617d0e6f1ebdf35d3395ae7d4fa21fdddec4b18f714642646ce5c`。复现 `python tools/macos-package/check_runtime.py --resource-root <包内 SuperPinkie> --node <包内 node> --metre-roles-snapshot <输出>`。额外的打包 UI WebKit 截图步骤在 `document.fonts.status` 等待超时，并未称 UI parity 整绿。 |
 | **R5 / P4** | 顶档是后续，不拿免费模型替代首版实验，也不是本次 8 轮新增的硬门槛。按用户「通过才合并」执行，当前不合并、不发布。 |
 
 ### R3-4 逐卡正文核对
 
-下列检查只判 PLAN 的「必须做到」「交回要带」是否写入正文，不是 R3-5 分数。31 张的卡文件与前次逐字相同；`researcher` 和 `visual-designer` 是本轮重新对读的两张变更卡。
+下列逐卡核对只判 PLAN 的「必须做到」「交回要带」是否写入正文；R3-5 对每张卡的六项原分另存于上面的结构化回执。31 张的卡文件与前次逐字相同；`researcher` 和 `visual-designer` 是本轮重新对读的两张变更卡。
 
 | 角色 | 核对 |
 |---|---|
@@ -73,7 +73,7 @@
 
 | 严重程度 | 位置 | 复现与建议 |
 |---|---|---|
-| 阻塞 | R2、R1-17、R3-5/7、X4 | 恢复已确认的本机免费模型入口，然后以 `node tools/metre/roles/compose.mjs --release-single-model mm/workbuddy/hy4flash-free` 固定同样四题；先在干净夹具完成 `backend-fix-1` 两边的汇报和重跑，再扩至其余六场及同模型新上下文复判。R3-5 用小批次以免推理耗尽输出预算。不要换模型或加付费回退。 |
+| 阻塞 | R2、R1-17、R3-7、X4 | 以 `node tools/metre/roles/compose.mjs --release-single-model mm/workbuddy/hy4flash-free` 固定同样四题；需要每组完整交回、产物重跑和同模型新上下文复判。验收环境的工具路径和本机模型入口都必须可用，不换模型或加付费回退。 |
 | 阻塞 | 合并时的主线变化（Z3） | 截至取证，远端 `main=a85a7449`，没有本候选。旧侧 Z3 仍用已批准的 `99c3716a`。新主线的 #31 本身已让 12 个旧模式样例多出记忆写入规则，见下段；不得通过更新固定期望值掩掉差异。 |
 | 重要 | Mac WebKit 截图 | [同包工作流](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039)，`tools/ui-parity/capture.mjs:155` 等待字体 20 秒超时。补采在途字体和资源状态，不能直接取消判据。 |
 
