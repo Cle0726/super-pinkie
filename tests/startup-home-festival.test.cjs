@@ -16,7 +16,10 @@ function data() {
 test('every Biqi mode has a festival greeting naming the day', () => {
   const {lines, festivalLines} = data();
   assert.deepEqual(Object.keys(festivalLines).sort(), Object.keys(lines).sort());
-  for (const line of Object.values(festivalLines)) assert.match(line, /^今天是\{f\}，/);
+  for (const line of Object.values(festivalLines)) {
+    assert.match(line, /^今天是\{f\}，/);
+    assert.doesNotMatch(line, /先生|老板/, '默认不给用户加头衔');
+  }
 });
 
 test('festival day: the first greeting is the festival one, and afterwards it comes up more than any single ordinary line', () => {
