@@ -73,3 +73,46 @@ test(`Metre dispatch appears during refresh, without its parent in the sidebar (
     assert.equal(await tab.locator('[data-laolao-group="__metre-dispatched"]').count(), 0);
   } finally { await browser.close(); }
 });
+
+test(`Metre dispatched sessions can be folded, archived and deleted from the sidebar (${engine})`, {timeout: 30_000}, async () => {
+  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30113/**', route => route.fulfill({contentType: 'text/html', body: '<section id="sidebar"></section>'}));
+    await tab.goto('http://127.0.0.1:30113/');
+    await tab.addScriptTag({path: script});
+    const done = 'agent:project:pinkie-child:done', live = 'agent:learning:pinkie-child:live';
+    await tab.evaluate(({done, live}) => {
+      const qa = window.qa = {calls: []};
+      qa.api = {mode: 'metre', agentId: 'metre', currentKey: 'agent:metre:current', state: {
+        pins: [], collapsed: {__recent: true}, projects: {}, projectFolders: {},
+      }, gwRequest: async method => {
+        if (method === 'sessions.list') return {sessions: []};
+        if (method === 'pinkie.session.lineage') return {away: {
+          [done]: {parentKey: 'agent:metre:p', title: '对比度修复', mode: 'project', updatedAt: 2},
+          [live]: {parentKey: 'agent:metre:p', title: '整理讲解稿', mode: 'learning', updatedAt: 1, hasActiveRun: true},
+        }, children: {}};
+        if (method === 'pinkie.session.search') return {results: []};
+        return {rows: {}};
+      }, toast(message) { throw Error(message); },
+      toggleGroup: id => { qa.api.state.collapsed[id] = !qa.api.state.collapsed[id]; qa.render(); },
+      dispatchedMenu: (anchor, key, title, opts) => qa.calls.push(['row', key, title, opts.live]),
+      dispatchedGroupMenu: (anchor, opts) => qa.calls.push(['group', opts.idle, opts.total])};
+      qa.render = () => window.PinkieSessionList.render(document.querySelector('#sidebar'), qa.api);
+      qa.render();
+    }, {done, live});
+    const group = tab.locator('[data-laolao-group="__metre-dispatched"]');
+    await group.locator(`[data-session-key="${done}"]`).waitFor();
+    await group.getByRole('button', {name: '管理派发的会话：对比度修复'}).click();
+    await group.getByRole('button', {name: '管理派发的会话：整理讲解稿'}).click();
+    await group.getByRole('button', {name: '管理派发的会话', exact: true}).click();
+    assert.deepEqual(await tab.evaluate(() => window.qa.calls), [
+      ['row', done, '对比度修复', false], ['row', live, '整理讲解稿', true], ['group', [done], 2]]);
+    // Folding hides finished dispatches but keeps running ones visible.
+    await group.getByRole('button', {name: '收起派发的会话'}).click();
+    await group.locator(`[data-session-key="${done}"]`).waitFor({state: 'detached'});
+    assert.equal(await group.locator(`[data-session-key="${live}"]`).count(), 1);
+    await group.getByRole('button', {name: '展开派发的会话'}).click();
+    await group.locator(`[data-session-key="${done}"]`).waitFor();
+  } finally { await browser.close(); }
+});
