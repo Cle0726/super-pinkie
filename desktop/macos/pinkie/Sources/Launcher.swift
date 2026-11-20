@@ -783,7 +783,11 @@ private enum Gateway {
     static func prepareNativeControlAuth(for webView: WKWebView) {
         // Share a credential only with our own bundled Gateway's loopback
         // Control UI. Never expose it to the separate browser or a remote URL.
-        guard let task = process, task.isRunning, task.executableURL == BundledRuntime.nodeURL,
+        // Foundation's Process may return a differently represented file URL
+        // for the same executable. Match the resolved paths, not URL objects.
+        guard let task = process, task.isRunning,
+              let executable = task.executableURL, let bundledNode = BundledRuntime.nodeURL,
+              canonicalPath(executable.path) == canonicalPath(bundledNode.path),
               var origin = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let scheme = origin.scheme, scheme == "http" || scheme == "https",
               let host = origin.host?.lowercased(), ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host),

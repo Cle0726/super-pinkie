@@ -48,7 +48,7 @@ test('the macOS Gateway credential reaches only the exact loopback main frame', 
   const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
   const helper = launcher.slice(launcher.indexOf('static func prepareNativeControlAuth('),
     launcher.indexOf('private static func endpoint('));
-  assert.match(helper, /task\.isRunning, task\.executableURL == BundledRuntime\.nodeURL/);
+  assert.match(helper, /let task = process, task\.isRunning,[\s\S]*canonicalPath\(executable\.path\) == canonicalPath\(bundledNode\.path\)/);
   assert.match(helper, /injectionTime: \.atDocumentStart, forMainFrameOnly: true/);
   const script = helper.match(/let source = """([\s\S]+?)"""/)?.[1];
   assert.ok(script);
