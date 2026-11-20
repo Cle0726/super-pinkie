@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  METRE_MAIN_REFERENCE: 99c3716a30370f74c371f981083522eb18af4e31
+  METRE_MAIN_REFERENCE: a85a7449103efa49674ed4f49725c1e93b943de0
 
 jobs:
   portable-checks:
