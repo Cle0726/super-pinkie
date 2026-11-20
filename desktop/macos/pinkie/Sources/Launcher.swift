@@ -783,25 +783,33 @@ private enum Gateway {
     static func prepareNativeControlAuth(for webView: WKWebView) {
         // Share a credential only with our own bundled Gateway's loopback
         // Control UI. Never expose it to the separate browser or a remote URL.
-        guard let task = process, task.isRunning, task.executableURL == BundledRuntime.nodeURL,
-              var origin = URLComponents(url: url, resolvingAgainstBaseURL: false),
+        func why(_ value: String) {
+            FileHandle.standardError.write(Data("pinkie-release-smoke: auth preparation \(value)\n".utf8))
+        }
+        guard let task = process else { why("no process"); return }
+        guard task.isRunning else { why("process not running"); return }
+        let canonicalSame = task.executableURL.flatMap { executable in
+            BundledRuntime.nodeURL.map { expected in canonicalPath(executable.path) == canonicalPath(expected.path) }
+        } ?? false
+        guard task.executableURL == BundledRuntime.nodeURL else { why("native executable URL differs / same normalized path: \(canonicalSame)"); return }
+        guard var origin = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let scheme = origin.scheme, scheme == "http" || scheme == "https",
               let host = origin.host?.lowercased(), ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host),
               origin.user == nil, origin.password == nil, origin.query == nil, origin.fragment == nil,
-              origin.path.isEmpty || origin.path == "/" else { return }
+              origin.path.isEmpty || origin.path == "/" else { why("not the expected local origin"); return }
         let controller = webView.configuration.userContentController
-        guard !nativeControlAuthPrepared(for: webView) else { return }
+        guard !nativeControlAuthPrepared(for: webView) else { why("already added"); return }
 
         let env = task.environment ?? [:]
         let config = env["OPENCLAW_CONFIG_PATH"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
             ?? SettingsGuardNative.openclawStateDir().appendingPathComponent("openclaw.json")
-        guard let data = try? Data(contentsOf: config),
-              data.range(of: Data("\"$include\"".utf8)) == nil,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let gateway = root["gateway"] as? [String: Any],
-              (gateway["mode"] as? String ?? "local") == "local",
-              (gateway["bind"] as? String ?? "loopback") == "loopback",
-              ((gateway["tailscale"] as? [String: Any])?["mode"] as? String ?? "off") == "off" else { return }
+        guard let data = try? Data(contentsOf: config) else { why("profile file not readable"); return }
+        guard data.range(of: Data("\"$include\"".utf8)) == nil else { why("unresolved include"); return }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { why("JSON decode"); return }
+        guard let gateway = root["gateway"] as? [String: Any] else { why("gateway not in file"); return }
+        guard (gateway["mode"] as? String ?? "local") == "local" else { why("profile mode not local"); return }
+        guard (gateway["bind"] as? String ?? "loopback") == "loopback" else { why("profile bind not loopback"); return }
+        guard ((gateway["tailscale"] as? [String: Any])?["mode"] as? String ?? "off") == "off" else { why("tailscale on"); return }
         let auth = gateway["auth"] as? [String: Any] ?? [:]
         func literal(_ name: String, environment: String) -> String? {
             guard auth[name] == nil || auth[name] is String else { return nil }  // SecretRef is resolved only by OpenClaw.
@@ -818,12 +826,12 @@ private enum Gateway {
         switch mode {
         case "token": credential = token
         case "password": credential = password
-        default: return
+        default: why("not a token/password auth mode"); return
         }
         origin.path = ""
         guard let address = origin.string, let credential,
               let payload = try? JSONSerialization.data(withJSONObject: ["origin": address, mode: credential]),
-              let json = String(data: payload, encoding: .utf8) else { return }
+              let json = String(data: payload, encoding: .utf8) else { why("no local literal auth payload"); return }
         let source = """
         \(nativeAuthScriptMarker)
         (() => {
@@ -835,6 +843,7 @@ private enum Gateway {
         })();
         """
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        why("after add same controller: \(controller.userScripts.contains { $0.source.hasPrefix(nativeAuthScriptMarker) }); via WebView: \(nativeControlAuthPrepared(for: webView))")
     }
 
     private static func endpoint(_ path: String) -> URL {

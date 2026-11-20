@@ -1,0 +1,43 @@
+name: Mac Native Auth Preparation Diagnostic
+
+on:
+  push:
+    branches: ['diagnose/macos-auth-preparation']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-failed-candidate
+          path: isolated-diagnostic-download
+          run-id: 44762501422
+          github-token: ${{ github.token }}
+      - name: Instrument only the launcher in a disposable signed package copy
+        run: |
+          fixture="$RUNNER_TEMP/diagnose-native"
+          mkdir -p "$fixture"
+          ditto -x -k isolated-diagnostic-download/super-pinkie-macos-2.5.51.zip "$fixture"
+          app="$fixture/超級碧琪.app"
+          src=desktop/macos/pinkie/Sources
+          xcrun swiftc -parse-as-library -O "$src/MaterialPreview.swift" "$src/BrowserControl.swift" \
+            "$src/ChatGPTBackgroundWorker.swift" "$src/PinkieNative.swift" "$src/Launcher.swift" \
+            -framework AppKit -framework AVFoundation -framework Carbon -framework Foundation \
+            -framework Speech -framework UserNotifications -framework WebKit -o "$fixture/Launcher.probe"
+          mv "$fixture/Launcher.probe" "$app/Contents/MacOS/Launcher"
+          codesign --force --options runtime --sign - \
+            --requirements '=designated => identifier "com.cle0726.super-pinkie"' "$app"
+          codesign --verify --deep --strict "$app"
+          python3 tools/macos-package/smoke_launch.py --app "$fixture"
