@@ -11,17 +11,10 @@ import io
 import json
 import os
 import re
-import sys
 import threading
 import unittest
 from pathlib import Path
 from unittest import mock
-
-# Match the packaged app's top-level sibling imports without relying on
-# another test module having already added app/ to the import path.
-APP_DIR = str(Path(__file__).resolve().parents[1] / "app")
-if APP_DIR not in sys.path:
-    sys.path.insert(0, APP_DIR)
 
 from app import windows_desktop
 from app.windows_desktop import NativeBridge, _describe_material
