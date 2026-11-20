@@ -11,7 +11,7 @@ const A = 'agent:project:pinkie-child:aaaa';
 const B = 'agent:learning:pinkie-child:bbbb';
 const OTHER = 'agent:project:solo';
 
-function setup(t) {
+function setup(t, metreRoleCatalog = () => null) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'metre-board-'));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
   let clock = 1_000_000;
@@ -37,7 +37,7 @@ function setup(t) {
   const modelHealth = {models: new Map([['mm/glm-5', {okAt: 5}], ['mm/kimi-k3', {okAt: 1, failAt: 9, reason: 'rate limit'}]]), sessions: new Map(), runs: new Map()};
   const hooks = {}, methods = new Map();
   const api = {on: (name, fn) => (hooks[name] ??= []).push(fn), registerGatewayMethod: (name, fn) => methods.set(name, fn)};
-  const board = registerMetreBoard(api, {root, lineage, plans, modelHealth});
+  const board = registerMetreBoard(api, {root, lineage, plans, modelHealth, metreRoleCatalog});
   board.now = () => clock;
   board.schedule = fn => { fn(); return null; };
   const fire = (name, event, ctx) => hooks[name].forEach(fn => fn(event, ctx));
@@ -237,4 +237,51 @@ test('网关重启把正在跑的子会话打断：一轮开了头没收尾、�
   assert.equal(a.spans.at(-1).kind, 'fail');
   assert.equal(b.status, 'done');
   assert.equal(view.overview.failed, 1);
+});
+
+test('role name and source follow the dispatched snapshot; card diagnostics are independent of tasks', async t => {
+  const catalogue = {
+    roles: new Map([
+      ['backend-fix', {id: 'backend-fix', name: '新改的名字', source: 'user'}],
+      ['researcher', {id: 'researcher', name: '调研员', source: 'official'}],
+    ]),
+    invalid: [{file: '/private/user/broken.md', source: 'user', reason: '缺少 when'}],
+  };
+  const {rpc, lineageRecords, states} = setup(t, () => catalogue);
+  const user = 'agent:roles:pinkie-child:cc';
+  const official = 'agent:roles:pinkie-child:dd';
+  const queued = 'agent:roles:pinkie-child:ee';
+  lineageRecords[user] = {parentKey: PARENT, title: '修回调', metreRole: 'backend-fix',
+    metreRoleName: '接口诊断', metreRoleSource: 'user', model: 'deepseek-v4-pro'};
+  lineageRecords[official] = {parentKey: PARENT, metreRole: 'researcher', metreRoleSource: 'official'};
+  states[PARENT].launches = {[queued]: {key: queued, metreRole: 'reviewer', metreRoleSource: 'official', metreRoleName: '验收员'}};
+  states[PARENT].cards = [{kind: 'report', childKey: user, text: '验证通过', createdAt: 100}];
+
+  let board = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  const roles = key => {
+    const {role, roleName, roleSource} = board.sessions.find(row => row.key === key);
+    return [role, roleName, roleSource];
+  };
+  assert.deepEqual(roles(A), ['', '', '']);
+  assert.deepEqual(roles(user), ['backend-fix', '接口诊断', 'user']);
+  assert.deepEqual(roles(official), ['researcher', '调研员', 'official']);
+  assert.deepEqual(roles(queued), ['reviewer', '验收员', 'official']);
+  assert.match(board.timeline.find(item => item.kind === 'report').text, /接口诊断/);
+  assert.deepEqual(board.runtime.metreRoles, {valid: 2, invalid: 1,
+    issues: [{file: 'broken.md', source: 'user', reason: '缺少 when'}]});
+
+  // A refreshed catalog (e.g. after fixing the bad card) is visible on the
+  // next RPC, without renaming the task dispatched with an earlier snapshot.
+  catalogue.invalid.length = 0;
+  board = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  assert.equal(board.runtime.metreRoles.invalid, 0);
+  assert.deepEqual(roles(user), ['backend-fix', '接口诊断', 'user']);
+});
+
+test('failed catalog read leaves the board usable and does not report zero roles', async t => {
+  const {rpc} = setup(t, () => { throw new Error('catalog unavailable'); });
+  const board = await rpc('pinkie.metre.board', {sessionKey: PARENT});
+  assert.equal(board.ok, true);
+  assert.equal(board.runtime.metreRoles, null);
+  assert.equal(board.sessions.length, 2);
 });

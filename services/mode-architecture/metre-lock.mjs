@@ -24,11 +24,11 @@ const MAX_COOLDOWN_MS = 24 * 60 * 60_000;
 export const LOCKED_ERROR = '正式版中 Metre 需要先输入开发者密码解锁。';
 
 export function isMetreSession(key) {
-  return /^agent:metre(?::|$)/i.test(String(key ?? '').trim());
+  return /^agent:(?:metre|roles)(?::|$)/i.test(String(key ?? '').trim());
 }
 
 export function isMetreAgent(agentId) {
-  return String(agentId ?? '').trim().toLowerCase() === 'metre';
+  return ['metre', 'roles'].includes(String(agentId ?? '').trim().toLowerCase());
 }
 
 export function isMetreMode(mode) {

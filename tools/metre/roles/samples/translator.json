@@ -1,0 +1,42 @@
+{
+  "role": "translator",
+  "name": "翻译",
+  "samples": [
+    {
+      "id": "translator-1",
+      "title": "英译中软件发布说明（含占位符、代码、美制日期与英里/华氏度本地化）",
+      "brief": "目标：将 `input/release-en.md` 翻译并本地化为面向中国大陆开发者的简体中文发布说明，输出到 `out/release-zh.md`。\n背景：需保持技术准确，同时把美式日期、华氏度与英里换算成国内常用写法。\n边界：原文件 `input/release-en.md` 只读不改；严禁改动命令代码、环境变量名、URL 和模板变量占位符。\n做到什么样算完：译文落盘，先建术语表并全文统一，挑 3 段关键内容完成回译对照，说明无法直译的宣传语处理方式。",
+      "files": [
+        {
+          "path": "input/release-en.md",
+          "content": "# Horizon Sync v3.2 Release Notes\n\nReleased on 11/18/2026 (PST).\n\n## Highlights\n- **Incremental Snapshot**: Reduced sync latency by 42% on workspaces with more than 10,000 files. Run `horizon sync --mode=fast --dry-run` before enabling in production.\n- **Localization & Alerts**: Notification template `\"Synced {count} items for user %s in ${elapsed_ms}ms\"` now supports automatic retry when the server returns HTTP `503`.\n- **Cold-Chain Sensor Alerts**: Edge gateways now trigger a warning when ambient temperature exceeds 41°F or delivery distance exceeds 15 miles from the depot.\n\n## Known Issues\n- On Windows, paths containing non-ASCII characters may require setting `HORIZON_UTF8=1`. See https://docs.example.org/horizon/v3.2/utf8 for details.\n- The onboarding banner still displays our English pun tagline: \"Sync without a hitch, ship before you blink.\"\n"
+        }
+      ],
+      "checks": [
+        "存在 `out/release-zh.md`，且 `input/release-en.md` 字节未改动",
+        "译文原样保留全部代码、占位符与链接：`horizon sync --mode=fast --dry-run`、`{count}`、`%s`、`${elapsed_ms}`、`503`、`HORIZON_UTF8=1`、`https://docs.example.org/horizon/v3.2/utf8`",
+        "日期与单位已本地化：`11/18/2026` 转为 `2026 年 11 月 18 日`（或 `2026-11-18`）；`41°F` 换算为 `5°C`（可括注原值）；`15 miles` 换算为约 `24.1 公里`（可括注原值）",
+        "汇报包含「译文」「术语表」「回译对照」「没法翻的地方」四段",
+        "「术语表」包含至少 4 条全文统一术语；「回译对照」包含恰好 3 段关键内容的原文、译文、回译与核对说明；「没法翻的地方」说明了宣传语双关句的处理方式"
+      ]
+    },
+    {
+      "id": "translator-2",
+      "title": "中译英 SaaS 帮助中心文档（保留 Markdown 表格、占位符与品牌口号说明）",
+      "brief": "目标：将 `input/help-zh.md` 翻译为面向北美用户的美式英语帮助中心文档，写入 `out/help-en.md`。\n背景：用户为英文 SaaS 客户，要求日期和货币/重量单位符合美式阅读习惯（必要时保留原值括注）。\n边界：不改动原稿 `input/help-zh.md`；不破坏 Markdown 表格结构、代码块和变量占位符。\n做到什么样算完：译文保存至 `out/help-en.md`，附术语表、3 段回译对照及中文口号/双关的本地化处理说明。",
+      "files": [
+        {
+          "path": "input/help-zh.md",
+          "content": "# 跨境退单与运费补贴说明\n\n生效日期：2026 年 11 月 18 日\n\n## 适用条件\n单笔订单包裹重量不超过 2 公斤且签收后 14 天内提交申诉的客户，可在控制台调用接口自动发起补贴申请。\n\n| 账单等级 | 单次补贴上限 | 处理时效 |\n|---|---|---|\n| 标准版 | 50 元人民币 | 2 个工作日 |\n| 企业版 | 200 元人民币 | 4 小时 |\n\n## 通知模板示例\n系统推送消息模板为：`\"Order {order_id} for tenant {{tenant}} refunded at %d\"`，请勿修改其中的花括号或百分号占位符。\n\n## 品牌口号\n页面底部保留中文市场常用标语：「省心不省料，快人不止一步」。\n"
+        }
+      ],
+      "checks": [
+        "存在 `out/help-en.md`，`input/help-zh.md` 保持原样未修改",
+        "保留完整的 3 列 Markdown 表格结构，以及代码模板中的 `{order_id}`、`{{tenant}}`、`%d` 未被翻译或删改",
+        "日期转换为美式英文写法（如 `November 18, 2026`），重量 `2 公斤` 附带磅换算（约 `4.4 lb`）或清楚标明单位，货币明确标出 `CNY` / `RMB` 避免与美元混淆",
+        "汇报包含「译文」「术语表」「回译对照」「没法翻的地方」段落",
+        "「回译对照」覆盖 3 段关键内容，「没法翻的地方」说明了中文口号「省心不省料，快人不止一步」的意译取舍"
+      ]
+    }
+  ]
+}

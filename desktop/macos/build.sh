@@ -289,7 +289,8 @@ sed \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
 
 "$PYTHON_DRIVER" "$REPO_ROOT/tools/macos-package/check_runtime.py" \
-  --resource-root "$CONTENTS/Resources/SuperPinkie" --node "$RUNTIME_ROOT/bin/node"
+  --resource-root "$CONTENTS/Resources/SuperPinkie" --node "$RUNTIME_ROOT/bin/node" \
+  --metre-roles-snapshot "$OUTPUT_ROOT/macos-metre-roles-runtime.json"
 
 "$PYTHON_DRIVER" "$REPO_ROOT/tools/ui-parity/bundle.py" check \
   --control-ui "$RUNTIME_ROOT/openclaw/dist/control-ui" --output "$OUTPUT_ROOT/macos-ui-manifest.json"

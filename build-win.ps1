@@ -99,6 +99,24 @@ foreach ($stage in @($serviceStage, $personaStage, $uiStage, $windowsInstallerSt
 }
 Copy-Item -Path (Join-Path $RepoRoot "services\*") -Destination $serviceStage -Recurse -Force
 Copy-Item -Path (Join-Path $RepoRoot "personas\*") -Destination $personaStage -Recurse -Force
+# The workspace installer and its reference file must come from shared source.
+foreach ($asset in @(
+    (Join-Path $serviceStage "mode-architecture\metre_role_assets.py"),
+    (Join-Path $personaStage "thinking\AESTHETICS.md"),
+    (Join-Path $personaStage "project\playbooks\toolbox.mjs")
+)) {
+    if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) { throw "缺少 Metre 角色资源 $asset" }
+}
+$officialRoles = Join-Path $RepoRoot "personas\metre\roles"
+if (Test-Path -LiteralPath $officialRoles -PathType Container) {
+    foreach ($card in (Get-ChildItem -LiteralPath $officialRoles -File -Filter '*.md')) {
+        $bundledCard = Join-Path $personaStage ("metre\roles\" + $card.Name)
+        if (-not (Test-Path -LiteralPath $bundledCard -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $bundledCard).Hash -ne (Get-FileHash -LiteralPath $card.FullName).Hash) {
+            throw "Metre 官方角色卡未正确打包 $($card.Name)"
+        }
+    }
+}
 Copy-Item -Path (Join-Path $RepoRoot "ui\*") -Destination $uiStage -Recurse -Force
 if ($env:PINKIE_RELEASE_BUILD -eq '1') {
     Copy-Item -LiteralPath (Join-Path $RepoRoot "ui\assets\laolao-splash-release.mp4") -Destination (Join-Path $uiStage "assets\laolao-splash.mp4") -Force
@@ -134,7 +152,9 @@ Get-Content -LiteralPath $sums | ForEach-Object {
     $parts = $_ -split '  ', 2
     $expect = $parts[0].ToLower()
     $rel = $parts[1].Trim()
-    if ($rel -eq 'services/mode-architecture/index.mjs') { throw '模式引擎必须使用公共源码，不能由快照覆盖' }
+    if ($rel -match '^services/mode-architecture/(index\.mjs|setup\.py|metre-roles\.mjs|metre-board\.mjs|metre_role_assets\.py)$') {
+        throw "模式引擎和 Metre 角色资源必须使用公共源码，不能由快照覆盖：$rel"
+    }
     if ($rel.StartsWith("openclaw/")) {
         Install-MacSnapshot $rel (Join-Path $openclawRoot ($rel.Substring(9) -replace '/', '\')) $expect
     } elseif ($rel.StartsWith("services/")) {

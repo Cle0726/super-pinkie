@@ -598,9 +598,10 @@
     const n = el('div', 'sidebar-recent-session session-row-host pinkie-session-part');
     n.dataset.sessionKey = part.key;
     const name = part.title || '子会话', where = MODE_SHORT[part.mode] || '';
+    const role = /^agent:roles:pinkie-child:/.test(part.key) ? part.roleName : '';
     const link = el('a', 'sidebar-recent-session__link');
     link.href = '/chat?session=' + encodeURIComponent(part.key);
-    link.dataset.pinkieTooltip = where ? name + '（在' + where + '模式，点了切过去）' : name;
+    link.dataset.pinkieTooltip = role ? name + '（角色：' + role + '）' : where ? name + '（在' + where + '模式，点了切过去）' : name;
     link.append(el('span', 'sidebar-recent-session__name', name));
     link.onclick = e => {
       if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -608,7 +609,7 @@
       openInMode(part.key);
     };
     const aside = el('span', 'session-row-aside');
-    if (where) aside.append(el('span', 'pinkie-session-origin pinkie-session-part__mode', where));
+    if (role || where) aside.append(el('span', 'pinkie-session-origin pinkie-session-part__mode', role || where));
     const phase = sessionStatus(part);
     if (phase) aside.append(sessionIcon(phase, statusLabels[phase], 'pinkie-session-icon pinkie-session-status--' + phase));
     else {

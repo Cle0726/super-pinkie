@@ -18,6 +18,10 @@ on:
       old_tag:
         description: "Older release for upgrade; empty = fresh only; metre-only = only check Metre in a fresh profile"
         default: v2.5.16
+      metre_roles:
+        description: "Verify installed Metre role assets, upgrade and native dispatch"
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       app_artifact:
@@ -27,6 +31,9 @@ on:
       old_tag:
         type: string
         default: v2.5.16
+      metre_roles:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,6 +48,7 @@ jobs:
       PACKAGE: ${{ inputs.app_artifact != '' && 'artifact' || inputs.package || 'build' }}
       RELEASE_TAG: ${{ inputs.release_tag || 'v2.5.26' }}
       OLD_TAG: ${{ inputs.old_tag }}
+      METRE_ROLES: ${{ inputs.metre_roles }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -104,6 +112,7 @@ jobs:
           if ($env:PACKAGE -ne 'release') { $arguments += '--metre-sidebar' }
           if (Test-Path smoke-old) { $arguments += @('--old-app', 'smoke-old') }
           if ($env:OLD_TAG -eq 'metre-only') { $arguments += '--metre-sidebar-only' }
+          if ($env:METRE_ROLES -eq 'true') { $arguments += '--metre-roles' }
           python @arguments
 
       - name: Upload evidence
