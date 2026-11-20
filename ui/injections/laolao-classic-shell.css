@@ -390,6 +390,16 @@ html[data-laolao-classic-shell="1"] .agent-chat__composer-shell {
   margin-left: auto;
 }
 
+/* Upstream removes the narrow layout's bottom gap when a mobile keyboard is
+   active. The Windows desktop input instead loses focus on pointerdown, so
+   moving the whole toolbar at that moment can drop the click on pointerup. */
+@media (max-width: 768px) {
+  html[data-pinkie-platform="windows"]
+    .agent-chat__composer-shell:has(.agent-chat__composer-combobox > textarea:focus) {
+    margin-bottom: calc(14px + var(--safe-area-bottom, 0px));
+  }
+}
+
 html[data-laolao-classic-shell="1"] .agent-chat__input {
   width: 100% !important;
   max-width: none !important;

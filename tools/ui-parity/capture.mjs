@@ -106,8 +106,12 @@ try {
     console.log('capture',label,view);
     currentView=view;
     const entryAgent=view==='home'?(captureAgent==='main'?'project':'main'):(view==='learning'?'learning':captureAgent);
+    // The mock server and route handler must see the actual packaged responses;
+    // a service worker can take over requests and stall this intercepted WebKit
+    // session before font readiness. Leave real CDP contexts and the separate
+    // Windows cache-evidence probe untouched.
     const context=args.cdp ? browser.contexts()[0]
-      : await browser.newContext({viewport:captureSize,deviceScaleFactor:1,colorScheme:captureTheme,locale:'zh-CN',reducedMotion:'no-preference'});
+      : await browser.newContext({viewport:captureSize,deviceScaleFactor:1,colorScheme:captureTheme,locale:'zh-CN',reducedMotion:'no-preference',serviceWorkers:'block'});
     if(!context)throw Error('the packaged WebView2 has no debuggable context');
     await context.route('**/*',route=>{const u=new URL(route.request().url());if(['http:','https:'].includes(u.protocol)&&u.origin!==origin){requests.push({view,url:u.href,blockedExternal:true});return route.abort();}return route.continue();});
     await context.addInitScript(({view,origin,entryAgent,nativePlatform,mockNative,captureTheme})=>{
@@ -154,6 +158,26 @@ try {
     await page.waitForTimeout(1500);
     await page.waitForFunction(()=>document.fonts.status==='loaded',null,{timeout:20000,polling:100});
     console.log('fonts ready',view);
+    if(view==='compact-composer'){
+      if(args.cdp||args['native-platform']!=='windows')throw Error('compact-composer requires a Windows-styled browser fixture');
+      await page.setViewportSize({width:760,height:500});
+      const input=page.locator('.agent-chat__composer-combobox > textarea').first();
+      for(const [name,trigger,popup] of [
+        ['toolbox','.pinkie-tray-btn','.pinkie-tray'],
+        ['context','.laolao-context-viewer > summary','.laolao-context-viewer__popover.is-floating'],
+      ]){
+        const button=page.locator(trigger).first();
+        await input.click();
+        // A real press through focusout; invoking dispatchEvent or element.click
+        // here would not detect a toolbar that moves out from under the pointer.
+        await button.click({delay:65});
+        await page.locator(popup).first().waitFor({state:'visible',timeout:5000});
+        if(name==='toolbox')await page.keyboard.press('Escape');
+        else await button.click();
+        await page.locator(popup).first().waitFor({state:'hidden',timeout:5000});
+        console.log('compact composer click passed',name);
+      }
+    }
     if(view==='home'){
       await page.locator('.laolao-mode-switcher').first().click();
       await page.locator(`.laolao-mode-menu__option[data-mode="${captureMode}"]`).click();
