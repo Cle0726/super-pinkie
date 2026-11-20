@@ -12,14 +12,18 @@ import tempfile
 import time
 from urllib.request import ProxyHandler, build_opener
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.release.runtime_inventory import cli_json, inspect_activation
+
 
 GATEWAY = "http://127.0.0.1:18789"
 HTTP = build_opener(ProxyHandler({}))
+DASHBOARD_PROOF = b"pinkie-release-smoke: dashboard connected and model setup loaded"
 
 
-def gateway_listening():
+def gateway_listening(port=18789):
     try:
-        with socket.create_connection(("127.0.0.1", 18789), timeout=1):
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
             return True
     except OSError:
         return False
@@ -79,18 +83,68 @@ def stop_owned(process, owned):
     raise RuntimeError("the isolated launcher or its gateway did not stop")
 
 
-def launch(package, profile, label):
+def verify_installed_features(app, config_path, state, env, label, log_path):
+    runtime = app / 'Contents/Resources/SuperPinkie/runtime'
+    command = [runtime / 'bin/node', runtime / 'openclaw/openclaw.mjs']
+    report = inspect_activation(command, env)
+    if not report['ok']:
+        raise RuntimeError(f'{label}: packaged features are missing: {report}')
+    # All calls are read-only and target the disposable profile's local gateway.
+    gateway = json.loads(config_path.read_text(encoding='utf-8')).get('gateway') or {}
+    if gateway.get('mode', 'local') != 'local' or gateway.get('port', 18789) != 18789:
+        raise RuntimeError(f'{label}: fixture Gateway is not local')
+    checks = {
+        'usage': ('pinkie.usage.get', {}),
+        'workbench': ('pinkie.fs.status', {'sessionKey': 'agent:project:main'}),
+        'learning desk': ('pinkie.learning.desk.metrics', {'sessionKey': 'agent:learning:main'}),
+        'model setup': ('pinkie.modelSetup.list', {}),
+        'Metre lock': ('pinkie.guard.metreStatus', {}),
+    }
+    for name, (method, params) in checks.items():
+        value = cli_json([*command, 'gateway', 'call', method, '--json', '--timeout', '15000',
+                          '--params', json.dumps(params)], env, dict)
+        if name == 'Metre lock' and not (value.get('required') and value.get('locked') and value.get('configured')):
+            raise RuntimeError(f'{label}: Metre release lock not active')
+        if name == 'model setup' and not isinstance(value.get('providers'), list):
+            raise RuntimeError(f'{label}: model setup did not return the provider list')
+    for name, port in [('party', 18889), ('roundtable', 18891)]:
+        with HTTP.open(f'http://127.0.0.1:{port}/api/health', timeout=4) as response:
+            if json.load(response).get('service') != f'super-pinkie-{name}':
+                raise RuntimeError(f'{label}: unexpected {name} service')
+    guard = json.loads((state / 'guard/status.json').read_text(encoding='utf-8'))
+    if not guard.get('trusted') or guard.get('limitReached') or guard.get('counterTampered') or guard.get('strikesIn24h') != 0:
+        raise RuntimeError(f'{label}: official settings guard is not clean after startup')
+    deadline = time.monotonic() + 55
+    while DASHBOARD_PROOF not in log_path.read_bytes():
+        if time.monotonic() >= deadline:
+            # The exact signed Launcher exposes only these fixed QA labels,
+            # never page content, environment values or gateway credentials.
+            diagnostics = [line for line in log_path.read_bytes().splitlines()
+                           if line.startswith(b"pinkie-release-smoke:")]
+            for line in diagnostics[-12:]:
+                print(line.decode("utf-8", errors="replace"), flush=True)
+            raise RuntimeError(f'{label}: native WebKit did not reach its actual Gateway and model setup')
+        time.sleep(1)
+    print(f'{label}: core agents, plugins, model sync, services, live Gateway methods and native WebKit verified',
+          flush=True)
+
+
+def launch(package, profile, label, *, verify_features=False):
     app = package / "超級碧琪.app"
     executable = app / "Contents/MacOS/Launcher"
     home, state = profile / "home", profile / "state"
     claw = home / ".openclaw"
     for directory in (home, state, claw):
         directory.mkdir(parents=True, exist_ok=True)
-    if gateway_listening():
-        raise RuntimeError("loopback gateway was already running before " + label)
+    occupied = [port for port in (18789, 18889, 18891) if gateway_listening(port)]
+    if occupied:
+        raise RuntimeError(f'{label}: the fixture ports were already in use: {occupied}')
     env = {**os.environ, "HOME": str(home), "PINKIE_STATE_ROOT": str(state),
            "OPENCLAW_STATE_DIR": str(claw), "PINKIE_GATEWAY_URL": GATEWAY + "/"}
-    with (profile / f"{label}-launcher.log").open("wb") as log:
+    if verify_features:
+        env["PINKIE_RELEASE_SMOKE"] = "1"
+    log_path = profile / f"{label}-launcher.log"
+    with log_path.open("wb") as log:
         process = subprocess.Popen([str(executable)], cwd=app, env=env,
                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         owned = {}
@@ -108,9 +162,8 @@ def launch(package, profile, label):
                     time.sleep(3)
                     if process.poll() is not None or not gateway_up():
                         raise RuntimeError(f"{label}: native app did not stay up")
-                    guard_log = state / "logs/guard.log"
-                    if guard_log.is_file() and "alert:" in guard_log.read_text(encoding="utf-8", errors="replace"):
-                        raise RuntimeError(f"{label}: settings protection showed a startup alert")
+                    if verify_features:
+                        verify_installed_features(app, claw / 'openclaw.json', state, env, label, log_path)
                     print(f"{label}: native launcher and bundled gateway ready ({time.monotonic()-started:.1f}s)", flush=True)
                     return
                 time.sleep(2)
@@ -126,18 +179,20 @@ def main():
         raise SystemExit("This check must run on a disposable macOS GitHub Actions runner")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True, help="extracted candidate ZIP directory")
-    parser.add_argument("--old-app", type=Path, required=True, help="extracted published ZIP directory")
+    parser.add_argument("--old-app", type=Path, help="extracted published ZIP directory for an additional upgrade test")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="pinkie-native-smoke-", dir=os.environ.get("RUNNER_TEMP"),
                                      ignore_cleanup_errors=True) as folder:
         root = Path(folder)
-        launch(args.app.resolve(), root / "fresh", "fresh")
+        launch(args.app.resolve(), root / "fresh", "fresh", verify_features=True)
+        if not args.old_app:
+            return
         profile = root / "upgrade"
         launch(args.old_app.resolve(), profile, "upgrade-old")
         marker = profile / "home/.openclaw/workspace/pinkie-ci-user-note.txt"
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_bytes(b"Existing user note in isolated release QA profile.\n")
-        launch(args.app.resolve(), profile, "upgrade")
+        launch(args.app.resolve(), profile, "upgrade", verify_features=True)
         if marker.read_bytes() != b"Existing user note in isolated release QA profile.\n":
             raise RuntimeError("existing workspace data changed on upgrade startup")
         print("Mac release ZIP launched successfully with fresh and existing profiles", flush=True)

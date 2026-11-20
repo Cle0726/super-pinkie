@@ -775,6 +775,71 @@ private enum Gateway {
     private static var logHandle: FileHandle?
     private(set) static var lastError: String?
     private static let bundledNodeSuffix = "/Contents/Resources/SuperPinkie/runtime/bin/node"
+    private static let nativeAuthScriptMarker = "/* super-pinkie managed Gateway auth */"
+    static func nativeControlAuthPrepared(for webView: WKWebView) -> Bool {
+        webView.configuration.userContentController.userScripts.contains { $0.source.hasPrefix(nativeAuthScriptMarker) }
+    }
+
+    static func prepareNativeControlAuth(for webView: WKWebView) {
+        // Share a credential only with our own bundled Gateway's loopback
+        // Control UI. Never expose it to the separate browser or a remote URL.
+        // Foundation's Process may return a differently represented file URL
+        // for the same executable. Match the resolved paths, not URL objects.
+        guard let task = process, task.isRunning,
+              let executable = task.executableURL, let bundledNode = BundledRuntime.nodeURL,
+              canonicalPath(executable.path) == canonicalPath(bundledNode.path),
+              var origin = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = origin.scheme, scheme == "http" || scheme == "https",
+              let host = origin.host?.lowercased(), ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host),
+              origin.user == nil, origin.password == nil, origin.query == nil, origin.fragment == nil,
+              origin.path.isEmpty || origin.path == "/" else { return }
+        let controller = webView.configuration.userContentController
+        guard !nativeControlAuthPrepared(for: webView) else { return }
+
+        let env = task.environment ?? [:]
+        let config = env["OPENCLAW_CONFIG_PATH"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? SettingsGuardNative.openclawStateDir().appendingPathComponent("openclaw.json")
+        guard let data = try? Data(contentsOf: config),
+              data.range(of: Data("\"$include\"".utf8)) == nil,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let gateway = root["gateway"] as? [String: Any],
+              (gateway["mode"] as? String ?? "local") == "local",
+              (gateway["bind"] as? String ?? "loopback") == "loopback",
+              ((gateway["tailscale"] as? [String: Any])?["mode"] as? String ?? "off") == "off" else { return }
+        let auth = gateway["auth"] as? [String: Any] ?? [:]
+        func literal(_ name: String, environment: String) -> String? {
+            guard auth[name] == nil || auth[name] is String else { return nil }  // SecretRef is resolved only by OpenClaw.
+            for candidate in [auth[name] as? String, env[environment]] {
+                guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { continue }
+                return value.contains("${") ? nil : value
+            }
+            return nil
+        }
+        let token = literal("token", environment: "OPENCLAW_GATEWAY_TOKEN")
+        let password = literal("password", environment: "OPENCLAW_GATEWAY_PASSWORD")
+        let mode = auth["mode"] as? String ?? (password != nil ? "password" : "token")
+        let credential: String?
+        switch mode {
+        case "token": credential = token
+        case "password": credential = password
+        default: return
+        }
+        origin.path = ""
+        guard let address = origin.string, let credential,
+              let payload = try? JSONSerialization.data(withJSONObject: ["origin": address, mode: credential]),
+              let json = String(data: payload, encoding: .utf8) else { return }
+        let source = """
+        \(nativeAuthScriptMarker)
+        (() => {
+          const auth = \(json);
+          if (window !== window.top || location.origin !== new URL(auth.origin).origin) return;
+          delete auth.origin;
+          auth.gatewayUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+          window.__OPENCLAW_NATIVE_CONTROL_AUTH__ = auth;
+        })();
+        """
+        controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
 
     private static func endpoint(_ path: String) -> URL {
         url.appendingPathComponent(path)
@@ -2274,6 +2339,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var companionRetries = 0
     private var startupVideoStartedAt: Date?
     private var dashboardLoadPending = false
+    private var releaseDashboardProbeGeneration = 0
+    private var releaseDashboardProbeStatus = ""
+    private let releaseDashboardProbeEnabled = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+        && ProcessInfo.processInfo.environment["PINKIE_RELEASE_SMOKE"] == "1"
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
     private var gatewayProbeInFlight = false
@@ -4717,6 +4786,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         // primary's full navigation rail visible at half width is what made
         // each reply collapse into a skinny vertical strip.
         companionRetries = 0
+        Gateway.prepareNativeControlAuth(for: companion)
         companion.load(URLRequest(url: chatURL(sessionKey: targetSession, docked: true)))
         window.makeFirstResponder(companion)
     }
@@ -4757,7 +4827,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
             startupVideoStartedAt = nil
         }
+        if let webView {
+            Gateway.prepareNativeControlAuth(for: webView)
+            if releaseDashboardProbeEnabled {
+                releaseDashboardProbeGeneration += 1
+                let generation = releaseDashboardProbeGeneration
+                logReleaseDashboardProbe("navigation queued (native auth: \(Gateway.nativeControlAuthPrepared(for: webView)))")
+                DispatchQueue.main.async { [weak self, weak webView] in
+                    if let webView { self?.probeReleaseDashboard(webView, generation: generation) }
+                }
+            }
+        }
         webView?.load(URLRequest(url: Gateway.defaultChatURL))
+    }
+
+    private func logReleaseDashboardProbe(_ status: String) {
+        guard status != releaseDashboardProbeStatus else { return }
+        releaseDashboardProbeStatus = status
+        FileHandle.standardError.write(Data("pinkie-release-smoke: \(status)\n".utf8))
+    }
+
+    private func probeReleaseDashboard(_ view: WKWebView, generation: Int, remaining: Int = 45) {
+        // Disposable release QA exercises the actual embedded WebKit view.
+        // This is a read-only check; it does not alter navigation or auth.
+        guard view === webView, generation == releaseDashboardProbeGeneration else { return }
+        func retry() {
+            guard remaining > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak view] in
+                if let view { self?.probeReleaseDashboard(view, generation: generation, remaining: remaining - 1) }
+            }
+        }
+        guard view.url?.scheme == Gateway.url.scheme, view.url?.host == Gateway.url.host,
+              view.url?.port == Gateway.url.port else {
+            logReleaseDashboardProbe("waiting for local dashboard navigation")
+            retry()
+            return
+        }
+        let check = """
+        const sidebar = window.__laolaoSidebar;
+        if (!sidebar?.gwRequest) {
+          return document.body?.innerText.includes('Gateway Token')
+            ? 'local dashboard asks for a token'
+            : 'local dashboard sidebar not initialized';
+        }
+        try {
+          const data = await sidebar.gwRequest('pinkie.modelSetup.list', {}, 2500);
+          return Array.isArray(data?.providers) ? 'dashboard connected and model setup loaded' : 'missing model providers';
+        } catch {
+          return document.body?.innerText.includes('Gateway Token')
+            ? 'local dashboard asks for a token'
+            : 'waiting for live model setup';
+        }
+        """
+        view.callAsyncJavaScript(check, arguments: [:], in: nil, in: .page) { [weak self] result in
+            guard let self, generation == self.releaseDashboardProbeGeneration else { return }
+            if case .success(let value) = result, let status = value as? String {
+                self.logReleaseDashboardProbe(status)
+                if status == "dashboard connected and model setup loaded" { return }
+            } else if case .failure(let error) = result {
+                self.logReleaseDashboardProbe("WebKit callback error \((error as NSError).code)")
+            }
+            retry()
+        }
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {

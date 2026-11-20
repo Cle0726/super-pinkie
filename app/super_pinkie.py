@@ -619,13 +619,15 @@ def configured_agent_ids(config_path=None):
         return None
 
 
-def ensure_main_agent(log, config_path=None):
+def ensure_main_agent(log, config_path=None, *, stage_modes=False):
     """Put the 唠嗑 agent `main` first in agents.list.
 
     OpenClaw treats the first listed agent as the default, and the chat mode
     opens the default session.  A fresh Windows profile only ever had the two
     party agents written by services/party, so 唠嗑模式 silently ran as
     pinkie-party.  The Mac install lists main first with this same workspace.
+    In a guarded install, stage all missing bundled modes in the same write,
+    before plugin setup or any CLI command can take a partial baseline.
     """
     path = Path(config_path or openclaw_config_path())
     try:
@@ -638,22 +640,32 @@ def ensure_main_agent(log, config_path=None):
             return False
         index = next((i for i, item in enumerate(listed) if isinstance(item, dict) and item.get("id") == "main"), None)
         workspace = str(path.parent / "workspace")
+        messages = []
         if index == 0:
-            if listed[0].get("workspace"):
-                return True
-            # Other setup steps may add a bare {"id": "main"}. The release
-            # guard expects main's workspace to be written out and would
-            # otherwise "repair" it on the next start with a tampering notice.
-            listed[0]["workspace"] = workspace
-            message = "  已写明 main（唠嗑）模式的工作区"
+            if not listed[0].get("workspace"):
+                # Other setup steps may add a bare {"id": "main"}. The release
+                # guard expects main's workspace to be written out.
+                listed[0]["workspace"] = workspace
+                messages.append("  已写明 main（唠嗑）模式的工作区")
         elif index is None:
             listed.insert(0, {"id": "main", "workspace": workspace})
-            message = "  已补齐 main（唠嗑）模式"
+            messages.append("  已补齐 main（唠嗑）模式")
         else:
             entry = listed.pop(index)
             entry.setdefault("workspace", workspace)
             listed.insert(0, entry)
-            message = "  已把 main（唠嗑）模式放回默认位置"
+            messages.append("  已把 main（唠嗑）模式放回默认位置")
+        if stage_modes:
+            existing = {item.get("id") for item in listed if isinstance(item, dict) and isinstance(item.get("id"), str)}
+            for agent_id, folder in MODE_AGENTS.items():
+                if agent_id in existing:
+                    continue
+                # OpenClaw resolves the default agentDir and reads IDENTITY.md
+                # from the workspace already seeded by install_personas.
+                listed.append({"id": agent_id, "name": agent_id, "workspace": str(path.parent / folder)})
+                messages.append(f"  已补齐 {agent_id} 模式")
+        if not messages:
+            return True
         # The gateway may still be running after the window was closed. Do
         # check for an edit made since we read the configuration.
         fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".pinkie-main-")
@@ -668,7 +680,8 @@ def ensure_main_agent(log, config_path=None):
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-        log(message)
+        for message in messages:
+            log(message)
         return True
     except (OSError, ValueError, AttributeError) as exc:
         log(f"  ⚠️ 补齐 main（唠嗑）模式失败：{exc}")
@@ -678,13 +691,15 @@ def ensure_main_agent(log, config_path=None):
 def ensure_mode_agents(log):
     """Register any missing mode agent.  Returns True when all of them exist.
 
-    Safe to call on every launch: it reads openclaw.json first and only runs
-    the CLI when something is missing.  Every failure is logged instead of
-    swallowed, so a broken run shows up in setup.log and is retried next time.
+    Use one config write for the guarded App. Its own `agents add` commands
+    would otherwise load the guard and count each legitimate new bundled mode
+    as a change to protected configuration during a legacy upgrade.
     """
     configured = configured_agent_ids()
     if configured and configured[0] == "main" and all(agent_id in configured for agent_id in MODE_AGENTS):
         return True
+    if bundled_settings_guard_enabled():
+        return ensure_main_agent(log, stage_modes=True)
     registered = register_mode_agents(log)
     # After the CLI, which rewrites openclaw.json itself.
     return ensure_main_agent(log) and registered
@@ -1080,6 +1095,13 @@ def pull_and_update(log):
         return False
 
 
+def bundled_settings_guard_enabled():
+    try:
+        return json.loads(resource_path("build-info.json").read_text(encoding="utf-8-sig")).get("guard") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def run_settings_guard(log):
     """产品设定防护（正式版才做事）：校验签名清单，把被改过的人设/插件/自带技能换回官方版本，openclaw.json 只修产品键。
 
@@ -1087,13 +1109,7 @@ def run_settings_guard(log):
     后面的插件 setup 读到的已经是修好的配置。校验器自己出错不挡启动（它会写 status.json 标记）。
     """
     guard = resource_path("installer", "guard", "guard.mjs")
-    info = resource_path("build-info.json")
-    if not guard.is_file() or not info.is_file():
-        return None
-    try:
-        if json.loads(info.read_text(encoding="utf-8-sig")).get("guard") is not True:
-            return None
-    except (OSError, ValueError, AttributeError):
+    if not guard.is_file() or not bundled_settings_guard_enabled():
         return None
     try:
         result = subprocess.run(
@@ -1155,12 +1171,9 @@ def prepare_bundled_desktop(log):
     # It used to sit in the `else` branch, so a fresh download registered no
     # mode agents at all and every mode plugin looked like it "did not take
     # effect" until the *next* start -- the exact symptom users reported.
-    # It is cheap and idempotent: it reads openclaw.json and only calls the CLI
-    # when something is missing, so a failed run is repaired next time.
-    # The CLI it calls loads every plugin. After a broken earlier install (half
-    # a plugin copied) it cannot start until install_runtime_service below has
-    # put the plugin back, so a failure here is held back and the modes are
-    # registered again after the services; only that second result is logged.
+    # In a guarded package the official entries must be complete before plugin
+    # setup activates the watcher. Development builds still use the CLI; retry
+    # a failed configuration after the service files have been installed.
     early = []
     agents_ok = ensure_mode_agents(early.append)
     for line in early:

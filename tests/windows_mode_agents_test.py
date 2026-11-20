@@ -127,6 +127,31 @@ class ModeAgentRegistrationTests(unittest.TestCase):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
         self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted", "metre"])
 
+    def test_guarded_legacy_upgrade_stages_all_modes_before_the_first_plugin_is_loaded(self):
+        (self.resources / "build-info.json").write_text('{"channel":"release","guard":true}', encoding="utf-8")
+        # The 2.5.16 upgrade profile has no built-in mode rows yet.
+        old = {"id": "pinkie-party", "name": "My party"}
+        other = {"id": "custom-agent", "name": "My assistant", "model": "fixture/custom"}
+        config = self.home / ".openclaw/openclaw.json"
+        config.write_text(json.dumps({"agents": {"list": [old, other]}}), encoding="utf-8")
+        staged = []
+
+        def install_service(name, log):
+            staged.append(json.loads(config.read_text(encoding="utf-8"))["agents"]["list"])
+
+        with mock.patch.object(super_pinkie, "run_openclaw", side_effect=AssertionError("must not add one agent at a time")), \
+                mock.patch.object(super_pinkie, "install_runtime_service", side_effect=install_service):
+            super_pinkie.prepare_bundled_desktop(self.logs.append)
+            self.assertTrue(staged)
+            entries = staged[0]
+            self.assertEqual([entry["id"] for entry in entries], ["main", "pinkie-party", "custom-agent", *super_pinkie.MODE_AGENTS])
+            self.assertEqual(entries[1:3], [old, other])
+            for entry in entries[3:]:
+                self.assertEqual(entry["workspace"], str(config.parent / super_pinkie.MODE_AGENTS[entry["id"]]))
+            before = config.read_bytes()
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+            self.assertEqual(config.read_bytes(), before)
+
     def test_main_is_added_first_ahead_of_the_party_agents(self):
         # What services/party leaves in a fresh profile: no main at all, so
         # OpenClaw picked pinkie-party as the default and 唠嗑 ran as it.

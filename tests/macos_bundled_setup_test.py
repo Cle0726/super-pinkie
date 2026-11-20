@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,8 @@ class BundledSetupTest(unittest.TestCase):
         shutil.copy2(INSTALLER / "apply-bundled.sh", installer)
         shutil.copy2(INSTALLER / "agent-setup-plan.py", installer)
         (installer / "sync-personas.sh").write_text("#!/bin/bash\nexit 0\n")
+        (installer / "apply-theme.sh").write_text("#!/bin/bash\nexit 0\n")
+        (installer / "apply-theme.sh").chmod(0o755)
         (self.repo / "VERSION").write_text("2.5.29\n")
         self.package = self.repo / "runtime/openclaw/package.json"
         self.package.parent.mkdir(parents=True)
@@ -47,12 +50,13 @@ class BundledSetupTest(unittest.TestCase):
         for agent, identity in IDENTITIES.items():
             target = self.home / f".openclaw/workspace-{agent}/IDENTITY.md"
             target.parent.mkdir(parents=True)
-            target.write_text("\n".join(f"- **{key.title()}:** {value}" for key, value in identity.items()) + "\n")
+            target.write_text("\n".join(f"- **{key.title()}:** {value}" for key, value in identity.items()) + "\n",
+                              encoding="utf-8")
 
     def write_config(self, agents=tuple(IDENTITIES)):
         self.config.write_text(json.dumps({"agents": {"list": [
             {"id": agent, "identity": IDENTITIES[agent]} for agent in agents
-        ]}}, ensure_ascii=False))
+        ]}}, ensure_ascii=False), encoding="utf-8")
 
     def plan(self, extra_env=None):
         with mock.patch.dict(os.environ, extra_env or {}, clear=True):
@@ -91,12 +95,12 @@ elif args[:2] == ["agents", "add"]:
         result = subprocess.run(["bash", str(self.repo / "installer/macos/apply-bundled.sh")],
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
-        return [json.loads(line) for line in log.read_text().splitlines()]
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def test_only_unambiguously_matching_identities_are_skipped(self):
         self.assertEqual(self.plan(), ["project", "learning", "metre"])
         project = self.home / ".openclaw/workspace-project/IDENTITY.md"
-        project.write_text(project.read_text() + "- Name: 不同的名字\n")
+        project.write_text(project.read_text(encoding="utf-8") + "- Name: 不同的名字\n", encoding="utf-8")
         self.assertEqual(self.plan(), ["learning", "metre"])
         self.assertEqual(self.plan({"OPENCLAW_CONFIG_PATH": "/custom/config.json"}), [])
         self.assertEqual(self.plan({"OPENCLAW_STATE_DIR": "/custom/state"}), [])
@@ -113,49 +117,79 @@ elif args[:2] == ["agents", "add"]:
         self.config.write_text('{not-json}')
         self.assertEqual(self.plan(), [])
 
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_existing_identities_reuse_one_validated_list(self):
-        calls = self.run_setup()
-        self.assertEqual(calls, [["agents", "list", "--json"]])
+    def test_atomic_stage_keeps_existing_modes_preferences_and_identities(self):
+        config = json.loads(self.config.read_text(encoding='utf-8'))
+        config['models'] = {'providers': {'local': {'models': []}}}
+        existing = config['agents']['list'][0]
+        existing['workspace'] = '/existing/project'
+        self.config.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
+        self.assertTrue(PLAN.stage_bundled_agents(self.config))
+        updated = json.loads(self.config.read_text(encoding='utf-8'))
+        rows = updated['agents']['list']
+        self.assertEqual(rows[0]['id'], 'main')
+        self.assertEqual(set(row['id'] for row in rows), set(PLAN.BUNDLED_MODES))
+        self.assertEqual(next(row for row in rows if row['id'] == 'project'), existing)
+        self.assertEqual(updated['models'], config['models'])
+        self.assertFalse(PLAN.stage_bundled_agents(self.config))
+
+    def test_default_managed_loopback_has_a_private_stable_profile_token(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            PLAN.stage_bundled_agents(self.config)
+            gateway = json.loads(self.config.read_text(encoding='utf-8'))['gateway']
+            self.assertEqual((gateway['mode'], gateway['bind'], gateway['auth']['mode']),
+                             ('local', 'loopback', 'token'))
+            self.assertRegex(gateway['auth']['token'], r'^[A-Za-z0-9_-]{43}$')
+            if os.name == 'posix':
+                self.assertEqual(stat.S_IMODE(self.config.stat().st_mode), 0o600)
+            self.assertFalse(PLAN.stage_bundled_agents(self.config))
+            other = self.root / 'other.json'
+            PLAN.stage_bundled_agents(other)
+            self.assertNotEqual(json.loads(other.read_text(encoding='utf-8'))['gateway']['auth']['token'],
+                                gateway['auth']['token'])
+
+    def test_explicit_gateway_and_credential_sources_are_untouched(self):
+        cases = [
+            ({'auth': {'mode': 'none'}}, {}),
+            ({'auth': {'mode': 'token', 'token': 'existing-test-token'}}, {}),
+            ({'auth': {'mode': 'password', 'password': 'existing-test-password'}}, {}),
+            ({'auth': {'token': {'source': 'env', 'provider': 'default', 'id': 'MY_TEST_TOKEN'}}}, {}),
+            ({'mode': 'remote', 'remote': {'url': 'wss://example.test'}}, {}),
+            ({'bind': 'lan'}, {}),
+            ({'tailscale': {'mode': 'serve'}}, {}),
+            ({}, {'OPENCLAW_GATEWAY_TOKEN': 'test-env-token'}),
+        ]
+        for gateway, env in cases:
+            with self.subTest(gateway=gateway, env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.config.write_text(json.dumps({'gateway': gateway}), encoding='utf-8')
+                PLAN.stage_bundled_agents(self.config)
+                self.assertEqual(json.loads(self.config.read_text(encoding='utf-8'))['gateway'], gateway)
+        (self.config.parent / '.env').write_text('export OPENCLAW_GATEWAY_PASSWORD="test-value"\n', encoding='utf-8')
+        self.config.write_text('{}', encoding='utf-8')
+        with mock.patch.dict(os.environ, {}, clear=True):
+            PLAN.stage_bundled_agents(self.config)
+            self.assertNotIn('gateway', json.loads(self.config.read_text(encoding='utf-8')))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_changed_identity_still_uses_original_cli(self):
-        path = self.home / ".openclaw/workspace-project/IDENTITY.md"
-        path.write_text(path.read_text().replace("项目搭档", "新项目搭档"))
-        calls = self.run_setup()
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[1][:4], ["agents", "set-identity", "--agent", "project"])
-
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_missing_project_refreshes_list_and_installs_identity(self):
-        self.write_config(("learning", "metre"))
-        calls = self.run_setup(agents=("learning", "metre"))
-        self.assertEqual([call[:3] for call in calls], [
-            ["agents", "list", "--json"], ["agents", "add", "project"],
-            ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
-        ])
-        self.assertEqual(calls[2][3], "project")
-
-    @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_fresh_profile_adds_all_managed_modes(self):
+    def test_fresh_profile_registers_all_six_modes_before_the_managed_gateway(self):
         self.write_config(())
         calls = self.run_setup(agents=())
-        self.assertEqual([call[:3] for call in calls], [
-            ["agents", "list", "--json"], ["agents", "add", "project"],
-            ["agents", "set-identity", "--agent"], ["agents", "list", "--json"],
-            ["agents", "add", "learning"], ["agents", "set-identity", "--agent"],
-            ["agents", "list", "--json"], ["agents", "add", "metre"],
-            ["agents", "set-identity", "--agent"],
-        ])
+        self.assertEqual(calls, [])
+        rows = json.loads(self.config.read_text(encoding='utf-8'))['agents']['list']
+        self.assertEqual([row['id'] for row in rows], list(PLAN.BUNDLED_MODES))
+        for row in rows:
+            self.assertEqual(row['workspace'], str(self.config.parent / PLAN.BUNDLED_MODES[row['id']]))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_failed_list_output_is_not_treated_as_valid(self):
-        calls = self.run_setup(extra_env={"FAKE_FAIL_LIST": "1"})
-        self.assertEqual([call[2] for call in calls if call[1] == "add"], list(IDENTITIES))
+    def test_existing_version_marker_does_not_hide_missing_registrations(self):
+        self.state.mkdir()
+        (self.state / 'bundled-personas-2.5.29').touch()
+        self.assertEqual(self.run_setup(), [])
+        rows = json.loads(self.config.read_text(encoding='utf-8'))['agents']['list']
+        self.assertEqual(set(row['id'] for row in rows), set(PLAN.BUNDLED_MODES))
 
     @unittest.skipUnless(shutil.which("bash") and sys.platform != "win32", "requires bash on macOS/Linux")
-    def test_custom_config_uses_each_original_identity_command(self):
-        calls = self.run_setup(extra_env={"OPENCLAW_CONFIG_PATH": "/custom/config.json"})
+    def test_manual_external_runtime_still_uses_the_cli_identity_commands(self):
+        calls = self.run_setup(extra_env={"PINKIE_MANAGED_GATEWAY": "0"})
         self.assertEqual([call[3] for call in calls if call[1] == "set-identity"], list(IDENTITIES))
 
 

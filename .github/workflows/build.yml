@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-macos:
@@ -56,18 +56,3 @@ jobs:
             dist/超級碧琪.exe
             dist/super-pinkie-control-windows.exe
             dist/super-pinkie-control-windows-portable.zip
-
-  release:
-    name: Attach to GitHub Release
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-macos, build-windows]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/**/super-pinkie-control-macos.zip
-            artifacts/**/super-pinkie-control-windows-portable.zip

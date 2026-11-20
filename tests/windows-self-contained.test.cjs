@@ -155,9 +155,11 @@ test('Windows exe checks signed release assets and can roll back a failed update
   assert.match(release, /windows-\*\.exe\.sha256/);
   assert.match(release, /portable\.zip/);
   assert.match(release, /portable\.zip\.sha256/);
-  for (const job of ['source', 'macos-publish', 'windows-publish']) {
-    assert.match(release, new RegExp(`\\n  ${job}:\\n    needs: \\[windows-smoke, ui-parity\\]\\n`), `${job} must not publish before Windows smoke passes`);
-  }
+  assert.match(release, /\n  publish:\n    needs: \[windows-smoke, ui-parity\]\n/);
+  assert.doesNotMatch(release, /action-gh-release|^  (source|macos-publish|windows-publish):/m);
+  const publisher = read('tools/release/publish-github.sh');
+  assert.match(publisher, /gh release create.*--verify-tag --draft/);
+  assert.match(publisher, /verify-upload[\s\S]*gh release edit.*--verify-tag --draft=false --latest/);
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {

@@ -28,6 +28,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.release.runtime_inventory import inspect_activation
+
 GATEWAY = "http://127.0.0.1:18789/"
 CHAT = GATEWAY + "chat"
 MODES = [
@@ -436,6 +439,8 @@ def drive_ui(out, label, release=False):
               const checks = [
                 ['usage', 'pinkie.usage.get', {}],
                 ['workbench', 'pinkie.fs.status', {sessionKey: 'agent:project:main'}],
+                ['model_setup', 'pinkie.modelSetup.list', {}],
+                ['learning_desk', 'pinkie.learning.desk.metrics', {sessionKey: 'agent:learning:main'}],
                 ['metre_board', 'pinkie.metre.board', {sessionKey: 'agent:metre:main'}],
               ];
               const result = {};
@@ -459,6 +464,12 @@ def drive_ui(out, label, release=False):
                   const value = await rpc(method, params);
                   if (name === 'metre_board' && (!value?.ok || !value.overview || !Array.isArray(value.sessions))) {
                     throw new Error('Metre board did not return a valid overview and session list');
+                  }
+                  if (name === 'model_setup' && !Array.isArray(value?.providers)) {
+                    throw new Error('model setup did not return its provider list');
+                  }
+                  if (name === 'learning_desk' && !value?.range) {
+                    throw new Error('the learning desk did not return its metrics');
                   }
                   result[name] = {ok: true};
                 } catch (error) { result[name] = {ok: false, error: String(error)}; }
@@ -711,7 +722,13 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary.update({"gateway_ready": ready, "seconds": seconds})
     try:
         if ready:
-            summary["agents"] = agents_list(runtime_dir(exe), env, out, label)
+            runtime = runtime_dir(exe)
+            summary["agents"] = agents_list(runtime, env, out, label)
+            if release:
+                summary["activation"] = inspect_activation(
+                    [runtime / "bin/node.exe", runtime / "node_modules/openclaw/openclaw.mjs"],
+                    env, agent_ids=summary["agents"]["ids"])
+                log(f"[{label}] installed activation: {summary['activation']}")
             if metre_roles:
                 receipt = metre_install_receipt(exe, profile)
                 if old_exe:
@@ -736,6 +753,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
     summary["passed"] = bool(
         ready
         and (not release or summary["release"]["passed"])
+        and (not release or summary.get("activation", {}).get("ok"))
         and (not release or summary.get("ui", {}).get("feedback_prompt", {}).get("ok"))
         and (not metre_roles or bool(summary.get("metre_roles")))
         and not summary.get("agents", {}).get("missing", AGENTS)
@@ -744,7 +762,7 @@ def scenario(label, exe, profile, out, old_exe=None, *, metre_roles=False):
         and summary.get("native_ui", {}).get("passed")
         and len(modes) == len(MODES)
         and all(entry.get("ok") for entry in modes.values())
-        and set(plugin_methods) == {"usage", "workbench", "metre_board"}
+        and set(plugin_methods) == {"usage", "workbench", "model_setup", "learning_desk", "metre_board"}
         and all(entry.get("ok") for entry in plugin_methods.values())
         and all(summary.get("service_health", {}).get(name) for name in ("party", "roundtable"))
         and not summary.get("ui", {}).get("page_errors")
