@@ -1,6 +1,6 @@
 # Metre 角色 agent · 修复后复验
 
-**结论（2026-11-20 更新）：8 轮免费模型验收通过、扩展评估待测；合并以推送后 CI 通过为准。** 八轮真实模型对比已全部交回并复判 **8/8**；用户已明确取消本轮异厂判分，执行与新上下文复判同用 `workbuddy/hy4flash-free`，**同模型复判，非异厂复核**，产品的异厂保护不变。
+**结论（2026-11-20 更新）：8 轮免费模型验收通过、扩展评估待测；CI 四项通过，按用户「验收通过就合并主线」合并。** 八轮真实模型对比已全部交回并复判 **8/8**；用户已明确取消本轮异厂判分，执行与新上下文复判同用 `workbuddy/hy4flash-free`，**同模型复判，非异厂复核**，产品的异厂保护不变。
 
 - **本次验收对象**：`79afb64a`（= 候选 `fba26226` 合并当时最新主线 `a85a7449`）。`fba26226` 是复判中发现的汇报标题误判修复，见下文 R2 行。八轮模型运行时候选为 `1a11ac71`；其后产品代码仅有该标题检查修复与主线合并。
 - 早前的全量门禁复验源码 `5212d2558c40e6330fbd750ae0c6279315ac9c44`；真实派活基于分支产品源码 `7467977aee5ef3f5d0d99f7b2a04cf47f776d13f`，本轮未改产品代码。[草稿 PR #29](https://github.com/Cle0726/super-pinkie/pull/29)。包的专项检查固定在 `069a7fc3239575e496213c71dc6b47207732039f`；后续差异仅测试、验收用的矩阵／代理、台账与记录。不将包检查冒称为另一个 HEAD。
@@ -76,16 +76,17 @@
 - **Z3 对新主线**：同一量具从独立干净工作树 `a85a7449`（`git status` 为空）采集，`node tools/metre/inject-inventory.mjs --verify-baseline` 对合并树 `ok: true`、`diffs=[]`、整体 SHA-256 `99597ed6e65c1df77ae3d99c6087013b03f8e347fe5330cb5f3030a03ce50e83` 两端相同；Codex 留下的 a85 基线 `new-main-baseline.json` 同样 `diffs=[]`（`work/merged-gate-79afb64a/against-live-main.txt`）。
 - **对 `99c3716a` 的历史差异照列**：合并树与 `99c3716a` 记录有 12 条样例 SHA 不同（main/project/thinking/learning 各 3 条），与两份独立主线工作树之间的差异一致，来源是主线 #31 新增的记忆写入规则，不是角色功能。按 ACCEPTANCE「合并时的主线换代」一条，回归基线文件改为 a85 采集的版本，旧记录改名 `main-inject-baseline-99c3716a.json` 保留。
 - **Z1 全量（合并树，本机隔离 profile，`node tools/release-gate/run-tests.mjs --jobs 2`）**：`272 test files, 2 failing tests, 2 known`（`work/merged-gate-79afb64a-r2/gate.txt`）。两项失败均已查明：① `metre-roles.test.mjs` 旧模式快照——即上面的 99c3716a 基线过时，换基线后 `node --test tests/metre-roles.test.mjs` 在另一套临时目录下 17/17 过；② `windows-shared-chat.test.cjs` 第 2 项——本机没有 `pwsh.exe`，`spawnSync` 返回 `status=null`，与代码无关（Codex 早前带 pwsh 的同项通过）；由推送后 CI 的 Windows 套件实跑确认，见下行。两条已知项仍是明确跳过，`known-failures.json` 未新增。
-- **CI（推送后的提交）**：见 PR #29 上对应提交的 CI；合并前须四项（Linux、Windows 套件、macOS 检查、Windows 构建）全部 success。
+- **CI（推送后的提交）**：[CI 44681639131](https://github.com/Cle0726/super-pinkie/actions/runs/44681639131)（提交 `352fbe52`）Linux 套件、Windows 套件、macOS 检查、Windows 构建四项均 `success`，Windows 套件实跑了 `windows-shared-chat` 第 2 项。过程：① 前一提交 `85913b32` 的 Linux 套件仍报旧模式快照不符——CI 不读仓库里的基线文件，而是从 `ci.yml` 的 `METRE_MAIN_REFERENCE=99c3716a` 现场重采；`352fbe52` 把它改为 `a85a7449`，与基线文件一致后通过。② Windows 套件两次报学习台 `v2 A3: course bar…` 点「下课」超时（按钮在点击前被重绘替换）。本机同一测试重复 10 次：纯主线 `a85a7449` 失败 2 次、合并树失败 3 次，失败方式相同，是主线已有的不稳定测试，与角色功能无关；本分支未改学习台界面代码。只重跑失败作业后通过。根因（同步事件重建课程条、丢掉「确定下课吗？」确认框）已在另一条修复 [PR #32](https://github.com/Cle0726/super-pinkie/pull/32) 处理，不并入本分支。
 
 ## 仍阻塞的事项
 
 | 严重程度 | 位置 | 复现与建议 |
 |---|---|---|
 | 重要（不阻塞） | Mac WebKit 截图 | [同包工作流](https://github.com/Cle0726/super-pinkie/actions/runs/44639696039)，`tools/ui-parity/capture.mjs:155` 等待字体 20 秒超时。P2 要求的 Mac 运行时快照已过；这一步是额外截图，补采在途字体和资源状态，不能直接取消判据。 |
+| 次要（不阻塞） | 学习台 A3 测试（主线已有） | Windows CI 偶发点「下课」超时，主线同样复现；由 PR #32 修复。 |
 | 次要（不阻塞） | 验收脚本 | ui A 组 `image` 调用被隔离网关假驱动应答；下次扩展评估前给 A/C 都显式配置图片模型。 |
 
-阻塞问题：无（CI 结果待推送后确认）。
+阻塞问题：无。
 
 后续（不计入本次）：48 轮三组实验、66 题全量真实运行、顶档 Metre 流程（R5）、其余四张审查卡的真实召回、异厂判分。
 
