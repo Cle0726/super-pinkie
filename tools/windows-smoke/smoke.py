@@ -326,10 +326,50 @@ PAGE_STATE = r"""() => {
 }"""
 
 
+METRE_DIALOG = ".laolao-metre-lock-dialog"
+METRE_LOCK_READY = r"""async () => {
+  const status = await window.__laolaoSidebar?.gwRequest('pinkie.guard.metreStatus', {}, 8000);
+  return status?.required === true && status.configured === true && status.locked === true && !status.unlocked;
+}"""
+
+
+def still_outside_metre(before, state):
+    return bool(before["mode"] and before["mode"] != "metre"
+                and state["mode"] == before["mode"] and state["pending"] != "metre"
+                and not any(state[key].lower().startswith("agent:metre:") for key in ("session", "shellSession")))
+
+
+def open_release_metre_prompt(page, before, timeout_error, label):
+    password = page.locator(f'{METRE_DIALOG} input[type="password"]')
+
+    def select_metre():
+        page.click(".laolao-mode-switcher", timeout=15_000)
+        page.locator('.laolao-mode-menu__option[data-mode="metre"]').click(timeout=10_000)
+
+    select_metre()
+    try:
+        password.wait_for(state="visible", timeout=20_000)
+        return "first"
+    except timeout_error:
+        # A previous mode switch reloads the chat page. Its new gateway socket
+        # can still be connecting, and the status request can outlast this wait.
+        # Retry only this missing prompt, and only once the real lock answers.
+        if not still_outside_metre(before, page.evaluate(PAGE_STATE)):
+            raise RuntimeError("mode/session changed without showing the Metre password prompt")
+        if not page.evaluate(METRE_LOCK_READY):
+            raise RuntimeError("gateway did not confirm the configured Metre lock before retry")
+        if password.is_visible():
+            return "late"
+        log(f"[{label}] Metre password prompt timed out; retrying once after the lock answered")
+        select_metre()
+        password.wait_for(state="visible", timeout=20_000)
+        return "retry"
+
+
 def drive_ui(out, label, release=False):
     # Let the context report the service worker's own requests (see measure_loads).
     os.environ.setdefault("PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS", "1")
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
     result = {"modes": {}, "console_errors": [], "page_errors": [], "failed_requests": [], "http_errors": []}
     console = []
@@ -432,17 +472,14 @@ def drive_ui(out, label, release=False):
                     # where it was when the prompt is cancelled.
                     try:
                         before = page.evaluate(PAGE_STATE)
-                        page.click(".laolao-mode-switcher", timeout=15_000)
-                        page.wait_for_selector(".laolao-mode-menu__option", timeout=10_000)
-                        page.locator(".laolao-mode-menu__option").nth(index).click(timeout=10_000)
-                        page.wait_for_selector(".laolao-metre-lock-dialog", state="visible", timeout=20_000)
+                        entry["prompt_delivery"] = open_release_metre_prompt(page, before, PlaywrightTimeoutError, label)
                         page.screenshot(path=str(out / f"{label}-mode-{index + 1}-metre-locked.png"))
                         page.keyboard.press("Escape")
-                        page.wait_for_selector(".laolao-metre-lock-dialog", state="detached", timeout=10_000)
+                        page.wait_for_selector(METRE_DIALOG, state="detached", timeout=10_000)
                         page.wait_for_timeout(1500)
                         entry["state"] = page.evaluate(PAGE_STATE)
                         entry["locked_prompt"] = True
-                        entry["ok"] = entry["state"]["mode"] == before["mode"] and not entry["state"]["mode"] == "metre"
+                        entry["ok"] = still_outside_metre(before, entry["state"])
                     except Exception as error:
                         entry["error"] = str(error)
                     page.screenshot(path=str(out / f"{label}-mode-{index + 1}-{mode}.png"))

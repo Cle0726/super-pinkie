@@ -14,6 +14,60 @@ smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 
+class ReleaseMetrePromptTests(unittest.TestCase):
+    def setUp(self):
+        self.before = {"mode": "unrestricted", "pending": None,
+                       "session": "agent:unrestricted:main", "shellSession": ""}
+        self.page = mock.Mock()
+        self.password = mock.Mock()
+        self.option = mock.Mock()
+        self.page.locator.side_effect = {
+            f'{smoke.METRE_DIALOG} input[type="password"]': self.password,
+            '.laolao-mode-menu__option[data-mode="metre"]': self.option,
+        }.__getitem__
+        self.password.is_visible.return_value = False
+        self.page.evaluate.side_effect = [self.before, True]
+
+    def open_prompt(self):
+        return smoke.open_release_metre_prompt(self.page, self.before, TimeoutError, "fresh")
+
+    def test_first_click_needs_no_retry(self):
+        self.assertEqual(self.open_prompt(), "first")
+        self.option.click.assert_called_once()
+        self.page.evaluate.assert_not_called()
+
+    def test_one_retry_after_slow_gateway_with_locked_status(self):
+        self.password.wait_for.side_effect = [TimeoutError("slow gateway"), None]
+        self.assertEqual(self.open_prompt(), "retry")
+        self.assertEqual(self.page.evaluate.call_args_list, [mock.call(smoke.PAGE_STATE), mock.call(smoke.METRE_LOCK_READY)])
+        self.assertEqual(self.option.click.call_count, 2)
+
+    def test_late_prompt_is_not_clicked_twice(self):
+        self.password.wait_for.side_effect = TimeoutError("slow gateway")
+        self.password.is_visible.return_value = True
+        self.assertEqual(self.open_prompt(), "late")
+        self.option.click.assert_called_once()
+
+    def test_retry_cannot_mask_a_mode_change_or_an_unconfirmed_lock(self):
+        self.password.wait_for.side_effect = TimeoutError("missing prompt")
+        for state, locked, error in (
+            ({**self.before, "shellSession": "agent:metre:main"}, True, "mode/session changed"),
+            (self.before, False, "did not confirm"),
+        ):
+            with self.subTest(state=state, locked=locked):
+                self.option.reset_mock()
+                self.page.evaluate.side_effect = [state, locked]
+                with self.assertRaisesRegex(RuntimeError, error):
+                    self.open_prompt()
+                self.option.click.assert_called_once()
+
+    def test_a_second_timeout_still_fails_the_smoke_test(self):
+        self.password.wait_for.side_effect = TimeoutError("missing prompt")
+        with self.assertRaisesRegex(TimeoutError, "missing prompt"):
+            self.open_prompt()
+        self.assertEqual(self.option.click.call_count, 2)
+
+
 class WindowsSmokeTests(unittest.TestCase):
     def test_fresh_modes_use_pinkies_name_without_overriding_existing_users(self):
         identities = {agent: "碧琪" for agent in smoke.AGENTS}
