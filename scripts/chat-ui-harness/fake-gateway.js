@@ -15,8 +15,15 @@
    the run ending.  See the README's "追加消息" table for the six probes. */
 (() => {
   'use strict';
-  const AGENT = 'unrestricted';
-  const SK = 'agent:unrestricted:dashboard:harness0001';
+  let selected = null;
+  try {
+    const query = new URLSearchParams(window.location?.search || '');
+    if (query.get('harnessSession') === 'active') {
+      selected = /^agent:(main|project|thinking|learning|metre|unrestricted):dashboard:[a-z0-9-]+$/u.exec(query.get('session') || '');
+    }
+  } catch { /* Node harness tests need not bring a URL or browser location. */ }
+  const AGENT = selected?.[1] || 'unrestricted';
+  const SK = selected?.[0] || 'agent:unrestricted:dashboard:harness0001';
   const SID = 'harness-session-0001';
   const RUNNING_REFRESH_STORE = 'pinkie.chat-ui-harness.running-refresh.v1';
   const log = [];
@@ -395,6 +402,7 @@
       // Plan B status bar: tests set window.__fakeRunStatus / __fakePlan to replay a moment.
       case 'pinkie.run.status': return ok(window.__fakeRunStatus || {active: false, phase: 'idle', review: {phase: 'idle'}, continuations: {tier: 0, integrity: 0}, missing: []});
       case 'pinkie.plan.get': return ok({plan: window.__fakePlan || null});
+      case 'pinkie.work.status': return ok(window.__fakeWorkStatus || {sessionKey: SK});
       case 'chat.abort': return ok({ok: true, aborted: false, runIds: []});
       case 'chat.send': {
         void receiveChatSend(socket, params).then(ok, (error) => {

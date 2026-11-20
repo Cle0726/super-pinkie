@@ -62,6 +62,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue {
   background: transparent !important;
   box-shadow: none !important;
 }
+html:not([data-laolao-mode="metre"]):not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { padding-right: 0 !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue__title { display: none !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue__list { display: flex; flex-direction: column; gap: 6px; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item {
@@ -83,6 +84,8 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queu
   color: color-mix(in srgb, var(--accent) 80%, #4a3a40);
   font: 600 11px/1.5 -apple-system, "PingFang SC", sans-serif;
 }
+/* An existing native receipt is already the authoritative status label. */
+html:not([data-laolao-mode="metre"]):not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item:has(.chat-queue__badge)::before { display: none; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__main { flex: 1; min-width: 0; padding: 0 !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__text {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -244,20 +247,17 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-thread { padding
     grid-template-columns: minmax(0, 1fr) !important;
     grid-template-areas: "topbar" "content" !important;
   }
-  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { padding-right: 180px !important; }
   html:not([data-laolao-plain-composer]):not([data-r2-off]) { --r4-col: calc(100% - 24px); }
+  html[data-laolao-mode="metre"]:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { padding-right: 180px !important; }
   html:not([data-laolao-plain-composer]):not([data-r2-off]) .agent-chat__composer-shell,
   html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { width: calc(100% - 32px) !important; }
   html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-group.assistant > .chat-group-messages { max-width: calc(100% - 46px) !important; }
   html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue .chat-queue__item::before { display: none; }
 }
-
 @media (max-width: 480px) {
-  html:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue {
-    padding-right: 0 !important;
-    margin-bottom: 94px !important;
-  }
+  html[data-laolao-mode="metre"]:not([data-laolao-plain-composer]):not([data-r2-off]) .chat-queue { padding-right: 0 !important; margin-bottom: 94px !important; }
 }
+
 
 /* 完成时的彩纸改由按模式的点缀负责 */
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .pinkie-confetti { display: none !important; }
