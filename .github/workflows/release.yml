@@ -78,6 +78,14 @@ jobs:
           printf '%s\n' "$PINKIE_GUARD_SIGNING_KEY" > "$key_file"
           PINKIE_RELEASE_BUILD=1 PINKIE_GUARD_SIGNING_KEY_FILE="$key_file" ./desktop/macos/build.sh
           rm -f "$key_file"
+      - name: Verify the exact macOS release ZIP starts with its core features active
+        timeout-minutes: 12
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          smoke="$RUNNER_TEMP/mac-release-activation"
+          mkdir -p "$smoke"
+          ditto -x -k "dist/super-pinkie-macos-$version.zip" "$smoke"
+          python3 tools/macos-package/smoke_launch.py --app "$smoke"
       - name: Keep the actual packaged macOS UI manifest
         uses: actions/upload-artifact@v4
         with:
