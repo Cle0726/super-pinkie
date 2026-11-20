@@ -30,5 +30,10 @@ test('Pinkie build and installer use its own source and never invoke C.le. start
   assert.doesNotMatch(build,/CLE_BRAND|apply-startup/);
   for(const name of ['Launcher.swift','MaterialPreview.swift','BrowserControl.swift']) assert.ok(build.includes(`"$NATIVE_SOURCE_DIR/${name}"`));
   assert.match(installer,/PINKIE_NATIVE_SOURCE_DIR="\$REPO_ROOT\/desktop\/macos\/pinkie\/Sources"/);
+  // apply-theme.sh recompiles the launcher on every install; it must compile every Swift file build.sh does.
+  const buildSwift=[...build.matchAll(/"\$NATIVE_SOURCE_DIR\/([A-Za-z]+\.swift)"/g)].map(m=>m[1]).sort();
+  const installerSwift=[...installer.split('\n').find(line=>line.startsWith('LAUNCHER_SUPPORT_SOURCES=')).matchAll(/([A-Za-z]+\.swift)/g)].map(m=>m[1]).concat('Launcher.swift').sort();
+  assert.deepEqual(installerSwift,buildSwift);
+  for(const name of fs.readdirSync(path.join(mac,'pinkie/Sources')).filter(n=>n.endsWith('.swift'))) assert.ok(buildSwift.includes(name),`build.sh does not compile ${name}`);
   for(const file of ['services/cle-studio','installer/cle','patch/apply-startup.mjs']) assert.ok(!fs.existsSync(path.join(root,file)));
 });
