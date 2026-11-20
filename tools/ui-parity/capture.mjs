@@ -100,12 +100,16 @@ const errors=[],requests=[],states={};
 let browser, activePage, failure;
 try {
   const browserName=args.browser||'webkit';
-  browser=args.cdp ? await playwright.chromium.connectOverCDP(args.cdp)
-    : await (browserName==='webkit'?playwright.webkit:playwright.chromium).launch({headless:!args.headed,...(['chrome','msedge'].includes(browserName)?{channel:browserName}:{})});
+  const launch=()=>(browserName==='webkit'?playwright.webkit:playwright.chromium)
+    .launch({headless:!args.headed,...(['chrome','msedge'].includes(browserName)?{channel:browserName}:{})});
+  if(args.cdp)browser=await playwright.chromium.connectOverCDP(args.cdp);
   for(const view of String(args.views||'home,chat,cards,sidebar,learning,power').split(',')){
     console.log('capture',label,view);
     currentView=view;
     const entryAgent=view==='home'?(captureAgent==='main'?'project':'main'):(view==='learning'?'learning':captureAgent);
+    // Closing a context does not reset its engine's GPU process. Test each
+    // independent fixture view on a fresh one; the real app CDP keeps its own.
+    if(!args.cdp)browser=await launch();
     // The mock server and route handler must see the actual packaged responses;
     // a service worker can take over requests and stall this intercepted WebKit
     // session before font readiness. Leave real CDP contexts and the separate
@@ -236,7 +240,7 @@ try {
         console.log(execFileSync(args['desktop-python'],large,{encoding:'utf8',timeout:30000}));
       }
     }
-    if(!args.cdp)await context.close();
+    if(!args.cdp){await context.close();await browser.close();browser=null;}
   }
 } catch(error) {
   failure={message:String(error),view:currentView};
