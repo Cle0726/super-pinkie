@@ -18,6 +18,8 @@ def diagnose(app, config_path, state, env, label):
           'auth mode:', auth.get('mode'), 'token configured:', bool(auth.get('token')), flush=True)
     if gateway.get('mode') == 'remote':
         raise RuntimeError('not using a local disposable Gateway')
+    subprocess.run(['node', str(Path(__file__).with_name('live_webkit_diagnostic.mjs'))],
+                   env=env, check=True, timeout=65)
     runtime = app / 'Contents/Resources/SuperPinkie/runtime'
     command = [str(runtime/'bin/node'), str(runtime/'openclaw/openclaw.mjs')]
     for name, params in (('sessions.list', {'limit': 1}), ('pinkie.usage.get', {}), ('pinkie.guard.metreStatus', {})):

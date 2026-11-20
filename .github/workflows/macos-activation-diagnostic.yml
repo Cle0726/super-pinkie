@@ -19,6 +19,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.20.0'
+      - name: Install WebKit client for the live Gateway check
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ui-activation-diagnostic"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version"
+          "$deps/node_modules/.bin/playwright" install webkit
+          echo "PINKIE_UI_DEPS=$deps" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: macos-release
