@@ -41,6 +41,7 @@ test('release trial has eight matched A/C runs, no paid route or same-vendor jud
   assert.equal(result.allowPaidFallback, false);
   assert.equal(result.execution.vendor, 'tencent');
   assert.equal(result.judge.vendor, 'qwen');
+  assert.deepEqual(result.judgement, {independentVendor: true, separateContext: true});
   assert.equal(result.runs.length, 8);
   assert.equal(new Set(result.runs.map(run => run.id)).size, 8);
   assert.deepEqual(result.cases.filter(row => row.needsVision).map(row => row.role), ['ui-replicator']);
@@ -62,4 +63,15 @@ test('release trial has eight matched A/C runs, no paid route or same-vendor jud
   assert.throws(() => metreReleaseMatrix(tencent, 'router/workbuddy/hy4free'), /异厂/);
   assert.throws(() => metreReleaseMatrix(tencent, 'qwen-3'), /指定免费路由/);
   assert.throws(() => metreReleaseMatrix(tencent, 'unknown/free'), /厂家无法确认/);
+});
+
+test('explicit single-model review only changes judging provenance, not the eight executions', () => {
+  const free = 'mm/workbuddy/hy4flash-free', other = 'example/qwen-3:free';
+  const plan = metreReleaseMatrix(free, free, {sameModelReview: true});
+  assert.deepEqual(plan.judgement, {independentVendor: false, separateContext: true});
+  assert.deepEqual(plan.execution, plan.judge);
+  assert.deepEqual(plan.runs, metreReleaseMatrix(free, other).runs);
+  assert.throws(() => metreReleaseMatrix(free, free), /异厂/);
+  assert.throws(() => metreReleaseMatrix(free, other, {sameModelReview: true}), /同一条免费路由/);
+  assert.throws(() => metreReleaseMatrix('hy4flash', 'hy4flash', {sameModelReview: true}), /指定免费路由/);
 });

@@ -3,6 +3,7 @@
 // node tools/metre/roles/compose.mjs <role-id> <brief-file>
 // node tools/metre/roles/compose.mjs --matrix <explicit-child-model-id>
 // node tools/metre/roles/compose.mjs --release-matrix <free-executor> <free-judge>
+// node tools/metre/roles/compose.mjs --release-single-model <free-executor-and-judge>
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -69,10 +70,14 @@ function freeRoute(id, purpose) {
   return {id, vendor};
 }
 
-export function metreReleaseMatrix(executionModel, judgeModel) {
+export function metreReleaseMatrix(executionModel, judgeModel, {sameModelReview = false} = {}) {
   const execution = freeRoute(executionModel, '执行');
   const judge = freeRoute(judgeModel, '判分');
-  if (execution.vendor === judge.vendor) throw new Error('8 轮验收的判分模型和执行模型必须异厂');
+  if (sameModelReview) {
+    if (execution.id !== judge.id) throw new Error('单模型复判要求执行和判分锁定同一条免费路由');
+  } else if (execution.vendor === judge.vendor) {
+    throw new Error('未启用单模型例外时，判分模型和执行模型必须异厂');
+  }
   const cases = [], runs = [];
   for (const role of PILOT_ROLES) {
     const {samples} = JSON.parse(fs.readFileSync(path.join(HERE, 'samples', `${role}.json`), 'utf8'));
@@ -99,8 +104,9 @@ export function metreReleaseMatrix(executionModel, judgeModel) {
   }
   return {
     status: 'prepared-not-run', execution, judge, cases, runs, allowPaidFallback: false,
-    preflight: ['两条路由在实际目录和账户中均可用且免费，按返回/账单信息核实，不只看名称',
-      '执行路由必须支持图像输入；同题两组各用新夹具与独立会话', '判分只给原始证据和检查项，不向执行模型给评分表'],
+    judgement: {independentVendor: !sameModelReview, separateContext: true},
+    preflight: ['核实所选路由在实际目录和账户中可用且免费，记录请求与响应模型标识',
+      '执行路由必须支持图像输入；同题两组各用新夹具与独立会话', '新上下文复判只给原始证据和检查项，不向执行模型给评分表'],
   };
 }
 
@@ -108,11 +114,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const args = process.argv.slice(2);
   try {
     if (args[0] === '--release-matrix' ? args.length !== 3 : args.length !== 2) {
-      throw new Error('用法：compose.mjs <角色 id> <简报文件>、--matrix <模型 id> 或 --release-matrix <免费执行模型> <异厂免费判分模型>');
+      throw new Error('用法：compose.mjs <角色 id> <简报文件>、--matrix <模型 id>、--release-matrix <免费执行模型> <异厂免费判分模型> 或 --release-single-model <免费模型>');
     }
-    const result = args[0] === '--release-matrix' ? metreReleaseMatrix(args[1], args[2]) : args[0] === '--matrix'
-      ? metrePilotMatrix(args[1])
-      : composeMetreArms(args[0], fs.readFileSync(args[1], 'utf8'));
+    const result = args[0] === '--release-matrix' ? metreReleaseMatrix(args[1], args[2])
+      : args[0] === '--release-single-model' ? metreReleaseMatrix(args[1], args[1], {sameModelReview: true})
+        : args[0] === '--matrix' ? metrePilotMatrix(args[1]) : composeMetreArms(args[0], fs.readFileSync(args[1], 'utf8'));
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);

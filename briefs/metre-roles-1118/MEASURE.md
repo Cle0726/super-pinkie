@@ -170,3 +170,30 @@
 1. **R0-4 磁盘检查**：开工时 F 盘剩余 `14,598,283,264` bytes（`13.60 GiB` / `14.60 GB`），不足 15GB；按规矩停下报告用户并记入 `PROGRESS-1.md`（提交 `d9f259c6`），未擅自删除任何文件。用户查看大目录清单后回复「全部清」清理 `F:\tmp` 旧临时文件，清理后 F 盘剩余 `37,400,641,536` bytes（`34.83 GiB` / `37.40 GB`），满足 ≥15GB 要求后才创建 `F:\碧琪实测\iso-roles`。
 2. **R0-5 门槛判定**：`roles` 原型（砍过工具）的每次调用固定输入为 **14,480 token**，远低于 PLAN R0 第 5 条的 **30,000 token** 门槛（余量 15,520 token，足以容纳 `ROLES_BASE` ≤800 字、角色卡正文 ≤1,200 字及少量运行时事实并保持总固定输入远低于 30k）。
    - **结论：通过，继续进入 R1 机制实现。**
+
+---
+
+## 五、本次八轮免费模型验收补记
+
+- **计数：完整执行 0/8，逐轮复判 0/8。** 首对的初试及重跑合计 7 次真实上游响应，没有一组完成。按用户 2026-11-19 确认，后续逐轮复判在独立上下文用同一免费模型，**非异厂复核**。不影响产品内指定 `of` 时的异厂保护；本轮没有给任何结果补分。
+- 候选产品源码 `7467977aee5ef3f5d0d99f7b2a04cf47f776d13f`。请求 `mm/workbuddy/hy4flash-free`，中继实际请求 `workbuddy/hy4flash-free`，HTTP 200 的响应标识 `hy4-flash-free`（腾讯）。两标识并列记录，不声称字符串相同。只直连本机 :1466，不经过 :1467 的模型回退；七次回应的 usage 均为 `credit: 0`，无救援响应头。合成的本机派活驱动只调用实际工具，不生成样题答案、不计入八轮。
+- **真图预检（另计）**：2026-11-20 01:35:22 UTC，带真实 PNG 的一条请求，正确读出提示中没有的随机数字 `514410`。HTTP 200，用量 `prompt_tokens=230, completion_tokens=59`。回执 `vision-live-20261119-173522/result.json` SHA-256 `c0fbbe3964318b5f80fada9564cc3cfe3f234ec59ffd78d56e15a733d5526d1b`；PNG SHA-256 `549f613d5fe72fca609e985a91d04569e6bda076a3857c6b837335a7e1836e42`。旧隔离配置只报文本；共享安装逻辑已把干净配置的这条路由更新为文本加图片。目录的免费标签与实际调用的零 credit 是不同证据，未取得账户总账单。
+
+| 固定样题 | A：项目 | C：角色 |
+|---|---|---|
+| `backend-fix-1` | 真实 Project 子会话；收到工具动作，但夹具中继误拒了只读 Git 命令；未交回 | 真实 backend-fix 角色子会话；执行了读取，第二次模型响应的流在转发后中断；未交回 |
+| `researcher-2` | 未派发 | 未派发 |
+| `ui-replicator-1` | 未派发 | 未派发 |
+| `reviewer-1` | 未派发 | 未派发 |
+
+首对 A/C 相同简报 SHA-256：`3011fa065a7296f100a4c09ff4d4f494fd60a1b84ebc575cbca88939b02e61c3`；相同种子夹具 SHA-256：`19be9bc0ecece586d36b52a98c92b20a879b55d2435cf5cd20f90766c44b52bd`（按相对路径排序后的 `[路径, 原文]` JSON）。原始证据根 `C:/Users/34786/Documents/Codex/2026-11-19/origin-feat-metre-roles-1118-briefs/work`，相对该根：
+
+| 尝试 | 隔离工作区、会话与请求/用量 |
+|---|---|
+| A 首次上游响应 | `ml-175751/A/fixture`；`agent:project:pinkie-child:7ef612a4b00c83faa420ddefcb0bf136`。查 `A/run.json`、`A/child-01-response.txt`、`A/board.json`；请求 SHA-256 `08e6eeed774ecbeba1bd833faf05d6812671d78f7e43918b6f6b6bd52d42f2da`；HTTP 200，输入/输出 `27526/937`。模型请求读三个文件、`git status --short --branch` 及 `run_tests`；测试夹具中继的白名单误拒而非产品拒绝。默认 Project 工作区曾与夹具同路径，由运行时初始化的额外文件也不能记为模型改动。 |
+| C 首次派活 | `ml-175751/C/fixture`；`agent:roles:pinkie-child:deb3a14f497fd9a568642a6fbfb04e08`。查 `C/run.json`、`C/child-{01,02}-response.txt`、该 agent 的原始 JSONL 和 `C/board.json`。两次 HTTP 200；输入/输出 `9565/558`、`13240/2359`。首条会话 usage 摘录：`{"input":9565,"output":558,"cacheRead":0,"cacheWrite":0,"totalTokens":10123}`，按 R0 算式为 `9565 + 0`。第一轮 6 次读工具有结果；第二轮上游给了工具调用，但会话日志记录 `errorMessage=terminated`，没有运行或交回，不算成修复。前后清单相同（含越权哨兵），但没有交回说明，X4 不算通过。 |
+| 修正夹具后重跑 | `ml-180847/{A,C}/`。分别派到 `agent:project:pinkie-child:7f79f765b9ec991e1ce23c9474e79bee` 与 `agent:roles:pinkie-child:930382555a1b6a3a1b5d7953ad1a6abf`。仅在本机监听端口和新 profile 内调整试跑工具策略、流式转发和默认工作区，不改产品或样题种子。两组的 `run.json` 均为 `validateExit=0`、`changed=[]`、`gatewayStopped=true`；各一次上游连接遇到 `ConnectionRefusedError`，无 HTTP 回包、无新增模型 usage。尚不能据此认定转发修正后的线上结果。 |
+| 临时恢复监听期间重跑 | `ml-181710/{A,C}/run.json`、`ml-184605/{A,C}/run.json`。A 两次分别收到 2 条 HTTP 200，流可到达工具阶段；均因复现命令的内容不在隔离中继允许范围而未执行下一步，没有交回。C 两次各一次连接被拒，没有新的模型回应。所有网关事后已停。不能把这两次 A 的额外调用算成另外两道题。 |
+| R3-5 静态六维评分（另计） | `card-review-175811/receipt.json`：新上下文、同一条免费模型、无任何工具。实际 HTTP 200、输入 `23054`、输出 `5500` 全为推理用量，`finish_reason=length`，无可用的评分 JSON。`card-batch-181039/batch-1/receipt.json` 是缩小批次后连接失败，无第二份结果。 |
+
+复跑入口：仓库根执行 `node tools/metre/roles/compose.mjs --release-single-model mm/workbuddy/hy4flash-free`，产物仅为计划；两组各用全新隔离工作区和网关，固定相同简报、夹具，实际调用 `pinkie_session_start`（A 传 `mode: project`，C 传 `role`），先核对 :1466 可连接；本机夹具与记录脚本为 `work/run-metre-live-pair.py`，用 `--repo <候选工作树> --runtime-root <隔离运行时> --out <新隔离目录>`。证据优先顺序：判据下可重跑的工具与文件 → 原始会话与交回 → 新上下文模型复判，不以模型自述替代现场。请勿上传原始提示、完整请求或任何配置。
