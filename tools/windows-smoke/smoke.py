@@ -177,17 +177,23 @@ def desktop_shot(path):
         log(f"desktop screenshot failed: {error}")
 
 
-def guard_alert(env):
+def guard_alerts(env):
     path = Path(env["LOCALAPPDATA"]) / "SuperPinkie/logs/guard.log"
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
-        return ""
-    return next((line.strip()[:200] for line in lines if "alert:" in line), "")
+        return []
+    return [line.strip()[:200] for line in lines if "alert:" in line]
+
+
+def guard_alert(env, since=0):
+    """The first guard notice raised after the first `since` ones."""
+    return next(iter(guard_alerts(env)[since:]), "")
 
 
 def launch(exe, env, out, label, timeout=480):
     log(f"[{label}] launching {exe}")
+    seen = len(guard_alerts(env))
     process = subprocess.Popen([str(exe)], env=env, cwd=str(exe.parent))
     started = time.monotonic()
     while time.monotonic() - started < timeout:
@@ -196,9 +202,9 @@ def launch(exe, env, out, label, timeout=480):
         if process.poll() is not None:
             log(f"[{label}] exe exited early with {process.returncode}")
             break
-        if guard_alert(env):
+        if guard_alert(env, seen):
             # The guard's message box holds startup until someone clicks it.
-            log(f"[{label}] guard notice raised: {guard_alert(env)}")
+            log(f"[{label}] guard notice raised: {guard_alert(env, seen)}")
             break
         time.sleep(2)
     ready = http_ready()

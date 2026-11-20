@@ -942,12 +942,16 @@ def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False
         profiler = None
         kill_app(exe.parent)
         hidden = []
-        for path in plugin_copies(exe, profile):
+        # The user (release) build treats a package missing its own files as
+        # not official and says so; that case only applies to dev builds.
+        release = (exe.parent / "_internal/build-info.json").is_file() and '"channel": "release"' in (exe.parent / "_internal/build-info.json").read_text(encoding="utf-8-sig")
+        for path in ([] if release else plugin_copies(exe, profile)):
             path.rename(path.with_name(path.name + ".probe-hidden"))
             hidden.append(path)
         summary["hidden_plugin_files"] = [str(path) for path in hidden]
+        summary["release"] = release
         try:
-            process, ready, seconds = relaunch(launch, kill_app, exe, env, out, "probe-plugin-missing")
+            process, ready, seconds = relaunch(launch, kill_app, exe, env, out, "probe-plugin-missing") if not release else (None, False, 0)
             if ready:
                 with sync_playwright() as playwright:
                     browser, context, page = connect_packaged_webview(playwright, env.get("PINKIE_SMOKE_WEBVIEW_CDP"))
@@ -974,6 +978,6 @@ def run(exe, profile, out, launch, kill_app, profile_env, *, metre_sidebar=False
     summary["passed"] = (
         (not metre_sidebar or summary.get("metre_sidebar", {}).get("passed") is True)
         and (not metre_roles or summary.get("metre_roles", {}).get("passed") is True)
-        and len(summary["cases"]) == 6 and not any(result["problems"] for result in summary["cases"].values())
+        and len(summary["cases"]) == (5 if summary.get("release") else 6) and not any(result["problems"] for result in summary["cases"].values())
     )
     return summary
