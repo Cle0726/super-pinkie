@@ -614,7 +614,7 @@
   }
 
   // One entry per dispatch, independent of the parent’s position or fold state.
-  function awayRow(part) {
+  function awayRow(part, api) {
     const n = el('div', 'sidebar-recent-session session-row-host pinkie-session-part');
     n.dataset.sessionKey = part.key;
     const name = part.title || '子会话', where = MODE_SHORT[part.mode] || '';
@@ -636,18 +636,42 @@
       const time = dateLabel(part.updatedAt);
       if (time) aside.append(el('time', 'pinkie-session-time', time));
     }
+    if (typeof api?.dispatchedMenu === 'function') {
+      const actions = el('span', 'laolao-row-actions');
+      actions.append(button('⋯', '管理派发的会话：' + name, e => api.dispatchedMenu(e.currentTarget, part.key, name,
+        {open: () => openInMode(part.key), live: sessionStatus(part) === 'running'})));
+      aside.append(actions);
+    }
     n.append(link, aside);
     return n;
   }
 
-  function dispatchedGroup(parts) {
+  // 派发的会话：可收起；收起时还在跑/等回复的照样露出来。头上 ⋯ 一键归档已结束的。
+  function dispatchedGroup(parts, api) {
     const section = el('section', 'laolao-group');
     section.dataset.laolaoGroup = dispatchedGroupId;
     const head = el('div', 'laolao-group__head');
-    head.append(el('span', 'laolao-group__label', '派发的会话'), el('span', 'laolao-group__count', String(parts.length)));
-    const list = el('div', 'laolao-group__list');
-    list.append(...parts.map(awayRow));
-    section.append(head, list);
+    const collapsed = !query.trim() && !!api.state.collapsed?.[dispatchedGroupId];
+    const name = '派发的会话';
+    const label = el('span', 'laolao-group__label', name);
+    const toggle = button(collapsed ? '›' : '⌄', (collapsed ? '展开' : '收起') + name, () => api.toggleGroup(dispatchedGroupId));
+    toggle.classList.add('laolao-group__toggle');
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    label.onclick = () => api.toggleGroup(dispatchedGroupId);
+    head.append(label, toggle, el('span', 'laolao-group__count', String(parts.length)));
+    if (typeof api.dispatchedGroupMenu === 'function') {
+      const idle = parts.filter(part => !isLive(part)).map(part => part.key);
+      const more = button('⋯', '管理派发的会话', e => api.dispatchedGroupMenu(e.currentTarget, {idle, total: parts.length}));
+      more.classList.add('laolao-group__action');
+      head.append(more);
+    }
+    section.append(head);
+    const shown = collapsed ? parts.filter(part => isLive(part) || part.key === api.currentKey) : parts;
+    if (shown.length) {
+      const list = el('div', 'laolao-group__list');
+      list.append(...shown.map(part => awayRow(part, api)));
+      section.append(list);
+    }
     return section;
   }
 
@@ -791,7 +815,7 @@
       const pinned = node => [node, ...node.children].some(item => api.state.pins.includes(item.session.key));
       const pinnedRows = tree.filter(pinned);
       if (pinnedRows.length) groups.append(group('__pins', '置顶', pinnedRows, api));
-      if (cached?.dispatched?.length) groups.append(dispatchedGroup(cached.dispatched));
+      if (cached?.dispatched?.length) groups.append(dispatchedGroup(cached.dispatched, api));
       if(Object.keys(api.state.projects).length) {
         const heading = el('div', 'laolao-group__head pinkie-project-heading');
         heading.append(el('span', 'laolao-group__label', '项目'));
