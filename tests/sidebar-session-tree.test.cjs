@@ -101,3 +101,34 @@ test('multi-select toggles and selects an anchored visible range', () => {
   assert.deepEqual(select(order, ['a','d'], 'd', 'a', false, true), ['d']);
   assert.deepEqual(select(order, ['a'], 'a', 'c', true, true), ['a','b','c']);
 });
+
+test('a just-dispatched child shows before its first message, even without lineage', () => {
+  const fresh = row(child, '刚派出的', {lastMessagePreview: undefined, parentSessionKey: parent});
+  const tree = build([row(parent, '项目检查'), fresh]);
+  assert.equal(tree[0].children[0].session.key, child);
+  assert.equal(build([fresh])[0].session.key, child);
+  assert.equal(build([fresh], {query: '刚派出的'})[0].session.key, child);
+});
+
+test('a worker whose parent is not listed gets its own row instead of vanishing', () => {
+  const orphan = row(worker, '求解·1', {spawnedBy: 'agent:main:elsewhere'});
+  assert.deepEqual(build([orphan]).map(node => node.session.key), [worker]);
+  assert.deepEqual(build([row(parent, '空白', {lastMessagePreview: undefined}), {...orphan, spawnedBy: parent}])
+    .map(node => node.session.key), [worker]);
+});
+
+test('a running child of an archived parent stays in the active list', () => {
+  const running = row(child, '还在跑', {lineage: {parentKey: parent}, parentArchived: true, hasActiveRun: true});
+  assert.equal(build([running])[0].session.key, child);
+  const runningWorker = row(worker, '求解·1', {spawnedBy: parent, parentArchived: true, hasActiveRun: true});
+  assert.equal(build([runningWorker])[0].session.key, worker);
+  assert.equal(build([{...runningWorker, hasActiveRun: false}]).length, 0);
+});
+
+test('a fresh child lifts an old parent into the recent page; running ones are never cut off', () => {
+  const old = Array.from({length: 35}, (_, index) => row(`agent:main:item-${index}`, `会话 ${index}`, {updatedAt: 100 - index}));
+  const page = rows => Array.from(window.PinkieSessionList.recentPage(build(rows), 30, ''), node => node.session.key);
+  assert.equal(page(old.concat(row(child, '子会话', {parentSessionKey: 'agent:main:item-34', updatedAt: 500})))[0], 'agent:main:item-34');
+  const running = row(child, '子会话', {parentSessionKey: 'agent:main:item-33', updatedAt: 1, hasActiveRun: true});
+  assert.ok(page(old.concat(running)).includes('agent:main:item-33'));
+});

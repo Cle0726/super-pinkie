@@ -207,9 +207,16 @@
     await load();
   }
   let bar = null, polling = 0, statusPolling = 0, messageObserver = null, resizeObserver = null, padding = null, currentRevision = 0;
+  // An open “确定下课吗？” outlives a repaint or a resync of the course bar.
+  let openConfirm = null;
+  function rememberConfirm() {
+    if (!bar) return;
+    const pop = bar.querySelector('.lesson-finish-confirm');
+    openConfirm = pop ? {lessonId: bar.dataset.lessonId, focused: pop.contains(document.activeElement)} : null;
+  }
   function clearBar() {
     currentRevision++; clearInterval(polling); polling = 0; messageObserver?.disconnect(); messageObserver = null; resizeObserver?.disconnect(); resizeObserver = null;
-    bar?.remove(); bar = null;
+    rememberConfirm(); bar?.remove(); bar = null;
     releasePadding();
   }
   function releasePadding() { if (padding) { padding.node.removeAttribute('data-pinkie-lesson-space'); if (padding.value) padding.node.style.setProperty('--pinkie-lesson-base-padding', padding.value); else padding.node.style.removeProperty('--pinkie-lesson-base-padding'); padding = null; } }
@@ -237,16 +244,19 @@
     }
   }
   function paintBar(lesson, local) {
-    if (!lesson || !['active', 'paused'].includes(lesson.status)) { bar?.remove(); bar = null; releasePadding(); return; }
+    if (!lesson || !['active', 'paused'].includes(lesson.status)) { bar?.remove(); bar = null; openConfirm = null; releasePadding(); return; }
     const signature = JSON.stringify([lesson.lessonId, lesson.status, lesson.segment, lesson.checks, lesson.outline?.segments, lesson.sources]);
     if (bar?.dataset.signature === signature) { positionBar(); return; }
-    bar?.remove(); bar = el('section', 'lesson-bar'); bar.dataset.signature = signature; bar.dataset.status = lesson.status; bar.setAttribute('aria-label', '课程条');
+    rememberConfirm();
+    const reopen = openConfirm?.lessonId === lesson.lessonId ? openConfirm : null; openConfirm = null;
+    let finishAnchor = null;
+    bar?.remove(); bar = el('section', 'lesson-bar'); bar.dataset.signature = signature; bar.dataset.lessonId = lesson.lessonId; bar.dataset.status = lesson.status; bar.setAttribute('aria-label', '课程条');
     const title = el('div', 'lesson-bar-title'); title.append(el('i', 'lesson-state'), el('strong', '', pointTitle(lesson))); bar.append(title);
     const segments = lesson.outline?.segments || [], segment = Number(lesson.segment) || 1;
     const dots = el('div', 'lesson-segments'); for (const [i, seg] of segments.entries()) { const dot = el('i', i + 1 < segment ? 'done' : i + 1 === segment ? 'current' : ''); dot.title = seg.title; dots.append(dot); } dots.append(el('span', 'lesson-segment-count', `${segment} / ${segments.length}`)); bar.append(dots);
     const actions = el('div', 'lesson-bar-actions');
     const event = async (type, b) => { b.disabled = true; const key = desk.sessionKey(); try { const result = await rpc('lesson.event', {lessonId: lesson.lessonId, type, segment}, local, key); if (!valid(key)) return; local.current = result; if (type === 'resume' || type === 'stuck') { const text = type === 'stuck' ? '这段没懂，换个讲法' : `继续上课：${pointTitle(lesson)}，从第 ${segment} 段「${segments[segment - 1]?.title || ''}」接着讲`; if (!local.mock.has('lesson')) await desk.askBiqi(text); } await refreshCurrent(); } finally { b.disabled = false; } };
-    if (lesson.status === 'paused') { dots.replaceChildren(el('span', '', '已暂停')); actions.append(btn('继续上课', b => event('resume', b), 'lesson-primary', 'play'), btn('下课', b => confirmFinish(lesson, b), 'lesson-ghost')); }
+    if (lesson.status === 'paused') { dots.replaceChildren(el('span', '', '已暂停')); finishAnchor = btn('下课', b => confirmFinish(lesson, b), 'lesson-ghost'); actions.append(btn('继续上课', b => event('resume', b), 'lesson-primary', 'play'), finishAnchor); }
     else {
       const sourceButton = btn(`出处 ${(lesson.sources || []).length}`, () => {
         const existing = bar.querySelector('.lesson-source-popover'); if (existing) { existing.remove(); return; }
@@ -258,14 +268,16 @@
       stuck.setAttribute('aria-label','没懂，换个讲法');
       const pause = btn('暂停', b => event('pause', b), 'lesson-ghost lesson-bar-pause', 'pause'); pause.title = '暂停上课'; pause.setAttribute('aria-label','暂停');
       const ready = segment >= segments.length && Number(lesson.checks?.answered ?? lesson.checks?.asked ?? 0) >= segments.length;
-      actions.append(sourceButton, stuck, pause, btn('讲完了，去练', b => ready ? finish(lesson, b) : confirmFinish(lesson, b), ready ? 'lesson-pink' : 'lesson-secondary', 'arrow'));
+      finishAnchor = btn('讲完了，去练', b => ready ? finish(lesson, b) : confirmFinish(lesson, b), ready ? 'lesson-pink' : 'lesson-secondary', 'arrow');
+      actions.append(sourceButton, stuck, pause, finishAnchor);
     }
     bar.append(actions); if (local.mock.has('lesson')) { bar.dataset.demo = 'true'; title.append(el('small', 'lesson-meta', '示意数据')); }
     root().append(bar); positionBar();
+    if (reopen) confirmFinish(lesson, finishAnchor, reopen.focused);
   }
-  function confirmFinish(lesson, anchor) {
+  function confirmFinish(lesson, anchor, focus = true) {
     bar?.querySelector('.lesson-finish-confirm')?.remove(); const pop = el('div', 'lesson-finish-confirm'); pop.setAttribute('role', 'region'); pop.setAttribute('aria-label', '确认下课');
-    const yes = btn('下课', b => finish(lesson, b), 'lesson-primary'); pop.append(el('p', '', '还没讲完，确定下课吗？'), yes, btn('再听一会', () => { pop.remove(); anchor.focus(); }, 'link')); bar.append(pop); yes.focus();
+    const yes = btn('下课', b => finish(lesson, b), 'lesson-primary'); pop.append(el('p', '', '还没讲完，确定下课吗？'), yes, btn('再听一会', () => { pop.remove(); anchor?.focus(); }, 'link')); bar.append(pop); if (focus) yes.focus();
   }
   function transcript(messages, startedAt) {
     const start = typeof startedAt === 'number' ? startedAt : Date.parse(startedAt) || 0;

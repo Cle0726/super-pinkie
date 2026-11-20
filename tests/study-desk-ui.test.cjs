@@ -452,6 +452,23 @@ test('v2 A2: conflicting lessons require an explicit choice and gateway failures
     assert.equal(await page.locator('.lesson-demo').count(), 0); assert.equal(await page.getByRole('button', {name: '重试', exact: true}).count(), 1);
   });
 });
+test('v2 A3: an open finish confirmation survives a course bar repaint', async () => {
+  await v2Run({}, async (page, f) => {
+    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
+    await page.getByRole('button', {name: '讲完了，去练', exact: true}).click(); await page.getByText('还没讲完，确定下课吗？', {exact: true}).waitFor();
+    // While the question is open the lesson moves on and the desk resyncs
+    // (the same clear-and-rebuild a learning-state event triggers in the App).
+    f.current({...f.current(), segment: 2});
+    const before = await page.locator('.lesson-bar').getAttribute('data-signature');
+    await page.evaluate(() => window.dispatchEvent(new Event('pinkie:learning-state')));
+    await page.waitForFunction(old => document.querySelector('.lesson-bar')?.dataset.signature !== old, before);
+    await page.locator('.lesson-segment-count', {hasText: '2 / 3'}).waitFor();
+    assert.equal(await page.locator('.lesson-finish-confirm').count(), 1);
+    await page.getByRole('button', {name: '下课', exact: true}).click({timeout: 5000});
+    await page.locator('.lesson-summary-title').waitFor();
+  });
+});
+
 test('v2 A3: course bar, stuck, pause/resume, guarded finish, clean history and four-question bridge', async () => {
   await v2Run({}, async (page, f) => {
     await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();

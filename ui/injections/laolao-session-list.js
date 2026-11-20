@@ -37,7 +37,8 @@
     if (isPersona(s.key)) return s.label && !badTitle.test(s.label) ? s.label : s.subagentRole === 'orchestrator' ? '协调分身' : '分身';
     if (['user', 'system'].includes(s.meta?.source) && s.label) return s.label;
     if (s.lineage?.title && (!s.label || !hasMessages(s))) return s.label || s.lineage.title;
-    if (!hasMessages(s)) return '新会话';
+    // A dispatched child is named by its dispatch title before its first reply.
+    if (!hasMessages(s)) return isChildRow(s) && s.label && !isBadTitle(s.label, s.key, s.sessionId) ? s.label.trim() : '新会话';
     const label = typeof s.label === 'string' ? s.label.trim() : '';
     if (label && !isBadTitle(label, s.key, s.sessionId)) return label;
     return s.meta?.channelTitle || '新会话';
@@ -110,6 +111,13 @@
       void api.gwRequest('pinkie.session.title.ensure', {keys: keys.slice(offset, offset + 20)}).catch(() => {});
     }
   }
+  // A dispatched child (independent child or worker) always gets a row:
+  // it never needs messages first, and while it runs it survives an
+  // archived parent, a folded parent and the recent-page limit.
+  const isChildRow = s => Boolean(s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy);
+  const isLive = s => ['running', 'waiting'].includes(sessionStatus(s));
+  const nodeLive = node => isLive(node.session) || node.workers.some(isLive)
+    || node.children.some(child => isLive(child.session) || child.workers.some(isLive));
   // Keep independent children and read-only workers grouped even when a
   // search matches a descendant or the parent has been archived.
   function buildTree(rows, {archive = false, currentKey = '', query = ''} = {}) {
@@ -118,8 +126,8 @@
     const nodes = new Map();
     const search = query.trim().toLowerCase();
     const matches = s => title(s).toLowerCase().includes(search);
-    const visible = s => archive || !internalRow(s) && !s.parentArchived
-      && (s.key === currentKey || hasMessages(s) || s.hasActiveRun || s.lineage);
+    const visible = s => archive || !internalRow(s) && (!s.parentArchived || isLive(s))
+      && (s.key === currentKey || hasMessages(s) || s.hasActiveRun || s.lineage || isChildRow(s));
     const ordinary = sorted.filter(s => !isPersona(s.key) && visible(s));
     for (const s of ordinary) nodes.set(s.key, {session: s, children: [], workers: []});
     const roots = [];
@@ -143,7 +151,12 @@
       else parent.children.push(node);
     }
     for (const s of sorted) {
-      if (isPersona(s.key) && !internalRow(s)) nodes.get(ordinaryParent(s))?.workers.push(s);
+      if (!isPersona(s.key) || internalRow(s)) continue;
+      const parent = nodes.get(ordinaryParent(s));
+      if (parent) parent.workers.push(s);
+      // Parent not listed here (other mode, archived, still blank): the worker
+      // gets its own row instead of vanishing.
+      else if (archive || !s.parentArchived || isLive(s)) roots.push({session: s, children: [], workers: []});
     }
     // Normal UI children are one level. If native history has deeper chains,
     // retain the descendants under the first visible root.
@@ -160,6 +173,12 @@
       }
       root.children = flat;
     }
+    // A parent moves up when one of its children was just dispatched or updated.
+    for (const root of roots) {
+      root.activity = Math.max(root.session.updatedAt || 0, ...root.workers.map(s => s.updatedAt || 0),
+        ...root.children.flatMap(child => [child.session.updatedAt || 0, ...child.workers.map(s => s.updatedAt || 0)]));
+    }
+    roots.sort((a, b) => b.activity - a.activity);
     if (!search) return roots;
     for (const root of roots) {
       const rootMatches = matches(root.session);
@@ -178,6 +197,7 @@
       || node.children.some(child => child.session.key === currentKey || child.workers.some(worker => worker.key === currentKey));
     const selected = currentKey && roots.find(contains);
     if (selected && !visible.includes(selected)) visible.push(selected);
+    for (const node of roots) if (!visible.includes(node) && nodeLive(node)) visible.push(node);
     return visible;
   }
 
@@ -634,22 +654,25 @@
   function addWorkers(host, node, api) {
     if (!node.workers.length) return;
     const key = 'workers:' + node.session.key;
-    const collapsed = !query.trim() && folded(key, true);
+    // Shown by default; folding is only ever the user's choice, and even then a
+    // running worker keeps its row.
+    const collapsed = !query.trim() && folded(key, false);
     const list = el('div', 'pinkie-session-branch pinkie-session-workers');
     const toggle = button((collapsed ? '›' : '⌄') + ' 分身 ' + node.workers.length,
       (collapsed ? '展开' : '收起') + '分身', () => setFolded(key, !collapsed));
     toggle.setAttribute('aria-expanded', String(!collapsed));
     list.append(toggle);
-    for (const s of node.workers) if (!collapsed || s.key === api.currentKey) list.append(row(s, api, {worker: true}));
+    for (const s of node.workers) if (!collapsed || s.key === api.currentKey || isLive(s)) list.append(row(s, api, {worker: true}));
     host.append(list);
   }
 
   function addTree(host, node, api) {
     const key = archived ? 'archive:' + node.session.key : node.session.key;
     const collapsed = !query.trim() && folded(key, archived);
-    host.append(row(node.session, api, {children: node.children.length, collapsed}));
+    host.append(row(node.session, api, {children: node.children.length, collapsed, worker: isPersona(node.session.key)}));
     const shown = collapsed ? node.children.filter(child => child.session.key === api.currentKey
-      || child.workers.some(worker => worker.key === api.currentKey)) : node.children;
+      || child.workers.some(worker => worker.key === api.currentKey)
+      || isLive(child.session) || child.workers.some(isLive)) : node.children;
     if (shown.length) {
       const branch = el('div', 'pinkie-session-branch');
       for (const child of shown) {
@@ -692,12 +715,15 @@
       if(path){const open=button('打开','在 Finder 中打开项目「'+name+'」',()=>api.revealProject(path));open.classList.add('laolao-group__action','laolao-group__open');head.insertBefore(open,settings);}
     }
     n.append(head);
+    // A folded group still lists the sessions whose dispatched children are running.
+    const liveRows=collapsed?rows.filter(nodeLive):[];
+    if(liveRows.length){const list=el('div','laolao-group__list');for(const node of liveRows)addTree(list,node,api);n.append(list);}
     if(!collapsed){
       const list=el('div','laolao-group__list');
       if(id==='__recent') {
         const now=Date.now();
         for(const label of ['今天','昨天','7 天内','30 天内','更早']) {
-          const matching=rows.filter(node=>dateGroup(node.session.updatedAt,now)===label);
+          const matching=rows.filter(node=>dateGroup(node.activity??node.session.updatedAt,now)===label);
           if(!matching.length)continue;
           list.append(el('div','pinkie-session-date',label));
           for(const node of matching)addTree(list,node,api);
