@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -252,6 +254,33 @@ class StartupRescueTest(unittest.TestCase):
 
 
 class ProbeVisibilityTest(unittest.TestCase):
+    def test_probe_uses_the_old_release_sibling_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_app = root / "old-source" / "app"
+            old_app.mkdir(parents=True)
+            (old_app / "legacy_release_fixture.py").write_text("VERSION = 'old'\n", encoding="utf-8")
+            old_source = old_app / "windows_desktop.py"
+            old_source.write_text(
+                "from legacy_release_fixture import VERSION\n"
+                "class WindowsUpdater:\n"
+                "    portable = True\n"
+                "    def __init__(self, resource_root, executable): pass\n"
+                "    def launch_replacer(self):\n"
+                "        return {'started': True, 'from': VERSION, 'to': self.prepared['version']}\n",
+                encoding="utf-8",
+            )
+            caller = root / "caller.py"
+            caller.write_text(probe.CALLER, encoding="utf-8")
+            result = root / "result.json"
+            env = dict(os.environ)
+            env.pop("PYTHONPATH", None)
+            subprocess.run([sys.executable, str(caller), str(old_source), str(root / "app.exe"),
+                            str(root / "payload.zip"), "digest", "new", str(result)],
+                           cwd=root, env=env, capture_output=True, check=True)
+            self.assertEqual(json.loads(result.read_text(encoding="utf-8")),
+                             {"started": True, "from": "old", "to": "new"})
+
     def test_gaps_over_three_seconds_are_found(self):
         samples = [{"t": t, "titles": titles} for t, titles in (
             (0, ["超級碧琪"]), (1, []), (2, []), (3, ["超級碧琪更新"]),   # 2 s: fine
