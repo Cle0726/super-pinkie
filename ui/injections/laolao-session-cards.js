@@ -516,7 +516,7 @@
 
   window.PinkieSessionCards = {cardActions, manageSummary, proposalState, chooseAnchor, forkEntryId, cardMeasure};
   if (typeof MutationObserver !== 'function') return;
-  new MutationObserver(reconcile).observe(document.documentElement, {subtree: true, childList: true});
+  window.Pinkie?.domWatch?.createObserver(reconcile)?.watch(document.documentElement, {childList: true});
   window.addEventListener('popstate', reconcile);
   window.addEventListener('resize', reconcile);
   window.addEventListener('pinkie:session-selected', reconcile);

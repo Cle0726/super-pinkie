@@ -8,7 +8,7 @@
 | M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
 | M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
 | M5 真页面回归测试 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI ubuntu-latest Chromium） | 2026-11-21 | [#52](https://github.com/Cle0726/super-pinkie/pull/52) |
-| M3 页面规矩（收窄版） | 未开始 | | | |
+| M3 页面规矩（收窄版） | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows） | 2026-11-21 | [#53](https://github.com/Cle0726/super-pinkie/pull/53) |
 | M4 拆巨无霸文件 | 未开始 | | | |
 | M6 上游补丁管理 | 已取消（由 C.le. 内核接管计划的 K3 取代） | | 2026-11-20 | |
 | M7 地图和规矩 | 未开始 | | | |
@@ -159,6 +159,11 @@ d. 删掉一处 !important 但不更新基线
 
 - **改动范围**：新增隔离视觉回归脚手架与零依赖 PNG 像素比对工具（`tests/visual/lib/harness.mjs`、`tests/visual/lib/png-diff.mjs`）、24 张 Linux Chromium 截图基线（`tests/visual/baseline/*.png`，12 画面 × 日/夜）、视觉回归测试（`tests/visual-baseline.test.mjs`）、10 项映射 `HOTSPOTS.md` 的用户可见热点测试（`tests/hotspot-ui-regression.test.mjs`）以及 `.github/workflows/ci.yml` 的 Linux Chromium 3 次零抖动 + ≤ 0.1% 像素门禁。
 - **验收自查**：M5-1 ★（Linux Chromium 连续 3 次 0 像素差异）、M5-2 ★（12 画面 × 日/夜 = 24 张 PNG）、M5-3 ★（10 项热点测试 Chrome & Edge 全过，H1/H2/H8 三项故意改坏反例全部精准报错并还原）、M5-4（已接入 `ci.yml`）、M5-5（Windows 本机 Edge 13/13 通过、24 画面本机 0 抖动，与 Linux Chromium 跨系统差异 0.40%–2.39% 源于 DirectWrite vs FreeType 字形渲染差异，详见 `progress/M5.md`）。Z2/Z4/Z5 全部通过。
+
+## M3 执行记录（2026-11-21，Gemini-Win-4e9b @ Windows）
+
+- **改动范围**：新增区域负责表与护栏测试（`ui/injections/regions.json`、`ui/injections/REGIONS.md`、`tests/ui-region-ownership.test.mjs`）、共用 DOM 观察器与可见性调度器（`ui/injections/laolao-dom-watch.js`、`tests/shared-dom-watch.test.mjs`），将 38 个文件中的 47 处子树观察器全量迁移至共用观察器，并将 36 个文件中的 47 处轮询 `setInterval` 合并至共享调度器，同步收缩 `tools/health/baseline.json`。
+- **验收自查**：M3-1 ★（202 项头部注入 100% 覆盖，`laolao-feedback.css` 越界改 `.sidebar-shell` 反例精准报错并还原）、M3-2 ★（静态 `measure.mjs` 与 Playwright 真页面运行时计数均严格为 **1** 个子树观察器，`mutationObservers` 74→29）、M3-3（取消，`!important` 5090 未增）、M3-4 ★（Batch A–E 每批提交均过 M5 回归与棘轮）、M3-5（`setIntervals` **91 → 44**，减少 51.6%）。Z2/Z4/Z5 全部通过，详见 `progress/M3.md`。
 
 ## 复发记录
 

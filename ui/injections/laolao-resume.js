@@ -1456,7 +1456,7 @@
       pluginChecked = false;
     }
   };
-  window.setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     if (!location.pathname.startsWith("/chat")) return;
     void checkCorePlugin();
     const banner = document.querySelector(".callout.danger.callout--dismissible");
@@ -2378,7 +2378,7 @@
       if (!isBusy(pane)) scheduleQueueRecovery(pane, "composer-hydration");
     }
     void syncSelectedSession(observedSessionKey);
-    window.setInterval(() => {
+    window.Pinkie?.domWatch?.poll(() => {
       // A replaced native pane brings a new state object; guard it right away.
       for (const pane of chatPanes()) guardMessageWindow(pane?.state);
       if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;
@@ -2580,7 +2580,7 @@
   // v3: 挂上后立即 disconnect——常驻的 documentElement 子树观察器是
   // mutation 记录雪崩的放大器（每条记录都要为它单独包装成 JS 对象）。
   let hooked = false;
-  const readyObserver = new MutationObserver(() => {
+  const readyObserver = window.Pinkie?.domWatch?.createObserver(() => {
     hookWhenReady();
   });
   const hookWhenReady = () => {
@@ -2588,11 +2588,11 @@
     const shell = document.querySelector("openclaw-app-shell");
     if (shell?.context?.gateway) {
       hooked = true;
-      readyObserver.disconnect();
+      readyObserver?.disconnect();
       hookGatewayStore();
     }
   };
-  readyObserver.observe(document.documentElement, { childList: true, subtree: true });
+  readyObserver?.watch(document.documentElement, {childList: true});
   // 10s 兜底：无论如何不再永久监听
   window.setTimeout(() => readyObserver.disconnect(), 10000);
   // Context can be attached to an existing shell without a DOM mutation. A

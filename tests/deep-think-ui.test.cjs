@@ -35,7 +35,7 @@ test('main chat shows aggregate worker progress without exposing child chats',()
   assert.match(src,/laolao-status-flow/);
   assert.match(src,/fill\.style\.transform = `scaleX/);
   assert.doesNotMatch(src,/details\.replaceChildren/);
-  assert.match(src,/window\.setInterval\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
+  assert.match(src,/(?:window\.setInterval|domWatch\?\.poll)\(\(\) => \{ if \(!document\.hidden\) void refreshStatus\(\); \}, 900\)/);
 });
 
 test('tier completion refreshes only the bounded live timeline window while reload stays a guarded offline-only fallback',()=>{

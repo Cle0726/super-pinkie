@@ -156,12 +156,12 @@
     if (!root || root.dataset.pinkieFirstPersonWatch === '1') return false;
     root.dataset.pinkieFirstPersonWatch = '1';
     renderTree(root);
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       for (const record of records) {
         if (record.type === 'characterData') renderText(record.target);
         else for (const node of record.addedNodes) renderTree(node);
       }
-    }).observe(root, {childList: true, characterData: true, subtree: true});
+    })?.watch(root, {childList: true, characterData: true});
     return true;
   };
 

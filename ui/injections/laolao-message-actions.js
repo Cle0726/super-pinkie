@@ -491,17 +491,17 @@
   }
   let frame = 0;
   function schedule() { if (!frame) frame = requestAnimationFrame(paint); }
-  const observer = new MutationObserver(mutations => {
+  const observer = window.Pinkie?.domWatch?.createObserver(mutations => {
     if (mutations.every(mutation => [...mutation.addedNodes, ...mutation.removedNodes]
       .every(node => node.nodeType === 1 && node.closest?.('.pinkie-msg-row, .pinkie-msg-menu, .pinkie-msg-toast, .pinkie-msg-edit, .pinkie-fail')))) return;
     schedule();
   });
   const start = () => {
-    observer.observe(document.body, {childList: true, subtree: true});
+    observer?.watch(document.body, {childList: true});
     schedule();
   };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
-  setInterval(schedule, 1500);
+  window.Pinkie?.domWatch?.poll(schedule, 1500);
 
   window.__pinkieMessageActions = Object.freeze({plainText, historyItem, reloadHistory, paint: schedule, failureSay: FAILURE_SAY});
 })();

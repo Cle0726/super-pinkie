@@ -570,13 +570,13 @@
     let any = false;
     for (const [h, observer] of observers) if (!h.isConnected) { observer.disconnect(); observers.delete(h); any = true; }
     for (const h of document.querySelectorAll('.chat-thread-inner')) if (!observers.has(h)) {
-      const observer = new MutationObserver(changed);
-      observer.observe(h, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+      const observer = window.Pinkie?.domWatch?.createObserver(changed);
+      observer?.watch(h, {childList: true, attributes: true, attributeFilter: ['class']});
       observers.set(h, observer); any = true;
     }
     if (any) schedule();
   }
-  setInterval(attach, 400);
+  window.Pinkie?.domWatch?.poll(attach, 400);
   attach();
 
   // 昼夜切换：图表和流程图按新配色重画

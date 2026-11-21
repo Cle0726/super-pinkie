@@ -1033,8 +1033,8 @@ html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pi
   };
   // 输入区由 Lit 重建；低频轮询足够且不会在流式输出时制造 MutationObserver 风暴。
   window.setInterval(scheduleRender, 700);
-  window.setInterval(() => { if (!document.hidden) void refreshStatus(); }, 900);
-  window.setInterval(() => { syncWorkSession(); if (!document.hidden) void refreshWork(); }, 450);
+  window.Pinkie?.domWatch?.poll(() => { if (!document.hidden) void refreshStatus(); }, 900);
+  window.Pinkie?.domWatch?.poll(() => { syncWorkSession(); if (!document.hidden) void refreshWork(); }, 450);
   window.addEventListener("resize", positionStatus, {passive: true});
   window.addEventListener("resize", positionWork, {passive: true});
   const workSessionChanged = () => { syncWorkSession(); workNextPoll = 0; void refreshStatus(); void refreshWork(); };

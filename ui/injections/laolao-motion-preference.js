@@ -78,14 +78,14 @@
       else rewriteSheet(el.sheet);
     }
   };
-  new MutationObserver((records) => {
+  window.Pinkie?.domWatch?.createObserver((records) => {
     for (const record of records) {
       // A <style> whose text changed is re-parsed and loses the rewrite.
       const style = record.target.nodeType === 1 ? record.target.closest?.("style") : record.target.parentElement?.closest?.("style");
       if (style) rewriteSheet(style.sheet);
       record.addedNodes.forEach(watchNode);
     }
-  }).observe(document.documentElement, {childList: true, subtree: true, characterData: true});
+  })?.watch(document.documentElement, {childList: true, characterData: true});
   document.querySelectorAll("style, link[rel~='stylesheet']").forEach(watchNode);
   document.addEventListener("DOMContentLoaded", rewriteAll, {once: true});
   window.addEventListener("load", rewriteAll, {once: true});

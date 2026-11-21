@@ -273,7 +273,7 @@
     }
   };
 
-  const observer = new MutationObserver((records) => {
+  const observer = window.Pinkie?.domWatch?.createObserver((records) => {
     for (const r of records) {
       if (r.type === 'characterData') {
         queue(ownerOf(r.target));
@@ -293,10 +293,8 @@
   const start = () => {
     ensureStyle();
     scan(document.body);
-    observer.observe(document.body, {
-      subtree: true, childList: true, characterData: true,
-      attributes: true, attributeFilter: ['data-message-text'],
-    });
+    observer?.watch(document.body, {childList: true, characterData: true,
+      attributes: true, attributeFilter: ['data-message-text'],});
   };
 
   window.__pinkieBiqiTranslateNotice = translate;

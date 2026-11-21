@@ -408,10 +408,10 @@
   function start() {
     // 侧栏的入口区每次重画都会清空；首页是整块换掉的。只看这两处所在的外壳，不看聊天区。
     const shell = document.querySelector('.shell') || document.body;
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       if (!isMetre()) return;
       if (records.some((r) => !(r.target instanceof Element) || !r.target.closest('.chat-thread, .pk-metre-board, .pk-metre-quick'))) queue();
-    }).observe(shell, {childList: true, subtree: true});
+    })?.watch(shell, {childList: true});
     new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-laolao-startup-home']});
     window.addEventListener('resize', queue);
     // Esc 只在焦点在面板里、或面板是浮层时关：停靠时 Esc 留给对话（比如停止生成）。

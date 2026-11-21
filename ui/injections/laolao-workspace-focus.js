@@ -180,11 +180,11 @@
   const observeRail = (rail) => {
     if (rail.dataset.laolaoWorkspaceFocusObserver === "1" || typeof MutationObserver !== "function") return;
     rail.dataset.laolaoWorkspaceFocusObserver = "1";
-    const observer = new MutationObserver(schedule);
+    const observer = window.Pinkie?.domWatch?.createObserver(schedule);
     /* The observer is bounded to this small rail. It is intentionally not a
        document/chat transcript observer, so streamed messages cannot trigger
        it or make the composer flicker. */
-    observer.observe(rail, { childList: true, subtree: true });
+    observer?.watch(rail, {childList: true});
     window.addEventListener("pagehide", () => observer.disconnect(), { once: true });
   };
 

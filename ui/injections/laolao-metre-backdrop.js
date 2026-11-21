@@ -1160,10 +1160,10 @@
     new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-laolao-startup-home', 'data-theme', 'data-pinkie-night', 'data-pinkie-reduce-motion']});
     const shell = document.querySelector('openclaw-app') || document.body;
     // 换页（对话 ↔ 设置等）时 main 的 class 会变；只看结构变化，不看对话流里的字
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       if (!isMetre() && !canvas) return;
       if (records.some((r) => !(r.target instanceof Element) || !r.target.closest('.chat-thread, .pk-metre-board, .pk-metre-brand, .pk-metre-backdrop'))) queue();
-    }).observe(shell, {childList: true, subtree: true});
+    })?.watch(shell, {childList: true});
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else queue(); });
     window.addEventListener('resize', queue);
     document.addEventListener('pointerdown', onTap, true);

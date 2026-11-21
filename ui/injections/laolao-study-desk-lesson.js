@@ -335,7 +335,7 @@
     clearBar(); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!root()?.isConnected || !window.__pinkieDeskChat?.active?.() || document.hidden || desk.pane() !== globalDesk.pane()) return;
     // 新聊天不抢发学习台请求；已有课程立即恢复，其他会话从首个 4 秒轮询或新消息恢复。
     if (data().current || data().prepared || desk.local().today?.focus?.kind === 'lesson') void refreshCurrent(); 
-    const column = messageColumn(); if (column) { let queued = false; messageObserver = new MutationObserver(records => { if (queued || !records.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !bar?.contains(n)))) return; queued = true; setTimeout(() => { queued = false; void refreshCurrent(); }, 250); }); messageObserver.observe(column, {childList: true, characterData: true, subtree: true}); }
+    const column = messageColumn(); if (column) { let queued = false; messageObserver = window.Pinkie?.domWatch?.createObserver(records => { if (queued || !records.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !bar?.contains(n)))) return; queued = true; setTimeout(() => { queued = false; void refreshCurrent(); }, 250); }); messageObserver?.watch(column, {childList: true, characterData: true}); }
     resizeObserver = new ResizeObserver(positionBar); if (column) resizeObserver.observe(column); const sidebar = document.querySelector('aside.sidebar'); if (sidebar) resizeObserver.observe(sidebar);
   }
     const pause = (options={}) => { clearInterval(statusPolling); statusPolling = 0; if(!options.chat||!options.samePane)clearBar(); };

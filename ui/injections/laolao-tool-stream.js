@@ -175,7 +175,7 @@
      prepare 本身幂等且便宜，1s 延迟对工具流展示无感知。 */
   function start() {
     schedule();
-    setInterval(schedule, 1000);
+    window.Pinkie?.domWatch?.poll(schedule, 1000);
   }
 
   if (document.readyState === 'loading') {

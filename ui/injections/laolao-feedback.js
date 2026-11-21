@@ -390,7 +390,7 @@
     const scroll = document.querySelector?.(`#laolao-user-settings .${S}scroll`);
     if (scroll) mount(scroll);
     waitAndPromptOnboarding(0);
-    if (typeof window.setInterval === 'function') window.setInterval(syncWhenSettingsOpens, 1200);
+    if (typeof window.setInterval === 'function') window.Pinkie?.domWatch?.poll(syncWhenSettingsOpens, 1200);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady, {once: true});
   else onReady();

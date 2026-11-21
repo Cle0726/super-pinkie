@@ -803,7 +803,7 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
   window.addEventListener("resize", () => document.querySelectorAll(".laolao-context-viewer[open]").forEach(placePanel), {passive: true});
   ensureStyle();
   render();
-  setInterval(render, 900);
+  window.Pinkie?.domWatch?.poll(render, 900);
   window.addEventListener("pinkie:gateway-event", handleCompactionEvent);
   window.addEventListener("laolao:sessions-changed", () => { usageFetchedAt = 0; fetchContextCapacity(); });
   window.__laolaoContextCompact = {compact, currentSessionKey, contextCapacity, readCompactionState, handleCompactionEvent,

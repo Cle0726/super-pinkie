@@ -256,6 +256,7 @@ function renderSceneBody(sceneId, mode) {
     <title>超級碧琪 · M5 视觉回归</title>
     <script src="/__fake-gateway.js"></script>
     <script src="/laolao-night.js"></script>
+    <script src="/laolao-dom-watch.js"></script>
     <link rel="stylesheet" href="/laolao-theme.css" />
     <link rel="stylesheet" href="/laolao-classic-shell.css" />
     <link rel="stylesheet" href="/laolao-sidebar.css" />

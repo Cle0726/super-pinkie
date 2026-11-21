@@ -226,7 +226,7 @@
   window.addEventListener('laolao:modechange', () => { close(); mount(); });
   window.addEventListener('pinkie:session-selected', () => close());
   window.addEventListener('pinkie:composer-chips', mount);
-  window.setInterval(mount, 1000);
+  window.Pinkie?.domWatch?.poll(mount, 1000);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, {once: true}); else mount();
 
   window.__pinkieComposerTray = {mount, close, rows: input => available(input).map(entry => ({key: entry.row.key, ...entry.row.state(entry.node)}))};

@@ -420,15 +420,15 @@
   window.addEventListener("pagehide", () => railObserver?.disconnect(), { once: true });
   const mountSelector = '.shell--chat, .chat-workbench, .sidebar-shell__footer, .sidebar-nav, .dashboard-header__breadcrumb, .agent-chat__input, .sidebar-footer-actions';
   if (typeof MutationObserver === "function") {
-    const mounts = new MutationObserver(records => {
+    const mounts = window.Pinkie?.domWatch?.createObserver(records => {
       if (records.some(rec => [...rec.addedNodes, ...rec.removedNodes].some(
         node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
           || (node.nodeType === 1 && rec.target.matches?.('.sidebar-footer-actions, .sidebar-footer-bar'))
       ))) schedule();
     });
-    mounts.observe(document.documentElement, {childList: true, subtree: true});
+    mounts?.watch(document.documentElement, {childList: true});
   } else {
-    setInterval(schedule, 1200);
+    window.Pinkie?.domWatch?.poll(schedule, 1200);
   }
   window.addEventListener("pinkie:session-selected", schedule);
   window.addEventListener("pinkie:sidebar-gateway-ready", schedule);

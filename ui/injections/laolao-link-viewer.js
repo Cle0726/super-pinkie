@@ -344,7 +344,7 @@
   // The app swaps chat roots during mode/session changes. A low-frequency,
   // idempotent mount avoids a subtree observer competing with streaming text.
   setInterval(mountBrowserLauncher, 1500);
-  setInterval(mountMediaWorkspaceActions, 1500);
+  window.Pinkie?.domWatch?.poll(mountMediaWorkspaceActions, 1500);
   mountBrowserLauncher();
   mountMediaWorkspaceActions();
 

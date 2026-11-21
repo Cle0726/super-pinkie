@@ -20,7 +20,7 @@ test('connection and fallback chrome use CLE Kk while stored chat text stays pro
   assert.match(phrases,/问问碧琪/);
   assert.match(phrases,/碧琪正在把新模型请进派对/);
   assert.match(phrases,/watchBrandTitle/);
-  assert.match(phrases,/MutationObserver\(\(\) => syncBrandTitle\(\)\)/);
+  assert.match(phrases,/(?:MutationObserver|domWatch\?\.createObserver)\(\(\) => syncBrandTitle\(\)\)/);
   for(const label of ['Delete message','Open in canvas','Copy as markdown']){
     assert.match(phrases,new RegExp(`\\["${label.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')}"`));
   }
@@ -76,7 +76,7 @@ test('model picker preserves native session actions and reasoning controls',()=>
   const behavior=read('ui/injections/laolao-model-picker.js');
   assert.match(behavior,/details\.dataset\.pinkieModelsOpen = "0"/);
   assert.match(behavior,/Number\(range\.value\) >= Number\(range\.max\)/);
-  assert.match(behavior,/watcher\.observe\(details, \{childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: \["hidden", "aria-selected", "disabled"\]\}\)/);
+  assert.match(behavior,/watcher(?:\.observe|\?\.watch)\(details, \{childList: true,(?: subtree: true,)? characterData: true, attributes: true, attributeFilter: \["hidden", "aria-selected", "disabled"\]\}\)/);
   assert.match(read('ui/injections/laolao-head.fragment.html'),/laolao-model-picker\.js\?v=@hash/);
 });
 

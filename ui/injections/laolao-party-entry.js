@@ -33,6 +33,6 @@
   // of every mutation record (the GC "record avalanche" that froze the page).
   // mount() is idempotent, so a slow 1.5s poll is more than enough here.
   // Metre 里没有派对入口，不轮询（批 6）。
-  if (window.__pinkieQuiet) window.__pinkieQuiet.interval('party-entry', mount, 1500); else setInterval(mount, 1500);
+  if (window.__pinkieQuiet) window.__pinkieQuiet.interval('party-entry', mount, 1500); else window.Pinkie?.domWatch?.poll(mount, 1500);
   mount();
 })();

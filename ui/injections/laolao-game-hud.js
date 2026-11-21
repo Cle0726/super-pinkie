@@ -182,7 +182,7 @@
     const stop = () => listeners.delete(paint);
     // 条被移出页面后停止更新（先等它挂上去一次）。
     let seenOn = false;
-    new MutationObserver((_, o) => { if (bar.isConnected) { seenOn = true; return; } if (seenOn) { stop(); o.disconnect(); } }).observe(host.ownerDocument.body, {childList: true, subtree: true});
+    window.Pinkie?.domWatch?.createObserver((_, o) => { if (bar.isConnected) { seenOn = true; return; } if (seenOn) { stop(); o.disconnect(); } })?.watch(host.ownerDocument.body, {childList: true});
     return {bar, paint, stop};
   }
 

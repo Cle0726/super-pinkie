@@ -265,7 +265,7 @@
     if (name === 'sessions.changed' || name === 'chat' && state !== 'delta') scheduleContext();
   });
   window.addEventListener('laolao:modechange', scheduleContext);
-  setInterval(pushContext, 15_000);
+  window.Pinkie?.domWatch?.poll(pushContext, 15_000);
   setTimeout(pushContext, 3000);
 
   window.__pinkieNativeBridge = {

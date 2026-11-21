@@ -106,5 +106,17 @@
     "metric": "lines",
     "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
     "value": 209
+  },
+  {
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "mutationObservers",
+    "value": 1,
+    "reason": "M3 shared page-wide DOM observer replacing per-file subtree MutationObservers across ui/injections"
+  },
+  {
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "subtreeObserverCalls",
+    "value": 1,
+    "reason": "M3 single shared subtree MutationObserver for the entire Control UI"
   }
 ]
