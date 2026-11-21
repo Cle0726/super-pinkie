@@ -301,9 +301,9 @@
   async function math(nodes) {
     if (!window.katex) {
       mathLoading ||= new Promise((resolve, reject) => {
-        const cssURL = new URL('laolao-katex/katex.min.css?v=0.18.9', desk.base).href;
+        const cssURL = new URL((window.__pinkieAsset || (p => p))('laolao-katex/katex.min.css'), desk.base).href;
         if (![...document.querySelectorAll('link[rel=stylesheet]')].some(n => n.href === cssURL)) { const css = el('link'); css.rel = 'stylesheet'; css.href = cssURL; document.head.append(css); }
-        const url = new URL('laolao-katex/katex.min.js?v=0.18.9', desk.base).href;
+        const url = new URL((window.__pinkieAsset || (p => p))('laolao-katex/katex.min.js'), desk.base).href;
         let script = [...document.scripts].find(n => n.src === url);
         const ready = () => window.katex ? resolve() : reject(Error('公式组件未就绪'));
         if (!script) { script = el('script'); script.src = url; document.head.append(script); }

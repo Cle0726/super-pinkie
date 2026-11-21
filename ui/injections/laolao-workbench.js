@@ -789,7 +789,7 @@
           const label = id => id === 'json' ? 'json' : ['css', 'scss', 'less'].includes(id) ? 'css' : ['html', 'handlebars', 'razor'].includes(id) ? 'html' : ['typescript', 'javascript'].includes(id) ? 'ts' : 'editor';
           self.MonacoEnvironment = {getWorker: (_, id) => new Worker(MONACO + 'worker-boot.js?w=' + WORKERS[label(id)])};
           // 补全、报错、AI 行内补全在单独的模块里（语言服务器客户端）
-          const code = document.createElement('script'); code.src = BASE + 'laolao-workbench-code.js?v=4'; code.async = true; document.head.append(code);
+          const code = document.createElement('script'); code.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-workbench-code.js') : 'laolao-workbench-code.js'); code.async = true; document.head.append(code);
           resolve(window.monaco);
         }, reject);
       };

@@ -18,7 +18,7 @@
 //   Metre 里只在一轮运行期间占着 WebGL，落款结束就整个拆掉、把上下文还回去（见 endHold）。
 let CleSpace = null, spaceLoading = null;
 const loadSpace = () => spaceLoading ||= Promise.resolve(window.__pinkieQuiet?.loadSignature())
-  .then(() => import('./laolao-cle-space.js?v=7')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
+  .then(() => import(window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
 const metreNow = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
 if (!metreNow() && !document.documentElement.hasAttribute('data-laolao-splash-metre')) loadSpace();
 

@@ -13,7 +13,7 @@
 })(typeof window === "object" ? window : globalThis, (root) => {
   "use strict";
 
-  const ASSET_VERSION = "splashfx1";
+  const asset = (p) => (typeof root.__pinkieAsset === "function" ? root.__pinkieAsset(p) : p);
   const FINISH = 380;          // 就绪后进度走满
   const EXIT_DELAY = 260;      // 走满后停一下再冲
   const CHARGE = 420;          // 冲向镜头
@@ -41,10 +41,10 @@
   const assetUrls = () => ({
     // 和 laolao-splash.css 首帧用的是同一个地址，共用已经下载好的图。
     image: "/laolao-splash.png",
-    mask: `/laolao-splash-mask.png?v=${ASSET_VERSION}`,
-    plate: `/laolao-splash-plate.webp?v=${ASSET_VERSION}`,
-    plateSoft: `/laolao-splash-plate-soft.png?v=${ASSET_VERSION}`,
-    charSoft: `/laolao-splash-char-soft.png?v=${ASSET_VERSION}`,
+    mask: asset("/laolao-splash-mask.png"),
+    plate: asset("/laolao-splash-plate.webp"),
+    plateSoft: asset("/laolao-splash-plate-soft.png"),
+    charSoft: asset("/laolao-splash-char-soft.png"),
   });
 
   // ---------- WebGL ----------

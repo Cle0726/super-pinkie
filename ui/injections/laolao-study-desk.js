@@ -1120,9 +1120,9 @@
           pane.view = id; pane.state.view = id;
           if (!state.notesLoading) {
             state.notesLoading = true;
-            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + 'laolao-study-desk-notes.css?v=drill2'; css.dataset.notebookV2 = '';
+            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-notes.css') : 'laolao-study-desk-notes.css'); css.dataset.notebookV2 = '';
             if (!document.querySelector('link[data-notebook-v2]')) document.head.append(css);
-            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-notes.js?v=drill2';
+            const script = document.createElement('script'); script.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-notes.js') : 'laolao-study-desk-notes.js');
             script.onload = () => { state.notesLoading = false; for (const p of workspace().panes) if (p.view === 'notes') renderPane(p); };
             script.onerror = () => { state.notesLoading = false; script.remove(); notice('笔记本未能加载，请重试'); }; document.head.append(script);
           }
@@ -1138,11 +1138,11 @@
           if (!state.drillLoading) {
             state.drillLoading = true;
             for (const file of ['laolao-desk-reward.css', 'laolao-study-desk-drill.css']) {
-              const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + file + '?v=drill2';
+              const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + (window.__pinkieAsset ? window.__pinkieAsset(file) : file);
               if (!document.querySelector('link[href="' + css.href + '"]')) document.head.append(css);
             }
-            const reward = document.createElement('script'); reward.src = BASE + 'laolao-desk-reward.js?v=drill2';
-            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-drill.js?v=drill2';
+            const reward = document.createElement('script'); reward.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-desk-reward.js') : 'laolao-desk-reward.js');
+            const script = document.createElement('script'); script.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-drill.js') : 'laolao-study-desk-drill.js');
             reward.onload = () => document.head.append(script);
             script.onload = () => { state.drillLoading = false; for (const p of workspace().panes) if (p.view === 'drill') renderPane(p); };
             script.onerror = () => { state.drillLoading = false; notice('背一背未能加载，请重试'); };

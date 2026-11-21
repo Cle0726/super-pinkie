@@ -524,7 +524,7 @@
         resolve(true);
       };
       image.onerror = () => resolve(false);
-      image.src = `./laolao-reasoning-frame-${material}.png?v=1`;
+      image.src = (window.__pinkieAsset || ((p) => p))(`./laolao-reasoning-frame-${material}.png`);
     });
     frameLoads.set(material, loaded);
     return loaded;
@@ -564,7 +564,7 @@
       layers[0].classList.add("is-initial");
       /* Freeze the outgoing image while the first frame loads. Otherwise a
          quick drag makes the old CSS background switch before the fade exists. */
-      menu.style.backgroundImage = `url("./laolao-reasoning-frame-${material}.png?v=1"), linear-gradient(145deg, rgba(252, 250, 252, .88), rgba(239, 235, 242, .78) 58%, rgba(250, 247, 248, .84))`;
+      menu.style.backgroundImage = `url("${(window.__pinkieAsset || ((p) => p))(`./laolao-reasoning-frame-${material}.png`)}"), linear-gradient(145deg, rgba(252, 250, 252, .88), rgba(239, 235, 242, .78) 58%, rgba(250, 247, 248, .84))`;
       state = { layers, active: 0, material, pending: null, token: 0, initialLoad: null };
       frameStates.set(menu, state);
       state.initialLoad = preloadFrame(material).then((loaded) => {
