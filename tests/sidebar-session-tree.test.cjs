@@ -132,3 +132,48 @@ test('a fresh child lifts an old parent into the recent page; running ones are n
   const running = row(child, '子会话', {parentSessionKey: 'agent:main:item-33', updatedAt: 1, hasActiveRun: true});
   assert.ok(page(old.concat(running)).includes('agent:main:item-33'));
 });
+
+test('Metre dispatched children from other modes hang under their parent, not in a group of their own', () => {
+  const metre = 'agent:metre:parent', other = 'agent:metre:other';
+  const done = {key: 'agent:project:pinkie-child:done', parentKey: metre, title: '对比度修复', mode: 'project', updatedAt: 5};
+  const live = {key: 'agent:learning:pinkie-child:live', parentKey: metre, title: '整理讲解稿', mode: 'learning', updatedAt: 9, hasActiveRun: true};
+  const lost = {key: 'agent:ideas:pinkie-child:lost', parentKey: 'agent:metre:gone', title: '起草标题', mode: 'ideas', updatedAt: 1};
+  const rows = [row(metre, '收尾检查', {updatedAt: 1}), row(other, '别的会话', {updatedAt: 7})];
+  const tree = build(rows, {parts: {[metre]: [done, live]}});
+  const parentNode = tree.find(node => node.session.key === metre);
+  assert.deepEqual(parentNode.parts.map(part => part.key), [done.key, live.key]);
+  assert.equal(tree.find(node => node.session.key === other).parts.length, 0);
+  // A parent moves up when a dispatched child was just updated, like any other child.
+  assert.equal(tree[0].session.key, metre);
+  assert.equal(parentNode.activity, 9);
+  // Search finds the parent through a dispatched child's title; a miss hides it.
+  assert.deepEqual(build(rows, {query: '讲解稿', parts: {[metre]: [done, live]}}).map(node => [node.session.key, node.parts.map(p => p.key)]),
+    [[metre, [live.key]]]);
+  assert.equal(build(rows, {query: '不存在', parts: {[metre]: [done, live]}}).length, 0);
+  // A part whose parent is not in the tree is left for the caller to list on its own.
+  const nested = new Set(tree.map(node => node.session.key));
+  assert.deepEqual([done, live, lost].filter(part => !nested.has(part.parentKey)).map(part => part.key), [lost.key]);
+});
+
+test('a running dispatched child keeps its parent in the recent page and counts as live', () => {
+  const metre = 'agent:metre:parent';
+  const live = {key: 'agent:project:pinkie-child:live', parentKey: metre, title: '正在整理', mode: 'project', updatedAt: 1, hasActiveRun: true};
+  const rows = Array.from({length: 35}, (_, index) => row(`agent:metre:item-${index}`, `会话 ${index}`, {updatedAt: 100 - index}))
+    .concat(row(metre, '最老的父会话', {updatedAt: 0}));
+  const roots = window.PinkieSessionList.buildTree(rows, {parts: {[metre]: [live]}});
+  assert.equal(Array.from(window.PinkieSessionList.recentPage(roots, 30, ''), node => node.session.key).includes(metre), true);
+  const quiet = window.PinkieSessionList.buildTree(rows, {parts: {[metre]: [{...live, hasActiveRun: false, updatedAt: 0}]}});
+  assert.equal(Array.from(window.PinkieSessionList.recentPage(quiet, 30, ''), node => node.session.key).includes(metre), false);
+});
+
+test('running sessions keep their place while they update; they move once when they settle', () => {
+  const at = (stamps, live) => build(['a', 'b', 'c'].map((name, i) => row('agent:metre:' + name, name,
+    {updatedAt: stamps[i], hasActiveRun: live})), {}).map(node => node.session.label).join('');
+  // all three running and each touching updatedAt in turn: the order must not change
+  assert.equal(at([30, 20, 10], true), 'abc');
+  assert.equal(at([20, 50, 10], true), 'abc');
+  assert.equal(at([20, 40, 60], true), 'abc');
+  // once they settle they sort by their real time, one move
+  assert.equal(at([20, 40, 60], false), 'cba');
+  assert.equal(at([70, 40, 60], false), 'acb');
+});

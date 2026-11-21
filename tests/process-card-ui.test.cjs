@@ -170,6 +170,7 @@ test('later bursts use only the renderer-owned slots', () => {
   assert.match(script, /function placeFor\(card, slot, ep\)/);
   assert.match(script, /slots\.find\(node => Number\(node\.dataset\.pinkieThinkingSeg\) === ep\.anchor\)/);
   assert.doesNotMatch(script, /host\.prepend\(holder\)|details\.append\(tail\)/);
-  assert.match(script, /preserveSlot\(slot, \(\) => box\.classList\.remove\("is-live"\)\)/);
+  // Leaving the live window (and opening to the body) goes through preserveSlot so the reader keeps their place.
+  assert.match(script, /const settle = \(\) => \{[^}]*"is-live"[^}]*"is-open"[^}]*\};\s*if \(box\.classList\.contains\("is-live"\) !== live && !live\) preserveSlot\(slot, settle\)/);
   assert.match(css, /\.pinkie-process__rows \.pinkie-process__thinking:not\(:empty\)/);
 });

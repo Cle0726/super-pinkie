@@ -234,3 +234,31 @@ test('the active sidebar session also gets per-burst history segments', () => {
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
   }
 });
+
+test('a finished 「思考了」 is open by default and the reader can fold it', () => {
+  const h = harness({[key]: {text: '做完的完整思考', ms: 2300, count: 1, at: 1}});
+  h.setRows(2);
+  const box = () => h.card.querySelector('.pinkie-thinking');
+  const head = () => box().querySelector('.pinkie-thinking__head');
+  assert.match(box().querySelector('.pinkie-thinking__label').textContent, /^思考了/);
+  assert.equal(box().classList.contains('is-open'), true);
+  assert.equal(head().getAttribute('aria-expanded'), 'true');
+  assert.deepEqual(h.textAt(0), ['做完的完整思考']);
+  head().click();
+  assert.equal(box().classList.contains('is-open'), false);
+  assert.equal(head().getAttribute('aria-expanded'), 'false');
+  h.render();
+  assert.equal(box().classList.contains('is-open'), false);
+  head().click();
+  assert.equal(box().classList.contains('is-open'), true);
+});
+
+test('a live thought keeps its short window; only the finished 「思考了」 opens by default', () => {
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '正在想的内容'});
+  const box = h.card.querySelector('.pinkie-thinking');
+  assert.equal(box.classList.contains('is-live'), true);
+  assert.equal(box.classList.contains('is-open'), false);
+  assert.match(box.querySelector('.pinkie-thinking__label').textContent, /^正在思考/);
+});
