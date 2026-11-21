@@ -16,6 +16,7 @@ import urllib.parse
 
 import release_notes
 
+UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
 UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
 TRUSTED_UPDATE_HOSTS = {
     "api.github.com",
