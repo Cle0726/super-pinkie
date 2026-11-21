@@ -190,7 +190,7 @@ class RelayPortIdentityTests(unittest.TestCase):
         which features were in the path.
         """
         self.assertTrue(super_pinkie.resource_path("proxy", "mm-retry-proxy.py").is_file())
-        launcher = (self.ROOT / "app" / "windows_desktop.py").read_text(encoding="utf-8")
+        launcher = (self.ROOT / "app" / "windows_gateway.py").read_text(encoding="utf-8")
         installer = (self.ROOT / "install.ps1").read_text(encoding="utf-8-sig")
         self.assertIn("mm-retry-proxy.py", installer)
         self.assertIn("proxy/mm-retry-proxy.py", launcher)
