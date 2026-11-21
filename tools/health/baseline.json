@@ -1763,10 +1763,8 @@
   },
   "longFiles": {
     "app/super_pinkie.py": 1560,
-    "app/windows_desktop.py": 5775,
     "desktop/macos/pinkie/Sources/Launcher.swift": 5746,
     "patch/apply-chat-timeline.mjs": 1978,
-    "services/mode-architecture/index.mjs": 7949,
     "services/mode-architecture/learning.mjs": 2501,
     "services/mode-architecture/session-lineage.mjs": 1894,
     "ui/injections/laolao-metre-skin.css": 2592,

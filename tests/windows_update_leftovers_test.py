@@ -60,7 +60,7 @@ class LeftoverOrderTest(unittest.TestCase):
         self.assertIn("--user-data-dir=", body)
 
     def test_portable_command_passes_the_state_root(self):
-        source = Path(__file__).resolve().parents[1].joinpath("app/windows_desktop.py").read_text(encoding="utf-8")
+        source = Path(__file__).resolve().parents[1].joinpath("app/windows_updater.py").read_text(encoding="utf-8")
         launch = source.split("def launch_replacer(", 1)[1].split("else:", 1)[0]
         self.assertIn('"-StateRoot", str(state_root())', launch)
 

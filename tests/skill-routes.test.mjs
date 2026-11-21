@@ -58,7 +58,8 @@ test('both builds ship the manifest, the index and the notices', () => {
   for (const file of ['services/mode-architecture/setup.py', 'installer/macos/apply-theme.sh']) {
     assert.match(fs.readFileSync(path.join(ROOT, file), 'utf8'), /skill-routes\.mjs/, `${file} must install the router`);
   }
-  const shared = fs.readFileSync(path.join(ROOT, 'services/mode-architecture/index.mjs'), 'utf8');
+  const shared = fs.readFileSync(path.join(ROOT, 'services/mode-architecture/index.mjs'), 'utf8')
+    + '\n' + fs.readFileSync(path.join(ROOT, 'services/mode-architecture/mode-architecture-core.mjs'), 'utf8');
   for (const needle of ['skillRouteBlock(', 'waitingSection(', 'runningBackgroundJobs(', "'\\n' + BACKGROUND_WORK_RULES + '\\n'"]) {
     assert.ok(shared.includes(needle), `shared mode engine lacks ${needle}`);
   }

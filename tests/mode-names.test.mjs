@@ -6,7 +6,8 @@ import {spawnSync} from 'node:child_process';
 
 test('services and the UI use the current mode names', () => {
   const run = spawnSync('git', ['grep', '-n', '-E', '习作|营造|挥洒', '--', 'services', 'ui',
-    ':!services/mode-architecture/index.mjs', ':!services/mode-architecture/setup.py',
+    ':!services/mode-architecture/index.mjs', ':!services/mode-architecture/evidence-rules.mjs',
+    ':!services/mode-architecture/mode-architecture-core.mjs', ':!services/mode-architecture/setup.py',
     // 微信适配器要认得改名前已经打过补丁的发布包，那一行里的旧名是用来比对的。
     ':!services/wechat-connect/apply-weixin-adapter.mjs'], {encoding: 'utf8'});
   assert.equal(run.stdout.trim(), '');
