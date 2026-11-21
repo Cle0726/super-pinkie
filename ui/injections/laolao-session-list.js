@@ -1,7 +1,7 @@
 /* Independent sidebar DOM: never move Lit-owned native session nodes. */
 (() => {
   'use strict';
-  const cache=new Map(),loading=new Map();
+  const cache=new Map(),loading=new Map(),homeDrafts=new Set();
   let current=null,revision=0,archived=false,query='',limit=30,signature='',lastMode='',dataVersion=0;
   const el=(tag,cls='',text='')=>{const n=document.createElement(tag);n.className=cls;n.textContent=text;return n;};
   function button(text,label,action){const b=el('button','laolao-managed-button',text);b.type='button';b.setAttribute('aria-label',label);b.dataset.pinkieTooltip=label;b.onclick=action;return b;}
@@ -805,12 +805,12 @@
     if(newSession&&!newSession.querySelector(':scope > .pinkie-new-session-ic')){const art=window.PinkieIcons?.node('new-session');if(art){art.classList.add('pinkie-new-session-ic');newSession.prepend(art);}}
     const cached = cache.get(key);
     const rows = cached?.rows || [];
-    // 首页开着时，输入框挂在一个还没发过消息的空白新会话上；它在发出第一句话之前不进列表。
+    // 首页开着时，输入框挂在一个还没发过消息的空白新会话上；它在发出第一句话之前不进列表（离开首页的那一下也不进）。
     const onHome = document.documentElement.hasAttribute('data-laolao-startup-home');
-    const homeDraft = onHome ? String(window.__laolaoStartupHome?.status?.()?.draft?.key || '') : '';
+    const homeDraft = onHome ? String(window.__laolaoStartupHome?.status?.()?.draft?.key || '') : ''; if (homeDraft) homeDrafts.add(homeDraft);
     const next = JSON.stringify([api.mode, archived, query, limit, cached?.version, api.state, api.currentKey, onHome, homeDraft, new Date().toDateString()]);
     if(signature===next)return;signature=next;
-    controls.replaceChildren();
+    const metreNav = api.mode === 'metre' ? [...controls.querySelectorAll(':scope > .pk-metre-nav')] : []; controls.replaceChildren(); // 留住「总谱」：拿掉再等它补回来，整个列表会上下跳 36px
     const search=button('','搜索当前模式的会话',()=>openSearch(api));
     search.append(window.PinkieIcons?.node('search')||entryIcon('M21 21l-4.35-4.35M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z'),el('span','','搜索'));
     search.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--search');
@@ -820,7 +820,7 @@
     });
     artifacts.append(window.PinkieIcons?.node('works')||entryIcon('M4 4h16v16H4zM4 9h16M9 9v11'),el('span','','作品'));
     artifacts.classList.add('pinkie-sidebar-entry','pinkie-sidebar-entry--artifacts');
-    controls.append(search,artifacts);
+    controls.append(search,artifacts,...metreNav);
     if(archived) controls.append(button('‹ 返回','返回进行中的会话',()=>{archived=false;limit=30;signature='';render(section,api);}));
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     // H1: temp sessions never join the list; the open one sits on top with a dashed circle.
@@ -828,7 +828,7 @@
     // Dispatched children (other modes) belong under their parent in the list.
     const partsBy = {};
     if (!archived) for (const part of cached?.dispatched || []) if (part.parentKey) (partsBy[part.parentKey] ||= []).push(part);
-    const tree = buildTree(rows.filter(s => !isTemp(s.key) && s.key !== homeDraft), {archive: archived, currentKey: onHome ? '' : api.currentKey, query, parts: partsBy});
+    const tree = buildTree(rows.filter(s => !isTemp(s.key) && s.key !== homeDraft && !(homeDrafts.has(s.key) && !hasMessages(s) && !s.hasActiveRun && !isLive(s))), {archive: archived, currentKey: onHome ? '' : api.currentKey, query, parts: partsBy});
     if (!archived && isTemp(api.currentKey)) {
       const tempRow = row({key: api.currentKey, label: '临时会话', meta: {source: 'system'}, updatedAt: Date.now()}, api);
       tempRow.classList.add('pinkie-session-temp-row');
