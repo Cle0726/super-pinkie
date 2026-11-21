@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "file": "ui/injections/laolao-process-card.js",
+    "metric": "lines",
+    "value": 718,
+    "reason": "缺陷修复：做完的「思考了」默认展开（只记住读者手动折叠的），多出的行是折叠状态集合和结束时保持读者位置的那段；没有新增全局名、观察器或定时器。"
+  },
+  {
+    "file": "ui/injections/laolao-session-list.js",
+    "metric": "lines",
+    "value": 910,
+    "reason": "缺陷修复：Metre 派发的子会话重新挂回父会话下面（原来全部堆在单独的「派发的会话」分组里），多出的行是 buildTree 的 parts、addTree 里的子会话行和找不到父会话时的兜底分组；没有新增全局名、观察器或定时器。"
+  }
+]
