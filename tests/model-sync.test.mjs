@@ -362,6 +362,26 @@ test('hy4free is discovered with reasoning and existing placeholders recover',as
  assert.deepEqual(config.models.providers.mm.models[0].compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
 });
 
+test('placeholders that got loopback image input still gain reasoning; a saved reasoning=false still wins',async()=>{
+  // Real 11-21 Windows catalog: hy4flash-free etc. were text+image and stuck at reasoning:false, so no 「思考了」.
+  const stuck=id=>({...newModelEntries([],[id])[0],reasoning:false,input:['text','image']});
+  const models=[stuck('workbuddy/hy4flash-free'),stuck('workbuddy/hy4std'),stuck('gemini-3-flash')];
+  for(const m of models) delete m.compat;
+  const config={models:{providers:{mm:{baseUrl:'http://127.0.0.1:1466/v1',apiKey:'secret',models}}}};
+  const fs=await import('node:fs'), os=await import('node:os'), path=await import('node:path');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-sync-'));
+  fs.writeFileSync(path.join(dir,'pinkie-model-setup.json'),JSON.stringify({capabilities:{'mm/workbuddy/hy4std':{reasoning:false}}}));
+  const sync=createModelSynchronizer({runtime:{state:{resolveStateDir:()=>dir},config:{current:()=>config,
+    async mutateConfigFile({mutate}){mutate(config);}}}},
+    {fetchImpl:async()=>new Response(JSON.stringify({data:models.map(m=>({id:m.id}))}))});
+  await sync.sync();
+  const byId=Object.fromEntries(config.models.providers.mm.models.map(m=>[m.id,m]));
+  assert.equal(byId['workbuddy/hy4flash-free'].reasoning,true);
+  assert.deepEqual(byId['workbuddy/hy4flash-free'].input,['text','image']);
+  assert.equal(byId['gemini-3-flash'].reasoning,true);
+  assert.equal(byId['workbuddy/hy4std'].reasoning,false,'the user turned reasoning off for this one');
+});
+
 test('automatic placeholders gain reasoning on every provider while custom capabilities stay untouched',async()=>{
   const placeholder={...newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0],reasoning:false};
  delete placeholder.compat;
