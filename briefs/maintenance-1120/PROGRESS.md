@@ -8,7 +8,7 @@
 | M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
 | M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
 | M5 真页面回归测试 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI ubuntu-latest Chromium） | 2026-11-21 | [#52](https://github.com/Cle0726/super-pinkie/pull/52) |
-| M3 页面规矩（收窄版） | 未开始 | | | |
+| M3 页面规矩（收窄版） | 进行中 | Gemini-Win-4e9b（Windows） | 2026-11-21 | `maint/m3-regions-dom-watch` |
 | M4 拆巨无霸文件 | 未开始 | | | |
 | M6 上游补丁管理 | 已取消（由 C.le. 内核接管计划的 K3 取代） | | 2026-11-20 | |
 | M7 地图和规矩 | 未开始 | | | |
@@ -16,6 +16,8 @@
 ## 正在改的文件（并行时互相避让）
 
 M3 和 M4 可以同时进行。开工时在这里写明这一批会改哪些文件，收工后删掉这一行。
+
+- **M3（Gemini-Win-4e9b）**：`ui/injections/**`、`ui/injections/REGIONS.md`、`ui/injections/regions.json`、`tests/ui-region-ownership.test.mjs`、`tools/health/baseline.json`、`tools/health/exceptions.json`
 
 ## 用户的决定
 
