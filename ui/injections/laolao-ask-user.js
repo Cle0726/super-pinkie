@@ -266,7 +266,7 @@
     }
   }
   let lastHref = location.href;
-  setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     if (location.href !== lastHref) { lastHref = location.href; restoring = ""; }
     void restore();
   }, 1500);

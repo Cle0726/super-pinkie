@@ -1281,7 +1281,7 @@
       if (tab.path === state.active) statusFlash('已同步「' + tab.name + '」的最新改动');
     }
   }
-  setInterval(() => void checkOpenFiles(), 2500);
+  window.Pinkie?.domWatch?.poll(() => void checkOpenFiles(), 2500);
   window.addEventListener('focus', () => { if (state.visible) { void checkOpenFiles(); refreshSoon(); } });
 
   /* ───────── 改动对比（Git） ───────── */
@@ -2327,7 +2327,7 @@
   editorResize.observe(monacoHost); editorResize.observe(diffHost);
   const ro = new ResizeObserver(debounce(() => { if (state.visible) place(); }, 30));
   const watchContent = () => { const c = mainContent(); if (c && !c.__pkWbObserved) { c.__pkWbObserved = true; ro.observe(c); } };
-  setInterval(watchContent, 1500);
+  window.Pinkie?.domWatch?.poll(watchContent, 1500);
   window.addEventListener('beforeunload', persistTabs);
   // 给代码模块（语言服务、AI、运行）用的接口
   Object.assign(window.__pinkieWorkbench, {

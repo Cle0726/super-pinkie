@@ -38,7 +38,7 @@
     button(awards, '碎片', () => fx.playAward({id: 'shard-' + Date.now(), kind: 'shards', amount: 5, reason: '收服错题怪', fx: 'small'}, {from: target}));
     const all = el('button', '', '▶ 全部放一遍'); all.style.marginTop = '14px'; all.addEventListener('click', () => playAll()); panel.append(all, out);
     document.body.append(stage, panel);
-    setInterval(() => { const s = fx.stats(), f = fx.fps(1500); out.textContent = `tier ${fx.settings().label}\nWebGL ${s.webgl ? 'on' : (s.fallback ? 'flat' : 'idle')}  ctx ${s.contexts}\nrAF ${s.rafActive ? 'run' : 'stop'}  frames ${s.frames}\nfps median ${f.median}  p5 ${f.p5}`; }, 500);
+    window.Pinkie?.domWatch?.poll(() => { const s = fx.stats(), f = fx.fps(1500); out.textContent = `tier ${fx.settings().label}\nWebGL ${s.webgl ? 'on' : (s.fallback ? 'flat' : 'idle')}  ctx ${s.contexts}\nrAF ${s.rafActive ? 'run' : 'stop'}  frames ${s.frames}\nfps median ${f.median}  p5 ${f.p5}`; }, 500);
     async function playAll({gap = 380, cineGap = 300} = {}) {
       const log = [];
       for (const k of fx.kinds) { await fx.burst(k, center()); log.push(k); await wait(gap); }

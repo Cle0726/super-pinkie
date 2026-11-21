@@ -669,7 +669,7 @@
 
   // ---------- 节拍：一秒一次只改文字；运行中每 3 秒问一次网关 ----------
   let beat = 0, lastKey = '';
-  setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     beat += 1;
     watchStore();
     checkConnection();

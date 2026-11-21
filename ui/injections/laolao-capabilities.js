@@ -560,12 +560,12 @@
     if (!p || event.detail.event !== 'chat' || !p.sessionKey) return;
     for (const btn of document.querySelectorAll('.laolao-research-btn.is-on')) if (btn.dataset.key === p.sessionKey) void syncResearch(btn);
   });
-  setInterval(mountResearch, 1000);
+  window.Pinkie?.domWatch?.poll(mountResearch, 1000);
   mountResearch();
 
   window.__pinkieCapabilities = {mount};
   window.addEventListener('pinkie:settings-ready', (event) => mount(event.detail));
   const ready = () => mount(document.querySelector('#laolao-user-settings .' + S + 'scroll'));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once: true}); else ready();
-  setInterval(checkVisible, 1200);
+  window.Pinkie?.domWatch?.poll(checkVisible, 1200);
 })();

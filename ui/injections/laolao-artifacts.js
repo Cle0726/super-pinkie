@@ -709,7 +709,7 @@
   const start = () => { observer?.watch(document.body, {childList: true}); scheduleCards(true); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
   let lastKey = '';
-  setInterval(() => { const key = currentKey(); if (key !== lastKey) { lastKey = key; scheduleCards(true); } else scheduleCards(); }, 2000);
+  window.Pinkie?.domWatch?.poll(() => { const key = currentKey(); if (key !== lastKey) { lastKey = key; scheduleCards(true); } else scheduleCards(); }, 2000);
 
   window.PinkieArtifacts = Object.freeze({
     open: openLibrary, close: closeLibrary, openViewer, openProjectSettings, openShortcuts, shortcutGroups,

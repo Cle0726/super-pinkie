@@ -501,7 +501,7 @@
     schedule();
   };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
-  setInterval(schedule, 1500);
+  window.Pinkie?.domWatch?.poll(schedule, 1500);
 
   window.__pinkieMessageActions = Object.freeze({plainText, historyItem, reloadHistory, paint: schedule, failureSay: FAILURE_SAY});
 })();

@@ -335,8 +335,8 @@
   function boot() {
     if (!document.getElementById('party-usage') && !$sidebar()) return setTimeout(boot, 500);
 
-    setInterval(refresh, REFRESH_MS);
-    setInterval(() => { syncLive(); updateRuntimeChip(); }, 1000);
+    window.Pinkie?.domWatch?.poll(refresh, REFRESH_MS);
+    window.Pinkie?.domWatch?.poll(() => { syncLive(); updateRuntimeChip(); }, 1000);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refresh();
     });

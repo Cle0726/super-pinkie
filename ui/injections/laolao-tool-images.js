@@ -191,10 +191,10 @@
 
   function start() {
     later(800);
-    setInterval(paint, 1500);
+    window.Pinkie?.domWatch?.poll(paint, 1500);
     // 地址栏换了会话但没有 session-selected（直接改 URL、历史前进后退）
     let last = sessionKey();
-    setInterval(() => { const now = sessionKey(); if (now !== last) { last = now; traces = {}; tracesFor = ''; later(200); } }, 1000);
+    window.Pinkie?.domWatch?.poll(() => { const now = sessionKey(); if (now !== last) { last = now; traces = {}; tracesFor = ''; later(200); } }, 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
   else start();

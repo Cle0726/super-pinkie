@@ -428,7 +428,7 @@
     });
     mounts?.watch(document.documentElement, {childList: true});
   } else {
-    setInterval(schedule, 1200);
+    window.Pinkie?.domWatch?.poll(schedule, 1200);
   }
   window.addEventListener("pinkie:session-selected", schedule);
   window.addEventListener("pinkie:sidebar-gateway-ready", schedule);

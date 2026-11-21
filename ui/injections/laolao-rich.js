@@ -576,7 +576,7 @@
     }
     if (any) schedule();
   }
-  setInterval(attach, 400);
+  window.Pinkie?.domWatch?.poll(attach, 400);
   attach();
 
   // 昼夜切换：图表和流程图按新配色重画

@@ -1456,7 +1456,7 @@
       pluginChecked = false;
     }
   };
-  window.setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     if (!location.pathname.startsWith("/chat")) return;
     void checkCorePlugin();
     const banner = document.querySelector(".callout.danger.callout--dismissible");
@@ -2378,7 +2378,7 @@
       if (!isBusy(pane)) scheduleQueueRecovery(pane, "composer-hydration");
     }
     void syncSelectedSession(observedSessionKey);
-    window.setInterval(() => {
+    window.Pinkie?.domWatch?.poll(() => {
       // A replaced native pane brings a new state object; guard it right away.
       for (const pane of chatPanes()) guardMessageWindow(pane?.state);
       if (!isVisibleChatSurface() || !location.pathname.startsWith("/chat")) return;

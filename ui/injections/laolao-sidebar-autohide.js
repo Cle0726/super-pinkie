@@ -260,7 +260,7 @@
     if (sidebar?.contains(event.target) && !sidebar.contains(event.relatedTarget)) glideTo(null);
   }, {passive: true});
   document.addEventListener('scroll', event => { if (glideRow && event.target.contains?.(glideRow)) glideTo(null); }, {capture: true, passive: true});
-  setInterval(reconcile, 350);
+  window.Pinkie?.domWatch?.poll(reconcile, 350);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', reconcile, {once: true});
   else reconcile();
 })();

@@ -146,7 +146,7 @@
   });
   window.addEventListener('popstate', schedule);
   window.addEventListener('laolao:modechange', schedule);
-  setInterval(attach, 1200);
+  window.Pinkie?.domWatch?.poll(attach, 1200);
   window.__pinkiePlan = {refresh: () => { attach(); for (const view of views.values()) void refresh(view); }};
   attach();
 })();

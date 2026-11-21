@@ -220,7 +220,7 @@
   window.addEventListener("laolao:modechange", close);
   window.addEventListener("popstate", close);
   window.__clekkMemoryUI = {open, close};
-  window.setInterval(ensureEntry, 1200);
+  window.Pinkie?.domWatch?.poll(ensureEntry, 1200);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ensureEntry, {once: true});
   else ensureEntry();
 })();

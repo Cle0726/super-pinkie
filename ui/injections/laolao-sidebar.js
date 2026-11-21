@@ -2031,7 +2031,7 @@
 
   window.addEventListener('pinkie:night', syncSidebarThemeButton);
   // 原生快捷栏在折叠/展开时会整块重画，慢轮询把开关补回去（幂等）。
-  if (typeof setInterval === 'function') setInterval(ensureRailThemeButton, 1500);
+  if (typeof setInterval === 'function') window.Pinkie?.domWatch?.poll(ensureRailThemeButton, 1500);
 
   function run() {
     ensureDrawerFocusGuard();
@@ -2072,7 +2072,7 @@
 
   // 模式切换是 SPA 路由变化（URL 变了但未必触发列表重渲染）：单独盯 URL
   let lastHref = location.href;
-  setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     if (location.href !== lastHref) {
       lastHref = location.href;
       schedule();

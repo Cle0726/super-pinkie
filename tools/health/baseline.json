@@ -2,7 +2,7 @@
   "injectionTotals": {
     "important": 5090,
     "mutationObservers": 28,
-    "setIntervals": 91,
+    "setIntervals": 44,
     "subtreeObserverCalls": 0,
     "windowGlobals": 124,
     "windowGlobalsPerFileSum": 128
@@ -20,7 +20,7 @@
       "important": 0,
       "lines": 718,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -36,7 +36,7 @@
       "important": 0,
       "lines": 276,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -68,7 +68,7 @@
       "important": 0,
       "lines": 571,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -84,7 +84,7 @@
       "important": 0,
       "lines": 437,
       "mutationObservers": 1,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -124,7 +124,7 @@
       "important": 0,
       "lines": 819,
       "mutationObservers": 0,
-      "setIntervals": 3,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -172,7 +172,7 @@
       "important": 0,
       "lines": 233,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -180,7 +180,7 @@
       "important": 12,
       "lines": 812,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -204,7 +204,7 @@
       "important": 8,
       "lines": 1128,
       "mutationObservers": 2,
-      "setIntervals": 3,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -212,7 +212,7 @@
       "important": 3,
       "lines": 352,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -284,7 +284,7 @@
       "important": 0,
       "lines": 397,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -316,7 +316,7 @@
       "important": 0,
       "lines": 53,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -476,7 +476,7 @@
       "important": 0,
       "lines": 182,
       "mutationObservers": 1,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -484,7 +484,7 @@
       "important": 6,
       "lines": 846,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -612,7 +612,7 @@
       "important": 1,
       "lines": 378,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -660,7 +660,7 @@
       "important": 0,
       "lines": 226,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -676,7 +676,7 @@
       "important": 0,
       "lines": 507,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -908,7 +908,7 @@
       "important": 0,
       "lines": 275,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -940,7 +940,7 @@
       "important": 0,
       "lines": 38,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -964,7 +964,7 @@
       "important": 0,
       "lines": 152,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -996,7 +996,7 @@
       "important": 0,
       "lines": 293,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -1012,7 +1012,7 @@
       "important": 0,
       "lines": 708,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
@@ -1020,7 +1020,7 @@
       "important": 0,
       "lines": 37,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -1228,7 +1228,7 @@
       "important": 0,
       "lines": 2611,
       "mutationObservers": 0,
-      "setIntervals": 5,
+      "setIntervals": 3,
       "subtreeObserverCalls": 0,
       "windowGlobals": 14
     },
@@ -1244,7 +1244,7 @@
       "important": 0,
       "lines": 596,
       "mutationObservers": 1,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -1252,7 +1252,7 @@
       "important": 0,
       "lines": 31,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -1260,7 +1260,7 @@
       "important": 0,
       "lines": 315,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -1276,7 +1276,7 @@
       "important": 0,
       "lines": 693,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -1324,7 +1324,7 @@
       "important": 0,
       "lines": 1155,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
@@ -1340,7 +1340,7 @@
       "important": 0,
       "lines": 1637,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
@@ -1364,7 +1364,7 @@
       "important": 0,
       "lines": 266,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -1388,7 +1388,7 @@
       "important": 0,
       "lines": 2143,
       "mutationObservers": 1,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
@@ -1612,7 +1612,7 @@
       "important": 0,
       "lines": 203,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -1644,7 +1644,7 @@
       "important": 0,
       "lines": 188,
       "mutationObservers": 0,
-      "setIntervals": 1,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
@@ -1692,7 +1692,7 @@
       "important": 0,
       "lines": 376,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
@@ -1700,7 +1700,7 @@
       "important": 4,
       "lines": 1091,
       "mutationObservers": 0,
-      "setIntervals": 2,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
@@ -1740,7 +1740,7 @@
       "important": 0,
       "lines": 2352,
       "mutationObservers": 3,
-      "setIntervals": 3,
+      "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },

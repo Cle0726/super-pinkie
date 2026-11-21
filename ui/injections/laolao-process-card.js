@@ -677,7 +677,7 @@
     attributeFilter: ['data-live', 'data-state', 'data-pinkie-process', 'data-pinkie-row-count', 'data-pinkie-thinking-seg', 'data-pinkie-history-revision']});
   indexCards(document);
   schedule();
-  setInterval(() => { if (run.startedAt || run.doneAt > Date.now() - 3200) schedule(); }, 250);
+  window.Pinkie?.domWatch?.poll(() => { if (run.startedAt || run.doneAt > Date.now() - 3200) schedule(); }, 250);
 
   // ---------- a small confetti pop from the sticker (drawn above the text) ----------
   let canvas = null, parts = [], raf = 0;

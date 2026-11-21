@@ -110,7 +110,7 @@
     const original = history[name];
     history[name] = function (...args) { const result = original.apply(this, args); try { watchSession(); } catch {} return result; };
   }
-  setInterval(watchSession, 300);
+  window.Pinkie?.domWatch?.poll(watchSession, 300);
   window.addEventListener('popstate', watchSession);
   // Temp sessions left by a previous app run (closed while one was open).
   async function cleanLeftovers(attempt = 0) {
@@ -1143,7 +1143,7 @@
   });
   const start = () => { observer?.watch(document.body, {childList: true}); scheduleAll(); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
-  setInterval(scheduleAll, 1500);
+  window.Pinkie?.domWatch?.poll(scheduleAll, 1500);
   // 切回这个窗口时按后端重画一次：别处（快速提问小窗、另一个窗口）改过的设置要立刻看得到。
   window.addEventListener('focus', () => { if (document.querySelector('.pinkie-composer-chips')) void paintChips(true); });
   window.addEventListener('pinkie:sidebar-gateway-ready', () => { void paintChips(true); });

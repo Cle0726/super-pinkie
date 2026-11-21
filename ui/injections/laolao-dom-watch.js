@@ -251,6 +251,10 @@
     };
   }
 
+  function poll(handler, ms, options = {}) {
+    return every(ms, handler, options);
+  }
+
   ensureRootObserver();
 
   rootNs.domWatch = {
@@ -259,6 +263,7 @@
     watchTree,
     watch,
     every,
+    poll,
     stats() {
       return {
         observerCount: rootObserver ? 1 : 0,

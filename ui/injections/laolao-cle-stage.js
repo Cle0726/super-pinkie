@@ -346,7 +346,7 @@ if (!window.__laolaoCleStage) {
     const all = document.querySelectorAll('.chat-group--process details.pinkie-process');
     return all.length ? all[all.length - 1] : null;
   }
-  setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     const card = latestCard();
     if (card && card !== live && card !== finishing) decorate(card);
   }, 2000);
@@ -807,7 +807,7 @@ if (!window.__laolaoCleStage) {
     if (h) mo?.watch(h, {childList: true, attributes: true, attributeFilter: ['data-live', 'class']});
     schedule();
   }
-  setInterval(attach, 300);
+  window.Pinkie?.domWatch?.poll(attach, 300);
   attach();
   window.addEventListener('pagehide', () => mo.disconnect());
 
