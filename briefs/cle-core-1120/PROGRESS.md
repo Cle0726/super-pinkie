@@ -9,7 +9,7 @@
 |---|---|---|---|---|
 | K0 摸底 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a（接手 Codex-Win-4d8c） | 2026-11-21 | [PR #41](https://github.com/Cle0726/super-pinkie/pull/41) |
 | K1 建内核仓库 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a | 2026-11-21 | [PR #50](https://github.com/Cle0726/super-pinkie/pull/50) |
-| K2 换成自己编译的内核 | 进行中 | Gemini-Win-9c2a | 2026-11-21 | `core/k2-dual-core`（认领中） |
+| K2 换成自己编译的内核 | 进行中 | Gemini-Win-9c2a | 2026-11-21 | [PR #54](https://github.com/Cle0726/super-pinkie/pull/54) |
 | K3 补丁搬进源码 | 未开始 | | | |
 | K4 显示名字改为 C.le. | 未开始 | | | |
 | K5 正式切换 | 未开始（发版要用户点头） | | | |
