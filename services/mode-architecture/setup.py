@@ -655,7 +655,7 @@ def install(home=None) -> bool:
     installed_version = _package_version(extension)
     if installed_version <= source_version:
         for name in (
-            "index.mjs", "evidence-rules.mjs", "mode-constants.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
+            "index.mjs", "completion-integrity.mjs", "evidence-rules.mjs", "mode-constants.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
             "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
             "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
             "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
