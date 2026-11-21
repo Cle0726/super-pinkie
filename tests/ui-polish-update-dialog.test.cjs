@@ -49,6 +49,13 @@ test('real progress, unknown total, background continuation and retry', {skip: !
     assert.equal(await page.evaluate(()=>document.activeElement.id),'origin');
     await page.evaluate(()=>document.documentElement.setAttribute('data-laolao-mode','other'));
     assert.equal(await page.evaluate(()=>window.__pinkieUpdateDialog.open()),false);
+    // Metre and 无限制 are real modes: they get the new card, not the old fallback.
+    for (const mode of ['metre', 'unrestricted']) {
+      await page.evaluate(m=>document.documentElement.setAttribute('data-laolao-mode',m), mode);
+      assert.equal(await page.evaluate(()=>window.__pinkieUpdateDialog.open()),true, mode);
+      assert.equal(await page.locator('#pinkie-update-v2').count(),1, mode);
+      await page.getByRole('button',{name:'关闭更新窗口'}).click();
+    }
   } finally { await browser.close(); }
 });
 

@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   if (window.__pinkieUpdateDialog) return;
-  const modes = new Set(['chat', 'project', 'thinking', 'learning']);
+  const modes = new Set(['chat', 'project', 'thinking', 'learning', 'unrestricted', 'metre']); // every real mode, or the app shows the old card
   const stages = ['check', 'download', 'verify', 'install', 'restart'];
   const labels = ['检查', '下载', '校验', '安装', '重启'];
   const manualUrl = 'https://github.com/Cle0726/super-pinkie/releases/latest';
