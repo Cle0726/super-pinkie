@@ -1,6 +1,6 @@
 # C.le. 内核接管 · 验收标准
 
-对应 `PLAN.md`。执行者自查时逐条填写「过 / 没过 / 没测（原因）」，写进 `PROGRESS.md`。验收人按本文件**亲自核对**，结果写进 `briefs/cle-core-1120/REVIEW.md`。
+对应 `PLAN.md`。执行者自查时逐条填写「过 / 没过 / 没测（原因）」，写进 `progress/<批号>.md`。验收人按本文件**亲自核对**，结果写进 `briefs/cle-core-1120/review/<批号>.md`（格式见 `briefs/program-1120/ACCEPTANCE.md` 第二节）。多个 AI 同时验收时的规矩见 `briefs/program-1120/CONCURRENCY.md` 第五节。
 
 ## 验收人的规矩
 
