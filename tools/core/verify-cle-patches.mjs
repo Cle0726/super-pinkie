@@ -6,6 +6,7 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,6 +63,8 @@ function main() {
   }
 
   const pkg = JSON.parse(fs.readFileSync(path.join(openclawRoot, 'package.json'), 'utf8'));
+  const backupRoot = process.env.PINKIE_PATCH_BACKUP_ROOT
+    || fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-verify-patch-backups-'));
   const results = [];
   let failed = 0;
 
@@ -74,6 +77,7 @@ function main() {
         ...process.env,
         OPENCLAW_ROOT: openclawRoot,
         PINKIE_SKIP_APP_BUNDLES: '1',
+        PINKIE_PATCH_BACKUP_ROOT: backupRoot,
       },
       encoding: 'utf8',
       timeout: 60000,

@@ -32,12 +32,18 @@ test('core-manifest.json defaults to openclaw and stays synced with legacy runti
 
 test('resolveCoreSelection defaults to manifest.default and honors PINKIE_CORE=openclaw|cle', () => {
   const manifest = loadCoreManifest(DEFAULT_REPO_ROOT);
-  assert.equal(resolveCoreSelection(manifest, undefined).core, 'openclaw');
-  assert.equal(resolveCoreSelection(manifest, '').core, 'openclaw');
-  assert.equal(resolveCoreSelection(manifest, 'openclaw').core, 'openclaw');
-  assert.equal(resolveCoreSelection(manifest, 'cle').core, 'cle');
-  assert.equal(resolveCoreSelection(manifest, 'CLE').core, 'cle');
-  assert.throws(() => resolveCoreSelection(manifest, 'unknown-core'), /Unsupported PINKIE_CORE/);
+  const prevEnv = process.env.PINKIE_CORE;
+  delete process.env.PINKIE_CORE;
+  try {
+    assert.equal(resolveCoreSelection(manifest, undefined).core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, '').core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, 'openclaw').core, 'openclaw');
+    assert.equal(resolveCoreSelection(manifest, 'cle').core, 'cle');
+    assert.equal(resolveCoreSelection(manifest, 'CLE').core, 'cle');
+    assert.throws(() => resolveCoreSelection(manifest, 'unknown-core'), /Unsupported PINKIE_CORE/);
+  } finally {
+    if (prevEnv !== undefined) process.env.PINKIE_CORE = prevEnv;
+  }
 });
 
 test('K2-2: SHA-256 verification succeeds on exact match and hard-fails on 1-char mismatch', async () => {
