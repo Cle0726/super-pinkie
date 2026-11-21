@@ -26,16 +26,11 @@ jobs:
           npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
           "$deps/node_modules/.bin/playwright" install --with-deps webkit chromium
           echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
-      - name: Bootstrap M5 Linux Chromium baselines (temporary for PR #52)
+      - name: Verify M5 visual baseline 3x determinism and <=0.1% diff on Linux Chromium
         env:
-          PINKIE_VISUAL_UPDATE: "1"
           PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
         run: node --test tests/visual-baseline.test.mjs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: m5-linux-baselines
-          if-no-files-found: error
-          path: tests/visual/baseline/*.png
       - name: Capture the pinned main Metre regression baseline on Linux
         run: |
           git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
