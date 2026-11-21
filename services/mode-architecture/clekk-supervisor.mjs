@@ -8,7 +8,7 @@ import {renderFirstPerson} from './first-person.mjs';
 import {ACTION_CONTINUATION, AUDIT_CORRUPTION_FAILURE, COMPLETION_CLAIM, DELIVERY_CLAIM, DELIVERY_GUARD_TOOL, IN_PROGRESS_CLAIM, failedAssistantMessage, isInternalExecutionSession, isMutationRequest, pinkieStateRoot, workFirstPrompt} from './mode-constants.mjs';
 import {compactToolEvidence, completionRunKey, isHonestIncomplete, isLikelyActionRequest, proseOnly, resultText, toolResultFailed, waitingForGeneratedMedia, workFirstBackgroundResult, workFirstContext, workFirstReplyText} from './evidence-rules.mjs';
 import {CompletionIntegrityGuard, assistantMessageHasToolCall, auditRecordDigest, hashForAudit, housekeepingTurn, internalControlText, isTerminalAssistantMessage, payloadText, runtimeTurnText, visibleAssistantText} from './completion-integrity.mjs';
-import {agentFromSessionKey, assistantTextFromMessages, modeForContext, section} from './index.mjs';
+import {agentFromSessionKey, assistantTextFromMessages, modeForContext, section} from './deliberation-audit.mjs';
 
 export class CleKkAuditLog {
   constructor(root = path.join(pinkieStateRoot(), 'cle-kk', 'audit')) {

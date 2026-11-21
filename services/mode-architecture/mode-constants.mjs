@@ -7,7 +7,7 @@ import {isUnresolvedSessionKey} from './session-titles.mjs';
 import {RIGOR_LADDER, SPAWN_FALLBACK} from './run-contract.mjs';
 import {WORK_ROLE_LABELS} from './work-kinds.mjs';
 import {endsWithUserQuestion} from './ask.mjs';
-import {agentFromSessionKey, deliberationRequirements, modeForContext} from './index.mjs';
+import {agentFromSessionKey, deliberationRequirements, modeForContext} from './deliberation-audit.mjs';
 import {resultText, toolResultFailed, workFirstContext} from './evidence-rules.mjs';
 
 const MODE_BY_AGENT = Object.freeze({

@@ -7,7 +7,7 @@ import {lineageRunningChildren} from './session-lineage.mjs';
 import {AUTO_COMPACTION_RECOVERY_FAILURE, CONTEXT_OVERFLOW_FAILURE, DISPATCH_SETUP_FAILURE, DISPLAY_PRICING_VERSION, GATEWAY_RECOVERY_FAILURE, PERMANENT_FAILURE, PROVIDER_ACCOUNT_FAILURE, TIER_FAILED_TURN_BASE_MS, TIER_FAILED_TURN_LIMIT, TIER_FAILED_TURN_MAX_MS, TIER_FAILED_TURN_RESET_CAP_MS, TIER_RETRY_LIMITS, USER_STOP_GRACE_MS, WATCHDOG_ACCOUNT_FALLBACKS, WATCHDOG_ACTIVITY_POLL_MS, WATCHDOG_CLI_TIMEOUT_MS, WATCHDOG_DISPATCH_FAILURE_LIMIT, WATCHDOG_GATEWAY_BACKOFF_INITIAL_MS, WATCHDOG_GATEWAY_BACKOFF_MAX_MS, WATCHDOG_MAX_ATTEMPTS, WATCHDOG_OUTAGE_DELAYS_MS, WATCHDOG_OUTAGE_MAX_ATTEMPTS, WATCHDOG_QUIET_FENCE_MS, WATCHDOG_RETRY_MAX_DELAY_MS, WATCHDOG_STALLED_GENERATION_MS, displayCost, endedWithFailedAssistant, endsWithYield, failureReasonFromEvent, hasIncompleteToolTurn, isInternalExecutionSession, isProviderOutage, isTransientFailure, isWatchdogParentContext, localSetupFailure, normalizedTaskType, pinkieStateRoot, resolveGatewayCliEntry, runProcess, safeTag, shortReason, tierControlMessage, userStoppedRecently, userStops, watchdogControlMessage} from './mode-constants.mjs';
 import {workFirstContext} from './evidence-rules.mjs';
 import {hashForAudit, internalControlText} from './completion-integrity.mjs';
-import {agentFromSessionKey, modelOverrideFor, verificationEvidence} from './index.mjs';
+import {agentFromSessionKey, modelOverrideFor, verificationEvidence} from './deliberation-audit.mjs';
 
 /** Durable lease for upstream failures; survives a gateway/process restart. */
 export class WatchdogJobStore {
