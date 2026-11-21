@@ -63,7 +63,7 @@ test('first paint stays CSS-only: blurred art that focuses by itself and letters
   assert.match(bootstrap, /letter\.style\.setProperty\("--i", String\(index\)\)/);
   assert.match(bootstrap, /title\.removeAttribute\("aria-label"\);\s*title\.textContent = details\.label;/);
   // 拆字的脚本是同步脚本，跟在开屏标记后面，所以首帧就已经拆好。
-  assert.match(read('tools/ui-parity/bundle.py'), /laolao-handoff-bootstrap\.js\?v=handoff7/);
+  assert.match(read('tools/ui-parity/bundle.py'), /laolao-handoff-bootstrap\.js\?v=@hash/);
   assert.doesNotMatch(read('ui/injections/laolao-body.fragment.html'), /<script/);
 });
 

@@ -64,8 +64,8 @@ test('tier menu keeps its glass design and observes mode changes without a subtr
   assert.match(src,/backdrop-filter:blur\(28px\)/);
   assert.match(src,/item\.dataset\.tier = tier\.id/);
   assert.match(src,/btn\.dataset\.tierSymbol/);
-  assert.match(src,/laolao-deep-think-base\.png\?v=tierart3/);
-  assert.match(src,/laolao-deep-think-base\.webm\?v=tiermotion2/);
+  assert.match(src,/asset\("\/laolao-deep-think-base\.png"\)/);
+  assert.match(src,/asset\("\/laolao-deep-think-base\.webm"\)/);
   assert.match(src,/laolao-deep-think-menu__poster/);
   assert.match(src,/<video class="laolao-deep-think-menu__art"/);
   assert.match(src,/laolao-deep-think-btn__art/);

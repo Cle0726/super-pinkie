@@ -49,14 +49,18 @@ test('already bundled v1 can be upgraded in place without duplicating the native
   assert.equal(transformWithStatus(upgrade.text).reason, 'already-patched');
 });
 
-test('native entry loads the versioned queued-message bundle after an upgrade', () => {
+test('native entry loads the versioned queued-message bundle after an upgrade', async () => {
+  const {stampNativeEntryBytes} = await import('../tools/assets/stamp.mjs');
   const runtime = new URL('../ui/runtime/', import.meta.url);
   const file = 'chat-page-DrPkxqJK.js';
   const body = readFileSync(new URL(file,runtime));
-  const digest = createHash('sha256').update(body).digest('hex').slice(0,12);
+  const digest = createHash('sha256').update(body).digest('hex').slice(0,10);
   const entry = readFileSync(new URL('index-Bvtt7vVx.js',runtime),'utf8');
-  const imports = [...entry.matchAll(/\.\/chat-page-DrPkxqJK\.js\?v=clekk-history59&h=([a-f0-9]+)/g)];
-  assert.ok(imports.length > 0);
+  const placeholders = [...entry.matchAll(/\.\/chat-page-DrPkxqJK\.js\?v=@hash/g)];
+  assert.ok(placeholders.length > 0);
+  const stamped = stampNativeEntryBytes(Buffer.from(entry, 'utf8'), () => body).toString('utf8');
+  const imports = [...stamped.matchAll(/\.\/chat-page-DrPkxqJK\.js\?v=([a-f0-9]{10})/g)];
+  assert.equal(imports.length, placeholders.length);
   assert.ok(imports.every(([, hash]) => hash === digest));
   assert.equal(transformWithStatus(body.toString('utf8')).reason, 'already-patched');
 });

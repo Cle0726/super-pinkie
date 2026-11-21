@@ -881,7 +881,7 @@ test('active slider effects match all nine Pinkie party scenes', () => {
   const css = read('ui/injections/laolao-theme.css');
   const active = css.slice(css.indexOf('/* Model control v9'));
   assert.ok(active.length > 0, '派对特效层必须存在');
-  assert.match(active, /party-off\.svg\?v=1"\), linear-gradient/, '关闭档仍应在空轨上显示主题');
+  assert.match(active, /party-off\.svg\?v=@hash"\), linear-gradient/, '关闭档仍应在空轨上显示主题');
   const animations = new Set();
   const motifs = new Set();
   for (const material of ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'adaptive', 'max', 'ultra']) {

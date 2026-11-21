@@ -329,7 +329,6 @@ def install(root, control):
     refresh_native_imports(control)
     html = normalize_index(base_html, root, files, control)
     write_if_changed(index, html.encode('utf-8'))
-    run_stamp_tool(root, control)
     actual = inspect(root, control)
     write_if_changed(control / MANIFEST, (json.dumps(actual, ensure_ascii=False, indent=2) + '\n').encode())
     return actual
@@ -424,7 +423,12 @@ def main():
         return
     if args.control_ui is None:
         parser.error('--control-ui is required')
-    result = (install if args.action == 'install' else inspect)(args.root, args.control_ui)
+    if args.action == 'install':
+        install(args.root, args.control_ui)
+        run_stamp_tool(args.root, args.control_ui)
+    result = inspect(args.root, args.control_ui)
+    if args.action == 'install':
+        write_if_changed(args.control_ui / MANIFEST, (json.dumps(result, ensure_ascii=False, indent=2) + '\n').encode())
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
