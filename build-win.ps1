@@ -17,7 +17,9 @@ $env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
-$manifest = Get-Content ".\desktop\windows\runtime-manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$coreManifestPath = Join-Path $RepoRoot "core-manifest.json"
+$coreManifest = Get-Content $coreManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$coreHelper = Join-Path $RepoRoot "tools\core\manifest.mjs"
 $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
@@ -28,12 +30,14 @@ python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_ve
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
+$coreInfo = (& $node $coreHelper info --root $RepoRoot | Out-String | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or -not $coreInfo) { throw "无法解析 core-manifest.json（请检查 PINKIE_CORE 与清单格式）" }
 $nodeVersion = (& $node --version).TrimStart('v')
-if ($nodeVersion -ne $manifest.node) {
+if ($nodeVersion -ne $coreInfo.node) {
     if (-not $AllowLocalNodeVersion -or $nodeVersion -notmatch '^24\.') {
-        throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
+        throw "Node.js 版本不一致：需要 $($coreInfo.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
     }
-    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($manifest.node)）"
+    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($coreInfo.node)）"
 }
 
 if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
@@ -67,13 +71,16 @@ Copy-Item -LiteralPath $mihomoExe.FullName -Destination (Join-Path $browserVpnSt
 # registry.npmjs.org stalled here for minutes at a time (15 idle
 # connections, zero CPU) while the mirror finished the same install in
 # six minutes. Only this build step is pointed at the mirror; the
-# package and its version still come from the manifest.
+# core selection (openclaw / cle), version, URL and SHA-256 all come
+# from core-manifest.json.
 $npmRegistry = if ($env:PINKIE_NPM_REGISTRY) { $env:PINKIE_NPM_REGISTRY } else { "https://registry.npmmirror.com" }
-npm install --prefix $runtimeStage --registry $npmRegistry --omit=dev --no-audit --no-fund "openclaw@$($manifest.openclaw)"
-if ($LASTEXITCODE -ne 0) { throw "OpenClaw 内置运行时下载失败" }
+$coreCache = Join-Path $buildCache "core"
+Write-Host "==> installing core '$($coreInfo.core)' ($($coreInfo.version)) from core-manifest.json"
+& $node $coreHelper install --root $RepoRoot --prefix $runtimeStage --registry $npmRegistry --cache-dir $coreCache
+if ($LASTEXITCODE -ne 0) { throw "内置内核（$($coreInfo.core)@$($coreInfo.version)）下载或校验失败" }
 $openclawRoot = Join-Path $runtimeModules "openclaw"
 if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
-    throw "OpenClaw 内置运行时不完整"
+    throw "内置内核运行时不完整：$openclawRoot"
 }
 
 $env:OPENCLAW_ROOT = $openclawRoot
@@ -213,8 +220,10 @@ Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES -ErrorAction SilentlyContinue
 
 $runtimeInfo = @{
     architecture = $env:PROCESSOR_ARCHITECTURE
+    core = $coreInfo.core
+    coreVersion = $coreInfo.version
     node = $nodeVersion
-    openclaw = $manifest.openclaw
+    openclaw = $coreInfo.version
     python = (python -c "import platform; print(platform.python_version())")
     webview = (python -c "import importlib.metadata; print(importlib.metadata.version('pywebview'))")
 }
@@ -254,6 +263,8 @@ $pyInstallerCommonArgs = @(
     "--add-data", "installer\guard;installer\guard",
     "--add-data", "tools\ui-parity;tools\ui-parity",
     "--add-data", "tools\assets;tools\assets",
+    "--add-data", "tools\core;tools\core",
+    "--add-data", "core-manifest.json;.",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",

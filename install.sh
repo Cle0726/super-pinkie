@@ -27,8 +27,21 @@ PROXY_PORT="${UR_PROXY_PORT:-1467}"
 UPSTREAM_PORT="${UR_UPSTREAM_PORT:-1466}"
 PROXY_SCRIPT="$REPO_DIR/proxy/mm-retry-proxy.py"
 PATCH_SCRIPT="$REPO_DIR/patch/reapply-unrestricted-patch.mjs"
+CORE_MANIFEST_TOOL="$REPO_DIR/tools/core/manifest.mjs"
 LAUNCHD_LABEL="com.openclaw.urproxy"
 MODE="${1:-install}"
+
+# Core selection always comes from core-manifest.json (PINKIE_CORE=openclaw|cle overrides default).
+if [[ "$MODE" != "--remove" && -f "$CORE_MANIFEST_TOOL" ]]; then
+  CORE_NAME="$(node "$CORE_MANIFEST_TOOL" field core --root "$REPO_DIR")"
+  CORE_VERSION="$(node "$CORE_MANIFEST_TOOL" field version --root "$REPO_DIR")"
+  if [[ "${PINKIE_INSTALL_CORE:-0}" == "1" || -n "${PINKIE_CORE_PREFIX:-}" ]]; then
+    CORE_PREFIX="${PINKIE_CORE_PREFIX:-$HOME/.super-pinkie/core/$CORE_NAME}"
+    echo "==> installing core '$CORE_NAME' ($CORE_VERSION) from core-manifest.json into $CORE_PREFIX"
+    node "$CORE_MANIFEST_TOOL" install --root "$REPO_DIR" --prefix "$CORE_PREFIX"
+    export OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
+  fi
+fi
 
 if [[ "$MODE" == "--remove" ]]; then
   echo "==> stripping transport patches"
