@@ -116,20 +116,23 @@
   // archived parent, a folded parent and the recent-page limit.
   const isChildRow = s => Boolean(s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy);
   const isLive = s => ['running', 'waiting'].includes(sessionStatus(s));
-  const nodeLive = node => isLive(node.session) || node.workers.some(isLive)
-    || node.children.some(child => isLive(child.session) || child.workers.some(isLive));
+  const nodeLive = node => isLive(node.session) || node.workers.some(isLive) || node.parts?.some(isLive)
+    || node.children.some(child => isLive(child.session) || child.workers.some(isLive) || child.parts?.some(isLive));
   // Keep independent children and read-only workers grouped even when a
   // search matches a descendant or the parent has been archived.
-  function buildTree(rows, {archive = false, currentKey = '', query = ''} = {}) {
+  // `parts`: parentKey -> dispatched children that live in other modes (Metre). They hang under their
+  // parent like any child; a part whose parent is not in the returned tree is the caller's orphan.
+  function buildTree(rows, {archive = false, currentKey = '', query = '', parts = {}} = {}) {
     const sorted = [...rows].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const byKey = new Map(sorted.map(s => [s.key, s]));
     const nodes = new Map();
     const search = query.trim().toLowerCase();
     const matches = s => title(s).toLowerCase().includes(search);
+    const partMatches = part => String(part.title || '').toLowerCase().includes(search);
     const visible = s => archive || !internalRow(s) && (!s.parentArchived || isLive(s))
       && (s.key === currentKey || hasMessages(s) || s.hasActiveRun || s.lineage || isChildRow(s));
     const ordinary = sorted.filter(s => !isPersona(s.key) && visible(s));
-    for (const s of ordinary) nodes.set(s.key, {session: s, children: [], workers: []});
+    for (const s of ordinary) nodes.set(s.key, {session: s, children: [], workers: [], parts: []});
     const roots = [];
     function ordinaryParent(s) {
       const seen = new Set([s.key]);
@@ -156,7 +159,7 @@
       if (parent) parent.workers.push(s);
       // Parent not listed here (other mode, archived, still blank): the worker
       // gets its own row instead of vanishing.
-      else if (archive || !s.parentArchived || isLive(s)) roots.push({session: s, children: [], workers: []});
+      else if (archive || !s.parentArchived || isLive(s)) roots.push({session: s, children: [], workers: [], parts: []});
     }
     // Normal UI children are one level. If native history has deeper chains,
     // retain the descendants under the first visible root.
@@ -173,28 +176,35 @@
       }
       root.children = flat;
     }
+    for (const root of roots) for (const node of [root, ...root.children]) node.parts = (parts[node.session.key] || []).slice();
     // A parent moves up when one of its children was just dispatched or updated.
     for (const root of roots) {
       root.activity = Math.max(root.session.updatedAt || 0, ...root.workers.map(s => s.updatedAt || 0),
-        ...root.children.flatMap(child => [child.session.updatedAt || 0, ...child.workers.map(s => s.updatedAt || 0)]));
+        ...root.parts.map(s => s.updatedAt || 0),
+        ...root.children.flatMap(child => [child.session.updatedAt || 0, ...child.workers.map(s => s.updatedAt || 0),
+          ...child.parts.map(s => s.updatedAt || 0)]));
     }
     roots.sort((a, b) => b.activity - a.activity);
     if (!search) return roots;
     for (const root of roots) {
       const rootMatches = matches(root.session);
       root.workers = root.workers.filter(matches);
+      if (!rootMatches) root.parts = root.parts.filter(partMatches);
       root.children = root.children.filter(child => {
         child.workers = child.workers.filter(matches);
-        return rootMatches || matches(child.session) || child.workers.length;
+        if (!rootMatches && !matches(child.session)) child.parts = child.parts.filter(partMatches);
+        return rootMatches || matches(child.session) || child.workers.length || child.parts.length;
       });
     }
-    return roots.filter(root => matches(root.session) || root.children.length || root.workers.length);
+    return roots.filter(root => matches(root.session) || root.children.length || root.workers.length || root.parts.length);
   }
 
   function recentPage(roots, limit, currentKey) {
     const visible = roots.slice(0, limit);
     const contains = node => node.session.key === currentKey || node.workers.some(worker => worker.key === currentKey)
-      || node.children.some(child => child.session.key === currentKey || child.workers.some(worker => worker.key === currentKey));
+      || node.parts?.some(part => part.key === currentKey)
+      || node.children.some(child => child.session.key === currentKey || child.workers.some(worker => worker.key === currentKey)
+        || child.parts?.some(part => part.key === currentKey));
     const selected = currentKey && roots.find(contains);
     if (selected && !visible.includes(selected)) visible.push(selected);
     for (const node of roots) if (!visible.includes(node) && nodeLive(node)) visible.push(node);
@@ -693,16 +703,22 @@
   function addTree(host, node, api) {
     const key = archived ? 'archive:' + node.session.key : node.session.key;
     const collapsed = !query.trim() && folded(key, archived);
-    host.append(row(node.session, api, {children: node.children.length, collapsed, worker: isPersona(node.session.key)}));
+    const parts = node.parts || [];
+    host.append(row(node.session, api, {children: node.children.length + parts.length, collapsed, worker: isPersona(node.session.key)}));
     const shown = collapsed ? node.children.filter(child => child.session.key === api.currentKey
       || child.workers.some(worker => worker.key === api.currentKey)
-      || isLive(child.session) || child.workers.some(isLive)) : node.children;
-    if (shown.length) {
+      || isLive(child.session) || child.workers.some(isLive) || child.parts?.some(isLive)) : node.children;
+    // Dispatched children live in other modes, so they are never part of `children`; they sit
+    // under the same parent. Folding hides finished ones, a running or open one stays.
+    const shownParts = collapsed ? parts.filter(part => isLive(part) || part.key === api.currentKey) : parts;
+    if (shown.length || shownParts.length) {
       const branch = el('div', 'pinkie-session-branch');
       for (const child of shown) {
         branch.append(row(child.session, api));
         addWorkers(branch, child, api);
+        for (const part of child.parts || []) branch.append(awayRow(part, api));
       }
+      for (const part of shownParts) branch.append(awayRow(part, api));
       host.append(branch);
     }
     addWorkers(host, node, api);
@@ -724,7 +740,8 @@
     const head=el('div','laolao-group__head');const collapsed=!!api.state.collapsed[id];
     const toggle=button(collapsed?'›':'⌄',(collapsed?'展开':'收起')+name,()=>api.toggleGroup(id));toggle.classList.add('laolao-group__toggle');toggle.setAttribute('aria-expanded',String(!collapsed));
     const label=el('span','laolao-group__label',name);label.onclick=()=>api.toggleGroup(id);
-    head.append(label,toggle,el('span','laolao-group__count',String(rows.reduce((count, node) => count + [node, ...node.children].filter(item => hasMessages(item.session)).length, 0) || '')));
+    head.append(label,toggle,el('span','laolao-group__count',String(rows.reduce((count, node) => count + [node, ...node.children].filter(item => hasMessages(item.session)).length
+      + [node, ...node.children].reduce((sum, item) => sum + (item.parts?.length || 0), 0), 0) || '')));
     if(id==='__recent') {
       const more=button('⋯','最近会话菜单',e=>api.openRecentMenu(e.currentTarget,()=>{
         archived=true;limit=30;signature='';render(current.section,current.api);
@@ -800,7 +817,10 @@
     const old=host.querySelector('.laolao-managed-groups');const groups=el('div','laolao-managed-groups');
     // H1: temp sessions never join the list; the open one sits on top with a dashed circle.
     const isTemp = key => /:dashboard:temp-[0-9a-f-]{36}$/i.test(String(key || ''));
-    const tree = buildTree(rows.filter(s => !isTemp(s.key) && s.key !== homeDraft), {archive: archived, currentKey: onHome ? '' : api.currentKey, query});
+    // Dispatched children (other modes) belong under their parent in the list.
+    const partsBy = {};
+    if (!archived) for (const part of cached?.dispatched || []) if (part.parentKey) (partsBy[part.parentKey] ||= []).push(part);
+    const tree = buildTree(rows.filter(s => !isTemp(s.key) && s.key !== homeDraft), {archive: archived, currentKey: onHome ? '' : api.currentKey, query, parts: partsBy});
     if (!archived && isTemp(api.currentKey)) {
       const tempRow = row({key: api.currentKey, label: '临时会话', meta: {source: 'system'}, updatedAt: Date.now()}, api);
       tempRow.classList.add('pinkie-session-temp-row');
@@ -815,7 +835,12 @@
       const pinned = node => [node, ...node.children].some(item => api.state.pins.includes(item.session.key));
       const pinnedRows = tree.filter(pinned);
       if (pinnedRows.length) groups.append(group('__pins', '置顶', pinnedRows, api));
-      if (cached?.dispatched?.length) groups.append(dispatchedGroup(cached.dispatched, api));
+      // Only a dispatch whose parent is not in the list (archived, deleted, outside this mode) gets its own group.
+      const nested = new Set(tree.flatMap(node => [node.session.key, ...node.children.map(child => child.session.key)]));
+      const needle = query.trim().toLowerCase();
+      const orphans = (cached?.dispatched || []).filter(part => !nested.has(part.parentKey)
+        && (!needle || String(part.title || '').toLowerCase().includes(needle)));
+      if (orphans.length) groups.append(dispatchedGroup(orphans, api));
       if(Object.keys(api.state.projects).length) {
         const heading = el('div', 'laolao-group__head pinkie-project-heading');
         heading.append(el('span', 'laolao-group__label', '项目'));

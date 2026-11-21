@@ -116,3 +116,59 @@ test(`Metre dispatched sessions can be folded, archived and deleted from the sid
     await group.locator(`[data-session-key="${done}"]`).waitFor();
   } finally { await browser.close(); }
 });
+
+test(`Metre dispatched sessions sit under their parent session; only a lost parent leaves them on their own (${engine})`, {timeout: 30_000}, async () => {
+  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30113/**', route => route.fulfill({contentType: 'text/html', body: '<section id="sidebar"></section>'}));
+    await tab.goto('http://127.0.0.1:30113/');
+    await tab.addScriptTag({path: script});
+    const parent = 'agent:metre:parent', done = 'agent:project:pinkie-child:done', live = 'agent:learning:pinkie-child:live';
+    const lost = 'agent:ideas:pinkie-child:lost';
+    await tab.evaluate(({parent, done, live, lost}) => {
+      const qa = window.qa = {calls: [], opened: ''};
+      qa.api = {mode: 'metre', agentId: 'metre', currentKey: 'agent:metre:current', state: {
+        pins: [], collapsed: {}, projects: {}, projectFolders: {},
+      }, gwRequest: async (method, params) => {
+        if (method === 'sessions.list') return {sessions: params.agentId === 'metre'
+          ? [{key: parent, label: '收尾检查', lastMessagePreview: '好的', updatedAt: 10}] : []};
+        if (method === 'pinkie.session.lineage') return {away: {
+          [done]: {parentKey: parent, title: '对比度修复', mode: 'project', updatedAt: 2},
+          [live]: {parentKey: parent, title: '整理讲解稿', mode: 'learning', updatedAt: 1, hasActiveRun: true},
+          [lost]: {parentKey: 'agent:metre:gone', title: '起草标题', mode: 'ideas', updatedAt: 3},
+        }, children: {}};
+        if (method === 'pinkie.session.search') return {results: []};
+        return {rows: {}};
+      }, toast(message) { throw Error(message); },
+      toggleGroup: id => { qa.api.state.collapsed[id] = !qa.api.state.collapsed[id]; qa.render(); },
+      dispatchedMenu: (anchor, key, title) => qa.calls.push(['row', key, title])};
+      qa.render = () => window.PinkieSessionList.render(document.querySelector('#sidebar'), qa.api);
+      window.addEventListener('pinkie:open-session-in-mode', e => { qa.opened = e.detail.sessionKey; });
+      qa.render();
+    }, {parent, done, live, lost});
+    const under = key => tab.locator(`[data-laolao-group="__recent"] [data-session-key="${parent}"] + .pinkie-session-branch [data-session-key="${key}"]`);
+    await under(done).waitFor();
+    assert.equal(await under(live).count(), 1);
+    // The parent row says how many sit under it, and the part rows are the same rows as anywhere else.
+    assert.equal(await tab.locator(`[data-session-key="${parent}"] .pinkie-session-fold__count`).textContent(), '2');
+    assert.equal(await under(live).getByRole('img', {name: '运行中'}).count(), 1);
+    assert.equal(await under(done).getByRole('link').getAttribute('href'), '/chat?session=' + encodeURIComponent(done));
+    await under(done).getByRole('link').click();
+    assert.equal(await tab.evaluate(() => window.qa.opened), done);
+    await under(done).getByRole('button', {name: '管理派发的会话：对比度修复'}).click();
+    assert.deepEqual(await tab.evaluate(() => window.qa.calls), [['row', done, '对比度修复']]);
+    // Only the dispatch whose parent is gone is listed on its own, and not twice.
+    const lonely = tab.locator(`[data-laolao-group="__metre-dispatched"] [data-session-key="${lost}"]`);
+    assert.equal(await lonely.count(), 1);
+    assert.equal(await tab.locator(`[data-laolao-group="__metre-dispatched"] [data-session-key="${done}"]`).count(), 0);
+    assert.equal(await tab.locator(`[data-session-key="${done}"]`).count(), 1);
+    assert.equal(await tab.locator('[data-laolao-group="__metre-dispatched"] .laolao-group__count').textContent(), '1');
+    // Folding the parent hides the finished child and keeps the running one.
+    await tab.getByRole('button', {name: '收起收尾检查的子会话'}).click();
+    await under(done).waitFor({state: 'detached'});
+    assert.equal(await under(live).count(), 1);
+    await tab.getByRole('button', {name: '展开收尾检查的子会话'}).click();
+    await under(done).waitFor();
+  } finally { await browser.close(); }
+});

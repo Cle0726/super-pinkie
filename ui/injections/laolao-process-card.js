@@ -64,7 +64,11 @@
   const processCards = new Map();
   const processCardKeys = new WeakMap();
   const dirtyCards = new Set();
-  const openedThoughts = new Set(); // Manual expansion is page-local; history starts folded.
+  // A finished 「思考了」 starts open; only the reader's manual fold is remembered (page-local).
+  // While a thought is live its 68px window is the default, and openedThoughts is the reader's
+  // manual widening of that window.
+  const openedThoughts = new Set(), foldedThoughts = new Set();
+  const moveThought = (set, from, to) => { if (set.has(from)) { set.add(to); set.delete(from); } };
   // v8: show each received thought before folding, including a block delivered
   // in the same batch as tool.start. Keep this transient state out of storage.
   const TYPE_CPS = 120, TYPE_MIN = 500, TYPE_MAX = 2500, TYPE_HOLD = 1800;
@@ -126,7 +130,7 @@
         episodesOf(previous).forEach((_, index) => {
           const from = epKey(oldKey, index), to = epKey(key, index);
           if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
-          if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+          moveThought(openedThoughts, from, to); moveThought(foldedThoughts, from, to);
         });
         save();
       }
@@ -399,7 +403,9 @@
     head.setAttribute("aria-controls", body.id);
     head.addEventListener("click", () => {
       preserveSlot(slot, () => {
-        if (openedThoughts.has(id)) openedThoughts.delete(id); else openedThoughts.add(id);
+        // Live: widen/narrow the live window. Finished: fold/unfold the (default-open) thought.
+        const set = box.classList.contains("is-live") ? openedThoughts : foldedThoughts;
+        if (set.has(id)) set.delete(id); else set.add(id);
         box.dataset.pinkieFollow = "1";
         if (slot.isConnected) renderThinking(slot);
       });
@@ -428,12 +434,16 @@
     if (t && !isTyping && !holding && !thinking) typing.delete(id);
     if (isTyping) typingFrame = true;
     const live = thinking || isTyping || holding;
-    const opened = openedThoughts.has(id);
-    // Folding a finished thought shrinks the card; keep the reader in place.
-    if (box.classList.contains("is-live") !== live && !live) preserveSlot(slot, () => box.classList.remove("is-live"));
-    box.classList.toggle("is-live", live);
-    box.classList.toggle("is-typing", isTyping);
-    box.classList.toggle("is-open", opened);
+    const opened = live ? openedThoughts.has(id) : !foldedThoughts.has(id);
+    // A thought that finishes leaves the 68px live window and opens to its body; keep the reader in place.
+    const settle = () => {
+      box.classList.toggle("is-live", live);
+      box.classList.toggle("is-typing", isTyping);
+      box.classList.toggle("is-open", opened);
+    };
+    if (box.classList.contains("is-live") !== live && !live) preserveSlot(slot, settle);
+    else if (box.classList.contains("is-open") !== opened && !live) preserveSlot(slot, settle);
+    else settle();
     const head = box.querySelector(".pinkie-thinking__head");
     const expanded = String(live || opened);
     if (head.getAttribute("aria-expanded") !== expanded) head.setAttribute("aria-expanded", expanded);
@@ -513,7 +523,7 @@
     episodesOf(record).forEach((_, index) => {
       const from = epKey(move.from, index), to = epKey(key, index);
       if (typing.has(from)) { typing.set(to, typing.get(from)); typing.delete(from); }
-      if (openedThoughts.has(from)) { openedThoughts.add(to); openedThoughts.delete(from); }
+      moveThought(openedThoughts, from, to); moveThought(foldedThoughts, from, to);
     });
     if (run.doneKey === move.from) run.doneKey = key;
     if (run.oops.has(move.from)) run.oops.set(key, run.oops.get(move.from));
