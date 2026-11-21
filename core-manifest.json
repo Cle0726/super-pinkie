@@ -5,11 +5,11 @@
     "version": "2026.7.1-2"
   },
   "cle": {
-    "version": "2026.7.1-2-c.1",
-    "tag": "cle-core-v2026.7.1-2-c.1",
+    "version": "2026.7.1-2-c.2",
+    "tag": "cle-core-v2026.7.1-2-c.2",
     "repo": "Cle0726/cle-core",
-    "asset": "cle-core-v2026.7.1-2-c.1.tgz",
-    "url": "https://github.com/Cle0726/cle-core/releases/download/cle-core-v2026.7.1-2-c.1/cle-core-v2026.7.1-2-c.1.tgz",
-    "sha256": "dbe0fca718ab081965330280586266b7cf62baac1ef87e097253e509b51d3f6f"
+    "asset": "cle-core-v2026.7.1-2-c.2.tgz",
+    "url": "https://github.com/Cle0726/cle-core/releases/download/cle-core-v2026.7.1-2-c.2/cle-core-v2026.7.1-2-c.2.tgz",
+    "sha256": "5a88d205d4cf4b422edd75da2c99f768dda6b1e83067c50ed44e2bab6b960ba6"
   }
 }
