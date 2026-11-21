@@ -51,6 +51,18 @@
     return null;
   }
   // 游戏页左上角 ×：回到上一个游戏页（栈在 laolao-study-desk.js 的 goPane 里记），没有就回营地
+  // 调色板 → 能压住白字的强调色
+  const goInk = pal => {
+    const hsl = hex => { const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim()); if (!m) return null; const n = parseInt(m[1], 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn; if (!d) return [0, 0, l]; const s2 = d / (1 - Math.abs(2 * l - 1)); const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, s2, l]; };
+    const rgb = ([h, s2, l]) => { const c = (1 - Math.abs(2 * l - 1)) * s2, x = c * (1 - Math.abs(h / 60 % 2 - 1)), m = l - c / 2; const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]; return [r + m, g + m, b + m]; };
+    const lum = c => { const [r, g, b] = c.map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * r + .7152 * g + .0722 * b; };
+    const list = [pal[1], pal[0], pal[2]].map(hsl).filter(Boolean);
+    const pick = list.find(c => c[1] >= .35 && c[2] > .12 && c[2] < .93) || list.find(c => c[1] >= .2 && c[2] > .08) || null;
+    if (!pick) return '';
+    const c = [pick[0], Math.min(Math.max(pick[1], .5), .8), Math.min(pick[2], .5)];
+    while (c[2] > .12 && 1.05 / (lum(rgb(c)) + .05) < 4.5) c[2] -= .02;
+    return '#' + rgb(c).map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+  };
   const BACK_NAME = {gamepractice: '回题库', gamemap: '回地图', gamehunt: '回讨伐', gameshop: '回商店', gamegacha: '回扭蛋', gamewardrobe: '回衣橱', gamecodex: '回图鉴', gameexam: '回考场'};
   const backTarget = () => desk()?.pane?.()?.state?.gameStack?.at(-1) || 'today';
   const backLabel = () => desk()?.backName?.(backTarget()) || BACK_NAME[backTarget()] || '回营地';
@@ -236,6 +248,8 @@
       call('forms.v2seen').catch(() => {});
     }
     if (form?.palette) host.style.cssText += `;--pkg-a:${form.palette[0]};--pkg-b:${form.palette[1]};--pkg-c:${form.palette[2]}`;
+    // 「出发」键是白字：形态主色太浅（魔法少女的浅粉、甜点师）或太灰（骑士）时白字看不清。挑调色板里最有颜色的一个，压暗到和白字对比 ≥ 4.5。
+    if (form?.palette) { const go = goInk(form.palette); if (go) host.style.setProperty('--pkg-go', go); else host.style.removeProperty('--pkg-go'); }
     const night = (() => { const h = beijingHour(); return h >= 18 || h < 5; })();
 
     // 左：舞台
@@ -280,6 +294,7 @@
     // 右：Boss / 委托 / 今日 / 入口
     const side = el('div', 'pkg-side'); body.append(side);
     side.append(bossBanner(s.boss));
+    if (s.targets?.list?.length) side.append(targetsBar(s));
     const quests = el('section', 'pkg-quests'); quests.setAttribute('aria-label', '今日委托'); side.append(quests);
     paintQuests(quests, s);
     const today = el('section', 'pkg-today'); today.setAttribute('aria-label', '今日'); side.append(today);
@@ -289,6 +304,7 @@
       const badge = id === 'hunt' && s.monsters?.due ? `${s.monsters.due} 只到期` : id === 'shop' && s.season?.limitedSkus?.length && !s.quiet ? `${s.season.name}限定` : '';
       b.append(el('small', '', en), el('b', '', zh), badge ? el('em', 'pkg-entry__sub is-hot', badge) : el('span', 'pkg-entry__sub', sub));
       if (badge) b.dataset.hot = '1';
+      if (id === 'map') { const cv = window.__pinkieLoadout?.current?.('cover'); const book = el('i', 'pkg-entry__book'); if (cv?.css) { book.style.background = cv.css; book.dataset.cover = cv.name; } book.append(el('i', 'pkg-entry__spine'), el('i', 'pkg-entry__label')); b.append(book); }
       b.style.setProperty('--e', entries.children.length); b.addEventListener('click', () => openGame(id)); entries.append(b);
     }
     left.append(entries);
@@ -338,6 +354,57 @@
     const apply = () => { raf = 0; far.style.transform = `translate3d(${nx * -6}px,${ny * -3}px,0)`; mid.style.transform = `translate3d(${nx * 10}px,${ny * 4}px,0)`; near.style.transform = `translate3d(${nx * 16}px,${ny * 8}px,0)`; };
     stage.addEventListener('pointermove', e => { if (stage.dataset.still) return; const r = stage.getBoundingClientRect(); nx = (e.clientX - r.left) / r.width - .5; ny = (e.clientY - r.top) / r.height - .5; if (!raf) raf = requestAnimationFrame(apply); });
     stage.addEventListener('pointerleave', () => { nx = ny = 0; if (!raf) raf = requestAnimationFrame(apply); });
+  }
+
+  // 备考目标（v4）：B 级 / 四级 / 六级 / 专升本……每场一枚倒计时牌，最近的一场排第一并写出现在是哪个阶段、今天建议几组。
+  // 日期是学习台 pact 里的那一份（用户自己填的优先，没填的是预估日，牌子上标「预计」）；点牌子改日期，「＋」加一场。
+  function targetsBar(s) {
+    const t = s.targets, bar = el('section', 'pkg-targets'); bar.setAttribute('aria-label', '备考目标');
+    const row = el('div', 'pkg-targets__row');
+    const edit = (item, isNew) => {
+      const d = el('dialog', 'lesson-dialog pkg-target-dlg'); d.setAttribute('aria-label', `${item.name} 考试日期`);
+      const f = el('form'); f.method = 'dialog';
+      const input = el('input'); input.type = 'date'; input.value = item.date || ''; input.setAttribute('aria-label', '考试日期'); input.min = '2026-01-01'; input.max = '2035-12-31';
+      const note = el('p', 'pkg-target-dlg__note', item.estimated || isNew ? '现在这个日期是按往年估的。准考证出来以后改成真的那天，碧琪会按它安排每天的量。' : '改了以后，倒计时和每天建议的组数跟着变。');
+      const act = el('div', 'pk-done-actions'); const ok = el('button', 'pk-btn', isNew ? '加上这场' : '保存'); ok.type = 'submit'; ok.dataset.kind = 'go'; const no = el('button', 'pk-link', '取消'); no.type = 'button'; no.addEventListener('click', () => d.close());
+      act.append(ok, no); f.append(el('h3', '', item.name), el('label', '', '考试日期'), input, note, act); d.append(f); bar.append(d); d.showModal(); input.focus();
+      f.addEventListener('submit', async e => { e.preventDefault(); ok.disabled = true; try { await call('target.set', {exam: item.id, name: item.name, date: input.value || null}); d.close(); const ns = await refresh(); bar.replaceWith(targetsBar(ns)); } catch (err) { ok.disabled = false; note.textContent = err.message || '没存上，再试一次'; } });
+      d.addEventListener('close', () => d.remove(), {once: true});
+    };
+    for (const x of t.list) {
+      const b = el('button', 'pkg-target'); b.type = 'button'; b.dataset.phase = x.phase; if (x.id === t.focus) b.dataset.focus = '1';
+      const n = el('b', 'pkg-num', x.daysLeft == null ? '—' : x.daysLeft < 0 ? '✓' : String(x.daysLeft));
+      const unit = el('small', '', x.daysLeft == null ? '待定' : x.daysLeft < 0 ? '已考' : x.daysLeft === 0 ? '今天' : '天');
+      const cnt = el('span', 'pkg-target__n'); cnt.append(n, unit);
+      const txt = el('span', 'pkg-target__t'); txt.append(el('b', '', x.short || x.name), el('em', '', `${x.label}${x.estimated ? '·估' : ''}`));
+      b.append(cnt, txt);
+      b.title = `${x.name}${x.date ? ' · ' + x.date : ''}${x.estimated ? '（预估日）' : ''} · 点一下改日期`; b.setAttribute('aria-label', b.title);
+      b.addEventListener('click', () => edit(x, false)); row.append(b);
+    }
+    if (t.addable?.length) {
+      const add = el('button', 'pkg-target is-add'); add.type = 'button'; add.append(el('span', 'pkg-target__n', '＋'), el('span', 'pkg-target__t', ''));
+      add.lastChild.append(el('b', '', '加一场'), el('em', '', t.addable.map(a => a.name.replace('英语', '')).join(' / ')));
+      add.setAttribute('aria-label', '加一场考试');
+      add.addEventListener('click', () => {
+        const menu = el('dialog', 'lesson-dialog pkg-target-dlg'); menu.setAttribute('aria-label', '加一场考试'); menu.append(el('h3', '', '还要准备哪一场'));
+        for (const a of t.addable) { const o = el('button', 'pk-btn', a.name); o.type = 'button'; o.addEventListener('click', () => { menu.close(); edit({...a, estimated: true}, true); }); menu.append(o); }
+        const no = el('button', 'pk-link', '取消'); no.type = 'button'; no.addEventListener('click', () => menu.close()); menu.append(no);
+        bar.append(menu); menu.showModal(); menu.addEventListener('close', () => menu.remove(), {once: true});
+      });
+      row.append(add);
+    }
+    bar.append(row);
+    const f = t.list.find(x => x.id === t.focus);
+    if (f) {
+      const sets = s.today?.jar?.sets || 0, goal = t.goal;
+      const line = f.phase === 'final' ? `${f.name}还有 ${f.daysLeft} 天。这一周不加量，每天 ${goal} 组保持手感，早点睡。`
+        : f.phase === 'day' ? `今天考${f.name}。带好准考证，碧琪在这儿等你回来。`
+        : !f.playable ? `最近的一场是${f.name}（${f.daysLeft} 天）。它的关卡还在做，现在先用学习台的课和生词本准备。`
+        : f.phase === 'sprint' ? `${f.name}进入冲刺期：每天 ${goal} 组真题，今天做了 ${sets} 组。`
+        : `${f.name}还有 ${f.daysLeft} 天，${f.label}：每天 ${goal} 组，今天做了 ${sets} 组。`;
+      bar.append(el('p', 'pkg-targets__line', line));
+    }
+    return bar;
   }
 
   function bossBanner(boss) {
@@ -428,7 +495,7 @@
         else openGame('map');
       }});
     const sg = loop.suggest;
-    row({id: 'real', step: '练 · 真题', title: sg ? sg.name : '刷真题', meta: loop.realSets ? `做了 ${loop.realSets} 组 · 答对 ${loop.realCorrect}` : sg?.reason === 'lesson' ? '刚讲完的考点 · 8 题' : sg?.reason === 'weak' ? `弱项${sg.acc != null ? ' · 正确率 ' + sg.acc + '%' : ''} · 8 题` : '真题题库', done: loop.realSets > 0,
+    row({id: 'real', step: '练 · 真题', title: sg ? (sg.name === '未分类' ? (sg.groupName || '刷真题') : sg.name) : '刷真题', meta: loop.realSets ? `做了 ${loop.realSets} 组 · 答对 ${loop.realCorrect}` : sg?.reason === 'lesson' ? '刚讲完的考点 · 8 题' : sg?.reason === 'weak' ? `弱项${sg.acc != null ? ' · 正确率 ' + sg.acc + '%' : ''} · 8 题` : '真题题库', done: loop.realSets > 0,
       run: e => { const P = window.__pinkieGamePractice; if (sg && P) P.startPoint(sg.point, {nodeId: sg.nodeId || '', from: e.currentTarget}); else openGame('practice'); }});
     row({id: 'vocab', step: '背', title: '生词', meta: loop.words ? `背了 ${loop.words} 个` : '打开生词复习', done: loop.words > 0, run: () => d.go('vocab', {review: true})});
     row({id: 'notes', step: '背', title: '笔记回顾', meta: loop.notes ? `回顾了 ${loop.notes} 条` : '今天最多 10 条', done: loop.notes > 0, run: () => d.go('notes', {view: 'review'})});
@@ -457,7 +524,7 @@
         const sg = await call('practice.suggest', {nodeId: next.id}).catch(() => null);
         if (!go.isConnected) return;
         if (sg?.point && sg.reason === 'node') {
-          go.dataset.mode = 'real'; sub.textContent = `练真题 · ${sg.name}`;
+          go.dataset.mode = 'real'; sub.textContent = `练真题 · ${sg.name === '未分类' ? (sg.groupName || '混练') : sg.name}`;
           go.addEventListener('click', () => window.__pinkieGamePractice.startPoint(sg.point, {nodeId: next.id, from: go}));
           return;
         }

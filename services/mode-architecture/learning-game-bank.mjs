@@ -465,7 +465,7 @@ export class GamePractice {
       if (pt && this.countFor({point: pt.id}) >= 5) return {point: pt.id, name: pt.name, reason: nodeId ? 'node' : 'lesson', nodeId: nid, lesson: node?.name || lesson?.name || ''};
     }
     const weak = this.weakPoint(state);
-    return weak ? {point: weak.id, name: weak.name, reason: 'weak', nodeId: '', acc: weak.acc} : null;
+    return weak ? {point: weak.id, name: weak.name, groupName: weak.groupName || '', reason: 'weak', nodeId: '', acc: weak.acc} : null;
   }
   // 守关卷用的真题：这个区域的单选（不带文章），没做过 / 做错过的优先，最多 12 道
   guardItems(region) {
@@ -496,7 +496,7 @@ export class GamePractice {
     const res = this.game.once('practice.start', requestId, st => {
       const pr = this.ensure(st);
       const setId = `pr-${randomUUID().slice(0, 12)}`;
-      pr.sets[setId] = {setId, mode, kind, point, title, at: this.now(), items: r.items.map(i => i.id), answers: {}, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null};
+      pr.sets[setId] = {setId, mode, kind, point, title, at: this.now(), items: r.items.map(i => i.id), answers: {}, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null, ...battleStart(this.game.form(st), {mode, count: r.items.length})};
       const keys = Object.keys(pr.sets);
       if (keys.length > 80) for (const k of keys.sort((a, b) => pr.sets[a].at - pr.sets[b].at).slice(0, keys.length - 60)) delete pr.sets[k];
       return {setId};
@@ -515,7 +515,7 @@ export class GamePractice {
     let audio = null;
     if (set.mode === 'listening' && set.paperId) audio = this.game.modules.exam?.audioFor?.(this.game.modules.exam.readFull(set.paperId)) || null;
     return {setId: set.setId, mode: set.mode, kind: set.kind, point: set.point, title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
-      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])), finished: set.finished};
+      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])), finished: set.finished, battle: publicBattle(set)};
   }
 
   // 交一题。客观题马上判；翻译段落 / 写作要模型阅卷（异步，最多 60 秒）。
@@ -525,6 +525,8 @@ export class GamePractice {
     if (!snap) throw new Error('这组题不在了');
     if (!snap.items.includes(iid)) throw new Error('这道题不在这组里');
     if (snap.answers[iid]) return publicResult(snap.answers[iid]);
+    if (snap.hp?.failed) throw new Error('这一组已经打输了，先结算');
+    if (snap.hp?.down) throw new Error('碧琪倒下了，先让她站起来');
     const it = this.bank.item(iid);
     if (!it) throw new Error('题库里没有这道题了');
     let correct, grade = null;
@@ -544,6 +546,8 @@ export class GamePractice {
       // 星星：7 天内做对过的题不给（防刷）；本组第一次交这题
       const fresh = !(rec.ok && this.now() - (rec.okAt || 0) < FRESH_DAYS * DAY);
       const awards = [];
+      const fight = {}; // 这一下在战斗上发生了什么（界面照着演）
+      if (set.hp?.failed || set.hp?.down) throw new Error('碧琪倒下了，先让她站起来');
       d.answers += 1; d.realAnswers = (d.realAnswers || 0) + 1;
       if (correct) {
         d.correct += 1; d.realCorrect = (d.realCorrect || 0) + 1; state.stats.realCorrect = (state.stats.realCorrect || 0) + 1;
@@ -556,9 +560,22 @@ export class GamePractice {
         const c = E.comboStars(set.combo, {form, economy: this.economy});
         if (c.stars && fresh) awards.push({kind: 'stars', amount: c.stars, reason: c.ult ? `连击 ${set.combo} · 碧琪大招` : `连击 ${set.combo}`, fx: c.ult ? 'cinematic' : 'medium'});
         if (c.ult) { state.stats.ults += 1; d.ults = (d.ults || 0) + 1; }
-      } else if (form?.bonus?.kind === 'comboShield' && !set.shield && set.combo > 0) {
-        set.shield = true; // 幻形灵：一组里第一次答错不断连击
-      } else set.combo = 0;
+        // 「加倍」技能：这一题的星星翻倍（只翻这一题的）
+        if (set.double) { set.double = false; fight.doubled = true; for (const a of awards) if (a.kind === 'stars') a.amount *= 2; }
+        if (set.skill) set.charge = Math.min(set.skill.cost, (set.charge || 0) + 1);
+        // 连对 5 题：缓过一口气，回 1 颗心
+        if (set.hp && set.combo % HEAL_COMBO === 0 && set.hp.left < set.hp.max) { set.hp.left += 1; fight.healed = 1; }
+      } else if (set.guard) {
+        set.guard = false; fight.guarded = true; // 「护盾」技能：这一下不掉心、不断连击
+      } else {
+        if (form?.bonus?.kind === 'comboShield' && !set.shield && set.combo > 0) set.shield = true; // 幻形灵：一组里第一次答错不断连击
+        else set.combo = 0;
+        if (set.double) set.double = false;
+        if (set.hp) {
+          set.hp.left = Math.max(0, set.hp.left - 1); fight.hurt = 1;
+          if (!set.hp.left) { if (set.hp.revived) { set.hp.failed = true; fight.failed = true; } else { set.hp.down = true; fight.down = true; } }
+        }
+      }
       pr.rec[iid] = {n: (rec.n || 0) + 1, ok: Boolean(correct), at: this.now(), ...(correct ? {okAt: this.now()} : {okAt: rec.okAt || 0})};
       const out = this.game.grant(state, `real:${sid}:${iid}`, {type: 'real', id: sid}, awards);
       // 做错 → 错题怪（真题当种子，讨伐时出变体）。听力、写作、翻译段落不生怪（变体题出不了）。
@@ -570,11 +587,57 @@ export class GamePractice {
           answer: it.options ? it.options[it.answer] : [].concat(it.answer)[0], options: it.options || null, source: {type: 'real', id: sid}});
         if (m) monster = {id: m.id, name: m.name};
       }
-      const res = {itemId: iid, correct: Boolean(correct), key: keyText(it), why: it.why || '', script: it.script || '', grade, combo: set.combo, awards: out, monster, given: typeof answer === 'number' ? answer : clean(answer, 600)};
+      const res = {itemId: iid, correct: Boolean(correct), key: keyText(it), why: it.why || '', script: it.script || '', grade, combo: set.combo, awards: out, monster, given: typeof answer === 'number' ? answer : clean(answer, 600), ...(set.hp || set.skill ? {battle: {...publicBattle(set), ...fight}} : {})};
       if (it.options) res.answer = it.answer;
       set.answers[iid] = res;
       this.game.questTick(state);
       return publicResult(res);
+    });
+  }
+  // 倒地后站起来：一组一次，回 1 颗心。界面要求先把这组的错题和官方答案看一遍。
+  revive({setId} = {}) {
+    const sid = clean(setId, 40);
+    return this.game.mutate(state => {
+      const set = this.ensure(state).sets[sid];
+      if (!set) throw new Error('这组题不在了');
+      if (set.hp?.failed) throw new Error('这一组已经打输了');
+      if (!set.hp?.down) return publicBattle(set);
+      if (set.hp.revived) throw new Error('这一组已经站起来过一次了');
+      set.hp.down = false; set.hp.revived = true; set.hp.left = 1;
+      return publicBattle(set);
+    });
+  }
+  // 放形态技能：攒满才能放。排除 = 当前这题去掉两个错项；回心 = +1 颗心；护盾 = 下一次答错不掉心不断连击；加倍 = 下一题答对星星翻倍。
+  skill({setId, itemId} = {}) {
+    const sid = clean(setId, 40), iid = clean(itemId, 80);
+    return this.game.mutate(state => {
+      const set = this.ensure(state).sets[sid];
+      if (!set) throw new Error('这组题不在了');
+      const sk = set.skill;
+      if (!sk) throw new Error('这个形态在这一组里没有技能');
+      if (set.hp?.down || set.hp?.failed) throw new Error('碧琪倒下了');
+      if ((set.charge || 0) < sk.cost) throw new Error('技能还没攒满');
+      const used = {kind: sk.kind};
+      if (sk.kind === 'eliminate') {
+        const it = set.items.includes(iid) && !set.answers[iid] ? this.bank.item(iid) : null;
+        if (!it?.options || it.options.length < 3) throw new Error('这道题没有可以排除的选项，留到选择题再用');
+        const wrong = it.options.map((_, k) => k).filter(k => k !== it.answer);
+        let seed = E.seedFrom('eliminate', sid, iid) >>> 0;
+        while (wrong.length > Math.min(2, it.options.length - 2)) { seed = (seed * 1664525 + 1013904223) >>> 0; wrong.splice(seed % wrong.length, 1); }
+        used.remove = wrong; (set.removed ||= {})[iid] = wrong;
+      } else if (sk.kind === 'heal') {
+        if (!set.hp) throw new Error('这一组不计心');
+        if (set.hp.left >= set.hp.max) throw new Error('心是满的，留着');
+        set.hp.left += 1; used.healed = 1;
+      } else if (sk.kind === 'shield') {
+        if (set.guard) throw new Error('护盾还在');
+        set.guard = true;
+      } else if (sk.kind === 'double') {
+        if (set.double) throw new Error('加倍还没用掉');
+        set.double = true;
+      } else throw new Error('技能无效');
+      set.charge = 0; set.skillUsed = (set.skillUsed || 0) + 1;
+      return {...publicBattle(set), used};
     });
   }
   async gradeSubjective(it, text) {
@@ -625,15 +688,17 @@ export class GamePractice {
       const d = this.game.day(state);
       const firstSetToday = d.sets === 0;
       const awards = E.setStars({scored, correct, firstSetToday, form, economy: this.economy}).map(p => ({kind: 'stars', amount: p.value, reason: p.reason === '这一组背完了' ? '这一组真题做完了' : p.reason, fx: 'medium'}));
-      const counted = scored >= this.economy.earn.setFinishMinScored || (scored >= 1 && set.items.length <= 2 && scored === set.items.length);
+      const failed = Boolean(set.hp?.failed);
+      const counted = !failed && (scored >= this.economy.earn.setFinishMinScored || (scored >= 1 && set.items.length <= 2 && scored === set.items.length));
+      if (failed) state.stats.setsLost = (state.stats.setsLost || 0) + 1;
       if (counted) {
         d.sets += 1; d.realSets = (d.realSets || 0) + 1; state.stats.setsDone += 1;
         if (correct === scored) { state.stats.perfectSets += 1; d.perfectSets = (d.perfectSets || 0) + 1; }
       }
       const granted = this.game.grant(state, `realset:${sid}`, {type: 'real', id: sid}, counted ? awards : []);
       // 从地图节点 / 营地「练」进来的：≥80% 点亮那个节点
-      if (set.nodeId && scored >= 5) granted.push(...(this.game.modules.world?.nodePass?.(state, set.nodeId, correct / scored, `real:${sid}`) || []));
-      set.finished = {scored, correct, total: set.items.length, maxCombo: set.maxCombo, awards: granted, counted};
+      if (set.nodeId && scored >= 5 && !failed) granted.push(...(this.game.modules.world?.nodePass?.(state, set.nodeId, correct / scored, `real:${sid}`) || []));
+      set.finished = {scored, correct, total: set.items.length, maxCombo: set.maxCombo, awards: granted, counted, ...(set.hp ? {failed, hearts: set.hp.left, heartsMax: set.hp.max, revived: Boolean(set.hp.revived)} : {})};
       this.game.questTick(state);
       return set.finished;
     });
@@ -650,6 +715,25 @@ function titleFor({mode, kind, point, items}) {
   const names = {vc: '词汇语法 · 选择', vf: '词汇语法 · 词形', rd: '阅读 · 短文选择', r3: '阅读 · 信息填空', r4: '阅读 · 术语配对', r5: '阅读 · 实用文', translation: '翻译', writing: '写作'};
   const one = items.length && items.every(i => i.paperId === items[0].paperId);
   return `${names[kind] || '真题'}${one ? ' · ' + items[0].title : ''}`;
+}
+// ---------- 战斗（v4 第二批）----------
+// 碧琪有心：一组 ≥ 5 题、不是听力整套时开。答错掉 1 颗；连对 5 题回 1 颗；掉光倒地，站起来一次（回 1 颗），再掉光这一组算打输（没有整组奖励，不算今天的组数）。
+// 已经答对的题的星星照发：打输只丢「这一组做完」那一份，不倒扣。
+export const HEAL_COMBO = 5;
+export const BASE_HEARTS = 3;
+const SKILL_KINDS = new Set(['eliminate', 'heal', 'shield', 'double']);
+export function battleStart(form, {mode = 'random', count = 0} = {}) {
+  const out = {};
+  if (mode !== 'listening' && count >= 5) { const max = BASE_HEARTS + Math.max(0, Math.min(2, Number(form?.skill?.hearts) || 0)); out.hp = {max, left: max, down: false, revived: false, failed: false}; }
+  const sk = form?.skill;
+  if (sk && SKILL_KINDS.has(sk.kind) && count >= 3) { out.skill = {kind: sk.kind, cost: Math.max(2, Math.min(8, Number(sk.cost) || 4)), name: clean(sk.name, 20), formId: form.id}; out.charge = 0; }
+  return out;
+}
+export function publicBattle(set) {
+  if (!set?.hp && !set?.skill) return null;
+  return {hp: set.hp ? {max: set.hp.max, left: set.hp.left, down: Boolean(set.hp.down), revived: Boolean(set.hp.revived), failed: Boolean(set.hp.failed)} : null,
+    skill: set.skill ? {...set.skill, charge: set.charge || 0, ready: (set.charge || 0) >= set.skill.cost} : null,
+    guard: Boolean(set.guard), double: Boolean(set.double), removed: set.removed || {}};
 }
 function publicResult(r) {
   if (!r) return r;

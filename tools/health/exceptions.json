@@ -10,5 +10,107 @@
     "metric": "lines",
     "value": 918,
     "reason": "缺陷修复：Metre 派发的子会话重新挂回父会话下面（原来全部堆在单独的「派发的会话」分组里），多出的行是 buildTree 的 parts、addTree 里的子会话行和找不到父会话时的兜底分组；没有新增全局名、观察器或定时器；另有在跑会话排序位置冻结（防止列表乱跳）的几行。"
+  },
+  {
+    "file": "ui/injections/laolao-game-battle.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 447
+  },
+  {
+    "file": "ui/injections/laolao-game-form-stage.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 802
+  },
+  {
+    "file": "ui/injections/laolao-game-fx.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1415
+  },
+  {
+    "file": "ui/injections/laolao-game-hud.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 481
+  },
+  {
+    "file": "ui/injections/laolao-game-hud.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 595
+  },
+  {
+    "file": "ui/injections/laolao-game-loadout.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
+    "file": "ui/injections/laolao-game-loadout.js",
+    "metric": "windowGlobals",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 5
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 198
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 621
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 8
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 207
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 580
+  },
+  {
+    "file": "ui/injections/laolao-game-stage.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 7
+  },
+  {
+    "file": "ui/injections/laolao-game-stage.js",
+    "metric": "windowGlobals",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 209
+  },
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "manualVersions",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 201
   }
 ]
