@@ -47,19 +47,48 @@ export function isOwnedEntry(ref) {
   return (name.startsWith('laolao-') || name.startsWith('vendor/')) && (name.endsWith('.js') || name.endsWith('.css'));
 }
 
+const EXCLUDED_MANIFEST_FILES = new Set([
+  ASSET_MANIFEST_JS,
+  UI_MANIFEST_JSON,
+  'index.html',
+  'sw.js',
+  'asset-manifest.json',
+  ...FRAGMENTS,
+  ...RUNTIME_DATA,
+]);
+
 export function isManifestResource(relPath) {
-  if (!relPath || relPath.endsWith('.br') || relPath.endsWith('.gz')) return false;
-  if (relPath === ASSET_MANIFEST_JS || relPath === UI_MANIFEST_JSON || FRAGMENTS.has(relPath) || RUNTIME_DATA.has(relPath)) {
-    return false;
+  if (!relPath || relPath.startsWith('assets/') || relPath.endsWith('.br') || relPath.endsWith('.gz')) return false;
+  if (EXCLUDED_MANIFEST_FILES.has(relPath)) return false;
+  return true;
+}
+
+function collectManifestKeys(repoRoot, controlFiles) {
+  const policyPath = repoRoot ? path.join(repoRoot, 'ui/parity-policy.json') : null;
+  if (!policyPath || !fs.existsSync(policyPath)) {
+    return controlFiles.filter((rel) => isManifestResource(rel));
   }
-  if (relPath === 'apple-touch-icon.png') return true;
-  if (relPath.startsWith('laolao-') || relPath.startsWith('vendor/') || relPath.startsWith('fonts/')
-    || relPath.startsWith('study-desk/') || relPath.startsWith('study-game/') || relPath.startsWith('deep-think/')
-    || relPath.startsWith('provider-icons/') || relPath.startsWith('ProviderIcon-')) {
-    return true;
+  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+  const excluded = new Set(Object.keys(policy.native_only_assets || {}));
+  const keys = new Set();
+  for (const sub of ['ui/assets', 'ui/injections']) {
+    const dir = path.join(repoRoot, sub);
+    for (const rel of walkFiles(dir)) {
+      const base = path.posix.basename(rel);
+      if (FRAGMENTS.has(base) || excluded.has(rel) || base === 'CLeAppIcon.icns' || base.includes('.bak') || base.endsWith('.pyc')) {
+        continue;
+      }
+      keys.add(rel);
+    }
   }
-  if (/^assets\/(?:chat-page-|index-)[^/]+\.(?:js|css)$/.test(relPath)) return true;
-  return false;
+  if (fs.existsSync(path.join(repoRoot, 'ui/assets/laolao-avatar.png'))) {
+    keys.add('apple-touch-icon.png');
+  }
+  if (fs.existsSync(path.join(repoRoot, 'ui/assets/ProviderIcon-crossmodel.svg'))) {
+    keys.add('provider-icons/ProviderIcon-crossmodel.svg');
+  }
+  const controlSet = new Set(controlFiles);
+  return [...keys].filter((k) => controlSet.has(k)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function walkFiles(dir, base = dir, out = []) {
@@ -144,7 +173,7 @@ export function stampTag(tag, hashes) {
   if (!match) return tag;
   const [, attr, quote, rawRef] = match;
   const target = refPath(rawRef);
-  const hash = hashes[target];
+  const hash = hashes[target] || (NATIVE_ENTRY_RE.test(target) ? sha10(Buffer.from(target, 'utf8')) : null);
   if (!hash) return tag;
   const qIndex = rawRef.indexOf('?');
   const rawQuery = qIndex >= 0 ? rawRef.slice(qIndex + 1) : '';
@@ -201,9 +230,9 @@ export function stampControlUi(controlUiDir, {root = DEFAULT_ROOT, check = false
   }
 
   const allFiles = walkFiles(control);
+  const manifestKeys = collectManifestKeys(repoRoot, allFiles);
   const rawHashes = {};
-  for (const rel of allFiles) {
-    if (!isManifestResource(rel)) continue;
+  for (const rel of manifestKeys) {
     rawHashes[rel] = sha10(fs.readFileSync(path.join(control, rel)));
   }
 
@@ -226,27 +255,32 @@ export function stampControlUi(controlUiDir, {root = DEFAULT_ROOT, check = false
     }
   }
 
-  // 2. Stamp assets/index-*.js dynamic imports for ./chat-page-*.js
+  // 2. Stamp assets/index-*.js dynamic imports for ./chat-page-*.js and hash native entry assets
+  const nativeHashes = {};
   for (const rel of allFiles) {
-    if (!/^assets\/index-[^/]+\.js$/.test(rel)) continue;
+    if (!NATIVE_ENTRY_RE.test(rel)) continue;
     const full = path.join(control, rel);
     const original = fs.readFileSync(full);
-    const stamped = stampNativeEntryBytes(original, (targetName) => {
-      const candidate = path.join(control, 'assets', targetName);
-      return fs.existsSync(candidate) ? fs.readFileSync(candidate) : null;
-    });
-    rawHashes[rel] = sha10(stamped);
-    if (!stamped.equals(original)) {
-      if (check) throw new Error(`Unstamped chat-page import in ${rel}`);
-      writeIfChanged(full, stamped);
-      modifiedFiles.push(full);
+    if (rel.endsWith('.js')) {
+      const stamped = stampNativeEntryBytes(original, (targetName) => {
+        const candidate = path.join(control, 'assets', targetName);
+        return fs.existsSync(candidate) ? fs.readFileSync(candidate) : null;
+      });
+      nativeHashes[rel] = sha10(stamped);
+      if (!stamped.equals(original)) {
+        if (check) throw new Error(`Unstamped chat-page import in ${rel}`);
+        writeIfChanged(full, stamped);
+        modifiedFiles.push(full);
+      }
+    } else {
+      nativeHashes[rel] = sha10(original);
     }
   }
 
   // 3. Render laolao-asset-manifest.js and compute its own 10-char hash
   const manifestJsText = renderAssetManifestJs(rawHashes);
   const manifestJsBytes = Buffer.from(manifestJsText, 'utf8');
-  const hashes = {...rawHashes, [ASSET_MANIFEST_JS]: sha10(manifestJsBytes)};
+  const hashes = {...rawHashes, ...nativeHashes, [ASSET_MANIFEST_JS]: sha10(manifestJsBytes)};
   const manifestJsPath = path.join(control, ASSET_MANIFEST_JS);
   if (check) {
     if (!fs.existsSync(manifestJsPath) || !fs.readFileSync(manifestJsPath).equals(manifestJsBytes)) {
