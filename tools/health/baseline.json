@@ -1,9 +1,9 @@
 {
   "injectionTotals": {
     "important": 5090,
-    "mutationObservers": 58,
+    "mutationObservers": 48,
     "setIntervals": 91,
-    "subtreeObserverCalls": 31,
+    "subtreeObserverCalls": 20,
     "windowGlobals": 124,
     "windowGlobalsPerFileSum": 128
   },
@@ -123,9 +123,9 @@
     "ui/injections/laolao-cle-stage.js": {
       "important": 0,
       "lines": 819,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 3,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-compaction-glyph.js": {
@@ -859,9 +859,9 @@
     "ui/injections/laolao-model-picker.js": {
       "important": 0,
       "lines": 2049,
-      "mutationObservers": 2,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 2,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-model-setup.css": {
@@ -954,10 +954,10 @@
     },
     "ui/injections/laolao-phrases.js": {
       "important": 0,
-      "lines": 750,
-      "mutationObservers": 2,
+      "lines": 747,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 2,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
     "ui/injections/laolao-plan.js": {
@@ -1011,9 +1011,9 @@
     "ui/injections/laolao-process-card.js": {
       "important": 0,
       "lines": 708,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 1,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
     "ui/injections/laolao-progress.js": {
@@ -1243,9 +1243,9 @@
     "ui/injections/laolao-rich.js": {
       "important": 0,
       "lines": 596,
-      "mutationObservers": 2,
+      "mutationObservers": 1,
       "setIntervals": 1,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-roundtable-entry.js": {
@@ -1435,9 +1435,9 @@
     "ui/injections/laolao-stream-fx.js": {
       "important": 0,
       "lines": 209,
-      "mutationObservers": 3,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 4,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
     "ui/injections/laolao-study-desk-board.css": {

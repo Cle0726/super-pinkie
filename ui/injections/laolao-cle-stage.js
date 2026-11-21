@@ -798,13 +798,13 @@ if (!window.__laolaoCleStage) {
     pending = true;
     setTimeout(scan, 120);                          // 不用 rAF：窗口在后台时也要跟上状态
   }
-  const mo = new MutationObserver(schedule);
+  const mo = window.Pinkie?.domWatch?.createObserver(schedule);
   function attach() {
     const h = document.querySelector('.chat-thread-inner');
     if (h === host) return;
     mo.disconnect();
     host = h;
-    if (h) mo.observe(h, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-live', 'class']});
+    if (h) mo?.watch(h, {childList: true, attributes: true, attributeFilter: ['data-live', 'class']});
     schedule();
   }
   setInterval(attach, 300);

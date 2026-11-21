@@ -658,7 +658,7 @@
   });
   // Index new/replaced cards once; text updates dirty only their owning card.
   // Attribute changes are limited to the native run metadata, not our text.
-  new MutationObserver(records => {
+  window.Pinkie?.domWatch?.createObserver(records => {
     let changed = false;
     for (const record of records) {
       if (record.type !== 'attributes' && record.target.closest?.('[data-pinkie-thinking], [data-pinkie-status]')) continue;
@@ -673,7 +673,7 @@
       }
     }
     if (changed) schedule();
-  }).observe(document.documentElement, {childList: true, subtree: true, attributes: true,
+  })?.watch(document.documentElement, {childList: true, attributes: true,
     attributeFilter: ['data-live', 'data-state', 'data-pinkie-process', 'data-pinkie-row-count', 'data-pinkie-thinking-seg', 'data-pinkie-history-revision']});
   indexCards(document);
   schedule();

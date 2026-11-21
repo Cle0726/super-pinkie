@@ -478,8 +478,8 @@
     const head = document.head;
     if (!head || head.dataset.pinkieBrandTitleWatch === '1') return;
     head.dataset.pinkieBrandTitleWatch = '1';
-    const observer = new MutationObserver(() => syncBrandTitle());
-    observer.observe(head, { subtree: true, childList: true, characterData: true });
+    const observer = window.Pinkie?.domWatch?.createObserver(() => syncBrandTitle());
+    observer?.watch(head, {childList: true, characterData: true});
     syncBrandTitle();
   };
 
@@ -699,7 +699,7 @@
     const appRoot = document.querySelector("openclaw-app") || document.querySelector("#openclaw-mount-fallback");
     if (!appRoot || appRoot.dataset.pinkieLocalizedWatch === "1") return;
     appRoot.dataset.pinkieLocalizedWatch = "1";
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       let chatChanged = false;
       for (const record of records) {
         if (record.type === "characterData") localizeText(record.target);
@@ -713,13 +713,10 @@
         }
       }
       if (chatChanged) scheduleChatProjection();
-    }).observe(appRoot, {
-      childList: true,
+    })?.watch(appRoot, {childList: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["title", "aria-label", "alt", "placeholder"],
-      subtree: true,
-    });
+      attributeFilter: ["title", "aria-label", "alt", "placeholder"],});
   };
 
   window.addEventListener('laolao:modechange',()=>{

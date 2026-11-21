@@ -965,13 +965,13 @@
   function watchPicker(details) {
     if (!details || triggerObservers.has(details)) return;
     prepareModernPicker(details);
-    const watcher = new MutationObserver((changes = []) => {
+    const watcher = window.Pinkie?.domWatch?.createObserver((changes = []) => {
       syncTrigger(details);
       if (details.open && changes.some((change) => change.type === "attributes" && change.attributeName === "disabled"
         && change.target?.matches?.("[data-chat-model-option]:not(.pinkie-fallback-option)"))) refreshFallbackSession(details);
       if (details.open) schedule(details);
     });
-    watcher.observe(details, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["hidden", "aria-selected", "disabled"]});
+    watcher?.watch(details, {childList: true, characterData: true, attributes: true, attributeFilter: ["hidden", "aria-selected", "disabled"]});
     triggerObservers.set(details, watcher);
     syncTrigger(details);
     const browser = details.querySelector?.(".chat-controls__model-browser");
@@ -1924,7 +1924,7 @@
 
   scanPickers();
   if (document.body) {
-    new MutationObserver((changes) => {
+    window.Pinkie?.domWatch?.createObserver((changes) => {
       for (const [details, watcher] of triggerObservers) {
         if (!details.isConnected) {
           watcher.disconnect(); triggerObservers.delete(details); releasePopupLayout(details);
@@ -1934,7 +1934,7 @@
       for (const change of changes) {
         for (const node of change.addedNodes || []) if (node.nodeType === 1) scanPickers(node);
       }
-    }).observe(document.body, {childList: true, subtree: true});
+    })?.watch(document.body, {childList: true});
   }
 
   document.addEventListener("pinkie:reasoning-preparing", (event) => {
