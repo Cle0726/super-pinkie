@@ -114,6 +114,14 @@
   // A dispatched child (independent child or worker) always gets a row:
   // it never needs messages first, and while it runs it survives an
   // archived parent, a folded parent and the recent-page limit.
+  // Sorting by updatedAt made rows swap places on every update while sessions run. A running or
+  // waiting session keeps the stamp it had when first seen so; it moves once, when it settles.
+  const frozenStamp = new Map();
+  const stampOf = s => {
+    if (!isLive(s)) { frozenStamp.delete(s.key); return s.updatedAt || 0; }
+    if (!frozenStamp.has(s.key)) frozenStamp.set(s.key, s.updatedAt || 0);
+    return frozenStamp.get(s.key);
+  };
   const isChildRow = s => Boolean(s.lineage?.parentKey || s.parentSessionKey || s.spawnedBy);
   const isLive = s => ['running', 'waiting'].includes(sessionStatus(s));
   const nodeLive = node => isLive(node.session) || node.workers.some(isLive) || node.parts?.some(isLive)
@@ -123,7 +131,9 @@
   // `parts`: parentKey -> dispatched children that live in other modes (Metre). They hang under their
   // parent like any child; a part whose parent is not in the returned tree is the caller's orphan.
   function buildTree(rows, {archive = false, currentKey = '', query = '', parts = {}} = {}) {
-    const sorted = [...rows].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const stamps = new Map(rows.map(s => [s.key, archive ? s.updatedAt || 0 : stampOf(s)]));
+    const stamp = s => archive ? s.updatedAt || 0 : stamps.get(s.key) ?? stampOf(s);
+    const sorted = [...rows].sort((a, b) => stamp(b) - stamp(a));
     const byKey = new Map(sorted.map(s => [s.key, s]));
     const nodes = new Map();
     const search = query.trim().toLowerCase();
@@ -179,10 +189,8 @@
     for (const root of roots) for (const node of [root, ...root.children]) node.parts = (parts[node.session.key] || []).slice();
     // A parent moves up when one of its children was just dispatched or updated.
     for (const root of roots) {
-      root.activity = Math.max(root.session.updatedAt || 0, ...root.workers.map(s => s.updatedAt || 0),
-        ...root.parts.map(s => s.updatedAt || 0),
-        ...root.children.flatMap(child => [child.session.updatedAt || 0, ...child.workers.map(s => s.updatedAt || 0),
-          ...child.parts.map(s => s.updatedAt || 0)]));
+      root.activity = Math.max(stamp(root.session), ...root.workers.map(stamp), ...root.parts.map(stamp),
+        ...root.children.flatMap(child => [stamp(child.session), ...child.workers.map(stamp), ...child.parts.map(stamp)]));
     }
     roots.sort((a, b) => b.activity - a.activity);
     if (!search) return roots;

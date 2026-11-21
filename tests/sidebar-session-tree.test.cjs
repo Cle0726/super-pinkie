@@ -165,3 +165,15 @@ test('a running dispatched child keeps its parent in the recent page and counts 
   const quiet = window.PinkieSessionList.buildTree(rows, {parts: {[metre]: [{...live, hasActiveRun: false, updatedAt: 0}]}});
   assert.equal(Array.from(window.PinkieSessionList.recentPage(quiet, 30, ''), node => node.session.key).includes(metre), false);
 });
+
+test('running sessions keep their place while they update; they move once when they settle', () => {
+  const at = (stamps, live) => build(['a', 'b', 'c'].map((name, i) => row('agent:metre:' + name, name,
+    {updatedAt: stamps[i], hasActiveRun: live})), {}).map(node => node.session.label).join('');
+  // all three running and each touching updatedAt in turn: the order must not change
+  assert.equal(at([30, 20, 10], true), 'abc');
+  assert.equal(at([20, 50, 10], true), 'abc');
+  assert.equal(at([20, 40, 60], true), 'abc');
+  // once they settle they sort by their real time, one move
+  assert.equal(at([20, 40, 60], false), 'cba');
+  assert.equal(at([70, 40, 60], false), 'acb');
+});
