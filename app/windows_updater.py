@@ -1230,7 +1230,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-LogPath", str(state_root() / "logs/updater.log"),
                     "-ReadyMarker", str(ready_marker),
                     "-GatewayRecord", str(state_root() / "gateway-owner.json"),
-                    "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
+                    "-GatewayPort", str(urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789),
                     "-Version", str(self.prepared["version"]),
                     "-StartSeconds", str(int(self.health_start_seconds)),
                     "-ReadySeconds", str(int(self.health_ready_seconds)),
@@ -1346,7 +1346,7 @@ class UpdateHealthReporter:
         self.limit = limit
         self.protocol = update_helper_protocol(token, root)
         self.done = threading.Event()
-        self.port = port or urllib.parse.urlparse(GATEWAY_URL).port or 18789
+        self.port = port or urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789
         self.hold_limit = hold_limit
         # Set while the gateway port is free for our real gateway to bind.
         self.port_free = threading.Event()
