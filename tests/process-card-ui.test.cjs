@@ -78,6 +78,7 @@ function processHarness() {
     querySelectorAll() { globalScans += 1; return [older, current]; },
     addEventListener(name, handler) { listeners.set(name, handler); }};
   const window = {addEventListener(name, handler) { listeners.set(name, handler); },
+    Pinkie: {domWatch: {createObserver: fn => ({watch() { observer = fn; }, observe() { observer = fn; }, disconnect() {}}), poll: () => ({stop() {}})}},
     __pinkieChatViewport: {preserve(target, change) { assert.equal(target, pane); preserved += 1; return change(); }}};
   const context = {window, document, location: {href: 'http://localhost/chat?session=agent%3Amain%3Atest'},
     localStorage: {getItem: () => '{}', setItem() {}},

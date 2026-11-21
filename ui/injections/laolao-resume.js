@@ -2588,7 +2588,7 @@
     const shell = document.querySelector("openclaw-app-shell");
     if (shell?.context?.gateway) {
       hooked = true;
-      readyObserver.disconnect();
+      readyObserver?.disconnect();
       hookGatewayStore();
     }
   };

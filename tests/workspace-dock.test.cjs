@@ -237,7 +237,7 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
 
   // The attribute signal rides the single mode observer (one observer budget),
   // and settles exactly once before re-rendering.
-  assert.equal((mode.match(/new MutationObserver\(/g) || []).length, 1,
+  assert.equal((mode.match(/new MutationObserver\(/g) || []).length, 0,
     'the dock watch must not add a second MutationObserver');
   assert.match(mode, /"data-pinkie-platform"/);
   const settle = between(
