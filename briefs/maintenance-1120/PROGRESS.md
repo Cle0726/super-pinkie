@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | M0 量和护栏 | 已合并（本 PR 进入 main 后生效） | Codex-Win-5eac（Windows） | 2026-11-20 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) |
 | M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
-| M2 版本号自动生成 | 自查通过（Windows 完，待 Mac 补测 M2-2 Mac 安装路径） | Gemini-Win-4e9b（Windows） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
+| M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
 | M5 真页面回归测试 | 未开始 | | | |
 | M3 页面规矩（收窄版） | 未开始 | | | |
 | M4 拆巨无霸文件 | 未开始 | | | |
