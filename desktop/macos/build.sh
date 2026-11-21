@@ -25,18 +25,6 @@ CUA_DRIVER_URL="https://github.com/trycua/cua/releases/download/cua-driver-rs-v$
 CUA_DRIVER_SHA256="59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727"
 CUA_DRIVER_TEAM_ID="YCK386LBJ7"
 
-OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
-if [[ -z "$OPENCLAW_BIN" || ! -x "$OPENCLAW_BIN" ]]; then
-  echo "error: 构建机没有可用的 OpenClaw" >&2
-  exit 1
-fi
-OPENCLAW_ENTRY="$(realpath "$OPENCLAW_BIN")"
-OPENCLAW_ROOT="$(dirname "$OPENCLAW_ENTRY")"
-if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
-  echo "error: 无法确认 OpenClaw 包目录：$OPENCLAW_ROOT" >&2
-  exit 1
-fi
-
 # The installed App puts its private Node first on PATH during an update. That
 # runtime intentionally has no npm, so look for a complete build toolchain
 # instead of failing before the old App can be replaced.
@@ -64,21 +52,40 @@ if [[ -z "$NODE_BIN" ]]; then
   exit 1
 fi
 
-# The pinned 2026.7.1-2 runtime predates CLE Kk's separately versioned Cua
-# JavaScript bridge. Add that small SDK only inside an isolated build copy;
-# never mutate the developer's globally installed OpenClaw package.
+# Always install the core runtime from core-manifest.json (openclaw by default,
+# or cle when PINKIE_CORE=cle). Never read any globally installed OpenClaw on
+# the build host.
+OPENCLAW_CORE_STAGE_ROOT=""
 OPENCLAW_COMPAT_STAGE_ROOT=""
 CUA_VERIFY_DIR=""
 cleanup_build_temps() {
   local target
-  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}"; do
+  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}" "${OPENCLAW_CORE_STAGE_ROOT:-}"; do
     [[ -n "$target" && -d "$target" ]] || continue
     case "$(basename "$target")" in
-      super-pinkie-cua.*|super-pinkie-openclaw.*) rm -rf "$target" ;;
+      super-pinkie-cua.*|super-pinkie-openclaw.*|super-pinkie-core.*) rm -rf "$target" ;;
     esac
   done
 }
 trap cleanup_build_temps EXIT
+
+CORE_CACHE_ROOT="${PINKIE_CORE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/SuperPinkie/build/core}"
+mkdir -p "$CORE_CACHE_ROOT"
+OPENCLAW_CORE_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-core.XXXXXX")"
+PATH="$(dirname "$NODE_BIN"):$PATH" \
+  "$NODE_BIN" "$REPO_ROOT/tools/core/manifest.mjs" install \
+  --root "$REPO_ROOT" \
+  --prefix "$OPENCLAW_CORE_STAGE_ROOT" \
+  --cache-dir "$CORE_CACHE_ROOT"
+OPENCLAW_ROOT="$OPENCLAW_CORE_STAGE_ROOT/node_modules/openclaw"
+if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
+  echo "error: 无法确认 core-manifest.json 安装的内核包目录：$OPENCLAW_ROOT" >&2
+  exit 1
+fi
+
+# The pinned 2026.7.1-2 runtime predates CLE Kk's separately versioned Cua
+# JavaScript bridge. Add that small SDK only inside an isolated build copy;
+# never mutate any host package.
 CUA_SDK_PACKAGE="$OPENCLAW_ROOT/node_modules/@trycua/cua-driver/package.json"
 if [[ ! -f "$CUA_SDK_PACKAGE" ]]; then
   OPENCLAW_COMPAT_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-openclaw.XXXXXX")"

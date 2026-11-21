@@ -440,6 +440,12 @@ install_relay_watchdog() {
 }
 
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}"
+if [[ -z "$OPENCLAW_ROOT" && -f "$REPO_ROOT/tools/core/manifest.mjs" && ( "${PINKIE_INSTALL_CORE:-0}" == "1" || -n "${PINKIE_CORE_PREFIX:-}" ) ]]; then
+  CORE_NAME="$(node "$REPO_ROOT/tools/core/manifest.mjs" field core --root "$REPO_ROOT")"
+  CORE_PREFIX="${PINKIE_CORE_PREFIX:-$USER_HOME/.super-pinkie/core/$CORE_NAME}"
+  node "$REPO_ROOT/tools/core/manifest.mjs" install --root "$REPO_ROOT" --prefix "$CORE_PREFIX"
+  OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
+fi
 if [[ -z "$OPENCLAW_ROOT" ]]; then
   # The managed App owns the gateway it is about to update. Prefer that
   # runtime before PATH: a shell shim named `openclaw` is not a package root

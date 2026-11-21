@@ -82,18 +82,33 @@ function Apply-UISkin {
 }
 
 # ── 1. 定位当前 OpenClaw（新版 dist/control-ui + 旧版 ui）──────────────
+# 若显式指定 PINKIE_INSTALL_CORE=1 或 PINKIE_CORE_PREFIX，则先按 core-manifest.json
+# 安装并校验内核（支持 PINKIE_CORE=openclaw|cle，sha256 不一致直接报错停止）。
+$coreManifestTool = Join-Path $RepoRoot 'tools\core\manifest.mjs'
+if ((Test-Path -LiteralPath $coreManifestTool) -and ($env:PINKIE_INSTALL_CORE -eq '1' -or $env:PINKIE_CORE_PREFIX)) {
+    $coreInfo = (& node $coreManifestTool info --root $RepoRoot | Out-String | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0 -or -not $coreInfo) { throw '无法解析 core-manifest.json' }
+    $corePrefix = if ($env:PINKIE_CORE_PREFIX) { $env:PINKIE_CORE_PREFIX } else { Join-Path $env:LOCALAPPDATA ('SuperPinkie\core\' + $coreInfo.core) }
+    & node $coreManifestTool install --root $RepoRoot --prefix $corePrefix
+    if ($LASTEXITCODE -ne 0) { throw "内核安装或 SHA-256 校验失败（$($coreInfo.core)）" }
+    $env:OPENCLAW_ROOT = Join-Path $corePrefix 'node_modules\openclaw'
+}
 $didAny = $false
 $packageRoots = [System.Collections.Generic.List[string]]::new()
-if ($env:OPENCLAW_ROOT) { $packageRoots.Add($env:OPENCLAW_ROOT) }
-try {
-    $npmRoot = (& npm root -g 2>$null | Select-Object -First 1).Trim()
-    if ($npmRoot) { $packageRoots.Add((Join-Path $npmRoot 'openclaw')) }
-} catch {}
-$packageRoots.Add((Join-Path $env:APPDATA 'npm\node_modules\openclaw'))
-if (Test-Path $NvmRoot) {
-    Get-ChildItem $NvmRoot -Directory | ForEach-Object {
-        $packageRoots.Add((Join-Path $_.FullName 'lib\node_modules\openclaw'))
-        $packageRoots.Add((Join-Path $_.FullName 'node_modules\openclaw'))
+if ($env:OPENCLAW_ROOT) {
+    $packageRoots.Add($env:OPENCLAW_ROOT)
+}
+if (-not ($env:OPENCLAW_ROOT -and $SkipApp)) {
+    try {
+        $npmRoot = (& npm root -g 2>$null | Select-Object -First 1).Trim()
+        if ($npmRoot) { $packageRoots.Add((Join-Path $npmRoot 'openclaw')) }
+    } catch {}
+    $packageRoots.Add((Join-Path $env:APPDATA 'npm\node_modules\openclaw'))
+    if (Test-Path $NvmRoot) {
+        Get-ChildItem $NvmRoot -Directory | ForEach-Object {
+            $packageRoots.Add((Join-Path $_.FullName 'lib\node_modules\openclaw'))
+            $packageRoots.Add((Join-Path $_.FullName 'node_modules\openclaw'))
+        }
     }
 }
 
