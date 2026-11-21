@@ -25,11 +25,11 @@
       syncMoreButton();
     });
   };
-  const observer = new MutationObserver(scheduleSync);
+  const observer = window.Pinkie?.domWatch?.createObserver(scheduleSync);
   const start = () => {
     syncMoreButton();
     const nav = document.querySelector("aside.sidebar .sidebar-nav");
-    if (nav) observer.observe(nav, { childList: true, subtree: true });
+    if (nav) observer?.watch(nav, {childList: true});
   };
 
   if (document.readyState === "loading") {

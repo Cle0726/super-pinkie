@@ -1136,12 +1136,12 @@
     try { paintSources(); } catch {}
   }
   function scheduleAll() { if (!frame) frame = requestAnimationFrame(paintAll); }
-  const observer = new MutationObserver(mutations => {
+  const observer = window.Pinkie?.domWatch?.createObserver(mutations => {
     if (mutations.every(mutation => [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1
       || node.closest?.('.pinkie-sources, .pinkie-cite, .pinkie-composer-chips, .pinkie-temp-banner, .pinkie-outline, .pinkie-mention, .pinkie-mention-tags')))) return;
     scheduleAll();
   });
-  const start = () => { observer.observe(document.body, {childList: true, subtree: true}); scheduleAll(); };
+  const start = () => { observer?.watch(document.body, {childList: true}); scheduleAll(); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
   setInterval(scheduleAll, 1500);
   // 切回这个窗口时按后端重画一次：别处（快速提问小窗、另一个窗口）改过的设置要立刻看得到。

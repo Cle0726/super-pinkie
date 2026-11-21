@@ -1181,7 +1181,7 @@
     render();
   };
   const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, .topnav-shell__actions, #pinkie-study-desk, #pinkie-study-desk .rail, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
-  const modeObserver = new MutationObserver(records => {
+  const modeObserver = window.Pinkie?.domWatch?.createObserver(records => {
     // A late bridge install stamps data-pinkie-platform on <html>; settle the
     // split-workspace entry before deciding whether a repaint is needed.
     if (dockSettle && records.some(record => record.type === "attributes"
@@ -1199,12 +1199,9 @@
     renderQueued = true;
     window.requestAnimationFrame(() => { renderQueued = false; render(); });
   });
-  modeObserver.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
+  modeObserver?.watch(document.documentElement, {childList: true,
     attributes: true,
-    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock", "data-pinkie-platform"],
-  });
+    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock", "data-pinkie-platform"],});
   const schedulePreload = () => window.setTimeout(() => {
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(() => { void preloadTransitions(); }, {timeout: 1200});
