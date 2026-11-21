@@ -9,10 +9,10 @@
 
 | 文件 | 给谁看 | 内容 |
 |---|---|---|
+| **`START.md`** | **用户只需要把这一个文件发给 AI** | 接活入口：AI 读完自己看现状、挑一件没人在做的事、做完再挑下一件 |
 | `README.md`（本文件） | 所有人 | 全部批次一览、先后关系、哪些可以同时做 |
-| `CONCURRENCY.md` | **每个执行者和验收人开工前必读** | 多个 AI 同时干活的规矩 |
+| `CONCURRENCY.md` | 每个 AI 开工前必读 | 多个 AI 同时干活的规矩：接力卡、认领、自己挑活、撞车怎么让 |
 | `ACCEPTANCE.md` | 验收人、用户 | 每一批怎么验收、里程碑、最后的总验收 |
-| `PROMPTS.md` | 用户 | 派活和验收的通用提示词，填上批号就能用 |
 
 每一批具体做什么、怎样算过，仍然以两份计划各自的 `PLAN.md` 和 `ACCEPTANCE.md` 为准。本目录只管「怎么一起干、怎么一起验」。
 
@@ -78,5 +78,5 @@ flowchart LR
 
 ## 四、现在做到哪了
 
-- 总体：看两份 `PROGRESS.md` 顶部的表格，以及 GitHub 上标题以 `maint(` 或 `core(` 开头的 PR（包括草稿 PR，草稿 PR 就是认领，见 `CONCURRENCY.md` 2.2）。
+- 总体：看两份 `PROGRESS.md` 顶部的表格，以及 GitHub 上标题以 `maint(`、`core(` 或 `program(` 开头的 PR（包括草稿 PR，草稿 PR 就是认领，见 `CONCURRENCY.md` 2.2）。
 - 某一批具体做到哪一步：看那一批记录文件最上面的**接力卡**（`briefs/<计划>/progress/<批号>.md`；M0 的在 `briefs/maintenance-1120/PROGRESS.md`）。任何一个 AI 停下来，下一个 AI 都从接力卡接着做，规矩见 `CONCURRENCY.md` 第〇节。
