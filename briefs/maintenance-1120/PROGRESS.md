@@ -11,7 +11,7 @@
 | M3 页面规矩（收窄版） | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows） | 2026-11-21 | [#53](https://github.com/Cle0726/super-pinkie/pull/53) |
 | M4 拆巨无霸文件 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#55](https://github.com/Cle0726/super-pinkie/pull/55) |
 | M6 上游补丁管理 | 已取消（由 C.le. 内核接管计划的 K3 取代） | | 2026-11-20 | |
-| M7 地图和规矩 | 未开始 | | | |
+| M7 地图和规矩 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#56](https://github.com/Cle0726/super-pinkie/pull/56) |
 
 ## 正在改的文件（并行时互相避让）
 
