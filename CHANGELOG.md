@@ -4,6 +4,11 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+### 2.5.53
+- #47 思考透传：`model-sync.mjs` 的 `isAutoDiscoveredPlaceholder` 也认 `input: ['text','image']`（本地线路默认开图片后，63 个 mm 模型一直停在 `reasoning: false`，hy4flash-free 等没有「思考了」）；`pinkie-model-setup.json` 里手动关掉的照旧不动。
+- #48 侧栏跳动：重画时保留 Metre「总谱」入口（以前每次重画被清掉、0.1–0.3s 后补回，列表上下跳 36px）；首页草稿在第一句话或开始运行前一直不进列表。
+- #46 更新弹窗：`laolao-update-dialog.js` 的模式名单加上 `metre`、`unrestricted`，不再退回旧卡片。
+
 ### 2.5.52
 - 侧栏/过程卡三处修复（#43）：Metre 派发的子会话重新挂回父会话下（找不到父会话时才进「派发的会话」分组，`a4e16984` 起一直在分组里）；做完的「思考了」默认展开，手动折叠才记住；在跑的会话排序位置冻结，不再因 updatedAt 每次更新而来回换位（ABC→BAC→CAB）。
 - 另含 #39 维护计划文档、#40 代码健康度棘轮（`tools/health`，`tests/code-health-ratchet.test.mjs`）；两者不改运行时行为。
