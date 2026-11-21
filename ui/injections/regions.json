@@ -20,6 +20,7 @@
       "crossCutting": true,
       "rootSelectors": [],
       "files": [
+        "laolao-dom-watch.js",
         "laolao-night.js",
         "laolao-night.css",
         "laolao-motion-preference.js",
