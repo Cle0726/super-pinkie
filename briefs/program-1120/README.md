@@ -34,7 +34,7 @@
 | **M4** | 拆两个巨无霸文件 | M5 已合并 | **M3**、K0、K1 | `services/mode-architecture/index.mjs` 和拆出来的新模块、`app/windows_desktop.py` 和拆出来的新模块、`超級碧琪.spec`、`.github/workflows/windows-smoke.yml` | Windows（打包验证） |
 | **M7** | 地图和规矩 | M3、M4 已合并 | K 系列 | `docs/ARCHITECTURE.md`、`docs/README.md`、`docs/archive/`、根目录 `CLAUDE.md` 和 `AGENTS.md` | 任一 |
 | **K0** | 摸底：实际版本、源码试编译、补丁对照表 | 无 | 全部 | `briefs/cle-core-1120/PATCH-MAP.md` 和 K0 记录；仓库外的 OpenClaw 源码目录 | Windows 和 Mac 各做一份 |
-| **K1** | 建私有仓库 `cle-core` | K0 已合并，**用户点头** | M 系列 | `cle-core` 仓库本身 | 任一 |
+| **K1** | 建私有仓库 `cle-core` | K0 已合并（用户已同意建仓库） | M 系列 | `cle-core` 仓库本身 | 任一 |
 | **K2** | 碧琪支持两种内核（默认仍是 OpenClaw），CI 两种都测 | K1 已合并；M0、M5 已合并 | M3、M4（不碰同一批文件时） | `core-manifest.json`、`build-win.ps1`、`desktop/macos/build.sh`、`install.sh`、`install.ps1`、两个 `apply-theme` 脚本、`desktop/windows/runtime-manifest.json`、`.github/workflows/ci.yml` | Windows 和 Mac |
 | **K3** | 补丁一个一个搬进 C.le. 源码（碧琪暂不删补丁） | K2 已合并 | 多个 AI 可以各搬不同的补丁（见 `CONCURRENCY.md` 4.5） | `cle-core` 里每个补丁对应的源码文件；碧琪这边的 `core-manifest.json` **一次只合一个** | 任一，Mac 要补测 |
 | **K4** | 显示名字改成 C.le. | K3 已合并 | 无 | 用户可见的文案所在文件（执行时先列清单再认领） | Windows 和 Mac |
