@@ -335,6 +335,18 @@ export async function installCoreIntoPrefix({
     throw new Error(`Installed core (${selected.core}) is incomplete: missing ${path.join(packageRoot, 'openclaw.mjs')}`);
   }
 
+  // When npm installs a local .tgz (cle-core), it may hoist @openclaw/ai to
+  // <prefix>/node_modules/@openclaw/ai instead of nesting it under
+  // openclaw/node_modules/@openclaw/ai. Mirror it into the nested path so
+  // every existing Pinkie runtime patch resolves @openclaw/ai identically
+  // across both openclaw and cle cores.
+  const hoistedAi = path.join(prefixDir, 'node_modules', '@openclaw', 'ai');
+  const nestedAi = path.join(packageRoot, 'node_modules', '@openclaw', 'ai');
+  if (fs.existsSync(hoistedAi) && !fs.existsSync(nestedAi)) {
+    fs.mkdirSync(path.dirname(nestedAi), { recursive: true });
+    fs.cpSync(hoistedAi, nestedAi, { recursive: true });
+  }
+
   return {
     core: selected.core,
     version: selected.spec.version,
