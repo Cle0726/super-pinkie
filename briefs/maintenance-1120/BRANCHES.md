@@ -40,7 +40,7 @@
 | `fix/windows-2.5.46-study-game` | `6d3662db4d52` | 599 / 5 | 3 / 1 | 2090 / 298 | D | 与 `release/study-game` 同头 `6d3662db`，是 2.5.46 发行快照，不是 v4；保留。 |
 | `fix/windows-learning-worker-1119` | `67135e69a8d7` | 88 / 1 | 1 / 0 | 2 / 0 | A | 虽是 `+`，实际只改提取器和 Windows worker 测试，两路径 blob 均相同；`069a7fc3` 已交付，实测通过。 |
 | `install/all-1113-live` | `eff7d1969344` | 315 / 5 | 4 / 0 | 165 / 165 | D | 含四条 v4，和 `audit` 的 165 个触及路径只剩头部清单不同；旧安装上下文不作为 B 类再次合并。 |
-| `integration/all-fixes` | `5ae10d81f397` | 1124 / 6 | 0 / 0 | 9 / 9 | D | `git cherry` 空不等于等价：6 个合并的第二父已在主线，但 `2a53bcda` 有一处独立冲突处理差异，先留。 |
+| `integration/all-fixes` | `5ae10d81f397` | 1124 / 6 | 0 / 0 | 9 / 9 | A | 复核 6 个第二父都已在主线；唯一手工合并 `2a53bcda` 留下的两个测试块在现主线逐字相同。开工时先留，#43 后补证。 |
 | `maint/m1-branch-inventory` | `f35f230e1930` | 0 / 2 | 2 / 0 | 2 / 2 | D | 本批 [#42](https://github.com/Cle0726/super-pinkie/pull/42) 在做，不计入旧分支清理。 |
 | `oc/brand` | `05c4ee0d27ce` | 1049 / 4 | 4 / 0 | 24 / 22 | D | 旧 C.le. 外观、模型分层和本地工作快照混合，22 个触及路径不同；不覆盖当前外观。 |
 | `oc/legacy-chat` | `7d0d6bebaba7` | 1043 / 1 | 1 / 0 | 34 / 34 | D | 提交说明明确是待接手的旧聊天迁移；34 路径不同，保留。 |
@@ -77,6 +77,14 @@
 
 - 快照之后出现 [#43](https://github.com/Cle0726/super-pinkie/pull/43) 的 fix/metre-children-under-parent。它在修改共用的头部清单和健康度例外，按 D 保护，不纳入清理；不抢合并。
 - [#44](https://github.com/Cle0726/super-pinkie/pull/44) 是同一认领者的 B 类候选，也不属于旧分支清理名单。
+
+## #43 合并后的快照复查
+
+- `2026-11-21T09:10:56Z`，以 `cd3d7c56` 为主线，现有 132 个远端头，51 个未并入。原 20 个 A/C 候选头没变；快照后新增的分支：
+  - `fix/metre-children-under-parent`（`e695c0f8`）已由 [#43](https://github.com/Cle0726/super-pinkie/pull/43) 合进主线，仍作为该修复的保留引用，不动。
+  - `maint/m1-study-game-v4`（`723c6a5e`，[#44](https://github.com/Cle0726/super-pinkie/pull/44)）是本批活跃候选，不动。
+  - `release/2.5.52`（`802c98de`，[#45](https://github.com/Cle0726/super-pinkie/pull/45)）是正在验收的发行分支，D 类，不动。
+- `integration/all-fixes` 复核后由 D 改为 A：六次合并的第二父都已进主线；唯一的手工冲突处理把两个防护测试并排保留，逐段与 `cd3d7c56` 对比，两个测试体均相同。因此开工快照中的候选由 20 条增至 21 条，尚未存档或删除。
 
 ## 实际存档和删除
 
