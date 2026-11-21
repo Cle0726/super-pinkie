@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const {test} = require('node:test');
-const source = fs.readFileSync(path.join(__dirname, '../app/windows_desktop.py'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../app/windows_bridge_scripts.py'), 'utf8');
 const start = source.indexOf('const chooseDragInterval = ');
 const end = source.indexOf('const selector = ', start);
 assert.ok(start >= 0 && end > start, 'use the actual injected Windows drag calculation');
