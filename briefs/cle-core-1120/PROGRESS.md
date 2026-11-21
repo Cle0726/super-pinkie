@@ -7,7 +7,7 @@
 
 | 批 | 状态 | 谁在做 | 更新日期 | 分支 / PR |
 |---|---|---|---|---|
-| K0 摸底 | 自查通过（Windows 全部通过，待 Mac 补测 K0-3） | Gemini-Win-9c2a（接手 Codex-Win-4d8c） | 2026-11-21 | [PR #41](https://github.com/Cle0726/super-pinkie/pull/41) |
+| K0 摸底 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a（接手 Codex-Win-4d8c） | 2026-11-21 | [PR #41](https://github.com/Cle0726/super-pinkie/pull/41) |
 | K1 建内核仓库 | 未开始（用户已同意建仓库） | | | |
 | K2 换成自己编译的内核 | 未开始（要等维护计划 M0、M5 合进主线） | | | |
 | K3 补丁搬进源码 | 未开始 | | | |
