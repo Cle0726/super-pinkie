@@ -5,7 +5,7 @@
 | 批 | 状态 | 谁在做 | 更新日期 | 分支 / PR |
 |---|---|---|---|---|
 | M0 量和护栏 | 已合并（本 PR 进入 main 后生效） | Codex-Win-5eac（Windows） | 2026-11-20 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) |
-| M1 收分支 | 进行中 | Codex-Win-4d8c（Windows） | 2026-11-21 | maint/m1-branch-inventory |
+| M1 收分支 | 进行中 | Codex-Win-4d8c（Windows） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) |
 | M2 版本号自动生成 | 未开始 | | | |
 | M5 真页面回归测试 | 未开始 | | | |
 | M3 页面规矩（收窄版） | 未开始 | | | |
