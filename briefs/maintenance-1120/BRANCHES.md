@@ -88,7 +88,46 @@
 
 ## 实际存档和删除
 
-尚未执行。实际删除需逐项记录原分支、完整旧头、远端存档标签、删除时间及验证方式；未核对的头不删除。
+2026-11-21T12:32:16Z（`Gemini-Win-4e9b` 接手执行）：已完成全部 21 条已核实 A/C 类远端分支的归档标签推送、逐条 `git ls-remote --refs --tags origin` SHA 核验，以及 `--force-with-lease=refs/heads/<分支>:<原头>` 安全删除（只删远端分支，不删本机分支；D 类与活跃 PR 分支均未动；B 类 `audit/pinkie-1112` 与 `unify/pinkie-1112` 留待 [#44](https://github.com/Cle0726/super-pinkie/pull/44) 合并并核对 M1-2 后再归档清理）。完整机器可读证据：`C:\Users\34786\AppData\Local\Temp\pinkie-m1-exec-4e9b\m1-archive-delete-21.json`。
+
+| 分支 | 类别 | 完整旧头 | 远端存档标签 | 删除时间（UTC） |
+|---|:---:|---|---|---|
+| `feat/metre-roles-1118-2` | A | `5544f045fa2e76f211ef08c85b7ee52d49b7d51a` | `archive/2026-11/feat/metre-roles-1118-2` | `2026-11-21T12:32:16Z` |
+| `fix/state-root-sandbox` | A | `2a609d33738b18ab17b6b8b06c05c7943be49017` | `archive/2026-11/fix/state-root-sandbox` | `2026-11-21T12:32:16Z` |
+| `fix/uninstall-proxy-filter` | A | `13f163895813c2e1b82ea71929d55863eb6762c8` | `archive/2026-11/fix/uninstall-proxy-filter` | `2026-11-21T12:32:16Z` |
+| `fix/update-download-resume` | A | `7868ea76131b365b7bffdedb6d420f33616b0341` | `archive/2026-11/fix/update-download-resume` | `2026-11-21T12:32:16Z` |
+| `fix/update-suite-state-isolation` | A | `4b2605065807245d741eaffbcf37e8551daa1165` | `archive/2026-11/fix/update-suite-state-isolation` | `2026-11-21T12:32:16Z` |
+| `fix/updater-download-integrity` | A | `b78976409c788b9c40d063d75bd1873397f554d7` | `archive/2026-11/fix/updater-download-integrity` | `2026-11-21T12:32:16Z` |
+| `fix/windows-learning-worker-1119` | A | `67135e69a8d7a4a1a96bbb808266d07f27168627` | `archive/2026-11/fix/windows-learning-worker-1119` | `2026-11-21T12:32:16Z` |
+| `integration/all-fixes` | A | `5ae10d81f397bb958978ac6ffce1f985646dc991` | `archive/2026-11/integration/all-fixes` | `2026-11-21T12:32:16Z` |
+| `refactor/one-state-root` | A | `c23661967b449766281006855901d324eb8fb2b4` | `archive/2026-11/refactor/one-state-root` | `2026-11-21T12:32:16Z` |
+| `repair/companion` | A | `7dd8ebe375e3232b4ac5dabff9cbc86fc1f50b19` | `archive/2026-11/repair/companion` | `2026-11-21T12:32:16Z` |
+| `repair/effects` | A | `bf500836894fcecac7a2453c0da47388ce0c41ba` | `archive/2026-11/repair/effects` | `2026-11-21T12:32:16Z` |
+| `repair/layout` | A | `d4d63f95d9c15901541f20d2b0625b64e4b48659` | `archive/2026-11/repair/layout` | `2026-11-21T12:32:16Z` |
+| `repair/models` | A | `476b1110dd7baa16a7e2994cf5ff7c55c1da14df` | `archive/2026-11/repair/models` | `2026-11-21T12:32:16Z` |
+| `repair/recovery` | A | `f8ed58f8b81437a8d231c47df2b4cea342eed230` | `archive/2026-11/repair/recovery` | `2026-11-21T12:32:16Z` |
+| `repair/workbench-gaze` | A | `97460b6f2e91a7b06a311c54d0f5e63090a17600` | `archive/2026-11/repair/workbench-gaze` | `2026-11-21T12:32:16Z` |
+| `feat/metre-roles-1118-1` | C | `a6d2d9989b2b129ab916ae5c024b3391754e7b21` | `archive/2026-11/feat/metre-roles-1118-1` | `2026-11-21T12:32:16Z` |
+| `feat/metre-roles-1118-3` | C | `aebb3aaf9a942da8af1527f1892bbb652aafd1c1` | `archive/2026-11/feat/metre-roles-1118-3` | `2026-11-21T12:32:16Z` |
+| `feat/metre-roles-1118-4` | C | `882e5ce2709501d1f02db467d27d8e227dcd4384` | `archive/2026-11/feat/metre-roles-1118-4` | `2026-11-21T12:32:16Z` |
+| `feat/windows-browser-pointer-autonode` | C | `3ccfbfa5dc2c5744417330c6780b8b429061865c` | `archive/2026-11/feat/windows-browser-pointer-autonode` | `2026-11-21T12:32:16Z` |
+| `feat/windows-inapp-browser-vpn` | C | `1d6433cf661b3b9b66f999b3e4ad9086b7ebbda0` | `archive/2026-11/feat/windows-inapp-browser-vpn` | `2026-11-21T12:32:16Z` |
+| `fix/real-thinking-only` | C | `728e5ca931126dbb750529bd3f25da265ad1968d` | `archive/2026-11/fix/real-thinking-only` | `2026-11-21T12:32:16Z` |
+
+### M1-4 远端存档标签恢复抽验（3/3 通过）
+
+在全新空裸库中直接从 GitHub 远端验证原分支已不存在、归档标签指向精确旧头，执行 `git fetch --depth 1 --filter=blob:none https://github.com/Cle0726/super-pinkie.git refs/tags/<标签>:refs/tags/<标签>` 并以 `git branch recovered/<原分支> refs/tags/<标签>` 恢复出原始提交头（证据：`C:\Users\34786\AppData\Local\Temp\pinkie-m1-exec-4e9b\m1-recovery-3.json`）：
+
+| 抽验分支 | 类别 | 存档标签 | 恢复后提交头 |
+|---|:---:|---|---|
+| `feat/metre-roles-1118-2` | A | `archive/2026-11/feat/metre-roles-1118-2` | `5544f045fa2e76f211ef08c85b7ee52d49b7d51a` |
+| `fix/real-thinking-only` | C | `archive/2026-11/fix/real-thinking-only` | `728e5ca931126dbb750529bd3f25da265ad1968d` |
+| `integration/all-fixes` | A | `archive/2026-11/integration/all-fixes` | `5ae10d81f397bb958978ac6ffce1f985646dc991` |
+
+### 后续快照新增的活跃/发版分支（D 类保护，未动）
+
+- `fix/update-dialog-metre`（[#46](https://github.com/Cle0726/super-pinkie/pull/46)）、`fix/thinking-passthrough-vision`（[#47](https://github.com/Cle0726/super-pinkie/pull/47)）、`fix/sidebar-jump`（[#48](https://github.com/Cle0726/super-pinkie/pull/48)）：已合并进主线。
+- `release/2.5.53`（[#49](https://github.com/Cle0726/super-pinkie/pull/49)）：活跃正式发版分支，D 类保护不动。
 
 <details>
 <summary>本表的完整分支头（用于重跑清点）</summary>
