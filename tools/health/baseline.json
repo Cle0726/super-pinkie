@@ -1769,8 +1769,6 @@
     "services/mode-architecture/index.mjs": 7949,
     "services/mode-architecture/learning.mjs": 2501,
     "services/mode-architecture/session-lineage.mjs": 1894,
-    "tools/native-pointer-fix/base/Launcher.swift": 4888,
-    "tools/native-pointer-fix/src/Launcher.swift": 4888,
     "ui/injections/laolao-metre-skin.css": 2592,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
@@ -3988,9 +3986,9 @@
       "tests/update_notes_voice.test.cjs"
     ],
     "browserFiles": 16,
-    "gatedNodeFiles": 273,
+    "gatedNodeFiles": 274,
     "otherTestFiles": 1,
     "pythonDiscoveryFiles": 63,
-    "total": 337
+    "total": 338
   }
 }
