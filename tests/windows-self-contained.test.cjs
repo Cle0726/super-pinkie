@@ -9,6 +9,11 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const readWindowsShell = () => [
+  'app/windows_desktop.py', 'app/windows_ps_templates.py', 'app/windows_update_guard.py',
+  'app/windows_updater.py', 'app/windows_elevated.py', 'app/windows_runtime.py',
+  'app/windows_gateway.py', 'app/windows_bridge.py', 'app/windows_bridge_scripts.py',
+].map(read).join('\n');
 const pythonBin = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
 // Content-hashed query versions, as `asset -> 10-char sha256 hex digest`.
@@ -223,7 +228,7 @@ test('both packages share the complete Mac browser renderer and preserve the bac
 });
 
 test('Windows desktop launches the bundled gateway and keeps it supervised', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   assert.match(launcher, /node_modules\/openclaw\/openclaw\.mjs/);
   assert.match(launcher, /gateway", "run"/);
   assert.match(launcher, /GATEWAY_CHAT_URL = urllib\.parse\.urljoin\(GATEWAY_URL, "chat"\)/);
@@ -256,7 +261,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
 });
 
 test('Windows exe checks signed release assets and can roll back a failed update', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const release = read('.github/workflows/release.yml');
   assert.match(launcher, /api\.github\.com\/repos\/Cle0726\/super-pinkie\/releases\/latest/);
   assert.match(launcher, /super-pinkie-windows-/);
@@ -283,7 +288,7 @@ test('Windows exe checks signed release assets and can roll back a failed update
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const entry = read('app/super_pinkie.py');
   assert.match(launcher, /services\/party\/server\.py/);
   assert.match(launcher, /services\/roundtable\/server\.py/);
@@ -382,7 +387,7 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
 });
 
 test('the desktop shell reads PINKIE_STATE_ROOT instead of only exporting it', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const start = launcher.indexOf('def state_root(');
   assert.ok(start !== -1, 'app/windows_desktop.py must keep a state_root()');
   const body = launcher.slice(start, launcher.indexOf('\ndef ', start + 1));
@@ -468,7 +473,7 @@ test('the injected bridge waits for a document it can actually append to', () =>
   // null (reading 'append')"), the shell logged "native bridge setup skipped",
   // and the update health marker -- written after the injection at the time --
   // never appeared, which is how a working build gets rolled back.
-  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_bridge_scripts.py'));
   assert.ok(found, 'app/windows_desktop.py must keep a BRIDGE_SCRIPT');
 
   const created = [];
@@ -526,7 +531,7 @@ test('links inside the chat UI stay with its router; other local pages go back t
   // The bridge used to send every 127.0.0.1:18789 link to open_chat, so the
   // sidebar's 设置 (/settings/general) reloaded the chat page instead of
   // opening settings.
-  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_bridge_scripts.py'));
   const run = (pageUrl) => {
     const clicks = [];
     const calls = [];

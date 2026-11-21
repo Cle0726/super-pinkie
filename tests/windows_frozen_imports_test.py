@@ -42,7 +42,7 @@ class FrozenImportTest(unittest.TestCase):
         self.assertEqual(problems, [], "imports that only work from the repository, not in the packaged App")
 
     def test_windows_native_is_reachable_the_frozen_way(self):
-        source = (ROOT / "app" / "windows_desktop.py").read_text(encoding="utf-8")
+        source = (ROOT / "app" / "windows_bridge.py").read_text(encoding="utf-8")
         self.assertIn("from windows_native import WindowsNative", source)
 
 

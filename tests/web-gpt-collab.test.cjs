@@ -152,7 +152,7 @@ test('a new Pinkie session does not mistake another ChatGPT conversation for the
 });
 
 test('gateway uses hidden next-turn injection instead of rewriting the composer', () => {
-  const plugin = read('services/mode-architecture/index.mjs');
+  const plugin = read('services/mode-architecture/index.mjs') + '\n' + read('services/mode-architecture/mode-constants.mjs');
   assert.match(plugin, /registerGatewayMethod\('pinkie\.webGpt\.arm'/);
   assert.match(plugin, /enqueueNextTurnInjection/);
   assert.match(plugin, /\[pinkie:web-gpt-relayed-plan\]/);

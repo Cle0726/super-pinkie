@@ -21,7 +21,7 @@ from app.windows_desktop import NativeBridge, _describe_material
 
 
 def bridge_script():
-    with io.open(Path(windows_desktop.__file__).resolve(), encoding="utf-8") as handle:
+    with io.open(Path(windows_desktop.__file__).resolve().with_name("windows_bridge_scripts.py"), encoding="utf-8") as handle:
         source = handle.read()
     start = source.index('BRIDGE_SCRIPT = r"""') + len('BRIDGE_SCRIPT = r"""')
     return source[start:source.index('"""', start)]
@@ -318,7 +318,7 @@ class WindowStateIsolationTests(unittest.TestCase):
     """The maximize event and the fullscreen action must not reset each other."""
 
     def script(self):
-        source = Path(windows_desktop.__file__).resolve().read_text(encoding="utf-8")
+        source = Path(windows_desktop.__file__).resolve().with_name("windows_bridge_scripts.py").read_text(encoding="utf-8")
         start = source.index('BRIDGE_SCRIPT = r"""') + len('BRIDGE_SCRIPT = r"""')
         return source[start:source.index('"""', start)]
 

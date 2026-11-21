@@ -213,7 +213,7 @@ test('a split always keeps a reachable exit, even when the sidebar is hidden', (
 
 test('the dock entry survives a bridge that arrives after the page scripts', () => {
   const mode = read('ui/injections/laolao-mode-switcher.js');
-  const desktop = read('app/windows_desktop.py');
+  const desktop = read('app/windows_bridge_scripts.py');
 
   // WebView2 only lets the shell inject once the document reports loaded, so
   // the page scripts have always run first. Reading the handler is a plain

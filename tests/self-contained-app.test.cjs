@@ -84,7 +84,7 @@ test('macOS updater selects a build Node with npm when the bundled runtime has n
 
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
   const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  const windows = read('app/windows_desktop.py');
+  const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const patcher = read('patch/apply-local-unrestricted-policy.mjs');
   const macTheme = read('installer/macos/apply-theme.sh');
   const install = read('install.sh');
@@ -239,7 +239,7 @@ test('installed App keeps every runtime repair patch beside its cold-start boots
 
 test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater', () => {
   const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  const windows = read('app/windows_desktop.py');
+  const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const setup = read('services/mode-architecture/setup.py');
   for (const source of [launcher, windows]) {
     assert.match(source, /OPENCLAW_NO_AUTO_UPDATE/);
