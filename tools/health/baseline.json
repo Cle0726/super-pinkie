@@ -1,0 +1,3996 @@
+{
+  "injectionTotals": {
+    "important": 5090,
+    "mutationObservers": 74,
+    "setIntervals": 91,
+    "subtreeObserverCalls": 47,
+    "windowGlobals": 124,
+    "windowGlobalsPerFileSum": 128
+  },
+  "injections": {
+    "ui/injections/laolao-artifacts.css": {
+      "important": 17,
+      "lines": 132,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-artifacts.js": {
+      "important": 0,
+      "lines": 718,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-ask-user.css": {
+      "important": 2,
+      "lines": 68,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-ask-user.js": {
+      "important": 0,
+      "lines": 276,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-biqi-notices.js": {
+      "important": 2,
+      "lines": 305,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-body.fragment.html": {
+      "important": 0,
+      "lines": 14,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-buddy-rig.js": {
+      "important": 0,
+      "lines": 513,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-capabilities.js": {
+      "important": 0,
+      "lines": 571,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-classic-shell.css": {
+      "important": 56,
+      "lines": 505,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-classic-shell.js": {
+      "important": 0,
+      "lines": 437,
+      "mutationObservers": 2,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-mark.svg": {
+      "important": 0,
+      "lines": 1,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-signature.js": {
+      "important": 0,
+      "lines": 71,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-space.js": {
+      "important": 0,
+      "lines": 659,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-stage.css": {
+      "important": 37,
+      "lines": 128,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-stage.js": {
+      "important": 0,
+      "lines": 819,
+      "mutationObservers": 1,
+      "setIntervals": 3,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-compaction-glyph.js": {
+      "important": 0,
+      "lines": 267,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-companion.css": {
+      "important": 20,
+      "lines": 472,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-companion.js": {
+      "important": 0,
+      "lines": 1219,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-composer-dock.js": {
+      "important": 0,
+      "lines": 117,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-composer-tray.css": {
+      "important": 8,
+      "lines": 153,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-composer-tray.js": {
+      "important": 0,
+      "lines": 233,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-context-compact.js": {
+      "important": 12,
+      "lines": 812,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-crew.css": {
+      "important": 2,
+      "lines": 80,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-crew.js": {
+      "important": 0,
+      "lines": 125,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-deep-think.js": {
+      "important": 8,
+      "lines": 1128,
+      "mutationObservers": 2,
+      "setIntervals": 3,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-desensitize.js": {
+      "important": 3,
+      "lines": 352,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-desk-chat.css": {
+      "important": 28,
+      "lines": 131,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-desk-chat.js": {
+      "important": 0,
+      "lines": 358,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-desk-kit.css": {
+      "important": 2,
+      "lines": 145,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-desk-kit.js": {
+      "important": 0,
+      "lines": 117,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-desk-reward.css": {
+      "important": 1,
+      "lines": 154,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-desk-reward.js": {
+      "important": 0,
+      "lines": 783,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-divider.css": {
+      "important": 17,
+      "lines": 17,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-feedback.css": {
+      "important": 1,
+      "lines": 218,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-feedback.js": {
+      "important": 0,
+      "lines": 397,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-first-person.js": {
+      "important": 0,
+      "lines": 196,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-battle.css": {
+      "important": 8,
+      "lines": 184,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-battle.js": {
+      "important": 0,
+      "lines": 397,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-demo.js": {
+      "important": 0,
+      "lines": 53,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-exam.css": {
+      "important": 7,
+      "lines": 229,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-exam.js": {
+      "important": 0,
+      "lines": 424,
+      "mutationObservers": 0,
+      "setIntervals": 3,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-form-stage.js": {
+      "important": 0,
+      "lines": 789,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-game-fx.css": {
+      "important": 1,
+      "lines": 122,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-fx.js": {
+      "important": 0,
+      "lines": 1378,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-hud.css": {
+      "important": 22,
+      "lines": 446,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-hud.js": {
+      "important": 0,
+      "lines": 528,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-practice.css": {
+      "important": 3,
+      "lines": 121,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-practice.js": {
+      "important": 0,
+      "lines": 444,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-shop.css": {
+      "important": 7,
+      "lines": 181,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-shop.js": {
+      "important": 0,
+      "lines": 527,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-sig.js": {
+      "important": 0,
+      "lines": 785,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-game-world.css": {
+      "important": 2,
+      "lines": 65,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-game-world.js": {
+      "important": 0,
+      "lines": 276,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-handoff-bootstrap.js": {
+      "important": 0,
+      "lines": 63,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-head.fragment.html": {
+      "important": 0,
+      "lines": 205,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-icons.css": {
+      "important": 13,
+      "lines": 94,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-icons.js": {
+      "important": 0,
+      "lines": 51,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-image-viewer.js": {
+      "important": 0,
+      "lines": 58,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-immersion.js": {
+      "important": 0,
+      "lines": 182,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-laser-pointer.js": {
+      "important": 6,
+      "lines": 846,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-devices-engine.js": {
+      "important": 0,
+      "lines": 171,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-devices.css": {
+      "important": 15,
+      "lines": 21,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-devices.js": {
+      "important": 0,
+      "lines": 220,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-explore.css": {
+      "important": 2,
+      "lines": 146,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-explore.js": {
+      "important": 0,
+      "lines": 700,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-inline.css": {
+      "important": 1,
+      "lines": 143,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-inline.js": {
+      "important": 0,
+      "lines": 893,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-library.css": {
+      "important": 55,
+      "lines": 153,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-library.js": {
+      "important": 0,
+      "lines": 239,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-practice.css": {
+      "important": 1,
+      "lines": 36,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-practice.js": {
+      "important": 0,
+      "lines": 244,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-reminder.css": {
+      "important": 2,
+      "lines": 42,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-reminder.js": {
+      "important": 0,
+      "lines": 130,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-learning-stage.css": {
+      "important": 17,
+      "lines": 1065,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-learning-stage.js": {
+      "important": 0,
+      "lines": 687,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-link-viewer.js": {
+      "important": 1,
+      "lines": 378,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-live-voice.js": {
+      "important": 0,
+      "lines": 220,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-markdown-preview.js": {
+      "important": 1,
+      "lines": 86,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-material-preview.css": {
+      "important": 4,
+      "lines": 680,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-material-preview.js": {
+      "important": 0,
+      "lines": 813,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-memory.css": {
+      "important": 24,
+      "lines": 250,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-memory.js": {
+      "important": 0,
+      "lines": 226,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-message-actions.css": {
+      "important": 1,
+      "lines": 58,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-message-actions.js": {
+      "important": 0,
+      "lines": 507,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-backdrop.css": {
+      "important": 5,
+      "lines": 48,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-backdrop.js": {
+      "important": 0,
+      "lines": 1195,
+      "mutationObservers": 3,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-board-data.js": {
+      "important": 0,
+      "lines": 523,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-board.css": {
+      "important": 3,
+      "lines": 499,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-board.js": {
+      "important": 0,
+      "lines": 435,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-brand.css": {
+      "important": 69,
+      "lines": 250,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-brand.js": {
+      "important": 0,
+      "lines": 252,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-cat-frames.js": {
+      "important": 0,
+      "lines": 268,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-cat.css": {
+      "important": 4,
+      "lines": 92,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-cat.js": {
+      "important": 0,
+      "lines": 400,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-home.js": {
+      "important": 0,
+      "lines": 357,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-lock.css": {
+      "important": 0,
+      "lines": 167,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-lock.js": {
+      "important": 0,
+      "lines": 381,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-metre-prompts.js": {
+      "important": 0,
+      "lines": 1089,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-skin.css": {
+      "important": 2281,
+      "lines": 2592,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-metre-skin.js": {
+      "important": 1,
+      "lines": 293,
+      "mutationObservers": 8,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 3,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-metre-transition.js": {
+      "important": 0,
+      "lines": 283,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-mode-menu-fx.css": {
+      "important": 11,
+      "lines": 592,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-mode-switcher.js": {
+      "important": 0,
+      "lines": 1248,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-mode-transition-fx.css": {
+      "important": 5,
+      "lines": 307,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-mode-transition-fx.js": {
+      "important": 0,
+      "lines": 1248,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-model-picker.css": {
+      "important": 145,
+      "lines": 477,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-model-picker.js": {
+      "important": 0,
+      "lines": 2049,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 2,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-model-setup.css": {
+      "important": 0,
+      "lines": 156,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-model-setup.js": {
+      "important": 0,
+      "lines": 477,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-motion-preference.js": {
+      "important": 0,
+      "lines": 122,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-motion-system.css": {
+      "important": 8,
+      "lines": 139,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-motion.js": {
+      "important": 0,
+      "lines": 133,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-native.js": {
+      "important": 0,
+      "lines": 275,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-night.css": {
+      "important": 461,
+      "lines": 543,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-night.js": {
+      "important": 0,
+      "lines": 67,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-page-warmup.js": {
+      "important": 0,
+      "lines": 92,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-party-entry.js": {
+      "important": 0,
+      "lines": 38,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-perf.js": {
+      "important": 0,
+      "lines": 354,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-phrases.js": {
+      "important": 0,
+      "lines": 750,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 2,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-plan.js": {
+      "important": 0,
+      "lines": 152,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-platform-surface.css": {
+      "important": 3,
+      "lines": 41,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-platform-surface.js": {
+      "important": 0,
+      "lines": 20,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-power-settings.css": {
+      "important": 1,
+      "lines": 398,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-power-settings.js": {
+      "important": 0,
+      "lines": 293,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-process-card.css": {
+      "important": 24,
+      "lines": 133,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-process-card.js": {
+      "important": 0,
+      "lines": 708,
+      "mutationObservers": 1,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-progress.js": {
+      "important": 0,
+      "lines": 37,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-queue-steer.js": {
+      "important": 0,
+      "lines": 458,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-quiet.js": {
+      "important": 0,
+      "lines": 160,
+      "mutationObservers": 1,
+      "setIntervals": 6,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-quota.json": {
+      "important": 0,
+      "lines": 4,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reading-view.css": {
+      "important": 3,
+      "lines": 16,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reading-view.js": {
+      "important": 0,
+      "lines": 38,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-reasoning-adaptive.svg": {
+      "important": 0,
+      "lines": 12,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-high.svg": {
+      "important": 0,
+      "lines": 12,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-low.svg": {
+      "important": 0,
+      "lines": 13,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-max.svg": {
+      "important": 0,
+      "lines": 10,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-medium.svg": {
+      "important": 0,
+      "lines": 11,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-minimal.svg": {
+      "important": 0,
+      "lines": 10,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-off.svg": {
+      "important": 0,
+      "lines": 11,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-adaptive.svg": {
+      "important": 0,
+      "lines": 6,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-high.svg": {
+      "important": 0,
+      "lines": 5,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-low.svg": {
+      "important": 0,
+      "lines": 7,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-max.svg": {
+      "important": 0,
+      "lines": 6,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-medium.svg": {
+      "important": 0,
+      "lines": 6,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-minimal.svg": {
+      "important": 0,
+      "lines": 7,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-off.svg": {
+      "important": 0,
+      "lines": 5,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-ultra.svg": {
+      "important": 0,
+      "lines": 6,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-party-xhigh.svg": {
+      "important": 0,
+      "lines": 7,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-ultra.svg": {
+      "important": 0,
+      "lines": 13,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-reasoning-xhigh.svg": {
+      "important": 0,
+      "lines": 12,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-redesign.css": {
+      "important": 106,
+      "lines": 317,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-rest.js": {
+      "important": 0,
+      "lines": 187,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-resume.js": {
+      "important": 0,
+      "lines": 2611,
+      "mutationObservers": 1,
+      "setIntervals": 5,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 14
+    },
+    "ui/injections/laolao-rich.css": {
+      "important": 12,
+      "lines": 505,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-rich.js": {
+      "important": 0,
+      "lines": 596,
+      "mutationObservers": 2,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-roundtable-entry.js": {
+      "important": 0,
+      "lines": 31,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-run-notify.js": {
+      "important": 0,
+      "lines": 315,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-run-status.css": {
+      "important": 1,
+      "lines": 220,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-run-status.js": {
+      "important": 0,
+      "lines": 693,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-selection-actions.js": {
+      "important": 0,
+      "lines": 136,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-session-cards.css": {
+      "important": 1,
+      "lines": 46,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-session-cards.js": {
+      "important": 0,
+      "lines": 532,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-session-list.js": {
+      "important": 0,
+      "lines": 885,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-session-tools.css": {
+      "important": 2,
+      "lines": 128,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-session-tools.js": {
+      "important": 0,
+      "lines": 1155,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-settings-user.css": {
+      "important": 11,
+      "lines": 551,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-settings-user.js": {
+      "important": 0,
+      "lines": 1637,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-side-layout.css": {
+      "important": 134,
+      "lines": 370,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-side-layout.js": {
+      "important": 0,
+      "lines": 45,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-sidebar-autohide.js": {
+      "important": 0,
+      "lines": 266,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-sidebar-surface.css": {
+      "important": 186,
+      "lines": 311,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-sidebar.css": {
+      "important": 38,
+      "lines": 509,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-sidebar.js": {
+      "important": 0,
+      "lines": 2143,
+      "mutationObservers": 2,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-splash-fx.js": {
+      "important": 0,
+      "lines": 548,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-splash.css": {
+      "important": 4,
+      "lines": 428,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-splash.js": {
+      "important": 0,
+      "lines": 195,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-startup-home.css": {
+      "important": 15,
+      "lines": 147,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-startup-home.js": {
+      "important": 0,
+      "lines": 666,
+      "mutationObservers": 2,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-stream-fx.js": {
+      "important": 0,
+      "lines": 209,
+      "mutationObservers": 3,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 4,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-board.css": {
+      "important": 3,
+      "lines": 71,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-board.js": {
+      "important": 0,
+      "lines": 232,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-conversation.js": {
+      "important": 0,
+      "lines": 102,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-drill.css": {
+      "important": 0,
+      "lines": 159,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-drill.js": {
+      "important": 0,
+      "lines": 726,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-handbook.css": {
+      "important": 0,
+      "lines": 94,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-handbook.js": {
+      "important": 0,
+      "lines": 301,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-ink.css": {
+      "important": 17,
+      "lines": 549,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-lesson.css": {
+      "important": 4,
+      "lines": 120,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-lesson.js": {
+      "important": 0,
+      "lines": 357,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-notes.css": {
+      "important": 6,
+      "lines": 139,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-notes.js": {
+      "important": 0,
+      "lines": 440,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-panes.css": {
+      "important": 47,
+      "lines": 203,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-split.css": {
+      "important": 58,
+      "lines": 43,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-split.js": {
+      "important": 0,
+      "lines": 37,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk-vocab.css": {
+      "important": 3,
+      "lines": 131,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk-vocab.js": {
+      "important": 0,
+      "lines": 417,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-study-desk.css": {
+      "important": 25,
+      "lines": 476,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-study-desk.js": {
+      "important": 0,
+      "lines": 1291,
+      "mutationObservers": 4,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 3,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-theme.css": {
+      "important": 557,
+      "lines": 5389,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-tool-images.css": {
+      "important": 0,
+      "lines": 37,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-tool-images.js": {
+      "important": 0,
+      "lines": 203,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-tool-kind.js": {
+      "important": 0,
+      "lines": 224,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-tool-rows.css": {
+      "important": 90,
+      "lines": 155,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-tool-stream.css": {
+      "important": 50,
+      "lines": 261,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-tool-stream.js": {
+      "important": 0,
+      "lines": 188,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-tuning.js": {
+      "important": 0,
+      "lines": 169,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-ui-subtraction.css": {
+      "important": 149,
+      "lines": 448,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-update-dialog.css": {
+      "important": 6,
+      "lines": 104,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-update-dialog.js": {
+      "important": 0,
+      "lines": 278,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-usage-stats.css": {
+      "important": 4,
+      "lines": 145,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-usage-stats.js": {
+      "important": 0,
+      "lines": 378,
+      "mutationObservers": 1,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-web-gpt-collab.js": {
+      "important": 4,
+      "lines": 1091,
+      "mutationObservers": 0,
+      "setIntervals": 2,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 3
+    },
+    "ui/injections/laolao-workbench-code.js": {
+      "important": 0,
+      "lines": 822,
+      "mutationObservers": 0,
+      "setIntervals": 1,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-workbench-notebook.css": {
+      "important": 0,
+      "lines": 85,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-workbench-notebook.js": {
+      "important": 0,
+      "lines": 229,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 1
+    },
+    "ui/injections/laolao-workbench.css": {
+      "important": 123,
+      "lines": 638,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-workbench.js": {
+      "important": 0,
+      "lines": 2352,
+      "mutationObservers": 3,
+      "setIntervals": 3,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 2
+    },
+    "ui/injections/laolao-workspace-focus.css": {
+      "important": 1,
+      "lines": 79,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-workspace-focus.js": {
+      "important": 0,
+      "lines": 213,
+      "mutationObservers": 1,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 1,
+      "windowGlobals": 0
+    }
+  },
+  "longFiles": {
+    "app/super_pinkie.py": 1560,
+    "app/windows_desktop.py": 5775,
+    "desktop/macos/pinkie/Sources/Launcher.swift": 5746,
+    "patch/apply-chat-timeline.mjs": 1978,
+    "services/mode-architecture/index.mjs": 7949,
+    "services/mode-architecture/learning.mjs": 2501,
+    "services/mode-architecture/session-lineage.mjs": 1894,
+    "tools/native-pointer-fix/base/Launcher.swift": 4888,
+    "tools/native-pointer-fix/src/Launcher.swift": 4888,
+    "ui/injections/laolao-metre-skin.css": 2592,
+    "ui/injections/laolao-model-picker.js": 2049,
+    "ui/injections/laolao-resume.js": 2611,
+    "ui/injections/laolao-settings-user.js": 1637,
+    "ui/injections/laolao-sidebar.js": 2143,
+    "ui/injections/laolao-theme.css": 5389,
+    "ui/injections/laolao-workbench.js": 2352
+  },
+  "manualVersions": {
+    "counts": {
+      "head": 197,
+      "injections": 105,
+      "runtime": 2,
+      "tooling": 7
+    },
+    "occurrences": [
+      {
+        "column": 43,
+        "file": "tools/claude-deploy/deploy-work-first.py",
+        "line": 23,
+        "source": "tooling",
+        "value": "companion6"
+      },
+      {
+        "column": 46,
+        "file": "tools/claude-deploy/deploy-work-first.py",
+        "line": 25,
+        "source": "tooling",
+        "value": "companion7"
+      },
+      {
+        "column": 82,
+        "file": "tools/claude-deploy/deploy-work-first.py",
+        "line": 25,
+        "source": "tooling",
+        "value": "companion8"
+      },
+      {
+        "column": 31,
+        "file": "tools/claude-deploy/deploy-work-first.py",
+        "line": 54,
+        "source": "tooling",
+        "value": "companion8"
+      },
+      {
+        "column": 72,
+        "file": "tools/ui-parity/bundle.py",
+        "line": 171,
+        "source": "tooling",
+        "value": "handoff7"
+      },
+      {
+        "column": 36,
+        "file": "tools/ui-parity/bundle.py",
+        "line": 194,
+        "source": "tooling",
+        "value": "clekk-history59"
+      },
+      {
+        "column": 78,
+        "file": "tools/ui-parity/bundle.py",
+        "line": 242,
+        "source": "tooling",
+        "value": "handoff7"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 5,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 88,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 6,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 91,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 7,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 91,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 8,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 104,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 9,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 80,
+        "file": "ui/injections/laolao-classic-shell.js",
+        "line": 10,
+        "source": "injections",
+        "value": "cathead1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-cle-stage.js",
+        "line": 21,
+        "source": "injections",
+        "value": "7"
+      },
+      {
+        "column": 147,
+        "file": "ui/injections/laolao-context-compact.js",
+        "line": 22,
+        "source": "injections",
+        "value": "compactionglyph3"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 51,
+        "source": "injections",
+        "value": "tierart3"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 52,
+        "source": "injections",
+        "value": "tiermotion2"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 60,
+        "source": "injections",
+        "value": "tierart3"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 61,
+        "source": "injections",
+        "value": "tiermotion2"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 69,
+        "source": "injections",
+        "value": "tierart3"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 70,
+        "source": "injections",
+        "value": "tiermotion2"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 78,
+        "source": "injections",
+        "value": "tierart3"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-deep-think.js",
+        "line": 79,
+        "source": "injections",
+        "value": "tiermotion2"
+      },
+      {
+        "column": 86,
+        "file": "ui/injections/laolao-game-hud.js",
+        "line": 48,
+        "source": "injections",
+        "value": "game17"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-handoff-bootstrap.js",
+        "line": 50,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 33,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 2,
+        "source": "head",
+        "value": "ui1101"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 3,
+        "source": "head",
+        "value": "motion1"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 5,
+        "source": "head",
+        "value": "metreskin5"
+      },
+      {
+        "column": 33,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 7,
+        "source": "head",
+        "value": "quiet5"
+      },
+      {
+        "column": 34,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 8,
+        "source": "head",
+        "value": "tuning3"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 9,
+        "source": "head",
+        "value": "icons2"
+      },
+      {
+        "column": 33,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 10,
+        "source": "head",
+        "value": "icons2"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 11,
+        "source": "head",
+        "value": "metre1118.roles1.children1.dispatch2"
+      },
+      {
+        "column": 35,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 12,
+        "source": "head",
+        "value": "metre1116b.roles1.dispatch2"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 13,
+        "source": "head",
+        "value": "crew5"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 14,
+        "source": "head",
+        "value": "crew5metre"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 15,
+        "source": "head",
+        "value": "audit1112.5"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 16,
+        "source": "head",
+        "value": "failcard2"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 17,
+        "source": "head",
+        "value": "onenotify1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 18,
+        "source": "head",
+        "value": "metre1118"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 19,
+        "source": "head",
+        "value": "tray1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 20,
+        "source": "head",
+        "value": "tray3"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 21,
+        "source": "head",
+        "value": "parity1117.m7"
+      },
+      {
+        "column": 39,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 22,
+        "source": "head",
+        "value": "side12"
+      },
+      {
+        "column": 39,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 23,
+        "source": "head",
+        "value": "parity1111.7"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 24,
+        "source": "head",
+        "value": "surface3"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 26,
+        "source": "head",
+        "value": "composer1101"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 27,
+        "source": "head",
+        "value": "audit1112.1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 28,
+        "source": "head",
+        "value": "parity1111.12"
+      },
+      {
+        "column": 60,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 29,
+        "source": "head",
+        "value": "failcard1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 30,
+        "source": "head",
+        "value": "audit1113.1"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 31,
+        "source": "head",
+        "value": "parity1111.m4e"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 32,
+        "source": "head",
+        "value": "power1"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 33,
+        "source": "head",
+        "value": "stats8"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 34,
+        "source": "head",
+        "value": "splash21"
+      },
+      {
+        "column": 41,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 35,
+        "source": "head",
+        "value": "toolnames3"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 36,
+        "source": "head",
+        "value": "toolkind3"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 37,
+        "source": "head",
+        "value": "notices3"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 38,
+        "source": "head",
+        "value": "firstperson1"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 39,
+        "source": "head",
+        "value": "voice4"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 40,
+        "source": "head",
+        "value": "thumbs1"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 41,
+        "source": "head",
+        "value": "toolimages2"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 42,
+        "source": "head",
+        "value": "toolimages2"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 43,
+        "source": "head",
+        "value": "modetransitionfx6"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 44,
+        "source": "head",
+        "value": "metrelock1"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 45,
+        "source": "head",
+        "value": "metrelock1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 46,
+        "source": "head",
+        "value": "mode53.roles1"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 47,
+        "source": "head",
+        "value": "modelpicker51u1116n1"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 48,
+        "source": "head",
+        "value": "party5"
+      },
+      {
+        "column": 34,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 49,
+        "source": "head",
+        "value": "motion6"
+      },
+      {
+        "column": 42,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 50,
+        "source": "head",
+        "value": "progress5"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 51,
+        "source": "head",
+        "value": "stream4"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 52,
+        "source": "head",
+        "value": "link7"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 53,
+        "source": "head",
+        "value": "roundtable4"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 54,
+        "source": "head",
+        "value": "power3"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 55,
+        "source": "head",
+        "value": "toolstream7"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 56,
+        "source": "head",
+        "value": "toolstream3"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 57,
+        "source": "head",
+        "value": "1"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 58,
+        "source": "head",
+        "value": "deepthink33"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 59,
+        "source": "head",
+        "value": "ctxpanel8metre"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 60,
+        "source": "head",
+        "value": "classic19"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 61,
+        "source": "head",
+        "value": "memory2"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 62,
+        "source": "head",
+        "value": "audit1112.1"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 63,
+        "source": "head",
+        "value": "memory3"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 64,
+        "source": "head",
+        "value": "composer1101"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 65,
+        "source": "head",
+        "value": "material5"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 66,
+        "source": "head",
+        "value": "material8"
+      },
+      {
+        "column": 60,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 67,
+        "source": "head",
+        "value": "workspacefocus2"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 68,
+        "source": "head",
+        "value": "workspacefocus2"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 69,
+        "source": "head",
+        "value": "warmup2"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 70,
+        "source": "head",
+        "value": "learning13"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 71,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 72,
+        "source": "head",
+        "value": "webgpt33"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 73,
+        "source": "head",
+        "value": "guard1"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 74,
+        "source": "head",
+        "value": "rest2"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 75,
+        "source": "head",
+        "value": "power2"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 76,
+        "source": "head",
+        "value": "power3"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 77,
+        "source": "head",
+        "value": "modelsetup4"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 78,
+        "source": "head",
+        "value": "modelsetup4"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 79,
+        "source": "head",
+        "value": "guard3"
+      },
+      {
+        "column": 53,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 80,
+        "source": "head",
+        "value": "feedback1"
+      },
+      {
+        "column": 42,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 81,
+        "source": "head",
+        "value": "feedback1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 82,
+        "source": "head",
+        "value": "motionsys1"
+      },
+      {
+        "column": 63,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 83,
+        "source": "head",
+        "value": "modetransitionfx4"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 84,
+        "source": "head",
+        "value": "modemenufx1"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 85,
+        "source": "head",
+        "value": "ui1119"
+      },
+      {
+        "column": 53,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 86,
+        "source": "head",
+        "value": "askuser1"
+      },
+      {
+        "column": 42,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 87,
+        "source": "head",
+        "value": "askuser1"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 88,
+        "source": "head",
+        "value": "ui1106"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 89,
+        "source": "head",
+        "value": "power6"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 90,
+        "source": "head",
+        "value": "runstatus3"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 91,
+        "source": "head",
+        "value": "runstatus7"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 93,
+        "source": "head",
+        "value": "metrecat3"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 94,
+        "source": "head",
+        "value": "metrecat1"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 95,
+        "source": "head",
+        "value": "metrecat6"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 96,
+        "source": "head",
+        "value": "metreprompts3"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 97,
+        "source": "head",
+        "value": "metrehome6"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 98,
+        "source": "head",
+        "value": "metrebrand6"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 99,
+        "source": "head",
+        "value": "metrebrand4"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 101,
+        "source": "head",
+        "value": "metrebackdrop9"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 102,
+        "source": "head",
+        "value": "metretransition3"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 103,
+        "source": "head",
+        "value": "metreboard8"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 104,
+        "source": "head",
+        "value": "metreboard7.roles1"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 105,
+        "source": "head",
+        "value": "metreboard7.roles1"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 106,
+        "source": "head",
+        "value": "runnotify4"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 107,
+        "source": "head",
+        "value": "power3"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 108,
+        "source": "head",
+        "value": "desensitize1"
+      },
+      {
+        "column": 60,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 109,
+        "source": "head",
+        "value": "audit1112.1"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 110,
+        "source": "head",
+        "value": "ui1116d"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 111,
+        "source": "head",
+        "value": "companion10"
+      },
+      {
+        "column": 53,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 112,
+        "source": "head",
+        "value": "redesign9"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 113,
+        "source": "head",
+        "value": "buddyrig7"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 114,
+        "source": "head",
+        "value": "companion17"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 115,
+        "source": "head",
+        "value": "immersion3"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 116,
+        "source": "head",
+        "value": "startuphome6"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 117,
+        "source": "head",
+        "value": "startuphome13"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 118,
+        "source": "head",
+        "value": "divider1"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 119,
+        "source": "head",
+        "value": "clestage21"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 120,
+        "source": "head",
+        "value": "toolrows10"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 121,
+        "source": "head",
+        "value": "rich5"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 122,
+        "source": "head",
+        "value": "perf4"
+      },
+      {
+        "column": 100,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 123,
+        "source": "head",
+        "value": "gsap3150"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 124,
+        "source": "head",
+        "value": "clesig1"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 125,
+        "source": "head",
+        "value": "clestage31"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 126,
+        "source": "head",
+        "value": "rich4"
+      },
+      {
+        "column": 38,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 127,
+        "source": "head",
+        "value": "plan3"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 128,
+        "source": "head",
+        "value": "capabilities4"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 129,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 130,
+        "source": "head",
+        "value": "library1"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 131,
+        "source": "head",
+        "value": "deskfinal7"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 132,
+        "source": "head",
+        "value": "workbench14"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 133,
+        "source": "head",
+        "value": "workbench16"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 134,
+        "source": "head",
+        "value": "modelpicker15"
+      },
+      {
+        "column": 60,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 135,
+        "source": "head",
+        "value": "learninginline5"
+      },
+      {
+        "column": 62,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 136,
+        "source": "head",
+        "value": "learningpractice4"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 137,
+        "source": "head",
+        "value": "learningpractice4"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 138,
+        "source": "head",
+        "value": "learningexplore1"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 139,
+        "source": "head",
+        "value": "learningexplore1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 140,
+        "source": "head",
+        "value": "learningdevices1"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 141,
+        "source": "head",
+        "value": "learningdevices1"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 142,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 143,
+        "source": "head",
+        "value": "splashfx2"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 144,
+        "source": "head",
+        "value": "splash29"
+      },
+      {
+        "column": 50,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 145,
+        "source": "head",
+        "value": "night3"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 147,
+        "source": "head",
+        "value": "metreskin27"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 148,
+        "source": "head",
+        "value": "metrebackdrop2"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 149,
+        "source": "head",
+        "value": "readingview3"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 150,
+        "source": "head",
+        "value": "readingview2"
+      },
+      {
+        "column": 75,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 152,
+        "source": "head",
+        "value": "lucide04602"
+      },
+      {
+        "column": 80,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 153,
+        "source": "head",
+        "value": "studydesk2"
+      },
+      {
+        "column": 76,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 154,
+        "source": "head",
+        "value": "gsap3130"
+      },
+      {
+        "column": 81,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 155,
+        "source": "head",
+        "value": "gsap3130"
+      },
+      {
+        "column": 85,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 156,
+        "source": "head",
+        "value": "gsap3130"
+      },
+      {
+        "column": 99,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 157,
+        "source": "head",
+        "value": "confetti193"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 158,
+        "source": "head",
+        "value": "studydesk2"
+      },
+      {
+        "column": 53,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 159,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 160,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 161,
+        "source": "head",
+        "value": "deskmodel3"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 162,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 73,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 163,
+        "source": "head",
+        "value": "deskmodel3"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 164,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 165,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 166,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 62,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 167,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 80,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 168,
+        "source": "head",
+        "value": "deskfinal7"
+      },
+      {
+        "column": 62,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 169,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 80,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 170,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 171,
+        "source": "head",
+        "value": "deskcards1"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 172,
+        "source": "head",
+        "value": "deskcards1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 173,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 174,
+        "source": "head",
+        "value": "deskmodel3"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 175,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 86,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 176,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 72,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 177,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 64,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 178,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 82,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 179,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 180,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 74,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 181,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 182,
+        "source": "head",
+        "value": "game0"
+      },
+      {
+        "column": 70,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 183,
+        "source": "head",
+        "value": "game0"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 184,
+        "source": "head",
+        "value": "game4"
+      },
+      {
+        "column": 72,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 185,
+        "source": "head",
+        "value": "game0"
+      },
+      {
+        "column": 78,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 186,
+        "source": "head",
+        "value": "redo3"
+      },
+      {
+        "column": 53,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 187,
+        "source": "head",
+        "value": "game17"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 188,
+        "source": "head",
+        "value": "game17"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 189,
+        "source": "head",
+        "value": "game17"
+      },
+      {
+        "column": 74,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 190,
+        "source": "head",
+        "value": "explainfix2"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 191,
+        "source": "head",
+        "value": "redo3"
+      },
+      {
+        "column": 72,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 192,
+        "source": "head",
+        "value": "redo3"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 193,
+        "source": "head",
+        "value": "game1"
+      },
+      {
+        "column": 73,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 194,
+        "source": "head",
+        "value": "game1"
+      },
+      {
+        "column": 54,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 195,
+        "source": "head",
+        "value": "game1"
+      },
+      {
+        "column": 72,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 196,
+        "source": "head",
+        "value": "game1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 197,
+        "source": "head",
+        "value": "redo3"
+      },
+      {
+        "column": 76,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 198,
+        "source": "head",
+        "value": "explainfix2"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 199,
+        "source": "head",
+        "value": "drill2"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 200,
+        "source": "head",
+        "value": "explainfix2"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 201,
+        "source": "head",
+        "value": "deskfinal6"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 202,
+        "source": "head",
+        "value": "deskcards1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 203,
+        "source": "head",
+        "value": "upd1113"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 204,
+        "source": "head",
+        "value": "upd1113"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-head.fragment.html",
+        "line": 205,
+        "source": "head",
+        "value": "surface2"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-learning-devices.js",
+        "line": 6,
+        "source": "injections",
+        "value": "learningdevices1"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-learning-library.js",
+        "line": 134,
+        "source": "injections",
+        "value": "library1"
+      },
+      {
+        "column": 77,
+        "file": "ui/injections/laolao-learning-library.js",
+        "line": 135,
+        "source": "injections",
+        "value": "6.4.299"
+      },
+      {
+        "column": 74,
+        "file": "ui/injections/laolao-learning-library.js",
+        "line": 136,
+        "source": "injections",
+        "value": "6.4.299"
+      },
+      {
+        "column": 79,
+        "file": "ui/injections/laolao-learning-library.js",
+        "line": 139,
+        "source": "injections",
+        "value": "78914ae"
+      },
+      {
+        "column": 30,
+        "file": "ui/injections/laolao-mode-menu-fx.css",
+        "line": 1,
+        "source": "injections",
+        "value": "modemenufx1"
+      },
+      {
+        "column": 39,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 14,
+        "source": "injections",
+        "value": "states6"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 15,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 48,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 16,
+        "source": "injections",
+        "value": "sm3"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 17,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 42,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 29,
+        "source": "injections",
+        "value": "states6"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 30,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 31,
+        "source": "injections",
+        "value": "sm3"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 32,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 44,
+        "source": "injections",
+        "value": "states6"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 45,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 46,
+        "source": "injections",
+        "value": "sm3"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 47,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 59,
+        "source": "injections",
+        "value": "states1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 60,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 52,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 61,
+        "source": "injections",
+        "value": "sm3"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 62,
+        "source": "injections",
+        "value": "transition1"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 74,
+        "source": "injections",
+        "value": "states6"
+      },
+      {
+        "column": 51,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 75,
+        "source": "injections",
+        "value": "avatars7"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 76,
+        "source": "injections",
+        "value": "sm3"
+      },
+      {
+        "column": 63,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 77,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 41,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 96,
+        "source": "injections",
+        "value": "cathead1"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-mode-switcher.js",
+        "line": 97,
+        "source": "injections",
+        "value": "cathead1"
+      },
+      {
+        "column": 26,
+        "file": "ui/injections/laolao-mode-transition-fx.js",
+        "line": 17,
+        "source": "injections",
+        "value": "modetransitionfx1"
+      },
+      {
+        "column": 49,
+        "file": "ui/injections/laolao-mode-transition-fx.js",
+        "line": 131,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 63,
+        "file": "ui/injections/laolao-model-picker.js",
+        "line": 527,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 85,
+        "file": "ui/injections/laolao-model-picker.js",
+        "line": 567,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 42,
+        "file": "ui/injections/laolao-motion.js",
+        "line": 104,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 34,
+        "file": "ui/injections/laolao-motion.js",
+        "line": 105,
+        "source": "injections",
+        "value": "avatars6"
+      },
+      {
+        "column": 40,
+        "file": "ui/injections/laolao-rich.js",
+        "line": 20,
+        "source": "injections",
+        "value": "4.5.1"
+      },
+      {
+        "column": 44,
+        "file": "ui/injections/laolao-rich.js",
+        "line": 21,
+        "source": "injections",
+        "value": "12.0.0"
+      },
+      {
+        "column": 43,
+        "file": "ui/injections/laolao-rich.js",
+        "line": 22,
+        "source": "injections",
+        "value": "0.18.9"
+      },
+      {
+        "column": 47,
+        "file": "ui/injections/laolao-rich.js",
+        "line": 23,
+        "source": "injections",
+        "value": "0.18.9"
+      },
+      {
+        "column": 45,
+        "file": "ui/injections/laolao-rich.js",
+        "line": 24,
+        "source": "injections",
+        "value": "0.18.9"
+      },
+      {
+        "column": 26,
+        "file": "ui/injections/laolao-splash-fx.js",
+        "line": 16,
+        "source": "injections",
+        "value": "splashfx1"
+      },
+      {
+        "column": 126,
+        "file": "ui/injections/laolao-splash.js",
+        "line": 69,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 46,
+        "file": "ui/injections/laolao-splash.js",
+        "line": 79,
+        "source": "injections",
+        "value": "transition2"
+      },
+      {
+        "column": 62,
+        "file": "ui/injections/laolao-study-desk-lesson.js",
+        "line": 304,
+        "source": "injections",
+        "value": "0.18.9"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-study-desk-lesson.js",
+        "line": 306,
+        "source": "injections",
+        "value": "0.18.9"
+      },
+      {
+        "column": 130,
+        "file": "ui/injections/laolao-study-desk.js",
+        "line": 1123,
+        "source": "injections",
+        "value": "drill2"
+      },
+      {
+        "column": 112,
+        "file": "ui/injections/laolao-study-desk.js",
+        "line": 1125,
+        "source": "injections",
+        "value": "drill2"
+      },
+      {
+        "column": 112,
+        "file": "ui/injections/laolao-study-desk.js",
+        "line": 1141,
+        "source": "injections",
+        "value": "drill2"
+      },
+      {
+        "column": 107,
+        "file": "ui/injections/laolao-study-desk.js",
+        "line": 1144,
+        "source": "injections",
+        "value": "drill2"
+      },
+      {
+        "column": 112,
+        "file": "ui/injections/laolao-study-desk.js",
+        "line": 1145,
+        "source": "injections",
+        "value": "drill2"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3814,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 59,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3824,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3834,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 58,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3844,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 56,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3854,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3864,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 60,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3874,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 55,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3885,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 57,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 3896,
+        "source": "injections",
+        "value": "mat1"
+      },
+      {
+        "column": 69,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4024,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 73,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4029,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 69,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4034,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 72,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4039,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 70,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4044,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4049,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 74,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4054,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 69,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4059,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 71,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4064,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4106,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4113,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 65,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4120,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4127,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 64,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4134,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 62,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4141,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 63,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4148,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 66,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4155,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 61,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4162,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 63,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4169,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 153,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4257,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 161,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4258,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 153,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4259,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 159,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4260,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 155,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4261,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 157,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4262,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 163,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4263,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 153,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4264,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 157,
+        "file": "ui/injections/laolao-theme.css",
+        "line": 4265,
+        "source": "injections",
+        "value": "1"
+      },
+      {
+        "column": 104,
+        "file": "ui/injections/laolao-workbench.js",
+        "line": 792,
+        "source": "injections",
+        "value": "4"
+      },
+      {
+        "column": 827,
+        "file": "ui/runtime/index-Bvtt7vVx.js",
+        "line": 1,
+        "source": "runtime",
+        "value": "clekk-history59"
+      },
+      {
+        "column": 1726,
+        "file": "ui/runtime/index-Bvtt7vVx.js",
+        "line": 1811,
+        "source": "runtime",
+        "value": "clekk-history59"
+      }
+    ],
+    "total": 311
+  },
+  "patchApplyFiles": 34,
+  "tests": {
+    "browserFilePaths": [
+      "tests/learning-desk.test.mjs",
+      "tests/learning-notes-menu.test.cjs",
+      "tests/metre-board-scroll-e2e.test.mjs",
+      "tests/metre-sidebar-e2e.test.mjs",
+      "tests/metre-switch-e2e.test.mjs",
+      "tests/sidebar-handshake.test.cjs",
+      "tests/study-builtin-model-ui.test.cjs",
+      "tests/study-desk-chat-entry.test.cjs",
+      "tests/study-desk-conversation.test.cjs",
+      "tests/study-desk-panes.test.cjs",
+      "tests/study-desk-ui.test.cjs",
+      "tests/study-explain-ui.test.cjs",
+      "tests/tool-images-e2e.test.mjs",
+      "tests/ui-polish-mac-update-browser.test.cjs",
+      "tests/ui-polish-update-dialog.test.cjs",
+      "tests/update_notes_voice.test.cjs"
+    ],
+    "browserFiles": 16,
+    "gatedNodeFiles": 273,
+    "otherTestFiles": 1,
+    "pythonDiscoveryFiles": 63,
+    "total": 337
+  }
+}
