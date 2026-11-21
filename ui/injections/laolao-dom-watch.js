@@ -124,23 +124,26 @@
       callback,
       handle: null,
     };
+    function bindTarget(target, options = {}, forceSubtree = false) {
+      ensureRootObserver();
+      sub.target = target || document.documentElement;
+      sub.childList = Boolean(options.childList);
+      sub.attributes = Boolean(options.attributes || (options.attributeFilter && options.attributeFilter.length));
+      sub.characterData = Boolean(options.characterData);
+      sub.subtree = forceSubtree || Boolean(options.subtree);
+      sub.attributeFilter = Array.isArray(options.attributeFilter) ? new Set(options.attributeFilter) : null;
+      if (!sub.childList && !sub.attributes && !sub.characterData) {
+        sub.childList = true;
+      }
+      sub.active = true;
+      subscribers.add(sub);
+    }
     const handle = {
       observe(target, options = {}) {
-        ensureRootObserver();
-        sub.target = target || document.documentElement;
-        sub.childList = Boolean(options.childList);
-        sub.attributes = Boolean(options.attributes || (options.attributeFilter && options.attributeFilter.length));
-        sub.characterData = Boolean(options.characterData);
-        sub.subtree = Boolean(options.subtree);
-        sub.attributeFilter = Array.isArray(options.attributeFilter) ? new Set(options.attributeFilter) : null;
-        if (!sub.childList && !sub.attributes && !sub.characterData) {
-          sub.childList = true;
-        }
-        sub.active = true;
-        subscribers.add(sub);
+        bindTarget(target, options, false);
       },
       watch(target, options = {}) {
-        handle.observe(target, {...options, subtree: true});
+        bindTarget(target, options, true);
       },
       disconnect() {
         sub.active = false;
@@ -163,11 +166,11 @@
   function watchTree(target, callback, options = {}) {
     const handle = createObserver(callback);
     if (target) {
-      handle.observe(target, {...options, subtree: true});
+      handle.watch(target, options);
     }
     return {
       disconnect: () => handle.disconnect(),
-      reconnect: (nextTarget, nextOptions) => handle.observe(nextTarget, {...(nextOptions || options), subtree: true}),
+      reconnect: (nextTarget, nextOptions) => handle.watch(nextTarget, nextOptions || options),
       takeRecords: () => handle.takeRecords(),
     };
   }

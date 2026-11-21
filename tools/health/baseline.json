@@ -1,9 +1,9 @@
 {
   "injectionTotals": {
     "important": 5090,
-    "mutationObservers": 74,
+    "mutationObservers": 67,
     "setIntervals": 91,
-    "subtreeObserverCalls": 47,
+    "subtreeObserverCalls": 40,
     "windowGlobals": 124,
     "windowGlobalsPerFileSum": 128
   },
@@ -691,9 +691,9 @@
     "ui/injections/laolao-metre-backdrop.js": {
       "important": 0,
       "lines": 1195,
-      "mutationObservers": 3,
+      "mutationObservers": 2,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-metre-board-data.js": {
@@ -715,9 +715,9 @@
     "ui/injections/laolao-metre-board.js": {
       "important": 0,
       "lines": 435,
-      "mutationObservers": 2,
+      "mutationObservers": 1,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-metre-brand.css": {
@@ -731,9 +731,9 @@
     "ui/injections/laolao-metre-brand.js": {
       "important": 0,
       "lines": 252,
-      "mutationObservers": 2,
+      "mutationObservers": 1,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-metre-cat-frames.js": {
@@ -763,9 +763,9 @@
     "ui/injections/laolao-metre-home.js": {
       "important": 0,
       "lines": 357,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-metre-lock.css": {
@@ -803,9 +803,9 @@
     "ui/injections/laolao-metre-skin.js": {
       "important": 1,
       "lines": 293,
-      "mutationObservers": 8,
+      "mutationObservers": 5,
       "setIntervals": 0,
-      "subtreeObserverCalls": 3,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 3
     },
     "ui/injections/laolao-metre-transition.js": {
