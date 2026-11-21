@@ -27,10 +27,12 @@ const CLEKK_NATIVE_EFFORTS=new Map([
 // catalog entries in by default instead of maintaining a model-ID allowlist.
 // Existing user-customized entries are never rewritten by this migration.
 const workBuddyThinkingCompat = () => ({supportsReasoningEffort: true, supportedReasoningEfforts: ['high']});
+// The loopback vision default (setup.py and discovery) turns ['text'] into ['text','image'];
+// such an entry is still untouched, so it must still recover reasoning (11-21: 63 stuck off).
 function isAutoDiscoveredPlaceholder(entry) {
   return entry?.name === modelName(entry.id)
     && entry.reasoning === false && !entry.compat && Array.isArray(entry.input)
-    && entry.input.length === 1 && entry.input[0] === 'text';
+    && entry.input[0] === 'text' && (entry.input.length === 1 || entry.input.length === 2 && entry.input[1] === 'image');
 }
 function isAutoDiscoveredWorkBuddy(entry) {
   return entry?.id?.startsWith('workbuddy/') && isAutoDiscoveredPlaceholder(entry);
