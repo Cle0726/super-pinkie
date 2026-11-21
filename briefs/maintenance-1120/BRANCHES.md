@@ -88,7 +88,7 @@
 
 ## 实际存档和删除
 
-2026-11-21T12:32:16Z（`Gemini-Win-4e9b` 接手执行）：已完成全部 21 条已核实 A/C 类远端分支的归档标签推送、逐条 `git ls-remote --refs --tags origin` SHA 核验，以及 `--force-with-lease=refs/heads/<分支>:<原头>` 安全删除（只删远端分支，不删本机分支；D 类与活跃 PR 分支均未动；B 类 `audit/pinkie-1112` 与 `unify/pinkie-1112` 留待 [#44](https://github.com/Cle0726/super-pinkie/pull/44) 合并并核对 M1-2 后再归档清理）。完整机器可读证据：`C:\Users\34786\AppData\Local\Temp\pinkie-m1-exec-4e9b\m1-archive-delete-21.json`。
+2026-11-21T12:32:16Z 与 2026-11-21T13:52:56Z（`Gemini-Win-4e9b` 接手执行）：已完成全部 23 条远端分支（15 条 A 类、6 条 C 类，以及 [#44](https://github.com/Cle0726/super-pinkie/pull/44) 落地 `bc4262d3` 后的 2 条已合 B 类 `audit/pinkie-1112` 与 `unify/pinkie-1112`）的归档标签推送、逐条 `git ls-remote --refs --tags origin` SHA 核验，以及 `--force-with-lease=refs/heads/<分支>:<原头>` 安全删除（只删远端分支，不删本机分支；D 类与活跃 PR 分支均未动）。完整机器可读证据：`C:\Users\34786\AppData\Local\Temp\pinkie-m1-exec-4e9b\m1-archive-delete-21.json`。
 
 | 分支 | 类别 | 完整旧头 | 远端存档标签 | 删除时间（UTC） |
 |---|:---:|---|---|---|
@@ -113,6 +113,8 @@
 | `feat/windows-browser-pointer-autonode` | C | `3ccfbfa5dc2c5744417330c6780b8b429061865c` | `archive/2026-11/feat/windows-browser-pointer-autonode` | `2026-11-21T12:32:16Z` |
 | `feat/windows-inapp-browser-vpn` | C | `1d6433cf661b3b9b66f999b3e4ad9086b7ebbda0` | `archive/2026-11/feat/windows-inapp-browser-vpn` | `2026-11-21T12:32:16Z` |
 | `fix/real-thinking-only` | C | `728e5ca931126dbb750529bd3f25da265ad1968d` | `archive/2026-11/fix/real-thinking-only` | `2026-11-21T12:32:16Z` |
+| `audit/pinkie-1112` | B（已合 #44） | `f33c4186dc69249e6804a218a9850be4edca1128` | `archive/2026-11/audit/pinkie-1112` | `2026-11-21T13:52:56Z` |
+| `unify/pinkie-1112` | B（已合 #44） | `f33c4186dc69249e6804a218a9850be4edca1128` | `archive/2026-11/unify/pinkie-1112` | `2026-11-21T13:52:56Z` |
 
 ### M1-4 远端存档标签恢复抽验（3/3 通过）
 
@@ -124,10 +126,13 @@
 | `fix/real-thinking-only` | C | `archive/2026-11/fix/real-thinking-only` | `728e5ca931126dbb750529bd3f25da265ad1968d` |
 | `integration/all-fixes` | A | `archive/2026-11/integration/all-fixes` | `5ae10d81f397bb958978ac6ffce1f985646dc991` |
 
-### 后续快照新增的活跃/发版分支（D 类保护，未动）
+### M1-5 清理后远端未合并分支核对（`2026-11-21T13:53Z`，对照主线 `bc4262d3`）
 
-- `fix/update-dialog-metre`（[#46](https://github.com/Cle0726/super-pinkie/pull/46)）、`fix/thinking-passthrough-vision`（[#47](https://github.com/Cle0726/super-pinkie/pull/47)）、`fix/sidebar-jump`（[#48](https://github.com/Cle0726/super-pinkie/pull/48)）：已合并进主线。
-- `release/2.5.53`（[#49](https://github.com/Cle0726/super-pinkie/pull/49)）：活跃正式发版分支，D 类保护不动。
+- 清理完成后远端共 113 个分支头，其中相对 `origin/main`（`bc4262d3`）未合并的远端分支仅剩 **27 条**：
+  - 24 条原清单 D 类保护分支（`claude/tools-health-1113-a3-03a2ac`、`claude/tools-health-1113-a4-7640b6`、`dev/study-game`、`diagnose/legacy-2.5.50`、`diagnose/macos-activation`、`diagnose/macos-auth-preparation`、`feat/study-desk-drill`、`fix/tools-health-1113`、`fix/windows-2.5.46-study-game`、`install/all-1113-live`、`oc/brand`、`oc/legacy-chat`、`oc/restyle`、`oc/sidebar`、`release/study-game`、`repair/browser`、`repair/fusion`、`repair/startup`、`test/desk-win-probe`、5 条 `wip-snapshot-1111/*`）；
+  - 3 条正在进行的整体计划活跃分支：`core/k0-baseline`（[#41](https://github.com/Cle0726/super-pinkie/pull/41)）、`core/k1-init-cle-core`（[#50](https://github.com/Cle0726/super-pinkie/pull/50)）、`maint/m1-branch-inventory`（[#42](https://github.com/Cle0726/super-pinkie/pull/42)，本 PR 合并时自动删除）。
+- 快照之后新增并已合并主线的分支：`fix/update-dialog-metre`（[#46](https://github.com/Cle0726/super-pinkie/pull/46)）、`fix/thinking-passthrough-vision`（[#47](https://github.com/Cle0726/super-pinkie/pull/47)）、`fix/sidebar-jump`（[#48](https://github.com/Cle0726/super-pinkie/pull/48)）、`release/2.5.53`（[#49](https://github.com/Cle0726/super-pinkie/pull/49)）。
+- 其余 A/C 及已合 B 类未合并远端分支均已归档删除，清零完毕。
 
 <details>
 <summary>本表的完整分支头（用于重跑清点）</summary>

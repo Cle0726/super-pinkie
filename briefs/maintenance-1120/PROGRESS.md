@@ -5,7 +5,7 @@
 | 批 | 状态 | 谁在做 | 更新日期 | 分支 / PR |
 |---|---|---|---|---|
 | M0 量和护栏 | 已合并（本 PR 进入 main 后生效） | Codex-Win-5eac（Windows） | 2026-11-20 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) |
-| M1 收分支 | 进行中 | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
+| M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
 | M2 版本号自动生成 | 未开始 | | | |
 | M5 真页面回归测试 | 未开始 | | | |
 | M3 页面规矩（收窄版） | 未开始 | | | |
@@ -29,6 +29,7 @@ M3 和 M4 可以同时进行。开工时在这里写明这一批会改哪些文�
 - 2026-11-20 / M0：测量读工作树而非 Git 索引，未暂存的新注入文件也能被拦。只对 UTF-8 文本作行数/字面计数；子树数是 `.observe` 里直接写 `subtree: true` / `!0` 的调用点，不是浏览器运行时创建数。巨文件只统计源码、脚本和模板，不把生成的报告、测试夹具数据算作代码。
 - 2026-11-20 / M0：已有注入文件的行数也受棘轮约束；新注入文件以 1500 行为上限，四类风险计数和子树调用从 0 起。长文件、各注入指标和手写版本号总量入棘轮；补丁个数、测试个数和版本号坐标仅供盘点，避免拦住新增测试或移动版本位置。
 - 2026-11-20 / M0：`exceptions.json` 用 `file`（仓库相对路径）、`metric`、`value`（该文件允许的准确计数）、`reason`；手写版本号例外也按具体文件审核。现在为空。`--write-baseline` 不会把例外或其他增长写入基线；如确需和例外同时交付改善，应审查基线差异，只改小真正改善的字段。不可用手改基线放行增长。
+- 2026-11-21 / M1（Z5 新对照基准，依 `ACCEPTANCE.md` 基线节）：学习台游戏 v4（[#44](https://github.com/Cle0726/super-pinkie/pull/44)）合入主线提交 `bc4262d33bca99589e8976e62f404a7ecf8383e1` 后，M1 结束时的 Z5 注入对照基准更新为该提交（本 PR #42 仅清理旧目录/文档，不改动产品运行逻辑或人设/提示词/技能）。在 `M1-exec` 上实测 `tools/metre/inject-inventory.mjs` 六模式（五个老模式 + Metre）各 3 条共 18 条样例，输出 `386635` 字节，SHA-256 `896fbadec7b4d0759196b4faea038c6a00dd3294a07884aaf270ec3582443c17`，供 M2 及后续批次作为 Z5 对照。
 
 ## M0 执行记录（2026-11-20，待验收）
 
