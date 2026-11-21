@@ -33,6 +33,7 @@ $ProxyPort    = if ($env:UR_PROXY_LISTEN) { $env:UR_PROXY_LISTEN } elseif ($env:
 $UpstreamPort = if ($env:UR_PROXY_UPSTREAM_PORT) { $env:UR_PROXY_UPSTREAM_PORT } elseif ($env:UR_UPSTREAM_PORT) { $env:UR_UPSTREAM_PORT } else { "1466" }
 $ProxyScript  = Join-Path $RepoDir "proxy\mm-retry-proxy.py"
 $PatchScript  = Join-Path $RepoDir "patch\reapply-unrestricted-patch.mjs"
+$CoreManifestTool = Join-Path $RepoDir "tools\core\manifest.mjs"
 $TaskName     = "OpenClawURProxy"
 $GatewayWatchdogTask = "OpenClawGatewayWatchdog"
 $GatewayWatchdog = Join-Path $RepoDir "services\watchdog\windows-gateway-watchdog.ps1"
@@ -65,6 +66,19 @@ if ($Remove) {
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   Write-Host "done. Config baseUrl changes (if any) must be reverted manually."
   exit 0
+}
+
+# ── 0/6  按 core-manifest.json 校验并（按需）安装内核 ─────────────────────
+if (Test-Path -LiteralPath $CoreManifestTool) {
+  $CoreInfo = (& node $CoreManifestTool info --root $RepoDir | Out-String | ConvertFrom-Json)
+  if ($LASTEXITCODE -ne 0 -or -not $CoreInfo) { throw "无法解析 core-manifest.json（请检查 PINKIE_CORE 与清单格式）" }
+  if ($env:PINKIE_INSTALL_CORE -eq "1" -or $env:PINKIE_CORE_PREFIX) {
+    $CorePrefix = if ($env:PINKIE_CORE_PREFIX) { $env:PINKIE_CORE_PREFIX } else { Join-Path $env:LOCALAPPDATA ("SuperPinkie\core\" + $CoreInfo.core) }
+    Write-Host "==> 0/6  installing core '$($CoreInfo.core)' ($($CoreInfo.version)) from core-manifest.json -> $CorePrefix"
+    & node $CoreManifestTool install --root $RepoDir --prefix $CorePrefix
+    if ($LASTEXITCODE -ne 0) { throw "内核安装或 SHA-256 校验失败" }
+    $env:OPENCLAW_ROOT = Join-Path $CorePrefix "node_modules\openclaw"
+  }
 }
 
 # ── 1/6  提示词 ───────────────────────────────────────────────────────────

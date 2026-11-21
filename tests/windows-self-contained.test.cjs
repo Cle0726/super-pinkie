@@ -158,10 +158,14 @@ test('the Windows installer pins one content hash per asset via bundle.py and st
 
 test('Windows exe embeds its own Node and OpenClaw runtime', () => {
   const build = read('build-win.ps1');
-  const manifest = JSON.parse(read('desktop/windows/runtime-manifest.json'));
-  assert.match(manifest.node, /^24\./);
-  assert.match(manifest.openclaw, /^2026\./);
-  assert.match(build, /openclaw@\$\(\$manifest\.openclaw\)/);
+  const coreManifest = JSON.parse(read('core-manifest.json'));
+  const legacyManifest = JSON.parse(read('desktop/windows/runtime-manifest.json'));
+  assert.match(coreManifest.node, /^24\./);
+  assert.match(coreManifest.openclaw.version, /^2026\./);
+  assert.equal(legacyManifest.node, coreManifest.node);
+  assert.equal(legacyManifest.openclaw, coreManifest.openclaw.version);
+  assert.match(build, /core-manifest\.json/);
+  assert.match(build, /tools\\core\\manifest\.mjs/);
   assert.match(build, /node\.exe'\);runtime\\bin/);
   assert.match(build, /runtime\\node_modules/);
   assert.match(build, /--onedir/, 'Windows builds must use the fast-starting onedir layout');

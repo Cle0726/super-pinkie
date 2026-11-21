@@ -201,3 +201,56 @@ jobs:
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
+
+  cle-core-checks:
+    name: C.le. 内核
+    runs-on: ubuntu-latest
+    env:
+      PINKIE_CORE: cle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate core-manifest.json for C.le.
+        run: node tools/core/manifest.mjs info --core cle
+      - name: Install and verify C.le. core tarball (SHA-256 + patches + C5)
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+            echo "::warning::CLE_CORE_TOKEN secret is not configured; skipping private Cle0726/cle-core tarball download."
+            exit 0
+          fi
+          prefix="$RUNNER_TEMP/cle-core-prefix"
+          node tools/core/manifest.mjs install --core cle --prefix "$prefix" --cache-dir "$RUNNER_TEMP/core-cache"
+          core_root="$prefix/node_modules/openclaw"
+          pkg_name="$(node -p "require('$core_root/package.json').name")"
+          test "$pkg_name" = "openclaw"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$core_root"
+          echo "OPENCLAW_ROOT=$core_root" >> "$GITHUB_ENV"
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit chromium
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Verify M5 visual baseline on C.le. core path (3x determinism, <=0.1% diff)
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test tests/visual-baseline.test.mjs
+      - name: Run core-manifest, Metre inventory, and full regression suites on C.le. path
+        timeout-minutes: 30
+        run: |
+          git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
+          git worktree add --detach "$RUNNER_TEMP/metre-main-reference" "$METRE_MAIN_REFERENCE"
+          PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
+            node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
+          PINKIE_METRE_MAIN_BASELINE="$RUNNER_TEMP/metre-main.json" \
+            node --test tests/*.test.cjs tests/*.test.mjs
+          python -m unittest discover -s tests -p '*_test.py' -v
