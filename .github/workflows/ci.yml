@@ -233,7 +233,6 @@ jobs:
           pkg_name="$(node -p "require('$core_root/package.json').name")"
           test "$pkg_name" = "openclaw"
           node tools/core/verify-cle-patches.mjs --openclaw-root "$core_root"
-          echo "OPENCLAW_ROOT=$core_root" >> "$GITHUB_ENV"
       - name: Install browser regression dependencies
         run: |
           deps="$RUNNER_TEMP/pinkie-ci-deps"
