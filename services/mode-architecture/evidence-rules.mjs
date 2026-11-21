@@ -12,7 +12,8 @@ import {classifyWorkKind} from './work-kinds.mjs';
 import {cleanReplyText} from './reply-hygiene.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
 import {ACTION_CONTINUATION, ACTION_REQUEST, BOOKKEEPING_TOOL, CLE_KK_CONTROL_PATH, CROSS_RUN_EVIDENCE_COPY, DELIVERY_GUARD_TOOL, DIAGNOSTIC_TARGET, ENGLISH_MUTATION_CLAIM, ENGLISH_TEST_CLAIM, EVIDENCE_FILE, HONEST_INCOMPLETE, MUTATING_TOOL, QUESTION_ONLY, READ_ONLY_DIAGNOSTIC_INTENT, REPORTED_MUTATION, RESPONSE_ONLY_FOLLOWUP_ACTION, RESPONSE_ONLY_PREFIX, TIMESTAMP_TAMPERING, WORKFLOW_EVIDENCE_TARGETS, WORK_PRODUCT_CLAIM, intentText, isMutationRequest, startedBackgroundTask} from './mode-constants.mjs';
-import {agentFromSessionKey, sessionCheckpointRelative} from './index.mjs';
+import {agentFromSessionKey} from './index.mjs';
+import {sessionCheckpointRelative} from './watchdog-runtime.mjs';
 
 // 雅叙、营造、堇思、习作四个模式共用的做事标准（挥洒模式不注入）。
 // 针对的是所有场景里都会出现的三类毛病：顺着说话、说没有依据的事、草草交差。
