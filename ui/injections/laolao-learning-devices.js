@@ -3,7 +3,7 @@
   if (window.__pinkieLearningDevices) return;
   const base = document.currentScript?.src || location.href;
   let engine;
-  const ready = import(new URL('./laolao-learning-devices-engine.js?v=learningdevices1', base).href).then(value => (engine = value));
+  const ready = import(new URL((window.__pinkieAsset || (p => p))('./laolao-learning-devices-engine.js'), base).href).then(value => (engine = value));
   ready.catch(() => {});
   const E = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = String(text); return n; };
   const S = (tag, attrs = {}, text) => { const n = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); if (text !== undefined) n.textContent = String(text); return n; };

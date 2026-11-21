@@ -106,11 +106,5 @@
     "metric": "lines",
     "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
     "value": 209
-  },
-  {
-    "file": "ui/injections/laolao-head.fragment.html",
-    "metric": "manualVersions",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
-    "value": 201
   }
 ]

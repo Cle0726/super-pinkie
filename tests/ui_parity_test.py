@@ -22,7 +22,7 @@ class SharedUiBundleTests(unittest.TestCase):
             'ui/injections/laolao-new-surface.css': 'body { color: pink }',
             'ui/injections/vendor/nested/effect.js': 'fullAnimation()',
             'ui/injections/laolao-handoff-bootstrap.js': 'handoff()',
-            'ui/injections/laolao-head.fragment.html': '<script src="/laolao-night.js?v=one"></script>\n<!-- pinkie-native-assets -->\n<link rel="stylesheet" href="/laolao-new-surface.css?v=one">\n<script defer src="/vendor/nested/effect.js?v=one"></script>',
+            'ui/injections/laolao-head.fragment.html': '<script src="/laolao-night.js?v=@hash"></script>\n<!-- pinkie-native-assets -->\n<link rel="stylesheet" href="/laolao-new-surface.css?v=@hash">\n<script defer src="/vendor/nested/effect.js?v=@hash"></script>',
             'ui/injections/laolao-body.fragment.html': '<section id="laolao-splash"></section>',
         }
         for name, content in sources.items():
@@ -137,25 +137,26 @@ class SharedUiBundleTests(unittest.TestCase):
             (root / 'ui/injections/laolao-new-surface.css').write_text('new full glass')
             bundle.install(root, mac)
             self.assertNotEqual(first, (mac / 'index.html').read_bytes())
-            self.assertIn(b'?v=one&h=', (mac / 'index.html').read_bytes())
+            self.assertIn(('?v=' + bundle.sha10(b'new full glass')).encode(), (mac / 'index.html').read_bytes())
 
     def test_native_cache_revision_preserves_independent_flags(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             mac, _ = self.fixture(root)
             files = bundle.source_files(root)
+            expected_entry_hash = bundle.sha10(b'assets/index-abc.js')
             for prefix in ('./', '/'):
                 for suffix in ('', '?v=old&pinkie-drafts=1'):
                     html = f'<html><head><script type="module" src="{prefix}assets/index-abc.js{suffix}"></script></head><body><openclaw-app></openclaw-app></body></html>'
                     result = bundle.normalize_index(html, root, files)
-                    self.assertEqual(result.count('v=clekk-history59'), 1)
+                    self.assertEqual(result.count(f'v={expected_entry_hash}'), 1)
                     self.assertEqual('pinkie-drafts=1' in result, bool(suffix))
                     self.assertEqual(bundle.normalize_index(result, root, files), result)
             entry = mac / 'assets/index-abc.js'
             entry.parent.mkdir(exist_ok=True)
             entry.write_text('import("./chat-page-abc.js?v=old")')
             bundle.refresh_native_imports(mac)
-            self.assertEqual(entry.read_text(), 'import("./chat-page-abc.js?v=clekk-history59")')
+            self.assertEqual(entry.read_text(), f'import("./chat-page-abc.js?v={bundle.sha10(b"./chat-page-abc.js")}")')
 
     def test_checkout_case_collisions_and_unresolved_lfs_media_fail_before_packaging(self):
         with tempfile.TemporaryDirectory() as directory:

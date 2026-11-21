@@ -1,4 +1,4 @@
-/* laolao-mode-menu-fx.css?v=modemenufx1
+/* laolao-mode-menu-fx.css
    模式头像的小戏法只落在自建 portrait 包裹层：菜单行和顶部按钮仍可继续
    使用全局 motion system 的 transform 按压反馈，二者不会互相覆盖。 */
 

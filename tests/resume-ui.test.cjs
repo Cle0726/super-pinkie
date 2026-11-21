@@ -1247,7 +1247,7 @@ test('desktop installers update an existing root-relative resume URL',()=>{
 
 test('native entry cache revision covers both URL forms and retains independent flags',()=>{
   const source=read('tools/ui-parity/bundle.py');
-  assert.match(source,/clekk-history59/);
+  assert.match(source,/CHAT_IMPORT/);
   assert.match(source,/parse_qsl/);
   // Executable coverage for both URL forms, independent flags and repeated
   // installation is in tests/ui_parity_test.py.

@@ -58,7 +58,7 @@ test('A4-4: the shipped frames are byte-identical to the approved preview file; 
   const head = read(INJ + 'laolao-head.fragment.html');
   assert.ok(head.indexOf('laolao-metre-cat-frames.js') < head.indexOf('laolao-metre-cat.js?'), '帧数据先于控制器加载');
   for (const file of ['laolao-mode-switcher.js', 'laolao-classic-shell.js']) {
-    assert.match(read(INJ + file), /laolao-mode-metre\.svg\?v=cathead1/, file);
+    assert.match(read(INJ + file), /asset\("\/laolao-mode-metre\.svg"\)/, file);
   }
   // 启动 / 切换闪屏在 Metre 时用像素 M（11-15），不用猫头，也不用碧琪的图
   assert.match(read(INJ + 'laolao-splash.js'), /__pinkieMetreBrand\?\.mark/);
@@ -432,7 +432,7 @@ test('Metre v6 home: tempo mark above the prompt, board art drawn on the backdro
 // ---------- 11-16 第十二稿：点哪里都是「一个音落进水里」（RIPPLE-DETAIL-PLAN-1116 §A‴） ----------
 test('Metre backdrop v12: a tap anywhere drops a note into the backdrop — a 3D ripple where you click, notes jump out, objects ride the floor, nothing is left behind', () => {
   const head = read(INJ + 'laolao-head.fragment.html');
-  assert.match(head, /laolao-metre-backdrop\.js\?v=metrebackdrop9/);
+  assert.match(head, /laolao-metre-backdrop\.js\?v=@hash/);
   const ctx = {console, Math, Date};
   ctx.globalThis = ctx;
   vm.createContext(ctx);

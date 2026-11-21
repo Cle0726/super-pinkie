@@ -224,8 +224,10 @@ test('shared UI registration upgrades stale duplicate desk tags in order and is 
     assert.ok(actual.includes('existing-user-change'));
     assert.ok(actual.includes('<openclaw-app>'));
     let previous = -1;
-    for (const [, resource] of desk.matchAll(/(?:src|href)="(\/[^"]+)"/g)) {
-      const needle = resource + '&h=';
+    for (const [, resource] of desk.matchAll(/(?:src|href)="(\/[^"?]+)\?v=@hash"/g)) {
+      const matched = actual.match(new RegExp(resource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\?v=[a-f0-9]{10}'));
+      assert.ok(matched, `expected stamped hash for ${resource}`);
+      const needle = matched[0];
       assert.equal(actual.split(needle).length - 1, 1);
       assert.ok(actual.indexOf(needle) > previous);
       previous = actual.indexOf(needle);

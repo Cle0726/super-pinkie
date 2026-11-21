@@ -3811,7 +3811,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 
 .chat-controls__model[data-pinkie-material="off"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(231, 224, 236, .32);
-  background-image: url("./laolao-reasoning-off.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-off.svg?v=@hash"),
     radial-gradient(ellipse at 20% 50%, rgba(238,229,246,.37), transparent 35%),
     linear-gradient(90deg, #57505e, #8f8495 54%, #5f566a);
   background-size: 128px 20px, 170% 100%, 250% 100%;
@@ -3821,7 +3821,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="minimal"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,240,250,.64);
-  background-image: url("./laolao-reasoning-minimal.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-minimal.svg?v=@hash"),
     linear-gradient(104deg, transparent 24%, rgba(255,255,255,.63) 48%, transparent 68%),
     linear-gradient(92deg, #77607e, #b895b5 39%, #e1b9c8 69%, #987397);
   background-size: 128px 20px, 240% 100%, 250% 100%;
@@ -3831,7 +3831,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="low"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(251,222,244,.68);
-  background-image: url("./laolao-reasoning-low.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-low.svg?v=@hash"),
     radial-gradient(ellipse at 42% 22%, rgba(255,240,250,.7), transparent 34%),
     linear-gradient(94deg, #805979, #d289b7 36%, #b691c8 62%, #805a9b);
   background-size: 144px 20px, 190% 175%, 290% 100%;
@@ -3841,7 +3841,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="medium"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,235,209,.76);
-  background-image: url("./laolao-reasoning-medium.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-medium.svg?v=@hash"),
     linear-gradient(108deg, transparent 8%, rgba(255,250,228,.85) 34%, transparent 47%, transparent 68%, rgba(255,255,255,.52) 77%, transparent 88%),
     linear-gradient(92deg, #84546d, #c58181 31%, #e0b17d 61%, #a96c7f);
   background-size: 154px 20px, 260% 100%, 290% 100%;
@@ -3851,7 +3851,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="high"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(204,255,236,.78);
-  background-image: url("./laolao-reasoning-high.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-high.svg?v=@hash"),
     radial-gradient(ellipse at 33% 18%, rgba(255,255,255,.78), transparent 31%),
     linear-gradient(96deg, #235b69, #3f9a87 31%, #a3c6a4 57%, #6482ae 80%, #326b81);
   background-size: 164px 20px, 180% 185%, 300% 100%;
@@ -3861,7 +3861,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="xhigh"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(236,218,255,.81);
-  background-image: url("./laolao-reasoning-xhigh.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-xhigh.svg?v=@hash"),
     linear-gradient(108deg, transparent 22%, rgba(255,255,255,.72) 48%, transparent 64%),
     linear-gradient(94deg, #332c5b, #785aaf 28%, #a970a9 51%, #5f9d9c 77%, #483668);
   background-size: 178px 20px, 250% 100%, 310% 100%;
@@ -3871,7 +3871,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="adaptive"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(237,225,255,.76);
-  background-image: url("./laolao-reasoning-adaptive.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-adaptive.svg?v=@hash"),
     radial-gradient(ellipse at 25% 45%, rgba(255,206,224,.68), transparent 31%),
     radial-gradient(ellipse at 73% 60%, rgba(160,247,216,.6), transparent 30%),
     linear-gradient(94deg, #546080, #bd75a1 31%, #c2ac82 50%, #4ca990 74%, #635482);
@@ -3882,7 +3882,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="max"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,238,197,.88);
-  background-image: url("./laolao-reasoning-max.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-max.svg?v=@hash"),
     linear-gradient(108deg, transparent 12%, rgba(255,255,255,.17) 35%, rgba(255,255,255,.92) 49%, rgba(255,255,255,.16) 62%, transparent 83%),
     radial-gradient(ellipse at 62% 20%, rgba(255,238,166,.66), transparent 28%),
     linear-gradient(94deg, #362748, #a45b81 25%, #e7ad75 51%, #4ca696 78%, #5b4374);
@@ -3893,7 +3893,7 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
 }
 .chat-controls__model[data-pinkie-material="ultra"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,249,231,.94);
-  background-image: url("./laolao-reasoning-ultra.svg?v=mat1"),
+  background-image: url("./laolao-reasoning-ultra.svg?v=@hash"),
     linear-gradient(108deg, transparent 10%, rgba(255,255,255,.94) 22%, transparent 33%, transparent 59%, rgba(255,244,198,.9) 70%, transparent 81%),
     radial-gradient(ellipse at 22% 26%, rgba(170,255,236,.75), transparent 27%),
     radial-gradient(ellipse at 77% 71%, rgba(255,188,237,.73), transparent 26%),
@@ -4021,47 +4021,47 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
    These transparent, asymmetric corner illustrations are background artwork,
    never the slider itself. The centre remains clear for the animated rail. */
 .chat-controls__model[data-pinkie-material="off"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-off.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-off.png?v=@hash");
   --pinkie-frame-edge: rgba(160, 130, 158, .32);
   --pinkie-frame-glow: rgba(177, 142, 181, .16);
 }
 .chat-controls__model[data-pinkie-material="minimal"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-minimal.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-minimal.png?v=@hash");
   --pinkie-frame-edge: rgba(127, 185, 218, .4);
   --pinkie-frame-glow: rgba(137, 204, 233, .22);
 }
 .chat-controls__model[data-pinkie-material="low"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-low.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-low.png?v=@hash");
   --pinkie-frame-edge: rgba(232, 157, 188, .38);
   --pinkie-frame-glow: rgba(242, 173, 194, .2);
 }
 .chat-controls__model[data-pinkie-material="medium"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-medium.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-medium.png?v=@hash");
   --pinkie-frame-edge: rgba(218, 143, 179, .4);
   --pinkie-frame-glow: rgba(237, 167, 197, .22);
 }
 .chat-controls__model[data-pinkie-material="high"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-high.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-high.png?v=@hash");
   --pinkie-frame-edge: rgba(147, 190, 221, .44);
   --pinkie-frame-glow: rgba(162, 202, 229, .24);
 }
 .chat-controls__model[data-pinkie-material="xhigh"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-xhigh.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-xhigh.png?v=@hash");
   --pinkie-frame-edge: rgba(180, 148, 205, .44);
   --pinkie-frame-glow: rgba(198, 159, 218, .26);
 }
 .chat-controls__model[data-pinkie-material="adaptive"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-adaptive.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-adaptive.png?v=@hash");
   --pinkie-frame-edge: rgba(130, 191, 213, .44);
   --pinkie-frame-glow: rgba(155, 213, 227, .25);
 }
 .chat-controls__model[data-pinkie-material="max"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-max.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-max.png?v=@hash");
   --pinkie-frame-edge: rgba(234, 152, 173, .5);
   --pinkie-frame-glow: rgba(245, 175, 179, .29);
 }
 .chat-controls__model[data-pinkie-material="ultra"] {
-  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-ultra.png?v=1");
+  --pinkie-reasoning-frame: url("./laolao-reasoning-frame-ultra.png?v=@hash");
   --pinkie-frame-edge: rgba(219, 166, 208, .52);
   --pinkie-frame-glow: rgba(236, 175, 223, .32);
 }
@@ -4103,70 +4103,70 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
   background-repeat: repeat-x, no-repeat, no-repeat;
 }
 .chat-controls__model[data-pinkie-material="off"][data-pinkie-level] .chat-controls__reasoning-slider::after {
-  background-image: url("./laolao-reasoning-party-off.svg?v=1"), linear-gradient(180deg, #fff9fb, #efdce8);
+  background-image: url("./laolao-reasoning-party-off.svg?v=@hash"), linear-gradient(180deg, #fff9fb, #efdce8);
   background-size: 128px 20px, 100% 100%;
   background-repeat: repeat-x, no-repeat;
   animation: pinkie-v9-curtain 8.8s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="off"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(216,151,187,.38);
-  background-image: url("./laolao-reasoning-party-off.svg?v=1"), radial-gradient(ellipse at 24% 50%, rgba(255,255,255,.54), transparent 36%), linear-gradient(95deg, #d5a5bf, #f2d5e2 50%, #cda0bd);
+  background-image: url("./laolao-reasoning-party-off.svg?v=@hash"), radial-gradient(ellipse at 24% 50%, rgba(255,255,255,.54), transparent 36%), linear-gradient(95deg, #d5a5bf, #f2d5e2 50%, #cda0bd);
   background-size: 128px 20px, 180% 100%, 230% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.70), 0 0 7px rgba(218,158,191,.25);
   animation: pinkie-v9-curtain 8.8s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="minimal"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(225,245,255,.83);
-  background-image: url("./laolao-reasoning-party-minimal.svg?v=1"), radial-gradient(ellipse at 24% 22%, rgba(255,255,255,.78), transparent 36%), linear-gradient(96deg, #d78fb5, #f2b6d3 38%, #a9d9ec 76%, #e4a4c8);
+  background-image: url("./laolao-reasoning-party-minimal.svg?v=@hash"), radial-gradient(ellipse at 24% 22%, rgba(255,255,255,.78), transparent 36%), linear-gradient(96deg, #d78fb5, #f2b6d3 38%, #a9d9ec 76%, #e4a4c8);
   background-size: 136px 20px, 200% 170%, 260% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.82), 0 0 11px rgba(165,212,234,.47);
   animation: pinkie-v9-balloon-one 6.2s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="low"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,240,223,.86);
-  background-image: url("./laolao-reasoning-party-low.svg?v=1"), linear-gradient(108deg, transparent 23%, rgba(255,255,255,.71) 39%, transparent 56%), linear-gradient(94deg, #cc7fa6, #f4b1cf 34%, #f4c894 63%, #d386ad);
+  background-image: url("./laolao-reasoning-party-low.svg?v=@hash"), linear-gradient(108deg, transparent 23%, rgba(255,255,255,.71) 39%, transparent 56%), linear-gradient(94deg, #cc7fa6, #f4b1cf 34%, #f4c894 63%, #d386ad);
   background-size: 144px 20px, 215% 100%, 260% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.87), 0 0 13px rgba(238,162,191,.49);
   animation: pinkie-v9-frosting 5.5s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="medium"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,235,224,.88);
-  background-image: url("./laolao-reasoning-party-medium.svg?v=1"), linear-gradient(110deg, transparent 26%, rgba(255,247,220,.65) 46%, transparent 64%), linear-gradient(95deg, #c873a4, #f0a8cb 34%, #fadca6 61%, #d883b2);
+  background-image: url("./laolao-reasoning-party-medium.svg?v=@hash"), linear-gradient(110deg, transparent 26%, rgba(255,247,220,.65) 46%, transparent 64%), linear-gradient(95deg, #c873a4, #f0a8cb 34%, #fadca6 61%, #d883b2);
   background-size: 152px 20px, 230% 100%, 270% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.89), 0 0 14px rgba(224,146,187,.52);
   animation: pinkie-v9-bunting 5s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="high"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,248,224,.91);
-  background-image: url("./laolao-reasoning-party-high.svg?v=1"), radial-gradient(ellipse at 38% 18%, rgba(255,255,255,.77), transparent 35%), linear-gradient(96deg, #d77aaa, #f7a8ca 30%, #a8dbee 58%, #f6d898 78%, #e486ba);
+  background-image: url("./laolao-reasoning-party-high.svg?v=@hash"), radial-gradient(ellipse at 38% 18%, rgba(255,255,255,.77), transparent 35%), linear-gradient(96deg, #d77aaa, #f7a8ca 30%, #a8dbee 58%, #f6d898 78%, #e486ba);
   background-size: 160px 20px, 190% 170%, 300% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.92), 0 0 17px rgba(229,147,195,.56), 0 0 8px rgba(142,207,231,.28);
   animation: pinkie-v9-balloon-three 4.55s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="xhigh"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(248,230,255,.91);
-  background-image: url("./laolao-reasoning-party-xhigh.svg?v=1"), linear-gradient(90deg, transparent 33%, rgba(255,255,255,.67) 50%, transparent 67%), linear-gradient(94deg, #b965a3, #e995c5 32%, #f6bdce 53%, #a6d6ef 81%, #c576ab);
+  background-image: url("./laolao-reasoning-party-xhigh.svg?v=@hash"), linear-gradient(90deg, transparent 33%, rgba(255,255,255,.67) 50%, transparent 67%), linear-gradient(94deg, #b965a3, #e995c5 32%, #f6bdce 53%, #a6d6ef 81%, #c576ab);
   background-size: 168px 20px, 225% 100%, 310% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.93), 0 0 18px rgba(211,124,192,.62);
   animation: pinkie-v9-drumbeat 3.45s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="adaptive"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(217,246,255,.91);
-  background-image: url("./laolao-reasoning-party-adaptive.svg?v=1"), radial-gradient(ellipse at 28% 55%, rgba(166,223,240,.66), transparent 31%), linear-gradient(95deg, #c879ae, #efacd0 31%, #afe0e7 59%, #f2d3a5 77%, #d48dbd);
+  background-image: url("./laolao-reasoning-party-adaptive.svg?v=@hash"), radial-gradient(ellipse at 28% 55%, rgba(166,223,240,.66), transparent 31%), linear-gradient(95deg, #c879ae, #efacd0 31%, #afe0e7 59%, #f2d3a5 77%, #d48dbd);
   background-size: 176px 20px, 185% 170%, 315% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.94), 0 0 18px rgba(169,212,229,.55);
   animation: pinkie-v9-planner 4.2s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="max"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,244,207,.96);
-  background-image: url("./laolao-reasoning-party-max.svg?v=1"), linear-gradient(106deg, transparent 21%, rgba(255,255,255,.93) 48%, transparent 67%), linear-gradient(95deg, #be5c9e, #f288ba 29%, #f7bd83 52%, #9fd9e8 75%, #e677ae);
+  background-image: url("./laolao-reasoning-party-max.svg?v=@hash"), linear-gradient(106deg, transparent 21%, rgba(255,255,255,.93) 48%, transparent 67%), linear-gradient(95deg, #be5c9e, #f288ba 29%, #f7bd83 52%, #9fd9e8 75%, #e677ae);
   background-size: 184px 20px, 270% 100%, 340% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,.97), 0 0 22px rgba(240,146,188,.73), 0 0 9px rgba(244,198,121,.52);
   animation: pinkie-v9-party-cannon 3s linear infinite;
 }
 .chat-controls__model[data-pinkie-material="ultra"][data-pinkie-level] .chat-controls__reasoning-slider::before {
   border-color: rgba(255,251,228,.98);
-  background-image: url("./laolao-reasoning-party-ultra.svg?v=1"), linear-gradient(109deg, transparent 13%, rgba(255,255,255,.87) 27%, transparent 39%, transparent 58%, rgba(255,248,191,.92) 74%, transparent 86%), linear-gradient(94deg, #bb5ca4, #f285b9 20%, #ffd89c 41%, #a9dff0 59%, #f5a5cf 80%, #c56aae);
+  background-image: url("./laolao-reasoning-party-ultra.svg?v=@hash"), linear-gradient(109deg, transparent 13%, rgba(255,255,255,.87) 27%, transparent 39%, transparent 58%, rgba(255,248,191,.92) 74%, transparent 86%), linear-gradient(94deg, #bb5ca4, #f285b9 20%, #ffd89c 41%, #a9dff0 59%, #f5a5cf 80%, #c56aae);
   background-size: 200px 20px, 295% 100%, 360% 100%;
   box-shadow: inset 0 1px rgba(255,255,255,1), 0 0 25px rgba(244,146,202,.83), 0 0 12px rgba(177,220,237,.62);
   animation: pinkie-v9-festival 2.65s linear infinite;
@@ -4254,15 +4254,15 @@ html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.cha
   background-repeat: no-repeat;
   animation: pinkie-v10-frame-drift 12s ease-in-out infinite alternate;
 }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="off"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-off.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="minimal"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-minimal.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="low"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-low.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="medium"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-medium.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="high"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-high.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="xhigh"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-xhigh.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="adaptive"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-adaptive.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="max"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-max.png?v=1"); }
-.chat-controls__model .pinkie-model-frame[data-pinkie-frame="ultra"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-ultra.png?v=1"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="off"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-off.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="minimal"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-minimal.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="low"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-low.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="medium"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-medium.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="high"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-high.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="xhigh"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-xhigh.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="adaptive"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-adaptive.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="max"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-max.png?v=@hash"); }
+.chat-controls__model .pinkie-model-frame[data-pinkie-frame="ultra"] .pinkie-model-frame__art { background-image: url("./laolao-reasoning-frame-ultra.png?v=@hash"); }
 @keyframes pinkie-v10-frame-drift {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(0, var(--pinkie-tier-drift), 0); }

@@ -46,7 +46,7 @@ test('CONTRACT §2 每个方法都注册了，权限照背一背', async t => {
   assert.ok(st.ok);
   for (const k of ['wallet', 'rank', 'form', 'today', 'boss', 'monsters', 'season', 'wishlist', 'quiet']) assert.ok(k in st.value, k);
   assert.equal(st.value.form.equipped, 'daily');
-  assert.equal(st.value.season.term, 'lidong');
+  assert.equal(st.value.season.term, seasonOn(beijingDate(Date.now()))?.term || null);
   const bad = await new Promise(resolve => api.methods.get('pinkie.learning.game.state').fn({params: {sessionKey: 'agent:main:x'}, respond: (ok, v, e) => resolve({ok, e})}));
   assert.equal(bad.ok, false);
   assert.equal(bad.e.code, 'INVALID_REQUEST');

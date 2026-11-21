@@ -178,7 +178,7 @@ class WindowsStartupTests(unittest.TestCase):
                 super_pinkie.install_theme(lambda _: None)
             process.assert_not_called()
             html = (control / 'index.html').read_text(encoding='utf-8')
-            self.assertIn('laolao-theme.css?v=composer1101&h=', html)
+            self.assertRegex(html, r'laolao-theme\.css\?v=[a-f0-9]{10}')
             self.assertEqual(html.count('laolao-handoff-bootstrap.js'), 1)
             self.assertTrue((control / 'laolao-deep-think-full.webm').exists())
 

@@ -14,7 +14,7 @@
 })(typeof window === "object" ? window : globalThis, (root) => {
   "use strict";
 
-  const ASSET_VERSION = "modetransitionfx1";
+  const asset = (p) => (typeof root.__pinkieAsset === "function" ? root.__pinkieAsset(p) : p);
   const FINISH = 380;          // 加载好后进度走完的时长
   const EXIT = 460;            // 退场时长
   const PHRASE_EVERY = 600;    // 每句台词至少停留的时长
@@ -128,11 +128,11 @@
   };
 
   const assetUrls = (id) => ({
-    image: `/laolao-mode-transition-${id}.png?v=transition2`,
-    mask: `/laolao-mode-transition-${id}-mask.png?v=${ASSET_VERSION}`,
-    plate: `/laolao-mode-transition-${id}-plate.webp?v=${ASSET_VERSION}`,
-    plateSoft: `/laolao-mode-transition-${id}-plate-soft.png?v=${ASSET_VERSION}`,
-    charSoft: `/laolao-mode-transition-${id}-char-soft.png?v=${ASSET_VERSION}`,
+    image: asset(`/laolao-mode-transition-${id}.png`),
+    mask: asset(`/laolao-mode-transition-${id}-mask.png`),
+    plate: asset(`/laolao-mode-transition-${id}-plate.webp`),
+    plateSoft: asset(`/laolao-mode-transition-${id}-plate-soft.png`),
+    charSoft: asset(`/laolao-mode-transition-${id}-char-soft.png`),
   });
 
   // ---------- WebGL：背景板 + 角色两层，按深度做视差，带对焦和五种揭幕 ----------

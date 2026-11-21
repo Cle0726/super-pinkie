@@ -48,6 +48,12 @@ function Apply-UISkin {
     # The same byte-preserving resource/entry generator as macOS.
     python (Join-Path $RepoRoot 'tools\ui-parity\bundle.py') install --root $RepoRoot --control-ui $UiRoot
     if ($LASTEXITCODE -ne 0) { throw 'Shared Control UI installation failed' }
+    $stampTool = Join-Path $RepoRoot 'tools\assets\stamp.mjs'
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCmd -and (Test-Path -LiteralPath $stampTool)) {
+        & $nodeCmd.Source $stampTool --root $RepoRoot --control-ui $UiRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Control UI asset hash stamping failed' }
+    }
     $serviceWorker = Join-Path $UiRoot 'sw.js'
     if (Test-Path $serviceWorker) {
         $worker = Get-Content $serviceWorker -Raw -Encoding UTF8

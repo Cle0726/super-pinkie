@@ -36,6 +36,9 @@ apply_ui_skin() {
   # One source for resources, ordering and versions on BOTH platforms. Run
   # after an installed runtime snapshot too; snapshots must never own the skin.
   "$python_bin" "$REPO_ROOT/tools/ui-parity/bundle.py" install --root "$REPO_ROOT" --control-ui "$ui_root"
+  if command -v node >/dev/null 2>&1 && [[ -f "$REPO_ROOT/tools/assets/stamp.mjs" ]]; then
+    node "$REPO_ROOT/tools/assets/stamp.mjs" --root "$REPO_ROOT" --control-ui "$ui_root"
+  fi
   if [[ "$previous_manifest" != "$(shasum -a 256 "$ui_root/pinkie-ui-manifest.json")" ]]; then DID_CHANGE=1; fi
 
   # Patched native chunks keep their upstream hashed filename. Cache-first
@@ -133,8 +136,9 @@ sync_launcher_resources() {
   copy_if_changed "$REPO_ROOT/installer/macos/sync-personas.sh" "$bundled_root/installer/macos/sync-personas.sh"
   copy_if_changed "$REPO_ROOT/installer/macos/agent-setup-plan.py" "$bundled_root/installer/macos/agent-setup-plan.py"
   copy_if_changed "$REPO_ROOT/installer/macos/apply-theme.sh" "$bundled_root/installer/macos/apply-theme.sh"
-  mkdir -p "$bundled_root/tools/ui-parity"
+  mkdir -p "$bundled_root/tools/ui-parity" "$bundled_root/tools/assets"
   copy_if_changed "$REPO_ROOT/tools/ui-parity/bundle.py" "$bundled_root/tools/ui-parity/bundle.py"
+  copy_if_changed "$REPO_ROOT/tools/assets/stamp.mjs" "$bundled_root/tools/assets/stamp.mjs"
   copy_if_changed "$REPO_ROOT/ui/parity-policy.json" "$bundled_root/ui/parity-policy.json"
   copy_if_changed "$REPO_ROOT/ui/control-ui.index.html" "$bundled_root/ui/control-ui.index.html"
   mkdir -p "$bundled_root/ui/runtime"

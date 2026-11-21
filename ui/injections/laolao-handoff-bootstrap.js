@@ -47,7 +47,7 @@
   // Metre has no transition scene (batch 0); the splash keeps its own background.
   if (!details.plain) splash.style.setProperty(
     "--laolao-mode-progress-image",
-    `url("/laolao-mode-transition-${handoff.mode}.png?v=transition2")`,
+    `url("${(window.__pinkieAsset || ((p) => p))(`/laolao-mode-transition-${handoff.mode}.png`)}")`,
   );
   const eyebrow = splash.querySelector(".laolao-splash__eyebrow");
   const title = splash.querySelector(".laolao-splash__title");
