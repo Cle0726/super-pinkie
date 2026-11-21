@@ -191,6 +191,7 @@ import {
   toolCallKey,
   hostFileMutationReceipt,
   agentWorkspaceConfig,
+  setAgentWorkspaceConfig,
   agentWorkspaceDir,
   toolTargetPaths,
   snapshotFile,
@@ -605,7 +606,7 @@ export default {
     architecture = new ModeArchitecture(new FileRunStore(), memory, null, learning);
     architecture.settingsGuard = settingsGuard;
     // 门禁里解析相对路径的那个工作区解析器，也优先用 API 配置，不再只读 ~/.openclaw/openclaw.json。
-    agentWorkspaceConfig = pluginConfig();
+    setAgentWorkspaceConfig(pluginConfig());
     const integrity = new CompletionIntegrityGuard();
     // The compaction handoff keeps only a bounded snapshot of real tool
     // evidence.  This is intentionally a host-side capture, not a model-made

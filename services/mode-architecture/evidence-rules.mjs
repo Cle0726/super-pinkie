@@ -201,6 +201,7 @@ function patchPaths(params = {}) {
 // 相对路径的写入/修改一律看不见，门禁就误判「执行型修改任务没有主机确认的文件变化」（2026-10-12 实测）。
 let agentWorkspaceCache = null;
 let agentWorkspaceConfig = null;
+export function setAgentWorkspaceConfig(cfg) { agentWorkspaceConfig = cfg; }
 function agentWorkspaceDir(ctx = {}) {
   if (typeof ctx.workspaceDir === 'string' && path.isAbsolute(ctx.workspaceDir)) return ctx.workspaceDir;
   try {
