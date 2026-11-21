@@ -76,11 +76,11 @@ export function simulate(profileName, {days = 35, seed = 7} = {}) {
   function pull(banner, count, day) {
     const cost = E.bannerCost(banner, count, eco, {tensDone: tens[banner]});
     if (!cost || !pay(cost)) return false;
+    const out = E.gachaPull(banner, {pity: pity[banner], owned, count, rng, economy: eco, guaranteeForm: count === 10 && tens[banner] === 0});
     if (count === 10) tens[banner] += 1;
-    const out = E.gachaPull(banner, {pity: pity[banner], owned, count, rng, economy: eco});
     pity[banner] = out.pity;
     for (const r of out.results) {
-      if (r.dup) { if (r.shardTo === 'any') wallet.any += r.shards; else wallet.shards[r.shardTo] = (wallet.shards[r.shardTo] || 0) + r.shards; }
+      if (r.dup || r.kind === 'shards') { if (r.shardTo === 'any') wallet.any += r.shards; else wallet.shards[r.shardTo] = (wallet.shards[r.shardTo] || 0) + r.shards; }
       else take(r.itemId, day, `扭蛋${r.rarity}`);
     }
     return true;
