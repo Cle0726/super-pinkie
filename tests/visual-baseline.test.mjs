@@ -22,7 +22,7 @@ import {
   launchVisualBrowser,
   startVisualServer,
 } from './visual/lib/harness.mjs';
-import {decodePng, diffPngBuffers} from './visual/lib/png-diff.mjs';
+import {comparePng, decodePng} from './visual/lib/png-diff.mjs';
 
 const BASELINE_DIR = path.join(REPO_ROOT, 'tests/visual/baseline');
 const DIFF_DIR = path.join(REPO_ROOT, 'tests/visual/diff');
@@ -76,7 +76,7 @@ test('visual baseline rendering, determinism, and pixel diff check', async () =>
 
         if (REPEAT_COUNT > 1) {
           for (let run = 1; run < captures.length; run += 1) {
-            const repeatDiff = diffPngBuffers(captures[0], captures[run]);
+            const repeatDiff = comparePng(captures[0], captures[run], {channelTolerance: 0});
             assert.equal(
               repeatDiff.diffPixels,
               0,
@@ -96,7 +96,7 @@ test('visual baseline rendering, determinism, and pixel diff check', async () =>
         const baselinePath = path.join(BASELINE_DIR, `${name}.png`);
         assert.ok(fs.existsSync(baselinePath), `missing baseline ${baselinePath}`);
         const expectedPng = fs.readFileSync(baselinePath);
-        const diff = diffPngBuffers(expectedPng, firstPng);
+        const diff = comparePng(firstPng, expectedPng);
         diffSummary.push({name, diffPercent: diff.diffPercent, diffPixels: diff.diffPixels});
 
         if (diff.diffPercent > MAX_DIFF_PERCENT) {
@@ -104,7 +104,7 @@ test('visual baseline rendering, determinism, and pixel diff check', async () =>
           const actualPath = path.join(DIFF_DIR, `${name}-actual.png`);
           const diffPath = path.join(DIFF_DIR, `${name}-diff.png`);
           fs.writeFileSync(actualPath, firstPng);
-          if (diff.diffPng) fs.writeFileSync(diffPath, diff.diffPng);
+          if (diff.diffPngBuffer) fs.writeFileSync(diffPath, diff.diffPngBuffer);
           assert.fail(
             `${name} exceeded visual threshold: ${diff.diffPercent.toFixed(4)}% > ${MAX_DIFF_PERCENT}% `
             + `(${diff.diffPixels}/${diff.totalPixels} px). Actual: ${actualPath}, Diff: ${diffPath}`,
