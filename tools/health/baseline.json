@@ -1,9 +1,9 @@
 {
   "injectionTotals": {
     "important": 5090,
-    "mutationObservers": 67,
+    "mutationObservers": 58,
     "setIntervals": 91,
-    "subtreeObserverCalls": 40,
+    "subtreeObserverCalls": 31,
     "windowGlobals": 124,
     "windowGlobalsPerFileSum": 128
   },
@@ -227,9 +227,9 @@
     "ui/injections/laolao-desk-chat.js": {
       "important": 0,
       "lines": 358,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-desk-kit.css": {
@@ -371,9 +371,9 @@
     "ui/injections/laolao-game-hud.js": {
       "important": 0,
       "lines": 528,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 1,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-game-practice.css": {
@@ -539,9 +539,9 @@
     "ui/injections/laolao-learning-inline.js": {
       "important": 0,
       "lines": 893,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-learning-library.css": {
@@ -587,9 +587,9 @@
     "ui/injections/laolao-learning-reminder.js": {
       "important": 0,
       "lines": 130,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-learning-stage.css": {
@@ -603,9 +603,9 @@
     "ui/injections/laolao-learning-stage.js": {
       "important": 0,
       "lines": 687,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-link-viewer.js": {
@@ -1515,9 +1515,9 @@
     "ui/injections/laolao-study-desk-lesson.js": {
       "important": 0,
       "lines": 357,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 2,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-study-desk-notes.css": {
@@ -1587,9 +1587,9 @@
     "ui/injections/laolao-study-desk.js": {
       "important": 0,
       "lines": 1291,
-      "mutationObservers": 4,
+      "mutationObservers": 1,
       "setIntervals": 2,
-      "subtreeObserverCalls": 3,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-theme.css": {

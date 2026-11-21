@@ -853,7 +853,7 @@
     if (root?.matches?.(SLOT)) enqueueRoot(root);
     for (const slot of root?.querySelectorAll?.(SLOT) || []) enqueueRoot(slot);
   }
-  const observer = new MutationObserver(records => {
+  const observer = window.Pinkie?.domWatch?.createObserver(records => {
     let removed = false;
     for (const record of records) {
       if (record.target.closest?.('.pinkie-learning-inline-slot')) continue;
@@ -862,7 +862,7 @@
     }
     if (removed && roots.size) for (const slot of roots.keys()) if (!slot.isConnected) enqueueRoot(slot);
   });
-  observer.observe(document.documentElement, {childList: true, subtree: true});
+  observer?.watch(document.documentElement, {childList: true});
   scan(document);
   window.addEventListener('pinkie:learning-state', event => {
     const remote = event.detail, session = remote?.sessionKey;

@@ -112,12 +112,12 @@
     if (!state.frame) state.frame = requestAnimationFrame(() => { state.frame = 0; reconcile(); });
   }
   const mounts = 'header.topbar, .topnav-shell__content, .dashboard-header, .chat-pane__header, .pk-workspace-header';
-  const observer = new MutationObserver(records => {
+  const observer = window.Pinkie?.domWatch?.createObserver(records => {
     if (records.some(r => r.type === 'attributes' || [...r.addedNodes, ...r.removedNodes].some(n => n.nodeType === 1 && (n.matches(mounts) || n.querySelector(mounts))))) queue();
   });
   const observe = () => {
     observer.observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-pinkie-study-desk']});
-    observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-laolao-mode-label']});
+    observer?.watch(document.body, {childList: true, attributes: true, attributeFilter: ['data-laolao-mode-label']});
   };
   for (const name of ['pinkie:session-selected', 'laolao:modechange', 'popstate', 'pinkie:study-desk-view', 'pinkie:study-desk-mounted', 'pinkie:desk-chat-ready']) window.addEventListener(name, queue);
   window.addEventListener('pinkie:learning-state', () => { if (active() && !document.hidden) { state.readAt = 0; queue(); } });
