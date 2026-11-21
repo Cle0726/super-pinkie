@@ -1,9 +1,9 @@
 {
   "injectionTotals": {
     "important": 5090,
-    "mutationObservers": 39,
+    "mutationObservers": 28,
     "setIntervals": 91,
-    "subtreeObserverCalls": 11,
+    "subtreeObserverCalls": 0,
     "windowGlobals": 124,
     "windowGlobalsPerFileSum": 128
   },
@@ -19,9 +19,9 @@
     "ui/injections/laolao-artifacts.js": {
       "important": 0,
       "lines": 718,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 2,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-ask-user.css": {
@@ -42,10 +42,10 @@
     },
     "ui/injections/laolao-biqi-notices.js": {
       "important": 2,
-      "lines": 305,
-      "mutationObservers": 1,
+      "lines": 303,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-body.fragment.html": {
@@ -291,9 +291,9 @@
     "ui/injections/laolao-first-person.js": {
       "important": 0,
       "lines": 196,
-      "mutationObservers": 2,
+      "mutationObservers": 1,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-game-battle.css": {
@@ -619,9 +619,9 @@
     "ui/injections/laolao-live-voice.js": {
       "important": 0,
       "lines": 220,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 0
     },
     "ui/injections/laolao-markdown-preview.js": {
@@ -643,9 +643,9 @@
     "ui/injections/laolao-material-preview.js": {
       "important": 0,
       "lines": 813,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-memory.css": {
@@ -675,9 +675,9 @@
     "ui/injections/laolao-message-actions.js": {
       "important": 0,
       "lines": 507,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 1,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-metre-backdrop.css": {
@@ -963,9 +963,9 @@
     "ui/injections/laolao-plan.js": {
       "important": 0,
       "lines": 152,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 1,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-platform-surface.css": {
@@ -1026,10 +1026,10 @@
     },
     "ui/injections/laolao-queue-steer.js": {
       "important": 0,
-      "lines": 458,
-      "mutationObservers": 1,
+      "lines": 456,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-quiet.js": {
@@ -1059,9 +1059,9 @@
     "ui/injections/laolao-reading-view.js": {
       "important": 0,
       "lines": 38,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 0,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 1
     },
     "ui/injections/laolao-reasoning-adaptive.svg": {
@@ -1227,9 +1227,9 @@
     "ui/injections/laolao-resume.js": {
       "important": 0,
       "lines": 2611,
-      "mutationObservers": 1,
+      "mutationObservers": 0,
       "setIntervals": 5,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 14
     },
     "ui/injections/laolao-rich.css": {
@@ -1690,10 +1690,10 @@
     },
     "ui/injections/laolao-usage-stats.js": {
       "important": 0,
-      "lines": 378,
-      "mutationObservers": 1,
+      "lines": 376,
+      "mutationObservers": 0,
       "setIntervals": 2,
-      "subtreeObserverCalls": 1,
+      "subtreeObserverCalls": 0,
       "windowGlobals": 2
     },
     "ui/injections/laolao-web-gpt-collab.js": {

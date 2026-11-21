@@ -805,7 +805,7 @@
     initialDecorate();
     decorateDeliveries();
     if (typeof MutationObserver === "function") {
-      new MutationObserver(scheduleDeliveries).observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:["data-laolao-material-path"]});
+      window.Pinkie?.domWatch?.createObserver(scheduleDeliveries)?.watch(document.body, {childList:true, attributes:true, attributeFilter:["data-laolao-material-path"]});
     }
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });

@@ -353,7 +353,7 @@
     // 不能每批次都跑（雪崩教训：回调频率 × 成本 才是主线程杀手）。
     let queued = false;
     const mountSelector = ".dashboard-header, .chat-pane__header, #party-usage, .chat-send-btn, #jobs .job";
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       if (queued || !records.some((rec) => {
         if (rec.type === "attributes") return rec.target.matches?.(".chat-send-btn, #jobs .job");
         return [...rec.addedNodes, ...rec.removedNodes].some(
@@ -362,10 +362,8 @@
       })) return;
       queued = true;
       requestAnimationFrame(() => { queued = false; render(); syncLive(); });
-    }).observe(document.documentElement, {
-      childList: true, subtree: true,
-      attributes: true, attributeFilter: ["class"],
-    });
+    })?.watch(document.documentElement, {childList: true,
+      attributes: true, attributeFilter: ["class"],});
 
     refresh();
   }

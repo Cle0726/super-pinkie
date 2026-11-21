@@ -701,12 +701,12 @@
   }, true);
 
   // ---------- paint loop ----------
-  const observer = new MutationObserver(mutations => {
+  const observer = window.Pinkie?.domWatch?.createObserver(mutations => {
     if (mutations.every(mutation => [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1
       || node.closest?.('.pinkie-file-cards, .pinkie-art-page, .pinkie-art-viewer, .pinkie-sources, .pinkie-cite, .pinkie-msg-row')))) return;
     scheduleCards();
   });
-  const start = () => { observer.observe(document.body, {childList: true, subtree: true}); scheduleCards(true); };
+  const start = () => { observer?.watch(document.body, {childList: true}); scheduleCards(true); };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start, {once: true});
   let lastKey = '';
   setInterval(() => { const key = currentKey(); if (key !== lastKey) { lastKey = key; scheduleCards(true); } else scheduleCards(); }, 2000);

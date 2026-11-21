@@ -125,8 +125,8 @@
       if (!view) {
         view = {host, key, plan: null, card: null, sig: '', folded: false, userFolded: false, painted: false};
         // 重绘会把卡片冲掉：只在卡片不在了的时候才重新挂（节流）
-        view.observer = new MutationObserver(() => { if (view.plan && !view.card?.isConnected) schedule(); });
-        view.observer.observe(host, {childList: true, subtree: true});
+        view.observer = window.Pinkie?.domWatch?.createObserver(() => { if (view.plan && !view.card?.isConnected) schedule(); });
+        view.observer?.watch(host, {childList: true});
         views.set(host, view); void refresh(view);
       } else if (key !== view.key) {
         view.card?.remove();
