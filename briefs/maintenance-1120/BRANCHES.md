@@ -8,7 +8,7 @@
 
 - 只统计快照时 `git ls-remote --heads origin` 返回的远端分支。`git fetch origin` 后校验本机对象与快照 SHA 相同。「未合并」指分支头不是 `main` 的祖先，不表示补丁都还没交付。
 - `git rev-list --left-right --count <main>...<head>` 的独有提交数含合并。`git cherry <main> <head>` 的 `+` 是未发现等价补丁、`-` 是找到等价补丁，不计合并提交。`git diff --name-status --no-renames <main>...<head>` 列涉及路径；再逐路径比两端 blob 和 Git mode（含增删），得到当前不同的路径数。
-- A：补丁等价，或实际触及内容都在主线；B：应合进主线；C：旧实现已由主线取代；D：活跃或保留待确认。D 不表示猜测还在做，依据不足就保留。D 的旧提交作者为仓库维护者 Cle0726，不能从作者字段推断当前负责人；有实际认领的单独标注。
+- A：补丁等价，或实际触及内容都在主线；B：应合进主线；C：旧实现已由主线取代；D：活跃或保留待确认。D 不表示猜测还在做，依据不足就保留。旧提交作者和当前负责人不是一回事；有已知认领的单独标注。
 - 计划点名的分支逐条看提交内容。已可达的旧分支不在以下未合并表中；[#40](https://github.com/Cle0726/super-pinkie/pull/40) 已合并且本次不动其远端分支。
 
 ## 所有未合并远端分支
@@ -72,6 +72,11 @@
 - **真实思考**：十条工作的分组为禁止伪思路、模型推理配置、真实思考播放/折叠、样式与长内容、分段滚动、缓存键、历史卡。同一份 `tests/ui-real-thinking-only.test.mjs` 在主线 4/4 通过，覆盖真实流、伪思路、长文本、分段/历史卡；`5a2d9658`、`252ac423` 已改为按模型设置，`eeeaf671` 有主线缓存键。旧模型设置和旧打包文件不覆盖现行方案。
 - **Windows 学习提取器**：`git diff <main> <worker头> -- services/mode-architecture/learning-materials-extract.mjs tests/learning-materials-windows-worker.test.mjs` 为空。同一 Windows worker 用例在主线实际通过（与真实思考一起 `node --test tests/learning-materials-windows-worker.test.mjs tests/ui-real-thinking-only.test.mjs` 共 5/5）。
 - **合并提交的例外**：`integration/all-fixes` 每次合并的第二父都已在主线；`git show --remerge-diff --format= --name-only 2a53bcda` 仍列一处自定义冲突解决路径。先保留，不能只因为 `+` 是零就删；无合并提交且补丁全等价的 A 类没有这个问题。
+
+## 快照以后
+
+- 快照之后出现 [#43](https://github.com/Cle0726/super-pinkie/pull/43) 的 fix/metre-children-under-parent。它在修改共用的头部清单和健康度例外，按 D 保护，不纳入清理；不抢合并。
+- [#44](https://github.com/Cle0726/super-pinkie/pull/44) 是同一认领者的 B 类候选，也不属于旧分支清理名单。
 
 ## 实际存档和删除
 
