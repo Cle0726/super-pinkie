@@ -828,7 +828,7 @@ def run_desktop(resource_root, prepare, update_health_token=None):
         # bare gateway counter that looks like nothing happened.
         version_file = Path(resource_root) / "VERSION"
         version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else ""
-        loading += "?" + urllib.parse.urlencode({"updated": version or "1"})
+        loading += "#" + urllib.parse.urlencode({"updated": version or "1"})  # not "?": .NET's Uri makes it %3F
     gateway = GatewaySupervisor(runtime)
     bridge._gateway = gateway
     # A gateway kept alive by an older version would otherwise be adopted
