@@ -5,7 +5,7 @@
  * - 运行状态以网关事件为准（pinkie:gateway-event：lifecycle / thinking / tool / assistant），
  *   界面上的 data-live 在历史重绘时会闪，只在没收到事件时（例如运行中刷新了页面）兜底。
  * - 运行中的那张卡片：标题行左侧是 C.le. 三维粒子迷你版（全页唯一的 WebGL 上下文），
- *   跟着当前步骤变形；动作词带扫光，正在跑的命令 / 文件用等宽小签标出来。
+ *   每种步骤一个形状、按笔顺连着变；动作词带扫光，正在跑的命令 / 文件用等宽小签标出来。
  *   结束时在小标里落款（卡片被历史重绘换掉也会接到新卡片上），然后换回静态签名。
  * - 其余卡片：左侧是一枚静态的矢量签名小标（不耗性能）。
  * - 工具调用的参数（命令、路径）按 toolCallId 记在本机：历史记录里只有工具结果，没有参数，
@@ -16,9 +16,10 @@
 // 三维小标（three.js）动态 import（不静态 import，免得拖慢启动）。
 // 11-16 夜用户要回来：Metre 里思考时也用这个「C.le.」粒子签名（批 6 原本在 Metre 里不加载）；
 //   Metre 里只在一轮运行期间占着 WebGL，落款结束就整个拆掉、把上下文还回去（见 endHold）。
+import {createSteps, liveKind} from './laolao-cle-steps.js';
 let CleSpace = null, spaceLoading = null;
 const loadSpace = () => spaceLoading ||= Promise.resolve(window.__pinkieQuiet?.loadSignature())
-  .then(() => import('./laolao-cle-space.js?v=7')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
+  .then(() => import('./laolao-cle-space.js?v=8')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
 const metreNow = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
 if (!metreNow() && !document.documentElement.hasAttribute('data-laolao-splash-metre')) loadSpace();
 
@@ -27,7 +28,7 @@ if (!window.__laolaoCleStage) {
 
   const root = document.documentElement;
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)');
-  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', image: '图片生成中', done: '完成', stopped: '已中断',
+  const VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划', reply: '正在回复', image: '图片生成中', done: '完成', stopped: '已中断', ok: '这一步完成', fail: '这一步没成功',
     search: '正在搜索', fetch: '正在看网页', browse: '正在用浏览器', find: '正在查代码', test: '正在跑测试',
     quiz: '正在出题', lab: '正在搭小互动', grade: '正在批改', note: '正在记进手账', memory: '正在翻记忆',
     session: '正在安排子会话', show: '正在打开工作台', computer: '正在操作电脑', webgpt: '正在和网页 GPT 协作',
@@ -72,7 +73,6 @@ if (!window.__laolaoCleStage) {
   const NS = 'http://www.w3.org/2000/svg';
   const ARGS_KEY = 'laolao:cle-tool-args:v1';
   const ARGS_MAX = 600;
-  const MIN_STEP = 1400;       // 很快跑完的工具（几十毫秒）也要在状态行上停留一下，不然根本看不到
 
   let space = null, glyph = null, owner = null;   // owner：当前持有动画小标的卡片
   // 进 Metre 时把三维小标整个拆掉（动画帧、WebGL 上下文都还回去）；下次思考时再建（批 6；Metre 里也会再建，只在运行期间）。
@@ -80,7 +80,7 @@ if (!window.__laolaoCleStage) {
   window.__pinkieQuiet?.register('cle-space', {suspend: dropSpace});
   let live = null, finishing = null, finishInfo = null, liveSince = 0, tick = 0, doneTimer = 0;
   // 本轮运行（来自网关事件）。seen：这一轮收到过事件，之后就只信事件
-  const run = {on: false, seen: false, since: 0, endedAt: 0, stopped: false, queue: [], cur: null, bg: 'think', pumpT: 0, kind: 'think', text: '', mono: false, quiet: 0};
+  const run = {on: false, seen: false, since: 0, endedAt: 0, stopped: false, kind: 'think', text: '', mono: false, quick: false, quiet: 0};
 
   const canAnimate = () => !(reduce && reduce.matches) && !root.hasAttribute('data-pinkie-lite') && webglOK();
   function webglOK() {
@@ -421,7 +421,7 @@ if (!window.__laolaoCleStage) {
     if (claim(details)) {
       root.setAttribute('data-cle-live', '');
       markFocus(details);
-    }
+    } else if (!CleSpace && canAnimate()) loadSpace().then(() => { if (live === details && CleSpace) begin(details); });   // three 刚加载完：这一轮就接上
     sync();
     clearInterval(tick);
     tick = setInterval(scan, 1000);                 // 每秒刷新用时；结束信号也可能不在聊天区里
@@ -430,7 +430,7 @@ if (!window.__laolaoCleStage) {
   function sync() {
     if (!live) return;
     const step = run.on ? run : domStep(live);
-    if (space && owner === live) space.set(step.kind === 'ask' ? 'think' : step.kind === 'exec' || step.kind === 'reply' || step.kind === 'plan' ? 'write' : step.kind);
+    if (space && owner === live) space.set(step.kind, {quick: !!step.quick});
     status(live, step.kind, step.text, fmt(Date.now() - liveSince), step.mono);
   }
 
@@ -488,36 +488,11 @@ if (!window.__laolaoCleStage) {
   }
 
   /* ── 网关事件 ── */
-  // Gemini 这类模型会先安静地想十几秒，再把「说明 + 工具 + 结果」在几十毫秒内一起吐出来。
-  // 工具步骤先排队，状态行逐个播放，每步至少停留 MIN_STEP，动画才有机会被看见。
-  function show(step) {
-    Object.assign(run, {kind: step.kind, text: step.text || '', mono: !!step.mono});
-    schedule();
-  }
-  function pump() {
-    clearTimeout(run.pumpT);
-    const now = Date.now(), c = run.cur;
-    if (c && now - c.at < MIN_STEP) { run.pumpT = setTimeout(pump, c.at + MIN_STEP - now); return; }
-    if (run.queue.length) {
-      run.cur = run.queue.shift();
-      run.cur.at = now;
-      show(run.cur);
-      run.pumpT = setTimeout(pump, MIN_STEP);
-      return;
-    }
-    if (c && !c.done) return;                       // 工具还在跑，等它的结果
-    run.cur = null;
-    show({kind: run.bg});
-  }
-  function resetSteps(bg) {
-    clearTimeout(run.pumpT);
-    Object.assign(run, {queue: [], cur: null, bg: bg || 'think'});
-  }
-  function stepDone(id) {
-    const all = run.cur ? [run.cur, ...run.queue] : run.queue;
-    const st = all.find((x) => x.id === id);
-    if (st) st.done = true;
-    pump();
+  // 排队、每步停多久、积压时怎么追上：laolao-cle-steps.js
+  const steps = createSteps((step) => { Object.assign(run, step); schedule(); });
+  function resetSteps() {
+    steps.reset();
+    Object.assign(run, {kind: 'think', text: '', mono: false, quick: false});
   }
 
   function onEvent(e) {
@@ -530,13 +505,13 @@ if (!window.__laolaoCleStage) {
       if (stream === 'lifecycle') {
         if (d.phase === 'start') {
           Object.assign(run, {on: true, seen: true, since: Date.now(), stopped: false, quiet: 0});
-          resetSteps('think');
-          show({kind: 'think'});
+          resetSteps();
+          schedule();
         } else if (d.phase === 'end' || d.phase === 'error') {
           run.on = false;
           run.endedAt = Date.now();
           run.stopped = d.aborted === true || d.phase === 'error' || /abort|error/i.test(String(d.stopReason || ''));
-          resetSteps('think');
+          resetSteps();
           schedule();
         }
         return;
@@ -546,22 +521,21 @@ if (!window.__laolaoCleStage) {
         if (!run.on) {
           if (Date.now() - run.endedAt < 3000) return;
           Object.assign(run, {on: true, seen: true, since: Date.now(), stopped: false, quiet: 0});
-          resetSteps('think');
+          resetSteps();
         }
         if (stream === 'tool') {
           const id = d.toolCallId || '';
           if (d.phase === 'start') {
-            const k = kindOfCall(d.name, d.args) || kindOf(d.name);
+            const k = liveKind(kindOfCall(d.name, d.args) || kindOf(d.name), d.name, d.args);
             const a = argText(d.name, d.args, d.meta);
             if (id) { ARGS[id] = {k, t: a.text, m: a.mono, n: normTool(d.name), at: Date.now()}; saveArgs(); }
-            run.queue.push({id, kind: d.name === 'ask_user' ? 'ask' : k, text: a.text, mono: a.mono, done: false});
-            pump();
+            steps.start({id, kind: d.name === 'ask_user' ? 'ask' : k, text: a.text, mono: a.mono});
           } else if (d.phase === 'result') {
-            stepDone(id);
+            // 内核的 isError 已经把「退出码不是 0」算进去了；没带这个字段就既不演成功也不演失败
+            steps.finish(id, {failed: d.isError === true, ok: d.isError === false});
           }
         } else {
-          run.bg = stream === 'thinking' ? 'think' : 'reply';
-          pump();
+          steps.background(stream === 'thinking' ? 'think' : 'reply');
         }
         return;
       }
@@ -571,10 +545,10 @@ if (!window.__laolaoCleStage) {
       }
       return;
     }
-    if (/^(?:exec|plugin)\.approval\.requested$/.test(String(name))) { run.queue.push({id: 'approval', kind: 'ask', text: '', done: false}); pump(); return; }
-    if (/^(?:exec|plugin)\.approval\.resolved$/.test(String(name))) { stepDone('approval'); return; }
+    if (/^(?:exec|plugin)\.approval\.requested$/.test(String(name))) { steps.start({id: 'approval', kind: 'ask'}); return; }
+    if (/^(?:exec|plugin)\.approval\.resolved$/.test(String(name))) { steps.finish('approval'); return; }
     if (name === 'chat' && ['aborted', 'error'].includes(p.state) && run.on) {
-      run.on = false; run.endedAt = Date.now(); run.stopped = true; resetSteps('think'); schedule();
+      run.on = false; run.endedAt = Date.now(); run.stopped = true; resetSteps(); schedule();
     }
   }
   window.addEventListener('pinkie:gateway-event', onEvent);
@@ -603,9 +577,7 @@ if (!window.__laolaoCleStage) {
     }
     ARGS[callId] = {...(rec || {t, m: true, at: Date.now()}), k};
     saveArgs();
-    const all = run.cur ? [run.cur, ...run.queue] : run.queue;
-    const step = all.find((x) => x.id === callId);
-    if (step) { step.kind = k; if (run.cur === step) show(step); }
+    steps.refine(callId, k);
     schedule();
   });
   window.addEventListener('pinkie:session-selected', () => {
@@ -615,8 +587,8 @@ if (!window.__laolaoCleStage) {
     endHold();
     liveSince = 0;
     document.querySelectorAll('[data-cle-focus]').forEach(n => n.removeAttribute('data-cle-focus'));
-    Object.assign(run, {on: false, seen: false, since: 0, kind: 'think', text: '', quiet: 0});
-    resetSteps('think');
+    Object.assign(run, {on: false, seen: false, since: 0, quiet: 0});
+    resetSteps();
     schedule();
   });
 
@@ -813,6 +785,7 @@ if (!window.__laolaoCleStage) {
 
   window.__cleStage = {
     get run() { return run; },
+    get steps() { return steps; },
     get space() { return space; },
     args: ARGS,
   };

@@ -88,6 +88,38 @@
       "subtreeObserverCalls": 1,
       "windowGlobals": 0
     },
+    "ui/injections/laolao-cle-classic.js": {
+      "important": 0,
+      "lines": 271,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-forms.js": {
+      "important": 0,
+      "lines": 625,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-ink.js": {
+      "important": 0,
+      "lines": 195,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
+    "ui/injections/laolao-cle-kit.js": {
+      "important": 0,
+      "lines": 192,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
+    },
     "ui/injections/laolao-cle-mark.svg": {
       "important": 0,
       "lines": 1,
@@ -106,7 +138,7 @@
     },
     "ui/injections/laolao-cle-space.js": {
       "important": 0,
-      "lines": 659,
+      "lines": 277,
       "mutationObservers": 0,
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
@@ -122,11 +154,19 @@
     },
     "ui/injections/laolao-cle-stage.js": {
       "important": 0,
-      "lines": 819,
+      "lines": 792,
       "mutationObservers": 1,
       "setIntervals": 3,
       "subtreeObserverCalls": 1,
       "windowGlobals": 2
+    },
+    "ui/injections/laolao-cle-steps.js": {
+      "important": 0,
+      "lines": 114,
+      "mutationObservers": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0
     },
     "ui/injections/laolao-compaction-glyph.js": {
       "important": 0,

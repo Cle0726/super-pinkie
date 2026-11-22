@@ -90,7 +90,7 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status > span
 @keyframes cle-chip-in { from { opacity: 0; transform: translateY(3px); } }
 
 html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary::after { content: none !important; display: none !important; }
-
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status[data-kind="fail"]:not([data-kind="done"]):not([data-kind="stopped"]) b { --cle-sweep: #ff8589; --cle-sweep-base: #e5484d; }
 /* 运行中挂在卡片外的思考块（会自动展开、铺开整段思考文字）：状态行已写「思考中」，这份隐藏；
    卡片里面那份保留，点 › 展开仍可看完整思考 */
 html:not(#p1):not(#p2):not(#p3) .chat-group--process > .chat-group-messages > .pinkie-process__thinking { display: none !important; }
