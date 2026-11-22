@@ -408,6 +408,7 @@
       host.classList.add('pkb-guard', 'pkp-set');
       host.append(el('p', 'pkb-empty', '在找上次做到的地方…'));
       let dead = false;
+      let resumedRuntime = null;
       const giveUp = () => { if (dead || !host.isConnected) return; host.replaceChildren(el('div', 'pkb-result')); const p = host.firstChild; p.append(el('h3', '', '这组题不在了'), el('p', 'pkb-result__line', '回题库再开一组。')); const b = btn('pkg-btn', '回题库'); b.addEventListener('click', () => desk()?.go('gamepractice')); p.append(b); };
       if (!g?.call) { giveUp(); return {unmount() { dead = true; }, keydown() {}}; }
       g.call('practice.current', {}, 15000).then(r => {
@@ -419,9 +420,13 @@
         delete host.dataset.pkpResume;
         host.replaceChildren();
         host.className = host.className.replace(/\bpk[pb]-[\w-]+/g, '').trim();
-        host.__pkpRuntime = mountSet(host, ctx);
+        resumedRuntime = mountSet(host, ctx);
+        if (pane) pane.runtime = resumedRuntime;
       }).catch(() => giveUp());
-      return {unmount() { dead = true; }, keydown() {}};
+      return {
+        unmount() { dead = true; resumedRuntime?.unmount?.(); },
+        keydown(event) { return resumedRuntime?.keydown?.(event); },
+      };
     }
     host.classList.add('pkb-guard', 'pkp-set');
     const top = el('header', 'pk-drill-top pkb-top pkb-guard__top');
@@ -1425,7 +1430,8 @@
       const stepV = rows.some(r => r.slots.length > 1) ? 2 : 1;
       termKeyHandler = event => {
         const k = String(event.key || '');
-        const upper = k.toUpperCase();
+        const code = String(event.code || '');
+        const upper = /^[A-Za-z]$/.test(k) ? k.toUpperCase() : (/^Key[A-Z]$/.test(code) ? code.slice(3) : '');
         if (!allAnswered()) {
           if (/^[A-Z]$/.test(upper) && validLetters.has(upper)) {
             event.preventDefault();
@@ -1523,14 +1529,23 @@
         if (r.awards?.length) setTimeout(() => G().play(r.awards, {from: a?.foe || card}), 400); else G().pending?.();
       }
     }
+    let childRuntime = null;
     // 「再来一组」：同一页重新挂（返回目标不变）
-    function mountAgain() { alive = false; try { audio?.pause(); } catch { /* 无 */ } host.replaceChildren(); host.className = host.className.replace(/\bpk[pb]-[\w-]+/g, '').trim(); const rt = mountSet(host, ctx); host.__pkpRuntime = rt; }
+    function mountAgain() {
+      alive = false;
+      try { audio?.pause(); } catch { /* 无 */ }
+      host.replaceChildren();
+      host.className = host.className.replace(/\bpk[pb]-[\w-]+/g, '').trim();
+      childRuntime = mountSet(host, ctx);
+      const pane = desk()?.pane?.();
+      if (pane) pane.runtime = childRuntime;
+    }
 
     show();
     return {
-      unmount() { alive = false; try { audio?.pause(); } catch { /* 无 */ } },
+      unmount() { alive = false; childRuntime?.unmount?.(); try { audio?.pause(); } catch { /* 无 */ } },
       keydown(event) {
-        if (host.__pkpRuntime) return host.__pkpRuntime.keydown(event);
+        if (childRuntime) return childRuntime.keydown(event);
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
         if (host.querySelector('dialog[open]')) return;
@@ -1538,9 +1553,12 @@
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         if (termKeyHandler && termKeyHandler(event)) return;
         const key = String(event.key || '').toLowerCase();
+        const code = String(event.code || '');
         const choices = [...(qCol?.querySelectorAll('.pkb-opt:not(:disabled), .pkp-letter:not(:disabled)') || [])];
         if (choices.length && !qCol.querySelector('.pkp-fb')) {
-          const idx = /^[1-9]$/.test(key) ? Number(key) - 1 : (/^[a-j]$/.test(key) ? key.charCodeAt(0) - 97 : -1);
+          let idx = /^[1-9]$/.test(key) ? Number(key) - 1 : (/^[a-j]$/.test(key) ? key.charCodeAt(0) - 97 : -1);
+          if (idx < 0 && /^(?:Digit|Numpad)[1-9]$/.test(code)) idx = Number(code.slice(-1)) - 1;
+          else if (idx < 0 && /^Key[A-J]$/.test(code)) idx = code.charCodeAt(3) - 65;
           if (idx >= 0 && idx < choices.length && idx < 10) { event.preventDefault(); choices[idx].click(); return; }
         }
         if (event.key === 'Enter') {
