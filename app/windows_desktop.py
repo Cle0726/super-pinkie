@@ -64,7 +64,11 @@ DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
 })
 
 
-try:
+_PYINSTALLER_DISCOVERY = False
+if _PYINSTALLER_DISCOVERY:
+    # Static imports keep every split module and its exported names visible to
+    # PyInstaller's ModuleGraph and symtable undefined-name checks without
+    # executing them into separate namespaces at runtime.
     from windows_update_guard import (
         version_tuple,
         trusted_update_url,
@@ -90,32 +94,84 @@ try:
         show_guard_dialog,
         process_guard_alerts,
     )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_update_guard import (
-        version_tuple,
-        trusted_update_url,
-        _mirror_base,
-        update_mirrors,
-        release_notes_parts,
-        release_notes_text,
-        bundled_release_notes,
-        release_update,
-        manifest_update,
-        mirrored_release_update,
-        GUARD_UPDATE_REFUSED,
-        guard_release_build,
-        verify_signed_latest,
-        GUARD_PUBLIC_KEY,
-        GUARD_STRIKE_LIMIT,
-        guard_bundle_identity,
-        _guard_receipt_matches,
-        has_guard_receipt,
-        verify_guard_counter,
-        lock_tampered_guard_counter,
-        format_guard_alert,
-        show_guard_dialog,
-        process_guard_alerts,
+    from windows_ps_templates import (
+        FOREGROUND_PS,
+        PINKIE_WPF_PS,
+        PROGRESS_WINDOW_PS,
+        REPAIR_PS,
+        UPDATE_LOG_PS,
+        UPDATE_UI_PS,
     )
+    from windows_updater import UpdateHealthReporter, WindowsUpdater
+    from windows_elevated import (
+        ElevatedProcess,
+        RESIZE_EDGES,
+        WINDOW_MIN_SIZE,
+        configure_native_corners,
+        configure_native_glass,
+        follow_native_resize,
+        hidden_process_kwargs,
+        native_corner_geometry,
+        resized_window_rect,
+        start_elevated,
+    )
+    from windows_runtime import (
+        BundledRuntime,
+        DesktopControlNode,
+        _config_repair_module,
+        _gateway_proxy_module,
+    )
+    from windows_gateway import (
+        GatewaySupervisor,
+        LocalServices,
+        load_file_module,
+        relay_command,
+    )
+    from windows_bridge_scripts import BRIDGE_SCRIPT, NATIVE_READING_SCRIPT
+    from windows_bridge import (
+        NativeBridge,
+        _describe_material,
+        _image_dimensions,
+        run_notify_fields,
+    )
+
+
+def _load_desktop_part(name):
+    """Execute a split Windows desktop module inside this module's global dict.
+
+    Restores pre-split single-module semantics: one copy of every constant and
+    mutable global, full intra/cross-module monkeypatch visibility on
+    windows_desktop, and isolated dynamic loading via spec_from_file_location.
+    """
+    ns = globals()
+    saved_doc = ns.get("__doc__")
+    code = None
+    if not getattr(sys, "frozen", False):
+        sibling = Path(__file__).resolve().with_name(f"{name}.py")
+        if sibling.is_file():
+            code = compile(sibling.read_text(encoding="utf-8-sig"), str(sibling), "exec")
+    if code is None:
+        spec = importlib.util.find_spec(name)
+        if spec is None:
+            try:
+                spec = importlib.util.find_spec(f"app.{name}")
+            except ModuleNotFoundError:
+                spec = None
+        if spec is None or spec.loader is None or not hasattr(spec.loader, "get_code"):
+            raise ModuleNotFoundError(f"cannot load desktop module {name!r}", name=name)
+        code = spec.loader.get_code(spec.name)
+        if code is None:
+            raise ImportError(f"no code object for desktop module {name!r}", name=name)
+    ns["_PINKIE_DESKTOP_PART"] = True
+    try:
+        exec(code, ns)
+    finally:
+        ns.pop("_PINKIE_DESKTOP_PART", None)
+        if saved_doc is not None:
+            ns["__doc__"] = saved_doc
+
+
+_load_desktop_part("windows_update_guard")
 
 
 def app_version(resource_root):
@@ -332,74 +388,10 @@ def cleanup_orphan_webview(storage):
         append_log("launcher", "stale WebView2 cleanup skipped")
 
 
-try:
-    from windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
-
-
-try:
-    from windows_updater import UpdateHealthReporter, WindowsUpdater
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_updater import UpdateHealthReporter, WindowsUpdater
-
-
-try:
-    from windows_elevated import (
-        ElevatedProcess,
-        RESIZE_EDGES,
-        WINDOW_MIN_SIZE,
-        configure_native_corners,
-        configure_native_glass,
-        follow_native_resize,
-        hidden_process_kwargs,
-        native_corner_geometry,
-        resized_window_rect,
-        start_elevated,
-    )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_elevated import (
-        ElevatedProcess,
-        RESIZE_EDGES,
-        WINDOW_MIN_SIZE,
-        configure_native_corners,
-        configure_native_glass,
-        follow_native_resize,
-        hidden_process_kwargs,
-        native_corner_geometry,
-        resized_window_rect,
-        start_elevated,
-    )
-
-
-try:
-    from windows_runtime import (
-        BundledRuntime,
-        DesktopControlNode,
-        _config_repair_module,
-        _gateway_proxy_module,
-    )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_runtime import (
-        BundledRuntime,
-        DesktopControlNode,
-        _config_repair_module,
-        _gateway_proxy_module,
-    )
+_load_desktop_part("windows_ps_templates")
+_load_desktop_part("windows_updater")
+_load_desktop_part("windows_elevated")
+_load_desktop_part("windows_runtime")
 
 
 def keep_gateway_after_close():
@@ -453,45 +445,14 @@ def kill_process_tree(pid, timeout=8):
     )
 
 
-try:
-    from windows_gateway import (
-        GatewaySupervisor,
-        LocalServices,
-        load_file_module,
-        relay_command,
-    )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_gateway import (
-        GatewaySupervisor,
-        LocalServices,
-        load_file_module,
-        relay_command,
-    )
+_load_desktop_part("windows_gateway")
 
 
 from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
 
 
-try:
-    from windows_bridge import (
-        NativeBridge,
-        _describe_material,
-        _image_dimensions,
-        run_notify_fields,
-    )
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_bridge import (
-        NativeBridge,
-        _describe_material,
-        _image_dimensions,
-        run_notify_fields,
-    )
-
-
-try:
-    from windows_bridge_scripts import BRIDGE_SCRIPT, NATIVE_READING_SCRIPT
-except ImportError:  # imported as app.windows_desktop (tests)
-    from app.windows_bridge_scripts import BRIDGE_SCRIPT, NATIVE_READING_SCRIPT
+_load_desktop_part("windows_bridge_scripts")
+_load_desktop_part("windows_bridge")
 
 
 def show_startup_error(window):

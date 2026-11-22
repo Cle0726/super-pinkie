@@ -12,20 +12,32 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+if "_PINKIE_DESKTOP_PART" not in globals():
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_runtime (tests)
+            from app import windows_desktop as module
+        return module
 
-def append_log(*args, **kwargs):
-    return _desktop().append_log(*args, **kwargs)
+    def append_log(*args, **kwargs):
+        return _desktop().append_log(*args, **kwargs)
 
-def state_root(*args, **kwargs):
-    return _desktop().state_root(*args, **kwargs)
+    def state_root(*args, **kwargs):
+        return _desktop().state_root(*args, **kwargs)
 
-def bind_to_app_lifetime(*args, **kwargs):
-    return _desktop().bind_to_app_lifetime(*args, **kwargs)
+    def bind_to_app_lifetime(*args, **kwargs):
+        return _desktop().bind_to_app_lifetime(*args, **kwargs)
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
+    def hidden_process_kwargs(*args, **kwargs):
+        return _desktop().hidden_process_kwargs(*args, **kwargs)
+
+    GATEWAY_URL = "http://127.0.0.1:18789/"
 
 
 class BundledRuntime:

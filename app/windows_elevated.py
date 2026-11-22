@@ -7,11 +7,19 @@ import subprocess
 import sys
 import time
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+if "_PINKIE_DESKTOP_PART" not in globals():
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_elevated (tests)
+            from app import windows_desktop as module
+        return module
 
-def append_log(*args, **kwargs):
-    return _desktop().append_log(*args, **kwargs)
+    def append_log(*args, **kwargs):
+        return _desktop().append_log(*args, **kwargs)
 
 
 class ElevatedProcess:

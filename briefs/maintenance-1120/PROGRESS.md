@@ -9,7 +9,7 @@
 | M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
 | M5 真页面回归测试 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI ubuntu-latest Chromium） | 2026-11-21 | [#52](https://github.com/Cle0726/super-pinkie/pull/52) |
 | M3 页面规矩（收窄版） | 返工已合并（#61 进入 main 后生效）；M3-2 作废；M3-4 的真实页面补测待做 | Gemini-Win-9k4m（返工），协调者独立复核 | 2026-11-21 | [#53](https://github.com/Cle0726/super-pinkie/pull/53) / [#61](https://github.com/Cle0726/super-pinkie/pull/61) |
-| M4 拆巨无霸文件 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#55](https://github.com/Cle0726/super-pinkie/pull/55) |
+| M4 拆巨无霸文件 | 返工中（#55 引入 8 处未定义名、14 处常量分裂、动态加载失效，且 M4-4 引用的 windows-smoke Run 44936310560 实际为 failure；返工见 #62 草稿，待协调者独立复核） | Gemini-Win-7c4e（返工），原执行 Gemini-Win-8f4d | 2026-11-22 | [#55](https://github.com/Cle0726/super-pinkie/pull/55) / [#62](https://github.com/Cle0726/super-pinkie/pull/62) |
 | M6 上游补丁管理 | 已取消（由 C.le. 内核接管计划的 K3 取代） | | 2026-11-20 | |
 | M7 地图和规矩 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#56](https://github.com/Cle0726/super-pinkie/pull/56) |
 

@@ -18,24 +18,35 @@ import urllib.parse
 
 import release_notes
 
-UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
-UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
-TRUSTED_UPDATE_HOSTS = {
-    "api.github.com",
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
-UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
-UPDATE_MANIFEST_NAME = "latest.json"
-DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
-UPDATE_RELEASE_API_PROXY_HOSTS = frozenset({"gh-proxy.com"})
+if "_PINKIE_DESKTOP_PART" not in globals():
+    UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
+    UPDATE_ASSET_PREFIX = "super-pinkie-windows-"
+    TRUSTED_UPDATE_HOSTS = {
+        "api.github.com",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    }
+    UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+    UPDATE_MANIFEST_NAME = "latest.json"
+    DEFAULT_UPDATE_PROXIES = ("https://ghfast.top/", "https://gh-proxy.com/", "https://ghproxy.net/")
+    UPDATE_RELEASE_API_PROXY_HOSTS = frozenset({"gh-proxy.com"})
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_update_guard (tests)
+            from app import windows_desktop as module
+        return module
 
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def update_in_progress(*args, **kwargs): return _desktop().update_in_progress(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def update_in_progress(*args, **kwargs): return _desktop().update_in_progress(*args, **kwargs)
 
 
 def version_tuple(value):
