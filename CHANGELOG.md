@@ -4,6 +4,12 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+### 2.5.54
+- 思考折叠：恢复「播完 → 停 1.8–3.6 秒 → 折成『思考了 N 秒』，历史默认折叠、可点开」（`a0ebf381` 改反成默认展开，2.5.52 / 2.5.53 受影响）；新一段思考插入时保留上一段小窗的 scrollTop；`process-card.js` 缓存版本换成 power9。
+- 更新后启动页：`?updated=` 改 `#updated=`（.NET Uri 会把 file 地址里的 `?` 编码成 `%3F`，导致启动页加载失败）。
+- C.le. 连笔动画：每类步骤一个由签名笔画组成的形态，任意两个之间连续变形、可打断；步骤队列不掉队、不丢失败（`tests/cle-ink.test.mjs`）。
+- 从 v2.5.53 线发版，不含 main 上 2.5.53 之后的维护改动（#50–#61）。
+
 ### 2.5.53
 - #47 思考透传：`model-sync.mjs` 的 `isAutoDiscoveredPlaceholder` 也认 `input: ['text','image']`（本地线路默认开图片后，63 个 mm 模型一直停在 `reasoning: false`，hy4flash-free 等没有「思考了」）；`pinkie-model-setup.json` 里手动关掉的照旧不动。
 - #48 侧栏跳动：重画时保留 Metre「总谱」入口（以前每次重画被清掉、0.1–0.3s 后补回，列表上下跳 36px）；首页草稿在第一句话或开始运行前一直不进列表。
