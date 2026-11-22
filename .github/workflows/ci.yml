@@ -204,6 +204,8 @@ jobs:
 
   cle-core-checks:
     name: C.le. 内核
+    # Fork pull requests never receive secrets. Everywhere else this job fails closed.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       PINKIE_CORE: cle
@@ -217,20 +219,29 @@ jobs:
           python-version: "3.12"
       - name: Validate core-manifest.json for C.le.
         run: node tools/core/manifest.mjs info --core cle
-      - name: Install and verify C.le. core tarball (SHA-256 + patches + C5)
+      # The token exists only in this step; install scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
         env:
           CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
         run: |
           if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
-            echo "::warning::CLE_CORE_TOKEN secret is not configured; skipping private Cle0726/cle-core tarball download."
-            exit 0
+            echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be tested."
+            exit 1
           fi
-          prefix="$RUNNER_TEMP/cle-core-prefix"
-          node tools/core/manifest.mjs install --core cle --prefix "$prefix" --cache-dir "$RUNNER_TEMP/core-cache"
-          core_root="$prefix/node_modules/openclaw"
-          pkg_name="$(node -p "require('$core_root/package.json').name")"
-          test "$pkg_name" = "openclaw"
-          node tools/core/verify-cle-patches.mjs --openclaw-root "$core_root"
+          tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+          echo "PINKIE_CLE_CORE_TARBALL=$tgz" >> "$GITHUB_ENV"
+      - name: Prove C.le. equals npm openclaw before and after Pinkie patches
+        env:
+          PINKIE_NPM_REGISTRY: https://registry.npmjs.org
+        run: |
+          official="$RUNNER_TEMP/openclaw-prefix"
+          cle="$RUNNER_TEMP/cle-core-prefix"
+          node tools/core/manifest.mjs install --core openclaw --prefix "$official"
+          node tools/core/manifest.mjs install --core cle --prefix "$cle"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$official/node_modules/openclaw"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$cle/node_modules/openclaw"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
       - name: Install browser regression dependencies
         run: |
           deps="$RUNNER_TEMP/pinkie-ci-deps"

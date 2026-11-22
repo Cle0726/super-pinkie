@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { envWithoutTokens, installLockedTarball } from './locked-install.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -286,7 +287,7 @@ export async function fetchCleCoreTarball({
   }
 }
 
-function runNpmInstall(args, env = process.env) {
+function runNpm(args, env = envWithoutTokens()) {
   const isWin = process.platform === 'win32';
   const res = isWin
     ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm', ...args], { stdio: 'inherit', env })
@@ -310,41 +311,38 @@ export async function installCoreIntoPrefix({
   const selected = resolveCoreSelection(manifest, coreOverride);
   fs.mkdirSync(prefixDir, { recursive: true });
 
-  let installSpec;
   let verifiedSha256 = null;
   if (selected.core === 'openclaw') {
-    installSpec = `openclaw@${selected.spec.version}`;
+    runNpm([
+      'install',
+      '--prefix', prefixDir,
+      '--registry', npmRegistry,
+      '--omit=dev',
+      '--no-audit',
+      '--no-fund',
+      `openclaw@${selected.spec.version}`,
+    ]);
   } else {
     const fetched = await fetchCleCoreTarball({ repoRoot, cacheDir, localOverride });
-    installSpec = fetched.tarballPath;
     verifiedSha256 = fetched.sha256;
+    installLockedTarball({
+      tarball: fetched.tarballPath,
+      prefixDir,
+      coreVersion: selected.spec.version,
+      registry: npmRegistry,
+      runNpm,
+    });
   }
-
-  runNpmInstall([
-    'install',
-    '--prefix', prefixDir,
-    '--registry', npmRegistry,
-    '--omit=dev',
-    '--no-audit',
-    '--no-fund',
-    installSpec,
-  ]);
 
   const packageRoot = path.join(prefixDir, 'node_modules', 'openclaw');
   if (!fs.existsSync(path.join(packageRoot, 'openclaw.mjs'))) {
     throw new Error(`Installed core (${selected.core}) is incomplete: missing ${path.join(packageRoot, 'openclaw.mjs')}`);
   }
 
-  // When npm installs a local .tgz (cle-core), it may hoist @openclaw/ai to
-  // <prefix>/node_modules/@openclaw/ai instead of nesting it under
-  // openclaw/node_modules/@openclaw/ai. Mirror it into the nested path so
-  // every existing Pinkie runtime patch resolves @openclaw/ai identically
-  // across both openclaw and cle cores.
-  const hoistedAi = path.join(prefixDir, 'node_modules', '@openclaw', 'ai');
-  const nestedAi = path.join(packageRoot, 'node_modules', '@openclaw', 'ai');
-  if (fs.existsSync(hoistedAi) && !fs.existsSync(nestedAi)) {
-    fs.mkdirSync(path.dirname(nestedAi), { recursive: true });
-    fs.cpSync(hoistedAi, nestedAi, { recursive: true });
+  // Patches, the Windows snapshot and the macOS bundle all expect dependencies
+  // inside the package directory; a hoisted install is unusable.
+  if (!fs.existsSync(path.join(packageRoot, 'node_modules', '@openclaw', 'ai', 'package.json'))) {
+    throw new Error(`Installed core (${selected.core}) is incomplete: dependencies are not nested under ${packageRoot}`);
   }
 
   return {

@@ -14,6 +14,8 @@ import {
   sha256File,
   verifyTarballSha256,
 } from '../tools/core/manifest.mjs';
+import { buildInstallLock, envWithoutTokens, installLockedTarball } from '../tools/core/locked-install.mjs';
+import { compareCores } from '../tools/core/verify-equivalence.mjs';
 
 const read = (rel) => fs.readFileSync(path.join(DEFAULT_REPO_ROOT, rel), 'utf8');
 
@@ -136,4 +138,83 @@ test('K2-7: CI defines the C.le. core job running with PINKIE_CORE=cle', () => {
   assert.match(ci, /PINKIE_CORE:\s*cle/);
   assert.match(ci, /tools\/core\/manifest\.mjs/);
   assert.match(ci, /tests\/visual-baseline\.test\.mjs/);
+});
+
+test('cle install lock nests every dependency and swaps in the vendored @openclaw/ai', () => {
+  const pkg = { name: 'openclaw', version: '1.0.0-2', dependencies: { left: '1.0.0', '@openclaw/ai': '1.0.0-2' } };
+  const shrinkwrap = {
+    version: '1.0.0-2',
+    packages: {
+      '': {},
+      'node_modules/left': { version: '1.0.0', integrity: 'sha512-left' },
+      'node_modules/@openclaw/ai': { version: '1.0.0-2', resolved: 'https://registry/ai.tgz', integrity: 'sha512-npm' },
+    },
+  };
+  const core = { resolved: 'file:.cle-core/openclaw.tgz', integrity: 'sha512-core' };
+  const ai = { resolved: 'file:.cle-core/openclaw-ai.tgz', integrity: 'sha512-own' };
+  const { packages } = buildInstallLock({ pkg, shrinkwrap, core, ai }).lock;
+
+  assert.equal(packages['node_modules/left'], undefined, 'dependencies must not be hoisted');
+  assert.equal(packages['node_modules/openclaw/node_modules/left'].integrity, 'sha512-left');
+  assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].integrity, 'sha512-own');
+  assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].resolved, ai.resolved);
+
+  assert.throws(() => buildInstallLock({ pkg: { ...pkg, version: '1.0.0' }, shrinkwrap, core, ai }), /does not match/);
+  const escaping = { ...shrinkwrap, packages: { ...shrinkwrap.packages, 'node_modules/../../outside': {} } };
+  assert.throws(() => buildInstallLock({ pkg, shrinkwrap: escaping, core, ai }), /invalid path/);
+});
+
+test('cle install refuses to empty a node_modules it does not own', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-k2-prefix-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'node_modules', 'someone-elses-package'), { recursive: true });
+    const runNpm = () => assert.fail('npm must not run');
+    assert.throws(
+      () => installLockedTarball({ tarball: 'unused', prefixDir: tmp, coreVersion: 'x', runNpm, registry: '' }),
+      /not a dedicated core prefix/,
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('install scripts never receive repository tokens', () => {
+  const env = envWithoutTokens({ CLE_CORE_TOKEN: 'a', GH_TOKEN: 'b', GITHUB_TOKEN: 'c', KEEP: 'd' });
+  assert.deepEqual(env, { KEEP: 'd' });
+});
+
+test('equivalence check catches changed bytes, renamed chunks and hoisted dependencies', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-k2-equal-'));
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  };
+  const make = (prefix, { body = 'same', chunk = 'index-AAAA.js', hoist = false } = {}) => {
+    const root = path.join(prefix, 'node_modules/openclaw');
+    write(path.join(root, 'package.json'), '{"name":"openclaw","version":"1.0.0"}');
+    write(path.join(root, 'dist/run.js'), body);
+    write(path.join(root, 'dist/control-ui/assets', chunk), 'ui');
+    write(path.join(root, 'node_modules/@openclaw/ai/package.json'), '{"version":"1.0.0"}');
+    write(path.join(root, 'node_modules/@openclaw/ai/dist/index.mjs'), 'ai');
+    write(path.join(hoist ? prefix : root, 'node_modules/left/package.json'), '{"version":"1.0.0"}');
+    return prefix;
+  };
+  try {
+    const official = make(path.join(tmp, 'official'));
+    const problems = (name, options) => compareCores(official, make(path.join(tmp, name), options)).problems.join('\n');
+    assert.equal(problems('same'), '');
+    assert.match(problems('bytes', { body: 'other' }), /changed dist\/run\.js/);
+    assert.match(problems('chunk', { chunk: 'index-BBBB.js' }), /missing dist\/control-ui\/assets\/index-AAAA\.js/);
+    assert.match(problems('hoisted', { hoist: true }), /dependency .*node_modules\/left/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('K2-7: the C.le. CI job fails closed and really compares the two cores', () => {
+  const ci = read('.github/workflows/ci.yml');
+  const job = ci.slice(ci.indexOf('cle-core-checks:'));
+  assert.doesNotMatch(job, /skipping private|exit 0/);
+  assert.match(job, /CLE_CORE_TOKEN is not configured[\s\S]{0,120}exit 1/);
+  assert.equal(job.match(/verify-equivalence\.mjs/g).length, 2, 'compare before and after patches');
 });
