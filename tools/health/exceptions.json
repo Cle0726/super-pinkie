@@ -118,5 +118,11 @@
     "metric": "subtreeObserverCalls",
     "value": 1,
     "reason": "M3 single shared subtree MutationObserver for the entire Control UI"
+  },
+  {
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "setIntervals",
+    "value": 1,
+    "reason": "M3 返工：恢复原生定时语义"
   }
 ]
