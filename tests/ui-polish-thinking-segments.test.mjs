@@ -10,7 +10,7 @@ const {createDocument} = require('./fixtures/mini-dom.cjs');
 const script = fs.readFileSync(new URL('../ui/injections/laolao-process-card.js', import.meta.url), 'utf8');
 const key = 'pinkie:process:agent:main:test:user1';
 
-function harness(saved = {}, session = "agent:main:test") {
+function harness(saved = {}, session = "agent:main:test", clock = null) {
   const localKey = `pinkie:process:${session}:user1`;
   const document = createDocument();
   const proto = Object.getPrototypeOf(document.createElement('div'));
@@ -40,7 +40,7 @@ function harness(saved = {}, session = "agent:main:test") {
   const storage = {getItem: () => JSON.stringify(saved), setItem(_k, _v) {}};
   vm.runInNewContext(script, {window, document, location: {href: 'http://localhost/chat?session=' + encodeURIComponent(session)},
     localStorage: storage, Image: class {}, URL, CSS: {escape: value => value},
-    performance: {now: () => 1}, matchMedia: () => ({matches: true}),
+    performance: {now: () => clock ? clock.now : 1}, matchMedia: () => ({matches: !clock}), // a clock means: animate
     MutationObserver: class {constructor(fn) { observer = fn; } observe() {}},
     requestAnimationFrame(fn) { frames.push(fn); return frames.length; }, cancelAnimationFrame() {},
     setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; }, clearTimeout() {}, setInterval() {}, console});
@@ -235,30 +235,103 @@ test('the active sidebar session also gets per-burst history segments', () => {
   }
 });
 
-test('a finished 「思考了」 is open by default and the reader can fold it', () => {
+// The user's rule (2026-11-05, repeated 2026-11-21): show the thought while it
+// streams, play all of it, hold briefly, THEN fold by itself. Do not turn this
+// into "finished thoughts stay open": a0ebf381 did, and it was a regression.
+function playback() {
+  const clock = {now: 1};
+  const h = harness({}, 'agent:main:test', clock);
+  h.send('lifecycle', {phase: 'start'});
+  const box = () => h.card.querySelector('.pinkie-thinking');
+  const at = ms => { clock.now = ms; h.render(); };
+  const state = () => ({live: box().classList.contains('is-live'), open: box().classList.contains('is-open'),
+    expanded: box().querySelector('.pinkie-thinking__head').getAttribute('aria-expanded'),
+    text: box().querySelector('.pinkie-thinking__text').textContent});
+  return {h, at, box, state};
+}
+
+for (const [name, text, typed, hold] of [
+  ['short', '先看看这个文件', 500, 1800],
+  ['long', '长思考'.repeat(2000), 2500, 3600],
+]) {
+  test(`a ${name} thought plays in full, holds, then folds by itself even though the run already ended`, () => {
+    const {h, at, state} = playback();
+    h.send('thinking', {delta: text});
+    h.send('assistant', {delta: '回答'});
+    h.send('lifecycle', {phase: 'end'});
+    at(1 + typed / 2);
+    assert.equal(state().live, true);
+    assert.ok(state().text.length > 0 && state().text.length < text.length);
+    at(1 + typed);
+    assert.equal(state().text, text);
+    assert.equal(state().live, true);
+    at(typed + hold - 10);
+    assert.equal(state().live, true, 'folded before the reading hold was over');
+    at(typed + hold + 10);
+    assert.deepEqual(state(), {live: false, open: false, expanded: 'false', text});
+  });
+}
+
+test('a thought does not fold while the model is still thinking', () => {
+  const {h, at, state} = playback();
+  h.send('thinking', {delta: '还没想完'});
+  at(60000);
+  assert.equal(state().live, true);
+});
+
+test('each burst folds by itself', () => {
+  const {h, at} = playback();
+  h.send('thinking', {delta: '第一段'});
+  h.send('tool', {phase: 'start', name: 'read'});
+  h.setRows(2);
+  at(501); at(2400);
+  h.send('tool', {phase: 'result', name: 'read'});
+  h.send('thinking', {delta: '第二段'});
+  const live = () => h.card.querySelectorAll('.pinkie-thinking').map(node => node.classList.contains('is-live'));
+  assert.deepEqual(live(), [false, true]);
+  h.send('lifecycle', {phase: 'end'});
+  at(3000); at(4900);
+  assert.deepEqual(live(), [false, false]);
+});
+
+test('a thought the reader opened while live is not folded under them', () => {
+  const {h, at, box, state} = playback();
+  h.send('thinking', {delta: '我点开看的思考'});
+  box().querySelector('.pinkie-thinking__head').click();
+  h.send('lifecycle', {phase: 'end'});
+  at(501); at(2400);
+  assert.equal(state().live, false);
+  assert.equal(state().open, true);
+});
+
+test('a new burst does not rewind the previous one to its first line', () => {
+  const {h, box} = playback();
+  h.send('thinking', {delta: '第一段很长的思考'});
+  h.send('tool', {phase: 'start', name: 'read'});
+  const body = box().querySelector('.pinkie-thinking__body'), slot = box().parentNode, append = slot.append.bind(slot);
+  body.scrollTop = 205;
+  // Browsers reset scrollTop when a node is taken out and inserted again.
+  slot.append = (...nodes) => {
+    for (const node of nodes) if (node.querySelector?.('.pinkie-thinking__body') === body) body.scrollTop = 0;
+    return append(...nodes);
+  };
+  h.send('tool', {phase: 'result', name: 'read'});
+  h.send('thinking', {delta: '第二段'});
+  assert.equal(h.card.querySelectorAll('.pinkie-thinking').length, 2);
+  assert.equal(body.scrollTop, 205);
+});
+
+test('history starts folded and the reader can open and close it', () => {
   const h = harness({[key]: {text: '做完的完整思考', ms: 2300, count: 1, at: 1}});
   h.setRows(2);
   const box = () => h.card.querySelector('.pinkie-thinking');
   const head = () => box().querySelector('.pinkie-thinking__head');
-  assert.match(box().querySelector('.pinkie-thinking__label').textContent, /^思考了/);
-  assert.equal(box().classList.contains('is-open'), true);
-  assert.equal(head().getAttribute('aria-expanded'), 'true');
-  assert.deepEqual(h.textAt(0), ['做完的完整思考']);
-  head().click();
+  assert.equal(box().classList.contains('is-live'), false);
   assert.equal(box().classList.contains('is-open'), false);
   assert.equal(head().getAttribute('aria-expanded'), 'false');
-  h.render();
-  assert.equal(box().classList.contains('is-open'), false);
   head().click();
+  h.render();
   assert.equal(box().classList.contains('is-open'), true);
-});
-
-test('a live thought keeps its short window; only the finished 「思考了」 opens by default', () => {
-  const h = harness();
-  h.send('lifecycle', {phase: 'start'});
-  h.send('thinking', {delta: '正在想的内容'});
-  const box = h.card.querySelector('.pinkie-thinking');
-  assert.equal(box.classList.contains('is-live'), true);
-  assert.equal(box.classList.contains('is-open'), false);
-  assert.match(box.querySelector('.pinkie-thinking__label').textContent, /^正在思考/);
+  head().click();
+  assert.equal(box().classList.contains('is-open'), false);
 });
