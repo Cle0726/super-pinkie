@@ -14,6 +14,21 @@ import {
   openRealScenePage,
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
+import {decodePng} from './visual/lib/png-diff.mjs';
+
+function meanPngLuminance(pngBuf) {
+  const {width, height, data} = decodePng(pngBuf);
+  let sum = 0;
+  let count = 0;
+  for (let y = 0; y < height; y += 8) {
+    for (let x = 0; x < width; x += 8) {
+      const idx = (y * width + x) * 4;
+      sum += relativeLuminance({r: data[idx], g: data[idx + 1], b: data[idx + 2]});
+      count += 1;
+    }
+  }
+  return count ? sum / count : 0;
+}
 
 function parseRgb(colorStr) {
   const m = String(colorStr || '').match(/rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);
@@ -126,7 +141,8 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       const before = await page.evaluate(() => {
         const sidebar = document.querySelector('aside.nav, .shell-nav, .sidebar');
         const main = document.querySelector('.chat-main');
-        const rows = [...document.querySelectorAll('#laolao-session-manager [data-session-key], .sidebar-recent-session[data-session-key]')];
+        const rows = [...document.querySelectorAll('#laolao-session-manager .session-row-host[data-session-key]')]
+          .filter((el) => el.getBoundingClientRect().height > 10);
         return {
           sidebarW: sidebar ? sidebar.getBoundingClientRect().width : 0,
           mainW: main ? main.getBoundingClientRect().width : 0,
@@ -137,23 +153,27 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         before.sidebarW >= 210 && before.sidebarW <= 280,
         `real sidebar expanded width out of bounds [210, 280]: got ${before.sidebarW}px`,
       );
-      assert.ok(before.rowCount >= 2, `expected >= 2 sessions in real sidebar, got ${before.rowCount}`);
+      assert.ok(before.rowCount >= 2, `expected >= 2 visible sessions in real #laolao-session-manager, got ${before.rowCount}`);
 
-      const secondRow = page.locator('#laolao-session-manager [data-session-key], .sidebar-recent-session[data-session-key]').nth(1);
+      const secondRow = page.locator('#laolao-session-manager .session-row-host[data-session-key]').nth(1);
       const targetKey = await secondRow.getAttribute('data-session-key');
-      await secondRow.click();
+      await secondRow.locator('a.sidebar-recent-session__link').click();
       await page.waitForFunction(
         (key) => new URLSearchParams(location.search).get('session') === key
-          || document.querySelector('.sidebar-recent-session--active')?.getAttribute('data-session-key') === key,
+          || document.querySelector('#laolao-session-manager .sidebar-recent-session--active')?.getAttribute('data-session-key') === key,
         targetKey,
         {timeout: 5_000},
       );
 
-      await page.click('[data-pinkie-sidebar-toggle]');
+      const toggleSel = '.sidebar [data-pinkie-sidebar-toggle], .sidebar button[aria-label="折叠侧边栏"]';
+      await page.waitForSelector(toggleSel, {timeout: 5_000});
+      await page.click(toggleSel);
       await page.waitForFunction(
-        () => document.documentElement.getAttribute('data-pinkie-sidebar-auto') === '1',
+        () => document.documentElement.getAttribute('data-pinkie-sidebar-auto') === '1'
+          || Boolean(document.querySelector('.sidebar.sidebar--collapsed')),
         {timeout: 5_000},
       );
+      await page.waitForTimeout(260);
       const after = await page.evaluate(() => {
         const main = document.querySelector('.chat-main');
         return {mainW: main ? main.getBoundingClientRect().width : 0};
@@ -325,17 +345,17 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       assert.deepEqual(failedRequests, []);
       await assertRealPageLoaded(page);
 
-      const triggerSel = '.laolao-context-viewer__trigger, .laolao-context-compact-btn, button[aria-label*="上下文"]';
+      const triggerSel = 'details.laolao-context-viewer > summary';
       const trigger = page.locator(triggerSel).first();
-      await trigger.waitFor({state: 'visible', timeout: 5_000});
+      await trigger.waitFor({state: 'visible', timeout: 10_000});
       await trigger.click();
       await page.waitForTimeout(150);
 
       const pop = await page.evaluate(() => {
-        const el = document.querySelector('.laolao-context-viewer__popover:not([hidden]), #laolao-context-compact-popover:not([hidden])');
+        const el = document.querySelector('.laolao-context-viewer__popover.is-floating, details.laolao-context-viewer[open] .laolao-context-viewer__popover');
         if (!el) return {missing: true};
         const r = el.getBoundingClientRect();
-        const btn = el.querySelector('button');
+        const btn = el.querySelector('.laolao-context-viewer__compact, button');
         const br = btn ? btn.getBoundingClientRect() : null;
         const hit = br ? document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2) : null;
         return {
@@ -347,13 +367,13 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         };
       });
 
-      assert.equal(pop.missing, false, 'clicking context trigger must open context popover on real page');
+      assert.equal(pop.missing, false, 'clicking details.laolao-context-viewer > summary must open context popover on real page');
       assert.ok(pop.rect.width > 120 && pop.rect.height > 40, `context popover invalid size: ${JSON.stringify(pop.rect)}`);
       assert.ok(
         pop.rect.left >= 0 && pop.rect.top >= 0 && pop.rect.right <= VIEWPORT.width && pop.rect.bottom <= VIEWPORT.height,
         `real context popover clipped outside viewport: ${JSON.stringify(pop.rect)}`,
       );
-      assert.equal(pop.hasButton, true, 'context popover must contain an action button');
+      assert.equal(pop.hasButton, true, 'context popover must contain .laolao-context-viewer__compact button');
       assert.equal(pop.btnHit, true, `context popover action button obscured by ${pop.hitDesc}`);
     } finally {
       await context.close();
@@ -368,7 +388,7 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       await assertRealPageLoaded(page);
 
       const rects = await page.evaluate(() => (
-        [...document.querySelectorAll('#pinkie-study-desk .pk-drill-opt')].map((el, idx) => {
+        [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el, idx) => {
           const r = el.getBoundingClientRect();
           return {idx, text: el.textContent?.trim(), left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height};
         })
@@ -381,19 +401,21 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         }
       }
 
-      await page.locator('#pinkie-study-desk .pk-drill-opt').nth(1).click();
-      const selected = await page.evaluate(() => (
-        [...document.querySelectorAll('#pinkie-study-desk .pk-drill-opt')].map((el) => (
-          el.classList.contains('is-selected') || el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true'
-        ))
-      ));
-      assert.equal(selected[1], true, `clicking 2nd real study desk option must select it: ${JSON.stringify(selected)}`);
+      await page.locator('.pk-drill .pk-drill-options .pk-choice').nth(1).click();
+      const selected = await page.evaluate(() => ({
+        choices: [...document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice')].map((el) => (
+          el.classList.contains('is-on') || el.getAttribute('aria-pressed') === 'true'
+        )),
+        checkDisabled: document.querySelector('.pk-drill-check')?.getAttribute('aria-disabled'),
+      }));
+      assert.equal(selected.choices[1], true, `clicking 2nd real study desk option must select it: ${JSON.stringify(selected)}`);
+      assert.notEqual(selected.checkDisabled, 'true', 'selecting an answer must enable .pk-drill-check');
     } finally {
       await context.close();
     }
   });
 
-  await t.test('H8 [HOTSPOTS #23/#30]: real Metre skin removes pink cast, mounts #pk-metre-board, and keeps footer buttons clickable', async () => {
+  await t.test('H8 [HOTSPOTS #23/#30]: real Metre skin removes pink cast, mounts .pk-metre-board, and keeps footer buttons clickable', async () => {
     const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'metre-board', 'day');
     try {
       assert.deepEqual(pageErrors, []);
@@ -402,15 +424,17 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
 
       const info = await page.evaluate(() => {
         const bg = getComputedStyle(document.body).backgroundColor;
-        const board = document.querySelector('#pk-metre-board');
+        const board = document.querySelector('.pk-metre-board');
+        const slots = board ? board.querySelectorAll('.pk-metre-board__card[data-metre-slot]').length : 0;
         const footer = document.querySelector('.sidebar-footer-bar');
-        const settingsBtn = document.querySelector('.laolao-settings-trigger');
+        const settingsBtn = document.querySelector('.sidebar-footer-bar a.sidebar-footer-icon[aria-label="设置"], .sidebar-footer-bar .laolao-footer-more');
         const sr = settingsBtn?.getBoundingClientRect();
         const hit = sr ? document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2) : null;
         return {
           mode: document.documentElement.getAttribute('data-laolao-mode'),
           bg,
-          hasBoard: Boolean(board && board.getBoundingClientRect().height > 20),
+          hasBoard: Boolean(board && !board.hidden && board.getBoundingClientRect().height > 120),
+          slots,
           footerPe: footer ? getComputedStyle(footer).pointerEvents : null,
           settingsPe: settingsBtn ? getComputedStyle(settingsBtn).pointerEvents : null,
           settingsHit: Boolean(settingsBtn && (hit === settingsBtn || settingsBtn.contains(hit))),
@@ -419,7 +443,8 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       });
 
       assert.equal(info.mode, 'metre');
-      assert.equal(info.hasBoard, true, 'real #pk-metre-board must be rendered with non-zero height');
+      assert.equal(info.hasBoard, true, 'real .pk-metre-board must be rendered with non-zero height');
+      assert.ok(info.slots >= 3, `expected >= 3 Metre board slots, got ${info.slots}`);
       const rgb = parseRgb(info.bg);
       assert.ok(rgb, `unable to parse real Metre body background: ${info.bg}`);
       assert.ok(
@@ -446,7 +471,7 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       const layout = await page.evaluate(() => {
         const thread = document.querySelector('.chat-thread');
         const tr = thread?.getBoundingClientRect();
-        const cards = [...document.querySelectorAll('.chat-thread details, .chat-thread .chat-tool-card, .chat-thread .laolao-process-card, .chat-thread [data-tool-call-id]')];
+        const cards = [...document.querySelectorAll('.chat-thread details.pinkie-process, .chat-thread .chat-tool-msg-collapse')];
         return {
           threadRight: tr ? tr.right : 0,
           cards: cards.map((el) => {
@@ -462,7 +487,7 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         };
       });
 
-      assert.ok(layout.cards.length >= 1, `expected >= 1 real tool/process card in long-conversation, got ${layout.cards.length}`);
+      assert.ok(layout.cards.length >= 2, `expected >= 2 real process/tool cards in long-conversation, got ${layout.cards.length}`);
       for (const c of layout.cards) {
         assert.ok(
           c.right <= layout.threadRight + 2,
@@ -470,14 +495,24 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         );
       }
 
-      const toggleTarget = page.locator('.chat-thread details > summary, .chat-thread .laolao-process-card__head, .chat-thread .chat-tool-card summary').first();
-      if (await toggleTarget.count()) {
-        const beforeH = await toggleTarget.evaluate((el) => el.closest('details, .chat-tool-card, .laolao-process-card')?.getBoundingClientRect().height || 0);
-        await toggleTarget.click();
-        await page.waitForTimeout(150);
-        const midH = await toggleTarget.evaluate((el) => el.closest('details, .chat-tool-card, .laolao-process-card')?.getBoundingClientRect().height || 0);
-        assert.notEqual(Math.round(midH), Math.round(beforeH), `clicking real tool/process card header must toggle height: before=${beforeH}, after=${midH}`);
-      }
+      const toolRow = page.locator('.chat-thread .chat-tool-msg-collapse').first();
+      const summaryBtn = toolRow.locator('button.chat-tool-msg-summary').first();
+      await summaryBtn.waitFor({state: 'visible', timeout: 5_000});
+      const beforeH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
+      await summaryBtn.click();
+      await page.waitForTimeout(150);
+      const expandedH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
+      assert.ok(
+        expandedH > beforeH + 10,
+        `clicking real button.chat-tool-msg-summary must expand tool detail: before=${beforeH}, after=${expandedH}`,
+      );
+      await summaryBtn.click();
+      await page.waitForTimeout(150);
+      const collapsedH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
+      assert.ok(
+        Math.abs(collapsedH - beforeH) <= 2,
+        `clicking real button.chat-tool-msg-summary again must collapse back: before=${beforeH}, collapsed=${collapsedH}`,
+      );
     } finally {
       await context.close();
     }
@@ -485,12 +520,13 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
 
   await t.test('H10 [HOTSPOTS #27/#30]: real night mode drops luminance, mounts pinkie-buddy, and keeps model picker readable in viewport', async () => {
     const dayCtx = await openRealScenePage(browser, server.origin, 'model-picker', 'day');
-    let dayBg;
+    let dayLum;
     try {
       assert.deepEqual(dayCtx.pageErrors, []);
       assert.deepEqual(dayCtx.failedRequests, []);
       await assertRealPageLoaded(dayCtx.page);
-      dayBg = await dayCtx.page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor || getComputedStyle(document.body).backgroundColor);
+      const dayShot = await dayCtx.page.screenshot({animations: 'disabled', caret: 'hide', type: 'png'});
+      dayLum = meanPngLuminance(dayShot);
     } finally {
       await dayCtx.context.close();
     }
@@ -501,6 +537,9 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       assert.deepEqual(nightCtx.failedRequests, []);
       await assertRealPageLoaded(nightCtx.page);
 
+      const nightShot = await nightCtx.page.screenshot({animations: 'disabled', caret: 'hide', type: 'png'});
+      const nightLum = meanPngLuminance(nightShot);
+
       const nightInfo = await nightCtx.page.evaluate(() => {
         const menu = document.querySelector('.chat-controls__inline-select-menu--combined');
         const buddy = document.querySelector('.pinkie-buddy');
@@ -508,8 +547,6 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         const ms = menu ? getComputedStyle(menu) : null;
         return {
           nightAttr: document.documentElement.hasAttribute('data-pinkie-night'),
-          htmlBg: getComputedStyle(document.documentElement).backgroundColor,
-          bodyBg: getComputedStyle(document.body).backgroundColor,
           hasBuddy: Boolean(buddy && buddy.getBoundingClientRect().width > 20),
           hasMenu: Boolean(menu && r && r.width > 100 && r.height > 40),
           menuBg: ms?.backgroundColor || '',
@@ -522,19 +559,14 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       assert.equal(nightInfo.hasBuddy, true, 'real .pinkie-buddy must be mounted on composer');
       assert.equal(nightInfo.hasMenu, true, 'real model picker menu must be open');
       assert.ok(
+        dayLum > 0.5 && nightLum < 0.25 && nightLum < dayLum * 0.4,
+        `real night mode must sharply drop rendered luminance: day=${dayLum.toFixed(3)}, night=${nightLum.toFixed(3)}`,
+      );
+      assert.ok(
         nightInfo.rect.left >= 0 && nightInfo.rect.top >= 0
         && nightInfo.rect.right <= VIEWPORT.width && nightInfo.rect.bottom <= VIEWPORT.height,
         `real night model picker out of viewport: ${JSON.stringify(nightInfo.rect)}`,
       );
-
-      const nightBgRgb = parseRgb(nightInfo.bodyBg) || parseRgb(nightInfo.htmlBg);
-      const dayBgRgb = parseRgb(dayBg);
-      if (nightBgRgb && dayBgRgb && (nightBgRgb.r + nightBgRgb.g + nightBgRgb.b > 0)) {
-        assert.ok(
-          relativeLuminance(nightBgRgb) < relativeLuminance(dayBgRgb),
-          `night background must be darker than day: day=${dayBg} night=${nightInfo.bodyBg}`,
-        );
-      }
 
       const menuFg = parseRgb(nightInfo.menuColor);
       const menuBg = parseRgb(nightInfo.menuBg);

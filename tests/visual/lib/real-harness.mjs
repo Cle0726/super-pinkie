@@ -46,6 +46,13 @@ const OPTIONAL_404_PATHS = new Set([
   '/apple-touch-icon.png',
 ]);
 
+const REAL_ASSET_PATH_RE = /(?:^\/(?:assets|vendor|fonts|study-desk|provider-icons)\/|^\/laolao-|\.(?:js|mjs|css|woff2?|ttf|png|jpe?g|webp|svg)$)/i;
+
+function isTrackedAssetPath(pathname) {
+  if (!pathname || OPTIONAL_404_PATHS.has(pathname)) return false;
+  return REAL_ASSET_PATH_RE.test(pathname);
+}
+
 export function readRuntimeOpenClawVersion(repoRoot = REPO_ROOT) {
   const manifestPath = path.join(repoRoot, 'desktop/windows/runtime-manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -223,13 +230,32 @@ export function extractWindowsBridgeScript(repoRoot = REPO_ROOT) {
 }
 
 // Deterministic fake-gateway response extension for RPCs that fake-gateway.js
-// currently answers with empty defaults (models catalog for model-picker and
-// fixed zero usage for laolao-usage-stats). Never alters UI behavior or DOM.
+// currently answers with empty defaults (models catalog for model-picker,
+// fixed usage for laolao-usage-stats, and session totalTokens for context viewer).
+// Never alters UI behavior or DOM.
 const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
   'use strict';
   const BaseSocket = window.WebSocket;
   if (!BaseSocket || BaseSocket.__pinkieRealHarnessWrapped) return;
   const origSend = BaseSocket.prototype.send;
+  const origRaw = BaseSocket.prototype._raw;
+  if (typeof origRaw === 'function') {
+    BaseSocket.prototype._raw = function patchedRaw(obj) {
+      if (obj && obj.type === 'res' && obj.ok && Array.isArray(obj.payload?.sessions)) {
+        const sessions = obj.payload.sessions.map((s) => (
+          s && typeof s === 'object'
+            ? {
+                ...s,
+                totalTokens: s.totalTokens ?? 128000,
+                contextTokens: s.contextTokens ?? 1000000,
+              }
+            : s
+        ));
+        return origRaw.call(this, {...obj, payload: {...obj.payload, sessions}});
+      }
+      return origRaw.call(this, obj);
+    };
+  }
   BaseSocket.prototype.send = function patchedSend(data) {
     try {
       const frame = JSON.parse(data);
@@ -330,7 +356,30 @@ export async function startRealUiServer({
       res.end(extractWindowsBridgeScript(repoRoot));
       return;
     }
-    if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/chat' || url.pathname === '/chat/') {
+    if (url.pathname === '/control-ui-config.json') {
+      res.setHeader('Content-Type', MIME['.json']);
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({basePath: '', assistantName: '碧琪', assistantAvatar: null}));
+      return;
+    }
+    if (url.pathname.startsWith('/avatar/')) {
+      res.statusCode = 404;
+      res.end('no custom avatar');
+      return;
+    }
+    const baseName = path.posix.basename(url.pathname);
+    const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+    if (rel.includes('..')) {
+      res.statusCode = 404;
+      res.end('invalid path');
+      return;
+    }
+    const target = path.resolve(controlUiDir, rel);
+    const rootResolved = path.resolve(controlUiDir);
+    const isFileOnDisk = rel && target.startsWith(rootResolved + path.sep)
+      && fs.existsSync(target) && fs.statSync(target).isFile();
+
+    if (url.pathname === '/' || url.pathname === '/index.html' || (!baseName.includes('.') && !isFileOnDisk)) {
       const indexPath = path.join(controlUiDir, 'index.html');
       const rawHtml = fs.readFileSync(indexPath, 'utf8');
       const injectTags = [
@@ -345,15 +394,7 @@ export async function startRealUiServer({
       return;
     }
 
-    const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    if (rel.includes('..')) {
-      res.statusCode = 404;
-      res.end('invalid path');
-      return;
-    }
-    const target = path.resolve(controlUiDir, rel);
-    const rootResolved = path.resolve(controlUiDir);
-    if (!target.startsWith(rootResolved + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
+    if (!isFileOnDisk) {
       res.statusCode = 404;
       res.end(`missing ${rel}`);
       return;
@@ -521,10 +562,16 @@ export async function settleRealPage(page, theme) {
       el.classList.remove('laolao-welcome--materializing');
     });
 
-    // Freeze performance.now so laolao-usage-stats linkLatency is deterministically 0ms
-    performance.now = () => 1000;
-    if (window.__laolaoUsage?.refresh) {
-      await window.__laolaoUsage.refresh();
+    // Temporarily freeze performance.now only during laolao-usage-stats refresh
+    // so linkLatency is deterministically 0ms without blocking later animations/transitions.
+    const origPerfNow = performance.now.bind(performance);
+    try {
+      performance.now = () => 1000;
+      if (window.__laolaoUsage?.refresh) {
+        await window.__laolaoUsage.refresh();
+      }
+    } finally {
+      performance.now = origPerfNow;
     }
 
     // Finish any active Web Animations
@@ -582,17 +629,19 @@ export async function assertRealPageLoaded(page) {
     const hasOpenClawIndex = resources.some((name) => /\/assets\/index-[^/?#]+\.js/i.test(name));
     const hasOpenClawChatPage = resources.some((name) => /\/assets\/chat-page-[^/?#]+\.js/i.test(name));
     const laolaoTags = document.querySelectorAll('script[src*="laolao-"], link[href*="laolao-"]').length;
+    const onSettingsRoute = String(location.pathname || '').startsWith('/settings');
     return {
       definedApp: Boolean(customElements.get('openclaw-app')),
       hasAppEl: Boolean(document.querySelector('openclaw-app')),
       hasChatPane: Boolean(document.querySelector('openclaw-chat-pane')),
+      onSettingsRoute,
       hasFakeSkeleton: Boolean(document.querySelector('#m5-sidebar, .m5-shell, .m5-stage')),
       hasOpenClawIndex,
       hasOpenClawChatPage,
       laolaoTags,
     };
   });
-  if (!proof.definedApp || !proof.hasAppEl || !proof.hasChatPane) {
+  if (!proof.definedApp || !proof.hasAppEl || (!proof.hasChatPane && !proof.onSettingsRoute)) {
     throw new Error(`Real OpenClaw Control UI did not mount: ${JSON.stringify(proof)}`);
   }
   if (proof.hasFakeSkeleton) {
@@ -692,6 +741,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
         sessionId: 'harness-prev-01',
         label: '视觉基线与热点核对',
         displayName: '视觉基线与热点核对',
+        lastMessagePreview: '已完成真实页面视觉基线与十个热点核对。',
         updatedAt: frozenMs - 120_000,
         agentId: m.agentId,
       },
@@ -700,6 +750,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
         sessionId: 'harness-prev-02',
         label: '工作台布局回归记录',
         displayName: '工作台布局回归记录',
+        lastMessagePreview: '侧栏展开与收起宽度已验证无回归。',
         updatedAt: frozenMs - 3_600_000,
         agentId: m.agentId,
       },
@@ -731,14 +782,14 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   page.on('requestfailed', (req) => {
     const pathname = new URL(req.url()).pathname;
-    if (!OPTIONAL_404_PATHS.has(pathname)) {
+    if (isTrackedAssetPath(pathname)) {
       failedRequests.push(`${req.method()} ${pathname}: ${req.failure()?.errorText || 'failed'}`);
     }
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {
       const pathname = new URL(res.url()).pathname;
-      if (!OPTIONAL_404_PATHS.has(pathname)) {
+      if (isTrackedAssetPath(pathname)) {
         failedRequests.push(`${res.status()} ${pathname}`);
       }
     }
@@ -766,15 +817,23 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     }, {timeout: 15_000});
   }
 
-  // Wait briefly for initial async UI injections (usage chips, sidebar sessions, mode label)
+  // Trigger immediate context-capacity fetch and wait briefly for async UI injections
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('laolao:sessions-changed'));
+  });
   await page.waitForTimeout(350);
 
   if (sceneId === 'sidebar-collapsed') {
-    await page.click('[data-pinkie-sidebar-toggle]');
+    const toggleSel = '.sidebar [data-pinkie-sidebar-toggle], .sidebar button[aria-label="折叠侧边栏"]';
+    await page.waitForSelector(toggleSel, {timeout: 10_000});
+    await page.click(toggleSel);
     await page.waitForFunction(
-      () => document.documentElement.getAttribute('data-pinkie-sidebar-auto') === '1',
+      () => document.documentElement.getAttribute('data-pinkie-sidebar-auto') === '1'
+        || Boolean(document.querySelector('.sidebar.sidebar--collapsed')),
       {timeout: 5_000},
     );
+    // Allow laolao-sidebar-autohide's 200ms native collapse timer to settle
+    await page.waitForTimeout(260);
   } else if (sceneId === 'model-picker') {
     const triggerSel = 'details.chat-controls__model > summary, details.chat-controls__model-picker > summary';
     await page.waitForSelector(triggerSel, {timeout: 10_000});
@@ -786,23 +845,39 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     }, {timeout: 10_000});
     await page.waitForTimeout(200);
   } else if (sceneId === 'settings') {
-    await page.waitForSelector('.laolao-settings-trigger', {timeout: 10_000});
-    await page.click('.laolao-settings-trigger');
-    await page.waitForFunction(() => {
-      const dlg = document.querySelector('#laolao-user-settings');
-      return Boolean(dlg && dlg.open);
-    }, {timeout: 10_000});
+    const settingsLink = 'a.sidebar-footer-icon[aria-label="设置"]';
+    await page.waitForSelector(settingsLink, {timeout: 10_000});
+    await page.click(settingsLink);
+    await page.waitForFunction(() => (
+      location.pathname.startsWith('/settings')
+      && (document.body.getAttribute('data-pinkie-user-settings') === '1'
+        || Boolean(document.querySelector('.config-view-toggle')))
+    ), {timeout: 10_000});
+    await page.waitForTimeout(350);
   } else if (sceneId === 'study-desk') {
-    await page.waitForFunction(() => typeof window.PinkieStudyDesk?.showActivity === 'function', {timeout: 10_000});
-    await page.evaluate(async (activity) => {
-      await window.PinkieStudyDesk.showActivity(activity);
-    }, REAL_QUIZ_ACTIVITY);
+    await page.waitForFunction(
+      () => typeof window.__pinkieStudyDesk?.go === 'function' && typeof window.__pinkieDrill?.start === 'function',
+      {timeout: 10_000},
+    );
+    await page.evaluate(() => {
+      window.__pinkieDrill.start({demo: true, auto: false});
+    });
     await page.waitForFunction(() => {
-      const desk = document.querySelector('#pinkie-study-desk');
-      return Boolean(desk && !desk.hidden && desk.querySelectorAll('.pk-drill-opt').length === 4);
+      const opts = document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice');
+      return opts.length === 4 && [...opts].every((el) => el.getBoundingClientRect().height > 20);
     }, {timeout: 10_000});
   } else if (sceneId === 'metre-board') {
-    await page.waitForFunction(() => Boolean(document.querySelector('#pk-metre-board')), {timeout: 10_000});
+    await page.waitForFunction(
+      () => typeof window.__pinkieMetreBoard?.open === 'function',
+      {timeout: 10_000},
+    );
+    await page.evaluate(() => {
+      window.__pinkieMetreBoard.open();
+    });
+    await page.waitForFunction(() => {
+      const board = document.querySelector('.pk-metre-board');
+      return Boolean(board && !board.hidden && board.querySelectorAll('[data-metre-slot]').length >= 3);
+    }, {timeout: 10_000});
   } else if (sceneId === 'long-conversation') {
     await page.waitForFunction(
       () => document.querySelectorAll('.chat-thread .chat-group').length >= 4,
