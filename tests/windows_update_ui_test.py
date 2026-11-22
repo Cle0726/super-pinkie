@@ -252,6 +252,14 @@ class StartupRescueTest(unittest.TestCase):
         self.assertIn('typeof nativeApi()?.startup_repair === "function"', page)
         self.assertRegex(page, r'<section id="rescue" hidden')
 
+    def test_updated_marker_travels_in_the_fragment(self):
+        # A "?" in a file URL becomes "%3F" in .NET's Uri, so the splash was never found after an update.
+        source = (ROOT / "app/windows_desktop.py").read_text(encoding="utf-8")
+        self.assertIn('loading += "#" + urllib.parse.urlencode({"updated"', source)
+        self.assertNotIn('loading += "?"', source)
+        page = (ROOT / "ui/launcher-loading.html").read_text(encoding="utf-8")
+        self.assertIn("location.hash.slice(1) || location.search", page)
+
 
 class ProbeVisibilityTest(unittest.TestCase):
     def test_probe_uses_the_old_release_sibling_modules(self):
