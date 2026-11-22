@@ -146,7 +146,8 @@ test('cle install lock nests every dependency and swaps in the vendored @opencla
     version: '1.0.0-2',
     packages: {
       '': {},
-      'node_modules/left': { version: '1.0.0', integrity: 'sha512-left' },
+      'node_modules/left': { version: '1.0.0', integrity: 'sha512-left', dependencies: { right: '2.0.0' } },
+      'node_modules/right': { version: '2.0.5', os: ['darwin'], cpu: ['x64'] },
       'node_modules/@openclaw/ai': { version: '1.0.0-2', resolved: 'https://registry/ai.tgz', integrity: 'sha512-npm' },
     },
   };
@@ -156,9 +157,11 @@ test('cle install lock nests every dependency and swaps in the vendored @opencla
 
   assert.equal(packages['node_modules/left'], undefined, 'dependencies must not be hoisted');
   assert.equal(packages['node_modules/openclaw/node_modules/left'].integrity, 'sha512-left');
+  assert.equal(packages['node_modules/openclaw/node_modules/left'].dependencies.right, '2.0.5', 'the pin beats a conflicting exact range');
   assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].integrity, 'sha512-own');
   assert.equal(packages['node_modules/openclaw/node_modules/@openclaw/ai'].resolved, ai.resolved);
 
+  assert.deepEqual(packages['node_modules/openclaw/node_modules/right'], { version: '2.0.5' }, 'no platform filtering');
   assert.throws(() => buildInstallLock({ pkg: { ...pkg, version: '1.0.0' }, shrinkwrap, core, ai }), /does not match/);
   const escaping = { ...shrinkwrap, packages: { ...shrinkwrap.packages, 'node_modules/../../outside': {} } };
   assert.throws(() => buildInstallLock({ pkg, shrinkwrap: escaping, core, ai }), /invalid path/);
