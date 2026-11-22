@@ -1,10 +1,11 @@
-// M3-2 verification:
-// 1. Static check via tools/health/measure.mjs: only ui/injections/laolao-dom-watch.js
-//    may have subtreeObserverCalls > 0, and the page-wide total is exactly 1.
-// 2. Runtime browser check: instrument window.MutationObserver before page load,
-//    load laolao-dom-watch.js plus representative migrated injection scripts,
-//    and assert only 1 real subtree MutationObserver is ever created while
-//    domWatch subscribers receive live DOM mutations.
+// M3 rework domWatch verification:
+// Behavioral equivalence takes priority over M3-2 single runtime observer count.
+// 1. Static check: ui/injections/laolao-dom-watch.js remains the single wrapper
+//    module declaring observe({ ..., subtree: true }) in ui/injections.
+// 2. Runtime browser check: laolao-dom-watch.js does not allocate an idle eager
+//    root observer on load, returns genuine native MutationObserver instances
+//    from createObserver(), and delivers live DOM mutations to migrated modules
+//    and watchTree handles without page errors.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {measure} from '../tools/health/measure.mjs';
@@ -14,7 +15,7 @@ import {
   startVisualServer,
 } from './visual/lib/harness.mjs';
 
-test('M3-2 static: exactly 1 subtree MutationObserver call remains in ui/injections (laolao-dom-watch.js)', async () => {
+test('M3 domWatch static: only ui/injections/laolao-dom-watch.js declares subtree:true in ui/injections', async () => {
   const report = await measure(REPO_ROOT, {includeTestInventory: false});
   const holders = Object.entries(report.injections)
     .filter(([, metrics]) => metrics.subtreeObserverCalls > 0)
@@ -27,7 +28,7 @@ test('M3-2 static: exactly 1 subtree MutationObserver call remains in ui/injecti
   assert.equal(report.injectionTotals.subtreeObserverCalls, 1);
 });
 
-test('M3-2 runtime: live browser page creates exactly 1 subtree MutationObserver across migrated modules', async () => {
+test('M3 domWatch runtime: no eager root observer, native MutationObserver instances, live delivery across migrated modules', async () => {
   const server = await startVisualServer();
   const browser = await launchVisualBrowser();
   try {
@@ -50,9 +51,19 @@ test('M3-2 runtime: live browser page creates exactly 1 subtree MutationObserver
     });
 
     const page = await context.newPage();
-    await page.goto(`${server.origin}/scene?id=home-project`, {waitUntil: 'networkidle'});
+    const pageErrors = [];
+    page.on('pageerror', (err) => pageErrors.push(err.message || String(err)));
 
-    // Load representative migrated injection scripts that previously each created subtree observers
+    // Blank page with ONLY laolao-dom-watch.js: must NOT create an idle eager root observer
+    await page.goto(`${server.origin}/scene?id=home-project`, {waitUntil: 'networkidle'});
+    const beforeScripts = await page.evaluate(() => ({
+      domWatchStats: window.Pinkie.domWatch.stats(),
+      isNativeInstance: window.Pinkie.domWatch.createObserver(() => {}) instanceof MutationObserver,
+    }));
+    assert.equal(beforeScripts.domWatchStats.createdObservers, 0, 'laolao-dom-watch.js must not eagerly allocate a root observer at load time');
+    assert.equal(beforeScripts.isNativeInstance, true, 'createObserver() must return a genuine MutationObserver instance');
+
+    // Load representative migrated injection scripts
     for (const script of [
       '/laolao-motion-preference.js',
       '/laolao-metre-skin.js',
@@ -72,21 +83,24 @@ test('M3-2 runtime: live browser page creates exactly 1 subtree MutationObserver
       probe.id = 'm3-live-probe';
       document.body.appendChild(probe);
       await new Promise((r) => setTimeout(r, 20));
+      const receivedBeforeDisconnect = received;
       handle.disconnect();
+      const probe2 = document.createElement('div');
+      document.body.appendChild(probe2);
+      await new Promise((r) => setTimeout(r, 20));
       return {
         runtime: window.__m3RuntimeStats,
         domWatchStats: window.Pinkie.domWatch.stats(),
-        received,
+        receivedBeforeDisconnect,
+        receivedAfterDisconnect: received,
       };
     });
 
-    assert.equal(
-      result.runtime.subtreeObserveCalls,
-      1,
-      `expected exactly 1 runtime subtree observe() call, got ${JSON.stringify(result.runtime)}`,
-    );
-    assert.equal(result.domWatchStats.observerCount, 1);
-    assert.ok(result.received >= 1, `expected shared domWatch subscriber to receive DOM mutation, got ${result.received}`);
+    assert.deepEqual(pageErrors, []);
+    assert.ok(result.runtime.subtreeObserveCalls >= 1, `expected migrated modules to register native subtree observers, got ${JSON.stringify(result.runtime)}`);
+    assert.ok(result.domWatchStats.createdObservers >= 1, `expected createdObservers >= 1, got ${JSON.stringify(result.domWatchStats)}`);
+    assert.ok(result.receivedBeforeDisconnect >= 1, `expected watchTree subscriber to receive DOM mutation, got ${result.receivedBeforeDisconnect}`);
+    assert.equal(result.receivedAfterDisconnect, result.receivedBeforeDisconnect, 'disconnect() must stop delivering mutations');
     await context.close();
   } finally {
     await browser.close();

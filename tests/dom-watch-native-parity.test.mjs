@@ -506,6 +506,162 @@ test('M3 differential: domWatch observers and polling match native browser APIs'
   });
 });
 
+test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', async (t) => {
+  const browser = await launchBrowser();
+  t.after(() => browser.close());
+  const TOTAL_BLOCKS = 25;
+  const PER_BLOCK = 100;
+  let total = 0;
+  let nonEmpty = 0;
+  const mismatches = [];
+
+  for (let block = 0; block < TOTAL_BLOCKS; block += 1) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.setContent('<!doctype html><html><head></head><body></body></html>');
+      await page.addScriptTag({content: DOM_WATCH_SRC});
+      const res = await page.evaluate(async ({blockIndex, count}) => {
+        const bad = [];
+        let nonEmptyLocal = 0;
+        for (let t = 0; t < count; t += 1) {
+          let seed = blockIndex * 1000 + t + 1;
+          const nextRand = () => {
+            seed = (seed * 1664525 + 1013904223) % 4294967296;
+            return seed / 4294967296;
+          };
+          const pick = (arr) => arr[Math.floor(nextRand() * arr.length)];
+          const root = document.body.appendChild(document.createElement('div'));
+          const ns = [root];
+          let k = 0;
+          const names = new Map([
+            [root, 'root'],
+            [document.documentElement, 'html'],
+            [document.body, 'body'],
+            [document, 'doc'],
+          ]);
+          const mkNode = () => {
+            const n = nextRand() < 0.8 ? document.createElement('i') : document.createTextNode('t');
+            names.set(n, 'n' + (++k));
+            return n;
+          };
+          for (let i = 0; i < 7; i += 1) {
+            const n = mkNode();
+            pick(ns.filter((x) => x.nodeType === 1)).appendChild(n);
+            ns.push(n);
+          }
+          await new Promise((r) => setTimeout(r, 0));
+
+          const log = {native: [], shared: []};
+          const ser = (recs) => recs.map((r) => [
+            r.type,
+            names.get(r.target) || '?',
+            r.attributeName,
+            r.oldValue,
+            [...r.addedNodes].map((n) => names.get(n) || '?'),
+            [...r.removedNodes].map((n) => names.get(n) || '?'),
+          ]);
+          const pairs = [0, 1, 2].map((id) => ({
+            n: new MutationObserver((r) => log.native.push([id, ...ser(r)])),
+            s: window.Pinkie.domWatch.createObserver((r) => log.shared.push([id, ...ser(r)])),
+          }));
+          const obs = (id) => {
+            const o = {};
+            if (nextRand() < 0.7) o.childList = true;
+            if (nextRand() < 0.4) {
+              o.attributes = true;
+              if (nextRand() < 0.4) o.attributeFilter = ['a'];
+              if (nextRand() < 0.15) o.attributeOldValue = true;
+            }
+            if (nextRand() < 0.3) {
+              o.characterData = true;
+              if (nextRand() < 0.15) o.characterDataOldValue = true;
+            }
+            if (!o.childList && !o.attributes && !o.characterData) o.childList = true;
+            const useSubtree = nextRand() < 0.6;
+            if (useSubtree) o.subtree = true;
+            const tg = nextRand() < 0.12
+              ? pick([document.documentElement, document.body, document])
+              : pick(ns);
+            pairs[id].n.observe(tg, o);
+            if (useSubtree && nextRand() < 0.5) {
+              const withoutSubtree = {...o};
+              delete withoutSubtree.subtree;
+              pairs[id].s.watch(tg, withoutSubtree);
+            } else {
+              pairs[id].s.observe(tg, o);
+            }
+          };
+          obs(0);
+          if (nextRand() < 0.8) obs(1);
+          if (nextRand() < 0.5) obs(2);
+
+          for (let i = 0; i < 22; i += 1) {
+            const x = nextRand();
+            const els = ns.filter((n) => n.nodeType === 1);
+            try {
+              if (x < 0.22) pick(els).appendChild(pick(ns.slice(1)));
+              else if (x < 0.34) {
+                const n = mkNode();
+                pick(els).appendChild(n);
+                ns.push(n);
+              } else if (x < 0.46) pick(ns.slice(1)).remove();
+              else if (x < 0.58) pick(els).setAttribute(pick(['a', 'b']), String(i));
+              else if (x < 0.66) {
+                const ts = ns.filter((n) => n.nodeType === 3);
+                if (ts.length) pick(ts).data = String(i);
+              } else if (x < 0.74) obs(Math.floor(nextRand() * 3));
+              else if (x < 0.80) {
+                const j = Math.floor(nextRand() * 3);
+                pairs[j].n.disconnect();
+                pairs[j].s.disconnect();
+              } else if (x < 0.85) {
+                const j = Math.floor(nextRand() * 3);
+                log.native.push(['take', j, ...ser(pairs[j].n.takeRecords())]);
+                log.shared.push(['take', j, ...ser(pairs[j].s.takeRecords())]);
+              } else if (x < 0.93) await new Promise((r) => setTimeout(r, 0));
+            } catch (e) {
+              if (e.name !== 'HierarchyRequestError') bad.push({blockIndex, t, err: e.message});
+            }
+          }
+          await new Promise((r) => setTimeout(r, 0));
+          const canon = (entries) => {
+            const byId = {};
+            for (const e of entries) {
+              const take = e[0] === 'take';
+              const id = take ? e[1] : e[0];
+              (byId[id] = byId[id] || []).push([take, e.slice(take ? 2 : 1)]);
+            }
+            return JSON.stringify([byId[0] || [], byId[1] || [], byId[2] || []]);
+          };
+          const a = canon(log.native);
+          const c = canon(log.shared);
+          if (a.length > 15) nonEmptyLocal += 1;
+          if (a !== c && bad.length < 20) {
+            bad.push({blockIndex, t, native: a.slice(0, 400), shared: c.slice(0, 400)});
+          }
+          pairs.forEach((q) => { q.n.disconnect(); q.s.disconnect(); });
+          root.remove();
+        }
+        return {bad, nonEmptyLocal};
+      }, {blockIndex: block, count: PER_BLOCK});
+      total += PER_BLOCK;
+      nonEmpty += res.nonEmptyLocal;
+      if (res.bad.length > 0) mismatches.push(...res.bad);
+    } finally {
+      await context.close();
+    }
+  }
+
+  assert.equal(total, TOTAL_BLOCKS * PER_BLOCK);
+  assert.ok(nonEmpty >= 2000, `expected >= 2000 non-empty fuzz sequences, got ${nonEmpty}`);
+  assert.equal(
+    mismatches.length,
+    0,
+    `random differential fuzz found ${mismatches.length} mismatch(es) across ${total} sequences; first: ${JSON.stringify(mismatches[0])}`,
+  );
+});
+
 test('M3 product regression: unmodified laolao-learning-reminder.js reacts to both html attributes and body subtree mutations', async (t) => {
   const browser = await launchBrowser();
   t.after(() => browser.close());
