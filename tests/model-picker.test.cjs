@@ -245,6 +245,33 @@ test('model list groups by AI family and folds identical IDs across providers wi
   assert.doesNotMatch(css, /\.chat-controls__model \.pinkie-fallback-provider \{/);
 });
 
+test('Doubao web text routes are named and grouped without exposing media or unknown auto routes', () => {
+  const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/, 'window.__pickerTest = {groupedPresentationModels, modelGroup, idBrand, syncModelBrands};})();');
+  const window = {addEventListener() {}, removeEventListener() {}};
+  vm.runInNewContext(source, {window, document: {addEventListener() {}}, requestAnimationFrame() {}});
+  const models = [
+    {provider: 'mm', id: 'doubao-web/auto', name: 'Auto · doubao-web'},
+    {provider: 'mm', id: 'doubao-web/expert', name: '豆包专家自定义名称'},
+    {provider: 'mm', id: 'doubao-web/fast', name: 'Fast · doubao-web'},
+    {provider: 'mm', id: 'doubao-web/think', name: 'doubao-web/think'},
+    {provider: 'mm', id: 'doubao-web/image', name: 'Image · doubao-web'},
+    {provider: 'mm', id: 'workbuddy/auto', name: 'Auto · workbuddy'},
+  ];
+  const shown = window.__pickerTest.groupedPresentationModels(models);
+  assert.deepEqual(Object.fromEntries(shown.map(model => [model.id, model.name])), {
+    'doubao-web/auto': '豆包对话（自动）',
+    'doubao-web/expert': '豆包专家自定义名称',
+    'doubao-web/fast': '豆包对话（快速）',
+    'doubao-web/think': '豆包对话（深度思考）',
+  });
+  assert.ok(shown.every(model => window.__pickerTest.modelGroup(model) === '豆包'));
+  assert.ok(shown.every(model => window.__pickerTest.idBrand(model.id) === 'doubao'));
+  const option = {dataset: {}, getAttribute(name) { return name === 'data-chat-model-option' ? 'mm/doubao-web/auto' : ''; }};
+  window.__pickerTest.syncModelBrands({querySelectorAll() { return [option]; }});
+  assert.equal(option.dataset.pinkieHiddenModel, undefined);
+  assert.equal(option.dataset.pinkieBrand, 'doubao');
+});
+
 test('the gateway catalog is authoritative even for older model names', () => {
   const source = read('ui/injections/laolao-model-picker.js').replace(/\}\)\(\);\s*$/,
     'window.__pickerTest = {groupedPresentationModels, fallbackModelName, syncModelBrands};})();');

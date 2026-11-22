@@ -237,6 +237,8 @@
     return provider === "mm" && /^claude-(?:sonnet|opus)-5-5-(?:low|medium|high)$/.test(model?.id || "") ? "antigravity" : "";
   }
   function modelSourceLabel(model, name) {
+    const doubao = doubaoWebName(model?.id, name);
+    if (doubao) return doubao;
     return modelOrigin(model) === "antigravity" ? String(name).replace(/\s*[·•]\s*At$/i, "") + " ·At" : name;
   }
 
@@ -381,6 +383,7 @@
   function hiddenPickerModel(model, selected = "") { return model?.available === false || (unnamedModel(model?.id) && !(model?.sources || []).includes(selected) && `${model?.provider || ""}/${model?.id || ""}` !== selected && model?.id !== selected); }
   function modelGroup(model) {
     const fullId = String(model.id || "").toLowerCase();
+    if (doubaoWebName(fullId)) return "豆包";
     const id = fullId.split("/").at(-1);
     if (/^gpt[-_.]/.test(id)) return "GPT";
     if (/^codex[-_.]/.test(id)) return "Codex";
@@ -416,8 +419,19 @@
 
   // 从模型 ID 本身认出它是哪一家的哪个模型；认不出（auto、copilot-search-a、memory4-dream……）返回 ""。
   // services/mode-architecture/model-sync.mjs 的 recognizedModelId 是同一套规则（tests/model-sync.test.mjs 守着）。
+  function doubaoWebName(id, configuredName) {
+    const match = /^doubao-web\/(auto|expert|fast|think)$/i.exec(String(id || ""));
+    if (!match) return "";
+    const mode = match[1].toLowerCase();
+    const name = String(configuredName || "").trim();
+    if (name && name.toLowerCase() !== match[0].toLowerCase()
+      && !/^(?:auto|expert|fast|think)\s*[·•]\s*doubao-web$/i.test(name)) return name;
+    return `豆包对话（${{auto: "自动", expert: "专家", fast: "快速", think: "深度思考"}[mode]}）`;
+  }
   function idBrand(id) {
-    const model = String(id || "").toLowerCase().split("/").at(-1);
+    const fullId = String(id || "").toLowerCase();
+    if (doubaoWebName(fullId)) return "doubao";
+    const model = fullId.split("/").at(-1);
     if (/^(?:gemini|gemma|veo)(?:[-_.:]|$)/.test(model)) return "gemini";
     if (/^(?:claude)(?:[-_.:]|$)/.test(model)) return "claude";
     if (/^codex(?:[-_.:]|$)/.test(model)) return "codex";

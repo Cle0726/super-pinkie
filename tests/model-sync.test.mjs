@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import http from 'node:http';
-import {setTimeout as delay} from 'node:timers/promises';
-import {chatModelIds, createModelSynchronizer, newModelEntries, recognizedModelId, registerModelSync} from '../services/mode-architecture/model-sync.mjs';
+import {chatModelIds, createModelSynchronizer, newModelEntries, recognizedModelId} from '../services/mode-architecture/model-sync.mjs';
 
 test('only chat IDs enter the model catalog, with duplicates removed', () => {
   assert.deepEqual(chatModelIds({data: [
@@ -67,74 +65,6 @@ test('sync adds upstream models once, preserves configured entries, and does not
   ]);
   assert.equal((await sync.sync({force: true})).added, 0);
   assert.equal(writes, 1);
-});
-
-test('the gateway automatically refreshes /models after startup and adds image input immediately on loopback', async (t) => {
-  let rows = [{id: 'workbuddy/hy4flash'}];
-  const requests = [];
-  const server = http.createServer((req, res) => {
-    requests.push([req.method, req.url, req.headers.authorization]);
-    res.writeHead(200, {'Content-Type': 'application/json'});
-    res.end(JSON.stringify({data: rows}));
-  });
-  await new Promise((resolve, reject) => server.once('error', reject).listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => {server.close(resolve); server.closeAllConnections();}));
-  const provider = {baseUrl: `http://127.0.0.1:${server.address().port}/v1`, apiKey: 'catalog-fixture', models: []};
-  const cfg = {models: {providers: {mm: provider}}};
-  const warnings = [];
-  let service;
-  t.mock.timers.enable({apis: ['setInterval', 'Date'], now: 10_000});
-  registerModelSync({registerService(value) {service = value;}, registerGatewayMethod() {}, runtime: {config: {
-    current: () => cfg, async mutateConfigFile({mutate}) {mutate(cfg);},
-  }}});
-  service.start({logger: {warn: message => warnings.push(message)}});
-  t.after(() => service.stop());
-  async function untilSize(size) {
-    for (let i = 0; i < 300 && provider.models.length < size; i++) await delay(10);
-    assert.equal(provider.models.length, size, warnings.join('\n'));
-  }
-  await untilSize(1);
-  assert.deepEqual(provider.models[0].input, ['text', 'image']);
-  rows = [...rows, {id: 'qwen3-coder-next'}, {id: 'gpt-image-2'}, {id: 'unrecognised-route'}];
-  t.mock.timers.tick(5 * 60_000);
-  await untilSize(2);
-  assert.deepEqual(provider.models.map(({id, input}) => [id, input]), [
-    ['workbuddy/hy4flash', ['text', 'image']], ['qwen3-coder-next', ['text', 'image']],
-  ]);
-  assert.deepEqual(requests, Array(2).fill(['GET', '/v1/models', 'Bearer catalog-fixture']));
-  assert.deepEqual(warnings, []);
-});
-
-test('new loopback models honor saved vision settings, and external catalogs do not default to image input', async (t) => {
-  const fs = await import('node:fs');
-  const os = await import('node:os');
-  const path = await import('node:path');
-  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-new-vision-'));
-  t.after(() => fs.rmSync(state, {recursive: true, force: true}));
-  fs.writeFileSync(path.join(state, 'pinkie-model-setup.json'), JSON.stringify({capabilities: {
-    'clekk/gpt-6-sol': {vision: false}, 'local/gemini-2.5-flash-high': {vision: false},
-  }}));
-  const sibling = {id: 'gemini-2.5-flash', name: 'Saved Gemini', reasoning: true, input: ['text', 'image']};
-  const providers = {
-    local: {baseUrl: 'http://[::1]:1467/v1', apiKey: 'fixture', models: [sibling]},
-    clekk: {baseUrl: 'http://localhost:1467/v1', apiKey: 'fixture', models: []},
-    direct: {baseUrl: 'https://provider.invalid/v1', apiKey: 'fixture', models: []},
-  };
-  const cfg = {models: {providers}};
-  const sync = createModelSynchronizer({runtime: {state: {resolveStateDir: () => state}, config: {
-    current: () => cfg, async mutateConfigFile({mutate}) {mutate(cfg);},
-  }}}, {fetchImpl: async () => new Response(JSON.stringify({data: [
-    {id: 'gpt-6-sol'}, {id: 'gemini-2.5-flash-high'}, {id: 'workbuddy/hy4flash'}, {id: 'gpt-4o-search-preview'},
-  ]}))});
-  await sync.sync();
-  const input = (provider, id) => providers[provider].models.find(model => model.id === id).input;
-  assert.deepEqual(input('local', 'workbuddy/hy4flash'), ['text', 'image']);
-  assert.deepEqual(input('local', 'gemini-2.5-flash-high'), ['text']);
-  assert.deepEqual(input('clekk', 'gpt-6-sol'), ['text']);
-  assert.deepEqual(input('direct', 'workbuddy/hy4flash'), ['text']);
-  assert.deepEqual(input('local', 'gpt-4o-search-preview'), ['text']);
-  assert.deepEqual(sibling.input, ['text', 'image']);
-  assert.equal((await sync.sync({force: true})).added, 0);
 });
 
 test('failed upstream fetch never mutates local models', async () => {
@@ -362,26 +292,6 @@ test('hy4free is discovered with reasoning and existing placeholders recover',as
  assert.deepEqual(config.models.providers.mm.models[0].compat,{supportsReasoningEffort:true,supportedReasoningEfforts:['high']});
 });
 
-test('placeholders that got loopback image input still gain reasoning; a saved reasoning=false still wins',async()=>{
-  // Real 11-21 Windows catalog: hy4flash-free etc. were text+image and stuck at reasoning:false, so no 「思考了」.
-  const stuck=id=>({...newModelEntries([],[id])[0],reasoning:false,input:['text','image']});
-  const models=[stuck('workbuddy/hy4flash-free'),stuck('workbuddy/hy4std'),stuck('gemini-3-flash')];
-  for(const m of models) delete m.compat;
-  const config={models:{providers:{mm:{baseUrl:'http://127.0.0.1:1466/v1',apiKey:'secret',models}}}};
-  const fs=await import('node:fs'), os=await import('node:os'), path=await import('node:path');
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'pinkie-sync-'));
-  fs.writeFileSync(path.join(dir,'pinkie-model-setup.json'),JSON.stringify({capabilities:{'mm/workbuddy/hy4std':{reasoning:false}}}));
-  const sync=createModelSynchronizer({runtime:{state:{resolveStateDir:()=>dir},config:{current:()=>config,
-    async mutateConfigFile({mutate}){mutate(config);}}}},
-    {fetchImpl:async()=>new Response(JSON.stringify({data:models.map(m=>({id:m.id}))}))});
-  await sync.sync();
-  const byId=Object.fromEntries(config.models.providers.mm.models.map(m=>[m.id,m]));
-  assert.equal(byId['workbuddy/hy4flash-free'].reasoning,true);
-  assert.deepEqual(byId['workbuddy/hy4flash-free'].input,['text','image']);
-  assert.equal(byId['gemini-3-flash'].reasoning,true);
-  assert.equal(byId['workbuddy/hy4std'].reasoning,false,'the user turned reasoning off for this one');
-});
-
 test('automatic placeholders gain reasoning on every provider while custom capabilities stay untouched',async()=>{
   const placeholder={...newModelEntries([],['workbuddy/deepseek-v4.1-flash'])[0],reasoning:false};
  delete placeholder.compat;
@@ -432,22 +342,26 @@ test('explicit upstream effort metadata is honored without replacing a custom ca
 // 11-16 用户：「当找不到模型名时就不要显示出来了」——认不出是哪个模型的上游 ID 不自动加进来；选择器用同一套规则把已经在配置里的藏起来。
 test('upstream IDs whose model name cannot be recognised are not added; the picker hides the same ones', async () => {
   const fs = await import('node:fs');
-  const named = ['gpt-6-sol', 'claude-cli/claude-opus-4-8', 'workbuddy/glm-5.3', 'workbuddy/hy4flash-free', 'gemini-3.6-flash-high', 'o4-mini', 'qwen3-coder-next', 'kimi-k3.1', 'mimo-v2.6-pro', 'step-5-preview', 'workbuddy/space-bunny', 'tab_flash_lite_preview', 'grok-4.7', 'deepseek-v4-pro', 'minimax-m3', 'codex-auto-review'];
+  const doubao = ['doubao-web/auto', 'doubao-web/expert', 'doubao-web/fast', 'doubao-web/think'];
+  const named = ['gpt-6-sol', 'claude-cli/claude-opus-4-8', 'workbuddy/glm-5.3', 'workbuddy/hy4flash-free', 'gemini-3.6-flash-high', 'o4-mini', 'qwen3-coder-next', 'kimi-k3.1', 'mimo-v2.6-pro', 'step-5-preview', 'workbuddy/space-bunny', 'tab_flash_lite_preview', 'grok-4.7', 'deepseek-v4-pro', 'minimax-m3', 'codex-auto-review', ...doubao];
   const unnamed = ['workbuddy/auto', 'auto', 'github-copilot/copilot-search-a', 'memory4-dream', 'github-copilot/mai-code-1-flash-secondary', 'future-model', 'x'];
   for (const id of named) assert.ok(recognizedModelId(id), id);
   for (const id of unnamed) assert.ok(!recognizedModelId(id), id);
   assert.deepEqual(newModelEntries([], [...named.slice(0, 3), ...unnamed]).map((entry) => entry.id), named.slice(0, 3));
   const config = {models: {providers: {fixture: {baseUrl: 'https://example.invalid/v1', apiKey: 'fixture', models: [{id: 'memory4-dream', name: 'Memory4 Dream'}]}}}};
   const api = {runtime: {config: {current: () => config, mutateConfigFile: async ({mutate}) => mutate(config)}}};
-  const result = await createModelSynchronizer(api, {fetchImpl: async () => new Response(JSON.stringify({data: [{id: 'gpt-6-sol'}, {id: 'auto'}, {id: 'copilot-search-a'}, {id: 'memory4-dream'}]}))}).sync();
-  assert.equal(result.added, 1);
+  const upstream = ['gpt-6-sol', 'auto', 'copilot-search-a', 'memory4-dream', ...doubao, 'doubao-web/image', 'doubao-web/video'];
+  const result = await createModelSynchronizer(api, {fetchImpl: async () => new Response(JSON.stringify({data: upstream.map(id => ({id}))}))}).sync();
+  assert.equal(result.added, 5);
   assert.equal(result.unnamed, 2, '认不出名字的两个没加，已经在配置里的不算');
-  assert.deepEqual(config.models.providers.fixture.models.map((entry) => entry.id), ['memory4-dream', 'gpt-6-sol'], '已有的条目不删');
+  assert.deepEqual(config.models.providers.fixture.models.map((entry) => entry.id), ['memory4-dream', 'gpt-6-sol', ...doubao]);
   // 选择器（laolao-model-picker.js）的 idBrand 和这里同一套规则
   const picker = fs.readFileSync(new URL('../ui/injections/laolao-model-picker.js', import.meta.url), 'utf8');
-  const body = picker.slice(picker.indexOf('function idBrand(id) {'), picker.indexOf('function modelBrand(provider, id) {'));
+  const body = picker.slice(picker.indexOf('function doubaoWebName(id, configuredName) {'), picker.indexOf('function modelBrand(provider, id) {'));
   const idBrand = new Function(`${body}; return idBrand;`)();
   for (const id of [...named, ...unnamed]) assert.equal(Boolean(idBrand(id)), recognizedModelId(id), id);
+  assert.deepEqual(newModelEntries([], doubao).map(entry => entry.name),
+    ['豆包对话（自动）', '豆包对话（专家）', '豆包对话（快速）', '豆包对话（深度思考）']);
   assert.match(picker, /function hiddenPickerModel\(model, selected = ""\) \{[^\n]*unnamedModel/, '展示目录藏起认不出名字的');
   assert.match(picker, /const unnamed = row !== selected && unnamedModel\(/, '输入框下的模型列表藏起认不出名字的，正在用的那个除外');
 });

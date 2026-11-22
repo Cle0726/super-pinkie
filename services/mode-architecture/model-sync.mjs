@@ -12,8 +12,19 @@ const NON_CHAT_VISION_ID = /imagine|image|video|veo-|embed|tts|whisper|speech|au
 // 从 ID 认出它是哪个模型（和 ui/injections/laolao-model-picker.js 的 idBrand 同一套规则，测试守着两边一致）。
 // 认不出名字的上游模型（比如 auto、copilot-search-a、memory4-dream）不自动加进模型列表：11-16 用户「当找不到模型名时就不要显示出来了」。
 const KNOWN_MODEL = /^(?:(?:gemini|gemma|veo|claude|codex|gpt|o1|o3|o4|grok|groq|deepseek|mistral|kimi|moonshot|glm|zai|llama|ollama|minimax|doubao|perplexity|hunyuan|space-bunny|tab)|(?:qwen|qwq)\d*|hy\d+[a-z]*)(?:[-_.:]|$)|^(?:mimo|step)[-_.]/i;
+const DOUBAO_WEB = /^doubao-web\/(auto|expert|fast|think)$/i;
+export function doubaoWebName(id, configuredName) {
+  const match = DOUBAO_WEB.exec(String(id || ''));
+  if (!match) return '';
+  const mode = match[1].toLowerCase();
+  const name = String(configuredName || '').trim();
+  if (name && name.toLowerCase() !== match[0].toLowerCase()
+    && !/^(?:auto|expert|fast|think)\s*[·•]\s*doubao-web$/i.test(name)) return name;
+  return `豆包对话（${{auto: '自动', expert: '专家', fast: '快速', think: '深度思考'}[mode]}）`;
+}
 export function recognizedModelId(id) {
-  return KNOWN_MODEL.test(String(id || '').split('/').at(-1));
+  const value = String(id || '');
+  return DOUBAO_WEB.test(value) || KNOWN_MODEL.test(value.split('/').at(-1));
 }
 const EFFORT_SUFFIX = /-(?:extra-low|non-reasoning|reasoning|thinking|tiered|adaptive|xhigh|high|medium|low)$/i;
 const VERIFIED_GPT6 = /^(?:gpt-6-(?:astra|sol|luna)|gpt-6\.1-sol)$/;
@@ -40,6 +51,8 @@ function isAutoDiscoveredWorkBuddy(entry) {
 
 
 function modelName(id) {
+  const doubao = doubaoWebName(id);
+  if (doubao) return doubao;
   const parts = id.split('/');
   const model = parts.pop();
   const words = {gpt: 'GPT', glm: 'GLM', deepseek: 'DeepSeek', minimax: 'MiniMax',
