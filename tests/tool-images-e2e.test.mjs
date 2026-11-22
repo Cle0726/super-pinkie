@@ -4,12 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {ToolTraceStore, serveToolImage} from '../services/mode-architecture/tool-trace.mjs';
 import {pinkieSplitTimelineMessage} from '../patch/apply-chat-timeline.mjs';
+import {playwright} from '../tools/study-desk/harness.mjs';
 
-const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 
@@ -41,7 +40,7 @@ test(`read-image trace displays the correct image, survives restart, and stays s
   const html = `<!doctype html><meta charset="utf-8">
     <link rel="stylesheet" href="/laolao-theme.css"><link rel="stylesheet" href="/laolao-tool-rows.css"><link rel="stylesheet" href="/laolao-tool-images.css">
     <style>body{margin:32px;max-width:800px;font-family:sans-serif;background:#faf8fa}.pinkie-process{padding:16px;border:1px solid #ddd;border-radius:12px}.chat-tool-msg-summary{display:flex;align-items:center;min-height:50px}.cle-run{display:flex;align-items:center;min-height:50px}</style>
-    <openclaw-chat-pane id="primary"><div class="pinkie-process"><div><button class="cle-run">看了图片</button></div><div id="rows" data-cle-member></div></div></openclaw-chat-pane>
+    <openclaw-chat-pane id="primary"><div class="pinkie-process"><div><button class="cle-run"><i></i><b>运行了 1 个命令，看了 ${'请详细描述这张图片里的内容。'.repeat(8)}</b><span></span></button></div><div id="rows" data-cle-member></div></div></openclaw-chat-pane>
     <openclaw-chat-pane id="other"><div id="foreign-row"><button class="chat-tool-msg-summary">另一个会话的图片</button></div></openclaw-chat-pane>
     <script>const fixture=${JSON.stringify(fixture).replace(/</g, '\\u003c')};
       document.querySelector('#primary').state={sessionKey:fixture.sessionKey,chatMessages:[{role:'user'},fixture.message]};
@@ -64,8 +63,7 @@ test(`read-image trace displays the correct image, survives restart, and stays s
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
   try {
-    const playwright = require('playwright');
-    browser = await playwright[engine].launch(engine === 'chromium' ? {headless:true,channel:'chrome'} : {headless:true});
+    browser = await playwright()[engine].launch(engine === 'chromium' ? {headless:true,channel:'chrome'} : {headless:true});
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/?session=${encodeURIComponent(sessionKey)}`);
     await page.evaluate(() => window.__pinkieToolImages.refresh());
@@ -80,6 +78,10 @@ test(`read-image trace displays the correct image, survives restart, and stays s
       assert.deepEqual(await response.body(), fs.readFileSync(expectedFile), 'thumbnail URL serves this call’s actual image bytes');
     }
     assert.equal(await page.locator('.cle-run .pinkie-tool-thumb').count(), 2);
+    const foldedRow = await page.locator('.cle-run').boundingBox();
+    const foldedImage = await page.locator('.cle-run .pinkie-tool-thumb').last().boundingBox();
+    assert.ok(foldedRow && foldedImage && foldedImage.x + foldedImage.width <= foldedRow.x + foldedRow.width,
+      'a long tool label must leave room for the thumbnail inside the folded row');
     await page.waitForFunction(() => [...document.querySelectorAll('#row0 .pinkie-tool-thumb img,#row1 .pinkie-tool-thumb img')].every(img => img.complete && img.naturalWidth > 0));
     const box = await page.locator('#row0 .pinkie-tool-thumb').boundingBox();
     assert.ok(box && box.width === 40 && box.height === 40, 'the actual thumbnail CSS remains visible at 40×40');

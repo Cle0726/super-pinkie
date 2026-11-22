@@ -30,6 +30,9 @@
 }
 /* 折起来的那一行本身是按钮：小框跟在文字后面，不被裁掉。
    laolao-tool-rows.css 给行里所有 span 设了不换行、溢出隐藏，这里按同样的权重改回来。 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run:has(> .pinkie-tool-thumbs) > b {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumbs { flex: none; overflow: visible; margin-left: 4px; font-size: 12px; }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumb { flex: none; min-width: 40px; overflow: hidden; }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run .pinkie-tool-thumb.is-gone { white-space: normal; font-size: 9px; line-height: 11px; }
