@@ -28,6 +28,30 @@ export function envWithoutTokens(env = process.env) {
   return clean;
 }
 
+const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+
+// Upstream generated the shrinkwrap with pnpm overrides, so an exact range can
+// disagree with what is pinned (p-retry wants @types/retry 0.12.0, 0.12.5 is
+// pinned and is what the published package installs). npm ci rejects that; the
+// pin is authoritative.
+function withPinnedRanges(key, entry, pinned) {
+  if (!entry.dependencies) return entry;
+  const dependencies = { ...entry.dependencies };
+  for (const [name, range] of Object.entries(dependencies)) {
+    if (!EXACT_VERSION.test(range)) continue;
+    for (let base = key; ;) {
+      const hit = pinned[`${base ? `${base}/` : ''}node_modules/${name}`];
+      if (hit) {
+        dependencies[name] = hit.version;
+        break;
+      }
+      if (!base) break;
+      base = base.slice(0, Math.max(0, base.lastIndexOf('/node_modules/')));
+    }
+  }
+  return { ...entry, dependencies };
+}
+
 export function buildInstallLock({ pkg, shrinkwrap, core, ai }) {
   if (shrinkwrap.version !== pkg.version) {
     throw new Error(`cle-core shrinkwrap ${shrinkwrap.version} does not match package ${pkg.version}`);
@@ -55,9 +79,14 @@ export function buildInstallLock({ pkg, shrinkwrap, core, ai }) {
     if (!key.startsWith('node_modules/') || key.split('/').includes('..')) {
       throw new Error(`cle-core shrinkwrap has an invalid path: ${key}`);
     }
+    // npm does not platform-filter a published package's shrinkwrap: every
+    // prebuilt binary lands in the App (that is how one Mac bundle can carry
+    // both architectures), so the same is done here.
+    const { os, cpu, libc, ...portable } = entry;
+    const pinned = withPinnedRanges(key, portable, shrinkwrap.packages);
     packages[`${CORE_KEY}/${key}`] = key === AI_KEY
-      ? { ...entry, resolved: ai.resolved, integrity: ai.integrity }
-      : entry;
+      ? { ...pinned, resolved: ai.resolved, integrity: ai.integrity }
+      : pinned;
   }
   return { root, lock: { name: root.name, lockfileVersion: 3, requires: true, packages } };
 }
