@@ -6,7 +6,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, explainInput} from './learning-game-content.mjs';
-import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
@@ -99,9 +99,24 @@ function keyText(kind, item) {
   if (item.reference) return clean(item.reference, 400);
   return clean(item.answer, 200);
 }
+function keyLabel(kind, item) {
+  if (item.options) {
+    const idx = Number(item.answer);
+    const letter = 'ABCD'[idx] || String(idx + 1);
+    return item.options[idx] ? `${letter}. ${clean(item.options[idx], 300)}` : letter;
+  }
+  if (kind === 'term-match') return clean(item.answer, 8);
+  if (Array.isArray(item.answer)) return item.answer.map(x => clean(x, 120)).filter(Boolean).join(' / ');
+  if (item.reference) return clean(item.reference, 400);
+  return clean(item.answer, 200);
+}
 function givenText(kind, item, given) {
   if (given == null || given === '') return '';
-  if (item.options) { const n = Number(given); return Number.isInteger(n) && item.options[n] ? clean(item.options[n], 300) : ''; }
+  if (item.options) {
+    const n = Number(given);
+    if (Number.isInteger(n) && item.options[n]) return `${'ABCD'[n] || String(n + 1)}. ${clean(item.options[n], 300)}`;
+    return '';
+  }
   if (kind === 'term-match') return clean(String(given).toUpperCase(), 8);
   return clean(given, 200);
 }
@@ -119,6 +134,7 @@ export class GameExam {
     this.game = game;
     this.jobs = new Map();
     this.grading = new Map();
+    this.explaining = new Map();
     game.modules.exam = this;
     this.audioTokens = new Map();
     this.real = new RealPapers(this, {materials: game.store?.materials || null, requestModel: game.requestModel, now: () => this.now(), dataRoot: game.store?.materials?.root || null});
@@ -188,18 +204,20 @@ export class GameExam {
     const ex = this.ensure(this.game.read());
     const tries = id => Object.values(ex.attempts).filter(a => a.paperId === id);
     const best = id => { const s = tries(id).map(a => a.result?.score).filter(Number.isFinite); return s.length ? Math.max(...s) : null; };
+    const lastSubmitted = id => tries(id).filter(a => a.submittedAt).sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))[0]?.attemptId || null;
     const isReal = p => ['real', 'mock'].includes(p.kind);
     const list = Object.values(ex.papers).filter(p => p.exam === exam && !isReal(p)).sort((a, b) => b.createdAt - a.createdAt)
-      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: tries(p.paperId).length, best: best(p.paperId)}));
+      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt), lastAttemptId: lastSubmitted(p.paperId)}));
     const real = Object.values(ex.papers).filter(p => p.exam === exam && isReal(p) && p.status === 'ready')
       .sort((a, b) => (a.kind === b.kind ? (b.year * 100 + b.month) - (a.year * 100 + a.month) || a.paperId.localeCompare(b.paperId) : a.kind === 'real' ? -1 : 1))
-      .map(p => ({paperId: p.paperId, kind: p.kind, year: p.year, month: p.month, title: p.title, audio: Boolean(p.audio) && Boolean(this.audioPresent(p.paperId)), items: p.items, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt)}));
+      .map(p => ({paperId: p.paperId, kind: p.kind, year: p.year, month: p.month, title: p.title, audio: Boolean(p.audio) && Boolean(this.audioPresent(p.paperId)), items: p.items, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt), lastAttemptId: lastSubmitted(p.paperId)}));
     this.keepSpare(exam);
     this.realTick();
     for (const [id] of this.jobs) if (!list.some(p => p.paperId === id)) list.unshift({paperId: id, title: '碧琪正在出卷…', createdAt: this.now(), status: 'generating', attempts: 0});
     const st = this.real.status;
     const found = Math.max(st.found || 0, this.real.readManifest().sets.length);
-    return {papers: list, real, realStatus: {found, ready: real.length, state: st.state, preparing: st.preparing, mounted: Boolean(st.mounted), failed: (st.failed || []).length}, format: PRETCO_B_FORMAT};
+    const latestAttemptId = Object.values(ex.attempts).filter(a => a.exam === exam && a.submittedAt).sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))[0]?.attemptId || null;
+    return {papers: list, real, latestAttemptId, realStatus: {found, ready: real.length, state: st.state, preparing: st.preparing, mounted: Boolean(st.mounted), failed: (st.failed || []).length}, format: PRETCO_B_FORMAT};
   }
   audioPresent(paperId) {
     const full = this.readFull(paperId);
@@ -328,56 +346,54 @@ export class GameExam {
     const sections = [];
     const wrong = [];
     const subjective = [];
+    let totalItems = 0, rightObj = 0, wrongObj = 0, blankObj = 0;
     for (const sec of full.sections) {
       let score = 0;
       let max = 0;
       for (const p of sec.parts) p.items.forEach((it, i) => {
         const id = `${sec.id}-${p.id}-${i + 1}`;
         max += p.each;
+        totalItems += 1;
         const ans = snap.answers[id];
         if (['translate-passage', 'writing'].includes(p.kind)) { subjective.push({sec: sec.id, id, kind: p.kind, it, max: p.each, ans}); return; }
-        if (gradeObjective(p.kind, it, ans)) score += p.each;
-        else wrong.push({id, sec: sec.id, kind: p.kind, it, given: ans});
+        const blank = ans == null || ans === '';
+        if (gradeObjective(p.kind, it, ans)) { score += p.each; rightObj += 1; }
+        else {
+          if (blank) blankObj += 1; else wrongObj += 1;
+          wrong.push({id, sec: sec.id, kind: p.kind, it, given: ans, blank});
+        }
       });
       sections.push({id: sec.id, score, max});
     }
     const notes = {};
-    for (const s of subjective) {
+    // 主观题并发阅卷；空白直接 0 分不调模型，大幅缩短交卷等待时间。
+    await Promise.all(subjective.map(async s => {
       const blank = !clean(s.ans) || fold(s.ans) === fold(s.it.stem);
       let got = {score: 0, reason: blank ? '没有作答（或只抄了题目）。' : '', source: 'local'};
-      if (!blank) {
+      if (!blank && this.game.requestModel) {
         const r = await modelJson(this.game.requestModel, GRADE_RULES, {kind: s.kind, task: s.it.stem, reference: s.it.reference, rubric: s.it.rubric, max: s.max, answer: s.ans}, {
           validate: v => (Number.isInteger(Number(v?.score)) && Number(v.score) >= 0 && Number(v.score) <= s.max ? {score: Number(v.score), reason: clean(v.reason, 300)} : null), timeoutMs: 100000, maxTokens: 800,
         });
         // 模型判不了时的兜底：按长度给一个保守分，并标明需要碧琪稍后复判
         got = r ? {...r.value, source: 'model'} : {score: Math.min(Math.floor(s.max * 0.4), Math.floor(clean(s.ans).split(/\s+/).length / 20)), reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local'};
+      } else if (!blank) {
+        got = {score: Math.min(Math.floor(s.max * 0.4), Math.floor(clean(s.ans).split(/\s+/).length / 20)), reason: '内置模型不在线，先按字数给了保守分；可进整卷对照参考答案。', source: 'local'};
       }
-      notes[s.id] = {...got, standard: clean(s.it.reference, 400), yours: clean(s.ans, 300)};
+      notes[s.id] = {...got, max: s.max, standard: clean(s.it.reference, 800), yours: clean(s.ans, 600)};
       sections.find(x => x.id === s.sec).score += got.score;
-    }
-    // 错题：标准答案先定下来，模型只顺着它讲。最多 24 道，避免一页全错时阅卷停太久。
-    const explained = [];
-    await pool(wrong.slice(0, 24), 4, async w => {
-      const standard = keyText(w.kind, w.it);
-      if (!standard) return;
+    }));
+    // 交卷先秒出全部标准答案和官方解析，不再逐题调模型卡住等待；想听哪题进「预览整卷」按需点「讲给我听 / 带读+搭配」。
+    const explained = wrong.map(w => {
+      const standard = keyLabel(w.kind, w.it);
       const yours = givenText(w.kind, w.it, w.given);
-      const note = clean(w.it.why, 200);
-      let text = note;
-      let source = note ? 'key' : 'none';
-      if (this.game.requestModel) {
-        const r = await modelJson(this.game.requestModel, explainRulesFor({brief: true}), explainInput({question: w.it.stem, options: w.it.options, standard, note, yours, correct: false}), {validate: v => validVoicedExplain(v, {brief: true}), retries: 1, timeoutMs: 100000, maxTokens: useCompactExplain() ? 3200 : 1000, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 3200, fallbackRules: compactExplainRules({brief: true}), onFallback: markCompactExplain})});
-        if (r) { text = r.value.text; source = 'model'; }
-      }
-      explained.push({id: w.id, section: w.sec, no: w.it.no || null, stem: clean(w.it.stem, 90), yours, standard, text, source});
-    });
-    explained.sort((a, b) => wrong.findIndex(w => w.id === a.id) - wrong.findIndex(w => w.id === b.id));
+      const note = clean(w.it.why, 240);
+      return {id: w.id, section: w.sec, no: w.it.no || null, stem: clean(w.it.stem || w.it.script || '', 120), yours, blank: w.blank, standard, text: note, source: note ? 'key' : 'none'};
+    }).filter(x => x.standard);
     // 真题卷少拆了几道题时满分不是 100：按比例折成百分制
     const maxAll = sections.reduce((n, s) => n + s.max, 0);
     const raw = sections.reduce((n, s) => n + s.score, 0);
     const score = Math.round(maxAll > 0 && Math.abs(maxAll - 100) > 0.5 ? raw / maxAll * 100 : raw);
-    let review = {text: localLine(score >= 70 ? 'boss' : 'default', {seed: score}), source: 'local'};
-    const line = await modelJson(this.game.requestModel, LINE_RULES, {event: 'examResult', context: {score, sections: sections.map(s => ({id: s.id, score: s.score, max: s.max})), passLine: 60, safeLine: 70}}, {validate: validLine, retries: 1, timeoutMs: 45000, maxTokens: 200});
-    if (line) review = {text: line.value.text, source: 'model'};
+    const review = {text: localLine(score >= 70 ? 'boss' : 'default', {seed: score}), source: 'local'};
     this.game.mutate(state => {
       const ex = this.ensure(state);
       const a = ex.attempts[attemptId];
@@ -406,7 +422,8 @@ export class GameExam {
         ex.bossDone[a.exam] = this.now();
         awards.push(...this.game.grant(state, `boss-break:${a.exam}`, {type: 'boss', id: 'babel'}, [{kind: 'form', itemId: 'dragon-rider', reason: '巴别兽破防！龙骑士碧琪加入', fx: 'cinematic'}]));
       }
-      a.result = {status: 'done', score, passLine: this.economy.boss.passLine,
+      a.result = {status: 'done', attemptId, paperId: full.paperId, title: full.title || null, score, passLine: this.economy.boss.passLine,
+        summary: {total: totalItems, right: rightObj, wrong: wrongObj, blank: blankObj, subjective: subjective.length},
         sections: sections.map(s => ({...s, crit: s.max > 0 && s.score / s.max >= 0.9})), notes, explained, predicted: bossAfter.bestPredicted,
         bossBefore, bossAfter, monstersSpawned: spawned, review, awards};
     });
@@ -416,7 +433,163 @@ export class GameExam {
     if (!a) throw new Error('这场考试不在了');
     if (!a.submittedAt) return {status: 'open'};
     if (!a.result) { this.kickGrade(a.attemptId); return {status: 'grading'}; }
-    return a.result;
+    const full = a.result.title ? null : this.readFull(a.paperId);
+    return {...a.result, attemptId: a.attemptId, paperId: a.paperId, title: a.result.title || full?.title || null};
+  }
+  // 交卷后整卷预览：带全卷题干、材料、听力原文、官方答案与解析、用户作答对错，以及已经缓存的按需讲解。
+  review({attemptId} = {}) {
+    const a = this.ensure(this.game.read()).attempts[clean(attemptId, 80)];
+    if (!a) throw new Error('这场考试不在了');
+    if (!a.submittedAt) return {status: 'open'};
+    if (!a.result) { this.kickGrade(a.attemptId); return {status: 'grading'}; }
+    const full = this.readFull(a.paperId);
+    if (!full) throw new Error('这份卷子不在了');
+    const real = ['real', 'mock'].includes(full.kind);
+    const notes = a.result.notes || {};
+    const lecturesMap = a.lectures || {};
+    let totalItems = 0, rightObj = 0, wrongObj = 0, blankObj = 0, subjCount = 0;
+    const sections = full.sections.map(sec => ({
+      id: sec.id,
+      title: sec.title,
+      timeMin: sec.timeMin,
+      points: sec.points,
+      instructions: sec.instructions,
+      parts: sec.parts.map(p => ({id: p.id, kind: p.kind, note: p.note || ''})),
+      items: sec.parts.flatMap(p => p.items.map((it, i) => {
+        const id = `${sec.id}-${p.id}-${i + 1}`;
+        const given = a.answers?.[id];
+        const isSubj = ['translate-passage', 'writing'].includes(p.kind);
+        const blank = given == null || given === '';
+        const note = isSubj ? notes[id] : null;
+        const correct = isSubj ? Boolean(note && note.score >= Math.ceil(p.each * 0.6)) : gradeObjective(p.kind, it, given);
+        totalItems += 1;
+        if (isSubj) subjCount += 1;
+        else if (correct) rightObj += 1;
+        else if (blank) blankObj += 1;
+        else wrongObj += 1;
+        const cached = lecturesMap[id];
+        const lectures = {};
+        if (cached?.lecture && cached.lectureV === EXPLAIN_VERSION) lectures.full = cached.lecture;
+        if (cached?.readLecture && cached.readLectureV === EXPLAIN_VERSION) lectures.read = cached.readLecture;
+        return {
+          id, kind: p.kind, part: p.id, points: p.each,
+          no: it.no || null,
+          ...(i === 0 && p.material ? {material: p.material} : {}),
+          prompt: it.stem,
+          ...(it.options ? {options: it.options} : {}),
+          ...(it.base ? {base: it.base} : {}),
+          ...(it.script || it.tts ? {script: it.script || it.tts} : {}),
+          ...(it.why ? {why: it.why} : {}),
+          ...(it.reference ? {reference: it.reference} : {}),
+          ...(it.rubric ? {rubric: it.rubric} : {}),
+          answer: it.answer,
+          ...(Array.isArray(it.alt) ? {alt: it.alt} : {}),
+          key: keyLabel(p.kind, it),
+          given: blank ? null : given,
+          givenText: givenText(p.kind, it, given),
+          blank,
+          correct,
+          subjective: isSubj,
+          ...(note ? {grade: {score: note.score, max: note.max ?? p.each, reason: note.reason || '', source: note.source || 'local'}} : {}),
+          ...(Object.keys(lectures).length ? {lectures} : {}),
+        };
+      })),
+    }));
+    const result = {...a.result, attemptId: a.attemptId, paperId: a.paperId, title: a.result.title || full.title || null,
+      summary: a.result.summary || {total: totalItems, right: rightObj, wrong: wrongObj, blank: blankObj, subjective: subjCount}};
+    return {
+      status: 'done',
+      attemptId: a.attemptId,
+      paperId: a.paperId,
+      title: full.title || '模拟卷',
+      kind: real ? full.kind : 'sim',
+      score: a.result.score,
+      submittedAt: a.submittedAt,
+      result,
+      audio: real ? this.audioFor(full) : null,
+      sections,
+    };
+  }
+  // 考场整卷按需讲解（与刷题「讲给我听」/「带读+搭配」同一套逻辑与缓存）
+  explain(params = {}) {
+    const mode = params.mode === 'read' ? 'read' : 'full';
+    const key = JSON.stringify([clean(params.attemptId, 80), clean(params.itemId, 80), mode]);
+    if (this.explaining.has(key)) return this.explaining.get(key);
+    const job = this.explainOne({...params, mode}).finally(() => this.explaining.delete(key));
+    this.explaining.set(key, job);
+    return job;
+  }
+  findExamItem(full, itemId) {
+    for (const sec of full.sections || []) {
+      for (const p of sec.parts || []) {
+        for (let i = 0; i < (p.items || []).length; i++) {
+          const id = `${sec.id}-${p.id}-${i + 1}`;
+          if (id === itemId) return {sec, part: p, item: p.items[i], id};
+        }
+      }
+    }
+    return null;
+  }
+  async explainOne({attemptId, itemId, mode = 'full'} = {}) {
+    const aid = clean(attemptId, 80), iid = clean(itemId, 80);
+    const kind = mode === 'read' ? 'read' : 'full';
+    const field = kind === 'read' ? 'readLecture' : 'lecture';
+    const vField = kind === 'read' ? 'readLectureV' : 'lectureV';
+    const a = this.ensure(this.game.read()).attempts[aid];
+    if (!a) throw new Error('这场考试不在了');
+    if (!a.submittedAt) throw new Error('交卷后才能看讲解');
+    const cached = a.lectures?.[iid];
+    if (cached?.[field] && cached?.[vField] === EXPLAIN_VERSION) return {text: cached[field], source: 'model', mode: kind};
+    const full = this.readFull(a.paperId);
+    if (!full) throw new Error('这份卷子不在了');
+    const found = this.findExamItem(full, iid);
+    if (!found) throw new Error('卷子里没有这道题');
+    const {part, item} = found;
+    if (!this.game.requestModel) return {text: '', source: 'offline', error: explainFailure('模型暂时不可用')};
+    const given = a.answers?.[iid];
+    const isSubj = ['translate-passage', 'writing'].includes(part.kind);
+    const correct = isSubj ? ((a.result?.notes?.[iid]?.score || 0) >= Math.ceil(part.each * 0.6)) : gradeObjective(part.kind, item, given);
+    const yours = givenText(part.kind, item, given);
+    const mat = part.material ? clean(part.material, 1200) : '';
+    const script = clean(item.script || item.tts || '', 800);
+    const stemPart = [mat, script && !item.stem?.includes(script) ? `录音原文：${script}` : '', item.stem].filter(Boolean).join('\n\n');
+    const bankItem = this.game.modules.practice?.bank?.load?.()?.items?.find(x => x.paperId === full.paperId && x.examId === iid);
+    let failure;
+    const r = await modelJson(
+      this.game.requestModel,
+      explainRulesFor({mode: kind}),
+      explainInput({
+        question: stemPart,
+        options: item.options,
+        standard: keyLabel(part.kind, item),
+        note: item.why || item.reference || script,
+        yours,
+        correct,
+        qkind: part.kind,
+        point: bankItem?.point || item.point,
+        base: item.base,
+      }),
+      {
+        validate: validVoicedExplain,
+        retries: 1,
+        timeoutMs: 120000,
+        maxTokens: useCompactExplain() ? 5200 : 3600,
+        directPayload: true,
+        stopOnQuota: true,
+        ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules({mode: kind}), onFallback: markCompactExplain}),
+        onFailure: error => { failure = error; },
+      },
+    );
+    if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
+    this.game.mutate(state => {
+      const att = this.ensure(state).attempts[aid];
+      if (!att) return;
+      att.lectures ||= {};
+      att.lectures[iid] ||= {};
+      att.lectures[iid][field] = r.value.text;
+      att.lectures[iid][vField] = EXPLAIN_VERSION;
+    });
+    return {text: r.value.text, source: 'model', mode: kind};
   }
 
   bossState(state, exam = GAME_EXAM) {

@@ -13,6 +13,7 @@ import {LearningLesson, registerLearningLesson} from './learning-lesson.mjs';
 import {LearningVocab, registerLearningVocab, parseVocabInput, validateMovedWords} from './learning-vocab.mjs';
 import {registerLearningDrill} from './learning-drill.mjs';
 import {registerLearningGame} from './learning-game.mjs';
+import {doubaoWebName} from './model-sync.mjs';
 import {LEARNING_EXAMS} from './learning-exams.mjs';
 import {LearningVisualStore, VISUAL_KINDS} from './learning-visuals.mjs';
 import {PRACTICE_KINDS, PRACTICE_LABELS} from './learning-practice.mjs';
@@ -2060,7 +2061,8 @@ export class LearningNotesOrganizer {
         const base = noteModelBase(model.baseUrl || provider.baseUrl);
         const api = model.api || provider.api || 'openai-completions';
         if (!base || !model.id || !NOTE_MODEL_APIS.has(api) || (Array.isArray(model.input) && !model.input.includes('text'))) continue;
-        models.push({ref: `${providerId}/${model.id}`, name: model.name || model.id, model, provider, api, base, apiKey});
+        const name = doubaoWebName(model.id, model.name) || model.name || model.id;
+        models.push({ref: `${providerId}/${model.id}`, name, model, provider, api, base, apiKey});
       }
     }
     const preferred = builtinModelRef(this);

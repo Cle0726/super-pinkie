@@ -937,7 +937,7 @@ export class LearningDrill {
       const ask = (rules, maxTokens) => this.organizer.requestModel(status.model, rules, payload, true, {userText: JSON.stringify(payload), maxTokens, timeoutMs: 120000});
       const read = result => validVoicedExplain(result)?.text || validVoicedExplain(result?.value)?.text;
       let text = '', failure;
-      for (const [rules, budget] of useCompactExplain() ? [[compactExplainRules(), 5200]] : [[explainRules(), 1500], [compactExplainRules(), 5200]]) {
+      for (const [rules, budget] of useCompactExplain() ? [[compactExplainRules(), 5200]] : [[explainRules(), 3600], [compactExplainRules(), 5200]]) {
         try { text = read(await ask(rules, budget)); failure = undefined; } catch (error) { failure = error; text = ''; }
         if (text) break;
         // 会长篇思考的模型会把 token 花光、正文为空：换精简提示词再来一次，并记住一阵子。

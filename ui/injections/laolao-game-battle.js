@@ -287,7 +287,10 @@
             p.textContent = '碧琪在按标准答案讲…';
             g.call('guard.explain', explainParams, 260000).then(res => {
               if (!p.isConnected) return;
-              if (res?.text) p.textContent = res.text; else retry(res?.error);
+              if (res?.text) {
+                const render = window.__pinkieGamePractice?.lectureNode;
+                if (render) p.replaceWith(render(res.text)); else p.textContent = res.text;
+              } else retry(res?.error);
             }).catch(error => retry(error?.message));
           };
           // 讲解要用户自己点才开始，不自动调用模型。

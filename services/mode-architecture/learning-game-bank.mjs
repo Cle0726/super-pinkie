@@ -38,6 +38,14 @@ export const POINT_GROUPS = [
 export const AREAS = [
   {id: 'vocab', name: '词汇语法'}, {id: 'reading', name: '阅读'}, {id: 'translation', name: '翻译'}, {id: 'writing', name: '写作'}, {id: 'listening', name: '听力'},
 ];
+// 试卷模块：跟真卷的 Part I–V 对齐。除听力需整套原录音外，词汇、阅读（按完整 Task 1–5）、翻译均跨年份优先混刷（2025–2020 优先）。
+export const PAPER_MODULES = [
+  {id: 'listening', name: 'Part I 听力', note: '一套 · 放原录音'},
+  {id: 'vocab', name: 'Part II 词汇与结构', note: '10 选择 + 5 词形 · 跨年混刷'},
+  {id: 'reading', name: 'Part III 阅读理解', note: 'Task 1–5 · 跨年混刷'},
+  {id: 'translation', name: 'Part IV 翻译', note: '4 选择 + 1 段落 · 跨年混刷'},
+  {id: 'writing', name: 'Part V 写作', note: '一篇应用文 · 近年优先'},
+];
 const GROUP = Object.fromEntries(POINT_GROUPS.map(g => [g.id, g]));
 // 地图区域 → 考点组（营地「练」/ 出发）；守关只用不带文章的单选
 const REGION_GROUPS = {vocab: ['vc', 'vf'], grammar: ['vc', 'vf'], reading: ['rd', 'r3', 'r4', 'r5'], translation: ['tc', 'tp'], writing: ['wr'], listening: []};
@@ -253,35 +261,119 @@ export class QuestionBank {
 }
 
 // ---------- 抽题 ----------
-// rec = 做题记录 {itemId: {n, ok, at, okAt}}；规则：没做过优先 → 做错过（最近一次错）→ 做对过但超过 7 天；7 天内做对的不出。
+// 2025–2020 近年真题优先（冲刺期更贴近最新考纲和题风）；越近的年份权重越高。
+export const PRIORITY_YEAR_MIN = 2020;
+export function yearWeight(item) {
+  const y = Number(item?.year) || 0;
+  if (y >= 2025) return 14;
+  if (y === 2024) return 12;
+  if (y === 2023) return 10;
+  if (y === 2022) return 8;
+  if (y === 2021) return 6;
+  if (y === 2020) return 5;
+  if (y >= 2018) return 1.2;
+  if (y >= 2013) return 0.5;
+  return 0.8; // 官方模拟卷或未标年份
+}
+const isPriorityYear = item => (Number(item?.year) || 0) >= PRIORITY_YEAR_MIN;
+const drawnCount = record => Math.max(record?.draws || 0, record?.n || 0);
+const drawKey = (rng, repeats, weight = 1) => (-Math.log1p(-rng()) * (1 + repeats)) / (weight > 0 ? weight : 1);
+
+// 先抽没见过的，再抽已抽未做、错题、过了 7 天的对题。同档内 2025–2020 年优先，且出现得越多越不容易重复。
 export function rankItems(items, rec, {now = Date.now(), seed = 1} = {}) {
   const rng = E.mulberry32(seed >>> 0);
   const scored = items.map(it => {
     const r = rec[it.id];
     let tier;
-    if (!r || !r.n) tier = 0;
-    else if (r.ok === false) tier = 1;
-    else if (now - (r.okAt || r.at || 0) >= FRESH_DAYS * DAY) tier = 2;
+    if (!r?.n) tier = drawnCount(r) ? 1 : 0;
+    else if (r.ok === false) tier = 2;
+    else if (now - (r.okAt || r.at || 0) >= FRESH_DAYS * DAY) tier = 3;
     else tier = 9;
-    return {it, tier, k: rng()};
+    return {it, tier, k: drawKey(rng, drawnCount(r) + (r?.n || 0), yearWeight(it))};
   }).filter(x => x.tier < 9);
   scored.sort((a, b) => a.tier - b.tier || a.k - b.k);
   return scored.map(x => x.it);
 }
 
-// mode: random | kind | point | wrong | listening
+// 跨年份 / 跨试卷分散抽题：保持 2025–2020 近年优先权重的同时，尽量让同一组题横跨不同年份和不同卷子，不扎堆在同一年。
+export function diversifyPick(ranked, n, {usedPapers = null, usedYears = null} = {}) {
+  const limit = Math.max(0, Number(n) || 0);
+  if (!limit || !ranked.length) return [];
+  const chosen = [];
+  const chosenIds = new Set();
+  const paperCnt = new Map(usedPapers ? [...usedPapers] : []);
+  const yearCnt = new Map(usedYears ? [...usedYears] : []);
+  const yearKey = it => (Number(it.year) > 0 ? String(it.year) : String(it.paperId || 'other'));
+  const take = it => {
+    chosen.push(it);
+    chosenIds.add(it.id);
+    paperCnt.set(it.paperId, (paperCnt.get(it.paperId) || 0) + 1);
+    const yk = yearKey(it);
+    yearCnt.set(yk, (yearCnt.get(yk) || 0) + 1);
+  };
+  // Pass 1：优先覆盖 2025–2020 各个未出现的年份（每年先各拿 1 题）
+  for (const it of ranked) {
+    if (chosen.length >= limit) break;
+    if (chosenIds.has(it.id) || !isPriorityYear(it)) continue;
+    if ((paperCnt.get(it.paperId) || 0) === 0 && (yearCnt.get(yearKey(it)) || 0) === 0) take(it);
+  }
+  // Pass 2：优先选 2025–2020 中未出现过的其他套卷（同一年先不超过 2 题，再放开到同一年第 3 套如 2023-03 / 2022-06）
+  for (const capY of [2, 3]) {
+    for (const it of ranked) {
+      if (chosen.length >= limit) break;
+      if (chosenIds.has(it.id) || !isPriorityYear(it)) continue;
+      if ((paperCnt.get(it.paperId) || 0) === 0 && (yearCnt.get(yearKey(it)) || 0) < capY) take(it);
+    }
+  }
+  // Pass 3：若 2025–2020 的不同套卷不足（例如已刷完或小考点），再按 ranked 顺序补未出现过的其他年份卷子
+  for (const it of ranked) {
+    if (chosen.length >= limit) break;
+    if (chosenIds.has(it.id)) continue;
+    if ((paperCnt.get(it.paperId) || 0) === 0) take(it);
+  }
+  // Pass 4：若仍不足，按轮转放宽每卷上限直至凑满
+  for (let cap = 2; chosen.length < limit && cap <= limit + 2; cap++) {
+    let added = false;
+    for (const it of ranked) {
+      if (chosen.length >= limit) break;
+      if (chosenIds.has(it.id)) continue;
+      if ((paperCnt.get(it.paperId) || 0) < cap) { take(it); added = true; }
+    }
+    if (!added) break;
+  }
+  // 错开相邻同卷 / 同年，让刷题时每一题自然跨年切换
+  const spaced = [];
+  const rest = [...chosen];
+  while (rest.length) {
+    const prev = spaced[spaced.length - 1];
+    let idx = 0;
+    if (prev) {
+      const diffBoth = rest.findIndex(x => x.paperId !== prev.paperId && yearKey(x) !== yearKey(prev));
+      if (diffBoth >= 0) idx = diffBoth;
+      else {
+        const diffPaper = rest.findIndex(x => x.paperId !== prev.paperId);
+        if (diffPaper >= 0) idx = diffPaper;
+      }
+    }
+    spaced.push(rest.splice(idx, 1)[0]);
+  }
+  return spaced;
+}
+
+// mode: random | kind | point | wrong | listening | module
 // kind（按题型）：vc / vf / rd / r3 / r4 / r5 / translation / writing
-export function pick(bank, {mode = 'random', kind = '', point = '', count = 10, seed = 1, rec = {}, unlocked = {}, now = Date.now(), audioOk = () => true} = {}) {
+// module（按试卷模块）：listening / vocab / reading / translation / writing
+export function pick(bank, {mode = 'random', kind = '', point = '', module = '', count = 10, seed = 1, rec = {}, unlocked = {}, now = Date.now(), audioOk = () => true} = {}) {
   const {items} = bank.load();
   const reserved = new Set(bank.reservedPapers().filter(id => !unlocked[id]));
   const open = items.filter(it => !reserved.has(it.paperId));
   const n = Math.max(1, Math.min(20, Number(count) || 10));
-  const rank = list => rankItems(list, rec, {now, seed});
-  if (mode === 'random') return {items: rank(open.filter(it => SINGLE.has(it.qkind))).slice(0, n)};
+  const rank = (list, salt = 0) => rankItems(list, rec, {now, seed: seed + salt});
+  if (mode === 'random') return {items: diversifyPick(rank(open.filter(it => SINGLE.has(it.qkind))), n)};
   if (mode === 'wrong') {
     const wrong = items.filter(it => rec[it.id]?.ok === false && !LISTEN(it.qkind));
-    wrong.sort((a, b) => (rec[b.id].at || 0) - (rec[a.id].at || 0));
-    return {items: wrong.slice(0, n)};
+    wrong.sort((a, b) => Number(isPriorityYear(b)) - Number(isPriorityYear(a)) || (rec[b.id].at || 0) - (rec[a.id].at || 0));
+    return {items: diversifyPick(wrong, n)};
   }
   if (mode === 'point') {
     const [group, ...rest] = String(point).split('/');
@@ -290,40 +382,124 @@ export function pick(bank, {mode = 'random', kind = '', point = '', count = 10, 
     // 写作 / 翻译段落一组一篇
     const big = list.filter(it => SUBJECTIVE.has(it.qkind));
     if (big.length && big.length === list.length) return {items: rank(big).slice(0, 1)};
-    return {items: rank(list.filter(it => !SUBJECTIVE.has(it.qkind))).slice(0, n)};
+    return {items: diversifyPick(rank(list.filter(it => !SUBJECTIVE.has(it.qkind))), n)};
   }
   if (mode === 'listening') {
-    // 随机一套的 Part I（要有原录音）；没做过的套优先
-    const papers = [...new Set(open.filter(it => LISTEN(it.qkind)).map(it => it.paperId))].filter(id => audioOk(id));
-    const ranked = rankPapers(papers, open, rec, seed, it => LISTEN(it.qkind));
-    const pid = ranked[0];
-    return {items: pid ? open.filter(it => it.paperId === pid && LISTEN(it.qkind)) : [], paperId: pid || null};
+    const papers = groupItems(open.filter(it => LISTEN(it.qkind)), it => it.paperId);
+    const items = pickGroup([...papers.values()].filter(group => audioOk(group[0].paperId)), rec, seed);
+    return {items, paperId: items[0]?.paperId || null};
   }
   if (mode === 'kind') {
-    if (['vc', 'vf'].includes(kind)) return {items: rank(open.filter(it => it.group === kind)).slice(0, n)};
+    if (['vc', 'vf'].includes(kind)) return {items: diversifyPick(rank(open.filter(it => it.group === kind)), n)};
     if (['rd', 'r3', 'r4', 'r5'].includes(kind)) {
-      // 阅读一篇一组：按「卷 + 小节」成组，挑没做过的篇
-      const groups = new Map();
-      for (const it of open.filter(x => x.group === kind || (kind === 'rd' && x.group === 'rd'))) { const k = `${it.paperId}|${it.part}`; (groups.get(k) || groups.set(k, []).get(k)).push(it); }
-      const keys = [...groups.keys()];
-      const rng = E.mulberry32(seed >>> 0);
-      const score = k => { const l = groups.get(k); const done = l.filter(it => rec[it.id]?.n).length; return done / l.length + rng() * 0.01; };
-      keys.sort((a, b) => score(a) - score(b));
-      return {items: keys.length ? groups.get(keys[0]) : []};
+      const passages = groupItems(open.filter(it => it.group === kind), it => `${it.paperId}|${it.part}`);
+      return {items: pickGroup(passages.values(), rec, seed)};
     }
     if (kind === 'translation') {
-      const choices = rank(open.filter(it => it.qkind === 'translate-choice')).slice(0, 4);
-      const passage = rank(open.filter(it => it.qkind === 'translate-passage')).slice(0, 1);
-      return {items: [...choices, ...passage]};
+      const choices = diversifyPick(rank(open.filter(it => it.qkind === 'translate-choice'), 71), 4);
+      const usedP = new Set(choices.map(x => x.paperId));
+      const usedY = new Set(choices.map(x => x.year || x.paperId));
+      const tpRanked = rank(open.filter(it => it.qkind === 'translate-passage'), 97);
+      const tp = tpRanked.find(x => !usedP.has(x.paperId) && !usedY.has(x.year || x.paperId))
+        || tpRanked.find(x => !usedP.has(x.paperId))
+        || tpRanked[0];
+      return {items: tp ? [...choices, tp] : choices};
     }
     if (kind === 'writing') return {items: rank(open.filter(it => it.qkind === 'writing')).slice(0, 1)};
   }
+  if (mode === 'module') return pickModule(open, module, rec, seed, audioOk, now);
   return {items: []};
 }
-function rankPapers(ids, items, rec, seed, filter) {
+function moduleList(open, id) {
+  if (id === 'listening') return open.filter(it => LISTEN(it.qkind));
+  return open.filter(it => it.section === id);
+}
+// 按 B 级模块抽题：
+// - 听力：需配整套原录音，按整套抽（2025–2020 优先）
+// - 词汇与结构：10 选择 + 5 词形，跨年份/跨试卷分散抽（2025–2020 优先）
+// - 阅读理解：完整 Task 1–5（每个 Task 内部文章/术语表保持原卷完整），5 个 Task 分别从不同年份/试卷抽
+// - 翻译：4 翻译选择 + 1 段落翻译，跨年份/跨试卷抽
+// - 写作：1 篇应用文（2025–2020 优先）
+function pickModule(open, id, rec, seed, audioOk, now = Date.now()) {
+  if (!PAPER_MODULES.some(m => m.id === id)) return {items: [], paperId: null};
+  if (id === 'vocab') {
+    const vc = diversifyPick(rankItems(open.filter(it => it.qkind === 'choice'), rec, {now, seed: seed + 17}), 10);
+    const vf = diversifyPick(rankItems(open.filter(it => it.qkind === 'word-form'), rec, {now, seed: seed + 53}), 5);
+    if (vc.length && vf.length > 1 && vc[vc.length - 1].paperId === vf[0].paperId) {
+      vf.push(vf.shift());
+    }
+    return {items: [...vc, ...vf], paperId: null};
+  }
+  if (id === 'reading') {
+    const usedPapers = new Set();
+    const usedYears = new Set();
+    const out = [];
+    const tasks = ['T1', 'T2', 'T3', 'T4', 'T5'];
+    tasks.forEach((taskId, ti) => {
+      const taskItems = open.filter(it => it.section === 'reading' && it.part === taskId);
+      const byPaper = [...groupItems(taskItems, it => it.paperId).values()];
+      if (!byPaper.length) return;
+      const freshBoth = byPaper.filter(g => !usedPapers.has(g[0].paperId) && !usedYears.has(g[0].year || g[0].paperId));
+      const freshPaper = byPaper.filter(g => !usedPapers.has(g[0].paperId));
+      const candidates = freshBoth.length ? freshBoth : freshPaper.length ? freshPaper : byPaper;
+      const picked = pickGroup(candidates, rec, seed + (ti + 1) * 131);
+      if (!picked.length) return;
+      picked.sort((a, b) => (Number(a.no) || 0) - (Number(b.no) || 0) || String(a.id).localeCompare(String(b.id)));
+      usedPapers.add(picked[0].paperId);
+      usedYears.add(picked[0].year || picked[0].paperId);
+      out.push(...picked);
+    });
+    return {items: out, paperId: null};
+  }
+  if (id === 'translation') {
+    const tc = diversifyPick(rankItems(open.filter(it => it.qkind === 'translate-choice'), rec, {now, seed: seed + 71}), 4);
+    const usedP = new Set(tc.map(x => x.paperId));
+    const usedY = new Set(tc.map(x => x.year || x.paperId));
+    const tpRanked = rankItems(open.filter(it => it.qkind === 'translate-passage'), rec, {now, seed: seed + 97});
+    const tp = tpRanked.find(x => !usedP.has(x.paperId) && !usedY.has(x.year || x.paperId))
+      || tpRanked.find(x => !usedP.has(x.paperId))
+      || tpRanked[0];
+    return {items: tp ? [...tc, tp] : tc, paperId: null};
+  }
+  if (id === 'writing') {
+    const wr = rankItems(open.filter(it => it.qkind === 'writing'), rec, {now, seed: seed + 113}).slice(0, 1);
+    return {items: wr, paperId: wr[0]?.paperId || null};
+  }
+  const papers = groupItems(moduleList(open, id), it => it.paperId);
+  const groups = [...papers.values()].filter(group => id !== 'listening' || audioOk(group[0].paperId));
+  const items = pickGroup(groups, rec, seed);
+  items.sort((a, b) => (Number(a.no) || 0) - (Number(b.no) || 0) || String(a.id).localeCompare(String(b.id)));
+  return {items, paperId: items[0]?.paperId || null};
+}
+function groupItems(items, keyFor) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyFor(item);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return groups;
+}
+function pickGroup(groups, rec, seed) {
   const rng = E.mulberry32(seed >>> 0);
-  const done = id => { const l = items.filter(it => it.paperId === id && filter(it)); return l.length ? l.filter(it => rec[it.id]?.n).length / l.length : 1; };
-  return ids.map(id => ({id, s: done(id) + rng() * 0.01})).sort((a, b) => a.s - b.s).map(x => x.id);
+  const ranked = Array.from(groups, items => {
+    const repeats = items.reduce((sum, it) => sum + drawnCount(rec[it.id]) + (rec[it.id]?.n || 0), 0);
+    return {items, seen: Number(repeats > 0), key: drawKey(rng, repeats / items.length, yearWeight(items[0]))};
+  });
+  ranked.sort((a, b) => a.seen - b.seen || a.key - b.key);
+  return ranked[0]?.items || [];
+}
+
+// 老版本只留下最近的组单和作答统计。首次抽题时补记还在的历史组单，后面直接累计。
+function practiceRecords(practice) {
+  if (practice.drawsTracked) return practice.rec;
+  const counts = new Map();
+  for (const set of Object.values(practice.sets)) {
+    for (const id of new Set(set?.items || [])) counts.set(id, (counts.get(id) || 0) + 1);
+  }
+  const records = {...practice.rec};
+  for (const [id, draws] of counts) records[id] = {...records[id], draws: Math.max(draws, drawnCount(records[id]))};
+  return records;
 }
 
 // 概览：每个考点 题数 · 做过 · 正确率（弱项排前：做过 ≥3 题的按正确率升序，其余按题数）
@@ -362,6 +538,7 @@ export function overview(bank, {rec = {}, unlocked = {}} = {}) {
   return {
     total: items.length, open: open.length, tagged: items.filter(i => i.point).length, wrong, unclassified: items.filter(i => i.point === UNCLASSIFIED).length,
     areas: AREAS, points: ranked, allPoints: points, kinds,
+    modules: PAPER_MODULES.map(m => ({...m, ...stat(moduleList(open, m.id))})),
     random: stat(open.filter(it => SINGLE.has(it.qkind))),
     reserved: reservedAll.map(id => ({paperId: id, title: papers.find(p => p.paperId === id)?.title || id, locked: reserved.has(id)})),
     papers: papers.length,
@@ -479,7 +656,7 @@ export class GamePractice {
       .map(it => ({stem: it.stem, options: it.options, answer: it.answer, why: it.why || '', point: it.point || GROUP[it.group].name, source: `${it.title}${it.no ? ' 第 ' + it.no + ' 题' : ''}`, bankId: it.id}));
   }
 
-  start({mode = 'random', kind = '', point = '', count = 10, nodeId = '', requestId} = {}) {
+  start({mode = 'random', kind = '', point = '', module = '', count = 10, nodeId = '', requestId} = {}) {
     if (!requestId) throw new Error('缺少 requestId');
     const done = this.game.read().requests[`practice.start:${clean(requestId, 120)}`];
     if (done) return this.decorate(done.result);
@@ -487,16 +664,23 @@ export class GamePractice {
     const p = this.ensure(state);
     const exam = this.game.modules.exam;
     const audioOk = id => Boolean(exam?.audioPresent?.(id));
-    const r = pick(this.bank, {mode, kind, point, count, rec: p.rec, unlocked: this.unlockedOf(state), now: this.now(), seed: E.seedFrom('practice', requestId), audioOk});
+    const rec = practiceRecords(p);
+    const r = pick(this.bank, {mode, kind, point, module, count, rec, unlocked: this.unlockedOf(state), now: this.now(), seed: E.seedFrom('practice', requestId), audioOk});
     if (!r.items.length) {
-      const why = mode === 'wrong' ? '刷题里还没有做错的真题。' : mode === 'random' ? '真题单题都在 7 天内做对过了，换个考点或题型。' : mode === 'listening' ? '本机还没有原录音（插一次 U 盘，碧琪会拷过来）。' : '这一类题现在没有可做的（7 天内做对的不重复出）。';
+      const why = mode === 'wrong' ? '刷题里还没有做错的真题。' : mode === 'random' ? '真题单题都在 7 天内做对过了，换个考点或题型。' : mode === 'listening' || (mode === 'module' && module === 'listening') ? '本机还没有原录音（插一次 U 盘，碧琪会拷过来）。' : mode === 'module' ? '这一部分现在没有可做的题。' : '这一类题现在没有可做的（7 天内做对的不重复出）。';
       return {setId: null, empty: true, why};
     }
-    const title = titleFor({mode, kind, point, items: r.items});
+    const title = titleFor({mode, kind, point, module, items: r.items});
     const res = this.game.once('practice.start', requestId, st => {
       const pr = this.ensure(st);
+      if (!pr.drawsTracked) {
+        pr.rec = rec;
+        pr.drawsTracked = true;
+      }
       const setId = `pr-${randomUUID().slice(0, 12)}`;
-      pr.sets[setId] = {setId, mode, kind, point, title, at: this.now(), items: r.items.map(i => i.id), answers: {}, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null};
+      const itemIds = r.items.map(item => item.id);
+      for (const id of itemIds) pr.rec[id] = {...pr.rec[id], draws: drawnCount(pr.rec[id]) + 1};
+      pr.sets[setId] = {setId, mode, kind, point, module: clean(module, 40), title, at: this.now(), items: itemIds, answers: {}, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null};
       const keys = Object.keys(pr.sets);
       if (keys.length > 80) for (const k of keys.sort((a, b) => pr.sets[a].at - pr.sets[b].at).slice(0, keys.length - 60)) delete pr.sets[k];
       return {setId};
@@ -514,8 +698,13 @@ export class GamePractice {
     for (const it of items) if (it.material) mats[it.material] = materials[it.material] || '';
     let audio = null;
     if (set.mode === 'listening' && set.paperId) audio = this.game.modules.exam?.audioFor?.(this.game.modules.exam.readFull(set.paperId)) || null;
-    return {setId: set.setId, mode: set.mode, kind: set.kind, point: set.point, title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
+    return {setId: set.setId, mode: set.mode, kind: set.kind, point: set.point, module: set.module || '', title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
       answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])), finished: set.finished};
+  }
+  // 最近一组还没结算的刷题。关掉学习台再打开，前端靠这个接回做到的那一题。
+  current() {
+    const open = Object.values(this.ensure(this.game.read()).sets).filter(set => set && !set.finished && set.items?.length).sort((a, b) => (b.at || 0) - (a.at || 0))[0];
+    return open ? this.decorate({setId: open.setId}) : {setId: null};
   }
 
   // 交一题。客观题马上判；翻译段落 / 写作要模型阅卷（异步，最多 60 秒）。
@@ -559,7 +748,7 @@ export class GamePractice {
       } else if (form?.bonus?.kind === 'comboShield' && !set.shield && set.combo > 0) {
         set.shield = true; // 幻形灵：一组里第一次答错不断连击
       } else set.combo = 0;
-      pr.rec[iid] = {n: (rec.n || 0) + 1, ok: Boolean(correct), at: this.now(), ...(correct ? {okAt: this.now()} : {okAt: rec.okAt || 0})};
+      pr.rec[iid] = {...rec, n: (rec.n || 0) + 1, ok: Boolean(correct), at: this.now(), okAt: correct ? this.now() : rec.okAt || 0};
       const out = this.game.grant(state, `real:${sid}:${iid}`, {type: 'real', id: sid}, awards);
       // 做错 → 错题怪（真题当种子，讨伐时出变体）。听力、写作、翻译段落不生怪（变体题出不了）。
       let monster = null;
@@ -587,30 +776,34 @@ export class GamePractice {
     if (!this.game.requestModel) return {score: 0, max, reason: '碧琪现在没法阅卷（内置模型不在线），先对照参考答案自己看。', source: 'none', reference: it.reference || ''};
     return {score: Math.min(Math.floor(max * 0.4), Math.floor(clean(text).split(/\s+/).length / 20)), max, reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local', reference: it.reference || ''};
   }
-  // 「讲给我听」：标准答案是官方的，模型只顺着它讲
+  // 「讲给我听」/「带读+搭配」：标准答案是官方的，模型只顺着它讲；两种模式分开缓存，随时切换。
   explain(params = {}) {
-    const key = JSON.stringify([clean(params.setId, 40), clean(params.itemId, 80)]);
+    const mode = params.mode === 'read' ? 'read' : 'full';
+    const key = JSON.stringify([clean(params.setId, 40), clean(params.itemId, 80), mode]);
     if (this.explaining.has(key)) return this.explaining.get(key);
-    const job = this.explainOne(params).finally(() => this.explaining.delete(key));
+    const job = this.explainOne({...params, mode}).finally(() => this.explaining.delete(key));
     this.explaining.set(key, job);
     return job;
   }
-  async explainOne({setId, itemId} = {}) {
+  async explainOne({setId, itemId, mode = 'full'} = {}) {
     const sid = clean(setId, 40), iid = clean(itemId, 80);
+    const kind = mode === 'read' ? 'read' : 'full';
+    const field = kind === 'read' ? 'readLecture' : 'lecture';
+    const vField = kind === 'read' ? 'readLectureV' : 'lectureV';
     const set = this.ensure(this.game.read()).sets[sid];
     const rec = set?.answers?.[iid];
     if (!rec) throw new Error('先做完这题');
-    if (rec.lecture && rec.lectureV === EXPLAIN_VERSION) return {text: rec.lecture, source: 'model'};
+    if (rec[field] && rec[vField] === EXPLAIN_VERSION) return {text: rec[field], source: 'model', mode: kind};
     const it = this.bank.item(iid);
     if (!it) throw new Error('题库里没有这道题了');
     const mat = it.material ? clean(this.bank.load().materials[it.material], 1200) : '';
     const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, 300);
     if (!this.game.requestModel) return {text: '', source: 'offline', error: explainFailure('模型暂时不可用')};
     let failure;
-    const r = await modelJson(this.game.requestModel, explainRulesFor(), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 1500, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules(), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
+    const r = await modelJson(this.game.requestModel, explainRulesFor({mode: kind}), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct, qkind: it.qkind, point: it.point, base: it.base}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 3600, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules({mode: kind}), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
     if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
-    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row.lecture = r.value.text; row.lectureV = EXPLAIN_VERSION; } });
-    return {text: r.value.text, source: 'model'};
+    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row[field] = r.value.text; row[vField] = EXPLAIN_VERSION; } });
+    return {text: r.value.text, source: 'model', mode: kind};
   }
   finish({setId} = {}) {
     const sid = clean(setId, 40);
@@ -642,10 +835,15 @@ export class GamePractice {
   }
 }
 
-function titleFor({mode, kind, point, items}) {
+function titleFor({mode, kind, point, module, items}) {
   if (mode === 'random') return '随机 10 题';
   if (mode === 'wrong') return '错题重刷';
   if (mode === 'listening') return `听力 Part I · ${items[0]?.title || ''}`;
+  if (mode === 'module') {
+    const modName = PAPER_MODULES.find(m => m.id === module)?.name || '试卷模块';
+    const one = items.length && items.every(i => i.paperId === items[0].paperId);
+    return `${modName} · ${one && items[0]?.title ? items[0].title : '跨年混刷'}`;
+  }
   if (mode === 'point') { const [g, ...rest] = String(point).split('/'); return `${GROUP[g]?.name || ''} · ${rest.join('/')}`; }
   const names = {vc: '词汇语法 · 选择', vf: '词汇语法 · 词形', rd: '阅读 · 短文选择', r3: '阅读 · 信息填空', r4: '阅读 · 术语配对', r5: '阅读 · 实用文', translation: '翻译', writing: '写作'};
   const one = items.length && items.every(i => i.paperId === items[0].paperId);
@@ -653,6 +851,10 @@ function titleFor({mode, kind, point, items}) {
 }
 function publicResult(r) {
   if (!r) return r;
-  const {lecture: _l, ...rest} = r;
+  const {lecture, lectureV, readLecture, readLectureV, ...rest} = r;
+  const lectures = {};
+  if (lecture && lectureV === EXPLAIN_VERSION) lectures.full = lecture;
+  if (readLecture && readLectureV === EXPLAIN_VERSION) lectures.read = readLecture;
+  if (Object.keys(lectures).length) rest.lectures = lectures;
   return rest;
 }

@@ -17,6 +17,14 @@
 #pinkie-study-desk .pkp-qcard:disabled{cursor:default;opacity:.55}
 #pinkie-study-desk .pkp-qcard[data-busy]{opacity:.7}
 
+/* 按试卷模块：Part I–V */
+#pinkie-study-desk .pkp-modules{display:flex;flex-direction:column;gap:10px}
+#pinkie-study-desk .pkp-modules__row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+#pinkie-study-desk .pkp-mod{align-items:flex-start;min-height:78px}
+@media (max-width:1100px){
+  #pinkie-study-desk .pkp-modules__row{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 /* 主体：考点表 + 右侧按题型 */
 #pinkie-study-desk .pkp-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
 #pinkie-study-desk .pkp-points,#pinkie-study-desk .pkp-kinds{display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -64,14 +72,25 @@
 #pinkie-study-desk .pkp-set > .pkp-record{margin:12px auto 0;width:min(980px,100%)}
 #pinkie-study-desk .pkp-warn{margin:10px auto 0;font-size:12.5px;color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkp-stage{display:flex;justify-content:center}
-#pinkie-study-desk .pkp-split{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:28px;width:min(1180px,calc(100% - 200px));min-height:0;height:100%}
-#pinkie-study-desk .pkp-material{min-height:0;max-height:100%;overflow-y:auto;margin:clamp(14px,3vh,28px) 0 18px;padding:18px 22px 22px;border-radius:12px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);scrollbar-width:thin}
-#pinkie-study-desk .pkp-material .pkg-kicker{margin-bottom:12px}
-#pinkie-study-desk .pkp-material__text{white-space:pre-wrap;font:400 15.5px/1.8 var(--serif,var(--pkg-display));color:var(--pkg-ink);overflow-wrap:anywhere}
-#pinkie-study-desk .pkp-qcol{width:auto}
-#pinkie-study-desk .pkp-split .pk-drill-stem{font-size:22px;line-height:1.55}
+#pinkie-study-desk .pkp-split{display:grid;grid-template-columns:minmax(0,.84fr) minmax(0,1.16fr);grid-template-rows:minmax(0,1fr);gap:clamp(16px,2cqi,30px);width:min(1380px,100%);height:100%;min-height:0;padding:clamp(12px,2vh,22px) 2px 0;box-sizing:border-box}
+#pinkie-study-desk .pkp-material{display:grid;grid-template-rows:auto minmax(0,1fr);align-self:start;min-width:0;max-height:100%;box-sizing:border-box;overflow:hidden;border:1px solid var(--pkg-line-2);border-radius:12px;background:var(--pkg-card-solid)}
+#pinkie-study-desk .pkp-material__title{margin:0;padding:11px 16px;border-bottom:1px solid var(--pkg-line);font:700 14px/1.3 var(--pk-sans,system-ui);color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-material__toggle{display:none}
+#pinkie-study-desk .pkp-material__text{min-height:0;overflow:auto;scrollbar-width:thin;padding:14px 16px 16px;white-space:pre-wrap;font:400 clamp(17px,1.36cqi,21px)/1.6 var(--pk-sans,system-ui);color:var(--pkg-ink);overflow-wrap:anywhere}
+#pinkie-study-desk .pkp-material__text:focus-visible{outline:2px solid var(--pink-solid);outline-offset:-2px}
+#pinkie-study-desk .pkp-set .pk-drill-col{box-sizing:border-box;padding:clamp(12px,2vh,22px) 2px 20px;gap:12px}
+#pinkie-study-desk .pkp-split .pkp-qcol{width:100%;padding-block-start:0}
+#pinkie-study-desk .pkp-set .pk-drill-q{flex:none;gap:12px}
+#pinkie-study-desk .pkp-question{display:grid;min-width:0;gap:9px;padding:clamp(12px,1.5cqi,22px);border:1px solid var(--pkg-line-2);border-inline-start:3px solid var(--pink-solid);border-radius:12px;background:var(--pkg-card-solid)}
+#pinkie-study-desk .pkp-question__meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:5px 10px;margin:0;font:600 13px/1.4 var(--pk-sans,system-ui);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-question__number{flex:none;padding:3px 8px;border-radius:6px;background:color-mix(in srgb,var(--pink-solid) 13%,var(--pkg-card-solid));color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-question .pk-drill-stem{margin:0;font:700 clamp(22px,2.18cqi,34px)/1.32 var(--pk-sans,system-ui);letter-spacing:normal;color:var(--pkg-ink);white-space:pre-wrap;text-wrap:wrap}
+#pinkie-study-desk .pkp-set .pk-drill-options{gap:8px}
+#pinkie-study-desk .pkp-set .pkb-opt{min-height:48px;padding:8px 12px;gap:10px;font-size:clamp(17px,1.65cqi,25px);line-height:1.35}
+#pinkie-study-desk .pkp-set .pkb-opt kbd{width:29px;height:29px;font-size:14px;color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-set .pkb-opt:is(.is-on,.is-lock,.is-answer) kbd{color:#fff}
 #pinkie-study-desk .pkp-base{font:400 .8em/1 var(--pk-sans,system-ui);color:var(--pkg-ink-3)}
-#pinkie-study-desk .pkp-source{display:block;margin-top:-2px;font-size:11.5px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-source{font-size:12px;line-height:1.35;color:var(--pkg-ink-2)}
 #pinkie-study-desk .pkp-letters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 #pinkie-study-desk .pkp-letter{min-height:0;padding:10px 12px}
 #pinkie-study-desk .pkp-letter span{font-size:13.5px}
@@ -83,10 +102,19 @@
 #pinkie-study-desk .pkp-essay:focus{border-color:color-mix(in srgb,var(--pkg-b,#DB1F74) 60%,var(--pkg-line-2))}
 #pinkie-study-desk .pkp-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 #pinkie-study-desk .pkp-row small{font-size:12px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-row .pkb-link[aria-pressed="true"]{color:var(--pkg-b,#DB1F74);font-weight:700;text-decoration:underline;text-underline-offset:4px}
+#pinkie-study-desk .pkp-set .pk-drill-top .pkp-prev-btn{appearance:none;display:inline-flex;align-items:center;gap:4px;height:32px;padding:0 12px;border:1px solid var(--pkg-line-2);border-radius:999px;background:var(--pkg-card-solid,var(--pkg-card));color:var(--pkg-ink);font:600 13px/1 var(--pk-sans,system-ui);cursor:pointer;flex:none;transition:border-color .18s var(--pkg-out),background .18s var(--pkg-out)}
+#pinkie-study-desk .pkp-set .pk-drill-top .pkp-prev-btn::before,
+#pinkie-study-desk .pkp-prev-inline::before{content:"← "}
+#pinkie-study-desk .pkp-set .pk-drill-top .pkp-prev-btn:hover:not(:disabled){border-color:var(--pkg-b,#DB1F74);color:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkp-set .pk-drill-top .pkp-prev-btn:focus-visible{outline:2px solid var(--pink-solid,#DB1F74);outline-offset:2px}
+#pinkie-study-desk .pkp-set .pk-drill-top .pkp-prev-btn:disabled{opacity:.45;cursor:default}
+#pinkie-study-desk .pkp-prev-btn[hidden]{display:none}
+#pinkie-study-desk .pkp-set .pk-drill-bar .pkp-prev-inline{margin-right:auto}
 #pinkie-study-desk .pkp-wait{margin:0;font-size:13px;color:var(--pkg-ink-2)}
 
 /* 答完：官方答案 + 解析，一张细线卡 */
-#pinkie-study-desk .pkp-fb{display:grid;gap:9px;padding:14px 18px 16px;border-radius:12px;background:var(--pkg-card);box-shadow:0 0 0 1px var(--pkg-line);border-left:2px solid var(--pkg-gold)}
+#pinkie-study-desk .pkp-fb{display:grid;gap:9px;padding:14px 18px 16px;border-radius:12px;background:var(--pkg-card-solid,var(--pkg-card));box-shadow:0 0 0 1px var(--pkg-line);border-left:2px solid var(--pkg-gold);position:relative;z-index:1}
 #pinkie-study-desk .pkp-fb[data-kind="wrong"]{border-left-color:var(--pkg-b,#DB1F74)}
 #pinkie-study-desk .pkp-fb__head{display:flex;align-items:baseline;gap:12px}
 #pinkie-study-desk .pkp-fb__head b{font:900 18px/1.2 var(--pkg-display);letter-spacing:.1em}
@@ -94,16 +122,14 @@
 #pinkie-study-desk .pkp-fb small{display:inline-block;margin-right:10px;font:600 10.5px/1 var(--pkg-latin);letter-spacing:.2em;color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkp-fb__key b{font:600 15px/1.4 var(--serif,var(--pkg-display));color:var(--pkg-ink)}
 #pinkie-study-desk .pkp-fb__mon{font-size:12.5px!important;color:var(--pkg-ink-3)!important}
-#pinkie-study-desk .pkp-fb__lecture{white-space:pre-line;line-height:1.6;padding-top:8px;border-top:1px solid var(--pkg-line);color:var(--pkg-ink)!important;white-space:pre-wrap}
-/* 作答区铺开时，篇章题干、术语选项和解析跟题干一起放大，不留在窄卡字号。 */
+#pinkie-study-desk .pkp-fb__lecture{display:grid;gap:16px;min-width:0;margin:2px 0 0;padding-top:16px;border-top:1px solid var(--pkg-line);color:var(--pkg-ink)}
+/* 作答区铺开时，术语选项和解析跟题干一起放大。 */
 @container drill (min-width:900px){
-  #pinkie-study-desk .pkp-split .pk-drill-stem{font-size:28px;line-height:1.5}
   #pinkie-study-desk .pkp-letter span{font-size:17px}
   #pinkie-study-desk .pkp-fb p{font-size:17px;line-height:1.7}
   #pinkie-study-desk .pkp-fb__head b{font-size:22px}
 }
 @container drill (min-width:1200px){
-  #pinkie-study-desk .pkp-split .pk-drill-stem{font-size:32px}
   #pinkie-study-desk .pkp-letter span{font-size:18px}
   #pinkie-study-desk .pkp-fb p{font-size:18px}
 }
@@ -114,8 +140,160 @@
   #pinkie-study-desk .pkp-grid{grid-template-columns:minmax(0,1fr)}
   #pinkie-study-desk .pkp-quick{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+@container drill (max-width:760px){
+  #pinkie-study-desk .pkp-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:10px}
+  #pinkie-study-desk .pkp-material{max-height:max(72px,min(29vh,220px))}
+  #pinkie-study-desk .pkp-material__title{display:none}
+  #pinkie-study-desk .pkp-material__toggle{display:flex;min-height:42px;align-items:center;justify-content:space-between;padding:8px 13px;border:0;background:transparent;color:var(--pkg-ink);font:700 14px/1.3 var(--pk-sans,system-ui);cursor:pointer}
+  #pinkie-study-desk .pkp-material__toggle::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin:-4px 2px 0 8px}
+  #pinkie-study-desk .pkp-material__toggle[aria-expanded="true"]::after{transform:rotate(225deg);margin-top:4px}
+  #pinkie-study-desk .pkp-material__toggle[aria-expanded="false"] + .pkp-material__text{display:none}
+  #pinkie-study-desk .pkp-material__toggle:focus-visible{outline:2px solid var(--pink-solid);outline-offset:-3px}
+  #pinkie-study-desk .pkp-material__text{padding:10px 13px 12px;border-top:1px solid var(--pkg-line)}
+}
 @media (max-width:860px){
-  #pinkie-study-desk .pkp-split{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(160px,38%) minmax(0,1fr);gap:8px}
-  #pinkie-study-desk .pkp-material{margin:10px 0 0}
   #pinkie-study-desk .pkp-prow{grid-template-columns:minmax(0,1fr) 44px 44px 110px 56px}
+}
+
+/* 讲给我听：6 板块清爽排版（先看选项识考点 / 回题干秒杀 / 逐词带读行行紧贴 / 一块块大白话 / 四个选项逐词扫 / 送分搭配 / 一句话钉牢） */
+#pinkie-study-desk .pkp-fb__lecture{display:grid;gap:20px;padding-top:16px}
+#pinkie-study-desk .pkp-fb__lecture .pkp-lead{margin:0;font:600 var(--pkp-lecture, 26px)/1.6 var(--pkg-display);color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-fb__lecture .pkp-say,
+#pinkie-study-desk .pkp-fb__lecture .pkp-p,
+#pinkie-study-desk .pkp-fb__lecture .pkp-whole{margin:0;font:400 var(--pkp-lecture, 26px)/1.7 var(--serif,var(--pkg-display));color:var(--pkg-ink);text-wrap:pretty}
+#pinkie-study-desk .pkp-sec{display:grid;gap:10px;min-width:0;padding-top:16px;border-top:1px solid var(--pkg-line)}
+#pinkie-study-desk .pkp-sec__title{margin:0 0 4px;font:700 calc(var(--pkp-lecture, 26px) * .62)/1.2 var(--pk-sans,system-ui);letter-spacing:.08em;color:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkp-fb__lecture small{display:block;margin:0 0 8px;font:600 calc(var(--pkp-lecture, 26px) * .5)/1 var(--pk-sans,system-ui);letter-spacing:.14em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-read{display:grid;gap:6px;min-width:0;padding-top:14px;border-top:1px solid var(--pkg-line)}
+/* 逐词带读 & 四个选项逐词扫：词一行、行行紧贴，三列对齐，重点词下方挂一行淡色快速记忆法 */
+#pinkie-study-desk .pkp-wlist{display:flex;flex-direction:column;gap:0;min-width:0}
+#pinkie-study-desk .pkp-wlist > .pkp-p{margin:0}
+#pinkie-study-desk .pkp-wrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;padding:3px 0}
+#pinkie-study-desk .pkp-wrow.is-hit{background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent);border-radius:6px;padding-left:6px;padding-right:6px;margin:0 -6px}
+#pinkie-study-desk .pkp-wrow.has-memo{padding-bottom:6px}
+#pinkie-study-desk .pkp-en{font:600 var(--pkp-lecture, 26px)/1.45 var(--serif,var(--pkg-display));color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-wrow .pkp-en{flex:0 0 8.2em;white-space:nowrap}
+#pinkie-study-desk .pkp-fb__lecture .pkp-py{display:inline-block;margin:0;font:400 var(--pkp-lecture, 26px)/1.45 var(--pkg-display);letter-spacing:.02em;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-wrow .pkp-py{flex:0 0 5.6em;white-space:nowrap}
+#pinkie-study-desk .pkp-zh{font:400 var(--pkp-lecture, 26px)/1.45 var(--pkg-display);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-wrow .pkp-zh{flex:1 1 6em;min-width:0}
+#pinkie-study-desk .pkp-memo{flex:1 0 100%;display:flex;align-items:baseline;gap:6px;padding-left:.2em;margin-top:2px;font:400 calc(var(--pkp-lecture, 26px) * .74)/1.45 var(--pk-sans,system-ui);color:var(--pkg-ink-3);white-space:normal;text-wrap:pretty}
+#pinkie-study-desk .pkp-memo__tag{flex:none;display:inline-block;padding:1px 6px;border-radius:4px;font:600 calc(var(--pkp-lecture, 26px) * .56)/1.25 var(--pk-sans,system-ui);font-style:normal;color:var(--pkg-b,#DB1F74);background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent)}
+/* 一块块大白话 + 整句 */
+#pinkie-study-desk .pkp-blist{display:grid;gap:6px;min-width:0}
+#pinkie-study-desk .pkp-bline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;line-height:1.6}
+#pinkie-study-desk .pkp-arr{color:var(--pkg-ink-3);font-size:var(--pkp-lecture, 26px)}
+#pinkie-study-desk .pkp-fb__lecture .pkp-whole{margin-top:6px;padding-top:10px;border-top:1px dashed var(--pkg-line);font-weight:500}
+#pinkie-study-desk .pkp-fb__lecture .pkp-whole small{display:inline-block;margin:0 8px 0 0;color:var(--pkg-ink-3)}
+/* 一句话钉牢 */
+#pinkie-study-desk .pkp-pin{display:grid;gap:4px;padding:10px 14px;border-radius:8px;border-left:3px solid var(--pkg-gold,#C99A3E);background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 9%,transparent)}
+#pinkie-study-desk .pkp-pin small{margin:0;color:var(--pkg-gold,#A67B28)}
+#pinkie-study-desk .pkp-pin .pkp-p{font-weight:600}
+@media (max-width:680px){
+  #pinkie-study-desk .pkp-wrow{gap:8px}
+  #pinkie-study-desk .pkp-wrow .pkp-en{flex-basis:6.4em}
+  #pinkie-study-desk .pkp-wrow .pkp-py{flex-basis:4.6em}
+}
+
+/* ───────────── 术语配对（Task 4 真题原卷排布：左英文词表 A–Q / 右 53–57 中文配对表）───────────── */
+#pinkie-study-desk .pkp-split.is-tm{grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(14px,1.8cqi,24px)}
+#pinkie-study-desk .pkp-tm-bank{display:grid;grid-template-rows:auto minmax(0,1fr);align-self:stretch;max-height:100%;min-height:0;overflow:hidden;border:1px solid var(--pkg-line-2);border-radius:12px;background:var(--pkg-card-solid)}
+#pinkie-study-desk .pkp-tm-bank__head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--pkg-line);background:color-mix(in srgb,var(--pkg-ink) 2.5%,var(--pkg-card-solid))}
+#pinkie-study-desk .pkp-tm-bank__title{display:inline-flex;align-items:center;gap:8px;margin:0;font:700 14px/1.2 var(--pk-sans,system-ui);color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-tm-bank__range{padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--pkg-ink) 8%,transparent);font:600 12px/1.2 var(--pkg-num);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-tm-bank__stat{margin-left:auto;font:600 12px/1.2 var(--pk-sans,system-ui);color:var(--pkg-ink-3);white-space:nowrap}
+#pinkie-study-desk .pkp-tm-bank__toggle{display:none;appearance:none;border:1px solid var(--pkg-line-2);border-radius:999px;padding:4px 10px;background:transparent;color:var(--pkg-ink-2);font:600 12px/1.2 var(--pk-sans,system-ui);cursor:pointer}
+#pinkie-study-desk .pkp-tm-bank__list{display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;scrollbar-width:thin;padding:8px 10px 12px}
+#pinkie-study-desk .pkp-tm-term{appearance:none;display:flex;align-items:center;gap:10px;width:100%;padding:6px 9px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--pkg-ink);text-align:left;cursor:pointer;transition:background .15s var(--pkg-out),border-color .15s var(--pkg-out),opacity .15s var(--pkg-out)}
+#pinkie-study-desk .pkp-tm-term:hover{background:color-mix(in srgb,var(--pkg-ink) 4.5%,transparent);border-color:var(--pkg-line-2)}
+#pinkie-study-desk .pkp-tm-term__key{flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:6px;border:1px solid var(--pkg-line-2);font:700 13px/1 var(--pkg-num);color:var(--pkg-ink-2);background:var(--pkg-card-solid)}
+#pinkie-study-desk .pkp-tm-term__en{flex:1;min-width:0;font:500 clamp(15px,1.25cqi,17.5px)/1.35 "Iowan Old Style","Palatino","Georgia",var(--pk-sans,system-ui);color:var(--pkg-ink);overflow-wrap:anywhere}
+#pinkie-study-desk .pkp-tm-term__tag{flex:none;max-width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 8px;border-radius:999px;font:600 11.5px/1.25 var(--pk-sans,system-ui);font-style:normal;background:color-mix(in srgb,var(--pkg-ink) 8%,transparent);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-tm-term__tag[hidden]{display:none}
+#pinkie-study-desk .pkp-tm-term.is-used{opacity:.58}
+#pinkie-study-desk .pkp-tm-term.is-used .pkp-tm-term__en{text-decoration:line-through;text-decoration-thickness:1.2px;text-decoration-color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-tm-term.is-used .pkp-tm-term__key{background:color-mix(in srgb,var(--pkg-ink) 12%,transparent);border-color:transparent;color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-tm-term.is-crossed{opacity:.42}
+#pinkie-study-desk .pkp-tm-term.is-crossed .pkp-tm-term__en{text-decoration:line-through;text-decoration-style:dashed;text-decoration-color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-tm-term.is-dup{opacity:1;border-color:#C87A1E;background:color-mix(in srgb,#C87A1E 11%,transparent)}
+#pinkie-study-desk .pkp-tm-term.is-dup .pkp-tm-term__tag{background:color-mix(in srgb,#C87A1E 20%,transparent);color:#9B5A0B}
+#pinkie-study-desk .pkp-tm-term.is-linked,
+#pinkie-study-desk .pkp-tm-term.is-hover-link{opacity:1;border-color:var(--pink-solid,#DB1F74);background:color-mix(in srgb,var(--pink-solid,#DB1F74) 9%,transparent)}
+#pinkie-study-desk .pkp-tm-term.is-linked .pkp-tm-term__key{background:var(--pink-solid,#DB1F74);border-color:transparent;color:#fff}
+#pinkie-study-desk .pkp-tm-term.is-graded-right{opacity:1;background:color-mix(in srgb,#2A7B56 10%,transparent);border-color:color-mix(in srgb,#2A7B56 35%,transparent)}
+#pinkie-study-desk .pkp-tm-term.is-graded-right .pkp-tm-term__key{background:#2A7B56;border-color:transparent;color:#fff}
+#pinkie-study-desk .pkp-tm-term.is-graded-right .pkp-tm-term__tag{background:color-mix(in srgb,#2A7B56 16%,transparent);color:#206645}
+#pinkie-study-desk .pkp-tm-term.is-graded-wrong{opacity:1;background:color-mix(in srgb,#C83A5E 10%,transparent);border-color:color-mix(in srgb,#C83A5E 35%,transparent)}
+#pinkie-study-desk .pkp-tm-term.is-graded-wrong .pkp-tm-term__key{background:#C83A5E;border-color:transparent;color:#fff}
+#pinkie-study-desk .pkp-tm-term.is-graded-wrong .pkp-tm-term__tag{background:color-mix(in srgb,#C83A5E 16%,transparent);color:#B0294B}
+#pinkie-study-desk .pkp-tm-term.is-linked-wrong{opacity:1;border:1.5px dashed #C83A5E}
+
+#pinkie-study-desk .pkp-tm-head{padding:12px 16px;gap:6px}
+#pinkie-study-desk .pkp-tm-tip{margin:0;font:400 12.5px/1.5 var(--pk-sans,system-ui);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-tm-sheet{display:flex;flex-direction:column;border:1px solid var(--pkg-line-2);border-radius:12px;background:var(--pkg-card-solid);overflow:hidden}
+#pinkie-study-desk .pkp-tm-row{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:stretch;border-bottom:1px solid var(--pkg-line)}
+#pinkie-study-desk .pkp-tm-row:last-child{border-bottom:0}
+#pinkie-study-desk .pkp-tm-no{display:grid;place-items:center;border-right:1px solid var(--pkg-line);background:color-mix(in srgb,var(--pkg-ink) 3%,transparent);font:700 15px/1 var(--pkg-num);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-tm-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px 10px;min-width:0}
+#pinkie-study-desk .pkp-tm-row.is-single .pkp-tm-slots{grid-template-columns:minmax(0,1fr)}
+#pinkie-study-desk .pkp-tm-slot{display:flex;align-items:center;gap:8px;min-width:0;min-height:46px;padding:7px 10px;border:1.5px solid transparent;border-radius:9px;background:color-mix(in srgb,var(--pkg-ink) 2.5%,transparent);cursor:pointer;transition:border-color .15s var(--pkg-out),background .15s var(--pkg-out),box-shadow .15s var(--pkg-out)}
+#pinkie-study-desk .pkp-tm-slot:hover{border-color:var(--pkg-line-2);background:color-mix(in srgb,var(--pkg-ink) 4.5%,transparent)}
+#pinkie-study-desk .pkp-tm-slot.is-filled{border-color:var(--pkg-line-2);background:var(--pkg-card-solid)}
+#pinkie-study-desk .pkp-tm-slot.is-active{border-color:var(--pink-solid,#DB1F74);background:color-mix(in srgb,var(--pink-solid,#DB1F74) 8%,var(--pkg-card-solid));box-shadow:0 0 0 2px color-mix(in srgb,var(--pink-solid,#DB1F74) 16%,transparent)}
+#pinkie-study-desk .pkp-tm-slot.is-dup{border-color:#C87A1E;background:color-mix(in srgb,#C87A1E 10%,var(--pkg-card-solid))}
+#pinkie-study-desk .pkp-tm-slot.is-hover-link{border-color:var(--pink-solid,#DB1F74)}
+#pinkie-study-desk .pkp-tm-slot.is-right{border-color:color-mix(in srgb,#2A7B56 50%,transparent);background:color-mix(in srgb,#2A7B56 10%,var(--pkg-card-solid))}
+#pinkie-study-desk .pkp-tm-slot.is-wrong{border-color:color-mix(in srgb,#C83A5E 50%,transparent);background:color-mix(in srgb,#C83A5E 10%,var(--pkg-card-solid))}
+#pinkie-study-desk .pkp-tm-slot.is-inspect{box-shadow:0 0 0 2px var(--pkg-ink)}
+#pinkie-study-desk .pkp-tm-blank{flex:none;font:700 15px/1 var(--pkg-num);letter-spacing:.02em;color:var(--pkg-ink-3);white-space:nowrap}
+#pinkie-study-desk .pkp-tm-slot.is-filled .pkp-tm-blank{color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-tm-slot.is-active .pkp-tm-blank{color:var(--pink-solid,#DB1F74)}
+#pinkie-study-desk .pkp-tm-slot.is-right .pkp-tm-blank{color:#206645}
+#pinkie-study-desk .pkp-tm-slot.is-wrong .pkp-tm-blank{color:#B0294B}
+#pinkie-study-desk .pkp-tm-zh{flex:1;min-width:0;font:600 clamp(15.5px,1.3cqi,18.5px)/1.35 var(--pk-sans,system-ui);color:var(--pkg-ink);overflow-wrap:anywhere}
+#pinkie-study-desk .pkp-tm-dup{flex:none;padding:2px 6px;border-radius:999px;font:700 11px/1.2 var(--pk-sans,system-ui);font-style:normal;background:color-mix(in srgb,#C87A1E 22%,transparent);color:#9B5A0B}
+#pinkie-study-desk .pkp-tm-dup[hidden]{display:none}
+#pinkie-study-desk .pkp-tm-clear{flex:none;appearance:none;width:22px;height:22px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--pkg-ink) 9%,transparent);color:var(--pkg-ink-2);font:700 14px/1 var(--pk-sans,system-ui);cursor:pointer}
+#pinkie-study-desk .pkp-tm-clear:hover{background:color-mix(in srgb,#C83A5E 18%,transparent);color:#B0294B}
+#pinkie-study-desk .pkp-tm-clear[hidden]{display:none}
+
+#pinkie-study-desk .pkp-tm-bar{flex-wrap:wrap;gap:10px}
+#pinkie-study-desk .pkp-tm-status{margin-right:auto;font:600 13px/1.3 var(--pk-sans,system-ui);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-tm-status.is-warn{color:#B2650C}
+#pinkie-study-desk .pkp-tm-clearall{font-size:13px;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-tm-fb{gap:12px}
+#pinkie-study-desk .pkp-tm-detail{display:grid;gap:8px;padding-top:12px;border-top:1px dashed var(--pkg-line)}
+#pinkie-study-desk .pkp-tm-fb.is-partial .pkp-tm-detail{padding-top:0;border-top:0}
+#pinkie-study-desk .pkp-tm-detail__head{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+#pinkie-study-desk .pkp-tm-detail__title{font:700 16px/1.3 var(--pk-sans,system-ui);color:var(--pkg-ink)}
+#pinkie-study-desk .pkp-tm-pill{padding:2px 8px;border-radius:999px;font:700 11.5px/1.2 var(--pk-sans,system-ui)}
+#pinkie-study-desk .pkp-tm-pill.is-right{background:color-mix(in srgb,#2A7B56 16%,transparent);color:#206645}
+#pinkie-study-desk .pkp-tm-pill.is-wrong{background:color-mix(in srgb,#C83A5E 16%,transparent);color:#B0294B}
+#pinkie-study-desk .pkp-tm-detail__hint{margin-left:auto;margin-right:0!important;font:500 12px/1.2 var(--pk-sans,system-ui)!important;letter-spacing:0!important;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-tm-detail__yours{color:#B0294B!important}
+#pinkie-study-desk .pkp-tm-detail__act{padding-top:4px}
+
+#pinkie-study-desk[data-theme="night"] .pkp-tm-slot.is-right .pkp-tm-blank,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-term.is-graded-right .pkp-tm-term__tag,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-pill.is-right{color:#7CE0AE}
+#pinkie-study-desk[data-theme="night"] .pkp-tm-slot.is-wrong .pkp-tm-blank,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-term.is-graded-wrong .pkp-tm-term__tag,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-pill.is-wrong,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-detail__yours{color:#FF8BA7!important}
+#pinkie-study-desk[data-theme="night"] .pkp-tm-dup,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-term.is-dup .pkp-tm-term__tag,
+#pinkie-study-desk[data-theme="night"] .pkp-tm-status.is-warn{color:#F2CA7A}
+
+@container drill (max-width:820px){
+  #pinkie-study-desk .pkp-split.is-tm{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:10px}
+  #pinkie-study-desk .pkp-tm-bank{max-height:min(36vh,270px)}
+  #pinkie-study-desk .pkp-tm-bank__toggle{display:inline-flex;align-items:center}
+  #pinkie-study-desk .pkp-tm-bank.is-collapsed .pkp-tm-bank__list{display:none}
+  #pinkie-study-desk .pkp-tm-bank__list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px 6px}
+  #pinkie-study-desk .pkp-tm-term{padding:5px 7px;gap:7px}
+  #pinkie-study-desk .pkp-tm-term__tag{max-width:38%}
+}
+@container drill (max-width:520px){
+  #pinkie-study-desk .pkp-tm-slots{grid-template-columns:minmax(0,1fr)}
+  #pinkie-study-desk .pkp-tm-bank__list{grid-template-columns:minmax(0,1fr)}
 }

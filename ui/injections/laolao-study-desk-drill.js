@@ -549,8 +549,10 @@
         p.textContent = known ? `${known}\n碧琪在按标准答案讲…` : '碧琪在按标准答案讲…';
         rpc('explain', {sessionId, itemId: item.itemId, yours: result.yours || ''}, 260000).then(r => {
           if (!p.isConnected) return;
-          if (r?.text && r.source === 'model') p.textContent = r.text;
-          else retry(r?.error, r?.text || known);
+          if (r?.text && r.source === 'model') {
+            const render = window.__pinkieGamePractice?.lectureNode;
+            if (render) p.replaceWith(render(r.text)); else p.textContent = r.text;
+          } else retry(r?.error, r?.text || known);
         }).catch(error => retry(error?.message));
       };
       // 讲解要用户自己点才开始，不自动调用模型。

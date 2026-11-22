@@ -318,7 +318,7 @@ export class GameWorld {
     let source = 'none';
     let failure;
     if (standard && this.game.requestModel) {
-      const r = await modelJson(this.game.requestModel, explainRulesFor(), explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 1500, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules(), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
+      const r = await modelJson(this.game.requestModel, explainRulesFor(), explainInput({question: item.stem, options: item.options, standard, note: item.why, yours, correct: rec.correct, point: item.point}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 3600, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules(), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
       if (r) { text = r.value.text; source = 'model'; }
     }
     if (text) this.game.mutate(state => { const row = this.ensure(state).guards[id]?.answers?.[String(itemId)]; if (row) { row.lecture = text; row.lectureSource = source; row.lectureV = EXPLAIN_VERSION; } });

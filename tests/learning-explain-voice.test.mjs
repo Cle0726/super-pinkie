@@ -55,15 +55,20 @@ test('工作区有规则就用工作区的，改了规则下一次就变；没�
   } finally { fs.rmSync(dir, {recursive: true, force: true}); _resetVoiceCache(); }
 });
 
-test('当场讲解短而轻、不分步骤；整卷回看更短', () => {
+test('当场讲解按 6 板块模板输出（先看选项识考点/回题干秒杀/逐词带读/一块块大白话/四个选项逐词扫/送分搭配/一句话钉牢）；整卷回看更短', () => {
   const long = '字'.repeat(300);
   assert.equal(validVoicedExplain({text: long}).text.length, long.length);
-  assert.ok(validVoicedExplain({text: '字'.repeat(900)}).text.length <= 760) // 英语带读要把整句逐块带完，上限从 520 放到 760;
-  assert.ok(validVoicedExplain({text: '字'.repeat(900)}, {brief: true}).text.length <= 420);
+  assert.equal(validVoicedExplain({text: '字'.repeat(3000)}).text.length, 2800);
+  assert.ok(validVoicedExplain({text: '字'.repeat(900)}, {brief: true}).text.length <= 650);
   assert.equal(validVoicedExplain({text: '短'}), null);
   assert.equal(validVoicedExplain({text: 'a\\nb 好的好的好的'}).text.includes('\n'), true);
   assert.match(explainRules({brief: true}), /150 字/);
-  assert.match(explainRules(), /260 字/); assert.doesNotMatch(explainRules(), /每段开头写/);
+  const full = explainRules();
+  for (const heading of ['先看选项识考点', '回题干秒杀', '逐词带读', '一块块大白话', '四个选项逐词扫', '送分搭配', '一句话钉牢']) {
+    assert.match(full, new RegExp(heading));
+  }
+  assert.match(full, /扑拉不冷/);
+  assert.doesNotMatch(full, /每段开头写/);
 });
 
 test('英语题讲解带一句中文翻译', () => { assert.match(explainRules(), /中文翻译/); });

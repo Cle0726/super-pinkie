@@ -831,6 +831,8 @@ export function registerLearningGame(api, store, options = {}) {
   register('exam.save', via('exam', 'save', notReady('考场')));
   register('exam.submit', via('exam', 'submit', notReady('考场')));
   register('exam.result', via('exam', 'result', notReady('成绩')));
+  register('exam.review', via('exam', 'review', notReady('整卷预览')));
+  register('exam.explain', via('exam', 'explain', notReady('考题讲解')));
   // 插着 U 盘时手动「再扫一遍」（大厅按钮）；没插盘就只返回状态
   register('exam.realSync', () => { const ex = mod('exam'); if (!ex.real) return {state: 'idle'}; ex.real.sync({force: false}).then(() => ex.keepSpare?.()).catch(() => {}); return {...ex.real.status, mounted: Boolean(ex.real.usbBase())}; });
   // 真题原录音：/pinkie-exam-audio/<paperId>?key=<开考时发的 key>，支持 Range（拖进度条）
@@ -864,6 +866,7 @@ export function registerLearningGame(api, store, options = {}) {
   register('boss.realScore', via('exam', 'realScore', notReady('真实分数')));
   register('practice.overview', via('practice', 'overview', (() => ({total: 0, points: [], kinds: []}))));
   register('practice.start', via('practice', 'start', notReady('刷题')));
+  register('practice.current', via('practice', 'current', (() => ({setId: null}))));
   register('practice.answer', via('practice', 'answer', notReady('刷题')));
   register('practice.explain', via('practice', 'explain', notReady('刷题')));
   register('practice.finish', via('practice', 'finish', notReady('刷题')));

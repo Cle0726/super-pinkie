@@ -442,6 +442,15 @@ html[data-pinkie-study-desk] :is(.laolao-learning-notes,.pinkie-library){z-index
 #pinkie-study-desk .desk-model-current-mark{color:var(--ink-2);width:32px;height:32px;flex:none}
 #pinkie-study-desk .desk-model-current-mark svg{width:100%;height:100%}
 #pinkie-study-desk .desk-model-scope{margin:12px 1px 15px;color:var(--ink-2);font:13px/1.65 var(--sans)}
+#pinkie-study-desk .desk-lecture-size{display:grid;gap:8px;margin:0 1px 14px;padding:12px 14px;border:1px solid var(--hair);border-radius:13px;background:var(--card)}
+#pinkie-study-desk .desk-lecture-size-copy{display:grid;gap:3px}
+#pinkie-study-desk .desk-lecture-size-copy p{margin:0;color:var(--ink-2);font:12px/1.5 var(--sans)}
+#pinkie-study-desk .desk-lecture-size-controls{display:flex;align-items:center;gap:10px}
+#pinkie-study-desk .desk-lecture-size-step{flex:none;min-width:40px;height:34px;padding:0 10px;border:1px solid var(--hair-2);border-radius:9px;background:var(--paper);color:var(--ink);font:700 14px var(--sans);cursor:pointer}
+#pinkie-study-desk .desk-lecture-size-controls input[type="range"]{flex:1;min-width:0;height:22px;accent-color:var(--pink-solid,#DB1F74);cursor:pointer}
+#pinkie-study-desk .desk-lecture-size-value{flex:none;min-width:2.4em;color:var(--ink);font:700 16px/1 var(--sans);text-align:right}
+#pinkie-study-desk .desk-lecture-size-preview{display:flex;align-items:baseline;gap:12px;margin:2px 0 0;color:var(--ink);font-weight:600;line-height:1.35;white-space:nowrap;overflow:hidden}
+#pinkie-study-desk .desk-lecture-size-preview span{font-weight:400;color:var(--ink-2)}
 #pinkie-study-desk .desk-model-search{display:flex;align-items:center;gap:11px;padding:0 12px;border:1px solid var(--hair-2);border-radius:11px;background:var(--card);color:var(--ink-2);font:13px var(--sans)}
 #pinkie-study-desk .desk-model-search>span{flex:none;white-space:nowrap}
 #pinkie-study-desk .desk-model-search:focus-within{outline:2px solid var(--pink-solid);outline-offset:1px}

@@ -212,6 +212,44 @@
     return art;
   }
 
+  const LECTURE_SIZE_KEY = 'pinkie-lecture-size';
+  const lectureSize = () => {
+    const n = Number(localStorage.getItem(LECTURE_SIZE_KEY) ?? 26);
+    return Number.isFinite(n) ? Math.min(48, Math.max(18, Math.round(n))) : 26;
+  };
+  const applyLectureSize = px => {
+    const size = Math.min(48, Math.max(18, Math.round(Number(px) || 26)));
+    const value = size + 'px';
+    document.documentElement.style.setProperty('--pkp-lecture', value);
+    state.root?.style.setProperty('--pkp-lecture', value);
+    try { localStorage.setItem(LECTURE_SIZE_KEY, String(size)); } catch { /* 记不住就只用这一次 */ }
+    return size;
+  };
+  function lectureSizeControl() {
+    const box = el('section', 'desk-lecture-size');
+    const copy = el('div', 'desk-lecture-size-copy');
+    copy.append(el('span', 'desk-model-label', '讲解字号'), el('p', '', '答题卡上的讲解。点「小」「大」或拖动，马上生效，下次还在。'));
+    const controls = el('div', 'desk-lecture-size-controls');
+    const slider = el('input');
+    slider.type = 'range'; slider.min = '18'; slider.max = '48'; slider.step = '2';
+    slider.value = String(lectureSize());
+    slider.setAttribute('aria-label', '讲解字号');
+    const value = el('b', 'desk-lecture-size-value', slider.value);
+    const preview = el('p', 'desk-lecture-size-preview');
+    preview.append(el('b', '', 'When'), el('span', '', '温'), el('span', '', '当……时'));
+    const paint = size => { value.textContent = String(size); slider.value = String(size); preview.style.fontSize = size + 'px'; };
+    const set = next => paint(applyLectureSize(next));
+    const down = button('小', () => set(lectureSize() - 2), 'desk-lecture-size-step');
+    const up = button('大', () => set(lectureSize() + 2), 'desk-lecture-size-step');
+    down.setAttribute('aria-label', '讲解字号减小');
+    up.setAttribute('aria-label', '讲解字号增大');
+    slider.addEventListener('input', () => set(slider.value));
+    controls.append(down, slider, up, value);
+    box.append(copy, controls, preview);
+    paint(applyLectureSize(lectureSize()));
+    return box;
+  }
+
   function builtinModelDialog() {
     if (!state.root) return;
     const existing = state.root.querySelector('dialog.desk-builtin-model');
@@ -245,7 +283,7 @@
     const listTitle = el('h3', '', '选择模型'); const count = el('span', '', ''); listHead.append(listTitle, count);
     const choices = el('div', 'desk-model-choices'); choices.setAttribute('aria-label', '可选模型');
     const message = el('p', 'desk-model-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
-    body.append(currentBox, scope, searchBox, listHead, choices, message);
+    body.append(currentBox, scope, lectureSizeControl(), searchBox, listHead, choices, message);
 
     const foot = el('footer', 'desk-model-actions');
     const test = button('测试连接', testConnection, 'desk-model-test');
@@ -1194,6 +1232,7 @@
     // exercise payload so the explicit desk entry can resume the same work.
     workspace().chat = true;
     const root = state.root = el('div', 'pk-ink'); root.id = 'pinkie-study-desk'; root.setAttribute('aria-label', '碧琪学习台');
+    applyLectureSize(lectureSize());
     const plate = el('div', 'plate'); plate.setAttribute('aria-hidden', 'true');
     const rail = el('nav', 'rail glass'); rail.setAttribute('aria-label', '学习导航');
     const logo = button('', () => { go('chat'); document.querySelector('.laolao-mode-switcher button, .laolao-mode-button')?.click(); }, 'logo'); logo.setAttribute('aria-label', '切换模式'); logo.append(icon('pinkie:brand', {size: 'sm'}), el('span', 'nav-tip', '切换模式'));

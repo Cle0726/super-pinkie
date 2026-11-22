@@ -103,10 +103,13 @@ export function validExplain(v) {
   const text = clean(v?.text, 800);
   return text.length >= 8 ? {text} : null;
 }
-export function explainInput({question, options, standard, note, yours, correct} = {}) {
+export function explainInput({question, options, standard, note, yours, correct, qkind, point, base} = {}) {
   const opts = (Array.isArray(options) ? options : []).map(item => clean(item, 180)).filter(Boolean).slice(0, 8);
   const body = {question: clean(question, 1800), standard: clean(standard, 400), note: clean(note, 300), yours: correct ? '' : clean(yours, 300), correct: Boolean(correct)};
   if (opts.length) body.options = opts;
+  if (clean(qkind, 40)) body.qkind = clean(qkind, 40);
+  if (clean(point, 60) && clean(point, 60) !== '未分类') body.point = clean(point, 60);
+  if (clean(base, 60)) body.base = clean(base, 60);
   return body;
 }
 
