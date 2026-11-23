@@ -168,7 +168,7 @@
 
 用户 11-22 要求：先找成熟开源项目再写；Metre 要有 T3 Code 那样的功能（派活给 Claude Code、Codex、Antigravity 等外部智能体）和成熟的页面按键，但换成 Metre 的样子。完整计划、评估和分批（K8-0 到 K8-6）在 `METRE-NEXT.md`。
 
-1. 前置：K5 第 3 步完成以后才改产品代码；K8-0 摸底现在就可以做。
+1. 11-22 改为现在就在 OpenClaw 上做、由 Claude 亲自做（用户「这个全部你来做」），见 `feat/metre-engines` 分支的 `briefs/metre-engines-1122/`。K5 以后再把成果搬进 `cle-core`。
 2. H3「界面不能变」对五个老模式继续有效；**只有 Metre 的界面按 `METRE-NEXT.md` 改**，这是用户 11-22 的明确要求，不能扩大到别的模式。
 3. 「开源优先」规矩（`METRE-NEXT.md` 第五节）从 11-22 起对整个计划生效。
 

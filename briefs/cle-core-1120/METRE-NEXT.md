@@ -1,8 +1,8 @@
 # K8 · Metre 换代：借成熟开源项目（T3 Code）
 
-- 计划：Windows 端 Opus 5.5，2026-11-22。执行：Gemini（按 `briefs/program-1120/` 的规矩派发），Claude 验收。
-- 本文是 `PLAN.md` 第五节 K8 的完整内容。和 `PLAN.md`、`ACCEPTANCE.md` 一起读。
-- 前置：K5 第 3 步（默认内核已经是 C.le.）完成。在那之前只能做 K8-0 摸底，不改产品代码。
+- 计划：Windows 端 Opus 5.5，2026-11-22。
+- **11-22 当天改了（以这里为准）**：用户要求「现在就要先在 OpenClaw 落实 OpenMausBot 和 T3 code」「这个全部你来做」。所以这件事**现在就在 OpenClaw 上做，由 Claude 亲自做，不派 Gemini，不等 K5**。实施计划和进度在发版线分支 `feat/metre-engines` 的 `briefs/metre-engines-1122/`（PLAN、PROGRESS），以那边为准。用户说的「Opanmaus bot」是 **OpenMausBot**（`milind-soni/OpenMausBot`，Apache-2.0，`enterprise/` 除外），不是下文第二节当初猜的 OpenManus。
+- 下面的内容保留作 C.le. 内核这边的长期方向：K5 以后，把 `feat/metre-engines` 做出来的引擎服务和 Metre 前台搬进 `cle-core`（第三节的两个公共部件）。
 
 ---
 
