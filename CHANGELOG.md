@@ -4,6 +4,10 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+### 2.5.55
+- C.le. 小标（PR #65 / `e60c9c73` 的内容移到 2.5.54 线，`laolao-cle-stage.js` 保留 2.5.54 线的手写版本号与原生观察器写法）：中断形态 `laolao-cle-stop.js`（塌到底线、褪灰、停 2 秒交回签名，重绘后才发现的「已中断」也走这段）；状态行步骤小窗 `laolao-cle-peek.js`；切换门槛 QUICK 1.1 → 1.6 秒、工具间空档 GRACE 0.8 秒（模拟一轮切换 23→18 次）；墨点 SHIMMER、poke()；形态按 46×22 重做。`tests/cle-ink.test.mjs` 26 条；`tools/health/exceptions.json` 追加 stage / ink / steps / forms 四条行数例外。
+- 从 v2.5.54 线发版，仍不含 main 上 2.5.53 之后的维护改动（#50–#61）。
+
 ### 2.5.54
 - 思考折叠：恢复「播完 → 停 1.8–3.6 秒 → 折成『思考了 N 秒』，历史默认折叠、可点开」（`a0ebf381` 改反成默认展开，2.5.52 / 2.5.53 受影响）；新一段思考插入时保留上一段小窗的 scrollTop；`process-card.js` 缓存版本换成 power9。
 - 更新后启动页：`?updated=` 改 `#updated=`（.NET Uri 会把 file 地址里的 `?` 编码成 `%3F`，导致启动页加载失败）。
