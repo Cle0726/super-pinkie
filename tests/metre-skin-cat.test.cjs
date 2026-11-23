@@ -418,8 +418,8 @@ test('Metre v6: count-in transition is wired into the switcher, declines under r
   const src = read(INJ + 'laolao-metre-transition.js');
   assert.match(src, /if \(reduced\(\)\) return null;/, '减少动态效果时不放过场');
   assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /setInterval|WebGL|\.png|\.webp/, '只用 canvas 点阵，不用图片、不留常驻计时器');
-  assert.match(src, /'METRE'/, '过场里有 METRE 字');
-  assert.match(src, /LaolaoMetreCat/, '过场里有像素猫');
+  assert.match(src, /const LOGO = \[/, '过场里有像素 M（当谱号）');
+  assert.doesNotMatch(src, /LaolaoMetreCat/, '小猫去掉了（用户 11-23）');
   assert.match(src, /overlay\.remove\(\)/);
 });
 
@@ -658,7 +658,7 @@ test('Metre 11-23 polish: one day and one night colour block, the score board sp
   assert.match(roots[1], /\[data-pinkie-night\],\s*html\[data-laolao-mode="metre"\]:not\(#_m1\):not\(#_m2\)\[data-theme="dark"\]$/);
   const board = read(INJ + 'laolao-metre-board.css');
   assert.doesNotMatch(board, /#4F7A5E|#86AF95|#E5EEE7|#1F2A23/, '做完不再用灰绿');
-  assert.match(board, /--metre-v2: #8A8478;/);
+  assert.match(board, /--metre-v2: #6F8466;/, '做完是偏绿的灰（11-24，和其他的暖灰拉开）');
   assert.match(board, /\.pk-metre-board__card-head h3 \{[^}]*var\(--metre-serif/, '区块标题是衬线');
   assert.match(board, /\.pk-metre-board__en \{[^}]*var\(--metre-mono[^}]*text-transform: uppercase/, '英文小标是等宽大写注记');
   assert.match(board, /@media \(hover: hover\) \{[^\n]*\.pk-mb-score__row:not\(:hover\):not\(:focus-within\) \.pk-mb-score__acts \{ opacity: 0; \}/, '每行的按钮悬停才出现，触屏照旧');
@@ -736,19 +736,31 @@ test('Metre 11-23 motion: lamps blink and dim on a change, the stage breathes wh
 });
 
 // ---------- 11-23 整页进场 / 换页（用户：「整页的进场和换页动画，像 Son Daven」） ----------
-test('Metre 11-23 page entrance: on the count-in sweep, a session switch and first load, the page comes in by 16 bars on the beat; a switch adds a sweeping line; reduced motion has none', () => {
+test('Metre 11-24 page moments: the count-in lifts the baton and lands the score on the downbeat; a session switch turns the page; home lights and the melodic prompt are called directly; a low band keeps only a staff; reduced motion has none', () => {
   const transition = read(INJ + 'laolao-metre-transition.js');
-  assert.match(transition, /if \(!alive\) return; window\.dispatchEvent\(new CustomEvent\('pinkie:metre-sweep'/, '预备拍的指挥线开始扫时告诉页面');
+  assert.doesNotMatch(transition, /LaolaoMetreCat/, '小猫去掉了（用户 11-23）');
+  assert.match(transition, /const COVER = 320, LIFT = 620, ICTUS = 1097, [^;]*HOLD = 1600, OPEN = 380;/, '总长约 1.98 秒，和第六版差不多');
+  assert.match(transition, /if \(!alive\) return;\n      window\.dispatchEvent\(new CustomEvent\('pinkie:metre-sweep'/, '翻开时告诉页面');
+  assert.match(read(INJ + 'laolao-head.fragment.html'), /<script defer src="\/laolao-metre-stagefx\.js\?v=@hash"><\/script>/);
+  const fx = read(INJ + 'laolao-metre-stagefx.js');
+  assert.doesNotMatch(fx.replace(/\/\*[\s\S]*?\*\//g, ''), /setInterval|MutationObserver|window\.__/, '不加定时器循环、观察器、全局名');
+  assert.match(fx, /while \(\(t = performance\.now\(\) - t0\) < 580\)/, '翻谱 ≤ 600ms');
+  assert.match(fx, /src\.dataset\.podX/, '指挥台位置读 backdrop 的锚点');
+  for (const f of ['turn', 'lights', 'melody']) assert.match(fx, new RegExp('function ' + f + '\\([^)]*\\) \\{[\\s\\S]{0,240}reduced\\(\\)'), f + '：减少动效时不做');
   const home = read(INJ + 'laolao-metre-home.js');
   assert.match(home, /window\.addEventListener\('pinkie:metre-sweep', \(\) => enter\(false\)\);/);
   assert.match(home, /window\.addEventListener\('pinkie:session-selected', onSwitch\);/);
-  assert.match(home, /if \(!isMetre\(\) \|\| reduced\(\) \|\| document\.hidden \|\| !main\) return;/, '减少动效时不放进场');
-  assert.match(home, /if \(!isMetre\(\) \|\| reduced\(\) \|\| document\.querySelector\('\.pk-metre-transition'\)\) return;/, '预备拍盖着时不另做');
-  assert.match(home, /Date\.now\(\) - t0 > 600\) enter\(true\)/, '换会话最多等 600ms 新内容');
-  assert.doesNotMatch(home, /setInterval|requestAnimationFrame|new MutationObserver/);
+  assert.match(home, /if \(!isMetre\(\) \|\| reduced\(\) \|\| document\.querySelector\('\.pk-metre-transition'\)\) return; if \(window\.PinkieMetreStage\) \{ void window\.PinkieMetreStage\.turn\(/, '换会话 = 翻谱；预备拍盖着时不另做');
+  assert.match(home, /window\.PinkieMetreStage\?\.lights\(\)/);
+  assert.match(home, /window\.PinkieMetreStage\?\.melody\(line\)/);
+  assert.doesNotMatch(home, /setInterval|requestAnimationFrame|new MutationObserver|'pk-metre-sweep'/);
+  const backdrop = read(INJ + 'laolao-metre-backdrop.js');
+  assert.match(backdrop, /Math\.max\(144, window\.innerHeight/, '首页画带最矮 144px');
+  assert.match(backdrop, /const lowBand = home && bandCss < 180;/, '矮于 180px 只留五线谱');
+  assert.match(backdrop, /canvas\.dataset\.podX = String\(scene\.anchors\.podX\);/);
   const skin = read(INJ + 'laolao-metre-skin.css');
-  assert.match(skin, /\[data-metre-enter\] \.pk-metre-backdrop, [^{]*\[data-metre-enter="chat"\] \.chat-thread \{ animation: pk-metre-bars 417ms steps\(16, end\) backwards; \}/, '画带和正文 16 格竖条');
+  assert.doesNotMatch(skin, /pk-metre-bars|pk-metre-sweep/, '竖条显出和指挥线让给翻谱');
+  assert.match(skin, /\[data-metre-band-low\] canvas\.pk-metre-backdrop \{ visibility: hidden; \}/);
   assert.match(skin, /\[data-metre-enter="home"\] \.agent-chat__input \{ animation: pk-metre-rise 417ms [^;]* 417ms backwards; \}/, '输入框第二个八分音符浮起');
-  assert.match(skin, /\.pk-metre-sweep \{[^}]*animation: pk-metre-sweep-line 417ms steps\(16, end\) forwards, pk-metre-out 1ms linear 417ms forwards; \}/, '换会话的指挥线');
-  assert.match(skin, /@media \(prefers-reduced-motion: reduce\) \{\n  [^\n]*\[data-metre-enter\] :is\(\.pk-metre-backdrop, \.chat-thread, [^)]*\), \.pk-metre-sweep \{ animation: none !important; \}/);
+  assert.match(skin, /@media \(prefers-reduced-motion: reduce\) \{\n  [^\n]*\[data-metre-enter\] :is\(\.pk-metre-prompt__head, \.agent-chat__input, \.agent-chat__composer-controls\) \{ animation: none !important; \}/);
 });

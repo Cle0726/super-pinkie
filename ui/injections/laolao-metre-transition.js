@@ -1,25 +1,21 @@
-/* laolao-metre-transition —— 切换进 Metre 的过场（11-15，第六版）。
+/* laolao-metre-transition —— 切换进 Metre 的过场（11-24，第七版「起拍」）。
  *
- * 碧琪的几个模式切换用的是插画场景 + 进度条；Metre 原来什么都不放，路由原地一换。用户要「一样的像素动态风格，但有独立的视觉语言」。
- * Metre 的语言是「预备拍」（乐队开演前指挥数的 1、2、3、4）：
- *   盖上：从左下角的模式按钮那里起，一圈一圈方形的波按格子往外推，每个格子先亮成一颗点，再长成一整格，把旧页面盖住（约 0.36 秒）。
- *   数拍：盖满后屏上是一整块熄灯的点阵（♩=200，数一遍 1.2 秒）：
- *         像素 M 的框一列一列点亮，中间的摆杆和摆锤真的在摆，每拍摆到一头，从摆锤推出一圈方形的「声波」；
- *         下面点阵字 METRE 逐字亮起，再下面 1 2 3 4 跟拍子亮；小黑猫（批 4 的像素猫，每个像素一颗点）从右边跑进来，第四拍坐在字旁边。
- *         新页面还没好就接着数（摆接着摆，猫坐着甩尾巴），不给进度条、不写俏皮话。
- *   落拍：数完、新页面也好了，一根竖的「指挥线」从左往右按格子扫过去，扫过的格子缩成点再熄掉，露出 Metre（约 0.4 秒）。
- * 画法：一张全屏 canvas，按格子画（12px 一格）。盖满的那一块是一个方形（波是按格子的方形），所以先离屏画好一整张熄灯点阵，
- *   每帧只按方形 / 指挥线右边那块整块贴上去，再逐格画波的前沿两圈和指挥线附近四列；按时间推进，只在换格时重画。没有图片、没有 WebGL。
+ * 碧琪的几个模式切换用的是插画场景 + 进度条；Metre 用自己的语言：一张总谱，一支钴蓝指挥棒，♩=72。
+ *   合上（0–320ms）：上下两半谱纸合到中缝，盖住旧页面。
+ *   起拍（320–1100ms）：钴蓝指挥棒从下面抬起来，在最高点停半拍（417ms，♩=72）——这是预备拍。
+ *   落拍（≈1100ms，整个过场的高潮）：棒子一下砸到中缝，棒尖迸出一圈钴蓝的点；五线谱从棒尖向两侧弹开（带一点回弹），
+ *         上下几行谱表依次跟着铺开，成一整页谱面。
+ *   亮灯：中间那行谱上方四盏谱台灯按三十二分音符一盏一盏亮（和首页亮灯同一个拍子网格），每盏在谱上照出一块光。
+ *   落位：最后像素 M 当谱号从上面落到谱表左端，轻轻回弹一下停住。
+ *   翻开（380ms）：新页面好了，谱纸从中缝上下翻开，同时发 pinkie:metre-sweep（页面进场跟着这一拍起）。新页面还没好就停在整页谱面上等。
+ * 总长约 1.98 秒，和第六版（2.0 秒）一样长。小猫不再出现（用户 11-23）。
+ * 画法：一张全屏 canvas，按像素格画（格子 = 短边 / 140，至少 4px）。没有图片、没有 WebGL；只在过场期间有 rAF。
  * 减少动态效果、或画不了 canvas 时返回 null，切换器照原来的方式原地换。
  * 对外：window.PinkieMetreTransition.play() → {overlay, ready, covered, waiting(), finish(), abort()}，和 PinkieModeTransitionFx 一个形状。 */
 (() => {
   'use strict';
   if (window.PinkieMetreTransition) return;
   const root = document.documentElement;
-  const CELL = 12;
-  const BEAT = 300;            // 预备拍 ♩=200
-  const COVER_MS = 380;        // 盖上：波推到最远的角用 0.38 秒
-  const SWEEP_MS = 420;        // 落拍：指挥线扫过整屏用 0.42 秒
   // 13×11 的像素 M（和 laolao-metre-brand.js 的 LOGO 同一张图；@ = 摆锤，强调色）
   const LOGO = [
     '...##...##...',
@@ -38,11 +34,18 @@
   const dark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night')
     || (!root.getAttribute('data-theme') && Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   const palette = () => dark()
-    ? {bg: '#151514', off: '#262523', on: '#ECEAE4', dim: '#4A4844', accent: '#93A5EE'}
-    : {bg: '#F7F6F3', off: '#E4E2DB', on: '#1B1A18', dim: '#C9C6BE', accent: '#2F4BB0'};
+    ? {bg: '#151514', line: '#77746B', faint: '#3A3935', on: '#ECEAE4', dim: '#34332F', accent: '#93A5EE', lamp: '#E9C77A', pool: 0.1}
+    : {bg: '#F7F6F3', line: '#8E8A81', faint: '#DCD9D1', on: '#1B1A18', dim: '#DDDAD3', accent: '#2F4BB0', lamp: '#C9993A', pool: 0.13};
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   // 窗口在后台时 requestAnimationFrame 不走，切换会卡住；那时退回定时器
   const frame = () => document.hidden ? wait(32) : new Promise((resolve) => requestAnimationFrame(resolve));
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeIn = (t) => t * t * t;
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const backOut = (t, s = 1.4) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
+  // 时间线（毫秒，从合上开始算）
+  const COVER = 320, LIFT = 620, ICTUS = 1097, SPREAD = 360, LAMP0 = ICTUS + 40, LAMP_STEP = 104, CLEF = 1380, CLEF_MS = 180, HOLD = 1600, OPEN = 380;
 
   function play() {
     if (reduced()) return null;
@@ -52,225 +55,157 @@
     overlay.setAttribute('aria-live', 'polite');
     overlay.setAttribute('aria-label', '正在切换到 Metre');
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext?.('2d');
-    if (!ctx) return null;
+    const g = canvas.getContext?.('2d');
+    if (!g) return null;
     overlay.append(canvas);
     Object.assign(overlay.style, {position: 'fixed', inset: '0', zIndex: '2147483000', pointerEvents: 'auto', background: 'transparent'});
     Object.assign(canvas.style, {position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block'});
     document.body.append(overlay);
 
-    const W = window.innerWidth, H = window.innerHeight;
-    const ratio = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.round(W * ratio);
-    canvas.height = Math.round(H * ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    const cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL);
-    const colors = palette();
-    const center = (x) => x * CELL + CELL / 2;
-    // 11-16：方的像素块，不再是圆的灯珠（和新背景同一种笔触）。亮透的一格填满，半亮的是居中的小方块。
-    const dot = (g, x, y, r, color) => { g.fillStyle = color; const side = r >= CELL * 0.34 ? CELL : Math.max(2, Math.round(r * 2)); const o = Math.round((CELL - side) / 2); g.fillRect(x * CELL + o, y * CELL + o, side, side); };
-    // 盖满以后的样子：底色 + 一整张熄灯的点（离屏画一次）
-    const pattern = document.createElement('canvas');
-    pattern.width = canvas.width; pattern.height = canvas.height;
-    const pg = pattern.getContext('2d');
-    pg.setTransform(ratio, 0, 0, ratio, 0, 0);
-    pg.fillStyle = colors.bg; pg.fillRect(0, 0, W, H);
-    // 11-16：盖满的那一块是一块干净的底，不再铺熄灭的点阵（和新背景一样不要整屏的点）
-    const blit = (x0, y0, x1, y1) => {   // 格子范围 [x0, x1) × [y0, y1)
-      x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(cols, x1); y1 = Math.min(rows, y1);
-      if (x1 <= x0 || y1 <= y0) return;
-      const sx = x0 * CELL, sy = y0 * CELL, sw = (x1 - x0) * CELL, sh = (y1 - y0) * CELL;
-      ctx.drawImage(pattern, sx * ratio, sy * ratio, sw * ratio, sh * ratio, sx, sy, sw, sh);
-    };
-    // 波从模式按钮那里起；找不到就从正中起
-    const button = [...document.querySelectorAll('.laolao-mode-switcher')].find((node) => node.getClientRects().length);
-    const br = button?.getBoundingClientRect();
-    const ox = br && br.width ? Math.floor((br.left + br.width / 2) / CELL) : Math.floor(cols / 2);
-    const oy = br && br.width ? Math.floor((br.top + br.height / 2) / CELL) : Math.floor(rows / 2);
-    const far = Math.max(ox, cols - ox, oy, rows - oy) + 3;
-    // ---------- 构图（格子坐标）----------
-    // 像素 M（一格 = 2×2 个点阵格），下面点阵字 METRE（5×7），再下面 1 2 3 4 四个数拍的数字（3×5）；小黑猫从右边跑进来坐在字的右边。
-    // 字和数字用半格的细点（6px 一颗；用户 11-15：「Metre字太大了」），整格画太抢 M。
-    const S = 2;
-    const FINE = 5;          // 字、数字、猫都用 5px 的细点
-    const blockH = 11 * S + 2 + 4 + 2 + 3;
-    // M 是视觉焦点，居中（用户 11-15：「保持logo视觉焦点啊把下面的字和猫小一点」）
-    const mx = Math.floor(cols / 2) - Math.floor((13 * S) / 2);
-    const my = Math.max(2, Math.floor(rows / 2) - Math.floor(blockH / 2) - 1);
-    // 字和数字的位置用 CSS 像素（细点）；M 的中线和整块的中线对齐
-    const midPx = (mx + 6.5 * S) * CELL;
-    const wordW = (5 * 6 - 1) * FINE;
-    const wordX = Math.round(midPx - wordW / 2), wordY = (my + 11 * S + 2) * CELL;
-    const digitsW = (4 * 5 - 2) * FINE;
-    const digitsX = Math.round(midPx - digitsW / 2), digitsY = wordY + 7 * FINE + 2 * CELL;
-    // 小猫坐在 M 底座右边，脚踩在底座那一行的底边上
-    const catFinalX = (mx + 13 * S) * CELL + 10, catY = (my + 11 * S) * CELL - 16 * FINE;
-    // 摆：支点在底座上沿正中，摆杆长 8 个标志格；拍子落在两头（像真节拍器，每拍摆到一边「嗒」一下）
-    const pivot = {x: mx + 6.5 * S, y: my + 10 * S};
-    const ROD = 8 * S, SWING = 0.36;
+    const W = window.innerWidth, H = window.innerHeight, ratio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(W * ratio); canvas.height = Math.round(H * ratio); g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const C = palette();
+    const P = Math.max(4, Math.round(Math.min(W, H) / 140));      // 像素格（860 高时 6px）
+    const sn = (v) => Math.round(v / P) * P;
+    const GAP = 3 * P, TH = Math.max(1, Math.round(P / 2));       // 谱线间距、线粗
+    const mid = sn(H / 2), cx = sn(W / 2);                       // 中缝 = 中间那行谱的第三线；棒尖落在正中
+    const sx0 = sn(W * 0.06), sx1 = sn(W * 0.94);
+    // 整页谱面：中间一行（主谱表）+ 上下各几行（淡），行距 = 9 个谱线间距
+    const PITCH = 9 * GAP, staves = [];
+    for (let k = -6; k <= 6; k++) { const y = mid + k * PITCH; if (y - 2 * GAP > P && y + 2 * GAP < H - P) staves.push({k, y, lines: [-2, -1, 0, 1, 2].map((n) => y + n * GAP)}); }
+    const main = staves.find((s) => s.k === 0);
+    const LS = Math.max(2, Math.round((4 * GAP + 2 * P) / 11));  // 谱号 M 的一格
+    const lx = sx0 + 2 * P, ly = Math.round(mid - (11 * LS) / 2);
+    const clefEnd = lx + 13 * LS + 3 * P;
+    const bars = [0.25, 0.5, 0.75].map((f) => sn(clefEnd + (sx1 - clefEnd) * f));   // 小节线
+    const lamps = [0, 1, 2, 3].map((k) => ({x: sn(clefEnd + ((sx1 - clefEnd) * (k + 0.5)) / 4), at: LAMP0 + k * LAMP_STEP}));
+    const st = {t: 0, dyTop: -mid, dyBot: H - mid};
+    const box = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
 
-    // cover = 波推到第几圈；lit = M 亮到第几列；beat = 当前拍；sweep = 指挥线到第几列（-1 = 还没落拍）；t = 从开始算的毫秒
-    const state = {cover: -1, lit: 0, beat: -1, sweep: -1, t: 0, letters: 0, catX: W + 10, catFrame: 0, sitting: false, ripple: -1};
-    function cellState(x, y) {
-      // 0 = 没盖（透明）；1 = 刚亮的点；2 = 半格；3 = 整格
-      const age = state.cover - Math.max(Math.abs(x - ox), Math.abs(y - oy));
-      let s = age < 0 ? 0 : age === 0 ? 1 : age === 1 ? 2 : 3;
-      if (state.sweep >= 0) {
-        const past = state.sweep - x;
-        if (past >= 3) s = 0; else if (past === 2) s = Math.min(s, 1); else if (past >= 0) s = Math.min(s, 2);
-      }
-      return s;
+    // 指挥棒：棒尖的位置和棒子的朝向（棒尾相对棒尖的偏移）
+    const REST = {x: cx - 3 * GAP, y: mid + 5 * GAP}, TOP = {x: cx + GAP, y: mid - 8 * GAP}, HIT = {x: cx, y: mid};
+    function baton(t) {
+      if (t < COVER - 120) return null;
+      let tip, tail = {x: -12 * P, y: 14 * P}, alpha = clamp((t - COVER + 120) / 120);
+      if (t < COVER) tip = REST;
+      else if (t < LIFT) { const e = easeOut((t - COVER) / (LIFT - COVER)); tip = {x: REST.x + (TOP.x - REST.x) * e, y: REST.y + (TOP.y - REST.y) * e}; tail = {x: -12 * P + 3 * P * e, y: 14 * P - 2 * P * e}; }
+      else if (t < ICTUS - 60) tip = TOP, tail = {x: -9 * P, y: 12 * P};                                  // 停半拍
+      else if (t < ICTUS) { const e = easeIn((t - ICTUS + 60) / 60); tip = {x: TOP.x + (HIT.x - TOP.x) * e, y: TOP.y + (HIT.y - TOP.y) * e}; tail = {x: -9 * P - 5 * P * e, y: 12 * P - 6 * P * e}; }
+      else { const u = clamp((t - ICTUS) / 220), e = easeOut(u); tip = {x: HIT.x + GAP * e, y: HIT.y - 3 * GAP * e}; tail = {x: -14 * P, y: 6 * P}; alpha = 1 - u; }
+      return {x: sn(tip.x), y: sn(tip.y), tx: sn(tip.x + tail.x), ty: sn(tip.y + tail.y), alpha};
     }
-    function cell(x, y) {
-      if (x < 0 || y < 0 || x >= cols || y >= rows) return;
-      const s = cellState(x, y);
-      if (s === 3) blit(x, y, x + 1, y + 1);
-      else if (s === 2) { ctx.fillStyle = colors.bg; ctx.fillRect(x * CELL, y * CELL, CELL, CELL); }
-      else if (s === 1) dot(ctx, x, y, CELL * 0.3, colors.dim);
-    }
-    function ring(d) {
-      if (d < 0) return;
-      if (d === 0) { cell(ox, oy); return; }
-      for (let x = ox - d; x <= ox + d; x++) { cell(x, oy - d); cell(x, oy + d); }
-      for (let y = oy - d + 1; y <= oy + d - 1; y++) { cell(ox - d, y); cell(ox + d, y); }
-    }
-    const DIGITS = {
-      1: ['.#.', '##.', '.#.', '.#.', '###'],
-      2: ['##.', '..#', '.#.', '#..', '###'],
-      3: ['##.', '..#', '.#.', '..#', '##.'],
-      4: ['#.#', '#.#', '###', '..#', '..#'],
-    };
-    const FONT = {
-      M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
-      E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
-      T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
-      R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
-    };
-    const cat = window.LaolaoMetreCat;
-    const runFrames = cat?.STATES?.exec?.frames || [];
-    const sitFrames = cat?.STATES?.idle?.frames || [];
-    // 摆杆的角度：每拍摆到一头；还没开始数时停在正中
-    const angle = () => state.beat < 0 ? 0 : SWING * Math.cos(Math.PI * (state.t / BEAT));
-    let lastKey = '';
-    function draw() {
-      const a = angle();
-      const tipX = Math.round(pivot.x + Math.sin(a) * ROD), tipY = Math.round(pivot.y - Math.cos(a) * ROD);
-      const key = `${state.cover},${state.lit},${state.beat},${state.sweep},${tipX},${tipY},${state.letters},${state.catX},${state.catFrame},${state.sitting},${state.ripple}`;
-      if (key === lastKey) return;
-      lastKey = key;
-      ctx.clearRect(0, 0, W, H);
-      const k = state.cover - 2;
-      const left = state.sweep >= 0 ? state.sweep + 1 : 0;
-      if (k >= 0) blit(Math.max(ox - k, left), oy - k, ox + k + 1, oy + k + 1);
-      ring(state.cover); ring(state.cover - 1);
-      if (state.sweep >= 0) for (let x = state.sweep - 2; x <= state.sweep; x++) for (let y = 0; y < rows; y++) cell(x, y);
-      // 下面的东西只画在整格盖着的地方
-      const covered = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows && cellState(x, y) === 3;
-      const lit = (x, y, color, r = 0.36) => { if (covered(x, y)) dot(ctx, x, y, CELL * r, color); };
-      // 细点：(px, py) 是 CSS 像素；它落在哪个整格，那一格盖着才画
-      const fine = (px, py, color, r) => {
-        if (!covered(Math.floor(px / CELL), Math.floor(py / CELL))) return;
-        ctx.fillStyle = color; const side = r >= 0.4 ? FINE : Math.max(2, Math.round(FINE * r * 2)), o = Math.round((FINE - side) / 2); ctx.fillRect(Math.round(px) + o, Math.round(py) + o, side, side);
-      };
-      // 每拍从摆锤那里推出一圈声波（方的，按格子走），越远越淡
-      if (state.ripple >= 2) {
-        const d = state.ripple;
-        ctx.globalAlpha = Math.max(0, 1 - d / 22);
-        for (let x = tipX - d; x <= tipX + d; x++) { lit(x, tipY - d, colors.dim, 0.22); lit(x, tipY + d, colors.dim, 0.22); }
-        for (let y = tipY - d + 1; y <= tipY + d - 1; y++) { lit(tipX - d, y, colors.dim, 0.22); lit(tipX + d, y, colors.dim, 0.22); }
-        ctx.globalAlpha = 1;
-      }
-      // M 的框（不含中间的 V、摆杆和摆锤）：一列一列点亮；V 两条是摆过的残影，常暗
-      for (let gy = 0; gy < 11; gy++) for (let gx = 0; gx < 13; gx++) {
-        const c = LOGO[gy][gx];
-        if (c === '.' || c === '@') continue;
-        const inner = gx >= 5 && gx <= 7 && gy >= 3 && gy <= 9;
-        const on = !inner && gx < state.lit;
-        for (let sy = 0; sy < S; sy++) for (let sx = 0; sx < S; sx++) lit(mx + gx * S + sx, my + gy * S + sy, on ? colors.on : colors.dim, on ? 0.36 : 0.2);
-      }
-      // 摆杆 + 摆锤（亮完以后才出现）
-      if (state.lit >= 13) {
-        const steps = ROD * 2;
-        for (let i = 0; i <= steps; i++) {
-          const f = i / steps;
-          lit(Math.round(pivot.x + (tipX - pivot.x) * f), Math.round(pivot.y + (tipY - pivot.y) * f), colors.on);
+    const trail = [];
+
+    function content(t) {
+      // 1. 谱表：落拍那一刻从棒尖 (cx) 向两侧弹开；离中间越远的那行晚 50ms
+      for (const s of staves) {
+        const p = clamp((t - ICTUS - Math.abs(s.k) * 50) / SPREAD);
+        if (p <= 0) continue;
+        const e = backOut(p), a = Math.max(sx0 - P, cx - (cx - sx0) * e), b = Math.min(sx1 + P, cx + (sx1 - cx) * e);
+        const color = s === main ? (t - ICTUS < 90 ? C.accent : C.line) : C.faint;
+        for (const y of s.lines) box(a, y - Math.floor(TH / 2), b - a, TH, color);
+        if (p >= 1) {
+          const top = s.lines[0] - Math.floor(TH / 2), h = 4 * GAP + TH;
+          box(sx0, top, TH, h, color);                                                      // 起始线
+          for (const x of bars) box(x, top, TH, h, color);                                  // 小节线
+          box(sx1 - 3 * P, top, TH, h, color); box(sx1 - P, top, P, h, color);              // 终止线
         }
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) lit(tipX + dx, tipY + dy, colors.accent, 0.42);
       }
-      // METRE：一个字母一个字母亮起来
-      [...'METRE'].forEach((ch, i) => FONT[ch].forEach((row, y) => [...row].forEach((c, x) => {
-        if (c === '#') fine(wordX + (i * 6 + x) * FINE, wordY + y * FINE, i < state.letters ? colors.on : colors.dim, i < state.letters ? 0.4 : 0.24);
-      })));
-      // 1 2 3 4：当前那一拍是强调色
-      for (let n = 0; n < 4; n++) DIGITS[n + 1].forEach((row, y) => [...row].forEach((c, x) => {
-        if (c === '#') fine(digitsX + (n * 5 + x) * FINE, digitsY + y * FINE, n === state.beat ? colors.accent : colors.dim, n === state.beat ? 0.42 : 0.26);
-      }));
-      // 落拍时扫过去的那根「指挥棒」：一整列钴蓝的点
-      if (state.sweep >= 0) for (let y = 0; y < rows; y++) if (covered(state.sweep + 1, y)) dot(ctx, state.sweep + 1, y, CELL * 0.3, colors.accent);
-      // 小黑猫：每个像素一颗点，身体用字色，眼睛用强调色
-      const frameRows = state.sitting ? sitFrames[state.catFrame % Math.max(1, sitFrames.length)] : runFrames[state.catFrame % Math.max(1, runFrames.length)];
-      if (frameRows) frameRows.forEach((row, y) => [...row].forEach((c, x) => {
-        const px = state.catX + x * FINE, py = catY + y * FINE;
-        if (c === 'K') fine(px, py, colors.on, 0.46);
-        else if (c === 'E' || c === 'H') fine(px, py, colors.accent, 0.46);
-        else if (c === 'S') fine(px, py, colors.dim, 0.3);
-      }));
+      // 2. 落拍：棒尖迸出一圈钴蓝的点（120ms，八个方向往外）
+      const d = t - ICTUS;
+      if (d >= 0 && d < 160) {
+        g.globalAlpha = 1 - d / 160;
+        const r = sn(P + (d / 160) * 5 * GAP);
+        for (const [ux, uy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) box(sn(HIT.x + ux * r) - P / 2, sn(HIT.y + uy * r) - P / 2, P, P, C.accent);
+        if (d < 50) box(HIT.x - P, HIT.y - P, 2 * P, 2 * P, C.accent);
+        g.globalAlpha = 1;
+      }
+      // 3. 谱台灯：中间那行上方四盏，三十二分音符一盏；灯一亮先冲一下再稳住，在谱上照出一块光
+      if (main) for (const l of lamps) {
+        if (t < ICTUS + 120) continue;
+        const on = t >= l.at, hy = main.lines[0] - 5 * P;
+        box(l.x - P, hy - 3 * P, TH, 3 * P, C.line);                                         // 灯杆
+        box(l.x - 2 * P, hy, 4 * P, P, on ? C.lamp : C.dim);                                 // 灯罩
+        if (!on) continue;
+        const k = t - l.at < 80 ? 1.6 : 1;
+        g.globalAlpha = C.pool * k;
+        for (let y = hy + P, w = 4 * P; y < main.lines[4] + 2 * P; y += P, w += P) box(l.x - w / 2, y, w, P, C.lamp);
+        g.globalAlpha = 1;
+      }
+      // 4. 谱号 = 像素 M：最后从上面落到谱表左端，轻轻回弹一下停住（中间的 V 常暗，摆锤是强调色）
+      if (t >= CLEF) {
+        const q = clamp((t - CLEF) / CLEF_MS), dy = sn(-(1 - backOut(q, 2.2)) * 5 * GAP);
+        g.globalAlpha = clamp(q * 3);
+        for (let gy = 0; gy < 11; gy++) for (let gx = 0; gx < 13; gx++) {
+          const c = LOGO[gy][gx];
+          if (c === '.') continue;
+          const inner = gx >= 5 && gx <= 7 && gy >= 3 && gy <= 9;
+          box(lx + gx * LS, ly + gy * LS + dy, LS, LS, c === '@' ? C.accent : inner ? C.dim : C.on);
+        }
+        g.font = `600 ${Math.max(10, Math.round(P * 2.2))}px ui-monospace, "Cascadia Mono", Consolas, monospace`; g.textAlign = 'center'; g.textBaseline = 'top';
+        g.fillStyle = C.line; g.fillText('♩ = 72', lx + (13 * LS) / 2, mid + 2 * GAP + 3 * P + dy);
+        g.globalAlpha = 1;
+      }
+      // 5. 指挥棒（钴蓝的棒身 + 棒尾）和落下时的残影
+      for (const p of trail) { g.globalAlpha = clamp(1 - (t - p.t) / 180) * 0.6; box(p.x, p.y, P, P, C.accent); }
+      g.globalAlpha = 1;
+      const b = baton(t);
+      if (b && b.alpha > 0) {
+        g.globalAlpha = b.alpha;
+        const n = Math.max(Math.abs(b.tx - b.x), Math.abs(b.ty - b.y)) / P;
+        for (let i = 0; i <= n; i++) { const f = i / Math.max(1, n); box(sn(b.x + (b.tx - b.x) * f) - P / 2, sn(b.y + (b.ty - b.y) * f) - P / 2, P, P, C.accent); }
+        box(b.tx - P, b.ty - P, 2 * P, 2 * P, C.on);                                         // 棒尾的软木
+        box(b.x - P / 2, b.y - P / 2, P, P, C.accent);
+        g.globalAlpha = 1;
+      }
+    }
+    function paint() {
+      const t = st.t, b = baton(t);
+      if (b && ((t >= ICTUS - 60 && t <= ICTUS) || (t > COVER && t < LIFT))) trail.push({x: b.x - P / 2, y: b.y - P / 2, t});
+      while (trail.length && t - trail[0].t > 180) trail.shift();
+      g.clearRect(0, 0, W, H);
+      for (const [dy, y0, h] of [[st.dyTop, 0, mid], [st.dyBot, mid, H - mid]]) {
+        g.save(); g.translate(0, sn(dy)); g.beginPath(); g.rect(0, y0, W, h); g.clip();
+        box(0, y0, W, h, C.bg);
+        box(0, y0 === 0 ? mid - 1 : mid, W, 1, C.dim);   // 谱纸的折缝
+        content(t);
+        g.restore();
+      }
     }
 
-    let alive = true, leaving = false;
+    let alive = true, leaving = false, t0 = 0;
     const ready = frame();
-    // 盖上：按时间推进，慢机器上跳几圈也准时盖满
+    // 合上：按时间推进，慢机器上跳几帧也准时盖满
     const covered = (async () => {
       await ready;
-      const t0 = performance.now();
-      while (alive && state.cover < far) {
-        state.cover = Math.min(far, Math.floor(((performance.now() - t0) / COVER_MS) * far));
-        draw();
-        await frame();
+      t0 = performance.now();
+      while (alive && st.t < COVER) {
+        st.t = performance.now() - t0;
+        const e = easeInOut(clamp(st.t / COVER));
+        st.dyTop = -mid * (1 - e); st.dyBot = (H - mid) * (1 - e);
+        paint(); await frame();
       }
       if (!alive) throw new Error('aborted');
+      st.dyTop = 0; st.dyBot = 0;
     })();
-    // 数拍：和盖上同时开始。第一拍 M 的框一列一列亮；第二、三拍 METRE 逐字亮；猫从右边跑进来，第四拍坐下。
-    // 数完之前不落拍，之后新页面好了就落拍，没好就接着数（摆接着摆，猫坐着甩尾巴）。
+    // 起拍、落拍、亮灯、落位：和合上接着走；走完之前不翻开，之后新页面好了就翻开，没好就停在整页谱面上
     const counted = (async () => {
-      await ready;
-      const t0 = performance.now();
-      const run = 4 * BEAT - 120;
-      for (let n = 0; alive; n++) {
-        if (n >= 4 && leaving) return;
-        state.beat = n % 4;
-        const until = t0 + (n + 1) * BEAT;
-        while (alive && performance.now() < until) {
-          const t = performance.now() - t0;
-          state.t = t;
-          state.lit = Math.min(13, Math.ceil((t / (BEAT * 1.2)) * 13));
-          state.letters = Math.max(0, Math.min(5, Math.floor((t - BEAT * 0.9) / (BEAT * 0.36)) + 1));
-          state.ripple = Math.floor((t - n * BEAT) / 22);
-          if (t < run) {
-            state.sitting = false;
-            state.catX = Math.round(W + 10 - (W + 10 - catFinalX) * (t / run));
-            state.catFrame = Math.floor(t / 80);
-          } else {
-            state.sitting = true;
-            state.catX = catFinalX;
-            state.catFrame = Math.floor((t - run) / 260);
-          }
-          draw();
-          await frame();
-        }
-      }
+      try { await covered; } catch { return; }
+      while (alive) { st.t = performance.now() - t0; if (leaving && st.t >= HOLD) return; paint(); await frame(); }
     })();
 
     async function finish() {
       leaving = true;
       await counted;
-      if (!alive) return; window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: SWEEP_MS}}));   // 指挥线开始扫：页面里的进场跟着这一拍起（laolao-metre-home.js）
-      state.beat = 0;
-      const t0 = performance.now();
-      while (alive && state.sweep <= cols + 2) {
-        state.sweep = Math.floor(((performance.now() - t0) / SWEEP_MS) * (cols + 3));
-        draw();
-        await frame();
+      if (!alive) return;
+      window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: OPEN}}));   // 翻开：页面里的进场跟着这一拍起（laolao-metre-home.js）
+      const o0 = performance.now();
+      let d;
+      while (alive && (d = performance.now() - o0) < OPEN) {
+        const e = easeInOut(d / OPEN);
+        st.t = performance.now() - t0;
+        st.dyTop = -mid * e; st.dyBot = (H - mid) * e;
+        paint(); await frame();
       }
       alive = false;
       overlay.remove();

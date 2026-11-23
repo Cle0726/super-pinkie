@@ -794,7 +794,7 @@
     },
     "ui/injections/laolao-metre-skin.css": {
       "important": 2267,
-      "lines": 2562,
+      "lines": 2552,
       "mutationObservers": 0,
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
@@ -810,7 +810,7 @@
     },
     "ui/injections/laolao-metre-transition.js": {
       "important": 0,
-      "lines": 283,
+      "lines": 218,
       "mutationObservers": 0,
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
@@ -1767,7 +1767,7 @@
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2501,
     "services/mode-architecture/session-lineage.mjs": 1894,
-    "ui/injections/laolao-metre-skin.css": 2562,
+    "ui/injections/laolao-metre-skin.css": 2552,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1637,

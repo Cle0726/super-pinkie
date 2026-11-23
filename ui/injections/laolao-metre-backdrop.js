@@ -982,7 +982,7 @@
     canvas?.remove();
     canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; sceneKey = ''; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer); clearTimeout(lampTimer); lampAnims.clear(); realLamps = null;
     root.removeAttribute('data-pk-metre-backdrop');
-    root.style.removeProperty('--metre-band');
+    root.style.removeProperty('--metre-band'); root.removeAttribute('data-metre-band-low'); window.PinkieMetreStage?.lowStaff(canvas, false);
   }
   const currentLamps = () => previewLamps || lampStates(window.__pinkieMetreBoardData?.data?.sessions);
   // 11-23 灯换状态时的过渡（毫秒，从换的那一刻算）：派出 = 先闪两下再亮稳；做完 = 一拍里分两档暗下去；出错 = 砖红闪两下。预览、减少动效时直接换
@@ -1031,9 +1031,9 @@
     canvas.width = cols * cellDev;
     canvas.height = rows * cellDev;
     ctx = canvas.getContext('2d');
-    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px');
+    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px'); const lowBand = home && bandCss < 180; if (lowBand) root.setAttribute('data-metre-band-low', ''); else root.removeAttribute('data-metre-band-low'); window.PinkieMetreStage?.lowStaff(canvas, lowBand);   // 11-24：矮于 180px 只留五线谱
     lampSig = lamps.join(',');
-    scene = buildScene({cols, rows, band, dark, home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot});
+    scene = buildScene({cols, rows, band, dark, home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot}); if (canvas.dataset) canvas.dataset.podX = String(scene.anchors.podX);   // 首页亮灯读指挥台的位置
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');

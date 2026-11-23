@@ -2517,27 +2517,25 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4)[data-pink
 }
 
 /* ====================================================================================================
- * 11-23 整页进场 / 换页（用户：「整页的进场和换页动画，像 Son Daven」）。laolao-metre-home.js 在这几个时刻给根元素放
- *   data-metre-enter="home | chat"：进 Metre 时预备拍的指挥线开始扫（和它同一拍）、换会话 / 新会话、刚打开 App 第一次出首页。
- * 借 Son Daven 的手法：画面按一格格竖条从左往右显出来（16 格 = 一小节的十六分音符），东西按拍子依次登场，换页时一根线扫过去。
- *   0      画带和对话正文：16 格竖条，半拍显完（和预备拍的「落拍」指挥线同向、同速）
- *   ♬ 208  速度记号那一行从左划出来
- *   ♪ 417  引导语逐字浮现（重新从第一个字开始）；输入框从下面浮起 16px                        （这一行和下一行只在首页）
- *   625    输入框下面那一排（Baton / 模型 / 强度）淡入；换会话进对话页时输入框不动，对话正文按竖条显出来
- *   换会话时另有一根钴蓝的指挥线（.pk-metre-sweep）跟着竖条的边一格格扫过内容区；进 Metre 时预备拍自己有这根线，不重复。
- *   减少动态效果时一样都没有（home.js 不放标记，这里也再拦一道）。
+ * 11-23 / 11-24 整页时刻（「总谱」语言，时值按 ♩=72）。laolao-metre-home.js 在这几个时刻给根元素放 data-metre-enter：
+ *   "wait"：刚打开 App、首页还没进场——画带先压暗、引导语和输入框先藏起来，免得先闪一下全亮的再进场；
+ *   "home"：进 Metre（预备拍翻开的那一拍）、刚打开 App 第一次出首页。画带由 laolao-metre-stagefx.js 亮灯（天幕从中间亮、
+ *     地板的灯按三十二分音符一盏盏亮、指挥台最后亮）；208ms 速度记号那一行从左划出，417ms 引导语按音高落回、输入框浮起 16px，
+ *     625ms 输入框下面那一排淡入。换会话是「翻谱」（stagefx 的 turn），不再用竖条显出和指挥线。
+ *   首页画带矮于 180px（最矮 144px）时根元素有 data-metre-band-low：舞台装饰全收掉，只留一行五线谱（.pk-metre-lowstaff）。
+ *   减少动态效果时一样都没有（home.js / stagefx 不放，这里也再拦一道）。
  * ==================================================================================================== */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter] .pk-metre-backdrop, html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="chat"] .chat-thread { animation: pk-metre-bars 417ms steps(16, end) backwards; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] .pk-metre-backdrop { opacity: 0.12; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] :is(.pk-metre-prompt, .agent-chat__input, .agent-chat__composer-controls) { opacity: 0; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .pk-metre-prompt__head { animation: pk-metre-wipe 417ms cubic-bezier(0.2, 0.7, 0.2, 1) 208ms backwards; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .agent-chat__input { animation: pk-metre-rise 417ms cubic-bezier(0.2, 0.7, 0.2, 1) 417ms backwards; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .agent-chat__composer-controls { animation: pk-metre-fade 208ms ease-out 625ms backwards; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-wait .pk-metre-ch, html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-wait .pk-metre-kw::after { opacity: 0; animation: none; }
-.pk-metre-sweep { position: fixed; z-index: 40; pointer-events: none; background: var(--metre-accent, #2F4BB0); animation: pk-metre-sweep-line 417ms steps(16, end) forwards, pk-metre-out 1ms linear 417ms forwards; }
-html:not([data-laolao-mode="metre"]) .pk-metre-sweep { display: none; }
-@keyframes pk-metre-bars {
-  from { clip-path: inset(0 100% 0 0); }
-  to { clip-path: inset(0 0 0 0); }
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-sung .pk-metre-ch { opacity: 1; animation: none; }
+.pk-metre-fly { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-band-low] canvas.pk-metre-backdrop { visibility: hidden; }
+.pk-metre-lowstaff { position: fixed; bottom: 0; height: var(--metre-band, 144px); z-index: -1; pointer-events: none; box-sizing: border-box; padding: 0 6%; background: repeating-linear-gradient(to bottom, var(--metre-staff-ink, #9C988F) 0 1px, transparent 1px 8px) center 42% / 100% 33px no-repeat content-box; }
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) .pk-metre-lowstaff { --metre-staff-ink: #5E5B54; }
 @keyframes pk-metre-wipe {
   from { opacity: 0; clip-path: inset(0 100% 0 0); }
   to { opacity: 1; clip-path: inset(0 0 0 0); }
@@ -2548,15 +2546,7 @@ html:not([data-laolao-mode="metre"]) .pk-metre-sweep { display: none; }
 @keyframes pk-metre-fade {
   from { opacity: 0; }
 }
-/* 一根 2px 的线：clip-path 只露出 2px 宽的一条，从左边一格格挪到右边，扫完熄掉 */
-@keyframes pk-metre-sweep-line {
-  from { clip-path: inset(0 calc(100% - 2px) 0 0); }
-  to { clip-path: inset(0 0 0 calc(100% - 2px)); }
-}
-@keyframes pk-metre-out {
-  to { opacity: 0; }
-}
 @media (prefers-reduced-motion: reduce) {
-  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter] :is(.pk-metre-backdrop, .chat-thread, .pk-metre-prompt__head, .agent-chat__input, .agent-chat__composer-controls), .pk-metre-sweep { animation: none !important; }
-  .pk-metre-sweep { display: none; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter] :is(.pk-metre-prompt__head, .agent-chat__input, .agent-chat__composer-controls) { animation: none !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] :is(.pk-metre-backdrop, .pk-metre-prompt, .agent-chat__input, .agent-chat__composer-controls) { opacity: 1; }
 }

@@ -220,8 +220,8 @@
         } else { group = null; nodes.push(span); }
       });
       line.replaceChildren(...nodes);
-      line.classList.toggle('is-enter', animate); line.style.setProperty('--metre-reveal', Math.round(list.length * step + 320) + 'ms');   // 整句浮现完的时刻：关键词下面那排点从这时起一颗颗亮（skin）
-      line.classList.remove('is-leave');
+      line.classList.remove('is-sung'); line.classList.toggle('is-enter', animate); line.style.setProperty('--metre-reveal', Math.round(list.length * step + 320) + 'ms');   // 整句浮现完的时刻：关键词下面那排点从这时起一颗颗亮（skin）
+      line.classList.remove('is-leave'); if (animate && !line.classList.contains('is-wait')) window.PinkieMetreStage?.melody(line);   // 11-24：引导语按音高落回（stagefx）
     };
     if (animate && line.childNodes.length) {
       line.classList.add('is-leave');
@@ -289,7 +289,7 @@
   }
 
   // 11-23 整页进场 / 换页（用户：「像 Son Daven」）：进 Metre（预备拍的指挥线开始扫）、换会话、刚打开 App 时，样子在 skin「11-23 整页进场」；换会话另有一根指挥线扫过。
-  let enterTimer = 0, lineEl = null, firstShown = false;
+  let enterTimer = 0, lineEl = null, firstShown = false; try { if (!reduced() && (document.documentElement.hasAttribute('data-laolao-splash-metre') || !sessionStorage.getItem('laolao:startup-home-seen'))) { document.documentElement.setAttribute('data-metre-enter', 'wait'); setTimeout(() => { if (document.documentElement.getAttribute('data-metre-enter') === 'wait') document.documentElement.removeAttribute('data-metre-enter'); }, 8000); } } catch {}   // 刚打开 App：进场前先压暗，不先闪一下
   function enter(withLine) {
     const root = document.documentElement, main = document.querySelector('main.content');
     if (!isMetre() || reduced() || document.hidden || !main) return;
@@ -297,13 +297,13 @@
     root.removeAttribute('data-metre-enter'); void root.offsetWidth;   // 拿掉再放上，CSS 动画才会从头来
     root.setAttribute('data-metre-enter', root.getAttribute('data-laolao-startup-home') === '1' || box?.isConnected ? 'home' : 'chat');
     const line = box?.isConnected && box.querySelector('.pk-metre-prompt__text'), r = main.getBoundingClientRect();
-    if (line) { line.classList.remove('is-enter'); line.classList.add('is-wait'); setTimeout(() => { line.classList.remove('is-wait'); void line.offsetWidth; line.classList.add('is-enter'); }, 417); }
-    if (withLine) { lineEl = Object.assign(document.createElement('div'), {className: 'pk-metre-sweep', ariaHidden: 'true'}); Object.assign(lineEl.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px'}); document.body.append(lineEl); }
+    if (line) { line.classList.remove('is-enter'); line.classList.add('is-wait'); setTimeout(() => { line.classList.remove('is-wait'); void line.offsetWidth; line.classList.add('is-enter'); window.PinkieMetreStage?.melody(line); }, 417); }
+    if (!withLine && root.getAttribute('data-metre-enter') === 'home') window.PinkieMetreStage?.lights();   // 11-24：首页开演前亮灯（stagefx；指挥台位置读 backdrop 的锚点）
     enterTimer = setTimeout(() => { root.removeAttribute('data-metre-enter'); lineEl?.remove(); lineEl = null; }, 1700);
   }
   // 换会话：等新内容到了再显（第一组消息换了、或者出了欢迎页），最多等 600ms；预备拍还盖着时不另做
   function onSwitch() {
-    if (!isMetre() || reduced() || document.querySelector('.pk-metre-transition')) return;
+    if (!isMetre() || reduced() || document.querySelector('.pk-metre-transition')) return; if (window.PinkieMetreStage) { void window.PinkieMetreStage.turn(document.querySelector('main.content')?.getBoundingClientRect()); return; }   // 11-24：换会话 = 翻谱
     const before = document.querySelector('.chat-thread .chat-group'), t0 = Date.now();
     const wait = () => { const now = document.querySelector('.chat-thread .chat-group'); if ((now && now !== before) || box?.isConnected || Date.now() - t0 > 600) enter(true); else setTimeout(wait, 40); }; setTimeout(wait, 40);
   }
@@ -314,7 +314,7 @@
     syncTitle();
     const welcome = isMetre() ? [...document.querySelectorAll('.agent-chat__welcome')].find((node) => node.getClientRects().length) : null;
     if (!welcome) {
-      if (box?.isConnected) { box.remove(); clearTimeout(timer); timer = 0; }
+      if (box?.isConnected) { box.remove(); clearTimeout(timer); timer = 0; } if (document.documentElement.getAttribute('data-metre-enter') === 'wait') document.documentElement.removeAttribute('data-metre-enter');
       return;
     }
     if (!box) build();

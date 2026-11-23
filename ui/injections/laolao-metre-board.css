@@ -7,14 +7,14 @@ html:not([data-laolao-mode="metre"]) .pk-metre-quick,
 html:not([data-laolao-mode="metre"]) .pk-metre-nav { display: none !important; }
 
 html[data-laolao-mode="metre"] {
-  /* 「谱纸」配色：状态色全部降饱和。钴蓝 = 在奏（和强调色同一支笔），暗暖白 = 做完（11-23 起不用灰绿，和背景谱台灯的「做完」同色），暖灰 = 其他，砖红 = 出错，浅灰 = 排队 */
+  /* 「谱纸」配色：状态色全部降饱和。钴蓝 = 在奏（和强调色同一支笔），偏绿的灰 = 做完（11-24：和「其他」的暖灰按色相拉开，日夜非文字对比度都 ≥ 3:1），暖灰 = 其他，砖红 = 出错，浅灰 = 排队 */
   --metre-v1: #2F4BB0;
-  --metre-v2: #8A8478;
+  --metre-v2: #6F8466;
   --metre-v3: #7A7468;
   --metre-v4: #B0463A;
   --metre-v5: #B5B1A8;
   --metre-v1-soft: #E6EAF6;
-  --metre-v2-soft: #ECE6D9;
+  --metre-v2-soft: #E3E9DE;
   --metre-v3-soft: #ECEAE5;
   --metre-v4-soft: #F5E5E2;
   --metre-v5-soft: #ECEAE5;
@@ -22,12 +22,12 @@ html[data-laolao-mode="metre"] {
 html[data-laolao-mode="metre"][data-pinkie-night],
 html[data-laolao-mode="metre"][data-theme="dark"] {
   --metre-v1: #93A5EE;
-  --metre-v2: #938D7E;
+  --metre-v2: #8FA585;
   --metre-v3: #9A958A;
   --metre-v4: #D9806F;
   --metre-v5: #5E5B55;
   --metre-v1-soft: #22263A;
-  --metre-v2-soft: #2C2923;
+  --metre-v2-soft: #232A21;
   --metre-v3-soft: #252422;
   --metre-v4-soft: #33231F;
   --metre-v5-soft: #242422;
