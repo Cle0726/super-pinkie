@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5076,
+    "important": 5073,
     "mutationObservers": 28,
     "setIntervals": 44,
     "subtreeObserverCalls": 0,
@@ -793,7 +793,7 @@
       "windowGlobals": 0
     },
     "ui/injections/laolao-metre-skin.css": {
-      "important": 2267,
+      "important": 2264,
       "lines": 2552,
       "mutationObservers": 0,
       "setIntervals": 0,

@@ -104,8 +104,8 @@
   {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 另：Metre 引擎台（briefs/metre-engines-1122）的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载，共 2 行；功能本身全在新文件里。 另：Metre 整页时刻（briefs/metre-ui-polish-1123，换会话翻谱、首页亮灯、引导语、矮画带）的新文件 laolao-metre-stagefx.js 在这里登记加载，1 行。",
-    "value": 212
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 另：Metre 引擎台（briefs/metre-engines-1122）的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载，共 2 行；功能本身全在新文件里。 另：Metre 整页时刻（briefs/metre-ui-polish-1123，换会话翻谱、首页亮灯、引导语、矮画带）的新文件 laolao-metre-stagefx.js 在这里登记加载，1 行。 另：Metre 的总谱按键（laolao-metre-keys.css）和后台状态带（laolao-metre-backstage.js）两个新文件在这里登记加载，2 行。",
+    "value": 214
   },
   {
     "file": "ui/injections/laolao-dom-watch.js",

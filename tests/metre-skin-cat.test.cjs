@@ -764,3 +764,27 @@ test('Metre 11-24 page moments: the count-in lifts the baton and lands the score
   assert.match(skin, /\[data-metre-enter="home"\] \.agent-chat__input \{ animation: pk-metre-rise 417ms [^;]* 417ms backwards; \}/, '输入框第二个八分音符浮起');
   assert.match(skin, /@media \(prefers-reduced-motion: reduce\) \{\n  [^\n]*\[data-metre-enter\] :is\(\.pk-metre-prompt__head, \.agent-chat__input, \.agent-chat__composer-controls\) \{ animation: none !important; \}/);
 });
+
+test('Metre 11-24 keys and backstage: one key language with every state in day and night, and a backstage band fed only by existing events and methods', () => {
+  const head = read(INJ + 'laolao-head.fragment.html');
+  assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>/);
+  const keys = read(INJ + 'laolao-metre-keys.css');
+  for (const state of [':hover:not(:disabled)', ':active:not(:disabled)', ':focus-visible', ':is(:disabled, [aria-disabled="true"])', '[aria-busy="true"]']) assert.ok(keys.includes(state), '按键状态：' + state);
+  assert.match(keys, /animation: pk-mk-beat 833ms steps\(1, end\) infinite;/, '运行中的拍子线按 ♩=72');
+  assert.match(keys, /@media \(prefers-reduced-motion: reduce\)/); assert.match(keys, /\[data-pinkie-reduce-motion\]/);
+  assert.match(keys, /:is\(\[data-theme="dark"\], \[data-pinkie-night\]\) \{ --mk-wait: /, '日夜两套');
+  assert.doesNotMatch(keys, /!important/);
+  for (const rule of keys.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{/g)) {
+    const sel = rule.slice(0, -1).trim();
+    if (!sel || sel.startsWith('@') || /^(\d+%|from|to)$/.test(sel)) continue;
+    assert.ok(/html\[data-laolao-mode="metre"\]/.test(sel) || sel === '.pk-metre-backstage', '只在 Metre 下：' + sel);
+  }
+  const band = read(INJ + 'laolao-metre-backstage.js');
+  const code = band.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(code, /setInterval|MutationObserver|window\.__\w+\s*=[^=]/, '不加定时器、观察器、全局名');
+  assert.match(code, /window\.addEventListener\('pinkie:run-view', render\);/, '刷新挂在 run-status 已有的节拍上');
+  assert.match(code, /UNSYNC_MS = 3000/, '两边不一致超过 3 秒才算不同步');
+  assert.match(code, /rpc\('pinkie\.engines\.status'/); assert.match(code, /__pinkieMetreBoardData\?\.data/); assert.match(code, /__pinkieRunStatus\?\.refresh/);
+  assert.match(code, /reloadHistory|chat\.history/, '同步 = 重拉 chat.history');
+  assert.match(code, /if \(!isMetre\(\)\) \{ if \(band\) band\.hidden = true; return; \}/, '只在 Metre 出现');
+});

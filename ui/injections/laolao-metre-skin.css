@@ -2041,8 +2041,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-ch
   transform: none !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::before,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::after { box-shadow: none !important; background: none !important; animation: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--metre-cobalt) 86%, var(--metre-text)) !important; outline: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::after { box-shadow: none !important; }   /* 11-24：::after 是停止键「运行中」的拍子线（laolao-metre-keys.css） */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--metre-cobalt) 86%, var(--metre-text)) !important; }   /* 键盘焦点的钴蓝一圈在 keys.css */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn.chat-send-btn--stop { background: var(--metre-text) !important; color: var(--metre-bg) !important; }
 
 /* ---------- 真机回归 2（11-16 用户截图：「排版问题，重复问题」）----------
