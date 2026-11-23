@@ -295,3 +295,9 @@ html[data-laolao-mode="metre"] #laolao-session-manager .sidebar-recent-session__
 }
 .pk-eng-menu__drop:hover { background: var(--metre-hover, #F0EEE6); }
 .pk-eng-menu__drop[data-armed] { color: var(--metre-danger, #B3261E); }
+/* 更多引擎（E6）：注册表里搜到的一家一行，名字和一句说明在左，「来源」「加上」在右 */
+.pk-eng-more__list { display: grid; max-height: 280px; overflow-y: auto; }
+.pk-eng-more__row { display: flex; align-items: center; gap: 8px; padding: 7px 2px; border-top: 1px solid var(--metre-line, #E8E6DC); }
+.pk-eng-more__text { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.pk-eng-more__text .pk-eng-menu__note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-eng-more__meta { color: var(--metre-muted, #73726C); font-size: 11.5px; }

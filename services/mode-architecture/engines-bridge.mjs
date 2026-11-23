@@ -41,7 +41,11 @@ export const ENGINES = [
   {id: 'muse', name: 'Muse Code', login: 'muse login', install: {}, link: 'https://dev.meta.ai/docs/muse-code'},
 ];
 const ENGINE_NAME = Object.fromEntries(ENGINES.map(engine => [engine.id, engine.name]));
-const engineInfo = id => ENGINES.find(engine => engine.id === id) || null;
+// 「更多引擎」（E6，engines-registry.mjs）：从公开的 ACP 注册表加进来的引擎，driver 都是 acpRegistry，各自带模型和登录。
+// 不进上面十家的表（菜单不会把它当成一行「还没打开」列出来），只在认实例时用：登录走引擎服务托管（provider.auth.*）。
+export const REGISTRY_DRIVER = 'acpRegistry';
+const REGISTRY_INFO = {id: REGISTRY_DRIVER, name: '更多引擎', managed: {signin: true}, registry: true};
+const engineInfo = id => ENGINES.find(engine => engine.id === id) || (id === REGISTRY_DRIVER ? REGISTRY_INFO : null);
 // 多账号（PLAN 3.7，用户 11-23）：引擎服务一个账号一个实例，实例 id 是「<家>-<n>」。
 // 只有登录能分开放的几家支持：Claude 每个账号一个配置文件夹（CLAUDE_CONFIG_DIR），Codex 每个账号一个影子文件夹（共用 ~/.codex 的对话），
 // Antigravity、Cursor 由引擎服务按实例各自托管登录。其余几家用这台电脑上同一份登录，开多个也是同一个账号。
@@ -52,8 +56,8 @@ export const ACCOUNTS = {
   cursor: {},
 };
 const INSTANCE_ID = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
-// 实例 id → 哪一家。默认实例 id 就是那一家；加出来的是「<家>-<n>」。
-export const driverOf = id => engineInfo(id) ? String(id) : (/^([a-zA-Z]+)-\d+$/.exec(String(id || ''))?.[1] || '');
+// 实例 id → 哪一家。默认实例 id 就是那一家；加出来的是「<家>-<n>」；注册表里加的是「acpRegistry_<名字>」。
+export const driverOf = id => engineInfo(id) ? String(id) : /^acpRegistry_\w+$/.test(String(id || '')) ? REGISTRY_DRIVER : (/^([a-zA-Z]+)-\d+$/.exec(String(id || ''))?.[1] || '');
 const installCommand = (info, platform = process.platform) => info?.install?.[platform === 'win32' ? 'win' : 'mac'] || info?.install?.any || '';
 // 用户点了才开终端，而且只跑这张表里写死的命令。
 const TERMINAL_COMMANDS = new Set(ENGINES.flatMap(engine => [engine.login, ...Object.values(engine.install || {})]).filter(Boolean));
@@ -131,6 +135,7 @@ export function summarizeProviders(providers = [], {platform = process.platform,
       name: (extra && brandless(provider.displayName || '').replace(EMAIL, '').trim()) || engineName(id) || brandless(provider.displayName || id),
       account: extra,
       multi: Boolean(ACCOUNTS[driver]),
+      registry: driver === REGISTRY_DRIVER,
       enabled: provider.enabled === true,
       installed: provider.installed === true,
       version: provider.version || null,
@@ -150,7 +155,8 @@ export function summarizeProviders(providers = [], {platform = process.platform,
         return {quota: limit, models: models.map(model => (limit.outModels.includes(model.slug) ? {...model, out: true} : model))};
       })(),
     };
-  }).filter(row => row.id);
+  // 引擎服务自带的那个空的注册表实例（没指定是哪一家）不列。
+  }).filter(row => row.id && row.id !== REGISTRY_DRIVER);
   if (all) for (const info of ENGINES) if (!rows.some(row => row.id === info.id)) {
     rows.push({id: info.id, driver: info.id, name: info.name, account: false, multi: Boolean(ACCOUNTS[info.id]), enabled: false, installed: false, version: null, status: 'disabled', signedIn: false, plan: '',
       message: '', state: 'off', text: '还没打开', setup: {canInstall: info.managed?.install === true, canAuthenticate: info.managed?.signin === true},
@@ -561,7 +567,8 @@ export class EngineBridge {
   async removeAccount({engine} = {}) {
     const {id, driver, info} = await this.resolve(engine);
     if (id === driver) throw new Error('默认账号不能删，可以关掉它');
-    if (info.managed?.signin) await this.call('provider.auth.logout', {instanceId: id}, {timeout: 60_000}).catch(error => this.logger?.warn?.(`engines logout ${id}: ${error.message}`));
+    // 注册表里的引擎在这台电脑上共用一份登录（引擎服务文档：ACP 不分账号），删掉这一行不替用户退出它。
+    if (info.managed?.signin && !info.registry) await this.call('provider.auth.logout', {instanceId: id}, {timeout: 60_000}).catch(error => this.logger?.warn?.(`engines logout ${id}: ${error.message}`));
     await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'remove', instanceId: id}});
     this.watches.delete(`auth:${id}`);
     this.configCache = {at: 0, value: null};

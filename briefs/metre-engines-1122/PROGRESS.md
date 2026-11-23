@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-11-23 晚 · E6 更多引擎（ACP 注册表）+ 引擎台补「新工作树」（AWS Quick 经 Quick 跑腿 2）
+
+**做了什么**
+- 引擎菜单底下多一行「＋ 更多引擎」（外部引擎打开时才有）：搜公开的 ACP 注册表，一家一行写说明、许可证、怎么装（下载运行包 / 用 npm 装 / 用 Python 工具装）、来源链接（只放 https）；不取图标（图在别人的网站上）。菜单里已有的十家不重复列（照引擎服务设置页的 `acpRegistryAgentIds`：codex-acp、claude-acp、antigravity-acp、cursor、grok-build、opencode、opencode-v2、pi-acp；另外去掉 muse-code，十家里已有 Muse Code）。点「加上」才下载：`server.prepareAcpRegistryAgent {agentId}` → `server.updateSettings` 建实例 `acpRegistry_<名字>`（driver `acpRegistry`，config `{agentId, distribution: 'auto'}`，id 照引擎服务设置页 `deriveInstanceId` 的规矩，重名加 `_2`）→ `refreshProviders` → 直接进这一家的设置卡片登录。
+- 新文件 `services/mode-architecture/engines-registry.mjs`（网关方法 `pinkie.engines.registry {action: search|add}`，要外部引擎开着），已登记进 `setup.py` 和 `installer/macos/apply-theme.sh` 两份复制清单（同一行里加，不加行数）。
+- `engines-bridge.mjs` 认 `acpRegistry`：`driverOf('acpRegistry_…')`；登录走托管（`provider.auth.*`，和 Antigravity、Cursor 同一条路，可带 `methodId`）；菜单行带 `registry: true`；引擎服务自带的那个空注册表实例（id 就是 `acpRegistry`，没指定哪一家）不列。删掉走现成的 `pinkie.engines.account remove`，**不替用户退出**它的登录（引擎服务文档：ACP 不分账号，同一台电脑上这家共用一份登录）。注册表加的引擎，设置卡片底下只有「删掉这个引擎」，没有改名字。
+- 登录方式是终端或填密钥的：Metre 里接不上，设置卡片说清楚，并列出它别的登录方式（「改用：…」，带 `methodId` 重新开始登录）。
+- 引擎台清单剩下的一项（PLAN 3.5「每个会话独立工作树」）：桥早就收 `worktree`、文档也写了有，但界面上没开关。现在还没开对话时，引擎台底下「先出方案」旁边多一颗「新工作树」，按下后第一句话带 `worktree: true`（`workspaceStrategy: worktree`）；对话开了就不再出现；换会话复位。
+- `?v=metreengine8` → `metreengine9`。`docs/METRE-MODE.md`「选引擎、登录」加「更多引擎」一条，代码清单加 `engines-registry.mjs`。
+
+**怎么验的**
+- 真引擎服务（0.1.11：用 `F:\t3probe\e1\root\versions` 里的程序 + 全新的 `F:\t3probe\e6probe\home`，不碰任何登录）：`server.searchAcpRegistry` 1.4 秒返回 43 家；新代码 `EngineRegistry.search` 剩 34 家，菜单已有的没漏进来，34 家都有来源链接；搜「qwen」只回 qwen-code。脚本 `build\quick-run\e6\probe-registry.mjs`、`real-search.mjs`。
+- 新测试 `tests/metre-engines-registry.test.mjs` 4 条：过滤十家和坏 id、只放 https、不带图标、不露引擎服务的名字；加上的顺序（先 prepare 再建实例再 refresh）、重名加 `_2`、拒绝时不下载；实例 id 规矩；注册表行走托管登录、删掉不退出登录。`metre-engine-ui` 新加两条真浏览器（Edge）：更多引擎（搜、描述按文本显示、已加的不能再加、点了才下载、加好直接进登录、删掉点两下、没有改名字）；新工作树（默认关、按下后第一句带 worktree、对话开了就消失）。`metre-engines` 的网关方法清单加 `registry`，并验外部引擎关着时不能搜。
+- 隔离 HOME/APPDATA 里 19 个文件全过：`metre-engine-ui` 12（`NODE_PATH` 借 Playwright）、`metre-engines-registry` 4、`metre-engines` 8、`metre-engines-bridge` 16、`metre-engine-task` 13、`user-settings`、`brand-ui`、`plugin-file-lists`、`code-health-ratchet`、`metre-board`、`metre-inject`、`metre-wording`、`metre-dispatch`、`metre-baton`、`metre-roles`、`metre-lock`、`metre-memory`、`metre-quiet`、`delegation-gate`。ratchet、`git diff --check` 过。
+- 全量门禁 `tools/release-gate/run-tests.mjs`：本次 54 条失败，同一提交（c2ee5a73）的干净副本 53 条。多出的一条是 `session-lineage` 的「stop-and-archive does not interrupt an active parent and leaves it unarchived on timeout」，单独各跑 4 遍：本次挂 1 遍、干净副本也挂 1 遍——计时不稳，不是这次改的。
+- 截图（存根页 + 真 Metre CSS + 真搜索结果，Edge，亮 / 暗）：菜单底下「＋ 更多引擎」、更多引擎列表、搜 qwen。第一版说明和许可证挤在一行，许可证被省略号截掉了，改成两行（说明一行，「许可证 · 怎么装」一行）。图在 `F:\Projects\super-pinkie\build\quick-run\e6\shot-*.png`（暗色里搜索框发白是存根页没设 `--metre-card`，真界面有）。
+
+**没验的**
+- 没真「加上」过任何一家（会下载第三方代码，要用户点头）：prepare 要多久、加好以后引擎服务报的状态（installed / setup / 有哪些登录方式）、真登录、真派一件活都没走过，只有单元测试。注册表引擎对话中途要求开网页授权（`server.acceptAcpRegistryUrlAuth`）没接。
+- 「新工作树」没在真引擎里开过一段（只有浏览器测试和桥原有的单元测试）。
+- 没在真碧琪界面里截图；Mac 没验。
+
+**下一步**：等用户定 push（c2ee5a73 和这一条）、NOTICES 放关于页哪里、版本号 → 用户同意后挑一家注册表引擎真加一遍、登录、发一句话 → E8 同步给碧琪全局（PLAN 3.8）。
+
 ## 2026-11-23 晚 · E7 设置「连接」里的外部引擎总开关（AWS Quick 经 Quick 跑腿）
 
 **做了什么**

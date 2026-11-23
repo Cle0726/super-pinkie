@@ -30,7 +30,7 @@ Metre 的一个会话可以不用 Metre 自己的模型，整段交给外部编�
 - 第一次打开会下载约 170MB 的引擎服务（固定版本，对照 SHA-256 校验，走碧琪的代理设置，显示进度；下载失败就说清楚，不留半截文件）。
 - 引擎服务只在这台电脑上跑、只监听本机（`127.0.0.1`）。开关一关或碧琪退出就停；崩了自动重启，最多 3 次，之后提示。
 - 装在碧琪状态目录下的 `engines/`。路径必须是纯英文：用户名是中文时改放 `%LOCALAPPDATA%` 下的英文目录，再不行放 `C:\ProgramData\SuperPinkie\engines`。
-- 代码：`services/mode-architecture/engines.mjs`（服务）、`engines-bridge.mjs`（网关方法 `pinkie.engines.*`）、`engines-rpc.mjs`（实时通道）；界面 `ui/injections/laolao-metre-engine.js/.css`，只在 Metre 生效。
+- 代码：`services/mode-architecture/engines.mjs`（服务）、`engines-bridge.mjs`（网关方法 `pinkie.engines.*`）、`engines-registry.mjs`（更多引擎）、`engines-rpc.mjs`（实时通道）；界面 `ui/injections/laolao-metre-engine.js/.css`，只在 Metre 生效。
 
 ### 选引擎、登录
 
@@ -38,6 +38,7 @@ Metre 的一个会话可以不用 Metre 自己的模型，整段交给外部编�
 - 碧琪不经手账号和密码。登录一律在无痕窗口里由用户自己完成（先找 Edge InPrivate，没有就用 Chrome 无痕，都没有才用默认浏览器）；有的引擎在终端里跑官方登录命令（比如 Claude Code 的 `claude auth login`）。Antigravity 有时最后给一串代码，贴回 Metre 的框里就行。要填密钥的登录方式不在 Metre 里做，提示改用浏览器或终端登录。
 - 多账号：Claude、Codex、Antigravity、Cursor 一家可以加好几个账号。菜单里「＋ 再加一个账号」→ 起名字 → 选哪一家 → 直接进这个账号的登录。一个账号一行，显示名字和套餐名，不显示邮箱。默认账号不能删，可以关。其余六家用这台电脑上同一份登录。一个账号额度用完了，换同一家的另一个账号接着用。
 - 加出来的账号，设置卡片底下可以改名字、删掉（点两下才删）。删 Claude / Codex 的账号时，它的登录文件夹留在磁盘上，不跟着删。
+- 更多引擎：菜单底下「＋ 更多引擎」搜公开的 ACP 注册表（Devin、Gemini CLI、Qwen Code、Kimi Code……，上面十家不重复列）。每一家写着说明、许可证、怎么装（下载运行包 / 用 npm 装 / 用 Python 工具装）和来源链接。这些是第三方代码，点「加上」才由引擎服务下载（运行包有 SHA-256 就核对），装在引擎服务自己的目录里；加好以后就是菜单里普通的一行，照常登录、选模型、派活。删掉点两下，不替你退出它的登录（同一台电脑上这家共用一份登录）。登录方式只有终端或填密钥的，Metre 里接不上，会列出它别的登录方式让你换。
 - Metre 的 Claude 账号各用自己的文件夹 `~/.claude-metre-<n>`，不碰用户的 `~/.claude`（Claude 桌面 App 也读它）；Codex 的账号各用一个 `~/.codex-metre-<n>`，和 `~/.codex` 共用对话记录。
 - 引擎版本太旧会提示先更新（比如 Codex 要 0.159 以上，旧版直接报错）。
 - 账号邮箱不显示、不写日志、不外发；和引擎服务通话的令牌现签现用，只放在内存里。

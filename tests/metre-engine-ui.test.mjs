@@ -143,7 +143,7 @@ test('in a browser: all ten engines are in the menu, and the ones not set up ope
     await chipButton.click();
     await tab.locator('.pk-eng-menu__group').first().waitFor();
     const names = await tab.locator('.pk-eng-menu__item .pk-eng-menu__name').allTextContents();
-    assert.deepEqual(names, ['Metre', 'Codex', 'Claude Code', 'Antigravity', 'Cursor', 'OpenCode', 'Grok Build', 'Kiro', 'Pi', 'fx', 'Muse Code']);
+    assert.deepEqual(names, ['Metre', 'Codex', 'Claude Code', 'Antigravity', 'Cursor', 'OpenCode', 'Grok Build', 'Kiro', 'Pi', 'fx', 'Muse Code', '＋ 更多引擎']);
     assert.deepEqual(await tab.locator('.pk-eng-menu__group').allTextContents(), ['能用', '还要设置一下']);
 
     // Cursor 还没打开 → 打开 → 变成「没装」，给官方安装命令；不点不跑。
@@ -396,5 +396,115 @@ test('in a browser: the settings switch turns the engines on, and turning them o
     await tab.waitForFunction(() => document.querySelector('[aria-label="关掉外部引擎"]')?.getAttribute('aria-pressed') === 'true');
     assert.deepEqual(await tab.evaluate(() => window.calls.filter(([m]) => m === 'pinkie.engines.enable').map(([, p]) => p)), [{on: true}, {on: false}]);
     assert.ok((await tab.evaluate(() => window.toasts)).includes('外部引擎已经关掉'));
+  } finally { await browser.close(); }
+});
+
+// 更多引擎（E6）：搜公开的 ACP 注册表，点「加上」才下载，加好直接进它的登录；删掉点两下，叫「删掉这个引擎」，没有改名字。
+test('in a browser: more engines searches the registry, adding one goes straight to its sign-in', {timeout: 60_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
+      <div class="chat-main" style="position:relative;width:900px;height:700px"><div class="chat-thread">native</div>
+      <div class="agent-chat__composer-controls"><div class="pinkie-chip pinkie-baton"></div></div></div></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Ad');
+    await tab.evaluate(() => {
+      const guide = {install: '', login: '', loginHint: '', link: '', note: '', managedInstall: false, managedSignin: true};
+      let engines = [{id: 'codex', driver: 'codex', name: 'Codex', state: 'ready', text: '', enabled: true, installed: true, signedIn: true, quota: {state: 'unknown'}, models: [{slug: 'm', name: 'M'}], setup: {}, guide}];
+      const agents = [{id: 'qwen-code', name: 'Qwen Code', description: 'coding <b>assistant</b>', license: 'Apache-2.0', link: 'https://github.com/QwenLM/qwen-code', how: '用 npm 装', dist: 'npx', added: false},
+        {id: 'kilo', name: 'Kilo', description: 'open source', license: 'MIT', link: '', how: '下载运行包', dist: 'binary', added: true}];
+      window.calls = [];
+      window.__laolaoToast = () => {};
+      const catalog = () => ({enabled: true, running: true, source: 'live', levels: [], engines, accountEngines: []});
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.session') return {sessionKey: params.sessionKey, pref: {engine: 'metre'}, summary: null, error: '', service: {running: true}};
+        if (method === 'pinkie.engines.catalog') return catalog();
+        if (method === 'pinkie.engines.players') return {players: []};
+        if (method === 'pinkie.engines.registry' && params.action === 'search') return {query: params.query, agents: agents.filter(a => a.name.toLowerCase().includes(params.query.trim().toLowerCase()))};
+        if (method === 'pinkie.engines.registry' && params.action === 'add') {
+          engines = [...engines, {id: 'acpRegistry_qwen_code', driver: 'acpRegistry', name: 'Qwen Code', registry: true, account: true, state: 'signin', text: '还没登录',
+            enabled: true, installed: true, signedIn: false, quota: {state: 'unknown'}, models: [], setup: {canAuthenticate: false}, guide}];
+          return {engine: 'acpRegistry_qwen_code', ...catalog()};
+        }
+        if (method === 'pinkie.engines.account' && params.action === 'remove') { engines = engines.filter(r => r.id !== params.engine); return catalog(); }
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    const chipButton = tab.locator('.agent-chat__composer-controls > .pk-eng-chip');
+    await chipButton.waitFor({timeout: 10_000});
+    await chipButton.click();
+    await tab.getByText('＋ 更多引擎').click();
+    await tab.locator('.pk-eng-more__row').nth(1).waitFor();
+    assert.deepEqual(await tab.locator('.pk-eng-more__row .pk-eng-menu__name').allTextContents(), ['Qwen Code', 'Kilo']);
+    assert.equal(await tab.locator('.pk-eng-more__row b').count(), 0, 'descriptions are text, not markup');
+    assert.match(await tab.locator('.pk-eng-more__row').first().innerText(), /许可证 Apache-2\.0 · 用 npm 装/);
+    assert.equal(await tab.locator('.pk-eng-more__row').first().locator('a').getAttribute('href'), 'https://github.com/QwenLM/qwen-code');
+    assert.equal(await tab.getByRole('button', {name: '已加'}).isDisabled(), true, 'one already added cannot be added twice');
+    await tab.locator('.pk-eng-menu .pk-eng-input').fill('kil');
+    await tab.waitForFunction(() => document.querySelectorAll('.pk-eng-more__row').length === 1);
+    assert.deepEqual(await tab.evaluate(() => window.calls.filter(([m]) => m === 'pinkie.engines.registry').at(-1)[1]), {action: 'search', query: 'kil'});
+    await tab.locator('.pk-eng-menu .pk-eng-input').fill('');
+    await tab.waitForFunction(() => document.querySelectorAll('.pk-eng-more__row').length === 2);
+    assert.equal(await tab.evaluate(() => window.calls.some(([m, p]) => m === 'pinkie.engines.registry' && p.action === 'add')), false, 'nothing is downloaded before a click');
+    await tab.getByRole('button', {name: '加上'}).click();
+    await tab.getByRole('button', {name: '登录', exact: true}).waitFor();
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m, p]) => m === 'pinkie.engines.registry' && p.action === 'add')[1]), {action: 'add', agentId: 'qwen-code'});
+    assert.match(await tab.locator('.pk-eng-menu__sub').textContent(), /Qwen Code/);
+    assert.equal(await tab.getByRole('button', {name: '改名字'}).count(), 0);
+    assert.equal(/T3/i.test(await tab.locator('.pk-eng-menu').innerText()), false);
+    await tab.getByRole('button', {name: '删掉这个引擎'}).click();
+    await tab.getByRole('button', {name: '再点一次确认删掉'}).click();
+    await tab.waitForFunction(() => window.calls.some(([m, p]) => m === 'pinkie.engines.account' && p.action === 'remove' && p.engine === 'acpRegistry_qwen_code'));
+  } finally { await browser.close(); }
+});
+
+// PLAN 3.5「每个会话独立工作树」：还没开对话时引擎台底下有「新工作树」，按下以后第一句话带 worktree；对话开了就不再出现。
+test('in a browser: a new conversation can start in its own worktree, and the choice is only offered before it starts', {timeout: 40_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
+      <div class="chat-main" style="position:relative;width:900px;height:700px"><div class="chat-thread">native</div>
+      <div class="agent-chat__composer-controls"><div class="pinkie-chip pinkie-baton"></div></div></div></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Aw');
+    await tab.evaluate(() => {
+      window.calls = [];
+      window.__laolaoToast = () => {};
+      let pref = {engine: 'claudeAgent', model: 'claude-haiku-5-5', level: 'full-access', threadId: ''};
+      const view = () => ({sessionKey: 'agent:metre:w', pref, summary: pref.threadId ? {thread: {id: 't9', engine: 'claudeAgent', engineName: 'Claude Code'}, status: 'running', items: [], pending: [], changes: [], turnCount: 0} : null, error: '', service: {running: true}});
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.session') return view();
+        if (method === 'pinkie.engines.catalog') return {enabled: true, running: true, levels: [], engines: []};
+        if (method === 'pinkie.engines.say') { pref = {...pref, threadId: 't9'}; return view(); }
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    const tree = tab.getByRole('button', {name: '新工作树'});
+    await tree.waitFor({timeout: 10_000});
+    assert.equal(await tree.getAttribute('aria-pressed'), 'false', 'off unless the user asks');
+    await tree.click();
+    assert.equal(await tab.getByRole('button', {name: '新工作树'}).getAttribute('aria-pressed'), 'true');
+    await tab.locator('.pk-eng-stage textarea').fill('新建 notes.md');
+    await tab.locator('.pk-eng-send').click();
+    await tab.waitForFunction(() => window.calls.some(([m]) => m === 'pinkie.engines.say'));
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.say')[1]), {sessionKey: 'agent:metre:w', text: '新建 notes.md', mode: 'queue', worktree: true});
+    await tab.waitForFunction(() => !document.querySelector('.pk-eng-chip--tree'));
+    assert.equal(await tab.getByRole('button', {name: '新工作树'}).count(), 0, 'once the conversation exists its folder is settled');
   } finally { await browser.close(); }
 });

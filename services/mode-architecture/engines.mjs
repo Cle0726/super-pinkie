@@ -11,6 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {registerEngineBridge} from './engines-bridge.mjs';
+import {registerEngineRegistry} from './engines-registry.mjs';
 import {EngineTasks, registerEngineTasks} from './engines-task.mjs';
 import {Players, registerPlayers} from './engines-players.mjs';
 
@@ -342,6 +343,8 @@ export function registerEngines(api, {base = '', register, lineage = null} = {})
     await service.start();
   };
   shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, isEnabled: () => prefs().enabled === true, ensureRunning});
+  // 「更多引擎」：从公开的 ACP 注册表里加别家的引擎（engines-registry.mjs），和桥注册在同一处。
+  shared.registry ||= registerEngineRegistry(api, {bridge: shared.bridge, register, ensureRunning, status: () => ({...service.status(), enabled: prefs().enabled === true})});
   shared.players ||= new Players(path.join(service.root, 'players.json'));
   registerPlayers(api, {players: shared.players, register, roles: () => {
     const registry = lineage?.metreRolesEnabled?.() === false ? null : lineage?.rolesRegistry?.();

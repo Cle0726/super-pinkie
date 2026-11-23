@@ -118,7 +118,7 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   const methods = {};
   const register = (api, name, fn) => { methods[name] = fn; };
   const service = registerEngines({logger: null}, {base, register});
-  assert.deepEqual(Object.keys(methods).sort(), ['account', 'catalog', 'choose', 'diff', 'enable', 'install', 'open', 'organize', 'players', 'respond', 'say', 'session', 'setup', 'signin', 'status', 'stop', 'thread', 'threads', 'turnOn'].map(name => 'pinkie.engines.' + name));
+  assert.deepEqual(Object.keys(methods).sort(), ['account', 'catalog', 'choose', 'diff', 'enable', 'install', 'open', 'organize', 'players', 'registry', 'respond', 'say', 'session', 'setup', 'signin', 'status', 'stop', 'thread', 'threads', 'turnOn'].map(name => 'pinkie.engines.' + name));
   assert.equal(service.root, path.join(base, 'engines'));
   const first = await methods['pinkie.engines.status']();
   assert.equal(first.enabled, false);
@@ -136,6 +136,7 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   assert.equal((await methods['pinkie.engines.catalog']({})).enabled, true);
   await methods['pinkie.engines.enable']({on: false});
   await assert.rejects(methods['pinkie.engines.threads']({}), /没有在运行/);
+  await assert.rejects(methods['pinkie.engines.registry']({action: 'search'}), /还没打开/, 'searching the registry needs the engines switched on');
   await assert.rejects(methods['pinkie.engines.open'](), /没有在运行/);
   service.status = () => ({running: true, url: 'http://127.0.0.1:3790'});
   let pairArgs = [];

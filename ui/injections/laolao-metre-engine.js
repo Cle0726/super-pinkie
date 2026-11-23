@@ -6,7 +6,7 @@
  *
  *   - Metre 输入框下面多一颗「引擎」按钮：Metre（默认）/ Claude Code / Codex / Antigravity，带登录和额度状态，再选模型。
  *   - 选了外部引擎，这个 Metre 会话的正文区换成引擎台：对话流、自己的输入框、待批准和提问卡片、右侧改动面板。
- *   - 数据全走网关：pinkie.engines.session / choose / say / respond / stop / organize / diff / catalog / enable / turnOn / install / signin / setup。
+ *   - 数据全走网关：pinkie.engines.session / choose / say / respond / stop / organize / diff / catalog / enable / turnOn / install / signin / setup / registry。
  *   - 刷新：引擎台开着时在跑 1 秒一次、闲着 4 秒一次；页面藏起来时不拉。 */
 (() => {
   'use strict';
@@ -163,7 +163,7 @@
 
   // ---------- 状态 ----------
   const state = {key: '', view: null, catalog: null, cast: null, catalogAt: 0, loading: false, sending: false, enabling: false,
-    open: new Set(), think: new Map(), diff: {open: false, data: null, at: 0}, lastSig: '', mode: 'queue', nodes: new Map(), timer: 0};
+    open: new Set(), think: new Map(), diff: {open: false, data: null, at: 0}, lastSig: '', mode: 'queue', worktree: false, nodes: new Map(), timer: 0};
 
   async function loadCatalog(force = false) {
     if (!force && state.catalog && Date.now() - state.catalogAt < 15000) return state.catalog;
@@ -227,6 +227,7 @@
     const body = node.querySelector('.pk-eng-menu__body');
     body.replaceChildren();
     if (step === 'player') { paintKeepPlayer(node, body, anchor); return; }
+    if (step === 'more') { paintMore(node, body, anchor); return; }
     if (step === 'models') {
       const row = engineRow(engineId);
       node.querySelector('.pk-eng-menu__sub').textContent = `${nameOf(engineId)} 用哪个模型`;
@@ -337,6 +338,11 @@
       more.onclick = () => openEngineMenu(anchor, 'account');
       body.append(more);
     }
+    if (catalog.enabled) {
+      const registry = h('button', 'pk-eng-menu__item pk-eng-menu__item--row pk-eng-menu__item--add', '<span class="pk-eng-menu__name">＋ 更多引擎</span><span class="pk-eng-menu__note">从公开的注册表里找别家的</span>');
+      registry.onclick = () => openEngineMenu(anchor, 'more');
+      body.append(registry);
+    }
     const levels = h('div', 'pk-eng-menu__levels');
     levels.innerHTML = '<div class="pk-eng-menu__label">放手程度</div>';
     for (const level of catalog.levels || []) {
@@ -348,6 +354,54 @@
     }
     body.append(levels);
     position(anchor, node);
+  }
+
+  // ---------- 更多引擎（E6）：引擎服务从公开的 ACP 注册表里搜别家的编程引擎，点「加上」才下载；加好以后就是菜单里普通的一行 ----------
+  function paintMore(node, body, anchor) {
+    node.querySelector('.pk-eng-menu__sub').textContent = '更多引擎';
+    const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
+    back.onclick = () => openEngineMenu(anchor);
+    const box = h('div', 'pk-eng-setup');
+    box.append(h('p', 'pk-eng-setup__text', '这些是别家做的编程引擎（第三方代码），各自带模型和登录。点「加上」才下载，装在引擎服务自己的目录里；加之前看看许可证和来源。'));
+    const input = h('input', 'pk-eng-input');
+    Object.assign(input, {type: 'search', placeholder: '搜名字，比如 Gemini、Qwen、Devin', maxLength: 120});
+    const list = h('div', 'pk-eng-more__list', '<div class="pk-eng-menu__wait">正在搜…</div>');
+    box.append(input, list);
+    body.append(back, box);
+    let seq = 0, timer = 0;
+    const search = async () => {
+      const mine = ++seq;
+      let found;
+      try { found = await rpc('pinkie.engines.registry', {action: 'search', query: input.value}, 70000); }
+      catch (error) { if (mine === seq) list.replaceChildren(h('div', 'pk-eng-menu__wait', esc(error.message))); return; }
+      if (mine !== seq || menu !== node) return;
+      list.replaceChildren();
+      for (const agent of found.agents || []) {
+        const row = h('div', 'pk-eng-more__row', `<div class="pk-eng-more__text"><span class="pk-eng-menu__name">${esc(agent.name)}</span><span class="pk-eng-menu__note">${esc(agent.description)}</span><span class="pk-eng-more__meta">${esc([agent.license && '许可证 ' + agent.license, agent.how].filter(Boolean).join(' · '))}</span></div>`);
+        if (agent.link) { const a = h('a', 'pk-eng-setup__link', '来源'); Object.assign(a, {href: agent.link, target: '_blank', rel: 'noopener noreferrer'}); row.append(a); }
+        const add = h('button', 'pk-eng-btn', agent.added ? '已加' : '加上');
+        Object.assign(add, {type: 'button', disabled: agent.added === true});
+        add.onclick = async () => {
+          add.disabled = true;
+          add.textContent = agent.dist === 'binary' ? '正在下载…' : '正在准备…';
+          try {
+            const done = await rpc('pinkie.engines.registry', {action: 'add', agentId: agent.id}, 16 * 60_000);
+            state.catalog = {...state.catalog, ...done};
+            state.catalogAt = Date.now();
+            toast(`加好了：${agent.name}，接着登录`);
+            openEngineMenu(anchor, 'setup', done.engine);
+          } catch (error) { toast(error.message); add.disabled = false; add.textContent = '加上'; }
+        };
+        row.append(add);
+        list.append(row);
+      }
+      if (!list.childElementCount) list.append(h('div', 'pk-eng-menu__wait', '没搜到，换个词试试。'));
+      position(anchor, node);
+    };
+    input.oninput = () => { clearTimeout(timer); timer = setTimeout(search, 300); };
+    search();
+    position(anchor, node);
+    input.focus();
   }
 
   // ---------- 乐手（E5，照 OpenMausBot「机器人当联系人」）：引擎 + 模型 + 放手程度 + 可选的 Metre 角色卡，起个名字存下来 ----------
@@ -543,8 +597,10 @@
     area.style.height = 'auto';
     paintDock();
     try {
-      state.view = await rpc('pinkie.engines.say', {sessionKey: key, text, mode: state.mode}, 180000);
+      // 「新工作树」只管开新对话那一句：对话开了，它在哪个文件夹里做就定下来了。
+      state.view = await rpc('pinkie.engines.say', {sessionKey: key, text, mode: state.mode, ...(!pref().threadId && state.worktree ? {worktree: true} : {})}, 180000);
       state.stick = true;
+      state.worktree = false;
     } catch (error) {
       area.value = text;
       toast(error.message);
@@ -618,7 +674,12 @@
       if (auth.phase === 'failed') { wrap.append(say('没登录上' + (auth.message ? '：' + esc(auth.message) : ''), 'pk-eng-setup__text--warn'), btn('再试一次', true, startSignin)); return wrap; }
       if (auth.phase === 'cancelled') { wrap.append(say('登录取消了。'), btn('重新登录', true, startSignin)); return wrap; }
       if (auth.phase === 'verifying') { wrap.append(say('正在确认账号…')); return wrap; }
-      if (step?.type === 'credentials') { wrap.append(say('这家选的是要填密钥的登录方式，Metre 里不经手密钥。请改用浏览器登录，或者在终端里用官方命令登录。')); return wrap; }
+      if (step?.type === 'credentials' || step?.type === 'terminal') {
+        wrap.append(say(step.type === 'terminal' ? '这家选的是在它自己的终端里登录，Metre 里还接不上。' : '这家选的是要填密钥的登录方式，Metre 里不经手密钥。请改用浏览器登录，或者在终端里用官方命令登录。'));
+        const others = (auth.methods || []).filter(method => !/terminal|credentials|env_var/.test(method.type));
+        if (others.length) { const acts = h('div', 'pk-eng-card__acts'); for (const method of others) acts.append(btn(`改用：${method.name}`, false, () => startSignin(method.id))); wrap.append(acts); }
+        return wrap;
+      }
       if (step?.type === 'deviceCode') wrap.append(say(`在登录页里输入这串代码：`), h('div', 'pk-eng-code', esc(step.code)));
       else if (step?.type === 'code') wrap.append(say('在无痕窗口里用你自己的账号登录（不碰你平时浏览器里的登录）。最后页面上会给一串代码，贴到下面（只交给引擎服务，碧琪不存）。'));
       else wrap.append(say(auth.phase === 'starting' ? '正在准备登录页…' : '在无痕窗口里用你自己的账号登录，登录完这里会自己接上。'));
@@ -642,8 +703,8 @@
       if (result.how === 'managed') { live = {install: result.install}; poll(); return; }
       if (result.opened) toast('终端窗口打开了：装好以后回来点「装好了，再查一次」');
     }
-    async function startSignin() {
-      const result = await rpc('pinkie.engines.signin', {engine, open: true}, 60000);
+    async function startSignin(methodId = '') {
+      const result = await rpc('pinkie.engines.signin', {engine, open: true, ...(typeof methodId === 'string' && methodId ? {methodId} : {})}, 60000);
       if (result.how === 'managed') { live = {auth: result.auth}; sig = ''; render(); poll(); return; }
       if (result.opened) toast('登录窗口打开了：照提示用你自己的账号登录，回来点「登好了，再查一次」');
     }
@@ -681,7 +742,7 @@
           acts.append(btn('装好了，再查一次', true, () => recheck()));
         }
       } else if (row.state === 'signin') {
-        if (guide.managedSignin && row.setup?.canAuthenticate !== false) {
+        if (guide.managedSignin && (row.setup?.canAuthenticate !== false || row.registry)) {
           box.append(say(`用你自己的 ${esc(name)} 账号登录：登录页开在无痕窗口里，不碰你平时浏览器里的登录。碧琪不经手账号和密码。`));
           acts.append(btn('登录', true, startSignin));
         } else {
@@ -701,7 +762,7 @@
       if (row?.account) box.append(manageAccount(row));
       relayout?.();
     }
-    // 加出来的账号：改名字、删掉（点两下才删；会在引擎服务里退出这个账号，Claude / Codex 的登录文件夹留着）。
+    // 加出来的账号：改名字、删掉（点两下才删；会在引擎服务里退出这个账号，Claude / Codex 的登录文件夹留着）。注册表里加的引擎只能删，不退出它的登录。
     function manageAccount(row) {
       const line = h('div', 'pk-eng-setup__manage');
       const rename = h('button', 'pk-eng-setup__link', '改名字');
@@ -722,7 +783,7 @@
         input.focus();
         relayout?.();
       };
-      const remove = h('button', 'pk-eng-setup__link pk-eng-setup__link--warn', '删掉这个账号');
+      const remove = h('button', 'pk-eng-setup__link pk-eng-setup__link--warn', row.registry ? '删掉这个引擎' : '删掉这个账号');
       remove.type = 'button';
       remove.onclick = async event => {
         event.stopPropagation();
@@ -736,7 +797,7 @@
           onRemoved?.();
         } catch (error) { toast(error.message); remove.disabled = false; }
       };
-      line.append(rename, remove);
+      line.append(...(row.registry ? [] : [rename]), remove);
       return line;
     }
     render(true);
@@ -978,7 +1039,11 @@
     planBtn.setAttribute('aria-pressed', String(p.plan === true));
     planBtn.dataset.pinkieTooltip = '打开后它先写方案给你看，你点「照这个方案做」才动手';
     planBtn.onclick = () => choose({plan: p.plan !== true});
-    left.replaceChildren(engineBtn, levelBtn, planBtn);
+    // PLAN 3.5「每个会话独立工作树」：还没开对话时可以选在一个新的 git 工作树里做，不动当前文件夹里的文件。
+    const treeBtn = p.threadId ? null : h('button', 'pk-eng-chip pk-eng-chip--plan pk-eng-chip--tree', '<span class="pk-eng-chip__name">新工作树</span>');
+    if (treeBtn) Object.assign(treeBtn, {onclick: () => { state.worktree = !state.worktree; paintDock(); }}).setAttribute('aria-pressed', String(state.worktree));
+    if (treeBtn) treeBtn.dataset.pinkieTooltip = '打开后这段新对话在一个新的 git 工作树里做，不动当前文件夹里的文件';
+    left.replaceChildren(engineBtn, levelBtn, planBtn, ...(treeBtn ? [treeBtn] : []));
     const parts = [];
     if (summary) {
       const word = STATUS_WORD[status] ?? status;
@@ -1120,7 +1185,7 @@
     const key = sessionKey();
     if (!isMetre() || !key) { state.key = ''; state.view = null; paint(); schedule(3000); return; }
     if (document.hidden) { schedule(4000); return; }
-    if (key !== state.key) { state.key = key; state.view = null; state.open.clear(); state.diff = {open: false, data: null, at: 0}; unmountStage(); }
+    if (key !== state.key) { state.key = key; state.view = null; state.worktree = false; state.open.clear(); state.diff = {open: false, data: null, at: 0}; unmountStage(); }
     if (state.loading) { schedule(500); return; }
     state.loading = true;
     try {
