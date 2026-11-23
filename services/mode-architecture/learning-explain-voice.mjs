@@ -246,33 +246,146 @@ const CONTRACT = `硬性要求：
 - 不要念条文，不要写「已检查」「按铁律」「上一轮已核对」「消化好发继续」「加油」等话，不要署名或报模型名。
 - 只输出 JSON：{"text":"讲解"}。板块标题直接单独占一行，不要 Markdown 符号（#、**、-）和表格。`;
 
+// 段落翻译（translate-passage）专用完整精讲模板：绝不套用选择题话术，必须从第 1 句到最后 1 句全部拆解翻译 + 全文逐词带读！
+const TRANSLATE_PASSAGE_LAYOUT = `这是一道「英译汉段落翻译（实用文）」主观题，不是选择题！
+严禁写「选了…」「没有 A/B/C/D 选项」「先看选项识考点」「四个选项逐词扫」；严禁只讲第一句就收尾！
+核心铁律：原文有几句英文，就必须从「第 1 句」一路讲到「最后 1 句」，一句不漏地全部拆解翻译、全部逐词带读！
+
+固定按下面 5 个板块输出（板块之间空一行 \\n\\n，严禁用 Markdown 的 # / ** / 表格，严禁写「消化好发继续」「上一轮已核对」「加油」等聊天话）：
+
+开头一句：先用 1 句大白话直说用户这版译文的问题或得分亮点（空白或只写了一半就直说漏翻了后半段，绝不写「选了」），下一行完整写出：
+完整官方译文：<standard>
+
+审题与扣分点
+结合 yours（用户的译文）和 note（评分要点 / 阅卷评语），用 2 到 3 行大白话指出：
+1. 你这版具体翻错了哪几个关键表达、漏掉了原文哪几句（若用户译文全对或基本完整，指出本段考场最容易丢分的 2 个词/句型）；
+2. 这类实用文翻译的拿分顺手招：按原文句子顺序一句句切主干，先保大意完整再润色。
+
+逐句精讲与拆译
+把 question 里的全部英文句子按顺序编号（第 1 句、第 2 句、第 3 句……直到最后一句，一句都不许省！）：
+每句严格按下面格式写，句与句之间空一行：
+第 N 句
+英文短块 1 → 这块的大白话中文
+英文短块 2 → 这块的大白话中文
+（按说话停顿切成 2 到 4 块）
+整句：这句对应的完整通顺中文译文（紧扣官方参考译文）。
+避坑：一句话点破这句最容易翻错的词或句型（没有明显坑可省略这行）。
+
+全文逐词带读
+把 question 里的全部英文句子从头到尾每一句都逐词拆开，按「第 1 句」「第 2 句」……分段（每句头写一行「第 N 句」，下面严格「一词一行、行行紧贴」，每行「单词 谐音 中文」；不用括号、不用斜线；the / a / is / to / of / if / and / for / you 等小词一个不许漏！只给生词、长词、高频考点词在行末附「｜ 记：≤14字速记」，简单小词不硬编）。
+
+核心高频搭配
+从全篇挑出 4 到 6 条 B 级必考高频词组或实用文句型，每条一行「英文搭配 ＝ 中文意思（附一句极短记忆法或翻译要点）」。
+
+一句话钉牢：用一句极简大白话口诀把这篇段落翻译的得分骨架钉死。`;
+
+const TRANSLATE_PASSAGE_READ_LAYOUT = `这是一道「英译汉段落翻译（实用文）」题，用户点了「带读+搭配」，想把整段每一句都读懂翻透。
+严禁只带读第一句！必须把 question 里的全部英文句子从「第 1 句」到「最后 1 句」全部逐词带读、全部逐句拆译，一句不漏！
+
+固定按下面 4 个板块输出（板块之间空一行 \\n\\n，严禁用 Markdown 的 # / ** / 表格，严禁写「消化好发继续」「上一轮已核对」「加油」等聊天话）：
+
+开头一句：写「这篇段落翻译帮你把全篇每一句逐词带读翻透，再补几条 B 级高频固定搭配。」下一行写出：
+完整官方译文：<standard>
+
+全文逐词带读
+把 question 里的全部英文句子从头到尾每一句逐词拆开，每句前写一行「第 N 句」，下面严格「一词一行、行行紧贴」，每行「单词 谐音 中文」（不用括号、不用斜线；小词一个不许漏；生词/考点词行末附「｜ 记：≤14字速记」）。
+
+逐句拆译
+按「第 1 句」「第 2 句」……覆盖全篇每一句，每句按意群拆 2 到 4 行「英文短块 → 这块的大白话中文」，紧接着一行「整句：这句对应的完整通顺中文译文。」（句与句之间空一行）。
+
+B级固定搭配扩展
+围绕本段的核心动词、短语与实用文句型，补充 4 到 6 条 B 级高频固定搭配，每条一行「英文搭配 ＝ 中文意思（附极短记忆法或翻译要点）」。
+
+一句话钉牢：用一句极简大白话口诀把这组高频搭配钉死。`;
+
+const WRITING_LAYOUT = `这是一道「英语 B 级应用文写作」主观题，不是选择题！
+严禁写「选了…」「没有 A/B/C/D 选项」「先看选项识考点」「四个选项逐词扫」。
+必须覆盖完整范文的全部句子和写作格式要件！
+
+固定按下面 5 个板块输出（板块之间空一行 \\n\\n，严禁用 Markdown 的 # / ** / 表格，严禁写「消化好发继续」「上一轮已核对」「加油」等聊天话）：
+
+开头一句：先用 1 句大白话直说用户这版作文的亮点与扣分点（若空白或偏题直说），下一行完整写出：
+完整官方范文：<standard>
+
+审题与格式要件
+结合题目要求和 note（评分要点 / 阅卷评语），用 2 到 4 行大白话讲清：
+1. 这类应用文必备格式（称呼、正文要点、落款/日期）和必写信息点；
+2. 用户这版（yours）具体缺了哪些要点或哪处语法/拼写最该改。
+
+范文逐句拆译
+把官方范文的正文全部句子按「第 1 句」「第 2 句」……逐句拆解（每句不漏！），每句拆 2 到 4 行「英文短块 → 中文意思」，紧接着一行「整句：这句对应的完整中文意思。」（句与句之间空一行）。
+
+范文逐词带读
+把官方范文里的核心正文句子按「第 1 句」「第 2 句」……逐词拆开，严格「一词一行、行行紧贴」，每行「单词 谐音 中文」（生词/考点词行末附「｜ 记：≤14字速记」）。
+
+写作万能模板与搭配
+拎出 4 到 6 条考场直接能套进同类作文的万能句型或高频搭配，每条一行「英文模板/搭配 ＝ 中文用途（附套用提示）」。
+
+一句话钉牢：用一句极简大白话口诀把这类应用文的格式和万能骨架钉死。`;
+
+const WRITING_READ_LAYOUT = `这是一道「英语 B 级应用文写作」题，用户点了「带读+搭配」，想把官方范文全篇读透并背下套句。
+固定按下面 4 个板块输出（板块之间空一行 \\n\\n，严禁用 Markdown 的 # / ** / 表格，严禁写「消化好发继续」「上一轮已核对」「加油」等聊天话）：
+
+开头一句：写「这篇官方范文帮你逐句带读翻透，再拎出考场直接能套的 B 级高频搭配。」下一行写出：
+完整官方范文：<standard>
+
+范文逐词带读
+把官方范文正文全部句子按「第 1 句」「第 2 句」……逐词拆开，严格「一词一行、行行紧贴」，每行「单词 谐音 中文」（小词不漏，生词/亮点词行末附「｜ 记：≤14字速记」）。
+
+范文逐句拆译
+覆盖官方范文全部句子，每句标「第 N 句」，按意群写「英文短块 → 中文」，紧接着一行「整句：完整中文意思。」（句与句之间空一行）。
+
+B级固定搭配扩展
+补充 4 到 6 条考场写作高频实用搭配与万能句型，每条一行「英文搭配 ＝ 中文意思（附套用要点）」。
+
+一句话钉牢：用一句极简大白话口诀钉牢这类作文的套路。`;
+
+const isLongPassageKind = qkind => qkind === 'translate-passage' || qkind === 'writing';
+function layoutFor({mode = 'full', qkind = ''} = {}) {
+  const readOnly = mode === 'read';
+  if (qkind === 'translate-passage') return readOnly ? TRANSLATE_PASSAGE_READ_LAYOUT : TRANSLATE_PASSAGE_LAYOUT;
+  if (qkind === 'writing') return readOnly ? WRITING_READ_LAYOUT : WRITING_LAYOUT;
+  return readOnly ? READ_LAYOUT : LAYOUT;
+}
+
 // 英语题和其他科目讲法不同：谐音、带读只用在英语；其他科目只写大白话思路。
 const SUBJECTS = `科目差异：
-- 英语题（B 级 / 四级 / 专升本英语）：严格按上面的 6 板块模板输出。${STYLE}
+- 英语题（B 级 / 四级 / 专升本英语）：严格按上面的模板输出。${STYLE}
 - 数学、电工电子、C 语言、计算机网络：不用谐音、逐词带读和一块块大白话，只用「先看选项识考点 / 回题干秒杀 / 一句话钉牢」三小段大白话讲清考点和关键一步。`;
 
 const READ_SUBJECTS = `科目差异：
-- 英语题（B 级 / 四级 / 专升本英语）：严格按上面的 3 板块模板输出（逐词带读 / 一块块大白话 / B级固定搭配扩展 + 一句话钉牢）。${STYLE}
+- 英语题（B 级 / 四级 / 专升本英语）：严格按上面的带读模板输出。${STYLE}
 - 数学、电工电子、C 语言、计算机网络：不用谐音和逐词带读，直接大白话翻译题干条件并补充 2 到 3 条同类必背公式或结论。`;
 
-export function explainRules({brief = false, mode = 'full', dir} = {}) {
+export function explainRules({brief = false, mode = 'full', qkind = '', dir} = {}) {
   const readOnly = !brief && mode === 'read';
+  const longKind = !brief && isLongPassageKind(qkind);
   const voice = loadVoice({dir});
-  const rules = readOnly ? voice.rules.filter(r => !/先看选项识考点|回题干秒杀|答对也必讲|做题两步|秒杀抢分战法/.test(r)) : voice.rules;
-  const steps = readOnly ? [] : voice.steps.filter(s => !/逐词带读|斜线断句/.test(s));
+  const rules = (readOnly || longKind)
+    ? voice.rules.filter(r => !/先看选项识考点|回题干秒杀|答对也必讲|做题两步|秒杀抢分战法|英译汉单选|词形填空|单选铁律/.test(r))
+    : voice.rules;
+  const steps = (readOnly || longKind) ? [] : voice.steps.filter(s => !/逐词带读|斜线断句/.test(s));
   const lines = [BASE, '', '【碧琪的态度与口吻】', '- ' + addressRule(voice.address), ...voice.soul.map(r => '- ' + r), ''];
-  if (rules.length) lines.push(readOnly ? '【用户定的辅导口味（排版严格按下面的 3 板块带读模板执行）】' : '【用户定的辅导口味（排版严格按下面的 6 板块模板执行）】', ...rules.map(r => '- ' + r), '');
+  if (rules.length) {
+    const label = longKind
+      ? '【用户定的辅导口味（排版严格按下面的整段/范文全篇逐句精讲模板执行，严禁漏句）】'
+      : readOnly
+        ? '【用户定的辅导口味（排版严格按下面的 3 板块带读模板执行）】'
+        : '【用户定的辅导口味（排版严格按下面的 6 板块模板执行）】';
+    lines.push(label, ...rules.map(r => '- ' + r), '');
+  }
   if (steps.length) lines.push('【讲法步骤】', ...steps.map(r => '- ' + r), '');
   lines.push(readOnly ? READ_SUBJECTS : SUBJECTS, '');
   if (brief) lines.push('这是整套卷子交卷后的错题回看，一次要看很多题：每题只写「答错了，正确答案是…」+「回题干秒杀」+「一句话钉牢」，总长不超过 150 字。', '');
-  else lines.push(readOnly ? READ_LAYOUT : LAYOUT, '');
+  else lines.push(layoutFor({mode: readOnly ? 'read' : 'full', qkind}), '');
   lines.push(CONTRACT);
   return lines.join('\n');
 }
 
-// 讲解长度：放宽截断上限，保证 6 板块（含逐词带读所有小词 + 重点词快速记忆法 + 选项逐词扫 + 送分搭配 + 一句话钉牢）完整不被腰斩。
-export function validVoicedExplain(v, {brief = false} = {}) {
-  const text = String(v?.text ?? '').replace(/\u0000/g, '').replace(/\\n/g, '\n').trim().slice(0, brief ? 650 : 2800);
+// 讲解长度：普通题上限 2800 字；整段翻译 / 写作需逐句拆译 + 全文逐词带读，放宽到 9000 字避免腰斩后半段。
+export function validVoicedExplain(v, {brief = false, long = false} = {}) {
+  const maxLen = brief ? 650 : long ? 9000 : 2800;
+  const text = String(v?.text ?? '').replace(/\u0000/g, '').replace(/\\n/g, '\n').trim().slice(0, maxLen);
   return text.length >= 8 ? {text} : null;
 }
 
@@ -283,13 +396,13 @@ const COMPACT_BASE = `你是碧琪，学习台里陪用户做题的学习搭档�
 let compactAt = 0;
 export const useCompactExplain = () => Date.now() - compactAt < 30 * 60 * 1000;
 export const markCompactExplain = () => { compactAt = Date.now(); };
-export function compactExplainRules({brief = false, mode = 'full', dir} = {}) {
+export function compactExplainRules({brief = false, mode = 'full', qkind = '', dir} = {}) {
   const readOnly = !brief && mode === 'read';
   return [COMPACT_BASE, addressRule(loadVoice({dir}).address),
     '要求：以 standard 为准，note 有内容就用上。不念条文，不写「加油」「消化好发继续」。',
     brief
       ? '这是整套卷子交卷后的错题回看：每题只写答案信号、错因和一句口诀，总长不超过 150 字。'
-      : `${readOnly ? READ_LAYOUT : LAYOUT}\n英语题：${STYLE}其他科目只写大白话解题思路和一句话钉牢。`,
+      : `${layoutFor({mode: readOnly ? 'read' : 'full', qkind})}\n英语题：${STYLE}其他科目只写大白话解题思路和一句话钉牢。`,
     '只输出 JSON：{"text":"讲解"}，不要 Markdown 符号和表格。'].join('\n');
 }
 export const explainRulesFor = opts => (useCompactExplain() ? compactExplainRules(opts) : explainRules(opts));
@@ -305,5 +418,7 @@ export function explainFailure(error) {
 }
 
 export const EXPLAIN_VERSION = 10;
+export const SUBJECTIVE_EXPLAIN_VERSION = 11;
+export const explainVersionFor = qkind => (isLongPassageKind(qkind) ? SUBJECTIVE_EXPLAIN_VERSION : EXPLAIN_VERSION);
 export const isExplainRules = rules => /^你是碧琪，在?学习台里陪(?:用户|先生)做题的学习搭档。/.test(String(rules || ''));
 export const _resetVoiceCache = () => { cache = {at: 0, key: '', value: null}; };

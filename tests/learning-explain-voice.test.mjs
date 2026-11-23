@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {explainRules, loadVoice, preferredAddress, tutoringRules, validVoicedExplain, _resetVoiceCache} from '../services/mode-architecture/learning-explain-voice.mjs';
+import {explainRules, explainVersionFor, loadVoice, preferredAddress, tutoringRules, validVoicedExplain, _resetVoiceCache} from '../services/mode-architecture/learning-explain-voice.mjs';
 
 const USER = `# USER
 - **教学/辅导铁律**：
@@ -77,4 +77,21 @@ test('USER.md 里的称呼：OpenClaw 模板那一行，空的和 (optional) 都
   assert.equal(preferredAddress('- **What to call them:** 小王\n'), '小王');
   assert.equal(preferredAddress('- **What to call them:**\n- **Pronouns:** _(optional)_'), '');
   assert.equal(preferredAddress('# 没有这一行'), '');
+});
+
+test('段落翻译与写作使用全篇逐句精讲模板，不套选择题话术且放宽长度上限', () => {
+  const tpFull = explainRules({qkind: 'translate-passage', mode: 'full'});
+  for (const h of ['审题与扣分点', '逐句精讲与拆译', '全文逐词带读', '核心高频搭配', '完整官方译文', '一句话钉牢']) {
+    assert.match(tpFull, new RegExp(h));
+  }
+  assert.match(tpFull, /一句都不许省|一句不漏/);
+  const tpRead = explainRules({qkind: 'translate-passage', mode: 'read'});
+  assert.match(tpRead, /全文逐词带读/);
+  assert.match(tpRead, /逐句拆译/);
+  const wrFull = explainRules({qkind: 'writing', mode: 'full'});
+  assert.match(wrFull, /审题与格式要件/);
+  assert.match(wrFull, /范文逐句拆译/);
+  assert.equal(validVoicedExplain({text: '字'.repeat(5000)}, {long: true}).text.length, 5000);
+  assert.ok(explainVersionFor('translate-passage') > explainVersionFor('choice'));
+  assert.ok(explainVersionFor('writing') > explainVersionFor('choice'));
 });

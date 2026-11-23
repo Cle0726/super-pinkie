@@ -8,7 +8,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {fold, modelJson, pool, explainInput} from './learning-game-content.mjs';
-import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION, explainVersionFor} from './learning-explain-voice.mjs';
 import {GRADE_RULES, gradeObjective} from './learning-game-exam.mjs';
 
 const DAY = 86400000;
@@ -805,8 +805,9 @@ export class GamePractice {
     for (const it of items) if (it.material) mats[it.material] = materials[it.material] || '';
     let audio = null;
     if ((set.mode === 'listening' || (set.mode === 'module' && set.module === 'listening')) && set.paperId) audio = this.game.modules.exam?.audioFor?.(this.game.modules.exam.readFull(set.paperId)) || null;
+    const itemMap = new Map(items.map(it => [it.id, it]));
     return {setId: set.setId, bucket: practiceBucket(set), mode: set.mode, kind: set.kind, point: set.point, module: set.module || '', title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
-      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])),
+      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v, itemMap.get(k)?.qkind)])),
       drafts: set.drafts && typeof set.drafts === 'object' ? {...set.drafts} : {},
       crossed: set.crossed && typeof set.crossed === 'object' ? {...set.crossed} : {},
       cursor: Number.isInteger(set.cursor) ? set.cursor : null,
@@ -894,7 +895,7 @@ export class GamePractice {
     const snap = this.ensure(this.game.read()).sets[sid];
     if (!snap) throw new Error('这组题不在了');
     if (!snap.items.includes(iid)) throw new Error('这道题不在这组里');
-    if (snap.answers[iid]) return publicResult(snap.answers[iid]);
+    if (snap.answers[iid]) return publicResult(snap.answers[iid], this.bank.item(iid)?.qkind);
     const it = this.bank.item(iid);
     if (!it) throw new Error('题库里没有这道题了');
     let correct, grade = null;
@@ -906,7 +907,7 @@ export class GamePractice {
       const pr = this.ensure(state);
       const set = pr.sets[sid];
       if (!set) throw new Error('这组题不在了');
-      if (set.answers[iid]) return publicResult(set.answers[iid]);
+      if (set.answers[iid]) return publicResult(set.answers[iid], it.qkind);
       const form = this.game.form(state);
       const date = this.game.today();
       const d = this.game.day(state, date);
@@ -946,7 +947,7 @@ export class GamePractice {
       if (set.drafts) delete set.drafts[iid];
       set.updatedAt = this.now();
       this.game.questTick(state);
-      return publicResult(res);
+      return publicResult(res, it.qkind);
     });
   }
   async gradeSubjective(it, text) {
@@ -976,16 +977,29 @@ export class GamePractice {
     const set = this.ensure(this.game.read()).sets[sid];
     const rec = set?.answers?.[iid];
     if (!rec) throw new Error('先做完这题');
-    if (rec[field] && rec[vField] === EXPLAIN_VERSION) return {text: rec[field], source: 'model', mode: kind};
     const it = this.bank.item(iid);
     if (!it) throw new Error('题库里没有这道题了');
+    const targetV = explainVersionFor(it.qkind);
+    if (rec[field] && rec[vField] === targetV) return {text: rec[field], source: 'model', mode: kind};
+    const isSubj = SUBJECTIVE.has(it.qkind);
     const mat = it.material ? clean(this.bank.load().materials[it.material], 1200) : '';
-    const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, 300);
+    const yours = it.options && Number.isInteger(Number(rec.given)) ? clean(it.options[Number(rec.given)], 300) : clean(rec.given, isSubj ? 1800 : 300);
+    const note = isSubj
+      ? [it.why, it.rubric, rec.grade?.reason ? `本次阅卷评语：${rec.grade.reason}` : ''].filter(Boolean).join('\n')
+      : (it.why || it.script);
     if (!this.game.requestModel) return {text: '', source: 'offline', error: explainFailure('模型暂时不可用')};
     let failure;
-    const r = await modelJson(this.game.requestModel, explainRulesFor({mode: kind}), explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note: it.why || it.script, yours, correct: rec.correct, qkind: it.qkind, point: it.point, base: it.base}), {validate: validVoicedExplain, retries: 1, timeoutMs: 120000, maxTokens: useCompactExplain() ? 5200 : 3600, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules({mode: kind}), onFallback: markCompactExplain}), onFailure: error => { failure = error; }});
+    const validate = v => validVoicedExplain(v, {long: isSubj});
+    const maxTokens = isSubj ? 8000 : (useCompactExplain() ? 5200 : 3600);
+    const fallbackMaxTokens = isSubj ? 9500 : 5200;
+    const r = await modelJson(
+      this.game.requestModel,
+      explainRulesFor({mode: kind, qkind: it.qkind}),
+      explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note, yours, correct: rec.correct, qkind: it.qkind, point: it.point, base: it.base}),
+      {validate, retries: 1, timeoutMs: isSubj ? 180000 : 120000, maxTokens, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens, fallbackRules: compactExplainRules({mode: kind, qkind: it.qkind}), onFallback: markCompactExplain}), onFailure: error => { failure = error; }},
+    );
     if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
-    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row[field] = r.value.text; row[vField] = EXPLAIN_VERSION; } });
+    this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row[field] = r.value.text; row[vField] = targetV; } });
     return {text: r.value.text, source: 'model', mode: kind};
   }
   finish({setId} = {}) {
@@ -1034,12 +1048,13 @@ function titleFor({mode, kind, point, module, items}) {
   const one = items.length && items.every(i => i.paperId === items[0].paperId);
   return `${names[kind] || '真题'}${one ? ' · ' + items[0].title : ''}`;
 }
-function publicResult(r) {
+function publicResult(r, qkind = '') {
   if (!r) return r;
   const {lecture, lectureV, readLecture, readLectureV, ...rest} = r;
+  const targetV = explainVersionFor(qkind);
   const lectures = {};
-  if (lecture && lectureV === EXPLAIN_VERSION) lectures.full = lecture;
-  if (readLecture && readLectureV === EXPLAIN_VERSION) lectures.read = readLecture;
+  if (lecture && lectureV === targetV) lectures.full = lecture;
+  if (readLecture && readLectureV === targetV) lectures.read = readLecture;
   if (Object.keys(lectures).length) rest.lectures = lectures;
   return rest;
 }

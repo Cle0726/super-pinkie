@@ -29,7 +29,10 @@
     note.append(el('em', 'pkp-memo__tag', '记'), document.createTextNode(cleanMemo));
     row.append(note);
   };
-  const SEC_HEAD = /^(先看选项识考点|回题干秒杀|逐词带读|一块块大白话|四个选项逐词扫|选项逐词扫|送分搭配|B级固定搭配扩展|B级搭配扩展|固定搭配扩展|扩展搭配)(?:\s*[（(][^）)\n]{1,30}[）)])?\s*[:：]?$/;
+  const SEC_HEAD = /^(先看选项识考点|回题干秒杀|审题与扣分点|审题与格式要件|逐词带读|全文逐词带读|范文逐词带读|一块块大白话|逐句精讲与拆译|逐句拆译|范文逐句拆译|四个选项逐词扫|选项逐词扫|送分搭配|核心高频搭配|写作万能模板与搭配|B级固定搭配扩展|B级搭配扩展|固定搭配扩展|扩展搭配)(?:\s*[（(][^）)\n]{1,30}[）)])?\s*[:：]?$/;
+  const SENT_HEAD = /^(第\s*\d+\s*句(?:\s*[:：].*)?|Sentence\s*\d+(?:\s*[:：].*)?)$/i;
+  const REF_LINE = /^(完整官方译文|完整官方范文|官方参考译文|官方参考范文)\s*[:：]\s*(.+)$/;
+  const PIT_LINE = /^(?:⚠️\s*)?(避坑|注意|易错点?)\s*[:：]\s*(.+)$/;
   const PIN_LINE = /^(?:⚠️\s*)?一句话钉牢\s*[:：]?\s*(.*)$/;
   const cleanHead = line => String(line || '').replace(/^[#*\s]+/, '').replace(/[*]+$/g, '').trim();
   const syllable = raw => String(raw || '').trim().split(/[\s·・]+/).filter(Boolean).join('·');
@@ -54,7 +57,7 @@
       if (hm) {
         inPin = false;
         const title = hm[1];
-        const kind = title === '逐词带读' ? 'words' : /选项逐词扫/.test(title) ? 'opts' : title === '一块块大白话' ? 'chunks' : 'prose';
+        const kind = /逐词带读/.test(title) ? 'words' : /选项逐词扫/.test(title) ? 'opts' : /一块块大白话|逐句/.test(title) ? 'chunks' : 'prose';
         cur = {title, kind, lines: []};
         sections.push(cur);
         continue;
@@ -103,9 +106,24 @@
     const structured = parseStructured(src);
     if (structured) {
       if (structured.intro) {
-        const lead = el('p', 'pkp-lead pkp-say');
-        appendLines(lead, structured.intro);
-        box.append(lead);
+        const introLines = structured.intro.split(/\n/).map(s => s.trim()).filter(Boolean);
+        const leadLines = [];
+        for (const l of introLines) {
+          const rm = l.match(REF_LINE);
+          if (rm) {
+            if (leadLines.length) { const lead = el('p', 'pkp-lead pkp-say'); appendLines(lead, leadLines.join('\n')); box.append(lead); leadLines.length = 0; }
+            const refBox = el('div', 'pkp-refbox');
+            refBox.append(el('small', '', rm[1]), el('p', 'pkp-p', rm[2].trim()));
+            box.append(refBox);
+          } else {
+            leadLines.push(l);
+          }
+        }
+        if (leadLines.length) {
+          const lead = el('p', 'pkp-lead pkp-say');
+          appendLines(lead, leadLines.join('\n'));
+          box.append(lead);
+        }
       }
       for (const sec of structured.sections) {
         const wrap = el('section', 'pkp-sec');
@@ -118,6 +136,11 @@
           const rowRe = sec.kind === 'words' ? WORD_ROW : PHRASE_ROW;
           let lastRow = null;
           for (const line of sec.lines.filter(Boolean)) {
+            if (SENT_HEAD.test(cleanHead(line))) {
+              list.append(el('h5', 'pkp-sent-head', cleanHead(line)));
+              lastRow = null;
+              continue;
+            }
             const ml = line.match(MEMO_LINE);
             if (ml && lastRow) {
               appendMemo(lastRow, ml[1]);
@@ -140,24 +163,38 @@
           }
           wrap.append(list);
         } else if (sec.kind === 'chunks') {
-          const blist = el('div', 'pkp-blist');
+          let blist = null;
+          const ensureBlist = () => { if (!blist) { blist = el('div', 'pkp-blist'); wrap.append(blist); } return blist; };
           for (const line of sec.lines.filter(Boolean)) {
+            if (SENT_HEAD.test(cleanHead(line))) {
+              blist = null;
+              wrap.append(el('h5', 'pkp-sent-head', cleanHead(line)));
+              continue;
+            }
             if (/^(?:整句(?:通译|翻译|译文)?|中文(?:翻译|译文)?)\s*[:：]/.test(line)) {
+              blist = null;
               const whole = el('p', 'pkp-whole');
               whole.append(el('small', '', '整句'), document.createTextNode(stripWholeCue(line)));
               wrap.append(whole);
+              continue;
+            }
+            const pit = line.match(PIT_LINE);
+            if (pit) {
+              blist = null;
+              const note = el('p', 'pkp-pit');
+              note.append(el('small', '', pit[1]), document.createTextNode(pit[2].trim()));
+              wrap.append(note);
               continue;
             }
             const bm = line.match(/^(.+?)\s*(?:→|->)\s*(.+)$/);
             if (bm) {
               const row = el('div', 'pkp-bline');
               row.append(el('b', 'pkp-en', bm[1].trim()), el('span', 'pkp-arr', '→'), el('span', 'pkp-zh', bm[2].trim()));
-              blist.append(row);
+              ensureBlist().append(row);
             } else {
-              blist.append(el('p', 'pkp-p', line));
+              ensureBlist().append(el('p', 'pkp-p', line));
             }
           }
-          if (blist.childNodes.length) wrap.insertBefore(blist, wrap.querySelector('.pkp-whole'));
         } else {
           for (const para of body.split(/\n{2,}/).map(s => s.trim()).filter(Boolean)) {
             const p = el('p', 'pkp-p');
@@ -992,7 +1029,13 @@
       if (!r.grade) { const k = el('p', 'pkp-fb__key'); k.append(el('small', '', '官方答案'), el('b', '', r.key || '')); box.append(k); }
       if (r.why) { const w = el('p', 'pkp-fb__why'); w.append(el('small', '', '官方解析'), document.createTextNode(r.why)); box.append(w); }
       if (r.script) { const s = el('p', 'pkp-fb__why'); s.append(el('small', '', '录音原文'), document.createTextNode(r.script)); box.append(s); }
-      if (r.grade?.reference) { const ref = el('details', 'pkp-fb__ref'); ref.append(el('summary', '', '看官方参考答案'), el('p', '', r.grade.reference)); box.append(ref); }
+      if (r.grade?.reference) {
+        const ref = el('details', 'pkp-fb__ref');
+        ref.open = true;
+        const refLabel = it.qkind === 'translate-passage' ? '官方参考译文' : it.qkind === 'writing' ? '官方参考范文' : '官方参考答案';
+        ref.append(el('summary', '', refLabel), el('p', '', r.grade.reference));
+        box.append(ref);
+      }
       if (r.monster) box.append(el('p', 'pkp-fb__mon', `这题变成了错题怪「${r.monster.name}」，过几天回来，讨伐时出变体题。`));
       const row = el('div', 'pkp-row');
       const nextLabel = i + 1 < items.length ? '下一题' : finished ? '回结算页' : '结算';
@@ -1077,7 +1120,9 @@
       if (restore) {
         const savedLectures = r.lectures || {};
         const mode = r.lastLectureMode && savedLectures[r.lastLectureMode] ? r.lastLectureMode : (savedLectures.full ? 'full' : savedLectures.read ? 'read' : null);
-        if (mode) renderLecture(savedLectures[mode], mode, {scroll: false});
+        const text = mode ? savedLectures[mode] : '';
+        const staleSubj = BIG_KINDS.has(it.qkind) && /^选了|先看选项识考点|四个选项逐词扫/.test(String(text || ''));
+        if (mode && !staleSubj) renderLecture(text, mode, {scroll: false});
       } else {
         next.focus({preventScroll: true});
         box.scrollIntoView({block: 'nearest', behavior: desk()?.motion?.reduced ? 'auto' : 'smooth'});

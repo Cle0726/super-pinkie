@@ -152,8 +152,9 @@
   #pinkie-study-desk .pkp-letter span{font-size:18px}
   #pinkie-study-desk .pkp-fb p{font-size:18px}
 }
-#pinkie-study-desk .pkp-fb__ref summary{cursor:pointer;font-size:12.5px;color:var(--pkg-ink-2)}
-#pinkie-study-desk .pkp-fb__ref p{margin-top:8px;white-space:pre-wrap}
+#pinkie-study-desk .pkp-fb__ref{padding:10px 14px;border-radius:8px;background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 7%,transparent);border-left:2px solid var(--pkg-gold,#C99A3E)}
+#pinkie-study-desk .pkp-fb__ref summary{cursor:pointer;font:700 13px/1.3 var(--pk-sans,system-ui);letter-spacing:.06em;color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-fb__ref p{margin-top:8px;white-space:pre-wrap;color:var(--pkg-ink)}
 
 @media (max-width:1100px){
   #pinkie-study-desk .pkp-grid{grid-template-columns:minmax(0,1fr)}
@@ -198,12 +199,21 @@
 #pinkie-study-desk .pkp-wrow .pkp-zh{flex:1 1 6em;min-width:0}
 #pinkie-study-desk .pkp-memo{flex:1 0 100%;display:flex;align-items:baseline;gap:6px;padding-left:.2em;margin-top:2px;font:400 calc(var(--pkp-lecture, 26px) * .74)/1.45 var(--pk-sans,system-ui);color:var(--pkg-ink-3);white-space:normal;text-wrap:pretty}
 #pinkie-study-desk .pkp-memo__tag{flex:none;display:inline-block;padding:1px 6px;border-radius:4px;font:600 calc(var(--pkp-lecture, 26px) * .56)/1.25 var(--pk-sans,system-ui);font-style:normal;color:var(--pkg-b,#DB1F74);background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent)}
-/* 一块块大白话 + 整句 */
+/* 一块块大白话 + 整句 + 多句段落精讲子标题与避坑 */
 #pinkie-study-desk .pkp-blist{display:grid;gap:6px;min-width:0}
 #pinkie-study-desk .pkp-bline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;line-height:1.6}
 #pinkie-study-desk .pkp-arr{color:var(--pkg-ink-3);font-size:var(--pkp-lecture, 26px)}
-#pinkie-study-desk .pkp-fb__lecture .pkp-whole{margin-top:6px;padding-top:10px;border-top:1px dashed var(--pkg-line);font-weight:500}
+#pinkie-study-desk .pkp-sent-head{margin:12px 0 2px;padding:3px 10px;width:fit-content;border-radius:6px;background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent);font:700 calc(var(--pkp-lecture, 26px) * .56)/1.35 var(--pk-sans,system-ui);letter-spacing:.06em;color:var(--pkg-b,#DB1F74)}
+#pinkie-study-desk .pkp-wlist > .pkp-sent-head:first-child,
+#pinkie-study-desk .pkp-sec > .pkp-sent-head:first-of-type{margin-top:2px}
+#pinkie-study-desk .pkp-fb__lecture .pkp-whole{margin-top:4px;padding-top:8px;border-top:1px dashed var(--pkg-line);font-weight:500}
 #pinkie-study-desk .pkp-fb__lecture .pkp-whole small{display:inline-block;margin:0 8px 0 0;color:var(--pkg-ink-3)}
+#pinkie-study-desk .pkp-pit{margin:0;padding:6px 12px;border-radius:6px;background:color-mix(in srgb,#C87A1E 10%,transparent);font:400 calc(var(--pkp-lecture, 26px) * .78)/1.55 var(--pk-sans,system-ui);color:var(--pkg-ink-2)}
+#pinkie-study-desk .pkp-pit small{display:inline-block;margin:0 8px 0 0;color:#9B5A0B;font-weight:700}
+#pinkie-study-desk .pkp-refbox{display:grid;gap:4px;padding:10px 14px;border-radius:8px;border-left:3px solid var(--pkg-gold,#C99A3E);background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 8%,transparent)}
+#pinkie-study-desk .pkp-refbox small{margin:0;color:#8A6114}
+#pinkie-study-desk[data-theme="night"] .pkp-pit small,
+#pinkie-study-desk[data-theme="night"] .pkp-refbox small{color:#F2CA7A}
 /* 一句话钉牢 */
 #pinkie-study-desk .pkp-pin{display:grid;gap:4px;padding:10px 14px;border-radius:8px;border-left:3px solid var(--pkg-gold,#C99A3E);background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 9%,transparent)}
 #pinkie-study-desk .pkp-pin small{margin:0;color:var(--pkg-gold,#A67B28)}

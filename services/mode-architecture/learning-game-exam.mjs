@@ -6,7 +6,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import * as E from './learning-game-economy.mjs';
 import {PRETCO_B_FORMAT, fold, modelJson, validChoice, localLine, LINE_RULES, validLine, blindSolve, pool, explainInput} from './learning-game-content.mjs';
-import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION} from './learning-explain-voice.mjs';
+import {explainRulesFor, compactExplainRules, markCompactExplain, useCompactExplain, explainRules, validVoicedExplain, explainFailure, EXPLAIN_VERSION, explainVersionFor} from './learning-explain-voice.mjs';
 import {GAME_EXAM, EXAM_DATES, beijingDate, daysBetween, mondayOf} from './learning-game.mjs';
 import {RealPapers, REAL_VERSION} from './learning-game-real.mjs';
 
@@ -498,9 +498,10 @@ export class GameExam {
         else if (blank) blankObj += 1;
         else wrongObj += 1;
         const cached = lecturesMap[id];
+        const targetV = explainVersionFor(p.kind);
         const lectures = {};
-        if (cached?.lecture && cached.lectureV === EXPLAIN_VERSION) lectures.full = cached.lecture;
-        if (cached?.readLecture && cached.readLectureV === EXPLAIN_VERSION) lectures.read = cached.readLecture;
+        if (cached?.lecture && cached.lectureV === targetV) lectures.full = cached.lecture;
+        if (cached?.readLecture && cached.readLectureV === targetV) lectures.read = cached.readLecture;
         return {
           id, kind: p.kind, part: p.id, points: p.each,
           no: it.no || null,
@@ -568,31 +569,38 @@ export class GameExam {
     const a = this.ensure(this.game.read()).attempts[aid];
     if (!a) throw new Error('这场考试不在了');
     if (!a.submittedAt) throw new Error('交卷后才能看讲解');
-    const cached = a.lectures?.[iid];
-    if (cached?.[field] && cached?.[vField] === EXPLAIN_VERSION) return {text: cached[field], source: 'model', mode: kind};
     const full = this.readFull(a.paperId);
     if (!full) throw new Error('这份卷子不在了');
     const found = this.findExamItem(full, iid);
     if (!found) throw new Error('卷子里没有这道题');
     const {part, item} = found;
+    const targetV = explainVersionFor(part.kind);
+    const cached = a.lectures?.[iid];
+    if (cached?.[field] && cached?.[vField] === targetV) return {text: cached[field], source: 'model', mode: kind};
     if (!this.game.requestModel) return {text: '', source: 'offline', error: explainFailure('模型暂时不可用')};
     const given = a.answers?.[iid];
     const isSubj = ['translate-passage', 'writing'].includes(part.kind);
     const correct = isSubj ? ((a.result?.notes?.[iid]?.score || 0) >= Math.ceil(part.each * 0.6)) : gradeObjective(part.kind, item, given);
-    const yours = givenText(part.kind, item, given);
+    const yours = isSubj ? clean(given, 1800) : givenText(part.kind, item, given);
     const mat = part.material ? clean(part.material, 1200) : '';
     const script = clean(item.script || item.tts || '', 800);
     const stemPart = [mat, script && !item.stem?.includes(script) ? `录音原文：${script}` : '', item.stem].filter(Boolean).join('\n\n');
     const bankItem = this.game.modules.practice?.bank?.load?.()?.items?.find(x => x.paperId === full.paperId && x.examId === iid);
+    const examNote = isSubj
+      ? [item.why, item.rubric, a.result?.notes?.[iid]?.reason ? `本次阅卷评语：${a.result.notes[iid].reason}` : ''].filter(Boolean).join('\n')
+      : (item.why || item.reference || script);
     let failure;
+    const validate = v => validVoicedExplain(v, {long: isSubj});
+    const maxTokens = isSubj ? 8000 : (useCompactExplain() ? 5200 : 3600);
+    const fallbackMaxTokens = isSubj ? 9500 : 5200;
     const r = await modelJson(
       this.game.requestModel,
-      explainRulesFor({mode: kind}),
+      explainRulesFor({mode: kind, qkind: part.kind}),
       explainInput({
         question: stemPart,
         options: item.options,
         standard: keyLabel(part.kind, item),
-        note: item.why || item.reference || script,
+        note: examNote,
         yours,
         correct,
         qkind: part.kind,
@@ -600,13 +608,13 @@ export class GameExam {
         base: item.base,
       }),
       {
-        validate: validVoicedExplain,
+        validate,
         retries: 1,
-        timeoutMs: 120000,
-        maxTokens: useCompactExplain() ? 5200 : 3600,
+        timeoutMs: isSubj ? 180000 : 120000,
+        maxTokens,
         directPayload: true,
         stopOnQuota: true,
-        ...(useCompactExplain() ? {} : {fallbackMaxTokens: 5200, fallbackRules: compactExplainRules({mode: kind}), onFallback: markCompactExplain}),
+        ...(useCompactExplain() ? {} : {fallbackMaxTokens, fallbackRules: compactExplainRules({mode: kind, qkind: part.kind}), onFallback: markCompactExplain}),
         onFailure: error => { failure = error; },
       },
     );
@@ -617,7 +625,7 @@ export class GameExam {
       att.lectures ||= {};
       att.lectures[iid] ||= {};
       att.lectures[iid][field] = r.value.text;
-      att.lectures[iid][vField] = EXPLAIN_VERSION;
+      att.lectures[iid][vField] = targetV;
     });
     return {text: r.value.text, source: 'model', mode: kind};
   }
