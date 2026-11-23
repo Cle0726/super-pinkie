@@ -10,5 +10,23 @@
     "metric": "lines",
     "value": 918,
     "reason": "缺陷修复：Metre 派发的子会话重新挂回父会话下面（原来全部堆在单独的「派发的会话」分组里），多出的行是 buildTree 的 parts、addTree 里的子会话行和找不到父会话时的兜底分组；没有新增全局名、观察器或定时器；另有在跑会话排序位置冻结（防止列表乱跳）的几行。"
+  },
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "lines",
+    "value": 207,
+    "reason": "Metre 引擎台（briefs/metre-engines-1122）的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载，共 2 行；功能本身全在新文件里。"
+  },
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "manualVersions",
+    "value": 199,
+    "reason": "上一条新登记的两个文件各带一个 ?v= 版本号（注入文件改了要换号，规矩如此）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-engine.js",
+    "metric": "manualVersions",
+    "value": 1,
+    "reason": "C.le. 思考动画要和 laolao-cle-stage.js 用同一份 three.js 模块，动态 import 的地址必须一字不差（含 ?v=8），否则会加载第二份、占第二个 WebGL 上下文；tests/metre-engine-ui.test.mjs 核对两边一致。"
   }
 ]

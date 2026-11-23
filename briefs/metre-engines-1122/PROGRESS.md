@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-11-22 夜 · 会话 31ea3b09 · E2 收尾 + E3 引擎台第一版（用户额度快用完，主动停在这里）
+
+**用户这一段的三句话（都已写进 PLAN 3.3）**
+- 「注意是做融合不是完全按照现在的 Meter……如果出现没有的就做一个 meter UI 覆盖就行」「也不要直接全用，因为本质上也是完善 meter 所有功能」→ 不嵌 T3 的整页，Metre 自己画「引擎台」，功能照 T3 / OpenMausBot。
+- 「不要有 T3 code 的 ip 标志 还有记得保留 "C.le." 思考动画 three.js」→ 界面上不出现 T3 的名字、标志、链接（引擎传回的话里也替换掉）；原计划「Antigravity 安装登录借用 T3 设置页 + 转发口」**作废**，改成 Metre 自己做（见下一步）；引擎台的工作状态行用和原生对话同一个 C.le. 粒子签名。
+
+**做了什么（提交见 git log，分支 feat/metre-engines）**
+- `engines-rpc.mjs`：T3 网页用的实时通道 `ws://127.0.0.1:<端口>/ws?orchestrationProtocol=2`（Effect RPC：Request / Chunk+Ack / Exit / Interrupt / Ping），令牌用 `t3 auth session issue --token-only --ttl 12h --scope …` 现签，只在内存。
+- `engines-bridge.mjs`：把 `orchestration.getThreadProjection` 的 `visibleTurnItems`（每行 `{position, item}`）翻成 Metre 的行（you / reply / thinking / command / edit / search / web / tool / todo / plan / approval / question / error / note）；命令：`launchThread`（开对话）、`message.dispatch`（空闲 `start_immediately`、在跑时 `queue_after_active` 或插话 `steer_active`）、`runtime-request.respond`（批准 / 回答）、`thread.stop`、`thread.model-selection.set` / `runtime-mode.set` / `interaction-mode.set`、`thread.pin/archive`、`getFullThreadDiff`（要 `toTurnCount` = 检查点最大 `ordinalWithinScope`）。额度、没登录说成大白话；邮箱和 T3 字样（`brandless`）都去掉。按会话记引擎选择：`<引擎目录>/sessions.json`。网关方法：`pinkie.engines.catalog / session / choose（含 newThread）/ say / thread / respond / stop / organize / diff / signin`（signin 只会在用户点按钮时开一个命令行窗口跑 `claude auth login` / `codex login`，碧琪不经手账号）。顺手修了 `threads` 少 `--project` 的错。
+- 界面 `laolao-metre-engine.js/.css`（已登记进 head，`?v=metreengine1`）：Metre 输入框下多一颗「引擎」按钮（菜单：Metre / Claude Code / Codex / Antigravity + 登录和额度状态 + 模型 + 放手程度四档）；选了外部引擎，正文区换成引擎台：对话流、命令和改文件一行一行可展开、待批准卡片（批准 / 这次都批准 / 不行 + 附一句）、提问卡片、计划清单、方案卡（「照这个方案做」）、右侧改动面板、自己的输入框（排队 / 插话 / 停）、「先出方案」开关、置顶 / 归档 / 换一段新对话。思考按「思考了」规矩：想时 68px 小窗，放完停 1.8–3.6 秒自己收成「思考了 N 秒」，打开页面时已想完的收着。最底下一行是 C.le. 粒子签名（`import('/laolao-cle-space.js?v=8')`，和 cle-stage 同一份模块），每一步换形状，做完落款、拆掉 WebGL。
+- 健康门禁：head 多 2 行、版本号 +3 已写进 `tools/health/exceptions.json`（带理由）；新文件不加 window 全局。
+
+**怎么验的**
+- 测试 37 过：`metre-engines`、`metre-engines-bridge`（9 条，含假 WebSocket）、`metre-engine-ui`（静态 3 条）、`metre-board`、`plugin-file-lists`、`code-health-ratchet`。
+- 真引擎（试验服务 `F:\t3probe\e1\root`，端口 3791，脚本在会话草稿 `bridgeprobe.mjs`）：catalog 读到 Claude 未登录、Codex 已登录但额度用完（11-27 01:44Z 恢复）；Codex、Claude 各开一个真对话，行和大白话报错都对。
+- 截图（`tools/ui-parity/capture.mjs --mode metre --rpc 场景.json`，Edge）：亮 / 暗、引擎菜单、运行中、思考中（C.le. ∞ 小标真的在 WebGL 里动）、同一个真对话和 T3 原版并排（T3 原版图用 `t3shot.mjs` 配对链接截的，只在本机）。
+
+**没验的 / 没做的**
+- `metre-engine-ui` 里真浏览器那条在这台机器上被跳过（harness 的 `require('playwright')` 找不到 NODE_PATH 里的包）——下次先让它跑起来。
+- 没在隔离网关里整条走一遍（E2 原定的「真网关里调用」）：要建 `tools/metre/iso` 副本（`METRE_ISO_ROOT=F:\metreiso\eng` 纯英文），把 `F:\t3probe\e1\root\versions` 拷到副本的 `local\SuperPinkie\engines\versions` 省得重下 170MB。
+- 侧栏这一行还没标引擎名（`laolao-session-list.js` 的行有 `data-session-key`，用新文件补一个小标，别改那个文件）。
+- 并排对比图还没拼成一张交给用户。
+- 没有一个有额度的引擎能跑完一整件真活（Codex 额度 11-27 恢复；Claude 要用户自己 `claude auth login`）。
+
+**下一步（按顺序）**
+1. 让 `metre-engine-ui` 的浏览器测试真跑；侧栏标引擎名；拼并排对比图。
+2. Antigravity 的安装和登录改成 Metre 自己做：T3 的 `provider.install.start/subscribe`、`provider.auth.start/respond/complete/subscribe`（`packages/contracts/src/rpc.ts` 的 WS_METHODS，源码只读参考在 `F:\t3probe\src\t3code`）。**不要嵌 T3 页面**（用户 11-22 明确不要 T3 标志）。`pinkie.engines.open`（配对链接）界面不再用。
+3. 隔离网关真调一遍（见上）。
+4. E4 `pinkie_engine_task`（PLAN 3.4）→ E5 乐手 → E7 设置 / 许可 / 文档。
+
 ## 2026-11-22 · 会话 847a9261 · E2 网关方法 · 前半完成
 
 - `engines.mjs` 末尾的 `registerEngines(api, {base, register})`：引擎服务全网关只建一个（`Symbol.for('pinkie.engines.v1')`，插件会被加载好几份）；开关存在 `<碧琪状态目录>/engines/prefs.json`，默认关；网关启动时开关是开的就自动启动；进程退出时停。方法：`pinkie.engines.status`（含 providers，已去邮箱）、`pinkie.engines.enable {on}`、`pinkie.engines.threads {folder}`。

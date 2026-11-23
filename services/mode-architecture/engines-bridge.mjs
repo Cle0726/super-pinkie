@@ -31,6 +31,13 @@ const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
 const ACTIVE_RUN = new Set(['queued', 'preparing', 'starting', 'running', 'waiting', 'waiting_for_input', 'interrupting']);
 
 const noEmail = text => String(text ?? '').replace(EMAIL, '…');
+// 用户 11-22：界面上不要出现对方的名字和标志。引擎服务传回来的话里带的产品名、链接、工具前缀都换掉。
+export const brandless = text => noEmail(text)
+  .replace(/https?:\/\/(?:app\.)?t3\.codes\S*/gi, '')
+  .replace(/\bmcp__t3-code(?:-direct)?__/gi, '')
+  .replace(/\bt3[-_]code[-_]?/gi, '')
+  .replace(/\bT3 ?Code\b/gi, '引擎服务')
+  .replace(/\bt3_(?=[a-z])/g, '');
 const clip = (text, n) => { const value = String(text ?? ''); return value.length > n ? value.slice(0, n) + '…' : value; };
 const tail = (text, n) => { const value = String(text ?? ''); return value.length > n ? '…' + value.slice(-n) : value; };
 const newId = prefix => `${prefix}:metre-${crypto.randomUUID()}`;
@@ -61,7 +68,7 @@ export function summarizeProviders(providers = []) {
       status: String(provider.status || 'unknown'),
       signedIn: provider.auth?.status === 'authenticated',
       plan: label.includes('@') ? '' : label,
-      message: noEmail(provider.message || ''),
+      message: brandless(provider.message || ''),
       quota: quota(provider.usageLimits),
       models: (Array.isArray(provider.models) ? provider.models : []).map(model => ({
         slug: String(model.slug || ''), name: String(model.name || model.slug || ''), isDefault: model.isDefault === true,
@@ -73,8 +80,8 @@ export function summarizeProviders(providers = []) {
 function failureText(failure) {
   if (!failure) return '';
   if (failure.class === 'usage_limit') return '额度用完了' + (failure.resetAt ? `，${failure.resetAt} 恢复` : '');
-  if (/auth|login|credential/i.test(String(failure.code || '') + String(failure.message || ''))) return '还没登录，或者登录过期了：' + noEmail(failure.message || '');
-  return noEmail(failure.message || failure.code || '出错了');
+  if (/auth|login|credential/i.test(String(failure.code || '') + String(failure.message || ''))) return '还没登录，或者登录过期了';
+  return brandless(failure.message || failure.code || '出错了');
 }
 
 const answersOf = item => item?.questionAnswer?.answers || item?.answers || null;
@@ -82,18 +89,21 @@ const answersOf = item => item?.questionAnswer?.answers || item?.answers || null
 // 一条 T3 的对话事项 → Metre 引擎台的一行。认不出的类型不画（T3 自己的内部记号）。
 export function toItem(item) {
   if (!item || typeof item !== 'object') return null;
-  const base = {id: String(item.id || ''), status: String(item.status || ''), at: item.updatedAt || item.completedAt || item.startedAt || null};
+  const base = {id: String(item.id || ''), status: String(item.status || ''), at: item.updatedAt || item.completedAt || item.startedAt || null,
+    startedAt: item.startedAt || null, completedAt: item.completedAt || null};
   switch (item.type) {
     case 'user_message': return {...base, kind: 'you', text: String(item.text || '')};
     case 'assistant_message': return {...base, kind: 'reply', text: String(item.text || ''), streaming: item.streaming === true};
     case 'reasoning': return {...base, kind: 'thinking', text: String(item.text || ''), streaming: item.streaming === true};
-    case 'command_execution': return {...base, kind: 'command', command: clip(item.input, 2000), output: tail(item.output, 6000),
+    // T3 自己的步骤（准备工作区之类）没有对应的引擎原生事项，只当一句旁注。
+    case 'command_execution': if (item.nativeItemRef == null && item.title && /^Preparing workspace$/i.test(String(item.input || ''))) return {...base, kind: 'note', text: /ready/i.test(item.title) ? '工作区准备好了' : String(item.title)};
+      return {...base, kind: 'command', command: clip(item.input, 2000), output: tail(item.output, 6000),
       exitCode: Number.isInteger(item.exitCode) ? item.exitCode : null, failed: item.outputIndicatesFailure === true || (Number.isInteger(item.exitCode) && item.exitCode !== 0)};
     case 'file_change': return {...base, kind: 'edit', file: String(item.fileName || ''), additions: item.additions ?? null, deletions: item.deletions ?? null,
       diff: clip(item.diffStr || '', 40_000), operations: (item.changes || []).map(change => String(change.operation || '')).filter(Boolean)};
     case 'file_search': return {...base, kind: 'search', text: String(item.pattern || item.title || ''), count: (item.results || []).length};
     case 'web_search': return {...base, kind: 'web', text: (item.patterns || []).join(' / ') || String(item.title || ''), count: (item.results || []).length};
-    case 'dynamic_tool': return {...base, kind: 'tool', name: String(item.toolName || item.title || '工具'), text: clip(typeof item.input === 'string' ? item.input : JSON.stringify(item.input ?? ''), 400)};
+    case 'dynamic_tool': return {...base, kind: 'tool', name: brandless(item.toolName || item.title || '工具') || '工具', text: brandless(clip(typeof item.input === 'string' ? item.input : JSON.stringify(item.input ?? ''), 400))};
     case 'todo_list': return {...base, kind: 'todo', explanation: String(item.explanation || ''),
       steps: (item.steps || []).map(step => ({text: String(step.text || ''), status: String(step.status || 'pending')}))};
     case 'proposed_plan': return {...base, kind: 'plan', text: String(item.markdown || ''), streaming: item.streaming === true};
@@ -104,10 +114,10 @@ export function toItem(item) {
       questions: (item.questions || []).map(question => ({id: String(question.id), header: String(question.header || ''), question: String(question.question || ''),
         multiSelect: question.multiSelect === true, allowCustom: question.allowCustomAnswer !== false,
         options: (question.options || []).map(option => ({label: String(option.label || ''), description: String(option.description || ''), value: option.value ?? option.label}))}))};
-    case 'error': return {...base, kind: 'error', text: failureText(item.failure), failureClass: String(item.failure?.class || ''), resetAt: item.failure?.resetAt || null};
+    case 'error': return {...base, kind: 'error', text: failureText(item.failure), detail: brandless(item.failure?.message || ''), failureClass: String(item.failure?.class || ''), resetAt: item.failure?.resetAt || null};
     case 'compaction': return {...base, kind: 'note', text: '对话太长，引擎把前面的内容压缩成了摘要'};
-    case 'run_interrupt_request': case 'run_interrupt_result': return {...base, kind: 'note', text: String(item.message || '已停下')};
-    case 'system_notice': return {...base, kind: 'note', text: String(item.title || item.text || item.message || '')};
+    case 'run_interrupt_request': case 'run_interrupt_result': return {...base, kind: 'note', text: brandless(item.message || '已停下')};
+    case 'system_notice': return {...base, kind: 'note', text: brandless(item.title || item.text || item.message || '')};
     default: return null;
   }
 }
@@ -151,13 +161,15 @@ export function summarizeProjection(projection) {
   const turnCount = Math.max(0, ...(projection?.checkpoints || []).map(checkpoint => Number(checkpoint?.ordinalWithinScope) || 0));
   return {
     thread: {
-      id: String(thread.id || ''), title: String(thread.title || ''), engine: String(thread.modelSelection?.instanceId || thread.providerInstanceId || ''),
+      id: String(thread.id || ''), title: brandless(thread.title || ''), engine: String(thread.modelSelection?.instanceId || thread.providerInstanceId || ''),
       engineName: engineName(thread.modelSelection?.instanceId || thread.providerInstanceId), model: String(thread.modelSelection?.model || ''),
       level: String(thread.runtimeMode || ''), plan: thread.interactionMode === 'plan', branch: thread.branch || null, worktree: thread.worktreePath || null,
       archived: Boolean(thread.archivedAt), createdAt: thread.createdAt || null, updatedAt: thread.updatedAt || projection?.updatedAt || null,
     },
     status: runStatus(active || latest, pending),
     activeRunId: active ? String(active.id) : null,
+    runStartedAt: (active || latest)?.startedAt || (active || latest)?.requestedAt || null,
+    runCompletedAt: active ? null : latest?.completedAt || null,
     items,
     pending: pending.map(item => ({requestId: item.requestId, kind: item.kind})),
     changes: [...changes.values()],
@@ -377,9 +389,11 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
   };
   register(api, 'pinkie.engines.catalog', async ({refresh} = {}) => ({...service.status(), ...await bridge.catalog({refresh: refresh === true})}));
   register(api, 'pinkie.engines.session', async ({sessionKey}) => view(needKey(sessionKey)));
-  register(api, 'pinkie.engines.choose', async ({sessionKey, engine, model, level, plan}) => {
+  register(api, 'pinkie.engines.choose', async ({sessionKey, engine, model, level, plan, newThread}) => {
     const key = needKey(sessionKey);
     const before = bridge.sessions.get(key) || {};
+    // 「换一段新的对话」：旧对话留在引擎里，这个会话下一句话开新的。
+    if (newThread === true) { bridge.sessions.set(key, {threadId: '', previousThreadId: before.threadId || before.previousThreadId || ''}); return view(key); }
     const patch = {};
     if (engine) patch.engine = String(engine);
     if (model !== undefined) patch.model = String(model || '');
