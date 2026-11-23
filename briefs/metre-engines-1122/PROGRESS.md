@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-11-23 下午 · 会话 83379188 · E4 派活给外部引擎、E5 乐手、侧栏标引擎名（c19a8b9e）
+
+**做了什么**
+- **侧栏标引擎名**：用外部引擎的 Metre 会话，行里标账号名（「Claude Code · Metre」）；Metre 派出去的活标「引擎 · 模型」（「Antigravity · Gemini 3.8 Flash」），在跑的左边一道强调色。做法是按 `data-session-key` 写一张样式表 `style#pk-eng-side`（标签是标题那一行的 `::after`，地方不够时标签先让），**没碰 `laolao-session-list.js`**。数据：新网关方法 `pinkie.engines.sessions`。写在 `laolao-metre-engine.js` 里（没开新文件，省得 head 再加行）。
+- **E4 `pinkie_engine_task`**（新文件 `engines-task.mjs`）：只在 Baton 下、外部引擎打开时出现；子会话里不出现。`engines` 列能用的引擎、模型、乐手；`start` 开一件活：在 Metre 父会话下面建一个子会话 `agent:metre:pinkie-child:…`（血缘 `kind: 'external'`，绑同一个项目文件夹），引擎台的 `sessions.json` 记好引擎和对话，所以**侧栏挂在父会话下、点开就是它的引擎台、总谱里是一个声部，全用现成的**；`launchThread` 不等。`say / stop / show`。和 `pinkie_session_start` 共用：在跑上限、一次请求上限、一轮 6 个、「不是用户这一轮不能派」、暂停分谱、Virtuoso 不给。
+- **守望**：每 5 秒看在跑的外部活（`setTimeout` 链，没活就停）。做完 → 汇报卡片（最后的回话 + 改了哪些文件）+ 叫醒 Metre（`lineage.report` + `defer`）；没做成 → 失败卡片（额度、原因大白话）、侧栏出错；等人批准/回答 → 一张「等你」卡片、侧栏「等你」；全体收住 → 也停它；开了 90 秒没起跑、引擎服务停了约 1 分钟 → 算没做成。用户在这件活的引擎台或总谱「发消息」递话 → 重新盯着，做完再交一次。
+- **血缘只改了两行（同一行里改，不加行数）**：`busy()` 认外部活（`externalBusy`），所以在跑上限、看门狗等子会话、总谱「在奏」都对；`isChildDelegation` 认 `pinkie_engine_task`（交付门禁不把「交给引擎了」当成没干活）。Baton 把它算真的派出去；Virtuoso 拦它。角色子会话不给它。Metre 给外部活发 `pinkie_session_message` 会被拦下，指到 `pinkie_engine_task say`。
+- **总谱**：外部声部写「引擎 · 模型」、在做什么（「改 e4.md」「跑 printf …」），时间条从交出去到交回一整段；「发消息」走 `pinkie.engines.say`（原来是 `chat.send`，会在子会话里跑一轮 Metre）。
+- **引擎台**：派来的活顶上一行「Part · Metre 派给 X 的活，做完会自动交回」+「回到 Metre ›」。
+- **E5 乐手**（新文件 `engines-players.mjs`，存 `<引擎目录>/players.json`）：名字 + 引擎（账号）+ 模型 + 放手程度 + 可选的 Metre 角色卡。引擎菜单里「乐手」一组一键选用，「＋ 把现在这一套记成乐手」，× 点两下删。派活写 `player`（名字或 id）就用它那一套；另写了别的引擎就不带乐手的模型。角色卡的正文放在简报前面（引擎看不到 Metre 的角色系统）；血缘里记 `metreRolePersona`，不记 `metreRole`（那是 roles 代理子会话的检查）。放手程度四档 E3 已有。
+- 顺手修：`metre-lock` 测试一直挂着一条（`registerMetreBoard` 没有状态目录时 `path.dirname(undefined)`）；现在没有状态目录就不建引擎服务。
+
+**怎么验的**
+- 测试 16 个文件全过：`metre-engines` 8、`metre-engines-bridge` 16、**`metre-engine-task` 13（新）**、`metre-engine-ui` 8（新加侧栏标签、乐手菜单两条真浏览器）、`metre-board` 14、`plugin-file-lists`、`code-health-ratchet`、`metre-roles` 17、`metre-baton` 7、`metre-dispatch` 19、`delegation-gate` 11、`metre-lock` 9、`metre-inject`、`metre-memory`、`metre-quiet`、`metre-wording`；`node tools/health/ratchet.mjs` 过。
+- **隔离碧琪真派一件活**（会话草稿 `e4run.py`）：对 `agent:metre:e4-test2` 说「用 pinkie_engine_task 交给 Antigravity · gemini-3.8-flash 新建 e4.md」。Metre（`mm/workbuddy/hy4flash-free`）27 秒交出去 → 子会话出现在父会话下 → `pinkie.engines.sessions` 报 running、在做「想」→ 总谱声部「Antigravity · Gemini 3.8 Flash · 改 e4.md」→ **91 秒汇报卡片回来**（「E4 派活测试 做完一轮」）→ 总谱「已交回」→ 叫醒 Metre 的那一轮发出去了。
+- 真界面截图（Edge，`e4shot.mjs`，亮/暗）：侧栏子行带「Antigravity · Gemini…」标签、子任务的引擎台、总谱声部。和原版的并排图：`side-session-notes/…/e4-compare-sidebar.png`（原版每条对话一张卡、状态字 + 引擎小图标；Metre 标「引擎 · 模型」文字）。只在本机，含对方标志，不进仓库。
+
+**没验的 / 发现**
+- 叫醒的那一轮在隔离副本里**没跑起来**：副本的默认模型 `mm/workbuddy/hy4free` 不在本机模型池的 Key 范围里（404），CLI 那一轮是用 `--model hy4flash-free` 跑的，叫醒用的是默认模型。不是派活代码的问题；以后在副本里跑先把默认模型换成 `hy4flash-free`（或给会话 `sessions.patch` 一个模型）。`drive.py` 的默认 `METRE_ISO_MODEL` 是 `mm/claude-opus-4-7`，跑之前要设成免费的。
+- 等人批准/回答、失败、全体收住、乐手派活：只有单元测试，没在真引擎里走（要「每步都问」的真审批，额度也要花）。
+- 侧栏子行地方窄：标签常被截成「Antigravit…」；全名在总谱和引擎台里。
+- Mac 没验。
+
+**下一步**：E6「更多引擎」（ACP 注册表：`server.searchAcpRegistry` / `server.prepareAcpRegistryAgent`，搜到再加进菜单）+ 引擎台清单剩下的项 → E7 设置开关 / 关于页许可 / `docs/METRE-MODE.md`「外部引擎」一节（**用户 11-23 问能不能让一个只能跑 Python 的 Opus 窗口帮忙省额度：E7 的文档和许可文字适合交给它**——写一份完整说明文件放会话备注目录，用户在那个窗口贴一句「读这个文件照着做」，做完 Claude 检查、跑测试）→ E8 同步给碧琪全局。
+
 ## 2026-11-23 · 会话 42f0bde1 · 隔离碧琪里真界面跑通 Antigravity 和 Claude（18940636）
 
 **隔离副本**：`METRE_ISO_ROOT=F:\metreiso\eng`，网关端口 8712（`tools/metre/iso/setup.py` 建，`gateway.py start|stop`，改了插件 `setup.py sync`，改了界面 `tools/ui-parity/bundle.py install --control-ui F:\metreiso\eng\runtime\node_modules\openclaw\dist\control-ui`）。
