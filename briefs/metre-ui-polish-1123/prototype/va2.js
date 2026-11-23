@@ -20,7 +20,7 @@ const pw = require('F:\\Projects\\super-pinkie\\build\\windows-runtime\\node_mod
       if (!band || band.hidden || !band.getClientRects().length) { res.band = {hidden: true}; }
       else {
         const br = band.getBoundingClientRect();
-        res.band = {...R(band), hidden: false, tier: band.dataset.tier, text: band.innerText.replace(/\s+/g, ' ').trim(), inViewport: br.left >= 0 && br.top >= 0 && br.right <= innerWidth && br.bottom <= innerHeight};
+        res.band = {...R(band), hidden: false, gapBottom: Math.round(innerHeight - br.bottom), gapComposer: (() => { const c = document.querySelector('.agent-chat__input'); return c && c.getClientRects().length ? Math.round(br.top - c.getBoundingClientRect().bottom) : null; })(), tier: band.dataset.tier, text: band.innerText.replace(/\s+/g, ' ').trim(), inViewport: br.left >= 0 && br.top >= 0 && br.right <= innerWidth && br.bottom <= innerHeight};
         res.bandOverflow = band.scrollWidth > band.clientWidth + 1 || band.scrollHeight > band.clientHeight + 1;
         const cands = [...document.querySelectorAll('p, button, a, code, pre, li, h1, h2, h3, h4, h5, label, time, input, textarea, img, svg, canvas:not(.pk-metre-backdrop):not(.pk-metre-lights), [role=button], span')]
           .filter((e) => !band.contains(e) && !panel?.contains(e) && !e.closest('.pk-bs__pop'));
@@ -72,7 +72,7 @@ const pw = require('F:\\Projects\\super-pinkie\\build\\windows-runtime\\node_mod
       await p.screenshot({path: path.join(out, `${w}-${night}-${state}.png`)});
       await p.evaluate(() => { const q = document.querySelector('[data-preview-panel]'); if (q) q.style.display = 'flex'; });
       report.push({size, night: Number(night), ...m});
-      console.log(`${size} n${night} ${state.padEnd(8)} band=${m.band?.hidden ? 'hidden' : `${m.band.x},${m.band.y} ${m.band.w}x${m.band.h} ${m.band.tier}`} overlaps=${m.overlaps.length} vis=${m.overlapsVisible.length} clipped=${m.clipped.length} overflow=${m.bandOverflow} | ${m.band?.text || ''}${m.board ? ` | board ${m.board.mode} comp=${m.board.composerVisible} overComp=${m.board.overlapsComposer} overBand=${m.board.overlapsBand} last=${m.board.lastCardReachable} notice="${m.board.notice}"` : ''}`);
+      console.log(`${size} n${night} ${state.padEnd(8)} band=${m.band?.hidden ? 'hidden' : `${m.band.x},${m.band.y} ${m.band.w}x${m.band.h} ${m.band.tier} gapB=${m.band.gapBottom} gapC=${m.band.gapComposer}`} overlaps=${m.overlaps.length} vis=${m.overlapsVisible.length} clipped=${m.clipped.length} overflow=${m.bandOverflow} | ${m.band?.text || ''}${m.board ? ` | board ${m.board.mode} comp=${m.board.composerVisible} overComp=${m.board.overlapsComposer} overBand=${m.board.overlapsBand} last=${m.board.lastCardReachable} notice="${m.board.notice}"` : ''}`);
       if (m.overlaps.length) console.log('   overlaps: ' + m.overlaps.join(' | '));
     };
     await click('bs-ok'); await p.waitForTimeout(900); await shoot('chat');
@@ -84,6 +84,8 @@ const pw = require('F:\\Projects\\super-pinkie\\build\\windows-runtime\\node_mod
     await p.keyboard.press('Escape');
     await click('bs-ok'); await p.waitForTimeout(600); await click('bs-run'); await p.waitForTimeout(1300); await shoot('running');
     await click('bs-ok'); await p.waitForTimeout(600); await click('bs-unsync'); await p.waitForTimeout(4400); await shoot('unsync');
+    await click('bs-ok'); await p.waitForTimeout(600); await click('keys-run'); await p.waitForTimeout(3150); await shoot('unsync-page');   // 反方向：页面以为在跑、后台空闲
+    await p.waitForFunction(() => /已和后台对齐|已对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText || ''), null, {timeout: 4000}).catch(() => {}); await shoot('aligned');
     await click('bs-ok'); await p.waitForTimeout(600);
     await click('bs-down'); await p.waitForTimeout(900); await shoot('down');
     await click('bs-recover'); await p.waitForTimeout(1500);

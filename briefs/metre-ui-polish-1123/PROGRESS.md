@@ -1,5 +1,15 @@
 # Metre UI 打磨（在现有设计上优化，不推倒重来）
 
+## 接力卡（最后更新：2026-11-23 PST 上午，Quick-Win-k7m2 @ Windows，协调者复验后的第 3 轮）
+
+- 状态：返工文件 `build\quick-run\返工-界面-1123-r3.md` 剩下的三处都改完、推送了（代码 `fb42cadf`），自查（全量门禁（fb42cadf，runner-ui2）：292 个文件、62 条失败，对照 main 61 条；多出的 1 条是 mode-architecture「cross-process audit writers preserve every record in one valid chain」，单独重跑：本分支 5 次里 1 次失败、main 副本（metre-ui-base）5 次里也 1 次失败，是并发写日志的偶发（上一轮交接卡就记过它在 main 上同样失败），和本线无关。本线新增失败 0）见 `build\quick-run\status\ui.done`，证据在 `build\quick-run\va-r3\`。PR #67 仍是草稿。
+- 三处：
+  1. 「不同步」两个方向都认（后台在跑页面停着 / 页面在等后台空闲），超过 3 秒显示「不同步」+「同步」键；带子自己排一次性的复查，所以已有代码（laolao-resume）约 4 秒后清掉页面之前它先亮出来；对上以后说 2 秒「已和后台对齐」再回常态。「后台在跑」也认 run-status 从网关事件看到的开始。新测试补进 `tests/metre-backstage-sync.test.mjs`。
+  2. 落拍：方形细线框换成从棒尖往外扩的三圈像素环（里实外虚、越扩越稀越淡）；三根残影换成一道连贯、越早越淡的拖影。
+  3. 后台带离窗口下沿固定 8px，各尺寸一样；带子在时输入框那一栏下面从 28px 让到 38px。
+- 注意：如果已有代码不到 3 秒就把页面清掉了（预览里偶尔 3 秒前就清），按「超过 3 秒才算」的规矩带子来不及喊「不同步」，会直接说「已和后台对齐」（只要对不上的状态持续过 1 秒）——不会再悄悄恢复。
+- 没动：其他五个模式（注入对照逐字一致）；`feat/metre-engines` 的新提交 `696a04ad` 还没合（返工没要求）。
+
 ## 接力卡（最后更新：2026-11-23 PST 上午，Quick-Win-k7m2 @ Windows，协调者视觉验收打回后的第 2 轮）
 
 - 状态：返工文件 `build\quick-run\返工-界面-1123-r2.md` 的七条都改完、推送了，自查清单逐条过了（全量门禁（984e10af，runner-ui2）：292 个文件、61 条失败，对照 main（polish-gate-base.txt）61 条，逐条一样，新增 0；见 `build\quick-run\status\ui.done`），**等协调者再验收**。PR #67 仍是草稿。
