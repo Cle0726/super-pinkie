@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-11-23 清晨 · hy4flash-free 前后端同步收尾：修了四处（4 个提交），切会话 / 停下 / 排队三种模式补齐（AWS Quick 新号，经 Quick 跑腿 2）
+
+**这一段**：照 `build\quick-run\任务-引擎-1123.md` 一口气做完（用户睡了，协调者代定）。隔离碧琪 `F:\metreiso\eng`（网关 8712），Edge 无头，会话先 `sessions.patch` 成 `mm/workbuddy/hy4flash-free`。改过的注入文件先放进副本的 `control-ui` 再走查（旧的备份在 `build\quick-run\eng1123\iso-backup-*`），并逐个核对页面拿到的就是仓库这份。剧本 `build\quick-run\eng1123\walk3.mjs` / `walk4.mjs` / `walk5.mjs`，结果和截图在同目录 `walk*\`。
+
+**修了的（各自一个提交）**
+- `280190c4` 第一人称：「我是碧琪」「我叫碧琪」（含「我就是碧琪」）原样显示，不再变成「碧琪是碧琪」；同一句后面的主语「我」照常省掉，别的句子照常换。三份规则同步改（UI 注入、`mode-architecture/first-person.mjs`、插件内嵌副本——测试核对三份一致），UI 文件行数不变；测试原来期望「碧琪是碧琪」的那条改成原样，加三条反例。
+- `6f80668d` 页面报错 `Cannot read properties of undefined (reading 'text')`：调用栈 `appendThinking (laolao-process-card.js:184)` ← thinking 事件 ← `laolao-sidebar.js` WebSocket，是我们的注入。「在跑时再发一句」开了另一轮的新卡，新卡记录还没有思考段落、上一段思考又没收尾，就取到了 undefined。改一行条件；新回归测试换回旧代码会以同样的报错失败。
+- `58c9ee6a` **Metre「在跑时再发一句」第二句永远挂在排队里、后台收不到**（这次走查找到的真不同步）：原生忙碌排队先给卡片预分配 `sendRunId`（`sendAttempts 0`、没有 `sendState`），`laolao-queue-steer.js` 和 `laolao-resume.js` 只在 main/project/thinking/learning/unrestricted 里把这种卡当「还没发」；Metre 里被当成「已在发」，自动追加跳过、结束后的兜底也不敢重发。两处判断加上 metre（各一行），Metre 仍然不加「结束后发 / 立即追加」切换按钮。真页面复验：Metre 第二句先被追加，回完后后台 2 问 2 答、排队清空。
+- `ce1d1aaf` Metre 页面报错 `Cannot read properties of undefined (reading 'classList') at liftHome (laolao-companion.js:299)`：Metre 不造碧琪小伙伴，窗口 resize 时 `bubble` 还是 undefined。加一个 `?.`，行数不变；`companion.test.mjs` 加一条。
+
+**查清了、不是产品问题的**
+- walk2「切会话」卡在 `locator.waitFor`：页面上同一个会话有两行——原生 Lit 侧栏那行被藏起来（0×0），碧琪自己画的那行才看得见；`.first()` 拿到藏起来的那行。另外空会话离开后侧栏本来就不列（`laolao-session-list.js` 只列当前 / 有消息 / 在跑 / 有派生关系的）。剧本改成先给另一个会话发一句、只点可见那行。
+- 比对误报：后台是 Markdown 原文（「1. **苹果**」），页面 innerText 没有列表序号；比对前去掉序号和强调符号后一致。
+- 项目模式第一次自我介绍页面出「这次回复没能完成」：历史里是上游临时断线 + 看门狗自动续接，不是同步问题。
+
+**同步结论（三种模式都用 hy4flash-free 真跑，点真侧栏）**
+- 在跑时点侧栏切走再切回：唠嗑 / 项目 / Metre 切走时后台都还在跑，另一个会话不串台、不显示在跑；趁还在跑切回来，页面马上接上「在跑」；回完后页面比后台晚 1.0–1.4 秒停，最后消息条数和内容一致；完后再切走切回也一致。只有一点：切到另一个会话后 2.5 秒时它的消息有时还没画出来（截图稍后就有了），属于加载慢，不算不同步。
+- 中途停下（等在跑 4 秒再点停止）：项目 1.0 秒、Metre 1.7 秒页面和后台同时停；之后 6 秒不再长字；刷新后一致。
+- 在跑时再发一句：项目 2 问 2 答；Metre 修好后 2 问 2 答。
+
+**验证**：相关单测全过（first-person-renderer、ui-polish-thinking-segments、process-card-ui、ui-real-thinking-only、queue-steer、queue-followup-session、resume-ui、chat-tool-timeline、companion、companion-menu-layout、buddy-rig、metre-skin-cat、metre-real-app-ui、night-mode、rest、tuning、metre-inject / quiet / board / wording / lock / engine-ui、plugin-file-lists、code-health-ratchet 等）；`tools/health/ratchet.mjs`、`git diff --check` 过。`mode-architecture` 有 2 条挂（#96 #97，工具数 31→32 / code_check），stash 掉改动的干净 HEAD 上一样挂，和本段无关，没动。
+
+**没做 / 没验的**
+- **没 push**。任务文件写了「协调者已替用户定：可以直接 push」，但交接、总览的全线规矩和跑腿本身都要求 push 先由用户本人点头，协调者代定不能替代；所以 `59af6360`、`b9b58ad0`、`9046559f` 和本段的提交都只在本地。界面线要合这条分支，可以直接在同一仓库合本地分支 `feat/metre-engines`，不需要先推远端。用户点头后：远端应还在 `7ff91468`，核对后 `git push origin feat/metre-engines`。
+- 全量门禁没跑；Mac 没验；插件（外部渠道）那份第一人称规则没装进副本重启网关验，只有单测。
+- 副本里改过的 control-ui 文件没还原（副本不是已安装的 App，备份在 `eng1123\iso-backup-*`）。
+
+**下一步**：用户决定 push；界面线合分支时注意本段改了 `laolao-companion.js`（只一个 `?.`）和 `laolao-queue-steer.js` / `laolao-resume.js` 各一行。
+
 ## 2026-11-23 晚 · 用 hy4flash-free 跑「页面和后台同步」（做了一半，交接）（AWS Quick 经 Quick 跑腿 2）
 
 **用户这一段**：「用 Hy4flashfree 模型简单跑一下测试看看 UI 有没有问题，主要是页面前端和后端不同步问题」。然后额度到了，要求交接。
