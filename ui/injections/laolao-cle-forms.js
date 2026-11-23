@@ -104,50 +104,46 @@ export function inkForms({P, SIG, out}) {
     };
   }
 
-  /* 命令：一个终端窗口，一条命令一条命令地跑。下划线画窗框和标题栏，e 是正在敲的命令（敲到哪露到哪），
-     两个点合成方块光标；回车时命令往上一挤变成输出，l 是往上滚的输出，C 折成提示符，回车那一下亮一下 */
+  /* 命令：一个终端窗口。e 画窗框和标题栏（左上三个小按钮），C 折成提示符，l 是往上滚的输出（一个词一个词的），
+     下划线是正在敲的这一行（敲到哪露到哪），两个点合成方块光标 */
   {
-    const prompt = brush('M19 65C23 68 27 70.5 31 74C27 77.5 23 80 19 83', 5.4);
-    const win = polyline([[182, 21], [182, 84], [179, 88.5], [175, 90], [17, 90], [13, 88.5], [10, 84], [10, 14], [13, 9.5],
-      [17, 8], [175, 8], [179, 9.5], [182, 14], [182, 21], [10, 21]].flat());
+    const prompt = brush('M19 67C23 70 27 72.5 31 76C27 79.5 23 82 19 85', 5.4);
+    const typed = brush('M171 76C130 76 88 76 41 76', 6.2);
+    const win = polyline([[182, 21], [10, 21], [10, 14], [13, 9.5], [17, 8], [175, 8], [179, 9.5], [182, 14], [182, 84],
+      [179, 88.5], [175, 90], [17, 90], [13, 88.5], [10, 84], [10, 21]].flat());
     const hsh = (n) => fract(Math.sin(n) * 43758.5453);
     const gap = (w) => smooth(.72, .78, w) * (1 - smooth(.94, 1, w));
-    const X0 = 42, Y0 = 74, T = 2.6;
-    let ph = 0, gen = 0, len = 0, cursor = X0, enter = 0, lift = 0;
+    let k = 0, cursor = 41;
     forms.exec = {
-      frame(t) {
-        const v = t / T + .05;
-        ph = fract(v); gen = Math.floor(v); len = 64 + 64 * hsh(gen * 5.3 + 1);
-        enter = smooth(.72, .88, ph); lift = 1 - smooth(.72, .86, ph);       // 回车：命令往上挤、淡掉
-        cursor = ph < .78 ? X0 + Math.min(1, ph / .6) * len : X0;            // 光标消失的那一刻才跳回行首
-      },
+      frame(t) { k = fract(t * .42 + .3); cursor = 41 + Math.min(1, k / .8) * 130; },
       place(i, t) {
         const p = P.part[i], u = P.u[i];
         if (p === C) {
           trace(i, prompt, u, 2.2, 4.4);
-          look(i, .45 + .2 * Math.sin(t * 2) + .9 * bump(ph - .76, .06));
+          look(i, .45 + .25 * Math.sin(t * 2));
         } else if (isDot(p)) {
-          disc(i, slantX(cursor + 4.5, Y0), Y0, 4, 6.6);
-          const blink = .3 + .7 * smooth(-.3, .3, Math.sin(t * TAU * 2.2));
-          const on = ph < .6 ? 1 : ph < .72 ? blink : ph < .78 ? 1 - smooth(.72, .77, ph) : smooth(.8, .86, ph) * blink;
-          look(i, 1.1, on, 1.15);
-        } else if (p === E && u < .14) {                   // 标题栏上的三个小按钮
-          const b = Math.min(2, Math.floor(u / .14 * 3));
-          disc(i, 19 + b * 8, 14.5, 2.3);
-          look(i, b ? .15 : .8, .75, .9);
-        } else if (p === E) {                              // 正在敲的命令
-          const x = X0 + (u - .14) / .86 * len, y = Y0 - 15 * enter, shown = 1 - smooth(cursor - 2, cursor + 2, x);
-          put(i, slantX(x, y), y, 2.6);
-          look(i, .15 + bump(x - cursor, 14) * .9 + .6 * bump(ph - .76, .06), (ph < .72 ? shown : lift) * (1 - gap(fract((x - X0 + gen * 7) / 19))));
-        } else if (p === TAIL) {                           // 窗框：和签名的下划线一样，沿底边从右往左扫
-          win.at(u, tmp);
-          put(i, tmp[0], tmp[1], 1.1);
-          look(i, .05, tmp[1] === 21 && tmp[0] < 182 ? .4 : .7, 1.15);
-        } else {                                           // 输出：三行，只在回车时往上滚一行，滚出顶上就换一行新的
-          const v = u * 3, r = Math.min(2, Math.floor(v)), f = v - r, s = r + gen + enter + .5, pos = s % 3, id = Math.floor(s / 3);
-          const y = 66 - pos * 14, w = .35 + .6 * hsh(id * 3.1 + r * 7.7), x = 20 + f * 156 * w;
-          put(i, slantX(x, y), y, 3.4);
-          look(i, .1 + .5 * smooth(.4, 0, pos) * bump(enter - .5, .5), smooth(0, .4, pos) * (1 - smooth(2.6, 2.95, pos)) * (1 - gap(fract((x + id * 11 + r * 5) / 15))) * .85);
+          disc(i, slantX(cursor + 4.5, 76), 76, 4, 6.6);
+          const blink = k < .8 ? 1 : .3 + .7 * smooth(-.3, .3, Math.sin(t * TAU * 2.4));
+          look(i, 1.1, smooth(0, .05, k) * blink * (1 - smooth(.93, 1, k)), 1.15);
+        } else if (p === TAIL) {
+          trace(i, typed, u, 1.6, 3);
+          const x = out[i * STRIDE + X], shown = 1 - smooth(cursor - 2, cursor + 2, x);
+          look(i, .15 + bump(x - cursor, 14) * .9, shown * (1 - gap(fract((x - 41) / 17))) * (1 - smooth(.9, 1, k)));
+        } else if (p === E) {
+          if (u < .14) {                                   // 标题栏上的三个小按钮
+            const b = Math.min(2, Math.floor(u / .14 * 3));
+            disc(i, 19 + b * 8, 14.5, 2.3);
+            look(i, b ? .15 : .8, .7, .9);
+          } else {
+            win.at((u - .14) / .86, tmp);
+            put(i, tmp[0], tmp[1], 1.6);
+            look(i, .04, .5, 1.3);
+          }
+        } else {                                           // 输出：三行一直往上滚，滚出去就换一行新的
+          const v = u * 3, r = Math.min(2, Math.floor(v)), f = v - r, g = r + t * .5, pos = g % 3, gen = Math.floor(g / 3);
+          const y = 64 - pos * 12, len = .42 + .52 * hsh(gen * 3.1 + r * 7.7), x = 22 + f * 150 * len;
+          put(i, slantX(x, y), y, 3.2);
+          look(i, .2 * (1 - smooth(0, 1, pos)), smooth(0, .3, pos) * (1 - smooth(2.3, 2.85, pos)) * (1 - gap(fract((x + gen * 11 + r * 5) / 16))) * .9);
         }
       },
     };
