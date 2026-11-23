@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-11-23 · 会话 42f0bde1 · 隔离碧琪里真界面跑通 Antigravity 和 Claude（18940636）
+
+**隔离副本**：`METRE_ISO_ROOT=F:\metreiso\eng`，网关端口 8712（`tools/metre/iso/setup.py` 建，`gateway.py start|stop`，改了插件 `setup.py sync`，改了界面 `tools/ui-parity/bundle.py install --control-ui F:\metreiso\eng\runtime\node_modules\openclaw\dist\control-ui`）。
+- **引擎目录在 `F:\metreiso\eng\local\SuperPinkie\engines`**（副本的 `PINKIE_STATE_ROOT` 是 `<ROOT>\local\SuperPinkie`，不是 `home\AppData\Local`——第一次拷错了地方）。从 `F:\t3probe\e1\root` 拷了 `versions` 和 `home`（含 Antigravity 登录和 `claudeAgent-2` 实例），`prefs.json` 写 `{"enabled":true}`，所以不用重下、不用重登。
+- 直接调网关方法：会话草稿 `isocall.py <方法> [json]`（借 `drive.py` 的 `gateway call`，邮箱打码）。真界面截图：会话草稿 `isoshot.mjs`（Edge 1280×820，网址带副本令牌 `#token=`）。内置浏览器面板被藏起来时截图是旧的、画不出浮层，看真界面用 `isoshot.mjs`。
+
+**在真引擎台里做的**：会话 `agent:metre:engine-test`。Antigravity · Gemini 3.8 Flash：新建 `hello.md` 写一行，45 秒做完（you / note / 思考了 3 秒 / 改 hello.md / 回话）。换一段新对话交给「Claude Code · Metre」· Haiku 5.5：末尾加一行，40 秒（跑命令 / 用 Read / 思考 / 改 / 回话）；再加「第三行」，10 秒，Claude 用 `printf >>` 改的。改动面板显示 `hello.md +1 −0` 和真差异。
+
+**真界面里发现并修了（都有测试，61→64 条相关测试全过）**
+- 菜单说「外部引擎没打开」：`pinkie.engines.catalog` 等只带了 `service.status()`，没带总开关。现在 `registerEngineBridge` 收 `isEnabled`，所有返回引擎清单的方法都带 `enabled`。（测试原来一直手写 `enabled: true`，漏掉了。）
+- Antigravity 显示「额度用完了」：它按模型分额度条（「Gemini 4 Argon · Weekly」满了，Gemini 整体 73%、Claude & GPT 50%）。`quota(usageLimits, models)` 现在分清整个账号的条和某几个模型的条：只有某几个模型满了，整家照常能用，模型菜单里把那几个模型放暗、写「额度用完了，几号恢复」；所有模型都满了才算整家用完。
+- Antigravity 报的路径是 `/F:/…`、不给行数：去掉斜杠、显示相对会话文件夹的路径；没行数的写「1 个文件」/「改了」，不写 +0 −0。
+- Claude、Antigravity 在非 git 文件夹里都只报文件名、没有差异：Metre 自己的草稿文件夹现在第一次用时 `git init` + 一个空提交（用户绑的项目文件夹不碰），引擎服务就能按检查点算整段差异；改动面板的文件清单和 +/− 从差异里数（覆盖用命令改文件、没有「改文件」那一行的情况）。
+- 回话里 `[hello.md](file:///…)` 显示成文件名，不放打不开的链接。
+- 改动面板开着时底下一排挤得字断行：改成排不下换到第二排，字不断。
+
+**还没做 / 发现**
+- 改动按钮在差异读回来之前写「改动」（只有命令改文件时，条目里没有文件）；点开就有。以后可以跑完自动读一次差异。
+- 用户登录的 Claude 和这个 Claude Code 会话是同一个 Pro 账号，额度共用（11-23 用了 41%→59%，大部分是这个会话自己）。
+- 副本还开着（网关 8712 + 引擎服务 3790）；不用时 `gateway.py stop`。
+
+**下一步**：侧栏标引擎名、和对方原版的并排对比图 → E4 `pinkie_engine_task`（Metre 派活给外部引擎）→ E5 乐手 → E6 「更多引擎」→ E7 → E8。
+
 ## 2026-11-23 上午 · 会话 42f0bde1 · Claude 多账号真登录、真回话
 
 - 用户在 Edge 无痕窗口里登录了 Claude（Pro 订阅），登录进的是 Metre 自己的账号文件夹 `~/.claude-metre-2`（实例 `claudeAgent-2`，「Claude Code · Metre」）。用户的 `~/.claude` 没动（登录文件里还是只有设备令牌）。
