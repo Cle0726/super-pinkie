@@ -1,9 +1,9 @@
 # Metre UI 打磨（在现有设计上优化，不推倒重来）
 
-## 接力卡（最后更新：2026-11-23 19:45，Quick-Win-r5ui @ Windows）
+## 接力卡（最后更新：2026-11-23 20:55，Quick-Win-r5ui @ Windows，交接给新会话）
 
-- 状态：进行中（补丁已应用、测试 / 门禁 / 注入对照 / 截图对比都过了；**真页面的进场 / 换会话截图还没截**）
-- 分支和 PR：`feat/metre-ui-polish`（从 origin/main `402f2dc2` 切），草稿 PR 见分支页
+- 状态：进行中（补丁三轮已提交推送、自查都过了；**整页动画在重新设计，第三版「总谱」原型用户说「方向对，细节要调」，还没落进代码**）
+- 分支和 PR：`feat/metre-ui-polish`，草稿 PR #67（https://github.com/Cle0726/super-pinkie/pull/67）。提交 `5824a665`（三轮补丁 + ref 截图）、本次提交（接力卡 + `prototype/`）。
 - 已完成：
   1. 接手时发现 worktree `C:\Users\34786\Projects\pinkie-wt\metre-ui` 已经建好（11-23 01:24，停在 `402f2dc2`、干净、补丁没打）；main 没动过，直接在上面 `git apply --3way` 了上一个会话的补丁（12 个文件，反向检查通过，`git diff --check` 干净），截图拷进 `ref/`。
   2. 相关测试（隔离：HOME / USERPROFILE / APPDATA / LOCALAPPDATA / TEMP 都指到 `build\quick-run\mui\iso\`）：`metre-skin-cat` 30/30、`metre-real-app-ui` 7/7、`metre-ui-wording` 3/3、`metre-board` 14/14、`metre-quiet` 7/7、`code-health-ratchet` 3/3。
@@ -12,22 +12,34 @@
   5. 注入对照：改前（未打补丁的同一 worktree）和改后各跑 `node tools/metre/inject-inventory.mjs --json main project thinking learning unrestricted metre`，六个模式逐字一致（只有随机临时目录名不同）。
   6. 截图：`visual-baseline` 在 Windows 上只渲染不比对，所以另用仓库自己的截图工具（`tests/visual/lib/harness.mjs`）在 main 副本和本批各截 24 张，逐像素比：**24 张全部 0 px**；本批连截两遍也是 0 px。截图基线不用动。
   7. 护栏反例：在 `laolao-night.css` 加一处 `!important`，棘轮测试报「461 → 462」失败，马上还原、`git diff` 干净。`measure.mjs --write-baseline` 拒绝写入（列出 dom-watch / game-* 等靠例外放行的增长），**main 副本上一模一样**，不是本批的问题；棘轮测试用上一个会话手算的基线是过的，基线不用再改。
-- 正在做：第 6 步，真页面看效果（首页进场、换会话、切进 Metre 时预备拍和页面登场是不是同一拍；日间 / 夜间）。
+  8. 预览页（真 App 的原生界面 + 本 worktree 注入 + 假网关）给用户在 Chrome 里看了补丁里的进场 / 换会话。用户：「和 Son Daven 比设计不怎么样」。
+  9. 研究参考站：Awwwards 那页的 5 段亮点视频逐帧看过（它用 GSAP + SplitText + Lenis + Barba；整站一套从自己 IP 长出来的「竖线」语言：电平表式竖条换页、竖线网点画图、文字散开归位、两色）。
+  10. 第二版（照搬竖线）被用户否了：「完全就是抄袭，根据 IP 自己设计一套，这个线条明显不合适」。**只学方法（一套从自己 IP 长出来的图形语言、一次一个大动作、慢而稳），不学外形。**
+  11. 第三版「总谱」（全用 Metre 自己的东西：五线谱、小节线、音符、指挥棒、像素 M 当谱号、谱台灯、♩=72）：原型在 `briefs/metre-ui-polish-1123/prototype/`（说明见那里的 README）。用户 11-23 20:54 的反馈：
+     - 切进 Metre：「可以不错，但是还可以让人眼前一亮，设计挺新颖」；**小猫去掉**；再稍微优化一下。
+     - 换会话：「太白了，没有设计感」——要重做。
+     - 首页亮灯、引导语：没提意见（保留现在的做法）。
+- 正在做：交接。
 - 下一步：
-  1. 用 `scripts/chat-ui-harness` 的思路（构建产物里的原生 control-ui + 本 worktree 的注入 + 页面内假网关）在本机 Chrome 里开 Metre，按接力卡「踩过的坑」里的办法（`animation.pause()` + `currentTime`，截图时拦住 1.7s 收尾和 417ms 引导语两个定时器）定格截图，放 `ref/real/`。
-  2. 截完更新本卡、推送；然后问用户上一个会话的最后一个问题（见下）。
-- 没推送的东西：无（截图草稿在 `F:\Projects\super-pinkie\build\quick-run\mui\shots\`，是对比用的中间产物，不进仓库）。
-- 环境：本会话（AWS Quick）不能直接起进程，靠自己拉起的三个跑腿窗口执行命令：`build\quick-run\runner-ui\`（顺序）、`runner-ui2\`（门禁）、`runner-uic\`（并行，最多 4 个），窗口标题都带「metre-ui-polish」，关掉窗口就停。脚本在 `build\quick-run\mui\`。main 的只读副本 `C:\Users\34786\Projects\pinkie-wt\metre-ui-base`（分离头 `402f2dc2`），收工时 `git worktree remove`。没开端口（截图工具的本地服务随用随关），没碰 18789。
+  1. 读 `prototype/README.md`，在本机 `F:\Projects\super-pinkie\build\quick-run\mui\` 里起预览服务（见交接提示词「怎么用跑腿」），在 Chrome 里打开 `v=3` 看现状。
+  2. 改原型（只改 `build\quick-run\mui\v3.js / v3.css`，不碰仓库）：
+     - 切进 Metre：去掉小猫；想一两个让人「眼前一亮」的点（例如落拍那一下要有一个真正的高潮），节奏再打磨。
+     - 换会话：重做，不能再是白底 + 一根线。仍用总谱语言，要有画面感（例如整页像谱纸翻到下一页、谱线和小节号做主角、旧内容被「收进」上一小节）。先给用户两三个方向选（决策卡），再做。
+  3. 每改一版：无头录帧（`film-ours.js`）自己先看，再在 Chrome 里给用户看；用户点头才落进代码。
+  4. 落进代码时：`laolao-metre-transition.js`（行数锁在基线上，要在同文件里删等量旧代码）、`laolao-metre-home.js`、skin；指挥台位置改读 `buildScene` 的锚点，不从像素里猜；减少动效时全不做；每个已有注入文件不许变长，新文件要进 head fragment（`feat/metre-engines` 也在改 head fragment，会冲突，先看它合了没有）。然后重跑全套自查（见「已完成」2–7），截图、更新本卡、推送。
+  5. 用户还定了：总谱「做完」和「其他」两个颜色**拉开**（还没改，等动画定了一起做）。
+- 没推送的东西：预览原型的活副本和录帧在 `F:\Projects\super-pinkie\build\quick-run\mui\`（`build\` 不进 git；存档已拷进 `prototype/`）。参考站的逐帧拼图在 `mui\film\_sheets\`、视频在 `mui\film\awww\`（别人的作品，不进仓库）。第二版（作废）在 `mui\v2.js / v2.css`。
+- 环境：本会话（AWS Quick）不能直接起进程，靠自己拉起的三个跑腿窗口：`build\quick-run\runner-ui\`（顺序）、`runner-ui2\`（门禁）、`runner-uic\`（并行，最多 4 个）。窗口标题带「metre-ui-polish」，关掉窗口就停。main 的只读副本 `C:\Users\34786\Projects\pinkie-wt\metre-ui-base`（分离头 `402f2dc2`，对照用，收工时 `git worktree remove`）。预览服务开在 127.0.0.1 的 5191 / 5192 / 5193（一小时后自己停）；没碰 18789。
 - 正在跑的长操作：无。
 - 踩过的坑（本会话）：
-  - 浏览器测试不能把 USERPROFILE / HOME 指到隔离目录：Chrome 会立刻退出（「Target page, context or browser has been closed」）；把 LOCALAPPDATA 指过去时 Edge 报「DevTools remote debugging requires a non-default data directory」。浏览器测试只隔离 TEMP 和 APPDATA。
-  - 全量门禁别带 `NODE_PATH`、别改 LOCALAPPDATA，不然和 `polish-gate-base.txt` 的口径不一样，对不上（带了的那次是 25 条失败，不能拿来比）。
-  - 跑腿正在跑任务时不会刷新 `alive.json`（「running …」那条可能是几分钟前写的），看 `results\` 里有没有结果文件才准。
-  - 往别的会话的跑腿队列里放任务前先看它忙不忙：跑腿 2 在跑别人的门禁时，排进去的任务要等十几分钟，还会占别人的队列。
+  - 浏览器测试不能把 USERPROFILE / HOME / LOCALAPPDATA 指到隔离目录（Chrome 直接退出、Edge 要求非默认资料目录），只隔离 TEMP 和 APPDATA；`metre-board-scroll-e2e` 只认 WebKit，这台机器没有，记「没测（需 Mac）」。
+  - 全量门禁的口径要和 `build\quick-run\polish-gate-base.txt` 一样（只改 HOME / USERPROFILE / APPDATA / TEMP / TMP，不带 NODE_PATH），否则对不上。
+  - 跑腿在跑任务时 `alive.json` 不一定刷新，以 `results\` 里有没有结果文件为准；别往别的会话的跑腿队列里放东西。
+  - 预览页刚打开会先闪一下再进场（旧版也有），落进代码时一起修。
+  - 和用户说中文：本会话两次不小心用英文回复，用户只回了「？」。
 - 待用户决定：
-  - 总谱里「做完」（`#8A8478`）和「其他」（`#7A7468`）颜色接近，要不要拉开。
   - 首页画带在很矮的窗口里最矮 144px，够不够。
-  - 上一个会话最后的问题：接下来是在真 App 里看效果，还是先调整动画的节奏 / 样子，还是再加整页动画的时刻（打开总谱、发第一条消息）。
+  - 换会话的新方向（下一步 2 里先给选项）。
 
 ## 前三轮的接力卡（Quick-Win-m7u3，原样保留）
 
