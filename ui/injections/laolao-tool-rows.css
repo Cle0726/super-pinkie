@@ -74,9 +74,12 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run::after {
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[aria-expanded="true"]::after { transform: rotate(90deg); }
 /* 正在进行的那一组：圆点呼吸；步数增加时轻轻一跳 */
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-active] i { animation: tr-breathe 1.4s ease-in-out infinite; }
+/* 正在跑命令（执行、测试）：圆点换成一闪一闪的终端光标，占的宽度和圆点一样，后面的字不挪 */
+html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-active]:is([data-kind="exec"], [data-kind="test"]) i { width: 6px; height: 11px; margin: 0 2.5px 0 3.5px; border-radius: 1.5px; animation: tr-cursor 1.05s steps(1) infinite; }
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .cle-run[data-bump] b { animation: tr-bump .5s cubic-bezier(.34, 1.56, .64, 1); }
 @keyframes tr-breathe { 50% { opacity: .35; transform: scale(.7); } }
 @keyframes tr-bump { 40% { transform: translateY(-2px); opacity: 1; } }
+@keyframes tr-cursor { 56% { opacity: .2; } }
 
 /* 新出场的步骤依次淡入 */
 html:not(#p1):not(#p2):not(#p3) .pinkie-process .pinkie-process__rows > .chat-group[data-cle-enter] {
