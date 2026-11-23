@@ -241,3 +241,39 @@ test('讲题等待模型时合并重复请求，讲完缓存；限流会明确�
   assert.match(fail.error, /限流或额度不足/);
   assert.equal(calls, 2, '限流时不立即重复请求');
 });
+
+test('按模块/题型独立保存进度与未提交草稿，切模块互不覆盖，支持重开与放弃', async t => {
+  const {game} = gameFixture(t);
+  install(game, [paper('real-2020-06'), paper('real-2019-06', {year: 2019}), paper('real-2018-06', {year: 2018}), paper('real-2017-06', {year: 2017})]);
+  const pr = game.modules.practice;
+  const sRead = pr.start({mode: 'module', module: 'reading', requestId: 'pm-r1'});
+  await pr.answer({setId: sRead.setId, itemId: sRead.items[0].itemId, answer: 0});
+  const tm = sRead.items.find(x => x.qkind === 'term-match');
+  pr.saveDraft({setId: sRead.setId, drafts: {[tm.itemId]: 'A'}, crossed: {[tm.material]: ['B']}, cursor: sRead.items.indexOf(tm), replace: true});
+
+  const sWrite = pr.start({mode: 'module', module: 'writing', requestId: 'pm-w1'});
+  pr.saveDraft({setId: sWrite.setId, drafts: {[sWrite.items[0].itemId]: 'Dear Sir, draft...'}, cursor: 0, replace: true});
+
+  const sRand = pr.start({mode: 'random', count: 5, requestId: 'pm-rand1'});
+  await pr.answer({setId: sRand.setId, itemId: sRand.items[0].itemId, answer: 0});
+
+  const ov = pr.overview();
+  assert.equal(ov.inProgress.length, 3);
+  assert.equal(ov.modules.find(m => m.id === 'reading').open.setId, sRead.setId);
+  assert.equal(ov.modules.find(m => m.id === 'writing').open.draftCount, 1);
+  assert.equal(ov.random.open.setId, sRand.setId);
+
+  const resumed = pr.start({mode: 'module', module: 'reading', requestId: 'pm-r2'});
+  assert.equal(resumed.setId, sRead.setId);
+  assert.equal(resumed.resumed, true);
+  assert.equal(resumed.drafts[tm.itemId], 'A');
+  assert.deepEqual(resumed.crossed[tm.material], ['B']);
+
+  const freshWrite = pr.start({mode: 'module', module: 'writing', fresh: true, requestId: 'pm-w2'});
+  assert.notEqual(freshWrite.setId, sWrite.setId);
+  assert.equal(pr.overview().modules.find(m => m.id === 'reading').open.setId, sRead.setId, '重开写作不影响阅读进度');
+
+  pr.abandon({setId: sRand.setId});
+  assert.equal(pr.overview().random.open, null);
+  assert.equal(pr.overview().modules.find(m => m.id === 'reading').open.setId, sRead.setId);
+});

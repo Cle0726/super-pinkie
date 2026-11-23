@@ -192,7 +192,14 @@
   // ───────────── 守关战（gameguard）：后端判分的单选卷 ─────────────
   function mountGuard(host, ctx) {
     const g = G(); const local = ctx.local?.() || {};
-    const opts = local.guardRoute || local.gameOpts || {};
+    const GUARD_STORE_KEY = 'pinkie-guard-resume-v1';
+    const readGuardStore = () => { try { const raw = JSON.parse(localStorage.getItem(GUARD_STORE_KEY) || 'null'); return raw?.payload?.attemptId ? raw : null; } catch { return null; } };
+    const saveGuardStore = v => { try { localStorage.setItem(GUARD_STORE_KEY, JSON.stringify({...v, at: Date.now()})); } catch { /* ignore */ } };
+    const clearGuardStore = () => { try { localStorage.removeItem(GUARD_STORE_KEY); } catch { /* ignore */ } };
+    const routeOpts = local.guardRoute || local.gameOpts || null;
+    const savedGuard = !routeOpts?.payload?.items?.length ? readGuardStore() : null;
+    const opts = routeOpts?.payload?.items?.length ? routeOpts : (savedGuard || {});
+    if (savedGuard && local) local.guardRoute = savedGuard;
     host.classList.add('pkb-guard');
     // 跟背一背同一套作答页：顶上一条状态条，下面一栏（最宽 760）题型小字 → 题干 → 选项 → 反馈卡。
     const top = el('header', 'pk-drill-top pkb-top pkb-guard__top');
@@ -204,29 +211,41 @@
     const backName = v => desk()?.backName?.(v) || ({today: '回营地', gamemap: '回地图', gamehunt: '回讨伐', stage: '回舞台'}[v] || '返回');
     // 注意 go() 没有返回值：以前写成 `ctx.go?.(…) ?? desk().go('today')`，回了地图又被拽回营地。
     const leaveNow = () => (ctx.go ? ctx.go(backTo()) : desk()?.go(backTo()));
-    // 做到一半退出要问一句（和讨伐一样）：守关卷不能接着做，退了这次就不算。
-    let finished = false, asking = false, i = 0;
+    const payload = opts.payload;
+    const items = payload?.items || [];
+    const doneIds = new Set(Array.isArray(payload?.doneIds) ? payload.doneIds : []);
+    let finished = false, asking = false;
+    let i = items.findIndex(it => !doneIds.has(it.itemId));
+    if (i < 0) i = items.length;
+    let right = Number(payload?.rightCount) || 0, combo = Number(payload?.combo) || 0;
+    const syncGuardStore = () => {
+      if (finished || !payload?.attemptId) return;
+      const nextPayload = {...payload, doneIds: [...doneIds], rightCount: right, combo, resumed: true};
+      opts.payload = nextPayload;
+      saveGuardStore({node: opts.node || null, payload: nextPayload});
+    };
     const askLeave = () => {
-      if (finished || i === 0 || !payload?.items?.length) { leaveNow(); return; }
+      if (finished || (!doneIds.size && i === 0) || !items.length) { leaveNow(); return; }
       if (asking) return; asking = true;
+      syncGuardStore();
       const dialog = el('dialog', 'lesson-dialog pk-drill-ask'); dialog.setAttribute('aria-label', '退出守关战');
-      dialog.append(el('p', '', `守关卷做到第 ${Math.min(i + 1, items.length)} / ${items.length} 题。现在退出，这次不算，下次重新出卷。`));
+      dialog.append(el('p', '', `守关卷做到第 ${Math.min(i + 1, items.length)} / ${items.length} 题（已答 ${doneIds.size} 题）。进度已自动保存，下次点守关可从这里接着打。`));
       const row = el('div', 'pk-done-actions');
       const stay = el('button', 'pk-btn', '接着打'); stay.type = 'button'; stay.dataset.kind = 'go'; stay.addEventListener('click', () => dialog.close('stay'));
-      const quit = el('button', 'pk-link', `退出，${backName(backTo())}`); quit.type = 'button'; quit.addEventListener('click', () => dialog.close('leave'));
+      const quit = el('button', 'pk-link', `先放着，${backName(backTo())}`); quit.type = 'button'; quit.addEventListener('click', () => dialog.close('leave'));
       row.append(stay, quit); dialog.append(row); host.append(dialog); dialog.showModal(); stay.focus();
       dialog.addEventListener('close', () => { asking = false; const go = dialog.returnValue === 'leave'; dialog.remove(); if (go) leaveNow(); }, {once: true});
     };
     back.addEventListener('click', askLeave);
     back.setAttribute('aria-label', `退出守关战，${backName(backTo())}`); back.title = back.getAttribute('aria-label');
-    const payload = opts.payload;
-    if (!payload?.items?.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
+    if (!items.length) { host.append(el('p', 'pkb-empty', '守关卷还没准备好。回地图再点一次守关。')); return; }
+    syncGuardStore();
     const a = arena({form: g.equippedForm(), strip: true}); top.append(a.root);
     a.setEnemy({kind: 'guard', species: GUARDIAN[opts.node?.region] || 'fog-puff', name: `${REGION_NAME[opts.node?.region] || '区域'} · 守卫`, level: 3, note: opts.node?.name || ''});
-    a.setHp(1, {instant: true}); a.setCombo(0);
+    a.setHp(1 - right / items.length, {instant: true}); a.setCombo(combo);
     const stage = el('div', 'pk-drill-stage pkb-guard__stage'); const qWrap = el('section', 'pk-drill-col pkb-guard__q'); stage.append(qWrap); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
-    const items = payload.items; let right = 0, combo = 0, busy = false, alive = true, picked = null;
+    let busy = false, alive = true, picked = null;
     const paint = () => { count.textContent = `${Math.min(i + 1, items.length)} / ${items.length}`; };
     function show() {
       paint(); qWrap.replaceChildren();
@@ -264,7 +283,9 @@
       if (!alive) return;
       host.dataset.feedbackMs = String(Math.round(performance.now() - t0));
       b.classList.remove('is-lock'); buttons[r.answer]?.classList.add('is-answer'); if (!r.correct) b.classList.add('is-wrong');
+      doneIds.add(items[i].itemId);
       if (r.correct) { right++; combo = r.combo ?? combo + 1; a.strike({crit: Boolean(r.crit), damage: r.damage || 100}); } else { combo = 0; a.dodge(); }
+      syncGuardStore();
       a.setCombo(combo); a.setHp(1 - right / items.length);
       if (r.correct && combo > 0 && combo % a.threshold === 0) a.ult(combo);
       qWrap.querySelector('.pk-drill-bar')?.remove();
@@ -304,6 +325,7 @@
     }
     async function finish() {
       finished = true;
+      clearGuardStore();
       qWrap.replaceChildren(el('p', 'pkb-empty', '结算中…'));
       try {
         const r = await g.call('guard.finish', {attemptId: payload.attemptId});
@@ -324,11 +346,15 @@
       } catch (e) { qWrap.replaceChildren(el('p', 'pkb-empty', e.message || '结算失败，再点一次')); }
     }
     show();
-    return {unmount() { alive = false; }, keydown(event) {
+    return {unmount() { syncGuardStore(); alive = false; }, keydown(event) {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'Escape') { event.preventDefault(); askLeave(); return; }
       if (host.querySelector('dialog[open]')) return;
-      const key = String(event.key || '').toLowerCase(); const n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
+      const key = String(event.key || '').toLowerCase();
+      const code = String(event.code || '');
+      let n = /^[1-4]$/.test(key) ? Number(key) : 'abcd'.indexOf(key) + 1;
+      if (n <= 0 && /^(?:Digit|Numpad)[1-4]$/.test(code)) n = Number(code.slice(-1));
+      else if (n <= 0 && /^Key[A-D]$/.test(code)) n = code.charCodeAt(3) - 64;
       if (n >= 1 && n <= 4 && !qWrap.querySelector('.pk-sheet, .pkb-guard__explain')) { event.preventDefault(); qWrap.querySelectorAll('.pkb-opt')[n - 1]?.click(); return; }
       if (event.key === 'Enter') {
         if (event.target?.closest?.('.pk-drill-check, .pk-sheet .pk-btn, .pkb-guard__explain .pk-btn')) return;

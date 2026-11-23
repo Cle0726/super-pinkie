@@ -42,6 +42,30 @@
   }
   function hi(text, reduced) { return `<span class="pk-hl${reduced ? '' : ' pk-anim'}">${esc(text)}</span>`; }
   function scopeKey(scope) { try { return JSON.stringify(scope || null); } catch { return ''; } }
+  const DRILL_STORE_KEY = 'pinkie-drill-progress-v1';
+  const drillBucket = (source, scope) => `${String(source || 'mixed')}:${scopeKey(scope)}`;
+  function readDrillStore() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DRILL_STORE_KEY) || 'null');
+      if (!raw || typeof raw !== 'object') return {};
+      const now = Date.now(), out = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (!v?.sessionId || !Array.isArray(v.queue) || !v.queue.length) continue;
+        if (now - (v.savedAt || 0) > 14 * 86400000) continue;
+        out[k] = v;
+      }
+      return out;
+    } catch { return {}; }
+  }
+  function writeDrillStore(map) {
+    try {
+      const entries = Object.entries(map || {}).sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0)).slice(0, 20);
+      localStorage.setItem(DRILL_STORE_KEY, JSON.stringify(Object.fromEntries(entries)));
+    } catch { /* 空间满了就这次不记 */ }
+  }
+  function loadDrillBucket(bucket) { return readDrillStore()[bucket] || null; }
+  function saveDrillBucket(bucket, snap) { const m = readDrillStore(); m[bucket] = {...snap, savedAt: Date.now()}; writeDrillStore(m); }
+  function clearDrillBucket(bucket) { const m = readDrillStore(); if (bucket in m) { delete m[bucket]; writeDrillStore(m); } }
 
   const base = (mode, fields) => ({itemId: mode, cardRef: {book: mode === 'look' || mode === 'flip' || mode === 'choice' || mode === 'truefalse' || mode === 'cloze' || mode === 'pairs' || mode === 'order' || mode === 'write' ? 'notes' : 'vocab', noteId: 'n-' + mode, wordId: 'w-' + mode, recallId: 'r-' + mode}, mode, strength: 1, answer: '', reveal: {question: '', answer: ''}, ...fields, itemId: mode});
   const FIXTURES = {
@@ -156,8 +180,19 @@
       return 'notes';
     }
     function backLabel() { return window.__pinkieStudyDesk?.backName?.(destination()) || RETURN_LABEL[destination()] || '返回'; }
-    function snapshot() {
-      local.drillSaved = {source: route.source, scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
+    const bucket = drillBucket(route.source || 'mixed', route.scope);
+    function snapshot(nextIndex = null) {
+      if (route.demo || phase === 'over' || !sessionId || !queue.length) return;
+      const idx = Number.isInteger(nextIndex) ? nextIndex : (phase === 'sheet' ? index + 1 : index);
+      if (idx <= 0 && !correctIds.size && !firstDone.size) return;
+      if (idx >= queue.length) return;
+      const snap = {source: route.source || 'mixed', scope: route.scope, size: route.size, returnTo: route.returnTo, task: route.task, sessionId, queue, index: idx, combo, maxCombo, stars, pendingN, original, startedAt, correct: [...correctIds], first: [...firstDone], firstRight: [...firstRight]};
+      local.drillSaved = snap;
+      saveDrillBucket(bucket, snap);
+    }
+    function clearSaved() {
+      if (sameSaved(local.drillSaved)) local.drillSaved = null;
+      clearDrillBucket(bucket);
     }
     async function rpc(name, params, timeout) {
       try { return await ctx.request('pinkie.learning.drill.' + name, params || {}, timeout || 20000); }
@@ -527,6 +562,7 @@
       R.sticker(stickerHost, result.correct ? (combo >= 3 ? 'combo' : 'cheer') : 'oops');
       if (result.shake) shake(result.shake);
       phase = 'sheet'; busy = false; check.hidden = true; bar.hidden = true;
+      snapshot(index + 1);
       const kind = result.kind || (result.correct ? 'right' : 'wrong');
       sheetApi = R.feedbackSheet(col, {kind, title: result.title, line: result.line, answerHtml: result.answerHtml, missing: result.missing, silent: result.silent, onContinue: advance});
       attachExplain(sheetApi?.sheet, item, result);
@@ -563,6 +599,7 @@
     function advance() {
       sheetApi = null; index += 1;
       if (index >= queue.length) return maybeFinish();
+      snapshot(index);
       check.hidden = false; show();
     }
     async function maybeFinish() {
@@ -572,7 +609,7 @@
       let summary;
       try { summary = route.demo ? demoSummary() : await rpc('finish', {sessionId}); }
       catch (error) { summary = localSummary(); live.textContent = (error.message || '') + '。' + lines().failed; }
-      local.drillSaved = null;
+      clearSaved();
       try { battle?.finish(summary); } catch { /* 同上 */ }
       showDone(summary);
     }
@@ -620,7 +657,7 @@
         if (go) { snapshot(); goBack(); }
       }, {once: true});
     }
-    function sameSaved(saved) { return saved && saved.source === route.source && scopeKey(saved.scope) === scopeKey(route.scope); }
+    function sameSaved(saved) { return saved && (saved.source || 'mixed') === (route.source || 'mixed') && scopeKey(saved.scope) === scopeKey(route.scope); }
     function resume(saved) {
       sessionId = saved.sessionId; queue = saved.queue || []; index = saved.index || 0; combo = saved.combo || 0; maxCombo = saved.maxCombo || combo; stars = saved.stars || 0;
       pendingN = saved.pendingN || 0; original = saved.original || queue.length; startedAt = saved.startedAt || Date.now();
@@ -635,12 +672,14 @@
     }
     function askResume(saved) {
       phase = 'ask';
-      q.replaceChildren(el('h3', 'pk-drill-stem', '接着上次那组？'), el('p', 'pk-drill-extra', '进度还在这一页上。'));
+      const total = saved.original || saved.queue?.length || 0;
+      const done = saved.correct?.length || Math.min(saved.index || 0, total);
+      q.replaceChildren(el('h3', 'pk-drill-stem', '接着上次那组？'), el('p', 'pk-drill-extra', total ? `已完成 ${done} / ${total}，进度已自动保存。` : '进度还在这一页上。'));
       const row = el('div', 'pk-done-actions');
       const yes = el('button', 'pk-btn', `接着${VERB}`); yes.type = 'button'; yes.dataset.kind = 'go';
       const no = el('button', 'pk-link', '重新开始'); no.type = 'button';
       yes.addEventListener('click', () => resume(saved));
-      no.addEventListener('click', () => { local.drillSaved = null; openFresh(); });
+      no.addEventListener('click', () => { clearSaved(); openFresh(); });
       row.append(yes, no); q.append(row); check.hidden = true;
     }
     async function openFresh() {
@@ -701,16 +740,20 @@
       // A–D 也能选（只在选择题，且焦点不在输入框里）。
       if (phase === 'ask' && /^[a-i]$/i.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey && CHOICE_MODES.has(queue[index]?.mode) && !event.target?.closest?.('input,textarea')) { event.preventDefault(); pickAt('abcdefghi'.indexOf(event.key.toLowerCase())); }
     }
-    const saved = local.drillSaved;
+    const onHide = () => { if (document.hidden) snapshot(); };
+    const onPageHide = () => { snapshot(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    const saved = loadDrillBucket(bucket) || (sameSaved(local.drillSaved) ? local.drillSaved : null);
     if (route.demo) {
       route.items = route.items || [structuredClone(FIXTURES.choice), {...structuredClone(FIXTURES.choice), itemId: 'choice-2', prompt: 'for 循环里 continue 会怎样？', options: ['结束整个循环', '跳过这一次', '从头再来', '什么也不做'], answer: 1}];
       openFresh();
     } else if (!route.force && sameSaved(saved)) askResume(saved);
     else openFresh();
 
-    return {unmount() { alive = false; try { battle?.detach(); } catch { /* 同上 */ } clearTimeout(restId); window.speechSynthesis?.cancel(); root.querySelectorAll('dialog').forEach(d => { d.close(); d.remove(); }); R.stop?.(); },
+    return {unmount() { snapshot(); alive = false; document.removeEventListener('visibilitychange', onHide); window.removeEventListener('pagehide', onPageHide); try { battle?.detach(); } catch { /* 同上 */ } clearTimeout(restId); window.speechSynthesis?.cancel(); root.querySelectorAll('dialog').forEach(d => { d.close(); d.remove(); }); R.stop?.(); },
       keydown: onKey,
-      pause() { window.speechSynthesis?.cancel(); },
+      pause() { snapshot(); window.speechSynthesis?.cancel(); },
       resume() {}};
   }
 

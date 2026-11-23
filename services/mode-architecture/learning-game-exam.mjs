@@ -205,12 +205,18 @@ export class GameExam {
     const tries = id => Object.values(ex.attempts).filter(a => a.paperId === id);
     const best = id => { const s = tries(id).map(a => a.result?.score).filter(Number.isFinite); return s.length ? Math.max(...s) : null; };
     const lastSubmitted = id => tries(id).filter(a => a.submittedAt).sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))[0]?.attemptId || null;
+    const openInfo = id => {
+      const a = tries(id).find(x => !x.submittedAt);
+      if (!a) return {open: false, openDone: 0};
+      const done = Object.values(a.answers || {}).filter(v => v != null && v !== '').length;
+      return {open: true, openDone: done};
+    };
     const isReal = p => ['real', 'mock'].includes(p.kind);
     const list = Object.values(ex.papers).filter(p => p.exam === exam && !isReal(p)).sort((a, b) => b.createdAt - a.createdAt)
-      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt), lastAttemptId: lastSubmitted(p.paperId)}));
+      .map(p => ({paperId: p.paperId, title: p.title, createdAt: p.createdAt, status: p.status, attempts: tries(p.paperId).length, best: best(p.paperId), ...openInfo(p.paperId), lastAttemptId: lastSubmitted(p.paperId)}));
     const real = Object.values(ex.papers).filter(p => p.exam === exam && isReal(p) && p.status === 'ready')
       .sort((a, b) => (a.kind === b.kind ? (b.year * 100 + b.month) - (a.year * 100 + a.month) || a.paperId.localeCompare(b.paperId) : a.kind === 'real' ? -1 : 1))
-      .map(p => ({paperId: p.paperId, kind: p.kind, year: p.year, month: p.month, title: p.title, audio: Boolean(p.audio) && Boolean(this.audioPresent(p.paperId)), items: p.items, attempts: tries(p.paperId).length, best: best(p.paperId), open: tries(p.paperId).some(a => !a.submittedAt), lastAttemptId: lastSubmitted(p.paperId)}));
+      .map(p => ({paperId: p.paperId, kind: p.kind, year: p.year, month: p.month, title: p.title, audio: Boolean(p.audio) && Boolean(this.audioPresent(p.paperId)), items: p.items, attempts: tries(p.paperId).length, best: best(p.paperId), ...openInfo(p.paperId), lastAttemptId: lastSubmitted(p.paperId)}));
     this.keepSpare(exam);
     this.realTick();
     for (const [id] of this.jobs) if (!list.some(p => p.paperId === id)) list.unshift({paperId: id, title: '碧琪正在出卷…', createdAt: this.now(), status: 'generating', attempts: 0});
@@ -306,17 +312,41 @@ export class GameExam {
         const id = `att-${randomUUID()}`;
         attempt = ex.attempts[id] = {attemptId: id, paperId: full.paperId, exam: full.exam, startedAt: this.now(), endsAt: this.now() + minutes * 60000, answers: {}};
       }
-      return {attemptId: attempt.attemptId, paper: publicPaper(full), endsAt: attempt.endsAt, answers: attempt.answers, resumed: Boolean(open), title: full.title || null, kind: real ? full.kind : 'sim'};
+      return {attemptId: attempt.attemptId, paper: publicPaper(full), endsAt: attempt.endsAt, answers: attempt.answers, meta: attempt.meta || null, savedAt: attempt.savedAt || 0, resumed: Boolean(open), title: full.title || null, kind: real ? full.kind : 'sim'};
     });
     // 录音 key 每次现发（同一 requestId 重放也拿新 key），不进状态文件
     return real ? {...res, audio: this.audioFor(full)} : res;
   }
-  save({attemptId, answers = {}} = {}) {
+  save({attemptId, answers = {}, replace = false, meta = null} = {}) {
     return this.game.mutate(state => {
       const a = this.ensure(state).attempts[clean(attemptId, 80)];
       if (!a) throw new Error('这场考试不在了');
       if (a.submittedAt) throw new Error('已经交卷了');
-      for (const [k, v] of Object.entries(answers || {}).slice(0, 200)) a.answers[clean(k, 40)] = typeof v === 'number' ? v : clean(v, 3000);
+      const next = replace ? {} : {...(a.answers || {})};
+      for (const [k, v] of Object.entries(answers || {}).slice(0, 200)) {
+        const key = clean(k, 40);
+        if (!key) continue;
+        if (v == null || v === '') { delete next[key]; continue; }
+        next[key] = typeof v === 'number' ? v : clean(v, 3000);
+      }
+      a.answers = next;
+      if (meta && typeof meta === 'object') {
+        const cleanMeta = {};
+        if (Number.isInteger(meta.cur) && meta.cur >= 0 && meta.cur < 20) cleanMeta.cur = meta.cur;
+        if (Array.isArray(meta.flags)) cleanMeta.flags = [...new Set(meta.flags.map(x => clean(x, 40)).filter(Boolean))].slice(0, 120);
+        if (meta.crossed && typeof meta.crossed === 'object') {
+          const c = {};
+          for (const [k, arr] of Object.entries(meta.crossed).slice(0, 20)) {
+            if (!Array.isArray(arr)) continue;
+            const list = [...new Set(arr.map(x => clean(x, 2).toUpperCase()).filter(x => /^[A-Z]$/.test(x)))];
+            if (list.length) c[clean(k, 60)] = list;
+          }
+          cleanMeta.crossed = c;
+        }
+        const atSec = Number(meta.audioTime);
+        if (Number.isFinite(atSec) && atSec >= 0) cleanMeta.audioTime = Math.round(atSec * 10) / 10;
+        a.meta = cleanMeta;
+      }
       a.savedAt = this.now();
       return {savedAt: a.savedAt};
     });

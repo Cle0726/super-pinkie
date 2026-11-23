@@ -231,7 +231,7 @@ PART = {"id":"原卷小节名，如 A / B / C / D / Task 1","kind":kinds 之一,
 - choice / passage-choice / translate-choice：{"no","stem":"题干（填空处写 ____）","options":[原卷全部选项，不带 A) 前缀；翻译选择通常只有 A–C 三个],"answer":选项下标,"why":"官方解析要点，30 字内中文"}；passage-choice 的 material 写整篇短文
 - word-form：{"no","stem":"含 ____ 的句子","base":"括号里给的词","answer":["官方答案","可接受写法"],"why":""}
 - passage-short（读短文完成句子 / 回答问题）：material 写短文；{"no","stem":"问题或待完成句子","answer":["官方答案","可接受写法"]}
-- term-match（术语 / 标识英汉配对）：material 写原卷全部候选项，每行「A — 英文」或「A — 中文」，保持原卷字母；每个空单独一个 item {"no","stem":"另一侧的内容","answer":"一个候选字母"}。原卷一个题号有两个空（如「53. ( ) 企业文化 ( ) 质量管理」）时拆成两个 item，题号相同。
+- term-match（术语 / 标识英汉配对）：material 写原卷全部候选项，每行「A — 英文」或「A — 中文」，保持原卷字母；若原卷印有 Examples 示例行（如「Examples: (D) 门诊部  (O) 预期寿命」），原样附在 material 末尾一行「Examples: (X) 中文1  (Y) 中文2」；每个空单独一个 item {"no","stem":"另一侧的内容","answer":"一个候选字母"}。原卷一个题号有两个空（如「53. ( ) 企业文化 ( ) 质量管理」）时拆成两个 item，题号相同。
 - practical-fill（实用文填表 / 简答）：material 写实用文全文；{"no","stem":"表格项或问题","answer":["官方答案","可接受写法"]}
 - translate-passage：{"no","stem":"要翻译的英文原文","reference":"官方参考译文","rubric":"评分要点：准确 / 通顺 / 关键词"}
 - writing：{"no","stem":"原卷写作要求（中文提示和格式要求全文）","reference":"官方范文","rubric":"五档评分要点和必备格式要件"}

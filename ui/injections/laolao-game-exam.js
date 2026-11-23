@@ -24,12 +24,27 @@
   const fmtScore = n => (Math.round(n * 10) / 10).toString();
   const latin = (node, text) => { if (/^[\x00-\x7F\u2018-\u201D\u2013\u2014\u2026]*$/.test(String(text || ''))) node.lang = 'en'; return node; };
 
-  // 术语配对：从卷面术语表（A — ... 到 Q/T — ...）解析英文术语列表与真实可选字母
+  // 术语配对：从卷面术语表（A — ... 到 Q/T — ...）解析英文术语列表、原卷 Examples 提示与真实可选字母
   function parseTermList(material) {
     const out = [];
     for (const line of String(material || '').split(/\n+/)) {
       const m = /^\s*([A-Z])\s*[—\-–:：.)）]\s*(.+)$/.exec(line);
       if (m && !out.some(x => x.letter === m[1])) out.push({letter: m[1], text: m[2].trim()});
+    }
+    return out;
+  }
+  function parseTermExamples(material) {
+    const out = [];
+    for (const line of String(material || '').split(/\n+/)) {
+      const m = /^\s*Examples?\s*[:：]\s*(.+)$/i.exec(line);
+      if (!m) continue;
+      const re = /[（(]\s*([A-Z])\s*[）)]\s*([^（()）\n]+)/g;
+      let hit;
+      while ((hit = re.exec(m[1]))) {
+        const letter = hit[1].toUpperCase();
+        const text = hit[2].trim();
+        if (letter && text && !out.some(x => x.letter === letter)) out.push({letter, text});
+      }
     }
     return out;
   }
@@ -122,14 +137,58 @@
   function openHall({start, onDone, onLeave}) {
     const r = root(); if (!r) return;
     const paper = start.paper; const attemptId = start.attemptId; const draftKey = `pinkie.exam.draft.${attemptId}`;
-    const answers = {...(start.answers || {}), ...(store.get(draftKey)?.answers || {})};
-    const flags = new Set(store.get(draftKey)?.flags || []);
-    let dirty = Object.keys(store.get(draftKey)?.answers || {}).length > 0, savedAt = 0, saving = false, closed = false;
+    const localDraft = store.get(draftKey) || null;
+    const serverMeta = start.meta && typeof start.meta === 'object' ? start.meta : {};
+    const useLocalAnswers = Boolean(localDraft?.answers && (localDraft.at || 0) >= (start.savedAt || 0));
+    const answers = useLocalAnswers ? {...localDraft.answers} : {...(start.answers || {}), ...(localDraft?.answers || {})};
+    const flags = new Set(localDraft?.flags || serverMeta.flags || []);
+    const crossedByPart = new Map();
+    const initCrossed = localDraft?.crossed || serverMeta.crossed || {};
+    for (const [k, arr] of Object.entries(initCrossed)) {
+      if (Array.isArray(arr) && arr.length) crossedByPart.set(k, new Set(arr));
+    }
+    let audioTime = Math.max(Number(localDraft?.audioTime) || 0, Number(serverMeta.audioTime) || 0);
+    const savedCur = Number.isInteger(localDraft?.cur) ? localDraft.cur : (Number.isInteger(serverMeta.cur) ? serverMeta.cur : null);
+    let dirty = Boolean(localDraft?.answers && Object.keys(localDraft.answers).length > 0), savedAt = start.savedAt || 0, saving = false, closed = false;
     const items = []; paper.sections.forEach((sec, si) => sec.items.forEach(it => items.push({...it, sec: sec.id, si, no: it.no || items.length + 1}))); const noOf = new Map(items.map(it => [it.id, it.no]));
     const realPaper = paper.kind === 'real' || paper.kind === 'mock';
-    // 真题原录音：整场一个播放器，切部分不断；考完 / 暂离就停
+    // 真题原录音：整场一个播放器，切部分不断；考完 / 暂离就停，记忆播放位置
     const audio = realPaper && start.audio?.url ? new Audio(start.audio.url) : null;
-    if (audio) { audio.preload = 'metadata'; }
+    let cur = 0;
+    const crossedObj = () => {
+      const out = {};
+      for (const [k, set] of crossedByPart) if (set?.size) out[k] = [...set];
+      return out;
+    };
+    const saveLocalDraft = () => {
+      if (audio && Number.isFinite(audio.currentTime) && audio.currentTime > 0) audioTime = Math.round(audio.currentTime * 10) / 10;
+      store.set(draftKey, {answers, flags: [...flags], cur, crossed: crossedObj(), audioTime, at: Date.now()});
+    };
+    if (audio) {
+      audio.preload = 'metadata';
+      let restoredAudio = false;
+      audio.addEventListener('loadedmetadata', () => {
+        if (!restoredAudio && audioTime > 1 && Number.isFinite(audio.duration) && audioTime < audio.duration - 1) {
+          restoredAudio = true;
+          try { audio.currentTime = audioTime; } catch { /* ignore */ }
+        }
+      });
+      let lastAudioTick = 0;
+      audio.addEventListener('timeupdate', () => {
+        const now = Date.now();
+        if (now - lastAudioTick >= 3000) {
+          lastAudioTick = now;
+          audioTime = Math.round(audio.currentTime * 10) / 10;
+          dirty = true;
+          saveLocalDraft();
+        }
+      });
+      audio.addEventListener('pause', () => {
+        audioTime = Math.round((audio.currentTime || 0) * 10) / 10;
+        dirty = true;
+        saveLocalDraft();
+      });
+    }
     r.dataset.exam = 'on'; tts.stop();
     const hall = el('section', 'pke-hall'); hall.setAttribute('role', 'dialog'); hall.setAttribute('aria-label', '考场');
     // 顶栏
@@ -138,12 +197,11 @@
     const tabs = el('nav', 'pke-tabs'); tabs.setAttribute('aria-label', '部分');
     const timer = el('div', 'pke-timer'); const tVal = el('b', 'pkg-num', '--:--'); timer.append(el('small', 'pkb-kicker', 'REMAINING'), tVal);
     const save = el('div', 'pke-save', start.resumed ? '已恢复上次的答案' : '自动保存 · 每 15 秒');
-    const leave = btn('暂离', 'pkb-link', () => confirmBox('暂时离开考场？', '倒计时不会停。答案已经保存，回来点「接着考」。', '离开', () => close(true)));
+    const leave = btn('暂离', 'pkb-link', () => confirmBox('暂时离开考场？', '倒计时不会停。答案、标记和当前位置已自动保存，回来点「接着考」。', '离开', () => close(true)));
     const submit = btn('交卷', 'pkg-btn pke-submit', () => askSubmit());
     top.append(id, tabs, timer, save, leave, submit);
     const body = el('div', 'pke-body'); const sheet = el('main', 'pke-paper'); const side = el('aside', 'pke-card'); body.append(sheet, side);
     hall.append(top, body); r.append(hall);
-    let cur = 0;
     const tabBtns = paper.sections.map((sec, i) => { const b = btn('', 'pke-tab', () => show(i)); b.append(el('small', '', `PART ${ROMAN[i]}`), el('b', '', PART_ZH[sec.id] || sec.title), el('em', 'pkg-num', '')); tabs.append(b); return b; });
     // 答题卡
     const cardHead = el('div', 'pke-card__head'); cardHead.append(el('small', 'pkb-kicker', 'ANSWER SHEET'), el('b', '', '答题卡'));
@@ -158,10 +216,12 @@
       paper.sections.forEach((sec, i) => { const n = sec.items.filter(answered).length; tabBtns[i].querySelector('em').textContent = sec.items.length ? `${n}/${sec.items.length}` : '—'; tabBtns[i].setAttribute('aria-selected', String(i === cur)); });
       const n = items.filter(answered).length; cardStat.textContent = `已答 ${n} / ${items.length}　待检查 ${flags.size}`;
     }
-    function setAnswer(it, v) { if (v === '' || v == null) delete answers[it.id]; else answers[it.id] = v; dirty = true; store.set(draftKey, {answers, flags: [...flags], at: Date.now()}); refreshCard(); }
+    function setAnswer(it, v) { if (v === '' || v == null) delete answers[it.id]; else answers[it.id] = v; dirty = true; saveLocalDraft(); refreshCard(); }
     // 一部分的题
     function show(i) {
+      const changed = cur !== i;
       cur = i; tts.stop(); sheet.replaceChildren(); sheet.scrollTop = 0;
+      if (changed) { dirty = true; saveLocalDraft(); }
       const sec = paper.sections[i];
       const secPts = sec.items.reduce((n, it) => n + it.points, 0);
       const head = el('header', 'pke-sec'); head.append(el('small', 'pkb-kicker', `PART ${ROMAN[i]} · ${sec.timeMin} MIN`), el('h2', '', sec.title.replace(/^Part [IVX]+\s*/, '')), el('p', 'pke-sec__zh', `${PART_ZH[sec.id] || ''} · ${fmtScore(secPts)} 分`));
@@ -209,9 +269,11 @@
       });
       bar.append(b, t); return bar;
     }
-    const crossedByPart = new Map();
     function termMatchHallView(partItems, material) {
       const terms = parseTermList(material);
+      const termMap = new Map(terms.map(x => [x.letter, x.text]));
+      const examples = parseTermExamples(material).filter(x => termMap.has(x.letter));
+      const exMap = new Map(examples.map(x => [x.letter, x.text]));
       const validLetters = new Set(terms.map(x => x.letter));
       const rows = groupTermRows(partItems, noOf);
       const stepV = rows.some(r => r.slots.length > 1) ? 2 : 1;
@@ -251,6 +313,7 @@
       board.append(bank, right);
 
       const termBtns = new Map();
+      const exNodes = new Map();
       const slotNodes = [];
       let hoverLetter = '';
       let hoverSlotIdx = -1;
@@ -260,6 +323,11 @@
           let on = hoverLetter === L;
           if (!on && hoverSlotIdx >= 0) on = answers[partItems[hoverSlotIdx].id] === L;
           b.classList.toggle('is-hover-link', on);
+        }
+        for (const [L, node] of exNodes) {
+          let on = hoverLetter === L;
+          if (!on && hoverSlotIdx >= 0) on = answers[partItems[hoverSlotIdx].id] === L;
+          node.classList.toggle('is-hover-link', on);
         }
         slotNodes.forEach((s, idx) => {
           let on = hoverSlotIdx === idx;
@@ -303,12 +371,36 @@
           e.preventDefault();
           if (crossed.has(L.letter)) crossed.delete(L.letter);
           else crossed.add(L.letter);
+          dirty = true;
+          saveLocalDraft();
           paint();
         });
         b.addEventListener('mouseenter', () => { hoverLetter = L.letter; hoverSlotIdx = -1; syncHover(); });
         b.addEventListener('mouseleave', () => { hoverLetter = ''; hoverSlotIdx = -1; syncHover(); });
         bankList.append(b);
         termBtns.set(L.letter, b);
+      }
+
+      if (examples.length) {
+        const exRow = el('div', 'pke-tm-row pke-tm-exrow');
+        exRow.append(el('span', 'pke-tm-no pke-tm-exlabel', '示例'));
+        const exWrap = el('div', 'pke-tm-slots pke-tm-exslots');
+        for (const ex of examples) {
+          const chip = btn('', 'pke-tm-ex');
+          chip.dataset.letter = ex.letter;
+          chip.title = termMap.get(ex.letter) ? `原卷示例：${ex.letter} — ${termMap.get(ex.letter)}（点击对照左侧）` : '原卷示例';
+          chip.append(el('span', 'pke-tm-blank pkg-num', `（ ${ex.letter} ）`), el('span', 'pke-tm-zh', ex.text));
+          chip.addEventListener('mouseenter', () => { hoverLetter = ex.letter; hoverSlotIdx = -1; syncHover(); });
+          chip.addEventListener('mouseleave', () => { hoverLetter = ''; hoverSlotIdx = -1; syncHover(); });
+          chip.addEventListener('click', () => {
+            hoverLetter = ex.letter; hoverSlotIdx = -1; syncHover();
+            termBtns.get(ex.letter)?.scrollIntoView({block: 'nearest', behavior: desk()?.motion?.reduced ? 'auto' : 'smooth'});
+          });
+          exWrap.append(chip);
+          exNodes.set(ex.letter, chip);
+        }
+        exRow.append(exWrap);
+        table.append(exRow);
       }
 
       for (const row of rows) {
@@ -341,7 +433,8 @@
             e.stopPropagation();
             flags.has(it.id) ? flags.delete(it.id) : flags.add(it.id);
             flag.setAttribute('aria-pressed', String(flags.has(it.id)));
-            store.set(draftKey, {answers, flags: [...flags], at: Date.now()});
+            dirty = true;
+            saveLocalDraft();
             refreshCard();
           });
           flag.setAttribute('aria-pressed', String(flags.has(it.id)));
@@ -364,8 +457,9 @@
       board.addEventListener('keydown', e => {
         if (e.metaKey || e.ctrlKey || e.altKey) return;
         const k = String(e.key || '');
-        const upper = k.toUpperCase();
-        if (/^[A-Z]$/.test(upper) && validLetters.has(upper)) {
+        const code = String(e.code || '');
+        const upper = /^[a-z]$/i.test(k) ? k.toUpperCase() : /^Key([A-Z])$/.test(code) ? code.slice(3) : '';
+        if (upper && validLetters.has(upper)) {
           e.preventDefault();
           assignLetter(upper, {advance: true});
           return;
@@ -404,21 +498,31 @@
         });
         const activeVal = answers[partItems[activeIdx]?.id] ? String(answers[partItems[activeIdx].id]).trim().toUpperCase() : '';
         let usedCount = 0;
+        let exampleOnlyCount = 0;
         for (const L of terms) {
           const b = termBtns.get(L.letter);
           const list = usage.get(L.letter) || [];
           const used = list.length > 0;
+          const exText = exMap.get(L.letter) || '';
+          const isEx = Boolean(exText);
           if (used) usedCount++;
+          else if (isEx) exampleOnlyCount++;
           const tag = b.querySelector('.pke-tm-term__tag');
           b.classList.toggle('is-used', used);
-          b.classList.toggle('is-dup', list.length > 1);
-          b.classList.toggle('is-crossed', !used && crossed.has(L.letter));
+          b.classList.toggle('is-example', !used && isEx);
+          b.classList.toggle('is-dup', list.length > 1 || (used && isEx));
+          b.classList.toggle('is-crossed', !used && !isEx && crossed.has(L.letter));
           b.classList.toggle('is-linked', Boolean(activeVal) && activeVal === L.letter);
           if (used) {
             const first = list[0];
             const no = noOf.get(first.it.id);
             const pre = no != null ? `${no} ` : '';
-            tag.textContent = list.length > 1 ? `${pre}${first.it.prompt} 等${list.length}处` : `${pre}${first.it.prompt}`;
+            tag.textContent = list.length > 1
+              ? `${pre}${first.it.prompt} 等${list.length}处`
+              : isEx ? `示例冲突 · ${pre}${first.it.prompt}` : `${pre}${first.it.prompt}`;
+            tag.hidden = false;
+          } else if (isEx) {
+            tag.textContent = `例 ${exText}`;
             tag.hidden = false;
           } else if (crossed.has(L.letter)) {
             tag.textContent = '已排除';
@@ -428,23 +532,31 @@
             tag.hidden = true;
           }
         }
-        bankStat.textContent = `已用 ${usedCount} · 剩 ${Math.max(0, terms.length - usedCount)} 项`;
+        const remainTerms = Math.max(0, terms.length - usedCount - exampleOnlyCount);
+        bankStat.textContent = examples.length
+          ? `已配 ${usedCount} · 示例 ${examples.length} · 剩 ${remainTerms} 项`
+          : `已用 ${usedCount} · 剩 ${remainTerms} 项`;
 
         let hasDup = false;
+        let hasExConflict = false;
         partItems.forEach((it, idx) => {
           const node = slotNodes[idx];
           const val = answers[it.id] ? String(answers[it.id]).trim().toUpperCase() : '';
           const dup = Boolean(val) && (usage.get(val)?.length || 0) > 1;
+          const exHit = Boolean(val) && exMap.has(val);
           if (dup) hasDup = true;
+          if (exHit) hasExConflict = true;
           node.root.classList.toggle('is-active', idx === activeIdx);
           node.root.classList.toggle('is-filled', Boolean(val));
-          node.root.classList.toggle('is-dup', dup);
+          node.root.classList.toggle('is-dup', dup || exHit);
           node.blank.textContent = val ? `（ ${val} ）` : '（　）';
-          node.dup.hidden = !dup;
+          node.dup.textContent = exHit ? '示例' : '重复';
+          node.dup.hidden = !(dup || exHit);
           node.clear.hidden = !val;
         });
-        footStat.textContent = `已配 ${filled} / ${partItems.length}` + (hasDup ? ' · 有重复字母，请检查' : '');
-        footStat.classList.toggle('is-warn', hasDup);
+        const warnMsg = hasDup ? ' · 有重复字母，请检查' : hasExConflict ? ' · 选到了原卷示例项，请确认' : '';
+        footStat.textContent = `已配 ${filled} / ${partItems.length}` + warnMsg;
+        footStat.classList.toggle('is-warn', hasDup || hasExConflict);
         clearAll.hidden = filled === 0;
         syncHover();
       }
@@ -456,7 +568,7 @@
     function itemView(it, partLetters) {
       const box = el('article', 'pke-item'); box.dataset.item = it.id; box.dataset.kind = it.kind;
       const no = el('span', 'pke-item__no pkg-num', String(noOf.get(it.id)));
-      const flag = btn('', 'pke-flag', () => { flags.has(it.id) ? flags.delete(it.id) : flags.add(it.id); flag.setAttribute('aria-pressed', String(flags.has(it.id))); store.set(draftKey, {answers, flags: [...flags], at: Date.now()}); refreshCard(); });
+      const flag = btn('', 'pke-flag', () => { flags.has(it.id) ? flags.delete(it.id) : flags.add(it.id); flag.setAttribute('aria-pressed', String(flags.has(it.id))); dirty = true; saveLocalDraft(); refreshCard(); });
       flag.setAttribute('aria-pressed', String(flags.has(it.id))); flag.setAttribute('aria-label', '标记待检查'); flag.title = '标记待检查';
       flag.innerHTML = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M3.5 14V2.5h8l-1.6 3 1.6 3h-8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
       const main = el('div', 'pke-item__main');
@@ -485,7 +597,9 @@
     // 保存 + 计时
     async function flush() {
       if (!dirty || saving || closed) return; saving = true; const snap = {...answers}; dirty = false;
-      try { const res = await G().call('exam.save', {attemptId, answers: snap}); savedAt = res?.savedAt || Date.now(); save.textContent = `已保存 ${clock(savedAt)}`; save.removeAttribute('data-err'); }
+      saveLocalDraft();
+      const meta = {cur, flags: [...flags], crossed: crossedObj(), audioTime};
+      try { const res = await G().call('exam.save', {attemptId, answers: snap, replace: true, meta}); savedAt = res?.savedAt || Date.now(); save.textContent = `已保存 ${clock(savedAt)}`; save.removeAttribute('data-err'); }
       catch (e) { dirty = true; save.textContent = '没存上，答案先留在这台电脑里'; save.dataset.err = '1'; }
       saving = false;
     }
@@ -493,12 +607,14 @@
     const tick = () => { const left = start.endsAt - Date.now(); tVal.textContent = mmss(left); timer.dataset.low = left < 5 * 60000 ? '1' : ''; if (left <= 0 && !closed) { clearInterval(tickTimer); doSubmit(true); } };
     const tickTimer = setInterval(tick, 1000); tick();
     const onHide = () => { if (document.hidden) flush(); };
+    const onPageHide = () => { saveLocalDraft(); flush(); };
     document.addEventListener('visibilitychange', onHide);
+    window.addEventListener?.('pagehide', onPageHide);
     const escape = () => { const m = hall.querySelector('.pke-modal'); if (m) m.querySelector('.pke-nav')?.click(); };
     const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); if (!e.defaultPrevented) { e.preventDefault(); escape(); } } };
     hall.addEventListener('keydown', onKey, true);
     function close(leaving) {
-      if (closed) return; closed = true; tts.stop(); try { audio?.pause(); } catch { /* ignore */ } clearInterval(saveTimer); clearInterval(tickTimer); document.removeEventListener('visibilitychange', onHide);
+      if (closed) return; closed = true; tts.stop(); try { audio?.pause(); } catch { /* ignore */ } clearInterval(saveTimer); clearInterval(tickTimer); document.removeEventListener('visibilitychange', onHide); window.removeEventListener?.('pagehide', onPageHide);
       hall.remove(); delete r.dataset.exam;
       if (leaving) { dirty = true; closed = false; flush().finally(() => { closed = true; }); onLeave?.(); }
     }
@@ -518,9 +634,10 @@
       store.del(draftKey); store.set('pinkie.exam.last', {attemptId, at: Date.now(), seen: false});
       close(false); onDone?.(attemptId, timeUp);
     }
-    // 如果第一部分为空（例如 2025.06 无听力），默认落到第一个有题的部分
+    // 优先回到上次所在部分；否则落到第一个有题的部分（例如 2025.06 无听力）
     const firstNonEmpty = paper.sections.findIndex(s => s.items.length > 0);
-    show(firstNonEmpty >= 0 ? firstNonEmpty : 0);
+    const startSec = savedCur != null && paper.sections[savedCur]?.items?.length ? savedCur : (firstNonEmpty >= 0 ? firstNonEmpty : 0);
+    show(startSec);
     sheet.tabIndex = -1; sheet.focus({preventScroll: true});
     return {close: () => close(true), escape};
   }
@@ -682,6 +799,8 @@
     function termMatchReviewView(allItems, visibleItems, material) {
       const terms = parseTermList(material);
       const termMap = new Map(terms.map(x => [x.letter, x.text]));
+      const examples = parseTermExamples(material).filter(x => termMap.has(x.letter));
+      const exMap = new Map(examples.map(x => [x.letter, x.text]));
       const visibleIds = new Set(visibleItems.map(x => x.id));
       const rows = groupTermRows(allItems, noOf);
       const wrongIdxs = allItems.map((it, idx) => (isMiss(it) ? idx : -1)).filter(x => x >= 0);
@@ -719,6 +838,7 @@
       });
 
       const termBtns = new Map();
+      const exNodes = new Map();
       const slotNodes = [];
       let hoverLetter = '';
       let hoverSlotIdx = -1;
@@ -733,6 +853,16 @@
             on = ans === L || giv === L;
           }
           b.classList.toggle('is-hover-link', on);
+        }
+        for (const [L, node] of exNodes) {
+          let on = hoverLetter === L;
+          if (!on && hoverSlotIdx >= 0) {
+            const it = allItems[hoverSlotIdx];
+            const ans = String(it.answer || it.key || '').trim().toUpperCase();
+            const giv = it.given ? String(it.given).trim().toUpperCase() : '';
+            on = ans === L || giv === L;
+          }
+          node.classList.toggle('is-hover-link', on);
         }
         slotNodes.forEach((s, idx) => {
           let on = hoverSlotIdx === idx;
@@ -753,12 +883,16 @@
         const en = latin(el('span', 'pke-tm-term__en', L.text), L.text);
         const tag = el('em', 'pke-tm-term__tag');
         const hits = ansByLetter.get(L.letter) || [];
+        const exText = exMap.get(L.letter) || '';
         if (hits.length) {
           const first = hits[0];
           const no = noOf.get(first.it.id);
           const pre = no != null ? `${no} ` : '';
           tag.textContent = `${pre}${first.it.prompt || ''}`;
           b.classList.add(hits.every(x => x.it.correct) ? 'is-graded-right' : 'is-graded-wrong');
+        } else if (exText) {
+          b.classList.add('is-example');
+          tag.textContent = `例 ${exText}`;
         } else {
           tag.hidden = true;
         }
@@ -771,6 +905,28 @@
         b.addEventListener('mouseleave', () => { hoverLetter = ''; hoverSlotIdx = -1; syncHover(); });
         bankList.append(b);
         termBtns.set(L.letter, b);
+      }
+
+      if (examples.length) {
+        const exRow = el('div', 'pke-tm-row pke-tm-exrow');
+        exRow.append(el('span', 'pke-tm-no pke-tm-exlabel', '示例'));
+        const exWrap = el('div', 'pke-tm-slots pke-tm-exslots');
+        for (const ex of examples) {
+          const chip = btn('', 'pke-tm-ex');
+          chip.dataset.letter = ex.letter;
+          chip.title = termMap.get(ex.letter) ? `原卷示例：${ex.letter} — ${termMap.get(ex.letter)}（点击对照左侧）` : '原卷示例';
+          chip.append(el('span', 'pke-tm-blank pkg-num', `（ ${ex.letter} ）`), el('span', 'pke-tm-zh', ex.text));
+          chip.addEventListener('mouseenter', () => { hoverLetter = ex.letter; hoverSlotIdx = -1; syncHover(); });
+          chip.addEventListener('mouseleave', () => { hoverLetter = ''; hoverSlotIdx = -1; syncHover(); });
+          chip.addEventListener('click', () => {
+            hoverLetter = ex.letter; hoverSlotIdx = -1; syncHover();
+            termBtns.get(ex.letter)?.scrollIntoView({block: 'nearest', behavior: desk()?.motion?.reduced ? 'auto' : 'smooth'});
+          });
+          exWrap.append(chip);
+          exNodes.set(ex.letter, chip);
+        }
+        exRow.append(exWrap);
+        table.append(exRow);
       }
 
       for (const row of rows) {
@@ -1309,10 +1465,10 @@
       const years = new Map(); const mocks = [];
       for (const p of list.real || []) { if (p.kind === 'mock') mocks.push(p); else { if (!years.has(p.year)) years.set(p.year, []); years.get(p.year).push(p); } }
       const chip = p => {
-        const c = btn('', 'pke-chip'); c.dataset.done = p.attempts ? '1' : '';
-        c.title = `${p.title}${p.audio ? ' · 原录音' : ' · 无录音'}${p.lastAttemptId ? ' · 点击可回看整卷或重考' : ''}`;
+        const c = btn('', 'pke-chip'); c.dataset.done = p.attempts ? '1' : ''; if (p.open) c.dataset.open = '1';
+        c.title = `${p.title}${p.audio ? ' · 原录音' : ' · 无录音'}${p.open ? ` · 进行中（已答 ${p.openDone || 0} 题）` : p.lastAttemptId ? ' · 点击可回看整卷或重考' : ''}`;
         c.append(el('b', 'pkg-num', p.kind === 'mock' ? `0${p.title.replace(/\D/g, '')}`.slice(-2) : `${String(p.month).padStart(2, '0')}`), el('small', '', p.kind === 'mock' ? '模拟' : '月'));
-        c.append(el('em', 'pkg-num', p.open ? '接着考' : p.best != null ? `${fmtScore(p.best)}分` : p.attempts ? '已考' : p.audio ? '' : '无录音'));
+        c.append(el('em', 'pkg-num', p.open ? (p.openDone ? `接着考 ${p.openDone}` : '接着考') : p.best != null ? `${fmtScore(p.best)}分` : p.attempts ? '已考' : p.audio ? '' : '无录音'));
         c.addEventListener('click', () => {
           if (!p.open && p.lastAttemptId) choosePaperAction(p, c);
           else begin(p, c);
@@ -1339,7 +1495,7 @@
         if (p.status === 'ready') {
           const acts = el('div', 'pke-prow__act');
           if (!p.open && p.lastAttemptId) acts.append(btn('看卷子', 'pkb-link', () => openPaperReview(p.lastAttemptId, {filter: 'all'})));
-          acts.append(btn(p.open ? '接着考' : p.attempts ? '再考' : '开考', p.attempts && !p.open ? 'pks-pull pke-nav' : 'pkg-btn', ev => begin(p, ev.currentTarget)));
+          acts.append(btn(p.open ? (p.openDone ? `接着考 (${p.openDone})` : '接着考') : p.attempts ? '再考' : '开考', p.attempts && !p.open ? 'pks-pull pke-nav' : 'pkg-btn', ev => begin(p, ev.currentTarget)));
           row.append(acts);
         } else if (p.status === 'generating') row.append(el('span', 'pke-spin', '出卷中'));
         ul.append(row);
@@ -1367,6 +1523,21 @@
         const inp = el('input', 'pke-fill pkg-num'); inp.type = 'number'; inp.min = '0'; inp.max = '100'; inp.placeholder = '0–100';
         const go = btn('填好了', 'pkg-btn', async () => { const v = Number(inp.value); if (!(v >= 0 && v <= 100)) return; go.disabled = true; try { const res = await call('boss.realScore', {exam: EXAM, score: v}); await finale(res); } catch (e) { g.toast?.(e.message); go.disabled = false; } });
         const row = el('div', 'pke-real__row'); row.append(inp, go); real.append(el('p', '', '把成绩单上的总分填进来。'), row);
+      }
+      const openPapers = [...(list.real || []), ...(list.papers || [])].filter(p => p.open && p.status !== 'generating');
+      if (openPapers.length) {
+        const banner = el('section', 'pke-resume');
+        banner.append(el('small', 'pkb-kicker', 'IN PROGRESS · 未交卷'));
+        const row = el('div', 'pke-resume__list');
+        for (const op of openPapers) {
+          const item = el('div', 'pke-resume__item');
+          const txt = el('div', 'pke-resume__txt');
+          txt.append(el('b', '', op.title || op.paperId), el('span', 'pkg-num', op.openDone ? `已答 ${op.openDone}${op.items ? ` / ${op.items}` : ''} 题` : '已开考 · 进度已保存'));
+          item.append(txt, btn('接着考', 'pkg-btn', ev => begin(op, ev.currentTarget)));
+          row.append(item);
+        }
+        banner.append(row);
+        main.append(banner);
       }
       main.append(pc, bp, fm, real);
       if (list.papers.some(p => p.status === 'generating') || list.realStatus?.state === 'preparing') pollT = setTimeout(() => { if (alive && !hall) lobby(); }, 8000);
@@ -1430,5 +1601,5 @@
     return true;
   }
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }
-  window.__pinkieGameExam = {tts, bossSettle, report, openReview, termLetters};
+  window.__pinkieGameExam = {tts, bossSettle, report, openReview, termLetters, parseTermExamples};
 })();

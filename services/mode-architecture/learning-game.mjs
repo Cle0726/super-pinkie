@@ -867,6 +867,8 @@ export function registerLearningGame(api, store, options = {}) {
   register('practice.overview', via('practice', 'overview', (() => ({total: 0, points: [], kinds: []}))));
   register('practice.start', via('practice', 'start', notReady('刷题')));
   register('practice.current', via('practice', 'current', (() => ({setId: null}))));
+  register('practice.saveDraft', via('practice', 'saveDraft', (() => ({ok: false}))));
+  register('practice.abandon', via('practice', 'abandon', (() => ({ok: false}))));
   register('practice.answer', via('practice', 'answer', notReady('刷题')));
   register('practice.explain', via('practice', 'explain', notReady('刷题')));
   register('practice.finish', via('practice', 'finish', notReady('刷题')));

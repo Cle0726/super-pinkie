@@ -241,9 +241,37 @@ export class GameWorld {
   }
 
   // ---------- 守关战 ----------
-  async guardStart({node, requestId, sessionKey}) {
+  async guardStart({node, requestId, sessionKey, fresh = false}) {
     const done = this.game.read().requests[`guard.start:${requestId}`];
     if (done) return done.result;
+    if (!fresh) {
+      const guards = this.ensure(this.game.read()).guards || {};
+      const hit = Object.entries(guards)
+        .filter(([, g]) => g && !g.finished && g.nodeId === node.id && Object.keys(g.answers || {}).length > 0 && Object.keys(g.answers || {}).length < (g.items?.length || 0))
+        .sort((a, b) => (b[1].updatedAt || b[1].at || 0) - (a[1].updatedAt || a[1].at || 0))[0];
+      if (hit) {
+        const [attemptId, g] = hit;
+        const doneIds = Object.keys(g.answers || {});
+        const rightCount = Object.values(g.answers || {}).filter(x => x?.correct).length;
+        return this.game.once('guard.start', requestId, state => {
+          const cur = this.ensure(state).guards[attemptId];
+          if (cur) cur.updatedAt = this.now();
+          return {
+            flow: 'guard',
+            payload: {
+              attemptId,
+              nodeId: node.id,
+              ...(g.real ? {real: true} : {}),
+              resumed: true,
+              doneIds,
+              rightCount,
+              combo: g.combo || 0,
+              items: g.items.map((x, i) => ({itemId: `g${i + 1}`, mode: 'choice', prompt: x.stem, options: x.options, point: x.point, ...(x.source ? {source: x.source} : {})})),
+            },
+          };
+        });
+      }
+    }
     const region = REGIONS.find(r => r.id === node.region);
     const sec = PRETCO_B_FORMAT.sections.find(s => s.id === region.section);
     const map = this.game.read().world?.[GAME_EXAM] || localWorld();
@@ -291,6 +319,7 @@ export class GameWorld {
       const crit = correct && g.combo > 0 && g.combo % 5 === 0;
       const res = {correct, explain: item.why || '', answer: item.answer, damage: correct ? (crit ? 2 : 1) * Math.round(100 / g.items.length) : 0, crit, combo: g.combo};
       g.answers[itemId] = res;
+      g.updatedAt = this.now();
       if (!correct) this.game.modules.monsters?.spawn(state, {key: `guard:${fold(item.point || item.stem).slice(0, 40)}`, subject: '英语', topic: item.point, question: item.stem, answer: item.options[item.answer], options: item.options, source: {type: 'guard', id: attemptId}, node: g.nodeId});
       return res;
     });

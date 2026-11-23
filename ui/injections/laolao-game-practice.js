@@ -225,25 +225,83 @@
   const TEXT_KINDS = new Set(['word-form', 'practical-fill', 'passage-short', 'listen-dictation']);
   const BIG_KINDS = new Set(['translate-passage', 'writing']);
   const backName = v => desk()?.backName?.(v) || '返回';
-  // 做到一半退出、关掉再打开，这一组还在。后端本来就记着每题的对错，这里只记住「正在做哪一组」。
-  const RESUME_KEY = 'pinkie-practice-resume-v2';
-  const loadResume = () => {
+  // 做到一半退出、切换其它模块、关掉重开，每个模块 / 题型 / 考点各自独立保留进度和未提交草稿。
+  const RESUME_STORE_KEY = 'pinkie-practice-progress-v4';
+  const LEGACY_RESUME_KEY = 'pinkie-practice-resume-v3';
+  const bucketOf = spec => {
+    if (!spec || typeof spec !== 'object') return 'random';
+    if (spec.bucket) return String(spec.bucket);
+    const m = String(spec.mode || 'random').trim();
+    const mod = String(spec.module || '').trim();
+    const k = String(spec.kind || '').trim();
+    const pt = String(spec.point || '').trim();
+    if (m === 'listening' || (m === 'module' && mod === 'listening') || (m === 'kind' && k === 'listening')) return 'module:listening';
+    if (m === 'module' && mod) return `module:${mod}`;
+    if (m === 'kind' && k) return `kind:${k}`;
+    if (m === 'point' && pt) return `point:${pt}`;
+    if (m === 'wrong') return 'wrong';
+    return 'random';
+  };
+  const readResumeStore = () => {
     try {
-      const raw = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
-      if (!raw?.set?.setId || !raw.set.items?.length || raw.set.finished) return null;
-      if (Date.now() - (raw.at || 0) > 14 * 86400000) return null;
-      return raw;
-    } catch { return null; }
+      const raw = JSON.parse(localStorage.getItem(RESUME_STORE_KEY) || 'null');
+      if (raw && typeof raw === 'object' && raw.buckets && typeof raw.buckets === 'object') {
+        const now = Date.now();
+        const clean = {};
+        for (const [k, v] of Object.entries(raw.buckets)) {
+          if (!v?.set?.setId || !v.set.items?.length || v.set.finished) continue;
+          if (now - (v.at || 0) > 30 * 86400000) continue;
+          clean[k] = v;
+        }
+        return {lastBucket: clean[raw.lastBucket] ? raw.lastBucket : Object.keys(clean)[0] || '', buckets: clean};
+      }
+    } catch { /* ignore */ }
+    return {lastBucket: '', buckets: {}};
   };
-  const clearResume = () => { try { localStorage.removeItem(RESUME_KEY); } catch { /* 无 */ } };
-  const remember = () => {
+  const writeResumeStore = data => {
+    try {
+      const entries = Object.entries(data.buckets || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, 30);
+      const buckets = Object.fromEntries(entries);
+      const lastBucket = buckets[data.lastBucket] ? data.lastBucket : entries[0]?.[0] || '';
+      localStorage.setItem(RESUME_STORE_KEY, JSON.stringify({lastBucket, buckets}));
+      localStorage.removeItem(LEGACY_RESUME_KEY);
+    } catch { /* 空间满了就这次不记 */ }
+  };
+  const loadResume = (bucket = '') => {
+    const store = readResumeStore();
+    const key = bucket || store.lastBucket;
+    return (key && store.buckets[key]) || null;
+  };
+  const clearResume = (bucketOrSetId = '') => {
+    const store = readResumeStore();
+    if (!bucketOrSetId) {
+      const pane = desk()?.pane?.();
+      const cur = pane?.state?.practiceSet;
+      bucketOrSetId = cur ? bucketOf(cur) : store.lastBucket;
+    }
+    if (bucketOrSetId && store.buckets[bucketOrSetId]) {
+      delete store.buckets[bucketOrSetId];
+    } else if (bucketOrSetId) {
+      for (const [k, v] of Object.entries(store.buckets)) {
+        if (v?.set?.setId === bucketOrSetId) delete store.buckets[k];
+      }
+    }
+    writeResumeStore(store);
+  };
+  const remember = (setOverride = null) => {
     const pane = desk()?.pane?.();
-    const set = pane?.state?.practiceSet;
-    if (!set?.setId || !set.items?.length || set.finished) { clearResume(); return; }
-    try { localStorage.setItem(RESUME_KEY, JSON.stringify({set, params: pane.state.practiceParams || null, returnView: pane.state.returnView || '', at: Date.now()})); } catch { /* 空间满了就这次不记 */ }
+    const set = setOverride || pane?.state?.practiceSet;
+    if (!set?.setId || !set.items?.length) return;
+    const b = bucketOf(set);
+    if (set.finished) { clearResume(b); return; }
+    const store = readResumeStore();
+    const params = pane?.state?.practiceParams || {mode: set.mode, kind: set.kind, point: set.point, module: set.module, count: set.items.length};
+    store.buckets[b] = {set, params, returnView: pane?.state?.returnView || '', at: Date.now()};
+    store.lastBucket = b;
+    writeResumeStore(store);
   };
-  const adoptResume = () => {
-    const saved = loadResume();
+  const adoptResume = (bucket = '') => {
+    const saved = loadResume(bucket);
     if (!saved) return null;
     const pane = desk()?.pane?.();
     if (pane?.state) {
@@ -253,16 +311,41 @@
     }
     return saved.set;
   };
+  // 把本地尚未同步到后端的草稿（如突然强关 App）合并进后端返回的续做组里，确保零丢失。
+  const mergeLocalDrafts = set => {
+    if (!set?.setId) return set;
+    const localSaved = loadResume(bucketOf(set));
+    if (!localSaved?.set || localSaved.set.setId !== set.setId) return set;
+    const ls = localSaved.set;
+    if ((ls.updatedAt || localSaved.at || 0) <= (set.updatedAt || 0)) return set;
+    const mergedDrafts = {...(set.drafts || {})};
+    for (const [k, v] of Object.entries(ls.drafts || {})) {
+      if (!set.answered?.[k] && mergedDrafts[k] == null && v != null && v !== '') mergedDrafts[k] = v;
+    }
+    const mergedCrossed = {...(ls.crossed || {}), ...(set.crossed || {})};
+    return {
+      ...set,
+      drafts: mergedDrafts,
+      crossed: mergedCrossed,
+      cursor: Number.isInteger(ls.cursor) ? ls.cursor : set.cursor,
+      audioTime: Math.max(Number(set.audioTime) || 0, Number(ls.audioTime) || 0),
+    };
+  };
 
-  // 开一组：后端出题 → 放进这一页的状态 → 进作答页（作答页记住从哪进来）
+  // 开一组（默认自动续接对应模块的未完成进度；传入 fresh: true 时重抽一组）
   async function openSet(params, {from} = {}) {
     const g = G();
-    const r = await g.call('practice.start', {...params, requestId: rid()}, 60000);
-    if (r?.empty || !r?.setId) { g.toast(r?.why || '这一类题现在没有可做的'); return null; }
+    const req = {...params};
+    if (!req.setId) req.requestId = rid();
+    const raw = await g.call('practice.start', req, 60000);
+    if (raw?.empty || !raw?.setId) { g.toast(raw?.why || '这一类题现在没有可做的'); return null; }
+    const r = mergeLocalDrafts(raw);
     const pane = desk()?.pane?.();
-    if (pane?.state) { pane.state.practiceSet = r; pane.state.practiceParams = params; }
+    const cleanParams = {mode: r.mode, kind: r.kind, point: r.point, module: r.module, count: params?.count || r.items.length, ...(params?.nodeId ? {nodeId: params.nodeId} : {})};
+    if (pane?.state) { pane.state.practiceSet = r; pane.state.practiceParams = cleanParams; }
+    if (params?.fresh) clearResume(bucketOf(r));
     desk()?.go('gamepracset');
-    remember();
+    remember(r);
     return r;
   }
 
@@ -300,29 +383,88 @@
     if (locked.length) lede.append(document.createTextNode(` 最新 ${locked.length} 套留给整套模考，不进随机。`));
     body.append(lede);
 
+    const fmtTime = sec => { const s = Math.max(0, Math.floor(Number(sec) || 0)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+    const openBadgeText = op => {
+      if (!op) return '';
+      if (op.done > 0 && op.draftCount > 0) return `继续 ${op.done}/${op.total} · 草稿 ${op.draftCount}`;
+      if (op.done > 0) return `继续 ${op.done}/${op.total}`;
+      if (op.draftCount > 0) return `草稿 ${op.draftCount}/${op.total}`;
+      if (op.audioTime > 5) return `已听 ${fmtTime(op.audioTime)}`;
+      return '继续';
+    };
+    const openParamsOf = op => {
+      if (op.mode === 'module') return {mode: 'module', module: op.module};
+      if (op.mode === 'listening') return {mode: 'listening'};
+      if (op.mode === 'kind') return {mode: 'kind', kind: op.kind, count: op.total || 10};
+      if (op.mode === 'point') return {mode: 'point', point: op.point, count: op.total || 10};
+      if (op.mode === 'wrong') return {mode: 'wrong', count: op.total || 10};
+      return {mode: 'random', count: op.total || 10};
+    };
+
+    // 进行中的练习总览条：跨模块 / 题型 / 考点各自保存，互不覆盖
+    const inProgress = Array.isArray(ov.inProgress) ? ov.inProgress : [];
+    if (inProgress.length) {
+      const strip = el('section', 'pkp-resume');
+      const rh = el('header', 'pkg-sec');
+      rh.append(el('small', 'pkg-kicker', 'IN PROGRESS'), el('h3', '', '继续上次练习'), el('span', 'pkg-sec__meta', `${inProgress.length} 个模块有未完成进度，互不覆盖`));
+      const row = el('div', 'pkp-resume__list');
+      for (const op of inProgress) {
+        const item = el('div', 'pkp-rcard');
+        item.dataset.bucket = op.bucket;
+        const mainBtn = btn('pkp-rcard__main');
+        mainBtn.append(el('b', '', op.title || '刷题'), el('span', 'pkp-open-pill pkg-num', openBadgeText(op)));
+        mainBtn.addEventListener('click', () => go(mainBtn, {setId: op.setId, ...openParamsOf(op)}));
+        const acts = el('div', 'pkp-rcard__act');
+        const restartBtn = btn('pkb-link pkp-rcard__reset', '重开');
+        restartBtn.title = '放弃这组进度，重新抽一组';
+        restartBtn.addEventListener('click', () => go(restartBtn, {...openParamsOf(op), fresh: true}));
+        const dropBtn = btn('pkp-rcard__drop', '×');
+        dropBtn.setAttribute('aria-label', `放弃「${op.title}」的进度`);
+        dropBtn.title = '清除这组进度';
+        dropBtn.addEventListener('click', async () => {
+          dropBtn.disabled = true;
+          try {
+            await g.call('practice.abandon', {setId: op.setId}, 15000);
+            clearResume(op.bucket);
+            desk()?.go('gamepractice');
+          } catch (e) { dropBtn.disabled = false; g.toast(e.message || '清除失败'); }
+        });
+        acts.append(restartBtn, dropBtn);
+        item.append(mainBtn, acts);
+        row.append(item);
+      }
+      strip.append(rh, row);
+      body.append(strip);
+    }
+
     // 快速入口
     const quick = el('nav', 'pkp-quick'); quick.setAttribute('aria-label', '刷题方式');
-    const card = (id, en, zh, sub, run, {hot = false, off = false} = {}) => {
-      const b = btn('pkp-qcard'); b.dataset.q = id; if (hot) b.dataset.hot = '1';
-      b.append(el('small', '', en), el('b', '', zh), el('em', '', sub), el('i', 'pkp-qcard__rule'));
+    const card = (id, en, zh, sub, run, {hot = false, off = false, open = null} = {}) => {
+      const b = btn('pkp-qcard'); b.dataset.q = id; if (hot) b.dataset.hot = '1'; if (open) b.dataset.open = '1';
+      const topRow = el('span', 'pkp-qcard__top');
+      topRow.append(el('small', '', en));
+      if (open) topRow.append(el('span', 'pkp-open-pill pkg-num', openBadgeText(open)));
+      b.append(topRow, el('b', '', zh), el('em', '', sub), el('i', 'pkp-qcard__rule'));
       if (off) { b.disabled = true; b.dataset.off = '1'; } else b.addEventListener('click', () => run(b));
       quick.append(b); return b;
     };
     const r = ov.random || {};
-    card('random', 'RANDOM', '随机 10 题', r.total ? `词汇 · 词形 · 翻译单题 · 已做 ${r.done}/${r.total}` : '单题池是空的', b => go(b, {mode: 'random', count: 10}), {hot: true, off: !r.total});
-    card('wrong', 'RETRY', '错题重刷', ov.wrong ? `${ov.wrong} 道做错的真题原题` : '刷题里还没有做错的题', b => go(b, {mode: 'wrong', count: 10}), {off: !ov.wrong});
+    card('random', 'RANDOM', '随机 10 题', r.total ? `词汇 · 词形 · 翻译单题 · 已做 ${r.done}/${r.total}` : '单题池是空的', b => go(b, {mode: 'random', count: 10}), {hot: true, off: !r.total, open: r.open});
+    card('wrong', 'RETRY', '错题重刷', ov.wrong ? `${ov.wrong} 道做错的真题原题` : '刷题里还没有做错的题', b => go(b, {mode: 'wrong', count: 10}), {off: !ov.wrong && !ov.wrongOpen, open: ov.wrongOpen});
     const lis = (ov.kinds || []).find(k => k.id === 'listening');
-    card('listening', 'LISTENING', '听力 Part I', lis?.total ? '随机一套 · 放原录音' : '没有听力题', b => go(b, {mode: 'listening'}), {off: !lis?.total});
+    card('listening', 'LISTENING', '听力 Part I', lis?.total ? '随机一套 · 放原录音' : '没有听力题', b => go(b, {mode: 'listening'}), {off: !lis?.total, open: lis?.open});
     card('year', 'BY YEAR', '按年份整套', '进考场，按年份选整卷', () => desk()?.go('gameexam'));
     body.append(quick);
 
     // 按试卷模块：一套卷的 Part I–V，答完和考点 / 题型一样能看官方解析、讲给我听
     const mods = el('section', 'pkp-modules');
-    const mh = el('header', 'pkg-sec'); mh.append(el('small', 'pkg-kicker', 'BY MODULE'), el('h3', '', '按试卷模块'), el('span', 'pkg-sec__meta', '2025–2020 跨年优先混刷 · 听力按整套原录音'));
+    const mh = el('header', 'pkg-sec'); mh.append(el('small', 'pkg-kicker', 'BY MODULE'), el('h3', '', '按试卷模块'), el('span', 'pkg-sec__meta', '各模块独立保存进度 · 2025–2020 跨年优先混刷'));
     const modRow = el('div', 'pkp-modules__row');
     for (const m of ov.modules || []) {
-      const b = btn('pkp-kind pkp-mod'); b.dataset.module = m.id;
-      const txt = el('span', 'pkp-kind__t'); txt.append(el('b', '', m.name), el('small', '', m.note || ''));
+      const b = btn('pkp-kind pkp-mod'); b.dataset.module = m.id; if (m.open) b.dataset.open = '1';
+      const txt = el('span', 'pkp-kind__t');
+      txt.append(el('b', '', m.name), el('small', '', m.note || ''));
+      if (m.open) txt.append(el('span', 'pkp-open-pill pkg-num', openBadgeText(m.open)));
       b.append(txt, el('span', 'pkp-kind__n pkg-num', m.total ? `${m.done}/${m.total}` : '—'));
       if (!m.total) b.disabled = true; else b.addEventListener('click', () => go(b, {mode: 'module', module: m.id}));
       modRow.append(b);
@@ -347,11 +489,13 @@
         const row = btn('pkp-prow'); row.dataset.point = p.id;
         const weak = p.done >= 3 && p.acc != null && p.acc < 60;
         if (weak) row.dataset.weak = '1';
+        if (p.open) row.dataset.open = '1';
         const name = el('span', 'pkp-prow__name'); name.append(el('b', '', p.name), el('small', '', p.groupName));
         const bar = el('i', 'pkp-prow__bar'); bar.style.setProperty('--p', `${p.acc ?? 0}%`); if (p.acc == null) bar.dataset.none = '1';
         const accCell = el('span', 'pkp-prow__acc'); accCell.append(el('b', 'pkg-num', pct(p.acc)), bar);
-        row.append(name, el('span', 'pkg-num', String(p.total)), el('span', 'pkg-num', String(p.done)), accCell, el('span', 'pkp-prow__go', weak ? '先补这个' : '练'));
-        row.setAttribute('aria-label', `${p.groupName} ${p.name}：${p.total} 题，做过 ${p.done}，正确率 ${pct(p.acc)}`);
+        const goLabel = p.open ? openBadgeText(p.open) : weak ? '先补这个' : '练';
+        row.append(name, el('span', 'pkg-num', String(p.total)), el('span', 'pkg-num', String(p.done)), accCell, el('span', 'pkp-prow__go' + (p.open ? ' is-open pkg-num' : ''), goLabel));
+        row.setAttribute('aria-label', `${p.groupName} ${p.name}：${p.total} 题，做过 ${p.done}，正确率 ${pct(p.acc)}${p.open ? '，' + goLabel : ''}`);
         row.addEventListener('click', () => go(row, {mode: 'point', point: p.id, count: 10}));
         list.append(row);
       }
@@ -371,8 +515,10 @@
     const kh = el('header', 'pkg-sec'); kh.append(el('small', 'pkg-kicker', 'BY TYPE'), el('h3', '', '按题型'));
     kinds.append(kh);
     for (const k of (ov.kinds || []).filter(x => x.id !== 'listening')) {
-      const b = btn('pkp-kind'); b.dataset.kind = k.id;
-      const txt = el('span', 'pkp-kind__t'); txt.append(el('b', '', k.name), el('small', '', k.note || ''));
+      const b = btn('pkp-kind'); b.dataset.kind = k.id; if (k.open) b.dataset.open = '1';
+      const txt = el('span', 'pkp-kind__t');
+      txt.append(el('b', '', k.name), el('small', '', k.note || ''));
+      if (k.open) txt.append(el('span', 'pkp-open-pill pkg-num', openBadgeText(k.open)));
       b.append(txt, el('span', 'pkp-kind__n pkg-num', k.total ? `${k.done}/${k.total}` : '—'));
       if (!k.total) b.disabled = true; else b.addEventListener('click', () => go(b, {mode: 'kind', kind: k.id, count: 10}));
       kinds.append(b);
@@ -411,12 +557,13 @@
       let resumedRuntime = null;
       const giveUp = () => { if (dead || !host.isConnected) return; host.replaceChildren(el('div', 'pkb-result')); const p = host.firstChild; p.append(el('h3', '', '这组题不在了'), el('p', 'pkb-result__line', '回题库再开一组。')); const b = btn('pkg-btn', '回题库'); b.addEventListener('click', () => desk()?.go('gamepractice')); p.append(b); };
       if (!g?.call) { giveUp(); return {unmount() { dead = true; }, keydown() {}}; }
-      g.call('practice.current', {}, 15000).then(r => {
+      g.call('practice.current', {}, 15000).then(raw => {
         if (dead || !host.isConnected) return;
-        if (!r?.items?.length || r.finished) { giveUp(); return; }
+        if (!raw?.items?.length || raw.finished) { giveUp(); return; }
+        const r = mergeLocalDrafts(raw);
         const pane = desk()?.pane?.();
         if (pane?.state) { pane.state.practiceSet = r; pane.state.practiceParams = {mode: r.mode, kind: r.kind, point: r.point, module: r.module, count: r.items.length}; }
-        remember();
+        remember(r);
         delete host.dataset.pkpResume;
         host.replaceChildren();
         host.className = host.className.replace(/\bpk[pb]-[\w-]+/g, '').trim();
@@ -425,6 +572,7 @@
       }).catch(() => giveUp());
       return {
         unmount() { dead = true; resumedRuntime?.unmount?.(); },
+        pause() { resumedRuntime?.pause?.(); },
         keydown(event) { return resumedRuntime?.keydown?.(event); },
       };
     }
@@ -447,25 +595,106 @@
     }
     const items = data.items;
     const answered = {...(data.answered || {})};
-    let i = items.findIndex(it => !answered[it.itemId]); if (i < 0) i = items.length;
+    const drafts = {};
+    if (data.drafts && typeof data.drafts === 'object') {
+      for (const [k, v] of Object.entries(data.drafts)) {
+        if (!answered[k] && (typeof v === 'number' || (typeof v === 'string' && v.trim()))) drafts[k] = v;
+      }
+    }
+    const termCrossed = new Map();
+    if (data.crossed && typeof data.crossed === 'object') {
+      for (const [k, arr] of Object.entries(data.crossed)) {
+        if (Array.isArray(arr) && arr.length) termCrossed.set(k, new Set(arr));
+      }
+    }
+    let audioTime = Number(data.audioTime) || 0;
+    const firstTodo = items.findIndex(it => !answered[it.itemId]);
+    let i = Number.isInteger(data.cursor) && data.cursor >= 0 && data.cursor < items.length
+      ? data.cursor
+      : (firstTodo >= 0 ? firstTodo : items.length);
     let right = Object.values(answered).filter(r => r.correct).length, combo = 0, busy = false, alive = true, finished = Boolean(data.finished), asking = false;
     let lastFinishResult = data.finished || null;
     let picked = null;
+    let draftTimer = 0;
+    let draftDirty = false;
+    const crossedObj = () => {
+      const out = {};
+      for (const [k, set] of termCrossed) if (set?.size) out[k] = [...set];
+      return out;
+    };
+    const draftCountNow = () => {
+      let n = 0;
+      for (const [k, v] of Object.entries(drafts)) {
+        if (answered[k]) continue;
+        if (typeof v === 'number' || (typeof v === 'string' && v.trim())) n++;
+      }
+      return n;
+    };
+    const hasAnyProgress = () => Object.keys(answered).length > 0 || draftCountNow() > 0 || audioTime > 5 || Object.keys(crossedObj()).length > 0;
+    const syncLocalState = () => {
+      data.answered = {...answered};
+      data.drafts = {...drafts};
+      data.crossed = crossedObj();
+      data.cursor = i;
+      data.audioTime = audioTime;
+      data.updatedAt = Date.now();
+      if (!finished) remember(data);
+    };
+    const flushDraft = () => {
+      clearTimeout(draftTimer);
+      draftTimer = 0;
+      if (audio && Number.isFinite(audio.currentTime) && audio.currentTime > 0) audioTime = Math.round(audio.currentTime * 10) / 10;
+      syncLocalState();
+      if (finished || !draftDirty || !data.setId || !hasAnyProgress()) return;
+      draftDirty = false;
+      G()?.call?.('practice.saveDraft', {setId: data.setId, drafts: {...drafts}, crossed: crossedObj(), cursor: i, audioTime, replace: true}, 10000)?.catch?.(() => { draftDirty = true; });
+    };
+    const scheduleDraftSave = () => {
+      draftDirty = true;
+      syncLocalState();
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(() => { if (alive) flushDraft(); }, 500);
+    };
     const a = window.__pinkieGameBattle?.arena({form: g.equippedForm(), strip: true});
     if (a) {
       top.append(a.root);
-      a.setEnemy({kind: 'target', name: data.mode === 'listening' ? '纸靶 · 听力' : '纸靶 · 真题', level: 1, note: data.title});
+      a.setEnemy({kind: 'target', name: data.mode === 'listening' || data.module === 'listening' ? '纸靶 · 听力' : '纸靶 · 真题', level: 1, note: data.title});
       a.setHp(1 - right / items.length, {instant: true}); a.setCombo(0);
     }
-    // 听力：整套原录音一个播放条
+    // 听力：整套原录音一个播放条（记忆播放进度）
     let audio = null;
-    if (data.audio?.url) { audio = new Audio(data.audio.url); audio.preload = 'metadata'; host.append(recordBar(audio)); }
-    else if (data.mode === 'listening') host.append(el('p', 'pkp-warn', '本机没有这套的原录音，只能看题。'));
+    if (data.audio?.url) {
+      audio = new Audio(data.audio.url);
+      audio.preload = 'metadata';
+      let restoredAudio = false;
+      audio.addEventListener('loadedmetadata', () => {
+        if (!restoredAudio && audioTime > 1 && Number.isFinite(audio.duration) && audioTime < audio.duration - 1) {
+          restoredAudio = true;
+          try { audio.currentTime = audioTime; } catch { /* ignore */ }
+        }
+      });
+      let lastAudioTick = 0;
+      audio.addEventListener('timeupdate', () => {
+        const now = Date.now();
+        if (now - lastAudioTick >= 3000) {
+          lastAudioTick = now;
+          audioTime = Math.round(audio.currentTime * 10) / 10;
+          if (audioTime > 5) scheduleDraftSave();
+        }
+      });
+      audio.addEventListener('pause', () => {
+        audioTime = Math.round((audio.currentTime || 0) * 10) / 10;
+        if (audioTime > 5) { draftDirty = true; flushDraft(); }
+      });
+      host.append(recordBar(audio));
+    } else if (data.mode === 'listening' || data.module === 'listening') host.append(el('p', 'pkp-warn', '本机没有这套的原录音，只能看题。'));
+    const onVisibility = () => { if (document.hidden) flushDraft(); };
+    const onPageHide = () => { flushDraft(); };
+    document.addEventListener?.('visibilitychange', onVisibility);
+    window.addEventListener?.('pagehide', onPageHide);
     const stage = el('div', 'pk-drill-stage pkp-stage'); host.append(stage);
     const live = el('div', 'pk-sr'); live.setAttribute('aria-live', 'polite'); host.append(live);
     let termKeyHandler = null;
-    const termDrafts = new Map();
-    const termCrossed = new Map();
     const termGroupAt = idx => {
       const it = items[idx];
       if (!it || it.qkind !== 'term-match') return null;
@@ -513,15 +742,43 @@
 
     const askLeave = () => {
       const done = Object.keys(answered).length;
-      if (finished || !done) { leaveNow(); return; }
+      const draftN = draftCountNow();
+      if (finished || (!done && !draftN && audioTime <= 5)) { leaveNow(); return; }
       if (asking) return; asking = true;
+      draftDirty = true;
+      flushDraft();
       const dialog = el('dialog', 'lesson-dialog pk-drill-ask'); dialog.setAttribute('aria-label', '退出刷题');
-      dialog.append(el('p', '', `这组做到第 ${Math.min(i + 1, items.length)} / ${items.length} 题。做过的都记下了（星星已经发了），剩下的下次再抽。`));
+      const parts = [];
+      if (done > 0) parts.push(`已答 ${done} 题`);
+      if (draftN > 0) parts.push(`草稿 ${draftN} 项`);
+      dialog.append(el('p', '', `这组做到第 ${Math.min(i + 1, items.length)} / ${items.length} 题${parts.length ? `（${parts.join('，')}）` : ''}。进度已按模块自动保存，下次点对应模块会从这里接着做。`));
       const row = el('div', 'pk-done-actions');
       const stay = btn('pk-btn', '接着做'); stay.dataset.kind = 'go'; stay.addEventListener('click', () => dialog.close('stay'));
       const quit = btn('pk-link', `先放着，${backName(backTo())}`); quit.addEventListener('click', () => dialog.close('leave'));
-      row.append(stay, quit); dialog.append(row); host.append(dialog); dialog.showModal(); stay.focus();
-      dialog.addEventListener('close', () => { asking = false; const leave = dialog.returnValue === 'leave'; dialog.remove(); if (leave) leaveNow(); }, {once: true});
+      const reset = btn('pk-link', '放弃并重抽'); reset.addEventListener('click', () => dialog.close('reset'));
+      row.append(stay, quit, reset); dialog.append(row); host.append(dialog); dialog.showModal(); stay.focus();
+      dialog.addEventListener('close', async () => {
+        asking = false;
+        const val = dialog.returnValue;
+        dialog.remove();
+        if (val === 'leave') { draftDirty = true; flushDraft(); leaveNow(); return; }
+        if (val === 'reset') {
+          try {
+            const pane = desk()?.pane?.();
+            const params = pane?.state?.practiceParams || {mode: data.mode, kind: data.kind, point: data.point, module: data.module, count: items.length};
+            await G().call('practice.abandon', {setId: data.setId}, 15000).catch(() => {});
+            clearResume(bucketOf(data));
+            const nx = await G().call('practice.start', {...params, fresh: true, requestId: rid()}, 60000);
+            if (nx?.setId) {
+              if (pane?.state) pane.state.practiceSet = nx;
+              remember(nx);
+              mountAgain();
+            } else {
+              leaveNow();
+            }
+          } catch (e) { G().toast(e.message || '重抽失败'); }
+        }
+      }, {once: true});
     };
     back.addEventListener('click', askLeave);
 
@@ -558,6 +815,7 @@
       busy = false;
       termKeyHandler = null;
       paintCount();
+      if (!finished && hasAnyProgress()) { data.cursor = i; scheduleDraftSave(); }
       const it = items[i];
       if (!it) { finish(); return; }
       const termGrp = termGroupAt(i);
@@ -578,9 +836,11 @@
       if (source) question.append(el('small', 'pkp-source', source));
       q.append(question);
       picked = null;
+      let restorePick = null;
       if (it.options) {
         const list = el('div', 'pk-drill-options pkb-guard__opts');
         const givenIdx = prev && prev.given !== '' && prev.given != null && Number.isInteger(Number(prev.given)) ? Number(prev.given) : -1;
+        const savedPick = !prev && Number.isInteger(drafts[it.itemId]) ? drafts[it.itemId] : -1;
         it.options.forEach((o, k) => {
           const b = btn('pk-choice pkb-opt');
           b.append(el('kbd', '', 'ABCD'[k] || String(k + 1)), el('span', '', o));
@@ -589,7 +849,8 @@
             if (k === prev.answer) b.classList.add('is-answer');
             if (k === givenIdx) { b.classList.add('is-on'); if (!prev.correct) b.classList.add('is-wrong'); }
           } else {
-            b.addEventListener('click', () => choose(k, b, list));
+            b.addEventListener('click', () => choose(k, b, list, it.itemId));
+            if (k === savedPick) restorePick = () => choose(k, b, list, it.itemId, {silent: true});
           }
           list.append(b);
         });
@@ -599,6 +860,7 @@
         const letters = letterChoices(data.materials?.[it.material] || '');
         const list = el('div', 'pkp-letters');
         const givenLetter = prev && prev.given != null ? String(prev.given).trim().toUpperCase() : '';
+        const savedLetter = !prev && typeof drafts[it.itemId] === 'string' ? drafts[it.itemId].trim().toUpperCase() : '';
         for (const L of letters) {
           const b = btn('pk-choice pkp-letter');
           b.append(el('kbd', '', L.letter), el('span', '', L.text));
@@ -607,7 +869,8 @@
             if (L.letter === prev.key) b.classList.add('is-answer');
             if (L.letter === givenLetter) { b.classList.add('is-on'); if (!prev.correct) b.classList.add('is-wrong'); }
           } else {
-            b.addEventListener('click', () => choose(L.letter, b, list));
+            b.addEventListener('click', () => choose(L.letter, b, list, it.itemId));
+            if (L.letter === savedLetter) restorePick = () => choose(L.letter, b, list, it.itemId, {silent: true});
           }
           list.append(b);
         }
@@ -616,14 +879,21 @@
       } else if (BIG_KINDS.has(it.qkind)) {
         const ta = el('textarea', 'pkp-essay'); ta.rows = it.qkind === 'writing' ? 12 : 8; ta.placeholder = it.qkind === 'writing' ? '在这里写作文（80–100 词）。写完点「交给碧琪阅卷」。' : '在这里写中文译文。';
         ta.setAttribute('aria-label', '你的作答');
-        const draftKey = `pkp-draft:${data.setId}:${it.itemId}`;
+        const legacyKey = `pkp-draft:${data.setId}:${it.itemId}`;
         if (prev) {
           ta.value = prev.given != null ? String(prev.given) : '';
           ta.readOnly = true; ta.disabled = true;
           q.append(ta);
         } else {
-          try { ta.value = sessionStorage.getItem(draftKey) || ''; } catch { /* 无 */ }
-          ta.addEventListener('input', () => { try { sessionStorage.setItem(draftKey, ta.value); } catch { /* 无 */ } });
+          let initial = typeof drafts[it.itemId] === 'string' ? drafts[it.itemId] : '';
+          if (!initial) { try { initial = sessionStorage.getItem(legacyKey) || ''; } catch { /* 无 */ } }
+          ta.value = initial;
+          ta.addEventListener('input', () => {
+            if (ta.value.trim()) drafts[it.itemId] = ta.value;
+            else delete drafts[it.itemId];
+            scheduleDraftSave();
+            try { sessionStorage.removeItem(legacyKey); } catch { /* 无 */ }
+          });
           const sub = btn('pkg-btn', '交给碧琪阅卷'); sub.addEventListener('click', () => submit(ta.value, sub, {essay: true}));
           const row = el('div', 'pkp-row');
           if (i > 0) row.append(makePrevLink());
@@ -639,6 +909,12 @@
           form.append(input);
           q.append(form);
         } else {
+          if (typeof drafts[it.itemId] === 'string') input.value = drafts[it.itemId];
+          input.addEventListener('input', () => {
+            if (input.value.trim()) drafts[it.itemId] = input.value;
+            else delete drafts[it.itemId];
+            scheduleDraftSave();
+          });
           const sub = btn('pkg-btn', '提交'); sub.type = 'submit';
           form.append(input, sub);
           form.addEventListener('submit', e => { e.preventDefault(); if (!input.value.trim()) { input.focus(); return; } submit(input.value, sub); });
@@ -647,6 +923,7 @@
         }
       }
       qCol.append(q);
+      if (restorePick) restorePick();
       if (prev) feedback(it, prev, {restore: true});
       qCol.scrollTop = 0;
     }
@@ -657,13 +934,17 @@
       return bar;
     }
     // 和背单词一样：点选项只是选定，还能改；回车或「检查」才交卷。
-    function choose(answer, b, list) {
+    function choose(answer, b, list, itemId = '', {silent = false} = {}) {
       if (busy) return;
       picked = {answer, el: b};
       list.querySelectorAll('.pk-choice').forEach(n => { n.classList.toggle('is-on', n === b); n.setAttribute('aria-pressed', String(n === b)); });
       const check = qCol.querySelector('.pk-drill-check');
       check?.classList.add('is-ready');
       check?.setAttribute('aria-disabled', 'false');
+      if (!silent && itemId) {
+        drafts[itemId] = answer;
+        scheduleDraftSave();
+      }
     }
     function choiceBar(hint) {
       const bar = barOf(hint);
@@ -690,8 +971,8 @@
       busy = false; syncNav();
       const saved = {...r, given: r.given ?? answer};
       answered[it.itemId] = saved;
-      data.answered = {...answered};
-      remember();
+      delete drafts[it.itemId];
+      syncLocalState();
       if (it.options) { const opts = qCol.querySelectorAll('.pkb-opt'); opts[saved.answer]?.classList.add('is-answer'); if (!saved.correct) b?.classList.add('is-wrong'); }
       if (it.qkind === 'term-match') { qCol.querySelectorAll('.pkp-letter').forEach(x => { if (x.querySelector('kbd')?.textContent === saved.key) x.classList.add('is-answer'); }); if (!saved.correct) b?.classList.add('is-wrong'); }
       if (saved.correct) { right++; a?.strike({crit: saved.combo > 0 && saved.combo % 5 === 0, damage: 96 + (saved.combo || 1) * 6}); } else a?.dodge();
@@ -806,33 +1087,42 @@
     function showTermGroup(grp) {
       shownMaterial = '__term-match__';
       stage.replaceChildren();
-      const letters = letterChoices(data.materials?.[grp.material] || '');
+      const rawMat = data.materials?.[grp.material] || '';
+      const letters = letterChoices(rawMat);
+      const examples = parseTermExamples(rawMat);
+      const exMap = new Map(examples.map(x => [x.letter, x.text]));
       const letterMap = new Map(letters.map(x => [x.letter, x.text]));
       const validLetters = new Set(letters.map(x => x.letter));
-      const draftKey = `pkp-tm-draft:${data.setId}:${grp.material || grp.items[0].itemId}`;
-      let draft = termDrafts.get(draftKey);
-      if (!draft) {
-        draft = {};
-        try {
-          const saved = JSON.parse(sessionStorage.getItem(draftKey) || 'null');
-          if (saved && typeof saved === 'object') Object.assign(draft, saved);
-        } catch { /* 无 */ }
-        termDrafts.set(draftKey, draft);
-      }
+      const grpKey = grp.material || grp.items[0].itemId;
+      const legacyTmKey = `pkp-tm-draft:${data.setId}:${grpKey}`;
+      const draft = {};
+      try {
+        const legacySaved = JSON.parse(sessionStorage.getItem(legacyTmKey) || 'null');
+        if (legacySaved && typeof legacySaved === 'object') Object.assign(draft, legacySaved);
+      } catch { /* 无 */ }
       for (const it of grp.items) {
+        const v = drafts[it.itemId];
+        if (typeof v === 'string' && validLetters.has(v.trim().toUpperCase())) draft[it.itemId] = v.trim().toUpperCase();
         if (answered[it.itemId] || (draft[it.itemId] && !validLetters.has(draft[it.itemId]))) delete draft[it.itemId];
       }
       const saveDraft = () => {
-        termDrafts.set(draftKey, draft);
-        try { sessionStorage.setItem(draftKey, JSON.stringify(draft)); } catch { /* 无 */ }
+        for (const it of grp.items) {
+          if (!answered[it.itemId] && draft[it.itemId]) drafts[it.itemId] = draft[it.itemId];
+          else delete drafts[it.itemId];
+        }
+        try { sessionStorage.removeItem(legacyTmKey); } catch { /* 无 */ }
+        scheduleDraftSave();
       };
       const clearDraft = () => {
-        for (const k of Object.keys(draft)) delete draft[k];
-        termDrafts.delete(draftKey);
-        try { sessionStorage.removeItem(draftKey); } catch { /* 无 */ }
+        for (const it of grp.items) {
+          delete draft[it.itemId];
+          delete drafts[it.itemId];
+        }
+        try { sessionStorage.removeItem(legacyTmKey); } catch { /* 无 */ }
+        scheduleDraftSave();
       };
-      let crossed = termCrossed.get(draftKey);
-      if (!crossed) { crossed = new Set(); termCrossed.set(draftKey, crossed); }
+      let crossed = termCrossed.get(grpKey);
+      if (!crossed) { crossed = new Set(); termCrossed.set(grpKey, crossed); }
 
       const allAnswered = () => grp.items.every(it => Boolean(answered[it.itemId]));
       const firstEditable = () => grp.items.findIndex(it => !answered[it.itemId] && !draft[it.itemId]);
@@ -892,6 +1182,7 @@
 
       const rows = groupTermRows(grp.items);
       const termBtns = new Map();
+      const exNodes = new Map();
       const slotNodes = [];
       let hoverLetter = '';
       let hoverSlotIdx = -1;
@@ -911,6 +1202,9 @@
             else on = draft[it.itemId] === L;
           }
           b.classList.toggle('is-hover-link', on);
+        }
+        for (const [L, node] of exNodes) {
+          node.classList.toggle('is-hover-link', hoverLetter === L);
         }
         slotNodes.forEach((s, idx) => {
           let on = hoverSlotIdx === idx;
@@ -992,12 +1286,36 @@
           e.preventDefault();
           if (crossed.has(L.letter)) crossed.delete(L.letter);
           else crossed.add(L.letter);
+          scheduleDraftSave();
           paint();
         });
         b.addEventListener('mouseenter', () => setHover(L.letter, -1));
         b.addEventListener('mouseleave', () => setHover('', -1));
         bankList.append(b);
         termBtns.set(L.letter, b);
+      }
+
+      // 若原卷带有官方 Examples 提示，放在 53 题最上方（与真题试卷完全一致）
+      if (examples.length) {
+        const exRow = el('div', 'pkp-tm-row pkp-tm-exrow');
+        exRow.append(el('span', 'pkp-tm-no pkp-tm-exlabel', '示例'));
+        const exWrap = el('div', 'pkp-tm-slots pkp-tm-exslots');
+        for (const ex of examples) {
+          const chip = btn('pkp-tm-ex');
+          chip.dataset.letter = ex.letter;
+          chip.title = letterMap.get(ex.letter) ? `原卷示例：${ex.letter} — ${letterMap.get(ex.letter)}（点击对照左侧）` : '原卷示例';
+          chip.append(el('span', 'pkp-tm-blank pkg-num', `（ ${ex.letter} ）`), el('span', 'pkp-tm-zh', ex.text));
+          chip.addEventListener('mouseenter', () => setHover(ex.letter, -1));
+          chip.addEventListener('mouseleave', () => setHover('', -1));
+          chip.addEventListener('click', () => {
+            setHover(ex.letter, -1);
+            termBtns.get(ex.letter)?.scrollIntoView({block: 'nearest', behavior: desk()?.motion?.reduced ? 'auto' : 'smooth'});
+          });
+          exWrap.append(chip);
+          exNodes.set(ex.letter, chip);
+        }
+        exRow.append(exWrap);
+        sheet.append(exRow);
       }
 
       // 建立右侧 53–57 试卷原版配对行
@@ -1262,15 +1580,20 @@
 
         // 更新左侧英文术语表状态
         let usedLettersCount = 0;
+        let exampleOnlyCount = 0;
         for (const L of letters) {
           const b = termBtns.get(L.letter);
           const list = usage.get(L.letter) || [];
           const used = list.length > 0;
+          const exText = exMap.get(L.letter) || '';
+          const isEx = Boolean(exText);
           if (used) usedLettersCount++;
+          else if (isEx) exampleOnlyCount++;
           const tag = b.querySelector('.pkp-tm-term__tag');
           b.classList.toggle('is-used', !doneAll && used);
-          b.classList.toggle('is-dup', !doneAll && list.length > 1);
-          b.classList.toggle('is-crossed', !doneAll && !used && crossed.has(L.letter));
+          b.classList.toggle('is-example', !used && isEx);
+          b.classList.toggle('is-dup', !doneAll && (list.length > 1 || (used && isEx)));
+          b.classList.toggle('is-crossed', !doneAll && !used && !isEx && crossed.has(L.letter));
           b.classList.toggle('is-linked', (!doneAll && activeLetter === L.letter) || (inspectIdx >= 0 && inspectKey === L.letter));
           b.classList.toggle('is-linked-wrong', inspectIdx >= 0 && Boolean(inspectGiven) && inspectGiven === L.letter);
           b.classList.toggle('is-graded-right', doneAll && used && list.every(x => x.r?.correct));
@@ -1280,7 +1603,10 @@
             const prefix = first.it.no != null ? `${first.it.no} ` : '';
             tag.textContent = list.length > 1
               ? `${prefix}${first.it.prompt} 等${list.length}处`
-              : `${prefix}${first.it.prompt}`;
+              : isEx && !doneAll ? `示例冲突 · ${prefix}${first.it.prompt}` : `${prefix}${first.it.prompt}`;
+            tag.hidden = false;
+          } else if (isEx) {
+            tag.textContent = `例 ${exText}`;
             tag.hidden = false;
           } else if (!doneAll && crossed.has(L.letter)) {
             tag.textContent = '已排除';
@@ -1290,28 +1616,34 @@
             tag.hidden = true;
           }
         }
-        const remainTerms = Math.max(0, letters.length - usedLettersCount);
+        const remainTerms = Math.max(0, letters.length - usedLettersCount - exampleOnlyCount);
         bankStat.textContent = doneAll
           ? `共 ${letters.length} 项`
-          : `已用 ${usedLettersCount} · 剩 ${remainTerms} 项`;
+          : examples.length
+            ? `已配 ${usedLettersCount} · 示例 ${examples.length} · 剩 ${remainTerms} 项`
+            : `已用 ${usedLettersCount} · 剩 ${remainTerms} 项`;
 
         // 更新右侧 53–57 中文槽位
         let filledCount = 0;
         let hasDup = false;
+        let hasExConflict = false;
         grp.items.forEach((it, idx) => {
           const node = slotNodes[idx];
           const r = answered[it.itemId];
           const val = r ? String(r.given || '').trim().toUpperCase() : (draft[it.itemId] || '');
           if (val) filledCount++;
           const dup = !r && Boolean(val) && (currentUsage.get(val)?.length || 0) > 1;
+          const exHit = !r && Boolean(val) && exMap.has(val);
           if (dup) hasDup = true;
+          if (exHit) hasExConflict = true;
           node.root.classList.toggle('is-active', !doneAll && !r && idx === activeIdx);
           node.root.classList.toggle('is-filled', !r && Boolean(val));
-          node.root.classList.toggle('is-dup', dup);
+          node.root.classList.toggle('is-dup', dup || exHit);
           node.root.classList.toggle('is-right', Boolean(r?.correct));
           node.root.classList.toggle('is-wrong', Boolean(r && !r.correct));
           node.root.classList.toggle('is-inspect', idx === inspectIdx && Boolean(r));
-          node.dup.hidden = !dup;
+          node.dup.textContent = exHit ? '示例' : '重复';
+          node.dup.hidden = !(dup || exHit);
           node.clear.hidden = Boolean(r) || !val;
           if (r) {
             const ansKey = String(r.key || '').trim().toUpperCase();
@@ -1331,8 +1663,9 @@
           const bar = el('footer', 'pk-drill-bar pkp-tm-bar');
           if (grp.start > 0) bar.append(makePrevLink());
           const status = el('span', 'pkp-tm-status');
-          status.textContent = `已配 ${filledCount} / ${grp.items.length}` + (hasDup ? ' · 有重复字母，请检查' : '');
-          if (hasDup) status.classList.add('is-warn');
+          const warnMsg = hasDup ? ' · 有重复字母，请检查' : hasExConflict ? ' · 选到了原卷示例项，请确认' : '';
+          status.textContent = `已配 ${filledCount} / ${grp.items.length}` + warnMsg;
+          if (hasDup || hasExConflict) status.classList.add('is-warn');
           bar.append(status);
           if (todoFilled > 0) {
             const clearAll = btn('pkb-link pkp-tm-clearall', '清空未交');
@@ -1509,7 +1842,8 @@
         if (!alive) return;
         lastFinishResult = r;
         data.finished = r;
-        clearResume();
+        for (const k of Object.keys(drafts)) delete drafts[k];
+        clearResume(bucketOf(data));
       }
       const perfect = r.scored > 0 && r.correct === r.scored;
       if (!alreadyDone && r.correct >= (r.total || items.length)) a?.defeat();
@@ -1519,7 +1853,7 @@
       card.append(el('p', 'pkb-result__line', r.scored > r.correct ? '错的题记成了错题怪，也能在「错题重刷」里再做原题。' : r.maxCombo >= 5 ? `最高连击 ${r.maxCombo}。` : '题库里还有很多，换个考点试试。'));
       const act = el('div', 'pkb-result__act');
       const home = backTo();
-      const again = btn('pkg-btn', '再来一组'); again.addEventListener('click', async () => { again.disabled = true; try { const pane = desk()?.pane?.(); const params = pane?.state?.practiceParams || {mode: 'random'}; const nx = await G().call('practice.start', {...params, requestId: rid()}, 60000); if (nx?.empty || !nx?.setId) { G().toast(nx?.why || '这一类题现在没有可做的'); again.disabled = false; return; } pane.state.practiceSet = nx; remember(); mountAgain(); } catch (e) { again.disabled = false; G().toast(e.message || '没打开'); } });
+      const again = btn('pkg-btn', '再来一组'); again.addEventListener('click', async () => { again.disabled = true; try { const pane = desk()?.pane?.(); const params = pane?.state?.practiceParams || {mode: 'random'}; const nx = await G().call('practice.start', {...params, fresh: true, requestId: rid()}, 60000); if (nx?.empty || !nx?.setId) { G().toast(nx?.why || '这一类题现在没有可做的'); again.disabled = false; return; } pane.state.practiceSet = nx; remember(nx); mountAgain(); } catch (e) { again.disabled = false; G().toast(e.message || '没打开'); } });
       const reviewLast = btn('pkb-link pkp-prev-btn', '回看上一题'); reviewLast.addEventListener('click', goPrev);
       const out = btn('pkb-link', backName(home)); out.addEventListener('click', leaveNow);
       act.append(again, reviewLast, out);
@@ -1533,6 +1867,9 @@
     // 「再来一组」：同一页重新挂（返回目标不变）
     function mountAgain() {
       alive = false;
+      clearTimeout(draftTimer);
+      document.removeEventListener?.('visibilitychange', onVisibility);
+      window.removeEventListener?.('pagehide', onPageHide);
       try { audio?.pause(); } catch { /* 无 */ }
       host.replaceChildren();
       host.className = host.className.replace(/\bpk[pb]-[\w-]+/g, '').trim();
@@ -1543,7 +1880,20 @@
 
     show();
     return {
-      unmount() { alive = false; childRuntime?.unmount?.(); try { audio?.pause(); } catch { /* 无 */ } },
+      unmount() {
+        flushDraft();
+        alive = false;
+        clearTimeout(draftTimer);
+        document.removeEventListener?.('visibilitychange', onVisibility);
+        window.removeEventListener?.('pagehide', onPageHide);
+        childRuntime?.unmount?.();
+        try { audio?.pause(); } catch { /* 无 */ }
+      },
+      pause() {
+        flushDraft();
+        try { audio?.pause(); } catch { /* 无 */ }
+        childRuntime?.pause?.();
+      },
       keydown(event) {
         if (childRuntime) return childRuntime.keydown(event);
         if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -1571,12 +1921,27 @@
     };
   }
 
-  // 术语配对的候选：「A — xxx」一行一个
+  // 术语配对的候选：「A — xxx」一行一个；同时解析原卷 Examples 提示行「Examples: (D) 门诊部  (O) 预期寿命」
   function letterChoices(material) {
     const out = [];
     for (const line of String(material).split(/\n+/)) {
       const m = /^\s*([A-Z])\s*[—\-–:：.)）]\s*(.+)$/.exec(line);
       if (m && !out.some(x => x.letter === m[1])) out.push({letter: m[1], text: m[2].trim()});
+    }
+    return out;
+  }
+  function parseTermExamples(material) {
+    const out = [];
+    for (const line of String(material || '').split(/\n+/)) {
+      const m = /^\s*Examples?\s*[:：]\s*(.+)$/i.exec(line);
+      if (!m) continue;
+      const re = /[（(]\s*([A-Z])\s*[）)]\s*([^（()）\n]+)/g;
+      let hit;
+      while ((hit = re.exec(m[1]))) {
+        const letter = hit[1].toUpperCase();
+        const text = hit[2].trim();
+        if (letter && text && !out.some(x => x.letter === letter)) out.push({letter, text});
+      }
     }
     return out;
   }
@@ -1629,40 +1994,7 @@
     d.registerView('gamepracset', {title: '刷题', wide: true, mount: (h, c) => mountSet(h, c), keydown: (e, ctx) => ctx.pane?.runtime?.keydown?.(e)});
     return true;
   }
-  // 只在这次打开学习台时接回未做完的一组。这次里点 × 离开不会被立刻拉回去。
-  let resumeArmed = false;
-  let resumeTicket = 0;
-  async function savedOrCurrent() {
-    const saved = loadResume();
-    if (saved) return saved;
-    try {
-      const r = await G()?.call?.('practice.current', {}, 15000);
-      if (!r?.setId || !r.items?.length || r.finished) return null;
-      return {set: r, params: {mode: r.mode, kind: r.kind, point: r.point, module: r.module, count: r.items.length}, returnView: ''};
-    } catch { return null; }
-  }
-  function resumeOpenSet(view) {
-    if (!resumeArmed) return;
-    if (!view) return;
-    if (view !== 'today' && view !== 'gamepractice') { resumeArmed = false; return; }
-    const ticket = ++resumeTicket;
-    const from = view;
-    savedOrCurrent().then(saved => {
-      if (!resumeArmed || ticket !== resumeTicket || desk()?.local?.()?.view !== from) return;
-      resumeArmed = false;
-      if (!saved) return;
-      const pane = desk()?.pane?.();
-      if (!pane?.state) return;
-      pane.state.practiceSet = saved.set;
-      if (saved.params) pane.state.practiceParams = saved.params;
-      if (saved.returnView) pane.state.returnView = saved.returnView;
-      remember();
-      desk().go('gamepracset');
-    });
-  }
-  window.addEventListener('pinkie:study-desk-mounted', () => { resumeArmed = true; });
-  window.addEventListener('pinkie:study-desk-view', event => resumeOpenSet(event.detail?.view));
   if (!register()) { const t = setInterval(() => { if (register()) clearInterval(t); }, 150); setTimeout(() => clearInterval(t), 20000); }
 
-  window.__pinkieGamePractice = {openSet, startPoint, letterChoices, groupTermRows, lectureNode};
+  window.__pinkieGamePractice = {openSet, startPoint, bucketOf, letterChoices, parseTermExamples, groupTermRows, lectureNode};
 })();

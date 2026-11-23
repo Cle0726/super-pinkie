@@ -563,6 +563,58 @@ export function keyText(it) {
   return clean(it.answer, 300);
 }
 
+// 刷题进度分桶键：每个模块 / 题型 / 考点 / 随机 / 错题独立保存进度，互不覆盖。
+export function practiceBucket({mode = 'random', kind = '', point = '', module = ''} = {}) {
+  const m = clean(mode, 20);
+  const mod = clean(module, 40);
+  const k = clean(kind, 40);
+  const pt = clean(point, 120);
+  if (m === 'listening' || (m === 'module' && mod === 'listening') || (m === 'kind' && k === 'listening')) return 'module:listening';
+  if (m === 'module' && mod) return `module:${mod}`;
+  if (m === 'kind' && k) return `kind:${k}`;
+  if (m === 'point' && pt) return `point:${pt}`;
+  if (m === 'wrong') return 'wrong';
+  return 'random';
+}
+function draftCountOf(set) {
+  if (!set?.drafts || typeof set.drafts !== 'object') return 0;
+  const ans = set.answers || {};
+  let n = 0;
+  for (const [k, v] of Object.entries(set.drafts)) {
+    if (ans[k]) continue;
+    if (typeof v === 'number' || (typeof v === 'string' && v.trim())) n += 1;
+  }
+  return n;
+}
+function hasProgress(set) {
+  if (!set || set.finished || set.abandoned || !set.items?.length) return false;
+  if (Object.keys(set.answers || {}).length > 0) return true;
+  if (draftCountOf(set) > 0) return true;
+  if ((Number(set.audioTime) || 0) > 5) return true;
+  if (set.crossed && typeof set.crossed === 'object' && Object.values(set.crossed).some(arr => Array.isArray(arr) && arr.length > 0)) return true;
+  return false;
+}
+function openSummary(set) {
+  const done = Object.keys(set.answers || {}).length;
+  const total = (set.items || []).length;
+  return {
+    setId: set.setId,
+    bucket: practiceBucket(set),
+    mode: set.mode,
+    kind: set.kind || '',
+    point: set.point || '',
+    module: set.module || '',
+    title: set.title,
+    done,
+    total,
+    draftCount: draftCountOf(set),
+    audioTime: Math.max(0, Math.floor(Number(set.audioTime) || 0)),
+    cursor: Number.isInteger(set.cursor) ? set.cursor : null,
+    updatedAt: set.updatedAt || set.at || 0,
+    at: set.at || 0,
+  };
+}
+
 // ---------- 刷题一组（挂在 LearningGame 上）----------
 export class GamePractice {
   constructor(game) {
@@ -586,6 +638,18 @@ export class GamePractice {
     for (const a of Object.values(state.exam?.attempts || {})) if (a.submittedAt) out[a.paperId] = true;
     return out;
   }
+  // 按模块/题型/考点分桶找出每类最近一组「有真实进度且未结算」的刷题。
+  openByBucket(state) {
+    const sets = this.ensure(state).sets || {};
+    const out = {};
+    for (const set of Object.values(sets)) {
+      if (!hasProgress(set)) continue;
+      const b = practiceBucket(set);
+      const prev = out[b];
+      if (!prev || (set.updatedAt || set.at || 0) >= (prev.updatedAt || prev.at || 0)) out[b] = set;
+    }
+    return out;
+  }
   // App 里自己补标：有没标的题、有模型、没在跑 → 后台标
   kickTags() {
     if (!this.game.requestModel || this.bank.job || this.game.autoReal === false) return;
@@ -597,7 +661,19 @@ export class GamePractice {
     const p = this.ensure(state);
     this.kickTags();
     const ov = overview(this.bank, {rec: p.rec, unlocked: this.unlockedOf(state)});
-    return {...ov, tagging: {...this.bank.status, untagged: this.bank.untagged().length}};
+    const byBucket = this.openByBucket(state);
+    const pickOpen = key => (byBucket[key] ? openSummary(byBucket[key]) : null);
+    const inProgress = Object.values(byBucket).map(openSummary).sort((a, b) => b.updatedAt - a.updatedAt);
+    return {
+      ...ov,
+      random: {...ov.random, open: pickOpen('random')},
+      wrongOpen: pickOpen('wrong'),
+      modules: (ov.modules || []).map(m => ({...m, open: pickOpen(`module:${m.id}`)})),
+      kinds: (ov.kinds || []).map(k => ({...k, open: pickOpen(k.id === 'listening' ? 'module:listening' : `kind:${k.id}`)})),
+      points: (ov.points || []).map(pt => ({...pt, open: pickOpen(`point:${pt.id}`)})),
+      inProgress,
+      tagging: {...this.bank.status, untagged: this.bank.untagged().length},
+    };
   }
   unlock({paperId} = {}) {
     const id = clean(paperId, 60);
@@ -656,12 +732,33 @@ export class GamePractice {
       .map(it => ({stem: it.stem, options: it.options, answer: it.answer, why: it.why || '', point: it.point || GROUP[it.group].name, source: `${it.title}${it.no ? ' 第 ' + it.no + ' 题' : ''}`, bankId: it.id}));
   }
 
-  start({mode = 'random', kind = '', point = '', module = '', count = 10, nodeId = '', requestId} = {}) {
+  start({mode = 'random', kind = '', point = '', module = '', count = 10, nodeId = '', requestId, fresh = false, setId = ''} = {}) {
+    const explicitId = clean(setId, 40);
+    if (explicitId) {
+      const target = this.ensure(this.game.read()).sets[explicitId];
+      if (target && !target.finished && !target.abandoned && target.items?.length) {
+        this.game.mutate(st => { const s = this.ensure(st).sets[explicitId]; if (s) s.updatedAt = this.now(); });
+        return this.decorate({setId: explicitId, resumed: true});
+      }
+      throw new Error('这组进度不在了');
+    }
     if (!requestId) throw new Error('缺少 requestId');
     const done = this.game.read().requests[`practice.start:${clean(requestId, 120)}`];
     if (done) return this.decorate(done.result);
     const state = this.game.read();
     const p = this.ensure(state);
+    const bucket = practiceBucket({mode, kind, point, module});
+    if (!fresh) {
+      const open = this.openByBucket(state)[bucket];
+      if (open) {
+        const res = this.game.once('practice.start', requestId, st => {
+          const s = this.ensure(st).sets[open.setId];
+          if (s) s.updatedAt = this.now();
+          return {setId: open.setId, resumed: true};
+        });
+        return this.decorate(res);
+      }
+    }
     const exam = this.game.modules.exam;
     const audioOk = id => Boolean(exam?.audioPresent?.(id));
     const rec = practiceRecords(p);
@@ -677,13 +774,23 @@ export class GamePractice {
         pr.rec = rec;
         pr.drawsTracked = true;
       }
-      const setId = `pr-${randomUUID().slice(0, 12)}`;
+      if (fresh) {
+        for (const s of Object.values(pr.sets)) {
+          if (s && !s.finished && !s.abandoned && practiceBucket(s) === bucket) s.abandoned = this.now();
+        }
+      }
+      const newSetId = `pr-${randomUUID().slice(0, 12)}`;
       const itemIds = r.items.map(item => item.id);
       for (const id of itemIds) pr.rec[id] = {...pr.rec[id], draws: drawnCount(pr.rec[id]) + 1};
-      pr.sets[setId] = {setId, mode, kind, point, module: clean(module, 40), title, at: this.now(), items: itemIds, answers: {}, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null};
+      const ts = this.now();
+      pr.sets[newSetId] = {setId: newSetId, mode, kind, point, module: clean(module, 40), title, at: ts, updatedAt: ts, items: itemIds, answers: {}, drafts: {}, crossed: {}, cursor: 0, audioTime: 0, combo: 0, maxCombo: 0, shield: false, nodeId: clean(nodeId, 80) || null, paperId: r.paperId || null, finished: null};
       const keys = Object.keys(pr.sets);
-      if (keys.length > 80) for (const k of keys.sort((a, b) => pr.sets[a].at - pr.sets[b].at).slice(0, keys.length - 60)) delete pr.sets[k];
-      return {setId};
+      if (keys.length > 100) {
+        // 优先清理已结束 / 已放弃 / 无真实进度的旧组，保护所有尚有进度的模块
+        const evictable = keys.filter(k => k !== newSetId && !hasProgress(pr.sets[k])).sort((a, b) => (pr.sets[a].updatedAt || pr.sets[a].at || 0) - (pr.sets[b].updatedAt || pr.sets[b].at || 0));
+        for (const k of evictable.slice(0, Math.max(0, keys.length - 80))) delete pr.sets[k];
+      }
+      return {setId: newSetId, resumed: false};
     });
     return this.decorate(res);
   }
@@ -697,14 +804,88 @@ export class GamePractice {
     const mats = {};
     for (const it of items) if (it.material) mats[it.material] = materials[it.material] || '';
     let audio = null;
-    if (set.mode === 'listening' && set.paperId) audio = this.game.modules.exam?.audioFor?.(this.game.modules.exam.readFull(set.paperId)) || null;
-    return {setId: set.setId, mode: set.mode, kind: set.kind, point: set.point, module: set.module || '', title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
-      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])), finished: set.finished};
+    if ((set.mode === 'listening' || (set.mode === 'module' && set.module === 'listening')) && set.paperId) audio = this.game.modules.exam?.audioFor?.(this.game.modules.exam.readFull(set.paperId)) || null;
+    return {setId: set.setId, bucket: practiceBucket(set), mode: set.mode, kind: set.kind, point: set.point, module: set.module || '', title: set.title, items: items.map(it => publicItem(it)), materials: mats, audio,
+      answered: Object.fromEntries(Object.entries(set.answers).map(([k, v]) => [k, publicResult(v)])),
+      drafts: set.drafts && typeof set.drafts === 'object' ? {...set.drafts} : {},
+      crossed: set.crossed && typeof set.crossed === 'object' ? {...set.crossed} : {},
+      cursor: Number.isInteger(set.cursor) ? set.cursor : null,
+      audioTime: Number(set.audioTime) || 0,
+      updatedAt: set.updatedAt || set.at || 0,
+      resumed: Boolean(res.resumed),
+      finished: set.finished};
   }
-  // 最近一组还没结算的刷题。关掉学习台再打开，前端靠这个接回做到的那一题。
-  current() {
-    const open = Object.values(this.ensure(this.game.read()).sets).filter(set => set && !set.finished && set.items?.length).sort((a, b) => (b.at || 0) - (a.at || 0))[0];
-    return open ? this.decorate({setId: open.setId}) : {setId: null};
+  // 最近一组还没结算的刷题（可按模块/桶筛选）。关掉学习台再打开，前端靠这个接回做到的那一题。
+  current(params = {}) {
+    const state = this.game.read();
+    const hasFilter = Boolean(params?.bucket || params?.mode || params?.module || params?.kind || params?.point);
+    if (hasFilter) {
+      const target = clean(params.bucket, 160) || practiceBucket(params);
+      const hit = this.openByBucket(state)[target];
+      return hit ? this.decorate({setId: hit.setId, resumed: true}) : {setId: null};
+    }
+    const sets = Object.values(this.ensure(state).sets).filter(set => set && !set.finished && !set.abandoned && set.items?.length);
+    const open = sets.sort((a, b) => Number(hasProgress(b)) - Number(hasProgress(a)) || (b.updatedAt || b.at || 0) - (a.updatedAt || a.at || 0))[0];
+    return open ? this.decorate({setId: open.setId, resumed: true}) : {setId: null};
+  }
+  // 保存未提交草稿（选项、填空、作文/译文、术语配对、划掉干扰项、当前题号、听力进度），跨刷新/重开不丢。
+  saveDraft({setId, drafts, crossed, cursor, audioTime, replace = false} = {}) {
+    const sid = clean(setId, 40);
+    if (!sid) throw new Error('缺少 setId');
+    return this.game.mutate(state => {
+      const set = this.ensure(state).sets[sid];
+      if (!set || set.finished || set.abandoned) return {ok: false};
+      const itemSet = new Set(set.items || []);
+      if (drafts && typeof drafts === 'object') {
+        const next = replace ? {} : {...(set.drafts || {})};
+        for (const [k, v] of Object.entries(drafts).slice(0, 120)) {
+          const iid = clean(k, 80);
+          if (!itemSet.has(iid) || set.answers?.[iid]) { delete next[iid]; continue; }
+          if (v == null || v === '') { delete next[iid]; continue; }
+          if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 26) next[iid] = v;
+          else if (typeof v === 'string') {
+            const val = v.replace(/\u0000/g, '').slice(0, 4000);
+            if (val.trim()) next[iid] = val; else delete next[iid];
+          }
+        }
+        set.drafts = next;
+      }
+      if (crossed && typeof crossed === 'object') {
+        const nextC = {};
+        for (const [k, arr] of Object.entries(crossed).slice(0, 30)) {
+          if (!Array.isArray(arr)) continue;
+          const cleanArr = [...new Set(arr.map(x => clean(x, 2).toUpperCase()).filter(x => /^[A-Z]$/.test(x)))];
+          if (cleanArr.length) nextC[clean(k, 120)] = cleanArr;
+        }
+        set.crossed = nextC;
+      }
+      if (Number.isInteger(cursor) && cursor >= 0 && cursor <= (set.items?.length || 0)) set.cursor = cursor;
+      const atSec = Number(audioTime);
+      if (Number.isFinite(atSec) && atSec >= 0) set.audioTime = Math.round(atSec * 10) / 10;
+      set.updatedAt = this.now();
+      return {ok: true, updatedAt: set.updatedAt, draftCount: draftCountOf(set)};
+    });
+  }
+  // 主动放弃某组（或某桶）未完成进度，下次再进会重新抽题。
+  abandon({setId = '', bucket = ''} = {}) {
+    const sid = clean(setId, 40);
+    const b = clean(bucket, 160);
+    return this.game.mutate(state => {
+      const sets = this.ensure(state).sets || {};
+      let count = 0;
+      if (sid && sets[sid] && !sets[sid].finished) {
+        sets[sid].abandoned = this.now();
+        count += 1;
+      } else if (b) {
+        for (const s of Object.values(sets)) {
+          if (s && !s.finished && !s.abandoned && practiceBucket(s) === b) {
+            s.abandoned = this.now();
+            count += 1;
+          }
+        }
+      }
+      return {ok: true, abandoned: count};
+    });
   }
 
   // 交一题。客观题马上判；翻译段落 / 写作要模型阅卷（异步，最多 60 秒）。
@@ -762,6 +943,8 @@ export class GamePractice {
       const res = {itemId: iid, correct: Boolean(correct), key: keyText(it), why: it.why || '', script: it.script || '', grade, combo: set.combo, awards: out, monster, given: typeof answer === 'number' ? answer : clean(answer, 600)};
       if (it.options) res.answer = it.answer;
       set.answers[iid] = res;
+      if (set.drafts) delete set.drafts[iid];
+      set.updatedAt = this.now();
       this.game.questTick(state);
       return publicResult(res);
     });
@@ -827,6 +1010,8 @@ export class GamePractice {
       // 从地图节点 / 营地「练」进来的：≥80% 点亮那个节点
       if (set.nodeId && scored >= 5) granted.push(...(this.game.modules.world?.nodePass?.(state, set.nodeId, correct / scored, `real:${sid}`) || []));
       set.finished = {scored, correct, total: set.items.length, maxCombo: set.maxCombo, awards: granted, counted};
+      set.drafts = {};
+      set.updatedAt = this.now();
       this.game.questTick(state);
       return set.finished;
     });
