@@ -10,5 +10,29 @@
     "metric": "lines",
     "value": 918,
     "reason": "缺陷修复：Metre 派发的子会话重新挂回父会话下面（原来全部堆在单独的「派发的会话」分组里），多出的行是 buildTree 的 parts、addTree 里的子会话行和找不到父会话时的兜底分组；没有新增全局名、观察器或定时器；另有在跑会话排序位置冻结（防止列表乱跳）的几行。"
+  },
+  {
+    "file": "ui/injections/laolao-cle-stage.js",
+    "metric": "lines",
+    "value": 800,
+    "reason": "C.le. 中断有了自己的形态：多出的行是 stopHold（塌下去停 2 秒、再用 1 秒交回签名，重绘后才发现中断时也走它）、两个时长常量和引入 laolao-cle-peek.js 的一行；adopt 里原来的三行合成一行。没有新增全局名、观察器或定时器。"
+  },
+  {
+    "file": "ui/injections/laolao-cle-ink.js",
+    "metric": "lines",
+    "value": 199,
+    "reason": "C.le. 连笔引擎：多出的两行是引入中断形态 laolao-cle-stop.js 和 poke()（点一下小标，一道光沿笔顺跑过去）；切换门槛 QUICK 1.1 → 1.6 秒是改值不加行。 另加 SHIMMER 常量和一句：每颗墨点各自轻轻闪（中断的灰不闪），静止的形态不死板。"
+  },
+  {
+    "file": "ui/injections/laolao-cle-steps.js",
+    "metric": "lines",
+    "value": 116,
+    "reason": "C.le. 步骤队列：多出的两行是 GRACE 常量和 pump() 里的一句——两个工具之间的零点几秒空档先等 0.8 秒，不切回「思考」再切走（实测一轮 23 次切换降到 18 次）。"
+  },
+  {
+    "file": "ui/injections/laolao-cle-forms.js",
+    "metric": "lines",
+    "value": 715,
+    "reason": "C.le. 形态质感（11-23 按 46×22 实际尺寸截帧逐个看过）：搜索加了被扫过才放大的三行字和找到的两处；测试从三个圈改成烧瓶（液面、弯月面、大小不一的气泡、瓶壁高光）；Git 改成分支图标的样子；记忆改成北斗七星；改文件从体素错位改成写字的铅笔（带石墨屑）。没有新增全局名、观察器或定时器。 第二轮：命令改成终端窗口（窗框和三个按钮、往上滚的一词一词的输出、敲到哪露到哪的输入行、方块光标）；子会话加了主核波纹、节点里的小核和沿连线送出去的任务包。"
   }
 ]
