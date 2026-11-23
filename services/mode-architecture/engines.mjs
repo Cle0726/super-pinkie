@@ -10,6 +10,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
+import {registerEngineBridge} from './engines-bridge.mjs';
 
 export const T3_VERSION = '0.1.11';
 export const RELEASE_BASE = 'https://github.com/pingdotgg/t3code/releases/download';
@@ -310,7 +311,7 @@ export function registerEngines(api, {base = '', register} = {}) {
   });
   register(api, 'pinkie.engines.threads', async ({folder} = {}) => {
     if (!service.status().running) throw new Error('外部引擎没有在运行');
-    return service.cli(['thread', 'list', String(folder || '.'), '--json']);
+    return service.cli(['thread', 'list', '--project', String(folder || '.'), '--json']);
   });
   // 嵌进 Metre 的引擎界面用一次性配对链接（5 分钟有效）换浏览器会话；权限只给用得到的，不给终端和远程访问管理。
   register(api, 'pinkie.engines.open', async () => {
@@ -322,6 +323,12 @@ export function registerEngines(api, {base = '', register} = {}) {
     if (!pairUrl.startsWith(url + '/pair#token=')) throw new Error('没有拿到引擎界面的登录链接');
     return {url: pairUrl, expiresAt: data.expiresAt || null};
   });
+  // 引擎台（Metre 自己画的对话界面）的方法：engines-bridge.mjs。
+  shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, ensureRunning: async () => {
+    if (service.status().running) return;
+    if (prefs().enabled !== true) throw new Error('外部引擎还没打开：在引擎菜单里打开它（第一次会下载约 170MB）');
+    await service.start();
+  }});
   if (!shared.booted) {
     shared.booted = true;
     if (prefs().enabled === true) service.start().catch(error => service.log('warn', `autostart failed: ${error.message}`));

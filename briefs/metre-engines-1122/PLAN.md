@@ -56,26 +56,49 @@
 - 登录引导：Claude Code → 让用户在终端运行 `claude auth login`；Codex → 已用用户自己的 ChatGPT 登录；Antigravity → 在 T3 里安装运行包并用 Google 登录（`docs/user/providers-antigravity.md`）。碧琪只打开官方页面或给出命令，不经手凭据。
 - 版本要求：Codex ≥ 0.159（11-22 实测旧版直接报错）。检测到旧版就提示更新。
 
-### 3.3 在 Metre 里用外部引擎（G1）
+### 3.3 在 Metre 里用外部引擎（G1）——Metre 自己的「引擎台」（11-22 晚按用户两句话改）
 
-- 输入框旁加「引擎」选择：Metre（默认）/ Claude Code / Codex / Antigravity，选了外部引擎再选模型。按会话记住（`pinkie.session.prefs` 加 `engine`）。
-- 第一版：Metre 主区换成嵌入的引擎视图（T3 网页，经 `t3 auth pairing` 换来的本机会话），外面是 Metre 的框（标题、返回 Metre、引擎和模型选择）；用 `t3 theme set` 装一套 Metre 主题。T3 自己的标志如果主题盖不掉，就在第二版换掉（3.6）。
-- 外部引擎的对话也要出现在 Metre 侧栏（一行，标引擎名），点开回到同一个视图。
+用户 11-22 晚：「注意是做融合不是完全按照现在的 Meter（因为现在 Meter 的完善程度没有别人的高大部分都没有如果出现没有的就做一个 meter UI 覆盖就行）」「也不要直接全用，因为本质上也是完善 meter 所有功能」。
+
+所以**不嵌对方的整页**（T3 网页本身也禁止被嵌：`frame-ancestors 'none'`），而是：功能以 T3 / OpenMausBot 为准，做成 Metre 自己的界面。
+
+- 数据：插件里一个 T3 实时通道客户端（`engines-rpc.mjs`）。T3 网页用的就是这条：`ws://127.0.0.1:<端口>/ws?orchestrationProtocol=2`，Effect RPC 的 JSON 消息（`Request / Chunk / Ack / Exit`）。令牌用 `t3 auth session issue --token-only --ttl … --scope …` 现签，只在内存里，到期前换新；不进日志、不给界面。11-22 实测 `server.getConfig`、`orchestration.getThreadProjection`、`orchestration.subscribeShell` 都通。
+- 翻译：`engines-bridge.mjs` 把 T3 的对话投影（`turnItems`、`runtimeRequests`、`runs`）翻成 Metre 的一份简单清单：你说的话 / 回答 / 思考 / 跑命令 / 改文件 / 搜索 / 工具 / 计划清单 / 待批准 / 提问 / 报错 / 压缩，外加此刻状态、引擎、模型、放手程度。
+- 动作（全部走 `orchestration.dispatchCommand` / `launchThread` 等 T3 自己界面用的命令）：开新对话、继续说、中途递话（插话 `steer_active` / 排队 `queue_after_active`）、停、批准或拒绝（`runtime-request.respond`）、回答提问、换模型（`thread.model-selection.set`）、换放手程度（`thread.runtime-mode.set`）、置顶、归档、看改动（`orchestration.getFullThreadDiff`）。
+- 界面（新文件 `laolao-metre-engine.js/.css`，只在 Metre 生效）：
+  - Metre 输入框下多一颗「引擎」按钮：Metre（默认）/ Claude Code / Codex / Antigravity，带登录和额度状态；再选模型和放手程度。按 Metre 会话记住（`<引擎目录>/sessions.json`，不改 `session-prefs.mjs`）。
+  - 选了外部引擎，这个 Metre 会话的正文区换成「引擎台」：Metre 自己画的对话流（思考看完自动收起、命令和改动一行一行可展开、待批准卡片、提问卡片、计划清单）、Metre 自己的输入框（发送 / 插话 / 排队 / 停）、右侧改动面板。侧栏还是这一行 Metre 会话，标上引擎名。
+  - 引擎没开、没登录、额度用完：在引擎台里用大白话说清楚，并给出下一步（打开开关 / 登录指引 / 几点恢复），不显示成程序出错。
+- 只有 Metre 没有、又很复杂的少数页面（Antigravity 运行包安装和 Google 登录、引擎实例的高级设置）用 T3 自己的设置页，外面套 Metre 的框，里面用 T3 官方主题机制（`t3 theme set` + 主题里的 `css`）换成 Metre 的配色并盖掉对方标志。为了能嵌进来，碧琪在本机开一个只给碧琪页面用的转发口：把 T3 的 `frame-ancestors 'none'` 换成只允许碧琪自己的地址，别的网站照样嵌不了。
 
 ### 3.4 Metre 派活给外部引擎（G2）
 
-- 新工具 `pinkie_engine_task`（只在 Baton 下提供）：`provider`、`model`、`task`、可选 `folder`。调 `t3 thread start <项目> <任务> --provider --model --json`（不等），记进血缘（`session-lineage.json`，类型 `external`），计入 Metre 的在跑上限。
-- 守望：每 5 秒 `t3 thread show --json`，结束（完成、失败、等人回答）后用现有的汇报卡片和叫醒链条回报 Metre；等人回答时在 Metre 里出「等你」。
-- 总谱声部里显示「引擎名 · 模型」，可以打开、停止、递一句话（`thread send`）。
+- 新工具 `pinkie_engine_task`（只在 Baton 下提供）：`engine`、`model`、`task`、可选 `folder`、`level`、`player`（乐手，见 3.5）。走 `launchThread`（不等），记进血缘（类型 `external`），计入 Metre 的在跑上限。
+- 守望：插件每 5 秒看一次在跑的外部子任务；结束（完成、失败、等人回答）后用现有的汇报卡片和叫醒链条回报 Metre；等人回答时在 Metre 里出「等你」。
+- 侧栏父会话下面、总谱声部里显示「引擎名 · 模型」和此刻在做什么，点开就是这条子任务的引擎台（可以停、递一句话、批准）。
 
 ### 3.5 吸收的功能清单（G3，做完逐项打勾）
 
-T3 Code：切换模型和引擎；每个会话独立工作树；改动差异审阅；审批（按引擎自己的权限模式）；会话列表（置顶、归档）；中途递话不打断（`thread send`）；用量和额度显示（caches 里的 `usageLimits`）。
-OpenMausBot：机器人当联系人（Metre 的角色卡 = 带引擎和模型的机器人）；审批分级（`docs/approval-levels.md`）；「看它干活」的实时视图；连接的应用改用碧琪已有的连接器（不用 Composio 的云服务）。
+| 来源 | 功能 | Metre 里怎么做 |
+|---|---|---|
+| T3 | 切换引擎和模型 | 引擎按钮 + 模型菜单；对话中途换模型走 `thread.model-selection.set` |
+| T3 | 中途递话不打断 | 引擎台输入框：运行中发送默认排队，可切「插话」 |
+| T3 | 审批（按引擎自己的权限模式） | 待批准卡片：批准 / 这次都批准 / 拒绝（可附一句理由） |
+| T3 | 提问卡片 | 选项 + 自己写；回答走 `runtime-request.respond` |
+| T3 | 改动差异审阅 | 右侧改动面板，按文件列 +/−，点开看差异 |
+| T3 | 会话列表（置顶、归档） | 引擎台标题栏的置顶 / 归档；侧栏标引擎名 |
+| T3 | 每个会话独立工作树 | 开新对话时可选「在新的工作树里做」（`workspaceStrategy: worktree`） |
+| T3 | 用量和额度 | 引擎菜单和引擎台顶部显示额度状态、恢复时间（`usageLimits`） |
+| T3 | 计划清单 / 方案 | `todo_list`、`proposed_plan` 画成 Metre 的清单和谱纸卡 |
+| OpenMausBot | 审批分级 | 「放手程度」四档：全放手 / 自己判断 / 改文件不问 / 每步都问（= T3 的 full-access / auto / auto-accept-edits / approval-required），默认全放手，对话中途可改 |
+| OpenMausBot | 机器人当联系人 | 「乐手」：名字 + 引擎 + 模型 + 放手程度 + 可选的 Metre 角色卡；引擎菜单里能直接选，派活时 `player` 指定 |
+| OpenMausBot | 看它干活 | 引擎台本身实时刷新；总谱声部显示此刻在做什么 |
+| OpenMausBot | 连接的应用 | 不做：用碧琪已有的连接器，不用对方的云服务 |
 
-### 3.6 第二版：自己的 Metre 前台
+### 3.6 设置、许可、文档（E7）
 
-嵌入视图稳定以后，基于 T3 网页端（MIT）和 OpenMausBot 的界面（Apache-2.0）做 Metre 自己的前台，连同一个引擎服务。保留许可声明，换掉全部品牌。这一步也是 C.le. 计划 K8 的落地。
+- 「外部引擎」总开关在引擎菜单和设置里各一处；关着时不下载、不启动。
+- 关于页加许可声明：T3 Code（MIT）、OpenMausBot（Apache-2.0，借的是功能设计，没有搬 `enterprise/`）。`docs/METRE-MODE.md` 加「外部引擎」一节。
 
 ---
 
@@ -85,10 +108,10 @@ OpenMausBot：机器人当联系人（Metre 的角色卡 = 带引擎和模型的
 |---|---|---|
 | E1 | 引擎服务：下载、校验、解压（中文路径）、启动、停止、状态、崩溃重启 | 单元测试；隔离目录里真装一遍；中文用户名路径的测试 |
 | E2 | 桥：网关方法、引擎和登录状态、版本检查 | 测试；隔离网关里调用 |
-| E3 | Metre 引擎选择 + 嵌入视图 + Metre 主题 | 真界面截图，和 T3 原版并排对比 |
+| E3 | 实时通道客户端 + 翻译 + 引擎台（引擎按钮、对话流、输入框、审批、提问、改动面板） | 测试；真界面截图，和 T3 原版并排对比 |
 | E4 | `pinkie_engine_task` 派活、守望、回报、总谱声部 | 隔离网关里派一件真活（用户额度可用的引擎） |
-| E5 | OpenMausBot 的机器人和审批分级 | 对照清单 |
-| E6 | 自己的 Metre 前台（3.6） | 对照清单 + 截图 |
+| E5 | 放手程度四档、乐手 | 对照清单 |
+| E6 | T3 设置页的 Metre 外观覆盖（主题 + 转发口），引擎台补齐清单剩下的项 | 对照清单 + 截图 |
 | E7 | 设置开关、关于页许可声明、文档（`docs/METRE-MODE.md`）、版本号 | 发版要用户点头 |
 
 ---
