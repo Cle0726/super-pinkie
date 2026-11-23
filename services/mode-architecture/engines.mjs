@@ -26,8 +26,8 @@ export function assetName(version = T3_VERSION, platform = process.platform, arc
 }
 
 // 第一个纯英文的候选目录。用户名是中文时，家目录下的路径不行，退到系统的英文目录。
-export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), env = process.env, platform = process.platform} = {}) {
-  const candidates = [path.join(stateDir, 'pinkie', 'engines')];
+export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), base = '', env = process.env, platform = process.platform} = {}) {
+  const candidates = [base ? path.join(base, 'engines') : path.join(stateDir, 'pinkie', 'engines')];
   if (platform === 'win32') {
     if (env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, 'SuperPinkie', 'engines'));
     candidates.push(path.join(env.ProgramData || 'C:\\ProgramData', 'SuperPinkie', 'engines'));
@@ -285,4 +285,37 @@ export class EngineService {
   }
 
   show(threadId) { return this.cli(['thread', 'show', threadId, '--json']); }
+}
+
+// 网关方法（界面用）：status / enable / threads。插件在同一个网关里会被加载好几份，引擎服务只能有一个。
+const SHARED = Symbol.for('pinkie.engines.v1');
+export function registerEngines(api, {base = '', register} = {}) {
+  const shared = globalThis[SHARED] ||= {service: new EngineService({root: engineRoot({base}), logger: api.logger})};
+  const service = shared.service;
+  const prefsFile = path.join(service.root, 'prefs.json');
+  const prefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')) || {}; } catch { return {}; } };
+  const savePrefs = patch => {
+    const next = {...prefs(), ...patch};
+    fs.mkdirSync(service.root, {recursive: true});
+    fs.writeFileSync(prefsFile + '.tmp', JSON.stringify(next));
+    fs.renameSync(prefsFile + '.tmp', prefsFile);
+    return next;
+  };
+  const status = () => ({...service.status(), enabled: prefs().enabled === true, providers: service.providers()});
+  register(api, 'pinkie.engines.status', () => status());
+  register(api, 'pinkie.engines.enable', async ({on} = {}) => {
+    savePrefs({enabled: on === true});
+    if (on === true) await service.start(); else service.stop();
+    return status();
+  });
+  register(api, 'pinkie.engines.threads', async ({folder} = {}) => {
+    if (!service.status().running) throw new Error('外部引擎没有在运行');
+    return service.cli(['thread', 'list', String(folder || '.'), '--json']);
+  });
+  if (!shared.booted) {
+    shared.booted = true;
+    if (prefs().enabled === true) service.start().catch(error => service.log('warn', `autostart failed: ${error.message}`));
+    process.once('exit', () => { try { service.stop(); } catch {} });
+  }
+  return service;
 }

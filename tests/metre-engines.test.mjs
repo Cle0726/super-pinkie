@@ -110,3 +110,26 @@ test('threads are started through the CLI with the message on stdin, so quotes a
   assert.equal(start.input, message);
   await assert.rejects(new EngineService({root: tmp(), platform: 'win32', arch: 'x64'}).show('x'), /还没有安装/);
 });
+
+test('gateway methods: off by default, the switch is remembered, nothing starts until it is on', async () => {
+  const {registerEngines} = await import('../services/mode-architecture/engines.mjs');
+  delete globalThis[Symbol.for('pinkie.engines.v1')];
+  const base = tmp();
+  const methods = {};
+  const register = (api, name, fn) => { methods[name] = fn; };
+  const service = registerEngines({logger: null}, {base, register});
+  assert.deepEqual(Object.keys(methods).sort(), ['pinkie.engines.enable', 'pinkie.engines.status', 'pinkie.engines.threads']);
+  assert.equal(service.root, path.join(base, 'engines'));
+  const first = await methods['pinkie.engines.status']();
+  assert.equal(first.enabled, false);
+  assert.equal(first.running, false);
+  let started = 0;
+  service.start = async () => { started += 1; return service.status(); };
+  service.stop = () => service.status();
+  assert.equal((await methods['pinkie.engines.enable']({on: true})).enabled, true);
+  assert.equal(started, 1);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(base, 'engines', 'prefs.json'), 'utf8')).enabled, true);
+  assert.equal((await methods['pinkie.engines.enable']({on: false})).enabled, false);
+  await assert.rejects(methods['pinkie.engines.threads']({}), /没有在运行/);
+  delete globalThis[Symbol.for('pinkie.engines.v1')];
+});

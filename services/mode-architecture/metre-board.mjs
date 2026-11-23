@@ -15,6 +15,7 @@ import {createHash} from 'node:crypto';
 import {agentOf, clipGraphemes, isInternalMessage, messageText, readSessionJson, registerSessionMethod} from './session-titles.mjs';
 import {isMetreKey} from './session-lineage.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
+import {registerEngines} from './engines.mjs';
 
 export const RAW_LIMIT = 200;
 export const TIMELINE_LIMIT = 120;
@@ -440,6 +441,8 @@ export class MetreBoard {
 export function registerMetreBoard(api, {root, lineage, plans = null, modelHealth = null, lock = null, metreRoleCatalog} = {}) {
   const activeLock = () => lock || getActiveMetreLock();
   const board = new MetreBoard({root, lineage, plans, modelHealth, metreRoleCatalog});
+  // 外部引擎（T3 Code：Claude Code、Codex、Antigravity），briefs/metre-engines-1122。默认关，用户打开才装才跑。
+  registerEngines(api, {base: path.dirname(root), register: registerSessionMethod});
   const safe = work => (event, ctx) => {
     if (activeLock()?.isLocked?.()) return;
     try { work(event, ctx); } catch { /* 看板记账出错不影响这一轮 */ }

@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-11-22 · 会话 847a9261 · E2 网关方法 · 前半完成
+
+- `engines.mjs` 末尾的 `registerEngines(api, {base, register})`：引擎服务全网关只建一个（`Symbol.for('pinkie.engines.v1')`，插件会被加载好几份）；开关存在 `<碧琪状态目录>/engines/prefs.json`，默认关；网关启动时开关是开的就自动启动；进程退出时停。方法：`pinkie.engines.status`（含 providers，已去邮箱）、`pinkie.engines.enable {on}`、`pinkie.engines.threads {folder}`。
+- 挂在 `metre-board.mjs` 的 `registerMetreBoard` 里（`index.mjs` 受健康门禁限制不能变长；`metre-board.mjs` 是新文件上限 1500 行）。`register` 传的是 `registerSessionMethod`，所以 Metre 锁照样生效。
+- 验证：`metre-engines`（8 条）、`metre-board`、`plugin-file-lists`、`code-health-ratchet`、`metre-roles` 共 43/43。没在真网关里调过。
+- **E2 还剩**：`pinkie.engines.open`——用 `t3 auth pairing` 给界面生成本机配对链接（先 `t3 auth pairing --help`；令牌不能打印进日志）；`pinkie.engines.signin {provider}` 打开官方登录（Claude 是终端 `claude auth login`，Antigravity 在 T3 设置里）；在 T3 里启用 `claudeAgent`、`antigravity` 实例（看 `t3 --help` 有没有开关命令，没有就查 `home/userdata` 的设置怎么写）。然后在隔离网关里真调一遍（`tools/metre/iso/`，副本放 F: 纯英文路径）。
+
 ## 2026-11-22 · 会话 847a9261 · E1 引擎服务 · 完成
 
 - `services/mode-architecture/engines.mjs`：`EngineService` 的 install（curl 走本机 7897/7890 代理下载固定版本 → 对照 `SHA256SUMS` → Windows 用 PowerShell `Expand-Archive`、Mac 用 tar 解压 → 放进 `engineRoot()` 选出的纯英文目录 → 清掉下载临时目录）、start（空闲端口、只监听 127.0.0.1、等「server is ready」、10 分钟内最多自动重启 3 次）、stop（Windows `taskkill /T`）、status、providers（读 `home/caches/*.json`，**去掉邮箱**）、cli（解析 `--json` 输出；错误取 `ERROR (#n):` 那句）、addProject（已存在算成功）、startThread / send / show（消息走标准输入，引号换行不出错）。
