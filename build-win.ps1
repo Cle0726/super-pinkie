@@ -68,6 +68,35 @@ $mihomoExe = Get-ChildItem -LiteralPath $mihomoUnpack -Filter "*.exe" -Recurse |
 if (-not $mihomoExe) { throw "mihomo 压缩包里没有 exe" }
 Copy-Item -LiteralPath $mihomoExe.FullName -Destination (Join-Path $browserVpnStage "mihomo.exe") -Force
 
+# 打包不碰构建机上真实的用户目录：内核安装（npm 安装脚本）、皮肤注入（会往 ~\.openclaw\workspace*
+# 写头像）和补丁都在 build\home 里跑，跑完恢复。npm 仍读构建机自己的 .npmrc（代理、镜像）。
+$isolatedHome = Join-Path $RepoRoot "build\home"
+$isolatedUserEnv = [ordered]@{
+    HOME = Join-Path $isolatedHome "home"
+    USERPROFILE = Join-Path $isolatedHome "home"
+    APPDATA = Join-Path $isolatedHome "appdata"
+    LOCALAPPDATA = Join-Path $isolatedHome "localappdata"
+    OPENCLAW_HOME = Join-Path $isolatedHome "home"
+    OPENCLAW_STATE_DIR = Join-Path $isolatedHome "openclaw-state"
+}
+$savedUserEnv = @{}
+foreach ($name in @($isolatedUserEnv.Keys) + @('npm_config_userconfig')) {
+    $savedUserEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
+function Restore-BuildUserEnv {
+    foreach ($name in $savedUserEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $savedUserEnv[$name], 'Process') }
+}
+# trap 对整个脚本生效（包括这一段之前），所以不依赖上面的函数，只在已保存过时才恢复。
+trap { if ($savedUserEnv) { foreach ($name in @($savedUserEnv.Keys)) { [Environment]::SetEnvironmentVariable($name, $savedUserEnv[$name], 'Process') } }; break }
+if (Test-Path -LiteralPath $isolatedHome) { Remove-Item -LiteralPath $isolatedHome -Recurse -Force }
+foreach ($name in $isolatedUserEnv.Keys) {
+    New-Item -ItemType Directory -Force -Path $isolatedUserEnv[$name] | Out-Null
+    [Environment]::SetEnvironmentVariable($name, $isolatedUserEnv[$name], 'Process')
+}
+if (-not $savedUserEnv['npm_config_userconfig'] -and $savedUserEnv['USERPROFILE']) {
+    $env:npm_config_userconfig = Join-Path $savedUserEnv['USERPROFILE'] '.npmrc'
+}
+
 # registry.npmjs.org stalled here for minutes at a time (15 idle
 # connections, zero CPU) while the mirror finished the same install in
 # six minutes. Only this build step is pointed at the mirror; the
@@ -217,6 +246,7 @@ if ($modeText -like '*C.le. 执行控制层*') { throw "Windows 包带上了 C.l
 Remove-Item Env:OPENCLAW_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES -ErrorAction SilentlyContinue
+Restore-BuildUserEnv
 
 $runtimeInfo = @{
     architecture = $env:PROCESSOR_ARCHITECTURE
