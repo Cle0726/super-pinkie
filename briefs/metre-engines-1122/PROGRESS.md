@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-11-23 上午 · 会话 42f0bde1 · Claude 多账号真登录、真回话
+
+- 用户在 Edge 无痕窗口里登录了 Claude（Pro 订阅），登录进的是 Metre 自己的账号文件夹 `~/.claude-metre-2`（实例 `claudeAgent-2`，「Claude Code · Metre」）。用户的 `~/.claude` 没动（登录文件里还是只有设备令牌）。
+- 报上来 14 个模型（claude-opus-5-5 默认、sonnet-5-5、fable-5-2 …、haiku-5-5、haiku-4-5）。用最便宜的 claude-haiku-5-5 发「只回复两个字：收到」，约 6 秒回「收到」。
+- 到现在有两个能跑真活的引擎：Antigravity（默认账号）和 Claude（`claudeAgent-2`），都在试验目录 `F:\t3probe\e1\root` 的引擎服务里，不在用户装的碧琪里。Codex 额度 11-26 17:44 恢复。
+- 脚本在会话草稿 `claudeprobe.mjs`。
+
+**下一步（按顺序）**
+1. 在引擎台界面里用 Antigravity / Claude 真跑一段（隔离网关 `tools/metre/iso`，`METRE_ISO_ROOT` 放 F: 纯英文路径；把 `F:\t3probe\e1\root\versions` 拷过去省得重下）——验对话流、改文件、待批准卡片、改动面板；用户的登录要在隔离副本里重登一次（或把副本的引擎目录指到 `F:\t3probe\e1\root`）。
+2. 侧栏标引擎名、和对方原版的并排对比图。
+3. E4 `pinkie_engine_task` → E5 乐手 → E6 「更多引擎」（ACP 注册表）→ E7 → E8 同步给碧琪全局。
+
 ## 2026-11-23 上午 · 会话 42f0bde1 · 多账号 + 登录一律开无痕窗口（923f3b8a）
 
 **用户这一段**：「最好支持多账号登入，比如 Anti 我有几个 Pro，还有 Claude 也是」；「要登入 Claude 你开一个无痕浏览器给我登入，不要用我的浏览器」。
