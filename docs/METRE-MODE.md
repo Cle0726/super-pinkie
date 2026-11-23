@@ -31,6 +31,7 @@ Metre 的一个会话可以不用 Metre 自己的模型，整段交给外部编�
 - 引擎服务只在这台电脑上跑、只监听本机（`127.0.0.1`）。开关一关或碧琪退出就停；崩了自动重启，最多 3 次，之后提示。
 - 装在碧琪状态目录下的 `engines/`。路径必须是纯英文：用户名是中文时改放 `%LOCALAPPDATA%` 下的英文目录，再不行放 `C:\ProgramData\SuperPinkie\engines`。
 - 代码：`services/mode-architecture/engines.mjs`（服务）、`engines-bridge.mjs`（网关方法 `pinkie.engines.*`）、`engines-registry.mjs`（更多引擎）、`engines-rpc.mjs`（实时通道）；界面 `ui/injections/laolao-metre-engine.js/.css`，只在 Metre 生效。
+- 许可声明：设置「关于与更新」最后一行「第三方许可」，点「查看」弹出全文（引擎服务的 MIT 许可证全文、借鉴设计的致谢、更多引擎各按自己的许可证）。正文在 `laolao-metre-engine.js` 的 `NOTICES` 段，那是全项目唯一可以写对方项目原名的地方。
 
 ### 选引擎、登录
 

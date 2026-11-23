@@ -667,7 +667,7 @@
       state.usageValues.set(key, value);
     }
     usageLabel.setAttribute("aria-hidden", "true");
-    makeStatus(aboutCard, "usage");
+    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
 
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());

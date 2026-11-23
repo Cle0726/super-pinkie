@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-11-23 晚 · E7 许可声明进关于页（AWS Quick 经 Quick 跑腿 2）
+
+**用户这一段**：push c2ee5a73 + 9beafcc7（已推，`461f9939..9beafcc7`）；NOTICES 放「关于与更新」卡片最后一行「第三方许可」，点「查看」弹出全文；同意挑 Qwen Code 真加一遍注册表引擎（下一条）。
+
+**做了什么**
+- 设置「关于与更新」最后一行「第三方许可」+「查看」：弹窗（原生 `<dialog>`，用设置页自己的 `--pinkie-settings-*` 配色）显示全文：引擎服务是 T3 Code 官方发布包（MIT）、OpenMausBot 设计借鉴（Apache-2.0，没搬代码）、更多引擎各按自己的许可证，中英各一份，最后是 MIT 全文。关闭按钮或点外面关。不连网关，五个模式都能看。
+- 写法照设置开关：`laolao-settings-user.js` 在同一行 `makeStatus(aboutCard, "usage")` 后面留空位 `.pinkie-user-settings__notices`（带 `row / button`），发 `pinkie:settings-notices`；行数还是 1637。正文和弹窗在 `laolao-metre-engine.js` 的 `NOTICES-BEGIN / NOTICES-END` 段，这是全项目唯一能写对方项目原名的地方；`metre-engine-ui` 的「界面不出现对方名字」那条改成只放过这一段（而且只能有一段）。
+- **MIT 全文和版权行「Copyright (c) 2026 T3 Tools Inc.」和 T3 Code 仓库 v0.1.11 标签下的 `LICENSE` 逐字对过**（`git show v0.1.11:LICENSE`，本机只读源码）——草稿里「拿不准」的那条解决了。关于页不写版本号。`NOTICES-draft.md` 的「拿不准」一节改成核对记录。
+- 顺手修：上一条 E7 设置开关改了 `laolao-settings-user.js`，但它的 `?v=guard3` 没换，有缓存的用户可能看不到开关。现在 `guard3` → `guard4`；`metreengine9` → `metreengine10`。
+- `docs/METRE-MODE.md`「打开和关掉」加一条许可声明在哪。
+
+**怎么验的**：`metre-engine-ui` 新加两条：静态（空位是关于卡片最后一行、MIT 关键句逐字在、settings 换了号）；真浏览器（设置页先建好 / 引擎文件先加载两种顺序都接上、点「查看」弹窗有版权行和致谢、关闭、全程不调网关）。19 个文件全过（`metre-engine-ui` 14 条，Edge）；ratchet、`git diff --check` 过。全量门禁：本次 53 条失败，干净副本（9beafcc7）54 条，没有新增——这次那条不稳的 `session-lineage`「stop-and-archive…」挂在了干净副本上。截图（存根页 + 真设置页 CSS，亮 / 暗）：`build\quick-run\e6\shot-notices-*.png`。
+
+**没验的**：没在真碧琪设置页里截图；Mac 没验。
+
+**下一步**：Qwen Code 真加一遍（用户 11-23 同意）→ E8。版本号发版前问用户。
+
 ## 2026-11-23 晚 · E6 更多引擎（ACP 注册表）+ 引擎台补「新工作树」（AWS Quick 经 Quick 跑腿 2）
 
 **做了什么**

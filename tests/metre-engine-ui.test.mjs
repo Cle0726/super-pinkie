@@ -20,7 +20,10 @@ test('the engine stage is loaded by the head fragment and reuses the very same C
 });
 
 test('nothing on screen names or links the other projects (user 11-22: no T3 Code marks)', () => {
-  for (const [name, text] of [['js', js], ['css', css]]) {
+  // 唯一的例外：关于页的第三方许可声明（MIT 要保留版权和许可声明），夹在 NOTICES-BEGIN / NOTICES-END 之间，只有一段。
+  assert.equal(js.split('// NOTICES-BEGIN').length, 2, 'exactly one notices block');
+  const outside = js.replace(/\/\/ NOTICES-BEGIN[\s\S]*?\/\/ NOTICES-END/, '');
+  for (const [name, text] of [['js', outside], ['css', css]]) {
     const visible = text.split('\n').filter(line => !/^\s*(?:\/\/|\/?\*)/.test(line)).join('\n');
     assert.doesNotMatch(visible, /T3|t3\.codes|OpenMaus|Maus/i, name);
   }
@@ -506,5 +509,60 @@ test('in a browser: a new conversation can start in its own worktree, and the ch
     assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.say')[1]), {sessionKey: 'agent:metre:w', text: '新建 notes.md', mode: 'queue', worktree: true});
     await tab.waitForFunction(() => !document.querySelector('.pk-eng-chip--tree'));
     assert.equal(await tab.getByRole('button', {name: '新工作树'}).count(), 0, 'once the conversation exists its folder is settled');
+  } finally { await browser.close(); }
+});
+
+// 关于页「第三方许可」（用户 11-23 定）：设置页「关于与更新」最后一行留空位，引擎文件填上；点「查看」弹出全文。
+test('the about card leaves the last slot for the third-party notices, and the notices keep the MIT text word for word', () => {
+  const settings = read('laolao-settings-user.js');
+  assert.match(settings, /makeStatus\(aboutCard, "usage"\); const noticesHost = element\("div", "pinkie-user-settings__notices", aboutCard\); noticesHost\.pinkieKit = \{row, button\}; window\.dispatchEvent\(new CustomEvent\("pinkie:settings-notices"/);
+  assert.ok(settings.indexOf('pinkie-user-settings__notices') > settings.indexOf('state.usageGrid ='), 'after the usage numbers, so it is the last row');
+  const block = /\/\/ NOTICES-BEGIN[\s\S]*?\/\/ NOTICES-END/.exec(js)[0];
+  for (const line of ['MIT License', 'Copyright (c) 2026 T3 Tools Inc.', 'The above copyright notice and this permission notice shall be included in all',
+    'copies or substantial portions of the Software.', 'OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE', 'https://github.com/pingdotgg/t3code', 'Apache-2.0']) assert.ok(block.includes(line), line);
+  assert.match(read('laolao-head.fragment.html'), /laolao-settings-user\.js\?v=guard4/, 'the settings file changed, so its version changed');
+});
+
+test('in a browser: 第三方许可 shows a 查看 button that opens the full notices and closes again', {timeout: 40_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html data-laolao-mode="chat"><head><style>${css}</style></head><body><section id="card"></section></body></html>`}));
+    await tab.goto('http://127.0.0.1:30117/settings');
+    await tab.evaluate(() => {
+      window.calls = [];
+      window.__laolaoSidebar = {gwRequest: async method => { window.calls.push(method); return {}; }};
+      const row = (parent, title, hint) => {
+        const item = document.createElement('div'); item.className = 'pinkie-user-settings__row';
+        item.innerHTML = '<div class="copy"><span class="title"></span><span class="hint"></span></div>';
+        item.querySelector('.title').textContent = title; item.querySelector('.hint').textContent = hint;
+        const control = document.createElement('div'); item.append(control); parent.append(item);
+        return {item, control};
+      };
+      const button = (label, className, parent, onClick) => { const b = document.createElement('button'); b.className = className; b.type = 'button'; b.textContent = label; parent.append(b); b.addEventListener('click', onClick); return b; };
+      window.slot = () => { const host = document.createElement('div'); host.className = 'pinkie-user-settings__notices'; host.pinkieKit = {row, button}; document.getElementById('card').append(host); return host; };
+      window.slot(); // 设置页比引擎文件先建好
+    });
+    await tab.addScriptTag({content: js});
+    await tab.locator('.pinkie-user-settings__notices .title').waitFor({timeout: 10_000});
+    assert.equal(await tab.locator('.pinkie-user-settings__notices .title').textContent(), '第三方许可');
+    // 引擎文件先加载、设置页后建好：靠事件接上。
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:settings-notices', {detail: {host: window.slot()}})));
+    assert.equal(await tab.locator('.pinkie-user-settings__notices .title').count(), 2);
+    await tab.getByRole('button', {name: '查看'}).first().click();
+    const dialog = tab.getByRole('dialog', {name: '第三方许可'});
+    await dialog.waitFor();
+    const text = await dialog.locator('.pk-notices__text').textContent();
+    assert.match(text, /Copyright \(c\) 2026 T3 Tools Inc\./);
+    assert.match(text, /OpenMausBot/);
+    assert.match(text, /^引擎服务/);
+    await dialog.getByRole('button', {name: '关闭'}).click();
+    await tab.waitForFunction(() => !document.querySelector('.pk-notices'));
+    assert.deepEqual(await tab.evaluate(() => window.calls), [], 'reading the notices needs no gateway');
   } finally { await browser.close(); }
 });

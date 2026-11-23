@@ -1259,6 +1259,76 @@
   window.addEventListener('pinkie:settings-engines', event => mountSettings(event.detail?.host));
   document.querySelectorAll('.pinkie-user-settings__engines').forEach(mountSettings); // 设置页比这里先建好的情况
 
+  // ---------- 关于页「第三方许可」（PLAN 3.6，用户 11-23 定：「关于与更新」最后一行，点「查看」弹出全文） ----------
+  // 设置页只留空位 .pinkie-user-settings__notices（带 row / button），再发 pinkie:settings-notices。不连网关，五个模式都能看。
+  // NOTICES-BEGIN：全项目唯一可以写这两个项目原名的地方（MIT 要求保留版权和许可声明）。MIT 全文 11-23 和 v0.1.11 的 LICENSE 逐字对过。
+  const NOTICES = `引擎服务
+Metre「外部引擎」用到的引擎服务是 T3 Code（https://github.com/pingdotgg/t3code）的官方发布包，固定版本，未经修改；只在你打开外部引擎时才下载到这台电脑上。T3 Code 按 MIT 许可证发布，全文见最下面。
+
+功能设计借鉴
+Metre 的放手程度分级、乐手（把机器人当成联系人）和「看它干活」这几项设计，借鉴了 OpenMausBot（https://github.com/milind-soni/OpenMausBot）。OpenMausBot 按 Apache-2.0 许可证发布（enterprise/ 目录除外，那部分不是开源许可）。我们只借鉴了功能和交互设计：没有复制它的代码，也没有用它的 enterprise/ 目录。
+
+更多引擎
+从「更多引擎」里加上的引擎是各家自己的软件，按各自的许可证发布（列表里写着），由引擎服务从公开的 ACP 注册表下载。
+
+————
+
+Engine service
+The engine service used by Metre's external engines is the official, unmodified release package of T3 Code (https://github.com/pingdotgg/t3code), pinned to a fixed version and downloaded to this computer only when you turn external engines on. T3 Code is distributed under the MIT License; the full text is at the bottom.
+
+Design inspiration
+Several Metre features (tiered approval levels, players as contacts, and watching an agent work) were inspired by the design of OpenMausBot (https://github.com/milind-soni/OpenMausBot), licensed under the Apache License 2.0 except for its enterprise/ directory. We borrowed only the feature and interaction design: no OpenMausBot source code is included and nothing from its enterprise/ directory was used.
+
+More engines
+Engines added from "More engines" are their makers' own software, each under its own license (shown in the list), downloaded by the engine service from the public ACP Registry.
+
+————
+
+MIT License
+
+Copyright (c) 2026 T3 Tools Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`;
+  // NOTICES-END
+  function mountNotices(host) {
+    const kit = host?.pinkieKit;
+    if (!host || host.dataset.pkNotices || typeof kit?.row !== 'function' || typeof kit?.button !== 'function') return;
+    host.dataset.pkNotices = 'on';
+    const line = kit.row(host, '第三方许可', 'Metre 外部引擎用到的开源软件，和借鉴过的设计。');
+    kit.button('查看', 'pinkie-user-settings__button pinkie-user-settings__button--small', line.control, () => {
+      host.querySelector('.pk-notices')?.remove();
+      const box = h('dialog', 'pk-notices');
+      box.setAttribute('aria-label', '第三方许可');
+      const head = h('div', 'pk-notices__head', '<strong>第三方许可</strong>');
+      kit.button('关闭', 'pinkie-user-settings__button pinkie-user-settings__button--small', head, () => box.close());
+      const text = h('pre', 'pk-notices__text');
+      text.textContent = NOTICES;
+      box.append(head, text);
+      box.addEventListener('close', () => box.remove());
+      box.addEventListener('click', event => { if (event.target === box) box.close(); }); // 点外面的暗处也关
+      host.append(box);
+      box.showModal();
+    });
+  }
+  window.addEventListener('pinkie:settings-notices', event => mountNotices(event.detail?.host));
+  document.querySelectorAll('.pinkie-user-settings__notices').forEach(mountNotices);
+
   window.addEventListener('pinkie:composer-chips', () => paintComposerChip());
   window.addEventListener('popstate', () => { schedule(50); setTimeout(refreshSide, 300); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { schedule(50); refreshSide(); } });
