@@ -11,7 +11,6 @@ export const RUSH = 650;       // 后面还有步骤在等
 export const RESULT = 1150;    // 成功 / 失败收势：变过去 0.45 秒，再让人看清
 export const INSTANT = 300;    // 这么快就做完的：不绕回签名，多留点时间给它自己的形状
 export const BACKLOG = 2;      // 做完但还没播的，最多留几个
-export const GRACE = 800;      // 两个工具之间常空出零点几秒：先别切回「思考」，等等下一步
 // 只有结果要紧的步骤才演「成功」，读文件、搜索这些不演
 const CELEBRATE = new Set(['test', 'build', 'install', 'git']);
 
@@ -67,7 +66,6 @@ export function createSteps(show, {now = () => Date.now(), later = (fn, ms) => s
       for (const s of seen.values()) if (!s.done) running = s;
       if (running) return take(running, '');
     }
-    if (cur && !cur.graced) { cur.graced = true; timer = later(pump, GRACE); return; }
     cur = null;
     show({kind: bg, text: '', mono: false, quick: false});
   }

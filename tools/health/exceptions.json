@@ -124,29 +124,5 @@
     "metric": "setIntervals",
     "value": 1,
     "reason": "M3 返工：恢复原生定时语义"
-  },
-  {
-    "file": "ui/injections/laolao-cle-stage.js",
-    "metric": "lines",
-    "value": 800,
-    "reason": "C.le. 中断有了自己的形态：多出的行是 stopHold（塌下去停 2 秒、再用 1 秒交回签名，重绘后才发现中断时也走它）、两个时长常量和引入 laolao-cle-peek.js 的一行；adopt 里原来的三行合成一行。没有新增全局名、观察器或定时器。"
-  },
-  {
-    "file": "ui/injections/laolao-cle-ink.js",
-    "metric": "lines",
-    "value": 199,
-    "reason": "C.le. 连笔引擎：引入中断形态 laolao-cle-stop.js、poke()（点一下小标，一道光沿笔顺跑过去）、SHIMMER（每颗墨点各自轻轻闪，中断的灰不闪）；切换门槛 QUICK 1.1 → 1.6 秒是改值不加行。"
-  },
-  {
-    "file": "ui/injections/laolao-cle-steps.js",
-    "metric": "lines",
-    "value": 116,
-    "reason": "C.le. 步骤队列：GRACE 常量和 pump() 里的一句——两个工具之间的零点几秒空档先等 0.8 秒，不切回「思考」再切走（同一轮模拟 23 次切换降到 18 次）。"
-  },
-  {
-    "file": "ui/injections/laolao-cle-forms.js",
-    "metric": "lines",
-    "value": 715,
-    "reason": "C.le. 形态质感（按 46×22 实际尺寸截帧逐个看过）：测试改成烧瓶、改文件改成写字的铅笔、命令改成终端窗口、Git 改成分支图标、记忆改成北斗七星；搜索加被扫过才放大的字和镜片反光；子会话加波纹、节点小核和任务包。没有新增全局名、观察器或定时器。"
   }
 ]

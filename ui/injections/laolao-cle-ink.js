@@ -2,16 +2,15 @@
  *
  *   平常：上一步 → 收成 C.le. → 沿笔画展开成下一步（合计 1.15 秒，不比原来的 1.25 秒慢）
  *   很快连着来的步骤：直接变过去，不每次绕回签名，免得频闪
- *   成功 / 失败 / 中断：是同一步的收势，直接变
+ *   成功 / 失败：是同一步的收势，直接变
  *   中途被打断：从此刻的位置、此刻的速度接着变，不跳、不停顿
  *
  * 变形先插值笔画中心线和笔宽，再按新中心线的法向铺开墨点，所以中途也一直是笔画。
  * 没有 DOM、没有 three：渲染在 laolao-cle-space.js。
  */
-import {STRIDE, X, Y, Z, W, GLOW, ALPHA, SIZE, RED, clamp, smooth, bump, buildParticles, worldX, worldY} from './laolao-cle-kit.js';
+import {STRIDE, X, Y, Z, W, GLOW, ALPHA, SIZE, RED, clamp, smooth, buildParticles, worldX, worldY} from './laolao-cle-kit.js';
 import {classicForms} from './laolao-cle-classic.js';
 import {inkForms} from './laolao-cle-forms.js';
-import {stopForm} from './laolao-cle-stop.js';
 
 export const TIME = Object.freeze({
   wake: .15,       // 从静止签名出发：先让粒子在原位显出来
@@ -23,12 +22,11 @@ export const TIME = Object.freeze({
   home: .6,        // 回到待机签名
   sign: .8,        // 落款起笔前收进笔尖
 });
-const QUICK = 1.6;        // 两次切换间隔短于这个秒数，就不绕回签名（1.1 时一轮里一半以上的切换要先收回签名，形状只露一下脸）
+const QUICK = 1.1;        // 两次切换间隔短于这个秒数，就不绕回签名
 const CARRY = .05;        // 被打断时沿原速度滑出去的时间常数
 const MAX_SPEED = 620;    // 画布单位 / 秒：继承的速度封顶，免得滑出画面
 const TELEPORT = 1800;    // 再快的是循环里看不见的瞬移，不继承
 const STAGGER = .4;       // 沿笔顺错开多少
-const SHIMMER = .07;      // 每颗墨点各自轻轻闪，静止的形态也不死板（中断的灰不闪）
 
 export class CleInk {
   constructor({SIG, sig, count, random}) {
@@ -45,14 +43,14 @@ export class CleInk {
     const classic = classicForms({P, sig, out: this.target});
     const {ringAt, ...kept} = classic;
     this.ringAt = ringAt;
-    this.forms = {...kept, ...inkForms({P, SIG, out: this.target}), stopped: stopForm({P, out: this.target})};
+    this.forms = {...kept, ...inkForms({P, SIG, out: this.target})};
     this.fx = {alpha: 0, paper: 1, ring: .05, ringAlpha: 0};
     this.clock = 0;
     this.lastSet = -9;
     this.form = 'idle';
     this.next = null;
     this.delay = 0; this.dur = 0; this.since = 1; this.time = 0;
-    this.reversed = false; this.kick = 0;
+    this.reversed = false;
     this.frame(0);
     this.mixed.set(this.target);
     this.spread();
@@ -62,7 +60,6 @@ export class CleInk {
   get moving() { return this.since < this.delay + this.dur; }
   /** 要去的形态（经过签名时，是签名之后那个）。 */
   get goal() { return this.next || this.form; }
-  poke() { this.kick = 1; }                // 点一下小标：一道光沿笔顺从 C 跑到最后一个点
 
   set(name, {quick = false} = {}) {
     if (!this.forms[name]) return false;
@@ -77,11 +74,11 @@ export class CleInk {
     if (name === 'idle') this.begin(name, TIME.home);
     else if (name === 'done') this.begin(name, TIME.sign);
     else if (this.next) {                               // 正在收回签名：改个去处就行
-      if (/^(?:ok|fail|stopped)$/.test(name)) this.begin(name, TIME.result);
+      if (name === 'ok' || name === 'fail') this.begin(name, TIME.result);
       else this.next = name;
     } else if (this.form === 'idle') {
       this.begin(name, TIME.out, this.moving ? 0 : TIME.wake);
-    } else if (/^(?:ok|fail|stopped)$/.test(name)) this.begin(name, TIME.result);
+    } else if (name === 'ok' || name === 'fail') this.begin(name, TIME.result);
     else if (quick || this.moving || this.form === 'done' || gap < QUICK) this.begin(name, TIME.direct);
     else {
       this.begin('idle', TIME.back);
@@ -122,7 +119,7 @@ export class CleInk {
   step(dt) {
     if (!(dt > 0)) return;
     this.clock += dt;
-    this.since += dt; this.kick = Math.max(0, this.kick - dt / .75);
+    this.since += dt;
     // 循环动作等墨线快落定了才起步：起点固定，「跳回起点」也不会发生在变形途中
     this.time += dt * (this.dur ? smooth(.55, 1.1, (this.since - this.delay) / this.dur) : 1);
     if (this.next && this.since >= this.dur + TIME.rest) this.begin(this.next, TIME.out);
@@ -178,7 +175,7 @@ export class CleInk {
 
   /* 中心线 + 笔宽 → 墨点 */
   spread() {
-    const {P, mixed, position, look, kick} = this;
+    const {P, mixed, position, look} = this;
     for (let i = 0, o = 0, k = 0, l = 0; i < this.count; i++, o += STRIDE, k += 3, l += 4) {
       let x = mixed[o], y = mixed[o + Y];
       const w = mixed[o + W];
@@ -192,8 +189,7 @@ export class CleInk {
         }
       }
       position[k] = worldX(x); position[k + 1] = worldY(y); position[k + 2] = mixed[o + Z];
-      look[l] = mixed[o + GLOW] + (kick && 1.4 * bump(P.order[i] - (1 - kick) * 1.4 + .2, .09))
-        + SHIMMER * (.5 + .5 * Math.sin(this.clock * (2 + P.seed[i * 4 + 2] * 3) + P.seed[i * 4 + 3] * 40)) * Math.max(0, 1 + Math.min(0, mixed[o + RED])); look[l + 1] = mixed[o + ALPHA]; look[l + 2] = mixed[o + SIZE]; look[l + 3] = mixed[o + RED];
+      look[l] = mixed[o + GLOW]; look[l + 1] = mixed[o + ALPHA]; look[l + 2] = mixed[o + SIZE]; look[l + 3] = mixed[o + RED];
     }
   }
 }
