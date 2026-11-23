@@ -4,6 +4,19 @@
 
 ---
 
+## 2026-11-23 上午 · 会话 42f0bde1 · 多账号 + 登录一律开无痕窗口（923f3b8a）
+
+**用户这一段**：「最好支持多账号登入，比如 Anti 我有几个 Pro，还有 Claude 也是」；「要登入 Claude 你开一个无痕浏览器给我登入，不要用我的浏览器」。
+
+**做了什么**
+- 一个账号 = 引擎服务里一个实例，id「<家>-<n>」（`ACCOUNTS` 表，`engines-bridge.mjs`）：Claude 每个账号一个 `~/.claude-metre-<n>` 文件夹（实例配置 `homePath` = `CLAUDE_CONFIG_DIR`）；Codex 每个账号一个 `~/.codex-metre-<n>` 影子文件夹（`shadowHomePath`，共用 `~/.codex` 的对话，照源码 `providers-codex.md`）；Antigravity、Cursor 由引擎服务按实例各自托管登录。其余六家用这台电脑上同一份登录，不给加。
+- 动作：`pinkie.engines.account {action: add|rename|remove}`。加：`providerInstanceMutation: create`，名字可填（邮箱去掉），文件夹已有旧登录就换个新名字；删：托管登录的先 `provider.auth.logout`，再 `remove`，Claude / Codex 的登录文件夹留在磁盘上；默认账号不能删（可以关）。`turnOn / install / signin / setup` 都认实例 id（`resolve` 从引擎服务的设置里查是哪一家）。加出来的 Claude / Codex 账号登录时，终端里带上它自己的文件夹（Windows 用 spawn 的 env，Mac 写在命令前面），菜单里显示、复制的那一行也带文件夹。
+- 无痕窗口：`privateBrowser()` 找 Edge（`--inprivate`），没有找 Chrome（`--incognito`），都没有才用默认浏览器。托管登录直接开；终端登录给一个 `private-browser.cmd/.sh` 启动器当 `BROWSER`（11-23 实测 `claude auth login` 认 `BROWSER`；Codex 等别的命令行认不认没验）。
+- 界面（`?v=metreengine3`）：一个账号一行（同一家挨着，默认在前），「＋ 再加一个账号」→ 起名字 → 点哪一家 → 直接进这个新账号的登录；加出来的账号设置卡片底下「改名字 / 删掉这个账号」（点两下才删）。各处名字用引擎服务报的账号名。
+
+**怎么验的**：测试 61 过（`metre-engines-bridge` 12，新加多账号和无痕窗口两条；`metre-engine-ui` 6，新加真浏览器里加账号、删账号一条；其余同上）；ratchet 过；截图看过菜单、加账号、账号设置卡片（亮 / 暗）。真机：建了 `claudeAgent-2`（「Claude Code · Metre」，文件夹 `~/.claude-metre-2`），登录终端开了，等用户在无痕窗口里登录——结果见下一条（如果这里没有下一条，就是还没登上）。
+- 为什么 Claude 不登进 `~/.claude`：这台电脑上的 Claude Code 桌面 App 也读这个文件夹，往里写登录可能影响 App 自己的账号，所以 Metre 的 Claude 一律用自己的账号文件夹。
+
 ## 2026-11-23 上午 · 会话 42f0bde1 · Antigravity 真登录、真回话（第一次有引擎跑通整条）
 
 **结果**：用户的 Antigravity Pro（Google 账号）经 Metre 桥真登录成功，报上来 9 个模型（gemini-4-neon / argon / hydrogen、gemini-pro-orchestrator-neon / g1-pro、gemini-3.8-flash、claude-opus-5-5、claude-sonnet-5-5、gpt-oss-120b-medium（默认））；用最便宜的 gemini-3.8-flash 开一段对话「只回复两个字：收到」，约 30 秒回「收到」，对话流是 you / note / reply。额度只花了这一句。
