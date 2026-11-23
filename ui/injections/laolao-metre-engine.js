@@ -384,6 +384,7 @@
         add.onclick = async () => {
           add.disabled = true;
           add.textContent = agent.dist === 'binary' ? '正在下载…' : '正在准备…';
+          toast(`正在${agent.dist === 'binary' ? '下载' : '装'} ${agent.name}：第一次可能要好几分钟（用 npm 装的实测七分钟左右），好了会自己接着登录`);
           try {
             const done = await rpc('pinkie.engines.registry', {action: 'add', agentId: agent.id}, 16 * 60_000);
             state.catalog = {...state.catalog, ...done};
@@ -749,6 +750,9 @@
           box.append(say(`还没登录。在终端里运行官方的登录命令，按提示用你自己的账号登录（登录页会开在无痕窗口里）${guide.loginHint ? '（' + esc(guide.loginHint) + '）' : ''}：`), commandLine(guide.login));
           acts.append(btn('在终端里登录', true, startSignin), btn('登好了，再查一次', false, () => recheck()));
         }
+      } else if (row.state === 'keyonly') {
+        box.append(say(`${esc(name)} 只给填 API 密钥这一种登录方式。碧琪不经手密钥，所以这家在 Metre 里用不了；它以后加了浏览器登录，点「再查一次」。`, 'pk-eng-setup__text--warn'));
+        acts.append(btn('再查一次', false, () => recheck()));
       } else if (row.state === 'ready') {
         box.append(say(`${esc(name)} 可以用了。`));
         if (onReady) acts.append(btn('选模型', true, async () => onReady()));

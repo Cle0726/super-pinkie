@@ -104,6 +104,9 @@ export function quota(usageLimits, models = []) {
   return {state: windows.length ? 'ok' : 'unknown', resetAt: scoped.length ? latest(scoped) : null, text: parts.join(' · '), outModels};
 }
 
+const KEY_ONLY = /api[ _-]?key|_API_KEY\b/i;
+const KEY_ONLY_TEXT = '只能填 API 密钥登录，Metre 里不经手密钥，用不了';
+const keyLike = method => /env_var|credentials/.test(String(method?.type)) || KEY_ONLY.test(`${method?.name || ''} ${method?.description || ''}`);
 // 一家引擎此刻能不能用，说成大白话：ready 能用 / off 还没打开 / missing 没装 / signin 没登录 / error 别的毛病。
 export function engineState(provider = {}) {
   const message = String(provider.message || '');
@@ -111,6 +114,8 @@ export function engineState(provider = {}) {
   const auth = String(provider.auth?.status || 'unknown');
   if (provider.enabled !== true || status === 'disabled') return {state: 'off', text: '还没打开'};
   if (provider.installed !== true || /not installed|not on PATH|ENOENT/i.test(message)) return {state: 'missing', text: '这台电脑上还没装'};
+  // 注册表里的引擎只给填 API 密钥的登录（11-23 真机：Qwen Code 0.28.4 只有「Use OpenAI API key」）：碧琪不经手密钥，这家在 Metre 里用不了。
+  if (provider.driver === REGISTRY_DRIVER && auth !== 'authenticated' && KEY_ONLY.test(message)) return {state: 'keyonly', text: KEY_ONLY_TEXT};
   if (auth === 'unauthenticated' || (status !== 'ready' && /not authenticated|not (?:logged|signed) in|auth login|\blogin\b/i.test(message))) return {state: 'signin', text: '还没登录，或者登录过期了'};
   // 能在浏览器里登录的（Antigravity、Cursor）：刚打开时引擎服务报「装好了、账号还没查」也是 ready，但其实还没登录、一个模型都没有。
   if (provider.setup?.canAuthenticate === true && auth !== 'authenticated') return {state: 'signin', text: '还没登录'};
@@ -410,7 +415,9 @@ export function authView(state) {
   }
   else if (interaction?.type === 'terminal') step = {type: 'terminal'};
   return {phase: String(state.phase || 'idle'), flowId: state.flowId ? String(state.flowId) : '', url: https(state.authorizationUrl), expiresAt: state.expiresAt || null, step,
-    message: brandless(state.message || ''), methods: (Array.isArray(state.methods) ? state.methods : []).map(method => ({id: String(method.id), name: brandless(method.name), type: String(method.type)}))};
+    // 没登录上、它给的登录方式又全是填密钥的：引擎原话（常常是英文的「Internal error」）换成大白话。
+    message: state.phase === 'failed' && Array.isArray(state.methods) && state.methods.length && state.methods.every(keyLike) ? KEY_ONLY_TEXT : brandless(state.message || ''),
+    methods: (Array.isArray(state.methods) ? state.methods : []).map(method => ({id: String(method.id), name: brandless(method.name), type: keyLike(method) ? 'credentials' : String(method.type)}))};
 }
 
 export function installView(state) {

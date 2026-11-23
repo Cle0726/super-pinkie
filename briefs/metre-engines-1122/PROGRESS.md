@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-11-23 晚 · 真加了一家注册表引擎：Qwen Code（AWS Quick 经 Quick 跑腿 2）
+
+**做了什么（用户 11-23 同意）**：在隔离的试验目录里用新代码真走了一遍「更多引擎」。引擎服务 0.1.11（程序用 `F:\t3probe\e1\root\versions`），引擎目录 `F:\t3probe\e6probe`（全新的 home，不碰用户的任何登录）。脚本 `build\quick-run\e6\qwen-run.mjs`、`qwen-run2.mjs`，结果 `qwen-run*.json`（链接只记域名和路径）。
+- 搜「qwen」→ 只有 qwen-code 0.28.4（Apache-2.0，用 npm 装，没有 sha256，靠注册表的 https）。
+- `EngineRegistry.add` 成功，**用了 7 分 17 秒**（`server.prepareAcpRegistryAgent` 走 npm，经本机代理），实例 `acpRegistry_qwen_code`。菜单行：名字「Qwen Code」、`registry: true`、「还没登录」、一个模型 `default`。
+- 引擎服务后台查完以后报 `warning`：「Sign in in provider settings using "Use OpenAI API key"」。登录方式**只有一种**：`openai`「Use OpenAI API key」（要设环境变量 `OPENAI_API_KEY`），点了直接失败，原话是英文的「The ACP agent could not complete sign-in. Internal error」。没有浏览器登录。
+- 结论：**Qwen Code 0.28.4 在 Metre 里用不了**（碧琪不经手密钥）。所以没发出一句话、没派活。
+
+**据此改的**
+- `engines-bridge.mjs`：注册表引擎没登录、引擎服务的话里说要 API key 的，状态叫 `keyonly`，「只能填 API 密钥登录，Metre 里不经手密钥，用不了」（只管注册表引擎，十家照旧）。托管登录失败、它给的方式又全是填密钥的：英文原话换成这句；这类方式标成 `credentials`，设置卡片不会把它当「改用：…」给出来。
+- 设置卡片 `keyonly`：说清楚用不了，留「再查一次」和「删掉这个引擎」。点「加上」时提示第一次可能要好几分钟（npm 实测七分钟左右）。`metreengine10` → `11`。文档同步。
+- 测试：`metre-engines-registry` 加一条（照真机的原话和字段）。19 个文件全过，ratchet、`git diff --check` 过；全量门禁本次 53、干净副本（f454f538）54，没有新增。
+
+**没验的 / 留给以后**：有浏览器登录的注册表引擎（比如 Gemini CLI、GitHub Copilot、Kimi Code，没查它们各给什么登录方式）还没真走一遍登录和派活。试验目录 `F:\t3probe\e6probe` 里 Qwen Code 的实例和 npm 包还在，不用时可以整个删掉。
+
+**下一步**：如果用户愿意，挑一家有浏览器登录的注册表引擎再试（先只查登录方式，不下载就看不到，所以要先点头）→ E8 同步给碧琪全局。版本号发版前问用户。
+
 ## 2026-11-23 晚 · E7 许可声明进关于页（AWS Quick 经 Quick 跑腿 2）
 
 **用户这一段**：push c2ee5a73 + 9beafcc7（已推，`461f9939..9beafcc7`）；NOTICES 放「关于与更新」卡片最后一行「第三方许可」，点「查看」弹出全文；同意挑 Qwen Code 真加一遍注册表引擎（下一条）。

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {EngineRegistry, FIRST_CLASS, agentView, instanceIdFor} from '../services/mode-architecture/engines-registry.mjs';
-import {EngineBridge, REGISTRY_DRIVER, driverOf, summarizeProviders} from '../services/mode-architecture/engines-bridge.mjs';
+import {EngineBridge, REGISTRY_DRIVER, authView, driverOf, summarizeProviders} from '../services/mode-architecture/engines-bridge.mjs';
 
 // 「更多引擎」（PLAN 3.7 末段、E6）。字段照引擎服务 0.1.11 的 server.searchAcpRegistry（11-23 本机实测搜出 43 家）。
 const agent = (id, name, extra = {}) => ({id, name, version: '1.0.0', description: `${name} coding agent`, authors: [], license: 'MIT', website: null, repository: null,
@@ -116,4 +116,19 @@ test('an engine added from the registry is an ordinary menu row: managed sign-in
   await bridge.removeAccount({engine: 'acpRegistry_qwen_code'});
   assert.equal(calls.some(call => call[0] === 'provider.auth.logout'), false, 'its login is shared on this computer, so it stays');
   assert.equal(instances.acpRegistry_qwen_code, undefined);
+});
+
+// 11-23 真机：Qwen Code 0.28.4 加上花了 7 分 17 秒（npm），登录只有「Use OpenAI API key」，点了报英文的「Internal error」。
+test('a registry engine that only signs in with an API key is said plainly, not as a sign-in that keeps failing', () => {
+  const [row] = summarizeProviders([{instanceId: 'acpRegistry_qwen_code', driver: 'acpRegistry', displayName: 'Qwen Code', enabled: true, installed: true, status: 'warning',
+    auth: {status: 'unauthenticated', type: 'agent'}, message: 'Sign in in provider settings using "Use OpenAI API key".', setup: {canAuthenticate: true}, models: [{slug: 'default'}]}], {all: false});
+  assert.deepEqual([row.state, row.text], ['keyonly', '只能填 API 密钥登录，Metre 里不经手密钥，用不了']);
+  const [codex] = summarizeProviders([{instanceId: 'codex', driver: 'codex', enabled: true, installed: true, status: 'error', auth: {status: 'unauthenticated'}, message: 'Set OPENAI_API_KEY or run codex login'}], {all: false});
+  assert.equal(codex.state, 'signin', 'only registry engines; the ten keep their own sign-in');
+  const methods = [{id: 'openai', name: 'Use OpenAI API key', description: 'Requires setting the `OPENAI_API_KEY` environment variable', type: 'agent'}];
+  const failed = authView({phase: 'failed', flowId: 'f', message: 'The ACP agent could not complete sign-in. Internal error', methods});
+  assert.equal(failed.message, '只能填 API 密钥登录，Metre 里不经手密钥，用不了');
+  assert.equal(failed.methods[0].type, 'credentials', 'so the card does not offer it as another way to sign in');
+  const browser = authView({phase: 'failed', flowId: 'f', message: 'Expired', methods: [...methods, {id: 'oauth', name: 'Sign in with browser', type: 'agent'}]});
+  assert.equal(browser.message, 'Expired', 'a browser method is still there: keep the real reason');
 });
