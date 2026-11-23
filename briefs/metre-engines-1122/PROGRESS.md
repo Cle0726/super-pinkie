@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11-23 晚 · E8 逐项定 + 交接（AWS Quick 经 Quick 跑腿 2）
+
+**做了什么**：push 了 f454f538、7ff91468（第一次被远端拒「failed」，第二次 TLS 断，等 30 秒第三次过了：`9beafcc7..7ff91468`）。E8 开工前把 PLAN 3.8 的候选逐项对照碧琪全局现有的注入文件查了一遍，结论写进 PLAN 3.8「E8 逐项定」：命令记录、审批、提问、计划清单、排队插话停、「思考了」、额度大白话**碧琪全局都已经有了，不同步**；要做的只有三项——**E8-1 改动差异面板、E8-2 多引擎选择、E8-3 失败卡写几点恢复**；方案卡暂不做（全局没有「先出方案」模式，算新功能）。
+
+**怎么验的**：只改了 PLAN / PROGRESS，没跑测试。查法：`build\quick-run\e8\survey*.js`（列 head 里 114 个注入文件的头注释，按关键词 grep）。
+
+**没做的**：E8 的代码一行没写。这个会话上下文已经很重，按第七节规矩交接：`F:\Projects\super-pinkie\build\quick-run\HANDOFF-e8.md`。
+
+**下一步**：新会话读 HANDOFF-e8.md，从 E8-1 开始。
+
 ## 2026-11-23 晚 · 真加了一家注册表引擎：Qwen Code（AWS Quick 经 Quick 跑腿 2）
 
 **做了什么（用户 11-23 同意）**：在隔离的试验目录里用新代码真走了一遍「更多引擎」。引擎服务 0.1.11（程序用 `F:\t3probe\e1\root\versions`），引擎目录 `F:\t3probe\e6probe`（全新的 home，不碰用户的任何登录）。脚本 `build\quick-run\e6\qwen-run.mjs`、`qwen-run2.mjs`，结果 `qwen-run*.json`（链接只记域名和路径）。
