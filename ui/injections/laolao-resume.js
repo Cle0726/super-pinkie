@@ -1849,7 +1849,7 @@
       ledger.evidence.delete(ledger.evidence.values().next().value);
     }
   };
-  const queueReservedButUnsent = (item) => /^agent:(?:main|project|thinking|learning|unrestricted):/.test(String(item?.sessionKey || ""))
+  const queueReservedButUnsent = (item) => /^agent:(?:main|project|thinking|learning|unrestricted|metre):/.test(String(item?.sessionKey || ""))
     && item?.sendAttempts === 0 && (!item?.sendState || (item?.sendState === "waiting-reconnect" && item?.__pinkieReservedUnsent === true))
     && !item?.pendingRunId && item?.kind !== "steered"
     && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer";

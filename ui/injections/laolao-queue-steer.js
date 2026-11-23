@@ -56,8 +56,8 @@
   const nativeInFlight = (item) => {
     // The native busy queue allocates its future send ID and timestamp before
     // sending anything. Treat that exact untouched state as queued; an ID by
-    // itself is not a receipt or an in-flight submission.
-    const reservedOnly = supportedQueueSession(item?.sessionKey)
+    // itself is not a receipt or an in-flight submission. Metre 的原生卡片也是这样（只是不给它排队/追加切换）。
+    const reservedOnly = (supportedQueueSession(item?.sessionKey) || /^agent:metre:/.test(String(item?.sessionKey || "")))
       && item?.sendAttempts === 0 && !item?.sendState && !item?.pendingRunId
       && !item?.sendRequestStartedAtMs && item?.queueMode !== "steer" && item?.kind !== "steered";
     if (reservedOnly) return false;

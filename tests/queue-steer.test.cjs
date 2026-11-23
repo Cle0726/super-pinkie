@@ -292,7 +292,7 @@ test('a native submission already in progress is not steered a second time', asy
 });
 
 test('a busy native queue item with only a reserved run id is steered once', async () => {
-  for (const mode of ['learning', 'unrestricted']) {
+  for (const mode of ['learning', 'unrestricted', 'metre']) { // metre：hy4flash-free 走查里第二句一直挂在排队里
     const {api} = loadQueueSteer();
     const sessionKey = `agent:${mode}:test`;
     const pane = queuePane([{id:'reserved',text:'新要求',sessionKey,sendAttempts:0,sendRunId:'reserved-id',sendSubmittedAtMs:123}]);
