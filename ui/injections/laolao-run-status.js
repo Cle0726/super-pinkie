@@ -235,7 +235,7 @@
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
   // Metre 的几种（idle / stopped / error）没有碧琪表情图：表情在 Metre 下本来就隐藏（猫代替），这里只防 404。
   const STICKERS = new Set(['asking', 'done', 'oops', 'thinking', 'working', 'writing']);
-  const STICKER = (state) => `./laolao-pinkie-status-${STICKERS.has(state) ? state : 'thinking'}.png`;
+  const STICKER = (state) => `/laolao-pinkie-status-${STICKERS.has(state) ? state : 'thinking'}.png`; // 绝对路径：在 /settings/… 下 ./ 会 404
   const RUNNING = /Command still running \(session ([\w.-]+), pid (\d+|n\/a)\)/;
   const EXITED = /Process exited with (?:code|signal)/;
   const SESSION = /^agent:(?:main|project|thinking|learning|unrestricted|metre):/;

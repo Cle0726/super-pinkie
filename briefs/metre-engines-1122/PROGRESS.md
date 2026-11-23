@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-11-23 晚 · E8 收尾：失败卡写几点恢复 + 真界面走一遍修了三处（AWS Quick 经 Quick 跑腿 2）
+
+**用户这一段**：「E8-2 多引擎选择不做，不要开新会话，在这里把所有的都做完，然后你直接像用户一样体验一次看看页面有没有问题」。`HANDOFF-e8.md` 作废，已删。
+
+**E8 定下来的**：E8-1 改动差异面板不做（工作台的「源代码管理」已经有，更全）；E8-2 用户不要；只做 E8-3。PLAN 3.8 末尾记了。
+
+**E8-3 做了什么**
+- `model-health.mjs` 新加 `resetTime(reason)`：从上游报错里认恢复时间，只认说得清楚的写法——ISO 时间、Unix 秒 / 毫秒（Claude 的 `usage limit reached|<秒>`、`resets_at: <秒>`）、`try again in 2 hours 30 minutes` / `in 20s`、`retry-after: 120`、`try again at 5:43 PM`（按这台电脑的时区，过了算明天）、OpenClaw 的 `ready in ~3 min`；只要以后 31 天内的，认不出就不写。时间从完整的报错里读（显示的「原文」照旧截 300 字）。`resetText` 说成「约 N 分钟后 / 今天 17:44 / 明天 09:05 / 11 月 26 日 17:44」，在取的时候算，过了就不写。有恢复时间的额度失败不再算「等也不会好」。
+- 失败卡（`laolao-message-actions.js`，行数不变）：有时间时说「「Codex」的额度用完了，今天 17:43 恢复。急的话先换一个模型。」，限流说「约 3 分钟后再发就好」；没时间时和原来一字不差。
+- 新测试 `tests/model-reset-time.test.mjs` 5 条。
+
+**像用户一样走了一遍（隔离碧琪 `F:\metreiso\eng`，网关 8712，Edge，这一版插件和界面装进去）**，截图在 `build\quick-run\e8\walk\`：
+- 唠嗑模式：输入框和正文里没有任何引擎的东西（外部引擎开着也一样）。
+- 设置「连接」→「外部引擎」一行，打开 / 关掉；「关于与更新」最后一行「第三方许可」→「查看」→ 弹窗亮暗都对，滚到底是 MIT 全文，关闭好用。
+- Metre：引擎菜单十家 + 账号 + 「＋ 再加一个账号」「＋ 更多引擎」；更多引擎真搜出 34 家，搜 gemini 剩 Gemini CLI；选「Claude Code · Metre · haiku」进引擎台，底下有「全放手 / 先出方案 / 新工作树」，「新工作树」按得下；换回 Metre 引擎台就收起。都没发消息、没下载。
+- 额度失败卡：临时在副本配置里加了一个假的模型服务（`e8\fake.mjs`，只回 402「Your usage limit reached. Try again in 2 hours 30 minutes.」），在唠嗑模式里打字发一句 → 失败卡「「quota-test」的额度用完了，今天 07:00 恢复。急的话先换一个模型。」+「换成 HY4FREE 再发一次」，顶上重复的红横幅藏起来了。之后副本配置已恢复、假服务已停、副本网关停着。
+
+**走的时候发现并修了**
+1. **找不到模型被说成「碧琪没找到要用的文件」**，而且和失败卡重复挂一条红横幅：原文「The selected model was not found by the provider」对不上「model not found」那条规则，落到了「not found → 文件」。`laolao-biqi-notices.js` 的那条规则和 `MODEL_FAILURE` 都认上「model was not found」（同一行里改），`model-health.mjs` 的 `MISSING` 也认；真界面复查：横幅藏了、失败卡说「找不到这个模型」。`model-failure-ui` 加了两句断言。
+2. **设置页上 6 张碧琪状态贴纸 404**（`/settings/laolao-pinkie-status-*.png`）：`laolao-ask-user.js`、`laolao-process-card.js`、`laolao-run-notify.js`（2 处）、`laolao-run-status.js` 用的是 `./`，在 `/settings/…` 地址下找错地方。改成 `/` 开头（同一行）。`laolao-update-dialog.js` 没动（更新窗口另有自己的目录）。
+3. 更多引擎搜的时候旧结果先变淡（真服务一次搜要一两秒，原来看着像没变）；许可弹窗正文从等宽字换成正文字体（中文段落用等宽字太像打字机）。
+- 换号：message-actions `failcard2r`、biqi-notices `notices3m`、ask-user `askuser1a`、process-card `power9a`、run-notify `runnotify4a`、run-status `runstatus7a`、`metreengine12`。
+
+**怎么验的**：28 个相关测试文件全过（ask-user、process-card、run-notify、run-status、model-* 全部、metre-engine*、user-settings、brand-ui、plugin-file-lists、code-health-ratchet、tool-kind-words），ratchet、`git diff --check` 过；全量门禁本次 53、干净副本（59af6360）54，没有新增。
+
+**没验的**：网关横幅里 `/avatar/main` 的 401 是原生界面自己的，没管；Mac 没验；真上游（Codex、Claude）的额度报错原话没真拿到过，靠的是公开格式和假服务。
+
+**下一步**：PLAN 里的分批都做完了（E8-2 用户不要）。剩发版：版本号要用户定，push / 发版要用户点头。
+
 ## 2026-11-23 晚 · E8 逐项定 + 交接（AWS Quick 经 Quick 跑腿 2）
 
 **做了什么**：push 了 f454f538、7ff91468（第一次被远端拒「failed」，第二次 TLS 断，等 30 秒第三次过了：`9beafcc7..7ff91468`）。E8 开工前把 PLAN 3.8 的候选逐项对照碧琪全局现有的注入文件查了一遍，结论写进 PLAN 3.8「E8 逐项定」：命令记录、审批、提问、计划清单、排队插话停、「思考了」、额度大白话**碧琪全局都已经有了，不同步**；要做的只有三项——**E8-1 改动差异面板、E8-2 多引擎选择、E8-3 失败卡写几点恢复**；方案卡暂不做（全局没有「先出方案」模式，算新功能）。

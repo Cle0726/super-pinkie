@@ -131,7 +131,7 @@
     const Web = webNotifier();
     if (!Web || Web.permission !== 'granted') return false;
     try {
-      const note = new Web(title, {body, tag: 'pinkie-run-' + key, icon: './laolao-pinkie-status-done.png'});
+      const note = new Web(title, {body, tag: 'pinkie-run-' + key, icon: '/laolao-pinkie-status-done.png'});
       note.onclick = () => { openSession(key); try { note.close?.(); } catch {} };
       return true;
     } catch { return false; }
@@ -268,7 +268,7 @@
     promptNode.className = 'pk-notify-ask';
     promptNode.setAttribute('role', 'dialog');
     promptNode.setAttribute('aria-label', ask.text);
-    const face = document.createElement('img'); face.src = './laolao-pinkie-status-asking.png'; face.alt = '';
+    const face = document.createElement('img'); face.src = '/laolao-pinkie-status-asking.png'; face.alt = '';
     const say = document.createElement('span'); say.textContent = ask.text;
     const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'pk-run__btn'; yes.dataset.act = 'answer'; yes.textContent = ask.buttons[0];
     const no = document.createElement('button'); no.type = 'button'; no.className = 'pk-run__btn'; no.textContent = ask.buttons[1];

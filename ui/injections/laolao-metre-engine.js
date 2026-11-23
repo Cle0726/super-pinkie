@@ -371,10 +371,12 @@
     let seq = 0, timer = 0;
     const search = async () => {
       const mine = ++seq;
+      list.classList.add('pk-eng-more__list--wait'); // 搜着的时候旧结果先变淡，免得以为没变
       let found;
       try { found = await rpc('pinkie.engines.registry', {action: 'search', query: input.value}, 70000); }
       catch (error) { if (mine === seq) list.replaceChildren(h('div', 'pk-eng-menu__wait', esc(error.message))); return; }
       if (mine !== seq || menu !== node) return;
+      list.classList.remove('pk-eng-more__list--wait');
       list.replaceChildren();
       for (const agent of found.agents || []) {
         const row = h('div', 'pk-eng-more__row', `<div class="pk-eng-more__text"><span class="pk-eng-menu__name">${esc(agent.name)}</span><span class="pk-eng-menu__note">${esc(agent.description)}</span><span class="pk-eng-more__meta">${esc([agent.license && '许可证 ' + agent.license, agent.how].filter(Boolean).join(' · '))}</span></div>`);

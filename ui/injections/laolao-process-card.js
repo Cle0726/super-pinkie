@@ -18,7 +18,7 @@
   const maxCards = () => tuned("process.maxCards", MAX_CARDS);
   const maxText = () => tuned("process.maxText", MAX_TEXT);
   const confettiRatio = () => window.PinkieTuning ? window.PinkieTuning.pixelRatio(Infinity) : devicePixelRatio;
-  const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
+  const STICKER = (state) => `/laolao-pinkie-status-${state}.png`; // 绝对路径：在 /settings/… 下 ./ 会 404
   const PHRASE = {
     thinking: "碧琪在动小脑瓜…", working: "碧琪在抛气球干活…", writing: "碧琪在比划着回你…",
     asking: "碧琪在等你点头…", done: "完成啦！", oops: "这一轮停下来了，做到一半的记录都留着",

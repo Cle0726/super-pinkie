@@ -21,6 +21,10 @@ test('"no auth available" says the model cannot be used, not that it is busy', (
   assert.doesNotMatch(account, /太忙|稍等|稍后/);
   assert.match(say('429 Too Many Requests'), /排队/);
   assert.match(say('503 Service Unavailable'), /太忙/);
+  // 11-23 真界面里看到的：模型不存在被说成「没找到要用的文件」，而且和失败卡重复了一条红横幅。
+  const missing = say('Agent failed before reply: The selected model was not found by the provider. Check the model id or choose a different model.');
+  assert.match(missing, /找不到这个模型/);
+  assert.doesNotMatch(missing, /文件/);
 });
 
 test('the chat error banner hides itself when the chat already shows the failure card', () => {
@@ -29,6 +33,8 @@ test('the chat error banner hides itself when the chat already shows the failure
   assert.match(source, /isChatErrorBanner\(box\) && MODEL_FAILURE\.test\(raw\) && chatShowsFailure\(box\)/);
   const failure = new RegExp(/auth[_ ]?unavailable|no auth available|\b(?:402|429|5\d\d)\b|timeout/i);
   assert.ok(failure.test('503 auth_unavailable: no auth available'));
+  const banner = new RegExp(/const MODEL_FAILURE = \/(.*)\/i;/.exec(source)[1], 'i');
+  assert.ok(banner.test('Agent failed before reply: The selected model was not found by the provider.'), 'a missing model is a model failure too, so the banner is not repeated');
 });
 
 test('the failure card explains the reason and offers a usable model, except when it is just busy', () => {
