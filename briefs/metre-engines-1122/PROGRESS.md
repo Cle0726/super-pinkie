@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-11-22 深夜 · 会话 42f0bde1 · 查清「把对方支持的引擎都加上」（只查没写代码，用户额度到了）
+
+**用户这一句**：「记得把人家支持的都加上比如Cursor 等这些都加」→ 引擎菜单不止 Claude Code / Codex / Antigravity，T3 支持的全部要有。
+
+**T3 一共 11 家**（`packages/contracts/src/model.ts` 的 `PROVIDER_DISPLAY_NAMES`，实例 id = 驱动名）：
+
+| id | 显示名 | 默认模型 | 怎么装 | 怎么登录 |
+|---|---|---|---|---|
+| claudeAgent | Claude Code | claude-opus-5-5 | `npm i -g @anthropic-ai/claude-code` | `claude auth login` |
+| codex | Codex | （服务给的 isDefault） | 引擎服务托管安装，或 `npm i -g @openai/codex` | `codex login`（或 ChatGPT 托管登录） |
+| antigravity | Antigravity | antigravity-default | **托管**：`provider.install.start/subscribe` | **托管**：`provider.auth.*`（浏览器 + 回贴代码） |
+| cursor | Cursor | auto | Win `irm 'https://cursor.com/install?win32=true' \| iex`；Mac `curl https://cursor.com/install -fsS \| bash`（可执行文件叫 `cursor-agent`） | **托管浏览器登录**（`setup.canAuthenticate: true`），或 `agent login`；要付费 Cursor 套餐 |
+| opencode | OpenCode | openai/gpt-5 | `npm i -g @opencode/cli`（2.x）或 opencode.ai | `opencode auth login` |
+| grok | Grok Build | grok-build | x.ai/cli（命令待查准） | `grok login` |
+| kiro | Kiro | default | Win `irm 'https://cli.kiro.dev/install.ps1' \| iex`；Mac `curl -fsSL https://cli.kiro.dev/install \| bash` | `kiro-cli login` |
+| pi | Pi | default | `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`（Node ≥ 22.19） | 终端跑 `pi` 再输 `/login` |
+| fx | fx | default | `curl -fsSL https://fx.sh/setup.sh \| bash`（Windows 待查） | `fx login` |
+| muse | Muse Code | default | dev.meta.ai/docs/muse-code | `muse login` |
+| acpRegistry | 更多引擎（ACP 注册表） | default | `server.searchAcpRegistry` / `server.prepareAcpRegistryAgent`（搜到再加） | 各家自己的 |
+
+（资料：T3 源码 `docs/user/install.md#providers`、`providers-*.md`、`cursor.md`；源码在 `F:\t3probe\src\t3code`，只读。）
+
+**已查清的命令（下一步直接用）**
+- 每家的状态里有 `setup: {canInstall, canAuthenticate}`：现在只有 Cursor `canAuthenticate`；Antigravity / Codex 的托管安装在 `apps/server/src/provider/providerInstallation.ts`（只这两家）。其余七家：**开开关 + 本机装命令行 + 终端登录**。
+- 开 / 关一个引擎：`server.updateSettings {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId, instance: {...旧的 settings.providerInstances[id] ?? {driver: id}, enabled: true}}}`，然后 `server.refreshProviders {instanceId}`（照 T3 `WelcomePage.tsx` 的 `turnOn`）。旧配置从 `server.getConfig` 返回的 `settings.providerInstances` 读。要 `providers:manage` 权限（令牌里已有）。
+- 托管登录：`provider.auth.subscribe {instanceId}`（流）给出 `phase / methods / interaction`；`provider.auth.start {instanceId, methodId?}`；`interaction` 四种：`browser {url}`（在用户浏览器打开）、`deviceCode {url, userCode}`（显示代码）、`terminal`（我们不用，改开自己的登录终端）、`credentials {fields}`（要用户填密钥——**不做**，计划写了碧琪不经手凭据，提示用户改用浏览器或终端登录）；回贴代码走 `provider.auth.complete {instanceId, flowId, callbackUrl}`；取消 `provider.auth.cancel`。合同在 `packages/contracts/src/providerSetup.ts`。
+- 托管安装：`provider.install.start {instanceId}` + `provider.install.subscribe`（`phase downloading/extracting/verifying/succeeded/failed`，`downloadedBytes / totalBytes` 做进度条）。
+- 试验服务 `F:\t3probe\e1\root\home\caches` 已经有 cursor / opencode / grok / kiro / pi / fx / muse 的缓存，都是 `status: disabled`、`installed: false`；没有 antigravity 和 acpRegistry 的缓存（没开过）。
+- **可疑点，先查**：claudeAgent 缓存的 `continuation.groupKey` 指向 `F:\t3probe\e1\tmphome\.claude`——E1 试验时引擎服务的 HOME 被换成了临时目录，所以「Claude 没登录」可能只是读不到用户真正的登录。查 `engines.mjs` 启动时是否改了 `HOME / USERPROFILE`；真用户环境下引擎服务必须用用户自己的 HOME，否则所有终端登录都对不上。
+
+**下一步（按顺序）**
+1. `engines-bridge.mjs`：`ENGINES` 扩成上表 10 家（不含 acpRegistry），每家带 `install: {win, mac, link}`、`signin: {how: 'terminal'|'managed'|'both', command}`；`summarizeProviders` 带上 `setup`、`enabled`；`openLoginTerminal` 的命令白名单放宽到上表的登录命令（现在的正则 `^[a-z]+ (?:auth )?login$` 挡不住 `kiro-cli login`、`pi`）。新网关方法：`pinkie.engines.turnOn {engine, on}`、`pinkie.engines.install {engine}`（托管的走 `provider.install.*`，命令行的开终端跑安装命令，**跑之前界面要让用户点头**）、`pinkie.engines.signin` 托管分支（`provider.auth.start` → 把 `browser` 的链接 / `deviceCode` 交给界面，回贴代码走 `complete`）。
+2. 界面 `laolao-metre-engine.js`：引擎菜单按「能用 / 没开 / 没装 / 没登录」分组，没开的显示「打开」，没装的显示安装命令 + 复制 + 「在终端里装」，托管的显示进度条；界面上不出现 T3 字样（`brandless` 已管服务传回的话，新加的「disabled in T3 Code settings」这类要换成「还没打开」）。
+3. 测试：`metre-engines-bridge` 加「10 家都在菜单里、顺序固定」「turnOn 发的是 upsert + refresh」「托管登录的浏览器链接只放 https」；然后接回上一条的下一步（浏览器测试、侧栏标引擎名、并排对比图、隔离网关真调）。
+
 ## 2026-11-22 夜 · 会话 31ea3b09 · E2 收尾 + E3 引擎台第一版（用户额度快用完，主动停在这里）
 
 **用户这一段的三句话（都已写进 PLAN 3.3）**
