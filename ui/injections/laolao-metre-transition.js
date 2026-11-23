@@ -264,7 +264,7 @@
     async function finish() {
       leaving = true;
       await counted;
-      if (!alive) return;
+      if (!alive) return; window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: SWEEP_MS}}));   // 指挥线开始扫：页面里的进场跟着这一拍起（laolao-metre-home.js）
       state.beat = 0;
       const t0 = performance.now();
       while (alive && state.sweep <= cols + 2) {

@@ -1,23 +1,12 @@
-/* laolao-metre-home —— Metre 的空状态引导语（PLAN 6.3，批 4）
- *
- * Metre 的新会话还没说话时，输入框上方一句引导语（不是「有什么可以帮你」）。
- * 题库：laolao-metre-prompts.js（五类各 24 句，原样来自 ref/metre-prompts.json）。
- * 换句：9–12、14–18 点每 25 秒；12–14、18–23 点每 45 秒；23 点到 9 点每 90 秒。鼠标停在句子上不换，页面不可见不换。
- * 类别按时段加权（早上多启发式、强有力、点火、微行动；下午多苏格拉底、拖延、第一性原理；晚上多反思、复盘、冷暖；深夜多机锋、暗夜、禅意），同一句 24 小时内不重复。
- * 彩蛋（有数据才出，不编）：时段问候、节气、节日、法定假日、最近的项目记忆；比例不超过三成，同一天同一类最多一次。
- * 节日 / 放假当天：第一句就是节日彩蛋，之后节日彩蛋机会是其它彩蛋的 3 倍、一天可出多次，但不连着出。
- *   数据来自 pinkie.metre.today（后端纯计算、不联网）。天气：App 里没有现成的天气数据，不做，也不为它发请求。
- * 动画：只动 opacity / transform；新句逐字浮现（每字 18 毫秒，最长 1.2 秒）；「减少动效」直接换字。
- * 句子只是看的，点了不会放进输入框；右边「换一句」换下一句。 */
+/* laolao-metre-home —— Metre 的空状态引导语（PLAN 6.3，批 4）和整页进场（11-23）。
+ * 新会话还没说话时，输入框上方一句引导语。题库 laolao-metre-prompts.js；换句 9–12、14–18 点 25 秒，12–14、18–23 点 45 秒，其余 90 秒；悬停、页面不可见不换。
+ * 类别按时段加权，同一句 24 小时内不重复。彩蛋（有数据才出，不编，数据来自 pinkie.metre.today）：问候、节气、节日、假日、最近的记忆；不超过三成；
+ *   节日当天第一句就是节日彩蛋，之后机会是其它的 3 倍、不连着出。天气不做。逐字浮现（每字 18ms、最长 1.2s），减少动效直接换字；句子点了不进输入框。 */
 (() => {
   'use strict';
   if (window.__pinkieMetreHome) return;
 
-  const DAY = 24 * 3600_000;
-  const HISTORY_KEY = 'pinkie-metre-prompt-history-v1';
-  const EGG_KEY = 'pinkie-metre-prompt-eggs-v1';
-  const NAME_KEY = 'pinkie-metre-name';
-  const EGG_SHARE = 0.3;
+  const DAY = 24 * 3600_000, HISTORY_KEY = 'pinkie-metre-prompt-history-v1', EGG_KEY = 'pinkie-metre-prompt-eggs-v1', NAME_KEY = 'pinkie-metre-name', EGG_SHARE = 0.3;
   const CATEGORY_NOTES = {
     heuristic: '启发式提问：不催促、不施压，帮你从复杂局面里找到最核心的抓手',
     socratic: '苏格拉底式提问：温和而锋利，追问前提，拆盲区和执念',
@@ -188,30 +177,17 @@
   let box = null, timer = 0, hovering = false, current = null, today = null, todayFor = '', todayAt = 0;
 
   function build() {
-    box = document.createElement('div');
-    box.className = 'pk-metre-prompt';
-    const label = document.createElement('span');
-    label.className = 'pk-metre-prompt__kind';
-    const line = document.createElement('p');
-    line.className = 'pk-metre-prompt__text';
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.className = 'pk-metre-prompt__next';
-    next.setAttribute('aria-label', '换一句');
-    next.title = '换一句';
-    next.textContent = '换一句 →';
+    const el = (tag, className) => Object.assign(document.createElement(tag), {className});
+    box = el('div', 'pk-metre-prompt');
+    const label = el('span', 'pk-metre-prompt__kind'), line = el('p', 'pk-metre-prompt__text'), next = el('button', 'pk-metre-prompt__next');
+    Object.assign(next, {type: 'button', title: '换一句', textContent: '换一句 →'}); next.setAttribute('aria-label', '换一句');
     // 第六版：上面一行是「速度记号」——类别、♩ = 72、四个拍点（背景点阵每拍把 data-beat 改一次），右边「换一句」。
-    const tempo = document.createElement('span');
-    tempo.className = 'pk-metre-tempo';
+    const tempo = el('span', 'pk-metre-tempo');
     tempo.setAttribute('aria-hidden', 'true');
     tempo.dataset.beat = '0';
     tempo.innerHTML = '<span class="pk-metre-tempo__mark">♩ = 72</span><i></i><i></i><i></i><i></i>';
-    const head = document.createElement('div');
-    head.className = 'pk-metre-prompt__head';
-    head.append(label, tempo, next);
-    const row = document.createElement('div');
-    row.className = 'pk-metre-prompt__row';
-    row.append(line);
+    const head = el('div', 'pk-metre-prompt__head'), row = el('div', 'pk-metre-prompt__row');
+    head.append(label, tempo, next); row.append(line);
     box.append(head, row);
     box.addEventListener('mouseenter', () => { hovering = true; });
     box.addEventListener('mouseleave', () => { hovering = false; arm(); });
@@ -244,7 +220,7 @@
         } else { group = null; nodes.push(span); }
       });
       line.replaceChildren(...nodes);
-      line.classList.toggle('is-enter', animate);
+      line.classList.toggle('is-enter', animate); line.style.setProperty('--metre-reveal', Math.round(list.length * step + 320) + 'ms');   // 整句浮现完的时刻：关键词下面那排点从这时起一颗颗亮（skin）
       line.classList.remove('is-leave');
     };
     if (animate && line.childNodes.length) {
@@ -312,6 +288,28 @@
     if (titleEl.parentElement !== header) header.prepend(titleEl);
   }
 
+  // 11-23 整页进场 / 换页（用户：「像 Son Daven」）：进 Metre（预备拍的指挥线开始扫）、换会话、刚打开 App 时，样子在 skin「11-23 整页进场」；换会话另有一根指挥线扫过。
+  let enterTimer = 0, lineEl = null, firstShown = false;
+  function enter(withLine) {
+    const root = document.documentElement, main = document.querySelector('main.content');
+    if (!isMetre() || reduced() || document.hidden || !main) return;
+    clearTimeout(enterTimer); lineEl?.remove(); lineEl = null;
+    root.removeAttribute('data-metre-enter'); void root.offsetWidth;   // 拿掉再放上，CSS 动画才会从头来
+    root.setAttribute('data-metre-enter', root.getAttribute('data-laolao-startup-home') === '1' || box?.isConnected ? 'home' : 'chat');
+    const line = box?.isConnected && box.querySelector('.pk-metre-prompt__text'), r = main.getBoundingClientRect();
+    if (line) { line.classList.remove('is-enter'); line.classList.add('is-wait'); setTimeout(() => { line.classList.remove('is-wait'); void line.offsetWidth; line.classList.add('is-enter'); }, 417); }
+    if (withLine) { lineEl = Object.assign(document.createElement('div'), {className: 'pk-metre-sweep', ariaHidden: 'true'}); Object.assign(lineEl.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px'}); document.body.append(lineEl); }
+    enterTimer = setTimeout(() => { root.removeAttribute('data-metre-enter'); lineEl?.remove(); lineEl = null; }, 1700);
+  }
+  // 换会话：等新内容到了再显（第一组消息换了、或者出了欢迎页），最多等 600ms；预备拍还盖着时不另做
+  function onSwitch() {
+    if (!isMetre() || reduced() || document.querySelector('.pk-metre-transition')) return;
+    const before = document.querySelector('.chat-thread .chat-group'), t0 = Date.now();
+    const wait = () => { const now = document.querySelector('.chat-thread .chat-group'); if ((now && now !== before) || box?.isConnected || Date.now() - t0 > 600) enter(true); else setTimeout(wait, 40); }; setTimeout(wait, 40);
+  }
+  window.addEventListener('pinkie:metre-sweep', () => enter(false));
+  window.addEventListener('pinkie:session-selected', onSwitch);
+
   function sync() {
     syncTitle();
     const welcome = isMetre() ? [...document.querySelectorAll('.agent-chat__welcome')].find((node) => node.getClientRects().length) : null;
@@ -322,9 +320,10 @@
     if (!box) build();
     if (box.parentElement !== welcome) {
       welcome.append(box);
-      // 第一句马上出；今天的数据（彩蛋用）回来后从下一句起才可能用上。
+      // 第一句马上出；今天的数据（彩蛋用）回来后从下一句起才可能用上。刚打开 App 第一次出首页：等启动闪屏走了再进场
       void refreshToday();
       show();
+      if (!firstShown) { firstShown = true; const go = (n) => (document.documentElement.hasAttribute('data-laolao-splash-metre') && n < 25 ? setTimeout(() => go(n + 1), 200) : enter(false)); go(0); }
     } else if (!timer && !hovering && !document.hidden) arm();
   }
 

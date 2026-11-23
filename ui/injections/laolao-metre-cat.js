@@ -24,7 +24,7 @@
   const SLEEP_AFTER_MS = 10 * 60_000;
   const DONE_MS = 3000;
   const ERROR_MS = 2500;
-  const TICK_MS = 125;   // 8 拍每秒；各状态按自己的 fps 取帧（和预览页同一算法）
+  const TICK_MS = 125, BEAT_MS = 60_000 / 72;   // 8 拍每秒；各状态按自己的 fps 取帧（和预览页同一算法）。BEAT_MS：全页共用的 ♩=72，点头按 Date.now() 落在这一拍上，和背景的摆锤、标志页的摆同一个钟（11-23）
   // 有人在用时 2～5 秒来一个空闲小动作；一分钟没碰键盘鼠标，就隔 20～40 秒才动一下（没人看，不白耗电）
   const LIVELY_MS = 60_000, ACT_GAP = [2000, 3000], ACT_GAP_UNWATCHED = [20_000, 20_000];
   const CATEGORY_NAMES = {overview: '项目概况', structure: '目录和关键文件', commands: '怎么跑、测、打包', conventions: '规矩',
@@ -188,11 +188,11 @@
   function actFrame() {
     if (!idleAct) return null;
     const def = idleAct.def;
-    const step = Math.floor((tick - idleAct.start) * def.fps / 8);
+    const step = idleAct.name === 'nod' ? Math.floor((Date.now() % BEAT_MS) / BEAT_MS * def.frames.length) : Math.floor((tick - idleAct.start) * def.fps / 8);
     return {index: step % def.frames.length, def};
   }
 
-  // 每一帧只画一次：缓存成小画布，之后每拍只是一次 drawImage，不再逐格 fillRect（空闲时猫一直在做小动作）。
+  // 每一帧只画一次：缓存成小画布，之后每拍只是一次 drawImage，不再逐格 fillRect。
   const sprites = new WeakMap();
   function sprite(api, frame, isDark) {
     let entry = sprites.get(frame);

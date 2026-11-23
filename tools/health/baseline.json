@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5090,
+    "important": 5076,
     "mutationObservers": 28,
     "setIntervals": 44,
     "subtreeObserverCalls": 0,
@@ -762,7 +762,7 @@
     },
     "ui/injections/laolao-metre-home.js": {
       "important": 0,
-      "lines": 357,
+      "lines": 356,
       "mutationObservers": 0,
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
@@ -793,8 +793,8 @@
       "windowGlobals": 0
     },
     "ui/injections/laolao-metre-skin.css": {
-      "important": 2281,
-      "lines": 2592,
+      "important": 2267,
+      "lines": 2562,
       "mutationObservers": 0,
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
@@ -1767,7 +1767,7 @@
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2501,
     "services/mode-architecture/session-lineage.mjs": 1894,
-    "ui/injections/laolao-metre-skin.css": 2592,
+    "ui/injections/laolao-metre-skin.css": 2562,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1637,

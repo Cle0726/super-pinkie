@@ -144,8 +144,8 @@
   ];
 
   const h = (tag, cls, html) => { const node = document.createElement(tag); if (cls) node.className = cls; if (html != null) node.innerHTML = html; return node; };
-  let page = null;
-  let lastFocus = null;
+  let page = null, lastFocus = null, leaveTimer = 0;
+  const reduced = () => document.documentElement.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
   function placeholder(slot) {
     const body = h('div', 'pk-metre-board__body is-placeholder');
@@ -273,12 +273,12 @@
 
   const api = {
     slots: SLOTS.map((slot) => slot.id),
-    get isOpen() { return Boolean(page && !page.hidden); },
+    get isOpen() { return Boolean(page && !page.hidden && !page.classList.contains('is-leaving')); },
     open(section) {
       if (!isMetre()) return false;
       if (!page) build();
       if (page.hidden) lastFocus = document.activeElement;
-      page.hidden = false;
+      clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = false;
       place();
       const target = section && card(section);
       const scroll = page.querySelector('.pk-metre-board__scroll');
@@ -288,12 +288,12 @@
       if (page.classList.contains('is-overlay')) page.focus({preventScroll: true});
       return true;
     },
+    // 11-23：关的时候先滑出去（skin 里 .is-leaving 的动画，300ms），滑完才藏起来、对话区才收回让出的宽度；减少动效时直接关
     close() {
-      if (!page || page.hidden) return;
+      if (!page || page.hidden || page.classList.contains('is-leaving')) return;
       const hadFocus = page.contains(document.activeElement);
-      page.hidden = true;
-      root.removeAttribute('data-metre-board');
-      root.style.removeProperty('--metre-board-w');
+      const done = () => { clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = true; root.removeAttribute('data-metre-board'); root.style.removeProperty('--metre-board-w'); };
+      if (reduced()) done(); else { page.classList.add('is-leaving'); leaveTimer = setTimeout(done, 300); }
       if (hadFocus) lastFocus?.focus?.({preventScroll: true});
     },
     toggle(section) { return api.isOpen ? (api.close(), false) : api.open(section); },

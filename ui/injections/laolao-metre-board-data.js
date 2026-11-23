@@ -51,16 +51,11 @@
     preferences: '偏好', pitfalls: '踩过的坑', people: '协作者', open: '没做完的'};
 
   let data = null;          // 上一次成功拿到的整份数据
-  let stale = false;
-  let lastAt = 0;
-  let pendingTimer = 0;
-  let inflight = false;
-  let again = false;
-  let badgeAt = 0;
-  let memoryQuery = '';
-  let watchTimer = 0;
-  let slowTimer = 0;
+  let stale = false, lastAt = 0, pendingTimer = 0, inflight = false, again = false, badgeAt = 0, memoryQuery = '', watchTimer = 0, slowTimer = 0;
   let dataAt = 0;            // 上一次成功读到数据的本机时间
+  // 11-23 刷新的过渡：记住上一次每段声部条的位置（%）、「现在」那条线、出现过的声部和小节。新出现的淡入；条和线从上一次的位置长 / 移过去
+  //   （skin 里的 .is-new / .is-moving 动画，只动 opacity 和 transform，不改排版——总谱「刷新不乱跳」照旧）。第一次画不动。
+  let prevGeo = null, prevNow = null, prevEvents = null;
   const RPC_MS = 45_000;     // 读总控台最多等这么久，过了算后端没回话
   const SLOW_MS = 8_000;     // 等过这么久就提示「回得慢」
   const QUIET_MS = 90_000;   // 在跑的会话超过这么久没动静，就标「没动静」
@@ -83,29 +78,31 @@
   }
 
   function sessionsNode(sessions, now) {
-    if (!sessions.length) return empty('还没有声部。Metre 分谱以后，每个声部在这里占一行。');
+    if (!sessions.length) { prevGeo = prevGeo || new Map(); return empty('还没有声部。Metre 分谱以后，每个声部在这里占一行。'); }
     const from = Math.min(...sessions.map((s) => s.spans[0]?.from || s.startedAt || now));
     const total = Math.max(60_000, now - from);
     const pct = (t) => Math.max(0, Math.min(100, ((t - from) / total) * 100));
-    const score = h('div', 'pk-mb-score');
+    const score = h('div', 'pk-mb-score'), geo = new Map(), first = !prevGeo;
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => `<b>${span(total * f) === '—' ? '0' : span(total * f)}</b>`).join('');
     score.append(h('div', 'pk-mb-score__ruler', `<span></span><div>${ticks}</div><span></span>`));
     for (const s of sessions) {
-      const row = h('div', 'pk-mb-score__row');
-      row.dataset.state = s.state;
+      const row = h('div', 'pk-mb-score__row' + (!first && !prevGeo.has(s.key) ? ' is-new' : ''));
+      row.dataset.state = s.state; geo.set(s.key, true);
       const role = s.roleName || s.role;
       const label = [role || s.modeName, s.model].filter(Boolean).join(' · ');
       const custom = role && s.roleSource === 'user' ? '<span class="pk-mb-role-badge">自定义</span>' : '';
       const part = h('div', 'pk-mb-score__part', `<strong title="${esc(s.title)}">${esc(s.title)}</strong>`);
       part.append(h('small', role ? 'pk-mb-role-label' : '', esc(label) + custom));
       const track = h('div', 'pk-mb-score__track');
-      for (const sp of s.spans) {
-        const block = h('i');
+      s.spans.forEach((sp, n) => {
+        const block = h('i'), left = pct(sp.from), width = Math.max(0.8, pct(sp.to) - left), old = prevGeo?.get(s.key + '#' + n) || (first ? null : [left, 0]);
         block.dataset.state = sp.kind === 'run' ? 'run' : sp.kind;
-        block.style.left = pct(sp.from) + '%';
-        block.style.width = Math.max(0.8, pct(sp.to) - pct(sp.from)) + '%';
+        block.style.left = left + '%';
+        block.style.width = width + '%';
+        if (old && (Math.abs(old[0] - left) > 0.05 || Math.abs(old[1] - width) > 0.05)) { block.classList.add('is-moving'); block.style.setProperty('--mb-dx', ((old[0] - left) / width * 100).toFixed(2) + '%'); block.style.setProperty('--mb-s', (old[1] / width).toFixed(4)); }
+        geo.set(s.key + '#' + n, [left, width]);
         track.append(block);
-      }
+      });
       const used = s.endedAt && s.startedAt ? s.endedAt - s.startedAt : s.startedAt ? now - s.startedAt : 0;
       const quiet = s.status === 'running' && s.lastActiveAt ? now - s.lastActiveAt : 0;
       const silent = quiet > QUIET_MS;
@@ -117,7 +114,7 @@
       if (s.usage?.input || s.usage?.output) bits.push(`用量 ${tokens(s.usage.input)} 进 / ${tokens(s.usage.output)} 出`);
       else if (s.usage?.total) bits.push(`用量 ${tokens(s.usage.total)}`);
       if (s.error) bits.push(`<b class="pk-mb-fail">失败：${esc(s.error)}</b>`);
-      line.innerHTML = `<span>${bits.join(' · ') || '&nbsp;'}</span>`;
+      line.innerHTML = `<span>${bits.join(' · ') || '&nbsp;'}</span>`; if (!bits.length) line.classList.add('is-empty');   // 没有说明文字：这一行不占高度，按钮浮在行的右边（board.css）
       const acts = h('div', 'pk-mb-score__acts');
       const btn = (text, fn, title) => { const b = h('button', 'pk-mb-act', text); b.type = 'button'; if (title) b.title = title; b.addEventListener('click', fn); acts.append(b); return b; };
       btn('打开', () => window.__laolaoSidebar?.navigateSession?.(s.key));
@@ -127,9 +124,11 @@
       row.append(part, track, meta, line);
       score.append(row);
     }
-    const now$ = h('div', 'pk-mb-score__now');
+    const now$ = h('div', 'pk-mb-score__now'), nowPct = pct(now);
     now$.setAttribute('aria-hidden', 'true');
-    now$.innerHTML = `<i style="left:${pct(now)}%"></i>`;
+    now$.innerHTML = `<i style="left:${nowPct}%"></i>`;
+    if (prevNow != null && Math.abs(prevNow - nowPct) > 0.05) { now$.classList.add('is-moving'); now$.style.setProperty('--mb-dx', (prevNow - nowPct).toFixed(2) + '%'); }
+    prevGeo = geo; prevNow = nowPct;
     score.append(now$);
     const wrap = h('div', 'pk-mb-scroll-x');
     wrap.append(score);
@@ -176,14 +175,15 @@
   }
 
   function timelineNode(timeline) {
-    if (!timeline.length) return empty('还没有事情发生。');
-    const list = h('ol', 'pk-mb-events');
+    if (!timeline.length) { prevEvents = prevEvents || new Set(); return empty('还没有事情发生。'); }
+    const list = h('ol', 'pk-mb-events'), seen = new Set();
     for (const item of timeline) {
-      const [word, state] = KIND[item.kind] || [item.kind, 'wait'];
-      const li = h('li', '', `<time>${clock(item.at)}</time><i aria-hidden="true"></i><b>${word}</b><span>${esc(item.text)}</span>`);
+      const [word, state] = KIND[item.kind] || [item.kind, 'wait'], key = `${item.at}|${item.kind}|${item.text}`;
+      const li = h('li', prevEvents && !prevEvents.has(key) ? 'is-new' : '', `<time>${clock(item.at)}</time><i aria-hidden="true"></i><b>${word}</b><span>${esc(item.text)}</span>`);
       li.dataset.state = state;
-      list.append(li);
+      list.append(li); seen.add(key);
     }
+    prevEvents = seen;
     return list;
   }
 
