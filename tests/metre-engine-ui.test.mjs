@@ -331,3 +331,70 @@ test('in a browser: players are one click away, and the current choice can be sa
     await tab.locator('.pk-eng-menu__item--player', {hasText: '小提琴手'}).waitFor();
   } finally { await browser.close(); }
 });
+
+// PLAN 3.6：设置「连接」里也有一处外部引擎总开关；设置页只留空位，开关写在引擎台的文件里（健康门禁不让设置页变长）。
+test('the settings page leaves a slot for the engines switch and the engine file fills it', () => {
+  const settings = read('laolao-settings-user.js');
+  assert.match(settings, /element\("div", "pinkie-user-settings__engines", connectionCard\); enginesHost\.pinkieKit = \{row, setPressed\}; window\.dispatchEvent\(new CustomEvent\("pinkie:settings-engines"/);
+  assert.match(js, /window\.addEventListener\('pinkie:settings-engines', event => mountSettings\(event\.detail\?\.host\)\)/);
+  assert.match(js, /document\.querySelectorAll\('\.pinkie-user-settings__engines'\)\.forEach\(mountSettings\)/);
+});
+
+test('in a browser: the settings switch turns the engines on, and turning them off takes two clicks', {timeout: 40_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><html data-laolao-mode="chat"><body><section id="card"></section></body></html>'}));
+    await tab.goto('http://127.0.0.1:30117/settings');
+    await tab.evaluate(() => {
+      let enabled = false;
+      window.calls = [];
+      window.toasts = [];
+      window.__laolaoToast = text => window.toasts.push(text);
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.status') return {running: enabled, enabled};
+        if (method === 'pinkie.engines.enable') { enabled = params.on === true; return {running: enabled, enabled}; }
+        if (method === 'pinkie.engines.catalog') return {enabled, running: enabled, levels: [], engines: []};
+        return {};
+      }};
+      // 设置页先建好（引擎台的文件后加载）：空位已经在了。
+      const row = (parent, title, hint) => {
+        const item = document.createElement('div'); item.className = 'pinkie-user-settings__row';
+        item.innerHTML = `<div class="copy"><span class="title"></span><span class="hint"></span></div>`;
+        item.querySelector('.title').textContent = title; item.querySelector('.hint').textContent = hint;
+        const control = document.createElement('div'); item.append(control); parent.append(item);
+        return {item, control};
+      };
+      const setPressed = (node, pressed) => node.setAttribute('aria-pressed', String(Boolean(pressed)));
+      const host = document.createElement('div'); host.className = 'pinkie-user-settings__engines'; host.pinkieKit = {row, setPressed};
+      document.getElementById('card').append(host);
+    });
+    await tab.addScriptTag({content: js});
+    const onButton = tab.getByRole('button', {name: '打开外部引擎', exact: true});
+    const offButton = tab.getByRole('button', {name: '关掉外部引擎', exact: true});
+    await tab.waitForFunction(() => document.querySelector('[aria-label="关掉外部引擎"]')?.getAttribute('aria-pressed') === 'true');
+    assert.equal(await tab.locator('.pinkie-user-settings__engines .title').textContent(), '外部引擎');
+    assert.match(await tab.locator('.pinkie-user-settings__engines .hint').textContent(), /170MB/);
+    assert.equal(await tab.evaluate(() => window.calls.some(([m]) => m === 'pinkie.engines.enable')), false, 'just showing the switch turns nothing on');
+
+    await onButton.click();
+    await tab.waitForFunction(() => document.querySelector('[aria-label="打开外部引擎"]')?.getAttribute('aria-pressed') === 'true');
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.enable')[1]), {on: true});
+    assert.match(await tab.locator('.pk-eng-settings-note').textContent(), /已经打开/);
+
+    await offButton.click();
+    assert.equal(await offButton.textContent(), '再点一次关掉');
+    assert.match(await tab.locator('.pk-eng-settings-note').textContent(), /正在跑的外部引擎对话和派出去的活也会停/);
+    assert.equal(await tab.evaluate(() => window.calls.filter(([m, p]) => m === 'pinkie.engines.enable' && p.on === false).length), 0, 'one click does not turn it off');
+    await offButton.click();
+    await tab.waitForFunction(() => document.querySelector('[aria-label="关掉外部引擎"]')?.getAttribute('aria-pressed') === 'true');
+    assert.deepEqual(await tab.evaluate(() => window.calls.filter(([m]) => m === 'pinkie.engines.enable').map(([, p]) => p)), [{on: true}, {on: false}]);
+    assert.ok((await tab.evaluate(() => window.toasts)).includes('外部引擎已经关掉'));
+  } finally { await browser.close(); }
+});

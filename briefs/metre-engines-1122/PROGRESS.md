@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-11-23 晚 · E7 设置「连接」里的外部引擎总开关（AWS Quick 经 Quick 跑腿）
+
+**做了什么**
+- 设置「连接」里，在「Metre 模式下暂停消息渠道」下面加了一行「外部引擎」：打开 / 关掉（PLAN 3.6「引擎菜单和设置里各一处」）。原来只能在引擎菜单里打开，**关掉的入口以前没有，现在只在这里**。关掉要点两下（第一下提示正在跑的外部引擎对话和派出去的活也会停，4 秒内再点才关），走 `pinkie.engines.enable {on: false}`：引擎服务会停，下载过的留着。打开复用引擎台的 `enableEngines()`，第一次下载时这一行写「正在准备……」。
+- 写法：`laolao-settings-user.js` 只留一个空位 `.pinkie-user-settings__engines`，带上它自己的 `row / setPressed`，再发 `pinkie:settings-engines` 事件；开关代码在 `laolao-metre-engine.js` 的 `mountSettings`。引擎台文件比设置页后加载时，会扫一遍已经建好的空位。设置页在健康基线上是 1637 行，不能变长：所以把同一文件里一处折成两行的 `element("p", …)` 合回一行，再加这一行，总行数不变。没有新的 `window.__` 全局名。
+- `?v=metreengine7` → `metreengine8`。
+- `docs/METRE-MODE.md`「打开和关掉」写了两处入口和关掉的后果。
+
+**怎么验的**：`metre-engine-ui` 新加两条：静态检查空位和事件；真浏览器里先建空位、后加载引擎台，验证显示开关时不调 `enable`、点打开发 `{on: true}`、点一次关掉不关、点两次才发 `{on: false}` 并弹提示。`metre-engine-ui` 10 条全过，用的是本机 Edge：Playwright 从 `F:\Projects\super-pinkie\build\windows-runtime\node_modules\openclaw\node_modules` 借（设 `NODE_PATH`，仓库里没装 Playwright，不设的话 7 条浏览器测试会写「Playwright is not installed here」后跳过；上一条记录说的 3 条就是这个原因）。另外在隔离的 HOME/APPDATA 里跑了 15 个文件，全过：`user-settings`、`brand-ui`、`motion-preference`、`tuning`、`run-notify`、四个引擎测试、`plugin-file-lists`、`code-health-ratchet`、`metre-quiet`、`metre-lock`、`metre-board`、`metre-wording`、`metre-inject`。ratchet 和 `git diff --check` 也过了。
+
+**没验的**：没在真碧琪的设置页里截图，也没真下载一遍。
+
+**下一步**：E7 剩下的：NOTICES 放进关于页（放哪还要定）、版本号（发版要用户点头）→ E6 → E8。
+
 ## 2026-11-23 晚 · E7 文档和许可声明草稿（AWS Quick 经 Quick 跑腿）
 
 **做了什么**

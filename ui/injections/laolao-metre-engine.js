@@ -1138,6 +1138,62 @@
     schedule(external() ? (status === 'running' ? 1000 : status === 'waiting' ? 2000 : 4000) : 5000);
   }
 
+  // ---------- 设置「连接」里的总开关（PLAN 3.6：引擎菜单和设置里各一处；关掉只在这里） ----------
+  // 设置页（laolao-settings-user.js）只留一个空位 .pinkie-user-settings__engines，带上它自己的 row / setPressed，再发 pinkie:settings-engines。
+  function mountSettings(host) {
+    const kit = host?.pinkieKit;
+    if (!host || host.dataset.pkEngines || typeof kit?.row !== 'function') return;
+    host.dataset.pkEngines = 'on';
+    const line = kit.row(host, '外部引擎', 'Metre 里把对话或活交给 Claude Code、Codex、Cursor 等。关着时什么都不下载、不运行；第一次打开会下载约 170MB，只在这台电脑上跑。');
+    const group = h('div', 'pinkie-user-settings__segments');
+    line.control.append(group);
+    const choice = (label, aria) => { const b = h('button', 'pinkie-user-settings__choice'); b.type = 'button'; b.textContent = label; b.setAttribute('aria-label', aria); group.append(b); return b; };
+    const on = choice('打开', '打开外部引擎'), off = choice('关掉', '关掉外部引擎');
+    const note = h('p', 'pinkie-user-settings__soft-note pk-eng-settings-note');
+    note.setAttribute('aria-live', 'polite');
+    host.append(note);
+    let enabled = null, armed = 0, said = '';
+    const show = (text = said) => {
+      said = text;
+      kit.setPressed?.(on, enabled === true); kit.setPressed?.(off, enabled === false);
+      on.disabled = off.disabled = state.enabling || enabled === null;
+      off.textContent = armed ? '再点一次关掉' : '关掉';
+      note.textContent = state.enabling ? '正在准备外部引擎：第一次要下载约 170MB 并校验，网慢的话要几分钟。好了会自动接上。' : said;
+    };
+    const read = async () => {
+      try { enabled = (await rpc('pinkie.engines.status', {}, 8000))?.enabled === true; show(); }
+      catch (error) { show('读不到外部引擎的状态：' + error.message); }
+    };
+    on.onclick = async () => {
+      if (enabled === true || state.enabling) return;
+      const done = enableEngines();
+      show('');
+      await done;
+      await read();
+      show(enabled ? '已经打开。在 Metre 输入框下面的「引擎」按钮里选用。' : '没能打开，原因见上面的提示。');
+    };
+    off.onclick = async () => {
+      if (enabled !== true || state.enabling) return;
+      if (!armed) {
+        armed = setTimeout(() => { armed = 0; show(''); }, 4000);
+        show('关掉会停下引擎服务，正在跑的外部引擎对话和派出去的活也会停。再点一次才关。');
+        return;
+      }
+      clearTimeout(armed); armed = 0;
+      try {
+        enabled = (await rpc('pinkie.engines.enable', {on: false}, 30000))?.enabled === true;
+        await loadCatalog(true);
+        toast('外部引擎已经关掉');
+        show('已经关掉。下载过的引擎服务还留在这台电脑上，再打开不用重下。');
+      } catch (error) { show('没能关掉：' + error.message); }
+      paint(); refresh();
+    };
+    show('');
+    read();
+  }
+  window.addEventListener('pinkie:settings-engines', event => mountSettings(event.detail?.host));
+  document.querySelectorAll('.pinkie-user-settings__engines').forEach(mountSettings); // 设置页比这里先建好的情况
+
   window.addEventListener('pinkie:composer-chips', () => paintComposerChip());
   window.addEventListener('popstate', () => { schedule(50); setTimeout(refreshSide, 300); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { schedule(50); refreshSide(); } });
