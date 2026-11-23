@@ -17,6 +17,7 @@
 // 11-16 夜用户要回来：Metre 里思考时也用这个「C.le.」粒子签名（批 6 原本在 Metre 里不加载）；
 //   Metre 里只在一轮运行期间占着 WebGL，落款结束就整个拆掉、把上下文还回去（见 endHold）。
 import {createSteps, liveKind} from './laolao-cle-steps.js';
+import './laolao-cle-peek.js';   // 点状态行 / 小标：看本轮步骤
 let CleSpace = null, spaceLoading = null;
 const loadSpace = () => spaceLoading ||= Promise.resolve(window.__pinkieQuiet?.loadSignature())
   .then(() => import(window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
@@ -70,6 +71,7 @@ if (!window.__laolaoCleStage) {
   }
   const STOPPED = /中断|失败|出错|错误|取消|interrupt|abort|fail|error|cancel/i;
   const DONE_HOLD = 6900;      // 落款全长（含回到签名）
+  const STOP_HOLD = 2000, STOP_BACK = 1000;   // 中断：塌下去停一会儿，再用一秒交回签名
   const NS = 'http://www.w3.org/2000/svg';
   const ARGS_KEY = 'laolao:cle-tool-args:v1';
   const ARGS_MAX = 600;
@@ -253,7 +255,7 @@ if (!window.__laolaoCleStage) {
     glyph = document.createElement('span');
     glyph.className = 'cle-glyph cle-glyph--live';
     try {
-      space = new CleSpace(glyph, {palette: 'cle', count: 1100, size: .17, fitW: 10.2, fitH: 5.4, interactive: false});
+      space = new CleSpace(glyph, {palette: 'cle', count: 1100, size: .17, fitW: 10.2, fitH: 5.4, interactive: true});   // 鼠标靠近时朝它倾一点
     } catch (err) {
       console.warn('[cle-stage] WebGL 不可用，退回静态签名', err);
       glyph = null;
@@ -277,8 +279,8 @@ if (!window.__laolaoCleStage) {
     if (lab.dataset.kind !== kind) lab.dataset.kind = kind;
     const b = lab.querySelector('b'), span = lab.querySelector('span'), em = span.querySelector('em'), i = lab.querySelector('i');
     const verb = (kind === 'git' && window.__pinkieToolKind ? window.__pinkieToolKind.ing('git', text) : VERB[kind]) || VERB.think;
-    if (b.textContent !== verb) b.textContent = verb;
-    if (em.textContent !== (text || '')) em.textContent = text || '';
+    if (b.textContent !== verb) { b.textContent = verb; lab.toggleAttribute('data-flip'); }   // 换词时淡入（cle-peek 的样式）
+    if (em.textContent !== (text || '')) { em.textContent = text || ''; lab.toggleAttribute('data-swap'); }
     span.toggleAttribute('data-mono', !!(mono && text));
     span.hidden = !text;
     if (i.textContent !== (right || '')) i.textContent = right || '';
@@ -451,10 +453,18 @@ if (!window.__laolaoCleStage) {
     liveSince = 0;
     finishing = d;
     showFinish(d);
-    // 被中断的不落款，安静地回到签名
-    const animated = !!(space && owner === d) && !stopped;
-    if (space && owner === d) space.set(stopped ? 'idle' : 'done');
+    // 被中断的不落款：墨线卸力塌下去、变灰，停一下再回到签名
+    if (stopped) return stopHold();
+    const animated = !!(space && owner === d);
+    if (animated) space.set('done');
     doneTimer = setTimeout(endHold, animated ? DONE_HOLD : 1200);
+  }
+
+  function stopHold() {
+    clearTimeout(doneTimer);
+    if (!(space && owner === finishing)) { doneTimer = setTimeout(endHold, 1200); return; }
+    space.set('stopped');
+    doneTimer = setTimeout(() => { if (space && owner === finishing) space.set('idle'); doneTimer = setTimeout(endHold, STOP_BACK); }, STOP_HOLD);
   }
 
   function endHold() {
@@ -477,12 +487,10 @@ if (!window.__laolaoCleStage) {
     claim(twin);
     markFocus(twin);
     // 重绘出来的历史才是定论：模型最后没给出回复（空回复 / 出错）时 App 会标「已中断」，
-    // 这时不再落款，安静地回到签名，免得先写「完成」过几秒又变「已中断」
+    // 这时不再落款，改演中断，免得先写「完成」过几秒又变「已中断」
     if (finishInfo && !finishInfo.stopped && metaOf(twin).stopped) {
       finishInfo.stopped = true;
-      if (space && owner === twin) space.set('idle');
-      clearTimeout(doneTimer);
-      doneTimer = setTimeout(endHold, 1200);
+      stopHold();
     }
     showFinish(twin);
   }

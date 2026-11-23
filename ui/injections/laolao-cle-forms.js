@@ -1,4 +1,4 @@
-/* cle-forms:v1 —— 每种步骤一个形态，都由 C.le. 的笔画变出来
+/* cle-forms:v2 —— 每种步骤一个形态，都由 C.le. 的笔画变出来
  *
  * 规矩：
  *   - 只用签名的 6 个部件（C、两个点、l、e、花式下划线），每个部件在形状里有固定的去处；
@@ -33,7 +33,7 @@ export const FORM_OF = Object.freeze({
   computer: 'pointer',
   quiz: 'learn', lab: 'learn', grade: 'learn', note: 'learn',
   tool: 'tool',
-  ok: 'ok', fail: 'fail', done: 'done', idle: 'idle', stopped: 'idle',
+  ok: 'ok', fail: 'fail', done: 'done', idle: 'idle', stopped: 'stopped',
 });
 /** 不认识的类别用「其他工具」，不再停在上一步的样子。 */
 export const formOf = (kind) => (Object.hasOwn(FORM_OF, kind) ? FORM_OF[kind] : 'tool');
@@ -68,61 +68,82 @@ export function inkForms({P, SIG, out}) {
 
   const forms = {};
 
-  /* 搜索：C 合成带起笔小钩的镜圈，下划线甩成镜柄，l、e 断成一串信息点 */
+  /* 搜索：C 合成带起笔小钩的镜圈，下划线甩成镜柄；l、e 是三行字，镜片扫过的地方字放大变粗，两个点是找到的那两处 */
   {
     const lens = brush('M97 24C94 17 88 14 79 15C62 16 52 30 55 47C58 65 78 73 94 65C110 57 114 34 101 21C96 16 90 14 83 15', 6.4);
     const grip = brush('M103 61C109 67 116 75 123 81C127 84.5 131 85 133 82', 7.6, true);
-    let dx = 0, dy = 0, shine = 0;
+    const ROW = [26, 46, 66], FOUND = [[138, 46], [44, 66]];
+    let dx = 0, dy = 0, shine = 0, lx = 0, ly = 0;
     forms.search = {
-      frame(t) { dx = Math.sin(t * 1.35) * 31; dy = Math.sin(t * 2.7) * 3; shine = t * .7; },
+      frame(t) { dx = Math.sin(t * 1.1) * 38; dy = Math.sin(t * 2.2) * 2; shine = t * .7; lx = 83 + dx; ly = 42 + dy; },
       place(i) {
         const p = P.part[i], u = P.u[i];
-        if (p === C) {
-          trace(i, lens, u, 2.4, 4.4, dx, dy);
-          const d = fract(u - shine);
+        if (p === C && u < .88) {
+          trace(i, lens, u / .88, 2.4, 4.4, dx, dy);
+          const d = fract(u / .88 - shine);
           look(i, .42 + .7 * bump(Math.min(d, 1 - d), .12));
+        } else if (p === C) {                              // 镜片左上的一道弧形反光
+          const f = (u - .88) / .12, a = 3.55 + f * .9, s = Math.sin(f * Math.PI);
+          put(i, 81 + dx + Math.cos(a) * 18, 41 + dy + Math.sin(a) * 18, 1.5 * s);
+          look(i, 1, .7 * s, .9);
         } else if (p === TAIL) {
           trace(i, grip, u, 0, 5, dx, dy);
           look(i, .45);
+        } else if (isDot(p)) {
+          const [x, y] = FOUND[p === DOT1 ? 0 : 1], hit = 1 - smooth(14, 26, Math.hypot(slantX(x, y) - lx, y - ly));
+          disc(i, slantX(x, y), y + 4.5, 9 + 3 * hit, 1.6);
+          look(i, .25 + hit, .35 + .65 * hit, 1.1);
         } else {
-          let col, row;
-          if (p === L || p === E) {
-            const k = Math.min(17, Math.floor(leU(i) * 18));
-            col = Math.floor(k / 3); row = col % 2 ? k % 3 : 2 - (k % 3);
-          } else { col = p === DOT1 ? 1 : 4; row = 1; }
-          const y = 20 + row * 25, x = slantX(15 + col * 32, y), hot = 1 - smooth(19, 31, Math.hypot(x - 83 - dx, y - 42 - dy));
-          disc(i, x, y, 2.5 + 3.4 * hot);
-          look(i, hot * 1.2, .55 + .45 * hot);
+          const v = leU(i) * 3, k = Math.min(2, Math.floor(v)), f = v - k, y = ROW[k], x0 = 24 + (k === 1 ? 10 : 0);
+          const x = slantX(x0 + f * (k === 2 ? 118 : 140), y), word = fract((x + k * 9) / 23);
+          const lens0 = 1 - smooth(15, 23, Math.hypot(x - lx, y - ly)), gap = smooth(.7, .76, word) * (1 - smooth(.94, 1, word));
+          put(i, x + (x - lx) * .32 * lens0, y + (y - ly) * .32 * lens0, 1.6 + 2.4 * lens0);
+          look(i, .1 + .55 * lens0, (.5 + .5 * lens0) * (1 - gap));
         }
       },
     };
   }
 
-  /* 命令：C 折成提示符，l、e 拉成输出行，下划线是正在敲的一行，两个点合成光标 */
+  /* 命令：一个终端窗口。e 画窗框和标题栏（左上三个小按钮），C 折成提示符，l 是往上滚的输出（一个词一个词的），
+     下划线是正在敲的这一行（敲到哪露到哪），两个点合成方块光标 */
   {
-    const prompt = brush('M27 24C29 26 31 27 33 29C40 35 47 41 53 46.5C43 54.5 31 63 19 70', 7.4);
-    const long = brush('M78 50C100 47 128 52 162 48', 11.5), short = brush('M78 50C96 48 114 51 138 48', 11.5);
-    const typed = brush('M172 80C160 78 148 78 134 79C112 81 90 81 70 80', 15, true);
-    let k = 0, cursor = 0;
+    const prompt = brush('M19 67C23 70 27 72.5 31 76C27 79.5 23 82 19 85', 5.4);
+    const typed = brush('M171 76C130 76 88 76 41 76', 6.2);
+    const win = polyline([[182, 21], [10, 21], [10, 14], [13, 9.5], [17, 8], [175, 8], [179, 9.5], [182, 14], [182, 84],
+      [179, 88.5], [175, 90], [17, 90], [13, 88.5], [10, 84], [10, 21]].flat());
+    const hsh = (n) => fract(Math.sin(n) * 43758.5453);
+    const gap = (w) => smooth(.72, .78, w) * (1 - smooth(.94, 1, w));
+    let k = 0, cursor = 41;
     forms.exec = {
-      frame(t) { k = fract(t * .46 + .3); cursor = 69 + Math.min(1, k / .8) * 101; },
+      frame(t) { k = fract(t * .42 + .3); cursor = 41 + Math.min(1, k / .8) * 130; },
       place(i, t) {
         const p = P.part[i], u = P.u[i];
         if (p === C) {
-          trace(i, prompt, u, 2.4);
-          look(i, .5);
+          trace(i, prompt, u, 2.2, 4.4);
+          look(i, .45 + .25 * Math.sin(t * 2));
         } else if (isDot(p)) {
-          disc(i, cursor + 5, 78, 5.4, 7.8);
-          const blink = k < .8 ? 1 : .35 + .65 * smooth(-.3, .3, Math.sin(t * TAU * 2.4));
-          look(i, 1.1, smooth(0, .05, k) * blink * (1 - smooth(.93, 1, k)), 1.2);
+          disc(i, slantX(cursor + 4.5, 76), 76, 4, 6.6);
+          const blink = k < .8 ? 1 : .3 + .7 * smooth(-.3, .3, Math.sin(t * TAU * 2.4));
+          look(i, 1.1, smooth(0, .05, k) * blink * (1 - smooth(.93, 1, k)), 1.15);
         } else if (p === TAIL) {
-          trace(i, typed, u, 1.3);
-          const x = out[i * STRIDE + X], shown = Math.max(1 - smooth(cursor - 3, cursor + 3, x), .07);
-          look(i, .2 + bump(x - cursor, 18) * .8, lerp(shown, .07, smooth(.9, 1, k)) * lerp(.07, 1, smooth(0, .04, k)) + .07);
-        } else {
-          const first = p === L, r = ((first ? 1.25 : .25) + t * .7) % 2, lift = 13 - r * 22;
-          trace(i, first ? long : short, u, 0, 99, -lift * .21, lift);
-          look(i, .3 * (1 - smooth(0, .6, r)), smooth(0, .16, r) * (1 - smooth(1.84, 2, r)) * .9);
+          trace(i, typed, u, 1.6, 3);
+          const x = out[i * STRIDE + X], shown = 1 - smooth(cursor - 2, cursor + 2, x);
+          look(i, .15 + bump(x - cursor, 14) * .9, shown * (1 - gap(fract((x - 41) / 17))) * (1 - smooth(.9, 1, k)));
+        } else if (p === E) {
+          if (u < .14) {                                   // 标题栏上的三个小按钮
+            const b = Math.min(2, Math.floor(u / .14 * 3));
+            disc(i, 19 + b * 8, 14.5, 2.3);
+            look(i, b ? .15 : .8, .7, .9);
+          } else {
+            win.at((u - .14) / .86, tmp);
+            put(i, tmp[0], tmp[1], 1.6);
+            look(i, .04, .5, 1.3);
+          }
+        } else {                                           // 输出：三行一直往上滚，滚出去就换一行新的
+          const v = u * 3, r = Math.min(2, Math.floor(v)), f = v - r, g = r + t * .5, pos = g % 3, gen = Math.floor(g / 3);
+          const y = 64 - pos * 12, len = .42 + .52 * hsh(gen * 3.1 + r * 7.7), x = 22 + f * 150 * len;
+          put(i, slantX(x, y), y, 3.2);
+          look(i, .2 * (1 - smooth(0, 1, pos)), smooth(0, .3, pos) * (1 - smooth(2.3, 2.85, pos)) * (1 - gap(fract((x + gen * 11 + r * 5) / 16))) * .9);
         }
       },
     };
@@ -191,25 +212,41 @@ export function inkForms({P, SIG, out}) {
     };
   }
 
-  /* 测试：C、l、e 各绕成一个圈，句点挨个跳进去检查（只表示「在查」，不提前打勾） */
+  /* 测试：C 合成一只烧瓶，l、e 是晃动的液面，下划线一半是液体、一半是往上冒的气泡，两个点从瓶口逸出 */
   {
-    const base = brush('M176 79C160 85 92 85 18 89', 8, true);
-    const CX = [37, 95, 153];
-    let at = 0, hop = 0, turnAt = 0;
+    const flask = brush('M112 12C101.33 12.00 90.67 12.00 80 12C82.00 13.00 84.00 14.00 86 15C86.00 22.00 86.00 29.00 86 36C73.67 50.33 61.33 64.67 49 79C50.00 81.00 51.00 83.00 52 85C80.67 85.00 109.33 85.00 138 85C139.00 83.00 140.00 81.00 141 79C128.67 64.67 116.33 50.33 104 36C104.00 29.00 104.00 22.00 104 15C106.67 14.00 109.33 13.00 112 12', 5.6);
+    const side = (y) => 18.5 + Math.max(0, y - 36) * (37 / 43);      // 瓶身从瓶颈往下张开的半宽
+    const surf = (x, t) => 58 + 2.3 * Math.sin(x * .17 - t * 3.4) + 1.4 * Math.sin(t * 1.7);
+    const HATCH = [66, 72, 78], BUB = [[82, .0], [108, .27], [94, .52], [120, .76]];
     forms.test = {
-      frame(t) { at = pingPong3(t * 1.25); hop = Math.sin(Math.PI * (at - Math.floor(at))); turnAt = fract(t * 1.1); },
-      place(i) {
+      place(i, t) {
         const p = P.part[i], u = P.u[i];
-        if (p === TAIL) {
-          trace(i, base, u, .8, 3);
-          look(i, .2 + bump(out[i * STRIDE + X] - 37 - at * 58, 20) * .7, .8);
-        } else if (isDot(p)) {
-          disc(i, 37 + at * 58, 45 - hop * 19, 7, 7 + hop);
-          look(i, 1.05, 1, 1.55);
+        if (p === C && u < .86) {
+          trace(i, flask, u / .86, 2.2, 4.2);
+          look(i, .3);
+        } else if (p === C) {                              // 玻璃上的一道竖高光
+          const f = (u - .86) / .14, y = lerp(47, 77, f), s = Math.sin(f * Math.PI);
+          put(i, slantX(95 - side(y) + 6.5, y), y, 1.4 * s);
+          look(i, .95, .6 * s, .9);
+        } else if (p === L || p === E) {
+          const y0 = 58, hw = side(y0) - 2.5, x = 95 - hw + leU(i) * hw * 2;
+          const y = surf(x, t) - 2.4 * smooth(hw - 8, hw, Math.abs(x - 95));   // 贴着瓶壁往上翘的弯月面
+          put(i, slantX(x, y), y, 2.4);
+          look(i, .55 + .35 * Math.sin(x * .17 - t * 3.4));
+        } else if (p === TAIL && u < .4) {                  // 气泡：从瓶底升到液面就破
+          const v = u / .4 * 4, k = Math.min(3, Math.floor(v)), a = (v - k) * TAU, [bx, off] = BUB[k];
+          const f = fract(t * (.42 + k * .06) + off), y = lerp(82, 61, f * f * (3 - 2 * f)), r = (1.8 + k % 2 * 1.2) + 2.2 * f;
+          const x = bx + Math.sin(f * 7 + k) * 2.5;
+          put(i, slantX(x, y) + Math.cos(a) * r, y + Math.sin(a) * r, 1.3);
+          look(i, .5, smooth(0, .12, f) * (1 - smooth(.86, 1, f)) * .95);
+        } else if (p === TAIL) {                            // 液体：三行淡淡的排线
+          const v = (u - .4) / .6 * 3, k = Math.min(2, Math.floor(v)), y = HATCH[k], hw = side(y) - 4, x = 95 - hw + (v - k) * hw * 2;
+          put(i, slantX(x, y), y, 1.6);
+          look(i, .15, .34 * smooth(.02, .1, v - k) * (1 - smooth(.9, .98, v - k)));
         } else {
-          const k = p === C ? 0 : p === L ? 1 : 2, on = bump(at - k, .36), d = fract(u + turnAt);
-          ring(i, u, CX[k], 45, 20 + on * 2.2, 20 + on * 2.2, 1.8, p === C ? -1.1 : Math.PI / 2);
-          look(i, .12 + on * (.35 + bump(Math.min(d, 1 - d), .13)), .65 + .35 * on);
+          const f = fract(t * .42 + (p === DOT2 ? .5 : 0)), y = lerp(40, 4, f);
+          disc(i, slantX(95 + Math.sin(f * 9 + (p === DOT2 ? 2 : 0)) * 4, y), y, 2.8 + f * 2.4);
+          look(i, .7, smooth(0, .15, f) * (1 - smooth(.7, .95, f)), 1.2);
         }
       },
     };
@@ -270,56 +307,63 @@ export function inkForms({P, SIG, out}) {
     };
   }
 
-  /* Git：下划线是右端轻挑的主干，l、e 连成分支，C 卷成枝头的提交，两个点是分叉与合并 */
+  /* Git：下划线是主干，l·e 从分叉处弯出去成一条支线，C 是支线顶端的提交，两个点是主干上的分叉和最新一次提交；一道光沿着历史往前走 */
   {
-    const rise = brush('M42 74C64 74 60 52 70 39C75 32 80 28 90 28', 6.6);
-    const fall = brush('M97 28C114 28 120 38 129 52C137 65 141 74 154 74', 5);
-    const trunk = brush('M183 64C179 71 170 75 152 74.5C114 73.5 62 72.5 14 77', 11, true);
+    const branch = brush('M40 66C54 66 58 31 82 31C103 31 120 31 139 31', 5.4);
+    const trunk = brush('M188 64C184.00 64.67 180.00 65.33 176 66C167.33 66.00 158.67 66.00 150 66C132.33 66.00 114.67 66.00 97 66C78.00 66.00 59.00 66.00 40 66C31.33 66.00 22.67 66.00 14 66', 9.5, true);
     let head = 0;
     forms.git = {
-      frame(t) { head = fract(t * .35) * 230 - 8; },
+      frame(t) { head = fract(t * .32) * 240 - 20; },
       place(i) {
         const p = P.part[i], u = P.u[i];
         if (isDot(p)) {
-          const x = p === DOT1 ? 41 : 151, hot = bump(x - head, 18);
-          disc(i, x, 74, 6.3 + 2.2 * hot);
-          look(i, .55 + .7 * hot, 1, 1.75);
+          const x = p === DOT1 ? 40 : 172, hot = bump(x - head, 16);
+          disc(i, slantX(x, 66), 66, 6.2 + 2 * hot);
+          look(i, .5 + .8 * hot, 1, 1.7);
           return;
         }
-        if (p === C) {
-          const a = -1.2 - u * TAU * 1.9, r = 8.3 - 4.8 * smooth(.45, 1, u);
-          put(i, 98 + Math.cos(a) * r, 28 + Math.sin(a) * r * .88, 3.4);
-        } else if (p === TAIL) trace(i, trunk, u, .9, 3.4);
-        else trace(i, p === L ? rise : fall, u, 1.7, 3.2);
-        look(i, (p === C ? .5 : .22) + 1.05 * bump(out[i * STRIDE + X] - head, 17));
+        if (p === C) { const r = 8 + 2.2 * bump(148 - head, 14); ring(i, u, slantX(148, 31), 31, r, r * .95, 1.7); }
+        else if (p === TAIL) trace(i, trunk, u, 1.2, 3.4);
+        else trace(i, branch, leU(i), 1.6, 3.4);
+        look(i, (p === C ? .55 : .22) + 1.05 * bump(out[i * STRIDE + X] - head, 16));
       },
     };
   }
 
-  /* 子会话：C、l、e 绕成三颗卫星，下划线是它们和主核之间的连线，两个点是主核 */
+  /* 子会话：主核（实心点）外面一圈圈「派活」的波纹；C、l、e 绕成三个子会话节点，每个圈里有一颗小核；
+     下划线是三条连线，任务一颗颗从主核送出去，到了节点，节点的小核亮一下 */
   {
-    const HX = 96, HY = 52, sx = [0, 0, 0], sy = [0, 0, 0], depth = [0, 0, 0];
+    const HX = 96, HY = 50, sx = [0, 0, 0], sy = [0, 0, 0], depth = [0, 0, 0], q = [0, 0, 0];
+    let ping = 0;
+    const sent = (k) => clamp(q[k] / .7) * .8;                  // 任务包在连线上的位置（0 = 主核）
     forms.team = {
       frame(t) {
         for (let k = 0; k < 3; k++) {
-          const a = Math.PI + .2 + k * TAU / 3 + t * .7;
-          sx[k] = HX + Math.cos(a) * 64; sy[k] = HY + Math.sin(a) * 27; depth[k] = .5 + .5 * Math.sin(a);
+          const a = Math.PI + .2 + k * TAU / 3 + t * .45;
+          sx[k] = HX + Math.cos(a) * 66; sy[k] = HY + Math.sin(a) * 28; depth[k] = .5 + .5 * Math.sin(a);
+          q[k] = fract(t * .6 + k / 3);
         }
+        ping = fract(t * .6);
       },
       place(i, t) {
         const p = P.part[i], u = P.u[i];
-        if (isDot(p)) {
-          disc(i, HX, HY, 8.5 + Math.sin(t * 2.6));
-          look(i, .95, 1, 1.85);
-        } else if (p === TAIL) {                           // 主核 → 卫星 → 主核 → …：一笔不断
-          const k = Math.min(4, Math.floor(u * 5)), f = u * 5 - k, s = k >> 1, out0 = k % 2 ? 1 - f : f;
-          put(i, lerp(HX, sx[s], out0), lerp(HY, sy[s], out0), 1.7);
-          const hot = bump(out0 - (.5 + .5 * Math.sin(t * 2.6 + s * 2)), .14);
-          look(i, hot * 1.3, (.4 + .6 * hot) * smooth(0, .12, out0) * (1 - smooth(.74, .84, out0)));
+        if (p === DOT1) {
+          disc(i, HX, HY, 7.2 + .8 * Math.sin(t * 2.6));
+          look(i, .95, 1, 1.75);
+        } else if (p === DOT2) {                          // 波纹：从主核往外扩，扩到看不见再从头来
+          const a = u * TAU, r = 9 + ping * 22;
+          put(i, HX + Math.cos(a) * r, HY + Math.sin(a) * r * .9, 1.1);
+          look(i, .7 * (1 - ping), smooth(0, .08, ping) * (1 - ping) * .8, .8);
+        } else if (p === TAIL) {                          // 主核 → 节点 → 主核 → …：一笔不断
+          const k = Math.min(4, Math.floor(u * 5)), f = u * 5 - k, s = k >> 1, d = k % 2 ? 1 - f : f;
+          put(i, lerp(HX, sx[s], d), lerp(HY, sy[s], d), 1.4);
+          const hot = bump(d - sent(s), .06) * (1 - smooth(.68, .74, q[s]));
+          look(i, .1 + hot * 1.4, (.3 + .7 * hot) * smooth(0, .12, d) * (1 - smooth(.74, .84, d)), 1 + hot * .6);
         } else {
-          const k = p === C ? 0 : p === L ? 1 : 2, r = 12.5 + depth[k] * 2.5;
-          ring(i, u, sx[k], sy[k], r, r * .92, 1.9, p === C ? -1.1 : Math.PI / 2);
-          look(i, .2 + .45 * depth[k], .75 + .25 * depth[k]);
+          const k = p === C ? 0 : p === L ? 1 : 2, r = 12 + depth[k] * 2.5, arrive = bump(q[k] - .74, .05);
+          if (u < .78) ring(i, u / .78, sx[k], sy[k], r, r * .92, 1.8, p === C ? -1.1 : Math.PI / 2);
+          else disc(i, sx[k], sy[k], 3.2 + 1.6 * arrive);
+          look(i, (u < .78 ? .2 + .3 * depth[k] : .5) + arrive * .9, .65 + .35 * depth[k], u < .78 ? 1 : 1.15);
         }
       },
     };
@@ -370,35 +414,37 @@ export function inkForms({P, SIG, out}) {
     };
   }
 
-  /* 记忆：l·e·下划线穿成星座，C 圈住正被想起的那一颗 */
+  /* 记忆：l·e·下划线连成北斗七星（斗柄 + 斗勺），C 圈住正被想起的那一颗，两个点是斗柄头和天枢 */
   {
-    const S = [[16, 64], [44, 27], [77, 55], [104, 19], [133, 63], [176, 33]], STAR = .07, EDGE = (1 - STAR * 6) / 5;
+    const S = [[20, 38], [48, 27], [76, 34], [99, 49], [108, 79], [160, 80], [171, 48]];
+    const V = [0, 1, 2, 3, 4, 5, 6, 3].map((k) => S[k]), N = V.length, STAR = .055, EDGE = (1 - STAR * N) / (N - 1);
     let head = 0, hx = 0, hy = 0;
     forms.memory = {
       frame(t) {
-        head = (.5 - .5 * Math.cos(t * .62)) * 5;
-        const k = Math.min(4, Math.floor(head)), f = smooth(0, 1, head - k);
-        hx = lerp(S[k][0], S[k + 1][0], f); hy = lerp(S[k][1], S[k + 1][1], f);
+        head = (.5 - .5 * Math.cos(t * .55)) * (N - 1);
+        const k = Math.min(N - 2, Math.floor(head)), f = smooth(0, 1, head - k);
+        hx = lerp(V[k][0], V[k + 1][0], f); hy = lerp(V[k][1], V[k + 1][1], f);
       },
-      place(i) {
+      place(i, t) {
         const p = P.part[i];
         if (p === C) {
-          ring(i, P.u[i], hx, hy, 10.5, 10, 1.3);
-          look(i, .75);
+          ring(i, P.u[i], hx, hy, 11, 10.4, 1.3);
+          look(i, .8);
         } else if (isDot(p)) {
-          const s = p === DOT1 ? 0 : 5, hot = bump(head - s, .55);
-          disc(i, S[s][0], S[s][1], 5 + 2 * hot);
-          look(i, .3 + hot, 1, 1.4);
+          const s = p === DOT1 ? 0 : 6, hot = bump(head - s, .6), tw = .5 + .5 * Math.sin(t * 2.3 + s);
+          disc(i, S[s][0], S[s][1], 5.2 + 1.8 * hot);
+          look(i, .35 + .3 * tw + hot, 1, 1.45);
         } else {
-          const v = clamp(P.local[i]) / (STAR + EDGE), s = Math.min(5, Math.floor(v)), r = (v - s) * (STAR + EDGE);
-          if (r <= STAR || s === 5) {
+          const v = clamp(P.local[i]) / (STAR + EDGE), s = Math.min(N - 1, Math.floor(v)), r = (v - s) * (STAR + EDGE);
+          const tw = .5 + .5 * Math.sin(t * 2.3 + s * 1.7);
+          if (r <= STAR || s === N - 1) {
             const hot = bump(head - s, .55);
-            disc(i, S[s][0], S[s][1], 4.6 + 3 * hot);
-            look(i, .25 + hot);
+            disc(i, V[s][0], V[s][1], 4 + 2.6 * hot + tw);
+            look(i, .2 + .35 * tw + hot, .85 + .15 * tw);
           } else {
             const f = clamp((r - STAR) / EDGE), hot = bump(head - s - f, .4);
-            put(i, lerp(S[s][0], S[s + 1][0], f), lerp(S[s][1], S[s + 1][1], f), 1.5 + hot);
-            look(i, hot, .5 + .5 * hot);
+            put(i, lerp(V[s][0], V[s + 1][0], f), lerp(V[s][1], V[s + 1][1], f), 1.2 + hot);
+            look(i, hot, .42 + .5 * hot);
           }
         }
       },
@@ -552,6 +598,50 @@ export function inkForms({P, SIG, out}) {
           const x = p === DOT1 ? 60 : 128;
           disc(i, slantX(x, 70), 70, 8, 1.5);
           look(i, .15, .7, 1.1);
+        }
+      },
+    };
+  }
+
+  /* 修改：一支铅笔斜着写。C 是笔身轮廓，下划线是正在写出来的那一行（写到哪露到哪），l、e 是格线，两个点是笔尖和橡皮 */
+  {
+    const LEN = 58, HW = 6.2, CONE = 12, FERRULE = 11;
+    const body = polyline([[LEN, -HW], [CONE, -HW], [0, 0], [CONE, HW], [LEN, HW], [LEN, -HW], [LEN - FERRULE, -HW], [LEN - FERRULE, HW]].flat());
+    const X0 = 26, X1 = 156, wave = (x) => 70 - 6 * Math.sin(x * .2) - 2.4 * Math.sin(x * .55 + 1);
+    let tx = X0, ty = 70, ca = 0, sa = 0, fade = 1, lift = 0;
+    forms.edit = {
+      frame(t) {
+        const p = fract(t / 3.4), go = smooth(0, .7, p), back = smooth(.8, 1, p);
+        tx = lerp(lerp(X0, X1, go), X0, back);
+        lift = smooth(.68, .78, p) * (1 - smooth(.94, 1, p));
+        ty = wave(tx) - lift * 9;
+        fade = 1 - smooth(.8, .93, p);
+        const a = -.88 + (1 - lift) * .07 * Math.sin(t * 11);
+        ca = Math.cos(a); sa = Math.sin(a);
+      },
+      place(i, t) {
+        const p = P.part[i], u = P.u[i];
+        if (p === C) {
+          body.at(u, tmp);
+          const al = tmp[0], ac = tmp[1];
+          put(i, tx + al * ca - ac * sa, ty + al * sa + ac * ca, 2.1);
+          look(i, .28);
+        } else if (isDot(p)) {
+          const tip = p === DOT1, al = tip ? 1.5 : LEN + 4.5;
+          disc(i, tx + al * ca, ty + al * sa, tip ? 2.6 : 5.2, tip ? 2.6 : 5.2);
+          look(i, tip ? 1.15 - .6 * lift : .3, 1, tip ? 1.2 : 1.35);
+        } else if (p === TAIL) {
+          const x = lerp(X1, X0, u);                       // 和签名的下划线一样，参数从右往左
+          if (x > tx) { put(i, tx, ty, 0); look(i, 0, 0); return; }
+          put(i, x, wave(x), 2.6 * (.45 + .55 * smooth(X0, X0 + 14, x)));
+          look(i, .1 + bump(x - tx, 9) * 1.1, fade);
+        } else if (p === E) {                              // 笔尖后面落下的石墨屑，抬笔时不掉
+          const s = P.seed[i * 4], f = fract(s * 7.3 + t * 1.4);
+          put(i, tx - 3 - f * 15 + (P.seed[i * 4 + 1] - .5) * 7, ty + 3 + f * f * 9 + (P.seed[i * 4 + 2] - .5) * 3, 0);
+          look(i, .25, (1 - f) * .55 * (1 - lift) * fade * smooth(X0 + 4, X0 + 12, tx), .75);
+        } else {
+          put(i, slantX(18 + leU(i) * 160, 82), 82, 1.1);
+          look(i, 0, .42);
         }
       },
     };

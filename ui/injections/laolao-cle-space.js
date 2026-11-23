@@ -22,19 +22,19 @@ const FRAME = 1 / 100;               // 120 / 240 Hz 的屏隔帧画（60–80 �
 
 const PALETTES = {
   cle: {
-    night: {a: '#e4ebff', b: '#8aa8ff', glow: '#62b4ff', ink: '#e9eeff', blend: 'add'},
-    day: {a: '#2c2945', b: '#15131f', glow: '#2f7bff', ink: '#1a1826', blend: 'normal'},
+    night: {a: '#e4ebff', b: '#8aa8ff', glow: '#62b4ff', ink: '#e9eeff', mute: '#75728a', blend: 'add'},
+    day: {a: '#2c2945', b: '#15131f', glow: '#2f7bff', ink: '#1a1826', mute: '#a6a2b5', blend: 'normal'},
   },
   pinkie: {
-    night: {a: '#ffd8e8', b: '#ff7ab3', glow: '#ffa3cb', ink: '#ffd3e6', blend: 'add'},
-    day: {a: '#ef68a3', b: '#b4459a', glow: '#ff4f9a', ink: '#b4459a', blend: 'normal'},
+    night: {a: '#ffd8e8', b: '#ff7ab3', glow: '#ffa3cb', ink: '#ffd3e6', mute: '#8a7482', blend: 'add'},
+    day: {a: '#ef68a3', b: '#b4459a', glow: '#ff4f9a', ink: '#b4459a', mute: '#bba6b4', blend: 'normal'},
   },
 };
 
 /* ───────────────────────── 着色器 ───────────────────────── */
 const VERT = /* glsl */`
 uniform float uSize, uScale, uFocus, uAlpha;
-attribute vec4 aInk;                 // 发光、透明度、点大小、红
+attribute vec4 aInk;                 // 发光、透明度、点大小、红（负数是灰：中断）
 varying float vAlpha, vGlow, vRed;
 void main(){
   vec4 mv = modelViewMatrix * vec4(position, 1.);
@@ -48,7 +48,7 @@ void main(){
 `;
 
 const FRAG = /* glsl */`
-uniform vec3 uA, uB, uGlow, uRed;
+uniform vec3 uA, uB, uGlow, uRed, uMute;
 varying float vAlpha, vGlow, vRed;
 void main(){
   vec2 c = gl_PointCoord - .5;
@@ -57,7 +57,7 @@ void main(){
   float soft = smoothstep(.5, .05, d);
   vec3 col = mix(uB, uA, smoothstep(.5, .0, d));
   col = mix(col, uGlow, clamp(vGlow, 0., 1.));
-  col = mix(col, uRed, vRed);
+  col = mix(mix(col, uRed, max(vRed, 0.)), uMute, max(-vRed, 0.));
   gl_FragColor = vec4(col, soft * vAlpha * (1. + vGlow * .5));
 }
 `;
@@ -139,7 +139,7 @@ export class CleSpace {
 
     this.u = {
       uSize: {value: this.opt.size || .066}, uScale: {value: 600}, uFocus: {value: 13}, uAlpha: {value: 0},
-      uA: {value: new THREE.Color()}, uB: {value: new THREE.Color()}, uGlow: {value: new THREE.Color()}, uRed: {value: new THREE.Color('#e5484d')},
+      uA: {value: new THREE.Color()}, uB: {value: new THREE.Color()}, uGlow: {value: new THREE.Color()}, uRed: {value: new THREE.Color('#e5484d')}, uMute: {value: new THREE.Color()},
     };
     this.material = new THREE.ShaderMaterial({uniforms: this.u, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false});
     this.points = new THREE.Points(g, this.material);
@@ -171,7 +171,7 @@ export class CleSpace {
   applyTheme() {
     const night = this.opt.night ?? document.documentElement.hasAttribute('data-pinkie-night');
     const pal = (PALETTES[this.opt.palette] || PALETTES.cle)[night ? 'night' : 'day'];
-    this.u.uA.value.set(pal.a); this.u.uB.value.set(pal.b); this.u.uGlow.value.set(pal.glow);
+    this.u.uA.value.set(pal.a); this.u.uB.value.set(pal.b); this.u.uGlow.value.set(pal.glow); this.u.uMute.value.set(pal.mute);
     this.ringU.uColor.value.set(pal.glow);
     this.svgInk.setAttribute('fill', pal.ink);
     this.material.blending = pal.blend === 'add' ? THREE.AdditiveBlending : THREE.NormalBlending;
