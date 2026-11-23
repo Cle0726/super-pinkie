@@ -104,8 +104,8 @@
   {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
-    "value": 209
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 另：Metre 引擎台（briefs/metre-engines-1122）的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载，共 2 行；功能本身全在新文件里。",
+    "value": 211
   },
   {
     "file": "ui/injections/laolao-dom-watch.js",

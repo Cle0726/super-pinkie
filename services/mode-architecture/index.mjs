@@ -776,10 +776,10 @@ export default {
     const background = new BackgroundJobs({
       runProcess: resumeProcess,
       cliEntry: gatewayCliEntry,
-      isBusy: sessionKey => {
+      isBusy: sessionKey => { // Metre 等子会话回报时是空着的：后台命令跑完马上叫醒它，不等子会话回齐
         const activity = architecture.activityFor(sessionKey) || {};
-        return Boolean(activity.parentRunning) || Number(activity.pending) > 0;
-      },
+        return Boolean(activity.parentRunning) || (!/^agent:metre:/.test(String(sessionKey)) && Number(activity.pending) > 0);
+      }, logger: api.logger,
     });
     api.on('tool_result_persist', (event) => {
       try {

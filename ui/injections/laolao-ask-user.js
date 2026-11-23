@@ -13,7 +13,7 @@
   const MARKER = "[[PINKIE_ASK_V1]]";
   const answerPrefix = () => document.documentElement.getAttribute("data-laolao-mode") === "metre"
     ? "【回答提问】" : "【回答碧琪的提问】";
-  const STICKER = "./laolao-pinkie-status-asking.png";
+  const STICKER = "/laolao-pinkie-status-asking.png"; // 绝对路径：在 /settings/… 这类地址下 ./ 会找错地方（404）
   const STORE = "laolao:ask-user:closed:v1";
   const $ = (sel, root = document) => root.querySelector(sel);
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;

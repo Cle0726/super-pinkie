@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {BackgroundJobs, WAKE_PREFIX, rememberKinds, runningBackgroundJobs, softenWaitNudge, waitNudge, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
+import {BackgroundJobs, MAX_BUSY_WAIT_MS, WAKE_PREFIX, WAKE_RETRY_MS, rememberKinds, runningBackgroundJobs, softenWaitNudge, waitNudge, wakeMessage} from '../services/mode-architecture/background-jobs.mjs';
 
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
 function fresh(options = {}) {
@@ -76,6 +76,61 @@ test('no wake when the agent already read the exit itself, and none while the se
   await jobs.tick();
   assert.equal(sent.length, 1);
   assert.match(sent[0].message, /slow-one/);
+});
+
+test('a busy mark that never clears does not hold the wake back forever', async () => {
+  const logs = [];
+  const {jobs, sent, live, advance} = fresh({isBusy: () => true, logger: {info: t => logs.push(t), warn: t => logs.push(t)}});
+  live.add(7);
+  jobs.afterTool(running('faint-lobster', 7), {sessionKey: 'agent:metre:dashboard:x'});
+  live.delete(7);
+  await jobs.tick();
+  advance(MAX_BUSY_WAIT_MS - 1_000);
+  await jobs.tick();
+  assert.equal(sent.length, 0, 'still waiting while the session may really be answering');
+  advance(2_000);
+  await jobs.tick();
+  assert.equal(sent.length, 1, 'woken after the cap; the gateway queues it behind any live turn');
+  assert.equal(sent[0].sessionKey, 'agent:metre:dashboard:x');
+  assert.ok(logs.some(t => /waiting session=agent:metre:dashboard:x/.test(t)));
+  assert.ok(logs.some(t => /waking anyway/.test(t)));
+});
+
+test('a failed wake is retried with growing gaps and only given up after every retry, with a log line', async () => {
+  const logs = [];
+  let ok = false, calls = 0;
+  const {jobs, live, advance} = fresh({
+    runProcess: async () => { calls += 1; if (!ok) throw new Error('gateway restarting'); return {stdout: '{"ok":true}'}; },
+    logger: {info: t => logs.push(t), warn: t => logs.push(t)},
+  });
+  live.add(8);
+  jobs.afterTool(running('tidal-mist', 8), ctx);
+  live.delete(8);
+  await jobs.tick();
+  assert.equal(calls, 1);
+  await jobs.tick();
+  await jobs.tick();
+  assert.equal(calls, 1, 'no hammering within the retry gap');
+  advance(WAKE_RETRY_MS[0]);
+  await jobs.tick();
+  assert.equal(calls, 2);
+  ok = true;
+  advance(WAKE_RETRY_MS[1]);
+  await jobs.tick();
+  assert.equal(calls, 3);
+  assert.deepEqual(jobs.status('agent:project:abc').map(({woke}) => woke), [true]);
+  assert.ok(logs.some(t => /attempt 1 failed/.test(t)) && logs.some(t => /^background wake sent/.test(t)));
+
+  const gaveUp = [];
+  const again = fresh({runProcess: async () => { throw new Error('down'); }, logger: {info() {}, warn: t => gaveUp.push(t)}});
+  again.live.add(9);
+  again.jobs.afterTool(running('dead', 9), ctx);
+  again.live.delete(9);
+  for (let i = 0; i <= WAKE_RETRY_MS.length; i++) {
+    await again.jobs.tick();
+    again.advance(WAKE_RETRY_MS[Math.min(i, WAKE_RETRY_MS.length - 1)]);
+  }
+  assert.ok(gaveUp.some(t => /gave up after 6 failed attempts/.test(t)));
 });
 
 test('only real chat sessions are watched, and foreground results are ignored', () => {

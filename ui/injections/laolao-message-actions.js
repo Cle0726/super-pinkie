@@ -378,10 +378,10 @@
   const FAILURE_TEXT = /^\s*这次(?:回复没能完成|没连上模型)/;
   const failures = new Map();   // sessionKey → {at, data, loading}
   const FAILURE_SAY = {
-    account: (m) => `「${m}」现在用不了：模型那边没有可用的账号（或额度用完了），等多久都不会好。`,
+    account: (m, at) => at ? `「${m}」的额度用完了，${at}${/\d$/.test(at) ? ' ' : ''}恢复。急的话先换一个模型。` : `「${m}」现在用不了：模型那边没有可用的账号（或额度用完了），等多久都不会好。`,
     key: (m) => `「${m}」现在用不了：模型的密钥不对或过期了。`,
     missing: (m) => `「${m}」现在用不了：模型那边找不到这个模型。`,
-    busy: (m) => `「${m}」那边正忙，排队的人太多，过一会儿再发就好。`,
+    busy: (m, at) => `「${m}」那边正忙，排队的人太多，${at ? at + (/\d$/.test(at) ? ' ' : '') + '再发就好' : '过一会儿再发就好'}。`,
     timeout: (m) => `「${m}」太久没回话，这一轮先停下了。`,
     network: () => '网络断了一下，碧琪没够着模型。看看网络或代理，再发一次。',
     down: (m) => `「${m}」那边出了故障，这次没回出来。`,
@@ -438,10 +438,10 @@
     const userGroup = userGroupBefore(last);
     const userId = userGroup ? lastEntryIn(userGroup, history) : '';
     const failed = shortModel(failure.model, names);
-    const say = (FAILURE_SAY[failure.kind] || FAILURE_SAY.other)(failed);
+    const say = (FAILURE_SAY[failure.kind] || FAILURE_SAY.other)(failed, failure.resetText || ''); // E8-3：上游报了恢复时间就写出来（插件算好的「今天 17:44」）
     const offer = Boolean(suggestion && editable && userId && failure.kind !== 'busy');
     const next = offer ? shortModel(suggestion, names) : '';
-    const signature = [failure.at, failure.kind, suggestion, userId, busy, offer].join('|');
+    const signature = [failure.at, failure.kind, failure.resetText, suggestion, userId, busy, offer].join('|');
     if (bubble.dataset.pinkieFail === signature) return;
     bubble.dataset.pinkieFail = signature;
     bubble.querySelector(':scope > .pinkie-fail')?.remove();

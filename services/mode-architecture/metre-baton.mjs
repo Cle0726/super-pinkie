@@ -12,7 +12,9 @@ export const BATON_FREE_STEPS = 4;
 const BATON_INTEGRATION_STEPS = 2;
 const SOLO_BLOCK = '【Virtuoso · 独做】本轮由 Metre 自己完成，不能派发、另开会话执行或给子会话加活。';
 const VISIBLE_DISPATCH_BLOCK = '【Baton · 派发】请用 pinkie_session_start 派活，子会话才会出现在用户的侧栏。';
-const DELEGATION_TOOLS = new Set(['sessions_spawn', 'sessions_send', 'pinkie_session_start', 'pinkie_mode_ask', 'pinkie_session_message']);
+const DELEGATION_TOOLS = new Set(['sessions_spawn', 'sessions_send', 'pinkie_session_start', 'pinkie_engine_task', 'pinkie_mode_ask', 'pinkie_session_message']);
+// 真的派出去了（开起了子会话）就多给几步收尾；pinkie_engine_task 是派给外部引擎（engines-task.mjs）。
+const DISPATCH_TOOLS = new Set(['pinkie_session_start', 'pinkie_engine_task']);
 const SHELL_TOOLS = new Set(['exec', 'bash', 'shell', 'terminal', 'run_command']);
 const READ_ONLY_CHECK = /^(?:(?:pwd|ls|rg|grep|cat|head|tail|wc|stat|Get-Location|Get-Item|Get-ChildItem|Get-Content|Get-FileHash|Select-String|Test-Path)(?: |$)|git (?:status|diff|log|show|rev-parse)(?: |$)|node --(?:test|check)(?: |$)|(?:pnpm|npm|yarn) (?:test|lint)(?: |$)|(?:python3?|py) -m (?:unittest|pytest)(?: |$)|pytest(?: |$))/iu;
 const SHELL_OPERATORS = /[;&|<>$\x60\r\n]/u;
@@ -77,7 +79,7 @@ export class MetreBaton {
   }
   // Only a real dispatch grants integration steps; only unavailability permits fallback.
   after(key, toolName, outcome) {
-    if (!this.isMetre(key) || String(toolName || '') !== 'pinkie_session_start') return;
+    if (!this.isMetre(key) || !DISPATCH_TOOLS.has(String(toolName || ''))) return;
     const state = this.state(key);
     if (outcome === 'unavailable') state.dispatchFailed = true;
     else if (outcome === 'started') state.dispatched = true;
@@ -93,7 +95,7 @@ export function dispatchOutcome(event) {
   if (!details) { try { details = JSON.parse(text); } catch {} }
   if (event?.error || result?.isError === true || result?.ok === false || details?.ok === false || details?.error) {
     const reason = [event.error, result?.error, details?.error, text].filter(Boolean).join(' ');
-    return /(?:^|\s)(?:名额满了|这个父会话已有 [0-9]+ 个子会话在跑|这台电脑上还没有|模型「.+」开不起来|会话消息未送达)/u.test(reason)
+    return /(?:^|\s)(?:名额满了|这个父会话已有 [0-9]+ 个子会话在跑|这台电脑上还没有|模型「.+」开不起来|会话消息未送达|用户还没打开外部引擎|.{1,40}现在用不了|没交出去)/u.test(reason)
       ? 'unavailable' : 'failed';
   }
   return typeof details?.key === 'string' && details.key.includes(':pinkie-child:') ? 'started' : '';
