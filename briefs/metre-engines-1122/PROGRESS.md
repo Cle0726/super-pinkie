@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-11-23 晚 · E7 文档和许可声明草稿（AWS Quick 经 Quick 跑腿）
+
+**做了什么**
+- `docs/METRE-MODE.md` 在「派发（Baton）和独做（Virtuoso）」后面加了一节「外部引擎」，共 62 行。内容：是什么、打开和关掉、选引擎和登录（无痕窗口、多账号）、引擎台、放手程度四档（说明照 `engines-bridge.mjs` 的 `LEVELS`）、乐手、`pinkie_engine_task` 派活和交回、额度用完和没登录。这一节里不出现对方项目的名字。
+- 新建 `briefs/metre-engines-1122/NOTICES-draft.md`：中英各一段许可声明（引擎服务 MIT；OpenMausBot 只借了功能设计，Apache-2.0，没搬 `enterprise/` 也没搬代码），附 MIT 全文。版权行「Copyright (c) 2026 T3 Tools Inc.」取自对方仓库加许可证的提交 4916dad；本机发布包里没有 `LICENSE`，所以没能和 0.1.11 逐字对照。草稿末尾有「拿不准的地方」，放进关于页前删掉。
+
+**怎么验的**：文档里写的功能都对照了代码（置顶归档 `thread.pin/archive`、工作树 `workspaceStrategy`、四档文字、`T3_VERSION = 0.1.11`、几个 `engines-*.mjs` 的路径）。在隔离的 HOME/APPDATA 里跑了 18 个测试文件，全部通过：`metre-engines` 8、`metre-engines-bridge` 16、`metre-engine-task` 13、`metre-engine-ui` 3、`brand-ui` 6、`artifacts-project` 7、`plugin-file-lists`、`code-health-ratchet`、`metre-board` 14、`metre-inject`、`metre-wording`、`metre-dispatch` 19、`metre-baton`、`metre-roles` 17、`metre-lock` 9、`metre-memory`、`metre-quiet`、`delegation-gate`。`tools/health/ratchet.mjs` 和 `git diff --check` 也过了。
+
+**没验的**：`metre-engine-ui` 这次只跑出 3 条（之前是 8 条），多半是隔离环境里找不到浏览器，真浏览器的那几条被跳过了。没跑全量门禁，因为这次只改了文档。
+
+**下一步**：E7 剩下的：设置页里的第二个「外部引擎」开关（现在只在引擎菜单里有）、把 NOTICES 放进关于页（放哪还要定）、版本号（发版前要用户点头）→ E6 更多引擎 → E8。
+
 ## 2026-11-23 下午 · 会话 83379188 · E4 派活给外部引擎、E5 乐手、侧栏标引擎名（c19a8b9e）
 
 **做了什么**
