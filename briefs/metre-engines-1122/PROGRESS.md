@@ -14,7 +14,8 @@
 - 已查清的命令（11-22）：
   - 配对链接：`t3 auth pairing create --ttl 5m --label metre --base-url http://127.0.0.1:<端口> --json`，返回里有 `/pair#token=...` 链接，界面用它嵌入并换到浏览器会话。默认权限很大（含 `terminal:operate`、`access:write`、`relay:*`），用 `--scope` 收窄到 `orchestration:read/operate`、`settings:write`、`providers:manage`、`filesystem:read`、`source-control:write`、`preview:operate`、`diagnostics:read`。令牌只交给界面，不进日志。
   - 程序用的令牌：`t3 auth session issue --token-only --ttl 1h --scope ...`（以后要直接连它的 WebSocket / MCP 时用）。
-  - 启用引擎实例：T3 服务端的 `settings.json`（在 `T3CODE_HOME/userdata/`，改过设置才生成）里 `providerInstances.<id>`；`t3 policy settings` 列出全部可设路径。实例 id：`claudeAgent`、`codex`、`antigravity`、`opencode`。先用 `t3 policy settings` 看清格式再写，写完重启引擎服务。
+  - **更正（11-22 晚）**：Claude 的实例 id 是 `claudeAgent`，它本来就是开着的；之前「disabled」是我把 id 写成了 `claude`。实测 `--provider claudeAgent --model claude-opus-5-5` 返回「Claude could not authenticate…run `claude auth login`」——只差用户本人登录。Antigravity 的运行包要在 T3 设置页的 Providers 里装并用 Google 登录（用户在嵌入的引擎界面里点），不需要碧琪改 settings.json。所以 E2 剩下的只有 `signin` 引导：Claude 显示「在终端运行 `claude auth login`」并提供复制按钮；Antigravity 和别的引擎指向嵌入界面的设置页。
+  - （备查）启用引擎实例：T3 服务端的 `settings.json`（在 `T3CODE_HOME/userdata/`，改过设置才生成）里 `providerInstances.<id>`；`t3 policy settings` 列出全部可设路径。实例 id：`claudeAgent`、`codex`、`antigravity`、`opencode`。先用 `t3 policy settings` 看清格式再写，写完重启引擎服务。
 - 试验目录：`F:\t3probe\e1\root`（E1 真装的那份，`home` 里已加项目 `F:\t3probe\work`）；`F:\t3probe\home`（最早手动试的一份，可以删）。
 
 ## 2026-11-22 · 会话 847a9261 · E1 引擎服务 · 完成
