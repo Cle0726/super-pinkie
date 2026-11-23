@@ -312,6 +312,16 @@ export function registerEngines(api, {base = '', register} = {}) {
     if (!service.status().running) throw new Error('外部引擎没有在运行');
     return service.cli(['thread', 'list', String(folder || '.'), '--json']);
   });
+  // 嵌进 Metre 的引擎界面用一次性配对链接（5 分钟有效）换浏览器会话；权限只给用得到的，不给终端和远程访问管理。
+  register(api, 'pinkie.engines.open', async () => {
+    const {running, url} = service.status();
+    if (!running) throw new Error('外部引擎没有在运行');
+    const scopes = ['orchestration:read', 'orchestration:operate', 'settings:write', 'providers:manage', 'filesystem:read', 'source-control:write', 'preview:operate', 'diagnostics:read'];
+    const data = await service.cli(['auth', 'pairing', 'create', '--ttl', '5m', '--label', 'metre', '--base-url', url, '--json', ...scopes.flatMap(scope => ['--scope', scope])]);
+    const pairUrl = String(data?.pairUrl || '');
+    if (!pairUrl.startsWith(url + '/pair#token=')) throw new Error('没有拿到引擎界面的登录链接');
+    return {url: pairUrl, expiresAt: data.expiresAt || null};
+  });
   if (!shared.booted) {
     shared.booted = true;
     if (prefs().enabled === true) service.start().catch(error => service.log('warn', `autostart failed: ${error.message}`));

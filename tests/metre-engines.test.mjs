@@ -118,7 +118,7 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   const methods = {};
   const register = (api, name, fn) => { methods[name] = fn; };
   const service = registerEngines({logger: null}, {base, register});
-  assert.deepEqual(Object.keys(methods).sort(), ['pinkie.engines.enable', 'pinkie.engines.status', 'pinkie.engines.threads']);
+  assert.deepEqual(Object.keys(methods).sort(), ['pinkie.engines.enable', 'pinkie.engines.open', 'pinkie.engines.status', 'pinkie.engines.threads']);
   assert.equal(service.root, path.join(base, 'engines'));
   const first = await methods['pinkie.engines.status']();
   assert.equal(first.enabled, false);
@@ -131,5 +131,13 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   assert.equal(JSON.parse(fs.readFileSync(path.join(base, 'engines', 'prefs.json'), 'utf8')).enabled, true);
   assert.equal((await methods['pinkie.engines.enable']({on: false})).enabled, false);
   await assert.rejects(methods['pinkie.engines.threads']({}), /没有在运行/);
+  await assert.rejects(methods['pinkie.engines.open'](), /没有在运行/);
+  service.status = () => ({running: true, url: 'http://127.0.0.1:3790'});
+  let pairArgs = [];
+  service.cli = async args => { pairArgs = args; return {pairUrl: 'http://127.0.0.1:3790/pair#token=abc', expiresAt: 'soon'}; };
+  assert.deepEqual(await methods['pinkie.engines.open'](), {url: 'http://127.0.0.1:3790/pair#token=abc', expiresAt: 'soon'});
+  assert.ok(pairArgs.includes('orchestration:operate') && !pairArgs.includes('terminal:operate') && !pairArgs.includes('access:write'));
+  service.cli = async () => ({pairUrl: 'https://evil.example/pair#token=abc'});
+  await assert.rejects(methods['pinkie.engines.open'](), /登录链接/);
   delete globalThis[Symbol.for('pinkie.engines.v1')];
 });

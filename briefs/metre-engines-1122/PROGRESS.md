@@ -9,7 +9,8 @@
 - `engines.mjs` 末尾的 `registerEngines(api, {base, register})`：引擎服务全网关只建一个（`Symbol.for('pinkie.engines.v1')`，插件会被加载好几份）；开关存在 `<碧琪状态目录>/engines/prefs.json`，默认关；网关启动时开关是开的就自动启动；进程退出时停。方法：`pinkie.engines.status`（含 providers，已去邮箱）、`pinkie.engines.enable {on}`、`pinkie.engines.threads {folder}`。
 - 挂在 `metre-board.mjs` 的 `registerMetreBoard` 里（`index.mjs` 受健康门禁限制不能变长；`metre-board.mjs` 是新文件上限 1500 行）。`register` 传的是 `registerSessionMethod`，所以 Metre 锁照样生效。
 - 验证：`metre-engines`（8 条）、`metre-board`、`plugin-file-lists`、`code-health-ratchet`、`metre-roles` 共 43/43。没在真网关里调过。
-- **E2 还剩**：`pinkie.engines.open`——用 `t3 auth pairing` 给界面生成本机配对链接（先 `t3 auth pairing --help`；令牌不能打印进日志）；`pinkie.engines.signin {provider}` 打开官方登录（Claude 是终端 `claude auth login`，Antigravity 在 T3 设置里）；在 T3 里启用 `claudeAgent`、`antigravity` 实例（看 `t3 --help` 有没有开关命令，没有就查 `home/userdata` 的设置怎么写）。然后在隔离网关里真调一遍（`tools/metre/iso/`，副本放 F: 纯英文路径）。
+- `pinkie.engines.open` 已做：`t3 auth pairing create --ttl 5m --json` 返回的 `pairUrl`（必须是本机引擎地址开头才给），权限收窄到 8 项（不给终端、远程访问管理）。测试 12/12。
+- **E2 还剩**：`pinkie.engines.signin {provider}` 打开官方登录（Claude 是终端 `claude auth login`，Antigravity 在 T3 设置里）；在 T3 里启用 `claudeAgent`、`antigravity` 实例（看 `t3 --help` 有没有开关命令，没有就查 `home/userdata` 的设置怎么写）。然后在隔离网关里真调一遍（`tools/metre/iso/`，副本放 F: 纯英文路径）。
 - 已查清的命令（11-22）：
   - 配对链接：`t3 auth pairing create --ttl 5m --label metre --base-url http://127.0.0.1:<端口> --json`，返回里有 `/pair#token=...` 链接，界面用它嵌入并换到浏览器会话。默认权限很大（含 `terminal:operate`、`access:write`、`relay:*`），用 `--scope` 收窄到 `orchestration:read/operate`、`settings:write`、`providers:manage`、`filesystem:read`、`source-control:write`、`preview:operate`、`diagnostics:read`。令牌只交给界面，不进日志。
   - 程序用的令牌：`t3 auth session issue --token-only --ttl 1h --scope ...`（以后要直接连它的 WebSocket / MCP 时用）。
