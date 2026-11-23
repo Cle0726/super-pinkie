@@ -1,6 +1,40 @@
 # Metre UI 打磨（在现有设计上优化，不推倒重来）
 
-## 接力卡（最后更新：2026-11-23 20:55，Quick-Win-r5ui @ Windows，交接给新会话）
+## 接力卡（最后更新：2026-11-23 23:20 CST，Quick-Win-k7m2 @ Windows，新号第 1 轮，用户睡了、协调者替用户定的方向）
+
+- 状态：任务文件 `build\quick-run\任务-界面-1123.md` 第 0–3 步都做完了，**等协调者统一做视觉验收**。PR #67 仍是草稿，没合并、没发版、没打 tag。
+- 分支：`feat/metre-ui-polish`，这一轮的提交（都已推送）：
+  1. `dbf7f772` 合 `feat/metre-engines`（9046559f）。4 处冲突按 main 的写法合、两边新增都保留：`windows_desktop.py` 的那行总谱 CSS 挪到 main 拆出来的 `app/windows_bridge_scripts.py`；`apply-theme.sh` 取 main 的清单加上 6 个 `engines*.mjs`；head fragment 取 main 的 `?v=@hash` 并登记引擎台两个文件；`exceptions.json` 取并集。顺带把引擎 js 的 three.js 动态 import 改成和 `laolao-cle-stage.js` 一字不差的 `__pinkieAsset('./laolao-cle-space.js')`（仍是同一份模块、同一个 WebGL 上下文），测试里三处 `?v=` 断言改成 `@hash`。
+  2. `d86c36e6` 整页动画定稿落进代码（见下面「设计」1–5）。
+  3. `f3648974` 总谱按键 + 后台状态带（见「设计」6–7）。
+  4. `8a59890e` 再合一次引擎线的新提交（280190c4「我是碧琪」原样显示、6f80668d 过程卡在跑时再发一句不报错），没冲突。
+  5. `d5178dff` 门禁对照 main 多出的 3 条补齐：`regions.json` 登记 5 个新 Metre 文件；`mode-architecture` 测试的工具清单补上引擎线新增的 `pinkie_engine_task`（31 → 32）。
+- 设计（协调者替用户定的写在任务文件里；没写到的这里自己定了，理由在括号里）：
+  1. **切进 Metre「起拍」**（`laolao-metre-transition.js` 整个换，283 → 218 行）：合上 320ms → 钴蓝指挥棒从下面抬起、在最高点停半拍（417ms）→ **落拍是高潮**：棒尖迸出一圈钴蓝的点，五线谱从棒尖向两侧弹开（带回弹），上下几行谱表依次铺开成整页谱面 → 四盏谱台灯一盏盏亮、在谱上照出一块光 → 像素 M 当谱号从上面落到谱表左端、轻轻回弹 → 谱纸上下翻开、发 `pinkie:metre-sweep`。总长约 1.98 秒（第六版 2.0 秒）。小猫去掉了。
+     - 自己定的：灯按**三十二分音符**一盏（104ms），不是一拍（833ms）一盏——一拍一盏要多 2 秒多，和「总长不许明显拉长」冲突，取后者；首页亮灯也是同一个三十二分音符网格。
+  2. **换会话「翻谱」**（新文件 `laolao-metre-stagefx.js` 的 `turn`，580ms）：旧会话这一页铺上 Metre 的谱纸（日 `#EFEBE2` / 夜 `#1E1D1A`，顶上一束暖的舞台光），右边以终止线收尾，以左边为书脊翻走（越翻越窄越暗、翻页边一道高光、新页上一道影子）；新页第一条小节线由钴蓝指挥棒从上往下画出；五线谱横线前后页连续（同一组 y）。原来的「白底 + 一根线」和 16 格竖条显出都拿掉了。
+  3. **首页亮灯、引导语**（用户没意见，保留第三版原型的样子）：落进代码时去掉了原型里的 MutationObserver / setInterval 挂钩，改成 `laolao-metre-home.js` 的 `enter()` / `render()` 里直接调 `PinkieMetreStage.lights()` / `melody()`；指挥台位置改读 backdrop `buildScene` 的 `anchors.podX`（`canvas.dataset.podX`），不再从画面里猜。
+  4. **颜色**：总谱「做完」改成偏绿的灰（日 `#6F8466` / 夜 `#8FA585`），「其他」保持暖灰（`#7A7468` / `#9A958A`）；对页面底色的非文字对比度日 3.8:1 / 4.3:1、夜 6.9:1 / 6.1:1。
+  5. **首页画带最矮 144px**（就定 144）；矮于 180px 时根元素放 `data-metre-band-low`，舞台装饰全收掉，只留一行五线谱（`.pk-metre-lowstaff`）和引导语。顺手修了「预览页刚打开先闪一下再进场」：启动闪屏还在时根元素放 `data-metre-enter="wait"`，画带先压暗、引导语和输入框先藏，进场时再出来。
+  6. **总谱按键**（新文件 `laolao-metre-keys.css`，位置和行为不动，只重画）：常态谱纸底 + 淡墨线框；悬停墨线加深；按下沉 1px；键盘焦点 2px 钴蓝一圈；禁用虚线框；运行中下沿一条钴蓝拍子线 ♩=72 一拍亮一次。主键墨色实心、悬停变钴蓝；收住键砖红。覆盖发送 / 停止、全体收住 / 暂停分谱、新会话、引擎台、引擎菜单和乐手、总谱声部的「发消息 / 停 / 看」。skin 里发送键让出 3 处 `!important`（2267 → 2264，基线同步）。
+  7. **后台状态带**（新文件 `laolao-metre-backstage.js`，只在 Metre）：对话页顶上那一行中间，`后台 ｜网关 ｜本轮 ｜排队 ｜引擎 ｜每个引擎任务一个声部`。数据：网关 = run-status 读原生网关仓库的 conn；本轮 = `pinkie.run.status` 对照原生面板的 `chatRunId / chatSending / chatStream`，**不一致超过 3 秒**显示「不同步」和「同步」键（重新问后台；后台停了就清掉页面残留的「在跑」；再重拉 `chat.history` 对齐）；排队 = 原生 `chatQueue`；引擎 = `pinkie.engines.status` + 总谱数据里外部引擎的声部（在跑 / 等你 / 交回 / 失败）。刷新挂在 run-status 的 `pinkie:run-view` 和总谱的 `pinkie:metre-board-data` 上，刚对不上时排一次 3 秒后的复查（一次性 setTimeout）；不加 setInterval / MutationObserver / `window.__`。
+     - 自己定的：放在对话页顶上那一行（会话标题和右边菜单之间的空当），不压正文；窄于 760px 时只留前四格。
+- 自查（每段都跑了相关单测 + ratchet；最后一次统一做的）：
+  - 全量门禁（runner-ui2，口径同 `polish-gate-base.txt`）：第一次 64 条失败、对照 main 61 条，多出的 3 条见提交 5，修完单独重跑都过；修完以后又整跑一次：全量门禁复跑（d5178dff，runner-ui2）：291 个文件、62 条失败；对照 main（polish-gate-base.txt）61 条。只多出 1 条 session-lineage「stop-and-archive does not interrupt an active parent…」，在本分支单独重跑两次 40/40 过、main 副本单独跑 40/40 过，是全量并发负载下的偶发（上一轮也遇到过同一条）。本线新增失败 0。
+  - 注入对照：本分支对 main 副本（`metre-ui-base`，402f2dc2）六个模式**逐字一致**；对 `feat/metre-engines` 最新提交，内容一致，只有来源行号不同（main 把 `index.mjs` 拆了，引擎线还没跟上），不是本线的改动。
+  - 健康度：没加 setInterval、MutationObserver、`window.__` 全局名；已有注入文件都没变长（skin 2552、transition 218、home 357、backdrop 1196、board.css 500），head fragment 行数例外 211 → 214（写明了是登记新文件）；三个新文件 208 / 116 / 135 行。
+  - 录帧：日 / 夜各录了切进 Metre、换会话、首页进场、刚打开、减少动效；按键和后台带的各状态截了图（`build\quick-run\mui\film\c2-*`、`k8-*`）。减少动效时 `play()` 返回 null、不翻谱、不亮灯。
+- 没做 / 留给协调者：视觉验收；`metre-board-scroll-e2e` 只认 WebKit，这台机器没有，照旧「没测（需 Mac）」。
+- 预览、录帧怎么用：见 `build\quick-run\status\ui.done`（场景一个个怎么触发都写了）。
+- 环境：跑腿 `runner-uic`（并行）、`runner-ui`、`runner-ui2`（门禁）。`metre-ui-base` 副本还在（对照用，收工时 `git worktree remove`）。这一轮临时建过的 `ui-inv-eng` 工作区已经删了。
+- 踩过的坑（本轮）：
+  - Quick 写到设备上的文件是 CRLF，仓库是 LF：整文件拷进 worktree 要先转 LF（`mui\sync-land.js` 做了），不然正则断言里的 `\n` 对不上。
+  - 先 `file_write` 任务说明、紧接着在设备上放队列任务，跑腿偶尔读不到刚写的说明文件：放任务前先确认文件在。
+  - 原生聊天面板会自己清 `chatStream / chatRunId`，预览里模拟「页面以为还在出字」按不住；预览面板改成模拟「后台说还在跑、页面停了」。
+  - run-status 只在一轮在跑时每秒发 `pinkie:run-view`，空闲时不发；后台带因此在「刚对不上」时自己排一次 3 秒后的复查。
+  - Playwright 录视频要 ffmpeg，这台没有；改用假时钟逐帧截（`mui\film-c.js`），帧名就是触发后的毫秒数。
+
+## 上一张接力卡（Quick-Win-r5ui，原样保留）
 
 - 状态：进行中（补丁三轮已提交推送、自查都过了；**整页动画在重新设计，第三版「总谱」原型用户说「方向对，细节要调」，还没落进代码**）
 - 分支和 PR：`feat/metre-ui-polish`，草稿 PR #67（https://github.com/Cle0726/super-pinkie/pull/67）。提交 `5824a665`（三轮补丁 + ref 截图）、本次提交（接力卡 + `prototype/`）。

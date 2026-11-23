@@ -1,28 +1,69 @@
-// 预览面板（只在预览页有，不是产品界面）：一键重放几个整页动画的时刻。
+// 预览面板（只在预览页有，不是产品界面）：一键重放整页动画的几个时刻，模拟后台状态带的几种状态。
 (() => {
   const q = new URLSearchParams(location.search);
   const go = (k, v) => { q.set(k, v); location.search = q.toString(); };
   const box = document.createElement('div');
   box.setAttribute('data-preview-panel', '');
-  Object.assign(box.style, {position: 'fixed', right: '12px', top: '48px', zIndex: 2147483600, display: 'flex', flexDirection: 'column', gap: '6px',
+  Object.assign(box.style, {position: 'fixed', right: '12px', top: '112px', zIndex: 2147483600, display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: 'calc(100vh - 60px)', overflow: 'auto',
     padding: '10px', borderRadius: '10px', background: 'rgba(20,20,20,.82)', color: '#fff', font: '12px/1.3 system-ui, sans-serif', boxShadow: '0 4px 18px rgba(0,0,0,.25)'});
-  const isV2 = document.documentElement.hasAttribute('data-pv3');
-  const title = document.createElement('div'); title.textContent = '预览面板（不是产品界面）· 现在是' + (isV2 ? '新版（总谱）' : '旧版'); title.style.opacity = '.7'; box.append(title);
-  const btn = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
-    Object.assign(b.style, {all: 'unset', cursor: 'pointer', padding: '6px 10px', borderRadius: '6px', background: 'rgba(255,255,255,.12)'});
+  const fold = document.createElement('button'); fold.type = 'button'; fold.textContent = '预览面板（不是产品界面）· 点这里收起 / 展开';
+  Object.assign(fold.style, {all: 'unset', cursor: 'pointer', opacity: '.75'}); box.append(fold);
+  const body = document.createElement('div'); Object.assign(body.style, {display: 'flex', flexDirection: 'column', gap: '5px'}); box.append(body);
+  fold.onclick = () => { body.hidden = !body.hidden; };
+  const head = (t) => { const d = document.createElement('div'); d.textContent = t; d.style.cssText = 'margin-top:6px;opacity:.6'; body.append(d); };
+  const btn = (label, fn, id) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (id) b.dataset.pv = id;
+    Object.assign(b.style, {all: 'unset', cursor: 'pointer', padding: '5px 10px', borderRadius: '6px', background: 'rgba(255,255,255,.12)'});
     b.onmouseenter = () => b.style.background = 'rgba(255,255,255,.22)'; b.onmouseleave = () => b.style.background = 'rgba(255,255,255,.12)';
-    b.onclick = fn; box.append(b); };
-  btn('▶ 切进 Metre（预备拍 → 谱纸翻开）', async () => {
+    b.onclick = fn; body.append(b); };
+  const pane = () => document.querySelector('openclaw-chat-pane');
+  const paint = () => { const p = pane(); p?.state?.requestUpdate?.(); p?.requestUpdate?.(); window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})); };
+
+  head('整页动画');
+  btn('▶ 切进 Metre（起拍 → 落拍 → 亮灯 → 谱号落位 → 翻开）', async () => {
     const t = window.PinkieMetreTransition?.play?.(); if (!t) { alert('现在是「减少动态效果」，转场不放。'); return; }
     await t.ready; await t.covered; t.finish();
-  });
-  btn(isV2 ? '▶ 换会话（翻到下一小节）' : '▶ 换会话（竖条显出 + 指挥线）', () => window.dispatchEvent(new CustomEvent('pinkie:session-selected', {detail: {}})));
-  btn('▶ 重放首页 / 对话页进场', () => window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: 420}})));
+  }, 'metre');
+  btn('▶ 换会话（翻谱）', () => window.dispatchEvent(new CustomEvent('pinkie:session-selected', {detail: {}})), 'switch');
+  btn('▶ 重放首页进场（亮灯 + 引导语按音高落回）', () => window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: 420}})), 'home');
+  btn('▭ 首页画带矮于 180px（把窗口高度压到约 520px 再点）', () => { if (window.innerHeight > 560) alert('把浏览器窗口高度拖到 520px 左右，画带会自己变成只有一行五线谱；或者用 &h=520 的录帧脚本看。'); }, 'low');
+
+  // 后台带：都是改「后台带读的那几份数据」，后台带自己的代码不动
+  const rs = () => window.__pinkieRunStatus;
+  let connOverride = null;
+  const hookConn = () => {
+    const o = rs(); if (!o || o.__pvHooked) return; o.__pvHooked = true;
+    const desc = Object.getOwnPropertyDescriptor(o, 'state'); const get = desc?.get;
+    if (get) Object.defineProperty(o, 'state', {configurable: true, get() { const s = get.call(o); return connOverride ? {...s, conn: {...s.conn, ...connOverride}} : s; }});
+  };
+  let engineOn = null, voices = null, runActive = null;
+  const hookGw = () => {
+    const sb = window.__laolaoSidebar; if (!sb || sb.__pvHooked) return; sb.__pvHooked = true;
+    const real = sb.gwRequest.bind(sb);
+    sb.gwRequest = (m, p, t) => (m === 'pinkie.engines.status' && engineOn != null ? Promise.resolve({enabled: engineOn, running: engineOn})
+      : m === 'pinkie.run.status' && runActive != null ? Promise.resolve({active: runActive, runId: runActive ? 'preview-run' : ''}) : real(m, p, t));
+    const bd = window.__pinkieMetreBoardData;
+    if (bd) { const d = Object.getOwnPropertyDescriptor(bd, 'data'); Object.defineProperty(bd, 'data', {configurable: true, get() { const v = d.get.call(bd); return voices ? {...(v || {}), sessions: [...((v && v.sessions) || []), ...voices]} : v; }}); }
+  };
+  head('后台状态带（对话页顶上那一条）');
+  btn('● 正常（连着、两边一致、没排队、引擎关）', () => { clearInterval(window.__pvHold); hookConn(); hookGw(); connOverride = null; engineOn = false; runActive = false; void window.__pinkieRunStatus?.refresh?.(); voices = null; const p = pane(); if (p?.state) { p.state.chatStream = null; p.state.chatRunId = null; p.state.chatQueue = []; } paint(); }, 'bs-ok');
+  btn('● 网关重连中（第 2 次）', () => { hookConn(); connOverride = {online: false, attempt: 2}; paint(); }, 'bs-reconnect');
+  btn('● 网关断了', () => { hookConn(); connOverride = {online: false, attempt: 0}; paint(); }, 'bs-down');
+  btn('● 不同步（后台说这一轮还在跑、页面已经停了；3 秒后出现「同步」键，点了就对齐）', () => { hookConn(); hookGw(); connOverride = null; runActive = true;
+    void window.__pinkieRunStatus?.refresh?.(); paint();
+    document.addEventListener('click', (e) => { if (e.target.closest?.('.pk-bs__sync')) runActive = false; }, {capture: true}); }, 'bs-unsync');
+  btn('● 排队 2 条', () => { const p = pane(); if (p?.state) p.state.chatQueue = [{id: 'pv1', text: '排队一', sessionKey: p.state.sessionKey}, {id: 'pv2', text: '排队二', sessionKey: p.state.sessionKey}]; paint(); }, 'bs-queue');
+  btn('● 引擎开 + 四个引擎声部（在跑 / 等你 / 交回 / 失败）', () => { hookGw(); engineOn = true;
+    voices = [['Codex', 'run', 'running'], ['Claude', 'wait', 'waiting'], ['Kiro', 'done', 'done'], ['Gemini', 'fail', 'error']].map(([n, state, status], i) => ({key: 'agent:metre:eng:' + i, external: true, title: n, state, status}));
+    window.dispatchEvent(new CustomEvent('pinkie:metre-board-data')); setTimeout(paint, 300); }, 'bs-engines');
+
+  head('按键（悬停、按住、Tab 键看焦点；输入框空着时发送键是禁用）');
+  btn('● 模拟一轮在跑（原生发送键变停止键，下沿拍子线一拍亮一次）', () => { const p = pane(); if (p?.state) { p.state.chatRunId = 'preview-run'; p.state.chatSending = false; } paint(); }, 'keys-run');
+  btn('● 打开总谱（暂停分谱 / 全体收住 / 声部上的发消息、停、看）', () => document.querySelector('.pk-metre-nav--board')?.click(), 'keys-board');
+
+  head('切换');
   btn(q.get('empty') === '1' ? '→ 换到对话页' : '→ 换到首页', () => go('empty', q.get('empty') === '1' ? '0' : '1'));
-  btn(isV2 ? '↺ 换回旧版对比' : '★ 换成新版（总谱）', () => go('v', isV2 ? '1' : '3'));
   btn(q.get('night') === '1' ? '☀ 换成日间' : '☾ 换成夜间', () => go('night', q.get('night') === '1' ? '0' : '1'));
-  const reduce = () => document.documentElement.hasAttribute('data-pinkie-reduce-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const warn = document.createElement('div'); warn.style.cssText = 'color:#f3c66b;display:none'; warn.textContent = '注意：现在是「减少动态效果」，整页动画按规矩不放。'; box.append(warn);
-  setTimeout(() => { warn.style.display = reduce() ? 'block' : 'none'; }, 1500);
+  btn(document.documentElement.hasAttribute('data-pinkie-reduce-motion') ? '↺ 恢复动效' : '◌ 模拟「减少动态效果」', () => { const r = document.documentElement; if (r.hasAttribute('data-pinkie-reduce-motion')) r.removeAttribute('data-pinkie-reduce-motion'); else r.setAttribute('data-pinkie-reduce-motion', ''); });
   const mount = () => document.body ? document.body.append(box) : setTimeout(mount, 50); mount();
+  window.__pv = {pane, paint, hookConn, hookGw};
 })();

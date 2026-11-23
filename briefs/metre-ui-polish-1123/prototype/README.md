@@ -1,5 +1,8 @@
 # Metre 整页动画原型（预览页专用，不是产品代码）
 
+> **11-23 夜：已经落进代码。** 切进 Metre 在 `ui/injections/laolao-metre-transition.js`（第七版「起拍」），换会话「翻谱」、首页亮灯、引导语、矮画带在 `ui/injections/laolao-metre-stagefx.js`，按键在 `laolao-metre-keys.css`，后台状态带在 `laolao-metre-backstage.js`。这里的 `v3.js` / `v3.css` 是第三版原型的存档；预览页里的 `__v3.js` 现在是空的，看到的就是代码里的样子。
+> 预览工具：`preview.js`（右上角面板：重放动画、模拟后台带各状态、模拟在跑）、`film-c.js`（假时钟逐帧录，帧名 = 触发后的毫秒数）、`film-keys.js`（后台带和按键各状态截图）、`film-ours.js`（老的固定间隔录帧）。用法见 `build\quick-run\status\ui.done`。
+
 这里是 11-23 在 Chrome 预览页里做的「总谱」版整页动画原型（第三版），用户看过后的结论是「方向对，细节要调」。**还没有落进 `ui/injections/`**，产品代码里跑的仍是补丁里的第三轮进场。
 
 ## 文件
