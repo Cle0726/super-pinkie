@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {T3Rpc, causeMessage} from '../services/mode-architecture/engines-rpc.mjs';
-import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, installView, openBrowser, openLoginTerminal, openTerminal, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
+import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, browserLauncher, driverOf, engineName, installView, openBrowser, openLoginTerminal, openTerminal, privateBrowser, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pk-bridge-'));
 
@@ -238,8 +238,73 @@ test('the terminal helper only runs the install and sign-in commands in the tabl
   assert.ok(spawned[2].args.includes(`powershell.exe -NoExit -ExecutionPolicy Bypass -Command "irm 'https://cli.kiro.dev/install.ps1' | iex"`), 'PowerShell one-liners run in PowerShell');
   assert.throws(() => openLoginTerminal('claude auth login && del x', {platform: 'win32', spawnImpl}), /不认识/);
   assert.throws(() => openBrowser('file:///C:/x', {platform: 'win32', spawnImpl}), /不是网页地址/);
-  openBrowser('https://accounts.example/sign?a=1&b=2', {platform: 'win32', spawnImpl});
+  openBrowser('https://accounts.example/sign?a=1&b=2', {platform: 'win32', spawnImpl, browser: null});
   assert.deepEqual(spawned.at(-1).args, ['url.dll,FileProtocolHandler', 'https://accounts.example/sign?a=1&b=2']);
+  // 用户 11-23：登录开无痕窗口，不用平时的浏览器。
+  const edge = privateBrowser({platform: 'win32', env: {'ProgramFiles(x86)': 'C:\\PF86', ProgramFiles: 'C:\\PF', LOCALAPPDATA: 'C:\\L'}, exists: file => /msedge/.test(file)});
+  assert.equal(edge.flag, '--inprivate');
+  assert.equal(privateBrowser({platform: 'win32', env: {LOCALAPPDATA: 'C:\\L'}, exists: file => /chrome/.test(file)}).flag, '--incognito');
+  assert.equal(privateBrowser({platform: 'win32', env: {}, exists: () => false}), null);
+  openBrowser('https://accounts.example/x', {platform: 'win32', spawnImpl, browser: edge});
+  assert.deepEqual([spawned.at(-1).file, spawned.at(-1).args], [edge.file, ['--inprivate', 'https://accounts.example/x']]);
+  const launcher = browserLauncher(tmp(), {platform: 'win32', browser: edge});
+  assert.match(fs.readFileSync(launcher, 'utf8'), /start "" ".*msedge\.exe" --inprivate %1/);
+  openTerminal('claude auth login', {platform: 'win32', spawnImpl, env: {BROWSER: launcher, CLAUDE_CONFIG_DIR: 'C:\\Users\\a\\.claude-metre-2'}});
+  assert.equal(spawned.at(-1).options.env.BROWSER, launcher);
+  assert.equal(spawned.at(-1).options.env.CLAUDE_CONFIG_DIR, 'C:\\Users\\a\\.claude-metre-2');
+  assert.throws(() => openTerminal('claude auth login', {platform: 'win32', spawnImpl, env: {BROWSER: 'C:\\evil.cmd'}}), /启动器/);
+  assert.throws(() => openTerminal('claude auth login', {platform: 'win32', spawnImpl, env: {PATH: 'C:\\x'}}), /不认识/);
+  openTerminal('claude auth login', {platform: 'darwin', spawnImpl, env: {CLAUDE_CONFIG_DIR: '/Users/a/.claude-metre-2'}});
+  assert.match(spawned.at(-1).args[1], /CLAUDE_CONFIG_DIR='\/Users\/a\/\.claude-metre-2' claude auth login/, 'Terminal.app does not inherit env');
+});
+
+test('several accounts per engine: each one is its own instance with its own login', async () => {
+  const rows = summarizeProviders([
+    {instanceId: 'antigravity-2', driver: 'antigravity', displayName: 'Antigravity · 工作号', enabled: true, installed: true, status: 'ready', auth: {status: 'authenticated', label: 'Google account'}, setup: {canAuthenticate: true}, models: [{slug: 'g'}]},
+    {instanceId: 'antigravity', driver: 'antigravity', enabled: true, installed: true, status: 'ready', auth: {status: 'authenticated', label: 'Google account'}, setup: {canAuthenticate: true}, models: [{slug: 'g'}]},
+    {instanceId: 'claudeAgent-3', driver: 'claudeAgent', displayName: 'Claude Code · me@x.com', enabled: true, installed: true, status: 'error', auth: {status: 'unauthenticated'}},
+  ]);
+  const ids = rows.map(row => row.id);
+  assert.ok(ids.indexOf('antigravity') < ids.indexOf('antigravity-2'), 'the default account first, then the added ones');
+  const work = rows.find(row => row.id === 'antigravity-2');
+  assert.deepEqual([work.name, work.account, work.multi, work.state], ['Antigravity · 工作号', true, true, 'ready']);
+  assert.equal(rows.find(row => row.id === 'claudeAgent-3').name.includes('@'), false, 'an email typed as a name never shows');
+  assert.equal(rows.find(row => row.id === 'kiro').multi, false, 'engines that share one machine login cannot add accounts');
+  assert.equal(engineName('claudeAgent-2'), 'Claude Code · 账号 2');
+  assert.deepEqual([driverOf('antigravity'), driverOf('antigravity-12'), driverOf('rm -rf')], ['antigravity', 'antigravity', '']);
+
+  const calls = [];
+  const home = tmp();
+  const spawned = [];
+  let instances = {claudeAgent: {driver: 'claudeAgent'}};
+  const {bridge} = bridgeWith(calls, {
+    'server.getConfig': () => ({providers: [], settings: {providerInstances: instances}}),
+    'server.updateSettings': payload => { const m = payload.providerInstanceMutation; if (m.operation === 'remove') delete instances[m.instanceId]; else instances = {...instances, [m.instanceId]: m.instance}; return {}; },
+    'server.refreshProviders': {}, 'provider.auth.logout': {},
+  });
+  bridge.homeDir = home;
+  bridge.spawnImpl = (file, args, options) => { spawned.push({file, args, options}); return {unref() {}}; };
+  const added = await bridge.addAccount({driver: 'claudeAgent', name: '  个人号 '});
+  assert.equal(added.engine, 'claudeAgent-2');
+  const create = calls.find(call => call[0] === 'server.updateSettings')[1].providerInstanceMutation;
+  assert.deepEqual(create, {operation: 'create', instanceId: 'claudeAgent-2', instance: {driver: 'claudeAgent', displayName: 'Claude Code · 个人号', enabled: true, config: {homePath: path.join(home, '.claude-metre-2')}}});
+  assert.ok(fs.existsSync(path.join(home, '.claude-metre-2')), 'the account gets its own login folder');
+  const third = await bridge.addAccount({driver: 'claudeAgent'});
+  assert.equal(third.engine, 'claudeAgent-3');
+
+  const login = await bridge.signin({engine: 'claudeAgent-2', open: true});
+  assert.equal(login.how, 'terminal');
+  assert.match(login.command, /CLAUDE_CONFIG_DIR.*claude-metre-2.*claude auth login/);
+  assert.equal(spawned.at(-1).options.env.CLAUDE_CONFIG_DIR, path.join(home, '.claude-metre-2'), 'logs in to its own folder only');
+
+  await bridge.renameAccount({engine: 'claudeAgent-2', name: '主力'});
+  assert.equal(instances['claudeAgent-2'].displayName, 'Claude Code · 主力');
+  await assert.rejects(bridge.removeAccount({engine: 'claudeAgent'}), /默认账号不能删/);
+  await bridge.removeAccount({engine: 'claudeAgent-3'});
+  assert.equal(instances['claudeAgent-3'], undefined);
+  assert.ok(fs.existsSync(path.join(home, '.claude-metre-3')), 'the login folder stays on disk');
+  await assert.rejects(bridge.addAccount({driver: 'kiro'}), /同一份登录/);
+  await assert.rejects(bridge.signin({engine: 'claudeAgent-9', open: true}), /删掉/);
 });
 
 test('turning an engine on keeps its saved settings, and managed sign-in follows the engine service step by step', async () => {

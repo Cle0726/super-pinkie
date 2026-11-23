@@ -168,3 +168,61 @@ test('in a browser: all ten engines are in the menu, and the ones not set up ope
   } finally { await browser.close(); }
 });
 
+// 多账号（用户 11-23）：一个账号一行；「再加一个账号」→ 起名字 → 选哪家 → 直接进这个新账号的登录。
+test('in a browser: one row per account, and adding an account goes straight to its sign-in', {timeout: 60_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
+      <div class="chat-main" style="position:relative;width:900px;height:700px"><div class="chat-thread">native</div>
+      <div class="agent-chat__composer-controls"><div class="pinkie-chip pinkie-baton"></div></div></div></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Ac');
+    await tab.evaluate(() => {
+      const guide = {install: '', login: '', loginHint: '', link: '', note: '', managedInstall: true, managedSignin: true};
+      const row = (id, name, state, extra = {}) => ({id, driver: id.replace(/-\d+$/, ''), name, state, text: state === 'ready' ? '' : '还没登录', account: /-\d+$/.test(id), multi: true,
+        enabled: true, installed: true, signedIn: state === 'ready', plan: 'Google account', quota: {state: 'unknown'}, models: [{slug: 'g', name: 'G', isDefault: true}],
+        setup: {canInstall: false, canAuthenticate: true}, guide, ...extra});
+      let engines = [row('antigravity', 'Antigravity', 'ready'), row('antigravity-2', 'Antigravity · 工作号', 'ready')];
+      window.calls = [];
+      window.__laolaoToast = () => {};
+      const catalog = () => ({enabled: true, running: true, source: 'live', levels: [], engines, accountEngines: [{id: 'claudeAgent', name: 'Claude Code'}, {id: 'codex', name: 'Codex'}, {id: 'antigravity', name: 'Antigravity'}, {id: 'cursor', name: 'Cursor'}]});
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.session') return {sessionKey: params.sessionKey, pref: {engine: 'metre'}, summary: null, error: '', service: {running: true}};
+        if (method === 'pinkie.engines.catalog') return catalog();
+        if (method === 'pinkie.engines.account' && params.action === 'add') {
+          engines = [...engines, row('antigravity-3', 'Antigravity · ' + params.name.trim(), 'signin')];
+          return {engine: 'antigravity-3', ...catalog()};
+        }
+        if (method === 'pinkie.engines.account' && params.action === 'remove') { engines = engines.filter(r => r.id !== params.engine); return catalog(); }
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    const chipButton = tab.locator('.agent-chat__composer-controls > .pk-eng-chip');
+    await chipButton.waitFor({timeout: 10_000});
+    await chipButton.click();
+    await tab.locator('.pk-eng-menu__group').first().waitFor();
+    const names = await tab.locator('.pk-eng-menu__item .pk-eng-menu__name').allTextContents();
+    assert.deepEqual(names.slice(0, 3), ['Metre', 'Antigravity', 'Antigravity · 工作号'], 'each account is its own row');
+    await tab.getByText('＋ 再加一个账号').click();
+    await tab.locator('.pk-eng-menu .pk-eng-input').fill(' 第三个号 ');
+    await tab.getByRole('button', {name: 'Antigravity', exact: true}).click();
+    await tab.getByRole('button', {name: '登录', exact: true}).waitFor();
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.account')[1]), {action: 'add', driver: 'antigravity', name: ' 第三个号 '});
+    assert.match(await tab.locator('.pk-eng-menu__sub').textContent(), /Antigravity · 第三个号/);
+    // 删掉：点两下才删，删完回到引擎列表。
+    await tab.getByRole('button', {name: '删掉这个账号'}).click();
+    assert.equal(await tab.evaluate(() => window.calls.some(([m, p]) => m === 'pinkie.engines.account' && p.action === 'remove')), false, 'the first click only arms it');
+    await tab.getByRole('button', {name: '再点一次确认删掉'}).click();
+    await tab.waitForFunction(() => window.calls.some(([m, p]) => m === 'pinkie.engines.account' && p.action === 'remove'));
+    await tab.locator('.pk-eng-menu__group').first().waitFor();
+    assert.equal(await tab.locator('.pk-eng-menu__item', {hasText: '第三个号'}).count(), 0);
+  } finally { await browser.close(); }
+});

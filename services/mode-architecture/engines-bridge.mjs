@@ -5,6 +5,7 @@
 // server.getConfig / refreshProviders），不碰它的数据库。账号邮箱一律不出这个文件。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
@@ -41,6 +42,18 @@ export const ENGINES = [
 ];
 const ENGINE_NAME = Object.fromEntries(ENGINES.map(engine => [engine.id, engine.name]));
 const engineInfo = id => ENGINES.find(engine => engine.id === id) || null;
+// 多账号（PLAN 3.7，用户 11-23）：引擎服务一个账号一个实例，实例 id 是「<家>-<n>」。
+// 只有登录能分开放的几家支持：Claude 每个账号一个配置文件夹（CLAUDE_CONFIG_DIR），Codex 每个账号一个影子文件夹（共用 ~/.codex 的对话），
+// Antigravity、Cursor 由引擎服务按实例各自托管登录。其余几家用这台电脑上同一份登录，开多个也是同一个账号。
+export const ACCOUNTS = {
+  claudeAgent: {folder: '.claude-metre-', config: dir => ({homePath: dir}), env: dir => ({CLAUDE_CONFIG_DIR: dir}), dirOf: config => config?.homePath},
+  codex: {folder: '.codex-metre-', config: dir => ({shadowHomePath: dir}), env: dir => ({CODEX_HOME: dir}), dirOf: config => config?.shadowHomePath},
+  antigravity: {},
+  cursor: {},
+};
+const INSTANCE_ID = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
+// 实例 id → 哪一家。默认实例 id 就是那一家；加出来的是「<家>-<n>」。
+export const driverOf = id => engineInfo(id) ? String(id) : (/^([a-zA-Z]+)-\d+$/.exec(String(id || ''))?.[1] || '');
 const installCommand = (info, platform = process.platform) => info?.install?.[platform === 'win32' ? 'win' : 'mac'] || info?.install?.any || '';
 // 用户点了才开终端，而且只跑这张表里写死的命令。
 const TERMINAL_COMMANDS = new Set(ENGINES.flatMap(engine => [engine.login, ...Object.values(engine.install || {})]).filter(Boolean));
@@ -60,7 +73,11 @@ export const brandless = text => noEmail(text)
 const clip = (text, n) => { const value = String(text ?? ''); return value.length > n ? value.slice(0, n) + '…' : value; };
 const tail = (text, n) => { const value = String(text ?? ''); return value.length > n ? '…' + value.slice(-n) : value; };
 const newId = prefix => `${prefix}:metre-${crypto.randomUUID()}`;
-export const engineName = id => ENGINE_NAME[id] || String(id || '');
+export const engineName = id => {
+  if (ENGINE_NAME[id]) return ENGINE_NAME[id];
+  const match = /^([a-zA-Z]+)-(\d+)$/.exec(String(id || ''));
+  return match && ENGINE_NAME[match[1]] ? `${ENGINE_NAME[match[1]]} · 账号 ${match[2]}` : String(id || '');
+};
 
 function quota(usageLimits, lastError = null) {
   const reset = lastError?.usageLimitResetAt || null;
@@ -94,11 +111,16 @@ export function summarizeProviders(providers = [], {platform = process.platform,
   const rows = (Array.isArray(providers) ? providers : []).map(provider => {
     const label = String(provider?.auth?.label || '');
     const id = String(provider?.instanceId || '');
-    const info = engineInfo(id);
+    const driver = String(provider?.driver || '') || driverOf(id);
+    const info = engineInfo(driver);
+    const extra = id !== driver;
     return {
       id,
-      driver: String(provider.driver || ''),
-      name: engineName(id) || brandless(provider.displayName || id),
+      driver,
+      // 加出来的账号用它自己的名字（「Claude Code · 工作号」）；默认账号用那一家的名字。
+      name: (extra && brandless(provider.displayName || '').replace(EMAIL, '').trim()) || engineName(id) || brandless(provider.displayName || id),
+      account: extra,
+      multi: Boolean(ACCOUNTS[driver]),
       enabled: provider.enabled === true,
       installed: provider.installed === true,
       version: provider.version || null,
@@ -116,13 +138,15 @@ export function summarizeProviders(providers = [], {platform = process.platform,
     };
   }).filter(row => row.id);
   if (all) for (const info of ENGINES) if (!rows.some(row => row.id === info.id)) {
-    rows.push({id: info.id, driver: info.id, name: info.name, enabled: false, installed: false, version: null, status: 'disabled', signedIn: false, plan: '',
+    rows.push({id: info.id, driver: info.id, name: info.name, account: false, multi: Boolean(ACCOUNTS[info.id]), enabled: false, installed: false, version: null, status: 'disabled', signedIn: false, plan: '',
       message: '', state: 'off', text: '还没打开', setup: {canInstall: info.managed?.install === true, canAuthenticate: info.managed?.signin === true},
       quota: {state: 'unknown', resetAt: null, text: ''}, models: []});
   }
+  // 同一家的账号排在一起：默认账号在前，加出来的按编号。
   const order = id => { const index = ENGINES.findIndex(engine => engine.id === id); return index < 0 ? ENGINES.length : index; };
-  rows.sort((x, y) => order(x.id) - order(y.id) || x.name.localeCompare(y.name));
-  return rows.map(row => ({...row, guide: setupGuide(row.id, platform)}));
+  const number = id => Number(/-(\d+)$/.exec(id)?.[1] || 1);
+  rows.sort((x, y) => order(x.driver) - order(y.driver) || number(x.id) - number(y.id) || x.name.localeCompare(y.name));
+  return rows.map(row => ({...row, guide: setupGuide(row.driver, platform)}));
 }
 
 // 菜单里「怎么装 / 怎么登录」那一小块。
@@ -256,16 +280,24 @@ export class SessionEngines {
 
 // 在终端里让用户自己装、自己登录（碧琪不经手账号）。只跑 ENGINES 表里写死的命令。
 // Windows：官方给的是 PowerShell 一行（irm … | iex）就开 PowerShell，其余开命令行窗口（npm 的 .ps1 常被执行策略挡住）；Mac 开「终端」。
-export function openTerminal(command, {platform = process.platform, spawnImpl = spawn} = {}) {
+// env：多账号时把这个账号自己的登录文件夹交给登录命令（只认 ACCOUNTS 里的两个变量名，值必须是绝对路径、不含引号）。
+export function openTerminal(command, {platform = process.platform, spawnImpl = spawn, env = null} = {}) {
   if (!TERMINAL_COMMANDS.has(command)) throw new Error('不认识的命令');
-  const detached = {detached: true, stdio: 'ignore', windowsHide: false};
+  const extra = Object.entries(env || {});
+  for (const [name, value] of extra) {
+    if (!['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'BROWSER'].includes(name) || !path.isAbsolute(String(value)) || /["'`$%\r\n]/.test(String(value))) throw new Error('不认识的登录文件夹');
+    if (name === 'BROWSER' && !/private-browser\.(?:cmd|sh)$/.test(String(value))) throw new Error('不认识的浏览器启动器');
+  }
+  const detached = {detached: true, stdio: 'ignore', windowsHide: false, ...(extra.length ? {env: {...process.env, ...Object.fromEntries(extra)}} : {})};
   let child;
   if (platform === 'win32') {
     const shell = /^irm /.test(command) ? `powershell.exe -NoExit -ExecutionPolicy Bypass -Command "${command}"` : `cmd.exe /k ${command}`;
-    // windowsVerbatimArguments：参数原样用空格拼起来，命令里的引号和 | 由 start 后面的程序自己解析。
+    // windowsVerbatimArguments：参数原样用空格拼起来，命令里的引号和 | 由 start 后面的程序自己解析。新窗口继承上面的 env。
     child = spawnImpl('cmd.exe', ['/c', 'start', '"Metre"', shell], {...detached, windowsVerbatimArguments: true});
   } else if (platform === 'darwin') {
-    const script = command.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // 「终端」不继承 osascript 的环境变量，账号文件夹写在命令前面。
+    const line = extra.map(([name, value]) => `${name}='${value}' `).join('') + command;
+    const script = line.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     child = spawnImpl('osascript', ['-e', `tell application "Terminal" to do script "${script}"`, '-e', 'tell application "Terminal" to activate'], detached);
   } else child = spawnImpl('x-terminal-emulator', ['-e', command], detached);
   child?.unref?.();
@@ -273,14 +305,53 @@ export function openTerminal(command, {platform = process.platform, spawnImpl = 
 }
 export const openLoginTerminal = openTerminal;
 
-// 登录页用系统浏览器打开（引擎服务给的链接，只放 https）。
-export function openBrowser(url, {platform = process.platform, spawnImpl = spawn} = {}) {
+// 给用户看、给复制的那一行登录命令（带这个账号自己的文件夹）。真开终端时用的是 env，不靠这一行。
+export function loginLine(command, env, platform = process.platform) {
+  const pairs = Object.entries(env || {});
+  if (!pairs.length) return command;
+  return platform === 'win32'
+    ? pairs.map(([name, value]) => `set "${name}=${value}" && `).join('') + command
+    : pairs.map(([name, value]) => `${name}='${value}' `).join('') + command;
+}
+
+// 登录一律开无痕窗口（用户 11-23：「开一个无痕浏览器给我登入，不要用我的浏览器」）：不碰用户平时浏览器里的登录，
+// 多账号时也不会被浏览器里已经登着的那个号带错。Windows 用 Edge InPrivate（系统自带），没有再试 Chrome 无痕；Mac 用 Chrome 无痕。都没有才退回默认浏览器。
+export function privateBrowser({platform = process.platform, env = process.env, exists = fs.existsSync} = {}) {
+  const candidates = platform === 'win32'
+    ? [[env['ProgramFiles(x86)'], 'Microsoft\\Edge\\Application\\msedge.exe', '--inprivate'], [env.ProgramFiles, 'Microsoft\\Edge\\Application\\msedge.exe', '--inprivate'],
+      [env.LOCALAPPDATA, 'Google\\Chrome\\Application\\chrome.exe', '--incognito'], [env.ProgramFiles, 'Google\\Chrome\\Application\\chrome.exe', '--incognito']]
+    : platform === 'darwin' ? [['/Applications', 'Google Chrome.app/Contents/MacOS/Google Chrome', '--incognito'], ['/Applications', 'Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '--inprivate']]
+      : [['/usr/bin', 'google-chrome', '--incognito'], ['/usr/bin', 'chromium', '--incognito']];
+  for (const [base, rel, flag] of candidates) {
+    if (!base) continue;
+    const file = path.join(base, rel);
+    if (exists(file)) return {file, flag};
+  }
+  return null;
+}
+
+// 登录页（引擎服务给的链接，只放 https）在无痕窗口里打开。
+export function openBrowser(url, {platform = process.platform, spawnImpl = spawn, browser = privateBrowser({platform})} = {}) {
   if (!/^https:\/\/[^\s"]+$/i.test(String(url || ''))) throw new Error('这个登录链接不是网页地址，没有打开');
   const detached = {detached: true, stdio: 'ignore'};
-  const child = platform === 'win32' ? spawnImpl('rundll32.exe', ['url.dll,FileProtocolHandler', url], detached)
-    : spawnImpl(platform === 'darwin' ? 'open' : 'xdg-open', [url], detached);
+  const child = browser ? spawnImpl(browser.file, [browser.flag, url], detached)
+    : platform === 'win32' ? spawnImpl('rundll32.exe', ['url.dll,FileProtocolHandler', url], detached)
+      : spawnImpl(platform === 'darwin' ? 'open' : 'xdg-open', [url], detached);
   child?.unref?.();
-  return {opened: true};
+  return {opened: true, private: Boolean(browser)};
+}
+
+// 终端里的官方登录命令（claude auth login 等）会按 BROWSER 打开登录页（11-23 实测 Claude 认）。
+// 给它一个小启动器：把链接交给无痕窗口。写在引擎目录里（纯英文路径）。
+export function browserLauncher(dir, {platform = process.platform, browser = privateBrowser({platform})} = {}) {
+  if (!browser) return '';
+  fs.mkdirSync(dir, {recursive: true});
+  const file = path.join(dir, platform === 'win32' ? 'private-browser.cmd' : 'private-browser.sh');
+  const body = platform === 'win32'
+    ? `@echo off\r\nstart "" "${browser.file}" ${browser.flag} %1\r\n`
+    : `#!/bin/sh\nexec "${browser.file}" ${browser.flag} "$1" >/dev/null 2>&1 &\n`;
+  fs.writeFileSync(file, body, {mode: 0o755});
+  return file;
 }
 
 const https = url => /^https:\/\/[^\s"]+$/i.test(String(url || '')) ? String(url) : '';
@@ -311,8 +382,8 @@ export function installView(state) {
 }
 
 export class EngineBridge {
-  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn} = {}) {
-    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl});
+  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn, homeDir = os.homedir()} = {}) {
+    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl, homeDir});
     this.sessions = new SessionEngines(path.join(service.root, 'sessions.json'));
     this.rpcClient = null;
     this.rpcPort = 0;
@@ -375,18 +446,92 @@ export class EngineBridge {
       } catch (error) { this.logger?.warn?.(`engines catalog: ${error.message}`); }
     }
     if (!engines.length) engines = summarizeProviders(readProviderFiles(this.service.home)).map(row => ({...row, quota: {state: 'unknown', resetAt: null, text: ''}}));
-    return {engines, levels: LEVELS, source};
+    // 加出来的 Claude / Codex 账号：登录命令要带上它自己的文件夹，菜单里给用户看、给复制的就是带文件夹的那一行。
+    if (source === 'live') {
+      const instances = this.configCache.value?.settings?.providerInstances || {};
+      for (const row of engines) {
+        const dir = row.account && ACCOUNTS[row.driver]?.dirOf?.(instances[row.id]?.config);
+        if (dir && row.guide?.login) row.guide = {...row.guide, login: loginLine(row.guide.login, ACCOUNTS[row.driver].env(dir)), accountDir: dir};
+      }
+    }
+    return {engines, levels: LEVELS, source, accountEngines: Object.keys(ACCOUNTS).map(id => ({id, name: ENGINE_NAME[id]}))};
   }
 
-  // 打开或关上一家引擎：照引擎服务自己的设置页，upsert 这一家的实例配置（保留它原有的配置），再让它重新检查这一家。
-  async turnOn({engine, on = true} = {}) {
-    if (!engineInfo(engine)) throw new Error('不认识这个引擎');
+  async settings() {
     const config = await this.config(true);
-    const settings = config?.settings?.providerInstances ? config.settings : await this.call('server.getSettings', {});
-    const current = settings?.providerInstances?.[engine] || {driver: engine};
-    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId: engine,
-      instance: {...current, driver: current.driver || engine, enabled: on !== false}}});
-    await this.call('server.refreshProviders', {instanceId: engine}, {timeout: 90_000}).catch(error => this.logger?.warn?.(`engines refresh ${engine}: ${error.message}`));
+    return config?.settings?.providerInstances ? config.settings : await this.call('server.getSettings', {});
+  }
+
+  // 实例 id（默认账号就是那一家的 id，加出来的是「<家>-<n>」）→ 哪一家、引擎服务里存的配置。
+  async resolve(engine) {
+    const id = String(engine || '');
+    if (!INSTANCE_ID.test(id)) throw new Error('不认识这个引擎');
+    const settings = await this.settings().catch(() => null);
+    const saved = settings?.providerInstances?.[id] || null;
+    const reported = (this.configCache.value?.providers || []).find(provider => provider.instanceId === id);
+    const driver = String(saved?.driver || reported?.driver || driverOf(id));
+    const info = engineInfo(driver);
+    if (!info) throw new Error('不认识这个引擎');
+    if (id !== driver && !saved && !reported) throw new Error('这个账号已经删掉了');
+    return {id, driver, info, saved};
+  }
+
+  // 打开或关上一个引擎（或一个账号）：照引擎服务自己的设置页，upsert 这个实例的配置（保留它原有的配置），再让它重新检查。
+  async turnOn({engine, on = true} = {}) {
+    const {id, driver, saved} = await this.resolve(engine);
+    const current = saved || {driver};
+    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId: id,
+      instance: {...current, driver: current.driver || driver, enabled: on !== false}}});
+    await this.refreshOne(id);
+    return this.catalog();
+  }
+
+  async refreshOne(id) {
+    await this.call('server.refreshProviders', {instanceId: id}, {timeout: 90_000}).catch(error => this.logger?.warn?.(`engines refresh ${id}: ${error.message}`));
+    this.configCache = {at: 0, value: null};
+  }
+
+  // 加一个账号：一个新实例「<家>-<n>」。Claude / Codex 在用户目录下建一个这个账号自己的登录文件夹（旧的不碰）。
+  async addAccount({driver, name = ''} = {}) {
+    const info = engineInfo(driver);
+    const recipe = ACCOUNTS[driver];
+    if (!info || !recipe) throw new Error('这个引擎用这台电脑上同一份登录，开不了第二个账号');
+    const settings = await this.settings();
+    const taken = new Set([...Object.keys(settings?.providerInstances || {}), ...(this.configCache.value?.providers || []).map(provider => String(provider.instanceId))]);
+    let n = 2;
+    while (taken.has(`${driver}-${n}`)) n += 1;
+    const id = `${driver}-${n}`;
+    const label = String(name || '').replace(EMAIL, '').replace(/[\r\n\t]/g, ' ').trim().slice(0, 40) || `账号 ${n}`;
+    const instance = {driver, displayName: `${info.name} · ${label}`, enabled: true};
+    if (recipe.folder) {
+      let dir = path.join(this.homeDir, recipe.folder + n);
+      // 文件夹已经有东西（以前删掉的账号留下的登录）就换一个新名字，不把旧登录混进新账号。
+      try { if (fs.readdirSync(dir).length) dir = path.join(this.homeDir, `${recipe.folder}${n}-${this.now().toString(36)}`); } catch {}
+      fs.mkdirSync(dir, {recursive: true});
+      instance.config = recipe.config(dir);
+    }
+    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'create', instanceId: id, instance}});
+    await this.refreshOne(id);
+    return {engine: id, ...await this.catalog()};
+  }
+
+  async renameAccount({engine, name = ''} = {}) {
+    const {id, driver, info, saved} = await this.resolve(engine);
+    if (id === driver) throw new Error('默认账号不用改名');
+    const label = String(name || '').replace(EMAIL, '').replace(/[\r\n\t]/g, ' ').trim().slice(0, 40);
+    if (!label) throw new Error('名字是空的');
+    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId: id, instance: {...(saved || {driver}), driver, displayName: `${info.name} · ${label}`}}});
+    this.configCache = {at: 0, value: null};
+    return this.catalog();
+  }
+
+  // 删掉一个加出来的账号：能托管登录的先在引擎服务里退出（去掉它存的登录），再删实例。Claude / Codex 的登录文件夹留在用户目录里，不删。
+  async removeAccount({engine} = {}) {
+    const {id, driver, info} = await this.resolve(engine);
+    if (id === driver) throw new Error('默认账号不能删，可以关掉它');
+    if (info.managed?.signin) await this.call('provider.auth.logout', {instanceId: id}, {timeout: 60_000}).catch(error => this.logger?.warn?.(`engines logout ${id}: ${error.message}`));
+    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'remove', instanceId: id}});
+    this.watches.delete(`auth:${id}`);
     this.configCache = {at: 0, value: null};
     return this.catalog();
   }
@@ -421,7 +566,7 @@ export class EngineBridge {
 
   // 装：引擎服务能托管安装的（Antigravity）走它；其余给官方安装命令，用户点了「在终端里装」才开终端。
   async install({engine, open = false} = {}) {
-    const info = engineInfo(engine);
+    const info = engineInfo(driverOf(engine));
     if (!info) throw new Error('不认识这个引擎');
     if (info.managed?.install) {
       const state = await this.call('provider.install.start', {instanceId: engine}, {timeout: 60_000});
@@ -437,7 +582,8 @@ export class EngineBridge {
 
   // 登录：引擎服务能在浏览器里登录的（Antigravity、Cursor）走它；其余开终端跑官方登录命令。
   async signin({engine, open = false, methodId = ''} = {}) {
-    const info = engineInfo(engine);
+    const driver = driverOf(engine);
+    const info = engineInfo(driver);
     if (!info) throw new Error('不认识这个引擎');
     if (info.managed?.signin && this.service.status().running) {
       const state = await this.call('provider.auth.start', {instanceId: engine, ...(methodId ? {methodId: String(methodId)} : {})}, {timeout: 60_000});
@@ -447,8 +593,21 @@ export class EngineBridge {
       return {engine, name: info.name, how: 'managed', auth: authView(state)};
     }
     if (!info.login) return {engine, name: info.name, how: 'link', link: info.link || ''};
-    if (open === true) openTerminal(info.login, {spawnImpl: this.spawnImpl});
-    return {engine, name: info.name, how: 'terminal', command: info.login, hint: info.loginHint || '', opened: open === true};
+    // 加出来的 Claude / Codex 账号：登录命令只登进它自己的文件夹。
+    let env = null;
+    if (engine !== driver && ACCOUNTS[driver]?.dirOf) {
+      const {saved} = await this.resolve(engine);
+      const dir = ACCOUNTS[driver].dirOf(saved?.config);
+      if (!dir) throw new Error('这个账号没有自己的登录文件夹，删掉重新加一个');
+      env = ACCOUNTS[driver].env(dir);
+    }
+    if (open === true) {
+      // 登录命令自己开浏览器时开到无痕窗口里（认 BROWSER 的命令行才管用，比如 Claude）。
+      let launcher = '';
+      try { launcher = browserLauncher(this.service.root); } catch (error) { this.logger?.warn?.(`engines browser launcher: ${error.message}`); }
+      openTerminal(info.login, {spawnImpl: this.spawnImpl, env: {...(env || {}), ...(launcher ? {BROWSER: launcher} : {})}});
+    }
+    return {engine, name: info.name, how: 'terminal', command: env ? loginLine(info.login, env) : info.login, hint: info.loginHint || '', opened: open === true};
   }
 
   // 登录进行中的一步：open 打开登录页（要同意的先替用户点「同意」——用户在 Metre 里点按钮就是同意）、paste 回贴登录页给的代码、cancel 取消。
@@ -633,16 +792,25 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
   // 引擎的打开、安装、登录（3.7）。托管的要引擎服务在跑；终端那条只有用户点了（open: true）才开窗口。
   register(api, 'pinkie.engines.turnOn', async ({engine, on} = {}) => { await ensureRunning(); return {...service.status(), ...await bridge.turnOn({engine, on: on !== false})}; });
   register(api, 'pinkie.engines.install', async ({engine, open} = {}) => {
-    if (engineInfo(engine)?.managed?.install) await ensureRunning();
+    if (engineInfo(driverOf(engine))?.managed?.install) await ensureRunning();
     return bridge.install({engine, open: open === true});
   });
   register(api, 'pinkie.engines.signin', async ({engine, open, methodId} = {}) => {
-    if (engineInfo(engine)?.managed?.signin && open === true) await ensureRunning();
+    // 加出来的账号要读它自己的登录文件夹，也得引擎服务在跑。
+    if ((engineInfo(driverOf(engine))?.managed?.signin || engine !== driverOf(engine)) && open === true) await ensureRunning();
     return bridge.signin({engine, open: open === true, methodId});
   });
   register(api, 'pinkie.engines.setup', async ({engine, action, code} = {}) => {
-    if (!engineInfo(engine)) throw new Error('不认识这个引擎');
+    if (!engineInfo(driverOf(engine))) throw new Error('不认识这个引擎');
     return action ? bridge.signinStep({engine, action, code}) : bridge.setupState({engine});
+  });
+  // 多账号（3.7）：add {driver, name} / rename {engine, name} / remove {engine}。
+  register(api, 'pinkie.engines.account', async ({action, driver, engine, name} = {}) => {
+    await ensureRunning();
+    if (action === 'add') return {...service.status(), ...await bridge.addAccount({driver, name})};
+    if (action === 'rename') return {...service.status(), ...await bridge.renameAccount({engine, name})};
+    if (action === 'remove') return {...service.status(), ...await bridge.removeAccount({engine})};
+    throw new Error('不认识的账号动作');
   });
   return bridge;
 }

@@ -261,3 +261,9 @@ html[data-laolao-mode="metre"][data-pinkie-night] .pk-eng-diff__l--del { color: 
   background: var(--metre-card, #fff); color: var(--metre-text, #1F1E1D); font: 400 12.5px/1 var(--metre-sans, system-ui, sans-serif); outline: 0;
 }
 .pk-eng-input:focus { border-color: var(--metre-text, #1F1E1D); }
+/* 多账号：加账号那一行、账号的改名和删掉 */
+.pk-eng-menu__item--add .pk-eng-menu__name { color: var(--metre-text, #1F1E1D); }
+.pk-eng-menu__item--add::after { content: none; }
+.pk-eng-setup__manage { display: flex; gap: 14px; padding-top: 2px; }
+button.pk-eng-setup__link { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 12px; }
+.pk-eng-setup__link--warn { color: var(--metre-warn, #9A4A1F); }

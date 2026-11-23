@@ -170,6 +170,8 @@
     return state.catalog;
   }
   const engineRow = id => (state.catalog?.engines || []).find(row => row.id === id) || null;
+  // 加出来的账号（「Claude Code · 工作号」）用引擎服务报上来的名字。
+  const nameOf = id => engineRow(id)?.name || ENGINE_NAMES[id] || String(id || '');
   const pref = () => state.view?.pref || {engine: 'metre'};
   const external = () => pref().engine && pref().engine !== 'metre';
 
@@ -217,7 +219,7 @@
     body.replaceChildren();
     if (step === 'models') {
       const row = engineRow(engineId);
-      node.querySelector('.pk-eng-menu__sub').textContent = `${ENGINE_NAMES[engineId] || row?.name || engineId} 用哪个模型`;
+      node.querySelector('.pk-eng-menu__sub').textContent = `${nameOf(engineId)} 用哪个模型`;
       const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
       back.onclick = () => openEngineMenu(anchor);
       body.append(back);
@@ -233,13 +235,46 @@
       return;
     }
     if (step === 'setup') {
-      node.querySelector('.pk-eng-menu__sub').textContent = `${ENGINE_NAMES[engineId] || engineId} 还要设置一下`;
+      node.querySelector('.pk-eng-menu__sub').textContent = `${nameOf(engineId)} 还要设置一下`;
       const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
       back.onclick = () => openEngineMenu(anchor);
       body.append(back, setupCard(engineId, {
         onReady: () => (engineRow(engineId)?.models || []).length ? openEngineMenu(anchor, 'models', engineId) : (closeMenu(), choose({engine: engineId, model: ''})),
         relayout: () => menu === node && position(anchor, node),
+        onRemoved: () => openEngineMenu(anchor),
       }));
+      position(anchor, node);
+      return;
+    }
+    if (step === 'account') {
+      // 多账号（3.7）：Claude、Codex、Antigravity、Cursor 一家能登几个账号，一个账号一行。
+      node.querySelector('.pk-eng-menu__sub').textContent = '再加一个账号';
+      const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
+      back.onclick = () => openEngineMenu(anchor);
+      const box = h('div', 'pk-eng-setup');
+      box.append(h('p', 'pk-eng-setup__text', '同一家可以登好几个账号（比如几个 Pro），一个账号一行，额度用完了换另一个。登录都在无痕窗口里，碧琪不经手账号和密码。'));
+      const input = h('input', 'pk-eng-input');
+      input.placeholder = '给这个账号起个名字（可以不填），比如 工作号';
+      input.maxLength = 40;
+      box.append(input);
+      const acts = h('div', 'pk-eng-card__acts');
+      for (const option of catalog.accountEngines || []) {
+        const add = h('button', 'pk-eng-btn', esc(option.name));
+        add.type = 'button';
+        add.onclick = async () => {
+          add.disabled = true;
+          try {
+            const result = await rpc('pinkie.engines.account', {action: 'add', driver: option.id, name: input.value}, 120000);
+            state.catalog = {...state.catalog, ...result};
+            state.catalogAt = Date.now();
+            toast(`加好了：${nameOf(result.engine)}，接着登录`);
+            openEngineMenu(anchor, 'setup', result.engine);
+          } catch (error) { toast(error.message); add.disabled = false; }
+        };
+        acts.append(add);
+      }
+      box.append(acts, h('p', 'pk-eng-setup__note', '别的几家用这台电脑上同一份登录，开多个也是同一个账号，所以不在这里。'));
+      body.append(back, box);
       position(anchor, node);
       return;
     }
@@ -251,7 +286,9 @@
       body.append(off);
     }
     // 分两组：设置好了的（能直接选）在上面，还要打开、安装或登录的在下面，点进去一步步弄好。
-    const external = ENGINE_ORDER.map(id => ({id, name: ENGINE_NAMES[id], note: engineNote(engineRow(id)), row: engineRow(id)}));
+    // 一个账号一行（引擎服务的顺序：同一家的账号挨着，默认账号在前）；读不到引擎状态时按十家的表列。
+    const rows = (catalog.engines || []).length ? catalog.engines : ENGINE_ORDER.map(id => ({id}));
+    const external = rows.map(row => ({id: row.id, name: nameOf(row.id), note: engineNote(engineRow(row.id)), row: engineRow(row.id)}));
     const groups = [
       {label: '', options: [{id: 'metre', name: 'Metre', note: '默认 · 用碧琪里配好的模型，能派活、能记项目'}]},
       {label: '能用', options: catalog.enabled ? external.filter(option => setUp(option.row)) : []},
@@ -276,6 +313,11 @@
         };
         body.append(item);
       }
+    }
+    if (catalog.enabled && (catalog.accountEngines || []).length) {
+      const more = h('button', 'pk-eng-menu__item pk-eng-menu__item--row pk-eng-menu__item--add', '<span class="pk-eng-menu__name">＋ 再加一个账号</span><span class="pk-eng-menu__note">Claude、Codex、Antigravity、Cursor</span>');
+      more.onclick = () => openEngineMenu(anchor, 'account');
+      body.append(more);
     }
     const levels = h('div', 'pk-eng-menu__levels');
     levels.innerHTML = '<div class="pk-eng-menu__label">放手程度</div>';
@@ -311,7 +353,7 @@
     if (!key) return;
     try {
       state.view = await rpc('pinkie.engines.choose', {sessionKey: key, ...patch}, 30000);
-      if (patch.engine && patch.engine !== 'metre') toast(`这个会话交给 ${ENGINE_NAMES[patch.engine] || patch.engine}`);
+      if (patch.engine && patch.engine !== 'metre') toast(`这个会话交给 ${nameOf(patch.engine)}`);
       if (patch.engine === 'metre') toast('回到 Metre 自己来做');
       if (patch.level) toast('放手程度：' + (LEVEL_SHORT[patch.level] || patch.level));
     } catch (error) { toast(error.message); }
@@ -336,7 +378,7 @@
     btn.type = 'button';
     btn.setAttribute('aria-haspopup', 'menu');
     btn.dataset.pinkieTooltip = '引擎：这段对话由 Metre 自己做，还是交给 Claude Code、Codex、Cursor、Antigravity 等';
-    btn.innerHTML = `<span class="pk-eng-chip__name">${esc(ENGINE_NAMES[pref().engine] || 'Metre')}</span><svg class="pk-eng-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.8L5 6.5l2.8-2.7"/></svg>`;
+    btn.innerHTML = `<span class="pk-eng-chip__name">${esc(nameOf(pref().engine || 'metre'))}</span><svg class="pk-eng-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.8L5 6.5l2.8-2.7"/></svg>`;
     btn.onclick = event => { event.preventDefault(); event.stopPropagation(); menu ? closeMenu() : openEngineMenu(btn); };
     return btn;
   }
@@ -344,7 +386,7 @@
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const old = controls?.querySelector(':scope > .pk-eng-chip');
     if (!controls || !isMetre() || !sessionKey()) { old?.remove(); return; }
-    const name = ENGINE_NAMES[pref().engine] || 'Metre';
+    const name = nameOf(pref().engine || 'metre');
     if (old && old.querySelector('.pk-eng-chip__name')?.textContent === name) return;
     const next = chip();
     const baton = controls.querySelector(':scope > .pinkie-baton');
@@ -439,9 +481,9 @@
   }
   // ---------- 一家引擎的「打开 → 安装 → 登录」（菜单里和引擎台顶上共用，3.7） ----------
   // 碧琪不经手账号：托管登录只把登录页在浏览器里打开、把登录页给的代码转回引擎服务；终端那条只跑官方命令，用户点了才开。
-  function setupCard(engine, {onReady = null, relayout = null} = {}) {
+  function setupCard(engine, {onReady = null, relayout = null, onRemoved = null} = {}) {
     const box = h('div', 'pk-eng-setup');
-    const name = ENGINE_NAMES[engine] || engine;
+    const name = nameOf(engine);
     let live = null, timer = 0, sig = '';
     const btn = (label, primary, fn) => {
       const node = h('button', 'pk-eng-btn' + (primary ? ' pk-eng-btn--primary' : ''), esc(label));
@@ -489,8 +531,8 @@
       if (auth.phase === 'verifying') { wrap.append(say('正在确认账号…')); return wrap; }
       if (step?.type === 'credentials') { wrap.append(say('这家选的是要填密钥的登录方式，Metre 里不经手密钥。请改用浏览器登录，或者在终端里用官方命令登录。')); return wrap; }
       if (step?.type === 'deviceCode') wrap.append(say(`在登录页里输入这串代码：`), h('div', 'pk-eng-code', esc(step.code)));
-      else if (step?.type === 'code') wrap.append(say('在浏览器里用你自己的账号登录。最后页面上会给一串代码，贴到下面（只交给引擎服务，碧琪不存）。'));
-      else wrap.append(say(auth.phase === 'starting' ? '正在准备登录页…' : '在浏览器里用你自己的账号登录，登录完这里会自己接上。'));
+      else if (step?.type === 'code') wrap.append(say('在无痕窗口里用你自己的账号登录（不碰你平时浏览器里的登录）。最后页面上会给一串代码，贴到下面（只交给引擎服务，碧琪不存）。'));
+      else wrap.append(say(auth.phase === 'starting' ? '正在准备登录页…' : '在无痕窗口里用你自己的账号登录，登录完这里会自己接上。'));
       const acts = h('div', 'pk-eng-card__acts');
       if (step?.url || auth.url) acts.append(btn('打开登录页', true, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'open'}, 30000); toast('登录页在浏览器里打开了'); poll(); }));
       acts.append(btn('取消', false, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'cancel'}, 20000); sig = ''; render(); }));
@@ -551,10 +593,10 @@
         }
       } else if (row.state === 'signin') {
         if (guide.managedSignin && row.setup?.canAuthenticate !== false) {
-          box.append(say(`用你自己的 ${esc(name)} 账号在浏览器里登录。碧琪不经手账号和密码。`));
+          box.append(say(`用你自己的 ${esc(name)} 账号登录：登录页开在无痕窗口里，不碰你平时浏览器里的登录。碧琪不经手账号和密码。`));
           acts.append(btn('登录', true, startSignin));
         } else {
-          box.append(say(`还没登录。在终端里运行官方的登录命令，按提示用你自己的账号登录${guide.loginHint ? '（' + esc(guide.loginHint) + '）' : ''}：`), commandLine(guide.login));
+          box.append(say(`还没登录。在终端里运行官方的登录命令，按提示用你自己的账号登录（登录页会开在无痕窗口里）${guide.loginHint ? '（' + esc(guide.loginHint) + '）' : ''}：`), commandLine(guide.login));
           acts.append(btn('在终端里登录', true, startSignin), btn('登好了，再查一次', false, () => recheck()));
         }
       } else if (row.state === 'ready') {
@@ -567,7 +609,46 @@
       if (guide.note) box.append(say(esc(guide.note), 'pk-eng-setup__note'));
       if (link) acts.append(link);
       if (acts.childElementCount) box.append(acts);
+      if (row?.account) box.append(manageAccount(row));
       relayout?.();
+    }
+    // 加出来的账号：改名字、删掉（点两下才删；会在引擎服务里退出这个账号，Claude / Codex 的登录文件夹留着）。
+    function manageAccount(row) {
+      const line = h('div', 'pk-eng-setup__manage');
+      const rename = h('button', 'pk-eng-setup__link', '改名字');
+      rename.type = 'button';
+      rename.onclick = event => {
+        event.stopPropagation();
+        const field = h('div', 'pk-eng-paste');
+        const input = h('input', 'pk-eng-input');
+        input.value = String(row.name || '').split(' · ').slice(1).join(' · ');
+        input.maxLength = 40;
+        field.append(input, btn('好', false, async () => {
+          state.catalog = {...state.catalog, ...await rpc('pinkie.engines.account', {action: 'rename', engine, name: input.value}, 60000)};
+          state.catalogAt = Date.now();
+          render(true);
+          paint();
+        }));
+        line.replaceWith(field);
+        input.focus();
+        relayout?.();
+      };
+      const remove = h('button', 'pk-eng-setup__link pk-eng-setup__link--warn', '删掉这个账号');
+      remove.type = 'button';
+      remove.onclick = async event => {
+        event.stopPropagation();
+        if (remove.dataset.armed !== '1') { remove.dataset.armed = '1'; remove.textContent = '再点一次确认删掉'; return; }
+        remove.disabled = true;
+        try {
+          state.catalog = {...state.catalog, ...await rpc('pinkie.engines.account', {action: 'remove', engine}, 60000)};
+          state.catalogAt = Date.now();
+          toast(`删掉了 ${row.name}`);
+          if (pref().engine === engine) await choose({engine: 'metre'});
+          onRemoved?.();
+        } catch (error) { toast(error.message); remove.disabled = false; }
+      };
+      line.append(rename, remove);
+      return line;
     }
     render(true);
     return box;
@@ -575,7 +656,7 @@
   // 引擎台顶上那张设置卡片：同一个引擎复用同一张，免得每次刷新把正在登录的那一步冲掉。
   let setupNode = null;
   function setupFor(engine) {
-    if (setupNode?.engine !== engine) setupNode = {engine, node: setupCard(engine, {onReady: () => paint()})};
+    if (setupNode?.engine !== engine) setupNode = {engine, node: setupCard(engine, {onReady: () => paint(), onRemoved: () => paint()})};
     return setupNode.node;
   }
   async function loadDiff(force = false) {
@@ -748,7 +829,7 @@
     if (!banner) return;
     let card = banner.querySelector(':scope > .pk-eng-card--setup[data-engine]');
     if (card?.dataset.engine !== engine) {
-      card = h('div', 'pk-eng-card pk-eng-card--setup', `<div class="pk-eng-card__head">${esc(ENGINE_NAMES[engine] || engine)} 还要设置一下</div>`);
+      card = h('div', 'pk-eng-card pk-eng-card--setup', `<div class="pk-eng-card__head">${esc(nameOf(engine))} 还要设置一下</div>`);
       card.dataset.engine = engine;
     }
     card.append(setupFor(engine));
@@ -772,10 +853,10 @@
       return;
     }
     if (row && !setUp(row) && catalog?.source === 'live' && !summary?.items?.length) { paintSetup(p.engine); return; }
-    if (row?.quota?.state === 'out') banner.append(h('div', 'pk-eng-card pk-eng-card--warn', `<div class="pk-eng-card__head">${esc(ENGINE_NAMES[p.engine])} 额度用完了</div><p>${row.quota.resetAt ? esc(when(row.quota.resetAt)) + ' 恢复。' : ''}这期间可以换一个引擎，或者回到 Metre 自己来做。</p>`));
+    if (row?.quota?.state === 'out') banner.append(h('div', 'pk-eng-card pk-eng-card--warn', `<div class="pk-eng-card__head">${esc(nameOf(p.engine))} 额度用完了</div><p>${row.quota.resetAt ? esc(when(row.quota.resetAt)) + ' 恢复。' : ''}这期间可以换一个引擎，或者回到 Metre 自己来做。</p>`));
     if (!p.model) banner.append(h('div', 'pk-eng-card pk-eng-card--setup', '<div class="pk-eng-card__head">还没选模型</div><p>点下面的引擎按钮，选一个模型。</p>'));
     if (!summary?.items?.length && !banner.childElementCount) {
-      banner.append(h('div', 'pk-eng-empty', `${pixel(REST, 'pk-eng-empty__glyph')}<div><div class="pk-eng-empty__title">${esc(ENGINE_NAMES[p.engine] || p.engine)}<span>${esc(p.model || '')}</span></div><p>说要做什么，它会在${state.view?.pref?.folder ? ' <code>' + esc(state.view.pref.folder) + '</code> 里' : '这个会话绑定的项目文件夹里（没绑就在一个草稿文件夹里）'}动手。放手程度：${esc(LEVEL_SHORT[p.level || 'full-access'])}。</p></div>`));
+      banner.append(h('div', 'pk-eng-empty', `${pixel(REST, 'pk-eng-empty__glyph')}<div><div class="pk-eng-empty__title">${esc(nameOf(p.engine))}<span>${esc(p.model || '')}</span></div><p>说要做什么，它会在${state.view?.pref?.folder ? ' <code>' + esc(state.view.pref.folder) + '</code> 里' : '这个会话绑定的项目文件夹里（没绑就在一个草稿文件夹里）'}动手。放手程度：${esc(LEVEL_SHORT[p.level || 'full-access'])}。</p></div>`));
     }
   }
 
@@ -791,7 +872,7 @@
     const left = stage.querySelector('.pk-eng-controls__left');
     const right = stage.querySelector('.pk-eng-controls__right');
     const p = pref();
-    const engineBtn = h('button', 'pk-eng-chip', `<span class="pk-eng-chip__name">${esc(ENGINE_NAMES[p.engine] || p.engine)}</span><span class="pk-eng-chip__model">${esc(p.model || '选模型')}</span><svg class="pk-eng-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.8L5 6.5l2.8-2.7"/></svg>`);
+    const engineBtn = h('button', 'pk-eng-chip', `<span class="pk-eng-chip__name">${esc(nameOf(p.engine))}</span><span class="pk-eng-chip__model">${esc(p.model || '选模型')}</span><svg class="pk-eng-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.8L5 6.5l2.8-2.7"/></svg>`);
     engineBtn.onclick = () => (menu ? closeMenu() : openEngineMenu(engineBtn));
     const levelBtn = h('button', 'pk-eng-chip pk-eng-chip--level', `<span class="pk-eng-chip__name">${esc(LEVEL_SHORT[p.level || 'full-access'])}</span>`);
     levelBtn.dataset.pinkieTooltip = '放手程度：引擎动手之前要不要先问你';
