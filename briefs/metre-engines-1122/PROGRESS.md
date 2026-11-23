@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-11-23 晚 · 用 hy4flash-free 跑「页面和后台同步」（做了一半，交接）（AWS Quick 经 Quick 跑腿 2）
+
+**用户这一段**：「用 Hy4flashfree 模型简单跑一下测试看看 UI 有没有问题，主要是页面前端和后端不同步问题」。然后额度到了，要求交接。
+
+**怎么跑的**：隔离碧琪 `F:\metreiso\eng`（网关 8712，插件和界面是 b9b58ad0 这一版），Edge 无头，会话先 `sessions.patch {key, agentId, model: 'mm/workbuddy/hy4flash-free'}`（副本默认的 hy4free 不在模型池 Key 范围里，404）。脚本 `build\quick-run\sync\walk.mjs`：每秒同时读页面（聊天窗格 `state.chatRunId / chatSending / chatStream / chatQueue`、停止键、状态条、消息气泡）和后台（`chat.history`、`pinkie.run.status`），比较什么时候各自「结束」、两边消息条数和最后一条回答是否一致；刷新后再比一遍。结果在 `sync\result.json`、`sync\run.log`，截图 `sync\shots\`。
+
+**结果**
+- 唠嗑一问一答：后台 26.3 秒回完，页面同一秒停；刷新后一致。✅
+- 项目一问一答：34.7 秒，页面同一秒停。❗ **页面显示「碧琪是碧琪，项目模式里…」，后台是「我是碧琪，…」**：第一人称替换（`laolao-first-person.js`，和 `services/mode-architecture/first-person.mjs` 同一份规则）把「我是碧琪」换成了「碧琪是碧琪」。**还没修。**
+- Metre 一问一答：后台 20.5 秒，页面晚 1.5 秒停。✅
+- 刷新后「页面 0 条消息」：是脚本等得太短（复查：唠嗑 / Metre 刷新后 2 秒内画出来，项目模式要 2–5 秒，期间是加载骨架）。不算不同步；项目模式刷新偏慢可以留意。
+- 唠嗑中途停下：点停止 2.0 秒后页面停；之后 6 秒后台回答没再长字；刷新后一致。✅（后台最后一条的 stopReason 是 `toolUse`，hy4flash-free 写散文时调了工具，没细查。）
+- 唠嗑在跑时再发一句：页面排队 1 条，后台收到 2 条、回了 2 条，排队清空。✅
+- 在跑时点侧栏切到别的会话再切回来：**没跑成**，侧栏那一行 0×0、点不到（脚本当时可能撞上开屏或侧栏还没画完）。`sync\walk2.mjs` 改成等那一行真的可见再点，交接时还在跑（跑腿任务 `sy-23-walk2`，结果 `sync\run2.log`、`sync\result2.json`）。
+- 页面报错一次：`Cannot read properties of undefined (reading 'text')`，来源还不知道；walk2 会记下调用栈。
+- `401 /avatar/main`、`/avatar/project` 是原生界面自己的，不管。
+
+**没做的**：修「碧琪是碧琪」；切会话场景的结论；那个页面报错的来源；项目 / Metre 模式的停下、排队、切会话没用 hy4flash-free 跑。
+
+**下一步**：读 `sync\run2.log` / `result2.json` → 修第一人称替换（「我是碧琪」「我叫碧琪」不换，两份规则同步改，`tests/first-person-renderer.test.mjs` 加一条）→ 查页面报错 → 项目 / Metre 补跑停下和切会话 → 提交。push 先问用户（本地已有 59af6360、b9b58ad0 和这一条没 push）。
+
 ## 2026-11-23 晚 · E8 收尾：失败卡写几点恢复 + 真界面走一遍修了三处（AWS Quick 经 Quick 跑腿 2）
 
 **用户这一段**：「E8-2 多引擎选择不做，不要开新会话，在这里把所有的都做完，然后你直接像用户一样体验一次看看页面有没有问题」。`HANDOFF-e8.md` 作废，已删。
