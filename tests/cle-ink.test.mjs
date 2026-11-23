@@ -7,7 +7,9 @@ import vm from 'node:vm';
 import {ALPHA, STRIDE, buildSignature} from '../ui/injections/laolao-cle-kit.js';
 import {CleInk, TIME} from '../ui/injections/laolao-cle-ink.js';
 import {FORM_OF, formOf} from '../ui/injections/laolao-cle-forms.js';
-import {createSteps, liveKind, RESULT, RUSH, HOLD} from '../ui/injections/laolao-cle-steps.js';
+import {createSteps, liveKind, RESULT, RUSH, HOLD, GRACE} from '../ui/injections/laolao-cle-steps.js';
+import {FLOOR} from '../ui/injections/laolao-cle-stop.js';
+import {rowsFor, clock, MAX_ROWS} from '../ui/injections/laolao-cle-peek.js';
 
 const read = (name) => fs.readFileSync(new URL('../ui/injections/' + name, import.meta.url), 'utf8');
 const context = {window: {}};
@@ -220,7 +222,8 @@ test('队列：十个瞬间完成的工具不再播十四秒', () => {
     queue.finish('t' + i, {ok: true});
   }
   wait(6000);
-  assert.ok(shown.at(-1).at <= 3200, `drained at ${shown.at(-1).at}`);
+  // 播完最后一步再等 GRACE 才回到「思考」（短空档不闪一下思考），仍远不到十四秒
+  assert.ok(shown.at(-1).at <= 3200 + GRACE, `drained at ${shown.at(-1).at}`);
   assert.equal(kinds().at(-1), 'think');
   assert.equal(shown.at(-2).text, '9', '最后一步一定播到');
 });
@@ -285,7 +288,7 @@ test('队列：等审批、并行时被顶下去的工具还在跑，就回到�
   wait(HOLD + 10);
   assert.equal(kinds().at(-1), 'exec');
   queue.finish('run');
-  wait(HOLD + 10);
+  wait(HOLD + GRACE + 10);                              // 回到「思考」前先等等下一步
   assert.equal(kinds().at(-1), 'think');
 });
 
@@ -306,4 +309,128 @@ test('队列：还在跑的一直停着，重复的开始事件只算一次', ()
   wait(HOLD * 4);
   assert.deepEqual(kinds(), ['exec']);
   assert.equal(queue.waiting, 0);
+});
+
+/* ── 中断、节奏、可以点的小标（11-23） ── */
+const visible = (engine, fn) => { for (let i = 0; i < engine.count; i++) if (engine.look[i * 4 + 1] > .3) fn(i); };
+function spread(engine) {
+  let lo = Infinity, hi = -Infinity, sum = 0, n = 0;
+  visible(engine, (i) => { const y = engine.position[i * 3 + 1]; lo = Math.min(lo, y); hi = Math.max(hi, y); sum += y; n++; });
+  return {lo, hi, mean: sum / n, n};
+}
+
+test('中断有自己的样子：直接变、塌到底线、褪成灰，不发光', () => {
+  assert.equal(formOf('stopped'), 'stopped');
+  const rest = spread(ink());                            // 待机：签名原样
+  const engine = ink();
+  settle(engine, 'exec');
+  engine.set('stopped');
+  assert.equal(engine.form, 'stopped', '同一步的收势：不先绕回签名');
+  play(engine, 2.4);
+  const down = spread(engine);
+  assert.ok(down.n > COUNT * .8, '几乎都还看得见');
+  assert.ok(down.mean < rest.mean - .35, `整体往下塌了：${rest.mean.toFixed(2)} → ${down.mean.toFixed(2)}`);
+  assert.ok(down.hi - down.lo < (rest.hi - rest.lo) * .55, '高度被压扁');
+  assert.ok(down.lo > -(FLOOR + 6 - 54) / 19, '不掉出基线太多');
+  visible(engine, (i) => {
+    assert.ok(engine.look[i * 4 + 3] < -.95, '全灰');
+    assert.ok(engine.look[i * 4] < .05, '不发光');
+  });
+});
+
+test('中断之后交回签名：灰色跟着墨走，最后是矢量签名', () => {
+  const engine = ink();
+  settle(engine, 'fail');
+  engine.set('stopped');
+  engine.step(DT);
+  visible(engine, (i) => assert.ok(engine.look[i * 4 + 3] > .9, '红到灰是连着变的，第一帧还是红'));
+  play(engine, 2.2);
+  engine.set('idle');
+  play(engine, 1.4);
+  assert.equal(engine.form, 'idle');
+  assert.equal(engine.fx.alpha, 0);
+  assert.equal(engine.fx.paper, 1);
+  for (let i = 0; i < engine.count; i++) assert.ok(Math.abs(engine.look[i * 4 + 3]) < 1e-6);
+});
+
+test('cle-stage：中断演 stopped，停一会儿再回到签名；完成照旧落款', () => {
+  const stage = read('laolao-cle-stage.js');
+  assert.match(stage, /if \(stopped\) return stopHold\(\);/);
+  assert.match(stage, /space\.set\('stopped'\);\n    doneTimer = setTimeout\(\(\) => \{ if \(space && owner === finishing\) space\.set\('idle'\); doneTimer = setTimeout\(endHold, STOP_BACK\); \}, STOP_HOLD\);/);
+  assert.match(stage, /finishInfo\.stopped = true;\n      stopHold\(\);/, '重绘后才发现中断：也改演中断');
+  assert.match(stage, /if \(animated\) space\.set\('done'\);/);
+  assert.doesNotMatch(stage, /space\.set\(stopped \? 'idle'/);
+});
+
+test('节奏：一秒半内连着来的切换直接变，隔得久了才先收回签名', () => {
+  const engine = ink();
+  settle(engine, 'search');
+  engine.set('git');
+  assert.equal(engine.form, 'idle');
+  play(engine, 1.4);
+  assert.equal(engine.form, 'git');
+  engine.set('read');
+  assert.equal(engine.form, 'read', '离上次切换 1.4 秒：直接变');
+  play(engine, 2);
+  engine.set('web');
+  assert.equal(engine.form, 'idle', '隔了 2 秒：照旧经过 C.le.');
+});
+
+test('队列：两个工具之间的短空档不切回「思考」，真没有下一步才回去', () => {
+  const {queue, wait, kinds} = steps();
+  const collapsed = () => kinds().filter((k, n, all) => k !== all[n - 1]);
+  queue.start({id: 'a', kind: 'read'});
+  wait(500);
+  queue.finish('a', {ok: true});
+  wait(HOLD + 100);                                      // a 停够了，正在空档里
+  assert.deepEqual(collapsed(), ['read']);
+  queue.start({id: 'b', kind: 'exec'});
+  assert.deepEqual(collapsed(), ['read', 'exec'], '中间没有闪一下「思考」');
+  wait(HOLD);
+  queue.finish('b');
+  wait(GRACE - 50);
+  assert.equal(kinds().at(-1), 'exec');
+  wait(100);
+  assert.equal(kinds().at(-1), 'think');
+});
+
+test('cle-ink：点一下小标，一道光沿笔顺跑过去，之后归零', () => {
+  const engine = ink();
+  settle(engine, 'test');
+  const base = engine.look.slice();
+  engine.poke();
+  play(engine, .3);
+  let brighter = 0;
+  for (let i = 0; i < engine.count; i++) if (engine.look[i * 4] > base[i * 4] + .5) brighter++;
+  assert.ok(brighter > 3 && brighter < COUNT * .5, `只亮一段：${brighter}`);
+  play(engine, .6);
+  assert.equal(engine.kick, 0);
+});
+
+test('步骤小窗：时间从本轮开始算，进行中的是最后一步，太长只留最近的', () => {
+  assert.equal(clock(0), '0:00');
+  assert.equal(clock(65400), '1:05');
+  const {rows} = rowsFor([{label: '读取文件', text: 'a', at: 1000}, {label: '执行命令', text: 'b', at: 4200}, {label: '用了工具', text: '', at: 0}], {running: true, start: 1000});
+  assert.deepEqual(rows.map((r) => r.when), ['0:00', '0:03', '']);
+  assert.deepEqual(rows.map((r) => r.current), [false, false, true]);
+  assert.deepEqual(rowsFor([{label: 'x', at: 9}], {}).rows.map((r) => r.current), [false], '历史卡片没有进行中');
+  const many = Array.from({length: MAX_ROWS + 15}, (_, k) => ({label: 'l', text: String(k), at: 1000 + k * 1000}));
+  const cut = rowsFor(many);
+  assert.equal(cut.rows.length, MAX_ROWS);
+  assert.equal(cut.hidden, 15);
+  assert.equal(cut.rows[0].text, '15');
+  assert.equal(cut.rows[0].when, '0:15', '时间仍从第一步算');
+});
+
+test('步骤小窗：能点、能用键盘、Esc 关；不加全局名、观察器和常驻定时器', () => {
+  const peek = read('laolao-cle-peek.js');
+  assert.match(read('laolao-cle-stage.js'), /^import '\.\/laolao-cle-peek\.js';/m);
+  assert.match(peek, /e\.key === 'Escape'/);
+  assert.match(peek, /setAttribute\('aria-expanded', 'true'\)/);
+  assert.match(peek, /setAttribute\('role', 'dialog'\)/);
+  assert.match(peek, /if \(typeof document !== 'undefined' && document\.addEventListener\) install\(\);/, 'node 里可以直接 import');
+  assert.match(peek, /textContent = r\.text/, '工具参数只当文字放，不拼 HTML');
+  assert.doesNotMatch(peek, /innerHTML/);
+  assert.doesNotMatch(peek, /\bsetInterval\s*\(|new MutationObserver|!\s*important|window\.__\w+\s*=[^=]/);
+  assert.match(peek, /prefers-reduced-motion: reduce/);
 });
