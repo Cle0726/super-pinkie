@@ -130,6 +130,11 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   assert.equal(started, 1);
   assert.equal(JSON.parse(fs.readFileSync(path.join(base, 'engines', 'prefs.json'), 'utf8')).enabled, true);
   assert.equal((await methods['pinkie.engines.enable']({on: false})).enabled, false);
+  // 11-23 真界面：菜单读 catalog 的 enabled 判断「外部引擎没打开」，必须是真开关，不能缺。
+  assert.equal((await methods['pinkie.engines.catalog']({})).enabled, false);
+  await methods['pinkie.engines.enable']({on: true});
+  assert.equal((await methods['pinkie.engines.catalog']({})).enabled, true);
+  await methods['pinkie.engines.enable']({on: false});
   await assert.rejects(methods['pinkie.engines.threads']({}), /没有在运行/);
   await assert.rejects(methods['pinkie.engines.open'](), /没有在运行/);
   service.status = () => ({running: true, url: 'http://127.0.0.1:3790'});

@@ -43,7 +43,7 @@ function scene() {
       pending: [{requestId: 'q1', kind: 'approval'}], changes: [{file: 'a.css', additions: 2, deletions: 1, edits: 1}], turnCount: 1,
       items: [
         {id: 'u', kind: 'you', status: 'completed', text: 'fix <b>it</b>'},
-        {id: 'r', kind: 'reply', status: 'completed', text: 'Done: `a.css` <script>alert(1)</script>\n\n- one\n- two'},
+        {id: 'r', kind: 'reply', status: 'completed', text: 'Done: `a.css` <script>alert(1)</script> [hello.md](file:///F:/x/hello.md)\n\n- one\n- two'},
         {id: 'c', kind: 'command', status: 'completed', command: 'npm test', output: 'ok', exitCode: 0},
         {id: 'a', kind: 'approval', status: 'pending', requestId: 'q1', requestKind: 'command', prompt: 'rm -rf build', open: true, options: []},
       ]},
@@ -83,6 +83,8 @@ test('in a browser: chip in the composer, stage rows, escaped text, and the appr
     assert.equal(await tab.locator('.pk-eng-reply script').count(), 0, 'no markup from the engine runs');
     assert.equal(await tab.locator('.pk-eng-reply li').count(), 2);
     assert.equal(await tab.locator('.pk-eng-reply code').first().textContent(), 'a.css');
+    assert.equal(await tab.locator('.pk-eng-reply a[href^="file:"]').count(), 0, 'local file links show as a name, not a dead link');
+    assert.equal(await tab.locator('.pk-eng-reply code').nth(1).textContent(), 'hello.md');
     assert.match(await tab.locator('.pk-eng-live .cle-status b').textContent(), /等你确认/);
     await tab.getByRole('button', {name: '批准', exact: true}).click();
     await tab.waitForFunction(() => window.calls.some(([m]) => m === 'pinkie.engines.respond'));

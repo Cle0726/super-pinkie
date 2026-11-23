@@ -333,7 +333,7 @@ export function registerEngines(api, {base = '', register} = {}) {
     return {url: pairUrl, expiresAt: data.expiresAt || null};
   });
   // 引擎台（Metre 自己画的对话界面）的方法：engines-bridge.mjs。
-  shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, ensureRunning: async () => {
+  shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, isEnabled: () => prefs().enabled === true, ensureRunning: async () => {
     if (service.status().running) return;
     if (prefs().enabled !== true) throw new Error('外部引擎还没打开：在引擎菜单里打开它（第一次会下载约 170MB）');
     await service.start();

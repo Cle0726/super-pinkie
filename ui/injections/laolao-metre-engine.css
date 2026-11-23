@@ -267,3 +267,9 @@ html[data-laolao-mode="metre"][data-pinkie-night] .pk-eng-diff__l--del { color: 
 .pk-eng-setup__manage { display: flex; gap: 14px; padding-top: 2px; }
 button.pk-eng-setup__link { border: 0; background: none; padding: 0; cursor: pointer; font: inherit; font-size: 12px; }
 .pk-eng-setup__link--warn { color: var(--metre-warn, #9A4A1F); }
+.pk-eng-drawer__note { color: var(--metre-muted, #73726C); font-size: 12px; }
+/* 右边开着改动面板时底下这一排变窄（11-23 真界面）：字不许断成两行，排不下就换到下一排，模型名太长就省略。 */
+.pk-eng-controls { flex-wrap: wrap; row-gap: 2px; }
+.pk-eng-controls__left, .pk-eng-controls__right { flex-wrap: wrap; }
+.pk-eng-controls .pk-eng-chip, .pk-eng-controls .pk-eng-chip__name, .pk-eng-controls .pk-eng-chip__model { white-space: nowrap; }
+.pk-eng-controls .pk-eng-chip__model { max-width: 14em; overflow: hidden; text-overflow: ellipsis; }

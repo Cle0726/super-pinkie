@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {T3Rpc, causeMessage} from '../services/mode-architecture/engines-rpc.mjs';
-import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, browserLauncher, driverOf, engineName, installView, openBrowser, openLoginTerminal, openTerminal, privateBrowser, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
+import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, browserLauncher, driverOf, engineName, installView, openBrowser, openLoginTerminal, openTerminal, privateBrowser, quota, diffFiles, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pk-bridge-'));
 
@@ -70,7 +70,7 @@ test('provider rows keep status, plan and models but never an email', () => {
   assert.equal(codex.signedIn, true);
   assert.equal(codex.state, 'ready');
   assert.equal(/[\w.+-]+@[\w-]+\./.test(JSON.stringify(rows)), false, 'no email');
-  assert.deepEqual(codex.quota, {state: 'out', resetAt: '2026-11-27T01:44:00.000Z', text: '额度用完了'});
+  assert.deepEqual(codex.quota, {state: 'out', resetAt: '2026-11-27T01:44:00.000Z', text: '额度用完了', outModels: []});
   assert.deepEqual(codex.models, [{slug: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', isDefault: true}]);
 });
 
@@ -101,6 +101,58 @@ test('every engine the engine service supports is in the menu, in a fixed order,
   assert.match(by.grok.guide.link, /^https:\/\//);
   assert.equal(summarizeProviders([], {platform: 'darwin'}).find(row => row.id === 'grok').guide.install, 'curl -fsSL https://x.ai/cli/install.sh | bash');
   assert.equal(/T3/i.test(JSON.stringify(rows)), false, 'no engine-service brand anywhere');
+});
+
+test('an Antigravity file change (file-URL path, no line counts) shows a clean path and no fake +0 −0 (real data 11-23)', () => {
+  const summary = summarizeProjection({thread: {id: 't'}, runs: [{id: 'r', ordinal: 1, status: 'completed'}], visibleTurnItems: [
+    {position: 1, item: {id: 'e1', type: 'file_change', status: 'completed', title: 'Changed files', fileName: '/F:/work/scratch/hello.md'}},
+    {position: 2, item: {id: 'e2', type: 'file_change', status: 'completed', fileName: 'C:\\w\\a.css', additions: 3, deletions: 1, diffStr: '@@'}},
+  ]});
+  assert.equal(summary.items[0].file, 'F:/work/scratch/hello.md');
+  assert.equal(summary.items[0].additions, null);
+  assert.deepEqual(summary.changes.map(change => [change.file, change.counted]), [['F:/work/scratch/hello.md', false], ['C:\\w\\a.css', true]]);
+});
+
+test('the file list and line counts come from the engine diff when edits were made by commands (real diff 11-23)', () => {
+  const diff = 'diff --git a/hello.md b/hello.md\nindex 6527716..cee145b 100644\n--- a/hello.md\n+++ b/hello.md\n@@ -1,2 +1,3 @@\n Metre 引擎台测试\n Claude 也来过。\n+第三行\n\\ No newline at end of file\n'
+    + 'diff --git a/src/a.js b/src/a.js\n--- a/src/a.js\n+++ b/src/a.js\n@@ -1 +1 @@\n-old\n+new\n';
+  assert.deepEqual(diffFiles(diff), [
+    {file: 'hello.md', additions: 1, deletions: 0, edits: 1, counted: true},
+    {file: 'src/a.js', additions: 1, deletions: 1, edits: 1, counted: true},
+  ]);
+  assert.deepEqual(diffFiles(''), []);
+});
+
+test('Metre\'s own scratch folder becomes a git repository once, so the engine service can work out diffs', () => {
+  const calls = [];
+  const {bridge, root} = bridgeWith(calls);
+  const runs = [];
+  bridge.runSync = (file, args, options) => { runs.push([file, args.filter(arg => !arg.startsWith('user.') && arg !== '-c'), options.cwd]); if (args.includes('init')) fs.mkdirSync(path.join(options.cwd, '.git')); return {status: 0}; };
+  const folder = bridge.folderFor('agent:metre:nobound');
+  assert.equal(folder, path.join(root, 'scratch'));
+  assert.deepEqual(runs.map(run => run[1][0]), ['init', 'commit']);
+  bridge.folderFor('agent:metre:nobound');
+  assert.equal(runs.length, 2, 'only the first time');
+});
+
+test('quota: a whole-account bar that is full means used up; a full per-model bar only marks those models (real data 11-23)', () => {
+  const codex = quota({windows: [{label: 'Session', usedPercent: 0}, {label: 'Weekly', usedPercent: 100, resetsAt: '2026-11-27T01:43:42.000Z'}]}, [{slug: 'gpt-6'}]);
+  assert.deepEqual([codex.state, codex.resetAt, codex.text], ['out', '2026-11-27T01:43:42.000Z', '额度用完了']);
+  const models = [{slug: 'gemini-4-argon', name: 'Gemini 4 Argon'}, {slug: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash'}, {slug: 'claude-opus-5-5', name: 'Claude Opus 5.5'}, {slug: 'gpt-oss-120b-medium', name: 'GPT-OSS 120B (Medium)'}];
+  const windows = [
+    {label: 'Claude & GPT (shared) · 5-hour', usedPercent: 0}, {label: 'Gemini · 5-hour', usedPercent: 0.08},
+    {label: 'Claude & GPT (shared) · Weekly', usedPercent: 50.12}, {label: 'Gemini 4 Argon · Weekly', usedPercent: 100, resetsAt: '2026-11-28T11:22:29.000Z'},
+    {label: 'Gemini · Weekly', usedPercent: 73.27},
+  ];
+  const anti = quota({windows}, models);
+  assert.equal(anti.state, 'ok', 'one model group out is not the whole engine out');
+  assert.deepEqual(anti.outModels, ['gemini-4-argon']);
+  assert.equal(anti.text, '已用 73% · Gemini 4 Argon 用完了');
+  const row = summarizeProviders([{instanceId: 'antigravity', driver: 'antigravity', enabled: true, installed: true, status: 'ready', auth: {status: 'authenticated'}, setup: {canAuthenticate: true}, usageLimits: {windows}, models}])
+    .find(item => item.id === 'antigravity');
+  assert.deepEqual(row.models.filter(model => model.out).map(model => model.slug), ['gemini-4-argon']);
+  const allGemini = quota({windows: [{label: 'Gemini · Weekly', usedPercent: 100}, {label: 'Claude & GPT (shared) · Weekly', usedPercent: 100}]}, models);
+  assert.equal(allGemini.state, 'out', 'every model group out is the whole engine out');
 });
 
 test('sign-in state keeps only web links and never asks for keys inside Metre', () => {
@@ -145,7 +197,7 @@ test('a projection becomes Metre rows in order, with open requests, per-file tot
   assert.deepEqual(view.pending, [{requestId: 'req1', kind: 'approval'}]);
   assert.equal(view.items.find(item => item.requestId === 'req0').open, false);
   assert.equal(view.items[2].failed, true);
-  assert.deepEqual(view.changes, [{file: 'src/a.js', additions: 5, deletions: 1, edits: 2}]);
+  assert.deepEqual(view.changes, [{file: 'src/a.js', additions: 5, deletions: 1, edits: 2, counted: true}]);
   assert.equal(view.turnCount, 2);
   assert.equal(view.thread.engineName, 'Claude Code');
   assert.equal(view.thread.level, 'approval-required');

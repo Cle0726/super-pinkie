@@ -119,7 +119,9 @@
       .replace(/`([^`\n]+)`/g, '<code>$1</code>')
       .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
-      .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+      // 引擎回话里指向本机文件的链接（Antigravity 爱写 [hello.md](file:///F:/…)）：只显示文件名，不放打不开的链接。
+      .replace(/\[([^\]\n]+)\]\((?:file:\/\/\/?|\/)[^)\s]*\)/g, '<code>$1</code>');
   }
   function md(text) {
     const out = [];
@@ -173,6 +175,12 @@
   // 加出来的账号（「Claude Code · 工作号」）用引擎服务报上来的名字。
   const nameOf = id => engineRow(id)?.name || ENGINE_NAMES[id] || String(id || '');
   const pref = () => state.view?.pref || {engine: 'metre'};
+  // 改动的文件写成相对这个会话文件夹的路径（hello.md），不在里面的才写全路径。
+  const shortPath = file => {
+    const text = String(file || '').replace(/\\/g, '/');
+    const base = String(pref().folder || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    return base && text.toLowerCase().startsWith(base.toLowerCase() + '/') ? text.slice(base.length + 1) : text;
+  };
   const external = () => pref().engine && pref().engine !== 'metre';
 
   function engineNote(row) {
@@ -224,7 +232,8 @@
       back.onclick = () => openEngineMenu(anchor);
       body.append(back);
       for (const model of row?.models || []) {
-        const item = h('button', 'pk-eng-menu__item', `<span class="pk-eng-menu__name">${esc(model.name)}</span><span class="pk-eng-menu__note">${esc(model.slug)}${model.isDefault ? ' · 默认' : ''}</span>`);
+        // 只有某几个模型额度用完（Antigravity 按模型分额度）：照样能选，标出来、放暗。
+        const item = h('button', 'pk-eng-menu__item' + (model.out ? ' pk-eng-menu__item--dim' : ''), `<span class="pk-eng-menu__name">${esc(model.name)}</span><span class="pk-eng-menu__note">${esc(model.slug)}${model.isDefault ? ' · 默认' : ''}${model.out ? ' · 额度用完了' + (row?.quota?.resetAt ? `，${esc(when(row.quota.resetAt))} 恢复` : '') : ''}</span>`);
         item.setAttribute('role', 'menuitemradio');
         item.setAttribute('aria-checked', String(pref().engine === engineId && pref().model === model.slug));
         item.onclick = () => { closeMenu(); choose({engine: engineId, model: model.slug}); };
@@ -697,7 +706,7 @@
       }
       case 'command': toggle(`<i class="pk-eng-dot pk-eng-dot--${dot}"></i><span class="pk-eng-verb">跑</span><code class="pk-eng-line__code">${esc(item.command.split('\n')[0].slice(0, 120))}</code>${item.exitCode != null ? `<span class="pk-eng-line__meta">退出码 ${item.exitCode}</span>` : ''}`,
         `<pre class="pk-eng-out"><span class="pk-eng-out__cmd">$ ${esc(item.command)}</span>\n${esc(item.output || '（没有输出）')}</pre>`); break;
-      case 'edit': toggle(`<i class="pk-eng-dot pk-eng-dot--${dot}"></i><span class="pk-eng-verb">改</span><span class="pk-eng-line__file">${esc(item.file)}</span>${item.additions != null ? `<span class="pk-eng-add">+${item.additions}</span>` : ''}${item.deletions != null ? `<span class="pk-eng-del">−${item.deletions}</span>` : ''}`,
+      case 'edit': toggle(`<i class="pk-eng-dot pk-eng-dot--${dot}"></i><span class="pk-eng-verb">改</span><span class="pk-eng-line__file" title="${esc(item.file)}">${esc(shortPath(item.file))}</span>${item.additions != null ? `<span class="pk-eng-add">+${item.additions}</span>` : ''}${item.deletions != null ? `<span class="pk-eng-del">−${item.deletions}</span>` : ''}`,
         item.diff ? `<pre class="pk-eng-diff pk-eng-diff--inline">${diffHtml(item.diff)}</pre>` : '<div class="pk-eng-quiet">这次没有带差异，打开右边的「改动」看整段对话的改动。</div>'); break;
       case 'search': case 'web': node.innerHTML = `<div class="pk-eng-line pk-eng-line--flat"><i class="pk-eng-dot pk-eng-dot--${dot}"></i><span class="pk-eng-verb">${item.kind === 'web' ? '查网页' : '找'}</span><span class="pk-eng-line__text">${esc(item.text)}</span>${item.count ? `<span class="pk-eng-line__meta">${item.count} 条</span>` : ''}</div>`; break;
       case 'tool': toggle(`<i class="pk-eng-dot pk-eng-dot--${dot}"></i><span class="pk-eng-verb">用</span><span class="pk-eng-line__text">${esc(item.name)}</span>`, `<pre class="pk-eng-out">${esc(item.text)}</pre>`); break;
@@ -887,7 +896,9 @@
       const word = STATUS_WORD[status] ?? status;
       if (word) parts.push(h('span', `pk-eng-state pk-eng-state--${status}`, `<i></i>${esc(word)}`));
       const add = summary.changes.reduce((n, c) => n + c.additions, 0), del = summary.changes.reduce((n, c) => n + c.deletions, 0);
-      const changes = h('button', 'pk-eng-chip pk-eng-chip--changes', summary.changes.length ? `<span class="pk-eng-chip__name">${summary.changes.length} 个文件</span><span class="pk-eng-add">+${add}</span><span class="pk-eng-del">−${del}</span>` : '<span class="pk-eng-chip__name">改动</span>');
+      // 有的引擎（Antigravity）不报行数：那就只写几个文件，不写 +0 −0。
+      const counted = summary.changes.some(c => c.counted !== false);
+      const changes = h('button', 'pk-eng-chip pk-eng-chip--changes', summary.changes.length ? `<span class="pk-eng-chip__name">${summary.changes.length} 个文件</span>${counted ? `<span class="pk-eng-add">+${add}</span><span class="pk-eng-del">−${del}</span>` : ''}` : '<span class="pk-eng-chip__name">改动</span>');
       changes.setAttribute('aria-pressed', String(state.diff.open));
       changes.onclick = () => { state.diff.open = !state.diff.open; paint(); if (state.diff.open) loadDiff(true); };
       const more = h('button', 'pk-eng-chip pk-eng-chip--more', '<span class="pk-eng-chip__name">···</span>');
@@ -925,7 +936,7 @@
     const data = state.diff.data;
     const changes = data?.changes || state.view?.summary?.changes || [];
     drawer.querySelector('.pk-eng-drawer__sum').textContent = changes.length ? `${changes.length} 个文件` : '';
-    drawer.querySelector('.pk-eng-drawer__files').innerHTML = changes.map(c => `<div class="pk-eng-drawer__file"><span>${esc(c.file)}</span><span class="pk-eng-add">+${c.additions}</span><span class="pk-eng-del">−${c.deletions}</span></div>`).join('')
+    drawer.querySelector('.pk-eng-drawer__files').innerHTML = changes.map(c => `<div class="pk-eng-drawer__file"><span title="${esc(c.file)}">${esc(shortPath(c.file))}</span>${c.counted === false ? '<span class="pk-eng-drawer__note">改了</span>' : `<span class="pk-eng-add">+${c.additions}</span><span class="pk-eng-del">−${c.deletions}</span>`}</div>`).join('')
       || '<div class="pk-eng-quiet">这段对话还没有改过文件。</div>';
     drawer.querySelector('.pk-eng-diff').innerHTML = data?.error ? esc('读不到改动：' + data.error) : data?.diff ? diffHtml(data.diff) : data ? '' : '正在读改动…';
   }

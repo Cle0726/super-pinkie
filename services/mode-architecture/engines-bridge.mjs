@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
 import {readProviderFiles} from './engines.mjs';
 import {boundProjectRoot} from './project-brief.mjs';
@@ -79,15 +79,25 @@ export const engineName = id => {
   return match && ENGINE_NAME[match[1]] ? `${ENGINE_NAME[match[1]]} · 账号 ${match[2]}` : String(id || '');
 };
 
-function quota(usageLimits, lastError = null) {
-  const reset = lastError?.usageLimitResetAt || null;
-  if (lastError?.lastErrorClass === 'usage_limit') return {state: 'out', resetAt: reset, text: '额度用完了'};
+// 额度（11-23 真机）：Codex、Claude 的额度条管整个账号（「Session」「Weekly」）；Antigravity 按模型分条
+// （「Gemini 4 Argon · Weekly」「Claude & GPT (shared) · Weekly」）。只有某个模型那条满了，就只是那几个模型用不了，不是整家用完。
+const scopeOf = label => (String(label || '').includes(' · ') ? String(label).split(' · ')[0].replace(/\(shared\)/i, '').trim() : '');
+const covers = (scope, model) => scope.split(/\s*&\s*/).some(part => part && String(model.name || model.slug || '').toLowerCase().startsWith(part.toLowerCase()));
+export function quota(usageLimits, models = []) {
   const limits = usageLimits && typeof usageLimits === 'object' ? usageLimits : null;
-  const windows = Array.isArray(limits?.windows) ? limits.windows : Array.isArray(limits?.limits) ? limits.limits : [];
-  const out = windows.find(item => Number(item?.usedPercent ?? item?.percentUsed) >= 100);
-  if (out) return {state: 'out', resetAt: out.resetsAt || out.resetAt || null, text: '额度用完了'};
-  const top = windows.map(item => Number(item?.usedPercent ?? item?.percentUsed)).filter(Number.isFinite).sort((a, b) => b - a)[0];
-  return Number.isFinite(top) ? {state: 'ok', resetAt: null, text: `已用 ${Math.round(top)}%`} : {state: 'unknown', resetAt: null, text: ''};
+  const windows = (Array.isArray(limits?.windows) ? limits.windows : Array.isArray(limits?.limits) ? limits.limits : [])
+    .map(item => ({used: Number(item?.usedPercent ?? item?.percentUsed), resetAt: item?.resetsAt || item?.resetAt || null, scope: scopeOf(item?.label)}))
+    .filter(item => Number.isFinite(item.used));
+  const latest = list => list.map(item => item.resetAt).filter(Boolean).sort().at(-1) || null;
+  const full = windows.filter(item => item.used >= 100);
+  const whole = full.filter(item => !item.scope);
+  if (whole.length) return {state: 'out', resetAt: latest(whole), text: '额度用完了', outModels: []};
+  const scoped = full.filter(item => item.scope);
+  const outModels = models.filter(model => scoped.some(item => covers(item.scope, model))).map(model => String(model.slug));
+  if (scoped.length && models.length && outModels.length === models.length) return {state: 'out', resetAt: latest(scoped), text: '额度用完了', outModels};
+  const top = windows.filter(item => item.used < 100).map(item => item.used).sort((a, b) => b - a)[0];
+  const parts = [Number.isFinite(top) ? `已用 ${Math.round(top)}%` : '', scoped.length ? `${[...new Set(scoped.map(item => item.scope))].join('、')} 用完了` : ''].filter(Boolean);
+  return {state: windows.length ? 'ok' : 'unknown', resetAt: scoped.length ? latest(scoped) : null, text: parts.join(' · '), outModels};
 }
 
 // 一家引擎此刻能不能用，说成大白话：ready 能用 / off 还没打开 / missing 没装 / signin 没登录 / error 别的毛病。
@@ -131,10 +141,14 @@ export function summarizeProviders(providers = [], {platform = process.platform,
       ...engineState(provider),
       setup: {canInstall: provider.setup?.canInstall === true || info?.managed?.install === true && provider.installed !== true,
         canAuthenticate: provider.setup?.canAuthenticate === true},
-      quota: quota(provider.usageLimits),
-      models: (Array.isArray(provider.models) ? provider.models : []).map(model => ({
-        slug: String(model.slug || ''), name: String(model.name || model.slug || ''), isDefault: model.isDefault === true,
-      })).filter(model => model.slug),
+      ...(() => {
+        const models = (Array.isArray(provider.models) ? provider.models : []).map(model => ({
+          slug: String(model.slug || ''), name: String(model.name || model.slug || ''), isDefault: model.isDefault === true,
+        })).filter(model => model.slug);
+        const limit = quota(provider.usageLimits, models);
+        // 模型菜单里标出这几个模型这会儿额度用完了。
+        return {quota: limit, models: models.map(model => (limit.outModels.includes(model.slug) ? {...model, out: true} : model))};
+      })(),
     };
   }).filter(row => row.id);
   if (all) for (const info of ENGINES) if (!rows.some(row => row.id === info.id)) {
@@ -179,7 +193,8 @@ export function toItem(item) {
     case 'command_execution': if (item.nativeItemRef == null && item.title && /^Preparing workspace$/i.test(String(item.input || ''))) return {...base, kind: 'note', text: /ready/i.test(item.title) ? '工作区准备好了' : String(item.title)};
       return {...base, kind: 'command', command: clip(item.input, 2000), output: tail(item.output, 6000),
       exitCode: Number.isInteger(item.exitCode) ? item.exitCode : null, failed: item.outputIndicatesFailure === true || (Number.isInteger(item.exitCode) && item.exitCode !== 0)};
-    case 'file_change': return {...base, kind: 'edit', file: String(item.fileName || ''), additions: item.additions ?? null, deletions: item.deletions ?? null,
+    // Antigravity 报的是文件网址式路径（/F:/…），去掉前面那条斜杠；它也不给逐行差异和行数（11-23 真机），行数留空，不当成 0。
+    case 'file_change': return {...base, kind: 'edit', file: String(item.fileName || '').replace(/^\/([A-Za-z]:[\\/])/, '$1'), additions: item.additions ?? null, deletions: item.deletions ?? null,
       diff: clip(item.diffStr || '', 40_000), operations: (item.changes || []).map(change => String(change.operation || '')).filter(Boolean)};
     case 'file_search': return {...base, kind: 'search', text: String(item.pattern || item.title || ''), count: (item.results || []).length};
     case 'web_search': return {...base, kind: 'web', text: (item.patterns || []).join(' / ') || String(item.title || ''), count: (item.results || []).length};
@@ -231,9 +246,11 @@ export function summarizeProjection(projection) {
   const changes = new Map();
   for (const item of items) {
     if (item.kind !== 'edit' || !item.file) continue;
-    const row = changes.get(item.file) || {file: item.file, additions: 0, deletions: 0, edits: 0};
+    const row = changes.get(item.file) || {file: item.file, additions: 0, deletions: 0, edits: 0, counted: false};
     row.additions += Number(item.additions) || 0;
     row.deletions += Number(item.deletions) || 0;
+    // counted：引擎报过行数。一次都没报过的文件，界面上写「改了」，不写 +0 −0。
+    if (item.additions != null || item.deletions != null) row.counted = true;
     row.edits += 1;
     changes.set(item.file, row);
   }
@@ -256,6 +273,20 @@ export function summarizeProjection(projection) {
     turnCount,
     error: lastError && runStatus(latest, pending) === 'failed' ? {text: lastError.text, failureClass: lastError.failureClass, resetAt: lastError.resetAt} : null,
   };
+}
+
+// 引擎服务算好的整段差异 → 改了哪些文件、各加减几行（11-23 真机：Claude 用命令改文件时没有「改文件」那一行，文件清单只能从差异里来）。
+export function diffFiles(diff) {
+  const files = new Map();
+  let current = null;
+  for (const line of String(diff || '').split('\n')) {
+    const head = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
+    if (head) { current = files.get(head[2]) || {file: head[2], additions: 0, deletions: 0, edits: 1, counted: true}; files.set(current.file, current); continue; }
+    if (!current || line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) current.additions += 1;
+    else if (line.startsWith('-')) current.deletions += 1;
+  }
+  return [...files.values()];
 }
 
 // 按 Metre 会话记住：用哪个引擎、模型、放手程度，以及对应的 T3 对话。
@@ -382,8 +413,8 @@ export function installView(state) {
 }
 
 export class EngineBridge {
-  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn, homeDir = os.homedir()} = {}) {
-    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl, homeDir});
+  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn, homeDir = os.homedir(), runSync = spawnSync} = {}) {
+    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl, homeDir, runSync});
     this.sessions = new SessionEngines(path.join(service.root, 'sessions.json'));
     this.rpcClient = null;
     this.rpcPort = 0;
@@ -648,6 +679,12 @@ export class EngineBridge {
     if (bound) return bound;
     const scratch = path.join(this.service.root, 'scratch');
     fs.mkdirSync(scratch, {recursive: true});
+    // 草稿文件夹做成 git 仓库：引擎服务靠 git 检查点算整段改动（11-23 真机：不是 git 时 Claude、Antigravity 都只报文件名，没有差异）。
+    // 只管 Metre 自己的草稿文件夹，用户绑的项目文件夹一概不碰。
+    if (!fs.existsSync(path.join(scratch, '.git'))) {
+      const git = (...args) => this.runSync('git', ['-c', 'user.name=Metre', '-c', 'user.email=metre@localhost', ...args], {cwd: scratch, windowsHide: true, timeout: 20_000, stdio: 'ignore'});
+      try { git('init', '-q'); git('commit', '--allow-empty', '-q', '-m', 'Metre 草稿'); } catch (error) { this.logger?.warn?.(`engines scratch git: ${error.message}`); }
+    }
     return scratch;
   }
 
@@ -732,14 +769,17 @@ export class EngineBridge {
     if (summary.turnCount > 0) {
       try {
         const result = await this.call('orchestration.getFullThreadDiff', {threadId, toTurnCount: summary.turnCount});
-        if (typeof result?.diff === 'string' && result.diff.trim()) return {source: 'engine', diff: clip(result.diff, 400_000), changes: summary.changes};
+        if (typeof result?.diff === 'string' && result.diff.trim()) return {source: 'engine', diff: clip(result.diff, 400_000), changes: diffFiles(result.diff)};
       } catch (error) { this.logger?.warn?.(`engines diff: ${error.message}`); }
     }
     return {source: 'items', diff: summary.items.filter(item => item.kind === 'edit' && item.diff).map(item => item.diff).join('\n'), changes: summary.changes};
   }
 }
 
-export function registerEngineBridge(api, {service, register, stateRoot = '', ensureRunning}) {
+// isEnabled：外部引擎总开关（存在 prefs.json，engines.mjs 管）。菜单靠它判断「外部引擎没打开」，所以每个返回引擎清单的方法都要带上
+// （11-23 真界面里发现：原来只带了 service.status()，开关是开的菜单也说没打开）。
+export function registerEngineBridge(api, {service, register, stateRoot = '', ensureRunning, isEnabled = () => service.status().running}) {
+  const status = () => ({...service.status(), enabled: isEnabled() === true});
   const bridge = new EngineBridge({service, stateRoot, logger: api.logger});
   const needKey = sessionKey => { if (!/^agent:metre:/.test(String(sessionKey || ''))) throw new Error('引擎台只在 Metre 的会话里用'); return String(sessionKey); };
   const view = async sessionKey => {
@@ -750,7 +790,7 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
     }
     return {sessionKey, pref, summary, error, service: service.status()};
   };
-  register(api, 'pinkie.engines.catalog', async ({refresh} = {}) => ({...service.status(), ...await bridge.catalog({refresh: refresh === true})}));
+  register(api, 'pinkie.engines.catalog', async ({refresh} = {}) => ({...status(), ...await bridge.catalog({refresh: refresh === true})}));
   register(api, 'pinkie.engines.session', async ({sessionKey}) => view(needKey(sessionKey)));
   register(api, 'pinkie.engines.choose', async ({sessionKey, engine, model, level, plan, newThread}) => {
     const key = needKey(sessionKey);
@@ -790,7 +830,7 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
   register(api, 'pinkie.engines.organize', async params => bridge.organize(params));
   register(api, 'pinkie.engines.diff', async ({threadId}) => bridge.diff({threadId: String(threadId || '')}));
   // 引擎的打开、安装、登录（3.7）。托管的要引擎服务在跑；终端那条只有用户点了（open: true）才开窗口。
-  register(api, 'pinkie.engines.turnOn', async ({engine, on} = {}) => { await ensureRunning(); return {...service.status(), ...await bridge.turnOn({engine, on: on !== false})}; });
+  register(api, 'pinkie.engines.turnOn', async ({engine, on} = {}) => { await ensureRunning(); return {...status(), ...await bridge.turnOn({engine, on: on !== false})}; });
   register(api, 'pinkie.engines.install', async ({engine, open} = {}) => {
     if (engineInfo(driverOf(engine))?.managed?.install) await ensureRunning();
     return bridge.install({engine, open: open === true});
@@ -807,9 +847,9 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
   // 多账号（3.7）：add {driver, name} / rename {engine, name} / remove {engine}。
   register(api, 'pinkie.engines.account', async ({action, driver, engine, name} = {}) => {
     await ensureRunning();
-    if (action === 'add') return {...service.status(), ...await bridge.addAccount({driver, name})};
-    if (action === 'rename') return {...service.status(), ...await bridge.renameAccount({engine, name})};
-    if (action === 'remove') return {...service.status(), ...await bridge.removeAccount({engine})};
+    if (action === 'add') return {...status(), ...await bridge.addAccount({driver, name})};
+    if (action === 'rename') return {...status(), ...await bridge.renameAccount({engine, name})};
+    if (action === 'remove') return {...status(), ...await bridge.removeAccount({engine})};
     throw new Error('不认识的账号动作');
   });
   return bridge;
