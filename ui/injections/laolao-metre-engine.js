@@ -162,7 +162,7 @@
   }
 
   // ---------- 状态 ----------
-  const state = {key: '', view: null, catalog: null, catalogAt: 0, loading: false, sending: false, enabling: false,
+  const state = {key: '', view: null, catalog: null, cast: null, catalogAt: 0, loading: false, sending: false, enabling: false,
     open: new Set(), think: new Map(), diff: {open: false, data: null, at: 0}, lastSig: '', mode: 'queue', nodes: new Map(), timer: 0};
 
   async function loadCatalog(force = false) {
@@ -221,10 +221,12 @@
     node.setAttribute('role', 'menu');
     node.innerHTML = '<div class="pk-eng-menu__head"><span class="pk-eng-menu__title">Engine</span><span class="pk-eng-menu__sub">这段对话交给谁来做</span></div><div class="pk-eng-menu__body"><div class="pk-eng-menu__wait">正在读引擎状态…</div></div>';
     place(anchor, node);
-    const catalog = await loadCatalog(false);
+    const [catalog, castView] = await Promise.all([loadCatalog(false), rpc('pinkie.engines.players', {}, 10000).catch(() => null)]);
+    if (castView) state.cast = castView;
     if (menu !== node) return;
     const body = node.querySelector('.pk-eng-menu__body');
     body.replaceChildren();
+    if (step === 'player') { paintKeepPlayer(node, body, anchor); return; }
     if (step === 'models') {
       const row = engineRow(engineId);
       node.querySelector('.pk-eng-menu__sub').textContent = `${nameOf(engineId)} 用哪个模型`;
@@ -303,7 +305,9 @@
       {label: '能用', options: catalog.enabled ? external.filter(option => setUp(option.row)) : []},
       {label: catalog.enabled ? '还要设置一下' : '打开外部引擎以后能用', options: catalog.enabled ? external.filter(option => !setUp(option.row)) : external},
     ];
+    const cast = catalog.enabled ? state.cast?.players || [] : [];
     for (const group of groups) {
+      if (group.label === '能用' && cast.length) paintCast(body, cast, anchor);
       if (!group.options.length) continue;
       if (group.label) body.append(h('div', 'pk-eng-menu__group', esc(group.label)));
       for (const option of group.options) {
@@ -323,6 +327,11 @@
         body.append(item);
       }
     }
+    if (catalog.enabled && pref().engine && pref().engine !== 'metre' && pref().model) {
+      const keep = h('button', 'pk-eng-menu__item pk-eng-menu__item--row pk-eng-menu__item--add', '<span class="pk-eng-menu__name">＋ 把现在这一套记成乐手</span><span class="pk-eng-menu__note">引擎、模型、放手程度</span>');
+      keep.onclick = () => openEngineMenu(anchor, 'player');
+      body.append(keep);
+    }
     if (catalog.enabled && (catalog.accountEngines || []).length) {
       const more = h('button', 'pk-eng-menu__item pk-eng-menu__item--row pk-eng-menu__item--add', '<span class="pk-eng-menu__name">＋ 再加一个账号</span><span class="pk-eng-menu__note">Claude、Codex、Antigravity、Cursor</span>');
       more.onclick = () => openEngineMenu(anchor, 'account');
@@ -339,6 +348,76 @@
     }
     body.append(levels);
     position(anchor, node);
+  }
+
+  // ---------- 乐手（E5，照 OpenMausBot「机器人当联系人」）：引擎 + 模型 + 放手程度 + 可选的 Metre 角色卡，起个名字存下来 ----------
+  const modelName = (engine, slug) => (engineRow(engine)?.models || []).find(model => model.slug === slug)?.name || slug || '';
+  // 菜单里的「乐手」一组：一个乐手一行，点了就用它那一套；右边 × 点两下删掉。
+  function paintCast(body, cast, anchor) {
+    body.append(h('div', 'pk-eng-menu__group', '乐手'));
+    for (const player of cast) {
+      const row = engineRow(player.engine);
+      const current = pref().engine === player.engine && pref().model === player.model && (pref().level || 'full-access') === player.level;
+      const item = h('div', 'pk-eng-menu__item pk-eng-menu__item--player' + (ready(row) ? '' : ' pk-eng-menu__item--dim'));
+      item.setAttribute('role', 'menuitemradio');
+      item.setAttribute('aria-checked', String(current));
+      item.tabIndex = 0;
+      item.innerHTML = `<span class="pk-eng-menu__name">${esc(player.name)}</span><span class="pk-eng-menu__note">${esc([nameOf(player.engine), modelName(player.engine, player.model), LEVEL_SHORT[player.level], player.role ? '带角色卡' : ''].filter(Boolean).join(' · '))}${row && !setUp(row) ? ' · ' + esc(engineNote(row)) : ''}</span>`;
+      const drop = h('button', 'pk-eng-menu__drop', '×');
+      drop.type = 'button';
+      drop.setAttribute('aria-label', '删掉乐手 ' + player.name);
+      drop.onclick = async event => {
+        event.stopPropagation();
+        if (!drop.dataset.armed) { drop.dataset.armed = '1'; drop.textContent = '删掉？'; return; }
+        try { state.cast = await rpc('pinkie.engines.players', {action: 'remove', id: player.id}, 10000); toast(`删掉了乐手「${player.name}」`); openEngineMenu(anchor); }
+        catch (error) { toast(error.message); }
+      };
+      item.append(drop);
+      const use = () => {
+        if (!row || !setUp(row)) { openEngineMenu(anchor, 'setup', player.engine); return; }
+        closeMenu();
+        choose({engine: player.engine, model: player.model || (row.models.find(model => model.isDefault) || row.models[0])?.slug || '', level: player.level});
+        toast(`交给乐手「${player.name}」`);
+      };
+      item.onclick = use;
+      item.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); use(); } };
+      body.append(item);
+    }
+  }
+  // 「把现在这一套记成乐手」：名字 + 可选角色卡。
+  function paintKeepPlayer(node, body, anchor) {
+    const p = pref();
+    node.querySelector('.pk-eng-menu__sub').textContent = '记成一个乐手';
+    const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
+    back.onclick = () => openEngineMenu(anchor);
+    const box = h('div', 'pk-eng-setup');
+    box.append(h('p', 'pk-eng-setup__text', `${esc(nameOf(p.engine))} · ${esc(modelName(p.engine, p.model) || '默认模型')} · ${esc(LEVEL_SHORT[p.level || 'full-access'])}。存成乐手以后在这里一键选用；Metre 派活时写它的名字，也是这一套。`));
+    const input = h('input', 'pk-eng-input');
+    input.placeholder = '乐手的名字，比如 小提琴手';
+    input.maxLength = 24;
+    box.append(input);
+    const roles = state.cast?.roles || [];
+    let select = null;
+    if (roles.length) {
+      select = h('select', 'pk-eng-input');
+      select.innerHTML = '<option value="">不带角色卡</option>' + roles.map(role => `<option value="${esc(role.id)}">角色：${esc(role.name)}</option>`).join('');
+      box.append(select);
+    }
+    const save = h('button', 'pk-eng-btn pk-eng-btn--primary', '存下来');
+    save.onclick = async () => {
+      save.disabled = true;
+      try {
+        state.cast = await rpc('pinkie.engines.players', {action: 'save', player: {name: input.value, engine: p.engine, model: p.model || '', level: p.level || 'full-access', role: select?.value || ''}}, 10000);
+        toast(`存好了：乐手「${state.cast.saved.name}」`);
+        openEngineMenu(anchor);
+      } catch (error) { toast(error.message); save.disabled = false; }
+    };
+    const acts = h('div', 'pk-eng-card__acts');
+    acts.append(save);
+    box.append(acts);
+    body.append(back, box);
+    position(anchor, node);
+    setTimeout(() => input.focus(), 0);
   }
 
   function openLevelMenu(anchor) {
@@ -367,6 +446,7 @@
       if (patch.level) toast('放手程度：' + (LEVEL_SHORT[patch.level] || patch.level));
     } catch (error) { toast(error.message); }
     paint();
+    if (patch.engine) refreshSide();
   }
 
   async function enableEngines() {
@@ -861,10 +941,18 @@
       banner.append(box);
       return;
     }
+    // Metre 派给引擎的活（pinkie_engine_task）：说明这是谁派来的，一键回到派活的 Metre 会话。
+    if (p.task && p.parentKey) {
+      const from = h('div', 'pk-eng-from', `<span><i>Part</i> Metre 派给 ${esc(nameOf(p.engine))} 的活，做完会自动交回</span>`);
+      const back = h('button', 'pk-eng-btn', '回到 Metre ›');
+      back.onclick = () => window.__laolaoSidebar?.navigateSession?.(p.parentKey);
+      from.append(back);
+      banner.append(from);
+    }
     if (row && !setUp(row) && catalog?.source === 'live' && !summary?.items?.length) { paintSetup(p.engine); return; }
     if (row?.quota?.state === 'out') banner.append(h('div', 'pk-eng-card pk-eng-card--warn', `<div class="pk-eng-card__head">${esc(nameOf(p.engine))} 额度用完了</div><p>${row.quota.resetAt ? esc(when(row.quota.resetAt)) + ' 恢复。' : ''}这期间可以换一个引擎，或者回到 Metre 自己来做。</p>`));
     if (!p.model) banner.append(h('div', 'pk-eng-card pk-eng-card--setup', '<div class="pk-eng-card__head">还没选模型</div><p>点下面的引擎按钮，选一个模型。</p>'));
-    if (!summary?.items?.length && !banner.childElementCount) {
+    if (!summary?.items?.length && !banner.querySelector('.pk-eng-card')) {
       banner.append(h('div', 'pk-eng-empty', `${pixel(REST, 'pk-eng-empty__glyph')}<div><div class="pk-eng-empty__title">${esc(nameOf(p.engine))}<span>${esc(p.model || '')}</span></div><p>说要做什么，它会在${state.view?.pref?.folder ? ' <code>' + esc(state.view.pref.folder) + '</code> 里' : '这个会话绑定的项目文件夹里（没绑就在一个草稿文件夹里）'}动手。放手程度：${esc(LEVEL_SHORT[p.level || 'full-access'])}。</p></div>`));
     }
   }
@@ -990,6 +1078,41 @@
     paintDrawer();
   }
 
+  // ---------- 侧栏：用外部引擎的会话标上引擎名（PLAN 3.3、3.4） ----------
+  // 侧栏的行是 laolao-session-list.js 画的，每次刷新整片重建；这里不碰它的节点，按 data-session-key 写一张样式表，
+  // 重建出来的行自己就带上标。Metre 派给引擎的活写「引擎名 · 模型」，在跑的标左边一道在奏的颜色。
+  const side = {css: null, text: '', timer: 0, loading: false};
+  const cssString = text => '"' + String(text ?? '').replace(/[\r\n\f]+/g, ' ').replace(/["\\]/g, ch => '\\' + ch) + '"';
+  const familyName = name => String(name || '').split(' · ')[0];
+  const modelShort = (name, engine) => String(name || '').replace(new RegExp('^' + familyName(engine).split(' ')[0] + '\\s+', 'i'), '');
+  function sideRules(sessions) {
+    const rules = [];
+    for (const [key, row] of Object.entries(sessions || {})) {
+      const sel = `html[data-laolao-mode="metre"] #laolao-session-manager .session-row-host[data-session-key=${cssString(key)}] .sidebar-recent-session__link`;
+      const label = row.task ? [familyName(row.name), modelShort(row.modelName, row.name)].filter(Boolean).join(' · ') : row.name;
+      rules.push(`${sel}::after{content:${cssString(label)}}`);
+      if (row.task) rules.push(`${sel}::after{max-width:10.5em}`);
+      if (row.task && row.status === 'running') rules.push(`${sel}::after{box-shadow:inset 2px 0 0 var(--metre-accent,#96681C)}`);
+    }
+    return rules.join('\n');
+  }
+  async function refreshSide() {
+    clearTimeout(side.timer);
+    if (!isMetre() || document.hidden || side.loading) { side.timer = setTimeout(refreshSide, 6000); return; }
+    side.loading = true;
+    let running = false;
+    try {
+      const {sessions} = await rpc('pinkie.engines.sessions', {}, 15000);
+      running = Object.values(sessions || {}).some(row => row.task && row.status === 'running');
+      const text = sideRules(sessions);
+      if (text !== side.text) {
+        side.css ||= document.head.appendChild(Object.assign(document.createElement('style'), {id: 'pk-eng-side'}));
+        side.css.textContent = side.text = text;
+      }
+    } catch {} finally { side.loading = false; }
+    side.timer = setTimeout(refreshSide, running ? 4000 : 15000);
+  }
+
   // ---------- 刷新 ----------
   function schedule(ms) { clearTimeout(state.timer); state.timer = setTimeout(refresh, ms); }
   async function refresh() {
@@ -1016,7 +1139,8 @@
   }
 
   window.addEventListener('pinkie:composer-chips', () => paintComposerChip());
-  window.addEventListener('popstate', () => schedule(50));
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(50); });
+  window.addEventListener('popstate', () => { schedule(50); setTimeout(refreshSide, 300); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { schedule(50); refreshSide(); } });
   schedule(800);
+  setTimeout(refreshSide, 1200);
 })();

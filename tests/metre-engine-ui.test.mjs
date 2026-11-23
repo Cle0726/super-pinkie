@@ -228,3 +228,106 @@ test('in a browser: one row per account, and adding an account goes straight to 
     assert.equal(await tab.locator('.pk-eng-menu__item', {hasText: '第三个号'}).count(), 0);
   } finally { await browser.close(); }
 });
+
+// 侧栏：用外部引擎的会话标上引擎名（账号名），Metre 派给引擎的活标「引擎 · 模型」，在跑的有一道强调色。
+// 不碰侧栏的节点（laolao-session-list.js 每次整片重建），只按 data-session-key 写样式表。
+test('in a browser: sidebar rows of engine sessions carry the engine name, jobs carry engine · model', {timeout: 40_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const row = key => `<div class="sidebar-recent-session session-row-host" data-session-key='${key}'><a class="sidebar-recent-session__link"><span>t</span></a><span class="session-row-aside"></span></div>`;
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body><aside class="sidebar"><div id="laolao-session-manager">
+      ${row('agent:metre:top')}${row('agent:metre:pinkie-child:job')}${row('agent:metre:odd"key]x')}${row('agent:metre:plain')}</div></aside></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Aplain');
+    await tab.evaluate(() => {
+      window.__laolaoSidebar = {gwRequest: async method => {
+        if (method === 'pinkie.engines.sessions') return {sessions: {
+          'agent:metre:top': {engine: 'claudeAgent-2', name: 'Claude Code · Metre', model: 'claude-haiku-5-5', modelName: 'Claude Haiku 5.5', task: false},
+          'agent:metre:pinkie-child:job': {engine: 'claudeAgent-2', name: 'Claude Code · Metre', model: 'claude-haiku-5-5', modelName: 'Claude Haiku 5.5', task: true, status: 'running'},
+          'agent:metre:odd"key]x': {engine: 'antigravity', name: 'Anti"gravity', task: false},
+        }};
+        if (method === 'pinkie.engines.session') return {pref: {engine: 'metre'}};
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    await tab.locator('style#pk-eng-side').waitFor({state: 'attached', timeout: 10_000});
+    const before = key => tab.evaluate(k => {
+      const link = [...document.querySelectorAll('.session-row-host')].find(n => n.dataset.sessionKey === k).querySelector('.sidebar-recent-session__link');
+      const style = getComputedStyle(link, '::after');
+      return {content: style.content, shadow: style.boxShadow};
+    }, key);
+    assert.equal((await before('agent:metre:top')).content, '"Claude Code · Metre"');
+    const job = await before('agent:metre:pinkie-child:job');
+    assert.equal(job.content, '"Claude Code · Haiku 5.5"');
+    assert.match(job.shadow, /inset/);
+    assert.equal((await before('agent:metre:odd"key]x')).content, '"Anti\\"gravity"', 'keys and names are escaped, not injected');
+    assert.equal((await before('agent:metre:plain')).content, 'none');
+  } finally { await browser.close(); }
+});
+
+// 乐手（E5）：菜单里一组「乐手」，点了用它那一套；「把现在这一套记成乐手」起个名字（可挂角色卡）存下来。
+test('in a browser: players are one click away, and the current choice can be saved as a player', {timeout: 60_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
+      <div class="chat-main" style="position:relative;width:900px;height:700px"><div class="chat-thread">native</div>
+      <div class="agent-chat__composer-controls"><div class="pinkie-chip pinkie-baton"></div></div></div></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Ap');
+    await tab.evaluate(() => {
+      const row = (id, name, models) => ({id, driver: id.replace(/-\d+$/, ''), name, state: 'ready', text: '', enabled: true, installed: true, signedIn: true,
+        quota: {state: 'ok'}, models, setup: {}, guide: {}});
+      const engines = [row('antigravity', 'Antigravity', [{slug: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', isDefault: true}]),
+        row('claudeAgent-2', 'Claude Code · Metre', [{slug: 'claude-haiku-5-5', name: 'Claude Haiku 5.5', isDefault: true}])];
+      let players = [{id: 'player-1', name: '审稿', engine: 'claudeAgent-2', model: 'claude-haiku-5-5', level: 'auto', role: 'reviewer'}];
+      let pref = {engine: 'antigravity', model: 'gemini-3.8-flash', level: 'full-access'};
+      window.calls = [];
+      window.__laolaoToast = () => {};
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.session') return {sessionKey: params.sessionKey, pref, summary: null, error: '', service: {running: true}};
+        if (method === 'pinkie.engines.catalog') return {enabled: true, running: true, source: 'live', levels: [], engines};
+        if (method === 'pinkie.engines.choose') { pref = {...pref, ...params}; return {sessionKey: params.sessionKey, pref, summary: null}; }
+        if (method === 'pinkie.engines.players') {
+          if (params.action === 'save') { const saved = {id: 'player-2', ...params.player}; players = [...players, saved]; return {players, roles: [{id: 'reviewer', name: '审稿人'}], saved}; }
+          return {players, roles: [{id: 'reviewer', name: '审稿人'}]};
+        }
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    // The session already uses an engine, so the stage has taken over the composer: its own engine chip opens the menu.
+    const chip = name => tab.locator('.pk-eng-stage .pk-eng-chip', {hasText: name});
+    await chip('Antigravity').waitFor({timeout: 10_000});
+    await chip('Antigravity').click();
+    const player = tab.locator('.pk-eng-menu__item--player');
+    await player.first().waitFor();
+    assert.match(await player.first().textContent(), /审稿Claude Code · Metre · Claude Haiku 5\.5 · 自己判断 · 带角色卡/);
+    await player.first().click();
+    await tab.waitForFunction(() => window.calls.some(([m]) => m === 'pinkie.engines.choose'));
+    const chosen = await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.choose')[1]);
+    assert.deepEqual({engine: chosen.engine, model: chosen.model, level: chosen.level}, {engine: 'claudeAgent-2', model: 'claude-haiku-5-5', level: 'auto'});
+    await chip('Claude Code · Metre').click();
+    await tab.getByText('＋ 把现在这一套记成乐手').click();
+    await tab.locator('.pk-eng-menu input.pk-eng-input').fill('小提琴手');
+    await tab.locator('.pk-eng-menu select.pk-eng-input').selectOption('reviewer');
+    await tab.getByRole('button', {name: '存下来'}).click();
+    await tab.waitForFunction(() => window.calls.some(([m, p]) => m === 'pinkie.engines.players' && p.action === 'save'));
+    const save = await tab.evaluate(() => window.calls.find(([m, p]) => m === 'pinkie.engines.players' && p.action === 'save')[1]);
+    assert.deepEqual(save.player, {name: '小提琴手', engine: 'claudeAgent-2', model: 'claude-haiku-5-5', level: 'auto', role: 'reviewer'});
+    await tab.locator('.pk-eng-menu__item--player', {hasText: '小提琴手'}).waitFor();
+  } finally { await browser.close(); }
+});

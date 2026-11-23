@@ -273,3 +273,25 @@ button.pk-eng-setup__link { border: 0; background: none; padding: 0; cursor: poi
 .pk-eng-controls__left, .pk-eng-controls__right { flex-wrap: wrap; }
 .pk-eng-controls .pk-eng-chip, .pk-eng-controls .pk-eng-chip__name, .pk-eng-controls .pk-eng-chip__model { white-space: nowrap; }
 .pk-eng-controls .pk-eng-chip__model { max-width: 14em; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- 侧栏：用外部引擎的会话标上引擎名（文字由 laolao-metre-engine.js 按会话写进 #pk-eng-side） ---------- */
+/* 跟在标题后面、和标题分一行的宽度：地方不够时标签先让（flex-shrink 3），但至少留 4.5em。 */
+html[data-laolao-mode="metre"] #laolao-session-manager .sidebar-recent-session__link::after {
+  flex: 0 3 auto; min-width: 4.5em; max-width: 8.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 5px; border-radius: 5px; background: color-mix(in srgb, currentColor 8%, transparent);
+  font: italic 400 11.5px/16px var(--metre-serif, Georgia, serif); opacity: 0.8;
+}
+.pk-eng-from {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding: 8px 12px; border: 1px dashed var(--metre-line-strong, #D9D6CC); border-radius: 10px;
+  color: var(--metre-muted, #73726C); font-size: 12.5px;
+}
+.pk-eng-from i { font: italic 400 13.5px/1 var(--metre-serif, Georgia, serif); color: var(--metre-accent, #96681C); margin-right: 4px; }
+/* 乐手：一行一个，右边 × 点两下删掉 */
+.pk-eng-menu__item--player { position: relative; padding-right: 64px; cursor: pointer; }
+.pk-eng-menu__drop {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%); padding: 2px 7px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--metre-muted, #73726C); font: 400 12.5px/1.4 var(--metre-sans, system-ui, sans-serif); cursor: pointer;
+}
+.pk-eng-menu__drop:hover { background: var(--metre-hover, #F0EEE6); }
+.pk-eng-menu__drop[data-armed] { color: var(--metre-danger, #B3261E); }

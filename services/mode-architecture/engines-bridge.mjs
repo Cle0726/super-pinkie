@@ -265,6 +265,7 @@ export function summarizeProjection(projection) {
     },
     status: runStatus(active || latest, pending),
     activeRunId: active ? String(active.id) : null,
+    runId: (active || latest)?.id ? String((active || latest).id) : null,
     runStartedAt: (active || latest)?.startedAt || (active || latest)?.requestedAt || null,
     runCompletedAt: active ? null : latest?.completedAt || null,
     items,
@@ -822,6 +823,7 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
       const started = await bridge.start({folder, engine: pref.engine, model: pref.model, text, level: pref.level, plan: pref.plan === true, worktree: worktree === true});
       bridge.sessions.set(key, {threadId: started.threadId, folder});
     }
+    bridge.afterSay?.(key); // Metre 派给引擎的活：用户在引擎台或总谱里递了话，守望重新盯着它（engines-task.mjs）
     return view(key);
   });
   register(api, 'pinkie.engines.thread', async ({threadId}) => bridge.thread(String(threadId || '')));

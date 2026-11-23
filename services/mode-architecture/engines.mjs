@@ -11,6 +11,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {registerEngineBridge} from './engines-bridge.mjs';
+import {EngineTasks, registerEngineTasks} from './engines-task.mjs';
+import {Players, registerPlayers} from './engines-players.mjs';
 
 export const T3_VERSION = '0.1.11';
 export const RELEASE_BASE = 'https://github.com/pingdotgg/t3code/releases/download';
@@ -299,7 +301,8 @@ export class EngineService {
 
 // 网关方法（界面用）：status / enable / threads。插件在同一个网关里会被加载好几份，引擎服务只能有一个。
 const SHARED = Symbol.for('pinkie.engines.v1');
-export function registerEngines(api, {base = '', register} = {}) {
+// lineage：Metre 的血缘（metre-board.mjs 传进来），有了它才提供 pinkie_engine_task（Metre 派活给外部引擎，engines-task.mjs）。
+export function registerEngines(api, {base = '', register, lineage = null} = {}) {
   const shared = globalThis[SHARED] ||= {service: new EngineService({root: engineRoot({base}), logger: api.logger})};
   const service = shared.service;
   const prefsFile = path.join(service.root, 'prefs.json');
@@ -333,11 +336,22 @@ export function registerEngines(api, {base = '', register} = {}) {
     return {url: pairUrl, expiresAt: data.expiresAt || null};
   });
   // 引擎台（Metre 自己画的对话界面）的方法：engines-bridge.mjs。
-  shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, isEnabled: () => prefs().enabled === true, ensureRunning: async () => {
+  const ensureRunning = async () => {
     if (service.status().running) return;
     if (prefs().enabled !== true) throw new Error('外部引擎还没打开：在引擎菜单里打开它（第一次会下载约 170MB）');
     await service.start();
+  };
+  shared.bridge ||= registerEngineBridge(api, {service, register, stateRoot: base, isEnabled: () => prefs().enabled === true, ensureRunning});
+  shared.players ||= new Players(path.join(service.root, 'players.json'));
+  registerPlayers(api, {players: shared.players, register, roles: () => {
+    const registry = lineage?.metreRolesEnabled?.() === false ? null : lineage?.rolesRegistry?.();
+    return (registry?.validIds || []).map(id => ({id, name: registry.byId[id]?.name || id}));
   }});
+  if (lineage) {
+    shared.tasks ||= new EngineTasks({bridge: shared.bridge, lineage, players: shared.players, isEnabled: () => prefs().enabled === true, ensureRunning, logger: api.logger});
+    shared.tasks.lineage = lineage; // 血缘每个状态目录只有一份；以最新注册的为准
+    registerEngineTasks(api, {tasks: shared.tasks, register});
+  }
   if (!shared.booted) {
     shared.booted = true;
     if (prefs().enabled === true) service.start().catch(error => service.log('warn', `autostart failed: ${error.message}`));
