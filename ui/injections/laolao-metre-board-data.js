@@ -23,7 +23,7 @@
     try { const key = new URL(location.href).searchParams.get('session') || ''; return /^agent:metre:/.test(key) ? key : ''; }
     catch { return ''; }
   };
-  const esc = (text) => String(text ?? '').replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[ch]));
+  const esc = (text) => String(text ?? '').replace(/[&<>"]/g, (ch) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[ch])); const connOnline = () => window.__pinkieRunStatus?.state?.conn?.online !== false;   // 连接状态只认一份：run-status 读的原生网关仓库（后台带读的也是这一份）
   const h = (tag, cls, html) => { const node = document.createElement(tag); if (cls) node.className = cls; if (html != null) node.innerHTML = html; return node; };
   const clock = (at) => { if (!at) return '—'; const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
   const clockSec = (at) => { const d = new Date(at); return `${clock(at)}:${String(d.getSeconds()).padStart(2, '0')}`; };
@@ -51,7 +51,7 @@
     preferences: '偏好', pitfalls: '踩过的坑', people: '协作者', open: '没做完的'};
 
   let data = null;          // 上一次成功拿到的整份数据
-  let stale = false, lastAt = 0, pendingTimer = 0, inflight = false, again = false, badgeAt = 0, memoryQuery = '', watchTimer = 0, slowTimer = 0;
+  let stale = false, staleWhy = '', lastAt = 0, pendingTimer = 0, inflight = false, again = false, badgeAt = 0, memoryQuery = '', watchTimer = 0, slowTimer = 0;
   let dataAt = 0;            // 上一次成功读到数据的本机时间
   // 11-23 刷新的过渡：记住上一次每段声部条的位置（%）、「现在」那条线、出现过的声部和小节。新出现的淡入；条和线从上一次的位置长 / 移过去
   //   （skin 里的 .is-new / .is-moving 动画，只动 opacity 和 transform，不改排版——总谱「刷新不乱跳」照旧）。第一次画不动。
@@ -217,9 +217,9 @@
       <div class="pk-mb-spark"><div><small>这件事的用量</small><strong>${tokens((rt.usage?.input || 0) + (rt.usage?.output || 0))}</strong></div>${line ? svg(200, 52, `<path class="grid" d="M0 12h200M0 30h200M0 48h200"/><path class="area" d="${line} L200 52 L0 52 Z"/><path class="spark" d="${line}"/>`, 'pk-mb-svg--fill') : '<p class="pk-mb-empty">还没有用量记录</p>'}</div>`));
     const health = h('ul', 'pk-mb-health');
     const add = (state, name, text) => { const li = h('li', '', `<i></i><span>${esc(name)}</span><em>${esc(text)}</em>`); li.dataset.state = state; health.append(li); };
-    add(stale ? 'fail' : 'done', '网关', stale ? '连接断了，正在重连' : '已连接');
+    add(connOnline() ? 'done' : 'fail', '网关', connOnline() ? '已连接' : '连接断了，正在重连');
     for (const m of rt.models || []) add(m.health === 'fail' ? 'fail' : m.health === 'ok' ? 'done' : 'wait', m.id, m.health === 'fail' ? `出错：${m.lastError || '原因没记下'}` : m.health === 'ok' ? '正常' : '还没调用过');
-    add('wait', '声部上限', `在奏 ${overview.running} / ${overview.limit} · 这一轮已开 ${overview.started} / ${overview.cap}`);
+    add('wait', '声部上限', `在奏 ${overview?.running ?? '—'} / ${overview?.limit ?? '—'} · 这一轮已开 ${overview?.started ?? '—'} / ${overview?.cap ?? '—'}`);
     const roles = rt.metreRoles;
     const counts = roles ? `合格 ${roles.valid} 张 · 不合格 ${roles.invalid} 张` : '暂时读不到';
     add(!roles ? 'wait' : roles.invalid ? 'fail' : 'done', '角色卡', counts);
@@ -311,10 +311,10 @@
   }
 
   // ---------- 总览、按钮、数字 ----------
-  function overview(o, now) {
+  function overview(o = {}, now) {   // 数据缺 overview 时也照常画（以前会抛错，被当成断线）
     const b = board();
     const parentQuiet = o.parentRunning && o.parentLastActiveAt ? now - o.parentLastActiveAt : 0;
-    b.setStat('state', stale ? '连接断了' : parentQuiet > QUIET_MS && o.state === 'Metre 在做' ? `Metre ${span(parentQuiet)}没动静` : o.state);
+    b.setStat('state', stale ? ({timeout: '没回话', error: '没读到'}[staleWhy] || '连接断了') : parentQuiet > QUIET_MS && o.state === 'Metre 在做' ? `Metre ${span(parentQuiet)}没动静` : (o.state || '—'));
     b.setStat('elapsed', o.startedAt ? span(now - o.startedAt) : '—');
     // 断线时 overview 可能只剩一半字段：没有的数写「—」，不写 undefined
     const n = (v) => (v == null || Number.isNaN(v) ? '—' : v);
@@ -367,14 +367,14 @@
   // 两种「拿不到现在的情况」：连接断了（lost），或者连着但后端 RPC_MS 都没回话（timeout，卡住或太忙）。
   // 两种都按断线处理：数据变灰、「在跑」改成「断线前在跑」，不显示成还在跑，也不显示成做完。
   function setStale(on, reason = 'lost') {
-    stale = on;
+    stale = on; staleWhy = on ? reason : '';
     const page = document.getElementById('pk-metre-board');
     if (!page) return;
     page.classList.toggle('is-stale', on);
     if (!on) { notice(''); return; }
     notice(reason === 'timeout'
       ? `<b>没回话</b>后端 ${Math.round(RPC_MS / 1000)} 秒没有回话（卡住或太忙），正在重试。下面是之前读到的数据，不代表还在跑，也不代表已经做完。`
-      : '<b>断线</b>连接断了，正在重连。下面是断线前的数据，不代表已经做完。');
+      : reason === 'error' ? '<b>没读到</b>连接是好的，这次没读到总谱的数据，正在重试。下面是之前读到的数据。' : '<b>断线</b>连接断了，正在重连。下面是断线前的数据，不代表已经做完。');
   }
   // 还没到 RPC_MS、但已经等了 SLOW_MS：说一声「回得慢」，并写明下面的数据是多久以前的。
   function slowNote(started) {
@@ -457,7 +457,7 @@
       watch(view);
       void fillMemory(key);
     } catch (error) {
-      setStale(true, /timeout/i.test(String(error?.message || error)) ? 'timeout' : 'lost');
+      setStale(true, /timeout/i.test(String(error?.message || error)) ? 'timeout' : connOnline() ? 'error' : 'lost');
       if (data) render(data);
       // 断着的时候每 WATCH_MS 再试一次；连上时 pinkie:sidebar-gateway-ready 会立刻补读。
       clearTimeout(watchTimer);
@@ -491,10 +491,10 @@
     const ended = payload.stream === 'lifecycle' && /^(?:end|error)$/.test(String(d.phase || ''));
     if (asked || ended || name === 'sessions.changed') void refreshBadge();
   });
-  window.addEventListener('pinkie:sidebar-gateway-ready', () => { if (stale) refreshSoon(0); });
+  window.addEventListener('pinkie:sidebar-gateway-ready', () => { if (stale) refreshSoon(0); }); window.addEventListener('pinkie:run-view', () => { if (!isMetre()) return; const on = connOnline(); if (stale && staleWhy === 'lost' && on) refreshSoon(0); else if (!stale && !on && board()?.isOpen) { setStale(true, 'lost'); if (data) render(data); } });   // 连接一恢复（同一份状态），断线条和「此刻」跟着重读
   window.addEventListener('pinkie:sidebar-gateway-lost', () => {
     if (!isMetre()) return;
-    setStale(true);
+    if (connOnline()) { clearTimeout(watchTimer); watchTimer = setTimeout(() => { watchTimer = 0; refreshSoon(0); }, 3000); return; } setStale(true, 'lost');   // 网关仓库还说连着：先不说断线，3 秒后读一次
     if (data && board()?.isOpen) render(data);
     // App 可能还有别的连接、或马上重连：3 秒后读一次，读到了就清掉断线；读不到就按看门狗每 20 秒再试。
     clearTimeout(watchTimer);

@@ -1,9 +1,7 @@
 /* laolao-metre-stagefx —— Metre 的整页时刻（11-24，「总谱」语言；只在 Metre 出现，其他模式不加载任何东西）。
  * 四个时刻，都由已有脚本在那一刻直接调用（不加观察器、不加定时器循环；动画期间才有 rAF，完了就停）：
- *   turn(rect)    换会话 = 翻谱（laolao-metre-home.js 的 onSwitch）。≤ 600ms：
- *                 0–100   旧会话这一页铺上 Metre 的谱纸（日间纸色 / 夜间夜色，顶上一束暖的舞台光），右边画出终止线收尾；
- *                 100–400 这一页以左边为书脊翻走（越翻越窄、越暗，翻页的边上有一道高光、新页上落一道影子），露出新会话；
- *                 400–580 钴蓝指挥棒在新页左边从上往下画出第一条小节线，然后谱线淡掉。五线谱的横线前后两页一直连着。
+ *   turn(rect)    换会话 = 翻谱（laolao-metre-home.js 的 onSwitch）。≤ 600ms：旧会话这一页铺上 Metre 的谱纸，
+ *                 以左边的书脊为轴真的翻过去（透视、背光变暗、翻起的边一道高光、新页上一道投影），钴蓝指挥棒在新页画出第一条小节线。
  *   lights()      首页开演前亮灯（home.js 的 enter，首页时）：像素舞台不改；天幕从中间往两边亮 → 地板上的灯按三十二分音符
  *                 一盏盏亮（每盏一圈三档的光）→ 指挥台最后亮（位置读 laolao-metre-backdrop.js buildScene 的锚点），之后整台全开。
  *   melody(line)  引导语：每个词先停在高低不同的位置（像音高，6px 一级），再按拍子依次落回、轻弹一下；动的是叠在上面的拷贝，原文排版不变。
@@ -22,18 +20,21 @@
   const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
   const rnd = (i, s = 1) => { const x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); };
   const Q = 60000 / 72, E8 = Q / 2, S32 = Q / 8;   // ♩=72：一拍 833ms、八分 417ms、三十二分 104ms
-  const palette = () => (dark()
-    ? {paper: '#1E1D1A', back: '#2A2824', line: '#6A675F', on: '#ECEAE4', accent: '#93A5EE', light: 'rgba(233,199,122,.16)', shade: 'rgba(0,0,0,.5)', edge: 'rgba(236,234,228,.22)'}
-    : {paper: '#EFEBE2', back: '#DCD5C6', line: '#8E8A81', on: '#1B1A18', accent: '#2F4BB0', light: 'rgba(214,170,80,.24)', shade: 'rgba(40,34,24,.2)', edge: 'rgba(255,255,255,.95)'});
-
-  // ================= 换会话：翻谱 =================
+  // ================= 换会话：翻谱（11-24 第二版：纸页真的以书脊为轴翻过去） =================
+  // ≤ 600ms：0–90 旧会话这一页铺上谱纸（舞台光、谱线、右边终止线）；90–430 这一页以左边的书脊为轴翻起来——越翻越窄，
+  // 离书脊越远的那一边越高（透视，朝人翻过来），背光的一面越来越暗，翻起的边上一道高光，书脊处一道折痕的暗，
+  // 新页上落一道随角度变宽的投影；380–520 钴蓝指挥棒在新页左边从上往下画出第一条小节线（3px，粗、清楚）；500–580 一起淡掉。
+  // 五线谱的横线前后页是同一组 y。夜间的纸是夜间舞台的冷灰蓝，不是泥棕色。
+  const turnPalette = () => (dark()
+    ? {paper: '#1F2230', back: '#141620', line: '#5A6280', ink: '#C9D2F5', accent: '#93A5EE', spot: 'rgba(147,165,238,.20)', warm: 'rgba(233,199,122,.07)', shade: '0,0,0', edge: 'rgba(214,222,255,.55)', fold: 'rgba(0,0,0,.55)'}
+    : {paper: '#F5F2EB', back: '#DCD5C6', line: '#9E998E', ink: '#26408F', accent: '#2F4BB0', spot: 'rgba(255,244,214,.75)', warm: 'rgba(214,170,80,.10)', shade: '60,48,26', edge: 'rgba(255,255,255,.95)', fold: 'rgba(60,48,26,.30)'});
   let turning = false;
   async function turn(r) {
     if (!metre() || reduced() || turning || !r || r.width < 80 || r.height < 80 || document.querySelector('.pk-metre-transition')) return;
     turning = true;
     const cv = document.createElement('canvas');
     try {
-      const C = palette(), w = Math.round(r.width), h = Math.round(r.height), dpr = Math.min(2, window.devicePixelRatio || 1);
+      const C = turnPalette(), w = Math.round(r.width), h = Math.round(r.height), dpr = Math.min(2, window.devicePixelRatio || 1);
       cv.className = 'pk-metre-turn'; cv.setAttribute('aria-hidden', 'true');
       Object.assign(cv.style, {position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: w + 'px', height: h + 'px', zIndex: '45', pointerEvents: 'none'});
       cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
@@ -42,39 +43,47 @@
       document.body.append(cv);
       // 整页谱面：每 112px 一行五线谱（8px 线距），第一行在 40px；横线在旧页、翻页、新页上是同一组 y
       const GAP = 8, rows = []; for (let y = 40; y + 4 * GAP < h - 16; y += 112) rows.push(y);
-      const staves = (x0, x1, color, a = 1) => { g.globalAlpha = a; g.fillStyle = color; for (const y of rows) for (let k = 0; k < 5; k++) g.fillRect(x0, y + k * GAP, x1 - x0, 1); g.globalAlpha = 1; };
-      const light = (x0, x1) => { const lg = g.createRadialGradient(w / 2, -h * 0.15, 0, w / 2, -h * 0.15, h * 1.1); lg.addColorStop(0, C.light); lg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = lg; g.fillRect(x0, 0, x1 - x0, h); };
-      const END = w - 28, FIRST = 24, t0 = performance.now();
+      const END = w - 28, FIRST = 44;
+      // 旧页（正面）先画好在一张离屏画布上：纸色 + 舞台光 + 谱线 + 三条小节线 + 右边的终止线
+      const sheet = document.createElement('canvas'); sheet.width = cv.width; sheet.height = cv.height;
+      { const s = sheet.getContext('2d'); s.setTransform(dpr, 0, 0, dpr, 0, 0);
+        s.fillStyle = C.paper; s.fillRect(0, 0, w, h);
+        const spot = s.createRadialGradient(w * 0.55, -h * 0.1, 0, w * 0.55, -h * 0.1, h * 1.15); spot.addColorStop(0, C.spot); spot.addColorStop(1, 'rgba(0,0,0,0)'); s.fillStyle = spot; s.fillRect(0, 0, w, h);
+        s.fillStyle = C.warm; s.fillRect(0, 0, w, h);
+        s.fillStyle = C.line; for (const y of rows) { for (let k = 0; k < 5; k++) s.fillRect(0, y + k * GAP, w, 1); for (const f of [0.25, 0.5, 0.75]) s.fillRect(Math.round(w * f), y, 1, 4 * GAP + 1); }
+        s.fillStyle = C.ink; for (const y of rows) { s.fillRect(END - 6, y, 1, 4 * GAP + 1); s.fillRect(END - 2, y, 3, 4 * GAP + 1); } }
+      const staves = (x0, x1, a) => { g.globalAlpha = a; g.fillStyle = C.line; for (const y of rows) for (let k = 0; k < 5; k++) g.fillRect(x0, y + k * GAP, Math.max(0, x1 - x0), 1); g.globalAlpha = 1; };
+      const STRIPS = 40, t0 = performance.now();
       let t;
       while ((t = performance.now() - t0) < 580) {
         g.clearRect(0, 0, w, h);
-        // 翻页的边：100ms 以后从右往左走到书脊（左边），整页翻走
-        const u = clamp((t - 100) / 300), e = w * (1 - easeInOut(u));
-        if (u < 1) {
-          // 正面：纸色 + 舞台光 + 谱线 + 终止线；横向按翻过的角度压窄（谱线的 y 不变，所以和新页连着）
-          const fade = clamp(t / 100);
-          g.globalAlpha = fade; g.fillStyle = C.paper; g.fillRect(0, 0, e, h); g.globalAlpha = 1;
-          if (fade >= 1) {
-            light(0, e); staves(0, e, C.line);
-            const grow = clamp(t / 90), bx = END * (e / w);
-            g.fillStyle = C.line; for (const y of rows) { const hh = (4 * GAP + 1) * grow; g.fillRect(bx - 6, y, 1, hh); g.fillRect(bx - 2, y, 3, hh); for (const f of [0.25, 0.5, 0.75]) g.fillRect(Math.round(e * f), y, 1, 4 * GAP + 1); }   // 终止线 + 三条小节线
-            // 越翻越暗，像翻起来的纸背对舞台光；边上一道高光，新页上落一道影子
-            if (u > 0) {
-              g.globalAlpha = 0.55 * Math.sin(u * Math.PI / 2); g.fillStyle = C.back; g.fillRect(0, 0, e, h); g.globalAlpha = 1;
-              g.fillStyle = C.edge; g.fillRect(Math.max(0, e - 2), 0, 2, h);
-              const sw = 28 * Math.sin(u * Math.PI), sg = g.createLinearGradient(e, 0, e + sw, 0);
-              sg.addColorStop(0, C.shade); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(e, 0, sw, h);
-            }
+        const out = 1 - clamp((t - 500) / 80);
+        const u = clamp((t - 90) / 340), th = u * u * (3 - 2 * u) * Math.PI / 2, c = Math.cos(th), s = Math.sin(th), edgeX = w * c;
+        // 新页（就是下面已经换好的新会话）：谱线接着旧页的横线，淡一点
+        if (t >= 90) staves(Math.max(0, edgeX), w, 0.65 * out);
+        if (t < 90) { g.globalAlpha = clamp(t / 90); g.drawImage(sheet, 0, 0, w, h); g.globalAlpha = 1; }
+        else if (u < 1) {
+          // 投影：落在新页上，从翻起的边往右，角度越大越宽、越淡
+          const sw = 18 + 90 * s, sh = g.createLinearGradient(edgeX, 0, edgeX + sw, 0);
+          sh.addColorStop(0, `rgba(${C.shade},${0.42 * Math.sin(th * 2) + 0.12 * s})`); sh.addColorStop(1, `rgba(${C.shade},0)`); g.fillStyle = sh; g.fillRect(edgeX, 0, sw, h);
+          // 纸页：切成竖条，每条按它离书脊的远近压窄、拉高（透视），越远越暗
+          for (let i = 0; i < STRIPS; i++) {
+            const a0 = i / STRIPS, a1 = (i + 1) / STRIPS, x0 = w * a0 * c, x1 = w * a1 * c, grow = 1 + 0.24 * a1 * s, hh = h * grow, y0 = (h - hh) / 2;
+            if (x1 - x0 < 0.3) continue;
+            g.drawImage(sheet, a0 * cv.width, 0, (a1 - a0) * cv.width, cv.height, x0, y0, x1 - x0 + 0.6, hh);
+            g.fillStyle = `rgba(${C.shade},${(0.12 + 0.5 * a1) * s * (C.paper === '#1F2230' ? 1.2 : 1)})`; g.fillRect(x0, y0, x1 - x0 + 0.6, hh);
           }
+          // 翻起的那一边：一道高光（纸边受光）；书脊：一道折痕的暗
+          const ex = Math.max(0, edgeX - 3), eh = h * (1 + 0.24 * s);
+          g.fillStyle = C.edge; g.fillRect(ex, (h - eh) / 2, 3, eh);
+          const fold = g.createLinearGradient(0, 0, 22, 0); fold.addColorStop(0, C.fold); fold.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = fold; g.fillRect(0, 0, 22, h);
         }
-        // 新页上的谱线（透明底，叠在新会话上，淡）：和旧页的横线接着；400ms 起指挥棒画第一条小节线，480ms 起谱线淡掉
-        const out = 1 - clamp((t - 480) / 100);
-        if (t >= 100) staves(Math.max(0, e), w, C.line, 0.45 * out);
-        if (t >= 400) {
-          const p = easeOut(clamp((t - 400) / 110)), top = rows[0], bottom = rows[rows.length - 1] + 4 * GAP + 1, y = top + (bottom - top) * p;
-          g.globalAlpha = out; g.fillStyle = p < 1 ? C.accent : C.line;
-          for (const ry of rows) { const y1 = Math.min(y, ry + 4 * GAP + 1); if (y1 > ry) g.fillRect(FIRST, ry, 2, y1 - ry); }
-          if (p < 1) { g.fillStyle = C.accent; g.fillRect(FIRST - 2, y - 3, 6, 6); }
+        // 新页第一条小节线（总谱的系统线：从第一行谱一直连到最后一行）：钴蓝指挥棒从上往下画出来，4px 宽；画完变成墨色、留到最后
+        if (t >= 380) {
+          const p = easeOut(clamp((t - 380) / 140)), top = rows[0], bottom = rows[rows.length - 1] + 4 * GAP + 1, y = top + (bottom - top) * p;
+          g.globalAlpha = out; g.fillStyle = p < 1 ? C.accent : C.ink;
+          g.fillRect(FIRST - 2, top, 4, y - top); g.fillRect(FIRST + 4, top, 1, y - top);
+          if (p < 1) { g.fillStyle = C.accent; g.fillRect(FIRST - 5, y - 5, 10, 10); for (let k = 1; k <= 8; k++) g.fillRect(FIRST + 3 + k * 3, y - 6 - k * 6, 5, 5); }   // 棒尖 + 斜着的一截棒身
           g.globalAlpha = 1;
         }
         await frame();

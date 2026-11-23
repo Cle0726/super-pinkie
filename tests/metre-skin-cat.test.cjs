@@ -786,5 +786,23 @@ test('Metre 11-24 keys and backstage: one key language with every state in day a
   assert.match(code, /UNSYNC_MS = 3000/, '两边不一致超过 3 秒才算不同步');
   assert.match(code, /rpc\('pinkie\.engines\.status'/); assert.match(code, /__pinkieMetreBoardData\?\.data/); assert.match(code, /__pinkieRunStatus\?\.refresh/);
   assert.match(code, /reloadHistory|chat\.history/, '同步 = 重拉 chat.history');
-  assert.match(code, /if \(!isMetre\(\)\) \{ if \(band\) band\.hidden = true; return; \}/, '只在 Metre 出现');
+  assert.match(code, /if \(!isMetre\(\)\) \{ if \(band\) band\.hidden = true; closePop\(\); return; \}/, '只在 Metre 出现');
+  // 11-24 验收第 1、2 条：带子在输入框正下方那一条（对话滚不到那里），宽度 = 输入框宽度，每一格按最长的字定宽，首页和窄窗口的总谱浮层时不出现
+  assert.match(code, /const top = room >= 26 \? Math\.round\(r\.bottom \+ \(room - 24\) \/ 2\)/, '输入框正下方');
+  assert.match(code, /width: Math\.round\(r\.width\) \+ 'px'/, '宽度跟输入框走，不跟状态走');
+  assert.match(code, /n\.style\.width = widths\[tier\]\[n\.dataset\.seg\] \+ 'px'/, '每一格定宽');
+  assert.match(code, /if \(!r \|\| r\.width < 280 \|\| onHome\(\) \|\| root\.getAttribute\('data-metre-board'\) === 'overlay'\)/, '首页、总谱浮层时不出现');
+  assert.match(code, /short: .引擎 \$\{voices\.length\}., pop: true/, '声部多了收成总数，点开看明细');
+  assert.match(keys, /\.shell:not\(\.shell--nav-drawer-open\) > \.shell-nav-backdrop \{ display: none; \}/, '收着的导航遮罩不占位置');
+  assert.match(keys, /\[data-metre-board="overlay"\] :is\(\.agent-chat__input, \.pk-run, \.pk-metre-cat--full\) \{ visibility: hidden; \}/, '浮层总谱打开时输入框让位');
+  assert.match(read(INJ + 'laolao-metre-board.js'), /page\.style\.bottom = 'var\(--metre-bs-room, 0px\)';/);
+  // 第 5 条：日夜每一格字对底 ≥ 4.5:1、色块对底 ≥ 3:1
+  const lum = (hex) => { const v = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((m, n) => n - m); return (hi + 0.05) / (lo + 0.05); };
+  for (const block of [/html\[data-laolao-mode="metre"\] \{\n  --bs-chip[^}]*\}/, /:is\(\[data-theme="dark"\], \[data-pinkie-night\]\) \{\n  --bs-chip[^}]*\}/]) {
+    const css = keys.match(block)[0], v = (name) => css.match(new RegExp('--bs-' + name + ': (#[0-9A-F]{6})'))[1];
+    for (const t of ['ink', 'muted', 'run-t', 'wait-t', 'fail-t']) assert.ok(ratio(v(t), v('chip')) >= 4.5, t + ' 字对底 ≥ 4.5:1');
+    for (const q of ['run', 'wait', 'fail', 'ok', 'off']) assert.ok(ratio(v(q), v('chip')) >= 3, q + ' 色块对底 ≥ 3:1');
+  }
+  assert.match(keys, /\.pk-metre-backstage:not\(\[hidden\]\) \{[^}]*gap: 6px;/, '格与格之间有间距');
 });

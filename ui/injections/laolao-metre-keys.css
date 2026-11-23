@@ -72,45 +72,103 @@ html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn.chat-send
   50% { opacity: 0.25; }
 }
 
-/* ---------- 5. 后台状态带 ---------- */
+/* ---------- 5. 后台状态带（11-24 第二版）：输入框正下方那一条，一格一个小方块（像一个音符框），格与格之间留 6px ----------
+ * 字对底的对比度：日间、夜间每一格都 ≥ 4.5:1；状态色块对底 ≥ 3:1（tests/metre-skin-cat 里按这几个色值算过）。 */
+html[data-laolao-mode="metre"] {
+  --bs-chip: #EEEBE4; --bs-rule: #D3CEC3; --bs-ink: #1F1E1D; --bs-muted: #5A564E;
+  --bs-run: #2F4BB0; --bs-run-t: #2F4BB0; --bs-wait: #9A6B1F; --bs-wait-t: #875A14; --bs-fail: #B0463A; --bs-fail-t: #A13A2E; --bs-ok: #6F8466; --bs-off: #827E75;
+}
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) {
+  --bs-chip: #26252A; --bs-rule: #45434B; --bs-ink: #ECEAE4; --bs-muted: #B9B4A9;
+  --bs-run: #93A5EE; --bs-run-t: #A9B9F5; --bs-wait: #D9A85C; --bs-wait-t: #E8B868; --bs-fail: #E07F6C; --bs-fail-t: #F2A090; --bs-ok: #8FA585; --bs-off: #8A867D;
+}
 .pk-metre-backstage { display: none; }
 html[data-laolao-mode="metre"] .pk-metre-backstage:not([hidden]) {
   position: fixed;
-  z-index: 35;
-  translate: -50% 0;
+  z-index: 36;
   display: flex;
   align-items: center;
-  max-width: min(92vw, 980px);
-  height: 26px;
-  padding: 0 4px 0 10px;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px;
   box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid var(--mk-rule);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--mk-paper) 94%, transparent);
-  color: var(--metre-muted, #73726C);
+  white-space: nowrap;
+  color: var(--bs-ink);
   font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  pointer-events: auto;
+}
+html[data-laolao-mode="metre"] .pk-metre-backstage.pk-metre-backstage--probe { left: -10000px; top: 0; width: auto; visibility: hidden; pointer-events: none; }
+html[data-laolao-mode="metre"] .pk-bs__label { flex: none; padding: 0 2px; color: var(--bs-ink); font-weight: 600; letter-spacing: 0.12em; }
+html[data-laolao-mode="metre"] .pk-bs__seg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--bs-rule);
+  border-radius: 4px;
+  background: var(--bs-chip);
+  color: var(--bs-ink);
+  font: inherit;
   white-space: nowrap;
 }
-html[data-laolao-mode="metre"] .pk-bs__label { margin-right: 8px; color: var(--mk-ink); letter-spacing: 0.12em; }
-html[data-laolao-mode="metre"] .pk-bs__seg { display: inline-flex; align-items: center; gap: 6px; height: 14px; padding: 0 9px; border-left: 1px solid var(--mk-rule); }
-html[data-laolao-mode="metre"] .pk-bs__seg--voice { border-left-style: dotted; }
-html[data-laolao-mode="metre"] .pk-bs__seg::before { content: ""; flex: none; width: 6px; height: 6px; background: var(--mk-tone, var(--mk-off)); }
-html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="ok"] { --mk-tone: var(--mk-done); }
-html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] { --mk-tone: var(--mk-run); color: var(--mk-ink); }
-html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"]::before { animation: pk-mk-beat 833ms steps(1, end) infinite; }
-html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="wait"] { --mk-tone: var(--mk-wait); color: var(--mk-ink); }
-html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="fail"] { --mk-tone: var(--mk-fail); color: var(--mk-fail); }
-html[data-laolao-mode="metre"] .pk-metre-backstage[data-unsynced="1"] { border-color: color-mix(in srgb, var(--mk-fail) 60%, transparent); }
-html[data-laolao-mode="metre"] .pk-bs__sync { height: 20px; margin-left: 4px; padding: 0 9px; font: inherit; color: var(--mk-fail); border-color: color-mix(in srgb, var(--mk-fail) 55%, transparent); }
-html[data-laolao-mode="metre"] .pk-metre-backstage[data-narrow="1"] .pk-bs__seg--voice,
-html[data-laolao-mode="metre"] .pk-metre-backstage[data-narrow="1"] .pk-bs__label { display: none; }
+html[data-laolao-mode="metre"] .pk-bs__seg > i { flex: none; width: 7px; height: 7px; background: var(--bs-sq, var(--bs-off)); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="ok"] { --bs-sq: var(--bs-ok); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] { --bs-sq: var(--bs-run); color: var(--bs-run-t); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="wait"] { --bs-sq: var(--bs-wait); color: var(--bs-wait-t); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="fail"] { --bs-sq: var(--bs-fail); color: var(--bs-fail-t); border-color: var(--bs-fail); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] > i { animation: pk-mk-beat 833ms steps(1, end) infinite; }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop { cursor: pointer; }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop:hover { border-color: var(--bs-ink); }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop:focus-visible { outline: 2px solid var(--mk-run); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-bs__caret { width: 0; height: 0; margin-left: auto; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid currentColor; }
+html[data-laolao-mode="metre"] .pk-metre-backstage .pk-bs__sync {
+  flex: none;
+  height: 16px;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--bs-fail);
+  border-radius: 3px;
+  background: var(--bs-chip);
+  color: var(--bs-fail-t);
+  font: inherit;
+  line-height: 14px;
+}
+html[data-laolao-mode="metre"] .pk-metre-backstage .pk-bs__sync:hover:not(:disabled) { background: var(--bs-fail); color: var(--bs-chip); }
+html[data-laolao-mode="metre"] .pk-bs__pop {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 4px;
+  min-width: 200px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--bs-rule);
+  border-radius: 6px;
+  background: var(--bs-chip);
+  color: var(--bs-ink);
+  font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+html[data-laolao-mode="metre"] .pk-bs__pop .pk-bs__seg { width: 100%; border-color: transparent; }
+html[data-laolao-mode="metre"] .pk-bs__pop-head { margin: 0 0 2px; color: var(--bs-muted); }
 
 /* ---------- 6. 减少动态效果：不闪、不沉、不过渡 ---------- */
 @media (prefers-reduced-motion: reduce) {
   html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .agent-chat__input button.chat-send-btn, .sidebar-new-session) { transition: none; translate: none; }
-  html[data-laolao-mode="metre"] :is(.pk-eng-stop, .pk-bs__sync, .pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send, .chat-send-btn)::after, html[data-laolao-mode="metre"] .pk-bs__seg::before { animation: none; }
+  html[data-laolao-mode="metre"] :is(.pk-eng-stop, .pk-bs__sync, .pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send, .chat-send-btn)::after, html[data-laolao-mode="metre"] .pk-bs__seg > i { animation: none; }
 }
 html[data-laolao-mode="metre"][data-pinkie-reduce-motion] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .agent-chat__input button.chat-send-btn, .sidebar-new-session) { transition: none; translate: none; }
 html[data-laolao-mode="metre"][data-pinkie-reduce-motion] :is(.pk-eng-stop, .pk-bs__sync, .pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send, .chat-send-btn)::after,
-html[data-laolao-mode="metre"][data-pinkie-reduce-motion] .pk-bs__seg::before { animation: none; }
+html[data-laolao-mode="metre"][data-pinkie-reduce-motion] .pk-bs__seg > i { animation: none; }
+
+/* ---------- 7. 让位（11-24 第二版） ----------
+ * 窄窗口的导航抽屉收着时，它那块透明、点不到的全屏遮罩不占位置（打开抽屉时照旧出现）。
+ * 窄窗口里总谱是从上面落下来的浮层：打开时输入框（连运行条、猫）让位，浮层一直铺到后台带上面（--metre-bs-room，laolao-metre-board.js 用它），
+ * 里面每一张卡都能滚到、点到；关掉浮层输入框回来。 */
+html[data-laolao-mode="metre"] .shell:not(.shell--nav-drawer-open) > .shell-nav-backdrop { display: none; }
+html[data-laolao-mode="metre"][data-metre-board="overlay"] :is(.agent-chat__input, .pk-run, .pk-metre-cat--full) { visibility: hidden; }

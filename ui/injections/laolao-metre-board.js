@@ -251,10 +251,10 @@
       page.classList.add('is-overlay');
       page.style.left = left + 'px';
       page.style.width = '';
-      // 浮层停在输入框上面，不挡输入（A5-8）。
-      const input = document.querySelector('.agent-chat__input');
-      const box = input && input.getClientRects().length ? input.getBoundingClientRect() : null;
-      page.style.bottom = box && box.top > window.innerHeight * 0.4 ? Math.round(window.innerHeight - box.top + 8) + 'px' : '';
+      // 11-24 验收：浮层打开时输入框让位（laolao-metre-keys.css 把输入框、运行条、猫藏起来），
+      // 浮层一直铺到最底下的后台带上面（--metre-bs-room 由 laolao-metre-backstage.js 写），每张卡都滚得到、点得到。
+      // 以前停在输入框上沿以上，窄窗口里下面几张卡只露一半。
+      page.style.bottom = 'var(--metre-bs-room, 0px)';
       setMode('overlay');
       root.style.removeProperty('--metre-board-w');
       return;
@@ -279,7 +279,7 @@
       if (!page) build();
       if (page.hidden) lastFocus = document.activeElement;
       clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = false;
-      place();
+      place(); window.dispatchEvent(new Event('pinkie:metre-board-open'));
       const target = section && card(section);
       const scroll = page.querySelector('.pk-metre-board__scroll');
       if (target) { scroll.scrollTop = Math.max(0, target.offsetTop - scroll.offsetTop - 12); target.classList.add('is-target'); setTimeout(() => target.classList.remove('is-target'), 1600); }
@@ -292,7 +292,7 @@
     close() {
       if (!page || page.hidden || page.classList.contains('is-leaving')) return;
       const hadFocus = page.contains(document.activeElement);
-      const done = () => { clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = true; root.removeAttribute('data-metre-board'); root.style.removeProperty('--metre-board-w'); };
+      const done = () => { clearTimeout(leaveTimer); page.classList.remove('is-leaving'); page.hidden = true; root.removeAttribute('data-metre-board'); root.style.removeProperty('--metre-board-w'); window.dispatchEvent(new Event('pinkie:metre-board-closed')); };
       if (reduced()) done(); else { page.classList.add('is-leaving'); leaveTimer = setTimeout(done, 300); }
       if (hadFocus) lastFocus?.focus?.({preventScroll: true});
     },
