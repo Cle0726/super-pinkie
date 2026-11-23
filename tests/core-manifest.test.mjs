@@ -221,3 +221,19 @@ test('K2-7: the C.le. CI job fails closed and really compares the two cores', ()
   assert.match(job, /CLE_CORE_TOKEN is not configured[\s\S]{0,120}exit 1/);
   assert.equal(job.match(/verify-equivalence\.mjs/g).length, 2, 'compare before and after patches');
 });
+
+test("Windows build keeps the build machine's real user folders out of core install, skin and patches", () => {
+  const buildWin = read('build-win.ps1');
+  const isolate = buildWin.indexOf('$isolatedHome = Join-Path $RepoRoot "build\\home"');
+  const install = buildWin.indexOf('& $node $coreHelper install');
+  const theme = buildWin.indexOf('& ".\\installer\\windows\\apply-theme.ps1"');
+  const patch = buildWin.indexOf('from app.super_pinkie import apply_patch');
+  const cleared = buildWin.indexOf('Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES');
+  const restore = buildWin.indexOf('Restore-BuildUserEnv\n', cleared);
+  assert.ok(isolate > 0, 'isolated home is defined');
+  assert.ok(isolate < install && install < theme && theme < patch && patch < restore, 'install, skin and patches run inside the isolated span');
+  for (const name of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'OPENCLAW_HOME', 'OPENCLAW_STATE_DIR']) {
+    assert.match(buildWin, new RegExp(`\\n    ${name} = Join-Path \\$isolatedHome `));
+  }
+  assert.match(buildWin, /\ntrap \{ if \(\$savedUserEnv\) \{ foreach \(\$name in @\(\$savedUserEnv\.Keys\)\) \{ \[Environment\]::SetEnvironmentVariable\(/, 'a failed build still restores the caller environment');
+});
