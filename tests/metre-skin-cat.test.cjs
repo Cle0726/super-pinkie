@@ -786,9 +786,10 @@ test('Metre 11-24 keys and backstage: one key language with every state in day a
   assert.match(code, /UNSYNC_MS = 3000/, '两边不一致超过 3 秒才算不同步');
   assert.match(code, /rpc\('pinkie\.engines\.status'/); assert.match(code, /__pinkieMetreBoardData\?\.data/); assert.match(code, /__pinkieRunStatus\?\.refresh/);
   assert.match(code, /reloadHistory|chat\.history/, '同步 = 重拉 chat.history');
-  assert.match(code, /if \(!isMetre\(\)\) \{ if \(band\) band\.hidden = true; closePop\(\); return; \}/, '只在 Metre 出现');
+  assert.match(code, /if \(!isMetre\(\)\) \{ if \(band\) band\.hidden = true; root\.removeAttribute\('data-metre-bs'\); closePop\(\); return; \}/, '只在 Metre 出现');
   // 11-24 验收第 1、2 条：带子在输入框正下方那一条（对话滚不到那里），宽度 = 输入框宽度，每一格按最长的字定宽，首页和窄窗口的总谱浮层时不出现
-  assert.match(code, /const top = room >= 26 \? Math\.round\(r\.bottom \+ \(room - 24\) \/ 2\)/, '输入框正下方');
+  assert.match(code, /const top = window\.innerHeight - BOTTOM - 24;/, '输入框正下方、离窗口下沿固定 8px'); assert.match(code, /const BOTTOM = 8;/);
+  assert.match(keys, /\[data-metre-bs\] \.agent-chat__composer-shell \{ margin-bottom: 24px; \}/, '输入框那一栏让出这一条');
   assert.match(code, /width: Math\.round\(r\.width\) \+ 'px'/, '宽度跟输入框走，不跟状态走');
   assert.match(code, /n\.style\.width = widths\[tier\]\[n\.dataset\.seg\] \+ 'px'/, '每一格定宽');
   assert.match(code, /if \(!r \|\| r\.width < 280 \|\| onHome\(\) \|\| root\.getAttribute\('data-metre-board'\) === 'overlay'\)/, '首页、总谱浮层时不出现');

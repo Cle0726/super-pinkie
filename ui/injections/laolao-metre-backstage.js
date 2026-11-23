@@ -3,7 +3,7 @@
  *
  *   [后台] [■ 网关 连着] [■ 本轮 后台空闲 · 页面停着] [■ 排队 0] [■ 引擎 4 · 1 在跑 · 1 等你 ▴]
  *
- * 位置：对话页输入框（连下面 Metre / 模型那一排）正下方的那一条——那里本来就空着、对话不会滚到那里，所以它不压任何东西；
+ * 位置：对话页输入框（连下面 Metre / 模型那一排）正下方的那一条，离窗口下沿 8px——输入框那一栏往上让出这一条，对话滚不到，所以它不压任何东西；
  *   宽度永远等于输入框的宽度，每一格的宽度按这一格所有可能的字里最长的那个定死，状态怎么变，带子和每一格都不动。
  *   首页（还没开始对话）不出现；窄窗口的总谱浮层打开时输入框和带子都让给浮层，浮层铺到窗口底。
  * 两档：输入框够宽时说全（「本轮 后台在跑 · 页面停着」「引擎 4 · 1 在跑 · 1 等你」）；不够宽收成短的（「本轮 在跑」「引擎 4」），
@@ -11,11 +11,12 @@
  * 数据一律来自后台已有的事件和接口，页面不自己猜：
  *   网关   laolao-run-status 读原生网关仓库得到的连接状态（state.conn）——总谱（laolao-metre-board-data）也读同一份，两边说法一致
  *   本轮   后台：pinkie.run.status（run-status 问的那份）；页面：原生聊天面板的 chatRunId / chatSending / chatStream。
- *          两边不一致超过 3 秒显示「不同步」和「同步」键：重新问后台；后台已经停了就清掉页面残留的「在跑」；再重拉 chat.history 对齐
+ *          两个方向（后台在跑页面停着 / 页面在等后台空闲）不一致超过 3 秒都显示「不同步」和「同步」键：重新问后台；后台已经停了就清掉页面残留的「在跑」；
+ *          再重拉 chat.history 对齐。对上以后（点了同步、或者页面自己被清掉）说 2 秒「已和后台对齐」再回常态
  *   排队   原生面板的 chatQueue 条数
  *   引擎   pinkie.engines.status（开 / 关）+ 总谱数据里外部引擎的声部（在跑 / 等你 / 交回 / 失败）
  * 刷新挂在已有的事件上：run-status 画状态条时发的 pinkie:run-view、总谱数据回来的 pinkie:metre-board-data、换会话、换模式、窗口大小；
- *   两边刚对不上时排一次 3 秒后的复查（一次性的 setTimeout）。不加 setInterval、不加观察器、不另起轮询。只在 Metre 出现。 */
+ *   两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就停）。不加 setInterval、不加观察器。只在 Metre 出现。 */
 (() => {
   'use strict';
   if (document.querySelector('.pk-metre-backstage')) return;
@@ -23,7 +24,7 @@
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const rpc = (method, params, timeout = 8000) => typeof window.__laolaoSidebar?.gwRequest === 'function'
     ? window.__laolaoSidebar.gwRequest(method, params, timeout) : Promise.reject(new Error('offline'));
-  const UNSYNC_MS = 3000, ENGINE_EVERY = 15_000;
+  const UNSYNC_MS = 3000, ENGINE_EVERY = 15_000;   // 两边不一致超过 3 秒才算「不同步」
   const pane = () => document.querySelector('openclaw-chat-pane');
   const runState = () => { try { return window.__pinkieRunStatus?.state || null; } catch { return null; } };
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -38,7 +39,7 @@
     return 'wait';
   }
   // 每一格：{id, tone, full, short, title, sync?, pop?}
-  function describe({conn, status, page, queue, engines, voices, since, now}) {
+  function describe({conn, status, page, queue, engines, voices, since, now, aligned = false}) {
     const gw = !conn ? {tone: 'off', full: '网关 还不知道', short: '网关 —'}
       : conn.online ? {tone: 'ok', full: '网关 连着', short: '网关 连着'}
       : conn.attempt > 0 ? {tone: 'wait', full: `网关 重连中 · 第 ${conn.attempt} 次`, short: `网关 重连 ${conn.attempt}`}
@@ -47,7 +48,9 @@
     const pageText = page.writing ? '页面在出字' : page.busy ? '页面在等回复' : '页面停着';
     const backText = back == null ? '后台还没回话' : back ? '后台在跑' : '后台空闲';
     const unsynced = back != null && conn?.online !== false && back !== page.busy && since && now - since >= UNSYNC_MS;
+    // 两个方向都认：后台在跑、页面停着；或者页面在等 / 在出字、后台空闲。对上了以后 2 秒里说一句「已和后台对齐」
     const run = unsynced ? {tone: 'fail', full: `不同步 · ${backText} · ${pageText}`, short: '不同步', sync: true}
+      : aligned ? {tone: 'ok', full: '本轮 已和后台对齐', short: '本轮 已对齐'}
       : {tone: back || page.busy ? 'run' : back == null ? 'off' : 'ok', full: `本轮 ${backText} · ${pageText}`,
         short: '本轮 ' + (back == null ? '—' : page.writing ? '出字' : back ? '在跑' : page.busy ? '等回复' : '空闲')};
     const q = {tone: queue > 0 ? 'wait' : 'off', full: `排队 ${queue}`, short: `排队 ${queue}`};
@@ -66,8 +69,8 @@
   // 每一格可能出现的所有字（量宽度用：每一格按最长的那个定死，状态变了带子不动）
   const VARIANTS = {
     gw: {full: ['网关 还不知道', '网关 连着', '网关 重连中 · 第 99 次', '网关 断了'], short: ['网关 —', '网关 连着', '网关 重连 99', '网关 断了']},
-    run: {full: [...['后台还没回话', '后台在跑', '后台空闲'].flatMap((b) => ['页面在出字', '页面在等回复', '页面停着'].map((p) => `本轮 ${b} · ${p}`)), ...['后台在跑 · 页面停着', '后台空闲 · 页面在出字', '后台空闲 · 页面在等回复'].map((x) => ['sync', `不同步 · ${x}`])],
-      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', ['sync', '不同步']]},
+    run: {full: [...['后台还没回话', '后台在跑', '后台空闲'].flatMap((b) => ['页面在出字', '页面在等回复', '页面停着'].map((p) => `本轮 ${b} · ${p}`)), ...['后台在跑 · 页面停着', '后台空闲 · 页面在出字', '后台空闲 · 页面在等回复'].map((x) => ['sync', `不同步 · ${x}`]), '本轮 已和后台对齐'],
+      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步']]},
     queue: {full: ['排队 99'], short: ['排队 99']},
     eng: {full: ['引擎 还不知道', '引擎 关', '引擎 开 · 服务没在跑', ['pop', '引擎 99 · 9 等你 · 9 在跑'], ['pop', '引擎 99 · 9 失败 · 9 等你'], ['pop', '引擎 99 · 全部交回']],
       short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99']]},
@@ -81,7 +84,7 @@
       ? `<button type="button" class="pk-bs__sync"${syncing ? ' disabled aria-busy="true"' : ''}>${syncing ? '同步中' : '同步'}</button>` : ''}${c.pop ? '<b class="pk-bs__caret" aria-hidden="true"></b>' : ''}</${tag}>`;
   };
   let band = null, sig = '', since = 0, lastPair = '', engines = null, enginesAt = 0, syncing = false, known = null, knownFor = '', askedAt = 0;
-  let widths = null, view = null, pop = null, unsyncTimer = 0, observed = null;
+  let widths = null, view = null, pop = null, recheck = 0, observed = null, alignedUntil = 0, shownUnsync = false;
   const LABEL = '<span class="pk-bs__label" aria-hidden="true">后台</span>';
   function measure() {
     // 用同样的样式在看不见的地方摆一遍每一格的所有字，取最宽的：每一格的宽度就此定死
@@ -123,14 +126,15 @@
     return [...document.querySelectorAll('.agent-chat__welcome')].some((n) => n.getClientRects().length);
   }
   // 输入框正下方那一条：左右和输入框对齐；那条不够 24px 高时（极矮的窗口）退到输入框上沿、对话留白的那一段里
+  const BOTTOM = 8;
   function place() {
+    if (!root.hasAttribute('data-metre-bs') && composer() && !onHome() && root.getAttribute('data-metre-board') !== 'overlay') root.setAttribute('data-metre-bs', '');   // 先让出位置再量
     const comp = composer(), r = comp?.getBoundingClientRect();
     // 窄窗口的总谱浮层开着时，带子让给浮层（浮层铺到最底下；总谱自己的「运行状况」里有网关那一行，读的是同一份状态）
-    if (!r || r.width < 280 || onHome() || root.getAttribute('data-metre-board') === 'overlay') { root.style.setProperty('--metre-bs-room', '0px'); return null; }
+    if (!r || r.width < 280 || onHome() || root.getAttribute('data-metre-board') === 'overlay') { root.style.setProperty('--metre-bs-room', '0px'); root.removeAttribute('data-metre-bs'); return null; }
     if (!widths) widths = measure();
-    const room = window.innerHeight - r.bottom;
     const tier = tierWidth('full') <= r.width ? 'full' : 'short';
-    const top = room >= 26 ? Math.round(r.bottom + (room - 24) / 2) : Math.round(r.top - 32);
+    const top = window.innerHeight - BOTTOM - 24;   // 离窗口下沿固定 8px，各尺寸一样；输入框那一栏往上让出 24px（keys.css 的 [data-metre-bs]）
     Object.assign(band.style, {left: Math.round(r.left) + 'px', top: top + 'px', width: Math.round(r.width) + 'px'});
     root.style.setProperty('--metre-bs-room', Math.max(0, Math.round(window.innerHeight - top + 4)) + 'px');
     if (observed !== comp && typeof ResizeObserver === 'function') {
@@ -140,7 +144,7 @@
     return tier;
   }
   function render(force) {
-    if (!isMetre()) { if (band) band.hidden = true; closePop(); return; }
+    if (!isMetre()) { if (band) band.hidden = true; root.removeAttribute('data-metre-bs'); closePop(); return; }
     const rs = runState(), p = pane(), st = p?.state || {};
     const page = {busy: Boolean(st.chatRunId || st.chatSending || st.chatStream), writing: Boolean(st.chatStream)};
     const now = Date.now();
@@ -149,16 +153,22 @@
     if (rs?.key !== knownFor) { knownFor = rs?.key || ''; known = null; }
     if (rs?.status) known = rs.status;
     if ((!rs?.status || Boolean(known?.active) !== page.busy) && rs?.conn?.online !== false && now - askedAt > 3000) { askedAt = now; void window.__pinkieRunStatus?.refresh?.(); }
-    const status = known;
-    const pair = `${status == null ? '?' : Boolean(status.active)}|${page.busy}`;
+    // 后台在不在跑：pinkie.run.status 说的，或者 run-status 从网关事件里看到这一轮开始了（事件也是后台发的）
+    const status = known || rs?.live?.active ? {...(known || {}), active: Boolean(known?.active || rs?.live?.active)} : null;
+    const pair = `${status == null ? '?' : status.active}|${page.busy}`;
     if (pair !== lastPair) {
-      lastPair = pair; since = status != null && Boolean(status.active) !== page.busy ? now : 0;
-      clearTimeout(unsyncTimer); if (since) unsyncTimer = setTimeout(render, UNSYNC_MS + 60);   // 对不上了：3 秒后再看一次（一次性，不是循环）
+      const was = since;
+      lastPair = pair; since = status != null && status.active !== page.busy ? now : 0;
+      if (!since && was && (shownUnsync || now - was >= 1000)) alignedUntil = now + 2000;   // 刚对上（页面自己被清掉、或者点了同步）：说一声，停 2 秒
+      if (since) shownUnsync = false;
     }
+    // 两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就不再排）
+    clearTimeout(recheck); recheck = since || alignedUntil > now ? setTimeout(render, Math.max(20, Math.min(500, since && now - since < UNSYNC_MS ? since + UNSYNC_MS - now + 5 : 500, alignedUntil > now ? alignedUntil - now + 5 : 500))) : 0;
     if (now - enginesAt > ENGINE_EVERY) { enginesAt = now; rpc('pinkie.engines.status', {}, 8000).then((v) => { engines = v && typeof v === 'object' ? v : null; sig = ''; render(); }).catch(() => {}); }
     const board = window.__pinkieMetreBoardData?.data;
     const voices = (board?.sessions || []).filter((s) => s && s.external).map((s) => ({key: s.key, name: String(s.engineName || s.title || s.label || '引擎').slice(0, 18), tone: voiceState(s)}));
-    view = describe({conn: rs?.conn || null, status, page, queue: Array.isArray(st.chatQueue) ? st.chatQueue.length : 0, engines, voices, since, now});
+    view = describe({conn: rs?.conn || null, status, page, queue: Array.isArray(st.chatQueue) ? st.chatQueue.length : 0, engines, voices, since, now, aligned: alignedUntil > now});
+    if (view.unsynced) shownUnsync = true;
     if (!band) build();
     const tier = place();
     band.hidden = !tier;

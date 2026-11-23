@@ -171,4 +171,5 @@ html[data-laolao-mode="metre"][data-pinkie-reduce-motion] .pk-bs__seg > i { anim
  * 窄窗口里总谱是从上面落下来的浮层：打开时输入框（连运行条、猫）让位，浮层一直铺到后台带上面（--metre-bs-room，laolao-metre-board.js 用它），
  * 里面每一张卡都能滚到、点到；关掉浮层输入框回来。 */
 html[data-laolao-mode="metre"] .shell:not(.shell--nav-drawer-open) > .shell-nav-backdrop { display: none; }
+html[data-laolao-mode="metre"][data-metre-bs] .agent-chat__composer-shell { margin-bottom: 24px; }   /* 原来下面一共 28px（内边距 14 + 外边距 14），改成 38px：后台带 24 + 离窗口下沿 8 + 和输入框之间 6 */
 html[data-laolao-mode="metre"][data-metre-board="overlay"] :is(.agent-chat__input, .pk-run, .pk-metre-cat--full) { visibility: hidden; }

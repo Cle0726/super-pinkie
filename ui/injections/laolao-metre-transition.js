@@ -1,6 +1,6 @@
 /* laolao-metre-transition —— 切换进 Metre 的过场（11-24 第八版「起拍」：协调者验收后加重落拍的分量）。一张总谱，一支钴蓝指挥棒，♩=72。
  *   合上（0–320ms）：上下两半谱纸合到中缝。谱纸中间有一束舞台光、四边暗下去，谱线淡淡印在上面。起拍（320–1030ms）：很大的钴蓝指挥棒从右下抬起，停在画面正中上方半拍（417ms）。
- *   落拍（≈1100ms，高潮）：棒子砸到画面正中，拖着残影；棒尖一闪，迸出一圈钴蓝像素点和一道方形冲击波，中间那行五线谱用钴蓝墨色、加粗地从棒尖向两侧弹开
+ *   落拍（≈1100ms，高潮）：棒子砸到画面正中，拖着一道连贯的拖影；棒尖一闪，迸出钴蓝像素点，三圈像素环从棒尖往外扩、越扩越稀越淡，中间那行五线谱用钴蓝墨色、加粗地从棒尖向两侧弹开
  *   （冲过头再回弹），上下几行谱表依次铺开。亮灯：四盏谱台灯按三十二分音符一盏盏亮，灯罩先冲亮再稳住，在谱面上投下一锥暖光和一圈光晕。
  *   落位：像素 M 当谱号落到谱表左端、轻轻回弹。翻开（380ms）：新页面好了，谱纸从中缝上下翻开，同时发 pinkie:metre-sweep；没好就停在整页谱面上等。
  * 总长约 1.98 秒（第六版 2.0 秒）。小猫不再出现（用户 11-23）。一张全屏 canvas 按像素格画（短边 / 140，至少 4px），没有图片和 WebGL，只在过场期间有 rAF。
@@ -90,7 +90,6 @@
       box(sn(b.x) - P, sn(b.y) - P, 2 * P, 2 * P, C.accent);
       g.globalAlpha = 1;
     }
-    const trail = [];
 
     function content(t) {
       const d = t - ICTUS;   // 0. 谱纸上淡淡印着的谱线（合上以后就在，页面不是一张白纸）
@@ -106,8 +105,7 @@
         gr.addColorStop(0, C.night ? `rgba(180,196,255,${a})` : `rgba(47,75,176,${a * 0.6})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(HIT.x - S * 0.24, HIT.y - S * 0.24, S * 0.48, S * 0.48); }
       // 2. 谱表：从棒尖 (cx) 向两侧弹开，冲过头再回来；主谱表钴蓝墨色、加粗，稳住后变成深一点的墨色
       for (const s of staves) {
-        const p = clamp((d - Math.abs(s.k) * 45) / SPREAD);
-        if (p <= 0) continue;
+        const p = clamp((d - Math.abs(s.k) * 45) / SPREAD); if (p <= 0) continue;
         const e = backOut(p, 1.9), a = Math.max(sx0 - 4 * P, cx - (cx - sx0) * e), b = Math.min(sx1 + 4 * P, cx + (sx1 - cx) * e);
         const isMain = s === main, th = isMain ? TH + (d < 120 ? 2 : 0) : TH2;
         const bounce = isMain && d < 300 ? Math.round(Math.sin((d / 300) * Math.PI * 2) * P * 0.6 * (1 - d / 300)) : 0;
@@ -120,17 +118,19 @@
           box(sx1 - 3 * P, top, th, h, color); box(sx1 - P, top, P + 1, h, color);          // 终止线
         }
       }
-      // 3. 冲击波（方形的一圈）和迸出的像素点：二十道，每道三颗，越远越小
-      if (d >= 0 && d < 320) {
-        const u = easeOut(d / 320), r = sn(u * S * 0.32);
-        g.globalAlpha = 0.7 * (1 - d / 320); g.strokeStyle = C.accent; g.lineWidth = P; g.strokeRect(HIT.x - r, HIT.y - r * 0.62, 2 * r, 2 * r * 0.62);
+      // 3. 落拍的波：从棒尖往外扩的三圈像素环（像谱线的波纹），里圈实、外圈越扩越稀、越淡，边上的像素有虚有实；再加二十道迸出的像素点
+      if (d >= 0 && d < 360) {
+        for (let k = 0; k < 3; k++) {
+          const u = clamp((d - k * 55) / 300); if (u <= 0 || u >= 1) continue;
+          const rx = easeOut(u) * S * (0.2 + k * 0.08), ry = rx * 0.62, n = Math.max(12, Math.ceil((Math.PI * 2 * rx) / (P * 1.25))), keep = 0.92 - u * 0.55 - k * 0.12;
+          for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, q = rnd(i, k + 7); if (q > keep) continue;
+            g.globalAlpha = (1 - u) * (0.35 + 0.65 * q / Math.max(0.01, keep)) * (k ? 0.75 : 1); const sz = k === 0 && u < 0.5 ? 2 * P : P;
+            box(sn(HIT.x + Math.cos(a) * rx) - sz / 2, sn(HIT.y + Math.sin(a) * ry) - sz / 2, sz, sz, k === 1 ? C.ink : C.accent); }
+        }
         g.globalAlpha = 1 - clamp(d / 280);
         for (let i = 0; i < 20; i++) {
           const ang = (i / 20) * Math.PI * 2 + 0.16, ux = Math.cos(ang), uy = Math.sin(ang) * 0.72, jitter = 0.8 + 0.45 * rnd(i, 3);
-          for (let k = 0; k < 3; k++) {
-            const rr = easeOut(clamp(d / (200 + k * 60))) * S * (0.07 + k * 0.06) * jitter, sz = [2 * P, Math.round(1.5 * P), P][k];
-            box(sn(HIT.x + ux * rr) - sz / 2, sn(HIT.y + uy * rr) - sz / 2, sz, sz, i % 5 === 2 ? C.lamp : C.accent);
-          }
+          for (let k = 0; k < 3; k++) { const rr = easeOut(clamp(d / (200 + k * 60))) * S * (0.07 + k * 0.06) * jitter, sz = [2 * P, Math.round(1.5 * P), P][k]; box(sn(HIT.x + ux * rr) - sz / 2, sn(HIT.y + uy * rr) - sz / 2, sz, sz, i % 5 === 2 ? C.lamp : C.accent); }
         }
         g.globalAlpha = 1;
       }
@@ -162,16 +162,17 @@
         g.fillStyle = C.line; g.fillText('♩ = 72', lx + (13 * LS) / 2, mid + 2 * GAP + 3 * P + dy);
         g.globalAlpha = 1;
       }
-      // 6. 指挥棒和落下时的残影
-      for (const [i, p] of trail.entries()) drawBaton(p, 0.12 + 0.1 * i);
-      const b = baton(t);
-      if (b && b.alpha > 0) drawBaton(b, b.alpha);
+      // 6. 落下时的拖影：一道连贯的扇面（把最近 80ms 里棒身扫过的地方连起来，离现在越远越淡），然后是指挥棒本身
+      if (d > -70 && d < 90) for (const [span, a] of [[90, 0.3], [40, 0.22]]) {
+        const pts = Array.from({length: 10}, (_, k) => baton(t - (span * k) / 9)).filter(Boolean); if (pts.length < 2) continue;
+        const o = pts[pts.length - 1], fade = g.createLinearGradient(o.x, o.y, pts[0].x, pts[0].y); fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, C.accent);   // 越早越淡，尾巴化进纸里
+        g.globalAlpha = a * (d > 0 ? 1 - d / 90 : 1); g.fillStyle = fade; g.beginPath();
+        pts.forEach((q, k) => (k ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); for (const q of pts.reverse()) g.lineTo(q.x + Math.cos(q.a) * BL * 0.76, q.y + Math.sin(q.a) * BL * 0.76);
+        g.closePath(); g.fill(); g.globalAlpha = 1;
+      } const b = baton(t); if (b && b.alpha > 0) drawBaton(b, b.alpha);
     }
     function paint() {
-      const t = st.t, b = baton(t);
-      if (b && t >= ICTUS - 70 && t <= ICTUS + 10) { trail.push(b); if (trail.length > 4) trail.shift(); }
-      if (t > ICTUS + 90) trail.length = 0;
-      g.clearRect(0, 0, W, H);
+      const t = st.t; g.clearRect(0, 0, W, H);
       for (const [dy, y0, h] of [[st.dyTop, 0, mid], [st.dyBot, mid, H - mid]]) {
         g.save(); g.translate(0, sn(dy)); g.beginPath(); g.rect(0, y0, W, h); g.clip();
         g.drawImage(paper, 0, y0 * ratio, W * ratio, h * ratio, 0, y0, W, h);
@@ -184,8 +185,7 @@
     let alive = true, leaving = false, t0 = 0; const ready = frame();
     // 合上：按时间推进，慢机器上跳几帧也准时盖满
     const covered = (async () => {
-      await ready;
-      t0 = performance.now();
+      await ready; t0 = performance.now();
       while (alive && st.t < COVER) {
         st.t = performance.now() - t0; const e = easeInOut(clamp(st.t / COVER)); st.dyTop = -mid * (1 - e); st.dyBot = (H - mid) * (1 - e);
         paint(); await frame();

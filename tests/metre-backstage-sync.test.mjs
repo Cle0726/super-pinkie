@@ -68,3 +68,58 @@ test('the backstage band and the score read one connection state, so neither say
     assert.doesNotMatch((await score()).text, /连接断了/);
   } finally { await browser.close(); }
 });
+
+// 11-24 复验第 1 条：「不同步」两个方向都要认。页面以为在跑（停止键亮着、chatRunId 有值）、后台却空闲——这正是用户最常碰到的「转圈不停」；
+// 以及后台在跑、页面停着。超过 3 秒都显示「不同步」和「同步」键；对上以后（页面自己被清掉，或者点了同步）说 2 秒「已和后台对齐」再回常态。
+test('the band calls out an unsynced round in both directions after 3 seconds, and says it is aligned again for 2 seconds', {timeout: 60_000}, async (t) => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage({viewport: {width: 1024, height: 720}});
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
+      <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:100px;top:560px;width:780px;height:92px"></section></body></html>`;
+    await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html', body}));
+    await tab.goto('http://127.0.0.1:30119/chat?session=agent%3Ametre%3Atest');
+    await tab.evaluate(() => {
+      window.ACTIVE = false;
+      const pane = document.createElement('openclaw-chat-pane'); pane.state = {chatRunId: null, chatSending: false, chatStream: null, chatQueue: [], sessionKey: 'agent:metre:test'}; document.body.append(pane);
+      window.__pinkieRunStatus = {get state() { return {key: 'agent:metre:test', status: {active: window.ACTIVE}, conn: {online: true, attempt: 0}, live: {active: false}}; },
+        refresh: async () => { if (window.FINISH_ON_REFRESH) window.ACTIVE = false; return null; }};
+      window.__laolaoSidebar = {gwRequest: async (method) => (method === 'pinkie.engines.status' ? {enabled: false} : {})};
+    });
+    await tab.addScriptTag({content: read('laolao-metre-backstage.js')});
+    const tick = () => tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
+    const band = () => tab.evaluate(() => document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText.replace(/\s+/g, ' ') || '');
+    const hasSync = () => tab.evaluate(() => Boolean(document.querySelector('.pk-metre-backstage .pk-bs__sync')));
+    await tick();
+    assert.match(await band(), /本轮 后台空闲 · 页面停着/);
+    // 1. 页面以为在跑、后台空闲：不到 3 秒不喊；过了 3 秒自己变成「不同步」（中间没有任何事件，靠带子自己的一次性复查）
+    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = 'stuck-run'; });
+    await tick();
+    await tab.waitForTimeout(1200);
+    assert.match(await band(), /本轮 后台空闲 · 页面在等回复/);
+    assert.equal(await hasSync(), false);
+    await tab.waitForTimeout(2400);
+    assert.match(await band(), /不同步 · 后台空闲 · 页面在等回复/, 'page waiting but the backend is idle is unsynced too');
+    assert.equal(await hasSync(), true, 'and offers 同步');
+    // 2. 页面自己被清掉（已有代码约 4 秒后会清）：先说「已和后台对齐」，停 2 秒再回常态
+    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = null; });
+    await tab.waitForTimeout(800);
+    assert.match(await band(), /本轮 已和后台对齐/);
+    await tab.waitForTimeout(2000);
+    assert.match(await band(), /本轮 后台空闲 · 页面停着/);
+    // 3. 反方向：后台在跑、页面停着；过了 3 秒「不同步」，点「同步」以后后台这一轮也结束了 → 「已和后台对齐」→ 常态
+    await tab.evaluate(() => { window.ACTIVE = true; window.FINISH_ON_REFRESH = false; });
+    await tick();
+    await tab.waitForTimeout(3600);
+    assert.match(await band(), /不同步 · 后台在跑 · 页面停着/);
+    await tab.evaluate(() => { window.FINISH_ON_REFRESH = true; document.querySelector('.pk-metre-backstage .pk-bs__sync').click(); });
+    await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText || ''), null, {timeout: 3000});
+    await tab.waitForTimeout(2600);
+    assert.match(await band(), /本轮 后台空闲 · 页面停着/);
+  } finally { await browser.close(); }
+});
