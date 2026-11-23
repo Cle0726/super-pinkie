@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {T3Rpc, causeMessage} from '../services/mode-architecture/engines-rpc.mjs';
-import {EngineBridge, LEVELS, SessionEngines, openLoginTerminal, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
+import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, installView, openBrowser, openLoginTerminal, openTerminal, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pk-bridge-'));
 
@@ -64,12 +64,51 @@ test('provider rows keep status, plan and models but never an email', () => {
     status: 'ready', auth: {status: 'authenticated', label: 'someone@example.com'}, message: 'Signed in as someone@example.com',
     usageLimits: {checkedAt: 'x', windows: [{id: 'w', kind: 'weekly', label: 'Weekly', usedPercent: 100, resetsAt: '2026-11-27T01:44:00.000Z'}]},
     models: [{slug: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', isDefault: true}]}]);
-  assert.equal(rows[0].name, 'Codex');
-  assert.equal(rows[0].plan, '');
-  assert.equal(rows[0].signedIn, true);
-  assert.equal(JSON.stringify(rows).includes('@'), false);
-  assert.deepEqual(rows[0].quota, {state: 'out', resetAt: '2026-11-27T01:44:00.000Z', text: '额度用完了'});
-  assert.deepEqual(rows[0].models, [{slug: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', isDefault: true}]);
+  const codex = rows.find(row => row.id === 'codex');
+  assert.equal(codex.name, 'Codex');
+  assert.equal(codex.plan, '');
+  assert.equal(codex.signedIn, true);
+  assert.equal(codex.state, 'ready');
+  assert.equal(/[\w.+-]+@[\w-]+\./.test(JSON.stringify(rows)), false, 'no email');
+  assert.deepEqual(codex.quota, {state: 'out', resetAt: '2026-11-27T01:44:00.000Z', text: '额度用完了'});
+  assert.deepEqual(codex.models, [{slug: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', isDefault: true}]);
+});
+
+test('every engine the engine service supports is in the menu, in a fixed order, with a plain state and its own setup steps', () => {
+  const rows = summarizeProviders([
+    {instanceId: 'cursor', driver: 'cursor', enabled: false, installed: false, status: 'disabled', auth: {status: 'unknown'}, setup: {canAuthenticate: true}, message: 'Cursor is disabled in T3 Code settings.'},
+    {instanceId: 'kiro', driver: 'kiro', enabled: true, installed: false, status: 'error', auth: {status: 'unknown'}, message: 'Kiro CLI (`kiro-cli`) is not installed or not on PATH.'},
+    {instanceId: 'claudeAgent', driver: 'claudeAgent', enabled: true, installed: true, status: 'error', auth: {status: 'unauthenticated'}, message: 'Claude Code is not authenticated. Run `claude auth login` and try again.'},
+    {instanceId: 'pi', driver: 'pi', enabled: true, installed: true, status: 'ready', auth: {status: 'unknown'}},
+  ], {platform: 'win32'});
+  assert.deepEqual(rows.map(row => row.id), ENGINES.map(engine => engine.id));
+  assert.deepEqual(ENGINES.map(engine => engine.name), ['Claude Code', 'Codex', 'Antigravity', 'Cursor', 'OpenCode', 'Grok Build', 'Kiro', 'Pi', 'fx', 'Muse Code']);
+  const by = Object.fromEntries(rows.map(row => [row.id, row]));
+  assert.equal(by.cursor.state, 'off');
+  assert.equal(by.cursor.setup.canAuthenticate, true);
+  assert.equal(by.kiro.state, 'missing');
+  assert.equal(by.claudeAgent.state, 'signin');
+  assert.equal(by.pi.state, 'ready');
+  assert.equal(by.antigravity.state, 'off', 'never reported yet still shows up');
+  assert.equal(by.antigravity.setup.canInstall, true);
+  assert.equal(by.cursor.guide.install, "irm 'https://cursor.com/install?win32=true' | iex");
+  assert.equal(by.kiro.guide.login, 'kiro-cli login');
+  assert.equal(by.grok.guide.install, '', 'no official Windows command: only the link');
+  assert.match(by.grok.guide.link, /^https:\/\//);
+  assert.equal(summarizeProviders([], {platform: 'darwin'}).find(row => row.id === 'grok').guide.install, 'curl -fsSL https://x.ai/cli/install.sh | bash');
+  assert.equal(/T3/i.test(JSON.stringify(rows)), false, 'no engine-service brand anywhere');
+});
+
+test('sign-in state keeps only web links and never asks for keys inside Metre', () => {
+  const view = authView({instanceId: 'antigravity', phase: 'waiting', flowId: 'f1', authorizationUrl: 'javascript:alert(1)', expiresAt: null, message: null,
+    methods: [{id: 'google', name: 'Google account', type: 'agent', accountEmail: 'a@b.co'}],
+    interaction: {type: 'browser', id: 'i1', url: 'https://accounts.example/sign', requiresConsent: true, acceptsCallback: true}});
+  assert.equal(view.url, '');
+  assert.deepEqual(view.step, {type: 'browser', id: 'i1', url: 'https://accounts.example/sign', consent: true, paste: true});
+  assert.equal(JSON.stringify(view).includes('@'), false);
+  assert.deepEqual(authView({phase: 'waiting', flowId: 'f2', interaction: {type: 'credentials', id: 'c', fields: [{name: 'key', label: 'API key', secret: true}]}}).step, {type: 'credentials'});
+  assert.deepEqual(installView({phase: 'downloading', downloadedBytes: 50, totalBytes: 200, version: '1.5.14', installedVersion: null, message: null}),
+    {phase: 'downloading', downloaded: 50, total: 200, version: '1.5.14', installedVersion: null, message: ''});
 });
 
 const projection = () => ({
@@ -133,9 +172,13 @@ function bridgeWith(calls, answers = {}) {
   class Rpc {
     request(tag, payload) { calls.push([tag, payload]); return Promise.resolve(typeof answers[tag] === 'function' ? answers[tag](payload) : answers[tag]); }
     first(tag) { calls.push([tag]); return Promise.resolve(answers[tag]); }
+    stream(tag, payload, onValue) { calls.push([tag, payload]); streams.push({tag, onValue}); return Promise.resolve({close() {}}); }
     close() {}
   }
-  return {root, bridge: new EngineBridge({service, RpcImpl: Rpc})};
+  const streams = [];
+  const bridge = new EngineBridge({service, RpcImpl: Rpc});
+  bridge.streams = streams;
+  return {root, bridge};
 }
 
 test('starting, sending, answering and stopping become the same commands the T3 page sends', async () => {
@@ -175,14 +218,57 @@ test('starting, sending, answering and stopping become the same commands the T3 
   assert.ok(calls.filter(call => call[0] === 'addProject').length === 1, 'the project id is remembered');
 });
 
-test('the login helper only runs the known sign-in commands, in a terminal the user sees', () => {
+test('the terminal helper only runs the install and sign-in commands in the table, in a window the user sees', () => {
   const spawned = [];
   const spawnImpl = (file, args, options) => { spawned.push({file, args, options}); return {unref() {}}; };
   openLoginTerminal('claude auth login', {platform: 'win32', spawnImpl});
   openLoginTerminal('codex login', {platform: 'darwin', spawnImpl});
+  openTerminal("irm 'https://cli.kiro.dev/install.ps1' | iex", {platform: 'win32', spawnImpl});
   assert.equal(spawned[0].file, 'cmd.exe');
-  assert.ok(spawned[0].args.includes('claude auth login'));
+  assert.ok(spawned[0].args.includes('cmd.exe /k claude auth login'));
   assert.equal(spawned[0].options.windowsHide, false);
   assert.equal(spawned[1].file, 'osascript');
+  assert.ok(spawned[2].args.includes(`powershell.exe -NoExit -ExecutionPolicy Bypass -Command "irm 'https://cli.kiro.dev/install.ps1' | iex"`), 'PowerShell one-liners run in PowerShell');
   assert.throws(() => openLoginTerminal('claude auth login && del x', {platform: 'win32', spawnImpl}), /不认识/);
+  assert.throws(() => openBrowser('file:///C:/x', {platform: 'win32', spawnImpl}), /不是网页地址/);
+  openBrowser('https://accounts.example/sign?a=1&b=2', {platform: 'win32', spawnImpl});
+  assert.deepEqual(spawned.at(-1).args, ['url.dll,FileProtocolHandler', 'https://accounts.example/sign?a=1&b=2']);
+});
+
+test('turning an engine on keeps its saved settings, and managed sign-in follows the engine service step by step', async () => {
+  const calls = [];
+  const spawned = [];
+  const {bridge} = bridgeWith(calls, {
+    'server.getConfig': {providers: [], settings: {providerInstances: {cursor: {driver: 'cursor', displayName: 'Work', config: {binaryPath: 'x'}}}}},
+    'server.updateSettings': {},
+    'server.refreshProviders': {},
+    'provider.auth.start': {instanceId: 'cursor', phase: 'waiting', flowId: 'f1', authorizationUrl: null, expiresAt: null, message: null,
+      interaction: {type: 'browser', id: 'i1', url: 'https://cursor.example/login', requiresConsent: true}},
+    'provider.auth.respond': {phase: 'waiting', flowId: 'f1'},
+    'provider.auth.complete': {phase: 'verifying', flowId: 'f1'},
+  });
+  bridge.spawnImpl = (file, args) => { spawned.push({file, args}); return {unref() {}}; };
+  await bridge.turnOn({engine: 'cursor'});
+  const update = calls.find(call => call[0] === 'server.updateSettings')[1];
+  assert.deepEqual(update.providerInstanceMutation, {operation: 'upsert', instanceId: 'cursor', instance: {driver: 'cursor', displayName: 'Work', config: {binaryPath: 'x'}, enabled: true}});
+  assert.deepEqual(calls.find(call => call[0] === 'server.refreshProviders')[1], {instanceId: 'cursor'});
+  await assert.rejects(bridge.turnOn({engine: 'rm'}), /不认识/);
+
+  const started = await bridge.signin({engine: 'cursor', open: true});
+  assert.equal(started.how, 'managed');
+  assert.ok(calls.some(call => call[0] === 'provider.auth.subscribe'), 'the sign-in is watched');
+  bridge.streams.at(-1).onValue({instanceId: 'cursor', phase: 'waiting', flowId: 'f1', interaction: {type: 'browser', id: 'i1', url: 'https://cursor.example/login', requiresConsent: true}});
+  await bridge.signinStep({engine: 'cursor', action: 'open'});
+  assert.deepEqual(calls.find(call => call[0] === 'provider.auth.respond')[1], {instanceId: 'cursor', flowId: 'f1', interactionId: 'i1', response: {type: 'browser', action: 'accept'}});
+  assert.equal(spawned.at(-1).args.at(-1), 'https://cursor.example/login');
+  await bridge.signinStep({engine: 'cursor', action: 'paste', code: '  4/abc  '});
+  assert.deepEqual(calls.find(call => call[0] === 'provider.auth.complete')[1], {instanceId: 'cursor', flowId: 'f1', callbackUrl: '4/abc'});
+  bridge.streams.at(-1).onValue({instanceId: 'cursor', phase: 'succeeded', flowId: 'f1'});
+  assert.equal(bridge.setupState({engine: 'cursor'}).auth.phase, 'succeeded');
+  assert.equal(calls.filter(call => call[0] === 'server.refreshProviders').length, 2, 'a finished sign-in makes the engine service check again');
+
+  const terminal = await bridge.signin({engine: 'kiro', open: true});
+  assert.deepEqual([terminal.how, terminal.command], ['terminal', 'kiro-cli login']);
+  const install = await bridge.install({engine: 'pi'});
+  assert.deepEqual([install.how, install.opened], ['terminal', false], 'nothing runs until the user clicks');
 });

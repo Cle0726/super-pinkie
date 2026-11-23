@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-11-23 · 会话 42f0bde1 · E3b 十家引擎全部进菜单：打开、安装、登录
+
+**用户这一段的两句话**
+- 「把人家支持的都加上比如 Cursor 等这些都加」→ 做了，见下。PLAN 3.7、分批 E3b。
+- 「T3 和 bot 这种主要功能是给 Metre 的，但是里面也有很成熟的工具 / 功能 / 可视化命令前端功能按键……也可以同步给碧琪（全局）」→ 写进 PLAN 3.8、分批 E8（Metre 里验过的部件写成不绑 Metre 的通用部件，再按碧琪的样子接到全局；不动老模式已有行为）。还没动手。
+
+**做了什么**
+- `engines-bridge.mjs`：`ENGINES` 从 3 家扩到 10 家（Claude Code、Codex、Antigravity、Cursor、OpenCode、Grok Build、Kiro、Pi、fx、Muse Code），每家带官方安装命令（win / mac / any，官方没给的系统只给链接）、登录命令、说明链接、要付费之类的提示。`engineState` 把每家说成大白话：能用 / 还没打开 / 这台电脑上还没装 / 还没登录 / 别的毛病（引擎服务的英文原话里 “disabled in T3 Code settings” 这类不再露出来）。引擎服务没报上来的（Antigravity 从没打开过时）也列出来，算「还没打开」。
+- 新动作：`turnOn`（照引擎服务自己设置页的做法 upsert 这一家的实例配置、保留原有配置，再 `server.refreshProviders {instanceId}`）；`install`（Antigravity 走托管 `provider.install.start` + 订阅进度；其余给官方命令，用户点了才开终端）；`signin`（Antigravity、Cursor 走托管 `provider.auth.start` + 订阅；其余开终端跑官方登录命令）；`signinStep`（open：要同意的先替用户点同意，再用系统浏览器打开登录页，只放 https；paste：把登录页给的代码转给 `provider.auth.complete`，不存；cancel）。要填密钥的登录方式不在 Metre 里做。终端只跑表里写死的命令；Windows 上 `irm … | iex` 开 PowerShell，其余开命令行窗口（npm 的 .ps1 常被执行策略挡）。网关方法：`pinkie.engines.turnOn / install / setup`，`signin` 改成新的。`engines.mjs` 拆出 `readProviderFiles`。
+- 界面 `laolao-metre-engine.js/.css`（`?v=metreengine2`）：引擎菜单分「能用」和「还要设置一下」两组；没设置好的一家一行（名字左、状态右、›），点进去是这一家的设置卡片：打开 → 装（命令 + 复制 + 在终端里装 / 托管进度条）→ 登录（终端命令，或托管的「打开登录页 / 贴代码 / 取消」）→ 选模型。引擎台顶上的旧「登录 Claude」卡片换成同一张设置卡片（同一个引擎复用同一张，刷新不会冲掉正在登录的那一步）。
+
+**怎么验的**
+- 测试 59 过：`metre-engines` 8、`metre-engines-bridge` 11（新加：十家顺序和状态、托管登录一步步、开关保留原配置、终端白名单、浏览器链接只放 https）、`metre-engine-ui` 5（**真浏览器那条这次跑起来了**，另加一条真点菜单：十家分组、打开 Cursor、在终端里装、Antigravity 贴代码）、`metre-board` 14、`plugin-file-lists`、`code-health-ratchet`、`metre-roles` 17；`tools/health/ratchet.mjs` 过。
+  - 浏览器测试的跑法：`npm install playwright-core@1.49.1 --proxy http://127.0.0.1:7897` 装到会话草稿的 `deps/`，然后 `NODE_PATH=<deps>/node_modules node --test tests/metre-engine-ui.test.mjs`（用本机 Edge）。
+- 真引擎服务（`F:\t3probe\e1\root`，脚本在会话草稿 `probe.mjs` / `authprobe.mjs` / `watchprobe.mjs`，只打印 id 和状态）：十家都列出；Cursor 真打开 → 变成「还没登录」→ 真关回去；Cursor 托管登录真走到「等你在浏览器登录」并拿到 https 登录页，取消也对。
+- 截图（存根页 + 真 Metre CSS，Edge，亮 / 暗）：菜单、Cursor 安装卡、Antigravity 登录卡，看过并修了两处（托管按钮撑满一行、一家一行的箭头和状态位置）。
+
+**发现**
+- 本机的 Claude Code 命令行**其实没登录**：`~/.claude/.credentials.json` 里只有设备令牌，`claude auth status` 是 `loggedIn: false`（那是桌面 App 自己的登录，命令行用不了）。之前「Claude 没登录」不是 HOME 的问题——E1 服务代码用的就是用户的 HOME。
+- Codex 已登录但额度用完（11-26 17:44 本地时间恢复）。其余八家本机都没装或没打开。所以目前没有一个引擎能跑真活：要么用户跑一次 `claude auth login`（之后用最便宜的模型发一句话验证，额度花得很少），要么等 Codex 恢复。
+
+**没验的**
+- 没在用户的真碧琪界面里点（只在存根页和测试里）；隔离网关整条走一遍还没做。
+- 托管安装（Antigravity 运行包）没真装——没打开 Antigravity；终端安装命令没真跑（不替用户装东西）。
+- Mac 上的终端命令只有单元测试。
+
+**下一步（按顺序）**
+1. 用户登录 Claude Code 后：用 Haiku 之类最便宜的模型在引擎台真发一句话，验对话流和改动面板；然后侧栏标引擎名、拼并排对比图。
+2. 隔离网关真调一遍（`tools/metre/iso`，`METRE_ISO_ROOT` 放 F: 纯英文路径；把 `F:\t3probe\e1\root\versions` 拷过去省得重下）。
+3. E4 `pinkie_engine_task` → E5 乐手 → E6 「更多引擎」（ACP 注册表）→ E7 → E8 同步给碧琪全局。
+
 ## 2026-11-22 深夜 · 会话 42f0bde1 · 查清「把对方支持的引擎都加上」（只查没写代码，用户额度到了）
 
 **用户这一句**：「记得把人家支持的都加上比如Cursor 等这些都加」→ 引擎菜单不止 Claude Code / Codex / Antigravity，T3 支持的全部要有。

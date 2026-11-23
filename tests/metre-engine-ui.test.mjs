@@ -91,3 +91,80 @@ test('in a browser: chip in the composer, stage rows, escaped text, and the appr
     await tab.locator('.pk-eng-card--closed').waitFor();
   } finally { await browser.close(); }
 });
+
+// 3.7：对方支持的十家都在菜单里；没设置好的点进去一步步打开、安装、登录。
+test('in a browser: all ten engines are in the menu, and the ones not set up open their own setup steps', {timeout: 60_000}, async t => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage();
+    const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
+      <div class="chat-main" style="position:relative;width:900px;height:700px"><div class="chat-thread">native</div>
+      <div class="agent-chat__composer-controls"><div class="pinkie-chip pinkie-baton"></div></div></div></body></html>`;
+    await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30117/chat?session=agent%3Ametre%3Ab');
+    await tab.evaluate(() => {
+      const guide = (install, login, extra = {}) => ({install, login, loginHint: '', link: 'https://example.com/docs', note: '', managedInstall: false, managedSignin: false, ...extra});
+      const row = (id, name, state, text, extra = {}) => ({id, name, state, text, enabled: state !== 'off', installed: !['off', 'missing'].includes(state), signedIn: state === 'ready',
+        quota: {state: 'unknown'}, models: state === 'ready' ? [{slug: 'm1', name: 'Model One', isDefault: true}] : [], setup: {canInstall: false, canAuthenticate: false}, guide: guide('', ''), ...extra});
+      let cursorOn = false;
+      const engines = () => [
+        row('claudeAgent', 'Claude Code', 'signin', '还没登录，或者登录过期了', {guide: guide('npm install -g @anthropic-ai/claude-code', 'claude auth login')}),
+        row('codex', 'Codex', 'ready', ''),
+        row('antigravity', 'Antigravity', 'signin', '还没登录，或者登录过期了', {setup: {canInstall: false, canAuthenticate: true}, guide: guide('', '', {managedInstall: true, managedSignin: true})}),
+        row('cursor', 'Cursor', cursorOn ? 'missing' : 'off', cursorOn ? '这台电脑上还没装' : '还没打开', {guide: guide("irm 'https://cursor.com/install?win32=true' | iex", 'agent login', {managedSignin: true, note: '要付费的 Cursor 套餐'})}),
+        row('opencode', 'OpenCode', 'off', '还没打开'), row('grok', 'Grok Build', 'off', '还没打开'),
+        row('kiro', 'Kiro', 'missing', '这台电脑上还没装', {guide: guide("irm 'https://cli.kiro.dev/install.ps1' | iex", 'kiro-cli login')}),
+        row('pi', 'Pi', 'off', '还没打开'), row('fx', 'fx', 'off', '还没打开'), row('muse', 'Muse Code', 'off', '还没打开'),
+      ];
+      window.calls = [];
+      window.toasts = [];
+      window.__laolaoToast = text => window.toasts.push(text);
+      window.__laolaoSidebar = {gwRequest: async (method, params) => {
+        window.calls.push([method, params]);
+        if (method === 'pinkie.engines.session') return {sessionKey: params.sessionKey, pref: {engine: 'metre'}, summary: null, error: '', service: {running: true}};
+        if (method === 'pinkie.engines.catalog') return {enabled: true, running: true, source: 'live', levels: [], engines: engines()};
+        if (method === 'pinkie.engines.turnOn') { cursorOn = true; return {enabled: true, running: true, source: 'live', levels: [], engines: engines()}; }
+        if (method === 'pinkie.engines.install') return {engine: params.engine, how: 'terminal', command: 'x', opened: params.open === true};
+        if (method === 'pinkie.engines.signin') return {engine: params.engine, how: 'managed', auth: {phase: 'waiting', flowId: 'f1', url: '', step: {type: 'browser', id: 'i1', url: 'https://accounts.example/x', consent: true, paste: true}, message: '', methods: []}};
+        if (method === 'pinkie.engines.setup') return {engine: params.engine, install: null, auth: {phase: 'waiting', flowId: 'f1', url: '', step: {type: 'browser', id: 'i1', url: 'https://accounts.example/x', consent: true, paste: true}, message: '', methods: []}};
+        return {};
+      }};
+    });
+    await tab.addScriptTag({content: js});
+    const chipButton = tab.locator('.agent-chat__composer-controls > .pk-eng-chip');
+    await chipButton.waitFor({timeout: 10_000});
+    await chipButton.click();
+    await tab.locator('.pk-eng-menu__group').first().waitFor();
+    const names = await tab.locator('.pk-eng-menu__item .pk-eng-menu__name').allTextContents();
+    assert.deepEqual(names, ['Metre', 'Codex', 'Claude Code', 'Antigravity', 'Cursor', 'OpenCode', 'Grok Build', 'Kiro', 'Pi', 'fx', 'Muse Code']);
+    assert.deepEqual(await tab.locator('.pk-eng-menu__group').allTextContents(), ['能用', '还要设置一下']);
+
+    // Cursor 还没打开 → 打开 → 变成「没装」，给官方安装命令；不点不跑。
+    await tab.locator('.pk-eng-menu__item', {hasText: 'Cursor'}).click();
+    await tab.getByRole('button', {name: '打开 Cursor'}).click();
+    await tab.locator('.pk-eng-cmd code', {hasText: 'cursor.com/install'}).waitFor();
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.turnOn')[1]), {engine: 'cursor', on: true});
+    assert.equal(await tab.evaluate(() => window.calls.some(([m]) => m === 'pinkie.engines.install')), false);
+    assert.match(await tab.locator('.pk-eng-setup__note').textContent(), /付费/);
+    await tab.getByRole('button', {name: '在终端里装'}).click();
+    await tab.waitForFunction(() => window.calls.some(([m]) => m === 'pinkie.engines.install'));
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m]) => m === 'pinkie.engines.install')[1]), {engine: 'cursor', open: true});
+
+    // Antigravity 托管登录：同意 + 打开登录页 + 回贴代码，都在 Metre 自己的卡片里。
+    await tab.getByRole('button', {name: '‹ 换引擎'}).click();
+    await tab.locator('.pk-eng-menu__item', {hasText: 'Antigravity'}).click();
+    await tab.getByRole('button', {name: '登录', exact: true}).click();
+    await tab.getByRole('button', {name: '打开登录页'}).waitFor();
+    await tab.locator('.pk-eng-input').fill('4/code');
+    await tab.getByRole('button', {name: '确定'}).click();
+    await tab.waitForFunction(() => window.calls.some(([m, p]) => m === 'pinkie.engines.setup' && p.action === 'paste'));
+    assert.deepEqual(await tab.evaluate(() => window.calls.find(([m, p]) => m === 'pinkie.engines.setup' && p.action === 'paste')[1]), {engine: 'antigravity', action: 'paste', code: '4/code'});
+    assert.equal(/T3/i.test(await tab.locator('.pk-eng-menu').innerText()), false);
+  } finally { await browser.close(); }
+});
+

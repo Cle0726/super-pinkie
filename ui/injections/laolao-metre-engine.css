@@ -231,3 +231,33 @@ html[data-laolao-mode="metre"][data-pinkie-night] .pk-eng-diff__l--del { color: 
 @media (prefers-reduced-motion: reduce) {
   .pk-eng-caret, .pk-eng-dot--run, .pk-eng-state--running i { animation: none; }
 }
+
+/* ---------- 一家引擎的打开、安装、登录（3.7） ---------- */
+.pk-eng-menu__group { padding: 10px 10px 4px; color: var(--metre-muted, #73726C); font-size: 11.5px; letter-spacing: 0.02em; }
+/* 还没设置好的那一组：一家一行，名字在左、状态在右，菜单不至于太长。 */
+.pk-eng-menu__item--row { display: flex; align-items: baseline; gap: 8px; padding-top: 6px; padding-bottom: 6px; }
+.pk-eng-menu__item--row .pk-eng-menu__note { margin-left: auto; white-space: nowrap; }
+.pk-eng-menu__item--row::after { content: "\203A"; color: var(--metre-muted, #73726C); }
+.pk-eng-menu .pk-eng-setup { padding: 4px 6px 6px; }
+.pk-eng-setup { display: grid; gap: 8px; }
+.pk-eng-setup__text { margin: 0; color: var(--metre-text, #1F1E1D); font-size: 13px; line-height: 1.55; }
+.pk-eng-setup__text--warn { color: var(--metre-warn, #9A4A1F); }
+.pk-eng-setup__note { margin: 0; color: var(--metre-muted, #73726C); font-size: 12px; }
+.pk-eng-setup__live { display: grid; gap: 8px; }
+.pk-eng-setup__live .pk-eng-card__acts { margin-top: 0; }
+.pk-eng-setup__link { align-self: center; color: var(--metre-muted, #73726C); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+.pk-eng-cmd {
+  display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; border-radius: 8px;
+  background: var(--metre-hover, #F0EEE6); border: 1px solid var(--metre-line, #E8E6DC);
+}
+.pk-eng-cmd code { flex: 1; min-width: 0; font: 400 12px/1.5 var(--metre-mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; }
+.pk-eng-cmd .pk-eng-btn { flex: none; padding: 2px 8px; font-size: 12px; }
+.pk-eng-progress { height: 4px; border-radius: 2px; background: var(--metre-line, #E8E6DC); overflow: hidden; }
+.pk-eng-progress > span { display: block; height: 100%; background: var(--metre-text, #1F1E1D); transition: width 0.4s ease; }
+.pk-eng-code { font: 600 20px/1.2 var(--metre-mono, ui-monospace, monospace); letter-spacing: 0.12em; user-select: all; }
+.pk-eng-paste { display: flex; gap: 6px; }
+.pk-eng-input {
+  flex: 1; min-width: 0; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--metre-line-strong, #D9D6CC);
+  background: var(--metre-card, #fff); color: var(--metre-text, #1F1E1D); font: 400 12.5px/1 var(--metre-sans, system-ui, sans-serif); outline: 0;
+}
+.pk-eng-input:focus { border-color: var(--metre-text, #1F1E1D); }

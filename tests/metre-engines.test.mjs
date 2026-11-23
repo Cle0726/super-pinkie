@@ -118,7 +118,7 @@ test('gateway methods: off by default, the switch is remembered, nothing starts 
   const methods = {};
   const register = (api, name, fn) => { methods[name] = fn; };
   const service = registerEngines({logger: null}, {base, register});
-  assert.deepEqual(Object.keys(methods).sort(), ['catalog', 'choose', 'diff', 'enable', 'open', 'organize', 'respond', 'say', 'session', 'signin', 'status', 'stop', 'thread', 'threads'].map(name => 'pinkie.engines.' + name));
+  assert.deepEqual(Object.keys(methods).sort(), ['catalog', 'choose', 'diff', 'enable', 'install', 'open', 'organize', 'respond', 'say', 'session', 'setup', 'signin', 'status', 'stop', 'thread', 'threads', 'turnOn'].map(name => 'pinkie.engines.' + name));
   assert.equal(service.root, path.join(base, 'engines'));
   const first = await methods['pinkie.engines.status']();
   assert.equal(first.enabled, false);

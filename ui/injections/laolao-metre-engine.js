@@ -6,7 +6,7 @@
  *
  *   - Metre 输入框下面多一颗「引擎」按钮：Metre（默认）/ Claude Code / Codex / Antigravity，带登录和额度状态，再选模型。
  *   - 选了外部引擎，这个 Metre 会话的正文区换成引擎台：对话流、自己的输入框、待批准和提问卡片、右侧改动面板。
- *   - 数据全走网关：pinkie.engines.session / choose / say / respond / stop / organize / diff / catalog / enable / signin。
+ *   - 数据全走网关：pinkie.engines.session / choose / say / respond / stop / organize / diff / catalog / enable / turnOn / install / signin / setup。
  *   - 刷新：引擎台开着时在跑 1 秒一次、闲着 4 秒一次；页面藏起来时不拉。 */
 (() => {
   'use strict';
@@ -35,7 +35,10 @@
   };
 
   const LEVEL_SHORT = {'full-access': '全放手', auto: '自己判断', 'auto-accept-edits': '改文件不问', 'approval-required': '每步都问'};
-  const ENGINE_NAMES = {metre: 'Metre', claudeAgent: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity'};
+  // 引擎服务支持的十家（顺序和 engines-bridge.mjs 的 ENGINES 一样）。
+  const ENGINE_NAMES = {metre: 'Metre', claudeAgent: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity', cursor: 'Cursor', opencode: 'OpenCode',
+    grok: 'Grok Build', kiro: 'Kiro', pi: 'Pi', fx: 'fx', muse: 'Muse Code'};
+  const ENGINE_ORDER = Object.keys(ENGINE_NAMES).filter(id => id !== 'metre');
   const STATUS_WORD = {idle: '', running: '在奏', waiting: '等你', done: '奏完', failed: '没奏成', stopped: '收住了'};
   // 像素记号（9×9，和 Metre 的像素 M 同一套画法）：一个休止符——引擎台还没开始的样子。
   const REST = ['..##.....', '...##....', '....##...', '...##....', '..##.....', '...##....', '....###..', '.....##..', '....#....'];
@@ -172,15 +175,14 @@
 
   function engineNote(row) {
     if (!state.catalog?.enabled && !state.catalog?.running) return '外部引擎没打开';
-    if (!row) return '还没装';
-    if (!row.enabled) return '在引擎服务里还没启用';
-    if (!row.installed) return '这台电脑还没装';
+    if (!row) return '还没打开';
+    if (row.state && row.state !== 'ready') return row.text || '还要设置一下';
     if (row.quota?.state === 'out') return '额度用完了' + (row.quota.resetAt ? ` · ${when(row.quota.resetAt)} 恢复` : '');
-    if (!row.signedIn) return '还没登录';
-    const parts = [row.plan, row.quota?.text, row.version ? 'v' + row.version : ''].filter(Boolean);
+    const parts = [row.plan, row.quota?.text, row.version ? 'v' + row.version : '', row.text].filter(Boolean);
     return parts.join(' · ') || '可以用';
   }
-  const ready = row => Boolean(row && row.enabled && row.installed && row.signedIn && row.quota?.state !== 'out');
+  const setUp = row => Boolean(row && (row.state ? row.state === 'ready' : row.enabled && row.installed && row.signedIn));
+  const ready = row => setUp(row) && row.quota?.state !== 'out';
 
   // ---------- 引擎菜单（输入框下面的按钮和引擎台里的按钮共用） ----------
   let menu = null;
@@ -230,6 +232,17 @@
       position(anchor, node);
       return;
     }
+    if (step === 'setup') {
+      node.querySelector('.pk-eng-menu__sub').textContent = `${ENGINE_NAMES[engineId] || engineId} 还要设置一下`;
+      const back = h('button', 'pk-eng-menu__back', '‹ 换引擎');
+      back.onclick = () => openEngineMenu(anchor);
+      body.append(back, setupCard(engineId, {
+        onReady: () => (engineRow(engineId)?.models || []).length ? openEngineMenu(anchor, 'models', engineId) : (closeMenu(), choose({engine: engineId, model: ''})),
+        relayout: () => menu === node && position(anchor, node),
+      }));
+      position(anchor, node);
+      return;
+    }
     if (!catalog.enabled) {
       const off = h('div', 'pk-eng-menu__off', '<span>外部引擎没打开。打开后才会下载（约 170MB）和启动，只在这台电脑上跑。</span>');
       const on = h('button', 'pk-eng-btn pk-eng-btn--primary', '打开外部引擎');
@@ -237,21 +250,32 @@
       off.append(on);
       body.append(off);
     }
-    const options = [{id: 'metre', name: 'Metre', note: '默认 · 用碧琪里配好的模型，能派活、能记项目'}]
-      .concat(['claudeAgent', 'codex', 'antigravity'].map(id => ({id, name: ENGINE_NAMES[id], note: engineNote(engineRow(id)), row: engineRow(id)})));
-    for (const option of options) {
-      const current = (pref().engine || 'metre') === option.id;
-      const item = h('button', 'pk-eng-menu__item' + (option.id !== 'metre' && !ready(option.row) ? ' pk-eng-menu__item--dim' : ''),
-        `<span class="pk-eng-menu__name">${esc(option.name)}</span><span class="pk-eng-menu__note">${esc(option.note)}</span>`);
-      item.setAttribute('role', 'menuitemradio');
-      item.setAttribute('aria-checked', String(current));
-      item.onclick = () => {
-        if (option.id === 'metre') { closeMenu(); choose({engine: 'metre'}); return; }
-        const models = option.row?.models || [];
-        if (models.length) openEngineMenu(anchor, 'models', option.id);
-        else { closeMenu(); choose({engine: option.id, model: ''}); }
-      };
-      body.append(item);
+    // 分两组：设置好了的（能直接选）在上面，还要打开、安装或登录的在下面，点进去一步步弄好。
+    const external = ENGINE_ORDER.map(id => ({id, name: ENGINE_NAMES[id], note: engineNote(engineRow(id)), row: engineRow(id)}));
+    const groups = [
+      {label: '', options: [{id: 'metre', name: 'Metre', note: '默认 · 用碧琪里配好的模型，能派活、能记项目'}]},
+      {label: '能用', options: catalog.enabled ? external.filter(option => setUp(option.row)) : []},
+      {label: catalog.enabled ? '还要设置一下' : '打开外部引擎以后能用', options: catalog.enabled ? external.filter(option => !setUp(option.row)) : external},
+    ];
+    for (const group of groups) {
+      if (!group.options.length) continue;
+      if (group.label) body.append(h('div', 'pk-eng-menu__group', esc(group.label)));
+      for (const option of group.options) {
+        const current = (pref().engine || 'metre') === option.id;
+        const compact = option.id !== 'metre' && (!catalog.enabled || !setUp(option.row));
+        const item = h('button', 'pk-eng-menu__item' + (option.id !== 'metre' && !ready(option.row) ? ' pk-eng-menu__item--dim' : '') + (compact ? ' pk-eng-menu__item--row' : ''),
+          `<span class="pk-eng-menu__name">${esc(option.name)}</span><span class="pk-eng-menu__note">${esc(option.note)}</span>`);
+        item.setAttribute('role', 'menuitemradio');
+        item.setAttribute('aria-checked', String(current));
+        item.onclick = () => {
+          if (option.id === 'metre') { closeMenu(); choose({engine: 'metre'}); return; }
+          if (!catalog.enabled || !setUp(option.row)) { openEngineMenu(anchor, 'setup', option.id); return; }
+          const models = option.row?.models || [];
+          if (models.length) openEngineMenu(anchor, 'models', option.id);
+          else { closeMenu(); choose({engine: option.id, model: ''}); }
+        };
+        body.append(item);
+      }
     }
     const levels = h('div', 'pk-eng-menu__levels');
     levels.innerHTML = '<div class="pk-eng-menu__label">放手程度</div>';
@@ -311,7 +335,7 @@
     const btn = h('button', 'pk-eng-chip');
     btn.type = 'button';
     btn.setAttribute('aria-haspopup', 'menu');
-    btn.dataset.pinkieTooltip = '引擎：这段对话由 Metre 自己做，还是交给 Claude Code、Codex、Antigravity';
+    btn.dataset.pinkieTooltip = '引擎：这段对话由 Metre 自己做，还是交给 Claude Code、Codex、Cursor、Antigravity 等';
     btn.innerHTML = `<span class="pk-eng-chip__name">${esc(ENGINE_NAMES[pref().engine] || 'Metre')}</span><svg class="pk-eng-chip__caret" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.2 3.8L5 6.5l2.8-2.7"/></svg>`;
     btn.onclick = event => { event.preventDefault(); event.stopPropagation(); menu ? closeMenu() : openEngineMenu(btn); };
     return btn;
@@ -413,12 +437,145 @@
     try { await rpc('pinkie.engines.organize', {threadId: pref().threadId, action}, 20000); toast(action === 'pin' ? '已置顶' : action === 'archive' ? '已归档' : '好了'); }
     catch (error) { toast(error.message); }
   }
-  async function signin(engine, open) {
-    try {
-      const info = await rpc('pinkie.engines.signin', {engine, open}, 20000);
-      if (info.opened) toast('登录窗口打开了：在浏览器里登录你自己的账号，回来点「我登录好了」');
-      return info;
-    } catch (error) { toast(error.message); return null; }
+  // ---------- 一家引擎的「打开 → 安装 → 登录」（菜单里和引擎台顶上共用，3.7） ----------
+  // 碧琪不经手账号：托管登录只把登录页在浏览器里打开、把登录页给的代码转回引擎服务；终端那条只跑官方命令，用户点了才开。
+  function setupCard(engine, {onReady = null, relayout = null} = {}) {
+    const box = h('div', 'pk-eng-setup');
+    const name = ENGINE_NAMES[engine] || engine;
+    let live = null, timer = 0, sig = '';
+    const btn = (label, primary, fn) => {
+      const node = h('button', 'pk-eng-btn' + (primary ? ' pk-eng-btn--primary' : ''), esc(label));
+      node.type = 'button';
+      node.onclick = async event => { event.stopPropagation(); node.disabled = true; try { await fn(); } catch (error) { toast(error.message); } finally { node.disabled = false; } };
+      return node;
+    };
+    const commandLine = command => {
+      const line = h('div', 'pk-eng-cmd', `<code>${esc(command)}</code>`);
+      line.append(btn('复制', false, async () => { await navigator.clipboard.writeText(command); toast('复制好了'); }));
+      return line;
+    };
+    const say = (text, cls = '') => h('p', 'pk-eng-setup__text' + (cls ? ' ' + cls : ''), text);
+    const recheck = async (quiet = false) => {
+      await loadCatalog(true);
+      live = null; sig = '';
+      render(true);
+      if (!quiet) toast(setUp(engineRow(engine)) ? `${name} 可以用了` : `${name}：${engineRow(engine)?.text || '还没好'}`);
+      if (setUp(engineRow(engine))) paint();
+    };
+    const poll = async () => {
+      clearTimeout(timer);
+      if (!box.isConnected) return;
+      try { live = await rpc('pinkie.engines.setup', {engine}, 10000); } catch {}
+      const phase = live?.install?.phase || live?.auth?.phase || '';
+      if (phase === 'succeeded') { toast(live.install ? `${name} 装好了` : `${name} 登录好了`); await recheck(true); return; }
+      render();
+      if (!['failed', 'cancelled', 'idle', ''].includes(phase)) timer = setTimeout(poll, 1200);
+    };
+    const managed = () => {
+      const wrap = h('div', 'pk-eng-setup__live');
+      const install = live?.install, auth = live?.auth;
+      if (install) {
+        const pct = install.total ? Math.min(100, Math.round(install.downloaded / install.total * 100)) : 0;
+        const words = {downloading: `正在下载 ${install.version || ''}`.trim(), extracting: '正在解压', verifying: '正在校验', failed: '没装上', cancelled: '取消了'};
+        wrap.append(say(`${words[install.phase] || '正在准备'}${install.phase === 'downloading' && install.total ? ` · ${pct}%` : ''}${install.message ? ' · ' + esc(install.message) : ''}`));
+        if (install.phase === 'downloading') wrap.append(h('div', 'pk-eng-progress', `<span style="width:${pct}%"></span>`));
+        if (install.phase === 'failed') wrap.append(btn('再装一次', true, startInstall));
+        return wrap;
+      }
+      if (!auth) return wrap;
+      const step = auth.step;
+      if (auth.phase === 'failed') { wrap.append(say('没登录上' + (auth.message ? '：' + esc(auth.message) : ''), 'pk-eng-setup__text--warn'), btn('再试一次', true, startSignin)); return wrap; }
+      if (auth.phase === 'cancelled') { wrap.append(say('登录取消了。'), btn('重新登录', true, startSignin)); return wrap; }
+      if (auth.phase === 'verifying') { wrap.append(say('正在确认账号…')); return wrap; }
+      if (step?.type === 'credentials') { wrap.append(say('这家选的是要填密钥的登录方式，Metre 里不经手密钥。请改用浏览器登录，或者在终端里用官方命令登录。')); return wrap; }
+      if (step?.type === 'deviceCode') wrap.append(say(`在登录页里输入这串代码：`), h('div', 'pk-eng-code', esc(step.code)));
+      else wrap.append(say(auth.phase === 'starting' ? '正在准备登录页…' : '在浏览器里用你自己的账号登录，登录完这里会自己接上。'));
+      const acts = h('div', 'pk-eng-card__acts');
+      if (step?.url || auth.url) acts.append(btn('打开登录页', true, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'open'}, 30000); toast('登录页在浏览器里打开了'); poll(); }));
+      acts.append(btn('取消', false, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'cancel'}, 20000); sig = ''; render(); }));
+      wrap.append(acts);
+      // 登录页最后给一串代码要贴回来的（Antigravity 这类）：贴在这里，Metre 只转给引擎服务，不存。
+      if (step?.paste || engine === 'antigravity') {
+        const field = h('div', 'pk-eng-paste');
+        const input = h('input', 'pk-eng-input');
+        input.placeholder = '登录页最后给的代码，或者整个地址';
+        input.autocomplete = 'off';
+        field.append(input, btn('确定', false, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'paste', code: input.value}, 60000); input.value = ''; poll(); }));
+        wrap.append(field);
+      }
+      return wrap;
+    };
+    async function startInstall() {
+      const result = await rpc('pinkie.engines.install', {engine, open: true}, 120000);
+      if (result.how === 'managed') { live = {install: result.install}; poll(); return; }
+      if (result.opened) toast('终端窗口打开了：装好以后回来点「装好了，再查一次」');
+    }
+    async function startSignin() {
+      const result = await rpc('pinkie.engines.signin', {engine, open: true}, 60000);
+      if (result.how === 'managed') { live = {auth: result.auth}; sig = ''; render(); poll(); return; }
+      if (result.opened) toast('登录窗口打开了：照提示用你自己的账号登录，回来点「登好了，再查一次」');
+    }
+    function render(force = false) {
+      const row = engineRow(engine);
+      const guide = row?.guide || {};
+      const next = JSON.stringify([row?.state, row?.text, state.catalog?.enabled, live]);
+      if (!force && next === sig) return;
+      sig = next;
+      box.replaceChildren();
+      const acts = h('div', 'pk-eng-card__acts');
+      const link = guide.link ? h('a', 'pk-eng-setup__link', '官方说明') : null;
+      if (link) { link.href = guide.link; link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+      if (!state.catalog?.enabled && !state.catalog?.running) {
+        box.append(say(`先打开外部引擎（第一次下载约 170MB，只在这台电脑上跑），再设置 ${esc(name)}。`));
+        acts.append(btn('打开外部引擎', true, async () => { await enableEngines(); await recheck(true); }));
+      } else if (live?.install || live?.auth) {
+        box.append(managed());
+      } else if (!row || row.state === 'off') {
+        box.append(say(`${esc(name)} 还没打开。打开后会检查这台电脑上有没有装、登没登录。`));
+        acts.append(btn(`打开 ${name}`, true, async () => {
+          state.catalog = {...state.catalog, ...await rpc('pinkie.engines.turnOn', {engine, on: true}, 120000)};
+          state.catalogAt = Date.now();
+          await recheck(true);
+        }));
+      } else if (row.state === 'missing') {
+        if (guide.managedInstall || row.setup?.canInstall) {
+          box.append(say(`要先装 ${esc(name)} 的运行包：引擎服务自己下载、校验，不用你动手。`));
+          acts.append(btn('安装', true, startInstall));
+        } else if (guide.install) {
+          box.append(say(`这台电脑上还没装 ${esc(name)}。在终端里运行官方的安装命令：`), commandLine(guide.install));
+          acts.append(btn('在终端里装', true, startInstall), btn('装好了，再查一次', false, () => recheck()));
+        } else {
+          box.append(say(`这台电脑上还没装 ${esc(name)}。官方没给这个系统的一行安装命令，照「官方说明」装好再回来。`));
+          acts.append(btn('装好了，再查一次', true, () => recheck()));
+        }
+      } else if (row.state === 'signin') {
+        if (guide.managedSignin && row.setup?.canAuthenticate !== false) {
+          box.append(say(`用你自己的 ${esc(name)} 账号在浏览器里登录。碧琪不经手账号和密码。`));
+          acts.append(btn('登录', true, startSignin));
+        } else {
+          box.append(say(`还没登录。在终端里运行官方的登录命令，按提示用你自己的账号登录${guide.loginHint ? '（' + esc(guide.loginHint) + '）' : ''}：`), commandLine(guide.login));
+          acts.append(btn('在终端里登录', true, startSignin), btn('登好了，再查一次', false, () => recheck()));
+        }
+      } else if (row.state === 'ready') {
+        box.append(say(`${esc(name)} 可以用了。`));
+        if (onReady) acts.append(btn('选模型', true, async () => onReady()));
+      } else {
+        box.append(say(esc(row.text || '暂时用不了'), 'pk-eng-setup__text--warn'));
+        acts.append(btn('再查一次', true, () => recheck()));
+      }
+      if (guide.note) box.append(say(esc(guide.note), 'pk-eng-setup__note'));
+      if (link) acts.append(link);
+      if (acts.childElementCount) box.append(acts);
+      relayout?.();
+    }
+    render(true);
+    return box;
+  }
+  // 引擎台顶上那张设置卡片：同一个引擎复用同一张，免得每次刷新把正在登录的那一步冲掉。
+  let setupNode = null;
+  function setupFor(engine) {
+    if (setupNode?.engine !== engine) setupNode = {engine, node: setupCard(engine, {onReady: () => paint()})};
+    return setupNode.node;
   }
   async function loadDiff(force = false) {
     const threadId = pref().threadId;
@@ -541,7 +698,7 @@
         const card = h('div', 'pk-eng-card pk-eng-card--warn', `<div class="pk-eng-card__head">没奏成</div><p>${esc(said)}</p>${item.detail && item.detail !== said ? `<details class="pk-eng-detail"><summary>引擎的原话</summary><p>${esc(item.detail)}</p></details>` : ''}`);
         if (/^还没登录/.test(item.text) && summary?.thread?.engine) {
           const login = h('button', 'pk-eng-btn pk-eng-btn--primary', '去登录');
-          login.onclick = () => paintSignin(summary.thread.engine, true);
+          login.onclick = () => { paintSetup(summary.thread.engine); stage.querySelector('.pk-eng-scroll').scrollTop = 0; };
           card.append(login);
         }
         node.append(card);
@@ -585,28 +742,16 @@
     if (state.stick) { const scroll = stage.querySelector('.pk-eng-scroll'); scroll.scrollTop = scroll.scrollHeight; }
   }
 
-  function paintSignin(engine, open) {
+  function paintSetup(engine) {
     const banner = stage?.querySelector('.pk-eng-banner');
     if (!banner) return;
-    const row = engineRow(engine);
-    const name = ENGINE_NAMES[engine] || engine;
-    const box = h('div', 'pk-eng-card pk-eng-card--setup');
-    const how = row?.signin || {};
-    box.innerHTML = how.how === 'terminal'
-      ? `<div class="pk-eng-card__head">登录 ${esc(name)}</div><p>用你自己的账号登录，碧琪不经手账号和密码。点下面的按钮会打开一个命令行窗口，里面运行 <code>${esc(how.command)}</code>，按提示在浏览器里登录；登录完回到这里点「我登录好了」。</p>`
-      : `<div class="pk-eng-card__head">登录 ${esc(name)}</div><p>${esc(name)} 的运行包和 Google 登录在引擎设置里完成（第一次要装运行包）。碧琪不经手账号和密码。</p>`;
-    const acts = h('div', 'pk-eng-card__acts');
-    if (how.how === 'terminal') {
-      const go = h('button', 'pk-eng-btn pk-eng-btn--primary', '打开登录窗口');
-      go.onclick = () => signin(engine, true);
-      acts.append(go);
+    let card = banner.querySelector(':scope > .pk-eng-card--setup[data-engine]');
+    if (card?.dataset.engine !== engine) {
+      card = h('div', 'pk-eng-card pk-eng-card--setup', `<div class="pk-eng-card__head">${esc(ENGINE_NAMES[engine] || engine)} 还要设置一下</div>`);
+      card.dataset.engine = engine;
     }
-    const again = h('button', 'pk-eng-btn', '我登录好了，重新检查');
-    again.onclick = async () => { again.disabled = true; await loadCatalog(true); again.disabled = false; paint(); toast(engineRow(engine)?.signedIn ? `${name} 已经登录` : `${name} 还是没登录上`); };
-    acts.append(again);
-    box.append(acts);
-    banner.replaceChildren(box);
-    if (open) stage.querySelector('.pk-eng-scroll').scrollTop = 0;
+    card.append(setupFor(engine));
+    banner.replaceChildren(card);
   }
 
   function paintBanner() {
@@ -625,7 +770,7 @@
       banner.append(box);
       return;
     }
-    if (row && !row.signedIn && catalog?.source === 'live' && !summary?.items?.length) { paintSignin(p.engine); return; }
+    if (row && !setUp(row) && catalog?.source === 'live' && !summary?.items?.length) { paintSetup(p.engine); return; }
     if (row?.quota?.state === 'out') banner.append(h('div', 'pk-eng-card pk-eng-card--warn', `<div class="pk-eng-card__head">${esc(ENGINE_NAMES[p.engine])} 额度用完了</div><p>${row.quota.resetAt ? esc(when(row.quota.resetAt)) + ' 恢复。' : ''}这期间可以换一个引擎，或者回到 Metre 自己来做。</p>`));
     if (!p.model) banner.append(h('div', 'pk-eng-card pk-eng-card--setup', '<div class="pk-eng-card__head">还没选模型</div><p>点下面的引擎按钮，选一个模型。</p>'));
     if (!summary?.items?.length && !banner.childElementCount) {

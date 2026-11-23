@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
-import {readProviders} from './engines.mjs';
+import {readProviderFiles} from './engines.mjs';
 import {boundProjectRoot} from './project-brief.mjs';
 
 // OpenMausBot 的审批分级（docs/approval-levels.md）= T3 的运行模式。默认全放手，和 Metre 自己「不设确认关卡」一致。
@@ -19,12 +19,31 @@ export const LEVELS = [
   {id: 'approval-required', name: '每步都问', hint: '跑命令、改文件之前都先等你点头'},
 ];
 const LEVEL_IDS = new Set(LEVELS.map(level => level.id));
+// 引擎服务支持的十家（用户 11-22：「把人家支持的都加上」）。顺序 = 菜单里的顺序。
+// install：没有托管安装时给用户的官方安装命令（win / mac / any），只在用户点了「在终端里装」才开终端跑；
+// 官方没给这个系统的命令就只给 link。login：官方登录命令。managed：引擎服务自己能装（install）或能在浏览器里登录（signin）。
+// 来源：引擎服务的 docs/user/install.md#providers 和各家官方文档（PROGRESS 11-22 深夜）。
 export const ENGINES = [
-  {id: 'claudeAgent', name: 'Claude Code', signin: {how: 'terminal', command: 'claude auth login'}},
-  {id: 'codex', name: 'Codex', signin: {how: 'terminal', command: 'codex login'}},
-  {id: 'antigravity', name: 'Antigravity', signin: {how: 'settings', page: 'providers'}},
+  {id: 'claudeAgent', name: 'Claude Code', login: 'claude auth login', install: {any: 'npm install -g @anthropic-ai/claude-code'}, link: 'https://claude.com/product/claude-code'},
+  {id: 'codex', name: 'Codex', login: 'codex login', install: {any: 'npm install -g @openai/codex'}, link: 'https://developers.openai.com/codex/cli'},
+  {id: 'antigravity', name: 'Antigravity', managed: {install: true, signin: true}, link: 'https://antigravity.google'},
+  {id: 'cursor', name: 'Cursor', login: 'agent login', managed: {signin: true}, note: '要付费的 Cursor 套餐',
+    install: {win: "irm 'https://cursor.com/install?win32=true' | iex", mac: 'curl https://cursor.com/install -fsS | bash'}, link: 'https://cursor.com/cli'},
+  {id: 'opencode', name: 'OpenCode', login: 'opencode auth login', install: {any: 'npm install -g @opencode/cli'}, link: 'https://opencode.ai'},
+  {id: 'grok', name: 'Grok Build', login: 'grok login', note: '要 SuperGrok 或 X Premium+',
+    install: {mac: 'curl -fsSL https://x.ai/cli/install.sh | bash'}, link: 'https://docs.x.ai/build/overview'},
+  {id: 'kiro', name: 'Kiro', login: 'kiro-cli login',
+    install: {win: "irm 'https://cli.kiro.dev/install.ps1' | iex", mac: 'curl -fsSL https://cli.kiro.dev/install | bash'}, link: 'https://kiro.dev/docs/cli/'},
+  {id: 'pi', name: 'Pi', login: 'pi', loginHint: '窗口里输入 /login，选你的模型服务商', note: '要 Node.js 22.19 以上',
+    install: {any: 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'}, link: 'https://pi.dev'},
+  {id: 'fx', name: 'fx', login: 'fx login', install: {mac: 'curl -fsSL https://fx.sh/setup.sh | bash'}, link: 'https://fx.sh'},
+  {id: 'muse', name: 'Muse Code', login: 'muse login', install: {}, link: 'https://dev.meta.ai/docs/muse-code'},
 ];
 const ENGINE_NAME = Object.fromEntries(ENGINES.map(engine => [engine.id, engine.name]));
+const engineInfo = id => ENGINES.find(engine => engine.id === id) || null;
+const installCommand = (info, platform = process.platform) => info?.install?.[platform === 'win32' ? 'win' : 'mac'] || info?.install?.any || '';
+// 用户点了才开终端，而且只跑这张表里写死的命令。
+const TERMINAL_COMMANDS = new Set(ENGINES.flatMap(engine => [engine.login, ...Object.values(engine.install || {})]).filter(Boolean));
 const TOKEN_SCOPES = ['orchestration:read', 'orchestration:operate', 'providers:manage', 'settings:write', 'source-control:write', 'filesystem:read', 'diagnostics:read'];
 const TOKEN_TTL_MS = 12 * 3600_000;
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
@@ -54,14 +73,30 @@ function quota(usageLimits, lastError = null) {
   return Number.isFinite(top) ? {state: 'ok', resetAt: null, text: `已用 ${Math.round(top)}%`} : {state: 'unknown', resetAt: null, text: ''};
 }
 
-// server.getConfig 的 providers → 引擎菜单。只留状态、套餐名、版本、模型；邮箱去掉。
-export function summarizeProviders(providers = []) {
-  return (Array.isArray(providers) ? providers : []).map(provider => {
+// 一家引擎此刻能不能用，说成大白话：ready 能用 / off 还没打开 / missing 没装 / signin 没登录 / error 别的毛病。
+export function engineState(provider = {}) {
+  const message = String(provider.message || '');
+  const status = String(provider.status || 'unknown');
+  const auth = String(provider.auth?.status || 'unknown');
+  if (provider.enabled !== true || status === 'disabled') return {state: 'off', text: '还没打开'};
+  if (provider.installed !== true || /not installed|not on PATH|ENOENT/i.test(message)) return {state: 'missing', text: '这台电脑上还没装'};
+  if (auth === 'unauthenticated' || (status !== 'ready' && /not authenticated|not (?:logged|signed) in|auth login|\blogin\b/i.test(message))) return {state: 'signin', text: '还没登录，或者登录过期了'};
+  if (status === 'ready') return {state: 'ready', text: ''};
+  if (status === 'warning') return {state: 'ready', text: brandless(message)};
+  return {state: 'error', text: brandless(message) || '暂时用不了'};
+}
+
+// server.getConfig 的 providers（或缓存文件）→ 引擎菜单。只留状态、套餐名、版本、模型；邮箱去掉。
+// 表里有、引擎服务还没报上来的（比如从没打开过的 Antigravity）也列出来，算「还没打开」。
+export function summarizeProviders(providers = [], {platform = process.platform, all = true} = {}) {
+  const rows = (Array.isArray(providers) ? providers : []).map(provider => {
     const label = String(provider?.auth?.label || '');
+    const id = String(provider?.instanceId || '');
+    const info = engineInfo(id);
     return {
-      id: String(provider.instanceId || ''),
+      id,
       driver: String(provider.driver || ''),
-      name: engineName(provider.instanceId) || String(provider.displayName || provider.instanceId || ''),
+      name: engineName(id) || brandless(provider.displayName || id),
       enabled: provider.enabled === true,
       installed: provider.installed === true,
       version: provider.version || null,
@@ -69,12 +104,31 @@ export function summarizeProviders(providers = []) {
       signedIn: provider.auth?.status === 'authenticated',
       plan: label.includes('@') ? '' : label,
       message: brandless(provider.message || ''),
+      ...engineState(provider),
+      setup: {canInstall: provider.setup?.canInstall === true || info?.managed?.install === true && provider.installed !== true,
+        canAuthenticate: provider.setup?.canAuthenticate === true},
       quota: quota(provider.usageLimits),
       models: (Array.isArray(provider.models) ? provider.models : []).map(model => ({
         slug: String(model.slug || ''), name: String(model.name || model.slug || ''), isDefault: model.isDefault === true,
       })).filter(model => model.slug),
     };
   }).filter(row => row.id);
+  if (all) for (const info of ENGINES) if (!rows.some(row => row.id === info.id)) {
+    rows.push({id: info.id, driver: info.id, name: info.name, enabled: false, installed: false, version: null, status: 'disabled', signedIn: false, plan: '',
+      message: '', state: 'off', text: '还没打开', setup: {canInstall: info.managed?.install === true, canAuthenticate: info.managed?.signin === true},
+      quota: {state: 'unknown', resetAt: null, text: ''}, models: []});
+  }
+  const order = id => { const index = ENGINES.findIndex(engine => engine.id === id); return index < 0 ? ENGINES.length : index; };
+  rows.sort((x, y) => order(x.id) - order(y.id) || x.name.localeCompare(y.name));
+  return rows.map(row => ({...row, guide: setupGuide(row.id, platform)}));
+}
+
+// 菜单里「怎么装 / 怎么登录」那一小块。
+export function setupGuide(id, platform = process.platform) {
+  const info = engineInfo(id);
+  if (!info) return null;
+  return {install: installCommand(info, platform), login: info.login || '', loginHint: info.loginHint || '', link: info.link || '', note: info.note || '',
+    managedInstall: info.managed?.install === true, managedSignin: info.managed?.signin === true};
 }
 
 function failureText(failure) {
@@ -198,28 +252,67 @@ export class SessionEngines {
   }
 }
 
-// 在终端里让用户自己登录（碧琪不经手账号）。Windows 开一个新的命令行窗口，Mac 开「终端」。
-export function openLoginTerminal(command, {platform = process.platform, spawnImpl = spawn} = {}) {
-  if (!/^[a-z]+ (?:auth )?login$/.test(command)) throw new Error('不认识的登录命令');
+// 在终端里让用户自己装、自己登录（碧琪不经手账号）。只跑 ENGINES 表里写死的命令。
+// Windows：官方给的是 PowerShell 一行（irm … | iex）就开 PowerShell，其余开命令行窗口（npm 的 .ps1 常被执行策略挡住）；Mac 开「终端」。
+export function openTerminal(command, {platform = process.platform, spawnImpl = spawn} = {}) {
+  if (!TERMINAL_COMMANDS.has(command)) throw new Error('不认识的命令');
   const detached = {detached: true, stdio: 'ignore', windowsHide: false};
-  const child = platform === 'win32'
-    ? spawnImpl('cmd.exe', ['/c', 'start', '"Metre 登录"', 'cmd.exe', '/k', command], {...detached, windowsVerbatimArguments: true})
-    : platform === 'darwin'
-      ? spawnImpl('osascript', ['-e', `tell application "Terminal" to do script "${command}"`, '-e', 'tell application "Terminal" to activate'], detached)
-      : spawnImpl('x-terminal-emulator', ['-e', command], detached);
+  let child;
+  if (platform === 'win32') {
+    const shell = /^irm /.test(command) ? `powershell.exe -NoExit -ExecutionPolicy Bypass -Command "${command}"` : `cmd.exe /k ${command}`;
+    // windowsVerbatimArguments：参数原样用空格拼起来，命令里的引号和 | 由 start 后面的程序自己解析。
+    child = spawnImpl('cmd.exe', ['/c', 'start', '"Metre"', shell], {...detached, windowsVerbatimArguments: true});
+  } else if (platform === 'darwin') {
+    const script = command.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    child = spawnImpl('osascript', ['-e', `tell application "Terminal" to do script "${script}"`, '-e', 'tell application "Terminal" to activate'], detached);
+  } else child = spawnImpl('x-terminal-emulator', ['-e', command], detached);
+  child?.unref?.();
+  return {opened: true};
+}
+export const openLoginTerminal = openTerminal;
+
+// 登录页用系统浏览器打开（引擎服务给的链接，只放 https）。
+export function openBrowser(url, {platform = process.platform, spawnImpl = spawn} = {}) {
+  if (!/^https:\/\/[^\s"]+$/i.test(String(url || ''))) throw new Error('这个登录链接不是网页地址，没有打开');
+  const detached = {detached: true, stdio: 'ignore'};
+  const child = platform === 'win32' ? spawnImpl('rundll32.exe', ['url.dll,FileProtocolHandler', url], detached)
+    : spawnImpl(platform === 'darwin' ? 'open' : 'xdg-open', [url], detached);
   child?.unref?.();
   return {opened: true};
 }
 
+const https = url => /^https:\/\/[^\s"]+$/i.test(String(url || '')) ? String(url) : '';
+const DONE_PHASES = new Set(['succeeded', 'failed', 'cancelled']);
+
+// 引擎服务的托管登录状态 → 界面要的那点东西。要填密钥的方式不在 Metre 里做（碧琪不经手凭据），只告诉用户换个方式。
+export function authView(state) {
+  if (!state || typeof state !== 'object') return null;
+  const interaction = state.interaction || null;
+  let step = null;
+  if (interaction?.type === 'browser') step = {type: 'browser', id: String(interaction.id), url: https(interaction.url), consent: interaction.requiresConsent === true, paste: interaction.acceptsCallback === true};
+  else if (interaction?.type === 'deviceCode') step = {type: 'deviceCode', id: String(interaction.id), url: https(interaction.url), code: String(interaction.userCode || '')};
+  else if (interaction?.type === 'credentials') step = {type: 'credentials'};
+  else if (interaction?.type === 'terminal') step = {type: 'terminal'};
+  return {phase: String(state.phase || 'idle'), flowId: state.flowId ? String(state.flowId) : '', url: https(state.authorizationUrl), expiresAt: state.expiresAt || null, step,
+    message: brandless(state.message || ''), methods: (Array.isArray(state.methods) ? state.methods : []).map(method => ({id: String(method.id), name: brandless(method.name), type: String(method.type)}))};
+}
+
+export function installView(state) {
+  if (!state || typeof state !== 'object') return null;
+  return {phase: String(state.phase || 'idle'), downloaded: Number(state.downloadedBytes) || 0, total: Number(state.totalBytes) || 0,
+    version: state.version || null, installedVersion: state.installedVersion || null, message: brandless(state.message || '')};
+}
+
 export class EngineBridge {
-  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now()} = {}) {
-    Object.assign(this, {service, stateRoot, logger, RpcImpl, now});
+  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn} = {}) {
+    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl});
     this.sessions = new SessionEngines(path.join(service.root, 'sessions.json'));
     this.rpcClient = null;
     this.rpcPort = 0;
     this.token = {value: '', expiresAt: 0};
     this.projects = new Map();
     this.configCache = {at: 0, value: null};
+    this.watches = new Map();
   }
 
   async issueToken() {
@@ -270,14 +363,114 @@ export class EngineBridge {
     if (state.running) {
       try {
         if (refresh) await this.call('server.refreshProviders', {}).catch(() => null);
-        engines = summarizeProviders((await this.config(refresh))?.providers);
-        source = 'live';
+        const providers = (await this.config(refresh))?.providers;
+        if (Array.isArray(providers) && providers.length) { engines = summarizeProviders(providers); source = 'live'; }
       } catch (error) { this.logger?.warn?.(`engines catalog: ${error.message}`); }
     }
-    if (!engines.length) engines = readProviders(this.service.home).map(row => ({...row, name: engineName(row.id) || row.name, quota: {state: 'unknown', resetAt: null, text: ''}}));
-    const wanted = new Set(ENGINES.map(engine => engine.id));
-    engines.sort((a, b) => Number(wanted.has(b.id)) - Number(wanted.has(a.id)) || ENGINES.findIndex(e => e.id === a.id) - ENGINES.findIndex(e => e.id === b.id));
-    return {engines: engines.map(row => ({...row, signin: ENGINES.find(engine => engine.id === row.id)?.signin || null})), levels: LEVELS, source};
+    if (!engines.length) engines = summarizeProviders(readProviderFiles(this.service.home)).map(row => ({...row, quota: {state: 'unknown', resetAt: null, text: ''}}));
+    return {engines, levels: LEVELS, source};
+  }
+
+  // 打开或关上一家引擎：照引擎服务自己的设置页，upsert 这一家的实例配置（保留它原有的配置），再让它重新检查这一家。
+  async turnOn({engine, on = true} = {}) {
+    if (!engineInfo(engine)) throw new Error('不认识这个引擎');
+    const config = await this.config(true);
+    const settings = config?.settings?.providerInstances ? config.settings : await this.call('server.getSettings', {});
+    const current = settings?.providerInstances?.[engine] || {driver: engine};
+    await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId: engine,
+      instance: {...current, driver: current.driver || engine, enabled: on !== false}}});
+    await this.call('server.refreshProviders', {instanceId: engine}, {timeout: 90_000}).catch(error => this.logger?.warn?.(`engines refresh ${engine}: ${error.message}`));
+    this.configCache = {at: 0, value: null};
+    return this.catalog();
+  }
+
+  // 托管安装、托管登录：开一条订阅，最新状态记在内存里，界面每秒来取一次。做完（成功、失败、取消）让引擎服务重新检查这一家，再关订阅。
+  watch(engine, kind, startedId = '') {
+    const key = `${kind}:${engine}`;
+    let entry = this.watches.get(key);
+    if (entry && startedId) entry.id = startedId;
+    if (entry?.open) return entry;
+    entry = {state: entry?.state || null, id: startedId || entry?.id || '', open: true, handle: null};
+    this.watches.set(key, entry);
+    const tag = kind === 'install' ? 'provider.install.subscribe' : 'provider.auth.subscribe';
+    const close = () => { entry.open = false; clearTimeout(entry.timer); try { entry.handle?.close(); } catch {} };
+    entry.timer = setTimeout(close, 20 * 60_000);
+    entry.timer.unref?.();
+    this.rpc().stream(tag, {instanceId: engine}, value => {
+      entry.state = value;
+      const id = String(value?.operationId || value?.flowId || '');
+      if (DONE_PHASES.has(value?.phase) && entry.id && id === entry.id) {
+        this.configCache = {at: 0, value: null};
+        this.call('server.refreshProviders', {instanceId: engine}, {timeout: 90_000}).catch(() => null);
+        close();
+      }
+    }, () => { entry.open = false; }).then(handle => { entry.handle = handle; if (!entry.open) handle.close(); }, error => { entry.open = false; this.logger?.warn?.(`engines watch ${key}: ${error.message}`); });
+    return entry;
+  }
+
+  setupState({engine} = {}) {
+    return {engine, install: installView(this.watches.get(`install:${engine}`)?.state), auth: authView(this.watches.get(`auth:${engine}`)?.state)};
+  }
+
+  // 装：引擎服务能托管安装的（Antigravity）走它；其余给官方安装命令，用户点了「在终端里装」才开终端。
+  async install({engine, open = false} = {}) {
+    const info = engineInfo(engine);
+    if (!info) throw new Error('不认识这个引擎');
+    if (info.managed?.install) {
+      const state = await this.call('provider.install.start', {instanceId: engine}, {timeout: 60_000});
+      const entry = this.watch(engine, 'install', String(state?.operationId || ''));
+      entry.state ||= state;
+      return {engine, how: 'managed', install: installView(state)};
+    }
+    const command = installCommand(info);
+    if (!command) return {engine, how: 'link', link: info.link || ''};
+    if (open === true) openTerminal(command, {spawnImpl: this.spawnImpl});
+    return {engine, how: 'terminal', command, opened: open === true, link: info.link || ''};
+  }
+
+  // 登录：引擎服务能在浏览器里登录的（Antigravity、Cursor）走它；其余开终端跑官方登录命令。
+  async signin({engine, open = false, methodId = ''} = {}) {
+    const info = engineInfo(engine);
+    if (!info) throw new Error('不认识这个引擎');
+    if (info.managed?.signin && this.service.status().running) {
+      const state = await this.call('provider.auth.start', {instanceId: engine, ...(methodId ? {methodId: String(methodId)} : {})}, {timeout: 60_000});
+      // 订阅的第一条可能晚到：先用开始时拿到的状态垫上，第一下点「打开登录页」就能用。
+      const entry = this.watch(engine, 'auth', String(state?.flowId || ''));
+      if (!entry.state || entry.state.flowId !== state?.flowId) entry.state = state;
+      return {engine, name: info.name, how: 'managed', auth: authView(state)};
+    }
+    if (!info.login) return {engine, name: info.name, how: 'link', link: info.link || ''};
+    if (open === true) openTerminal(info.login, {spawnImpl: this.spawnImpl});
+    return {engine, name: info.name, how: 'terminal', command: info.login, hint: info.loginHint || '', opened: open === true};
+  }
+
+  // 登录进行中的一步：open 打开登录页（要同意的先替用户点「同意」——用户在 Metre 里点按钮就是同意）、paste 回贴登录页给的代码、cancel 取消。
+  async signinStep({engine, action, code = ''} = {}) {
+    const state = this.watches.get(`auth:${engine}`)?.state;
+    const view = authView(state);
+    if (!view?.flowId) throw new Error('没有进行中的登录，先点「登录」');
+    if (action === 'open') {
+      const step = view.step;
+      if (step?.type === 'browser' && step.consent) {
+        await this.call('provider.auth.respond', {instanceId: engine, flowId: view.flowId, interactionId: step.id, response: {type: 'browser', action: 'accept'}});
+      }
+      const url = step?.url || view.url;
+      openBrowser(url, {spawnImpl: this.spawnImpl});
+      return {...this.setupState({engine}), opened: true};
+    }
+    if (action === 'paste') {
+      const text = String(code || '').trim();
+      if (!text) throw new Error('把登录页上给的代码或者整个地址贴进来');
+      const next = await this.call('provider.auth.complete', {instanceId: engine, flowId: view.flowId, callbackUrl: text.slice(0, 16_000)}, {timeout: 60_000});
+      this.watches.get(`auth:${engine}`).state = next;
+      return this.setupState({engine});
+    }
+    if (action === 'cancel') {
+      const next = await this.call('provider.auth.cancel', {instanceId: engine, flowId: view.flowId});
+      this.watches.get(`auth:${engine}`).state = next;
+      return this.setupState({engine});
+    }
+    throw new Error('不认识的登录动作');
   }
 
   folderFor(sessionKey) {
@@ -426,11 +619,19 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
   register(api, 'pinkie.engines.stop', async ({threadId}) => bridge.stop({threadId: String(threadId || '')}));
   register(api, 'pinkie.engines.organize', async params => bridge.organize(params));
   register(api, 'pinkie.engines.diff', async ({threadId}) => bridge.diff({threadId: String(threadId || '')}));
-  register(api, 'pinkie.engines.signin', async ({engine, open} = {}) => {
-    const known = ENGINES.find(item => item.id === engine);
-    if (!known) throw new Error('不认识这个引擎');
-    if (open === true && known.signin.how === 'terminal') openLoginTerminal(known.signin.command);
-    return {engine: known.id, name: known.name, ...known.signin, opened: open === true && known.signin.how === 'terminal'};
+  // 引擎的打开、安装、登录（3.7）。托管的要引擎服务在跑；终端那条只有用户点了（open: true）才开窗口。
+  register(api, 'pinkie.engines.turnOn', async ({engine, on} = {}) => { await ensureRunning(); return {...service.status(), ...await bridge.turnOn({engine, on: on !== false})}; });
+  register(api, 'pinkie.engines.install', async ({engine, open} = {}) => {
+    if (engineInfo(engine)?.managed?.install) await ensureRunning();
+    return bridge.install({engine, open: open === true});
+  });
+  register(api, 'pinkie.engines.signin', async ({engine, open, methodId} = {}) => {
+    if (engineInfo(engine)?.managed?.signin && open === true) await ensureRunning();
+    return bridge.signin({engine, open: open === true, methodId});
+  });
+  register(api, 'pinkie.engines.setup', async ({engine, action, code} = {}) => {
+    if (!engineInfo(engine)) throw new Error('不认识这个引擎');
+    return action ? bridge.signinStep({engine, action, code}) : bridge.setupState({engine});
   });
   return bridge;
 }

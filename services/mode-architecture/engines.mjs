@@ -71,7 +71,8 @@ export function errorLine(text) {
 }
 
 // 引擎和登录状态。缓存文件里有账号邮箱：只留「已登录」和套餐名，邮箱一律不出这个函数。
-export function readProviders(home) {
+// 引擎服务缓存的每家状态原样读出（含邮箱，只给 summarizeProviders / readProviders 用，不外传）。
+export function readProviderFiles(home) {
   const dir = path.join(home, 'caches');
   let names = [];
   try { names = fs.readdirSync(dir).filter(name => name.endsWith('.json')); } catch { return []; }
@@ -79,7 +80,15 @@ export function readProviders(home) {
   for (const name of names) {
     let data;
     try { data = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')); } catch { continue; }
-    if (!data || typeof data !== 'object') continue;
+    if (data && typeof data === 'object') rows.push({instanceId: name.replace(/\.json$/, ''), ...data});
+  }
+  return rows;
+}
+
+export function readProviders(home) {
+  const rows = [];
+  for (const data of readProviderFiles(home)) {
+    const name = data.instanceId;
     const label = String(data.auth?.label || '');
     rows.push({
       id: String(data.instanceId || name.replace(/\.json$/, '')),
