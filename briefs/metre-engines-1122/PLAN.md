@@ -106,6 +106,7 @@
 
 - 每家在菜单里按「能用 / 没打开 / 没装 / 没登录」分组；没打开的给「打开」，没装的给安装命令（复制 + 「在终端里装」，用户点了才开终端），没登录的给登录（引擎服务能托管的走托管：Antigravity 装和登，Cursor 浏览器登录；其余开终端跑官方登录命令）。
 - 碧琪不经手凭据：要填密钥的登录方式不在 Metre 里做，提示改用浏览器或终端登录。
+- **多账号**（用户 11-23：「最好支持多账号登入，比如 Anti 我有几个 Pro，还有 Claude 也是」）：引擎服务本来就支持一家开多个实例、各自登录——Antigravity 每个 Google 账号一个实例（各自托管登录，`docs/user/providers-antigravity.md`「Accounts and removal」）；Claude 每个账号一个实例，配置 `homePath`（= `CLAUDE_CONFIG_DIR`，比如 `~/.claude_2`），登录用 `CLAUDE_CONFIG_DIR=<目录> claude auth login`。做法：菜单里每家下面「加一个账号」→ `server.updateSettings` 的 `providerInstanceMutation: {operation: 'create', instanceId: '<家>-<n>', instance: {driver, displayName: '<家> · 账号 n', config: {homePath}}}`，然后照常打开、登录；菜单一个账号一行（显示名 + 套餐名，不显示邮箱），额度用完的那个账号旁边提示换另一个。实例 id 不再等于驱动名，`engineInfo` 要按 `driver` 查表。
 
 ### 3.8 成熟的东西也同步给碧琪全局（用户 11-23）
 

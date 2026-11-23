@@ -31,9 +31,10 @@
 - Mac 上的终端命令只有单元测试。
 
 **下一步（按顺序）**
-1. 用户登录 Claude Code 后：用 Haiku 之类最便宜的模型在引擎台真发一句话，验对话流和改动面板；然后侧栏标引擎名、拼并排对比图。
-2. 隔离网关真调一遍（`tools/metre/iso`，`METRE_ISO_ROOT` 放 F: 纯英文路径；把 `F:\t3probe\e1\root\versions` 拷过去省得重下）。
-3. E4 `pinkie_engine_task` → E5 乐手 → E6 「更多引擎」（ACP 注册表）→ E7 → E8 同步给碧琪全局。
+1. **多账号**（用户 11-23 刚提，PLAN 3.7 最后一条）：Antigravity、Claude 一个账号一个实例，菜单里「加一个账号」。和下面第 2 条可以一起做。
+2. 用户登录 Claude Code 后：用 Haiku 之类最便宜的模型在引擎台真发一句话，验对话流和改动面板；然后侧栏标引擎名、拼并排对比图。
+3. 隔离网关真调一遍（`tools/metre/iso`，`METRE_ISO_ROOT` 放 F: 纯英文路径；把 `F:\t3probe\e1\root\versions` 拷过去省得重下）。
+4. E4 `pinkie_engine_task` → E5 乐手 → E6 「更多引擎」（ACP 注册表）→ E7 → E8 同步给碧琪全局。
 
 ## 2026-11-22 深夜 · 会话 42f0bde1 · 查清「把对方支持的引擎都加上」（只查没写代码，用户额度到了）
 
