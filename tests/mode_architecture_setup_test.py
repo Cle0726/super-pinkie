@@ -190,6 +190,21 @@ class ModeArchitectureSetupTests(unittest.TestCase):
             self.assertEqual(data['agents']['defaults']['thinkingDefault'], choice)
             self.assertEqual(data['agents']['defaults']['reasoningDefault'], 'on')
 
+    def test_sessions_are_never_reset_at_4am_unless_the_user_configured_resets(self):
+        # OpenClaw's default is a daily reset at 04:00: a session started before 4 AM gets a new,
+        # empty transcript on its first message after 4 AM (Metre lost its history mid-dispatch).
+        data = {'agents': {'list': []}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['session']['reset'], {'mode': 'idle'})
+        data = {'agents': {'list': []}, 'session': {'dmScope': 'main'}}
+        setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+        self.assertEqual(data['session'], {'dmScope': 'main', 'reset': {'mode': 'idle'}})
+        for own in ({'reset': {'mode': 'daily', 'atHour': 6}}, {'resetByType': {'group': {'mode': 'idle', 'idleMinutes': 30}}},
+                    {'idleMinutes': 120}):
+            data = {'agents': {'list': []}, 'session': dict(own)}
+            setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))
+            self.assertEqual(data['session'], own)
+
     def test_web_fetch_accepts_fake_ip_proxies_by_default_but_keeps_user_choice(self):
         data = {'agents': {'list': []}}
         setup._configure_plugin(data, Path('/tmp/pinkie-mode-test'))

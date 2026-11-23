@@ -542,6 +542,16 @@ def _configure_plugin(data: dict, target: Path, disabled_vision: set[str] | None
     if not isinstance(update, dict):
         update = data["update"] = {}
     update["checkOnStart"] = False
+    # OpenClaw 默认每天凌晨 4 点（网关本机时间）重置会话：开始时间早于当天 4 点的会话，跨过 4 点后的
+    # 第一条消息（哪怕是子会话回报自动叫醒）会把整段记录改名成 .reset.* 存档，换一份空记录。界面上
+    # 就是「正在派发，突然跳成一个空的新会话，之前的历史都不见了」（2026-11-22 04:01 实测，Metre
+    # 会话 f7306527 → 85ddaa66）。碧琪自己有上下文压缩，桌面会话不需要定时清空：改成只按空闲
+    # 重置且不设空闲时长，等于从不自动重置。用户自己配过 reset / resetByType / idleMinutes 的不动。
+    session_cfg = data.get("session")
+    if session_cfg is None:
+        session_cfg = data["session"] = {}
+    if isinstance(session_cfg, dict) and not any(key in session_cfg for key in ("reset", "resetByType", "idleMinutes")):
+        session_cfg["reset"] = {"mode": "idle"}
     # 手册单个文件默认超过 2 万字就被 OpenClaw 悄悄截掉中间一段（项目手册已经 1.9 万字），
     # 模型拿到的是缺了几节的手册，没有任何提示。把上限抬到手册够不着的地方；只抬不降。
     for key, floor in (("bootstrapMaxChars", 60_000), ("bootstrapTotalMaxChars", 200_000)):

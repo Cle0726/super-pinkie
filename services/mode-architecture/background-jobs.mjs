@@ -9,6 +9,12 @@ const RUNNING = /Command still running \(session ([\w.-]+), pid (\d+|n\/a)\)/;
 const EXITED = /Process exited with (?:code|signal)/;
 const POLL_MS = 3_000;
 const MAX_WATCH_MS = 6 * 60 * 60_000;
+// 叫醒前要等会话空下来；但「忙」的标记可能是残留的（一轮被别的钩子拦下、没发结束），
+// 2026-11-22 Metre 实测：命令 01:14 跑完，界面显示「已完成」，却一直没叫醒，直到用户 01:28 自己问。
+// 跑完后连续「忙」超过这个时长就照样叫醒：网关会把它排在当前这一轮后面，不会打断。
+export const MAX_BUSY_WAIT_MS = 5 * 60_000;
+// 叫醒失败（网关重启、命令行超时）不再 3 秒连试 3 次就悄悄放弃：按这个间隔重试，全失败才放弃并留日志。
+export const WAKE_RETRY_MS = [5_000, 20_000, 60_000, 180_000, 600_000];
 export const WAKE_PREFIX = '[pinkie-tier] 后台任务完成';
 const SESSION_KEY = /^agent:(main|project|thinking|learning|unrestricted|metre|roles):[^\s]+$/;
 const STATE = Symbol.for('pinkie.backgroundJobs.v1');
@@ -97,7 +103,7 @@ export function runningBackgroundJobs(sessionKey = '') {
 }
 
 export class BackgroundJobs {
-  constructor({runProcess = null, cliEntry = '', isBusy = () => false, now = () => Date.now(), alive: isAlive = alive, pollMs = POLL_MS} = {}) {
+  constructor({runProcess = null, cliEntry = '', isBusy = () => false, now = () => Date.now(), alive: isAlive = alive, pollMs = POLL_MS, logger = null} = {}) {
     // 同一个网关进程里插件会被加载成几份（网关方法一份、运行时钩子一份），守望表必须只有一份。
     const shared = globalThis[STATE] ||= {jobs: new Map(), timer: null};
     this.shared = shared;
@@ -107,7 +113,12 @@ export class BackgroundJobs {
     this.now = now;
     this.alive = isAlive;
     this.pollMs = pollMs;
+    this.logger = logger;
     shared.owner ||= this;
+  }
+
+  log(level, text) {
+    try { this.logger?.[level]?.(`background wake ${text}`); } catch { /* 日志失败不影响叫醒 */ }
   }
 
   get jobs() { return this.shared.jobs; }
@@ -192,12 +203,35 @@ export class BackgroundJobs {
         job.endedAt = now;
       }
       if (job.state === 'done' && !job.woke && !job.seenByAgent && !job.waking) {
-        // 碧琪正在这个会话里忙（还在回答、子任务没收齐），先等它停下，再叫醒。
-        if (this.isBusy(job.sessionKey)) { running += 1; continue; }
+        if (job.retryAt && now < job.retryAt) { running += 1; continue; }
+        // 碧琪正在这个会话里忙（还在回答、子任务没收齐），先等它停下，再叫醒；忙得太久当残留标记处理。
+        let busy = false;
+        try { busy = Boolean(this.isBusy(job.sessionKey)); } catch { busy = false; }
+        if (busy) {
+          job.busySince ||= now;
+          if (now - job.busySince < MAX_BUSY_WAIT_MS) {
+            if (!job.busyLogged) { job.busyLogged = true; this.log('info', `waiting session=${job.sessionKey} job=${job.id} reason=busy`); }
+            running += 1;
+            continue;
+          }
+          this.log('warn', `busy for ${Math.round((now - job.busySince) / 1000)}s, waking anyway session=${job.sessionKey} job=${job.id}`);
+        }
         job.waking = true;
         job.woke = await this.wake(job);
         job.waking = false;
-        if (!job.woke) { job.wakeFailures = (job.wakeFailures || 0) + 1; if (job.wakeFailures >= 3) job.woke = true; else running += 1; }
+        if (job.woke) {
+          this.log('info', `sent session=${job.sessionKey} job=${job.id}`);
+        } else {
+          job.wakeFailures = (job.wakeFailures || 0) + 1;
+          if (job.wakeFailures > WAKE_RETRY_MS.length) {
+            job.woke = true;
+            this.log('warn', `gave up after ${job.wakeFailures} failed attempts session=${job.sessionKey} job=${job.id}`);
+          } else {
+            job.retryAt = now + WAKE_RETRY_MS[job.wakeFailures - 1];
+            this.log('warn', `attempt ${job.wakeFailures} failed, retrying session=${job.sessionKey} job=${job.id}`);
+            running += 1;
+          }
+        }
       }
     }
     for (const [id, job] of this.jobs) if (job.state !== 'running' && now - (job.endedAt || now) > 30 * 60_000) this.jobs.delete(id);
