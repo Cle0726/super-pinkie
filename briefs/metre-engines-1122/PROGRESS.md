@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-11-22 · 会话 847a9261 · E1 引擎服务 · 完成
+
+- `services/mode-architecture/engines.mjs`：`EngineService` 的 install（curl 走本机 7897/7890 代理下载固定版本 → 对照 `SHA256SUMS` → Windows 用 PowerShell `Expand-Archive`、Mac 用 tar 解压 → 放进 `engineRoot()` 选出的纯英文目录 → 清掉下载临时目录）、start（空闲端口、只监听 127.0.0.1、等「server is ready」、10 分钟内最多自动重启 3 次）、stop（Windows `taskkill /T`）、status、providers（读 `home/caches/*.json`，**去掉邮箱**）、cli（解析 `--json` 输出；错误取 `ERROR (#n):` 那句）、addProject（已存在算成功）、startThread / send / show（消息走标准输入，引号换行不出错）。
+- 已加进两份插件复制清单：`setup.py` 和 `installer/macos/apply-theme.sh`。新测试 `tests/plugin-file-lists.test.mjs` 从 `index.mjs` 顺着 import 核对两份清单（反向验证过：删掉一个文件就变红）。**index.mjs 还没 import engines.mjs**，E2 接上以后这条测试会自动盯住它。
+- 验证：`tests/metre-engines.test.mjs` 7/7；健康门禁过；真实流程（`F:\t3probe\e1\run.mjs`，数据在 `F:\t3probe\e1\root`）：真下载校验解压 → 启动在 3790 → providers 读到 codex 已登录 0.171、claudeAgent 未登录 → `startThread` 交给 Codex，正确返回「额度用完」→ `show` 返回 `{thread, messages}` → stop。
+- 没验：Mac；中文用户名的电脑（只有单元测试）；崩溃自动重启（只有代码，没真杀进程试）。
+- 下一步 E2：在 `index.mjs` 里建一个 `EngineService`（logger 用 `api.logger`），注册网关方法 `pinkie.engines.status / enable / disable / providers / threads / open`；开关存在插件状态目录；`open` 用 `t3 auth pairing` 生成本机配对链接给界面嵌入（命令先 `t3 auth pairing --help` 看清用法）。
+
 ## 2026-11-22 · 会话 847a9261（Opus 5.5）· 摸底和打通
 
 **环境（已做）**
