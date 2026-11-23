@@ -489,6 +489,7 @@
       if (auth.phase === 'verifying') { wrap.append(say('正在确认账号…')); return wrap; }
       if (step?.type === 'credentials') { wrap.append(say('这家选的是要填密钥的登录方式，Metre 里不经手密钥。请改用浏览器登录，或者在终端里用官方命令登录。')); return wrap; }
       if (step?.type === 'deviceCode') wrap.append(say(`在登录页里输入这串代码：`), h('div', 'pk-eng-code', esc(step.code)));
+      else if (step?.type === 'code') wrap.append(say('在浏览器里用你自己的账号登录。最后页面上会给一串代码，贴到下面（只交给引擎服务，碧琪不存）。'));
       else wrap.append(say(auth.phase === 'starting' ? '正在准备登录页…' : '在浏览器里用你自己的账号登录，登录完这里会自己接上。'));
       const acts = h('div', 'pk-eng-card__acts');
       if (step?.url || auth.url) acts.append(btn('打开登录页', true, async () => { live = await rpc('pinkie.engines.setup', {engine, action: 'open'}, 30000); toast('登录页在浏览器里打开了'); poll(); }));

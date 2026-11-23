@@ -80,6 +80,9 @@ test('every engine the engine service supports is in the menu, in a fixed order,
     {instanceId: 'kiro', driver: 'kiro', enabled: true, installed: false, status: 'error', auth: {status: 'unknown'}, message: 'Kiro CLI (`kiro-cli`) is not installed or not on PATH.'},
     {instanceId: 'claudeAgent', driver: 'claudeAgent', enabled: true, installed: true, status: 'error', auth: {status: 'unauthenticated'}, message: 'Claude Code is not authenticated. Run `claude auth login` and try again.'},
     {instanceId: 'pi', driver: 'pi', enabled: true, installed: true, status: 'ready', auth: {status: 'unknown'}},
+    // 真机 11-23：刚打开时引擎服务说「装好了，账号还没查」，status 是 ready，但没登录、没有模型。
+    {instanceId: 'antigravity', driver: 'antigravity', enabled: true, installed: true, status: 'ready', auth: {status: 'unknown'}, setup: {canInstall: true, canAuthenticate: true},
+      message: 'Antigravity is installed. Google account access is not checked yet.', models: []},
   ], {platform: 'win32'});
   assert.deepEqual(rows.map(row => row.id), ENGINES.map(engine => engine.id));
   assert.deepEqual(ENGINES.map(engine => engine.name), ['Claude Code', 'Codex', 'Antigravity', 'Cursor', 'OpenCode', 'Grok Build', 'Kiro', 'Pi', 'fx', 'Muse Code']);
@@ -89,8 +92,9 @@ test('every engine the engine service supports is in the menu, in a fixed order,
   assert.equal(by.kiro.state, 'missing');
   assert.equal(by.claudeAgent.state, 'signin');
   assert.equal(by.pi.state, 'ready');
-  assert.equal(by.antigravity.state, 'off', 'never reported yet still shows up');
+  assert.equal(by.antigravity.state, 'signin', 'installed but the Google account is not checked yet: not usable');
   assert.equal(by.antigravity.setup.canInstall, true);
+  assert.equal(summarizeProviders([]).find(row => row.id === 'muse').state, 'off', 'never reported yet still shows up');
   assert.equal(by.cursor.guide.install, "irm 'https://cursor.com/install?win32=true' | iex");
   assert.equal(by.kiro.guide.login, 'kiro-cli login');
   assert.equal(by.grok.guide.install, '', 'no official Windows command: only the link');
@@ -107,6 +111,9 @@ test('sign-in state keeps only web links and never asks for keys inside Metre', 
   assert.deepEqual(view.step, {type: 'browser', id: 'i1', url: 'https://accounts.example/sign', consent: true, paste: true});
   assert.equal(JSON.stringify(view).includes('@'), false);
   assert.deepEqual(authView({phase: 'waiting', flowId: 'f2', interaction: {type: 'credentials', id: 'c', fields: [{name: 'key', label: 'API key', secret: true}]}}).step, {type: 'credentials'});
+  // 真机 11-23：Antigravity 在这台电脑上是「贴代码」登录，那个框是一次性代码。
+  assert.deepEqual(authView({phase: 'waiting', flowId: 'f3', authorizationUrl: 'https://accounts.example/o', interaction: {type: 'credentials', id: 'f3', fields: [{name: 'code', label: 'Code from the Antigravity page', secret: false}]}}).step,
+    {type: 'code', id: 'f3', field: 'code', paste: true});
   assert.deepEqual(installView({phase: 'downloading', downloadedBytes: 50, totalBytes: 200, version: '1.5.14', installedVersion: null, message: null}),
     {phase: 'downloading', downloaded: 50, total: 200, version: '1.5.14', installedVersion: null, message: ''});
 });
@@ -266,6 +273,15 @@ test('turning an engine on keeps its saved settings, and managed sign-in follows
   bridge.streams.at(-1).onValue({instanceId: 'cursor', phase: 'succeeded', flowId: 'f1'});
   assert.equal(bridge.setupState({engine: 'cursor'}).auth.phase, 'succeeded');
   assert.equal(calls.filter(call => call[0] === 'server.refreshProviders').length, 2, 'a finished sign-in makes the engine service check again');
+
+  // Antigravity 的贴代码登录：代码填进引擎服务给的 code 框（respond），不是 complete。
+  calls.length = 0;
+  bridge.watches.set('auth:antigravity', {open: false, state: {phase: 'waiting', flowId: 'f9', authorizationUrl: 'https://accounts.example/o',
+    interaction: {type: 'credentials', id: 'f9', fields: [{name: 'code', label: 'Code', secret: false}]}}});
+  await bridge.signinStep({engine: 'antigravity', action: 'paste', code: ' 4/xyz '});
+  assert.deepEqual(calls.find(call => call[0] === 'provider.auth.respond')[1],
+    {instanceId: 'antigravity', flowId: 'f9', interactionId: 'f9', response: {type: 'credentials', values: {code: '4/xyz'}}});
+  assert.equal(calls.some(call => call[0] === 'provider.auth.complete'), false);
 
   const terminal = await bridge.signin({engine: 'kiro', open: true});
   assert.deepEqual([terminal.how, terminal.command], ['terminal', 'kiro-cli login']);

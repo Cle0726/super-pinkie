@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-11-23 上午 · 会话 42f0bde1 · Antigravity 真登录、真回话（第一次有引擎跑通整条）
+
+**结果**：用户的 Antigravity Pro（Google 账号）经 Metre 桥真登录成功，报上来 9 个模型（gemini-4-neon / argon / hydrogen、gemini-pro-orchestrator-neon / g1-pro、gemini-3.8-flash、claude-opus-5-5、claude-sonnet-5-5、gpt-oss-120b-medium（默认））；用最便宜的 gemini-3.8-flash 开一段对话「只回复两个字：收到」，约 30 秒回「收到」，对话流是 you / note / reply。额度只花了这一句。
+
+**真机发现并修了两个毛病（都有测试）**
+- 刚打开 Antigravity 时引擎服务报 `status: ready`，原话是「装好了、Google 账号还没查」，没有模型。Metre 原来当成「能用」。改成：能在浏览器里登录的（`setup.canAuthenticate`）没登录就是「还没登录」。
+- 这台电脑上 Antigravity 走「贴代码」登录：引擎服务给的是一个 `credentials` 交互，只有一个不保密的 `code` 框（源码 `AntigravityAuth.ts`）。原来 Metre 把它当「要填密钥」挡掉了。改成识别为贴代码一步，代码走 `provider.auth.respond {response: {type: 'credentials', values: {code}}}`（回调地址才走 `complete`）；界面提示「最后页面上会给一串代码，贴到下面」。
+- 本机不用下载 Antigravity 运行包：引擎服务直接用了 winget 装的 `agy` 1.5.14（要求 ≥ 1.5）。
+
+**测试方式（会话草稿 `antiprobe.mjs` + `codeprompt.ps1`）**：脚本开引擎服务、打开 Antigravity、开始登录、用系统浏览器打开登录页，并在用户桌面弹一个 PowerShell 小窗让用户自己贴代码，脚本读到就交给引擎服务、删掉临时文件、不打印——Claude 不经手代码。用户在聊天里发过一次代码，没用（那次登录作废重来）。
+- 坑：`TaskStop` 只停了外层 shell，node 探针还活着，而且引擎服务被杀后它按「崩溃自动重启」又拉起来一个，导致下一次启动报 78。以后停探针要查 `node.exe` 命令行里的脚本名一起停。
+
+**现在的状态**：试验目录 `F:\t3probe\e1\root` 里 Antigravity 已打开并登录（用户的一个 Google 账号），不在用户装的碧琪里。Cursor 已关回去。
+
+**下一步**：多账号（PLAN 3.7 最后一条，用户有几个 Antigravity Pro 和 Claude）→ 在引擎台界面里用 Antigravity 真跑一段（隔离网关）→ 侧栏标引擎名、并排对比图 → E4。
+
 ## 2026-11-23 · 会话 42f0bde1 · E3b 十家引擎全部进菜单：打开、安装、登录
 
 **用户这一段的两句话**

@@ -81,6 +81,8 @@ export function engineState(provider = {}) {
   if (provider.enabled !== true || status === 'disabled') return {state: 'off', text: '还没打开'};
   if (provider.installed !== true || /not installed|not on PATH|ENOENT/i.test(message)) return {state: 'missing', text: '这台电脑上还没装'};
   if (auth === 'unauthenticated' || (status !== 'ready' && /not authenticated|not (?:logged|signed) in|auth login|\blogin\b/i.test(message))) return {state: 'signin', text: '还没登录，或者登录过期了'};
+  // 能在浏览器里登录的（Antigravity、Cursor）：刚打开时引擎服务报「装好了、账号还没查」也是 ready，但其实还没登录、一个模型都没有。
+  if (provider.setup?.canAuthenticate === true && auth !== 'authenticated') return {state: 'signin', text: '还没登录'};
   if (status === 'ready') return {state: 'ready', text: ''};
   if (status === 'warning') return {state: 'ready', text: brandless(message)};
   return {state: 'error', text: brandless(message) || '暂时用不了'};
@@ -291,7 +293,12 @@ export function authView(state) {
   let step = null;
   if (interaction?.type === 'browser') step = {type: 'browser', id: String(interaction.id), url: https(interaction.url), consent: interaction.requiresConsent === true, paste: interaction.acceptsCallback === true};
   else if (interaction?.type === 'deviceCode') step = {type: 'deviceCode', id: String(interaction.id), url: https(interaction.url), code: String(interaction.userCode || '')};
-  else if (interaction?.type === 'credentials') step = {type: 'credentials'};
+  else if (interaction?.type === 'credentials') {
+    // Antigravity 的「贴代码」登录（真机 11-23）：只有一个不保密的 code 框，是登录页最后给的一次性代码，不是密钥。
+    const fields = Array.isArray(interaction.fields) ? interaction.fields : [];
+    const only = fields.length === 1 ? fields[0] : null;
+    step = only && only.secret !== true && /^code$/i.test(String(only.name)) ? {type: 'code', id: String(interaction.id), field: String(only.name), paste: true} : {type: 'credentials'};
+  }
   else if (interaction?.type === 'terminal') step = {type: 'terminal'};
   return {phase: String(state.phase || 'idle'), flowId: state.flowId ? String(state.flowId) : '', url: https(state.authorizationUrl), expiresAt: state.expiresAt || null, step,
     message: brandless(state.message || ''), methods: (Array.isArray(state.methods) ? state.methods : []).map(method => ({id: String(method.id), name: brandless(method.name), type: String(method.type)}))};
@@ -461,7 +468,11 @@ export class EngineBridge {
     if (action === 'paste') {
       const text = String(code || '').trim();
       if (!text) throw new Error('把登录页上给的代码或者整个地址贴进来');
-      const next = await this.call('provider.auth.complete', {instanceId: engine, flowId: view.flowId, callbackUrl: text.slice(0, 16_000)}, {timeout: 60_000});
+      // 一次性代码走 respond（填那个 code 框）；回调地址走 complete。都只转给引擎服务，不存、不写日志。
+      const next = view.step?.type === 'code'
+        ? await this.call('provider.auth.respond', {instanceId: engine, flowId: view.flowId, interactionId: view.step.id,
+          response: {type: 'credentials', values: {[view.step.field]: text.slice(0, 16_000)}}}, {timeout: 60_000})
+        : await this.call('provider.auth.complete', {instanceId: engine, flowId: view.flowId, callbackUrl: text.slice(0, 16_000)}, {timeout: 60_000});
       this.watches.get(`auth:${engine}`).state = next;
       return this.setupState({engine});
     }
