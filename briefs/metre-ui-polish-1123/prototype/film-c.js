@@ -24,6 +24,7 @@ const pw = require('F:\\Projects\\super-pinkie\\build\\windows-runtime\\node_mod
     } else {
       const [act, empty, len] = ACT[tag];
       await p.goto(base + '&empty=' + empty + '&night=' + night); await p.waitForTimeout(4500);
+      await p.evaluate(() => { const q = document.querySelector('[data-preview-panel]'); if (q) q.style.display = 'none'; });
       const now = await p.evaluate('Date.now()'); await p.clock.pauseAt(new Date(now + 20)); await p.clock.runFor(20);
       p.evaluate(act).catch(() => {});
       await p.waitForTimeout(60);

@@ -45,14 +45,18 @@
     if (bd) { const d = Object.getOwnPropertyDescriptor(bd, 'data'); Object.defineProperty(bd, 'data', {configurable: true, get() { const v = d.get.call(bd); return voices ? {...(v || {}), sessions: [...((v && v.sessions) || []), ...voices]} : v; }}); }
   };
   head('后台状态带（对话页顶上那一条）');
-  btn('● 正常（连着、两边一致、没排队、引擎关）', () => { clearInterval(window.__pvHold); hookConn(); hookGw(); connOverride = null; engineOn = false; runActive = false; void window.__pinkieRunStatus?.refresh?.(); voices = null; const p = pane(); if (p?.state) { p.state.chatStream = null; p.state.chatRunId = null; p.state.chatQueue = []; } paint(); }, 'bs-ok');
+  const reset = () => { clearInterval(window.__pvHold); hookConn(); hookGw(); connOverride = null; engineOn = false; runActive = false; voices = null; const p = pane(); if (p?.state) { p.state.chatStream = null; p.state.chatRunId = null; p.state.chatSending = false; p.state.chatQueue = []; } };
+  btn('● 正常（连着、两边一致、没排队、引擎关）', () => { reset(); void window.__pinkieRunStatus?.refresh?.(); paint(); }, 'bs-ok');
+  btn('● 在跑（后台在跑、页面在等回复）', () => { reset(); runActive = true; const set = () => { const p = pane(); if (p?.state) p.state.chatRunId = 'preview-run'; };
+    set(); window.__pvHold = setInterval(set, 100); void window.__pinkieRunStatus?.refresh?.(); paint(); }, 'bs-run');   // 预览里原生面板会自己清掉 chatRunId，这里按住（只在预览页）
   btn('● 网关重连中（第 2 次）', () => { hookConn(); connOverride = {online: false, attempt: 2}; paint(); }, 'bs-reconnect');
-  btn('● 网关断了', () => { hookConn(); connOverride = {online: false, attempt: 0}; paint(); }, 'bs-down');
-  btn('● 不同步（后台说这一轮还在跑、页面已经停了；3 秒后出现「同步」键，点了就对齐）', () => { hookConn(); hookGw(); connOverride = null; runActive = true;
+  btn('● 网关断了（总谱也跟着显示断线）', () => { hookConn(); hookGw(); connOverride = {online: false, attempt: 0}; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); paint(); }, 'bs-down');
+  btn('● 断线后恢复（总谱的断线条和「此刻」一起恢复）', () => { hookConn(); connOverride = null; window.dispatchEvent(new Event('pinkie:sidebar-gateway-ready')); paint(); }, 'bs-recover');
+  btn('● 不同步（后台说这一轮还在跑、页面已经停了；3 秒后出现「同步」键，点了就对齐）', () => { reset(); runActive = true;
     void window.__pinkieRunStatus?.refresh?.(); paint();
     document.addEventListener('click', (e) => { if (e.target.closest?.('.pk-bs__sync')) runActive = false; }, {capture: true}); }, 'bs-unsync');
   btn('● 排队 2 条', () => { const p = pane(); if (p?.state) p.state.chatQueue = [{id: 'pv1', text: '排队一', sessionKey: p.state.sessionKey}, {id: 'pv2', text: '排队二', sessionKey: p.state.sessionKey}]; paint(); }, 'bs-queue');
-  btn('● 引擎开 + 四个引擎声部（在跑 / 等你 / 交回 / 失败）', () => { hookGw(); engineOn = true;
+  btn('● 引擎开 + 四个引擎声部（在跑 / 等你 / 交回 / 失败；点「引擎」那一格看明细）', () => { hookGw(); engineOn = true;
     voices = [['Codex', 'run', 'running'], ['Claude', 'wait', 'waiting'], ['Kiro', 'done', 'done'], ['Gemini', 'fail', 'error']].map(([n, state, status], i) => ({key: 'agent:metre:eng:' + i, external: true, title: n, state, status}));
     window.dispatchEvent(new CustomEvent('pinkie:metre-board-data')); setTimeout(paint, 300); }, 'bs-engines');
 
