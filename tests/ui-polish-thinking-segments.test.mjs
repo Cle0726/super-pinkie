@@ -336,3 +336,14 @@ test('history starts folded and the reader can open and close it', () => {
   head().click();
   assert.equal(box().classList.contains('is-open'), false);
 });
+
+test('a fresh card record while a thought is still open starts its own burst instead of throwing', () => {
+  // 在跑时再发一句：第二句开了另一轮的新卡，新卡的记录还没有段落，而上一段思考还没收尾（thinkingSince 还在）。
+  // 以前这里取 record.eps 的最后一项是 undefined，页面报「Cannot read properties of undefined (reading 'text')」。
+  const h = harness();
+  h.send('lifecycle', {phase: 'start'});
+  h.send('thinking', {delta: '第一轮的思考'});
+  h.window.__laolaoProcessCard.store[key] = {text: '', ms: 0, count: 0, at: 1};
+  assert.doesNotThrow(() => h.send('thinking', {delta: '第二轮的思考'}));
+  assert.deepEqual(Array.from(h.window.__laolaoProcessCard.store[key].eps, ep => ep.text), ['第二轮的思考']);
+});
