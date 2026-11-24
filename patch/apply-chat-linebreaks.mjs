@@ -34,7 +34,7 @@ export function patchSource(source) {
   if (rule.test(source)) {
     const match = source.match(rule);
     const [all,t,i,node,escape] = match;
-    out = source.replace(all, `.renderer.rules.html_inline=(${t},${i})=>{let ${node}=${t}[${i}];return ${node}.meta?.taskListPlugin===!0?${node}.content:__pkLineBreak(${node})||${escape}(${node}.content)}`);
+    out = source.replace(all, `.renderer.rules.html_inline=(${t},${i})=>{let ${node}=${t}[${i}];return ${node}.meta?.taskListPlugin===!0?${node}.content:__pkLineBreak(${node})?'<br>':${escape}(${node}.content)}`);
   } else if (currentMatch) {
     const [,head,array,index,token,,escape] = currentMatch;
     // Keep the native structural-HTML / inline-code escaping path untouched and

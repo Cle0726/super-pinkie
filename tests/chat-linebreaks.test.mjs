@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 import {patchSource} from '../patch/apply-chat-linebreaks.mjs';
 import {refreshPrecompressed} from '../patch/lib-precompressed.mjs';
@@ -24,6 +25,38 @@ test('2026.7 bundle keeps the original transformation', () => {
   assert.match(result.out, /__pkCjkStrong\(wE\);/);
   assert.match(result.out, /pinkie-chat-linebreaks:v3/);
   assert.equal(patchSource(result.out).reason, 'already patched');
+});
+
+// Real markdown-it 14 from the 2026.7 Control UI (markdown-runtime-Y4RdJ3Nc.js), as already
+// bundled into ui/injections/laolao-markdown-preview.js by tools/work-panel/build-markdown-preview.mjs.
+function bundledMarkdownIt() {
+  const script = fs.readFileSync(new URL('../ui/injections/laolao-markdown-preview.js', import.meta.url), 'utf8');
+  assert.match(script.slice(0, script.indexOf('\n')), /Built from markdown-runtime-Y4RdJ3Nc\.js/u,
+    'preview bundle must still carry the 2026.7 markdown runtime');
+  const cut = script.indexOf('\nfunction __pkCjkStrong');
+  assert.ok(cut > 0, 'preview bundle layout');
+  const library = vm.runInNewContext(script.slice(script.indexOf('\n') + 1, cut) + '\nreturn library;})()', {});
+  return library.n;
+}
+
+// Verbatim from the 2026.7 chunk dist/control-ui/assets/markdown-DgASfUKF.js (openclaw@2026.7.1-2):
+// parser setup, the html_inline rule and the escape helper it calls.
+const legacyChunk = 'var Z=new oe({html:!0,breaks:!0,linkify:!0}),$e=Z.renderer.rules.code_inline;'
+  + 'Z.renderer.rules.html_inline=(e,t)=>{let n=e[t];return n.meta?.taskListPlugin===!0?n.content:U(n.content)};'
+  + 'function U(e){return e.replace(/&/g,`&amp;`).replace(/</g,`&lt;`).replace(/>/g,`&gt;`).replace(/"/g,`&quot;`).replace(/\'/g,`&#39;`)}';
+
+test('2026.7 bundle renders a lone <br> as a line break with real markdown-it, never the text true', () => {
+  const result = patchSource(legacyChunk);
+  assert.equal(result.changed, true);
+  const md = new Function('oe', `${result.out};return Z`)(bundledMarkdownIt());
+  const render = (text) => md.render(text).trim();
+  assert.equal(render('first<br>second'), '<p>first<br>second</p>');
+  assert.equal(render('第一行<br>第二行'), '<p>第一行<br>第二行</p>');
+  assert.equal(render('a<br />b'), '<p>a<br>b</p>');
+  for (const text of ['first<br>second', 'a<br />b', 'a<BR/>b']) assert.doesNotMatch(render(text), /true/u);
+  assert.equal(render('x <span>y</span> z'), '<p>x &lt;span&gt;y&lt;/span&gt; z</p>');
+  // Inline (not block) HTML is what html_inline sees; it must stay escaped.
+  assert.equal(render('x <script>alert(1)</script> z'), '<p>x &lt;script&gt;alert(1)&lt;/script&gt; z</p>');
 });
 
 test('2026.10 bundle renders a lone <br> token as a line break', () => {
