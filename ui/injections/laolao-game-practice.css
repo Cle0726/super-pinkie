@@ -185,20 +185,22 @@
 #pinkie-study-desk .pkp-sec__title{margin:0 0 4px;font:700 calc(var(--pkp-lecture, 26px) * .62)/1.2 var(--pk-sans,system-ui);letter-spacing:.08em;color:var(--pkg-b,#DB1F74)}
 #pinkie-study-desk .pkp-fb__lecture small{display:block;margin:0 0 8px;font:600 calc(var(--pkp-lecture, 26px) * .5)/1 var(--pk-sans,system-ui);letter-spacing:.14em;color:var(--pkg-ink-3)}
 #pinkie-study-desk .pkp-read{display:grid;gap:6px;min-width:0;padding-top:14px;border-top:1px solid var(--pkg-line)}
-/* 逐词带读 & 四个选项逐词扫：词一行、行行紧贴，三列对齐，重点词下方挂一行淡色快速记忆法 */
+/* 逐词带读 & 四个选项逐词扫：词一行、行行紧贴，三列对齐；重点词同行末尾轻贴紧凑联想速记胶囊，不拉高页面 */
 #pinkie-study-desk .pkp-wlist{display:flex;flex-direction:column;gap:0;min-width:0}
 #pinkie-study-desk .pkp-wlist > .pkp-p{margin:0}
-#pinkie-study-desk .pkp-wrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 16px;padding:3px 0}
+#pinkie-study-desk .pkp-wrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;padding:2.5px 0}
 #pinkie-study-desk .pkp-wrow.is-hit{background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent);border-radius:6px;padding-left:6px;padding-right:6px;margin:0 -6px}
-#pinkie-study-desk .pkp-wrow.has-memo{padding-bottom:6px}
+#pinkie-study-desk .pkp-wrow.has-memo{padding-bottom:3.5px}
 #pinkie-study-desk .pkp-en{font:600 var(--pkp-lecture, 26px)/1.45 var(--serif,var(--pkg-display));color:var(--pkg-ink)}
-#pinkie-study-desk .pkp-wrow .pkp-en{flex:0 0 8.2em;white-space:nowrap}
+#pinkie-study-desk .pkp-wrow .pkp-en{flex:0 0 7.4em;white-space:nowrap}
 #pinkie-study-desk .pkp-fb__lecture .pkp-py{display:inline-block;margin:0;font:400 var(--pkp-lecture, 26px)/1.45 var(--pkg-display);letter-spacing:.02em;color:var(--pkg-ink-3)}
-#pinkie-study-desk .pkp-wrow .pkp-py{flex:0 0 5.6em;white-space:nowrap}
+#pinkie-study-desk .pkp-wrow .pkp-py{flex:0 0 5.0em;white-space:nowrap}
 #pinkie-study-desk .pkp-zh{font:400 var(--pkp-lecture, 26px)/1.45 var(--pkg-display);color:var(--pkg-ink-2)}
-#pinkie-study-desk .pkp-wrow .pkp-zh{flex:1 1 6em;min-width:0}
-#pinkie-study-desk .pkp-memo{flex:1 0 100%;display:flex;align-items:baseline;gap:6px;padding-left:.2em;margin-top:2px;font:400 calc(var(--pkp-lecture, 26px) * .74)/1.45 var(--pk-sans,system-ui);color:var(--pkg-ink-3);white-space:normal;text-wrap:pretty}
-#pinkie-study-desk .pkp-memo__tag{flex:none;display:inline-block;padding:1px 6px;border-radius:4px;font:600 calc(var(--pkp-lecture, 26px) * .56)/1.25 var(--pk-sans,system-ui);font-style:normal;color:var(--pkg-b,#DB1F74);background:color-mix(in srgb,var(--pkg-b,#DB1F74) 10%,transparent)}
+#pinkie-study-desk .pkp-wrow .pkp-zh{flex:0 1 auto;min-width:3.8em}
+#pinkie-study-desk .pkp-memo{flex:0 1 auto;display:inline-flex;align-items:baseline;gap:5px;margin:0;padding:1px 8px 1px 4px;border-radius:6px;background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 11%,transparent);font:400 calc(var(--pkp-lecture, 26px) * .60)/1.35 var(--pk-sans,system-ui);color:var(--pkg-ink-2);white-space:normal;text-wrap:pretty}
+#pinkie-study-desk .pkp-memo__tag{flex:none;display:inline-block;padding:0 5px;border-radius:4px;font:700 calc(var(--pkp-lecture, 26px) * .48)/1.3 var(--pk-sans,system-ui);font-style:normal;color:#8A5A12;background:color-mix(in srgb,var(--pkg-gold,#C99A3E) 22%,transparent)}
+#pinkie-study-desk[data-theme="night"] .pkp-memo{background:color-mix(in srgb,#F2CA7A 12%,transparent);color:var(--pkg-ink-2)}
+#pinkie-study-desk[data-theme="night"] .pkp-memo__tag{color:#F5D488;background:color-mix(in srgb,#F2CA7A 20%,transparent)}
 /* 一块块大白话 + 整句 + 多句段落精讲子标题与避坑 */
 #pinkie-study-desk .pkp-blist{display:grid;gap:6px;min-width:0}
 #pinkie-study-desk .pkp-bline{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;line-height:1.6}
@@ -219,9 +221,13 @@
 #pinkie-study-desk .pkp-pin small{margin:0;color:var(--pkg-gold,#A67B28)}
 #pinkie-study-desk .pkp-pin .pkp-p{font-weight:600}
 @media (max-width:680px){
-  #pinkie-study-desk .pkp-wrow{gap:8px}
-  #pinkie-study-desk .pkp-wrow .pkp-en{flex-basis:6.4em}
-  #pinkie-study-desk .pkp-wrow .pkp-py{flex-basis:4.6em}
+  #pinkie-study-desk .pkp-wrow{gap:2px 8px}
+  #pinkie-study-desk .pkp-wrow .pkp-en{flex-basis:6.2em}
+  #pinkie-study-desk .pkp-wrow .pkp-py{flex-basis:4.4em}
+  #pinkie-study-desk .pkp-memo{flex:1 0 100%;margin-top:2px}
+}
+@container drill (max-width:580px){
+  #pinkie-study-desk .pkp-memo{flex:1 0 100%;margin-top:2px}
 }
 
 /* ───────────── 术语配对（Task 4 真题原卷排布：左英文词表 A–Q / 右 53–57 中文配对表）───────────── */

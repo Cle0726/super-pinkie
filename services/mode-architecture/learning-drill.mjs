@@ -934,15 +934,16 @@ export class LearningDrill {
     if (!status.available || !this.organizer?.requestModel) return {...local, error: explainFailure('模型暂时不可用')};
     try {
       const payload = explainInput({question: item.reveal?.question || item.prompt || '', options: item.options, standard, note, yours: attempt, correct});
-      const ask = (rules, maxTokens) => this.organizer.requestModel(status.model, rules, payload, true, {userText: JSON.stringify(payload), maxTokens, timeoutMs: 120000});
+      const ask = (rules, maxTokens) => this.organizer.requestModel(status.model, rules, payload, true, {userText: JSON.stringify(payload), maxTokens, timeoutMs: 120000, reasoningEffort: 'low'});
       const read = result => validVoicedExplain(result)?.text || validVoicedExplain(result?.value)?.text;
       let text = '', failure;
       for (const [rules, budget] of useCompactExplain() ? [[compactExplainRules(), 5200]] : [[explainRules(), 3600], [compactExplainRules(), 5200]]) {
         try { text = read(await ask(rules, budget)); failure = undefined; } catch (error) { failure = error; text = ''; }
         if (text) break;
-        // 会长篇思考的模型会把 token 花光、正文为空：换精简提示词再来一次，并记住一阵子。
-        if (failure && !/未完成|没有返回有效|没通过校验/.test(String(failure.message || failure))) break;
-        markCompactExplain();
+        const msg = String(failure?.message || failure || '');
+        if (/请求失败（(?:401|403|404|429)）/.test(msg)) break;
+        // 仅在思考截断 / 格式无效时切全局精简模式；5xx/超时/连接抖动只对本次重试。
+        if (/未完成|没有返回有效|没通过校验/.test(msg)) markCompactExplain();
       }
       return text ? keep({text, source: 'model', v: EXPLAIN_VERSION}) : {...local, error: explainFailure(failure)};
     } catch (error) {
@@ -962,7 +963,7 @@ export class LearningDrill {
       const status = this.modelStatus(session.sessionKey);
       if (!status.available) return local();
       const payload = {question: item.reveal?.question || item.prompt || '', answer, keys, text: String(text ?? '')};
-      const result = await this.organizer.requestModel(status.model, DRILL_JUDGE_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 1200, timeoutMs: 25000});
+      const result = await this.organizer.requestModel(status.model, DRILL_JUDGE_RULES, payload, true, {userText: JSON.stringify(payload), maxTokens: 1200, timeoutMs: 25000, reasoningEffort: 'low'});
       if (!['correct', 'partial', 'wrong'].includes(result?.verdict)) return local();
       const missing = Array.isArray(result.missing) ? result.missing.map(item => clean(item, 80)).filter(Boolean).slice(0, 3) : [];
       const comment = clean(result.comment, 80) || FALLBACK_COMMENT;

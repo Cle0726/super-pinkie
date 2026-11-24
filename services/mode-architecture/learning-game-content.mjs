@@ -32,7 +32,7 @@ export const fold = v => clean(v, 2000).normalize('NFKC').toLowerCase().replace(
 export const hashOf = (...parts) => createHash('sha256').update(parts.map(String).join('\n')).digest('hex').slice(0, 20);
 
 // requestModel(rules, payload, options) → requestLearningModel 的返回（{value|..., unavailable, model, ms}）
-export async function modelJson(requestModel, rules, payload, {validate = v => v, retries = 2, timeoutMs = 30000, maxTokens = 2000, directPayload = false, onFailure = null, stopOnQuota = false, fallbackRules = null, fallbackMaxTokens = null, onFallback = null} = {}) {
+export async function modelJson(requestModel, rules, payload, {validate = v => v, retries = 2, timeoutMs = 30000, maxTokens = 2000, directPayload = false, reasoningEffort = undefined, onFailure = null, stopOnQuota = false, fallbackRules = null, fallbackMaxTokens = null, onFallback = null} = {}) {
   if (typeof requestModel !== 'function') { onFailure?.(new Error('模型暂时不可用')); return null; }
   let lastError = '';
   let currentRules = rules;
@@ -40,7 +40,12 @@ export async function modelJson(requestModel, rules, payload, {validate = v => v
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const input = attempt ? {...payload, previousError: lastError} : payload;
-      const response = await requestModel(currentRules, input, {timeoutMs, maxTokens: currentMax, ...(directPayload ? {userText: JSON.stringify(input)} : {})});
+      const response = await requestModel(currentRules, input, {
+        timeoutMs,
+        maxTokens: currentMax,
+        ...(directPayload ? {userText: JSON.stringify(input)} : {}),
+        ...(reasoningEffort !== undefined ? {reasoningEffort} : {}),
+      });
       if (!response || response.unavailable) { onFailure?.(new Error('模型暂时不可用')); return null; }
       const raw = response.value ?? response.json ?? response;
       const value = typeof raw === 'string' ? JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim()) : raw;
@@ -51,7 +56,12 @@ export async function modelJson(requestModel, rules, payload, {validate = v => v
     } catch (error) {
       lastError = clean(error?.message || error, 160);
       if (/请求失败（(?:401|403)）/.test(lastError) || (stopOnQuota && /请求失败（(?:404|429)）/.test(lastError))) { onFailure?.(error); return null; }
-      if (fallbackRules && currentRules !== fallbackRules) { currentRules = fallbackRules; currentMax = fallbackMaxTokens ?? maxTokens; onFallback?.(); }
+      if (fallbackRules && currentRules !== fallbackRules) {
+        currentRules = fallbackRules;
+        currentMax = fallbackMaxTokens ?? maxTokens;
+        // 仅在思考截断 / 格式无效时记住精简模式，偶发 5xx/超时/连接波动不污染后续 30 分钟讲解。
+        if (/未完成|没有返回有效|没通过校验/.test(lastError)) onFallback?.();
+      }
     }
   }
   onFailure?.(new Error(lastError || '没有返回可用讲解'));

@@ -954,7 +954,7 @@ export class GamePractice {
     const max = it.qkind === 'writing' ? 15 : 12;
     if (!clean(text) || fold(text) === fold(it.stem)) return {score: 0, max, reason: '没有作答（或只抄了题目）。', source: 'local', reference: it.reference || ''};
     const r = await modelJson(this.game.requestModel, GRADE_RULES, {kind: it.qkind, task: it.stem, reference: it.reference, rubric: it.rubric, max, answer: text}, {
-      validate: v => (Number.isInteger(Number(v?.score)) && Number(v.score) >= 0 && Number(v.score) <= max ? {score: Number(v.score), reason: clean(v.reason, 300)} : null), timeoutMs: 60000, maxTokens: 800,
+      validate: v => (Number.isInteger(Number(v?.score)) && Number(v.score) >= 0 && Number(v.score) <= max ? {score: Number(v.score), reason: clean(v.reason, 300)} : null), timeoutMs: 60000, maxTokens: 800, reasoningEffort: 'low',
     });
     if (r) return {...r.value, max, source: 'model', reference: it.reference || ''};
     if (!this.game.requestModel) return {score: 0, max, reason: '碧琪现在没法阅卷（内置模型不在线），先对照参考答案自己看。', source: 'none', reference: it.reference || ''};
@@ -996,9 +996,12 @@ export class GamePractice {
       this.game.requestModel,
       explainRulesFor({mode: kind, qkind: it.qkind}),
       explainInput({question: `${mat ? mat + '\n\n' : ''}${it.stem}`, options: it.options, standard: keyText(it), note, yours, correct: rec.correct, qkind: it.qkind, point: it.point, base: it.base}),
-      {validate, retries: 1, timeoutMs: isSubj ? 180000 : 120000, maxTokens, directPayload: true, stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens, fallbackRules: compactExplainRules({mode: kind, qkind: it.qkind}), onFallback: markCompactExplain}), onFailure: error => { failure = error; }},
+      {validate, retries: 1, timeoutMs: isSubj ? 180000 : 120000, maxTokens, directPayload: true, reasoningEffort: 'low', stopOnQuota: true, ...(useCompactExplain() ? {} : {fallbackMaxTokens, fallbackRules: compactExplainRules({mode: kind, qkind: it.qkind}), onFallback: markCompactExplain}), onFailure: error => { failure = error; }},
     );
-    if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
+    if (!r) {
+      this.game.logger?.warn?.(`practice.explain failed (${iid}, ${it.qkind}, mode=${kind}): ${failure?.message || failure || 'empty'}`);
+      return {text: '', source: 'none', error: explainFailure(failure)};
+    }
     this.game.mutate(state => { const row = this.ensure(state).sets[sid]?.answers?.[iid]; if (row) { row[field] = r.value.text; row[vField] = targetV; } });
     return {text: r.value.text, source: 'model', mode: kind};
   }

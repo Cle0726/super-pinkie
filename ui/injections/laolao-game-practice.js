@@ -12,18 +12,19 @@
   const btn = (cls, text) => { const b = el('button', cls, text); b.type = 'button'; return b; };
   // 讲解排版：优先解析 6 板块模板（先看选项识考点 / 回题干秒杀 / 逐词带读 / 一块块大白话 / 四个选项逐词扫 / 送分搭配 / 一句话钉牢），旧缓存则兼容斜线带读。
   const GLOSS = /([A-Za-z][A-Za-z0-9'’.\-]*)\s*([\u4e00-\u9fff][^（(\n/／]{0,24}?)\s*[（(]([^）)\n]{1,40})[）)]/g;
-  const WORD_ROW = /^([A-Za-z][A-Za-z0-9'’.\-]*)\s+([\u4e00-\u9fff][^\s]*)\s+(.+)$/;
+  const WORD_ROW = /^((?:[A-Za-z][A-Za-z0-9'’.\-]*|\d+(?:[.,\-]\d+)*(?:st|nd|rd|th|%|km|m)?))\s+([\u4e00-\u9fff][^\s]*)\s+(.+)$/;
   const PHRASE_ROW = /^([A-Za-z][A-Za-z0-9'’.\-]*(?:\s+[A-Za-z0-9'’.\-]+)*)\s+([\u4e00-\u9fff][^\s]*)\s+(.+)$/;
-  const MEMO_SPLIT = /\s*[|｜]\s*(?:(?:快速)?记忆(?:法)?|速记|巧记|联想|记)\s*[:：]?\s*|\s*[|｜]\s+/;
-  const MEMO_LINE = /^(?:↳|->|→)?\s*(?:(?:快速)?记忆(?:法)?|速记|巧记|联想|记)\s*[:：]\s*(.+)$/;
+  const MEMO_SPLIT = /\s*[|｜]\s*(?:(?:谐音|画面|拆词|词根|场景)?(?:快速)?(?:记忆|联想|速记|巧记|记)(?:法)?)\s*[:：]?\s*|\s*[|｜]\s+/;
+  const MEMO_LINE = /^(?:↳|->|→)?\s*(?:(?:谐音|画面|拆词|词根|场景)?(?:快速)?(?:记忆|联想|速记|巧记|记)(?:法)?)\s*[:：]\s*(.+)$/;
   const splitMemo = text => {
     const m = String(text || '').match(MEMO_SPLIT);
     if (!m) return [String(text || '').trim(), ''];
     return [text.slice(0, m.index).trim(), text.slice(m.index + m[0].length).trim()];
   };
+  const TAUTOLOGY_MEMO = /^[A-Za-z][A-Za-z\s-]{0,20}(?:就是|指|是|＝|=)\s*["“”']?[\u4e00-\u9fff]{1,5}["“”']?$/;
   const appendMemo = (row, memo) => {
-    const cleanMemo = String(memo || '').trim();
-    if (!cleanMemo || !row) return;
+    const cleanMemo = String(memo || '').replace(/^(?:(?:快速)?记忆法?|速记|巧记|记)\s*[:：]\s*/, '').trim();
+    if (!cleanMemo || !row || TAUTOLOGY_MEMO.test(cleanMemo)) return;
     row.classList.add('has-memo');
     const note = el('span', 'pkp-memo');
     note.append(el('em', 'pkp-memo__tag', '记'), document.createTextNode(cleanMemo));

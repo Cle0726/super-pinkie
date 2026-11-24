@@ -95,3 +95,17 @@ test('段落翻译与写作使用全篇逐句精讲模板，不套选择题话�
   assert.ok(explainVersionFor('translate-passage') > explainVersionFor('choice'));
   assert.ok(explainVersionFor('writing') > explainVersionFor('choice'));
 });
+
+test('逐词带读要求少而精的联想法快速记忆，且严格控量防止页面撑爆', () => {
+  const single = explainRules({qkind: 'choice', mode: 'full'});
+  assert.match(single, /2 到 3 个核心词/);
+  assert.match(single, /谐音联想/);
+  assert.match(single, /严禁凑数废话/);
+  const singleRead = explainRules({qkind: 'choice', mode: 'read'});
+  assert.match(singleRead, /2 到 3 个核心词/);
+  assert.match(singleRead, /谐音联想/);
+  const passage = explainRules({qkind: 'translate-passage', mode: 'full'});
+  assert.match(passage, /4 到 6 个/);
+  assert.match(passage, /每句最多 1 到 2 个/);
+  assert.match(passage, /谐音联想/);
+});

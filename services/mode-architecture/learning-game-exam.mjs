@@ -613,12 +613,16 @@ export class GameExam {
         timeoutMs: isSubj ? 180000 : 120000,
         maxTokens,
         directPayload: true,
+        reasoningEffort: 'low',
         stopOnQuota: true,
         ...(useCompactExplain() ? {} : {fallbackMaxTokens, fallbackRules: compactExplainRules({mode: kind, qkind: part.kind}), onFallback: markCompactExplain}),
         onFailure: error => { failure = error; },
       },
     );
-    if (!r) return {text: '', source: 'none', error: explainFailure(failure)};
+    if (!r) {
+      this.game.logger?.warn?.(`exam.explain failed (${iid}, ${part.kind}, mode=${kind}): ${failure?.message || failure || 'empty'}`);
+      return {text: '', source: 'none', error: explainFailure(failure)};
+    }
     this.game.mutate(state => {
       const att = this.ensure(state).attempts[aid];
       if (!att) return;

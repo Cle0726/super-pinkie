@@ -1971,11 +1971,29 @@ function noteModelBase(value) {
 function parseModelJson(text) {
   const source = String(text || '').trim();
   if (!source) return null;
-  try { return JSON.parse(source); } catch { /* 字符串里有真实换行 */ }
-  try { return JSON.parse(source.replace(/\r?\n/g, '\\n')); } catch { /* 再抽 text 字段 */ }
-  const matched = source.match(/^\{\s*"text"\s*:\s*"([\s\S]*)"\s*\}\s*$/);
-  if (!matched) return null;
-  return {text: matched[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')};
+  const tryParse = raw => {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    try { return JSON.parse(s); } catch { /* 字符串里有真实换行 */ }
+    try { return JSON.parse(s.replace(/\r?\n/g, '\\n')); } catch { /* 再抽 text 字段 */ }
+    const matched = s.match(/^\{\s*"text"\s*:\s*"([\s\S]*)"\s*\}\s*$/);
+    if (!matched) return null;
+    return {text: matched[1].replace(/\\n/g, '\n').replace(/\\"/g, '"')};
+  };
+  const direct = tryParse(source);
+  if (direct) return direct;
+  const fenced = source.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) {
+    const inside = tryParse(fenced[1]);
+    if (inside) return inside;
+  }
+  const firstBrace = source.indexOf('{');
+  const lastBrace = source.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace && (firstBrace > 0 || lastBrace < source.length - 1)) {
+    const sliced = tryParse(source.slice(firstBrace, lastBrace + 1));
+    if (sliced) return sliced;
+  }
+  return null;
 }
 
 async function noteModelJson(response, {withMetadata = false, responseFormat = 'json'} = {}) {
@@ -2017,12 +2035,25 @@ async function noteModelJson(response, {withMetadata = false, responseFormat = '
 }
 
 // 学习台复用整理助手的鉴权、模型目录、超时与直连通道，默认跟随学习模式。
-function builtinReasoningEffort(entry) {
+// 默认优先用 low 档思考强度：像 clekk/gpt-6-luna 这类推理模型在 high 档做长篇讲解/翻译拆解时，
+// 非流式思考时间极易超过本地中转 75s 上游超时而返回 503；low 档可在 20–35s 稳定返回完整讲解。
+export function builtinReasoningEffort(entry, prefer = 'low') {
+  const pref = String(prefer || 'low').toLowerCase();
+  if (pref === 'none' || pref === 'off') return '';
   const declared = entry?.compat?.supportedReasoningEfforts;
-  if (!Array.isArray(declared) || !declared.length) return entry?.reasoning === true ? 'high' : '';
+  const order = pref === 'high'
+    ? ['high', 'medium', 'low', 'minimal']
+    : pref === 'medium'
+      ? ['medium', 'low', 'high', 'minimal']
+      : pref === 'minimal'
+        ? ['minimal', 'low', 'medium', 'high']
+        : ['low', 'minimal', 'medium', 'high'];
+  if (!Array.isArray(declared) || !declared.length) {
+    if (entry?.reasoning !== true) return '';
+    return ['low', 'minimal', 'medium', 'high'].includes(pref) ? pref : 'low';
+  }
   const levels = new Set(declared.map(value => String(value).toLowerCase()));
-  if (levels.has('high')) return 'high';
-  return ['medium', 'low', 'minimal'].find(level => levels.has(level)) || '';
+  return order.find(level => levels.has(level)) || '';
 }
 
 // 所有学习台后台任务（包括游戏）共用这一项；普通聊天及其模型配置不受影响。
@@ -2037,9 +2068,12 @@ export async function requestLearningModel(organizer, rules, digest, options = {
   const model = models.find(model => model.ref === defaultRef);
   if (!model) return {unavailable: true, model: null, usage: null};
   const info = {ref: model.ref, name: model.name};
-  const reasoningEffort = options.reasoningEffort || builtinReasoningEffort(model.model);
+  const requested = options.reasoningEffort;
+  const reasoningEffort = requested === 'none' || requested === false
+    ? ''
+    : builtinReasoningEffort(model.model, requested || 'low');
   try {
-    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true, ...(reasoningEffort ? {reasoningEffort} : {})});
+    const response = await organizer.requestModel(model.ref, rules, digest, false, {...options, withMetadata: true, reasoningEffort});
     return {...response, model: info, ms: Date.now() - started};
   } catch (error) { error.learningModel = info; error.ms = Date.now() - started; throw error; }
 }
@@ -2107,7 +2141,7 @@ export class LearningNotesOrganizer {
     const model = catalog.models.find(item => item.ref === ref);
     if (!model) throw new Error('这个模型暂时不可用，请重新选择');
     const start = Date.now();
-    const reasoningEffort = builtinReasoningEffort(model.model);
+    const reasoningEffort = builtinReasoningEffort(model.model, 'low');
     try {
       await this.requestModel(ref, '只回复 OK。', [], false,
         {userText: '请回复 OK。', responseFormat: 'text', maxTokens: 512, timeoutMs: 30000,
@@ -2166,8 +2200,14 @@ export class LearningNotesOrganizer {
     }
     if (options.temperature != null) body.temperature = options.temperature;
     if (options.reasoningEffort) {
-      if (api === 'openai-responses') body.reasoning = {effort:options.reasoningEffort};
-      else if (api === 'openai-completions') body.reasoning_effort = options.reasoningEffort;
+      const requested = String(options.reasoningEffort).toLowerCase();
+      const effort = ['low', 'minimal', 'medium', 'high'].includes(requested)
+        ? builtinReasoningEffort(model, requested)
+        : options.reasoningEffort;
+      if (effort) {
+        if (api === 'openai-responses') body.reasoning = {effort};
+        else if (api === 'openai-completions') body.reasoning_effort = effort;
+      }
     }
     const controller = new AbortController(); let timer;
     const externalAbort = () => controller.abort();

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {LearningInteractionStore, LearningNotesOrganizer, registerLearningGateway, requestLearningModel} from '../services/mode-architecture/learning.mjs';
+import {LearningInteractionStore, LearningNotesOrganizer, builtinReasoningEffort, registerLearningGateway, requestLearningModel} from '../services/mode-architecture/learning.mjs';
 
 const A = 'agent:learning:first';
 const B = 'agent:learning:second';
@@ -116,4 +116,34 @@ test('learning requests carry their runtime identity through the local model rel
   assert.match(body.messages[0].content, /^学习台讲题规则/);
   assert.match(body.messages[0].content, /## Runtime\nOpenClaw agent=learning/);
   assert.deepEqual(JSON.parse(body.messages[1].content), {question: 'fixture'});
+});
+
+test('reasoning builtin models default to low reasoning_effort for explain reliability and respect compat efforts', async t => {
+  const {config, organizer} = setup(t);
+  config.models.providers.local.models.push(
+    {id: 'gpt-6-luna', name: 'GPT-6 Luna', reasoning: true, input: ['text']},
+    {id: 'med-only', name: 'Med Only', reasoning: true, compat: {supportedReasoningEfforts: ['medium', 'high']}, input: ['text']},
+  );
+  assert.equal(builtinReasoningEffort({reasoning: true}), 'low');
+  assert.equal(builtinReasoningEffort({reasoning: false}), '');
+  assert.equal(builtinReasoningEffort({reasoning: true, compat: {supportedReasoningEfforts: ['medium', 'high']}}, 'low'), 'medium');
+  assert.equal(builtinReasoningEffort({reasoning: true}, 'high'), 'high');
+  assert.equal(builtinReasoningEffort({reasoning: true}, 'none'), '');
+
+  organizer.setBuiltinModel(A, 'local/gpt-6-luna');
+  const bodies = [];
+  organizer.fetchImpl = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    return new Response(JSON.stringify({choices: [{message: {content: '好的，以下是讲解：\n```json\n{"text":"这段完整讲解已经成功返回。"}\n```'}}]}));
+  };
+  const r = await requestLearningModel(organizer, '学习台讲题规则', {question: 'q'}, {userText: '{"question":"q"}'});
+  assert.equal(bodies[0].reasoning_effort, 'low');
+  assert.equal(r.value.text, '这段完整讲解已经成功返回。');
+
+  await organizer.testBuiltinModel(A, 'local/med-only');
+  assert.equal(bodies[1].reasoning_effort, 'medium');
+
+  organizer.setBuiltinModel(A, 'local/first');
+  await requestLearningModel(organizer, '学习台讲题规则', {question: 'q'}, {userText: '{"question":"q"}', reasoningEffort: 'low'});
+  assert.equal(bodies[2].reasoning_effort, undefined);
 });

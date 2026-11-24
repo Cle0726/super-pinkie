@@ -787,6 +787,7 @@ function howToGet(form) {
 // ---------- 注册 ----------
 export function registerLearningGame(api, store, options = {}) {
   const game = new LearningGame(store, options);
+  game.logger = api.logger || null;
   store.game = game;
   const register = (name, handler) => api.registerGatewayMethod(`pinkie.learning.game.${name}`, async ({params, respond}) => {
     try {
