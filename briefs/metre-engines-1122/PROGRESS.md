@@ -4,6 +4,23 @@
 
 ---
 
+## 接力卡（最后更新：2026-11-24 07:40 UTC，Claude Code @ Windows）
+
+- 状态：进行中（第一步差 CI 和隔离碧琪日夜截图；第二步差隔离真跑和全量对照）
+- 分支和 PR：第一步 `feat/metre-engines`，PR #73（草稿，base main）；第二步 `feat/metre-engines-dispatch`，PR #74（草稿，base `feat/metre-engines`，#73 合并后改 main）
+- 已完成：
+  1. 在本分支 `git merge origin/main`（12b644ea），不 rebase（#67 已经合入本分支），合并提交 `e39d28f7`，已推。冲突处理见合并提交说明。
+  2. 全量门禁对照（同机、同隔离目录，先分支后 main）：Node 门禁失败 61 / 61，Python 失败 11 / 11，新增 0。结果 `build\quick-run\engines\full\compare.json`、`sets-*.json`。
+  3. 第二步派活服务 `engines-dispatch.mjs` + 命令行 `engines-dispatch-cli.mjs` + 11 条单测（`3ae0248b`），PLAN 3.8 记下 E8-2 更正（`6a3841f0`），已推。
+- 正在做：等 #73 CI；等 `build\quick-run\gate.lock` 空出来再起隔离碧琪截图（`build\quick-run\engines\walk-step1.mjs light|dark`，结果 `engines\step1\`）。
+- 下一步：截图补进 #73 描述 → CI 全绿后 `gh pr ready 73` → 第二步在隔离碧琪里用 Claude Code 当主脑派「整理一份三条的清单」给碧琪，看侧栏「已派出」、子会话跑完、汇报回到引擎对话 → 第二步全量对照 → C.le. v5 本地试验分支截图（`build\quick-run\engines\cle-v5\`，不推）。
+- 没推送的东西：`build\quick-run\engines\` 下的脚本和结果（build 目录不进仓库）。
+- 环境：工作区 `C:\Users\34786\Projects\pinkie-wt\metre-sync-1122`（第一步）、`engines-dispatch`（第二步）、`engines-main-gate`（main 对照用，detached），都在 `pinkie-wt` 下；隔离碧琪 `F:\metreiso\eng` 网关 8712（进程 22828，11-23 04:39 上一位起的，截图前用 `tools/metre/iso/gateway.py stop/start` 重启）。
+- 正在跑的长操作：无。
+- 踩过的坑：本机 Python 不开 UTF-8 时 `mode_architecture_setup_test` 读插件清单报 cp1252 解码错，CI 设了 `PYTHONUTF8=1`，本地也要设；`windows_portable_update_integration_test` 在本机时好时坏（main 上一样），不是本分支引起的。
+- ★ 条目：本计划 PLAN / PROGRESS 里没有带 ★ 的自查条目；按任务书第一步第 3 条的验证项逐条记在上面。
+- 待用户决定：无（合并由协调者做）。
+
 ## 2026-11-23 清晨 · hy4flash-free 前后端同步收尾：修了四处（4 个提交），切会话 / 停下 / 排队三种模式补齐（AWS Quick 新号，经 Quick 跑腿 2）
 
 **这一段**：照 `build\quick-run\任务-引擎-1123.md` 一口气做完（用户睡了，协调者代定）。隔离碧琪 `F:\metreiso\eng`（网关 8712），Edge 无头，会话先 `sessions.patch` 成 `mm/workbuddy/hy4flash-free`。改过的注入文件先放进副本的 `control-ui` 再走查（旧的备份在 `build\quick-run\eng1123\iso-backup-*`），并逐个核对页面拿到的就是仓库这份。剧本 `build\quick-run\eng1123\walk3.mjs` / `walk4.mjs` / `walk5.mjs`，结果和截图在同目录 `walk*\`。
