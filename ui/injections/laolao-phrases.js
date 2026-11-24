@@ -53,19 +53,19 @@
   const fallbackName=/^(?:Assistant|助手|main|project|thinking|learning|unrestricted)$/i;
   // Metre is not Pinkie: its bare agent id becomes its own name, never 碧琪.
   const metreName=/^metre$/i;
-  const askAssistantLabel=/(?:Ask|询问|问问).*(?:OpenClaw|CLE\s*Kk)/i;
+  const askAssistantLabel=/(?:Ask|询问|问问).*(?:OpenClaw|CLE\s*Kk|C\.le\.)/i;
   // The compact toolbar gives the Home shortcut and the Ask shortcut a shared
   // OpenClaw-flavoured title.  The Home aria-label is the reliable difference,
   // so explicitly keep it out of the branded Ask treatment.
   const homeAssistantLabel=/(?:Home\s*智能体|与你的\s*Home|主页|首页|home\s+agent)/i;
   const modelStartup=/^正在启动模型(?:…|\.\.\.)?\s*(?:[·•]\s*)?(\d+)\s*秒$/;
   const exactPhrases = new Map([
-    ["网关仪表盘", "CLE Kk 本地工作台"],
-    ["WebSocket URL", "CLE Kk 连接地址"],
-    ["Gateway 令牌", "CLE Kk 访问令牌"],
+    ["网关仪表盘", "C.le. 本地工作台"],
+    ["WebSocket URL", "C.le. 连接地址"],
+    ["Gateway 令牌", "C.le. 访问令牌"],
     ["需要认证", "需要连接验证"],
-    ["Gateway 可以访问，但此浏览器连接前需要匹配的令牌或密码。", "CLE Kk 已启动，这个窗口需要匹配的访问令牌或密码。"],
-    ["粘贴来自", "粘贴 CLE Kk 的访问令牌；需要时可复制"],
+    ["Gateway 可以访问，但此浏览器连接前需要匹配的令牌或密码。", "C.le. 已启动，这个窗口需要匹配的访问令牌或密码。"],
+    ["粘贴来自", "粘贴 C.le. 的访问令牌；需要时可复制"],
     ["如果未配置令牌，请在 Gateway 主机上运行", "还没有访问令牌时，可在本机终端运行"],
     ["更新凭据后再次点击 Connect。", "填好后再次点击“连接”。"],
     ["Loading…", "稍等，碧琪在找派对用品…"],
@@ -274,7 +274,7 @@
     if (isStatusContext(element) && /^.+\s+is working[.…]*$/i.test(core)) {
       return `${leading}碧琪正忙着把这件事办好呢…${trailing}`;
     }
-    if (/^(?:Ask|询问|问问)\s*(?:OpenClaw|CLE\s*Kk)$/i.test(core)) {
+    if (/^(?:Ask|询问|问问)\s*(?:OpenClaw|CLE\s*Kk|C\.le\.)$/i.test(core)) {
       return `${leading}问问碧琪${trailing}`;
     }
 
@@ -285,7 +285,7 @@
     // Brand chrome only. Chat messages/code are filtered by
     // isProtectedContent before translate() is called.
     if (/\bOpenClaw\b/.test(core)) {
-      return `${leading}${core.replace(/\bOpenClaw\b/g,"CLE Kk")}${trailing}`;
+      return `${leading}${core.replace(/\bOpenClaw\b/g,"C.le.")}${trailing}`;
     }
     return text;
   };
@@ -433,7 +433,7 @@
 
   const syncBrandTitle = () => {
     if(isMetreMode())return;
-    if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'CLE Kk');
+    if (/OpenClaw/.test(document.title)) document.title=document.title.replace(/OpenClaw/g,'C.le.');
   };
 
   const syncBrandChrome = (scope=document) => {
@@ -443,15 +443,15 @@
     ownOrDescendants(scope,'input[placeholder], textarea[placeholder]').forEach(control=>{
       const value=control.getAttribute('placeholder')||'';
       const next=localizedChromeValue(value,control)
-        .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'CLE Kk 访问令牌（可选）')
-        .replace(/OpenClaw/g,'CLE Kk');
+        .replace(/OPENCLAW_GATEWAY_TOKEN(?:\s*[（(]可选[）)])?/g,'C.le. 访问令牌（可选）')
+        .replace(/OpenClaw/g,'C.le.');
       if(next!==value)setLocalizedAttribute(control,'placeholder',next);
     });
     ownOrDescendants(scope,'[title], [aria-label], img[alt]').forEach(element=>{
       for(const name of ['title','aria-label','alt']){
         if(!element.hasAttribute(name))continue;
         const value=element.getAttribute(name)||'';
-        const next=localizedChromeValue(value,element).replace(/OpenClaw/g,'CLE Kk');
+        const next=localizedChromeValue(value,element).replace(/OpenClaw/g,'C.le.');
         if(next!==value)setLocalizedAttribute(element,name,next);
       }
     });

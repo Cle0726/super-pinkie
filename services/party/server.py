@@ -34,7 +34,7 @@ USAGE = runpy.run_path(str(Path(__file__).with_name('usage.py')))
 LIVE = runpy.run_path(str(Path(__file__).with_name('live.py')))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
-LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'CLE Kk',
+LABELS = {'pinkie': '碧琪', 'codex': 'Codex', 'openclaw': 'C.le.',
           'claude': 'Claude', 'gemini': 'Gemini', 'grok': 'Grok'}
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MAX_MESSAGE = 12000
@@ -198,7 +198,7 @@ def openclaw_ready(agent_id):
     try:
         config = json.loads((Path.home() / '.openclaw/openclaw.json').read_text())
         agent = next(a for a in CONTEXT['agent_entries'](config) if a['id'] == agent_id)
-        # Party members are first-class CLE Kk agents.  The selected project
+        # Party members are first-class C.le. agents.  The selected project
         # remains their work focus, not a filesystem/tool sandbox.
         return '*' not in agent.get('tools', {}).get('deny', [])
     except (OSError, KeyError, ValueError, StopIteration):
@@ -986,7 +986,7 @@ class Manager:
                                     if isinstance(event,dict) and 'pinkieLive' in event:
                                         live.openclaw(event['pinkieLive'])
                                         if event['pinkieLive'].get('stream')=='capability':
-                                            self.store.message(task['room'],'system','当前 CLE Kk 内核暂不提供实时事件，本次会在完成后显示回复。','notice',task['id'])
+                                            self.store.message(task['room'],'system','当前 C.le. 内核暂不提供实时事件，本次会在完成后显示回复。','notice',task['id'])
                                     else:output += line+'\n'
                             else:output += decoded
                             if received > 2000000:
@@ -1012,7 +1012,7 @@ class Manager:
                 except ValueError:
                     continue
             if parsed is None:
-                raise ValueError('CLE Kk 没有返回有效结果：' + redact(errors[-500:] or output[-500:]))
+                raise ValueError('C.le. 没有返回有效结果：' + redact(errors[-500:] or output[-500:]))
             result = parsed.get('result', parsed)
             return '\n\n'.join(p['text'] for p in result.get('payloads', []) if isinstance(p.get('text'), str))
         finally:

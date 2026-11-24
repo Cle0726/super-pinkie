@@ -128,7 +128,7 @@ enum MaterialPreviewFileError: LocalizedError {
         switch self {
         case .invalidPath: return "文件路径无效。"
         case .outsideHome: return "为保护系统文件，只能打开用户主目录里的文件。"
-        case .sensitivePath: return "这个位置包含密钥或 CLE Kk 配置，不能从聊天里打开。"
+        case .sensitivePath: return "这个位置包含密钥或 C.le. 配置，不能从聊天里打开。"
         case .missing: return "这个文件已经不在原来的位置了。"
         case .notRegularFile: return "这里只能打开文件，不能打开文件夹。"
         case .tooLarge(let limit): return "这个文件超过 \(limit)，暂时不能预览。"

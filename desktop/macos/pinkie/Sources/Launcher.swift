@@ -1057,7 +1057,7 @@ private enum Gateway {
                 return
             }
             guard stale.allSatisfy({ stopStaleListener($0) }) else {
-                lastError = "旧版 CLE Kk 网关仍占用端口，没有误杀其他进程。"
+                lastError = "旧版 C.le. 网关仍占用端口，没有误杀其他进程。"
                 DispatchQueue.main.async { completion(.failed) }
                 return
             }
@@ -1319,7 +1319,7 @@ private final class DesktopControlService {
         guard !stopping,
               FileManager.default.fileExists(atPath: BundledRuntime.cuaDriverAppURL.path),
               BundledRuntime.exists(driver) else {
-            lastError = "缺少 CLE Kk 桌面执行器，请重新安装当前定版。"
+            lastError = "缺少 C.le. 桌面执行器，请重新安装当前定版。"
             NSLog("[CLE Kk computer] %@", lastError ?? "桌面执行器缺失")
             return
         }

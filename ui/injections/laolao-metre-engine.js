@@ -198,12 +198,12 @@
   let menu = null;
   function closeMenu() { menu?.remove(); menu = null; document.removeEventListener('pointerdown', outside, true); }
   function outside(event) { if (menu && !menu.contains(event.target) && !event.target.closest?.('.pk-eng-chip')) closeMenu(); }
-  // 菜单开在按钮上方（放不下才放下方）；内容读回来变高以后再摆一次。
+  // 菜单开在按钮上方（放不下才放下方）；内容读回来变高以后再摆一次。按钮在输入框里：下沿对齐输入框上沿，不压住输入框；上面不够高就限高、菜单里滚动（11-24 ui2 缺陷 1）。
   function position(anchor, node) {
-    const r = anchor.getBoundingClientRect();
-    const w = node.offsetWidth, hgt = node.offsetHeight;
-    const left = Math.max(12, Math.min(innerWidth - w - 12, r.left));
-    const top = r.top - hgt - 8 > 12 ? r.top - hgt - 8 : Math.max(12, Math.min(innerHeight - hgt - 12, r.bottom + 8));
+    const r = anchor.getBoundingClientRect(), box = (anchor.closest?.('.agent-chat__input') || anchor).getBoundingClientRect();
+    node.style.maxHeight = ''; const room = box.top - 20, w = node.offsetWidth;
+    if (room >= Math.min(node.offsetHeight, 240)) node.style.maxHeight = Math.min(node.offsetHeight, room) + 'px';
+    const hgt = node.offsetHeight, left = Math.max(12, Math.min(innerWidth - w - 12, r.left)), top = box.top - hgt - 8 >= 12 ? box.top - hgt - 8 : Math.max(12, Math.min(innerHeight - hgt - 12, r.bottom + 8));
     Object.assign(node.style, {left: left + 'px', top: top + 'px'});
   }
   function place(anchor, node) {
