@@ -754,3 +754,258 @@ test('a workspace whose files are never injected (Metre roles) is not watched as
   assert.deepEqual(guard.verifyAfterCommand('watch'), []);
   assert.equal(fs.existsSync(path.join(roles, 'BOOTSTRAP.md')), true);
 });
+
+// A locked file (antivirus, sync client) must delay a restore, never cancel it.
+function lockFixture(t) {
+  const box = sandbox();
+  const config = path.join(box.state, 'openclaw.json');
+  const official = {agents: {list: [{id: 'main', workspace: box.ws}]}, plugins: {enabled: true}, ui: {theme: 'light'}};
+  fs.writeFileSync(config, JSON.stringify(official));
+  const snap = box.guard.baseline();
+  t.after(() => {
+    clearTimeout(snap.retryTimer);
+    for (const watcher of snap.watchers || []) watcher.close();
+    snap.watchers = null;
+  });
+  return {
+    ...box, config, snap,
+    set: patch => fs.writeFileSync(config, JSON.stringify({...official, ...patch})),
+    current: () => JSON.parse(fs.readFileSync(config, 'utf8')),
+    guardFile: name => path.join(box.root, 'app-state/guard', name),
+  };
+}
+
+// Fails `name` on `target` for the first `times` calls; returns a function that lifts the lock.
+function lock(t, name, target, {code = 'EBUSY', times = Infinity} = {}) {
+  const real = fs[name];
+  let calls = 0;
+  fs[name] = function (file, ...rest) {
+    if (file === target && calls < times) {
+      calls += 1;
+      throw Object.assign(new Error(`${code}: simulated lock`), {code});
+    }
+    return real.call(this, file, ...rest);
+  };
+  const release = () => { fs[name] = real; };
+  t.after(release);
+  return release;
+}
+
+async function until(check, timeout = 4000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (check()) return true;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return check();
+}
+
+for (const code of ['EBUSY', 'EPERM', 'EACCES']) {
+  test(`restore: one ${code} while backing up openclaw.json is retried at once`, t => {
+    const f = lockFixture(t);
+    f.set({plugins: {enabled: false}});
+    lock(t, 'copyFileSync', f.config, {code, times: 1});
+    assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+    assert.equal(f.current().plugins.enabled, true);
+  });
+}
+
+test('restore: a lock that outlasts the retries is tried again by the next check, with the file unchanged', t => {
+  const f = lockFixture(t);
+  f.set({plugins: {enabled: false}});
+  const release = lock(t, 'copyFileSync', f.config);
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  assert.equal(f.current().plugins.enabled, false);
+  release();
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+  assert.equal(f.current().plugins.enabled, true);
+});
+
+test('restore: a failed write after the backup is also tried again', t => {
+  const f = lockFixture(t);
+  f.set({plugins: {enabled: false}});
+  const real = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (to === f.config) throw Object.assign(new Error('EBUSY: simulated lock'), {code: 'EBUSY'});
+    return real(from, to);
+  };
+  t.after(() => { fs.renameSync = real; });
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  fs.renameSync = real;
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+});
+
+test('restore: repeated failures alert once, leave no empty backups and count one strike on success', t => {
+  const f = lockFixture(t);
+  let clock = Date.now();
+  f.guard.now = () => new Date(clock += 1000);
+  f.set({plugins: {enabled: false}});
+  const release = lock(t, 'copyFileSync', f.config);
+  for (let i = 0; i < 3; i += 1) f.guard.verifyAfterCommand('exec');
+  const log = () => fs.readFileSync(f.guardFile('guard.log'), 'utf8').trim().split('\n');
+  assert.equal(log().length, 1);
+  assert.equal(f.guard.status().restoreFailedCount, 1);
+  assert.equal(f.guard.status().strikesIn24h, 0);
+  const backups = path.join(f.root, 'app-state/backups');
+  assert.deepEqual(fs.existsSync(backups) ? fs.readdirSync(backups) : [], []);
+
+  release();
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+  assert.equal(log().length, 2);
+  assert.equal(f.guard.status().restoreFailedCount, 0);
+  assert.equal(f.guard.status().strikesIn24h, 1);
+  assert.equal(JSON.parse(fs.readFileSync(f.guardFile('pending-alert.json'), 'utf8')).restoreFailed, false);
+});
+
+test('restore: the watcher retries by itself, without another file event or command', async t => {
+  const f = lockFixture(t);
+  // Closed watchers: "watching", but no file event can do the work for the retry.
+  for (const watcher of f.guard.watch()) watcher.close();
+  f.set({plugins: {enabled: false}});
+  const release = lock(t, 'copyFileSync', f.config);
+  assert.deepEqual(f.guard.verifyAfterCommand('watch'), []);
+  release();
+  assert.equal(await until(() => f.current().plugins.enabled === true), true);
+});
+
+test('restore: a retry that meets a running update keeps waiting for it', async t => {
+  const f = lockFixture(t);
+  for (const watcher of f.guard.watch()) watcher.close();
+  f.set({plugins: {enabled: false}});
+  const release = lock(t, 'copyFileSync', f.config);
+  f.guard.verifyAfterCommand('watch');
+  release();
+  const updating = path.join(f.root, 'app-state/updates/install-in-progress.json');
+  fs.mkdirSync(path.dirname(updating), {recursive: true});
+  fs.writeFileSync(updating, JSON.stringify({pid: process.pid}));
+  await new Promise(resolve => setTimeout(resolve, 700));
+  assert.equal(f.current().plugins.enabled, false);
+  fs.rmSync(updating);
+  assert.equal(await until(() => f.current().plugins.enabled === true), true);
+});
+
+test('restore: a locked read is not mistaken for a deleted config, so the user keeps their change', t => {
+  const f = lockFixture(t);
+  f.set({ui: {theme: 'dark'}});
+  const release = lock(t, 'readFileSync', f.config);
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  release();
+  assert.equal(fs.existsSync(f.guardFile('pending-alert.json')), false, 'not knowing is not a failed restore: no alert');
+  assert.equal(f.current().ui.theme, 'dark');
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  assert.equal(f.guard.status().strikesIn24h, 0);
+});
+
+test('restore: a locked read of a persona file never replaces it without a backup', t => {
+  const f = lockFixture(t);
+  const soul = path.join(f.ws, 'SOUL.md');
+  fs.writeFileSync(soul, 'edited');
+  const release = lock(t, 'readFileSync', soul);
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  release();
+  assert.equal(fs.readFileSync(soul, 'utf8'), 'edited');
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [soul]);
+  assert.equal(fs.readFileSync(soul, 'utf8'), 'soul');
+});
+
+test('restore: an unreadable (not locked) config is still replaced by the last good copy', t => {
+  const f = lockFixture(t);
+  f.set({plugins: {enabled: false}});
+  lock(t, 'readFileSync', f.config, {code: 'EACCES', times: 1});
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+  assert.equal(f.current().plugins.enabled, true);
+});
+
+test('restore: a write that lands while a check is reading is seen by the next check', t => {
+  const f = lockFixture(t);
+  f.set({ui: {theme: 'dark'}});
+  const real = fs.readFileSync;
+  fs.readFileSync = function (file, ...rest) {
+    const value = real.call(this, file, ...rest);
+    if (file === f.config) {
+      fs.readFileSync = real;
+      f.set({plugins: {enabled: false}});
+    }
+    return value;
+  };
+  t.after(() => { fs.readFileSync = real; });
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), [f.config]);
+});
+
+test('restore: a failure the user undoes themselves stops showing as failed', t => {
+  const f = lockFixture(t);
+  f.set({plugins: {enabled: false}});
+  const release = lock(t, 'copyFileSync', f.config);
+  f.guard.verifyAfterCommand('exec');
+  assert.equal(f.guard.status().restoreFailedCount, 1);
+  release();
+  f.set({});
+  assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
+  assert.equal(f.guard.status().restoreFailedCount, 0);
+});
+
+// statKey (size, mtime, inode) cannot see a same-length write inside one timestamp tick, nor an edit
+// whose mtime was set back. Pin the mtime to one whole second so the miss is deterministic, not timing luck.
+const PINNED = 1767225600;
+function pinned(file, content) {
+  const ino = fs.statSync(file).ino;
+  fs.writeFileSync(file, content);
+  fs.utimesSync(file, PINNED, PINNED);
+  const s = fs.statSync(file);
+  return {size: s.size, mtimeMs: s.mtimeMs, ino: s.ino, sameIno: s.ino === ino};
+}
+
+test('change detection: a same-size write with the same mtime still has its product keys restored', () => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const official = path.join(state, 'extensions/pinkie-mode-architecture');
+  const initial = {plugins: {allow: ['pinkie-mode-architecture', 'my-ext-plugin'], deny: ['some-other-user-plugin'], load: {paths: [official]}, entries: {'pinkie-mode-architecture': {enabled: true}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  const before = pinned(configFile, JSON.stringify(initial));
+  guard.baseline();
+  // Same length: the product plugin moves from allow to deny, a user plugin the other way.
+  const tampered = structuredClone(initial);
+  tampered.plugins.allow = ['some-other-user-plugin', 'my-ext-plugin'];
+  tampered.plugins.deny = ['pinkie-mode-architecture'];
+  const after = pinned(configFile, JSON.stringify(tampered));
+  assert.deepEqual([after.size, after.mtimeMs, after.sameIno], [before.size, before.mtimeMs, true], 'fixture must leave statKey unchanged');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  const fixed = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  assert.equal(fixed.plugins.allow.includes('pinkie-mode-architecture'), true);
+  assert.equal(fixed.plugins.deny.includes('pinkie-mode-architecture'), false);
+  // Nothing left to do afterwards, and a user-only change of the same shape is still kept.
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+});
+
+test('change detection: a same-size persona edit with the same mtime is still put back', () => {
+  const {guard, ws} = sandbox();
+  const soul = path.join(ws, 'SOUL.md');
+  const before = pinned(soul, 'soul');
+  guard.baseline();
+  const after = pinned(soul, 'evil');
+  assert.deepEqual([after.size, after.mtimeMs, after.sameIno], [before.size, before.mtimeMs, true], 'fixture must leave statKey unchanged');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [soul]);
+  assert.equal(fs.readFileSync(soul, 'utf8'), 'soul');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+});
+
+test('change detection: an unchanged-looking file that is locked is compared again by the next check', t => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const initial = {plugins: {allow: ['pinkie-mode-architecture', 'x'], entries: {'pinkie-mode-architecture': {enabled: true}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  pinned(configFile, JSON.stringify(initial));
+  guard.baseline();
+  const tampered = structuredClone(initial);
+  tampered.plugins.allow = ['x', 'pinkie-mode-architecturf'];
+  pinned(configFile, JSON.stringify(tampered));
+  const real = fs.readFileSync;
+  fs.readFileSync = function (file, ...rest) {
+    if (file === configFile) throw Object.assign(new Error('EBUSY: simulated lock'), {code: 'EBUSY'});
+    return real.call(this, file, ...rest);
+  };
+  t.after(() => { fs.readFileSync = real; });
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+  fs.readFileSync = real;
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).plugins.allow.includes('pinkie-mode-architecture'), true);
+});

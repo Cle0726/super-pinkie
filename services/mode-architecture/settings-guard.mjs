@@ -51,24 +51,32 @@ function readJson(file) {
 
 const sha256Hex = data => crypto.createHash('sha256').update(data).digest('hex');
 
+// 杀毒、同步软件会短暂占着文件：同步地多试几次（最多约 0.2 秒），不能一碰到就放弃。
+const LOCK_CODES = ['EPERM', 'EBUSY', 'EACCES'];
+function withLockRetry(run, codes = LOCK_CODES) {
+  for (let attempt = 0; ; attempt += 1) {
+    try { return run(); } catch (error) {
+      if (!codes.includes(error?.code) || attempt === 3) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 35 * (attempt + 1));
+    }
+  }
+}
+
+// null = 没有这个文件或根本读不了（照旧按「被删、被改坏」换回）。只有「正被占用」例外：
+// 那不代表内容坏了，抛出去等下次再查，否则会拿旧快照盖掉用户刚改的内容。
+function readUnlessLocked(file, encoding) {
+  try { return withLockRetry(() => fs.readFileSync(file, encoding), ['EBUSY']); } catch (error) {
+    if (error?.code === 'EBUSY') throw error;
+    return null;
+  }
+}
+
 function atomicWriteFileSync(target, data, {mode} = {}) {
   fs.mkdirSync(path.dirname(target), {recursive: true});
   const temp = path.join(path.dirname(target), `.${path.basename(target)}.guard-${process.pid}-${crypto.randomBytes(4).toString('hex')}`);
   try {
     fs.writeFileSync(temp, data, mode !== undefined ? {mode} : undefined);
-    let lastError = null;
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      try {
-        fs.renameSync(temp, target);
-        lastError = null;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!['EPERM', 'EBUSY', 'EACCES'].includes(error?.code) || attempt === 3) throw error;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 35 * (attempt + 1));
-      }
-    }
-    if (lastError) throw lastError;
+    withLockRetry(() => fs.renameSync(temp, target));
   } catch (error) {
     try { fs.rmSync(temp, {force: true}); } catch {}
     throw error;
@@ -627,13 +635,15 @@ export class SettingsGuard {
         for (const file of list) { try { files.set(file, fs.readFileSync(file)); } catch {} }
       }
     }
-    let config = null; try { config = JSON.parse(fs.readFileSync(this.configPath, 'utf8')); } catch {}
+    const configStat = statKey(this.configPath);
+    let configRaw = null; try { configRaw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
+    let config = null; try { config = JSON.parse(configRaw); } catch {}
     if (!config || typeof config !== 'object') config = this.readConfig() || {};
     const viewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
     const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
       // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
       product: productView(config, viewCtx), official: structuredClone(config), lastGood: structuredClone(config),
-      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: [], unreported: []};
+      configKnown: configStat !== 'missing' && Object.keys(config).length > 0, configStat, configHash: configRaw === null ? '' : sha256Hex(configRaw), restores: [], unreported: []};
     shared.set(key, snap);
     return snap;
   }
@@ -642,10 +652,14 @@ export class SettingsGuard {
   verifyAfterCommand(tool = 'exec') {
     const snap = this.baseline();
     if (!snap) return [];
-    if (isUpdateInProgress(this.pinkieStateRoot, this.now().getTime())) return [];
+    if (isUpdateInProgress(this.pinkieStateRoot, this.now().getTime())) {
+      this.scheduleRetry(snap);
+      return [];
+    }
     const fixed = [];
     const fixedKinds = new Set();
     const restoreFailed = [];
+    const unread = []; // 被占用、还没读到：不知道改没改，只排队重查，不报警
     const nowDate = this.now();
     const nowIso = nowDate.toISOString();
     const stamp = nowIso.replace(/[:.]/g, '-');
@@ -654,14 +668,27 @@ export class SettingsGuard {
     const backup = (file, mode = 'copy') => {
       if (!backupRoot) { if (mode === 'move') fs.rmSync(file, {force: true, recursive: true}); return; }
       const target = path.join(backupRoot, path.relative(this.stateDir, file).replace(/^(\.\.[\\/])+/, ''));
-      fs.mkdirSync(path.dirname(target), {recursive: true});
-      if (mode === 'move') fs.renameSync(file, target); else fs.copyFileSync(file, target);
+      const made = fs.mkdirSync(path.dirname(target), {recursive: true});
+      try {
+        withLockRetry(() => (mode === 'move' ? fs.renameSync(file, target) : fs.copyFileSync(file, target)));
+      } catch (error) {
+        if (made) removeEmptyDirs(path.dirname(target), made); // 会反复重试，别每次留一个空备份目录
+        throw error;
+      }
       backupUsed = true;
     };
     for (const [file, official] of snap.files) {
-      if (statKey(file) === snap.stats.get(file)) continue;
-      let now = null; try { now = fs.readFileSync(file); } catch {}
-      if (now && now.equals(official)) { snap.stats.set(file, statKey(file)); continue; }
+      const stat = statKey(file);
+      let now;
+      if (stat === snap.stats.get(file)) {
+        // 大小、修改时间都没变不等于内容没变：同一个时间刻度里写进等长的内容，或者改完把时间调回去，statKey 都对得上。
+        // 再读一次和官方原文逐字节比；正被占用读不到就先当没变（和以前一样），下一次检查还会再比。
+        try { now = readUnlessLocked(file); } catch { continue; }
+        if (!now || now.equals(official)) continue;
+      } else {
+        try { now = readUnlessLocked(file); } catch { unread.push(file); continue; }
+        if (now && now.equals(official)) { snap.stats.set(file, stat); continue; }
+      }
       try {
         if (now) backup(file);
         try { if (fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file); } catch {}
@@ -691,9 +718,20 @@ export class SettingsGuard {
     }
     // openclaw.json：只比产品键；用户改的模型、偏好原样留着。
     const configStat = statKey(this.configPath);
-    if (configStat !== snap.configStat) {
-      try {
-        let raw = null; try { raw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
+    let configChanged = configStat !== snap.configStat;
+    let raw = null;
+    let readable = true;
+    if (configChanged) {
+      try { raw = readUnlessLocked(this.configPath, 'utf8'); } catch { readable = false; unread.push(this.configPath); }
+    } else if (configStat !== 'missing') {
+      // statKey 只有大小、修改时间、inode：同一个时间刻度里写进等长的内容（或改完把时间调回去）它对不上变化。
+      // 所以再比一次内容哈希。正被占用读不到就先当没变，下一次检查还会再比，不会因此永久跳过。
+      try { raw = readUnlessLocked(this.configPath, 'utf8'); } catch { readable = false; }
+      configChanged = readable && raw !== null && sha256Hex(raw) !== snap.configHash;
+    }
+    if (configChanged) {
+      let written = null;
+      if (readable) try {
         let config = null; try { config = JSON.parse(raw); } catch {}
         const baseViewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
         const requiredAllowed = PRODUCT_PLUGIN_IDS.filter(id => Boolean(snap.official?.plugins?.entries?.[id]) || (Array.isArray(snap.official?.plugins?.allow) && snap.official.plugins.allow.includes(id)));
@@ -706,27 +744,70 @@ export class SettingsGuard {
           applyProductView(config, snap.official, viewCtx);
           backup(this.configPath);
           let mode = 0o600; try { mode = fs.statSync(this.configPath).mode & 0o777; } catch {}
-          atomicWriteFileSync(this.configPath, JSON.stringify(config, null, 2) + '\n', {mode});
+          written = JSON.stringify(config, null, 2) + '\n';
+          atomicWriteFileSync(this.configPath, written, {mode});
           fixed.push(this.configPath);
           fixedKinds.add('config');
         } else if (!config || typeof config !== 'object') {
           // 删掉或改成读不出来的样子：整份换回快照（快照就是启动校验之后的官方配置 + 当时的用户设置）。
           if (raw !== null) backup(this.configPath);
-          atomicWriteFileSync(this.configPath, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
+          written = JSON.stringify(snap.lastGood, null, 2) + '\n';
+          atomicWriteFileSync(this.configPath, written, {mode: 0o600});
           fixed.push(this.configPath);
           fixedKinds.add('config');
         }
         if (snap.configKnown && config && typeof config === 'object') snap.lastGood = structuredClone(config);
         this.cache = {at: 0, value: null};
+        // 只有查完、该换的也换好了才记「已检查」：失败时不记；没改动时记读之前的值，读的同时落盘的改动下次还会查到。
+        // 哈希记的是查过的那份内容（换回时是写进去的那份），下次 statKey 对得上时拿它比。
+        snap.configStat = written !== null ? statKey(this.configPath) : configStat;
+        snap.configHash = written !== null ? sha256Hex(written) : (raw === null ? '' : sha256Hex(raw));
       } catch (error) {
         restoreFailed.push({file: this.configPath, kind: 'config', error: String(error?.message || error)});
       }
-      snap.configStat = statKey(this.configPath);
     }
-    if (fixed.length || restoreFailed.length) {
+    // 同一个文件一直换不回时只报一次，否则每次重试都弹窗、记日志。
+    const previous = snap.failing || new Set();
+    const failing = new Set(restoreFailed.map(item => item.file));
+    for (const file of unread) if (previous.has(file)) failing.add(file);
+    const newlyFailed = restoreFailed.some(item => !previous.has(item.file));
+    snap.failing = failing;
+    if (fixed.length || newlyFailed) {
       this.recordRuntimeOutcome({snap, tool, fixed, fixedKinds, restoreFailed, backup: backupUsed ? backupRoot : '', nowDate, nowIso});
     }
+    const recovered = [...previous].filter(file => !failing.has(file));
+    if (recovered.length) this.clearRestoreFailures(recovered);
+
+    snap.needsRetry = restoreFailed.length > 0 || unread.length > 0;
+    if (!snap.needsRetry) {
+      clearTimeout(snap.retryTimer);
+      snap.retryTimer = null;
+      snap.retryDelay = 0;
+    }
+    this.scheduleRetry(snap);
     return fixed;
+  }
+
+  // 换不回时文件不会再变、监视也就不会再响：自己隔一会儿再试（0.25 秒起翻倍，最多隔 30 秒）。
+  scheduleRetry(snap) {
+    if (!snap.needsRetry || !snap.watchers || snap.retryTimer) return;
+    snap.retryDelay = Math.min(30_000, snap.retryDelay ? snap.retryDelay * 2 : 250);
+    snap.retryTimer = setTimeout(() => {
+      snap.retryTimer = null;
+      try { this.verifyAfterCommand('watch'); } catch { this.scheduleRetry(snap); }
+    }, snap.retryDelay);
+    snap.retryTimer.unref?.();
+  }
+
+  // 后来换回来了，设置页就不能一直写着「没能写入恢复」。
+  clearRestoreFailures(files) {
+    if (!this.pinkieStateRoot) return;
+    const statusFile = path.join(this.pinkieStateRoot, 'guard', 'status.json');
+    const status = readJson(statusFile);
+    if (!Array.isArray(status?.restoreFailed)) return;
+    const left = status.restoreFailed.filter(item => !files.includes(item?.file));
+    if (left.length === status.restoreFailed.length) return;
+    try { atomicWriteFileSync(statusFile, JSON.stringify({...status, restoreFailed: left}, null, 2) + '\n'); } catch {}
   }
 
   hasCounterReceipt(identity, startupStatus = null) {
@@ -977,6 +1058,12 @@ function requiredAgentDenyMap(config = {}) {
     out[agent.id] = hasTools ? [...REQUIRED_AGENT_DENY] : [];
   }
   return out;
+}
+function removeEmptyDirs(from, top) {
+  for (let dir = from; ; dir = path.dirname(dir)) {
+    try { fs.rmdirSync(dir); } catch { return; }
+    if (!path.relative(top, dir)) return;
+  }
 }
 function statKey(file) {
   try { const s = fs.lstatSync(file); return `${s.isSymbolicLink() ? 'L' : ''}${s.size}:${s.mtimeMs}:${s.ino}`; } catch { return 'missing'; }

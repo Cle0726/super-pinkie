@@ -4,22 +4,26 @@
 
 ---
 
-## 接力卡（最后更新：2026-11-24 07:40 UTC，Claude Code @ Windows）
+## 接力卡（最后更新：2026-11-24 11:30 UTC，Claude Code @ Windows）
 
-- 状态：进行中（第一步差 CI 和隔离碧琪日夜截图；第二步差隔离真跑和全量对照）
-- 分支和 PR：第一步 `feat/metre-engines`，PR #73（草稿，base main）；第二步 `feat/metre-engines-dispatch`，PR #74（草稿，base `feat/metre-engines`，#73 合并后改 main）
+- 状态：第一步**自查通过**（等协调者复核、改 ready、合并）；第二步进行中（差修复后的隔离真跑和全量对照）
+- 分支和 PR：第一步 `feat/metre-engines`，PR #73（草稿，base main，ready / 合并由协调者做）；第二步 `feat/metre-engines-dispatch`，PR #74（草稿，base `feat/metre-engines`，#73 合并后改 main）
 - 已完成：
-  1. 在本分支 `git merge origin/main`（12b644ea），不 rebase（#67 已经合入本分支），合并提交 `e39d28f7`，已推。冲突处理见合并提交说明。
-  2. 全量门禁对照（同机、同隔离目录，先分支后 main）：Node 门禁失败 61 / 61，Python 失败 11 / 11，新增 0。结果 `build\quick-run\engines\full\compare.json`、`sets-*.json`。
-  3. 第二步派活服务 `engines-dispatch.mjs` + 命令行 `engines-dispatch-cli.mjs` + 11 条单测（`3ae0248b`），PLAN 3.8 记下 E8-2 更正（`6a3841f0`），已推。
-- 正在做：等 #73 CI；等 `build\quick-run\gate.lock` 空出来再起隔离碧琪截图（`build\quick-run\engines\walk-step1.mjs light|dark`，结果 `engines\step1\`）。
-- 下一步：截图补进 #73 描述 → CI 全绿后 `gh pr ready 73` → 第二步在隔离碧琪里用 Claude Code 当主脑派「整理一份三条的清单」给碧琪，看侧栏「已派出」、子会话跑完、汇报回到引擎对话 → 第二步全量对照 → C.le. v5 本地试验分支截图（`build\quick-run\engines\cle-v5\`，不推）。
-- 没推送的东西：`build\quick-run\engines\` 下的脚本和结果（build 目录不进仓库）。
-- 环境：工作区 `C:\Users\34786\Projects\pinkie-wt\metre-sync-1122`（第一步）、`engines-dispatch`（第二步）、`engines-main-gate`（main 对照用，detached），都在 `pinkie-wt` 下；隔离碧琪 `F:\metreiso\eng` 网关 8712（进程 22828，11-23 04:39 上一位起的，截图前用 `tools/metre/iso/gateway.py stop/start` 重启）。
+  1. 两次 `git merge origin/main`，不 rebase（#67 已经合入本分支）：先合 12b644ea（`e39d28f7`），再合 815c0f78（`c81a9918`，自动合并无冲突），已推，现在不落后 main。
+  2. 引擎台加载 `laolao-cle-space.js` 改成和 `laolao-cle-stage.js` 一字不差（`__pinkieAsset('./laolao-cle-space.js')`），`tests/metre-engine-ui.test.mjs` 断言两边一致（旧写法上失败）。
+  3. 修了两处复发问题并各带复发测试：登录文件夹绝对路径按目标平台判断（`af31c76f`）、引擎台最下面一行「reading replaceWith」（`8fd80bfe`）。
+  4. CI（`c81a9918`）四路全绿；macos-check 第一轮没执行任何步骤就被取消，重跑 1m17s 通过。
+  5. 全量门禁对照（同机同隔离目录，`build\quick-run\engines\full3\compare.json`）：Node 门禁 62 / 62，新增 0；Python 6 / 5，多出的 `windows_portable_update_integration_test.test_gateway_releases_port_new_package_starts_and_other_processes_survive` 单独复跑两边各 3 遍全过（`full3\flaky\summary.txt`），main 12b644ea 上也挂过，属本机不稳定测试，新增实为 0。
+  6. 隔离碧琪（`F:\metreiso\eng`，网关 8712，装 `c81a9918`）日 / 夜 × 1366 / 1024 / 760 六轮无头走查，每轮 11 张，`build\quick-run\engines\step1-c81\<主题>-<宽度>\`：总开关关 / 开时五个老模式引擎标记全 0，打开后 Metre 能选到全部引擎、进引擎台，页面报错 0。
+  7. 第二步：派活服务 + 命令行 + 12 条单测；令牌改绑会话随机串（`7a0f826d`）；从第一句起交给引擎的会话补建网关会话条目（`8c25eaf3`）。
+- 正在做：把新的 `feat/metre-engines` 合进第二步，再在隔离碧琪里跑修复后的真跑（Claude Code 当主脑派「整理一份三条的清单」）。
+- 下一步：第二步全量对照 → C.le. v5 本地试验分支（`local/engines-cle-v5-trial`，不推）截图 `build\quick-run\engines\cle-v5\`。
+- 没推送的东西：`build\quick-run\engines\` 下的脚本和结果（build 目录不进仓库）；本地试验分支 `local/engines-cle-v5-trial`（按规矩不推）。
+- 环境：工作区 `pinkie-wt\metre-sync-1122`（第一步）、`engines-dispatch`（第二步）、`engines-main-gate`（main 对照，detached 在 815c0f78）、`engines-cle-v5`（试验分支）。重活一律持 `build\quick-run\gate.lock`，开跑前内存高于 90% 就等。
 - 正在跑的长操作：无。
-- 踩过的坑：本机 Python 不开 UTF-8 时 `mode_architecture_setup_test` 读插件清单报 cp1252 解码错，CI 设了 `PYTHONUTF8=1`，本地也要设；`windows_portable_update_integration_test` 在本机时好时坏（main 上一样），不是本分支引起的。
-- ★ 条目：本计划 PLAN / PROGRESS 里没有带 ★ 的自查条目；按任务书第一步第 3 条的验证项逐条记在上面。
-- 待用户决定：无（合并由协调者做）。
+- 踩过的坑：本机 Python 要设 `PYTHONUTF8=1`（同 CI）；`windows_portable_update_integration_test` 本机时好时坏；本机没装 Playwright，浏览器单测会跳过（M2-3 会失败），走查用 `build\windows-runtime` 里的 playwright + Edge 无头；`metre-engine-ui` 的 Linux WebKit 浏览器测试近几轮越跑越慢，接近 40 秒上限。
+- ★ 条目：本计划 PLAN / PROGRESS 里没有带 ★ 的自查条目；按任务书第一步第 3 条的验证项逐条记在上面，全部通过。
+- 待用户决定：无（#73 ready / 合并由协调者做）。
 
 ## 2026-11-23 清晨 · hy4flash-free 前后端同步收尾：修了四处（4 个提交），切会话 / 停下 / 排队三种模式补齐（AWS Quick 新号，经 Quick 跑腿 2）
 

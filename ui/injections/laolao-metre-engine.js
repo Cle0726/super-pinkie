@@ -51,7 +51,7 @@
   // ---------- C.le. 思考动画（用户 11-22：「记得保留 C.le. 思考动画 three.js」） ----------
   // 和 Metre 原生对话的工作过程标题行是同一个 three.js 粒子签名（laolao-cle-space.js），地址和 laolao-cle-stage.js 一样经 window.__pinkieAsset 取同一个内容哈希，
   // 所以是同一份模块；引擎在跑时在对话最下面一行动，每一步换一个形状，做完落款再换回静态签名，然后把 WebGL 上下文还回去。
-  const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('/laolao-cle-space.js') : '/laolao-cle-space.js');
+  const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js');
   const CLE_HOLD = 6900;
   const CLE_VERB = {think: '思考中', read: '正在读取', write: '正在写入', edit: '正在修改', exec: '正在执行', ask: '等你确认', plan: '正在更新计划',
     reply: '正在回复', search: '正在搜索', find: '正在查代码', test: '正在跑测试', tool: '正在用工具', done: '完成', stopped: '已中断', fail: '没奏成'};
