@@ -128,6 +128,7 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
 
 // 11-24 16:10 打回第 4 条：820 宽时状态带走短档，引擎 4 个声部（1 失败、1 等你）只剩「引擎 4」，「不同步」也只剩三个字、看不出哪边在跑。
 // 复发测试：短档的引擎格留最要紧的一项（失败 > 等你 > 在跑），不同步格带上后台在跑 / 空闲；输入框窄到只能走短档时，每一格都不挤字。
+// 18:06 预审第 1 条：失败和等你同时有时，短档两个数都要留（「引擎 4 · 1✕ · 1!」），不能只剩失败。
 test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
   let lib;
   try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
@@ -154,14 +155,14 @@ test('the short tier of the band still says what failed or waits, and which side
       const d = (o) => Object.fromEntries(window.PinkieMetreBackstage.describe({conn: {online: true}, page: {busy: false, writing: false}, queue: 0, engines: {enabled: true}, since: 0, now: 0, ...o}).cells.map((c) => [c.id, c.short]));
       const v = (...tones) => tones.map((tone, i) => ({key: 'k' + i, name: 'e' + i, tone}));
       return {
-        failWait: d({voices: v('fail', 'wait', 'run', 'done')}).eng, wait: d({voices: v('wait', 'run')}).eng, run: d({voices: v('run', 'done')}).eng, done: d({voices: v('done')}).eng,
+        failWait: d({voices: v('fail', 'wait', 'run', 'done')}).eng, failOnly: d({voices: v('fail', 'run')}).eng, fail2wait3: d({voices: v('fail', 'fail', 'wait', 'wait', 'wait')}).eng, wait: d({voices: v('wait', 'run')}).eng, run: d({voices: v('run', 'done')}).eng, done: d({voices: v('done')}).eng,
         backRunning: d({status: {active: true}, page: {busy: false}, since: 1, now: 5000, voices: []}).run,
         backIdle: d({status: {active: false}, page: {busy: true}, since: 1, now: 5000, voices: []}).run,
       };
     });
-    assert.deepEqual(short, {failWait: '引擎 4 · 1 失败', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
+    assert.deepEqual(short, {failWait: '引擎 4 · 1✕ · 1!', failOnly: '引擎 2 · 1 失败', fail2wait3: '引擎 5 · 2✕ · 3!', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
       backRunning: '不同步 · 后台在跑', backIdle: '不同步 · 后台空闲'});
-    // 真画出来：窄输入框只能走短档，引擎格写出失败，每一格都不挤字
+    // 真画出来：窄输入框只能走短档，引擎格失败数、等你数都在，每一格都不挤字
     await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
     const drawn = await tab.evaluate(() => {
       const band = document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)');
@@ -169,7 +170,7 @@ test('the short tier of the band still says what failed or waits, and which side
         squeezed: [...band.querySelectorAll('.pk-bs__seg')].filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent)};
     });
     assert.equal(drawn.tier, 'short');
-    assert.equal(drawn.eng, '引擎 4 · 1 失败');
+    assert.equal(drawn.eng, '引擎 4 · 1✕ · 1!', '820 宽短档：1 失败 + 1 等你两个数都要留');
     assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
   } finally { await browser.close(); }
 });
