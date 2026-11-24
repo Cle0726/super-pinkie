@@ -1,0 +1,57 @@
+/* laolao-metre-display —— Metre 对话区的「基础显示」修补（11-24 第零批实测，build\quick-run\对比-主流-Metre-1124.md 第十四节）。
+ * 只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。不加强制覆盖、不加脚本。颜色全用 Metre 自己的变量，日夜跟着变量走。
+ *
+ * B-M1 宽表格：碧琪给宽表格定最小列宽的规则写在 laolao-redesign.css，Metre 进场会把那张表整张停用（laolao-metre-skin.js 的 DECOR），
+ *      于是 12 列的表被挤进 756px，每格 63px、高 150px。这里补回同样的最小列宽；表格本身原生就是 display:block + 横向滚动。
+ * B-I3 / B-I4 长图、宽图：原生缩略图是 max 300×200 + contain，600×8000 缩成 15×200、4000×400 缩成 300×30。
+ *      给缩略图一个最小框（120×64），超出比例的用 cover 取上沿 / 中段；正常比例的图不受影响。点开看图器仍是整张原图。
+ * B-I6 坏图：原来只剩 71×22 的一小段「附件图片」字样。Chromium 和 WebKit 只在图片没加载成功时才画 img 的 ::after，
+ *      所以这里放一个虚线框和「图片打不开」，好图不会出现。
+ * B-I2 看图器：遮罩原来是碧琪的粉紫（rgba(54,23,42,.42)），图边框是白、阴影偏粉。换成谱纸墨色和 Metre 的线。 */
+
+/* B-M1 宽表格（列数 ≥ 4 才生效，和 redesign.css 原来的规则同一套数字） */
+html[data-laolao-mode="metre"] .chat-group.assistant .chat-text table { box-sizing: border-box; max-width: 100%; overscroll-behavior-x: contain; }
+html[data-laolao-mode="metre"] .chat-group.assistant .chat-text table:has(tr > :nth-child(4)) :is(th, td) { min-width: 84px; }
+html[data-laolao-mode="metre"] .chat-group.assistant .chat-text table:has(tr > :nth-child(4)) :is(th, td):nth-child(n+3) { min-width: 196px; }
+
+/* B-I3 / B-I4 缩略图最小框 */
+html[data-laolao-mode="metre"] .chat-thread .chat-message-image {
+  min-width: 120px;
+  min-height: 64px;
+  object-fit: cover;
+  object-position: 50% 0;
+  border: 1px solid var(--metre-line);
+  background: var(--metre-surface);
+  box-sizing: border-box;
+}
+
+/* B-I6 坏图：只有加载失败的 img 才会画出 ::after */
+html[data-laolao-mode="metre"] .chat-thread .chat-message-image { position: relative; color: transparent; }
+html[data-laolao-mode="metre"] .chat-thread .chat-message-image::after {
+  content: "图片打不开";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--metre-line-strong);
+  background: var(--metre-surface);
+  color: var(--metre-muted);
+  font: 400 12px/1.2 var(--metre-sans);
+}
+
+/* B-I2 看图器换成 Metre 的颜色 */
+html[data-laolao-mode="metre"] .laolao-image-viewer { background: color-mix(in srgb, var(--metre-text) 48%, transparent); }
+html[data-laolao-mode="metre"] .laolao-image-viewer__image {
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 4px;
+  background: var(--metre-bg);
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--metre-text) 28%, transparent);
+}
+html[data-laolao-mode="metre"] .laolao-image-viewer__close {
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 4px;
+  background: var(--metre-bg);
+  color: var(--metre-text);
+}
+html[data-laolao-mode="metre"] .laolao-image-viewer__close:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
