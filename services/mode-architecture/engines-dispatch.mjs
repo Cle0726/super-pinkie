@@ -242,12 +242,14 @@ export class EngineDispatch {
     const pending = (state.cards || []).filter(card => card.kind === 'report' && card.injection === 'pending');
     const wake = /^pinkie-session-wake-/.test(String(id || ''));
     if (wake && !pending.length) return {status: 'ok'};
+    const text = wake ? `【派出去的活有汇报了】${REPORT_RULE}\n\n${reportText(pending)}\n\n结合用户交代的目标核对这些汇报，按原来的权限和要求继续。` : String(message || '');
+    // 先送到再标「已送达」：送不出去时汇报留在待送里、下次唤醒再送（11-24 第四次真跑：先标后送，送失败汇报就丢了）。
+    try { await this.bridge.send({threadId, text: clip(text, 12_000), mode: 'queue', from: 'agent'}); }
+    catch (error) { if (wake) this.lineage.updateState(key, value => ({...value, wakePending: true})); throw error; }
     if (pending.length) {
       const ids = new Set(pending.map(card => card.id));
       this.lineage.updateState(key, value => ({...value, cards: (value.cards || []).map(card => (ids.has(card.id) ? (({full: _f, ...rest}) => ({...rest, injection: 'injected'}))(card) : card))}));
     }
-    const text = wake ? `【派出去的活有汇报了】${REPORT_RULE}\n\n${reportText(pending)}\n\n结合用户交代的目标核对这些汇报，按原来的权限和要求继续。` : String(message || '');
-    await this.bridge.send({threadId, text: clip(text, 12_000), mode: 'queue'});
     // 被汇报叫醒的这一轮，照 Metre 的规矩可以接着派下一批。
     if (wake) this.lineage.turns.set(key, {...(this.lineage.turns.get(key) || {}), runId: `engine-wake-${this.now()}`, internal: true, user: false, wake: true, trigger: '', autoStarts: 0});
     return {status: 'ok'};

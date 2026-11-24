@@ -739,12 +739,14 @@ export class EngineBridge {
     return {threadId: String(result?.threadId || ''), summary: result?.projection ? summarizeProjection(result.projection) : null};
   }
 
-  async send({threadId, text, mode = 'queue'} = {}) {
+  // 引擎服务的 message.dispatch 必带 createdBy / creationSource（缺了整条命令被拒，11-24 第四次真跑汇报丢在这）：
+  async send({threadId, text, mode = 'queue', from = 'user'} = {}) {
     if (!String(text || '').trim()) throw new Error('要说的话是空的');
     const current = await this.thread(threadId);
     const dispatchMode = !current.activeRunId ? {type: 'start_immediately'}
       : mode === 'steer' ? {type: 'steer_active', targetRunId: current.activeRunId} : {type: 'queue_after_active'};
-    await this.dispatch({type: 'message.dispatch', threadId, messageId: newId('message'), text: String(text), attachments: [], dispatchMode});
+    const origin = from === 'agent' ? {createdBy: 'agent', creationSource: 'mcp'} : {createdBy: 'user', creationSource: 'web'};
+    await this.dispatch({type: 'message.dispatch', threadId, messageId: newId('message'), text: String(text), attachments: [], dispatchMode, ...origin});
     return this.thread(threadId);
   }
 
