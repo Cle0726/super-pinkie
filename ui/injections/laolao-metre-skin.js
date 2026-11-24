@@ -176,7 +176,6 @@
     delete parked.dataset.metreTitle; parked = null;
   }, true);
   window.__pinkieMetreShowsText = showsItsText;
-
   window.__pinkieMetreSkin = {DECOR, apply, placePops, tempoOf, get on() { return applied; }};
 })();
 
@@ -187,8 +186,8 @@
   'use strict';
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
-  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer';
-  const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
+  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page';
+  const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip']; const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'}; const hit = (v) => v.includes('碧琪') || Object.hasOwn(LINKS, v.trim());
   // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
   const RULES = [
     [/超[級级]碧琪/g, 'Metre'],
@@ -207,6 +206,7 @@
     [/碧琪/g, 'Metre'],
   ];
   const word = (text) => {
+    if (text && Object.hasOwn(LINKS, text.trim())) return text.replace(text.trim(), LINKS[text.trim()]);   // 11-24 ui2 缺陷 5：原生设置页写死的英文链接键
     if (!text || !text.includes('碧琪')) return text;
     let out = text;
     for (const [pattern, to] of RULES) out = out.replace(pattern, to);
@@ -235,17 +235,17 @@
   }
   function rewrite(scope) {
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
-    for (let node; (node = walker.nextNode());) if (node.nodeValue.includes('碧琪')) rewriteText(node);
+    for (let node; (node = walker.nextNode());) if (hit(node.nodeValue)) rewriteText(node);
     rewriteAttrs(scope);
     for (const el of scope.querySelectorAll('[title],[aria-label],[placeholder],[alt],[data-pinkie-tooltip]')) rewriteAttrs(el);
   }
   const watched = new Map();
   function onChange(records) {
     for (const record of records) {
-      if (record.type === 'characterData') { if (record.target.nodeValue.includes('碧琪')) rewriteText(record.target); }
+      if (record.type === 'characterData') { if (hit(record.target.nodeValue)) rewriteText(record.target); }
       else if (record.type === 'attributes') rewriteAttrs(record.target);
       else for (const node of record.addedNodes) {
-        if (node.nodeType === 3) { if (node.nodeValue.includes('碧琪')) rewriteText(node); }
+        if (node.nodeType === 3) { if (hit(node.nodeValue)) rewriteText(node); }
         else if (node.nodeType === 1) rewrite(node);
       }
     }
@@ -286,7 +286,7 @@
   new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode']});
   window.addEventListener('laolao:modechange', sync);
   // 设置页、工作台、链接预览都是点出来的：点完再找一次新出现的根节点。
-  document.addEventListener('click', () => { if (isMetre()) setTimeout(attach, 0); }, true);
+  document.addEventListener('click', () => { if (isMetre()) for (const ms of [0, 250, 700]) setTimeout(attach, ms); }, true);   // 原生设置页点完约 170ms 才出来
   window.addEventListener('popstate', () => { if (isMetre()) setTimeout(attach, 0); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, {once: true}); else sync();
   window.__pinkieMetreWords = {word, attach, detach};
