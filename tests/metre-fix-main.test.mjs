@@ -64,7 +64,7 @@ test('设置页（Metre）：「助手身份」卡按自己内容高，不被旁
 
 // ---- 缺陷 5：原生设置页的英文链接键在 Metre 里换成中文 ----
 function loadWord() {
-  const src = between(inj('laolao-metre-skin.js'), 'const LINKS', '\n  // 记下换过的地方');
+  const src = between(inj('laolao-metre-skin.js'), '  const RULES = [', '\n  // 记下换过的地方');
   return new Function(`${src}\nreturn {word, hit};`)();
 }
 test('Metre 措辞：Configure / Manage / Browse / Connect → 换成中文，保留两边空白；别的英文不动', () => {

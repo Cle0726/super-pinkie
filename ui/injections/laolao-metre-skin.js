@@ -187,7 +187,7 @@
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page';
-  const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip']; const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'}; const hit = (v) => v.includes('碧琪') || Object.hasOwn(LINKS, v.trim());
+  const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
   // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
   const RULES = [
     [/超[級级]碧琪/g, 'Metre'],
@@ -204,7 +204,7 @@
     [/，碧琪照常可用/g, '，照常可用'],
     [/用哪个模式的碧琪/g, '用哪个模式'],
     [/碧琪/g, 'Metre'],
-  ];
+  ]; const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'}; const hit = (v) => v.includes('碧琪') || Object.hasOwn(LINKS, v.trim());
   const word = (text) => {
     if (text && Object.hasOwn(LINKS, text.trim())) return text.replace(text.trim(), LINKS[text.trim()]);   // 11-24 ui2 缺陷 5：原生设置页写死的英文链接键
     if (!text || !text.includes('碧琪')) return text;
