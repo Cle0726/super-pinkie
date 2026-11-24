@@ -7,7 +7,7 @@
 //
 // Baselines live ONLY in tests/visual/real-baseline/<platform>/ (24 PNGs each):
 //   linux/  captured by Linux Chromium on CI (portable-checks)
-//   win32/  captured on Windows with the system Chrome channel
+//   win32/  captured on Windows with the same pinned Playwright Chromium
 // The legacy tests/visual/baseline/ is never read or written here.
 //
 // Every platform with a baseline set is compared strictly (<= 0.1% pixels).

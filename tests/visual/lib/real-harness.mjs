@@ -677,14 +677,18 @@ export async function startRealUiServer({
   };
 }
 
-// Browser per platform, chosen explicitly so a baseline always comes from the
-// same engine: Linux uses Playwright's pinned Chromium (what CI installs);
-// Windows uses the system Chrome channel, which every Windows runner and a fresh
-// HOME with an empty Playwright cache both have. PINKIE_VISUAL_ENGINE overrides
-// (chromium | chrome | msedge).
+// Browser chosen explicitly so a baseline always comes from the same engine:
+// Playwright's pinned Chromium on Linux and Windows alike (install it with
+// `playwright install chromium-headless-shell`, as CI does). PINKIE_VISUAL_ENGINE
+// overrides (chromium | chrome | msedge) for local experiments only.
 export function resolveRealEngine(engine = process.env.PINKIE_VISUAL_ENGINE || '') {
   if (engine) return engine;
-  return process.platform === 'win32' ? 'chrome' : 'chromium';
+  // Playwright's own pinned Chromium (headless-shell, revision fixed by the
+  // playwright version in tools/pinkie-toolbox/toolbox-manifest.json) on every
+  // platform. The system Chrome channel auto-updates (154 locally vs 157 on the
+  // windows-latest runner), which moved text rendering by 0.2-1.3% and made a
+  // committed win32 baseline drift on its own.
+  return 'chromium';
 }
 
 export async function launchRealBrowser(engine = resolveRealEngine()) {
