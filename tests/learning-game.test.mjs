@@ -136,22 +136,34 @@ test('商店：requestId 幂等、钱不够写清还差多少、买过的不能�
   assert.throws(() => game.buy({sku: 'form:crystal'}), /requestId/);
 });
 
-test('形态 v3：退场的旧形态（含节气限定）不上任何货架，也不能复刻；名侦探回商店、立冬当季限定、过季复刻', t => {
+test('形态 v3 / v4：还没重画的旧形态不上任何货架，也不能复刻；名侦探回商店、立冬当季限定、过季复刻；v4 重画回来的照各自的来源上架', t => {
   const {game, setClock} = gameFixture(t);
   const skus = c => [...c.shelves.permanent, ...c.shelves.limited, ...c.shelves.seal, ...c.shelves.daily].map(s => s.sku);
   for (const at of [undefined, '2026-11-22T01:00:00Z', '2027-02-01T01:00:00Z']) {
     if (at) setClock(Date.parse(at));
     const c = game.catalogView();
     const all = skus(c);
-    for (const id of ['learning', 'xiaoxue', 'queen', 'princess']) assert.ok(!all.some(x => x.endsWith(':' + id)), id + ' 不该上架');
+    for (const id of ['learning', 'queen', 'princess', 'thinking', 'daxue']) assert.ok(!all.some(x => x.endsWith(':' + id)), id + ' 不该上架');
+    // 小雪：美术齐了才上架；上架后只在小雪节气（11-22 起）当季卖，之前不出现，过季进复刻
+    if (game.catalog.forms.some(f => f.id === 'xiaoxue' && !f.retired)) {
+      if (!at) assert.ok(!all.some(x => x.endsWith(':xiaoxue')), '立冬季还没到小雪');
+      else if (at.startsWith('2026-11-22')) assert.ok(c.shelves.limited.some(x => x.sku === 'form:xiaoxue'), '小雪季：小雪限定');
+      else assert.ok(c.shelves.seal.some(x => x.sku === 'replica:xiaoxue'), '过季：小雪复刻');
+    } else assert.ok(!all.some(x => x.endsWith(':xiaoxue')), '小雪没重画完不上架');
     assert.ok(c.shelves.permanent.some(s => s.sku === 'form:detective'), '名侦探在常驻货架');
     assert.ok(c.shelves.permanent.some(s => s.sku === 'form:breezie'), '微风仙子在常驻货架');
     if (!at) assert.ok(c.shelves.limited.some(s => s.sku === 'form:lidong'), '立冬季：立冬限定');
     else assert.ok(c.shelves.seal.some(s => s.sku === 'replica:lidong') && !c.shelves.limited.some(s => s.sku === 'form:lidong'), '过季：碎片复刻');
   }
   const active = game.catalog.forms.filter(f => !f.retired);
-  assert.equal(active.length, 12);
-  assert.deepEqual(active.filter(f => f.look === 'outfit').map(f => f.id).sort(), ['detective', 'lidong']);
+  // v3 的 12 个一直在；v4 重画回来的最多再加 12 个（美术齐一个上一个）
+  const V3 = ['alicorn', 'batpony', 'breezie', 'changeling', 'crystal', 'daily', 'detective', 'kirin', 'lidong', 'seapony', 'serious', 'unrestricted'];
+  const V4 = ['astrologer', 'astronaut', 'chef', 'cyber', 'graduate', 'idol', 'knight', 'magical-girl', 'ninja', 'pirate', 'xiaoxue', 'zhuangyuan'];
+  assert.deepEqual(active.map(f => f.id).filter(id => V3.includes(id)).sort(), V3);
+  assert.ok(active.every(f => V3.includes(f.id) || V4.includes(f.id)), '上架的只有 v3 和 v4 重画的');
+  assert.ok(active.length >= 12 && active.length <= 24);
+  for (const id of ['detective', 'lidong']) assert.equal(active.find(f => f.id === id).look, 'outfit');
+  assert.ok(active.every(f => ['outfit', 'transform'].includes(f.look)));
   assert.ok(active.every(f => f.art.avatar === `form/${f.id}/avatar`));
 });
 

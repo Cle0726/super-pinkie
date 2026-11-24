@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   const motion = window.PinkieMotion;
-
+  const asset = (p) => (window.__pinkieAsset ? window.__pinkieAsset(p) : p);
   const storageKey = "laolao:active-mode";
   const lastSessionStorageKey = (modeId) => `laolao:last-session:${modeId}`;
   const skipEntrySplashKey = "laolao:skip-entry-splash";
@@ -11,10 +11,10 @@
     {
       id: "chat",
       label: "唠嗑模式",
-      asset: "/laolao-mode-chat.svg?v=states6",
-      avatar: "/laolao-mode-chat-hd.png?v=avatars7",
-      avatarSmall: "/laolao-mode-chat-sm.png?v=sm3",
-      transition: "/laolao-mode-transition-chat.png?v=transition2",
+      asset: asset("/laolao-mode-chat.svg"),
+      avatar: asset("/laolao-mode-chat-hd.png"),
+      avatarSmall: asset("/laolao-mode-chat-sm.png"),
+      transition: asset("/laolao-mode-transition-chat.png"),
       phrases: [
         "稍等，碧琪把聊天气球牵过来啦…",
         "杯子蛋糕摆好，马上陪你唠个痛快！",
@@ -26,10 +26,10 @@
     {
       id: "project",
       label: "项目模式",
-      asset: "/laolao-mode-project.svg?v=states6",
-      avatar: "/laolao-mode-project-hd.png?v=avatars7",
-      avatarSmall: "/laolao-mode-project-sm.png?v=sm3",
-      transition: "/laolao-mode-transition-project.png?v=transition2",
+      asset: asset("/laolao-mode-project.svg"),
+      avatar: asset("/laolao-mode-project-hd.png"),
+      avatarSmall: asset("/laolao-mode-project-sm.png"),
+      transition: asset("/laolao-mode-transition-project.png"),
       phrases: [
         "稍等，碧琪正在把项目档案摊开…",
         "目标、文件和下一步都在排队报到啦！",
@@ -41,10 +41,10 @@
     {
       id: "thinking",
       label: "想法模式",
-      asset: "/laolao-mode-thinking.svg?v=states6",
-      avatar: "/laolao-mode-thinking-hd.png?v=avatars7",
-      avatarSmall: "/laolao-mode-thinking-sm.png?v=sm3",
-      transition: "/laolao-mode-transition-thinking.png?v=transition2",
+      asset: asset("/laolao-mode-thinking.svg"),
+      avatar: asset("/laolao-mode-thinking-hd.png"),
+      avatarSmall: asset("/laolao-mode-thinking-sm.png"),
+      transition: asset("/laolao-mode-transition-thinking.png"),
       phrases: [
         "稍等，碧琪在把点子排成彩带…",
         "卷卷鬃毛转一圈，好主意正在冒泡！",
@@ -56,10 +56,10 @@
     {
       id: "learning",
       label: "学习模式",
-      asset: "/laolao-mode-learning.svg?v=states1",
-      avatar: "/laolao-mode-learning-hd.png?v=avatars7",
-      avatarSmall: "/laolao-mode-learning-sm.png?v=sm3",
-      transition: "/laolao-mode-transition-learning.png?v=transition1",
+      asset: asset("/laolao-mode-learning.svg"),
+      avatar: asset("/laolao-mode-learning-hd.png"),
+      avatarSmall: asset("/laolao-mode-learning-sm.png"),
+      transition: asset("/laolao-mode-transition-learning.png"),
       phrases: [
         "稍等，碧琪把学习桌和笔记本摆好啦…",
         "先找到最关键的那个概念，再把它弄懂弄会！",
@@ -71,10 +71,10 @@
     {
       id: "unrestricted",
       label: "无限制模式",
-      asset: "/laolao-mode-unrestricted.svg?v=states6",
-      avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7",
-      avatarSmall: "/laolao-mode-unrestricted-sm.png?v=sm3",
-      transition: "/laolao-mode-transition-unrestricted.png?v=transition2",
+      asset: asset("/laolao-mode-unrestricted.svg"),
+      avatar: asset("/laolao-mode-unrestricted-hd.png"),
+      avatarSmall: asset("/laolao-mode-unrestricted-sm.png"),
+      transition: asset("/laolao-mode-transition-unrestricted.png"),
       phrases: [
         "彩虹力量开始升温啦…",
         "星星和纸屑让一让，想象力要冲出去啦！",
@@ -93,8 +93,8 @@
       alt: "Metre",
       address: "",
       plain: true,
-      avatar: "/laolao-mode-metre.svg?v=cathead1",
-      avatarSmall: "/laolao-mode-metre.svg?v=cathead1",
+      avatar: asset("/laolao-mode-metre.svg"),
+      avatarSmall: asset("/laolao-mode-metre.svg"),
       // 用户 11-14：「meter不需要像碧琪一样的头像当入口用一个按键就行」。Metre 的入口（侧栏顶上的按钮和
       // 模式菜单里的那一项）只有字，不放头像；avatar 留着给开场和经典外壳用。
       plain: true,
@@ -1181,7 +1181,7 @@
     render();
   };
   const modeMountSelector = ".laolao-mode-switcher, .laolao-mode-dock-trigger, .sidebar-brand__identity, .sidebar-brand, .pk-workspace-header__identity, .dashboard-header__breadcrumb-link, .topnav-shell__actions, #pinkie-study-desk, #pinkie-study-desk .rail, img.chat-avatar.assistant, .agent-chat__welcome, .laolao-classic-breadcrumb__mode";
-  const modeObserver = new MutationObserver(records => {
+  const modeObserver = window.Pinkie?.domWatch?.createObserver(records => {
     // A late bridge install stamps data-pinkie-platform on <html>; settle the
     // split-workspace entry before deciding whether a repaint is needed.
     if (dockSettle && records.some(record => record.type === "attributes"
@@ -1199,12 +1199,9 @@
     renderQueued = true;
     window.requestAnimationFrame(() => { renderQueued = false; render(); });
   });
-  modeObserver.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
+  modeObserver?.watch(document.documentElement, {childList: true,
     attributes: true,
-    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock", "data-pinkie-platform"],
-  });
+    attributeFilter: ["src", "data-pk-wb-compact", "data-pinkie-study-desk", "data-laolao-workspace-split", "data-laolao-workspace-dock", "data-pinkie-platform"],});
   const schedulePreload = () => window.setTimeout(() => {
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(() => { void preloadTransitions(); }, {timeout: 1200});

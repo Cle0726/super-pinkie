@@ -1619,7 +1619,7 @@
     if (window.__pinkieMetreLock?.cachedStatus?.()) {
       renderMetreLock(window.__pinkieMetreLock.cachedStatus());
     }
-    window.setInterval(() => {
+    window.Pinkie?.domWatch?.poll(() => {
       syncPage();
       if (state.root.hidden) return;
       syncUsage();

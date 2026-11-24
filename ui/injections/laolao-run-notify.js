@@ -282,7 +282,7 @@
 
   // ---------- 节拍：会话列表会重画，标记按节拍补回去 ----------
   let lastKey = currentSession();
-  window.setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     const key = currentSession();
     if (key !== lastKey) { lastKey = key; viewed(key); }
     else if (visible() && marks.has(key) && marks.get(key) !== 'running') viewed(key);
@@ -298,7 +298,7 @@
     if (bridge?.loadPrefs) Promise.resolve(bridge.loadPrefs()).then(takeNotifyPrefs, () => {});
   };
   loadNotifyPrefs();
-  window.setInterval(loadNotifyPrefs, 60_000);
+  window.Pinkie?.domWatch?.poll(loadNotifyPrefs, 60_000);
 
   window.__pinkieRunNotify = {
     decide, viewed, permissionPrompt, answerPermission,

@@ -29,10 +29,10 @@
     }
   }
   const schedule = () => { if (!frame) frame = requestAnimationFrame(refresh); };
-  new MutationObserver(records => {
+  window.Pinkie?.domWatch?.createObserver(records => {
     if (records.some(record => [...record.addedNodes,...record.removedNodes]
       .some(node => node.nodeType===1 && (node.matches?.('openclaw-chat-pane') || node.querySelector?.('openclaw-chat-pane'))))) schedule();
-  }).observe(document.documentElement,{childList:true,subtree:true});
+  })?.watch(document.documentElement, {childList:true});
   window.__pinkieReadingViews = {isReading,refresh};
   refresh();
 })();

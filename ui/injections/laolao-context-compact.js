@@ -19,7 +19,7 @@
   const glyphBase = document.currentScript?.src;
   function mountCompactionGlyph(icon, phase) {
     if (window.__pinkieCompactionGlyph) { window.__pinkieCompactionGlyph.mount(icon,phase); return; }
-    glyphLoad ||= new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('./laolao-compaction-glyph.js?v=compactionglyph3',glyphBase||location.href).href;script.onload=resolve;script.onerror=reject;document.head.append(script);});
+    glyphLoad ||= new Promise((resolve,reject)=>{const script=document.createElement('script'),rel=window.__pinkieAsset?window.__pinkieAsset('./laolao-compaction-glyph.js'):'./laolao-compaction-glyph.js';script.src=new URL(rel,glyphBase||location.href).href;script.onload=resolve;script.onerror=reject;document.head.append(script);});
     glyphLoad.then(()=>{if(icon.isConnected)window.__pinkieCompactionGlyph?.mount(icon,icon.closest('.laolao-compaction-notice')?.dataset.phase||phase);}).catch(()=>{});
   }
   const noticeMotionObserver = typeof IntersectionObserver === "function" ? new IntersectionObserver((entries) => {
@@ -803,7 +803,7 @@ html:is([data-pinkie-night],[data-theme-mode="dark"]) .laolao-compaction-notice[
   window.addEventListener("resize", () => document.querySelectorAll(".laolao-context-viewer[open]").forEach(placePanel), {passive: true});
   ensureStyle();
   render();
-  setInterval(render, 900);
+  window.Pinkie?.domWatch?.poll(render, 900);
   window.addEventListener("pinkie:gateway-event", handleCompactionEvent);
   window.addEventListener("laolao:sessions-changed", () => { usageFetchedAt = 0; fetchContextCapacity(); });
   window.__laolaoContextCompact = {compact, currentSessionKey, contextCapacity, readCompactionState, handleCompactionEvent,

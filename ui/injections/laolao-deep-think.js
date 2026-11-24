@@ -43,13 +43,13 @@
   });
 
   // 四档预设：文案和 docs/DEEP-THINK-TIERS.md、skills/deep-think/SKILL.md、运行单一致（2026-11-02 按活儿种类改版）
-  const TIERS = [
+  const asset = (p) => (window.__pinkieAsset ? window.__pinkieAsset(p) : p); const TIERS = [
     {
       id: "base",
       label: "基础档",
       numeral: "Ⅰ",
-      art: "/laolao-deep-think-base.png?v=tierart3",
-      motion: "/laolao-deep-think-base.webm?v=tiermotion2",
+      art: asset("/laolao-deep-think-base.png"),
+      motion: asset("/laolao-deep-think-base.webm"),
       short: "按活儿种类走对的做法",
       desc: "先认清是哪种活，照这种活的打法做；简单问题直接答",
     },
@@ -57,8 +57,8 @@
       id: "boost",
       label: "加强档",
       numeral: "Ⅱ",
-      art: "/laolao-deep-think-boost.png?v=tierart3",
-      motion: "/laolao-deep-think-boost.webm?v=tiermotion2",
+      art: asset("/laolao-deep-think-boost.png"),
+      motion: asset("/laolao-deep-think-boost.webm"),
       short: "说做完，就要有真凭据",
       desc: "每种活都要拿到它该有的证据才算完成：网页要打开看过、PPT 要看过交出去的文件、数据要重算过；拿不到就照实说",
     },
@@ -66,8 +66,8 @@
       id: "full",
       label: "全开档",
       numeral: "Ⅲ",
-      art: "/laolao-deep-think-full.png?v=tierart3",
-      motion: "/laolao-deep-think-full.webm?v=tiermotion2",
+      art: asset("/laolao-deep-think-full.png"),
+      motion: asset("/laolao-deep-think-full.webm"),
       short: "多做几版，挑出最好的",
       desc: "难题、取舍、设计、文案、点子会独立做出几版再比较；审稿员会打开成品挑毛病，每条都要有证据",
     },
@@ -75,8 +75,8 @@
       id: "marathon",
       label: "长跑档",
       numeral: "Ⅳ",
-      art: "/laolao-deep-think-marathon.png?v=tierart3",
-      motion: "/laolao-deep-think-marathon.webm?v=tiermotion2",
+      art: asset("/laolao-deep-think-marathon.png"),
+      motion: asset("/laolao-deep-think-marathon.webm"),
       short: "写好计划，一直做到完",
       desc: "先写计划和验收清单，按里程碑一个个做、一个个验，中断了也能接着跑，最后再整体打磨一轮",
     },
@@ -1033,8 +1033,8 @@ html[data-theme-mode="dark"] .pinkie-work__icon[data-icon="failed"],html[data-pi
   };
   // 输入区由 Lit 重建；低频轮询足够且不会在流式输出时制造 MutationObserver 风暴。
   window.setInterval(scheduleRender, 700);
-  window.setInterval(() => { if (!document.hidden) void refreshStatus(); }, 900);
-  window.setInterval(() => { syncWorkSession(); if (!document.hidden) void refreshWork(); }, 450);
+  window.Pinkie?.domWatch?.poll(() => { if (!document.hidden) void refreshStatus(); }, 900);
+  window.Pinkie?.domWatch?.poll(() => { syncWorkSession(); if (!document.hidden) void refreshWork(); }, 450);
   window.addEventListener("resize", positionStatus, {passive: true});
   window.addEventListener("resize", positionWork, {passive: true});
   const workSessionChanged = () => { syncWorkSession(); workNextPoll = 0; void refreshStatus(); void refreshWork(); };

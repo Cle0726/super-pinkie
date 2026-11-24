@@ -204,7 +204,7 @@
     armForReply(takeVoiceDraftFlag());
   }, true);
 
-  new MutationObserver((records) => {
+  window.Pinkie?.domWatch?.createObserver((records) => {
     // Keep the observer installed for the next native dictation send, but do
     // virtually no work while voice is unused. This is the common path.
     if (!waitingForVoiceReply && tracks.size === 0) return;
@@ -216,5 +216,5 @@
   // No characterData: streaming rebuilds whole elements anyway (childList
   // still fires), and text-node mutations are the bulk of the mutation record
   // avalanche that pegged the main thread during long sessions.
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  })?.watch(document.documentElement, {childList: true});
 })();

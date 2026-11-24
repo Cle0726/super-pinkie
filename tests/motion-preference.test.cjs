@@ -7,7 +7,7 @@ const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
 test('effects follow the in-app switch, loaded before every other injection but the night bootstrap', () => {
   const head = read('ui/injections/laolao-head.fragment.html');
   const scripts = [...head.matchAll(/<script[^>]*src="\/([^"?]+)/g)].map((m) => m[1]);
-  assert.deepEqual(scripts.slice(0, 2), ['laolao-night.js', 'laolao-motion-preference.js']);
+  assert.deepEqual(scripts.slice(0, 3), ['laolao-night.js', 'laolao-dom-watch.js', 'laolao-motion-preference.js']);
   assert.doesNotMatch(head.split('laolao-motion-preference.js')[0], /defer/);
   const source = read('ui/injections/laolao-motion-preference.js');
   assert.match(source, /window\.matchMedia = function matchMedia/);

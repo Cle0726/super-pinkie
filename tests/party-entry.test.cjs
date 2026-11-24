@@ -20,7 +20,7 @@ function fixture(){
     getElementById:id=>walk(root).find(n=>n.id===id),createElement:tag=>new Element(tag)};
   const native=[];
   vm.runInNewContext(source,{document,location:{href:'http://127.0.0.1:18789/'},URL,
-    window:{webkit:{messageHandlers:{laolaoParty:{postMessage:v=>native.push(v)}}}},
+    window:{webkit:{messageHandlers:{laolaoParty:{postMessage:v=>native.push(v)}}},Pinkie:{domWatch:{poll:fn=>{observer=fn;return{stop(){}};}}}},
     requestAnimationFrame:fn=>fn(),setInterval:fn=>{observer=fn;return 0;},
     MutationObserver:class{constructor(fn){observer=fn;}observe(){}}});
   return{document,sidebar,native,observer,rail:()=>rail,replaceRail(){rail.remove();rail=new Element('aside');root.append(rail);observer();},removeRail(){rail.remove();rail=null;observer();}};

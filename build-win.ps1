@@ -194,6 +194,8 @@ if ($LASTEXITCODE -ne 0) { throw "Windows 资源隔离失败" }
 # the shared repository source AFTER all overlays and package cleanup.
 python tools/ui-parity/bundle.py install --control-ui $controlUi --output (Join-Path $runtimeStage 'windows-ui-manifest.json')
 if ($LASTEXITCODE -ne 0) { throw "Mac/Windows shared UI installation failed" }
+& $node (Join-Path $RepoRoot 'tools\assets\stamp.mjs') --root $RepoRoot --control-ui $controlUi --manifest (Join-Path $runtimeStage 'windows-ui-manifest.json')
+if ($LASTEXITCODE -ne 0) { throw "Windows Control UI asset hash stamping failed" }
 & (Join-Path $RepoRoot "tools\windows-package\check_shared_chat.ps1") `
     -SourceRuntime (Join-Path $RepoRoot "ui\runtime") `
     -PackagedAssets (Join-Path $openclawRoot "dist\control-ui\assets")
@@ -251,6 +253,7 @@ $pyInstallerCommonArgs = @(
     "--add-data", "$windowsInstallerStage;installer\windows",
     "--add-data", "installer\guard;installer\guard",
     "--add-data", "tools\ui-parity;tools\ui-parity",
+    "--add-data", "tools\assets;tools\assets",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",

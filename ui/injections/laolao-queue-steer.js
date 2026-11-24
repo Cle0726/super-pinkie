@@ -438,9 +438,7 @@
       || document.querySelector("#openclaw-mount-fallback") || document.body;
     if (!root || root.dataset.pinkieQueueSteerWatch === "1") return;
     root.dataset.pinkieQueueSteerWatch = "1";
-    new MutationObserver(() => syncQueueControls()).observe(root, {
-      childList: true, subtree: true,
-    });
+    window.Pinkie?.domWatch?.createObserver(() => syncQueueControls())?.watch(root, {childList: true,});
     // A durable receipt may arrive while the run remains active and the queue
     // DOM does not change. Prune only; this path never retries or sends.
     window.setInterval?.(syncQueueControls, 1000);

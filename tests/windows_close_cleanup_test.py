@@ -150,7 +150,11 @@ class FinishExitTest(unittest.TestCase):
 
 class LifetimeBindingTest(unittest.TestCase):
     def test_children_join_the_kill_on_close_job(self):
-        source = Path(windows_desktop.__file__).read_text(encoding="utf-8")
+        app_dir = Path(windows_desktop.__file__).parent
+        source = "\n".join(
+            (app_dir / name).read_text(encoding="utf-8")
+            for name in ("windows_desktop.py", "windows_runtime.py", "windows_gateway.py")
+        )
         self.assertIn('bind_to_app_lifetime(self.process, "gateway")', source)
         self.assertIn('bind_to_app_lifetime(process, "desktop control node")', source)
         self.assertIn('bind_to_app_lifetime(self.relay, "relay")', source)

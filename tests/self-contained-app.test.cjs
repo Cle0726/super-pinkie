@@ -84,7 +84,7 @@ test('macOS updater selects a build Node with npm when the bundled runtime has n
 
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
   const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  const windows = read('app/windows_desktop.py');
+  const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const patcher = read('patch/apply-local-unrestricted-policy.mjs');
   const macTheme = read('installer/macos/apply-theme.sh');
   const install = read('install.sh');
@@ -239,7 +239,7 @@ test('installed App keeps every runtime repair patch beside its cold-start boots
 
 test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater', () => {
   const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  const windows = read('app/windows_desktop.py');
+  const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const setup = read('services/mode-architecture/setup.py');
   for (const source of [launcher, windows]) {
     assert.match(source, /OPENCLAW_NO_AUTO_UPDATE/);
@@ -474,4 +474,97 @@ test('roundtable uses its project as cwd without turning it into an access sandb
   assert.match(server, /cwd=project/);
   assert.match(server, /不是访问权限边界/);
   assert.doesNotMatch(server, /worker_sandbox|sandbox-exec/);
+});
+
+test('M2-2 macOS installer stamps content hashes and updates only the modified file URL on 1-byte edit', () => {
+  const macTheme = read('installer/macos/apply-theme.sh');
+  const macBuild = read('desktop/macos/build.sh');
+  assert.match(macTheme, /tools\/assets\/stamp\.mjs/);
+  assert.match(macBuild, /tools\/assets\/stamp\.mjs/);
+  if (process.platform !== 'darwin') return;
+
+  const { execFileSync } = require('node:child_process');
+  const crypto = require('node:crypto');
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-m2-mac-theme-'));
+  try {
+    const repo = path.join(tmp, 'repo');
+    for (const rel of [
+      'ui/parity-policy.json',
+      'ui/injections/laolao-body.fragment.html',
+      'ui/injections/laolao-night.js',
+      'ui/injections/laolao-night.css',
+      'ui/injections/laolao-theme.css',
+      'ui/injections/laolao-sidebar.js',
+      'ui/injections/laolao-mode-switcher.js',
+      'ui/injections/laolao-handoff-bootstrap.js',
+      'ui/injections/laolao-reasoning-off.svg',
+      'ui/assets/laolao-avatar.png',
+      'ui/assets/ProviderIcon-crossmodel.svg',
+      'ui/runtime/chat-page-DrPkxqJK.js',
+      'ui/runtime/index-Bvtt7vVx.js',
+      'tools/ui-parity/bundle.py',
+      'tools/ui-parity/sw_cache.py',
+      'tools/assets/stamp.mjs',
+      'patch/lib-precompressed.mjs',
+      'installer/macos/apply-theme.sh',
+    ]) {
+      const dst = path.join(repo, rel);
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(path.join(root, rel), dst);
+    }
+    fs.writeFileSync(
+      path.join(repo, 'ui/injections/laolao-head.fragment.html'),
+      [
+        '<script src="/laolao-night.js?v=@hash"></script>',
+        '<!-- pinkie-native-assets -->',
+        '<link rel="stylesheet" href="/laolao-theme.css?v=@hash">',
+        '<script defer src="/laolao-sidebar.js?v=@hash"></script>',
+        '<script defer src="/laolao-mode-switcher.js?v=@hash"></script>',
+        '<link rel="stylesheet" href="/laolao-night.css?v=@hash">',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+    const openclawRoot = path.join(tmp, 'openclaw');
+    const controlUi = path.join(openclawRoot, 'dist/control-ui');
+    fs.mkdirSync(path.join(controlUi, 'assets'), { recursive: true });
+    fs.writeFileSync(
+      path.join(controlUi, 'index.html'),
+      '<!doctype html><html><head><script type="module" src="/assets/index-Bvtt7vVx.js?v=@hash&pinkie-surface=6&pinkie-browser=3&pinkie-learning=8"></script></head><body><openclaw-app></openclaw-app></body></html>\n',
+      'utf8'
+    );
+    const env = {
+      ...process.env,
+      HOME: path.join(tmp, 'home'),
+      OPENCLAW_ROOT: openclawRoot,
+      PINKIE_BUNDLE_BUILD_ONLY: '1',
+      PINKIE_SKIP_APP_BUNDLES: '1',
+      PINKIE_PYTHON_BIN: 'python3',
+    };
+    fs.mkdirSync(env.HOME, { recursive: true });
+
+    const parseUrls = (html) => new Map(
+      [...html.matchAll(/(?:src|href)=["']\/([^"'?]+)\?v=([a-f0-9]{10})(?:&[^"']*)?["']/g)].map(([, p, h]) => [p, h])
+    );
+
+    execFileSync('/bin/bash', [path.join(repo, 'installer/macos/apply-theme.sh')], { cwd: repo, env, stdio: 'pipe' });
+    const before = parseUrls(fs.readFileSync(path.join(controlUi, 'index.html'), 'utf8'));
+
+    const sidebar = path.join(repo, 'ui/injections/laolao-sidebar.js');
+    fs.appendFileSync(sidebar, '\n', 'utf8');
+    const expectedHash = crypto.createHash('sha256').update(fs.readFileSync(sidebar)).digest('hex').slice(0, 10);
+
+    execFileSync('/bin/bash', [path.join(repo, 'installer/macos/apply-theme.sh')], { cwd: repo, env, stdio: 'pipe' });
+    const after = parseUrls(fs.readFileSync(path.join(controlUi, 'index.html'), 'utf8'));
+
+    assert.notEqual(after.get('laolao-sidebar.js'), before.get('laolao-sidebar.js'));
+    assert.equal(after.get('laolao-sidebar.js'), expectedHash);
+    for (const [asset, prevHash] of before.entries()) {
+      if (asset === 'laolao-sidebar.js' || asset === 'laolao-asset-manifest.js') continue;
+      assert.equal(after.get(asset), prevHash, `macOS apply-theme.sh must keep unrelated asset URL unchanged: ${asset}`);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

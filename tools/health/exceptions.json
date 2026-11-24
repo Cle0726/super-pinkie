@@ -12,21 +12,117 @@
     "reason": "缺陷修复：Metre 派发的子会话重新挂回父会话下面（原来全部堆在单独的「派发的会话」分组里），多出的行是 buildTree 的 parts、addTree 里的子会话行和找不到父会话时的兜底分组；没有新增全局名、观察器或定时器；另有在跑会话排序位置冻结（防止列表乱跳）的几行。"
   },
   {
+    "file": "ui/injections/laolao-game-battle.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 447
+  },
+  {
+    "file": "ui/injections/laolao-game-form-stage.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 802
+  },
+  {
+    "file": "ui/injections/laolao-game-fx.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1415
+  },
+  {
+    "file": "ui/injections/laolao-game-hud.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 481
+  },
+  {
+    "file": "ui/injections/laolao-game-hud.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 595
+  },
+  {
+    "file": "ui/injections/laolao-game-loadout.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
+    "file": "ui/injections/laolao-game-loadout.js",
+    "metric": "windowGlobals",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 5
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 198
+  },
+  {
+    "file": "ui/injections/laolao-game-practice.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 621
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 8
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.css",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 207
+  },
+  {
+    "file": "ui/injections/laolao-game-shop.js",
+    "metric": "lines",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 580
+  },
+  {
+    "file": "ui/injections/laolao-game-stage.css",
+    "metric": "important",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 7
+  },
+  {
+    "file": "ui/injections/laolao-game-stage.js",
+    "metric": "windowGlobals",
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。",
+    "value": 1
+  },
+  {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "value": 207,
-    "reason": "Metre 引擎台（briefs/metre-engines-1122）的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载，共 2 行；功能本身全在新文件里。"
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。",
+    "value": 211
   },
   {
-    "file": "ui/injections/laolao-head.fragment.html",
-    "metric": "manualVersions",
-    "value": 199,
-    "reason": "上一条新登记的两个文件各带一个 ?v= 版本号（注入文件改了要换号，规矩如此）。"
-  },
-  {
-    "file": "ui/injections/laolao-metre-engine.js",
-    "metric": "manualVersions",
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "mutationObservers",
     "value": 1,
-    "reason": "C.le. 思考动画要和 laolao-cle-stage.js 用同一份 three.js 模块，动态 import 的地址必须一字不差（含 ?v=8），否则会加载第二份、占第二个 WebGL 上下文；tests/metre-engine-ui.test.mjs 核对两边一致。"
+    "reason": "M3 shared page-wide DOM observer replacing per-file subtree MutationObservers across ui/injections"
+  },
+  {
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "subtreeObserverCalls",
+    "value": 1,
+    "reason": "M3 single shared subtree MutationObserver for the entire Control UI"
+  },
+  {
+    "file": "ui/injections/laolao-dom-watch.js",
+    "metric": "setIntervals",
+    "value": 1,
+    "reason": "M3 返工：恢复原生定时语义"
   }
 ]

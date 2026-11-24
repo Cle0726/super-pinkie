@@ -324,14 +324,14 @@
       if (Array.isArray(cards) && cards.some(ref => CARD_KINDS.has(ref?.kind)) || slots.has(slot)) bind(slot, cards, slot.pinkieLearningSession || key);
     }
   }
-  const observer = new MutationObserver(records => {
+  const observer = window.Pinkie?.domWatch?.createObserver(records => {
     for (const record of records) {
       const target = record.target;
       if (target.nodeType === 1 && target.closest?.('.pk-collected, .pk-ref-row, .pk-tonight, .pk-desk-cards, .pk-chat-toast')) continue;
       schedule(); return;
     }
   });
-  observer.observe(conversation()?.root() || document.body, {childList: true, subtree: true});
+  observer?.watch(conversation()?.root() || document.body, {childList: true});
   document.addEventListener('pointerover', event => {
     if (!inLearning()) return;
     if (event.target === hover.button || hover.menu?.contains(event.target)) return;

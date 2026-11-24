@@ -659,10 +659,10 @@
   };
   const observeChat = () => {
     if (typeof MutationObserver !== "function" || !document.body || chatObserver) return;
-    chatObserver = new MutationObserver(records => {
+    chatObserver = window.Pinkie?.domWatch?.createObserver(records => {
       if (records.some(record => (record.target.nodeType === 1 ? record.target : record.target.parentElement)?.closest?.('.chat-thread,.agent-chat__messages,.chat-messages'))) queueReconcile();
     });
-    chatObserver.observe(document.body, {childList:true,characterData:true,subtree:true});
+    chatObserver?.watch(document.body, {childList:true,characterData:true});
   };
   document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(reconcileTimer); reconcileTimer = 0; } else queueReconcile(); });
   window.addEventListener("popstate", queueReconcile);

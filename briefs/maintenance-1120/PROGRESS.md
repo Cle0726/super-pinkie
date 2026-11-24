@@ -5,13 +5,13 @@
 | 批 | 状态 | 谁在做 | 更新日期 | 分支 / PR |
 |---|---|---|---|---|
 | M0 量和护栏 | 已合并（本 PR 进入 main 后生效） | Codex-Win-5eac（Windows） | 2026-11-20 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) |
-| M1 收分支 | 未开始 | | | |
-| M2 版本号自动生成 | 未开始 | | | |
-| M5 真页面回归测试 | 未开始 | | | |
-| M3 页面规矩（收窄版） | 未开始 | | | |
-| M4 拆巨无霸文件 | 未开始 | | | |
+| M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
+| M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
+| M5 真页面回归测试 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI ubuntu-latest Chromium） | 2026-11-21 | [#52](https://github.com/Cle0726/super-pinkie/pull/52) |
+| M3 页面规矩（收窄版） | 返工已合并（#61 进入 main 后生效）；M3-2 作废；M3-4 的真实页面补测待做 | Gemini-Win-9k4m（返工），协调者独立复核 | 2026-11-21 | [#53](https://github.com/Cle0726/super-pinkie/pull/53) / [#61](https://github.com/Cle0726/super-pinkie/pull/61) |
+| M4 拆巨无霸文件 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#55](https://github.com/Cle0726/super-pinkie/pull/55) |
 | M6 上游补丁管理 | 已取消（由 C.le. 内核接管计划的 K3 取代） | | 2026-11-20 | |
-| M7 地图和规矩 | 未开始 | | | |
+| M7 地图和规矩 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-8f4d（Windows） | 2026-11-21 | [#56](https://github.com/Cle0726/super-pinkie/pull/56) |
 
 ## 正在改的文件（并行时互相避让）
 
@@ -21,6 +21,7 @@ M3 和 M4 可以同时进行。开工时在这里写明这一批会改哪些文�
 
 - 2026-11-20：用户在看完结构评估以后说「写维护计划」。
 - 2026-11-20：用户决定接管 OpenClaw 源码，做自己的内核 C.le.（见 `briefs/cle-core-1120/`）；最在意的是界面不能变。因此 M6 取消，M3 取消样式分层改造。
+- 2026-11-21：协调者问「同意作废「全页只剩 1 个观察器」(M3-2) 这条验收、合并修复 #61 吗？」，用户原话「同意，合并」。只对这两件事有效：作废 M3-2、合并 #61。
 
 ## 执行者的决定
 
@@ -29,6 +30,12 @@ M3 和 M4 可以同时进行。开工时在这里写明这一批会改哪些文�
 - 2026-11-20 / M0：测量读工作树而非 Git 索引，未暂存的新注入文件也能被拦。只对 UTF-8 文本作行数/字面计数；子树数是 `.observe` 里直接写 `subtree: true` / `!0` 的调用点，不是浏览器运行时创建数。巨文件只统计源码、脚本和模板，不把生成的报告、测试夹具数据算作代码。
 - 2026-11-20 / M0：已有注入文件的行数也受棘轮约束；新注入文件以 1500 行为上限，四类风险计数和子树调用从 0 起。长文件、各注入指标和手写版本号总量入棘轮；补丁个数、测试个数和版本号坐标仅供盘点，避免拦住新增测试或移动版本位置。
 - 2026-11-20 / M0：`exceptions.json` 用 `file`（仓库相对路径）、`metric`、`value`（该文件允许的准确计数）、`reason`；手写版本号例外也按具体文件审核。现在为空。`--write-baseline` 不会把例外或其他增长写入基线；如确需和例外同时交付改善，应审查基线差异，只改小真正改善的字段。不可用手改基线放行增长。
+- 2026-11-21 / M1（Z5 新对照基准，依 `ACCEPTANCE.md` 基线节）：学习台游戏 v4（[#44](https://github.com/Cle0726/super-pinkie/pull/44)）合入主线提交 `bc4262d33bca99589e8976e62f404a7ecf8383e1` 后，M1 结束时的 Z5 注入对照基准更新为该提交（本 PR #42 仅清理旧目录/文档，不改动产品运行逻辑或人设/提示词/技能）。在 `M1-exec` 上实测 `tools/metre/inject-inventory.mjs` 六模式（五个老模式 + Metre）各 3 条共 18 条样例，输出 `386635` 字节，SHA-256 `896fbadec7b4d0759196b4faea038c6a00dd3294a07884aaf270ec3582443c17`，供 M2 及后续批次作为 Z5 对照。
+- 2026-11-21 / M2（M2-3 开工前调研结论与缓存方案）：
+  1. `dist/control-ui/asset-manifest.json` 仅由上游 OpenClaw 2026.10+ 构建期为 `assets/*` 原生 chunk 及其预压缩 `.br`/`.gz` 生成；碧琪的 `laolao-*` 注入文件、`vendor/*`、`fonts/*`、`study-desk/*`、`study-game/*` 及新生成的 `laolao-asset-manifest.js` 均不在 `asset-manifest.json` 中，也没有 `.br`/`.gz` 预压缩副本。
+  2. `patch/lib-precompressed.mjs` 的 `refreshPrecompressed()` 仅在同目录存在 `.br`/`.gz` 与 `asset-manifest.json` 对应条目时才刷新，对不存在的条目安全跳过；因此注入文件不需要修改 `patch/lib-precompressed.mjs`。当 `tools/assets/stamp.mjs` 更新 `assets/index-*.js`（为 `./chat-page-*.js` 写入 10 位内容哈希）时，若目标 `control-ui` 下存在 `asset-manifest.json`，`stamp.mjs` 会顺带调用 `refreshPrecompressed()` 保持原生入口的 `.br`/`.gz` 与 `asset-manifest.json` 同步。
+  3. `patch/apply-control-ui-cache.mjs` 在网关静态文件响应上按文件大小与 `mtimeMs` 计算 `ETag: "pk-<size36>-<mtimeMs36>"` 并维持 `Cache-Control: no-cache`。文件内容变更时，不仅 URL 查询串 `?v=<sha256[:10]>` 改变，文件 ETag 也随之改变，浏览器必然发起新请求并拿到 `200 OK` 的新内容，故 `patch/apply-control-ui-cache.mjs` 无需修改。
+  4. `laolao-asset-manifest.js` 在安装/打包步骤由 `tools/assets/stamp.mjs`（及 `tools/ui-parity/bundle.py`）写入目标 `control-ui` 目录，不提交到仓库 `ui/injections/`，并在 `index.html` 的 `<head>` 中紧跟 `laolao-night.js` 同步加载，在所有懒加载脚本执行前提供 `window.__pinkieAsset(path)` 与 `window.__pinkieAssetManifest`。
 
 ## M0 执行记录（2026-11-20，待验收）
 
@@ -148,6 +155,16 @@ d. 删掉一处 !important 但不更新基线
 - 用户确认在约 22:59 打开过碧琪；对「你在 22:59 左右有打开碧琪吗？」回复原话：「有」。第 7 节保留当时观测，不再将该次已说明的变化作为未决事项。
 - 未启动、停止或调用正式网关。重新记录只读现场：18789 无监听进程；正式配置和 App 目录修改时间分别为 2026-11-20T07:56:00.7371058Z 和 2026-11-21T03:12:31.9611495Z（UTC）。新基线 prod-resume-before.json，合并前记录 prod-resume-after.json；不要求用户关闭应用。
 - 本提交只更新接力记录。重跑隔离棘轮和串行全量门禁，运行结果保留在 F:\tmp\pinkie-m0-merge-5eac\release-gate-resume.log；预计约 10–15 分钟。确认这轮现场不变，并等本提交的 CI 与主线 CI 全绿后才合并，证据记入 #40 讨论。不删分支、不打 tag、不发版。
+
+## M5 执行记录（2026-11-21，Gemini-Win-4e9b @ Windows + CI ubuntu-latest Chromium）
+
+- **改动范围**：新增隔离视觉回归脚手架与零依赖 PNG 像素比对工具（`tests/visual/lib/harness.mjs`、`tests/visual/lib/png-diff.mjs`）、24 张 Linux Chromium 截图基线（`tests/visual/baseline/*.png`，12 画面 × 日/夜）、视觉回归测试（`tests/visual-baseline.test.mjs`）、10 项映射 `HOTSPOTS.md` 的用户可见热点测试（`tests/hotspot-ui-regression.test.mjs`）以及 `.github/workflows/ci.yml` 的 Linux Chromium 3 次零抖动 + ≤ 0.1% 像素门禁。
+- **验收自查**：M5-1 ★（Linux Chromium 连续 3 次 0 像素差异）、M5-2 ★（12 画面 × 日/夜 = 24 张 PNG）、M5-3 ★（10 项热点测试 Chrome & Edge 全过，H1/H2/H8 三项故意改坏反例全部精准报错并还原）、M5-4（已接入 `ci.yml`）、M5-5（Windows 本机 Edge 13/13 通过、24 画面本机 0 抖动，与 Linux Chromium 跨系统差异 0.40%–2.39% 源于 DirectWrite vs FreeType 字形渲染差异，详见 `progress/M5.md`）。Z2/Z4/Z5 全部通过。
+
+## M3 执行记录（2026-11-21，Gemini-Win-4e9b @ Windows）
+
+- **改动范围**：新增区域负责表与护栏测试（`ui/injections/regions.json`、`ui/injections/REGIONS.md`、`tests/ui-region-ownership.test.mjs`）、共用 DOM 观察器与可见性调度器（`ui/injections/laolao-dom-watch.js`、`tests/shared-dom-watch.test.mjs`），将 38 个文件中的 47 处子树观察器全量迁移至共用观察器，并将 36 个文件中的 47 处轮询 `setInterval` 合并至共享调度器，同步收缩 `tools/health/baseline.json`。
+- **验收自查**：M3-1 ★（202 项头部注入 100% 覆盖，`laolao-feedback.css` 越界改 `.sidebar-shell` 反例精准报错并还原）、M3-2 ★（静态 `measure.mjs` 与 Playwright 真页面运行时计数均严格为 **1** 个子树观察器，`mutationObservers` 74→29）、M3-3（取消，`!important` 5090 未增）、M3-4 ★（Batch A–E 每批提交均过 M5 回归与棘轮）、M3-5（`setIntervals` **91 → 44**，减少 51.6%）。Z2/Z4/Z5 全部通过，详见 `progress/M3.md`。
 
 ## 复发记录
 

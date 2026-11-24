@@ -235,10 +235,10 @@
   const queue = () => { if (!queued) { queued = true; setTimeout(() => { queued = false; if (isMetre()) homeMark(); else api.close(); }, 150); } };
   function start() {
     const shell = document.querySelector('.shell') || document.body;
-    new MutationObserver((records) => {
+    window.Pinkie?.domWatch?.createObserver((records) => {
       if (!isMetre()) return;
       if (records.some((r) => !(r.target instanceof Element) || !r.target.closest('.chat-thread, .pk-metre-board, .pk-metre-brand'))) queue();
-    }).observe(shell, {childList: true, subtree: true});
+    })?.watch(shell, {childList: true});
     new MutationObserver(queue).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode', 'data-laolao-startup-home']});
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && api.isOpen) { event.stopPropagation(); api.close(); } }, true);
     document.addEventListener('visibilitychange', () => { if (document.hidden) stopLoop(); else if (api.isOpen) startLoop(); });

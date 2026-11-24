@@ -32,7 +32,7 @@ test('toolbox engine follows the observer diet and pointer contracts', () => {
   // during streaming; launchers poll on a slow timer instead. (The word
   // itself appears in a comment, so pin the constructor call.)
   assert.doesNotMatch(source, /new MutationObserver/);
-  assert.match(source, /setInterval\(mount, 1500\)/);
+  assert.match(source, /(?:setInterval|domWatch\?\.poll)\(mount, 1500\)/);
   // Escape always leaves the toolbox; the footer button toggles it.
   assert.match(source, /event\.key === 'Escape'/);
   assert.match(source, /aria-pressed/);
@@ -145,7 +145,7 @@ test('launcher mounts into the sidebar footer ahead of the more button, idempote
   };
   let poll;
   const sandbox = {
-    document, window: { matchMedia: () => ({ matches: false }) },
+    document, window: { matchMedia: () => ({ matches: false }), Pinkie: { domWatch: { poll: fn => { poll = fn; return { stop() {} }; } } } },
     location: { href: 'http://127.0.0.1:18789/' },
     setInterval: fn => { poll = fn; return 0; },
     requestAnimationFrame: fn => fn(),

@@ -850,8 +850,8 @@
   function keyboardReach(root) {
     let queued = false;
     const fix = () => { queued = false; for (const n of root.querySelectorAll('button:not([tabindex]),a[href]:not([tabindex]),summary:not([tabindex])')) n.tabIndex = 0; };
-    const watch = new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(fix); } });
-    watch.observe(root, {childList: true, subtree: true}); fix();
+    const watch = window.Pinkie?.domWatch?.createObserver(() => { if (!queued) { queued = true; queueMicrotask(fix); } });
+    watch?.watch(root, {childList: true}); fix();
     return () => watch.disconnect();
   }
   function observeStickers(root) {
@@ -867,7 +867,7 @@
       for (const img of observed) if (!img.isConnected) { resize.unobserve(img); observed.delete(img); }
       for (const img of root.querySelectorAll('img')) if (String(img.src).includes('/study-desk/stickers/')) { if (!observed.has(img)) { observed.add(img); resize.observe(img); } fit(img); }
     };
-    const mutations = new MutationObserver(scan); mutations.observe(root, {childList:true,subtree:true,attributes:true,attributeFilter:['src']}); scan();
+    const mutations = window.Pinkie?.domWatch?.createObserver(scan); mutations?.watch(root, {childList:true,attributes:true,attributeFilter:['src']}); scan();
     state.disposeStickers = () => { resize.disconnect(); mutations.disconnect(); observed.clear(); };
   }
   function syncTheme() {
@@ -929,12 +929,12 @@
     doc.toggleAttribute('data-pinkie-desk-entry', Boolean(host));
     if (!state.entryObserver) {
       // 原生页面由 Lit 重绘，侧栏也会收起或展开；入口被冲掉或位置不对时补回。
-      state.entryObserver = new MutationObserver(() => {
+      state.entryObserver = window.Pinkie?.domWatch?.createObserver(() => {
         if (doc.dataset.pinkieStudyDesk !== 'chat') return;
         const found = document.querySelector('.pinkie-desk-entry');
         if (!found || found.parentElement !== entryHost()) syncEntry(true);
       });
-      state.entryObserver.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+      state.entryObserver?.watch(document.body, {childList: true, attributes: true, attributeFilter: ['class']});
     }
   }
   function pageMotion(pane) {
@@ -1120,9 +1120,9 @@
           pane.view = id; pane.state.view = id;
           if (!state.notesLoading) {
             state.notesLoading = true;
-            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + 'laolao-study-desk-notes.css?v=drill2'; css.dataset.notebookV2 = '';
+            const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-notes.css') : 'laolao-study-desk-notes.css'); css.dataset.notebookV2 = '';
             if (!document.querySelector('link[data-notebook-v2]')) document.head.append(css);
-            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-notes.js?v=drill2';
+            const script = document.createElement('script'); script.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-notes.js') : 'laolao-study-desk-notes.js');
             script.onload = () => { state.notesLoading = false; for (const p of workspace().panes) if (p.view === 'notes') renderPane(p); };
             script.onerror = () => { state.notesLoading = false; script.remove(); notice('笔记本未能加载，请重试'); }; document.head.append(script);
           }
@@ -1138,11 +1138,11 @@
           if (!state.drillLoading) {
             state.drillLoading = true;
             for (const file of ['laolao-desk-reward.css', 'laolao-study-desk-drill.css']) {
-              const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + file + '?v=drill2';
+              const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = BASE + (window.__pinkieAsset ? window.__pinkieAsset(file) : file);
               if (!document.querySelector('link[href="' + css.href + '"]')) document.head.append(css);
             }
-            const reward = document.createElement('script'); reward.src = BASE + 'laolao-desk-reward.js?v=drill2';
-            const script = document.createElement('script'); script.src = BASE + 'laolao-study-desk-drill.js?v=drill2';
+            const reward = document.createElement('script'); reward.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-desk-reward.js') : 'laolao-desk-reward.js');
+            const script = document.createElement('script'); script.src = BASE + (window.__pinkieAsset ? window.__pinkieAsset('laolao-study-desk-drill.js') : 'laolao-study-desk-drill.js');
             reward.onload = () => document.head.append(script);
             script.onload = () => { state.drillLoading = false; for (const p of workspace().panes) if (p.view === 'drill') renderPane(p); };
             script.onerror = () => { state.drillLoading = false; notice('背一背未能加载，请重试'); };

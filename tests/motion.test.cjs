@@ -93,11 +93,12 @@ test('handoff first-frame bootstrap carries progress without a width reset',()=>
     style:{setProperty:(name,value)=>styles.push([name,value])},
     querySelector:s=>s.startsWith('[role')?bar:null,
   };
+  window.__pinkieAsset=p=>`${p}?v=1234567890`;
   const elements={'laolao-splash':splash,'laolao-splash-fill':fill,'laolao-splash-message':message,'laolao-splash-percentage':label};
   vm.runInNewContext(read('ui/injections/laolao-handoff-bootstrap.js'),{window,document:{getElementById:id=>elements[id]},sessionStorage:{getItem:()=>JSON.stringify({mode:'thinking',progress:93})}});
   assert.equal(splash.dataset.handoffBootstrapped,'1');
   assert.ok(classes.includes('is-mode-progress'));assert.ok(classes.includes('is-mode-progress--thinking'));
-  assert.deepEqual(styles,[['--laolao-mode-progress-image','url("/laolao-mode-transition-thinking.png?v=transition2")']]);
+  assert.deepEqual(styles,[['--laolao-mode-progress-image','url("/laolao-mode-transition-thinking.png?v=1234567890")']]);
   assert.equal(fill.style.transition,'none');assert.equal(message.textContent,'灵感房间正在亮灯…');
   assert.equal(fill.style.transform,'scaleX(0.93)');assert.equal(label.textContent,'93%');
   motion.progress(fill,label,bar,68);assert.equal(label.textContent,'93%');

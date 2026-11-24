@@ -103,7 +103,7 @@ export async function isolatedService() {
     fs.rmSync(target, {recursive: true, force: true});
   }};
 }
-export async function startHarness({vendor = true, handler = () => ({}), realUI = false, legacyUI = false, initialMessages = [], routes = []} = {}) {
+export async function startHarness({vendor = true, handler = () => ({}), realUI = false, legacyUI = false, initialMessages = [], routes = [], port = 0} = {}) {
   const calls = [];
   const chatMessages = [...initialMessages], deskHistories = new Map();
   const injectionRoot = process.env.PINKIE_QA_INJECTION_ROOT || path.join(repo, 'ui/injections');
@@ -122,7 +122,7 @@ export async function startHarness({vendor = true, handler = () => ({}), realUI 
   const html = `<!doctype html><html data-laolao-mode="learning" data-theme-mode="light"><meta charset="utf-8"><title>学习台隔离验收</title>
     <style>body{margin:0;font:15px system-ui}.shell{padding:25px}.pk-wb{position:fixed;inset:0;background:red;pointer-events:none}button{font:inherit}</style>
     ${coreCSS.map(file => `<link rel="stylesheet" href="${file}">`).join('')}${native}
-    <script>localStorage.setItem('openclaw.i18n.locale','zh-CN');window.qaCalls=[];const settings={gatewayUrl:location.origin.replace('http','ws'),sessionKey:'agent:learning:study-desk-qa',lastActiveSessionKey:'agent:learning:study-desk-qa',themeMode:'light',token:'qa'};const OriginalWebSocket=window.WebSocket;window.WebSocket=class extends OriginalWebSocket{constructor(url,protocols){super(settings.gatewayUrl+new URL(url,location.href).pathname,protocols);this.addEventListener('message',e=>{try{const m=JSON.parse(e.data);if(m.type==='event')dispatchEvent(new CustomEvent('pinkie:gateway-event',{detail:{event:m.event,payload:m.payload}}));}catch{}});}};for(const suffix of ['',':default',':'+settings.gatewayUrl])localStorage.setItem('openclaw.control.settings.v1'+suffix,JSON.stringify(settings));window.__laolaoSidebar={gwRequest:async(method,params)=>{qaCalls.push({method,params});const r=await fetch('/rpc',{method:'POST',body:JSON.stringify({method,params})});const data=await r.json();if(data?.error)throw Error(data.error);if(!${realUI}&&method==='chat.send'&&params.sessionKey.startsWith('agent:learning:desk-chat:'))setTimeout(()=>dispatchEvent(new CustomEvent('pinkie:gateway-event',{detail:{event:'chat',payload:{sessionKey:params.sessionKey,runId:data.runId,state:'final'}}})),0);return data;}};</script>${entry ? `<script type="module" src="${entry}"></script>` : ''}${legacy}${scripts}`;
+    <script>localStorage.setItem('openclaw.i18n.locale','zh-CN');window.qaCalls=[];const settings={gatewayUrl:location.origin.replace('http','ws'),sessionKey:'agent:learning:study-desk-qa',lastActiveSessionKey:'agent:learning:study-desk-qa',themeMode:'light',token:'qa'};const OriginalWebSocket=window.WebSocket;window.WebSocket=class extends OriginalWebSocket{constructor(url,protocols){super(settings.gatewayUrl+new URL(url,location.href).pathname,protocols);this.addEventListener('message',e=>{try{const m=JSON.parse(e.data);if(m.type==='event')dispatchEvent(new CustomEvent('pinkie:gateway-event',{detail:{event:m.event,payload:m.payload}}));}catch{}});}};for(const suffix of ['',':default',':'+settings.gatewayUrl])localStorage.setItem('openclaw.control.settings.v1'+suffix,JSON.stringify(settings));window.__laolaoSidebar={gwRequest:async(method,params)=>{qaCalls.push({method,params});const r=await fetch('/rpc',{method:'POST',body:JSON.stringify({method,params})});const data=await r.json();if(data?.error)throw Error(data.error);if(!${realUI}&&method==='chat.send'&&params.sessionKey.startsWith('agent:learning:desk-chat:'))setTimeout(()=>dispatchEvent(new CustomEvent('pinkie:gateway-event',{detail:{event:'chat',payload:{sessionKey:params.sessionKey,runId:data.runId,state:'final'}}})),0);return data;}};</script>${entry ? `<script type="module" src="${entry}"></script>` : ''}<script src="/laolao-dom-watch.js"></script>${legacy}${scripts}`;
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://local');
     // 后端注册的 HTTP 路由（如真题原录音 /pinkie-exam-audio/）照网关的前缀匹配转过去
@@ -171,7 +171,7 @@ export async function startHarness({vendor = true, handler = () => ({}), realUI 
       });
     });
   }
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
   return {url: `http://127.0.0.1:${server.address().port}/chat?session=agent:learning:study-desk-qa`, calls, realUI, close: () => { for (const client of wss?.clients || []) client.terminate(); wss?.close(); return new Promise(resolve => server.close(resolve)); }};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

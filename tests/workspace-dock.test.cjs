@@ -213,7 +213,7 @@ test('a split always keeps a reachable exit, even when the sidebar is hidden', (
 
 test('the dock entry survives a bridge that arrives after the page scripts', () => {
   const mode = read('ui/injections/laolao-mode-switcher.js');
-  const desktop = read('app/windows_desktop.py');
+  const desktop = read('app/windows_bridge_scripts.py');
 
   // WebView2 only lets the shell inject once the document reports loaded, so
   // the page scripts have always run first. Reading the handler is a plain
@@ -237,7 +237,7 @@ test('the dock entry survives a bridge that arrives after the page scripts', () 
 
   // The attribute signal rides the single mode observer (one observer budget),
   // and settles exactly once before re-rendering.
-  assert.equal((mode.match(/new MutationObserver\(/g) || []).length, 1,
+  assert.equal((mode.match(/new MutationObserver\(/g) || []).length, 0,
     'the dock watch must not add a second MutationObserver');
   assert.match(mode, /"data-pinkie-platform"/);
   const settle = between(

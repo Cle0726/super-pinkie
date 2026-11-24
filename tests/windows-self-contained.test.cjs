@@ -1,38 +1,163 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const readWindowsShell = () => [
+  'app/windows_desktop.py', 'app/windows_ps_templates.py', 'app/windows_update_guard.py',
+  'app/windows_updater.py', 'app/windows_elevated.py', 'app/windows_runtime.py',
+  'app/windows_gateway.py', 'app/windows_bridge.py', 'app/windows_bridge_scripts.py',
+].map(read).join('\n');
+const pythonBin = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
-// Cache-busting query versions, as `asset -> highest version number seen`.
-const cacheVersions = (text, tableForm) => {
+// Content-hashed query versions, as `asset -> 10-char sha256 hex digest`.
+const stampedAssetHashes = (text) => {
   const found = new Map();
-  const bump = (asset, version) => {
-    const number = Number(/(\d+)$/.exec(version)[1]);
-    if (!found.has(asset) || number > found.get(asset).number) found.set(asset, { number, version });
-  };
-  for (const [, asset, version] of text.matchAll(/laolao-([a-z-]+\.(?:js|css))\?v=([a-z]+\d+)/g)) bump(asset, version);
-  if (tableForm) {
-    for (const [, asset, version] of text.matchAll(/'laolao-([a-z-]+\.(?:js|css))'\s*=\s*'([a-z]+\d+)'/g)) bump(asset, version);
+  for (const [, asset, hash] of text.matchAll(/(?:src|href)=["']\/([^"'?]+)\?v=([a-f0-9]{10})(?:&[^"']*)?["']/g)) {
+    found.set(asset, hash);
   }
   return found;
 };
 
-test('Windows injects the same asset versions as macOS, never older ones', () => {
-  const head = require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-mode-menu-fx.css'], 'assets': []});
-  const source=read('build-win.ps1');
+const verifyMacWindowsHashParity = (macDir, winDir) => {
+  const macHead = stampedAssetHashes(fs.readFileSync(path.join(macDir, 'laolao-head.fragment.html'), 'utf8'));
+  const winHead = stampedAssetHashes(fs.readFileSync(path.join(winDir, 'laolao-head.fragment.html'), 'utf8'));
+  const macIndex = stampedAssetHashes(fs.readFileSync(path.join(macDir, 'index.html'), 'utf8'));
+  const winIndex = stampedAssetHashes(fs.readFileSync(path.join(winDir, 'index.html'), 'utf8'));
+  assert.ok(macHead.size >= 190, `expected full stamped head fragment, got ${macHead.size}`);
+  assert.deepEqual([...winHead.keys()], [...macHead.keys()], 'Mac and Windows head asset lists must match');
+  assert.deepEqual([...winIndex.keys()], [...macIndex.keys()], 'Mac and Windows index.html asset lists must match');
+  for (const [asset, macHash] of macIndex.entries()) {
+    const winHash = winIndex.get(asset);
+    assert.equal(winHash, macHash, `Windows hash mismatch for ${asset}: win=${winHash} mac=${macHash}`);
+    const winBytes = fs.readFileSync(path.join(winDir, asset));
+    const actualWinHash = crypto.createHash('sha256').update(winBytes).digest('hex').slice(0, 10);
+    assert.equal(actualWinHash, macHash, `Windows packaged file ${asset} content hash (${actualWinHash}) differs from Mac (${macHash})`);
+  }
+};
+
+test('Windows and macOS compute identical content hashes for every asset and catch any stale Windows file', () => {
+  require('./fixtures/shared-ui.cjs').sharedUi({'entries': ['laolao-mode-menu-fx.css'], 'assets': []});
+  const source = read('build-win.ps1');
   assert.ok(source.indexOf('bundle.py') > source.indexOf('clean_ui.py'));
-  assert.match(source,/windows-ui-manifest\.json/);
-  assert.match(read('.github/workflows/release.yml'),/ui-parity:/);
+  assert.ok(source.indexOf('stamp.mjs') > source.indexOf('clean_ui.py'));
+  assert.match(source, /windows-ui-manifest\.json/);
+  assert.match(read('.github/workflows/release.yml'), /ui-parity:/);
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-win-hash-parity-'));
+  try {
+    const fixtureRoot = path.join(tmp, 'repo');
+    for (const rel of [
+      'ui/parity-policy.json',
+      'ui/injections/laolao-body.fragment.html',
+      'ui/injections/laolao-night.js',
+      'ui/injections/laolao-night.css',
+      'ui/injections/laolao-theme.css',
+      'ui/injections/laolao-mode-menu-fx.css',
+      'ui/injections/laolao-sidebar.js',
+      'ui/injections/laolao-handoff-bootstrap.js',
+      'ui/injections/laolao-reasoning-off.svg',
+      'ui/assets/laolao-avatar.png',
+      'ui/assets/ProviderIcon-crossmodel.svg',
+      'ui/runtime/chat-page-DrPkxqJK.js',
+      'ui/runtime/index-Bvtt7vVx.js',
+    ]) {
+      const dst = path.join(fixtureRoot, rel);
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(path.join(root, rel), dst);
+    }
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'ui/injections/laolao-head.fragment.html'),
+      [
+        '<script src="/laolao-night.js?v=@hash"></script>',
+        '<!-- pinkie-native-assets -->',
+        '<link rel="stylesheet" href="/laolao-theme.css?v=@hash">',
+        '<link rel="stylesheet" href="/laolao-mode-menu-fx.css?v=@hash">',
+        '<script defer src="/laolao-sidebar.js?v=@hash"></script>',
+        '<link rel="stylesheet" href="/laolao-night.css?v=@hash">',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const macUi = path.join(tmp, 'mac-control-ui');
+    const winUi = path.join(tmp, 'win-control-ui');
+    const macManifest = path.join(tmp, 'macos-ui-manifest.json');
+    const winManifest = path.join(tmp, 'windows-ui-manifest.json');
+    const bundlePy = path.join(root, 'tools/ui-parity/bundle.py');
+    const stampMjs = path.join(root, 'tools/assets/stamp.mjs');
+    for (const [uiDir, manifestOut] of [[macUi, macManifest], [winUi, winManifest]]) {
+      fs.mkdirSync(path.join(uiDir, 'assets'), { recursive: true });
+      fs.writeFileSync(
+        path.join(uiDir, 'index.html'),
+        '<!doctype html><html><head><script type="module" src="/assets/index-Bvtt7vVx.js?v=@hash&pinkie-surface=6&pinkie-browser=3&pinkie-learning=8"></script></head><body><openclaw-app></openclaw-app></body></html>\n',
+        'utf8'
+      );
+      execFileSync(pythonBin, [bundlePy, 'install', '--root', fixtureRoot, '--control-ui', uiDir, '--output', manifestOut], { stdio: 'pipe' });
+      execFileSync(process.execPath, [stampMjs, '--root', fixtureRoot, '--control-ui', uiDir, '--manifest', manifestOut], { stdio: 'pipe' });
+    }
+    const macHead = stampedAssetHashes(fs.readFileSync(path.join(macUi, 'laolao-head.fragment.html'), 'utf8'));
+    const winHead = stampedAssetHashes(fs.readFileSync(path.join(winUi, 'laolao-head.fragment.html'), 'utf8'));
+    assert.equal(macHead.size, 6);
+    assert.deepEqual([...winHead.entries()], [...macHead.entries()]);
+    execFileSync(pythonBin, [bundlePy, 'compare', macManifest, winManifest], { stdio: 'pipe' });
+
+    const assertHashParity = () => {
+      const mIdx = stampedAssetHashes(fs.readFileSync(path.join(macUi, 'index.html'), 'utf8'));
+      const wIdx = stampedAssetHashes(fs.readFileSync(path.join(winUi, 'index.html'), 'utf8'));
+      const mismatches = [];
+      for (const [asset, macHash] of mIdx.entries()) {
+        const winHash = wIdx.get(asset);
+        const actualWinHash = crypto.createHash('sha256').update(fs.readFileSync(path.join(winUi, asset))).digest('hex').slice(0, 10);
+        if (winHash !== macHash || actualWinHash !== macHash) {
+          mismatches.push(`${asset} (mac=${macHash}, winUrl=${winHash}, winFile=${actualWinHash})`);
+        }
+      }
+      assert.equal(mismatches.length, 0, `Windows hash mismatch for ${mismatches.join(', ')}`);
+    };
+    assertHashParity();
+
+    // Counterexample (M2-5): simulate Windows packaging missing the new version of an injection file.
+    const targetAsset = 'laolao-sidebar.js';
+    const originalWinBytes = fs.readFileSync(path.join(winUi, targetAsset));
+    fs.writeFileSync(path.join(winUi, targetAsset), Buffer.concat([originalWinBytes, Buffer.from('\n/* stale windows copy */\n')]));
+    assert.throws(
+      () => assertHashParity(),
+      /laolao-sidebar\.js/,
+      'hash comparison must fail when Windows ships a different version of laolao-sidebar.js'
+    );
+    assert.throws(
+      () => execFileSync(pythonBin, [bundlePy, 'check', '--root', fixtureRoot, '--control-ui', winUi], { stdio: 'pipe' }),
+      /stale\/modified UI resource: laolao-sidebar\.js/,
+      'bundle.py check must reject a Windows package with a stale asset'
+    );
+    // Even if Windows re-stamped its own stale copy, its stamped hash differs from Mac's hash.
+    execFileSync(process.execPath, [stampMjs, '--root', fixtureRoot, '--control-ui', winUi, '--manifest', winManifest], { stdio: 'pipe' });
+    assert.throws(
+      () => assertHashParity(),
+      /Windows hash mismatch for .*laolao-sidebar\.js/,
+      'hash comparison must catch Windows stamping an older/different file than Mac'
+    );
+    assert.throws(
+      () => execFileSync(pythonBin, [bundlePy, 'compare', macManifest, winManifest], { stdio: 'pipe' }),
+      /Mac and Windows packaged UI manifests differ/,
+      'bundle.py compare must reject mismatched Mac and Windows manifests'
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
-test('the Windows installer pins one version per asset, not two', () => {
-  const source=read('installer/windows/apply-theme.ps1');
+test('the Windows installer pins one content hash per asset via bundle.py and stamp.mjs', () => {
+  const source = read('installer/windows/apply-theme.ps1');
   assert.doesNotMatch(source, /\$headTags = @\(|\$versions = @\{/);
+  assert.match(source, /tools\\assets\\stamp\.mjs/);
   require('./fixtures/shared-ui.cjs').sharedUi({entries:['laolao-theme.css','laolao-sidebar.js']});
 });
 
@@ -103,7 +228,7 @@ test('both packages share the complete Mac browser renderer and preserve the bac
 });
 
 test('Windows desktop launches the bundled gateway and keeps it supervised', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   assert.match(launcher, /node_modules\/openclaw\/openclaw\.mjs/);
   assert.match(launcher, /gateway", "run"/);
   assert.match(launcher, /GATEWAY_CHAT_URL = urllib\.parse\.urljoin\(GATEWAY_URL, "chat"\)/);
@@ -136,7 +261,7 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
 });
 
 test('Windows exe checks signed release assets and can roll back a failed update', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const release = read('.github/workflows/release.yml');
   assert.match(launcher, /api\.github\.com\/repos\/Cle0726\/super-pinkie\/releases\/latest/);
   assert.match(launcher, /super-pinkie-windows-/);
@@ -163,7 +288,7 @@ test('Windows exe checks signed release assets and can roll back a failed update
 });
 
 test('Windows shell keeps all local spaces, project picker, voice and startup movie', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const entry = read('app/super_pinkie.py');
   assert.match(launcher, /services\/party\/server\.py/);
   assert.match(launcher, /services\/roundtable\/server\.py/);
@@ -262,7 +387,7 @@ test('Windows deployment uses explicit ports, windowless Python and a safe gatew
 });
 
 test('the desktop shell reads PINKIE_STATE_ROOT instead of only exporting it', () => {
-  const launcher = read('app/windows_desktop.py');
+  const launcher = readWindowsShell();
   const start = launcher.indexOf('def state_root(');
   assert.ok(start !== -1, 'app/windows_desktop.py must keep a state_root()');
   const body = launcher.slice(start, launcher.indexOf('\ndef ', start + 1));
@@ -348,7 +473,7 @@ test('the injected bridge waits for a document it can actually append to', () =>
   // null (reading 'append')"), the shell logged "native bridge setup skipped",
   // and the update health marker -- written after the injection at the time --
   // never appeared, which is how a working build gets rolled back.
-  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_bridge_scripts.py'));
   assert.ok(found, 'app/windows_desktop.py must keep a BRIDGE_SCRIPT');
 
   const created = [];
@@ -406,7 +531,7 @@ test('links inside the chat UI stay with its router; other local pages go back t
   // The bridge used to send every 127.0.0.1:18789 link to open_chat, so the
   // sidebar's 设置 (/settings/general) reloaded the chat page instead of
   // opening settings.
-  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_desktop.py'));
+  const found = /BRIDGE_SCRIPT = r"""([\s\S]*?)"""/.exec(read('app/windows_bridge_scripts.py'));
   const run = (pageUrl) => {
     const clicks = [];
     const calls = [];

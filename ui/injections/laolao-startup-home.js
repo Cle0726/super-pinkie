@@ -568,8 +568,8 @@
   };
   const watch = () => {
     observer?.disconnect();
-    observer = new MutationObserver(schedule);
-    observer.observe(document.body, {childList: true, subtree: true});
+    observer = window.Pinkie?.domWatch?.createObserver(schedule);
+    observer?.watch(document.body, {childList: true});
   };
   // Mode switch: the transition cover is up when the handoff fires, so the
   // home is in place before the new mode's history could ever be seen.

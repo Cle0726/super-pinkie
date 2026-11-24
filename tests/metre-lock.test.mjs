@@ -751,8 +751,8 @@ test('simulated release bundle & dev bundle guard verification preserve hash fil
 
 test('frontend metre-lock module enforces prompts, cooldowns, dock curtains, and cold-start exits cleanly', async () => {
   const head = sharedUi({entries: ['laolao-metre-lock.css', 'laolao-metre-lock.js', 'laolao-mode-switcher.js'], assets: []});
-  assert.match(head, /laolao-metre-lock\.css\?v=metrelock1/);
-  assert.match(head, /laolao-metre-lock\.js\?v=metrelock1/);
+  assert.match(head, /laolao-metre-lock\.css\?v=@hash/);
+  assert.match(head, /laolao-metre-lock\.js\?v=@hash/);
   assert.ok(head.indexOf('laolao-metre-lock.js') < head.indexOf('laolao-mode-switcher.js'));
 
   const lockJs = fs.readFileSync(path.join(ROOT, 'ui/injections/laolao-metre-lock.js'), 'utf8');

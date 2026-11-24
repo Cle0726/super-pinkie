@@ -19,24 +19,14 @@ DRY = '--dry-run' in sys.argv
 sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
 
 
-def bump(text):
-    if text.count('laolao-companion.css?v=companion6') != 1:
-        raise SystemExit('Expected exactly one current companion CSS version; nothing written.')
-    for old, new in (('laolao-companion.js?v=companion7', 'laolao-companion.js?v=companion8'),):
-        if text.count(old) != 1:
-            raise SystemExit(f'Expected exactly one {old}; stopped without changing the App.')
-        text = text.replace(old, new, 1)
-    return text
-
-
 def apply(root):
     res = root / RES
     ui = REPO / 'ui/injections'
+    control = res / 'runtime/openclaw/dist/control-ui'
     for name in ('laolao-companion.js', 'laolao-companion.css'):
-        for target in (res / 'runtime/openclaw/dist/control-ui' / name, res / 'ui/injections' / name):
+        for target in (control / name, res / 'ui/injections' / name):
             shutil.copy2(ui / name, target)
-    p = res / 'runtime/openclaw/dist/control-ui/index.html'
-    p.write_text(bump(p.read_text()))
+    subprocess.run(['node', str(REPO / 'tools/assets/stamp.mjs'), '--root', str(REPO), '--control-ui', str(control)], check=True)
 
 
 def changed_files(a, b):
@@ -51,8 +41,13 @@ def changed_files(a, b):
 
 
 def deploy(stage_root):
-    if 'laolao-companion.js?v=companion8' in (APP / RES / 'runtime/openclaw/dist/control-ui/index.html').read_text():
-        raise SystemExit('App already has companion8; refusing to bump twice.')
+    control = APP / RES / 'runtime/openclaw/dist/control-ui'
+    js_sha = sha(REPO / 'ui/injections/laolao-companion.js')
+    css_sha = sha(REPO / 'ui/injections/laolao-companion.css')
+    if (js_sha and sha(control / 'laolao-companion.js') == js_sha
+            and css_sha and sha(control / 'laolao-companion.css') == css_sha
+            and f'laolao-companion.js?v={js_sha[:10]}' in (control / 'index.html').read_text()):
+        raise SystemExit('App already has the current companion assets; refusing to deploy twice.')
     stage = stage_root / APP.name
     snapshot = stage_root / 'snapshot.app'
     subprocess.run(['cp', '-cR', str(APP), str(snapshot)], check=True)

@@ -101,8 +101,8 @@
   });
   // Metre has no scene, portrait or wallpaper of its own (batch 0 placeholder only).
   const modeAssets = id => id === 'metre' ? Promise.resolve([]) : Promise.all([
-    `/laolao-mode-transition-${id}.png?v=transition2`,
-    `/laolao-mode-${id}-hd.png?v=avatars6`,
+    (root.__pinkieAsset || (p => p))(`/laolao-mode-transition-${id}.png`),
+    (root.__pinkieAsset || (p => p))(`/laolao-mode-${id}-hd.png`),
     id === 'chat' ? '/laolao-wallpaper.png' : `/laolao-wallpaper-${id}.png`,
   ].map(preload));
   function chatReady(id) {

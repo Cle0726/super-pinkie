@@ -31,7 +31,7 @@
   // Poll instead of a subtree-wide MutationObserver: during streaming every
   // markdown chunk rebuilds the DOM, and each observer receives its own copy
   // of every mutation record (the GC "record avalanche" that froze the page).
-  function start(){schedule();setInterval(prepare,2000);}
+  function start(){schedule();window.Pinkie?.domWatch?.poll(prepare,2000);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
   window.addEventListener('laolao:modechange',schedule);
 })();

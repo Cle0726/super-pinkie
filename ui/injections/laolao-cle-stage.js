@@ -19,7 +19,7 @@
 import {createSteps, liveKind} from './laolao-cle-steps.js';
 let CleSpace = null, spaceLoading = null;
 const loadSpace = () => spaceLoading ||= Promise.resolve(window.__pinkieQuiet?.loadSignature())
-  .then(() => import('./laolao-cle-space.js?v=8')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
+  .then(() => import(window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js')).then(mod => { CleSpace = mod.CleSpace; }).catch(() => { spaceLoading = null; });
 const metreNow = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
 if (!metreNow() && !document.documentElement.hasAttribute('data-laolao-splash-metre')) loadSpace();
 
@@ -346,7 +346,7 @@ if (!window.__laolaoCleStage) {
     const all = document.querySelectorAll('.chat-group--process details.pinkie-process');
     return all.length ? all[all.length - 1] : null;
   }
-  setInterval(() => {
+  window.Pinkie?.domWatch?.poll(() => {
     const card = latestCard();
     if (card && card !== live && card !== finishing) decorate(card);
   }, 2000);
@@ -770,16 +770,16 @@ if (!window.__laolaoCleStage) {
     pending = true;
     setTimeout(scan, 120);                          // 不用 rAF：窗口在后台时也要跟上状态
   }
-  const mo = new MutationObserver(schedule);
+  const mo = window.Pinkie?.domWatch?.createObserver(schedule);
   function attach() {
     const h = document.querySelector('.chat-thread-inner');
     if (h === host) return;
     mo.disconnect();
     host = h;
-    if (h) mo.observe(h, {childList: true, subtree: true, attributes: true, attributeFilter: ['data-live', 'class']});
+    if (h) mo?.watch(h, {childList: true, attributes: true, attributeFilter: ['data-live', 'class']});
     schedule();
   }
-  setInterval(attach, 300);
+  window.Pinkie?.domWatch?.poll(attach, 300);
   attach();
   window.addEventListener('pagehide', () => mo.disconnect());
 

@@ -18,17 +18,18 @@ test('刷题讲解失败可切模型重试，成功后显示结果并等足后�
     page.setDefaultTimeout(5000); page.on('pageerror', e => errors.push(e.message));
     await page.goto(server.url); await page.waitForFunction(() => window.__pinkieGamePractice && window.__pinkieStudyDesk);
     await page.evaluate(() => {
-      __pinkieGameBattle.arena = () => null;
       __pinkieGame.equippedForm = () => ({});
       __pinkieGame.play = () => {};
       const real = __pinkieGame.call;
       __pinkieGame.call = (name, params, timeout) => { if (name === 'practice.explain') window.qaExplainTimeout = timeout; return real(name, params, timeout); };
     });
     await page.evaluate(() => __pinkieGamePractice.openSet({mode:'kind', kind:'vc'}));
-    await page.locator('.pkp-set .pkb-opt').first().waitFor();
-    await page.locator('.pkp-set .pkb-opt').nth(1).click();
-    await page.locator('.pkp-set .pk-drill-check').click();
-    const box = page.locator('.pkp-fb'); await box.waitFor();
+    const set = page.locator('.pkp-set');
+    const answer = set.getByRole('group', {name:'选项'}).getByRole('button', {name:/^B\s*in$/});
+    await answer.click();
+    assert.equal(await answer.getAttribute('aria-pressed'), 'true');
+    await set.getByRole('button', {name:/^出手/}).click();
+    const box = set.locator('.pkq-fb'); await box.waitFor();
     await box.getByRole('button', {name:'讲给我听'}).click();
     await box.getByText(/限流或额度不足/).waitFor();
     assert.equal(await page.evaluate(() => qaExplainTimeout), 260000);

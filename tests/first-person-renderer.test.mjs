@@ -85,7 +85,7 @@ test('first-person rendering keeps code, links, 我们 and idioms, and both copi
 
 test('the App chat window shows 碧琪 for every mode through one display-only injection', () => {
   const fragment = fs.readFileSync(new URL('../ui/injections/laolao-head.fragment.html', import.meta.url), 'utf8');
-  assert.match(fragment, /<script defer src="\/laolao-first-person\.js\?v=firstperson\d+"><\/script>/);
+  assert.match(fragment, /<script defer src="\/laolao-first-person\.js\?v=@hash"><\/script>/);
   const ui = fs.readFileSync(new URL('../ui/injections/laolao-first-person.js', import.meta.url), 'utf8');
   // Only text node values change: no element rewrites that would break Lit markers.
   assert.doesNotMatch(ui, /\.(?:innerHTML|textContent|innerText)\s*=[^=]/);

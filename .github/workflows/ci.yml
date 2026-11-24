@@ -24,8 +24,13 @@ jobs:
           deps="$RUNNER_TEMP/pinkie-ci-deps"
           version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
           npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
-          "$deps/node_modules/.bin/playwright" install --with-deps webkit
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit chromium
           echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Verify M5 visual baseline 3x determinism and <=0.1% diff on Linux Chromium
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test tests/visual-baseline.test.mjs
       - name: Capture the pinned main Metre regression baseline on Linux
         run: |
           git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"

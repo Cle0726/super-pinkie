@@ -1,13 +1,13 @@
 (() => {
   "use strict";
-
+  const asset = (p) => (window.__pinkieAsset ? window.__pinkieAsset(p) : p);
   const modes = {
-    chat: { label: "唠嗑模式", agent: "main", avatar: "/laolao-mode-chat-hd.png?v=avatars7" },
-    project: { label: "项目模式", agent: "project", avatar: "/laolao-mode-project-hd.png?v=avatars7" },
-    thinking: { label: "想法模式", agent: "thinking", avatar: "/laolao-mode-thinking-hd.png?v=avatars7" },
-    learning: { label: "学习模式", agent: "learning", avatar: "/laolao-mode-learning-hd.png?v=avatars7" },
-    unrestricted: { label: "无限制模式", agent: "unrestricted", avatar: "/laolao-mode-unrestricted-hd.png?v=avatars7" },
-    metre: { label: "Metre", agent: "metre", avatar: "/laolao-mode-metre.svg?v=cathead1" },
+    chat: { label: "唠嗑模式", agent: "main", avatar: asset("/laolao-mode-chat-hd.png") },
+    project: { label: "项目模式", agent: "project", avatar: asset("/laolao-mode-project-hd.png") },
+    thinking: { label: "想法模式", agent: "thinking", avatar: asset("/laolao-mode-thinking-hd.png") },
+    learning: { label: "学习模式", agent: "learning", avatar: asset("/laolao-mode-learning-hd.png") },
+    unrestricted: { label: "无限制模式", agent: "unrestricted", avatar: asset("/laolao-mode-unrestricted-hd.png") },
+    metre: { label: "Metre", agent: "metre", avatar: asset("/laolao-mode-metre.svg") },
   };
 
   const activeMode = () => {
@@ -420,15 +420,15 @@
   window.addEventListener("pagehide", () => railObserver?.disconnect(), { once: true });
   const mountSelector = '.shell--chat, .chat-workbench, .sidebar-shell__footer, .sidebar-nav, .dashboard-header__breadcrumb, .agent-chat__input, .sidebar-footer-actions';
   if (typeof MutationObserver === "function") {
-    const mounts = new MutationObserver(records => {
+    const mounts = window.Pinkie?.domWatch?.createObserver(records => {
       if (records.some(rec => [...rec.addedNodes, ...rec.removedNodes].some(
         node => node.matches?.(mountSelector) || node.querySelector?.(mountSelector)
           || (node.nodeType === 1 && rec.target.matches?.('.sidebar-footer-actions, .sidebar-footer-bar'))
       ))) schedule();
     });
-    mounts.observe(document.documentElement, {childList: true, subtree: true});
+    mounts?.watch(document.documentElement, {childList: true});
   } else {
-    setInterval(schedule, 1200);
+    window.Pinkie?.domWatch?.poll(schedule, 1200);
   }
   window.addEventListener("pinkie:session-selected", schedule);
   window.addEventListener("pinkie:sidebar-gateway-ready", schedule);

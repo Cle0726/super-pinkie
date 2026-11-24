@@ -16,17 +16,28 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
+STAMP_SCRIPT = ROOT / 'tools/assets/stamp.mjs'
+HASH_LEN = 10
 TAG = re.compile(r'<script\b[^>]*\bsrc=["\'][^"\']+["\'][^>]*>\s*</script>|<link\b[^>]*>', re.I)
 REF = re.compile(r'\b(?:src|href)=["\']([^"\']+)["\']', re.I)
 NATIVE = re.compile(r'assets/index-[^/]+\.(?:js|css)$')
+CSS_URL_HASH = re.compile(r'url\((["\']?)(\.?/)?(laolao-[A-Za-z0-9._/-]+)\?v=(?:@hash|[a-f0-9]{10})\1\)')
+CHAT_IMPORT = re.compile(rb'(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"\'\\)]*)?')
 NATIVE_SLOT = '<!-- pinkie-native-assets -->'
 MANIFEST = 'pinkie-ui-manifest.json'
+ASSET_MANIFEST_JS = 'laolao-asset-manifest.js'
+HEAD_FRAGMENT = 'laolao-head.fragment.html'
 FRAGMENTS = {'laolao-head.fragment.html', 'laolao-body.fragment.html'}
 RUNTIME_DATA = {'laolao-stats.json', 'laolao-quota.json', 'laolao-exam-packs.json'}
+GENERATED_UI = {ASSET_MANIFEST_JS, HEAD_FRAGMENT}
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def sha10(data):
+    return digest(data)[:HASH_LEN]
 
 
 def ref_path(ref):
@@ -87,15 +98,94 @@ def source_files(root):
     return result
 
 
-def version_tag(tag, files):
+def read_entry_bytes(item):
+    if isinstance(item, (bytes, bytearray)):
+        return bytes(item)
+    return Path(item).read_bytes()
+
+
+def render_asset_manifest_js(hashes):
+    table = {k: hashes[k] for k in sorted(hashes) if not k.startswith('assets/') and k not in GENERATED_UI and k not in FRAGMENTS}
+    body = json.dumps(table, ensure_ascii=False, indent=2).replace('\n', '\n  ')
+    return (
+        '(() => {\n'
+        '  "use strict";\n'
+        f'  const M = {body};\n'
+        '  window.__pinkieAssetManifest = M;\n'
+        '  window.__pinkieAsset = (p) => {\n'
+        '    const s = String(p || "");\n'
+        '    const q = s.indexOf("?");\n'
+        '    const clean = q < 0 ? s : s.slice(0, q);\n'
+        '    const key = clean.replace(/^(?:\\.\\/|\\/)+/, "");\n'
+        '    const h = M[key];\n'
+        '    return h ? `${clean}?v=${h}` : s;\n'
+        '  };\n'
+        '})();\n'
+    ).encode('utf-8')
+
+
+def stamped_sources(root, files=None):
+    root = Path(root)
+    if files is None:
+        files = source_files(root)
+    data_map = {name: read_entry_bytes(src) for name, src in files.items()}
+    hashes = {name: sha10(data) for name, data in data_map.items()}
+    for name in sorted(data_map):
+        if name.startswith('laolao-') and name.endswith('.css'):
+            text = data_map[name].decode('utf-8')
+            if CSS_URL_HASH.search(text):
+                stamped = CSS_URL_HASH.sub(
+                    lambda m: f'url({m[1]}{m[2] or ""}{m[3]}?v={hashes[m[3]]}{m[1]})' if m[3] in hashes else m[0],
+                    text,
+                ).encode('utf-8')
+                data_map[name] = stamped
+                hashes[name] = sha10(stamped)
+    for name in sorted(data_map):
+        if NATIVE.fullmatch(name) and name.endswith('.js'):
+            def update_chat(match):
+                target_rel = 'assets/' + match[1].decode()[2:]
+                target_bytes = data_map.get(target_rel)
+                ver = sha10(target_bytes if target_bytes is not None else match[1]).encode()
+                return match[1] + b'?v=' + ver
+            stamped = CHAT_IMPORT.sub(update_chat, data_map[name])
+            data_map[name] = stamped
+            hashes[name] = sha10(stamped)
+    manifest_js = render_asset_manifest_js(hashes)
+    data_map[ASSET_MANIFEST_JS] = manifest_js
+    hashes[ASSET_MANIFEST_JS] = sha10(manifest_js)
+    head_path = root / 'ui/injections' / HEAD_FRAGMENT
+    if head_path.is_file():
+        head_text = head_path.read_text(encoding='utf-8').replace('\r\n', '\n').lstrip('\ufeff')
+        head_text = re.sub(
+            r'^[ \t]*<script\b[^>]*\bsrc=["\']/?laolao-asset-manifest\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>[ \t]*\n?',
+            '',
+            head_text,
+            flags=re.I | re.M,
+        )
+        head_text = TAG.sub(lambda m: version_tag(m[0], data_map, hashes), head_text)
+        manifest_tag = f'<script src="/{ASSET_MANIFEST_JS}?v={hashes[ASSET_MANIFEST_JS]}"></script>'
+        head_text = re.sub(
+            r'(<script\b[^>]*\bsrc=["\']/laolao-night\.js\?v=[^"\']+["\'][^>]*>\s*</script>)',
+            lambda m: m[1] + '\n' + manifest_tag,
+            head_text,
+            count=1,
+            flags=re.I,
+        )
+        data_map[HEAD_FRAGMENT] = head_text.encode('utf-8')
+        hashes[HEAD_FRAGMENT] = sha10(data_map[HEAD_FRAGMENT])
+    return data_map, hashes
+
+
+def version_tag(tag, files, hashes=None):
     match = REF.search(tag)
     if not match:
         raise ValueError(f'entry tag has no resource: {tag}')
     path = ref_path(match[1])
-    if path not in files:
+    if path not in files and (hashes is None or path not in hashes):
         raise ValueError(f'entry references an unbundled resource: {path}')
-    query = [(k, v) for k, v in parse_qsl(urlsplit(match[1]).query) if k != 'h']
-    query.append(('h', digest(files[path].read_bytes())[:12]))
+    ver = hashes[path] if hashes and path in hashes else sha10(read_entry_bytes(files[path]))
+    query = [(k, v) for k, v in parse_qsl(urlsplit(match[1]).query) if k not in ('v', 'h')]
+    query.append(('v', ver))
     return tag[:match.start(1)] + '/' + path + '?' + urlencode(query) + tag[match.end(1):]
 
 
@@ -103,6 +193,7 @@ def entry_tags(root, files):
     fragment = (Path(root) / 'ui/injections/laolao-head.fragment.html').read_text(encoding='utf-8')
     if fragment.count(NATIVE_SLOT) != 1:
         raise ValueError('shared head must contain exactly one native-assets slot')
+    data_map, hashes = stamped_sources(root, files)
     before, after = fragment.split(NATIVE_SLOT)
     tags = []
     for section in (before, after):
@@ -111,13 +202,17 @@ def entry_tags(root, files):
             ref = REF.search(match[0])
             if not ref or not owned(ref[1]) or retired(ref_path(ref[1])):
                 raise ValueError(f'invalid shared head entry: {match[0]}')
-            group.append(version_tag(match[0], files))
+            if ref_path(ref[1]) == ASSET_MANIFEST_JS:
+                continue
+            group.append(version_tag(match[0], data_map, hashes))
         tags.append(group)
     paths = [ref_path(REF.search(t)[1]) for group in tags for t in group]
     if len(paths) != len(set(paths)):
         raise ValueError('duplicate shared head resource')
     if not paths or paths[0] != 'laolao-night.js':
         raise ValueError('night bootstrap must run before the upstream theme bootstrap')
+    manifest_tag = f'<script src="/{ASSET_MANIFEST_JS}?v={hashes[ASSET_MANIFEST_JS]}"></script>'
+    tags[0].insert(1, manifest_tag)
     return tags
 
 
@@ -130,10 +225,11 @@ def outside_inline(html, transform):
     return ''.join(chunk if i % 2 else transform(chunk) for i, chunk in enumerate(chunks))
 
 
-def normalize_index(html, root, files):
+def normalize_index(html, root, files, control=None):
     # Browser and gateway must hash exactly the same LF-normalized script bytes.
     html = html.replace('\r\n', '\n').lstrip('\ufeff')
     original_inline = inline_scripts(html)
+    data_map, hashes = stamped_sources(root, files)
     html = re.sub(r",?\s*interactive-widget=[A-Za-z-]+", "", html)
     # WKWebView already sets this at document start; WebView2's loaded bridge
     # used to arrive after the first paint. Share the same initial surface.
@@ -146,11 +242,15 @@ def normalize_index(html, root, files):
         path = ref_path(ref[1])
         if NATIVE.fullmatch(path):
             # Upstream names stay hashed after our runtime patch. Advance its
-            # cache key without dropping independent surface/feature flags.
+            # cache key from actual content bytes without dropping feature flags.
             query = [(k, v) for k, v in parse_qsl(urlsplit(ref[1]).query) if k not in ('v', 'h')]
-            query.append(('v', 'clekk-history59'))
-            if path in files:
-                query.append(('h', digest(files[path].read_bytes())[:12]))
+            if path in hashes:
+                ver = hashes[path]
+            elif control is not None and (Path(control) / path).is_file():
+                ver = sha10((Path(control) / path).read_bytes())
+            else:
+                ver = sha10(path.encode('utf-8'))
+            query.append(('v', ver))
             native.append(match[0][:ref.start(1)] + '/' + path + '?' + urlencode(query) + match[0][ref.end(1):])
             return ''
         return '' if owned(ref[1]) else match[0]
@@ -158,8 +258,8 @@ def normalize_index(html, root, files):
     if len([t for t in native if t.lower().startswith('<script')]) != 1:
         raise ValueError('expected exactly one upstream entry module')
     groups = entry_tags(root, files)
-    early = groups[0].pop(0)
-    block = '\n'.join(groups[0] + native + groups[1])
+    early = '\n    '.join(groups[0][:2])
+    block = '\n'.join(groups[0][2:] + native + groups[1])
     # Whitespace outside scripts is disposable. Clearing former tag-only lines
     # makes repeated installation byte-for-byte idempotent.
     html = outside_inline(html, lambda text: re.sub(r'\n{3,}', '\n\n', re.sub(r'(?m)^[ \t]+$', '', text)))
@@ -168,7 +268,7 @@ def normalize_index(html, root, files):
     if 'id="laolao-splash"' not in html:
         body = (Path(root) / 'ui/injections/laolao-body.fragment.html').read_text(encoding='utf-8').replace('\r\n', '\n').replace('"./laolao-', '"/laolao-')
         html = re.sub(r'(<body\b[^>]*>)', lambda m: m[1] + '\n' + body, html, count=1, flags=re.I)
-    handoff = version_tag('<script src="/laolao-handoff-bootstrap.js?v=handoff7"></script>', files)
+    handoff = version_tag('<script src="/laolao-handoff-bootstrap.js?v=@hash"></script>', data_map, hashes)
     html = re.sub(r'\s*(?=<openclaw-app\b)', lambda m: '\n    ' + handoff + '\n    ', html, count=1)
     html = re.sub(r'<title>[^<]*</title>', '<title>超級碧琪</title>', html, count=1)
     if inline_scripts(html) != original_inline:
@@ -190,23 +290,33 @@ def refresh_native_imports(control):
         original = entry.read_bytes()
         def update(match):
             target = entry.parent / match[1].decode()
-            cache = b'&h=' + digest(target.read_bytes())[:12].encode() if target.is_file() else b''
-            return match[1] + b'?v=clekk-history59' + cache
-        updated = re.sub(rb'(\./chat-page-[A-Za-z0-9_-]+\.js)(?:\?v=[^`"\']*)?', update, original)
+            ver = sha10(target.read_bytes() if target.is_file() else match[1]).encode()
+            return match[1] + b'?v=' + ver
+        updated = CHAT_IMPORT.sub(update, original)
         write_if_changed(entry, updated)
+
+
+def run_stamp_tool(root, control):
+    script = Path(root) / 'tools/assets/stamp.mjs'
+    if not script.is_file():
+        script = STAMP_SCRIPT
+    node = shutil.which('node')
+    if script.is_file() and node:
+        subprocess.run([node, str(script), '--root', str(root), '--control-ui', str(control)], check=True)
 
 
 def install(root, control):
     root, control = Path(root), Path(control)
     files = source_files(root)
+    data_map, _ = stamped_sources(root, files)
     index = control / 'index.html'
     # The entrypoint is browser code too. A platform runtime overlay must not
     # supply different feature flags, bootstrap or fallback UI.
     template = root / 'ui/control-ui.index.html'
     base = template if template.is_file() else index
-    html = normalize_index(base.read_bytes().decode('utf-8-sig'), root, files)
-    for name, source in files.items():
-        write_if_changed(control / name, source.read_bytes())
+    base_html = base.read_bytes().decode('utf-8-sig')
+    for name, data in data_map.items():
+        write_if_changed(control / name, data)
     for name in ('laolao-stats.json', 'laolao-quota.json'):
         if not (control / name).exists():
             write_if_changed(control / name, b'null\n')
@@ -214,10 +324,11 @@ def install(root, control):
     # User statistics and runtime-generated learning metadata are not artwork.
     for file in list(control.rglob('*')):
         name = file.relative_to(control).as_posix()
-        if file.is_file() and (retired(name) or (ui_resource(name) and name not in files and name not in RUNTIME_DATA)):
+        if file.is_file() and (retired(name) or (ui_resource(name) and name not in data_map and name not in RUNTIME_DATA)):
             file.unlink()
-    write_if_changed(index, html.encode('utf-8'))
     refresh_native_imports(control)
+    html = normalize_index(base_html, root, files, control)
+    write_if_changed(index, html.encode('utf-8'))
     actual = inspect(root, control)
     write_if_changed(control / MANIFEST, (json.dumps(actual, ensure_ascii=False, indent=2) + '\n').encode())
     return actual
@@ -226,9 +337,10 @@ def install(root, control):
 def inspect(root, control):
     root, control = Path(root), Path(control)
     expected = source_files(root)
+    data_map, hashes = stamped_sources(root, expected)
     html = (control / 'index.html').read_bytes().decode('utf-8-sig')
     template = root / 'ui/control-ui.index.html'
-    if template.is_file() and html != normalize_index(template.read_bytes().decode('utf-8-sig'), root, expected):
+    if template.is_file() and html != normalize_index(template.read_bytes().decode('utf-8-sig'), root, expected, control):
         raise ValueError('package entry HTML differs from the shared entrypoint')
     wanted = [t for group in entry_tags(root, expected) for t in group]
     actual = [m[0] for m in TAG.finditer(html) if (r := REF.search(m[0])) and owned(r[1])
@@ -239,7 +351,7 @@ def inspect(root, control):
         if '\r' in script:
             raise ValueError('CR in an inline script would break the gateway CSP')
     handoffs = [m[0] for m in TAG.finditer(html) if (r := REF.search(m[0])) and ref_path(r[1]) == 'laolao-handoff-bootstrap.js']
-    if handoffs != [version_tag('<script src="/laolao-handoff-bootstrap.js?v=handoff7"></script>', expected)]:
+    if handoffs != [version_tag('<script src="/laolao-handoff-bootstrap.js?v=@hash"></script>', data_map, hashes)]:
         raise ValueError('missing, duplicate or stale splash handoff bootstrap')
     manifest = {'schema': 1, 'injections': actual, 'resources': {}}
     if template.is_file():
@@ -249,12 +361,12 @@ def inspect(root, control):
         ref = REF.search(match[0])
         if ref and ref_path(ref[1]).startswith('assets/') and not (control / ref_path(ref[1])).is_file():
             raise ValueError(f'package is missing upstream entry resource: {ref_path(ref[1])}')
-    for name, source in expected.items():
+    for name, expected_data in data_map.items():
         file = control / name
         if not file.is_file():
             raise ValueError(f'package is missing UI resource: {name}')
         data = file.read_bytes()
-        if data != source.read_bytes():
+        if data != expected_data:
             raise ValueError(f'package has stale/modified UI resource: {name}')
         manifest['resources'][name] = {'sha256': digest(data), 'bytes': len(data)}
     # The browser's upstream chunks are part of the visible UI as well. Read
@@ -269,7 +381,7 @@ def inspect(root, control):
         name = file.relative_to(control).as_posix()
         if file.is_file() and retired(name):
             raise ValueError(f'retired Cle UI remains in package: {file}')
-        if file.is_file() and ui_resource(name) and name not in expected and name not in RUNTIME_DATA:
+        if file.is_file() and ui_resource(name) and name not in data_map and name not in RUNTIME_DATA:
             raise ValueError(f'unlisted UI resource remains in package: {name}')
     return manifest
 
@@ -311,7 +423,12 @@ def main():
         return
     if args.control_ui is None:
         parser.error('--control-ui is required')
-    result = (install if args.action == 'install' else inspect)(args.root, args.control_ui)
+    if args.action == 'install':
+        install(args.root, args.control_ui)
+        run_stamp_tool(args.root, args.control_ui)
+    result = inspect(args.root, args.control_ui)
+    if args.action == 'install':
+        write_if_changed(args.control_ui / MANIFEST, (json.dumps(result, ensure_ascii=False, indent=2) + '\n').encode())
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

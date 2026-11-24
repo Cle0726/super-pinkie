@@ -1,0 +1,374 @@
+{
+  "version": 1,
+  "description": "SuperPinkie Control UI injection region ownership registry (M3-1). Every file in laolao-head.fragment.html belongs to a region or common.",
+  "commonCrossCuttingCss": [
+    "laolao-theme.css",
+    "laolao-classic-shell.css",
+    "laolao-night.css",
+    "laolao-redesign.css",
+    "laolao-ui-subtraction.css",
+    "laolao-motion-system.css",
+    "laolao-platform-surface.css",
+    "laolao-icons.css",
+    "laolao-metre-skin.css",
+    "laolao-metre-backdrop.css"
+  ],
+  "regions": [
+    {
+      "id": "common",
+      "name": "公共基础（主题、动效、调度与第三方库）",
+      "crossCutting": true,
+      "rootSelectors": [],
+      "files": [
+        "laolao-dom-watch.js",
+        "laolao-night.js",
+        "laolao-night.css",
+        "laolao-motion-preference.js",
+        "laolao-motion.js",
+        "laolao-motion-system.css",
+        "laolao-quiet.js",
+        "laolao-tuning.js",
+        "laolao-icons.css",
+        "laolao-icons.js",
+        "laolao-native.js",
+        "laolao-platform-surface.js",
+        "laolao-platform-surface.css",
+        "laolao-theme.css",
+        "laolao-classic-shell.css",
+        "laolao-classic-shell.js",
+        "laolao-ui-subtraction.css",
+        "laolao-redesign.css",
+        "laolao-perf.js",
+        "laolao-page-warmup.js",
+        "laolao-divider.css",
+        "laolao-desensitize.js",
+        "laolao-laser-pointer.js",
+        "laolao-vendor-gsap.min.js",
+        "vendor/lucide/icons.js",
+        "vendor/study-desk-before.js",
+        "vendor/gsap/gsap.min.js",
+        "vendor/gsap/SplitText.min.js",
+        "vendor/gsap/DrawSVGPlugin.min.js",
+        "vendor/canvas-confetti/confetti.browser.min.js",
+        "vendor/study-desk-after.js"
+      ]
+    },
+    {
+      "id": "sidebar",
+      "name": "侧栏、会话列表与角色栏",
+      "rootSelectors": [
+        ".sidebar-shell",
+        ".sidebar-brand",
+        ".sidebar-footer-bar",
+        ".laolao-sidebar"
+      ],
+      "allowedCrossRegionCss": [
+        "laolao-workbench.css"
+      ],
+      "files": [
+        "laolao-sidebar.css",
+        "laolao-sidebar.js",
+        "laolao-sidebar-surface.css",
+        "laolao-sidebar-autohide.js",
+        "laolao-side-layout.css",
+        "laolao-side-layout.js",
+        "laolao-session-list.js",
+        "laolao-session-cards.css",
+        "laolao-session-cards.js",
+        "laolao-session-tools.css",
+        "laolao-session-tools.js",
+        "laolao-crew.css",
+        "laolao-crew.js"
+      ]
+    },
+    {
+      "id": "mode-switcher",
+      "name": "模式切换菜单与转场入口",
+      "rootSelectors": [
+        ".laolao-mode-switcher",
+        ".laolao-mode-menu"
+      ],
+      "files": [
+        "laolao-mode-switcher.js",
+        "laolao-mode-transition-fx.css",
+        "laolao-mode-transition-fx.js",
+        "laolao-mode-menu-fx.css",
+        "laolao-party-entry.js",
+        "laolao-roundtable-entry.js"
+      ]
+    },
+    {
+      "id": "model-picker",
+      "name": "模型选择菜单与思考强度滑块",
+      "rootSelectors": [
+        ".chat-controls__model",
+        ".chat-controls__inline-select-menu"
+      ],
+      "allowedCrossRegionCss": [
+        "laolao-workbench.css"
+      ],
+      "files": [
+        "laolao-model-picker.css",
+        "laolao-model-picker.js"
+      ]
+    },
+    {
+      "id": "composer",
+      "name": "底部输入框、托盘与上下文压缩",
+      "rootSelectors": [
+        ".agent-chat__composer-combobox",
+        ".laolao-composer-tray"
+      ],
+      "files": [
+        "laolao-composer-tray.css",
+        "laolao-composer-tray.js",
+        "laolao-composer-dock.js",
+        "laolao-context-compact.js",
+        "laolao-queue-steer.js",
+        "laolao-live-voice.js",
+        "laolao-deep-think.js",
+        "laolao-web-gpt-collab.js"
+      ]
+    },
+    {
+      "id": "chat-thread",
+      "name": "消息列表、富文本、工作过程卡片与运行状态",
+      "rootSelectors": [
+        ".chat-tool-card",
+        ".laolao-process-card",
+        ".laolao-tool-rows",
+        ".laolao-rich"
+      ],
+      "files": [
+        "laolao-process-card.css",
+        "laolao-process-card.js",
+        "laolao-tool-rows.css",
+        "laolao-tool-stream.css",
+        "laolao-tool-stream.js",
+        "laolao-tool-images.css",
+        "laolao-tool-images.js",
+        "laolao-tool-kind.js",
+        "laolao-rich.css",
+        "laolao-rich.js",
+        "laolao-stream-fx.js",
+        "laolao-message-actions.css",
+        "laolao-message-actions.js",
+        "laolao-artifacts.css",
+        "laolao-artifacts.js",
+        "laolao-phrases.js",
+        "laolao-biqi-notices.js",
+        "laolao-first-person.js",
+        "laolao-image-viewer.js",
+        "laolao-link-viewer.js",
+        "laolao-resume.js",
+        "laolao-progress.js",
+        "laolao-plan.js",
+        "laolao-selection-actions.js",
+        "laolao-run-status.css",
+        "laolao-run-status.js",
+        "laolao-run-notify.js",
+        "laolao-ask-user.css",
+        "laolao-ask-user.js",
+        "laolao-cle-stage.css",
+        "laolao-cle-stage.js",
+        "laolao-cle-signature.js",
+        "laolao-cle-classic.js",
+        "laolao-cle-forms.js",
+        "laolao-cle-ink.js",
+        "laolao-cle-kit.js",
+        "laolao-cle-steps.js",
+        "laolao-reading-view.css",
+        "laolao-reading-view.js",
+        "laolao-usage-stats.css",
+        "laolao-usage-stats.js",
+        "laolao-capabilities.js"
+      ]
+    },
+    {
+      "id": "settings",
+      "name": "设置页、记忆、权限、模型配置与更新弹窗",
+      "rootSelectors": [
+        ".laolao-settings-user",
+        ".laolao-power-settings",
+        ".laolao-model-setup",
+        ".laolao-feedback",
+        ".laolao-update-dialog"
+      ],
+      "files": [
+        "laolao-settings-user.css",
+        "laolao-settings-user.js",
+        "laolao-power-settings.css",
+        "laolao-power-settings.js",
+        "laolao-model-setup.css",
+        "laolao-model-setup.js",
+        "laolao-memory.css",
+        "laolao-memory.js",
+        "laolao-material-preview.css",
+        "laolao-material-preview.js",
+        "laolao-feedback.css",
+        "laolao-feedback.js",
+        "laolao-rest.js",
+        "laolao-update-dialog.css",
+        "laolao-update-dialog.js"
+      ]
+    },
+    {
+      "id": "metre",
+      "name": "Metre 皮肤、看板与小猫",
+      "rootSelectors": [
+        "[data-metre-board]",
+        ".metre-board",
+        ".metre-cat"
+      ],
+      "files": [
+        "laolao-metre-skin.css",
+        "laolao-metre-skin.js",
+        "laolao-metre-backdrop.css",
+        "laolao-metre-backdrop.js",
+        "laolao-metre-board.css",
+        "laolao-metre-board.js",
+        "laolao-metre-board-data.js",
+        "laolao-metre-engine.css",
+        "laolao-metre-engine.js",
+        "laolao-metre-brand.css",
+        "laolao-metre-brand.js",
+        "laolao-metre-cat.css",
+        "laolao-metre-cat.js",
+        "laolao-metre-cat-frames.js",
+        "laolao-metre-home.js",
+        "laolao-metre-lock.css",
+        "laolao-metre-lock.js",
+        "laolao-metre-prompts.js",
+        "laolao-metre-transition.js"
+      ]
+    },
+    {
+      "id": "workbench",
+      "name": "代码工作台与工作区聚焦",
+      "rootSelectors": [
+        ".laolao-workbench",
+        ".laolao-workspace-focus"
+      ],
+      "allowedCrossRegionCss": [
+        "laolao-study-desk.css"
+      ],
+      "files": [
+        "laolao-workbench.css",
+        "laolao-workbench.js",
+        "laolao-workspace-focus.css",
+        "laolao-workspace-focus.js"
+      ]
+    },
+    {
+      "id": "study-desk",
+      "name": "学习台、题库、复习、笔记本与学习内联",
+      "rootSelectors": [
+        ".pk-desk",
+        ".laolao-study-desk"
+      ],
+      "files": [
+        "laolao-desk-kit.css",
+        "laolao-desk-kit.js",
+        "laolao-study-desk.css",
+        "laolao-study-desk.js",
+        "laolao-study-desk-board.css",
+        "laolao-study-desk-board.js",
+        "laolao-study-desk-vocab.css",
+        "laolao-study-desk-vocab.js",
+        "laolao-study-desk-lesson.css",
+        "laolao-study-desk-lesson.js",
+        "laolao-study-desk-split.css",
+        "laolao-study-desk-split.js",
+        "laolao-study-desk-notes.css",
+        "laolao-study-desk-notes.js",
+        "laolao-desk-chat.css",
+        "laolao-desk-chat.js",
+        "laolao-study-desk-conversation.js",
+        "laolao-study-desk-handbook.css",
+        "laolao-study-desk-handbook.js",
+        "laolao-desk-reward.css",
+        "laolao-desk-reward.js",
+        "laolao-study-desk-drill.css",
+        "laolao-study-desk-drill.js",
+        "laolao-study-desk-ink.css",
+        "laolao-study-desk-panes.css",
+        "laolao-learning-stage.css",
+        "laolao-learning-stage.js",
+        "laolao-learning-library.css",
+        "laolao-learning-library.js",
+        "laolao-learning-inline.css",
+        "laolao-learning-inline.js",
+        "laolao-learning-practice.css",
+        "laolao-learning-practice.js",
+        "laolao-learning-explore.css",
+        "laolao-learning-explore.js",
+        "laolao-learning-devices.css",
+        "laolao-learning-devices.js",
+        "laolao-learning-reminder.css",
+        "laolao-learning-reminder.js"
+      ]
+    },
+    {
+      "id": "study-game",
+      "name": "学习台游戏（HUD、对战、商店、地图、模考）",
+      "rootSelectors": [
+        ".laolao-game-hud",
+        ".laolao-game-battle",
+        ".laolao-game-shop",
+        ".laolao-game-world",
+        ".laolao-game-exam",
+        ".laolao-game-loadout",
+        ".laolao-game-stage",
+        ".laolao-game-practice"
+      ],
+      "files": [
+        "laolao-game-fx.css",
+        "laolao-game-fx.js",
+        "laolao-game-sig.js",
+        "laolao-game-demo.js",
+        "laolao-game-form-stage.js",
+        "laolao-game-hud.css",
+        "laolao-game-hud.js",
+        "laolao-game-battle.css",
+        "laolao-game-battle.js",
+        "laolao-game-shop.css",
+        "laolao-game-shop.js",
+        "laolao-game-world.css",
+        "laolao-game-world.js",
+        "laolao-game-exam.css",
+        "laolao-game-exam.js",
+        "laolao-game-loadout.css",
+        "laolao-game-loadout.js",
+        "laolao-game-stage.css",
+        "laolao-game-stage.js",
+        "laolao-game-practice.css",
+        "laolao-game-practice.js"
+      ]
+    },
+    {
+      "id": "companion-and-home",
+      "name": "陪伴小马、启动首页与开屏",
+      "rootSelectors": [
+        ".laolao-companion",
+        ".laolao-startup-home",
+        ".laolao-splash"
+      ],
+      "allowedCrossRegionCss": [
+        "laolao-study-desk.css",
+        "laolao-workbench.css",
+        "laolao-metre-brand.css"
+      ],
+      "files": [
+        "laolao-companion.css",
+        "laolao-companion.js",
+        "laolao-buddy-rig.js",
+        "laolao-immersion.js",
+        "laolao-startup-home.css",
+        "laolao-startup-home.js",
+        "laolao-splash.css",
+        "laolao-splash.js",
+        "laolao-splash-fx.js"
+      ]
+    }
+  ]
+}

@@ -81,7 +81,7 @@ test('a real mode change queues exactly one top portrait swap, while normal repa
   assert.match(css, /laolao-mode-fx-top-in/);
   assert.match(css, /laolao-mode-fx-top-halo-flash/);
   assert.match(css, /laolao-mode-switcher:hover .laolao-mode-button__portrait:not\(/);
-  assert.equal((switcher.match(/new MutationObserver\(/g) || []).length, 1, 'FX adds no new observer');
+  assert.equal((switcher.match(/new MutationObserver\(/g) || []).length, 0, 'FX adds no new observer');
 });
 
 test('reduced motion removes all portrait effects but retains a static halo', () => {

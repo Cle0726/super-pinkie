@@ -156,7 +156,7 @@ test('the config loads early and synchronously; the page loads with the settings
   const head = read('ui/injections/laolao-head.fragment.html');
   const scripts = [...head.matchAll(/<script[^>]*src="\/([^"?]+)/g)].map((m) => m[1]);
   // Metre's skin switch and quiet scheduler must also run before the first frame.
-  assert.deepEqual(scripts.slice(0, 5), ['laolao-night.js', 'laolao-motion-preference.js',
+  assert.deepEqual(scripts.slice(0, 6), ['laolao-night.js', 'laolao-dom-watch.js', 'laolao-motion-preference.js',
     'laolao-metre-skin.js', 'laolao-quiet.js', 'laolao-tuning.js']);
   assert.doesNotMatch(head.split('laolao-tuning.js')[0], /defer/);
   const power = scripts.indexOf('laolao-power-settings.js');
@@ -168,7 +168,7 @@ test('the page is easy to find and owns no second motion switch', () => {
   const page0 = read('ui/injections/laolao-power-settings.js');
   assert.match(page0, /querySelector\(".chat-workspace-rail"\)/, 'entry lives in the workspace rail');
   assert.match(page0, /getElementById\("pinkie-roundtable-entry"\)/, 'right under 灵感圆桌');
-  assert.match(page0, /setInterval\(mountRail, 1500\)/, 'polled like the other rail entries, no subtree observer');
+  assert.match(page0, /(?:setInterval|domWatch\?\.poll)\(mountRail, 1500\)/, 'polled like the other rail entries, no subtree observer');
   assert.doesNotMatch(page0, /new MutationObserver/);
   assert.match(read('ui/injections/laolao-companion.js'), /item\("power", "进阶调节", \(\) => window\.__pinkiePower\.open\(\)/);
   const page = read('ui/injections/laolao-power-settings.js');

@@ -2615,7 +2615,8 @@ test('继续 keeps an explicitly pending task on its retry lane',t=>{
 });
 
 test('custom plugin never relies on OpenClaw trusted-only in-process gateway requests',()=>{
-  const source=fs.readFileSync(new URL('../services/mode-architecture/index.mjs',import.meta.url),'utf8');
+  const source=['index.mjs','mode-constants.mjs','watchdog-runtime.mjs']
+    .map(f=>fs.readFileSync(new URL(`../services/mode-architecture/${f}`,import.meta.url),'utf8')).join('\n');
   assert.doesNotMatch(source,/runtime\.gateway\.request/);
   assert.match(source,/'gateway', 'call', 'chat\.send'/);
   assert.match(source,/OPENCLAW_ROOT[\s\S]*openclaw\.mjs/);

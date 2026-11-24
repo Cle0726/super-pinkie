@@ -11,11 +11,15 @@ const css = read('laolao-metre-engine.css');
 
 test('the engine stage is loaded by the head fragment and reuses the very same C.le. three.js module', () => {
   const head = read('laolao-head.fragment.html');
-  assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-engine\.css\?v=[\w.]+">/);
-  assert.match(head, /<script defer src="\/laolao-metre-engine\.js\?v=[\w.]+"><\/script>/);
-  const stageImport = /import\('\.\/(laolao-cle-space\.js\?v=\d+)'\)/.exec(read('laolao-cle-stage.js'))?.[1];
-  assert.ok(stageImport, 'cle-stage imports the particle signature dynamically');
-  assert.ok(js.includes(`const CLE_SPACE = '/${stageImport}';`), 'same URL, so one module and one WebGL context');
+  assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-engine\.css\?v=@hash">/);
+  assert.match(head, /<script defer src="\/laolao-metre-engine\.js\?v=@hash"><\/script>/);
+  // 两边都经 window.__pinkieAsset 取 laolao-cle-space.js 的内容哈希（M2：不手写版本号），解析出来是同一个地址、同一份模块、一个 WebGL 上下文。
+  assert.match(read('laolao-cle-stage.js'), /import\(window\.__pinkieAsset \? window\.__pinkieAsset\('\.\/laolao-cle-space\.js'\) : '\.\/laolao-cle-space\.js'\)/,
+    'cle-stage imports the particle signature dynamically through the asset manifest');
+  assert.ok(js.includes("const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('/laolao-cle-space.js') : '/laolao-cle-space.js');"),
+    'same hashed URL, so one module and one WebGL context');
+  assert.ok(js.includes('import(CLE_SPACE())'));
+  assert.doesNotMatch(js, /laolao-cle-space\.js\?v=/, 'no hand-written version (M2)');
   assert.match(js, /new cle\.Space\(glyph, \{palette: 'cle', count: 1100, size: \.17, fitW: 10\.2, fitH: 5\.4, interactive: false\}\)/);
 });
 
@@ -520,7 +524,8 @@ test('the about card leaves the last slot for the third-party notices, and the n
   const block = /\/\/ NOTICES-BEGIN[\s\S]*?\/\/ NOTICES-END/.exec(js)[0];
   for (const line of ['MIT License', 'Copyright (c) 2026 T3 Tools Inc.', 'The above copyright notice and this permission notice shall be included in all',
     'copies or substantial portions of the Software.', 'OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE', 'https://github.com/pingdotgg/t3code', 'Apache-2.0']) assert.ok(block.includes(line), line);
-  assert.match(read('laolao-head.fragment.html'), /laolao-settings-user\.js\?v=guard4/, 'the settings file changed, so its version changed');
+  // M2 以后版本号由 tools/assets/stamp.mjs 按内容哈希生成：头片段里只写 @hash，文件一变哈希自动变。
+  assert.match(read('laolao-head.fragment.html'), /laolao-settings-user\.js\?v=@hash/, 'the version is the content hash stamped at build time');
 });
 
 test('in a browser: 第三方许可 shows a 查看 button that opens the full notices and closes again', {timeout: 40_000}, async t => {

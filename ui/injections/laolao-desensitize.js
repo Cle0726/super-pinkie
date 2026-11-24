@@ -342,7 +342,7 @@ html[data-theme-mode="dark"] .laolao-desensitize-btn{
 
   let sched = false;
   const tick = () => { if (sched) return; sched = true; requestAnimationFrame(() => { sched = false; render(); }); };
-  setInterval(tick, 700);
+  window.Pinkie?.domWatch?.poll(tick, 700);
   window.addEventListener("popstate", tick);
   window.addEventListener("laolao:modechange", tick);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePop(); });

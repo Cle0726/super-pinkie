@@ -14,14 +14,14 @@
   'use strict';
   if (window.__laolaoRich) return;
   window.__laolaoRich = true;
-
+  const asset = (p) => (window.__pinkieAsset ? window.__pinkieAsset(p) : p);
   const LANGS = new Set(['ui', 'chart', 'mermaid', 'followups', 'app']);
   const VENDOR = {
-    chart: './laolao-vendor-chart.js?v=4.5.1',
-    mermaid: './laolao-vendor-mermaid.js?v=12.0.0',
-    katex: './laolao-katex/katex.min.js?v=0.18.9',
-    katexCss: './laolao-katex/katex.min.css?v=0.18.9',
-    mhchem: './laolao-katex/mhchem.min.js?v=0.18.9',
+    chart: asset('./laolao-vendor-chart.js'),
+    mermaid: asset('./laolao-vendor-mermaid.js'),
+    katex: asset('./laolao-katex/katex.min.js'),
+    katexCss: asset('./laolao-katex/katex.min.css'),
+    mhchem: asset('./laolao-katex/mhchem.min.js'),
   };
   const night = () => document.documentElement.hasAttribute('data-pinkie-night');
   const toast = (m) => { try { window.__laolaoToast?.(m); } catch {} };
@@ -570,13 +570,13 @@
     let any = false;
     for (const [h, observer] of observers) if (!h.isConnected) { observer.disconnect(); observers.delete(h); any = true; }
     for (const h of document.querySelectorAll('.chat-thread-inner')) if (!observers.has(h)) {
-      const observer = new MutationObserver(changed);
-      observer.observe(h, {childList: true, subtree: true, attributes: true, attributeFilter: ['class']});
+      const observer = window.Pinkie?.domWatch?.createObserver(changed);
+      observer?.watch(h, {childList: true, attributes: true, attributeFilter: ['class']});
       observers.set(h, observer); any = true;
     }
     if (any) schedule();
   }
-  setInterval(attach, 400);
+  window.Pinkie?.domWatch?.poll(attach, 400);
   attach();
 
   // 昼夜切换：图表和流程图按新配色重画

@@ -131,12 +131,12 @@
     await releaseBook();state.book=data.book;state.locations=data.locations;state.location=Number(anchor.location||data.book.progress?.location||1);state.zoom=data.book.progress?.zoom||1;state.session=session();
     mountReader();closeShelf();window.dispatchEvent(new CustomEvent('pinkie:library-opened'));const content=state.reader.querySelector('.pinkie-reader__content');content.textContent='正在打开原文…';
     if(data.book.type==='pdf'){
-      await import('/laolao-vendor-pdf-compat.js?v=library1');
-      const [pdf,bytes]=await Promise.all([import('/laolao-vendor-pdf.mjs?v=6.4.299'),sourceFile(data.book)]);if(ticket!==state.openTicket)return;
-      pdf.GlobalWorkerOptions.workerSrc='/laolao-vendor-pdf-worker.mjs?v=6.4.299';state.pdfAPI=pdf;
+      const asset=p=>window.__pinkieAsset?window.__pinkieAsset(p):p;await import(asset('/laolao-vendor-pdf-compat.js'));
+      const [pdf,bytes]=await Promise.all([import(asset('/laolao-vendor-pdf.mjs')),sourceFile(data.book)]);if(ticket!==state.openTicket)return;
+      pdf.GlobalWorkerOptions.workerSrc=asset('/laolao-vendor-pdf-worker.mjs');state.pdfAPI=pdf;
       state.pdfTask=pdf.getDocument({data:bytes,isEvalSupported:false,cMapUrl:'/laolao-vendor-pdf-cmaps/',cMapPacked:true,standardFontDataUrl:'/laolao-vendor-pdf-standard-fonts/',wasmUrl:'/laolao-vendor-pdf-wasm/'});state.pdf=await state.pdfTask.promise;
     }else if(data.book.type==='epub'){
-      const [epub,bytes]=await Promise.all([import('/laolao-vendor-epub.mjs?v=78914ae'),sourceFile(data.book)]);if(ticket!==state.openTicket)return;
+      const [epub,bytes]=await Promise.all([import((window.__pinkieAsset||(p=>p))('/laolao-vendor-epub.mjs')),sourceFile(data.book)]);if(ticket!==state.openTicket)return;
       const archive=epub.unzipSync(bytes),decode=new TextDecoder();
       state.epub=await new epub.EPUB({loadText:async name=>archive[name]?decode.decode(archive[name]):null,loadBlob:async name=>archive[name]?new Blob([archive[name]]):null,getSize:name=>archive[name]?.length||0,sha1:async bytes=>new Uint8Array(await crypto.subtle.digest('SHA-1',bytes))}).init();
       if(state.epub.sections.length!==data.book.locations)throw new Error('电子书目录与索引不一致，请重新导入');

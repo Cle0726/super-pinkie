@@ -98,7 +98,7 @@
   function attachToBubble(bubble) {
     if (!bubble?.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) return;
     if (!bubbleObservers.has(bubble)) {
-      const observer = new MutationObserver((mutations) => {
+      const observer = window.Pinkie?.domWatch?.createObserver((mutations) => {
         if (!bubble.isConnected || !bubble.matches(STREAM_BUBBLE_SEL)) {
           detachFromBubble(bubble);
           return;
@@ -106,7 +106,7 @@
         if (mutations.some((mutation) => mutation.type === "childList")) scheduleCursor(bubble);
       });
       bubbleObservers.set(bubble, observer);
-      observer.observe(bubble, { childList: true, subtree: true });
+      observer?.watch(bubble, {childList: true});
     }
     markStreaming(bubble);
   }
@@ -155,7 +155,7 @@
       if (root) scanForBubbles(root);
     });
   };
-  const rootObserver = new MutationObserver((mutations) => {
+  const rootObserver = window.Pinkie?.domWatch?.createObserver((mutations) => {
     let needScan = false;
     for (const m of mutations) {
       if (m.type === "childList") {
@@ -183,19 +183,19 @@
   function start() {
     const root = document.querySelector(ROOT_SEL);
     if (root) {
-      rootObserver.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+      rootObserver?.watch(root, {childList: true, attributes: true, attributeFilter: ["class"]});
       scanForBubbles(root);
     } else {
       // Chat thread not mounted yet — wait for it without leaking.
-      const pending = new MutationObserver(() => {
+      const pending = window.Pinkie?.domWatch?.createObserver(() => {
         const r = document.querySelector(ROOT_SEL);
         if (r) {
           pending.disconnect();
-          rootObserver.observe(r, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+          rootObserver?.watch(r, {childList: true, attributes: true, attributeFilter: ["class"]});
           scanForBubbles(r);
         }
       });
-      pending.observe(document.body, { childList: true, subtree: true });
+      pending?.watch(document.body, {childList: true});
       // Bail after 60s so we don't watch forever on non-chat pages.
       window.setTimeout(() => pending.disconnect(), 60000);
     }

@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {test} = require('node:test');
 
-const source=fs.readFileSync(path.join(__dirname,'../app/windows_desktop.py'),'utf8');
+const source=fs.readFileSync(path.join(__dirname,'../app/windows_bridge_scripts.py'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,'../app/windows_desktop.py'),'utf8');
 const match=/NATIVE_READING_SCRIPT = r"""([\s\S]*?)"""/.exec(source);
 assert.ok(match,'the test executes the actual native reading-surface script');
 

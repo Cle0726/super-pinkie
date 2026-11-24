@@ -36,6 +36,7 @@ function harness(saved = {}, session = "agent:main:test", clock = null) {
   const listeners = new Map(), frames = [], timers = [];
   let observer;
   const window = {addEventListener(name, handler) { listeners.set(name, handler); },
+    Pinkie: {domWatch: {createObserver: fn => ({watch() { observer = fn; }, observe() { observer = fn; }, disconnect() {}}), poll: () => ({stop() {}})}},
     __pinkieChatViewport: {preserve(_pane, change) { return change(); }}};
   const storage = {getItem: () => JSON.stringify(saved), setItem(_k, _v) {}};
   vm.runInNewContext(script, {window, document, location: {href: 'http://localhost/chat?session=' + encodeURIComponent(session)},

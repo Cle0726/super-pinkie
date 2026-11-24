@@ -1078,7 +1078,7 @@
     scheduled = true;
     requestAnimationFrame(() => { scheduled = false; render(); });
   };
-  setInterval(() => { syncSession(); schedule(); }, 700);
+  window.Pinkie?.domWatch?.poll(() => { syncSession(); schedule(); }, 700);
   window.addEventListener("popstate", () => {
     requestAnimationFrame(syncSession);
   });

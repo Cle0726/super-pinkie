@@ -285,7 +285,7 @@
     entry.addEventListener("click", open);
     if (anchor) anchor.after(entry); else rail.append(entry);
   };
-  setInterval(mountRail, 1500);
+  window.Pinkie?.domWatch?.poll(mountRail, 1500);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mountRail, {once: true});
   else mountRail();
 

@@ -146,7 +146,7 @@
       syncTempo(el);
       if (tempoWatched.has(el)) continue;
       tempoWatched.add(el);
-      new MutationObserver(() => syncTempo(el)).observe(el, {childList: true, characterData: true, subtree: true});
+      window.Pinkie?.domWatch?.createObserver(() => syncTempo(el))?.watch(el, {childList: true, characterData: true});
     }
   }
   document.addEventListener('toggle', watchTempo, true);
@@ -255,8 +255,8 @@
     for (const scope of document.querySelectorAll(SCOPE)) {
       if (watched.has(scope)) continue;
       rewrite(scope);
-      const observer = new MutationObserver(onChange);
-      observer.observe(scope, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS});
+      const observer = window.Pinkie?.domWatch?.createObserver(onChange);
+      observer?.watch(scope, {childList: true, characterData: true, attributes: true, attributeFilter: ATTRS});
       watched.set(scope, observer);
     }
     titleOn();
@@ -276,7 +276,7 @@
   function titleOn() {
     fixTitle();
     const el = document.querySelector('title');
-    if (el && !titleObserver) { titleObserver = new MutationObserver(fixTitle); titleObserver.observe(el, {childList: true, characterData: true, subtree: true}); }
+    if (el && !titleObserver) { titleObserver = window.Pinkie?.domWatch?.createObserver(fixTitle); titleObserver?.watch(el, {childList: true, characterData: true}); }
   }
   function titleOff() {
     titleObserver?.disconnect(); titleObserver = null;
