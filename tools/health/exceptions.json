@@ -130,5 +130,11 @@
     "metric": "setIntervals",
     "value": 1,
     "reason": "M3 返工：恢复原生定时语义"
+  },
+  {
+    "file": "ui/injections/laolao-metre-engine.js",
+    "metric": "lines",
+    "value": 1374,
+    "reason": "用户 11-24：界面上不再出现 OpenClaw，MIT 声明只放在关于页「第三方许可」弹窗里。多出的 31 行全在 NOTICES 段里：OpenClaw 的 MIT 全文 21 行（法律要求一字不改，和 openclaw@2026.7.1-2 包里的 LICENSE 逐字对过），中英两段说明加分隔共 9 行，注释 1 行。许可文字不能拆到别的文件：metre-engine-ui 测试要求全项目只有这一段 NOTICES。"
   }
 ]
