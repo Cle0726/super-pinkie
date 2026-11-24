@@ -629,7 +629,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .laolao-mo
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .pinkie-baton__seg[aria-checked="true"],
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .pinkie-baton__seg[aria-checked="true"] { background: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input:focus-within,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input:focus-within { border-color: #5A5A54 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input:focus-within { border-color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session:hover { background: var(--metre-hover) !important; background-image: none !important; }
 

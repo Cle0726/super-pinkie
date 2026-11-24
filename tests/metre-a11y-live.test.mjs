@@ -51,6 +51,18 @@ test('Metre 运行中 / 完成 / 等你确认时，文字是「看不见但读�
   assert.ok(!hides(hit.body));
 });
 
+// X2（第七批）：夜间输入框聚焦边框原来写死 #5A5A54，在夜间输入框底 #2C2B28 上只有约 2:1，和未聚焦边框只差约 1.7:1，键盘用户看不出焦点。
+// 改成 var(--metre-muted)，跟着夜间色板走（实测 ≥ 3:1）。
+test('Metre 夜间输入框聚焦边框用 --metre-muted，不再是看不出来的 #5A5A54', () => {
+  const css = inj('laolao-metre-skin.css');
+  const night = rules(css).filter((r) => /\[data-(?:pinkie-night|theme="dark")\][^,]*\.agent-chat__input:focus-within\s*$/.test(r.selector.split(/,(?![^(]*\))/).at(-1)) && /border-color/.test(r.body));
+  assert.ok(night.length >= 1, '有夜间输入框聚焦边框规则');
+  for (const r of night) {
+    assert.doesNotMatch(r.body, /#5A5A54/i);
+    assert.match(r.body, /border-color:\s*var\(--metre-muted\)/);
+  }
+});
+
 test('Metre 不摘掉原生对话区的 role=log / aria-live', () => {
   for (const file of metreFiles) {
     const text = inj(file);
