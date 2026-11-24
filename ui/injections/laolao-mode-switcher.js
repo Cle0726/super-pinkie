@@ -414,7 +414,7 @@
       const fx = {waiting() {}, abort() {}, finish: async () => {}};
       return {overlay, fx, assets: Promise.resolve()};
     }
-    if (activeMode() === "metre") { try { metreExit = window.PinkieMetreTransition?.leave?.() || null; await metreExit?.covered; } catch { metreExit?.release?.(); metreExit = null; } }   // Metre → 碧琪：先播 Metre 离场（收拍、合上谱纸），再播目标模式原来的转场
+    if (activeMode() === "metre") { try { metreExit = window.PinkieMetreTransition?.leave?.(mode.id) || null; } catch { metreExit = null; } }   // Metre → 碧琪：先播 Metre 离场；目标模式原来的转场趁离场备贴图，到 handoff.hold 那一拍才起
     // The FX module deliberately declines when graphics acceleration is unavailable or the
     // system asks for reduced motion. In that case the established transition
     // below remains the complete, accessible fallback.
@@ -422,7 +422,7 @@
     try {
       // Keep the old path usable even if an optional module is only partly
       // loaded (or its feature probe itself throws on an unusual graphics setup).
-      fx = window.PinkieModeTransitionFx?.play?.(mode, {onExit: () => motion.enter()}) || null;
+      fx = window.PinkieModeTransitionFx?.play?.(mode, {onExit: () => motion.enter(), ...metreExit?.handoff}) || null;
     } catch {}
     if (fx) {
       try {
@@ -434,7 +434,7 @@
         fx.abort?.();
       }
     }
-
+    if (metreExit) { try { await metreExit.covered; } catch {} }   // 碧琪的图形转场放不了时：等 Metre 离场收空，再放原来的 overlay
     return new Promise((resolve) => {
     const overlay = document.createElement("section");
     overlay.className = `laolao-mode-transition laolao-mode-transition--${mode.id}`;

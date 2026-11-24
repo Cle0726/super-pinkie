@@ -242,7 +242,9 @@
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
         "laolao-metre-keys.css",
-        "laolao-metre-backstage.js"
+        "laolao-metre-backstage.js",
+        "laolao-metre-queue.js",
+        "laolao-metre-list.js"
       ]
     },
     {

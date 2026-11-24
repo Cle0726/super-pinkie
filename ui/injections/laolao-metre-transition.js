@@ -4,10 +4,10 @@
  *     （450/700/950/1200ms），拍与拍之间往上弹；音符在拍点落到谱上：先高两格、再一格、落下压扁一下再弹回，刚落下的那个是钴蓝；音符上方的谱台灯
  *     跟着同一拍一盏盏亮 → 1250ms 起新页面好了就从中缝上下翻开（420ms），同时发 pinkie:metre-sweep。总长约 1.67 秒（和第 1 版一样）。
  *   离场 leave()（Metre → 碧琪，进场倒过来）：谱纸带着整页谱面从上下合上（0–280ms）→ 指挥棒画一个收拍的圈、一顿（360ms）→ 音符从最后一个起
- *     按拍跳起、飞离谱面，灯跟着一盏盏灭 → 五线往中间收拢、M 暗下去 → 760ms 谱面收空 = covered。切换器这时才播目标模式原来的碧琪转场（它的
- *     浮层比这张谱纸高一层），盖住以后 release() 拿掉谱纸：交接时不闪白、不露旧页、不叠着播。
+ *     按拍跳起、飞离谱面，灯跟着一盏盏灭 → 五线连同中缝往中间收拢、M 暗下去 → 760ms 谱面收空 = covered。交接（11-24 第 5 轮）：碧琪转场在离场一开始
+ *     就备贴图，到 handoff.hold（620ms，最后一个音符还在飞）才起，只留引子的最后 100ms（无限制不留），720ms 起它就揭开，和五线收拢叠 40ms；它盖住以后 release() 拿掉谱纸。
  * 一张全屏 canvas 按像素格画（短边 / 140，至少 4px），没有图片和 WebGL，只在过场期间有 rAF。减少动态效果、或画不了 canvas 时都返回 null，切换器照原来
- * 的方式原地换。对外：PinkieMetreTransition.play() → {overlay, ready, covered, waiting(), finish(), abort()}；leave() → {overlay, covered, release()}。 */
+ * 的方式原地换。对外：PinkieMetreTransition.play() → {overlay, ready, covered, waiting(), finish(), abort()}；leave() → {overlay, covered, handoff, release()}。 */
 (() => {
   'use strict';
   if (window.PinkieMetreTransition) return;
@@ -28,7 +28,7 @@
   const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2), backOut = (t, s = 2) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
   // 时间线（毫秒）。进场 = 第 1 版原样；离场：合上、收拍、音符一个个离开（隔 HOP）、五线收拢、收空
   const COVER = 380, OPEN = 420, B = 250, FIRST = 450, HOLD = 1250;
-  const CLOSE = 280, CUT = 360, HOP = 60, CLEAR = 540, GONE = 760;
+  const CLOSE = 280, CUT = 360, HOP = 60, CLEAR = 540, GONE = 760, CUE = 620, INTRO = 100;
 
   // 一张谱纸：进场和离场共用同一套画法。paint() 读 st：t = 进场时间；ex ≥ 0 时是离场（谱面停在进场画完的样子往回收）
   function score(label) {
@@ -157,7 +157,7 @@
       for (const [dy, y0, h] of [[st.dyTop, 0, mid], [st.dyBot, mid, H - mid]]) {
         g.save(); g.translate(0, sn(dy)); g.beginPath(); g.rect(0, y0, W, h); g.clip();
         box(0, y0, W, h, C.bg);
-        box(0, y0 === 0 ? mid - 1 : mid, W, 1, C.dim);   // 谱纸的折缝
+        { const k = st.ex >= 0 ? easeInOut(clamp((st.ex - CLEAR) / 200)) : 0, a = sn(cx * k); if (k < 1) box(a, y0 === 0 ? mid - 1 : mid, W - 2 * a, 1, C.dim); }   // 谱纸的折缝：离场时和五线一起往中间收掉
         content(st.t, st.ex); g.restore();
       }
     }
@@ -197,21 +197,21 @@
     return {overlay, ready, covered, waiting() {}, finish, abort};
   }
 
-  // 离场：画到收空为止（covered），谱纸留着垫在碧琪转场下面，release() 才拿掉；万一没人来拿，15 秒后自己拿掉
-  function leave() {
+  // 离场：画到收空为止（covered），谱纸留着垫在碧琪转场下面，release() 才拿掉；万一没人来拿，15 秒后自己拿掉。handoff 交给碧琪转场：hold 那一拍起、只留 INTRO 的引子
+  function leave(to) {
     const s = score('正在离开 Metre'); if (!s) return null; const {overlay, st, paint, mid, H} = s;
-    let alive = true; st.ex = 0; const release = () => { alive = false; overlay.remove(); };
+    let alive = true, cued; st.ex = 0; const release = () => { alive = false; overlay.remove(); }, cue = new Promise((resolve) => { cued = resolve; });
     const covered = (async () => {
       await frame(); const t0 = performance.now();
       while (alive && st.ex < GONE) {
-        st.ex = performance.now() - t0; const e = easeInOut(clamp(st.ex / CLOSE)); st.dyTop = -mid * (1 - e); st.dyBot = (H - mid) * (1 - e);
+        st.ex = performance.now() - t0; if (st.ex >= CUE) cued(); const e = easeInOut(clamp(st.ex / CLOSE)); st.dyTop = -mid * (1 - e); st.dyBot = (H - mid) * (1 - e);
         paint(); await frame();
       }
-      if (!alive) throw new Error('aborted');
-      st.ex = GONE; st.dyTop = 0; st.dyBot = 0; paint();
-      setTimeout(release, 15000);
+      cued(); if (!alive) throw new Error('aborted');
+      st.ex = GONE; st.dyTop = 0; st.dyBot = 0; paint(); setTimeout(release, 15000);
     })();
-    return {overlay, covered, release};
+    covered.catch(() => {});
+    return {overlay, covered, release, handoff: {hold: cue, intro: to === 'unrestricted' ? 0 : INTRO}};   // 无限制的彩虹斜切从角上细细地起，直接在交接那一拍起
   }
 
   window.PinkieMetreTransition = Object.freeze({play, leave});
