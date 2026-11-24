@@ -4,7 +4,7 @@
 //      Metre 里必须按工具结果出现的先后编号。
 //   2. 来源行在回答正文外面，链接预览模块接不到点击，点了会把整个页面导航到外站。Metre 里必须接住。
 //   3. 其他模式一个字不动；离开 Metre 时改过的地方原样换回。
-import {test} from 'node:test';
+import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -44,14 +44,23 @@ ${shared.map((url, i) => `<a class="pinkie-cite" href="${url}" aria-label="来�
 <div class="pinkie-sources"><span class="pinkie-sources__label">来源：</span>${shared.map((url, i) => `<a class="pinkie-sources__item" href="${url}">[${i + 1}] ${new URL(url).hostname}</a>`).join('')}</div>
 <div class="chat-group-footer"></div></div></div></div></openclaw-chat-pane></body></html>`;
 
-async function launch(t) {
+// 整个文件只起一个浏览器（CI 里所有测试文件并行跑，每个测试都起一个会拖慢别的文件里的浏览器测试）；
+// 每个测试自己开页面、用完关掉自己的页面，互不影响；文件跑完关浏览器。
+let sharedBrowser;
+after(async () => { const b = await sharedBrowser; await b?.close?.(); });
+async function start() {
   let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return null; }
+  try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
   for (const options of [{}, {channel: 'chrome'}, {channel: 'msedge'}]) {
     try { return await lib.chromium.launch({headless: true, ...options}); } catch {}
   }
-  t.skip('no Chromium browser here');
-  return null;
+  return {why: 'no Chromium browser here'};
+}
+async function launch(t) {
+  sharedBrowser ??= start();
+  const b = await sharedBrowser;
+  if (b.why) { t.skip(b.why); return null; }
+  return {newPage: (...a) => b.newPage(...a), close: async () => { for (const c of b.contexts()) await c.close(); }};
 }
 async function open(browser, mode) {
   const tab = await browser.newPage({viewport: {width: 1024, height: 700}});

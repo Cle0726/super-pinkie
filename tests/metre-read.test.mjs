@@ -1,7 +1,7 @@
 // M14：Metre 里「朗读这条回答」（laolao-metre-read.js）。
 // 用一个可控的 speechSynthesis 替身走完整个过程：点了开始念、键变「停止朗读」、念完自己复原、
 // 一次只念一条、再点就停、换会话 / 离开 Metre 会停；不念代码块、链接、来源角标；其他模式不出键。
-import {test} from 'node:test';
+import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -37,14 +37,23 @@ const fakeSpeech = () => {
   window.failOne = () => { const u = queue.shift(); u?.onerror?.(); };
 };
 
-async function launch(t) {
+// 整个文件只起一个浏览器（CI 里所有测试文件并行跑，每个测试都起一个会拖慢别的文件里的浏览器测试）；
+// 每个测试自己开页面、用完关掉自己的页面，互不影响；文件跑完关浏览器。
+let shared;
+after(async () => { const b = await shared; await b?.close?.(); });
+async function start() {
   let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return null; }
+  try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
   for (const options of [{}, {channel: 'chrome'}, {channel: 'msedge'}]) {
     try { return await lib.chromium.launch({headless: true, ...options}); } catch {}
   }
-  t.skip('no Chromium browser here');
-  return null;
+  return {why: 'no Chromium browser here'};
+}
+async function launch(t) {
+  shared ??= start();
+  const b = await shared;
+  if (b.why) { t.skip(b.why); return null; }
+  return {newPage: (...a) => b.newPage(...a), close: async () => { for (const c of b.contexts()) await c.close(); }};
 }
 async function open(browser, mode) {
   const tab = await browser.newPage();
