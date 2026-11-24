@@ -93,6 +93,8 @@ html[data-laolao-mode="metre"] .pk-mcite-card__foot { margin-top: 6px; padding-t
  * 鼠标移开后「停止朗读」会看不见也点不到。所以正在念时让它一直显示、可点；不念时和旁边的键一样，跟着按键区显隐。
  * 和来源角标放在同一张表里，免得为几条规则多登记一个文件。 */
 html[data-laolao-mode="metre"] .chat-group-footer .pk-mread[aria-pressed="true"] { opacity: 1; pointer-events: auto; color: var(--metre-accent, #C96442); background: color-mix(in srgb, var(--metre-accent, #C96442) 10%, transparent); }
+/* 退回原生底部按键区时，和旁边的原生键一样高（原生 24px，碧琪按键行 26px）。 */
+html[data-laolao-mode="metre"] .chat-group-footer-actions > .pk-mread { height: 24px; min-width: 24px; }
 html[data-laolao-mode="metre"] .chat-group-footer .pk-mread[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--metre-accent, #C96442) 16%, transparent); }
 
 @media (max-width: 900px) {
