@@ -14,8 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [pair-parallel, entry-alone, conversation-alone]
-        attempt: [1, 2, 3, 4]
+        attempt: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,14 +30,44 @@ jobs:
           & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
           if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
           "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Run (${{ matrix.mode }})
+      - name: Start per-process CPU sampler
+        shell: pwsh
+        run: |
+          "cores=$([Environment]::ProcessorCount)"
+          $out = Join-Path $env:RUNNER_TEMP 'cpu-samples.tsv'
+          $sampler = {
+            param($out)
+            $kind = @{}; $last = @{}
+            while ($true) {
+              $now = Get-Date
+              foreach ($p in Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(chrome|node|Playwright|WebKit|MiniBrowser|WebKitWebProcess|WebKitNetworkProcess|pwsh|powershell)$' }) {
+                $id = $p.Id
+                if (-not $kind.ContainsKey($id)) {
+                  $cl = (Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction SilentlyContinue).CommandLine
+                  $t = if ($cl -match '--type=([a-z-]+)') { $Matches[1] } elseif ($p.ProcessName -eq 'chrome') { 'browser' } else { '' }
+                  if ($cl -match '--utility-sub-type=([A-Za-z.]+)') { $t += ':' + $Matches[1] }
+                  $kind[$id] = $p.ProcessName + '/' + $t
+                }
+                $cpu = $p.TotalProcessorTime.TotalSeconds
+                if ($last.ContainsKey($id)) { '{0:HH:mm:ss}`t{1}`t{2}`t{3:N2}' -f $now, $id, $kind[$id], ($cpu - $last[$id]) | Add-Content -LiteralPath $out }
+                $last[$id] = $cpu
+              }
+              Start-Sleep -Seconds 3
+            }
+          }
+          Start-Process pwsh -ArgumentList '-NoProfile','-Command',"& {$sampler} '$out'" -WindowStyle Hidden
+      - name: Run the pair in parallel (same flags as windows-checks)
         timeout-minutes: 15
         shell: bash
-        env:
-          DEBUG: pw:api
+        run: node --test --test-concurrency=2 tests/study-desk-chat-entry.test.cjs tests/study-desk-conversation.test.cjs
+      - name: Top CPU consumers per 3 s window
+        if: always()
+        shell: pwsh
         run: |
-          case '${{ matrix.mode }}' in
-            pair-parallel) node --test --test-concurrency=2 tests/study-desk-chat-entry.test.cjs tests/study-desk-conversation.test.cjs ;;
-            entry-alone) node --test --test-concurrency=1 tests/study-desk-chat-entry.test.cjs ;;
-            conversation-alone) node --test --test-concurrency=1 tests/study-desk-conversation.test.cjs ;;
-          esac
+          $rows = Get-Content (Join-Path $env:RUNNER_TEMP 'cpu-samples.tsv') | ForEach-Object { $c = $_ -split "`t"; [pscustomobject]@{t=$c[0]; id=$c[1]; kind=$c[2]; cpu=[double]$c[3]} }
+          'per-kind CPU seconds over the whole run:'
+          $rows | Group-Object kind | ForEach-Object { '{0,8:N1}  {1}' -f ($_.Group | Measure-Object cpu -Sum).Sum, $_.Name } | Sort-Object -Descending | Select-Object -First 15
+          'busiest windows (sum of CPU seconds per 3 s, top 3 processes):'
+          $rows | Group-Object t | Sort-Object { ($_.Group | Measure-Object cpu -Sum).Sum } -Descending | Select-Object -First 12 | ForEach-Object {
+            '{0} total {1:N1}: {2}' -f $_.Name, ($_.Group | Measure-Object cpu -Sum).Sum, (($_.Group | Sort-Object cpu -Descending | Select-Object -First 3 | ForEach-Object { '{0}#{1}={2:N1}' -f $_.kind, $_.id, $_.cpu }) -join ', ')
+          }
