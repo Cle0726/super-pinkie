@@ -66,7 +66,13 @@
     }
     return urls.slice(0, MAX);
   }
-  const label = url => url.host + (url.pathname === '/' ? '' : url.pathname) + url.search;
+  // 签上只写「主机:端口」加一小段路径，长路径收成第一段加 /…，不靠 CSS 截断；完整地址在 title 和读屏名里。
+  const label = url => {
+    const rest = (url.pathname === '/' ? '' : url.pathname) + url.search;
+    if (rest.length <= 20) return url.host + rest;
+    const first = url.pathname.split('/').filter(Boolean)[0] || '';
+    return url.host + (first && first.length <= 16 ? `/${first}/…` : '/…');
+  };
 
   // ---------- 预览行 ----------
   function groupIndex(group, history) {
@@ -83,6 +89,7 @@
       const chip = el('a', 'pk-mprev-chip');
       chip.href = url.href;
       chip.title = `在碧琪的浏览器里打开 ${url.href}`;
+      chip.setAttribute('aria-label', `预览 ${url.href}`);
       chip.append(el('span', 'pk-mprev-chip__dot'), el('span', 'pk-mprev-chip__text', label(url)));
       row.append(chip);
     }
@@ -95,15 +102,16 @@
     for (const group of p.querySelectorAll('.chat-group.assistant')) {
       const index = groupIndex(group, history);
       const urls = index < 0 ? [] : urlsFor(history, index);
-      const old = group.querySelector(':scope > .pk-mprev-row');
+      const old = group.querySelector('.pk-mprev-row');
       const signature = urls.map(u => u.href).join('|');
       if (!urls.length) { old?.remove(); continue; }
       if (old?.dataset.pkPreview === signature) continue;
       const row = buildRow(urls);
       row.dataset.pkPreview = signature;
       if (old) { old.replaceWith(row); continue; }
-      const footer = group.querySelector(':scope > .chat-group-footer');
-      if (footer) footer.before(row); else group.append(row);
+      // 原生结构里按键区在 .chat-group-messages 里面、气泡下面；行放在按键区前面，和气泡同一列。
+      const footer = group.querySelector('.chat-group-footer');
+      if (footer) footer.before(row); else (group.querySelector('.chat-group-messages') || group).append(row);
     }
   }
   const restore = () => { for (const row of document.querySelectorAll('.pk-mprev-row')) row.remove(); };

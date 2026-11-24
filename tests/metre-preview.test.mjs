@@ -27,14 +27,14 @@ const history = [
   {role: 'toolResult', toolName: 'exec', content: t(`网关在 http://127.0.0.1:18789/ ，页面在 http://127.0.0.1:${PORT}/chat ，文档 https://vitejs.dev/guide/ 。再看 http://localhost:5173/ 。`), timestamp: 5},
   {role: 'assistant', content: t('开好了，在 5173。'), timestamp: 6},
   {role: 'user', content: t('再起一个'), timestamp: 7},
-  {role: 'toolResult', toolName: 'exec', content: t('- Local:        http://localhost:3000\n- Ready in 1.2s'), timestamp: 8},
+  {role: 'toolResult', toolName: 'exec', content: t('- Local:        http://localhost:3000\n- Ready in 1.2s\n  docs: http://localhost:3000/docs/getting-started/installation?lang=zh-CN'), timestamp: 8},
   {role: 'assistant', content: t('好了。'), timestamp: 9},
   {role: 'user', content: t('谢谢'), timestamp: 10},
   {role: 'assistant', content: t('不客气。'), timestamp: 11},
 ];
-const group = index => `<div class="chat-group assistant" id="g${index}"><div class="chat-group-messages">
-<div class="chat-bubble" data-message-id="msg:assistant:${history[index].timestamp}:${index}"><div class="chat-text"><p>${history[index].content[0].text}</p></div></div></div>
-<div class="chat-group-footer"></div></div>`;
+const group = index => `<div class="chat-group assistant" id="g${index}"><div class="chat-avatar assistant"></div><div class="chat-group-messages">
+<div class="chat-bubble" data-message-id="msg:assistant:${history[index].timestamp}:${index}"><div class="chat-text"><p>${history[index].content[0].text}</p></div></div>
+<div class="chat-group-footer"></div></div></div>`;
 const page = mode => `<!doctype html><html data-laolao-mode="${mode}"><head><style>${css}</style></head><body>
 <openclaw-chat-pane active><div class="chat-thread" style="width:760px"><div class="chat-thread-inner">${group(5)}${group(8)}${group(10)}</div></div></openclaw-chat-pane></body></html>`;
 
@@ -93,10 +93,16 @@ test('in Metre: local server addresses from this turn become one preview row; 18
     const tab = await open(browser, 'metre', 'mac');
     await tab.locator('#g5 .pk-mprev-row').waitFor({timeout: 5000});
     assert.deepEqual(await chips(tab, 'g5'), [['localhost:5173', 'http://localhost:5173/'], ['127.0.0.1:8000', 'http://127.0.0.1:8000/']]);
-    assert.deepEqual(await chips(tab, 'g8'), [['localhost:3000', 'http://localhost:3000/']], 'each turn only gets its own tool results');
+    assert.deepEqual(await chips(tab, 'g8'), [
+      ['localhost:3000', 'http://localhost:3000/'],
+      ['localhost:3000/docs/…', 'http://localhost:3000/docs/getting-started/installation?lang=zh-CN'],
+    ], 'each turn only gets its own tool results; long paths are shortened in the label, not cut by CSS');
+    assert.equal(await tab.locator('#g8 .pk-mprev-chip').nth(1).getAttribute('aria-label'), '预览 http://localhost:3000/docs/getting-started/installation?lang=zh-CN');
     assert.equal(await tab.locator('#g10 .pk-mprev-row').count(), 0, 'a turn without servers gets no row');
     // 行在回答和按键区之间
-    assert.equal(await tab.locator('#g5').evaluate(g => g.querySelector('.pk-mprev-row').nextElementSibling?.className), 'chat-group-footer');
+    // 原生结构里按键区在 .chat-group-messages 里面；行要在气泡和按键区之间，和气泡同一列，不能挤到头像旁边去
+    const place = await tab.locator('#g5').evaluate(g => { const row = g.querySelector('.pk-mprev-row'); return [row.parentElement.className, row.previousElementSibling?.className, row.nextElementSibling?.className]; });
+    assert.deepEqual(place, ['chat-group-messages', 'chat-bubble', 'chat-group-footer']);
     const look = await tab.locator('#g5 .pk-mprev-chip').first().evaluate(a => { const r = a.getBoundingClientRect(); const row = a.closest('.pk-mprev-row').getBoundingClientRect(); return {h: Math.round(r.height), inside: r.right <= row.right + 1}; });
     assert.deepEqual(look, {h: 26, inside: true});
     // 重画不重复
@@ -118,7 +124,7 @@ test('without the Mac bridge it uses the Windows app browser, and plain pages op
   try {
     for (const [bridge, expected] of [['windows', 'windows'], ['', 'tab']]) {
       const tab = await open(browser, 'metre', bridge);
-      await tab.locator('#g8 .pk-mprev-chip').click({timeout: 5000});
+      await tab.locator('#g8 .pk-mprev-chip').first().click({timeout: 5000});
       assert.deepEqual(await tab.evaluate(() => window.opened), [[expected, 'http://localhost:3000/']]);
       await tab.close();
     }

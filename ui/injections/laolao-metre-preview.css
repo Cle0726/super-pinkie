@@ -1,12 +1,14 @@
 /* laolao-metre-preview —— R4：回答下面「预览本地服务」一行（laolao-metre-preview.js）。
  * 和来源签条同一套 Metre 变量，日夜跟着变量走；只在 Metre 里有这一行。 */
 html[data-laolao-mode="metre"] .pk-mprev-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; align-self: stretch; width: 100%;
   margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--metre-line, #E8E6DC);
   max-width: 100%; box-sizing: border-box; font-size: 12px; color: var(--metre-muted, #73726C);
 }
+/* 「预览」小字：日间 --metre-muted 在底色上对比度只有 4.37，往正文色靠一点，过 4.5 */
 html[data-laolao-mode="metre"] .pk-mprev-row__label {
-  margin-right: 4px; font: italic 400 13px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; color: var(--metre-muted, #73726C);
+  margin-right: 4px; font: italic 400 13px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D));
 }
 html[data-laolao-mode="metre"] .pk-mprev-chip {
   display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: min(320px, 100%); height: 26px;
