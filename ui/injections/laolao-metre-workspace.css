@@ -1,0 +1,71 @@
+/* laolao-metre-workspace.css —— 第六批（m5 线）：S1 会话筛选的样子，只在 Metre 生效。
+ * 筛选只靠 <html data-pk-mw-filter> + 会话列表已有的状态记号，不改列表本身。 */
+
+/* —— 筛选：只留带对应记号的会话行；一行都不剩的分组连标题一起收起 —— */
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--running)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--waiting)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--error)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-unread)) {
+  display: none;
+}
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--running)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--waiting)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--error)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-unread)) {
+  display: none;
+}
+
+/* —— 侧栏顶上的「筛选」键：和「总谱」同一排、同一个样子；有筛选时底色标出来 —— */
+html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter {
+  --metre-ic: var(--metre-ic-updown);
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  order: 2;
+}
+html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter[aria-pressed="true"] {
+  background: var(--metre-side-active);
+  color: var(--metre-text);
+}
+html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— 筛选菜单：谱纸底、一条细线、无圆角光晕 —— */
+html[data-laolao-mode="metre"] .pk-mw-filter-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 188px;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line);
+  border-radius: 6px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-text);
+  font: 400 13px/1.4 var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:active { background: var(--metre-side-active); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: -2px; }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item[aria-checked="true"] { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__count { color: var(--metre-muted); font: 400 12px/1 var(--metre-mono); }
+html:not([data-laolao-mode="metre"]) .pk-mw-filter-menu { display: none; }
