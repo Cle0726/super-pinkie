@@ -93,6 +93,33 @@ test(`Metre session list: one layer of date groups, status marks from backend st
   } finally { await browser.close(); }
 });
 
+// 11-24 第 6 轮整页走查：Metre 首页不挂碧琪小伙伴（bubble 没建出来），窗口一改尺寸 laolao-companion.js 的 liftHome 就读 undefined.classList 报错
+test(`Metre home: resizing the window does not throw from the companion’s home lift (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message));
+    await page.setContent(`<!doctype html><html data-laolao-mode="metre" data-laolao-startup-home="1"><body><div class="laolao-startup-home"><div class="agent-chat__welcome">早上好</div></div></body></html>`);
+    await page.addScriptTag({path: inj('laolao-companion.js')});
+    await page.setViewportSize({width: 1000, height: 640}); await page.waitForTimeout(500);
+    await page.setViewportSize({width: 1200, height: 700}); await page.waitForTimeout(500);
+    assert.deepEqual(errors.filter((m) => /classList|liftHome/.test(m)), [], '改窗口尺寸不报错');
+  } finally { await browser.close(); }
+});
+
+// 11-24 第 6 轮整页走查：Metre 皮肤给所有元素设了标准 scrollbar-color，Chromium 就丢掉原生 6px 的 ::-webkit-scrollbar，侧栏会话列表被 15px 的系统滚动条挤窄
+test(`Metre keeps the native 6px scrollbar (sidebar list is not squeezed by a 15px system bar) (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 800, height: 600}});
+    await page.setContent(`<!doctype html><html data-laolao-mode="metre"><head><style>::-webkit-scrollbar{width:6px;height:6px}</style></head><body>
+      <div id="s" style="width:240px;height:100px;overflow-y:auto;scrollbar-gutter:stable"><div style="height:400px"></div></div></body></html>`);
+    await page.addStyleTag({path: inj('laolao-metre-skin.css')});
+    const gutter = await page.evaluate(() => { const s = document.getElementById('s'); return s.offsetWidth - s.clientWidth; });
+    assert.equal(gutter, 6, `滚动条预留 6px（实际 ${gutter}px）`);
+  } finally { await browser.close(); }
+});
+
 test('wiring: only Metre calls the list decorator; both scripts are in the head and owned by a region; no timers or observers', () => {
   const read = (f) => fs.readFileSync(inj(f), 'utf8');
   assert.match(read('laolao-session-list.js'), /if \(api\.mode === 'metre'\) window\.PinkieMetreList\?\.decorate\(groups, rows, api\);/);

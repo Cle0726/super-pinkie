@@ -1409,7 +1409,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is([role="tooltip"
  * 底色 14% 的钴蓝在深色底上太淡，提到 34%。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::selection { background: color-mix(in srgb, var(--metre-cobalt) 34%, transparent) !important; color: var(--metre-text) !important; -webkit-text-fill-color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(button, a, summary, [role="button"], [tabindex]):focus-visible { outline: 2px solid var(--metre-cobalt) !important; outline-offset: 2px !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) * { scrollbar-color: var(--metre-line-strong) transparent; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::-webkit-scrollbar-thumb { background: var(--metre-line-strong); }   /* 11-24 第 6 轮：不用标准 scrollbar-color——设了它 Chromium 就丢掉原生 6px 的 ::-webkit-scrollbar，侧栏列表被系统 15px 滚动条挤窄 15px */
 
 /* ---------- 首页：只留提示语、输入框、底部画带 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-metre-quick { display: none !important; }
