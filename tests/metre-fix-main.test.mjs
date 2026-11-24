@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {playwright} from '../tools/study-desk/harness.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const inj = (name) => fs.readFileSync(path.join(root, 'ui', 'injections', name), 'utf8');
@@ -65,23 +66,50 @@ test('设置页（Metre）：「助手身份」卡按自己内容高，不被旁
 // ---- 缺陷 5：原生设置页的英文链接键在 Metre 里换成中文 ----
 function loadWord() {
   const src = between(inj('laolao-metre-skin.js'), '  const RULES = [', '\n  // 记下换过的地方');
-  return new Function(`${src}\nreturn {word, hit};`)();
+  return new Function(`${src}\nreturn {word};`)();
 }
 test('Metre 措辞：Configure / Manage / Browse / Connect → 换成中文，保留两边空白；别的英文不动', () => {
-  const {word, hit} = loadWord();
+  const {word} = loadWord();
   assert.equal(word('Configure →'), '设置 →');
   assert.equal(word('\n   Manage →\n  '), '\n   管理 →\n  ');
   assert.equal(word('Browse →'), '浏览 →');
   assert.equal(word('Connect →'), '连接 →');
   assert.equal(word('Configure the gateway'), 'Configure the gateway');
-  assert.ok(hit(' Connect → ') && hit('碧琪') && !hit('Connect'));
+  assert.equal(word('Connect'), 'Connect');
 });
-test('Metre 措辞：原生设置页在改写范围里，点完设置后会再找几次（原生页约 170ms 后才出来）', () => {
+test('Metre 措辞：原生设置页在改写范围里；不靠点击补找，等根节点出现再挂（直接打开、刷新设置页时根节点比脚本晚）', () => {
   const js = inj('laolao-metre-skin.js');
   assert.match(js, /const SCOPE = '[^']*openclaw-config-page/);
-  const retry = js.match(/addEventListener\('click', \(\) => \{ if \(isMetre\(\)\) for \(const ms of \[([\d, ]+)\]\) setTimeout\(attach, ms\)/);
-  assert.ok(retry, '点击后要多次重试 attach');
-  assert.ok(Math.max(...retry[1].split(',').map(Number)) >= 250, '最晚一次要晚于原生设置页出现的时间');
+  assert.match(js, /window\.Pinkie\?\.domWatch\?\.watch\(SCOPE, attach\)/, '要经已有的 domWatch.watch 等根节点出现');
+  assert.doesNotMatch(js, /setTimeout\(attach/, '不再靠点击 / popstate 之后的定时补找');
+});
+
+// 真浏览器：先装脚本、后出设置页根节点（等同直接打开 /settings/general 或在设置页刷新），英文链接也要换掉；离开 Metre 换回。
+const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+test(`Metre 措辞（真浏览器）：设置页根节点晚于脚本出现时，Configure → 也换成中文 (${engine})`, {timeout: 30_000}, async () => {
+  const browser = await launch();
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30117/**', (route) => route.fulfill({contentType: 'text/html', body: '<!doctype html><html data-laolao-mode="metre"><head><title>超級碧琪</title></head><body><main id="app"></main></body></html>'}));
+    await tab.goto('http://127.0.0.1:30117/settings/general');
+    await tab.addScriptTag({path: path.join(root, 'ui', 'injections', 'laolao-dom-watch.js')});
+    await tab.addScriptTag({path: path.join(root, 'ui', 'injections', 'laolao-metre-skin.js')});
+    await tab.waitForTimeout(150);
+    await tab.evaluate(() => { document.querySelector('#app').innerHTML = '<openclaw-config-page><button class="qs-link-btn">Configure →</button><a> Manage → </a><span>Configure the gateway</span></openclaw-config-page>'; });
+    await tab.waitForFunction(() => document.querySelector('.qs-link-btn')?.textContent === '设置 →', null, {timeout: 3000});
+    assert.equal(await tab.evaluate(() => document.querySelector('openclaw-config-page a').textContent), ' 管理 → ');
+    assert.equal(await tab.evaluate(() => document.querySelector('openclaw-config-page span').textContent), 'Configure the gateway');
+    // 设置页重新渲染出新的根节点（路由切回来）：同样换掉
+    await tab.evaluate(() => { document.querySelector('#app').innerHTML = '<openclaw-config-page><button class="qs-link-btn">Browse →</button></openclaw-config-page>'; });
+    await tab.waitForFunction(() => document.querySelector('.qs-link-btn')?.textContent === '浏览 →', null, {timeout: 3000});
+    // 离开 Metre：换回英文，之后新出的根节点不再改
+    await tab.evaluate(() => document.documentElement.setAttribute('data-laolao-mode', 'classic'));
+    await tab.waitForFunction(() => document.querySelector('.qs-link-btn')?.textContent === 'Browse →', null, {timeout: 3000});
+    await tab.evaluate(() => { document.querySelector('#app').innerHTML = '<openclaw-config-page><button class="qs-link-btn">Connect →</button></openclaw-config-page>'; });
+    await tab.waitForTimeout(300);
+    assert.equal(await tab.evaluate(() => document.querySelector('.qs-link-btn').textContent), 'Connect →');
+  } finally { await browser.close(); }
 });
 
 // ---- 缺陷 6：820 宽能力卡说明不被省略号截掉 ----
@@ -90,14 +118,28 @@ test('设置页（Metre）：能力卡说明折行，不用省略号', () => {
 });
 
 // ---- 缺陷 7：模式切换卡不压住连接灯 ----
-test('侧栏（Metre）：模式切换卡右沿 + 投影在连接灯左边，灯不出底栏全屏键的位置', () => {
+// 真浏览器：经典壳的 .sidebar-brand__identity > .laolao-mode-switcher 带 min-width: 126px，会盖过 Metre 的 width。
+// 两份样式一起加载，量卡的真实宽度，算上悬停投影，灯要在卡右边、又不碰底栏的全屏键（x155）。
+test(`侧栏（Metre，真浏览器）：模式切换卡真实宽度 + 投影在连接灯左边，灯不碰全屏键 (${engine})`, {timeout: 30_000}, async () => {
   const css = inj('laolao-metre-skin.css');
-  const sel = 'aside.sidebar:not(.sidebar--collapsed) ';
-  const card = css.match(new RegExp(sel.replace(/[.()]/g, '\\$&') + '\\.laolao-mode-switcher\\.laolao-mode-button--plain \\{ width: (\\d+)px'));
-  const lamp = css.match(new RegExp(sel.replace(/[.()]/g, '\\$&') + '\\.pinkie-connection-status \\{ left: (\\d+)px !important; top: 16px'));
-  assert.ok(card && lamp, '找不到模式切换卡宽度或连接灯位置的规则');
-  const cardRight = 16 + Number(card[1]) + 4;   // 卡在 aside x16 起；悬停投影 4px
-  const lampLeft = 12 + Number(lamp[1]);         // 灯在底栏坐标系，底栏 x12
-  assert.ok(lampLeft >= cardRight, `灯 x${lampLeft} 压在卡（含投影到 x${cardRight}）上`);
-  assert.ok(lampLeft + 10 <= 155, `灯 x${lampLeft}..${lampLeft + 10} 碰到了全屏键（x155）`);
+  const lamp = css.match(/aside\.sidebar:not\(\.sidebar--collapsed\) \.pinkie-connection-status \{ left: (\d+)px !important; top: 16px/);
+  assert.ok(lamp, '找不到连接灯位置的规则');
+  const browser = await launch();
+  try {
+    const tab = await browser.newPage({viewport: {width: 1024, height: 768}});
+    const page = [
+      '<!doctype html><html data-laolao-mode="metre" data-laolao-classic-shell="1"><body style="margin:0">',
+      '<aside class="sidebar" style="position:relative;width:260px;height:600px"><div class="sidebar-brand__identity" style="display:flex">',
+      '<button class="laolao-mode-switcher laolao-mode-button--plain"><span class="laolao-mode-button__label">Metre</span></button>',
+      '</div></aside></body></html>',
+    ].join('');
+    await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body: page}));
+    await tab.goto('http://127.0.0.1:30118/');
+    for (const name of ['laolao-classic-shell.css', 'laolao-metre-skin.css']) await tab.addStyleTag({path: path.join(root, 'ui', 'injections', name)});
+    const width = await tab.evaluate(() => document.querySelector('.laolao-mode-switcher').getBoundingClientRect().width);
+    const cardRight = 16 + width + 4;   // 卡在 aside x16 起；悬停投影 4px
+    const lampLeft = 12 + Number(lamp[1]);   // 灯在底栏坐标系，底栏 x12
+    assert.ok(lampLeft >= cardRight, `卡真实宽 ${width}px，灯 x${lampLeft} 压在卡（含投影到 x${cardRight}）上`);
+    assert.ok(lampLeft + 10 <= 155, `灯 x${lampLeft}..${lampLeft + 10} 碰到了全屏键（x155）`);
+  } finally { await browser.close(); }
 });

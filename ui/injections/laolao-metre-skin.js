@@ -176,6 +176,7 @@
     delete parked.dataset.metreTitle; parked = null;
   }, true);
   window.__pinkieMetreShowsText = showsItsText;
+
   window.__pinkieMetreSkin = {DECOR, apply, placePops, tempoOf, get on() { return applied; }};
 })();
 
@@ -204,7 +205,8 @@
     [/，碧琪照常可用/g, '，照常可用'],
     [/用哪个模式的碧琪/g, '用哪个模式'],
     [/碧琪/g, 'Metre'],
-  ]; const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'}; const hit = (v) => v.includes('碧琪') || Object.hasOwn(LINKS, v.trim());
+  ];
+  const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'};
   const word = (text) => {
     if (text && Object.hasOwn(LINKS, text.trim())) return text.replace(text.trim(), LINKS[text.trim()]);   // 11-24 ui2 缺陷 5：原生设置页写死的英文链接键
     if (!text || !text.includes('碧琪')) return text;
@@ -235,23 +237,24 @@
   }
   function rewrite(scope) {
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
-    for (let node; (node = walker.nextNode());) if (hit(node.nodeValue)) rewriteText(node);
+    for (let node; (node = walker.nextNode());) rewriteText(node);
     rewriteAttrs(scope);
     for (const el of scope.querySelectorAll('[title],[aria-label],[placeholder],[alt],[data-pinkie-tooltip]')) rewriteAttrs(el);
   }
   const watched = new Map();
   function onChange(records) {
     for (const record of records) {
-      if (record.type === 'characterData') { if (hit(record.target.nodeValue)) rewriteText(record.target); }
+      if (record.type === 'characterData') rewriteText(record.target);
       else if (record.type === 'attributes') rewriteAttrs(record.target);
       else for (const node of record.addedNodes) {
-        if (node.nodeType === 3) { if (hit(node.nodeValue)) rewriteText(node); }
+        if (node.nodeType === 3) rewriteText(node);
         else if (node.nodeType === 1) rewrite(node);
       }
     }
   }
   function attach() {
     if (!isMetre()) return;
+    if (!watched.has(document)) watched.set(document, window.Pinkie?.domWatch?.watch(SCOPE, attach));   // 根节点比脚本晚出来（直接打开或刷新设置页、点出工作台）时等它出来再换
     for (const scope of document.querySelectorAll(SCOPE)) {
       if (watched.has(scope)) continue;
       rewrite(scope);
@@ -262,7 +265,7 @@
     titleOn();
   }
   function detach() {
-    for (const observer of watched.values()) observer.disconnect();
+    for (const observer of watched.values()) observer?.disconnect();
     watched.clear();
     for (const [node, {original, rewritten}] of texts) if (node.nodeValue === rewritten) node.nodeValue = original;
     for (const [el, saved] of attrs) for (const [name, {original, rewritten}] of Object.entries(saved)) if (el.getAttribute(name) === rewritten) el.setAttribute(name, original);
@@ -285,9 +288,6 @@
   const sync = () => (isMetre() ? attach() : detach());
   new MutationObserver(sync).observe(root, {attributes: true, attributeFilter: ['data-laolao-mode']});
   window.addEventListener('laolao:modechange', sync);
-  // 设置页、工作台、链接预览都是点出来的：点完再找一次新出现的根节点。
-  document.addEventListener('click', () => { if (isMetre()) for (const ms of [0, 250, 700]) setTimeout(attach, ms); }, true);   // 原生设置页点完约 170ms 才出来
-  window.addEventListener('popstate', () => { if (isMetre()) setTimeout(attach, 0); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync, {once: true}); else sync();
   window.__pinkieMetreWords = {word, attach, detach};
 })();
