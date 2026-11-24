@@ -61,3 +61,8 @@ html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outli
 @media (max-width: 920px) {
   html[data-laolao-mode="metre"] .chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card):not(:has(> .laolao-delivery-card.is-media)) { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* T3#5 复制键重复：碧琪的消息按键行（laolao-message-actions.css）想在有「复制 ▾」时藏掉原生「复制为 Markdown」，
+ * 但 2026.7.1-2 里原生键外面包了一层 openclaw-tooltip，那条 `> .chat-copy-btn` 的规则落空，助手消息底部出现两个复制键。
+ * openclaw-tooltip 自己在元素上写了 display: contents（内联），外层藏不掉，所以藏里面的原生按钮。只在 Metre 下生效；其他模式的同一问题交给对话区负责人。 */
+html[data-laolao-mode="metre"] .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > openclaw-tooltip > .chat-copy-btn { display: none; }

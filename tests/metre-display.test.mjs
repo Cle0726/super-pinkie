@@ -86,6 +86,30 @@ test(`Metre attachment cards: one per row in a narrow window, unchanged when wid
   } finally { await browser.close(); }
 });
 
+// T3#5：原生「复制为 Markdown」包在 openclaw-tooltip 里，碧琪按键行在的时候 Metre 下要藏掉（改前两个复制键并排）。
+const copyPage = (mode) => `<!doctype html><html${mode ? ` data-laolao-mode="${mode}"` : ''}><head><style>${NATIVE}\n${read('laolao-message-actions.css')}\n${read('laolao-metre-display.css')}</style></head><body>
+<div class="chat-thread"><div class="chat-group assistant"><div class="chat-group-messages"><div class="chat-group-footer"><div class="chat-group-footer-actions">
+<openclaw-tooltip style="display:contents"><button class="btn btn--xs chat-copy-btn" id="native">复制为 Markdown</button></openclaw-tooltip>
+<div class="pinkie-msg-row pinkie-msg-row--assistant"><button class="pinkie-msg-btn" id="ours">复制</button></div>
+</div></div></div></div></div></body></html>`;
+async function copyKeys(browser, mode) {
+  const p = await browser.newPage({viewport: {width: 1440, height: 700}});
+  await p.setContent(copyPage(mode));
+  const r = await p.evaluate(() => ['native', 'ours'].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return b.width > 0 && b.height > 0; }));
+  await p.close();
+  return r;
+}
+
+test(`Metre message footer: one copy key, native Markdown copy hidden when ours is present (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const [native, ours] = await copyKeys(browser, 'metre');
+    assert.deepEqual([native, ours], [false, true], `Metre: native copy hidden, ours shown: ${JSON.stringify([native, ours])}`);
+    const [n2, o2] = await copyKeys(browser, 'chat');
+    assert.deepEqual([n2, o2], [true, true], `other modes untouched by this file: ${JSON.stringify([n2, o2])}`);
+  } finally { await browser.close(); }
+});
+
 test('wiring: laolao-metre-display.css is in the head after the Metre keys and backstage, owned by the Metre region, Metre-only, and adds no !important', () => {
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);
