@@ -4,7 +4,7 @@
   const names = {pinkie:'碧琪',codex:'紫悦',openclaw:'云宝',claude:'珍奇',gemini:'柔柔',grok:'苹果嘉儿',user:'铲屎官',system:'派对记录'};
   // Keep the stable `openclaw` dispatch id for stored rooms and compatibility,
   // but never expose the upstream runtime name as this App's agent brand.
-  const engines={pinkie:'主持',codex:'Codex',openclaw:'CLE Kk',claude:'Claude',gemini:'Gemini',grok:'Grok'};
+  const engines={pinkie:'主持',codex:'Codex',openclaw:'C.le.',claude:'Claude',gemini:'Gemini',grok:'Grok'};
   const portraits={pinkie:'/avatar.png',codex:'/twilight.png',openclaw:'/rainbow.png',claude:'/rarity.png',gemini:'/fluttershy.png',grok:'/applejack.png'};
   const state = {token:'',agents:[],rooms:[],room:null,messages:new Map(),tasks:[],reply:null,query:'',signature:'',polling:false,epoch:0,requests:new Map(),sending:new Set(),hasOlder:false,archived:false,loadingRoom:false,metadataAt:0};
   const drafts=window.PartyDrafts;
@@ -83,7 +83,7 @@
   function messageNode(message){
     if(message.sender==='system'){
       if(message.kind==='error'){const details=element('details','notice error');details.append(element('summary','','这次没有完成，点开查看原因'),element('pre','',message.body));return details;}
-      return element('div','notice',message.body.replace(/Codex/g,'紫悦').replace(/OpenClaw/g,'CLE Kk'));
+      return element('div','notice',message.body.replace(/Codex/g,'紫悦').replace(/OpenClaw/g,'C.le.'));
     }
     const row=element('article','message '+(message.sender==='user'?'user':''));row.dataset.id=String(message.id);row.append(avatar(message.sender));
     const body=element('div','message-body');const meta=element('div','message-meta');
