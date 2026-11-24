@@ -104,7 +104,16 @@ export function compareCores(openclawPrefix, clePrefix) {
   return { dependencies: wantTree.size, files, problems };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+function isDirectCliEntry(entryPath) {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(entryPath);
+  } catch {
+    return path.resolve(process.argv[1]) === entryPath;
+  }
+}
+
+if (isDirectCliEntry(fileURLToPath(import.meta.url))) {
   const arg = (name) => {
     const index = process.argv.indexOf(name);
     if (index < 0 || !process.argv[index + 1]) {

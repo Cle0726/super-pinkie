@@ -1,5 +1,6 @@
 // K2 dual-core manifest, SHA-256 verification, and build/install contract tests.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -254,4 +255,30 @@ test("macOS build keeps the build machine's real user folders out of core instal
   assert.match(buildMac, /npm_config_userconfig="\$BUILD_NPM_USERCONFIG"/, 'preserves host .npmrc when present');
   assert.match(buildMac, /run_with_isolated_home env \\\n[\s\S]{0,400}\/bin\/bash "\$REPO_ROOT\/installer\/macos\/apply-theme\.sh"/, 'apply-theme runs inside isolated home');
   assert.match(buildMac, /super-pinkie-home\.\*/, 'cleanup trap removes temporary build home');
+});
+
+test('core CLI helpers still execute when invoked through a symlinked directory (macOS /tmp -> /private/tmp)', () => {
+  const realBase = fs.realpathSync(os.tmpdir());
+  const tmp = fs.mkdtempSync(path.join(realBase, 'pinkie-k2-symlink-'));
+  try {
+    const linkDir = path.join(tmp, 'sym-tools');
+    fs.symlinkSync(path.join(DEFAULT_REPO_ROOT, 'tools', 'core'), linkDir, 'junction');
+    const infoRes = spawnSync(
+      process.execPath,
+      [path.join(linkDir, 'manifest.mjs'), 'field', 'core', '--root', DEFAULT_REPO_ROOT],
+      { encoding: 'utf8' },
+    );
+    assert.equal(infoRes.status, 0, infoRes.stderr);
+    assert.equal(infoRes.stdout, 'openclaw');
+
+    const eqRes = spawnSync(
+      process.execPath,
+      [path.join(linkDir, 'verify-equivalence.mjs')],
+      { encoding: 'utf8' },
+    );
+    assert.equal(eqRes.status, 2, 'verify-equivalence CLI must run and reject missing flags instead of silently exiting 0');
+    assert.match(eqRes.stderr, /--openclaw-prefix <dir> is required/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

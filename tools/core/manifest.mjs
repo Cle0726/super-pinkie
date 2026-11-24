@@ -450,7 +450,16 @@ async function main() {
   throw new Error(`Unknown command: ${cmd}`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+function isDirectCliEntry(entryPath) {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(entryPath);
+  } catch {
+    return path.resolve(process.argv[1]) === entryPath;
+  }
+}
+
+if (isDirectCliEntry(__filename)) {
   main().catch((err) => {
     console.error(`[core-manifest] ERROR: ${err.message}`);
     process.exit(1);
