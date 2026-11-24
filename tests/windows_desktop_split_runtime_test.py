@@ -98,6 +98,21 @@ def _isolated_env(tmp_dir: Path) -> dict[str, str]:
     return env
 
 
+def _os_named(name):
+    """A copy of the os module whose only difference is os.name.
+
+    Patching os.name on the real module also flips pathlib's Path() to
+    WindowsPath, which cannot be instantiated off Windows (CI ubuntu raised
+    NotImplementedError).  windows_desktop runs every split part in one global
+    namespace, so rebinding its ``os`` global reaches lock_tampered_guard_counter
+    and hidden_process_kwargs without touching pathlib or other modules.
+    """
+    fake = types.ModuleType("os")
+    fake.__dict__.update(os.__dict__)
+    fake.name = name
+    return fake
+
+
 class WindowsDesktopSplitRuntimeTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="pinkie-m4-rt-")
@@ -194,7 +209,7 @@ class WindowsDesktopSplitRuntimeTest(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0)
 
         with (
-            mock.patch.object(desktop.os, "name", "nt"),
+            mock.patch.object(desktop, "os", _os_named("nt")),
             mock.patch.object(desktop.subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True),
             mock.patch.object(desktop.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, create=True),
             mock.patch.object(desktop.subprocess, "STARTUPINFO", mock.MagicMock, create=True),
@@ -207,6 +222,8 @@ class WindowsDesktopSplitRuntimeTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("lock-tampered", captured["cmd"])
         self.assertIn("creationflags", captured["kwargs"])
+        self.assertIn("startupinfo", captured["kwargs"])
+        self.assertIs(desktop.os, os)
 
     def test_desktop_control_node_arguments_and_start_with_fake_popen(self):
         install = self.root / "install"
@@ -529,6 +546,41 @@ print("OK", mod_name)
                 0,
                 f"standalone import/call failed for {name}:\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}",
             )
+
+
+    def test_package_import_without_app_dir_on_sys_path(self):
+        # python -m unittest from the repo root imports app.windows_desktop with
+        # only the repo root on sys.path; main raised "No module named
+        # release_notes" there unless PYTHONPATH=app was set.
+        code = r'''
+import importlib, sys
+from pathlib import Path
+root = Path(sys.argv[1]).resolve()
+app_dir = str(root / "app")
+sys.path[:] = [p for p in sys.path if p and Path(p).resolve() != Path(app_dir).resolve()]
+sys.path.insert(0, str(root))
+desk = importlib.import_module("app.windows_desktop")
+guard = importlib.import_module("app.windows_update_guard")
+assert "release_notes" not in sys.modules, "bare release_notes should not be importable here"
+assert desk.release_notes is sys.modules["app.release_notes"]
+assert guard.release_notes is sys.modules["app.release_notes"]
+assert desk.release_notes_text("x") == guard.release_notes_text("x")
+assert desk.InAppBrowserBridge.__module__ == "app.inapp_browser"
+assert "inapp_browser" not in sys.modules
+print("PKG_IMPORT_OK")
+'''
+        env = _isolated_env(self.root)
+        env.pop("PYTHONPATH", None)
+        r = subprocess.run(
+            [sys.executable, "-c", code, str(ROOT)],
+            cwd=str(self.root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        self.assertEqual(r.returncode, 0, f"package import failed:\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}")
+        self.assertIn("PKG_IMPORT_OK", r.stdout)
 
 
 if __name__ == "__main__":

@@ -28,8 +28,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import browser_vpn_subscription as subs
-from browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, locate_core, window_process_kwargs
+try:
+    import browser_vpn_subscription as subs
+    from browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, locate_core, window_process_kwargs
+except ModuleNotFoundError as _exc:  # imported as app.inapp_browser without app/ on sys.path
+    if _exc.name not in ("browser_vpn_subscription", "browser_vpn_core"):
+        raise
+    from app import browser_vpn_subscription as subs
+    from app.browser_vpn_core import CoreError, MihomoCore, assign_to_kill_job, locate_core, window_process_kwargs
 
 ENDPOINT_ENV = "PINKIE_APP_BROWSER_ENDPOINT"
 IP_CHECK_URL = "https://api.ip.sb/geoip"

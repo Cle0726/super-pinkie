@@ -16,7 +16,12 @@ import tempfile
 import time
 import urllib.parse
 
-import release_notes
+try:
+    import release_notes
+except ModuleNotFoundError as _exc:  # imported as app.<module> without app/ on sys.path
+    if _exc.name != "release_notes":
+        raise
+    from app import release_notes
 
 if "_PINKIE_DESKTOP_PART" not in globals():
     UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"

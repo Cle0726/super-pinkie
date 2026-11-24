@@ -25,7 +25,12 @@ import urllib.request
 import uuid
 import webbrowser
 
-import release_notes
+try:
+    import release_notes
+except ModuleNotFoundError as _exc:  # imported as app.<module> without app/ on sys.path
+    if _exc.name != "release_notes":
+        raise
+    from app import release_notes
 
 
 GATEWAY_URL = "http://127.0.0.1:18789/"
@@ -448,7 +453,12 @@ def kill_process_tree(pid, timeout=8):
 _load_desktop_part("windows_gateway")
 
 
-from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
+try:
+    from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
+except ModuleNotFoundError as _exc:  # imported as app.windows_desktop without app/ on sys.path
+    if _exc.name != "inapp_browser":
+        raise
+    from app.inapp_browser import InAppBrowserBridge  # noqa: E402
 
 
 _load_desktop_part("windows_bridge_scripts")
