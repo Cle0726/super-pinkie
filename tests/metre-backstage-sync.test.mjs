@@ -93,7 +93,9 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
     });
     await tab.addScriptTag({content: read('laolao-metre-backstage.js')});
     const tick = () => tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
-    const band = () => tab.evaluate(() => document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText.replace(/\s+/g, ' ') || '');
+    // 读每一格的 title（就是全文）。带子按输入框宽度选全文 / 短档，CI 的 Linux 没有同款中文字体，780px 放不下全文就换短档，
+    // 可见文字跟着环境变；title 两档一样，断言只看状态，不看字体。
+    const band = () => tab.evaluate(() => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg')].map((n) => n.title).join(' '));
     const hasSync = () => tab.evaluate(() => Boolean(document.querySelector('.pk-metre-backstage .pk-bs__sync')));
     await tick();
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
@@ -118,7 +120,7 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
     await tab.waitForTimeout(3600);
     assert.match(await band(), /不同步 · 后台在跑 · 页面停着/);
     await tab.evaluate(() => { window.FINISH_ON_REFRESH = true; document.querySelector('.pk-metre-backstage .pk-bs__sync').click(); });
-    await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText || ''), null, {timeout: 3000});
+    await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe) [data-seg="run"]')?.title || ''), null, {timeout: 3000});
     await tab.waitForTimeout(2600);
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
   } finally { await browser.close(); }
