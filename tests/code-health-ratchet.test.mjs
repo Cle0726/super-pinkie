@@ -9,8 +9,8 @@ import {healthChanges, readJson, SYNC_HINT} from '../tools/health/ratchet.mjs';
 test('代码健康度：每个文件不能变差，改善后要同步基线', async () => {
   const baseline = readJson(new URL('../tools/health/baseline.json', import.meta.url));
   const exceptions = readJson(new URL('../tools/health/exceptions.json', import.meta.url));
-  const {increases, decreases} = healthChanges(await measure(undefined, {includeTestInventory: false}), baseline, exceptions);
-  const notes = [...increases, ...decreases].map(message => `- ${message}`);
+  const {increases, decreases, unused} = healthChanges(await measure(undefined, {includeTestInventory: false}), baseline, exceptions);
+  const notes = [...increases, ...decreases, ...unused].map(message => `- ${message}`);
   if (decreases.length) notes.push(SYNC_HINT);
   if (notes.length) assert.fail(`代码健康度检查未通过：\n${notes.join('\n')}`);
 });
@@ -63,6 +63,6 @@ test('例外仅放行该文件的准确计数；新文件上限、全仓版本�
   const exception = (file, metric, value) => ({file, metric, value, reason: '对照测试'});
   assert.equal(healthChanges(current, empty).increases.length, 2);
   assert.equal(healthChanges(current, empty, [exception(file, 'lines', 1502)]).increases.length, 2);
-  assert.deepEqual(healthChanges(current, empty, [exception(file, 'lines', 1501), exception(versionFile, 'manualVersions', 1)]), {increases: [], decreases: []});
+  assert.deepEqual(healthChanges(current, empty, [exception(file, 'lines', 1501), exception(versionFile, 'manualVersions', 1)]), {increases: [], decreases: [], unused: []});
   assert.equal(healthChanges(empty, current).decreases.length, 2);
 });

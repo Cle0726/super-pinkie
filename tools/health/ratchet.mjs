@@ -46,7 +46,13 @@ function versionCounts(report) {
 export function healthChanges(current, baseline, exceptions = []) {
   const increases = [], decreases = [];
   const approved = exceptionsByMetric(exceptions);
-  const allows = (file, metric, value) => approved.get(`${file}\0${metric}`) === value;
+  const used = new Set();
+  const allows = (file, metric, value) => {
+    const key = `${file}\0${metric}`;
+    if (approved.get(key) !== value) return false;
+    used.add(key);
+    return true;
+  };
 
   function check(file, metric, actual, limit, hasBaseline) {
     if (!natural(limit)) throw new Error(`${file} 的基线缺少有效的 ${metric}。`);
@@ -93,5 +99,10 @@ export function healthChanges(current, baseline, exceptions = []) {
   } else if (newVersions < oldVersions) {
     decreases.push(`手写版本号总数减少（基线 ${oldVersions} → 当前 ${newVersions}）。`);
   }
-  return {increases, decreases};
+  // An exception nothing needs is a dormant pass for future growth: report it.
+  const unused = [...approved.keys()].filter(key => !used.has(key)).sort().map(key => {
+    const [file, metric] = key.split('\0');
+    return `${file}：${LABEL[metric]} 的例外（value ${approved.get(key)}）没有被用到，请从 tools/health/exceptions.json 删除。`;
+  });
+  return {increases, decreases, unused};
 }
