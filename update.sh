@@ -21,4 +21,4 @@ fi
 
 echo "==> re-applying prompts, patches and proxy"
 ./install.sh
-echo "done. Restart the CLE Kk gateway if it was running."
+echo "done. Restart the C.le. gateway if it was running."

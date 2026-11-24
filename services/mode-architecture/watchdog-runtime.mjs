@@ -858,7 +858,7 @@ export class UpstreamWatchdog {
           delayMs: Math.max(750, delayMs),
           deliveryMode: 'none',
           deleteAfterRun: true,
-          name: 'CLE Kk 续接',
+          name: 'C.le. 续接',
           tag,
         });
       }

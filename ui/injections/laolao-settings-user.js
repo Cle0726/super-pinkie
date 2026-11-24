@@ -205,6 +205,7 @@
     return {label, tone, detail};
   };
 
+  const kernelCredit = (version) => `C.le. 内核 ${version} · 基于 OpenClaw（MIT）`; // K4 关于页署名
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,
@@ -220,7 +221,7 @@
     thinkingChanges,
     fastModeValue,
     fastModeChanges,
-    guardPresentation,
+    guardPresentation, kernelCredit,
   });
 
   const state = {
@@ -228,7 +229,7 @@
     modelButton: null, modelMenu: null, modelList: null, modelChoices: [], brandButtons: [],
     modeButtons: new Map(), reasoningButtons: new Map(), speedButtons: new Map(),
     presetButtons: new Map(), themeButtons: [], themeModeButtons: [], channelList: null,
-    channelDisclosure: null, warning: null, version: null, usageValues: new Map(), statuses: new Map(),
+    channelDisclosure: null, warning: null, version: null, kernelNote: null, usageValues: new Map(), statuses: new Map(),
     saveQueue: Promise.resolve(), lastRoute: "", lastView: "", initialized: false,
     wechat: null, feishu: null, qq: null,
   };
@@ -438,7 +439,6 @@
     const intro = element("div", "pinkie-user-settings__intro", scroll);
     element("h2", "pinkie-user-settings__title", intro, "碧琪的常用设置");
     element("p", "pinkie-user-settings__intro-copy", intro, "把常用的几件事调成顺手的样子。修改后会自动保存。");
-
 
     const modeCard = card(scroll, "🌈", "碧琪", "选择新建聊天时先进入的模式。" );
     const modeRow = row(modeCard, "默认模式", "会影响之后新建的聊天。" );
@@ -667,7 +667,9 @@
       state.usageValues.set(key, value);
     }
     usageLabel.setAttribute("aria-hidden", "true");
-    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
+    makeStatus(aboutCard, "usage");
+    state.kernelNote = element("p", "pinkie-user-settings__soft-note", aboutCard, kernelCredit("读取中…"));
+    const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
 
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());
@@ -678,8 +680,7 @@
     syncPage();
     loadInitialData();
     syncVersion();
-    syncAppearance();
-    syncUsage();
+    syncAppearance(); syncUsage();
   }
 
   function rpc() { return window.__laolaoSidebar?.gwRequest; }
@@ -1444,7 +1445,7 @@
     const shell = document.querySelector("openclaw-app-shell");
     const version = shell?.context?.config?.current?.serverVersion
       || shell?.context?.gateway?.snapshot?.hello?.server?.version || "暂不可用";
-    ownText(state.version, String(version));
+    ownText(state.version, String(version)); ownText(state.kernelNote, kernelCredit(version));
   }
   const tokenCount = (value) => {
     const number = Number(value);
