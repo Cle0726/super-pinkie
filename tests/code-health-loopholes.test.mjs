@@ -9,7 +9,8 @@ import {fileURLToPath} from 'node:url';
 import {healthChanges, syncBaseline} from '../tools/health/ratchet.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const metrics = (over = {}) => ({important: 0, lines: 10, mutationObservers: 0, setIntervals: 0, subtreeObserverCalls: 0, windowGlobals: 0, ...over});
+const metrics = (over = {}) => ({important: 0, lines: 10, mutationObservers: 0, setIntervals: 0, subtreeObserverCalls: 0, windowGlobals: 0,
+  importantIndirect: 0, mutationObserverRefs: 0, observeUnclear: 0, setIntervalRefs: 0, windowGlobalsIndirect: 0, ...over});
 const report = injections => ({
   injectionTotals: {important: 0, mutationObservers: 0, setIntervals: 0, subtreeObserverCalls: 0, windowGlobals: 0, windowGlobalsPerFileSum: 0},
   injections, longFiles: {}, manualVersions: {counts: {}, occurrences: [], total: 0}, patchApplyFiles: 0,

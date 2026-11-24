@@ -49,7 +49,8 @@ test('测量口径：CRLF/LF 一致，只数独立全局名、观察子树设置
   const lf = await measure(dir);
   writeFiles('\r\n');
   assert.equal(formatMeasurement(await measure(dir)), formatMeasurement(lf));
-  assert.deepEqual(lf.injections[js], {important: 0, lines: 8, mutationObservers: 2, setIntervals: 1, subtreeObserverCalls: 1, windowGlobals: 1});
+  assert.deepEqual(lf.injections[js], {important: 0, lines: 8, mutationObservers: 2, setIntervals: 1, subtreeObserverCalls: 1, windowGlobals: 1,
+    importantIndirect: 0, mutationObserverRefs: 0, observeUnclear: 0, setIntervalRefs: 0, windowGlobalsIndirect: 0});
   assert.equal(Object.keys(lf.injections).length, 3);
   assert.equal(lf.injections['ui/injections/another.css'].lines, 1);
   assert.deepEqual(lf.manualVersions.counts, {head: 1, injections: 1, runtime: 1, tooling: 2});
