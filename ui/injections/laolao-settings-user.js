@@ -591,8 +591,7 @@
     const gameFxHost = element("div", "pinkie-user-settings__gamefx", appearanceCard);
     const mountGameFx = () => window.__pinkieGameFx?.buildSettings?.(gameFxHost, {row, setPressed});
     if (!mountGameFx()) window.addEventListener("pinkie:gamefx-ready", mountGameFx, {once: true});
-    element("p", "pinkie-user-settings__soft-note", appearanceCard,
-      "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。" );
+    element("p", "pinkie-user-settings__soft-note", appearanceCard, "语音输入和朗读可在聊天输入区使用；目前没有单独的开关。");
     makeStatus(appearanceCard, "appearance");
 
     const connectionCard = card(scroll, "📱", "连接", "管理手机配对和已连接的应用。" );
@@ -620,6 +619,7 @@
     quietOff.setAttribute("aria-label", "Metre 模式下消息渠道照常");
     paintQuiet();
     void (async () => { try { const result = await rpc()?.("pinkie.quiet.status", {}, 8000); pauseChannels = Boolean(result?.pauseChannels); paintQuiet(); } catch {} })();
+    const enginesHost = element("div", "pinkie-user-settings__engines", connectionCard); enginesHost.pinkieKit = {row, setPressed}; window.dispatchEvent(new CustomEvent("pinkie:settings-engines", {detail: {host: enginesHost}})); // Metre 外部引擎总开关，laolao-metre-engine.js 填
     state.channelDisclosure = element("details", "pinkie-user-settings__channels", connectionCard);
     const channelSummary = element("summary", "pinkie-user-settings__channels-summary", state.channelDisclosure,
       "已连接的其他应用");
@@ -667,7 +667,7 @@
       state.usageValues.set(key, value);
     }
     usageLabel.setAttribute("aria-hidden", "true");
-    makeStatus(aboutCard, "usage");
+    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
 
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());

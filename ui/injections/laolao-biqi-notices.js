@@ -38,7 +38,7 @@
       '模型那边不让碧琪进门，这个账号可能没开通这个模型。'],
     [/context[_ ]?(length|window)|maximum context|too many tokens|prompt is too long|token limit|context_length_exceeded/i,
       '这段对话太长啦，碧琪一口装不下。先整理一下（容量圈里的「手动整理」）再继续吧。'],
-    [/model[_ ]?not[_ ]?found|unknown model|does not exist|no such model/i,
+    [/model[_ ]?not[_ ]?found|model (?:was |is )?not found|selected model was not found|unknown model|does not exist|no such model/i,
       '找不到这个模型，可能名字变了。换一个模型试试。'],
     [/overloaded|\b529\b|\b503\b|service unavailable|server is busy|capacity/i,
       '模型那边太忙了，喘不过气。稍等一会儿再试。'],
@@ -209,7 +209,7 @@
   const ERROR_BOX = '.callout.danger:not(.update-banner), .callout.error, [role="alert"]:not(.update-banner)';
   // 模型调用失败（账号、额度、限流、上游 5xx、超时……）聊天里已经有一张失败卡说清楚了，
   // 顶部再挂一条红横幅就是同一件事报两遍。断线、文件、权限这些全局问题照常走横幅。
-  const MODEL_FAILURE = /auth[_ ]?unavailable|no auth available|no (?:available )?account|account unavailable|usage limit|rate.?limit|too many requests|insufficient[_ ]?(?:quota|balance|credit)|quota exceeded|billing|payment required|overloaded|service unavailable|server is busy|The agent run failed before producing a reply|Agent failed before reply|\b(?:402|429|5\d\d)\b|timed? ?out|timeout/i;
+  const MODEL_FAILURE = /model (?:was |is )?not found|auth[_ ]?unavailable|no auth available|no (?:available )?account|account unavailable|usage limit|rate.?limit|too many requests|insufficient[_ ]?(?:quota|balance|credit)|quota exceeded|billing|payment required|overloaded|service unavailable|server is busy|The agent run failed before producing a reply|Agent failed before reply|\b(?:402|429|5\d\d)\b|timed? ?out|timeout/i;
   const FAILURE_CARD = /^\s*这次(?:回复没能完成|没连上模型)/;
   const chatShowsFailure = (box) => {
     const pane = box.closest('openclaw-chat-pane') || document;

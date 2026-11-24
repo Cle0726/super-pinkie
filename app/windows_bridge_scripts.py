@@ -378,7 +378,7 @@ BRIDGE_SCRIPT = r"""
         border-color:rgba(246,218,234,.2);box-shadow:0 3px 12px rgba(0,0,0,.12),inset 0 1px rgba(255,255,255,.05);
       }
       html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-pane__header { padding-right:var(--pinkie-caption-reserve,204px)!important }
-      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important }
+      html[data-pinkie-platform="windows"][data-laolao-classic-shell="1"] body .chat-workbench>.chat-workspace-rail:not(.chat-workspace-rail--collapsed) { padding-top:44px!important } html[data-pinkie-platform="windows"] .pk-metre-board .pk-metre-board__head { padding-top:50px!important } @media(max-width:760px) { html[data-pinkie-platform="windows"] .pk-metre-board .pk-metre-board__close { top:50px!important } }
       html[data-pinkie-platform="windows"][data-pinkie-wb="on"] body .pk-workspace-header { padding-right:var(--pinkie-caption-reserve,204px)!important }
       html[data-pinkie-platform="windows"][data-pinkie-wb="on"][data-pk-wb-narrow="1"][data-pk-wb-view="code"] body .pk-wb-tabs { padding-right:var(--pinkie-caption-reserve,204px)!important }
       @media(max-width:900px) {

@@ -18,7 +18,7 @@
   const maxCards = () => tuned("process.maxCards", MAX_CARDS);
   const maxText = () => tuned("process.maxText", MAX_TEXT);
   const confettiRatio = () => window.PinkieTuning ? window.PinkieTuning.pixelRatio(Infinity) : devicePixelRatio;
-  const STICKER = (state) => `./laolao-pinkie-status-${state}.png`;
+  const STICKER = (state) => `/laolao-pinkie-status-${state}.png`; // 绝对路径：在 /settings/… 下 ./ 会 404
   const PHRASE = {
     thinking: "碧琪在动小脑瓜…", working: "碧琪在抛气球干活…", writing: "碧琪在比划着回你…",
     asking: "碧琪在等你点头…", done: "完成啦！", oops: "这一轮停下来了，做到一半的记录都留着",
@@ -175,7 +175,7 @@
       return;
     }
     if (!Array.isArray(record.eps)) record.eps = record.text ? [{text: record.text, ms: record.ms || 0, anchor: 0, legacy: true}] : [];
-    if (!run.thinkingSince) {
+    if (!run.thinkingSince || !record.eps.length) { // 新卡（在跑时再发一句开的另一轮）还没有段落时也先开一段，否则下面 ep 是 undefined
       run.thinkingSince = run.boundaryAt || Date.now(); record.count += 1;
       if (record.text) record.text += "\n\n";
       record.eps.push({text: "", ms: 0, anchor: rowAnchor(key),

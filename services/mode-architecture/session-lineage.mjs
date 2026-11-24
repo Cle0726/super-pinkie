@@ -187,7 +187,7 @@ export function isSessionOperationEvidence(entry, prompt) {
 // 这一轮把活真的交给了一个子会话（开起来了或已排队），不是只提了一张等用户点的卡片。
 // 那块活由子会话去做，它自己的交付门禁会检查它的改动和验证；父会话这一轮没有自己改文件是对的。
 export function isChildDelegation(entry) {
-  if (!entry || entry.failed || entry.name !== 'pinkie_session_start') return false;
+  if (!entry || entry.failed || !['pinkie_session_start', 'pinkie_engine_task'].includes(entry.name)) return false;
   return isChildKey(childResult(entry.output).key);
 }
 
@@ -412,7 +412,7 @@ export class SessionLineage {
     const reserved = this.reserved.get(key);
     if (reserved && this.now() - reserved > 60_000) this.reserved.delete(key);
     return Boolean(row?.hasActiveRun || row?.hasActiveSubagentRun || row?.hasActiveRun === undefined && row?.status === 'running'
-      || this.reserved.has(key) || this.isBusy(key));
+      || this.reserved.has(key) || this.isBusy(key) || this.externalBusy?.(key) === true);
   }
 
   runningChildren(parent, rows, lineage = this.lineage(), state = this.state(parent)) {

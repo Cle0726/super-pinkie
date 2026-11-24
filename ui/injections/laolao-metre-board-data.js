@@ -149,7 +149,7 @@
       if (!text) return;
       form.querySelector('button').disabled = true;
       try {
-        await rpc('chat.send', {sessionKey: s.key, message: text, idempotencyKey: 'pinkie-board-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)}, 12_000);
+        await (s.external ? rpc('pinkie.engines.say', {sessionKey: s.key, text}, 60_000) : rpc('chat.send', {sessionKey: s.key, message: text, idempotencyKey: 'pinkie-board-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)}, 12_000)); // 外部引擎的声部：递给引擎
         form.remove();
         refreshSoon();
       } catch { form.querySelector('button').disabled = false; input.setCustomValidity('没发出去，再试一次'); input.reportValidity(); }
