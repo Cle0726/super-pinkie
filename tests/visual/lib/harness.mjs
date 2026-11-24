@@ -96,10 +96,11 @@ const MODE_META = {
   },
 };
 
-function renderSceneBody(sceneId, mode) {
+function renderSceneBody(sceneId, mode, theme = 'day') {
   const meta = MODE_META[mode] || MODE_META.project;
   const collapsed = sceneId === 'sidebar-collapsed';
   const isMetre = mode === 'metre';
+  const isNight = theme === 'night';
 
   let mainContent = '';
   if (sceneId.startsWith('home-') || sceneId === 'sidebar-expanded' || sceneId === 'sidebar-collapsed') {
@@ -250,7 +251,7 @@ function renderSceneBody(sceneId, mode) {
   }
 
   return `<!doctype html>
-<html lang="zh-CN" data-laolao-mode="${mode}" data-theme-mode="light" data-pinkie-platform="windows" data-pinkie-native-glass="1">
+<html lang="zh-CN" data-laolao-mode="${mode}" data-theme-mode="${isNight ? 'dark' : 'light'}"${isNight ? ' data-pinkie-night=""' : ''} data-pinkie-platform="windows" data-pinkie-native-glass="1">
   <head>
     <meta charset="utf-8" />
     <title>超級碧琪 · M5 视觉回归</title>
@@ -565,10 +566,11 @@ export async function startVisualServer({port = 0} = {}) {
     }
     if (url.pathname === '/scene') {
       const sceneId = url.searchParams.get('id') || 'home-project';
+      const theme = url.searchParams.get('theme') === 'night' ? 'night' : 'day';
       const scene = VISUAL_SCENES.find((s) => s.id === sceneId) || VISUAL_SCENES[0];
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');
-      res.end(renderSceneBody(scene.id, scene.mode));
+      res.end(renderSceneBody(scene.id, scene.mode, theme));
       return;
     }
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
@@ -600,6 +602,7 @@ export async function launchVisualBrowser(engine = process.env.PINKIE_VISUAL_ENG
       '--font-render-hinting=none',
       '--disable-lcd-text',
       '--force-color-profile=srgb',
+      '--num-raster-threads=1',
     ],
   };
   if (engine === 'msedge' || engine === 'chrome') {
@@ -632,6 +635,7 @@ export async function openScenePage(browser, origin, sceneId, theme) {
     let seed = 42;
     Math.random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
     localStorage.setItem('laolao:motion-preference', 'reduce');
+    localStorage.setItem('pinkie.motion.reduce.v1', '1');
     localStorage.setItem('openclaw.i18n.locale', 'zh-CN');
     localStorage.setItem('openclaw.control.settings.v1', JSON.stringify({
       themeMode: dark ? 'dark' : 'light',
@@ -643,12 +647,46 @@ export async function openScenePage(browser, origin, sceneId, theme) {
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
-  await page.goto(`${origin}/scene?id=${encodeURIComponent(sceneId)}`, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/scene?id=${encodeURIComponent(sceneId)}&theme=${isNight ? 'night' : 'day'}`, {waitUntil: 'networkidle'});
   await page.evaluate(async (dark) => {
     document.documentElement.toggleAttribute('data-pinkie-night', dark);
     document.documentElement.setAttribute('data-theme-mode', dark ? 'dark' : 'light');
-    if (document.fonts?.ready) await document.fonts.ready;
-    await Promise.all([...document.images].map((img) => img.complete ? Promise.resolve() : new Promise((r) => { img.onload = img.onerror = r; })));
+    if (document.fonts) {
+      await Promise.all([...document.fonts].map((font) => font.load().catch(() => {})));
+      await document.fonts.ready;
+    }
+    await Promise.all([...document.images].map(async (img) => {
+      if (!img.complete) {
+        await new Promise((r) => {
+          img.addEventListener('load', r, {once: true});
+          img.addEventListener('error', r, {once: true});
+        });
+      }
+      if (typeof img.decode === 'function') {
+        await img.decode().catch(() => {});
+      }
+    }));
+    const bgUrls = new Set();
+    const collectBg = (style) => {
+      const bg = style?.backgroundImage || '';
+      for (const match of bg.matchAll(/url\((['"]?)(.*?)\1\)/g)) {
+        if (match[2] && !match[2].startsWith('data:')) bgUrls.add(match[2]);
+      }
+    };
+    for (const el of [document.documentElement, document.body, ...document.querySelectorAll('*')]) {
+      collectBg(getComputedStyle(el));
+      collectBg(getComputedStyle(el, '::before'));
+      collectBg(getComputedStyle(el, '::after'));
+    }
+    await Promise.all([...bgUrls].map(async (url) => {
+      const probe = new Image();
+      probe.src = url;
+      await probe.decode().catch(() => {});
+    }));
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   }, isNight);
   return {context, page, pageErrors};
 }
