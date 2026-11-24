@@ -489,13 +489,13 @@ class Roundtable:
         binary = executable('openclaw')
         node = executable('node')
         if not binary:
-            raise ValueError('没有找到 CLE Kk 模型连接器')
+            raise ValueError('没有找到 C.le. 模型连接器')
         live_config = Path.home()/'.openclaw/openclaw.json'
         config = json.loads(live_config.read_text(encoding='utf-8'))
         candidates = [agent for agent in CONTEXT['agent_entries'](config)
                       if '*' not in agent.get('tools', {}).get('deny', [])]
         if not candidates:
-            raise ValueError('没有可用于圆桌调用的 CLE Kk Agent 配置')
+            raise ValueError('没有可用于圆桌调用的 C.le. Agent 配置')
         agent = json.loads(json.dumps(candidates[0]))
         agent['model'] = {'primary': model, 'fallbacks': []}
         CONTEXT['replace_agent_entries'](config, [agent])
@@ -639,7 +639,7 @@ class Roundtable:
                                'scene', 'execute', 'done', run_id)
         binary, node = executable('openclaw'), executable('node')
         if not binary or not node:
-            raise ValueError('没有找到本机 CLE Kk 执行器')
+            raise ValueError('没有找到本机 C.le. 执行器')
         live_config = json.loads((Path.home()/'.openclaw/openclaw.json').read_text(encoding='utf-8'))
         candidates = [agent for agent in CONTEXT['agent_entries'](live_config)
                       if '*' not in agent.get('tools', {}).get('deny', [])]

@@ -133,7 +133,7 @@
   <tr>
     <td width="50%">
       <img src="ui/assets/laolao-party-wallpaper-v1.png" alt="派对空间">
-      <p align="center"><strong>🎉 派对空间（Party Space）</strong><br><sub>碧琪担任主持与总控，协同 Codex 执行代码任务、调用 CLE Kk 进行文本咨询，公开派工并逐项核验交付物。</sub></p>
+      <p align="center"><strong>🎉 派对空间（Party Space）</strong><br><sub>碧琪担任主持与总控，协同 Codex 执行代码任务、调用 C.le. 进行文本咨询，公开派工并逐项核验交付物。</sub></p>
     </td>
     <td width="50%">
       <img src="ui/assets/laolao-roundtable-workroom-v3.png" alt="灵感圆桌">

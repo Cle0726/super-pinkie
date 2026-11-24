@@ -80,5 +80,5 @@ if ($SyncPersonas) {
   & .\install.ps1
 }
 Write-Host ""
-Write-Host "更新完成。如果 CLE Kk 网关正在运行，请重启："
+Write-Host "更新完成。如果 C.le. 网关正在运行，请重启："
 Write-Host "    openclaw gateway restart"

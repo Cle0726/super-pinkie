@@ -231,11 +231,11 @@ export class CleKkAuditLog {
       const unsigned = {...value};
       delete unsigned.digest;
       if (!expected || expected !== hashForAudit(JSON.stringify(unsigned))) {
-        return {active: true, corrupted: true, reason: 'CLE Kk 状态摘要不一致'};
+        return {active: true, corrupted: true, reason: 'C.le. 状态摘要不一致'};
       }
       return value;
     } catch {
-      return {active: true, corrupted: true, reason: 'CLE Kk 状态文件不可读'};
+      return {active: true, corrupted: true, reason: 'C.le. 状态文件不可读'};
     }
   }
 
@@ -308,7 +308,7 @@ export class CleKkAuditLog {
       busy: true,
       retryable: true,
       records: 0,
-      reason: 'CLE Kk 审计日志正被写入，请稍后重试',
+      reason: 'C.le. 审计日志正被写入，请稍后重试',
     };
   }
 
@@ -321,14 +321,14 @@ export class CleKkAuditLog {
       for (const line of lines) {
         const record = JSON.parse(line);
         if (record.seq !== sequence + 1 || record.prev !== previous || record.hash !== auditRecordDigest(record)) {
-          return {ok: false, records: sequence, reason: 'CLE Kk 审计链断裂'};
+          return {ok: false, records: sequence, reason: 'C.le. 审计链断裂'};
         }
         sequence = record.seq;
         previous = record.hash;
       }
       return {ok: true, records: sequence};
     } catch (error) {
-      return {ok: false, records: sequence, reason: `CLE Kk 审计日志不可读：${error.message}`};
+      return {ok: false, records: sequence, reason: `C.le. 审计日志不可读：${error.message}`};
     }
   }
 }
@@ -650,7 +650,7 @@ export class CleKkSupervisor {
       // quarantine it and start a clean chain.
       turn.retryExhausted = true;
       turn.pending = {
-        decision: this.integrity.revise(key, persisted.reason || 'CLE Kk 状态不可验证'),
+        decision: this.integrity.revise(key, persisted.reason || 'C.le. 状态不可验证'),
         runId: turn.runId,
         textHash: '',
         at: Date.now(),
@@ -1155,7 +1155,7 @@ export class CleKkSupervisor {
     }
     this.scheduleRetry(pending, ctx, 'reply_payload');
     if (isHonestIncomplete(text)) return;
-    return {cancel: true, reason: 'CLE Kk 正在继续核对真实执行结果'};
+    return {cancel: true, reason: 'C.le. 正在继续核对真实执行结果'};
   }
 
   hasPending(sessionKey) {
