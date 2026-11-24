@@ -19,13 +19,39 @@
   const paint = () => { const p = pane(); p?.state?.requestUpdate?.(); p?.requestUpdate?.(); window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})); };
 
   head('整页动画');
-  btn('▶ 切进 Metre（起拍 → 落拍 → 亮灯 → 谱号落位 → 翻开）', async () => {
+  btn('▶ 只放 Metre 进场那一段（合上 → 五线 → 四拍音符跳上谱 → 翻开）', async () => {
     const t = window.PinkieMetreTransition?.play?.(); if (!t) { alert('现在是「减少动态效果」，转场不放。'); return; }
     await t.ready; await t.covered; t.finish();
   }, 'metre');
   btn('▶ 换会话（翻谱）', () => window.dispatchEvent(new CustomEvent('pinkie:session-selected', {detail: {}})), 'switch');
   btn('▶ 重放首页进场（亮灯 + 引导语按音高落回）', () => window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: 420}})), 'home');
   btn('▭ 首页画带矮于 180px（把窗口高度压到约 520px 再点）', () => { if (window.innerHeight > 560) alert('把浏览器窗口高度拖到 520px 左右，画带会自己变成只有一行五线谱；或者用 &h=520 的录帧脚本看。'); }, 'low');
+
+  // Metre ⇄ 碧琪：预览的假网关只有一个会话，路由换不过去，所以这里按切换器里一模一样的顺序调同样的两个模块，
+  // 「换路由」那一步换成换页面的模式皮（data-laolao-mode）。切换器本身的先后顺序由 tests/metre-leave.test.cjs 管。
+  const PINK = {chat: '唠嗑模式', project: '项目模式', thinking: '想法模式', learning: '学习模式', unrestricted: '无限制模式'};
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const skin = (id) => document.documentElement.setAttribute('data-laolao-mode', id);
+  const modeObj = (id) => ({id, label: PINK[id], phrases: ['正在切换到' + PINK[id], PINK[id] + '马上就好'], readyPhrase: PINK[id] + '到了'});
+  let pink = 'chat';
+  const toPinkie = async (id = pink) => {   // 切换器里 Metre → 碧琪：Metre 离场 → covered → 碧琪转场 → covered → 拿掉谱纸 → 换路由 → 新页面好了 finish
+    window.dispatchEvent(new CustomEvent('laolao:mode-transition-start', {detail: {mode: id}}));   // 切换器也发这一声：Metre 皮肤据此放出碧琪转场的样式表
+    const exit = window.PinkieMetreTransition?.leave?.(); if (exit) await exit.covered;
+    const fx = window.PinkieModeTransitionFx?.play?.(modeObj(id), {}) || null; if (fx) { await fx.ready; await fx.covered; }
+    exit?.release(); skin(id); await sleep(300); if (fx) await fx.finish();
+    window.dispatchEvent(new CustomEvent('laolao:mode-transition-finished', {detail: {mode: id}}));
+  };
+  const toMetre = async () => {             // 碧琪 → Metre：Metre 进场 → covered → 换路由 → finish（翻开）
+    const t = window.PinkieMetreTransition?.play?.(); if (!t) { skin('metre'); return; }
+    await t.ready; await t.covered; skin('metre'); await sleep(200); await t.finish();
+  };
+  head('Metre ⇄ 碧琪（下面选碧琪那一边是哪个模式）');
+  const sel = document.createElement('select'); sel.dataset.pv = 'pink'; Object.entries(PINK).forEach(([id, label]) => sel.append(new Option(label, id)));
+  sel.onchange = () => { pink = sel.value; }; Object.assign(sel.style, {padding: '4px', borderRadius: '6px'}); body.append(sel);
+  btn('▶ 碧琪 → Metre（进场：音符跳动）', async () => { if (document.documentElement.getAttribute('data-laolao-mode') === 'metre') { skin(pink); await sleep(600); } await toMetre(); }, 'to-metre');
+  btn('▶ Metre → 碧琪（Metre 离场 + 碧琪转场）', async () => { if (document.documentElement.getAttribute('data-laolao-mode') !== 'metre') { skin('metre'); await sleep(600); } await toPinkie(); }, 'to-pinkie');
+  btn('▶ 来回连切（切进 Metre，2 秒后切回碧琪）', async () => { skin(pink); await sleep(600); await toMetre(); await sleep(2000); await toPinkie(); }, 'round-trip');
+  btn('▶ 只放 Metre 离场那一段', async () => { const e = window.PinkieMetreTransition?.leave?.(); if (!e) { alert('现在是「减少动态效果」，离场不放。'); return; } await e.covered; await sleep(500); e.release(); }, 'leave-only');
 
   // 后台带：都是改「后台带读的那几份数据」，后台带自己的代码不动
   const rs = () => window.__pinkieRunStatus;
@@ -69,5 +95,5 @@
   btn(q.get('night') === '1' ? '☀ 换成日间' : '☾ 换成夜间', () => go('night', q.get('night') === '1' ? '0' : '1'));
   btn(document.documentElement.hasAttribute('data-pinkie-reduce-motion') ? '↺ 恢复动效' : '◌ 模拟「减少动态效果」', () => { const r = document.documentElement; if (r.hasAttribute('data-pinkie-reduce-motion')) r.removeAttribute('data-pinkie-reduce-motion'); else r.setAttribute('data-pinkie-reduce-motion', ''); });
   const mount = () => document.body ? document.body.append(box) : setTimeout(mount, 50); mount();
-  window.__pv = {pane, paint, hookConn, hookGw};
+  window.__pv = {pane, paint, hookConn, hookGw, toPinkie, toMetre, skin, PINK};
 })();

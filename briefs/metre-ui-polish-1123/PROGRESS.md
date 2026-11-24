@@ -1,5 +1,13 @@
 # Metre UI 打磨（在现有设计上优化，不推倒重来）
 
+## 接力卡（最后更新：2026-11-23 PST 下午，Quick-Win-k7m2 @ Windows，用户打回后的第 4 轮）
+
+- 状态：返工文件 `build\quick-run\返工-界面-1123-r4.md` 两条都改完、推送了（代码 `edf61f80`），自查（全量门禁：293 个测试文件、61 条失败，和 main 的 61 条逐条相同，本线新增 0）见 `build\quick-run\status\ui.done`，证据在 `build\quick-run\va-r4\`。PR #67 仍是草稿。
+- 两条：
+  1. 切进 Metre 回到第 1 版「音符跳动」（`build\quick-run\mui\proto-v3-1123\v3.js`）：谱纸合上 → 五线划出、M 当谱号亮 → 指挥棒每拍落在一个音符上、拍间往上弹，音符在拍点落到谱上（先高两格、再一格、落定），刚落下的是钴蓝 → 翻开。第八版的像素环 / 扇形拖影整套拿掉。打磨：落地压扁一下再弹回、两粒溅点；谱台灯在每个音符正上方，同一拍一盏盏亮；M 亮满时轻轻落位回弹。小猫不出现。时间线和第 1 版一样，约 1.67 秒。
+  2. 新做 Metre → 碧琪离场（`PinkieMetreTransition.leave()`）：谱纸带着谱面合上 → 指挥棒收拍（画个圈、一顿）→ 音符从最后一个起按拍跳起飞走、灯一盏盏灭 → 五线收拢、M 暗下去 → 760ms 收空。切换器从 Metre 去别的模式时先播离场，covered 以后才播目标模式原来的碧琪转场，碧琪转场 covered 以后才拿掉谱纸、才动路由。碧琪五个模式之间互切的路径没改。新测试 `tests/metre-leave.test.cjs`。
+- 预览：碧琪那边的模式在预览面板里选；「碧琪 → Metre」「Metre → 碧琪」「来回连切」三个键。预览的假网关只有一个会话，路由换不过去，这几个键按切换器一模一样的顺序调同样两个模块，「换路由」那一步换成换模式皮。
+- 没动：后台带、按键、换会话、颜色；其他五个模式（注入对照逐字一致）；`feat/metre-engines` 的新提交 `696a04ad` 还没合（返工没要求）。
 ## 接力卡（最后更新：2026-11-23 PST 上午，Quick-Win-k7m2 @ Windows，协调者复验后的第 3 轮）
 
 - 状态：返工文件 `build\quick-run\返工-界面-1123-r3.md` 剩下的三处都改完、推送了（代码 `fb42cadf`），自查（全量门禁（fb42cadf，runner-ui2）：292 个文件、62 条失败，对照 main 61 条；多出的 1 条是 mode-architecture「cross-process audit writers preserve every record in one valid chain」，单独重跑：本分支 5 次里 1 次失败、main 副本（metre-ui-base）5 次里也 1 次失败，是并发写日志的偶发（上一轮交接卡就记过它在 main 上同样失败），和本线无关。本线新增失败 0）见 `build\quick-run\status\ui.done`，证据在 `build\quick-run\va-r3\`。PR #67 仍是草稿。
