@@ -268,3 +268,30 @@ test('nothing on screen or in the note names the other projects', () => {
   }
   assert.equal(new EngineDispatch({bridge: {}, lineage: {}}).seed.length, 32);
 });
+
+// 11-24 第二次真跑：会话从第一句起就交给 Claude Code，网关里从没有这条 Metre 会话的条目，
+// 主脑派活被 Metre 拒「请在打开的父会话里操作」。说第一句时就照侧栏的建法补一条。
+test('a Metre session driven by an engine from its first message gets a gateway entry, so Metre accepts it as a parent', async t => {
+  const env = setup(t);
+  const entries = {};
+  const created = [];
+  env.lineage.access = {
+    entry: async key => entries[key] || null,
+    rpc: async (name, params) => {
+      if (name !== 'sessions.create') return {ok: true};
+      if (params.label === '新会话') throw new Error('label already in use: 新会话');
+      created.push(params); entries[params.key] = {label: params.label}; return {key: params.key};
+    },
+  };
+  await env.dispatch.decorate(BRAIN, '你好');
+  assert.deepEqual(created, [{agentId: 'metre', key: BRAIN, label: '新会话 2'}]);
+  // 已经有条目（包括归档的）：不再建。
+  env.bridge.sessions.set(BRAIN, {threadId: 'thread:project:x:other'});
+  await env.dispatch.decorate(BRAIN, '再一句');
+  assert.equal(created.length, 1);
+  // 网关出错不挡住说话：照样带派活说明发出去。
+  delete entries[BRAIN];
+  env.lineage.access.rpc = async () => { throw new Error('gateway down'); };
+  env.bridge.sessions.set(BRAIN, {threadId: '', dispatchNonce: ''});
+  assert.match(await env.dispatch.decorate(BRAIN, '第三句'), /^【Metre · 派活说明】/);
+});

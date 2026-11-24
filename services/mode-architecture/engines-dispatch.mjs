@@ -180,6 +180,7 @@ export class EngineDispatch {
   async decorate(key, text) {
     if (!this.isEnabled() || !isMetreKey(key) || this.lineage.lineage()[key]) return text;
     this.userTurn(key);
+    await this.ensureEntry(key).catch(error => this.logger?.warn?.(`engines dispatch entry: ${error.message}`));
     const pref = this.bridge.sessions.get(key) || {};
     const port = await this.listen().catch(() => 0);
     if (!port) return text;
@@ -198,6 +199,17 @@ export class EngineDispatch {
     const pref = this.bridge.sessions.get(key) || {};
     if (!pref.dispatchPending || !threadId) return;
     this.bridge.sessions.set(key, {dispatchThread: threadId, dispatchPending: false});
+  }
+
+  // 从第一句起就交给引擎的 Metre 会话从没走过 Metre 的一轮，网关里没有它的会话条目，Metre 派发会拒「请在打开的父会话里操作」
+  // （11-24 第二次真跑）。照侧栏「新会话」的建法补一条（名字撞了就加序号），已有条目或已归档的不动。
+  async ensureEntry(key) {
+    const access = this.lineage.access;
+    if (typeof access?.entry !== 'function' || typeof access?.rpc !== 'function' || await access.entry(key)) return;
+    for (let n = 1; n <= 20; n++) {
+      try { await access.rpc('sessions.create', {agentId: 'metre', key, label: n === 1 ? '新会话' : `新会话 ${n}`}); return; }
+      catch (error) { if (!/label already in use/i.test(error.message)) throw error; }
+    }
   }
 
   note(nonce, until) {
