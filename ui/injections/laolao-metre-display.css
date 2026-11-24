@@ -84,3 +84,14 @@ html[data-laolao-mode="metre"] .chat-group.user .chat-bubble > .pinkie-msg-row {
 html[data-laolao-mode="metre"] .chat-group.user:has(.chat-bubble[data-pinkie-editing]) .chat-group-messages { width: 100%; max-width: 100%; }
 html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] { box-sizing: border-box; width: min(520px, 100%); max-width: 100%; }
 html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] .pinkie-msg-edit { min-width: 0; width: 100%; }
+
+/* T3#10 计划卡配色：碧琪的计划卡（laolao-plan.js，样式 laolao-rich.css）的颜色全来自 --pk-* 变量，挂在 html:not(#p1):not(#p2):not(#p3) 上，
+ * Metre 里还是碧琪的蓝 #2f7bff、紫黑边、半透明白底、阴影。这里只在计划卡自己身上把这些变量换成 Metre 的（卡片上的值盖过从 html 继承来的，
+ * 不用强制覆盖，也不影响页面上其他用 --pk-* 的组件）。进行中那一项的扫光、完成标记都跟着变量走。 */
+html[data-laolao-mode="metre"] .pk-plan {
+  --pk-fg: var(--metre-text); --pk-mute: var(--metre-muted); --pk-faint: var(--metre-line-strong);
+  --pk-panel: var(--metre-surface, var(--metre-bg)); --pk-chip: var(--metre-hover); --pk-hover: var(--metre-hover);
+  --pk-accent: var(--metre-cobalt); --pk-accent-ink: var(--metre-cobalt);
+  --pk-on: color-mix(in srgb, var(--metre-cobalt) 12%, transparent); --pk-on-line: color-mix(in srgb, var(--metre-cobalt) 42%, transparent);
+  --pk-good: var(--metre-cobalt); --pk-shadow: 0 0 0 0 transparent;
+}

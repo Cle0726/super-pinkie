@@ -152,6 +152,31 @@ test(`Metre edit-and-resend box stays inside the thread at 820 and keeps a usabl
   } finally { await browser.close(); }
 });
 
+// T3#10：计划卡在 Metre 里还是碧琪的蓝 #2f7bff、紫黑边、阴影（--pk-* 变量挂在 html:not(#p1):not(#p2):not(#p3) 上）。
+const PK_VARS = 'html:not(#p1):not(#p2):not(#p3){--pk-fg:#2a2233;--pk-faint:rgba(42,34,51,.1);--pk-panel:rgba(255,255,255,.62);--pk-accent:#2f7bff;--pk-shadow:0 8px 24px -16px rgba(42,34,51,.18)}html:not(#p1):not(#p2):not(#p3) .pk-plan{display:block;background:var(--pk-panel);box-shadow:inset 0 0 0 1px var(--pk-faint),var(--pk-shadow);color:var(--pk-fg)}html:not(#p1):not(#p2):not(#p3) .pk-plan__bar i[data-status="completed"]{display:inline-block;width:20px;height:4px;background:var(--pk-accent)}';
+const METRE_VARS = 'html[data-laolao-mode="metre"]{--metre-text:#1B1A18;--metre-muted:#77736B;--metre-line-strong:#D3D0C8;--metre-surface:#FFFFFF;--metre-bg:#FAF9F5;--metre-hover:#F0EEE6;--metre-cobalt:#2F4BB0}';
+const planPage = (mode) => `<!doctype html><html${mode ? ` data-laolao-mode="${mode}"` : ''}><head><style>${PK_VARS}\n${METRE_VARS}\n${read('laolao-metre-display.css')}</style></head><body>
+<section class="pk-plan" id="plan"><div class="pk-plan__bar"><i data-status="completed" id="bar"></i></div></section></body></html>`;
+
+test(`Metre plan card uses Metre ink and cobalt, not 碧琪 blue; other modes untouched (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const look = async (mode) => {
+      const p = await browser.newPage({viewport: {width: 600, height: 300}});
+      await p.setContent(planPage(mode));
+      const r = await p.evaluate(() => { const c = getComputedStyle(document.getElementById('plan')); return {bar: getComputedStyle(document.getElementById('bar')).backgroundColor, bg: c.backgroundColor, shadow: c.boxShadow, color: c.color}; });
+      await p.close();
+      return r;
+    };
+    const m = await look('metre');
+    assert.equal(m.bar, 'rgb(47, 75, 176)', `Metre plan progress is cobalt: ${JSON.stringify(m)}`);
+    assert.equal(m.color, 'rgb(27, 26, 24)', `Metre plan text is Metre ink: ${JSON.stringify(m)}`);
+    assert.doesNotMatch(m.shadow, /42, 34, 51/, `no 碧琪 purple border / shadow in Metre: ${JSON.stringify(m)}`);
+    const c = await look('chat');
+    assert.equal(c.bar, 'rgb(47, 123, 255)', `other modes keep 碧琪 blue: ${JSON.stringify(c)}`);
+  } finally { await browser.close(); }
+});
+
 test('wiring: laolao-metre-display.css is in the head after the Metre keys and backstage, owned by the Metre region, Metre-only, and adds no !important', () => {
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);
