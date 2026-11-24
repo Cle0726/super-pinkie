@@ -571,3 +571,9 @@ test('in a browser: 第三方许可 shows a 查看 button that opens the full no
     assert.deepEqual(await tab.evaluate(() => window.calls), [], 'reading the notices needs no gateway');
   } finally { await browser.close(); }
 });
+
+// 11-24：外部引擎被中断 / 失败时不落款，和 cle-stage 一样演「中断」形态（新版塌下去变灰，旧版 stopped 映射成 idle），停 2 秒、1 秒交回签名。
+test('a stopped or failed engine run plays the C.le. stopped form instead of the signature flourish', () => {
+  assert.match(js, /cle\.space\.set\(kind === 'done' \? 'done' : 'stopped'\)/);
+  assert.match(js, /setTimeout\(\(\) => \{ cle\.space\?\.set\('idle'\); cle\.finishing = setTimeout\(drop, 1000\); \}, 2000\)/);
+});
