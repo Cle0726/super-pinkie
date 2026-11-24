@@ -16,8 +16,15 @@ test('the engine stage is loaded by the head fragment and reuses the very same C
   // 两边都经 window.__pinkieAsset 取 laolao-cle-space.js 的内容哈希（M2：不手写版本号），解析出来是同一个地址、同一份模块、一个 WebGL 上下文。
   assert.match(read('laolao-cle-stage.js'), /import\(window\.__pinkieAsset \? window\.__pinkieAsset\('\.\/laolao-cle-space\.js'\) : '\.\/laolao-cle-space\.js'\)/,
     'cle-stage imports the particle signature dynamically through the asset manifest');
-  assert.ok(js.includes("const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('/laolao-cle-space.js') : '/laolao-cle-space.js');"),
+  assert.ok(js.includes("const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js');"),
     'same hashed URL, so one module and one WebGL context');
+  // 11-24 协调者：两边加载 cle-space 的写法必须一字不差（原来引擎台写 '/laolao-cle-space.js'，cle-stage 写 './laolao-cle-space.js'），
+  // 否则 cle-stage 一改写法这边就悄悄跟丢，three.js 会加载两份、多占一个 WebGL 上下文。
+  const loads = src => [...src.matchAll(/window\.__pinkieAsset\('([^']*laolao-cle-space\.js)'\) : '([^']*laolao-cle-space\.js)'/g)].map(m => m.slice(1).join(' | '));
+  const stageLoads = loads(read('laolao-cle-stage.js')), engineLoads = loads(js);
+  assert.equal(stageLoads.length, 1, 'cle-stage loads cle-space exactly once');
+  assert.equal(engineLoads.length, 1, 'engine stage loads cle-space exactly once');
+  assert.equal(engineLoads[0], stageLoads[0], 'engine stage and cle-stage load cle-space with the very same path');
   assert.ok(js.includes('import(CLE_SPACE())'));
   assert.doesNotMatch(js, /laolao-cle-space\.js\?v=/, 'no hand-written version (M2)');
   assert.match(js, /new cle\.Space\(glyph, \{palette: 'cle', count: 1100, size: \.17, fitW: 10\.2, fitH: 5\.4, interactive: false\}\)/);
