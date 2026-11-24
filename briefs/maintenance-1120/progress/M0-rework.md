@@ -2,7 +2,7 @@
 
 ## 接力卡（最后更新：2026-11-24 01:40 -08:00，Claude-Win-r7m3 @ Windows）
 
-- 状态：已完成，等协调者复核（草稿 PR，不合并）
+- 状态：**已合并**（[PR #71](https://github.com/Cle0726/super-pinkie/pull/71)，合并提交 `19fb1523`）
 - 分支和 PR：`maint/m0-fix-ratchet`，PR #71（草稿），2026-11-24 01:42 -08:00 变基到 `origin/main` `44639398`（#62 合入后）；变基后 `node --test tests/code-health-ratchet.test.mjs tests/code-health-loopholes.test.mjs tests/ui-region-ownership.test.mjs` → `tests 16 | pass 16 | fail 0`，`node tools/health/compare-baseline.mjs --target <origin/main 44639398>` → exit 0。最终提交号见 `status/m0.done`
 - 依据：`briefs/maintenance-1120/review/M0-precheck.md`（PR #60 分支 `maint/foundation-audit`）的 L1–L7 和 `hotspots.mjs` 浅克隆问题；任务单 `tasks/h.md`。
 - 已完成：

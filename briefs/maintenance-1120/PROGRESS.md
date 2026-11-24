@@ -4,7 +4,7 @@
 
 | 批 | 状态 | 谁在做 | 更新日期 | 分支 / PR |
 |---|---|---|---|---|
-| M0 量和护栏 | 已合并（本 PR 进入 main 后生效） | Codex-Win-5eac（Windows） | 2026-11-20 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) |
+| M0 量和护栏 | 已合并（返工 PR #71，合并提交 19fb1523） | Claude-Win-r7m3（返工），原执行 Codex-Win-5eac（Windows） | 2026-11-24 | [#40](https://github.com/Cle0726/super-pinkie/pull/40) / [#71](https://github.com/Cle0726/super-pinkie/pull/71) |
 | M1 收分支 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows，接手 Codex-Win-4d8c） | 2026-11-21 | [#42](https://github.com/Cle0726/super-pinkie/pull/42) / [#44](https://github.com/Cle0726/super-pinkie/pull/44) |
 | M2 版本号自动生成 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI macos-latest） | 2026-11-21 | [#51](https://github.com/Cle0726/super-pinkie/pull/51) |
 | M5 真页面回归测试 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-4e9b（Windows + CI ubuntu-latest Chromium） | 2026-11-21 | [#52](https://github.com/Cle0726/super-pinkie/pull/52) |
