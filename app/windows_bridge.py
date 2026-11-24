@@ -17,37 +17,47 @@ import urllib.parse
 import uuid
 import webbrowser
 
-try:
-    from inapp_browser import InAppBrowserBridge
-except ImportError:  # imported as app.windows_bridge (tests)
-    from app.inapp_browser import InAppBrowserBridge
-try:
-    from windows_bridge_scripts import BRIDGE_SCRIPT
-except ImportError:  # imported as app.windows_bridge (tests)
-    from app.windows_bridge_scripts import BRIDGE_SCRIPT
-try:
-    from windows_elevated import RESIZE_EDGES
-except ImportError:  # imported as app.windows_bridge (tests)
-    from app.windows_elevated import RESIZE_EDGES
+if "_PINKIE_DESKTOP_PART" not in globals():
+    try:
+        from inapp_browser import InAppBrowserBridge
+    except ImportError:  # imported as app.windows_bridge (tests)
+        from app.inapp_browser import InAppBrowserBridge
+    try:
+        from windows_bridge_scripts import BRIDGE_SCRIPT
+    except ImportError:  # imported as app.windows_bridge (tests)
+        from app.windows_bridge_scripts import BRIDGE_SCRIPT
+    try:
+        from windows_elevated import RESIZE_EDGES
+    except ImportError:  # imported as app.windows_bridge (tests)
+        from app.windows_elevated import RESIZE_EDGES
 
-PARTY_URL = "http://127.0.0.1:18889/"
-ROUNDTABLE_URL = "http://127.0.0.1:18891/"
-DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
-    "pdf", "txt", "md", "markdown", "rtf", "csv", "tsv", "json", "log",
-    "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "epub",
-    "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "svg", "psd", "ai",
-    "mp4", "mov", "m4v", "webm", "mkv", "avi", "mp3", "m4a", "wav", "aac", "flac",
-    "srt", "ass", "vtt", "zip",
-})
+    PARTY_URL = "http://127.0.0.1:18889/"
+    ROUNDTABLE_URL = "http://127.0.0.1:18891/"
+    DEFAULT_APP_DOCUMENT_EXTENSIONS = frozenset({
+        "pdf", "txt", "md", "markdown", "rtf", "csv", "tsv", "json", "log",
+        "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "epub",
+        "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "svg", "psd", "ai",
+        "mp4", "mov", "m4v", "webm", "mkv", "avi", "mp3", "m4a", "wav", "aac", "flac",
+        "srt", "ass", "vtt", "zip",
+    })
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_bridge (tests)
+            from app import windows_desktop as module
+        return module
 
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def follow_native_resize(*args, **kwargs): return _desktop().follow_native_resize(*args, **kwargs)
-def gateway_ui_url(*args, **kwargs): return _desktop().gateway_ui_url(*args, **kwargs)
-def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
-def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def configure_native_corners(*args, **kwargs): return _desktop().configure_native_corners(*args, **kwargs)
+    def configure_native_glass(*args, **kwargs): return _desktop().configure_native_glass(*args, **kwargs)
+    def follow_native_resize(*args, **kwargs): return _desktop().follow_native_resize(*args, **kwargs)
+    def gateway_ui_url(*args, **kwargs): return _desktop().gateway_ui_url(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
 
 
 def _describe_material(path: Path):

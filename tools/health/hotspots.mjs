@@ -28,6 +28,11 @@ function report({ref, asOf}) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || !Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== asOf) {
     throw new Error('--as-of 必须是一个有效的 YYYY-MM-DD 日期。');
   }
+  // A shallow clone silently drops the fix commits behind its cut-off, so the
+  // table would be wrong without any warning. Refuse instead of guessing.
+  if (git(['rev-parse', '--is-shallow-repository']).trim() !== 'false') {
+    throw new Error('当前仓库是浅克隆，历史不完整，热点统计会少算。请先运行 `git fetch --unshallow origin` 再统计。');
+  }
   const since = new Date(day.getTime() - 59 * DAY).toISOString().slice(0, 10);
   const commit = git(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]).trim();
   const records = git(['log', '--no-color', '--no-notes', '--no-show-signature', '--no-merges', '--no-renames',

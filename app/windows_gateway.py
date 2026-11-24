@@ -11,33 +11,42 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
-PARTY_URL = "http://127.0.0.1:18889/"
-ROUNDTABLE_URL = "http://127.0.0.1:18891/"
-TTS_URL = "http://127.0.0.1:18888/health"
-RELAY_SERVICE = "super-pinkie-relay"
+if "_PINKIE_DESKTOP_PART" not in globals():
+    GATEWAY_URL = "http://127.0.0.1:18789/"
+    PARTY_URL = "http://127.0.0.1:18889/"
+    ROUNDTABLE_URL = "http://127.0.0.1:18891/"
+    TTS_URL = "http://127.0.0.1:18888/health"
+    RELAY_SERVICE = "super-pinkie-relay"
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_gateway (tests)
+            from app import windows_desktop as module
+        return module
 
-def _config_repair_module(*args, **kwargs): return _desktop()._config_repair_module(*args, **kwargs)
-def _gateway_proxy_module(*args, **kwargs): return _desktop()._gateway_proxy_module(*args, **kwargs)
-def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def bind_to_app_lifetime(*args, **kwargs): return _desktop().bind_to_app_lifetime(*args, **kwargs)
-def gateway_closed_marker(*args, **kwargs): return _desktop().gateway_closed_marker(*args, **kwargs)
-def gateway_listener_pid(*args, **kwargs): return _desktop().gateway_listener_pid(*args, **kwargs)
-def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
-def http_alive(*args, **kwargs): return _desktop().http_alive(*args, **kwargs)
-def http_identity(*args, **kwargs): return _desktop().http_identity(*args, **kwargs)
-def http_ready(*args, **kwargs): return _desktop().http_ready(*args, **kwargs)
-def keep_gateway_after_close(*args, **kwargs): return _desktop().keep_gateway_after_close(*args, **kwargs)
-def kill_process_tree(*args, **kwargs): return _desktop().kill_process_tree(*args, **kwargs)
-def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
-def process_image_and_start(*args, **kwargs): return _desktop().process_image_and_start(*args, **kwargs)
-def stale_gateway_reason(*args, **kwargs): return _desktop().stale_gateway_reason(*args, **kwargs)
-def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def _config_repair_module(*args, **kwargs): return _desktop()._config_repair_module(*args, **kwargs)
+    def _gateway_proxy_module(*args, **kwargs): return _desktop()._gateway_proxy_module(*args, **kwargs)
+    def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def bind_to_app_lifetime(*args, **kwargs): return _desktop().bind_to_app_lifetime(*args, **kwargs)
+    def gateway_closed_marker(*args, **kwargs): return _desktop().gateway_closed_marker(*args, **kwargs)
+    def gateway_listener_pid(*args, **kwargs): return _desktop().gateway_listener_pid(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def http_alive(*args, **kwargs): return _desktop().http_alive(*args, **kwargs)
+    def http_identity(*args, **kwargs): return _desktop().http_identity(*args, **kwargs)
+    def http_ready(*args, **kwargs): return _desktop().http_ready(*args, **kwargs)
+    def keep_gateway_after_close(*args, **kwargs): return _desktop().keep_gateway_after_close(*args, **kwargs)
+    def kill_process_tree(*args, **kwargs): return _desktop().kill_process_tree(*args, **kwargs)
+    def openclaw_config_path(*args, **kwargs): return _desktop().openclaw_config_path(*args, **kwargs)
+    def process_image_and_start(*args, **kwargs): return _desktop().process_image_and_start(*args, **kwargs)
+    def stale_gateway_reason(*args, **kwargs): return _desktop().stale_gateway_reason(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
 
 
 class GatewaySupervisor:
