@@ -1,0 +1,106 @@
+# TEMPORARY (M5 rework, PR #59): capture real-page baselines on CI runners.
+# Linux baselines must come from Linux Chromium; this job produces them as an
+# artifact that is downloaded and committed by hand. The windows job compares the
+# committed win32 set first, then captures a CI-side set for reference.
+# The capture steps clear CI/GITHUB_ACTIONS only inside their own step so that
+# PINKIE_VISUAL_UPDATE is accepted there; ci.yml never does this.
+# This file is deleted before #59 leaves draft.
+name: tmp M5 real baseline capture
+
+on:
+  push:
+    branches: [maint/m5-fix-real-page]
+
+jobs:
+  linux-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright Chromium
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Capture linux real baselines (3x repeat, 0 px jitter required)
+        shell: bash
+        run: |
+          set +e
+          env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
+            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
+          echo "capture exit=${PIPESTATUS[0]}"
+          ls tests/visual/real-baseline/linux | wc -l
+      - name: Re-check linux set in a fresh process (strict compare, 3x repeat)
+        shell: bash
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
+      - name: Run real-page hotspot suite on Linux
+        run: node --test --test-reporter=tap tests/hotspot-real-ui-regression.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m5-real-baseline-linux
+          path: |
+            tests/visual/real-baseline/linux
+            tests/visual/diff-real
+          if-no-files-found: warn
+
+  windows-capture:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright (system Chrome channel)
+        shell: pwsh
+        run: |
+          $deps = Join-Path $env:RUNNER_TEMP 'pinkie-ci-deps'
+          $version = (Get-Content 'tools/pinkie-toolbox/toolbox-manifest.json' -Raw | ConvertFrom-Json).playwrightVersion
+          npm install --prefix $deps --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install playwright' }
+          "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Compare committed win32 baselines (strict, 3x repeat)
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/compare.tap"; echo "compare exit=${PIPESTATUS[0]}"
+      - name: Capture CI-side win32 set for reference
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          mkdir -p tests/visual/diff-real
+          cp -r tests/visual/diff-real tests/visual/diff-real-compare
+          env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
+            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"; echo "capture exit=${PIPESTATUS[0]}"
+      - name: Run real-page hotspot suite on Windows
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: node --test --test-reporter=tap tests/hotspot-real-ui-regression.test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m5-real-baseline-win32
+          path: |
+            tests/visual/real-baseline/win32
+            tests/visual/diff-real-compare
+            tests/visual/diff-real
+          if-no-files-found: warn
