@@ -266,7 +266,7 @@ test('core CLI helpers still execute when invoked through a symlinked directory 
     const infoRes = spawnSync(
       process.execPath,
       [path.join(linkDir, 'manifest.mjs'), 'field', 'core', '--root', DEFAULT_REPO_ROOT],
-      { encoding: 'utf8' },
+      { encoding: 'utf8', env: { ...process.env, PINKIE_CORE: '' } },
     );
     assert.equal(infoRes.status, 0, infoRes.stderr);
     assert.equal(infoRes.stdout, 'openclaw');
