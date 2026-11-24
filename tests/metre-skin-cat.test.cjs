@@ -739,7 +739,7 @@ test('Metre 11-23 motion: lamps blink and dim on a change, the stage breathes wh
 test('Metre 11-24 page moments: the count-in lifts the baton and lands the score on the downbeat; a session switch turns the page; home lights and the melodic prompt are called directly; a low band keeps only a staff; reduced motion has none', () => {
   const transition = read(INJ + 'laolao-metre-transition.js');
   assert.doesNotMatch(transition, /LaolaoMetreCat/, '小猫去掉了（用户 11-23）');
-  assert.match(transition, /const COVER = 320, LIFT = 620, ICTUS = 1097, [^;]*HOLD = 1600, OPEN = 380;/, '总长约 1.98 秒，和第六版差不多');
+  assert.match(transition, /const COVER = 380, OPEN = 420, B = 250, FIRST = 450, HOLD = 1250;/, '第 1 版「音符跳动」的时间线，总长约 1.67 秒');
   assert.match(transition, /if \(!alive\) return;\n      window\.dispatchEvent\(new CustomEvent\('pinkie:metre-sweep'/, '翻开时告诉页面');
   assert.match(read(INJ + 'laolao-head.fragment.html'), /<script defer src="\/laolao-metre-stagefx\.js\?v=@hash"><\/script>/);
   const fx = read(INJ + 'laolao-metre-stagefx.js');

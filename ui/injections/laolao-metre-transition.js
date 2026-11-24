@@ -1,187 +1,171 @@
-/* laolao-metre-transition —— 切换进 Metre 的过场（11-24 第八版「起拍」：协调者验收后加重落拍的分量）。一张总谱，一支钴蓝指挥棒，♩=72。
- *   合上（0–320ms）：上下两半谱纸合到中缝。谱纸中间有一束舞台光、四边暗下去，谱线淡淡印在上面。起拍（320–1030ms）：很大的钴蓝指挥棒从右下抬起，停在画面正中上方半拍（417ms）。
- *   落拍（≈1100ms，高潮）：棒子砸到画面正中，拖着一道连贯的拖影；棒尖一闪，迸出钴蓝像素点，三圈像素环从棒尖往外扩、越扩越稀越淡，中间那行五线谱用钴蓝墨色、加粗地从棒尖向两侧弹开
- *   （冲过头再回弹），上下几行谱表依次铺开。亮灯：四盏谱台灯按三十二分音符一盏盏亮，灯罩先冲亮再稳住，在谱面上投下一锥暖光和一圈光晕。
- *   落位：像素 M 当谱号落到谱表左端、轻轻回弹。翻开（380ms）：新页面好了，谱纸从中缝上下翻开，同时发 pinkie:metre-sweep；没好就停在整页谱面上等。
- * 总长约 1.98 秒（第六版 2.0 秒）。小猫不再出现（用户 11-23）。一张全屏 canvas 按像素格画（短边 / 140，至少 4px），没有图片和 WebGL，只在过场期间有 rAF。
- * 减少动态效果、或画不了 canvas 时返回 null，切换器照原来的方式原地换。对外：window.PinkieMetreTransition.play() → {overlay, ready, covered, waiting(), finish(), abort()}。 */
+/* laolao-metre-transition —— Metre 的进场和离场（11-24 第九版：用户打回第八版「像素环」，回到第 1 版「音符跳动」mui\proto-v3-1123\v3.js 上打磨；
+ * 小猫不出现，用户 11-23）。♩=72，一拍 B=250ms 的细分。
+ *   进场 play()：上下两半谱纸合上（0–380ms）→ 五线从左往右划出、像素 M 当谱号一列列亮起，亮满时轻轻落位回弹 → 指挥棒每拍落在一个音符上
+ *     （450/700/950/1200ms），拍与拍之间往上弹；音符在拍点落到谱上：先高两格、再一格、落下压扁一下再弹回，刚落下的那个是钴蓝；音符上方的谱台灯
+ *     跟着同一拍一盏盏亮 → 1250ms 起新页面好了就从中缝上下翻开（420ms），同时发 pinkie:metre-sweep。总长约 1.67 秒（和第 1 版一样）。
+ *   离场 leave()（Metre → 碧琪，进场倒过来）：谱纸带着整页谱面从上下合上（0–280ms）→ 指挥棒画一个收拍的圈、一顿（360ms）→ 音符从最后一个起
+ *     按拍跳起、飞离谱面，灯跟着一盏盏灭 → 五线往中间收拢、M 暗下去 → 760ms 谱面收空 = covered。切换器这时才播目标模式原来的碧琪转场（它的
+ *     浮层比这张谱纸高一层），盖住以后 release() 拿掉谱纸：交接时不闪白、不露旧页、不叠着播。
+ * 一张全屏 canvas 按像素格画（短边 / 140，至少 4px），没有图片和 WebGL，只在过场期间有 rAF。减少动态效果、或画不了 canvas 时都返回 null，切换器照原来
+ * 的方式原地换。对外：PinkieMetreTransition.play() → {overlay, ready, covered, waiting(), finish(), abort()}；leave() → {overlay, covered, release()}。 */
 (() => {
   'use strict';
   if (window.PinkieMetreTransition) return;
   const root = document.documentElement;
-  // 13×11 的像素 M（和 laolao-metre-brand.js 的 LOGO 同一张图；@ = 摆锤，强调色）
+  // 13×11 的像素 M（和 laolao-metre-brand.js 的 LOGO 同一张图；@ = 摆锤的位置，这里另画会摆的摆）
   const LOGO = ['...##...##...', '...##...##...', '...##...##...', '..#..#.@@.#..', '..#..#.@@.#..', '..#..#.#..#..',
     '..#...#...#..', '.#....#....#.', '.#....#....#.', '.#....#....#.', '#############'];
+  const HEAD = ['.##.', '####', '.##.'], SQUASH = ['.####.', '######'];   // 音符头；落地那一下压扁成矮一格、宽两格
   const reduced = () => root.hasAttribute('data-pinkie-reduce-motion') || Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   const dark = () => root.getAttribute('data-theme') === 'dark' || root.hasAttribute('data-pinkie-night')
     || (!root.getAttribute('data-theme') && Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches));
   const palette = () => dark()
-    ? {bg: '#151514', glow: '#25262F', edge: '#0B0B0A', ghost: '#3A3A42', line: '#77746B', on: '#ECEAE4', dim: '#3A3935', accent: '#93A5EE', ink: '#B4C1F6', lamp: '#E9C77A', hot: '#FFE6A8', warm: '255,214,140', night: true}
-    : {bg: '#F7F6F3', glow: '#FFFDF7', edge: '#E6E1D6', ghost: '#CCC6B9', line: '#8E8A81', on: '#1B1A18', dim: '#D6D2C9', accent: '#2F4BB0', ink: '#26408F', lamp: '#D89A2C', hot: '#FFCF6E', warm: '232,168,60', night: false};
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  // 窗口在后台时 requestAnimationFrame 不走，切换会卡住；那时退回定时器
+    ? {bg: '#151514', line: '#6E6B63', on: '#ECEAE4', dim: '#34332F', accent: '#93A5EE', lamp: '#E9C77A', warm: '255,214,140'}
+    : {bg: '#F7F6F3', line: '#9C988F', on: '#1B1A18', dim: '#DDDAD3', accent: '#2F4BB0', lamp: '#D89A2C', warm: '232,168,60'};
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));   // 窗口在后台时 rAF 不走，切换会卡住；那时退回定时器
   const frame = () => document.hidden ? wait(32) : new Promise((resolve) => requestAnimationFrame(resolve));
-  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
-  const easeOut = (t) => 1 - Math.pow(1 - t, 3), easeIn = (t) => t * t * t;
-  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  const backOut = (t, s = 1.4) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
-  const rnd = (i, s = 1) => { const x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); }, lerp = (a, b, u) => a + (b - a) * u;
-  // 时间线（毫秒，从合上开始算）
-  const COVER = 320, LIFT = 620, ICTUS = 1097, SPREAD = 360, LAMP0 = ICTUS + 40, LAMP_STEP = 104, CLEF = 1380, CLEF_MS = 180, HOLD = 1600, OPEN = 380;
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v)), lerp = (a, b, u) => a + (b - a) * u, easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2), backOut = (t, s = 2) => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
+  // 时间线（毫秒）。进场 = 第 1 版原样；离场：合上、收拍、音符一个个离开（隔 HOP）、五线收拢、收空
+  const COVER = 380, OPEN = 420, B = 250, FIRST = 450, HOLD = 1250;
+  const CLOSE = 280, CUT = 360, HOP = 60, CLEAR = 540, GONE = 760;
 
-  function play() {
+  // 一张谱纸：进场和离场共用同一套画法。paint() 读 st：t = 进场时间；ex ≥ 0 时是离场（谱面停在进场画完的样子往回收）
+  function score(label) {
     if (reduced()) return null;
     const overlay = document.createElement('section');
-    overlay.className = 'pk-metre-transition'; overlay.setAttribute('role', 'status'); overlay.setAttribute('aria-live', 'polite'); overlay.setAttribute('aria-label', '正在切换到 Metre');
-    const canvas = document.createElement('canvas'), g = canvas.getContext?.('2d');
-    if (!g) return null;
-    overlay.append(canvas);
+    overlay.className = 'pk-metre-transition'; overlay.setAttribute('role', 'status'); overlay.setAttribute('aria-live', 'polite'); overlay.setAttribute('aria-label', label);
+    const cv = document.createElement('canvas'), g = cv.getContext?.('2d');
+    if (!g) return null; overlay.append(cv);
     Object.assign(overlay.style, {position: 'fixed', inset: '0', zIndex: '2147483000', pointerEvents: 'auto', background: 'transparent'});
-    Object.assign(canvas.style, {position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block'});
-    document.body.append(overlay);
-
-    const W = window.innerWidth, H = window.innerHeight, ratio = Math.min(2, window.devicePixelRatio || 1), S = Math.min(W, H);
-    canvas.width = Math.round(W * ratio); canvas.height = Math.round(H * ratio); g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    Object.assign(cv.style, {position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block'}); document.body.append(overlay);
+    const W = window.innerWidth, H = window.innerHeight, dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const C = palette();
-    const P = Math.max(4, Math.round(S / 140));                  // 像素格（860 高时 6px）
+    const P = Math.max(4, Math.round(Math.min(W, H) / 140));      // 像素格（860 高时 6px）
     const sn = (v) => Math.round(v / P) * P;
-    const GAP = 3 * P, TH = Math.max(3, Math.round(P * 0.67)), TH2 = Math.max(2, Math.round(P / 3));   // 谱线间距、主谱表线粗、其余谱表线粗
-    const mid = sn(H / 2), cx = sn(W / 2);                       // 中缝 = 中间那行谱的第三线；棒尖落在画面正中
-    const sx0 = sn(W * 0.06), sx1 = sn(W * 0.94);
-    // 整页谱面：中间一行（主谱表）+ 上下各几行，行距 = 9 个谱线间距
-    const PITCH = 9 * GAP, staves = [];
-    for (let k = -6; k <= 6; k++) { const y = mid + k * PITCH; if (y - 2 * GAP > P && y + 2 * GAP < H - P) staves.push({k, y, lines: [-2, -1, 0, 1, 2].map((n) => y + n * GAP)}); }
-    const main = staves.find((s) => s.k === 0);
+    const GAP = 3 * P, TH = Math.max(1, Math.round(P / 2));       // 谱线间距、线粗
+    const mid = sn(H / 2), lineY = [-2, -1, 0, 1, 2].map((k) => mid + k * GAP);   // 第三线 = 谱纸的中缝
+    const sx0 = sn(W * 0.16), sx1 = sn(W * 0.84), cx = sn(W / 2);
     const LS = Math.max(2, Math.round((4 * GAP + 2 * P) / 11));  // 谱号 M 的一格
-    const lx = sx0 + 2 * P, ly = Math.round(mid - (11 * LS) / 2);
-    const clefEnd = lx + 13 * LS + 3 * P;
-    const bars = [0.25, 0.5, 0.75].map((f) => sn(clefEnd + (sx1 - clefEnd) * f));   // 小节线
-    const lamps = [0, 1, 2, 3].map((k) => ({x: sn(clefEnd + ((sx1 - clefEnd) * (k + 0.5)) / 4), at: LAMP0 + k * LAMP_STEP}));
-    const st = {t: 0, dyTop: -mid, dyBot: H - mid};
+    const lx = sx0 + 2 * P, ly = Math.round(mid - (11 * LS) / 2), clefEnd = lx + 13 * LS + 3 * P;
+    const barX = sn(clefEnd + (sx1 - clefEnd) * 0.7);
+    const notesX = [0, 1, 2, 3].map((k) => sn(clefEnd + ((barX - clefEnd) * (k + 0.5)) / 4));
+    const PITCH = [1, 3, 5, 7], noteY = PITCH.map((p) => sn(lineY[4] - (p * GAP) / 2));   // 一拍一个音，往上走
+    const ictus = [0, 1, 2, 3].map((k) => FIRST + k * B), lampY = lineY[0] - 7 * GAP;                            // 谱台灯：每个音符正上方一盏，比棒子弹得最高处还高
+    const trail = [], st = {t: 0, ex: -1, dyTop: -mid, dyBot: H - mid, open: 0};
     const box = (x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); };
-    // 谱纸：中间一束舞台光、四边暗下去（画一次，每帧贴上去）
-    const paper = document.createElement('canvas'); paper.width = canvas.width; paper.height = canvas.height;
-    { const pg = paper.getContext('2d'); pg.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const gr = pg.createRadialGradient(cx, mid - S * 0.1, S * 0.05, cx, mid, Math.hypot(W, H) * 0.62);
-      gr.addColorStop(0, C.glow); gr.addColorStop(0.55, C.bg); gr.addColorStop(1, C.edge); pg.fillStyle = gr; pg.fillRect(0, 0, W, H); }
 
-    // 指挥棒：棒尖的位置 + 棒身朝向（从棒尖指向棒尾的角度）。棒长是短边的三成，落拍时落在画面正中。
-    const BL = S * 0.36;
-    const REST = {x: cx + S * 0.16, y: mid + S * 0.34, a: 0.95}, TOP = {x: cx + S * 0.03, y: mid - S * 0.33, a: 1.2}, HIT = {x: cx, y: mid, a: 0.62};
-    function baton(t) {
-      if (t < COVER - 140) return null;
-      let p, alpha = clamp((t - COVER + 140) / 140);
-      if (t < COVER) p = REST;
-      else if (t < LIFT) { const e = easeOut((t - COVER) / (LIFT - COVER)); p = {x: lerp(REST.x, TOP.x, e), y: lerp(REST.y, TOP.y, e), a: lerp(REST.a, TOP.a, e)}; }
-      else if (t < ICTUS - 70) { const u = (t - LIFT) / (ICTUS - 70 - LIFT); p = {...TOP, y: TOP.y - Math.sin(u * Math.PI / 2) * P * 1.5}; }   // 停半拍，吸一口气
-      else if (t < ICTUS) { const e = easeIn((t - ICTUS + 70) / 70); p = {x: lerp(TOP.x, HIT.x, e), y: lerp(TOP.y - P * 1.5, HIT.y, e), a: lerp(TOP.a, HIT.a, e)}; }
-      else { const u = clamp((t - ICTUS) / 320), e = easeOut(u); p = {x: HIT.x + S * 0.02 * e, y: HIT.y - S * 0.07 * Math.sin(Math.min(1, u * 1.4) * Math.PI / 2), a: HIT.a + 0.2 * e}; alpha = t - ICTUS < 120 ? 1 : 1 - clamp((t - ICTUS - 120) / 200); }
-      return {...p, alpha};
-    }
-    function drawBaton(b, alpha) {
-      const dx = Math.cos(b.a), dy = Math.sin(b.a), n = Math.ceil(BL / (P / 2));
-      g.globalAlpha = alpha;
-      for (let i = 0; i <= n; i++) {
-        const f = i / n, x = b.x + dx * BL * f, y = b.y + dy * BL * f;
-        const grip = f > 0.76, w = grip ? 4 * P : Math.max(P, Math.round(P * (1.4 + f * 1.6)));
-        box(sn(x) - w / 2, sn(y) - w / 2, w, w, grip ? C.on : C.accent);
-        if (!grip && f > 0.06) box(sn(x) - w / 2, sn(y) - w / 2, Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(w / 3)), C.night ? '#D6DEFF' : '#6F86D8');   // 棒身的高光
+    // 指挥棒。进场：预备从左上落下，每拍落在一个音符上（拍点），两拍之间往上弹；数完停在小节线右上方，轻轻点着。
+    const pts = [{x: clefEnd - P, y: lineY[0] - 5 * GAP, t: COVER}, ...ictus.map((ti, k) => ({x: notesX[k], y: noteY[k] - 2 * P, t: ti})), {x: barX + 2 * P, y: lineY[0] - 4 * GAP, t: ictus[3] + B}];
+    const rest = pts[pts.length - 1];
+    function batonAt(t, ex) {
+      if (ex >= 0) {   // 离场：收拍——从停的地方画一个圈，一顿，收掉
+        if (ex < 120) return {x: rest.x, y: sn(rest.y + Math.sin((ex / B) * Math.PI) * P)};
+        const u = easeInOut(clamp((ex - 120) / (CUT - 120))), a = Math.PI / 2 - u * Math.PI * 1.8, r = 2 * GAP * (1 - 0.35 * u);
+        return {x: sn(rest.x + Math.cos(a) * r), y: sn(rest.y - 2 * GAP + Math.sin(a) * r + 2 * GAP * u * 0.5)};
       }
-      box(sn(b.x) - P, sn(b.y) - P, 2 * P, 2 * P, C.accent);
-      g.globalAlpha = 1;
+      if (t < pts[0].t) return null;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1]; if (t > b.t) continue;
+        const u = (t - a.t) / (b.t - a.t), x = a.x + (b.x - a.x) * easeInOut(u);
+        // 拍点前加速落下、拍点后弹起（落得干脆，弹得有弹性）
+        const y = i === 0 ? a.y + (b.y - a.y) * u * u : a.y + (b.y - a.y) * u - Math.sin(Math.PI * Math.pow(u, 0.8)) * 3 * GAP;
+        return {x: sn(x), y: sn(y)};
+      }
+      return {x: rest.x, y: sn(rest.y + Math.sin(((t - rest.t) / B) * Math.PI) * P)};
     }
 
-    function content(t) {
-      const d = t - ICTUS;   // 0. 谱纸上淡淡印着的谱线（合上以后就在，页面不是一张白纸）
-      g.globalAlpha = clamp((t - COVER + 200) / 400) * (d > 0 ? 1 - clamp(d / SPREAD) : 1);
-      for (const s of staves) for (const y of s.lines) box(sx0, y, sx1 - sx0, 1, C.ghost);
+    function content(t, ex) {
+      const out = ex >= 0; if (out) t = 1e4;                     // 离场时谱面就是进场画完的样子
+      const fade = 1 - clamp(st.open / 0.35);                    // 翻开时指挥棒先收
+      const shut = out ? easeInOut(clamp((ex - CLEAR) / 200)) : 0, mAlpha = out ? 1 - clamp((ex - CLEAR - 60) / 140) : 1;
+      // 五线：盖满以后从左往右一笔划出（每根晚 24ms）；离场时两头往中间收拢
+      let drawn = 0; g.globalAlpha = mAlpha;
+      lineY.forEach((y, k) => {
+        const p = easeOut(clamp((t - COVER - k * 24) / 260)); if (k === 4) drawn = p;
+        const a = sn(lerp(sx0, cx, shut)), b = sn(lerp(sx0 + (sx1 - sx0) * p, cx, shut));
+        if (b > a) box(a, y - Math.floor(TH / 2), b - a, TH, C.line);
+      });
+      const a0 = sn(lerp(sx0, cx, shut)), a1 = sn(lerp(sx1, cx, shut));
+      if (drawn > 0 && shut < 1) box(a0, lineY[0] - Math.floor(TH / 2), TH, 4 * GAP + TH, C.line);                          // 起始线
+      if (drawn * (sx1 - sx0) > barX - sx0 && barX > a0 && barX < a1) box(barX, lineY[0] - Math.floor(TH / 2), TH, 4 * GAP + TH, C.line); // 小节线
+      if (drawn >= 1 && shut < 1) { box(a1 - 3 * P, lineY[0], TH, 4 * GAP, C.line); box(a1 - P, lineY[0], P, 4 * GAP + TH, C.line); }   // 终止线
+      g.globalAlpha = 1;   // 谱台灯：音符落拍那一下亮（先冲亮再稳住），在音符上投一锥很淡的暖光；离场时跟着自己的音符灭
+      notesX.forEach((x, k) => {
+        if (t < COVER + 120) return;
+        const leaveAt = CUT + (3 - k) * HOP, on = out ? ex < leaveAt : t >= ictus[k], k2 = on ? (!out && t - ictus[k] < 90 ? 1.6 : 1) : 0;
+        g.globalAlpha = clamp((t - COVER - 120) / 160) * mAlpha;
+        box(x - TH / 2, lampY - 3 * P, TH, 3 * P, C.dim);
+        if (on) { const gr = g.createLinearGradient(0, lampY, 0, noteY[k]); gr.addColorStop(0, `rgba(${C.warm},${0.2 * k2})`); gr.addColorStop(1, `rgba(${C.warm},0)`);
+          g.fillStyle = gr; g.beginPath(); g.moveTo(x - 2 * P, lampY + 2 * P); g.lineTo(x + 2 * P, lampY + 2 * P); g.lineTo(x + 6 * P, noteY[k]); g.lineTo(x - 6 * P, noteY[k]); g.closePath(); g.fill(); }
+        box(x - 2 * P, lampY, 4 * P, 2 * P, on ? C.lamp : C.dim); if (k2 > 1) box(x - 3 * P, lampY + 2 * P, 6 * P, P, C.lamp);
+        g.globalAlpha = 1;
+      });
+      // 谱号 = 像素 M：一列一列亮，亮满时往下落半格再回弹；中间的 V 常暗。离场时从右往左暗下去、淡掉
+      const lit = out ? 13 - Math.ceil(clamp((ex - CLEAR) / 180) * 13) : clamp(Math.ceil(((t - 260) / 240) * 13), 0, 13);
+      const mDy = out ? 0 : t < 500 ? -P : Math.round(-1.5 * P * (1 - backOut(clamp((t - 500) / 220))));
+      g.globalAlpha = mAlpha;
+      if (t > 260) for (let gy = 0; gy < 11; gy++) for (let gx = 0; gx < 13; gx++) {
+        const c = LOGO[gy][gx]; if (c === '.' || c === '@') continue;
+        const inner = gx >= 5 && gx <= 7 && gy >= 3 && gy <= 9;
+        box(lx + gx * LS, ly + gy * LS + mDy, LS, LS, !inner && gx < lit ? C.on : C.dim);
+      }
+      if (lit >= 13) {   // 摆：每个拍点摆到一头；离场时停在正中
+        const a = out || t < FIRST ? 0 : 0.36 * Math.cos((Math.PI * (t - FIRST)) / B);
+        const px = lx + 6.5 * LS, py = ly + 10 * LS + mDy, L = 8 * LS, q = Math.max(2, Math.round(LS * 0.5));
+        for (let i = 0; i <= 16; i++) { const f = i / 16; box(Math.round((px + Math.sin(a) * L * f) / q) * q - q / 2, Math.round((py - Math.cos(a) * L * f) / q) * q - q / 2, q, q, C.on); }
+        box(Math.round(px + Math.sin(a) * L - LS), Math.round(py - Math.cos(a) * L - LS), 2 * LS, 2 * LS, C.accent);
+      }
+      g.font = `600 ${Math.max(10, Math.round(P * 2.4))}px ui-monospace, "Cascadia Mono", Consolas, monospace`; g.textAlign = 'center'; g.textBaseline = 'top';
+      g.fillStyle = t > 700 && lit > 6 ? C.on : C.dim; g.fillText('METRE', lx + (13 * LS) / 2, lineY[4] + 4 * P);
       g.globalAlpha = 1;
-      // 0.5 起拍到落拍之间：一束追光打在棒尖上，跟着棒尖走（页面中段不再是一张空纸）
-      const bb = d < 0 ? baton(t) : null;
-      if (bb && t > COVER) { const gr = g.createRadialGradient(bb.x, bb.y, 0, bb.x, bb.y, S * 0.3), a = (C.night ? 0.34 : 0.5) * clamp((t - COVER) / 300);
-        gr.addColorStop(0, `rgba(${C.warm},${a})`); gr.addColorStop(1, `rgba(${C.warm},0)`); g.fillStyle = gr; g.fillRect(bb.x - S * 0.3, bb.y - S * 0.3, S * 0.6, S * 0.6); }
-      // 1. 落拍那一下的光：棒尖一闪，一圈暖白的光
-      if (d >= 0 && d < 220) { const gr = g.createRadialGradient(HIT.x, HIT.y, 0, HIT.x, HIT.y, S * 0.24); const a = 0.5 * (1 - d / 220);
-        gr.addColorStop(0, C.night ? `rgba(180,196,255,${a})` : `rgba(47,75,176,${a * 0.6})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(HIT.x - S * 0.24, HIT.y - S * 0.24, S * 0.48, S * 0.48); }
-      // 2. 谱表：从棒尖 (cx) 向两侧弹开，冲过头再回来；主谱表钴蓝墨色、加粗，稳住后变成深一点的墨色
-      for (const s of staves) {
-        const p = clamp((d - Math.abs(s.k) * 45) / SPREAD); if (p <= 0) continue;
-        const e = backOut(p, 1.9), a = Math.max(sx0 - 4 * P, cx - (cx - sx0) * e), b = Math.min(sx1 + 4 * P, cx + (sx1 - cx) * e);
-        const isMain = s === main, th = isMain ? TH + (d < 120 ? 2 : 0) : TH2;
-        const bounce = isMain && d < 300 ? Math.round(Math.sin((d / 300) * Math.PI * 2) * P * 0.6 * (1 - d / 300)) : 0;
-        const color = isMain ? (d < 260 ? C.accent : C.ink) : C.line;
-        for (const y of s.lines) box(a, y + bounce - Math.floor(th / 2), b - a, th, color);
-        if (p >= 1) {
-          const top = s.lines[0] - Math.floor(th / 2), h = 4 * GAP + th;
-          box(sx0, top, th, h, color);                                                      // 起始线
-          for (const x of bars) box(x, top, Math.max(2, th - 1), h, color);                 // 小节线
-          box(sx1 - 3 * P, top, th, h, color); box(sx1 - P, top, P + 1, h, color);          // 终止线
+      // 音符：拍点那一刻落到谱上（先高两格、再一格、落下压扁一下、再弹回）；刚落下的那个是钴蓝，两边溅起两粒小点。
+      // 离场：从最后一个起按拍蹲一下、跳起一格两格、飞出谱面淡掉，跳起来的那个是钴蓝
+      ictus.forEach((ti, k) => {
+        if (t < ti) return;
+        const d = t - ti, u = out ? ex - (CUT + (3 - k) * HOP) : -1;
+        let dy = d < 45 ? -2 * P : d < 85 ? -P : 0, head = d >= 85 && d < 135 ? SQUASH : HEAD, color = d < B ? C.accent : C.on, alpha = 1;
+        if (u >= 0) {
+          head = u < 40 ? SQUASH : HEAD; color = C.accent;
+          dy = u < 40 ? 0 : u < 70 ? -P : u < 100 ? -2 * P : -sn((2 + 0.004 * (u - 100) * (u - 100)) * P);
+          alpha = 1 - clamp((u - 100) / 110);
         }
-      }
-      // 3. 落拍的波：从棒尖往外扩的三圈像素环（像谱线的波纹），里圈实、外圈越扩越稀、越淡，边上的像素有虚有实；再加二十道迸出的像素点
-      if (d >= 0 && d < 360) {
-        for (let k = 0; k < 3; k++) {
-          const u = clamp((d - k * 55) / 300); if (u <= 0 || u >= 1) continue;
-          const rx = easeOut(u) * S * (0.2 + k * 0.08), ry = rx * 0.62, n = Math.max(12, Math.ceil((Math.PI * 2 * rx) / (P * 1.25))), keep = 0.92 - u * 0.55 - k * 0.12;
-          for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, q = rnd(i, k + 7); if (q > keep) continue;
-            g.globalAlpha = (1 - u) * (0.35 + 0.65 * q / Math.max(0.01, keep)) * (k ? 0.75 : 1); const sz = k === 0 && u < 0.5 ? 2 * P : P;
-            box(sn(HIT.x + Math.cos(a) * rx) - sz / 2, sn(HIT.y + Math.sin(a) * ry) - sz / 2, sz, sz, k === 1 ? C.ink : C.accent); }
-        }
-        g.globalAlpha = 1 - clamp(d / 280);
-        for (let i = 0; i < 20; i++) {
-          const ang = (i / 20) * Math.PI * 2 + 0.16, ux = Math.cos(ang), uy = Math.sin(ang) * 0.72, jitter = 0.8 + 0.45 * rnd(i, 3);
-          for (let k = 0; k < 3; k++) { const rr = easeOut(clamp(d / (200 + k * 60))) * S * (0.07 + k * 0.06) * jitter, sz = [2 * P, Math.round(1.5 * P), P][k]; box(sn(HIT.x + ux * rr) - sz / 2, sn(HIT.y + uy * rr) - sz / 2, sz, sz, i % 5 === 2 ? C.lamp : C.accent); }
-        }
+        if (alpha <= 0) return; g.globalAlpha = alpha;
+        const hx = notesX[k] - 2 * P, hy = sn(noteY[k] - 1.5 * P) + dy, sq = head === SQUASH;
+        head.forEach((row, ry) => [...row].forEach((ch, rx) => { if (ch === '#') box(hx + (rx - (sq ? 1 : 0)) * P, hy + (ry + (sq ? 1 : 0)) * P, P, P, color); }));
+        if (PITCH[k] < 4) box(hx + 4 * P - TH, hy - 6 * P + (sq ? P : 0), TH, 7 * P - (sq ? P : 0), color);
+        else box(hx, hy + P, TH, 7 * P - (sq ? P : 0), color);
+        if (!out && d < 90) { g.globalAlpha = 1 - d / 90; const o = Math.floor(d / 45) * P; box(hx - 2 * P - o, hy + 2 * P - o, P, P, C.accent); box(hx + 5 * P + o, hy + 2 * P - o, P, P, C.accent); }
+        g.globalAlpha = 1;
+      });
+      // 指挥棒的轨迹（最近 260ms）和棒尖；离场收拍那一顿棒尖放大一格，然后淡掉
+      const bf = out ? 1 - clamp((ex - CUT - 60) / 100) : fade;
+      if (bf > 0) {
+        const now = out ? ex : t;
+        for (const p of trail) { g.globalAlpha = bf * clamp(1 - (now - p.t) / 260) * 0.8; box(p.x, p.y, P, P, C.accent); }
+        const tip = trail[trail.length - 1], big = out && ex >= CUT && ex < CUT + 60 ? P : 0;
+        if (tip) { g.globalAlpha = bf; box(tip.x - P / 2 - big / 2, tip.y - P / 2 - big / 2, 2 * P + big, 2 * P + big, C.accent); }
         g.globalAlpha = 1;
       }
-      // 4. 谱台灯：中间那行上方四盏，三十二分音符一盏；灯罩先冲亮再稳住，在谱面上投下一锥暖光和一圈光晕
-      if (main) for (const l of lamps) {
-        if (t < ICTUS + 100) continue;
-        const on = t >= l.at, sy = main.lines[0] - 6 * P, k = on ? (t - l.at < 90 ? 1.5 : 1) : 0;
-        box(l.x - P / 2, sy - 4 * P, Math.max(2, P / 2), 4 * P, C.line);                    // 灯杆
-        if (on) {
-          const cone = g.createLinearGradient(0, sy, 0, main.lines[4] + 3 * P);
-          cone.addColorStop(0, `rgba(${C.warm},${0.42 * k})`); cone.addColorStop(1, `rgba(${C.warm},0.04)`);
-          g.fillStyle = cone; g.beginPath(); g.moveTo(l.x - 3 * P, sy + 2 * P); g.lineTo(l.x + 3 * P, sy + 2 * P); g.lineTo(l.x + 9 * P, main.lines[4] + 3 * P); g.lineTo(l.x - 9 * P, main.lines[4] + 3 * P); g.closePath(); g.fill();
-          const halo = g.createRadialGradient(l.x, sy + 2 * P, 0, l.x, sy + 2 * P, 11 * P);
-          halo.addColorStop(0, `rgba(${C.warm},${0.6 * k})`); halo.addColorStop(1, `rgba(${C.warm},0)`); g.fillStyle = halo; g.fillRect(l.x - 11 * P, sy - 9 * P, 22 * P, 22 * P);
-        }
-        box(l.x - 3 * P, sy, 6 * P, 2 * P, on ? (k > 1 ? C.hot : C.lamp) : C.dim);             // 灯罩
-        box(l.x - 2 * P, sy - P, 4 * P, P, on ? C.lamp : C.dim);
-      }
-      // 5. 谱号 = 像素 M：最后从上面落到谱表左端，轻轻回弹一下停住（中间的 V 常暗，摆锤是强调色）
-      if (t >= CLEF) {
-        const q = clamp((t - CLEF) / CLEF_MS), dy = sn(-(1 - backOut(q, 2.2)) * 5 * GAP);
-        g.globalAlpha = clamp(q * 3);
-        for (let gy = 0; gy < 11; gy++) for (let gx = 0; gx < 13; gx++) {
-          const c = LOGO[gy][gx]; if (c === '.') continue;
-          const inner = gx >= 5 && gx <= 7 && gy >= 3 && gy <= 9;
-          box(lx + gx * LS, ly + gy * LS + dy, LS, LS, c === '@' ? C.accent : inner ? C.dim : C.on);
-        }
-        g.font = `600 ${Math.max(10, Math.round(P * 2.2))}px ui-monospace, "Cascadia Mono", Consolas, monospace`; g.textAlign = 'center'; g.textBaseline = 'top';
-        g.fillStyle = C.line; g.fillText('♩ = 72', lx + (13 * LS) / 2, mid + 2 * GAP + 3 * P + dy);
-        g.globalAlpha = 1;
-      }
-      // 6. 落下时的拖影：一道连贯的扇面（把最近 80ms 里棒身扫过的地方连起来，离现在越远越淡），然后是指挥棒本身
-      if (d > -70 && d < 90) for (const [span, a] of [[90, 0.3], [40, 0.22]]) {
-        const pts = Array.from({length: 10}, (_, k) => baton(t - (span * k) / 9)).filter(Boolean); if (pts.length < 2) continue;
-        const o = pts[pts.length - 1], fade = g.createLinearGradient(o.x, o.y, pts[0].x, pts[0].y); fade.addColorStop(0, 'rgba(0,0,0,0)'); fade.addColorStop(1, C.accent);   // 越早越淡，尾巴化进纸里
-        g.globalAlpha = a * (d > 0 ? 1 - d / 90 : 1); g.fillStyle = fade; g.beginPath();
-        pts.forEach((q, k) => (k ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); for (const q of pts.reverse()) g.lineTo(q.x + Math.cos(q.a) * BL * 0.76, q.y + Math.sin(q.a) * BL * 0.76);
-        g.closePath(); g.fill(); g.globalAlpha = 1;
-      } const b = baton(t); if (b && b.alpha > 0) drawBaton(b, b.alpha);
     }
     function paint() {
-      const t = st.t; g.clearRect(0, 0, W, H);
+      const out = st.ex >= 0, now = out ? st.ex : st.t, tip = out && st.ex > CUT ? null : batonAt(st.t, st.ex);
+      if (tip) { const last = trail[trail.length - 1]; if (!last || last.x !== tip.x || last.y !== tip.y) trail.push({...tip, t: now}); }
+      while (trail.length && now - trail[0].t > 260) trail.shift();
+      g.clearRect(0, 0, W, H);
       for (const [dy, y0, h] of [[st.dyTop, 0, mid], [st.dyBot, mid, H - mid]]) {
         g.save(); g.translate(0, sn(dy)); g.beginPath(); g.rect(0, y0, W, h); g.clip();
-        g.drawImage(paper, 0, y0 * ratio, W * ratio, h * ratio, 0, y0, W, h);
+        box(0, y0, W, h, C.bg);
         box(0, y0 === 0 ? mid - 1 : mid, W, 1, C.dim);   // 谱纸的折缝
-        content(t);
-        g.restore();
+        content(st.t, st.ex); g.restore();
       }
     }
+    return {overlay, st, paint, mid, H};
+  }
 
+  function play() {
+    const s = score('正在切换到 Metre'); if (!s) return null; const {overlay, st, paint, mid, H} = s;
     let alive = true, leaving = false, t0 = 0; const ready = frame();
     // 合上：按时间推进，慢机器上跳几帧也准时盖满
     const covered = (async () => {
@@ -193,19 +177,18 @@
       if (!alive) throw new Error('aborted');
       st.dyTop = 0; st.dyBot = 0;
     })();
-    // 起拍、落拍、亮灯、落位：和合上接着走；走完之前不翻开，之后新页面好了就翻开，没好就停在整页谱面上
+    // 五线、谱号、四拍：和合上接着走；数完之前不翻开，之后新页面好了就翻开，没好就停在谱面上等
     const counted = (async () => {
       try { await covered; } catch { return; }
       while (alive) { st.t = performance.now() - t0; if (leaving && st.t >= HOLD) return; paint(); await frame(); }
     })();
-
     async function finish() {
       leaving = true; await counted;
       if (!alive) return;
       window.dispatchEvent(new CustomEvent('pinkie:metre-sweep', {detail: {ms: OPEN}}));   // 翻开：页面里的进场跟着这一拍起（laolao-metre-home.js）
       const o0 = performance.now(); let d;
       while (alive && (d = performance.now() - o0) < OPEN) {
-        const e = easeInOut(d / OPEN); st.t = performance.now() - t0; st.dyTop = -mid * e; st.dyBot = (H - mid) * e;
+        const e = easeInOut(d / OPEN); st.open = d / OPEN; st.t = performance.now() - t0; st.dyTop = -mid * e; st.dyBot = (H - mid) * e;
         paint(); await frame();
       }
       alive = false; overlay.remove();
@@ -214,5 +197,22 @@
     return {overlay, ready, covered, waiting() {}, finish, abort};
   }
 
-  window.PinkieMetreTransition = Object.freeze({play});
+  // 离场：画到收空为止（covered），谱纸留着垫在碧琪转场下面，release() 才拿掉；万一没人来拿，15 秒后自己拿掉
+  function leave() {
+    const s = score('正在离开 Metre'); if (!s) return null; const {overlay, st, paint, mid, H} = s;
+    let alive = true; st.ex = 0; const release = () => { alive = false; overlay.remove(); };
+    const covered = (async () => {
+      await frame(); const t0 = performance.now();
+      while (alive && st.ex < GONE) {
+        st.ex = performance.now() - t0; const e = easeInOut(clamp(st.ex / CLOSE)); st.dyTop = -mid * (1 - e); st.dyBot = (H - mid) * (1 - e);
+        paint(); await frame();
+      }
+      if (!alive) throw new Error('aborted');
+      st.ex = GONE; st.dyTop = 0; st.dyBot = 0; paint();
+      setTimeout(release, 15000);
+    })();
+    return {overlay, covered, release};
+  }
+
+  window.PinkieMetreTransition = Object.freeze({play, leave});
 })();

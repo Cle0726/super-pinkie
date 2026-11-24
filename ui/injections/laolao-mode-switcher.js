@@ -108,7 +108,7 @@
   let trigger = null;
   let dockTrigger = null;
   let menuAnchor = null;
-  let switching = false;
+  let switching = false, metreExit = null;   // metreExit：Metre 离场后垫在碧琪转场下面的那张谱纸
   let modeTransitionTargetId = null;
   const menuBoundTriggers = new WeakSet();
   let deferredModeChangeId = null;
@@ -397,10 +397,8 @@
 
   const playModeTransition = async (mode) => {
     if (mode.plain) {
-      // Metre's own cover (laolao-metre-transition.js): a pixel count-in, no
-      // scene art. It declines under reduced motion; then there is no cover at
-      // all and the route changes in place. The fx-shaped stub lets
-      // finishModeTransition wait for the destination without drawing anything.
+      // Metre's own cover (laolao-metre-transition.js): a pixel count-in, no scene art. It declines under reduced motion; then
+      // there is no cover and the route changes in place. The fx-shaped stub lets finishModeTransition wait without drawing.
       let own = null;
       try { own = window.PinkieMetreTransition?.play?.() || null; } catch {}
       if (own) {
@@ -416,6 +414,7 @@
       const fx = {waiting() {}, abort() {}, finish: async () => {}};
       return {overlay, fx, assets: Promise.resolve()};
     }
+    if (activeMode() === "metre") { try { metreExit = window.PinkieMetreTransition?.leave?.() || null; await metreExit?.covered; } catch { metreExit?.release?.(); metreExit = null; } }   // Metre → 碧琪：先播 Metre 离场（收拍、合上谱纸），再播目标模式原来的转场
     // The FX module deliberately declines when graphics acceleration is unavailable or the
     // system asks for reduced motion. In that case the established transition
     // below remains the complete, accessible fallback.
@@ -739,6 +738,7 @@
         playModeTransition(mode),
         exactTarget || resolveTargetSession(mode),
       ]);
+      metreExit?.release(); metreExit = null;   // 目标模式的转场已经盖住，拿掉垫在下面的 Metre 谱纸
       const targetMode = {...mode, sessionKey: targetSessionKey};
       localStorage.setItem(storageKey, mode.id);
       sessionStorage.removeItem(skipEntrySplashKey);
@@ -773,7 +773,7 @@
       if (modeTransitionTargetId === mode.id) {
         modeTransitionTargetId = null;
         switching = false;
-        document.querySelector(".laolao-mode-transition")?.remove();
+        document.querySelector(".laolao-mode-transition")?.remove(); metreExit?.release(); metreExit = null;
         render();
       }
     }
