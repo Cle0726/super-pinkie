@@ -10,6 +10,8 @@
  * K3 快捷键：⌘/Ctrl+1…9 打开侧栏第 N 个会话；Ctrl+Tab / Ctrl+Shift+Tab 打开下一个 / 上一个。
  *    跳过被筛选藏掉的行；点的是会话行自己的链接（laolao-session-list.js 里的 navigateSession）。
  *    新会话 ⌘/Ctrl+N 已由 laolao-sidebar.js 提供，这里不重复。
+ * K1 命令面板（⌘/Ctrl+K，原生 openclaw-command-palette）补动作：新会话、换模型、总谱、工作台（含终端）、分屏、
+ *    导出、筛选、旁问 /btw、目标 /goal；输入关键词时排在最前，用过的标「最近用过」排前面。
  * 其他五个模式一个字不动。不自己开定时器、不自己开 DOM 观察器、不加新的全局名：刷新只挂在 Pinkie.domWatch 和会话列表的事件上。 */
 (() => {
   'use strict';
@@ -201,17 +203,109 @@
     return jump(cmd) ? 'jump' : false;
   }
 
+  // ---------- K1 命令面板补动作 ----------
+  // 原生 openclaw-command-palette 只有导航项；有字时它调 searchSessions(query)，把 sessionItems 排在最前，
+  // 选中 nav:<x> 的项交给 onNavigate(x)。laolao-sidebar.js 已经包过这两个；这里在它外面再包一层：
+  // Metre 下加上本文件的动作（每项都点页面上已有的按键，或者把原生斜杠命令放进输入框），用过的排在前面。
+  // 某项的按键此刻不在页面上，就不列出来（没接上后端的按键不出现）。
+  const RECENT_KEY = 'pinkie.metre.palette.recent.v1';
+  const NAV = 'pinkie-mw:';
+  const putDraft = text => {
+    const box = document.querySelector('.agent-chat__input textarea');
+    if (!box) return false;
+    box.value = text;
+    box.dispatchEvent(new Event('input', {bubbles: true}));
+    box.focus();
+    return true;
+  };
+  const clickFirst = sel => { const node = [...document.querySelectorAll(sel)].find(n => !n.disabled); if (!node) return false; node.click(); return true; };
+  const MODEL = 'details.chat-controls__model > summary, details.chat-controls__model-picker > summary';
+  const SPLIT = '[aria-label="分屏工作区：在右侧打开另一个模式"]';
+  const NEW = '.sidebar-new-session:not(.sidebar-new-session--worktree)';
+  const BOX = '.agent-chat__input textarea';
+  const ACTIONS = Object.freeze([
+    {id: 'new-session', label: '新会话', icon: 'plus', target: NEW, run: () => clickFirst(NEW)},
+    {id: 'model', label: '换模型', icon: 'brain', target: MODEL, run: () => clickFirst(MODEL)},
+    {id: 'board', label: '打开总谱', icon: 'barChart', target: '.pk-metre-nav--board', run: () => clickFirst('.pk-metre-nav--board')},
+    {id: 'workbench', label: '打开工作台（文件、终端）', icon: 'folder', target: '.pk-wb-reopen', run: () => clickFirst('.pk-wb-reopen')},
+    {id: 'split', label: '分屏：在右侧打开另一个模式', icon: 'panelRightOpen', target: SPLIT, run: () => clickFirst(SPLIT)},
+    {id: 'export', label: '导出这段会话…', icon: 'download', available: () => typeof window.PinkieSessionTools?.openExport === 'function', run: () => { window.PinkieSessionTools.openExport(); return true; }},
+    {id: 'filter', label: '会话筛选', icon: 'search', target: '.pk-metre-nav--filter', run: () => clickFirst('.pk-metre-nav--filter')},
+    {id: 'btw', label: '旁问一句（/btw，不进主线）', icon: 'messageSquare', target: BOX, run: () => putDraft('/btw ')},
+    {id: 'goal', label: '设一个目标（/goal）', icon: 'target', target: BOX, run: () => putDraft('/goal ')},
+  ]);
+  function recent() {
+    try {
+      const list = JSON.parse(window.localStorage?.getItem(RECENT_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(id => ACTIONS.some(a => a.id === id)).slice(0, 5) : [];
+    } catch { return []; }
+  }
+  function remember(id) {
+    try { window.localStorage?.setItem(RECENT_KEY, JSON.stringify([id, ...recent().filter(x => x !== id)].slice(0, 5))); } catch {}
+  }
+  function available(action) {
+    if (action.available) return Boolean(action.available());
+    return [...document.querySelectorAll(action.target)].some(n => !n.disabled);
+  }
+  function paletteItems(query) {
+    if (!isMetre()) return [];
+    const q = String(query || '').trim().toLowerCase();
+    const used = recent();
+    const rank = a => { const i = used.indexOf(a.id); return i < 0 ? used.length : i; };
+    return ACTIONS
+      .filter(a => available(a) && (!q || a.label.toLowerCase().includes(q) || a.id.includes(q)))
+      .sort((a, b) => rank(a) - rank(b))
+      .map(a => ({id: 'pinkie-mw-' + a.id, label: a.label, icon: a.icon, category: 'navigation', action: 'nav:' + NAV + a.id,
+        description: used.includes(a.id) ? '最近用过' : 'Metre'}));
+  }
+  function runAction(id) {
+    const action = ACTIONS.find(a => a.id === id);
+    if (!action || !isMetre() || !available(action)) return false;
+    remember(id);
+    return Boolean(action.run());
+  }
+  function ensurePalette() {
+    const palette = document.querySelector('openclaw-command-palette');
+    if (!palette) return;
+    const search = palette.searchSessions;
+    if (typeof search === 'function' && !search.pkMetreWorkspace) {
+      const wrapped = async function (query) {
+        const result = await search.call(this, query);
+        const mine = paletteItems(query);
+        if (mine.length && this.open) {
+          const rest = (this.sessionItems || []).filter(item => !String(item?.action || '').startsWith('nav:' + NAV));
+          this.sessionItems = [...mine, ...rest];
+          this.activeIndex = 0;
+        }
+        return result;
+      };
+      wrapped.pkMetreWorkspace = true;
+      palette.searchSessions = wrapped;
+    }
+    const navigate = palette.onNavigate;
+    if (typeof navigate === 'function' && !navigate.pkMetreWorkspace) {
+      const wrapped = route => (String(route).startsWith(NAV) ? void runAction(String(route).slice(NAV.length)) : navigate(route));
+      wrapped.pkMetreWorkspace = true;
+      palette.onNavigate = wrapped;
+    }
+  }
+
+  function refresh() { ensure(); ensurePalette(); }
   document.addEventListener('keydown', handleKey, false);
-  window.addEventListener('laolao:sessions-changed', () => setTimeout(ensure, 0));
-  window.Pinkie?.domWatch?.poll?.(ensure, 1500);
-  ensure();
+  window.addEventListener('laolao:sessions-changed', () => setTimeout(refresh, 0));
+  window.Pinkie?.domWatch?.poll?.(refresh, 1500);
+  refresh();
 
   ns.metreWorkspace = Object.freeze({
     FILTERS,
+    ACTIONS,
     get filter() { return filter; },
     setFilter,
     counts,
     handleKey,
     ensure,
+    ensurePalette,
+    paletteItems,
+    runAction,
   });
 })();

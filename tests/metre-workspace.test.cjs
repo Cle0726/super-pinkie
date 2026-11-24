@@ -90,7 +90,8 @@ function sandbox({mode = 'metre', platform = 'Win32'} = {}) {
   const controls = new FakeEl('div');
   controls.className = 'laolao-session-controls';
   const body = new FakeEl('body');
-  const env = {attrs, controls, body, rows: [], layers: [], stop: null, textarea: null, now: 1_000_000, docListeners: {}, winListeners: {}};
+  const env = {attrs, controls, body, rows: [], layers: [], stop: null, textarea: null, now: 1_000_000, docListeners: {}, winListeners: {},
+    palette: null, targets: {}, store: new Map()};
   const document = {
     documentElement,
     body,
@@ -103,17 +104,21 @@ function sandbox({mode = 'metre', platform = 'Win32'} = {}) {
       if (sel === 'aside.sidebar .pk-metre-nav--filter') return env.controls.querySelector('.pk-metre-nav--filter');
       if (sel === '.agent-chat__input .chat-send-btn--stop') return env.stop;
       if (sel === '.agent-chat__input textarea') return env.textarea;
+      if (sel === 'openclaw-command-palette') return env.palette;
       return null;
     },
     querySelectorAll(sel) {
       if (sel === '#laolao-session-manager .session-row-host') return env.rows;
       if (sel.includes('.slash-menu')) return env.layers;
-      return [];
+      if (sel === '.agent-chat__input textarea') return env.textarea ? [env.textarea] : [];
+      if (sel === '.pk-metre-nav--filter') return env.controls.querySelectorAll('.pk-metre-nav--filter');
+      return env.targets[sel] || [];
     },
   };
   const window = {
     navigator: {platform},
     addEventListener: (t, fn) => (env.winListeners[t] ??= []).push(fn),
+    localStorage: {getItem: (k) => env.store.get(k) ?? null, setItem: (k, v) => env.store.set(k, String(v))},
   };
   const ctx = {
     window, document, console, JSON, Object, Number, String, Boolean, Array, Set, Map,
@@ -320,6 +325,98 @@ test('K3: shortcuts stay out of the code editor and other modes', () => {
   other.rows = [fakeRow(), fakeRow()];
   assert.equal(other.api.handleKey(key({key: '2', code: 'Digit2', ctrlKey: true})), false);
   assert.equal(other.rows[1].link.clicks, 0);
+});
+
+// ---------- K1 命令面板补动作 ----------
+const SPLIT = '[aria-label="分屏工作区：在右侧打开另一个模式"]';
+const btn = () => ({disabled: false, clicks: 0, click() { this.clicks += 1; }});
+function withPalette(env) {
+  // 原生 openclaw-command-palette 的最小样子：searchSessions 写 sessionItems，onNavigate 收 nav: 后面的部分。
+  const native = {routes: [], searched: []};
+  env.palette = {
+    open: true, sessionItems: [], activeIndex: 3,
+    async searchSessions(q) { native.searched.push(q); this.sessionItems = [{id: 'session-a', action: 'session:agent:metre:a', label: '会话 A'}]; },
+    onNavigate: (route) => native.routes.push(route),
+  };
+  env.api.ensurePalette();
+  return native;
+}
+
+test('K1: typing in the native palette puts Metre actions first, ahead of the native session hits, and keeps those hits', async () => {
+  const env = sandbox();
+  env.targets['.pk-metre-nav--board'] = [btn()];
+  env.targets[SPLIT] = [btn()];
+  const native = withPalette(env);
+  await env.palette.searchSessions('');
+  assert.deepEqual(native.searched, [''], '原生搜索照样跑');
+  const labels = [...env.palette.sessionItems.map((i) => i.label)];
+  assert.deepEqual(labels.slice(0, 3), ['打开总谱', '分屏：在右侧打开另一个模式', '会话筛选']);
+  assert.equal(labels.at(-1), '会话 A', '原生的会话结果留在后面');
+  assert.equal(env.palette.activeIndex, 0);
+  assert.ok(env.palette.sessionItems.slice(0, 3).every((i) => i.action.startsWith('nav:pinkie-mw:') && i.category === 'navigation'));
+  await env.palette.searchSessions('总谱');
+  assert.deepEqual([...env.palette.sessionItems.map((i) => i.label)], ['打开总谱', '会话 A'], '按关键词过滤');
+});
+
+test('K1: an action whose button is not on the page is not listed (nothing unwired appears)', async () => {
+  const env = sandbox();
+  withPalette(env);
+  await env.palette.searchSessions('');
+  const ids = env.palette.sessionItems.map((i) => i.id);
+  assert.ok(!ids.includes('pinkie-mw-board') && !ids.includes('pinkie-mw-workbench') && !ids.includes('pinkie-mw-model'));
+  assert.ok(!ids.includes('pinkie-mw-btw'), '没有输入框就不列旁问');
+  assert.ok(!ids.includes('pinkie-mw-export'), '没有导出功能就不列导出');
+  env.targets['.pk-wb-reopen'] = [{disabled: true, click() {}}];
+  await env.palette.searchSessions('');
+  assert.ok(!env.palette.sessionItems.some((i) => i.id === 'pinkie-mw-workbench'), '按键是禁用的也不列');
+});
+
+test('K1: choosing an action runs it through onNavigate (click the real button / prefill a slash command); other routes go native', async () => {
+  const env = sandbox();
+  const board = btn();
+  env.targets['.pk-metre-nav--board'] = [board];
+  const box = {value: '', events: [], focused: false, dispatchEvent(e) { this.events.push(e.type); }, focus() { this.focused = true; }};
+  env.textarea = box;
+  const native = withPalette(env);
+  env.palette.onNavigate('pinkie-mw:board');
+  assert.equal(board.clicks, 1, '点的是侧栏上真的「总谱」键');
+  env.palette.onNavigate('pinkie-mw:btw');
+  assert.equal(box.value, '/btw ', '原生 /btw 放进输入框，由用户补完再发');
+  assert.deepEqual(box.events, ['input']);
+  assert.ok(box.focused);
+  env.palette.onNavigate('pinkie-mw:goal');
+  assert.equal(box.value, '/goal ');
+  env.palette.onNavigate('sessions');
+  assert.deepEqual(native.routes, ['sessions'], '原生导航不受影响');
+  assert.equal(env.api.runAction('nope'), false);
+});
+
+test('K1: recently used actions move to the front and say 最近用过', async () => {
+  const env = sandbox();
+  env.targets['.pk-metre-nav--board'] = [btn()];
+  env.targets[SPLIT] = [btn()];
+  withPalette(env);
+  env.palette.onNavigate('pinkie-mw:split');
+  await env.palette.searchSessions('');
+  const first = env.palette.sessionItems[0];
+  assert.equal(first.id, 'pinkie-mw-split');
+  assert.equal(first.description, '最近用过');
+  assert.equal(env.palette.sessionItems[1].description, 'Metre');
+});
+
+test('K1: wrapping is idempotent and other modes get no extra palette items', async () => {
+  const env = sandbox();
+  env.targets['.pk-metre-nav--board'] = [btn()];
+  withPalette(env);
+  const once = env.palette.searchSessions;
+  env.api.ensurePalette();
+  assert.equal(env.palette.searchSessions, once, '不重复包');
+  const other = sandbox({mode: 'thinking'});
+  other.targets['.pk-metre-nav--board'] = [btn()];
+  withPalette(other);
+  await other.palette.searchSessions('');
+  assert.deepEqual([...other.palette.sessionItems.map((i) => i.label)], ['会话 A'], '其他模式逐字不变');
+  assert.equal(other.api.runAction('board'), false);
 });
 
 // ---------- 登记与健康规矩 ----------
