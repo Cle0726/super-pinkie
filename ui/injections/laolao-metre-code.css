@@ -1,0 +1,31 @@
+/* laolao-metre-code —— Metre 对话区里代码块和文字方向的两处补齐（11-24，对比-主流-Metre-1124.md 第十四节）。
+ * 只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。不加强制覆盖、不加脚本。
+ *
+ * B-C3 diff 块：原生 hljs 已经把 +/- 行标成 .hljs-addition / .hljs-deletion，但颜色是 GitHub 夜间主题的浅绿浅红，
+ *      放在 Metre 日间的谱纸底上对比度只有 1.30 / 1.63（几乎看不清），而且底色只垫在字后面、不成行。
+ *      这里换成引擎台改动面板（laolao-metre-engine.css 的 .pk-eng-diff__l--*）同一套颜色，整行垫底；日夜各一套。
+ * B-T3 从右往左：阿拉伯文、希伯来文段落原来跟着整页从左往右排，标点和数字会跑到错的一头。
+ *      unicode-bidi: plaintext 让每一段按它自己的第一个强方向字符定方向（和网页版 dir=auto 一样的效果），
+ *      中英文段落不受影响；代码块不参与（代码永远从左往右）。 */
+
+/* ---------- B-C3 diff 块 ---------- */
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff .hljs-addition,
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff .hljs-deletion {
+  /* 铺满代码块的内容宽度（不靠负边距去够内边距：真页面上代码块的内边距不一定是多少） */
+  display: inline-block; min-width: 100%; box-sizing: border-box;
+}
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff .hljs-addition { background: rgba(78, 122, 62, 0.10); color: #3E6431; }
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff .hljs-deletion { background: rgba(181, 72, 58, 0.09); color: #9A3B2F; }
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff .hljs-meta { color: var(--metre-accent, #96681C); }
+html[data-laolao-mode="metre"] .chat-text pre code.language-diff :is(.hljs-comment, .hljs-section) { color: var(--metre-muted, #73726C); }
+html[data-laolao-mode="metre"][data-pinkie-night] .chat-text pre code.language-diff .hljs-addition { background: rgba(156, 196, 138, 0.12); color: #9CC48A; }
+html[data-laolao-mode="metre"][data-pinkie-night] .chat-text pre code.language-diff .hljs-deletion { background: rgba(224, 154, 142, 0.12); color: #E09A8E; }
+/* 夜间没取到 Metre 变量时，兜底色也要是浅的（日间兜底 #96681C 在深底上只有 3.2） */
+html[data-laolao-mode="metre"][data-pinkie-night] .chat-text pre code.language-diff .hljs-meta { color: var(--metre-accent, #D2A85C); }
+html[data-laolao-mode="metre"][data-pinkie-night] .chat-text pre code.language-diff :is(.hljs-comment, .hljs-section) { color: var(--metre-muted, #A3A19A); }
+
+/* ---------- B-T3 从右往左 ---------- */
+html[data-laolao-mode="metre"] .chat-text :is(p, li, blockquote, h1, h2, h3, h4, h5, h6) { unicode-bidi: plaintext; text-align: start; }
+/* 表格格子只定方向，不改原生的对齐 */
+html[data-laolao-mode="metre"] .chat-text :is(td, th) { unicode-bidi: plaintext; }
+html[data-laolao-mode="metre"] .chat-text :is(pre, code) { unicode-bidi: isolate; direction: ltr; }
