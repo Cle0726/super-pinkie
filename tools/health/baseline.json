@@ -2382,7 +2382,7 @@
     "ui/injections/laolao-settings-user.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 1637,
+      "lines": 1636,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3093,7 +3093,7 @@
     "ui/injections/laolao-metre-skin.css": 2592,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
-    "ui/injections/laolao-settings-user.js": 1637,
+    "ui/injections/laolao-settings-user.js": 1636,
     "ui/injections/laolao-sidebar.js": 2143,
     "ui/injections/laolao-theme.css": 5389,
     "ui/injections/laolao-workbench.js": 2352
