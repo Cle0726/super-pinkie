@@ -246,7 +246,9 @@
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
         "laolao-metre-display.css",
-        "laolao-metre-thumbs.js"
+        "laolao-metre-thumbs.js",
+        "laolao-metre-stash.css",
+        "laolao-metre-stash.js"
       ]
     },
     {

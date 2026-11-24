@@ -1,0 +1,42 @@
+/* laolao-metre-stash —— T3#2 草稿暂存的样子（laolao-metre-stash.js）。只在 Metre 里；颜色全用 Metre 变量，日夜跟着变量走。
+ * 「Rest」和引擎条一样是衬线斜体英文，中文说明在悬停提示里；数字是等宽小字。不加强制覆盖。 */
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-stash { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+html[data-laolao-mode="metre"] .pk-stash__btn,
+html[data-laolao-mode="metre"] .pk-stash__count {
+  display: inline-flex; align-items: center; justify-content: center; height: 28px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--metre-text); cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-stash__btn { padding: 0 8px; font: italic 400 14.5px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; }
+html[data-laolao-mode="metre"] .pk-stash__count {
+  min-width: 22px; height: 20px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--metre-cobalt) 40%, transparent); border-radius: 4px;
+  color: var(--metre-cobalt); font: 500 12px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+}
+html[data-laolao-mode="metre"] .pk-stash__count[hidden] { display: none; }
+html[data-laolao-mode="metre"] :is(.pk-stash__btn, .pk-stash__count):hover:not(:disabled) { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] :is(.pk-stash__btn, .pk-stash__count):active:not(:disabled) { background: color-mix(in srgb, var(--metre-text) 10%, transparent); }
+html[data-laolao-mode="metre"] :is(.pk-stash__btn, .pk-stash__count, .pk-stash-menu__btn):focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-stash__btn:disabled { color: var(--metre-muted); opacity: 0.55; cursor: default; }
+html[data-laolao-mode="metre"] .pk-stash__count[aria-expanded="true"] { background: color-mix(in srgb, var(--metre-cobalt) 12%, transparent); }
+
+html[data-laolao-mode="metre"] .pk-stash-menu {
+  position: fixed; z-index: 1000; box-sizing: border-box; max-height: min(320px, 50vh); overflow: auto; padding: 4px;
+  border: 1px solid var(--metre-line-strong); border-radius: 8px; background: var(--metre-bg); color: var(--metre-text);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.10); font: 400 13px/1.4 var(--metre-sans, system-ui, sans-serif);
+}
+html[data-laolao-mode="metre"] .pk-stash-menu__head { padding: 6px 8px 4px; color: var(--metre-muted); font: italic 400 13px/1 var(--metre-serif, Georgia, serif); }
+html[data-laolao-mode="metre"] .pk-stash-menu__list { list-style: none; margin: 0; padding: 0; }
+html[data-laolao-mode="metre"] .pk-stash-menu__row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 4px 0 8px; border-radius: 6px; }
+html[data-laolao-mode="metre"] .pk-stash-menu__row:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-stash-menu__text { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+html[data-laolao-mode="metre"] .pk-stash-menu__when { flex: 0 0 auto; color: var(--metre-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"] .pk-stash-menu__btn {
+  flex: 0 0 auto; height: 24px; min-width: 24px; padding: 0 6px; border: 0; border-radius: 5px;
+  background: transparent; color: var(--metre-text); font: inherit; cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-stash-menu__btn:hover { background: color-mix(in srgb, var(--metre-text) 8%, transparent); }
+html[data-laolao-mode="metre"] .pk-stash-menu__btn--take { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-stash-menu__btn--drop { color: var(--metre-muted); }
+@media (prefers-reduced-motion: no-preference) {
+  html[data-laolao-mode="metre"] .pk-stash-menu { animation: pk-stash-in 120ms ease-out; }
+}
+@keyframes pk-stash-in { from { opacity: 0; transform: translateY(4px); } }
