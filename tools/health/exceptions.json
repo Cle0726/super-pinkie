@@ -104,14 +104,14 @@
   {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。 ui3 M13（11-24）再加 2 行：Metre 来源角标和引用卡的两个新文件 laolao-metre-cite.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。",
-    "value": 213
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。 ui3 M13（11-24）再加 3 行：Metre 来源角标和引用卡 laolao-metre-cite.css / .js、M14 朗读键 laolao-metre-read.js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。",
+    "value": 214
   },
   {
     "file": "ui/injections/regions.json",
     "metric": "lines",
-    "reason": "合并 feat/metre-engines：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 测试要求头片段加载的每个文件都归属一个区域；本文件一行一个文件名，没有通配写法）。只多这 2 行，没有新区域、新根选择器或跨区域 CSS 放行。 ui3 M13（11-24）同理再加 2 行：laolao-metre-cite.css / .js 登记在 metre 区域 files 里，同样没有新区域、新根选择器或跨区域放行。",
-    "value": 376
+    "reason": "合并 feat/metre-engines：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 测试要求头片段加载的每个文件都归属一个区域；本文件一行一个文件名，没有通配写法）。只多这 2 行，没有新区域、新根选择器或跨区域 CSS 放行。 ui3 M13（11-24）同理再加 3 行：laolao-metre-cite.css / .js、laolao-metre-read.js 登记在 metre 区域 files 里，同样没有新区域、新根选择器或跨区域放行。",
+    "value": 377
   },
   {
     "file": "ui/injections/laolao-dom-watch.js",
