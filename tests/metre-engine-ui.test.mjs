@@ -577,3 +577,11 @@ test('a stopped or failed engine run plays the C.le. stopped form instead of the
   assert.match(js, /cle\.space\.set\(kind === 'done' \? 'done' : 'stopped'\)/);
   assert.match(js, /setTimeout\(\(\) => \{ cle\.space\?\.set\('idle'\); cle\.finishing = setTimeout\(drop, 1000\); \}, 2000\)/);
 });
+
+// 11-24 隔离真跑页面报错 Cannot read properties of null (reading 'replaceWith')：dropCle 直接 remove 实时小标，
+// 对话最下面那一行就没有 .cle-glyph 了，下一次画（paintLive）对 null 调 replaceWith。要原地换回静态签名。
+test('dropping the live C.le. glyph puts the static signature back in its slot, so the live line always keeps a glyph', () => {
+  const drop = /function dropCle\(\) \{[\s\S]*?\n  \}/.exec(js)?.[0] || '';
+  assert.match(drop, /if \(cle\.glyph\?\.isConnected\) cle\.glyph\.replaceWith\(staticGlyph\(\)\)/);
+  assert.doesNotMatch(drop, /cle\.space = null; cle\.glyph\?\.remove\(\);/);
+});

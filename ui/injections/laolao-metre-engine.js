@@ -92,7 +92,7 @@
     clearTimeout(cle.finishing);
     cle.finishing = 0;
     try { cle.space?.dispose(); } catch {}
-    cle.space = null; cle.glyph?.remove(); cle.glyph = null; cle.kind = '';
+    cle.space = null; if (cle.glyph?.isConnected) cle.glyph.replaceWith(staticGlyph()); else cle.glyph?.remove(); cle.glyph = null; cle.kind = ''; // 原地换回静态签名：直接 remove 会让那一行没了 .cle-glyph，下次画就对 null 调 replaceWith（11-24 真跑页面报错）
   }
   // 此刻在做的那一步 → C.le. 的步骤类别和标题行的内容。
   function stepOf(summary) {
