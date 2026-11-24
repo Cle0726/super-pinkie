@@ -55,3 +55,9 @@ html[data-laolao-mode="metre"] .laolao-image-viewer__close {
 }
 html[data-laolao-mode="metre"] .laolao-image-viewer__close:hover { background: var(--metre-hover); }
 html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+
+/* B-A1 附件卡：碧琪的交付卡网格是 auto-fit minmax(280px)，820 宽时附件区还有 752px，两张卡挤成一排、文件名被截。
+ * 窄窗口（和 Metre 皮肤同一个 920px 断点）下改成一张一排；图片、视频卡和单张卡的排法不动。 */
+@media (max-width: 920px) {
+  html[data-laolao-mode="metre"] .chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card):not(:has(> .laolao-delivery-card.is-media)) { grid-template-columns: minmax(0, 1fr); }
+}

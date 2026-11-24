@@ -60,11 +60,37 @@ test(`Metre basic display: wide tables scroll, long / wide / broken images keep 
   } finally { await browser.close(); }
 });
 
+// B-A1：碧琪交付卡的网格（laolao-material-preview.css 原样规则）。改前 820 宽两张挤一排。
+const DELIVERY = '.chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card){display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px;width:100%;min-width:0}.laolao-delivery-card{display:block;min-height:120px;border:1px solid #ccc}';
+const cardsPage = (mode) => `<!doctype html><html${mode ? ` data-laolao-mode="${mode}"` : ''}><head><style>${NATIVE}
+${DELIVERY}
+${read('laolao-metre-display.css')}</style></head><body>
+<div class="chat-thread"><div class="chat-bubble"><div class="chat-assistant-attachments"><div class="laolao-delivery-card" id="c1">报告.pdf</div><div class="laolao-delivery-card" id="c2">录音.mp3</div></div></div></div></body></html>`;
+async function cardRows(browser, mode, width) {
+  const p = await browser.newPage({viewport: {width, height: 700}});
+  await p.setContent(cardsPage(mode));
+  const r = await p.evaluate(() => ['c1', 'c2'].map((id) => { const b = document.getElementById(id).getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width)]; }));
+  await p.close();
+  return r;
+}
+
+test(`Metre attachment cards: one per row in a narrow window, unchanged when wide and in other modes (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const [a, b] = await cardRows(browser, 'metre', 820);
+    assert.ok(a[0] === b[0] && b[1] > a[1] && a[2] >= 700, `820 wide in Metre: cards stack, full width: ${JSON.stringify([a, b])}`);
+    const [c, d] = await cardRows(browser, 'chat', 820);
+    assert.ok(c[1] === d[1] && d[0] > c[0], `other modes keep two per row: ${JSON.stringify([c, d])}`);
+    const [e, g] = await cardRows(browser, 'metre', 1440);
+    assert.ok(e[1] === g[1] && g[0] > e[0], `wide Metre window keeps the grid: ${JSON.stringify([e, g])}`);
+  } finally { await browser.close(); }
+});
+
 test('wiring: laolao-metre-display.css is in the head after the Metre keys and backstage, owned by the Metre region, Metre-only, and adds no !important', () => {
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);
   assert.ok(/"id": "metre"[\s\S]*?"laolao-metre-display\.css"/.test(read('regions.json')), 'registered in the Metre region');
   const css = read('laolao-metre-display.css').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.ok(!css.includes('!important'));
-  for (const rule of css.split('}').map((s) => s.trim()).filter(Boolean)) assert.match(rule, /^html\[data-laolao-mode="metre"\]/, `every rule is Metre-only: ${rule.slice(0, 80)}`);
+  for (const rule of css.split('}').map((s) => s.trim().replace(/^@media[^{]*\{\s*/, '')).filter(Boolean)) assert.match(rule, /^html\[data-laolao-mode="metre"\]/, `every rule is Metre-only: ${rule.slice(0, 80)}`);
 });
