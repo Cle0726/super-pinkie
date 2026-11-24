@@ -90,7 +90,7 @@ function sandbox({mode = 'metre', platform = 'Win32'} = {}) {
   const controls = new FakeEl('div');
   controls.className = 'laolao-session-controls';
   const body = new FakeEl('body');
-  const env = {attrs, controls, body, rows: [], layers: [], stop: null, textarea: null, now: 1_000_000, docListeners: {}, winListeners: {},
+  const env = {attrs, controls, body, rows: [], layers: [], stop: null, textarea: null, now: 1_000_000, docListeners: {}, winListeners: {}, winCapture: {},
     palette: null, targets: {}, store: new Map()};
   const document = {
     documentElement,
@@ -117,7 +117,7 @@ function sandbox({mode = 'metre', platform = 'Win32'} = {}) {
   };
   const window = {
     navigator: {platform},
-    addEventListener: (t, fn) => (env.winListeners[t] ??= []).push(fn),
+    addEventListener: (t, fn, opt) => { (env.winListeners[t] ??= []).push(fn); if (opt === true || opt?.capture) (env.winCapture[t] ??= []).push(fn); },
     localStorage: {getItem: (k) => env.store.get(k) ?? null, setItem: (k, v) => env.store.set(k, String(v))},
   };
   const ctx = {
@@ -202,6 +202,24 @@ test('S1: the menu lists 全部 / 在跑 / 等你回复 / 未读 / 上一轮出�
   assert.equal(env.body.querySelector('.pk-mw-filter-menu'), null, '选完收起');
   assert.equal(btn.getAttribute('aria-expanded'), 'false');
   assert.ok(btn.focused, '焦点回到按键');
+});
+
+test('S1: Esc with the filter menu open closes only the menu, before the sidebar drawer hears it (1024 / 820 drawer)', () => {
+  const env = sandbox();
+  const btn = env.controls.querySelector('.pk-metre-nav--filter');
+  // 侧栏在 document 捕获阶段一听到 Esc 就收抽屉；本文件必须挂在 window 捕获阶段，才能先拦下来。
+  assert.ok((env.winCapture.keydown || []).includes(env.api.menuEscape), 'Esc 处理挂在 window 的捕获阶段');
+  assert.equal(env.api.menuEscape(key({key: 'Escape'})), false, '菜单没开时不拦 Esc');
+  btn.click();
+  assert.ok(env.body.querySelector('.pk-mw-filter-menu'));
+  let stopped = false;
+  const ev = key({key: 'Escape', stopPropagation() { stopped = true; }});
+  assert.equal(env.api.menuEscape(ev), true);
+  assert.ok(stopped, '停止传播：抽屉听不到这一下');
+  assert.equal(ev.defaultPrevented, true);
+  assert.equal(env.body.querySelector('.pk-mw-filter-menu'), null, '菜单关了');
+  assert.ok(btn.focused, '焦点回到筛选键');
+  assert.equal(env.api.menuEscape(key({key: 'Escape'})), false, '再按一次交给别人（这时才收抽屉）');
 });
 
 test('S1: the stylesheet hides only rows (and emptied groups) without the chosen marker, Metre only, no !important', () => {

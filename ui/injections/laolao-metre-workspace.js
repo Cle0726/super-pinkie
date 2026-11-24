@@ -107,8 +107,7 @@
     menu.addEventListener('keydown', event => {
       const items = [...menu.querySelectorAll('.pk-mw-filter-menu__item')];
       const at = items.indexOf(document.activeElement);
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(true); }
-      else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         items[(at + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
       }
@@ -290,7 +289,18 @@
     }
   }
 
+  // 筛选菜单开着时 Esc 只关菜单：挂在 window 的捕获阶段，先于 laolao-sidebar.js 在 document 捕获阶段
+  // 「Esc 就收起侧栏抽屉」那一条（1024 / 820 宽侧栏是抽屉，菜单在抽屉里，不能一起收掉）。
+  function menuEscape(event) {
+    if (!menu || event.key !== 'Escape' || event.isComposing) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu(true);
+    return true;
+  }
+
   function refresh() { ensure(); ensurePalette(); }
+  window.addEventListener('keydown', menuEscape, true);
   document.addEventListener('keydown', handleKey, false);
   window.addEventListener('laolao:sessions-changed', () => setTimeout(refresh, 0));
   window.Pinkie?.domWatch?.poll?.(refresh, 1500);
@@ -303,6 +313,7 @@
     setFilter,
     counts,
     handleKey,
+    menuEscape,
     ensure,
     ensurePalette,
     paletteItems,
