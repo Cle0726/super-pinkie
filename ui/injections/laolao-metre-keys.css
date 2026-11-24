@@ -1,0 +1,175 @@
+/* laolao-metre-keys —— Metre 的一套「总谱按键」和「后台」状态带的样式（11-24）。只在 data-laolao-mode="metre" 下生效，其他五个模式不受影响。
+ *
+ * 一个按键 = 谱纸上的一个音符框，位置和行为不动，只重画：
+ *   常态    谱纸底 + 一圈淡墨线（4 线谱那种灰）
+ *   悬停    墨线加深、纸压一档
+ *   按下    往下沉 1px、纸再压一档（像琴键）
+ *   键盘焦点 一圈 2px 钴蓝，离开 2px
+ *   禁用    虚线框、字淡、不能点
+ *   运行中  下沿一条钴蓝「拍子线」，按 ♩=72 一拍亮一次（减少动效时常亮不闪）
+ * 三种墨色：普通键（墨线框）、主键（墨色实心：发送 / 引擎台发送 / 声部发消息）、收住键（砖红：全体收住、停、删乐手）。
+ * 覆盖：发送 / 停止（原生）、全体收住、暂停分谱、新会话、引擎台（发送 / 停 / 选项）、引擎菜单的每一行和乐手、
+ *       总谱声部上的「发消息 / 停 / 看」和发消息的小表单。发送键和新会话的底色仍由 laolao-metre-skin.css 定（那里是强制覆盖），这里补齐其余状态。 */
+html[data-laolao-mode="metre"] {
+  --mk-ink: var(--metre-text, #1F1E1D);
+  --mk-paper: var(--metre-bg, #F7F6F3);
+  --mk-rule: color-mix(in srgb, var(--metre-text, #1F1E1D) 24%, transparent);
+  --mk-hover: color-mix(in srgb, var(--metre-text, #1F1E1D) 6%, var(--metre-bg, #F7F6F3));
+  --mk-press: color-mix(in srgb, var(--metre-text, #1F1E1D) 12%, var(--metre-bg, #F7F6F3));
+  --mk-run: var(--metre-v1, #2F4BB0);
+  --mk-done: var(--metre-v2, #6F8466);
+  --mk-wait: #9A6B1F;
+  --mk-fail: var(--metre-v4, #B0463A);
+  --mk-off: var(--metre-v5, #B5B1A8);
+}
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) { --mk-wait: #D9A85C; }
+
+/* ---------- 1. 普通键 ---------- */
+html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync) {
+  position: relative;
+  border: 1px solid var(--mk-rule);
+  border-radius: 6px;
+  background: var(--mk-paper);
+  color: var(--mk-ink);
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, translate 60ms ease-out;
+}
+html[data-laolao-mode="metre"] :is(.pk-eng-chip, .pk-eng-menu__item) { position: relative; border-radius: 6px; transition: background-color 120ms ease-out, translate 60ms ease-out; }
+html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync):hover:not(:disabled) { background: var(--mk-hover); border-color: var(--mk-ink); }
+html[data-laolao-mode="metre"] :is(.pk-eng-chip, .pk-eng-menu__item):hover { background: var(--mk-hover); }
+html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button):active:not(:disabled) { translate: 0 1px; background: var(--mk-press); }
+html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .pk-metre-board__close, .pk-metre-nav, .sidebar-new-session, .agent-chat__input button.chat-send-btn):focus-visible { outline: 2px solid var(--mk-run); outline-offset: 2px; }
+html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-send, .pk-mb-msg button):is(:disabled, [aria-disabled="true"]) { border: 1px dashed var(--mk-rule); background: transparent; color: var(--metre-muted, #73726C); opacity: 0.6; cursor: not-allowed; translate: none; }
+html[data-laolao-mode="metre"] .pk-eng-menu__item[aria-checked="true"] { box-shadow: inset 2px 0 0 var(--mk-run); }
+
+/* ---------- 2. 主键（墨色实心）：悬停变钴蓝 ---------- */
+html[data-laolao-mode="metre"] :is(.pk-eng-send, .pk-eng-btn--primary, .pk-mb-msg button) { position: relative; border: 1px solid var(--mk-ink); border-radius: 6px; background: var(--mk-ink); color: var(--mk-paper); cursor: pointer; transition: background-color 120ms ease-out, translate 60ms ease-out; }
+html[data-laolao-mode="metre"] :is(.pk-eng-send, .pk-eng-btn--primary, .pk-mb-msg button):hover:not(:disabled) { background: var(--mk-run); border-color: var(--mk-run); }
+html[data-laolao-mode="metre"] :is(.pk-eng-send, .pk-eng-btn--primary, .pk-mb-msg button):active:not(:disabled) { background: color-mix(in srgb, var(--mk-run) 80%, var(--mk-ink)); }
+html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn { position: relative; transition: translate 60ms ease-out; }
+html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn:active:not(:disabled) { translate: 0 1px; }
+html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+html[data-laolao-mode="metre"] aside.sidebar .sidebar-new-session:active { translate: 0 1px; }
+
+/* ---------- 3. 收住键（砖红） ---------- */
+html[data-laolao-mode="metre"] :is(.pk-metre-board__btn--stop, .pk-eng-menu__drop[data-armed]):not(:disabled) { color: var(--mk-fail); border-color: color-mix(in srgb, var(--mk-fail) 55%, transparent); }
+html[data-laolao-mode="metre"] :is(.pk-metre-board__btn--stop, .pk-eng-menu__drop[data-armed]):hover:not(:disabled) { background: color-mix(in srgb, var(--mk-fail) 9%, var(--mk-paper)); border-color: var(--mk-fail); }
+
+/* ---------- 4. 运行中：下沿一条钴蓝的拍子线，♩=72 一拍亮一次 ---------- */
+html[data-laolao-mode="metre"] :is(.pk-eng-stop:not([hidden]), .pk-bs__sync[aria-busy="true"], [aria-busy="true"]:is(.pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send))::after,
+html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn.chat-send-btn--stop::after {
+  content: "";
+  position: absolute;
+  left: 6px; right: 6px; bottom: 3px;
+  height: 2px;
+  background: var(--mk-run);
+  pointer-events: none;
+  animation: pk-mk-beat 833ms steps(1, end) infinite;
+}
+html[data-laolao-mode="metre"] .agent-chat__input button.chat-send-btn.chat-send-btn--stop::after { background: var(--metre-bg, #F7F6F3); }
+@keyframes pk-mk-beat {
+  0% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ---------- 5. 后台状态带（11-24 第二版）：输入框正下方那一条，一格一个小方块（像一个音符框），格与格之间留 6px ----------
+ * 字对底的对比度：日间、夜间每一格都 ≥ 4.5:1；状态色块对底 ≥ 3:1（tests/metre-skin-cat 里按这几个色值算过）。 */
+html[data-laolao-mode="metre"] {
+  --bs-chip: #EEEBE4; --bs-rule: #D3CEC3; --bs-ink: #1F1E1D; --bs-muted: #5A564E;
+  --bs-run: #2F4BB0; --bs-run-t: #2F4BB0; --bs-wait: #9A6B1F; --bs-wait-t: #875A14; --bs-fail: #B0463A; --bs-fail-t: #A13A2E; --bs-ok: #6F8466; --bs-off: #827E75;
+}
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) {
+  --bs-chip: #26252A; --bs-rule: #45434B; --bs-ink: #ECEAE4; --bs-muted: #B9B4A9;
+  --bs-run: #93A5EE; --bs-run-t: #A9B9F5; --bs-wait: #D9A85C; --bs-wait-t: #E8B868; --bs-fail: #E07F6C; --bs-fail-t: #F2A090; --bs-ok: #8FA585; --bs-off: #8A867D;
+}
+.pk-metre-backstage { display: none; }
+html[data-laolao-mode="metre"] .pk-metre-backstage:not([hidden]) {
+  position: fixed;
+  z-index: 36;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--bs-ink);
+  font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  pointer-events: auto;
+}
+html[data-laolao-mode="metre"] .pk-metre-backstage.pk-metre-backstage--probe { left: -10000px; top: 0; width: auto; visibility: hidden; pointer-events: none; }
+html[data-laolao-mode="metre"] .pk-bs__label { flex: none; padding: 0 2px; color: var(--bs-ink); font-weight: 600; letter-spacing: 0.12em; }
+html[data-laolao-mode="metre"] .pk-bs__seg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  margin: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--bs-rule);
+  border-radius: 4px;
+  background: var(--bs-chip);
+  color: var(--bs-ink);
+  font: inherit;
+  white-space: nowrap;
+}
+html[data-laolao-mode="metre"] .pk-bs__seg > i { flex: none; width: 7px; height: 7px; background: var(--bs-sq, var(--bs-off)); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="ok"] { --bs-sq: var(--bs-ok); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] { --bs-sq: var(--bs-run); color: var(--bs-run-t); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="wait"] { --bs-sq: var(--bs-wait); color: var(--bs-wait-t); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="fail"] { --bs-sq: var(--bs-fail); color: var(--bs-fail-t); border-color: var(--bs-fail); }
+html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] > i { animation: pk-mk-beat 833ms steps(1, end) infinite; }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop { cursor: pointer; }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop:hover { border-color: var(--bs-ink); }
+html[data-laolao-mode="metre"] button.pk-bs__seg--pop:focus-visible { outline: 2px solid var(--mk-run); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-bs__caret { width: 0; height: 0; margin-left: auto; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid currentColor; }
+html[data-laolao-mode="metre"] .pk-metre-backstage .pk-bs__sync {
+  flex: none;
+  height: 16px;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--bs-fail);
+  border-radius: 3px;
+  background: var(--bs-chip);
+  color: var(--bs-fail-t);
+  font: inherit;
+  line-height: 14px;
+}
+html[data-laolao-mode="metre"] .pk-metre-backstage .pk-bs__sync:hover:not(:disabled) { background: var(--bs-fail); color: var(--bs-chip); }
+html[data-laolao-mode="metre"] .pk-bs__pop {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 4px;
+  min-width: 200px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--bs-rule);
+  border-radius: 6px;
+  background: var(--bs-chip);
+  color: var(--bs-ink);
+  font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+html[data-laolao-mode="metre"] .pk-bs__pop .pk-bs__seg { width: 100%; border-color: transparent; }
+html[data-laolao-mode="metre"] .pk-bs__pop-head { margin: 0 0 2px; color: var(--bs-muted); }
+
+/* ---------- 6. 减少动态效果：不闪、不沉、不过渡 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .agent-chat__input button.chat-send-btn, .sidebar-new-session) { transition: none; translate: none; }
+  html[data-laolao-mode="metre"] :is(.pk-eng-stop, .pk-bs__sync, .pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send, .chat-send-btn)::after, html[data-laolao-mode="metre"] .pk-bs__seg > i { animation: none; }
+}
+html[data-laolao-mode="metre"][data-pinkie-reduce-motion] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .agent-chat__input button.chat-send-btn, .sidebar-new-session) { transition: none; translate: none; }
+html[data-laolao-mode="metre"][data-pinkie-reduce-motion] :is(.pk-eng-stop, .pk-bs__sync, .pk-eng-btn, .pk-mb-act, .pk-metre-board__btn, .pk-eng-send, .chat-send-btn)::after,
+html[data-laolao-mode="metre"][data-pinkie-reduce-motion] .pk-bs__seg > i { animation: none; }
+
+/* ---------- 7. 让位（11-24 第二版） ----------
+ * 窄窗口的导航抽屉收着时，它那块透明、点不到的全屏遮罩不占位置（打开抽屉时照旧出现）。
+ * 窄窗口里总谱是从上面落下来的浮层：打开时输入框（连运行条、猫）让位，浮层一直铺到后台带上面（--metre-bs-room，laolao-metre-board.js 用它），
+ * 里面每一张卡都能滚到、点到；关掉浮层输入框回来。 */
+html[data-laolao-mode="metre"] .shell:not(.shell--nav-drawer-open) > .shell-nav-backdrop { display: none; }
+html[data-laolao-mode="metre"][data-metre-bs] .agent-chat__composer-shell { margin-bottom: 24px; }   /* 原来下面一共 28px（内边距 14 + 外边距 14），改成 38px：后台带 24 + 离窗口下沿 8 + 和输入框之间 6 */
+html[data-laolao-mode="metre"][data-metre-board="overlay"] :is(.agent-chat__input, .pk-run, .pk-metre-cat--full) { visibility: hidden; }
