@@ -239,6 +239,7 @@
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
+        "laolao-metre-prefs.js",
         "laolao-metre-transition.js"
       ]
     },

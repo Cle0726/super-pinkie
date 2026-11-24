@@ -849,7 +849,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind[hidden
 /* ---------- 对话页 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-bubble { background: var(--metre-ph) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group .chat-text,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group .chat-text :is(p, li) { font-size: 15.5px !important; line-height: 1.7 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group .chat-text :is(p, li) { font-size: var(--metre-chat-fs, 15.5px) !important; line-height: var(--metre-chat-lh, 1.7) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text :is(h1, h2, h3) { font-family: var(--metre-serif) !important; font-weight: 500 !important; letter-spacing: 0.01em; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text a { color: var(--metre-accent) !important; }
 @media (max-width: 920px) {

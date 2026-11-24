@@ -104,14 +104,14 @@
   {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。",
-    "value": 211
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。 ui2「以后」S 级再加 1 行：Metre 设置弹层「对话」卡片的新文件 laolao-metre-prefs.js 只能在这里登记加载（?v=@hash），功能全在新文件里。",
+    "value": 212
   },
   {
     "file": "ui/injections/regions.json",
     "metric": "lines",
-    "reason": "合并 feat/metre-engines：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 测试要求头片段加载的每个文件都归属一个区域；本文件一行一个文件名，没有通配写法）。只多这 2 行，没有新区域、新根选择器或跨区域 CSS 放行。",
-    "value": 374
+    "reason": "合并 feat/metre-engines：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 测试要求头片段加载的每个文件都归属一个区域；本文件一行一个文件名，没有通配写法）。只多这 2 行，没有新区域、新根选择器或跨区域 CSS 放行。 ui2「以后」S 级再加 1 行：metre 区域登记新文件 laolao-metre-prefs.js（同样一行一个文件名），没有新区域、新根选择器。",
+    "value": 375
   },
   {
     "file": "ui/injections/laolao-dom-watch.js",
