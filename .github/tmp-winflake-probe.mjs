@@ -32,7 +32,7 @@ for (const cfg of configs) {
   try {
     harness = await startHarness(cfg.opts(service));
     browser = await playwright().chromium.launch({headless: true, channel: 'chrome'});
-    const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+    const page = await browser.newPage({viewport: {width: 1440, height: 900}, ...(process.env.PROBE_REDUCED ? {reducedMotion: 'reduce'} : {})});
     await page.addInitScript(() => {
       const orig = window.requestAnimationFrame.bind(window);
       window.__raf = {n: 0, src: {}};

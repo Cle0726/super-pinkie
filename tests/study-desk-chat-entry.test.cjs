@@ -6,7 +6,11 @@ for(const engine of ['chromium','webkit']) test(engine+': new learning chats sta
   try{
     harness=await startHarness({vendor:false,handler:service.handler});
     browser=await playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true});
-    const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    // The today view mounts the WebGL form stage, whose idle loop redraws every frame unless
+    // reduced motion is on. GPU-less CI runners rasterise it in software (~150-200 ms CPU per
+    // frame), which starved two parallel Chrome tests until clicks hung for 30 s. This test is
+    // about chat entry, not the animation, so it runs with the stage still.
+    const page=await browser.newPage({reducedMotion:'reduce'}),errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(harness.url);await page.locator('#pinkie-study-desk').waitFor({state:'attached'});
     assert.equal(await page.locator('html').getAttribute('data-pinkie-study-desk'),'chat');
     const unexpected = harness.calls.map(call => call.method).filter(method => !/\.(?:desk\.today|ref\.receipts|state|game\.(?:forms\.list|line|world|awards\.pending))$/.test(method));
