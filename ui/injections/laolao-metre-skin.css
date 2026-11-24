@@ -2206,13 +2206,13 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run[data-tone] 
 }
 /* 5. 运行条不再重复状态（11-16 用户：「这种重复显示有必要吗」）：「思考中 · 已用 N 秒」和回复里过程卡的状态、用时是同一件事，
  *    「停下」和输入框里的原生停止键是同一个键。照 Claude 只在回复里显示一处：正常运行 / 完成 / 等你确认时只留 ◆ 芯片，
- *    和空闲时一样；变慢、警告、中断、已停下这些别处看不到的情况仍然显示文字。 */
+ *    和空闲时一样；变慢、警告、中断、已停下这些别处看不到的情况仍然显示文字。X1（11-24）：.pk-run__text 是 role=status 的播报区，只做「看不见」不 display:none，读屏照样播报。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) .pk-run__body {
   width: max-content !important;
   padding: 0 !important;
   background: transparent !important;
 }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) :is(.pk-run__text, .pk-run__meta, .pk-run__actions) { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) :is(.pk-run__meta, .pk-run__actions) { display: none !important; } html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-run:is([data-tone="run"], [data-tone="done"], [data-tone="ask"]) .pk-run__text { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
 /* 6. 输入框下面原生的「Metre is responding… / Done」也是同一个状态的第三处显示（用户：「也是重复显示」），Metre 里不显示；
  *    「Interrupted」留着。窄窗时它被包在 .agent-chat__composer-progress 里，一起收掉。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.agent-chat__run-status--in-progress, .agent-chat__run-status--done),
