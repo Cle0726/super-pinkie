@@ -1,34 +1,19 @@
 # M4 返工 · 恢复拆分前的 Windows 运行时行为 · 执行记录
 
-## 接力卡（最后更新：2026-11-22 00:49 -08:00，Gemini-Win-7c4e @ Windows）
+## 接力卡（最后更新：2026-11-24 03:42 UTC，Claude Code 接手执行者 @ Windows）
 
-- 状态：进行中（核心修复与两类新测试已实现并推送，正在跑本地隔离全量 Python / 全量门禁对照及云端 CI + `windows-smoke.yml`）
-- 分支和 PR：`maint/m4-fix-runtime`，[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)（草稿）
-- 已完成：
-  1. 自 `origin/main`（`1bbe9214780488097310fd336fcf0312fb90416d`）建立独立工作区 `C:\Users\34786\Projects\pinkie-wt\m4-rework-exec`，记录 Z2 开工只读快照，核对 PR #54 文件清单（16 个文件，含 `.github/workflows/ci.yml`，全程零触碰），初始化接力卡并开草稿 PR #62（提交 `8a1520ce`）。
-  2. 复制协调者证据脚本独立复现 `1bbe9214` 的 8 处未定义名与 3 处真实调用 `NameError`（`v2.5.53` 与 `3cd2ac6f` 均为 0 处）。
-  3. 完成六大类系统排查（未定义名字、常量/可变状态分裂、monkeypatch 失效、`__file__` 相对路径、循环导入、动态加载），以及 `3cd2ac6f` vs `1bbe9214` 全量 AST 对照（66 函数 / 8 类 / 30 顶层赋值）。
-  4. 编写两类新测试并在 `1bbe9214` 归档源码上确认全部失败：
-     - `tests/app_undefined_names_test.py`：退出码 `1`，零白名单捕获全部 8 处未定义全局名；
-     - `tests/windows_desktop_split_runtime_test.py`：退出码 `1`，9/9 项全部失败（`failures=4, errors=5`）。
-  5. 实施单命名空间共享加载修复（`app/windows_desktop.py` + 6 个含运行逻辑的拆分子模块）：
-     - 8 个拆分子模块在 `windows_desktop.py` 加载时经 `_load_desktop_part()` 执行进 `windows_desktop` 的唯一全局命名空间（非冻结读同目录 `.py`，冻结读 `spec.loader.get_code()`）；`if _PYINSTALLER_DISCOVERY:` 保留静态导入供 PyInstaller `PyiModuleGraph` 与 `symtable` 发现；
-     - 子模块保留 `if "_PINKIE_DESKTOP_PART" not in globals():` 独立导入守卫、补齐 8 处漏导入/转发桩与 `_desktop()` 惰性导入回退；恢复 `windows_updater.py` 2 处 `GATEWAY_URL` 为原样（66/66 函数、8/8 类与 `3cd2ac6f` 100% AST 一致，30/30 顶层赋值全为单份）；
-     - 复测：`tests/app_undefined_names_test.py` 3/3 过、`tests/windows_desktop_split_runtime_test.py` 9/9 过、`call.py` 3/3 过、`undef.py` 0 处、`windows_frozen_imports_test.py` 2/2 过、`code-health-ratchet.test.mjs` 3/3 过、PyInstaller `PyiModuleGraph` 实测 `Missing: []`。
-  6. 改正 `briefs/maintenance-1120/progress/M4.md` 与 `briefs/maintenance-1120/PROGRESS.md` 总表中不成立的「过」。
-- 正在做：推送修复提交并触发 GitHub Actions CI（4 项）与 `windows-smoke.yml`；本地串行重跑无 `PINKIE_STATE_ROOT` 污染的隔离全量 Python 套件，随后做同环境 `origin/main` 全量门禁对照（一次只跑一个重任务）。
-- 下一步：
-  1. 等本地隔离全量 Python 套件完成（0 失败），记录退出码与计数；
-  2. 在隔离环境对本分支和同环境 `origin/main` 跑全量门禁 `node tools/release-gate/run-tests.mjs`（串行，不同时跑），确认新增失败为 0；
-  3. 收集 PR #62 四项 CI 运行编号与全绿结论；
-  4. 收集本分支 `windows-smoke.yml` 运行编号与结论（若出现与 `v2.5.53` 共同失败项，则补跑 `v2.5.53` 同一工作流对照）；
-  5. 核对 Z2 收工快照、清理本会话临时文件与进程、最终更新 `M4-rework.md` 并推送（保持草稿 PR，不合并）。
-- 没推送的东西：无（本提交将一并推送）
-- 环境：工作区 `C:\Users\34786\Projects\pinkie-wt\m4-rework-exec`；临时目录 `C:\Users\34786\AppData\Local\Temp\pinkie-m4-rework-7c4e`；端口 `5140–5144`；C 盘剩余 `16.07 GB`；后台进程：无
-- 正在跑的长操作：即将触发 GitHub Actions CI + `windows-smoke.yml`（云端），并启动本地全量 Python 测试（约 6–7 分钟，结果写入 `C:\Users\34786\AppData\Local\Temp\pinkie-m4-rework-7c4e\evidence\full_python_clean.log`）
-- 踩过的坑：
-  - 外层壳提前设置 `PINKIE_STATE_ROOT` 会覆盖 `context_budget_test.py` 与 `party_usage_test.py` 内部每用例的 `self.home` 隔离，导致 `mkdir(parents=True)` 报 `FileExistsError` 与跨用例累计脏值；改为仅隔离 `HOME`/`USERPROFILE`/`APPDATA`/`LOCALAPPDATA`/`TEMP`/`TMP`/`npm_config_prefix` 且不预置 `PINKIE_STATE_ROOT` 后，上述 22/22 全部通过。
-  - PowerShell 管道 `git archive | tar` 会破坏二进制流，改用 `git archive --format=zip --output=...` + `Expand-Archive` 正常提取。
+- 状态：返工第 2 轮已做完，等协调者复验（PR 保持草稿，不合并）
+- 分支和 PR：`maint/m4-fix-runtime`，[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)（草稿），证据头 `7af633bd`
+- 已完成（第 2 轮）：
+  1. rebase 到 origin/main，并补上 `app.` 兜底导入（a871b49e）；修好 Linux 上 lock_tampered 测试的 WindowsPath 报错（64cce696）。
+  2. verifyAfterCommand 偶发失败：main 上同样会出现，根因是 statKey 在同大小、同 mtime 时跳过检查，和 #64 的 EBUSY 不是同一件事。
+  3. 6 个函数的字节码差异来自 Python 3.13 类体 `__firstlineno__` 常量，属于编译差异，不是行为差异。冻结包 PYZ 实测：11 个模块全部走 `get_code`，没有 NameError。
+  4. windows-smoke 不是本 PR 引起的：本分支 45305393950、main 45317443287、v2.5.53 45299544643 都用 package=build，都挂在 `metre-sidebar` 探针；本分支和 main 的失败行逐字相同。
+  5. 测试不再弹窗：单独提交 7af633bd，只改 `tests/windows_portable_update_integration_test.py`，产品代码没动。CI 45316807530 四项全绿。
+  6. 同环境全量对照（本分支 7af633bd，main 12b644ea 加同一份测试替身）：门禁两边各 61 条，Python 两边各 6 条，失败集合相同，新增失败 0。全程窗口监视：真窗口 0 个。
+- 证据：PR #62 评论 https://github.com/Cle0726/super-pinkie/pull/62#issuecomment-7121337486。本机脚本、日志和证据在 `F:\Projects\super-pinkie\build\quick-run\m4\`（`full/sets-br3.json`、`full/sets-main3.json`、`watch-full3.log`、`smoke-*-failed.log`）。
+- 下一步：协调者复验后决定是否合并。metre-sidebar 探针在 main 和 v2.5.53 上同样失败，需要另开一条线处理。
+- 没推送的东西：无
 - 待用户决定：无
 
 ---
@@ -138,6 +123,14 @@
 
 ---
 
-## 五、全量测试、门禁对照、CI 与 `windows-smoke.yml`（进行中）
+## 五、全量测试、门禁对照、CI 与 `windows-smoke.yml`（第 2 轮，头 `7af633bd`）
 
-待本轮运行完成后逐项补齐命令、退出码、输出原文与 CI 运行编号。
+| 项 | 本分支 | 同环境 main | 新增失败 |
+|---|---|---|---|
+| 全量门禁 `node tools/release-gate/run-tests.mjs` | `284 test files, 61 failing tests, 2 known` | `284 test files, 61 failing tests, 2 known` | 0（集合逐条相同） |
+| Python `python -m unittest discover -s tests -p '*_test.py'` | `Ran 552 tests` `FAILED (failures=6, skipped=15)` | `Ran 539 tests` `FAILED (failures=6, skipped=15)` | 0（同 6 条；多出的 13 个是本 PR 新增测试，全部通过） |
+| CI（4 项） | 45316807530：windows-checks / portable-checks / macos-check / windows-build 全部 success | — | — |
+| windows-smoke（package=build） | 45305393950 failure：`metre-sidebar` 探针超时 | 45317443287 failure：失败行逐字相同；v2.5.53 的 45299544643 也挂在 `metre-sidebar` | 不是本 PR 引起的 |
+| 测试弹窗 | 全量期间真进度窗口 0 个、带标题窗口 0 个（`watch-full3.log`） | 同（main 一侧临时加了同一份测试替身，未提交） | — |
+
+逐条证据见 PR #62 评论 https://github.com/Cle0726/super-pinkie/pull/62#issuecomment-7121337486。
