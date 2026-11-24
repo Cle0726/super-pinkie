@@ -92,7 +92,12 @@ export function buildInstallLock({ pkg, shrinkwrap, core, ai }) {
 }
 
 export function installLockedTarball({ tarball, prefixDir, coreVersion, runNpm, registry }) {
-  const modules = path.join(prefixDir, 'node_modules');
+  fs.mkdirSync(prefixDir, { recursive: true });
+  // On macOS, /tmp -> /private/tmp and $TMPDIR (/var/folders) -> /private/var/folders.
+  // npm 11's Arborist compares virtualTree (un-realpathed) against idealTree (realpathed)
+  // and fails `npm ci` with "Missing: <basename>@ from lock file" if --prefix is a symlink.
+  const realPrefix = fs.realpathSync(prefixDir);
+  const modules = path.join(realPrefix, 'node_modules');
   if (fs.existsSync(modules)) {
     // npm ci empties node_modules, so only ever run it in a prefix owned by the core.
     const foreign = fs.readdirSync(modules).filter((name) => name !== 'openclaw' && !name.startsWith('.'));
@@ -101,7 +106,7 @@ export function installLockedTarball({ tarball, prefixDir, coreVersion, runNpm, 
     }
   }
 
-  const stage = path.join(prefixDir, STAGE);
+  const stage = path.join(realPrefix, STAGE);
   fs.rmSync(stage, { recursive: true, force: true });
   fs.mkdirSync(stage, { recursive: true });
   try {
@@ -132,10 +137,10 @@ export function installLockedTarball({ tarball, prefixDir, coreVersion, runNpm, 
       core: local('openclaw.tgz'),
       ai: local('openclaw-ai.tgz'),
     });
-    fs.writeFileSync(path.join(prefixDir, 'package.json'), `${JSON.stringify(root, null, 2)}\n`);
-    fs.writeFileSync(path.join(prefixDir, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
+    fs.writeFileSync(path.join(realPrefix, 'package.json'), `${JSON.stringify(root, null, 2)}\n`);
+    fs.writeFileSync(path.join(realPrefix, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
 
-    runNpm(['ci', '--prefix', prefixDir, '--registry', registry, '--omit=dev', '--no-audit', '--no-fund']);
+    runNpm(['ci', '--prefix', realPrefix, '--registry', registry, '--omit=dev', '--no-audit', '--no-fund']);
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }

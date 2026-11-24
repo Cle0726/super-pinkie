@@ -282,3 +282,44 @@ test('core CLI helpers still execute when invoked through a symlinked directory 
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('installLockedTarball resolves symlinked --prefix before npm ci (macOS $TMPDIR -> /private/var/folders)', () => {
+  const realBase = fs.realpathSync(os.tmpdir());
+  const tmp = fs.mkdtempSync(path.join(realBase, 'pinkie-k2-symprefix-'));
+  try {
+    // Build a minimal valid lock-installable tarball
+    const pkgRoot = path.join(tmp, 'src', 'package');
+    fs.mkdirSync(path.join(pkgRoot, 'cle-vendor'), { recursive: true });
+    fs.writeFileSync(path.join(pkgRoot, 'package.json'), JSON.stringify({ name: 'openclaw', version: '2026.7.1-2' }));
+    fs.writeFileSync(path.join(pkgRoot, 'cle-vendor/openclaw-ai.tgz'), 'ai-bytes');
+    fs.writeFileSync(
+      path.join(pkgRoot, 'npm-shrinkwrap.json'),
+      JSON.stringify({
+        version: '2026.7.1-2',
+        packages: { '': {}, 'node_modules/@openclaw/ai': { version: '2026.7.1-2' } },
+      }),
+    );
+    const tgz = path.join(tmp, 'cle.tgz');
+    const tarRes = spawnSync('tar', ['-czf', tgz, '-C', path.join(tmp, 'src'), 'package'], { encoding: 'utf8' });
+    assert.equal(tarRes.status, 0, tarRes.stderr);
+
+    const realTarget = path.join(tmp, 'real-prefix');
+    fs.mkdirSync(realTarget, { recursive: true });
+    const symlinkPrefix = path.join(tmp, 'symlink-prefix');
+    fs.symlinkSync(realTarget, symlinkPrefix, 'junction');
+
+    let capturedArgs = null;
+    installLockedTarball({
+      tarball: tgz,
+      prefixDir: symlinkPrefix,
+      coreVersion: '2026.7.1-2-c.3',
+      registry: 'https://registry.example.test',
+      runNpm: (args) => { capturedArgs = args; },
+    });
+    assert.ok(Array.isArray(capturedArgs), 'runNpm must be called');
+    const prefixIdx = capturedArgs.indexOf('--prefix');
+    assert.equal(capturedArgs[prefixIdx + 1], fs.realpathSync(realTarget), 'npm ci --prefix must receive realpath');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

@@ -310,12 +310,13 @@ export async function installCoreIntoPrefix({
   const manifest = loadCoreManifest(repoRoot);
   const selected = resolveCoreSelection(manifest, coreOverride);
   fs.mkdirSync(prefixDir, { recursive: true });
+  const realPrefixDir = fs.realpathSync(prefixDir);
 
   let verifiedSha256 = null;
   if (selected.core === 'openclaw') {
     runNpm([
       'install',
-      '--prefix', prefixDir,
+      '--prefix', realPrefixDir,
       '--registry', npmRegistry,
       '--omit=dev',
       '--no-audit',
@@ -327,14 +328,14 @@ export async function installCoreIntoPrefix({
     verifiedSha256 = fetched.sha256;
     installLockedTarball({
       tarball: fetched.tarballPath,
-      prefixDir,
+      prefixDir: realPrefixDir,
       coreVersion: selected.spec.version,
       registry: npmRegistry,
       runNpm,
     });
   }
 
-  const packageRoot = path.join(prefixDir, 'node_modules', 'openclaw');
+  const packageRoot = path.join(realPrefixDir, 'node_modules', 'openclaw');
   if (!fs.existsSync(path.join(packageRoot, 'openclaw.mjs'))) {
     throw new Error(`Installed core (${selected.core}) is incomplete: missing ${path.join(packageRoot, 'openclaw.mjs')}`);
   }
