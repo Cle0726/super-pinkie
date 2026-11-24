@@ -635,13 +635,15 @@ export class SettingsGuard {
         for (const file of list) { try { files.set(file, fs.readFileSync(file)); } catch {} }
       }
     }
-    let config = null; try { config = JSON.parse(fs.readFileSync(this.configPath, 'utf8')); } catch {}
+    const configStat = statKey(this.configPath);
+    let configRaw = null; try { configRaw = fs.readFileSync(this.configPath, 'utf8'); } catch {}
+    let config = null; try { config = JSON.parse(configRaw); } catch {}
     if (!config || typeof config !== 'object') config = this.readConfig() || {};
     const viewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
     const snap = {files, stats: new Map([...files.keys()].map(f => [f, statKey(f)])), dirs, roots,
       // official：启动校验之后的配置（产品键以它为准）；lastGood：最近一份读得出的配置（整份坏掉时用它，保住用户后来改的偏好）。
       product: productView(config, viewCtx), official: structuredClone(config), lastGood: structuredClone(config),
-      configKnown: statKey(this.configPath) !== 'missing' && Object.keys(config).length > 0, configStat: statKey(this.configPath), restores: [], unreported: []};
+      configKnown: configStat !== 'missing' && Object.keys(config).length > 0, configStat, configHash: configRaw === null ? '' : sha256Hex(configRaw), restores: [], unreported: []};
     shared.set(key, snap);
     return snap;
   }
@@ -677,10 +679,16 @@ export class SettingsGuard {
     };
     for (const [file, official] of snap.files) {
       const stat = statKey(file);
-      if (stat === snap.stats.get(file)) continue;
       let now;
-      try { now = readUnlessLocked(file); } catch { unread.push(file); continue; }
-      if (now && now.equals(official)) { snap.stats.set(file, stat); continue; }
+      if (stat === snap.stats.get(file)) {
+        // 大小、修改时间都没变不等于内容没变：同一个时间刻度里写进等长的内容，或者改完把时间调回去，statKey 都对得上。
+        // 再读一次和官方原文逐字节比；正被占用读不到就先当没变（和以前一样），下一次检查还会再比。
+        try { now = readUnlessLocked(file); } catch { continue; }
+        if (!now || now.equals(official)) continue;
+      } else {
+        try { now = readUnlessLocked(file); } catch { unread.push(file); continue; }
+        if (now && now.equals(official)) { snap.stats.set(file, stat); continue; }
+      }
       try {
         if (now) backup(file);
         try { if (fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file); } catch {}
@@ -710,10 +718,19 @@ export class SettingsGuard {
     }
     // openclaw.json：只比产品键；用户改的模型、偏好原样留着。
     const configStat = statKey(this.configPath);
-    if (configStat !== snap.configStat) {
-      let raw = null;
-      let readable = true;
+    let configChanged = configStat !== snap.configStat;
+    let raw = null;
+    let readable = true;
+    if (configChanged) {
       try { raw = readUnlessLocked(this.configPath, 'utf8'); } catch { readable = false; unread.push(this.configPath); }
+    } else if (configStat !== 'missing') {
+      // statKey 只有大小、修改时间、inode：同一个时间刻度里写进等长的内容（或改完把时间调回去）它对不上变化。
+      // 所以再比一次内容哈希。正被占用读不到就先当没变，下一次检查还会再比，不会因此永久跳过。
+      try { raw = readUnlessLocked(this.configPath, 'utf8'); } catch { readable = false; }
+      configChanged = readable && raw !== null && sha256Hex(raw) !== snap.configHash;
+    }
+    if (configChanged) {
+      let written = null;
       if (readable) try {
         let config = null; try { config = JSON.parse(raw); } catch {}
         const baseViewCtx = {stateDir: this.stateDir, home: this.home, userSkillsDir: this.userSkillsDir()};
@@ -727,20 +744,24 @@ export class SettingsGuard {
           applyProductView(config, snap.official, viewCtx);
           backup(this.configPath);
           let mode = 0o600; try { mode = fs.statSync(this.configPath).mode & 0o777; } catch {}
-          atomicWriteFileSync(this.configPath, JSON.stringify(config, null, 2) + '\n', {mode});
+          written = JSON.stringify(config, null, 2) + '\n';
+          atomicWriteFileSync(this.configPath, written, {mode});
           fixed.push(this.configPath);
           fixedKinds.add('config');
         } else if (!config || typeof config !== 'object') {
           // 删掉或改成读不出来的样子：整份换回快照（快照就是启动校验之后的官方配置 + 当时的用户设置）。
           if (raw !== null) backup(this.configPath);
-          atomicWriteFileSync(this.configPath, JSON.stringify(snap.lastGood, null, 2) + '\n', {mode: 0o600});
+          written = JSON.stringify(snap.lastGood, null, 2) + '\n';
+          atomicWriteFileSync(this.configPath, written, {mode: 0o600});
           fixed.push(this.configPath);
           fixedKinds.add('config');
         }
         if (snap.configKnown && config && typeof config === 'object') snap.lastGood = structuredClone(config);
         this.cache = {at: 0, value: null};
         // 只有查完、该换的也换好了才记「已检查」：失败时不记；没改动时记读之前的值，读的同时落盘的改动下次还会查到。
-        snap.configStat = fixed.includes(this.configPath) ? statKey(this.configPath) : configStat;
+        // 哈希记的是查过的那份内容（换回时是写进去的那份），下次 statKey 对得上时拿它比。
+        snap.configStat = written !== null ? statKey(this.configPath) : configStat;
+        snap.configHash = written !== null ? sha256Hex(written) : (raw === null ? '' : sha256Hex(raw));
       } catch (error) {
         restoreFailed.push({file: this.configPath, kind: 'config', error: String(error?.message || error)});
       }

@@ -944,3 +944,68 @@ test('restore: a failure the user undoes themselves stops showing as failed', t 
   assert.deepEqual(f.guard.verifyAfterCommand('exec'), []);
   assert.equal(f.guard.status().restoreFailedCount, 0);
 });
+
+// statKey (size, mtime, inode) cannot see a same-length write inside one timestamp tick, nor an edit
+// whose mtime was set back. Pin the mtime to one whole second so the miss is deterministic, not timing luck.
+const PINNED = 1767225600;
+function pinned(file, content) {
+  const ino = fs.statSync(file).ino;
+  fs.writeFileSync(file, content);
+  fs.utimesSync(file, PINNED, PINNED);
+  const s = fs.statSync(file);
+  return {size: s.size, mtimeMs: s.mtimeMs, ino: s.ino, sameIno: s.ino === ino};
+}
+
+test('change detection: a same-size write with the same mtime still has its product keys restored', () => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const official = path.join(state, 'extensions/pinkie-mode-architecture');
+  const initial = {plugins: {allow: ['pinkie-mode-architecture', 'my-ext-plugin'], deny: ['some-other-user-plugin'], load: {paths: [official]}, entries: {'pinkie-mode-architecture': {enabled: true}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  const before = pinned(configFile, JSON.stringify(initial));
+  guard.baseline();
+  // Same length: the product plugin moves from allow to deny, a user plugin the other way.
+  const tampered = structuredClone(initial);
+  tampered.plugins.allow = ['some-other-user-plugin', 'my-ext-plugin'];
+  tampered.plugins.deny = ['pinkie-mode-architecture'];
+  const after = pinned(configFile, JSON.stringify(tampered));
+  assert.deepEqual([after.size, after.mtimeMs, after.sameIno], [before.size, before.mtimeMs, true], 'fixture must leave statKey unchanged');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  const fixed = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  assert.equal(fixed.plugins.allow.includes('pinkie-mode-architecture'), true);
+  assert.equal(fixed.plugins.deny.includes('pinkie-mode-architecture'), false);
+  // Nothing left to do afterwards, and a user-only change of the same shape is still kept.
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+});
+
+test('change detection: a same-size persona edit with the same mtime is still put back', () => {
+  const {guard, ws} = sandbox();
+  const soul = path.join(ws, 'SOUL.md');
+  const before = pinned(soul, 'soul');
+  guard.baseline();
+  const after = pinned(soul, 'evil');
+  assert.deepEqual([after.size, after.mtimeMs, after.sameIno], [before.size, before.mtimeMs, true], 'fixture must leave statKey unchanged');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [soul]);
+  assert.equal(fs.readFileSync(soul, 'utf8'), 'soul');
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+});
+
+test('change detection: an unchanged-looking file that is locked is compared again by the next check', t => {
+  const {guard, state, ws} = sandbox();
+  const configFile = path.join(state, 'openclaw.json');
+  const initial = {plugins: {allow: ['pinkie-mode-architecture', 'x'], entries: {'pinkie-mode-architecture': {enabled: true}}}, agents: {list: [{id: 'main', workspace: ws}]}};
+  pinned(configFile, JSON.stringify(initial));
+  guard.baseline();
+  const tampered = structuredClone(initial);
+  tampered.plugins.allow = ['x', 'pinkie-mode-architecturf'];
+  pinned(configFile, JSON.stringify(tampered));
+  const real = fs.readFileSync;
+  fs.readFileSync = function (file, ...rest) {
+    if (file === configFile) throw Object.assign(new Error('EBUSY: simulated lock'), {code: 'EBUSY'});
+    return real.call(this, file, ...rest);
+  };
+  t.after(() => { fs.readFileSync = real; });
+  assert.deepEqual(guard.verifyAfterCommand('exec'), []);
+  fs.readFileSync = real;
+  assert.deepEqual(guard.verifyAfterCommand('exec'), [configFile]);
+  assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).plugins.allow.includes('pinkie-mode-architecture'), true);
+});
