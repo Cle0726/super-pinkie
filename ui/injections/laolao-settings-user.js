@@ -667,9 +667,7 @@
       state.usageValues.set(key, value);
     }
     usageLabel.setAttribute("aria-hidden", "true");
-    makeStatus(aboutCard, "usage");
-    state.kernelNote = element("p", "pinkie-user-settings__soft-note", aboutCard, kernelCredit("读取中…"));
-    const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
+    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); state.kernelNote = element("p", "pinkie-user-settings__soft-note", aboutCard, kernelCredit("读取中…")); aboutCard.insertBefore(state.kernelNote, noticesHost); //第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js；K4 内核署名排在它前面
 
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());
