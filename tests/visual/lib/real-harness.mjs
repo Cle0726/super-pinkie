@@ -546,9 +546,9 @@ export function sceneMeta(sceneId) {
   return {...scene, isHome, agentId, sessionKey};
 }
 
-export async function settleRealPage(page, theme) {
+export async function settleRealPage(page, theme, {lockPerfClock = false} = {}) {
   const isNight = theme === 'night';
-  await page.evaluate(async (dark) => {
+  await page.evaluate(async ({dark, lockClock}) => {
     // Sync theme through real laolao-night controller if needed
     const wantMode = dark ? 'dark' : 'light';
     if (document.documentElement.getAttribute('data-theme-mode') !== wantMode) {
@@ -562,21 +562,30 @@ export async function settleRealPage(page, theme) {
       el.classList.remove('laolao-welcome--materializing');
     });
 
-    // Temporarily freeze performance.now only during laolao-usage-stats refresh
-    // so linkLatency is deterministically 0ms without blocking later animations/transitions.
+    // Freeze performance.now during laolao-usage-stats refresh so linkLatency is
+    // deterministically 0ms. When lockClock=true (screenshot-only capture before
+    // closing context), keep it locked so any pending 500ms sessions-changed
+    // debounce cannot overwrite 0ms with a live wall-clock latency.
     const origPerfNow = performance.now.bind(performance);
     try {
-      performance.now = () => 1000;
       if (window.__laolaoUsage?.refresh) {
-        await window.__laolaoUsage.refresh();
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          performance.now = () => 1000;
+          await window.__laolaoUsage.refresh();
+          const link = window.__laolaoUsage.link;
+          if (link?.online && link.latency === 0) break;
+          await new Promise((r) => setTimeout(r, 40));
+        }
       }
     } finally {
-      performance.now = origPerfNow;
+      if (!lockClock) {
+        performance.now = origPerfNow;
+      }
     }
 
-    // Finish any active Web Animations
+    // Finish any active Web Animations (e.g. usage chip pulse)
     if (typeof document.getAnimations === 'function') {
-      for (const anim of document.getAnimations()) {
+      for (const anim of document.getAnimations({subtree: true})) {
         try { anim.finish(); } catch { try { anim.cancel(); } catch {} }
       }
     }
@@ -616,11 +625,21 @@ export async function settleRealPage(page, theme) {
       await probe.decode().catch(() => {});
     }));
 
-    if (document.activeElement && typeof document.activeElement.blur === 'function') {
-      document.activeElement.blur();
-    }
+    // Blur focused inputs/textareas so high-specificity caret-color:!important rules
+    // cannot leave a blinking caret in the screenshot.
+    const blurAll = () => {
+      if (document.activeElement && document.activeElement !== document.body && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+      for (const field of document.querySelectorAll('textarea:focus, input:focus')) {
+        field.blur();
+      }
+    };
+    blurAll();
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  }, isNight);
+    blurAll();
+    await new Promise((r) => requestAnimationFrame(r));
+  }, {dark: isNight, lockClock: lockPerfClock});
 }
 
 export async function assertRealPageLoaded(page) {
@@ -813,15 +832,27 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
       const st = window.__laolaoStartupHome?.status?.();
       return document.documentElement.getAttribute('data-laolao-startup-ready') === '1'
         && Boolean(document.querySelector('.laolao-startup-home__greeting')?.textContent?.trim())
+        && document.querySelectorAll('.laolao-startup-home__recent .laolao-startup-home__item').length >= 1
         && (!st?.draft || st.draft.state === 'ready' || st.draft.state === 'failed');
     }, {timeout: 15_000});
   }
 
-  // Trigger immediate context-capacity fetch and wait briefly for async UI injections
+  // Trigger immediate context-capacity fetch and wait for post-splash mode-enter animation
+  // and initial async UI injections (usage chips, context viewer ring, sidebar sessions) to settle.
   await page.evaluate(() => {
     window.dispatchEvent(new Event('laolao:sessions-changed'));
   });
-  await page.waitForTimeout(350);
+  await page.waitForFunction(
+    () => !document.documentElement.hasAttribute('data-laolao-mode-enter'),
+    {timeout: 5_000},
+  );
+  await page.waitForFunction(() => {
+    const hasMeta = Boolean(document.querySelector('.agent-chat__composer-meta'));
+    if (!hasMeta) return true;
+    const pct = document.querySelector('.laolao-context-viewer__percent')?.textContent?.trim();
+    return Boolean(pct && pct !== '—');
+  }, {timeout: 5_000}).catch(() => {});
+  await page.waitForTimeout(150);
 
   if (sceneId === 'sidebar-collapsed') {
     const toggleSel = '.sidebar [data-pinkie-sidebar-toggle], .sidebar button[aria-label="折叠侧边栏"]';
@@ -850,10 +881,10 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     await page.click(settingsLink);
     await page.waitForFunction(() => (
       location.pathname.startsWith('/settings')
-      && (document.body.getAttribute('data-pinkie-user-settings') === '1'
-        || Boolean(document.querySelector('.config-view-toggle')))
+      && document.body.getAttribute('data-pinkie-user-settings') === '1'
+      && Boolean(document.querySelector('#laolao-user-settings:not([hidden])'))
     ), {timeout: 10_000});
-    await page.waitForTimeout(350);
+    await page.waitForTimeout(250);
   } else if (sceneId === 'study-desk') {
     await page.waitForFunction(
       () => typeof window.__pinkieStudyDesk?.go === 'function' && typeof window.__pinkieDrill?.start === 'function',
@@ -864,8 +895,17 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     });
     await page.waitForFunction(() => {
       const opts = document.querySelectorAll('.pk-drill .pk-drill-options .pk-choice');
-      return opts.length === 4 && [...opts].every((el) => el.getBoundingClientRect().height > 20);
+      if (opts.length !== 4 || ![...opts].every((el) => el.getBoundingClientRect().height > 20)) return false;
+      const deskRoot = document.querySelector('#pinkie-study-desk');
+      const paperLoaded = !deskRoot || (
+        Boolean(deskRoot.style.getPropertyValue('--paper-texture'))
+        && deskRoot.style.getPropertyValue('--grain').includes('grain.png')
+      );
+      const imgs = [...document.querySelectorAll('.pk-drill img')];
+      const imgsReady = imgs.every((img) => img.complete && img.naturalWidth > 0);
+      return paperLoaded && imgsReady;
     }, {timeout: 10_000});
+    await page.waitForTimeout(200);
   } else if (sceneId === 'metre-board') {
     await page.waitForFunction(
       () => typeof window.__pinkieMetreBoard?.open === 'function',
@@ -889,12 +929,18 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     });
   }
 
-  await settleRealPage(page, theme);
+  await settleRealPage(page, theme, {lockPerfClock: Boolean(opts.lockPerfClock)});
   return {context, page, pageErrors, failedRequests, meta};
 }
 
 export async function captureRealScenePng(browser, origin, sceneId, theme) {
-  const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, origin, sceneId, theme);
+  const {context, page, pageErrors, failedRequests} = await openRealScenePage(
+    browser,
+    origin,
+    sceneId,
+    theme,
+    {lockPerfClock: true},
+  );
   try {
     const proof = await assertRealPageLoaded(page);
     const png = await page.screenshot({animations: 'disabled', caret: 'hide', type: 'png'});
