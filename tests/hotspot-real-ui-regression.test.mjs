@@ -57,7 +57,7 @@ function rectsOverlap(a, b) {
 
 test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT});
+  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   const browser = await launchRealBrowser();
 
   t.after(async () => {
@@ -471,7 +471,7 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       const layout = await page.evaluate(() => {
         const thread = document.querySelector('.chat-thread');
         const tr = thread?.getBoundingClientRect();
-        const cards = [...document.querySelectorAll('.chat-thread details.pinkie-process, .chat-thread .chat-tool-msg-collapse')];
+        const cards = [...document.querySelectorAll('.chat-thread details.pinkie-process, .chat-thread .chat-group.tool')];
         return {
           threadRight: tr ? tr.right : 0,
           cards: cards.map((el) => {
@@ -495,7 +495,22 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         );
       }
 
-      const toolRow = page.locator('.chat-thread .chat-tool-msg-collapse').first();
+      // Finished tool groups are folded behind the real C.le. run row (button.cle-run,
+      // ui/injections/cle-ink.js). Opening it must reveal the tool row, the tool row
+      // must expand its own detail, and both must fold back to the original height.
+      const group = page.locator('.chat-thread .chat-group.tool').filter({has: page.locator('button.cle-run')}).first();
+      const runRow = group.locator('button.cle-run').first();
+      await runRow.waitFor({state: 'visible', timeout: 5_000});
+      const groupH = async () => group.evaluate((el) => el.getBoundingClientRect().height);
+      const foldedH = await groupH();
+      assert.equal(await runRow.getAttribute('aria-expanded'), 'false', 'finished tool group must start folded');
+      await runRow.click();
+      await page.waitForFunction((el) => el.getAttribute('aria-expanded') === 'true', await runRow.elementHandle(), {timeout: 5_000});
+      await page.waitForTimeout(150);
+      const openH = await groupH();
+      assert.ok(openH > foldedH + 10, `clicking real button.cle-run must unfold the tool group: folded=${foldedH}, open=${openH}`);
+
+      const toolRow = group.locator('.chat-tool-msg-collapse').first();
       const summaryBtn = toolRow.locator('button.chat-tool-msg-summary').first();
       await summaryBtn.waitFor({state: 'visible', timeout: 5_000});
       const beforeH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
@@ -506,6 +521,8 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         expandedH > beforeH + 10,
         `clicking real button.chat-tool-msg-summary must expand tool detail: before=${beforeH}, after=${expandedH}`,
       );
+      const detailRight = await toolRow.evaluate((el) => el.getBoundingClientRect().right);
+      assert.ok(detailRight <= layout.threadRight + 2, `expanded tool detail overflows .chat-thread: ${detailRight} > ${layout.threadRight}`);
       await summaryBtn.click();
       await page.waitForTimeout(150);
       const collapsedH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
@@ -513,6 +530,11 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
         Math.abs(collapsedH - beforeH) <= 2,
         `clicking real button.chat-tool-msg-summary again must collapse back: before=${beforeH}, collapsed=${collapsedH}`,
       );
+      await runRow.click();
+      await page.waitForTimeout(150);
+      assert.equal(await runRow.getAttribute('aria-expanded'), 'false', 'clicking button.cle-run again must fold the group');
+      const refoldedH = await groupH();
+      assert.ok(Math.abs(refoldedH - foldedH) <= 2, `tool group must fold back: folded=${foldedH}, refolded=${refoldedH}`);
     } finally {
       await context.close();
     }

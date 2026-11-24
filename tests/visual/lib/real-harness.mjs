@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import zlib from 'node:zlib';
 import {playwright} from '../../../tools/study-desk/harness.mjs';
 import {FROZEN_TIME_MS, THEMES, VIEWPORT, VISUAL_SCENES} from './harness.mjs';
 
@@ -37,20 +38,105 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
-const OPTIONAL_404_PATHS = new Set([
-  '/favicon.ico',
-  '/laolao-stats.json',
-  '/laolao-quota.json',
-  '/laolao-exam-packs.json',
-  '/manifest.webmanifest',
-  '/apple-touch-icon.png',
+// Same set the real gateway uses (openclaw dist/control-ui-*.js STATIC_ASSET_EXTENSIONS):
+// a missing file with one of these extensions is a 404, anything else falls back
+// to index.html (client-side routes such as /overview, /sessions, /cron).
+const STATIC_ASSET_EXTENSIONS = new Set([
+  '.js', '.css', '.json', '.map', '.svg', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.txt', '.webmanifest',
 ]);
 
-const REAL_ASSET_PATH_RE = /(?:^\/(?:assets|vendor|fonts|study-desk|provider-icons)\/|^\/laolao-|\.(?:js|mjs|css|woff2?|ttf|png|jpe?g|webp|svg)$)/i;
+// Every failed request and every HTTP error counts. Nothing is whitelisted:
+// the fake server answers each path the way the real gateway does, so a 4xx/5xx
+// or an aborted request is a real defect in the page or in the harness.
+function describeRequest(origin, rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol === 'data:' || url.protocol === 'blob:') return null;
+    return url.origin === origin ? url.pathname : `${url.origin}${url.pathname}`;
+  } catch {
+    return String(rawUrl);
+  }
+}
 
-function isTrackedAssetPath(pathname) {
-  if (!pathname || OPTIONAL_404_PATHS.has(pathname)) return false;
-  return REAL_ASSET_PATH_RE.test(pathname);
+// ---- npm tarball extraction (no external `tar`) ---------------------------
+// Git Bash puts GNU tar first in PATH on Windows runners, and GNU tar reads
+// `C:\...` as host `C` + path. The bundled Windows bsdtar works, but which one
+// wins depends on PATH order. Extract the gzip'd ustar/pax archive in-process
+// so the result never depends on PATH.
+function tarOctal(buf, off, len) {
+  if (buf[off] & 0x80) {
+    let v = 0;
+    for (let i = off + 1; i < off + len; i += 1) v = v * 256 + buf[i];
+    return v;
+  }
+  const s = buf.toString('latin1', off, off + len).replace(/\0[\s\S]*$/, '').trim();
+  return s ? Number.parseInt(s, 8) : 0;
+}
+
+function tarString(buf, off, len) {
+  const end = buf.indexOf(0, off);
+  return buf.toString('utf8', off, end < 0 || end > off + len ? off + len : end);
+}
+
+function parsePaxRecords(data) {
+  const out = {};
+  let i = 0;
+  while (i < data.length) {
+    const sp = data.indexOf(0x20, i);
+    if (sp < 0) break;
+    const len = Number.parseInt(data.toString('latin1', i, sp), 10);
+    if (!len) break;
+    const rec = data.toString('utf8', sp + 1, i + len - 1);
+    const eq = rec.indexOf('=');
+    if (eq > 0) out[rec.slice(0, eq)] = rec.slice(eq + 1);
+    i += len;
+  }
+  return out;
+}
+
+export function extractNpmTarball(tgzPath, outDir, {include = []} = {}) {
+  const buf = zlib.gunzipSync(fs.readFileSync(tgzPath));
+  const root = path.resolve(outDir);
+  let off = 0;
+  let pax = null;
+  let longName = null;
+  let files = 0;
+  while (off + 512 <= buf.length) {
+    const header = buf.subarray(off, off + 512);
+    if (header.every((b) => b === 0)) break;
+    const type = String.fromCharCode(header[156] || 48);
+    let size = tarOctal(header, 124, 12);
+    let name = tarString(header, 0, 100);
+    const prefix = header.toString('latin1', 257, 262) === 'ustar' ? tarString(header, 345, 155) : '';
+    if (prefix) name = `${prefix}/${name}`;
+    if (pax?.path) name = pax.path;
+    if (pax?.size) size = Number(pax.size);
+    if (longName) name = longName;
+    const dataStart = off + 512;
+    const data = buf.subarray(dataStart, dataStart + size);
+    off = dataStart + Math.ceil(size / 512) * 512;
+    if (type === 'x') { pax = parsePaxRecords(data); continue; }
+    if (type === 'g' || type === 'K') continue;
+    if (type === 'L') { longName = data.toString('utf8').replace(/\0+$/, ''); continue; }
+    pax = null;
+    longName = null;
+    const parts = name.split('/').filter(Boolean);
+    if (parts.includes('..') || path.isAbsolute(name) || /^[A-Za-z]:/.test(name)) {
+      throw new Error(`Unsafe path in ${tgzPath}: ${name}`);
+    }
+    const rel = parts.slice(1).join('/'); // npm tarballs wrap everything in package/
+    if (!rel) continue;
+    if (include.length && !include.some((p) => rel === p || rel.startsWith(`${p.replace(/\/+$/, '')}/`))) continue;
+    const target = path.join(root, ...rel.split('/'));
+    if (!target.startsWith(root + path.sep)) throw new Error(`Archive entry escapes ${root}: ${name}`);
+    if (type === '5') { fs.mkdirSync(target, {recursive: true}); continue; }
+    if (type !== '0' && type !== '\0' && type !== '7') continue;
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, data);
+    files += 1;
+  }
+  if (!files) throw new Error(`No files extracted from ${tgzPath} (include=${include.join(',')})`);
+  return files;
 }
 
 export function readRuntimeOpenClawVersion(repoRoot = REPO_ROOT) {
@@ -156,11 +242,7 @@ export function ensureUpstreamOpenClaw(version = readRuntimeOpenClawVersion()) {
     if (!tgzName || !fs.existsSync(tgzPath)) {
       throw new Error(`npm pack openclaw@${version} did not produce a tarball (output=${output.trim()})`);
     }
-    execFileSync(
-      'tar',
-      ['-xzf', tgzPath, '-C', extractDir, '--strip-components=1', 'package/package.json', 'package/dist/control-ui'],
-      {cwd: stageRoot, env, stdio: 'pipe'},
-    );
+    extractNpmTarball(tgzPath, extractDir, {include: ['package.json', 'dist/control-ui']});
     if (!isValidUpstreamOpenClaw(extractDir, version)) {
       throw new Error(`Extracted openclaw@${version} is missing package.json or dist/control-ui/index.html`);
     }
@@ -233,10 +315,40 @@ export function extractWindowsBridgeScript(repoRoot = REPO_ROOT) {
 // currently answers with empty defaults (models catalog for model-picker,
 // fixed usage for laolao-usage-stats, and session totalTokens for context viewer).
 // Never alters UI behavior or DOM.
+// Gateway methods answered by the product's own server code instead of the
+// in-page fake-gateway.js default ({}): the composer chips read the session's
+// prefs on mount and keep retrying (re-rendering at random times) while the
+// answer has no prefs in it. services/mode-architecture/session-prefs.mjs is
+// what the installed pinkie-mode-architecture plugin registers for these.
+const REAL_RPC_METHODS = Object.freeze(['pinkie.prefs.get', 'pinkie.session.prefs.get', 'pinkie.session.prefs.set']);
+
+async function createRealRpc(repoRoot, stateDir) {
+  const mod = (rel) => import(pathToFileURL(path.join(repoRoot, rel)).href);
+  const {SessionPrefs} = await mod('services/mode-architecture/session-prefs.mjs');
+  const {agentOf} = await mod('services/mode-architecture/session-titles.mjs');
+  fs.mkdirSync(stateDir, {recursive: true});
+  const prefs = new SessionPrefs(stateDir);
+  // Same wrappers as registerSessionPrefs() in session-prefs.mjs.
+  const handlers = {
+    'pinkie.prefs.get': () => ({ok: true, ...prefs.globalPrefs()}),
+    'pinkie.session.prefs.get': ({key}) => {
+      if (typeof key !== 'string' || !agentOf(key)) throw new Error('会话不存在');
+      return {ok: true, ...prefs.forSession(key)};
+    },
+    'pinkie.session.prefs.set': ({key, ...rest}) => prefs.setSession(key, rest),
+  };
+  return async (method, params) => {
+    const fn = handlers[method];
+    if (!fn) return {ok: false, error: `unsupported ${method}`};
+    try { return await fn(params || {}); } catch (error) { return {ok: false, error: error.message}; }
+  };
+}
+
 const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
   'use strict';
   const BaseSocket = window.WebSocket;
   if (!BaseSocket || BaseSocket.__pinkieRealHarnessWrapped) return;
+  const REAL_RPC_METHODS = ${JSON.stringify(REAL_RPC_METHODS)};
   const origSend = BaseSocket.prototype.send;
   const origRaw = BaseSocket.prototype._raw;
   if (typeof origRaw === 'function') {
@@ -260,6 +372,18 @@ const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
     try {
       const frame = JSON.parse(data);
       if (frame && frame.type === 'req') {
+        (window.__realHarnessRpcLog ||= []).push(frame.method);
+        if (REAL_RPC_METHODS.includes(frame.method)) {
+          fetch('/__pinkie-rpc', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({method: frame.method, params: frame.params || {}}),
+          })
+            .then((res) => res.json())
+            .then((payload) => this._raw?.({type: 'res', id: frame.id, ok: true, payload}))
+            .catch((error) => this._raw?.({type: 'res', id: frame.id, ok: false, error: {message: String(error)}}));
+          return;
+        }
         if ((frame.method === 'chat.metadata' || frame.method === 'models.list') && Array.isArray(window.__realHarnessModels)) {
           const models = window.__realHarnessModels;
           Promise.resolve().then(() => {
@@ -326,83 +450,190 @@ async function listenOnPreferredPort(server, ports = PREFERRED_PORTS) {
   throw lastError || new Error('Failed to bind local real-UI server');
 }
 
+// ---- real gateway HTTP surface ---------------------------------------------
+// Mirrors openclaw dist/control-ui-*.js handleControlUiHttpRequest /
+// handleControlUiAvatarRequest for an installed Super Pinkie (basePath ''):
+//   * /control-ui-config.json (+ the two legacy aliases) -> bootstrap payload
+//   * /avatar/<agentId>?meta=1 -> avatar resolution JSON; /avatar/<agentId> -> image or 404
+//   * existing control-ui file -> file; missing *.js/.css/.json/... -> 404
+//   * anything else (client routes /chat, /overview, /sessions, /cron ...) -> index.html
+// Agent identities come from the repo's personas/*/IDENTITY.md and avatar files
+// from the same table app/super_pinkie.py uses to seed workspace avatars.
+const AGENT_PERSONA_DIRS = Object.freeze({
+  main: 'chat', project: 'project', thinking: 'thinking', learning: 'learning', unrestricted: 'neutral', metre: 'metre',
+});
+const BOOTSTRAP_CONFIG_PATHS = new Set(['/control-ui-config.json', '/__openclaw/control-ui-config.json', '/__openclaw__/control-ui-config.json']);
+
+function readIdentityField(text, field) {
+  const m = String(text || '').match(new RegExp(`^\\s*-\\s*\\*\\*${field}:\\*\\*\\s+(.+?)\\s*$`, 'im'));
+  return m ? m[1].trim() : '';
+}
+
+export function loadAgentIdentities(repoRoot = REPO_ROOT) {
+  const appSource = fs.readFileSync(path.join(repoRoot, 'app/super_pinkie.py'), 'utf8');
+  const seeded = new Map();
+  for (const m of appSource.matchAll(/\(\s*"(workspace(?:-[a-z]+)?)"\s*,\s*"([^"]+\.png)"\s*,\s*"([^"]+\.png)"\s*\)/g)) {
+    seeded.set(`${m[1]}/avatars/${m[3]}`, path.join(repoRoot, 'ui/assets', m[2]));
+  }
+  if (!seeded.size) throw new Error('Unable to read workspace avatar table from app/super_pinkie.py');
+  const identities = {};
+  for (const [agentId, personaDir] of Object.entries(AGENT_PERSONA_DIRS)) {
+    const identityPath = path.join(repoRoot, 'personas', personaDir, 'IDENTITY.md');
+    const text = fs.existsSync(identityPath) ? fs.readFileSync(identityPath, 'utf8') : '';
+    const avatarSource = readIdentityField(text, 'Avatar') || null;
+    const workspace = agentId === 'main' ? 'workspace' : `workspace-${agentId}`;
+    const filePath = avatarSource ? seeded.get(`${workspace}/${avatarSource.replace(/\\/g, '/')}`) || null : null;
+    identities[agentId] = {
+      agentId,
+      name: readIdentityField(text, 'Name') || 'Assistant',
+      avatarSource,
+      avatarFile: filePath && fs.existsSync(filePath) ? filePath : null,
+    };
+  }
+  return identities;
+}
+
+function avatarMeta(identity) {
+  if (!identity?.avatarSource) return {avatarSource: null, avatarStatus: 'none', avatarReason: 'missing'};
+  if (!identity.avatarFile) return {avatarSource: identity.avatarSource, avatarStatus: 'none', avatarReason: 'missing'};
+  return {avatarSource: identity.avatarSource, avatarStatus: 'local', avatarReason: null};
+}
+
+function bootstrapConfigPayload(identities, version, runDir) {
+  const main = identities.main;
+  const meta = avatarMeta(main);
+  return {
+    basePath: '',
+    assistantName: main.name,
+    assistantAvatar: meta.avatarStatus === 'local' ? '/avatar/main' : (main.avatarSource || 'A'),
+    assistantAvatarSource: meta.avatarSource,
+    assistantAvatarStatus: meta.avatarStatus,
+    assistantAvatarReason: meta.avatarReason,
+    assistantAgentId: 'main',
+    serverVersion: version,
+    localMediaPreviewRoots: runDir ? [path.join(runDir, 'home', '.openclaw', 'workspace')] : [],
+    embedSandbox: 'scripts',
+    allowExternalEmbedUrls: false,
+    terminalEnabled: false,
+  };
+}
+
+function sendGatewayNotFound(res) {
+  res.statusCode = 404;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.end('Not Found');
+}
+
 export async function startRealUiServer({
   controlUiDir,
   repoRoot = REPO_ROOT,
   ports = PREFERRED_PORTS,
+  version = readRuntimeOpenClawVersion(repoRoot),
+  runDir = null,
 } = {}) {
   if (!controlUiDir || !fs.existsSync(path.join(controlUiDir, 'index.html'))) {
     throw new Error(`Invalid controlUiDir: ${controlUiDir}`);
   }
   const fakeGatewayPath = path.join(repoRoot, 'scripts/chat-ui-harness/fake-gateway.js');
+  const identities = loadAgentIdentities(repoRoot);
+  const stateRoot = runDir || fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-real-ui-state-'));
+  const realRpc = await createRealRpc(repoRoot, path.join(stateRoot, 'home', '.openclaw', 'pinkie-mode-architecture'));
+  const rootResolved = path.resolve(controlUiDir);
+  const requests = [];
+
+  const sendIndex = (res) => {
+    const rawHtml = fs.readFileSync(path.join(controlUiDir, 'index.html'), 'utf8');
+    const injectTags = [
+      '<script src="/__fake-gateway.js"></script>',
+      '<script src="/__fake-gateway-ext.js"></script>',
+      '<script src="/__windows-bridge.js"></script>',
+    ].join('\n');
+    const html = rawHtml
+      .replace(/<html\b/i, '<html data-openclaw-terminal-enabled="false"')
+      .replace(/<head>/i, `<head>\n${injectTags}`);
+    res.setHeader('Content-Type', MIME['.html']);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.end(html);
+  };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
-    if (url.pathname === '/__fake-gateway.js') {
+    const pathname = url.pathname;
+    res.on('finish', () => requests.push({method: req.method, path: pathname, status: res.statusCode}));
+    if (pathname === '/__fake-gateway.js' || pathname === '/__fake-gateway-ext.js' || pathname === '/__windows-bridge.js') {
       res.setHeader('Content-Type', MIME['.js']);
       res.setHeader('Cache-Control', 'no-store');
-      res.end(fs.readFileSync(fakeGatewayPath, 'utf8'));
+      res.end(pathname === '/__fake-gateway.js'
+        ? fs.readFileSync(fakeGatewayPath, 'utf8')
+        : pathname === '/__fake-gateway-ext.js' ? FAKE_GATEWAY_EXT_SCRIPT : extractWindowsBridgeScript(repoRoot));
       return;
     }
-    if (url.pathname === '/__fake-gateway-ext.js') {
-      res.setHeader('Content-Type', MIME['.js']);
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(FAKE_GATEWAY_EXT_SCRIPT);
+    if (pathname === '/__pinkie-rpc' && req.method === 'POST') {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', async () => {
+        let payload;
+        try {
+          const {method, params} = JSON.parse(body || '{}');
+          payload = await realRpc(String(method || ''), params);
+        } catch (error) {
+          payload = {ok: false, error: String(error?.message || error)};
+        }
+        res.setHeader('Content-Type', MIME['.json']);
+        res.setHeader('Cache-Control', 'no-store');
+        res.end(JSON.stringify(payload));
+      });
       return;
     }
-    if (url.pathname === '/__windows-bridge.js') {
-      res.setHeader('Content-Type', MIME['.js']);
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(extractWindowsBridgeScript(repoRoot));
-      return;
-    }
-    if (url.pathname === '/control-ui-config.json') {
+    if (BOOTSTRAP_CONFIG_PATHS.has(pathname)) {
+      res.statusCode = 200;
       res.setHeader('Content-Type', MIME['.json']);
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(JSON.stringify({basePath: '', assistantName: '碧琪', assistantAvatar: null}));
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(JSON.stringify(bootstrapConfigPayload(identities, version, runDir)));
       return;
     }
-    if (url.pathname.startsWith('/avatar/')) {
-      res.statusCode = 404;
-      res.end('no custom avatar');
+    if (pathname.startsWith('/avatar/')) {
+      const parts = pathname.slice('/avatar/'.length).split('/').filter(Boolean);
+      const agentId = parts[0] || '';
+      if (parts.length !== 1 || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(agentId)) { sendGatewayNotFound(res); return; }
+      const identity = identities[agentId.toLowerCase()] || null;
+      const meta = avatarMeta(identity);
+      if (url.searchParams.get('meta') === '1') {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', MIME['.json']);
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(JSON.stringify({avatarUrl: meta.avatarStatus === 'local' ? `/avatar/${agentId}` : null, ...meta}));
+        return;
+      }
+      if (meta.avatarStatus !== 'local') { sendGatewayNotFound(res); return; }
+      res.setHeader('Content-Type', MIME[path.extname(identity.avatarFile).toLowerCase()] || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(fs.readFileSync(identity.avatarFile));
       return;
     }
-    const baseName = path.posix.basename(url.pathname);
-    const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    if (rel.includes('..')) {
-      res.statusCode = 404;
-      res.end('invalid path');
+    let decoded;
+    try { decoded = decodeURIComponent(pathname); } catch { sendGatewayNotFound(res); return; }
+    const assetsIndex = decoded.indexOf('/assets/');
+    const rel = decoded === '/' ? '' : assetsIndex >= 0 ? decoded.slice(assetsIndex + 1) : decoded.slice(1);
+    const fileRel = (rel && !rel.endsWith('/') ? rel : `${rel}index.html`) || 'index.html';
+    const normalized = path.posix.normalize(fileRel);
+    if (normalized.startsWith('../') || normalized === '..' || path.isAbsolute(normalized) || normalized.includes('\0')) {
+      sendGatewayNotFound(res);
       return;
     }
-    const target = path.resolve(controlUiDir, rel);
-    const rootResolved = path.resolve(controlUiDir);
-    const isFileOnDisk = rel && target.startsWith(rootResolved + path.sep)
-      && fs.existsSync(target) && fs.statSync(target).isFile();
-
-    if (url.pathname === '/' || url.pathname === '/index.html' || (!baseName.includes('.') && !isFileOnDisk)) {
-      const indexPath = path.join(controlUiDir, 'index.html');
-      const rawHtml = fs.readFileSync(indexPath, 'utf8');
-      const injectTags = [
-        '<script src="/__fake-gateway.js"></script>',
-        '<script src="/__fake-gateway-ext.js"></script>',
-        '<script src="/__windows-bridge.js"></script>',
-      ].join('\n');
-      const html = rawHtml.replace(/<head>/i, `<head>\n${injectTags}`);
-      res.setHeader('Content-Type', MIME['.html']);
-      res.setHeader('Cache-Control', 'no-store');
-      res.end(html);
+    const target = path.resolve(rootResolved, normalized);
+    if (target !== rootResolved && !target.startsWith(rootResolved + path.sep)) { sendGatewayNotFound(res); return; }
+    const isFile = fs.existsSync(target) && fs.statSync(target).isFile();
+    if (isFile && path.basename(target) === 'index.html') { sendIndex(res); return; }
+    if (isFile) {
+      res.setHeader('Content-Type', MIME[path.extname(target).toLowerCase()] || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end(fs.readFileSync(target));
       return;
     }
-
-    if (!isFileOnDisk) {
-      res.statusCode = 404;
-      res.end(`missing ${rel}`);
-      return;
-    }
-    const ext = path.extname(target).toLowerCase();
-    res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'no-store');
-    res.end(fs.readFileSync(target));
+    if (STATIC_ASSET_EXTENSIONS.has(path.extname(normalized).toLowerCase())) { sendGatewayNotFound(res); return; }
+    sendIndex(res);
   });
 
   const port = await listenOnPreferredPort(server, ports);
@@ -410,11 +641,25 @@ export async function startRealUiServer({
     origin: `http://127.0.0.1:${port}`,
     port,
     controlUiDir,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    requests,
+    close: () => new Promise((resolve) => {
+      server.closeAllConnections?.();
+      server.close(resolve);
+    }),
   };
 }
 
-export async function launchRealBrowser(engine = process.env.PINKIE_VISUAL_ENGINE || '') {
+// Browser per platform, chosen explicitly so a baseline always comes from the
+// same engine: Linux uses Playwright's pinned Chromium (what CI installs);
+// Windows uses the system Chrome channel, which every Windows runner and a fresh
+// HOME with an empty Playwright cache both have. PINKIE_VISUAL_ENGINE overrides
+// (chromium | chrome | msedge).
+export function resolveRealEngine(engine = process.env.PINKIE_VISUAL_ENGINE || '') {
+  if (engine) return engine;
+  return process.platform === 'win32' ? 'chrome' : 'chromium';
+}
+
+export async function launchRealBrowser(engine = resolveRealEngine()) {
   const {chromium} = playwright();
   const launchOpts = {
     headless: true,
@@ -427,14 +672,15 @@ export async function launchRealBrowser(engine = process.env.PINKIE_VISUAL_ENGIN
       '--num-raster-threads=1',
     ],
   };
-  if (engine === 'msedge' || engine === 'chrome') {
-    return chromium.launch({...launchOpts, channel: engine});
-  }
-  try {
-    return await chromium.launch(launchOpts);
-  } catch {
-    return chromium.launch({...launchOpts, channel: 'chrome'});
-  }
+  const browser = engine === 'msedge' || engine === 'chrome'
+    ? await chromium.launch({...launchOpts, channel: engine})
+    : await chromium.launch(launchOpts);
+  browser.__pinkieEngine = engine;
+  return browser;
+}
+
+export function realBaselinePlatform() {
+  return process.platform === 'win32' ? 'win32' : process.platform === 'linux' ? 'linux' : process.platform;
 }
 
 const REAL_LONG_HISTORY = Object.freeze([
@@ -557,6 +803,41 @@ export async function settleRealPage(page, theme, {lockPerfClock = false} = {}) 
       document.documentElement.toggleAttribute('data-pinkie-night', dark);
     }
 
+    // Wait until the real page stops changing on its own: late gateway replies
+    // and debounced injections (composer tray, usage chips, session list) land at
+    // different times on a busy machine, so a fixed sleep is not enough. A quiet
+    // window is QUIET_MS without any DOM mutation, capped at MAX_MS.
+    const waitForQuietDom = (quietMs, maxMs) => new Promise((resolve) => {
+      let quietTimer = null;
+      let mutations = 0;
+      const finish = (quiet) => {
+        observer.disconnect();
+        clearTimeout(quietTimer);
+        clearTimeout(hardTimer);
+        resolve({quiet, mutations});
+      };
+      // Rewrites that leave the value unchanged (e.g. a timer re-assigning the
+      // same className) cannot change pixels and do not count.
+      const changed = (rec) => {
+        if (rec.type === 'attributes') return rec.oldValue !== rec.target.getAttribute(rec.attributeName);
+        if (rec.type === 'characterData') return rec.oldValue !== rec.target.data;
+        return true;
+      };
+      const observer = new MutationObserver((records) => {
+        const real = records.filter(changed).length;
+        if (!real) return;
+        mutations += real;
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(() => finish(true), quietMs);
+      });
+      observer.observe(document, {
+        subtree: true, childList: true, attributes: true, characterData: true, attributeOldValue: true, characterDataOldValue: true,
+      });
+      quietTimer = setTimeout(() => finish(true), quietMs);
+      const hardTimer = setTimeout(() => finish(false), maxMs);
+    });
+    window.__pinkieRealSettle = {first: await waitForQuietDom(400, 8000)};
+
     // Remove one-shot entrance classes that auto-clear on a timer
     document.querySelectorAll('.laolao-welcome--materializing').forEach((el) => {
       el.classList.remove('laolao-welcome--materializing');
@@ -636,6 +917,12 @@ export async function settleRealPage(page, theme, {lockPerfClock = false} = {}) 
       }
     };
     blurAll();
+    window.__pinkieRealSettle.last = await waitForQuietDom(250, 3000);
+    if (typeof document.getAnimations === 'function') {
+      for (const anim of document.getAnimations({subtree: true})) {
+        try { anim.finish(); } catch { try { anim.cancel(); } catch {} }
+      }
+    }
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     blurAll();
     await new Promise((r) => requestAnimationFrame(r));
@@ -800,25 +1087,21 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   const failedRequests = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   page.on('requestfailed', (req) => {
-    const pathname = new URL(req.url()).pathname;
-    if (isTrackedAssetPath(pathname)) {
-      failedRequests.push(`${req.method()} ${pathname}: ${req.failure()?.errorText || 'failed'}`);
-    }
+    const where = describeRequest(origin, req.url());
+    if (where) failedRequests.push(`${req.method()} ${where}: ${req.failure()?.errorText || 'failed'}`);
   });
   page.on('response', (res) => {
     if (res.status() >= 400) {
-      const pathname = new URL(res.url()).pathname;
-      if (isTrackedAssetPath(pathname)) {
-        failedRequests.push(`${res.status()} ${pathname}`);
-      }
+      const where = describeRequest(origin, res.url());
+      if (where) failedRequests.push(`${res.status()} ${where}`);
     }
   });
 
   const targetUrl = `${origin}/chat?harnessSession=active&session=${encodeURIComponent(meta.sessionKey)}`;
-  await page.goto(targetUrl, {waitUntil: 'load'});
+  await page.goto(targetUrl, {waitUntil: 'load', timeout: 60_000});
 
   // Wait for splash screen to clear and real OpenClaw + Pinkie UI to mount
-  await page.waitForFunction(() => !document.getElementById('laolao-splash'), {timeout: 15_000});
+  await page.waitForFunction(() => !document.getElementById('laolao-splash'), {timeout: 30_000});
   await page.waitForFunction(() => (
     Boolean(document.querySelector('openclaw-chat-pane'))
     && Boolean(document.querySelector('.chat-main'))
