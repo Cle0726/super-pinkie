@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5090,
+    "important": 5073,
     "importantIndirect": 7,
     "mutationObserverRefs": 20,
     "mutationObservers": 28,
@@ -1274,6 +1274,19 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-backstage.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 223,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-board-data.js": {
       "important": 0,
       "importantIndirect": 0,
@@ -1378,6 +1391,19 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-display.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 72,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-engine.css": {
       "important": 0,
       "importantIndirect": 0,
@@ -1407,7 +1433,7 @@
     "ui/injections/laolao-metre-home.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 357,
+      "lines": 356,
       "mutationObserverRefs": 1,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1415,6 +1441,32 @@
       "setIntervals": 0,
       "subtreeObserverCalls": 0,
       "windowGlobals": 1,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-keys.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 175,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-list.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 71,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
     "ui/injections/laolao-metre-lock.css": {
@@ -1456,10 +1508,23 @@
       "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
-    "ui/injections/laolao-metre-skin.css": {
-      "important": 2281,
+    "ui/injections/laolao-metre-queue.js": {
+      "important": 0,
       "importantIndirect": 0,
-      "lines": 2592,
+      "lines": 117,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-skin.css": {
+      "important": 2264,
+      "importantIndirect": 0,
+      "lines": 2553,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1482,10 +1547,23 @@
       "windowGlobals": 3,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-stagefx.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 216,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-transition.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 283,
+      "lines": 218,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3051,7 +3129,7 @@
     "services/mode-architecture/session-lineage.mjs": 1894,
     "tests/mode-architecture.test.mjs": 3294,
     "tests/resume-ui.test.cjs": 2003,
-    "ui/injections/laolao-metre-skin.css": 2592,
+    "ui/injections/laolao-metre-skin.css": 2553,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1636,
