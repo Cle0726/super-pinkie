@@ -320,12 +320,20 @@ export function extractWindowsBridgeScript(repoRoot = REPO_ROOT) {
 // prefs on mount and keep retrying (re-rendering at random times) while the
 // answer has no prefs in it. services/mode-architecture/session-prefs.mjs is
 // what the installed pinkie-mode-architecture plugin registers for these.
+// The study desk game HUD reads pinkie.learning.game.state on mount (s.form.equipped);
+// the in-page default {} made it show "Cannot read properties of undefined
+// (reading 'equipped')" in .desk-status, which the real gateway never does.
+// Those methods are answered by the product's own registerLearningGame() on a
+// LearningInteractionStore inside the isolated run dir (no model, no real-paper sync).
 const REAL_RPC_METHODS = Object.freeze(['pinkie.prefs.get', 'pinkie.session.prefs.get', 'pinkie.session.prefs.set']);
+const REAL_RPC_PREFIXES = Object.freeze(['pinkie.learning.game.']);
 
 async function createRealRpc(repoRoot, stateDir) {
   const mod = (rel) => import(pathToFileURL(path.join(repoRoot, rel)).href);
   const {SessionPrefs} = await mod('services/mode-architecture/session-prefs.mjs');
   const {agentOf} = await mod('services/mode-architecture/session-titles.mjs');
+  const {LearningInteractionStore} = await mod('services/mode-architecture/learning.mjs');
+  const {registerLearningGame} = await mod('services/mode-architecture/learning-game.mjs');
   fs.mkdirSync(stateDir, {recursive: true});
   const prefs = new SessionPrefs(stateDir);
   // Same wrappers as registerSessionPrefs() in session-prefs.mjs.
@@ -337,10 +345,26 @@ async function createRealRpc(repoRoot, stateDir) {
     },
     'pinkie.session.prefs.set': ({key, ...rest}) => prefs.setSession(key, rest),
   };
+  const learningRoot = path.join(stateDir, 'learning');
+  const store = new LearningInteractionStore({root: learningRoot, workspace: path.join(stateDir, 'workspace')});
+  store.materials = {root: path.join(stateDir, 'learning-materials')};
+  const registered = {};
+  registerLearningGame({
+    registerGatewayMethod: (name, handler) => { registered[name] = handler; },
+    registerHttpRoute: () => {},
+    logger: {warn: () => {}, info: () => {}},
+  }, store, {requestModel: null, autoReal: false});
   return async (method, params) => {
+    if (registered[method]) {
+      return new Promise((resolve) => {
+        Promise.resolve(registered[method]({params: params || {}, respond: (ok, payload, error) => resolve({ok: Boolean(ok), payload, error})}))
+          .catch((error) => resolve({ok: false, error: {message: String(error?.message || error)}}));
+      });
+    }
     const fn = handlers[method];
-    if (!fn) return {ok: false, error: `unsupported ${method}`};
-    try { return await fn(params || {}); } catch (error) { return {ok: false, error: error.message}; }
+    if (!fn) return {ok: false, error: {message: `unsupported ${method}`}};
+    // registerSessionPrefs() answers ok:true and puts {ok:false, error} in the payload.
+    try { return {ok: true, payload: await fn(params || {})}; } catch (error) { return {ok: true, payload: {ok: false, error: error.message}}; }
   };
 }
 
@@ -349,6 +373,8 @@ const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
   const BaseSocket = window.WebSocket;
   if (!BaseSocket || BaseSocket.__pinkieRealHarnessWrapped) return;
   const REAL_RPC_METHODS = ${JSON.stringify(REAL_RPC_METHODS)};
+  const REAL_RPC_PREFIXES = ${JSON.stringify(REAL_RPC_PREFIXES)};
+  const isRealRpc = (method) => REAL_RPC_METHODS.includes(method) || REAL_RPC_PREFIXES.some((p) => String(method || '').startsWith(p));
   const origSend = BaseSocket.prototype.send;
   const origRaw = BaseSocket.prototype._raw;
   if (typeof origRaw === 'function') {
@@ -373,14 +399,16 @@ const FAKE_GATEWAY_EXT_SCRIPT = `(() => {
       const frame = JSON.parse(data);
       if (frame && frame.type === 'req') {
         (window.__realHarnessRpcLog ||= []).push(frame.method);
-        if (REAL_RPC_METHODS.includes(frame.method)) {
+        if (isRealRpc(frame.method)) {
           fetch('/__pinkie-rpc', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({method: frame.method, params: frame.params || {}}),
           })
             .then((res) => res.json())
-            .then((payload) => this._raw?.({type: 'res', id: frame.id, ok: true, payload}))
+            .then((r) => this._raw?.(r.ok
+              ? {type: 'res', id: frame.id, ok: true, payload: r.payload}
+              : {type: 'res', id: frame.id, ok: false, error: r.error || {message: 'failed'}}))
             .catch((error) => this._raw?.({type: 'res', id: frame.id, ok: false, error: {message: String(error)}}));
           return;
         }
@@ -578,7 +606,7 @@ export async function startRealUiServer({
           const {method, params} = JSON.parse(body || '{}');
           payload = await realRpc(String(method || ''), params);
         } catch (error) {
-          payload = {ok: false, error: String(error?.message || error)};
+          payload = {ok: false, error: {message: String(error?.message || error)}};
         }
         res.setHeader('Content-Type', MIME['.json']);
         res.setHeader('Cache-Control', 'no-store');
@@ -670,6 +698,17 @@ export async function launchRealBrowser(engine = resolveRealEngine()) {
       '--disable-lcd-text',
       '--force-color-profile=srgb',
       '--num-raster-threads=1',
+      // Without these, separate pages of the same scene differ by a few pixels at
+      // 1-4 channel levels (partial raster / checker-imaging / threaded compositor
+      // timing). Measured on Windows Chrome: 0 px across 4 captures with them,
+      // up to 32 px without. Rendering output is otherwise unchanged.
+      '--disable-partial-raster',
+      '--disable-checker-imaging',
+      '--run-all-compositor-stages-before-draw',
+      '--disable-threaded-animation',
+      '--disable-threaded-scrolling',
+      '--disable-image-animation-resync',
+      '--disable-skia-runtime-opts',
     ],
   };
   const browser = engine === 'msedge' || engine === 'chrome'
@@ -917,6 +956,18 @@ export async function settleRealPage(page, theme, {lockPerfClock = false} = {}) 
       }
     };
     blurAll();
+    // The real composer textarea still paints a blinking caret on some frames even
+    // after blur (activeElement is <body>), and Playwright's caret:'hide' does not
+    // reach every product rule. Hide the caret everywhere, which is what caret:'hide'
+    // intends; nothing else about the page is changed.
+    const hideCaret = (root) => {
+      const style = document.createElement('style');
+      style.setAttribute('data-real-harness', 'caret');
+      style.textContent = '*, *::before, *::after { caret-color: transparent !important; }';
+      (root === document ? document.head : root).appendChild(style);
+    };
+    hideCaret(document);
+    for (const el of document.querySelectorAll('*')) if (el.shadowRoot) hideCaret(el.shadowRoot);
     window.__pinkieRealSettle.last = await waitForQuietDom(250, 3000);
     if (typeof document.getAnimations === 'function') {
       for (const anim of document.getAnimations({subtree: true})) {
