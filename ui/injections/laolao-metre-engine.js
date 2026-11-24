@@ -1269,10 +1269,7 @@
   // 设置页只留空位 .pinkie-user-settings__notices（带 row / button），再发 pinkie:settings-notices。不连网关，五个模式都能看。
   // NOTICES-BEGIN：界面上唯一可以写这几个项目原名的地方（MIT 要求保留版权和许可声明）。T3 Code 的 MIT 全文 11-23 和 v0.1.11 的 LICENSE 逐字对过；
   // OpenClaw 的 MIT 全文 11-24 和 openclaw@2026.7.1-2 包里的 LICENSE 前 21 行逐字对过（用户 11-24：界面只在这里出现 OpenClaw）。
-  const NOTICES = `C.le. 内核
-C.le. 内核分叉自 OpenClaw（https://github.com/openclaw/openclaw）2026.7.1-2 版，之后由我们自己维护。OpenClaw 按 MIT 许可证发布，全文见最下面。
-
-引擎服务
+  const NOTICES = `引擎服务
 Metre「外部引擎」用到的引擎服务是 T3 Code（https://github.com/pingdotgg/t3code）的官方发布包，固定版本，未经修改；只在你打开外部引擎时才下载到这台电脑上。T3 Code 按 MIT 许可证发布，全文见最下面。
 
 功能设计借鉴
@@ -1281,10 +1278,10 @@ Metre 的放手程度分级、乐手（把机器人当成联系人）和「看�
 更多引擎
 从「更多引擎」里加上的引擎是各家自己的软件，按各自的许可证发布（列表里写着），由引擎服务从公开的 ACP 注册表下载。
 
-————
+C.le. 内核
+C.le. 内核分叉自 OpenClaw（https://github.com/openclaw/openclaw）2026.7.1-2 版，之后由我们自己维护。OpenClaw 按 MIT 许可证发布，全文见最下面。
 
-C.le. kernel
-The C.le. kernel is a fork of OpenClaw (https://github.com/openclaw/openclaw) version 2026.7.1-2 and is maintained by us from then on. OpenClaw is distributed under the MIT License; the full text is at the bottom.
+————
 
 Engine service
 The engine service used by Metre's external engines is the official, unmodified release package of T3 Code (https://github.com/pingdotgg/t3code), pinned to a fixed version and downloaded to this computer only when you turn external engines on. T3 Code is distributed under the MIT License; the full text is at the bottom.
@@ -1294,6 +1291,9 @@ Several Metre features (tiered approval levels, players as contacts, and watchin
 
 More engines
 Engines added from "More engines" are their makers' own software, each under its own license (shown in the list), downloaded by the engine service from the public ACP Registry.
+
+C.le. kernel
+The C.le. kernel is a fork of OpenClaw (https://github.com/openclaw/openclaw) version 2026.7.1-2 and is maintained by us from then on. OpenClaw is distributed under the MIT License; the full text is at the bottom.
 
 ————
 
