@@ -27,9 +27,7 @@ import webbrowser
 
 try:
     import release_notes
-except ModuleNotFoundError as _exc:  # imported as app.<module> without app/ on sys.path
-    if _exc.name != "release_notes":
-        raise
+except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.path)
     from app import release_notes
 
 
@@ -455,9 +453,7 @@ _load_desktop_part("windows_gateway")
 
 try:
     from inapp_browser import InAppBrowserBridge  # noqa: E402  碧琪的浏览器（独立窗口 + 浏览器专用节点）
-except ModuleNotFoundError as _exc:  # imported as app.windows_desktop without app/ on sys.path
-    if _exc.name != "inapp_browser":
-        raise
+except ImportError:  # imported as app.windows_desktop (tests, no app/ on sys.path)
     from app.inapp_browser import InAppBrowserBridge  # noqa: E402
 
 

@@ -18,9 +18,7 @@ import urllib.parse
 
 try:
     import release_notes
-except ModuleNotFoundError as _exc:  # imported as app.<module> without app/ on sys.path
-    if _exc.name != "release_notes":
-        raise
+except ImportError:  # imported as app.windows_update_guard (tests, no app/ on sys.path)
     from app import release_notes
 
 if "_PINKIE_DESKTOP_PART" not in globals():
