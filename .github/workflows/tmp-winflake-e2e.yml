@@ -1,5 +1,5 @@
-# TEMPORARY (winflake line): repeat the three flaky study-desk browser e2e
-# files on windows-latest to measure the failure rate before/after the fix.
+# TEMPORARY (winflake line): repeat the flaky study-desk browser e2e files on
+# windows-latest to measure the failure rate before/after the fix.
 # Removed again before the final commit of maint/win-checks-flakes.
 name: tmp winflake e2e repeat
 
@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        mode: [pair-parallel, entry-alone, conversation-alone]
+        attempt: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +31,14 @@ jobs:
           & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
           if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
           "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Run the three study-desk e2e files (same flags as windows-checks)
+      - name: Run (${{ matrix.mode }})
         timeout-minutes: 15
         shell: bash
-        run: node --test --test-concurrency=2 tests/study-desk-ui.test.cjs tests/study-desk-chat-entry.test.cjs tests/study-desk-conversation.test.cjs
+        env:
+          DEBUG: pw:api
+        run: |
+          case '${{ matrix.mode }}' in
+            pair-parallel) node --test --test-concurrency=2 tests/study-desk-chat-entry.test.cjs tests/study-desk-conversation.test.cjs ;;
+            entry-alone) node --test --test-concurrency=1 tests/study-desk-chat-entry.test.cjs ;;
+            conversation-alone) node --test --test-concurrency=1 tests/study-desk-conversation.test.cjs ;;
+          esac
