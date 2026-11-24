@@ -106,3 +106,40 @@ export function healthChanges(current, baseline, exceptions = []) {
   });
   return {increases, decreases, unused};
 }
+
+// --write-baseline: keep every number at min(baseline, current). Growth covered by
+// an exception is NOT written (the exception keeps allowing it), and files the
+// baseline never measured get the new-file limit at most, so nothing ever rises.
+export function syncBaseline(current, baseline) {
+  const injections = {};
+  for (const file of Object.keys(current.injections).sort()) {
+    const old = baseline.injections[file], now = current.injections[file];
+    injections[file] = Object.fromEntries(INJECTION_METRICS.map(metric => {
+      const limit = old ? old[metric] : metric === 'lines' ? LINE_LIMIT : 0;
+      return [metric, Math.min(now[metric], limit)];
+    }));
+  }
+  const longFiles = {};
+  for (const file of Object.keys(current.longFiles).sort()) {
+    if (injections[file]) {
+      if (injections[file].lines > LINE_LIMIT) longFiles[file] = injections[file].lines;
+    } else if (baseline.longFiles[file] !== undefined) {
+      longFiles[file] = Math.min(current.longFiles[file], baseline.longFiles[file]);
+    }
+  }
+  const sum = key => Object.values(injections).reduce((total, metrics) => total + metrics[key], 0);
+  const injectionTotals = {
+    important: sum('important'), mutationObservers: sum('mutationObservers'), setIntervals: sum('setIntervals'),
+    subtreeObserverCalls: sum('subtreeObserverCalls'),
+    windowGlobals: Math.min(current.injectionTotals.windowGlobals, baseline.injectionTotals.windowGlobals),
+    windowGlobalsPerFileSum: sum('windowGlobals'),
+  };
+  const manualVersions = current.manualVersions.total <= baseline.manualVersions.total
+    ? current.manualVersions : baseline.manualVersions;
+  const synced = {injectionTotals, injections, longFiles, manualVersions,
+    patchApplyFiles: Math.min(current.patchApplyFiles, baseline.patchApplyFiles ?? current.patchApplyFiles)};
+  // The test inventory is informational and not ratcheted; keep the recorded
+  // snapshot so a sync never makes any existing number in the file go up.
+  if (baseline.tests !== undefined) synced.tests = baseline.tests;
+  return synced;
+}

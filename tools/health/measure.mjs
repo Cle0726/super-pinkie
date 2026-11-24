@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {healthChanges, LINE_LIMIT, readJson} from './ratchet.mjs';
+import {healthChanges, LINE_LIMIT, readJson, syncBaseline} from './ratchet.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const HEAD = 'ui/injections/laolao-head.fragment.html';
@@ -180,11 +180,14 @@ async function main(args) {
     throw new Error('用法：node tools/health/measure.mjs [--root <对照工作树> | --write-baseline]');
   }
   const file = path.join(ROOT, 'tools/health/baseline.json');
+  const baseline = readJson(file);
   const current = await measure();
-  const {increases} = healthChanges(current, readJson(file));
-  if (increases.length) throw new Error(`不能把增长（含例外）写进基线：\n- ${increases.join('\n- ')}`);
-  fs.writeFileSync(file, formatMeasurement(current), 'utf8');
-  console.log('已同步 tools/health/baseline.json；请与本次改善一起提交。');
+  // Growth that no exception covers still fails; growth an exception covers is
+  // simply not written, and only improved numbers move (see syncBaseline).
+  const {increases} = healthChanges(current, baseline, readJson(path.join(ROOT, 'tools/health/exceptions.json')));
+  if (increases.length) throw new Error(`有没登记例外的增长，不能同步基线：\n- ${increases.join('\n- ')}`);
+  fs.writeFileSync(file, formatMeasurement(syncBaseline(current, baseline)), 'utf8');
+  console.log('已同步 tools/health/baseline.json（只写入变好的数字）；请与本次改善一起提交。');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
