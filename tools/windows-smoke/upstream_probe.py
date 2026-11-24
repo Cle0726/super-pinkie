@@ -45,6 +45,16 @@ DISPATCH_TOOL_ID = "call_sidebar_acceptance"
 ROLE_PROBE = "METRE-ROLE-PACKAGE-PROBE"
 ROLE_TITLE = "角色验收：整理本机夹具"
 ROLE_CHILD_MODEL = "role-worker-free"
+# Since a0ebf381 a dispatched child sits in the branch under its parent's row; only a
+# child whose parent is not listed (archived, deleted, other mode) goes to this group.
+ORPHAN_GROUP_SELECTOR = '[data-laolao-group="__metre-dispatched"]'
+
+
+def nested_child_selector(parent):
+    """Rows rendered in the branch right under the parent's own sidebar row."""
+    return f'#laolao-session-manager [data-session-key="{parent}"] + .pinkie-session-branch [data-session-key]'
+
+
 # Mid-turn retries are hidden control messages with this prefix.
 WATCHDOG_PREFIX = "[pinkie-watchdog]"
 # The file whose absence kept the plugin from loading in v2.5.23.
@@ -731,11 +741,13 @@ def verify_metre_sidebar(page, out, upstream):
         """, [parent, DISPATCH_PROMPT])
         if await_dispatch.get("status") not in ("started", "ok"):
             raise RuntimeError("Metre test message did not start")
-        entry = page.locator('[data-laolao-group="__metre-dispatched"] [data-session-key]').filter(has_text=DISPATCH_TITLE)
+        entry = page.locator(nested_child_selector(parent)).filter(has_text=DISPATCH_TITLE)
         entry.wait_for(state="visible", timeout=75_000)
         child = entry.get_attribute("data-session-key")
         if not child or not child.startswith("agent:project:pinkie-child:"):
             raise RuntimeError("Metre sidebar did not show the dispatched project session")
+        if page.locator(ORPHAN_GROUP_SELECTOR + f' [data-session-key="{child}"]').count():
+            raise RuntimeError("Metre sidebar listed a dispatch whose parent is shown as an orphan too")
         if not any(item["dispatch_tool"] for item in upstream.requests[first_request:]):
             raise RuntimeError("the packaged gateway did not request the scripted dispatch tool")
         page.screenshot(path=str(out / "metre-dispatched-sidebar.png"), timeout=15_000)
@@ -807,7 +819,7 @@ def verify_metre_role_sidebar(page, out, upstream):
         if result.get("status") not in ("started", "ok"):
             raise RuntimeError("Metre role test message did not start")
 
-        entry = page.locator('[data-laolao-group="__metre-dispatched"] [data-session-key]').filter(has_text=ROLE_TITLE)
+        entry = page.locator(nested_child_selector(parent)).filter(has_text=ROLE_TITLE)
         entry.get_by_text("调研员", exact=True).wait_for(timeout=75_000)
         child = entry.get_attribute("data-session-key")
         if not child or not child.startswith("agent:roles:pinkie-child:"):
