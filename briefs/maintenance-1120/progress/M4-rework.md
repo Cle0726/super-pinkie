@@ -2,7 +2,7 @@
 
 ## 接力卡（最后更新：2026-11-24 08:45 UTC，Claude Code 接手执行者 @ Windows）
 
-- 状态：**自查通过**（带 ★ 条目全部过；合并由协调者复验后做）
+- 状态：**已合并**（[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)，合并提交 `44639398`）
 - 分支和 PR：`maint/m4-fix-runtime`（已变基到 `origin/main` `815c0f78`），[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)
 - 已完成（第 2 轮）：
   1. 变基到最新 origin/main，补上 `app.` 兜底导入；修好 Linux 上 lock_tampered 测试的 WindowsPath 报错。
