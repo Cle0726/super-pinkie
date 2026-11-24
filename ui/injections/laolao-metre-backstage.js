@@ -16,7 +16,7 @@
  *   排队   原生面板的 chatQueue 条数
  *   引擎   pinkie.engines.status（开 / 关）+ 总谱数据里外部引擎的声部（在跑 / 等你 / 交回 / 失败）
  * 刷新挂在已有的事件上：run-status 画状态条时发的 pinkie:run-view、总谱数据回来的 pinkie:metre-board-data、换会话、换模式、窗口大小；
- *   两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就停）。不加 setInterval、不加观察器。只在 Metre 出现。 */
+ *   两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就停）。不加循环定时器、不加观察器。只在 Metre 出现。 */
 (() => {
   'use strict';
   if (document.querySelector('.pk-metre-backstage')) return;

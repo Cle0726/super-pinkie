@@ -328,7 +328,7 @@ export function openTerminal(command, {platform = process.platform, spawnImpl = 
   if (!TERMINAL_COMMANDS.has(command)) throw new Error('不认识的命令');
   const extra = Object.entries(env || {});
   for (const [name, value] of extra) {
-    if (!['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'BROWSER'].includes(name) || !path.isAbsolute(String(value)) || /["'`$%\r\n]/.test(String(value))) throw new Error('不认识的登录文件夹');
+    if (!['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'BROWSER'].includes(name) || !(platform === 'win32' ? path.win32 : path.posix).isAbsolute(String(value)) || /["'`$%\r\n]/.test(String(value))) throw new Error('不认识的登录文件夹');
     if (name === 'BROWSER' && !/private-browser\.(?:cmd|sh)$/.test(String(value))) throw new Error('不认识的浏览器启动器');
   }
   const detached = {detached: true, stdio: 'ignore', windowsHide: false, ...(extra.length ? {env: {...process.env, ...Object.fromEntries(extra)}} : {})};

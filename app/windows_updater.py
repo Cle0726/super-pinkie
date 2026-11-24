@@ -21,55 +21,63 @@ import urllib.request
 import uuid
 import zipfile
 
-try:
-    from windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
-except ImportError:  # imported as app.windows_updater (tests)
-    from app.windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
+if "_PINKIE_DESKTOP_PART" not in globals():
+    try:
+        from windows_ps_templates import (
+            FOREGROUND_PS,
+            PINKIE_WPF_PS,
+            PROGRESS_WINDOW_PS,
+            REPAIR_PS,
+            UPDATE_LOG_PS,
+            UPDATE_UI_PS,
+        )
+    except ImportError:  # imported as app.windows_updater (tests)
+        from app.windows_ps_templates import (
+            FOREGROUND_PS,
+            PINKIE_WPF_PS,
+            PROGRESS_WINDOW_PS,
+            REPAIR_PS,
+            UPDATE_LOG_PS,
+            UPDATE_UI_PS,
+        )
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
-UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
-TRUSTED_UPDATE_HOSTS = {
-    "api.github.com",
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
-UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
-UPDATE_MANIFEST_NAME = "latest.json"
-GUARD_UPDATE_REFUSED = "更新包的签名不对，没有安装，旧版没有改动。"
+    GATEWAY_URL = "http://127.0.0.1:18789/"
+    UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
+    TRUSTED_UPDATE_HOSTS = {
+        "api.github.com",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    }
+    UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+    UPDATE_MANIFEST_NAME = "latest.json"
+    GUARD_UPDATE_REFUSED = "更新包的签名不对，没有安装，旧版没有改动。"
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_updater (tests)
+            from app import windows_desktop as module
+        return module
 
-def GatewaySupervisor(*args, **kwargs): return _desktop().GatewaySupervisor(*args, **kwargs)
-def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def guard_release_build(*args, **kwargs): return _desktop().guard_release_build(*args, **kwargs)
-def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
-def manifest_update(*args, **kwargs): return _desktop().manifest_update(*args, **kwargs)
-def mirrored_release_update(*args, **kwargs): return _desktop().mirrored_release_update(*args, **kwargs)
-def release_update(*args, **kwargs): return _desktop().release_update(*args, **kwargs)
-def start_elevated(*args, **kwargs): return _desktop().start_elevated(*args, **kwargs)
-def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
-def trusted_update_url(*args, **kwargs): return _desktop().trusted_update_url(*args, **kwargs)
-def update_helper_protocol(*args, **kwargs): return _desktop().update_helper_protocol(*args, **kwargs)
-def update_mirrors(*args, **kwargs): return _desktop().update_mirrors(*args, **kwargs)
-def verify_signed_latest(*args, **kwargs): return _desktop().verify_signed_latest(*args, **kwargs)
-def version_tuple(*args, **kwargs): return _desktop().version_tuple(*args, **kwargs)
+    def GatewaySupervisor(*args, **kwargs): return _desktop().GatewaySupervisor(*args, **kwargs)
+    def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def guard_release_build(*args, **kwargs): return _desktop().guard_release_build(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def manifest_update(*args, **kwargs): return _desktop().manifest_update(*args, **kwargs)
+    def mirrored_release_update(*args, **kwargs): return _desktop().mirrored_release_update(*args, **kwargs)
+    def release_update(*args, **kwargs): return _desktop().release_update(*args, **kwargs)
+    def start_elevated(*args, **kwargs): return _desktop().start_elevated(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def trusted_update_url(*args, **kwargs): return _desktop().trusted_update_url(*args, **kwargs)
+    def update_helper_protocol(*args, **kwargs): return _desktop().update_helper_protocol(*args, **kwargs)
+    def update_mirrors(*args, **kwargs): return _desktop().update_mirrors(*args, **kwargs)
+    def verify_signed_latest(*args, **kwargs): return _desktop().verify_signed_latest(*args, **kwargs)
+    def version_tuple(*args, **kwargs): return _desktop().version_tuple(*args, **kwargs)
 
 
 class WindowsUpdater:
@@ -1230,7 +1238,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-LogPath", str(state_root() / "logs/updater.log"),
                     "-ReadyMarker", str(ready_marker),
                     "-GatewayRecord", str(state_root() / "gateway-owner.json"),
-                    "-GatewayPort", str(urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789),
+                    "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
                     "-Version", str(self.prepared["version"]),
                     "-StartSeconds", str(int(self.health_start_seconds)),
                     "-ReadySeconds", str(int(self.health_ready_seconds)),
@@ -1346,7 +1354,7 @@ class UpdateHealthReporter:
         self.limit = limit
         self.protocol = update_helper_protocol(token, root)
         self.done = threading.Event()
-        self.port = port or urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789
+        self.port = port or urllib.parse.urlparse(GATEWAY_URL).port or 18789
         self.hold_limit = hold_limit
         # Set while the gateway port is free for our real gateway to bind.
         self.port_free = threading.Event()

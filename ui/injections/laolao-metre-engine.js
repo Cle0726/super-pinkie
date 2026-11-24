@@ -49,7 +49,7 @@
   };
 
   // ---------- C.le. 思考动画（用户 11-22：「记得保留 C.le. 思考动画 three.js」） ----------
-  // 和 Metre 原生对话的工作过程标题行是同一个 three.js 粒子签名（laolao-cle-space.js），地址和 laolao-cle-stage.js 的动态 import 一字不差，
+  // 和 Metre 原生对话的工作过程标题行是同一个 three.js 粒子签名（laolao-cle-space.js），地址和 laolao-cle-stage.js 一样经 window.__pinkieAsset 取同一个内容哈希，
   // 所以是同一份模块；引擎在跑时在对话最下面一行动，每一步换一个形状，做完落款再换回静态签名，然后把 WebGL 上下文还回去。
   const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js');
   const CLE_HOLD = 6900;
@@ -92,7 +92,7 @@
     clearTimeout(cle.finishing);
     cle.finishing = 0;
     try { cle.space?.dispose(); } catch {}
-    cle.space = null; cle.glyph?.remove(); cle.glyph = null; cle.kind = '';
+    cle.space = null; if (cle.glyph?.isConnected) cle.glyph.replaceWith(staticGlyph()); else cle.glyph?.remove(); cle.glyph = null; cle.kind = ''; // 原地换回静态签名：直接 remove 会让那一行没了 .cle-glyph，下次画就对 null 调 replaceWith（11-24 真跑页面报错）
   }
   // 此刻在做的那一步 → C.le. 的步骤类别和标题行的内容。
   function stepOf(summary) {

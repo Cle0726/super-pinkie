@@ -296,7 +296,7 @@
     const welcome = document.querySelector(".laolao-startup-home .agent-chat__welcome");
     const current = parseFloat(root.style.getPropertyValue("--laolao-home-lift")) || 0;
     let lift = 0;
-    if (root.dataset.laolaoStartupHome === "1" && welcome && bubble?.classList.contains("is-shown")) {
+    if (root.dataset.laolaoStartupHome === "1" && welcome && bubble?.classList.contains("is-shown")) { // Metre 不造小伙伴，resize 时 bubble 还没有
       const b = bubble.getBoundingClientRect();
       const w = welcome.getBoundingClientRect();
       const home = welcome.closest(".laolao-startup-home")?.getBoundingClientRect();

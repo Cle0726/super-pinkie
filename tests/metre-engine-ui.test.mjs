@@ -13,9 +13,20 @@ test('the engine stage is loaded by the head fragment and reuses the very same C
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-engine\.css\?v=@hash">/);
   assert.match(head, /<script defer src="\/laolao-metre-engine\.js\?v=@hash"><\/script>/);
-  const stageImport = /import\((window\.__pinkieAsset \? window\.__pinkieAsset\('\.\/laolao-cle-space\.js'\) : '\.\/laolao-cle-space\.js')\)/.exec(read('laolao-cle-stage.js'))?.[1];
-  assert.ok(stageImport, 'cle-stage imports the particle signature dynamically');
-  assert.ok(js.includes(`const CLE_SPACE = () => (${stageImport});`), 'same URL, so one module and one WebGL context');
+  // 两边都经 window.__pinkieAsset 取 laolao-cle-space.js 的内容哈希（M2：不手写版本号），解析出来是同一个地址、同一份模块、一个 WebGL 上下文。
+  assert.match(read('laolao-cle-stage.js'), /import\(window\.__pinkieAsset \? window\.__pinkieAsset\('\.\/laolao-cle-space\.js'\) : '\.\/laolao-cle-space\.js'\)/,
+    'cle-stage imports the particle signature dynamically through the asset manifest');
+  assert.ok(js.includes("const CLE_SPACE = () => (window.__pinkieAsset ? window.__pinkieAsset('./laolao-cle-space.js') : './laolao-cle-space.js');"),
+    'same hashed URL, so one module and one WebGL context');
+  // 11-24 协调者：两边加载 cle-space 的写法必须一字不差（原来引擎台写 '/laolao-cle-space.js'，cle-stage 写 './laolao-cle-space.js'），
+  // 否则 cle-stage 一改写法这边就悄悄跟丢，three.js 会加载两份、多占一个 WebGL 上下文。
+  const loads = src => [...src.matchAll(/window\.__pinkieAsset\('([^']*laolao-cle-space\.js)'\) : '([^']*laolao-cle-space\.js)'/g)].map(m => m.slice(1).join(' | '));
+  const stageLoads = loads(read('laolao-cle-stage.js')), engineLoads = loads(js);
+  assert.equal(stageLoads.length, 1, 'cle-stage loads cle-space exactly once');
+  assert.equal(engineLoads.length, 1, 'engine stage loads cle-space exactly once');
+  assert.equal(engineLoads[0], stageLoads[0], 'engine stage and cle-stage load cle-space with the very same path');
+  assert.ok(js.includes('import(CLE_SPACE())'));
+  assert.doesNotMatch(js, /laolao-cle-space\.js\?v=/, 'no hand-written version (M2)');
   assert.match(js, /new cle\.Space\(glyph, \{palette: 'cle', count: 1100, size: \.17, fitW: 10\.2, fitH: 5\.4, interactive: false\}\)/);
 });
 
@@ -520,7 +531,8 @@ test('the about card leaves the last slot for the third-party notices, and the n
   const block = /\/\/ NOTICES-BEGIN[\s\S]*?\/\/ NOTICES-END/.exec(js)[0];
   for (const line of ['MIT License', 'Copyright (c) 2026 T3 Tools Inc.', 'The above copyright notice and this permission notice shall be included in all',
     'copies or substantial portions of the Software.', 'OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE', 'https://github.com/pingdotgg/t3code', 'Apache-2.0']) assert.ok(block.includes(line), line);
-  assert.match(read('laolao-head.fragment.html'), /laolao-settings-user\.js\?v=@hash/, 'the version comes from the file hash, so a changed file gets a new one');
+  // M2 以后版本号由 tools/assets/stamp.mjs 按内容哈希生成：头片段里只写 @hash，文件一变哈希自动变。
+  assert.match(read('laolao-head.fragment.html'), /laolao-settings-user\.js\?v=@hash/, 'the version is the content hash stamped at build time');
 });
 
 test('in a browser: 第三方许可 shows a 查看 button that opens the full notices and closes again', {timeout: 40_000}, async t => {
@@ -565,4 +577,12 @@ test('in a browser: 第三方许可 shows a 查看 button that opens the full no
     await tab.waitForFunction(() => !document.querySelector('.pk-notices'));
     assert.deepEqual(await tab.evaluate(() => window.calls), [], 'reading the notices needs no gateway');
   } finally { await browser.close(); }
+});
+
+// 11-24 隔离真跑页面报错 Cannot read properties of null (reading 'replaceWith')：dropCle 直接 remove 实时小标，
+// 对话最下面那一行就没有 .cle-glyph 了，下一次画（paintLive）对 null 调 replaceWith。要原地换回静态签名。
+test('dropping the live C.le. glyph puts the static signature back in its slot, so the live line always keeps a glyph', () => {
+  const drop = /function dropCle\(\) \{[\s\S]*?\n  \}/.exec(js)?.[0] || '';
+  assert.match(drop, /if \(cle\.glyph\?\.isConnected\) cle\.glyph\.replaceWith\(staticGlyph\(\)\)/);
+  assert.doesNotMatch(drop, /cle\.space = null; cle\.glyph\?\.remove\(\);/);
 });

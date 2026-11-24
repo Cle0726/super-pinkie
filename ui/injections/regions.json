@@ -228,6 +228,8 @@
         "laolao-metre-board.css",
         "laolao-metre-board.js",
         "laolao-metre-board-data.js",
+        "laolao-metre-engine.css",
+        "laolao-metre-engine.js",
         "laolao-metre-brand.css",
         "laolao-metre-brand.js",
         "laolao-metre-cat.css",
