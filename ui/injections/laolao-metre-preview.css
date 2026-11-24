@@ -1,0 +1,32 @@
+/* laolao-metre-preview —— R4：回答下面「预览本地服务」一行（laolao-metre-preview.js）。
+ * 和来源签条同一套 Metre 变量，日夜跟着变量走；只在 Metre 里有这一行。 */
+html[data-laolao-mode="metre"] .pk-mprev-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--metre-line, #E8E6DC);
+  max-width: 100%; box-sizing: border-box; font-size: 12px; color: var(--metre-muted, #73726C);
+}
+html[data-laolao-mode="metre"] .pk-mprev-row__label {
+  margin-right: 4px; font: italic 400 13px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; color: var(--metre-muted, #73726C);
+}
+html[data-laolao-mode="metre"] .pk-mprev-chip {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: min(320px, 100%); height: 26px;
+  padding: 0 10px 0 9px; box-sizing: border-box;
+  border: 1px solid var(--metre-line, #E8E6DC); border-radius: 6px;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D); text-decoration: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+html[data-laolao-mode="metre"] .pk-mprev-chip:hover { border-color: var(--metre-line-strong, #D9D6CC); background: var(--metre-hover, #F0EEE6); }
+html[data-laolao-mode="metre"] .pk-mprev-chip:active { background: var(--metre-line, #E8E6DC); }
+html[data-laolao-mode="metre"] .pk-mprev-chip:focus-visible { outline: 2px solid var(--metre-accent, #C96442); outline-offset: 2px; }
+/* 小圆点：本地在跑的服务，用强调色 */
+html[data-laolao-mode="metre"] .pk-mprev-chip__dot {
+  flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--metre-accent, #C96442);
+}
+html[data-laolao-mode="metre"] .pk-mprev-chip__text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 12px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"] .pk-mprev-chip { transition: none; }
+}
+html[data-pinkie-reduce-motion][data-laolao-mode="metre"] .pk-mprev-chip { transition: none; }
