@@ -300,7 +300,8 @@ test('installLockedTarball resolves symlinked --prefix before npm ci (macOS $TMP
       }),
     );
     const tgz = path.join(tmp, 'cle.tgz');
-    const tarRes = spawnSync('tar', ['-czf', tgz, '-C', path.join(tmp, 'src'), 'package'], { encoding: 'utf8' });
+    // Relative names: GNU tar on Windows reads "C:" in absolute paths as a remote host.
+    const tarRes = spawnSync('tar', ['-czf', '../cle.tgz', 'package'], { cwd: path.join(tmp, 'src'), encoding: 'utf8' });
     assert.equal(tarRes.status, 0, tarRes.stderr);
 
     const realTarget = path.join(tmp, 'real-prefix');
