@@ -308,6 +308,8 @@ test('the terminal helper only runs the install and sign-in commands in the tabl
   assert.throws(() => openTerminal('claude auth login', {platform: 'win32', spawnImpl, env: {PATH: 'C:\\x'}}), /不认识/);
   openTerminal('claude auth login', {platform: 'darwin', spawnImpl, env: {CLAUDE_CONFIG_DIR: '/Users/a/.claude-metre-2'}});
   assert.match(spawned.at(-1).args[1], /CLAUDE_CONFIG_DIR='\/Users\/a\/\.claude-metre-2' claude auth login/, 'Terminal.app does not inherit env');
+  // 路径是不是绝对路径按目标平台判断，不按跑测试 / 跑网关的这台机器（CI 的 Linux 上 C:\ 也要认，Mac 上 C:\ 不认）。
+  assert.throws(() => openTerminal('claude auth login', {platform: 'darwin', spawnImpl, env: {CLAUDE_CONFIG_DIR: 'C:\\Users\\a\\.claude-metre-2'}}), /不认识/);
 });
 
 test('several accounts per engine: each one is its own instance with its own login', async () => {
