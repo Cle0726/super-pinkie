@@ -61,3 +61,12 @@ html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outli
 @media (max-width: 920px) {
   html[data-laolao-mode="metre"] .chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card):not(:has(> .laolao-delivery-card.is-media)) { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* 16:10 打回第 2 条（待发送）：原生排队区 .chat-queue 或其中一条刚插进来的那一帧，放一个 1ms 的空动画；
+ * laolao-metre-queue.js 听 animationstart（名字 pk-mq-born）当帧画出那一条，不等别的事件，也不加定时器、观察器。
+ * 原生标题和大卡片在 laolao-metre-skin.css 第 1430 行从第一帧起就不占位。 */
+html[data-laolao-mode="metre"] :is(.chat-queue, .chat-queue__item) { animation: pk-mq-born 1ms; }
+@keyframes pk-mq-born {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}

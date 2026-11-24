@@ -125,3 +125,51 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
   } finally { await browser.close(); }
 });
+
+// 11-24 16:10 打回第 4 条：820 宽时状态带走短档，引擎 4 个声部（1 失败、1 等你）只剩「引擎 4」，「不同步」也只剩三个字、看不出哪边在跑。
+// 复发测试：短档的引擎格留最要紧的一项（失败 > 等你 > 在跑），不同步格带上后台在跑 / 空闲；输入框窄到只能走短档时，每一格都不挤字。
+test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
+      <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:300px;height:92px"></section></body></html>`;
+    await tab.route('http://127.0.0.1:30120/**', (route) => route.fulfill({contentType: 'text/html', body}));
+    await tab.goto('http://127.0.0.1:30120/chat?session=agent%3Ametre%3Atest');
+    await tab.evaluate(() => {
+      const pane = document.createElement('openclaw-chat-pane'); pane.state = {chatRunId: null, chatSending: false, chatStream: null, chatQueue: [], sessionKey: 'agent:metre:test'}; document.body.append(pane);
+      window.__pinkieRunStatus = {get state() { return {key: 'agent:metre:test', status: {active: false}, conn: {online: true, attempt: 0}, live: {active: false}}; }, refresh: async () => null};
+      window.__laolaoSidebar = {gwRequest: async (method) => (method === 'pinkie.engines.status' ? {enabled: true, running: true} : {})};
+      window.__pinkieMetreBoardData = {data: {sessions: [{key: 'e1', external: true, engineName: 'Codex', state: 'fail'}, {key: 'e2', external: true, engineName: 'Kiro', state: 'wait'},
+        {key: 'e3', external: true, engineName: 'Claude', state: 'run'}, {key: 'e4', external: true, engineName: 'Gemini', state: 'done'}]}};
+    });
+    await tab.addScriptTag({content: read('laolao-metre-backstage.js')});
+    // 纯函数：同样的输入同样的短档文字
+    const short = await tab.evaluate(() => {
+      const d = (o) => Object.fromEntries(window.PinkieMetreBackstage.describe({conn: {online: true}, page: {busy: false, writing: false}, queue: 0, engines: {enabled: true}, since: 0, now: 0, ...o}).cells.map((c) => [c.id, c.short]));
+      const v = (...tones) => tones.map((tone, i) => ({key: 'k' + i, name: 'e' + i, tone}));
+      return {
+        failWait: d({voices: v('fail', 'wait', 'run', 'done')}).eng, wait: d({voices: v('wait', 'run')}).eng, run: d({voices: v('run', 'done')}).eng, done: d({voices: v('done')}).eng,
+        backRunning: d({status: {active: true}, page: {busy: false}, since: 1, now: 5000, voices: []}).run,
+        backIdle: d({status: {active: false}, page: {busy: true}, since: 1, now: 5000, voices: []}).run,
+      };
+    });
+    assert.deepEqual(short, {failWait: '引擎 4 · 1 失败', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
+      backRunning: '不同步 · 后台在跑', backIdle: '不同步 · 后台空闲'});
+    // 真画出来：窄输入框只能走短档，引擎格写出失败，每一格都不挤字
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
+    const drawn = await tab.evaluate(() => {
+      const band = document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)');
+      return {tier: band?.dataset.tier, eng: band?.querySelector('[data-seg="eng"] span')?.textContent,
+        squeezed: [...band.querySelectorAll('.pk-bs__seg')].filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent)};
+    });
+    assert.equal(drawn.tier, 'short');
+    assert.equal(drawn.eng, '引擎 4 · 1 失败');
+    assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
+  } finally { await browser.close(); }
+});

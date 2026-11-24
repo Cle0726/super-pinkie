@@ -60,6 +60,80 @@ test(`Metre queue: one 30px line on the composer’s top edge; expanded rows are
   } finally { await browser.close(); }
 });
 
+// 11-24 16:10 打回第 2 条：排队一出现，原生的大卡片先露出来、停约 5 秒才缩成一行（.pk-mq 要等别的事件才画）。
+// 复发测试：原生排队区插进来以后不碰页面，0 ms 和 300 ms 各量一次 .chat-queue，都不超过 32px；300 ms 时那一条已经画好；再排一条也跟着变。
+test(`Metre queue: the native big card never shows — 0 ms and 300 ms after the queue appears it is one line (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    await page.setContent(PAGE);
+    await page.evaluate(() => {
+      document.querySelector('.chat-queue').remove();
+      document.querySelector('openclaw-chat-pane').state = {sessionKey: 'agent:metre:main', chatQueue: [], requestUpdate() {}};
+    });
+    await page.addStyleTag({path: inj('laolao-metre-skin.css')});
+    await page.addStyleTag({path: inj('laolao-metre-display.css')});
+    await page.addScriptTag({path: inj('laolao-metre-queue.js')});
+    const item = (id, text) => `<div class="chat-queue__item" data-pinkie-queue-id="${id}" style="height:72px"><div class="chat-queue__text">${text}</div></div>`;
+    const h0 = await page.evaluate((html) => {
+      const pane = document.querySelector('openclaw-chat-pane');
+      pane.state.chatQueue = [{id: 'q0', text: '第一条', sessionKey: 'agent:metre:main'}, {id: 'q1', text: '第二条', sessionKey: 'agent:metre:main'}];
+      const q = document.createElement('div'); q.className = 'chat-queue'; q.setAttribute('role', 'status');
+      q.innerHTML = `<div class="chat-queue__title">Queued (2)</div><div class="chat-queue__list">${html}</div>`;
+      document.querySelector('.chat-main').prepend(q);
+      return q.getBoundingClientRect().height;
+    }, item('q0', '第一条') + item('q1', '第二条'));
+    assert.ok(h0 <= 32, `排队区插进来的当时 ≤ 32px（${h0}）`);
+    await page.waitForTimeout(300);
+    const at300 = await page.evaluate(() => ({h: document.querySelector('.chat-queue').getBoundingClientRect().height, bar: document.querySelector('.pk-mq__bar')?.textContent || ''}));
+    assert.ok(at300.h <= 32, `300 ms 时 ≤ 32px（${at300.h}）`);
+    assert.match(at300.bar, /待发送 2/, '300 ms 时那一条已经画好，没有等别的事件');
+    await page.evaluate((html) => {
+      const pane = document.querySelector('openclaw-chat-pane');
+      pane.state.chatQueue = [...pane.state.chatQueue, {id: 'q2', text: '第三条', sessionKey: 'agent:metre:main'}];
+      document.querySelector('.chat-queue__list').insertAdjacentHTML('beforeend', html);
+    }, item('q2', '第三条'));
+    await page.waitForTimeout(300);
+    assert.match(await page.locator('.pk-mq__bar').innerText(), /待发送 3/, '再排一条，这一条跟着变');
+    assert.ok((await page.locator('.chat-queue').boundingBox()).height <= 32);
+  } finally { await browser.close(); }
+});
+
+// 11-24 16:10 打回第 3 条：侧栏会话行悬停时，「置顶 / 重命名 / 归档 / ⋯」四个键是绝对定位、透明底，长标题的字从键底下透出来。
+// 复发测试：长标题悬停时，标题可见部分的右端 ≤ 第一个按键的左端，而且标题确实被省略了（不是没压到是因为标题短）。
+// 原生的会话行规则（链接 flex:auto / min-width:0、会话名省略号、行尾区 flex:none）照 control-ui 打包里的写法补在页面上。
+test(`Metre session list: on hover a long title makes room for the row keys and ellipsizes instead of running under them (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 1200, height: 700}});
+    await page.setContent(PAGE);
+    await page.addStyleTag({content: `.sidebar-recent-session__link{min-width:0;flex:auto;display:flex;align-items:center;gap:8px;text-decoration:none}
+      .sidebar-recent-session__name{text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:auto;overflow:hidden}
+      .session-row-aside{flex:none;display:grid;place-items:center end}`});
+    await page.addStyleTag({path: inj('laolao-metre-skin.css')});
+    await page.evaluate(() => {
+      window.PinkieSessionList = {sessionStatus: () => '', beginRename() {}};
+      document.querySelector('.laolao-managed-groups').innerHTML = `<div class="laolao-group"><div class="laolao-group__list"><div class="pinkie-session-date">今天</div>
+        <div class="sidebar-recent-session session-row-host" data-session-key="agent:metre:a"><a class="sidebar-recent-session__link"><span class="sidebar-recent-session__name">把登录页和注册页的主按钮统一改成钴蓝色并补测试</span></a><span class="session-row-aside"><span class="laolao-row-actions"><button aria-label="管理会话">⋯</button></span></span></div></div></div>`;
+    });
+    await page.addScriptTag({path: inj('laolao-metre-list.js')});
+    await page.evaluate(() => window.PinkieMetreList.decorate(document.querySelector('.laolao-managed-groups'), [{key: 'agent:metre:a', updatedAt: Date.now() - 3 * 60_000}], {state: {pins: []}}));
+    await page.hover('.sidebar-recent-session');
+    const r = await page.evaluate(() => {
+      const name = document.querySelector('.sidebar-recent-session__name');
+      const keys = [...document.querySelectorAll('.laolao-row-actions > button')].filter((b) => +getComputedStyle(b.parentElement).opacity > 0.5).map((b) => b.getBoundingClientRect());
+      return {nameRight: name.getBoundingClientRect().right, firstKey: Math.min(...keys.map((k) => k.left)), keys: keys.length, clipped: name.scrollWidth > name.clientWidth + 1};
+    });
+    assert.equal(r.keys, 4, '悬停时四个键都露出来');
+    assert.ok(r.nameRight <= r.firstKey + 0.5, `标题可见部分的右端 ≤ 第一个键的左端（${r.nameRight} / ${r.firstKey}）`);
+    assert.ok(r.clipped, '长标题被省略，不是因为标题短才没压到');
+    await page.mouse.move(900, 600);
+    const idle = await page.evaluate(() => ({time: getComputedStyle(document.querySelector('.pinkie-session-time')).display, keys: +getComputedStyle(document.querySelector('.laolao-row-actions')).opacity}));
+    assert.notEqual(idle.time, 'none', '不悬停时时间照常显示');
+    assert.equal(idle.keys, 0, '不悬停时按键不露');
+  } finally { await browser.close(); }
+});
+
 test(`Metre session list: one layer of date groups, status marks from backend state, relative time, hover-only actions (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
@@ -130,5 +204,10 @@ test('wiring: only Metre calls the list decorator; both scripts are in the head 
     const src = read(f).replace(/\/\*[\s\S]*?\*\//g, '');
     assert.doesNotMatch(src, /setInterval|MutationObserver|window\.__\w+\s*=/, f + '：不加循环定时器、观察器、全局名');
   }
-  assert.match(read('laolao-metre-skin.css'), /\.chat-queue:has\(> \.pk-mq\) > :is\(\.chat-queue__title, \.chat-queue__list\) \{ display: none !important; \}/, '原生的大卡片只在新的一条画出来以后才藏');
+  const skin = read('laolao-metre-skin.css');
+  assert.match(skin, /\.chat-queue > \.chat-queue__title \{ display: none !important; \}/, '原生标题从第一帧起就藏，不等 .pk-mq');
+  assert.match(skin, /\.chat-queue > \.chat-queue__list \{ position: absolute; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; \}/, '原生大卡片从第一帧起不占位');
+  assert.doesNotMatch(skin, /\.chat-queue:has\(> \.pk-mq\)/, '不再靠 :has(.pk-mq) 才藏');
+  assert.match(read('laolao-metre-queue.js'), /animationName === 'pk-mq-born'/, '排队区插进来的那一帧就画那一条');
+  assert.ok(read('laolao-metre-display.css').includes('html[data-laolao-mode="metre"] :is(.chat-queue, .chat-queue__item) { animation: pk-mq-born 1ms; }'), '插进来那一帧的空动画只在 Metre');
 });

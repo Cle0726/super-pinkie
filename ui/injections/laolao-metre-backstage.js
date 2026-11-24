@@ -49,7 +49,7 @@
     const backText = back == null ? '后台还没回话' : back ? '后台在跑' : '后台空闲';
     const unsynced = back != null && conn?.online !== false && back !== page.busy && since && now - since >= UNSYNC_MS;
     // 两个方向都认：后台在跑、页面停着；或者页面在等 / 在出字、后台空闲。对上了以后 2 秒里说一句「已和后台对齐」
-    const run = unsynced ? {tone: 'fail', full: `不同步 · ${backText} · ${pageText}`, short: '不同步', sync: true}
+    const run = unsynced ? {tone: 'fail', full: `不同步 · ${backText} · ${pageText}`, short: '不同步 · ' + backText, sync: true}
       : aligned ? {tone: 'ok', full: '本轮 已和后台对齐', short: '本轮 已对齐'}
       : {tone: back || page.busy ? 'run' : back == null ? 'off' : 'ok', full: `本轮 ${backText} · ${pageText}`,
         short: '本轮 ' + (back == null ? '—' : page.writing ? '出字' : back ? '在跑' : page.busy ? '等回复' : '空闲')};
@@ -58,7 +58,7 @@
     if (voices.length) {
       const n = (k) => voices.filter((v) => v.tone === k).length;
       const bits = [['fail', '失败'], ['wait', '等你'], ['run', '在跑']].filter(([k]) => n(k)).slice(0, 2).map(([k, w]) => `${n(k)} ${w}`);
-      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}`, pop: true};
+      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (bits.length ? ' · ' + bits[0] : ''), pop: true};   // 窄的时候也留最要紧的一项（失败 > 等你 > 在跑）
     } else eng = engines == null ? {tone: 'off', full: '引擎 还不知道', short: '引擎 —'}
       : !engines.enabled ? {tone: 'off', full: '引擎 关', short: '引擎 关'}
       : engines.running === false ? {tone: 'wait', full: '引擎 开 · 服务没在跑', short: '引擎 开'} : {tone: 'ok', full: '引擎 开', short: '引擎 开'};
@@ -70,10 +70,10 @@
   const VARIANTS = {
     gw: {full: ['网关 还不知道', '网关 连着', '网关 重连中 · 第 99 次', '网关 断了'], short: ['网关 —', '网关 连着', '网关 重连 99', '网关 断了']},
     run: {full: [...['后台还没回话', '后台在跑', '后台空闲'].flatMap((b) => ['页面在出字', '页面在等回复', '页面停着'].map((p) => `本轮 ${b} · ${p}`)), ...['后台在跑 · 页面停着', '后台空闲 · 页面在出字', '后台空闲 · 页面在等回复'].map((x) => ['sync', `不同步 · ${x}`]), '本轮 已和后台对齐'],
-      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步']]},
+      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步 · 后台在跑'], ['sync', '不同步 · 后台空闲']]},
     queue: {full: ['排队 99'], short: ['排队 99']},
     eng: {full: ['引擎 还不知道', '引擎 关', '引擎 开 · 服务没在跑', ['pop', '引擎 99 · 9 等你 · 9 在跑'], ['pop', '引擎 99 · 9 失败 · 9 等你'], ['pop', '引擎 99 · 全部交回']],
-      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99']]},
+      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`])]},
   };
 
   // ---------- 画 ----------

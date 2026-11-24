@@ -90,7 +90,11 @@ test('wiring: laolao-metre-display.css is in the head after the Metre keys and b
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);
   assert.ok(/"id": "metre"[\s\S]*?"laolao-metre-display\.css"/.test(read('regions.json')), 'registered in the Metre region');
-  const css = read('laolao-metre-display.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.ok(!css.includes('!important'));
+  const all = read('laolao-metre-display.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!all.includes('!important'));
+  // 关键帧不是选择器规则：先剥出来，只许动 opacity（16:10 打回第 2 条的 pk-mq-born 只是插进来那一帧的信号）
+  const frames = [...all.matchAll(/@keyframes ([\w-]+)\s*\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)];
+  for (const [, name, body] of frames) assert.ok([...body.matchAll(/([a-z-]+)\s*:/g)].every((m) => m[1] === 'opacity'), `${name} only touches opacity`);
+  const css = frames.reduce((s, [block]) => s.replace(block, ''), all);
   for (const rule of css.split('}').map((s) => s.trim().replace(/^@media[^{]*\{\s*/, '')).filter(Boolean)) assert.match(rule, /^html\[data-laolao-mode="metre"\]/, `every rule is Metre-only: ${rule.slice(0, 80)}`);
 });
