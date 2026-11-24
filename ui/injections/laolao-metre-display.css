@@ -66,3 +66,9 @@ html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outli
  * 但 2026.7.1-2 里原生键外面包了一层 openclaw-tooltip，那条 `> .chat-copy-btn` 的规则落空，助手消息底部出现两个复制键。
  * openclaw-tooltip 自己在元素上写了 display: contents（内联），外层藏不掉，所以藏里面的原生按钮。只在 Metre 下生效；其他模式的同一问题交给对话区负责人。 */
 html[data-laolao-mode="metre"] .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > openclaw-tooltip > .chat-copy-btn { display: none; }
+
+/* T3#12 输入框缩略图可以点开放大（laolao-metre-thumbs.js 给它补 data-metre-zoom）：悬停换放大镜指针、加深边线，键盘焦点给钴蓝框。 */
+html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"] { cursor: zoom-in; }
+html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"]:hover { border-color: var(--metre-line-strong); }
+html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"]:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"] button { cursor: pointer; }
