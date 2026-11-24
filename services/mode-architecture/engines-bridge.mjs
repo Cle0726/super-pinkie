@@ -830,19 +830,19 @@ export function registerEngineBridge(api, {service, register, stateRoot = '', en
     await ensureRunning();
     const pref = bridge.sessions.get(key) || {};
     if (!pref.engine || pref.engine === 'metre') throw new Error('这个会话用的是 Metre 自己，不走外部引擎');
-    if (pref.threadId) {
+    if (bridge.decorate) text = await bridge.decorate(key, text); if (pref.threadId) { // 主脑也能派活：前面加派活说明（engines-dispatch.mjs）
       await bridge.send({threadId: pref.threadId, text, mode: mode === 'steer' ? 'steer' : 'queue'});
     } else {
       const folder = bridge.folderFor(key);
       const started = await bridge.start({folder, engine: pref.engine, model: pref.model, text, level: pref.level, plan: pref.plan === true, worktree: worktree === true});
-      bridge.sessions.set(key, {threadId: started.threadId, folder});
+      bridge.sessions.set(key, {threadId: started.threadId, folder}); await bridge.afterStart?.(key, started.threadId);
     }
     bridge.afterSay?.(key); // Metre 派给引擎的活：用户在引擎台或总谱里递了话，守望重新盯着它（engines-task.mjs）
     return view(key);
   });
   register(api, 'pinkie.engines.thread', async ({threadId}) => bridge.thread(String(threadId || '')));
   register(api, 'pinkie.engines.respond', async params => bridge.respond(params));
-  register(api, 'pinkie.engines.stop', async ({threadId}) => bridge.stop({threadId: String(threadId || '')}));
+  register(api, 'pinkie.engines.stop', async ({threadId}) => { const result = await bridge.stop({threadId: String(threadId || '')}); await bridge.afterStop?.(String(threadId || '')); return result; }); // 主脑停下，它派出去的活一起停
   register(api, 'pinkie.engines.organize', async params => bridge.organize(params));
   register(api, 'pinkie.engines.diff', async ({threadId}) => bridge.diff({threadId: String(threadId || '')}));
   // 引擎的打开、安装、登录（3.7）。托管的要引擎服务在跑；终端那条只有用户点了（open: true）才开窗口。
