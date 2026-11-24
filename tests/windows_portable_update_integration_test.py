@@ -87,6 +87,22 @@ sys.path.insert(0,os.path.join(repo,'app'))
 import app.windows_desktop as desktop
 desktop.GATEWAY_URL='http://127.0.0.1:'+os.environ['FIXTURE_PORT']+'/'
 WindowsUpdater=desktop.WindowsUpdater
+# 测试里不弹真窗口（产品默认行为不变）：App 侧的进度窗口换成替身，照常返回进程对象，
+# 于是命令行照常带 -ProgressShown，替换脚本不会自己再开一张；替换脚本里的问题窗口只记日志。
+stand_in_calls=[]
+class _NoWindow:
+    def terminate(self):pass
+    def poll(self):return None
+def _progress_stand_in(update_root,token,version):
+    stand_in_calls.append(token);return _NoWindow()
+WindowsUpdater._start_progress_window=staticmethod(_progress_stand_in)
+_PROBLEM='function Show-UpdateProblem([string]$Text) {'
+_helper=WindowsUpdater._directory_helper_source
+def _quiet_helper():
+    source=_helper()
+    assert source.count(_PROBLEM)==1,'Show-UpdateProblem signature changed; update the test stand-in'
+    return source.replace(_PROBLEM,_PROBLEM+"\n  Write-UpdateLog ('test stand-in: update problem window suppressed: ' + $Text); return",1)
+WindowsUpdater._directory_helper_source=staticmethod(_quiet_helper)
 exe=Path(exe);payload=Path(payload)
 updater=WindowsUpdater(exe.parent/'_internal',executable=exe)
 assert updater.portable
@@ -94,6 +110,7 @@ updater.prepared={'payload':payload,'sha256':digest,'version':'9.9.9'}
 if os.environ.get('FIXTURE_START_SECONDS'):updater.health_start_seconds=int(os.environ['FIXTURE_START_SECONDS'])
 if os.environ.get('FIXTURE_SWAP_SECONDS'):updater.swap_seconds=int(os.environ['FIXTURE_SWAP_SECONDS'])
 outcome=updater.launch_replacer()
+outcome['progressStandIn']=len(stand_in_calls)
 Path(result).write_text(json.dumps(outcome),encoding='utf-8')
 raise SystemExit(0 if outcome.get('started') else 1)
 '''
@@ -403,6 +420,8 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     out,err=process.communicate(timeout=30)
                 self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
+                # 防复发：进度窗口必须走测试替身（不在桌面上弹真窗口）。
+                self.assertEqual(outcome.pop('progressStandIn',None),1,'progress window was not replaced by the test stand-in')
                 if gateway_kind in ('unknown_external','mismatched_record','wrong_command','acl_denied'):
                     self.assertEqual(process.returncode,1,err.decode('utf-8',errors='replace'))
                     self.assertFalse(outcome['started'])

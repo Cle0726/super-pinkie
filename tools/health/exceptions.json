@@ -108,6 +108,12 @@
     "value": 211
   },
   {
+    "file": "ui/injections/regions.json",
+    "metric": "lines",
+    "reason": "合并 feat/metre-engines：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 在 metre 区域 files 里各登记一行（ui-region-ownership 测试要求头片段加载的每个文件都归属一个区域；本文件一行一个文件名，没有通配写法）。只多这 2 行，没有新区域、新根选择器或跨区域 CSS 放行。",
+    "value": 374
+  },
+  {
     "file": "ui/injections/laolao-dom-watch.js",
     "metric": "mutationObservers",
     "value": 1,
