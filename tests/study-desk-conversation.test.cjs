@@ -10,7 +10,9 @@ test('desk conversation is independent; ordinary learning chat has no tonight st
  try{
   h=await startHarness({handler,legacyUI:true});
   b=await playwright().chromium.launch({headless:true,channel:'chrome'});
-  const p=await b.newPage({viewport:{width:1440,height:900}}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(h.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation);
+  // reducedMotion: the today view's WebGL form stage otherwise redraws every frame; on GPU-less
+  // runners that software rendering starved parallel tests (see study-desk-chat-entry.test.cjs).
+  const p=await b.newPage({viewport:{width:1440,height:900},reducedMotion:'reduce'}),errors=[];p.on('pageerror',e=>errors.push(e.message));await p.goto(h.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation);
   await p.locator('.shell .chat-thread').evaluate(n=>{n.innerHTML='<article class="chat-group assistant"><div class="chat-bubble" data-message-id="outer" data-message-text="外部原聊天记录">外部原聊天记录</div></article>';});
   await p.locator('.shell .chat-bubble').hover();assert.equal(await p.locator('.pk-tonight:visible').count(),0);assert.equal(await p.locator('.pk-collect-btn:visible').count(),0);assert.equal(h.calls.filter(c=>c.method==='chat.history').length,0);
   await p.evaluate(()=>{__pinkieStudyDesk.go('today');__pinkieStudyDesk.setLayout('spread-chat');});await p.locator('#pinkie-desk-chat .pk-tonight').waitFor();
