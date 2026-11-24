@@ -237,3 +237,21 @@ test("Windows build keeps the build machine's real user folders out of core inst
   }
   assert.match(buildWin, /\ntrap \{ if \(\$savedUserEnv\) \{ foreach \(\$name in @\(\$savedUserEnv\.Keys\)\) \{ \[Environment\]::SetEnvironmentVariable\(/, 'a failed build still restores the caller environment');
 });
+
+test("macOS build keeps the build machine's real user folders out of core install, Cua staging, skin and patches", () => {
+  const buildMac = read('desktop/macos/build.sh');
+  const isolate = buildMac.indexOf('OPENCLAW_BUILD_HOME="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-home.XXXXXX")"');
+  const helper = buildMac.indexOf('run_with_isolated_home() {');
+  const install = buildMac.indexOf('run_with_isolated_home env PATH="$(dirname "$NODE_BIN"):$PATH"');
+  const pack = buildMac.indexOf('archive="$(run_with_isolated_home "$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" pack');
+  const theme = buildMac.indexOf('/bin/bash "$REPO_ROOT/installer/macos/apply-theme.sh"');
+  const managedSkills = buildMac.indexOf('run_with_isolated_home env OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw"');
+  assert.ok(isolate > 0 && helper > isolate, 'isolated home and helper are defined');
+  assert.ok(helper < install && install < pack && pack < theme && theme < managedSkills, 'core install, Cua pack, apply-theme, and managed-skills patch run after helper definition');
+  for (const name of ['HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'OPENCLAW_HOME', 'OPENCLAW_STATE_DIR', 'PINKIE_STATE_ROOT']) {
+    assert.match(buildMac, new RegExp(`\\b${name}="\\$OPENCLAW_BUILD_HOME/`));
+  }
+  assert.match(buildMac, /npm_config_userconfig="\$BUILD_NPM_USERCONFIG"/, 'preserves host .npmrc when present');
+  assert.match(buildMac, /run_with_isolated_home env \\\n[\s\S]{0,400}\/bin\/bash "\$REPO_ROOT\/installer\/macos\/apply-theme\.sh"/, 'apply-theme runs inside isolated home');
+  assert.match(buildMac, /super-pinkie-home\.\*/, 'cleanup trap removes temporary build home');
+});
