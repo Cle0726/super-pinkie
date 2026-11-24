@@ -168,7 +168,7 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
   arm(sessionKey, tier) {
     const agent = agentFromSessionKey(sessionKey);
     const mode = MODE_BY_AGENT[agent];
-    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持 CLE Kk 主模式与基础/加强/全开/长跑四档');
+    if (!mode || !TIER_LIMITS[tier]) throw new Error('只支持 C.le. 主模式与基础/加强/全开/长跑四档');
     const existing = this.getRun(sessionKey);
     if (existing?.active) throw new Error('上一轮档位任务仍在执行，请等最终交付后再发送下一条');
     const run = {

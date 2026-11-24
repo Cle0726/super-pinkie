@@ -273,7 +273,7 @@ class NativeBridge(InAppBrowserBridge):
             or len(parts) >= 2 and parts[:2] == ["library", "keychains"]
             or parts[0] == ".openclaw" and not is_openclaw_workspace
         ):
-            return {"ok": False, "message": "这个位置包含密钥或 CLE Kk 配置，不能从聊天里打开。"}
+            return {"ok": False, "message": "这个位置包含密钥或 C.le. 配置，不能从聊天里打开。"}
         if action == "check":
             try:
                 return {"ok": True, "name": path.name, "size": path.stat().st_size}

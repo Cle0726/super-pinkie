@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""超級碧琪 🎈 控制台 — CLE Kk 全功能安装与无限制注入工具（GUI 版）
+"""超級碧琪 🎈 控制台 — C.le. 全功能安装与无限制注入工具（GUI 版）
 
 一键完成（Windows / macOS 通用）：
-1. 环境检测与自动补齐（Node.js / CLE Kk 兼容内核）
+1. 环境检测与自动补齐（Node.js / C.le. 兼容内核）
 2. API Key 与模型供应商配置（OpenAI / Anthropic / Gemini / DeepSeek / 任意兼容中继）
 3. 提示词库复制与双传输层补丁（纯 Python 注入，无需手动 node）
 4. 四模式人格文件安装（chat / project / thinking / neutral）
 5. 来啦～老弟 完整 UI 皮肤与资源注入
-6. 注入代理自启与 CLE Kk 网关启停管理
+6. 注入代理自启与 C.le. 网关启停管理
 7. 一键状态健康检查与 Cle 验证引导
 
 用法（源码运行）:
@@ -162,7 +162,7 @@ def install_node_windows(log):
 
 def install_openclaw_npm(log):
     """通过 npm 全局安装 openclaw"""
-    log("==> 正在安装 CLE Kk 兼容内核...")
+    log("==> 正在安装 C.le. 兼容内核...")
     try:
         cmd = ["npm", "install", "-g", "openclaw"]
         if os.name == "nt":
@@ -173,12 +173,12 @@ def install_openclaw_npm(log):
             log("  " + line.rstrip())
         proc.wait()
         if proc.returncode == 0:
-            log("✅ CLE Kk 兼容内核安装成功！")
+            log("✅ C.le. 兼容内核安装成功！")
             return True
         else:
-            log(f"❌ CLE Kk 兼容内核安装失败，退出码: {proc.returncode}")
+            log(f"❌ C.le. 兼容内核安装失败，退出码: {proc.returncode}")
     except Exception as e:
-        log(f"❌ CLE Kk 兼容内核安装异常: {e}")
+        log(f"❌ C.le. 兼容内核安装异常: {e}")
     return False
 
 
@@ -406,9 +406,9 @@ def patch_ai_file(path, remove, log):
 def apply_patch(remove, log):
     root = resolve_openclaw_root()
     if not root:
-        log("✗ 未找到 CLE Kk 兼容内核。请先运行一键安装 / 修复。")
+        log("✗ 未找到 C.le. 兼容内核。请先运行一键安装 / 修复。")
         return False
-    log(f"CLE Kk 内核路径: {root}")
+    log(f"C.le. 内核路径: {root}")
     # 2026.9 moved the executable provider transport into @openclaw/ai and
     # leaves a small openai-transport-stream shim in the root dist. Keep the
     # legacy name for older installs, then fall back to the current transport
@@ -435,7 +435,7 @@ def apply_patch(remove, log):
     if ai_file:
         patch_ai_file(ai_file, remove, log)
     else:
-        log("✗ 未找到 CLE Kk 兼容传输层文件"); ok = False
+        log("✗ 未找到 C.le. 兼容传输层文件"); ok = False
     
     # 额外运行 apply-context-budget、apply-image-access 和 apply-metre-lock 脚本（如果存在）
     if not remove:
@@ -535,7 +535,7 @@ def _install_metre_role_assets(personas, openclaw_home, backup_root):
 
 
 def install_personas(log, register=True):
-    log("==> 正在安装 CLE Kk 模式人格文件...")
+    log("==> 正在安装 C.le. 模式人格文件...")
     home = Path.home()
     mapping = {
         "chat": home / ".openclaw" / "workspace",
@@ -873,8 +873,8 @@ def proxy_health(port=DEFAULT_PROXY_PORT):
 
 
 def restart_openclaw_gateway(log):
-    """重启 CLE Kk 网关"""
-    log("==> 正在重启 CLE Kk 网关...")
+    """重启 C.le. 网关"""
+    log("==> 正在重启 C.le. 网关...")
     try:
         res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
@@ -1353,8 +1353,8 @@ def run_control_center():
         health = proxy_health()
         
         status_var.set(
-            f"📦 Node.js: {node_v}   |   CLE Kk 内核: {oc_v}\n"
-            f"📂 CLE Kk 路径: {root_path}\n"
+            f"📦 Node.js: {node_v}   |   C.le. 内核: {oc_v}\n"
+            f"📂 C.le. 路径: {root_path}\n"
             f"💉 注入补丁: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
             f"🔄 代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'} (健康: {'✅' if health else '—'})"
         )
@@ -1372,9 +1372,9 @@ def run_control_center():
             else:
                 log("请先手动安装 Node.js (https://nodejs.org)")
                 
-        # 2. 检查 CLE Kk 兼容内核
+        # 2. 检查 C.le. 兼容内核
         if not resolve_openclaw_root():
-            log("⚠️ 未找到 CLE Kk 兼容内核，正在自动补齐...")
+            log("⚠️ 未找到 C.le. 兼容内核，正在自动补齐...")
             install_openclaw_npm(log)
             
         # 3. 安装提示词
@@ -1448,7 +1448,7 @@ def run_control_center():
             return
         update_api_config(prov, k, u, m, log)
         restart_openclaw_gateway(log)
-        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已保存，并已重启 CLE Kk 网关！")
+        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已保存，并已重启 C.le. 网关！")
 
     make_button(api_card, "💾 保存配置并应用", save_api_settings, color=DEEP).grid(row=4, column=1, sticky="e", padx=10, pady=10)
 

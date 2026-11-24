@@ -139,7 +139,7 @@ export class LongTermMemoryStore {
   }
 
   contextForSession(sessionKey) {
-    if (!validSession(sessionKey) || isChild(sessionKey)) throw new Error('只支持 CLE Kk 主模式的有效会话');
+    if (!validSession(sessionKey) || isChild(sessionKey)) throw new Error('只支持 C.le. 主模式的有效会话');
     const mode = modeForMemorySession(sessionKey);
     return {mode, sessionKey, workspaceDir: this.workspaceForMode(mode)};
   }

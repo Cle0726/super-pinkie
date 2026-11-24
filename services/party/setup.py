@@ -159,4 +159,4 @@ def install(home=None):
 
 
 if __name__ == '__main__':
-    print('派对专属 Agent 已安装。' if install() else '派对配置已就绪，或尚未配置 CLE Kk 内核。')
+    print('派对专属 Agent 已安装。' if install() else '派对配置已就绪，或尚未配置 C.le. 内核。')
