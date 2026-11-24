@@ -10,7 +10,7 @@
 | K0 摸底 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a（接手 Codex-Win-4d8c） | 2026-11-21 | [PR #41](https://github.com/Cle0726/super-pinkie/pull/41) |
 | K1 建内核仓库 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a | 2026-11-21 | [PR #50](https://github.com/Cle0726/super-pinkie/pull/50) |
 | K2 换成自己编译的内核 | 未开始（要等维护计划 M0、M5 合进主线） | | | |
-| K3 补丁搬进源码 | 未开始 | | | |
+| K3 补丁搬进源码 | 进行中（第 1/34 个 apply-same-session-recovery 已在 cle-core 本机提交 db2e27bb；12-01 前 cle-core 不推送，见 progress/K3.md） | Claude Code（m4 线，Windows） | 2026-11-24 | 分支 core/k3-patches |
 | K4 显示名字改为 C.le. | 进行中（草稿 PR；用户可见处 84 处已改，24 处因文件被 #54/#67/#74 占用延后，见 progress/K4.md） | Claude-Win-r7m3（Windows） | 2026-11-24 | [PR #77](https://github.com/Cle0726/super-pinkie/pull/77) |
 | K5 正式切换 | 未开始（发版要用户点头） | | | |
 | K6 界面搬进源码 | 未开始（要等维护计划 M3 收窄版完成） | | | |
