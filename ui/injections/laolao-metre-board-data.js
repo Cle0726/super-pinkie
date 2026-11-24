@@ -263,7 +263,7 @@
     const items = listed?.items || [];
     const wrap = h('div', 'pk-mb-memory');
     const cats = h('div', 'pk-mb-memory__cats');
-    cats.append(h('div', 'pk-mb-memory__folder', `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 5.5h5l1.5 2H17v8.5H3z"/></svg>${esc(stats.folder ? `现在用的是：${stats.name || stats.folder}` : '现在没绑文件夹')}<small>${stats.count} 条 · 了解 ${stats.known} / 9 类</small>`));
+    cats.append(h('div', 'pk-mb-memory__folder', `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 5.5h5l1.5 2H17v8.5H3z"/></svg>${esc(stats.folder ? `现在用的是：${stats.name || stats.folder}` : '现在没绑文件夹')}<small>${Number.isFinite(stats.count) ? stats.count : Object.values(stats.byCategory || {}).reduce((s, n) => s + (+n || 0), 0)} 条 · 了解 ${Number.isFinite(stats.known) ? stats.known : Object.values(stats.byCategory || {}).filter((n) => +n > 0).length} / 9 类</small>`));
     const max = Math.max(1, ...Object.values(stats.byCategory || {}));
     const shades = ['v1', 'v2', 'v3', 'v4', 'v5'];
     Object.entries(MEMORY_CATS).forEach(([cat, name], i) => {
