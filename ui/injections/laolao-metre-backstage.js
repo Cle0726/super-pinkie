@@ -58,7 +58,7 @@
     if (voices.length) {
       const n = (k) => voices.filter((v) => v.tone === k).length;
       const bits = [['fail', '失败'], ['wait', '等你'], ['run', '在跑']].filter(([k]) => n(k)).slice(0, 2).map(([k, w]) => `${n(k)} ${w}`);
-      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (n('fail') && n('wait') ? ` · ${n('fail')}✕ · ${n('wait')}!` : bits.length ? ' · ' + bits[0] : ''), pop: true};   // 窄的时候：失败、等你同时有就两个数都留（✕ 失败、! 等你），否则留最要紧的一项（失败 > 等你 > 在跑）
+      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (n('fail') && n('wait') ? ` · ${n('fail')} 败 · ${n('wait')} 等` : bits.length ? ' · ' + bits[0] : ''), pop: true};   // 窄的时候：失败、等你同时有就两个数都留（「败」「等」，不用符号：读屏会念成乘号 / 叹号），否则留最要紧的一项（失败 > 等你 > 在跑）
     } else eng = engines == null ? {tone: 'off', full: '引擎 还不知道', short: '引擎 —'}
       : !engines.enabled ? {tone: 'off', full: '引擎 关', short: '引擎 关'}
       : engines.running === false ? {tone: 'wait', full: '引擎 开 · 服务没在跑', short: '引擎 开'} : {tone: 'ok', full: '引擎 开', short: '引擎 开'};
@@ -73,14 +73,14 @@
       short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步 · 后台在跑'], ['sync', '不同步 · 后台空闲']]},
     queue: {full: ['排队 99'], short: ['排队 99']},
     eng: {full: ['引擎 还不知道', '引擎 关', '引擎 开 · 服务没在跑', ['pop', '引擎 99 · 9 等你 · 9 在跑'], ['pop', '引擎 99 · 9 失败 · 9 等你'], ['pop', '引擎 99 · 全部交回']],
-      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`]), ['pop', '引擎 99 · 9✕ · 9!']]},
+      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`]), ['pop', '引擎 99 · 9 败 · 9 等']]},
   };
 
   // ---------- 画 ----------
   const chip = (c, tier, syncing) => {
     const text = tier === 'full' ? c.full : c.short;
     const tag = c.pop ? 'button' : 'span';
-    return `<${tag}${c.pop ? ' type="button" aria-haspopup="true"' : ''} class="pk-bs__seg${c.pop ? ' pk-bs__seg--pop' : ''}" data-seg="${c.id}" data-tone="${c.tone}" title="${esc(c.title)}"><i aria-hidden="true"></i><span>${esc(text)}</span>${c.sync
+    return `<${tag}${c.pop ? ` type="button" aria-haspopup="true" aria-label="${esc(c.full)}"` : ''} class="pk-bs__seg${c.pop ? ' pk-bs__seg--pop' : ''}" data-seg="${c.id}" data-tone="${c.tone}" title="${esc(c.title)}"><i aria-hidden="true"></i><span>${esc(text)}</span>${c.sync
       ? `<button type="button" class="pk-bs__sync"${syncing ? ' disabled aria-busy="true"' : ''}>${syncing ? '同步中' : '同步'}</button>` : ''}${c.pop ? '<b class="pk-bs__caret" aria-hidden="true"></b>' : ''}</${tag}>`;
   };
   let band = null, sig = '', since = 0, lastPair = '', engines = null, enginesAt = 0, syncing = false, known = null, knownFor = '', askedAt = 0;
