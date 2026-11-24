@@ -1,18 +1,20 @@
 # M4 返工 · 恢复拆分前的 Windows 运行时行为 · 执行记录
 
-## 接力卡（最后更新：2026-11-24 03:42 UTC，Claude Code 接手执行者 @ Windows）
+## 接力卡（最后更新：2026-11-24 08:45 UTC，Claude Code 接手执行者 @ Windows）
 
-- 状态：返工第 2 轮已做完，等协调者复验（PR 保持草稿，不合并）
-- 分支和 PR：`maint/m4-fix-runtime`，[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)（草稿），证据头 `7af633bd`
+- 状态：**自查通过**（带 ★ 条目全部过；合并由协调者复验后做）
+- 分支和 PR：`maint/m4-fix-runtime`（已变基到 `origin/main` `815c0f78`），[PR #62](https://github.com/Cle0726/super-pinkie/pull/62)
 - 已完成（第 2 轮）：
-  1. rebase 到 origin/main，并补上 `app.` 兜底导入（a871b49e）；修好 Linux 上 lock_tampered 测试的 WindowsPath 报错（64cce696）。
-  2. verifyAfterCommand 偶发失败：main 上同样会出现，根因是 statKey 在同大小、同 mtime 时跳过检查，和 #64 的 EBUSY 不是同一件事。
-  3. 6 个函数的字节码差异来自 Python 3.13 类体 `__firstlineno__` 常量，属于编译差异，不是行为差异。冻结包 PYZ 实测：11 个模块全部走 `get_code`，没有 NameError。
-  4. windows-smoke 不是本 PR 引起的：本分支 45305393950、main 45317443287、v2.5.53 45299544643 都用 package=build，都挂在 `metre-sidebar` 探针；本分支和 main 的失败行逐字相同。
-  5. 测试不再弹窗：单独提交 7af633bd，只改 `tests/windows_portable_update_integration_test.py`，产品代码没动。CI 45316807530 四项全绿。
-  6. 同环境全量对照（本分支 7af633bd，main 12b644ea 加同一份测试替身）：门禁两边各 61 条，Python 两边各 6 条，失败集合相同，新增失败 0。全程窗口监视：真窗口 0 个。
-- 证据：PR #62 评论 https://github.com/Cle0726/super-pinkie/pull/62#issuecomment-7121337486。本机脚本、日志和证据在 `F:\Projects\super-pinkie\build\quick-run\m4\`（`full/sets-br3.json`、`full/sets-main3.json`、`watch-full3.log`、`smoke-*-failed.log`）。
-- 下一步：协调者复验后决定是否合并。metre-sidebar 探针在 main 和 v2.5.53 上同样失败，需要另开一条线处理。
+  1. 变基到最新 origin/main，补上 `app.` 兜底导入；修好 Linux 上 lock_tampered 测试的 WindowsPath 报错。
+  2. verifyAfterCommand 偶发失败：main 上同样出现，根因是 statKey 在同大小、同 mtime 时跳过检查，和 #64 的 EBUSY 不是同一件事（#64 已合入 main）。
+  3. 6 个函数的字节码差异来自 Python 3.13 类体 `__firstlineno__` 常量，属于编译差异；冻结包 PYZ 实测 11 个模块全走 `get_code`，没有 NameError。
+  4. 测试不再弹窗：单独提交（原 7af633bd，变基后 9c671274），只改 `tests/windows_portable_update_integration_test.py`，产品代码没动。
+  5. 同环境全量对照：门禁两边各 61 条、Python 两边各 6 条，失败集合相同，新增 0。
+  6. Z1 逐文件单独重跑（07:58–08:10 UTC，持 gate.lock）：便携更新测试两边失败的是同样 4 条；`windows_update_leftovers_test` 本分支 8/8 过，main 侧导入失败（`No module named release_notes`，正是本 PR 修的问题）。新增 0；我方目录弹窗 0；弹窗守护对我方目录 0 次动作。
+  7. Z2 收工快照已填并逐行判定（见第一节）；工作区里的 `%SystemDrive%` 缓存目录（4 个 shell 缓存 .db）已删。
+  8. 变基后新头 `84b5cd4f`：CI 45354088826 四项全绿；windows-smoke 45354095909（package=build）success，`[probe] metre-sidebar` passed，`overall passed=True`。
+- 证据：PR #62 评论 https://github.com/Cle0726/super-pinkie/pull/62#issuecomment-7121337486；本机 `F:\Projects\super-pinkie\build\quick-run\m4\`（`full/sets-br3.json`、`full/sets-main3.json`、`full/z1b-*-r1.txt`、`watch-z1b.log`、`z2-close.txt`、`z2-explain.txt`、`smoke-45354095909-84b5cd4f.log`）。
+- 下一步：协调者复验后合并。
 - 没推送的东西：无
 - 待用户决定：无
 
@@ -136,3 +138,12 @@
 | 测试弹窗 | 全量期间真进度窗口 0 个、带标题窗口 0 个（`watch-full3.log`） | 同（main 一侧临时加了同一份测试替身，未提交） | — |
 
 逐条证据见 PR #62 评论 https://github.com/Cle0726/super-pinkie/pull/62#issuecomment-7121337486。
+
+### 5.1 补充（变基到 `815c0f78` 之后，头 `84b5cd4f`）
+
+| 项 | 本分支 | 同环境 main | 新增失败 |
+|---|---|---|---|
+| Z1 逐文件单独重跑 `windows_portable_update_integration_test` | `FAILED (failures=4)` | `FAILED (failures=4)` | 0（同 4 条：reappearing_old_gateway / rollback_copies / slow_first_start / unpacked_files_held_open） |
+| Z1 逐文件单独重跑 `windows_update_leftovers_test` | `Ran 8 tests` `OK` | `ImportError: No module named 'release_notes'`（本 PR 修的缺陷，记为 main 侧失败） | 0 |
+| CI（4 项） | 45354088826：portable-checks / windows-checks / macos-check / windows-build 全部 success | — | — |
+| windows-smoke（package=build，old_tag=v2.5.16） | 45354095909 success：`[probe] metre-sidebar: passed True`，升级后六模式 ok，`overall passed=True` | — | — |
