@@ -1076,7 +1076,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] asid
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session { background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) #laolao-session-manager { margin-top: 22px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-recent-session__title, .sidebar-recent-session__link, .sidebar-recent-session a) { font-size: 14.5px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session { min-height: 34px !important; }
 /* 左下角账号栏：一行，圆形记号 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__footer { height: 54px !important; min-height: 54px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { left: 18px !important; bottom: 17px !important; width: auto !important; height: 36px !important; padding: 4px 8px 4px 6px !important; align-items: center !important; gap: 9px !important; }
@@ -2179,12 +2178,12 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-ch
 /* ---------- 真机回归 2（11-16 用户截图：「排版问题，重复问题」）----------
  * 1. 黑卡右上角的方灯掉在卡外、压着钴蓝投影：卡宽随字体浮动，灯却是写死的坐标。卡定宽 128px，灯收进卡里右上角，去掉奶白描边。
  *    不能再宽：原生壳会在底栏最前面插一个「全屏」按钮（Launcher.swift ensureFullScreenButton，浏览器里没有），从 x≈155 开始，
- *    140px 的卡和灯会压上去。卡在 aside 坐标系（left 16 → x16..144，top = 底栏 +13）；灯在底栏坐标系（底栏 x12），left = 144 - 12 - 4 - 10 = 118。
+ *    140px 的卡和灯会压上去。11-24 ui2 缺陷 7：灯在卡里和模式键两个按钮叠着（10×10），改成卡收窄到内容宽 120（26 + 9 + 48 + 9 - 4 + 14 + 内边距 18；x16..136，悬停投影到 140），灯放卡右边 x141..151（底栏 x12 → left 129），离全屏键 155 还有 4px。
  * 2. 临时会话（虚线圆）本该和搜索、收起在顶上同一行：展开态的 .sidebar-brand 本来是 0 高（上面 916 行），
  *    后来通用的 min-height: 48px 把它撑高，会话区（overflow: hidden）整体下移 48px，按钮掉到第二行。展开态恢复 0 高，
  *    按钮放在收起键右边（会话区 x12 起，left 80 → x92），右端留给原生壳的分屏按钮。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { width: 128px !important; justify-content: flex-start !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status { left: 118px !important; top: 16px !important; z-index: 3 !important; pointer-events: auto !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { width: 120px !important; min-width: 0 !important; justify-content: flex-start !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status { left: 129px !important; top: 16px !important; z-index: 3 !important; pointer-events: auto !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status__dot { outline: 0 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand { min-height: 0 !important; height: 0 !important; padding: 0 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar:not(.sidebar--collapsed) .pinkie-temp-entry { top: 0 !important; left: 80px !important; right: auto !important; }
@@ -2571,7 +2570,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe:focus-visible { outline-color: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__recipe.is-selected { background: var(--metre-hover) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
-
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe-copy small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }   /* 11-24 ui2 缺陷 6：820 宽能力卡说明被省略号截掉，Metre 里折行 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .qs-identity-grid { align-items: start; }   /* 11-24 ui2 缺陷 4：「助手身份」卡被旁边「你」那张撑高成大框，Metre 里按各自内容高 */
 /* ---- 工作台在 Metre 里用 Metre 的颜色 ----
  * 工作台所有模式共用，浅色时是碧琪的藕粉（底 #eadde6、字 #563f50 / #735d6a）、强调是粉色。换掉它的色板变量即可；
  * Git 的增删改颜色是语义色，不动。 */
