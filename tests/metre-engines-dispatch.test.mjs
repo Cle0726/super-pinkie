@@ -295,3 +295,38 @@ test('a Metre session driven by an engine from its first message gets a gateway 
   env.bridge.sessions.set(BRAIN, {threadId: '', dispatchNonce: ''});
   assert.match(await env.dispatch.decorate(BRAIN, '第三句'), /^【Metre · 派活说明】/);
 });
+
+test('an engine brain counts as its own engine model, not Metre\'s default, and can list Bizhi\'s models (11-24 third real run)', async t => {
+  const {chooseChildModel} = await import('../services/mode-architecture/metre-models.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-engine-dispatch-self-'));
+  const config = {agents: {defaults: {model: {primary: 'mm/workbuddy/hy4free'}}, list: [{id: 'metre'}, {id: 'main'}]}};
+  const modelCalls = [];
+  const lineage = {
+    lineage: () => ({}), turns: new Map(), state: () => ({}),
+    // Metre 自己的取法：没有本轮调用记录、会话里也没选模型时，退回配置默认。
+    selfModel: async () => 'mm/workbuddy/hy4free',
+    models: async (key, params) => { modelCalls.push({key, params}); return {models: [{id: 'mm/workbuddy/hy4free'}], self: await lineage.selfModel(key)}; },
+    start: async () => { throw new Error('这个模式的默认模型（mm/workbuddy/hy4free）和你自己相同，必须写 model：先用 pinkie_models 选一个更轻的'); },
+  };
+  const bridge = {sessions: new SessionEngines(path.join(root, 'sessions.json'))};
+  const dispatch = registerEngineDispatch({logger: null}, {bridge, lineage, isEnabled: () => true});
+  t.after(() => { dispatch.close(); fs.rmSync(root, {recursive: true, force: true}); });
+  bridge.sessions.set(BRAIN, {engine: 'claudeAgent', model: 'claude-haiku-5-5', threadId: THREAD, dispatchNonce: NONCE, dispatchThread: THREAD});
+  assert.equal(await lineage.selfModel(BRAIN), 'claudeAgent/claude-haiku-5-5');
+  assert.equal(await lineage.selfModel(OTHER), 'mm/workbuddy/hy4free');
+  // 有了正确的「自己」，碧琪模式的默认模型不再被当成派给自己。
+  assert.deepEqual(chooseChildModel({config, selfModel: await lineage.selfModel(BRAIN), targetAgent: 'main'}), {model: 'mm/workbuddy/hy4free', explicit: false});
+  const otherSelf = await lineage.selfModel(OTHER);
+  assert.throws(() => chooseChildModel({config, selfModel: otherSelf, targetAgent: 'main'}), /和你自己相同/);
+  const token = signToken(dispatch.seed, NONCE, Date.now() + TOKEN_TTL_MS);
+  const listed = await dispatch.call(token, {action: 'models', tier: 'light'});
+  assert.deepEqual(modelCalls, [{key: BRAIN, params: {tier: 'light', query: ''}}]);
+  assert.equal(listed.self, 'claudeAgent/claude-haiku-5-5');
+  assert.match(dispatch.note(NONCE, Date.now() + TOKEN_TTL_MS), /"action":"models"/);
+  // 引擎调不到 pinkie_models：经 HTTP 回给它的报错换成这里的写法。
+  const port = await dispatch.listen();
+  const refused = await post(port, token, {action: 'start', title: '清单', task: '三条', mode: 'chat'});
+  assert.equal(refused.body.ok, false);
+  assert.doesNotMatch(refused.body.error, /pinkie_models/);
+  assert.match(refused.body.error, /\{"action":"models"\}/);
+});

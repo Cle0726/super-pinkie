@@ -22,7 +22,7 @@ import {isMetreKey} from './session-lineage.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
 
 export const TOKEN_TTL_MS = 24 * 60 * 60_000;
-export const ACTIONS = Object.freeze(['start', 'ask', 'engine', 'engines', 'say', 'list', 'show', 'result', 'stop']);
+export const ACTIONS = Object.freeze(['start', 'ask', 'models', 'engine', 'engines', 'say', 'list', 'show', 'result', 'stop']);
 const MAX_BODY = 64 * 1024;
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'engines-dispatch-cli.mjs');
 const clip = (text, n) => String(text ?? '').slice(0, n);
@@ -84,6 +84,12 @@ export class EngineDispatch {
     const pref = this.bridge.sessions.get(key);
     return this.isBrain(key, pref) ? String(pref.threadId || '') : '';
   }
+  // 外部引擎当主脑时「自己」是它用的引擎模型（如 claudeAgent/claude-haiku-5-5），不是 Metre 配置里的默认模型：
+  // 不然碧琪模式的默认模型和 Metre 默认相同，就会被当成「派给自己」拒掉（11-24 第三次真跑）。
+  brainModel(key) {
+    const pref = this.bridge.sessions.get(key);
+    return this.isBrain(key, pref) && pref.model ? `${pref.engine}/${pref.model}` : '';
+  }
 
   async listen() {
     if (this.server) return this.port;
@@ -112,7 +118,8 @@ export class EngineDispatch {
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return send(400, {ok: false, error: '请求不是 JSON'}); }
       const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
       try { send(200, {ok: true, ...await this.call(auth, body)}); }
-      catch (error) { send(error.status || 200, {ok: false, error: clip(error.message, 500)}); }
+      // Metre 的报错让它「先用 pinkie_models」：外部引擎调不到这个工具，换成这里对应的写法。
+      catch (error) { send(error.status || 200, {ok: false, error: clip(String(error.message).replace(/pinkie_models/g, '{"action":"models"}'), 500)}); }
     });
   }
 
@@ -134,6 +141,7 @@ export class EngineDispatch {
         context: 'fresh', ...(params.mode ? {mode: params.mode} : {}), ...(params.role ? {role: params.role} : {}), ...(params.of ? {of: params.of} : {}),
         ...(params.model ? {model: params.model} : {}), ...(params.folder ? {folder: params.folder} : {})}, callId);
     }
+    if (action === 'models') return lineage.models(key, {tier: params.tier || '', query: params.query || ''});
     if (action === 'ask') return lineage.ask(key, runId, {mode: params.mode, role: params.role, question: params.question, background: params.background, model: params.model}, callId);
     if (action === 'engine' || action === 'engines') {
       if (!this.tasks) throw new Error('这里不能把活派给别的外部引擎');
@@ -219,6 +227,7 @@ export class EngineDispatch {
       `在终端里跑下面这条命令（令牌已经写在里面，照抄即可），请求 JSON 从标准输入给：${cmd} < 请求.json`,
       '也可以把 JSON 直接写在命令最后一个参数里（用单引号括起来）。请求的写法（action 必写）：',
       '- 开子会话：{"action":"start","title":"短标题","task":"简报：做什么、文件路径、做到什么样算完、怎么验证","mode":"project|chat|ideas|learning|unrestricted"}（或写 "role" 代替 mode）',
+      '- 看碧琪能用的模型：{"action":"models"}（可加 "tier":"light|mid|top" 或 "query":"…"）。start / ask 不写 model 就用那个模式的默认；要写就写这里返回的 id',
       '- 问一个模式一句话：{"action":"ask","mode":"ideas","question":"…","background":"…"}',
       '- 派给别的编码引擎：先 {"action":"engines"} 看能用的，再 {"action":"engine","engine":"<id>","model":"<id>","task":"…"}',
       '- 查进度 {"action":"list"}；递话 {"action":"say","target":"<key>","text":"…"}；停下 {"action":"stop","target":"<key>"}；取结果 {"action":"result","target":"<key>"}',
@@ -260,6 +269,11 @@ export function registerEngineDispatch(api, {bridge, lineage, tasks = null, isEn
   const dispatch = new EngineDispatch({bridge, lineage, tasks, isEnabled, logger: api?.logger});
   bridge.decorate = (key, text) => dispatch.decorate(key, text);
   bridge.afterStart = (key, threadId) => dispatch.afterStart(key, threadId).catch(error => api?.logger?.warn?.(`engines dispatch token: ${error.message}`));
+  if (typeof lineage.selfModel === 'function' && !lineage.selfModelWrapped) {
+    lineage.selfModelWrapped = true;
+    const selfModel = lineage.selfModel.bind(lineage);
+    lineage.selfModel = async (key, parent) => dispatch.brainModel(key) || selfModel(key, parent);
+  }
   bridge.afterStop = async threadId => { const key = dispatch.brainByThread(threadId); if (key) await dispatch.stopFamily(key).catch(() => null); };
   // 只包真有这两个方法的血缘（metre-board 的测试替身等没有 send / stopAll，原样不动）。
   if (!lineage.dispatchWrapped && typeof lineage.send === 'function' && typeof lineage.stopAll === 'function') {
