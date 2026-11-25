@@ -1267,7 +1267,8 @@
 
   // ---------- 关于页「第三方许可」（PLAN 3.6，用户 11-23 定：「关于与更新」最后一行，点「查看」弹出全文） ----------
   // 设置页只留空位 .pinkie-user-settings__notices（带 row / button），再发 pinkie:settings-notices。不连网关，五个模式都能看。
-  // NOTICES-BEGIN：全项目唯一可以写这两个项目原名的地方（MIT 要求保留版权和许可声明）。MIT 全文 11-23 和 v0.1.11 的 LICENSE 逐字对过。
+  // NOTICES-BEGIN：界面上唯一可以写这几个项目原名的地方（MIT 要求保留版权和许可声明）。T3 Code 的 MIT 全文 11-23 和 v0.1.11 的 LICENSE 逐字对过；
+  // OpenClaw 的 MIT 全文 11-24 和 openclaw@2026.7.1-2 包里的 LICENSE 前 21 行逐字对过（用户 11-24：界面只在这里出现 OpenClaw）。
   const NOTICES = `引擎服务
 Metre「外部引擎」用到的引擎服务是 T3 Code（https://github.com/pingdotgg/t3code）的官方发布包，固定版本，未经修改；只在你打开外部引擎时才下载到这台电脑上。T3 Code 按 MIT 许可证发布，全文见最下面。
 
@@ -1276,6 +1277,9 @@ Metre 的放手程度分级、乐手（把机器人当成联系人）和「看�
 
 更多引擎
 从「更多引擎」里加上的引擎是各家自己的软件，按各自的许可证发布（列表里写着），由引擎服务从公开的 ACP 注册表下载。
+
+C.le. 内核
+C.le. 内核分叉自 OpenClaw（https://github.com/openclaw/openclaw）2026.7.1-2 版，之后由我们自己维护。OpenClaw 按 MIT 许可证发布，全文见最下面。
 
 ————
 
@@ -1287,6 +1291,9 @@ Several Metre features (tiered approval levels, players as contacts, and watchin
 
 More engines
 Engines added from "More engines" are their makers' own software, each under its own license (shown in the list), downloaded by the engine service from the public ACP Registry.
+
+C.le. kernel
+The C.le. kernel is a fork of OpenClaw (https://github.com/openclaw/openclaw) version 2026.7.1-2 and is maintained by us from then on. OpenClaw is distributed under the MIT License; the full text is at the bottom.
 
 ————
 
@@ -1310,13 +1317,37 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+————
+
+MIT License
+
+Copyright (c) 2026 OpenClaw Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`;
   // NOTICES-END
   function mountNotices(host) {
     const kit = host?.pinkieKit;
     if (!host || host.dataset.pkNotices || typeof kit?.row !== 'function' || typeof kit?.button !== 'function') return;
     host.dataset.pkNotices = 'on';
-    const line = kit.row(host, '第三方许可', 'Metre 外部引擎用到的开源软件，和借鉴过的设计。');
+    const line = kit.row(host, '第三方许可', 'C.le. 内核和 Metre 外部引擎用到的开源软件，和借鉴过的设计。');
     kit.button('查看', 'pinkie-user-settings__button pinkie-user-settings__button--small', line.control, () => {
       host.querySelector('.pk-notices')?.remove();
       const box = h('dialog', 'pk-notices');
