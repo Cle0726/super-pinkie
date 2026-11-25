@@ -234,7 +234,9 @@ test(`P1: approval buttons stay filled although the theme forces glass on .btn, 
         return {btns, cobalt: v('--metre-cobalt'), card: getComputedStyle(document.querySelector('.exec-approval-card')).backgroundColor,
           meta: [...document.querySelectorAll('.exec-approval-meta-row')].map((row) => [...row.children].map((c) => c.dataset.pkZh || c.textContent.trim())),
           who: [...document.querySelectorAll('.pk-perm-q__who')].map((e) => e.textContent.trim()),
-          sub: getComputedStyle(document.querySelector('.exec-approval-sub'), '::after').content};
+          sub: getComputedStyle(document.querySelector('.exec-approval-sub'), '::after').content,
+          qEdge: getComputedStyle(document.querySelector('.exec-approval-queue')).borderTopColor,
+          qYes: (() => { const c = getComputedStyle(document.querySelector('.pk-perm-q__btn--yes')); return {bg: c.backgroundColor, edge: c.borderTopColor, color: c.color}; })()};
       });
       const tag = night ? '夜' : '日';
       const [once, always, deny] = r.btns;
@@ -248,6 +250,12 @@ test(`P1: approval buttons stay filled although the theme forces glass on .btn, 
         assert.ok(ratio(b.color, b.fill) >= 4.5, `${tag}：「${b.text}」字和底 ${ratio(b.color, b.fill).toFixed(2)}（${JSON.stringify(b)}）`);
       }
       assert.equal(r.sub, '"2 分钟后过期"', `${tag}：过期时间用中文单位`);
+      // 控件轮廓 ≥ 3:1（look.py 第三轮：始终允许 1.34–1.54、拒绝 2.35–2.76、夜间胶囊 1.87）
+      for (const b of [always, deny]) assert.ok(ratio(b.edge, b.fill) >= 3, `${tag}：「${b.text}」边框 ${ratio(b.edge, b.fill).toFixed(2)}`);
+      assert.ok(ratio(r.qEdge, always.fill) >= 3, `${tag}：待处理胶囊轮廓 ${ratio(r.qEdge, always.fill).toFixed(2)}`);
+      // 待批列表的「允许一次」不是实心钴蓝底，底部「允许一次」是唯一的实心按钮；字和边看得清
+      assert.notEqual(hex(r.qYes.bg), r.cobalt.toUpperCase(), `${tag}：列表里的允许一次不抢主按钮（${JSON.stringify(r.qYes)}）`);
+      assert.ok(ratio(r.qYes.color, r.qYes.bg) >= 4.5 && ratio(r.qYes.edge, r.qYes.bg) >= 3, `${tag}：列表允许一次字 ${ratio(r.qYes.color, r.qYes.bg).toFixed(2)} 边 ${ratio(r.qYes.edge, r.qYes.bg).toFixed(2)}`);
       assert.deepEqual(r.meta, [['代理', 'Metre'], ['工作目录', '~/demo'], ['安全', '只跑允许清单里的'], ['询问策略', '不在清单里就问']], `${tag}：详情区中文`);
       assert.ok(r.who.includes('harness') && !r.who.some((w) => /刚刚/.test(w)), `${tag}：来源只取会话名（${JSON.stringify(r.who)}）`);
       await p.close();

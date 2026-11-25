@@ -4,8 +4,8 @@
  * 字要对谱线也 ≥ 4.5:1——日间 ink2 #4D4A44 5.07、warn #6A440C 4.94、cobalt-ink #2A4199 5.21；夜间按下态底是钴蓝 14%，
  * --metre-cobalt 只有 4.4，cobalt-ink 提到 #A3B1F0（va-b5\pixel-contrast.py 按真截图量）。 */
 
-html[data-laolao-mode="metre"] { --pk-perm-ink2: #4D4A44; --pk-perm-warn: #6A440C; --pk-perm-cobalt-ink: #2A4199; --pk-perm-danger: var(--metre-danger); --pk-perm-rule: var(--metre-line); }
-html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; --pk-perm-cobalt-ink: #A3B1F0; --pk-perm-danger: color-mix(in srgb, var(--metre-danger) 80%, var(--metre-text)); --pk-perm-rule: color-mix(in srgb, var(--metre-muted) 40%, transparent); }
+html[data-laolao-mode="metre"] { --pk-perm-ink2: #4D4A44; --pk-perm-warn: #6A440C; --pk-perm-cobalt-ink: #2A4199; --pk-perm-danger: var(--metre-danger); --pk-perm-rule: var(--metre-line-strong); --pk-perm-edge: var(--metre-muted); }
+html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; --pk-perm-cobalt-ink: #A3B1F0; --pk-perm-danger: color-mix(in srgb, var(--metre-danger) 80%, var(--metre-text)); --pk-perm-rule: color-mix(in srgb, var(--metre-muted) 60%, transparent); --pk-perm-edge: var(--metre-muted); }
 
 /* ---------- P1 审批卡（原生 openclaw-exec-approval，弹在顶层） ---------- */
 @keyframes pk-perm-born { from { outline-color: transparent; } to { outline-color: transparent; } }
@@ -30,7 +30,7 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-title { fon
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub,
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta { color: var(--pk-perm-ink2); font: 400 12.5px/1.6 var(--metre-sans); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-queue {
-  color: var(--metre-text); background: transparent; border: 1px solid var(--pk-perm-rule); border-radius: 999px;
+  color: var(--metre-text); background: transparent; border: 1px solid var(--pk-perm-edge); border-radius: 999px;
   padding: 2px 10px; font: 400 12.5px/1.5 var(--metre-sans);
 }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-command {
@@ -44,30 +44,31 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .bt
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn,
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn {
   min-height: 32px; padding: 0 14px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--metre-line-strong); background: var(--metre-surface); color: var(--metre-text);
+  border: 1px solid var(--pk-perm-edge); background: var(--metre-surface); color: var(--metre-text);
   font: 400 13.5px/1 var(--metre-sans); box-shadow: none; transition: background-color 120ms ease, border-color 120ms ease;
 }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover,
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:hover,
-html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn:hover { background: var(--metre-hover); border-color: var(--metre-muted); }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary,
-html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes { background: var(--metre-cobalt); border-color: var(--metre-cobalt); color: var(--metre-surface); }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover,
-html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes:hover { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); border-color: var(--metre-cobalt); }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger { color: var(--pk-perm-danger); border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn:hover { background: var(--metre-hover); border-color: var(--metre-text); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary { background: var(--metre-cobalt); border-color: var(--metre-cobalt); color: var(--metre-surface); }
+/* 待批列表的「允许一次」是次级操作：钴蓝描边 + 钴蓝字，不抢底部主按钮 */
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes { background: var(--metre-surface); border-color: var(--pk-perm-cobalt-ink); color: var(--pk-perm-cobalt-ink); }
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes:hover { background: var(--metre-hover); border-color: var(--pk-perm-cobalt-ink); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); border-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger { color: var(--pk-perm-danger); border-color: var(--pk-perm-danger); }
 /* 主题 laolao-theme.css 给所有不是 .danger 的 .btn 强制玻璃底、白色半透明边框和按键粉字（带强制优先级），Metre 皮肤只去掉了渐变和阴影，
  * 底色和边框仍被压成透明 / 白色——日间「允许一次 / 始终允许」看着像纯文字。不加强制覆盖：底和边画在 ::before 上（主题管不到伪元素），
  * 字色走主题自己读的 --mode-button-ink。 */
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn { position: relative; isolation: isolate; border-width: 0; padding: 0 15px; --mode-button-ink: var(--metre-text); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
-  border: 1px solid var(--metre-line-strong); background: var(--metre-surface); transition: background-color 120ms ease, border-color 120ms ease;
+  border: 1px solid var(--pk-perm-edge); background: var(--metre-surface); transition: background-color 120ms ease, border-color 120ms ease;
 }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover::before { background: var(--metre-hover); border-color: var(--metre-muted); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover::before { background: var(--metre-hover); border-color: var(--metre-text); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary { --mode-button-ink: var(--metre-surface); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary::before { background: var(--metre-cobalt); border-color: var(--metre-cobalt); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover::before { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger::before { border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger::before { border-color: var(--pk-perm-danger); }
 /* 详情区原生标签和值是英文（中文语言包里 cwd 也是「CWD」，security / ask 的值没有翻译）：脚本按当前文字给中文别名，只改显示 */
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub[data-pk-zh] { font-size: 0; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub[data-pk-zh]::after { content: attr(data-pk-zh); font-size: 12.5px; }
