@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import {fileURLToPath} from 'node:url';
 import {formatMeasurement, measure} from '../tools/health/measure.mjs';
-import {healthChanges, readJson, SYNC_HINT} from '../tools/health/ratchet.mjs';
+import {healthChanges, loadExceptions, readJson, SYNC_HINT} from '../tools/health/ratchet.mjs';
 
 test('代码健康度：每个文件不能变差，改善后要同步基线', async () => {
   const baseline = readJson(new URL('../tools/health/baseline.json', import.meta.url));
-  const exceptions = readJson(new URL('../tools/health/exceptions.json', import.meta.url));
+  const exceptions = loadExceptions(fileURLToPath(new URL('..', import.meta.url)));
   const {increases, decreases, unused} = healthChanges(await measure(undefined, {includeTestInventory: false}), baseline, exceptions);
   const notes = [...increases, ...decreases, ...unused].map(message => `- ${message}`);
   if (decreases.length) notes.push(SYNC_HINT);
