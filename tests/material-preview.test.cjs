@@ -55,7 +55,7 @@ test('materials stay inside the workspace rail and image click can reuse the exi
 });
 
 test('both desktop shells provide a local material transport without changing tool access', () => {
-  const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const mac = read('desktop/macos/pinkie/Sources/Launcher.swift') + '\n' + read('desktop/macos/pinkie/Sources/LauncherWebBridge.swift');
   const material = read('desktop/macos/pinkie/Sources/MaterialPreview.swift');
   const windows = read('app/windows_bridge.py');
   assert.match(material, /final class MaterialPreviewSchemeHandler: NSObject, WKURLSchemeHandler/);
