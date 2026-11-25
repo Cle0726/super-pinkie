@@ -53,7 +53,8 @@
     const security = a.security ?? d.security ?? 'full', ask = a.ask ?? d.ask ?? 'off';
     return (LEVELS.find((l) => l.security === security && l.ask === ask) || {id: 'custom'}).id;
   }
-  // 本批自己的读取哪几项没读到（网关没回 / 报错）：状态键说「没读到」，详情里列出来并能重试。额度、文件夹没数据是常态，不算。
+  // 本批自己的读取哪几项没读到（网关没回 / 报错）：状态键说「没读到」，详情里列出来、对应行写「没读到」，并能重试。
+  // 读到了但确实没有（没绑文件夹、账号没给额度数据）是常态，照旧那样写，不算没读到。
   const fails = new Set();
   async function loadLevel() {
     fails.delete('放手程度');
@@ -93,9 +94,11 @@
       const s = (res?.sessions || []).find((x) => x?.key === key) || res?.sessions?.[0] || null;
       state.usage = s ? {model: s.model || s.modelOverride || '', provider: s.modelProvider || s.providerOverride || '', ...(s.usage || {})} : null;
     } catch { state.usage = null; fails.add('用量'); }
-    try { state.folder = String((await rpc('pinkie.project.bind', {key}, 8000))?.binding?.root || ''); } catch { state.folder = ''; }
+    fails.delete('工作目录');
+    try { state.folder = String((await rpc('pinkie.project.bind', {key}, 8000))?.binding?.root || ''); } catch { state.folder = ''; fails.add('工作目录'); }
   }
   async function loadQuota() {
+    fails.delete('额度');
     try {
       const res = await rpc('usage.status', {}, 10000);
       let best = null;
@@ -105,7 +108,7 @@
         if (!best || remaining < best.remaining) best = {provider: p.displayName || p.provider || '', label: w.label || '', remaining, resetAt: w.resetAt || null};
       }
       state.quota = best;
-    } catch { state.quota = null; }
+    } catch { state.quota = null; fails.add('额度'); }
   }
   let quotaTimer = 0;
   const quotaLoop = () => { clearTimeout(quotaTimer); quotaTimer = setTimeout(async () => { if (isMetre()) { await loadQuota(); paint(true); } quotaLoop(); }, 5 * 60_000); };
@@ -281,6 +284,7 @@
       bad.append(again); menu.append(bad);
     }
     const u = state.usage || {};
+    const miss = (k) => fails.has(k) ? '没读到' : '';
     const pc = planCounts(state.plan);
     if (pc.total) {
       const plan = el('div', 'pk-perm-pop__plan');
@@ -289,12 +293,12 @@
       const fill = el('i'); fill.style.width = Math.round(pc.done / pc.total * 100) + '%'; bar.append(fill); plan.append(bar); menu.append(plan);
     }
     menu.append(
-      detailRow('模型', [u.provider, u.model].filter(Boolean).join(' / ')),
-      detailRow('开始', Number.isFinite(u.firstActivity) ? when(u.firstActivity) : ''),
-      detailRow('工作目录', state.folder || '没绑文件夹'),
-      detailRow('本会话令牌', tokens(u.totalTokens) + (Number.isFinite(u.input) ? `（读 ${tokens(u.input)} · 写 ${tokens(u.output)}）` : '')),
-      detailRow('本会话花费', money(u.totalCost) + (Number.isFinite(u.totalCost) ? '（估算）' : '')),
-      detailRow('额度', state.quota ? `${state.quota.provider} ${state.quota.label} 还剩 ${state.quota.remaining}%` + (state.quota.resetAt ? ` · ${when(state.quota.resetAt)} 重置` : '') : '这个账号没给额度数据'),
+      detailRow('模型', miss('用量') || [u.provider, u.model].filter(Boolean).join(' / ')),
+      detailRow('开始', miss('用量') || (Number.isFinite(u.firstActivity) ? when(u.firstActivity) : '')),
+      detailRow('工作目录', miss('工作目录') || state.folder || '没绑文件夹'),
+      detailRow('本会话令牌', miss('用量') || tokens(u.totalTokens) + (Number.isFinite(u.input) ? `（读 ${tokens(u.input)} · 写 ${tokens(u.output)}）` : '')),
+      detailRow('本会话花费', miss('用量') || money(u.totalCost) + (Number.isFinite(u.totalCost) ? '（估算）' : '')),
+      detailRow('额度', miss('额度') || (state.quota ? `${state.quota.provider} ${state.quota.label} 还剩 ${state.quota.remaining}%` + (state.quota.resetAt ? ` · ${when(state.quota.resetAt)} 重置` : '') : '这个账号没给额度数据')),
     );
     if (fold >= 2) {
       const lv = LEVELS.find((l) => l.id === state.level);

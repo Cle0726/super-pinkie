@@ -318,11 +318,14 @@ test(`when the gateway does not answer, the status key says so and details list 
   const browser = await launch();
   try {
     const p = await open(browser);
-    await p.evaluate(() => { window.__save = {...window.__resp}; delete window.__resp['exec.approvals.get']; delete window.__resp['pinkie.metre.planMode.get']; return window.PinkieMetrePerm.refresh(); });
+    await p.evaluate(() => { window.__save = {...window.__resp}; for (const m of ['exec.approvals.get', 'pinkie.metre.planMode.get', 'sessions.usage', 'pinkie.project.bind', 'usage.status']) delete window.__resp[m]; return window.PinkieMetrePerm.refresh(); });
     await p.waitForFunction(() => document.querySelector('.pk-perm-chip--stat')?.textContent === '没读到');
     await p.click('.pk-perm-chip--stat');
     const fail = await p.textContent('.pk-perm-pop__fail');
-    assert.match(fail, /放手程度/); assert.match(fail, /先出方案/); assert.match(fail, /没读到/);
+    for (const k of ['放手程度', '先出方案', '用量', '工作目录', '额度']) assert.match(fail, new RegExp(k), `没读到清单里有${k}`);
+    // 读失败的行写「没读到」，不借用「没绑文件夹」「这个账号没给额度数据」「—」这类「本来就没有」的说法（look.py 场景二轮）
+    const rows = Object.fromEntries(await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__row', (n) => n.map((r) => [r.querySelector('.pk-perm-pop__k').textContent, r.querySelector('.pk-perm-pop__v').textContent])));
+    for (const k of ['模型', '开始', '工作目录', '本会话令牌', '本会话花费', '额度']) assert.equal(rows[k], '没读到', `${k}：${rows[k]}`);
     assert.equal(await p.$eval('.pk-perm-pop__fail .pk-perm-pop__btn', (e) => getComputedStyle(e).whiteSpace), 'nowrap', '弹层按钮不折行');
     await p.evaluate(() => { Object.assign(window.__resp, window.__save); });
     await p.click('.pk-perm-pop__fail .pk-perm-pop__btn');
