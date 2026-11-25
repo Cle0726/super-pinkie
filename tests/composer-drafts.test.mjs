@@ -21,6 +21,36 @@ function harness({durable=new Map(),inputSupport=false,reading=false,modeDock=fa
   return {saved,durable,listeners,timers,state,controller,native:context.native};
 }
 
+// The document-wide input capture also runs for textareas outside the composer
+// (whiteboard editor, settings fields). On the startup home page it falls back
+// to the primary pane's state, so it must not touch a textarea it did not find.
+const runtimeChunk=fs.readFileSync(new URL('../ui/runtime/chat-page-DrPkxqJK.js',import.meta.url),'utf8');
+const pickFunction=(source,name)=>{const m=new RegExp('function '+name+'\\([^)]*\\) \\{[\\s\\S]*?\\n\\}').exec(source);assert.ok(m,name+' is present');return m[0];};
+function startupHomeCapture(source){
+  const listeners=new Map(),local=new Map(),state={sessionKey:'agent:thinking:main',settings:{gatewayUrl:'ws://gateway-one'}},pane={state};
+  const document={addEventListener:(name,fn)=>listeners.set(name,fn),querySelectorAll:()=>[pane],querySelector:selector=>selector==='openclaw-chat-pane'?pane:null,
+    documentElement:{hasAttribute:key=>key==='data-laolao-startup-home',getAttribute:()=>null}};
+  const context=vm.createContext({document,localStorage:{getItem:key=>local.get(key)??null,setItem:(key,value)=>local.set(key,value),removeItem:key=>local.delete(key)},Date});
+  vm.runInContext(pickFunction(source,'pinkieComposerReadOnly')+'\n'+pickFunction(source,'pinkieCaptureComposerInput')+'\npinkieCaptureComposerInput(url=>String(url),(s,key)=>key);',context);
+  return {input:listeners.get('input'),local,pane};
+}
+
+test('the patch and the reviewed runtime chunk carry the same input capture',()=>{
+  assert.equal(pickFunction(runtimeChunk,'pinkieCaptureComposerInput'),pickFunction(transform(original),'pinkieCaptureComposerInput'));
+});
+
+for(const [label,source] of [['patch output',transform(original)],['ui/runtime chunk',runtimeChunk]]){
+  test(`${label}: typing outside the composer on the startup home neither throws nor writes a draft`,()=>{
+    const h=startupHomeCapture(source);assert.equal(typeof h.input,'function');
+    const whiteboard={value:'白板便签',closest:()=>null};
+    assert.doesNotThrow(()=>h.input({target:whiteboard}));
+    assert.equal([...h.local.keys()].filter(key=>key.startsWith('pinkie.composerDraft')).length,0);
+    const composer={value:'首页草稿',closest:selector=>selector==='openclaw-chat-pane'?null:composer};
+    h.input({target:composer});
+    assert.equal(JSON.parse(h.local.get('pinkie.composerDraft.v2:ws://gateway-one:agent%3Athinking%3Amain')).draft,'首页草稿','the composer on the startup home still saves');
+  });
+}
+
 test('typing persists immediately even when the native queue does not change',()=>{
   const h=harness();h.state.chatMessage='这个问题还没写完\n第二行';h.controller.schedule();h.controller.persistChangedState();
   assert.equal(h.timers.size,0);
