@@ -1563,7 +1563,7 @@
     "ui/injections/laolao-metre-prefs.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 135,
+      "lines": 154,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
