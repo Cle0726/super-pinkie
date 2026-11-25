@@ -2114,7 +2114,7 @@ private final class UpdateProgressController: NSObject, NSApplicationDelegate {
 @main
 struct LauncherMain {
     static func main() {
-        let arguments = CommandLine.arguments
+        let arguments = CommandLine.arguments; if PinkieAppWindow.runIfRequested(arguments) { return }  // 装到桌面的作品：只开这件作品的窗口（AppWindow.swift）
         if let flag = arguments.firstIndex(of: "--update-progress"), flag + 1 < arguments.count {
             let app = NSApplication.shared
             let controller = UpdateProgressController(file: URL(fileURLWithPath: arguments[flag + 1]))
