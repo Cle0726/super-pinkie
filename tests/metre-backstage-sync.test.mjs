@@ -176,3 +176,55 @@ test('the short tier of the band still says what failed or waits, and which side
     assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
   } finally { await browser.close(); }
 });
+
+test('the band and the model row under the composer sit on one solid theme plate, day and night, so no pixel backdrop shows behind their text', {timeout: 60_000}, async (t) => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage({viewport: {width: 1024, height: 768}});
+    // 一整块红色铺在最底下代替像素背景（skin.css 会把 html / body 刷成主题底色，所以不能直接染 body）：底板 / 带子哪里没盖住，取色就会取到红色
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-skin.css')}</style><style>${read('laolao-metre-keys.css')}</style>
+      <style>body { margin: 0; } .agent-chat__composer-shell { position: fixed; left: 122px; top: 638px; width: 780px; height: 106px; z-index: 1; }</style></head>
+      <body><div id="pixel-stand-in" style="position:fixed;inset:0;z-index:0;background:rgb(255,0,0)"></div><div class="agent-chat__composer-shell"><section class="agent-chat__input"></section></div>
+      <div class="pk-metre-backstage" style="left:122px;top:736px;width:780px;z-index:2"><span class="pk-bs__label">后台</span><span class="pk-bs__seg" data-tone="fail"><i></i><span>引擎 4</span></span></div></body></html>`;
+    await tab.route('http://127.0.0.1:30121/**', (route) => route.fulfill({contentType: 'text/html', body}));
+    await tab.goto('http://127.0.0.1:30121/chat');
+    const look = () => tab.evaluate(() => {
+      const shell = document.querySelector('.agent-chat__composer-shell'), band = document.querySelector('.pk-metre-backstage');
+      const cs = getComputedStyle(shell), r = shell.getBoundingClientRect();
+      return {plate: cs.backgroundImage, bandBg: getComputedStyle(band).backgroundColor, labelInk: getComputedStyle(band.querySelector('.pk-bs__label')).color,
+        bg: getComputedStyle(document.documentElement).getPropertyValue('--metre-bg').trim(), h: Math.round(r.height)};
+    });
+    const lum = (rgb) => { const v = rgb.match(/\d+/g).slice(0, 3).map((n) => +n / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((m, n) => n - m); return (hi + 0.05) / (lo + 0.05); };
+    // 首页（没有后台带）：外壳照旧透明
+    let s = await look();
+    assert.equal(s.plate, 'none', '没有后台带时外壳不加底板');
+    for (const night of [false, true]) {
+      await tab.evaluate((n) => { const h = document.documentElement; h.setAttribute('data-metre-bs', ''); if (n) h.setAttribute('data-pinkie-night', ''); else h.removeAttribute('data-pinkie-night'); }, night);
+      s = await look();
+      const want = night ? 'rgb(21, 21, 20)' : 'rgb(247, 246, 243)';
+      assert.equal(s.bandBg, want, (night ? '夜间' : '日间') + '后台带整条是 --metre-bg 底色');
+      assert.match(s.plate, /linear-gradient\(to top, rgb\(\d+, \d+, \d+\) 68px, rgba\(0, 0, 0, 0\) 68px\)/, '外壳下 68px（框体下圆角到后台带）一块底板');
+      assert.ok(s.plate.includes(want), (night ? '夜间' : '日间') + '底板也是 --metre-bg');
+      assert.ok(ratio(s.labelInk, s.bandBg) >= 4.5, '「后台」字对底 ≥ 4.5:1');
+      // 真画出来：模型那一排（外壳下沿往上 14–44px）和带子上取色，不能是红的
+      // 取色只看底板和带子自己：把输入框本体拿掉（它自带 --metre-surface 底色，会盖住外壳上部，让「上面透出背景」那一点取不到红）
+      await tab.evaluate(() => document.querySelector('.agent-chat__composer-shell .agent-chat__input')?.remove());
+      const shot = await tab.screenshot({clip: {x: 122, y: 638, width: 780, height: 122}});
+      const px = await tab.evaluate(async (b64) => { const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode(); const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        const at = (x, y) => [...g.getImageData(x, y, 1, 1).data].slice(0, 3).join(',');
+        return {model: [at(20, 106 - 30), at(400, 106 - 20), at(770, 106 - 40)], band: [at(4, 98 + 12), at(500, 98 + 3), at(775, 98 + 12)], above: at(400, 2)}; }, shot.toString('base64'));
+      const wantPx = want.match(/\d+/g).join(',');
+      // 截图解码会有 ±1–2 的色差，差 4 以内算同一底色（红色差两百多，不会混进来）
+      const near = (got) => got.split(',').every((c, i) => Math.abs(+c - +wantPx.split(',')[i]) <= 4);
+      assert.ok(px.model.every(near), '模型那一排身后是实底，像素背景透不出来：' + px.model.join(' / '));
+      assert.ok(px.band.every(near), '后台带左端「后台」、格与格之间、右端都是实底：' + px.band.join(' / '));
+      assert.equal(px.above, '255,0,0', '底板只到框体下圆角，上面对话区照旧透出背景');
+    }
+  } finally { await browser.close(); }
+});
