@@ -163,7 +163,10 @@ export function summarizeProviders(providers = [], {platform = process.platform,
       setup: {canInstall: provider.setup?.canInstall === true || info?.managed?.install === true && provider.installed !== true,
         canAuthenticate: provider.setup?.canAuthenticate === true},
       ...(() => {
-        const models = (Array.isArray(provider.models) ? provider.models : []).map(model => ({
+        // 「碧琪模型」那几行只列碧琪的模型：引擎服务把这家自带的模型排在前面、实例 customModels 排在后面（标 isCustom）。
+        // 11-25 真机：不筛的话 Claude Code 那一行前面是它自己的 claude-sonnet-5-5 之类，选了会不走碧琪的 top 档。
+        const listed = (Array.isArray(provider.models) ? provider.models : []).filter(model => !pinkie || model?.isCustom === true);
+        const models = listed.map(model => ({
           slug: String(model.slug || ''), name: String(model.name || model.slug || ''), isDefault: model.isDefault === true,
         })).filter(model => model.slug);
         const limit = quota(provider.usageLimits, models);
