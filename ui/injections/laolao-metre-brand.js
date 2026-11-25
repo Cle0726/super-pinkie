@@ -141,7 +141,7 @@
     const maxAngle = Math.atan2(halfTop, len);
     line(cx - halfTop, top, cx, pivotY, 'dim');
     line(cx + halfTop, top, cx, pivotY, 'dim');
-    const beatPos = reduced() ? 0.5 : ((now - startAt) % (BEAT * 2)) / (BEAT * 2);   // 一个来回两拍
+    const beatPos = reduced() ? 0.5 : (Date.now() % (BEAT * 2)) / (BEAT * 2);   // 一个来回两拍；按 Date.now() 落拍，和背景的摆锤、猫点头同一个钟（11-23）
     const angle = maxAngle * Math.cos(beatPos * Math.PI * 2);
     const tipX = cx + Math.sin(angle) * len, tipY = pivotY - Math.cos(angle) * len;
     line(cx, pivotY, tipX, tipY, 'ink');
@@ -157,7 +157,7 @@
       x0 += 7;
     }
     // 四个拍点：强-弱-弱-弱，当前那一拍点亮
-    const beat = reduced() ? 0 : Math.floor((now - startAt) / BEAT) % 4;
+    const beat = reduced() ? 0 : Math.floor(Date.now() / BEAT) % 4;
     const beatsY = wordY + 10;
     const starts = [-7, -2, 2, 6];
     starts.forEach((off, i) => {

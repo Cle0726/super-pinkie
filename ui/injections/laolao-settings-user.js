@@ -205,7 +205,7 @@
     return {label, tone, detail};
   };
 
-  const kernelCredit = (version) => `C.le. 内核 ${version} · 基于 OpenClaw（MIT）`; // K4 关于页署名
+  const kernelCredit = (version) => `C.le. 内核 ${version}`; // K4 关于页署名（用户 11-24：不写上游名字，MIT 声明在「第三方许可」里）
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,
@@ -379,7 +379,7 @@
     const hotkeyRow = row(notifyCard, "快速提问快捷键", "在任何地方按下，弹出小窗直接问碧琪。");
     const hotkeyLabel = element("kbd", "pinkie-user-settings__kbd", hotkeyRow.control, prettyHotkey(defaultHotkey()));
     const record = button("修改", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
-    const off = button("关闭", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
+    const off = button("关闭", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control); button("全部快捷键", "pinkie-user-settings__button pinkie-user-settings__button--small pinkie-user-settings__all-keys", hotkeyRow.control, () => void window.PinkieArtifacts?.openShortcuts?.());   // K4：快捷键一览（⌘/ · Ctrl+/）在设置里的入口
     const applyHotkey = async accelerator => {
       let result = {ok: true, accelerator};
       try { result = await bridge()?.pinkieNative({type: "setHotkey", accelerator}) || result; }

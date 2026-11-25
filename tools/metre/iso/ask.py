@@ -1,7 +1,7 @@
 """在 Metre 隔离网关上发消息（一批并行），打印每条的回复前 400 字。
 
   python -I -X utf8 tools/metre/iso/ask.py metre:你好 project:你好 ...      # agent:消息
-  可选环境变量 METRE_ISO_MODEL（默认 mm/workbuddy/hy4free）、METRE_ISO_LABEL（会话 key 的批次名）
+  可选环境变量 METRE_ISO_MODEL（默认 mm/workbuddy/hy4flash-free；用户 11-24：hy4free 不可用）、METRE_ISO_LABEL（会话 key 的批次名）
 """
 import concurrent.futures as cf, json, os, subprocess, sys, time
 from pathlib import Path
@@ -10,7 +10,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gateway as gw  # noqa
 
-MODEL = os.environ.get('METRE_ISO_MODEL', 'mm/workbuddy/hy4free')
+MODEL = os.environ.get('METRE_ISO_MODEL', 'mm/workbuddy/hy4flash-free')
 LABEL = os.environ.get('METRE_ISO_LABEL', time.strftime('%H%M%S'))
 
 

@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  METRE_MAIN_REFERENCE: a85a7449103efa49674ed4f49725c1e93b943de0
+  METRE_MAIN_REFERENCE: cb7931c30ef82b7ac591bec456bd0c2bb7ee048f
 
 jobs:
   portable-checks:
@@ -163,8 +163,10 @@ jobs:
           $version = (Get-Content 'tools/pinkie-toolbox/toolbox-manifest.json' -Raw | ConvertFrom-Json).playwrightVersion
           npm install --prefix $deps --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
           if ($LASTEXITCODE -ne 0) { throw 'Unable to install browser test dependencies' }
-          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit
-          if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit for browser tests' }
+          # chromium-headless-shell: the pinned Playwright Chromium the real-page
+          # visual/hotspot suites capture with (same revision as portable-checks).
+          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install webkit chromium-headless-shell
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install WebKit / Chromium for browser tests' }
           "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify tool image trace and Metre sidebar in Chrome on Windows
         timeout-minutes: 5
