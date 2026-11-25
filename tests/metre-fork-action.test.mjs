@@ -42,8 +42,8 @@ const BODIES = [
   ['表格', '<table><tr><th>列一</th><th>列二</th></tr><tr><td>一</td><td>二</td></tr></table>'],
 ];
 const KEY = '<button class="pinkie-session-card__button pinkie-fork-action" type="button">从这里分出去</button>';
-// 页脚照真页面：左边时间，右边原生三个 24px 键（删除 / 在画布中打开 / 复制）。
-const FOOTER = '<div class="chat-group-footer" style="display:flex;align-items:center;gap:8px;margin-top:8px;min-height:24px"><span class="chat-group-timestamp">19:00</span>'
+// 页脚照真页面：行高 26px（碧琪的消息键是 26px），左边 11px / 13.2px 的时间，右边原生三个 24px 键（删除 / 在画布中打开 / 复制）。
+const FOOTER = '<div class="chat-group-footer" style="display:flex;align-items:center;gap:8px;margin-top:8px;min-height:26px"><span class="chat-group-timestamp" style="font-size:11px;line-height:13.2px">19:00</span>'
   + `<div class="chat-group-footer-actions" style="margin-left:auto;display:flex;gap:4px">${'<button type="button" aria-label="原生键" style="width:24px;height:24px;padding:0"></button>'.repeat(3)}</div></div>`;
 const bubble = (id, html, key = true, cls = '') => `<div class="chat-bubble${cls}" style="width:fit-content;max-width:100%" data-message-id="${id}"><div class="chat-text">${html}</div>${key ? KEY : ''}</div>`;
 const group = (w, inner, attr = '') => `<div class="chat-group assistant"${attr} style="display:flex;margin-bottom:16px"><div class="chat-group-messages" style="width:${w}px">${inner}${FOOTER}</div></div>`;
@@ -91,7 +91,11 @@ async function measure(tab) {
       const btnHit = [...document.querySelectorAll('.chat-thread button')].filter((e) => !e.matches('.pinkie-fork-action') && ov(e.getBoundingClientRect())).length;
       const last = Boolean(bub.nextElementSibling?.matches('.chat-group-footer'));
       const fq = grp.querySelector('.chat-group-footer')?.getBoundingClientRect();
-      return {hits, btnHit, last, inGroup: q.left >= gq.left - 0.5 && q.right <= gq.right + 0.5 && q.top >= gq.top - 0.5 && q.bottom <= gq.bottom + 0.5,
+      // 页脚行里：键的竖直中线和页脚行、原生键、时间一致；字号、行高和时间一样。
+      const ts = grp.querySelector('.chat-group-timestamp'); const ks = getComputedStyle(k); const tss = ts && getComputedStyle(ts);
+      const mid = (a) => (a.top + a.bottom) / 2; const nb = grp.querySelector('.chat-group-footer-actions button')?.getBoundingClientRect();
+      const align = fq && ts && nb ? {dRow: Math.abs(mid(q) - mid(fq)), dTime: Math.abs(mid(q) - mid(ts.getBoundingClientRect())), dNative: Math.abs(mid(q) - mid(nb)), type: [ks.fontSize, ks.lineHeight].join('/'), timeType: [tss.fontSize, tss.lineHeight].join('/')} : null;
+      return {hits, btnHit, last, align, inGroup: q.left >= gq.left - 0.5 && q.right <= gq.right + 0.5 && q.top >= gq.top - 0.5 && q.bottom <= gq.bottom + 0.5,
         inFooterRow: Boolean(fq) && q.top >= fq.top - 0.5 && q.bottom <= fq.bottom + 0.5, op: getComputedStyle(k).opacity, to: [(q.left + q.right) / 2, (q.top + q.bottom) / 2]};
     }, sel);
     let minOp = 1;
@@ -143,6 +147,18 @@ for (const night of [false, true]) {
           assert.equal(m.minOp, 1, `${tag}：鼠标从正文移到键的路上键消失了`);
           assert.ok(m.onKey, `${tag}：鼠标到了键中心却点不到键`);
           if (m.last) assert.ok(m.inFooterRow, `${tag}：组里最后一条的键应该在页脚行里`);
+          if (m.last && m.align) {
+            assert.ok(m.align.dRow <= 0.5 && m.align.dTime <= 0.5 && m.align.dNative <= 0.5, `${tag}：页脚行里键和行、时间、原生键的中线没对齐 ${JSON.stringify(m.align)}`);
+            assert.equal(m.align.type, m.align.timeType, `${tag}：页脚行里键的字号 / 行高要和时间一样`);
+          }
+        }
+        // 反例：键回到 24px 高、不设字号行高（738c4dfa 的写法），中线差 1px、字号比时间大。
+        if (w === WIDTHS[0]) {
+          const OLD = 'min-height: 24px; }'; const NEW = 'min-height: 26px; font-size: 11px; line-height: 1.2; }';
+          assert.ok(skin.includes(NEW), '找不到页脚行键的对齐写法');
+          await open('metre', [cards, skin.replace(NEW, OLD)], w);
+          const old = Object.values(await measure(tab)).filter((m) => m.last && m.align);
+          assert.ok(old.length > 0 && old.every((m) => m.align.dRow > 0.5 && m.align.type !== m.align.timeType), `反例没抓到对不齐：${JSON.stringify(old.map((m) => m.align))}`);
         }
         const nokey = await tab.evaluate(() => { const g = document.getElementById('nokey'); return [getComputedStyle(g.querySelector('.chat-group-footer')).paddingRight, getComputedStyle(g.querySelector('.chat-bubble')).paddingBottom]; });
         assert.deepEqual(nokey, ['0px', '0px'], `宽${w}：没有键的气泡（正在输出）不该让位`);
