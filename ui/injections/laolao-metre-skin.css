@@ -433,7 +433,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinki
   border: 0 !important;
   box-shadow: none !important;
   border-radius: 8px !important;
-  font: 400 13px/1 var(--metre-sans) !important;
+  font: 400 13px/1.35 var(--metre-sans) !important; /* 1.35 同原生模型名：1 时模型名行框只有 13px，overflow:hidden 在 win32 切掉「g」下伸部 */
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger, .laolao-deep-think-btn, .laolao-context-viewer > summary):hover { color: var(--metre-text) !important; background: var(--metre-hover) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger) :is(span, .pinkie-external-tier) { font: inherit !important; color: inherit !important; }
@@ -1122,7 +1122,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
   --metre-bg: #151514;
   --metre-surface: #232321;
   --metre-text: #ECEAE4;
-  --metre-muted: #918D84;
+  --metre-muted: #918D84; --sb-ink: var(--metre-text); /* 侧栏非当前标题用 --sb-ink：日间公式混了夜间 accent 成 #5A5469（2.5:1） */
   --metre-line: #272725;
   --metre-line-strong: #393835;
   --metre-accent: #93A5EE;
@@ -2528,7 +2528,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5)
    只留一层分组（「最近」的标题行藏掉，laolao-metre-list.js）；状态记号在导航图标那一列；选中 = 左边一条钴蓝细线 + 很淡的底，和「新会话」区分开 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-group.pk-ml-flat > .laolao-group__head { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar :is(.laolao-group__head, .laolao-group__empty) { padding-left: 39px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-date { display: flex; align-items: center; justify-content: space-between; min-height: 28px; box-sizing: border-box; padding: 10px 4px 2px 39px !important; font: 500 12px/16px var(--metre-sans) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-date { display: flex; align-items: center; justify-content: space-between; min-height: 28px; box-sizing: border-box; padding: 10px 4px 2px 39px !important; font: 500 12px/16px var(--metre-sans) !important; color: var(--metre-muted) !important; opacity: 1; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-date > .pinkie-recent-menu { width: 22px; height: 22px; padding: 0; border-radius: 5px; opacity: 0; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-group:is(:hover, :focus-within) .pinkie-session-date > .pinkie-recent-menu { opacity: 1; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session { position: relative; align-items: center; min-height: 32px !important; padding: 0 8px 0 39px !important; border-radius: 6px !important; background: transparent !important; box-shadow: none !important; }
@@ -2537,7 +2537,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5)
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session__link { padding: 0 !important; gap: 6px; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session__name { font: 400 14px/20px var(--metre-sans) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-unread .sidebar-recent-session__name { font-weight: 600 !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-time { font: 400 12px/20px var(--metre-sans) !important; color: var(--metre-muted) !important; font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-time { font: 400 12px/20px var(--metre-sans) !important; color: var(--metre-muted) !important; font-variant-numeric: tabular-nums; opacity: 1; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .session-row-aside > :is(.pinkie-session-unread, [class*="pinkie-session-status--"]) { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot { position: absolute; left: 15px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; pointer-events: none; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot[data-state="waiting"] { background: var(--metre-accent); }
