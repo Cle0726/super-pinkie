@@ -68,7 +68,7 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
   try {
     const tab = await browser.newPage();
     let mode = 'metre';
-    await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html', body: page(mode)}));
+    await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html; charset=utf-8', body: page(mode)}));
     await tab.goto('http://127.0.0.1:30119/chat?session=agent%3Ametre%3Ap1');
     await tab.evaluate(() => localStorage.clear());
     await tab.addScriptTag({content: DOMWATCH});
