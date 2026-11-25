@@ -562,7 +562,8 @@ test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut m
     assert.equal(tight.fold, '2', `这个宽度收到只剩「详情」（${JSON.stringify(tight)}）`);
     assert.equal(tight.text, '详情', '键的文字不变');
     assert.equal(tight.mark, '"▾"', `「详情」带 ▾，看得出能展开（${JSON.stringify(tight)}）`);
-    assert.equal(tight.ownedDisplay, 'inline-flex', `真结构：选择器自己的 label 是 inline-flex（${JSON.stringify(tight)}）`);
+    // theme.css:4883 写的是 inline-flex；放在 flex 的 summary 里会被块级化，算出来是 flex。两种都是 flex 容器，text-overflow 都不生效。
+    assert.match(tight.ownedDisplay, /^(inline-)?flex$/, `真结构：选择器自己的 label 是 flex 容器（${JSON.stringify(tight)}）`);
     assert.equal(tight.clipped, true, `模型名截了（${JSON.stringify(tight)}）`);
     assert.ok(!/flex/.test(tight.display) && tight.holder.includes('pinkie-external-model-name'),
       `名字文字在自己的 .pinkie-external-model-name 里，不是直接写在 inline-flex 的 label 上（flex 容器不画「…」）（${JSON.stringify(tight)}）`);
