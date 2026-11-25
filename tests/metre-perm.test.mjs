@@ -603,6 +603,38 @@ test(`when the other keys already wrap with the full model name, the name is cut
   } finally { await browser.close(); }
 });
 
+// linux 真页面（reducedMotion: reduce）上游有 *{transition-duration:.01ms!important}，transition-property 默认 all：
+// 模型名的 max-width 一改就起一段过渡，measure() 同步读到的还是旧的 260px，每一档截短都算「放不下」，一路收到「⋯」。
+// 带上这条规则，收拢结果要和不带时一样。
+test(`a reduced-motion rule that gives every element a tiny transition does not change how the row folds (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const run = async (upstreamReduce) => {
+      const p = await open(browser, {width: 1280});
+      if (upstreamReduce) await p.addStyleTag({content: '*,:before,:after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}'});
+      await longModelRow(p);
+      await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:59px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
+      await p.evaluate(() => {
+        const c = document.querySelector('.agent-chat__composer-controls');
+        const w = (s) => c.querySelector(s).getBoundingClientRect().width;
+        c.style.width = Math.ceil(w(':scope > .pk-eng-chip') + w(':scope > .chat-composer-model-control') + w(':scope > .laolao-context-viewer') + 8 - 30) + 'px';
+      });
+      await p.evaluate(() => window.PinkieMetrePerm.fit());
+      const out = await p.evaluate(() => {
+        const c = document.querySelector('.agent-chat__composer-controls'), box = c.querySelector(':scope > .pk-perm-chips');
+        const label = c.querySelector('.chat-composer-model-control .chat-controls__inline-select-label');
+        return {fold: box.dataset.fold, labelW: Math.round(label.getBoundingClientRect().width),
+          rows: new Set([...c.children].filter((k) => k.getBoundingClientRect().height > 0).map((k) => Math.round(k.getBoundingClientRect().top))).size};
+      });
+      await p.close();
+      return out;
+    };
+    const plain = await run(false), reduced = await run(true);
+    assert.notEqual(plain.fold, '3', `复现前提：不带这条规则时不用收到「⋯」（${JSON.stringify(plain)}）`);
+    assert.deepEqual(reduced, plain, `带上游 reduced-motion 规则时收拢结果不变（不带 ${JSON.stringify(plain)}，带 ${JSON.stringify(reduced)}）`);
+  } finally { await browser.close(); }
+});
+
 // 按键行底下横穿着谱线：va-b5 真截图里字底下最难读的像素，日间 #C8C4BB、夜间 #232429；「先出方案」按下态的底日间 #B8B7BA、夜间 #313443。
 // 字对这些像素也要 ≥ 4.5:1。改前日间 ink2 #5F5C55 只有 3.8、warn #8A5A12 3.4，夜间按下态钴蓝 4.4；夜间计划进度条底槽和卡片底几乎一样（1.05）。
 test(`key text stays at least 4.5:1 over the stave lines behind the key row, and the night plan bar track is visible (${engine})`, {timeout: 60_000}, async () => {
