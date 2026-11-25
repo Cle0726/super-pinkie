@@ -84,6 +84,7 @@ export function loadExceptions(root) {
       if (!target) throw new Error(`${EXCEPTION_DELTAS_DIR}/${name}：${file} 的 ${metric} 在 ${EXCEPTIONS_FILE} 里没有基础条目；新例外要写进 ${EXCEPTIONS_FILE}。`);
       target.value += add;
       target.reason = `${target.reason} ${reason.trim()}（${name}，+${add}）`;
+      target.deltas = [...(target.deltas ?? []), {name, add}];   // 「没被用到」时告诉人改哪几个文件
     }
   }
   return merged;
@@ -172,9 +173,15 @@ export function healthChanges(current, baseline, exceptions = []) {
     }
   }
   // An exception nothing needs is a dormant pass for future growth: report it.
+  const deltasOf = new Map(exceptions.map(entry => [`${entry.file}\0${entry.metric}`, entry.deltas ?? []]));
   const unused = [...approved.keys()].filter(key => !used.has(key)).sort().map(key => {
     const [file, metric] = key.split('\0');
-    return `${file}：${LABEL[metric]} 的例外（value ${approved.get(key)}）没有被用到，请从 tools/health/exceptions.json 删除。`;
+    const deltas = deltasOf.get(key) ?? [];
+    if (!deltas.length) return `${file}：${LABEL[metric]} 的例外（value ${approved.get(key)}）没有被用到，请从 tools/health/exceptions.json 删除。`;
+    // 生效值里有增量：先动增量文件（各 PR 自己的），增量都删完还多再改 exceptions.json 的基础值，免得又去改那条大家共用的数字。
+    const parts = deltas.map(({name, add}) => `${EXCEPTION_DELTAS_DIR}/${name} +${add}`).join('、');
+    const baseValue = approved.get(key) - deltas.reduce((sum, {add}) => sum + add, 0);
+    return `${file}：${LABEL[metric]} 的例外（生效值 ${approved.get(key)} = ${EXCEPTIONS_FILE} 的基础值 ${baseValue} + ${parts}）没有被用到：先减小或删掉 ${EXCEPTION_DELTAS_DIR} 里对应的增量文件；增量都删完还多，再改 ${EXCEPTIONS_FILE} 的基础值（实际值等于基线时整条删掉）。`;
   });
   return {increases, decreases, unused};
 }
