@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {test} from 'node:test';
+import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {CompanionAssistant, TITLE_MODEL} from '../services/mode-architecture/companion.mjs';
 import {
@@ -236,7 +237,7 @@ test('a duplicate title is numbered, and an internal-only session is flagged wit
 });
 
 test('title transport ignores helper settings, explicitly turns thinking off, and never changes models', async () => {
-  const model = {id: 'workbuddy/hy4free', compat: {supportsTemperature: false}, reasoning: true};
+  const model = {id: 'workbuddy/hy4flash-free', compat: {supportsTemperature: false}, reasoning: true};
   const models = [model, {id: 'other-model', reasoning: true}];
   const config = {models: {providers: {mm: {api: 'openai-completions', baseUrl: 'http://127.0.0.1:1/v1', apiKey: 'test', models}}}};
   const calls = [];
@@ -245,16 +246,29 @@ test('title transport ignores helper settings, explicitly turns thinking off, an
     return new Response(JSON.stringify({choices: [{finish_reason: 'stop', message: {content: '{"title":"系统内存清理"}'}}]}));
   }});
   assistant.setSettings({mode: 'chat', settings: {model: 'mm/other-model', thinking: 'high', temperature: 1}});
-  assert.equal(TITLE_MODEL, 'mm/workbuddy/hy4free');
+  assert.equal(TITLE_MODEL, 'mm/workbuddy/hy4flash-free');
   assert.equal(await assistant.title('帮我找找怎么清理系统内存'), '系统内存清理');
-  assert.equal(calls[0].model, 'workbuddy/hy4free');
-  assert.equal(calls[0].max_tokens, 120);
+  assert.equal(calls[0].model, 'workbuddy/hy4flash-free');
+  assert.equal(calls[0].max_tokens, 400);
   // hy4free 不传思考参数时会把全部 token 用在思考上、正文为空（11-11 实测），必须显式关掉。
   assert.equal(calls[0].reasoning_effort, 'none');
   assert.equal(calls[0].temperature, undefined);
   models.shift();
   await assert.rejects(assistant.title('另一个主题'), /title-model-unavailable/);
   assert.equal(calls.length, 1);
+});
+
+// 用户 11-24：hy4free 在号池这把 key 上回 404，产品代码换成同一份免费额度的 hy4flash-free，不设付费后备。
+test('product code no longer points at the retired hy4free model', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'services');
+  const hits = [];
+  for (const entry of fs.readdirSync(root, {recursive: true})) {
+    if (!/\.(?:mjs|cjs|js|json|py)$/.test(entry)) continue;
+    const text = fs.readFileSync(path.join(root, entry), 'utf8');
+    for (const [n, line] of text.split(/\r?\n/).entries()) if (/['"`](?:mm\/)?workbuddy\/hy4free['"`]/.test(line)) hits.push(`${entry}:${n + 1}`);
+  }
+  assert.deepEqual(hits, []);
+  assert.equal(TITLE_MODEL, 'mm/workbuddy/hy4flash-free');
 });
 
 test('provider failure consumes at most three attempts across new turns', async t => {
