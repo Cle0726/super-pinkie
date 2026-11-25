@@ -56,6 +56,19 @@ test('灵感圆桌：同一份脚本按 data-host="roundtable" 走圆桌服务�
   assert.match(CSS, /\.pk-whiteboard-entry\.is-inline \{[^}]*border: 1px solid var\(--wb-edge\)/);
 });
 
+test('编辑框：放便签后不立刻失焦、双击按坐标找元素、分组名不被便签挡住（真页面由 probe-wb.js 验）', () => {
+  // 真浏览器里（probe-wb-debug.js）：按下时重画换掉了按住的节点，默认聚焦落到 body，按键跑去聊天输入框，
+  // 原生 dblclick 也不来。所以按下先拦默认动作、自己把焦点给白板，双击在 down() 里自己认。
+  const down = JS.slice(JS.indexOf('  function down('), JS.indexOf('  function move('));
+  const head = down.slice(0, down.indexOf('setPointerCapture'));
+  assert.match(head, /ev\.preventDefault\(\);/);
+  assert.match(head, /st\.root\.focus\(\{preventScroll: true\}\)/);
+  assert.match(head, /now - last\.t < 450[\s\S]*?openEditor\(item\)/);
+  assert.doesNotMatch(JS, /addEventListener\('dblclick'/);  // 两套都认会一下放两张便签
+  // 分组名压在上边框上，不在框里（框里会被便签盖住）
+  assert.match(JS, /y: it\.y \+ 5, fill: it\.label \? p\.text : p\.muted, stroke: p\.bg/);
+});
+
 test('只在想法模式开（反例：别的模式都不行）', () => {
   const {wb} = load('agent:thinking:main');
   assert.equal(wb.allowed('agent:thinking:main'), true);

@@ -1,7 +1,7 @@
 /* 白板（想法模式）。只用 .pk-whiteboard / .pk-whiteboard-entry 两个根；颜色日夜各一套，控件边对底色 ≥ 3:1。 */
 .pk-whiteboard-entry {
   --wb-fg: #2B2A33; --wb-bg: #FFFFFF; --wb-edge: #8A857C; --wb-hover: #F3F1EC; --wb-ring: #2F5FD0;
-  position: fixed; top: 56px; right: 16px; z-index: 900;
+  position: fixed; top: 56px; right: 16px; z-index: 60; /* 原生：顶栏 40 < 这里 < 抽屉遮罩 65 / 抽屉 70，窄屏开抽屉时不浮在上面 */
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 10px;
   border: 1px solid var(--wb-edge); border-radius: 16px; background: var(--wb-bg); color: var(--wb-fg);
   font: 500 13px/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; cursor: pointer;
