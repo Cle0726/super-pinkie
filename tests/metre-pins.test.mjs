@@ -208,9 +208,11 @@ test('M3 真浏览器：「取消置顶」边框日夜对实际底色 ≥ 3:1（
     await tab.evaluate(() => document.getElementById('pk-revert')?.remove());
     await tab.locator('.pk-metre-pin').evaluate((b) => { b.closest('.chat-group').parentElement.prepend(b.closest('.chat-group')); });
     await tab.evaluate(() => document.activeElement?.blur());
+    // macOS 的 WebKit（Safari）默认 Tab 只走表单控件，要 Option+Tab 才跳按钮（mac3 报 :219 只在 Mac 红；assist 07:54）。
+    const tabKey = engine === 'webkit' && process.platform === 'darwin' ? 'Alt+Tab' : 'Tab';
     const rings = {};
     for (let i = 0; i < 4; i++) {
-      await tab.keyboard.press('Tab');
+      await tab.keyboard.press(tabKey);
       const f = await tab.evaluate(() => { const e = document.activeElement, s = getComputedStyle(e); return {cls: e.className, text: e.textContent, style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor}; });
       rings[f.cls] = f;
     }
