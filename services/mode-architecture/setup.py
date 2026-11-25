@@ -668,7 +668,7 @@ def install(home=None) -> bool:
             "index.mjs", "mode-architecture-core.mjs", "deliberation-audit.mjs", "watchdog-runtime.mjs", "clekk-supervisor.mjs", "completion-integrity.mjs", "evidence-rules.mjs", "mode-constants.mjs", "memory.mjs", "learning.mjs", "learning-visuals.mjs",
             "learning-explore.mjs", "learning-devices.mjs", "learning-labs.mjs",
             "learning-practice.mjs", "learning-compute.mjs", "learning-c-trace.mjs",
-            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs",
+            "learning-engine.py", "learning-requirements.txt", "learning-pact.mjs", "monthly-recap.mjs",
             "learning-desk.mjs", "learning-drill.mjs", "learning-explain-voice.mjs", "learning-game-bank.mjs", "learning-game-real.mjs", "learning-game-content.mjs", "learning-game-economy.json", "learning-game-economy.mjs", "learning-game-exam.mjs", "learning-game-forms.json", "learning-game-monsters.mjs", "learning-game-world.mjs", "learning-game.mjs", "learning-exams.mjs", "learning-vocab.mjs",
             "learning-almanac.mjs", "learning-holidays-cn.json", "learning-refs.mjs",
             "learning-recall.mjs", "learning-companion.mjs", "learning-lesson.mjs",
