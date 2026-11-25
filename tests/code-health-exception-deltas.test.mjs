@@ -98,3 +98,18 @@ test('D5 两个分支各加一个增量文件，git 合并零冲突，合并后�
   assert.equal(git(dir, 'diff', '--name-only', '--diff-filter=U').trim(), EXCEPTIONS_FILE);
   git(dir, 'merge', '--abort');
 });
+
+test('D6 生效值里有增量时，「没被用到」的提示列出基础值和每个增量文件，叫人先改增量文件；没有增量时提示和以前一样', t => {
+  const dir = repo(t, {[EXCEPTIONS_FILE]: BASE, [`${EXCEPTION_DELTAS_DIR}/feat-a.json`]: delta(2), [`${EXCEPTION_DELTAS_DIR}/feat-b.json`]: delta(3)});
+  const baseline = {injections: {[HEAD]: {lines: 205}}, longFiles: {}};
+  const at = (lines, exceptions) => healthChanges({injections: {[HEAD]: {lines}}, longFiles: {}}, baseline, exceptions).unused;
+  const [message] = at(228, loadExceptions(dir));
+  assert.match(message, /生效值 230 = tools\/health\/exceptions\.json 的基础值 225 \+ tools\/health\/exceptions\.d\/feat-a\.json \+2、tools\/health\/exceptions\.d\/feat-b\.json \+3/);
+  assert.match(message, /先减小或删掉 tools\/health\/exceptions\.d 里对应的增量文件/);
+  assert.doesNotMatch(message, /请从 tools\/health\/exceptions\.json 删除/, '有增量时不能叫人直接删 exceptions.json 那一条');
+  // 实际值正好等于生效值：不提示。
+  assert.deepEqual(at(230, loadExceptions(dir)), []);
+  // 反例：没有增量（只有基础条目）时，提示和以前逐字一样。
+  const [old] = at(224, loadExceptions(repo(t, {[EXCEPTIONS_FILE]: BASE})));
+  assert.match(old, /^ui\/injections\/laolao-head\.fragment\.html：\S+ 的例外（value 225）没有被用到，请从 tools\/health\/exceptions\.json 删除。$/);
+});
