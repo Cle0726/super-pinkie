@@ -45,7 +45,7 @@
   let lastEsc = 0;
   let menu = null;
 
-  const shown = node => Boolean(node && node.getClientRects && node.getClientRects().length);
+  const shown = node => Boolean(node?.getClientRects?.().length) && (typeof node.checkVisibility === 'function' ? node.checkVisibility() : !node.closest?.('details:not([open]) > :not(summary)')); // 关着的 <details> 里的弹层（上下文查看器 role=dialog）有 rect 但看不见，不算（mac1 11-25）
   const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text != null) node.textContent = text; return node; };
   const labelOf = id => (FILTERS.find(f => f.id === id) || FILTERS[0]).label;
 
@@ -210,8 +210,8 @@
     }
     const box = document.querySelector('.agent-chat__input textarea');
     if (!box || event.target !== box || !box.value) { lastEsc = 0; return false; }
-    const now = Date.now();
-    if (lastEsc && now - lastEsc <= DOUBLE_ESC_MS) {
+    const now = event.timeStamp > 0 ? event.timeStamp : Date.now(); // 按键事件自己的时间戳：单调，不受页面冻结 / 改动 Date 影响
+    if (lastEsc && now - lastEsc >= 0 && now - lastEsc <= DOUBLE_ESC_MS) {
       event.preventDefault();
       lastEsc = 0;
       box.value = '';

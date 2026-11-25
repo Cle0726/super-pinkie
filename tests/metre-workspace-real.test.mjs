@@ -215,3 +215,117 @@ test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下
     }
   }
 });
+
+// K2 Esc 复发测试（协调者打回 11-25，依据 mac1 报告 #86@cfd93253）：输入框下方关着的
+// <details class="laolao-context-viewer"> 里有 section[role=dialog]，计算样式是 block、getClientRects 有一块，
+// 但看不见。旧的 shown() 只看 getClientRects，把它算成开着的弹层，escape() 一进来就让路。
+//   1. 前提：页面上真有这个关着的查看器，且它的弹层 getClientRects 非空（不然测不到这个坑）；
+//   2. 输入框有字 → 两下 Esc 变空；
+//   3. 有停止键时 Esc 点到它（假停止键挂在真输入区里，只数点击）；
+//   4. 反例：查看器真的打开时，弹层归它，两下 Esc 不清输入框、不点停止键。
+const BOX = '.agent-chat__input textarea';
+const viewerState = () => {
+  const v = document.querySelector('.agent-chat__input details.laolao-context-viewer');
+  const p = v && (v.__lcvPanel || v.querySelector('.laolao-context-viewer__popover'));
+  return v ? {open: v.open, role: p?.getAttribute('role') || null, rects: p ? p.getClientRects().length : 0} : null;
+};
+
+async function fillBox(page, text) {
+  await page.click(BOX);
+  await page.fill(BOX, text);
+  await page.waitForTimeout(100);
+}
+async function doubleEsc(page) {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(80);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  return page.inputValue(BOX);
+}
+const addFakeStop = () => {
+  const host = document.querySelector('.agent-chat__input');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chat-send-btn chat-send-btn--stop pk-test-fake-stop';
+  btn.textContent = '停';
+  btn.style.cssText = 'position:fixed;left:4px;top:4px;width:24px;height:24px;z-index:99999';
+  window.__pkTestStopClicks = 0;
+  btn.addEventListener('click', () => { window.__pkTestStopClicks += 1; });
+  host.append(btn);
+  return Boolean(btn.getClientRects().length);
+};
+const removeFakeStop = () => document.querySelector('.pk-test-fake-stop')?.remove();
+
+test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两下 Esc 清空、Esc 点停止键；查看器开着时让路（1440 日 / 820 夜）', async (t) => {
+  const installed = installRealControlUi({repoRoot: REPO_ROOT});
+  let server = null;
+  let browser = null;
+  t.after(async () => {
+    try { await browser?.close(); }
+    finally {
+      try { await server?.close(); }
+      finally { installed.cleanup(); }
+    }
+  });
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
+
+  for (const [width, theme] of [[1440, 'day'], [820, 'night']]) {
+    await t.test(`K2 ${width} ${theme}`, async () => {
+      const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
+      try {
+        await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
+        await page.setViewportSize({width, height: 800});
+        await page.waitForSelector(BOX, {timeout: 5_000});
+        await page.waitForSelector('.agent-chat__input details.laolao-context-viewer', {state: 'attached', timeout: 8_000});
+        await page.waitForTimeout(300);
+
+        // 1. 前提
+        const v0 = await page.evaluate(viewerState);
+        t.diagnostic(`K2 ${width} ${theme} 查看器 ${JSON.stringify(v0)}`);
+        assert.ok(v0, '前提：输入区有上下文查看器');
+        assert.equal(v0.open, false, '前提：查看器关着');
+        assert.equal(v0.role, 'dialog', '前提：查看器弹层带 role=dialog（会匹配 LAYERS）');
+        assert.ok(v0.rects > 0, '前提：关着时弹层 getClientRects 仍非空（旧 shown() 会误判）');
+        assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), 'metre');
+
+        // 2. 两下 Esc 清空
+        await fillBox(page, '测试草稿');
+        assert.equal(await doubleEsc(page), '', '输入框有字，0.5 秒内两下 Esc 清空');
+        await fillBox(page, '慢一点');
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(700);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        assert.equal(await page.inputValue(BOX), '慢一点', '两下隔太久不清空');
+        await page.fill(BOX, '');
+
+        // 3. Esc 点停止键
+        assert.ok(await page.evaluate(addFakeStop), '前提：假停止键看得见');
+        await page.evaluate(() => document.activeElement?.blur?.());
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        assert.equal(await page.evaluate(() => window.__pkTestStopClicks), 1, '在跑时 Esc 点到停止键一次');
+
+        // 4. 反例：查看器开着，Esc 归它
+        await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = true; });
+        await page.waitForTimeout(300);
+        assert.equal((await page.evaluate(viewerState)).open, true, '反例前提：查看器开着');
+        await page.evaluate(() => { window.__pkTestStopClicks = 0; document.activeElement?.blur?.(); });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        assert.equal(await page.evaluate(() => window.__pkTestStopClicks), 0, '查看器开着时 Esc 不点停止键');
+        await page.evaluate(removeFakeStop);
+        await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = true; });
+        await page.waitForTimeout(200);
+        await page.evaluate((sel) => { const b = document.querySelector(sel); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(b, '还在'); b.dispatchEvent(new Event('input', {bubbles: true})); b.focus(); }, BOX);
+        await page.waitForTimeout(150);
+        assert.equal(await doubleEsc(page), '还在', '查看器开着时两下 Esc 不清输入框');
+        await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = false; });
+        assert.deepEqual(pageErrors, [], '页面没有报错');
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
