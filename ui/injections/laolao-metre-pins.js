@@ -43,7 +43,8 @@
     const group = groups().find((g) => groupId(g) === id);
     if (!group) { status.textContent = '这条不在已经加载的记录里，往上翻能找到。'; return; }
     status.textContent = '';
-    group.scrollIntoView({block: 'center', behavior: 'smooth'});
+    // 瞬时滚动（mac2 任务 32）：smooth 滚到一半，laolao-perf.js 的 IntersectionObserver 回调 restoreNow 会把 scrollTop 写回锚点。
+    group.scrollIntoView({block: 'center'});
     group.classList.remove('pk-metre-pin-flash'); void group.offsetWidth; group.classList.add('pk-metre-pin-flash');
     group.addEventListener('animationend', () => group.classList.remove('pk-metre-pin-flash'), {once: true});
   }

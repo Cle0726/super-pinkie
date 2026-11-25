@@ -186,6 +186,8 @@ html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pre
 /* 协调者 11-25 03:27：不悬停时时间 opacity 0 但照占位，「已置顶」浮在正文左缘右边一百多 px。
  * 已置顶的排到页脚行最前（order -1），左外边距抵掉自己的内边距：静止和悬停都贴页脚左缘，悬停时时间出现在它后面，不跳。 */
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { order: -1; margin-left: -5px; }
+/* mac2 任务 32：用户消息悬停时，皮肤把「复制 / 编辑」行绝对定位在气泡右下，正好盖住页脚行末尾；用户消息的「置顶」一律排到页脚行最前，离开那一块。 */
+html[data-laolao-mode="metre"] .chat-group.user .chat-group-footer__meta > .pk-metre-pin { order: -1; margin-left: -5px; }
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); opacity: 1; }
 html[data-laolao-mode="metre"] .pk-metre-pins {
   box-sizing: border-box;

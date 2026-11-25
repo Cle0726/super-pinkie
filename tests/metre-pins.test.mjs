@@ -222,3 +222,71 @@ test('M3 真浏览器：「取消置顶」边框日夜对实际底色 ≥ 3:1（
     }
   } finally { await browser.close(); }
 });
+
+// mac2 任务 32（14:12Z，#102@6b389e4b）挡合并的两条：
+// 1. 用户消息悬停时，皮肤把「复制 / 编辑」行（.pinkie-msg-row--user）绝对定位在气泡右下，正好盖住页脚行末尾的「置顶」，鼠标点不到；
+// 2. 列表里点一条跳不到：smooth scrollIntoView 滚到一半，laolao-perf.js 的 IntersectionObserver 回调 restoreNow 把 scrollTop 写回锚点。
+// 这里装上真皮肤、消息操作样式和 laolao-perf.js：鼠标（不 force）点用户消息的「置顶」；跳转后那条在对话视口里。
+test('M3 真浏览器（mac2 任务 32）：用户消息的「置顶」不被复制 / 编辑行盖住；装着 laolao-perf.js 时列表跳转落在视口里', {timeout: 60_000}, async (t) => {
+  const {playwright} = await import('../tools/study-desk/harness.mjs');
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const SKIN = read('ui/injections/laolao-metre-skin.css'), ACTIONS = read('ui/injections/laolao-message-actions.css');
+  const DOMWATCH = read('ui/injections/laolao-dom-watch.js'), PERF = read('ui/injections/laolao-perf.js');
+  const filler = '这一段只是占位，让对话够长、要滚很远才到目标。'.repeat(6);
+  const userRow = '<div class="pinkie-msg-row pinkie-msg-row--user"><button type="button" class="pinkie-msg-btn" style="width:26px;height:26px">复</button><button type="button" class="pinkie-msg-btn" style="width:26px;height:26px">编</button></div>';
+  const group = (role, i, text) => `<div class="chat-group ${role}"><div class="chat-group-messages"><div class="chat-bubble" data-message-id="msg:${role}:${1000 + i}:${i}"><div class="chat-text">${text}</div>${role === 'user' ? userRow : ''}</div>`
+    + `<div class="chat-group-footer"><div class="chat-group-footer__meta"><span class="chat-sender-name">${role === 'user' ? '你' : 'Metre'}</span><time>2026年11月25日 0:10</time></div></div></div></div>`;
+  let body = '';
+  for (let i = 0; i < 40; i++) body += group(i % 2 ? 'assistant' : 'user', i, i === 37 ? '注册页用的是同一个' : `第 ${i} 条。${filler}`);
+  // 原生的几条布局：用户消息整组靠右、页脚行 flex。
+  const native = '.chat-group-messages{display:flex;flex-direction:column}.chat-group.user .chat-group-messages{align-items:flex-end}'
+    + '.chat-bubble{max-width:560px}.chat-group-footer{display:flex}.chat-group-footer__meta{display:flex;align-items:center;gap:8px}.chat-group{margin:0 0 24px}';
+  const page = `<!doctype html><html data-laolao-mode="metre"><head><meta charset="utf-8"><style>${native}</style><style>${SKIN}</style><style>${ACTIONS}</style><style>${CSS}</style></head>`
+    + `<body style="margin:0"><div class="chat-main"><div class="chat-thread" style="height:600px;overflow-y:auto;width:900px"><div class="chat-thread-inner">${body}</div></div></div></body></html>`;
+  const KEY = 'pinkie.metre.pins:agent:metre:p2';
+  try {
+    const tab = await browser.newPage({viewport: {width: 1000, height: 700}});
+    await tab.route('http://127.0.0.1:30123/**', (route) => route.fulfill({contentType: 'text/html; charset=utf-8', body: page}));
+    await tab.goto('http://127.0.0.1:30123/chat?session=agent%3Ametre%3Ap2');
+    await tab.evaluate(() => localStorage.clear());
+    await tab.addScriptTag({content: DOMWATCH});
+    await tab.addScriptTag({content: PERF});
+    await tab.addScriptTag({content: SRC});
+    await tab.locator('.pk-metre-pin').first().waitFor({state: 'attached', timeout: 5000});
+    assert.equal(await tab.evaluate(() => window.__laolaoPerf), true, '前提：laolao-perf.js 装上了');
+
+    // 1. 用户消息：悬停后「置顶」中心点上最上面的元素是它自己，鼠标点得到（不 force）。
+    const user = tab.locator('.chat-group.user').first();
+    await user.hover();
+    const hit = await user.evaluate((g) => { const b = g.querySelector('.pk-metre-pin'), r = b.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return {own: b.contains(top), top: top?.className || top?.tagName, pin: [r.left, r.top, r.width, r.height].map(Math.round), row: [...g.querySelector('.pinkie-msg-row').getBoundingClientRect().toJSON ? Object.values(g.querySelector('.pinkie-msg-row').getBoundingClientRect().toJSON()).slice(0, 4) : []].map(Math.round)}; });
+    t.diagnostic('用户消息置顶键 ' + JSON.stringify(hit));
+    assert.ok(hit.own, `用户消息「置顶」中心点被 ${hit.top} 盖住`);
+    await user.locator('.pk-metre-pin').click({timeout: 3000});
+    assert.equal(await user.locator('.pk-metre-pin').getAttribute('aria-pressed'), 'true', '鼠标点到了用户消息的「置顶」');
+    await user.locator('.pk-metre-pin').click({timeout: 3000});
+    assert.equal(await user.locator('.pk-metre-pin').getAttribute('aria-pressed'), 'false');
+
+    // 2. 置顶最后面那条，回到顶上，从列表跳过去：等滚动停下，目标在 .chat-thread 视口里。
+    const far = tab.locator('.chat-group.assistant', {hasText: '注册页用的是同一个'});
+    await far.scrollIntoViewIfNeeded();
+    await far.hover();
+    await far.locator('.pk-metre-pin').click();
+    await tab.evaluate(() => { document.querySelector('.chat-thread').scrollTop = 0; });
+    await tab.waitForTimeout(400);
+    await tab.locator('.pk-metre-pins__toggle').click();
+    await tab.locator('.pk-metre-pins__go').click();
+    let last = -1;
+    for (let i = 0; i < 30; i++) { await tab.waitForTimeout(100); const now = await tab.evaluate(() => document.querySelector('.chat-thread').scrollTop); if (now === last) break; last = now; }
+    await tab.waitForTimeout(300);
+    const seen = await far.evaluate((g) => { const v = g.closest('.chat-thread').getBoundingClientRect(), r = g.getBoundingClientRect(); return {top: Math.round(r.top - v.top), bottom: Math.round(r.bottom - v.top), view: Math.round(v.height), scroll: Math.round(g.closest('.chat-thread').scrollTop)}; });
+    t.diagnostic('跳转后 ' + JSON.stringify(seen));
+    assert.ok(seen.scroll > 0, `滚动了（scrollTop ${seen.scroll}）`);
+    assert.ok(seen.top >= 0 && seen.top < seen.view, `跳过去的那条在视口里（相对视口 top ${seen.top}，视口高 ${seen.view}）`);
+    assert.equal(await tab.evaluate((k) => JSON.parse(localStorage.getItem(k)).length, KEY), 1);
+  } finally { await browser.close(); }
+});
