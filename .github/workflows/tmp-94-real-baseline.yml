@@ -51,6 +51,11 @@ jobs:
         if: always()
         shell: bash
         run: node tools/tmp94-probe.mjs . 2>&1 | tee "$RUNNER_TEMP/probe.tap"
+      - name: Probe metre-board footer wand (linux, why #pinkie-laser-entry shows under Metre)
+        continue-on-error: true
+        if: always()
+        shell: bash
+        run: node tools/tmp94-laser-probe.mjs . 8 2>&1 | tee "$RUNNER_TEMP/laser.tap"
       - name: Collect logs
         if: always()
         shell: bash
