@@ -214,9 +214,9 @@
     const pop = bar.querySelector('.lesson-finish-confirm');
     openConfirm = pop ? {lessonId: bar.dataset.lessonId, focused: pop.contains(document.activeElement)} : null;
   }
-  function clearBar() {
+  function clearBar(keep = false) {
     currentRevision++; clearInterval(polling); polling = 0; messageObserver?.disconnect(); messageObserver = null; resizeObserver?.disconnect(); resizeObserver = null;
-    rememberConfirm(); bar?.remove(); bar = null;
+    if (keep) return; rememberConfirm(); bar?.remove(); bar = null; // keep：马上要 refreshCurrent，旧条留到新结果到了再换 / 删，不先拆掉（否则每次对话 sync 都闪一下没课程条）
     releasePadding();
   }
   function releasePadding() { if (padding) { padding.node.removeAttribute('data-pinkie-lesson-space'); if (padding.value) padding.node.style.setProperty('--pinkie-lesson-base-padding', padding.value); else padding.node.style.removeProperty('--pinkie-lesson-base-padding'); padding = null; } }
@@ -332,9 +332,9 @@
     demo(paper, local); renderSide(host, result.failed ? 'working' : 'happy', summary.next || (result.failed ? '课程还在，稍后可以再试一次。' : '这节课学过了，接着试一小组。'));
   }
   function sync() {
-    clearBar(); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!root()?.isConnected || !window.__pinkieDeskChat?.active?.() || document.hidden || desk.pane() !== globalDesk.pane()) return;
-    // 新聊天不抢发学习台请求；已有课程立即恢复，其他会话从首个 4 秒轮询或新消息恢复。
-    if (data().current || data().prepared || desk.local().today?.focus?.kind === 'lesson') void refreshCurrent(); 
+    const live = root()?.isConnected && window.__pinkieDeskChat?.active?.() && !document.hidden && desk.pane() === globalDesk.pane(), lesson = Boolean(data().current || data().prepared || desk.local().today?.focus?.kind === 'lesson');
+    clearBar(live && lesson); if (root()?.dataset.view !== 'today') { clearInterval(statusPolling); statusPolling = 0; } if (!live) return; // 新聊天不抢发学习台请求；已有课程立即恢复（旧条留到新结果到），其他会话从首个 4 秒轮询或新消息恢复。
+    if (lesson) void refreshCurrent();
     const column = messageColumn(); if (column) { let queued = false; messageObserver = window.Pinkie?.domWatch?.createObserver(records => { if (queued || !records.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !bar?.contains(n)))) return; queued = true; setTimeout(() => { queued = false; void refreshCurrent(); }, 250); }); messageObserver?.watch(column, {childList: true, characterData: true}); }
     resizeObserver = new ResizeObserver(positionBar); if (column) resizeObserver.observe(column); const sidebar = document.querySelector('aside.sidebar'); if (sidebar) resizeObserver.observe(sidebar);
   }
