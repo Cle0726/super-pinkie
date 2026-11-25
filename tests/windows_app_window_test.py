@@ -136,8 +136,14 @@ class AppWindowTest(unittest.TestCase):
     def test_native_bridge_forwards_app_requests(self):
         from app.windows_native import WindowsNative
 
+        # 和 windows_native 一样先试顶层导入：别的测试把 app/ 塞进 sys.path 后，桥用的是顶层的
+        # windows_app_window，跟 app.windows_app_window 不是同一个模块对象，打补丁要打在桥真正用的那个上。
+        try:
+            import windows_app_window as bridged
+        except ImportError:
+            bridged = appwin
         native = WindowsNative(mock.Mock())
-        with mock.patch.object(appwin, "handle", return_value={"ok": True, "via": "apps"}) as handled:
+        with mock.patch.object(bridged, "handle", return_value={"ok": True, "via": "apps"}) as handled:
             self.assertEqual(native.handle({"type": "installApp", "appId": APP}), {"ok": True, "via": "apps"})
             self.assertEqual(handled.call_count, 1)
         # 反例：别的类型照旧不认识。
