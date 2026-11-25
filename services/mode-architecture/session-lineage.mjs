@@ -1003,7 +1003,7 @@ export class SessionLineage {
       const answered = new Promise(resolve => {
         this.waiters.set(key, resolve);
         timer = setTimeout(() => resolve(null), this.askTimeoutMs);
-        timer.unref?.();
+        // 不 unref：这是 ask() 唯一在等的事，unref 了事件循环可能提前退出（Mac 单文件跑必现）。每条路都会 clearTimeout，不会多挂。
       });
       try {
         await this.serial(parentKey, async () => {
@@ -1063,7 +1063,7 @@ export class SessionLineage {
     const answered = new Promise(resolve => {
       this.waiters.set(key, resolve);
       timer = setTimeout(() => resolve(null), this.askTimeoutMs);
-      timer.unref?.();
+      // 不 unref：这是 ask() 唯一在等的事，unref 了事件循环可能提前退出（Mac 单文件跑必现）。每条路都会 clearTimeout，不会多挂。
     });
     try {
       await this.serial(parentKey, async () => {
