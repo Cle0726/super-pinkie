@@ -46,6 +46,7 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn {
   min-height: 32px; padding: 0 14px; border-radius: 8px; cursor: pointer;
   border: 1px solid var(--pk-perm-edge); background: var(--metre-surface); color: var(--metre-text);
   font: 400 13.5px/1 var(--metre-sans); box-shadow: none; transition: background-color 120ms ease, border-color 120ms ease;
+  white-space: nowrap; flex-shrink: 0;   /* 「不自动接着做」在弹层里折成两行（look.py 场景一轮） */
 }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover,
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:hover,
@@ -154,4 +155,8 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__resume {
 }
 @media (prefers-reduced-motion: reduce) {
   html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn, html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn { transition: none; }
+}
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__fail {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 6px 10px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--pk-perm-rule); color: var(--pk-perm-warn); font-size: 13px;
 }

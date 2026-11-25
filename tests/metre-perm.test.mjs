@@ -313,6 +313,24 @@ test(`the keys sit right after the Metre engine key even when that key is insert
   } finally { await browser.close(); }
 });
 
+// look.py 场景一轮：网关全挂时按键行和详情与空场一模一样，看不出读失败；会话详情里「不自动接着做」折成两行。改前这条失败。
+test(`when the gateway does not answer, the status key says so and details list what failed with a retry; popover buttons do not wrap (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser);
+    await p.evaluate(() => { window.__save = {...window.__resp}; delete window.__resp['exec.approvals.get']; delete window.__resp['pinkie.metre.planMode.get']; return window.PinkieMetrePerm.refresh(); });
+    await p.waitForFunction(() => document.querySelector('.pk-perm-chip--stat')?.textContent === '没读到');
+    await p.click('.pk-perm-chip--stat');
+    const fail = await p.textContent('.pk-perm-pop__fail');
+    assert.match(fail, /放手程度/); assert.match(fail, /先出方案/); assert.match(fail, /没读到/);
+    assert.equal(await p.$eval('.pk-perm-pop__fail .pk-perm-pop__btn', (e) => getComputedStyle(e).whiteSpace), 'nowrap', '弹层按钮不折行');
+    await p.evaluate(() => { Object.assign(window.__resp, window.__save); });
+    await p.click('.pk-perm-pop__fail .pk-perm-pop__btn');
+    await p.waitForFunction(() => document.querySelector('.pk-perm-chip--stat')?.textContent !== '没读到');
+    assert.equal(await p.$('.pk-perm-pop__fail'), null, '重试读到以后提示消失');
+  } finally { await browser.close(); }
+});
+
 // look.py 弹层一轮：按键展开 / 「先出方案」打开只多一块底色，对按键行 1.12 / 1.15，状态看不出。改前这条失败。
 test(`key states (menu open, plan-first on) show a ring at least 3:1, without changing the key width (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();

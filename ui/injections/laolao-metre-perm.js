@@ -53,8 +53,11 @@
     const security = a.security ?? d.security ?? 'full', ask = a.ask ?? d.ask ?? 'off';
     return (LEVELS.find((l) => l.security === security && l.ask === ask) || {id: 'custom'}).id;
   }
+  // 本批自己的读取哪几项没读到（网关没回 / 报错）：状态键说「没读到」，详情里列出来并能重试。额度、文件夹没数据是常态，不算。
+  const fails = new Set();
   async function loadLevel() {
-    try { state.level = levelOf((await rpc('exec.approvals.get', {}, 10000))?.file); } catch { state.level = null; }
+    fails.delete('放手程度');
+    try { state.level = levelOf((await rpc('exec.approvals.get', {}, 10000))?.file); } catch { state.level = null; fails.add('放手程度'); }
   }
   async function setLevel(id) {
     const lv = LEVELS.find((l) => l.id === id); if (!lv) throw new Error('没有这一档：' + id);
@@ -81,14 +84,15 @@
   // 存储读不了（隐私模式、无源页面）就当没关过自动接着做，不让整段失效
   const resumeOff = () => { try { return localStorage.getItem(RESUME_OFF) === '1'; } catch { return false; } };
   const setResumeOff = (on) => { try { if (on) localStorage.setItem(RESUME_OFF, '1'); else localStorage.removeItem(RESUME_OFF); } catch {} };
-  async function loadPlanMode(key) { try { state.planOn = (await rpc('pinkie.metre.planMode.get', {sessionKey: key}, 8000))?.on === true; } catch { state.planOn = false; } }
+  async function loadPlanMode(key) { fails.delete('先出方案'); try { state.planOn = (await rpc('pinkie.metre.planMode.get', {sessionKey: key}, 8000))?.on === true; } catch { state.planOn = false; fails.add('先出方案'); } }
   async function loadPlan(key) { try { state.plan = (await rpc('pinkie.plan.get', {sessionKey: key}, 8000))?.plan || null; } catch { state.plan = null; } }
   async function loadUsage(key) {
+    fails.delete('用量');
     try {
       const res = await rpc('sessions.usage', {key}, 15000);
       const s = (res?.sessions || []).find((x) => x?.key === key) || res?.sessions?.[0] || null;
       state.usage = s ? {model: s.model || s.modelOverride || '', provider: s.modelProvider || s.providerOverride || '', ...(s.usage || {})} : null;
-    } catch { state.usage = null; }
+    } catch { state.usage = null; fails.add('用量'); }
     try { state.folder = String((await rpc('pinkie.project.bind', {key}, 8000))?.binding?.root || ''); } catch { state.folder = ''; }
   }
   async function loadQuota() {
@@ -269,6 +273,13 @@
     closeMenu();
     menu = el('div', 'pk-perm-pop pk-perm-pop--detail'); menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', '会话详情');
     menu.append(el('div', 'pk-perm-pop__title', '会话详情'));
+    if (fails.size) {
+      const bad = el('div', 'pk-perm-pop__fail');
+      bad.append(el('span', '', [...fails].join('、') + '没读到（网关没回）'));
+      const again = el('button', 'pk-perm-pop__btn', '重试'); again.type = 'button';
+      again.onclick = async () => { again.disabled = true; await refresh(); const now = document.querySelector('.pk-perm-chip--stat'); if (now) openDetail(now); else closeMenu(); };
+      bad.append(again); menu.append(bad);
+    }
     const u = state.usage || {};
     const pc = planCounts(state.plan);
     if (pc.total) {
@@ -334,6 +345,7 @@
   function statText() {
     const r = state.resume;
     if (r && r.key === state.key) return {text: `${when(r.at)} 恢复`, tone: 'warn'};
+    if (fails.size) return {text: '没读到', tone: 'warn'};
     const pc = planCounts(state.plan), q = state.quota;
     const parts = [];
     if (pc.total) parts.push(`计划 ${pc.done} / ${pc.total}`);
