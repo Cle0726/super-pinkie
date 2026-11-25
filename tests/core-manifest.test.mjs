@@ -336,4 +336,15 @@ test('K4 deferred install/build scripts use C.le. in user-visible messages witho
     .join('\n');
   assert.doesNotMatch(applyMacNonComments, /CLE Kk/, 'apply-theme.sh user-visible output must use C.le.');
   assert.doesNotMatch(read('build-win.ps1'), /内置 OpenClaw 传输补丁失败/);
+  assert.match(read('desktop/macos/build.sh'), /tools\/ui-parity\/sw_cache\.py/, 'macOS bundle ships sw_cache.py beside bundle.py');
+  assert.match(
+    read('installer/macos/apply-theme.sh'),
+    /\[\[ -z "\$OPENCLAW_ROOT" && \( "\$SKIP_APP_BUNDLES" != "1" \|\| -n "\$\{PINKIE_APP_PATH:-\}" \) \]\]/,
+    'apply-theme.sh never mutates /Applications unsealed when SKIP_APP_BUNDLES=1',
+  );
+  assert.match(
+    read('installer/macos/apply-theme.sh'),
+    /NFSHomeDirectory/,
+    'apply-theme.sh skips host launchctl bootstrap when running inside an isolated HOME',
+  );
 });

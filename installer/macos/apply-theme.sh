@@ -421,6 +421,11 @@ install_relay_watchdog() {
   else
     rm -f "$target_plist.tmp"
   fi
+  local real_home
+  real_home="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+  if [[ "${PINKIE_SKIP_LAUNCHD:-0}" == "1" ]] || [[ -n "$real_home" && "$(cd "$USER_HOME" 2>/dev/null && pwd -P)" != "$(cd "$real_home" 2>/dev/null && pwd -P)" ]]; then
+    return 0
+  fi
   if ! launchctl print "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1; then
     should_reload=1
   fi
@@ -446,10 +451,11 @@ if [[ -z "$OPENCLAW_ROOT" && -f "$REPO_ROOT/tools/core/manifest.mjs" && ( "${PIN
   node "$REPO_ROOT/tools/core/manifest.mjs" install --root "$REPO_ROOT" --prefix "$CORE_PREFIX"
   OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
 fi
-if [[ -z "$OPENCLAW_ROOT" ]]; then
+if [[ -z "$OPENCLAW_ROOT" && ( "$SKIP_APP_BUNDLES" != "1" || -n "${PINKIE_APP_PATH:-}" ) ]]; then
   # The managed App owns the gateway it is about to update. Prefer that
   # runtime before PATH: a shell shim named `openclaw` is not a package root
-  # and has no `dist/` tree to patch.
+  # and has no `dist/` tree to patch. Never fall back to /Applications when
+  # SKIP_APP_BUNDLES=1 omitted PINKIE_APP_PATH, since reseal is skipped there.
   BUNDLED_RUNTIME="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}/Contents/Resources/SuperPinkie/runtime/openclaw"
   if [[ -f "$BUNDLED_RUNTIME/openclaw.mjs" ]]; then
     OPENCLAW_ROOT="$BUNDLED_RUNTIME"

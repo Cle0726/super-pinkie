@@ -230,7 +230,7 @@ for bundle_part in VERSION ui personas installer patch; do
   ditto "$REPO_ROOT/$bundle_part" "$CONTENTS/Resources/SuperPinkie/$bundle_part"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/tools/ui-parity" "$CONTENTS/Resources/SuperPinkie/tools/assets"
-cp "$REPO_ROOT/tools/ui-parity/bundle.py" "$CONTENTS/Resources/SuperPinkie/tools/ui-parity/"
+cp "$REPO_ROOT/tools/ui-parity/bundle.py" "$REPO_ROOT/tools/ui-parity/sw_cache.py" "$CONTENTS/Resources/SuperPinkie/tools/ui-parity/"
 cp "$REPO_ROOT/tools/assets/stamp.mjs" "$CONTENTS/Resources/SuperPinkie/tools/assets/"
 for service in party roundtable tts; do
   mkdir -p "$CONTENTS/Resources/SuperPinkie/services/$service"
