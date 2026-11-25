@@ -617,6 +617,8 @@ test(`a reduced-motion rule that gives every element a tiny transition does not 
       await p.evaluate(() => {
         const c = document.querySelector('.agent-chat__composer-controls');
         const w = (s) => c.querySelector(s).getBoundingClientRect().width;
+        // 测试自己改容器宽，不许这一改也起过渡（真页面上容器宽是排版算的，不是改属性）；只关容器这一个，模型名的过渡由皮肤那条规则管
+        c.style.setProperty('transition', 'none', 'important');
         c.style.width = Math.ceil(w(':scope > .pk-eng-chip') + w(':scope > .chat-composer-model-control') + w(':scope > .laolao-context-viewer') + 8 - 30) + 'px';
       });
       await p.evaluate(() => window.PinkieMetrePerm.fit());
