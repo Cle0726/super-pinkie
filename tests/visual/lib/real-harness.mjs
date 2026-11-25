@@ -1030,6 +1030,15 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   });
 
   const extraInit = opts.initScript || null;
+  // Chromium keeps only 250 resource timing entries by default. The real page already fills it
+  // (Pinkie injects ~200 tags), so later chunks such as chat-page-*.js can be dropped and
+  // assertRealPageLoaded() below would misjudge them as "not loaded". Only the buffer size is
+  // raised here; what the check looks for is unchanged.
+  await context.addInitScript(() => {
+    if (typeof performance !== 'undefined' && typeof performance.setResourceTimingBufferSize === 'function') {
+      performance.setResourceTimingBufferSize(2000);
+    }
+  });
   await context.addInitScript(({
     frozenMs,
     isNight: dark,
