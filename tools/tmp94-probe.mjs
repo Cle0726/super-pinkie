@@ -50,6 +50,49 @@ const REPLAY = () => {
   out.restoredH = H();
   return out;
 };
+// Why does the squeezed limit not narrow the label on linux (replay: 8ch limit, width still 140.4px)?
+// Under the squeeze, record the label's computed max-width / display / the variable as the label and the model key see it,
+// the parent's display, then force an inline max-width of 60px to see whether the label can get narrower at all.
+const DIAG = () => {
+  const c = document.querySelector('.chat-main .agent-chat__composer-controls');
+  const model = c?.querySelector(':scope > .chat-composer-model-control');
+  const label = model && (model.querySelector('.pinkie-trigger-label') || model.querySelector('.chat-controls__inline-select-label'));
+  if (!label) return {none: true};
+  const V = '--pk-perm-model-label';
+  const keep = model.style.getPropertyValue(V) || '';
+  const cs = () => getComputedStyle(label);
+  const W = () => Math.round(label.getBoundingClientRect().width * 10) / 10;
+  const chain = [];
+  for (let n = label.parentElement; n && n !== c && chain.length < 6; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    chain.push(`${n.tagName.toLowerCase()}.${String(n.className).split(' ').filter(Boolean).slice(0, 2).join('.')}:${s.display}/w${Math.round(n.getBoundingClientRect().width)}/max${s.maxWidth}`);
+  }
+  const out = {cls: String(label.className), text: (label.textContent || '').trim().slice(0, 40), chain,
+    base: {w: W(), display: cs().display, maxWidth: cs().maxWidth, minWidth: cs().minWidth, flex: cs().flex, overflow: cs().overflow, whiteSpace: cs().whiteSpace, fontSize: cs().fontSize}};
+  model.style.setProperty(V, 'calc(8ch + 0px)');
+  out.squeezed = {w: W(), maxWidth: cs().maxWidth, varOnLabel: cs().getPropertyValue(V), varOnModel: getComputedStyle(model).getPropertyValue(V)};
+  model.style.setProperty(V, '60px');
+  out.squeezed60 = {w: W(), maxWidth: cs().maxWidth};
+  if (keep) model.style.setProperty(V, keep); else model.style.removeProperty(V);
+  label.style.setProperty('max-width', '60px', 'important');
+  out.inline60 = {w: W(), maxWidth: cs().maxWidth, display: cs().display};
+  label.style.removeProperty('max-width');
+  const rules = [];
+  for (const sheet of document.styleSheets) {
+    let list; try { list = sheet.cssRules; } catch { continue; }
+    const walk = (rs) => { for (const r of rs) {
+      if (r.cssRules && !r.selectorText) { try { walk(r.cssRules); } catch {} continue; }
+      if (!r.selectorText || !r.style) continue;
+      if (!/max-width|width|display|flex/.test(r.style.cssText)) continue;
+      let hit = false; try { hit = label.matches(r.selectorText); } catch {}
+      if (hit) rules.push(`${(sheet.href || 'inline').split('/').pop().split('?')[0]} :: ${r.selectorText.slice(0, 140)} { ${r.style.cssText.slice(0, 160)} }`);
+    } };
+    walk(list);
+  }
+  out.rules = rules.slice(0, 20);
+  out.restoredW = W();
+  return out;
+};
 try {
   for (const theme of ['day', 'night']) {
     const {context, page} = await h.openRealScenePage(browser, server.origin, 'metre-board', theme, {lockPerfClock: true});
@@ -58,6 +101,7 @@ try {
       console.log(theme, 'viewport', JSON.stringify(vp));
       console.log(theme, '1-settled', JSON.stringify(await page.evaluate(SNAP)));
       console.log(theme, '2-replay', JSON.stringify(await page.evaluate(REPLAY)));
+      console.log(theme, '2b-diag', JSON.stringify(await page.evaluate(DIAG)));
       await page.setViewportSize({width: vp.width - 1, height: vp.height});
       await page.waitForTimeout(300);
       await page.setViewportSize(vp);
