@@ -10,95 +10,10 @@
  * 不出现：碧琪头像和表情、模式横幅图、墙纸、转场、小碧琪、随机一句、碧琪的派对空间和圆桌入口。
  * 保留：流式输出、过程卡片、工具流、运行状态条、子会话细线、计划清单、ask_user 卡片、模型选择器、工作台。 */
 
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-bg: #FAF9F5;
-  --metre-surface: #FFFFFF;
-  --metre-text: #1F1E1D;
-  --metre-muted: #73726C;
-  --metre-line: #E8E6DC;
-  --metre-line-strong: #D9D6CC;
-  --metre-accent: #C96442;
-  --metre-hover: #F0EEE6;
-  --metre-side: #F5F4EE;
-  --metre-serif: ui-serif, Georgia, "Songti SC", "SimSun", serif;
-  --metre-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --metre-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
 
-  --laolao-wallpaper-image: none !important;
-  --laolao-wallpaper-soft: none !important;
-  --bg: var(--metre-bg) !important;
-  --bg-content: var(--metre-bg) !important;
-  --bg-elevated: var(--metre-surface) !important;
-  --bg-accent: var(--metre-hover) !important;
-  --bg-hover: var(--metre-hover) !important;
-  --bg-muted: var(--metre-hover) !important;
-  --card: var(--metre-surface) !important;
-  --card-foreground: var(--metre-text) !important;
-  --card-highlight: transparent !important;
-  --panel: var(--metre-bg) !important;
-  --panel-hover: var(--metre-hover) !important;
-  --panel-strong: var(--metre-surface) !important;
-  --popover: var(--metre-surface) !important;
-  --popover-foreground: var(--metre-text) !important;
-  --chrome: var(--metre-bg) !important;
-  --chrome-strong: var(--metre-bg) !important;
-  --input: var(--metre-surface) !important;
-  --laolao-surface: var(--metre-surface) !important;
-  --laolao-surface-strong: var(--metre-surface) !important;
-  --text: var(--metre-text) !important;
-  --text-strong: var(--metre-text) !important;
-  --chat-text: var(--metre-text) !important;
-  --muted: var(--metre-muted) !important;
-  --muted-strong: var(--metre-muted) !important;
-  --muted-foreground: var(--metre-muted) !important;
-  --secondary: var(--metre-hover) !important;
-  --secondary-foreground: var(--metre-text) !important;
-  --border: var(--metre-line) !important;
-  --border-hover: #D6D3C7 !important;
-  --border-strong: #D6D3C7 !important;
-  --accent: var(--metre-accent) !important;
-  --accent-rgb: 201, 100, 66 !important;
-  --accent-hover: #B5583A !important;
-  --accent-foreground: #FFFFFF !important;
-  --accent-glow: transparent !important;
-  --accent-muted: rgba(201, 100, 66, 0.12) !important;
-  --accent-subtle: rgba(201, 100, 66, 0.08) !important;
-  --primary: var(--metre-accent) !important;
-  --primary-foreground: #FFFFFF !important;
-  --ring: var(--metre-muted) !important;
-  --focus: var(--metre-muted) !important;
-  --focus-ring: 0 0 0 2px rgba(115, 114, 108, 0.35) !important;
-  --shadow-sm: 0 1px 2px rgba(31, 30, 29, 0.05) !important;
-  --shadow-md: 0 4px 14px rgba(31, 30, 29, 0.07) !important;
-  background: var(--metre-bg) !important;
-  color-scheme: light;
-}
-
-/* 深色 */
-html[data-laolao-mode="metre"][data-pinkie-night]:not(#_m1):not(#_m2),
-html[data-laolao-mode="metre"][data-theme="dark"]:not(#_m1):not(#_m2) {
-  --metre-bg: #262624;
-  --metre-surface: #30302E;
-  --metre-text: #F0EEE6;
-  --metre-muted: #A3A19A;
-  --metre-line: #3E3E3A;
-  --metre-line-strong: #4A4A45;
-  --metre-hover: #34342F;
-  --metre-side: #1F1E1D;
-  --border-hover: #4A4A45 !important;
-  --border-strong: #4A4A45 !important;
-  --accent-hover: #D9764F !important;
-  --shadow-sm: none !important;
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
-  color-scheme: dark;
-}
 
 /* 底色、字体 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body {
-  background: var(--metre-bg) !important;
-  color: var(--metre-text) !important;
-  font-family: var(--metre-sans) !important;
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body { background: var(--metre-bg) !important; color: var(--metre-text) !important; font-family: var(--metre-sans) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body::before,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body::after,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .card.chat::before,
@@ -115,11 +30,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell-nav { background: var(
 /* 不用玻璃、渐变 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) *,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) *::before,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) *::after {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  text-shadow: none !important;
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; text-shadow: none !important; }
 
 /* 碧琪的东西一律不出现 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) canvas.pinkie-ambient,
@@ -136,17 +47,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-power-entry img { dis
 
 /* 消息：用户那条不用粉色竖线；助手的回答用无衬线（照 Claude 截图） */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-text,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-bubble {
-  color: var(--metre-text) !important;
-  border-color: var(--metre-line) !important;
-  background: transparent !important;
-  background-image: none !important;
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text {
-  font-family: var(--metre-sans) !important;
-  color: var(--metre-text) !important;
-  line-height: 1.75 !important;
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-bubble { color: var(--metre-text) !important; border-color: var(--metre-line) !important; background: transparent !important; background-image: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text { font-family: var(--metre-sans) !important; color: var(--metre-text) !important; line-height: 1.75 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text :is(h1, h2, h3, h4, strong) { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.assistant .chat-text li::marker { color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(code, pre, kbd, samp) { font-family: var(--metre-mono) !important; }
@@ -154,26 +56,12 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(code, pre, kbd, samp) { f
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.chat-avatar, .chat-group > img, .chat-group-avatar, .chat-sender-name) { display: none !important; }
 
 /* 输入框、卡片：一条细线，不要粉色光晕 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.agent-chat__composer-shell, .agent-chat__input, .agent-chat__composer-combobox) {
-  background: var(--metre-surface) !important;
-  background-image: none !important;
-  border-color: var(--metre-line) !important;
-  box-shadow: var(--shadow-sm) !important;
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail {
-  background: var(--metre-bg) !important;
-  border-color: var(--metre-line) !important;
-  box-shadow: none !important;
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.agent-chat__composer-shell, .agent-chat__input, .agent-chat__composer-combobox) { background: var(--metre-surface) !important; background-image: none !important; border-color: var(--metre-line) !important; box-shadow: var(--shadow-sm) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail { background: var(--metre-bg) !important; border-color: var(--metre-line) !important; box-shadow: none !important; }
 
 /* 运行状态条：底色、细线，不要渐变 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run .pk-run__body,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run .pk-run__dot {
-  background: var(--metre-bg) !important;
-  background-image: none !important;
-  box-shadow: inset 0 0 0 1px var(--metre-line) !important;
-  color: var(--metre-text) !important;
-}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run .pk-run__dot { background: var(--metre-bg) !important; background-image: none !important; box-shadow: inset 0 0 0 1px var(--metre-line) !important; color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run .pk-run__text { color: var(--metre-text) !important; font-family: var(--metre-sans) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run .pk-run__meta { color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-run[data-tone="ask"] .pk-run__body { box-shadow: inset 0 0 0 1px var(--metre-accent) !important; }
@@ -210,7 +98,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.laolao-mode-switcher, .l
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.laolao-mode-button__halo, .laolao-mode-button__fx) { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-recent-session--active,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-recent-session:hover { background-color: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-recent-session--active :is(.sidebar-recent-session__title, .sidebar-recent-session__time, span) { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier {
   background: none !important;
   -webkit-background-clip: border-box !important;
@@ -220,8 +107,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier {
   animation: none !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn { background-image: none !important; box-shadow: none !important; }
-/* 共用按钮的字色默认是碧琪粉 #ad4f7f（--mode-button-ink 没定义时）；Metre 用正文色。设置页「高级」的按钮就是这样露粉的。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --mode-button-ink: var(--metre-text); }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn:not(.btn--xs):not(.primary):not(.danger) { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn.btn--xs { background-color: transparent !important; color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-fork-action,
@@ -333,7 +218,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__icon { 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .chat-bubble { position: relative !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-group.user .pinkie-msg-row { position: absolute !important; right: 0 !important; top: 100% !important; margin-top: 4px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-recent-session--active::before { content: none !important; display: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-recent-session--active { border-radius: 8px !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-shell,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell-nav { background: var(--metre-side) !important; }
@@ -423,15 +307,6 @@ html[data-pinkie-reduce-motion] .pk-metre-prompt__text:hover .pk-metre-kw::after
  * 第二版（Fable 11-14）：照 Claude 桌面版的版式重排。上面那一段只管「去掉碧琪的东西」，这一段管「长成什么样」。
  * 尺寸标准写在 briefs/metre-mode-1113/ACCEPTANCE.md 批 4 的「版式」一节，改这里要同时对着那一节。
  * ==================================================================================================== */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-serif: Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
-  --metre-sans: var(--pinkie-ui-font, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif);
-  --metre-ic-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M10 4v12M4 10h12'/%3E%3C/svg%3E");
-  --metre-ic-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='5.25'/%3E%3Cpath d='M13 13l3.5 3.5'/%3E%3C/svg%3E");
-  --metre-ic-works: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Crect x='3.5' y='6.5' width='10' height='10' rx='2'/%3E%3Cpath d='M7 6.5V5.5a2 2 0 0 1 2-2h5.5a2 2 0 0 1 2 2V11a2 2 0 0 1-2 2h-1'/%3E%3C/svg%3E");
-  --metre-ic-temp: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-dasharray='2.4 3'%3E%3Ccircle cx='10' cy='10' r='6.25'/%3E%3C/svg%3E");
-  --metre-ic-chat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M4 5.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9.5L6 16.5v-3a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
-}
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body { font-family: var(--metre-sans) !important; -webkit-font-smoothing: antialiased; }
 
 /* ---------- 侧栏：14px 字、36px 行高、一套 1.5px 线条图标 ---------- */
@@ -489,10 +364,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar #laolao-session
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .laolao-group__label { font: 400 12px/1 var(--metre-sans) !important; color: var(--metre-muted) !important; letter-spacing: 0 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .laolao-group__head :is(button) { color: var(--metre-muted) !important; background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .laolao-group__empty { font-size: 13px !important; color: var(--metre-muted) !important; padding-left: 10px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session { min-height: 34px !important; padding: 0 10px !important; border-radius: 8px !important; border: 0 !important; background-image: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session__title { font: 400 14px/1.3 var(--metre-sans) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active .sidebar-recent-session__title { font-weight: 400 !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session__time { font-size: 12px !important; color: var(--metre-muted) !important; }
 /* 底栏：只有连接状态和「更多」，都用次要色 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-shell__footer { border-top: 0 !important; background: transparent !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-footer-bar { background: transparent !important; border: 0 !important; box-shadow: none !important; }
@@ -593,7 +466,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail.chat-wor
 /* 工具箱：换成单色的滑杆图标；思考强度不要光晕 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-tray-btn > svg { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .pinkie-tray-btn::before { content: ""; flex: none; width: 16px; height: 16px; background: currentColor; -webkit-mask: var(--metre-ic-tools) center / contain no-repeat; mask: var(--metre-ic-tools) center / contain no-repeat; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --metre-ic-tools: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M3.5 6.5h6M13.5 6.5h3M3.5 13.5h3M10.5 13.5h6'/%3E%3Ccircle cx='11.5' cy='6.5' r='2'/%3E%3Ccircle cx='8.5' cy='13.5' r='2'/%3E%3C/svg%3E"); }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier { filter: none !important; font-weight: 400 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier::before,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-external-tier::after { content: none !important; display: none !important; }
@@ -604,8 +476,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__info { display
 }
 /* 会话行：选中只靠灰底，不加粗、不变色；和上面三个入口左对齐 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .laolao-group__list > .sidebar-recent-session { margin-inline: 0 !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session :is(.sidebar-recent-session__link, .session-row-aside) { font-weight: 400 !important; padding-left: 0 !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-session-date { padding: 10px 10px 4px !important; font: 400 12px/1.2 var(--metre-sans) !important; color: var(--metre-muted) !important; opacity: 1 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .laolao-group__empty { opacity: 1 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text { word-break: auto-phrase; }
 
@@ -630,8 +500,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .pinkie-ba
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .pinkie-baton__seg[aria-checked="true"] { background: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input:focus-within,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input:focus-within { border-color: var(--metre-muted) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session:hover { background: var(--metre-hover) !important; background-image: none !important; }
 
 /* ---------- 对齐和窄窗口 ---------- */
 /* 右侧那一列挪走以后不再占 44px，中间一栏才真的居中 */
@@ -642,9 +510,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .topbar button:hover { color:
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail.chat-workspace-rail--collapsed { right: 84px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text { font-size: 24px; }
 }
-/* 深色底上的浅色字在 Windows 上渲染偏粗（同样是 400）。字色压暗一档，和 Claude 深色的正文接近；字重不动。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] { --metre-text: #E3E1D8; }
 @media (max-width: 920px) {
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail.chat-workspace-rail--collapsed { top: 15px !important; }
 }
@@ -658,45 +523,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-workspace-rail.chat-wor
  *   3. 深色按用户截图里量到的明度重配（内容区比侧栏更暗）。
  * 上面两版里被这里覆盖的规则没有删，方便对照；同样的选择器，后写的生效。
  * ==================================================================================================== */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-accent: #96681C;
-  --accent-rgb: 150, 104, 28 !important;
-  --accent-hover: #7F5714 !important;
-  --accent-muted: rgba(150, 104, 28, 0.14) !important;
-  --accent-subtle: rgba(150, 104, 28, 0.08) !important;
-  --metre-side-hover: #EAE8DF;
-  --metre-side-active: #E3E0D5;
-  --metre-card: #FFFFFF;
-  --metre-art: #FAF9F5;
-  --metre-ph: #EFEDE5;
-  --metre-ph-strong: #DAD7CC;
-  --metre-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-  --metre-ic-board: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 4.5h13v11h-13zM3.5 8.5h13M8.5 8.5v7'/%3E%3C/svg%3E");
-  --metre-ic-beat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
-  --metre-ic-send: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 15.5v-11M5.5 9L10 4.5 14.5 9'/%3E%3C/svg%3E");
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
-  --metre-bg: #191817;
-  --metre-side: #201F1D;
-  --metre-surface: #2C2B28;
-  --metre-card: #1F1E1C;
-  --metre-art: #191817;
-  --metre-text: #E4E2DB;
-  --metre-muted: #9E9C95;
-  --metre-line: #2E2D2A;
-  --metre-line-strong: #3D3B37;
-  --metre-hover: #262523;
-  --metre-side-hover: #2B2A27;
-  --metre-side-active: #363430;
-  --metre-ph: #2A2927;
-  --metre-ph-strong: #3F3D39;
-  --metre-accent: #D2A85C;
-  --accent-rgb: 210, 168, 92 !important;
-  --accent-hover: #E0BA74 !important;
-  --accent-foreground: #191817 !important;
-  --primary-foreground: #191817 !important;
-}
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) body { font-family: var(--metre-sans) !important; }
 
 /* ---------- 侧栏 ---------- */
@@ -725,9 +551,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-button__label { 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry) { height: 34px !important; min-height: 34px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry):hover,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button):hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session:hover { background: var(--metre-side-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session--active:hover { background: var(--metre-side-active) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pk-metre-nav--board { --metre-ic: var(--metre-ic-board); width: 100% !important; cursor: pointer; text-align: left; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .pk-metre-nav--board { background: var(--metre-side-active) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .sidebar-recent-session--active { background: transparent !important; }
@@ -907,14 +730,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__kind { font
  * Metre 照 Claude 的排法：顶上一行是主按钮「新会话」和几个图标（临时、搜索、收起）；中间两行导航和最近的会话；
  * 左下角是身份栏（黑底方块里一个拍号记号、Metre、连接状态），点它换模式；右下角是设置和更多。
  * 只在侧栏展开时这样排；收起成一条时照原来的。DOM 一个都没挪，全是定位。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23FAF9F5' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
-  --metre-ic-updown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 8L10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
-  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23191817' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
-}
 /* 顶上：品牌那一行不占高度，只剩右上角的收起图标 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand { position: static !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; border: 0 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__identity { position: static !important; }
@@ -1029,20 +844,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-menu__option { w
  *   深色：侧栏 #1F1F1F、内容区 #191919、输入框 #303030、选中行 #404040（Metre 保留一点暖色，明度照这几个数）。
  * 和上面第四版冲突的规则以这一段为准。
  * ==================================================================================================== */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --shell-nav-width: 272px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
-  --metre-bg: #191918;
-  --metre-side: #1F1F1E;
-  --metre-surface: #2F2F2D;
-  --metre-card: #1F1F1E;
-  --metre-art: #191918;
-  --metre-line: #2F2F2D;
-  --metre-line-strong: #3A3A38;
-  --metre-hover: #2A2A28;
-  --metre-side-hover: #2C2C2A;
-  --metre-side-active: #3D3D3A;
-}
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell--chat aside.sidebar:not(.sidebar--collapsed) { width: 272px !important; }
 /* 侧栏最上面一行小图标：左边收起，右边临时会话 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-brand__actions { top: 10px !important; left: 18px !important; right: auto !important; }
@@ -1075,7 +876,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--c
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--board { background: var(--metre-side-active) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session { background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) #laolao-session-manager { margin-top: 22px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-recent-session__title, .sidebar-recent-session__link, .sidebar-recent-session a) { font-size: 14.5px !important; }
 /* 左下角账号栏：一行，圆形记号 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .sidebar-shell__footer { height: 54px !important; min-height: 54px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain { left: 18px !important; bottom: 17px !important; width: auto !important; height: 36px !important; padding: 4px 8px 4px 6px !important; align-items: center !important; gap: 9px !important; }
@@ -1116,7 +916,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent 
  * 2. 「临时会话」图标被 .sidebar-sessions 的 overflow 裁掉：顶上那一行的位置改由 .sidebar-sessions 自己的内边距留出来。
  * 3. 连接状态的字压在设置图标上：字收进悬停提示，只留一个圆点，贴在账号栏圆形记号的右下角。
  * 4. 首页：引导语到输入框、输入框到看板之间的空白收紧。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) { --shell-nav-width: 280px !important; --metre-side-w: 280px; }
 @media (min-width: 851px) {
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not([data-pinkie-sidebar-auto="1"]):not([data-laolao-workspace-split="1"]):not([data-laolao-workspace-dock="1"]):not([data-laolao-browser-workspace="1"]):not(:has(aside.sidebar.sidebar--collapsed)) .shell.shell--chat:not(.shell--nav-collapsed) { grid-template-columns: var(--metre-side-w) minmax(0, 1fr) !important; }
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-sidebar-auto="1"] .shell--chat > .shell-nav { width: var(--metre-side-w) !important; }
@@ -1155,13 +954,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--c
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { padding-bottom: 46px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-quick { margin-top: 26px !important; }
 /* 5. 字体：碧琪随包的那套字（"Pinkie UI"）是通过 --pinkie-ui-font 发到各处的，会话名、时间、用户消息还在用它。
- *    Metre 里把这个变量本身换成系统字体，不再一处一处补。 */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --pinkie-ui-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
-  --cle-sans: var(--pinkie-ui-font);
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session__name { font: 400 14.5px/1.4 var(--metre-sans) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-session-time { font: 400 12px/1.3 var(--metre-sans) !important; color: var(--metre-muted) !important; }
+ *    Metre 里把这个变量本身换成系统字体，不再一处一处补（变量在「第六版『总谱』」那一段的合并色板里）。 */
 /* 6. 对话页的输入框：照 claude-chat-dark 那张，是一行高的（约 50px），左边一个图标、右边发送键；首页那个两行高的不变。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not([data-laolao-startup-home="1"]) .agent-chat__input .agent-chat__composer-combobox,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not([data-laolao-startup-home="1"]) .agent-chat__input .agent-chat__composer-combobox:focus-within { min-height: 52px !important; padding: 12px 52px 12px 46px !important; }
@@ -1215,49 +1008,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home { height
  *   状态色全部降饱和，不发光、不用渐变。
  * 和上面冲突的以这一段为准。
  * ==================================================================================================== */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
-  --metre-bg: #FAFAFA;
-  --metre-side: #F4F4F5;
-  --metre-surface: #FFFFFF;
-  --metre-card: #FFFFFF;
-  --metre-art: #F4F4F5;
-  --metre-text: #18181B;
-  --metre-muted: #71717A;
-  --metre-line: #E4E4E7;
-  --metre-line-strong: #D4D4D8;
-  --metre-hover: #F0F0F2;
-  --metre-side-hover: #EBEBED;
-  --metre-side-active: #E4E4E7;
-  --metre-ph: #EDEDEF;
-  --metre-ph-strong: #D4D4D8;
-  --metre-accent: #8F6526;
-  --accent-rgb: 143, 101, 38 !important;
-  --accent-hover: #7A5520 !important;
-  --accent-muted: rgba(143, 101, 38, 0.12) !important;
-  --accent-subtle: rgba(143, 101, 38, 0.07) !important;
-}
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
-  --metre-bg: #18181B;
-  --metre-side: #131315;
-  --metre-surface: #26262A;
-  --metre-card: #1E1E21;
-  --metre-art: #18181B;
-  --metre-text: #EDEDEF;
-  --metre-muted: #9D9DA6;
-  --metre-line: #29292D;
-  --metre-line-strong: #3A3A40;
-  --metre-hover: #222226;
-  --metre-side-hover: #1E1E21;
-  --metre-side-active: #2A2A2F;
-  --metre-ph: #232327;
-  --metre-ph-strong: #3A3A40;
-  --metre-accent: #C8A15E;
-  --accent-rgb: 200, 161, 94 !important;
-  --accent-hover: #D4B272 !important;
-  --accent-muted: rgba(200, 161, 94, 0.14) !important;
-  --accent-subtle: rgba(200, 161, 94, 0.08) !important;
-}
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.04) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .agent-chat__input { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important; }
@@ -1281,47 +1031,121 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__welcome .pk-metr
  * 和上面冲突的以这一段为准。
  * ==================================================================================================== */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) {
+  /* 日间（11-23 合并）：原来这里前后有 9 段日间、9 段深色在反复覆盖同一批变量（强调色依次是陶土、旧铜、金、钴蓝），
+   * 现在只留最后生效的那一组，画面一格不变。改颜色只改这一段和下面深色那一段。 */
   --metre-bg: #F7F6F3;
-  --metre-side: #F0EFEB;
   --metre-surface: #FFFFFF;
-  --metre-card: #FFFFFF;
-  --metre-art: #F0EFEB;
   --metre-text: #1B1A18;
   --metre-muted: #77736B;
   --metre-line: #E4E2DC;
   --metre-line-strong: #D3D0C8;
+  --metre-accent: #2F4BB0;
   --metre-hover: #EFEDE8;
+  --metre-side: #F0EFEB;
+  --metre-serif: Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", serif;
+  --metre-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --metre-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas, monospace;
+  --metre-ic-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M10 4v12M4 10h12'/%3E%3C/svg%3E");
+  --metre-ic-search: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Ccircle cx='9' cy='9' r='5.25'/%3E%3Cpath d='M13 13l3.5 3.5'/%3E%3C/svg%3E");
+  --metre-ic-works: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Crect x='3.5' y='6.5' width='10' height='10' rx='2'/%3E%3Cpath d='M7 6.5V5.5a2 2 0 0 1 2-2h5.5a2 2 0 0 1 2 2V11a2 2 0 0 1-2 2h-1'/%3E%3C/svg%3E");
+  --metre-ic-temp: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-dasharray='2.4 3'%3E%3Ccircle cx='10' cy='10' r='6.25'/%3E%3C/svg%3E");
+  --metre-ic-chat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M4 5.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9.5L6 16.5v-3a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
+  --metre-ic-tools: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M3.5 6.5h6M13.5 6.5h3M3.5 13.5h3M10.5 13.5h6'/%3E%3Ccircle cx='11.5' cy='6.5' r='2'/%3E%3Ccircle cx='8.5' cy='13.5' r='2'/%3E%3C/svg%3E");
   --metre-side-hover: #E8E6E0;
   --metre-side-active: #E1DED7;
+  --metre-card: #FFFFFF;
+  --metre-art: #F0EFEB;
   --metre-ph: #EBE9E3;
   --metre-ph-strong: #D3D0C8;
-  --metre-accent: #2F4BB0;
+  --metre-ic-board: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 4.5h13v11h-13zM3.5 8.5h13M8.5 8.5v7'/%3E%3C/svg%3E");
+  --metre-ic-beat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+  --metre-ic-send: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 15.5v-11M5.5 9L10 4.5 14.5 9'/%3E%3C/svg%3E");
+  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23FAF9F5' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+  --metre-ic-updown: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 8L10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  --metre-side-w: 280px;
+  /* 给原生界面和碧琪共用样式的变量：一律接到上面的 Metre 色（--pinkie-ui-font：碧琪随包的字体，Metre 换成系统字体） */
+  --laolao-wallpaper-image: none !important;
+  --laolao-wallpaper-soft: none !important;
+  --bg: var(--metre-bg) !important;
+  --bg-content: var(--metre-bg) !important;
+  --bg-elevated: var(--metre-surface) !important;
+  --bg-accent: var(--metre-hover) !important;
+  --bg-hover: var(--metre-hover) !important;
+  --bg-muted: var(--metre-hover) !important;
+  --card: var(--metre-surface) !important;
+  --card-foreground: var(--metre-text) !important;
+  --card-highlight: transparent !important;
+  --panel: var(--metre-bg) !important;
+  --panel-hover: var(--metre-hover) !important;
+  --panel-strong: var(--metre-surface) !important;
+  --popover: var(--metre-surface) !important;
+  --popover-foreground: var(--metre-text) !important;
+  --chrome: var(--metre-bg) !important;
+  --chrome-strong: var(--metre-bg) !important;
+  --input: var(--metre-surface) !important;
+  --laolao-surface: var(--metre-surface) !important;
+  --laolao-surface-strong: var(--metre-surface) !important;
+  --text: var(--metre-text) !important;
+  --text-strong: var(--metre-text) !important;
+  --chat-text: var(--metre-text) !important;
+  --muted: var(--metre-muted) !important;
+  --muted-strong: var(--metre-muted) !important;
+  --muted-foreground: var(--metre-muted) !important;
+  --secondary: var(--metre-hover) !important;
+  --secondary-foreground: var(--metre-text) !important;
+  --border: var(--metre-line) !important;
+  --border-hover: #D6D3C7 !important;
+  --border-strong: #D6D3C7 !important;
+  --accent: var(--metre-accent) !important;
   --accent-rgb: 47, 75, 176 !important;
   --accent-hover: #263E93 !important;
+  --accent-foreground: #FFFFFF !important;
+  --accent-glow: transparent !important;
   --accent-muted: rgba(47, 75, 176, 0.12) !important;
   --accent-subtle: rgba(47, 75, 176, 0.06) !important;
+  --primary: var(--metre-accent) !important;
+  --primary-foreground: #FFFFFF !important;
+  --ring: var(--metre-muted) !important;
+  --focus: var(--metre-muted) !important;
+  --focus-ring: 0 0 0 2px rgba(115, 114, 108, 0.35) !important;
+  --shadow-sm: 0 1px 2px rgba(31, 30, 29, 0.05) !important;
+  --shadow-md: 0 4px 14px rgba(31, 30, 29, 0.07) !important;
+  --mode-button-ink: var(--metre-text);
+  --shell-nav-width: 280px !important;
+  --pinkie-ui-font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  --cle-sans: var(--pinkie-ui-font);
+  background: var(--metre-bg) !important;
+  color-scheme: light;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night],
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] {
   --metre-bg: #151514;
-  --metre-side: #111110;
   --metre-surface: #232321;
-  --metre-card: #1B1B1A;
-  --metre-art: #151514;
   --metre-text: #ECEAE4;
   --metre-muted: #918D84;
   --metre-line: #272725;
   --metre-line-strong: #393835;
+  --metre-accent: #93A5EE;
   --metre-hover: #1F1F1D;
+  --metre-side: #111110;
   --metre-side-hover: #1C1C1B;
   --metre-side-active: #292927;
+  --metre-card: #1B1B1A;
+  --metre-art: #151514;
   --metre-ph: #222220;
   --metre-ph-strong: #393835;
-  --metre-accent: #93A5EE;
+  --metre-ic-beat-on: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23191817' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M4 3.5v13M8.5 8v8.5M12.5 8v8.5M16.5 8v8.5'/%3E%3C/svg%3E");
+  --border-hover: #4A4A45 !important;
+  --border-strong: #4A4A45 !important;
   --accent-rgb: 147, 165, 238 !important;
   --accent-hover: #A9B8F2 !important;
+  --accent-foreground: #191817 !important;
   --accent-muted: rgba(147, 165, 238, 0.14) !important;
   --accent-subtle: rgba(147, 165, 238, 0.07) !important;
+  --primary-foreground: #191817 !important;
+  --shadow-sm: none !important;
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+  color-scheme: dark;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input { border-color: var(--metre-line-strong) !important; box-shadow: 0 1px 0 rgba(27, 26, 24, 0.03) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-theme="dark"] .agent-chat__input,
@@ -1444,7 +1268,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) [data-metre-pop] {
   bottom: auto !important;
   margin: 0 !important;
   transform: none !important;
-  animation: none !important;
+  animation: pk-metre-pop-in 208ms cubic-bezier(0.2, 0.7, 0.2, 1) !important;   /* 11-23：¼ 拍淡入、往上浮 4px（用 translate，不碰被锁住的 transform） */
   max-height: var(--mp-max, none) !important;
   overflow-y: auto !important;
 }
@@ -1585,7 +1409,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is([role="tooltip"
  * 底色 14% 的钴蓝在深色底上太淡，提到 34%。 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::selection { background: color-mix(in srgb, var(--metre-cobalt) 34%, transparent) !important; color: var(--metre-text) !important; -webkit-text-fill-color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(button, a, summary, [role="button"], [tabindex]):focus-visible { outline: 2px solid var(--metre-cobalt) !important; outline-offset: 2px !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) * { scrollbar-color: var(--metre-line-strong) transparent; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) ::-webkit-scrollbar-thumb { background: var(--metre-line-strong); }   /* 11-24 第 6 轮：不用标准 scrollbar-color——设了它 Chromium 就丢掉原生 6px 的 ::-webkit-scrollbar，侧栏列表被系统 15px 滚动条挤窄 15px */
 
 /* ---------- 首页：只留提示语、输入框、底部画带 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pk-metre-quick { display: none !important; }
@@ -1602,8 +1426,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-sea
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) section.card.chat > .callout { width: min(768px, calc(100% - 48px)) !important; margin: 12px auto 0 !important; box-sizing: border-box !important; padding: 10px 12px 10px 14px !important; font-size: 13px !important; line-height: 1.5 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .callout__dismiss { color: var(--metre-muted) !important; background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 6px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .callout__dismiss:hover { color: var(--metre-text) !important; background: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue { width: min(768px, calc(100% - 48px)) !important; margin: 0 auto 10px !important; box-sizing: border-box !important; padding: 10px 12px !important; background: var(--metre-surface) !important; border: 1px solid var(--metre-line-strong) !important; border-radius: 10px !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue__title { color: var(--metre-muted) !important; font: 500 12px/1.4 var(--metre-sans) !important; padding: 0 2px 6px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue { width: var(--pk-mq-w, min(780px, calc(100% - 48px))) !important; margin: 0 auto var(--pk-mq-mb, 0px) !important; box-sizing: border-box !important; padding: 0 !important; background: transparent !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue > .chat-queue__title { display: none !important; } html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue > .chat-queue__list { position: absolute; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }   /* 11-24 第 5 轮追加 A：大卡片换成 laolao-metre-queue.js 画的一条。16:10 打回第 2 条：原生标题和大卡片从第一帧起就不占位、不等 .pk-mq；列表只是看不见（不 display:none），插进来那一帧的 pk-mq-born 动画在 laolao-metre-display.css，它的 animationstart 让 laolao-metre-queue.js 当帧画出那一条 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue__item { background: transparent !important; border: 0 !important; border-top: 1px solid var(--metre-line) !important; border-radius: 0 !important; padding: 8px 2px !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue__badge { background: transparent !important; border: 1px solid var(--metre-line-strong) !important; border-radius: 4px !important; color: var(--metre-muted) !important; font: 400 11px/1.5 var(--metre-sans) !important; padding: 0 6px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .chat-queue__text { color: var(--metre-text) !important; padding-left: 0 !important; margin-left: 0 !important; }
@@ -2171,8 +1995,8 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-ch
   transform: none !important;
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::before,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::after { box-shadow: none !important; background: none !important; animation: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--metre-cobalt) 86%, var(--metre-text)) !important; outline: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn::after { box-shadow: none !important; }   /* 11-24：::after 是停止键「运行中」的拍子线（laolao-metre-keys.css） */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--metre-cobalt) 86%, var(--metre-text)) !important; }   /* 键盘焦点的钴蓝一圈在 keys.css */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .agent-chat__input button.chat-send-btn.chat-send-btn--stop { background: var(--metre-text) !important; color: var(--metre-bg) !important; }
 
 /* ---------- 真机回归 2（11-16 用户截图：「排版问题，重复问题」）----------
@@ -2590,3 +2414,140 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(.pk-wb, .pk-wb.is-light) 
   --wb-editor: var(--metre-surface);
   --wb-sig: linear-gradient(90deg, var(--metre-accent), var(--metre-accent));
 }
+
+/* ====================================================================================================
+ * 11-23 动画（在现有设计上加，不换题材；时值都按 ♩=72：一拍 833ms、半拍 417ms、¼ 拍 208ms）。用户 11-23：「动画呢」，六项都要。
+ *   1. 背景的谱台灯换状态时闪 / 暗下去、6. 空闲时舞台口呼吸：在 laolao-metre-backdrop.js（LAMP_SEQ、breathe）。
+ *   2. 总谱打开半拍从右边滑进来（浮层是从上面落下来），关的时候 300ms 滑回去（laolao-metre-board.js 的 close 等它滑完再藏）。
+ *   3. 总谱刷新：新的声部行、新的小节淡入上浮；声部条从上一次的位置长过去，「现在」那条线移过去（位置由 laolao-metre-board-data.js 写进
+ *      --mb-dx / --mb-s）。只动 opacity 和 transform，不改排版，「刷新不乱跳」照旧。
+ *   4. 弹层 ¼ 拍淡入、往上浮 4px（上面 [data-metre-pop] 那条，加这里的菜单、更多工具、搜索）。
+ *   5. 引导语整句浮现完以后，关键词下面那排点从左往右一颗颗亮起来（--metre-reveal 由 laolao-metre-home.js 写）。
+ *   减少动态效果（设置里的开关或系统的）时全部没有。
+ * ==================================================================================================== */
+.pk-metre-board.is-docked:not([hidden]) { animation: pk-metre-board-in 417ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pk-metre-board.is-overlay:not([hidden]) { animation: pk-metre-board-drop 417ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pk-metre-board.is-docked.is-leaving { animation: pk-metre-board-out 300ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+.pk-metre-board.is-overlay.is-leaving { animation: pk-metre-board-lift 300ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+@keyframes pk-metre-board-in {
+  from { opacity: 0; transform: translateX(32px); }
+}
+@keyframes pk-metre-board-out {
+  to { opacity: 0; transform: translateX(32px); }
+}
+@keyframes pk-metre-board-drop {
+  from { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes pk-metre-board-lift {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+.pk-metre-board .pk-mb-score__row.is-new, .pk-metre-board .pk-mb-events li.is-new { animation: pk-metre-new 417ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pk-metre-board .pk-mb-score__track i.is-moving { transform-origin: left center; animation: pk-metre-grow 417ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pk-metre-board .pk-mb-score__now.is-moving { animation: pk-metre-slide 417ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes pk-metre-new {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@keyframes pk-metre-grow {
+  from { transform: translateX(var(--mb-dx, 0%)) scaleX(var(--mb-s, 1)); }
+}
+@keyframes pk-metre-slide {
+  from { transform: translateX(var(--mb-dx, 0%)); }
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) :is(.laolao-menu, .laolao-footer-overflow, .pinkie-session-search-dialog) { animation: pk-metre-pop-in 208ms cubic-bezier(0.2, 0.7, 0.2, 1) !important; }
+@keyframes pk-metre-pop-in {
+  from { opacity: 0; translate: 0 4px; }
+}
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-enter .pk-metre-kw::after { animation: pk-metre-dots 520ms linear var(--metre-reveal, 0ms) backwards; }
+/* 悬停时照旧补一下那道线（和上一条同名的动画留着不重来，只多一个）*/
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-enter:hover .pk-metre-kw::after { animation: pk-metre-dots 520ms linear var(--metre-reveal, 0ms) backwards, pk-metre-underline 420ms ease-out; }
+@keyframes pk-metre-dots {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+html[data-pinkie-reduce-motion] .pk-metre-board, html[data-pinkie-reduce-motion] .pk-metre-board :is(.is-new, .is-moving) { animation: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4)[data-pinkie-reduce-motion] :is([data-metre-pop], .laolao-menu, .laolao-footer-overflow, .pinkie-session-search-dialog), html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4)[data-pinkie-reduce-motion] .pk-metre-kw::after { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .pk-metre-board, .pk-metre-board :is(.is-new, .is-moving) { animation: none !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) :is([data-metre-pop], .laolao-menu, .laolao-footer-overflow, .pinkie-session-search-dialog), html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pk-metre-kw::after { animation: none !important; }
+}
+
+/* ====================================================================================================
+ * 11-23 / 11-24 整页时刻（「总谱」语言，时值按 ♩=72）。laolao-metre-home.js 在这几个时刻给根元素放 data-metre-enter：
+ *   "wait"：刚打开 App、首页还没进场——画带先压暗、引导语和输入框先藏起来，免得先闪一下全亮的再进场；
+ *   "home"：进 Metre（预备拍翻开的那一拍）、刚打开 App 第一次出首页。画带由 laolao-metre-stagefx.js 亮灯（天幕从中间亮、
+ *     地板的灯按三十二分音符一盏盏亮、指挥台最后亮）；208ms 速度记号那一行从左划出，417ms 引导语按音高落回、输入框浮起 16px，
+ *     625ms 输入框下面那一排淡入。换会话是「翻谱」（stagefx 的 turn），不再用竖条显出和指挥线。
+ *   首页画带矮于 180px（最矮 144px）时根元素有 data-metre-band-low：舞台装饰全收掉，只留一行五线谱（.pk-metre-lowstaff）。
+ *   减少动态效果时一样都没有（home.js / stagefx 不放，这里也再拦一道）。
+ * ==================================================================================================== */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] .pk-metre-backdrop { opacity: 0.12; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] :is(.pk-metre-prompt, .agent-chat__input, .agent-chat__composer-controls) { opacity: 0; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .pk-metre-prompt__head { animation: pk-metre-wipe 417ms cubic-bezier(0.2, 0.7, 0.2, 1) 208ms backwards; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .agent-chat__input { animation: pk-metre-rise 417ms cubic-bezier(0.2, 0.7, 0.2, 1) 417ms backwards; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="home"] .agent-chat__composer-controls { animation: pk-metre-fade 208ms ease-out 625ms backwards; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-wait .pk-metre-ch, html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-wait .pk-metre-kw::after { opacity: 0; animation: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pk-metre-prompt__text.is-sung .pk-metre-ch { opacity: 1; animation: none; }
+.pk-metre-fly { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-band-low] canvas.pk-metre-backdrop { visibility: hidden; }
+.pk-metre-lowstaff { position: fixed; bottom: 0; height: var(--metre-band, 144px); z-index: -1; pointer-events: none; box-sizing: border-box; padding: 0 6%; background: repeating-linear-gradient(to bottom, var(--metre-staff-ink, #9C988F) 0 1px, transparent 1px 8px) center 42% / 100% 33px no-repeat content-box; }
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) .pk-metre-lowstaff { --metre-staff-ink: #5E5B54; }
+@keyframes pk-metre-wipe {
+  from { opacity: 0; clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@keyframes pk-metre-rise {
+  from { opacity: 0; translate: 0 16px; }
+}
+@keyframes pk-metre-fade {
+  from { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter] :is(.pk-metre-prompt__head, .agent-chat__input, .agent-chat__composer-controls) { animation: none !important; }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-enter="wait"] :is(.pk-metre-backdrop, .pk-metre-prompt, .agent-chat__input, .agent-chat__composer-controls) { opacity: 1; }
+}
+/* ---------- 11-24 第 5 轮追加 A：待发送 = 输入框上沿的一条（laolao-metre-queue.js）。
+   收起 30px 一行：「待发送 N · 第一条的前 30 个字…」＋展开 / 全部清掉；展开每条 28px、最多露 4 条，多了在框里滚；
+   宽度和输入框一样，文字和输入框里的字对齐（--pk-mq-w / --pk-mq-pad / --pk-mq-mb 由脚本量好写在 .chat-queue 上）
+   原生的标题和大卡片列表只在这一条画出来以后才藏（:has），脚本没跑起来时原生的照常显示 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq { border: 1px solid var(--metre-line); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--metre-surface); color: var(--metre-text); font: 400 13px/20px var(--metre-sans); overflow: hidden; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) :is(.pk-mq__bar, .pk-mq__row) { display: flex; align-items: center; gap: 6px; box-sizing: border-box; padding: 0 6px 0 var(--pk-mq-pad, 46px); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__bar { height: 30px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) :is(.pk-mq__count, .pk-mq__sep) { flex: none; color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__count { font-weight: 500; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) :is(.pk-mq__peek, .pk-mq__text) { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__list { margin: 0; padding: 0; list-style: none; max-height: 112px; overflow-y: auto; border-top: 1px solid var(--metre-line); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__row { height: 28px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__row:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__tag { flex: none; color: var(--metre-muted); font-size: 12px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__row[data-state="failed"] .pk-mq__tag { color: var(--metre-danger); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq__acts { display: flex; flex: none; gap: 1px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq .pk-mq__btn { all: unset; flex: none; box-sizing: border-box; height: 22px; min-width: 22px; padding: 0 6px; border-radius: 5px; color: var(--metre-muted); font: 400 12px/22px var(--metre-sans); text-align: center; cursor: pointer; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq .pk-mq__btn:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) .pk-mq .pk-mq__btn:disabled { opacity: 0.35; cursor: default; background: transparent; } html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5):has(.chat-queue > .pk-mq) .pk-metre-perch { translate: 0 calc(-1 * var(--pk-mq-h, 0px)); }   /* 小猫蹲到待发送这一条的上沿，不挡它的按键 */
+/* ---------- 11-24 第 5 轮追加 B：侧栏会话列表只有一条左对齐线 —— 分组小标题、会话名都和上面导航的字对齐（行左 + 39px，1440 宽时 x = 59）；
+   只留一层分组（「最近」的标题行藏掉，laolao-metre-list.js）；状态记号在导航图标那一列；选中 = 左边一条钴蓝细线 + 很淡的底，和「新会话」区分开 ---------- */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-group.pk-ml-flat > .laolao-group__head { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar :is(.laolao-group__head, .laolao-group__empty) { padding-left: 39px !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-date { display: flex; align-items: center; justify-content: space-between; min-height: 28px; box-sizing: border-box; padding: 10px 4px 2px 39px !important; font: 500 12px/16px var(--metre-sans) !important; color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-date > .pinkie-recent-menu { width: 22px; height: 22px; padding: 0; border-radius: 5px; opacity: 0; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-group:is(:hover, :focus-within) .pinkie-session-date > .pinkie-recent-menu { opacity: 1; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session { position: relative; align-items: center; min-height: 32px !important; padding: 0 8px 0 39px !important; border-radius: 6px !important; background: transparent !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session:hover { background: var(--metre-side-hover) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar :is(.sidebar-recent-session--active, .sidebar-recent-session--active:hover) { background: color-mix(in srgb, var(--metre-accent) 7%, transparent) !important; box-shadow: inset 2px 0 0 var(--metre-accent) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session__link { padding: 0 !important; gap: 6px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session__name { font: 400 14px/20px var(--metre-sans) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-unread .sidebar-recent-session__name { font-weight: 600 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pinkie-session-time { font: 400 12px/20px var(--metre-sans) !important; color: var(--metre-muted) !important; font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .session-row-aside > :is(.pinkie-session-unread, [class*="pinkie-session-status--"]) { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot { position: absolute; left: 15px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; pointer-events: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot[data-state="waiting"] { background: var(--metre-accent); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot[data-state="error"] { background: var(--metre-danger); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .pk-ml-dot[data-state="running"] { background: var(--metre-text); animation: pk-ml-beat 833ms ease-in-out infinite; }
+@keyframes pk-ml-beat { 0%, 100% { transform: scale(0.5); opacity: 0.5; } 14% { transform: scale(1); opacity: 1; } }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-row-actions { position: absolute !important; right: 4px; top: 50%; transform: translateY(-50%); display: flex !important; gap: 1px; opacity: 0; pointer-events: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session:is(:hover, :focus-within) .laolao-row-actions { position: static !important; transform: none; opacity: 1; pointer-events: auto; }   /* 16:10 打回第 3 条：悬停时按键回到行尾区里占位，标题让出位置再省略，不叠字 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .sidebar-recent-session:is(:hover, :focus-within) .pinkie-session-time { display: none; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-row-actions > button { width: 22px; min-width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent !important; color: var(--metre-muted) !important; font: 400 13px/22px var(--metre-sans); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4):not(#_m5) aside.sidebar .laolao-row-actions > button:hover { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"][data-pinkie-reduce-motion] aside.sidebar .pk-ml-dot { animation: none; }
+@media (prefers-reduced-motion: reduce) { html[data-laolao-mode="metre"] aside.sidebar .pk-ml-dot { animation: none; } }
