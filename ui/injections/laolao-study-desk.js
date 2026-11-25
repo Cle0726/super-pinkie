@@ -1166,7 +1166,7 @@
   }
   function onKey(event) {
     // 学习台页面上不开工作台；回到对话界面后 ⌥⌘B 照常开关工作台。
-    if (event.altKey && event.metaKey && event.code === 'KeyB') { if (!workspace().chat) { event.preventDefault(); event.stopImmediatePropagation(); } return; }
+    if (event.altKey && !event.shiftKey && event.code === 'KeyB' && (/Mac/.test(navigator.platform) ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) { if (!workspace().chat) { event.preventDefault(); event.stopImmediatePropagation(); } return; }
     if (event.defaultPrevented || event.repeat || event.isComposing) return;
     const modal = [...(state.root?.querySelectorAll('.lesson-dialog[open]') || [])].at(-1);
     if (modal && event.key === 'Escape') { event.preventDefault(); modal.close(); return; }
