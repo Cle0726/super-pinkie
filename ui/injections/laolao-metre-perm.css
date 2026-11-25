@@ -69,6 +69,8 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .bt
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover::before { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger::before { border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
 /* 详情区原生标签和值是英文（中文语言包里 cwd 也是「CWD」，security / ask 的值没有翻译）：脚本按当前文字给中文别名，只改显示 */
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub[data-pk-zh] { font-size: 0; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub[data-pk-zh]::after { content: attr(data-pk-zh); font-size: 12.5px; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta-row > [data-pk-zh] { font-size: 0; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta-row > [data-pk-zh]::after { content: attr(data-pk-zh); font-size: 12.5px; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:focus-visible,

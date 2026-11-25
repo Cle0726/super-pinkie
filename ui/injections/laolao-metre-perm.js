@@ -173,7 +173,11 @@
     key: {CWD: '工作目录', cwd: '工作目录', '已解析': '实际程序'},
     '安全': {full: '不限', allowlist: '只跑允许清单里的', deny: '不跑命令'},
     '询问策略': {off: '不问', 'on-miss': '不在清单里就问', always: '每次都问'},
+    '代理': {metre: 'Metre'},
   });
+  // 副标题：原生按 Ns / Nm / Nh 拼「{time} 后过期」（中文包里单位也是英文缩写），这里给中文别名，只改显示
+  const UNIT_ZH = Object.freeze({s: '秒', m: '分钟', h: '小时'});
+  const subZh = (t) => { const m = t.match(/^(?:expires in )?(\d+)([smh])(?: 后过期)?$/); return m ? `${m[1]} ${UNIT_ZH[m[2]]}后过期` : /^(?:expired|已过期)$/.test(t) ? '已过期' : ''; };
   async function decide(item, decision, row) {
     row?.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     try {
@@ -192,6 +196,8 @@
     const queue = Array.isArray(host.props?.queue) ? host.props.queue : [];
     const title = card.querySelector('.exec-approval-title');
     if (title && queue[0]) title.dataset.pkTitle = queue[0].kind === 'plugin' ? '一个插件在等你批' : '要跑一条命令，等你批';
+    const sub = card.querySelector('.exec-approval-sub');
+    if (sub) { const z = subZh(sub.textContent.trim()); if (z) sub.dataset.pkZh = z; else delete sub.dataset.pkZh; }
     // 详情区的英文标签和值：按当前文字给中文别名（每次重画都重算，原生换了下一条也跟着对）
     for (const r of card.querySelectorAll('.exec-approval-meta-row')) {
       const [k, v] = r.children; if (!k || !v) continue;
@@ -221,7 +227,10 @@
     if (mine) mine.replaceWith(box);
     else card.querySelector('.exec-approval-actions')?.before(box);
   }
-  const approvalSoon = () => { for (const ms of [30, 250, 800]) setTimeout(paintApproval, ms); };
+  // 卡片开着时每秒对一次过期时间（一次性 setTimeout 链；卡片关了、离开 Metre 就停，不加循环定时器和观察器）
+  let subTimer = 0;
+  const subTick = () => { clearTimeout(subTimer); if (!isMetre() || !approvalHost()?.querySelector('.exec-approval-card')) return; paintApproval(); subTimer = setTimeout(subTick, 1000); };
+  const approvalSoon = () => { for (const ms of [30, 250, 800]) setTimeout(paintApproval, ms); setTimeout(subTick, 900); };
   document.addEventListener('animationstart', (e) => { if (e.animationName === 'pk-perm-born') approvalSoon(); }, true);
 
   // ---------- 按键行 ----------
