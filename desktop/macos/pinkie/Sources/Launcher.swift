@@ -7,7 +7,7 @@ import Speech
 import UserNotifications
 import WebKit
 
-private enum RuntimeConfig {
+enum RuntimeConfig {
     private static let values: [String: String] = {
         let configURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/super-pinkie/config.json")
@@ -32,7 +32,7 @@ private enum RuntimeConfig {
     ))!
 }
 
-private enum BundledRuntime {
+enum BundledRuntime {
     static let resourceRoot = Bundle.main.resourceURL?.appendingPathComponent("SuperPinkie")
     static let runtimeRoot = resourceRoot?.appendingPathComponent("runtime")
     static let binRoot = runtimeRoot?.appendingPathComponent("bin")
@@ -255,7 +255,7 @@ private enum BundledRuntime {
 /// The node worker must receive the exact private endpoint started by this App.
 /// Keeping it in process memory prevents a model or a stale shell from choosing
 /// a different helper binary or socket.
-private enum DesktopControlEndpoint {
+enum DesktopControlEndpoint {
     private static let lock = NSLock()
     private static var value: String?
 
@@ -301,7 +301,7 @@ private enum DesktopControlEndpoint {
     }
 }
 
-private final class LauncherWindow: NSWindow {
+final class LauncherWindow: NSWindow {
     // Borderless NSWindow instances are not key windows by default. The
     // dashboard contains text inputs, so it must be able to receive focus.
     override var canBecomeKey: Bool { true }
@@ -325,7 +325,7 @@ private final class LauncherWindow: NSWindow {
 /* A transparent native overlay must never turn page buttons into window
    dragging targets. Only small, explicitly reported blank toolbar regions
    accept input; the rest of the overlay passes straight through to WebKit. */
-private final class WindowDragArea: NSView {
+final class WindowDragArea: NSView {
     weak var sourceWebView: WKWebView?
     private var regions: [NSRect] = []
     private var viewport = NSSize.zero
@@ -358,7 +358,7 @@ private final class WindowDragArea: NSView {
 
 /* A narrow native drag target between chat and the browser workspace. Keeping
    resizing outside WebKit avoids pointer loss when either page is repainting. */
-private final class BrowserResizeHandle: NSView {
+final class BrowserResizeHandle: NSView {
     var onDrag: ((CGFloat) -> Void)?
     private var previousX: CGFloat?
 
@@ -382,7 +382,7 @@ private final class BrowserResizeHandle: NSView {
     }
 }
 
-private class BrowserPanelDragHandle: NSView {
+class BrowserPanelDragHandle: NSView {
     var onDrag: ((NSPoint) -> Void)?
     var onDragBegan: (() -> Void)?
     var onDragEnded: (() -> Void)?
@@ -407,7 +407,7 @@ private class BrowserPanelDragHandle: NSView {
     }
 }
 
-private final class BrowserToolbarHandle: BrowserPanelDragHandle {
+final class BrowserToolbarHandle: BrowserPanelDragHandle {
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
     override func updateTrackingAreas() {
@@ -420,7 +420,7 @@ private final class BrowserToolbarHandle: BrowserPanelDragHandle {
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
-private final class BrowserPanelContainer: NSView {
+final class BrowserPanelContainer: NSView {
     var inputSuppressed = false
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
@@ -437,7 +437,7 @@ private final class BrowserPanelContainer: NSView {
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
-private final class BrowserEdgeTab: BrowserPanelDragHandle {
+final class BrowserEdgeTab: BrowserPanelDragHandle {
     var edge: BrowserDockEdge = .right { didSet { needsDisplay = true } }
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
@@ -475,7 +475,7 @@ struct BrowserResizeEdges: OptionSet {
     var label: String { (contains(.top) ? "上" : contains(.bottom) ? "下" : "") + (contains(.left) ? "左" : contains(.right) ? "右" : "") + (isCorner ? "角" : "边") }
 }
 
-private final class BrowserPanelResizeHandle: BrowserPanelDragHandle {
+final class BrowserPanelResizeHandle: BrowserPanelDragHandle {
     let edges: BrowserResizeEdges
     init(edges: BrowserResizeEdges) {
         self.edges = edges
@@ -506,11 +506,11 @@ private final class BrowserPanelResizeHandle: BrowserPanelDragHandle {
         }
     }
 }
-private final class BrowserPanelTitle: NSTextField {
+final class BrowserPanelTitle: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-private final class BrowserAddressField: NSSearchField {
+final class BrowserAddressField: NSSearchField {
     private(set) var editingAddress = false
     var fullAddress = ""
     var shortAddress = ""
@@ -536,7 +536,7 @@ private final class BrowserAddressField: NSSearchField {
 /* WebKit on macOS does not provide a dependable Web Speech recognition path.
    Use the system recognizer directly instead, while leaving sending entirely
    under the user's control. */
-private final class NativeDictationController {
+final class NativeDictationController {
     weak var webView: WKWebView?
 
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
@@ -666,7 +666,7 @@ private final class NativeDictationController {
 /* Playback belongs to the native app rather than WebKit. That avoids browser
    autoplay rules while the page continues to decide which reply sentences are
    ready to be spoken. */
-private final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate {
+final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate {
     private struct SpeechItem {
         let id: UUID
         var audio: Data?
@@ -748,7 +748,7 @@ private final class NativeLiveSpeechController: NSObject, AVAudioPlayerDelegate 
     }
 }
 
-private enum Gateway {
+enum Gateway {
     enum ReadyRuntimeResult {
         case acceptExisting
         case restarted
@@ -1167,7 +1167,7 @@ private enum Gateway {
 /// Accessibility to its stable identity. The OpenClaw mode extension consumes
 /// this private endpoint directly as the `computer` tool; no extra node pairing
 /// or second gateway transport is required.
-private final class DesktopControlService {
+final class DesktopControlService {
     private static let displayName = "超級碧琪桌面控制"
     private static let driverBundleIdentifier = "com.trycua.driver"
     private static let hostBundleIdentifier = "com.cle0726.super-pinkie"
@@ -1645,7 +1645,7 @@ private final class DesktopControlService {
     }
 }
 
-private final class PartyService {
+final class PartyService {
     static let url = URL(string: "http://127.0.0.1:18889/")!
     private var process: Process?
 
@@ -1683,7 +1683,7 @@ private final class PartyService {
     }
 }
 
-private final class RoundtableService {
+final class RoundtableService {
     static let url = URL(string: "http://127.0.0.1:18891/")!
     private var process: Process?
 
@@ -1721,7 +1721,7 @@ private final class RoundtableService {
     }
 }
 
-private final class TTSService {
+final class TTSService {
     static let healthURL = URL(string: "http://127.0.0.1:18888/health")!
     private var process: Process?
 
@@ -1756,7 +1756,7 @@ private final class TTSService {
     }
 }
 
-private enum BundledSetup {
+enum BundledSetup {
     static func apply() {
         guard let resources = Bundle.main.resourceURL else { return }
         let script = resources
@@ -1780,7 +1780,7 @@ private enum BundledSetup {
     }
 }
 
-private enum SettingsGuardNative {
+enum SettingsGuardNative {
     static let publicKey = "MCowBQYDK2VwAyEAcejSsqLWnO2o0lFTrm+Lh22s8Qi5XSfTGX4GnQTgnOs="
     static let strikeLimit = 3
 
@@ -2006,11 +2006,11 @@ private enum SettingsGuardNative {
 
 /// Stays on screen after the main App exits, while the updater replaces the bundle.
 /// Launched as a copy of this executable so deleting /Applications/超級碧琪.app does not kill it.
-private enum UpdateProgressHold {
+enum UpdateProgressHold {
     static var controller: UpdateProgressController?
 }
 
-private final class UpdateProgressController: NSObject, NSApplicationDelegate {
+final class UpdateProgressController: NSObject, NSApplicationDelegate {
     let file: URL
     let started = Date()
     private var panel: NSPanel?
@@ -2247,7 +2247,7 @@ enum BrowserWorkspaceGeometry {
     }
 }
 
-private final class MaterialDownloadContext {
+final class MaterialDownloadContext {
     weak var webView: WKWebView?
     var destination: URL?
     var reservedPath: String?
@@ -2258,10 +2258,10 @@ private final class MaterialDownloadContext {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate, UNUserNotificationCenterDelegate {
-    private var window: NSWindow?
-    private var webView: WKWebView?
-    private var windowDragArea: WindowDragArea?
-    private lazy var pinkieNative: PinkieNativeBridge = {
+    var window: NSWindow?
+    var webView: WKWebView?
+    var windowDragArea: WindowDragArea?
+    lazy var pinkieNative: PinkieNativeBridge = {
         let bridge = PinkieNativeBridge()
         bridge.mainWebView = { [weak self] in self?.webView }
         bridge.mainWindow = { [weak self] in self?.window }
@@ -2271,77 +2271,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // native window. It keeps a second mode/session truly independent while
     // the two chats stay visible as a real left/right split instead of a
     // floating mini window over the primary work.
-    private var companionPanel: NSView?
-    private var companionWebView: WKWebView?
-    private var companionModeID: String?
+    var companionPanel: NSView?
+    var companionWebView: WKWebView?
+    var companionModeID: String?
     // One browser workspace is shared by every chat mode. It lives beside the
     // primary WebView, so switching sessions cannot remount or erase the page.
-    private var browserPanel: NSView?
-    private var browserWebView: WKWebView?
-    private var browserWidthConstraint: NSLayoutConstraint?
-    private var browserWidthFraction: CGFloat = 0.44
-    private var browserPresentation: BrowserPresentation = .floating
-    private var browserFloatingFrame: NSRect?
-    private var browserDockEdge: BrowserDockEdge?
-    private var browserEdgeRevealed = false
-    private var browserEdgeTab: BrowserEdgeTab?
-    private var browserEdgeHoveringPanel = false
-    private var browserEdgeHoveringTab = false
-    private var browserEdgeHoverGeneration = 0
-    private var browserDragging = false
-    private var browserDragUnclampedFrame: NSRect?
-    private var workspacePresentationState: String?
-    private var browserFitEnabled = (UserDefaults.standard.object(forKey: "pinkie.browser.fitWindow") as? Bool) ?? true
+    var browserPanel: NSView?
+    var browserWebView: WKWebView?
+    var browserWidthConstraint: NSLayoutConstraint?
+    var browserWidthFraction: CGFloat = 0.44
+    var browserPresentation: BrowserPresentation = .floating
+    var browserFloatingFrame: NSRect?
+    var browserDockEdge: BrowserDockEdge?
+    var browserEdgeRevealed = false
+    var browserEdgeTab: BrowserEdgeTab?
+    var browserEdgeHoveringPanel = false
+    var browserEdgeHoveringTab = false
+    var browserEdgeHoverGeneration = 0
+    var browserDragging = false
+    var browserDragUnclampedFrame: NSRect?
+    var workspacePresentationState: String?
+    var browserFitEnabled = (UserDefaults.standard.object(forKey: "pinkie.browser.fitWindow") as? Bool) ?? true
     /// 内置浏览器的网页层强制深色：深色外观下，把仍然画白底的站点翻成深色。
-    private var browserForceDark = (UserDefaults.standard.object(forKey: "pinkie.browser.forceDark") as? Bool) ?? true
-    private var browserForceDarkItem: NSMenuItem?
-    private var browserFitWidth: CGFloat?
-    private var browserFitWork: DispatchWorkItem?
-    private var browserFitItem: NSMenuItem?
-    private var browserToolbarHovered = false
-    private var browserDragDelta = NSPoint.zero
-    private var browserDragDetached = false
-    private var browserFrameConstraints: [NSLayoutConstraint] = []
-    private var browserTitlebar: BrowserPanelDragHandle?
-    private var browserCorner: BrowserPanelResizeHandle?
-    private var browserFloatingResizeHandles: [BrowserPanelResizeHandle] = []
-    private var browserContentEdgeConstraints: [NSLayoutConstraint] = []
-    private var browserPresentationButtons: [BrowserPresentation: NSButton] = [:]
-    private var browserPresentationMenu: NSPopUpButton?
-    private var browserPresentationMenuItems: [BrowserPresentation: NSMenuItem] = [:]
-    private var browserStatusStack: NSStackView?
+    var browserForceDark = (UserDefaults.standard.object(forKey: "pinkie.browser.forceDark") as? Bool) ?? true
+    var browserForceDarkItem: NSMenuItem?
+    var browserFitWidth: CGFloat?
+    var browserFitWork: DispatchWorkItem?
+    var browserFitItem: NSMenuItem?
+    var browserToolbarHovered = false
+    var browserDragDelta = NSPoint.zero
+    var browserDragDetached = false
+    var browserFrameConstraints: [NSLayoutConstraint] = []
+    var browserTitlebar: BrowserPanelDragHandle?
+    var browserCorner: BrowserPanelResizeHandle?
+    var browserFloatingResizeHandles: [BrowserPanelResizeHandle] = []
+    var browserContentEdgeConstraints: [NSLayoutConstraint] = []
+    var browserPresentationButtons: [BrowserPresentation: NSButton] = [:]
+    var browserPresentationMenu: NSPopUpButton?
+    var browserPresentationMenuItems: [BrowserPresentation: NSMenuItem] = [:]
+    var browserStatusStack: NSStackView?
     private var fullScreenTransitionInProgress = false
-    private var browserAddressField: BrowserAddressField?
-    private var browserBackButton: NSButton?
-    private var browserForwardButton: NSButton?
-    private var browserReloadButton: NSButton?
-    private var browserCloseButton: NSButton?
-    private var browserExternalButton: NSButton?
-    private var browserLoadingIndicator: NSProgressIndicator?
-    private var browserStatusLabel: NSTextField?
-    private var browserActivityIndicator: BrowserActivityIndicator?
-    private var browserAgentActive = false
-    private var browserToolbarView: NSView?
-    private var browserResizeView: NSView?
+    var browserAddressField: BrowserAddressField?
+    var browserBackButton: NSButton?
+    var browserForwardButton: NSButton?
+    var browserReloadButton: NSButton?
+    var browserCloseButton: NSButton?
+    var browserExternalButton: NSButton?
+    var browserLoadingIndicator: NSProgressIndicator?
+    var browserStatusLabel: NSTextField?
+    var browserActivityIndicator: BrowserActivityIndicator?
+    var browserAgentActive = false
+    var browserToolbarView: NSView?
+    var browserResizeView: NSView?
     /// 网页的「配色」变成深色时由 laolaoWindowControl 告诉原生层，原生画的浏览器栏和分屏底色跟着换。
-    private var nightAppearance = false
-    private var lastBrowserURL: URL?
-    private var browserAnimationGeneration = 0
-    private var primaryFullSizeConstraints: [NSLayoutConstraint] = []
+    var nightAppearance = false
+    var lastBrowserURL: URL?
+    var browserAnimationGeneration = 0
+    var primaryFullSizeConstraints: [NSLayoutConstraint] = []
     // These lifetimes are independent: closing a browser must never remove
     // the companion chat's constraints, or vice versa.
-    private var chatLayoutConstraints: [NSLayoutConstraint] = []
-    private var companionContentConstraints: [NSLayoutConstraint] = []
-    private var browserLayoutConstraints: [NSLayoutConstraint] = []
-    private let primaryMinimumSize = NSSize(width: 860, height: 580)
-    private let splitMinimumSize = NSSize(width: 1180, height: 650)
-    private var retries = 0
-    private var companionRetries = 0
-    private var startupVideoStartedAt: Date?
-    private var dashboardLoadPending = false
-    private var releaseDashboardProbeGeneration = 0
-    private var releaseDashboardProbeStatus = ""
-    private let releaseDashboardProbeEnabled = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
+    var chatLayoutConstraints: [NSLayoutConstraint] = []
+    var companionContentConstraints: [NSLayoutConstraint] = []
+    var browserLayoutConstraints: [NSLayoutConstraint] = []
+    let primaryMinimumSize = NSSize(width: 860, height: 580)
+    let splitMinimumSize = NSSize(width: 1180, height: 650)
+    var retries = 0
+    var companionRetries = 0
+    var startupVideoStartedAt: Date?
+    var dashboardLoadPending = false
+    var releaseDashboardProbeGeneration = 0
+    var releaseDashboardProbeStatus = ""
+    let releaseDashboardProbeEnabled = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
         && ProcessInfo.processInfo.environment["PINKIE_RELEASE_SMOKE"] == "1"
     private var gatewayMonitor: Timer?
     private var gatewayProbeFailures = 0
@@ -2350,40 +2350,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var guardAlertInFlight = false
     private var guardCounterVerified = false
     private var guardSeenAlertIDs: Set<String> = []
-    private let dictation = NativeDictationController()
-    private let dictationHandlerName = "laolaoNativeDictation"
-    private let liveSpeech = NativeLiveSpeechController()
-    private let liveSpeechHandlerName = "laolaoLiveVoice"
-    private let companionDictation = NativeDictationController()
-    private let companionLiveSpeech = NativeLiveSpeechController()
-    private let projectFolderHandlerName = "laolaoProjectFolder"
-    private let updateHandlerName = "laolaoUpdate"
-    private let workspaceDockHandlerName = "laolaoWorkspaceDock"
-    private let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"
-    private let windowControlHandlerName = "laolaoWindowControl"
-    private let materialPreviewHandlerName = "laolaoMaterialPreview"
+    let dictation = NativeDictationController()
+    let dictationHandlerName = "laolaoNativeDictation"
+    let liveSpeech = NativeLiveSpeechController()
+    let liveSpeechHandlerName = "laolaoLiveVoice"
+    let companionDictation = NativeDictationController()
+    let companionLiveSpeech = NativeLiveSpeechController()
+    let projectFolderHandlerName = "laolaoProjectFolder"
+    let updateHandlerName = "laolaoUpdate"
+    let workspaceDockHandlerName = "laolaoWorkspaceDock"
+    let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"
+    let windowControlHandlerName = "laolaoWindowControl"
+    let materialPreviewHandlerName = "laolaoMaterialPreview"
     /// 计划书 B 第三节：页面看不到时，碧琪做完 / 出错 / 等确认的系统通知（laolao-run-notify.js）。
-    private let runNotifyHandlerName = "pinkieNotify"
+    let runNotifyHandlerName = "pinkieNotify"
     private var updateLaunchInProgress = false
     private var updateStageTask: Process?
     private let party = PartyService()
     private let roundtable = RoundtableService()
     private let tts = TTSService()
     private let desktopControl = DesktopControlService()
-    private let browserControl = BrowserControlController()
+    let browserControl = BrowserControlController()
     var browserControlForDialogs: BrowserControlController { browserControl }
     var browserWebViewForDialogs: WKWebView? { browserWebView }
-    private let browserEndpoint = BrowserControlEndpoint()
-    private var gptWebWorker: ChatGPTBackgroundWorker?
-    private var browserUserEventMonitor: Any?
-    private var chatGPTControlUntil = Date.distantPast
-    private let materialPreview = MaterialPreviewSchemeHandler()
-    private let materialPreviewAccess = MaterialPreviewFileAccess()
-    private let materialDownloadLock = NSLock()
-    private var materialDownloadContexts: [ObjectIdentifier: MaterialDownloadContext] = [:]
-    private var reservedDownloadPaths: Set<String> = []
+    let browserEndpoint = BrowserControlEndpoint()
+    var gptWebWorker: ChatGPTBackgroundWorker?
+    var browserUserEventMonitor: Any?
+    var chatGPTControlUntil = Date.distantPast
+    let materialPreview = MaterialPreviewSchemeHandler()
+    let materialPreviewAccess = MaterialPreviewFileAccess()
+    let materialDownloadLock = NSLock()
+    var materialDownloadContexts: [ObjectIdentifier: MaterialDownloadContext] = [:]
+    var reservedDownloadPaths: Set<String> = []
 
-    private let workspaceSessions: [String: String] = [
+    let workspaceSessions: [String: String] = [
         "chat": "agent:main:main",
         "project": "agent:project:main",
         "thinking": "agent:thinking:main",
@@ -2405,7 +2405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         openParty(in: webView)
     }
 
-    private func openParty(in targetWebView: WKWebView?) {
+    func openParty(in targetWebView: WKWebView?) {
         party.ready { [weak self] ready in
             if ready {
                 self?.stopNativeInput(for: targetWebView)
@@ -2423,7 +2423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         openRoundtable(in: webView)
     }
 
-    private func openRoundtable(in targetWebView: WKWebView?) {
+    func openRoundtable(in targetWebView: WKWebView?) {
         roundtable.ready { [weak self] ready in
             if ready {
                 self?.stopNativeInput(for: targetWebView)
@@ -2583,7 +2583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func isCompanion(_ target: WKWebView?) -> Bool {
+    func isCompanion(_ target: WKWebView?) -> Bool {
         guard let target, let companionWebView else { return false }
         return target === companionWebView
     }
@@ -2598,20 +2598,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func sessionKey(for url: URL?) -> String? {
+    func sessionKey(for url: URL?) -> String? {
         guard let url else { return nil }
         return URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "session" })?.value
     }
 
-    private func modeID(for url: URL?) -> String? {
+    func modeID(for url: URL?) -> String? {
         guard let session = sessionKey(for: url) else { return nil }
         if session.hasPrefix("agent:main:") { return "chat" }
         return workspaceSessions.first(where: { session.hasPrefix($0.value.replacingOccurrences(of: ":main", with: ":")) })?.key
     }
 
-    private func isWorkspaceSession(_ sessionKey: String, for modeID: String) -> Bool {
+    func isWorkspaceSession(_ sessionKey: String, for modeID: String) -> Bool {
         guard let rootSession = workspaceSessions[modeID] else { return false }
         let prefix = "\(String(rootSession.dropLast(5))):"
         return sessionKey.hasPrefix(prefix)
@@ -2619,7 +2619,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             && !sessionKey.contains(":subagent:")
     }
 
-    private func chatURL(sessionKey: String, docked: Bool = false) -> URL {
+    func chatURL(sessionKey: String, docked: Bool = false) -> URL {
         var components = URLComponents(url: Gateway.defaultChatURL, resolvingAgainstBaseURL: false)
         var queryItems = [URLQueryItem(name: "session", value: sessionKey)]
         if docked {
@@ -2631,7 +2631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         return components?.url ?? Gateway.defaultChatURL
     }
 
-    private func trustedFrame(_ frame: WKFrameInfo) -> Bool {
+    func trustedFrame(_ frame: WKFrameInfo) -> Bool {
         guard frame.isMainFrame, let url = frame.request.url else { return false }
         return [Gateway.url, PartyService.url, RoundtableService.url].contains { allowed in
             url.scheme == allowed.scheme && url.host == allowed.host && url.port == allowed.port
@@ -2747,7 +2747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         webView?.evaluateJavaScript("window.__pinkieUpdateProgress?.(\(json))", completionHandler: nil)
     }
 
-    private func handleUpdateRequest(_ body: [String: Any]) {
+    func handleUpdateRequest(_ body: [String: Any]) {
         guard let action = body["action"] as? String, let request = body["request"] as? Int,
               request > 0, request < 1_000_000_000 else { return }
         if action == "apply" {
@@ -2971,7 +2971,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         windowDragArea = dragArea
     }
 
-    private func makeChatWebView(docked: Bool = false) -> WKWebView {
+    func makeChatWebView(docked: Bool = false) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(materialPreview, forURLScheme: "clekk-material")
         let controller = configuration.userContentController
@@ -3177,7 +3177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         return button
     }
 
-    private func configureBrowserControl() {
+    func configureBrowserControl() {
         browserControl.clicked = { browser, x, y in
             BrowserClickFeedback.show(in: browser, x: x * Double(browser.pageZoom), y: y * Double(browser.pageZoom))
         }
@@ -3251,7 +3251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         } catch { NSLog("[碧琪浏览器] %@", error.localizedDescription) }
     }
 
-    private func showBrowserFile(_ path: String, sourceWebView: WKWebView?) {
+    func showBrowserFile(_ path: String, sourceWebView: WKWebView?) {
         browserControl.handle(["action": "show_file", "path": path], userInitiated: true) { [weak sourceWebView] result in
             let detail: [String: Any] = ["path": path, "ok": result["ok"] as? Bool ?? false, "reason": result["reason"] as? String ?? ""]
             guard let data = try? JSONSerialization.data(withJSONObject: detail), let json = String(data: data, encoding: .utf8) else { return }
@@ -3298,7 +3298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         return browser
     }
 
-    private func setBrowserStatus(_ message: String, loading: Bool = false) {
+    func setBrowserStatus(_ message: String, loading: Bool = false) {
         browserStatusLabel?.stringValue = message
         browserStatusLabel?.isHidden = message.isEmpty || browserAgentActive
         if loading {
@@ -3311,7 +3311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         updateBrowserToolbarLayout(width: browserPanel?.bounds.width ?? 600)
     }
 
-    private func scheduleBrowserFit() {
+    func scheduleBrowserFit() {
         browserFitWork?.cancel()
         guard !browserDragging else { return }
         let work = DispatchWorkItem { [weak self] in
@@ -3346,7 +3346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     /// 深色外观下给仍然画白底的站点套一层反色；图片、视频再反回来保持原色。
     /// 只处理 http/https/file，PDF 和 clekk-material 预览不动。
-    private func applyBrowserForceDark() {
+    func applyBrowserForceDark() {
         guard let browser = browserWebView,
               let scheme = browser.url?.scheme?.lowercased(),
               ["http", "https", "file"].contains(scheme),
@@ -3421,7 +3421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func browserErrorPage(_ error: Error) {
+    func browserErrorPage(_ error: Error) {
         let nsError = error as NSError
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
         let detail = nsError.localizedDescription
@@ -3684,7 +3684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         return panel
     }
 
-    private func updateBrowserToolbarLayout(width: CGFloat) {
+    func updateBrowserToolbarLayout(width: CGFloat) {
         browserForwardButton?.isHidden = width < 500 || browserWebView?.canGoForward != true
         browserExternalButton?.isHidden = true
         browserPresentationMenu?.isHidden = false
@@ -3695,7 +3695,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
 
     /// 黑夜模式：浏览器工作区和分屏面板这些原生画的底色也换成深色，与网页一致。
-    private func applyNightAppearance() {
+    func applyNightAppearance() {
         let dark = nightAppearance
         let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat) -> NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
@@ -3742,7 +3742,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func browserURL(from value: String) -> URL? {
+    func browserURL(from value: String) -> URL? {
         let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if let direct = URL(string: text), ["http", "https", "file"].contains(direct.scheme?.lowercased() ?? "") {
@@ -3759,7 +3759,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // Keep account switching narrowly scoped to the embedded OpenAI sites.
     // CLE Kk localhost auth, other websites, project data and permissions stay
     // untouched; the user signs in to the replacement account themselves.
-    private func resetChatGPTBrowserSession() {
+    func resetChatGPTBrowserSession() {
         let dataStore = WKWebsiteDataStore.default()
         let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
         dataStore.fetchDataRecords(ofTypes: dataTypes) { [weak self] records in
@@ -3778,7 +3778,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func loadBrowserURL(_ url: URL) {
+    func loadBrowserURL(_ url: URL) {
         let safe: URL
         do { safe = try BrowserControlPolicy.validatedURL(url.absoluteString, access: materialPreviewAccess) }
         catch { setBrowserStatus(error.localizedDescription); return }
@@ -4242,7 +4242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func handleChatGPTControl(_ body: [String: Any], sourceWebView: WKWebView?) {
+    func handleChatGPTControl(_ body: [String: Any], sourceWebView: WKWebView?) {
         chatGPTControlUntil = Date().addingTimeInterval(body["operation"] as? String == "send" ? 300 : 30)
         let requestId = body["requestId"] as? String ?? UUID().uuidString
         switch body["operation"] as? String {
@@ -4276,7 +4276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         browserAddressField?.stringValue = ""
     }
 
-    private func updateBrowserControls() {
+    func updateBrowserControls() {
         browserBackButton?.isEnabled = browserWebView?.canGoBack == true
         browserForwardButton?.isEnabled = browserWebView?.canGoForward == true
         if let url = browserWebView?.url,
@@ -4294,7 +4294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         updateBrowserToolbarLayout(width: browserFloatingFrame?.width ?? browserPanel?.bounds.width ?? 600)
     }
 
-    private func openBrowserWorkspace(url: URL?) {
+    func openBrowserWorkspace(url: URL?) {
         ensureBrowserWorkspace(url: url, focus: true)
     }
 
@@ -4345,9 +4345,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    @objc private func browserDocked(_ sender: Any?) { changeBrowserPresentation(.side) }
-    @objc private func browserFloating(_ sender: Any?) { changeBrowserPresentation(.floating) }
-    @objc private func browserFull(_ sender: Any?) { changeBrowserPresentation(.full) }
+    @objc func browserDocked(_ sender: Any?) { changeBrowserPresentation(.side) }
+    @objc func browserFloating(_ sender: Any?) { changeBrowserPresentation(.floating) }
+    @objc func browserFull(_ sender: Any?) { changeBrowserPresentation(.full) }
 
     private func changeBrowserPresentation(_ mode: BrowserPresentation) {
         guard browserPanel?.superview != nil, let content = window?.contentView, let primary = webView else { return }
@@ -4358,7 +4358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         content.layoutSubtreeIfNeeded()
     }
 
-    private func browserDockedWidth(totalWidth: CGFloat, fraction: CGFloat) -> CGFloat {
+    func browserDockedWidth(totalWidth: CGFloat, fraction: CGFloat) -> CGFloat {
         guard companionPanel?.superview != nil else {
             return BrowserWorkspaceGeometry.browserWidth(totalWidth: totalWidth, fraction: fraction)
         }
@@ -4391,7 +4391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    private func syncWorkspacePresentation(force: Bool = false) {
+    func syncWorkspacePresentation(force: Bool = false) {
         let dualChat = companionPanel?.superview != nil && companionWebView != nil
         let browserSide = browserPanel?.superview != nil && browserPresentation == .side
         let state = "\(dualChat):\(browserSide)"
@@ -4453,7 +4453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         syncWorkspacePresentation()
     }
 
-    private func applyBrowserPresentation(in content: NSView, primary: WKWebView) {
+    func applyBrowserPresentation(in content: NSView, primary: WKWebView) {
         guard let panel = browserPanel else { return }
         let previousFrame = panel.frame
         browserDragging = false; browserDragUnclampedFrame = nil
@@ -4491,7 +4491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         scheduleBrowserFit()
     }
 
-    private func setBrowserFloatingFrame(_ frame: NSRect, animated: Bool = false) {
+    func setBrowserFloatingFrame(_ frame: NSRect, animated: Bool = false) {
         guard browserPresentation == .floating, browserFrameConstraints.count == 4 else { return }
         browserFloatingFrame = frame
         let displayed = browserDockEdge.flatMap { edge in window?.contentView.map { BrowserWorkspaceGeometry.edgeDockedFrame(in: $0.bounds, frame: frame, edge: edge, revealed: browserEdgeRevealed) } } ?? frame
@@ -4518,7 +4518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         } else { window?.contentView?.layoutSubtreeIfNeeded() }
         scheduleBrowserFit()
     }
-    private func clearBrowserEdgeDock() {
+    func clearBrowserEdgeDock() {
         browserDockEdge = nil; browserEdgeRevealed = false
         updateBrowserPanelInput()
         browserEdgeHoveringPanel = false; browserEdgeHoveringTab = false
@@ -4568,7 +4568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if tab.superview == nil { content.addSubview(tab) }
         for handle in browserFloatingResizeHandles { handle.isHidden = true; handle.enabled = false }
     }
-    private func updateBrowserEdgeHover() {
+    func updateBrowserEdgeHover() {
         guard browserDockEdge != nil, !browserDragging else { return }
         browserEdgeHoverGeneration += 1
         let generation = browserEdgeHoverGeneration
@@ -4584,13 +4584,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             }
         }
     }
-    private func beginBrowserFloatingDrag() {
+    func beginBrowserFloatingDrag() {
         browserPanel?.layer?.removeAllAnimations()
         browserDragging = true; browserDragDelta = .zero; browserDragDetached = false
         browserDragUnclampedFrame = browserFloatingFrame
         browserEdgeHoverGeneration += 1
     }
-    private func endBrowserFloatingDrag() {
+    func endBrowserFloatingDrag() {
         browserDragging = false
         let proposed = browserDragUnclampedFrame
         browserDragUnclampedFrame = nil
@@ -4616,7 +4616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             setBrowserFloatingFrame(frame, animated: true)
         }
     }
-    private func moveBrowserFloating(by delta: NSPoint) {
+    func moveBrowserFloating(by delta: NSPoint) {
         guard browserPresentation == .floating, let bounds = window?.contentView?.bounds, var frame = browserFloatingFrame else { return }
         browserDragDelta.x += delta.x; browserDragDelta.y += delta.y
         if let edge = browserDockEdge {
@@ -4636,12 +4636,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         if browserDragging { browserDragUnclampedFrame = frame }
         setBrowserFloatingFrame(BrowserWorkspaceGeometry.floatingFrame(in: bounds, proposed: frame))
     }
-    private func resizeBrowserFloating(by delta: NSPoint, edges: BrowserResizeEdges = [.right, .bottom]) {
+    func resizeBrowserFloating(by delta: NSPoint, edges: BrowserResizeEdges = [.right, .bottom]) {
         guard browserPresentation == .floating, let bounds = window?.contentView?.bounds, let frame = browserFloatingFrame else { return }
         setBrowserFloatingFrame(BrowserWorkspaceGeometry.resizedFloatingFrame(in: bounds, frame: frame, edges: edges, delta: delta))
     }
 
-    private func detachBrowserWorkspace() {
+    func detachBrowserWorkspace() {
         guard browserPanel?.superview != nil else { return }
         clearBrowserEdgeDock()
         browserAnimationGeneration += 1
@@ -4657,7 +4657,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.makeFirstResponder(webView)
     }
 
-    @objc private func closeBrowserWorkspace(_ sender: Any?) {
+    @objc func closeBrowserWorkspace(_ sender: Any?) {
         guard let panel = browserPanel, panel.superview != nil else { return }
         browserAnimationGeneration += 1
         let generation = browserAnimationGeneration
@@ -4681,32 +4681,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
     }
 
-    @objc private func browserAddressSubmitted(_ sender: NSSearchField) {
+    @objc func browserAddressSubmitted(_ sender: NSSearchField) {
         guard let url = browserURL(from: sender.stringValue) else { return }
         loadBrowserURL(url)
         window?.makeFirstResponder(browserWebView)
     }
 
-    @objc private func browserGoBack(_ sender: Any?) {
+    @objc func browserGoBack(_ sender: Any?) {
         browserWebView?.goBack()
     }
 
-    @objc private func browserGoForward(_ sender: Any?) {
+    @objc func browserGoForward(_ sender: Any?) {
         browserWebView?.goForward()
     }
 
-    @objc private func browserReload(_ sender: Any?) {
+    @objc func browserReload(_ sender: Any?) {
         if browserWebView?.url != nil { browserWebView?.reload() }
         else if let lastBrowserURL { loadBrowserURL(lastBrowserURL) }
     }
 
-    @objc private func browserOpenExternally(_ sender: Any?) {
+    @objc func browserOpenExternally(_ sender: Any?) {
         guard let url = browserWebView?.url ?? lastBrowserURL,
               ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
         NSWorkspace.shared.open(url)
     }
 
-    private func openWorkspaceDock(modeID requestedModeID: String, requestedSessionKey: String?) {
+    func openWorkspaceDock(modeID requestedModeID: String, requestedSessionKey: String?) {
         guard let canonicalSession = workspaceSessions[requestedModeID],
               requestedModeID != (modeID(for: webView?.url) ?? "chat"),
               let window,
@@ -4791,7 +4791,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.makeFirstResponder(companion)
     }
 
-    @objc private func closeWorkspaceDock(_ sender: Any?) {
+    @objc func closeWorkspaceDock(_ sender: Any?) {
         guard companionPanel?.superview != nil else { return }
         companionDictation.stop()
         companionLiveSpeech.stop()
@@ -4813,7 +4813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window?.makeFirstResponder(webView)
     }
 
-    private func loadDashboard() {
+    func loadDashboard() {
         if let started = startupVideoStartedAt {
             let remaining = 6.1 - Date().timeIntervalSince(started)
             if remaining > 0 {
@@ -5516,7 +5516,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         else { webView.reload() }
     }
 
-    private var nativeWindowDragBridge: String {
+    var nativeWindowDragBridge: String {
         #"""
         (() => {
           const bridge = window.webkit?.messageHandlers?.laolaoWindowControl;
@@ -5577,7 +5577,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         """#
     }
 
-    private var nativeDictationBridge: String {
+    var nativeDictationBridge: String {
         #"""
         (() => {
           const buttonId = "laolao-native-dictation";
