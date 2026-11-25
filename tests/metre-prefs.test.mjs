@@ -214,4 +214,3 @@ test('G2 只影响 Metre：变量只在 Metre 作用域的规则里被读；不�
     if (f.endsWith('.css')) for (const line of text.split('\n').filter((l) => /--metre-chat-(fs|lh)/.test(l))) assert.match(line, /^html\[data-laolao-mode="metre"\]/, line);
   }
 });
-
