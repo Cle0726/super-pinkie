@@ -338,6 +338,19 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-composer-history.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 25,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-composer-tray.css": {
       "important": 8,
       "importantIndirect": 0,
@@ -1248,6 +1261,32 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-allow.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 24,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-allow.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 192,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-backdrop.css": {
       "important": 5,
       "importantIndirect": 0,
@@ -1391,6 +1430,45 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-chat.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 175,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-cite.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 121,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-cite.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 243,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-code.css": {
       "important": 0,
       "importantIndirect": 0,
@@ -1508,6 +1586,19 @@
       "windowGlobals": 1,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-prefs.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 157,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-preview.css": {
       "important": 0,
       "importantIndirect": 0,
@@ -1560,6 +1651,19 @@
       "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-read.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 168,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-skin.css": {
       "important": 2263,
       "importantIndirect": 0,
@@ -1590,6 +1694,32 @@
       "important": 0,
       "importantIndirect": 0,
       "lines": 216,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-suggest.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 13,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-suggest.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 98,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2314,6 +2444,32 @@
       "windowGlobals": 14,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-rich-chart.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 83,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-rich-chart.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 260,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-rich.css": {
       "important": 12,
       "importantIndirect": 0,
@@ -2330,7 +2486,7 @@
     "ui/injections/laolao-rich.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 596,
+      "lines": 563,
       "mutationObserverRefs": 0,
       "mutationObservers": 1,
       "observeUnclear": 0,
@@ -3079,6 +3235,32 @@
       "setIntervals": 1,
       "subtreeObserverCalls": 0,
       "windowGlobals": 3,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-whiteboard.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 92,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-whiteboard.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 644,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
     "ui/injections/laolao-workbench-code.js": {
