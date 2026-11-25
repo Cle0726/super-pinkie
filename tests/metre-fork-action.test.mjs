@@ -93,8 +93,10 @@ async function measure(tab) {
       const fq = grp.querySelector('.chat-group-footer')?.getBoundingClientRect();
       // 页脚行里：键的竖直中线和页脚行、原生键、时间一致；字号、行高和时间一样。
       const ts = grp.querySelector('.chat-group-timestamp'); const ks = getComputedStyle(k); const tss = ts && getComputedStyle(ts);
+      // 字号 / 行高按数值比到 0.1px：WebKit 把 11px × 1.2 算成 13.200001px（Mac 任务报告），按字符串比会一直红
+      const px1 = (v) => (/^[\d.]+px$/.test(v) ? Math.round(parseFloat(v) * 10) / 10 + 'px' : v); const type = (c) => [px1(c.fontSize), px1(c.lineHeight)].join('/');
       const mid = (a) => (a.top + a.bottom) / 2; const nb = grp.querySelector('.chat-group-footer-actions button')?.getBoundingClientRect();
-      const align = fq && ts && nb ? {dRow: Math.abs(mid(q) - mid(fq)), dTime: Math.abs(mid(q) - mid(ts.getBoundingClientRect())), dNative: Math.abs(mid(q) - mid(nb)), type: [ks.fontSize, ks.lineHeight].join('/'), timeType: [tss.fontSize, tss.lineHeight].join('/')} : null;
+      const align = fq && ts && nb ? {dRow: Math.abs(mid(q) - mid(fq)), dTime: Math.abs(mid(q) - mid(ts.getBoundingClientRect())), dNative: Math.abs(mid(q) - mid(nb)), type: type(ks), timeType: type(tss)} : null;
       return {hits, btnHit, last, align, inGroup: q.left >= gq.left - 0.5 && q.right <= gq.right + 0.5 && q.top >= gq.top - 0.5 && q.bottom <= gq.bottom + 0.5,
         inFooterRow: Boolean(fq) && q.top >= fq.top - 0.5 && q.bottom <= fq.bottom + 0.5, op: getComputedStyle(k).opacity, to: [(q.left + q.right) / 2, (q.top + q.bottom) / 2]};
     }, sel);
@@ -192,7 +194,8 @@ const stepAndTime = (tab) => tab.evaluate((sel) => {
   const ts = document.querySelector('.chat-group-timestamp'); const tss = getComputedStyle(ts); const op = Number(tss.opacity);
   const fg = px(tss.color); const bg = px(getComputedStyle(document.body).backgroundColor); const eff = fg.map((v, i) => v * op + bg[i] * (1 - op));
   const [hi, lo] = [lum(eff), lum(bg)].sort((x, y) => y - x);
-  return {stepType: [ks.fontSize, ks.lineHeight].join('/'), stepH: +q.height.toFixed(1), dRight: +(b.right - q.right).toFixed(1), dTop: +(q.top - b.bottom).toFixed(1), stepOp: ks.opacity,
+  const px1 = (v) => (/^[\d.]+px$/.test(v) ? Math.round(parseFloat(v) * 10) / 10 + 'px' : v);   // WebKit 给 13.200001px，按 0.1px 比
+  return {stepType: [px1(ks.fontSize), px1(ks.lineHeight)].join('/'), stepH: +q.height.toFixed(1), dRight: +(b.right - q.right).toFixed(1), dTop: +(q.top - b.bottom).toFixed(1), stepOp: ks.opacity,
     tab: getComputedStyle(bub, '::after').backgroundImage, tsOp: op, tsContrast: +((hi + 0.05) / (lo + 0.05)).toFixed(2)};
 }, STEP);
 for (const night of [false, true]) {
