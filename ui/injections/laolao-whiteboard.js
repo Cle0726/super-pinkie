@@ -153,7 +153,8 @@
     } else if (it.kind === 'box') {
       const r = {x: it.x, y: it.y, width: it.w, height: it.h, rx: 12, fill: 'none'};
       g.append(s('rect', {...r, stroke: 'transparent', 'stroke-width': 14, 'pointer-events': 'stroke'}), s('rect', {...r, stroke: mine ? p.pinkie : p.box, 'stroke-width': 1.6, 'pointer-events': 'none'}));
-      g.append(s('text', {x: it.x + 14, y: it.y + 24, fill: it.label ? p.text : p.muted, 'font-size': 13, 'font-weight': 600, 'font-family': FONT}, it.label || '未命名分组'));
+      // 分组名压在上边框上（像表单的组标题），便签放进框里也挡不住；底色描边把框线断开。
+      g.append(s('text', {x: it.x + 14, y: it.y + 5, fill: it.label ? p.text : p.muted, stroke: p.bg, 'stroke-width': 6, 'paint-order': 'stroke', 'font-size': 13, 'font-weight': 600, 'font-family': FONT}, it.label || '未命名分组'));
     } else if (it.kind === 'ink') {
       const d = inkPath(it.points);
       g.append(s('path', {d, fill: 'none', stroke: 'transparent', 'stroke-width': 14, 'stroke-linecap': 'round', 'pointer-events': 'stroke'}),
@@ -361,8 +362,20 @@
   // ---------- pointer ----------
   function down(ev) {
     if (ev.pointerType === 'mouse' && ev.button !== 0 && ev.button !== 1) return;
+    // 按下时会重画，按住的那个节点被换掉：浏览器默认的聚焦落到 body（按键跑去聊天输入框），
+    // 按下 / 松开的目标也不一样，原生 dblclick 根本不来。所以焦点自己给白板，双击自己认。
+    ev.preventDefault();
     commitEdit();
+    st.root.focus({preventScroll: true});
     const [wx, wy] = toWorld(ev), item = hitItem(ev), handle = ev.target.closest?.('[data-handle]');
+    const now = performance.now(), last = st.press, id = item?.id || '';
+    st.press = {t: now, x: ev.clientX, y: ev.clientY, id};
+    if (st.tool === 'select' && ev.button === 0 && !handle && last && last.id === id && now - last.t < 450 && Math.hypot(ev.clientX - last.x, ev.clientY - last.y) < 8) {
+      st.press = null; st.gesture = null;
+      if (item && (item.kind === 'note' || item.kind === 'box')) return openEditor(item);
+      if (!item) return openEditor(add({id: uid('note'), kind: 'note', x: r1(wx - 80), y: r1(wy - 60), w: 160, h: 120, text: '', color: st.color}));
+      return;
+    }
     st.svg.setPointerCapture?.(ev.pointerId);
     if (ev.button === 1 || (st.tool === 'select' && !item && !handle)) {
       if (st.tool === 'select') st.selected = '';
@@ -371,6 +384,7 @@
     else if (st.tool === 'box') st.gesture = {type: 'box', x0: wx, y0: wy, x1: wx, y1: wy};
     else if (st.tool === 'note') {
       const it = add({id: uid('note'), kind: 'note', x: r1(wx - 80), y: r1(wy - 60), w: 160, h: 120, text: '', color: st.color});
+      // 按下的默认动作已经拦掉（见上），编辑框开了不会被抢走焦点。
       setTool('select'); openEditor(it);
     } else if (st.tool === 'link') {
       if (!item || item.kind === 'link') { st.linkFrom = ''; say('连线取消了'); }
@@ -545,11 +559,7 @@
     svg.addEventListener('pointermove', move);
     svg.addEventListener('pointerup', up);
     svg.addEventListener('pointercancel', up);
-    svg.addEventListener('dblclick', ev => {
-      const it = hitItem(ev);
-      if (it && (it.kind === 'note' || it.kind === 'box')) return openEditor(it);
-      if (!it && st.tool === 'select') { const [x, y] = toWorld(ev); openEditor(add({id: uid('note'), kind: 'note', x: r1(x - 80), y: r1(y - 60), w: 160, h: 120, text: '', color: st.color})); }
-    });
+    // 双击在 down() 里自己认（原生 dblclick 在按下时重画会丢）。
     svg.addEventListener('wheel', ev => {
       ev.preventDefault();
       const r = svg.getBoundingClientRect();
