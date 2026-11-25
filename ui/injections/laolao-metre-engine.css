@@ -18,13 +18,13 @@ html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-eng-chip::be
 
 /* ---------- 菜单 ---------- */
 .pk-eng-menu {
-  position: fixed; z-index: 2147483000; width: 320px; max-height: min(520px, calc(100vh - 32px)); overflow: auto;
-  background: var(--metre-surface, #fff); color: var(--metre-text, #1F1E1D);
-  border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(31, 30, 29, 0.12);
-  font: 400 13px/1.45 var(--metre-sans, system-ui, sans-serif); padding: 6px;
+  position: fixed; z-index: 2147483000; width: 320px; max-height: min(520px, calc(100vh - 32px)); overflow: hidden; display: flex; flex-direction: column;
+  background: var(--metre-surface, #fff); color: var(--metre-text, #1F1E1D); border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(31, 30, 29, 0.12); font: 400 13px/1.45 var(--metre-sans, system-ui, sans-serif); padding: 6px;
 }
-.pk-eng-menu__head { display: flex; align-items: baseline; gap: 10px; padding: 8px 10px 6px; border-bottom: 1px solid var(--metre-line, #E8E6DC); margin-bottom: 4px; }
+/* 标题不跟着滚，只滚下面的列表；下面还有内容时底边有一道渐深的提示，滚到底就消失（mac2 任务 18：菜单比面板高 19px、最后一行露半行）。 */
+.pk-eng-menu__body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; background: linear-gradient(var(--metre-surface, #fff), var(--metre-surface, #fff)) bottom / 100% 16px no-repeat local, linear-gradient(transparent, var(--metre-line-strong, #D9D6CC)) bottom / 100% 12px no-repeat scroll; }
+.pk-eng-menu__head { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 8px 10px 6px; border-bottom: 1px solid var(--metre-line, #E8E6DC); margin-bottom: 4px; }
 .pk-eng-menu__title { font: italic 400 16px/1 var(--metre-serif, Georgia, serif); }
 .pk-eng-menu__sub { color: var(--metre-muted, #73726C); font-size: 12.5px; }
 .pk-eng-menu__item {
