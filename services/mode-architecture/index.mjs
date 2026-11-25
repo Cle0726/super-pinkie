@@ -22,6 +22,7 @@ import {registerMetreMemory} from './metre-memory.mjs';
 import {registerMetreBoard} from './metre-board.mjs';
 import {registerQuietMode} from './quiet-mode.mjs';
 import {registerArtifacts} from './artifacts.mjs';
+import {registerDesktopApps} from './desktop-apps.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
@@ -757,6 +758,8 @@ export default {
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
     registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(toolApi, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    // 作品装成桌面独立应用（PR①）：拷副本、记清单；入口和窗口归原生端。
+    registerDesktopApps(toolApi, {root: path.join(pinkieStateRoot(), 'apps'), artifacts});
     registerProjectSettings(toolApi, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(toolApi, webGptActivity);
     registerWebGptConnectionGateway(toolApi, webGptConnection);
