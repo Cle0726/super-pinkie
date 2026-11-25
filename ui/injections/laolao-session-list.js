@@ -872,7 +872,7 @@
         limit += 30; signature = ''; render(section, api);
       }));
     }
-    if(old)old.replaceWith(groups);else host.append(groups);
+    if (api.mode === 'metre') window.PinkieMetreList?.decorate(groups, rows, api); if(old)old.replaceWith(groups);else host.append(groups);   // Metre：一层分组、状态记号、相对时间、悬停小键（laolao-metre-list.js）
     updateSelection();
     ensureVisibleTitles(groups, rows, api);
     if (!archived) readCurrent(rows, api);

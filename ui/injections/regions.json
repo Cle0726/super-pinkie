@@ -240,7 +240,15 @@
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
-        "laolao-metre-transition.js"
+        "laolao-metre-transition.js",
+        "laolao-metre-stagefx.js",
+        "laolao-metre-engine.css",
+        "laolao-metre-engine.js",
+        "laolao-metre-keys.css",
+        "laolao-metre-backstage.js",
+        "laolao-metre-queue.js",
+        "laolao-metre-list.js",
+        "laolao-metre-display.css"
       ]
     },
     {
