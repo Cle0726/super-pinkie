@@ -27,7 +27,13 @@ function readContrast() {
   const ps = getComputedStyle(probe);
   const tokens = {muted: ps.color, line: ps.borderTopColor, strong: ps.outlineColor};
   probe.remove();
-  const rgb = (s) => (s.match(/[\d.]+/g) || []).map(Number);
+  // 11-25：color-mix() 算出来的色，浏览器报成 color(srgb r g b [/ a])，分量是 0–1；以前当 0–255 读，会把 (90,84,105) 读成近黑。
+  const rgb = (s) => {
+    const n = (s.match(/-?[\d.]+(?:e-?\d+)?/g) || []).map(Number);
+    if (/^rgba?\(/.test(s)) return n;
+    if (/^color\(srgb\s/.test(s)) return n.map((v, i) => (i < 3 ? v * 255 : v));
+    throw new Error(`读不懂的颜色格式：${s}`);
+  };
   const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
     .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
   const bgOf = (el) => {
@@ -58,9 +64,11 @@ function readContrast() {
         ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)});
     }
   }
-  // 11-25 协调者加：没选中的会话标题（字色不是弱化色，上面那圈量不到）。Metre 夜间不带 data-pinkie-night，标题曾吃日间配方，约 2.5:1。
+  // 11-25 协调者加：会话标题（字色不是弱化色，上面那圈量不到）。Metre 夜间不带 data-pinkie-night，没选中的标题曾吃日间配方，约 2.5:1；
+  // 选中的那行（laolao-sidebar-surface.css:144 accent 45% + #3d3036）夜间约 2.96:1。active 标出是不是选中行。
+  // 选中行的底是 accent 7% 半透明，bgOf 跳过它取侧栏底；夜间两者只差几级灰，对 4.5 的判断没影响。
   const titles = [];
-  for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session:not(.sidebar-recent-session--active) .sidebar-recent-session__name')) {
+  for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session .sidebar-recent-session__name')) {
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || !el.textContent.trim()) continue;
     const cs = getComputedStyle(el); const bg = bgOf(el);
@@ -69,7 +77,7 @@ function readContrast() {
     const raw = rgb(cs.color); const alpha = (raw[3] === undefined ? 1 : raw[3]) * op;
     const ink = raw.slice(0, 3).map((v, i) => alpha * v + (1 - alpha) * bg[i]);
     const a = lum(ink); const b = lum(bg);
-    titles.push({el: 'span.sidebar-recent-session__name', text: el.textContent.trim().slice(0, 16), ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op,
+    titles.push({el: 'span.sidebar-recent-session__name', active: !!el.closest('.sidebar-recent-session--active'), text: el.textContent.trim().slice(0, 16), ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op,
       ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)});
   }
   return {tokens, items: out, titles};
@@ -103,8 +111,9 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       assert.ok(more.items.length >= 1, `${theme}: 侧栏 / 状态带里没找到用弱化色的小字`);
       for (const i of more.items) assert.ok(i.ratio >= 4.5, `${theme}: ${i.el}「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.items)}`);
       console.log(`ℹ ${theme} more titles: ${fmt(more.titles)}`);
-      assert.ok(more.titles.length >= 1, `${theme}: 侧栏里没找到没选中的会话标题（量不到不能算通过）`);
-      for (const i of more.titles) assert.ok(i.ratio >= 4.5, `${theme}: 没选中的会话标题「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.titles)}`);
+      assert.ok(more.titles.some((i) => !i.active), `${theme}: 侧栏里没找到没选中的会话标题（量不到不能算通过）`);
+      assert.ok(more.titles.some((i) => i.active), `${theme}: 侧栏里没找到选中的会话标题（量不到不能算通过）`);
+      for (const i of more.titles) assert.ok(i.ratio >= 4.5, `${theme}: ${i.active ? '选中' : '没选中'}的会话标题「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.titles)}`);
 
       if (theme === 'night') {
         // 反例：删掉 laolao-metre-contrast.css 的规则，夜间没选中的会话标题必须掉回 4.5 以下（就是协调者看到的那几行）
@@ -120,8 +129,10 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
         await page.waitForTimeout(600);
         const bad = await page.evaluate(readContrast);
         console.log(`ℹ night more without contrast css, titles: ${fmt(bad.titles)}`);
-        assert.ok(bad.titles.length >= 1, '反例：删掉后侧栏里没找到没选中的会话标题');
-        assert.ok(bad.titles.some((i) => i.ratio < 4.5), `反例没生效：删掉后夜间会话标题仍都 ≥ 4.5 — ${fmt(bad.titles)}`);
+        assert.ok(bad.titles.some((i) => !i.active), '反例：删掉后侧栏里没找到没选中的会话标题');
+        assert.ok(bad.titles.some((i) => !i.active && i.ratio < 4.5), `反例没生效：删掉后夜间没选中的会话标题仍都 ≥ 4.5 — ${fmt(bad.titles)}`);
+        assert.ok(bad.titles.some((i) => i.active), '反例：删掉后侧栏里没找到选中的会话标题');
+        assert.ok(bad.titles.some((i) => i.active && i.ratio < 4.5), `反例没生效：删掉后夜间选中的会话标题仍 ≥ 4.5 — ${fmt(bad.titles)}`);
       }
 
       if (theme === 'day') {

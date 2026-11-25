@@ -23,6 +23,7 @@
     --metre-line-strong: #ADA9A0;
     --bs-off: #ADA9A0;
     --bs-rule: #85827A;
+    --sb-ink-active: var(--metre-text);   /* 选中的会话标题：laolao-sidebar-surface.css:144 accent 45% + #3d3036，夜间 accent 下只有约 2.96:1（日间 8.5:1，不动） */
   }
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-memory-layer { background: rgba(27, 26, 24, 0.36); }
   /* 11-25 截图 + CI 核对：侧栏日期行「今天」（laolao-sidebar.css:466 opacity .58）、历史时间（:467 .56）、分组标题（:98 .7）、计数（:103 .45）
