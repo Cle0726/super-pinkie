@@ -8,7 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {measure} from '../tools/health/measure.mjs';
-import {healthChanges, readJson} from '../tools/health/ratchet.mjs';
+import {healthChanges, loadExceptions, readJson} from '../tools/health/ratchet.mjs';
 import {
   ASSET_MANIFEST_JS,
   HEAD_FRAGMENT,
@@ -92,7 +92,7 @@ test('M2-1: source tree has 0 manual versions, uses @hash placeholders, and ratc
   }
 
   const baseline = readJson(path.join(ROOT, 'tools/health/baseline.json'));
-  const exceptions = readJson(path.join(ROOT, 'tools/health/exceptions.json'));
+  const exceptions = loadExceptions(ROOT);
   assert.equal(baseline.manualVersions.total, 0);
 
   // Counterexample: adding a manual version fails the ratchet immediately.
