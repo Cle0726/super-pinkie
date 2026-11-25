@@ -104,8 +104,8 @@
   {
     "file": "ui/injections/laolao-head.fragment.html",
     "metric": "lines",
-    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。 另：合并 feat/metre-ui-polish（PR #67，Metre 界面线）时再加 5 行：Metre 的总谱按键（laolao-metre-keys.css）、后台状态带（laolao-metre-backstage.js）、对话区基础显示修补（laolao-metre-display.css）、待发送一条（laolao-metre-queue.js）、侧栏会话列表整理（laolao-metre-list.js）五个新文件只能在这里登记加载（?v=@hash），功能本身全在新文件里。 另：第四批「对话和输入」（feat/metre-b4-chat-input）再加 2 行：Metre 对话区换皮 laolao-metre-chat.css 和输入框历史重画 laolao-composer-history.js 两个新文件只能在这里登记加载（?v=@hash），功能本身全在新文件里。",
-    "value": 219
+    "reason": "来自合并 audit/pinkie-1112（学习台游戏 v4；B 类，只允许本次实测值）。 合并 feat/metre-engines 时再加 2 行：Metre 引擎台的两个新文件 laolao-metre-engine.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。 另：合并 feat/metre-ui-polish（PR #67，Metre 界面线）时再加 5 行：Metre 的总谱按键（laolao-metre-keys.css）、后台状态带（laolao-metre-backstage.js）、对话区基础显示修补（laolao-metre-display.css）、待发送一条（laolao-metre-queue.js）、侧栏会话列表整理（laolao-metre-list.js）五个新文件只能在这里登记加载（?v=@hash），功能本身全在新文件里。 另：第四批「对话和输入」（feat/metre-b4-chat-input）再加 2 行：Metre 对话区换皮 laolao-metre-chat.css 和输入框历史重画 laolao-composer-history.js 两个新文件只能在这里登记加载（?v=@hash），功能本身全在新文件里。 另：界面线 5 第二批 U4 收藏模型再加 2 行：Metre 的两个新文件 laolao-metre-fav.css / .js 只能在这里登记加载（?v=@hash），功能全在新文件里；regions.json 不加行（metre 区域 files 里原来重复登记了一遍 laolao-metre-engine.css / .js，换成了这两个新文件）。",
+    "value": 221
   },
   {
     "file": "ui/injections/regions.json",

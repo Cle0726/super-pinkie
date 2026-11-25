@@ -1,0 +1,11 @@
+/* laolao-metre-fav.css —— U4 收藏模型（laolao-metre-fav.js）：引擎菜单选模型那一步，每行是「模型行 + 星标键」。星标键在行的右侧，不压住模型名和说明。
+ * 星标颜色：没收藏用 muted，收藏用 accent，日夜都跟着皮肤变量走；键 28×28，悬停底色和行一样。 */
+html[data-laolao-mode="metre"] .pk-fav-row { display: flex; align-items: center; gap: 2px; }
+html[data-laolao-mode="metre"] .pk-fav-row > .pk-eng-menu__item { flex: 1; min-width: 0; }
+html[data-laolao-mode="metre"] .pk-fav-star {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent;
+  color: var(--metre-muted, #73726C); font: 400 15px/28px var(--metre-sans, system-ui, sans-serif); text-align: center; cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-fav-star:hover { background: var(--metre-hover, #F0EEE6); color: var(--metre-text, #1F1E1D); }
+html[data-laolao-mode="metre"] .pk-fav-star[aria-pressed="true"] { color: var(--metre-accent, #96681C); }
+html[data-laolao-mode="metre"] .pk-fav-star:focus-visible { outline: 2px solid var(--metre-accent, #96681C); outline-offset: -2px; }
