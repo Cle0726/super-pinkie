@@ -253,7 +253,7 @@
     const mode = currentMode();
     const context = {type: 'context', mode, modeLabel: MODE_LABEL[mode] || '碧琪', running};
     const signature = JSON.stringify(context);
-    if (signature === lastContext) return;
+    if (signature === lastContext && !running.length) return; // N2: while running, resend = heartbeat for the shell's 120 s keep-awake lease
     lastContext = signature;
     pinkieNative(context, 10_000).catch(() => {});
   }
