@@ -75,7 +75,8 @@ async function open(browser, {mode = 'metre', night = false, sk = SK, clock = fa
 // 装了假时钟以后 waitForFunction 的轮询也停了：每次推进 50ms 假时间再看一次
 async function until(p, fn, tries = 60) { for (let i = 0; i < tries; i++) { if (await p.evaluate(fn)) return; await p.clock.runFor(50); } throw new Error('没等到：' + fn); }
 const calls = (p, m) => p.evaluate((m) => window.__calls.filter((c) => c.method === m), m);
-const lum = (rgb) => { const [r, g, b] = rgb.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+// color-mix() 算出来是 color(srgb 0.84 0.53 0.46)，分量是 0–1，不是 0–255
+const lum = (rgb) => { const k = /^color\(srgb/.test(rgb) ? 1 : 255; const [r, g, b] = rgb.replace(/^color\(srgb/, '').match(/\d*\.?\d+/g).slice(0, 3).map(Number).map((v) => { v /= k; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
 
 test(`P2 / I4 / R3 / U2: Metre composer gets level, plan-first and status keys; level writes only agents.metre security / ask with baseHash and retries on a conflict (${engine})`, {timeout: 60_000}, async () => {
@@ -196,6 +197,62 @@ test(`A2: when quota runs out with a reset time, Metre shows it and sends "接�
   } finally { await browser.close(); }
 });
 
+// 审批卡走查第二轮：主题 laolao-theme.css 给不是 .danger 的 .btn 强制透明底、白色半透明边框和粉字，日间「允许一次 / 始终允许」看着像纯文字；
+// 详情区标签和值是英文（CWD / allowlist / on-miss）；待批行来源取了侧栏整行文字，出来是「harness 刚刚」。改前三处都不对，这条失败。
+// 夹具在页面画完以后才加这几条样式，按钮自带的 120ms 底色过渡会让读数停在浏览器默认的 #F0F0F0 起点；真页面主题一开始就在，这里关掉过渡。
+const THEME_BTN = `*,*::before{transition:none!important}
+  :is(.btn):not(:disabled):not(.danger){background:linear-gradient(180deg,rgba(255,250,253,.78),rgba(251,220,241,.33))!important;border-color:rgba(255,255,255,.72)!important;color:var(--mode-button-ink,#ad4f7f)!important}
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .btn{background-image:none!important;box-shadow:none!important}
+  .btn{border:1px solid transparent;border-radius:6px;height:32px}`;
+test(`P1: approval buttons stay filled although the theme forces glass on .btn, details read in Chinese, and the queue source is just the session name (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    for (const night of [false, true]) {
+      const p = await open(browser, {night});
+      await p.addStyleTag({content: THEME_BTN});
+      await p.evaluate(() => {
+        const row = document.createElement('a'); row.className = 'sidebar-recent-session'; row.dataset.sessionKey = 'agent:metre:dashboard:t2';
+        row.innerHTML = '<span class="sidebar-recent-session__name">harness</span><span class="sidebar-recent-session__time">刚刚</span>';
+        document.body.prepend(row);
+        const meta = document.createElement('div'); meta.className = 'exec-approval-meta';
+        meta.innerHTML = [['CWD', '~/demo'], ['安全', 'allowlist'], ['询问策略', 'on-miss']].map(([k, v]) => `<div class="exec-approval-meta-row"><span>${k}</span><span>${v}</span></div>`).join('');
+        document.querySelector('.exec-approval-actions').before(meta);
+        const mk = (id, cmd, sk) => ({id, kind: 'exec', request: {command: cmd, sessionKey: sk}, createdAtMs: 1, expiresAtMs: Date.now() + 120e3});
+        document.querySelector('openclaw-exec-approval').props = {queue: [mk('a1', 'npm test', 'agent:metre:dashboard:t1'), mk('a2', 'rm -rf build', 'agent:metre:dashboard:t2')]};
+      });
+      await p.evaluate(gw('exec.approval.requested', {id: 'a2', request: {command: 'rm -rf build', sessionKey: 'agent:metre:dashboard:t2'}}));
+      await p.waitForSelector('.pk-perm-q');
+      const r = await p.evaluate(() => {
+        const clear = (c) => /rgba\(0, 0, 0, 0\)|transparent/.test(c);
+        const btns = [...document.querySelectorAll('.exec-approval-actions .btn')].map((e) => {
+          const own = getComputedStyle(e), b = getComputedStyle(e, '::before');
+          const fill = !clear(own.backgroundColor) && own.backgroundImage === 'none' ? own.backgroundColor : b.content !== 'none' ? b.backgroundColor : 'none';
+          const edge = b.content !== 'none' && b.borderTopWidth !== '0px' ? b.borderTopColor : own.borderTopWidth !== '0px' ? own.borderTopColor : 'none';
+          return {text: e.textContent.trim(), fill, edge, color: own.color};
+        });
+        const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+        return {btns, cobalt: v('--metre-cobalt'), card: getComputedStyle(document.querySelector('.exec-approval-card')).backgroundColor,
+          meta: [...document.querySelectorAll('.exec-approval-meta-row')].map((row) => [...row.children].map((c) => c.dataset.pkZh || c.textContent.trim())),
+          who: [...document.querySelectorAll('.pk-perm-q__who')].map((e) => e.textContent.trim())};
+      });
+      const tag = night ? '夜' : '日';
+      const [once, always, deny] = r.btns;
+      const hex = (c) => { const [a, b, d] = c.match(/\d+/g).map(Number); return '#' + [a, b, d].map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase(); };
+      assert.notEqual(once.fill, 'none', `${tag}：「允许一次」有底色（${JSON.stringify(once)}）`);
+      assert.equal(hex(once.fill), r.cobalt.toUpperCase(), `${tag}：「允许一次」是钴蓝底（${JSON.stringify(once)}）`);
+      assert.ok(ratio(once.color, once.fill) >= 4.5, `${tag}：「允许一次」字和底 ${ratio(once.color, once.fill).toFixed(2)}`);
+      for (const b of [always, deny]) {
+        assert.notEqual(b.fill, 'none', `${tag}：「${b.text}」有底色`);
+        assert.ok(!/255, 255, 255, 0\.72/.test(b.edge) && b.edge !== 'none', `${tag}：「${b.text}」边框不是主题的白色半透明（${b.edge}）`);
+        assert.ok(ratio(b.color, b.fill) >= 4.5, `${tag}：「${b.text}」字和底 ${ratio(b.color, b.fill).toFixed(2)}（${JSON.stringify(b)}）`);
+      }
+      assert.deepEqual(r.meta, [['工作目录', '~/demo'], ['安全', '只跑允许清单里的'], ['询问策略', '不在清单里就问']], `${tag}：详情区中文`);
+      assert.ok(r.who.includes('harness') && !r.who.some((w) => /刚刚/.test(w)), `${tag}：来源只取会话名（${JSON.stringify(r.who)}）`);
+      await p.close();
+    }
+  } finally { await browser.close(); }
+});
+
 test(`other modes are untouched, and Metre text on these keys and popovers is at least 4.5:1 in day and night (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
@@ -225,6 +282,44 @@ test(`other modes are untouched, and Metre text on these keys and popovers is at
       }
     }
     console.log('contrast', JSON.stringify(out));
+  } finally { await browser.close(); }
+});
+
+// 真页面 1280 宽 metre-board：输入框下这一行还有原生模型键和 Baton / Virtuoso，本批三个键把模型键挤到第二行、输入框往上跳 28px（#94 第一轮 CI 截图对比 5.2%）。
+// 放不下时要一步步收拢，原生的键不许换行；位置够就全露。改前没有收拢，下面「窄」的那一半失败。
+test(`when the composer row is too narrow the keys fold down instead of pushing the native model key to a new line (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    for (const [w, wide] of [[1000, true], [330, false]]) {
+      const p = await open(browser);
+      await p.evaluate((w) => {
+        const c = document.querySelector('.agent-chat__composer-controls');
+        c.style.cssText = `display:flex;flex-wrap:wrap;gap:4px;width:${w}px`;
+        const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
+        window.__plan = {items: [{id: '1', text: 'a', status: 'completed'}, {id: '2', text: 'b', status: 'pending'}]};
+      }, w);
+      await p.evaluate(() => window.PinkieMetrePerm.refresh());
+      await p.waitForTimeout(1700);   // 画完以后还会隔一会儿再量几次
+      const r = await p.evaluate(() => {
+        const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
+        return {metre: top('.agent-chat__composer-controls > .pk-eng-chip'), model: top('.chat-composer-model-control'), fold: document.querySelector('.pk-perm-chips').dataset.fold,
+          keys: [...document.querySelectorAll('.pk-perm-chips .pk-eng-chip__name')].map((e) => e.textContent)};
+      });
+      assert.equal(r.model, r.metre, `${w}px：原生模型键和 Metre 键在同一行（${JSON.stringify(r)}）`);
+      if (wide) { assert.equal(r.fold, '0'); assert.deepEqual(r.keys, ['自动', '先出方案', '计划 1 / 2 · 额度 40%']); continue; }
+      assert.ok(Number(r.fold) >= 2, '窄的时候收拢到只剩一个键');
+      assert.equal(r.keys.length, 1);
+      // 收进去的放手程度、先出方案在会话详情里还能用
+      await p.click('.pk-perm-chip--stat');
+      assert.deepEqual(await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent)), ['放手程度：自动', '先出方案：关']);
+      await p.click('.pk-perm-pop__acts .pk-perm-pop__btn:nth-child(2)');
+      await p.waitForFunction(() => window.__planOn === true);
+      await p.waitForSelector('.pk-perm-pop__btn--go');
+      await p.click('.pk-perm-pop__btn--go');
+      await p.waitForFunction(() => window.__calls.some((c) => c.method === 'chat.send'));
+      assert.equal(await p.evaluate(() => window.__planOn), false, '照这个方案做：先关开关再发话');
+      await p.close();
+    }
   } finally { await browser.close(); }
 });
 

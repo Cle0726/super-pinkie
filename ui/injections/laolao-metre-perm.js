@@ -13,7 +13,7 @@
  *      （模型、开始时间、工作目录、令牌、花费、计划、额度）。数据：pinkie.plan.get、usage.status、sessions.usage、pinkie.project.bind。
  *   A2 额度用完后自动接着做（并入 T3#14）：这一轮失败且 pinkie.model.failure 说是额度用完、给了恢复时间，就显示「几点恢复」，
  *      到点（加 20 秒）自动发一句「接着做」；用户自己先发了话、或点了「不自动接着做」就取消。
- * 重画时机：pinkie:run-view、pinkie:composer-chips、换会话、换模式、网关事件、窗口尺寸；额度每 5 分钟取一次（setTimeout 链）。不加循环定时器和观察器。 */
+ * 按键行放不下时一步步收拢（见 build / fit），不把原生的键挤到下一行。重画时机：pinkie:run-view、pinkie:composer-chips、换会话、换模式、网关事件、窗口尺寸；额度每 5 分钟取一次（setTimeout 链）。不加循环定时器和观察器。 */
 (() => {
   'use strict';
   if (window.PinkieMetrePerm) return;
@@ -144,7 +144,7 @@
   function clearAskTitle() { if (titled && String(document.title).startsWith('? ')) document.title = String(document.title).slice(2); titled = false; }
   function sessionName(key) {
     const row = [...document.querySelectorAll('[data-session-key]')].find((n) => n.dataset.sessionKey === key);
-    return clip(row?.textContent || '', 30) || 'Metre';
+    return clip(row?.querySelector('.sidebar-recent-session__name')?.textContent || '', 30) || 'Metre';
   }
   function notifyAsk(id, key, command) {
     const rn = window.__pinkieRunNotify;
@@ -169,6 +169,11 @@
 
   // ---------- P1 / P4 审批卡 ----------
   const approvalHost = () => document.querySelector('openclaw-exec-approval');
+  const META_ZH = Object.freeze({
+    key: {CWD: '工作目录', cwd: '工作目录', '已解析': '实际程序'},
+    '安全': {full: '不限', allowlist: '只跑允许清单里的', deny: '不跑命令'},
+    '询问策略': {off: '不问', 'on-miss': '不在清单里就问', always: '每次都问'},
+  });
   async function decide(item, decision, row) {
     row?.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     try {
@@ -187,6 +192,13 @@
     const queue = Array.isArray(host.props?.queue) ? host.props.queue : [];
     const title = card.querySelector('.exec-approval-title');
     if (title && queue[0]) title.dataset.pkTitle = queue[0].kind === 'plugin' ? '一个插件在等你批' : '要跑一条命令，等你批';
+    // 详情区的英文标签和值：按当前文字给中文别名（每次重画都重算，原生换了下一条也跟着对）
+    for (const r of card.querySelectorAll('.exec-approval-meta-row')) {
+      const [k, v] = r.children; if (!k || !v) continue;
+      const kt = k.textContent.trim(), vt = v.textContent.trim();
+      const alias = (e, a) => { if (a) e.dataset.pkZh = a; else delete e.dataset.pkZh; };
+      alias(k, META_ZH.key[kt]); alias(v, (META_ZH[kt] || {})[vt]);
+    }
     const rest = queue.slice(1);
     if (!rest.length) { mine?.remove(); return; }
     const sig = rest.map((q) => q.id).join('|');
@@ -264,6 +276,18 @@
       detailRow('本会话花费', money(u.totalCost) + (Number.isFinite(u.totalCost) ? '（估算）' : '')),
       detailRow('额度', state.quota ? `${state.quota.provider} ${state.quota.label} 还剩 ${state.quota.remaining}%` + (state.quota.resetAt ? ` · ${when(state.quota.resetAt)} 重置` : '') : '这个账号没给额度数据'),
     );
+    if (fold >= 2) {
+      const lv = LEVELS.find((l) => l.id === state.level);
+      const go = state.planOn && pc.total > 0;
+      const acts = el('div', 'pk-perm-pop__acts');
+      const lvb = el('button', 'pk-perm-pop__btn', '放手程度：' + (lv ? lv.name : state.level === 'custom' ? '自定义' : '未知')); lvb.type = 'button';
+      lvb.setAttribute('aria-haspopup', 'menu'); lvb.onclick = () => openLevelMenu(btn);
+      const pb = el('button', 'pk-perm-pop__btn', '先出方案：' + (state.planOn ? '开' : '关')); pb.type = 'button'; pb.setAttribute('aria-pressed', String(state.planOn));
+      pb.onclick = async () => { pb.disabled = true; await togglePlan(); const now = document.querySelector('.pk-perm-chip--stat'); if (now) openDetail(now); };
+      acts.append(lvb, pb);
+      if (go) { const g = el('button', 'pk-perm-pop__btn pk-perm-pop__btn--go', '照这个方案做'); g.type = 'button'; g.onclick = () => { closeMenu(); void approvePlan(); }; acts.append(g); }
+      menu.insertBefore(acts, menu.children[1] || null);
+    }
     const r = state.resume;
     if (r && r.key === state.key) {
       const box = el('div', 'pk-perm-pop__resume');
@@ -307,31 +331,60 @@
     if (q) parts.push(`额度 ${q.remaining}%`);
     return {text: parts.join(' · ') || '详情', tone: q && q.remaining <= 10 ? 'danger' : q && q.remaining <= 25 ? 'warn' : ''};
   }
-  let sig = '';
+  // 按键行的宽度预算：输入框下这一行还有原生的模型键、碧琪的 Baton / Virtuoso 键（1280 宽真页面上 Metre 键和模型键之间只剩约 50px）。
+  // 本批的键不许把原生的键挤到下一行、让输入框往上跳。插进去以后量输入框高度，变高了就一步步收拢：
+  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」。
+  let sig = '', fold = 0;
+  function build(f) {
+    const lv = LEVELS.find((l) => l.id === state.level);
+    const pc = planCounts(state.plan), st = statText();
+    const go = state.planOn && pc.total > 0;
+    const box = el('span', 'pk-perm-chips'); box.dataset.fold = String(f);
+    if (f < 2) {
+      const level = chip('pk-perm-chip--level', lv ? lv.name : state.level === 'custom' ? '自定义' : '放手程度', '放手程度：Metre 跑命令之前要不要先问你', openLevelMenu);
+      level.setAttribute('aria-haspopup', 'menu'); level.setAttribute('aria-expanded', 'false');
+      const plan = chip('pk-perm-chip--plan', '先出方案', '打开后 Metre 先写方案给你看，你点「照这个方案做」才动手', () => void togglePlan());
+      plan.setAttribute('aria-pressed', String(state.planOn));
+      box.append(level, plan);
+      // 多出「照这个方案做」时状态键只留「详情」两个字
+      if (go) box.append(chip('pk-perm-chip--go', '照这个方案做', '关掉「先出方案」，让 Metre 照计划动手', () => void approvePlan()));
+    }
+    const label = f >= 3 ? '⋯' : (f >= 1 || go) ? '详情' : st.text;
+    const tip = f >= 2 ? '会话详情：放手程度、先出方案、模型、开始时间、工作目录、令牌、花费、计划和额度' : '会话详情：模型、开始时间、工作目录、令牌、花费、计划和额度';
+    const stat = chip('pk-perm-chip--stat', label, tip, openDetail);
+    if (st.tone) stat.dataset.tone = st.tone;
+    stat.setAttribute('aria-haspopup', 'dialog'); stat.setAttribute('aria-expanded', 'false');
+    box.append(stat);
+    return box;
+  }
+  function fit() {
+    const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
+    const box = controls?.querySelector(':scope > .pk-perm-chips'), input = controls?.closest('.agent-chat__input');
+    if (!box || !input || getComputedStyle(box).display === 'none') return;
+    const h = () => input.getBoundingClientRect().height;
+    box.style.display = 'none'; const h0 = h(); box.style.display = '';
+    if (fold === 0 && h() <= h0 + 1) return;
+    let cur = box;
+    for (let f = 0; f <= 3; f++) {
+      if (f !== Number(cur.dataset.fold)) { const nb = build(f); cur.replaceWith(nb); cur = nb; }
+      fold = f;
+      if (h() <= h0 + 1) break;
+    }
+  }
+  // 原生模型名是后到的、思考档位键第一次点页面会变宽：画完以后隔一会儿再量几次（一次性的 setTimeout，不加循环定时器和观察器）
+  function fitSoon() { for (const ms of [60, 400, 1500]) setTimeout(fit, ms); }
   function paint(force) {
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const old = controls?.querySelector(':scope > .pk-perm-chips');
     if (!controls || !isMetre() || !METRE.test(state.key || currentKey())) { old?.remove(); sig = ''; return; }
-    const lv = LEVELS.find((l) => l.id === state.level);
-    const pc = planCounts(state.plan), st = statText();
-    const next = JSON.stringify([state.level, state.planOn, pc.total > 0, st]);
+    const pc = planCounts(state.plan);
+    const next = JSON.stringify([state.level, state.planOn, pc.total > 0, statText()]);
     if (!force && old && next === sig) return;
     sig = next;
-    const box = el('span', 'pk-perm-chips');
-    const level = chip('pk-perm-chip--level', lv ? lv.name : state.level === 'custom' ? '自定义' : '放手程度', '放手程度：Metre 跑命令之前要不要先问你', openLevelMenu);
-    level.setAttribute('aria-haspopup', 'menu'); level.setAttribute('aria-expanded', 'false');
-    const plan = chip('pk-perm-chip--plan', '先出方案', '打开后 Metre 先写方案给你看，你点「照这个方案做」才动手', () => void togglePlan());
-    plan.setAttribute('aria-pressed', String(state.planOn));
-    box.append(level, plan);
-    // 按键行的宽度预算：820 宽时 Metre 键和模型之间只有约 300px。多出「照这个方案做」时状态键只留「详情」两个字，不然整行换行、输入框往上跳。
-    const go = state.planOn && pc.total > 0;
-    if (go) box.append(chip('pk-perm-chip--go', '照这个方案做', '关掉「先出方案」，让 Metre 照计划动手', () => void approvePlan()));
-    const stat = chip('pk-perm-chip--stat', go ? '详情' : st.text, '会话详情：模型、开始时间、工作目录、令牌、花费、计划和额度', openDetail);
-    if (st.tone) stat.dataset.tone = st.tone;
-    stat.setAttribute('aria-haspopup', 'dialog'); stat.setAttribute('aria-expanded', 'false');
-    box.append(stat);
+    const box = build(fold);
     if (old) old.replaceWith(box);
     else { const eng = controls.querySelector(':scope > .pk-eng-chip'); if (eng) eng.after(box); else controls.append(box); }
+    fit(); fitSoon();
   }
 
   // ---------- 事件 ----------
@@ -361,9 +414,10 @@
   window.addEventListener('pinkie:session-selected', () => { closeMenu(); void refresh(); });
   window.addEventListener('laolao:modechange', () => { closeMenu(); void refresh(); approvalSoon(); });
   window.addEventListener('pinkie:sidebar-gateway-ready', () => void refresh());
-  window.addEventListener('resize', () => closeMenu());
+  window.addEventListener('resize', () => { closeMenu(); fitSoon(); });
+  document.addEventListener('pointerup', () => fitSoon(), {once: true, capture: true});
   setTimeout(() => void refresh(), 600);
   quotaLoop();
 
-  window.PinkieMetrePerm = Object.freeze({refresh, paint, paintApproval, setLevel, levelOf, LEVELS, scheduleResume, notifyAsk, snapshot: () => JSON.parse(JSON.stringify({...state, resume: state.resume && {key: state.resume.key, at: state.resume.at, off: !!state.resume.off, armed: !!state.resume.timer}}))});
+  window.PinkieMetrePerm = Object.freeze({refresh, paint, fit, paintApproval, setLevel, levelOf, LEVELS, scheduleResume, notifyAsk, snapshot: () => JSON.parse(JSON.stringify({...state, resume: state.resume && {key: state.resume.key, at: state.resume.at, off: !!state.resume.off, armed: !!state.resume.timer}}))});
 })();

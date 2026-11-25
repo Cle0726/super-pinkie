@@ -4,8 +4,8 @@
  * 字要对谱线也 ≥ 4.5:1——日间 ink2 #4D4A44 5.07、warn #6A440C 4.94、cobalt-ink #2A4199 5.21；夜间按下态底是钴蓝 14%，
  * --metre-cobalt 只有 4.4，cobalt-ink 提到 #A3B1F0（va-b5\pixel-contrast.py 按真截图量）。 */
 
-html[data-laolao-mode="metre"] { --pk-perm-ink2: #4D4A44; --pk-perm-warn: #6A440C; --pk-perm-cobalt-ink: #2A4199; }
-html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; --pk-perm-cobalt-ink: #A3B1F0; }
+html[data-laolao-mode="metre"] { --pk-perm-ink2: #4D4A44; --pk-perm-warn: #6A440C; --pk-perm-cobalt-ink: #2A4199; --pk-perm-danger: var(--metre-danger); --pk-perm-rule: var(--metre-line); }
+html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; --pk-perm-cobalt-ink: #A3B1F0; --pk-perm-danger: color-mix(in srgb, var(--metre-danger) 80%, var(--metre-text)); --pk-perm-rule: color-mix(in srgb, var(--metre-muted) 40%, transparent); }
 
 /* ---------- P1 审批卡（原生 openclaw-exec-approval，弹在顶层） ---------- */
 @keyframes pk-perm-born { from { outline-color: transparent; } to { outline-color: transparent; } }
@@ -30,7 +30,7 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-title { fon
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub,
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta { color: var(--pk-perm-ink2); font: 400 12.5px/1.6 var(--metre-sans); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-queue {
-  color: var(--metre-text); background: var(--metre-hover); border: 1px solid var(--metre-line); border-radius: 999px;
+  color: var(--metre-text); background: transparent; border: 1px solid var(--pk-perm-rule); border-radius: 999px;
   padding: 2px 10px; font: 400 12.5px/1.5 var(--metre-sans);
 }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-command {
@@ -38,7 +38,7 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-command {
   font: 400 13px/1.55 var(--metre-mono); padding: 10px 12px; margin: 12px 0 10px; max-height: 180px; overflow: auto;
 }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-warning,
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-error { color: var(--metre-danger); font-size: 12.5px; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-error { color: var(--pk-perm-danger); font-size: 12.5px; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn,
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn,
@@ -54,7 +54,23 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .bt
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes { background: var(--metre-cobalt); border-color: var(--metre-cobalt); color: var(--metre-surface); }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover,
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes:hover { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); border-color: var(--metre-cobalt); }
-html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger { color: var(--metre-danger); border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger { color: var(--pk-perm-danger); border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+/* 主题 laolao-theme.css 给所有不是 .danger 的 .btn 强制玻璃底、白色半透明边框和按键粉字（带强制优先级），Metre 皮肤只去掉了渐变和阴影，
+ * 底色和边框仍被压成透明 / 白色——日间「允许一次 / 始终允许」看着像纯文字。不加强制覆盖：底和边画在 ::before 上（主题管不到伪元素），
+ * 字色走主题自己读的 --mode-button-ink。 */
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn { position: relative; isolation: isolate; border-width: 0; padding: 0 15px; --mode-button-ink: var(--metre-text); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  border: 1px solid var(--metre-line-strong); background: var(--metre-surface); transition: background-color 120ms ease, border-color 120ms ease;
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover::before { background: var(--metre-hover); border-color: var(--metre-muted); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary { --mode-button-ink: var(--metre-surface); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary::before { background: var(--metre-cobalt); border-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover::before { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger::before { border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+/* 详情区原生标签和值是英文（中文语言包里 cwd 也是「CWD」，security / ask 的值没有翻译）：脚本按当前文字给中文别名，只改显示 */
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta-row > [data-pk-zh] { font-size: 0; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta-row > [data-pk-zh]::after { content: attr(data-pk-zh); font-size: 12.5px; }
 html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:focus-visible,
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:focus-visible,
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn:focus-visible,
@@ -63,16 +79,17 @@ html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .bt
 html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:disabled { opacity: 0.55; cursor: default; }
 
 /* ---------- P4 卡片里的「还有 N 处在等你批」 ---------- */
-html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q { margin-top: 14px; border-top: 1px solid var(--metre-line); padding-top: 10px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q { margin-top: 14px; border-top: 1px solid var(--pk-perm-rule); padding-top: 10px; }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__head { color: var(--pk-perm-ink2); font: 400 12.5px/1.6 var(--metre-sans); margin-bottom: 6px; }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row { display: flex; align-items: center; gap: 10px; padding: 6px 0; min-height: 40px; }
-html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row + .pk-perm-q__row { border-top: 1px dashed var(--metre-line); }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row + .pk-perm-q__row { border-top: 1px dashed var(--pk-perm-rule); }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__cmd { font: 400 12.5px/1.45 var(--metre-mono); color: var(--metre-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__cmd { font: 400 12.5px/1.45 var(--metre-mono); color: var(--metre-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  align-self: flex-start; max-width: 100%; box-sizing: border-box; background: var(--metre-bg); border: 1px solid var(--pk-perm-rule); border-radius: 4px; padding: 1px 6px; }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__who { font: 400 12px/1.4 var(--metre-sans); color: var(--pk-perm-ink2); }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__acts { flex: none; display: flex; gap: 6px; }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__done { font: 400 12.5px/1 var(--metre-sans); color: var(--pk-perm-ink2); }
-html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row[data-error]::after { content: attr(data-error); color: var(--metre-danger); font-size: 12px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row[data-error]::after { content: attr(data-error); color: var(--pk-perm-danger); font-size: 12px; }
 html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q .pk-perm-q__btn { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
 
 /* ---------- 按键行：放手程度 / 先出方案 / 照这个方案做 / 状态键 ---------- */
@@ -119,6 +136,9 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__row { display: grid; g
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__k { color: var(--pk-perm-ink2); font-size: 12.5px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__v { color: var(--metre-text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__plan { padding: 4px 6px 10px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 6px 10px; border-bottom: 1px solid var(--metre-line); margin-bottom: 4px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn[aria-pressed="true"] { color: var(--pk-perm-cobalt-ink); border-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn--go { color: var(--pk-perm-cobalt-ink); font-weight: 500; }
 html[data-laolao-mode="metre"] .pk-perm-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--metre-muted) 38%, transparent); margin-top: 6px; overflow: hidden; }
 html[data-laolao-mode="metre"] .pk-perm-bar > i { display: block; height: 100%; background: var(--metre-cobalt); border-radius: 2px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__resume {
