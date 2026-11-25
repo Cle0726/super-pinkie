@@ -1,21 +1,20 @@
-/* laolao-metre-board —— Metre 总控台的页面骨架和首页三张看板卡片（PLAN 2.12；说明见 laolao-metre-board.js）。
- * 只在 Metre 模式出现；底色、字色用 laolao-metre-skin.css 的 --metre-* 变量。
- * 第四版（Fable 11-14 夜）：区块里不再是灰色线框，换成有字、有颜色的版式示例。图表用四个颜色：
- *   黄铜（在跑 / 当前）、铜绿（做完）、赭红（出错）、青灰（其他），外加一档灰（排队）。 */
+/* laolao-metre-board —— Metre 总谱的页面骨架和首页三张看板卡片（PLAN 2.12；说明见 laolao-metre-board.js）。只在 Metre 模式出现；
+ * 底色、字色用 laolao-metre-skin.css 的 --metre-* 变量。状态色和背景的谱台灯同一套：钴蓝（在奏）、暗下去的暖白（做完）、
+ * 暖灰（其他）、砖红（出错），外加一档灰（排队）。11-23：标题统一成「衬线标题 + 等宽小注记」，间距按 8 的倍数。 */
 
 html:not([data-laolao-mode="metre"]) .pk-metre-board,
 html:not([data-laolao-mode="metre"]) .pk-metre-quick,
 html:not([data-laolao-mode="metre"]) .pk-metre-nav { display: none !important; }
 
 html[data-laolao-mode="metre"] {
-  /* 「谱纸」配色（11-15 第六版）：状态色全部降饱和。钴蓝 = 在跑（和强调色同一支笔），灰绿 = 做完，暖灰 = 其他，砖红 = 出错，浅灰 = 排队 */
+  /* 「谱纸」配色：状态色全部降饱和。钴蓝 = 在奏（和强调色同一支笔），偏绿的灰 = 做完（11-24：和「其他」的暖灰按色相拉开，日夜非文字对比度都 ≥ 3:1），暖灰 = 其他，砖红 = 出错，浅灰 = 排队 */
   --metre-v1: #2F4BB0;
-  --metre-v2: #4F7A5E;
+  --metre-v2: #6F8466;
   --metre-v3: #7A7468;
   --metre-v4: #B0463A;
   --metre-v5: #B5B1A8;
   --metre-v1-soft: #E6EAF6;
-  --metre-v2-soft: #E5EEE7;
+  --metre-v2-soft: #E3E9DE;
   --metre-v3-soft: #ECEAE5;
   --metre-v4-soft: #F5E5E2;
   --metre-v5-soft: #ECEAE5;
@@ -23,12 +22,12 @@ html[data-laolao-mode="metre"] {
 html[data-laolao-mode="metre"][data-pinkie-night],
 html[data-laolao-mode="metre"][data-theme="dark"] {
   --metre-v1: #93A5EE;
-  --metre-v2: #86AF95;
+  --metre-v2: #8FA585;
   --metre-v3: #9A958A;
   --metre-v4: #D9806F;
   --metre-v5: #5E5B55;
   --metre-v1-soft: #22263A;
-  --metre-v2-soft: #1F2A23;
+  --metre-v2-soft: #232A21;
   --metre-v3-soft: #252422;
   --metre-v4-soft: #33231F;
   --metre-v5-soft: #242422;
@@ -44,8 +43,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   color: var(--metre-text, #1F1E1D);
   font: 400 14px/1.5 var(--metre-sans, system-ui, sans-serif);
 }
-.pk-metre-board[hidden] { display: none; }
-.pk-metre-board:focus { outline: none; }
+.pk-metre-board[hidden] { display: none; } .pk-metre-board:focus { outline: none; }
 .pk-metre-board__head {
   flex: none;
   display: flex;
@@ -54,7 +52,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   gap: 24px;
   width: min(1160px, 100% - 64px);
   margin: 0 auto;
-  padding: 30px 0 18px;
+  padding: 32px 0 16px;
 }
 .pk-metre-board__title h2 { margin: 0; display: flex; align-items: center; gap: 10px; font: 400 30px/1.2 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em; color: var(--metre-text, #1F1E1D); }
 .pk-metre-board__title p { margin: 6px 0 0; font-size: 13.5px; color: var(--metre-muted, #73726C); }
@@ -102,7 +100,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   gap: 10px;
   margin-top: 0;
   margin-bottom: 16px;
-  padding: 9px 14px;
+  padding: 8px 16px;
   border: 1px solid color-mix(in srgb, var(--metre-v1) 30%, transparent);
   border-radius: 10px;
   background: var(--metre-v1-soft);
@@ -120,7 +118,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   background: var(--metre-card, #FFFFFF);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
-.pk-metre-board__stat { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px 14px; min-width: 0; }
+.pk-metre-board__stat { display: flex; flex-direction: column; gap: 4px; padding: 16px; min-width: 0; }
 .pk-metre-board__stat + .pk-metre-board__stat { border-left: 1px solid var(--metre-line, #E8E6DC); }
 .pk-metre-board__stat-label { font-size: 12.5px; color: var(--metre-muted, #73726C); }
 .pk-metre-board__stat-value { font: 400 28px/1.2 var(--metre-serif, Georgia, serif); color: var(--metre-text, #1F1E1D); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -143,10 +141,10 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 }
 .pk-metre-board__card--wide { grid-column: span 2; }
 .pk-metre-board__card.is-target { border-color: var(--metre-accent, #96681C); }
-.pk-metre-board__card-head { display: flex; align-items: baseline; gap: 8px; padding: 14px 18px 12px; border-bottom: 1px solid var(--metre-line, #E8E6DC); }
-.pk-metre-board__card-head h3 { margin: 0; font: 600 14.5px/1.3 var(--metre-sans, system-ui, sans-serif); color: var(--metre-text, #1F1E1D); }
-/* 英文小标写成乐谱上的表情记号：斜体衬线 */
-.pk-metre-board__en { font: italic 400 14px/1 var(--metre-serif, Georgia, serif); color: var(--metre-muted, #73726C); }
+.pk-metre-board__card-head { display: flex; align-items: baseline; gap: 8px; padding: 16px 16px 8px; border-bottom: 1px solid var(--metre-line, #E8E6DC); }
+.pk-metre-board__card-head h3 { margin: 0; font: 400 17px/1.3 var(--metre-serif, Georgia, serif); color: var(--metre-text, #1F1E1D); }
+/* 英文小标：等宽大写的小注记（和首页引导语上面那行速度记号同一种字），不再和中文粗体、斜体衬线三种字混在一起 */
+.pk-metre-board__en { font: 500 10.5px/1 var(--metre-mono, ui-monospace, Consolas, monospace); letter-spacing: 0.12em; text-transform: uppercase; color: var(--metre-muted, #73726C); }
 .pk-mb-ic { width: 18px; height: 18px; flex: none; align-self: center; color: var(--metre-accent, #96681C); }
 .pk-metre-board__tag {
   margin-left: auto;
@@ -161,7 +159,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   cursor: help;
 }
 .pk-metre-board__card[data-metre-state="live"] .pk-metre-board__tag { display: none; }
-.pk-metre-board__body { flex: 1; padding: 16px 18px; min-width: 0; }
+.pk-metre-board__body { flex: 1; padding: 16px; min-width: 0; }
 .pk-metre-board__body.is-placeholder { display: flex; flex-direction: column; gap: 14px; }
 .pk-metre-board__sample { flex: 1; min-width: 0; user-select: none; cursor: default; }
 .pk-metre-board__note { margin: 0; padding-top: 12px; border-top: 1px dashed var(--metre-line-strong, #D9D6CC); font-size: 12.5px; line-height: 1.55; color: var(--metre-muted, #73726C); }
@@ -189,7 +187,7 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 .pk-mb-steps li[data-state="done"] span { color: var(--metre-muted, #73726C); }
 .pk-mb-steps li[data-state="run"] span { font-weight: 600; }
 .pk-mb-steps li[data-state="wait"] span { color: var(--metre-muted, #73726C); }
-.pk-mb-steps span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-mb-steps span { min-width: 0; padding: 4px 0; overflow-wrap: anywhere; }
 .pk-mb-steps em { font-style: normal; font-size: 12px; color: var(--metre-muted, #73726C); font-variant-numeric: tabular-nums; }
 .pk-mb-steps li[data-state="run"] em { color: var(--metre-v1); }
 
@@ -201,9 +199,9 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 .pk-mb-score__ruler b { width: 0; display: flex; justify-content: center; font: 400 11px/1 var(--metre-sans, system-ui, sans-serif); color: var(--metre-muted, #73726C); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pk-mb-score__ruler b:first-child { justify-content: flex-start; }
 .pk-mb-score__ruler b:last-child { justify-content: flex-end; }
-.pk-mb-score__row { min-height: 44px; border-top: 1px solid var(--metre-line, #E8E6DC); }
+.pk-mb-score__row { min-height: 48px; border-top: 1px solid var(--metre-line, #E8E6DC); }
 .pk-mb-score__part { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.pk-mb-score__part strong { font: 500 13.5px/1.3 var(--metre-sans, system-ui, sans-serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-mb-score__part strong { font: 500 13.5px/1.3 var(--metre-sans, system-ui, sans-serif); overflow-wrap: anywhere; }
 .pk-mb-score__part small { font-size: 11.5px; color: var(--metre-muted, #73726C); }
 .pk-mb-role-label { overflow-wrap: anywhere; }
 .pk-mb-role-badge {
@@ -373,10 +371,10 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
   .pk-metre-quick__card { padding-top: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pk-metre-quick__card, .pk-metre-board__card { transition: none; }
+  .pk-metre-quick__card, .pk-metre-board__card, .pk-mb-score__acts, .pk-mb-score__line { transition: none; }
   .pk-metre-quick__card:hover { transform: none; }
 }
-html[data-pinkie-reduce-motion] :is(.pk-metre-quick__card, .pk-metre-quick__card:hover) { transition: none; transform: none; }
+html[data-pinkie-reduce-motion] :is(.pk-metre-quick__card, .pk-metre-quick__card:hover) { transition: none; transform: none; } html[data-pinkie-reduce-motion] :is(.pk-mb-score__acts, .pk-mb-score__line) { transition: none; }   /* 总谱这两个不关 transform：.pk-mb-score__line.is-empty 靠 translateY(-50%) 居中 */
 
 /* ---------- 批 5：接上真数据以后的零件（laolao-metre-board-data.js 画的） ---------- */
 .pk-mb-empty { margin: 4px 0; font-size: 13px; line-height: 1.6; color: var(--metre-muted, #73726C); }
@@ -387,6 +385,8 @@ html[data-pinkie-reduce-motion] :is(.pk-metre-quick__card, .pk-metre-quick__card
 .pk-mb-score__line { position: relative; z-index: 1; background: var(--metre-card, #FFFFFF); grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-height: 26px; padding-bottom: 6px; font-size: 12px; color: var(--metre-muted, #73726C); }
 .pk-mb-score__line > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk-mb-score__acts, .pk-mb-memory__acts { display: inline-flex; flex: none; gap: 4px; }
+/* 每行的打开 / 停止 / 发消息：有鼠标时停在这一行上（或键盘移进来）才出现，平时只看得到这一行的状态；触屏照旧一直显示 */
+@media (hover: hover) { .pk-mb-score__acts, .pk-mb-score__line.is-empty { transition: opacity 208ms ease-out; } .pk-mb-score__row:not(:hover):not(:focus-within) .pk-mb-score__acts { opacity: 0; } .pk-mb-score__row { position: relative; } .pk-mb-score__line.is-empty { position: absolute; top: 50%; right: 0; min-height: 0; padding: 0 0 0 12px; transform: translateY(-50%); } .pk-mb-score__line.is-empty > span { display: none; } .pk-mb-score__row:not(:hover):not(:focus-within) > .pk-mb-score__line.is-empty { opacity: 0; pointer-events: none; } }
 .pk-mb-act { padding: 2px 9px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 7px; background: var(--metre-card, #FFFFFF); color: var(--metre-text, #1F1E1D); font: 400 12px/1.5 var(--metre-sans, system-ui, sans-serif); cursor: pointer; }
 .pk-mb-act:hover { border-color: var(--metre-muted, #73726C); }
 .pk-mb-act:disabled { opacity: 0.5; cursor: default; }
@@ -459,10 +459,10 @@ html:has(.pk-metre-board.is-resizing) { cursor: col-resize; }
 .pk-metre-board.is-docked .pk-metre-board__notice,
 .pk-metre-board.is-docked .pk-metre-board__stats,
 .pk-metre-board.is-docked .pk-metre-board__grid { width: calc(100% - 40px); }
-.pk-metre-board.is-docked .pk-metre-board__head { padding: 18px 0 14px; align-items: center; }
+.pk-metre-board.is-docked .pk-metre-board__head { padding: 16px 0; align-items: center; }
 .pk-metre-board.is-docked .pk-metre-board__title h2 { font-size: 22px; }
 .pk-metre-board.is-docked .pk-metre-board__title p { display: none; }
-.pk-metre-board.is-docked .pk-metre-board__stat { padding: 12px 14px 10px; }
+.pk-metre-board.is-docked .pk-metre-board__stat { padding: 8px 16px; }
 .pk-metre-board.is-docked .pk-metre-board__stat-value { font-size: 22px; }
 .pk-metre-board.is-docked .pk-metre-board__grid { gap: 12px; margin-top: 12px; }
 

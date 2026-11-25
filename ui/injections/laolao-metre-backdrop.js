@@ -1,26 +1,11 @@
-/* laolao-metre-backdrop —— Metre 首页 / 对话页底部的像素画带（11-15 第十一稿「谱台灯」；11-16 第十二稿：细节 + 地面波纹）。
- *
- * 用户 11-15 晚看了装进 App 的「月夜」：「像素视觉元素没有 Metre 自己的感觉，像素密度也低，质量太差，整体也没有大厂的氛围和呼吸感」。
- * 月亮、山、电线杆、音符、草、星星、萤火虫和整屏的 LED 缝全部拿掉（它们是照参考视频抄的题材）。
- *
- * 现在画的是 Metre 自己的事：一个指挥，一排排等着开工的声部。
- *   夜里的排练厅，从乐手的座位看出去：近处几排谱台，每个谱台上夹着一盏小灯；中间偏右是指挥台，
- *   上面一个背对我们的谱台（指挥的位置空着——猫在输入框上，不在画里重复）；最远处是舞台口，里面立着像素 M 节拍器的剪影。
- *   谱台灯 = 子会话（和总控台同一份数据，laolao-metre-board-data.js）：
- *     没有子会话时只有指挥台那一盏亮着；每派出一个亮一盏——在跑 = 钴蓝，做完 = 暖白（暗一档），出错 = 砖红，排队 = 不亮。
- *   会动的只有两样：指挥台的灯和节拍器的摆锤，按 ♩=72 跳格。减少动态效果时静止。
- * 版面：画只占页面底部一条（首页约 28% 高，对话页约 16% 高、对比度降一半），上面是空的——
- *   只有一层很细的抖动渐变（大厅的暗），不放任何东西。提示语、对话正文都在那片空里。
- * 画法：一格 2 个 CSS 像素（按设备像素取整，格子边永远落在整像素上），整张图先画进一块低分辨率的 Uint32 缓冲，
- *   最近邻放大贴到画布上；不压缝。
- *   光：主光是舞台口的冷光（从远处正前方来，离舞台口越远越暗），局部光是各盏谱台灯（从上往下、各自的颜色）。
- *   后墙是规整的竖向吸音木条 + 凸起的护墙嵌板（斜面朝舞台口受光）；舞台里有天幕渐变、吊杆灯和光锥、透视的台板；
- *   谱台三种大小，近排的谱纸有厚度、翻起的页角、夹子，灯罩有弧度；地板是朝舞台口收拢的打蜡木条，倒着后墙和舞台口。
- *   静的那一层分两份：完整的一张（buf）和「拿掉谱台、椅子、指挥台」的一张（base），东西各自记成一组（obj / groups）——
- *   点击的波纹要让地面起伏、东西跟着上下，就靠这个分层。
- * 浅色主题不是把深色反相：是谱纸上的墨线版——暖白底、墨色剪影、灯是钴蓝的点。
- * 资源（批 6「不留常驻动画」）：只在 Metre 的对话页 / 首页、窗口可见时跑；一个 setTimeout 每半拍走一步，只重画会动的那几行；
- *   标志页开着时停；减少动态效果时只画一帧。不在 Metre 时画布直接拿掉，根元素上的 data-pk-metre-backdrop 也拿掉。 */
+/* laolao-metre-backdrop —— Metre 首页 / 对话页底部的像素画带：夜里的排练厅（11-15「谱台灯」→ 11-16 细节 + 点击波纹 → 11-23 动画打磨）。
+ * 从乐手的座位看出去：近处几排谱台各夹一盏小灯，中间偏右是指挥台（背对我们的谱台，指挥空着——猫在输入框上），最远处舞台口里立着像素 M 节拍器。
+ * 谱台灯 = 子会话（和总谱同一份数据）：在奏 = 钴蓝，做完 = 暖白（暗一档），出错 = 砖红，排队 = 不亮；换状态时闪两下 / 分两档暗下去（LAMP_SEQ）。
+ * 动的：在奏时指挥台的灯和摆锤按 ♩=72 半拍一步；空闲时舞台口的天幕一拍一步慢慢呼吸，偶尔一盏空谱台的灯闪一下（11-23 用户点头）；点一下背景起波纹。
+ * 版面：只占底部一条（首页约 28%、不高过输入框下沿、上半截退一档；对话页约 16%、对比度降一半），上面只有一层很细的抖动渐变，提示语和正文在那片空里。
+ * 画法：一格 2 CSS 像素（按设备像素取整），先画进低分辨率 Uint32 缓冲再最近邻放大。光：舞台口的冷光 + 各盏谱台灯。浅色主题是谱纸上的墨线版，不是反相。
+ *   静的一层分两份：完整的 buf 和拿掉谱台、椅子、指挥台的 base，东西各记一组（obj / groups）——点击的波纹让地面起伏、东西跟着上下，靠这个分层。
+ * 资源：只在 Metre 的对话页 / 首页、窗口可见时跑，只用 setTimeout（点击后的约 1.5 秒里另有 rAF）；一分钟没人碰、标志页开着、减少动态效果时停在一帧；不在 Metre 时画布拿掉。 */
 (() => {
   'use strict';
   const G = typeof window !== 'undefined' ? window : globalThis;
@@ -40,8 +25,7 @@
   const mod = (a, n) => ((a % n) + n) % n;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-  // ---------- 颜色 ----------
-  // 每种材质 4–6 级。深色：夜里的排练厅，暖光来自指挥台的灯，冷光来自舞台口。浅色：谱纸上的墨线版（不是反相）。
+  // ---------- 颜色 ---------- 每种材质 4–6 级。深色：夜里的排练厅，暖光来自指挥台的灯，冷光来自舞台口。浅色：谱纸上的墨线版（不是反相）。
   const PALETTES = {
     dark: {
       bg: '#151514', hall1: '#17171A', hall2: '#191A1F', hall3: '#1C1D25', wall: '#22232D', rail: '#2A2C38',
@@ -89,6 +73,9 @@
   for (const p of Object.values(PALETTES)) p.wait = p.off;
   PALETTES.dark.tap = {hi: '#FFF8E4', mid: '#EADFBE', lo: '#C9BD98', line: '#A89C78', ink: '#3A3323', core: '#FFF6DC', glow: '#D9CDA8'};
   PALETTES.light.tap = {hi: '#F4F6FF', mid: '#E6EBFB', lo: '#D3DBF5', line: '#91A1E0', ink: '#2F4BB0', core: '#2F4BB0', glow: '#2F4BB0'};
+  // 11-23：一盏灯从「在奏」暗成「做完」时中间的两档（灯亮灭的过渡用）
+  const mixHex = (a, b, t) => (a && b ? '#' + rgb(a).map((v, i) => Math.round(v + (rgb(b)[i] - v) * t).toString(16).padStart(2, '0')).join('') : b);
+  for (const p of Object.values(PALETTES)) [p.dim1, p.dim2] = [1 / 3, 2 / 3].map((t) => Object.fromEntries(Object.keys(p.run).map((k) => [k, mixHex(p.run[k], p.done[k], t)])));
   const resolve = (pal) => {
     const out = {};
     for (const [k, v] of Object.entries(pal)) out[k] = typeof v === 'string' ? rgb(v) : Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, vv ? rgb(vv) : null]));
@@ -101,8 +88,7 @@
     return levels[Math.min(n, lo + (v - lo > bayer(x, y) ? 1 : 0))];
   };
 
-  // ---------- 精灵 ----------
-  // 像素 M 节拍器（和 laolao-metre-brand.js 的标志同一张图；摆锤单独画，会动）
+  // ---------- 精灵 ---------- 像素 M 节拍器（和 laolao-metre-brand.js 的标志同一张图；摆锤单独画，会动）
   const LOGO = [
     '...##...##...',
     '...##...##...',
@@ -127,8 +113,7 @@
   const LEAD = {w: 27, dh: 15, lampW: 9, poleH: 11, legH: 4};          // 指挥台上的谱台（背面）
   LEAD.h = 3 + LEAD.dh + 1 + LEAD.poleH + LEAD.legH;
 
-  // ---------- 场景 ----------
-  // 把 sessions（总控台那份）变成灯的状态表
+  // ---------- 场景 ---------- 把 sessions（总谱那份）变成灯的状态表
   function lampStates(sessions) {
     const out = [];
     for (const s of Array.isArray(sessions) ? sessions : []) {
@@ -138,10 +123,8 @@
     return out;
   }
 
-  /* 画静的那一层。返回 {buf, base, obj, …, anchors}。
-   * cols×rows 是整块画布的格数；band 是场景占的行数（贴底），band 上面的行只有大厅的暗（抖动渐变，越往上越接近底色，最上面是透明）。
-   * quiet = [x0, x1]：输入框那一栏的格范围（对话页用它把指挥台和舞台口让到两边的空地上）；首页传 null。
-   * keepTop：输入框上沿在第几行（对话页「空中」点击的光点落在它上面，不落到输入框后面）。 */
+  /* 画静的那一层。返回 {buf, base, obj, …, anchors}。cols×rows：整块画布的格数；band：场景占的行数（贴底），上面只有大厅的暗（越往上越透明）。
+   * quiet = [x0, x1]：对话页输入框那一栏的格范围（指挥台和舞台口让到两边）；首页传 null。keepTop：输入框上沿在第几行（空中点击的光点落在它上面）。 */
   function buildScene({cols, rows, band, dark, home, lamps = [], quiet = null, dim = 0, flash = -1, keepTop = null}) {
     const C = resolve(dark ? PALETTES.dark : PALETTES.light);
     const N = cols * rows;
@@ -189,9 +172,7 @@
       else if (right >= 190) { stageX = quiet[1] + Math.round(right * 0.25); podX = quiet[1] + Math.round(right * 0.7); }
     }
 
-    // 2. 后墙。光只从舞台口来：离舞台口越近越亮，斜面朝着舞台口的那一侧受光。
-    //    上半：规整的竖向吸音木条（4 格一根：3 格面 + 1 格缝），每 7 根一道嵌板缝；亮度按根算（一根一个色，不抖动、不随机），往上抖动着淡进大厅。
-    //    中间：腰线（一线高光 + 一线暗缝）。下半：凸起的护墙嵌板，四条斜面一亮一暗。
+    // 2. 后墙，光只从舞台口来。上半：竖向吸音木条（4 格一根，每 7 根一道嵌板缝，一根一个色），往上淡进大厅；中间腰线；下半：护墙嵌板，斜面一亮一暗。
     const wainTop = floorY - 18, slatTop = floorY - Math.round(band * 0.4) + 2, slatBot = wainTop - 4;
     const wallLit = (x) => Math.max(0, 1 - Math.abs(x - stageX) / (cols * 0.42));
     const SLAT = [C.slat0, C.slat1, C.slat2, C.slat3];
@@ -250,7 +231,7 @@
     const swN = Math.max(3, Math.round(iw / 30)), sw = iw / swN;
     const CU = [C.cu0, C.cu1, C.cu2, C.cu3], ST = [C.st0, C.st1, C.st2, C.st3];
     const deckTop = ih - lipH - deckH, battenY = vh + 1;
-    const fixtures = [];
+    const fixtures = [], sky = new Uint8Array(cols * rows);
     for (let k = 0, n = Math.max(2, Math.round((iw - 2 * cw) / 16)); k < n; k++) fixtures.push(Math.round(stageX + (k - (n - 1) / 2) * ((iw - 2 * cw - 10) / Math.max(1, n - 1))));
     for (let y = ay0; y < floorY; y++) for (let x = ax0; x <= ax1; x++) {
       if (!inArch(x, y)) continue;
@@ -289,7 +270,7 @@
       // 天幕：上暗下亮的冷光（5 档、抖动过渡），中间亮两边暗；台面上方一道很窄的地平线亮
       const tt = (ly - battenY) / Math.max(1, deckTop - battenY), centre = Math.max(0, 1 - Math.abs(x - stageX) / (iw * 0.55));
       const lvl = 0.18 + tt * tt * 0.55 + centre * 0.36 + (deckTop - ly <= 2 ? 0.1 : 0);
-      set(x, y, ramp([C.st0, C.st1, C.st2, C.st3, C.st4], lvl, x, y));
+      set(x, y, ramp([C.st0, C.st1, C.st2, C.st3, C.st4], lvl, x, y)); sky[y * cols + x] = 1 + Math.round(centre * 254);   // 呼吸只照天幕本身，中间最亮
     }
     // 脚灯：台唇上一排小灯罩，光往台里打
     for (let k = 0; ; k++) {
@@ -326,7 +307,7 @@
         // 木纹：顺着木条方向的细纹（同一根木条里按 u 偏移取几道），近处才看得清
         const u = ((x - vpx) / (y - vpy)) * pk - i;
         if (d > 0.35 && Math.abs(((u * 5 + (h >>> 5) % 5) % 5) - 2.5) < 0.12 && (y + (h >>> 9)) % 11 < 4) c = mix(c, C.seam, 0.4);
-        if (plank(x - 1, y) !== i && d * 2.8 > bayer(x, y)) c = C.seam;
+        if (plank(x - 1, y) !== i && (!dark || d * 2.8 > bayer(x, y))) c = dark ? C.seam : mix(c, C.seam, Math.min(1, d * 2.8));   // 浅色：远处的缝平平地淡掉，不抖动
         else if (d > 0.12 && (y === floorY + 4 + (h >>> 3) % floorH || y === floorY + 4 + (h >>> 11) % floorH)) c = C.seam;   // 木条的接头
         set(x, y, c);
       }
@@ -339,15 +320,15 @@
       for (let x = 0; x < cols; x++) {
         const v = buf[sy * cols + x];
         if (!v || buf[y * cols + x] === seamPk) continue;
-        const a = k * (dark ? 0.42 : 0.3);
-        if (a > bayer(x, y) * 0.9) blend(x, y, unpack(v, C.bg), a);
+        const a = k * (dark ? 0.42 : 0.3);   // 浅色（11-23）：倒影不抖动，平平地淡一层——抖动的倒影在暖白地板上是一片脏点
+        if (dark ? a > bayer(x, y) * 0.9 : a > 0.02) blend(x, y, unpack(v, C.bg), dark ? a : a * 0.5);
       }
     }
     // 舞台口的光落在地上一片（越近越疏）
     const spill = Math.round(floorH * 0.3);
     for (let dy = 0; dy < spill; dy++) {
       const y = floorY + dy, half = Math.round(iw * 0.4 + dy * 1.8), k = 1 - dy / spill;
-      for (let x = stageX - half; x <= stageX + half; x++) if (k * 0.7 * (1 - Math.abs(x - stageX) / (half + 1)) > bayer(x, y)) blend(x, y, C.st2, dark ? 0.5 : 0.6);
+      for (let x = stageX - half; x <= stageX + half; x++) { const a = k * 0.7 * (1 - Math.abs(x - stageX) / (half + 1)); if (dark ? a > bayer(x, y) : a > 0.02) blend(x, y, C.st2, dark ? 0.5 : a * 0.6); }
     }
     const risers = [floorY, floorY + Math.round(floorH * 0.22), floorY + Math.round(floorH * 0.5)];
     for (const y of risers.slice(1)) for (let x = 0; x < cols; x++) { set(x, y, C.edge); set(x, y + 1, C.edgeLo); if (bayer(x, y) < 0.5) blend(x, y + 2, C.edgeLo, 0.6); }
@@ -513,7 +494,9 @@
     }
     paintRow(0);
 
-    // 波纹要用的：地面的相机（和木条同一个灭点）、光源、画家顺序
+    // 11-23：首页地平线以上（后墙、舞台口、大厅的暗）往底色退一档，细节和对比度让给前排谱台和上面的提示语；谱台、椅子、指挥台本身不退
+    const upDim = home ? (dark ? 0.22 : 0.3) : 0;
+    if (upDim) for (let i = 0; i < floorY * cols; i++) { if (base[i]) base[i] = pack(mix(unpack(base[i], C.bg), C.bg, upDim)); if (buf[i] && !obj[i]) buf[i] = pack(mix(unpack(buf[i], C.bg), C.bg, upDim)); }
     // 点击的水波要用的：地面的相机（和木条同一个灭点）、光源、画家顺序
     const Dm = rows - vpy, geo = {vpx, vpy, Dm, f: 1.5 * Dm};
     const toFloor = (x, y) => { const d = Math.max(1, y - vpy); return {X: (x - vpx) * Dm / d, Z: geo.f * Dm / d}; };
@@ -524,12 +507,11 @@
     for (const s of slots) { const st = C[s.state]; if (st && st.glow) addLight(s.cx, Math.min(s.base, rows + 30), st.glow, st.core, s.state === 'done' ? 0.55 : 0.8, 60); }
     const paintOrder = groups.slice(1).sort((a, b) => a.order - b.order).map((g) => g.id);
     const landY = floorY + Math.round(floorH * (home ? 0.5 : 0.45));
-    return {buf, base, obj, groups, cols, rows, C, dim, dark, solid,
-      anchors: {logo, lead, floorY, floorH, y0, hy0, stageX, podX, slots, quiet, keepTop, landY, geo, lights, paintOrder, gPod}};
+    return {buf, base, obj, groups, cols, rows, C, dim, upDim, dark, solid,
+      anchors: {logo, lead, floorY, floorH, y0, hy0, stageX, podX, slots, quiet, keepTop, landY, geo, lights, paintOrder, gPod, sky: {x0: ix0 + cw, x1: ix0 + iw - cw, y0: iy0 + battenY + 3, y1: iy0 + deckTop, w: sky}}};
   }
 
-  /* 会动的两样，叠在静的那一层上：指挥台的灯（每拍亮一下、半拍收回一格）和节拍器的摆锤（左-中-右-中，一根摆杆连到底部的支点）。
-   * put(x, y, [r,g,b]) 由调用方给（它负责 dim 和越界）。step 是半拍数；still = 减少动态效果；leadDy = 指挥台被波纹顶起 / 落下几格。 */
+  /* 会动的两样：指挥台的灯（每拍亮一下）和节拍器的摆锤（左-中-右-中）。put 由调用方给（负责 dim 和越界）；step = 半拍数；still = 减少动效；leadDy = 指挥台被波纹顶起几格。 */
   function paintMoving(scene, step, still, put, under, leadDy = 0) {
     const {C, dark, cols, anchors: {logo, lead: lead0}} = scene;
     const lead = leadDy ? {cx: lead0.cx, base: lead0.base + leadDy} : lead0;
@@ -567,15 +549,8 @@
   }
 
   /* ---------- 点一下 =「一个音落进水里」（11-16 定稿，标准见 RIPPLE-DETAIL-PLAN-1116.md §A‴） ----------
-   * 点哪里都有，效果就在点的地方：落点先是一个像素符头砸下去，砸出一圈 3D 水波，水里跳出两三颗像素音符往上飘、晃、抖动着散掉。
-   * 水波（两种，同一种材质）：
-   *   地板上：地面是一个真的平面，和木条同一个灭点的针孔相机。屏幕行离灭点 d 格，最底行 d = Dm；深度 Z = f·Dm/d；
-   *     横向在每个波自己的正对坐标里算：(x − 落点x)·Dm/d。近大远小、远处更扁更细更慢，全由投影得到（落点越远波做得越大，免得看不见）。
-   *   地板以上（大厅、后墙、舞台口）：同样的波、固定扁度的椭圆——整块背景像一层深色的水面。
-   * 波 = 高度场：「墨西哥帽」波包（一圈隆起，前后各一道凹），一个十六分音符后再跟一圈小的；多次点击直接相加。
-   * 画法：从远到近（从上到下）一行行重画，每个像素按自己那点的高度抬起来，空当用近的那行填；近处的波峰抬起来会盖住后面的东西。
-   *   地板上谱台、椅子、指挥台按脚的深度插进这个顺序里，跟着脚下的地面上下动；波峰扫过谁的脚，谁的灯闪一下。
-   *   明暗按坡度：光从远处（舞台口 / 上方）来，朝光的坡推向光的颜色（地板上还有各盏灯各自的颜色），背光的坡压暗；不抖动，弱了色带自己变细消失。
+   * 地板上：和木条同一个灭点的针孔相机（深度 Z = f·Dm/d），波按投影近大远小；波 = 「墨西哥帽」高度场，一个十六分音符后再跟一圈小的，多次点击相加。
+   * 画法：从远到近一行行重画、按高度抬起；谱台、椅子、指挥台按脚的深度插进顺序里跟着地面动，波峰扫过谁的脚谁的灯闪；明暗按坡度，不抖动。
    * 音符第一颗钴蓝，其余墨色；每颗在水面上有一个倒着的淡影子。 */
   const RIP = {speed: 0.12, ease: 1400, sigma: 5.5, amp: 4.4, spread: 24, decay: 700, lag: 208, second: 0.55, gain: 3.4, lift: 0.55};
   const HEAD_MS = 90;   // 符头落下来要 90ms，落进去那一刻才起波
@@ -717,11 +692,8 @@
     return {top: Math.max(0, top), leadDy: dyOf[gPod] || 0};
   }
 
-  /* 地板以上：「一个音落在谱纸上」。这一片是正对着我们的一张平面（大厅的暗、后墙、舞台口），点一下：
-   *   符头从我们这边飞向纸面 → 落上去的一刻，藏在黑里的谱纸（五线 + 小节线）显出来，被压成一个漏斗形的坑（谱线往坑里收拢）→
-   *   纸弹回来鼓成一个包，把符头弹成 ♪ 飞走 → 一圈圈正圆的涟漪荡开，谱纸跟着隐回黑里。
-   *   坑 = 「重力井」1/(1+r²)；画法：坑按透视放缩（陷下去的缩小、鼓起来的放大），涟漪按坡度像透镜一样把后面的线推开；
-   *   光从左上来，受光坡推亮、背光坡压暗、越深越暗，不抖动。谱台、椅子、指挥台在纸前面，不被弯；在地平线（墙和地板的交线）截断。 */
+  /* 地板以上：「一个音落在谱纸上」——正对我们的一张平面，点一下，藏在黑里的谱纸显出来、被压成漏斗形的坑（重力井 1/(1+r²)），弹回鼓包把符头弹成 ♪ 飞走，
+   *   涟漪像透镜推开后面的线、谱纸跟着隐回黑里。光从左上来，不抖动；谱台、椅子、指挥台在纸前面不被弯；在墙和地板的交线截断。 */
   const SHEET = {s: 12, Rw: 58, Hw: 12, T: 240, tau: 280, Dz: 16, launch: 170, Rs: 12, Hr: 3.4, sig: 4, sp: 30, kr: 4.2, kh: 1.3, gR: 1.15, gW: 2.4, ao: 0.1, note: 300};
   const STAFF = {gap: 3, lines: 5, period: 22, bar: 28};
   // 谱纸上 (qx, qy) 这一格（一格盖住 span 格谱纸）有没有线：五线（线距 3，一组 5 线，周期 22）+ 小节线（每 28 格，只在五线之间）
@@ -740,8 +712,7 @@
     const env = b > 0 ? Math.min(1, b / 80) * Math.exp(-b / 650) * Math.max(0, 1 - (a / RIPPLE_MS) ** 4) : 0;
     const b1 = b - RIP.lag, k1 = b1 > 0 ? RIP.second * Math.min(1, b1 / 60) : 0;
     const sig = S.sig * (1 + Math.max(0, b) / 1600), R0 = b > 0 ? ring(b) : 0;
-    // 谱纸显出来的地方跟着波走：坑压下去时坑口那一块全显（弹起后 150ms 收掉）；之后只在两圈波峰附近显（波推到哪、纸亮到哪），
-    //   波峰里面留一层半显的、随涟漪一起淡——涟漪走完，谱纸也隐回黑里，不留一块不动的谱纸。
+    // 谱纸跟着波显出来：坑压下去时坑口全显（弹起后 150ms 收掉），之后只在两圈波峰附近显、里面一层半显随涟漪淡——走完就隐回黑里。
     const dent = a < S.launch + 120 ? Math.min(1, a / 50) : Math.max(0, 1 - (a - S.launch - 120) / 150);
     const ringVis = clamp((env - 0.12) * 3, 0, 1), inner = 0.55 * clamp((env - 0.3) * 2.5, 0, 1);
     return {sx: rp.sx, sy: rp.sy, wc, env, A: S.Hr * env, R0, R1: b1 > 0 ? ring(b1) : 0, k1, sig, sp: S.sp, dent, Rd: S.Rw * 0.6, ringVis, inner,
@@ -937,9 +908,7 @@
     const hit = x >= 0 && y >= 0 && x < cols && y < rows ? obj[y * cols + x] : 0;
     if (hit) { const g = groups[hit], fy = Math.min(g.foot, rows - 1); return [{...at(g.cx, fy), t0: now + HEAD_MS, seed, group: hit, px: x, py: y, notes: 3}]; }
     if (y >= floorY + 1) return [{...at(x, y), t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}];
-    // 地板以上：竖直面上压出坑、荡开涟漪；涟漪走到墙和地板的交线时，「声音」落到正下方的地板上接着荡开（谱台跟着起伏、灯闪）。
-    //   落地的时刻 = 涟漪走到交线的时刻（最晚 360ms），离得越远落地的波越弱。
-    //   落点在交线上（离灭点很近、地面上很远），按透视把波做大（k = Dm/d），让它在一秒多里扫过远、中两排谱台。
+    // 地板以上：竖直面上压出坑、荡开涟漪；涟漪走到墙脚时（最晚 360ms）「声音」落到正下方的地板上接着荡开，越远越弱；落点离灭点近时按透视把波做大（k = Dm/d）。
     const D = floorY - y, S = SHEET, full = RIP.speed * RIP.ease, q = (D - S.Rs) / full;
     const lag = Math.min(360, S.launch + (q <= 0 ? 0 : q < 0.95 ? -RIP.ease * Math.log(1 - q) : Infinity));
     const ey = Math.min(rows - 1, floorY + 2), ed = Math.max(1, ey - vpy);
@@ -947,8 +916,7 @@
     return [{air: true, sx: x, sy: y, t0: now + HEAD_MS, seed, px: x, py: y, notes: 3}, echo];
   }
 
-  // 点在 (x, y)（格坐标）附近的谱台：按谱板中心算距离（竖向算重一点），46 格以内最近的那个；没有返回 -1。
-  //   点一下，它的灯亮一拍（不亮的灯亮成 tap 色；本来亮着的照旧，波纹另让它闪一下）。
+  // 点在 (x, y)（格坐标）附近的谱台：按谱板中心算（竖向算重一点），46 格以内最近的那个，没有返回 -1；点一下它的灯亮一拍（不亮的亮成 tap 色）。
   function nearestSlot(scene, x, y) {
     let best = -1, bestD = 46;
     scene.anchors.slots.forEach((sl, i) => {
@@ -963,15 +931,21 @@
     const live = ripples && ripples.length ? ripples : null;
     const rip = live ? paintRipples(scene, live, now, out) : null;
     if (!rip) out.set(scene.buf);
-    const {cols, rows, C: {bg}, dim} = scene;
-    const put = (x, y, c) => { if (x >= 0 && y >= 0 && x < cols && y < rows) out[y * cols + x] = pack(dim ? mix(c, bg, dim) : c); };
+    const {cols, rows, C: {bg}, dim, upDim, obj, anchors: {floorY}} = scene;   // 会动的摆锤在舞台口里：和静的一层一样退一档（谱台上的灯不退）
+    const put = (x, y, c) => { if (x >= 0 && y >= 0 && x < cols && y < rows) { const i = y * cols + x, d = upDim && y < floorY && !obj[i] ? upDim : dim; out[i] = pack(d ? mix(c, bg, d) : c); } };
     const under = (x, y) => unpack(x >= 0 && y >= 0 && x < cols && y < rows ? out[y * cols + x] : 0, bg);
     paintMoving(scene, step, still, put, under, rip ? rip.leadDy : 0);
+    if (scene.breath) breathe(scene, out);
     if (!live) return null;
     const tops = [rip && rip.top, paintSheet(scene, live, now, out), paintNotes(scene, live, now, out)].filter((v) => v != null);
     return tops.length ? Math.max(0, Math.min(...tops)) : null;
   }
 
+  // 11-23 空闲时的呼吸：舞台口的天幕跟着一个 8 拍的起伏慢慢明暗（breath 0–3 四档，不抖动；M、谱台、指挥台不动）
+  function breathe(scene, out) {
+    const {C, cols, dark, dim, upDim, solid, obj, anchors: {sky}} = scene, a = scene.breath * (dark ? 0.09 : 0.04), d = upDim || dim, tint = mix(dark ? C.st4 : C.drop, C.bg, d || 0);
+    for (let y = Math.max(0, sky.y0); y < sky.y1; y++) for (let x = Math.max(0, sky.x0); x <= Math.min(cols - 1, sky.x1); x++) { const i = y * cols + x; if (sky.w[i] && !solid[i] && !obj[i] && out[i]) out[i] = pack(mix(unpack(out[i], C.bg), tint, a * (sky.w[i] - 1) / 254)); }
+  }
   // 给单测和离线出图用（node 里没有 document）
   G.__pinkieMetreScene = {CELL, BPM, SPRITES, PALETTES, RIPPLE_MS, buildScene, paintMoving, lampStates, paintRipples, makeRipples, nearestSlot, compose};
   if (typeof document === 'undefined') return;
@@ -988,6 +962,7 @@
   let sceneKey = '', runActive = false;
   let timer = 0, step = 0, observed = null, lastStep = -1, lampSig = '', previewLamps = null, prevTop = 0, prevRip = false;
   let ripples = [], rippleTimer = 0, rippleRaf = 0, lastFrame = 0, flashSlot = -1, flashTimer = 0;
+  let lastInput = Date.now(), lastBreath = -1, timerLive = false, realLamps = null, lampTimer = 0; const lampAnims = new Map(), BEAT = STEP * 2, UNWATCHED_MS = 60_000;
   const mainClass = new MutationObserver(() => queue());
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => queue()) : null;
 
@@ -1005,11 +980,25 @@
     observed = null;
     mainClass.disconnect();
     canvas?.remove();
-    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; sceneKey = ''; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer);
+    canvas = null; ctx = null; scene = null; low = null; img = null; lastStep = -1; sceneKey = ''; lampSig = ''; ripples = []; stopRipple(); flashSlot = -1; clearTimeout(flashTimer); clearTimeout(lampTimer); lampAnims.clear(); realLamps = null;
     root.removeAttribute('data-pk-metre-backdrop');
-    root.style.removeProperty('--metre-band');
+    root.style.removeProperty('--metre-band'); root.removeAttribute('data-metre-band-low'); window.PinkieMetreStage?.lowStaff(canvas, false);
   }
   const currentLamps = () => previewLamps || lampStates(window.__pinkieMetreBoardData?.data?.sessions);
+  // 11-23 灯换状态时的过渡（毫秒，从换的那一刻算）：派出 = 先闪两下再亮稳；做完 = 一拍里分两档暗下去；出错 = 砖红闪两下。预览、减少动效时直接换
+  const LAMP_SEQ = {run: [['run', 70], ['off', 160], ['run', 240], ['off', 380]], done: [['dim1', 280], ['dim2', 560]], fail: [['fail', 90], ['off', 190], ['fail', 280], ['off', 380]]};
+  function shownLamps() {
+    const real = currentLamps(), now = Date.now(), out = real.slice();
+    if (previewLamps || reduced()) { realLamps = real; lampAnims.clear(); return real; }
+    if (realLamps) real.forEach((to, i) => { const from = realLamps[i] || 'off'; if (from !== to && LAMP_SEQ[to] && (to !== 'done' || from === 'run')) lampAnims.set(i, {to, t0: now}); });
+    realLamps = real; let next = Infinity;
+    for (const [i, a] of lampAnims) {
+      const frame = LAMP_SEQ[a.to].find(([, until]) => now - a.t0 < until);
+      if (frame) { out[i] = frame[0]; next = Math.min(next, a.t0 + frame[1]); } else lampAnims.delete(i);
+    }
+    clearTimeout(lampTimer); lampTimer = 0; if (next < Infinity && canvas) lampTimer = setTimeout(() => { lampTimer = 0; if (canvas && layout()) draw(true); }, Math.max(16, next - now));
+    return out;
+  }
 
   // 量位置、算格数、画静的那一层
   function layout() {
@@ -1021,17 +1010,18 @@
     const cellDev = Math.max(2, Math.round(CELL * dpr));           // 一格占几个设备像素（整数）
     const cellCss = cellDev / dpr;
     const fullH = window.innerHeight - rect.top;
-    // 场景高：首页约 28%，对话页约 16%；上面再留一段只有「大厅的暗」的过渡
-    const bandCss = home ? Math.max(184, Math.min(300, Math.round(fullH * 0.28))) : Math.max(112, Math.min(168, Math.round(fullH * 0.16)));
+    // 场景高：首页约 28%，对话页约 16%；上面再留一段只有「大厅的暗」的过渡。首页不高过输入框（连下面 Baton 那一排）的下沿，最矮 144px（11-23）
+    const col = document.querySelector('.agent-chat__input')?.getBoundingClientRect(), under = document.querySelector('.agent-chat__composer-controls')?.getBoundingClientRect();
+    const room = home && col && col.height ? Math.max(144, window.innerHeight - Math.max(col.bottom, under?.bottom || 0) - 16) : Infinity;
+    const bandCss = home ? Math.min(room, Math.max(184, Math.min(300, Math.round(fullH * 0.28)))) : Math.max(112, Math.min(168, Math.round(fullH * 0.16)));
     const band = Math.round(bandCss / cellCss);
     // 画布铺满对话区整高（上面是透明的，只有空中点击掉下来的光点会画到那里）
     const rows = Math.max(band + Math.round(band * (home ? 0.9 : 0.6)), Math.ceil(fullH / cellCss));
     const cols = Math.ceil(rect.width / cellCss);
     const cssW = cols * cellCss, cssH = rows * cellCss;
-    const col = document.querySelector('.agent-chat__input')?.getBoundingClientRect();
     const quiet = !home && col && col.width ? [Math.floor((col.left - rect.left) / cellCss) - 4, Math.ceil((col.right - rect.left) / cellCss) + 4] : null;
     const keepTop = quiet ? Math.floor((col.top - (window.innerHeight - cssH)) / cellCss) : null;
-    const lamps = currentLamps();
+    const lamps = shownLamps();
     const left = Math.round(rect.left * dpr) / dpr;
     const dark = isDark();
     const signature = JSON.stringify([left, cssW, cssH, cols, rows, band, cellDev, dark, home, lamps, quiet, keepTop, flashSlot]);
@@ -1041,9 +1031,9 @@
     canvas.width = cols * cellDev;
     canvas.height = rows * cellDev;
     ctx = canvas.getContext('2d');
-    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px');
+    root.style.setProperty('--metre-band', Math.round(band * cellCss) + 'px'); const lowBand = home && bandCss < 180; if (lowBand) root.setAttribute('data-metre-band-low', ''); else root.removeAttribute('data-metre-band-low'); window.PinkieMetreStage?.lowStaff(canvas, lowBand);   // 11-24：矮于 180px 只留五线谱
     lampSig = lamps.join(',');
-    scene = buildScene({cols, rows, band, dark, home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot});
+    scene = buildScene({cols, rows, band, dark, home, lamps, quiet, keepTop, dim: home ? 0 : 0.5, flash: flashSlot}); if (canvas.dataset) canvas.dataset.podX = String(scene.anchors.podX);   // 首页亮灯读指挥台的位置
     low = document.createElement('canvas');
     low.width = cols; low.height = rows;
     lowCtx = low.getContext('2d');
@@ -1059,8 +1049,9 @@
     const tempo = document.querySelector('.pk-metre-tempo');
     const beat = String(reduced() ? 0 : Math.floor(step / 2) % 4);
     if (tempo && tempo.dataset.beat !== beat) tempo.dataset.beat = beat;
-    if (!force && step === lastStep && !ripples.length && !prevRip) return;
-    lastStep = step;
+    const breath = breathing() ? [0, 1, 2, 3, 3, 2, 1, 0][Math.floor(Date.now() / BEAT) % 8] : 0;
+    if (!force && step === lastStep && breath === lastBreath && !ripples.length && !prevRip) return;
+    lastStep = step; lastBreath = breath; scene.breath = breath;
     const {cols, rows, cellDev} = view;
     const out = new Uint32Array(img.data.buffer);
     const top = compose(scene, step, reduced(), ripples, Date.now(), out);
@@ -1073,21 +1064,27 @@
     ctx.clearRect(0, y0 * cellDev, cols * cellDev, (rows - y0) * cellDev);
     ctx.drawImage(low, 0, y0, cols, rows - y0, 0, y0 * cellDev, cols * cellDev, (rows - y0) * cellDev);
   }
+  // 在奏时半拍一步；空闲时一拍一步只为呼吸（11-23 用户点头，改了批 6「不留常驻动画」）。都落在全页共用的拍子格子上；一分钟没人碰就停在这一帧，一动又接着。
   function tick() {
     timer = 0;
-    if (!running()) return;
-    step++;
+    const live = running();
+    if (!live && !breathing()) return;
+    if (live) step++;
+    if (!live && !ripples.length && flashSlot < 0 && Math.random() < 1 / 12) flicker();
     // 子会话变了（派出、做完、出错）：灯跟着换，静的那一层重画一次
-    if (currentLamps().join(',') !== lampSig) { layout(); draw(true); } else draw();
-    timer = setTimeout(tick, STEP);
+    if (shownLamps().join(',') !== lampSig) { layout(); draw(true); } else draw();
+    timerLive = live;
+    timer = setTimeout(tick, live ? STEP - (Date.now() % STEP) : BEAT - (Date.now() % BEAT));
   }
-  const running = () => Boolean(canvas) && (runActive || currentLamps().includes('run'))
-    && !document.hidden && !window.__pinkieMetreBrand?.isOpen && !reduced();
-  function start() { if (!timer && running()) timer = setTimeout(tick, STEP); }
-  function stop() { clearTimeout(timer); timer = 0; }
+  const still = () => !canvas || document.hidden || window.__pinkieMetreBrand?.isOpen || reduced();
+  const running = () => !still() && (runActive || currentLamps().includes('run'));
+  const breathing = () => !still() && Date.now() - lastInput < UNWATCHED_MS;
+  function start(live) { if (timer && timerLive === live) return; clearTimeout(timer); timerLive = live; timer = setTimeout(tick, live ? STEP : BEAT - (Date.now() % BEAT)); }
+  function stop() { clearTimeout(timer); timer = 0; timerLive = false; }
+  const pace = () => { if (!canvas) return; if (running()) start(true); else if (breathing()) start(false); else stop(); };
+  const wake = () => { const was = Date.now() - lastInput >= UNWATCHED_MS; lastInput = Date.now(); if (was) pace(); };
 
-  // 点击：只在点击后的约 1.5 秒里逐帧画（跟屏幕刷新走，最多 60 帧每秒；窗口在后台时退回 16ms 的定时器），画完就停，平时不常驻；
-  //   按钮、输入框、正文、侧栏、总控台、弹层上不触发；减少动态效果时不出现。
+  // 点击：只在点击后的约 1.5 秒里逐帧画（rAF，窗口在后台时退回定时器），画完就停；按钮、输入框、正文、侧栏、总谱、弹层上不触发；减少动态效果时不出现。
   const QUIET_HIT = 'button, a, input, textarea, select, summary, label, [role="button"], [role="menu"], [role="dialog"], [role="listbox"], [contenteditable], .chat-text, .chat-group, .agent-chat__input, aside.sidebar, header.topbar, .pk-metre-board, .pk-metre-brand, [data-metre-pop], .laolao-menu, .pinkie-tray';
   // 前台跟屏幕刷新走；同时挂一个 50ms 的保底定时器（窗口被挡住、画面不在前面时 rAF 会停，但页面不算 hidden），哪个先到用哪个
   function nextRipple() {
@@ -1106,24 +1103,25 @@
     draw();
     if (ripples.length && canvas) nextRipple();
   }
+  function flash(slot, ms) {
+    clearTimeout(flashTimer); if (slot !== flashSlot) { flashSlot = slot; layout(); draw(true); }
+    const off = () => {
+      if (ripples.length && canvas) { flashTimer = setTimeout(off, 120); return; }
+      flashSlot = -1; flashTimer = 0; if (canvas) { layout(); draw(true); }
+    };
+    flashTimer = setTimeout(off, ms);
+  }
+  // 空闲时偶尔一盏没人的谱台灯闪一下（160ms），像排练厅里有人碰了一下灯
+  function flicker() { const off = scene?.anchors.slots.map((sl, i) => (sl.state === 'off' ? i : -1)).filter((i) => i >= 0); if (off?.length) flash(off[Math.floor(Math.random() * off.length)], 160); }
   // clientX / clientY（页面坐标）→ 荡一圈；返回是否荡了
   function tapAt(clientX, clientY) {
     if (!canvas || !scene || !view || reduced()) return false;
     const rect = canvas.getBoundingClientRect();
     const x = Math.round((clientX - rect.left) / view.cellCss), y = Math.round((clientY - rect.top) / view.cellCss);
     if (x < 0 || y < 0 || x >= view.cols || y >= view.rows) return false;
-    // 点在谱台附近：最近的那个谱台灯亮一拍（至少两个半拍），静的一层带着它重画一次；
-    //   熄灯也要整层重画（约一帧的活），所以等这一下的波纹走完再熄，不在波纹中间卡一帧
+    // 点在谱台附近：最近的那个谱台灯亮一拍（至少两个半拍）；熄灯要整层重画，所以等波纹走完再熄（flash）
     const slot = nearestSlot(scene, x, y);
-    if (slot >= 0) {
-      clearTimeout(flashTimer);
-      if (slot !== flashSlot) { flashSlot = slot; layout(); draw(true); }
-      const off = () => {
-        if (ripples.length && canvas) { flashTimer = setTimeout(off, 120); return; }
-        flashSlot = -1; flashTimer = 0; if (canvas) { layout(); draw(true); }
-      };
-      flashTimer = setTimeout(off, STEP * 2);
-    }
+    if (slot >= 0) flash(slot, STEP * 2);
     ripples.push(...makeRipples(scene, x, y, Date.now()));
     if (ripples.length > 4) ripples = ripples.slice(-4);   // 最多同时 4 个（空中点击一次是两个：竖直面 + 落到地板上的回声）
     if (!rippleTimer && !rippleRaf) rippleTick();
@@ -1151,7 +1149,7 @@
       mainClass.observe(main, {attributes: true, attributeFilter: ['class']});
     }
     if (layout()) draw(true);
-    if (running()) start(); else stop();
+    pace();
   }
   let queued = false;
   const queue = () => { if (!queued) { queued = true; setTimeout(() => { queued = false; sync(); }, 150); } };
@@ -1167,6 +1165,7 @@
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else queue(); });
     window.addEventListener('resize', queue);
     document.addEventListener('pointerdown', onTap, true);
+    for (const type of ['pointermove', 'pointerdown', 'keydown', 'wheel']) window.addEventListener(type, wake, {capture: true, passive: true});
     // 总控台的数据到了 / 换了会话：灯马上跟上（不等下一拍）
     window.addEventListener('pinkie:session-selected', () => { runActive = false; queue(); });
     window.addEventListener('pinkie:metre-board-data', queue);
@@ -1175,8 +1174,8 @@
       if (active !== runActive) { runActive = active; queue(); }
     });
     // 标志页开关：它开着时停，关了接着走
-    document.addEventListener('keydown', () => setTimeout(() => { if (canvas) { if (running()) start(); else stop(); } }, 0), true);
-    document.addEventListener('click', () => setTimeout(() => { if (canvas) { if (running()) start(); else stop(); } }, 0), true);
+    document.addEventListener('keydown', () => setTimeout(pace, 0), true);
+    document.addEventListener('click', () => setTimeout(pace, 0), true);
     sync();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once: true});
@@ -1184,7 +1183,8 @@
 
   window.__pinkieMetreBackdrop = Object.freeze({
     get mounted() { return Boolean(canvas); },
-    get running() { return Boolean(timer); },
+    get running() { return Boolean(timer) && timerLive; },
+    get breathing() { return Boolean(timer) && !timerLive; },
     get step() { return step; },
     get lamps() { return currentLamps(); },
     // 预览 / 验收用：临时指定灯的状态（['run','done','fail',…]），传 null 恢复成跟总控台走
