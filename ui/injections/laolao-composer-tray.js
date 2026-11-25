@@ -27,6 +27,9 @@
       + '<path class="pk-f" d="M10.500 7.300c.3 1.900 1.100 2.700 3 3-1.900.3-2.700 1.100-3 3-.3-1.900-1.100-2.700-3-3 1.900-.3 2.700-1.100 3-3z"/>'),
     webgpt: svg('<rect x="3.500" y="5.500" width="17" height="12" rx="2.200"/><path d="M9 20.500h6"/><path class="pk-a" d="M8.500 11.500h3M14 11.500h1.500"/>'),
     split: svg('<rect x="3.500" y="5" width="17" height="14" rx="2.200"/><path class="pk-a" d="M12 5v14"/>'),
+    // 截图：四个取景角，中间一个小框。
+    shot: svg('<path d="M4 8.500V5.500A1.500 1.500 0 0 1 5.500 4h3M15.500 4h3A1.500 1.500 0 0 1 20 5.500v3M20 15.500v3a1.500 1.500 0 0 1-1.500 1.500h-3M8.500 20h-3A1.500 1.500 0 0 1 4 18.500v-3"/>'
+      + '<rect class="pk-a" x="8.500" y="9" width="7" height="6" rx="1"/>'),
   };
   const text = node => (node?.textContent || '').replace(/\s+/g, ' ').trim();
   // 每一行：在这个输入框里找原来的那颗按钮；找不到（这个模式或这个版本没有）就不出这一行。
@@ -54,6 +57,44 @@
   const inputOf = node => node?.closest?.('.agent-chat__input') || null;
   const attachOptions = input => [...(input?.querySelectorAll('.agent-chat__attach-menu-popover .agent-chat__attach-menu-option') || [])];
   const available = input => ROWS.map(row => ({row, node: row.find(input)})).filter(entry => entry.node);
+  // I5 截图：原生只有拍照 / 照片 / 文件。截图走浏览器自己的「选择要共享的屏幕或窗口」，抓一帧存成 PNG，
+  // 再交给原生「照片」那个文件框（和用户自己选了一张图同一条路），不自己拼附件、不经过后台。
+  const photoInput = input => input?.closest('.agent-chat__composer-shell')?.querySelector('.agent-chat__photo-input') || null;
+  const canShoot = input => Boolean(navigator.mediaDevices?.getDisplayMedia) && photoInput(input)?.disabled === false;
+  async function screenshot(input) {
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
+      const video = document.createElement('video');
+      video.muted = true; video.playsInline = true; video.srcObject = stream;
+      await video.play();
+      if (!video.videoWidth) await new Promise(done => video.addEventListener('loadeddata', done, {once: true}));
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const blob = await new Promise(done => canvas.toBlob(done, 'image/png'));
+      const target = photoInput(input);
+      if (!blob || !target || target.disabled) throw new Error('no frame');
+      const now = new Date(), pad = n => String(n).padStart(2, '0');
+      const name = `截图 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}.${pad(now.getMinutes())}.${pad(now.getSeconds())}.png`;
+      const files = new DataTransfer();
+      files.items.add(new File([blob], name, {type: 'image/png'}));
+      target.files = files.files;
+      target.dispatchEvent(new Event('change', {bubbles: true}));
+    } catch (error) {
+      // 在选择框里点了取消（浏览器报 NotAllowedError / AbortError）就是不要截图，不提示；别的失败说一句。
+      if (error?.name !== 'NotAllowedError' && error?.name !== 'AbortError') notice('没截到图：没抓到画面，可以再试一次，或者用系统截图后粘贴进来');
+    } finally {
+      for (const track of stream?.getTracks?.() || []) track.stop();
+    }
+  }
+  // 全部注入功能共用的通知出口（laolao-sidebar.js），不另造一个提示框。
+  const notice = message => window.dispatchEvent(new CustomEvent('laolao:toast', {detail: {message}}));
+  const shotRow = input => {
+    const row = rowButton({icon: ICON.shot, name: '截图'}, () => { close(); screenshot(input); });
+    row.dataset.key = 'attach-shot';
+    return row;
+  };
 
   function close(restoreFocus = false) {
     if (!menu) return;
@@ -120,8 +161,9 @@
     const input = inputOf(anchor);
     if (!input) { close(); return; }
     const options = attachOptions(input), rows = available(input).map(entry => ({...entry, state: entry.row.state(entry.node)}));
+    const shoot = canShoot(input);
     // 只在内容真的变了时重画，开着菜单的这段时间里焦点和悬停不会被打断。
-    const next = JSON.stringify([options.map(text), rows.map(entry => [entry.row.key, entry.state, entry.node.disabled === true])]);
+    const next = JSON.stringify([options.map(text), shoot, rows.map(entry => [entry.row.key, entry.state, entry.node.disabled === true])]);
     if (next === signature) return;
     const focused = menu.contains(document.activeElement) ? document.activeElement.closest('.pinkie-tray__row')?.dataset.key : '';
     signature = next;
@@ -141,7 +183,7 @@
       const row = rowButton({icon: icon || ICON.file, name: text(option) || '添加文件'}, () => { close(); option.click(); });
       row.dataset.key = 'attach-' + index;
       return row;
-    }));
+    }).concat(shoot ? [shotRow(input)] : []));
     for (const name of ['session', 'window']) {
       group(name, rows.filter(entry => entry.row.group === name).map(({row, node, state}) => {
         // 原按钮停用时（比如还没读到这个会话的设置），把它自己的说明当副标题，不只是灰掉。

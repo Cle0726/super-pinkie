@@ -1,5 +1,11 @@
 [
   {
+    "file": "ui/injections/laolao-composer-tray.js",
+    "metric": "lines",
+    "value": 275,
+    "reason": "「以后」S 级 I5（ui2）：工具箱「添加」组补一项「截图」——浏览器屏幕选择框抓一帧存成 PNG，交给原生「照片」文件框（和用户自己选图同一条路）；取消不提示、失败走共用 laolao:toast；屏幕流用完即停。多出的是 screenshot / canShoot / shotRow 和一个图标；没有新增全局名、观察器或定时器。"
+  },
+  {
     "file": "ui/injections/laolao-process-card.js",
     "metric": "lines",
     "value": 710,

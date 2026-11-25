@@ -1,0 +1,112 @@
+// 「以后」S 级 I5（ui2，11-25）：截图 / 拍照附图。
+// 原生附件菜单已有「拍照 / 照片 / 文件」，工具箱整组照搬；原生没有「截图」，工具箱补一项：
+// 浏览器屏幕选择框抓一帧 → PNG → 交给原生「照片」文件框，走原生自己的附件路径。
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const TRAY = read('ui/injections/laolao-composer-tray.js');
+
+test('I5 截图不自己造附件：只往原生 .agent-chat__photo-input 塞文件、发 change；不碰 chatAttachments；用共用通知；用完停掉屏幕流', () => {
+  const code = TRAY.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.match(code, /querySelector\('\.agent-chat__photo-input'\)/);
+  assert.match(code, /target\.dispatchEvent\(new Event\('change', \{bubbles: true\}\)\)/);
+  assert.doesNotMatch(code, /chatAttachments|onAttachmentsChange/);
+  assert.match(code, /new CustomEvent\('laolao:toast'/);
+  assert.match(code, /track\.stop\(\)/);
+  assert.doesNotMatch(code, /new\s+MutationObserver/);
+});
+
+// 和原生同形状的最小输入框：外壳里有工具按钮位、原生附件菜单（三项）、照片文件框。
+const page = (photoDisabled = false) => `<!doctype html><html data-laolao-mode="metre"><body>
+<div class="agent-chat__composer-shell"><div class="agent-chat__input"><div class="agent-chat__composer-actions">
+<details class="agent-chat__attach-menu"><summary>+</summary><div class="agent-chat__attach-menu-popover" role="menu">
+<button type="button" class="agent-chat__attach-menu-option" onclick="window.__clicked.push('camera')"><svg></svg><span>拍照</span></button>
+<button type="button" class="agent-chat__attach-menu-option" onclick="window.__clicked.push('photo')"><svg></svg><span>照片</span></button>
+<button type="button" class="agent-chat__attach-menu-option" onclick="window.__clicked.push('file')"><svg></svg><span>文件</span></button>
+</div></details></div></div>
+<input type="file" accept="image/*" multiple class="agent-chat__photo-input" ${photoDisabled ? 'disabled' : ''} style="display:none"></div>
+<script>window.__clicked=[];window.__toasts=[];window.__files=[];window.__streams=[];
+addEventListener('laolao:toast',e=>__toasts.push(e.detail.message));
+document.querySelector('.agent-chat__photo-input').addEventListener('change',e=>{for(const f of e.target.files)__files.push({name:f.name,type:f.type,size:f.size});});</script>
+</body></html>`;
+
+test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / 截图；截图成 PNG 进原生照片框并停流；取消不提示；失败提示；不支持或停用时不出这一项', {timeout: 60_000}, async (t) => {
+  const {playwright} = await import('../tools/study-desk/harness.mjs');
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  t.after(() => browser.close());
+
+  // 假的屏幕选择：ok 给一条 320×200 的画布流；cancel 抛 NotAllowedError（用户点了取消）；broken 抛别的错；none 表示环境不支持。
+  const open = async ({mode = 'ok', photoDisabled = false} = {}) => {
+    const tab = await browser.newPage();
+    await tab.setContent(page(photoDisabled));
+    await tab.evaluate((mode) => {
+      if (!navigator.mediaDevices) Object.defineProperty(navigator, 'mediaDevices', {value: {}, configurable: true});
+      const fake = mode === 'none' ? undefined : async () => {
+        if (mode === 'cancel') throw new DOMException('Permission denied', 'NotAllowedError');
+        if (mode === 'broken') throw new DOMException('Could not start video source', 'NotReadableError');
+        const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 200;
+        const g = canvas.getContext('2d'); g.fillStyle = '#2f4bb0'; g.fillRect(0, 0, 320, 200);
+        const stream = canvas.captureStream(5);
+        const tick = () => { g.fillRect(0, 0, 1, 1); if (stream.active) requestAnimationFrame(tick); }; tick();
+        window.__streams.push(stream);
+        return stream;
+      };
+      Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {value: fake, configurable: true});
+    }, mode);
+    await tab.addScriptTag({content: TRAY});
+    await tab.click('.pinkie-tray-btn');
+    return tab;
+  };
+  const names = (tab) => tab.$$eval('.pinkie-tray__tiles .pinkie-tray__name', (list) => list.map((n) => n.textContent));
+  const shot = (tab) => tab.click('.pinkie-tray__row[data-key="attach-shot"] .pinkie-tray__item');
+
+  {
+    const tab = await open();
+    assert.deepEqual(await names(tab), ['拍照', '照片', '文件', '截图'], '原生三项照搬，截图排最后');
+    await shot(tab);
+    await tab.waitForFunction(() => window.__files.length > 0, null, {timeout: 10_000});
+    const got = await tab.evaluate(() => ({files: window.__files, toasts: window.__toasts, live: window.__streams.flatMap((s) => s.getTracks()).filter((x) => x.readyState === 'live').length, menu: Boolean(document.querySelector('.pinkie-tray'))}));
+    assert.equal(got.files.length, 1);
+    assert.equal(got.files[0].type, 'image/png');
+    assert.match(got.files[0].name, /^截图 \d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.png$/);
+    assert.ok(got.files[0].size > 100, 'PNG 有内容');
+    assert.equal(got.live, 0, '抓完一帧就停掉屏幕流（系统的「正在共享」提示随之消失）');
+    assert.deepEqual(got.toasts, []);
+    assert.equal(got.menu, false, '点了就关菜单');
+    // 原生三项照旧转给原按钮。
+    await tab.click('.pinkie-tray-btn');
+    await tab.click('.pinkie-tray__row[data-key="attach-0"] .pinkie-tray__item');
+    assert.deepEqual(await tab.evaluate(() => window.__clicked), ['camera']);
+    await tab.close();
+  }
+  {
+    const tab = await open({mode: 'cancel'});
+    await shot(tab);
+    await tab.waitForTimeout(400);
+    assert.deepEqual(await tab.evaluate(() => [window.__files.length, window.__toasts]), [0, []], '取消：不附图、不提示');
+    await tab.close();
+  }
+  {
+    const tab = await open({mode: 'broken'});
+    await shot(tab);
+    await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 5_000});
+    assert.match((await tab.evaluate(() => window.__toasts))[0], /^没截到图/);
+    assert.equal(await tab.evaluate(() => window.__files.length), 0);
+    await tab.close();
+  }
+  for (const opts of [{mode: 'none'}, {photoDisabled: true}]) {
+    const tab = await open(opts);
+    assert.deepEqual(await names(tab), ['拍照', '照片', '文件'], JSON.stringify(opts) + '：不出截图');
+    await tab.close();
+  }
+});
