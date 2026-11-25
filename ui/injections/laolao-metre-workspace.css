@@ -1,0 +1,99 @@
+/* laolao-metre-workspace.css —— 第六批（m5 线）：S1 会话筛选的样子，只在 Metre 生效。
+ * 筛选只靠 <html data-pk-mw-filter> + 会话列表已有的状态记号，不改列表本身。 */
+
+/* —— 筛选：只留带对应记号的会话行；一行都不剩的分组连标题一起收起 —— */
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--running)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--waiting)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-status--error)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager .session-row-host:not(.pinkie-session-part):not(:has(.pinkie-session-unread)) {
+  display: none;
+}
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--running)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--waiting)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-status--error)),
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager .laolao-group:not(:has(.pinkie-session-unread)) {
+  display: none;
+}
+
+/* —— 侧栏顶上的「筛选」键：和「总谱」同一排；固定一个漏斗图标（侧栏别的键都不用），有筛选时底色标出来 —— */
+html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter {
+  --metre-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 4.5h13l-5 6.25v4.75l-3 1.5v-6.25z'/%3E%3C/svg%3E");
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  order: 2;
+}
+/* 按下态底色不在这里：metre-skin 用带重要标记的 transparent 锁住了侧栏条目底色，不带标记的声明权重再高也压不过。
+ * 它和「总谱」打开态并在 laolao-metre-skin.css 同一条规则里（界面审查 11-24 23:55 第 2 条，不新增重要标记）。 */
+
+/* —— 筛到 0 条：一行提示 +「显示全部」，三宽 × 日夜都不截断；有匹配的行或没在筛选时不出现 —— */
+html[data-laolao-mode="metre"] #laolao-session-manager .pk-mw-filter-empty { display: none; }
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--running)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--waiting)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--error)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-unread)) .pk-mw-filter-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  color: color-mix(in srgb, var(--metre-muted) 80%, var(--metre-text)); /* 纯 muted 在日间底上只有 4.37:1，掺两成正文色到 ≥ 4.5:1 */
+  font: 400 13px/1.5 var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__text { min-width: 0; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__all {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--metre-cobalt);
+  font: inherit;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__all:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+html:not([data-laolao-mode="metre"]) .pk-mw-filter-empty { display: none; }
+html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* —— 筛选菜单：谱纸底、一条细线、无圆角光晕 —— */
+html[data-laolao-mode="metre"] .pk-mw-filter-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 188px; box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  padding: 4px;
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line);
+  border-radius: 6px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-text);
+  font: 400 13px/1.4 var(--metre-sans); transition-property: none; /* 定位不走过渡：openMenu 先放 0/0 再挪到按键下方，默认 all 会让头一帧停在左上角 */
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:active { background: var(--metre-side-active); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: -2px; }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__item[aria-checked="true"] { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__count { color: var(--metre-muted); font: 400 12px/1 var(--metre-mono); }
+html:not([data-laolao-mode="metre"]) .pk-mw-filter-menu { display: none; }
