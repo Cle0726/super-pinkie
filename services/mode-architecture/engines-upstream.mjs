@@ -272,6 +272,23 @@ export function codexPinkieInstance(dir, models, {baseUrl, token}) {
     config: {shadowHomePath: dir, launchArgs: codexLaunchArgs({baseUrl, token}), customModels: models.map(model => ({slug: model.slug, name: model.name}))}};
 }
 
+// 每一家能不能切到「碧琪模型」（11-25 在引擎服务 0.1.11 里逐家查的，表在 build/quick-run/engines/pinkie-upstream-others-1125.md）。
+// row：能的那几家对应的固定实例；why：不能的那几家给用户看的一句原因（界面上不出现引擎服务的名字）。
+export const PINKIE_UPSTREAM = Object.freeze({
+  claudeAgent: {row: PINKIE_INSTANCE},
+  codex: {row: 'codex-pinkie'},
+  opencode: {row: 'opencode-pinkie'},
+  pi: {why: '还没接上：要先在这台电脑上装 Pi 核对它的模型配置'},
+  antigravity: {why: '只能用 Google 账号或 Gemini 的 API 密钥，没有换上游的口子'},
+  cursor: {why: '模型在 Cursor 自己的服务器上跑，只能用 Cursor 账号'},
+  fx: {why: '模型在 fx 自己那边跑，只能用 fx 账号'},
+  grok: {why: '只能用 Grok 自己的登录'},
+  kiro: {why: '模型在 Kiro 那边跑，只能用 Kiro 账号'},
+  muse: {why: '只能用 Muse Code 自己的登录'},
+  acpRegistry: {why: '从注册表加的引擎要逐个核对，暂时还不能切'},
+});
+export const pinkieUpstreamOf = driver => PINKIE_UPSTREAM[driver] || {why: '这一家还没核对能不能换上游'};
+
 // ---- OpenCode 那一家 ----
 // 引擎服务起 OpenCode 服务器时，把实例的 environment 合进子进程，并且原样传 OPENCODE_CONFIG_CONTENT（0.1.11 里核对过）。
 // OpenCode 把这段配置叠在用户自己的 opencode.json 上，所以用户的文件不动。

@@ -189,3 +189,19 @@ test('opencode: the menu row is listed with OpenCode and cannot be renamed or re
   const ids = rows.map(r => r.id);
   assert.ok(ids.indexOf('opencode') < ids.indexOf(OPENCODE_PINKIE_INSTANCE));
 });
+
+test('every engine row says whether it can switch to Pinkie models, and a plain reason when it cannot', async () => {
+  const {PINKIE_UPSTREAM, pinkieUpstreamOf} = await import('../services/mode-architecture/engines-upstream.mjs');
+  const rows = summarizeProviders([{instanceId: 'acpRegistry_qwen', driver: 'acpRegistry', enabled: true, installed: true, status: 'ready'}]);
+  const of = id => rows.find(row => row.id === id).switchable;
+  assert.deepEqual([of('claudeAgent'), of('codex'), of('opencode')], [{to: 'claudeAgent-pinkie'}, {to: 'codex-pinkie'}, {to: OPENCODE_PINKIE_INSTANCE}]);
+  // 反例：不能换的几家给原因、不给 to；没打开的占位行也带上（不只是引擎服务报上来的那几行）。
+  for (const id of ['antigravity', 'cursor', 'fx', 'grok', 'kiro', 'muse', 'pi', 'acpRegistry_qwen']) {
+    const value = of(id);
+    assert.equal(value.to, undefined, `${id} cannot switch`);
+    assert.ok(value.why && value.why.length >= 6, `${id} says why`);
+    assert.equal(/T3|OpenClaw/i.test(value.why), false, 'the engine service is never named');
+  }
+  assert.match(pinkieUpstreamOf('someNewEngine').why, /还没核对/, 'an engine nobody checked yet is not offered by default');
+  for (const [driver, entry] of Object.entries(PINKIE_UPSTREAM)) assert.ok(Boolean(entry.row) !== Boolean(entry.why), `${driver}: exactly one of row / why`);
+});

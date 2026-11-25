@@ -10,7 +10,7 @@ import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
 import {readProviderFiles} from './engines.mjs';
-import {CODEX_PINKIE_FOLDER, CODEX_PINKIE_INSTANCE, OPENCODE_PINKIE_INSTANCE, PINKIE_FOLDER, PINKIE_INSTANCE, PINKIE_LABEL, PinkieRelay, codexPinkieInstance, linkPinkieHistory, openCodePinkieInstance, pinkieInstance, pinkieModels, writePinkieSettings} from './engines-upstream.mjs';
+import {CODEX_PINKIE_FOLDER, CODEX_PINKIE_INSTANCE, OPENCODE_PINKIE_INSTANCE, PINKIE_FOLDER, PINKIE_INSTANCE, PINKIE_LABEL, PinkieRelay, codexPinkieInstance, linkPinkieHistory, openCodePinkieInstance, pinkieUpstreamOf, pinkieInstance, pinkieModels, writePinkieSettings} from './engines-upstream.mjs';
 // 两家各一个「碧琪模型」固定实例：不是加出来的账号，不用登录订阅，不能改名、不能删。
 const PINKIE_ROWS = new Map([[PINKIE_INSTANCE, 'claudeAgent'], [CODEX_PINKIE_INSTANCE, 'codex'], [OPENCODE_PINKIE_INSTANCE, 'opencode']]);
 export const isPinkieRow = id => PINKIE_ROWS.has(String(id || ''));
@@ -182,7 +182,9 @@ export function summarizeProviders(providers = [], {platform = process.platform,
   const order = id => { const index = ENGINES.findIndex(engine => engine.id === id); return index < 0 ? ENGINES.length : index; };
   const number = id => Number(/-(\d+)$/.exec(id)?.[1] || 1);
   rows.sort((x, y) => order(x.driver) - order(y.driver) || number(x.id) - number(y.id) || x.name.localeCompare(y.name));
-  return rows.map(row => ({...row, guide: setupGuide(row.driver, platform)}));
+  // switchable：这一家能不能切到「碧琪模型」——能就给出那一行的 id，不能就给一句原因，菜单里把这个选项灰掉、旁边写这句。
+  // 放在这里，是因为没打开的几家走上面的占位行，也要带上。
+  return rows.map(row => ({...row, guide: setupGuide(row.driver, platform), switchable: (({row: to, why}) => (to ? {to} : {why}))(pinkieUpstreamOf(row.driver))}));
 }
 
 // 菜单里「怎么装 / 怎么登录」那一小块。
