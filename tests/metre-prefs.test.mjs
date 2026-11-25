@@ -72,7 +72,7 @@ function env({mode = 'metre', pane = true, config = false, stored = {}, settings
   const tick = () => polls[0][0]();
   // 模拟「回到对话页」：设置页没了，对话面板回来。
   const backToChat = () => { state.config = false; state.pane = true; if (!paneEl.state) mkPane(); };
-  return {vars, look, lookBtn, lookPressed, html, scroll, card, buttons, btn, pressed, applied, configWrites, paneEl, fire, polls, tick, ls, backToChat, note: () => card.querySelector('.pk-metre-prefs__note')};
+  return {winListeners: (t) => winListeners[t] || [], vars, look, lookBtn, lookPressed, html, scroll, card, buttons, btn, pressed, applied, configWrites, paneEl, fire, polls, tick, ls, backToChat, note: () => card.querySelector('.pk-metre-prefs__note')};
 }
 
 test('Metre 设置弹层里有「对话」卡片，排在页脚前面，三档对应原生取值，默认选中原生当前值', () => {
@@ -213,4 +213,100 @@ test('G2 只影响 Metre：变量只在 Metre 作用域的规则里被读；不�
     assert.ok(f === 'laolao-metre-skin.css' || f === 'laolao-metre-prefs.js', `${f} 不该读 --metre-chat-*`);
     if (f.endsWith('.css')) for (const line of text.split('\n').filter((l) => /--metre-chat-(fs|lh)/.test(l))) assert.match(line, /^html\[data-laolao-mode="metre"\]/, line);
   }
+});
+
+// ---------- I7 发送键可选（只在 Metre，不改原生全局 chatSendShortcut，不动碧琪共用的 4 个 Enter 钩子） ----------
+const SEND_KEY = 'pinkie.metre.prefs.sendKey';
+const keyEnv = (opts) => {
+  const e = env(opts);
+  const inInput = {closest: (sel) => (sel === '.agent-chat__input' ? {querySelector: (q) => (q === '.slash-menu' && e.slash ? {} : null)} : null)};
+  const ta = {closest: (sel) => (sel === '.agent-chat__composer-combobox textarea' ? inInput : null)};
+  e.press = (extra = {}) => { let stopped = 0; for (const f of e.winListeners('keydown')) f({key: 'Enter', target: ta, stopImmediatePropagation: () => { stopped += 1; }, preventDefault: () => { throw new Error('不许挡掉换行'); }, ...extra}); return stopped; };
+  return e;
+};
+
+test('I7 卡片里有「发送键」两档，默认 Enter；点「Ctrl + Enter」存本地，点回 Enter 去掉存的值；不经原生 applySettings', () => {
+  const e = keyEnv();
+  assert.deepEqual(e.look('send').map((b) => b.textContent), ['Enter', 'Ctrl + Enter']);
+  const hint = e.card.all('span').find((s) => s.className === 'pinkie-user-settings__hint' && /Enter/.test(s.textContent))?.textContent || '';
+  assert.ok(hint.includes('Ctrl\u00a0+\u00a0Enter'), '说明里的组合键用不换行空格，不会拆成两行：' + JSON.stringify(hint));
+  assert.deepEqual(e.lookPressed('send'), ['enter']);
+  e.lookBtn('send', 'modifier-enter').click();
+  assert.equal(e.ls.get(SEND_KEY), 'modifier-enter');
+  assert.deepEqual(e.lookPressed('send'), ['modifier-enter']);
+  e.lookBtn('send', 'enter').click();
+  assert.equal(e.ls.has(SEND_KEY), false);
+  assert.equal(e.applied.length, 0, '不写原生 chatSendShortcut（它是全局的，会连带其他五个模式）');
+  assert.doesNotMatch(SRC, /chatSendShortcut\s*:/, '代码里不写 chatSendShortcut（注释里提到不算）');
+});
+
+test('I7 默认 Enter：输入框里单按 Enter 不拦，照原来发送', () => {
+  const e = keyEnv();
+  assert.equal(e.press(), 0);
+});
+
+test('I7 选了 Ctrl + Enter：单按 Enter 只停传播（换行照常），Ctrl / ⌘ / Shift / Alt + Enter、输入法组字、斜杠菜单开着都不拦', () => {
+  const e = keyEnv({stored: {[SEND_KEY]: 'modifier-enter'}});
+  assert.deepEqual(e.lookPressed('send'), ['modifier-enter'], '重开时按存的值选中');
+  assert.equal(e.press(), 1, '单按 Enter：拦住，原生发送和共用钩子都收不到');
+  for (const mod of [{ctrlKey: true}, {metaKey: true}, {shiftKey: true}, {altKey: true}, {isComposing: true}, {keyCode: 229}]) assert.equal(e.press(mod), 0, JSON.stringify(mod));
+  assert.equal(e.press({key: 'a'}), 0, '别的键不管');
+  assert.equal(e.press({target: {closest: () => null}}), 0, '不在输入框里不管');
+  e.slash = true;
+  assert.equal(e.press(), 0, '斜杠菜单开着时 Enter 归菜单');
+});
+
+test('I7 只在 Metre：其他五个模式存了 Ctrl + Enter 也不拦；存了不认识的值按 Enter', () => {
+  const other = keyEnv({mode: 'classic', stored: {[SEND_KEY]: 'modifier-enter'}});
+  assert.equal(other.press(), 0);
+  const odd = keyEnv({stored: {[SEND_KEY]: 'space'}});
+  assert.equal(odd.press(), 0);
+  assert.deepEqual(odd.lookPressed('send'), ['enter']);
+});
+
+test('I7 前提：碧琪共用的 4 个 Enter 钩子都挂在 document 捕获阶段（window 捕获先于它们），本 PR 没改这 4 个文件', () => {
+  for (const f of ['laolao-queue-steer.js', 'laolao-resume.js', 'laolao-immersion.js', 'laolao-companion.js']) {
+    const text = read('ui/injections/' + f);
+    assert.match(text, /document\.addEventListener\("keydown", \((?:e|event)\) => \{\n\s+if \((?:e|event)\.key !== "Enter"/, f);
+  }
+  assert.match(SRC, /window\.addEventListener\('keydown', \(event\) => \{[\s\S]*?event\.stopImmediatePropagation\(\);\n  \}, true\);/);
+});
+
+test('I7 真浏览器：选了 Ctrl + Enter，单按 Enter 在输入框里换行、原生发送和 document 捕获钩子都收不到；Ctrl + Enter 照常发送；默认档照原来', {timeout: 40_000}, async (t) => {
+  const {playwright} = await import('../tools/study-desk/harness.mjs');
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const run = async (stored) => {
+      const tab = await browser.newPage();
+      const page = `<!doctype html><html data-laolao-mode="metre"><body><div class="agent-chat__input"><div class="agent-chat__composer-combobox"><textarea></textarea></div></div></body></html>`;
+      await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body: page}));
+      await tab.goto('http://127.0.0.1:30118/chat');
+      await tab.evaluate((v) => {
+        v ? localStorage.setItem('pinkie.metre.prefs.sendKey', v) : localStorage.removeItem('pinkie.metre.prefs.sendKey');
+        window.sent = 0; window.hooks = 0;
+        // 碧琪共用钩子的样子：document 捕获阶段；原生发送：textarea 上，按 enter / 修饰键规则发送并 preventDefault。
+        document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) window.hooks += 1; }, true);
+        document.querySelector('textarea').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); window.sent += 1; } });
+      }, stored);
+      await tab.addScriptTag({content: SRC});
+      const ta = tab.locator('textarea');
+      await ta.fill('第一行');
+      await ta.press('Enter');
+      const afterEnter = await tab.evaluate(() => ({value: document.querySelector('textarea').value, sent: window.sent, hooks: window.hooks}));
+      await ta.press('Control+Enter');
+      const afterCtrl = await tab.evaluate(() => ({sent: window.sent, hooks: window.hooks}));
+      await tab.close();
+      return {afterEnter, afterCtrl};
+    };
+    const mod = await run('modifier-enter');
+    assert.deepEqual(mod.afterEnter, {value: '第一行\n', sent: 0, hooks: 0}, '单按 Enter：换行，没有发送，共用钩子没收到');
+    assert.deepEqual(mod.afterCtrl, {sent: 1, hooks: 1}, 'Ctrl + Enter：照常发送');
+    const dflt = await run('');
+    assert.deepEqual(dflt.afterEnter, {value: '第一行', sent: 1, hooks: 1}, '默认档：Enter 照原来发送');
+  } finally { await browser.close(); }
 });
