@@ -161,6 +161,40 @@ test('图表：「复制图片」放进剪贴板的是实底、带标题的 PNG�
     await tab.waitForFunction(() => window.__saved && document.querySelector('.pk-chart__note').textContent.includes('文件'), null, {timeout: 5000});
     const saved = await tab.evaluate(() => ({...window.__saved, note: document.querySelector('.pk-chart__note').textContent}));
     assert.deepEqual(saved, {name: '吃饭花销连降两个月.png', href: 'blob:', note: '剪贴板用不了，已存成图片文件'});
+
+    // toBlob 回空（无头 WebKit 实测如此）：改用 toDataURL，照样存成文件 / 写进剪贴板，不只报「没复制成」
+    await tab.evaluate(() => {
+      HTMLCanvasElement.prototype.toBlob = function (cb) { setTimeout(() => cb(null), 0); };
+      window.__saved = null;
+    });
+    await tab.locator('.pk-chart__key', {hasText: '复制图片'}).click();
+    await tab.waitForFunction(() => window.__saved && document.querySelector('.pk-chart__note').textContent.includes('文件'), null, {timeout: 5000});
+    const savedNoBlob = await tab.evaluate(() => ({...window.__saved, note: document.querySelector('.pk-chart__note').textContent}));
+    assert.deepEqual(savedNoBlob, {name: '吃饭花销连降两个月.png', href: 'blob:', note: '剪贴板用不了，已存成图片文件'}, 'toBlob 回空也退回下载');
+
+    await tab.evaluate(() => {
+      window.__got = null;
+      Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {write: async (items) => {
+        const blob = await items[0].getType('image/png');
+        const bmp = await createImageBitmap(blob);
+        window.__got = {type: blob.type, w: bmp.width, src: document.querySelector('.pk-rich--chart canvas').width};
+      }}});
+    });
+    await tab.locator('.pk-chart__key', {hasText: '复制图片'}).click();
+    await tab.waitForFunction(() => window.__got && document.querySelector('.pk-chart__note').textContent.includes('已复制'), null, {timeout: 5000});
+    const gotNoBlob = await tab.evaluate(() => window.__got);
+    assert.equal(gotNoBlob.type, 'image/png', 'toBlob 回空时剪贴板里也是能解开的 PNG');
+    assert.ok(gotNoBlob.w > gotNoBlob.src, 'toDataURL 出的也是带边、带标题的那张');
+
+    // 反例：两样都出不了图，才如实报「没复制成」，也不下载空文件
+    await tab.evaluate(() => {
+      HTMLCanvasElement.prototype.toDataURL = () => 'data:,';
+      Object.defineProperty(navigator, 'clipboard', {configurable: true, value: undefined});
+      window.__saved = null;
+    });
+    await tab.locator('.pk-chart__key', {hasText: '复制图片'}).click();
+    await tab.waitForFunction(() => document.querySelector('.pk-chart__note').textContent.includes('没复制成'), null, {timeout: 5000});
+    assert.equal(await tab.evaluate(() => window.__saved), null, '出不了图就不下载');
     assert.deepEqual(errors, []);
   } finally { await browser.close(); }
 });
