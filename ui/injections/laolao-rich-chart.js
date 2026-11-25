@@ -162,10 +162,25 @@ function saveFile(blob, title) {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+// toBlob 回空（无头 WebKit 见过）就改用 toDataURL 解出同一张 PNG；两样都不行才算失败
+function pngOf(canvas) {
+  const viaUrl = () => {
+    const url = canvas.toDataURL('image/png');
+    const comma = url.indexOf(',');
+    if (!url.startsWith('data:image/png') || comma < 0 || comma === url.length - 1) throw new Error('toDataURL');
+    const bin = atob(url.slice(comma + 1)), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], {type: 'image/png'});
+  };
+  return new Promise((ok, no) => {
+    const fallback = () => { try { ok(viaUrl()); } catch (error) { no(error); } };
+    try { canvas.toBlob((b) => (b && b.size ? ok(b) : fallback()), 'image/png'); } catch { fallback(); }
+  });
+}
 // 剪贴板要在点击的同一拍里拿到 ClipboardItem（WebKit 的要求），所以先给它一个还没好的 Promise
 export async function copyImage(chart, spec, pal) {
   const out = composeImage(chart, [spec.title, spec.unit && `（单位：${spec.unit}）`].filter(Boolean).join(''), pal);
-  const blob = new Promise((ok, no) => out.toBlob((b) => (b ? ok(b) : no(new Error('toBlob'))), 'image/png'));
+  const blob = pngOf(out);
   blob.catch(() => {});
   try {
     if (typeof navigator.clipboard?.write !== 'function' || typeof ClipboardItem !== 'function') throw new Error('no clipboard');
