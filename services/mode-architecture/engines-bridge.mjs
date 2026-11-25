@@ -10,6 +10,7 @@ import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
 import {readProviderFiles} from './engines.mjs';
+import {PINKIE_FOLDER, PINKIE_INSTANCE, PINKIE_LABEL, PinkieRelay, linkPinkieHistory, pinkieInstance, pinkieModels, writePinkieSettings} from './engines-upstream.mjs';
 import {boundProjectRoot} from './project-brief.mjs';
 
 // OpenMausBot 的审批分级（docs/approval-levels.md）= T3 的运行模式。默认全放手，和 Metre 自己「不设确认关卡」一致。
@@ -57,7 +58,8 @@ export const ACCOUNTS = {
 };
 const INSTANCE_ID = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/;
 // 实例 id → 哪一家。默认实例 id 就是那一家；加出来的是「<家>-<n>」；注册表里加的是「acpRegistry_<名字>」。
-export const driverOf = id => engineInfo(id) ? String(id) : /^acpRegistry_\w+$/.test(String(id || '')) ? REGISTRY_DRIVER : (/^([a-zA-Z]+)-\d+$/.exec(String(id || ''))?.[1] || '');
+// 「碧琪模型」那个固定实例（engines-upstream.mjs）也算 Claude 一家。
+export const driverOf = id => engineInfo(id) ? String(id) : id === PINKIE_INSTANCE ? 'claudeAgent' : /^acpRegistry_\w+$/.test(String(id || '')) ? REGISTRY_DRIVER : (/^([a-zA-Z]+)-\d+$/.exec(String(id || ''))?.[1] || '');
 const installCommand = (info, platform = process.platform) => info?.install?.[platform === 'win32' ? 'win' : 'mac'] || info?.install?.any || '';
 // 用户点了才开终端，而且只跑这张表里写死的命令。
 const TERMINAL_COMMANDS = new Set(ENGINES.flatMap(engine => [engine.login, ...Object.values(engine.install || {})]).filter(Boolean));
@@ -116,9 +118,11 @@ export function engineState(provider = {}) {
   if (provider.installed !== true || /not installed|not on PATH|ENOENT/i.test(message)) return {state: 'missing', text: '这台电脑上还没装'};
   // 注册表里的引擎只给填 API 密钥的登录（11-23 真机：Qwen Code 0.28.4 只有「Use OpenAI API key」）：碧琪不经手密钥，这家在 Metre 里用不了。
   if (provider.driver === REGISTRY_DRIVER && auth !== 'authenticated' && KEY_ONLY.test(message)) return {state: 'keyonly', text: KEY_ONLY_TEXT};
-  if (auth === 'unauthenticated' || (status !== 'ready' && /not authenticated|not (?:logged|signed) in|auth login|\blogin\b/i.test(message))) return {state: 'signin', text: '还没登录，或者登录过期了'};
+  // 「碧琪模型」那个实例走碧琪上游，不用登录订阅：不按登录状态判断。
+  const pinkie = String(provider.instanceId || '') === PINKIE_INSTANCE;
+  if (!pinkie && (auth === 'unauthenticated' || (status !== 'ready' && /not authenticated|not (?:logged|signed) in|auth login|\blogin\b/i.test(message)))) return {state: 'signin', text: '还没登录，或者登录过期了'};
   // 能在浏览器里登录的（Antigravity、Cursor）：刚打开时引擎服务报「装好了、账号还没查」也是 ready，但其实还没登录、一个模型都没有。
-  if (provider.setup?.canAuthenticate === true && auth !== 'authenticated') return {state: 'signin', text: '还没登录'};
+  if (!pinkie && provider.setup?.canAuthenticate === true && auth !== 'authenticated') return {state: 'signin', text: '还没登录'};
   if (status === 'ready') return {state: 'ready', text: ''};
   if (status === 'warning') return {state: 'ready', text: brandless(message)};
   return {state: 'error', text: brandless(message) || '暂时用不了'};
@@ -132,13 +136,17 @@ export function summarizeProviders(providers = [], {platform = process.platform,
     const id = String(provider?.instanceId || '');
     const driver = String(provider?.driver || '') || driverOf(id);
     const info = engineInfo(driver);
-    const extra = id !== driver;
+    // 「碧琪模型」那一行不是加出来的账号：不能改名、不能删，也不用登录订阅。
+    const pinkie = id === PINKIE_INSTANCE;
+    const extra = id !== driver && !pinkie;
     return {
       id,
       driver,
       // 加出来的账号用它自己的名字（「Claude Code · 工作号」）；默认账号用那一家的名字。
-      name: (extra && brandless(provider.displayName || '').replace(EMAIL, '').trim()) || engineName(id) || brandless(provider.displayName || id),
+      name: pinkie ? `${engineName(driver)} · ${PINKIE_LABEL}` : (extra && brandless(provider.displayName || '').replace(EMAIL, '').trim()) || engineName(id) || brandless(provider.displayName || id),
       account: extra,
+      // 用谁的模型：pinkie = 碧琪上游（不用订阅，用量记在碧琪的额度上），own = 这一家自己的账号。
+      upstream: pinkie ? 'pinkie' : 'own',
       multi: Boolean(ACCOUNTS[driver]),
       registry: driver === REGISTRY_DRIVER,
       enabled: provider.enabled === true,
@@ -427,8 +435,12 @@ export function installView(state) {
 }
 
 export class EngineBridge {
-  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn, homeDir = os.homedir(), runSync = spawnSync} = {}) {
-    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl, homeDir, runSync});
+  // pinkieConfig：碧琪自己的配置（模型目录和上游，钥匙在里面），「碧琪模型」那条路每次现读；health：碧琪的模型健康，能用的模型排前面。
+  constructor({service, stateRoot = '', logger = null, RpcImpl = T3Rpc, now = () => Date.now(), spawnImpl = spawn, homeDir = os.homedir(), runSync = spawnSync,
+    pinkieConfig = () => ({}), health = null, RelayImpl = PinkieRelay} = {}) {
+    Object.assign(this, {service, stateRoot, logger, RpcImpl, now, spawnImpl, homeDir, runSync, pinkieConfig, health, RelayImpl});
+    this.relay = null;
+    this.pinkieTried = false;
     this.sessions = new SessionEngines(path.join(service.root, 'sessions.json'));
     this.rpcClient = null;
     this.rpcPort = 0;
@@ -484,6 +496,11 @@ export class EngineBridge {
     let engines = [];
     let source = 'cache';
     if (state.running) {
+      // 「碧琪模型」那一行：第一次取清单、或者用户点了刷新时，按碧琪现在的模型目录核对一遍。
+      if (refresh || !this.pinkieTried) {
+        this.pinkieTried = true;
+        await this.ensurePinkie().catch(error => this.logger?.warn?.(`engines pinkie upstream: ${error.message}`));
+      }
       try {
         if (refresh) await this.call('server.refreshProviders', {}).catch(() => null);
         const providers = (await this.config(refresh))?.providers;
@@ -536,6 +553,37 @@ export class EngineBridge {
     this.configCache = {at: 0, value: null};
   }
 
+  // 「碧琪模型」那条路（engines-upstream.mjs）：起本机转发口，把这个实例的 settings.json 指向它，引擎服务里没有这个实例就建一个。
+  // 碧琪目录里没有能给 Claude Code 用的模型就什么都不做（菜单里就没有这一行）。settings.json 里只有转发口的会话令牌，没有上游钥匙。
+  async ensurePinkie() {
+    const models = pinkieModels(this.pinkieConfig() || {}, {health: this.health});
+    if (!models.length) return null;
+    this.relay ||= new this.RelayImpl({config: () => this.pinkieConfig() || {}, logger: this.logger});
+    await this.relay.start();
+    this.relay.defaultModel = models[0].slug;
+    const dir = path.join(this.homeDir, PINKIE_FOLDER);
+    const stamp = `${this.relay.baseUrl} ${models[0].slug}`;
+    if (this.pinkieStamp !== stamp) { writePinkieSettings(dir, {baseUrl: this.relay.baseUrl, token: this.relay.token, model: models[0].slug}); this.pinkieStamp = stamp; }
+    // 会话历史和默认账号共用一个 projects（junction）：同一段对话切到 / 切出「碧琪模型」后历史还在。
+    // 那里已经有一个不是链接的目录就不动它，只记一句，历史这次不共用。
+    if (this.pinkieHistory?.state !== 'ok' && this.pinkieHistory?.state !== 'linked') {
+      try { this.pinkieHistory = linkPinkieHistory(dir, {shared: path.join(this.homeDir, '.claude', 'projects')}); }
+      catch (error) { this.pinkieHistory = {state: 'error', message: error.message}; }
+      if (!['ok', 'linked'].includes(this.pinkieHistory.state)) this.logger?.warn?.(`engines pinkie history not shared: ${this.pinkieHistory.state} ${this.pinkieHistory.link || this.pinkieHistory.message || ''}`);
+    }
+    const want = pinkieInstance(dir, models);
+    const saved = (await this.settings().catch(() => null))?.providerInstances?.[PINKIE_INSTANCE] || null;
+    const same = saved && saved.driver === want.driver && saved.config?.homePath === dir
+      && JSON.stringify(saved.config?.customModels || []) === JSON.stringify(want.config.customModels);
+    if (!same) {
+      // 用户关掉过这一行就保持关着。
+      const instance = {...(saved || {}), ...want, config: {...(saved?.config || {}), ...want.config}, enabled: saved ? saved.enabled !== false : true};
+      await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: saved ? 'upsert' : 'create', instanceId: PINKIE_INSTANCE, instance}});
+      await this.refreshOne(PINKIE_INSTANCE);
+    }
+    return {models, dir};
+  }
+
   // 加一个账号：一个新实例「<家>-<n>」。Claude / Codex 在用户目录下建一个这个账号自己的登录文件夹（旧的不碰）。
   async addAccount({driver, name = ''} = {}) {
     const info = engineInfo(driver);
@@ -563,6 +611,7 @@ export class EngineBridge {
   async renameAccount({engine, name = ''} = {}) {
     const {id, driver, info, saved} = await this.resolve(engine);
     if (id === driver) throw new Error('默认账号不用改名');
+    if (id === PINKIE_INSTANCE) throw new Error('「碧琪模型」这一行不用改名');
     const label = String(name || '').replace(EMAIL, '').replace(/[\r\n\t]/g, ' ').trim().slice(0, 40);
     if (!label) throw new Error('名字是空的');
     await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'upsert', instanceId: id, instance: {...(saved || {driver}), driver, displayName: `${info.name} · ${label}`}}});
@@ -574,6 +623,7 @@ export class EngineBridge {
   async removeAccount({engine} = {}) {
     const {id, driver, info} = await this.resolve(engine);
     if (id === driver) throw new Error('默认账号不能删，可以关掉它');
+    if (id === PINKIE_INSTANCE) throw new Error('「碧琪模型」这一行不能删，可以关掉它');
     // 注册表里的引擎在这台电脑上共用一份登录（引擎服务文档：ACP 不分账号），删掉这一行不替用户退出它。
     if (info.managed?.signin && !info.registry) await this.call('provider.auth.logout', {instanceId: id}, {timeout: 60_000}).catch(error => this.logger?.warn?.(`engines logout ${id}: ${error.message}`));
     await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: 'remove', instanceId: id}});
@@ -725,6 +775,8 @@ export class EngineBridge {
   async start({folder, engine, model, text, level = 'full-access', plan = false, worktree = false, title = ''} = {}) {
     if (!engine || !model) throw new Error('先选引擎和模型');
     if (!String(text || '').trim()) throw new Error('要说的话是空的');
+    // 「碧琪模型」：开线程前确认转发口在跑、settings.json 指向它（碧琪重启后转发口的端口和令牌都是新的）。
+    if (engine === PINKIE_INSTANCE && !await this.ensurePinkie()) throw new Error('碧琪这边没有能给 Claude Code 用的模型');
     const projectId = await this.projectId(folder);
     const result = await this.call('orchestration.launchThread', {
       commandId: newId('command'), projectId,
@@ -767,6 +819,8 @@ export class EngineBridge {
   }
 
   async configure({threadId, engine, model, level, plan} = {}) {
+    // 中途切到「碧琪模型」：下一轮生效，先确认转发口在跑、settings.json 指向它。
+    if (engine === PINKIE_INSTANCE && !await this.ensurePinkie()) throw new Error('碧琪这边没有能给 Claude Code 用的模型');
     if (engine && model) await this.dispatch({type: 'thread.model-selection.set', threadId, modelSelection: {instanceId: engine, model}});
     if (level && LEVEL_IDS.has(level)) await this.dispatch({type: 'thread.runtime-mode.set', threadId, runtimeMode: level});
     if (typeof plan === 'boolean') await this.dispatch({type: 'thread.interaction-mode.set', threadId, interactionMode: plan ? 'plan' : 'default'});
@@ -795,9 +849,9 @@ export class EngineBridge {
 
 // isEnabled：外部引擎总开关（存在 prefs.json，engines.mjs 管）。菜单靠它判断「外部引擎没打开」，所以每个返回引擎清单的方法都要带上
 // （11-23 真界面里发现：原来只带了 service.status()，开关是开的菜单也说没打开）。
-export function registerEngineBridge(api, {service, register, stateRoot = '', ensureRunning, isEnabled = () => service.status().running}) {
+export function registerEngineBridge(api, {service, register, stateRoot = '', ensureRunning, isEnabled = () => service.status().running, pinkieConfig = () => ({}), health = null}) {
   const status = () => ({...service.status(), enabled: isEnabled() === true});
-  const bridge = new EngineBridge({service, stateRoot, logger: api.logger});
+  const bridge = new EngineBridge({service, stateRoot, logger: api.logger, pinkieConfig, health});
   const needKey = sessionKey => { if (!/^agent:metre:/.test(String(sessionKey || ''))) throw new Error('引擎台只在 Metre 的会话里用'); return String(sessionKey); };
   const view = async sessionKey => {
     const pref = bridge.sessions.get(sessionKey) || {engine: 'metre'};
