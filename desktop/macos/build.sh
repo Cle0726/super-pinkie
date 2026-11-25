@@ -175,6 +175,12 @@ xcrun swiftc -parse-as-library -O \
   "$NATIVE_SOURCE_DIR/BrowserControl.swift" \
   "$NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" \
   "$NATIVE_SOURCE_DIR/PinkieNative.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherRuntime.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherViews.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherServices.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherBrowser.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherWorkspace.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherWebBridge.swift" \
   "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \
