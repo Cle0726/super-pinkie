@@ -128,7 +128,8 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
 
 // 11-24 16:10 打回第 4 条：820 宽时状态带走短档，引擎 4 个声部（1 失败、1 等你）只剩「引擎 4」，「不同步」也只剩三个字、看不出哪边在跑。
 // 复发测试：短档的引擎格留最要紧的一项（失败 > 等你 > 在跑），不同步格带上后台在跑 / 空闲；输入框窄到只能走短档时，每一格都不挤字。
-// 18:06 预审第 1 条：失败和等你同时有时，短档两个数都要留（「引擎 4 · 1 败 · 1 等」），不能只剩失败。
+// 18:06 预审第 1 条：失败和等你同时有时，短档两个数都要留，不能只剩失败。
+// 11-24 21:30 派活第 3 条：「1败·1等」看不懂，写全「引擎 4 · 1 失败 · 1 等你」；格子放不下时省略号，悬停 / 读屏是全文。
 // 19:50 审查建议：不用「✕」「!」符号（读屏念成乘号 / 叹号，✕ 像关闭键）；引擎格按钮的读屏名（aria-label）是全档文字。
 test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
   let lib;
@@ -161,7 +162,7 @@ test('the short tier of the band still says what failed or waits, and which side
         backIdle: d({status: {active: false}, page: {busy: true}, since: 1, now: 5000, voices: []}).run,
       };
     });
-    assert.deepEqual(short, {failWait: '引擎 4 · 1 败 · 1 等', failOnly: '引擎 2 · 1 失败', fail2wait3: '引擎 5 · 2 败 · 3 等', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
+    assert.deepEqual(short, {failWait: '引擎 4 · 1 失败 · 1 等你', failOnly: '引擎 2 · 1 失败', fail2wait3: '引擎 5 · 2 失败 · 3 等你', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
       backRunning: '不同步 · 后台在跑', backIdle: '不同步 · 后台空闲'});
     // 真画出来：窄输入框只能走短档，引擎格失败数、等你数都在，每一格都不挤字
     await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
@@ -171,7 +172,7 @@ test('the short tier of the band still says what failed or waits, and which side
         squeezed: [...band.querySelectorAll('.pk-bs__seg')].filter((n) => n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent)};
     });
     assert.equal(drawn.tier, 'short');
-    assert.equal(drawn.eng, '引擎 4 · 1 败 · 1 等', '820 宽短档：1 失败 + 1 等你两个数都要留');
+    assert.equal(drawn.eng, '引擎 4 · 1 失败 · 1 等你', '820 宽短档：1 失败 + 1 等你两个数都要留，写全不缩成「败」「等」');
     assert.equal(drawn.engLabel, '引擎 4 · 1 失败 · 1 等你', '短档时读屏名仍是全档文字');
     assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
   } finally { await browser.close(); }
@@ -226,5 +227,121 @@ test('the band and the model row under the composer sit on one solid theme plate
       assert.ok(px.band.every(near), '后台带左端「后台」、格与格之间、右端都是实底：' + px.band.join(' / '));
       assert.equal(px.above, '255,0,0', '底板只到框体下圆角，上面对话区照旧透出背景');
     }
+  } finally { await browser.close(); }
+});
+
+// 11-24 21:30 派活第 2 条：窄窗（820）侧栏抽屉打开、命令面板打开时，后台带（body 上 z=36）画在抽屉 / 遮罩上面，压住 METRE 账号键下半。
+// 复发测试：抽屉、命令面板、收起侧栏的悬停卡片开着时，带子退到 app 层（openclaw-app z=1）下面——带子上取点，最上层不许是带子；
+// 反例：把 keys.css 里那一条拿掉，同一组取点要变回带子在最上层（证明这条测试能红）。顺带：夜间用量圆环底圈对底 ≥ 3:1。
+// 11-24 22:37 打回：z=0 让带子掉到输入框外壳底板下面，格子上沿 6px 被盖、字头被切。遮罩开着时 app 层（openclaw-app z=1）也不再自成层叠上下文，
+// 每格上边框和文字区里，遮罩下面第一层必须是带子自己；反例只留 z=0、拿掉 app 层那一条，外壳要盖住格子（测试能红）。
+test('the band sinks under the narrow nav drawer, its backdrop and the command palette, so it never covers the METRE key', {timeout: 60_000}, async (t) => {
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  try {
+    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const keys = read('laolao-metre-keys.css');
+    const fix = keys.split(/\r?\n/).find((l) => l.includes(':has(.shell--nav-drawer-open)') && l.includes('.pk-metre-backstage'));
+    assert.ok(fix, 'keys.css 里有「抽屉 / 命令面板开着时带子退到 app 层下面」那一条');
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style id="keys">${keys}</style><style>body { margin: 0; } openclaw-app { position: relative; z-index: 1; display: block; min-height: 100vh; }</style></head>
+      <body><openclaw-app><div class="shell">
+        <aside class="shell-nav" style="position:fixed;left:-320px;top:0;bottom:0;width:320px;z-index:70;background:#fff"><button class="laolao-mode-switcher" style="position:absolute;left:16px;bottom:13px;width:120px;height:38px">METRE</button></aside>
+        <div class="shell-nav-backdrop" style="position:fixed;inset:0;z-index:65;background:#00000085"></div>
+        <main class="content" style="position:fixed;inset:0"></main>
+        <div class="agent-chat__composer-shell" style="position:fixed;left:40px;top:560px;width:740px;height:136px;background:#F7F6F3"></div>
+        <section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:740px;height:92px"><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track" style="fill:none"/></svg></section>
+        <dialog class="cmd-palette-overlay" style="position:fixed;inset:0;z-index:1000;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0;background:#00000080"></dialog>
+      </div></openclaw-app></body></html>`;
+    await tab.route('http://127.0.0.1:30122/**', (route) => route.fulfill({contentType: 'text/html', body}));
+    await tab.goto('http://127.0.0.1:30122/chat?session=agent%3Ametre%3Atest');
+    await tab.evaluate(() => {
+      const pane = document.createElement('openclaw-chat-pane'); pane.state = {chatRunId: null, chatSending: false, chatStream: null, chatQueue: [], sessionKey: 'agent:metre:test'}; document.body.append(pane);
+      window.__pinkieRunStatus = {get state() { return {key: 'agent:metre:test', status: {active: false}, conn: {online: true, attempt: 0}, live: {active: false}}; }, refresh: async () => null};
+      window.__laolaoSidebar = {gwRequest: async (method) => (method === 'pinkie.engines.status' ? {enabled: true, running: true} : {})};
+      window.__pinkieMetreBoardData = {data: {sessions: [{key: 'e1', external: true, engineName: 'Codex', state: 'fail'}, {key: 'e2', external: true, engineName: 'Kiro', state: 'wait'}]}};
+    });
+    await tab.addScriptTag({content: read('laolao-metre-backstage.js')});
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
+    const set = (state) => tab.evaluate((s) => {
+      const shell = document.querySelector('.shell'), nav = document.querySelector('.shell-nav'), dlg = document.querySelector('dialog.cmd-palette-overlay');
+      shell.classList.toggle('shell--nav-drawer-open', s === 'drawer'); nav.style.left = s === 'drawer' ? '0px' : '-320px';
+      if (s === 'palette') { if (!dlg.open) dlg.show(); } else if (dlg.open) dlg.close();
+      if (s === 'peek') document.documentElement.setAttribute('data-pinkie-sidebar-peek', '1'); else document.documentElement.removeAttribute('data-pinkie-sidebar-peek');
+    }, state);
+    const look = () => tab.evaluate(() => {
+      const band = document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe):not([hidden])');
+      if (!band) return null;
+      const B = band.getBoundingClientRect(), pts = [];
+      for (let i = 1; i < 10; i++) for (const y of [B.top + 4, B.top + B.height / 2, B.bottom - 4]) pts.push([B.left + B.width * i / 10, y]);
+      const badge = document.querySelector('.laolao-mode-switcher').getBoundingClientRect(), bpts = [];
+      for (let i = 1; i < 6; i++) for (const f of [0.55, 0.75, 0.92]) bpts.push([badge.left + badge.width * i / 6, badge.top + badge.height * f]);
+      const onBand = (p) => band.contains(document.elementFromPoint(...p));
+      // 每格上边框（top + 0.5）和文字区（中线）各取 3 点：跳过抽屉遮罩 / 抽屉 / 命令面板之后的第一层必须是带子自己，不是输入框外壳
+      const overlay = (e) => e.closest('.shell-nav-backdrop, .shell-nav, dialog.cmd-palette-overlay');
+      const under = [];
+      for (const seg of band.querySelectorAll('.pk-bs__seg')) {
+        const r = seg.getBoundingClientRect();
+        for (const y of [r.top + 0.5, r.top + r.height / 2]) for (const f of [0.25, 0.5, 0.75]) {
+          const first = document.elementsFromPoint(r.left + r.width * f, y).find((e) => !overlay(e));
+          under.push(first && band.contains(first) ? 'band' : first ? first.className || first.tagName : 'none');
+        }
+      }
+      return {z: getComputedStyle(band).zIndex, top: pts.filter(onBand).length, of: pts.length, badgeCovered: bpts.filter(onBand).length, y: Math.round(B.top), b: Math.round(B.bottom),
+        under: under.filter((u) => u === 'band').length, underOf: under.length, underBy: [...new Set(under.filter((u) => u !== 'band'))]};
+    });
+    let s = await look();
+    assert.ok(s, '820 宽时有后台带');
+    // 字头不被格子文字的盒子剪掉：span 有 overflow: hidden（省略号），竖直方向要装得下整行字形（原来 11.5px/1 时中文字头被剪约 2px，「着」成「看」）
+    const clipped = await tab.evaluate(() => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg > span')].map((n) => {
+      const box = n.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(n); const ink = range.getBoundingClientRect();
+      return {t: n.textContent, over: +Math.max(box.top - ink.top, ink.bottom - box.bottom).toFixed(1)};
+    }).filter((x) => x.over > 0.5));
+    assert.deepEqual(clipped, [], '每格文字竖直方向不被自己的盒子剪掉');
+    assert.equal(s.top, s.of, '抽屉、面板都不开时带子在最上层、点得到');
+    for (const state of ['drawer', 'palette', 'peek']) {
+      await set(state); s = await look();
+      assert.equal(s.z, '0', state + ' 开着时带子退到 z=0');
+      if (state !== 'peek') assert.equal(s.top, 0, state + ' 开着时带子上每一点最上层都不是带子（被遮罩压暗、不越过抽屉）：' + s.top + '/' + s.of);
+      if (state === 'drawer') assert.equal(s.badgeCovered, 0, '抽屉开着时 METRE 账号键下半不被带子压住');
+      if (state !== 'peek') assert.equal(s.under, s.underOf, state + ' 开着时每格上边框和文字区，遮罩下面第一层是带子自己、不是输入框外壳：' + JSON.stringify(s.underBy));
+    }
+    // 22:37 打回第 1、2 条的反例：只留 z=0、不处理 app 层（拿掉 openclaw-app z-index: auto 那一条），输入框外壳盖住格子上沿——测试会红
+    const appRule = await tab.evaluate(() => {
+      const sheet = document.getElementById('keys').sheet;
+      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('nav-drawer-open') && /openclaw-app$/.test(r.selectorText.trim()) && r.style.zIndex === 'auto') { const text = r.cssText; sheet.deleteRule(i); return text; } }
+      return null;
+    });
+    assert.ok(appRule, '反例真的拿掉了 openclaw-app 那一条');
+    for (const state of ['drawer', 'palette']) {
+      await set(state); s = await look();
+      assert.equal(s.z, '0', '反例：z=0 那一条还在');
+      assert.ok(s.under < s.underOf && s.underBy.includes('agent-chat__composer-shell'), '反例（只留 z=0）：' + state + ' 开着时外壳盖住格子 ' + JSON.stringify(s));
+    }
+    await tab.evaluate((text) => { const sheet = document.getElementById('keys').sheet; sheet.insertRule(text, sheet.cssRules.length); }, appRule);
+    // 反例：拿掉那一条，抽屉 / 面板开着时带子又跑到最上层、压住账号键——测试会红
+    const removed = await tab.evaluate(() => {
+      const sheet = document.getElementById('keys').sheet; let n = 0;
+      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('nav-drawer-open') && ((r.selectorText.includes('pk-metre-backstage') && r.style.zIndex === '0') || (/openclaw-app$/.test(r.selectorText.trim()) && r.style.zIndex === 'auto'))) { sheet.deleteRule(i); n++; } }
+      return n;
+    });
+    assert.equal(removed, 2, '反例真的拿掉了两条（带子 z=0、app 层 z-index: auto），回到 main 的样子');
+    for (const state of ['drawer', 'palette']) {
+      await set(state); s = await look();
+      assert.equal(s.top, s.of, '反例（没有这一条）：' + state + ' 开着时带子在最上层 ' + JSON.stringify(s));
+      if (state === 'drawer') assert.ok(s.badgeCovered > 0, '反例（没有这一条）：带子压住 METRE 账号键下半');
+    }
+    // 夜间：用量圆环底圈用 --metre-muted，对 #151514 非文本 ≥ 3:1（日间不动）
+    const lum = (rgb) => { const v = rgb.match(/\d+(\.\d+)?/g).slice(0, 3).map((n) => +n / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    const track = () => tab.evaluate(() => getComputedStyle(document.querySelector('.laolao-context-viewer__track')).stroke);
+    await tab.evaluate(() => document.documentElement.setAttribute('data-pinkie-night', ''));
+    const night = await track();
+    assert.equal(night, 'rgb(145, 141, 132)', '夜间底圈是 --metre-muted');
+    assert.ok((lum(night) + 0.05) / (lum('rgb(21, 21, 20)') + 0.05) >= 3, '夜间底圈对底 ≥ 3:1');
+    await tab.evaluate(() => document.documentElement.removeAttribute('data-pinkie-night'));
+    assert.notEqual(await track(), night, '日间底圈不跟着改');
   } finally { await browser.close(); }
 });
