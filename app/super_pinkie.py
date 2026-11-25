@@ -1539,6 +1539,12 @@ def main():
 
         run_inapp_browser()
         return
+    if "--app-window" in sys.argv[1:]:
+        # 装到桌面的作品（Windows）：只开这件作品的窗口，不起网关、不开碧琪主界面。
+        from windows_app_window import run as run_app_window
+
+        run_app_window()
+        return
     utf8_console()
     ports = relay_ports_from_argv()
     if ports:
