@@ -51,7 +51,8 @@ async function setup(t) {
 
 // 假页面：首页那一列 + 「继续之前的工作」+ 设置弹层的滚动区；假网关记下每次调用。
 const PAGE = `<!doctype html><html data-laolao-mode="chat" data-laolao-startup-home="1" data-laolao-startup-ready="1"><head><meta charset="utf-8">
-<style>:root{--text-strong:#1f1d1a;--muted-strong:#6b675f;--accent:#2f4bb0;--laolao-home-col:min(720px,calc(100% - 48px))} .chat-main{display:flex;flex-direction:column;height:700px}</style>
+<style>:root{--text-strong:#1f1d1a;--muted-strong:#6b675f;--accent:#2f4bb0;--popover:#fffdfd;--metre-surface:#232321;--metre-line-strong:#393835;--metre-muted:#918D84;--metre-text:#ECEAE4;--metre-cobalt:#93A5EE;--laolao-home-col:min(720px,calc(100% - 48px))}
+body{background:linear-gradient(90deg,#f0a,#0af)} .chat-main{display:flex;flex-direction:column;height:700px}</style>
 <style>${CSS}</style></head><body><div class="chat-main"><section class="laolao-startup-home"></section><section class="laolao-startup-home__recent"><h3>继续之前的工作</h3></section></div>
 <div id="laolao-user-settings"><div class="pinkie-user-settings__scroll"><footer class="pinkie-user-settings__footer"></footer></div></div></body></html>`;
 
@@ -99,6 +100,12 @@ test('真浏览器：12 月 2 日首页出上个月回顾，排在「继续之�
     assert.match(text, /新添 40 个词，背过 120 个/);
     assert.match(text, /连着学了 5 天/);
     assert.doesNotMatch(text, /随便聊|无限制/);
+    // 首页背后是插画：卡片底必须不透明（11-25 截图里透明底压在像素舞台 / 气球上读不清）；Metre 用自己的面板色。
+    const bg = async () => tab.evaluate(() => getComputedStyle(document.querySelector('.laolao-startup-home__recap')).backgroundColor);
+    assert.equal(await bg(), 'rgb(255, 253, 253)', '唠嗑等模式：--popover 实底');
+    await tab.evaluate(() => document.documentElement.setAttribute('data-laolao-mode', 'metre'));
+    assert.equal(await bg(), 'rgb(35, 35, 33)', 'Metre：--metre-surface 实底');
+    await tab.evaluate(() => document.documentElement.setAttribute('data-laolao-mode', 'chat'));
     const calls = await tab.evaluate(() => window.calls.map(([m, p]) => m + ':' + JSON.stringify(p)));
     assert.deepEqual(calls.sort(), ['pinkie.recap.month:{"month":"2026-11"}', 'sessions.list:{"limit":1000}']);
     // 收起：这个月不再出现

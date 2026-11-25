@@ -9,9 +9,17 @@
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--muted-strong) 35%, transparent);
   border-radius: 10px;
+  /* 实底：首页背后是插画（唠嗑的气球、Metre 的像素舞台），透明底上字读不清（11-25 截图）。--popover 日夜都是不透明的。 */
+  background: var(--popover);
   color: var(--text-strong);
   visibility: hidden;
 }
+/* Metre 用自己的面板色和线色，和输入框同一层。 */
+html[data-laolao-mode="metre"] .laolao-startup-home__recap { background: var(--metre-surface); border-color: var(--metre-line-strong); color: var(--metre-text); font-family: var(--metre-sans); border-radius: 6px; }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-title,
+html[data-laolao-mode="metre"] .laolao-startup-home__recap[data-short="1"] .laolao-startup-home__recap-line { color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-close { border-color: var(--metre-muted); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-close:hover { border-color: var(--metre-cobalt); color: var(--metre-cobalt); }
 html[data-laolao-startup-ready="1"] .laolao-startup-home__recap,
 html[data-laolao-startup-reveal="1"] .laolao-startup-home__recap { visibility: visible; }
 /* 有回顾卡时，「继续之前的工作」和卡片之间不再空一大段。 */
