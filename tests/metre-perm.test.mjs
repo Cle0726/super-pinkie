@@ -533,6 +533,42 @@ test(`a key under the floating microphone / send button counts as not fitting, s
   } finally { await browser.close(); }
 });
 
+// linux CI 真页面 metre-board 日夜 5.4%（11-25 临时采图 run 45642943357）：fit() 量完那一刻是一行，之后按键行里别的东西（容量圈「13%」）又变宽、
+// 把按键行挤换行，没人再量。输入框尺寸变了要自动重量（ResizeObserver 只看输入框本身）。改前这条失败。
+test(`when something in the row grows after the keys were fitted, the row is measured again by itself and goes back to one line (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser, {width: 1280});
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
+      const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
+    });
+    await p.evaluate(() => window.PinkieMetrePerm.refresh());
+    await p.waitForTimeout(1700);
+    const rows = () => p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      return {rows: new Set([...c.children].filter((k) => k.getBoundingClientRect().height > 0).map((k) => Math.round(k.getBoundingClientRect().top))).size, fold: document.querySelector('.pk-perm-chips').dataset.fold};
+    });
+    // 够放全露的一行（再留 30px）：量完是第 0 档、一行
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      const used = [...c.children].reduce((s, k) => s + k.getBoundingClientRect().width, 0) + 4 * (c.children.length - 1);
+      c.style.width = Math.ceil(used + 30) + 'px';
+      window.PinkieMetrePerm.fit();
+    });
+    await p.waitForTimeout(1700);
+    const before = await rows();
+    assert.equal(before.rows, 1, JSON.stringify(before)); assert.equal(before.fold, '0', JSON.stringify(before));
+    // 后到的容量圈（60px）：按键行被挤换行。不手动调 fit。
+    await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:60px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
+    await p.waitForTimeout(1900);
+    const after = await rows();
+    assert.equal(after.rows, 1, `后到的东西把按键行挤换行以后自己重量、回到一行（${JSON.stringify(after)}）`);
+    assert.ok(Number(after.fold) > Number(before.fold), `收拢了一档以上（${JSON.stringify({before, after})}）`);
+  } finally { await browser.close(); }
+});
+
 // 按键行底下横穿着谱线：va-b5 真截图里字底下最难读的像素，日间 #C8C4BB、夜间 #232429；「先出方案」按下态的底日间 #B8B7BA、夜间 #313443。
 // 字对这些像素也要 ≥ 4.5:1。改前日间 ink2 #5F5C55 只有 3.8、warn #8A5A12 3.4，夜间按下态钴蓝 4.4；夜间计划进度条底槽和卡片底几乎一样（1.05）。
 test(`key text stays at least 4.5:1 over the stave lines behind the key row, and the night plan bar track is visible (${engine})`, {timeout: 60_000}, async () => {
