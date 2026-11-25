@@ -278,7 +278,9 @@
     menu.append(el('div', 'pk-perm-pop__title', '会话详情'));
     if (fails.size) {
       const bad = el('div', 'pk-perm-pop__fail');
-      bad.append(el('span', '', [...fails].join('、') + '没读到（网关没回）'));
+      // 清单用详情里看得到的行名：「用量」一项对应模型、开始、令牌、花费四行（look.py 场景三轮：清单写「用量」、行里写模型 / 开始，对不上）
+      const shown = {用量: '会话信息（模型、开始、令牌、花费）'};
+      bad.append(el('span', '', [...fails].map((k) => shown[k] || k).join('、') + '没读到（网关没回）'));
       const again = el('button', 'pk-perm-pop__btn', '重试'); again.type = 'button';
       again.onclick = async () => { again.disabled = true; await refresh(); const now = document.querySelector('.pk-perm-chip--stat'); if (now) openDetail(now); else closeMenu(); };
       bad.append(again); menu.append(bad);
