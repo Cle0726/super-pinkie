@@ -251,45 +251,11 @@
     day: ['#2f7bff', '#e94f91', '#c9821a', '#16956f', '#7a5cff', '#1aa3a3'],
     night: ['#8ec0ff', '#ff8fbf', '#ffc56b', '#6fdcb5', '#b8a4ff', '#6ad8d8'],
   };
-  async function renderChart(box, spec) {
-    await script(VENDOR.chart);
-    if (!box.isConnected) return;
-    const Chart = window.Chart;
-    const dark = night(), pal = PALETTE[dark ? 'night' : 'day'];
-    const ink = dark ? 'rgba(236,232,240,.72)' : 'rgba(40,30,51,.68)', grid = dark ? 'rgba(236,232,240,.08)' : 'rgba(40,30,51,.08)';
-    let type = String(spec.type || 'bar');
-    const area = type === 'area'; if (area) type = 'line';
-    const round = type === 'pie' || type === 'doughnut' || type === 'polarArea';
-    const series = Array.isArray(spec.series) ? spec.series : spec.data ? [{name: spec.name || '', data: spec.data}] : [];
-    const datasets = series.map((s, i) => {
-      const c = pal[i % pal.length];
-      return round
-        ? {label: s.name || '', data: s.data, backgroundColor: (s.data || []).map((_, j) => pal[j % pal.length]), borderColor: dark ? '#1b1622' : '#fff', borderWidth: 2}
-        : {label: s.name || '', data: s.data, borderColor: c, backgroundColor: area || type === 'radar' ? c + '33' : type === 'line' ? c : c + 'cc', fill: area || type === 'radar', tension: .32, borderWidth: type === 'line' ? 2.2 : 0, pointRadius: type === 'line' ? 2.5 : 3, borderRadius: type === 'bar' ? 6 : 0, maxBarThickness: 42};
-    });
-    const unit = spec.unit ? String(spec.unit) : '';
-    const fmt = (v) => (typeof v === 'number' ? v.toLocaleString('zh-CN') : v) + (unit ? ' ' + unit : '');
-    const wrap = el('div', 'pk-chart');
-    if (spec.title) wrap.append(el('div', 'pk-chart__title', String(spec.title)));
-    const stage = el('div', 'pk-chart__stage'); const cv = el('canvas'); stage.append(cv); wrap.append(stage);
-    box.append(wrap);
-    Chart.defaults.font.family = '-apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif';
-    const chart = new Chart(cv, {
-      type,
-      data: {labels: spec.labels || [], datasets},
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: {duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600},
-        indexAxis: spec.horizontal ? 'y' : 'x',
-        plugins: {
-          legend: {display: datasets.length > 1 || round, position: 'bottom', labels: {color: ink, boxWidth: 10, boxHeight: 10, usePointStyle: true}},
-          tooltip: {callbacks: {label: (c) => `${c.dataset.label ? c.dataset.label + '：' : (round ? c.label + '：' : '')}${fmt(spec.horizontal ? c.parsed?.x : c.parsed?.y ?? c.parsed?.r ?? c.parsed)}`}},
-        },
-        scales: round ? {} : type === 'radar'
-          ? {r: {grid: {color: grid}, angleLines: {color: grid}, pointLabels: {color: ink}, ticks: {display: false}}}
-          : {x: {stacked: !!spec.stacked, grid: {display: false}, ticks: {color: ink}}, y: {stacked: !!spec.stacked, grid: {color: grid}, border: {display: false}, ticks: {color: ink, callback: (v) => fmt(v)}}},
-      },
-    });
-    box.__pkChart = chart;
+  // 画图、校验、数据表、复制图片都在 laolao-rich-chart.js（ES 模块，第一次用到才加载，不挂全局名；要用的小工具从这里传过去）
+  let chartMod = null;
+  async function renderChart(box, src) {
+    const mod = await (chartMod ||= import(new URL(asset('./laolao-rich-chart.js'), document.baseURI).href).catch((e) => { chartMod = null; throw e; }));
+    return mod.renderChart(box, src, {el, script, css, toast, chartSrc: VENDOR.chart, cssHref: asset('./laolao-rich-chart.css')});
   }
 
   /* ── ```mermaid ── */
@@ -450,13 +416,14 @@
     wrapper.after(box);
     try {
       if (lang === 'ui') renderUI(box, JSON.parse(src), key);
-      else if (lang === 'chart') await renderChart(box, JSON.parse(src));
+      else if (lang === 'chart') await renderChart(box, src);
       else if (lang === 'mermaid') await renderMermaid(box, src);
       else if (lang === 'app') await renderApp(box, src, wrapper);
     } catch (err) {
       // 写错了就把原代码块露出来，别让内容消失
       wrapper.removeAttribute('data-pk-hidden');
-      fail(box, lang === 'mermaid' ? '这张图的写法有误，下面是原文。' : '这段内容格式有误，下面是原文。');
+      wrapper.before(box);
+      fail(box, err?.pkUser || (lang === 'mermaid' ? '这张图的写法有误，下面是原文。' : '这段内容格式有误，下面是原文。'));
       console.warn('[laolao-rich]', lang, err);
     }
   }
@@ -579,18 +546,18 @@
   window.Pinkie?.domWatch?.poll(attach, 400);
   attach();
 
-  // 昼夜切换：图表和流程图按新配色重画
+  // 昼夜或模式切换：图表和流程图按新配色重画（图表配色跟着模式走，见 laolao-rich-chart.css）
   new MutationObserver(() => {
     document.querySelectorAll('.pk-rich--chart, .pk-rich--mermaid').forEach((b) => {
       b.__pkChart?.destroy?.();
-      const code = b.previousElementSibling?.querySelector?.('code[data-pk-seen]');
+      const code = (b.classList.contains('is-error') ? b.nextElementSibling : b.previousElementSibling)?.querySelector?.('code[data-pk-seen]');
       code?.removeAttribute('data-pk-seen');
       b.remove();
     });
     mermaidTheme = '';
     retheme();
     schedule();
-  }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-pinkie-night']});
+  }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-pinkie-night', 'data-theme', 'data-laolao-mode']});
 
   window.__laolaoRichApi = {send, scan, request, sessionFor};
 })();
