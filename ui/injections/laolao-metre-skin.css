@@ -196,7 +196,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-context-viewer__compa
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-button__portrait svg { display: none !important; }
 /* 对话在中间一栏（和 Claude 一样，约 768px），不贴着侧栏 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .chat-thread-inner { max-width: 768px !important; margin-left: auto !important; margin-right: auto !important; width: 100% !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__composer-shell { background: transparent !important; box-shadow: none !important; border: 0 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__composer-shell { background: var(--metre-bs-plate, transparent) !important; box-shadow: none !important; border: 0 !important; }   /* 有后台带时 keys.css 给一块底板 */
 /* 顶栏：底色一致，不画分隔线（Claude 没有） */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .topbar,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .dashboard-header {
