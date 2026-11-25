@@ -148,5 +148,11 @@
     "metric": "lines",
     "value": 28,
     "reason": "白板（第 4 项 PR ①，ui4）：区域总览表加 whiteboard 一行，和 regions.json 新区域对应（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/roundtable/index.html",
+    "metric": "lines",
+    "value": 50,
+    "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
   }
 ]

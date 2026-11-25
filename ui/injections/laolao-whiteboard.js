@@ -28,7 +28,26 @@
     {id: 'link', label: '连线', key: 'l', tip: '先点一个元素，再点另一个'},
   ];
 
+  // 灵感圆桌页面用 data-host="roundtable" 加载：走圆桌自己的服务（同样的合并规则），不走网关；圆桌只有夜色。
+  const HOST = document.currentScript?.dataset?.host === 'roundtable' ? 'roundtable' : 'gateway';
+  const RT = {token: ''};
+  // 圆桌只有夜色：给根加夜间标记，CSS 和 isNight() 都按夜色走（圆桌自己的样式不看这个属性）。
+  if (HOST === 'roundtable') document.documentElement.setAttribute('data-pinkie-night', '');
+  async function roundtable(method, params, timeout, retry = true) {
+    const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
+    if (!RT.token) RT.token = (await (await fetch('/api/bootstrap', {cache: 'no-store', signal})).json()).token || '';
+    const base = '/api/sessions/' + encodeURIComponent(params.key) + '/whiteboard';
+    const res = method === 'pinkie.whiteboard.get'
+      ? await fetch(base + '?since=' + (params.since || 0), {cache: 'no-store', signal})
+      : await fetch(base, {method: 'POST', signal, body: JSON.stringify({ops: params.ops}),
+        headers: {'Content-Type': 'application/json', 'X-Roundtable-Token': RT.token}});
+    if (res.status === 403 && retry) { RT.token = ''; return roundtable(method, params, timeout, false); }
+    const value = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(value.error || '圆桌没有回应');
+    return value;
+  }
   const request = (method, params, timeout = 15000) => {
+    if (HOST === 'roundtable') return roundtable(method, params, timeout);
     const rpc = window.__laolaoSidebar?.gwRequest;
     return typeof rpc === 'function' ? rpc(method, params, timeout) : Promise.reject(new Error('网关未连接'));
   };
@@ -37,8 +56,15 @@
     if (value?.ok === false) throw new Error(value.error || '没有成功');
     return value;
   };
-  const currentKey = () => { try { return new URL(location.href).searchParams.get('session') || ''; } catch { return ''; } };
-  const allowed = key => /^agent:thinking:/.test(String(key || ''));
+  const roundtableKey = () => {
+    if (!document.querySelector('#app[data-has-session="true"]')) return '';
+    try { return localStorage.getItem('roundtable:last') || ''; } catch { return ''; }
+  };
+  const currentKey = () => {
+    if (HOST === 'roundtable') return roundtableKey();
+    try { return new URL(location.href).searchParams.get('session') || ''; } catch { return ''; }
+  };
+  const allowed = key => (HOST === 'roundtable' ? /^[a-f0-9]{32}$/ : /^agent:thinking:/).test(String(key || ''));
   const uid = kind => kind.slice(0, 1) + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const r1 = v => Math.round(v * 10) / 10;
   const el = (tag, cls, text) => {
@@ -409,7 +435,8 @@
     layer.lastElementChild?.replaceChildren();
     const out = s('svg', {xmlns: SVG, width: w, height: h, viewBox: `${r1(b.x - pad)} ${r1(b.y - pad)} ${w} ${h}`});
     out.append(s('rect', {x: r1(b.x - pad), y: r1(b.y - pad), width: w, height: h, fill: p.bg}), layer);
-    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(out)], {type: 'image/svg+xml'}));
+    // data: rather than blob: — the roundtable CSP is img-src 'self' data:, the Control UI allows both.
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(out));
     try {
       const img = new Image();
       img.src = url;
@@ -427,7 +454,6 @@
       say('已导出 PNG');
       return blob;
     } catch (error) { say('导出没成功：' + error.message); return null; }
-    finally { URL.revokeObjectURL(url); }
   }
 
   // ---------- shell ----------
@@ -593,7 +619,9 @@
       entry.setAttribute('aria-haspopup', 'dialog');
       entry.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="13" rx="2"/><path d="M7.5 13.5c1.6-2.4 3-3.2 4.3-1.4 1.1 1.5 2.3 1.2 4.4-1.6"/><path d="M9 20.5h6"/></svg><span>白板</span>';
       entry.addEventListener('click', toggle);
-      document.body.append(entry);
+      // 圆桌右上角是席位栏，入口放进输入框上面那一行（「直接完成 / 只讨论」后面）。
+      const row = HOST === 'roundtable' ? document.querySelector('.compose-context') : null;
+      if (row) { entry.classList.add('is-inline'); row.append(entry); } else document.body.append(entry);
     }
     if (entry) { entry.hidden = !show; entry.setAttribute('aria-expanded', String(isOpen())); }
     if (isOpen() && key !== st.key) { if (show) open(); else close(); }

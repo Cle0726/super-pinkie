@@ -12,6 +12,16 @@
 .pk-whiteboard-entry:hover { background: var(--wb-hover); }
 .pk-whiteboard-entry:focus-visible { outline: 2px solid var(--wb-ring); outline-offset: 2px; }
 .pk-whiteboard-entry[aria-expanded="true"] { border-color: var(--wb-ring); color: var(--wb-ring); }
+/* 灵感圆桌：放在输入框上面那一行里；两个类压过圆桌的 .compose-context>button（去边框、透明底、8px 字）。 */
+.pk-whiteboard-entry.is-inline {
+  position: static; display: inline-flex; flex: none; max-width: none; gap: 5px; height: 24px; margin-left: 8px; padding: 0 9px 0 7px;
+  border: 1px solid var(--wb-edge); border-radius: 12px; background: var(--wb-bg); color: var(--wb-fg);
+  font: 500 11px/1 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; box-shadow: none;
+}
+.pk-whiteboard-entry.is-inline svg { width: 14px; height: 14px; }
+.pk-whiteboard-entry.is-inline:hover { background: var(--wb-hover); }
+.pk-whiteboard-entry.is-inline[aria-expanded="true"] { border-color: var(--wb-ring); color: var(--wb-ring); }
+.pk-whiteboard-entry.is-inline[hidden] { display: none; }
 
 .pk-whiteboard {
   --wb-fg: #2B2A33; --wb-muted: #5F5B53; --wb-panel: #FFFFFF; --wb-edge: #8A857C; --wb-line: #E4E1DA;
