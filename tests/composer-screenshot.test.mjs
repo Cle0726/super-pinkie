@@ -67,8 +67,10 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
       const fake = mode === 'none' ? undefined : async () => {
         if (mode === 'cancel') throw new DOMException('Permission denied', 'NotAllowedError');
         if (mode === 'broken') throw new DOMException('Could not start video source', 'NotReadableError');
-        // stall：给一条活着但永远不出画面的流（画布流不画就没有帧），旧代码会一直等 loadeddata、一直挂着共享。
-        if (mode === 'stall') { const quiet = document.createElement('canvas').captureStream(0); window.__streams.push(quiet); return quiet; }
+        // 不出帧的三种流（mac2 任务 42 第 5 条在 WebKit 上都卡住过）：0×0 画布流、空 MediaStream、只有音轨。
+        if (mode === 'zero') { const c = document.createElement('canvas'); c.width = 0; c.height = 0; const s = c.captureStream(0); window.__streams.push(s); return s; }
+        if (mode === 'empty') { const s = new MediaStream(); window.__streams.push(s); return s; }
+        if (mode === 'audio') { const ac = new AudioContext(); const s = ac.createMediaStreamDestination().stream; window.__streams.push(s); return s; }
         // noblob：toBlob 回 null（无头 WebKit 见过），要走 toDataURL 退路。
         if (mode === 'noblob') HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
         const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 200;
@@ -125,19 +127,19 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
     assert.equal(await tab.evaluate(() => window.__files.length), 0);
     await tab.close();
   }
-  {
-    // 监工 07:57 跟进：流永远不出画面时，3 秒内停掉共享、说一句「没截到」，不附图。
-    const tab = await open({mode: 'stall'});
+  for (const mode of ['zero', 'empty', 'audio']) {
+    // 监工 07:57 / 08:36（mac2 任务 42 第 5 条）：流不出画面时，3 秒上限内停掉共享、说一句「没截到」，不附图。
+    const tab = await open({mode});
     const t0 = Date.now();
     await shot(tab);
     await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 6_000});
     const took = Date.now() - t0;
     const got = await tab.evaluate(() => ({toast: window.__toasts[0], files: window.__files.length, live: window.__streams.flatMap((s) => s.getTracks()).filter((x) => x.readyState === 'live').length}));
-    t.diagnostic(`不出画面：${took}ms 后提示「${got.toast}」`);
-    assert.match(got.toast, /^没截到图/);
-    assert.equal(got.files, 0, '不附图');
-    assert.equal(got.live, 0, '屏幕共享已停');
-    assert.ok(took < 5_000, `3 秒上限内停（实际 ${took}ms）`);
+    t.diagnostic(`${mode}：${took}ms 后提示「${got.toast}」`);
+    assert.match(got.toast, /^没截到图/, `${mode}：提示没截到`);
+    assert.equal(got.files, 0, `${mode}：不附图`);
+    assert.equal(got.live, 0, `${mode}：屏幕共享已停`);
+    assert.ok(took < 5_000, `${mode}：3 秒上限内停（实际 ${took}ms）`);
     await tab.close();
   }
   {

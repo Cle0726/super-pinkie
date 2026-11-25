@@ -52,16 +52,18 @@
       stream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
       const video = document.createElement('video');
       video.muted = true; video.playsInline = true; video.srcObject = stream;
-      // 开播和第一帧合起来最多等 3 秒（监工 07:57）：没有画面的流上 play() 自己也可能一直不返回。
-      // 等不到就当没截到，finally 照样停掉屏幕共享，不会一直挂着「正在共享」。
+      // 开播和第一帧合起来最多等 3 秒（监工 07:57、mac2 任务 42 第 5 条）：不出帧的流（0×0 画布、空流、只有音轨）上
+      // play() 自己也可能一直不返回。loadeddata 监听在 play() 之前挂，不会错过；已经有数据（readyState ≥ 2）就不等。
+      // 等不到、或者到了也没有画面（videoWidth 0），都当没截到：finally 照样停掉屏幕共享，不会一直挂着「正在共享」。
       let timer = 0;
       try {
         await new Promise((done, fail) => {
           timer = setTimeout(() => fail(new Error('no frame in time')), FRAME_WAIT_MS);
-          const ready = () => (video.videoWidth ? done() : video.addEventListener('loadeddata', done, {once: true}));
-          video.play().then(ready, fail);
+          video.addEventListener('loadeddata', done, {once: true});
+          video.play().then(() => { if (video.readyState >= 2) done(); }, fail);
         });
       } finally { clearTimeout(timer); }
+      if (!video.videoWidth || !video.videoHeight) throw new Error('no picture');
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
