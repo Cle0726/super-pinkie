@@ -452,7 +452,20 @@
     if (eng) { if (eng.nextElementSibling !== box) eng.after(box); }
     else if (box.parentElement !== controls) controls.append(box);
   }
+  // 量完记下输入框的高；之后输入框自己变高 / 变矮（后到的容量圈、模型名、思考档位把按键行挤换行），ResizeObserver 再量一次。
+  // 只看输入框这一个元素的尺寸，不监听子树；fit() 自己引起的高度变化和记下的一样，不会再触发（不会来回量）。
+  let lastH = -1, watched = null;
+  const resized = typeof ResizeObserver === 'function' ? new ResizeObserver((entries) => {
+    const hh = entries[0]?.target?.getBoundingClientRect().height;
+    if (hh != null && Math.abs(hh - lastH) > 1) fitSoon();
+  }) : null;
   function fit() {
+    measure();
+    const input = document.querySelector('.chat-main .agent-chat__composer-controls')?.closest('.agent-chat__input');
+    lastH = input ? input.getBoundingClientRect().height : -1;
+    if (resized && input && watched !== input) { resized.disconnect(); resized.observe(input); watched = input; }
+  }
+  function measure() {
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const box = controls?.querySelector(':scope > .pk-perm-chips'), input = controls?.closest('.agent-chat__input');
     if (box) seat(controls, box);
