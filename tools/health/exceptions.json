@@ -142,11 +142,5 @@
     "metric": "important",
     "value": 2,
     "reason": "B-C3 夜间返工（#85，监工 11-24 15:26 定 a）：所有模式共用的 laolao-theme.css 第 375 行用强制覆盖给对话里的 code / pre 铺了不分日夜的浅底（background-color rgba(255,255,255,.52)、border-color rgba(255,255,255,.58)），Metre 夜间真页面上普通代码只有 1.36:1、diff 行 1.78:1（main 缺陷）。强制覆盖只能用强制覆盖压回去，具体度再高也赢不了；这里只在 html[data-laolao-mode=metre][data-pinkie-night] 下、只对同一组 code / pre / .cm-code-block、只压底色和描边两处。不改 laolao-theme.css（别的线的文件）。diff 颜色和 @@ 行靠 :not(#_mc) 具体度取胜，没有用强制覆盖。"
-  },
-  {
-    "file": "ui/injections/laolao-metre-skin.css",
-    "metric": "lines",
-    "value": 2554,
-    "reason": "#98 A3 mac2 任务 27（ui4）：原生 /cron 页净加 2 行（2552 → 2554）——状态徽章 / chip / 空状态虚线框用 --pk-a3-edge（≥ 3:1）、普通按键悬停、主按钮悬停；「筛选」外框并进同一条。去掉通用边框和「筛选」外框两处强制覆盖（2256 → 2254），原生悬停才换得了边框。B 类，只允许本次实测值。"
   }
 ]

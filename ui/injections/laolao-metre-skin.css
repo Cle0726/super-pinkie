@@ -2342,12 +2342,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(#laolao-user-settings, #p
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__title { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__card { box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__row { border-top-color: var(--metre-line) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__advanced-link:hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand:hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__button:hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice:hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__model-button:hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__text-button:hover { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pinkie-user-settings__advanced-link, .pinkie-user-settings__brand, .pinkie-user-settings__button, .pinkie-user-settings__choice, .pinkie-user-settings__model-button, .pinkie-user-settings__text-button):hover { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings button:focus-visible,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings summary:focus-visible { outline-color: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: var(--metre-text) !important; }
