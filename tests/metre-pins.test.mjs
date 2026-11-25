@@ -68,7 +68,7 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
   // 两条助手消息时间戳相同（假网关种子记录就是这样）：只置顶最后一条，第一条不能跟着变「已置顶」。
   const thread = (offset) => group('user', `msg:user:1000:${offset}`, '把登录页的按钮改成蓝色') + group('assistant', `msg:assistant:2000:${offset + 1}`, '好，我先改按钮颜色')
     + group('assistant', `msg:assistant:2000:${offset + 2}`, '注册页用的是同一个');
-  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>.chat-group-footer__meta{display:flex;align-items:center;gap:8px;min-width:0} .chat-group-footer__meta time{min-width:96px;opacity:0} .chat-group:hover .chat-group-footer__meta time{opacity:1}</style><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
+  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>html{--metre-cobalt:#2f4bb0;--metre-chat-small:#6f6c65} .chat-group-footer__meta{display:flex;align-items:center;gap:8px;min-width:0} .chat-group-footer__meta time{min-width:96px;opacity:0} .chat-group:hover .chat-group-footer__meta time{opacity:1}</style><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
   const KEY = 'pinkie.metre.pins:agent:metre:p1';
   try {
     const tab = await browser.newPage();
@@ -97,6 +97,11 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
     t.diagnostic('已置顶左缘 ' + JSON.stringify({rest, hover}));
     assert.ok(Math.abs(rest.text - rest.row) <= 1, `不悬停时「已置顶」字贴页脚左缘（字 ${rest.text}，行 ${rest.row}）`);
     assert.equal(hover.text, rest.text, '悬停时不跳');
+    // assist 03:17 预审：悬停这组时「已置顶」不能退成灰色「置顶」（截图里那张是置顶之前拍的）。
+    const look = await tab.evaluate(() => { const b = [...document.querySelectorAll('.pk-metre-pin')].find((x) => x.getAttribute('aria-pressed') === 'true'); return {text: b.textContent, color: getComputedStyle(b).color, cobalt: (() => { const i = document.createElement('i'); i.style.color = 'var(--metre-cobalt)'; b.parentElement.append(i); const c = getComputedStyle(i).color; i.remove(); return c; })()}; });
+    assert.equal(look.text, '已置顶', '悬停这组时文字不变');
+    assert.equal(look.cobalt, 'rgb(47, 75, 176)', '前提：钴蓝变量在页面里有值');
+    assert.equal(look.color, look.cobalt, '悬停这组时还是钴蓝，不退成时间戳灰');
     assert.equal(await firstPin.textContent(), '置顶', '同一时间戳的另一条不跟着变');
     assert.equal(await tab.locator('.pk-metre-pins__toggle').textContent(), '已置顶 1 条');
     // 折叠条是对话流的第一个子元素，在流里占位：第一条消息在它下面，不被盖住
