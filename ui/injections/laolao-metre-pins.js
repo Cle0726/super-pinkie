@@ -63,7 +63,7 @@
     }
   }
   function paintBar(key, list) {
-    // 放在对话流 .chat-thread 的最前面、sticky：在流里占位，第一条消息被推下去不被盖住；往下翻时贴在顶上。
+    // 放在对话流 .chat-thread 的最前面，普通排在流里：第一条消息被推下去，不被盖住；跟着对话一起滚走（不 sticky：贴顶时读起来像压住了消息）。
     const host = document.querySelector('.chat-thread');
     let bar = document.querySelector('.pk-metre-pins');
     if (!key || !list.length || !host) { bar?.remove(); return; }

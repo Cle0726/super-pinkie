@@ -185,8 +185,8 @@ html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pre
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { color: var(--metre-cobalt); }
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); opacity: 1; }
 html[data-laolao-mode="metre"] .pk-metre-pins {
-  position: sticky; top: 0; z-index: 2; box-sizing: border-box;
-  margin: 6px auto 10px; width: min(760px, calc(100% - 32px)); border: 1px solid var(--metre-line-strong); border-radius: 4px;
+  box-sizing: border-box;
+  margin: 6px auto 14px; width: min(760px, calc(100% - 32px)); border: 1px solid var(--metre-line-strong); border-radius: 4px;
   background: var(--metre-surface); color: var(--metre-text); font-family: var(--metre-sans);
 }
 html[data-laolao-mode="metre"] .pk-metre-pins__toggle {

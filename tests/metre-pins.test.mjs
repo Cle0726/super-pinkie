@@ -94,7 +94,7 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
     const place = await tab.evaluate(() => { const bar = document.querySelector('.pk-metre-pins'), first = document.querySelector('.chat-thread .chat-group'); const a = bar.getBoundingClientRect(), b = first.getBoundingClientRect(); return {first: bar.parentElement.classList.contains('chat-thread') && bar.parentElement.firstElementChild === bar, gap: Math.round(b.top - a.bottom), position: getComputedStyle(bar).position}; });
     assert.equal(place.first, true, '在 .chat-thread 最前面');
     assert.ok(place.gap >= 0, `第一条消息不被盖住（间距 ${place.gap}px）`);
-    assert.equal(place.position, 'sticky');
+    assert.equal(place.position, 'static', '普通排在流里，不浮在消息上（look.py：sticky 贴顶读起来像压住了消息）');
     const stored = await tab.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);
     assert.equal(stored.length, 1);
     assert.match(stored[0].id, /^assistant:2000:[0-9a-z]+$/);
