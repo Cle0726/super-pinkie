@@ -441,7 +441,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .laolao-co
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton { padding: 2px !important; gap: 0 !important; border: 0 !important; border-radius: 8px !important; background: transparent !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg { font: 400 13px/1 var(--metre-sans) !important; padding: 5px 9px !important; border-radius: 6px !important; color: var(--metre-muted) !important; background: transparent !important; opacity: 1 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg:hover { color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg[aria-checked="true"] { color: var(--metre-text) !important; background: var(--metre-hover) !important; font-weight: 500 !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .pinkie-baton__seg[aria-checked="true"], html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-skills-page .agent-tab.active { color: var(--metre-text) !important; background: var(--metre-hover) !important; font-weight: 500 !important; border-color: var(--metre-line-strong); }   /* 11-25 ui3 G3a：技能页选中的筛选键不用紫 */
 
 /* 最近的工作 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__recent { margin-top: 28px !important; padding: 0 6px !important; }
@@ -491,7 +491,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .chat-cont
 /* ---------- 深色 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .sidebar-shell,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell-nav { border-color: var(--metre-line) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .shell-nav, html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-skills-page .card { border-color: var(--metre-line) !important; box-shadow: none !important; }   /* G3a：技能页卡片不用粉边 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar { border-right: 1px solid var(--metre-line) !important; }
 /* 黑猫头在深色底上看不见：垫一块浅色小方块 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pinkie-night] .laolao-mode-button__portrait,
