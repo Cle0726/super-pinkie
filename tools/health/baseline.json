@@ -2330,7 +2330,7 @@
     "ui/injections/laolao-rich.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 596,
+      "lines": 563,
       "mutationObserverRefs": 0,
       "mutationObservers": 1,
       "observeUnclear": 0,

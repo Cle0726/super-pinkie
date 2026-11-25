@@ -1,0 +1,84 @@
+/* laolao-rich-chart —— 回复里 ```chart 图表的配色、数据表和底下两个键（laolao-rich-chart.js 第一次画图时才加载）
+ * 配色全在 --pk-chart-* 里：画布上的线、字、网格和「复制图片」的底色都从这里取，日、夜、Metre 日、Metre 夜各一套。
+ * 非 Metre 模式的取值和原来 laolao-rich.js 里写死的一样。:not(#p1):not(#p2):not(#p3) 和 laolao-rich.css 同一个级别。 */
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart {
+  --pk-chart-1: #2f7bff; --pk-chart-2: #e94f91; --pk-chart-3: #c9821a; --pk-chart-4: #16956f; --pk-chart-5: #7a5cff; --pk-chart-6: #1aa3a3;
+  --pk-chart-ink: rgba(40, 30, 51, .68); --pk-chart-grid: rgba(40, 30, 51, .08); --pk-chart-edge: #fff;
+  --pk-chart-paper: #fff; --pk-chart-title: #2a2233;
+  --pk-chart-font: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) .pk-rich--chart {
+  --pk-chart-1: #8ec0ff; --pk-chart-2: #ff8fbf; --pk-chart-3: #ffc56b; --pk-chart-4: #6fdcb5; --pk-chart-5: #b8a4ff; --pk-chart-6: #6ad8d8;
+  --pk-chart-ink: rgba(236, 232, 240, .72); --pk-chart-grid: rgba(236, 232, 240, .08); --pk-chart-edge: #1b1622;
+  --pk-chart-paper: #1b1622; --pk-chart-title: #ece3e8;
+}
+/* Metre：钴蓝打头，其余是压低了饱和度的陶土、灰绿、旧铜、灰紫、暖灰；字、网格、底色接 Metre 自己的变量 */
+html[data-laolao-mode="metre"]:not(#p1):not(#p2):not(#p3) .pk-rich--chart {
+  --pk-chart-1: var(--metre-accent, #2F4BB0); --pk-chart-2: #B8663E; --pk-chart-3: #4F8467; --pk-chart-4: #9A7A3E; --pk-chart-5: #6E679E; --pk-chart-6: #8A857B;
+  --pk-chart-ink: var(--metre-muted, #77736B); --pk-chart-grid: var(--metre-line, #E4E2DC); --pk-chart-edge: var(--metre-card, #FFFFFF);
+  --pk-chart-paper: var(--metre-card, #FFFFFF); --pk-chart-title: var(--metre-text, #1B1A18); --pk-chart-font: var(--metre-sans, sans-serif);
+}
+html[data-laolao-mode="metre"][data-pinkie-night]:not(#p1):not(#p2):not(#p3) .pk-rich--chart,
+html[data-laolao-mode="metre"][data-theme="dark"]:not(#p1):not(#p2):not(#p3) .pk-rich--chart {
+  --pk-chart-1: var(--metre-accent, #93A5EE); --pk-chart-2: #E0976E; --pk-chart-3: #86C29E; --pk-chart-4: #CDAE72; --pk-chart-5: #ABA5DD; --pk-chart-6: #A6A196;
+  --pk-chart-ink: var(--metre-muted, #918D84); --pk-chart-grid: var(--metre-line, #272725); --pk-chart-edge: var(--metre-card, #1B1B1A);
+  --pk-chart-paper: var(--metre-card, #1B1B1A); --pk-chart-title: var(--metre-text, #ECEAE4);
+}
+
+/* Metre：块里的字、线、按键也接 Metre 的变量（laolao-rich.css 的 --pk-* 是碧琪的紫灰），只在图表块里 */
+html[data-laolao-mode="metre"]:not(#p1):not(#p2):not(#p3) .pk-rich--chart {
+  --pk-fg: var(--metre-text, #1B1A18); --pk-mute: var(--metre-muted, #77736B); --pk-faint: var(--metre-line, #E4E2DC);
+  --pk-chip: var(--metre-hover, rgba(27, 26, 24, .05)); --pk-hover: var(--metre-hover, rgba(27, 26, 24, .05));
+  --pk-accent: var(--metre-accent, #2F4BB0); --pk-accent-ink: var(--metre-accent, #2F4BB0);
+  --pk-on: var(--metre-cobalt-soft, rgba(47, 75, 176, .10)); --pk-on-line: var(--metre-line-strong, #CFCCC4);
+}
+/* 图表块用实底：夜间 laolao-rich.css 的面板几乎透明，背景插画会透进图里、把网格线染色 */
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart { background: var(--pk-chart-paper); }
+
+/* 画布套一层固定 260px 的 plot（laolao-rich.css 给 stage 定的高度）。
+ * 数据表：plot 退出排版、只是看不见（画布尺寸不变，「复制图片」照样拿得到），图区高度跟着表格走，三行的表下面不空一大块；行多了最高 260px，在里面滚 */
+html:not(#p1):not(#p2):not(#p3) .pk-chart__plot { position: relative; height: 260px; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart.is-table .pk-chart__stage { height: auto; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart.is-table .pk-chart__plot { position: absolute; top: 0; left: 0; width: 100%; visibility: hidden; pointer-events: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__grid {
+  position: relative; width: 100%; max-height: 260px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  border-radius: 8px; border: 1px solid var(--pk-faint);   /* 用边框不用内阴影：粘住的表头有实底，会把内阴影盖掉 */
+}
+html:not(#p1):not(#p2):not(#p3) .pk-chart:not(.is-table) .pk-chart__grid { display: none; }
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table {
+  width: 100%; margin: 0; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 20px; font-variant-numeric: tabular-nums;
+}
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table :is(th, td) {
+  padding: 6px 12px; border: 0; border-bottom: 1px solid var(--pk-faint); background: none; color: var(--pk-fg); text-align: right; white-space: nowrap;
+  font-family: var(--pk-chart-font);   /* 主题给 th 配了等宽字体 */
+}
+/* 原生和主题把聊天里的 table 设成 display: block（非 Metre 还是强制覆盖的写法），里面的表格盒只有内容那么宽，分隔线画一半就断。
+ * 名称列 width: 100% 让自动表格布局撑满整行：名称靠左，数字挤到右边 */
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table :is(thead th:first-child, tbody th) { width: 100%; }
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table :is(thead th:first-child, tbody th) { text-align: left; }   /* 名称列靠左；数字列的表头和数字一起靠右 */
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--pk-chart-paper); color: var(--pk-mute); font-weight: 500;
+}
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table tbody th { font-weight: 400; }
+html:not(#p1):not(#p2):not(#p3) .chat-text table.pk-chart__table tbody tr:last-child > * { border-bottom: 0; }
+
+/* 图下面一行：「数据表」「复制图片」和一句短提示 */
+html:not(#p1):not(#p2):not(#p3) .pk-chart__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 26px; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key {
+  all: unset; box-sizing: border-box; cursor: pointer; padding: 3px 10px; border-radius: 7px; font-size: 12.5px; line-height: 20px;
+  color: var(--pk-fg); opacity: .82; box-shadow: inset 0 0 0 1px var(--pk-faint); transition: background .18s, color .18s, box-shadow .18s, opacity .18s;
+}   /* 字用正文色（略淡一点），不用 --pk-mute：那个看着像按不了 */
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key:hover:not(:disabled) { opacity: 1; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key:hover:not(:disabled) { background: var(--pk-chip); color: var(--pk-fg); }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key[aria-pressed="true"] { opacity: 1; background: var(--pk-on); color: var(--pk-accent-ink); box-shadow: inset 0 0 0 1px var(--pk-on-line); }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 1px; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__key:disabled { cursor: default; opacity: .55; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__note { font-size: 12.5px; line-height: 20px; color: var(--pk-mute); }
+/* 格式不对：提示在原文上面，用强调色的一道左边线，看得出是在说下面那段写错了（不用红：不是出故障，只是写法不对） */
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart.is-error { padding: 8px 12px 8px 18px; margin-bottom: 4px; border-radius: 8px; box-shadow: inset 0 0 0 1px var(--pk-faint); }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart.is-error::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--pk-accent); }   /* 竖条缩进、自带圆角：贴边会被外框圆角裁成月牙 */
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart.is-error .pk-rich__tools { display: none; }
+html:not(#p1):not(#p2):not(#p3) .pk-rich--chart.is-error .pk-rich__error { color: var(--pk-fg); font-size: 13px; }
+html:not(#p1):not(#p2):not(#p3) .pk-chart__unit { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--pk-mute); white-space: nowrap; }
+/* Metre 的气泡宽度跟着内容走：回复字少时图会被挤窄。给图表块一个建议宽度，最多到整行 */
+html[data-laolao-mode="metre"]:not(#p1):not(#p2):not(#p3) .pk-rich--chart:not(.is-error) { width: 640px; }
