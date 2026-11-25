@@ -187,7 +187,7 @@
   'use strict';
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
-  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page, .pinkie-shortcuts';
+  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page, .pinkie-shortcuts, openclaw-skills-page';
   const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
   // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
   const RULES = [
@@ -215,11 +215,11 @@
     return out.replace(/她/g, '它');
   };
   // 记下换过的地方：节点 → {原文, 换后}；离开 Metre 时只还原没被模块重新写过的。
-  const texts = new Map();
-  const attrs = new Map();
+  const texts = new Map(), attrs = new Map();
+  const SKILLS = {'All': '全部', 'Ready': '可用', 'Needs Setup': '待设置', 'Disabled': '已停用', 'Enabled': '已启用', 'Blocked': '已拦下', 'Unavailable': '不可用', 'Pending': '等待中', 'Review': '查看', 'Clean': '无风险', 'Install': '安装', 'Installing…': '正在安装…', 'Acknowledge risk and install': '知道风险，仍然安装', 'shown': '个', 'Installed skills and their status.': '已装的技能和状态。', 'Filter installed skills': '筛选已装的技能', 'Search ClawHub skills…': '搜索 ClawHub 技能…', 'Search and install skills from the registry': '从技能库搜索并安装', 'Not connected to gateway.': '还没连上后台。', 'No skills found.': '没有找到技能。', 'No skills found on ClawHub.': 'ClawHub 上没有找到。', 'Skill not found.': '没有这个技能。', 'ClawHub link invalid': 'ClawHub 链接无效', 'Missing requirements': '缺少依赖', 'Refreshing…': '正在刷新…', 'Searching…': '正在搜索…', 'Full security report': '完整安全报告', 'Source:': '来源：', 'Loading Skill Card...': '正在载入技能卡…', 'Skill Card not loaded.': '技能卡没载入。', 'Built-in Skills': '内置技能', 'Workspace Skills': '工作区技能', 'Extra Skills': '额外技能', 'Other Skills': '其他技能', 'Installed Skills': '已装技能'}, local = (el, text) => (text && el?.closest?.('openclaw-skills-page') && Object.hasOwn(SKILLS, text.trim())) ? text.replace(text.trim(), SKILLS[text.trim()]) : word(text);   // 11-25 ui3 G3a：原生技能页写死的英文，只在这一页里按整句换
   function rewriteText(node) {
     const value = node.nodeValue;
-    const next = word(value);
+    const next = local(node.parentElement, value);
     if (next === value) return;
     texts.set(node, {original: value, rewritten: next});
     node.nodeValue = next;
@@ -227,7 +227,7 @@
   function rewriteAttrs(el) {
     for (const name of ATTRS) {
       const value = el.getAttribute(name);
-      const next = word(value);
+      const next = local(el, value);
       if (next === value) continue;
       let saved = attrs.get(el);
       if (!saved) attrs.set(el, saved = {});

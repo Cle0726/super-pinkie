@@ -25,7 +25,7 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {indirectMetrics} from './patterns.mjs';
-import {adoptUnmeasured, healthChanges, injectionTotals, LINE_LIMIT, readJson, syncBaseline} from './ratchet.mjs';
+import {adoptUnmeasured, healthChanges, injectionTotals, LINE_LIMIT, loadExceptions, readJson, syncBaseline} from './ratchet.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const HEAD = 'ui/injections/laolao-head.fragment.html';
@@ -281,7 +281,7 @@ async function main(args) {
   }
   // Growth that no exception covers still fails; growth an exception covers is
   // simply not written, and only improved numbers move (see syncBaseline).
-  const {increases} = healthChanges(current, baseline, readJson(path.join(ROOT, 'tools/health/exceptions.json')));
+  const {increases} = healthChanges(current, baseline, loadExceptions(ROOT));
   if (increases.length) throw new Error(`有没登记例外的增长，不能同步基线：\n- ${increases.join('\n- ')}`);
   fs.writeFileSync(file, formatMeasurement(syncBaseline(current, baseline)), 'utf8');
   console.log('已同步 tools/health/baseline.json（只写入变好的数字）；请与本次改善一起提交。');
