@@ -339,7 +339,7 @@
     resizeObserver = new ResizeObserver(positionBar); if (column) resizeObserver.observe(column); const sidebar = document.querySelector('aside.sidebar'); if (sidebar) resizeObserver.observe(sidebar);
   }
     const pause = (options={}) => { clearInterval(statusPolling); statusPolling = 0; if(!options.chat||!options.samePane)clearBar(); };
-    return {open, openFocus, mountStatus, openMaterials, openPage, transcript, mount, sync, pause,
+    return {open, openFocus, mountStatus, openMaterials, openPage, transcript, mount, sync, pause, place: positionBar,
       unmount() { root()?.querySelector('.lesson-stage')?._lessonCleanup?.(); pause(); },
       resume() { sync(); }, dispose() { data().revision++; pause(); for (const d of root()?.querySelectorAll('.lesson-dialog') || []) { d.close(); d.remove(); } }};
   }
@@ -351,7 +351,7 @@
   globalDesk.registerStageMode('learn', {title: '讲', create: ctx => forPane(ctx.pane)});
   const each = run => { if (!document.getElementById('pinkie-study-desk')) return; for (const ctx of globalDesk.contexts()) { const instance = instances.get(ctx.pane); if (instance) run(instance, ctx); } };
   for (const name of ['pinkie:study-desk-view', 'pinkie:study-desk-focus', 'pinkie:study-desk-mounted', 'pinkie:learning-state', 'pinkie:desk-chat-ready', 'pinkie:desk-conversation-ready']) window.addEventListener(name, event => each((instance,ctx) => { if(name==='pinkie:study-desk-focus'&&event.detail?.chat&&ctx.pane===globalDesk.pane())return;instance.sync(); }));
-  window.addEventListener('pinkie:study-desk-unmount', () => each(instance => instance.dispose()));
+  window.addEventListener('pinkie:study-desk-unmount', () => each(instance => instance.dispose())); window.addEventListener('pinkie:desk-lesson-host', () => each(instance => instance.place())); // 今晚条晚到时把已画好的课程条搬进去，不重拉 lesson.current
   document.addEventListener('visibilitychange', () => each(instance => document.hidden ? instance.pause() : instance.sync()));
   window.addEventListener('pagehide', () => each(instance => instance.dispose()));
 })();
