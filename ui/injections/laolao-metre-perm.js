@@ -378,12 +378,51 @@
     return {text: parts.join(' · ') || '详情', tone: q && q.remaining <= 10 ? 'danger' : q && q.remaining <= 25 ? 'warn' : ''};
   }
   // 按键行的宽度预算：输入框下这一行还有原生的模型键、碧琪的 Baton / Virtuoso 键（1280 宽真页面上 Metre 键和模型键之间只剩约 50px）。
-  // 本批的键不许把原生的键挤到下一行、让输入框往上跳。插进去以后量输入框高度，变高了就一步步收拢：
-  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」→ 4 连「⋯」都放不下
-  //   （linux 字体更宽，CI 真页面 1280 宽「⋯」也放不下；宽度够了下次重量自动展开）。
-  // 第 4 档不整组藏（协调者 11-25 03:52）：「⋯」照样在，键盘 Tab 能到、读屏念「会话详情：…」，但不占按键行的位置
-  // （CSS 把它移出排版，拿到焦点才显出来），原生按键照样不换行。
+  // 本批的键不许把原生的键挤到下一行、让输入框往上跳。放不下时（协调者 11-25 06:03）先截原生模型名（省略号，模型键 title 给全名，
+  // 名字最少留 8 个英文字符宽），再一步步收拢本批的键：
+  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」。
+  // 「⋯」任何宽度都不藏、不移出排版，鼠标点得到。每一档都先试模型名全长、再一点点截短，取放得下的最长那个；宽度够了下次重量自动展开。
+  // 「放不下」= 输入框变高（换行了），或者有键被浮在框角上的发送 / 麦克风键盖住（mac1 任务 28：320 宽「详情」被麦克风盖住）。
+  // 模型名的上限走 Metre 皮肤里那条 max-width 的 --pk-perm-model-label 变量，只设在模型键上（不用强制覆盖）。
   let sig = '', fold = 0;
+  const MODEL_VAR = '--pk-perm-model-label';
+  const modelLabel = (model) => model && (model.querySelector('.pinkie-trigger-label') || model.querySelector('.chat-controls__inline-select-label'));
+  function squeeze(model, w) {
+    if (!model) return;
+    if (w == null) {
+      model.style.removeProperty(MODEL_VAR);
+      if (model.dataset.pkPermSqueezed) { model.removeAttribute('title'); delete model.dataset.pkPermSqueezed; }
+      return;
+    }
+    model.style.setProperty(MODEL_VAR, typeof w === 'number' ? w + 'px' : w);
+    model.dataset.pkPermSqueezed = '1';
+    model.title = (modelLabel(model)?.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  // 模型名要试的上限：全长（不设）→ 每次短 16px → 最短（8 个字符宽，再加上「· 档位」那一截）
+  function widths(model) {
+    const label = modelLabel(model);
+    if (!label) return [null];
+    squeeze(model, null);
+    const full = label.getBoundingClientRect().width;
+    const tier = label.querySelector(':scope > .pinkie-external-tier');
+    squeeze(model, `calc(8ch + ${tier ? Math.ceil(tier.getBoundingClientRect().width) + 16 : 0}px)`);
+    const min = label.getBoundingClientRect().width;
+    squeeze(model, null);
+    const out = [null];
+    for (let w = Math.floor(full) - 16; w > min; w -= 16) out.push(w);
+    if (min < full - 1) out.push(Math.ceil(min));
+    return out;
+  }
+  // 本批哪个键被浮在输入框角上的按钮（发送、停止、麦克风都是 button.chat-send-btn，绝对定位）盖住
+  function covered(box, input) {
+    const floats = [...input.querySelectorAll('button.chat-send-btn')].filter((b) => /^(?:absolute|fixed)$/.test(getComputedStyle(b).position))
+      .map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    if (!floats.length) return false;
+    return [...box.querySelectorAll('.pk-perm-chip')].some((k) => {
+      const a = k.getBoundingClientRect();
+      return floats.some((r) => Math.min(a.right, r.right) - Math.max(a.left, r.left) > 1 && Math.min(a.bottom, r.bottom) - Math.max(a.top, r.top) > 1);
+    });
+  }
   function build(f) {
     const lv = LEVELS.find((l) => l.id === state.level);
     const pc = planCounts(state.plan), st = statText();
@@ -417,19 +456,24 @@
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const box = controls?.querySelector(':scope > .pk-perm-chips'), input = controls?.closest('.agent-chat__input');
     if (box) seat(controls, box);
-    if (!box || !input || (box.dataset.fold !== '4' && getComputedStyle(box).display === 'none')) return;
+    if (!box || !input || getComputedStyle(box).display === 'none') return;
+    const model = controls.querySelector(':scope > .chat-composer-model-control');
     // 这一行只有本批的键时（别的键都没出来），多出来的高度是本行自己的，不是换行：全露、不收拢
     const others = [...controls.children].some((c) => c !== box && c.getBoundingClientRect().height > 0);
-    if (!others) { if (fold !== 0 || box.dataset.fold !== '0') { const nb = build(0); box.replaceWith(nb); } fold = 0; return; }
+    if (!others) { squeeze(model, null); if (fold !== 0 || box.dataset.fold !== '0') { const nb = build(0); box.replaceWith(nb); } fold = 0; return; }
     const h = () => input.getBoundingClientRect().height;
+    squeeze(model, null);
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
-    if (fold === 0 && h() <= h0 + 1) return;
     let cur = box;
-    for (let f = 0; f <= 4; f++) {
+    const ok = () => h() <= h0 + 1 && !covered(cur, input);
+    if (fold === 0 && Number(cur.dataset.fold) === 0 && ok()) return;
+    const tries = widths(model);
+    for (let f = 0; f <= 3; f++) {
       if (f !== Number(cur.dataset.fold)) { const nb = build(f); cur.replaceWith(nb); cur = nb; }
       fold = f;
-      if (h() <= h0 + 1) break;
+      for (const w of tries) { squeeze(model, w); if (ok()) return; }
     }
+    // 收到「⋯」、模型名截到最短还放不下：停在这里，「⋯」照样占位、点得到（宁可换行也不藏）
   }
   // 原生模型名是后到的、思考档位键第一次点页面会变宽：画完以后隔一会儿再量几次（一次性的 setTimeout，不加循环定时器和观察器）
   function fitSoon() { for (const ms of [60, 400, 1500]) setTimeout(fit, ms); }

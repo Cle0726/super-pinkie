@@ -441,62 +441,95 @@ test(`when the composer row is too narrow the keys fold down instead of pushing 
   } finally { await browser.close(); }
 });
 
-// linux CI 真页面 1280 宽：字体更宽，收到「⋯」（fold 3）还是放不下，原生模型键被挤到第二行（metre-board 5.4%）。
-// 连「⋯」都放不下时要整组藏起来，宽度够了再展开。改前停在 fold 3、模型键换行，这条失败。
-test(`when even the ⋯ key does not fit, the keys hide instead of wrapping, and come back when there is room (${engine})`, {timeout: 60_000}, async () => {
+// 协调者 11-25 06:03：「⋯」任何宽度都不许藏。820 宽 + 长模型名（workbuddy/hy4flash-free · mm）时，先截模型名（省略号 + title 全名，最少约 8 个字符宽），
+// 再收进「⋯」；「⋯」本身固定占位、鼠标点得到，菜单里有「放手程度」「先出方案」。改前（第 4 档把「⋯」移出排版）这条失败；去掉截模型名也失败（模型键被挤到下一行）。
+const SKIN_LABEL = read('laolao-metre-skin.css').split('\n').find((l) => l.includes('.agent-chat__input .chat-controls__inline-select-label { max-width:'));
+const LONG = 'workbuddy/hy4flash-free · mm';
+async function longModelRow(p) {
+  await p.addStyleTag({content: SKIN_LABEL});   // Metre 皮肤里模型名上限那一条，原样搬过来
+  await p.evaluate((name) => {
+    const c = document.querySelector('.agent-chat__composer-controls');
+    c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
+    const m = document.createElement('div'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 1 auto;min-width:0;height:28px';
+    m.innerHTML = `<details class="chat-controls__model"><summary class="chat-controls__inline-select-trigger" style="display:inline-flex;max-width:300px;font:500 12px/28px sans-serif"><span class="chat-controls__inline-select-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span></summary></details>`;
+    c.append(m);
+  }, LONG);
+  await p.evaluate(() => window.PinkieMetrePerm.refresh());
+  await p.waitForTimeout(1700);
+}
+const rowState = (p) => p.evaluate(() => {
+  const top = (s) => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().top) : null; };
+  const box = document.querySelector('.pk-perm-chips'), key = box.querySelector('.pk-perm-chip--stat'), r = key.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  const label = document.querySelector('.chat-composer-model-control .chat-controls__inline-select-label');
+  return {metre: top('.agent-chat__composer-controls > .pk-eng-chip'), model: top('.chat-composer-model-control'), fold: box.dataset.fold, label: key.textContent,
+    keyW: Math.round(r.width), keyHit: Boolean(hit && key.contains(hit)), hidden: box.getAttribute('aria-hidden'),
+    nameW: label ? Math.round(label.getBoundingClientRect().width) : null, clipped: label ? label.scrollWidth > label.clientWidth + 1 : null,
+    title: document.querySelector('.chat-composer-model-control')?.getAttribute('title') ?? null};
+});
+
+test(`at any width the ⋯ key stays on the row and clickable; a long model name is cut first (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser);
-    await p.evaluate(() => {
-      const c = document.querySelector('.agent-chat__composer-controls');
-      c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
-      const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
-    });
-    await p.evaluate(() => window.PinkieMetrePerm.refresh());
-    await p.waitForTimeout(1700);
-    const st = () => p.evaluate(() => {
-      const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
-      const box = document.querySelector('.pk-perm-chips');
-      return {metre: top('.agent-chat__composer-controls > .pk-eng-chip'), model: top('.chat-composer-model-control'), fold: box.dataset.fold, shown: getComputedStyle(box).display !== 'none'};
-    });
-    // 只够放 Metre 键和模型键（再加 10px），「⋯」放不下
+    const p = await open(browser, {width: 820});
+    await longModelRow(p);
+    const wide = await rowState(p);
+    assert.equal(wide.fold, '0'); assert.equal(wide.clipped, false, `够宽时模型名不截（${JSON.stringify(wide)}）`); assert.equal(wide.title, null);
+    // 只够放 Metre 键、模型键（全名）再加 10px：不截模型名就放不下「⋯」
     await p.evaluate(() => {
       const w = (s) => document.querySelector(s).getBoundingClientRect().width;
       document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 4 + 10) + 'px';
       window.PinkieMetrePerm.fit();
     });
-    const tight = await st();
-    assert.equal(tight.model, tight.metre, `放不下「⋯」时模型键不换行（${JSON.stringify(tight)}）`);
-    assert.equal(tight.fold, '4');
-    // 协调者 11-25 03:52：第 4 档不整组藏。「⋯」还在、没被 aria-hidden，读屏有名字，键盘 Tab 能到；拿到焦点才显出来，模型键照样不换行。
-    // 改前（整组 display:none + aria-hidden）这几条失败。
-    const a11y = await p.evaluate(() => {
-      const box = document.querySelector('.pk-perm-chips'), key = box.querySelector('.pk-perm-chip--stat');
-      const w = () => Math.round(box.getBoundingClientRect().width);
-      const before = {hidden: box.getAttribute('aria-hidden'), key: Boolean(key), name: key?.getAttribute('aria-label') || '', label: key?.textContent || '', w: w()};
-      key?.focus();
-      return {...before, focused: document.activeElement === key, wFocused: w(), popup: key?.getAttribute('aria-haspopup')};
-    });
-    assert.equal(a11y.hidden, null, '不再 aria-hidden');
-    assert.equal(a11y.key, true, '「⋯」还在');
-    assert.equal(a11y.label, '⋯');
-    assert.match(a11y.name, /^⋯：会话详情：放手程度、先出方案/, '读屏念得出它是什么，也说得出里面有放手程度和先出方案');
-    assert.ok(a11y.w <= 1, `没拿焦点时不占位（${JSON.stringify(a11y)}）`);
-    assert.equal(a11y.focused, true, '键盘能到');
-    assert.ok(a11y.wFocused > 10, `拿到焦点时显出来（${JSON.stringify(a11y)}）`);
-    assert.equal(a11y.popup, 'dialog');
-    const focusedRow = await st();
-    assert.equal(focusedRow.model, focusedRow.metre, '显出来时也不把模型键挤到下一行');
-    // 回车打开会话详情，里面有放手程度和先出方案两个键
-    await p.keyboard.press('Enter');
-    await p.waitForTimeout(200);
-    const acts = await p.evaluate(() => [...document.querySelectorAll('.pk-perm-pop .pk-perm-pop__acts .pk-perm-pop__btn')].map((b) => b.textContent));
+    const tight = await rowState(p);
+    assert.equal(tight.model, tight.metre, `模型键不换行（${JSON.stringify(tight)}）`);
+    // 先截模型名、再收拢：截完名字以后收到「详情」一个键就放得下，或者一直收到「⋯」，两种都对；放手程度、先出方案都已挪进会话详情
+    assert.ok(Number(tight.fold) >= 2, `收拢到一个键（${JSON.stringify(tight)}）`); assert.ok(['详情', '⋯'].includes(tight.label), tight.label);
+    assert.ok(tight.keyW > 10, `这个键占位、看得见（${JSON.stringify(tight)}）`);
+    assert.equal(tight.keyHit, true, '键中心点下去就是它自己，鼠标点得到');
+    assert.equal(tight.hidden, null);
+    assert.equal(tight.clipped, true, '模型名截了（省略号）'); assert.ok(tight.nameW < wide.nameW);
+    assert.ok(tight.nameW >= 8 * 6, `模型名最少留约 8 个字符宽（${tight.nameW}px）`);
+    assert.equal(tight.title, LONG, '模型键 title 给全名');
+    // 鼠标点「⋯」打开会话详情，里面有放手程度和先出方案
+    await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
+    await p.waitForSelector('.pk-perm-pop--detail');
+    const acts = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent));
     assert.ok(acts.some((t) => t.startsWith('放手程度：')) && acts.some((t) => t.startsWith('先出方案：')), `会话详情里有两个键（${JSON.stringify(acts)}）`);
     await p.keyboard.press('Escape');
-    // 宽度够了再量一次就展开回来
+    // 放宽后展开，模型名回到全长、title 拿掉
     await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls').style.width = '1000px'; window.PinkieMetrePerm.fit(); });
-    const wide = await st();
-    assert.equal(wide.fold, '0', `放宽后展开（${JSON.stringify(wide)}）`); assert.equal(wide.shown, true); assert.equal(wide.model, wide.metre);
+    const back = await rowState(p);
+    assert.equal(back.fold, '0'); assert.equal(back.clipped, false); assert.equal(back.title, null, `放宽后 title 拿掉（${JSON.stringify(back)}）`);
+  } finally { await browser.close(); }
+});
+
+// mac1 任务 28（#94 issuecomment-7164474183）：320 宽「详情」键被浮在框角上的麦克风（button.chat-send-btn，position:absolute; z-index:3）盖住 32×23，
+// 鼠标点到的是麦克风。被盖住也算「放不下」，接着收拢，直到键中心点下去是键自己。改前这条失败。
+test(`a key under the floating microphone / send button counts as not fitting, so the keys fold until it is clickable (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser, {width: 820});
+    await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls').style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:600px'; });
+    await p.evaluate(() => window.PinkieMetrePerm.refresh());
+    await p.waitForTimeout(1700);
+    assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.fold), '0');
+    // 把麦克风浮在状态键现在的位置上（和真页面一样挂在输入框里、绝对定位、z-index 3）
+    await p.evaluate(() => {
+      const input = document.querySelector('.agent-chat__input'); input.style.position = 'relative';
+      const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(), base = input.getBoundingClientRect();
+      const mic = document.createElement('button'); mic.className = 'chat-send-btn chat-send-btn--laolao-dictation'; mic.textContent = '🎤';
+      mic.style.cssText = `position:absolute;z-index:3;left:${Math.round(k.left - base.left)}px;top:${Math.round(k.top - base.top)}px;width:32px;height:${Math.round(k.height)}px`;
+      input.append(mic);
+      window.PinkieMetrePerm.fit();
+    });
+    const r = await rowState(p);
+    assert.ok(Number(r.fold) >= 1, `被盖住就收拢（${JSON.stringify(r)}）`);
+    assert.equal(r.keyHit, true, `状态键中心点下去是它自己，不是麦克风（${JSON.stringify(r)}）`);
+    assert.equal(await p.evaluate(() => [...document.querySelectorAll('.pk-perm-chip')].every((k) => {
+      const a = k.getBoundingClientRect(), m = document.querySelector('.chat-send-btn--laolao-dictation').getBoundingClientRect();
+      return Math.min(a.right, m.right) - Math.max(a.left, m.left) <= 1 || Math.min(a.bottom, m.bottom) - Math.max(a.top, m.top) <= 1;
+    })), true, '本批没有一个键压在麦克风底下');
   } finally { await browser.close(); }
 });
 
