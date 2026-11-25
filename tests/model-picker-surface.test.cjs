@@ -58,8 +58,9 @@ function harness(source) {
     if (context) { const meta = new Node('span'); meta.className = 'chat-controls__model-option-meta'; meta.textContent = context; row.append(meta); }
     browser.append(row); return row;
   };
-  return {api: window.__test, stored, menu, browser, details, add, sync: () => window.__test.syncCatalogSurface(details, menu, browser)};
+  return {api: window.__test, win: window, stored, menu, browser, details, add, sync: () => window.__test.syncCatalogSurface(details, menu, browser)};
 }
+const orderOf = (row) => Number(row.style.getPropertyValue('--pinkie-model-order'));
 
 for (const source of sources) {
   test(`${source}: filters actual catalog rows, keeps current model and preserves route identity`, () => {
@@ -137,6 +138,22 @@ for (const source of sources) {
     assert.equal(recent.length, 6); assert.equal(new Set(recent).size, 6); assert.equal(recent[0], 'route/model-18');
     for (const value of [null, undefined, 0, -1, 'unknown']) assert.equal(h.api.formatModelContext(value), '');
     assert.equal(h.api.formatModelContext(1000000), '1M'); assert.equal(h.api.formatModelContext(128000), '128k');
+  });
+
+  test(`${source}: Metre favourites sort right after the current model in Common, nothing changes without them`, () => {
+    const h = harness(source);
+    const rows = Array.from({length: 6}, (_, i) => h.add(`custom/gpt-model-${i}`, `Choice ${i}`, '', i === 0));
+    h.stored.set('pinkie:model-picker:recent:v1', JSON.stringify(['custom/gpt-model-5', 'custom/gpt-model-2']));
+    const shown = () => rows.filter((row) => !row.hidden).sort((a, b) => orderOf(a) - orderOf(b)).map((row) => row.getAttribute('data-chat-model-option').slice(-1));
+    h.sync();
+    assert.deepEqual(shown(), ['0', '5', '2'], 'without the Metre hook Common is current + recent, as before');
+    let asked;
+    h.win.Pinkie = {metre: {fav: {pickerFavs: (values) => { asked = values; return ['custom/gpt-model-3', 'custom/gpt-model-2']; }}}};
+    h.sync();
+    assert.equal(asked.length, 6, 'the hook sees every catalog route');
+    assert.deepEqual(shown(), ['0', '3', '2', '5'], 'current first, then favourites in stored order, then the remaining recent ones');
+    h.api.surfaceStates.get(h.details).brand = 'all'; h.sync();
+    assert.deepEqual(rows.map(orderOf), [-1, 1, 2, 3, 4, 5], 'All keeps catalog order; favourites only reorder Common');
   });
 
   test(`${source}: the catalog retains every backing route while folding duplicate and effort choices`, () => {
