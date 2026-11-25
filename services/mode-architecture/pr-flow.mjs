@@ -150,6 +150,17 @@ export class PrFlow {
       out.fix = await this.fix(r.key, {number: n, branch: pr.headRefName, findings: picked});
       this.note(r.key, 'fix', 'done', '');
     }
+    // 推送：跟上 base、引擎改完提交以后，要推到 PR 分支 CI 才会跑新头。只推当前分支、只用普通 push（不 force），被拒就停。
+    // 「改」只是把活交给引擎（异步），推送要等引擎改完、在引擎台里看过再单独点。
+    if (steps.has('push')) {
+      this.note(r.key, 'push', 'running', `推到 ${pr.headRefName}`);
+      const cur = (await this.sh(this.git, ['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).stdout.trim();
+      if (cur !== pr.headRefName) { this.note(r.key, 'push', 'failed', '分支不对'); throw fail(`当前分支是 ${cur}，不是这个 PR 的 ${pr.headRefName}，先切过去。`); }
+      const p = await this.sh(this.git, ['push', 'origin', `HEAD:refs/heads/${pr.headRefName}`], cwd);
+      if (p.code !== 0) { this.note(r.key, 'push', 'failed', p.stderr); throw fail('没推上去（不会强推；远端有新提交就先「跟上」再推）：' + redact(p.stderr).slice(0, 200)); }
+      out.push = {pushed: true, head: (await this.sh(this.git, ['rev-parse', 'HEAD'], cwd)).stdout.trim()};
+      this.note(r.key, 'push', 'done', out.push.head.slice(0, 8));
+    }
     if (steps.has('reply')) {
       const body = String(params.body || '').trim();
       if (!body) throw fail('回评论要先写好正文。');
