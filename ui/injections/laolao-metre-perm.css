@@ -1,9 +1,11 @@
 /* laolao-metre-perm —— Metre 第五批「权限、计划、用量」的样子（脚本在 laolao-metre-perm.js）。只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。
  * 不加强制覆盖：靠选择器本身够具体（html[data-laolao-mode] + 两个类）压过原生的单类规则。颜色全用 Metre 的变量，日夜跟着变量走；
- * 正文另用两档更深的灰（--pk-perm-ink2），因为 Metre 的 --metre-muted 日间在谱纸底上只有约 4.4:1，不够 4.5:1。 */
+ * 正文另用更深的一档（--pk-perm-ink2 / -warn / -cobalt-ink）：按键行底下有横穿的谱线（截图实测像素 #C8C4BB），
+ * 字要对谱线也 ≥ 4.5:1——日间 ink2 #4D4A44 5.07、warn #6A440C 4.94、cobalt-ink #2A4199 5.21；夜间按下态底是钴蓝 14%，
+ * --metre-cobalt 只有 4.4，cobalt-ink 提到 #A3B1F0（va-b5\pixel-contrast.py 按真截图量）。 */
 
-html[data-laolao-mode="metre"] { --pk-perm-ink2: #5F5C55; --pk-perm-warn: #8A5A12; }
-html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; }
+html[data-laolao-mode="metre"] { --pk-perm-ink2: #4D4A44; --pk-perm-warn: #6A440C; --pk-perm-cobalt-ink: #2A4199; }
+html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; --pk-perm-cobalt-ink: #A3B1F0; }
 
 /* ---------- P1 审批卡（原生 openclaw-exec-approval，弹在顶层） ---------- */
 @keyframes pk-perm-born { from { outline-color: transparent; } to { outline-color: transparent; } }
@@ -77,9 +79,9 @@ html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q .pk-perm-q__btn { 
 html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip { flex: none; white-space: nowrap; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip .pk-eng-chip__name { color: var(--pk-perm-ink2); font: 400 13px/1 var(--metre-sans); font-style: normal; }
-html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] .pk-eng-chip__name { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] .pk-eng-chip__name { color: var(--pk-perm-cobalt-ink); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] { background: var(--metre-cobalt-soft, var(--metre-hover)); }
-html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--go .pk-eng-chip__name { color: var(--metre-cobalt); font-weight: 500; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--go .pk-eng-chip__name { color: var(--pk-perm-cobalt-ink); font-weight: 500; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat .pk-eng-chip__name { font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="warn"] .pk-eng-chip__name { color: var(--pk-perm-warn); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="danger"] .pk-eng-chip__name { color: var(--metre-danger); }
@@ -117,7 +119,7 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__row { display: grid; g
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__k { color: var(--pk-perm-ink2); font-size: 12.5px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__v { color: var(--metre-text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__plan { padding: 4px 6px 10px; }
-html[data-laolao-mode="metre"] .pk-perm-bar { height: 4px; border-radius: 2px; background: var(--metre-line); margin-top: 6px; overflow: hidden; }
+html[data-laolao-mode="metre"] .pk-perm-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--metre-muted) 38%, transparent); margin-top: 6px; overflow: hidden; }
 html[data-laolao-mode="metre"] .pk-perm-bar > i { display: block; height: 100%; background: var(--metre-cobalt); border-radius: 2px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__resume {
   display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-top: 8px; padding: 8px 6px 2px;

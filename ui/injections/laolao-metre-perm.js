@@ -323,8 +323,10 @@
     const plan = chip('pk-perm-chip--plan', '先出方案', '打开后 Metre 先写方案给你看，你点「照这个方案做」才动手', () => void togglePlan());
     plan.setAttribute('aria-pressed', String(state.planOn));
     box.append(level, plan);
-    if (state.planOn && pc.total) box.append(chip('pk-perm-chip--go', '照这个方案做', '关掉「先出方案」，让 Metre 照计划动手', () => void approvePlan()));
-    const stat = chip('pk-perm-chip--stat', st.text, '会话详情：模型、开始时间、工作目录、令牌、花费、计划和额度', openDetail);
+    // 按键行的宽度预算：820 宽时 Metre 键和模型之间只有约 300px。多出「照这个方案做」时状态键只留「详情」两个字，不然整行换行、输入框往上跳。
+    const go = state.planOn && pc.total > 0;
+    if (go) box.append(chip('pk-perm-chip--go', '照这个方案做', '关掉「先出方案」，让 Metre 照计划动手', () => void approvePlan()));
+    const stat = chip('pk-perm-chip--stat', go ? '详情' : st.text, '会话详情：模型、开始时间、工作目录、令牌、花费、计划和额度', openDetail);
     if (st.tone) stat.dataset.tone = st.tone;
     stat.setAttribute('aria-haspopup', 'dialog'); stat.setAttribute('aria-expanded', 'false');
     box.append(stat);

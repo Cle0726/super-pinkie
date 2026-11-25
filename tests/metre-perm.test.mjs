@@ -103,6 +103,7 @@ test(`P2 / I4 / R3 / U2: Metre composer gets level, plan-first and status keys; 
     await p.click('.pk-perm-chip--plan');
     await p.waitForSelector('.pk-perm-chip--go');
     assert.equal(await p.getAttribute('.pk-perm-chip--plan', 'aria-pressed'), 'true');
+    assert.equal(await p.textContent('.pk-perm-chip--stat'), '详情', '多出「照这个方案做」时状态键只留「详情」，820 宽下按键行不换行');
     await p.click('.pk-perm-chip--go');
     await p.waitForFunction(() => window.__calls.some((c) => c.method === 'chat.send'));
     const seq = (await p.evaluate(() => window.__calls)).filter((c) => /planMode\.set|chat\.send/.test(c.method)).map((c) => c.method + ':' + (c.params.on ?? c.params.message));
@@ -224,5 +225,52 @@ test(`other modes are untouched, and Metre text on these keys and popovers is at
       }
     }
     console.log('contrast', JSON.stringify(out));
+  } finally { await browser.close(); }
+});
+
+// 按键行底下横穿着谱线：va-b5 真截图里字底下最难读的像素，日间 #C8C4BB、夜间 #232429；「先出方案」按下态的底日间 #B8B7BA、夜间 #313443。
+// 字对这些像素也要 ≥ 4.5:1。改前日间 ink2 #5F5C55 只有 3.8、warn #8A5A12 3.4，夜间按下态钴蓝 4.4；夜间计划进度条底槽和卡片底几乎一样（1.05）。
+test(`key text stays at least 4.5:1 over the stave lines behind the key row, and the night plan bar track is visible (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const out = {};
+    for (const night of [false, true]) {
+      const p = await open(browser, {night});
+      await p.evaluate(() => {
+        window.__plan = {items: [{id: '1', text: 'a', status: 'completed'}, {id: '2', text: 'b', status: 'pending'}]};
+        window.__resp['usage.status'] = () => ({providers: [{provider: 'anthropic', displayName: 'Claude', windows: [{label: '5h', usedPercent: 78}]}]});
+      });
+      await p.evaluate(() => window.PinkieMetrePerm.refresh());
+      assert.equal(await p.getAttribute('.pk-perm-chip--stat', 'data-tone'), 'warn', '额度只剩 22%：状态键是提醒色');
+      const stave = night ? 'rgb(35, 36, 41)' : 'rgb(200, 196, 187)';
+      const fg = (sel) => p.$eval(sel, (e) => getComputedStyle(e).color);
+      const check = (k, c, bg) => {
+        const r = ratio(c, bg);
+        out[(night ? 'night ' : 'day ') + k] = Math.round(r * 100) / 100;
+        assert.ok(r >= 4.5, `${night ? '夜' : '日'} ${k} ${c} on ${bg} = ${r.toFixed(2)}`);
+      };
+      check('level', await fg('.pk-perm-chip--level .pk-eng-chip__name'), stave);
+      check('plan', await fg('.pk-perm-chip--plan .pk-eng-chip__name'), stave);
+      check('stat warn', await fg('.pk-perm-chip--stat .pk-eng-chip__name'), stave);
+      await p.click('.pk-perm-chip--plan');
+      await p.waitForSelector('.pk-perm-chip--go');
+      check('plan pressed', await fg('.pk-perm-chip--plan .pk-eng-chip__name'), night ? 'rgb(49, 52, 67)' : 'rgb(184, 183, 186)');
+      check('go', await fg('.pk-perm-chip--go .pk-eng-chip__name'), stave);
+      // 进度条底槽：在画布上先铺卡片底、再叠底槽色，取合成后的像素（底槽色是带透明度的混色）
+      await p.click('.pk-perm-chip--stat');
+      const [track, card] = await p.evaluate(() => {
+        const card = getComputedStyle(document.querySelector('.pk-perm-pop--detail')).backgroundColor;
+        const tr = getComputedStyle(document.querySelector('.pk-perm-bar')).backgroundColor;
+        const c = document.createElement('canvas'); c.width = c.height = 1; const g = c.getContext('2d');
+        g.fillStyle = card; g.fillRect(0, 0, 1, 1); g.fillStyle = tr; g.fillRect(0, 0, 1, 1);
+        const d = g.getImageData(0, 0, 1, 1).data;
+        return [`rgb(${d[0]}, ${d[1]}, ${d[2]})`, card];
+      });
+      const r = ratio(track, card);
+      out[(night ? 'night ' : 'day ') + 'bar track'] = Math.round(r * 100) / 100;
+      if (night) assert.ok(r >= 1.5, `夜 进度条底槽 ${track} on ${card} = ${r.toFixed(2)}`);
+      await p.close();
+    }
+    console.log('stave contrast', JSON.stringify(out));
   } finally { await browser.close(); }
 });
