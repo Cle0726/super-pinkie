@@ -1443,6 +1443,19 @@
       "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-code.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 41,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-display.css": {
       "important": 0,
       "importantIndirect": 0,
