@@ -34,6 +34,8 @@ test('Pinkie build and installer use its own source and never invoke C.le. start
   const buildSwift=[...build.matchAll(/"\$NATIVE_SOURCE_DIR\/([A-Za-z]+\.swift)"/g)].map(m=>m[1]).sort();
   const installerSwift=[...installer.split('\n').find(line=>line.startsWith('LAUNCHER_SUPPORT_SOURCES=')).matchAll(/([A-Za-z]+\.swift)/g)].map(m=>m[1]).concat('Launcher.swift').sort();
   assert.deepEqual(installerSwift,buildSwift);
+  const syncedSwift=[...installer.split('\n').find(line=>line.includes('for native_file in ')).matchAll(/([A-Za-z]+\.swift)/g)].map(m=>m[1]).sort();
+  assert.deepEqual(syncedSwift,buildSwift);
   for(const name of fs.readdirSync(path.join(mac,'pinkie/Sources')).filter(n=>n.endsWith('.swift'))) assert.ok(buildSwift.includes(name),`build.sh does not compile ${name}`);
   for(const file of ['services/cle-studio','installer/cle','patch/apply-startup.mjs']) assert.ok(!fs.existsSync(path.join(root,file)));
 });

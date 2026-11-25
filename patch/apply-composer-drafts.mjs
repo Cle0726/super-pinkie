@@ -69,7 +69,7 @@ function pinkieCaptureComposerInput(gatewayKey, sessionKey) {
     const textarea = event.target?.closest?.('.agent-chat__composer-combobox textarea');
     const owner = textarea?.closest?.('openclaw-chat-pane');
     const state = owner?.state || (document.documentElement?.hasAttribute?.('data-laolao-startup-home') ? document.querySelector('openclaw-chat-pane')?.state : null);
-    if (!state?.sessionKey || typeof textarea.value !== 'string' || pinkieComposerReadOnly(state)) return;
+    if (!textarea || !state?.sessionKey || typeof textarea.value !== 'string' || pinkieComposerReadOnly(state)) return;
     try {
       const key = 'pinkie.composerDraft.v2:' + gatewayKey(state.settings?.gatewayUrl) + ':' + encodeURIComponent(sessionKey(state,state.sessionKey));
       if (textarea.value) localStorage.setItem(key,JSON.stringify({draft:textarea.value,updatedAt:Date.now()}));

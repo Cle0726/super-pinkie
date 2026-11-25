@@ -24,7 +24,16 @@ test('settings expose one 减少动效 switch, default full effects', () => {
 });
 
 test('the Mac shell no longer reads the OS reduce-motion flag', () => {
-  for (const file of ['Launcher.swift', 'BrowserControl.swift']) {
+  for (const file of [
+    'Launcher.swift',
+    'LauncherRuntime.swift',
+    'LauncherViews.swift',
+    'LauncherServices.swift',
+    'LauncherBrowser.swift',
+    'LauncherWorkspace.swift',
+    'LauncherWebBridge.swift',
+    'BrowserControl.swift',
+  ]) {
     assert.doesNotMatch(read(`desktop/macos/pinkie/Sources/${file}`), /accessibilityDisplayShouldReduceMotion/);
   }
   assert.match(read('desktop/macos/pinkie/Sources/Launcher.swift'), /controller\.add\(self, name: "pinkieMotion"\)/);
