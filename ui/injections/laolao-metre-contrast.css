@@ -24,7 +24,7 @@
     --bs-rule: #85827A;
   }
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-memory-layer { background: rgba(27, 26, 24, 0.36); }
-  /* 11-25 15:33 截图核对：侧栏历史时间（laolao-sidebar.css:467 opacity .56）、分组标题（:98 .7）、分组计数（:103 .45）自己带透明度，
-   * 光换弱化色实际只到约 2.5（日）/ 3.3（夜）:1。高对比时这三处不透明；三个 id 级 :not() 压过 #laolao-session-manager，不用强制覆盖。 */
-  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.pinkie-session-time, .laolao-group__label, .laolao-group__count) { opacity: 1; }
+  /* 11-25 截图 + CI 核对：侧栏日期行「今天」（laolao-sidebar.css:466 opacity .58）、历史时间（:467 .56）、分组标题（:98 .7）、计数（:103 .45）
+   * 自己带透明度，光换弱化色实际只到约 2.5（日）/ 3.3（夜）:1。高对比时这几处不透明；三个 id 级 :not() 压过 #laolao-session-manager，不用强制覆盖。 */
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.pinkie-session-date, .pinkie-session-time, .laolao-group__label, .laolao-group__count) { opacity: 1; }
 }
