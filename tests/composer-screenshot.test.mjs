@@ -21,7 +21,11 @@ test('I5 截图不自己造附件：只往原生 .agent-chat__photo-input 塞文
   assert.match(code, /new CustomEvent\('laolao:toast'/);
   assert.match(code, /track\.stop\(\)/);
   // 不新增观察器、定时器、window 全局名，不拼 HTML；页面变化走 domWatch。
-  assert.doesNotMatch(code, /new\s+MutationObserver|setInterval\s*\(|setTimeout\s*\(|window\.__[A-Za-z]|innerHTML/);
+  assert.doesNotMatch(code, /new\s+MutationObserver|setInterval\s*\(|window\.__[A-Za-z]|innerHTML/);
+  // 只有「等第一帧」那一个一次性定时器（监工 07:57 要的 3 秒上限），而且一定清掉。
+  assert.equal((code.match(/setTimeout\s*\(/g) || []).length, 1, '只有一个一次性定时器');
+  assert.match(code, /finally \{ clearTimeout\(timer\); \}/);
+  assert.match(code, /const FRAME_WAIT_MS = 3000;/);
   assert.match(SHOT, /window\.Pinkie\?\.domWatch\?\.watch\(/);
   // 监工 07:13：已有的工具箱脚本不变长；截图整块在新文件里，工具箱里没有截图代码。
   assert.doesNotMatch(TRAY, /getDisplayMedia|attach-shot/);
@@ -63,6 +67,10 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
       const fake = mode === 'none' ? undefined : async () => {
         if (mode === 'cancel') throw new DOMException('Permission denied', 'NotAllowedError');
         if (mode === 'broken') throw new DOMException('Could not start video source', 'NotReadableError');
+        // stall：给一条活着但永远不出画面的流（画布流不画就没有帧），旧代码会一直等 loadeddata、一直挂着共享。
+        if (mode === 'stall') { const quiet = document.createElement('canvas').captureStream(0); window.__streams.push(quiet); return quiet; }
+        // noblob：toBlob 回 null（无头 WebKit 见过），要走 toDataURL 退路。
+        if (mode === 'noblob') HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
         const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 200;
         const g = canvas.getContext('2d'); g.fillStyle = '#2f4bb0'; g.fillRect(0, 0, 320, 200);
         const stream = canvas.captureStream(5);
@@ -115,6 +123,33 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
     await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 5_000});
     assert.match((await tab.evaluate(() => window.__toasts))[0], /^没截到图/);
     assert.equal(await tab.evaluate(() => window.__files.length), 0);
+    await tab.close();
+  }
+  {
+    // 监工 07:57 跟进：流永远不出画面时，3 秒内停掉共享、说一句「没截到」，不附图。
+    const tab = await open({mode: 'stall'});
+    const t0 = Date.now();
+    await shot(tab);
+    await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 6_000});
+    const took = Date.now() - t0;
+    const got = await tab.evaluate(() => ({toast: window.__toasts[0], files: window.__files.length, live: window.__streams.flatMap((s) => s.getTracks()).filter((x) => x.readyState === 'live').length}));
+    t.diagnostic(`不出画面：${took}ms 后提示「${got.toast}」`);
+    assert.match(got.toast, /^没截到图/);
+    assert.equal(got.files, 0, '不附图');
+    assert.equal(got.live, 0, '屏幕共享已停');
+    assert.ok(took < 5_000, `3 秒上限内停（实际 ${took}ms）`);
+    await tab.close();
+  }
+  {
+    // toBlob 回 null：走 toDataURL 退路，照样把一张 PNG 交给照片框。
+    const tab = await open({mode: 'noblob'});
+    await shot(tab);
+    await tab.waitForFunction(() => window.__files.length > 0 || window.__toasts.length > 0, null, {timeout: 10_000});
+    const got = await tab.evaluate(() => ({files: window.__files, toasts: window.__toasts}));
+    assert.deepEqual(got.toasts, [], 'toBlob 回空不算失败');
+    assert.equal(got.files.length, 1);
+    assert.equal(got.files[0].type, 'image/png');
+    assert.ok(got.files[0].size > 100, '退路解出的 PNG 有内容');
     await tab.close();
   }
   for (const opts of [{mode: 'none'}, {photoDisabled: true}]) {

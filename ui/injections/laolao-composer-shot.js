@@ -30,18 +30,42 @@
     svg.append(corners, frame);
     return svg;
   }
+  const FRAME_WAIT_MS = 3000;
+  // toBlob 回空（无头 WebKit 见过）就改用 toDataURL 解出同一张 PNG，和 laolao-rich-chart.js（#126）同一个退路；两样都不行才算没截到。
+  function pngOf(canvas) {
+    const viaUrl = () => {
+      const url = canvas.toDataURL('image/png');
+      const comma = url.indexOf(',');
+      if (!url.startsWith('data:image/png') || comma < 0 || comma === url.length - 1) throw new Error('toDataURL');
+      const bin = atob(url.slice(comma + 1)), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], {type: 'image/png'});
+    };
+    return new Promise((ok, no) => {
+      const fallback = () => { try { ok(viaUrl()); } catch (error) { no(error); } };
+      try { canvas.toBlob((b) => (b && b.size ? ok(b) : fallback()), 'image/png'); } catch { fallback(); }
+    });
+  }
   async function screenshot(input) {
     let stream = null;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
       const video = document.createElement('video');
       video.muted = true; video.playsInline = true; video.srcObject = stream;
-      await video.play();
-      if (!video.videoWidth) await new Promise((done) => video.addEventListener('loadeddata', done, {once: true}));
+      // 开播和第一帧合起来最多等 3 秒（监工 07:57）：没有画面的流上 play() 自己也可能一直不返回。
+      // 等不到就当没截到，finally 照样停掉屏幕共享，不会一直挂着「正在共享」。
+      let timer = 0;
+      try {
+        await new Promise((done, fail) => {
+          timer = setTimeout(() => fail(new Error('no frame in time')), FRAME_WAIT_MS);
+          const ready = () => (video.videoWidth ? done() : video.addEventListener('loadeddata', done, {once: true}));
+          video.play().then(ready, fail);
+        });
+      } finally { clearTimeout(timer); }
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth; canvas.height = video.videoHeight;
       canvas.getContext('2d').drawImage(video, 0, 0);
-      const blob = await new Promise((done) => canvas.toBlob(done, 'image/png'));
+      const blob = await pngOf(canvas);
       const target = photoInput(input);
       if (!blob || !target || target.disabled) throw new Error('no frame');
       const now = new Date(), pad = (n) => String(n).padStart(2, '0');
