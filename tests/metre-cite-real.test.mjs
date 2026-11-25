@@ -166,6 +166,9 @@ test('M13/M14 real page: citation card title + contrast, hovered badge number, r
         return {label: b.getAttribute('aria-label'), pressed: b.getAttribute('aria-pressed'), filled: !!b.querySelector('svg rect[fill="currentColor"]'), tip: getComputedStyle(b, '::after').content};
       });
       assert.deepEqual([stop.label, stop.pressed, stop.filled], ['停止朗读', 'true', true], `${theme}: 停止朗读键 ${JSON.stringify(stop)}`);
+      const sq = await last.locator('.pk-mread svg rect').boundingBox();
+      t.diagnostic(`${theme} stop square ${sq && `${sq.width.toFixed(1)}x${sq.height.toFixed(1)}`}`);
+      assert.ok(sq && sq.width >= 9 && sq.height >= 9, `${theme}: 停止方块太小，夜间认不出（11-25 06:46 打回）${JSON.stringify(sq)}`);
       assert.equal(stop.tip, '"停止朗读"', `${theme}: 停止朗读键没有悬停提示`);
       await read.hover();
       await page.waitForTimeout(600);
