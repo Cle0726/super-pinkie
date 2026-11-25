@@ -81,6 +81,25 @@ html[data-laolao-mode="metre"] .chat-timeline-overflow__body { border-left-width
 html[data-laolao-mode="metre"] .chat-timeline-overflow__body > button { background: transparent; border: 1px solid var(--metre-line-strong); border-radius: 4px; color: var(--metre-muted); font: 12px var(--metre-sans); padding: 3px 8px; cursor: pointer; }
 html[data-laolao-mode="metre"] .chat-timeline-overflow__body > button:hover { background: var(--metre-hover); color: var(--metre-text); }
 
+/* M10 消息小字：原生在历史带 usage / model 时就画 details.msg-meta（悬停露出 ↑输入 ↓输出 令牌、缓存、花费、上下文占比、模型），
+ * 预览页只露时间是因为假网关不给 usage。这里只换皮：圆胶囊换成细线签条，模型名用 Metre 等宽字，花费不再是绿色。
+ * 这一版历史里没有「用时」字段，不造。 */
+html[data-laolao-mode="metre"] .msg-meta { color: var(--metre-muted); font-family: var(--metre-sans); }
+html[data-laolao-mode="metre"] .msg-meta__summary:focus-visible { outline-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .msg-meta__details {
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 4px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-muted);
+  font-family: var(--metre-mono);
+  font-size: 11px;
+}
+html[data-laolao-mode="metre"] .msg-meta__model { background: var(--metre-hover); border-radius: 3px; color: var(--metre-text); font-family: var(--metre-mono); }
+html[data-laolao-mode="metre"] .msg-meta__cost { color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .msg-meta__ctx--warn { color: var(--metre-v4); }
+html[data-laolao-mode="metre"] .msg-meta__ctx--danger { color: var(--metre-danger); font-weight: 600; }
+
 /* B-C2 代码块表头：语言标签和「复制」 */
 html[data-laolao-mode="metre"] .chat-text .code-block-wrapper { border: 1px solid var(--metre-line-strong); border-radius: 6px; }
 html[data-laolao-mode="metre"] .chat-text .code-block-header { background: var(--metre-art); border-bottom: 1px solid var(--metre-line-strong); border-radius: 6px 6px 0 0; }
