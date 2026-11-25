@@ -74,12 +74,18 @@ const firstCharSide = (tab, id) => tab.evaluate(id => {
   return (r.left - box.left) < (box.right - r.right) ? 'left' : 'right';
 }, id);
 
-test('loaded after the Metre engine files, owned by the metre region, CSS only, no !important', () => {
+test('loaded after the Metre engine files, owned by the metre region, CSS only, !important only on the night code-block background', () => {
   const at = name => head.indexOf(`/${name}?v=@hash`);
   assert.ok(at('laolao-metre-code.css') > at('laolao-metre-engine.js'));
   const metre = Object.values(regions.regions || regions).find(region => (region.files || []).includes('laolao-metre-engine.js'));
   assert.ok(metre?.files.includes('laolao-metre-code.css'));
-  assert.doesNotMatch(css, /!important/);
+  // 只有夜间代码块底色那一条能用强制覆盖（要压过 laolao-theme.css 不分日夜的强制浅底），而且只许底色、描边两处。
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.equal((bare.match(/!important/g) || []).length, 2);
+  for (const rule of bare.split('}').filter(r => r.includes('!important'))) {
+    assert.match(rule.split('{')[0], /^\s*html\[data-laolao-mode="metre"\]\[data-pinkie-night\]/);
+    assert.deepEqual([...rule.split('{')[1].matchAll(/([\w-]+)\s*:[^;]*!important/g)].map(m => m[1]), ['background-color', 'border-color']);
+  }
   for (const rule of css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map(s => s.trim()).filter(Boolean)) {
     for (const selector of rule.split('{')[0].split(/,(?![^(]*\))/)) assert.match(selector.trim(), /^html\[data-laolao-mode="metre"\]/, 'every rule is scoped to Metre: ' + selector.trim());
   }

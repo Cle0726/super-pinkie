@@ -130,5 +130,11 @@
     "metric": "setIntervals",
     "value": 1,
     "reason": "M3 返工：恢复原生定时语义"
+  },
+  {
+    "file": "ui/injections/laolao-metre-code.css",
+    "metric": "important",
+    "value": 2,
+    "reason": "B-C3 夜间返工（#85，监工 11-24 15:26 定 a）：所有模式共用的 laolao-theme.css 第 375 行用强制覆盖给对话里的 code / pre 铺了不分日夜的浅底（background-color rgba(255,255,255,.52)、border-color rgba(255,255,255,.58)），Metre 夜间真页面上普通代码只有 1.36:1、diff 行 1.78:1（main 缺陷）。强制覆盖只能用强制覆盖压回去，具体度再高也赢不了；这里只在 html[data-laolao-mode=metre][data-pinkie-night] 下、只对同一组 code / pre / .cm-code-block、只压底色和描边两处。不改 laolao-theme.css（别的线的文件）。diff 颜色和 @@ 行靠 :not(#_mc) 具体度取胜，没有用强制覆盖。"
   }
 ]
