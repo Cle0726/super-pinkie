@@ -144,5 +144,83 @@ class RoundtableWhiteboardTests(unittest.TestCase):
             server.server_close()
 
 
+class PinkieBoardRouteTests(unittest.TestCase):
+    """碧琪那一席动圆桌白板：一次性令牌、只认本机进程、记成 pinkie。"""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.state = mock.patch.dict(os.environ, {'PINKIE_STATE_ROOT': str(Path(self.temp.name)/'state')})
+        self.state.start()
+        self.models = mock.patch.object(MODULE, 'available_models', return_value=MODELS)
+        self.models.start()
+        self.store = MODULE.Store(self.temp.name)
+        self.session = self.store.create_session('碧琪动手')['id']
+        self.other = self.store.create_session('另一张')['id']
+        self.server = MODULE.ThreadingHTTPServer(('127.0.0.1', 0), MODULE.Handler)
+        self.server.token, self.server.store = 'page-token', self.store
+        self.server.roundtable = MODULE.Roundtable(self.store)
+        self.server.roundtable.board_url = 'http://127.0.0.1:' + str(self.server.server_port)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.host = '127.0.0.1:' + str(self.server.server_port)
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.server.roundtable.pool.shutdown(wait=False, cancel_futures=True)
+        self.store.db.close()
+        self.models.stop()
+        self.state.stop()
+        self.temp.cleanup()
+
+    def post(self, session, body, board='', origin=None, page=None):
+        conn = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        headers = {'Host': self.host, 'Content-Type': 'application/json'}
+        if board:
+            headers['X-Roundtable-Board'] = board
+        if origin:
+            headers['Origin'] = origin
+        if page:
+            headers['X-Roundtable-Token'] = page
+        conn.request('POST', '/api/sessions/' + session + '/whiteboard/pinkie', json.dumps(body), headers)
+        res = conn.getresponse()
+        data = json.loads(res.read() or b'{}')
+        conn.close()
+        return res.status, data
+
+    def test_token_lets_pinkie_write_as_pinkie(self):
+        token = self.server.roundtable.issue_board_token(self.session)
+        ops = {'ops': [{'op': 'put', 'baseRev': 0, 'item': note('note-pink1', '碧琪的想法')}]}
+        status, data = self.post(self.session, ops, board=token)
+        self.assertEqual(200, status)
+        self.assertEqual('pinkie', data['applied'][0]['by'])
+        status, data = self.post(self.session, {'read': True}, board=token)
+        self.assertEqual((200, ['碧琪的想法']), (status, [it['text'] for it in data['items']]))
+
+    def test_rejects_wrong_token_other_session_page_token_and_browsers(self):
+        token = self.server.roundtable.issue_board_token(self.session)
+        ops = {'ops': [{'op': 'put', 'baseRev': 0, 'item': note('note-pink1')}]}
+        self.assertEqual(403, self.post(self.session, ops)[0])
+        self.assertEqual(403, self.post(self.session, ops, board='x' * 43)[0])
+        self.assertEqual(403, self.post(self.other, ops, board=token)[0])
+        self.assertEqual(403, self.post(self.session, ops, page='page-token', origin='http://' + self.host)[0])
+        self.assertEqual(403, self.post(self.session, ops, board=token, origin='http://' + self.host)[0])
+        self.assertEqual(0, self.store.whiteboard(self.session)['rev'])
+
+    def test_token_is_gone_after_the_run_and_without_a_server_url(self):
+        token = self.server.roundtable.issue_board_token(self.session)
+        self.assertEqual(self.session, self.server.roundtable.board_session(token))
+        self.server.roundtable.board_tokens.pop(token)
+        self.assertEqual('', self.server.roundtable.board_session(token))
+        self.assertEqual(403, self.post(self.session, {'read': True}, board=token)[0])
+        self.assertEqual('', MODULE.Roundtable(self.store).issue_board_token(self.session))
+
+    def test_only_pinkie_seat_gets_the_token_and_it_is_dropped_in_finally(self):
+        source = (ROOT/'services/roundtable/server.py').read_text(encoding='utf-8')
+        invoke = source[source.index('    def invoke(self, run_id'):source.index('    def worker_prompt(')]
+        self.assertIn("board_token = self.issue_board_token(session['id']) if member == 'pinkie' else ''", invoke)
+        self.assertIn('self.board_tokens.pop(board_token, None)', invoke[invoke.index('finally:'):])
+        self.assertNotIn('PINKIE_ROUNDTABLE_BOARD', source[source.index('    def run_worker('):])
+
+
 if __name__ == '__main__':
     unittest.main()
