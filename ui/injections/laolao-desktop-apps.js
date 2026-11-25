@@ -70,7 +70,28 @@
     } catch { return ''; }
   }
 
-  function nameBox(item, current) {
+  // 勾选框：默认都不勾。返回读勾选结果的函数。
+  function permissionRows(box, needs) {
+    const picks = [];
+    if (!needs || (!needs.network?.length && !needs.files)) return () => ({network: [], files: false});
+    box.append(el('p', 'pinkie-art-confirm__text pk-apps-dialog__perm-head', '这件作品想用到下面这些。默认都不给，要给就勾上：'));
+    const list = el('div', 'pk-apps-dialog__perms');
+    const row = (label, value) => {
+      const line = el('label', 'pk-apps-dialog__perm');
+      const check = el('input');
+      check.type = 'checkbox';
+      line.append(check, el('span', '', label));
+      list.append(line);
+      picks.push([check, value]);
+    };
+    for (const origin of needs.network || []) row('联网：' + origin.replace(/^[a-z]+:\/\//, ''), origin);
+    if (needs.files) row('读你选的文件', '__files__');
+    box.append(list);
+    return () => ({network: picks.filter(([check, value]) => check.checked && value !== '__files__').map(([, value]) => value),
+      files: picks.some(([check, value]) => check.checked && value === '__files__')});
+  }
+
+  function nameBox(item, current, needs) {
     return new Promise(resolve => {
       const mask = el('div', 'laolao-modal-mask pinkie-tools-mask pinkie-art-confirm');
       const box = el('div', 'laolao-modal pinkie-tools-modal pk-apps-dialog');
@@ -84,15 +105,17 @@
         ? '已经装过了。再装一次会换成作品现在的版本，名字也可以改。'
         : `装好以后在${placeLabel()}里有它自己的图标，双击直接打开，不用先开碧琪。默认不联网。`;
       box.append(el('h3', 'laolao-modal__title', '装到桌面'), el('p', 'pinkie-art-confirm__text', hint), input);
+      const picked = permissionRows(box, needs);
       const buttons = el('div', 'laolao-modal__buttons');
       const done = value => { mask.remove(); document.removeEventListener('keydown', onKey, true); resolve(value); };
+      const submit = () => done({name: input.value.trim() || appName(item), ...picked()});
       const onKey = event => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); done(null); }
-        else if (event.key === 'Enter' && event.target === input) { event.preventDefault(); done(input.value.trim() || appName(item)); }
+        else if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submit(); }
       };
       document.addEventListener('keydown', onKey, true);
       buttons.append(button('取消', 'laolao-modal__button', () => done(null)),
-        button(current ? '重新装' : '装到桌面', 'laolao-modal__button laolao-modal__button--primary', () => done(input.value.trim() || appName(item))));
+        button(current ? '重新装' : '装到桌面', 'laolao-modal__button laolao-modal__button--primary', submit));
       box.append(buttons);
       mask.append(box);
       document.body.append(mask);
@@ -104,11 +127,14 @@
   async function install(item, trigger) {
     let existing = null;
     try { existing = (await rpcOk('pinkie.apps.forArtifact', {id: item.id})).app; } catch {}
-    const name = await nameBox(item, existing?.name);
-    if (!name) return;
+    let needs = null;
+    try { needs = await rpcOk('pinkie.apps.needs', {id: item.id}); } catch {}
+    const choice = await nameBox(item, existing?.name, needs);
+    if (!choice) return;
+    const {name, network, files} = choice;
     trigger.disabled = true;
     try {
-      const {app} = await rpcOk('pinkie.apps.install', {id: item.id, name, icon: drawIcon(name)}, 60_000);
+      const {app} = await rpcOk('pinkie.apps.install', {id: item.id, name, icon: drawIcon(name), network, files}, 60_000);
       try { await nativeOk({type: 'installApp', appId: app.id}); }
       catch (error) {
         // 入口没建成就别留半个应用：副本也删掉，用户看到的是「没装上」。
@@ -144,6 +170,18 @@
       toast('没卸载干净：' + (error.message || '不知道为什么'));
     }
   }
+  // 更新：名字、图标、勾选不变；新版本多用到的地址不自动放行，告诉用户要的话卸了重装再勾。
+  async function update(app, list) {
+    try {
+      const out = await rpcOk('pinkie.apps.update', {id: app.id}, 60_000);
+      await nativeOk({type: 'installApp', appId: app.id});
+      const extra = (out.newOrigins || []).length ? `；新版本还想连 ${out.newOrigins.length} 个地址，没给，要给的话重新「装到桌面」再勾` : '';
+      toast(`「${app.name}」更新到第 ${out.app.version} 版了${extra}`);
+    } catch (error) {
+      toast('没更新成：' + (error.message || '不知道为什么'));
+    }
+    void paintList(list);
+  }
   async function paintList(list) {
     list.replaceChildren(el('p', S + 'hint', '正在读…'));
     let apps = [];
@@ -154,9 +192,11 @@
     for (const app of apps) {
       const row = el('div', S + 'row pk-apps-row');
       const copy = el('div', S + 'row-copy');
-      const note = app.latest > app.version ? `作品有新版本（第 ${app.latest} 版），装的是第 ${app.version} 版` : `第 ${app.version} 版 · 不联网`;
+      const reach = app.network?.length ? `可以联网（${app.network.length} 个地址）` : '不联网';
+      const note = app.latest > app.version ? `作品有新版本（第 ${app.latest} 版），装的是第 ${app.version} 版` : `第 ${app.version} 版 · ${reach}${app.files ? ' · 能读文件' : ''}`;
       copy.append(el('span', S + 'row-title', app.name), el('span', S + 'hint', note));
       const control = el('div', S + 'row-control pk-apps-row__actions');
+      if (app.latest > app.version) control.append(button('更新成新版本', 'pinkie-art-btn', () => void update(app, list)));
       control.append(
         button('打开', 'pinkie-art-btn', () => nativeOk({type: 'openApp', appId: app.id}).catch(error => toast(error.message))),
         button('卸载', 'pinkie-art-btn pinkie-art-btn--quiet', () => void uninstall(app, row)),
