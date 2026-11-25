@@ -467,7 +467,32 @@ test(`when even the ⋯ key does not fit, the keys hide instead of wrapping, and
     });
     const tight = await st();
     assert.equal(tight.model, tight.metre, `放不下「⋯」时模型键不换行（${JSON.stringify(tight)}）`);
-    assert.equal(tight.fold, '4'); assert.equal(tight.shown, false);
+    assert.equal(tight.fold, '4');
+    // 协调者 11-25 03:52：第 4 档不整组藏。「⋯」还在、没被 aria-hidden，读屏有名字，键盘 Tab 能到；拿到焦点才显出来，模型键照样不换行。
+    // 改前（整组 display:none + aria-hidden）这几条失败。
+    const a11y = await p.evaluate(() => {
+      const box = document.querySelector('.pk-perm-chips'), key = box.querySelector('.pk-perm-chip--stat');
+      const w = () => Math.round(box.getBoundingClientRect().width);
+      const before = {hidden: box.getAttribute('aria-hidden'), key: Boolean(key), name: key?.getAttribute('aria-label') || '', label: key?.textContent || '', w: w()};
+      key?.focus();
+      return {...before, focused: document.activeElement === key, wFocused: w(), popup: key?.getAttribute('aria-haspopup')};
+    });
+    assert.equal(a11y.hidden, null, '不再 aria-hidden');
+    assert.equal(a11y.key, true, '「⋯」还在');
+    assert.equal(a11y.label, '⋯');
+    assert.match(a11y.name, /^⋯：会话详情：放手程度、先出方案/, '读屏念得出它是什么，也说得出里面有放手程度和先出方案');
+    assert.ok(a11y.w <= 1, `没拿焦点时不占位（${JSON.stringify(a11y)}）`);
+    assert.equal(a11y.focused, true, '键盘能到');
+    assert.ok(a11y.wFocused > 10, `拿到焦点时显出来（${JSON.stringify(a11y)}）`);
+    assert.equal(a11y.popup, 'dialog');
+    const focusedRow = await st();
+    assert.equal(focusedRow.model, focusedRow.metre, '显出来时也不把模型键挤到下一行');
+    // 回车打开会话详情，里面有放手程度和先出方案两个键
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(200);
+    const acts = await p.evaluate(() => [...document.querySelectorAll('.pk-perm-pop .pk-perm-pop__acts .pk-perm-pop__btn')].map((b) => b.textContent));
+    assert.ok(acts.some((t) => t.startsWith('放手程度：')) && acts.some((t) => t.startsWith('先出方案：')), `会话详情里有两个键（${JSON.stringify(acts)}）`);
+    await p.keyboard.press('Escape');
     // 宽度够了再量一次就展开回来
     await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls').style.width = '1000px'; window.PinkieMetrePerm.fit(); });
     const wide = await st();

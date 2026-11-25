@@ -144,8 +144,15 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__row { display: grid; g
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__k { color: var(--pk-perm-ink2); font-size: 12.5px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__v { color: var(--metre-text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__plan { padding: 4px 6px 10px; }
-/* 收拢第 4 档：连「⋯」都放不下，整组不占位，原生按键不换行 */
-html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips.pk-perm-chips[data-fold="4"] { display: none; }
+/* 收拢第 4 档：连「⋯」都放不下。「⋯」不藏（键盘能到、读屏有名字），但移出排版不占位，原生按键不换行；
+   绝对定位不给偏移，就待在它本来该在的位置。拿到键盘焦点时显出来，浮在按键行上面。 */
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips.pk-perm-chips[data-fold="4"] {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips.pk-perm-chips[data-fold="4"]:focus-within {
+  width: auto; height: auto; overflow: visible; clip-path: none; z-index: 3;
+  background: var(--metre-surface); border-radius: 8px; box-shadow: 0 0 0 1px var(--metre-line-strong);
+}
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 6px 10px; border-bottom: 1px solid var(--metre-line); margin-bottom: 4px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn[aria-pressed="true"] { color: var(--pk-perm-cobalt-ink); border-color: var(--metre-cobalt); }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn--go { color: var(--pk-perm-cobalt-ink); font-weight: 500; }

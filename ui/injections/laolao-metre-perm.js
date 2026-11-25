@@ -379,10 +379,12 @@
   }
   // 按键行的宽度预算：输入框下这一行还有原生的模型键、碧琪的 Baton / Virtuoso 键（1280 宽真页面上 Metre 键和模型键之间只剩约 50px）。
   // 本批的键不许把原生的键挤到下一行、让输入框往上跳。插进去以后量输入框高度，变高了就一步步收拢：
-  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」→ 4 连「⋯」都放不下就整组藏起来（linux 字体更宽，CI 真页面 1280 宽「⋯」也放不下；宽度够了下次重量自动展开）。
+  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」→ 4 连「⋯」都放不下
+  //   （linux 字体更宽，CI 真页面 1280 宽「⋯」也放不下；宽度够了下次重量自动展开）。
+  // 第 4 档不整组藏（协调者 11-25 03:52）：「⋯」照样在，键盘 Tab 能到、读屏念「会话详情：…」，但不占按键行的位置
+  // （CSS 把它移出排版，拿到焦点才显出来），原生按键照样不换行。
   let sig = '', fold = 0;
   function build(f) {
-    if (f >= 4) { const b = el('span', 'pk-perm-chips'); b.dataset.fold = '4'; b.setAttribute('aria-hidden', 'true'); return b; }
     const lv = LEVELS.find((l) => l.id === state.level);
     const pc = planCounts(state.plan), st = statText();
     const go = state.planOn && pc.total > 0;
