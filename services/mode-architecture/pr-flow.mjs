@@ -123,14 +123,19 @@ export class PrFlow {
     if (steps.has('ci')) {
       this.note(r.key, 'ci', 'running', `#${n} 看 CI`);
       const c = await this.sh(this.gh, ['pr', 'checks', String(n), '--json', 'name,state,bucket,link'], cwd);
-      out.ci = c.stdout.trim() ? JSON.parse(c.stdout) : [];
+      // gh pr checks 有检查还在跑时退出码是 8，输出照样是 JSON；别的非零或解析不了就停，给一句话。
+      let list = null;
+      if (c.code === 0 || c.code === 8) { try { const v = c.stdout.trim() ? JSON.parse(c.stdout) : []; if (Array.isArray(v)) list = v; } catch {} }
+      if (!list) { this.note(r.key, 'ci', 'failed', '读不到 CI 结果'); throw fail('读不到这个 PR 的 CI 结果：' + (redact(c.stderr).trim().slice(0, 200) || 'gh 没给出能读的结果')); }
+      out.ci = list;
       this.note(r.key, 'ci', 'done', `${out.ci.length} 项`);
     }
     if (steps.has('main')) {
       this.note(r.key, 'main', 'running', `跟 ${pr.baseRefName}`);
       const cur = (await this.sh(this.git, ['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).stdout.trim();
       if (cur !== pr.headRefName) { this.note(r.key, 'main', 'failed', '分支不对'); throw fail(`当前分支是 ${cur}，不是这个 PR 的 ${pr.headRefName}，先切过去。`); }
-      await this.sh(this.git, ['fetch', 'origin', pr.baseRefName], cwd);
+      const f = await this.sh(this.git, ['fetch', 'origin', pr.baseRefName], cwd);
+      if (f.code !== 0) { this.note(r.key, 'main', 'failed', '取不到最新的 ' + pr.baseRefName); throw fail(`取不到最新的 ${pr.baseRefName}，没有合并：` + (redact(f.stderr).trim().slice(0, 200) || 'git fetch 没成功')); }
       const m = await this.sh(this.git, ['merge', '--no-edit', `origin/${pr.baseRefName}`], cwd);
       if (m.code !== 0) {
         const u = await this.sh(this.git, ['diff', '--name-only', '--diff-filter=U'], cwd);
