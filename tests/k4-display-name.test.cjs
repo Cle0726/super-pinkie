@@ -35,7 +35,8 @@ const USER_VISIBLE = [
 
 // 文件里其余的「CLE Kk」是注释、开发日志或给模型看的提示词，只检查这几行用户可见的文字。
 const USER_VISIBLE_LINES = {
-  'desktop/macos/pinkie/Sources/Launcher.swift': [/lastError = "[^"]*网关仍占用端口/, /lastError = "缺少 [^"]*桌面执行器/],
+  'desktop/macos/pinkie/Sources/LauncherRuntime.swift': [/lastError = "[^"]*网关仍占用端口/],
+  'desktop/macos/pinkie/Sources/LauncherServices.swift': [/lastError = "缺少 [^"]*桌面执行器/],
   'services/party/setup.py': [/print\('派对专属 Agent 已安装。'/],
   'services/roundtable/server.py': [/模型连接器'\)/, /圆桌调用的 [^']* Agent 配置'\)/, /本机 [^']* 执行器'\)/],
   'services/mode-architecture/memory.mjs': [/主模式的有效会话/],
