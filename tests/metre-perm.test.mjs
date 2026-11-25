@@ -170,6 +170,47 @@ test(`P1 / P4 / N1: approval card in Metre gets a Chinese title, lists the other
   } finally { await browser.close(); }
 });
 
+// 原生 openclaw-modal-dialog 的影子样式照抄（top/left 50% + translate(-50%, -50%)）：卡高为奇数时上下边落在半像素上，
+// 1px 横线被拆成两行、实测 2.0–2.9:1。改前 Metre 下 dialog 仍是 translate，下面「transform 为 none」失败。
+const FAKE_MODAL = `
+  customElements.define('openclaw-modal-dialog', class extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      const sr = this.attachShadow({mode: 'open'});
+      sr.innerHTML = '<style>:host{position:fixed;inset:0;z-index:200;display:block;padding:24px;box-sizing:border-box;background:rgba(0,0,0,.8)}'
+        + 'dialog{position:fixed;top:50%;left:50%;width:min(540px,calc(100vw - 48px));max-height:calc(100dvh - 48px);margin:0;padding:0;border:0;background:transparent;transform:translate(-50%,-50%);overflow:visible}</style><dialog open><slot></slot></dialog>';
+    }
+  });
+  const host = document.querySelector('openclaw-exec-approval'), card = host.querySelector('.exec-approval-card');
+  card.style.height = '301px'; card.style.boxSizing = 'border-box';
+  const m = document.createElement('openclaw-modal-dialog'); host.append(m); m.append(card);   // 重新插入会重放 pk-perm-born
+`;
+for (const mode of ['metre', 'classic']) {
+  test(`P1: in ${mode} the approval dialog is ${mode === 'metre' ? 'centred by layout (no half-pixel translate)' : 'left as native'} (${engine})`, {timeout: 60_000}, async () => {
+    const browser = await launch();
+    try {
+      const p = await open(browser, {mode});
+      await p.addScriptTag({content: FAKE_MODAL});
+      await p.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: 'exec.approval.requested', payload: {id: 'a1', request: {command: 'npm test', sessionKey: 'agent:metre:dashboard:t1'}}}})));
+      await p.waitForTimeout(1200);
+      const r = await p.evaluate(() => {
+        const m = document.querySelector('openclaw-modal-dialog'), d = m.shadowRoot.querySelector('dialog'), c = d.getBoundingClientRect();
+        return {snap: m.hasAttribute('data-pk-snap'), transform: getComputedStyle(d).transform, top: c.top, bottom: c.bottom, left: c.left, right: c.right, h: c.height, vw: innerWidth, vh: innerHeight};
+      });
+      if (mode === 'metre') {
+        assert.equal(r.snap, true);
+        assert.equal(r.transform, 'none');
+        assert.ok(Math.abs(r.top - (r.vh - r.bottom)) <= 1, `上下不居中：${r.top} / ${r.vh - r.bottom}`);
+        assert.ok(Math.abs(r.left - (r.vw - r.right)) <= 1, `左右不居中：${r.left} / ${r.vw - r.right}`);
+        assert.equal(Math.round(r.h), 301);
+      } else {
+        assert.equal(r.snap, false);
+        assert.notEqual(r.transform, 'none');
+      }
+    } finally { await browser.close(); }
+  });
+}
+
 test(`A2: when quota runs out with a reset time, Metre shows it and sends "接着做" after the reset; starting a run yourself cancels it (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {

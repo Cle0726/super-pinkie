@@ -195,9 +195,28 @@
       if (row) row.dataset.error = '没批成：' + clip(error?.message || error, 40);
     }
   }
+  // 原生 openclaw-modal-dialog 用 top/left 50% + translate(-50%, -50%) 居中：卡高是奇数时上下边落在半像素上，
+  // 1px 横线（卡边、「N 个待处理」胶囊、次按钮上下边）被拆成两行半透明像素，实测只剩 2.0–2.9:1。
+  // Metre 下只给审批卡这一个弹层的影子根补一张样式表，改成 inset: 0 + margin: auto 居中（浏览器自带模态对话框就是这么居中的：
+  // 走布局、绘制时对齐整像素；showModal 进顶层也照样成立），宽度和高度上限照原生。
+  let snapSheet = null;
+  function snapModal(host) {
+    const m = host?.querySelector('openclaw-modal-dialog'), sr = m?.shadowRoot;
+    if (!sr) return;
+    if (!isMetre()) { m.removeAttribute('data-pk-snap'); return; }
+    try {
+      if (!snapSheet) {
+        snapSheet = new CSSStyleSheet();
+        snapSheet.replaceSync(':host([data-pk-snap]) dialog { inset: 0; height: fit-content; margin: auto; transform: none; }');
+      }
+      if (!sr.adoptedStyleSheets.includes(snapSheet)) sr.adoptedStyleSheets = [...sr.adoptedStyleSheets, snapSheet];
+      m.setAttribute('data-pk-snap', '');
+    } catch {}
+  }
   function paintApproval() {
     const host = approvalHost(), card = host?.querySelector('.exec-approval-card');
     if (!card) return;
+    snapModal(host);
     const mine = card.querySelector(':scope > .pk-perm-q');
     if (!isMetre()) { mine?.remove(); return; }
     const queue = Array.isArray(host.props?.queue) ? host.props.queue : [];
@@ -236,7 +255,7 @@
   }
   // 卡片开着时每秒对一次过期时间（一次性 setTimeout 链；卡片关了、离开 Metre 就停，不加循环定时器和观察器）
   let subTimer = 0;
-  const subTick = () => { clearTimeout(subTimer); if (!isMetre() || !approvalHost()?.querySelector('.exec-approval-card')) return; paintApproval(); subTimer = setTimeout(subTick, 1000); };
+  const subTick = () => { clearTimeout(subTimer); snapModal(approvalHost()); if (!isMetre() || !approvalHost()?.querySelector('.exec-approval-card')) return; paintApproval(); subTimer = setTimeout(subTick, 1000); };
   const approvalSoon = () => { for (const ms of [30, 250, 800]) setTimeout(paintApproval, ms); setTimeout(subTick, 900); };
   document.addEventListener('animationstart', (e) => { if (e.animationName === 'pk-perm-born') approvalSoon(); }, true);
 
