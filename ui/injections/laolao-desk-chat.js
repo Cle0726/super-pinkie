@@ -291,7 +291,7 @@
     if(vocab?.count)row.append(el('small','',`生词 ${vocab.count}`));const notes=(d.quiet||[]).find(item=>item.kind==='notes');if(notes?.count)row.append(el('small','',`闪卡 ${notes.count}`));
     main.replaceChildren(el('b', '', label+(lateAfter&&night?' · '+hm(lateAfter-1)+' 收工':'')), row, el('i', '', '翻到今日 →'));
     main.setAttribute('aria-label', `${label}：${parts.join('，')}。打开今日页`);
-    if (strip.nextElementSibling !== thread) thread.parentElement.insertBefore(strip, thread);
+    if (strip.nextElementSibling !== thread) { thread.parentElement.insertBefore(strip, thread); window.dispatchEvent(new Event('pinkie:desk-lesson-host')); } // 课程条可能比今晚条先画好（只能浮着）；今晚条插进来就叫它搬进 .pk-tonight-lesson
     strip.classList.toggle('pk-tonight--lesson', Boolean(strip.querySelector('.lesson-bar')));
   }
   function loadStrip({force = false} = {}) {
