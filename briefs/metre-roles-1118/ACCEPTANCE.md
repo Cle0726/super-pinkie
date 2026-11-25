@@ -16,6 +16,8 @@
 - **历史对照保留**：`1d83ad3b6e5001880143fea68392161897c4c1a7` 以及在 R0 存档的 `legacy-inject-baseline.json` 不更改。验收报告照列与它们的差异，不能将历史差异写成一致。
 - **本功能的回归门槛**：固定为集成前的主线 `99c3716a30370f74c371f981083522eb18af4e31`，不是后续滚动的 `origin/main`。以下 Z1、Z3、Z4 以这份源码作「改动前」对照。自带的 `main-inject-baseline.json` 是该主线的 Windows 记录；在其他平台用同一量具、同一隔离环境对固定提交和候选分别重放，不能从候选更新期望值。只归一量具的临时路径、平台路径分隔符和实时日期；其余文字与工具定义逐字比较。
 - **合并时的主线换代（2026-11-20）**：候选并入主线 `a85a7449` 后，主线 #31 自己给 12 个旧模式样例加了记忆规则，这不是角色功能引起的。按上一条「以固定的当前主线验回归」，合并验收的回归基线改为固定提交 `a85a7449103efa49674ed4f49725c1e93b943de0`：`main-inject-baseline.json` 由同一量具从**独立的 a85a7449 干净工作树**采集（不从候选生成），`99c3716a` 的原记录改名 `main-inject-baseline-99c3716a.json` 原样保留，与它的 12 条差异在 `REVIEW.md` 照列。
+- **手册改动的基线换代（2026-11-25，#121）**：官方新功能第 3 项有意改了 project / thinking 两个模式的工作手册（AGENTS.md 与 playbooks/data-and-charts.md），只这两个模式的 workspace 哈希变。按协调者 11-25 04:10 的决定，在 #121 头 494c5144（已含 main 3f598694）的**干净工作树**上用同一量具采集，只替换 project / thinking 两条记录，main / learning / unrestricted 三个模式与 metreToolsBefore 原样保留，overallSha256 按原算法重算。project 16a08dc6… → c541c4c2…，thinking ea0f63c1… → 6a5d466d…。
+- **CI 固定提交跟进（2026-11-25，#121 合并后）**：Linux 上 portable-checks / verify 不读提交的 `main-inject-baseline.json`，而是从 `METRE_MAIN_REFERENCE` 指的固定提交重采。#121 合并（`cb7931c30ef82b7ac591bec456bd0c2bb7ee048f`）后，按协调者 11-25 04:51，把 `ci.yml`、`verify.yml` 两处 `METRE_MAIN_REFERENCE` 从 `a85a7449` 改为 `cb7931c3`。在 cb7931c3 的**独立干净工作树**上用同一量具采集，与提交的基线比：project / thinking / prompts 逐字相同，main / learning / unrestricted 只差样例的 pluginChars / total 计数（各样例 sha256、workspace 与工具快照哈希不变）；用这份采集对当前主线 `--verify-baseline`，diffs 为空。提交的 `main-inject-baseline.json` 不改：它的 metreToolsBefore 是角色功能之前的工具定义，R1-11 关掉 metreRoles 后要和它逐字一致，不能换成 cb7931c3 上默认开着角色的定义。
 - 基线变化只改变识别「角色功能是否引入回归」的参照，不替代全量门禁、真实模型复判或发行包验收。
 
 ## 本次合并的模型验收（2026-11-19 用户确认）
