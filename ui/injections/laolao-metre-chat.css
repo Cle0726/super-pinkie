@@ -72,6 +72,8 @@ html[data-laolao-mode="metre"] .chat-reply-preview {
 }
 html[data-laolao-mode="metre"] .slash-menu-args,
 html[data-laolao-mode="metre"] .slash-menu-footer { color: var(--metre-chat-small); }
+/* 原生 .slash-menu-args 带 opacity: .65，字色再深也被冲淡：日间实画 #98958E / 2.56:1、夜间 3.38:1。和分组名一样拉回 1。 */
+html[data-laolao-mode="metre"] .slash-menu-args { opacity: 1; }
 
 /* M7 新消息，回到底部 */
 html[data-laolao-mode="metre"] .chat-new-messages {
