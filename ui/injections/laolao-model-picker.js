@@ -811,14 +811,14 @@
     }
     label.style?.setProperty?.("display", "none", "important");
     const decorated = owned.querySelector?.(":scope > .pinkie-external-tier");
-    if (owned.textContent === display && Boolean(decorated) === Boolean(tier)) return display;
-    if (!tier || !document.createTextNode || !owned.replaceChildren) {
-      owned.textContent = display;
-      return display;
-    }
+    const wrapped = owned.querySelector?.(":scope > .pinkie-external-model-name");
+    if (owned.textContent === display && Boolean(decorated) === Boolean(tier) && (wrapped || !owned.replaceChildren)) return display;
+    // Name in its own span even without a tier: owned is inline-flex (theme.css), where text-overflow draws no "…".
+    if (!owned.replaceChildren || (tier && !document.createTextNode)) return (owned.textContent = display);
     const model = document.createElement("span");
     model.className = "pinkie-external-model-name";
-    model.textContent = name;
+    model.textContent = model.title = name;
+    if (!tier) { owned.replaceChildren(model); return display; }
     const level = document.createElement("span");
     level.className = "pinkie-external-tier";
     level.textContent = LEVEL_LABELS[tier];

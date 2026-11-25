@@ -505,19 +505,49 @@ test(`at any width the ⋯ key stays on the row and clickable; a long model name
 });
 
 // 协调者 11-25 10:23 看 #94 图：① 只剩「详情」时看不出能展开（放手程度、先出方案在里面）；② win32 夜间模型名截成「gemini-3.6-flash · r」没有省略号。
-// 真页面的模型名 span 没有行内样式，上面几条测试给它写了 text-overflow 行内样式，所以没看出来。这里先拿掉行内样式，只靠 Metre 皮肤那条规则。
+// 真页面上看到的模型名不是原生 label，是模型选择器 writeTriggerLabel 另写的 .pinkie-trigger-label（原生 label 藏起来），
+// laolao-theme.css 把它设成 display:inline-flex !important——flex 容器上 text-overflow 不生效，名字直接写成它的文字就只会被硬裁。
+// 这里用真结构：上游给 label 的省略号规则、theme.css 那几条、选择器源码里的 writeTriggerLabel 原样搬过来（监工 11-25 10:47）。
+// 断言看「名字文字所在的那个元素」：它被截了、不是 flex 容器、自己带省略号。去掉名字外面那层 .pinkie-external-model-name 这条就红。
+const UPSTREAM_LABEL = '.chat-controls__inline-select-label{text-overflow:ellipsis;white-space:nowrap;min-width:0;line-height:1.35;overflow:hidden}';
+const THEME_TRIGGER = (() => {
+  const s = read('laolao-theme.css'), start = s.indexOf('html:not([data-laolao-plain-composer]) .agent-chat__input .chat-composer-model-control .pinkie-trigger-label {');
+  const endMark = '.chat-controls__model .pinkie-trigger-label .pinkie-external-tier { flex: none; }', end = s.indexOf(endMark, start);
+  assert.ok(start >= 0 && end > start, 'laolao-theme.css 里模型键 .pinkie-trigger-label 那几条还在');
+  return s.slice(start, end + endMark.length);
+})();
+const PICKER_WRITE = (() => {
+  const s = read('laolao-model-picker.js'), start = s.indexOf('function writeTriggerLabel('), end = s.indexOf('\n  function syncBrandMotion(', start);
+  const levels = s.match(/const LEVEL_LABELS = \{[^}]*\};/);
+  assert.ok(start >= 0 && end > start && levels, 'laolao-model-picker.js 里 writeTriggerLabel / LEVEL_LABELS 还在');
+  return `${levels[0]}\nwindow.__writeTriggerLabel = ${s.slice(start, end).trim()};`;
+})();
+async function realTriggerLabel(p, name) {
+  await p.addStyleTag({content: UPSTREAM_LABEL + '\n' + THEME_TRIGGER});
+  await p.addScriptTag({content: PICKER_WRITE});
+  await p.evaluate((full) => {
+    const s = document.querySelector('.chat-composer-model-control summary');
+    s.innerHTML = '<span class="chat-controls__inline-select-label">hy4flash-free</span>';   // 原生 label：Lit 写的名字不带「· 渠道」后缀
+    window.__writeTriggerLabel(s.firstElementChild, full, '');
+  }, name);
+  await p.evaluate(() => window.PinkieMetrePerm.refresh());
+  await p.waitForTimeout(400);
+}
 test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut model name ends in an ellipsis and the title is the full name (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
     const p = await open(browser, {width: 1280});
     await longModelRow(p);
-    await p.evaluate(() => document.querySelector('.chat-composer-model-control .chat-controls__inline-select-label').removeAttribute('style'));
+    await realTriggerLabel(p, LONG);
     const look = () => p.evaluate(() => {
       const box = document.querySelector('.pk-perm-chips'), name = box.querySelector('.pk-perm-chip--stat .pk-eng-chip__name');
-      const label = document.querySelector('.chat-composer-model-control .chat-controls__inline-select-label'), cs = getComputedStyle(label);
+      const owned = document.querySelector('.chat-composer-model-control .pinkie-trigger-label');
+      const walk = document.createTreeWalker(owned, NodeFilter.SHOW_TEXT); let t; while ((t = walk.nextNode()) && !t.textContent.trim());
+      const holder = t.parentElement, cs = getComputedStyle(holder);
       return {fold: box.dataset.fold, text: name.textContent, mark: getComputedStyle(name, '::after').content,
-        clipped: label.scrollWidth > label.clientWidth + 1, overflow: cs.overflowX, ellipsis: cs.textOverflow, nowrap: cs.whiteSpace,
-        title: document.querySelector('.chat-composer-model-control').getAttribute('title')};
+        ownedDisplay: getComputedStyle(owned).display, holder: holder.className, display: cs.display,
+        clipped: holder.scrollWidth > holder.clientWidth + 1, overflow: cs.overflowX, ellipsis: cs.textOverflow, nowrap: cs.whiteSpace,
+        nameTitle: holder.getAttribute('title'), title: document.querySelector('.chat-composer-model-control').getAttribute('title')};
     });
     const wide = await look();
     assert.equal(wide.fold, '0'); assert.ok(!/▾/.test(wide.mark), `全露时状态键不带 ▾（${JSON.stringify(wide)}）`);
@@ -532,8 +562,12 @@ test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut m
     assert.equal(tight.fold, '2', `这个宽度收到只剩「详情」（${JSON.stringify(tight)}）`);
     assert.equal(tight.text, '详情', '键的文字不变');
     assert.equal(tight.mark, '"▾"', `「详情」带 ▾，看得出能展开（${JSON.stringify(tight)}）`);
+    assert.equal(tight.ownedDisplay, 'inline-flex', `真结构：选择器自己的 label 是 inline-flex（${JSON.stringify(tight)}）`);
     assert.equal(tight.clipped, true, `模型名截了（${JSON.stringify(tight)}）`);
-    assert.deepEqual([tight.overflow, tight.ellipsis, tight.nowrap], ['hidden', 'ellipsis', 'nowrap'], `没有行内样式也有省略号（${JSON.stringify(tight)}）`);
+    assert.ok(!/flex/.test(tight.display) && tight.holder.includes('pinkie-external-model-name'),
+      `名字文字在自己的 .pinkie-external-model-name 里，不是直接写在 inline-flex 的 label 上（flex 容器不画「…」）（${JSON.stringify(tight)}）`);
+    assert.deepEqual([tight.overflow, tight.ellipsis, tight.nowrap], ['hidden', 'ellipsis', 'nowrap'], `截断处有省略号（${JSON.stringify(tight)}）`);
+    assert.equal(tight.nameTitle, LONG, '名字 span 的 title 是全名');
     assert.equal(tight.title, LONG, '模型键 title 给全名');
     await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
     await p.waitForSelector('.pk-perm-pop--detail');
