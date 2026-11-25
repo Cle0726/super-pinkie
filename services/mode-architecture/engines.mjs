@@ -14,6 +14,7 @@ import {registerEngineBridge} from './engines-bridge.mjs';
 import {registerEngineRegistry} from './engines-registry.mjs';
 import {EngineTasks, registerEngineTasks} from './engines-task.mjs';
 import {Players, registerPlayers} from './engines-players.mjs';
+import {registerEngineDispatch} from './engines-dispatch.mjs';
 
 export const T3_VERSION = '0.1.11';
 export const RELEASE_BASE = 'https://github.com/pingdotgg/t3code/releases/download';
@@ -354,6 +355,8 @@ export function registerEngines(api, {base = '', register, lineage = null} = {})
     shared.tasks ||= new EngineTasks({bridge: shared.bridge, lineage, players: shared.players, isEnabled: () => prefs().enabled === true, ensureRunning, logger: api.logger});
     shared.tasks.lineage = lineage; // 血缘每个状态目录只有一份；以最新注册的为准
     registerEngineTasks(api, {tasks: shared.tasks, register});
+    // 用户在 Metre 里选的外部引擎当主脑：它也能派活，走同一条路（engines-dispatch.mjs）。
+    shared.dispatch ||= registerEngineDispatch(api, {bridge: shared.bridge, lineage, tasks: shared.tasks, service, isEnabled: () => prefs().enabled === true});
   }
   if (!shared.booted) {
     shared.booted = true;
