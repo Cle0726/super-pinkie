@@ -15,9 +15,9 @@ html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manag
   display: none;
 }
 
-/* —— 侧栏顶上的「筛选」键：和「总谱」同一排、同一个样子；有筛选时底色标出来 —— */
+/* —— 侧栏顶上的「筛选」键：和「总谱」同一排；固定一个漏斗图标（侧栏别的键都不用），有筛选时底色标出来 —— */
 html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter {
-  --metre-ic: var(--metre-ic-updown);
+  --metre-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 4.5h13l-5 6.25v4.75l-3 1.5v-6.25z'/%3E%3C/svg%3E");
   width: 100%;
   cursor: pointer;
   text-align: left;
@@ -38,7 +38,7 @@ html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manag
   gap: 4px 10px;
   margin: 6px 10px 0;
   padding: 8px 10px;
-  color: var(--metre-muted);
+  color: color-mix(in srgb, var(--metre-muted) 80%, var(--metre-text)); /* 纯 muted 在日间底上只有 4.37:1，掺两成正文色到 ≥ 4.5:1 */
   font: 400 13px/1.5 var(--metre-sans);
 }
 html[data-laolao-mode="metre"] .pk-mw-filter-empty__text { min-width: 0; overflow-wrap: anywhere; }
@@ -65,7 +65,7 @@ html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-
 html[data-laolao-mode="metre"] .pk-mw-filter-menu {
   position: fixed;
   z-index: 60;
-  min-width: 188px;
+  min-width: 188px; box-sizing: border-box;
   max-width: calc(100vw - 16px);
   padding: 4px;
   background: var(--metre-surface);

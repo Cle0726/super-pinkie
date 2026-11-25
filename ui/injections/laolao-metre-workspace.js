@@ -142,7 +142,7 @@
     (document.querySelector('aside.sidebar') || document.body).append(menu);
     const r = btn.getBoundingClientRect();
     const o = menu.getBoundingClientRect();
-    menu.style.left = Math.round(r.left - (o.left || 0)) + 'px';
+    menu.style.left = Math.round(r.left - (o.left || 0)) + 'px'; menu.style.width = Math.round(r.width) + 'px'; // 和按键（= 侧栏列表那一栏）等宽：窄了右边会露出被切掉半截的会话行
     menu.style.top = Math.round(r.bottom + 4 - (o.top || 0)) + 'px';
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', outside, true);
