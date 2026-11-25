@@ -2,7 +2,10 @@
 // 11-24 uireview 打回 #85：静态页上量的夜间 6.78 / 6.23，真页面上只有 1.78——所有模式共用的 laolao-theme.css 给
 // 对话里的 code / pre 铺了不分日夜的 rgba(255,255,255,.52) !important，夜间叠成浅灰底，浅色字看不清（main 上普通代码 1.36）。
 // 读 CSS 文本抓不到这种「被别的文件压掉」的情况，所以这里截图读像素。
-// 反例写在同一个测试里：把 laolao-metre-code.css 里夜间代码块底色那条规则从页面上删掉，再量一次，必须掉到 4.5 以下。
+// 反例写在同一个测试里：把 laolao-metre-code.css 里夜间代码块底色那条规则从页面上删掉，再量一次。
+// 11-25 合 main 3434e8a2 后：#b4 的 laolao-metre-chat.css（B-C2）用满铺内阴影给 .code-block-wrapper pre 盖了谱纸底，
+// 围栏代码块不再靠这条规则（删掉后 diff 行仍有 8.9:1 以上，原反例不再成立）。这条规则现在护的是正文里的行内 code，
+// 所以反例改量行内 code：删掉后它必须掉到 4.5 以下；围栏代码块各行删掉后仍要 ≥ 4.5（两条规则各管一块）。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -13,7 +16,7 @@ import {
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
 
-const DIFF_REPLY = '改动如下：\n\n```diff\n@@ -1,3 +1,3 @@\n const a = 1;\n-const color = "red";\n+const color = "blue";\n export default a;\n```\n\n这是一段中英混排 mixed text。';
+const DIFF_REPLY = '改动如下：\n\n```diff\n@@ -1,3 +1,3 @@\n const a = 1;\n-const color = "red";\n+const color = "blue";\n export default a;\n```\n\n这是一段中英混排 mixed text，跑 `npm test` 看结果。';
 
 // 在页面里：截每一行的矩形，取出现最多的颜色当底色、离它最远的颜色当字，算 WCAG 对比度。
 async function measureRows(page) {
@@ -38,6 +41,10 @@ async function measureRows(page) {
       const r = rg.getBoundingClientRect();
       out.context = {x: r.left, y: r.top, width: r.width, height: r.height};
     }
+    // 正文里的行内 code（不在 pre 里）
+    const inl = [...document.querySelectorAll('.chat-text code')].find((c) => !c.closest('pre') && /npm test/.test(c.textContent));
+    const ri = inl?.getClientRects()[0];
+    if (ri) out.inline = {x: ri.left, y: ri.top, width: ri.width, height: ri.height};
     return out;
   });
   assert.ok(boxes, 'Metre 对话里没有渲染出 diff 代码块');
@@ -94,11 +101,13 @@ test('B-C3 real page: Metre night diff rows and plain code reach 4.5:1 (pixels),
       assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-pinkie-night')), theme === 'night');
       await page.waitForSelector('.chat-text pre code.language-diff .hljs-addition', {timeout: 10_000});
       const res = await measureRows(page);
-      for (const k of ['deletion', 'addition', 'context', 'meta']) {
-        assert.ok(res[k]?.ratio >= 4.5, `${theme}: ${k} 行对比度不到 4.5:1 — ${fmt(res)}`);
+      for (const k of ['deletion', 'addition', 'context', 'meta', 'inline']) {
+        assert.ok(res[k]?.ratio >= 4.5, `${theme}: ${k} 对比度不到 4.5:1 — ${fmt(res)}`);
       }
+      console.log(`ℹ ${theme}: ${fmt(res)}`);
       if (theme === 'night') {
-        // 反例：去掉夜间代码块底色的覆盖，删、加、上下文行必须掉回 4.5 以下（证明测试真能抓到这个问题）
+        // 反例：去掉夜间代码块底色的覆盖，正文里的行内 code 必须掉回 4.5 以下（证明测试真能抓到这个问题）；
+        // 围栏代码块现在由 laolao-metre-chat.css 的内阴影铺底，删掉这条后各行仍要 ≥ 4.5。
         const removed = await page.evaluate(() => {
           let n = 0;
           for (const sh of document.styleSheets) {
@@ -112,8 +121,10 @@ test('B-C3 real page: Metre night diff rows and plain code reach 4.5:1 (pixels),
         });
         assert.equal(removed, 1, '没找到夜间代码块底色那条规则');
         const bad = await measureRows(page);
-        for (const k of ['deletion', 'addition', 'context']) {
-          assert.ok(bad[k].ratio < 4.5, `反例没生效：去掉覆盖后 ${k} 行仍有 ${bad[k].ratio.toFixed(2)}:1 — ${fmt(bad)}`);
+        console.log(`ℹ night without override: ${fmt(bad)}`);
+        assert.ok(bad.inline.ratio < 4.5, `反例没生效：去掉覆盖后行内 code 仍有 ${bad.inline.ratio.toFixed(2)}:1 — ${fmt(bad)}`);
+        for (const k of ['deletion', 'addition', 'context', 'meta']) {
+          assert.ok(bad[k].ratio >= 4.5, `围栏代码块不该靠这条规则：去掉后 ${k} 行只有 ${bad[k].ratio.toFixed(2)}:1 — ${fmt(bad)}`);
         }
       }
     } finally {
