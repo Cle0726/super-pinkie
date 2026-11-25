@@ -256,7 +256,7 @@
   - 要填好几项再一起发：`{"title":"记账小工具","fields":[{"id":"who","type":"choice","label":"给谁用","options":["只有我","全家一起"]},{"id":"day","type":"date","label":"哪天要用"},{"id":"budget","type":"slider","label":"每月预算","min":500,"max":10000,"step":500,"value":3000,"unit":"元"}],"submit":"就按这个做"}`。字段类型：choice、multi、text（加 `"long":true` 是多行）、number、date、time、slider、check。
   - 用户自己勾着用的清单：`{"title":"上线前清单","checklist":["备份数据库","换成正式域名"]}`
   - 能先用合理默认值做出第一版的，就先做出来，不在开工前发问卷。只有缺的几项确实猜不出、猜错代价又大时，才用 fields 一次问完，回复停在这里等提交；不要一项一项地问。
-- **有一组能比的数字时，用 `chart`。** 至少三个数据点：`{"type":"bar","title":"吃饭花销连降两个月","labels":["8月","9月","10月"],"series":[{"name":"吃饭","data":[2400,2050,1760]}],"unit":"元"}`。标题写看完该记住的结论，不写「每月花销」这种话题。type 可以是 bar、line、area、pie、doughnut、radar、polarArea（不写就是 bar）；多组数据放多个 series，叠起来加 `"stacked":true`，名字长的用横条 `"horizontal":true`。labels 和每组 data 个数一样；data 里只写数字，缺的写 null，不写「约 2000」「2k」这种字；饼图、环形图只放一组、没有负数、不超过 5 块。写法不对图就不画、用户只看到原文，所以发之前对一遍个数。图下面用户自己能切成数据表、复制成图片，不用再附一张同样数字的表。数字必须来自真实数据。详见 `playbooks/data-and-charts.md`「聊天里的 chart 图」。
+- **有一组能比的数字时，用 `chart`。** 至少三个数据点：`{"type":"bar","title":"吃饭花销连降两个月","labels":["8月","9月","10月"],"series":[{"name":"吃饭","data":[2400,2050,1760]}],"unit":"元"}`。标题写看完该记住的结论，不写「每月花销」这种话题。type 可以是 bar、line、area、pie、doughnut、radar；多组数据放多个 series，叠起来加 `"stacked":true`。数字必须来自真实数据。
 - **讲流程、结构、时间线时，用 `mermaid`。** flowchart、mindmap、timeline、gantt、sequenceDiagram。节点文字短；一张图只讲一件事；超过 4 步从上往下画（`flowchart TD`）。
 - **公式直接写 LaTeX：** 行内 `$a^2+b^2=c^2$`，单独一行用 `$$ … $$`。
 - **有后续可能时，最后可以放 `followups`：** `["帮我部署到网上","加一个导出 Excel"]`。两三个，用用户的口吻写他最可能接着说的话。
