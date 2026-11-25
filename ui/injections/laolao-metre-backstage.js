@@ -58,7 +58,7 @@
     if (voices.length) {
       const n = (k) => voices.filter((v) => v.tone === k).length;
       const bits = [['fail', '失败'], ['wait', '等你'], ['run', '在跑']].filter(([k]) => n(k)).slice(0, 2).map(([k, w]) => `${n(k)} ${w}`);
-      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (n('fail') && n('wait') ? ` · ${n('fail')} 败 · ${n('wait')} 等` : bits.length ? ' · ' + bits[0] : ''), pop: true};   // 窄的时候：失败、等你同时有就两个数都留（「败」「等」，不用符号：读屏会念成乘号 / 叹号），否则留最要紧的一项（失败 > 等你 > 在跑）
+      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (bits.length ? ' · ' + (n('fail') && n('wait') ? bits.join(' · ') : bits[0]) : ''), pop: true};   // 窄的时候：失败、等你同时有就两个数都留（写全「1 失败 · 1 等你」，不缩成「败」「等」或符号：看不懂、读屏也念不对；格子放不下时省略号，悬停看全文），否则留最要紧的一项（失败 > 等你 > 在跑）
     } else eng = engines == null ? {tone: 'off', full: '引擎 还不知道', short: '引擎 —'}
       : !engines.enabled ? {tone: 'off', full: '引擎 关', short: '引擎 关'}
       : engines.running === false ? {tone: 'wait', full: '引擎 开 · 服务没在跑', short: '引擎 开'} : {tone: 'ok', full: '引擎 开', short: '引擎 开'};
@@ -73,7 +73,7 @@
       short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步 · 后台在跑'], ['sync', '不同步 · 后台空闲']]},
     queue: {full: ['排队 99'], short: ['排队 99']},
     eng: {full: ['引擎 还不知道', '引擎 关', '引擎 开 · 服务没在跑', ['pop', '引擎 99 · 9 等你 · 9 在跑'], ['pop', '引擎 99 · 9 失败 · 9 等你'], ['pop', '引擎 99 · 全部交回']],
-      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`]), ['pop', '引擎 99 · 9 败 · 9 等']]},
+      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`]), ['pop', '引擎 99 · 9 失败 · 9 等你']]},
   };
 
   // ---------- 画 ----------
