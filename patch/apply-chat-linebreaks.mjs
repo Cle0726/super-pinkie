@@ -3,12 +3,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {refreshPrecompressed} from './lib-precompressed.mjs';
-export const marker = '/* pinkie-chat-linebreaks:v3 */';
+export const marker = '/* pinkie-chat-linebreaks:v4 */';
+const MARKER_V3 = '/* pinkie-chat-linebreaks:v3 */';
+const MARKER_V2 = '/* pinkie-chat-linebreaks:v2 */';
+// v2/v3 wrote the 2026.7 rule as "__pkLineBreak(n)||U(n.content)", which renders a lone <br>
+// as the text "true". v4 writes "__pkLineBreak(n)?'<br>':U(n.content)". Names are read, not assumed.
+const OLD_LINE_BREAK = /__pkLineBreak\(([\w$]+)\)\|\|([\w$]+)\(\1\.content\)/g;
+function fixLineBreak(source) {
+  let count = 0;
+  const out = source.replace(OLD_LINE_BREAK, (_, node, escape) => {
+    count++;
+    return '__pkLineBreak(' + node + ")?'<br>':" + escape + '(' + node + '.content)';
+  });
+  return {count, out};
+}
+// In-place v3 -> v4 upgrade of an already patched chunk: rewrite only that expression and the
+// marker; every other patch already in the chunk stays byte for byte.
+function upgradeV3(source) {
+  const {count, out} = fixLineBreak(source);
+  if (count) return {changed:true, out:out.replace(MARKER_V3, marker)};
+  if (/__pkLineBreak\([\w$]+\)\?'<br>':/.test(source)) {
+    return {changed:false, reason:'v3 line-break expression is already correct; nothing to upgrade'};
+  }
+  return {changed:false, reason:'v3 marker found but __pkLineBreak(X)||Y(X.content) not found'};
+}
 export function patchSource(source) {
   if (source.includes(marker)) return {changed:false, reason:'already patched'};
   // Upgrade only the old helper, leaving every other bundle patch intact.
   // Parsing into the outer token array corrupts markdown-it's delimiter indices.
-  if (source.includes('/* pinkie-chat-linebreaks:v2 */')) {
+  if (source.includes(MARKER_V2)) {
     const start = source.indexOf('function __pkCjkStrong(md) {');
     const tail = '    state.pos = end+2; return true;\n  });\n}';
     const end = source.indexOf(tail, start);
@@ -17,9 +40,11 @@ export function patchSource(source) {
     }
     const helper = CJK_RULE.slice(CJK_RULE.indexOf('function __pkCjkStrong'));
     let out = source.slice(0,start)+helper.trimEnd()+source.slice(end+tail.length);
-    out = out.replace('/* pinkie-chat-linebreaks:v2 */',marker);
+    // v2 lands directly on v4: the same 2026.7 line-break fix as the v3 upgrade.
+    out = fixLineBreak(out.replace(MARKER_V2,marker)).out;
     return {changed:true,out:readableFallback(out)};
   }
+  if (source.includes(MARKER_V3)) return upgradeV3(source);
   // 2026.7 bundle: `renderer.rules.html_inline=(t,i)=>{let node=t[i];return …}`.
   const rule = /\.renderer\.rules\.html_inline=\((\w+),(\w+)\)=>\{let (\w+)=\1\[\2\];return \3\.meta\?\.taskListPlugin===!0\?\3\.content:(\w+)\(\3\.content\)\}/;
   // 2026.10 bundle: the rule is installed through a plugin and looks the token
@@ -34,7 +59,7 @@ export function patchSource(source) {
   if (rule.test(source)) {
     const match = source.match(rule);
     const [all,t,i,node,escape] = match;
-    out = source.replace(all, `.renderer.rules.html_inline=(${t},${i})=>{let ${node}=${t}[${i}];return ${node}.meta?.taskListPlugin===!0?${node}.content:__pkLineBreak(${node})||${escape}(${node}.content)}`);
+    out = source.replace(all, `.renderer.rules.html_inline=(${t},${i})=>{let ${node}=${t}[${i}];return ${node}.meta?.taskListPlugin===!0?${node}.content:__pkLineBreak(${node})?'<br>':${escape}(${node}.content)}`);
   } else if (currentMatch) {
     const [,head,array,index,token,,escape] = currentMatch;
     // Keep the native structural-HTML / inline-code escaping path untouched and
