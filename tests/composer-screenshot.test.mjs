@@ -10,15 +10,24 @@ import {fileURLToPath} from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 const TRAY = read('ui/injections/laolao-composer-tray.js');
+const SHOT = read('ui/injections/laolao-composer-shot.js');
+const DOMWATCH = read('ui/injections/laolao-dom-watch.js');
 
 test('I5 截图不自己造附件：只往原生 .agent-chat__photo-input 塞文件、发 change；不碰 chatAttachments；用共用通知；用完停掉屏幕流', () => {
-  const code = TRAY.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = SHOT.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.match(code, /querySelector\('\.agent-chat__photo-input'\)/);
   assert.match(code, /target\.dispatchEvent\(new Event\('change', \{bubbles: true\}\)\)/);
   assert.doesNotMatch(code, /chatAttachments|onAttachmentsChange/);
   assert.match(code, /new CustomEvent\('laolao:toast'/);
   assert.match(code, /track\.stop\(\)/);
-  assert.doesNotMatch(code, /new\s+MutationObserver/);
+  // 不新增观察器、定时器、window 全局名，不拼 HTML；页面变化走 domWatch。
+  assert.doesNotMatch(code, /new\s+MutationObserver|setInterval\s*\(|setTimeout\s*\(|window\.__[A-Za-z]|innerHTML/);
+  assert.match(SHOT, /window\.Pinkie\?\.domWatch\?\.watch\(/);
+  // 监工 07:13：已有的工具箱脚本不变长；截图整块在新文件里，工具箱里没有截图代码。
+  assert.doesNotMatch(TRAY, /getDisplayMedia|attach-shot/);
+  assert.match(read('ui/injections/laolao-head.fragment.html'), /<script defer src="\/laolao-composer-shot\.js\?v=@hash"><\/script>/);
+  const regions = JSON.parse(read('ui/injections/regions.json'));
+  assert.ok((Array.isArray(regions) ? regions : regions.regions).find((r) => r.id === 'composer').files.includes('laolao-composer-shot.js'));
 });
 
 // 和原生同形状的最小输入框：外壳里有工具按钮位、原生附件菜单（三项）、照片文件框。
@@ -63,8 +72,12 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
       };
       Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {value: fake, configurable: true});
     }, mode);
+    await tab.addScriptTag({content: DOMWATCH});
     await tab.addScriptTag({content: TRAY});
+    await tab.addScriptTag({content: SHOT});
     await tab.click('.pinkie-tray-btn');
+    // 截图那格由新文件在下一轮页面变化（domWatch，一帧）里补上，等它落定。
+    await tab.waitForTimeout(250);
     return tab;
   };
   const names = (tab) => tab.$$eval('.pinkie-tray__tiles .pinkie-tray__name', (list) => list.map((n) => n.textContent));
