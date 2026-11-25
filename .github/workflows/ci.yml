@@ -86,7 +86,11 @@ jobs:
           src=desktop/macos/pinkie/Sources
           xcrun swiftc -parse-as-library -typecheck \
             "$src/MaterialPreview.swift" "$src/BrowserControl.swift" \
-            "$src/ChatGPTBackgroundWorker.swift" "$src/PinkieNative.swift" "$src/Launcher.swift" \
+            "$src/ChatGPTBackgroundWorker.swift" "$src/PinkieNative.swift" \
+            "$src/LauncherRuntime.swift" "$src/LauncherViews.swift" \
+            "$src/LauncherServices.swift" "$src/LauncherBrowser.swift" \
+            "$src/LauncherWorkspace.swift" "$src/LauncherWebBridge.swift" \
+            "$src/Launcher.swift" \
             -framework AppKit -framework AVFoundation -framework Carbon \
             -framework Foundation -framework Speech -framework UserNotifications \
             -framework WebKit

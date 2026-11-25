@@ -6,7 +6,7 @@
 
 ```text
 1. 桌面壳（Desktop Shell）
-   ├─ macOS: desktop/macos/pinkie/Sources/Launcher.swift（WKWebView / 原生语音 / 更新 / 网关监管）
+   ├─ macOS: desktop/macos/pinkie/Sources/Launcher.swift + 6 个拆分模块（WKWebView / 原生语音 / 更新 / 网关监管）
    └─ Windows: app/windows_desktop.py + 8 个拆分模块（WebView2 / 原生托盘与玻璃 / 更新器 / 网关监管）
             │  拉起内置 Node + OpenClaw（或 C.le.）网关（18789）与本地配套服务
             ▼
@@ -52,7 +52,7 @@
 | **派对空间（Party Space）** | `services/party/server.py`、`services/party/live.py`、`services/party/openclaw-live.mjs`、`ui/injections/laolao-party-entry.js` | `tests/party_service_test.py`、`tests/party_stream_test.py`、`tests/party-entry.test.cjs` |
 | **圆桌（Roundtable）** | `services/roundtable/server.py`、`ui/injections/laolao-roundtable-entry.js` | `tests/roundtable_service_test.py`、`tests/roundtable_ui.test.cjs` |
 | **内置浏览器（In-App Browser）** | `app/inapp_browser.py`、`app/inapp_browser_host.py`、`app/inapp_browser_pages.py`、`app/browser_proxy.py`、`services/mode-architecture/app-browser.mjs` | `tests/app-browser-windows-fallback.test.mjs`、`tests/inapp_browser_scope_test.py`、`tests/browser_proxy_test.py` |
-| **更新器（Windows / macOS）** | `app/windows_updater.py`、`app/windows_update_guard.py`、`app/windows_ps_templates.py`、`desktop/macos/pinkie/Sources/Launcher.swift` | `tests/windows_update_test.py`、`tests/windows_update_ui_test.py`、`tests/windows_update_health_test.py`、`tests/guard_update_signature_test.py` |
+| **更新器（Windows / macOS）** | `app/windows_updater.py`、`app/windows_update_guard.py`、`app/windows_ps_templates.py`、`desktop/macos/pinkie/Sources/Launcher.swift`、`desktop/macos/pinkie/Sources/LauncherWebBridge.swift` | `tests/windows_update_test.py`、`tests/windows_update_ui_test.py`、`tests/windows_update_health_test.py`、`tests/guard_update_signature_test.py` |
 | **资源版本自动哈希（M2）** | `tools/assets/stamp.mjs`、`ui/injections/laolao-head.fragment.html`、`tools/ui-parity/bundle.py`、`installer/macos/apply-theme.sh`、`installer/windows/apply-theme.ps1`、`build-win.ps1` | `tests/windows-self-contained.test.cjs`、`tests/self-contained-app.test.cjs`、`tests/code-health-ratchet.test.mjs` |
 | **页面区域与共用观察器（M3）** | `ui/injections/REGIONS.md`、`ui/injections/regions.json`、`ui/injections/laolao-dom-watch.js` | `tests/ui-region-ownership.test.mjs`、`tests/shared-dom-watch.test.mjs` |
 | **视觉基线与热点护栏（M5）** | `tests/visual/lib/harness.mjs`、`tests/visual/lib/png-diff.mjs`、`tests/visual/baseline/home-chat-day.png` | `tests/visual-baseline.test.mjs`、`tests/hotspot-ui-regression.test.mjs` |
@@ -91,6 +91,18 @@
 | `app/windows_bridge.py` | `NativeBridge` 桌面桥接与附件/通知辅助函数 |
 | `app/windows_bridge_scripts.py` | 注入 WebView2 的前端桥接与原生阅读面脚本（`BRIDGE_SCRIPT`、`NATIVE_READING_SCRIPT`） |
 
+### 3.3 macOS 桌面壳（`desktop/macos/pinkie/Sources/`）
+
+| 模块 | 职责 |
+|---|---|
+| `desktop/macos/pinkie/Sources/Launcher.swift` | macOS 桌面壳主入口（`@main LauncherApp`、`LauncherMain`、`AppDelegate` 窗口/菜单/主聊天 `WKWebView` 生命周期） |
+| `desktop/macos/pinkie/Sources/LauncherRuntime.swift` | `RuntimeLayout` 内置运行时路径与环回免代理环境、`Gateway` 本地网关进程生命周期/归属核验/认证注入 |
+| `desktop/macos/pinkie/Sources/LauncherViews.swift` | 原生内置浏览器浮层拖拽与缩放手柄、`BrowserWorkspaceGeometry` 几何约束及 `MaterialDownloadContext` |
+| `desktop/macos/pinkie/Sources/LauncherServices.swift` | `PartyService`、`RoundtableService`、`DesktopControlService`（CuaDriver 与控制节点监管）及 `TTSService` |
+| `desktop/macos/pinkie/Sources/LauncherBrowser.swift` | 原生内置浏览器工作区、深浅色外观同步与网页版 ChatGPT 桥接控制 |
+| `desktop/macos/pinkie/Sources/LauncherWorkspace.swift` | 双栏分屏工作区（`companionWebView`）、派对/圆桌路由与浏览器工具栏动作 |
+| `desktop/macos/pinkie/Sources/LauncherWebBridge.swift` | `WKScriptMessageHandler` / `WKNavigationDelegate` / `WKDownloadDelegate` 前端桥接、手动更新拉起与网关健康巡检 |
+
 ---
 
 ## 四、关键工程规矩（M2 / M3 / M4 / 内核与补丁）
@@ -107,6 +119,7 @@
    - 新文件不得超过 **1500 行**；已有超过 1500 行的文件只许变小，改善后同步更新 `tools/health/baseline.json`。
    - 拆出 `services/mode-architecture/*.mjs` 新模块时，必须同步加入 `services/mode-architecture/setup.py` 和 `installer/macos/apply-theme.sh` 的文件清单。
    - 拆出 `app/windows_*.py` 新模块时，兄弟模块导入必须采用「顶层导入优先 + `except ImportError: from app.<mod>` 兜底」，确保 PyInstaller `--paths app` 冻结包不缺模块（由 `tests/windows_frozen_imports_test.py` 把关）。
+   - 拆出 `desktop/macos/pinkie/Sources/*.swift` 新模块时，必须同步加入 `desktop/macos/build.sh`、`installer/macos/apply-theme.sh`（单行 `LAUNCHER_SUPPORT_SOURCES`）和 `.github/workflows/ci.yml` 的 `swiftc` 编译清单（由 `tests/native-brand-isolation.test.cjs` 与 `tests/macos-ci-contract.test.cjs` 把关）。
 4. **内核、补丁与 Windows 快照边界（M6 已由 K3 取代）**：
    - **K5 切换前（当前 OpenClaw 补丁路径）**：修改 `patch/apply-*.mjs` 后，Windows 打包使用 `desktop/windows/mac-runtime/` 中的 Mac 预打补丁快照，必须在 Mac 上运行 `python3 tools/windows-package/refresh_mac_runtime.py` 刷新 `desktop/windows/mac-runtime/` 与 `SHA256SUMS`，否则 Windows 端不会拿到补丁修复。
    - **自有内核路径（C.le.，`Cle0726/cle-core`）**：内核源码改动全部在私有仓库 `Cle0726/cle-core` 中开发、跑三平台编译与反向 CI、发布 `.tgz` Release，然后在碧琪仓库更新 `core-manifest.json` 的版本号与 SHA-256 即可让碧琪用上；K5 切换后旧补丁与 Windows 快照同步退休。

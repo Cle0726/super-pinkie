@@ -6,10 +6,22 @@ const { runInNewContext } = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
+const readLauncher = () =>
+  [
+    'LauncherRuntime.swift',
+    'LauncherViews.swift',
+    'LauncherServices.swift',
+    'Launcher.swift',
+    'LauncherWorkspace.swift',
+    'LauncherBrowser.swift',
+    'LauncherWebBridge.swift',
+  ]
+    .map((file) => read(`desktop/macos/pinkie/Sources/${file}`))
+    .join('\n');
 
 test('macOS app ships and prefers its own gateway, node and python runtimes', () => {
   const build = read('desktop/macos/build.sh');
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   assert.match(build, /RUNTIME_ROOT\/openclaw/);
   assert.match(build, /RUNTIME_ROOT\/python/);
   assert.match(build, /RUNTIME_ROOT\/bin\/node/);
@@ -45,7 +57,7 @@ test('macOS app ships and prefers its own gateway, node and python runtimes', ()
 });
 
 test('the macOS Gateway credential reaches only the exact loopback main frame', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const helper = launcher.slice(launcher.indexOf('static func prepareNativeControlAuth('),
     launcher.indexOf('private static func endpoint('));
   assert.match(helper, /let task = process, task\.isRunning,[\s\S]*canonicalPath\(executable\.path\) == canonicalPath\(bundledNode\.path\)/);
@@ -83,7 +95,7 @@ test('macOS updater selects a build Node with npm when the bundled runtime has n
 });
 
 test('desktop launchers scope the unrestricted registered-tool policy to their private gateway', () => {
-  const mac = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const mac = readLauncher();
   const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const patcher = read('patch/apply-local-unrestricted-policy.mjs');
   const macTheme = read('installer/macos/apply-theme.sh');
@@ -113,7 +125,7 @@ test('macOS updater removes only its old app rollback copies after a healthy ins
 });
 
 test('macOS launcher replaces only a stale gateway proven to belong to an older CLE Kk app', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   assert.match(launcher, /private static let bundledNodeSuffix = "\/Contents\/Resources\/SuperPinkie\/runtime\/bin\/node"/);
   assert.match(launcher, /task\.executableURL = lsof/);
   assert.match(launcher, /"-sTCP:LISTEN", "-Fp"/);
@@ -152,7 +164,7 @@ test('macOS hotfix keeps the same stable local identity used by full builds', ()
 });
 
 test('macOS gateway provenance detects an old executable replaced at the same app path', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   assert.match(launcher, /private struct ExecutableIdentity: Equatable/);
   assert.match(launcher, /let device: UInt64\s+let inode: UInt64/);
   assert.match(launcher, /mappedExecutableIdentity\(for pid: pid_t, matching executablePath: String\)/);
@@ -164,7 +176,7 @@ test('macOS gateway provenance detects an old executable replaced at the same ap
 
 test('macOS app owns an unrestricted computer-control driver and capable node', () => {
   const build = read('desktop/macos/build.sh');
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const manifest = read('desktop/macos/runtime-manifest.json.in');
   assert.match(build, /CUA_DRIVER_VERSION="0\.22\.0"/);
   assert.match(build, /59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727/);
@@ -181,7 +193,7 @@ test('macOS app owns an unrestricted computer-control driver and capable node', 
   assert.match(manifest, /"cuaDriver": "@CUA_DRIVER_VERSION@"/);
 
   assert.match(launcher, /OPENCLAW_CUA_DRIVER_ENDPOINT/);
-  assert.match(launcher, /private final class DesktopControlService/);
+  assert.match(launcher, /(?:private )?final class DesktopControlService/);
   assert.match(launcher, /mode extension consumes[\s\S]{0,120}`computer` tool/);
   assert.match(launcher, /URL\(fileURLWithPath: "\/tmp"/);
   assert.match(launcher, /clekk-cua-/);
@@ -238,7 +250,7 @@ test('installed App keeps every runtime repair patch beside its cold-start boots
 });
 
 test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const windows = read('app/windows_desktop.py') + '\n' + read('app/windows_runtime.py');
   const setup = read('services/mode-architecture/setup.py');
   for (const source of [launcher, windows]) {
@@ -252,7 +264,7 @@ test('packaged runtimes ignore upstream update feeds and keep the CLE Kk updater
 });
 
 test('native startup uses the bundled opaque mascot video instead of exposing the desktop', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const loading = read('ui/launcher-loading.html');
   assert.match(launcher, /ui\/launcher-loading\.html/);
   assert.match(loading, /<video class="scene"/);
@@ -415,7 +427,7 @@ test('source updaters make persona manuals follow the official version and keep 
 });
 
 test('macOS manual update leaves the gateway page before replacing the App', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const updater = read('installer/macos/detached-update.sh');
   assert.match(launcher, /laolaoUpdate/);
   assert.match(launcher, /主动拉取更新/);
