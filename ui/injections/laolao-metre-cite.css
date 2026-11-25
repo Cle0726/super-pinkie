@@ -81,7 +81,7 @@ html[data-laolao-mode="metre"] .pk-mcite-card__n {
   border-radius: 3px; background: var(--metre-accent, #C96442); color: var(--metre-bg, #FAF9F5);
   font: 600 10px/1 var(--metre-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums;
 }
-html[data-laolao-mode="metre"] .pk-mcite-card__host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+html[data-laolao-mode="metre"] .pk-mcite-card__host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 25%, var(--metre-muted, #73726C)); }
 html[data-laolao-mode="metre"] .pk-mcite-card__title {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
   font: 600 13px/1.4 var(--metre-sans, system-ui, sans-serif); color: var(--metre-text, #1F1E1D);
@@ -90,7 +90,7 @@ html[data-laolao-mode="metre"] .pk-mcite-card__snippet {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere;
   margin: 4px 0 0; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 78%, var(--metre-muted, #73726C));
 }
-html[data-laolao-mode="metre"] .pk-mcite-card__foot { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--metre-line, #E8E6DC); font-size: 11px; color: var(--metre-muted, #73726C); }
+html[data-laolao-mode="metre"] .pk-mcite-card__foot { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--metre-line, #E8E6DC); font-size: 11px; color: color-mix(in srgb, var(--metre-text, #1F1E1D) 25%, var(--metre-muted, #73726C)); }
 
 /* M14 朗读键（laolao-metre-read.js）：和回答底部其他按键同一个样子；正在念时用强调色，按键区保持显示（共用规则看 aria-pressed）。
  * 键可能在碧琪按键行里，也可能退回原生底部按键区：原生 .chat-group-footer button 不悬停时 opacity:0、pointer-events:none，
