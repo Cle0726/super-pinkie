@@ -41,7 +41,10 @@ export function pinkieModels(config = {}, {health = null, family = 'claude'} = {
     const entry = providers[item.provider] || {};
     const model = item.id.slice(item.provider.length + 1);
     const base = upstreamBase(entry.baseUrl);
-    const fits = family === 'codex' ? (entry.api === 'openai-responses' || isLoopback(base)) : /claude/i.test(model);
+    // chat = OpenCode 那条路（上游要有 OpenAI /v1/chat/completions：提供方标了 openai-completions，或者是本机网关）。
+    const fits = family === 'codex' ? (entry.api === 'openai-responses' || isLoopback(base))
+      : family === 'chat' ? (entry.api === 'openai-completions' || isLoopback(base))
+      : /claude/i.test(model);
     return fits && !LOW_EFFORT.test(model) && tierOf(item.id) === 'top' && base && String(entry.apiKey || '').trim();
   }).map(item => ({slug: item.id, name: item.name, failing: failing(health, item.id)}))
     // 能用的在前；同一档里版本号大的在前（claude-opus-5-5 排在 claude-opus-4-7 前面），不带思考后缀的在前。默认用第一个。
@@ -97,12 +100,12 @@ export class PinkieRelay {
     this.config = config; this.logger = logger; this.fetchImpl = fetchImpl;
     Object.defineProperty(this, 'token', {value: token, enumerable: false});
     // defaultModel：Claude Code 那条路的默认模型；codexModel：Codex 那条路的。
-    this.server = null; this.port = 0; this.defaultModel = ''; this.codexModel = '';
+    this.server = null; this.port = 0; this.defaultModel = ''; this.codexModel = ''; this.chatModel = '';
   }
 
   get baseUrl() { return this.port ? `http://127.0.0.1:${this.port}` : ''; }
   // 日志和快照里只出现这些。
-  toJSON() { return {running: Boolean(this.server), port: this.port, defaultModel: this.defaultModel, codexModel: this.codexModel}; }
+  toJSON() { return {running: Boolean(this.server), port: this.port, defaultModel: this.defaultModel, codexModel: this.codexModel, chatModel: this.chatModel}; }
 
   async start() {
     if (this.server) return this;
@@ -146,26 +149,29 @@ export class PinkieRelay {
       return res.end(JSON.stringify({data, has_more: false, first_id: data[0]?.id || null, last_id: data.at(-1)?.id || null}));
     }
     // 两条路：Claude Code 走 Anthropic /v1/messages，Codex 走 OpenAI /v1/responses（上游原生就有，不做协议转换）。
+    // 第三条：OpenCode 走 OpenAI /v1/chat/completions（本机网关原生有）。codex / chat 两条路都用 OpenAI 的头和错误格式。
     const codex = url.pathname === '/v1/responses';
+    const chat = url.pathname === '/v1/chat/completions';
     const claude = /^\/v1\/messages(?:\/count_tokens)?$/.test(url.pathname);
-    const opts = {openai: codex};
-    if (req.method !== 'POST' || !(codex || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages 和 /v1/responses');
+    const openai = codex || chat;
+    const opts = {openai};
+    if (req.method !== 'POST' || !(openai || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages、/v1/responses 和 /v1/chat/completions');
     const chunks = []; let size = 0;
     for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts); chunks.push(chunk); }
     let body;
     try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
     const config = this.config();
-    const family = codex ? 'codex' : 'claude';
-    const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : this.defaultModel);
-    if (!route) return this.fail(res, 503, 'api_error', `碧琪这边没有能给 ${codex ? 'Codex' : 'Claude Code'} 用的模型`, opts);
+    const family = codex ? 'codex' : chat ? 'chat' : 'claude';
+    const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : chat ? this.chatModel : this.defaultModel);
+    if (!route) return this.fail(res, 503, 'api_error', `碧琪这边没有能给 ${codex ? 'Codex' : chat ? 'OpenCode' : 'Claude Code'} 用的模型`, opts);
     const entry = config?.models?.providers?.[route.provider] || {};
     const key = String(entry.apiKey || '').trim();
     const base = upstreamBase(entry.baseUrl);
     if (!key || !base) return this.fail(res, 503, 'api_error', '碧琪这个上游没配好', opts);
-    const headers = codex ? {authorization: `Bearer ${key}`} : {'x-api-key': key, authorization: `Bearer ${key}`};
-    for (const name of codex ? OPENAI_PASS_HEADERS : PASS_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
+    const headers = openai ? {authorization: `Bearer ${key}`} : {'x-api-key': key, authorization: `Bearer ${key}`};
+    for (const name of openai ? OPENAI_PASS_HEADERS : PASS_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
     headers['content-type'] ||= 'application/json';
-    if (!codex) headers['anthropic-version'] ||= '2023-06-01';
+    if (!openai) headers['anthropic-version'] ||= '2023-06-01';
     const upstream = await this.fetchImpl(base + url.pathname, {method: 'POST', headers, body: JSON.stringify({...body, model: route.model})});
     const out = {'content-type': upstream.headers.get('content-type') || 'application/json'};
     for (const name of ['retry-after', 'anthropic-ratelimit-requests-reset', 'anthropic-ratelimit-tokens-reset', 'request-id',
@@ -176,7 +182,7 @@ export class PinkieRelay {
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '');
       res.writeHead(upstream.status, out);
-      const fallback = codex ? {error: {type: 'api_error', message: `上游 ${upstream.status}`}} : {type: 'error', error: {type: 'api_error', message: `上游 ${upstream.status}`}};
+      const fallback = openai ? {error: {type: 'api_error', message: `上游 ${upstream.status}`}} : {type: 'error', error: {type: 'api_error', message: `上游 ${upstream.status}`}};
       return res.end(this.scrub(text) || JSON.stringify(fallback));
     }
     res.writeHead(upstream.status, out);
@@ -264,4 +270,46 @@ export function codexLaunchArgs({baseUrl, token}) {
 export function codexPinkieInstance(dir, models, {baseUrl, token}) {
   return {driver: 'codex', displayName: `Codex · ${PINKIE_LABEL}`, enabled: true,
     config: {shadowHomePath: dir, launchArgs: codexLaunchArgs({baseUrl, token}), customModels: models.map(model => ({slug: model.slug, name: model.name}))}};
+}
+
+// 每一家能不能切到「碧琪模型」（11-25 在引擎服务 0.1.11 里逐家查的，表在 build/quick-run/engines/pinkie-upstream-others-1125.md）。
+// row：能的那几家对应的固定实例；why：不能的那几家给用户看的一句原因（界面上不出现引擎服务的名字）。
+export const PINKIE_UPSTREAM = Object.freeze({
+  claudeAgent: {row: PINKIE_INSTANCE},
+  codex: {row: 'codex-pinkie'},
+  opencode: {row: 'opencode-pinkie'},
+  pi: {why: '还没接上：要先在这台电脑上装 Pi 核对它的模型配置'},
+  antigravity: {why: '只能用 Google 账号或 Gemini 的 API 密钥，没有换上游的口子'},
+  cursor: {why: '模型在 Cursor 自己的服务器上跑，只能用 Cursor 账号'},
+  fx: {why: '模型在 fx 自己那边跑，只能用 fx 账号'},
+  grok: {why: '只能用 Grok 自己的登录'},
+  kiro: {why: '模型在 Kiro 那边跑，只能用 Kiro 账号'},
+  muse: {why: '只能用 Muse Code 自己的登录'},
+  acpRegistry: {why: '从注册表加的引擎要逐个核对，暂时还不能切'},
+});
+export const pinkieUpstreamOf = driver => PINKIE_UPSTREAM[driver] || {why: '这一家还没核对能不能换上游'};
+
+// ---- OpenCode 那一家 ----
+// 引擎服务起 OpenCode 服务器时，把实例的 environment 合进子进程，并且原样传 OPENCODE_CONFIG_CONTENT（0.1.11 里核对过）。
+// OpenCode 把这段配置叠在用户自己的 opencode.json 上，所以用户的文件不动。
+// - provider「pinkie」：@ai-sdk/openai-compatible，baseURL 指转发口 /v1（走 /v1/chat/completions）。
+// - apiKey 直接写转发口的会话令牌（不是上游钥匙）。OpenCode 1.18 里没核到 {env:} 替换，不靠它；
+//   整个 OPENCODE_CONFIG_CONTENT 标 sensitive，引擎服务把这种值另存，不和设置放一起。
+// - 模型名：引擎服务在第一个「/」处拆成 providerID / modelID，所以菜单里的名字是「pinkie/<碧琪的模型名>」，
+//   转发口收到的就是碧琪的模型名（gw/aws-quick/…）。思考开最高档（@ai-sdk/openai-compatible 的 reasoningEffort → reasoning_effort）。
+export const OPENCODE_PINKIE_INSTANCE = 'opencode-pinkie';
+export const OPENCODE_PROVIDER_ID = 'pinkie';
+
+export function openCodeConfigContent({baseUrl, token, models}) {
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(String(baseUrl || ''))) throw new Error('转发口地址不对');
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(String(token || ''))) throw new Error('转发口令牌不对');
+  const entries = Object.fromEntries(models.map(model => [model.slug, {name: model.name || model.slug, options: {reasoningEffort: TOP_EFFORT}}]));
+  return JSON.stringify({provider: {[OPENCODE_PROVIDER_ID]: {npm: '@ai-sdk/openai-compatible', name: PINKIE_LABEL,
+    options: {baseURL: `${baseUrl}/v1`, apiKey: token}, models: entries}}});
+}
+
+export function openCodePinkieInstance(models, {baseUrl, token}) {
+  return {driver: 'opencode', displayName: `OpenCode · ${PINKIE_LABEL}`, enabled: true,
+    environment: [{name: 'OPENCODE_CONFIG_CONTENT', value: openCodeConfigContent({baseUrl, token, models}), sensitive: true}],
+    config: {customModels: models.map(model => ({slug: `${OPENCODE_PROVIDER_ID}/${model.slug}`, name: model.name}))}};
 }
