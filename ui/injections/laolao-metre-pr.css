@@ -1,0 +1,32 @@
+/* laolao-metre-pr.css —— 「PR 一条龙」那一页（laolao-metre-pr.js），只在 Metre。
+ * 页面骨架用工作台自己的 .pk-wb-page；这里只管三段的排版。颜色全用 Metre 变量；按钮边框用 --metre-muted（日夜对底都 ≥ 3:1，#104 打回的教训）。
+ * 选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名，不用强制覆盖。 */
+html[data-laolao-mode="metre"] .pk-mpr { max-width: 860px; font: 400 13px/1.55 var(--metre-sans); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mpr__bar, html[data-laolao-mode="metre"] .pk-mpr__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+html[data-laolao-mode="metre"] .pk-mpr__busy, html[data-laolao-mode="metre"] .pk-mpr__meta { color: var(--metre-muted); font-size: 12px; }
+html[data-laolao-mode="metre"] .pk-mpr__pick { max-width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); color: var(--metre-text); font: inherit; }
+html[data-laolao-mode="metre"] .pk-mpr__sec { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--metre-line-strong); border-radius: 8px; background: var(--metre-surface); }
+html[data-laolao-mode="metre"] .pk-mpr__h { margin: 0 0 10px; font: 600 14px/1.3 var(--metre-sans); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mpr__btn { appearance: none; height: 28px; padding: 0 12px; border: 1px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); color: var(--metre-text); font: 500 12px/26px var(--metre-sans); cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-mpr__btn:is(:hover, :focus-visible):not(:disabled) { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-mpr__btn:focus-visible { outline: 2px solid var(--metre-accent); outline-offset: 1px; }
+html[data-laolao-mode="metre"] .pk-mpr__btn--main { border-color: var(--metre-accent); background: var(--metre-accent); color: var(--metre-surface); }   /* 日 白字 / #2F4BB0，夜 #232321 / #93A5EE，字都 ≥ 4.5:1 */
+html[data-laolao-mode="metre"] .pk-mpr__btn--main:is(:hover, :focus-visible):not(:disabled) { background: var(--metre-accent); filter: brightness(1.08); }
+html[data-laolao-mode="metre"] .pk-mpr__btn:disabled { cursor: not-allowed; border-color: var(--metre-muted); background: var(--metre-hover); color: var(--metre-muted); filter: none; }
+html[data-laolao-mode="metre"] .pk-mpr__msg { margin: 6px 0; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .pk-mpr__msg--error { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mpr__why { color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mpr__findings { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+html[data-laolao-mode="metre"] .pk-mpr__finding { display: grid; grid-template-columns: auto auto minmax(0, auto) 1fr; align-items: start; gap: 8px; padding: 6px 8px; border-left: 3px solid var(--metre-muted); border-radius: 4px; background: var(--metre-bg); }
+html[data-laolao-mode="metre"] .pk-mpr__finding--high { border-left-color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mpr__finding--medium { border-left-color: var(--metre-accent); }
+html[data-laolao-mode="metre"] .pk-mpr__sev { font: 600 12px/20px var(--metre-sans); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mpr__file { height: 20px; padding: 0 6px; border: 0; background: none; color: var(--metre-accent); font: 400 12px/20px var(--metre-mono, monospace); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mpr__ftext p { margin: 2px 0 0; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .pk-mpr__step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 6px; cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-mpr input[type="checkbox"] { width: 14px; height: 14px; margin: 3px 0 0; accent-color: var(--metre-accent); }
+html[data-laolao-mode="metre"] .pk-mpr__phase { font-size: 12px; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .pk-mpr__phase--failed { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mpr__body { display: block; box-sizing: border-box; width: 100%; margin: 4px 0 10px; padding: 6px 8px; border: 1px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); color: var(--metre-text); font: inherit; resize: vertical; }
+html[data-laolao-mode="metre"] .pk-mpr__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--metre-accent); border-radius: 6px; }
+html[data-laolao-mode="metre"] .pk-mpr__confirm p { flex: 1 1 100%; margin: 0; }

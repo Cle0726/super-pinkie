@@ -257,7 +257,9 @@
         "laolao-metre-display.css",
         "laolao-metre-chat.css",
         "laolao-metre-allow.css",
-        "laolao-metre-allow.js"
+        "laolao-metre-allow.js",
+        "laolao-metre-pr.css",
+        "laolao-metre-pr.js"
       ]
     },
     {
