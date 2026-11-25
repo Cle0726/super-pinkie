@@ -1,0 +1,5 @@
+/* 作品装成桌面应用（PR①）：装到桌面对话框的名字框、设置里「已装的应用」列表。颜色跟弹层走 currentColor。 */
+.pk-apps-dialog__name { box-sizing:border-box;width:100%;height:34px;margin:0 0 16px;padding:0 10px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:14px }
+.pk-apps-dialog__name:focus-visible { outline:2px solid color-mix(in srgb,currentColor 45%,transparent);outline-offset:1px }
+.pk-apps-list { display:flex;flex-direction:column;gap:2px }
+.pk-apps-row__actions { display:flex;gap:6px;flex-shrink:0 }

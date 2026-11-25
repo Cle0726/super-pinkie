@@ -328,7 +328,7 @@
     const remove = button('从作品库移除', 'pinkie-art-btn pinkie-art-btn--quiet', () => void doRemove());
     const close = button('关闭预览', 'pinkie-art-close', () => finish(), '×');
     const actions = el('div', 'pinkie-art-view__actions');
-    actions.append(open, reveal, remove, close);
+    actions.append(open, reveal, remove, close); window.dispatchEvent(new CustomEvent('pinkie:art-viewer', {detail: {item, actions}}));
     head.append(name, versions, actions);
     const body = el('div', 'pinkie-art-view__body');
     const status = el('p', 'pinkie-art-status');

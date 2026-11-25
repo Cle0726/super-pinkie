@@ -156,6 +156,8 @@
         "laolao-message-actions.js",
         "laolao-artifacts.css",
         "laolao-artifacts.js",
+        "laolao-desktop-apps.css",
+        "laolao-desktop-apps.js",
         "laolao-phrases.js",
         "laolao-biqi-notices.js",
         "laolao-first-person.js",
