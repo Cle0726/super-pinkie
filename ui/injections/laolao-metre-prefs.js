@@ -25,6 +25,7 @@
   const SEND_KEY = 'pinkie.metre.prefs.sendKey';
   const MOD = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || '') ? '⌘' : 'Ctrl';
   const SEND = [['enter', 'Enter'], ['modifier-enter', MOD + ' + Enter']];
+  const SUGGEST_KEY = 'pinkie.metre.prefs.nextSuggest', SUGGEST = [['on', '开'], ['off', '关']]; // I8：laolao-metre-suggest.js 读同一个键，off = 关
   const valid = (v) => SCROLL.some(([k]) => k === v);
   const known = (list, v, dflt) => (list.some(([k]) => k === v) ? v : dflt);
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
@@ -40,7 +41,7 @@
   const leading = () => known(LEADING, readKey(LEAD_KEY), 'normal');
   const sendKey = () => known(SEND, readKey(SEND_KEY), 'enter');
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], sendBtns = [], note = null;
+  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], sendBtns = [], suggestBtns = [], note = null;
 
   // G2：把字号 / 行距写成根元素上的变量；「标准」档去掉变量，Metre 规则回到原来的 15.5px / 1.7。
   function applyLook() {
@@ -77,6 +78,7 @@
     mark(textBtns, textSize());
     mark(leadBtns, leading());
     mark(sendBtns, sendKey());
+    mark(suggestBtns, readKey(SUGGEST_KEY) === 'off' ? 'off' : 'on');
     note.hidden = !waiting;
   }
   function chooseScroll(key) {
@@ -124,8 +126,9 @@
     // 组合键里用不换行空格，「Ctrl + Enter」不会被拆成两行（look.py 1024 / 1440 夜）。
     const combo = (MOD + ' + Enter').replace(/ /g, ' ');
     const [sendRow, nb] = segRow('pk-metre-prefs-send', '发送键', `按哪个键发出去。选 ${combo} 时，Enter 只换行。`, SEND, 'send', (k) => chooseLook(SEND_KEY, 'enter', k));
-    textBtns = tb; leadBtns = lb; sendBtns = nb;
-    card.append(scrollRow, note, textRow, leadRow, sendRow);
+    const [suggestRow, gb] = segRow('pk-metre-prefs-suggest', '下一句建议', '回答完在输入框上方给两三条接着问的话，点一下只填进输入框，不会直接发出去。', SUGGEST, 'suggest', (k) => { writeKey(SUGGEST_KEY, k === 'off' ? 'off' : ''); paint(); window.Pinkie?.metreSuggest?.check(); });
+    textBtns = tb; leadBtns = lb; sendBtns = nb; suggestBtns = gb;
+    card.append(scrollRow, note, textRow, leadRow, sendRow, suggestRow);
     const footer = target.querySelector('.' + S + 'footer');
     footer ? footer.before(card) : target.append(card);
     paint();
