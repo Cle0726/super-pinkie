@@ -429,6 +429,38 @@ test('Metre 的 pinkie_mode_ask：可以问五个模式，模型规则同样生�
   assert.match(pending.key, /^agent:unrestricted:pinkie-child:/);
 });
 
+// mac3 11-25（#96 11:12Z）：Mac 上单文件跑，上面这条和后两条必现 cancelledByParent。ask() 里唯一的超时定时器被 unref()，
+// 别的事都做完时事件循环提前退出，ask() 等不到超时就没了。Windows 上整文件跑有别的定时器撑着，暴露不出来，
+// 所以这里把 ask() 单独放进一个子进程里跑：它是唯一还在等的事。改前子进程没打出 DONE 就退出，这条失败。
+test('pinkie_mode_ask 的超时定时器撑得住事件循环：单独跑 ask() 也等得到超时', async t => {
+  const {spawnSync} = await import('node:child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'metre-ask-alone-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const lineageUrl = new URL('../services/mode-architecture/session-lineage.mjs', import.meta.url).href;
+  const script = [
+    `import {SessionLineage} from ${JSON.stringify(lineageUrl)};`,
+    `const metre = ${JSON.stringify(metre)}, entries = new Map([[metre, {key: metre, sessionId: 'id', label: '总控'}]]);`,
+    `const config = ${JSON.stringify(CONFIG)};`,
+    'const access = {entry: async key => entries.get(key) || null, list: async () => ({entries: Object.fromEntries(entries), dir: process.cwd()}),',
+    '  async rpc(method, params) {',
+    "    if (method === 'sessions.create') { entries.set(params.key, {key: params.key, sessionId: 's', label: params.label}); return {key: params.key, sessionId: 's'}; }",
+    "    if (method === 'pinkie.project.bind') return {binding: {root: process.cwd(), name: 'x'}};",
+    "    if (method === 'sessions.list') return {sessions: []};",
+    "    if (method === 'chat.history') return {messages: []};",
+    '    return {ok: true};',
+    '  }};',
+    "const lineage = new SessionLineage({logger: {warn() {}}}, {root: process.cwd(), titles: {access, record() {}}, isBusy: () => false, stopped: () => false,",
+    '  schedule: () => ({unref() {}}), config: () => config, stopTimeoutMs: 2000, askTimeoutMs: 10});',
+    "const out = await lineage.ask(metre, 'human', {mode: 'unrestricted', question: '这段话怎么改', model: 'mm/workbuddy/glm-5.3'}, 'q1');",
+    "console.log('DONE', out.pending === true);",
+  ].join('\n');
+  const file = path.join(dir, 'ask-alone.mjs');
+  fs.writeFileSync(file, script);
+  const run = spawnSync(process.execPath, [file], {cwd: dir, encoding: 'utf8', timeout: 30_000});
+  assert.match(run.stdout, /DONE true/, `ask() 单独跑也要等到超时、回「还在想」（exit=${run.status} stderr=${String(run.stderr).slice(0, 300)}）`);
+  assert.equal(run.status, 0);
+});
+
 test('chooseChildModel 的边界：没有目录时只按默认比较；目标模式没默认时不拦', () => {
   assert.throws(() => chooseChildModel({config: {}, selfModel: SELF, requested: 'x/y'}), /没有/);
   assert.deepEqual(chooseChildModel({config: {}, selfModel: SELF, targetAgent: 'project'}), {model: '', explicit: false});
