@@ -1433,7 +1433,7 @@
     "ui/injections/laolao-metre-contrast.css": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 27,
+      "lines": 30,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,

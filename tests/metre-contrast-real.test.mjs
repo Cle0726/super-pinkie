@@ -46,9 +46,14 @@ function readContrast() {
       if (cs.color !== tokens.muted || cs.visibility === 'hidden' || cs.display === 'none') continue;
       const r = el.getBoundingClientRect();
       if (r.width < 2 || r.height < 2) continue;
-      const ink = rgb(cs.color).slice(0, 3); const bg = bgOf(el);
+      const bg = bgOf(el);
+      // 11-25：侧栏时间 / 分组标题自己带 opacity（.56 / .7），只看 color 会把实际 2.5:1 的字算成 6:1。按自己和祖先的透明度连乘，把字色混到底上再算。
+      let op = 1;
+      for (let n = el; n && n.nodeType === 1; n = n.parentElement) op *= Number(getComputedStyle(n).opacity);
+      if (op < 0.05) continue;   // 悬停才出现的行内按键等，平时就是全透明、看不见，不算
+      const raw = rgb(cs.color); const alpha = (raw[3] === undefined ? 1 : raw[3]) * op;
+      const ink = raw.slice(0, 3).map((v, i) => alpha * v + (1 - alpha) * bg[i]);
       const a = lum(ink); const b = lum(bg);
-      const op = Number(cs.opacity);
       out.push({el: `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}`, text: el.textContent.trim().slice(0, 16),
         ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)});
     }
