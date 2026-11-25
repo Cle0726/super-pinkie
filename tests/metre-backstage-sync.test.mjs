@@ -247,13 +247,13 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
     const keys = read('laolao-metre-keys.css');
     const fix = keys.split(/\r?\n/).find((l) => l.includes(':has(.shell--nav-drawer-open)') && l.includes('.pk-metre-backstage'));
     assert.ok(fix, 'keys.css 里有「抽屉 / 命令面板开着时带子退到 app 层下面」那一条');
-    const body = `<!doctype html><html data-laolao-mode="metre"><head><style id="keys">${keys}</style><style>body { margin: 0; } openclaw-app { position: relative; z-index: 1; display: block; min-height: 100vh; }</style></head>
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style id="keys">${keys}</style><style>.laolao-context-viewer__track { stroke: rgba(119, 107, 136, .22); } html { --metre-muted: #77736B; } html[data-pinkie-night] { --metre-muted: #918D84; } body { margin: 0; } openclaw-app { position: relative; z-index: 1; display: block; min-height: 100vh; }</style></head>
       <body><openclaw-app><div class="shell">
         <aside class="shell-nav" style="position:fixed;left:-320px;top:0;bottom:0;width:320px;z-index:70;background:#fff"><button class="laolao-mode-switcher" style="position:absolute;left:16px;bottom:13px;width:120px;height:38px">METRE</button></aside>
         <div class="shell-nav-backdrop" style="position:fixed;inset:0;z-index:65;background:#00000085"></div>
         <main class="content" style="position:fixed;inset:0"></main>
         <div class="agent-chat__composer-shell" style="position:fixed;left:40px;top:560px;width:740px;height:136px;background:#F7F6F3"></div>
-        <section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:740px;height:92px"><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track" style="fill:none"/></svg></section>
+        <section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:740px;height:92px"><details class="laolao-context-viewer"><summary style="color:var(--metre-muted)"><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track" style="fill:none"/></svg><span class="laolao-context-viewer__percent">—</span></summary></details></section>
         <dialog class="cmd-palette-overlay" style="position:fixed;inset:0;z-index:1000;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0;background:#00000080"></dialog>
       </div></openclaw-app></body></html>`;
     await tab.route('http://127.0.0.1:30122/**', (route) => route.fulfill({contentType: 'text/html', body}));
@@ -334,14 +334,33 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
       assert.equal(s.top, s.of, '反例（没有这一条）：' + state + ' 开着时带子在最上层 ' + JSON.stringify(s));
       if (state === 'drawer') assert.ok(s.badgeCovered > 0, '反例（没有这一条）：带子压住 METRE 账号键下半');
     }
-    // 夜间：用量圆环底圈用 --metre-muted，对 #151514 非文本 ≥ 3:1（日间不动）
+    // 用量圆环（底圈 + 「—」）：夜间底圈用 --metre-muted，对 #151514 非文本 ≥ 3:1；日间这个键局部换深一档灰，底圈 ≥ 3:1、「—」≥ 4.5:1（对日间几种底色都算）
     const lum = (rgb) => { const v = rgb.match(/\d+(\.\d+)?/g).slice(0, 3).map((n) => +n / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
-    const track = () => tab.evaluate(() => getComputedStyle(document.querySelector('.laolao-context-viewer__track')).stroke);
+    const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const ring = () => tab.evaluate(() => { const t = getComputedStyle(document.querySelector('.laolao-context-viewer__track')); const p = getComputedStyle(document.querySelector('.laolao-context-viewer__percent')); return {track: t.stroke, dash: p.color}; });
+    const DAY_BGS = ['rgb(245, 244, 241)', 'rgb(246, 245, 242)', 'rgb(247, 246, 243)', 'rgb(255, 255, 255)'];
     await tab.evaluate(() => document.documentElement.setAttribute('data-pinkie-night', ''));
-    const night = await track();
-    assert.equal(night, 'rgb(145, 141, 132)', '夜间底圈是 --metre-muted');
-    assert.ok((lum(night) + 0.05) / (lum('rgb(21, 21, 20)') + 0.05) >= 3, '夜间底圈对底 ≥ 3:1');
+    const night = await ring();
+    assert.equal(night.track, 'rgb(145, 141, 132)', '夜间底圈是 --metre-muted');
+    assert.ok(cr(night.track, 'rgb(21, 21, 20)') >= 3, '夜间底圈对底 ≥ 3:1');
+    assert.ok(cr(night.dash, 'rgb(21, 21, 20)') >= 4.5, '夜间「—」对底 ≥ 4.5:1');
     await tab.evaluate(() => document.documentElement.removeAttribute('data-pinkie-night'));
-    assert.notEqual(await track(), night, '日间底圈不跟着改');
+    const day = await ring();
+    assert.equal(day.track, 'rgb(111, 107, 99)', '日间底圈是局部深一档的灰 #6F6B63');
+    assert.equal(day.dash, day.track, '日间「—」和底圈同色');
+    for (const bg of DAY_BGS) {
+      assert.ok(cr(day.track, bg) >= 3, `日间底圈对 ${bg} ≥ 3:1`);
+      assert.ok(cr(day.dash, bg) >= 4.5, `日间「—」对 ${bg} ≥ 4.5:1，实际 ${cr(day.dash, bg).toFixed(2)}`);
+    }
+    // 反例：拿掉日间那一条和「底圈走 --metre-muted」那一条（回到原生 22% 透明灰紫、「—」#77736B），日间底圈不到 3:1、「—」不到 4.5:1——测试会红
+    const ringRules = await tab.evaluate(() => {
+      const sheet = document.getElementById('keys').sheet; let n = 0;
+      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('laolao-context-viewer')) { sheet.deleteRule(i); n++; } }
+      return n;
+    });
+    assert.equal(ringRules, 2, '反例真的拿掉了两条（日间局部灰、底圈走 --metre-muted）');
+    const nat = await ring();
+    assert.ok(cr(nat.track, 'rgb(247, 246, 243)') < 3 || /rgba/.test(nat.track), '反例：原生日间底圈不到 3:1 ' + nat.track);
+    assert.ok(cr(nat.dash, 'rgb(245, 244, 241)') < 4.5, '反例：原生日间「—」不到 4.5:1 ' + nat.dash);
   } finally { await browser.close(); }
 });
