@@ -13,7 +13,7 @@ const PR = {number: 7, title: '加一个按钮', url: 'https://example.test/pr/7
   statusCheckRollup: [{name: 'ci', conclusion: 'SUCCESS'}]};
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
-function harness({bound = true, repo = true, auth = 0, pr = PR, mergeConflict = false, branch = 'feat/button', answer = '[]'} = {}) {
+function harness({bound = true, repo = true, auth = 0, pr = PR, mergeConflict = false, branch = 'feat/button', answer = '[]', fetchFail = false, checks = null} = {}) {
   const calls = [], asked = [], fixed = [];
   const ok = (stdout = '') => ({code: 0, stdout, stderr: ''});
   const run = async (cmd, args) => {
@@ -22,6 +22,7 @@ function harness({bound = true, repo = true, auth = 0, pr = PR, mergeConflict = 
     if (cmd === 'git') {
       if (a === 'rev-parse --is-inside-work-tree') return repo ? ok('true\n') : {code: 128, stdout: '', stderr: 'not a git repository'};
       if (a === 'rev-parse --abbrev-ref HEAD') return ok(branch + '\n');
+      if (a.startsWith('fetch ')) return fetchFail ? {code: 128, stdout: '', stderr: 'fatal: unable to access remote, token ghp_abcdefghijklmnopqrstuvwxyz0123'} : ok('');
       if (a.startsWith('merge --no-edit')) return mergeConflict ? {code: 1, stdout: '', stderr: 'CONFLICT'} : ok('');
       if (a === 'diff --name-only --diff-filter=U') return ok('a.js\nb.css\n');
       return ok('');
@@ -30,7 +31,7 @@ function harness({bound = true, repo = true, auth = 0, pr = PR, mergeConflict = 
     if (a.startsWith('pr view')) return ok(JSON.stringify(pr));
     if (a.startsWith('pr list')) return ok(JSON.stringify([{number: 7, title: pr.title, headRefName: pr.headRefName, isDraft: pr.isDraft}]));
     if (a.startsWith('pr diff')) return ok('diff --git a/x.js b/x.js\n+const y = 1;\n');
-    if (a.startsWith('pr checks')) return ok(JSON.stringify([{name: 'ci', state: 'SUCCESS', bucket: 'pass', link: ''}]));
+    if (a.startsWith('pr checks')) return checks || ok(JSON.stringify([{name: 'ci', state: 'SUCCESS', bucket: 'pass', link: ''}]));
     if (a.startsWith('pr comment')) return ok('https://example.test/pr/7#c1\n');
     return ok('');
   };
@@ -82,6 +83,22 @@ test('跟进：看 CI；跟 main 只 merge，不变基不 force；有冲突就�
   assert.ok(c.calls.some((x) => x[0] === 'git' && x[1] === 'merge' && x[2] === '--abort'));
   assert.equal(c.flow.progress.get(KEY).phase, 'failed');
   await assert.rejects(harness({branch: 'main'}).flow.followUp({sessionKey: KEY, number: 7, steps: ['main']}), /先切过去/);
+});
+
+test('跟进：git fetch 没成功就停，不拿旧的 origin/<base> 说已跟上；CI 读不到给一句话，检查在跑（退出码 8）照常', async () => {
+  const f = harness({fetchFail: true});
+  await assert.rejects(f.flow.followUp({sessionKey: KEY, number: 7, steps: ['main']}), (e) => /取不到最新的 main，没有合并/.test(e.message) && !/ghp_/.test(e.message));
+  assert.ok(!f.calls.some((c) => c[0] === 'git' && c[1] === 'merge'), '没成功取到就不 merge');
+  assert.deepEqual([f.flow.progress.get(KEY).step, f.flow.progress.get(KEY).phase], ['main', 'failed']);
+  for (const checks of [{code: 1, stdout: '', stderr: 'no checks reported'}, {code: 0, stdout: 'not json', stderr: ''}, {code: 0, stdout: '{"a":1}', stderr: ''}]) {
+    const c = harness({checks});
+    await assert.rejects(c.flow.followUp({sessionKey: KEY, number: 7, steps: ['ci']}), /读不到这个 PR 的 CI 结果/);
+    assert.deepEqual([c.flow.progress.get(KEY).step, c.flow.progress.get(KEY).phase], ['ci', 'failed']);
+  }
+  const pending = harness({checks: {code: 8, stdout: JSON.stringify([{name: 'ci', state: 'PENDING', bucket: 'pending', link: ''}]), stderr: ''}});
+  const out = await pending.flow.followUp({sessionKey: KEY, number: 7, steps: ['ci']});
+  assert.equal(out.ci[0].bucket, 'pending');
+  assert.equal(pending.flow.progress.get(KEY).phase, 'done');
 });
 
 test('跟进：按意见改交给引擎；回评论要正文和界面上的确认', async () => {
