@@ -4,7 +4,7 @@
 // 反例：审查 / 跟进里任何一步都没调 gh pr merge；头变了、草稿、CI 没绿都不合；令牌串被抹掉。
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PrFlow, parseFindings, redact, registerPrFlow, reviewPrompt} from '../services/mode-architecture/pr-flow.mjs';
+import {PrFlow, engineAdapter, parseFindings, redact, registerPrFlow, reviewPrompt} from '../services/mode-architecture/pr-flow.mjs';
 
 const KEY = 'agent:metre:w';
 const HEAD = 'abc1234def5678';
@@ -130,4 +130,60 @@ test('网关方法：五个都挂上；出错时回 respond(false) 且消息里�
   assert.equal(got[0], false); assert.match(got[2].message, /gh auth login/); assert.doesNotMatch(got[2].message, /ghp_/);
   assert.equal(redact('x ghp_abcdefghijklmnopqrstuvwxyz0123 y github_pat_ABCDEFGHIJKLMNOPQRSTUV_123 z'), 'x [已隐去] y [已隐去] z');
   assert.match(reviewPrompt({pr: PR, diff: 'D'}), /#7「加一个按钮」（feat\/button → main）/);
+});
+
+function fakeBridge({engine = 'codex', model = 'm1', runs = 2, failed = false} = {}) {
+  const started = [], stopped = [];
+  let polls = 0;
+  const b = {
+    sessions: {get: (key) => (key === KEY ? {engine, model} : {})},
+    folderFor: () => '/repo',
+    start: async (opts) => { started.push(opts); return {threadId: 't' + started.length}; },
+    thread: async () => {
+      polls += 1;
+      const done = polls > runs;
+      return {activeRunId: done ? null : 'r1', status: done ? (failed ? 'failed' : 'idle') : 'running', error: failed ? {text: '额度用完'} : null,
+        items: [{kind: 'reply', text: '早先的一句', streaming: false}, {kind: 'reply', text: done ? '[{"severity":"high","file":"x.js","line":2,"title":"会崩"}]' : '写到一半', streaming: !done}]};
+    },
+    stop: async (o) => { stopped.push(o); },
+  };
+  return {b, started, stopped, polls: () => polls};
+}
+
+test('接引擎台：ask 用会话选的引擎开计划模式（不改文件）、等跑完、取最后一条完整回答；fix 开普通对话且不准推送 / 合并 / 变基', async () => {
+  const f = fakeBridge();
+  const eng = engineAdapter({bridge: () => f.b, wait: async () => {}, everyMs: 0});
+  const text = await eng.ask(KEY, '审查一下');
+  assert.match(text, /会崩/);
+  assert.equal(f.started[0].plan, true); assert.equal(f.started[0].engine, 'codex'); assert.equal(f.started[0].model, 'm1'); assert.equal(f.started[0].folder, '/repo');
+  assert.ok(f.polls() >= 3, '等到 activeRunId 没了才取');
+  const job = await eng.fix(KEY, {number: 7, branch: 'feat/button', findings: [{severity: 'high', file: 'x.js', line: 2, title: '会崩', detail: 'y 没定义'}]});
+  assert.deepEqual(job, {threadId: 't2'});
+  assert.notEqual(f.started[1].plan, true);
+  assert.match(f.started[1].text, /分支 feat\/button.*PR #7/);
+  assert.match(f.started[1].text, /不要推送、不要合并、不要变基/);
+  assert.match(f.started[1].text, /\[high\] x\.js:2 会崩 —— y 没定义/);
+});
+
+test('接引擎台：没开外部引擎 / 会话没选引擎 → 一句话；引擎跑失败报原因；超时停下线程', async () => {
+  await assert.rejects(engineAdapter({bridge: () => null}).ask(KEY, 'x'), /外部引擎还没打开/);
+  await assert.rejects(engineAdapter({bridge: () => fakeBridge({engine: 'metre'}).b}).ask(KEY, 'x'), /选一个外部引擎和模型/);
+  await assert.rejects(engineAdapter({bridge: () => fakeBridge({model: ''}).b}).ask(KEY, 'x'), /选一个外部引擎和模型/);
+  await assert.rejects(engineAdapter({bridge: () => fakeBridge({runs: 0, failed: true}).b, wait: async () => {}}).ask(KEY, 'x'), /没跑完：额度用完/);
+  const slow = fakeBridge({runs: 1e9});
+  await assert.rejects(engineAdapter({bridge: () => slow.b, wait: async () => {}, timeoutMs: 0}).ask(KEY, 'x'), /超时，已停下/);
+  assert.deepEqual(slow.stopped, [{threadId: 't1'}]);
+});
+
+test('registerPrFlow 没注入 ask / fix 时用引擎台适配器；审查走到引擎、结果回界面', async () => {
+  const f = fakeBridge();
+  const methods = new Map();
+  const h = harness();
+  const flow = registerPrFlow({registerGatewayMethod: (n, fn) => methods.set(n, fn)}, {scope: () => ({root: '/repo', bound: true}), run: h.flow.run, engine: {bridge: () => f.b, wait: async () => {}, everyMs: 0}});
+  assert.equal(typeof flow.ask, 'function');
+  let got = null;
+  await methods.get('pinkie.pr.review')({params: {sessionKey: KEY, number: 7}, respond: (...a) => { got = a; }});
+  assert.equal(got[0], true, JSON.stringify(got[2]));
+  assert.deepEqual(got[1].findings.map((x) => [x.severity, x.file, x.line]), [['high', 'x.js', 2]]);
+  assert.equal(f.started[0].plan, true);
 });

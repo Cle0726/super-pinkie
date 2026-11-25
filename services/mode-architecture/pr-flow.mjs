@@ -190,8 +190,43 @@ export class PrFlow {
   }
 }
 
+// 接引擎台：engines.mjs 把桥放在 globalThis[Symbol.for('pinkie.engines.v1')].bridge（metre-board 里注册，可能晚于这里），用时再取。
+// ask：用这个会话选的引擎和模型开一段**计划模式**（不改文件）的新对话，等它跑完，取最后一条回答。
+// fix：开一段普通对话，把选中的意见交给它改；返回线程号，进度在引擎台里看、能停。
+export function engineAdapter({bridge = () => globalThis[Symbol.for('pinkie.engines.v1')]?.bridge, wait = (ms) => new Promise((r) => setTimeout(r, ms)), timeoutMs = 15 * 60_000, everyMs = 2000} = {}) {
+  const pick = (key) => {
+    const b = bridge(); if (!b) throw fail('外部引擎还没打开：在 Metre 的引擎菜单里打开并选一个引擎。');
+    const pref = b.sessions.get(key) || {};
+    if (!pref.engine || pref.engine === 'metre' || !pref.model) throw fail('先在 Metre 的引擎菜单里给这个会话选一个外部引擎和模型。');
+    return {b, pref, folder: b.folderFor(key)};
+  };
+  return {
+    async ask(key, text) {
+      const {b, pref, folder} = pick(key);
+      const {threadId} = await b.start({folder, engine: pref.engine, model: pref.model, text, plan: true, title: 'PR 审查'});
+      for (const end = Date.now() + timeoutMs; Date.now() < end; await wait(everyMs)) {
+        const s = await b.thread(threadId);
+        if (!s.activeRunId) {
+          if (s.status === 'failed') throw fail('引擎审查没跑完：' + redact(s.error?.text || '').slice(0, 200));
+          return [...(s.items || [])].reverse().find((i) => i.kind === 'reply' && !i.streaming)?.text || '';
+        }
+      }
+      await b.stop({threadId}).catch(() => {});
+      throw fail('引擎审查超时，已停下。');
+    },
+    async fix(key, {number, branch, findings}) {
+      const {b, pref, folder} = pick(key);
+      const list = findings.map((f, i) => `${i + 1}. [${f.severity}] ${f.file}${f.line ? ':' + f.line : ''} ${f.title}${f.detail ? ' —— ' + f.detail : ''}`).join('\n');
+      const text = `在分支 ${branch} 上按下面的审查意见改 PR #${number}，改完提交（不要推送、不要合并、不要变基）：\n${list}`;
+      const {threadId} = await b.start({folder, engine: pref.engine, model: pref.model, text, title: `改 PR #${number}`});
+      return {threadId};
+    },
+  };
+}
+
 export function registerPrFlow(api, options = {}) {
-  const flow = options.flow || new PrFlow(options);
+  const engine = options.ask || options.fix ? {} : engineAdapter(options.engine);
+  const flow = options.flow || new PrFlow({ask: engine.ask, fix: engine.fix, ...options});
   const method = (name, scope, fn) => api.registerGatewayMethod(name, async ({params, respond}) => {
     try { respond(true, await fn(params || {})); }
     catch (error) { respond(false, undefined, {code: error.code === 'CONFLICT' ? 'CONFLICT' : 'INVALID_REQUEST', message: redact(error.message || '操作未完成。').slice(0, 400)}); }
