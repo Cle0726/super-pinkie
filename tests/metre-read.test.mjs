@@ -91,6 +91,9 @@ test('in Metre: read one answer, show it is playing, reset when done, one at a t
     await button.click();
     assert.equal(await state(tab, 'a'), 'true');
     assert.equal(await tab.locator('#a .pk-mread').getAttribute('aria-label'), '停止朗读');
+    // 11-25 06:46 打回：停止方块实际只有约 6.4px，夜间认不出。量渲染出来的方块，至少 9px 见方。
+    const stop = await tab.locator('#a .pk-mread svg rect').boundingBox();
+    assert.ok(stop && stop.width >= 9 && stop.height >= 9, `stop square too small: ${JSON.stringify(stop)}`);
     // 只念正文：不念代码、链接、角标数字；段落和列表项分开念
     assert.deepEqual(await tab.evaluate(() => window.spoken), ['第一段。']);
     await tab.evaluate(() => window.endOne());
