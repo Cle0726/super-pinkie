@@ -352,7 +352,7 @@
       seg.onclick = () => { closeMenu(); choose({level: level.id}); };
       levels.append(seg);
     }
-    body.append(levels);
+    if ((catalog.levels || []).length) body.append(levels); // 取清单失败时退成 levels: []，别只画一个空标题
     position(anchor, node);
   }
 
