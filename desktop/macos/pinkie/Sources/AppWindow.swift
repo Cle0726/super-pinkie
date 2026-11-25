@@ -20,6 +20,8 @@ enum PinkieAppWindow {
         let id: String
         let name: String
         let dir: URL
+        var files = false  // PR②：安装时勾了「读你选的文件」才弹文件框
+        var network: [String] = []  // PR②：安装时勾了的来源（https://host[:port]），只有这些能跳转
     }
 
     static func isValidId(_ id: String) -> Bool {
@@ -49,7 +51,8 @@ enum PinkieAppWindow {
         let dir = appsRoot.appendingPathComponent(id, isDirectory: true)
         guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("index.html").path) else { return nil }
         let name = (app["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "作品"
-        return App(id: id, name: name, dir: dir)
+        let network = (app["network"] as? [String] ?? []).map { $0.lowercased() }
+        return App(id: id, name: name, dir: dir, files: app["files"] as? Bool == true, network: network)
     }
 
     static func ledger() -> [String: String] {
@@ -180,7 +183,7 @@ enum PinkieAppWindow {
     }
 }
 
-final class PinkieAppWindowController: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate {
+final class PinkieAppWindowController: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
     static var hold: PinkieAppWindowController?
     let app: PinkieAppWindow.App?
     private var window: NSWindow?
@@ -218,6 +221,7 @@ final class PinkieAppWindowController: NSObject, NSApplicationDelegate, NSWindow
         if let app {
             let web = WKWebView(frame: frame, configuration: WKWebViewConfiguration())
             web.navigationDelegate = self
+            web.uiDelegate = self
             web.loadFileURL(app.dir.appendingPathComponent("index.html"), allowingReadAccessTo: app.dir)
             window.contentView = web
             if let image = NSImage(contentsOf: app.dir.appendingPathComponent("icon.icns")) { NSApp.applicationIconImage = image }
@@ -237,11 +241,26 @@ final class PinkieAppWindowController: NSObject, NSApplicationDelegate, NSWindow
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    // PR②：<input type=file> 只有安装时勾了「读你选的文件」才弹文件框；没勾就当用户取消。
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        guard app?.files == true else { completionHandler(nil); return }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.begin { response in completionHandler(response == .OK ? panel.urls : nil) }
+    }
+
     // The work stays inside its own folder: no navigation to the network or to other files.
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url, let dir = app?.dir.standardizedFileURL.path else { decisionHandler(.cancel); return }
         if ["about", "data", "blob"].contains(url.scheme ?? "") { decisionHandler(.allow); return }
+        if let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(), ["http", "https"].contains(scheme) {
+            let origin = scheme + "://" + host + (url.port.map { ":\($0)" } ?? "")
+            decisionHandler(app?.network.contains(origin) == true ? .allow : .cancel); return
+        }
         decisionHandler(url.isFileURL && url.standardizedFileURL.path.hasPrefix(dir) ? .allow : .cancel)
     }
 }
