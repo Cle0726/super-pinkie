@@ -1,0 +1,13 @@
+/* laolao-metre-suggest.css —— I8「下一句建议」那一行（laolao-metre-suggest.js）的样式，只在 Metre。
+ * 输入框上方一行小按钮：左对齐、能折到第二行不横向滚；字号、圆角、悬停底色跟待发送那一条（.pk-mq__btn）同一套 Metre 变量。
+ * 按钮边框日夜都用 --metre-muted 本色（--metre-line 日 #E4E2DC 对底只有约 1.2:1，看不出是按钮；本色对按钮底和页面底都 ≥ 3:1）。
+ * 行容器不留左右内边距：第一条按钮的左边框和输入框左边框齐平（js 量输入框给 --pk-ms-x / --pk-ms-w）。
+ * 选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名，不碰原生输入框，不用强制覆盖。 */
+html[data-laolao-mode="metre"] .pk-metre-suggest { display: flex; flex-wrap: wrap; gap: 6px; box-sizing: border-box; width: var(--pk-ms-w, auto); max-width: 100%; margin: 0 0 8px var(--pk-ms-x, 0px); padding: 0; }   /* 左边、宽度由 js 量输入框得来，和输入框左对齐 */
+html[data-laolao-mode="metre"] .pk-metre-suggest__chip {
+  appearance: none; box-sizing: border-box; max-width: 100%; height: 26px; padding: 0 10px;
+  border: 1px solid var(--metre-muted); border-radius: 13px; background: var(--metre-surface); color: var(--metre-muted);
+  font: 400 12px/24px var(--metre-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-metre-suggest__chip:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-metre-suggest__chip:focus-visible { outline: 2px solid var(--metre-accent); outline-offset: 1px; }
