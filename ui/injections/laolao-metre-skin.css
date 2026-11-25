@@ -207,7 +207,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .dashboard-header {
 }
 /* 侧栏文字：碧琪的黑夜配色已停用，深色下这里自己给颜色 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar { color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button, .sidebar-recent-session__title) { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button, .sidebar-recent-session__title), html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):is([data-pinkie-night], [data-theme="dark"]) aside.sidebar .sidebar-recent-session--active .sidebar-recent-session__name { color: var(--metre-text) !important; } /* 夜间当前标题：共用 sidebar-surface:144 的 accent 混色在 Metre 夜是 #646589（2.9:1） */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-section-title, .sidebar-recent-session__time, kbd, .sidebar-shortcut) { color: var(--metre-muted) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button):hover { background-color: var(--metre-hover) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-startup-home__item-title { color: var(--metre-text) !important; }
