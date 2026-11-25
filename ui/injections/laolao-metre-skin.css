@@ -1369,16 +1369,16 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-tray__item 
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-tray__item :is(.pinkie-tray__desc, .pinkie-tray__hint, small) { color: var(--metre-muted) !important; }
 
 /* ---------- 搜索 ---------- */
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-mask { background: rgba(20, 20, 19, 0.36) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-dialog { border-radius: 12px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-dialog * { color: inherit; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-mask { background: rgba(20, 20, 19, 0.36); -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-session-search-title, .pinkie-session-search-time) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* 11-25 S5：长标题一行省略（全名在行的 aria-label），时间不折行 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):is([data-pinkie-night], [data-theme="dark"]) .pinkie-session-search-mask { background: rgba(0, 0, 0, 0.62); }   /* 11-25 S5：夜间 0.36 的墨色压不住深色页面，弹层两边的正文看着像叠在一起 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-input { background: transparent !important; border: 0 !important; border-bottom: 1px solid var(--metre-line) !important; border-radius: 0 !important; box-shadow: none !important; color: var(--metre-text) !important; font: 400 15px/1.4 var(--metre-sans) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-input::placeholder { color: var(--metre-muted) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-session-search-filter, .pinkie-session-search-status, .pinkie-session-search-result__snippet, .pinkie-session-search-result__time) { color: var(--metre-muted) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.pinkie-session-search-filter, .pinkie-session-search-status, .pinkie-session-search-snippet, .pinkie-session-search-time) { color: color-mix(in srgb, var(--metre-muted) 82%, var(--metre-text)) !important; }   /* 11-25 S5：原来写的 __snippet / __time 类名不存在，摘录和时间跟标题一样深；略加深，选中行底色上日间也 ≥ 4.5:1 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-filter input { accent-color: var(--metre-cobalt) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-result { border: 0 !important; border-radius: 6px !important; background: transparent !important; box-shadow: none !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-result:is(:hover, :focus-visible, .is-active) { background: var(--metre-hover) !important; outline: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-result mark { background: var(--metre-cobalt-soft) !important; color: inherit !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-result:is(:focus-visible, [aria-selected="true"]) { background: color-mix(in srgb, var(--metre-text) 8%, var(--metre-surface)) !important; box-shadow: inset 2px 0 0 var(--metre-cobalt) !important; outline: none !important; }   /* 11-25 S5：方向键选中的是 aria-selected，原来的 .is-active 不存在，选中行没底色；夜间 --metre-hover 比弹层还暗，改用正文色调出来的底 + 左边一道钴蓝 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-session-search-result mark { background: color-mix(in srgb, var(--metre-cobalt) 26%, transparent) !important; color: var(--metre-text) !important; border-radius: 2px; }   /* 11-25 S5：10% 的钴蓝在夜间几乎看不见；命中字用正文色，不跟着摘录变浅 */
 
 /* ---------- 通用菜单、更多工具 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) :is(.laolao-menu, .laolao-footer-overflow) { padding: 6px !important; }
