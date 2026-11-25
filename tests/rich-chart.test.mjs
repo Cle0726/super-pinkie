@@ -33,7 +33,9 @@ const BAD = [
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const msg = (src) => `<div class="chat-group assistant"><div class="chat-group-messages"><div class="chat-bubble"><div class="chat-text"><p>看图：</p><pre><code class="language-chart">${esc(src)}</code></pre><p>完。</p></div></div></div></div>`;
-const page = (sources, {mode = 'chat', night = false} = {}) => `<!doctype html><html data-laolao-mode="${mode}"${night ? ' data-pinkie-night="1"' : ''}><head>`
+// skin：Metre 时加载真 Metre 皮肤（不靠 var() 兜底色，兜底只有日间值）；皮肤的夜间块认 data-theme=dark，一起带上
+const page = (sources, {mode = 'chat', night = false, skin = false} = {}) => `<!doctype html><html data-laolao-mode="${mode}"${night ? ' data-pinkie-night="1"' : ''}${night && skin ? ' data-theme="dark"' : ''}><head>`
+  + (skin && mode === 'metre' ? '<link rel="stylesheet" href="/laolao-metre-skin.css">' : '')
   + '<link rel="stylesheet" href="/laolao-rich.css"><style>.chat-text :where(table) { display: block; width: 100%; }</style></head>'   // 原生 index.css 同一条<body style="margin:0;width:760px;font:15px/1.7 sans-serif">'
   + `<div class="chat-thread"><div class="chat-thread-inner">${sources.map(msg).join('')}</div></div>`
   + '<script src="/laolao-dom-watch.js"></script><script src="/laolao-rich.js"></script></body></html>';
@@ -255,7 +257,7 @@ test('图表：「数据表」「复制图片」键的边日夜、Metre 和非 M
       await tab.close();
       return found;
     };
-    const cases = [{mode: 'chat'}, {mode: 'chat', night: true}, {mode: 'metre'}, {mode: 'metre', night: true}];
+    const cases = [{mode: 'chat'}, {mode: 'chat', night: true}, {mode: 'metre', skin: true}, {mode: 'metre', night: true, skin: true}];
     for (const opts of cases) assert.deepEqual(await measure(opts), [], JSON.stringify(opts));
     // 反例：普通态的边换回 --pk-faint，四种里都要挑出来
     const faint = (css) => css.replace('box-shadow: inset 0 0 0 1px var(--pk-mute)', 'box-shadow: inset 0 0 0 1px var(--pk-faint)');
