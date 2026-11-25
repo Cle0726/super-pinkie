@@ -183,6 +183,9 @@ html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin {
 html[data-laolao-mode="metre"] .chat-group:is(:hover, :focus-within) .chat-group-footer__meta > .pk-metre-pin,
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { opacity: 1; }
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { color: var(--metre-cobalt); }
+/* 协调者 11-25 03:27：不悬停时时间 opacity 0 但照占位，「已置顶」浮在正文左缘右边一百多 px。
+ * 已置顶的排到页脚行最前（order -1），左外边距抵掉自己的内边距：静止和悬停都贴页脚左缘，悬停时时间出现在它后面，不跳。 */
+html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin[aria-pressed="true"] { order: -1; margin-left: -5px; }
 html[data-laolao-mode="metre"] .chat-group-footer__meta > .pk-metre-pin:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); opacity: 1; }
 html[data-laolao-mode="metre"] .pk-metre-pins {
   box-sizing: border-box;

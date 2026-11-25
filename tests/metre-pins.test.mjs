@@ -68,7 +68,7 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
   // 两条助手消息时间戳相同（假网关种子记录就是这样）：只置顶最后一条，第一条不能跟着变「已置顶」。
   const thread = (offset) => group('user', `msg:user:1000:${offset}`, '把登录页的按钮改成蓝色') + group('assistant', `msg:assistant:2000:${offset + 1}`, '好，我先改按钮颜色')
     + group('assistant', `msg:assistant:2000:${offset + 2}`, '注册页用的是同一个');
-  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
+  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>.chat-group-footer__meta{display:flex;align-items:center;gap:8px;min-width:0} .chat-group-footer__meta time{min-width:96px;opacity:0} .chat-group:hover .chat-group-footer__meta time{opacity:1}</style><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
   const KEY = 'pinkie.metre.pins:agent:metre:p1';
   try {
     const tab = await browser.newPage();
@@ -88,6 +88,15 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
     await tab.locator('.pk-metre-pins').waitFor({timeout: 5000});
     assert.equal(await pin.textContent(), '已置顶');
     assert.equal(await pin.getAttribute('aria-pressed'), 'true');
+    // 协调者 03:27：已置顶的不悬停时贴页脚左缘（原生时间 opacity 0 但照占位），悬停时也不跳。
+    const edge = () => tab.evaluate(() => { const b = [...document.querySelectorAll('.pk-metre-pin')].find((x) => x.getAttribute('aria-pressed') === 'true'); const r = document.createRange(); r.selectNodeContents(b); return {text: Math.round(r.getBoundingClientRect().left), row: Math.round(b.parentElement.getBoundingClientRect().left)}; });
+    await tab.mouse.move(1, 1);
+    const rest = await edge();
+    await tab.locator('.chat-group.assistant').last().hover();
+    const hover = await edge();
+    t.diagnostic('已置顶左缘 ' + JSON.stringify({rest, hover}));
+    assert.ok(Math.abs(rest.text - rest.row) <= 1, `不悬停时「已置顶」字贴页脚左缘（字 ${rest.text}，行 ${rest.row}）`);
+    assert.equal(hover.text, rest.text, '悬停时不跳');
     assert.equal(await firstPin.textContent(), '置顶', '同一时间戳的另一条不跟着变');
     assert.equal(await tab.locator('.pk-metre-pins__toggle').textContent(), '已置顶 1 条');
     // 折叠条是对话流的第一个子元素，在流里占位：第一条消息在它下面，不被盖住
