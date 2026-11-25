@@ -95,7 +95,10 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
           return n;
         });
         assert.ok(removed >= 1, '页面上没有 laolao-metre-contrast.css');
+        await page.waitForTimeout(600);   // Metre 皮肤给字色有 160ms 过渡，删规则后马上读会读到过渡中的颜色、一个都对不上弱化色
         const bad = await page.evaluate(readContrast);
+        const seen = await page.evaluate(() => [...document.querySelectorAll('aside.sidebar .pinkie-session-time')].slice(0, 3).map((el) => `${getComputedStyle(el).color} / transition ${getComputedStyle(el).transitionDuration}`));
+        assert.ok(bad.items.length >= 1, `反例：删掉后侧栏 / 状态带里没找到用弱化色的小字（量不到不能算通过）；弱化色 ${bad.tokens.muted}，侧栏时间实际 ${seen.join(' | ')}`);
         console.log(`ℹ day more without contrast css: ${fmt(bad.items)}`);
         assert.equal(bad.tokens.muted, NORMAL.day.muted);
         assert.ok(bad.items.some((i) => i.ratio < 4.5), `反例没生效：删掉后小字仍都 ≥ 4.5 — ${fmt(bad.items)}`);
