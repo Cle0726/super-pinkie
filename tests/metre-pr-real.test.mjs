@@ -49,8 +49,10 @@ const contrast = () => {
 };
 
 async function openBench(page) {
+  // 「打开工作台」在顶栏右侧，CI 的窄视口里会被原生窗口按钮组（最小化）盖住、指针点不到（main 上就这样，不归本 PR），
+  // 所以直接调按钮自己的 click，测的是 PR 页，不是顶栏布局。
   const reopen = page.locator('.pk-wb-reopen');
-  if (await reopen.isVisible().catch(() => false)) await reopen.click();
+  if (await reopen.isVisible().catch(() => false)) await reopen.evaluate((b) => b.click());
   await page.waitForSelector('.pk-wb-status .pk-mpr__status', {timeout: 8_000});
 }
 
