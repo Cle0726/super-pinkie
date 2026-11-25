@@ -16,13 +16,13 @@ html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) {
 
 /* 原代码块：藏起来，点「源码」再露出 */
 html:not(#p1):not(#p2):not(#p3) .chat-text [data-pk-hidden] { display: none !important; }
-
+/* 原生代码块标题栏：原生 #00000014 透明条 + --muted 小字，日间壁纸透上来约 3:1。非 Metre 日间垫近实底，字用本模式 --text，日夜小字 ≥ 4.5:1（Metre 有自己的表头） */
+html:not([data-laolao-mode="metre"]):not([data-pinkie-night]):not(#p1):not(#p2):not(#p3) .chat-text .code-block-header { background-color: rgba(244, 240, 242, .9); }
+html:not([data-laolao-mode="metre"]):not(#p1):not(#p2):not(#p3) .chat-text .code-block-header :is(.code-block-lang, .code-block-copy) { color: var(--text); }
 /* 外壳 */
 html:not(#p1):not(#p2):not(#p3) .pk-rich {
-  position: relative; margin: 10px 0 12px; padding: 14px 16px 16px; border-radius: 14px;
-  background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
-  color: var(--pk-fg); font-size: 14px; line-height: 1.6; max-width: 100%; overflow: hidden;
-  animation: pk-in .36s cubic-bezier(.22, 1, .36, 1) backwards;
+  position: relative; margin: 10px 0 12px; padding: 14px 16px 16px; border-radius: 14px; background: var(--pk-panel); box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow);
+  color: var(--pk-fg); font-size: 14px; line-height: 1.6; max-width: 100%; overflow: hidden; animation: pk-in .36s cubic-bezier(.22, 1, .36, 1) backwards;
 }
 @keyframes pk-in { from { opacity: 0; transform: translateY(4px); } }
 html:not(#p1):not(#p2):not(#p3) .pk-rich__tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; z-index: 1; }
