@@ -1560,12 +1560,12 @@
         if (window.localStorage?.getItem(RECENT_MODELS_KEY) !== encoded) window.localStorage?.setItem(RECENT_MODELS_KEY, encoded);
       } catch { /* Browser storage can be unavailable. */ }
     }
-    const common = new Set(recentOrder);
-    let visible = 0;
+    const favs = window.Pinkie?.metre?.fav?.pickerFavs?.(rows.map((row) => row.getAttribute("data-chat-model-option"))) || [], common = new Set([...favs, ...recentOrder]);
+    let visible = 0; // Metre favourites (laolao-metre-fav.js) sit between the current model and the recent ones in 常用模型.
     for (const [index, row] of rows.entries()) {
       const value = row.getAttribute("data-chat-model-option");
-      const order = query ? Number(row.dataset.chatModelRank ?? index)
-        : state.brand === "common" ? row === selected ? -1 : recentOrder.indexOf(value) >= 0 ? recentOrder.indexOf(value) : rows.length + index : row === selected ? -1 : index;
+      const order = query ? Number(row.dataset.chatModelRank ?? index) : state.brand !== "common" ? row === selected ? -1 : index : row === selected ? -1
+        : favs.includes(value) ? favs.indexOf(value) : recentOrder.includes(value) ? favs.length + recentOrder.indexOf(value) : rows.length + favs.length + index;
       if (row.style.getPropertyValue("--pinkie-model-order") !== String(order)) row.style.setProperty("--pinkie-model-order", String(order));
       const haystack = [row.dataset.chatModelName, row.dataset.chatModelKeywords, row.dataset.chatModelProviderLabel,
         row.getAttribute("data-chat-model-option"), row.dataset.pinkieSources, row.querySelector(".chat-controls__model-option-name")?.textContent || row.textContent].join(" ").toLocaleLowerCase();

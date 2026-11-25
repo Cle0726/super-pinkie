@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {measure, repoFiles, UNMEASURED_LIST, unmeasuredPaths} from './measure.mjs';
-import {exceptionsByMetric, FILE_SECTIONS, injectionTotals, LINE_LIMIT, readJson, TOTALS_OF, VERSION_SECTIONS} from './ratchet.mjs';
+import {exceptionsByMetric, FILE_SECTIONS, injectionTotals, LINE_LIMIT, loadExceptions, readJson, TOTALS_OF, VERSION_SECTIONS} from './ratchet.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const BASELINE = 'tools/health/baseline.json', EXCEPTIONS = 'tools/health/exceptions.json';
@@ -114,8 +114,8 @@ async function main(args) {
     targetBaseline: readOr(targetRoot, BASELINE, {injections: {}, longFiles: {}}),
     targetMeasured: await measure(targetRoot, {includeTestInventory: false, listRoot: ROOT, strict: false}),
     prMeasured: await measure(ROOT, {includeTestInventory: false}),
-    prExceptions: readOr(ROOT, EXCEPTIONS, []),
-    targetExceptions: readOr(targetRoot, EXCEPTIONS, []),
+    prExceptions: loadExceptions(ROOT),
+    targetExceptions: loadExceptions(targetRoot),
     prSkipped: unmeasuredPaths(ROOT),
     targetSkipped: fs.existsSync(path.join(targetRoot, UNMEASURED_LIST)) ? unmeasuredPaths(targetRoot) : [],
     targetHasList: fs.existsSync(path.join(targetRoot, UNMEASURED_LIST)),
