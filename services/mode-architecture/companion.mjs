@@ -13,7 +13,8 @@ const MODE_LABELS = {chat: '聊天', project: '项目（做东西、写代码）
 export const DEFAULT_COMPANION_SETTINGS = Object.freeze({model:'', thinking:'auto', temperature:null, maxTokens:1600, timeoutSeconds:25});
 // 「帮我说清楚」需要读懂半句话、挑出真正的分叉点，小模型做不好；用户没在「模型与参数」里选过模型时用它。
 export const CLARIFY_MODEL = 'mm/gemini-3.8-flash-tiered';
-export const TITLE_MODEL = 'mm/workbuddy/hy4free';
+// 用户 11-24：hy4free 在号池这把 key 上已不可用（404 model_not_available），改用同一份免费额度的 hy4flash-free；不设付费后备。
+export const TITLE_MODEL = 'mm/workbuddy/hy4flash-free';
 const TITLE_RULES = `给会话起一个概括主题的短名字。中文 4–14 字，英文 2–6 个词。用描述里的主要语言，零星代码、外文名词不决定语言。
 把主题放在前面，优先用名词短语。省去「帮我、看看、去、想、请、如何、怎么、能不能、研究一下、实现」这些空话。
 如果是提问或讨论，只概括讨论的主题，不加用户没有要求的动作。不要照抄长句或加引号、书名号、句号、表情、「标题：」。
@@ -200,7 +201,9 @@ export class CompanionAssistant {
     if (!target) throw new Error('title-model-unavailable');
     const result = await this.transport.requestModel(TITLE_MODEL, TITLE_RULES, [{kind: 'title', text, context}], false, {
       // hy4free 默认会先思考：不关的话 60–400 个 token 全被思考吃掉、正文为空（11-11 实测）。
-      maxTokens: 120,
+      // hy4flash-free 关不掉思考（11-25 实测 reasoning_effort none / low、thinking disabled、enable_thinking false 都照样先想 200–670 个 token）：
+      // 120 个 token 五题全空，400 个 token 五题全出合格标题、最慢 2.7 秒。
+      maxTokens: 400,
       reasoningEffort: 'none',
       temperature: target.model.compat?.supportsTemperature === false ? undefined : 0.3,
       timeoutMs: 12_000,
