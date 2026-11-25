@@ -579,6 +579,12 @@ test('in a browser: 第三方许可 shows a 查看 button that opens the full no
   } finally { await browser.close(); }
 });
 
+// 11-24：外部引擎被中断 / 失败时不落款，和 cle-stage 一样演「中断」形态（新版塌下去变灰，旧版 stopped 映射成 idle），停 2 秒、1 秒交回签名。
+test('a stopped or failed engine run plays the C.le. stopped form instead of the signature flourish', () => {
+  assert.match(js, /cle\.space\.set\(kind === 'done' \? 'done' : 'stopped'\)/);
+  assert.match(js, /setTimeout\(\(\) => \{ cle\.space\?\.set\('idle'\); cle\.finishing = setTimeout\(drop, 1000\); \}, 2000\)/);
+});
+
 // 11-24 隔离真跑页面报错 Cannot read properties of null (reading 'replaceWith')：dropCle 直接 remove 实时小标，
 // 对话最下面那一行就没有 .cle-glyph 了，下一次画（paintLive）对 null 调 replaceWith。要原地换回静态签名。
 test('dropping the live C.le. glyph puts the static signature back in its slot, so the live line always keeps a glyph', () => {
