@@ -433,7 +433,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinki
   border: 0 !important;
   box-shadow: none !important;
   border-radius: 8px !important;
-  font: 400 13px/1 var(--metre-sans) !important;
+  font: 400 13px/1.35 var(--metre-sans) !important;   /* 行高不能是 1：模型名 span 用 font: inherit 继承它，原生 label / model-name 都 overflow:hidden，行框 = 字号时 g、p、y 的下伸部被裁（像「qemini」）。1.35 同原生 label；按钮 min-height 30px，不变高 */
 }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger, .laolao-deep-think-btn, .laolao-context-viewer > summary):hover { color: var(--metre-text) !important; background: var(--metre-hover) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.pinkie-tray-btn, .chat-controls__inline-select-trigger, .pinkie-effort-trigger) :is(span, .pinkie-external-tier) { font: inherit !important; color: inherit !important; }
