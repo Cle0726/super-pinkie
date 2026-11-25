@@ -176,3 +176,70 @@ for (const night of [false, true]) {
     } finally { await browser.close(); }
   });
 }
+
+// 11-24 22:04：工作过程步骤键（挂在步骤气泡下沿外）要和页脚行键一样 11px / 1.2、高 26px，右沿离气泡右沿 6px（真页面上就和工作过程块、页脚键对齐）；
+// 悬停时 ::after 悬停桥沿气泡下沿画一条细线、键底下画同色的一片，看得出键属于上面这条气泡，静止时什么都不画。
+// 原生时间戳（悬停才出现，原生 color: var(--muted); opacity: .7，日约 2.7:1）在 Metre 下悬停时满不透明、小字色，对页面底 ≥ 4.5:1；其他模式不变。
+const STEP = '.chat-bubble[data-message-id="msg:assistant:8:0"]';
+const NATIVE_TS = '<style>.chat-group-timestamp { color: #77736B; opacity: .7; } :where(html[data-pinkie-night]) .chat-group-timestamp { color: #918D84; }</style>';
+const STEP_NEW = 'right: 6px; z-index: 1; width: 80px; min-height: 26px; padding: 0; justify-content: center; font-size: 11px; line-height: 1.2; border-radius: 0 0 6px 6px; }';
+const STEP_TAB = / html\[data-laolao-mode="metre"\]:not\(#_m1\):not\(#_m2\) \.chat-group\.assistant\.chat-group--timeline-step > \.chat-group-messages:is\(:hover, :focus-within\) > [^{]*::after \{ background:[^}]*\}/;
+const TS_RULE = / html\[data-laolao-mode="metre"\] \.chat-group:is\(:hover, :focus-within\) \.chat-group-footer \.chat-group-timestamp \{[^}]*\}/;
+const stepAndTime = (tab) => tab.evaluate((sel) => {
+  const px = (c) => { const cv = document.createElement('canvas'); cv.width = cv.height = 1; const x = cv.getContext('2d'); x.fillStyle = '#000'; x.fillStyle = c; x.fillRect(0, 0, 1, 1); return [...x.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  const bub = document.querySelector(sel); const k = bub.querySelector(':scope > .pinkie-fork-action'); const q = k.getBoundingClientRect(); const b = bub.getBoundingClientRect(); const ks = getComputedStyle(k);
+  const ts = document.querySelector('.chat-group-timestamp'); const tss = getComputedStyle(ts); const op = Number(tss.opacity);
+  const fg = px(tss.color); const bg = px(getComputedStyle(document.body).backgroundColor); const eff = fg.map((v, i) => v * op + bg[i] * (1 - op));
+  const [hi, lo] = [lum(eff), lum(bg)].sort((x, y) => y - x);
+  return {stepType: [ks.fontSize, ks.lineHeight].join('/'), stepH: +q.height.toFixed(1), dRight: +(b.right - q.right).toFixed(1), dTop: +(q.top - b.bottom).toFixed(1), stepOp: ks.opacity,
+    tab: getComputedStyle(bub, '::after').backgroundImage, tsOp: op, tsContrast: +((hi + 0.05) / (lo + 0.05)).toFixed(2)};
+}, STEP);
+for (const night of [false, true]) {
+  test(`Metre（真浏览器，${night ? '夜间' : '日间'}）：工作过程步骤键 11px / 26px 高、右沿 6px、悬停时挂在上面气泡下沿；原生时间戳悬停时 ≥ 4.5:1；反例：去掉规则就不行 (${engine})`, {timeout: 120_000}, async () => {
+    const cards = inj('laolao-session-cards.css'); const skin = inj('laolao-metre-skin.css'); const chat = inj('laolao-metre-chat.css');
+    assert.ok(skin.includes(STEP_NEW), '找不到工作过程步骤键的字号 / 右沿写法');
+    assert.match(skin, STEP_TAB, '找不到工作过程步骤键悬停时的归属底片');
+    assert.match(chat, TS_RULE, '找不到 Metre 下原生时间戳的对比度规则');
+    const browser = await launch();
+    try {
+      const tab = await browser.newPage({viewport: {width: 820, height: 2600}});
+      const open = async (mode, css) => {
+        await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html; charset=utf-8', body: page(mode, night, WIDTHS[0]).replace('</head>', `${NATIVE_TS}</head>`)}));
+        await tab.goto('http://127.0.0.1:30119/');
+        for (const c of css) await tab.addStyleTag({content: c});
+        await tab.unroute('http://127.0.0.1:30119/**');
+        await tab.mouse.move(1, 1);
+      };
+      const hover = async (sel) => { const p = await tab.evaluate((s) => { const r = document.querySelector(`${s} .chat-text`).getBoundingClientRect(); return [r.left + 8, r.top + 8]; }, sel); await tab.mouse.move(p[0], p[1]); };
+      const run = async (css) => {
+        await open('metre', css);
+        const rest = await stepAndTime(tab);
+        await hover(STEP); const step = await stepAndTime(tab);
+        await hover('.chat-bubble[data-message-id="msg:assistant:0:0"]'); const time = await stepAndTime(tab);
+        return {rest, step, time};
+      };
+      const fixed = await run([cards, skin, chat]);
+      assert.equal(fixed.rest.tab, 'none', '静止时步骤气泡下沿不该画东西');
+      assert.equal(fixed.rest.tsOp, 0.7, '静止时时间戳不归这条规则管');
+      assert.equal(fixed.step.stepOp, '1', '悬停步骤气泡时键要显示出来');
+      assert.equal(fixed.step.stepType, '11px/13.2px', '步骤键的字号 / 行高要和页脚行键、时间一样');
+      assert.equal(fixed.step.stepH, 26, '步骤键要和页脚行键一样 26px 高');
+      assert.ok(Math.abs(fixed.step.dRight - 6) <= 0.5, `步骤键右沿要离气泡右沿 6px（和工作过程块、页脚键对齐），实际 ${fixed.step.dRight}`);
+      assert.ok(Math.abs(fixed.step.dTop) <= 0.5, `步骤键要贴着气泡下沿挂下来，实际差 ${fixed.step.dTop}`);
+      assert.equal((fixed.step.tab.match(/linear-gradient/g) || []).length, 5, `悬停时要画下沿细线、键两侧和下沿的边、键底下那一片：${fixed.step.tab}`);
+      assert.equal(fixed.time.tsOp, 1, '悬停时时间戳要满不透明');
+      assert.ok(fixed.time.tsContrast >= 4.5, `悬停时时间戳对页面底只有 ${fixed.time.tsContrast}:1`);
+      // 反例：步骤键回到 ui2 的写法（只有 top: 100%）、去掉归属底片和时间戳规则，就是 12px、右沿差 2px、看不出归属、时间戳不到 4.5:1。
+      const broken = await run([cards, skin.replace(STEP_NEW, 'z-index: 1; }').replace(STEP_TAB, ''), chat.replace(TS_RULE, '')]);
+      assert.notEqual(broken.step.stepType, '11px/13.2px', '反例没抓到步骤键字号不对');
+      assert.ok(Math.abs(broken.step.dRight - 6) > 0.5, `反例没抓到步骤键右沿不齐：${broken.step.dRight}`);
+      assert.equal(broken.step.tab, 'none', '反例里不该有归属底片');
+      assert.ok(broken.time.tsContrast < 4.5, `反例没抓到时间戳对比度不够：${broken.time.tsContrast}`);
+      // 其他模式不变：唠嗑模式悬停时时间戳仍是原生的 .7。
+      await open('laolao', [cards, skin, chat]);
+      await hover('.chat-bubble[data-message-id="msg:assistant:0:0"]');
+      assert.equal((await stepAndTime(tab)).tsOp, 0.7, '唠嗑模式下时间戳不该被 Metre 规则改掉');
+    } finally { await browser.close(); }
+  });
+}
