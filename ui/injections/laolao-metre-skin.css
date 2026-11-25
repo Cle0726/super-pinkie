@@ -1484,10 +1484,11 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settin
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-user-settings__button--primary:hover { background: var(--metre-text) !important; opacity: 0.88; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-model-setup__badge { color: var(--metre-muted) !important; border-radius: 4px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-model-setup__badge--default { color: var(--metre-cobalt) !important; border-color: var(--metre-cobalt) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings :is(.pinkie-user-settings__textarea, input[type="text"], input[type="search"], input[type="password"], input[type="number"], input:not([type]), select) { background: var(--metre-bg) !important; border: 1px solid var(--metre-line-strong) !important; border-radius: 8px !important; box-shadow: none !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-user-settings__switch { background: var(--metre-line-strong) !important; border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-user-settings__switch:is([aria-checked="true"], [aria-pressed="true"], .is-on) { background: var(--metre-cobalt) !important; border-color: var(--metre-cobalt) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings .pinkie-user-settings__switch-knob { background: #FFFFFF !important; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings :is(.pinkie-user-settings__textarea, textarea, input[type="text"], input[type="search"], input[type="password"], input[type="number"], input[type="time"], input[type="datetime-local"], input:not([type]), select) { background: var(--metre-bg) !important; border: 1px solid var(--metre-line-strong) !important; border-radius: 8px !important; box-shadow: none !important; color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings :is(.pinkie-user-settings__switch, .pk-cap__switch) { background: transparent !important; border-color: transparent !important; box-shadow: inset 0 0 0 1px var(--metre-muted) !important; }   /* 11-25 ui4 A3：关着是描边空心，开着见下一行；两种开关一个样子 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings :is(.pinkie-user-settings__switch:is([aria-checked="true"], [aria-pressed="true"], .is-on), .pk-cap__switch[aria-checked="true"]) { background: var(--metre-cobalt) !important; border-color: var(--metre-cobalt) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .pinkie-user-settings :is(.pinkie-user-settings__switch-knob, .pk-cap__switch i) { background: var(--metre-muted) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pinkie-user-settings__switch:is([aria-checked="true"], [aria-pressed="true"], .is-on) .pinkie-user-settings__switch-knob, .pk-cap__switch[aria-checked="true"] i) { background: var(--metre-surface) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .qs-segmented { background: var(--metre-hover) !important; border: 0 !important; border-radius: 8px !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .qs-segmented__btn { background: transparent !important; color: var(--metre-muted) !important; border-radius: 6px !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .qs-segmented__btn--active { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
@@ -2348,8 +2349,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice:hover,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__model-button:hover,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__text-button:hover { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand.is-selected,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; color: var(--metre-text) !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings button:focus-visible,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings summary:focus-visible { outline-color: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__status[data-state="error"] { color: var(--metre-text) !important; }
@@ -2359,31 +2358,34 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand[data-brand="gemini"] { border-color: var(--metre-line) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__model-choice { border-color: var(--metre-line) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset:hover { border-color: var(--metre-line-strong) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; color: var(--metre-text) !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__custom { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__button--primary { border-color: var(--metre-line) !important; background: var(--metre-surface) !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__advanced-link,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__text-button { color: var(--metre-text) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pinkie-user-settings__advanced-link, .pinkie-user-settings__text-button) { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__channels { border-top-color: var(--metre-line) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__count { color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__usage-chip { border-color: var(--metre-line) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__brand.is-selected,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice.is-selected,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__preset.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch-knob { box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch[aria-checked="true"] { background: var(--metre-hover) !important; border-color: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__textarea:focus { outline-color: var(--metre-line-strong) !important; border-color: var(--metre-line-strong) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__switch-knob { background: var(--metre-surface) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__link:focus-visible { outline-color: var(--metre-line-strong) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pk-job, .pk-conn):hover { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__history li[data-ok="false"] span { color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch i { box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch[aria-checked="true"] { background: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__switch:focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pk-cap__link, .pk-cap__switch, .pk-cap__idea, .pk-cap__recipe):focus-visible { outline-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pk-job, .pk-conn), html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings :is(.pk-job, .pk-conn):hover { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__history li span { color: var(--metre-text); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__history li[data-ok="false"] span { color: var(--metre-danger) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__when { width: 80px; min-width: 0; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job__when span { order: -1; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-job[data-enabled="false"] :is(.pk-job__when, .pk-job__when b, .pk-job__main > strong, .pk-job__text) { opacity: 1; color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__sheet { background: var(--metre-surface); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pinkie-user-settings__choice.is-selected .pk-cap__choice-sub { color: var(--metre-text); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__link { color: var(--metre-text); text-decoration: underline; text-decoration-color: var(--metre-line-strong); text-underline-offset: 3px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-cron-page .card { border-color: var(--metre-line) !important; box-shadow: none !important; }   /* 11-25 ui4 A3：原生定时任务页 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-cron-page { --ok: var(--metre-text); --ok-subtle: transparent; --danger: var(--metre-danger); --danger-subtle: transparent; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-cron-page .cron-job-detail-label { flex: none; white-space: nowrap; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-cron-page .cron-job--disabled .cron-job-main { opacity: 1; color: var(--metre-muted); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) openclaw-cron-page :is(.btn, .list-item, .cron-filter-panel, .chip, .cron-job-status-pill, input, select) { border-color: var(--metre-line-strong) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) openclaw-cron-page .btn.btn--primary { background: var(--metre-text) !important; border-color: var(--metre-text) !important; color: var(--metre-bg) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; box-shadow: inset 0 0 0 1px var(--metre-line-strong); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__confirm .pinkie-user-settings__button { color: var(--metre-danger) !important; border-color: var(--metre-danger) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea { border-color: var(--metre-line) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea:hover { box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__idea:focus-visible { outline-color: var(--metre-line-strong) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__line { border-bottom-color: var(--metre-line) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__input:focus { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-tile { background: var(--metre-surface) !important; }
@@ -2391,9 +2393,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-con
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-conn__state[data-state="bad"]::before { background: var(--metre-surface) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe:hover { border-color: var(--metre-line-strong) !important; box-shadow: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe.is-selected { border-color: var(--metre-line-strong) !important; background: var(--metre-hover) !important; box-shadow: none !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe:focus-visible { outline-color: var(--metre-line-strong) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__recipe.is-selected { background: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(html[data-theme-mode="dark"], html[data-theme="dark"], html[data-color-scheme="dark"]) #laolao-user-settings .pk-cap__confirm { background: var(--metre-surface) !important; color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #laolao-user-settings .pk-cap__recipe-copy small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }   /* 11-24 ui2 缺陷 6：820 宽能力卡说明被省略号截掉，Metre 里折行 */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .qs-identity-grid { align-items: start; }   /* 11-24 ui2 缺陷 4：「助手身份」卡被旁边「你」那张撑高成大框，Metre 里按各自内容高 */
 /* ---- 工作台在 Metre 里用 Metre 的颜色 ----

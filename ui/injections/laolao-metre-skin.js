@@ -204,12 +204,12 @@
     [/(还没|暂时没有)连上碧琪/g, '$1连上后台'],
     [/，碧琪照常可用/g, '，照常可用'],
     [/用哪个模式的碧琪/g, '用哪个模式'],
-    [/碧琪/g, 'Metre'],
+    [/碧琪/g, 'Metre'], [/\bmetre模式/g, 'Metre 模式'],   // 11-25 ui4 A3：定时任务交给 Metre 的那条
   ];
   const LINKS = {'Configure →': '设置 →', 'Manage →': '管理 →', 'Browse →': '浏览 →', 'Connect →': '连接 →'};
   const word = (text) => {
     if (text && Object.hasOwn(LINKS, text.trim())) return text.replace(text.trim(), LINKS[text.trim()]);   // 11-24 ui2 缺陷 5：原生设置页写死的英文链接键
-    if (!text || !text.includes('碧琪')) return text;
+    if (!text || !/碧琪|\bmetre模式/.test(text)) return text;
     let out = text;
     for (const [pattern, to] of RULES) out = out.replace(pattern, to);
     return out.replace(/她/g, '它');
