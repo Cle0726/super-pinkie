@@ -21,10 +21,10 @@ html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-eng-chip::be
   position: fixed; z-index: 2147483000; width: 320px; max-height: min(520px, calc(100vh - 32px)); overflow: hidden; display: flex; flex-direction: column;
   background: var(--metre-surface, #fff); color: var(--metre-text, #1F1E1D); border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 14px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(31, 30, 29, 0.12); font: 400 13px/1.45 var(--metre-sans, system-ui, sans-serif); padding: 6px;
-}
+  --pk-menu-rule: color-mix(in srgb, var(--metre-text, #1F1E1D) 22%, var(--metre-surface, #fff)); --mk-hover: color-mix(in srgb, var(--metre-text, #1F1E1D) 14%, var(--metre-surface, #fff)); --mk-press: color-mix(in srgb, var(--metre-text, #1F1E1D) 20%, var(--metre-surface, #fff)); }
 /* 标题不跟着滚，只滚下面的列表；下面还有内容时底边有一道渐深的提示，滚到底就消失（mac2 任务 18：菜单比面板高 19px、最后一行露半行）。 */
 .pk-eng-menu__body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; background: linear-gradient(var(--metre-surface, #fff), var(--metre-surface, #fff)) bottom / 100% 16px no-repeat local, linear-gradient(transparent, var(--metre-line-strong, #D9D6CC)) bottom / 100% 12px no-repeat scroll; }
-.pk-eng-menu__head { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 8px 10px 6px; border-bottom: 1px solid var(--metre-line, #E8E6DC); margin-bottom: 4px; }
+.pk-eng-menu__head { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 8px 10px 6px; border-bottom: 1px solid var(--pk-menu-rule, var(--metre-line, #E8E6DC)); margin-bottom: 4px; }
 .pk-eng-menu__title { font: italic 400 16px/1 var(--metre-serif, Georgia, serif); }
 .pk-eng-menu__sub { color: var(--metre-muted, #73726C); font-size: 12.5px; }
 .pk-eng-menu__item {
@@ -41,7 +41,7 @@ html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-eng-chip::be
 .pk-eng-menu__back { border: 0; background: transparent; color: var(--metre-muted, #73726C); cursor: pointer; padding: 4px 10px; font: inherit; }
 .pk-eng-menu__wait { padding: 10px; color: var(--metre-muted, #73726C); }
 .pk-eng-menu__off { display: grid; gap: 8px; margin: 4px 4px 8px; padding: 10px; border-radius: 10px; background: var(--metre-hover, #F0EEE6); }
-.pk-eng-menu__levels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px 4px; margin-top: 4px; border-top: 1px solid var(--metre-line, #E8E6DC); }
+.pk-eng-menu__levels { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px 4px; margin-top: 4px; border-top: 1px solid var(--pk-menu-rule, var(--metre-line, #E8E6DC)); }
 .pk-eng-menu__label { width: 100%; color: var(--metre-muted, #73726C); font-size: 12px; padding: 0 4px 2px; }
 .pk-eng-seg { border: 1px solid var(--metre-line-strong, #D9D6CC); background: transparent; color: inherit; border-radius: 7px; padding: 4px 9px; cursor: pointer; font: inherit; font-size: 12.5px; }
 .pk-eng-seg[aria-pressed="true"] { background: var(--metre-text, #1F1E1D); color: var(--metre-bg, #FAF9F5); border-color: transparent; }
