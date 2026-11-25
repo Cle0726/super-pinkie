@@ -187,7 +187,7 @@
   'use strict';
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
-  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page';
+  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page, .pinkie-shortcuts';
   const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
   // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
   const RULES = [

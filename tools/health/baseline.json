@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5064,
+    "important": 5065,
     "importantIndirect": 7,
     "mutationObserverRefs": 20,
     "mutationObservers": 28,
@@ -1573,6 +1573,32 @@
       "windowGlobals": 0,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-metre-preview.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 34,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-metre-preview.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 153,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-metre-prompts.js": {
       "important": 0,
       "importantIndirect": 0,
@@ -1600,9 +1626,9 @@
       "windowGlobalsIndirect": 0
     },
     "ui/injections/laolao-metre-skin.css": {
-      "important": 2255,
+      "important": 2256,
       "importantIndirect": 0,
-      "lines": 2552,
+      "lines": 2553,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3207,7 +3233,7 @@
     "services/mode-architecture/session-lineage.mjs": 1894,
     "tests/mode-architecture.test.mjs": 3294,
     "tests/resume-ui.test.cjs": 2003,
-    "ui/injections/laolao-metre-skin.css": 2552,
+    "ui/injections/laolao-metre-skin.css": 2553,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1636,
