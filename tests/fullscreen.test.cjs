@@ -4,10 +4,9 @@ const path = require('node:path');
 const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
-const source = fs.readFileSync(
-  path.join(root, 'desktop/macos/pinkie/Sources/Launcher.swift'),
-  'utf8',
-);
+const source = ['Launcher.swift', 'LauncherWebBridge.swift']
+  .map((file) => fs.readFileSync(path.join(root, 'desktop/macos/pinkie/Sources', file), 'utf8'))
+  .join('\n');
 
 test('native window exposes standard macOS fullscreen controls', () => {
   assert.match(source, /final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate/);
@@ -19,7 +18,7 @@ test('native window exposes standard macOS fullscreen controls', () => {
 });
 
 test('sidebar fullscreen icon uses the native window bridge', () => {
-  assert.match(source, /private let windowControlHandlerName = "laolaoWindowControl"/);
+  assert.match(source, /(?:private )?let windowControlHandlerName = "laolaoWindowControl"/);
   assert.match(source, /controller\.add\(self, name: windowControlHandlerName\)/);
   assert.match(source, /const actions = document\.querySelector\("\.sidebar-footer-bar"\);/);
   assert.match(source, /id = "pinkie-window-fullscreen"/);
