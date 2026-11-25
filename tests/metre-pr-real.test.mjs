@@ -71,6 +71,10 @@ async function openBench(page) {
   const reopen = page.locator('.pk-wb-reopen');
   if (await reopen.isVisible().catch(() => false)) await reopen.evaluate((b) => b.click());
   await page.waitForSelector('.pk-wb-status .pk-mpr__status', {timeout: 8_000});
+  // 假网关（scripts/chat-ui-harness/fake-gateway.js）对 pinkie.fs.status 回 {}，工作台就拿到 root = undefined，
+  // 开任何页签时 renderTabs → absolute() 调 state.root.replace 会抛错（CI 现场：active 是 page:pr、PR 页没画、一个 rpc 都没调）。
+  // 真网关总会回 root（services/mode-architecture/workbench.mjs 的 scope），这里照真网关补一个，测的是 PR 页，不是假网关。
+  await page.evaluate(() => { const st = window.__pinkieWorkbench.state; if (typeof st.root !== 'string' || !st.root) st.root = '/tmp/pinkie-pr-real'; });
 }
 
 test('PR 页 real page: 只在 Metre，CI 没绿合并灰着，合并要页内再确认（1440 日 / 820 夜）', async (t) => {
