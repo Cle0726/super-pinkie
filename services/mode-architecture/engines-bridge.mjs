@@ -10,9 +10,9 @@ import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
 import {T3Rpc} from './engines-rpc.mjs';
 import {readProviderFiles} from './engines.mjs';
-import {CODEX_PINKIE_FOLDER, CODEX_PINKIE_INSTANCE, PINKIE_FOLDER, PINKIE_INSTANCE, PINKIE_LABEL, PinkieRelay, codexPinkieInstance, linkPinkieHistory, pinkieInstance, pinkieModels, writePinkieSettings} from './engines-upstream.mjs';
+import {CODEX_PINKIE_FOLDER, CODEX_PINKIE_INSTANCE, OPENCODE_PINKIE_INSTANCE, PINKIE_FOLDER, PINKIE_INSTANCE, PINKIE_LABEL, PinkieRelay, codexPinkieInstance, linkPinkieHistory, openCodePinkieInstance, pinkieUpstreamOf, pinkieInstance, pinkieModels, writePinkieSettings} from './engines-upstream.mjs';
 // 两家各一个「碧琪模型」固定实例：不是加出来的账号，不用登录订阅，不能改名、不能删。
-const PINKIE_ROWS = new Map([[PINKIE_INSTANCE, 'claudeAgent'], [CODEX_PINKIE_INSTANCE, 'codex']]);
+const PINKIE_ROWS = new Map([[PINKIE_INSTANCE, 'claudeAgent'], [CODEX_PINKIE_INSTANCE, 'codex'], [OPENCODE_PINKIE_INSTANCE, 'opencode']]);
 export const isPinkieRow = id => PINKIE_ROWS.has(String(id || ''));
 import {boundProjectRoot} from './project-brief.mjs';
 
@@ -185,7 +185,9 @@ export function summarizeProviders(providers = [], {platform = process.platform,
   const order = id => { const index = ENGINES.findIndex(engine => engine.id === id); return index < 0 ? ENGINES.length : index; };
   const number = id => Number(/-(\d+)$/.exec(id)?.[1] || 1);
   rows.sort((x, y) => order(x.driver) - order(y.driver) || number(x.id) - number(y.id) || x.name.localeCompare(y.name));
-  return rows.map(row => ({...row, guide: setupGuide(row.driver, platform)}));
+  // switchable：这一家能不能切到「碧琪模型」——能就给出那一行的 id，不能就给一句原因，菜单里把这个选项灰掉、旁边写这句。
+  // 放在这里，是因为没打开的几家走上面的占位行，也要带上。
+  return rows.map(row => ({...row, guide: setupGuide(row.driver, platform), switchable: (({row: to, why}) => (to ? {to} : {why}))(pinkieUpstreamOf(row.driver))}));
 }
 
 // 菜单里「怎么装 / 怎么登录」那一小块。
@@ -507,6 +509,7 @@ export class EngineBridge {
         this.pinkieTried = true;
         await this.ensurePinkie().catch(error => this.logger?.warn?.(`engines pinkie upstream: ${error.message}`));
         await this.ensureCodexPinkie().catch(error => this.logger?.warn?.(`engines pinkie upstream (codex): ${error.message}`));
+        await this.ensureOpenCodePinkie().catch(error => this.logger?.warn?.(`engines pinkie upstream (opencode): ${error.message}`));
       }
       try {
         if (refresh) await this.call('server.refreshProviders', {}).catch(() => null);
@@ -613,10 +616,31 @@ export class EngineBridge {
     return {models, dir};
   }
 
-  // 开对话 / 中途切换前，按引擎 id 把对应那一家的「碧琪模型」准备好；不是这两行就什么都不做。
+  // OpenCode 那一家的「碧琪模型」：同一个转发口，走 /v1/chat/completions。provider 放在实例 environment 的
+  // OPENCODE_CONFIG_CONTENT 里（标 sensitive，里面只有转发口地址和会话令牌），OpenCode 把它叠在用户自己的 opencode.json 上，用户的文件不动。
+  async ensureOpenCodePinkie() {
+    const models = pinkieModels(this.pinkieConfig() || {}, {health: this.health, family: 'chat'});
+    if (!models.length) return null;
+    this.relay ||= new this.RelayImpl({config: () => this.pinkieConfig() || {}, logger: this.logger});
+    await this.relay.start();
+    this.relay.chatModel = models[0].slug;
+    const want = openCodePinkieInstance(models, {baseUrl: this.relay.baseUrl, token: this.relay.token});
+    const saved = (await this.settings().catch(() => null))?.providerInstances?.[OPENCODE_PINKIE_INSTANCE] || null;
+    const stamp = `${this.relay.baseUrl} ${crypto.createHash('sha256').update(this.relay.token).digest('hex').slice(0, 12)} ${JSON.stringify(want.config.customModels)}`;
+    if (!(saved && saved.driver === want.driver && this.openCodeStamp === stamp)) {
+      const instance = {...(saved || {}), ...want, config: {...(saved?.config || {}), ...want.config}, enabled: saved ? saved.enabled !== false : true};
+      await this.call('server.updateSettings', {patch: {}, providerInstanceMutation: {operation: saved ? 'upsert' : 'create', instanceId: OPENCODE_PINKIE_INSTANCE, instance}});
+      await this.refreshOne(OPENCODE_PINKIE_INSTANCE);
+      this.openCodeStamp = stamp;
+    }
+    return {models};
+  }
+
+  // 开对话 / 中途切换前，按引擎 id 把对应那一家的「碧琪模型」准备好；不是这几行就什么都不做。
   async preparePinkie(engine) {
     if (engine === PINKIE_INSTANCE && !await this.ensurePinkie()) throw new Error('碧琪这边没有能给 Claude Code 用的模型');
     if (engine === CODEX_PINKIE_INSTANCE && !await this.ensureCodexPinkie()) throw new Error('碧琪这边没有能给 Codex 用的模型');
+    if (engine === OPENCODE_PINKIE_INSTANCE && !await this.ensureOpenCodePinkie()) throw new Error('碧琪这边没有能给 OpenCode 用的模型');
   }
 
   // 加一个账号：一个新实例「<家>-<n>」。Claude / Codex 在用户目录下建一个这个账号自己的登录文件夹（旧的不碰）。
