@@ -231,12 +231,17 @@
         "laolao-metre-board-data.js",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
+        "laolao-metre-preview.css",
+        "laolao-metre-preview.js",
+        "laolao-metre-code.css",
         "laolao-metre-brand.css",
         "laolao-metre-brand.js",
         "laolao-metre-cat.css",
         "laolao-metre-cat.js",
         "laolao-metre-cat-frames.js",
         "laolao-metre-home.js",
+        "laolao-metre-workspace.css",
+        "laolao-metre-workspace.js",
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
@@ -251,7 +256,9 @@
         "laolao-metre-list.js",
         "laolao-metre-display.css",
         "laolao-metre-contrast.css",
-        "laolao-metre-chat.css"
+        "laolao-metre-chat.css",
+        "laolao-metre-allow.css",
+        "laolao-metre-allow.js"
       ]
     },
     {
