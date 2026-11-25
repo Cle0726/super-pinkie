@@ -93,6 +93,39 @@ const DIAG = () => {
   out.restoredW = W();
   return out;
 };
+// 2b showed: with the variable at calc(8ch) or even an inline max-width:60px !important, the label's computed max-width is still 260px.
+// Only a running transition beats an inline !important. Record transition / animations directly, read again after turning transitions off, and read again after waiting.
+const DIAG2 = async () => {
+  const c = document.querySelector('.chat-main .agent-chat__composer-controls');
+  const model = c?.querySelector(':scope > .chat-composer-model-control');
+  const label = model && (model.querySelector('.pinkie-trigger-label') || model.querySelector('.chat-controls__inline-select-label'));
+  if (!label) return {none: true};
+  const V = '--pk-perm-model-label';
+  const keep = model.style.getPropertyValue(V) || '';
+  const cs = () => getComputedStyle(label);
+  const W = () => Math.round(label.getBoundingClientRect().width * 10) / 10;
+  const anim = () => (label.getAnimations?.() || []).map((a) => `${a.constructor.name}:${a.transitionProperty || a.animationName || ''}:${a.playState}`);
+  const out = {inlineStyle: label.getAttribute('style') || '', tr: {prop: cs().transitionProperty, dur: cs().transitionDuration, delay: cs().transitionDelay}, anim0: anim()};
+  model.style.setProperty(V, '60px');
+  out.set = {w: W(), maxWidth: cs().maxWidth, anim: anim()};
+  await new Promise((r) => setTimeout(r, 600));
+  out.after600 = {w: W(), maxWidth: cs().maxWidth, anim: anim()};
+  if (keep) model.style.setProperty(V, keep); else model.style.removeProperty(V);
+  await new Promise((r) => setTimeout(r, 600));
+  label.style.setProperty('transition', 'none', 'important');
+  model.style.setProperty(V, '60px');
+  out.noTransition = {w: W(), maxWidth: cs().maxWidth, anim: anim()};
+  if (keep) model.style.setProperty(V, keep); else model.style.removeProperty(V);
+  label.style.removeProperty('transition');
+  const ancestors = [];
+  for (let n = label; n && n !== document.body && ancestors.length < 8; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (s.transitionDuration.split(',').some((d) => parseFloat(d) > 0)) ancestors.push(`${n.tagName.toLowerCase()}.${String(n.className).split(' ').filter(Boolean).slice(0, 2).join('.')} :: ${s.transitionProperty.slice(0, 80)} / ${s.transitionDuration.slice(0, 60)}`);
+  }
+  out.ancestorsWithTransition = ancestors;
+  out.restoredW = W();
+  return out;
+};
 try {
   for (const theme of ['day', 'night']) {
     const {context, page} = await h.openRealScenePage(browser, server.origin, 'metre-board', theme, {lockPerfClock: true});
@@ -102,6 +135,7 @@ try {
       console.log(theme, '1-settled', JSON.stringify(await page.evaluate(SNAP)));
       console.log(theme, '2-replay', JSON.stringify(await page.evaluate(REPLAY)));
       console.log(theme, '2b-diag', JSON.stringify(await page.evaluate(DIAG)));
+      console.log(theme, '2c-diag', JSON.stringify(await page.evaluate(DIAG2)));
       await page.setViewportSize({width: vp.width - 1, height: vp.height});
       await page.waitForTimeout(300);
       await page.setViewportSize(vp);
