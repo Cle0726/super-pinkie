@@ -233,6 +233,8 @@ test('the band and the model row under the composer sit on one solid theme plate
 // 11-24 21:30 派活第 2 条：窄窗（820）侧栏抽屉打开、命令面板打开时，后台带（body 上 z=36）画在抽屉 / 遮罩上面，压住 METRE 账号键下半。
 // 复发测试：抽屉、命令面板、收起侧栏的悬停卡片开着时，带子退到 app 层（openclaw-app z=1）下面——带子上取点，最上层不许是带子；
 // 反例：把 keys.css 里那一条拿掉，同一组取点要变回带子在最上层（证明这条测试能红）。顺带：夜间用量圆环底圈对底 ≥ 3:1。
+// 11-24 22:37 打回：z=0 让带子掉到输入框外壳底板下面，格子上沿 6px 被盖、字头被切。遮罩开着时 app 层（openclaw-app z=1）也不再自成层叠上下文，
+// 每格上边框和文字区里，遮罩下面第一层必须是带子自己；反例只留 z=0、拿掉 app 层那一条，外壳要盖住格子（测试能红）。
 test('the band sinks under the narrow nav drawer, its backdrop and the command palette, so it never covers the METRE key', {timeout: 60_000}, async (t) => {
   let lib;
   try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
@@ -245,11 +247,12 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
     const keys = read('laolao-metre-keys.css');
     const fix = keys.split(/\r?\n/).find((l) => l.includes(':has(.shell--nav-drawer-open)') && l.includes('.pk-metre-backstage'));
     assert.ok(fix, 'keys.css 里有「抽屉 / 命令面板开着时带子退到 app 层下面」那一条');
-    const body = `<!doctype html><html data-laolao-mode="metre"><head><style id="keys">${keys}</style><style>body { margin: 0; }</style></head>
-      <body><openclaw-app style="position:relative;z-index:1;display:block;min-height:100vh"><div class="shell">
+    const body = `<!doctype html><html data-laolao-mode="metre"><head><style id="keys">${keys}</style><style>body { margin: 0; } openclaw-app { position: relative; z-index: 1; display: block; min-height: 100vh; }</style></head>
+      <body><openclaw-app><div class="shell">
         <aside class="shell-nav" style="position:fixed;left:-320px;top:0;bottom:0;width:320px;z-index:70;background:#fff"><button class="laolao-mode-switcher" style="position:absolute;left:16px;bottom:13px;width:120px;height:38px">METRE</button></aside>
         <div class="shell-nav-backdrop" style="position:fixed;inset:0;z-index:65;background:#00000085"></div>
         <main class="content" style="position:fixed;inset:0"></main>
+        <div class="agent-chat__composer-shell" style="position:fixed;left:40px;top:560px;width:740px;height:136px;background:#F7F6F3"></div>
         <section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:740px;height:92px"><svg width="16" height="16"><circle cx="8" cy="8" r="6.5" class="laolao-context-viewer__track" style="fill:none"/></svg></section>
         <dialog class="cmd-palette-overlay" style="position:fixed;inset:0;z-index:1000;width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0;background:#00000080"></dialog>
       </div></openclaw-app></body></html>`;
@@ -277,24 +280,55 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
       const badge = document.querySelector('.laolao-mode-switcher').getBoundingClientRect(), bpts = [];
       for (let i = 1; i < 6; i++) for (const f of [0.55, 0.75, 0.92]) bpts.push([badge.left + badge.width * i / 6, badge.top + badge.height * f]);
       const onBand = (p) => band.contains(document.elementFromPoint(...p));
-      return {z: getComputedStyle(band).zIndex, top: pts.filter(onBand).length, of: pts.length, badgeCovered: bpts.filter(onBand).length, y: Math.round(B.top), b: Math.round(B.bottom)};
+      // 每格上边框（top + 0.5）和文字区（中线）各取 3 点：跳过抽屉遮罩 / 抽屉 / 命令面板之后的第一层必须是带子自己，不是输入框外壳
+      const overlay = (e) => e.closest('.shell-nav-backdrop, .shell-nav, dialog.cmd-palette-overlay');
+      const under = [];
+      for (const seg of band.querySelectorAll('.pk-bs__seg')) {
+        const r = seg.getBoundingClientRect();
+        for (const y of [r.top + 0.5, r.top + r.height / 2]) for (const f of [0.25, 0.5, 0.75]) {
+          const first = document.elementsFromPoint(r.left + r.width * f, y).find((e) => !overlay(e));
+          under.push(first && band.contains(first) ? 'band' : first ? first.className || first.tagName : 'none');
+        }
+      }
+      return {z: getComputedStyle(band).zIndex, top: pts.filter(onBand).length, of: pts.length, badgeCovered: bpts.filter(onBand).length, y: Math.round(B.top), b: Math.round(B.bottom),
+        under: under.filter((u) => u === 'band').length, underOf: under.length, underBy: [...new Set(under.filter((u) => u !== 'band'))]};
     });
     let s = await look();
     assert.ok(s, '820 宽时有后台带');
+    // 字头不被格子文字的盒子剪掉：span 有 overflow: hidden（省略号），竖直方向要装得下整行字形（原来 11.5px/1 时中文字头被剪约 2px，「着」成「看」）
+    const clipped = await tab.evaluate(() => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg > span')].map((n) => {
+      const box = n.getBoundingClientRect(), range = document.createRange(); range.selectNodeContents(n); const ink = range.getBoundingClientRect();
+      return {t: n.textContent, over: +Math.max(box.top - ink.top, ink.bottom - box.bottom).toFixed(1)};
+    }).filter((x) => x.over > 0.5));
+    assert.deepEqual(clipped, [], '每格文字竖直方向不被自己的盒子剪掉');
     assert.equal(s.top, s.of, '抽屉、面板都不开时带子在最上层、点得到');
     for (const state of ['drawer', 'palette', 'peek']) {
       await set(state); s = await look();
       assert.equal(s.z, '0', state + ' 开着时带子退到 z=0');
       if (state !== 'peek') assert.equal(s.top, 0, state + ' 开着时带子上每一点最上层都不是带子（被遮罩压暗、不越过抽屉）：' + s.top + '/' + s.of);
       if (state === 'drawer') assert.equal(s.badgeCovered, 0, '抽屉开着时 METRE 账号键下半不被带子压住');
+      if (state !== 'peek') assert.equal(s.under, s.underOf, state + ' 开着时每格上边框和文字区，遮罩下面第一层是带子自己、不是输入框外壳：' + JSON.stringify(s.underBy));
     }
+    // 22:37 打回第 1、2 条的反例：只留 z=0、不处理 app 层（拿掉 openclaw-app z-index: auto 那一条），输入框外壳盖住格子上沿——测试会红
+    const appRule = await tab.evaluate(() => {
+      const sheet = document.getElementById('keys').sheet;
+      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('nav-drawer-open') && /openclaw-app$/.test(r.selectorText.trim()) && r.style.zIndex === 'auto') { const text = r.cssText; sheet.deleteRule(i); return text; } }
+      return null;
+    });
+    assert.ok(appRule, '反例真的拿掉了 openclaw-app 那一条');
+    for (const state of ['drawer', 'palette']) {
+      await set(state); s = await look();
+      assert.equal(s.z, '0', '反例：z=0 那一条还在');
+      assert.ok(s.under < s.underOf && s.underBy.includes('agent-chat__composer-shell'), '反例（只留 z=0）：' + state + ' 开着时外壳盖住格子 ' + JSON.stringify(s));
+    }
+    await tab.evaluate((text) => { const sheet = document.getElementById('keys').sheet; sheet.insertRule(text, sheet.cssRules.length); }, appRule);
     // 反例：拿掉那一条，抽屉 / 面板开着时带子又跑到最上层、压住账号键——测试会红
     const removed = await tab.evaluate(() => {
       const sheet = document.getElementById('keys').sheet; let n = 0;
-      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('nav-drawer-open') && r.selectorText.includes('pk-metre-backstage') && r.style.zIndex === '0') { sheet.deleteRule(i); n++; } }
+      for (let i = sheet.cssRules.length - 1; i >= 0; i--) { const r = sheet.cssRules[i]; if (r.selectorText?.includes('nav-drawer-open') && ((r.selectorText.includes('pk-metre-backstage') && r.style.zIndex === '0') || (/openclaw-app$/.test(r.selectorText.trim()) && r.style.zIndex === 'auto'))) { sheet.deleteRule(i); n++; } }
       return n;
     });
-    assert.equal(removed, 1, '反例真的拿掉了那一条');
+    assert.equal(removed, 2, '反例真的拿掉了两条（带子 z=0、app 层 z-index: auto），回到 main 的样子');
     for (const state of ['drawer', 'palette']) {
       await set(state); s = await look();
       assert.equal(s.top, s.of, '反例（没有这一条）：' + state + ' 开着时带子在最上层 ' + JSON.stringify(s));
