@@ -62,6 +62,20 @@ test('A3 边框：原生 /cron 页「•••」和筛选下拉是 <summary cla
   assert.match(css, /:is\(button, input, select, textarea, summary\.btn\) \{ --metre-line-strong: var\(--pk-a3-edge\); \}/);
 });
 
+// 「筛选」折叠条是 <details class="cron-filter-panel"><summary class="cron-filter-panel__summary">，不是 .btn；
+// 可点的边界是 details 外框，原来被 2383 行那条 :is(.btn, …, .cron-filter-panel, …) 设成 --metre-line-strong 原值（约 1.5:1）。
+test('A3 边框：原生 /cron 页「筛选」折叠条外框也用 --pk-a3-edge，且写在通用那条后面', (t) => {
+  const generic = css.indexOf('openclaw-cron-page :is(.btn, .list-item, .cron-filter-panel,');
+  const own = css.search(/html\[data-laolao-mode="metre"\]:not\(#_m1\):not\(#_m2\) openclaw-cron-page \.cron-filter-panel \{ border-color: var\(--pk-a3-edge\) !important; \}/);
+  assert.ok(own >= 0, '要有 openclaw-cron-page .cron-filter-panel { border-color: var(--pk-a3-edge) } 那条');
+  assert.ok(generic < 0 || own > generic, '同样的优先级，要写在通用边框那条后面才生效');
+  const dir = process.env.PINKIE_CONTROL_UI_ROOT ? path.join(process.env.PINKIE_CONTROL_UI_ROOT, 'assets') : '';
+  const f = dir && fs.existsSync(dir) ? fs.readdirSync(dir).find((n) => /^cron-page-.*\.js$/.test(n)) : '';
+  if (!f) { t.skip('没有原生 Control UI（PINKIE_CONTROL_UI_ROOT），只查规则'); return; }
+  const js = fs.readFileSync(path.join(dir, f), 'utf8');
+  assert.match(js, /<details class="cron-filter-panel"/, '「筛选」折叠条不再是 <details class="cron-filter-panel">？');
+});
+
 test('A3 边框反例：改回 --metre-line-strong 原值就不够 3:1（日夜都不够）', () => {
   for (const theme of ['day', 'night']) assert.ok(ratio(T.ls[theme], T.surface[theme]) < 3, `${theme} 的原值本来就够了？`);
 });
