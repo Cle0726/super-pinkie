@@ -572,8 +572,16 @@ test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut m
     assert.equal(tight.title, LONG, '模型键 title 给全名');
     await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
     await p.waitForSelector('.pk-perm-pop--detail');
-    const acts = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent));
-    assert.ok(acts.some((t) => t.startsWith('放手程度：')) && acts.some((t) => t.startsWith('先出方案：')), `鼠标点「详情」看得到放手程度和先出方案（${JSON.stringify(acts)}）`);
+    // 协调者 11-25 11:54 认图的条件：鼠标点「详情▾」要真看得到「自动」「先出方案」——键在视口里、有大小、键中心没被别的东西盖住。
+    // 反例：openDetail 里去掉 fold >= 2 那块（收纳入口没了），或 acts 不放这两颗键，这里红。
+    const acts = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => {
+      const r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {text: e.textContent, seen: r.width > 0 && r.height > 0 && r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && !!hit && e.contains(hit)};
+    }));
+    const lv = acts.find((a) => a.text.startsWith('放手程度：')), plan = acts.find((a) => a.text.startsWith('先出方案：'));
+    assert.equal(lv?.text, '放手程度：自动', `鼠标点「详情▾」看得到「自动」（${JSON.stringify(acts)}）`);
+    assert.match(plan?.text || '', /^先出方案：(开|关)$/, `鼠标点「详情▾」看得到「先出方案」（${JSON.stringify(acts)}）`);
+    assert.ok(lv.seen && plan.seen, `两颗键都在屏幕上、没被盖住（${JSON.stringify(acts)}）`);
   } finally { await browser.close(); }
 });
 
