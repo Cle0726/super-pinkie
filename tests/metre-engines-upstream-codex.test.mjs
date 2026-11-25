@@ -184,11 +184,12 @@ test('codex: starting on Pinkie models creates its own instance first; switching
 
 test('codex: the menu row needs no ChatGPT login and is listed with Codex', () => {
   const rows = summarizeProviders([
-    {instanceId: CODEX_PINKIE_INSTANCE, driver: 'codex', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}, setup: {canAuthenticate: true}, models: [{slug: 'gw/a', name: 'A'}]},
+    {instanceId: CODEX_PINKIE_INSTANCE, driver: 'codex', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}, setup: {canAuthenticate: true}, models: [{slug: 'gpt-6.2-sol', name: 'GPT 6.2', isCustom: false}, {slug: 'gw/a', name: 'A', isCustom: true}]},
     {instanceId: 'codex-2', driver: 'codex', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}},
   ]);
   const row = rows.find(r => r.id === CODEX_PINKIE_INSTANCE);
   assert.deepEqual([row.name, row.upstream, row.account, row.state], ['Codex · 碧琪模型', 'pinkie', false, 'ready']);
+  assert.deepEqual(row.models.map(model => model.slug), ['gw/a'], 'Codex\'s own gpt models are not offered on the Pinkie row (11-25 real run)');
   assert.deepEqual([rows.find(r => r.id === 'codex-2').state], ['signin'], 'an added ChatGPT account still has to log in');
   assert.deepEqual([driverOf(CODEX_PINKIE_INSTANCE), isPinkieRow(CODEX_PINKIE_INSTANCE), isPinkieRow('codex-2')], ['codex', true, false]);
   const ids = rows.map(r => r.id);

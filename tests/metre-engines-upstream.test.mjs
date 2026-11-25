@@ -147,13 +147,16 @@ test('the instance settings point Claude Code at the relay with every model slot
 
 test('the menu row for Pinkie models needs no subscription login and cannot be renamed or removed', () => {
   const rows = summarizeProviders([
-    {instanceId: PINKIE_INSTANCE, driver: 'claudeAgent', displayName: 'whatever', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}, setup: {canAuthenticate: true}, models: [{slug: 'gw/aws-quick/claude-opus-5-5', name: 'Opus 5.5'}]},
-    {instanceId: 'claudeAgent-2', driver: 'claudeAgent', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}},
+    {instanceId: PINKIE_INSTANCE, driver: 'claudeAgent', displayName: 'whatever', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}, setup: {canAuthenticate: true}, models: [{slug: 'claude-sonnet-5-5', name: 'Sonnet 5.5', isCustom: false}, {slug: 'gw/aws-quick/claude-opus-5-5', name: 'Opus 5.5', isCustom: true}]},
+    {instanceId: 'claudeAgent-2', driver: 'claudeAgent', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}, models: [{slug: 'claude-sonnet-5-5', name: 'Sonnet 5.5', isCustom: false}]},
   ]);
   const pinkie = rows.find(row => row.id === PINKIE_INSTANCE);
   assert.deepEqual([pinkie.name, pinkie.upstream, pinkie.account, pinkie.state], ['Claude Code · 碧琪模型', 'pinkie', false, 'ready']);
   const own = rows.find(row => row.id === 'claudeAgent-2');
   assert.deepEqual([own.upstream, own.state], ['own', 'signin'], 'an added subscription account still has to log in');
+  // 11-25 真机：引擎服务把 Claude Code 自带的模型排在前面，「碧琪模型」这一行只留碧琪的（isCustom）。反例：订阅那一行自带的照样在。
+  assert.deepEqual(pinkie.models.map(model => model.slug), ['gw/aws-quick/claude-opus-5-5'], 'only Pinkie\'s models on the Pinkie row');
+  assert.deepEqual(own.models.map(model => model.slug), ['claude-sonnet-5-5'], 'a subscription row keeps its own models');
   assert.equal(driverOf(PINKIE_INSTANCE), 'claudeAgent');
   const ids = rows.map(row => row.id);
   assert.ok(ids.indexOf('claudeAgent') < ids.indexOf(PINKIE_INSTANCE) && ids.indexOf(PINKIE_INSTANCE) < ids.indexOf('codex'), 'listed with Claude Code');
