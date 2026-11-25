@@ -44,9 +44,13 @@
 
   let row = null, wasBusy = false, session = '';
   const hide = () => { row?.remove(); row = null; };
+  // 放到输入框外壳前面，再量输入框的左边和宽度，让这一行和输入框左对齐、一样宽（同 laolao-metre-queue.js 的 place）。
   function place(p) {
-    const shell = p?.querySelector('.agent-chat__composer-shell');
-    if (row && shell && row.nextElementSibling !== shell) shell.before(row);
+    const shell = p?.querySelector('.agent-chat__composer-shell'), comp = p?.querySelector('.agent-chat__composer-combobox');
+    if (!row || !shell) return;
+    if (row.nextElementSibling !== shell) shell.before(row);
+    const parent = row.parentElement?.getBoundingClientRect?.(), c = comp?.getBoundingClientRect?.();
+    if (parent && c && c.width > 0) { row.style.setProperty('--pk-ms-x', Math.round(c.left - parent.left) + 'px'); row.style.setProperty('--pk-ms-w', Math.round(c.width) + 'px'); }
   }
   function fill(text) {
     const p = pane(); if (!p?.state) return;
@@ -87,6 +91,7 @@
   window.addEventListener('pinkie:run-view', check);
   window.addEventListener('pinkie:session-selected', () => { session = ''; check(); });
   window.addEventListener('laolao:modechange', check);
+  window.addEventListener('resize', () => { if (row) place(pane()); });
   // 开始打字就收起（输入框是原生的，只看 input 事件，不拦）。
   document.addEventListener('input', (e) => { if (row && e.target?.matches?.('.agent-chat__composer-combobox textarea') && squash(e.target.value)) hide(); }, true);
   if (window.Pinkie) window.Pinkie.metreSuggest = Object.freeze({pick, check, KEY});

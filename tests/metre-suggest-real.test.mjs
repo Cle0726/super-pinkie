@@ -24,9 +24,12 @@ const rowState = () => {
   const row = document.querySelector('.pk-metre-suggest');
   if (!row) return null;
   const r = row.getBoundingClientRect();
+  const chip = row.querySelector('.pk-metre-suggest__chip')?.getBoundingClientRect();
+  const box = document.querySelector('.agent-chat__composer-combobox')?.getBoundingClientRect();
   return {chips: [...row.querySelectorAll('.pk-metre-suggest__chip')].map((b) => b.textContent),
     beforeShell: row.nextElementSibling?.classList.contains('agent-chat__composer-shell') ?? false,
-    visible: r.width > 0 && r.height > 0 && r.bottom <= innerHeight && r.top >= 0};
+    visible: r.width > 0 && r.height > 0 && r.bottom <= innerHeight && r.top >= 0,
+    leftGap: chip && box ? Math.round(chip.left - box.left) : null, overRight: chip && box ? Math.round(r.right - box.right) : null};
 };
 const contrast = () => {
   const lum = (s) => { const m = s.match(/[\d.]+/g).map(Number); const [r, g, b] = m.slice(0, 3).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
@@ -74,6 +77,8 @@ test('I8 real page: 回答后出下一句建议，点了只填不发，设置里
         assert.deepEqual(s1.chips, ['React', 'Vue']);
         assert.ok(s1.beforeShell, '在输入框外壳前面');
         assert.ok(s1.visible, '看得见、在视口里');
+        assert.ok(s1.leftGap >= 0 && s1.leftGap <= 12, `第一条建议和输入框左边对齐（差 ${s1.leftGap}px，应在 0–12）`);
+        assert.ok(s1.overRight <= 1, `建议这一行不超出输入框右边（超出 ${s1.overRight}px）`);
 
         // 4. 对比度
         const c = await page.evaluate(contrast);

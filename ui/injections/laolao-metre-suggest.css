@@ -2,7 +2,7 @@
  * 输入框上方一行小按钮：左对齐、能折到第二行不横向滚；字号、圆角、悬停底色跟待发送那一条（.pk-mq__btn）同一套 Metre 变量。
  * 夜间 --metre-line（#272725）在 --metre-surface 上几乎看不见，按钮边框改用 --metre-muted 的淡色，保证看得出是按钮。
  * 选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名，不碰原生输入框，不用强制覆盖。 */
-html[data-laolao-mode="metre"] .pk-metre-suggest { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0 2px; }
+html[data-laolao-mode="metre"] .pk-metre-suggest { display: flex; flex-wrap: wrap; gap: 6px; box-sizing: border-box; width: var(--pk-ms-w, auto); max-width: 100%; margin: 0 0 8px var(--pk-ms-x, 0px); padding: 0 2px; }   /* 左边、宽度由 js 量输入框得来，和输入框左对齐 */
 html[data-laolao-mode="metre"] .pk-metre-suggest__chip {
   appearance: none; box-sizing: border-box; max-width: 100%; height: 26px; padding: 0 10px;
   border: 1px solid var(--metre-line); border-radius: 13px; background: var(--metre-surface); color: var(--metre-muted);
