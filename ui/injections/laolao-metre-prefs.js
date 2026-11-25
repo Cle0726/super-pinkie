@@ -1,4 +1,4 @@
-/* Metre 设置弹层里的「对话」卡片（「以后」S 级 M8 自动滚动三档 + G2 对话正文字号 / 行距）。
+/* Metre 设置弹层里的「对话」卡片（「以后」S 级 M8 自动滚动三档 + G2 对话正文字号 / 行距 + I7 发送键可选）。
  *
  * 原生聊天设置齿轮在所有模式都被 laolao-ui-subtraction.css 藏掉了（#31，用户要求「对话栏去掉设置齿轮，侧栏设置入口保留」），
  * 所以不把齿轮露回来，而是在碧琪设置弹层（pinkie:settings-ready）里加一张卡片，只在 Metre 模式显示。
@@ -22,6 +22,9 @@
   const SCROLL = [['always', '始终'], ['near-bottom', '接近底部时'], ['off', '关闭']];
   const TEXT = [['s', '小', '14px'], ['m', '标准', ''], ['l', '大', '17px'], ['xl', '特大', '19px']];
   const LEADING = [['tight', '紧凑', '1.5'], ['normal', '标准', ''], ['loose', '宽松', '1.9']];
+  const SEND_KEY = 'pinkie.metre.prefs.sendKey';
+  const MOD = /Mac|iPhone|iPad/.test(globalThis.navigator?.platform || '') ? '⌘' : 'Ctrl';
+  const SEND = [['enter', 'Enter'], ['modifier-enter', MOD + ' + Enter']];
   const valid = (v) => SCROLL.some(([k]) => k === v);
   const known = (list, v, dflt) => (list.some(([k]) => k === v) ? v : dflt);
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
@@ -35,8 +38,9 @@
   const setPending = (v) => writeKey(PENDING, v);
   const textSize = () => known(TEXT, readKey(TEXT_KEY), 'm');
   const leading = () => known(LEADING, readKey(LEAD_KEY), 'normal');
+  const sendKey = () => known(SEND, readKey(SEND_KEY), 'enter');
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], note = null;
+  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], sendBtns = [], note = null;
 
   // G2：把字号 / 行距写成根元素上的变量；「标准」档去掉变量，Metre 规则回到原来的 15.5px / 1.7。
   function applyLook() {
@@ -72,6 +76,7 @@
     mark(scrollBtns, value);
     mark(textBtns, textSize());
     mark(leadBtns, leading());
+    mark(sendBtns, sendKey());
     note.hidden = !waiting;
   }
   function chooseScroll(key) {
@@ -116,14 +121,26 @@
     note.setAttribute('role', 'status');
     const [textRow, tb] = segRow('pk-metre-prefs-text', '字号', '对话里回答和你发的话的字号。', TEXT, 'text', (k) => chooseLook(TEXT_KEY, 'm', k));
     const [leadRow, lb] = segRow('pk-metre-prefs-leading', '行距', '行与行之间的距离。紧凑一屏看得多，宽松读长文更轻松。', LEADING, 'leading', (k) => chooseLook(LEAD_KEY, 'normal', k));
-    textBtns = tb; leadBtns = lb;
-    card.append(scrollRow, note, textRow, leadRow);
+    const [sendRow, nb] = segRow('pk-metre-prefs-send', '发送键', `按哪个键把写好的话发出去。选「${MOD} + Enter」时，单按 Enter 是换行。`, SEND, 'send', (k) => chooseLook(SEND_KEY, 'enter', k));
+    textBtns = tb; leadBtns = lb; sendBtns = nb;
+    card.append(scrollRow, note, textRow, leadRow, sendRow);
     const footer = target.querySelector('.' + S + 'footer');
     footer ? footer.before(card) : target.append(card);
     paint();
   }
 
   window.addEventListener('pinkie:settings-ready', (event) => mount(event.detail));
+  // I7：选了「Ctrl / ⌘ + Enter」时，输入框里单按 Enter 只换行。原生发送和碧琪共用的 Enter 钩子（queue-steer / resume /
+  // immersion / companion，都挂在 document 捕获阶段）都在这之后才收到事件，所以在 window 捕获阶段把这一下拦住：
+  // 只停传播、不 preventDefault，换行照常落进输入框。原生 chatSendShortcut 不改（它是全局的，会连带其他五个模式）；
+  // Ctrl / ⌘ + Enter 照常往下走，原生和共用钩子都按「发送」处理。输入法组字中、斜杠菜单开着时不拦。
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.isComposing || event.keyCode === 229) return;
+    if (!isMetre() || sendKey() !== 'modifier-enter') return;
+    const ta = event.target?.closest?.('.agent-chat__composer-combobox textarea');
+    if (!ta || ta.closest('.agent-chat__input')?.querySelector('.slash-menu')) return;
+    event.stopImmediatePropagation();
+  }, true);
   window.addEventListener('laolao:modechange', paint);
   const ready = () => { applyLook(); flush(); mount(document.querySelector('#laolao-user-settings .' + S + 'scroll')); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once: true}); else ready();
