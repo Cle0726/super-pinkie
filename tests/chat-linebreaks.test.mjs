@@ -23,7 +23,7 @@ test('2026.7 bundle keeps the original transformation', () => {
   assert.equal(result.changed, true);
   assert.match(result.out, /__pkLineBreak\(n\)/);
   assert.match(result.out, /__pkCjkStrong\(wE\);/);
-  assert.match(result.out, /pinkie-chat-linebreaks:v3/);
+  assert.match(result.out, /pinkie-chat-linebreaks:v4/);
   assert.equal(patchSource(result.out).reason, 'already patched');
 });
 
@@ -80,6 +80,59 @@ test('upgrades the installed v2 helper without touching neighboring patches', ()
   assert.match(result.out, /state\.env, children/);
   assert.equal(patchSource(result.out).changed, false);
   assert.equal(patchSource('/* pinkie-chat-linebreaks:v2 */ unknown').changed, false);
+  assert.match(result.out, /pinkie-chat-linebreaks:v4/);
+  assert.doesNotMatch(result.out, /pinkie-chat-linebreaks:v[23]/);
+  // A v2 install on 2026.7 also carries the old line-break rule; it is fixed on the way to v4.
+  const oldRule = old.replace('prefix;', "prefix;r=(e,t)=>{let n=e[t];return __pkLineBreak(n)||U(n.content)};");
+  const fixed = patchSource(oldRule).out;
+  assert.match(fixed, /return __pkLineBreak\(n\)\?'<br>':U\(n\.content\)\}/);
+  assert.ok(fixed.endsWith('const otherPatch = 42;'));
+});
+
+// A machine patched by the v3 script keeps the v3 2026.7 rule "__pkLineBreak(n)||U(n.content)".
+// Rebuild exactly that installed shape from the v4 output (the two differ only there and in the marker).
+function v3Installed(chunk) {
+  return patchSource(chunk).out
+    .replace(/__pkLineBreak\(([\w$]+)\)\?'<br>':([\w$]+)\(\1\.content\)/, '__pkLineBreak($1)||$2($1.content)')
+    .replace('/* pinkie-chat-linebreaks:v4 */', '/* pinkie-chat-linebreaks:v3 */');
+}
+const neighborPatch = '\n/* pinkie-chat-math:v2 */\nconst otherPatch = 42;';
+const rendererFor = (source) => {
+  const md = new Function('oe', source + ';return Z')(bundledMarkdownIt());
+  return (text) => md.render(text).trim();
+};
+
+test('a v3-patched 2026.7 chunk upgrades in place to v4 and renders a lone <br> as a line break, not true', () => {
+  const installed = v3Installed(legacyChunk) + neighborPatch;
+  assert.match(installed, /__pkLineBreak\([\w$]+\)\|\|[\w$]+\([\w$]+\.content\)/);
+  assert.match(installed, /pinkie-chat-linebreaks:v3/);
+  assert.equal(rendererFor(installed)('first<br>second'), '<p>firsttruesecond</p>');
+  const result = patchSource(installed);
+  assert.equal(result.changed, true);
+  // Only the expression and the marker move; the neighboring patch and everything else stay.
+  assert.equal(result.out, patchSource(legacyChunk).out + neighborPatch);
+  assert.doesNotMatch(result.out, /pinkie-chat-linebreaks:v3/);
+  const render = rendererFor(result.out);
+  assert.equal(render('first<br>second'), '<p>first<br>second</p>');
+  assert.equal(render('第一行<br>第二行'), '<p>第一行<br>第二行</p>');
+  assert.equal(render('a<br />b'), '<p>a<br>b</p>');
+  for (const text of ['first<br>second', 'a<br />b', 'a<BR/>b']) assert.doesNotMatch(render(text), /true/u);
+  assert.equal(render('x <span>y</span> z'), '<p>x &lt;span&gt;y&lt;/span&gt; z</p>');
+});
+
+test('running again at v4 changes nothing (idempotent); a v3 chunk without the old rule is left alone with a reason', () => {
+  const upgraded = patchSource(v3Installed(legacyChunk) + neighborPatch).out;
+  assert.deepEqual(patchSource(upgraded), {changed:false, reason:'already patched'});
+  for (const fresh of [legacy, current, legacyChunk]) {
+    const once = patchSource(fresh).out;
+    assert.deepEqual(patchSource(once), {changed:false, reason:'already patched'});
+  }
+  // v3 on 2026.10 already had the right rule.
+  const current3 = patchSource(current).out.replace('/* pinkie-chat-linebreaks:v4 */', '/* pinkie-chat-linebreaks:v3 */');
+  assert.deepEqual(patchSource(current3), {changed:false, reason:'v3 line-break expression is already correct; nothing to upgrade'});
+  // The hand-written v3 chunk kept in ui/runtime has no __pkLineBreak call at all.
+  const runtime = fs.readFileSync(new URL('../ui/runtime/markdown-DgASfUKF.js', import.meta.url), 'utf8');
+  assert.deepEqual(patchSource(runtime), {changed:false, reason:'v3 marker found but __pkLineBreak(X)||Y(X.content) not found'});
 });
 
 test('nested CJK parsing cannot alter outer emphasis delimiter positions', () => {
