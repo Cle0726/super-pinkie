@@ -181,10 +181,11 @@ test('opencode: starting on Pinkie models creates its own instance first; switch
 
 test('opencode: the menu row is listed with OpenCode and cannot be renamed or removed', () => {
   const rows = summarizeProviders([
-    {instanceId: OPENCODE_PINKIE_INSTANCE, driver: 'opencode', enabled: true, installed: true, status: 'ready', auth: {status: 'unknown'}, models: [{slug: 'pinkie/gw/a', name: 'A'}]},
+    {instanceId: OPENCODE_PINKIE_INSTANCE, driver: 'opencode', enabled: true, installed: true, status: 'ready', auth: {status: 'unknown'}, models: [{slug: 'opencode/big-pickle', name: 'Big Pickle', isCustom: false}, {slug: 'pinkie/gw/a', name: 'A', isCustom: true}]},
   ]);
   const row = rows.find(r => r.id === OPENCODE_PINKIE_INSTANCE);
   assert.deepEqual([row.name, row.upstream, row.account, row.state], ['OpenCode · 碧琪模型', 'pinkie', false, 'ready']);
+  assert.deepEqual(row.models.map(model => model.slug), ['pinkie/gw/a'], 'OpenCode's own models (opencode/big-pickle …) are not offered on the Pinkie row (11-25 real run)');
   assert.deepEqual([driverOf(OPENCODE_PINKIE_INSTANCE), isPinkieRow(OPENCODE_PINKIE_INSTANCE), isPinkieRow('opencode')], ['opencode', true, false]);
   const ids = rows.map(r => r.id);
   assert.ok(ids.indexOf('opencode') < ids.indexOf(OPENCODE_PINKIE_INSTANCE));
