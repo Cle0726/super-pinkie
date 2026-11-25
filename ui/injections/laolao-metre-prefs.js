@@ -121,7 +121,9 @@
     note.setAttribute('role', 'status');
     const [textRow, tb] = segRow('pk-metre-prefs-text', '字号', '对话里回答和你发的话的字号。', TEXT, 'text', (k) => chooseLook(TEXT_KEY, 'm', k));
     const [leadRow, lb] = segRow('pk-metre-prefs-leading', '行距', '行与行之间的距离。紧凑一屏看得多，宽松读长文更轻松。', LEADING, 'leading', (k) => chooseLook(LEAD_KEY, 'normal', k));
-    const [sendRow, nb] = segRow('pk-metre-prefs-send', '发送键', `按哪个键把写好的话发出去。选「${MOD} + Enter」时，单按 Enter 是换行。`, SEND, 'send', (k) => chooseLook(SEND_KEY, 'enter', k));
+    // 组合键里用不换行空格，「Ctrl + Enter」不会被拆成两行（look.py 1024 / 1440 夜）。
+    const combo = (MOD + ' + Enter').replace(/ /g, ' ');
+    const [sendRow, nb] = segRow('pk-metre-prefs-send', '发送键', `按哪个键发出去。选 ${combo} 时，Enter 只换行。`, SEND, 'send', (k) => chooseLook(SEND_KEY, 'enter', k));
     textBtns = tb; leadBtns = lb; sendBtns = nb;
     card.append(scrollRow, note, textRow, leadRow, sendRow);
     const footer = target.querySelector('.' + S + 'footer');

@@ -228,6 +228,8 @@ const keyEnv = (opts) => {
 test('I7 卡片里有「发送键」两档，默认 Enter；点「Ctrl + Enter」存本地，点回 Enter 去掉存的值；不经原生 applySettings', () => {
   const e = keyEnv();
   assert.deepEqual(e.look('send').map((b) => b.textContent), ['Enter', 'Ctrl + Enter']);
+  const hint = e.card.all('span').find((s) => s.className === 'pinkie-user-settings__hint' && /Enter/.test(s.textContent))?.textContent || '';
+  assert.ok(hint.includes('Ctrl\u00a0+\u00a0Enter'), '说明里的组合键用不换行空格，不会拆成两行：' + JSON.stringify(hint));
   assert.deepEqual(e.lookPressed('send'), ['enter']);
   e.lookBtn('send', 'modifier-enter').click();
   assert.equal(e.ls.get(SEND_KEY), 'modifier-enter');
