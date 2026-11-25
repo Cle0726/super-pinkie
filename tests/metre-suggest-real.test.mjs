@@ -29,13 +29,19 @@ const rowState = () => {
   return {chips: [...row.querySelectorAll('.pk-metre-suggest__chip')].map((b) => b.textContent),
     beforeShell: row.nextElementSibling?.classList.contains('agent-chat__composer-shell') ?? false,
     visible: r.width > 0 && r.height > 0 && r.bottom <= innerHeight && r.top >= 0,
-    leftGap: chip && box ? Math.round(chip.left - box.left) : null, overRight: chip && box ? Math.round(r.right - box.right) : null};
+    leftGap: chip && box ? Math.round((chip.left - box.left) * 100) / 100 : null, overRight: chip && box ? Math.round(r.right - box.right) : null};
 };
+// 字 / 底，以及边框对按钮底、对按钮背后实际底色（往上找第一个不透明的背景）的对比度。
 const contrast = () => {
   const lum = (s) => { const m = s.match(/[\d.]+/g).map(Number); const [r, g, b] = m.slice(0, 3).map((c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (x, y) => { const a = lum(x), c = lum(y); return Math.round(((Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05)) * 100) / 100; };
+  const opaque = (s) => { const m = s.match(/[\d.]+/g); return m && (m.length < 4 || Number(m[3]) >= 0.99) && !/^rgba\(0, 0, 0, 0\)$/.test(s); };
   const b = document.querySelector('.pk-metre-suggest__chip'); if (!b) return null;
-  const cs = getComputedStyle(b), a = lum(cs.color), c = lum(cs.backgroundColor);
-  return {fg: cs.color, bg: cs.backgroundColor, ratio: Math.round(((Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05)) * 100) / 100};
+  const cs = getComputedStyle(b);
+  let el = b.parentElement, behind = 'rgb(255, 255, 255)';
+  for (; el; el = el.parentElement) { const bg = getComputedStyle(el).backgroundColor; if (opaque(bg)) { behind = bg; break; } }
+  return {fg: cs.color, bg: cs.backgroundColor, border: cs.borderTopColor, behind,
+    ratio: ratio(cs.color, cs.backgroundColor), edgeOnChip: ratio(cs.borderTopColor, cs.backgroundColor), edgeOnPage: ratio(cs.borderTopColor, behind)};
 };
 
 async function turn(page, text) {
@@ -77,12 +83,14 @@ test('I8 real page: 回答后出下一句建议，点了只填不发，设置里
         assert.deepEqual(s1.chips, ['React', 'Vue']);
         assert.ok(s1.beforeShell, '在输入框外壳前面');
         assert.ok(s1.visible, '看得见、在视口里');
-        assert.ok(s1.leftGap >= 0 && s1.leftGap <= 12, `第一条建议和输入框左边对齐（差 ${s1.leftGap}px，应在 0–12）`);
+        assert.ok(Math.abs(s1.leftGap) <= 0.5, `第一条建议的左边框和输入框左边框齐平（差 ${s1.leftGap}px，只容 ±0.5 取整误差）`);
         assert.ok(s1.overRight <= 1, `建议这一行不超出输入框右边（超出 ${s1.overRight}px）`);
 
         // 4. 对比度
         const c = await page.evaluate(contrast);
         assert.ok(c.ratio >= 4.5, `建议按钮字 / 底对比度 ${c.ratio} < 4.5（${c.fg} on ${c.bg}）`);
+        assert.ok(c.edgeOnChip >= 3, `建议按钮边框对按钮底 ${c.edgeOnChip} < 3（${c.border} on ${c.bg}）`);
+        assert.ok(c.edgeOnPage >= 3, `建议按钮边框对背后实际底色 ${c.edgeOnPage} < 3（${c.border} on ${c.behind}）`);
 
         // 2. 点了只填不发
         const before = await page.evaluate(sends);
