@@ -104,6 +104,53 @@ test(`Metre fav: other modes and other menu steps are left alone (${engine})`, {
   } finally { await browser.close(); }
 });
 
+// 原生模型选择器（laolao-model-picker.js 画的 [data-pinkie-picker-surface]）：行是宿主的按键，只在菜单底部加「收藏当前模型」。
+const pickerHtml = (selected) => `<details class="chat-controls__model" open><summary>模型</summary><div class="chat-controls__model-menu" data-pinkie-picker-surface="1"><div class="chat-controls__model-options">${
+  [['route-a/opus', 'Opus'], ['route-b/gpt-5', 'GPT-5'], ['route-c/a-very-long-model-name-that-keeps-going-and-going', 'A Very Long Model Name That Keeps Going And Going']]
+    .map(([v, n]) => `<button type="button" data-chat-model-option="${v}" aria-selected="${v === selected}"><span class="chat-controls__model-option-name">${n}</span></button>`).join('')}</div></div></details>`;
+
+test(`Metre fav: native picker gets one "favourite current model" toggle that feeds pickerFavs (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 820, height: 720}});
+    await setup(page, 'metre', ['Claude Code/haiku']);
+    await page.evaluate((html) => { document.body.insertAdjacentHTML('beforeend', html); window.picked = 0; document.querySelector('details').addEventListener('toggle', () => { window.picked += 1; }); }, pickerHtml('route-b/gpt-5'));
+    await page.waitForTimeout(150);
+    const toggle = page.locator('[data-pinkie-picker-surface] > .pk-fav-current');
+    assert.equal(await toggle.count(), 1);
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+    assert.equal(await toggle.innerText(), '☆ 收藏当前模型 GPT-5');
+    const routes = ['route-a/opus', 'route-b/gpt-5', 'route-c/x'];
+    assert.deepEqual(await page.evaluate((v) => window.Pinkie.metre.fav.pickerFavs(v), routes), [], '引擎菜单的收藏不算进原生选择器');
+
+    await toggle.click();
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
+    assert.equal(await toggle.innerText(), '★ 已收藏 GPT-5');
+    assert.equal(await page.evaluate(() => document.querySelector('details').open), true, '点它不关菜单');
+    assert.deepEqual(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY), ['picker:route-b/gpt-5', 'Claude Code/haiku']);
+    assert.deepEqual(await page.evaluate((v) => window.Pinkie.metre.fav.pickerFavs(v), routes), ['route-b/gpt-5']);
+    assert.deepEqual(await page.evaluate(() => window.Pinkie.metre.fav.pickerFavs(['route-a/opus'])), [], '目录里没有的路由不返回');
+
+    // 换了当前模型：键跟着换，状态按新模型算；键盘空格切换。
+    await page.evaluate(() => { document.querySelector('[aria-selected="true"]').setAttribute('aria-selected', 'false'); document.querySelector('[data-chat-model-option^="route-c"]').setAttribute('aria-selected', 'true'); });
+    await page.waitForTimeout(150);
+    assert.equal(await toggle.count(), 1, '观察器多次触发也只有一个键');
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+    await toggle.focus(); await page.keyboard.press('Space');
+    assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
+    const box = await toggle.evaluate((b) => ({sw: b.scrollWidth, cw: b.clientWidth, ov: getComputedStyle(b).textOverflow, w: b.getBoundingClientRect().width, pw: b.parentElement.getBoundingClientRect().width}));
+    assert.equal(box.ov, 'ellipsis', '长模型名省略号截断，不撑宽菜单');
+    assert.ok(box.w <= box.pw + 0.5, '键不超出菜单');
+
+    // 不是 Metre：不加键，pickerFavs 返回空（原生选择器顺序不变）。
+    await setup(page, 'pinkie', ['picker:route-b/gpt-5']);
+    await page.evaluate((html) => document.body.insertAdjacentHTML('beforeend', html), pickerHtml('route-b/gpt-5'));
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator('.pk-fav-current').count(), 0);
+    assert.deepEqual(await page.evaluate((v) => window.Pinkie.metre.fav.pickerFavs(v), routes), []);
+  } finally { await browser.close(); }
+});
+
 test('Metre fav: no new observer, timer or window.__ global; loaded right after the engine script', () => {
   const js = fs.readFileSync(inj('laolao-metre-fav.js'), 'utf8');
   assert.doesNotMatch(js, /new MutationObserver|setInterval|window\.__/);

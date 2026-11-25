@@ -71,8 +71,41 @@
     if (first.length) for (const row of [...first, ...rest]) body.append(row);
   }
 
-  ns.fav = {KEY, read, toggle, decorate};
-  const start = () => window.Pinkie?.domWatch?.watch?.('.pk-eng-menu', (menus) => menus.forEach(decorate), {immediate: true});
+  /* 原生模型选择器（输入框下面那个，laolao-model-picker.js 画的 [data-pinkie-picker-surface]）：它的行是宿主 Lit 画的按键，
+   * 不能往里塞星标，也不能包一层。所以只在菜单底部放一个「收藏当前模型」切换键（Pinkie 自己的按键），收藏的是当前选中的那个；
+   * 「常用模型」标签里收藏的排在当前模型后面、最近用过的前面（laolao-model-picker.js 调 pickerFavs 取顺序）。存储同一个键，值「picker:<路由>」。 */
+  const PICKER = 'picker:';
+  const pickerFavs = (values) => (isMetre() ? read().filter((key) => key.startsWith(PICKER)).map((key) => key.slice(PICKER.length)).filter((v) => values.includes(v)) : []);
+  function decoratePicker(menu) {
+    let button = menu.querySelector(':scope > .pk-fav-current');
+    const row = isMetre() && menu.querySelector('[data-chat-model-option][aria-selected="true"]');
+    if (!row) { button?.remove(); return; }
+    const value = row.getAttribute('data-chat-model-option') || '';
+    const name = (row.querySelector('.chat-controls__model-option-name')?.textContent || row.dataset.chatModelName || value).trim();
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'pk-fav-current';
+      button.addEventListener('click', (event) => {
+        event.preventDefault(); event.stopPropagation();
+        toggle(PICKER + button.dataset.value);
+        decoratePicker(menu);
+      });
+    }
+    // 这里的改动会再触发共用观察器：只在值变了时才写，避免来回触发。
+    const on = read().includes(PICKER + value), text = (on ? '★ 已收藏 ' : '☆ 收藏当前模型 ') + name;
+    if (button.dataset.value !== value) button.dataset.value = value;
+    if (button.getAttribute('aria-pressed') !== String(on)) button.setAttribute('aria-pressed', String(on));
+    if (button.textContent !== text) button.textContent = text;
+    const title = on ? '取消收藏 ' + name : '收藏 ' + name + '：在「常用模型」里排在最前';
+    if (button.title !== title) button.title = title;
+    if (button.parentElement !== menu) menu.append(button);
+  }
+
+  ns.fav = {KEY, read, toggle, decorate, pickerFavs, decoratePicker};
+  // 一次 watch = 一个观察器：两种菜单共用这一个。
+  const start = () => window.Pinkie?.domWatch?.watch?.('.pk-eng-menu, [data-pinkie-picker-surface]',
+    (menus) => menus.forEach((menu) => (menu.matches('.pk-eng-menu') ? decorate : decoratePicker)(menu)), {immediate: true});
   if (window.Pinkie?.domWatch?.watch) start();
   else document.addEventListener('DOMContentLoaded', start, {once: true});
 })();
