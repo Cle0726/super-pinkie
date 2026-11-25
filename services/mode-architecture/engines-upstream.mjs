@@ -24,18 +24,25 @@ export const ENV_NAMES = Object.freeze(['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TO
   'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']);
 const MAX_BODY = 32 * 1024 * 1024;
 const PASS_HEADERS = ['content-type', 'anthropic-version', 'anthropic-beta', 'accept'];
+// Codex 那条路只转这几个；别的（cookie、ChatGPT 账号头之类）一律不转。
+const OPENAI_PASS_HEADERS = ['content-type', 'accept', 'openai-beta'];
 
 // 碧琪目录里能给 Claude Code 用的模型：top 档、Claude 系（上游原生就有 Anthropic /v1/messages）、提供方有本机或 https 地址和钥匙。
 // slug 是「提供方/模型」，转发口靠第一段认出是哪个提供方。
 // health：碧琪自己记的模型健康（model-health.mjs 的 ModelHealth），最近调用失败的排到最后
 // （11-25 隔离碧琪：同一个网关里 claude-* 那几条走的登录过期了，aws-quick/* 能用）。
 // 低思考档的变体（-low / -medium / -minimal …）不列：用户只用最高的思考档。
-export function pinkieModels(config = {}, {health = null} = {}) {
+// family：claude = Claude Code 那条路（上游要有 Anthropic /v1/messages，只列 Claude 系）；
+// codex = Codex 那条路（上游要有 OpenAI /v1/responses：提供方标了 openai-responses，或者是本机网关——11-25 实测本机网关
+// /v1/messages、/v1/responses、/v1/chat/completions 三个都通）。两条路都只列 top 档、不列低思考档。
+export function pinkieModels(config = {}, {health = null, family = 'claude'} = {}) {
   const providers = config?.models?.providers || {};
   return catalog(config).filter(item => {
     const entry = providers[item.provider] || {};
     const model = item.id.slice(item.provider.length + 1);
-    return /claude/i.test(model) && !LOW_EFFORT.test(model) && tierOf(item.id) === 'top' && upstreamBase(entry.baseUrl) && String(entry.apiKey || '').trim();
+    const base = upstreamBase(entry.baseUrl);
+    const fits = family === 'codex' ? (entry.api === 'openai-responses' || isLoopback(base)) : /claude/i.test(model);
+    return fits && !LOW_EFFORT.test(model) && tierOf(item.id) === 'top' && base && String(entry.apiKey || '').trim();
   }).map(item => ({slug: item.id, name: item.name, failing: failing(health, item.id)}))
     // 能用的在前；同一档里版本号大的在前（claude-opus-5-5 排在 claude-opus-4-7 前面），不带思考后缀的在前。默认用第一个。
     .sort((a, b) => Number(a.failing) - Number(b.failing) || versionOf(b.slug) - versionOf(a.slug)
@@ -55,6 +62,9 @@ export const versionOf = slug => {
   const match = /(?:opus|sonnet|haiku)-(\d{1,2})(?:[-.](\d{1,2}))?(?!\d)/i.exec(name) || /claude-(\d{1,2})(?:[-.](\d{1,2}))?(?!\d)/i.exec(name);
   return match ? Number(match[1]) * 100 + Number(match[2] || 0) : 0;
 };
+
+const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];
+const isLoopback = base => { try { return LOOPBACK.includes(new URL(base).hostname); } catch { return false; } };
 
 // 提供方的 baseUrl（多半以 /v1 结尾）→ 转发去的根地址。只认 http（必须是本机回环）和 https。
 export function upstreamBase(raw) {
@@ -86,12 +96,13 @@ export class PinkieRelay {
   constructor({config = () => ({}), logger = null, fetchImpl = globalThis.fetch, token = crypto.randomBytes(32).toString('base64url')} = {}) {
     this.config = config; this.logger = logger; this.fetchImpl = fetchImpl;
     Object.defineProperty(this, 'token', {value: token, enumerable: false});
-    this.server = null; this.port = 0; this.defaultModel = '';
+    // defaultModel：Claude Code 那条路的默认模型；codexModel：Codex 那条路的。
+    this.server = null; this.port = 0; this.defaultModel = ''; this.codexModel = '';
   }
 
   get baseUrl() { return this.port ? `http://127.0.0.1:${this.port}` : ''; }
   // 日志和快照里只出现这些。
-  toJSON() { return {running: Boolean(this.server), port: this.port, defaultModel: this.defaultModel}; }
+  toJSON() { return {running: Boolean(this.server), port: this.port, defaultModel: this.defaultModel, codexModel: this.codexModel}; }
 
   async start() {
     if (this.server) return this;
@@ -119,10 +130,11 @@ export class PinkieRelay {
     return Object.values(providers).map(entry => String(entry?.apiKey || '').trim()).filter(Boolean);
   }
 
-  fail(res, status, type, message) {
+  // openai：Codex 那条路（/v1/responses）用 OpenAI 的错误格式，Claude Code 那条路用 Anthropic 的。
+  fail(res, status, type, message, {openai = false} = {}) {
     if (res.headersSent) { try { res.end(); } catch {} return; }
     res.writeHead(status, {'content-type': 'application/json'});
-    res.end(JSON.stringify({type: 'error', error: {type, message}}));
+    res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
   }
 
   async handle(req, res) {
@@ -133,32 +145,39 @@ export class PinkieRelay {
       res.writeHead(200, {'content-type': 'application/json'});
       return res.end(JSON.stringify({data, has_more: false, first_id: data[0]?.id || null, last_id: data.at(-1)?.id || null}));
     }
-    if (req.method !== 'POST' || !/^\/v1\/messages(?:\/count_tokens)?$/.test(url.pathname)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages');
+    // 两条路：Claude Code 走 Anthropic /v1/messages，Codex 走 OpenAI /v1/responses（上游原生就有，不做协议转换）。
+    const codex = url.pathname === '/v1/responses';
+    const claude = /^\/v1\/messages(?:\/count_tokens)?$/.test(url.pathname);
+    const opts = {openai: codex};
+    if (req.method !== 'POST' || !(codex || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages 和 /v1/responses');
     const chunks = []; let size = 0;
-    for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大'); chunks.push(chunk); }
+    for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts); chunks.push(chunk); }
     let body;
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON'); }
+    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
     const config = this.config();
-    const route = routeModel(body?.model, pinkieModels(config), this.defaultModel);
-    if (!route) return this.fail(res, 503, 'api_error', '碧琪这边没有能给 Claude Code 用的模型');
+    const family = codex ? 'codex' : 'claude';
+    const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : this.defaultModel);
+    if (!route) return this.fail(res, 503, 'api_error', `碧琪这边没有能给 ${codex ? 'Codex' : 'Claude Code'} 用的模型`, opts);
     const entry = config?.models?.providers?.[route.provider] || {};
     const key = String(entry.apiKey || '').trim();
     const base = upstreamBase(entry.baseUrl);
-    if (!key || !base) return this.fail(res, 503, 'api_error', '碧琪这个上游没配好');
-    const headers = {'x-api-key': key, authorization: `Bearer ${key}`};
-    for (const name of PASS_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
+    if (!key || !base) return this.fail(res, 503, 'api_error', '碧琪这个上游没配好', opts);
+    const headers = codex ? {authorization: `Bearer ${key}`} : {'x-api-key': key, authorization: `Bearer ${key}`};
+    for (const name of codex ? OPENAI_PASS_HEADERS : PASS_HEADERS) if (req.headers[name]) headers[name] = String(req.headers[name]);
     headers['content-type'] ||= 'application/json';
-    headers['anthropic-version'] ||= '2023-06-01';
+    if (!codex) headers['anthropic-version'] ||= '2023-06-01';
     const upstream = await this.fetchImpl(base + url.pathname, {method: 'POST', headers, body: JSON.stringify({...body, model: route.model})});
     const out = {'content-type': upstream.headers.get('content-type') || 'application/json'};
-    for (const name of ['retry-after', 'anthropic-ratelimit-requests-reset', 'anthropic-ratelimit-tokens-reset', 'request-id']) {
+    for (const name of ['retry-after', 'anthropic-ratelimit-requests-reset', 'anthropic-ratelimit-tokens-reset', 'request-id',
+      'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'x-request-id']) {
       const value = upstream.headers.get(name); if (value) out[name] = value;
     }
-    // 上游出错：原样转状态码（429 = 额度用完，Claude Code 和引擎服务照常按「额度用完」处理），正文去掉钥匙。
+    // 上游出错：原样转状态码（429 = 额度用完，Claude Code / Codex 和引擎服务照常按「额度用完」处理），正文去掉钥匙。
     if (!upstream.ok) {
       const text = await upstream.text().catch(() => '');
       res.writeHead(upstream.status, out);
-      return res.end(this.scrub(text) || JSON.stringify({type: 'error', error: {type: 'api_error', message: `上游 ${upstream.status}`}}));
+      const fallback = codex ? {error: {type: 'api_error', message: `上游 ${upstream.status}`}} : {type: 'error', error: {type: 'api_error', message: `上游 ${upstream.status}`}};
+      return res.end(this.scrub(text) || JSON.stringify(fallback));
     }
     res.writeHead(upstream.status, out);
     if (!upstream.body) return res.end();
@@ -215,4 +234,34 @@ export function linkPinkieHistory(dir, {shared = path.join(os.homedir(), '.claud
 export function pinkieInstance(dir, models) {
   return {driver: 'claudeAgent', displayName: `Claude Code · ${PINKIE_LABEL}`, enabled: true,
     config: {homePath: dir, customModels: models.map(model => ({slug: model.slug, name: model.name}))}};
+}
+
+// ---- Codex 那一家 ----
+// 引擎服务给 Codex 开子进程时会删掉 OPENAI_API_KEY / OPENAI_BASE_URL（0.1.11 里核对过），所以不走环境变量，
+// 走这个实例自己的启动参数（-c 覆盖，只给这一个子进程，不改用户的 ~/.codex/config.toml）：
+// - model_providers.pinkie：base_url 指向转发口，wire_api="responses"（Codex 0.171 只认这一种），
+//   experimental_bearer_token 放转发口的会话令牌（不是上游钥匙），requires_openai_auth=false 所以不用登录订阅。
+// - 思考开最高档 xhigh。
+// 会话历史：用影子文件夹（shadowHomePath）。引擎服务会把 ~/.codex 里除 auth.json / auth.lock / models_cache.json /
+// log / memories / tmp 以外的东西（sessions、sqlite、config.toml …）都链进来，所以切到 / 切出「碧琪模型」历史还在；
+// auth.json 这个实例自己一份，用户的 ChatGPT 登录不会被读到这条路上来。
+export const CODEX_PINKIE_INSTANCE = 'codex-pinkie';
+export const CODEX_PINKIE_FOLDER = '.codex-metre-pinkie';
+export const CODEX_PROVIDER_ID = 'pinkie';
+// 和引擎服务的 quoteCliArg 同一套引号规则：它用 tokenizeCliArgs 拆 launchArgs。
+const quoteArg = value => `"${String(value).replace(/["\\$`]/g, '\\$&')}"`;
+const tomlString = value => JSON.stringify(String(value));
+
+export function codexLaunchArgs({baseUrl, token}) {
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(String(baseUrl || ''))) throw new Error('转发口地址不对');
+  if (!/^[A-Za-z0-9_-]{16,}$/.test(String(token || ''))) throw new Error('转发口令牌不对');
+  const provider = `model_providers.${CODEX_PROVIDER_ID}={name=${tomlString(`碧琪模型`)},base_url=${tomlString(`${baseUrl}/v1`)},wire_api="responses",`
+    + `experimental_bearer_token=${tomlString(token)},requires_openai_auth=false,supports_websockets=false}`;
+  return [`model_provider=${tomlString(CODEX_PROVIDER_ID)}`, provider, `model_reasoning_effort=${tomlString(TOP_EFFORT)}`]
+    .map(setting => `-c ${quoteArg(setting)}`).join(' ');
+}
+
+export function codexPinkieInstance(dir, models, {baseUrl, token}) {
+  return {driver: 'codex', displayName: `Codex · ${PINKIE_LABEL}`, enabled: true,
+    config: {shadowHomePath: dir, launchArgs: codexLaunchArgs({baseUrl, token}), customModels: models.map(model => ({slug: model.slug, name: model.name}))}};
 }
