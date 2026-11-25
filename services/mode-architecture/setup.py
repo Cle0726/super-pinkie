@@ -683,7 +683,7 @@ def install(home=None) -> bool:
             "web-gpt-project-context.mjs", "ask.mjs", "reply-hygiene.mjs",
             "app-browser.mjs", "web-search-fallback.mjs", "model-health.mjs", "file-delivery.mjs", "app-guide.mjs",
             "rich-runtime.mjs", "workbench.mjs", "workbench-lsp.mjs",
-            "workbench-ext.mjs", "nb_runner.py", "nb_bootstrap.py",
+            "workbench-ext.mjs", "pr-flow.mjs", "nb_runner.py", "nb_bootstrap.py",
             "package.json", "openclaw.plugin.json",
         ):
             if (source / name).is_file():

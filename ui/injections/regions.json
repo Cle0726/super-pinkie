@@ -263,7 +263,9 @@
         "laolao-metre-allow.css",
         "laolao-metre-allow.js",
         "laolao-metre-suggest.css",
-        "laolao-metre-suggest.js"
+        "laolao-metre-suggest.js",
+        "laolao-metre-pr.css",
+        "laolao-metre-pr.js"
       ]
     },
     {
