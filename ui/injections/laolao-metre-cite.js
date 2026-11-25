@@ -172,7 +172,7 @@
     const {n, source} = info;
     card = el('div', 'pk-mcite-card');
     card.id = 'pk-mcite-card';
-    card.setAttribute('role', 'tooltip');
+    // 不设 role="tooltip"：Metre 皮肤给所有 tooltip 铺反色（强制覆盖），卡片标题会和底同色消失。角标的 aria-describedby 照样指到这里。
     if (reduced()) card.dataset.still = '1';
     const head = el('div', 'pk-mcite-card__head');
     head.append(el('span', 'pk-mcite-card__n', String(n)), el('span', 'pk-mcite-card__host', source.host));

@@ -17,7 +17,9 @@
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const synth = () => window.speechSynthesis || null;
   const ICON_PLAY = '<path d="M4 10v4h3l5 4V6L7 10z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/>';
-  const ICON_STOP = '<rect x="7" y="7" width="10" height="10" rx="1.5"/>';
+  // 「停止朗读」：播放器通用的实心圆角方块停止键。11-24 打回：原来只是一个空心细框，认不出来；
+  // 试过「圆圈里一个小方块」，看图像录音键，所以只用实心方块。
+  const ICON_STOP = '<rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor" stroke="none"/>';
   const LABEL = {idle: '朗读', playing: '停止朗读'};
 
   // ---------- 要念的文字 ----------
@@ -72,7 +74,8 @@
     button.dataset.state = state;
     button.setAttribute('aria-pressed', playing ? 'true' : 'false');
     button.setAttribute('aria-label', LABEL[state]);
-    button.title = LABEL[state];
+    // 悬停提示由 laolao-metre-cite.css 用 aria-label 画（::after），不再设 title，免得系统提示和它叠两层。
+    button.removeAttribute('title');
     button.querySelector('svg').innerHTML = playing ? ICON_STOP : ICON_PLAY;
   }
   function stop() {

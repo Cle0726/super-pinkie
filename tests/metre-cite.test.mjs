@@ -100,7 +100,7 @@ test('in Metre: cites follow the order the tools returned them, the card shows t
     assert.match(await tab.locator('.pinkie-cite').first().getAttribute('aria-label'), /^来源 1：Node\.js 22 发布说明，nodejs\.org$/);
 
     await tab.locator('.pinkie-cite').first().hover();
-    const card = tab.locator('.pk-mcite-card[role=tooltip]');
+    const card = tab.locator('.pk-mcite-card:not([role])');
     await card.waitFor();
     assert.match(await card.innerText(), /nodejs\.org[\s\S]*Node\.js 22 发布说明[\s\S]*require\(esm\)/);
     assert.equal(await tab.locator('.pinkie-cite').first().getAttribute('aria-describedby'), 'pk-mcite-card');
