@@ -23,10 +23,38 @@ html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-
   text-align: left;
   order: 2;
 }
-html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter[aria-pressed="true"] {
-  background: var(--metre-side-active);
-  color: var(--metre-text);
+/* 按下态底色不在这里：metre-skin 用带重要标记的 transparent 锁住了侧栏条目底色，不带标记的声明权重再高也压不过。
+ * 它和「总谱」打开态并在 laolao-metre-skin.css 同一条规则里（界面审查 11-24 23:55 第 2 条，不新增重要标记）。 */
+
+/* —— 筛到 0 条：一行提示 +「显示全部」，三宽 × 日夜都不截断；有匹配的行或没在筛选时不出现 —— */
+html[data-laolao-mode="metre"] #laolao-session-manager .pk-mw-filter-empty { display: none; }
+html[data-laolao-mode="metre"][data-pk-mw-filter="running"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--running)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="waiting"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--waiting)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="error"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-status--error)) .pk-mw-filter-empty,
+html[data-laolao-mode="metre"][data-pk-mw-filter="unread"] #laolao-session-manager:not(:has(.session-row-host:not(.pinkie-session-part) .pinkie-session-unread)) .pk-mw-filter-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  color: var(--metre-muted);
+  font: 400 13px/1.5 var(--metre-sans);
 }
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__text { min-width: 0; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__all {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--metre-cobalt);
+  font: inherit;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+html[data-laolao-mode="metre"] .pk-mw-filter-empty__all:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+html:not([data-laolao-mode="metre"]) .pk-mw-filter-empty { display: none; }
 html[data-laolao-mode="metre"] aside.sidebar .laolao-session-controls .pk-metre-nav--filter > span {
   overflow: hidden;
   text-overflow: ellipsis;

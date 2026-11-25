@@ -64,6 +64,7 @@
     filter = isMetre() ? next : '';
     if (filter) root.setAttribute('data-pk-mw-filter', filter); else root.removeAttribute('data-pk-mw-filter');
     paintButton();
+    ensureEmpty();
     return filter;
   }
   function paintButton() {
@@ -73,6 +74,27 @@
     label.textContent = filter ? '筛选 · ' + labelOf(filter) : '筛选';
     btn.setAttribute('aria-pressed', String(Boolean(filter)));
     btn.setAttribute('aria-label', filter ? '会话筛选：只看' + labelOf(filter) + '，点开换一种' : '会话筛选：全部会话');
+  }
+  // 筛到 0 条时的空态（界面审查 11-24 23:55 第 3 条）：一行提示 +「显示全部」。节点常驻在
+  // #laolao-session-manager 顶上（会话列表重画只换 .laolao-managed-groups，不清 host），
+  // 显不显示交给 laolao-metre-workspace.css 的 :has()——列表怎么重画都跟着对。
+  const EMPTY_TEXT = Object.freeze({running: '没有在跑的会话', waiting: '没有等你回复的会话', unread: '没有未读的会话', error: '没有上一轮出错的会话'});
+  function ensureEmpty() {
+    const host = document.querySelector('aside.sidebar #laolao-session-manager');
+    if (!host) return null;
+    let box = host.querySelector('.pk-mw-filter-empty');
+    if (!box) {
+      box = el('div', 'pk-mw-filter-empty');
+      box.setAttribute('role', 'status');
+      const show = el('button', 'pk-mw-filter-empty__all', '显示全部');
+      show.type = 'button';
+      show.addEventListener('click', () => { setFilter(''); document.querySelector('aside.sidebar .pk-metre-nav--filter')?.focus(); });
+      box.append(el('span', 'pk-mw-filter-empty__text', ''), show);
+      if (typeof host.prepend === 'function') host.prepend(box); else host.append(box);
+    }
+    const text = box.querySelector('.pk-mw-filter-empty__text');
+    if (text) text.textContent = EMPTY_TEXT[filter] || '';
+    return box;
   }
   function closeMenu(focusButton) {
     if (!menu) return;
@@ -112,10 +134,16 @@
         items[(at + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
       }
     });
+    // 挂进侧栏，不挂 body：1024 / 820 宽侧栏是抽屉，laolao-sidebar.js 在 document 捕获阶段见到 .shell-nav 外的
+    // pointerdown 就收抽屉，菜单挂在 body 上时用鼠标点任何一项都算「点在抽屉外」（界面审查 11-24 23:55 第 1 条）。
+    // aside 带 container（metre-skin），是 fixed 的参照块：先挂上去，再按它的实际原点换算到按钮正下方。
+    menu.style.left = '0px';
+    menu.style.top = '0px';
+    (document.querySelector('aside.sidebar') || document.body).append(menu);
     const r = btn.getBoundingClientRect();
-    menu.style.left = Math.round(r.left) + 'px';
-    menu.style.top = Math.round(r.bottom + 4) + 'px';
-    document.body.append(menu);
+    const o = menu.getBoundingClientRect();
+    menu.style.left = Math.round(r.left - (o.left || 0)) + 'px';
+    menu.style.top = Math.round(r.bottom + 4 - (o.top || 0)) + 'px';
     btn.setAttribute('aria-expanded', 'true');
     document.addEventListener('pointerdown', outside, true);
     (menu.querySelector('[aria-checked="true"]') || menu.querySelector('.pk-mw-filter-menu__item'))?.focus();
@@ -126,6 +154,7 @@
       closeMenu(false);
       return;
     }
+    ensureEmpty();
     const controls = document.querySelector('aside.sidebar .laolao-session-controls');
     if (!controls || controls.querySelector('.pk-metre-nav--filter')) return;
     const btn = el('button', 'pinkie-sidebar-entry pk-metre-nav pk-metre-nav--filter');

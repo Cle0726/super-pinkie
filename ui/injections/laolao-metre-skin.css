@@ -873,7 +873,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--c
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) :is(.sidebar-new-session, .pinkie-sidebar-entry)::before { width: 18px !important; height: 18px !important; background: currentColor !important; opacity: 0.9 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search > span { display: inline !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) .pinkie-sidebar-entry--search { order: 0 !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--board { background: var(--metre-side-active) !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--board, html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-pk-mw-filter] aside.sidebar:not(.sidebar--collapsed) .pk-metre-nav--filter[aria-pressed="true"] { background: var(--metre-side-active) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar:not(.sidebar--collapsed) .sidebar-new-session { background: transparent !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar:not(.sidebar--collapsed) #laolao-session-manager { margin-top: 22px !important; }
 /* 左下角账号栏：一行，圆形记号 */
