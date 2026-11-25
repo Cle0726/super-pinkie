@@ -400,6 +400,40 @@ test(`when the composer row is too narrow the keys fold down instead of pushing 
   } finally { await browser.close(); }
 });
 
+// linux CI 真页面 1280 宽：字体更宽，收到「⋯」（fold 3）还是放不下，原生模型键被挤到第二行（metre-board 5.4%）。
+// 连「⋯」都放不下时要整组藏起来，宽度够了再展开。改前停在 fold 3、模型键换行，这条失败。
+test(`when even the ⋯ key does not fit, the keys hide instead of wrapping, and come back when there is room (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser);
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
+      const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
+    });
+    await p.evaluate(() => window.PinkieMetrePerm.refresh());
+    await p.waitForTimeout(1700);
+    const st = () => p.evaluate(() => {
+      const top = (s) => Math.round(document.querySelector(s).getBoundingClientRect().top);
+      const box = document.querySelector('.pk-perm-chips');
+      return {metre: top('.agent-chat__composer-controls > .pk-eng-chip'), model: top('.chat-composer-model-control'), fold: box.dataset.fold, shown: getComputedStyle(box).display !== 'none'};
+    });
+    // 只够放 Metre 键和模型键（再加 10px），「⋯」放不下
+    await p.evaluate(() => {
+      const w = (s) => document.querySelector(s).getBoundingClientRect().width;
+      document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 4 + 10) + 'px';
+      window.PinkieMetrePerm.fit();
+    });
+    const tight = await st();
+    assert.equal(tight.model, tight.metre, `放不下「⋯」时模型键不换行（${JSON.stringify(tight)}）`);
+    assert.equal(tight.fold, '4'); assert.equal(tight.shown, false);
+    // 宽度够了再量一次就展开回来
+    await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls').style.width = '1000px'; window.PinkieMetrePerm.fit(); });
+    const wide = await st();
+    assert.equal(wide.fold, '0', `放宽后展开（${JSON.stringify(wide)}）`); assert.equal(wide.shown, true); assert.equal(wide.model, wide.metre);
+  } finally { await browser.close(); }
+});
+
 // 按键行底下横穿着谱线：va-b5 真截图里字底下最难读的像素，日间 #C8C4BB、夜间 #232429；「先出方案」按下态的底日间 #B8B7BA、夜间 #313443。
 // 字对这些像素也要 ≥ 4.5:1。改前日间 ink2 #5F5C55 只有 3.8、warn #8A5A12 3.4，夜间按下态钴蓝 4.4；夜间计划进度条底槽和卡片底几乎一样（1.05）。
 test(`key text stays at least 4.5:1 over the stave lines behind the key row, and the night plan bar track is visible (${engine})`, {timeout: 60_000}, async () => {

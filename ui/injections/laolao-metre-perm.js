@@ -360,9 +360,10 @@
   }
   // 按键行的宽度预算：输入框下这一行还有原生的模型键、碧琪的 Baton / Virtuoso 键（1280 宽真页面上 Metre 键和模型键之间只剩约 50px）。
   // 本批的键不许把原生的键挤到下一行、让输入框往上跳。插进去以后量输入框高度，变高了就一步步收拢：
-  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」。
+  //   0 全露 → 1 状态键只留「详情」→ 2 只留「详情」一个键（放手程度、先出方案、照这个方案做挪进会话详情）→ 3 只留「⋯」→ 4 连「⋯」都放不下就整组藏起来（linux 字体更宽，CI 真页面 1280 宽「⋯」也放不下；宽度够了下次重量自动展开）。
   let sig = '', fold = 0;
   function build(f) {
+    if (f >= 4) { const b = el('span', 'pk-perm-chips'); b.dataset.fold = '4'; b.setAttribute('aria-hidden', 'true'); return b; }
     const lv = LEVELS.find((l) => l.id === state.level);
     const pc = planCounts(state.plan), st = statText();
     const go = state.planOn && pc.total > 0;
@@ -395,12 +396,15 @@
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const box = controls?.querySelector(':scope > .pk-perm-chips'), input = controls?.closest('.agent-chat__input');
     if (box) seat(controls, box);
-    if (!box || !input || getComputedStyle(box).display === 'none') return;
+    if (!box || !input || (box.dataset.fold !== '4' && getComputedStyle(box).display === 'none')) return;
+    // 这一行只有本批的键时（别的键都没出来），多出来的高度是本行自己的，不是换行：全露、不收拢
+    const others = [...controls.children].some((c) => c !== box && c.getBoundingClientRect().height > 0);
+    if (!others) { if (fold !== 0 || box.dataset.fold !== '0') { const nb = build(0); box.replaceWith(nb); } fold = 0; return; }
     const h = () => input.getBoundingClientRect().height;
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
     if (fold === 0 && h() <= h0 + 1) return;
     let cur = box;
-    for (let f = 0; f <= 3; f++) {
+    for (let f = 0; f <= 4; f++) {
       if (f !== Number(cur.dataset.fold)) { const nb = build(f); cur.replaceWith(nb); cur = nb; }
       fold = f;
       if (h() <= h0 + 1) break;

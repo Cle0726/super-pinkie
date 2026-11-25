@@ -144,6 +144,8 @@ html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__row { display: grid; g
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__k { color: var(--pk-perm-ink2); font-size: 12.5px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__v { color: var(--metre-text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__plan { padding: 4px 6px 10px; }
+/* 收拢第 4 档：连「⋯」都放不下，整组不占位，原生按键不换行 */
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips.pk-perm-chips[data-fold="4"] { display: none; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 6px 10px; border-bottom: 1px solid var(--metre-line); margin-bottom: 4px; }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn[aria-pressed="true"] { color: var(--pk-perm-cobalt-ink); border-color: var(--metre-cobalt); }
 html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn--go { color: var(--pk-perm-cobalt-ink); font-weight: 500; }
