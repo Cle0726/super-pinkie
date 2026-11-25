@@ -476,9 +476,11 @@ test('v2 A3: an open finish confirmation survives a course bar repaint', async (
 
 test('v2 A3: course bar, stuck, pause/resume, guarded finish, clean history and four-question bridge', async () => {
   await v2Run({}, async (page, f) => {
-    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
+    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click();
+    // The bar can be painted before the tonight strip exists; the strip then moves it in. Wait for that end state, not the first paint.
+    await page.locator('.pk-tonight .lesson-bar').waitFor();
     assert.ok(await page.locator('.lesson-bar').evaluate(n => n.getBoundingClientRect().height <= 48));
-    assert.equal(await page.locator('.pk-tonight .lesson-bar').count(), 1);
+    assert.equal(await page.locator('.lesson-bar').count(), 1);
     await page.getByRole('button', {name: '没懂，换个讲法', exact: true}).click();
     await page.waitForFunction(() => qaCalls.some(c => c.method === 'chat.send' && c.params.message === '这段没懂，换个讲法'));
     await page.getByRole('button', {name: '暂停', exact: true}).click(); await page.getByText('已暂停', {exact: true}).waitFor();
