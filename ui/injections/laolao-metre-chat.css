@@ -1,0 +1,175 @@
+/* laolao-metre-chat —— 第四批「对话和输入」里原生已有、只差换皮的部件（build\quick-run\对比-主流-Metre-1124.md 第四批）。
+ * 只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。不加强制覆盖；颜色、字体、线条全用 Metre 自己的变量，日夜跟着变量走。
+ * 原生规则都是单个类名，这里前面多一个 html[data-laolao-mode] 就够压住。
+ * I1   斜杠菜单 .slash-menu：原生是冷白底、蓝紫强调、全大写英文分组名。换成谱纸底、墨色线、钴蓝命令名，分组名用 Metre 的小号衬线。
+ * M2   引用回复 .chat-reply-pill：原生灰胶囊。换成左边一道钴蓝细线的引文条。
+ * M7   新消息回到底部 .chat-new-messages：原生圆胶囊、英文「New messages」。换成 Metre 的签条，文字换成中文（原文藏起来，读屏走 aria-label，见 laolao-metre-chat.js）。
+ * M9   长过程折叠 .chat-timeline-overflow（碧琪时间线补丁画的「前面还有 N 步」）：原来是碧琪的粉色悬停和粉线，换成 Metre 的线和悬停色。
+ * B-C2 代码块的语言标签和「复制」.code-block-header：原生半透明黑条。换成谱纸的细线表头。
+ * M12  会话目录 .pinkie-outline（laolao-session-tools，Alt+↑/↓ 跳提问）：原来是经典模式的白卡 / 夜里梅子色、12px 圆角、大阴影。换成谱纸底和墨线。
+ * I2   长粘贴附件条 .chat-attachment-thumb--file（laolao-session-tools 收成「粘贴的文字 · N 字.txt」）：原生 180px 宽把字数和扩展名截掉，关闭键是黑圆点。加宽到放得下，关闭键换成 Metre 的小方键。 */
+
+/* 小字色：这一批的小号字（折叠提示、代码注释、斜杠菜单说明和参数、消息小字、引用条）原来用 --metre-muted，
+ * 日间在米白 / 悬停 / 引用条底上只有 3.75–4.37:1，夜里引用条底上 4.49:1。这里只给本文件派生一个同色相的小字色，
+ * 日间压暗 12%（#69655E）、夜间提亮 14%（#A09D95），在实测的所有底色上都 ≥ 4.6:1；全局 --metre-muted 不动。 */
+html[data-laolao-mode="metre"] { --metre-chat-small: color-mix(in srgb, var(--metre-muted) 88%, #000); }
+html[data-laolao-mode="metre"]:is([data-pinkie-night], [data-theme="dark"]) { --metre-chat-small: color-mix(in srgb, var(--metre-muted) 86%, #fff); }
+
+/* I1 斜杠菜单 */
+html[data-laolao-mode="metre"] .slash-menu {
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 8px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-text);
+  font-family: var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .slash-menu-group + .slash-menu-group { border-top: 1px solid var(--metre-line); }
+html[data-laolao-mode="metre"] .slash-menu-group__label {
+  color: var(--metre-chat-small);
+  opacity: 1;
+  font-family: var(--metre-serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 6px 10px 2px;
+}
+html[data-laolao-mode="metre"] .slash-menu-item { border-radius: 4px; }
+html[data-laolao-mode="metre"] :is(.slash-menu-item:hover, .slash-menu-item--active) { background: var(--metre-hover); box-shadow: inset 2px 0 0 var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .slash-menu-icon { color: var(--metre-chat-small); }
+html[data-laolao-mode="metre"] .slash-menu-name { color: var(--metre-cobalt); font-family: var(--metre-mono); font-weight: 600; }
+html[data-laolao-mode="metre"] .slash-menu-desc { color: var(--metre-chat-small); font-family: var(--metre-sans); }
+html[data-laolao-mode="metre"] .slash-menu-item--active .slash-menu-desc { color: var(--metre-text); }
+html[data-laolao-mode="metre"] .slash-menu-badge {
+  background: transparent;
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 3px;
+  color: var(--metre-chat-small);
+  font-family: var(--metre-mono);
+  font-weight: 400;
+}
+
+/* M2 引用回复 */
+html[data-laolao-mode="metre"] .chat-reply-pill {
+  background: var(--metre-cobalt-soft);
+  border: 0;
+  border-left: 2px solid var(--metre-cobalt);
+  border-radius: 0 4px 4px 0;
+  color: var(--metre-chat-small);
+  font-family: var(--metre-sans);
+}
+html[data-laolao-mode="metre"] :is(.chat-reply-pill__icon, .chat-reply-preview__icon) { color: var(--metre-cobalt); }
+/* 气泡图标是描边图标（lucide message-square），原生没给 fill / stroke，画成了实心黑块，夜里和底色只差 1.4:1。 */
+html[data-laolao-mode="metre"] :is(.chat-reply-pill__icon, .chat-reply-preview__icon) svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* 输入框上方的回复预览：原生底色是 8% 强调色叠透明，820 宽时压在舞台装饰上，日间后半句只剩约 1.9:1。
+ * 同一层淡钴蓝叠在实色谱纸上（渐变层在上、底色在下），不再透底。 */
+html[data-laolao-mode="metre"] .chat-reply-preview {
+  background: linear-gradient(var(--metre-cobalt-soft), var(--metre-cobalt-soft)) var(--metre-surface);
+  border-color: var(--metre-line-strong);
+  color: var(--metre-chat-small);
+}
+html[data-laolao-mode="metre"] .slash-menu-args,
+html[data-laolao-mode="metre"] .slash-menu-footer { color: var(--metre-chat-small); }
+/* 原生 .slash-menu-args 带 opacity: .65，字色再深也被冲淡：日间实画 #98958E / 2.56:1、夜间 3.38:1。和分组名一样拉回 1。 */
+html[data-laolao-mode="metre"] .slash-menu-args { opacity: 1; }
+
+/* M7 新消息，回到底部 */
+html[data-laolao-mode="metre"] .chat-new-messages {
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 4px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-text);
+  font-family: var(--metre-sans);
+  font-size: 0;
+  gap: 6px;
+  padding: 6px 12px;
+}
+html[data-laolao-mode="metre"] .chat-new-messages::after { content: "有新消息，回到底部"; font-size: 12px; line-height: 1; }
+html[data-laolao-mode="metre"] .chat-new-messages svg { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .chat-new-messages:hover { background: var(--metre-hover); border-color: var(--metre-cobalt); }
+
+/* M9 长过程折叠 */
+html[data-laolao-mode="metre"] .chat-timeline-overflow > summary { color: var(--metre-chat-small); border-radius: 4px; font-family: var(--metre-sans); }
+html[data-laolao-mode="metre"] .chat-timeline-overflow > summary::before { content: "▸ "; color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .chat-timeline-overflow[open] > summary::before { content: "▾ "; }
+/* 夜里 laolao-tool-stream.css 234–240 用强制覆盖把悬停底和左线染成粉色，这里不加强制覆盖：
+ * 悬停底用满铺的内阴影盖住；左线把边框宽度归零（那条强制规则只管颜色），改用内阴影画一道细线。 */
+html[data-laolao-mode="metre"] .chat-timeline-overflow > summary:hover { background: var(--metre-hover); box-shadow: inset 0 0 0 999px var(--metre-hover); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .chat-timeline-overflow__body { border-left-width: 0; box-shadow: inset 1px 0 0 var(--metre-line-strong); }
+html[data-laolao-mode="metre"] .chat-timeline-overflow__body > button { background: transparent; border: 1px solid var(--metre-line-strong); border-radius: 4px; color: var(--metre-chat-small); font: 12px var(--metre-sans); padding: 3px 8px; cursor: pointer; }
+html[data-laolao-mode="metre"] .chat-timeline-overflow__body > button:hover { background: var(--metre-hover); color: var(--metre-text); }
+
+/* M10 消息小字：原生在历史带 usage / model 时就画 details.msg-meta（悬停露出 ↑输入 ↓输出 令牌、缓存、花费、上下文占比、模型），
+ * 预览页只露时间是因为假网关不给 usage。这里只换皮：圆胶囊换成细线签条，模型名用 Metre 等宽字，花费不再是绿色。
+ * 这一版历史里没有「用时」字段，不造。 */
+html[data-laolao-mode="metre"] .msg-meta { color: var(--metre-chat-small); font-family: var(--metre-sans); }
+html[data-laolao-mode="metre"] .msg-meta__summary:focus-visible { outline-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .msg-meta__details {
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 4px;
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-chat-small);
+  font-family: var(--metre-mono);
+  font-size: 11px;
+}
+html[data-laolao-mode="metre"] .msg-meta__model { background: var(--metre-hover); border-radius: 3px; color: var(--metre-text); font-family: var(--metre-mono); }
+html[data-laolao-mode="metre"] .msg-meta__cost { color: var(--metre-chat-small); }
+html[data-laolao-mode="metre"] .msg-meta__ctx--warn { color: var(--metre-v4); }
+html[data-laolao-mode="metre"] .msg-meta__ctx--danger { color: var(--metre-danger); font-weight: 600; }
+
+/* B-C2 代码块表头：语言标签和「复制」 */
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper { border: 1px solid var(--metre-line-strong); border-radius: 6px; }
+html[data-laolao-mode="metre"] .chat-text .code-block-header { background: var(--metre-art); border-bottom: 1px solid var(--metre-line-strong); border-radius: 6px 6px 0 0; }
+html[data-laolao-mode="metre"] .chat-text .code-block-lang { color: var(--metre-chat-small); font-family: var(--metre-mono); }
+html[data-laolao-mode="metre"] .chat-text .code-block-copy { color: var(--metre-chat-small); font-family: var(--metre-sans); border-radius: 4px; }
+html[data-laolao-mode="metre"] .chat-text .code-block-copy:hover { color: var(--metre-text); background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .chat-text .code-block-copy.copied .code-block-copy__done { color: var(--metre-cobalt); }
+
+/* B-C2 代码块正文。laolao-theme.css 375–380 用强制覆盖给气泡里所有 code / pre 铺半透明白底、白边，夜里成了一块灰板，
+ * 行内的 code 又叠一层，字像被框住。这里不加强制覆盖：那条规则只管底色、字色、边框颜色，不管内阴影和边框宽度，
+ * 所以 pre 和 pre code 都用满铺内阴影盖上谱纸底（pre code 是行内框，内阴影按每一行片段画，正好盖住它自己的底），pre 的边框宽度归零（外框由 .code-block-wrapper 画）。
+ * 字色那条强制规则给的就是 Metre 正文色，不用动。 */
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre { border-width: 0; box-shadow: inset 0 0 0 9999px var(--metre-bg); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code { box-shadow: inset 0 0 0 9999px var(--metre-bg); }
+
+/* 语法高亮：原生是 GitHub 的红 / 蓝 / 紫 / 橙。换成 Metre 声部色（laolao-metre-board.css 定义在 html[data-laolao-mode="metre"] 上，日夜各一套）：
+ * 关键字钴蓝，字符串偏绿的灰，数字和字面量砖红，类型暖灰，函数名正文色加粗，注释灰斜体。 */
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-keyword, .hljs-selector-tag, .hljs-subst, .hljs-attr, .hljs-attribute, .hljs-name, .hljs-selector-class, .hljs-symbol, .hljs-bullet, .hljs-link) { color: var(--metre-v1); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-string, .hljs-doctag, .hljs-regexp) { color: var(--metre-v2); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable) { color: var(--metre-v4); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-type, .hljs-built_in, .hljs-builtin-name, .hljs-class .hljs-title) { color: var(--metre-v3); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-title, .hljs-section, .hljs-selector-id, .hljs-function .hljs-title) { color: var(--metre-text); font-weight: 600; }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs :is(.hljs-comment, .hljs-quote, .hljs-meta) { color: var(--metre-chat-small); font-style: normal; }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs .hljs-deletion { color: var(--metre-v4); background: var(--metre-v4-soft); }
+html[data-laolao-mode="metre"] .chat-text .code-block-wrapper pre code.hljs .hljs-addition { color: var(--metre-v2); background: var(--metre-v2-soft); }
+
+/* M12 会话目录：和上面的斜杠菜单同一套弹层。laolao-session-tools.css 的夜间阴影规则是 html[data-pinkie-night] .pinkie-outline，
+ * 和这里一样重，多一个 :not(#_m1) 压住，不加强制覆盖。圆角不写：面板是 role="dialog"，laolao-metre-skin.css 给 Metre 里所有对话框统一 12px。 */
+html[data-laolao-mode="metre"]:not(#_m1) .pinkie-outline {
+  background: var(--metre-surface);
+  border: 1px solid var(--metre-line-strong);
+  box-shadow: var(--metre-pop-shadow);
+  color: var(--metre-text);
+  font-family: var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pinkie-outline__head { border-bottom-color: var(--metre-line); color: var(--metre-chat-small); opacity: 1; }
+html[data-laolao-mode="metre"] .pinkie-outline__item { border-radius: 4px; }
+html[data-laolao-mode="metre"] .pinkie-outline__item:is(:hover, :focus-visible) { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pinkie-outline__item::before,
+html[data-laolao-mode="metre"] .pinkie-outline__time { color: var(--metre-chat-small); opacity: 1; font-family: var(--metre-mono); }
+
+/* I2 长粘贴附件条：原生固定 180px，「粘贴的文字 · 3,350 字.txt」被截成「…3,350 …」。按内容放宽，最多 360px，再长才省略。
+ * 关闭键原生是压在角上的黑圆点，换成卡内的小方键。 */
+html[data-laolao-mode="metre"] .chat-attachment-thumb--file { width: max-content; min-width: 180px; max-width: min(360px, 100%); border-color: var(--metre-line-strong); border-radius: 4px; }
+html[data-laolao-mode="metre"] .chat-attachment-thumb--file .chat-attachment-file { background: var(--metre-surface); color: var(--metre-text); }
+/* 回形针是描边图标（lucide paperclip），原生没给 fill，画成了实心黑块，夜里看不见。 */
+html[data-laolao-mode="metre"] .chat-attachment-thumb--file .chat-attachment-file__icon svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove {
+  top: 4px; right: 4px; width: 22px; height: 22px; font-size: 14px;
+  border-radius: 3px; background: transparent; color: var(--metre-text);
+}
+html[data-laolao-mode="metre"] .chat-attachment-thumb .chat-attachment-remove:is(:hover, :focus-visible) { background: var(--metre-hover); color: var(--metre-text); }

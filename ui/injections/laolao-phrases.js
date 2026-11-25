@@ -222,10 +222,10 @@
     if (/^per page$/i.test(value) && element?.closest?.('.data-table-pagination__size')) return '条/页';
     const mapped = exactPhrases.get(value);
     if (mapped && exactPhraseAllowed(value, element)) return mapped;
-    const duplicateCount = value.match(/^(\d+) consecutive identical messages collapsed$/i);
-    if (duplicateCount) return `连续 ${duplicateCount[1]} 条相同消息已折叠`;
-    const messageContext = value.match(/^Message context for (.+)$/i);
-    if (messageContext) return `消息信息：${messageContext[1]}`;
+    const duplicateCount = value.match(/^(\d+) consecutive identical messages collapsed$/i); if (duplicateCount) return `连续 ${duplicateCount[1]} 条相同消息已折叠`;
+    const messageContext = value.match(/^Message context for (.+)$/i); if (messageContext) return `消息信息：${messageContext[1]}`;
+    const reply = element?.closest?.('.chat-reply-pill__label, .chat-reply-preview__label') && value.match(/^Replying to(?: (.+))?$/i); if (reply) return reply[1] === 'current message' ? '回复当前消息' : reply[1] ? `回复 ${reply[1]}` : '回复';
+    if (value === '% ctx' && element?.closest?.('.msg-meta__ctx')) return '% 上下文';
     const rowSummary = value.match(/^(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+rows?$/i);
     if (rowSummary && element?.closest?.('.data-table-wrapper')) {
       return `显示第 ${rowSummary[1]}–${rowSummary[2]} 条，共 ${rowSummary[3]} 条`;
