@@ -267,6 +267,12 @@ test('starting, sending, answering and stopping become the same commands the T3 
   await bridge.send({threadId: 't1', text: 'then the docs'});
   const sends = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').map(call => call[1].dispatchMode);
   assert.deepEqual(sends, [{type: 'start_immediately'}, {type: 'steer_active', targetRunId: 'r1'}, {type: 'queue_after_active'}]);
+  // 11-24 第四次真跑：引擎服务的 message.dispatch 必带 createdBy / creationSource，缺了整条被拒（汇报送不回主脑）。
+  const origins = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').map(call => [call[1].createdBy, call[1].creationSource]);
+  assert.deepEqual(origins, [['user', 'web'], ['user', 'web'], ['user', 'web']]);
+  await bridge.send({threadId: 't1', text: 'report is in', from: 'agent'});
+  const last = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').at(-1)[1];
+  assert.deepEqual([last.createdBy, last.creationSource], ['agent', 'mcp']);
 
   await bridge.respond({threadId: 't1', requestId: 'req1', decision: 'accept'});
   await bridge.stop({threadId: 't1'});

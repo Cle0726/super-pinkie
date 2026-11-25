@@ -193,7 +193,7 @@ def build():
         if original.get('id') not in MODES:
             continue
         agent = copy.deepcopy(original)
-        agent.pop('model', None)  # 各模式不单独指定，统一用默认（hy4free）
+        agent.pop('model', None)  # 各模式不单独指定，统一用默认（hy4flash-free）
         agent['workspace'] = str(STATE / MODES[agent['id']])
         agent_dir = STATE / 'agents' / agent['id'] / 'agent'
         agent_dir.mkdir(parents=True, exist_ok=True)
@@ -205,9 +205,10 @@ def build():
     config['agents']['list'] = agents
     config['agents'].setdefault('defaults', {})['workspace'] = str(STATE / 'workspace')
     config['agents']['defaults']['heartbeat'] = {'every': '0m'}
-    # 用户 11-13：实测统一用 hy4free；它自己能看图，image / pdf 工具也走它（imageModel / pdfModel 是运行时已有的键）。
-    # 只用 hy4free，不设后备（用户 11-13：hy4std、deepseek 不能用）。
-    vision = {'primary': 'mm/workbuddy/hy4free', 'fallbacks': []}
+    # 用户 11-24：hy4free 不可用，改用 hy4flash（免费）；不设后备。
+    # 免费档在号池里的模型名是 workbuddy/hy4flash-free（workbuddy/hy4flash 是付费档）；11-24 实测文字、看图都回 200。
+    # 它自己能看图，image / pdf 工具也走它（imageModel / pdfModel 是运行时已有的键）。
+    vision = {'primary': 'mm/workbuddy/hy4flash-free', 'fallbacks': []}
     config['agents']['defaults']['model'] = dict(vision)
     config['agents']['defaults']['imageModel'] = dict(vision)
     config['agents']['defaults']['pdfModel'] = dict(vision)
