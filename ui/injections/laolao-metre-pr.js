@@ -10,7 +10,7 @@
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
   const SEV = {high: '高', medium: '中', low: '低'};
-  const STEPS = [['ci', '看 CI'], ['main', '跟上 base 分支（只 merge，不变基）'], ['fix', '按选中的意见改（交给引擎，改完提交、不推送）'], ['reply', '回一条评论']];
+  const STEPS = [['ci', '看 CI'], ['main', '跟上 base 分支（只 merge，不变基）'], ['fix', '按选中的意见改（交给引擎，改完提交、不推送）'], ['push', '推送到 PR 分支（不强推；引擎改完、在引擎台看过再勾）'], ['reply', '回一条评论']];
   const GREEN = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
   const s = {data: null, error: '', busy: '', number: 0, review: null, picked: new Set(), steps: new Set(['ci']), body: '', confirm: false, result: ''};
 
@@ -64,6 +64,7 @@
       if (r.ci) bits.push(`CI ${r.ci.filter((c) => /pass|success/i.test(c.bucket || c.state)).length} / ${r.ci.length} 通过`);
       if (r.main) bits.push(r.main.merged ? '已跟上 base' : `跟 base 有冲突，已撤回：${r.main.conflicts.join('、')}`);
       if (r.fix) bits.push('已交给引擎改，进度在引擎台里看');
+      if (r.push) bits.push(`已推到 PR 分支（头 ${short(r.push.head)}），等 CI`);
       if (r.reply) bits.push('评论已发');
       s.result = bits.join('；') || '做完了';
       if (r.reply) s.body = '';

@@ -148,6 +148,25 @@ test('回评论：勾了才出正文框，正文和确认一起交给后端；�
   assert.ok(!e.calls.some((c) => c[0] === 'pinkie.pr.merge'), '跟进不合并');
 });
 
+test('推送：勾了才带 push，结果写新头、等 CI；不合并', async () => {
+  const e = env({status: READY});
+  const orig = e.wb.rpc;
+  e.wb.rpc = async (m, p) => {
+    if (m !== 'pinkie.pr.followUp') return orig(m, p);
+    e.calls.push([m, JSON.parse(JSON.stringify(p))]);
+    return {number: p.number, push: {pushed: true, head: 'def67890aaaa'}};
+  };
+  await e.win.Pinkie.metrePr.open(); await flush();
+  const push = e.box().byClass('pk-mpr__step').find((s) => /推送到 PR 分支（不强推/.test(s.text)).all((n) => n.tagName === 'INPUT')[0];
+  assert.equal(push.checked, false, '默认不勾推送');
+  push.checked = true; push.fire('change'); await flush();
+  e.box().button('开始跟进').fire('click'); await flush();
+  const f = e.calls.find((c) => c[0] === 'pinkie.pr.followUp')[1];
+  assert.deepEqual([...f.steps].sort(), ['ci', 'push']);
+  assert.match(e.box().text, /已推到 PR 分支（头 def67890），等 CI/);
+  assert.ok(!e.calls.some((c) => c[0] === 'pinkie.pr.merge'));
+});
+
 test('不新增定时器、观察器和 window.__ 全局名；界面不出现 Claude / OpenClaw / Copilot', () => {
   const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   assert.doesNotMatch(code, /setInterval|setTimeout|requestAnimationFrame|MutationObserver|ResizeObserver|IntersectionObserver/);
