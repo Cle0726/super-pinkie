@@ -66,14 +66,42 @@ test('A3 边框：原生 /cron 页「•••」和筛选下拉是 <summary cla
 // 可点的边界是 details 外框，原来被 2383 行那条 :is(.btn, …, .cron-filter-panel, …) 设成 --metre-line-strong 原值（约 1.5:1）。
 test('A3 边框：原生 /cron 页「筛选」折叠条外框也用 --pk-a3-edge，且写在通用那条后面', (t) => {
   const generic = css.indexOf('openclaw-cron-page :is(.btn, .list-item, .cron-filter-panel,');
-  const own = css.search(/html\[data-laolao-mode="metre"\]:not\(#_m1\):not\(#_m2\) openclaw-cron-page \.cron-filter-panel \{ border-color: var\(--pk-a3-edge\) !important; \}/);
-  assert.ok(own >= 0, '要有 openclaw-cron-page .cron-filter-panel { border-color: var(--pk-a3-edge) } 那条');
+  // 任务 27 起和徽章 / chip / 空状态框合成一条（通用那条不再强制覆盖，这里也就不用了）
+  const own = css.search(/html\[data-laolao-mode="metre"\]:not\(#_m1\):not\(#_m2\) openclaw-cron-page :is\(\.cron-filter-panel, [^)]*\) \{ border-color: var\(--pk-a3-edge\); \}/);
+  assert.ok(own >= 0, '要有 openclaw-cron-page :is(.cron-filter-panel, …) { border-color: var(--pk-a3-edge) } 那条');
   assert.ok(generic < 0 || own > generic, '同样的优先级，要写在通用边框那条后面才生效');
   const dir = process.env.PINKIE_CONTROL_UI_ROOT ? path.join(process.env.PINKIE_CONTROL_UI_ROOT, 'assets') : '';
   const f = dir && fs.existsSync(dir) ? fs.readdirSync(dir).find((n) => /^cron-page-.*\.js$/.test(n)) : '';
   if (!f) { t.skip('没有原生 Control UI（PINKIE_CONTROL_UI_ROOT），只查规则'); return; }
   const js = fs.readFileSync(path.join(dir, f), 'utf8');
   assert.match(js, /<details class="cron-filter-panel"/, '「筛选」折叠条不再是 <details class="cron-filter-panel">？');
+});
+
+// mac2 任务 27（WebKit，#98@03c186bd）：① /cron「•••」和主按钮悬停没变化——通用边框那条用了 !important，原生 .btn:hover 换不了边框；
+// ② 状态徽章、chip、空状态虚线框还是 --metre-line-strong 原值（日 1.43、夜 1.34、虚线 1.3）。
+test('任务 27 ①：通用边框不加 !important，/cron 按键有自己的悬停，主按钮也有', () => {
+  const line = css.split(/\r?\n/).find((l) => l.includes('openclaw-cron-page :is(.btn, .list-item, .cron-filter-panel,'));
+  assert.ok(line, '要有 /cron 通用边框那条');
+  assert.doesNotMatch(line.split('/*')[0], /!important/, '通用边框加了 !important，原生悬停就换不了边框');
+  const hover = css.match(/openclaw-cron-page \.btn:not\(\.btn--primary\):hover \{ background: var\(--metre-hover\); border-color: var\(--metre-([a-z-]+)\); \}/);
+  assert.ok(hover, '要有 /cron 普通按键的悬停');
+  const T2 = {text: pick('text')};
+  for (const theme of ['day', 'night']) {
+    const r = ratio(T2[hover[1]]?.[theme] ?? pick(hover[1])[theme], T.surface[theme]);
+    assert.ok(r >= 3, `悬停边框对卡片底只有 ${r.toFixed(2)}:1（${theme}）`);
+  }
+  assert.match(css, /openclaw-cron-page \.btn\.btn--primary:hover \{ opacity: 0\.\d+; \}/, '主按钮悬停要有变化');
+});
+
+test('任务 27 ②：状态徽章、chip、空状态虚线框用 --pk-a3-edge（≥ 3:1），写在通用那条后面', () => {
+  const generic = css.indexOf('openclaw-cron-page :is(.btn, .list-item, .cron-filter-panel,');
+  const own = css.indexOf('openclaw-cron-page :is(.cron-filter-panel, .chip, .cron-job-status-pill, .cron-empty-state) { border-color: var(--pk-a3-edge); }');
+  assert.ok(own >= 0, '要有 chip / 徽章 / 空状态框那条');
+  assert.ok(own > generic, '同样的优先级，要写在通用边框那条后面才生效');
+  for (const theme of ['day', 'night']) {
+    const r = ratio(edge(theme), T.surface[theme]);
+    assert.ok(r >= 3, `徽章边框对卡片底只有 ${r.toFixed(2)}:1（${theme}）`);
+  }
 });
 
 test('A3 边框反例：改回 --metre-line-strong 原值就不够 3:1（日夜都不够）', () => {
