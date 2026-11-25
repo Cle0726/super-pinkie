@@ -32,6 +32,13 @@ const measure = (sels) => {
       if (!node.textContent.trim()) continue;
       const host = node.parentElement;
       if (!host || !host.getClientRects().length || getComputedStyle(host).visibility === 'hidden') continue;
+      // 只给读屏用的隐藏文字（1×1px + clip，比如深度思考键的「极致思考」）本来就不显示，不算。
+      let srOnly = false;
+      for (let el = host; el && el !== btn.parentElement; el = el.parentElement) {
+        const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        if ((r.width <= 1 && r.height <= 1) || /rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(cs.clip)) { srOnly = true; break; }
+      }
+      if (srOnly) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
       const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
