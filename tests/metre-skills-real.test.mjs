@@ -91,6 +91,7 @@ test('G3a real page: in Metre the native skills page drops the pink / purple and
           return n;
         });
         assert.equal(removed, 2, '没找到技能页的两条 Metre 规则');
+        await page.waitForTimeout(600);   // Metre 皮肤给卡片边框 / 字色有 140–160ms 过渡，删规则后马上读会读到过渡起点（还是 Metre 色）
         const bad = await page.evaluate(readSkills);
         console.log(`ℹ day without overrides: ${JSON.stringify({card: bad.card, tab: bad.tab})}`);
         assert.match(bad.card.border, PINK, '反例没生效：删掉规则后卡片不是粉边');
