@@ -22,10 +22,13 @@ function loadApi() {
 
 test('M3 消息 id：去掉「当前窗口里的序号」，分页后同一条还是同一个 id；直接 id 原样用', () => {
   const {stableId} = loadApi();
-  assert.equal(stableId('msg:assistant:1764050000000:3'), 'assistant:1764050000000');
-  assert.equal(stableId('msg:assistant:1764050000000:17'), 'assistant:1764050000000', '序号变了，id 不变');
-  assert.equal(stableId('msg:user:1764050000000:0'), 'user:1764050000000');
-  assert.equal(stableId('msg:abc-123'), 'abc-123');
+  const a3 = stableId('msg:assistant:1764050000000:3', '好，我先改按钮颜色');
+  assert.match(a3, /^assistant:1764050000000:[0-9a-z]+$/);
+  assert.equal(stableId('msg:assistant:1764050000000:17', '好，我先改按钮颜色'), a3, '序号变了，id 不变');
+  assert.equal(stableId('msg:assistant:1764050000000:17', '  好，我先改按钮颜色 \n'), a3, '首尾空白不算');
+  assert.notEqual(stableId('msg:assistant:1764050000000:4', '注册页用的是同一个'), a3, '同一时间戳的两条（假网关种子 / 批量导入）不撞');
+  assert.match(stableId('msg:user:1764050000000:0', 'x'), /^user:1764050000000:/);
+  assert.equal(stableId('msg:abc-123', 'whatever'), 'abc-123', '有消息 id 就原样用，不加哈希');
   assert.equal(stableId(''), '');
   assert.equal(stableId('msg:'), '');
   assert.equal(stableId('tool:1'), '');
@@ -62,7 +65,9 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
   catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
   const DOMWATCH = read('ui/injections/laolao-dom-watch.js');
   const group = (role, id, text) => `<div class="chat-group ${role}"><div class="chat-group-messages"><div class="chat-bubble" data-message-id="${id}"><div class="chat-text">${text}</div></div><div class="chat-group-footer"><div class="chat-group-footer__meta"><span class="chat-sender-name">${role}</span><time>10:00</time></div></div></div></div>`;
-  const thread = (offset) => group('user', `msg:user:1000:${offset}`, '把登录页的按钮改成蓝色') + group('assistant', `msg:assistant:2000:${offset + 1}`, '好，我先改按钮颜色');
+  // 两条助手消息时间戳相同（假网关种子记录就是这样）：只置顶最后一条，第一条不能跟着变「已置顶」。
+  const thread = (offset) => group('user', `msg:user:1000:${offset}`, '把登录页的按钮改成蓝色') + group('assistant', `msg:assistant:2000:${offset + 1}`, '好，我先改按钮颜色')
+    + group('assistant', `msg:assistant:2000:${offset + 2}`, '注册页用的是同一个');
   const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
   const KEY = 'pinkie.metre.pins:agent:metre:p1';
   try {
@@ -73,30 +78,40 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
     await tab.evaluate(() => localStorage.clear());
     await tab.addScriptTag({content: DOMWATCH});
     await tab.addScriptTag({content: SRC});
-    const pin = tab.locator('.chat-group.assistant .pk-metre-pin');
+    const pin = tab.locator('.chat-group.assistant .pk-metre-pin').last();
+    const firstPin = tab.locator('.chat-group.assistant .pk-metre-pin').first();
     await pin.waitFor({state: 'attached', timeout: 5000});
-    assert.equal(await tab.locator('.pk-metre-pin').count(), 2, '每组消息页脚行一个');
+    assert.equal(await tab.locator('.pk-metre-pin').count(), 3, '每组消息页脚行一个');
     assert.equal(await tab.locator('.pk-metre-pins').count(), 0, '没置顶时没有折叠条');
-    await tab.locator('.chat-group.assistant').hover();
+    await tab.locator('.chat-group.assistant').last().hover();
     await pin.click();
     await tab.locator('.pk-metre-pins').waitFor({timeout: 5000});
     assert.equal(await pin.textContent(), '已置顶');
     assert.equal(await pin.getAttribute('aria-pressed'), 'true');
+    assert.equal(await firstPin.textContent(), '置顶', '同一时间戳的另一条不跟着变');
     assert.equal(await tab.locator('.pk-metre-pins__toggle').textContent(), '已置顶 1 条');
-    assert.equal(await tab.evaluate(() => document.querySelector('.pk-metre-pins').nextElementSibling.className), 'chat-workbench', '折叠条在对话区上面');
+    // 折叠条是对话流的第一个子元素，在流里占位：第一条消息在它下面，不被盖住
+    const place = await tab.evaluate(() => { const bar = document.querySelector('.pk-metre-pins'), first = document.querySelector('.chat-thread .chat-group'); const a = bar.getBoundingClientRect(), b = first.getBoundingClientRect(); return {first: bar.parentElement.classList.contains('chat-thread') && bar.parentElement.firstElementChild === bar, gap: Math.round(b.top - a.bottom), position: getComputedStyle(bar).position}; });
+    assert.equal(place.first, true, '在 .chat-thread 最前面');
+    assert.ok(place.gap >= 0, `第一条消息不被盖住（间距 ${place.gap}px）`);
+    assert.equal(place.position, 'sticky');
     const stored = await tab.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);
-    assert.deepEqual(stored.map((p) => [p.id, p.role, p.text]), [['assistant:2000', 'assistant', '好，我先改按钮颜色']]);
+    assert.equal(stored.length, 1);
+    assert.match(stored[0].id, /^assistant:2000:[0-9a-z]+$/);
+    assert.deepEqual([stored[0].role, stored[0].text], ['assistant', '注册页用的是同一个']);
     assert.equal(await tab.evaluate(() => localStorage.getItem('openclaw:pinned:agent:metre:p1')), null, '不写原生存储');
     // 展开、看到摘要、点一条跳过去
     await tab.locator('.pk-metre-pins__toggle').click();
     assert.equal(await tab.locator('.pk-metre-pins__toggle').getAttribute('aria-expanded'), 'true');
-    assert.equal(await tab.locator('.pk-metre-pins__text').textContent(), '好，我先改按钮颜色');
+    assert.equal(await tab.locator('.pk-metre-pins__text').textContent(), '注册页用的是同一个');
     assert.equal(await tab.locator('.pk-metre-pins__role').textContent(), 'Metre');
     await tab.locator('.pk-metre-pins__go').click();
     assert.equal(await tab.locator('.chat-group.assistant.pk-metre-pin-flash').count(), 1, '跳过去的那组亮一下');
-    // 分页重画：序号变了（0/1 → 5/6），同一条还是「已置顶」
+    assert.equal(await tab.evaluate(() => [...document.querySelectorAll('.chat-group.assistant')].findIndex((g) => g.classList.contains('pk-metre-pin-flash'))), 1, '亮的是置顶的那条（第二条助手消息）');
+    // 分页重画：序号变了（0/1/2 → 5/6/7），只有同一条还是「已置顶」；折叠条重新回到对话流最前面
     await tab.evaluate((html) => { document.querySelector('.chat-thread').innerHTML = html; }, thread(5));
-    await tab.waitForFunction(() => document.querySelector('.chat-group.assistant .pk-metre-pin')?.textContent === '已置顶', null, {timeout: 5000});
+    await tab.waitForFunction(() => [...document.querySelectorAll('.chat-group.assistant .pk-metre-pin')].map((b) => b.textContent).join('|') === '置顶|已置顶', null, {timeout: 5000});
+    await tab.waitForFunction(() => document.querySelector('.chat-thread').firstElementChild?.classList.contains('pk-metre-pins'), null, {timeout: 5000});
     assert.equal(await tab.locator('.chat-group.user .pk-metre-pin').textContent(), '置顶');
     // 安静时不反复重画自己（domWatch 也看属性变化，原样再写一遍也算变化）
     await tab.waitForTimeout(300);

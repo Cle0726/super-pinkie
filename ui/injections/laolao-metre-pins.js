@@ -17,12 +17,14 @@
   const save = (key, list) => { try { list.length ? store()?.setItem(PREFIX + key, JSON.stringify(list)) : store()?.removeItem(PREFIX + key); } catch {} };
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   // 消息自己的 id：去掉「当前窗口里的序号」，分页后还是同一个。
-  function stableId(domId) {
+  // 只有角色 + 时间戳时，同一时间戳的两条会撞（假网关的种子记录、批量导入的历史都这样），再加正文的短哈希分开。
+  const hash = (s) => { let h = 5381; for (const ch of String(s).slice(0, 400)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0; return h.toString(36); };
+  function stableId(domId, text = '') {
     const id = String(domId || '');
     const m = /^msg:([a-z]+):(\d+):\d+$/.exec(id);
-    return m ? `${m[1]}:${m[2]}` : (id.startsWith('msg:') && id.length > 4 ? id.slice(4) : '');
+    return m ? `${m[1]}:${m[2]}:${hash(String(text).replace(/\s+/g, ' ').trim())}` : (id.startsWith('msg:') && id.length > 4 ? id.slice(4) : '');
   }
-  const groupId = (group) => stableId(group.querySelector('.chat-bubble[data-message-id]')?.dataset.messageId);
+  const groupId = (group) => { const b = group.querySelector('.chat-bubble[data-message-id]'); return stableId(b?.dataset.messageId, b?.querySelector('.chat-text')?.textContent || ''); };
   const groupRole = (group) => (group.classList.contains('user') ? 'user' : 'assistant');
   const groupText = (group) => [...group.querySelectorAll('.chat-bubble .chat-text')].map((t) => t.textContent.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 140);
   const groups = () => [...document.querySelectorAll('.chat-thread .chat-group')].filter((g) => !g.closest('.pinkie-session-cards'));
@@ -61,11 +63,12 @@
     }
   }
   function paintBar(key, list) {
-    const host = document.querySelector('.chat-workbench');
+    // 放在对话流 .chat-thread 的最前面、sticky：在流里占位，第一条消息被推下去不被盖住；往下翻时贴在顶上。
+    const host = document.querySelector('.chat-thread');
     let bar = document.querySelector('.pk-metre-pins');
     if (!key || !list.length || !host) { bar?.remove(); return; }
     const sig = JSON.stringify([key, open, list.map((p) => p.id)]);
-    if (bar && bar.dataset.sig === sig && bar.nextElementSibling === host) return;
+    if (bar && bar.dataset.sig === sig && host.firstElementChild === bar) return;
     bar?.remove();
     bar = node('section', 'pk-metre-pins'); bar.dataset.sig = sig; bar.setAttribute('aria-label', '置顶的消息');
     const head = node('button', 'pk-metre-pins__toggle', `已置顶 ${list.length} 条`); head.type = 'button';
@@ -85,7 +88,7 @@
       }
       bar.append(ul, status);
     }
-    host.before(bar);
+    host.prepend(bar);
   }
   function paint() {
     const key = isMetre() ? sessionKey() : '';
@@ -97,6 +100,6 @@
   const ns = (window.Pinkie = window.Pinkie || {}); ns.metre = ns.metre || {}; ns.metre.pins = {stableId, paint};
   window.addEventListener('laolao:modechange', paint);
   window.addEventListener('popstate', paint);
-  window.Pinkie.domWatch?.watch('.chat-thread .chat-group-footer__meta, .chat-workbench', paint, {always: true});
+  window.Pinkie.domWatch?.watch('.chat-thread .chat-group-footer__meta, .chat-thread', paint, {always: true});
   paint();
 })();
