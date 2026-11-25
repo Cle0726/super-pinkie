@@ -24,7 +24,8 @@ const mix = (a, b, p) => '#' + rgb(a).map((v, i) => Math.round(v * p + rgb(b)[i]
 function edge(theme) {
   const def = css.match(/:is\(#pinkie-schedules, openclaw-cron-page\) \{ --pk-a3-edge: color-mix\(in srgb, var\(--metre-([a-z-]+)\) (\d+)%, var\(--metre-([a-z-]+)\)\); \}/);
   if (!def) return T.ls[theme];   // 没有这条混色规则 = 还是 --metre-line-strong 原值
-  const use = /:is\(#pinkie-schedules, openclaw-cron-page\) :is\(button, input, select, textarea\) \{ --metre-line-strong: var\(--pk-a3-edge\); \}/.test(css);
+  // summary.btn：原生 /cron 页行尾「•••」(cron-job-menu__trigger) 和筛选下拉 (cron-filter-dropdown__trigger) 是 <summary class="btn">，不是 <button>。
+  const use = /:is\(#pinkie-schedules, openclaw-cron-page\) :is\(button, input, select, textarea, summary\.btn\) \{ --metre-line-strong: var\(--pk-a3-edge\); \}/.test(css);
   if (!use) return T.ls[theme];
   const key = (n) => ({'muted': 'muted', 'line-strong': 'ls', 'bg': 'bg', 'surface': 'surface', 'card': 'card'})[n];
   assert.ok(key(def[1]) && key(def[3]), `不认识的变量 ${def[1]} / ${def[3]}`);
@@ -47,6 +48,18 @@ test('A3 边框：只在定时任务卡和原生 /cron 页里换，Metre 前缀�
   const rules = line.slice(line.indexOf('html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) :is(#pinkie-schedules'));
   assert.match(rules, /^html\[data-laolao-mode="metre"\]/);
   assert.doesNotMatch(rules.split('/*')[0], /!important/);
+});
+
+test('A3 边框：原生 /cron 页「•••」和筛选下拉是 <summary class="btn">，规则要覆盖到', (t) => {
+  const dir = process.env.PINKIE_CONTROL_UI_ROOT ? path.join(process.env.PINKIE_CONTROL_UI_ROOT, 'assets') : '';
+  const f = dir && fs.existsSync(dir) ? fs.readdirSync(dir).find((n) => /^cron-page-.*\.js$/.test(n)) : '';
+  if (!f) { t.skip('没有原生 Control UI（PINKIE_CONTROL_UI_ROOT），只查规则'); }
+  else {
+    const js = fs.readFileSync(path.join(dir, f), 'utf8');
+    assert.match(js, /<summary\s+class="btn btn--sm cron-job-menu__trigger"/, '「•••」触发键不再是 <summary class="btn">？');
+    assert.match(js, /<summary class="btn cron-filter-dropdown__trigger">/, '筛选下拉触发键不再是 <summary class="btn">？');
+  }
+  assert.match(css, /:is\(button, input, select, textarea, summary\.btn\) \{ --metre-line-strong: var\(--pk-a3-edge\); \}/);
 });
 
 test('A3 边框反例：改回 --metre-line-strong 原值就不够 3:1（日夜都不够）', () => {
