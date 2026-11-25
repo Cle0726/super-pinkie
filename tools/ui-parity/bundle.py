@@ -305,6 +305,15 @@ def run_stamp_tool(root, control):
         subprocess.run([node, str(script), '--root', str(root), '--control-ui', str(control)], check=True)
 
 
+def brand_service_worker(control):
+    # 用户 11-24：界面上不出现上游名字。通知标题来自 sw.js（不是 assets/ 分块），
+    # 两个平台都在这里把它改成 C.le.；只换独立的词，技术名字（openclaw-*）不动。
+    worker = Path(control) / 'sw.js'
+    if worker.is_file():
+        text = worker.read_text(encoding='utf-8')
+        write_if_changed(worker, re.sub(r'(?<![A-Za-z0-9_$-])OpenClaw(?![A-Za-z0-9_$-])', 'C.le.', text).encode('utf-8'))
+
+
 def install(root, control):
     root, control = Path(root), Path(control)
     files = source_files(root)
@@ -327,6 +336,7 @@ def install(root, control):
         if file.is_file() and (retired(name) or (ui_resource(name) and name not in data_map and name not in RUNTIME_DATA)):
             file.unlink()
     refresh_native_imports(control)
+    brand_service_worker(control)
     html = normalize_index(base_html, root, files, control)
     write_if_changed(index, html.encode('utf-8'))
     actual = inspect(root, control)

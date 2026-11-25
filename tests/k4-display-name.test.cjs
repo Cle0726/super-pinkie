@@ -1,4 +1,5 @@
-// K4：用户看得到的内核名字是「C.le.」，不再是「CLE Kk」；关于页署名「C.le. 内核 <版本> · 基于 OpenClaw（MIT）」。
+// K4：用户看得到的内核名字是「C.le.」，不再是「CLE Kk」；关于页署名「C.le. 内核 <版本>」。
+// 用户 11-24：界面上不再出现 OpenClaw；唯一保留的是关于页「第三方许可」里的 MIT 声明（法律要求）。
 // 技术名字（openclaw 包名、~/.openclaw、CLE_KK_* 环境变量、cle-kk 状态目录）不在这里检查，也不许改。
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,15 +74,15 @@ test('K4：界面把上游名字和旧名字都换成 C.le.，并仍认得旧名
   assert.match(read('ui/party/party.js'), /openclaw:'C\.le\.'/);
 });
 
-test('K4：关于页有「C.le. 内核 <版本> · 基于 OpenClaw（MIT）」，版本来自网关而不是写死', () => {
+test('K4：关于页有「C.le. 内核 <版本>」，版本来自网关而不是写死，也不写上游名字', () => {
   const source = read('ui/injections/laolao-settings-user.js');
   const window = {};
   const document = {readyState: 'loading', addEventListener() {}};
   vm.runInNewContext(source, {window, document, URL, URLSearchParams, JSON, Object, Array, String, Boolean, Date, Number},
     {filename: 'laolao-settings-user.js'});
   const {kernelCredit} = window.__laolaoUserSettings;
-  assert.equal(kernelCredit('2026.10.1'), 'C.le. 内核 2026.10.1 · 基于 OpenClaw（MIT）');
-  assert.equal(kernelCredit('9.9.9-test'), 'C.le. 内核 9.9.9-test · 基于 OpenClaw（MIT）');
+  assert.equal(kernelCredit('2026.10.1'), 'C.le. 内核 2026.10.1');
+  assert.equal(kernelCredit('9.9.9-test'), 'C.le. 内核 9.9.9-test');
   // 卡片里有这一行，并且和「版本」一起从网关报的版本刷新。
   const about = source.slice(source.indexOf('const aboutCard = card('), source.indexOf('const footer = element("footer"'));
   assert.match(about, /state\.kernelNote = element\("p", "pinkie-user-settings__soft-note", aboutCard, kernelCredit\(/);
@@ -98,4 +99,64 @@ test('K4：技术名字不带点', () => {
   }
   assert.match(read('ui/party/party.js'), /openclaw:'C\.le\.'/, '派对成员 id 仍是 openclaw');
   assert.match(read('services/party/server.py'), /'openclaw': 'C\.le\.'/);
+});
+
+// 控制台原生分块：碧琪共用的 ui/runtime 里，用户看得到的文字不再有 OpenClaw（patch/apply-brand-text.mjs 烤进去的）。
+// 留下的只有给模型看的内部提示（后端按原文识别）和技术名字。
+const RUNTIME_ALLOWED = [
+  /^OpenClaw runtime context \(internal\):$/, /^OpenClaw runtime context for the immediately preceding user message\.$/, /^OpenClaw runtime event\.$/,
+  /^Internal OpenClaw voice control result\.$/, /^Speak this exact OpenClaw status to the voice call/, /^Tell the person briefly that you are checking, then wait for the final OpenClaw result/,
+];
+test('K4：控制台界面文字不再出现 OpenClaw（语言包、品牌位、提示、斜杠命令、错误提示）', () => {
+  const dir = path.join(root, 'ui/runtime');
+  const literal = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
+  const left = [];
+  const files = fs.readdirSync(dir).filter((n) => n.endsWith('.js'));
+  for (const name of files) {
+    const text = read('ui/runtime/' + name);
+    for (const m of text.matchAll(literal)) {
+      const s = m[0].slice(1, -1);
+      if (!/(?<![A-Za-z0-9_$])OpenClaw(?![A-Za-z0-9_$])/.test(s)) continue;
+      if (RUNTIME_ALLOWED.some((re) => re.test(s))) continue;
+      left.push(name + ': ' + s.replace(/\s+/g, ' ').trim().slice(0, 100));
+    }
+  }
+  assert.deepEqual(left, [], '用户看得到的 OpenClaw：\n' + left.join('\n'));
+  // 21 个语言包都在（含简体、繁体中文和英文），否则安装时会落回上游原样的那一份。
+  for (const locale of ['i18n', 'zh-CN', 'zh-TW', 'ja-JP', 'de', 'nl']) assert.ok(files.some((n) => n.startsWith(locale + '-')), locale);
+  assert.equal(files.filter((n) => /^(?:i18n|ar|de|es|fa|fr|hi|id|it|ja-JP|ko|nl|pl|pt-BR|ru|th|tr|uk|vi|zh-CN|zh-TW)-/.test(n)).length, 21);
+  const index = read('ui/runtime/index-Bvtt7vVx.js');
+  assert.match(index, /<span class="topbar-brand__title">C\.le\.<\/span>/);
+  assert.match(index, /<div class="login-gate__title">C\.le\.<\/div>/);
+  assert.match(read('ui/runtime/zh-CN-CDJc7cUL.js'), /`C\.le\. 移动版`/);
+  assert.match(read('ui/runtime/chat-page-DrPkxqJK.js'), /e\.assistantName\|\|`C\.le\.`/);
+});
+
+test('K4：OpenClaw 的 MIT 声明只在关于页「第三方许可」里，一字不改', () => {
+  const js = read('ui/injections/laolao-metre-engine.js');
+  const block = /\/\/ NOTICES-BEGIN[\s\S]*?\/\/ NOTICES-END/.exec(js)[0];
+  const notices = block.slice(block.indexOf('`') + 1, block.lastIndexOf('`'));
+  // openclaw@2026.7.1-2 包里 LICENSE 的第 1–21 行。
+  const mit = ['MIT License', '', 'Copyright (c) 2026 OpenClaw Foundation', '',
+    'Permission is hereby granted, free of charge, to any person obtaining a copy',
+    'of this software and associated documentation files (the "Software"), to deal',
+    'in the Software without restriction, including without limitation the rights',
+    'to use, copy, modify, merge, publish, distribute, sublicense, and/or sell',
+    'copies of the Software, and to permit persons to whom the Software is',
+    'furnished to do so, subject to the following conditions:', '',
+    'The above copyright notice and this permission notice shall be included in all',
+    'copies or substantial portions of the Software.', '',
+    'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR',
+    'IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,',
+    'FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE',
+    'AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER',
+    'LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,',
+    'OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE', 'SOFTWARE.'].join('\n');
+  assert.ok(notices.endsWith(mit), 'OpenClaw 的 MIT 全文要原样放在第三方许可最后');
+  assert.ok(notices.includes('https://github.com/openclaw/openclaw'));
+  // 引擎文件里，第三方许可以外的地方不出现 OpenClaw；关于页署名也不出现。
+  assert.doesNotMatch(js.replace(block, ''), /OpenClaw/);
+  const settings = read('ui/injections/laolao-settings-user.js');
+  const creditLine = settings.slice(settings.indexOf('const kernelCredit'), settings.indexOf('\n', settings.indexOf('const kernelCredit')));
+  assert.doesNotMatch(creditLine.split('//')[0], /OpenClaw|MIT/, '关于页署名的文字里不写上游名字');
 });
