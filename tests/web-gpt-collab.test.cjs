@@ -54,7 +54,7 @@ test('web GPT collaboration is opt-in and scoped per session', () => {
   assert.match(ui, /bridge\.postMessage\(\{action: "open", url: home\}\)/);
   assert.match(ui, /未绑定项目 · 仅网页对话/);
   assert.match(ui, /No local project files were supplied or read/);
-  assert.match(ui, /Never inspect Pinkie\/OpenClaw memory/);
+  assert.match(ui, /Never inspect Pinkie\/C\.le\. memory/);
   assert.match(ui, /修复前记录，内部工作区连接现已停用/);
   assert.match(ui, /现在已经禁止读取碧琪记忆和内部工作区/);
   assert.match(ui, /const syncSession =/);

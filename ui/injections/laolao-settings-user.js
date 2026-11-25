@@ -205,7 +205,7 @@
     return {label, tone, detail};
   };
 
-  const kernelCredit = (version) => `C.le. 内核 ${version} · 基于 OpenClaw（MIT）`; // K4 关于页署名
+  const kernelCredit = (version) => `C.le. 内核 ${version}`; // K4 关于页署名（用户 11-24：不写上游名字，MIT 声明在「第三方许可」里）
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,

@@ -1,0 +1,10 @@
+/* 预览用（不进仓库）：Metre 整页动画第三版（总谱）的配套样式。只在 html[data-pv3] 下生效。 */
+/* 旧版的换会话竖条、指挥线、画带竖条让给新的 */
+html[data-pv3] .pk-metre-sweep { display: none !important; }
+html[data-pv3][data-laolao-mode="metre"][data-metre-enter] .pk-metre-backdrop,
+html[data-pv3][data-laolao-mode="metre"][data-metre-enter="chat"] .chat-thread { animation: none !important; }
+/* 引导语：逐字淡入让给「音高落回」（动的是拷贝，原文排版不变） */
+html[data-pv3] .pk-metre-prompt__text .pk-metre-ch { animation: none !important; opacity: 1 !important; }
+html[data-pv3] .pk-metre-prompt__text.is-wait .pk-metre-ch { opacity: 0 !important; }
+.pv3-fly { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+html:not([data-laolao-mode="metre"]) .pv3-lights { display: none !important; }

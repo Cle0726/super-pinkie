@@ -35,6 +35,9 @@ for (const width of [1500, 900]) {
       await tab.evaluate(() => window.__pinkieMetreBoard.open());
       await tab.waitForFunction(() => window.qa.n > 0 && document.getElementById('pk-metre-board-plan')?.dataset.metreState === 'live');
       await tab.waitForTimeout(300);
+      // 11-24 真实页面基线比对时发现：记忆统计不带 count / known 时，卡片写成「undefined 条 · 了解 undefined / 9 类」。
+      await tab.waitForFunction(() => document.querySelector('.pk-mb-memory__folder small'));
+      assert.equal(await tab.evaluate(() => document.querySelector('.pk-mb-memory__folder small').textContent), '0 条 · 了解 0 / 9 类', 'memory card counts fall back to 0, never undefined');
 
       const place = () => tab.evaluate(() => {
         const scroll = document.querySelector('.pk-metre-board__scroll');

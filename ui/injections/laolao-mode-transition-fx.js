@@ -881,7 +881,7 @@
     const parts = makeParticles(mode.id);
     const view = {w: 1, h: 1, glScale: 1, fxScale: 1};
     let gl = null, U = null, fx = null, size = null, s = null;
-    let clock = 0, lastNow = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
+    let clock = Math.max(0, POP - (hooks.intro ?? POP)), lastNow = 0, readyAt = Infinity, readyProgress = .72, exitAt = Infinity, raf = 0;
     let phraseKey = '', copyStep = 0, waitingText = '', finished = false, destroyed = false, doneOrigin = null;
     let resolveCovered, resolveFinished, rejectReady;
     const covered = new Promise((resolve) => { resolveCovered = resolve; });
@@ -1203,6 +1203,7 @@
       s.busy = true;
       const tex = await withTimeout(stageMode(s, mode.id, true), LOAD_TIMEOUT);
       if (destroyed || s.lost) throw new Error('aborted');
+      if (hooks.hold) { await hooks.hold; if (destroyed) throw new Error('aborted'); }   // 从 Metre 离场接过来：贴图趁离场备好，到交接那一拍才起，引子只留 hooks.intro 毫秒
       size = {w: tex.w, h: tex.h};
       ({gl, U} = s);
       ui.glCanvas = s.canvas;
@@ -1214,8 +1215,7 @@
       fx = ui.fxCanvas.getContext('2d');
       root.addEventListener('resize', resize);
       setMessage(phrases[0]);
-      syncDom(0);
-      render(0);
+      syncDom(clock); render(clock);
       raf = root.requestAnimationFrame(tick);
     })();
     ready.catch(() => cleanup());
