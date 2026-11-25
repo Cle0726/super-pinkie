@@ -324,3 +324,16 @@ test('installLockedTarball resolves symlinked --prefix before npm ci (macOS $TMP
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('K4 deferred install/build scripts use C.le. in user-visible messages without touching technical names', () => {
+  for (const rel of ['install.ps1', 'install.sh', 'installer/windows/apply-theme.ps1']) {
+    assert.doesNotMatch(read(rel), /CLE Kk/, `${rel} must not display legacy CLE Kk brand`);
+  }
+  assert.doesNotMatch(read('installer/windows/apply-theme.ps1'), /\.Replace\(['"]OpenClaw['"]/);
+  const applyMacNonComments = read('installer/macos/apply-theme.sh')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
+  assert.doesNotMatch(applyMacNonComments, /CLE Kk/, 'apply-theme.sh user-visible output must use C.le.');
+  assert.doesNotMatch(read('build-win.ps1'), /内置 OpenClaw 传输补丁失败/);
+});

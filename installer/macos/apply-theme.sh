@@ -369,12 +369,12 @@ reseal_app_on_exit() {
           "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
           || ! codesign -dr - "$LAUNCHER_APP_PATH" 2>&1 \
             | grep -Fq 'designated => identifier "com.cle0726.super-pinkie"'; then
-        echo "error: failed to preserve CLE Kk's stable local permission identity" >&2
+        echo "error: failed to preserve C.le.'s stable local permission identity" >&2
         [[ "$exit_code" -eq 0 ]] && exit_code=1
       fi
     fi
     if ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
-      echo "error: updated CLE Kk App signature did not verify" >&2
+      echo "error: updated C.le. App signature did not verify" >&2
       [[ "$exit_code" -eq 0 ]] && exit_code=1
     fi
   fi
@@ -567,7 +567,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     apply_ui_skin "$OPENCLAW_ROOT/dist/control-ui"
   fi
 else
-  echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
+  echo "error: C.le. compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
   exit 1
 fi
 

@@ -57,7 +57,6 @@ function Apply-UISkin {
     $serviceWorker = Join-Path $UiRoot 'sw.js'
     if (Test-Path $serviceWorker) {
         $worker = Get-Content $serviceWorker -Raw -Encoding UTF8
-        $worker = $worker.Replace('OpenClaw', 'CLE Kk')
         # 打了补丁的原生块沿用上游的哈希文件名，cache-first 会一直把补丁前的
         # 渲染器喂回来。给本地 UI 改网络优先，并给它那份可丢弃的缓存打版本号；
         # 离线回退仍然保留。
@@ -163,7 +162,7 @@ foreach ($packageRoot in $packageRoots) {
 }
 
 if (-not $didAny) {
-    Write-Warning "找不到 CLE Kk UI 目录，皮肤注入跳过。请先运行一键安装 / 修复。"
+    Write-Warning "找不到 C.le. UI 目录，皮肤注入跳过。请先运行一键安装 / 修复。"
 }
 
 # ── 2. 写入头像到各工作区 ────────────────────────────────────────────────
@@ -183,4 +182,4 @@ foreach ($ws in $workspaces) {
 }
 
 Write-Host ""
-Write-Host "皮肤注入完成。如果 CLE Kk 正在运行，请重启网关使更改生效。"
+Write-Host "皮肤注入完成。如果 C.le. 正在运行，请重启网关使更改生效。"

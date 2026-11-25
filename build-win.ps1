@@ -117,7 +117,7 @@ $env:PINKIE_SKIP_APP_BUNDLES = "1"
 $env:PINKIE_SKIP_RUNTIME_PATCHES = "1"
 & ".\installer\windows\apply-theme.ps1"
 python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
-if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
+if ($LASTEXITCODE -ne 0) { throw "内置 C.le. 传输补丁失败" }
 
 # 后台网关继续采用已验证的 Mac 兼容快照；完整浏览器 UI 统一来自 ui/。
 # 所有覆盖及清理结束后，必须再装公共入口、渲染器和资源，不能恢复旧页面。
