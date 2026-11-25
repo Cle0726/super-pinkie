@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "m5 新功能第 5 项 PR 一条龙（11-25，feat/m5-pr-page）：Metre 工作台「PR」页 laolao-metre-pr.css / .js 只能在这里登记加载（?v=@hash），功能本身全在新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "m5 PR 一条龙（11-25，feat/m5-pr-page）：laolao-metre-pr.css / .js 登记在 metre 区域 files 里各一行，没有新区域、新根选择器或跨区域放行。"}
+]
