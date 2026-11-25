@@ -15,6 +15,7 @@
     --metre-line-strong: #6B675F;
     --bs-off: #6B675F;
     --bs-rule: #86827A;
+    --sb-ink: var(--metre-text);   /* 没选中的会话标题：Metre 夜间不带 data-pinkie-night，标题吃的是日间配方 accent 22% + #4a3d44，夜间只有约 2.5:1 */
   }
   html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):is([data-pinkie-night], [data-theme="dark"]) {
     --metre-muted: #ADA9A0;

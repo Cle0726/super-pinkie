@@ -58,7 +58,21 @@ function readContrast() {
         ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)});
     }
   }
-  return {tokens, items: out};
+  // 11-25 协调者加：没选中的会话标题（字色不是弱化色，上面那圈量不到）。Metre 夜间不带 data-pinkie-night，标题曾吃日间配方，约 2.5:1。
+  const titles = [];
+  for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session:not(.sidebar-recent-session--active) .sidebar-recent-session__name')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || !el.textContent.trim()) continue;
+    const cs = getComputedStyle(el); const bg = bgOf(el);
+    let op = 1;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) op *= Number(getComputedStyle(n).opacity);
+    const raw = rgb(cs.color); const alpha = (raw[3] === undefined ? 1 : raw[3]) * op;
+    const ink = raw.slice(0, 3).map((v, i) => alpha * v + (1 - alpha) * bg[i]);
+    const a = lum(ink); const b = lum(bg);
+    titles.push({el: 'span.sidebar-recent-session__name', text: el.textContent.trim().slice(0, 16), ink: `rgb(${ink})`, bg: `rgb(${bg})`, opacity: op,
+      ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)});
+  }
+  return {tokens, items: out, titles};
 }
 
 const fmt = (items) => items.map((i) => `${i.el}「${i.text}」${i.ink} on ${i.bg} ${i.ratio.toFixed(2)}`).join('; ');
@@ -88,6 +102,27 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       assert.notEqual(more.tokens.muted, NORMAL[theme].muted, `${theme}: 高对比时弱化色没换`);
       assert.ok(more.items.length >= 1, `${theme}: 侧栏 / 状态带里没找到用弱化色的小字`);
       for (const i of more.items) assert.ok(i.ratio >= 4.5, `${theme}: ${i.el}「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.items)}`);
+      console.log(`ℹ ${theme} more titles: ${fmt(more.titles)}`);
+      assert.ok(more.titles.length >= 1, `${theme}: 侧栏里没找到没选中的会话标题（量不到不能算通过）`);
+      for (const i of more.titles) assert.ok(i.ratio >= 4.5, `${theme}: 没选中的会话标题「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.titles)}`);
+
+      if (theme === 'night') {
+        // 反例：删掉 laolao-metre-contrast.css 的规则，夜间没选中的会话标题必须掉回 4.5 以下（就是协调者看到的那几行）
+        const removed = await page.evaluate(() => {
+          let n = 0;
+          for (const sh of document.styleSheets) {
+            if (!/laolao-metre-contrast\.css/.test(sh.href || '')) continue;
+            for (let i = sh.cssRules.length - 1; i >= 0; i--) { sh.deleteRule(i); n++; }
+          }
+          return n;
+        });
+        assert.ok(removed >= 1, '页面上没有 laolao-metre-contrast.css');
+        await page.waitForTimeout(600);
+        const bad = await page.evaluate(readContrast);
+        console.log(`ℹ night more without contrast css, titles: ${fmt(bad.titles)}`);
+        assert.ok(bad.titles.length >= 1, '反例：删掉后侧栏里没找到没选中的会话标题');
+        assert.ok(bad.titles.some((i) => i.ratio < 4.5), `反例没生效：删掉后夜间会话标题仍都 ≥ 4.5 — ${fmt(bad.titles)}`);
+      }
 
       if (theme === 'day') {
         // 反例：删掉 laolao-metre-contrast.css 的规则，日间弱化色小字必须掉回 4.5 以下
