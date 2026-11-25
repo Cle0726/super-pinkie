@@ -22,6 +22,8 @@ test('Metre：分叉键挪到页脚行的规则只在 Metre 下生效，不用 !
   assert.ok(rule, '找不到 Metre 下把分叉键挪到页脚行的规则');
   assert.match(rule[0], /:has\(\+ \.chat-group-footer\) > \.pinkie-fork-action \{ top: auto; bottom: 0; right: 0;/);
   assert.match(rule[0], /\.chat-bubble:has\(> \.pinkie-fork-action\) \+ \.chat-group-footer \{ padding-right: 94px; \}/);
+  assert.match(rule[0], /\.chat-group\.assistant:not\(\.chat-group--timeline-step\) [^{]*::after \{ content: ""; display: block; height: 30px; \}/, '留键高的 ::after 不能落到工作过程步骤上（会让工作过程块常驻多 30px）');
+  assert.match(rule[0], /\.chat-group--timeline-step > [^{]*::after \{ content: ""; display: block; position: absolute;/, '工作过程步骤的悬停桥要绝对定位，不占位');
   assert.doesNotMatch(rule[0], /!important/, '这组规则不需要 !important');
   assert.doesNotMatch(rule[0], /:has\([^)]*:has\(/, ':has() 不能嵌套，浏览器会把整条规则丢掉');
   assert.doesNotMatch(css, /pinkie-fork-action\) > \.chat-text::before/, '正文开头的浮动占位会改静止排版，不能再用');
@@ -49,6 +51,11 @@ const page = (mode, night, w) => [
   `<!doctype html><html data-laolao-mode="${mode}"${night ? ' data-pinkie-night="1"' : ''}><head><style>.chat-bubble { position: relative; } .chat-text :where(pre) { overflow: auto; }</style></head>`,
   '<body style="margin:0;font:15px/1.7 sans-serif"><div class="chat-thread">',
   ...BODIES.map(([, html], i) => group(w, bubble(`msg:assistant:${i}:0`, html))),
+  // 工作过程块（真页面「碧琪的工作过程」）：步骤气泡后面接工具行，没有页脚。它不能比 main 多占高，否则后面各组都会下移。
+  `<div class="chat-group assistant chat-group--process" style="display:flex;margin-bottom:16px"><div class="chat-group-messages" style="width:${w}px"><div class="pinkie-process__rows">`
+    + `<div class="chat-group assistant chat-group--timeline-step" style="margin:0 6px"><div class="chat-group-messages">${bubble('msg:assistant:8:0', `<p>${LONG}</p>`)}</div></div>`
+    + '<div class="chat-group tool chat-group--timeline-step" style="margin:0 6px"><button type="button" class="cle-run" style="display:flex;width:210px;height:28px;margin:2px 0">读了 1 个文件</button></div>'
+    + '</div></div></div>',
   group(w, bubble('msg:assistant:9:0', '<p>正在输出的这条没有键。</p>', false, ' streaming'), ' id="nokey"'),
   // 同组连着两条带键气泡（真机上「文字、工具卡、文字」）：放在最后，它让出的键高不影响上面各组的位置。
   group(w, bubble('msg:assistant:7:0', `<p>${LONG}</p>`) + bubble('msg:assistant:7:1', '<p>工具卡后面接着说的一段。</p>'), ' data-multi="1"'),
@@ -80,12 +87,12 @@ async function measure(tab) {
       const ov = (a) => Math.min(a.right, q.right) - Math.max(a.left, q.left) > 0 && Math.min(a.bottom, q.bottom) - Math.max(a.top, q.top) > 0;
       let hits = 0; const tw = document.createTreeWalker(document.querySelector('.chat-thread'), NodeFilter.SHOW_TEXT);
       for (let t = tw.nextNode(); t; t = tw.nextNode()) { if (!t.data.trim() || t.parentElement.closest('.pinkie-fork-action')) continue; const g = document.createRange(); g.selectNodeContents(t); hits += [...g.getClientRects()].filter((a) => a.width > 1 && ov(a)).length; }
-      const grp = bub.closest('.chat-group'); const gq = grp.getBoundingClientRect();
-      const btnHit = [...grp.querySelectorAll('.chat-group-footer button')].filter((e) => ov(e.getBoundingClientRect())).length;
+      const grp = bub.closest('.chat-group'); const gq = (bub.closest('.pinkie-process__rows') || grp).getBoundingClientRect();
+      const btnHit = [...document.querySelectorAll('.chat-thread button')].filter((e) => !e.matches('.pinkie-fork-action') && ov(e.getBoundingClientRect())).length;
       const last = Boolean(bub.nextElementSibling?.matches('.chat-group-footer'));
-      const fq = grp.querySelector('.chat-group-footer').getBoundingClientRect();
+      const fq = grp.querySelector('.chat-group-footer')?.getBoundingClientRect();
       return {hits, btnHit, last, inGroup: q.left >= gq.left - 0.5 && q.right <= gq.right + 0.5 && q.top >= gq.top - 0.5 && q.bottom <= gq.bottom + 0.5,
-        inFooterRow: q.top >= fq.top - 0.5 && q.bottom <= fq.bottom + 0.5, op: getComputedStyle(k).opacity, to: [(q.left + q.right) / 2, (q.top + q.bottom) / 2]};
+        inFooterRow: Boolean(fq) && q.top >= fq.top - 0.5 && q.bottom <= fq.bottom + 0.5, op: getComputedStyle(k).opacity, to: [(q.left + q.right) / 2, (q.top + q.bottom) / 2]};
     }, sel);
     let minOp = 1;
     for (let s = 1; s <= 10; s += 1) {
@@ -126,7 +133,7 @@ for (const night of [false, true]) {
         assert.deepEqual(restFixed.multi, restMain.multi, `宽${w}：多气泡组里正文相对气泡的排版变了`);
         const fixed = await measure(tab);
         const ids = Object.keys(fixed);
-        assert.equal(ids.length, BODIES.length + 2, `宽${w}：带键气泡数不对`);
+        assert.equal(ids.length, BODIES.length + 3, `宽${w}：带键气泡数不对`);
         for (const id of ids) {
           const m = fixed[id]; const tag = `宽${w} ${id}`;
           assert.equal(m.op, '1', `${tag}：悬停正文时键要显示出来`);
@@ -139,7 +146,8 @@ for (const night of [false, true]) {
         }
         const nokey = await tab.evaluate(() => { const g = document.getElementById('nokey'); return [getComputedStyle(g.querySelector('.chat-group-footer')).paddingRight, getComputedStyle(g.querySelector('.chat-bubble')).paddingBottom]; });
         assert.deepEqual(nokey, ['0px', '0px'], `宽${w}：没有键的气泡（正在输出）不该让位`);
-        // 反例：同一页面去掉这组规则（等同 main），段落、短话、列表开头悬停时都会被键压住。
+        // 反例：同一页面去掉这组规则（等同 main），段落、短话、列表开头、工作过程步骤悬停时都会被键压住。
+        if (broken) assert.ok(broken['msg:assistant:8:0'].hits > 0, '反例没压字（工作过程步骤）：这条测试抓不住复发');
         if (broken) for (const name of ['段落', '短话', '列表开头']) {
           const i = BODIES.findIndex(([n]) => n === name);
           assert.ok(broken[`msg:assistant:${i}:0`].hits > 0, `反例没压字（${name}）：这条测试抓不住复发`);
