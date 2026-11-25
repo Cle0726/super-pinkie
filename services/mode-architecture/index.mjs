@@ -51,6 +51,7 @@ import {registerAppBrowserLifecycle} from './app-browser.mjs';
 import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
+import {registerPrFlow} from './pr-flow.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
@@ -793,7 +794,8 @@ export default {
     const modelSetup = registerModelSetup(toolApi);
     toolApi.registerTool?.((ctx) => (isMetreTurnLocked(null, ctx) ? null : createModelCapabilityTool(modelSetup, ctx)), {name: 'pinkie_model_capability'});
     registerRichRuntime(toolApi, {cli: resolveGatewayCliEntry()});
-    registerWorkbench(toolApi);
+    const workbench = registerWorkbench(toolApi);
+    registerPrFlow(toolApi, {scope: (params) => workbench.scope(params)}); // 新功能第 5 项 PR 一条龙（只在 Metre；引擎台用时再取）
     const feedback = registerFeedback(toolApi, {root: resolveFeedbackRoot({stateRoot: process.env.PINKIE_STATE_ROOT || ''})});
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
