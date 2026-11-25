@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 1, "reason": "ui3 X4（#131）：Metre 高对比（prefers-contrast: more）的新文件 laolao-metre-contrast.css 只能在这里登记加载（?v=@hash），规则全在新文件的媒体查询里，平时不生效。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 1, "reason": "ui3 X4（#131）：laolao-metre-contrast.css 在 metre 区域 files 里登记一行（ui-region-ownership 要求头片段加载的每个文件都归属一个区域）；没有新区域、新根选择器或跨区域放行。"}
+]
