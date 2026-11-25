@@ -569,6 +569,40 @@ test(`when something in the row grows after the keys were fitted, the row is mea
   } finally { await browser.close(); }
 });
 
+// linux CI 真页面 1200 / 940 宽（11-25 15:47、15:55 探针）：本批键不放、模型名全名时，别的键（接力、引擎、模型、思考、容量圈）本身就挤成两行，
+// 基准高 h0 量成两行高，第 0 档全露也算「没多出高度」，fit() 直接收工、按键行一直两行、模型名也不截。基准要在模型名截到最短时量。改前这条失败。
+test(`when the other keys already wrap with the full model name, the name is cut and the row goes back to one line (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser, {width: 1280});
+    await longModelRow(p);
+    await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:59px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
+    const state = () => p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls'), box = c.querySelector(':scope > .pk-perm-chips');
+      const label = c.querySelector('.chat-composer-model-control .chat-controls__inline-select-label');
+      const keys = [...box.querySelectorAll('.pk-perm-chip')].map((k) => { const r = k.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return Boolean(hit && k.contains(hit)); });
+      return {rows: new Set([...c.children].filter((k) => k.getBoundingClientRect().height > 0).map((k) => Math.round(k.getBoundingClientRect().top))).size,
+        fold: box.dataset.fold, clipped: label.scrollWidth > label.clientWidth + 1, keysHit: keys.every(Boolean)};
+    });
+    // 容器宽 = 引擎 + 模型（全名）+ 容量圈 + 间距 - 30：本批键不放也已经两行；模型名截短以后放得下一行
+    const pre = await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls'), box = c.querySelector(':scope > .pk-perm-chips');
+      const w = (s) => c.querySelector(s).getBoundingClientRect().width;
+      c.style.width = Math.ceil(w(':scope > .pk-eng-chip') + w(':scope > .chat-composer-model-control') + w(':scope > .laolao-context-viewer') + 8 - 30) + 'px';
+      box.style.display = 'none';
+      const rows = new Set([...c.children].filter((k) => k.getBoundingClientRect().height > 0).map((k) => Math.round(k.getBoundingClientRect().top))).size;
+      box.style.display = '';
+      return rows;
+    });
+    assert.equal(pre, 2, '复现前提：本批键不放、模型名全名时别的键已经两行');
+    await p.evaluate(() => window.PinkieMetrePerm.fit());
+    const after = await state();
+    assert.equal(after.rows, 1, `截模型名 / 收键以后回到一行（${JSON.stringify(after)}）`);
+    assert.equal(after.clipped, true, `模型名截了（${JSON.stringify(after)}）`);
+    assert.ok(after.keysHit, `本批的键都点得到（${JSON.stringify(after)}）`);
+  } finally { await browser.close(); }
+});
+
 // 按键行底下横穿着谱线：va-b5 真截图里字底下最难读的像素，日间 #C8C4BB、夜间 #232429；「先出方案」按下态的底日间 #B8B7BA、夜间 #313443。
 // 字对这些像素也要 ≥ 4.5:1。改前日间 ink2 #5F5C55 只有 3.8、warn #8A5A12 3.4，夜间按下态钴蓝 4.4；夜间计划进度条底槽和卡片底几乎一样（1.05）。
 test(`key text stays at least 4.5:1 over the stave lines behind the key row, and the night plan bar track is visible (${engine})`, {timeout: 60_000}, async () => {

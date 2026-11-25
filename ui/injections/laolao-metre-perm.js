@@ -475,12 +475,15 @@
     const others = [...controls.children].some((c) => c !== box && c.getBoundingClientRect().height > 0);
     if (!others) { squeeze(model, null); if (fold !== 0 || box.dataset.fold !== '0') { const nb = build(0); box.replaceWith(nb); } fold = 0; return; }
     const h = () => input.getBoundingClientRect().height;
-    squeeze(model, null);
+    // 基准 h0：本批键不放、模型名截到最短时输入框的高（这一行最少要占几行）。不截模型名量的话，
+    // 别的键本身就挤成两行时（linux 真页面 1200 / 940 宽），h0 就是两行高，第 0 档全露也算「没多出高度」，直接收工。
+    const tries = widths(model);
+    squeeze(model, tries[tries.length - 1]);
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
+    squeeze(model, null);
     let cur = box;
     const ok = () => h() <= h0 + 1 && !covered(cur, input);
     if (fold === 0 && Number(cur.dataset.fold) === 0 && ok()) return;
-    const tries = widths(model);
     for (let f = 0; f <= 3; f++) {
       if (f !== Number(cur.dataset.fold)) { const nb = build(f); cur.replaceWith(nb); cur = nb; }
       fold = f;
