@@ -231,6 +231,9 @@
         "laolao-metre-board-data.js",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
+        "laolao-metre-cite.css",
+        "laolao-metre-cite.js",
+        "laolao-metre-read.js",
         "laolao-metre-preview.css",
         "laolao-metre-preview.js",
         "laolao-metre-code.css",
@@ -259,7 +262,9 @@
         "laolao-metre-allow.css",
         "laolao-metre-allow.js",
         "laolao-metre-perm.css",
-        "laolao-metre-perm.js"
+        "laolao-metre-perm.js",
+        "laolao-metre-suggest.css",
+        "laolao-metre-suggest.js"
       ]
     },
     {
