@@ -504,6 +504,44 @@ test(`at any width the ⋯ key stays on the row and clickable; a long model name
   } finally { await browser.close(); }
 });
 
+// 协调者 11-25 10:23 看 #94 图：① 只剩「详情」时看不出能展开（放手程度、先出方案在里面）；② win32 夜间模型名截成「gemini-3.6-flash · r」没有省略号。
+// 真页面的模型名 span 没有行内样式，上面几条测试给它写了 text-overflow 行内样式，所以没看出来。这里先拿掉行内样式，只靠 Metre 皮肤那条规则。
+test(`with only 详情 left it shows ▾ and opens level and plan-first; a cut model name ends in an ellipsis and the title is the full name (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser, {width: 1280});
+    await longModelRow(p);
+    await p.evaluate(() => document.querySelector('.chat-composer-model-control .chat-controls__inline-select-label').removeAttribute('style'));
+    const look = () => p.evaluate(() => {
+      const box = document.querySelector('.pk-perm-chips'), name = box.querySelector('.pk-perm-chip--stat .pk-eng-chip__name');
+      const label = document.querySelector('.chat-composer-model-control .chat-controls__inline-select-label'), cs = getComputedStyle(label);
+      return {fold: box.dataset.fold, text: name.textContent, mark: getComputedStyle(name, '::after').content,
+        clipped: label.scrollWidth > label.clientWidth + 1, overflow: cs.overflowX, ellipsis: cs.textOverflow, nowrap: cs.whiteSpace,
+        title: document.querySelector('.chat-composer-model-control').getAttribute('title')};
+    });
+    const wide = await look();
+    assert.equal(wide.fold, '0'); assert.ok(!/▾/.test(wide.mark), `全露时状态键不带 ▾（${JSON.stringify(wide)}）`);
+    await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:59px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls'), w = (s) => c.querySelector(s).getBoundingClientRect().width;
+      c.style.setProperty('transition', 'none', 'important');
+      c.style.width = Math.ceil(w(':scope > .pk-eng-chip') + w(':scope > .chat-composer-model-control') + w(':scope > .laolao-context-viewer') + 8 - 30) + 'px';
+      window.PinkieMetrePerm.fit();
+    });
+    const tight = await look();
+    assert.equal(tight.fold, '2', `这个宽度收到只剩「详情」（${JSON.stringify(tight)}）`);
+    assert.equal(tight.text, '详情', '键的文字不变');
+    assert.equal(tight.mark, '"▾"', `「详情」带 ▾，看得出能展开（${JSON.stringify(tight)}）`);
+    assert.equal(tight.clipped, true, `模型名截了（${JSON.stringify(tight)}）`);
+    assert.deepEqual([tight.overflow, tight.ellipsis, tight.nowrap], ['hidden', 'ellipsis', 'nowrap'], `没有行内样式也有省略号（${JSON.stringify(tight)}）`);
+    assert.equal(tight.title, LONG, '模型键 title 给全名');
+    await p.mouse.click(...await p.evaluate(() => { const r = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }));
+    await p.waitForSelector('.pk-perm-pop--detail');
+    const acts = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__acts .pk-perm-pop__btn', (n) => n.map((e) => e.textContent));
+    assert.ok(acts.some((t) => t.startsWith('放手程度：')) && acts.some((t) => t.startsWith('先出方案：')), `鼠标点「详情」看得到放手程度和先出方案（${JSON.stringify(acts)}）`);
+  } finally { await browser.close(); }
+});
+
 // mac1 任务 28（#94 issuecomment-7164474183）：320 宽「详情」键被浮在框角上的麦克风（button.chat-send-btn，position:absolute; z-index:3）盖住 32×23，
 // 鼠标点到的是麦克风。被盖住也算「放不下」，接着收拢，直到键中心点下去是键自己。改前这条失败。
 test(`a key under the floating microphone / send button counts as not fitting, so the keys fold until it is clickable (${engine})`, {timeout: 60_000}, async () => {

@@ -486,7 +486,7 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .topbar :is(.laolao-usage, .t
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session :is(a, span, div) { font-weight: 400 !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .sidebar-recent-session :is(.sidebar-recent-session__link, a) { font-size: 14px !important; color: var(--metre-text) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input :is(.chat-controls__model, .chat-controls__inline-select-trigger) { max-width: 300px !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .chat-controls__inline-select-label { max-width: var(--pk-perm-model-label, 260px) !important; transition: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .agent-chat__input .chat-controls__inline-select-label { max-width: var(--pk-perm-model-label, 260px) !important; transition: none !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
 
 /* ---------- 深色 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar,
