@@ -86,19 +86,18 @@ html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) {
 html[data-laolao-mode="metre"] .pk-metre-backstage:not([hidden]) {
   position: fixed;
   z-index: 36;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: flex; align-items: center; gap: 6px;
   height: 24px;
   padding: 0 4px;
   box-sizing: border-box;
-  overflow: hidden;
-  white-space: nowrap;
+  overflow: hidden; white-space: nowrap;
   color: var(--bs-ink); background: var(--metre-bg, #F7F6F3); border-radius: 0 0 8px 8px;   /* 整条带子一块主题底色，「后台」和各格都不压像素背景；和上面的底板连成一块，下沿圆角 */
   font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
   pointer-events: auto;
 }
 html[data-laolao-mode="metre"] .pk-metre-backstage.pk-metre-backstage--probe { left: -10000px; top: 0; width: auto; visibility: hidden; pointer-events: none; }
+html[data-laolao-mode="metre"]:is(:has(.shell--nav-drawer-open), :has(dialog.cmd-palette-overlay[open]), [data-pinkie-sidebar-peek="1"]) .pk-metre-backstage:not([hidden]) { z-index: 0; }   /* 窄窗抽屉、命令面板、收起侧栏的悬停卡片开着时，带子退到 app 层（openclaw-app z=1）下面：被遮罩一起压暗，不越过抽屉、不压 METRE 键 */
+html[data-laolao-mode="metre"]:is([data-theme="dark"], [data-pinkie-night]) .laolao-context-viewer__track { stroke: var(--metre-muted, #918D84); }   /* 输入框右下用量圆环的底圈：夜间原来 22% 透明的灰紫几乎看不见，换成 --metre-muted（对 #151514 约 5.4:1，非文本 ≥ 3:1） */
 html[data-laolao-mode="metre"] .pk-bs__label { flex: none; padding: 0 2px; color: var(--bs-ink); font-weight: 600; letter-spacing: 0.12em; }
 html[data-laolao-mode="metre"] .pk-bs__seg {
   flex: none;
@@ -122,6 +121,7 @@ html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] { --bs-sq: var(--bs-
 html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="wait"] { --bs-sq: var(--bs-wait); color: var(--bs-wait-t); }
 html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="fail"] { --bs-sq: var(--bs-fail); color: var(--bs-fail-t); border-color: var(--bs-fail); }
 html[data-laolao-mode="metre"] .pk-bs__seg[data-tone="run"] > i { animation: pk-mk-beat 833ms steps(1, end) infinite; }
+html[data-laolao-mode="metre"] .pk-bs__seg > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }   /* 格子定宽放不下时省略号，全文在 title / aria-label 里 */
 html[data-laolao-mode="metre"] button.pk-bs__seg--pop { cursor: pointer; }
 html[data-laolao-mode="metre"] button.pk-bs__seg--pop:hover { border-color: var(--bs-ink); }
 html[data-laolao-mode="metre"] button.pk-bs__seg--pop:focus-visible { outline: 2px solid var(--mk-run); outline-offset: 2px; }
