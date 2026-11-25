@@ -48,6 +48,7 @@ jobs:
         run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
       - name: Probe metre-board key row (linux, why fold 3 + full model name wraps)
         continue-on-error: true
+        if: always()
         shell: bash
         run: node tools/tmp94-probe.mjs . 2>&1 | tee "$RUNNER_TEMP/probe.tap"
       - name: Collect logs
