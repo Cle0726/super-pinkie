@@ -73,7 +73,7 @@ html[data-laolao-mode="metre"] .pk-mw-filter-menu {
   border-radius: 6px;
   box-shadow: var(--metre-pop-shadow);
   color: var(--metre-text);
-  font: 400 13px/1.4 var(--metre-sans);
+  font: 400 13px/1.4 var(--metre-sans); transition-property: none; /* 定位不走过渡：openMenu 先放 0/0 再挪到按键下方，默认 all 会让头一帧停在左上角 */
 }
 html[data-laolao-mode="metre"] .pk-mw-filter-menu__item {
   display: flex;

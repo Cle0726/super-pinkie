@@ -1524,7 +1524,7 @@
     "ui/injections/laolao-metre-skin.css": {
       "important": 2264,
       "importantIndirect": 0,
-      "lines": 2553,
+      "lines": 2552,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3155,7 +3155,7 @@
     "services/mode-architecture/session-lineage.mjs": 1894,
     "tests/mode-architecture.test.mjs": 3294,
     "tests/resume-ui.test.cjs": 2003,
-    "ui/injections/laolao-metre-skin.css": 2553,
+    "ui/injections/laolao-metre-skin.css": 2552,
     "ui/injections/laolao-model-picker.js": 2049,
     "ui/injections/laolao-resume.js": 2611,
     "ui/injections/laolao-settings-user.js": 1636,

@@ -550,7 +550,6 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-switcher.laolao-
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .laolao-mode-button__label { font: 400 19px/1.1 var(--metre-serif) !important; letter-spacing: 0.01em !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry) { height: 34px !important; min-height: 34px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-new-session, .pinkie-sidebar-entry):hover,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(a, button):hover,
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pk-metre-nav--board { --metre-ic: var(--metre-ic-board); width: 100% !important; cursor: pointer; text-align: left; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .pk-metre-nav--board { background: var(--metre-side-active) !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2)[data-metre-board="open"] aside.sidebar .sidebar-recent-session--active { background: transparent !important; }

@@ -55,13 +55,18 @@ async function restingBackground(page, width) {
 
 test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下态有底色、0 条有空态（三宽 × 日夜）', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  const browser = await launchRealBrowser();
+  let server = null;
+  let browser = null;
+  // 清理先注册：浏览器起不来时（如找不到 playwright-core）假服务也要关掉，否则 node 永远不退出。
   t.after(async () => {
-    await browser.close();
-    await server.close();
-    installed.cleanup();
+    try { await browser?.close(); }
+    finally {
+      try { await server?.close(); }
+      finally { installed.cleanup(); }
+    }
   });
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
 
   for (const theme of ['day', 'night']) {
     for (const width of [1440, 1024, 820]) {
