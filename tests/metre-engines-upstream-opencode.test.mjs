@@ -185,7 +185,7 @@ test('opencode: the menu row is listed with OpenCode and cannot be renamed or re
   ]);
   const row = rows.find(r => r.id === OPENCODE_PINKIE_INSTANCE);
   assert.deepEqual([row.name, row.upstream, row.account, row.state], ['OpenCode · 碧琪模型', 'pinkie', false, 'ready']);
-  assert.deepEqual(row.models.map(model => model.slug), ['pinkie/gw/a'], 'OpenCode's own models (opencode/big-pickle …) are not offered on the Pinkie row (11-25 real run)');
+  assert.deepEqual(row.models.map(model => model.slug), ['pinkie/gw/a'], 'OpenCode\'s own models (opencode/big-pickle …) are not offered on the Pinkie row (11-25 real run)');
   assert.deepEqual([driverOf(OPENCODE_PINKIE_INSTANCE), isPinkieRow(OPENCODE_PINKIE_INSTANCE), isPinkieRow('opencode')], ['opencode', true, false]);
   const ids = rows.map(r => r.id);
   assert.ok(ids.indexOf('opencode') < ids.indexOf(OPENCODE_PINKIE_INSTANCE));
