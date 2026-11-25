@@ -3,6 +3,7 @@
 //       图表模块和样式表由 rich.js 第一次遇到图表时自己走 http 加载（不是 addScriptTag 塞进去）。
 // 正例：格式对的画成图；「数据表」切到表格再切回；「复制图片」放进剪贴板的是实底 + 标题 + 图的 PNG，剪贴板用不了就存成文件；
 //       配色跟着日夜和模式走（Metre 用自己的强调色），切模式、切日夜会重画。
+//       「数据表」「复制图片」键的边：日夜、Metre 和非 Metre、普通和按下，对键底和图卡底都 ≥ 3:1（反例换回 --pk-faint 要红）。
 // 反例：格式不对（不是 JSON、个数对不上、数里有字、类型不认识、一个数都没有、饼图两组、没有 labels）一律不画，原代码块露出来，
 //       上面说清哪里不对，页面不报错；把模块里的校验换成「照单全收」，同一组检查要红。
 import {test} from 'node:test';
@@ -49,6 +50,7 @@ async function open(browser, sources, opts = {}, mutateModule = null) {
     if (!/^laolao-[\w.-]+\.(js|css)$/.test(name)) return route.fulfill({status: 404, body: ''});
     let body = inj(name);
     if (name === 'laolao-rich-chart.js' && mutateModule) body = mutateModule(body);
+    if (name === 'laolao-rich-chart.css' && opts.mutateCss) body = opts.mutateCss(body);
     return route.fulfill({contentType: (name.endsWith('.css') ? 'text/css' : 'text/javascript') + '; charset=utf-8', body});
   });
   await tab.goto(ORIGIN + '/chat');
@@ -209,5 +211,57 @@ test('图表：格式不对一律不画，原代码块露出来、说清哪里�
     const counter = await open(browser, BAD.map((b) => b[1]), {}, lax);
     const problems = await badProblems(counter.tab);
     assert.ok(problems.length >= 4, '反例：校验照单全收时这组检查要红，实际只挑出 ' + JSON.stringify(problems));
+  } finally { await browser.close(); }
+});
+
+// 图下「数据表」「复制图片」键的边：真页面计算样式，边色（叠到键底上）对键底、对背后图卡的实际底都要 ≥ 3:1。
+// 日 / 夜 × Metre / 非 Metre × 普通 / 按下。反例：把边换回 --pk-faint，同一组检查要红。
+const keyEdgeProblems = (tab) => tab.evaluate(() => {
+  const parse = (s) => { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const v = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return {r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1}; };
+  const over = (top, under) => ({r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1});
+  const lum = (c) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const ratio = (x, y) => { const [hi, lo] = [lum(x), lum(y)].sort((p, q) => q - p); return (hi + 0.05) / (lo + 0.05); };
+  const box = document.querySelector('.pk-rich--chart');
+  const behind = parse(getComputedStyle(box).backgroundColor);
+  if (!behind || behind.a < 1) return [`图卡底不是实底：${getComputedStyle(box).backgroundColor}`];
+  const out = [];
+  for (const key of box.querySelectorAll('.pk-chart__key')) {
+    const cs = getComputedStyle(key);
+    const edge = parse(cs.boxShadow) || parse(cs.borderTopColor);
+    const own = parse(cs.backgroundColor) || {r: 0, g: 0, b: 0, a: 0};
+    if (!edge) { out.push(`${key.textContent} 没有边`); continue; }
+    const keyBg = over(own, behind);
+    const opacity = Number(cs.opacity);
+    const seen = over({...edge, a: edge.a * opacity}, keyBg);
+    const state = key.getAttribute('aria-pressed') === 'true' ? '按下' : '普通';
+    const a = ratio(seen, keyBg), b = ratio(seen, behind);
+    if (a < 3 || b < 3) out.push(`${key.textContent}（${state}）边对键底 ${a.toFixed(2)}、对图卡底 ${b.toFixed(2)}`);
+  }
+  return out;
+});
+
+test('图表：「数据表」「复制图片」键的边日夜、Metre 和非 Metre、普通和按下都 ≥ 3:1；反例（边换回 --pk-faint）要红', async () => {
+  const browser = await launch();
+  try {
+    const measure = async (opts) => {
+      const {tab, errors} = await open(browser, [JSON.stringify(GOOD)], opts);
+      const found = await keyEdgeProblems(tab);
+      const table = tab.locator('.pk-chart__key', {hasText: '数据表'}).first();
+      await table.click();
+      await tab.mouse.move(0, 0);
+      assert.equal(await table.getAttribute('aria-pressed'), 'true', '「数据表」点了是按下态');
+      found.push(...await keyEdgeProblems(tab));
+      assert.deepEqual(errors, []);
+      await tab.close();
+      return found;
+    };
+    const cases = [{mode: 'chat'}, {mode: 'chat', night: true}, {mode: 'metre'}, {mode: 'metre', night: true}];
+    for (const opts of cases) assert.deepEqual(await measure(opts), [], JSON.stringify(opts));
+    // 反例：普通态的边换回 --pk-faint，四种里都要挑出来
+    const faint = (css) => css.replace('box-shadow: inset 0 0 0 1px var(--pk-mute)', 'box-shadow: inset 0 0 0 1px var(--pk-faint)');
+    for (const opts of cases) {
+      const bad = await measure({...opts, mutateCss: faint});
+      assert.ok(bad.length >= 1, `${JSON.stringify(opts)} 反例没红`);
+    }
   } finally { await browser.close(); }
 });
