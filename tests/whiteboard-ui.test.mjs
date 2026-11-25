@@ -34,6 +34,28 @@ test('前提：头片段加载、区域登记、只挂 Pinkie.whiteboard', () =>
   assert.deepEqual(Object.keys(window).sort(), ['Pinkie']);
 });
 
+test('灵感圆桌：同一份脚本按 data-host="roundtable" 走圆桌服务、只认圆桌会话、用夜色', () => {
+  const attrs = {};
+  const window = {Pinkie: {domWatch: {poll() {}, every: () => ({stop() {}})}}};
+  const document = {body: null, currentScript: {dataset: {host: 'roundtable'}},
+    documentElement: {setAttribute: (k, v) => { attrs[k] = v; }},
+    querySelector: () => null, createElement: () => ({getContext: () => null})};
+  vm.runInNewContext(JS, {window, document, location: {href: 'http://127.0.0.1:18891/'}, URL,
+    addEventListener() {}, setTimeout, clearTimeout, console}, {filename: 'laolao-whiteboard.js'});
+  const wb = window.Pinkie.whiteboard;
+  assert.equal(wb.allowed('0123456789abcdef0123456789abcdef'), true);
+  for (const key of ['agent:thinking:main', '0123456789ABCDEF0123456789ABCDEF', 'abc', '']) assert.equal(wb.allowed(key), false, key);
+  assert.ok('data-pinkie-night' in attrs);
+  const html = fs.readFileSync(path.join(ROOT, 'ui/roundtable/index.html'), 'utf8');
+  assert.match(html, /<script src="\/whiteboard\.js" data-host="roundtable" defer><\/script>/);
+  assert.match(html, /<script src="\/dom-watch\.js" defer><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="\/whiteboard\.css">/);
+  const server = fs.readFileSync(path.join(ROOT, 'services/roundtable/server.py'), 'utf8');
+  for (const file of ['laolao-whiteboard.js', 'laolao-whiteboard.css', 'laolao-dom-watch.js']) assert.match(server, new RegExp("ui/injections/" + file.replace('.', '\\.')));
+  // 圆桌的输入框行会把按钮去边框；入口要用两个类压过去。
+  assert.match(CSS, /\.pk-whiteboard-entry\.is-inline \{[^}]*border: 1px solid var\(--wb-edge\)/);
+});
+
 test('只在想法模式开（反例：别的模式都不行）', () => {
   const {wb} = load('agent:thinking:main');
   assert.equal(wb.allowed('agent:thinking:main'), true);
