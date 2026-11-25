@@ -48,6 +48,23 @@ const contrast = () => {
   return {fg: cs.color, border: cs.borderTopColor, bg, text: ratio(cs.color, bg), edge: ratio(cs.borderTopColor, bg)};
 };
 
+// 出错时把页面现场写进测试输出（CI 不传截图，靠这个看是哪一步没对上）。
+const scene = () => {
+  const wb = window.__pinkieWorkbench, ds = document.documentElement.dataset;
+  const b = document.querySelector('.pk-wb-status .pk-mpr__status'), r = b?.getBoundingClientRect();
+  const top = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  const pv = document.querySelector('.pk-mpr')?.closest('[hidden]');
+  return {active: wb?.state?.active, tabs: (wb?.state?.tabs || []).map((t) => t.path).slice(0, 6), visible: wb?.state?.visible,
+    narrow: ds.pkWbNarrow, view: ds.pkWbView, mpr: (document.querySelector('.pk-mpr')?.textContent || '').slice(0, 200), mprHiddenBy: pv?.className || '',
+    prBtn: r && {x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height)},
+    prBtnTop: top ? (top === b || b.contains(top) ? 'self' : String(top.className || top.tagName)) : null,
+    calls: (window.__prTestCalls || []).map((c) => c.method)};
+};
+async function step(t, page, pageErrors, label, run) {
+  try { return await run(); }
+  catch (error) { t.diagnostic(`${label} 现场 ${JSON.stringify(await page.evaluate(scene).catch((e) => String(e)))} 页面报错 ${JSON.stringify(pageErrors)}`); throw error; }
+}
+
 async function openBench(page) {
   // 「打开工作台」在顶栏右侧，CI 的窄视口里会被原生窗口按钮组（最小化）盖住、指针点不到（main 上就这样，不归本 PR），
   // 所以直接调按钮自己的 click，测的是 PR 页，不是顶栏布局。
@@ -96,8 +113,13 @@ test('PR 页 real page: 只在 Metre，CI 没绿合并灰着，合并要页内�
         assert.deepEqual(offMetre, {item: false, fetched: 0, back: true}, '别的模式下没有「PR」入口、不取状态；回到 Metre 又有');
 
         // 2. CI 没全绿：合并灰着、写原因、硬点也不合并
-        await page.click('.pk-wb-status .pk-mpr__status');
-        await page.waitForSelector('.pk-mpr .pk-mpr__head .pk-mpr__meta', {timeout: 8_000});
+        // 820 宽时 Metre 的后台状态带（position: fixed，main 上的）会压在工作台状态栏上、指针点不到「PR」，
+        // 先用真指针点 3 秒；点不到就把现场写进输出、改调按钮自己的 click（测的是 PR 页，不是状态带布局）。
+        await page.click('.pk-wb-status .pk-mpr__status', {timeout: 3_000}).catch(async () => {
+          t.diagnostic(`PR 页 ${width} ${theme}「PR」入口指针点不到，现场 ${JSON.stringify(await page.evaluate(scene))}`);
+          await page.locator('.pk-wb-status .pk-mpr__status').evaluate((b) => b.click());
+        });
+        await step(t, page, pageErrors, `PR 页 ${width} ${theme} 等 PR 页头`, () => page.waitForSelector('.pk-mpr .pk-mpr__head .pk-mpr__meta', {timeout: 8_000}));
         const meta = await page.textContent('.pk-mpr__meta');
         assert.match(meta, /feat\/m5-pr-page → main · 头 abcdef12 · CI：1 \/ 2 通过/);
         assert.equal(await mergeBtn(page).isDisabled(), true, 'CI 没全绿时「合并」灰着');
