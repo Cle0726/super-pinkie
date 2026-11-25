@@ -6,21 +6,33 @@ const {spawnSync} = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
+const readLauncher = () =>
+  [
+    'LauncherRuntime.swift',
+    'LauncherViews.swift',
+    'LauncherServices.swift',
+    'Launcher.swift',
+    'LauncherWorkspace.swift',
+    'LauncherBrowser.swift',
+    'LauncherWebBridge.swift',
+  ]
+    .map((file) => read(`desktop/macos/pinkie/Sources/${file}`))
+    .join('\n');
 
 test('native browser workspace is independent from chat modes and keeps one persistent webview', () => {
-  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const source = readLauncher();
 
-  assert.match(source, /private let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"/);
+  assert.match(source, /(?:private )?let browserWorkspaceHandlerName = "laolaoBrowserWorkspace"/);
   assert.match(source, /controller\.add\(self, name: browserWorkspaceHandlerName\)/);
-  assert.match(source, /private var browserWebView: WKWebView\?/);
+  assert.match(source, /(?:private )?var browserWebView: WKWebView\?/);
   assert.match(source, /configuration\.websiteDataStore = \.default\(\)/);
-  assert.match(source, /private func openBrowserWorkspace\(url: URL\?\)/);
+  assert.match(source, /(?:private )?func openBrowserWorkspace\(url: URL\?\)/);
   assert.match(source, /private func ensureBrowserWorkspace\(url: URL\?, focus: Bool, showStartPage: Bool = true\)/);
   assert.match(source, /browserPresentation = \.floating/);
   assert.match(source, /data-laolao-browser-workspace/);
 
-  const closeStart = source.indexOf('private func detachBrowserWorkspace');
-  const closeEnd = source.indexOf('@objc private func browserAddressSubmitted', closeStart);
+  const closeStart = source.indexOf('func detachBrowserWorkspace');
+  const closeEnd = source.indexOf('func browserAddressSubmitted', closeStart);
   const close = source.slice(closeStart, closeEnd);
   assert.match(close, /browserPanel\?\.removeFromSuperview\(\)/);
   assert.doesNotMatch(close, /browserWebView\s*=\s*nil/);
@@ -29,21 +41,21 @@ test('native browser workspace is independent from chat modes and keeps one pers
 });
 
 test('browser workspace supports navigation, popup links and drag resizing', () => {
-  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  assert.match(source, /private final class BrowserResizeHandle/);
+  const source = readLauncher();
+  assert.match(source, /(?:private )?final class BrowserResizeHandle/);
   assert.match(source, /onDrag\?\(previousX - currentX\)/);
   assert.match(source, /browser\.allowsBackForwardNavigationGestures = true/);
-  assert.match(source, /@objc private func browserGoBack/);
-  assert.match(source, /@objc private func browserGoForward/);
-  assert.match(source, /@objc private func browserReload/);
+  assert.match(source, /@objc (?:private )?func browserGoBack/);
+  assert.match(source, /@objc (?:private )?func browserGoForward/);
+  assert.match(source, /@objc (?:private )?func browserReload/);
   assert.match(source, /createWebViewWith configuration: WKWebViewConfiguration/);
   assert.match(source, /navigationAction\.targetFrame == nil/);
   assert.match(source, /openBrowserWorkspace\(url: url\)/);
   assert.match(source, /arrow\.up\.right\.square/);
-  assert.match(source, /@objc private func browserOpenExternally/);
+  assert.match(source, /@objc (?:private )?func browserOpenExternally/);
   assert.match(source, /NSWorkspace\.shared\.open\(url\)/);
   assert.match(source, /正在通过安全验证/);
-  assert.match(source, /private func browserErrorPage/);
+  assert.match(source, /(?:private )?func browserErrorPage/);
   assert.match(source, /webViewWebContentProcessDidTerminate/);
   assert.match(source, /private func isChatGPTURL/);
   assert.match(source, /private func sendChatGPTMessage/);
@@ -72,10 +84,10 @@ test('every mode gets the same sidebar browser launcher and chat links use it', 
 });
 
 test('browser width remains bounded through full-screen, drag and ordinary-window sizes', {skip: process.platform !== 'darwin'}, () => {
-  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/LauncherViews.swift');
   const start = source.indexOf('enum BrowserWorkspaceGeometry {');
-  const end = source.indexOf('private final class MaterialDownloadContext', start);
-  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
+  const end = source.indexOf('final class MaterialDownloadContext', start);
+  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('final class BrowserPanelResizeHandle'));
   const dock = source.slice(source.indexOf('enum BrowserDockEdge:'), start);
   assert.ok(start >= 0 && end > start);
   const result = spawnSync('xcrun', ['swift', '-'], {encoding: 'utf8', input: `import AppKit\n${edges}\n${dock}\n${source.slice(start, end)}
@@ -106,10 +118,10 @@ test('browser width remains bounded through full-screen, drag and ordinary-windo
 });
 
 test('edge-docked reveal exposes exactly half and collapsed exposes none', {skip: process.platform !== 'darwin'}, () => {
-  const source = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const source = read('desktop/macos/pinkie/Sources/LauncherViews.swift');
   const geoStart = source.indexOf('enum BrowserWorkspaceGeometry {');
-  const geoEnd = source.indexOf('private final class MaterialDownloadContext', geoStart);
-  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('private final class BrowserPanelResizeHandle'));
+  const geoEnd = source.indexOf('final class MaterialDownloadContext', geoStart);
+  const edges = source.slice(source.indexOf('struct BrowserResizeEdges: OptionSet {'), source.indexOf('final class BrowserPanelResizeHandle'));
   const dock = 'enum BrowserDockEdge: String { case top, bottom, right }\n';
   assert.ok(geoStart >= 0 && geoEnd > geoStart);
 

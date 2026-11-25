@@ -185,7 +185,9 @@ class SharedUiBundleTests(unittest.TestCase):
         self.assertIn('removeAttribute("data-pinkie-lite"', profile)
         self.assertNotIn('setAttribute("data-pinkie-lite"', profile)
         self.assertNotIn('backdrop-filter: none !important', profile)
-        launcher = (ROOT / 'desktop/macos/pinkie/Sources/Launcher.swift').read_text()
+        launcher = "\n".join(
+            p.read_text() for p in sorted((ROOT / 'desktop/macos/pinkie/Sources').glob('Launcher*.swift'))
+        )
         self.assertNotIn("setAttribute('data-pinkie-lite'", launcher)
 
 
