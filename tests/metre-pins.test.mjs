@@ -133,3 +133,78 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
     assert.equal(await tab.locator('.pk-metre-pin, .pk-metre-pins').count(), 0, '经典模式里什么都不加');
   } finally { await browser.close(); }
 });
+
+// uireview 11-25 10:04Z 打回 #102：「取消置顶」只靠边框圈出来（底透明），原来 --metre-line-strong 对折叠条底日 1.54 / 夜 1.34。
+// 真浏览器里装上皮肤和对话样式，日夜各量一次计算样式：边框色对它背后实际的底色 ≥ 3:1，悬停底上也 ≥ 3:1；
+// 反例：把边框换回 --metre-line-strong，同一把尺子量出来要 < 3（尺子本身没坏）。顺带量三种键 Tab 到时的焦点环。
+test('M3 真浏览器：「取消置顶」边框日夜对实际底色 ≥ 3:1（换回 --metre-line-strong 要低于 3）；三种键 Tab 焦点有环', {timeout: 40_000}, async (t) => {
+  const {playwright} = await import('../tools/study-desk/harness.mjs');
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const SKIN = read('ui/injections/laolao-metre-skin.css');
+  const bar = '<section class="pk-metre-pins"><button type="button" class="pk-metre-pins__toggle" aria-expanded="true">已置顶 1 条</button>'
+    + '<ul class="pk-metre-pins__list"><li class="pk-metre-pins__item"><button type="button" class="pk-metre-pins__go"><span class="pk-metre-pins__role">Metre</span><span class="pk-metre-pins__text">注册页用的是同一个</span></button>'
+    + '<button type="button" class="pk-metre-pins__x">取消置顶</button></li></ul></section>';
+  const footer = '<div class="chat-group assistant"><div class="chat-group-footer"><div class="chat-group-footer__meta"><span class="chat-sender-name">Metre</span>'
+    + '<button type="button" class="pk-metre-pin" aria-pressed="true">已置顶</button></div></div></div>';
+  const page = `<!doctype html><html data-laolao-mode="metre"><head><meta charset="utf-8"><style>${SKIN}</style><style>${CSS}</style></head><body><div class="chat-thread">${bar}${footer}</div></body></html>`;
+  // 浏览器里量：边框色和往上第一个不透明的底色都按计算样式取（color-mix 的计算值可能是 color(srgb …)），算 WCAG 对比度。
+  const measure = () => {
+    const rgb = (s) => {
+      let m = s.match(/^rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)$/);
+      if (m) return {c: [+m[1], +m[2], +m[3]], a: m[4] == null ? 1 : +m[4]};
+      m = s.match(/^color\(srgb ([\d.e-]+) ([\d.e-]+) ([\d.e-]+)(?: \/ ([\d.]+))?\)$/);
+      if (m) return {c: [m[1], m[2], m[3]].map((v) => +v * 255), a: m[4] == null ? 1 : +m[4]};
+      throw new Error('unparsed colour ' + s);
+    };
+    const lum = (c) => c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+    const x = document.querySelector('.pk-metre-pins__x');
+    let host = x.parentElement, bg;
+    while (host) { const b = rgb(getComputedStyle(host).backgroundColor); if (b.a === 1) { bg = b.c; break; } host = host.parentElement; }
+    // 悬停时键底是 --metre-hover：拿一个探针元素把这个变量解析成颜色
+    const probe = document.createElement('i'); probe.style.color = 'var(--metre-hover)'; x.parentElement.append(probe);
+    const hover = rgb(getComputedStyle(probe).color); probe.remove();
+    const cs = getComputedStyle(x), edge = rgb(cs.borderTopColor);
+    return {edge: edge.c.map(Math.round), style: cs.borderTopStyle, width: cs.borderTopWidth, height: x.getBoundingClientRect().height, onBar: +ratio(edge.c, bg).toFixed(2), onHover: +ratio(edge.c, hover.c).toFixed(2)};
+  };
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30121/**', (route) => route.fulfill({contentType: 'text/html; charset=utf-8', body: page}));
+    await tab.goto('http://127.0.0.1:30121/chat');
+    for (const night of [false, true]) {
+      await tab.evaluate((n) => { const h = document.documentElement; if (n) h.setAttribute('data-pinkie-night', ''); else h.removeAttribute('data-pinkie-night'); document.getElementById('pk-revert')?.remove(); }, night);
+      const theme = night ? '夜' : '日';
+      const now = await tab.evaluate(measure);
+      t.diagnostic(`${theme} 取消置顶 ${JSON.stringify(now)}`);
+      assert.equal(now.style, 'solid'); assert.equal(now.width, '1px');
+      assert.ok(now.onBar >= 3, `${theme}间边框对折叠条底 ${now.onBar}:1，要 ≥ 3:1`);
+      assert.ok(now.onHover >= 3, `${theme}间边框对悬停底 ${now.onHover}:1，要 ≥ 3:1`);
+      assert.ok(now.height >= 24, `点击区高 ${now.height}px，要 ≥ 24`);
+      // 反例：换回皮肤原来的 --metre-line-strong，同一把尺子必须量出 < 3
+      await tab.evaluate(() => { const s = document.createElement('style'); s.id = 'pk-revert'; s.textContent = 'html[data-laolao-mode="metre"] .pk-metre-pins .pk-metre-pins__x { border-color: var(--metre-line-strong); }'; document.head.append(s); });
+      const old = await tab.evaluate(measure);
+      assert.ok(old.onBar < 3, `${theme}间反例（--metre-line-strong）应低于 3:1，量到 ${old.onBar}:1`);
+    }
+    // 焦点：Tab 到三种键，看计算出来的 outline（Metre 规则没去掉浏览器默认焦点环）
+    await tab.evaluate(() => document.getElementById('pk-revert')?.remove());
+    await tab.locator('.pk-metre-pin').evaluate((b) => { b.closest('.chat-group').parentElement.prepend(b.closest('.chat-group')); });
+    await tab.evaluate(() => document.activeElement?.blur());
+    const rings = {};
+    for (let i = 0; i < 4; i++) {
+      await tab.keyboard.press('Tab');
+      const f = await tab.evaluate(() => { const e = document.activeElement, s = getComputedStyle(e); return {cls: e.className, text: e.textContent, style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor}; });
+      rings[f.cls] = f;
+    }
+    t.diagnostic('焦点环 ' + JSON.stringify(Object.values(rings)));
+    for (const cls of ['pk-metre-pin', 'pk-metre-pins__toggle', 'pk-metre-pins__x']) {
+      assert.ok(rings[cls], `Tab 能到 ${cls}`);
+      assert.notEqual(rings[cls].style, 'none', `${cls} 键盘焦点有 outline`);
+      assert.notEqual(rings[cls].width, '0px', `${cls} 焦点环有宽度`);
+    }
+  } finally { await browser.close(); }
+});
