@@ -366,9 +366,17 @@
     box.append(stat);
     return box;
   }
+  // 按键行里各键同为 order 6，按 DOM 先后排。引擎台的 Metre 键可能比本批晚插进来（时序竞争：先画的本批键落到 Baton / Metre 前面），
+  // 所以每次画、每次延后重量都核对一次：Metre 键在就紧跟在它后面。
+  function seat(controls, box) {
+    const eng = controls.querySelector(':scope > .pk-eng-chip');
+    if (eng) { if (eng.nextElementSibling !== box) eng.after(box); }
+    else if (box.parentElement !== controls) controls.append(box);
+  }
   function fit() {
     const controls = document.querySelector('.chat-main .agent-chat__composer-controls');
     const box = controls?.querySelector(':scope > .pk-perm-chips'), input = controls?.closest('.agent-chat__input');
+    if (box) seat(controls, box);
     if (!box || !input || getComputedStyle(box).display === 'none') return;
     const h = () => input.getBoundingClientRect().height;
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
@@ -392,7 +400,7 @@
     sig = next;
     const box = build(fold);
     if (old) old.replaceWith(box);
-    else { const eng = controls.querySelector(':scope > .pk-eng-chip'); if (eng) eng.after(box); else controls.append(box); }
+    seat(controls, box);
     fit(); fitSoon();
   }
 

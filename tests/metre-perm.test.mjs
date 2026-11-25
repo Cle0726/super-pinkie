@@ -295,6 +295,24 @@ test(`other modes are untouched, and Metre text on these keys and popovers is at
   } finally { await browser.close(); }
 });
 
+// 合并 #90 后真页面 1280 宽：本批键先画、引擎台 Metre 键后插，按键行成了「⋯ · Metre」（同为 order 6，按 DOM 先后）。改前这条失败。
+test(`the keys sit right after the Metre engine key even when that key is inserted later (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser);
+    await p.evaluate(() => { document.querySelector('.agent-chat__composer-controls > .pk-eng-chip').remove(); return window.PinkieMetrePerm.refresh(); });
+    await p.waitForSelector('.pk-perm-chips');
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      const baton = document.createElement('button'); baton.className = 'pinkie-chip pinkie-baton'; baton.textContent = 'Baton'; c.append(baton);
+      const eng = document.createElement('button'); eng.className = 'pk-eng-chip'; eng.innerHTML = '<span class="pk-eng-chip__name">Metre</span>'; c.append(eng);
+    });
+    await p.waitForTimeout(1700);   // 画完以后隔一会儿还会再量几次
+    const kids = await p.$$eval('.agent-chat__composer-controls > *', (n) => n.map((e) => e.className.split(' ')[0]));
+    assert.equal(kids[kids.indexOf('pk-eng-chip') + 1], 'pk-perm-chips', `按键紧跟 Metre 键（${kids.join(' · ')}）`);
+  } finally { await browser.close(); }
+});
+
 // look.py 弹层一轮：按键展开 / 「先出方案」打开只多一块底色，对按键行 1.12 / 1.15，状态看不出。改前这条失败。
 test(`key states (menu open, plan-first on) show a ring at least 3:1, without changing the key width (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
