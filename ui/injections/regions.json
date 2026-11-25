@@ -122,6 +122,7 @@
       "files": [
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
+        "laolao-composer-history.js",
         "laolao-composer-dock.js",
         "laolao-context-compact.js",
         "laolao-queue-steer.js",
@@ -249,7 +250,8 @@
         "laolao-metre-backstage.js",
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
-        "laolao-metre-display.css"
+        "laolao-metre-display.css",
+        "laolao-metre-chat.css"
       ]
     },
     {

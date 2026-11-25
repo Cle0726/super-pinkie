@@ -94,7 +94,7 @@ html[data-laolao-mode="metre"] .pk-metre-backstage:not([hidden]) {
   box-sizing: border-box;
   overflow: hidden;
   white-space: nowrap;
-  color: var(--bs-ink);
+  color: var(--bs-ink); background: var(--metre-bg, #F7F6F3); border-radius: 0 0 8px 8px;   /* 整条带子一块主题底色，「后台」和各格都不压像素背景；和上面的底板连成一块，下沿圆角 */
   font: 500 11.5px/1 var(--metre-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
   pointer-events: auto;
 }
@@ -156,7 +156,6 @@ html[data-laolao-mode="metre"] .pk-bs__pop {
 }
 html[data-laolao-mode="metre"] .pk-bs__pop .pk-bs__seg { width: 100%; border-color: transparent; }
 html[data-laolao-mode="metre"] .pk-bs__pop-head { margin: 0 0 2px; color: var(--bs-muted); }
-
 /* ---------- 6. 减少动态效果：不闪、不沉、不过渡 ---------- */
 @media (prefers-reduced-motion: reduce) {
   html[data-laolao-mode="metre"] :is(.pk-eng-btn, .pk-eng-stop, .pk-eng-menu__drop, .pk-eng-menu__back, .pk-mb-act, .pk-metre-board__btn, .pk-bs__sync, .pk-eng-chip, .pk-eng-menu__item, .pk-eng-send, .pk-mb-msg button, .agent-chat__input button.chat-send-btn, .sidebar-new-session) { transition: none; translate: none; }
@@ -171,5 +170,6 @@ html[data-laolao-mode="metre"][data-pinkie-reduce-motion] .pk-bs__seg > i { anim
  * 窄窗口里总谱是从上面落下来的浮层：打开时输入框（连运行条、猫）让位，浮层一直铺到后台带上面（--metre-bs-room，laolao-metre-board.js 用它），
  * 里面每一张卡都能滚到、点到；关掉浮层输入框回来。 */
 html[data-laolao-mode="metre"] .shell:not(.shell--nav-drawer-open) > .shell-nav-backdrop { display: none; }
-html[data-laolao-mode="metre"][data-metre-bs] .agent-chat__composer-shell { margin-bottom: 24px; }   /* 原来下面一共 28px（内边距 14 + 外边距 14），改成 38px：后台带 24 + 离窗口下沿 8 + 和输入框之间 6 */
+html[data-laolao-mode="metre"][data-metre-bs] .agent-chat__composer-shell { margin-bottom: 24px; }
+html[data-laolao-mode="metre"][data-metre-bs] .agent-chat__composer-shell { --metre-bs-plate: linear-gradient(to top, var(--metre-bg, #F7F6F3) 68px, transparent 68px); }   /* 底板：从输入框框体下圆角起（离外壳下沿 68px = 圆角 16 + 间距 8 + 模型那一排 30 + 让给后台带的 14）到后台带，和框体两侧齐一整块主题底色（日夜跟 --metre-bg），模型那一排不再压在像素背景上。原来下面一共 28px（内边距 14 + 外边距 14），改成 38px：后台带 24 + 离窗口下沿 8 + 和输入框之间 6 */
 html[data-laolao-mode="metre"][data-metre-board="overlay"] :is(.agent-chat__input, .pk-run, .pk-metre-cat--full) { visibility: hidden; }
