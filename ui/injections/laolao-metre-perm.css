@@ -101,6 +101,10 @@ html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip { flex: none; white-
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip .pk-eng-chip__name { color: var(--pk-perm-ink2); font: 400 13px/1 var(--metre-sans); font-style: normal; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] .pk-eng-chip__name { color: var(--pk-perm-cobalt-ink); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] { background: var(--metre-cobalt-soft, var(--metre-hover)); }
+/* 状态不只靠底色（look.py：已选底色对按键行只有 1.12 / 1.15）：开关打开一圈钴蓝、弹层展开一圈轮廓色，都 ≥ 3:1。
+ * 用内阴影画，不占宽度，按键行不跳位。 */
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip[aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--pk-perm-edge); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--pk-perm-cobalt-ink); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--go .pk-eng-chip__name { color: var(--pk-perm-cobalt-ink); font-weight: 500; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat .pk-eng-chip__name { font-variant-numeric: tabular-nums; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="warn"] .pk-eng-chip__name { color: var(--pk-perm-warn); }

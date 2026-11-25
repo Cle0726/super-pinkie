@@ -295,6 +295,33 @@ test(`other modes are untouched, and Metre text on these keys and popovers is at
   } finally { await browser.close(); }
 });
 
+// look.py 弹层一轮：按键展开 / 「先出方案」打开只多一块底色，对按键行 1.12 / 1.15，状态看不出。改前这条失败。
+test(`key states (menu open, plan-first on) show a ring at least 3:1, without changing the key width (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    for (const night of [false, true]) {
+      const p = await open(browser, {night});
+      await p.evaluate(() => { window.__planOn = true; return window.PinkieMetrePerm.refresh(); });
+      await p.waitForSelector('.pk-perm-chip--plan[aria-pressed="true"]');
+      const w0 = await p.$eval('.pk-perm-chip--level', (e) => e.getBoundingClientRect().width);
+      await p.click('.pk-perm-chip--level');
+      await p.waitForSelector('.pk-perm-chip--level[aria-expanded="true"]');
+      const r = await p.evaluate(() => {
+        const ring = (s) => (getComputedStyle(document.querySelector(s)).boxShadow.match(/(?:rgba?|color)\([^)]*\)/) || ['none'])[0];
+        return {open: ring('.pk-perm-chip--level'), plan: ring('.pk-perm-chip--plan'), bg: getComputedStyle(document.body).backgroundColor,
+          w: document.querySelector('.pk-perm-chip--level').getBoundingClientRect().width};
+      });
+      const tag = night ? '夜' : '日';
+      for (const k of ['open', 'plan']) {
+        assert.notEqual(r[k], 'none', `${tag}：${k} 有描边（${JSON.stringify(r)}）`);
+        assert.ok(ratio(r[k], r.bg) >= 3, `${tag}：${k} 描边 ${ratio(r[k], r.bg).toFixed(2)}`);
+      }
+      assert.equal(r.w, w0, `${tag}：展开前后按键宽度不变`);
+      await p.close();
+    }
+  } finally { await browser.close(); }
+});
+
 // 真页面 1280 宽 metre-board：输入框下这一行还有原生模型键和 Baton / Virtuoso，本批三个键把模型键挤到第二行、输入框往上跳 28px（#94 第一轮 CI 截图对比 5.2%）。
 // 放不下时要一步步收拢，原生的键不许换行；位置够就全露。改前没有收拢，下面「窄」的那一半失败。
 test(`when the composer row is too narrow the keys fold down instead of pushing the native model key to a new line (${engine})`, {timeout: 60_000}, async () => {
