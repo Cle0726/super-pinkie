@@ -3240,7 +3240,6 @@
   },
   "longFiles": {
     "app/super_pinkie.py": 1560,
-    "desktop/macos/pinkie/Sources/Launcher.swift": 5746,
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2501,
     "services/mode-architecture/session-lineage.mjs": 1894,
