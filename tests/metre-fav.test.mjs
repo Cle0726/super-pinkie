@@ -151,6 +151,40 @@ test(`Metre fav: native picker gets one "favourite current model" toggle that fe
   } finally { await browser.close(); }
 });
 
+// 真页面的样子（mac1 任务 19 抓到的两条）：宿主 Lit 行藏在前面、选中态停在最初的模型，标题类名是 -title；
+// laolao-model-picker.js 的 .pinkie-fallback-catalog 才是可见目录，展示名直接写在按键文字里。
+const realPickerHtml = (hostSelected, shownSelected) => `<details class="chat-controls__model" open><summary>模型</summary><div class="chat-controls__model-menu" data-pinkie-picker-surface="1"><div class="chat-controls__model-options" hidden>${
+  [['google/gemini-3-flash', 'Gemini 3 Flash'], ['openai/gpt-5.2', 'GPT-5.2']]
+    .map(([v, n]) => `<button type="button" class="chat-controls__inline-select-option" data-chat-model-option="${v}" aria-selected="${v === hostSelected}"><span class="chat-controls__model-option-title">${n}</span></button>`).join('')
+}</div><div class="pinkie-fallback-catalog">${
+  [['google/gemini-3-flash', 'Gemini 3 Flash'], ['openai/gpt-5.2', 'GPT-5.2']]
+    .map(([v, n]) => `<button type="button" class="chat-controls__combined-model-option pinkie-fallback-option" data-chat-model-option="${v}" aria-selected="${v === shownSelected}">${n}</button>`).join('')
+}</div></div></details>`;
+
+test(`Metre fav: on the real picker the toggle follows the visible catalog and shows the display name (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const page = await browser.newPage({viewport: {width: 820, height: 720}});
+    await setup(page, 'metre', []);
+    await page.evaluate((html) => document.body.insertAdjacentHTML('beforeend', html), realPickerHtml('google/gemini-3-flash', 'google/gemini-3-flash'));
+    await page.waitForTimeout(150);
+    const toggle = page.locator('[data-pinkie-picker-surface] > .pk-fav-current');
+    assert.equal(await toggle.innerText(), '☆ 收藏当前模型 Gemini 3 Flash', '显示展示名，不是路由串');
+
+    // 在可见目录里换成 GPT-5.2；藏着的宿主行仍停在 Gemini。
+    await page.evaluate(() => {
+      const c = document.querySelector('.pinkie-fallback-catalog');
+      c.querySelector('[data-chat-model-option="google/gemini-3-flash"]').setAttribute('aria-selected', 'false');
+      c.querySelector('[data-chat-model-option="openai/gpt-5.2"]').setAttribute('aria-selected', 'true');
+    });
+    await page.waitForTimeout(150);
+    assert.equal(await toggle.innerText(), '☆ 收藏当前模型 GPT-5.2', '跟着可见目录换，不卡在藏着的旧行上');
+    await toggle.click();
+    assert.deepEqual(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY), ['picker:openai/gpt-5.2'], '收的是现在选中的模型');
+    assert.equal(await toggle.innerText(), '★ 已收藏 GPT-5.2');
+  } finally { await browser.close(); }
+});
+
 test('Metre fav: no new observer, timer or window.__ global; loaded right after the engine script', () => {
   const js = fs.readFileSync(inj('laolao-metre-fav.js'), 'utf8');
   assert.doesNotMatch(js, /new MutationObserver|setInterval|window\.__/);

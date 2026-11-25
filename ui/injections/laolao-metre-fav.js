@@ -78,10 +78,11 @@
   const pickerFavs = (values) => (isMetre() ? read().filter((key) => key.startsWith(PICKER)).map((key) => key.slice(PICKER.length)).filter((v) => values.includes(v)) : []);
   function decoratePicker(menu) {
     let button = menu.querySelector(':scope > .pk-fav-current');
-    const row = isMetre() && menu.querySelector('[data-chat-model-option][aria-selected="true"]');
+    const catalog = menu.querySelector('.pinkie-fallback-catalog') || menu; // 真页面：宿主行藏着、选中态是旧的，只认可见目录（同 modelSurfaceRows）
+    const row = isMetre() && [...catalog.querySelectorAll('[data-chat-model-option][aria-selected="true"]')].find((r) => r.dataset.pinkieHiddenModel !== '1');
     if (!row) { button?.remove(); return; }
     const value = row.getAttribute('data-chat-model-option') || '';
-    const name = (row.querySelector('.chat-controls__model-option-name')?.textContent || row.dataset.chatModelName || value).trim();
+    const name = (row.querySelector('.chat-controls__model-option-title, .chat-controls__model-option-name')?.textContent || row.dataset.chatModelName || row.textContent || value).trim();
     if (!button) {
       button = document.createElement('button');
       button.type = 'button';
