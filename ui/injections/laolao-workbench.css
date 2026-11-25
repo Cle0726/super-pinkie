@@ -606,7 +606,7 @@ html[data-pk-wb-narrow="1"] .pk-workspace-header__views { display: flex; }
 html[data-pk-wb-narrow="1"][data-pk-wb-view="chat"] body > .pk-workspace-header { position: fixed; left: 0; right: 0; top: 0; z-index: 45; height: 36px; padding-inline: 10px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
 html[data-pk-wb-narrow="1"][data-pk-wb-view="chat"] body > .pk-workspace-header .pk-workspace-header__views { margin-left: auto; order: 2; }
 html[data-pk-wb-narrow="1"][data-pk-wb-view="chat"] .pk-wb { visibility: hidden; pointer-events: none; }
-html[data-pk-wb-narrow="1"][data-pk-wb-view="code"] main.content.content--chat > * { visibility: hidden; pointer-events: none; }
+html[data-pk-wb-narrow="1"][data-pk-wb-view="code"] :is(main.content.content--chat > *, body > .pk-metre-backstage, body > .pk-bs__pop) { visibility: hidden; pointer-events: none; }   /* 窄窗「代码」页：Metre 底部后台带和引擎弹层（挂在 body 上、z 36）跟对话那一列一起藏，不压工作台最后一屏 */
 .pk-wb.is-side-overlay .pk-wb-side { position: absolute; z-index: 20; left: 0; top: 0; bottom: 0; width: min(280px, calc(100% - 28px)); background: var(--wb-editor); box-shadow: 8px 0 22px #0003; }
 .pk-wb.is-side-overlay .pk-wb-side__head { height: 36px; }
 .pk-wb.is-side-overlay .pk-wb-views { flex-direction: row; }
