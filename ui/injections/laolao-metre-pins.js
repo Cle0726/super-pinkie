@@ -82,7 +82,7 @@
         const go = node('button', 'pk-metre-pins__go'); go.type = 'button';
         go.append(node('span', 'pk-metre-pins__role', p.role === 'user' ? '你' : 'Metre'), node('span', 'pk-metre-pins__text', p.text || '（没有文字）'));
         go.addEventListener('click', () => jump(p.id, status));
-        const x = node('button', 'pk-metre-pins__x', '取消'); x.type = 'button'; x.setAttribute('aria-label', '取消置顶：' + (p.text || '').slice(0, 30));
+        const x = node('button', 'pk-metre-pins__x', '取消置顶'); x.type = 'button'; x.setAttribute('aria-label', '取消置顶：' + (p.text || '').slice(0, 30));
         x.addEventListener('click', () => { save(key, load(key).filter((q) => q.id !== p.id)); paint(); });
         li.append(go, x); ul.append(li);
       }
