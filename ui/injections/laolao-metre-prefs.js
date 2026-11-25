@@ -22,6 +22,7 @@
   const SCROLL = [['always', '始终'], ['near-bottom', '接近底部时'], ['off', '关闭']];
   const TEXT = [['s', '小', '14px'], ['m', '标准', ''], ['l', '大', '17px'], ['xl', '特大', '19px']];
   const LEADING = [['tight', '紧凑', '1.5'], ['normal', '标准', ''], ['loose', '宽松', '1.9']];
+  const SUGGEST_KEY = 'pinkie.metre.prefs.nextSuggest', SUGGEST = [['on', '开'], ['off', '关']]; // I8：laolao-metre-suggest.js 读同一个键，off = 关
   const valid = (v) => SCROLL.some(([k]) => k === v);
   const known = (list, v, dflt) => (list.some(([k]) => k === v) ? v : dflt);
   const isMetre = () => document.documentElement.getAttribute('data-laolao-mode') === 'metre';
@@ -36,7 +37,7 @@
   const textSize = () => known(TEXT, readKey(TEXT_KEY), 'm');
   const leading = () => known(LEADING, readKey(LEAD_KEY), 'normal');
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], note = null;
+  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], suggestBtns = [], note = null;
 
   // G2：把字号 / 行距写成根元素上的变量；「标准」档去掉变量，Metre 规则回到原来的 15.5px / 1.7。
   function applyLook() {
@@ -72,6 +73,7 @@
     mark(scrollBtns, value);
     mark(textBtns, textSize());
     mark(leadBtns, leading());
+    mark(suggestBtns, readKey(SUGGEST_KEY) === 'off' ? 'off' : 'on');
     note.hidden = !waiting;
   }
   function chooseScroll(key) {
@@ -117,7 +119,9 @@
     const [textRow, tb] = segRow('pk-metre-prefs-text', '字号', '对话里回答和你发的话的字号。', TEXT, 'text', (k) => chooseLook(TEXT_KEY, 'm', k));
     const [leadRow, lb] = segRow('pk-metre-prefs-leading', '行距', '行与行之间的距离。紧凑一屏看得多，宽松读长文更轻松。', LEADING, 'leading', (k) => chooseLook(LEAD_KEY, 'normal', k));
     textBtns = tb; leadBtns = lb;
-    card.append(scrollRow, note, textRow, leadRow);
+    const [suggestRow, gb] = segRow('pk-metre-prefs-suggest', '下一句建议', '回答完在输入框上方给两三条接着问的话，点一下只填进输入框，不会直接发出去。', SUGGEST, 'suggest', (k) => { writeKey(SUGGEST_KEY, k === 'off' ? 'off' : ''); paint(); window.Pinkie?.metreSuggest?.check(); });
+    suggestBtns = gb;
+    card.append(scrollRow, note, textRow, leadRow, suggestRow);
     const footer = target.querySelector('.' + S + 'footer');
     footer ? footer.before(card) : target.append(card);
     paint();
