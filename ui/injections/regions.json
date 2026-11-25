@@ -247,7 +247,9 @@
         "laolao-metre-backstage.js",
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
-        "laolao-metre-display.css"
+        "laolao-metre-display.css",
+        "laolao-metre-perm.css",
+        "laolao-metre-perm.js"
       ]
     },
     {

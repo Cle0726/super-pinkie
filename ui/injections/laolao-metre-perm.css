@@ -1,0 +1,128 @@
+/* laolao-metre-perm —— Metre 第五批「权限、计划、用量」的样子（脚本在 laolao-metre-perm.js）。只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。
+ * 不加强制覆盖：靠选择器本身够具体（html[data-laolao-mode] + 两个类）压过原生的单类规则。颜色全用 Metre 的变量，日夜跟着变量走；
+ * 正文另用两档更深的灰（--pk-perm-ink2），因为 Metre 的 --metre-muted 日间在谱纸底上只有约 4.4:1，不够 4.5:1。 */
+
+html[data-laolao-mode="metre"] { --pk-perm-ink2: #5F5C55; --pk-perm-warn: #8A5A12; }
+html[data-laolao-mode="metre"][data-theme="dark"], html[data-laolao-mode="metre"][data-pinkie-night] { --pk-perm-ink2: #B0ACA3; --pk-perm-warn: #E0B162; }
+
+/* ---------- P1 审批卡（原生 openclaw-exec-approval，弹在顶层） ---------- */
+@keyframes pk-perm-born { from { outline-color: transparent; } to { outline-color: transparent; } }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-card {
+  animation: pk-perm-born 1ms;
+  background: var(--metre-surface);
+  color: var(--metre-text);
+  border: 1px solid var(--metre-line-strong);
+  border-radius: 10px;
+  box-shadow: var(--metre-pop-shadow, 0 10px 32px rgba(31, 30, 29, 0.12));
+  font: 400 14px/1.55 var(--metre-sans);
+  padding: 18px 20px 16px;
+  max-width: min(560px, calc(100vw - 32px));
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-title[data-pk-title] { font-size: 0; line-height: 0; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-title[data-pk-title]::after {
+  content: attr(data-pk-title);
+  font: italic 400 19px/1.3 var(--metre-serif);
+  color: var(--metre-text);
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-title { font: italic 400 19px/1.3 var(--metre-serif); color: var(--metre-text); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-sub,
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-meta { color: var(--pk-perm-ink2); font: 400 12.5px/1.6 var(--metre-sans); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-queue {
+  color: var(--metre-text); background: var(--metre-hover); border: 1px solid var(--metre-line); border-radius: 999px;
+  padding: 2px 10px; font: 400 12.5px/1.5 var(--metre-sans);
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-command {
+  background: var(--metre-bg); color: var(--metre-text); border: 1px solid var(--metre-line); border-radius: 8px;
+  font: 400 13px/1.55 var(--metre-mono); padding: 10px 12px; margin: 12px 0 10px; max-height: 180px; overflow: auto;
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-warning,
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-error { color: var(--metre-danger); font-size: 12.5px; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn,
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn {
+  min-height: 32px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--metre-line-strong); background: var(--metre-surface); color: var(--metre-text);
+  font: 400 13.5px/1 var(--metre-sans); box-shadow: none; transition: background-color 120ms ease, border-color 120ms ease;
+}
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:hover,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:hover,
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn:hover { background: var(--metre-hover); border-color: var(--metre-muted); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes { background: var(--metre-cobalt); border-color: var(--metre-cobalt); color: var(--metre-surface); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.primary:hover,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn--yes:hover { background: color-mix(in srgb, var(--metre-cobalt) 88%, var(--metre-text)); border-color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn.danger { color: var(--metre-danger); border-color: color-mix(in srgb, var(--metre-danger) 45%, var(--metre-line-strong)); }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:focus-visible,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:focus-visible,
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__btn:focus-visible,
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__item:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
+html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn:disabled,
+html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ---------- P4 卡片里的「还有 N 处在等你批」 ---------- */
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q { margin-top: 14px; border-top: 1px solid var(--metre-line); padding-top: 10px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__head { color: var(--pk-perm-ink2); font: 400 12.5px/1.6 var(--metre-sans); margin-bottom: 6px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row { display: flex; align-items: center; gap: 10px; padding: 6px 0; min-height: 40px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row + .pk-perm-q__row { border-top: 1px dashed var(--metre-line); }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__cmd { font: 400 12.5px/1.45 var(--metre-mono); color: var(--metre-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__who { font: 400 12px/1.4 var(--metre-sans); color: var(--pk-perm-ink2); }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__acts { flex: none; display: flex; gap: 6px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__done { font: 400 12.5px/1 var(--metre-sans); color: var(--pk-perm-ink2); }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q__row[data-error]::after { content: attr(data-error); color: var(--metre-danger); font-size: 12px; }
+html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q .pk-perm-q__btn { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
+
+/* ---------- 按键行：放手程度 / 先出方案 / 照这个方案做 / 状态键 ---------- */
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip { flex: none; white-space: nowrap; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip .pk-eng-chip__name { color: var(--pk-perm-ink2); font: 400 13px/1 var(--metre-sans); font-style: normal; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] .pk-eng-chip__name { color: var(--metre-cobalt); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] { background: var(--metre-cobalt-soft, var(--metre-hover)); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--go .pk-eng-chip__name { color: var(--metre-cobalt); font-weight: 500; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat .pk-eng-chip__name { font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="warn"] .pk-eng-chip__name { color: var(--pk-perm-warn); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="danger"] .pk-eng-chip__name { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 1px; }
+/* 窄屏：状态键只留数字，「先出方案」以外的字不换行；820 以下把放手程度藏进状态键旁的菜单不做，宁可让模型名省略 */
+@media (max-width: 900px) {
+  html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip { padding-left: 7px; padding-right: 7px; }
+}
+/* 引擎台打开时（外部引擎当主脑）这几个键属于 Metre 自己的对话，让位 */
+html[data-laolao-mode="metre"][data-pk-engine="on"] .agent-chat__composer-controls > .pk-perm-chips { display: none; }
+
+/* ---------- 弹层：放手程度菜单、会话详情 ---------- */
+html[data-laolao-mode="metre"] .pk-perm-pop {
+  position: fixed; z-index: 2147483000; box-sizing: border-box;
+  width: min(340px, calc(100vw - 16px)); max-height: min(70vh, 520px); overflow: auto;
+  background: var(--metre-surface); color: var(--metre-text);
+  border: 1px solid var(--metre-line-strong); border-radius: 10px;
+  box-shadow: var(--metre-pop-shadow, 0 10px 32px rgba(31, 30, 29, 0.12));
+  padding: 10px; font: 400 13.5px/1.5 var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__title { font: italic 400 17px/1.3 var(--metre-serif); padding: 2px 6px 4px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__sub { color: var(--pk-perm-ink2); font-size: 12.5px; padding: 0 6px 8px; border-bottom: 1px solid var(--metre-line); margin-bottom: 4px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; box-sizing: border-box;
+  padding: 8px 10px 8px 26px; border: 0; border-radius: 8px; background: transparent; color: var(--metre-text);
+  text-align: left; cursor: pointer; position: relative; font: inherit;
+}
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__item:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__item[aria-checked="true"]::before {
+  content: ""; position: absolute; left: 10px; top: 15px; width: 7px; height: 7px; border-radius: 50%; background: var(--metre-cobalt);
+}
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__name { font-size: 14px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__hint { color: var(--pk-perm-ink2); font-size: 12.5px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; padding: 6px; border-top: 1px solid var(--metre-line); }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__k { color: var(--pk-perm-ink2); font-size: 12.5px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__v { color: var(--metre-text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__plan { padding: 4px 6px 10px; }
+html[data-laolao-mode="metre"] .pk-perm-bar { height: 4px; border-radius: 2px; background: var(--metre-line); margin-top: 6px; overflow: hidden; }
+html[data-laolao-mode="metre"] .pk-perm-bar > i { display: block; height: 100%; background: var(--metre-cobalt); border-radius: 2px; }
+html[data-laolao-mode="metre"] .pk-perm-pop .pk-perm-pop__resume {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-top: 8px; padding: 8px 6px 2px;
+  border-top: 1px solid var(--metre-line); color: var(--pk-perm-warn); font-size: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"] .pk-perm-q .pk-perm-q__btn, html[data-laolao-mode="metre"] openclaw-exec-approval .exec-approval-actions .btn { transition: none; }
+}
