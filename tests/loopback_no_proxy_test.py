@@ -32,7 +32,7 @@ class WindowsLoopbackNoProxyTest(unittest.TestCase):
 
 class MacLauncherLoopbackNoProxyTest(unittest.TestCase):
     def test_launcher_exempts_loopback_in_both_spellings(self):
-        source = (ROOT / "desktop/macos/pinkie/Sources/Launcher.swift").read_text(encoding="utf-8")
+        source = (ROOT / "desktop/macos/pinkie/Sources/LauncherRuntime.swift").read_text(encoding="utf-8")
         body = source.split("static func environment()", 1)[1].split("static func pythonExecutable()", 1)[0]
         self.assertIn('for key in ["NO_PROXY", "no_proxy"]', body)
         self.assertIn('["localhost", "127.0.0.1", "::1"]', body)

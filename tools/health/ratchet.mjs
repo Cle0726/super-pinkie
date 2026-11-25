@@ -1,6 +1,7 @@
 // Shared by the test, --write-baseline, --adopt-unmeasured and compare-baseline.mjs so that
 // updating the baseline cannot silently allow growth.
 import fs from 'node:fs';
+import path from 'node:path';
 
 export const LINE_LIMIT = 1500;
 export const SYNC_HINT = '数字变好了，请运行 `node tools/health/measure.mjs --write-baseline` 同步基线，并与本次改善一起提交。';
@@ -51,6 +52,42 @@ export function injectionTotals(files, uniqueGlobals) {
 export function readJson(file) {
   // A UTF-8 BOM from a Windows editor isn't part of the JSON document.
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
+}
+
+// 例外分两层，免得同时开着的界面 PR 都去改 exceptions.json 同一条的 value / reason 而互相冲突：
+// - tools/health/exceptions.json：基础条目（数组，{file, metric, value, reason}），和以前一样；
+// - tools/health/exceptions.d/*.json：每个 PR 自己一个文件（数组，{file, metric, add, reason}），
+//   只能给 exceptions.json 里已有的同一条 file + metric 加数（add 是正整数）。
+// 生效值 = value + 所有 add 之和，原因拼在后面；ratchet、--write-baseline 和 CI 的目标分支对比都只看生效值，
+// 所以「抬高例外要协调者认可」照旧，「只允许准确计数」「没用到要删」也照旧按生效值算。
+// 两个 PR 各加 2 行：各自分支上各自的文件，合并后 add 相加，正好等于两边都合进来的实测值。
+export const EXCEPTIONS_FILE = 'tools/health/exceptions.json';
+export const EXCEPTION_DELTAS_DIR = 'tools/health/exceptions.d';
+export function loadExceptions(root) {
+  const base = path.join(root, EXCEPTIONS_FILE);
+  const entries = fs.existsSync(base) ? readJson(base) : [];
+  if (!Array.isArray(entries)) throw new Error(`${EXCEPTIONS_FILE} 必须是数组。`);
+  const dir = path.join(root, EXCEPTION_DELTAS_DIR);
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(name => name.endsWith('.json')).sort() : [];
+  if (!names.length) return entries;
+  const merged = entries.map(entry => ({...entry}));
+  const byKey = new Map(merged.map(entry => [`${entry.file}\0${entry.metric}`, entry]));
+  for (const name of names) {
+    const deltas = readJson(path.join(dir, name));
+    if (!Array.isArray(deltas)) throw new Error(`${EXCEPTION_DELTAS_DIR}/${name} 必须是数组。`);
+    for (const delta of deltas) {
+      const {file, metric, add, reason} = delta ?? {};
+      if (!Number.isSafeInteger(add) || add <= 0 || typeof reason !== 'string' || !reason.trim()) {
+        throw new Error(`${EXCEPTION_DELTAS_DIR}/${name}：每条要有 file、metric、add（正整数）和 reason。`);
+      }
+      const target = byKey.get(`${file}\0${metric}`);
+      if (!target) throw new Error(`${EXCEPTION_DELTAS_DIR}/${name}：${file} 的 ${metric} 在 ${EXCEPTIONS_FILE} 里没有基础条目；新例外要写进 ${EXCEPTIONS_FILE}。`);
+      target.value += add;
+      target.reason = `${target.reason} ${reason.trim()}（${name}，+${add}）`;
+      target.deltas = [...(target.deltas ?? []), {name, add}];   // 「没被用到」时告诉人改哪几个文件
+    }
+  }
+  return merged;
 }
 
 export function exceptionsByMetric(entries) {
@@ -136,9 +173,15 @@ export function healthChanges(current, baseline, exceptions = []) {
     }
   }
   // An exception nothing needs is a dormant pass for future growth: report it.
+  const deltasOf = new Map(exceptions.map(entry => [`${entry.file}\0${entry.metric}`, entry.deltas ?? []]));
   const unused = [...approved.keys()].filter(key => !used.has(key)).sort().map(key => {
     const [file, metric] = key.split('\0');
-    return `${file}：${LABEL[metric]} 的例外（value ${approved.get(key)}）没有被用到，请从 tools/health/exceptions.json 删除。`;
+    const deltas = deltasOf.get(key) ?? [];
+    if (!deltas.length) return `${file}：${LABEL[metric]} 的例外（value ${approved.get(key)}）没有被用到，请从 tools/health/exceptions.json 删除。`;
+    // 生效值里有增量：先动增量文件（各 PR 自己的），增量都删完还多再改 exceptions.json 的基础值，免得又去改那条大家共用的数字。
+    const parts = deltas.map(({name, add}) => `${EXCEPTION_DELTAS_DIR}/${name} +${add}`).join('、');
+    const baseValue = approved.get(key) - deltas.reduce((sum, {add}) => sum + add, 0);
+    return `${file}：${LABEL[metric]} 的例外（生效值 ${approved.get(key)} = ${EXCEPTIONS_FILE} 的基础值 ${baseValue} + ${parts}）没有被用到：先减小或删掉 ${EXCEPTION_DELTAS_DIR} 里对应的增量文件；增量都删完还多，再改 ${EXCEPTIONS_FILE} 的基础值（实际值等于基线时整条删掉）。`;
   });
   return {increases, decreases, unused};
 }
