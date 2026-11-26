@@ -186,9 +186,31 @@ test('图表：「复制图片」放进剪贴板的是实底、带标题的 PNG�
     assert.equal(gotNoBlob.type, 'image/png', 'toBlob 回空时剪贴板里也是能解开的 PNG');
     assert.ok(gotNoBlob.w > gotNoBlob.src, 'toDataURL 出的也是带边、带标题的那张');
 
-    // 反例：两样都出不了图，才如实报「没复制成」，也不下载空文件
+    // 本机 WebKit（2370 / 2388）实测：toBlob 回空、toDataURL 三种格式都回 data:，但像素读得出：用像素自己拼 PNG
     await tab.evaluate(() => {
       HTMLCanvasElement.prototype.toDataURL = () => 'data:,';
+      window.__got = null;
+      Object.defineProperty(navigator, 'clipboard', {configurable: true, value: {write: async (items) => {
+        const blob = await items[0].getType('image/png');
+        const bmp = await createImageBitmap(blob);
+        const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+        const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+        let titleInk = 0; const d = g.getImageData(0, 0, Math.min(bmp.width, 400), 40).data;
+        for (let i = 0; i < d.length; i += 4) if (d[i] < 150) titleInk++;
+        window.__got = {type: blob.type, w: bmp.width, corner: [...g.getImageData(2, 2, 1, 1).data], titleInk, src: document.querySelector('.pk-rich--chart canvas').width};
+      }}});
+    });
+    await tab.locator('.pk-chart__key', {hasText: '复制图片'}).click();
+    await tab.waitForFunction(() => window.__got && document.querySelector('.pk-chart__note').textContent.includes('已复制'), null, {timeout: 5000});
+    const gotPixels = await tab.evaluate(() => window.__got);
+    assert.equal(gotPixels.type, 'image/png', '编码全不可用时剪贴板里也是能解开的 PNG');
+    assert.deepEqual(gotPixels.corner, [255, 255, 255, 255], '自己拼的那张也是实底');
+    assert.ok(gotPixels.w > gotPixels.src, '自己拼的那张也带边');
+    assert.ok(gotPixels.titleInk > 20, '自己拼的那张也有标题字');
+
+    // 反例：连像素都读不出（比如画布被跨域图片污染），才如实报「没复制成」，也不下载空文件
+    await tab.evaluate(() => {
+      CanvasRenderingContext2D.prototype.getImageData = () => { throw new DOMException('tainted', 'SecurityError'); };
       Object.defineProperty(navigator, 'clipboard', {configurable: true, value: undefined});
       window.__saved = null;
     });

@@ -120,6 +120,36 @@ test('in a browser: engines that can switch offer Pinkie\'s models, the Pinkie r
   } finally { await browser.close(); }
 });
 
+// #127：macOS WebKit 的 Tab 不停在 button 上，Option+Tab 才停；Chromium 的 Tab 就停。两种都按一遍。
+test('in a browser: keyboard focus walks past the greyed-out row but still reaches a row that can switch', {timeout: 60_000}, async t => {
+  const ctx = await openPage(t);
+  if (!ctx) return;
+  const {browser, tab, models, upstream} = ctx;
+  const keys = (process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium') === 'webkit' ? ['Alt+Tab', 'Tab'] : ['Tab'];
+  const walk = async key => {
+    await tab.locator('.pk-eng-menu__back').focus();
+    const seen = [];
+    for (let i = 0; i < 6; i++) {
+      await tab.keyboard.press(key);
+      seen.push(await tab.evaluate(() => { const a = document.activeElement; return a?.closest('.pk-eng-menu') ? (a.className + '|' + (a.querySelector('.pk-eng-menu__name')?.textContent || a.textContent)) : 'outside'; }));
+    }
+    return seen;
+  };
+  try {
+    await models('Antigravity');
+    assert.equal(await upstream().getAttribute('aria-disabled'), 'true');
+    for (const key of keys) {
+      const seen = await walk(key);
+      assert.ok(!seen.some(s => /pk-eng-menu__item--dim/.test(s)), `${key} landed on the greyed-out row: ${seen.join(' > ')}`);
+    }
+    // 反例：能切的那一行照样键盘够得着，不是把整行都拿出了 Tab 序列。
+    await models('Claude Code');
+    assert.equal(await upstream().getAttribute('aria-disabled'), null);
+    const reach = await walk(keys[0]);
+    assert.ok(reach.some(s => s.includes('pk-eng-menu__item--upstream') && s.endsWith('|改用碧琪模型')), `${keys[0]} never reached the switch row: ${reach.join(' > ')}`);
+  } finally { await browser.close(); }
+});
+
 test('in a browser: without the upstream file the model list is exactly as before (the engine file draws no such row itself)', {timeout: 40_000}, async t => {
   const ctx = await openPage(t, {withUpstream: false});
   if (!ctx) return;
