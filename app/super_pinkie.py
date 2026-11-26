@@ -27,6 +27,7 @@ import time
 import traceback
 import urllib.request
 import urllib.parse
+import webbrowser
 from pathlib import Path
 
 # A non-UTF-8 Windows locale gives this process a cp1252 stdout; the Chinese
@@ -78,6 +79,32 @@ def openclaw_command(*arguments):
 
 def prompts_dir():
     return Path(os.environ.get("UR_PROMPTS_DIR", Path.home() / ".openclaw"))
+
+
+def open_folder_command(folder, platform=None):
+    """argv that opens a folder in the file manager, with no shell in between (B33:
+    os.system(explorer "...") let cmd expand %VAR% inside UR_PROMPTS_DIR)."""
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return ["open", str(folder)]
+    if platform.startswith("win"):
+        return ["explorer.exe", str(folder)]
+    return ["xdg-open", str(folder)]
+
+
+def open_folder(folder):
+    try:
+        subprocess.Popen(open_folder_command(folder))
+    except OSError:
+        pass
+
+
+def npm_install_command(platform_name=None):
+    """argv for the global openclaw install. On Windows npm is npm.cmd, which
+    CreateProcess runs without shell=True once it is named by its full path."""
+    if (platform_name or os.name) == "nt":
+        return [shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd", "install", "-g", "openclaw"]
+    return ["npm", "install", "-g", "openclaw"]
 
 
 def windows_state_root():
@@ -164,11 +191,7 @@ def install_openclaw_npm(log):
     """通过 npm 全局安装 openclaw"""
     log("==> 正在安装 C.le. 兼容内核...")
     try:
-        cmd = ["npm", "install", "-g", "openclaw"]
-        if os.name == "nt":
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True, **hidden_process_kwargs())
-        else:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
+        proc = subprocess.Popen(npm_install_command(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
         proc.wait()
@@ -1412,7 +1435,7 @@ def run_control_center():
     make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
     make_button(btn_row1, "⬆️ 检查并拉取更新", lambda: threading.Thread(target=lambda: [pull_and_update(log), refresh_status()], daemon=True).start(), color="#C2185B").pack(side="left", padx=4)
     make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
-    make_button(btn_row1, "🌐 打开 Web 界面", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
+    make_button(btn_row1, "🌐 打开 Web 界面", lambda: webbrowser.open("http://127.0.0.1:18789")).pack(side="left", padx=4)
 
     # ------------------ Tab 2: API Key 配置 ------------------
     api_card = tk.Frame(tab_api, bg=CARD, highlightbackground=PINK, highlightthickness=1)
@@ -1459,7 +1482,7 @@ def run_control_center():
     make_button(adv_frame, "⏹ 停止注入代理", lambda: proxy.stop()).pack(side="left", padx=4)
     make_button(adv_frame, "🔄 重启 Gateway", lambda: restart_openclaw_gateway(log)).pack(side="left", padx=4)
     make_button(adv_frame, "🗑 卸载全部补丁", lambda: [apply_patch(True, log), refresh_status()]).pack(side="left", padx=4)
-    make_button(adv_frame, "📂 打开配置目录", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=4)
+    make_button(adv_frame, "📂 打开配置目录", lambda: open_folder(prompts_dir())).pack(side="left", padx=4)
 
     # 公共日志框（置底）
     log_lbl = tk.Label(root, text="📜 操作日志与运行输出:", bg=BG, fg=TEXT, font=("PingFang SC", 9, "bold"), anchor="w")
