@@ -17,6 +17,9 @@ ALLOWED_ORIGIN = os.environ.get("PINKIE_GATEWAY_ORIGIN", "http://127.0.0.1:18789
 DEFAULT_RATE = os.environ.get("PINKIE_TTS_RATE", "+10%")
 DEFAULT_PITCH = os.environ.get("PINKIE_TTS_PITCH", "+8Hz")
 DEFAULT_VOLUME = os.environ.get("PINKIE_TTS_VOLUME", "+0%")
+# 拒掉的请求最多读掉多少请求体、等多久再回复；超出就回 Connection: close（同 services/roundtable #204）。
+DRAIN_LIMIT = 1 << 20
+DRAIN_SECONDS = 2
 
 
 def synthesize(voice, text, rate=DEFAULT_RATE, pitch=DEFAULT_PITCH, volume=DEFAULT_VOLUME):
@@ -36,6 +39,50 @@ def synthesize(voice, text, rate=DEFAULT_RATE, pitch=DEFAULT_PITCH, volume=DEFAU
 
 
 class Handler(BaseHTTPRequestHandler):
+    def handle_one_request(self):
+        self.body_read = False
+        super().handle_one_request()
+
+    def discard_body(self):
+        # 没读请求体就回 404/500 再关连接：内核对还没读的字节回 RST，Windows 客户端连已经发出的回复都收不到
+        # （WinError 10053/10054，同 services/roundtable #204）。回复前先把请求体读掉；
+        # 长度不明、太大或读不完就返回 False，由调用方明说 Connection: close。
+        if self.body_read:
+            return True
+        self.body_read = True
+        if self.headers.get("Transfer-Encoding"):
+            return False
+        try:
+            left = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return False
+        if left <= 0:
+            return left == 0
+        if left > DRAIN_LIMIT:
+            return False
+        try:
+            self.connection.settimeout(DRAIN_SECONDS)
+            while left:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    return False
+                left -= len(chunk)
+            return True
+        except OSError:
+            return False
+        finally:
+            try:
+                self.connection.settimeout(self.timeout)
+            except OSError:
+                pass
+
+    def start_reply(self, code):
+        drained = self.discard_body()
+        self.send_response(code)
+        if not drained:
+            self.send_header("Connection", "close")
+            self.close_connection = True
+
     def cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -43,11 +90,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path != "/health":
-            self.send_response(404)
+            self.start_reply(404)
             self.end_headers()
             return
         payload = b'{"ok":true}'
-        self.send_response(200)
+        self.start_reply(200)
         self.cors_headers()
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
@@ -55,17 +102,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_OPTIONS(self):
-        self.send_response(204)
+        self.start_reply(204)
         self.cors_headers()
         self.end_headers()
 
     def do_POST(self):
         if self.path != "/v1/audio/speech":
-            self.send_response(404)
+            self.start_reply(404)
             self.end_headers()
             return
         try:
             size = int(self.headers.get("Content-Length", "0"))
+            if size < 0:
+                raise ValueError("Content-Length is invalid")
+            self.body_read = True
             request = json.loads(self.rfile.read(size))
             text = str(request.get("input", "")).strip()
             if not text:
@@ -77,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 str(request.get("pitch", DEFAULT_PITCH)),
                 str(request.get("volume", DEFAULT_VOLUME)),
             )
-            self.send_response(200)
+            self.start_reply(200)
             self.cors_headers()
             self.send_header("Content-Type", "audio/mpeg")
             self.send_header("Content-Length", str(len(audio)))
@@ -85,7 +135,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(audio)
         except Exception as error:
             payload = json.dumps({"error": str(error)}, ensure_ascii=False).encode("utf-8")
-            self.send_response(500)
+            self.start_reply(500)
             self.cors_headers()
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))

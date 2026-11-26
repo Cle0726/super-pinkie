@@ -116,6 +116,7 @@ test('in Metre: cites follow the order the tools returned them, the card shows t
 
     const before = tab.url();
     await tab.locator('.pk-mcite-chip').nth(1).click();
+    // 保留死等：这里断言的是「页面没有被导航走」（没发生的事），得留一段时间窗让错误的导航有机会发生，没有可等的条件。
     await tab.waitForTimeout(300);
     assert.equal(tab.url(), before, 'the page itself does not navigate away');
     assert.deepEqual(await tab.evaluate(() => window.opened), [V]);
@@ -133,10 +134,12 @@ test('in other modes nothing changes', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
   try {
     const tab = await open(browser, 'chat');
+    // 保留死等：断言的是「其他模式什么都不改」（没发生的事），要给脚本的首帧重画留出时间窗，没有可等的正向状态。
     await tab.waitForTimeout(400);
     assert.deepEqual(await hrefs(tab, '.pinkie-cite'), shared);
     assert.equal(await tab.locator('.pk-mcite-row, .pk-mcite-chip, [data-pk-cite-n]').count(), 0);
     await tab.locator('.pinkie-cite').first().hover();
+    // 保留死等：断言的是「悬停后不出卡片」（没发生的事），同上。
     await tab.waitForTimeout(300);
     assert.equal(await tab.locator('.pk-mcite-card').count(), 0);
   } finally { await browser.close(); }
