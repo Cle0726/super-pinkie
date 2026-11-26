@@ -86,6 +86,9 @@ test('in a browser: engines that can switch offer Pinkie\'s models, the Pinkie r
     const apart = await upstream().evaluate(node => { const after = getComputedStyle(node, '::after'); return {gap: parseFloat(getComputedStyle(node).marginTop), line: after.borderTopWidth, style: after.borderTopStyle}; });
     assert.ok(apart.gap >= 4 && apart.gap <= 6, `gap above the row is ${apart.gap}px`);
     assert.deepEqual([apart.line, apart.style], ['1px', 'solid']);
+    // 分隔线比菜单标题下那道深一档（协调者 11-25 20:14）
+    const rules = await upstream().evaluate(node => [getComputedStyle(node, '::after').borderTopColor, getComputedStyle(document.querySelector('.pk-eng-menu__head')).borderBottomColor]);
+    assert.notEqual(rules[0], rules[1], `separator ${rules[0]} vs head rule ${rules[1]}`);
     await upstream().click();
     await tab.waitForFunction(() => document.querySelector('.pk-eng-menu__sub')?.textContent === 'Claude Code · 碧琪模型 用哪个模型');
     assert.deepEqual(await tab.locator('.pk-eng-menu__item .pk-eng-menu__note').first().textContent(), 'pinkie/gw/top · 默认');
@@ -102,6 +105,9 @@ test('in a browser: engines that can switch offer Pinkie\'s models, the Pinkie r
     assert.equal(await upstream().getAttribute('aria-disabled'), 'true');
     assert.match(await upstream().getAttribute('class'), /pk-eng-menu__item--dim/);
     assert.equal(await upstream().locator('.pk-eng-menu__note').textContent(), '用不了：只能用 Google 账号或 Gemini 的 API 密钥，没有换上游的口子');
+    // 「API 密钥」不拆两行（协调者 11-25 20:14）：在同一个不换行的段里，只占一行
+    const keep = await upstream().evaluate(node => { const s = [...node.querySelectorAll('.pk-eng-menu__note span')].find(x => x.textContent === 'API 密钥'); return s ? {ws: getComputedStyle(s).whiteSpace, lines: s.getClientRects().length} : null; });
+    assert.deepEqual(keep, {ws: 'nowrap', lines: 1});
     await upstream().evaluate(node => node.click());
     await tab.waitForTimeout(300);
     assert.equal(await sub(), 'Antigravity 用哪个模型');
