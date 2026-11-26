@@ -60,15 +60,27 @@ export const charsetMeta = text => (declaresCharset(String(text)) ? '' : CHARSET
 export function withOfflinePolicy(html) { return withPolicy(html, {}); }
 
 // 作品里写死的外部来源（https://host[:port]），最多 20 个；只认 http(s) 和 ws(s)，不认相对地址。
+// 只在已经认出的 ASCII 记号上折叠默认端口：浏览器和 macOS 都把 https://host:443 当成 https://host。
+// 不交给 URL 再解析，避免把十进制 IP、百分号点号收成另一个主机。
 const ORIGIN = /\b(?:https?|wss?):\/\/[a-z0-9.-]+(?::\d{1,5})?/gi;
 const FILE_USE = /<input[^>]*type\s*=\s*["']?file|showOpenFilePicker|showDirectoryPicker|showSaveFilePicker|webkitdirectory/i;
+function canonicalOrigin(origin) {
+  const match = /^(https?|wss?):\/\/([a-z0-9.-]+)(?::(\d{1,5}))?$/.exec(origin);
+  if (!match) return '';
+  const [, scheme, host, rawPort] = match;
+  if (rawPort == null) return `${scheme}://${host}`;
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return '';
+  const def = scheme === 'https' || scheme === 'wss' ? 443 : 80;
+  return `${scheme}://${host}${port === def ? '' : `:${port}`}`;
+}
 export function needsOf(html) {
-  const origins = [...new Set([...String(html).matchAll(ORIGIN)].map(match => match[0].toLowerCase()))]
+  const origins = [...new Set([...String(html).matchAll(ORIGIN)].map(match => canonicalOrigin(match[0].toLowerCase())).filter(Boolean))]
     .filter(origin => !/^(?:https?|wss?):\/\/(?:www\.)?w3\.org$/.test(origin)).sort().slice(0, 20);
   return {network: origins, files: FILE_USE.test(String(html))};
 }
-const cleanOrigins = list => [...new Set((Array.isArray(list) ? list : []).map(String).map(item => item.toLowerCase())
-  .filter(item => /^(?:https?|wss?):\/\/[a-z0-9.-]+(?::\d{1,5})?$/.test(item)))].sort().slice(0, 20);
+const cleanOrigins = list => [...new Set((Array.isArray(list) ? list : []).map(String).map(item => canonicalOrigin(item.toLowerCase()))
+  .filter(Boolean))].sort().slice(0, 20);
 
 export function policyFor({origins = []} = {}) {
   const allowed = cleanOrigins(origins);
@@ -81,6 +93,30 @@ export function policyFor({origins = []} = {}) {
     return rule;
   }).join('; ');
 }
+// CSP 的 connect-src 管不住换页：location、刷新跳转、<a> 都会把整份文档换成没有这条策略的新页面。
+// 守卫跟 CSP 一起插在作品脚本之前。勾过的来源按浏览器的 origin 比较（默认端口 443/80 算同一个）；
+// file: 只留在本页所在的目录里。data:、blob: 和其他地址直接取消。
+const GUARD_ORIGIN = /^[a-z]+:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
+export function guardOrigins(origins) {
+  const out = [];
+  for (const origin of cleanOrigins(origins)) {
+    try {
+      const url = new URL(origin);
+      if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && GUARD_ORIGIN.test(url.origin)) out.push(url.origin);
+    } catch { /* 浏览器解析不了的来源不放进守卫 */ }
+  }
+  return [...new Set(out)];
+}
+export function navGuardScript(origins) {
+  const list = JSON.stringify(guardOrigins(origins));
+  return '<script>(()=>{const allowed=new Set(' + list + ');const ok=raw=>{let u;try{u=new URL(raw,location.href)}catch{return false}'
+    + 'if(u.protocol==="file:"){const d=new URL(".",location.href).href;return u.href.startsWith(d)}'
+    + 'return (u.protocol==="http:"||u.protocol==="https:"||u.protocol==="ws:"||u.protocol==="wss:")&&allowed.has(u.origin)};'
+    + 'addEventListener("click",e=>{const p=typeof e.composedPath==="function"?e.composedPath():[e.target];for(const n of p){const href=n&&(n.tagName==="A"||n.tagName==="AREA")&&n.href;if(href&&!ok(href)){e.preventDefault();e.stopImmediatePropagation();return}}},true);'
+    + 'const open=window.open;window.open=function(url,name,features){if(url==null||url===""||!ok(String(url)))return null;return typeof open==="function"?open.call(window,url,name,features):null};'
+    + 'if(window.navigation)window.navigation.addEventListener("navigate",e=>{if(e.hashChange||(e.destination&&e.destination.sameDocument)||e.navigationType==="reload")return;if(!e.destination||!ok(e.destination.url))e.preventDefault()})})()</script>';
+}
+
 // 没勾读文件：在作品自己的脚本之前把文件选择框挡掉（file input 的点击、File System Access API）。
 export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMException("这个应用没有读文件的权限","NotAllowedError"));'
   + 'for(const k of ["showOpenFilePicker","showDirectoryPicker","showSaveFilePicker"])try{Object.defineProperty(window,k,{value:no,configurable:false})}catch{}'
@@ -96,7 +132,8 @@ export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMExce
 // 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
 export function withPolicy(html, {origins = [], files = false} = {}) {
   const text = String(html);
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins})}">` + (files ? '' : FILE_GUARD);
+  const allowed = cleanOrigins(origins);
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins: allowed})}">` + (files ? '' : FILE_GUARD) + navGuardScript(allowed);
   const charset = charsetMeta(text);
   let at = 0;
   for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
@@ -210,6 +247,14 @@ export class DesktopApps {
     const data = this.load();
     const appId = appIdFor(item.id);
     if (!data.apps[appId] && Object.keys(data.apps).length >= this.limits.apps) throw new Error(`最多装 ${this.limits.apps} 个应用`);
+    // 快捷方式 / .app 的文件名在 Windows 和 macOS 上不区分大小写，macOS 还会按名字删掉同名的旧入口。
+    // 两件作品落到同一个名字时，后装的会盖掉先装的入口。比较前先走 safeAppName（斜杠会变成空格），
+    // 再按 NFC、en-US 小写对齐。同一件作品重装或更新不算冲突。拒绝发生在写任何文件之前。
+    const storedName = safeAppName(name || item.title);
+    const nameKey = storedName.normalize('NFC').toLocaleLowerCase('en-US');
+    const clash = Object.values(data.apps).some(app => app.id !== appId
+      && safeAppName(app.name).normalize('NFC').toLocaleLowerCase('en-US') === nameKey);
+    if (clash) throw new Error('已经有一个同名的应用，换个名字再装');
     const {path: source} = this.artifacts.versionPath(item.id, item.version);
     const size = fs.statSync(source).size;
     if (size > this.limits.htmlBytes) throw new Error('这件作品太大了，装不了（超过 5 MB）');
@@ -237,7 +282,7 @@ export class DesktopApps {
     }
     const ts = this.now();
     const old = data.apps[appId];
-    data.apps[appId] = {id: appId, artifactId: item.id, name: safeAppName(name || item.title), version: item.version,
+    data.apps[appId] = {id: appId, artifactId: item.id, name: storedName, version: item.version,
       installedAt: old?.installedAt || ts, updatedAt: ts, network: origins, files: files === true};
     this.save();
     return {ok: true, replaced: Boolean(old), previousName: old?.name || '', app: this.view(data.apps[appId])};
