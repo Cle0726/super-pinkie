@@ -340,13 +340,16 @@ export class SessionEngines {
 // 在终端里让用户自己装、自己登录（碧琪不经手账号）。只跑 ENGINES 表里写死的命令。
 // Windows：官方给的是 PowerShell 一行（irm … | iex）就开 PowerShell，其余开命令行窗口（npm 的 .ps1 常被执行策略挡住）；Mac 开「终端」。
 // env：多账号时把这个账号自己的登录文件夹交给登录命令（只认 ACCOUNTS 里的两个变量名，值必须是绝对路径、不含引号）。
+function assertLoginEnv(name, value, platform) {
+  const text = String(value ?? '');
+  if (!['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'BROWSER'].includes(name) || !(platform === 'win32' ? path.win32 : path.posix).isAbsolute(text) || /["'`$%\r\n]/.test(text)) throw new Error('不认识的登录文件夹');
+  if (name === 'BROWSER' && !/private-browser\.(?:cmd|sh)$/.test(text)) throw new Error('不认识的浏览器启动器');
+}
+
 export function openTerminal(command, {platform = process.platform, spawnImpl = spawn, env = null} = {}) {
   if (!TERMINAL_COMMANDS.has(command)) throw new Error('不认识的命令');
   const extra = Object.entries(env || {});
-  for (const [name, value] of extra) {
-    if (!['CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'BROWSER'].includes(name) || !(platform === 'win32' ? path.win32 : path.posix).isAbsolute(String(value)) || /["'`$%\r\n]/.test(String(value))) throw new Error('不认识的登录文件夹');
-    if (name === 'BROWSER' && !/private-browser\.(?:cmd|sh)$/.test(String(value))) throw new Error('不认识的浏览器启动器');
-  }
+  for (const [name, value] of extra) assertLoginEnv(name, value, platform);
   const detached = {detached: true, stdio: 'ignore', windowsHide: false, ...(extra.length ? {env: {...process.env, ...Object.fromEntries(extra)}} : {})};
   let child;
   if (platform === 'win32') {
@@ -368,6 +371,7 @@ export const openLoginTerminal = openTerminal;
 export function loginLine(command, env, platform = process.platform) {
   const pairs = Object.entries(env || {});
   if (!pairs.length) return command;
+  for (const [name, value] of pairs) assertLoginEnv(name, value, platform);
   return platform === 'win32'
     ? pairs.map(([name, value]) => `set "${name}=${value}" && `).join('') + command
     : pairs.map(([name, value]) => `${name}='${value}' `).join('') + command;
@@ -523,7 +527,13 @@ export class EngineBridge {
       const instances = this.configCache.value?.settings?.providerInstances || {};
       for (const row of engines) {
         const dir = row.account && ACCOUNTS[row.driver]?.dirOf?.(instances[row.id]?.config);
-        if (dir && row.guide?.login) row.guide = {...row.guide, login: loginLine(row.guide.login, ACCOUNTS[row.driver].env(dir)), accountDir: dir};
+        if (dir && row.guide?.login) {
+          // 文件夹来自引擎服务的配置。拼不进一条安全的登录命令时，只留原来的命令，不把这段路径交出去。
+          try {
+            const env = ACCOUNTS[row.driver].env(dir);
+            row.guide = {...row.guide, login: loginLine(row.guide.login, env), accountDir: dir};
+          } catch { /* 不认识的登录文件夹 */ }
+        }
       }
     }
     return {engines, levels: LEVELS, source, accountEngines: Object.keys(ACCOUNTS).map(id => ({id, name: ENGINE_NAME[id]}))};

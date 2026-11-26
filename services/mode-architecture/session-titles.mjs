@@ -371,10 +371,48 @@ export function scopeUpgradeFallbackRunner(api, {cli, runProcess, access, env = 
   };
 }
 
+// sessions.json 里的 sessionFile / sessionId 是外部数据。记录必须落在这个 agent 的
+// sessions 目录里：绝对路径、`..`、以及指向目录外的符号链接都不能拿来读。
+const pathInside = (root, target) => {
+  const base = root.endsWith(path.sep) ? root : root + path.sep;
+  return target === root || target.startsWith(base);
+};
+
+export function resolveSessionTranscript(dir, data) {
+  const sessionId = typeof data?.sessionId === 'string' ? data.sessionId : '';
+  if (!sessionId || sessionId.includes('\0')) return '';
+  const root = path.resolve(String(dir || ''));
+  const named = typeof data.sessionFile === 'string' && data.sessionFile.trim() ? data.sessionFile : `${sessionId}.jsonl`;
+  if (named.includes('\0')) return '';
+  const file = path.resolve(root, named);
+  if (!pathInside(root, file)) return '';
+  try {
+    const realRoot = fs.realpathSync(root);
+    let current = file;
+    const rest = [];
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) return '';
+      rest.unshift(path.basename(current));
+      current = parent;
+    }
+    const realCurrent = fs.realpathSync(current);
+    if (!pathInside(realRoot, realCurrent)) return '';
+    const real = rest.length ? path.join(realCurrent, ...rest) : realCurrent;
+    if (!pathInside(realRoot, real)) return '';
+    if (!rest.length && !fs.statSync(real).isFile()) return '';
+    return real;
+  } catch {
+    return '';
+  }
+}
+
 function sessionEntry(entries, dir, key) {
   const data = entries[key];
   if (!data?.sessionId) return null;
-  return {...data, key, transcript: path.resolve(dir, data.sessionFile || data.sessionId + '.jsonl')};
+  const transcript = resolveSessionTranscript(dir, data);
+  if (!transcript) return null;
+  return {...data, key, transcript};
 }
 
 export function logSessionFailure(api, topic, key, reason) {
