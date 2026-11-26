@@ -4,8 +4,15 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const output=fs.mkdtempSync(path.join(os.tmpdir(),'study-desk-complete-'));
-let h;
+let h,shared=null;
 test.before(async()=>h=await import('../tools/study-desk/harness.mjs'));
+// 整个文件只起一个 Chrome：启动的 promise 只建一次，失败会被记住并在每个用例里重抛（不变成跳过）。
+// 每个用例仍各开各的 context（各自的 localStorage、视口和页面错误），用完就关，状态不串。
+function sharedChrome(){
+ shared??=h.playwright().chromium.launch({headless:true,channel:'chrome'}).then(browser=>({browser}),error=>({error}));
+ return shared.then(got=>{if(got.error)throw got.error;return got.browser;});
+}
+test.after(async()=>{if(!shared)return;const got=await shared;if(got.browser)await got.browser.close();});
 function handler(){
  let serial=0;
  const words=[['continue','康听扭','继续；（循环里）跳过本次'],['ambulance','安比鲁冷斯','救护车'],['apply for','额普莱 佛','申请'],['pest','拍斯特','害虫；讨厌的人'],['deadline','待的赖恩','截止日期']].map(([word,homophone,meaning],i)=>({id:'w'+i,word,homophone,meaning,status:'ready',reviewCount:i,reviewLevel:i%4,exams:[{id:'pretco-b',tier:'核心'}],collocations:[{en:['continue working','call an ambulance','apply for a job','','meet the deadline'][i],zh:''}]}));
@@ -29,13 +36,15 @@ function handler(){
 }
 async function run(fn,{width=1440,custom=handler()}={}){
  const server=await h.startHarness({handler:custom,legacyUI:true});
- const browser=await h.launchWithHarness(server,()=>h.playwright().chromium.launch({headless:true,channel:'chrome'}));
+ const browser=await h.launchWithHarness(server,sharedChrome);
+ let context;
  try{
-  const page=await browser.newPage({viewport:{width,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  context=await browser.newContext({viewport:{width,height:900}});
+  const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(server.url);await page.waitForFunction(()=>!!window.__pinkieStudyDesk);
   await page.evaluate(()=>__pinkieStudyDesk.go('today'));await page.locator('.desk-page .view').first().waitFor();
   await fn(page,server);assert.deepEqual(errors,[]);
- }finally{try{await browser.close();}finally{await server.close();}}
+ }finally{try{await context?.close();}finally{await server.close();}}
 }
 // 11-08：学习台改成一次一页，「两张卡各做一组题」和「对开装订」两条多卡用例随功能删除。
 test('one page at a time: the chat card docks on the right, old multi-card workspaces migrate, and there are no drag handles',{timeout:60000},async()=>{
@@ -95,9 +104,13 @@ test('notes review opens the drill, shows the question before the answer, and fi
 test('paper remains visible when a background WebView suspends its first animation frame',{timeout:45000},async()=>{
  for(const engine of ['chromium','webkit']){
   const server=await h.startHarness({handler:handler(),legacyUI:true});
-  const browser=await h.launchWithHarness(server,()=>h.playwright()[engine].launch(engine==='chromium'?{headless:true,channel:'chrome'}:{headless:true}));
+  // Chrome 用文件内共用的那一个；WebKit 只在这一例用到，照旧单独起、用完就关。
+  const own=engine!=='chromium';
+  const browser=await h.launchWithHarness(server,own?()=>h.playwright()[engine].launch({headless:true}):sharedChrome);
+  let context;
   try{
-   const p=await browser.newPage({viewport:{width:840,height:1050}});await p.goto(server.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation,{},{polling:100});
+   context=await browser.newContext({viewport:{width:840,height:1050}});
+   const p=await context.newPage();await p.goto(server.url);await p.waitForFunction(()=>!!window.__pinkieStudyConversation,{},{polling:100});
    await p.evaluate(()=>{__pinkieStudyDesk.go('deskchat');for(const a of document.querySelector('.view').getAnimations()){a.pause();a.currentTime=0;}});
    const paper=await p.locator('.view').evaluate(n=>({opacity:getComputedStyle(n).opacity,bounds:n.getBoundingClientRect().toJSON(),bookZ:getComputedStyle(n.closest('.desk-content')).zIndex}));
    assert.equal(paper.opacity,'1',engine+' must not depend on a running animation to show the paper');assert.ok(paper.bounds.width>600&&paper.bounds.height>900);assert.equal(paper.bookZ,'1');
@@ -106,6 +119,6 @@ test('paper remains visible when a background WebView suspends its first animati
    await p.evaluate(()=>__pinkieStudyDesk.focusPane(__pinkieStudyDesk.pages().find(x=>x.view==='deskchat').id));
    const marginContent=await p.locator('.side .ln,.side .fig img').evaluateAll(ns=>ns.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName})));
    assert.ok(marginContent.length>1);assert.ok(marginContent.every(x=>x.opacity==='1'&&x.animation==='none'),engine+' freezes the page-edge note and sticker in their readable state');
-  }finally{try{await browser.close();}finally{await server.close();}}
+  }finally{try{try{await context?.close();}finally{if(own)await browser.close();}}finally{await server.close();}}
  }
 });
