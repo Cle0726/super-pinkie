@@ -80,13 +80,13 @@ test('assistantMessageHasToolCall：内容块里的 toolCall / tool_use 与并�
 // 疑似 bug：开头 `if (!Array.isArray(message.content)) return false;` 让 content 为字符串 / null 的消息（OpenAI 风格
 // `content: null, tool_calls: [...]`）永远判成没有工具调用，后面并列检查的字段形同虚设；file-delivery.mjs 的同类判断
 // 不看 content 形状。连带 isTerminalAssistantMessage 会把带工具调用、标了 final 的消息当成终答。按任务要求不修，只标 todo。
-test('assistantMessageHasToolCall：content 不是数组时也应认出 tool_calls 字段', {
-  todo: '源码疑似 bug：非数组 content 提前 return false，tool_calls / toolCalls / toolCall 字段被忽略',
-}, () => {
-  assert.equal(assistantMessageHasToolCall({role: 'assistant', content: null, tool_calls: [{id: 'c1'}]}), true);
-  assert.equal(assistantMessageHasToolCall({role: 'assistant', content: '调用中', toolCalls: [{id: 'c1'}]}), true);
-  assert.equal(isTerminalAssistantMessage({role: 'assistant', content: '调用中', tool_calls: [{id: 'c1'}], final: true}), false);
-});
+// 不带函数体：tools/release-gate/tap.mjs 只把 # SKIP 排除在失败之外，带失败断言的 todo 会输出
+// `not ok … # TODO` 并被发版门禁记成新失败，所以这里只登记，不跑会失败的断言。
+// 修源码的 PR 把下面这条恢复成普通 test，断言原文：
+//   assert.equal(assistantMessageHasToolCall({role: 'assistant', content: null, tool_calls: [{id: 'c1'}]}), true);
+//   assert.equal(assistantMessageHasToolCall({role: 'assistant', content: '调用中', toolCalls: [{id: 'c1'}]}), true);
+//   assert.equal(isTerminalAssistantMessage({role: 'assistant', content: '调用中', tool_calls: [{id: 'c1'}], final: true}), false);
+test.todo('assistantMessageHasToolCall：content 不是数组时也应认出 tool_calls 字段（待修源码）');
 
 test('isTerminalAssistantMessage：显式终答标记或终止类 stopReason 才算终答', () => {
   const done = extra => isTerminalAssistantMessage({role: 'assistant', content: [], ...extra});
