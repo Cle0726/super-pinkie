@@ -37,6 +37,8 @@ if hasattr(_sys.stdout, 'reconfigure'):
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# invoke / run_worker 读 Agent 名单走这里，和 services/party/server.py 同一份加载。漏了会 NameError。
+CONTEXT = runpy.run_path(str(ROOT/'services/context/context_budget.py'))
 PROCESS = runpy.run_path(str(ROOT/'services/process_io.py'))
 USAGE = runpy.run_path(str(ROOT/'services/party/usage.py'))
 # The one state-root rule; see services/state_root.py.  This entry point used to
