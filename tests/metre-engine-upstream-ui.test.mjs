@@ -82,6 +82,10 @@ test('in a browser: engines that can switch offer Pinkie\'s models, the Pinkie r
     assert.equal(await upstream().count(), 1);
     assert.equal(await upstream().locator('.pk-eng-menu__name').textContent(), '改用碧琪模型');
     assert.equal(await upstream().getAttribute('aria-disabled'), null);
+    // 和上面的模型行分开：多留 4–6px，上面一道 1px 的线（uireview 11-26 02:31Z）。
+    const apart = await upstream().evaluate(node => { const after = getComputedStyle(node, '::after'); return {gap: parseFloat(getComputedStyle(node).marginTop), line: after.borderTopWidth, style: after.borderTopStyle}; });
+    assert.ok(apart.gap >= 4 && apart.gap <= 6, `gap above the row is ${apart.gap}px`);
+    assert.deepEqual([apart.line, apart.style], ['1px', 'solid']);
     await upstream().click();
     await tab.waitForFunction(() => document.querySelector('.pk-eng-menu__sub')?.textContent === 'Claude Code · 碧琪模型 用哪个模型');
     assert.deepEqual(await tab.locator('.pk-eng-menu__item .pk-eng-menu__note').first().textContent(), 'pinkie/gw/top · 默认');

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // #127 的 PR 截图脚本（照 tools/pr-shots/minimal.mjs 的约定：node <脚本> --out <目录>，写 PNG + 追加 <目录>/shots.jsonl）。
 // 拍引擎菜单模型子菜单最底下「用谁的模型」那一行：菜单本身、Claude Code 的模型列表（「改用碧琪模型」）、
-// 点进去后「Claude Code · 碧琪模型」的模型列表（「改回我自己的账号」），1440 / 820 × 日 / 夜。
+// 点进去后「Claude Code · 碧琪模型」的模型列表（「改回我自己的账号」）、Antigravity 的模型列表（灰掉的那一行和原因），
+// 1440 / 820 × 日 / 夜，共 16 张。拍之前鼠标挪开，拍的是不悬停的样子。
 // 页面照 tests/metre-engine-upstream-ui.test.mjs 搭：真的 Metre 皮肤和引擎样式、真的引擎和上游脚本，网关是假的（只在页面里回目录），
 // 不连网关、不碰用户会话。
 import fs from 'node:fs';
@@ -65,6 +66,7 @@ try {
       const chip = tab.locator('.agent-chat__composer-controls > .pk-eng-chip').first();
       await chip.waitFor({timeout: 15_000});
       const shot = async (state) => {
+        await tab.mouse.move(0, 0);
         await tab.waitForTimeout(300);
         const name = `127-${state}-${tag}`, file = name + '.png';
         const buf = await tab.screenshot({path: path.join(out, file)});
@@ -80,6 +82,11 @@ try {
       await tab.locator('.pk-eng-menu__item--upstream').first().click();
       await tab.locator('.pk-eng-menu__sub', {hasText: '碧琪模型'}).waitFor({timeout: 15_000});
       await shot('pinkie');
+      await tab.locator('.pk-eng-menu__back').first().click();
+      await tab.locator('.pk-eng-menu__group').first().waitFor({timeout: 15_000});
+      await tab.locator('.pk-eng-menu__item').filter({has: tab.locator('.pk-eng-menu__name', {hasText: /^Antigravity$/})}).first().click();
+      await tab.locator('.pk-eng-menu__item--upstream.pk-eng-menu__item--dim').waitFor({timeout: 15_000});
+      await shot('grey');
     } finally {
       await ctx.close();
     }
@@ -89,4 +96,4 @@ try {
 }
 fs.appendFileSync(path.join(out, 'shots.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
 console.log(`pr-shots #127: ${lines.length} 张 → ${out}`);
-if (lines.length !== 12) { console.error('expected 12 shots'); process.exit(1); }
+if (lines.length !== 16) { console.error('expected 16 shots'); process.exit(1); }
