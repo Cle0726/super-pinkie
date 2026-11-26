@@ -32,7 +32,9 @@ test('WebKit page.screenshot() returns non-empty sRGB PNG and supports clip on m
 
     const fullPath = path.join(outDir, 'full.png');
     const fullBuf = await page.screenshot({path: fullPath});
-    assert.ok(fullBuf.length > 500, `expected non-empty PNG buffer, got ${fullBuf.length} bytes`);
+    // The bug was a 0-byte buffer. Two flat colour blocks compress to ~470 bytes on Linux/Windows WebKit, so no size floor.
+    assert.ok(fullBuf.length > 0 && fullBuf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+      `expected a non-empty PNG buffer, got ${fullBuf.length} bytes`);
     assert.equal(fs.statSync(fullPath).size, fullBuf.length);
     const fullImg = decodePng(fullBuf);
     assert.equal(fullImg.width, 240);
