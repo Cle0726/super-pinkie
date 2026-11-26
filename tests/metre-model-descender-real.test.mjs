@@ -20,6 +20,9 @@ const BUTTONS = ['.pinkie-tray-btn', '.chat-controls__inline-select-trigger', '.
 // 反例：和皮肤那条规则同样的选择器，多三个 :not(#id) 压过它，只把行高改回 1。
 const REVERT = `html[data-laolao-mode="metre"]:not(#_r1):not(#_r2):not(#_r3) .agent-chat__input :is(${BUTTONS.join(', ')}) { line-height: 1 !important; }`;
 
+// 字体就绪（字形盒子跟字体走）后再等两帧，样式和排版都落定再量；不靠固定毫秒。
+const settle = async () => { await document.fonts.ready; await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); };
+
 // 返回 {checked, clipped:[…], model}：checked 是量过的文字段数，model 是模型名那段的量法，clipped 是被切掉的。
 const measure = (sels) => {
   const out = {checked: 0, clipped: [], model: null};
@@ -98,7 +101,12 @@ test('Metre 输入框下面一排按钮的字（含模型名的 g 下钩）不�
           assert.deepEqual(now.clipped, [], '没有一段字被父级在上下方向裁掉');
 
           await page.addStyleTag({content: REVERT});
-          await page.waitForTimeout(50);
+          // 不靠固定毫秒：等每个按钮的计算行高真变成 1（= 字号），再等字体就绪和两帧，才量。
+          await page.waitForFunction((sels) => {
+            const els = [...document.querySelectorAll(sels.map((s) => `.agent-chat__input ${s}`).join(', '))];
+            return els.length > 0 && els.every((el) => { const cs = getComputedStyle(el); return cs.lineHeight === '1' || Math.abs(parseFloat(cs.lineHeight) - parseFloat(cs.fontSize)) < 0.01; });
+          }, BUTTONS, {timeout: 5_000});
+          await page.evaluate(settle);
           const reverted = await page.evaluate(measure, BUTTONS);
           t.diagnostic(`${width} ${theme} 行高压回 1 ${JSON.stringify(reverted.model)}`);
           assert.ok(reverted.model?.clip, `反例：行高压回 1 时必须量出模型名被裁（${JSON.stringify(reverted.model)}）`);
