@@ -160,5 +160,17 @@
     "metric": "lines",
     "value": 50,
     "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board-data.js",
+    "metric": "lines",
+    "value": 541,
+    "reason": "macdev5 G4 规则入口（11-26）：总控台「项目记忆」区多一行「项目规矩」，用已有的 pinkie.fs.stat 列出 project-brief.mjs 读给模型的规则文件，点开交给工作台；和项目记忆同一处请求、同一块，拆到新文件反而要多登记 head / regions 两处。没有新全局、观察器或轮询（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board.css",
+    "metric": "lines",
+    "value": 504,
+    "reason": "macdev5 G4 规则入口（11-26）：「项目规矩」一行的样式，只用 .pk-mb-rules 前缀，跟在项目记忆样式后面，沿用 --metre-* 变量，没有 !important（B 类，只允许本次实测值）。"
   }
 ]

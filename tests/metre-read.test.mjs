@@ -175,7 +175,7 @@ test('in other modes there is no read-aloud button', {timeout: 30_000}, async t 
   const browser = await launch(t); if (!browser) return;
   try {
     const tab = await open(browser, 'chat');
-    await tab.waitForTimeout(300);
+    await tab.waitForTimeout(300);   // 保留：断言别的模式「没有朗读键」，没有能等的条件
     assert.equal(await tab.locator('.pk-mread').count(), 0);
   } finally { await browser.close(); }
 });
