@@ -3,7 +3,8 @@
  * 会话名优先：小字的弹性基准是 0，只吃会话名（和引擎标签）用剩的地方，会话名不因为它变短。
  * 剩的地方不到 6 个字符就整个不显示：小字是一行高 20px 的换行盒，前面垫一个零宽的块，
  * 正文弹性基准 0、最少 6ch、最多自身宽，放不下 6ch 就折到第二行被裁掉，不会出现「b…」。
- * 和会话名之间的 6px 是正文自己的外边距（这一行的列间距归零），所以小字折掉时外框宽 0，会话名一像素不少。 */
+ * 和会话名之间的 6px、和右边时间之间的 8px 都是正文自己的外边距（这一行的列间距归零），所以小字折掉时外框宽 0，会话名一像素不少。
+ * 右边 8px：时间那一栏和链接之间没有间距，小字顶满时会和「刚刚」贴住（09:17Z 截图 Windows 820 只剩 3px）。 */
 html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt) { column-gap: 0; }
 html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt)::after { margin-inline-start: 6px; }
 html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt {
@@ -23,7 +24,7 @@ html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt__text {
   flex: 1 1 0px;
   min-width: 6ch;
   max-width: max-content;
-  margin-inline-start: 6px;
+  margin-inline: 6px 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
