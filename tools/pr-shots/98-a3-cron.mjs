@@ -40,7 +40,7 @@ const initScript = () => {
     'cron.runs': (p) => { const t0 = Date.now(); const entries = p.id === 'j2'
       ? [{jobId: 'j2', status: 'error', runAtMs: t0 - 18 * 60000, ts: t0 - 18 * 60000, error: 'tests/metre-board.test.mjs 第 3 条失败：期望 0 实际 2。'},
         {jobId: 'j2', status: 'ok', runAtMs: t0 - 48 * 60000, ts: t0 - 48 * 60000, summary: 'CI 全绿。'}]
-      : [{jobId: p.id || 'j1', status: 'ok', runAtMs: t0 - 19 * 3600e3, ts: t0 - 19 * 3600e3, summary: '今天多云转小雨，记得带伞，薄外套就够。'}];
+      : [{jobId: p.id || 'j1', status: 'ok', runAtMs: t0 - 4 * 3600e3, ts: t0 - 4 * 3600e3, summary: '今天多云转小雨，记得带伞，薄外套就够。'}];
       return {entries, total: entries.length, offset: 0, limit: 50, hasMore: false, nextOffset: null}; },
     'cron.run': () => ({ok: true}), 'cron.update': () => ({ok: true}), 'cron.add': () => ({ok: true}), 'cron.remove': () => ({ok: true}),
   };
