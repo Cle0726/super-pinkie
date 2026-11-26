@@ -152,7 +152,7 @@ test('#98 real page: /cron Run / Edit / ••• / Refresh borders use --pk-a3-
           return n;
         }, RULE);
         assert.equal(removed, 2, `反例：页面上没找到那两条新规则（找到 ${removed} 条）`);
-        await page.waitForTimeout(600);
+        await page.waitForTimeout(600);   // 保留：删规则后等皮肤颜色过渡走完，过渡没有可观察的结束标记
         const bad = (await page.evaluate(readEdges)).items;
         console.log(`ℹ day without the new rule: ${fmt(bad)}`);
         assert.ok(bad.length >= 10, `反例：删掉后量不到按键 — ${fmt(bad)}`);
