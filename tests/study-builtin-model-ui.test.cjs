@@ -87,7 +87,7 @@ test('load errors can be retried and closing during a slow request never reopens
     await page.keyboard.press('Escape');
     assert.equal(await dialog.count(), 0);
     release();
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(100);   // 保留：断言放行后对话框「不再弹出」，没有能等的条件
     assert.equal(await dialog.count(), 0);
   });
 });
