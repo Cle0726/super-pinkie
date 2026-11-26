@@ -29,6 +29,21 @@ enum DesktopAppEntryDriver {
             print(String(data: data, encoding: .utf8) ?? "{}")
             return
         }
+        // `driver version` tells two builds apart (the test compiles one with -D PINKIE_DRIVER_V2 as the "upgraded" Launcher).
+        if args == ["version"] {
+            #if PINKIE_DRIVER_V2
+            print("v2")
+            #else
+            print("v1")
+            #endif
+            return
+        }
+        // `driver refresh` swaps this driver in as the Launcher of every installed work, as Super Pinkie does at start.
+        if args == ["refresh"] {
+            let data = (try? JSONSerialization.data(withJSONObject: PinkieAppWindow.refreshInstalled())) ?? Data()
+            print(String(data: data, encoding: .utf8) ?? "{}")
+            return
+        }
         guard let id = PinkieAppWindow.requestedAppId(CommandLine.arguments) else { exit(3) }
         let marker = PinkieAppWindow.stateRoot.appendingPathComponent("launched-\(id).txt")
         try? (Bundle.main.bundlePath + "\n").write(to: marker, atomically: true, encoding: .utf8)
