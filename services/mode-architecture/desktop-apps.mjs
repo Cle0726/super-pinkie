@@ -331,8 +331,19 @@ export class DesktopApps {
         fs.writeFileSync(path.join(staging, 'icon.ico'), icoFromPng(png));
         fs.writeFileSync(path.join(staging, 'icon.icns'), icnsFromPng(png));
       }
-      fs.rmSync(dir, {recursive: true, force: true});
-      fs.renameSync(staging, dir);
+      // 换目录不先删旧版本：旧目录先挪成备份，新版本挪进来之后才删备份；挪不进来就把备份挪回去（回滚出错不盖住原错误）。
+      const backup = fs.existsSync(dir) ? `${dir}.backup-${process.pid}-${this.now()}` : '';
+      if (backup) fs.renameSync(dir, backup);
+      try {
+        fs.renameSync(staging, dir);
+      } catch (error) {
+        if (backup) {
+          try { fs.rmSync(dir, {recursive: true, force: true}); } catch { /* 尽力清掉挪了一半的目录 */ }
+          try { fs.renameSync(backup, dir); } catch { /* 回滚尽力而为，抛原来的错误 */ }
+        }
+        throw error;
+      }
+      if (backup) try { fs.rmSync(backup, {recursive: true, force: true}); } catch { /* 新版本已就位，备份删不掉不算失败 */ }
     } catch (error) {
       fs.rmSync(staging, {recursive: true, force: true});
       throw error;

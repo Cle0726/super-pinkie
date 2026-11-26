@@ -416,3 +416,38 @@ test('A8 网关方法：pinkie.apps.* 都在，出错回 {ok:false} 不抛', asy
   assert.equal(bad.ok, false);
   assert.match(bad.error, /作品库里没有/);
 });
+
+test('A16 重装换目录是原子的：新版本挪不进来时旧版本原样留着、记录仍是旧版本、不留暂存 / 备份目录；恢复后能正常装上新版本', () => {
+  const {dir, record, apps} = setup();
+  const item = record('swap.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '换目录'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  assert.match(v1, /v1/);
+  record('swap.html', '<p>v2</p>');
+  const leftovers = () => fs.readdirSync(path.join(dir, 'apps')).filter(name => /staging|backup/.test(name));
+  // 第一次 renameSync 是旧目录 → 备份（放行），第二次是暂存 → 应用目录（让它失败），之后的回滚照常。
+  const original = fs.renameSync;
+  let calls = 0;
+  fs.renameSync = (...args) => {
+    calls += 1;
+    if (calls === 2) throw Object.assign(new Error('模拟：新版本挪不进来'), {code: 'EPERM'});
+    return original(...args);
+  };
+  try {
+    assert.throws(() => apps.install({id: item.id, name: '换目录'}), /模拟：新版本挪不进来/);
+  } finally {
+    fs.renameSync = original;
+  }
+  assert.ok(calls >= 2, '确实走到了暂存 → 应用目录那一步');
+  assert.equal(fs.readFileSync(first.app.entry, 'utf8'), v1, '旧版本 index.html 原样还在');
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录仍是旧版本');
+  assert.equal(apps.list().apps[0].version, 1);
+  assert.deepEqual(leftovers(), [], '失败后不留暂存 / 备份目录');
+  // 反例：恢复之后照常装上新版本（也说明回滚留下的是干净状态）。
+  const second = apps.install({id: item.id, name: '换目录'});
+  assert.equal(second.replaced, true);
+  assert.equal(second.app.version, 2);
+  assert.match(fs.readFileSync(second.app.entry, 'utf8'), /v2/);
+  assert.doesNotMatch(fs.readFileSync(second.app.entry, 'utf8'), /v1/);
+  assert.deepEqual(leftovers(), [], '成功后也不留暂存 / 备份目录');
+});
