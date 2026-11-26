@@ -173,7 +173,12 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
           || Boolean(document.querySelector('.sidebar.sidebar--collapsed')),
         {timeout: 5_000},
       );
-      await page.waitForTimeout(260);
+      // 等侧栏收起的宽度过渡放完：轮询到 .chat-main 变宽超过 160px 为止；等不到不在这里报错，交给下面原有断言给出原来的失败信息。
+      await page.waitForFunction(
+        (w) => (document.querySelector('.chat-main')?.getBoundingClientRect().width || 0) > w + 160,
+        before.mainW,
+        {timeout: 5_000},
+      ).catch(() => {});
       const after = await page.evaluate(() => {
         const main = document.querySelector('.chat-main');
         return {mainW: main ? main.getBoundingClientRect().width : 0};
@@ -349,7 +354,13 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       const trigger = page.locator(triggerSel).first();
       await trigger.waitFor({state: 'visible', timeout: 10_000});
       await trigger.click();
-      await page.waitForTimeout(150);
+      // 等弹层挂到 body 上（details 的 toggle 事件是异步的，laolao-context-compact.js 在那里才加 is-floating）
+      // 且它自己的 lcv-pop 入场动画（.18s，带 translate/scale，会影响量到的矩形）放完，再量位置。
+      // 等不到也不在这里报错：下面原有断言会给出原来的失败信息。
+      await page.waitForFunction(() => {
+        const el = document.querySelector('.laolao-context-viewer__popover.is-floating');
+        return Boolean(el) && el.getAnimations().every((a) => a.playState !== 'running');
+      }, null, {timeout: 5_000}).catch(() => {});
 
       const pop = await page.evaluate(() => {
         const el = document.querySelector('.laolao-context-viewer__popover.is-floating, details.laolao-context-viewer[open] .laolao-context-viewer__popover');
@@ -506,7 +517,10 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       assert.equal(await runRow.getAttribute('aria-expanded'), 'false', 'finished tool group must start folded');
       await runRow.click();
       await page.waitForFunction((el) => el.getAttribute('aria-expanded') === 'true', await runRow.elementHandle(), {timeout: 5_000});
-      await page.waitForTimeout(150);
+      // 下面几处展开 / 收起：轮询到高度满足和原有断言同一个条件为止（展开、收起可能带过渡）；
+      // 等不到不在这里报错，交给原有断言给出原来的失败信息。
+      const settle = async (loc, fn, arg) => page.waitForFunction(fn, [await loc.elementHandle(), arg], {timeout: 5_000}).catch(() => {});
+      await settle(group, ([el, h]) => el.getBoundingClientRect().height > h + 10, foldedH);
       const openH = await groupH();
       assert.ok(openH > foldedH + 10, `clicking real button.cle-run must unfold the tool group: folded=${foldedH}, open=${openH}`);
 
@@ -515,7 +529,7 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       await summaryBtn.waitFor({state: 'visible', timeout: 5_000});
       const beforeH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
       await summaryBtn.click();
-      await page.waitForTimeout(150);
+      await settle(toolRow, ([el, h]) => el.getBoundingClientRect().height > h + 10, beforeH);
       const expandedH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
       assert.ok(
         expandedH > beforeH + 10,
@@ -524,14 +538,15 @@ test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', 
       const detailRight = await toolRow.evaluate((el) => el.getBoundingClientRect().right);
       assert.ok(detailRight <= layout.threadRight + 2, `expanded tool detail overflows .chat-thread: ${detailRight} > ${layout.threadRight}`);
       await summaryBtn.click();
-      await page.waitForTimeout(150);
+      await settle(toolRow, ([el, h]) => Math.abs(el.getBoundingClientRect().height - h) <= 2, beforeH);
       const collapsedH = await toolRow.evaluate((el) => el.getBoundingClientRect().height);
       assert.ok(
         Math.abs(collapsedH - beforeH) <= 2,
         `clicking real button.chat-tool-msg-summary again must collapse back: before=${beforeH}, collapsed=${collapsedH}`,
       );
       await runRow.click();
-      await page.waitForTimeout(150);
+      await settle(group, ([el, h]) => el.querySelector('button.cle-run')?.getAttribute('aria-expanded') === 'false'
+        && Math.abs(el.getBoundingClientRect().height - h) <= 2, foldedH);
       assert.equal(await runRow.getAttribute('aria-expanded'), 'false', 'clicking button.cle-run again must fold the group');
       const refoldedH = await groupH();
       assert.ok(Math.abs(refoldedH - foldedH) <= 2, `tool group must fold back: folded=${foldedH}, refolded=${refoldedH}`);

@@ -6,13 +6,17 @@
        Any request with a large context needs 15-25s for its first byte, so every
        attempt was cut at 8s and 64 retries all died — big sessions got a fake
        "upstream unavailable" 503 while small requests looked fine. Pin generous
-       values here so a reinstall can never bring that wall back. -->
+       values here so a reinstall can never bring that wall back.
+       2026-11-26: 60 / 180 was still too short. hy4flash-free long-context replies
+       take 76-90s for their first byte, so each attempt was cut at 60s and the
+       budget ran out on retries. 180 / 300 covers that; a Feishu reply is capped
+       at 300s, so a longer budget buys nothing. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>UR_PROXY_FIRST_BYTE_TIMEOUT</key>
-    <string>60</string>
-    <key>UR_PROXY_RETRY_BUDGET</key>
     <string>180</string>
+    <key>UR_PROXY_RETRY_BUDGET</key>
+    <string>300</string>
   </dict>
   <key>Label</key>
   <string>com.openclaw.mm-retry-proxy</string>
