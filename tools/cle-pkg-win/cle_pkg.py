@@ -343,6 +343,20 @@ def verify_channel(app):
         raise Failed(f"{app} 的 build-info channel 是 {info.get('channel')!r}，不是 'cle'")
 
 
+def probe_rename(path):
+    """原地改名再改回来：目录里有文件被占用（App、网关在跑）就在这里失败，没有任何副作用。"""
+    path = Path(path)
+    probe = path.with_name(f"{path.name}.cle-probe-{stamp_now()}")
+    try:
+        os.replace(lp(path), lp(probe))
+    except OSError as error:
+        raise Failed(f"挪不动 {path}（App 或网关还在跑？先退出再来）：{error}")
+    try:
+        os.replace(lp(probe), lp(path))
+    except OSError as error:
+        raise Failed(f"{path} 试改名后改不回来，现在叫 {probe}，请手动改回：{error}")
+
+
 def move_away(path, dest):
     """先原地改名（被占用就干净地失败），再挪进 after-install；不删。"""
     path, dest = Path(path), Path(dest)
@@ -530,6 +544,9 @@ def cmd_install(s, run, tasks, reg, args):
     stamp = stamp_now()
     staging = s.app_dir.with_name(s.app_dir.name + ".cle-staging")
     replaced = s.app_dir.parent / unique(s.app_dir.parent, f"{s.app_dir.name}.cle-replaced-{stamp}")
+    if s.app_dir.exists():
+        # 先试一次原地改名再改回：App 被占用就在停任务、放 1 GB 包之前当场失败，什么都没碰。
+        run(f"试一下 {s.app_dir} 能不能改名（被占用就当场停，不停任务、不放包）", lambda: probe_rename(s.app_dir))
     for name in [n for n in s.tasks if tasks.export(n) is not None]:
         run(f"停计划任务 {name}（它按自己的触发器会再起来）", lambda name=name: tasks.end(name))
     if staging.exists():

@@ -196,6 +196,22 @@ class ClePkgWinTest(unittest.TestCase):
         self.assertEqual(self.channel(), "release")
         self.assertFalse(self.app.with_name("SuperPinkie.cle-staging").exists())
 
+    @unittest.skipUnless(os.name == "nt", "只有 Windows 会因为目录里有打开的文件拒绝改名")
+    def test_locked_app_fails_before_stopping_tasks_or_unpacking(self):
+        self.seed_old_install()
+        self.assert_ok("backup-current")
+        held = open(self.app / "_internal" / "build-info.json", "rb")  # 模拟 App 还在跑
+        try:
+            rc, out = self.run_tool("install-cle", "--yes")
+        finally:
+            held.close()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("挪不动", out)
+        self.assertEqual(self.channel(), "release")
+        self.assertEqual(sorted(p.name for p in self.app.parent.iterdir()), ["SuperPinkie"])  # 没有 staging / probe 残留
+        for verb in ("/End", "/Delete", "/Create"):
+            self.assertNotIn(verb, self.calls())
+
     # ── A：原来没装 App ──
 
     def test_no_app_before_backup_install_restore_moves_new_app_aside(self):
