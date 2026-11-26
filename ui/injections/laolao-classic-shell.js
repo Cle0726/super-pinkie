@@ -388,16 +388,16 @@
 
   const render = () => {
     pending = false;
-    const shell = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
-    if (!shell) return;
+    /* 17：upstream 只在聊天页加 shell--chat；重新载入的 /cron 等正式页也做侧栏几步，聊天页专属的只在聊天页做，引导 / 启动中不动。 */
+    const chat = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
+    const page = document.querySelector("openclaw-app-shell .shell, .shell");
+    if (!chat && (!page || /\bshell--(?:onboarding|booting)\b/.test(page.className || ""))) return;
     if (document.documentElement.getAttribute?.("data-laolao-classic-shell") !== "1") document.documentElement.setAttribute("data-laolao-classic-shell", "1");
-    ensureBreadcrumbs();
+    if (chat) ensureBreadcrumbs();
     ensureNavigation();
     ensureFooterBrand();
     ensureFooterMenu();
-    ensureComposerBrand();
-    observeRailMount();
-    ensureRail();
+    if (chat) { ensureComposerBrand(); observeRailMount(); ensureRail(); }
   };
 
   const schedule = () => {
