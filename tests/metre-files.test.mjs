@@ -116,7 +116,8 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
       if (method === 'pinkie.fs.list') return {entries: []};
       // 后端说了算：项目外只读（这里按非 Metre 的规则答，看前端是不是照抄 readOnly，不自己判）
       if (method === 'pinkie.fs.read') return {kind: 'text', content: 'text of ' + params.path, path: params.path, readOnly: String(params.path).startsWith('/'), size: 10, mtimeMs: 1};
-      if (method === 'pinkie.fs.gitStatus') return git ? {repo: true, branch: 'main', changes: []} : {repo: false};
+      if (method === 'pinkie.fs.git') return git ? {repo: true, branch: 'main', changes: []} : {repo: false};
+      if (method === 'pinkie.fs.stat') return {stats: (params.paths || []).map(p => ({path: p, exists: true, kind: 'file', size: 10, mtimeMs: 1}))};
       if (method === 'pinkie.fs.gitShow') return {content: 'old', exists: true};
       return {};
     }};
@@ -159,6 +160,16 @@ test('in Metre: one 文件 row per turn; 打开 opens a workbench tab with the b
     // 离开 Metre 整行拿掉
     await tab.evaluate(() => { document.documentElement.setAttribute('data-laolao-mode', 'chat'); window.dispatchEvent(new Event('laolao:modechange')); });
     await tab.waitForFunction(() => !document.querySelector('.pk-mfile-row'));
+  } finally { await tab.close(); }
+});
+
+test('改动 clicked first, before git status has loaded, still opens the diff (pr-shots 45789320196 caught this)', {timeout: 60_000}, async t => {
+  const browser = await launch(t); if (!browser) return;
+  const tab = await open(browser, 'metre');
+  try {
+    await tab.locator('#g11 .pk-mfile-chip[data-path="/proj/README.md"]').click({timeout: 5000});
+    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff'), null, {timeout: 10_000});
+    assert.ok((await tab.evaluate(() => window.calls)).some(([m]) => m === 'pinkie.fs.git'), 'diff asks for git status itself when it is not known yet');
   } finally { await tab.close(); }
 });
 

@@ -45,7 +45,8 @@ const answers = {
   'pinkie.fs.read': (p) => { const r = rel(p.path); const outside = String(p.path).startsWith('/') && !String(p.path).startsWith('/proj/');
     const content = FILES[r] ? FILES[r][1] : outside ? '127.0.0.1 localhost\\n::1 localhost\\n' : '';
     return {kind: 'text', content, path: p.path, readOnly: outside, size: content.length, mtimeMs: 1}; },
-  'pinkie.fs.gitStatus': () => ({repo: true, branch: 'main', changes: [{path: 'README.md', status: 'M'}, {path: 'src/app.js', status: 'M'}]}),
+  'pinkie.fs.stat': (p) => ({stats: (p.paths || []).map((x) => ({path: x, exists: true, kind: 'file', size: 10, mtimeMs: 1}))}),
+  'pinkie.fs.git': () => ({repo: true, branch: 'main', changes: [{path: 'README.md', status: 'M'}, {path: 'src/app.js', status: 'M'}]}),
   'pinkie.fs.gitShow': (p) => { const r = rel(p.path); return FILES[r] ? {content: FILES[r][0], exists: true} : {content: '', exists: false}; },
 };
 const patch = (Cls) => {
@@ -105,6 +106,9 @@ async function cell(theme, width) {
     await shot(page, 'r5-open', theme, width, {opened});
     report.push({theme, width, step: 'open', opened, ...(await benchState(page))});
 
+    // 820 时工作台是紧凑的「代码 / 对话」两页，打开以后停在代码页、盖住对话；照用户的做法先切回对话再点下一个签条。
+    const narrow = await page.evaluate(() => 'pkWbNarrow' in document.documentElement.dataset);
+    if (narrow) { await page.getByRole('button', {name: '对话', exact: true}).first().click({timeout: 5000}).catch(() => {}); await page.waitForTimeout(400); }
     await page.locator('.pk-mfile-chip[data-path="/proj/README.md"]').first().click({timeout: 5000}).catch(() => {});
     const diffed = await page.waitForFunction(() => (window.__pinkieWorkbench?.state?.tabs || []).some((x) => x.kind === 'diff'), null, {timeout: 20_000})
       .then(() => true, () => false);
