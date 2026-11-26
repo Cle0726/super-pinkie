@@ -87,8 +87,11 @@ function runMacInstaller() {
 }
 
 const patchOf = (call) => (call.tool === 'node' ? call.args.split(' ')[0].match(/\/patch\/((?:re)?apply-[a-z0-9-]+\.mjs)$/)?.[1] : undefined);
-const isSkinInstall = (call, ui) => call.tool === 'python' && /\/tools\/ui-parity\/bundle\.py install /.test(call.args)
-  && call.args.endsWith(`--control-ui ${ui}`);
+// Windows 上 ui 来自 path.join（全反斜杠），脚本里是 "$OPENCLAW_ROOT/dist/control-ui"（反斜杠根 + 正斜杠尾），
+// 逐字比永远对不上。两边先统一成 / 再比，比较本身不放宽。
+const slash = (p) => p.replaceAll('\\', '/');
+const isSkinInstall = (call, ui) => call.tool === 'python' && /\/tools\/ui-parity\/bundle\.py install /.test(slash(call.args))
+  && slash(call.args).endsWith(`--control-ui ${slash(ui)}`);
 
 let macRun;
 const mac = () => (macRun ??= runMacInstaller());
@@ -119,6 +122,22 @@ test('apply-theme.sh 在全部运行时补丁之后才用 bundle.py 装最终皮
   assert.ok(lastSkin >= 0, 'apply-theme.sh 没有对 $OPENCLAW_ROOT/dist/control-ui 跑 bundle.py install');
   assert.ok(lastSkin > lastPatch, `最终皮肤（第 ${lastSkin} 次调用）早于最后一个补丁（第 ${lastPatch} 次调用），补丁重写的入口会盖掉皮肤`);
   assert.equal(title, '超級碧琪', '装皮肤后入口标题应改成 超級碧琪');
+});
+
+test('isSkinInstall：Windows 斜杠混用的路径能认出，不相关的调用不误判', () => {
+  const ui = path.win32.join('D:\\a\\tmp\\openclaw', 'dist/control-ui');
+  const py = (args) => ({tool: 'python', env: '', args});
+  const hit = py('D:\\a\\repo/tools/ui-parity/bundle.py install --root D:\\a\\repo --control-ui D:\\a\\tmp\\openclaw/dist/control-ui');
+  // 复发：逐字比时 windows-checks 上就是这样对不上。
+  assert.equal(hit.args.endsWith(`--control-ui ${ui}`), false);
+  assert.ok(isSkinInstall(hit, ui), '反斜杠根 + /dist/control-ui 的装皮肤调用没认出来');
+  assert.ok(isSkinInstall(py('/r/tools/ui-parity/bundle.py install --root /r --control-ui /t/openclaw/dist/control-ui'), '/t/openclaw/dist/control-ui'));
+  for (const miss of [
+    py('D:\\a\\repo/tools/ui-parity/bundle.py install --root D:\\a\\repo --control-ui D:\\a\\tmp\\other/dist/control-ui'),
+    py('D:\\a\\repo/tools/ui-parity/bundle.py install --root D:\\a\\repo --control-ui D:\\a\\tmp\\openclaw/dist/control-ui-old'),
+    py('D:\\a\\repo/tools/ui-parity/bundle.py build --root D:\\a\\repo --control-ui D:\\a\\tmp\\openclaw/dist/control-ui'),
+    {tool: 'node', env: '', args: 'D:\\a\\repo/tools/ui-parity/bundle.py install --control-ui D:\\a\\tmp\\openclaw/dist/control-ui'},
+  ]) assert.equal(isSkinInstall(miss, ui), false, `误判成装皮肤：${miss.tool} ${miss.args}`);
 });
 
 /* ── Windows：apply-theme.ps1 静态断言（本机无 pwsh） ───────────────────── */
