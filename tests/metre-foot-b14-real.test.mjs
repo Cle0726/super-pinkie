@@ -1,7 +1,7 @@
 // B14（backlog，uireview #164 记）：Metre 侧栏底栏的模式黑卡和连接方灯。
 // 1. 方灯比黑卡中心高约 10px：卡是从底往上放的（bottom 13px、高 38px），灯却写死 top 16px（#164 shots.jsonl：卡 y849..887 中心 868，灯 y853..863 中心 858）。
 //    改成 top 26px，灯的竖直中心和卡的竖直中心对齐。
-// 2. 日间卡里的 ◇（上下箭头）偏暗：◇ 是 mask 图形，颜色取 background（--metre-muted，日间 #77736B，在 #131312 黑卡上不到 3:1）；
+// 2. 日间卡里的 ◇（上下箭头）偏暗：◇ 是 mask 图形，颜色取 background（--metre-muted，日间 #77736B，在 #131312 黑卡上实测 3.94:1，过了图形 3:1 但看着发暗；按文字 4.5:1 要求）；
 //    旧规则只改了 color，mask 用不上。改成 background 也用浅钴蓝 #8496E6（卡日夜同一张，◇ 日夜同色）。
 // 真实安装的 OpenClaw Control UI + 碧琪注入，metre-board 场景 1440 宽，日 / 夜都量；反例：删掉这两处新声明，日间两条都必须不过。
 import assert from 'node:assert/strict';
@@ -47,7 +47,7 @@ function readFoot() {
 const LAMP_SEL = 'aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status';
 const ARROW_SEL = 'aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__arrow';
 
-test('B14 real page: Metre footer light is vertically centred on the mode card and the ◇ reads at ≥ 3:1 on the card, day and night; reverting the two declarations breaks both in day', async (t) => {
+test('B14 real page: Metre footer light is vertically centred on the mode card and the ◇ reads at ≥ 4.5:1 on the card, day and night; reverting the two declarations breaks both in day', async (t) => {
   let installed; let server; let browser;
   t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
   installed = installRealControlUi({repoRoot: REPO_ROOT});
@@ -67,7 +67,7 @@ test('B14 real page: Metre footer light is vertically centred on the mode card a
       assert.ok(m.arrowShown, `${theme}: ◇ 没显示`);
       assert.ok(m.lampRightOfCard, `${theme}: 方灯压到卡上了`);
       assert.ok(Math.abs(m.lampMid - m.cardMid) <= 2, `${theme}: 方灯中心 y${m.lampMid} 和卡中心 y${m.cardMid} 差 ${(m.lampMid - m.cardMid).toFixed(1)}px`);
-      assert.ok(m.ratio >= 3, `${theme}: ◇ ${m.fill} 在卡 ${m.cardBg} 上只有 ${m.ratio.toFixed(2)}:1`);
+      assert.ok(m.ratio >= 4.5, `${theme}: ◇ ${m.fill} 在卡 ${m.cardBg} 上只有 ${m.ratio.toFixed(2)}:1`);
 
       if (theme === 'day') {
         // 反例：把两处新声明删掉（方灯回到 top 16px、◇ 回到 --metre-muted），日间两条都要不过
@@ -88,7 +88,7 @@ test('B14 real page: Metre footer light is vertically centred on the mode card a
         const bad = await page.evaluate(readFoot);
         console.log(`ℹ day without the fix: ${JSON.stringify(bad)}`);
         assert.ok(Math.abs(bad.lampMid - bad.cardMid) >= 6, `反例没生效：方灯回到 top 16px 后仍和卡中心对齐（差 ${(bad.lampMid - bad.cardMid).toFixed(1)}px）`);
-        assert.ok(bad.ratio < 3, `反例没生效：◇ 回到 --metre-muted 后仍 ≥ 3:1（${bad.ratio.toFixed(2)}）`);
+        assert.ok(bad.ratio < 4.5, `反例没生效：◇ 回到 --metre-muted 后仍 ≥ 4.5:1（${bad.ratio.toFixed(2)}）`);
       }
     } finally {
       await context.close();
