@@ -66,10 +66,12 @@ test('没勾读文件：影子树里的选择框、showPicker 和三个选择器
 
 test('守卫跟 CSP 一起放在作品脚本前面；勾了读文件就不插这段', () => {
   const html = withPolicy('<html><head><title>t</title></head><body><script>box.showPicker()</script></body></html>');
-  const guard = html.indexOf('composedPath');
+  // 导航守卫（navGuardScript）也用 composedPath 且总会插入，这里只认文件守卫本身。
+  const guard = html.indexOf(FILE_GUARD);
   assert.ok(guard > html.indexOf('Content-Security-Policy') && guard < html.indexOf('box.showPicker()'));
   assert.equal(html.includes(FILE_GUARD), true);
   const opened = withPolicy('<html><head><title>t</title></head></html>', {files: true});
-  assert.equal(opened.includes('composedPath'), false);
+  assert.equal(opened.includes(FILE_GUARD), false);
+  assert.equal(opened.includes('没有读文件的权限'), false);
   assert.equal(opened.includes('showPicker'), false);
 });
