@@ -266,6 +266,7 @@ $pyInstallerCommonArgs = @(
     "--paths", "app",
     "--hidden-import", "webview.platforms.edgechromium",
     "--hidden-import", "win32com.client",
+    "--hidden-import", "win32com.shell.shell",
     "--hidden-import", "pythoncom",
     "--hidden-import", "pywintypes",
     "--hidden-import", "sqlite3",
