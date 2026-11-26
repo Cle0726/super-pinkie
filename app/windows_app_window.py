@@ -81,10 +81,55 @@ def launch_command(app_id, executable=None, frozen=None, script=None):
     return executable, f'"{script}" --app-window {app_id}'
 
 
-def _wscript_shell():
-    import win32com.client
+class _ShellLink:
+    """One .lnk written through IShellLinkW, with the same properties and Save()
+    as WScript.Shell's shortcut object.
 
-    return win32com.client.Dispatch("WScript.Shell")
+    WScript.Shell is not used: it converts paths through the ANSI code page, so on
+    a non-Chinese Windows (code page 1252) setting TargetPath to 超級碧琪.exe fails
+    with E_INVALIDARG, and saving a link named 单词小游戏.lnk fails with
+    ERROR_INVALID_NAME. IShellLinkW and IPersistFile take UTF-16 throughout."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.TargetPath = self.Arguments = self.WorkingDirectory = self.IconLocation = self.Description = ""
+
+    def Save(self):
+        import pythoncom
+        from win32com.shell import shell
+
+        try:  # the bridge may call us on a thread that has not entered COM yet
+            pythoncom.CoInitialize()
+        except pythoncom.com_error:
+            pass  # already in COM with another apartment model: fine for an in-proc ShellLink
+        link = pythoncom.CoCreateInstance(shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink)
+        link.SetPath(self.TargetPath)
+        link.SetArguments(self.Arguments)
+        link.SetWorkingDirectory(self.WorkingDirectory)
+        link.SetDescription(self.Description)
+        if self.IconLocation:
+            icon, _, index = self.IconLocation.rpartition(",")
+            if not icon or not index.strip().lstrip("-").isdigit():
+                icon, index = self.IconLocation, "0"
+            link.SetIconLocation(icon, int(index))
+        link.QueryInterface(pythoncom.IID_IPersistFile).Save(self.path, 0)
+
+
+class _UnicodeShell:
+    """The two WScript.Shell calls AppShortcuts makes, both Unicode-safe."""
+
+    def SpecialFolders(self, name):
+        from win32com.shell import shell, shellcon
+
+        csidl = {"Programs": shellcon.CSIDL_PROGRAMS, "Desktop": shellcon.CSIDL_DESKTOPDIRECTORY}[name]
+        return shell.SHGetFolderPath(0, csidl, None, 0)
+
+    def CreateShortcut(self, path):
+        return _ShellLink(path)
+
+
+def _wscript_shell():
+    return _UnicodeShell()
 
 
 class AppShortcuts:

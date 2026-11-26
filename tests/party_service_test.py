@@ -462,9 +462,11 @@ class PartyTests(unittest.TestCase):
         with patch.object(self.manager, 'command', return_value=[sys.executable, '-c', 'import time;time.sleep(30)']):
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 future = pool.submit(self.manager.execute, task, self.a)
-                for _ in range(100):
-                    if task_id in self.manager.processes:
-                        break
+                deadline = time.monotonic() + 5
+                while task_id not in self.manager.processes:
+                    if future.done() or time.monotonic() >= deadline:
+                        self.fail('execute() never registered the running process: %r' % (
+                            future.exception() if future.done() else 'timed out after 5s'))
                     time.sleep(.01)
                 process = self.manager.processes[task_id]
                 self.manager.cancel(self.a['id'], task_id)
