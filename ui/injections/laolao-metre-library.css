@@ -1,0 +1,46 @@
+/* laolao-metre-library —— R5 ③：工作台不在时的只读预览面板（laolao-metre-library.js）。
+ * 日夜都走 Metre 变量（--metre-surface / --metre-line-strong / --metre-text），设计稿第二节 5；只在 Metre 里有。 */
+html[data-laolao-mode="metre"] .pk-mlib-preview {
+  position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center;
+  padding: 24px; box-sizing: border-box; background: color-mix(in srgb, var(--metre-text, #1F1E1D) 38%, transparent);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__box {
+  display: flex; flex-direction: column; width: min(860px, 100%); max-height: min(86vh, 100%); min-height: 0;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 10px; overflow: hidden;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__head {
+  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px;
+  border-bottom: 1px solid var(--metre-line, #E8E6DC);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 13px/1.3 var(--metre-mono, ui-monospace, monospace);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__tag {
+  flex: none; padding: 2px 6px; border-radius: 4px; font-size: 11px; line-height: 1.2;
+  border: 1px solid var(--metre-line-strong, #D9D6CC);
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__close {
+  margin-left: auto; flex: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); background: var(--metre-surface, #FFFFFF);
+  color: var(--metre-text, #1F1E1D); font: 400 16px/1 inherit;
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__close:hover { background: var(--metre-hover, #F0EEE6); }
+html[data-laolao-mode="metre"] .pk-mlib-preview__close:focus-visible,
+html[data-laolao-mode="metre"] .pk-mlib-preview__text:focus-visible { outline: 2px solid var(--metre-accent, #C96442); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-mlib-preview__note {
+  margin: 0; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--metre-line, #E8E6DC);
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__body { min-height: 0; overflow: auto; }
+html[data-laolao-mode="metre"] .pk-mlib-preview__text {
+  margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 400 12.5px/1.55 var(--metre-mono, ui-monospace, monospace); color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__image { display: block; max-width: 100%; height: auto; margin: 12px auto; }
+@media (max-width: 600px) {
+  html[data-laolao-mode="metre"] .pk-mlib-preview { padding: 10px; }
+  html[data-laolao-mode="metre"] .pk-mlib-preview__box { max-height: 94vh; }
+}
