@@ -105,8 +105,11 @@ test('同一轮第一次碰才存原样，回退后逐字节一致；第 1 轮�
   assert.equal(rec.files[0].preHash, sha(original));
   assert.equal(rec.files[0].postHash, sha('Y'));
   assert.deepEqual(h.blobs(), [sha(original)], '第二次写入不能再存一份');
-  assert.equal(fs.statSync(h.dir).mode & 0o777, 0o700);
-  assert.equal(fs.statSync(path.join(h.dir, 'index.json')).mode & 0o777, 0o600);
+  // Windows 没有 POSIX 权限位，stat 读出来总是 0o666。
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(h.dir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(h.dir, 'index.json')).mode & 0o777, 0o600);
+  }
 
   const preview = await h.cp.preview(h.params(assistantId));
   assert.equal(preview.turn, 1);
@@ -296,7 +299,8 @@ test('冲突勾选后才覆盖', async t => {
   assert.equal(fs.readFileSync(f, 'utf8'), 'orig');
 });
 
-test('第二个文件写不回去：第一个也拨回，对话不截', {skip: process.getuid?.() === 0}, async t => {
+// 靠只读目录让 rename 失败：root 不受限，Windows 的目录 chmod 也拦不住写入。
+test('第二个文件写不回去：第一个也拨回，对话不截', {skip: process.getuid?.() === 0 || process.platform === 'win32'}, async t => {
   const h = setup();
   const ro = path.join(h.project, 'ro');
   t.after(() => { try { fs.chmodSync(ro, 0o700); } catch {} h.cleanup(); });
