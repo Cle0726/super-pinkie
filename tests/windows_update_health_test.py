@@ -113,7 +113,9 @@ class ReporterTest(unittest.TestCase):
         self.assertTrue(self._marker(".ready").is_file(), "must not wait for the cold gateway")
         self.assertTrue(self._listening(port))
         self.assertFalse(reporter.port_free.is_set(), "the real gateway must wait for the helper")
-        time.sleep(.3)
+        # Observation window while the helper script still exists: wakes at
+        # once if the port is (wrongly) released early.
+        reporter.port_free.wait(.3)
         self.assertFalse(reporter.port_free.is_set())
         (self.root / "updates" / f"apply-{TOKEN}.ps1").unlink()  # helper finished
         self.assertTrue(reporter.wait_for_gateway_port(timeout=3))
@@ -129,10 +131,12 @@ class ReporterTest(unittest.TestCase):
             reporter = self._reporter(HELPER_2_5_29, port=busy.getsockname()[1])
             thread = reporter.start()
             self.assertTrue(reporter.port_free.is_set())
-            time.sleep(.1)
+            # Observation windows (~10 reporter polls each): they end early
+            # only if .ready is (wrongly) written.
+            self._wait(self._marker(".ready"), seconds=.1)
             self.assertFalse(self._marker(".ready").exists())
             self.listener["image"] = str(self.root / "old" / "_internal" / "runtime" / "bin" / "node.exe")
-            time.sleep(.1)
+            self._wait(self._marker(".ready"), seconds=.1)
             self.assertFalse(self._marker(".ready").exists(), "an old install's gateway must not count")
             self.listener["image"] = str(self.node)
             self.assertTrue(self._wait(self._marker(".ready")))

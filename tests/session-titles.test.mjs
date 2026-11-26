@@ -236,6 +236,17 @@ test('a duplicate title is numbered, and an internal-only session is flagged wit
   assert.equal(f.rpcCalls.some(call => call.key === internal), false);
 });
 
+test('a corrupt session-titles.json does not drop list metadata for every session', async t => {
+  const f = fixture(t);
+  f.add(key, '归档的会话', [['user', '旧话题']], {archivedAt: 1});
+  fs.writeFileSync(path.join(f.root, 'session-titles.json'), '{"agent:main:');
+  // The sidebar swallows a failed metadata call, so a SyntaxError here silently
+  // un-archived every row of the list until the file was fixed by hand.
+  const {rows} = await f.titles.metadata([key]);
+  assert.equal(rows[key].archived, true);
+  assert.equal(rows[key].source, undefined);
+});
+
 test('title transport ignores helper settings, explicitly turns thinking off, and never changes models', async () => {
   const model = {id: 'workbuddy/hy4flash-free', compat: {supportsTemperature: false}, reasoning: true};
   const models = [model, {id: 'other-model', reasoning: true}];

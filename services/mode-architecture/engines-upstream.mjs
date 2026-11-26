@@ -94,6 +94,40 @@ const sameToken = (given, token) => {
 };
 const tokenOf = req => String(req.headers['x-api-key'] || '').trim() || String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
 
+// 回 4xx 之前先把还没读的请求体读掉（只读不攒）。Node 不读请求体就回包时，客户端带 Connection: close、req.destroy()、
+// 或者在 for await (… of req) 里提前 return，关连接那一下内核都会对没读的字节回 RST：Windows 上连已经发出的回复都收不到
+// （WinError 10053/10054，同 services/roundtable #204；11-26 本机回环实测，Node v24）。
+// 声明的长度超过 limit、读到超过 limit、长度写错或超时：不再等，明说 Connection: close 再回。
+export const DRAIN_LIMIT = 1 << 20;
+export const DRAIN_MS = 2000;
+export function drainThen(req, res, reply, {limit = DRAIN_LIMIT, ms = DRAIN_MS} = {}) {
+  if (req.complete || req.readableEnded) return reply();
+  const closeAfter = () => { if (!res.headersSent) res.setHeader('Connection', 'close'); };
+  const raw = req.headers['content-length'];
+  const declared = raw === undefined ? 0 : Number(raw);
+  if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit) { closeAfter(); return reply(); }
+  let seen = 0, done = false, timer = null;
+  const finish = () => { if (done) return; done = true; clearTimeout(timer); req.off('data', count); req.off('end', finish); reply(); };
+  const bail = () => { if (done) return; closeAfter(); finish(); };
+  const count = chunk => { seen += chunk.length; if (seen > limit) bail(); };
+  timer = setTimeout(bail, ms); timer.unref?.();
+  // error 监听一直留着：客户端中途断开时 req 会报错，没人接就成了未捕获异常。
+  req.on('data', count); req.on('end', finish); req.on('error', bail);
+  req.resume();
+}
+
+// 攒请求体，最多 max 字节。超了就停下（不 destroy，destroy 就是 RST），返回 null，剩下的交给 drainThen 读掉。
+export function readCapped(req, max) {
+  return new Promise((resolve, reject) => {
+    const chunks = []; let size = 0;
+    const stop = () => { req.off('data', onData); req.off('end', onEnd); req.off('error', onError); };
+    const onData = chunk => { size += chunk.length; if (size <= max) { chunks.push(chunk); return; } stop(); req.pause(); resolve(null); };
+    const onEnd = () => { stop(); resolve(Buffer.concat(chunks)); };
+    const onError = error => { stop(); reject(error); };
+    req.on('data', onData); req.on('end', onEnd); req.on('error', onError);
+  });
+}
+
 // 本机转发口。config()：每次请求现读碧琪配置（钥匙不留在这个对象上）。fetchImpl 给测试换。
 export class PinkieRelay {
   constructor({config = () => ({}), logger = null, fetchImpl = globalThis.fetch, token = crypto.randomBytes(32).toString('base64url')} = {}) {
@@ -134,10 +168,15 @@ export class PinkieRelay {
   }
 
   // openai：Codex 那条路（/v1/responses）用 OpenAI 的错误格式，Claude Code 那条路用 Anthropic 的。
+  // 回复前先把没读的请求体读掉（drainThen），不然 Windows 上 Claude Code / Codex 连这条报错都收不到。
   fail(res, status, type, message, {openai = false} = {}) {
     if (res.headersSent) { try { res.end(); } catch {} return; }
-    res.writeHead(status, {'content-type': 'application/json'});
-    res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
+    const reply = () => {
+      if (res.headersSent || res.writableEnded) return;
+      res.writeHead(status, {'content-type': 'application/json'});
+      res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
+    };
+    if (res.req) drainThen(res.req, res, reply); else reply();
   }
 
   async handle(req, res) {
@@ -156,10 +195,12 @@ export class PinkieRelay {
     const openai = codex || chat;
     const opts = {openai};
     if (req.method !== 'POST' || !(openai || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages、/v1/responses 和 /v1/chat/completions');
-    const chunks = []; let size = 0;
-    for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts); chunks.push(chunk); }
+    // 不在 for await (… of req) 里提前 return：迭代器退出时会销毁 req，客户端只收到 RST。
+    if (Number(req.headers['content-length']) > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts);
+    const raw = await readCapped(req, MAX_BODY);
+    if (!raw) return this.fail(res, 413, 'request_too_large', '请求太大', opts);
     let body;
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
+    try { body = JSON.parse(raw.toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
     const config = this.config();
     const family = codex ? 'codex' : chat ? 'chat' : 'claude';
     const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : chat ? this.chatModel : this.defaultModel);

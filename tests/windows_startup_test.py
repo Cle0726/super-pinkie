@@ -158,14 +158,14 @@ class WindowsStartupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             control = Path(directory) / 'dist/control-ui'
             control.mkdir(parents=True)
-            (control / 'index.html').write_text('<html><head><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>')
+            (control / 'index.html').write_text('<html><head><script type="module" src="/assets/index-test.js"></script></head><body><openclaw-app></openclaw-app></body></html>', encoding="utf-8")
             # Model the pinned upstream package's entry resources. The shared
             # installer must now reject missing upstream chunks as well.
             template = (Path(__file__).resolve().parents[1] / 'ui/control-ui.index.html').read_text(encoding='utf-8')
             for name in re.findall(r'(?:src|href)=["\']\.?/(assets/[^?"\']+)', template):
                 file = control / name
                 file.parent.mkdir(parents=True, exist_ok=True)
-                file.write_text('upstream fixture')
+                file.write_text('upstream fixture', encoding="utf-8")
             # Source resources are read only; every write goes to this fixture.
             original = super_pinkie.resource_path
             def resource(*parts):
