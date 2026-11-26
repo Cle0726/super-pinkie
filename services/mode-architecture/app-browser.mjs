@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
+import {drainThen} from './engines-upstream.mjs';
 
 export const APP_BROWSER_ACTIONS = Object.freeze([
   'open', 'status', 'snapshot', 'screenshot', 'click', 'type', 'press', 'scroll',
@@ -231,7 +232,8 @@ const MIME = Object.freeze({
 });
 
 function staticRequest(directory, home, req, res, log) {
-  const respond = (status, text) => { res.writeHead(status, {'Content-Type': 'text/plain; charset=utf-8'}); res.end(text); };
+  // 报错前先把没读的请求体读掉（drainThen，见 engines-upstream.mjs）：不读就回 405，客户端带 Connection: close 时只收到 RST。
+  const respond = (status, text) => drainThen(req, res, () => { res.writeHead(status, {'Content-Type': 'text/plain; charset=utf-8'}); res.end(text); });
   if (!['GET', 'HEAD'].includes(req.method)) return respond(405, '这里只支持读取网页。');
   try {
     const pathname = decodeURIComponent(String(req.url || '/').split('?')[0]);
