@@ -42,6 +42,15 @@ export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), bas
   return candidates.find(isAscii) || candidates[candidates.length - 1];
 }
 
+// 发布包里的路径是下载内容，不是本机路径。绝对路径和 `..` 不能解压出来。
+export function archiveMemberEscapes(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  const normalized = raw.replace(/\\/g, '/');
+  if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) return true;
+  return normalized.split('/').some(part => part === '..');
+}
+
 export function parseSums(text, name) {
   for (const line of String(text).split(/\r?\n/)) {
     const match = line.trim().match(/^([a-f0-9]{64})\s+\*?(.+)$/i);
@@ -187,15 +196,27 @@ export class EngineService {
       const expected = parseSums(fs.readFileSync(path.join(staging, 'SHA256SUMS'), 'utf8'), name);
       if (!expected) throw new Error('发布包的校验清单里没有这个文件');
       if (sha256File(path.join(staging, name)) !== expected) throw new Error('下载的文件校验不对，已丢弃');
+      const archive = path.join(staging, name);
+      const listed = await this.exec('tar', ['-tf', archive], {timeout: 60_000});
+      if (listed.code !== 0) throw new Error('解压失败：读不到发布包里的文件名');
+      for (const line of String(listed.stdout || '').split(/\r?\n/)) {
+        if (archiveMemberEscapes(line)) throw new Error('发布包里有越界路径，已丢弃');
+      }
       const out = path.join(staging, 'x');
       fs.mkdirSync(out, {recursive: true});
       const extracted = this.platform === 'win32'
-        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${path.join(staging, name).replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
-        : await this.exec('tar', ['-xzf', path.join(staging, name), '-C', out], {timeout: 10 * 60_000});
+        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${archive.replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
+        : await this.exec('tar', ['-xzf', archive, '-C', out], {timeout: 10 * 60_000});
       if (extracted.code !== 0) throw new Error('解压失败：' + (extracted.stderr || '').trim().slice(0, 200));
       const binary = this.platform === 'win32' ? 't3.exe' : 't3';
       const found = [out, ...fs.readdirSync(out).map(entry => path.join(out, entry))].find(dir => fs.existsSync(path.join(dir, binary)));
       if (!found) throw new Error('发布包里没有找到 ' + binary);
+      const binaryPath = path.join(found, binary);
+      if (!fs.lstatSync(binaryPath).isFile()) throw new Error('发布包里的程序不是普通文件，已丢弃');
+      const realOut = fs.realpathSync(out);
+      const realBin = fs.realpathSync(binaryPath);
+      const outPrefix = realOut.endsWith(path.sep) ? realOut : realOut + path.sep;
+      if (!realBin.startsWith(outPrefix)) throw new Error('发布包里的程序指向了目录外面，已丢弃');
       fs.mkdirSync(path.dirname(this.dir), {recursive: true});
       fs.rmSync(this.dir, {recursive: true, force: true});
       fs.renameSync(found, this.dir);

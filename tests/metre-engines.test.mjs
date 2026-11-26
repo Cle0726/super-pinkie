@@ -78,6 +78,57 @@ test('a download that does not match the published checksum is refused and nothi
   assert.equal(fs.readdirSync(path.join(root, 'downloads')).length, 0);
 });
 
+function linuxDownload(root, onTar) {
+  const calls = [];
+  const payload = Buffer.from('fake release');
+  const name = 't3-0.1.11-linux-x64.tar.gz';
+  const exec = async (file, args) => {
+    calls.push([file, ...args]);
+    if (file === 'curl') {
+      const out = args[args.indexOf('-o') + 1];
+      if (out.endsWith('SHA256SUMS')) fs.writeFileSync(out, `${crypto.createHash('sha256').update(payload).digest('hex')}  ${name}\n`);
+      else fs.writeFileSync(out, payload);
+      return {code: 0, stdout: '', stderr: ''};
+    }
+    if (file === 'tar') return onTar(args, calls);
+    return {code: 0, stdout: '', stderr: ''};
+  };
+  return {calls, service: new EngineService({root, platform: 'linux', arch: 'x64', exec, proxy: async () => ''})};
+}
+
+test('an archive member that leaves the extract directory is refused before unpacking', async () => {
+  const root = tmp();
+  const outside = path.join(root, 'pwned.txt');
+  const {calls, service} = linuxDownload(root, args => {
+    if (args[0] === '-tf') return {code: 0, stdout: '../pwned.txt\nt3\n', stderr: ''};
+    const dest = args[args.indexOf('-C') + 1];
+    fs.mkdirSync(dest, {recursive: true});
+    fs.writeFileSync(outside, 'PINKIE_LEAK');
+    fs.writeFileSync(path.join(dest, 't3'), 'exe');
+    return {code: 0, stdout: '', stderr: ''};
+  });
+  await assert.rejects(service.install(), /越界路径/);
+  assert.equal(service.installed(), false);
+  assert.equal(fs.existsSync(outside), false);
+  assert.equal(calls.some(call => call[0] === 'tar' && call[1] === '-xzf'), false);
+});
+
+test('a symlink shipped as the engine binary is refused', async () => {
+  const root = tmp();
+  const evil = path.join(root, 'evil-bin');
+  fs.writeFileSync(evil, 'evil');
+  const {service} = linuxDownload(root, args => {
+    if (args[0] === '-tf') return {code: 0, stdout: 't3\n', stderr: ''};
+    const dest = args[args.indexOf('-C') + 1];
+    fs.mkdirSync(dest, {recursive: true});
+    fs.symlinkSync(evil, path.join(dest, 't3'));
+    return {code: 0, stdout: '', stderr: ''};
+  });
+  await assert.rejects(service.install(), /不是普通文件|目录外面/);
+  assert.equal(service.installed(), false);
+  assert.equal(fs.existsSync(path.join(service.dir, 't3')), false);
+});
+
 test('provider status keeps sign-in state and plan but never the account e-mail', () => {
   const home = tmp();
   fs.mkdirSync(path.join(home, 'caches'));
