@@ -88,24 +88,58 @@ export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMExce
   + 'const i=t&&(t.matches("input")?t:t.control);if(i&&i.type==="file"){e.preventDefault();e.stopImmediatePropagation()}},true);'
   + 'const c=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==="file")return;return c.call(this)}})()</script>';
 
-// 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何脚本之前：有 <head> 插在它后面；
-// 没有就插在 <html> / doctype 后面（解析器会把它放进隐式的 head）；都没有才放最前面。
-// 属性最多扫 512 字，没有 > 的长输入不会拖成平方级；<head> 属性超过 512 字时匹配不到它，会插到 <html> 后、
-// <head> 前（解析器先建隐式 head，作品那个 <head> 的属性会丢），作品基本不会这样写，不另处理。
-// charset 跟 CSP 放在一起；只有那样会超出前 1024 字节时（比如 doctype 后一大段注释），才改成紧跟 doctype，
-// 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
+// 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何会发请求的内容之前，
+// 而且不能插进注释或脚本字符串：meta 形式的 CSP 只管它后面的内容，插进 <!-- <head> --> 里等于没有。
+// 从开头跳过空白和注释，只认文档最前面的 doctype / html / head。head 之前如果已经有脚本、模板、
+// 图片或其他标签，就改插在更早的 doctype / html 后（都没有就放最前），让策略盖住那段内容。
+// 正常写法（head 前只有空白、注释、doctype、html）仍插在 <head> 后面。
+// 属性最多扫 512 字，没有 > 的长输入不会拖成平方级；<head> 属性超过 512 字时不当成 head，会插到 <html> 后。
+// charset 跟 CSP 放在一起；只有那样会超出前 1024 字节时（比如 doctype 后一大段注释），才改成紧跟真正的 doctype，
+// 没有 doctype 就放最前。注释里的假 doctype 不算。
+const POLICY_TAG_LIMIT = 512;
+const POLICY_SPACE = /[ \t\n\r\f\uFEFF]/;
+function policyTagEnd(text, at) {
+  const stop = Math.min(text.length, at + 1 + POLICY_TAG_LIMIT);
+  for (let i = at + 1; i < stop; i++) if (text[i] === '>') return i + 1;
+  return -1;
+}
+function policyTagKind(text, at) {
+  const sample = text.slice(at, at + 10).toLowerCase();
+  if (sample.startsWith('<!doctype') && !/[a-z0-9]/i.test(text[at + 9] || '')) return 'doctype';
+  if (sample.startsWith('<html') && !/[a-z0-9]/i.test(text[at + 5] || '')) return 'html';
+  if (sample.startsWith('<head') && !/[a-z0-9]/i.test(text[at + 5] || '')) return 'head';
+  return '';
+}
+// 返回 CSP 的插入位置，以及它前面那个真正的 doctype 结束处（没有就是 0）。
+export function policyInsertion(text) {
+  let doctypeEnd = 0, htmlEnd = null, headEnd = null, i = 0;
+  while (i < text.length) {
+    if (POLICY_SPACE.test(text[i])) { i++; continue; }
+    if (text.startsWith('<!--', i)) {
+      const end = text.indexOf('-->', i + 4);
+      i = end < 0 ? text.length : end + 3;
+      continue;
+    }
+    if (text[i] !== '<') break;
+    const kind = policyTagKind(text, i);
+    if (!kind) break;
+    const end = policyTagEnd(text, i);
+    if (end < 0) break;
+    if (kind === 'doctype') doctypeEnd = end;
+    else if (kind === 'html') htmlEnd = end;
+    else { headEnd = end; break; }
+    i = end;
+  }
+  const at = headEnd ?? htmlEnd ?? doctypeEnd;
+  return {at, doctypeEnd: doctypeEnd <= at ? doctypeEnd : 0};
+}
 export function withPolicy(html, {origins = [], files = false} = {}) {
   const text = String(html);
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins})}">` + (files ? '' : FILE_GUARD);
   const charset = charsetMeta(text);
-  let at = 0;
-  for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
-    const match = pattern.exec(text);
-    if (match) { at = match.index + match[0].length; break; }
-  }
+  const {at, doctypeEnd} = policyInsertion(text);
   if (Buffer.byteLength(text.slice(0, at), 'utf8') + charset.length <= PRESCAN_BYTES) return text.slice(0, at) + charset + meta + text.slice(at);
-  const doctype = /<!doctype[^>]{0,512}>/i.exec(text.slice(0, at));
-  const lead = doctype ? doctype.index + doctype[0].length : 0;
+  const lead = doctypeEnd;
   return text.slice(0, lead) + charset + text.slice(lead, at) + meta + text.slice(at);
 }
 
