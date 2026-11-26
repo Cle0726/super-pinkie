@@ -168,6 +168,18 @@
     "reason": "engines S6 第 3 步（11-26，feat/engines-s6-board）：总控台加「全部会话」一栏，SLOTS 一项、ICON 一项、SAMPLE 一项各 1 行，共 3 行；渲染全在新文件 laolao-session-board.js，没有新增全局名、观察器或定时器。"
   },
   {
+    "file": "ui/injections/laolao-workbench.js",
+    "metric": "lines",
+    "value": 2358,
+    "reason": "B30（ui，uireview #218 记）：差异标签拆成文件名 + 比较说明（renderTabs 里 +1 行），标签栏溢出时被挤出的一头淡出并露出「全部标签」键（键 1 行、溢出判断 1 行、scroll / ResizeObserver 挂钩 1 行、注释 1 行、renderTabs 末尾调用 1 行），共 +6；没有新增全局名、MutationObserver 或定时器（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-workbench.css",
+    "metric": "lines",
+    "value": 642,
+    "reason": "B30（ui）：差异标签文件名不缩、比较说明带省略号 1 行，标签栏两头淡出（mask）1 行，「全部标签」键 1 行，注释 1 行，共 +4；0 个 !important（B 类，只允许本次实测值）。"
+  },
+  {
     "file": "ui/injections/laolao-metre-board-data.js",
     "metric": "lines",
     "value": 541,
