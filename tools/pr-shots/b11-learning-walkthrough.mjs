@@ -9,11 +9,14 @@
 //   overlap  两段文字的框互相压住（交叠 >=25% 小框面积且 >=16px²）
 //   trunc    文字被 overflow 裁掉（scrollWidth>clientWidth）且没有省略号、也没有 title
 // 底色只叠背景色，不算背景图/渐变/纸纹；叠到图的记 approx:true。
+// 例外：background-clip:text 画的字（字色透明、墨色在背景里）改按像素量（clip-text-ink.mjs），
+// 记 method:'pixels'，ratio 取渐变最浅那段；每页全部量值在 row.clipText。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import * as H from '../../tests/visual/lib/real-harness.mjs';
+import {clipTextInk} from './clip-text-ink.mjs';
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--out');
@@ -109,11 +112,29 @@ function measure() {
     leaves.push({e, r: tr, text: texts.map((t) => t.textContent.trim()).join(' ').slice(0, 40)});
   }
 
+  // background-clip:text 画的字：字色透明、墨色在背景里，按 color / backgroundColor 算会是假低分，交给页面外按像素量。
+  const clipText = [];
+  const clipSource = (e) => {
+    if (P(getComputedStyle(e).webkitTextFillColor || 'transparent').a > 0 && P(getComputedStyle(e).color).a > 0) return null;
+    for (let x = e, i = 0; x && x.nodeType === 1 && i < 4; x = x.parentElement, i++) {
+      const s = getComputedStyle(x);
+      if (s.backgroundClip === 'text' || s.webkitBackgroundClip === 'text') return x;
+    }
+    return null;
+  };
+
   for (const {e, r, text} of leaves) {
     const s = getComputedStyle(e), px = parseFloat(s.fontSize), wt = Number(s.fontWeight) || 400;
     const large = px >= 24 || (px >= 18.66 && wt >= 700);
-    const {bg, approx} = bgOf(e), fg = over(P(s.color), bg), k = ratio(fg, bg), need = large ? 3 : 4.5;
-    if (k < need) add('text', sel(e), {sel: sel(e), text, ratio: k, need, color: s.color, fg: hex(fg), bg: hex(bg), fontSize: px, fontWeight: wt, approx, ...box(r)});
+    const src = clipSource(e), need = large ? 3 : 4.5;
+    if (src) {
+      const id = String(clipText.length);
+      e.dataset.pkWalkClip = id; src.dataset.pkWalkClipSrc = id;
+      clipText.push({id, sel: sel(e), text, need, fontSize: px, fontWeight: wt, ...box(r)});
+    } else {
+      const {bg, approx} = bgOf(e), fg = over(P(s.color), bg), k = ratio(fg, bg);
+      if (k < need) add('text', sel(e), {sel: sel(e), text, ratio: k, need, color: s.color, fg: hex(fg), bg: hex(bg), fontSize: px, fontWeight: wt, approx, ...box(r)});
+    }
     // 截断：往上 3 层找第一个会裁的盒子。
     let x = e;
     for (let i = 0; i < 4 && x && x !== document.body; i++, x = x.parentElement) {
@@ -172,6 +193,7 @@ function measure() {
   const list = (m, by) => [...m.values()].sort(by).slice(0, 40);
   return {
     leaves: leaves.length,
+    clipText,
     counts: Object.fromEntries(Object.entries(issues).map(([k, m]) => [k, m.size])),
     issues: {
       text: list(issues.text, (a, b) => a.ratio - b.ratio),
@@ -202,12 +224,38 @@ const record = async (page, name) => {
   });
 };
 
+// measure() 标出来的 background-clip:text 字：页面外按像素量（clip-text-ink.mjs），不够线的并回 issues.text。
+// 每条记 method:'pixels'，ratio 是渐变最浅那段、median 是中位；全部量值另记在 row.clipText 里。
+async function measureClipText(page, row) {
+  const vp = page.viewportSize();
+  for (const c of row.clipText || []) {
+    const x = Math.max(0, c.x - 2), y = Math.max(0, c.y - 2);
+    const clip = {x, y, width: Math.min(vp.width - x, c.w + 4), height: Math.min(vp.height - y, c.h + 4)};
+    if (clip.width < 2 || clip.height < 2) { c.skipped = 'offscreen'; continue; }
+    try {
+      const dpr = await page.evaluate(() => devicePixelRatio);
+      const hide = `[data-pk-walk-clip="${c.id}"], [data-pk-walk-clip-src="${c.id}"]`;
+      Object.assign(c, await clipTextInk(page, hide, clip, (c.fontSize * dpr) / 2));
+    } catch (error) {
+      c.error = String(error?.message || error).slice(0, 160);
+      continue;
+    }
+    if (c.ratio < c.need) {
+      row.issues.text.push({sel: c.sel, text: c.text, ratio: c.ratio, median: c.median, need: c.need, method: 'pixels', fontSize: c.fontSize, fontWeight: c.fontWeight, x: c.x, y: c.y, w: c.w, h: c.h, count: 1});
+      row.counts.text++;
+    }
+  }
+  row.issues.text.sort((a, b) => a.ratio - b.ratio);
+  await page.evaluate(() => { for (const n of document.querySelectorAll('[data-pk-walk-clip], [data-pk-walk-clip-src]')) { delete n.dataset.pkWalkClip; delete n.dataset.pkWalkClipSrc; } });
+}
+
 const shoot = async (page, pageErrors, {group, view, theme, width}) => {
   const name = `${group}${view ? '-' + view : ''}-${width}-${theme}`;
   const row = {name, group, view: view || '', theme, width};
   try {
     await record(page, name);
     Object.assign(row, await page.evaluate(measure));
+    await measureClipText(page, row);
   } catch (error) {
     row.error = String(error?.message || error).slice(0, 300);
   }
