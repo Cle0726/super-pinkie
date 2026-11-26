@@ -765,7 +765,6 @@ const GAP = {
   craft_checked: '做出来的东西还没真的打开或运行过',
   tutoring_checked: '讲解里的关键计算还没验算过',
 };
-export const WORK_GAPS = Object.freeze(GAP);
 
 function lastSeq(rows, predicate) {
   let last = -Infinity;
