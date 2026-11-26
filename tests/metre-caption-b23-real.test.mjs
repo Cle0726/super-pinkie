@@ -24,7 +24,8 @@ function readCaption() {
   const icon = el.querySelector('button[data-act="min"]') || el.querySelector('button');
   const probe = document.createElement('i');
   document.body.append(probe);
-  const resolve = (v) => { probe.style.color = ''; probe.style.color = `var(${v})`; return getComputedStyle(probe).color; };
+  // 行内要带 !important：Metre 皮肤里有 !important 的 color 规则会盖过普通行内值（CI 上探针量成了 --metre-text）。
+  const resolve = (v) => { probe.style.removeProperty('color'); probe.style.setProperty('color', `var(${v})`, 'important'); return getComputedStyle(probe).color; };
   const out = {
     mode: document.documentElement.getAttribute('data-laolao-mode'),
     bgImage: cs.backgroundImage, bg: cs.backgroundColor, edge: cs.borderTopColor,
