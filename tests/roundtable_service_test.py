@@ -108,6 +108,52 @@ class RoundtableServiceTests(unittest.TestCase):
         self.assertTrue(MODULE.transient_failure('AbortError after connection_closed'))
         self.assertFalse(MODULE.transient_failure('invalid api key'))
 
+    def test_invoke_loads_context_budget_before_spawning(self):
+        # 撤掉 server.py 里的 CONTEXT = runpy.run_path(...) 时，invoke 在读 Agent
+        # 名单处抛 NameError，到不了这里的假 Popen。
+        home = Path(self.temp.name) / 'home'
+        (home / '.openclaw').mkdir(parents=True)
+        (home / '.openclaw' / 'openclaw.json').write_text(json.dumps({
+            'agents': {'list': [
+                {'id': 'blocked', 'tools': {'deny': ['*']}},
+                {'id': 'worker', 'model': {'primary': 'old/model'}},
+            ]},
+        }), encoding='utf-8')
+        binary = Path(self.temp.name) / 'openclaw'
+        binary.write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+        binary.chmod(0o755)
+        claude = Path(self.temp.name) / 'empty-claude'
+        codex = Path(self.temp.name) / 'empty-codex'
+        claude.mkdir()
+        codex.mkdir()
+        session = self.create()
+        captured = {}
+
+        class StopBeforeLaunch(Exception):
+            pass
+
+        def fake_popen(_command, **kwargs):
+            config_path = kwargs['env']['OPENCLAW_CONFIG_PATH']
+            captured['config'] = json.loads(Path(config_path).read_text(encoding='utf-8'))
+            raise StopBeforeLaunch()
+
+        manager = MODULE.Roundtable(self.store)
+        try:
+            with mock.patch.dict(os.environ, {
+                'PINKIE_OPENCLAW_ENTRY': str(binary),
+                'CLAUDE_CONFIG_DIR': str(claude),
+                'CODEX_HOME': str(codex),
+            }), mock.patch.object(MODULE.Path, 'home', return_value=home), \
+                 mock.patch.object(MODULE.subprocess, 'Popen', side_effect=fake_popen):
+                with self.assertRaises(StopBeforeLaunch):
+                    manager.invoke('run-ctx', session, 'twilight', 'relay/b', 'ideas', '只测配置', 1)
+        finally:
+            manager.close()
+        agents = captured['config']['agents']['list']
+        self.assertEqual(['worker'], [item['id'] for item in agents])
+        self.assertEqual({'primary': 'relay/b', 'fallbacks': []}, agents[0]['model'])
+        self.assertNotIn('*', (agents[0].get('tools') or {}).get('deny', []))
+
     def test_project_brief_reads_only_the_selected_folder(self):
         selected = Path(self.temp.name) / 'selected'; selected.mkdir()
         other = Path(self.temp.name) / 'other'; other.mkdir()

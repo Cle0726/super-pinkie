@@ -18,11 +18,13 @@
 // - PINKIE_VISUAL_REPORT=1  : print a JSON summary line
 // - PINKIE_VISUAL_ENGINE=chromium|chrome|msedge : override the per-platform engine
 // Failing or missing scenes write <name>.actual.png (+ .diff.png) to tests/visual/diff-real/.
+import './visual/lib/empty-upstream-env.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {allBaselineNames} from './visual/lib/harness.mjs';
+import {installRealCaptureFontFreeze} from './visual/lib/real-capture-freeze.mjs';
 import {
   REPO_ROOT,
   THEMES,
@@ -110,6 +112,9 @@ test('real-page visual scenes render deterministically on real Control UI and st
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   const browser = await launchRealBrowser();
+  // Fonts still loading after settle used to consume the screenshot's own 30s
+  // budget (real-scene home-learning-night, run 45748757225). Settle them first.
+  installRealCaptureFontFreeze(browser);
   const summary = [];
 
   t.after(async () => {

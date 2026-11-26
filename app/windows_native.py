@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 WM_APP = 0x8000
@@ -41,6 +42,14 @@ HOTKEY_ID = 0x504B
 DEFAULT_HOTKEY = "Ctrl+Alt+Space"
 MENU_NEW, MENU_QUICK, MENU_OPEN, MENU_SETTINGS, MENU_QUIT = 1, 2, 3, 4, 5
 MENU_RUNNING_BASE = 100
+# N2 keep-awake: SetThreadExecutionState flags. System only -- the display
+# still dims, turns off and locks as usual.
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+AWAKE_DEFAULT = True          # coordinator may flip the default (设计-N2.md)
+AWAKE_LEASE_S = 120           # no fresh context from the page for this long -> let it sleep
+AWAKE_CAP_S = 8 * 3600        # never hold the system awake longer than this in one stretch
+AWAKE_CHECK_S = 30
 
 QUICK_HTML = """<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:transparent;font:16px system-ui,'Microsoft YaHei UI'}
@@ -166,6 +175,15 @@ class WindowsNative:
         self.mode = "chat"
         self.mode_label = "唠嗑"
         self._quick = None
+        # N2: keep the system (not the display) awake while sessions run.
+        self._clock = time.monotonic
+        self._awake_enabled = AWAKE_DEFAULT
+        self._awake_on = False
+        self._awake_since = 0.0
+        self._awake_seen = 0.0
+        self._awake_capped = False
+        self._awake_timer = None
+        self._awake_lock = threading.Lock()
         self._load_settings()
 
     # ---------- settings ----------
@@ -177,6 +195,8 @@ class WindowsNative:
         self._menubar = data.get("menubar", True) is not False
         hotkey = data.get("hotkey", DEFAULT_HOTKEY)
         self._hotkey = hotkey if hotkey is None or parse_accelerator(hotkey) else DEFAULT_HOTKEY
+        awake = data.get("awake", AWAKE_DEFAULT)
+        self._awake_enabled = awake if isinstance(awake, bool) else AWAKE_DEFAULT
 
     def _save_settings(self):
         if not self._settings_file:
@@ -184,7 +204,8 @@ class WindowsNative:
         try:
             self._settings_file.parent.mkdir(parents=True, exist_ok=True)
             temp = self._settings_file.with_suffix(".tmp")
-            temp.write_text(json.dumps({"menubar": self._menubar, "hotkey": self._hotkey}), encoding="utf-8")
+            temp.write_text(json.dumps({"menubar": self._menubar, "hotkey": self._hotkey,
+                                        "awake": self._awake_enabled}), encoding="utf-8")
             os.replace(temp, self._settings_file)
         except OSError:
             pass
@@ -220,10 +241,63 @@ class WindowsNative:
             self.mode = str(message.get("mode") or self.mode)
             self.mode_label = str(message.get("modeLabel") or self.mode_label)
             items = message.get("running") if isinstance(message.get("running"), list) else []
-            self._running = [(str(item.get("key")), str(item.get("title") or "未命名会话"))
-                             for item in items[:20] if isinstance(item, dict) and item.get("key")]
+            running = [(str(item.get("key")), str(item.get("title") or "未命名会话"))
+                       for item in items[:20] if isinstance(item, dict) and item.get("key")]
+            now = self._clock()
+            if [key for key, _ in running] != [key for key, _ in self._running]:
+                self._awake_capped = False
+            self._running = running
+            if running:
+                self._awake_seen = now
+            self._update_awake(now)
             return {"ok": True}
+        if kind == "setAwake":
+            self._awake_enabled = message.get("enabled", True) is not False
+            self._save_settings()
+            self._update_awake(self._clock())
+            return {"ok": True, "enabled": self._awake_enabled}
         return {"ok": False, "error": "不认识的原生请求"}
+
+    # ---------- N2 keep-awake ----------
+    def _awake_wanted(self, now):
+        return bool(self._awake_enabled and self._running and not self._awake_capped
+                    and now - self._awake_seen <= AWAKE_LEASE_S)
+
+    def _update_awake(self, now):
+        """Hold or release the system-awake request to match what is running.
+
+        The request itself lives on the tray thread (SetThreadExecutionState is
+        per thread and the js_api threads are short-lived), so this only
+        decides and posts. Released when nothing runs, when the page stops
+        sending context for AWAKE_LEASE_S (page hung, gateway gone), after
+        AWAKE_CAP_S in one stretch, when the user turns it off, and on stop().
+        """
+        with self._awake_lock:
+            if self._awake_on and now - self._awake_since > AWAKE_CAP_S:
+                self._awake_capped = True
+            wanted = self._awake_wanted(now)
+            if wanted == self._awake_on:
+                return
+            self._awake_on = wanted
+            if wanted:
+                self._awake_since = now
+        self._post("awake", wanted)
+        if wanted:
+            self._schedule_awake_check()
+
+    def _schedule_awake_check(self):
+        if self._thread is None:      # tray not running (tests, non-Windows): nothing to re-check
+            return
+        timer = threading.Timer(AWAKE_CHECK_S, self._awake_tick)
+        timer.daemon = True
+        self._awake_timer = timer
+        timer.start()
+
+    def _awake_tick(self):
+        was_on = self._awake_on
+        self._update_awake(self._clock())
+        if was_on and self._awake_on:    # still held: keep checking (a fresh hold schedules its own)
+            self._schedule_awake_check()
 
     def emit(self, detail):
         window = getattr(self._bridge, "_window", None)
@@ -385,9 +459,14 @@ class WindowsNative:
         is gone, until the pointer moves over it -- it looks like 碧琪 is still
         running.
         """
+        timer, self._awake_timer = self._awake_timer, None
+        if timer is not None:
+            timer.cancel()
+        with self._awake_lock:
+            self._awake_on = False
         if self._hwnd is None:
             return
-        self._call("stop", timeout=2)
+        self._call("stop", timeout=2)   # tray thread drops the awake request, then the icon
 
     def _post(self, command, payload=None):
         self._commands.put((command, payload, None))
@@ -498,6 +577,15 @@ class WindowsNative:
                 # The balloon needs an icon; hide it again once the toast is in the action center.
                 threading.Timer(12, lambda: self._post("menubar")).start()
 
+        kernel32.SetThreadExecutionState.restype = wintypes.DWORD
+        kernel32.SetThreadExecutionState.argtypes = [wintypes.DWORD]
+
+        def set_awake(on):
+            # Per-thread request; this tray thread lives as long as the app, and
+            # the system drops it by itself if the process exits.
+            flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED if on else ES_CONTINUOUS
+            kernel32.SetThreadExecutionState(flags)
+
         def register(accelerator):
             user32.UnregisterHotKey(self._hwnd, HOTKEY_ID)
             parsed = parse_accelerator(accelerator) if accelerator else None
@@ -557,7 +645,10 @@ class WindowsNative:
                     result = register(payload)
                     if not result and self._hotkey and self._hotkey != payload:
                         register(self._hotkey)
+                elif command == "awake":
+                    set_awake(bool(payload))
                 elif command == "stop":
+                    set_awake(False)
                     remove_icon()
                     user32.PostQuitMessage(0)
                 if done is not None:

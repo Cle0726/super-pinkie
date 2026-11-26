@@ -54,7 +54,18 @@ test('in a browser: the engine menu separator and hovered row can be seen on the
       await tab.locator('.pk-eng-menu__levels').waitFor();
       const item = tab.locator('.pk-eng-menu__item:not([aria-checked="true"])').first();
       await item.hover();
-      await tab.waitForTimeout(300); // the keys file fades the hover in over 120ms
+      // The keys file fades the hover in from transparent; after a fixed wait a slow runner could still read oklab(0 0 0 / 0)
+      // and measure it as black. Wait until the hovered row's fill paints opaque and holds for two frames.
+      await tab.waitForFunction(() => {
+        const el = [...document.querySelectorAll('.pk-eng-menu__item')].find(e => e.matches(':hover'));
+        if (!el) return false;
+        const ctx = (window.__qaHoverCtx ||= Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d', {willReadFrequently: true}));
+        ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = getComputedStyle(el).backgroundColor; ctx.fillRect(0, 0, 1, 1);
+        const px = ctx.getImageData(0, 0, 1, 1).data.join(), same = px === window.__qaHoverPx;
+        window.__qaHoverPx = px;
+        window.__qaHoverHeld = same ? (window.__qaHoverHeld || 0) + 1 : 0;
+        return px.endsWith(',255') && window.__qaHoverHeld >= 2;
+      }, null, {polling: 'raf', timeout: 10_000});
       const got = await tab.evaluate(() => {
         // Paint each computed colour on a 1x1 canvas and read the pixel back, so whatever syntax the engine serialises
         // color-mix() to (rgb, color(srgb …), display-p3, oklab …) is converted to sRGB 0–255 by the browser itself.
