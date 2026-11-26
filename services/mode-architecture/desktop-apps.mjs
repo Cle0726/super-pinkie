@@ -32,8 +32,31 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
   return name;
 }
 
-// CSP 必须在任何脚本之前：有 <head> 插在它后面；没有就插在 doctype / <html> 后面
-// （解析器会把它放进隐式的 head）；都没有才放最前面。
+// 副本按 file:// 打开，没有 HTTP 头报编码；作品自己没写 charset 时 WebKit / WebView2 按本地默认编码猜，中文会乱码。
+// 文件是按 utf8 读写的，所以缺了就补 utf-8。浏览器预扫只看前 1024 字节，作品自己的声明也只在这一段、
+// <body / 第一个 <script 之前找（脚本字符串里的 <meta charset> 不算），并且只认非空的 charset 属性或
+// http-equiv=content-type 的 content 里非空的 charset=（空值浏览器拿不到编码，照样补）。
+const PRESCAN_BYTES = 1024;
+const CHARSET_META = '<meta charset="utf-8">';
+const ATTR = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+function declaresCharset(text) {
+  let head = Buffer.from(text.slice(0, PRESCAN_BYTES)).subarray(0, PRESCAN_BYTES).toString('utf8');
+  head = head.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  const stop = head.search(/<(?:body|script)[\s>/]/i);
+  if (stop >= 0) head = head.slice(0, stop);
+  for (const [, inner] of head.matchAll(/<meta(\s[^>]*)>/gi)) {
+    const attrs = {};
+    for (const m of inner.matchAll(ATTR)) {
+      const key = m[1].toLowerCase();
+      if (!(key in attrs)) attrs[key] = m[2] ?? m[3] ?? m[4] ?? '';
+    }
+    if ((attrs.charset || '').trim()) return true;
+    if (attrs['http-equiv']?.toLowerCase() === 'content-type' && /charset\s*=\s*["']?[^\s"';]/i.test(attrs.content || '')) return true;
+  }
+  return false;
+}
+export const charsetMeta = text => (declaresCharset(String(text)) ? '' : CHARSET_META);
+
 export function withOfflinePolicy(html) { return withPolicy(html, {}); }
 
 // 作品里写死的外部来源（https://host[:port]），最多 20 个；只认 http(s) 和 ws(s)，不认相对地址。
@@ -65,16 +88,25 @@ export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMExce
   + 'const i=t&&(t.matches("input")?t:t.control);if(i&&i.type==="file"){e.preventDefault();e.stopImmediatePropagation()}},true);'
   + 'const c=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==="file")return;return c.call(this)}})()</script>';
 
-// CSP（和守卫）必须在任何脚本之前：有 <head> 插在它后面；没有就插在 doctype / <html> 后面
-// （解析器会把它放进隐式的 head）；都没有才放最前面。
+// 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何脚本之前：有 <head> 插在它后面；
+// 没有就插在 <html> / doctype 后面（解析器会把它放进隐式的 head）；都没有才放最前面。
+// 属性最多扫 512 字，没有 > 的长输入不会拖成平方级；<head> 属性超过 512 字时匹配不到它，会插到 <html> 后、
+// <head> 前（解析器先建隐式 head，作品那个 <head> 的属性会丢），作品基本不会这样写，不另处理。
+// charset 跟 CSP 放在一起；只有那样会超出前 1024 字节时（比如 doctype 后一大段注释），才改成紧跟 doctype，
+// 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
 export function withPolicy(html, {origins = [], files = false} = {}) {
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins})}">` + (files ? '' : FILE_GUARD);
   const text = String(html);
-  for (const pattern of [/<head(?:\s[^>]*)?>/i, /<html(?:\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins})}">` + (files ? '' : FILE_GUARD);
+  const charset = charsetMeta(text);
+  let at = 0;
+  for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
     const match = pattern.exec(text);
-    if (match) return text.slice(0, match.index + match[0].length) + meta + text.slice(match.index + match[0].length);
+    if (match) { at = match.index + match[0].length; break; }
   }
-  return meta + text;
+  if (Buffer.byteLength(text.slice(0, at), 'utf8') + charset.length <= PRESCAN_BYTES) return text.slice(0, at) + charset + meta + text.slice(at);
+  const doctype = /<!doctype[^>]{0,512}>/i.exec(text.slice(0, at));
+  const lead = doctype ? doctype.index + doctype[0].length : 0;
+  return text.slice(0, lead) + charset + text.slice(lead, at) + meta + text.slice(at);
 }
 
 function pngSize(png) {
