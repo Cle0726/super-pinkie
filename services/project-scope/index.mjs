@@ -38,7 +38,9 @@ export class ProjectScope {
   }
   load() {
     if(!fs.existsSync(this.file)) return {};
-    const data=JSON.parse(fs.readFileSync(this.file,'utf8'));
+    // A half-written or hand-edited file must give the same clear error as a
+    // wrong shape, not a bare SyntaxError from deep inside the gateway.
+    let data; try{data=JSON.parse(fs.readFileSync(this.file,'utf8'));}catch(error){if(!(error instanceof SyntaxError))throw error;data=null;}
     if(!data || Array.isArray(data) || typeof data!=='object') throw new Error('项目绑定记录损坏，已停止文件操作');
     return data;
   }
@@ -65,7 +67,11 @@ export class ProjectScope {
   binding(ctx) {
     const key=ctx.sessionKey||'';
     if(!modes.test(key)&&!this.inheritedBindings.has(key)) return null;
-    const binding=this.load()[key]||this.inheritedBindings.get(key);
+    // A corrupt bindings.json must not turn every prompt of every mode session
+    // into an error (before_prompt_build calls this outside any try). Same
+    // policy as a missing folder: run unanchored; bind() still reports it.
+    let stored; try{stored=this.load();}catch{stored={};}
+    const binding=stored[key]||this.inheritedBindings.get(key);
     // A bound folder on a drive that is no longer attached must not turn every
     // prompt and tool call of the session into an error. The session simply
     // runs unanchored (its own mode workspace) until the folder is back.

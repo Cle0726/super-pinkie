@@ -47,6 +47,14 @@ test('apply-all ORDER keeps every runtime patch a fix added to the trial run', (
   }
 });
 
+// c092fc4b deleted patch/apply-startup.mjs but left it in ORDER: every trial run
+// spawned a missing file, counted it as a failed patch and exited 1, so a clean
+// run of the harness could never pass.
+test('apply-all ORDER only lists patches that exist in patch/', () => {
+  const missing = harnessOrder(harness).filter((name) => !fs.existsSync(path.join(root, 'patch', name)));
+  assert.deepEqual(missing, [], `apply-all.mjs ORDER lists patches that are gone: ${missing.join(', ')}`);
+});
+
 test('apply-all ORDER runs those patches in the same order as the macOS installer', () => {
   const order = harnessOrder(harness);
   const installed = installerOrder(theme);
