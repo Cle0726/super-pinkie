@@ -44,6 +44,7 @@ const backdrop = (page) => page.evaluate((NATIVE) => {
   return {
     open: Boolean(root && !root.hidden), modal: root?.getAttribute('aria-modal') || null,
     scrim: Boolean(scrim && !scrim.hidden && getComputedStyle(scrim).display !== 'none'),
+    alpha: scrim ? Number((getComputedStyle(scrim).backgroundColor.match(/[\d.]+(?=\)$)/) || [1])[0]) : null,
     others: others.length, inert: others.filter((n) => n.inert).length,
     native: native.map((n) => n.id), nativeInert: native.filter((n) => n.inert).map((n) => n.id),
   };
@@ -74,6 +75,9 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         assert.equal(bd.open, true, `${tag}: 想法模式首页打不开白板`);
         assert.equal(bd.modal, 'true', `${tag}: 白板根要 aria-modal="true"`);
         assert.equal(bd.scrim, true, `${tag}: 打开白板时要有遮罩`);
+        // 夜间页面本来就暗，遮罩要比日间深（uireview 04:17Z「夜间遮罩太淡」）；日间不变 0.48
+        if (theme === 'night') assert.ok(bd.alpha >= 0.6, `${tag}: 夜间遮罩太淡（不透明度 ${bd.alpha}）`);
+        else assert.equal(bd.alpha, 0.48, `${tag}: 日间遮罩不该变（不透明度 ${bd.alpha}）`);
         assert.ok(bd.others > 0 && bd.inert === bd.others, `${tag}: 背后页面没全设 inert（${bd.inert}/${bd.others}）`);
         assert.deepEqual(bd.nativeInert, [], `${tag}: 桌面壳的 ${bd.nativeInert.join(', ')} 不能设 inert`);
 

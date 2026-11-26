@@ -98,6 +98,8 @@ html[data-laolao-mode="metre"] .exec-approval-card .pk-perm-q .pk-perm-q__btn { 
 
 /* ---------- 按键行：放手程度 / 先出方案 / 照这个方案做 / 状态键 ---------- */
 html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; }
+/* 收到「⋯」还被框角的麦克风 / 发送键盖住（mac1 任务 58，320 宽）：自己占一行、排在行首（laolao-metre-perm.js measure()）。 */
+html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-perm-chips[data-dodge] { flex-basis: 100%; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip { flex: none; white-space: nowrap; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip .pk-eng-chip__name { color: var(--pk-perm-ink2); font: 400 13px/1 var(--metre-sans); font-style: normal; }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--plan[aria-pressed="true"] .pk-eng-chip__name { color: var(--pk-perm-cobalt-ink); }
