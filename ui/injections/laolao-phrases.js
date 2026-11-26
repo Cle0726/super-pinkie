@@ -181,6 +181,7 @@
     ["Failed", "发送失败"],
     ["The active run ended before the steer message was accepted.", "这轮刚结束，这轮结束后发送。"],
     ["Steer failed before it reached the run; try again.", "追加没有送达，这轮结束后发送。"],
+    ["No scheduled jobs yet.", "还没有定时任务。"], ["Create one from a plain-language prompt; advanced fields can wait.", "用一句话说清要做什么就能建一个，高级选项以后再填。"], ["Clear or change filters to see scheduled jobs.", "清除或修改筛选条件，就能看到定时任务。"], ["Browser enabled", "启用浏览器"], ["Tool profile", "工具档位"], // B12：上游 zh-CN 漏译（/cron 空状态、设置弹层安全卡）
   ]);
 
   // These short words are also ordinary setting labels (for example
@@ -188,8 +189,7 @@
   // part of a real progress/status surface. Tool chrome has its own narrower
   // scope so a settings row can never turn into a pony status message.
   const statusExactPhrases = new Set([
-    "Thinking", "Thinking…", "Thinking...", "Running", "Waiting…", "Waiting...",
-    "Retry", "Retrying…", "Retrying...", "Interrupted", "Stopped", "Cancelled",
+    "Thinking", "Thinking…", "Thinking...", "Running", "Waiting…", "Waiting...", "Retry", "Retrying…", "Retrying...", "Interrupted", "Stopped", "Cancelled",
     "Aborted", "Error rendering content", "An error occurred:",
   ]);
   const toolExactPhrases = new Set([
