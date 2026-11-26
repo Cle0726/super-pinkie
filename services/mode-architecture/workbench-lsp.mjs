@@ -135,6 +135,8 @@ export const DEFAULT_ROUTES = {
   edit: ['mm/gemini-3-flash', 'mm/gemini-2.5-flash', 'mm/claude-sonnet-4-6', 'mm/gemini-3.1-pro-low'],
 };
 const TASK_LABEL = {complete: '行内补全', edit: '行内修改'};
+// 行内修改要求（instruction）一次最多这么多字：超了直接拒绝并说清楚，不截一半交给模型。
+export const EDIT_INSTRUCTION_MAX = 2000;
 const ATTEMPT_MS = {complete: 7000, edit: 45000};
 const TOTAL_MS = {complete: 16000, edit: 120000};
 const COOLDOWN_MS = 5 * 60 * 1000;
@@ -361,8 +363,10 @@ export class CodeAssistant {
     const code = String(params.code || '');
     const instruction = String(params.instruction || '').trim();
     if (!instruction) throw new Error('先写下要怎么改。');
+    // 旧逻辑把超长的修改要求截到前 2000 字照样交给模型，后半截要求模型看不到、改出来的代码却照样替换选区（同 #199）。
+    if (instruction.length > EDIT_INSTRUCTION_MAX) throw new Error(`修改要求有 ${instruction.length} 字，超过 ${EDIT_INSTRUCTION_MAX} 字，没有发出去；请写短一点，或分几次修改。`);
     if (code.length > 24000) throw new Error('选中的代码太长，请分段修改。');
-    const out = await this.run('edit', EDIT_RULES, {file: String(params.path || '').slice(0, 300), language: String(params.language || ''), instruction: instruction.slice(0, 2000), code, before: String(params.before || '').slice(-2000), after: String(params.after || '').slice(0, 1000)}, 6000);
+    const out = await this.run('edit', EDIT_RULES, {file: String(params.path || '').slice(0, 300), language: String(params.language || ''), instruction, code, before: String(params.before || '').slice(-2000), after: String(params.after || '').slice(0, 1000)}, 6000);
     return {text: out.text.replace(/^```[\w-]*\n|\n?```\s*$/g, ''), model: out.model, fallback: out.fallback};
   }
 }

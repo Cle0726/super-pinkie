@@ -819,8 +819,10 @@ function visibleAssistantText(message = {}) {
 }
 
 function assistantMessageHasToolCall(message = {}) {
-  if (!Array.isArray(message.content)) return false;
-  return message.content.some(part => part?.type === 'toolCall' || part?.type === 'tool_use')
+  // content 可能是字符串或 null（OpenAI 风格 `content: null, tool_calls: [...]`），
+  // 此时只跳过 content 这一项，其余工具调用字段照查。
+  return (Array.isArray(message.content)
+      && message.content.some(part => part?.type === 'toolCall' || part?.type === 'tool_use'))
     || (Array.isArray(message.toolCalls) && message.toolCalls.length > 0)
     || (Array.isArray(message.tool_calls) && message.tool_calls.length > 0)
     || Boolean(message.toolCall || message.tool_call);

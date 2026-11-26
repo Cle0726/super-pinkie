@@ -467,3 +467,86 @@ test('A8 网关方法：pinkie.apps.* 都在，出错回 {ok:false} 不抛', asy
   assert.equal(bad.ok, false);
   assert.match(bad.error, /作品库里没有/);
 });
+
+test('A16 重装换目录是原子的：新版本挪不进来时旧版本原样留着、记录仍是旧版本、不留暂存 / 备份目录；恢复后能正常装上新版本', () => {
+  const {dir, record, apps} = setup();
+  const item = record('swap.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '换目录'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  assert.match(v1, /v1/);
+  record('swap.html', '<p>v2</p>');
+  const leftovers = () => fs.readdirSync(path.join(dir, 'apps')).filter(name => /staging|backup/.test(name));
+  // 按路径打桩：只让「暂存 → 应用目录」这一步失败，别的 rename（旧目录 → 备份、回滚）照常。
+  // 按路径而不是按次数：改回「先 rmSync 再 rename」时也是这一步失败，旧版本已经被删，下面的断言就会红。
+  const original = fs.renameSync;
+  const swaps = [];
+  fs.renameSync = (from, to, ...rest) => {
+    if (/\.staging-/.test(String(from)) && path.resolve(String(to)) === path.resolve(first.app.dir)) {
+      swaps.push(fs.existsSync(first.app.entry) || fs.readdirSync(path.join(dir, 'apps')).some(name => name.includes('backup')));
+      throw Object.assign(new Error('模拟：新版本挪不进来'), {code: 'EPERM'});
+    }
+    return original(from, to, ...rest);
+  };
+  try {
+    assert.throws(() => apps.install({id: item.id, name: '换目录'}), /模拟：新版本挪不进来/);
+  } finally {
+    fs.renameSync = original;
+  }
+  assert.equal(swaps.length, 1, '确实走到了暂存 → 应用目录那一步');
+  assert.equal(swaps[0], true, '新版本落位前，旧版本（原目录或备份）一直在');
+  assert.equal(fs.readFileSync(first.app.entry, 'utf8'), v1, '旧版本 index.html 原样还在');
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录仍是旧版本');
+  assert.equal(apps.list().apps[0].version, 1);
+  assert.deepEqual(leftovers(), [], '失败后不留暂存 / 备份目录');
+  // 反例：恢复之后照常装上新版本（也说明回滚留下的是干净状态）。
+  const second = apps.install({id: item.id, name: '换目录'});
+  assert.equal(second.replaced, true);
+  assert.equal(second.app.version, 2);
+  assert.match(fs.readFileSync(second.app.entry, 'utf8'), /v2/);
+  assert.doesNotMatch(fs.readFileSync(second.app.entry, 'utf8'), /v1/);
+  assert.deepEqual(leftovers(), [], '成功后也不留暂存 / 备份目录');
+});
+
+test('A16b Windows 上旧应用目录被占用（挪旧目录就 EBUSY）：原错误往上抛、旧版本和记录原样、不留暂存 / 备份目录', t => {
+  const {dir, record, apps} = setup();
+  const item = record('busy.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '被占用'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  record('busy.html', '<p>v2</p>');
+  const realRename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to, ...rest) => {
+    if (path.resolve(String(from)) === path.resolve(first.app.dir)) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rename '${from}'`), {code: 'EBUSY'});
+    }
+    return realRename(from, to, ...rest);
+  });
+  assert.throws(() => apps.install({id: item.id, name: '被占用'}), /EBUSY/);
+  t.mock.restoreAll();
+  assert.equal(fs.readFileSync(first.app.entry, 'utf8'), v1, '旧版本 index.html 原样还在');
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录仍是旧版本');
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'apps')).filter(name => /staging|backup/.test(name)), []);
+});
+
+test('A16c 回滚也失败时抛的仍是原来的错误，旧版本还留在备份目录里没丢', t => {
+  const {dir, record, apps} = setup();
+  const item = record('both.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '两头失败'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  record('both.html', '<p>v2</p>');
+  const realRename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to, ...rest) => {
+    if (path.resolve(String(to)) === path.resolve(first.app.dir)) {
+      if (/\.staging-/.test(String(from))) throw Object.assign(new Error('模拟：新版本挪不进来'), {code: 'EPERM'});
+      throw Object.assign(new Error('模拟：回滚也挪不回去'), {code: 'EACCES'});
+    }
+    return realRename(from, to, ...rest);
+  });
+  assert.throws(() => apps.install({id: item.id, name: '两头失败'}), error => /新版本挪不进来/.test(error.message) && error.code === 'EPERM');
+  t.mock.restoreAll();
+  const names = fs.readdirSync(path.join(dir, 'apps'));
+  assert.deepEqual(names.filter(name => name.includes('staging')), [], '暂存目录照样清掉');
+  const backups = names.filter(name => name.includes('backup'));
+  assert.equal(backups.length, 1, '旧版本留在备份目录');
+  assert.equal(fs.readFileSync(path.join(dir, 'apps', backups[0], 'index.html'), 'utf8'), v1);
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录没改成新版本');
+});
