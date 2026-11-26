@@ -767,7 +767,7 @@ const REAL_LONG_HISTORY = Object.freeze([
   },
   {
     role: 'assistant',
-    content: [{type: 'text', text: '已完成核对：真实页面已挂载 OpenClaw Control UI 与碧琪全部注入脚本，工具过程卡与聊天主列边界正常。'}],
+    content: [{type: 'text', text: '已完成核对：真实页面已挂载 C.le. 控制台与碧琪全部注入脚本，工具过程卡与聊天主列边界正常。'}],
     stopReason: 'stop',
     timestamp: FROZEN_TIME_MS - 420_000,
   },
@@ -803,7 +803,7 @@ const REAL_SHORT_HISTORY = Object.freeze([
   },
   {
     role: 'assistant',
-    content: [{type: 'text', text: '已就绪：当前在隔离目录中运行真实安装的 OpenClaw Control UI 与碧琪界面。'}],
+    content: [{type: 'text', text: '已就绪：当前在隔离目录中运行真实安装的 C.le. 控制台与碧琪界面。'}],
     stopReason: 'stop',
     timestamp: FROZEN_TIME_MS - 60_000,
   },
