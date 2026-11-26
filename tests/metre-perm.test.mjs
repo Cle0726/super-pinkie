@@ -634,6 +634,74 @@ test(`a key under the floating microphone / send button counts as not fitting, s
   } finally { await browser.close(); }
 });
 
+// mac1 任务 58（#94 issuecomment-7181299832）：320 宽收到第 3 档「⋯」以后麦克风还压在「⋯」上（键 [229,672,27,28]、麦克风 [227,677,34,34]），
+// 没有更小的档可退，鼠标点不开会话详情。收到「⋯」还被盖住就让它自己占一行、排在行首；只是换行、没被盖住的不挪。改前这条失败（keyHit false）。
+test(`at the last fold a ⋯ still under the floating microphone moves to the start of its own line and stays clickable (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    const p = await open(browser, {width: 320});
+    await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls');
+      c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;width:1000px';
+      const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
+    });
+    await p.evaluate(() => window.PinkieMetrePerm.refresh());
+    await p.waitForTimeout(1700);
+    // 只够放 Metre 键和模型键再加 10px：收到「⋯」也放不下，换行；这时没被盖住，不挪
+    await p.evaluate(() => {
+      const w = (s) => document.querySelector(s).getBoundingClientRect().width;
+      document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 4 + 10) + 'px';
+      window.PinkieMetrePerm.fit();
+    });
+    const wrapped = await rowState(p);
+    assert.equal(wrapped.fold, '3', `收到「⋯」（${JSON.stringify(wrapped)}）`);
+    assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.dodge ?? null), null, '只是换行、没被盖住：不挪');
+    // 和 mac1 的图一样：收到「⋯」以后麦克风还压在它上面。按键行一行放得下，按键紧跟 Metre 键，麦克风浮在按键那一截的起点上
+    // （挂在输入框里、绝对定位、z-index 3）。第 0–2 档第一个键都在那儿、被盖住，往下收；收到「⋯」它还在那儿，没有更小的档，只能自己占一行
+    const pre = await p.evaluate(() => {
+      const c = document.querySelector('.agent-chat__composer-controls'); c.style.width = '1000px'; window.PinkieMetrePerm.fit();
+      const input = document.querySelector('.agent-chat__input'); input.style.position = 'relative';
+      const chips = document.querySelector('.pk-perm-chips'), k = chips.querySelector('.pk-perm-chip').getBoundingClientRect();
+      const m = document.querySelector('.chat-composer-model-control').getBoundingClientRect(), base = input.getBoundingClientRect();
+      const mic = document.createElement('button'); mic.className = 'chat-send-btn chat-send-btn--laolao-dictation'; mic.textContent = '🎤';
+      mic.style.cssText = `position:absolute;z-index:3;left:${Math.round(k.left - base.left - 2)}px;top:${Math.round(k.top - base.top - 3)}px;width:34px;height:34px;padding:0;border:0`;
+      input.append(mic);
+      const b = mic.getBoundingClientRect();
+      const R = (r) => [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      const out = {fold: chips.dataset.fold, sameLine: Math.abs(k.top - m.top) < m.height / 2,
+        covered: Math.min(k.right, b.right) - Math.max(k.left, b.left) > 1 && Math.min(k.bottom, b.bottom) - Math.max(k.top, b.top) > 1,
+        first: R(k), mic: R(b), model: R(m), controls: R(c.getBoundingClientRect())};
+      window.PinkieMetrePerm.fit();
+      return out;
+    });
+    // 前提：fit() 之前按键行第一个键和模型键同一行、被麦克风盖住；不成立这条就测不到 mac1 的 bug
+    assert.ok(pre.sameLine && pre.covered, '前提：按键行第一个键和模型键同一行、被麦克风盖住（' + JSON.stringify(pre) + '）');
+    const r = await rowState(p);
+    assert.equal(r.fold, '3', `还是「⋯」（${JSON.stringify(r)}）`);
+    assert.equal(r.label, '⋯');
+    assert.equal(r.keyHit, true, `「⋯」中心点下去是它自己，不是麦克风（${JSON.stringify(r)}）`);
+    const spot = await p.evaluate(() => {
+      const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(), c = document.querySelector('.agent-chat__composer-controls').getBoundingClientRect();
+      const eng = document.querySelector('.agent-chat__composer-controls > .pk-eng-chip'), e = eng.getBoundingClientRect();
+      const hit = document.elementFromPoint(e.left + e.width / 2, e.top + e.height / 2);
+      // 量到键的外边距边上：每个键都带 .pk-eng-chip 自己的 margin-left 10px（laolao-metre-engine.css），行首也一样
+      const ml = parseFloat(getComputedStyle(document.querySelector('.pk-perm-chip--stat')).marginLeft) || 0;
+      return {left: Math.round(k.left - ml - c.left), ml, engHit: Boolean(hit && eng.contains(hit)), dodge: document.querySelector('.pk-perm-chips').dataset.dodge ?? null};
+    });
+    assert.equal(spot.dodge, '1'); assert.ok(spot.left <= 1, `「⋯」排在行首（${JSON.stringify(spot)}）`);
+    assert.equal(spot.engHit, true, `Metre 键没被挪到麦克风底下（${JSON.stringify(spot)}）`);
+    // 鼠标点「⋯」打开会话详情
+    await p.mouse.click(...await p.evaluate(() => { const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(); return [k.left + k.width / 2, k.top + k.height / 2]; }));
+    await p.waitForSelector('.pk-perm-pop--detail');
+    await p.keyboard.press('Escape');
+    // 麦克风拿走、放宽：回到第 0 档、原位
+    await p.evaluate(() => { document.querySelector('.chat-send-btn--laolao-dictation').remove(); document.querySelector('.agent-chat__composer-controls').style.width = '1000px'; window.PinkieMetrePerm.fit(); });
+    const back = await rowState(p);
+    assert.equal(back.fold, '0');
+    assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.dodge ?? null), null, '放宽后挪回原位');
+  } finally { await browser.close(); }
+});
+
 // linux CI 真页面 metre-board 日夜 5.4%（11-25 临时采图 run 45642943357）：fit() 量完那一刻是一行，之后按键行里别的东西（容量圈「13%」）又变宽、
 // 把按键行挤换行，没人再量。输入框尺寸变了要自动重量（ResizeObserver 只看输入框本身）。改前这条失败。
 test(`when something in the row grows after the keys were fitted, the row is measured again by itself and goes back to one line (${engine})`, {timeout: 60_000}, async () => {
