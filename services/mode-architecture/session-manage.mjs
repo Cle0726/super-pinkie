@@ -504,11 +504,12 @@ export class SessionManager {
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('备份说明不对');
     const key = meta.key, agentId = agentOf(key);
     if (!agentId || agentId !== meta.agentId) throw new Error('备份说明不对');
-    // 先核对记录文件，路径不对就不创建新会话。
+    // 锁着的 Metre 备份先被锁拦下，不去碰备份里的记录文件。
+    if (isMetreSession(key) || isMetreAgent(agentId)) getActiveMetreLock()?.assertUnlocked?.();
+    // 再核对记录文件，路径不对就不创建新会话。
     const transcript = backupTranscript(realDir, meta.transcript, this.platform);
     const lines = fs.readFileSync(transcript, 'utf8').split('\n');
     const head = (() => { try { return JSON.parse(lines[0]); } catch { return null; } })();
-    if (isMetreSession(key) || isMetreAgent(agentId)) getActiveMetreLock()?.assertUnlocked?.();
     if (await this.access.entry(key)) throw new Error('这条会话还在（没删或已经恢复过）');
     const {label} = await this.uniqueLabel(agentId, meta.entry?.label || meta.title || '恢复的会话');
     await this.access.rpc('sessions.create', {agentId, key, label});
