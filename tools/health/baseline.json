@@ -3120,6 +3120,32 @@
       "windowGlobals": 3,
       "windowGlobalsIndirect": 0
     },
+    "ui/injections/laolao-whiteboard.css": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 95,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
+    "ui/injections/laolao-whiteboard.js": {
+      "important": 0,
+      "importantIndirect": 0,
+      "lines": 668,
+      "mutationObserverRefs": 0,
+      "mutationObservers": 0,
+      "observeUnclear": 0,
+      "setIntervalRefs": 0,
+      "setIntervals": 0,
+      "subtreeObserverCalls": 0,
+      "windowGlobals": 0,
+      "windowGlobalsIndirect": 0
+    },
     "ui/injections/laolao-workbench-code.js": {
       "important": 0,
       "importantIndirect": 0,
