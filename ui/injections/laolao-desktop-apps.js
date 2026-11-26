@@ -91,37 +91,44 @@
       files: picks.some(([check, value]) => check.checked && value === '__files__')});
   }
 
-  function nameBox(item, current, needs) {
+  // 碧琪弹层，装到桌面和卸载确认共用（皮肤走 artifacts.css 里 .pk-apps-dialog 那组）。
+  // 带 input 时确认回名字（空就用 fallback），再给 extra（box => 读勾选的函数）就回 {name, ...勾选}；
+  // 不带 input 回 true；取消 / Esc 回 null。
+  function modal(title, text, okLabel, input, fallback, extra) {
     return new Promise(resolve => {
       const mask = el('div', 'laolao-modal-mask pinkie-tools-mask pinkie-art-confirm');
       const box = el('div', 'laolao-modal pinkie-tools-modal pk-apps-dialog');
-      box.setAttribute('role', 'dialog');
-      box.setAttribute('aria-label', '装到桌面');
-      const input = el('input', 'pk-apps-dialog__name');
-      input.value = current || appName(item);
-      input.maxLength = 40;
-      input.setAttribute('aria-label', '应用名字');
-      const hint = current
-        ? '已经装过了。再装一次会换成作品现在的版本，名字也可以改。'
-        : `装好以后在${placeLabel()}里有它自己的图标，双击直接打开，不用先开碧琪。默认不联网。`;
-      box.append(el('h3', 'laolao-modal__title', '装到桌面'), el('p', 'pinkie-art-confirm__text', hint), input);
-      const picked = permissionRows(box, needs);
+      box.setAttribute('role', input ? 'dialog' : 'alertdialog');
+      box.setAttribute('aria-label', title);
+      box.append(el('h3', 'laolao-modal__title', title), el('p', 'pinkie-art-confirm__text', text));
+      if (input) box.append(input);
+      const picked = extra ? extra(box) : null;
+      const name = () => input.value.trim() || fallback;
+      const value = () => (!input ? true : picked ? {name: name(), ...picked()} : name());
       const buttons = el('div', 'laolao-modal__buttons');
-      const done = value => { mask.remove(); document.removeEventListener('keydown', onKey, true); resolve(value); };
-      const submit = () => done({name: input.value.trim() || appName(item), ...picked()});
+      const done = result => { mask.remove(); document.removeEventListener('keydown', onKey, true); resolve(result); };
       const onKey = event => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); done(null); }
-        else if (event.key === 'Enter' && event.target === input) { event.preventDefault(); submit(); }
+        else if (input && event.key === 'Enter' && event.target === input) { event.preventDefault(); done(value()); }
       };
       document.addEventListener('keydown', onKey, true);
-      buttons.append(button('取消', 'laolao-modal__button', () => done(null)),
-        button(current ? '重新装' : '装到桌面', 'laolao-modal__button laolao-modal__button--primary', submit));
+      const ok = button(okLabel, 'laolao-modal__button laolao-modal__button--primary', () => done(value()));
+      buttons.append(button('取消', 'laolao-modal__button', () => done(null)), ok);
       box.append(buttons);
       mask.append(box);
       document.body.append(mask);
-      input.focus();
-      input.select();
+      if (input) { input.focus(); input.select(); } else ok.focus();
     });
+  }
+  function nameBox(item, current, needs) {
+    const input = el('input', 'pk-apps-dialog__name');
+    input.value = current || appName(item);
+    input.maxLength = 40;
+    input.setAttribute('aria-label', '应用名字');
+    const hint = current
+      ? '已经装过了。再装一次会换成作品现在的版本，名字也可以改。'
+      : `装好以后在${placeLabel()}里有它自己的图标，双击直接打开，不用先开碧琪。默认不联网。`;
+    return modal('装到桌面', hint, current ? '重新装' : '装到桌面', input, appName(item), box => permissionRows(box, needs));
   }
 
   async function install(item, trigger) {
@@ -161,6 +168,8 @@
 
   // ---------- 设置里的「已装的应用」 ----------
   async function uninstall(app, row) {
+    const ok = await modal(`卸载「${app.name}」？`, `${placeLabel()}里的图标和碧琪里存的副本会一起删掉，原来的作品文件不动。`, '卸载');
+    if (!ok) return;
     try {
       await nativeOk({type: 'uninstallApp', appId: app.id});
       await rpcOk('pinkie.apps.remove', {id: app.id});
