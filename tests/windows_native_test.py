@@ -39,10 +39,34 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertIsNone(parse_accelerator("Hyper+Space"))
         self.assertIsNone(parse_accelerator("Ctrl+F13"))
 
+    def test_hotkey_rejects_long_and_repeated_b43(self):
+        # B43: 'Ctrl+' x 100000 + 'A' used to be accepted and written to native-settings.json (600 KB)
+        for bad in ("Ctrl+" * 100000 + "A", "Ctrl+Ctrl+A", "Alt+Option+K", "Ctrl+" * 13 + "A", {"a": 1}, ["Ctrl", "A"], 5):
+            self.assertIsNone(parse_accelerator(bad), str(bad)[:20])
+        self.assertIsNotNone(parse_accelerator("Ctrl+Alt+Shift+Win+K"))
+        self.native._call = lambda *args, **kwargs: True
+        self.native._post = lambda *args: None
+        before = self.native._hotkey
+        for bad in ("Ctrl+" * 100000 + "A", "Ctrl+Ctrl+A", {"a": 1}):
+            result = self.native.handle({"type": "setHotkey", "accelerator": bad})
+            self.assertEqual(result, {"ok": False, "error": "这个快捷键写法不认识"})
+        self.assertEqual(self.native._hotkey, before)
+        self.assertFalse(self.settings.exists() and "Ctrl+Ctrl" in self.settings.read_text(encoding="utf-8"))
+
     def test_safe_file_name(self):
         self.assertEqual(safe_file_name('a/b:c?', "pdf"), "a-b-c-.pdf")
         self.assertEqual(safe_file_name("", "png"), "碧琪会话.png")
         self.assertEqual(safe_file_name("x.PDF", "pdf"), "x.PDF")
+
+    def test_safe_file_name_long_keeps_ext_b43(self):
+        # B43: the extension used to be added before the 180-char cut, so long titles lost .md / .pdf
+        for raw, ext in (("n" * 300, "md"), ("会" * 300 + ".pdf", "pdf"), ("a" * 178 + ". . ", "png")):
+            name = safe_file_name(raw, ext)
+            self.assertTrue(name.lower().endswith("." + ext), name[-12:])
+            self.assertLessEqual(len(name), 180)
+            self.assertFalse(name[:-len(ext) - 1].endswith((".", " ")), name[-12:])
+        self.assertEqual(safe_file_name("a\x00b\nc", "md"), "a-b-c.md")
+        self.assertEqual(safe_file_name("...", "md"), "碧琪会话.md")
 
     def test_notify_dedupes_by_run_id(self):
         posted = []
