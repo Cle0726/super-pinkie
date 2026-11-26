@@ -183,6 +183,33 @@ test('A11 碧琪各模式下装到桌面 / 卸载确认主按钮字对比度 ≥
   for (const c of night) assert.ok(ratio(rgb(ink[1]), rgb(c)) >= 4.5, `夜间 ${ink[1]} / ${c} = ${ratio(rgb(ink[1]), rgb(c)).toFixed(2)}`);
 });
 
+test('A12 跟进：权限勾选框跟主色、「更新成新版本」是主按钮（同一套对比度变量）、应用行说明栏占满不挤断', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-desktop-apps.css'), js = read('laolao-desktop-apps.js');
+  // ① 勾选框 accent-color 跟主按钮底色同一个变量。
+  assert.match(css, /^\.pk-apps-dialog__perm input \{[^}]*accent-color:var\(--pk-apps-accent,var\(--pa-accent\)\)/m);
+  // ② 「更新成新版本」带 pk-apps-update，底 / 字跟对话框主按钮同一套变量；设置卡片里也设了这套变量（日压暗、夜深字、Metre 夜面板色）。
+  assert.match(js, /button\('更新成新版本', 'pk-apps-update'/);
+  assert.match(css, /^\.pk-apps-row \.pk-apps-update \{[^}]*background:var\(--pk-apps-accent,var\(--pa-accent\)\);color:var\(--pk-apps-on-accent,#fff\)/m);
+  for (const [scope, value] of [
+    ['html:not\\(\\[data-laolao-mode="metre"\\]\\):not\\(\\[data-pinkie-night\\]\\)', '--pk-apps-accent:color-mix\\(in srgb,var\\(--pa-accent\\) 85%,#000\\)'],
+    ['html\\[data-pinkie-night\\]:not\\(\\[data-laolao-mode="metre"\\]\\)', '--pk-apps-on-accent:#2a2027'],
+    ['html\\[data-laolao-mode="metre"\\]:is\\(\\[data-pinkie-night\\],\\[data-theme="dark"\\]\\)', '--pk-apps-on-accent:var\\(--metre-surface,#232321\\)'],
+  ]) {
+    const dialog = new RegExp(`^${scope} \\.pk-apps-dialog \\{ ${value} \\}$`, 'm'), card = new RegExp(`^${scope} \\.pk-apps-card \\{ ${value} \\}$`, 'm');
+    assert.match(css, dialog, '对话框那条还在');
+    assert.match(css, card, '设置卡片用同一个值（A11 量过的对比度）');
+  }
+  // Metre 皮肤用 !important 把 .pinkie-art-btn 全压成透明描边：主按钮不挂这个类，自己带尺寸；本文件不加 !important。
+  assert.doesNotMatch(js, /'pinkie-art-btn[^']*pk-apps-update/);
+  assert.match(css, /^\.pk-apps-row \.pk-apps-update \{ height:28px;/m);
+  assert.doesNotMatch(css, /!important/);
+  // ③ 应用行说明占满、按钮按内容宽（默认设置行左栏 .34fr 会把「作品有新版本…」挤成两三行）；窄屏照旧上下排。
+  assert.match(css, /^#laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:minmax\(0,1fr\) auto \}$/m);
+  assert.match(css, /@media \(max-width:780px\) \{ #laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:1fr \} \}/);
+});
+
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
 function fakeDom(source) {
   const hasClass = (node, name) => String(node.className || '').split(/\s+/).includes(name);

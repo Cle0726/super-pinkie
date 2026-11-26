@@ -205,7 +205,7 @@
       const note = app.latest > app.version ? `作品有新版本（第 ${app.latest} 版），装的是第 ${app.version} 版` : `第 ${app.version} 版 · ${reach}${app.files ? ' · 能读文件' : ''}`;
       copy.append(el('span', S + 'row-title', app.name), el('span', S + 'hint', note));
       const control = el('div', S + 'row-control pk-apps-row__actions');
-      if (app.latest > app.version) control.append(button('更新成新版本', 'pinkie-art-btn', () => void update(app, list)));
+      if (app.latest > app.version) control.append(button('更新成新版本', 'pk-apps-update', () => void update(app, list)));
       control.append(
         button('打开', 'pinkie-art-btn', () => nativeOk({type: 'openApp', appId: app.id}).catch(error => toast(error.message))),
         button('卸载', 'pinkie-art-btn pk-apps-uninstall', () => void uninstall(app, row)),
