@@ -44,6 +44,14 @@ function readSkills() {
 
 const PINK = /rgba\(217, 89, 143/;
 
+// 删了规则后，等 CSS 过渡全部停下再量（和 metre-contrast-real 的 transitionsSettled 同一个条件）。
+// 只看 CSS 过渡：页面上猫、加载圈等无限循环的 CSS 动画一直 running，算进来会永远等不到。getAnimations() 会先刷样式，刚起的过渡已经在里面。
+// 等不到不在这里报错，走到下面原有断言，失败信息和原来一样。
+const transitionsSettled = (page) => page.waitForFunction(
+  () => document.getAnimations().filter((a) => a instanceof CSSTransition).every((a) => a.playState !== 'running'),
+  null, {timeout: 5000},
+).catch(() => {});
+
 test('G3a real page: in Metre the native skills page drops the pink / purple and speaks Chinese; without the overrides it goes back', async (t) => {
   let installed; let server; let browser;
   t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
@@ -91,7 +99,7 @@ test('G3a real page: in Metre the native skills page drops the pink / purple and
           return n;
         });
         assert.equal(removed, 2, '没找到技能页的两条 Metre 规则');
-        await page.waitForTimeout(600);   // Metre 皮肤给卡片边框 / 字色有 140–160ms 过渡，删规则后马上读会读到过渡起点（还是 Metre 色）
+        await transitionsSettled(page);   // Metre 皮肤给卡片边框 / 字色有 140–160ms 过渡，删规则后马上读会读到过渡起点（还是 Metre 色）
         const bad = await page.evaluate(readSkills);
         console.log(`ℹ day without overrides: ${JSON.stringify({card: bad.card, tab: bad.tab})}`);
         assert.match(bad.card.border, PINK, '反例没生效：删掉规则后卡片不是粉边');
