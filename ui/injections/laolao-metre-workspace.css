@@ -95,5 +95,5 @@ html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:hover { background: var(
 html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:active { background: var(--metre-side-active); }
 html[data-laolao-mode="metre"] .pk-mw-filter-menu__item:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: -2px; }
 html[data-laolao-mode="metre"] .pk-mw-filter-menu__item[aria-checked="true"] { color: var(--metre-cobalt); }
-html[data-laolao-mode="metre"] .pk-mw-filter-menu__count { color: var(--metre-muted); font: 400 12px/1 var(--metre-mono); }
+html[data-laolao-mode="metre"] .pk-mw-filter-menu__count { color: color-mix(in srgb, var(--metre-muted) 78%, var(--metre-text)); font: 400 12px/1 var(--metre-mono); }   /* 纯 muted 在悬停行底上日间只有 4.03:1，掺两成多正文色到 ≥ 4.7（B11 走查） */
 html:not([data-laolao-mode="metre"]) .pk-mw-filter-menu { display: none; }

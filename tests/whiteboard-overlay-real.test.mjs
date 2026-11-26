@@ -74,6 +74,13 @@ const backdrop = (page) => page.evaluate((NATIVE) => {
 
 const openBoard = (page) => page.evaluate(() => Promise.resolve(window.Pinkie.whiteboard.open()).then(() => true, () => true));
 
+// 等白板和遮罩一起显 / 隐（laolao-whiteboard.js 的 setBackdrop 同步改 hidden 和 inert）。
+// 等不到不在这里报错，交给后面原有断言给出原来的失败信息。
+const boardShown = (page, on) => page.waitForFunction((want) => {
+  const root = document.querySelector('.pk-whiteboard'); const scrim = document.querySelector('.pk-whiteboard__scrim');
+  return Boolean(root && scrim) && root.hidden === !want && scrim.hidden === !want;
+}, on, {timeout: 5_000}).catch(() => {});
+
 test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert page behind; old look (no scrim) fails', async (t) => {
   let installed; let server;
   t.after(async () => { await server?.close(); installed?.cleanup(); });
@@ -88,9 +95,10 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
       for (const [W, H] of SIZES) {
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
+        // 保留死等：改窗口大小后等布局 / 媒体查询（窄屏 inset: 8px）切换稳定，白板打开时按当时的顶栏位置让位，没有单一可等状态。
         await page.waitForTimeout(150);
         await openBoard(page);
-        await page.waitForTimeout(200);
+        await boardShown(page, true);
 
         const bd = await backdrop(page);
         t.diagnostic(`${tag} backdrop ${JSON.stringify(bd)}`);
@@ -127,6 +135,7 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         // 点遮罩：不穿透、白板关掉、inert 全撤
         const before = await page.evaluate(() => location.href);
         await page.mouse.click(...hit[clickKey].at);
+        // 保留死等：后面还要证明「点遮罩没穿透到页面」（地址没变，没发生的事），得留时间窗让错误的导航有机会发生。
         await page.waitForTimeout(200);
         const after = await backdrop(page);
         assert.equal(after.open, false, `${tag}: 点遮罩要关白板`);
@@ -136,16 +145,16 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
 
         // Esc 也能关，且一样撤 inert
         await openBoard(page);
-        await page.waitForTimeout(150);
+        await boardShown(page, true);
         await page.evaluate(() => document.querySelector('.pk-whiteboard').focus());
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(150);
+        await boardShown(page, false);
         const esc = await backdrop(page);
         assert.deepEqual([esc.open, esc.inert], [false, 0], `${tag}: Esc 关白板后 ${JSON.stringify(esc)}`);
 
         // 反例：打开后藏掉遮罩、撤掉 inert（= 打回时的样子），四角外的点必须命中页面
         await openBoard(page);
-        await page.waitForTimeout(150);
+        await boardShown(page, true);
         await page.evaluate(() => {
           document.querySelector('.pk-whiteboard__scrim').hidden = true;
           for (const n of document.body.children) n.inert = false;
@@ -158,7 +167,7 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         assert.ok(masked.length >= 1, `${tag}: 没有点落在遮罩上 ${JSON.stringify(hit)}`);
         assert.equal(leaked.length, masked.length, `反例没生效（${tag}）：没遮罩时还有点命中白板 ${JSON.stringify(old)}`);
         await page.evaluate(() => window.Pinkie.whiteboard.close());
-        await page.waitForTimeout(100);
+        await boardShown(page, false);
       }
     } finally {
       await context.close();
@@ -219,9 +228,10 @@ test('#113 real page: whiteboard toolbar clears the desktop shell window control
         const tag = `${W}-${theme}`;
         await page.setViewportSize({width: W, height: H});
         await page.evaluate(NATIVE_STUB, W);
+        // 保留死等：改窗口大小、放好替身后等布局稳定，白板打开时按当时替身 / 顶栏的位置让位，没有单一可等状态。
         await page.waitForTimeout(150);
         await openBoard(page);
-        await page.waitForTimeout(200);
+        await boardShown(page, true);
 
         const ctlBottom = await page.evaluate(() => Math.max(...['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map((id) => document.getElementById(id).getBoundingClientRect().bottom)));
         const now = await toolbarHits(page);
@@ -235,19 +245,21 @@ test('#113 real page: whiteboard toolbar clears the desktop shell window control
         assert.deepEqual(shell, [false, false], `${tag}: 白板开着时桌面壳的窗口键 / 拖动条不能设 inert`);
         const btn = await page.locator('#pinkie-native-window-controls button').boundingBox();
         await page.mouse.click(btn.x + btn.width / 2, btn.y + btn.height / 2);
+        // 保留死等：下面还要证明「点窗口键不关白板」（没发生的事），得留时间窗让错误的关闭有机会发生。
         await page.waitForTimeout(100);
         const after = await page.evaluate(() => ({clicks: window.__stubClicks, open: window.Pinkie.whiteboard.isOpen()}));
         assert.deepEqual(after, {clicks: 1, open: true}, `${tag}: 白板开着时窗口键要点得动、点了不关白板 ${JSON.stringify(after)}`);
 
         // 反例：去掉让位（顶边回到原来的 CSS），至少一颗键被替身盖住
         await page.evaluate(() => document.querySelector('.pk-whiteboard').style.removeProperty('top'));
-        await page.waitForTimeout(100);
+        // 去掉行内 top 是同步的样式改动；万一别处给白板配了过渡（laolao-whiteboard.css 里只有 reduced-motion 下关过渡那一条），等它停下再量。等不到不在这里报错，交给下面原有断言。
+        await page.waitForFunction(() => document.querySelector('.pk-whiteboard').getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 5_000}).catch(() => {});
         const old = await toolbarHits(page);
         const oldCovered = old.hits.filter((h) => !h.own);
         t.diagnostic(`${tag} counter-example top ${old.top}; covered ${oldCovered.map((h) => `${h.b}/${h.k}<${h.by}`).join(' ')}`);
         assert.ok(oldCovered.length >= 1, `反例没生效（${tag}）：顶边 ${old.top} 时工具条一颗都没被盖住`);
         await page.evaluate(() => window.Pinkie.whiteboard.close());
-        await page.waitForTimeout(100);
+        await boardShown(page, false);
         const closed = await page.evaluate(() => ['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map((id) => document.getElementById(id).inert));
         assert.deepEqual(closed, [false, false], `${tag}: 关掉白板后窗口键 / 拖动条状态被改了`);
       }
