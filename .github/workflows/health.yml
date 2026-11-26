@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: "24.20.0"
       - name: Ratchet and loophole counterexamples
-        run: node --test tests/code-health-ratchet.test.mjs tests/code-health-loopholes.test.mjs tests/compare-baseline-mergebase.test.mjs
+        run: node --test --test-force-exit tests/code-health-ratchet.test.mjs tests/code-health-loopholes.test.mjs tests/compare-baseline-mergebase.test.mjs
       - name: Compare baseline, exceptions and unmeasured list with the target branch
         if: github.event_name == 'pull_request'
         env:
