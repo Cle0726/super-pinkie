@@ -66,7 +66,7 @@ html[data-pinkie-night] .pinkie-art-viewer { background:rgba(0,0,0,.5) }
 .pinkie-art-loading { margin:auto;color:var(--pa-muted) }
 .pinkie-art-status { min-height:0;margin:0;padding:0 18px;font-size:12.5px;color:color-mix(in srgb,var(--pa-accent) 80%,var(--pa-text)) }
 .pinkie-art-status:not(:empty) { padding:8px 18px;border-top:1px solid var(--pa-line) }
-.pinkie-art-confirm { z-index:2147482500;--pk-modal-title-font:var(--metre-sans) }
+.pinkie-art-confirm { z-index:2147482500 }
 .pinkie-art-confirm__text { margin:0 0 16px;font-size:13px;line-height:1.6;opacity:.8 }
 
 /* W3 file cards under a reply */
