@@ -82,11 +82,15 @@ export function policyFor({origins = []} = {}) {
   }).join('; ');
 }
 // 没勾读文件：在作品自己的脚本之前把文件选择框挡掉（file input 的点击、File System Access API）。
+// 点击走 composedPath：影子树里的 input 在事件上被换成宿主，closest 够不着。
+// showPicker 不走 click，也不走上面三个选择器 API，单独包一层。
 export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMException("这个应用没有读文件的权限","NotAllowedError"));'
   + 'for(const k of ["showOpenFilePicker","showDirectoryPicker","showSaveFilePicker"])try{Object.defineProperty(window,k,{value:no,configurable:false})}catch{}'
-  + 'addEventListener("click",e=>{const t=e.target&&e.target.closest&&e.target.closest("input[type=file],label");'
-  + 'const i=t&&(t.matches("input")?t:t.control);if(i&&i.type==="file"){e.preventDefault();e.stopImmediatePropagation()}},true);'
-  + 'const c=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==="file")return;return c.call(this)}})()</script>';
+  + 'const fileInput=n=>!!(n&&n.tagName==="INPUT"&&String(n.type).toLowerCase()==="file");'
+  + 'addEventListener("click",e=>{const p=typeof e.composedPath==="function"?e.composedPath():[e.target];'
+  + 'for(const n of p){if(fileInput(n)||(n&&n.tagName==="LABEL"&&fileInput(n.control))){e.preventDefault();e.stopImmediatePropagation();return}}},true);'
+  + 'const proto=HTMLInputElement.prototype;const c=proto.click;proto.click=function(){if(String(this.type).toLowerCase()==="file")return;return c.call(this)};'
+  + 'if(typeof proto.showPicker==="function"){const s=proto.showPicker;proto.showPicker=function(){if(String(this.type).toLowerCase()==="file")throw new DOMException("这个应用没有读文件的权限","NotAllowedError");return s.call(this)}}})()</script>';
 
 // 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何脚本之前：有 <head> 插在它后面；
 // 没有就插在 <html> / doctype 后面（解析器会把它放进隐式的 head）；都没有才放最前面。
