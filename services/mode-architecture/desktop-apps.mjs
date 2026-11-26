@@ -81,6 +81,30 @@ export function policyFor({origins = []} = {}) {
     return rule;
   }).join('; ');
 }
+// CSP 的 connect-src 管不住换页：location、刷新跳转、<a> 都会把整份文档换成没有这条策略的新页面。
+// 守卫跟 CSP 一起插在作品脚本之前。勾过的来源按浏览器的 origin 比较（默认端口 443/80 算同一个）；
+// file: 只留在本页所在的目录里。data:、blob: 和其他地址直接取消。
+const GUARD_ORIGIN = /^[a-z]+:\/\/[a-z0-9.-]+(?::\d{1,5})?$/;
+export function guardOrigins(origins) {
+  const out = [];
+  for (const origin of cleanOrigins(origins)) {
+    try {
+      const url = new URL(origin);
+      if (['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) && GUARD_ORIGIN.test(url.origin)) out.push(url.origin);
+    } catch { /* 浏览器解析不了的来源不放进守卫 */ }
+  }
+  return [...new Set(out)];
+}
+export function navGuardScript(origins) {
+  const list = JSON.stringify(guardOrigins(origins));
+  return '<script>(()=>{const allowed=new Set(' + list + ');const ok=raw=>{let u;try{u=new URL(raw,location.href)}catch{return false}'
+    + 'if(u.protocol==="file:"){const d=new URL(".",location.href).href;return u.href.startsWith(d)}'
+    + 'return (u.protocol==="http:"||u.protocol==="https:"||u.protocol==="ws:"||u.protocol==="wss:")&&allowed.has(u.origin)};'
+    + 'addEventListener("click",e=>{const p=typeof e.composedPath==="function"?e.composedPath():[e.target];for(const n of p){const href=n&&(n.tagName==="A"||n.tagName==="AREA")&&n.href;if(href&&!ok(href)){e.preventDefault();e.stopImmediatePropagation();return}}},true);'
+    + 'const open=window.open;window.open=function(url,name,features){if(url==null||url===""||!ok(String(url)))return null;return typeof open==="function"?open.call(window,url,name,features):null};'
+    + 'if(window.navigation)window.navigation.addEventListener("navigate",e=>{if(e.hashChange||(e.destination&&e.destination.sameDocument)||e.navigationType==="reload")return;if(!e.destination||!ok(e.destination.url))e.preventDefault()})})()</script>';
+}
+
 // 没勾读文件：在作品自己的脚本之前把文件选择框挡掉（file input 的点击、File System Access API）。
 export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMException("这个应用没有读文件的权限","NotAllowedError"));'
   + 'for(const k of ["showOpenFilePicker","showDirectoryPicker","showSaveFilePicker"])try{Object.defineProperty(window,k,{value:no,configurable:false})}catch{}'
@@ -96,7 +120,8 @@ export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMExce
 // 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
 export function withPolicy(html, {origins = [], files = false} = {}) {
   const text = String(html);
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins})}">` + (files ? '' : FILE_GUARD);
+  const allowed = cleanOrigins(origins);
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins: allowed})}">` + (files ? '' : FILE_GUARD) + navGuardScript(allowed);
   const charset = charsetMeta(text);
   let at = 0;
   for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
