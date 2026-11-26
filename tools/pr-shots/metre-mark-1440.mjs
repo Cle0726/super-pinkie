@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // 17（协调者 22:09 / 22:14，uireview #98 审图「日 1440 左下角 METRE 标志压住齿轮 / 切换 / 书本图标」）的 PR 截图脚本。
 // 约定照 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + <目录>/shots.jsonl。
-// 真实安装的 Control UI + 碧琪注入，metre-board 场景，1440 / 820 × 日 / 夜。不连网关、不碰用户会话。
+// 真实安装的 Control UI + 碧琪注入，metre-board 场景首页和重新载入的原生 /cron 页（照 #98 的 98-a3-cron.mjs：page.goto 换路由），1440 / 820 × 日 / 夜。
+// 不连网关、不碰用户会话。uireview #98 看到的压图标是在 /cron 页上（侧栏约 258 宽、底栏图标比首页多）。
 // 每组拍两张：
-//   mark-<宽>-<日夜>       ：整页
-//   mark-<宽>-<日夜>-foot  ：左下角底栏放大（侧栏底部 300 × 80，裁图 3 倍）
+//   mark-<路由>-<宽>-<日夜>       ：整页（路由 board / cron）
+//   mark-<路由>-<宽>-<日夜>-foot  ：左下角底栏放大（侧栏底部 300 × 80，裁图 3 倍）
 // shots.jsonl 每行另记侧栏宽、黑卡 / 方灯 / 底栏每个图标的横向范围，以及谁和谁叠着（overlaps，空数组才算没压）。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +33,8 @@ function measureFoot() {
   if (card) items.push({id: 'card', ...box(card)});
   const lamp = vis(side?.querySelector('.pinkie-connection-status'));
   if (lamp) items.push({id: 'lamp', ...box(lamp)});
-  const bar = side?.querySelector('.sidebar-footer-bar');
+  // 整个底栏（.sidebar-shell__footer）里看得见的按键都算：主题键、记忆书本、激光笔这些是别的注入后挂上去的，不一定在 .sidebar-footer-bar 里
+  const bar = side?.querySelector('.sidebar-shell__footer') || side?.querySelector('.sidebar-footer-bar');
   for (const e of bar ? bar.querySelectorAll('button, a, [role="button"]') : []) {
     if (e.closest('.laolao-mode-switcher, .pinkie-connection-status')) continue;
     const r = vis(e); if (!r) continue;
@@ -58,11 +60,13 @@ try {
   for (const theme of ['day', 'night']) {
     const {context, page} = await openRealScenePage(browser, server.origin, 'metre-board', theme);
     try {
+      for (const route of ['board', 'cron']) {
+      if (route === 'cron') { const u = new URL(page.url()); u.pathname = '/cron'; await page.goto(u.href); await page.waitForTimeout(1500); }
       for (const [width, height] of [[1440, 900], [820, 900]]) {
         await page.setViewportSize({width, height});
         await page.waitForTimeout(900);
         const info = await page.evaluate(measureFoot);
-        const name = `mark-${width}-${theme}`;
+        const name = `mark-${route}-${width}-${theme}`;
         rec(name, width, height, await page.screenshot({path: path.join(out, name + '.png')}), info);
         const clip = {x: 0, y: Math.max(0, (info.sideBottom ?? height) - 80), width: 300, height: 80};
         const foot = name + '-foot';
@@ -75,6 +79,7 @@ try {
           rec(foot, clip.width * 3, clip.height * 3, await p2.screenshot({path: path.join(out, foot + '.png')}), {...info, clip});
         } finally { await p2.close(); }
         notes.push(`${name}: side=${info.sideW} ` + info.items.map((i) => `${i.id}[${i.l}..${i.r}]`).join(' ') + ` overlaps=${JSON.stringify(info.overlaps)}`);
+      }
       }
     } finally {
       await context.close();
