@@ -86,7 +86,7 @@
     key: '', items: new Map(), rev: 0, loaded: false, tool: 'select', color: 'sun', view: {x: 40, y: 40, z: 1},
     selected: '', linkFrom: '', gesture: null, timer: 0, theme: '', chain: Promise.resolve(),
     pending: new Map(), gen: new Map(), lastRev: new Map(), gone: new Set(),
-    root: null, svg: null, layer: null, dots: null, editor: null, empty: null, status: null, bar: {},
+    root: null, scrim: null, svg: null, layer: null, dots: null, editor: null, empty: null, status: null, bar: {},
   };
 
   // ---------- geometry ----------
@@ -485,6 +485,7 @@
   function build() {
     const root = el('section', 'pk-whiteboard');
     root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'true');
     root.setAttribute('aria-label', '白板');
     root.tabIndex = -1;
     root.hidden = true;
@@ -580,9 +581,30 @@
       else if (k === '0') fit();
     });
     addEventListener('resize', () => commitEdit());
-    document.body.append(root);
+    // 浮层四周留 24px 白边：铺一层实的遮罩（点了不穿透，点它就关），背后的页面设 inert，根标 aria-modal。
+    const scrim = el('div', 'pk-whiteboard__scrim');
+    scrim.hidden = true;
+    scrim.setAttribute('aria-hidden', 'true');
+    scrim.addEventListener('click', () => close());
+    document.body.append(scrim, root);
+    st.scrim = scrim;
     st.root = root;
     updateBar();
+  }
+  // 打开时把 body 下其余顶层节点设 inert（只记自己设的，关的时候只撤自己设的）。
+  const inerted = new Set();
+  function setBackdrop(on) {
+    if (st.scrim) st.scrim.hidden = !on;
+    if (on) {
+      for (const n of document.body.children) {
+        if (n === st.root || n === st.scrim || n.inert || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
+        n.inert = true;
+        inerted.add(n);
+      }
+    } else {
+      for (const n of inerted) n.inert = false;
+      inerted.clear();
+    }
   }
   const isOpen = () => Boolean(st.root && !st.root.hidden);
   async function open() {
@@ -595,6 +617,7 @@
       say('正在打开白板…');
     }
     st.root.hidden = false;
+    setBackdrop(true);
     // 轮询走共用调度器（页面藏起来时自动停），关掉白板就停。
     st.timer?.stop?.();
     st.timer = window.Pinkie.domWatch?.every(POLL_MS, () => {
@@ -612,6 +635,7 @@
     if (!st.root) return;
     commitEdit();
     st.root.hidden = true;
+    setBackdrop(false);
     st.timer?.stop?.();
     st.timer = null;
     syncEntry();
