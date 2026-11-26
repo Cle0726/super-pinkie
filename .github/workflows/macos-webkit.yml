@@ -1,0 +1,47 @@
+name: macOS WebKit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-webkit-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  webkit-suite:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - name: Install WebKit regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Run the WebKit suite from tests/webkit-ci.list
+        timeout-minutes: 12
+        run: |
+          node tools/ci/run-macos-webkit.mjs \
+            --list tests/webkit-ci.list \
+            --artifact-dir "$RUNNER_TEMP/macos-webkit-artifacts" \
+            --concurrency 3 \
+            --max-minutes 9
+      - name: Upload TAP logs and failure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-webkit-artifacts
+          if-no-files-found: warn
+          retention-days: 14
+          path: ${{ runner.temp }}/macos-webkit-artifacts/
