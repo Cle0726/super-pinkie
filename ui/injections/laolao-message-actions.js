@@ -331,7 +331,7 @@
     const userId = userGroup ? lastEntryIn(userGroup, history) : '';
     const ownId = lastEntryIn(group, history);
     const streaming = Boolean(group.querySelector('.chat-bubble.streaming'));
-    const signature = [userId, ownId, editable, busy, streaming, ratings[ownId] || ''].join('|');
+    const signature = [userId, ownId, editable, busy, streaming, ratings[ownId] || '', Boolean(window.Pinkie?.sideBySide)].join('|');
     const footer = group.querySelector('.chat-group-footer');
     if (!footer || group.dataset.pinkieActions === signature) return;
     group.dataset.pinkieActions = signature;
