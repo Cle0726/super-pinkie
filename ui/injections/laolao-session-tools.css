@@ -5,7 +5,7 @@ html[data-pinkie-night] { --pt-card:#2a2027; --pt-text:#f3e9ef }
 /* H1 ghost entry beside 新会话 */
 .sidebar-sessions { position:relative }
 .pinkie-temp-entry { position:absolute;right:8px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:color-mix(in srgb,currentColor 55%,transparent);font:inherit;font-size:12px;cursor:pointer;opacity:.75 }
-.pinkie-temp-entry svg { width:15px;height:15px }
+.pinkie-temp-entry svg { width:15px;height:15px } /* B11 学习表：日间「临时」原是字色 55% 再叠 .75 透明度，白底只有 1.91–2.13:1；日间五个碧琪模式改 90%、不透明（5.16–6.91:1）。悬停 / 键盘焦点 / 临时会话中、夜间、Metre 不变。 */ html:not([data-pinkie-night]):not([data-laolao-mode="metre"]):not([data-pinkie-temp]) .pinkie-temp-entry:not(:hover):not(:focus-visible) { color:color-mix(in srgb,currentColor 90%,transparent);opacity:1 }
 /* 「临时」叠在「新会话」那一行的右端，快捷键提示原来也排在同一个位置，两行字糊成一团：有「临时」时把提示往左让开。 */
 html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }
 .pinkie-temp-entry:hover,.pinkie-temp-entry:focus-visible { opacity:1;color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 9%,transparent);outline:none }
