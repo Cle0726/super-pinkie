@@ -416,15 +416,36 @@
     if (min < full - 1) out.push(Math.ceil(min));
     return out;
   }
-  // 本批哪个键被浮在输入框角上的按钮（发送、停止、麦克风都是 button.chat-send-btn，绝对定位）盖住
+  // 浮在输入框上、会盖住本批键的控件：输入框里绝对 / 固定定位、看得见也接得住鼠标的按钮。发送、停止、麦克风都是 button.chat-send-btn
+  // （mac1 任务 28 / 58）；左下角还有托盘键 .pinkie-tray-btn（mac2 #150 issuecomment-7183750963：320 宽「⋯」让到行首后正好落在它底下）。
+  // 不只认这两个类名：任何这样浮着的控件都算。本批自己的键不算。
+  function floatsOver(input) {
+    return [...input.querySelectorAll('button, summary, [role="button"], .pinkie-tray-btn')].filter((b) => {
+      if (b.closest('.pk-perm-chips')) return false;
+      const s = getComputedStyle(b);
+      return /^(?:absolute|fixed)$/.test(s.position) && s.visibility !== 'hidden' && s.pointerEvents !== 'none';
+    }).map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+  }
+  const overlaps = (a, r) => Math.min(a.right, r.right) - Math.max(a.left, r.left) > 1 && Math.min(a.bottom, r.bottom) - Math.max(a.top, r.top) > 1;
+  // 本批哪个键被这些浮着的控件盖住
   function covered(box, input) {
-    const floats = [...input.querySelectorAll('button.chat-send-btn')].filter((b) => /^(?:absolute|fixed)$/.test(getComputedStyle(b).position))
-      .map((b) => b.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    const floats = floatsOver(input);
     if (!floats.length) return false;
-    return [...box.querySelectorAll('.pk-perm-chip')].some((k) => {
-      const a = k.getBoundingClientRect();
-      return floats.some((r) => Math.min(a.right, r.right) - Math.max(a.left, r.left) > 1 && Math.min(a.bottom, r.bottom) - Math.max(a.top, r.top) > 1);
-    });
+    return [...box.querySelectorAll('.pk-perm-chip')].some((k) => { const a = k.getBoundingClientRect(); return floats.some((r) => overlaps(a, r)); });
+  }
+  // 「⋯」自己占一行、排到行首以后还被盖住（托盘键就浮在行首）：按键往右让，让过盖住它的那个控件再留 4px，直到不被盖住；
+  // 让到超出这一行还盖着就算让不开（返回 false，调用方挪回来）。让的距离记在按键这一截的 padding-left 上，每次重量先清掉。
+  function clearCover(box, input, controls) {
+    const room = controls.getBoundingClientRect().right;
+    for (let i = 0; i < 4; i++) {
+      const floats = floatsOver(input), keys = [...box.querySelectorAll('.pk-perm-chip')].map((k) => k.getBoundingClientRect());
+      let need = 0;
+      for (const a of keys) for (const r of floats) if (overlaps(a, r)) need = Math.max(need, Math.ceil(r.right - a.left) + 4);
+      if (!need) return true;
+      if (Math.max(...keys.map((a) => a.right)) + need > room) return false;
+      box.style.paddingLeft = ((parseFloat(box.style.paddingLeft) || 0) + need) + 'px';
+    }
+    return !covered(box, input);
   }
   function build(f) {
     const lv = LEVELS.find((l) => l.id === state.level);
@@ -485,7 +506,7 @@
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
     squeeze(model, null);
     let cur = box;
-    delete cur.dataset.dodge;   // 上次为躲麦克风挪到行首的，先回原位再量
+    delete cur.dataset.dodge; cur.style.removeProperty('padding-left');   // 上次为躲麦克风挪到行首（再为躲托盘键往右让）的，先回原位再量
     const ok = () => h() <= h0 + 1 && !covered(cur, input);
     if (fold === 0 && Number(cur.dataset.fold) === 0 && ok()) return;
     for (let f = 0; f <= 3; f++) {
@@ -499,6 +520,8 @@
     if (!covered(cur, input)) return;
     cur.dataset.dodge = '1';
     for (const w of tries) { squeeze(model, w); if (!covered(cur, input)) return; }
+    // 挪到行首还被盖住（mac2：320 宽真实页面，行首正好是浮着的托盘键）：在这一行里往右让过它；让不开才挪回来
+    for (const w of tries) { squeeze(model, w); if (clearCover(cur, input, controls)) return; cur.style.removeProperty('padding-left'); }
     delete cur.dataset.dodge;
   }
   // 原生模型名是后到的、思考档位键第一次点页面会变宽：画完以后隔一会儿再量几次（一次性的 setTimeout，不加循环定时器和观察器）
