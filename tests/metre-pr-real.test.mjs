@@ -129,7 +129,7 @@ test('PR 页 real page: 只在 Metre，CI 没绿合并灰着，合并要页内�
         assert.equal(await mergeBtn(page).isDisabled(), true, 'CI 没全绿时「合并」灰着');
         assert.equal((await page.textContent('.pk-mpr .pk-mpr__sec:last-of-type .pk-mpr__why')).trim(), 'CI 还没全绿。');
         await mergeBtn(page).evaluate((b) => b.click());
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(200);   // 保留：断言灰着的按钮点了「不出确认、不调 merge」，没有能等的条件
         assert.equal(await page.locator('.pk-mpr__confirm').count(), 0, '灰着的按钮点了不出确认');
         assert.equal((await page.evaluate(calls, 'pinkie.pr.merge')).length, 0, 'CI 没绿不调 merge');
 
@@ -150,7 +150,7 @@ test('PR 页 real page: 只在 Metre，CI 没绿合并灰着，合并要页内�
         assert.match(ask, /#7.*main.*头 abcdef12/, `确认写 PR 号、base、头（${ask}）`);
         assert.equal((await page.evaluate(calls, 'pinkie.pr.merge')).length, 0, '点「合并」只出确认，不调 merge');
         await page.click('.pk-mpr__confirm .pk-mpr__btn >> text=取消');
-        await page.waitForTimeout(200);
+        await page.waitForTimeout(200);   // 保留：同时断言取消后「不调 merge」，要给可能的误调用留时间
         assert.equal(await page.locator('.pk-mpr__confirm').count(), 0, '取消收回确认');
         assert.equal((await page.evaluate(calls, 'pinkie.pr.merge')).length, 0, '取消不调 merge');
         await mergeBtn(page).click();
