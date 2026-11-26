@@ -154,6 +154,35 @@ test('A9 Metre 夜间装到桌面对话框主按钮字对比度 ≥ 4.5:1（uire
   assert.ok(ratio(surface, accent) >= 4.5, `夜间主按钮 ${surface} / ${accent} = ${ratio(surface, accent).toFixed(2)}`);
 });
 
+test('A11 碧琪各模式下装到桌面 / 卸载确认主按钮字对比度 ≥ 4.5:1（CI 截图 7ec74580：项目模式白字压青绿 日 3.78 / 夜 2.03）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const lum = c => c.map(v => v / 255).map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  // 日间：主题里每个模式的 --accent（含 :root 默认）；夜间：laolao-night.css 每个模式的 --accent。
+  const theme = read('laolao-theme.css');
+  // 模式色块都在文件开头（:root 和 html[data-laolao-mode=…] 那几段），后面是各页面自己的规则。
+  const head = theme.split('\n').slice(0, theme.split('\n').findIndex((line, i) => i > 0 && /^html\[data-laolao-mode="unrestricted"\] \{/.test(line)) + 10).join('\n');
+  const day = [...head.matchAll(/--accent:\s*(#[0-9a-fA-F]{6})/g)].map(m => m[1]);
+  const night = [...read('laolao-night.css').matchAll(/html\[data-pinkie-night\]\[data-laolao-mode="[a-z]+"\][^{]*\{[^}]*--accent:\s*(#[0-9a-fA-F]{6})/g)].map(m => m[1]);
+  assert.ok(day.length >= 5 && night.length >= 5, `读到日间 ${day.length}、夜间 ${night.length} 个强调色`);
+  assert.ok(night.some(c => ratio([255, 255, 255], rgb(c)) < 4.5), '白字本来就不够，这条测试才有意义');
+  // 主按钮底跟 --pk-apps-accent 走，默认仍是 --pa-accent（别的对话框不变）。
+  assert.match(read('laolao-artifacts.css'), /\.pk-apps-dialog\) \.laolao-modal__button--primary \{ background:var\(--pk-apps-accent,var\(--pa-accent\)\)/);
+  const css = read('laolao-desktop-apps.css');
+  const mix = css.match(/^html:not\(\[data-laolao-mode="metre"\]\):not\(\[data-pinkie-night\]\) \.pk-apps-dialog \{ --pk-apps-accent:color-mix\(in srgb,var\(--pa-accent\) (\d+)%,#000\) \}$/m);
+  assert.ok(mix, '日间对话框要压暗主按钮底');
+  const ink = css.match(/^html\[data-pinkie-night\]:not\(\[data-laolao-mode="metre"\]\) \.pk-apps-dialog \{ --pk-apps-on-accent:(#[0-9a-fA-F]{6}) \}$/m);
+  assert.ok(ink, '夜间对话框主按钮要换深色字');
+  for (const c of day) {
+    const bg = rgb(c).map(v => (v * Number(mix[1])) / 100);
+    assert.ok(ratio([255, 255, 255], bg) >= 4.5, `日间 ${c} 压到 ${mix[1]}% 白字 ${ratio([255, 255, 255], bg).toFixed(2)}`);
+  }
+  for (const c of night) assert.ok(ratio(rgb(ink[1]), rgb(c)) >= 4.5, `夜间 ${ink[1]} / ${c} = ${ratio(rgb(ink[1]), rgb(c)).toFixed(2)}`);
+});
+
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
 function fakeDom(source) {
   const hasClass = (node, name) => String(node.className || '').split(/\s+/).includes(name);
