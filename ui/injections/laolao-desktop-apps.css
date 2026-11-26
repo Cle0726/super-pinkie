@@ -3,3 +3,5 @@
 .pk-apps-dialog__name:focus-visible { outline:2px solid color-mix(in srgb,currentColor 45%,transparent);outline-offset:1px }
 .pk-apps-list { display:flex;flex-direction:column;gap:2px }
 .pk-apps-row__actions { display:flex;gap:6px;flex-shrink:0 }
+/* Metre 夜间强调色 #93A5EE 偏亮，白字只有 2.37:1；只在装到桌面对话框里把主按钮字换成 Metre 面板深色（≥ 4.5:1）。 */
+html[data-laolao-mode="metre"]:is([data-pinkie-night],[data-theme="dark"]) .pk-apps-dialog { --pk-apps-on-accent:var(--metre-surface,#232321) }
