@@ -96,6 +96,21 @@ export function readableEntries(message) {
   return out;
 }
 
+// 备份说明里的文件名是外部 JSON。只认备份目录里的一个普通文件名，并在解析符号链接后再核对一次。
+function backupTranscript(realDir, name, platform) {
+  const raw = String(name ?? '');
+  const fold = value => platform === 'win32' ? value.toLowerCase() : value;
+  if (!raw || raw !== path.basename(raw) || raw === '.' || raw === '..' || raw.includes('\0') || /[\\/]/.test(raw)) {
+    throw new Error('备份说明不对');
+  }
+  const file = path.join(realDir, raw);
+  let real;
+  try { real = fs.realpathSync(file); } catch { throw new Error('这个备份里没有会话记录'); }
+  const prefix = realDir.endsWith(path.sep) ? realDir : realDir + path.sep;
+  if (!fold(real).startsWith(fold(prefix)) || !fs.statSync(real).isFile()) throw new Error('备份说明不对');
+  return real;
+}
+
 export class SessionManager {
   constructor(api, {root, titles, lineage = null, stateRoot, bindingsFile = '', now = Date.now, stopTimeoutMs = 12_000, search, platform = process.platform, home = os.homedir()}) {
     this.api = api;
@@ -463,22 +478,42 @@ export class SessionManager {
   }
 
   async restore(raw) {
-    const dir = path.resolve(normalizeFolder(raw, {platform: this.platform, home: this.home}) || '');
-    const root = path.resolve(this.backupRoot) + path.sep;
+    const requested = path.resolve(normalizeFolder(raw, {platform: this.platform, home: this.home}) || '');
     const fold = value => this.platform === 'win32' ? value.toLowerCase() : value;
-    if (!fold(dir).startsWith(fold(root))) throw new Error('只能从删除备份目录（' + this.backupRoot + '）里恢复');
+    const lexicalRoot = path.resolve(this.backupRoot);
+    const lexicalPrefix = lexicalRoot.endsWith(path.sep) ? lexicalRoot : lexicalRoot + path.sep;
+    if (!fold(requested).startsWith(fold(lexicalPrefix))) throw new Error('只能从删除备份目录（' + this.backupRoot + '）里恢复');
+    let realDir;
+    try { realDir = fs.realpathSync(requested); } catch { throw new Error('这个备份里没有 session.json'); }
+    let realRoot;
+    try { realRoot = fs.realpathSync(lexicalRoot); } catch { throw new Error('只能从删除备份目录（' + this.backupRoot + '）里恢复'); }
+    const realPrefix = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+    if (fold(realDir) === fold(realRoot) || !fold(realDir + path.sep).startsWith(fold(realPrefix))) {
+      throw new Error('只能从删除备份目录（' + this.backupRoot + '）里恢复');
+    }
     let meta;
-    try { meta = JSON.parse(fs.readFileSync(path.join(dir, 'session.json'), 'utf8')); } catch { throw new Error('这个备份里没有 session.json'); }
+    try {
+      const realMeta = fs.realpathSync(path.join(realDir, 'session.json'));
+      const dirPrefix = realDir.endsWith(path.sep) ? realDir : realDir + path.sep;
+      if (!fold(realMeta).startsWith(fold(dirPrefix))) throw new Error('备份说明不对');
+      meta = JSON.parse(fs.readFileSync(realMeta, 'utf8'));
+    } catch (error) {
+      if (error.message === '备份说明不对') throw error;
+      throw new Error('这个备份里没有 session.json');
+    }
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) throw new Error('备份说明不对');
     const key = meta.key, agentId = agentOf(key);
     if (!agentId || agentId !== meta.agentId) throw new Error('备份说明不对');
+    // 先核对记录文件，路径不对就不创建新会话。
+    const transcript = backupTranscript(realDir, meta.transcript, this.platform);
+    const lines = fs.readFileSync(transcript, 'utf8').split('\n');
+    const head = (() => { try { return JSON.parse(lines[0]); } catch { return null; } })();
     if (isMetreSession(key) || isMetreAgent(agentId)) getActiveMetreLock()?.assertUnlocked?.();
     if (await this.access.entry(key)) throw new Error('这条会话还在（没删或已经恢复过）');
     const {label} = await this.uniqueLabel(agentId, meta.entry?.label || meta.title || '恢复的会话');
     await this.access.rpc('sessions.create', {agentId, key, label});
     const entry = await this.entry(key);
     // 把备份的记录写回新会话的文件；开头那行 session 头换成新会话的 id，其余原样。
-    const lines = fs.readFileSync(path.join(dir, meta.transcript), 'utf8').split('\n');
-    const head = (() => { try { return JSON.parse(lines[0]); } catch { return null; } })();
     if (head?.type === 'session') lines[0] = JSON.stringify({...head, id: entry.sessionId});
     fs.mkdirSync(path.dirname(entry.transcript), {recursive: true});
     fs.writeFileSync(entry.transcript, lines.join('\n'));
@@ -486,7 +521,7 @@ export class SessionManager {
       try { await this.access.rpc('pinkie.project.bind', {key, path: meta.binding.root, name: meta.binding.name || ''}); } catch {}
     }
     this.notify(key);
-    return {key, restored: true, title: label, from: dir};
+    return {key, restored: true, title: label, from: requested};
   }
 
   // ---------- 确认卡片（老模式对别的会话 archive / stop / rename / detach）----------
