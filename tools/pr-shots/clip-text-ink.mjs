@@ -77,3 +77,29 @@ export async function clipTextInk(page, hide, clip, binPx) {
     await tag.evaluate((n) => n.remove());
   }
 }
+
+// 走查脚本 measure() 标出来的 background-clip:text 字：页面外按像素量（clip-text-ink.mjs），不够线的并回 issues.text。
+// 每条记 method:'pixels'，ratio 是渐变最浅那段、median 是中位；全部量值另记在 row.clipText 里。
+export async function measureClipText(page, row) {
+  const vp = page.viewportSize();
+  for (const c of row.clipText || []) {
+    const x = Math.max(0, c.x - 2), y = Math.max(0, c.y - 2);
+    const clip = {x, y, width: Math.min(vp.width - x, c.w + 4), height: Math.min(vp.height - y, c.h + 4)};
+    if (clip.width < 2 || clip.height < 2) { c.skipped = 'offscreen'; continue; }
+    try {
+      const dpr = await page.evaluate(() => devicePixelRatio);
+      const hide = `[data-pk-walk-clip="${c.id}"], [data-pk-walk-clip-src~="${c.id}"]`;
+      Object.assign(c, await clipTextInk(page, hide, clip, (c.fontSize * dpr) / 2));
+      if (!c.bins) { c.skipped = 'no-ink'; continue; } // 有字 / 藏字截图一样：量不到墨，不按 ratio 1 报红
+    } catch (error) {
+      c.error = String(error?.message || error).slice(0, 160);
+      continue;
+    }
+    if (c.ratio < c.need) {
+      row.issues.text.push({sel: c.sel, text: c.text, ratio: c.ratio, median: c.median, need: c.need, method: 'pixels', fontSize: c.fontSize, fontWeight: c.fontWeight, x: c.x, y: c.y, w: c.w, h: c.h, count: 1});
+      row.counts.text++;
+    }
+  }
+  row.issues.text.sort((a, b) => a.ratio - b.ratio);
+  await page.evaluate(() => { for (const n of document.querySelectorAll('[data-pk-walk-clip], [data-pk-walk-clip-src]')) { delete n.dataset.pkWalkClip; delete n.dataset.pkWalkClipSrc; } });
+}
