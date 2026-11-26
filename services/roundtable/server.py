@@ -557,8 +557,26 @@ class Roundtable:
         self.store = store
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='roundtable')
         self.processes = {}
+        # 碧琪那一席动白板用的一次性令牌：{token: session}，只在内存里，这一跑结束就删。
+        self.board_tokens = {}
+        self.board_url = ''  # serve() 填 http://127.0.0.1:<port>；没填（测试里直接用 Roundtable）就不给白板令牌
         self.lock = threading.RLock()
         self.closed = False
+
+    def issue_board_token(self, session):
+        if not self.board_url:
+            return ''
+        token = secrets.token_urlsafe(32)
+        with self.lock:
+            self.board_tokens[token] = session
+        return token
+
+    def board_session(self, token):
+        with self.lock:
+            for known, session in self.board_tokens.items():
+                if token and hmac.compare_digest(token, known):
+                    return session
+        return ''
 
     def send(self, session_id, data):
         session = self.store.session(session_id)
@@ -682,6 +700,10 @@ class Roundtable:
                 command = [node, '--import', str(hook), str(Path(binary).resolve())] + command[len(openclaw_command()):]
                 environment['PINKIE_LIVE_ENTRY'] = binary
             environment['OPENCLAW_CONFIG_PATH'] = str(config_path)
+            # 只有碧琪那一席能动白板：一次性令牌只放进她这个子进程的环境，不进日志、提示词和记录，这一跑结束就作废。
+            board_token = self.issue_board_token(session['id']) if member == 'pinkie' else ''
+            if board_token:
+                environment['PINKIE_ROUNDTABLE_BOARD'] = json.dumps({'url': self.board_url, 'session': session['id'], 'token': board_token})
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=self.store.root, env=environment, **PROCESS['popen_group_kwargs']())
             with self.lock:
@@ -753,6 +775,8 @@ class Roundtable:
                     self.kill(process)
                 with self.lock:
                     self.processes.get(run_id, set()).discard(process)
+                    if board_token:
+                        self.board_tokens.pop(board_token, None)
                 process.stdout.close()
                 process.stderr.close()
 
@@ -1156,7 +1180,34 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
             pass
 
+    def pinkie_whiteboard(self, session):
+        # 碧琪那一席的子进程来改白板：只认这一跑发的令牌（和页面令牌分开），不接浏览器（带 Origin 的一律拒），
+        # 令牌对应的圆桌必须就是这一张；by 一律记 pinkie。
+        port = self.server.server_port
+        if self.headers.get('Host') not in {'127.0.0.1:' + str(port), 'localhost:' + str(port)} or self.headers.get('Origin'):
+            return self.reply(403, {'error': '白板令牌只给本机的碧琪用'})
+        owner = self.server.roundtable.board_session(self.headers.get('X-Roundtable-Board', ''))
+        if not owner or owner != session:
+            return self.reply(403, {'error': '白板令牌不对或已经过期'})
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
+                raise ValueError('请求格式不正确')
+            data = json.loads(self.rfile.read(size))
+            if not isinstance(data, dict):
+                raise ValueError('请求格式不正确')
+            if data.get('read') is True:
+                return self.reply(200, self.server.store.whiteboard(session))
+            return self.reply(200, self.server.store.apply_whiteboard(session, data.get('ops'), 'pinkie'))
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            return self.reply(400, {'error': str(error)})
+        except sqlite3.Error:
+            return self.reply(503, {'error': '本机圆桌记录暂时无法保存'})
+
     def do_POST(self):
+        pinkie_board = re.fullmatch(r'/api/sessions/([a-f0-9]{32})/whiteboard/pinkie', self.path)
+        if pinkie_board:
+            return self.pinkie_whiteboard(pinkie_board.group(1))
         if not self.trusted(mutation=True):
             return self.reply(403, {'error': '页面授权失效，请刷新后重试'})
         try:
@@ -1196,6 +1247,7 @@ def serve(port, state_dir, on_ready=None):
     server.token = secrets.token_urlsafe(32)
     server.store = Store(state_dir)
     server.roundtable = Roundtable(server.store)
+    server.roundtable.board_url = 'http://127.0.0.1:' + str(server.server_port)
     if on_ready:
         on_ready(server)
     def shutdown(*_):

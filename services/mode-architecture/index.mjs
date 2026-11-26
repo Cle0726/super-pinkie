@@ -15,6 +15,7 @@ import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
 import {registerWhiteboard} from './whiteboard-store.mjs';
+import {registerWhiteboardTool} from './whiteboard-tools.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
 import {registerSessionManage} from './session-manage.mjs';
@@ -744,6 +745,7 @@ export default {
     });
     const sessionPrefs = registerSessionPrefs(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     registerWhiteboard(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    registerWhiteboardTool(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
     // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
