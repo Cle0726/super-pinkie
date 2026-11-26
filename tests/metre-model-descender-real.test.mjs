@@ -92,7 +92,7 @@ test('Metre 输入框下面一排按钮的字（含模型名的 g 下钩）不�
           await page.waitForSelector(BOX, {timeout: 5_000});
           assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), 'metre');
           await page.waitForFunction(() => document.querySelector('.agent-chat__input .chat-controls__inline-select-trigger')?.textContent.trim(), null, {timeout: 10_000});
-          await page.waitForTimeout(300);
+          await page.waitForTimeout(300);   // 保留：模型名出现后等字体和布局稳定再量，没有可等的状态
 
           const now = await page.evaluate(measure, BUTTONS);
           t.diagnostic(`${width} ${theme} 现在 ${JSON.stringify(now)}`);
