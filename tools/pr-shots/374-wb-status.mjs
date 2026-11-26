@@ -79,11 +79,14 @@ async function cell(scene, theme, width, branch) {
     await page.evaluate(() => window.__pinkieWorkbench.open('README.md', {pinned: true}));
     await page.waitForFunction(() => window.__pinkieWorkbench.state.tabs.find((x) => x.path === 'README.md')?.kind === 'text', null, {timeout: 15_000}).catch(() => {});
     await page.waitForFunction(() => { const r = document.querySelector('.pk-wb-status > .pk-wb-status__side:last-child'); return r && ['ln', 'ai'].every((k) => r.querySelector(`:scope > [data-opt="${k}"]`)); }, null, {timeout: 15_000}).catch(() => {});
-    await page.evaluate(() => window.__pinkieWorkbench.renderStatus());
+    // 诊断（uireview 22:17Z ②）：renderStatus 刚跑完和 600ms 后各量一次左半边宽、右半边宽和字体状态，看是谁在 fit 之后变了
+    const probe = () => page.evaluate(() => { const s = document.querySelector('.pk-wb-status'); const [l, r] = s ? [s.firstElementChild, s.lastElementChild] : []; return {leftW: l ? Math.round(l.getBoundingClientRect().width * 10) / 10 : null, rightW: r ? Math.round(r.getBoundingClientRect().width * 10) / 10 : null, fonts: document.fonts?.status, loading: document.fonts ? [...document.fonts].filter((f) => f.status === 'loading').map((f) => f.family).slice(0, 6) : []}; });
+    const t0 = await page.evaluate(() => { window.__pinkieWorkbench.renderStatus(); const s = document.querySelector('.pk-wb-status'); return {leftW: s ? Math.round(s.firstElementChild.getBoundingClientRect().width * 10) / 10 : null, rightW: s ? Math.round(s.lastElementChild.getBoundingClientRect().width * 10) / 10 : null, fonts: document.fonts?.status}; });
     await page.waitForTimeout(600);
+    const t600 = await probe();
     const m = await measure(page);
     await shot(page, `b50-${tag}`, {width, ...m});
-    report.push({tag, mode: await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), ...m, pageErrors});
+    report.push({tag, mode: await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), ...m, t0, t600, pageErrors});
   } finally {
     await context.close();
   }

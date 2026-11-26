@@ -1992,9 +1992,9 @@
     right.append(pinkie);
     status.replaceChildren(left, right); fitStatus();
   }
-  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
+  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失、字体晚到（左半边 flex:none 会变宽）也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
   function fitStatus() { const r = status.lastElementChild; if (!r) return; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
-  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']});
+  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']}); document.fonts?.addEventListener('loadingdone', () => fitStatus());
 
   /* ───────── 问碧琪 ───────── */
   const composer = () => document.querySelector('.agent-chat__input textarea');
