@@ -115,3 +115,94 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
     }
   }
 });
+
+// mac1 任务 54（WebKit 真页面，#113@e432b648）：桌面壳的窗口键胶囊和拖动条（app/windows_bridge_scripts.py 注入，z-index ≈ 2^31，
+// 压在一切之上）盖住白板工具条——820 宽「全部」整个被盖、「便签」「选择」点不到，1440 宽「导出 PNG」「关闭」上沿被压。
+// 另外它们是 body 的直接子节点，遮罩那一版会把它们一起设 inert，白板开着时窗口最小化 / 关闭 / 拖动都用不了。
+// 这里照 windows_bridge_scripts.py 的位置和层级放两个替身（CI 的真页面没有桌面壳），量：
+//   白板顶边让到替身下面、工具条每颗键的上沿和中心都点得到它自己、替身不是 inert 且点得动、点替身不关白板；
+//   反例：把白板顶边改回原来的 CSS（去掉让位），至少一颗工具条键被替身盖住。
+const NATIVE_STUB = (W) => {
+  for (const id of ['pinkie-native-drag-strip', 'pinkie-native-window-controls']) document.getElementById(id)?.remove();
+  const narrow = W <= 900;
+  const drag = document.createElement('div');
+  drag.id = 'pinkie-native-drag-strip';
+  drag.style.cssText = `position:fixed;z-index:2147483000;top:0;left:${narrow ? 54 : 264}px;right:204px;height:34px`;
+  const ctl = document.createElement('div');
+  ctl.id = 'pinkie-native-window-controls';
+  ctl.style.cssText = `position:fixed;z-index:2147483647;top:4px;right:${narrow ? 10 : 12}px;width:190px;height:36px;display:flex`;
+  const min = document.createElement('button');
+  min.type = 'button'; min.textContent = '–'; min.style.cssText = 'flex:1';
+  window.__stubClicks = 0;
+  min.addEventListener('click', () => { window.__stubClicks += 1; });
+  ctl.append(min);
+  document.body.append(drag, ctl);
+};
+
+const toolbarHits = (page) => page.evaluate(() => {
+  const root = document.querySelector('.pk-whiteboard');
+  const out = [];
+  for (const b of root.querySelectorAll('.pk-whiteboard__bar button')) {
+    const r = b.getBoundingClientRect();
+    if (!r.width) continue;
+    for (const [k, y] of [['top', r.top + 3], ['mid', r.top + r.height / 2]]) {
+      const e = document.elementFromPoint(r.left + r.width / 2, y);
+      const own = Boolean(e && (e === b || b.contains(e)));
+      out.push({b: b.textContent.trim() || b.getAttribute('aria-label') || '?', k, own, by: own ? '' : (e?.closest('[id]')?.id || e?.tagName || null)});
+    }
+  }
+  return {top: Math.round(root.getBoundingClientRect().top), hits: out};
+});
+
+test('#113 real page: whiteboard toolbar clears the desktop shell window controls / drag strip, which stay usable (not inert); old offset is covered', async (t) => {
+  let installed; let server; let browser;
+  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  installed = installRealControlUi({repoRoot: REPO_ROOT});
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
+
+  for (const theme of ['day', 'night']) {
+    const {context, page} = await openRealScenePage(browser, server.origin, 'home-thinking', theme);
+    try {
+      await page.waitForFunction(() => typeof window.Pinkie?.whiteboard?.open === 'function', null, {timeout: 10_000});
+      for (const [W, H] of [[1440, 900], [820, 900]]) {
+        const tag = `${W}-${theme}`;
+        await page.setViewportSize({width: W, height: H});
+        await page.evaluate(NATIVE_STUB, W);
+        await page.waitForTimeout(150);
+        await openBoard(page);
+        await page.waitForTimeout(200);
+
+        const ctlBottom = await page.evaluate(() => Math.max(...['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map((id) => document.getElementById(id).getBoundingClientRect().bottom)));
+        const now = await toolbarHits(page);
+        const covered = now.hits.filter((h) => !h.own);
+        t.diagnostic(`${tag} board top ${now.top} (shell bottom ${ctlBottom}); ${now.hits.length / 2} toolbar keys; covered ${JSON.stringify(covered)}`);
+        assert.ok(now.top >= ctlBottom + 4, `${tag}: 白板顶边 ${now.top} 没让到窗口键 / 拖动条（下沿 ${ctlBottom}）下面`);
+        assert.ok(now.hits.length >= 20, `${tag}: 工具条键太少 ${now.hits.length / 2}`);
+        assert.deepEqual(covered, [], `${tag}: 工具条有键被盖住`);
+
+        const shell = await page.evaluate(() => ['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map((id) => document.getElementById(id).inert));
+        assert.deepEqual(shell, [false, false], `${tag}: 白板开着时桌面壳的窗口键 / 拖动条不能设 inert`);
+        const btn = await page.locator('#pinkie-native-window-controls button').boundingBox();
+        await page.mouse.click(btn.x + btn.width / 2, btn.y + btn.height / 2);
+        await page.waitForTimeout(100);
+        const after = await page.evaluate(() => ({clicks: window.__stubClicks, open: window.Pinkie.whiteboard.isOpen()}));
+        assert.deepEqual(after, {clicks: 1, open: true}, `${tag}: 白板开着时窗口键要点得动、点了不关白板 ${JSON.stringify(after)}`);
+
+        // 反例：去掉让位（顶边回到原来的 CSS），至少一颗键被替身盖住
+        await page.evaluate(() => document.querySelector('.pk-whiteboard').style.removeProperty('top'));
+        await page.waitForTimeout(100);
+        const old = await toolbarHits(page);
+        const oldCovered = old.hits.filter((h) => !h.own);
+        t.diagnostic(`${tag} counter-example top ${old.top}; covered ${oldCovered.map((h) => `${h.b}/${h.k}<${h.by}`).join(' ')}`);
+        assert.ok(oldCovered.length >= 1, `反例没生效（${tag}）：顶边 ${old.top} 时工具条一颗都没被盖住`);
+        await page.evaluate(() => window.Pinkie.whiteboard.close());
+        await page.waitForTimeout(100);
+        const closed = await page.evaluate(() => ['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map((id) => document.getElementById(id).inert));
+        assert.deepEqual(closed, [false, false], `${tag}: 关掉白板后窗口键 / 拖动条状态被改了`);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+});
