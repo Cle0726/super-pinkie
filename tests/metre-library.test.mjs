@@ -1,7 +1,7 @@
 // R5 ③：作品库「在工作台打开」+ 工作台不在时的只读预览面板（laolao-metre-library.js）+ 后端 maxBytes（tests/workbench-read-maxbytes.test.mjs）。
 // 复发防护：
 //   1. 键只在 Metre、只给当前项目文件夹里的文本类作品（md / csv / txt）；项目外、图片 / HTML / PDF 不出键（反例）。
-//   2. 查看器停在旧版本时键上写「打开当前文件（作品库里看的是第 N 版）」，换到最新版回到「在工作台打开」；打开的是磁盘上的原文件（工作台标签，相对项目根）。
+//   2. 键单独一条放在查看器头部下面（不挤头部，× 不被挤出纸面）；停在旧版本时键写「打开当前文件」、说明写「作品库里看的是第 N 版…」，换到最新版回到「在工作台打开」；打开的是磁盘上的原文件（工作台标签，相对项目根）。
 //   3. 工作台出不来（< 600）时开只读预览：读的时候带 maxBytes 256 KB；截了就说「只显示前 256 KB…」；图片内联；二进制说去处；Esc 关、焦点回到键上。
 //   4. 其他模式同样的作品不出键（反例）。
 import {test, after} from 'node:test';
@@ -108,9 +108,15 @@ test('in Metre the library viewer offers 在工作台打开 for text artifacts i
   const tab = await open(browser, 'metre');
   try {
     await viewer(tab, item('/proj/notes.md'), '版本 1 / 2');
-    assert.equal(await keyText(tab), '打开当前文件（作品库里看的是第 1 版）', 'an old version is on screen: say which');
+    assert.equal(await keyText(tab), '打开当前文件', 'an old version is on screen: the key says it opens the current file');
+    assert.equal(await tab.locator('.pk-mlib-open').getAttribute('aria-label'), '打开当前文件（作品库里看的是第 1 版）');
+    assert.equal(await tab.locator('.pk-mlib-strip__note').textContent(), '作品库里看的是第 1 版；磁盘上的文件可能已经改过', 'and the strip says which version is on screen');
+    // 键不进查看器头部（头部 820 时就满了，塞进去 × 会被挤出纸面）：单独一条，紧跟在头部后面
+    assert.equal(await tab.evaluate(() => document.querySelector('.pinkie-art-view__actions .pk-mlib-open')), null, 'the key is not squeezed into the header');
+    assert.equal(await tab.evaluate(() => document.querySelector('.pinkie-art-view header').nextElementSibling?.className), 'pk-mlib-strip');
     await viewer(tab, item('/proj/notes.md'), '版本 2 / 2');
     assert.equal(await keyText(tab), '在工作台打开');
+    assert.equal(await tab.locator('.pk-mlib-strip').count(), 1, 'one strip per viewer');
     assert.equal(await tab.locator('.pk-mlib-open').getAttribute('title'), '打开的是磁盘上的当前文件，不是作品库里的快照');
     // 反例：项目外、图片、HTML 不出键
     for (const [p, kind] of [['/etc/notes.md', 'doc'], ['/proj/a.png', 'image'], ['/proj/page.html', 'html'], ['/proj/r.pdf', 'doc']]) {
@@ -131,6 +137,10 @@ test('under 600px the key opens a read-only preview instead: 256 KB head only, s
   const browser = await launch(t); if (!browser) return;
   const tab = await open(browser, 'metre', {width: 560});
   try {
+    // 窄窗口：键是短字、整个在视口里，不靠挤查看器头部
+    await viewer(tab, item('/proj/big.md'), '版本 1 / 2');
+    assert.equal(await keyText(tab), '打开当前文件');
+    assert.ok(await tab.evaluate(() => { const r = document.querySelector('.pk-mlib-open').getBoundingClientRect(); return r.width > 0 && r.width < 140 && r.right <= innerWidth; }), 'the key is short and fully on screen');
     await viewer(tab, item('/proj/big.md'), '版本 2 / 2');
     assert.equal(await keyText(tab), '在工作台打开');
     await tab.locator('.pk-mlib-open').click();
@@ -139,7 +149,10 @@ test('under 600px the key opens a read-only preview instead: 256 KB head only, s
     assert.ok((await tab.evaluate(() => window.calls)).some(([m, p, max]) => m === 'pinkie.fs.read' && p === '/proj/big.md' && max === 262144), 'asks for the first 256 KB only');
     assert.equal(await tab.locator('.pk-mlib-preview__text').textContent(), '# 开头\n');
     assert.equal(await tab.locator('.pk-mlib-preview__note').textContent(), '只显示前 256 KB，完整内容请在工作台或系统程序里打开');
-    assert.equal(await tab.locator('.pk-mlib-preview__tag').textContent(), '只读');
+    assert.equal(await tab.locator('.pk-mlib-preview__tag').textContent(), '当前文件 · 只读', 'says it is the file on disk now, not the version the viewer shows');
+    // 遮罩是压暗：日夜都是深色半透明（反例：从 --metre-text 混出来，夜间会把底下提亮）
+    const [r, g, b, a] = (await tab.evaluate(() => getComputedStyle(document.querySelector('.pk-mlib-preview')).backgroundColor)).match(/[\d.]+/g).map(Number);
+    assert.ok(Math.max(r, g, b) < 60 && a > 0.3, 'the mask dims what is under it');
     assert.equal(await tab.locator('.pk-mlib-preview').getAttribute('role'), 'dialog');
     assert.ok(await tab.evaluate(() => Number(getComputedStyle(document.querySelector('.pk-mlib-preview')).zIndex) > 2147481000), 'the panel stacks above the library viewer');
     await tab.keyboard.press('Escape');

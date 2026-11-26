@@ -60,7 +60,7 @@
     const head = el('header', 'pk-mlib-preview__head');
     const title = el('strong', 'pk-mlib-preview__title', name);
     title.title = path;
-    const tag = el('span', 'pk-mlib-preview__tag', '只读');
+    const tag = el('span', 'pk-mlib-preview__tag', '当前文件 · 只读');   // 背后的查看器可能停在旧版本：写明这是磁盘上的现在
     const close = el('button', 'pk-mlib-preview__close', '×');
     close.type = 'button'; close.setAttribute('aria-label', '关闭预览'); close.addEventListener('click', closePanel);
     head.append(title, tag, close);
@@ -107,28 +107,44 @@
   }
 
   // ---------- 作品库查看器里的键 ----------
-  function labelFor(viewer) {
+  // 查看器停在旧版本时返回版本序号，否则 0
+  function oldVersion(viewer) {
     const m = /版本\s*(\d+)\s*\/\s*(\d+)/.exec(viewer?.querySelector('.pinkie-art-versions__label')?.textContent || '');
-    return m && Number(m[1]) < Number(m[2]) ? `打开当前文件（作品库里看的是第 ${m[1]} 版）` : '在工作台打开';
+    return m && Number(m[1]) < Number(m[2]) ? Number(m[1]) : 0;
+  }
+  // 键上只放短字（窄窗口也放得下）；看的是哪一版写在左边的说明里，完整说法留在 aria-label
+  function paintStrip(strip, key, view) {
+    const v = oldVersion(view);
+    key.textContent = v ? '打开当前文件' : '在工作台打开';
+    key.setAttribute('aria-label', v ? `打开当前文件（作品库里看的是第 ${v} 版）` : '在工作台打开');
+    strip.querySelector('.pk-mlib-strip__note').textContent = v
+      ? `作品库里看的是第 ${v} 版；磁盘上的文件可能已经改过`
+      : '这个文件在当前项目里，可以在工作台里看、改';
   }
   window.addEventListener('pinkie:art-viewer', event => {
     const {item, actions} = event.detail || {};
     if (!isMetre() || !item?.path || !actions || !TEXT.test(item.path)) return;
     void projectRoot().then(dir => {
-      if (!insideRoot(item.path, dir) || !actions.isConnected || actions.querySelector('.pk-mlib-open')) return;
-      const key = el('button', 'pinkie-art-btn pk-mlib-open');
+      const view = actions.closest('.pinkie-art-view');
+      const head = actions.parentElement;
+      if (!insideRoot(item.path, dir) || !actions.isConnected || !view || !head || view.querySelector('.pk-mlib-strip')) return;
+      // 不往查看器头部塞键：头部 820 时就满了，再塞 × 会被挤出纸面。单起一条，放在头部下面
+      const strip = el('div', 'pk-mlib-strip');
+      const note = el('span', 'pk-mlib-strip__note');
+      const key = el('button', 'pk-mlib-open');   // 不挂 pinkie-art-btn：Metre 皮肤会把它压成灰字描边，主键自带样式
       key.type = 'button';
       key.dataset.path = item.path;
       key.title = '打开的是磁盘上的当前文件，不是作品库里的快照';
-      const relabel = () => { key.textContent = labelFor(actions.closest('.pinkie-art-view')); };
+      strip.append(note, key);
+      const relabel = () => paintStrip(strip, key, view);
       relabel();
       // 工作台出来了就收起查看器（全屏遮罩会盖住工作台）；走查看器自己的「点遮罩关闭」，让它的 finish() 收掉 Esc 监听
       key.addEventListener('click', () => void openInBench(item.path).then(where => {
         const mask = actions.closest('.pinkie-art-viewer');
         if (where === 'bench' && mask?.isConnected) mask.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
       }));
-      actions.insertBefore(key, actions.firstChild);
-      // 换版本（‹ ›、左右键、恢复）后键上的字跟着改
+      head.after(strip);
+      // 换版本（‹ ›、左右键、恢复）后说明和键跟着改
       const viewer = actions.closest('.pinkie-art-viewer');
       viewer?.addEventListener('click', () => requestAnimationFrame(relabel));
       viewer?.addEventListener('keyup', () => requestAnimationFrame(relabel));
