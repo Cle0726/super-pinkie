@@ -1,4 +1,11 @@
-const test = require('node:test');
+const nodeTest = require('node:test');
+// B55: one case once hung until the 30-minute step limit with no output (run 45841300853). Every case
+// here gets a hang limit far above the slowest Windows run (~19 s), so a hang fails by name instead.
+const HANG_LIMIT = 120_000;
+const test = (name, options, fn) => typeof options === 'function'
+  ? nodeTest(name, {timeout: HANG_LIMIT}, options)
+  : nodeTest(name, {timeout: HANG_LIMIT, ...options}, fn);
+test.before = nodeTest.before; test.after = nodeTest.after;
 const assert = require('node:assert/strict');
 let harnessModule;
 const controlUIRoots = [process.env.PINKIE_CONTROL_UI_ROOT, '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui', require('node:path').resolve(__dirname, '../../sandbox/try/dist/control-ui')].filter(Boolean);
