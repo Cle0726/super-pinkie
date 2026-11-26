@@ -144,7 +144,8 @@ test('ed92f571：内置技能每次都打进 bundled-skills，缺技能即失败
   assert.match(loop[1], /"\$CONTENTS\/Resources\/SuperPinkie\/bundled-skills\/\$skill"/);
   // 放进 Resources/SuperPinkie/skills/ 会被常规 setup 当成源，覆盖用户工作区里的版本。
   assert.doesNotMatch(sh, /Resources\/SuperPinkie\/skills\//);
-  assert.match(sh, /^OPENCLAW_ROOT="\$RUNTIME_ROOT\/openclaw" "\$RUNTIME_ROOT\/bin\/node" "\$REPO_ROOT\/patch\/apply-pinkie-managed-skills\.mjs"$/m);
+  // 顶层、不带条件地跑（main 上现在包在 run_with_isolated_home env … 里，可以跨两行）。
+  assert.match(sh, /^(?:run_with_isolated_home env )?OPENCLAW_ROOT="\$RUNTIME_ROOT\/openclaw"(?: \\\n\s*| )"\$RUNTIME_ROOT\/bin\/node" "\$REPO_ROOT\/patch\/apply-pinkie-managed-skills\.mjs"$/m);
   assert.doesNotMatch(sh, /\]\] && OPENCLAW_ROOT=[^\n]*apply-pinkie-managed-skills|\]\] \|\| OPENCLAW_ROOT=[^\n]*apply-pinkie-managed-skills/);
 });
 
@@ -154,7 +155,8 @@ test('c092fc4b：只打包产出可执行文件的那份原生源码，并在签
   // 旧的 desktop/macos/Sources 副本会让修复工具选到另一套源码。
   assert.doesNotMatch(sh, /SuperPinkie\/desktop\/macos\/Sources/);
   // 包里要带 bundle.py，装机时才能重装共享 UI。
-  assert.match(sh, /cp "\$REPO_ROOT\/tools\/ui-parity\/bundle\.py" "\$CONTENTS\/Resources\/SuperPinkie\/tools\/ui-parity\/"/);
+  // 可以和别的工具（如 sw_cache.py）同一条 cp 拷进去。
+  assert.match(sh, /cp "\$REPO_ROOT\/tools\/ui-parity\/bundle\.py"[^\n]* "\$CONTENTS\/Resources\/SuperPinkie\/tools\/ui-parity\/"/);
   const ui = at(sh, /"\$PYTHON_DRIVER" "\$REPO_ROOT\/tools\/ui-parity\/bundle\.py" check \\\n\s+--control-ui "\$RUNTIME_ROOT\/openclaw\/dist\/control-ui" --output "\$OUTPUT_ROOT\/macos-ui-manifest\.json"/, 'bundle.py check');
   assert.doesNotMatch(sh, /bundle\.py" check[^\n]*\|\| true/);
   const theme = at(sh, '/bin/bash "$REPO_ROOT/installer/macos/apply-theme.sh"', 'apply-theme.sh');

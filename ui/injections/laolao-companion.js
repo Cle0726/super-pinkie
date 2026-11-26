@@ -1064,7 +1064,7 @@
   /* ── 氛围画布 ─────────────────────────────────────────────────────────── */
   const ambient = (() => {
     let canvas = null, ctx = null, raf = 0, last = 0, flow = 1, w = 0, h = 0, currentMode = "", parts = [], t0 = performance.now();
-    let layer = null;   // 不动的部分（学习的光束、项目的网格）只画一次，每帧贴上去
+    let layer = null, sizer = null;   // layer：不动的部分（学习的光束、项目的网格）只画一次，每帧贴上去；sizer：盯聊天卡片尺寸的唯一 ResizeObserver，重建画布前先断开旧的
     const rnd = (a, b) => a + Math.random() * (b - a);
     /* 柔光点预先画成小贴图，每帧只贴图、调透明度，不再每个点每帧新建渐变 */
     const sprites = new Map();
@@ -1182,7 +1182,7 @@
       if (!want) { stop(); canvas?.classList.remove("is-on"); return; }
       // 没人在看（窗口在后台、很久没动）：停在当前这一帧，不消失；回来就接着动。见 laolao-rest.js。
       if (window.__pinkieRest?.away && canvas && canvas.parentElement === card && currentMode === mode()) { stop(); return; }
-      if (!canvas || canvas.parentElement !== card) { canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; new ResizeObserver(() => canvas && resize()).observe(card); }
+      if (!canvas || canvas.parentElement !== card) { canvas?.remove(); canvas = el("canvas", "pinkie-ambient"); ctx = canvas.getContext("2d"); card.prepend(canvas); currentMode = ""; sizer?.disconnect(); sizer = new ResizeObserver(() => canvas && resize()); sizer.observe(card); }
       if (currentMode !== mode()) { currentMode = mode(); resize(); }
       canvas.classList.add("is-on");
       if (!raf) { last = performance.now(); raf = requestAnimationFrame(draw); }
