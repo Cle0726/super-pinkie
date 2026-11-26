@@ -226,7 +226,7 @@ html[data-pinkie-wb="on"] .chat-workbench { grid-template-columns: minmax(0, 1fr
 .pk-wb-tab__dir { font-size: 11px; color: var(--wb-mute); overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
 .pk-wb-tab__diff { color: var(--wb-cle); }
 /* B30：差异标签文件名不缩、比较说明先缩带省略号；标签栏被挤出的一头淡出（--pk-fs / --pk-fe），右侧「全部标签」键 */
-.pk-wb-tab.is-diff { max-width: 260px; } .pk-wb-tab.is-diff .pk-wb-tab__label { flex: none; max-width: 150px; } .pk-wb-tab__vs { min-width: 0; font-size: 11px; color: var(--wb-mute); overflow: hidden; text-overflow: ellipsis; }
+.pk-wb-tab.is-diff { box-sizing: border-box; max-width: min(260px, 100%); } .pk-wb-tab.is-diff .pk-wb-tab__label { flex: none; max-width: 150px; } .pk-wb-tab__vs { min-width: 0; font-size: 11px; color: var(--wb-mute); overflow: hidden; text-overflow: ellipsis; }
 .pk-wb-tabs__list.is-clip-start { --pk-fs: 28px; } .pk-wb-tabs__list.is-clip-end { --pk-fe: 28px; } .pk-wb-tabs__list.is-clip-start, .pk-wb-tabs__list.is-clip-end { -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--pk-fs, 0px), #000 calc(100% - var(--pk-fe, 0px)), transparent); mask-image: linear-gradient(to right, transparent, #000 var(--pk-fs, 0px), #000 calc(100% - var(--pk-fe, 0px)), transparent); }
 .pk-wb-tabs__more { flex: none; margin-left: 2px; } .pk-wb-tabs__more[hidden] { display: none; }
 .pk-wb-tab__close { width: 20px; height: 20px; border-radius: 4px; opacity: 0; }

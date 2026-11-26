@@ -68,6 +68,8 @@ test('B30 反例：换回整串标签，文件名和说明又挤在同一个 spa
 });
 
 test('B30 CSS：文件名不缩，比较说明先缩、带省略号', () => {
+  // 820 下只开一个差异标签时，标签不能比标签栏还宽（否则一个标签就算溢出，比较说明被淡出盖住、省略号不出）
+  assert.match(css, /\.pk-wb-tab\.is-diff \{ box-sizing: border-box; max-width: min\(260px, 100%\); \}/);
   assert.match(css, /\.pk-wb-tab\.is-diff \.pk-wb-tab__label \{[^}]*flex: none/);
   assert.match(css, /\.pk-wb-tab__vs \{[^}]*min-width: 0[^}]*text-overflow: ellipsis/);
   assert.match(css, /\.pk-wb-tabs__list\.is-clip-start \{ --pk-fs: 28px; \}/);
