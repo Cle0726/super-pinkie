@@ -97,22 +97,54 @@ const tokenOf = req => String(req.headers['x-api-key'] || '').trim() || String(r
 // 回 4xx 之前先把还没读的请求体读掉（只读不攒）。Node 不读请求体就回包时，客户端带 Connection: close、req.destroy()、
 // 或者在 for await (… of req) 里提前 return，关连接那一下内核都会对没读的字节回 RST：Windows 上连已经发出的回复都收不到
 // （WinError 10053/10054，同 services/roundtable #204；11-26 本机回环实测，Node v24）。
-// 声明的长度超过 limit、读到超过 limit、长度写错或超时：不再等，明说 Connection: close 再回。
+// limit 以内：读完再回，连接照常可复用。
+// 声明的长度超过 limit、读到超过 limit、长度写错或 ms 内没动静：先回（带 Connection: close，回复头和正文立刻发出去），
+// 但 res.end 先压着，接着读掉丢弃，读完（或 ms 内没新数据）才真的 end、关连接，客户端能收到完整回复。
+// 读掉的总量超过硬上限 cap、或总共超过 totalMs，才不再读、直接 end（这时没读的字节可能让客户端收到 RST）。
+// #263 后续：之前超过 limit 就直接回、直接关，engines-upstream 1–32 MiB 的请求体回 401 / 404 / 413 全被 RST。
 export const DRAIN_LIMIT = 1 << 20;
+export const DRAIN_CAP = 16 << 20;
 export const DRAIN_MS = 2000;
-export function drainThen(req, res, reply, {limit = DRAIN_LIMIT, ms = DRAIN_MS} = {}) {
+export const DRAIN_TOTAL_MS = 30000;
+export function drainThen(req, res, reply, {limit = DRAIN_LIMIT, cap = DRAIN_CAP, ms = DRAIN_MS, totalMs = DRAIN_TOTAL_MS} = {}) {
   if (req.complete || req.readableEnded) return reply();
-  const closeAfter = () => { if (!res.headersSent) res.setHeader('Connection', 'close'); };
   const raw = req.headers['content-length'];
   const declared = raw === undefined ? 0 : Number(raw);
-  if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit) { closeAfter(); return reply(); }
-  let seen = 0, done = false, timer = null;
-  const finish = () => { if (done) return; done = true; clearTimeout(timer); req.off('data', count); req.off('end', finish); reply(); };
-  const bail = () => { if (done) return; closeAfter(); finish(); };
-  const count = chunk => { seen += chunk.length; if (seen > limit) bail(); };
-  timer = setTimeout(bail, ms); timer.unref?.();
-  // error 监听一直留着：客户端中途断开时 req 会报错，没人接就成了未捕获异常。
-  req.on('data', count); req.on('end', finish); req.on('error', bail);
+  const end = res.end;
+  let seen = 0, early = false, done = false, held = null, idle = null, total = null;
+  const stop = () => {
+    if (done) return; done = true; clearTimeout(idle); clearTimeout(total);
+    req.off('data', count); req.off('end', stop);
+    if (!early) return reply();
+    res.end = end;
+    const args = held; held = null;
+    if (args) end.apply(res, args);
+  };
+  // 先回：reply 照常 writeHead + end，end 里的正文先 write 出去，end 本身留到 stop 再调。
+  const replyNow = () => {
+    if (early || done) return; early = true;
+    if (!res.headersSent) res.setHeader('Connection', 'close');
+    res.end = (...args) => {
+      if (done) return end.apply(res, args);
+      const callback = typeof args.at(-1) === 'function' ? args.pop() : null;
+      if (args.length && args[0] != null) res.write(...args.slice(0, 2));
+      held = callback ? [callback] : [];
+      return res;
+    };
+    reply();
+  };
+  const arm = () => { clearTimeout(idle); idle = setTimeout(early ? stop : () => { replyNow(); arm(); }, ms); idle.unref?.(); };
+  const count = chunk => {
+    seen += chunk.length;
+    if (!early && seen > limit) replyNow();
+    if (early && seen > cap) return stop();
+    arm();
+  };
+  if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit) replyNow();
+  // error / close 监听一直留着：客户端中途断开时 req 会报错，没人接就成了未捕获异常。stop 只走一次。
+  req.on('data', count); req.on('end', stop); req.on('error', stop); req.on('close', stop);
+  arm();
+  total = setTimeout(() => { replyNow(); stop(); }, totalMs); total.unref?.();
   req.resume();
 }
 
@@ -176,7 +208,8 @@ export class PinkieRelay {
       res.writeHead(status, {'content-type': 'application/json'});
       res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
     };
-    if (res.req) drainThen(res.req, res, reply); else reply();
+    // 硬上限要比 MAX_BODY（32 MiB）大：超 32 MiB 的 413 也得先读掉剩下的，客户端才收得到。
+    if (res.req) drainThen(res.req, res, reply, {cap: 2 * MAX_BODY}); else reply();
   }
 
   async handle(req, res) {
