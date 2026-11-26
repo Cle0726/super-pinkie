@@ -12,6 +12,8 @@
  * G2 字号 / 行距：不用原生 textScale——它是全局的，会连带改其他五个模式，而那边没有入口改回来。
  * 这里只在 Metre 生效：值存本文件自己的 localStorage 键，写成根元素上的 --metre-chat-fs / --metre-chat-lh，
  * 只有 laolao-metre-skin.css「对话页」那条 Metre 规则读它们；「标准」档不写变量，和原来逐像素一样。
+ * G3「技能」卡：Metre 侧栏展开时原生导航（含 /skills）被 laolao-metre-skin.css 整个藏掉，设置弹层里也没有技能入口，
+ * 这里补一个按钮，走原生路由 navigate('skills')（和 laolao-mode-switcher.js 同一写法），只做入口，不造后台。
  * 不新增观察器、定时器和 window 全局名；回到对话页的检测走 window.Pinkie.domWatch.poll。 */
 (() => {
   'use strict';
@@ -41,7 +43,15 @@
   const leading = () => known(LEADING, readKey(LEAD_KEY), 'normal');
   const sendKey = () => known(SEND, readKey(SEND_KEY), 'enter');
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  let card = null, scrollBtns = [], textBtns = [], leadBtns = [], sendBtns = [], suggestBtns = [], note = null;
+  let card = null, skillsCard = null, scrollBtns = [], textBtns = [], leadBtns = [], sendBtns = [], suggestBtns = [], note = null;
+  // G3：原生路由优先（不重载页面、不断网关），老版本退回 history + popstate，和 laolao-mode-switcher.js 一样。
+  function openSkills() {
+    const shell = document.querySelector('openclaw-app-shell');
+    const nav = [shell, shell?.context].find((o) => typeof o?.navigate === 'function');
+    if (nav) { nav.navigate('skills'); return; }
+    window.history.pushState({}, '', '/skills');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }
 
   // G2：把字号 / 行距写成根元素上的变量；「标准」档去掉变量，Metre 规则回到原来的 15.5px / 1.7。
   function applyLook() {
@@ -72,6 +82,7 @@
   function paint() {
     if (!card) return;
     card.hidden = !isMetre();
+    if (skillsCard) skillsCard.hidden = card.hidden;
     if (card.hidden) return;
     const {value, waiting} = current();
     mark(scrollBtns, value);
@@ -131,6 +142,17 @@
     card.append(scrollRow, note, textRow, leadRow, sendRow, suggestRow);
     const footer = target.querySelector('.' + S + 'footer');
     footer ? footer.before(card) : target.append(card);
+    skillsCard = node('section', S + 'card pk-metre-skills');
+    const skHead = node('header', S + 'card-header');
+    const skIcon = node('span', S + 'icon', '✦'); skIcon.setAttribute('aria-hidden', 'true');
+    skHead.append(skIcon, node('h3', S + 'card-title', '技能'));
+    const skRow = node('div', S + 'row'), skCopy = node('div', S + 'row-copy'), skControl = node('div', S + 'row-control');
+    skCopy.append(node('span', S + 'row-title', '管理技能'), node('span', S + 'hint', '看看装了哪些技能，哪些可用、哪些还要设置，也可以停用。'));
+    const skBtn = node('button', S + 'button pk-metre-skills__open', '打开技能'); skBtn.type = 'button';
+    skBtn.addEventListener('click', openSkills);
+    skControl.append(skBtn); skRow.append(skCopy, skControl);
+    skillsCard.append(skHead, skRow);
+    card.before(skillsCard);
     paint();
   }
 

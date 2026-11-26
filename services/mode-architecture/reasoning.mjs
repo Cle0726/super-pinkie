@@ -47,6 +47,14 @@ const legacyMergeable = intent => Boolean(intent && intent.phase === 'armed'
 const CONTROL_PROMPT = /^\s*\[pinkie-(?:watchdog|tier-control|tier)\]/;
 const MAX_MESSAGE = 12_000;
 const MAX_HISTORY = 10_000;
+// 交给审稿员的最终回复要给全文：旧值 8000 / 6000 字把长回复的后半截悄悄吞掉，审稿员以为没写完、
+// 机械统计的字数也按截断后的算，打回去逼用户多收一条「更正」（同 #199）。真超过上限时明说截了多少。
+const REVIEW_REPLY_KEEP = 60_000;
+export function replyForReview(text = '') {
+  const value = String(text || '');
+  if (value.length <= REVIEW_REPLY_KEEP) return value;
+  return `${value.slice(0, REVIEW_REPLY_KEEP)}\n…（回复太长，后面还有 ${value.length - REVIEW_REPLY_KEEP} 字没有放进来；没看到的部分不要据此判没写完）`;
+}
 const PASS_TIMEOUT_MS = 300_000;
 const INDEPENDENT_WAIT_MS = 240_000;
 const INTENT_TTL_MS = 60 * 60_000;
@@ -1104,9 +1112,10 @@ export class ReasoningEnhancer {
     if (!fresh) return {reviewed: false, cancelled: true};
     // 打回之后这一条是「更正」：连同之前已交给用户的那条一起审，免得把只发更正当成没回答完整。
     // 在等独立解答之前落盘：等完再写会用旧副本盖掉独立解答刚写进去的结果。
-    const earlier = fresh.round > 0 ? String(fresh.deliveredReply || '').slice(0, 6000) : '';
+    const earlier = fresh.round > 0 ? replyForReview(fresh.deliveredReply) : '';
     fresh.phase = 'reviewing';
-    if (!fresh.round) fresh.deliveredReply = reply.slice(0, 8000);
+    // 落盘存原文，复核时再统一裁：存截过的再裁一次，「后面还有多少字」会算错。
+    if (!fresh.round) fresh.deliveredReply = reply;
     this.store.set(fresh);
     const signal = this.controller(fresh.requestId).signal;
     try {
@@ -1131,7 +1140,7 @@ export class ReasoningEnhancer {
       if (backfill.length) this.independent.set(fresh.requestId, Promise.resolve([...engine, ...backfill]));
       const independent = [...views, ...engine, ...backfill];
       const verdict = await this.critique(fresh, auditPrompt({
-        message: subjectOf(fresh), history: fresh.history, reply: reply.slice(0, 8000), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
+        message: subjectOf(fresh), history: fresh.history, reply: replyForReview(reply), evidence: toolEvidence(messages), independent, quality: Boolean(recipe.critic),
         workKind: fresh.workKind || '', artifacts: artifactPaths(entriesFromMessages(messages)), tools: true, earlier,
         previous: fresh.round > 0 ? fresh.issues : [],
       }), signal);
