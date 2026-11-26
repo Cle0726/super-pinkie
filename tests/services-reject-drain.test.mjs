@@ -150,3 +150,50 @@ test('app-browser static preview: POST 405 closes cleanly, GET still serves', as
   assert.equal(reply.verdict, 'clean');
   assert.equal(await fetch(`http://127.0.0.1:${started.port}/`).then(r => r.text()), '<h1>ok</h1>');
 });
+
+// #263 后续：请求体超过 DRAIN_LIMIT（1 MiB）时，之前是直接回、直接关，没读的字节让客户端只收到 RST。
+// 现在先回（Connection: close），接着读掉丢弃，读完才关。exchange 发完整个请求体、等服务端关完才判定，不靠竞速。
+// 反例：换回 main 上 b50ea5ff 的 drainThen，下面三条 upstream 都是 reset:ECONNRESET、status 0。
+const BIG = Buffer.alloc(4 * 1024 * 1024, 120);
+
+test('engines-upstream relay: wrong token 401 with a 4 MiB body still arrives in full', async t => {
+  const relay = await relayOf(t);
+  const reply = await exchange(relay.port, {url: '/v1/messages', headers: {'Content-Type': 'application/json', 'x-api-key': 'wrong'}, body: BIG});
+  assert.equal(reply.verdict, 'clean');
+  assert.equal(reply.status, 401);
+  assert.match(reply.head, /\r\nconnection: close/);
+  assert.equal(JSON.parse(reply.body).error.type, 'authentication_error');
+});
+
+test('engines-upstream relay: unknown path 404 with a 4 MiB body still arrives in full', async t => {
+  const relay = await relayOf(t);
+  const reply = await exchange(relay.port, {url: '/v1/other', headers: {'Content-Type': 'application/json', 'x-api-key': relay.token}, body: BIG});
+  assert.equal(reply.verdict, 'clean');
+  assert.equal(reply.status, 404);
+  assert.equal(JSON.parse(reply.body).error.type, 'not_found_error');
+});
+
+test('engines-upstream relay: a real body just over 32 MiB gets its 413 body, not a reset', async t => {
+  const relay = await relayOf(t);
+  const body = Buffer.alloc(32 * 1024 * 1024 + 512 * 1024, 120);
+  const reply = await exchange(relay.port, {url: '/v1/messages', headers: {'Content-Type': 'application/json', 'x-api-key': relay.token}, body});
+  assert.equal(reply.verdict, 'clean');
+  assert.equal(reply.status, 413);
+  assert.equal(JSON.parse(reply.body).error.type, 'request_too_large');
+});
+
+test('engines-upstream relay: a 256 KiB body is still drained first and the connection is not closed', async t => {
+  // 1 MiB 以内行为不变：先读完再回，不加 Connection: close（请求本身不带 Connection: close）。
+  const relay = await relayOf(t);
+  const head = await new Promise(resolve => {
+    const socket = net.connect({host: '127.0.0.1', port: relay.port});
+    let got = '';
+    const timer = setTimeout(() => { socket.destroy(); resolve(got); }, 3000);
+    socket.on('data', chunk => { got += chunk.toString('latin1'); if (got.includes('\r\n\r\n')) { clearTimeout(timer); socket.destroy(); resolve(got); } });
+    socket.on('error', () => { clearTimeout(timer); resolve(got); });
+    socket.write(['POST /v1/messages HTTP/1.1', `Host: 127.0.0.1:${relay.port}`, 'x-api-key: wrong', `Content-Length: ${BODY.length}`, '', ''].join('\r\n'));
+    socket.write(BODY);
+  });
+  assert.match(head, /^HTTP\/1\.1 401 /);
+  assert.doesNotMatch(head.toLowerCase(), /\r\nconnection: close/);
+});
