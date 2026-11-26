@@ -30,11 +30,16 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
   return name;
 }
 
+// 副本按 file:// 打开，没有 HTTP 头报编码；作品自己没写 charset 时 WebKit / WebView2 按本地默认编码猜，中文会乱码。
+// 文件是按 utf8 读写的，所以缺了就补 utf-8，放在 CSP 前面。
+const DECLARES_CHARSET = /<meta\s[^>]*charset\s*=/i;
+export const charsetMeta = text => (DECLARES_CHARSET.test(text) ? '' : '<meta charset="utf-8">');
+
 // CSP 必须在任何脚本之前：有 <head> 插在它后面；没有就插在 doctype / <html> 后面
 // （解析器会把它放进隐式的 head）；都没有才放最前面。
 export function withOfflinePolicy(html) {
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${OFFLINE_CSP}">`;
   const text = String(html);
+  const meta = charsetMeta(text) + `<meta http-equiv="Content-Security-Policy" content="${OFFLINE_CSP}">`;
   for (const pattern of [/<head(?:\s[^>]*)?>/i, /<html(?:\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
     const match = pattern.exec(text);
     if (match) return text.slice(0, match.index + match[0].length) + meta + text.slice(match.index + match[0].length);

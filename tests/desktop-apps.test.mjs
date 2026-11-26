@@ -108,12 +108,35 @@ test('A5 名字做文件名：去掉非法字符、保留中文、保留字加�
 });
 
 test('A6 CSP 插入点：有 head 进 head；只有 html / doctype 跟在后面；片段放最前；规则本身禁网', () => {
-  assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta http-equiv="Content-Security-Policy"/);
+  assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
   assert.match(withOfflinePolicy('<!doctype html><html><body>b</body></html>'), /^<!doctype html><html><meta /);
-  assert.match(withOfflinePolicy('<p>片段</p><script>1</script>'), /^<meta http-equiv/);
+  assert.match(withOfflinePolicy('<p>片段</p><script>1</script>'), /^<meta charset="utf-8"><meta http-equiv/);
   for (const rule of ["default-src 'none'", "connect-src 'none'", "frame-src 'none'", "form-action 'none'"]) assert.ok(OFFLINE_CSP.includes(rule), rule);
   // 反例：不放行任何 http(s) 来源。
   assert.doesNotMatch(OFFLINE_CSP, /https?:|\*/);
+});
+
+test('A12 编码：作品没写 charset 时补 utf-8 且在前 1024 字节内；写了的不重复补', () => {
+  const charsets = html => (html.match(/<meta\s[^>]*charset\s*=/gi) || []).length;
+  for (const page of ['<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>', '<p>中文片段</p>',
+    '<!doctype html><html><body>' + '<!-- 填充 -->'.repeat(200) + '中文</body></html>']) {
+    const out = withOfflinePolicy(page);
+    assert.equal(charsets(out), 1, page.slice(0, 40));
+    assert.ok(Buffer.byteLength(out.slice(0, out.search(/<meta charset="utf-8">/i)), 'utf8') < 1024, '要在浏览器探测编码的前 1024 字节里');
+  }
+  // 反例：作品自己声明了编码（两种写法、大小写）就不再补，也不改它。
+  for (const page of ['<html><head><meta charset="gbk"><title>t</title></head></html>',
+    '<html><head><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8"></head></html>']) {
+    const out = withOfflinePolicy(page);
+    assert.equal(charsets(out), 1, page);
+    assert.doesNotMatch(out, /<meta charset="utf-8">/);
+  }
+  // 装出来的副本也带上：没写 charset 的中文作品。
+  const {record, apps} = setup();
+  const item = record('cn.html', '<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>');
+  const html = fs.readFileSync(apps.install({id: item.id, name: '拼词'}).app.entry, 'utf8');
+  assert.ok(html.indexOf('<meta charset="utf-8">') < html.indexOf('Content-Security-Policy'));
+  assert.ok(html.includes('<body>拼词</body>'));
 });
 
 test('A7 图标：PNG 包成 ICO / ICNS 文件头正确；不是 PNG 的拒收', () => {
