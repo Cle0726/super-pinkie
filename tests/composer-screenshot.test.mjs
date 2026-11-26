@@ -58,14 +58,16 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
   catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
   t.after(() => browser.close());
 
-  // 假的屏幕选择：ok 给一条 320×200 的画布流；cancel 抛 NotAllowedError（用户点了取消）；broken 抛别的错；none 表示环境不支持。
+  // 假的屏幕选择：ok 给一条 320×200 的画布流；cancel 抛 AbortError（选择框被关掉）；denied 抛 NotAllowedError（Mac 没给屏幕录制权限 /
+  // 系统拒绝也是它，mac1 任务 64）；broken 抛别的错；none 表示环境不支持。
   const open = async ({mode = 'ok', photoDisabled = false} = {}) => {
     const tab = await browser.newPage();
     await tab.setContent(page(photoDisabled));
     await tab.evaluate((mode) => {
       if (!navigator.mediaDevices) Object.defineProperty(navigator, 'mediaDevices', {value: {}, configurable: true});
       const fake = mode === 'none' ? undefined : async () => {
-        if (mode === 'cancel') throw new DOMException('Permission denied', 'NotAllowedError');
+        if (mode === 'cancel') throw new DOMException('The user aborted a request', 'AbortError');
+        if (mode === 'denied') throw new DOMException('Permission denied', 'NotAllowedError');
         if (mode === 'broken') throw new DOMException('Could not start video source', 'NotReadableError');
         // 不出帧的三种流（mac2 任务 42 第 5 条在 WebKit 上都卡住过）：0×0 画布流、空 MediaStream、只有音轨。
         if (mode === 'zero') { const c = document.createElement('canvas'); c.width = 0; c.height = 0; const s = c.captureStream(0); window.__streams.push(s); return s; }
@@ -116,7 +118,19 @@ test('I5 真浏览器：工具箱「添加」里有拍照 / 照片 / 文件 / �
     const tab = await open({mode: 'cancel'});
     await shot(tab);
     await tab.waitForTimeout(400);
-    assert.deepEqual(await tab.evaluate(() => [window.__files.length, window.__toasts]), [0, []], '取消：不附图、不提示');
+    assert.deepEqual(await tab.evaluate(() => [window.__files.length, window.__toasts]), [0, []], '取消（AbortError）：不附图、不提示');
+    await tab.close();
+  }
+  {
+    // mac1 任务 64：NotAllowedError（没给屏幕录制权限 / 系统拒绝）不能静默，要有一句指到「屏幕录制」的提示，且不附图。
+    const tab = await open({mode: 'denied'});
+    await shot(tab);
+    await tab.waitForFunction(() => window.__toasts.length > 0, null, {timeout: 5_000});
+    const got = await tab.evaluate(() => ({toasts: window.__toasts, files: window.__files.length}));
+    t.diagnostic('denied：' + JSON.stringify(got));
+    assert.equal(got.toasts.length, 1, '只说一句');
+    assert.match(got.toasts[0], /^没截到图：.*屏幕录制/, 'NotAllowedError：提示指到屏幕录制权限');
+    assert.equal(got.files, 0, 'NotAllowedError：不附图');
     await tab.close();
   }
   {

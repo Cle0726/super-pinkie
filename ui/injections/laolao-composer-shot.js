@@ -6,7 +6,8 @@
  *
  * 点了：浏览器自己的「选择要共享的屏幕或窗口」抓一帧 → PNG → 交给原生「照片」文件框（.agent-chat__photo-input）并发 change，
  * 和用户自己选了一张图同一条路；不自己拼附件、不经过后台。抓完一帧立刻停屏幕流。
- * 选择框里点取消（NotAllowedError / AbortError）不提示；别的失败用共用的 laolao:toast 说一句。
+ * 只有 AbortError（选择框被关掉）不提示。NotAllowedError 不能当取消吞掉（mac1 任务 64）：Mac 上没给屏幕录制权限、或系统 / 浏览器拒绝时
+ * 也是它，静默就分不清是没点上、在等还是被拦了；所以给一句温和的提示，指到「屏幕录制」权限。别的失败用共用的 laolao:toast 说「没截到」。
  * 环境没有 getDisplayMedia，或者照片框停用（还不能发消息）时不出这一格。
  * 不新增观察器、定时器和 window 全局名：页面变化走 window.Pinkie.domWatch.watch。 */
 (() => {
@@ -77,7 +78,8 @@
       target.files = files.files;
       target.dispatchEvent(new Event('change', {bubbles: true}));
     } catch (error) {
-      if (error?.name !== 'NotAllowedError' && error?.name !== 'AbortError') notice('没截到图：没抓到画面，可以再试一次，或者用系统截图后粘贴进来');
+      if (error?.name === 'NotAllowedError') notice('没截到图：如果没弹出选择框，请到「系统设置 → 隐私与安全性 → 屏幕录制」里允许，然后再试；也可以用系统截图后粘贴进来');
+      else if (error?.name !== 'AbortError') notice('没截到图：没抓到画面，可以再试一次，或者用系统截图后粘贴进来');
     } finally {
       for (const track of stream?.getTracks?.() || []) track.stop();
     }
