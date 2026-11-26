@@ -85,6 +85,14 @@ function readContrast() {
 
 const fmt = (items) => items.map((i) => `${i.el}「${i.text}」${i.ink} on ${i.bg} ${i.ratio.toFixed(2)}`).join('; ');
 
+// 改了字色 / 删了规则后，等 CSS 过渡全部停下再量（Metre 皮肤给字色有 160ms 过渡，半路读到的是过渡中的颜色，Chromium 还会报成 oklab(...)）。
+// 只看 CSS 过渡：页面上猫、加载圈等无限循环的 CSS 动画一直 running，算进来会永远等不到。getAnimations() 会先刷样式，刚起的过渡已经在里面。
+// 和下面「切高对比后」那处 11-26 已经在 CI 上跑着的等法是同一个条件。
+const transitionsSettled = (page) => page.waitForFunction(
+  () => document.getAnimations().filter((a) => a instanceof CSSTransition).every((a) => a.playState !== 'running'),
+  null, {timeout: 5000},
+);
+
 test('X4 real page: with prefers-contrast: more, Metre muted small text in sidebar and status band reaches 4.5:1 day and night; normal look unchanged', async (t) => {
   let installed; let server; let browser;
   t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
@@ -140,7 +148,7 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
         return n;
       });
       assert.ok(faded >= 1, `${theme}: 反例：没找到可以改浅的没选中会话标题`);
-      await page.waitForTimeout(600);
+      await transitionsSettled(page);
       const lighter = await page.evaluate(readContrast);
       console.log(`ℹ ${theme} more, unselected titles faded: ${fmt(lighter.titles)}`);
       assert.ok(unselectedLow(lighter.titles).length >= 1, `${theme}: 反例没生效：没选中的标题改浅后仍都 ≥ 4.5 — ${fmt(lighter.titles)}`);
@@ -148,7 +156,7 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       await page.evaluate(() => {
         for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session__name')) { el.style.removeProperty('color'); el.style.removeProperty('transition'); }
       });
-      await page.waitForTimeout(600);
+      await transitionsSettled(page);
       assert.deepEqual(unselectedLow((await page.evaluate(readContrast)).titles), [], `${theme}: 撤掉反例后没选中的标题没回到 4.5:1`);
 
       if (theme === 'night') {
@@ -162,7 +170,7 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
           return n;
         });
         assert.ok(removed >= 1, '页面上没有 laolao-metre-contrast.css');
-        await page.waitForTimeout(600);
+        await transitionsSettled(page);
         const bad = await page.evaluate(readContrast);
         console.log(`ℹ night more without contrast css, titles: ${fmt(bad.titles)}`);
         assert.ok(bad.titles.some((i) => !i.active), '反例：删掉后侧栏里没找到没选中的会话标题');
@@ -182,7 +190,7 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
           return n;
         });
         assert.ok(removed >= 1, '页面上没有 laolao-metre-contrast.css');
-        await page.waitForTimeout(600);   // Metre 皮肤给字色有 160ms 过渡，删规则后马上读会读到过渡中的颜色、一个都对不上弱化色
+        await transitionsSettled(page);   // Metre 皮肤给字色有 160ms 过渡，删规则后马上读会读到过渡中的颜色、一个都对不上弱化色
         const bad = await page.evaluate(readContrast);
         const seen = await page.evaluate(() => [...document.querySelectorAll('aside.sidebar .pinkie-session-time')].slice(0, 3).map((el) => `${getComputedStyle(el).color} / transition ${getComputedStyle(el).transitionDuration}`));
         assert.ok(bad.items.length >= 1, `反例：删掉后侧栏 / 状态带里没找到用弱化色的小字（量不到不能算通过）；弱化色 ${bad.tokens.muted}，侧栏时间实际 ${seen.join(' | ')}`);
