@@ -580,7 +580,7 @@
       else if (k === '-') zoomCentre(1 / 1.25);
       else if (k === '0') fit();
     });
-    addEventListener('resize', () => commitEdit());
+    addEventListener('resize', () => { commitEdit(); if (isOpen()) place(); });
     // 浮层四周留 24px 白边：铺一层实的遮罩（点了不穿透，点它就关），背后的页面设 inert，根标 aria-modal。
     const scrim = el('div', 'pk-whiteboard__scrim');
     scrim.hidden = true;
@@ -591,13 +591,23 @@
     st.root = root;
     updateBar();
   }
+  // 桌面壳自己的窗口键 / 拖动条 / 改大小 / 更新提示 / 听写：浮在最上层，白板开着也要能用，不设 inert，白板顶边让到它们下面。
+  const NATIVE = /^(pinkie-native-|pinkie-update-|laolao-native-)/;
+  function place() {
+    if (!st.root) return;
+    const bottoms = ['pinkie-native-window-controls', 'pinkie-native-drag-strip']
+      .map(id => document.getElementById(id)?.getBoundingClientRect()).filter(r => r && r.height > 0 && r.top < 80).map(r => r.bottom);
+    if (bottoms.length) st.root.style.top = Math.ceil(Math.max(...bottoms) + 8) + 'px';
+    else st.root.style.removeProperty('top');
+  }
   // 打开时把 body 下其余顶层节点设 inert（只记自己设的，关的时候只撤自己设的）。
   const inerted = new Set();
   function setBackdrop(on) {
     if (st.scrim) st.scrim.hidden = !on;
     if (on) {
+      place();
       for (const n of document.body.children) {
-        if (n === st.root || n === st.scrim || n.inert || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
+        if (n === st.root || n === st.scrim || n.inert || NATIVE.test(n.id) || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
         n.inert = true;
         inerted.add(n);
       }
