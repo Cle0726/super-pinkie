@@ -256,6 +256,9 @@ test('A14 协调者 22:00：共享对话框按钮有圆角形状（碧琪胶囊 
   // ① 原来 .laolao-modal__button 没有任何基础形状（浏览器默认直角）。
   assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*border-radius:999px/m);
   assert.match(css, /^html\[data-laolao-mode="metre"\] :where\(\.laolao-modal\) \.laolao-modal__button \{ border-radius:6px \}$/m);
+  // ② 作品库移除确认框不在共享皮肤里：基础按钮给跟弹层走的底 / 字，主按钮走 --pk-apps-*（CI 图 d7c99f35 夜间灰底深字 1.94）。
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*background:color-mix\(in srgb,currentColor 7%,transparent\);color:inherit;/m);
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button--primary \{ border-color:transparent;background:var\(--pk-apps-accent,var\(--pa-accent\)\);color:var\(--pk-apps-on-accent,#fff\);/m);
   // ④ 箭头是 1px 右 / 下边框转 45°画的；减少动态效果那条把它的 transform 清成 none，就成了「⌟」。
   const reduce = theme.match(/@media \(prefers-reduced-motion: reduce\) \{\n  :is\(\.laolao-mode-menu__option,[^{]*\{\n    transition: none !important;\n    transform: none !important;/);
   assert.ok(reduce, '减少动态效果那条还在');
@@ -275,7 +278,7 @@ test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）�
   for (const scope of scopes) {
     const ref = apps.match(new RegExp(`^${scope} \\.pk-apps-dialog \\{ (--pk-apps-[a-z-]+:[^}]+?) \\}$`, 'm'));
     assert.ok(ref, `装到桌面对话框那条还在：${scope}`);
-    const line = new RegExp(`^${scope} \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts\\) \\{ ([^}]+?) \\}$`, 'm');
+    const line = new RegExp(`^${scope} \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pinkie-art-confirm \\*\\) \\{ ([^}]+?) \\}$`, 'm');
     const got = skin.match(line);
     assert.ok(got, `共享皮肤要设同一个变量：${scope}`);
     assert.equal(got[1], ref[1], '值跟对话框那条一字不差');
