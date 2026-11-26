@@ -1190,10 +1190,36 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   await page.evaluate(() => {
     window.dispatchEvent(new Event('laolao:sessions-changed'));
   });
-  await page.waitForFunction(
-    () => !document.documentElement.hasAttribute('data-laolao-mode-enter'),
-    {timeout: 5_000},
-  );
+  // The mode-enter entrance (laolao-motion.js enter()) is CSS animations keyed on
+  // data-laolao-mode-enter, which the product removes on a fixed 1250ms timer;
+  // waiting for that timer was ~1s of every page open. Contexts here use
+  // reducedMotion: 'reduce', under which laolao-theme.css turns those animations
+  // off, so nothing was animating during the wait. Finish the entrance animations
+  // (a safety net for the non-reduced case), then remove the attribute: every
+  // animated value then already equals its resting value, so no transition starts
+  // (cle-stage gives body::before a 0.7s opacity transition) and the captured frame
+  // is the one the timer would have produced. The product's own removeAttribute
+  // later is a no-op. Late async UI updates that used to land during the timer
+  // are still waited for by settleRealPage's quiet-DOM wait.
+  // Only the animations laolao-theme.css keys on html[data-laolao-mode-enter="1"]
+  // (not the mode-transition overlay's laolao-mode-scene/content-enter). The two
+  // welcome animations are also driven by .laolao-welcome--materializing; those
+  // keep running, since removing the attribute would not end them either.
+  await page.evaluate(() => {
+    const html = document.documentElement;
+    if (!html.hasAttribute('data-laolao-mode-enter')) return;
+    const ENTER = new Set([
+      'laolao-wallpaper-enter', 'laolao-glass-enter', 'laolao-avatar-enter',
+      'laolao-native-wallpaper-enter', 'laolao-native-glass-enter',
+      'laolao-welcome-particle-gather', 'laolao-welcome-materialize',
+    ]);
+    for (const anim of document.getAnimations()) {
+      if (!ENTER.has(anim.animationName)) continue;
+      if (anim.effect?.target?.closest?.('.laolao-welcome--materializing')) continue;
+      try { anim.finish(); } catch {}
+    }
+    html.removeAttribute('data-laolao-mode-enter');
+  });
   await page.waitForFunction(() => {
     const hasMeta = Boolean(document.querySelector('.agent-chat__composer-meta'));
     if (!hasMeta) return true;
