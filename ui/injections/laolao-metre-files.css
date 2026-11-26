@@ -1,0 +1,43 @@
+/* laolao-metre-files —— R5 ①：回答下面「文件」一行（laolao-metre-files.js）。
+ * 和「预览本地服务」那一行同一套 Metre 变量，日夜跟着变量走；只在 Metre 里有这一行。 */
+html[data-laolao-mode="metre"] .pk-mfile-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; align-self: stretch; width: 100%;
+  margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--metre-line, #E8E6DC);
+  max-width: 100%; box-sizing: border-box; font-size: 12px; color: var(--metre-muted, #73726C);
+}
+/* 预览行紧跟在后面时两条分隔线只留一条 */
+html[data-laolao-mode="metre"] .pk-mfile-row + .pk-mprev-row,
+html[data-laolao-mode="metre"] .pk-mprev-row + .pk-mfile-row { margin-top: 2px; padding-top: 0; border-top: 0; }
+html[data-laolao-mode="metre"] .pk-mfile-row__label {
+  margin-right: 4px; font: italic 400 13px/1 var(--metre-serif, Georgia, serif); letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mfile-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: min(280px, 100%); height: 26px;
+  padding: 0 9px; box-sizing: border-box; cursor: pointer;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 6px;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D); font: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+html[data-laolao-mode="metre"] .pk-mfile-chip:hover { background: var(--metre-hover, #F0EEE6); }
+html[data-laolao-mode="metre"] .pk-mfile-chip:active { background: var(--metre-line, #E8E6DC); }
+html[data-laolao-mode="metre"] .pk-mfile-chip:focus-visible { outline: 2px solid var(--metre-accent, #C96442); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-mfile-chip__text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 12px/1 var(--metre-mono, ui-monospace, monospace);
+}
+/* 「改动」小标：强调色描边，不靠颜色一项区分（有字） */
+html[data-laolao-mode="metre"] .pk-mfile-chip__tag {
+  flex: none; padding: 2px 5px; border-radius: 4px; font-size: 11px; line-height: 1;
+  border: 1px solid color-mix(in srgb, var(--metre-accent, #C96442) 55%, transparent);
+  color: color-mix(in srgb, var(--metre-accent, #C96442) 70%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mfile-row__more,
+html[data-laolao-mode="metre"] .pk-mfile-row__note { color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D)); }
+@media (max-width: 900px) {
+  html[data-laolao-mode="metre"] .pk-mfile-chip { max-width: min(180px, 100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"] .pk-mfile-chip { transition: none; }
+}
+html[data-pinkie-reduce-motion][data-laolao-mode="metre"] .pk-mfile-chip { transition: none; }

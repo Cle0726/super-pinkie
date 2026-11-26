@@ -65,7 +65,7 @@
     store.set('sideWidth', state.sideWidth); store.set('chatWidth', state.chatWidth); store.set('layoutVersion', 2);
   }
   const extraStatus = new Map();
-  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus};
+  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, rel: path => relativePath(path), diff: path => (state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true})), show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
 
   /* ───────── 让模型看见当前工作台和运行现场 ───────── */
   const contextClientId = crypto.randomUUID();
