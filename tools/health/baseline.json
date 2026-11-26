@@ -2720,7 +2720,7 @@
     "ui/injections/laolao-study-desk-board.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 232,
+      "lines": 231,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3214,7 +3214,7 @@
     "ui/injections/laolao-workbench.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 2352,
+      "lines": 2339,
       "mutationObserverRefs": 0,
       "mutationObservers": 3,
       "observeUnclear": 0,
@@ -3277,7 +3277,7 @@
     "ui/injections/laolao-settings-user.js": 1636,
     "ui/injections/laolao-sidebar.js": 2143,
     "ui/injections/laolao-theme.css": 5389,
-    "ui/injections/laolao-workbench.js": 2352
+    "ui/injections/laolao-workbench.js": 2339
   },
   "manualVersions": {
     "counts": {
