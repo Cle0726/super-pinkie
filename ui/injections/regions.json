@@ -184,7 +184,9 @@
         "laolao-reading-view.js",
         "laolao-usage-stats.css",
         "laolao-usage-stats.js",
-        "laolao-capabilities.js"
+        "laolao-capabilities.js",
+        "laolao-side-by-side.css",
+        "laolao-side-by-side.js"
       ]
     },
     {
