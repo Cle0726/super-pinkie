@@ -38,12 +38,14 @@ async function openMetre(browser, origin, width, theme) {
   const {page} = opened;
   await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
   await page.setViewportSize({width, height: 800});
+  // 保留死等：改窗口宽度后要等布局 / 媒体查询切换（宽屏侧栏 ↔ 抽屉）稳定下来，没有统一的可等状态。
   await page.waitForTimeout(400);
   const left = await page.evaluate(() => Math.round(document.querySelector('aside.sidebar')?.getBoundingClientRect().left ?? -9999));
   if (left < 0) {
     // 窄宽下侧栏是抽屉：点原生「展开侧边栏」
     await page.click('button[aria-label="展开侧边栏"]');
     await page.waitForFunction(() => document.querySelector('aside.sidebar')?.getBoundingClientRect().left >= 0, null, {timeout: 5_000});
+    // 保留死等：上面只等到抽屉进窗口，抽屉滑入的过渡还要放完再量位置 / 底色。
     await page.waitForTimeout(300);
   }
   await page.waitForSelector(FILTER, {timeout: 5_000});
@@ -71,6 +73,7 @@ const keys = () => {
 async function restingBackground(page, width) {
   await page.evaluate(() => document.activeElement?.blur?.());
   await page.mouse.move(width - 10, 790);
+  // 保留死等：挪开焦点 / 指针后要等按键的悬停 / 焦点底色过渡放完，读的就是过渡后的计算值，没有可等的 DOM 状态。
   await page.waitForTimeout(300);
   return page.evaluate((sel) => getComputedStyle(document.querySelector(sel)).backgroundColor, FILTER);
 }
@@ -157,6 +160,7 @@ test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下
           assert.equal(k1.filter, k0.filter, '菜单打开时「筛选」键图标不变');
           assert.equal(k1.label, k0.label, '菜单打开时「筛选」键文字不变');
           await page.locator('.pk-mw-filter-menu__item[data-filter="unread"]').click();
+          // 保留死等：这里要证明「鼠标选项后抽屉没被收掉」（不该发生的事），得留一段时间窗让错误的收起有机会发生。
           await page.waitForTimeout(400);
           const s1 = await page.evaluate(state);
           assert.equal(s1.filter, 'unread', '选中了「未读」');
@@ -177,7 +181,8 @@ test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下
           assert.equal(k3.filter, k0.filter, '未读时再打开菜单，图标不变');
           assert.equal(k3.label, k2.label, '未读时再打开菜单，文字不变');
           await page.keyboard.press('Escape');
-          await page.waitForTimeout(300);
+          // 等菜单节点被删掉（laolao-metre-workspace.js 的 closeMenu 同步 remove）；等不到不在这里报错，交给下面原有断言。
+          await page.waitForFunction(() => !document.querySelector('.pk-mw-filter-menu'), null, {timeout: 3_000}).catch(() => {});
           assert.equal(await page.evaluate(() => Boolean(document.querySelector('.pk-mw-filter-menu'))), false, 'Esc 关菜单');
           assert.equal((await page.evaluate(keys)).label, k2.label, '关菜单后文字不变');
 
@@ -211,6 +216,7 @@ test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下
           assert.ok(empty.bg && empty.ratio >= 4.5, `空态正文对比度 ≥ 4.5:1：${JSON.stringify(empty)}`);
 
           await page.click('#laolao-session-manager .pk-mw-filter-empty__all');
+          // 保留死等：同上，要证明点「显示全部」不收抽屉（不该发生的事），留时间窗；列表重画也在这段里完成。
           await page.waitForTimeout(400);
           const s2 = await page.evaluate(state);
           assert.equal(s2.filter, null, '「显示全部」清掉筛选');
@@ -244,12 +250,15 @@ const viewerState = () => {
 async function fillBox(page, text) {
   await page.click(BOX);
   await page.fill(BOX, text);
+  // 保留死等：fill 返回时值已经写进去，这里是给页面上的 input 监听（草稿、Esc 计时复位）跑完留的余量，没有可等的状态。
   await page.waitForTimeout(100);
 }
 async function doubleEsc(page) {
   await page.keyboard.press('Escape');
+  // 保留死等：测的就是「0.5 秒内两下 Esc」，两下之间的间隔本身是被测条件。
   await page.waitForTimeout(80);
   await page.keyboard.press('Escape');
+  // 保留死等：调用方有时要证明「不清空」（没发生的事），留时间窗；清空本身在按键处理里同步完成。
   await page.waitForTimeout(250);
   return page.inputValue(BOX);
 }
@@ -286,6 +295,7 @@ test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两�
         await page.setViewportSize({width, height: 800});
         await page.waitForSelector(BOX, {timeout: 5_000});
         await page.waitForSelector('.agent-chat__input details.laolao-context-viewer', {state: 'attached', timeout: 8_000});
+        // 保留死等：查看器刚挂上，它的弹层 / 百分比要等首轮数据填完；下面「前提」断言量的是这时的样子，没有单一可等状态。
         await page.waitForTimeout(300);
 
         // 1. 前提
@@ -302,8 +312,10 @@ test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两�
         assert.equal(await doubleEsc(page), '', '输入框有字，0.5 秒内两下 Esc 清空');
         await fillBox(page, '慢一点');
         await page.keyboard.press('Escape');
+        // 保留死等：测的就是「两下隔太久（> 0.5 秒）不清空」，这段间隔本身是被测条件。
         await page.waitForTimeout(700);
         await page.keyboard.press('Escape');
+        // 保留死等：要证明「不清空」（没发生的事），留时间窗。
         await page.waitForTimeout(200);
         assert.equal(await page.inputValue(BOX), '慢一点', '两下隔太久不清空');
         await page.fill(BOX, '');
@@ -312,21 +324,26 @@ test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两�
         assert.ok(await page.evaluate(addFakeStop), '前提：假停止键看得见');
         await page.evaluate(() => document.activeElement?.blur?.());
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(200);
+        // 等假停止键被点到（Esc 处理里同步 click）；等不到不在这里报错，交给下面原有断言（它还要求只点一次）。
+        await page.waitForFunction(() => window.__pkTestStopClicks >= 1, null, {timeout: 3_000}).catch(() => {});
         assert.equal(await page.evaluate(() => window.__pkTestStopClicks), 1, '在跑时 Esc 点到停止键一次');
 
         // 4. 反例：查看器开着，Esc 归它
         await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = true; });
-        await page.waitForTimeout(300);
+        // 等 details 的 toggle 事件（异步）跑完：laolao-context-compact.js 在那里把弹层挪到 body 上、加 is-floating。等不到不在这里报错。
+        await page.waitForFunction(() => Boolean(document.querySelector('.agent-chat__input details.laolao-context-viewer')?.__lcvPanel?.classList.contains('is-floating')), null, {timeout: 3_000}).catch(() => {});
         assert.equal((await page.evaluate(viewerState)).open, true, '反例前提：查看器开着');
         await page.evaluate(() => { window.__pkTestStopClicks = 0; document.activeElement?.blur?.(); });
         await page.keyboard.press('Escape');
+        // 保留死等：要证明「查看器开着时 Esc 不点停止键」（没发生的事），留时间窗。
         await page.waitForTimeout(200);
         assert.equal(await page.evaluate(() => window.__pkTestStopClicks), 0, '查看器开着时 Esc 不点停止键');
         await page.evaluate(removeFakeStop);
         await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = true; });
+        // 保留死等：查看器多半已经开着（上面开过），这一步可能没有任何状态变化，没有可等的条件。
         await page.waitForTimeout(200);
         await page.evaluate((sel) => { const b = document.querySelector(sel); const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(b, '还在'); b.dispatchEvent(new Event('input', {bubbles: true})); b.focus(); }, BOX);
+        // 保留死等：值和焦点是同步设的，这里是给页面上的 input 监听跑完留的余量，没有可等的状态。
         await page.waitForTimeout(150);
         assert.equal(await doubleEsc(page), '还在', '查看器开着时两下 Esc 不清输入框');
         await page.evaluate(() => { document.querySelector('.agent-chat__input details.laolao-context-viewer').open = false; });

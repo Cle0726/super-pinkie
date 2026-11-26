@@ -68,43 +68,12 @@ DEFAULT_OVERRIDE = (
     "172.2*;172.30.*;172.31.*;192.168.*;<local>"
 )
 
-# PAC 里需要直连的域名后缀。与 local_proxy.DEFAULT_BYPASS 同源，
-# 但这里必须用「点开头」形式，才能在 JS 里做后缀匹配。
-BYPASS_SUFFIXES: Tuple[str, ...] = (
-    ".cn", ".gov.cn", ".edu.cn", ".org.cn", ".com.cn", ".net.cn",
-    ".baidu.com", ".sogou.com", ".so.com", ".360.cn",
-    ".sina.com.cn", ".sohu.com", ".163.com", ".126.com", ".qq.com",
-    ".taobao.com", ".tmall.com", ".alipay.com", ".aliyun.com",
-    ".jd.com", ".jdcloud.com", ".alicdn.com",
-    ".pinduoduo.com", ".yangkeduo.com",
-    ".suning.com", ".meituan.com", ".dianping.com",
-    ".ele.me", ".koubei.com",
-    ".weixin.qq.com", ".wechat.com", ".weibo.com", ".weibo.cn",
-    ".zhihu.com", ".zhihu.cn", ".douban.com",
-    ".xiaohongshu.com", ".xhslink.com",
-    ".bilibili.com", ".bilivideo.com", ".hdslb.com",
-    ".iqiyi.com", ".qiyi.com", ".iqiyipic.com",
-    ".youku.com", ".ykimg.com",
-    ".douyin.com", ".bytedance.com", ".toutiao.com",
-    ".kuaishou.com", ".kwimgs.com",
-    ".huya.com", ".douyu.com",
-    ".qqmusic.com", ".kugou.com", ".kuwo.cn",
-    ".ctrip.com", ".elong.com", ".qunar.com", ".tuniu.com",
-    ".fliggy.com", ".feizhu.com",
-    ".amap.com", ".autonavi.com", ".bdimg.com",
-    ".12306.cn", ".sf-express.com", ".kuaidi100.com",
-    ".huawei.com", ".huaweicloud.com", ".hicloud.com",
-    ".xiaomi.com", ".mi.com", ".miui.com",
-    ".oppo.com", ".vivo.com", ".lenovo.com",
-    ".csdn.net", ".cnblogs.com", ".jianshu.com",
-    ".juejin.cn", ".gitee.com", ".oschina.net",
-    ".aliyuncs.com", ".tencent-cloud.net", ".myqcloud.com",
-    ".qcloudcdn.com", ".qpic.cn",
-    ".thepaper.cn", ".cctv.com", ".cnn.com.cn",
-    ".smzdm.com", ".hupu.com", ".acfun.cn",
-    ".tencent.com", ".alibaba.com", ".taobaocdn.com",
-    ".aliyuncdn.com", ".aliyun-inc.com",
-)
+# PAC 里需要直连的域名后缀：直接用 local_proxy.DEFAULT_BYPASS，只维护一份。
+# 那份本来就是「点开头」形式，PAC 在 JS 里做后缀匹配正好用得上。
+# 与 fanvpn_service 一样按 app/fanvpn 下的扁平模块导入。
+from local_proxy import DEFAULT_BYPASS  # noqa: E402
+
+BYPASS_SUFFIXES: Tuple[str, ...] = DEFAULT_BYPASS
 
 
 # ── 注册表抽象 ─────────────────────────────────────────────────
