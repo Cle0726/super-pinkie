@@ -5,6 +5,8 @@
 // 白板四角外留白的中点、上边留白中点、顶栏中心点，elementFromPoint 都要命中白板或遮罩。
 // 反例写在同一个测试里：把遮罩藏掉、撤掉 inert（= 打回时的样子），四角外的点必须命中页面原有的东西。
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test, {after} from 'node:test';
 import {
   REPO_ROOT,
@@ -25,9 +27,33 @@ function launchSharedBrowser() {
   return sharedBrowser;
 }
 
+// 安装（拷上游包 + bundle install/stamp/check）也整个文件只做一次：CI 上一次约 25s，原来两个测试各做一遍。
+// 装不上时记住那次失败，两个测试都重抛（不改成跳过）。
+let sharedInstall = null;
+function installForFile() {
+  if (!sharedInstall) {
+    try { sharedInstall = {installed: installRealControlUi({repoRoot: REPO_ROOT})}; }
+    catch (error) { sharedInstall = {error}; }
+  }
+  if (sharedInstall.error) throw sharedInstall.error;
+  return sharedInstall.installed;
+}
+// 假服务仍每个测试各起一个，各用安装目录下一个新的 state 子目录（会话偏好落盘互不相见），子目录随安装目录一起删。
+async function serverForTest(t) {
+  const installed = installForFile();
+  const runDir = fs.mkdtempSync(path.join(installed.runDir, 'state-'));
+  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir});
+  t.after(() => server.close());
+  return server;
+}
+
 after(async () => {
-  const got = await sharedBrowser;
-  if (got?.browser) await got.browser.close();
+  try {
+    const got = await sharedBrowser;
+    if (got?.browser) await got.browser.close();
+  } finally {
+    sharedInstall?.installed?.cleanup();
+  }
 });
 
 async function browserForTest() {
@@ -75,10 +101,7 @@ const backdrop = (page) => page.evaluate((NATIVE) => {
 const openBoard = (page) => page.evaluate(() => Promise.resolve(window.Pinkie.whiteboard.open()).then(() => true, () => true));
 
 test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert page behind; old look (no scrim) fails', async (t) => {
-  let installed; let server;
-  t.after(async () => { await server?.close(); installed?.cleanup(); });
-  installed = installRealControlUi({repoRoot: REPO_ROOT});
-  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  const server = await serverForTest(t);
   const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
@@ -205,10 +228,7 @@ const toolbarHits = (page) => page.evaluate(() => {
 });
 
 test('#113 real page: whiteboard toolbar clears the desktop shell window controls / drag strip, which stay usable (not inert); old offset is covered', async (t) => {
-  let installed; let server;
-  t.after(async () => { await server?.close(); installed?.cleanup(); });
-  installed = installRealControlUi({repoRoot: REPO_ROOT});
-  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  const server = await serverForTest(t);
   const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
