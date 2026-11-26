@@ -45,6 +45,11 @@ except ImportError:
 APP_NAME = "超級碧琪"
 DEFAULT_PROXY_PORT = 1467
 DEFAULT_UPSTREAM_PORT = 1466
+# The relay script's own defaults (35s first byte / 75s budget) cut hy4flash-free
+# long-context replies, whose first byte takes 76-90s, into retries and a 503.
+# Same values as launchd/openclaw-proxy/com.openclaw.mm-retry-proxy.plist; a
+# Feishu reply is capped at 300s, so a longer budget buys nothing.
+RELAY_TIMEOUTS = {"UR_PROXY_FIRST_BYTE_TIMEOUT": "180", "UR_PROXY_RETRY_BUDGET": "300"}
 # Name the bundled relay reports on /health. Port 1467 is shared with the
 # user's own retry proxy, which also answers {"ok": true}, so identity matters.
 RELAY_SERVICE = "super-pinkie-relay"
@@ -824,6 +829,8 @@ class ProxyManager:
         env = dict(os.environ)
         env["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
         env["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+        for key, value in RELAY_TIMEOUTS.items():
+            env.setdefault(key, value)
         self.proc = subprocess.Popen(
             [py, str(proxy_py), str(port)],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True,
@@ -1509,6 +1516,8 @@ def run_relay(port, upstream):
     os.environ["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
     os.environ["UR_PROXY_LISTEN"] = str(port)
     os.environ["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+    for key, value in RELAY_TIMEOUTS.items():
+        os.environ.setdefault(key, value)
     sys.argv = [sys.argv[0], str(port), str(upstream)]
     spec = importlib.util.spec_from_file_location("pinkie_relay", script)
     module = importlib.util.module_from_spec(spec)
