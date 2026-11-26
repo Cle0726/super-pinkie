@@ -1,0 +1,47 @@
+/* 月度回顾卡（laolao-recap.js）：首页「继续之前的工作」上面一张卡，六个模式共用首页；只在首页显示期间出现。
+ * 首页是 .chat-main 里的一列（问候 order 0、输入框 order 1、最近 order 2），卡片排在最近前面（同 order，DOM 在前）。 */
+.laolao-startup-home__recap {
+  order: 2;
+  flex: none;
+  width: var(--laolao-home-col);
+  margin: 22px auto 0;
+  padding: 12px 14px 10px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--muted-strong) 35%, transparent);
+  border-radius: 10px;
+  /* 实底：首页背后是插画（唠嗑的气球、Metre 的像素舞台），透明底上字读不清（11-25 截图）。--popover 日夜都是不透明的。 */
+  background: var(--popover);
+  color: var(--text-strong);
+  visibility: hidden;
+}
+/* Metre 用自己的面板色和线色，和输入框同一层。 */
+html[data-laolao-mode="metre"] .laolao-startup-home__recap { background: var(--metre-surface); border-color: var(--metre-line-strong); color: var(--metre-text); font-family: var(--metre-sans); border-radius: 6px; }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-title,
+html[data-laolao-mode="metre"] .laolao-startup-home__recap[data-short="1"] .laolao-startup-home__recap-line { color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-close { border-color: var(--metre-muted); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .laolao-startup-home__recap-close:hover { border-color: var(--metre-cobalt); color: var(--metre-cobalt); }
+html[data-laolao-startup-ready="1"] .laolao-startup-home__recap,
+html[data-laolao-startup-reveal="1"] .laolao-startup-home__recap { visibility: visible; }
+/* 有回顾卡时，「继续之前的工作」和卡片之间不再空一大段。 */
+.laolao-startup-home__recap + .laolao-startup-home__recent { margin-top: 14px; }
+.laolao-startup-home__recap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.laolao-startup-home__recap-title { margin: 0; font-size: 12.5px; font-weight: 500; color: var(--muted-strong); }
+.laolao-startup-home__recap-line { margin: 4px 0 0; font-size: 13.5px; line-height: 1.65; overflow-wrap: anywhere; }
+.laolao-startup-home__recap[data-short="1"] .laolao-startup-home__recap-line { color: var(--muted-strong); }
+/* 「收起」是控件：边框用 muted-strong（对卡片底 ≥ 3:1），高 24px。 */
+.laolao-startup-home__recap-close {
+  flex: none;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--muted-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.laolao-startup-home__recap-close:hover { color: var(--accent); border-color: var(--accent); }
+/* 设置弹层「现在看看」里的预览：同一张卡，不受首页的显隐和宽度。 */
+.laolao-recap-preview .laolao-startup-home__recap { width: auto; margin: 10px 0 0; visibility: visible; }
+.laolao-recap-preview:empty { display: none; }
