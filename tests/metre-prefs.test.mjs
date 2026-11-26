@@ -310,6 +310,3 @@ test('I7 真浏览器：选了 Ctrl + Enter，单按 Enter 在输入框里换行
     assert.deepEqual(dflt.afterEnter, {value: '第一行', sent: 1, hooks: 1}, '默认档：Enter 照原来发送');
   } finally { await browser.close(); }
 });
-
-// TEMPORARY counter-example for PR #143: this must turn the macOS WebKit job red; reverted in the next commit.
-test("counter-example: deliberately broken (macdev3)", () => { assert.equal(1, 2, "deliberately broken to prove the WebKit job goes red"); });
