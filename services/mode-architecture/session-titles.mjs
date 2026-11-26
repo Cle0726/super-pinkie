@@ -610,7 +610,9 @@ export class SessionTitles {
   }
 
   async metadata(keys) {
-    const records = readSessionJson(this.file);
+    // Read-only: a corrupt session-titles.json only loses the title source,
+    // never the archived/internal/channel flags of the whole session list.
+    let records; try { records = readSessionJson(this.file); } catch { records = {}; }
     const agents = new Map(), rows = {};
     for (const key of keys) {
       const agentId = agentOf(key);
