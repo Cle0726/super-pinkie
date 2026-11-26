@@ -43,7 +43,7 @@ html:not([data-laolao-mode="project"]) #laolao-project-scope[data-bound="false"]
   transition: background .15s ease, color .15s ease, transform .12s ease;
 }
 html[data-laolao-plain-composer] .agent-chat__input .pinkie-tray-btn { display: none; }
-.agent-chat__input .pinkie-tray-btn svg { width: 17px; height: 17px; flex: none; }
+.agent-chat__input .pinkie-tray-btn svg { width: 17px; height: 17px; flex: none; } /* B11 学习表：日间「工具」静止态 3.0–3.7 → ≥ 4.5 */ html:not([data-pinkie-night]):not([data-laolao-mode="metre"]) .agent-chat__input .pinkie-tray-btn:not(:hover):not(:focus-visible):not([aria-expanded="true"]) { color: color-mix(in srgb, var(--muted) 65%, var(--text-strong)); }
 .agent-chat__input .pinkie-tray-btn:is(:hover, :focus-visible, [aria-expanded="true"]) {
   background: rgba(255, 255, 255, .66);
   color: var(--fog-ink, inherit);
