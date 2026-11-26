@@ -6,14 +6,18 @@
 #   CLE_APP_DIR        App 所在目录，默认 /Applications（App 是 $CLE_APP_DIR/超級碧琪.app）
 #   CLE_BACKUP_DIR     备份目录，默认 ~/Library/Application Support/SuperPinkie-cle-pkg/backups
 #   CLE_AGENTS_DIR     LaunchAgents 目录，默认 ~/Library/LaunchAgents
-#   CLE_LABELS         要管的 LaunchAgents label，空格分隔
+#   CLE_LABELS         要管的 LaunchAgents label，空格分隔；设了就整个替换默认值（不是追加）
+#                      默认 = installer 实际会装的 4 个（watchdog / tts / reapply / urproxy）
+#                      + 旧 label ai.openclaw.gateway（apply-bundled.sh 会迁走它，老机器上可能还在）。
+#                      本机自建、仓库不装的 plist（自建网关、edge-tts、mm-retry-proxy* 等）不在默认里，
+#                      要管就把默认值和它们一起写进 CLE_LABELS。
 #   CLE_PKG            C.le. 包（.app），默认 tools/cle-pkg-mac/out/超級碧琪.app
 #   CLE_EXPECT_CHANNEL 包的 build-info channel 必须是它才装，默认 cle
 #   CLE_LAUNCHCTL / CLE_PGREP / CLE_CODESIGN / CLE_DITTO  替换系统命令（自测用假的）
 #   CLE_ISO_ROOT       隔离模式：所有路径必须在它下面，launchctl/pgrep/codesign 不许用真的
 
 CLE_APP_NAME="超級碧琪.app"
-CLE_DEFAULT_LABELS="ai.openclaw.watchdog ai.openclaw.gateway com.openclaw.urproxy"
+CLE_DEFAULT_LABELS="ai.openclaw.watchdog com.super-pinkie.tts com.super-pinkie.reapply com.openclaw.urproxy ai.openclaw.gateway"
 CLE_BUILD_INFO_REL="Contents/Resources/SuperPinkie/build-info.json"
 
 cle_say() { printf '%s\n' "$*"; }

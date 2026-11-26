@@ -17,6 +17,8 @@ TOOL = REPO / "tools" / "cle-pkg-mac"
 APP_NAME = "超級碧琪.app"
 BUILD_REL = Path("Contents/Resources/SuperPinkie/build-info.json")
 WATCHDOG, GATEWAY, URPROXY = "ai.openclaw.watchdog", "ai.openclaw.gateway", "com.openclaw.urproxy"
+TTS, REAPPLY = "com.super-pinkie.tts", "com.super-pinkie.reapply"
+UNMANAGED = "com.example.self-built-gateway"
 SCRIPTS = ("backup-current", "install-cle", "restore")
 
 
@@ -175,6 +177,8 @@ class ClePkgMacTest(unittest.TestCase):
     def test_full_cycle_backup_install_restore(self):
         self.plist(WATCHDOG, "w1")
         self.plist(GATEWAY, "g1")
+        self.plist(TTS, "t1")
+        self.plist(UNMANAGED, "x1")
         self.ok("backup-current")
         [backup] = self.backups_list()
         self.assertFalse(list(self.backups.glob("*.partial")))
@@ -183,7 +187,11 @@ class ClePkgMacTest(unittest.TestCase):
         self.assertEqual(m["app.present"], "1")
         self.assertEqual(m["app.channel"], "release")
         self.assertEqual(m["app.version"], "2.5.54")
-        self.assertEqual((m[f"plist.{WATCHDOG}"], m[f"plist.{GATEWAY}"], m[f"plist.{URPROXY}"]), ("1", "1", "0"))
+        self.assertEqual(
+            tuple(m[f"plist.{label}"] for label in (WATCHDOG, TTS, REAPPLY, URPROXY, GATEWAY)),
+            ("1", "1", "0", "0", "1"))
+        self.assertNotIn(f"plist.{UNMANAGED}", m)
+        self.assertFalse((backup / "LaunchAgents" / f"{UNMANAGED}.plist").exists())
         self.assertEqual(channel_of(backup / APP_NAME), "release")
         self.assertEqual((backup / "LaunchAgents" / f"{GATEWAY}.plist").read_text(), "g1")
 
@@ -217,6 +225,21 @@ class ClePkgMacTest(unittest.TestCase):
         self.assertIn(f"bootstrap {self.domain} {self.agents}/{GATEWAY}.plist", calls)
         self.assertIn(f"bootout {self.domain}/{URPROXY}", calls)
         self.assertFalse([c for c in calls if WATCHDOG in c])
+        self.assertIn(f"跳过 {TTS}.plist：和备份一样", r.stdout)
+        self.assertIn(f"跳过 {REAPPLY}.plist：备份里和现在都没有", r.stdout)
+        self.assertEqual((self.agents / f"{UNMANAGED}.plist").read_text(), "x1")
+        self.assertFalse([c for c in calls if UNMANAGED in c])
+
+    def test_cle_labels_replaces_defaults(self):
+        self.plist(WATCHDOG, "w1")
+        self.plist(UNMANAGED, "x1")
+        self.ok("backup-current", CLE_LABELS=f" {UNMANAGED}\t")
+        [backup] = self.backups_list()
+        m = self.manifest(backup)
+        self.assertEqual(m[f"plist.{UNMANAGED}"], "1")
+        self.assertNotIn(f"plist.{WATCHDOG}", m)
+        self.assertEqual((backup / "LaunchAgents" / f"{UNMANAGED}.plist").read_text(), "x1")
+        self.assertFalse((backup / "LaunchAgents" / f"{WATCHDOG}.plist").exists())
 
     def test_restore_copies_back_when_replaced_app_is_gone(self):
         self.ok("backup-current")
