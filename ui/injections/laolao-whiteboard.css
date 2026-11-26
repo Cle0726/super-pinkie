@@ -32,6 +32,9 @@
   box-shadow: 0 18px 48px rgb(0 0 0 / 18%);
 }
 .pk-whiteboard[hidden] { display: none; }
+/* 浮层四周 24px 留白下面垫一层实的遮罩：压暗页面、点了不穿透（遮罩 999 < 白板 1000），背后页面另由脚本设 inert。 */
+.pk-whiteboard__scrim { position: fixed; inset: 0; z-index: 999; background: rgb(24 20 28 / 48%); }
+.pk-whiteboard__scrim[hidden] { display: none; }
 .pk-whiteboard:focus { outline: none; }
 .pk-whiteboard__bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px;
