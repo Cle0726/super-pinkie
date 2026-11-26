@@ -163,12 +163,12 @@ test(`Metre worktree tags: gateway error shows nothing; other modes never call o
   try {
     const p = await open(browser, 'metre', 'fail');
     const errors = []; p.on('pageerror', (e) => errors.push(e.message));
-    await decorate(p); await p.waitForTimeout(200);
+    await decorate(p); await p.waitForTimeout(200);   // 保留：断言网关出错时「什么都不画」，没有能等的条件
     assert.deepEqual(await tags(p), Object.fromEntries(KEYS.map((k) => [k, null])), '网关出错就当没有');
     assert.deepEqual(errors, []);
     const q = await open(browser, 'project', {worktrees: WORKTREES});
     await q.evaluate(() => window.PinkieMetreWorktree.mark(document.querySelector('.laolao-managed-groups')));
-    await q.waitForTimeout(200);
+    await q.waitForTimeout(200);   // 保留：断言别的模式「不画、不请求」，没有能等的条件
     assert.equal(await q.locator('.pk-ml-wt').count(), 0, '别的模式不画');
     assert.equal(await q.evaluate(() => window.calls.length), 0, '别的模式不请求');
   } finally { await browser.close(); }

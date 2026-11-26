@@ -49,7 +49,6 @@ export const RIGOR_LADDER = Object.freeze({
 });
 
 export const depthLayers = (level) => ({...(DEPTH_LADDER[level] || NO_LAYERS)});
-export const rigorOf = (tier) => RIGOR_LADDER[tier] || null;
 // 四档在九档那边的写法：做事档位带来的独立份数、打回轮数、要不要审稿员重算。基础档没有验收，不在里面。
 export function rigorLayers(tier) {
   const rigor = RIGOR_LADDER[tier];
