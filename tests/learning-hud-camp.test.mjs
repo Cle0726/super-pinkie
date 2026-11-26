@@ -11,7 +11,7 @@ const CASES = [
 ];
 
 function measure() {
-  const P = (s) => { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; };
+  const P = (s) => { const c = s.match(/color\(srgb ([^)]+)\)/); if (c) { const v = c[1].split(/[ /]+/).filter(Boolean).map(Number); return [v[0] * 255, v[1] * 255, v[2] * 255, v[3] ?? 1]; } const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; };
   const over = (f, b) => { const a = f[3]; return [0, 1, 2].map(i => f[i] * a + b[i] * (1 - a)).concat(1); };
   const lum = (c) => { const t = c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * t[0] + .7152 * t[1] + .0722 * t[2]; };
   const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
@@ -26,12 +26,21 @@ function measure() {
   const b = meta.querySelector('b').getBoundingClientRect(), s = meta.querySelector('small').getBoundingClientRect();
   const overlap = Math.max(0, Math.min(b.right, s.right) - Math.max(b.left, s.left)) * Math.max(0, Math.min(b.bottom, s.bottom) - Math.max(b.top, s.top));
   const lines = (n, r) => Math.round(r.height / parseFloat(getComputedStyle(n).fontSize));
+  // 营地文字（舞台和 boss 卡另算：它们的底是渐变和背景图，逐层合成读不到）逐个算对比度，连同祖先的 opacity。
+  const camp = document.querySelector('.pkg-camp'); const low = [];
+  for (const n of camp.querySelectorAll('*')) {
+    if (n.closest('.pkg-stage, .pkg-boss') || ![...n.childNodes].some(c => c.nodeType === 3 && c.textContent.trim()) || !n.getClientRects().length) continue;
+    let op = 1; for (let m = n; m; m = m.parentElement) op *= +getComputedStyle(m).opacity;
+    const fg = P(getComputedStyle(n).color); fg[3] *= op; const bg = bgOf(n); const k = ratio(over(fg, bg), bg);
+    if (k < 4.5) low.push(`${n.className || n.tagName}「${n.textContent.trim().slice(0, 12)}」${k.toFixed(2)}`);
+  }
+  const borders = [...camp.querySelectorAll('.pkg-target')].map(t => { const bg = bgOf(t.parentElement); return {cls: t.className + (t.dataset.focus ? '[focus]' : ''), k: ratio(over(P(getComputedStyle(t).borderTopColor), bg), bg)}; });
   return {time: stage.dataset.time, theme: document.querySelector('#pinkie-study-desk').dataset.theme, metaDisplay: getComputedStyle(meta).display,
     overlap, bLines: lines(meta.querySelector('b'), b), smallLines: lines(meta.querySelector('small'), s),
-    small: contrast(tag.querySelector('small')), span: contrast(tag.querySelector('span'))};
+    small: contrast(tag.querySelector('small')), span: contrast(tag.querySelector('span')), low, borders};
 }
 
-test('camp HUD: name and intimacy level never overlap, stage tag text is at least 4.5:1 by day and night (WebKit)', async () => {
+test('camp HUD: name and intimacy level never overlap, stage tag and camp text are at least 4.5:1, target card borders at least 3:1, by day and night (WebKit)', async () => {
   const {harness, close} = await harnessWithGame();
   const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
   try {
@@ -53,6 +62,9 @@ test('camp HUD: name and intimacy level never overlap, stage tag text is at leas
         assert.ok(r[k].chain >= 4.5, `${at}：角标 ${k}「${r[k].text}」对比度 ${r[k].chain.toFixed(2)} < 4.5`);
         assert.ok(r[k].sky >= 4.5, `${at}：角标 ${k}「${r[k].text}」在最不利天空上 ${r[k].sky.toFixed(2)} < 4.5`);
       }
+      assert.deepEqual(r.low, [], `${at}：营地文字对比度 < 4.5`);
+      assert.ok(r.borders.length > 1, `${at}：没找到 .pkg-target`);
+      for (const bd of r.borders) assert.ok(bd.k >= 3, `${at}：${bd.cls} 边框对比度 ${bd.k.toFixed(2)} < 3`);
       assert.deepEqual(errors, [], at);
       await page.close();
     }
