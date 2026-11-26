@@ -59,11 +59,24 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
   const visible = (e) => {
     const r = e.getBoundingClientRect();
     if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.right <= 0 || r.top >= vh || r.left >= vw) return null;
-    for (let x = e; x && x.nodeType === 1; x = parentOf(x)) {
+    for (let x = e, child = null; x && x.nodeType === 1; child = x, x = parentOf(x)) {
       const s = getComputedStyle(x);
       if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return null;
+      // 收起的 <details> 里除了 summary 都不显示（Chromium 不改 display，只能自己判断）
+      if (x.localName === 'details' && !x.open && child && child.localName !== 'summary') return null;
     }
     return r;
+  };
+  const topAt = (x, y) => { let t = document.elementFromPoint(x, y); while (t?.shadowRoot) { const n = t.shadowRoot.elementFromPoint(x, y); if (!n || n === t) break; t = n; } return t; };
+  // 铺满视口的弹层（作品库等）打开时，压在它底下、中心点被盖住的元素不算「看得见」
+  const modal = [...document.querySelectorAll('[role="dialog"], [aria-modal="true"]')].find((d) => {
+    const r = visible(d); return r && r.width >= vw * 0.9 && r.height >= vh * 0.9;
+  }) || null;
+  const shown = (e) => {
+    const r = visible(e);
+    if (!r || !modal || modal.contains(e)) return r;
+    const t = topAt(r.left + r.width / 2, r.top + r.height / 2);
+    return t && (e.contains(t) || t.contains(e)) ? r : null;
   };
   const effOpacity = (e) => { let o = 1; for (let x = e; x && x.nodeType === 1; x = parentOf(x)) o *= Number(getComputedStyle(x).opacity) || 0; return o; };
   const selOf = (e) => {
@@ -94,7 +107,7 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
     if (['script', 'style', 'head', 'meta', 'link', 'title', 'noscript', 'template'].includes(e.localName)) continue;
     const text = ownText(e);
     if (!text && !['input', 'textarea'].includes(e.localName)) continue;
-    const r = visible(e);
+    const r = shown(e);
     if (!r) continue;
     const s = getComputedStyle(e);
     const size = parseFloat(s.fontSize) || 0, weight = Number(s.fontWeight) || 400;
@@ -103,12 +116,12 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
     const fgRaw = P(s.color);
     const fg = over({...fgRaw, a: fgRaw.a * effOpacity(e)}, bg.color);
     const k = ratio(fg, bg.color);
-    const shown = text || e.getAttribute('placeholder') || '';
-    if (!large && shown && k < 4.5) {
-      const sel = selOf(e), key = sel + '|' + shown.slice(0, 20);
+    const label = text || e.getAttribute('placeholder') || '';
+    if (!large && label && k < 4.5) {
+      const sel = selOf(e), key = sel + '|' + label.slice(0, 20);
       if (!seen.has(key)) {
         seen.add(key);
-        smallText.push({sel, text: shown.slice(0, 40), ratio: k, color: s.color, bg: rgb(bg.color), bgImage: bg.image, fontSize: size, ...box(r)});
+        smallText.push({sel, text: label.slice(0, 40), ratio: k, color: s.color, bg: rgb(bg.color), bgImage: bg.image, fontSize: size, ...box(r)});
       }
     }
     // 截断：只看自己有字的元素
@@ -125,7 +138,7 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
   const controls = [];
   walk(document, (e) => { if (e.matches?.(interactiveSel)) controls.push(e); });
   for (const e of controls) {
-    const r = visible(e);
+    const r = shown(e);
     if (!r) continue;
     const s = getComputedStyle(e);
     const w = parseFloat(s.borderTopWidth) || 0;
@@ -144,7 +157,7 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
   const icons = [];
   walk(document, (e) => { if (e.localName === 'svg' || e.matches?.('.codicon, [class*="icon"]:empty')) icons.push(e); });
   for (const e of icons) {
-    const r = visible(e);
+    const r = shown(e);
     if (!r || r.width > 40 || r.height > 40) continue;
     if (e.closest?.('[aria-hidden="true"]') && !e.closest?.(interactiveSel)) continue;   // 纯装饰
     const s = getComputedStyle(e);
@@ -166,8 +179,7 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
   }
 
   // 重叠：两个可点元素互不包含、相交面积超过 4px²，且相交区中心点上露在最上面的不是其中某一个的内部
-  const boxes = controls.map((e) => ({e, r: visible(e)})).filter((x) => x.r && x.r.width >= 4 && x.r.height >= 4);
-  const topAt = (x, y) => { let t = document.elementFromPoint(x, y); while (t?.shadowRoot) { const n = t.shadowRoot.elementFromPoint(x, y); if (!n || n === t) break; t = n; } return t; };
+  const boxes = controls.map((e) => ({e, r: shown(e)})).filter((x) => x.r && x.r.width >= 4 && x.r.height >= 4);
   for (let i = 0; i < boxes.length; i++) {
     for (let j = i + 1; j < boxes.length; j++) {
       const a = boxes[i], b = boxes[j];
@@ -236,12 +248,18 @@ const STEPS = [
     await reopen.waitFor({state: 'visible', timeout: 10_000});
     await reopen.click();
     await page.waitForFunction(() => document.documentElement.dataset.pinkieWb === 'on', {timeout: 10_000});
+  }, async (page) => {
+    // 收起工作台再去设置：820 宽时工作台占满主区，侧栏的齿轮点不到（上一轮 settings-820 两格 30 秒超时）
+    const close = page.locator('button[aria-label^="收起工作台"], button[title^="收起工作台"]').first();
+    if (await close.count()) await close.click().catch(() => {});
+    await page.waitForFunction(() => document.documentElement.dataset.pinkieWb !== 'on', {timeout: 5_000}).catch(() => {});
   }],
   ['settings', async (page) => {
     await openSidebar(page);
     const link = page.locator('a.sidebar-footer-icon[aria-label="设置"]').first();
-    await link.waitFor({state: 'visible', timeout: 10_000});
-    await link.click();
+    await link.waitFor({state: 'attached', timeout: 10_000});
+    if (await link.isVisible().catch(() => false)) await link.click({timeout: 5_000});
+    else await link.evaluate((a) => a.click());   // 窄屏侧栏收着：仍走真页面自己的链接
     await page.waitForFunction(() => (
       location.pathname.startsWith('/settings')
       && document.body.getAttribute('data-pinkie-user-settings') === '1'
