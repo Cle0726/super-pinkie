@@ -199,6 +199,44 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
         self.assertFalse(restore.exists())
         self.assertIn("previous version restored at sign-in", log.read_text(encoding="utf-8-sig"))
 
+    def test_restore_at_sign_in_survives_curly_quotes_in_the_paths(self):
+        # B33: PowerShell also ends '...' at ‘ ’ ‚ ‛. With only ' doubled,
+        # restore-<token>.ps1 for an install under O’Brien did not even parse.
+        from app.windows_desktop import ps_single_quoted
+        home = self.root / "O’Brien ‘a‚b‛"
+        home.mkdir()
+        install = home / "超級碧琪"
+        backup = home / "超級碧琪.previous-0123"
+        backup.mkdir()
+        (backup / "超級碧琪.exe").write_text("exe", encoding="utf-8")
+        updates = home / "updates"
+        updates.mkdir()
+        log = home / "updater.log"
+        functions = extract_functions(["Write-UpdateLog", "Register-RestoreAtLogon"])
+        out = self.run_powershell(textwrap.dedent(f"""
+            $ErrorActionPreference = 'Stop'
+            $TargetDir = {ps_single_quoted(install)}
+            $Backup = {ps_single_quoted(backup)}
+            $UpdateRoot = {ps_single_quoted(updates)}
+            $LogPath = {ps_single_quoted(log)}
+            $Token = '0123456789abcdef0123456789abcdef'
+            function New-Item {{ param($Path, [switch]$Force) }}
+            function Set-ItemProperty {{ param($Path, $Name, $Value) "runonce=$Name|$Value" }}
+            {functions}
+            Register-RestoreAtLogon
+        """))
+        self.assertIn("runonce=SuperPinkieRestore-01234567|", out)
+        restore = next(updates.glob("restore-*.ps1"))
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(restore)],
+            capture_output=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        self.assertEqual(result.stderr, b"", result.stderr.decode("utf-8", "replace"))
+        self.assertTrue((install / "超級碧琪.exe").is_file())
+        self.assertFalse(backup.exists())
+        self.assertIn("previous version restored at sign-in", log.read_text(encoding="utf-8-sig"))
+
 
 if __name__ == "__main__":
     unittest.main()
