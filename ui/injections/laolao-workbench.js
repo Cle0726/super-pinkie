@@ -1986,14 +1986,14 @@
     for (const [key, item] of extraStatus) { try { const node = item(tab); if (node) { node.dataset.opt ||= key; right.append(node); } } catch {} }
     const live = document.documentElement.hasAttribute('data-cle-live');
     const pinkie = el('button', 'pk-wb-status__item pk-wb-status__pinkie' + (live ? ' is-live' : '')); pinkie.type = 'button';
-    pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? '碧琪工作中' : '碧琪'));
+    const who = document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? 'Metre' : '碧琪'; pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? who + '工作中' : who)); // B50：Metre 里直接写终稿（皮肤事后把「碧琪」换成「Metre」会变宽，fitStatus 已量过）
     pinkie.title = '把焦点移到对话输入框';
     pinkie.addEventListener('click', () => composer()?.focus());
     right.append(pinkie);
     status.replaceChildren(left, right); fitStatus();
   }
   // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失、字体晚到（左半边 flex:none 会变宽）也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
-  function fitStatus() { const r = status.lastElementChild; if (!r) return; const pk = r.querySelector(':scope > .pk-wb-status__pinkie'); r.style.minWidth = pk ? pk.offsetWidth + 'px' : ''; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
+  function fitStatus() { const r = status.lastElementChild; if (!r) return; const pk = r.querySelector(':scope > .pk-wb-status__pinkie'); r.style.minWidth = pk ? Math.ceil(pk.getBoundingClientRect().width) + 'px' : ''; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
   new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']}); document.fonts?.addEventListener('loadingdone', () => fitStatus());
 
   /* ───────── 问碧琪 ───────── */

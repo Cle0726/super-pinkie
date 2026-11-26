@@ -129,7 +129,11 @@ test('工作台状态栏 real page: 放不下按顺序整项藏，不留半截�
     try {
       await openBench(page, HUGE, 1024);
       const m = await page.evaluate(inspect, ORDER);
-      checkFit(m, '1024 特长分支名');
+      const lay = await page.evaluate(() => { const s = document.querySelector('.pk-wb-status'); const w = (n) => n ? Math.round(n.getBoundingClientRect().width * 10) / 10 : null;
+        const [l, r] = [s.firstElementChild, s.lastElementChild]; const pk = r.querySelector('.pk-wb-status__pinkie');
+        return {bar: w(s), left: w(l), right: w(r), rightMin: r.style.minWidth, rightFlex: getComputedStyle(r).flex, leftFlex: getComputedStyle(l).flex, pinkie: w(pk), pinkieOffset: pk?.offsetWidth,
+          leftKids: [...l.children].map((n) => `${String(n.className).replace('pk-wb-status__', '')}:${w(n)}:${getComputedStyle(n).flex}`)}; });
+      checkFit(m, '1024 特长分支名 布局 ' + JSON.stringify(lay));
       const b = await page.evaluate(() => { const n = document.querySelector('.pk-wb-status__branch'); const s = n?.querySelector('.pk-wb-status__branch-name');
         const pk = document.querySelector('.pk-wb-status__pinkie').getBoundingClientRect(); const bar = document.querySelector('.pk-wb-status').getBoundingClientRect();
         return {title: n?.title || '', clipped: s ? s.scrollWidth > s.clientWidth : null, ellipsis: s ? getComputedStyle(s).textOverflow : '', pinkieIn: pk.left >= bar.left - 0.5 && pk.right <= bar.right + 0.5, pinkieW: Math.round(pk.width)}; });

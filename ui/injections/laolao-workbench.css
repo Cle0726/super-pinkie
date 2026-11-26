@@ -333,7 +333,7 @@ button.pk-wb-status__item:hover { color: var(--wb-text); background: color-mix(i
 .pk-wb-status__flash { padding: 0 8px; color: var(--wb-git-u); opacity: 0; transform: translateY(3px); transition: opacity .25s, transform .25s; white-space: nowrap; }
 .pk-wb-status__flash.is-on { opacity: 1; transform: none; }
 .pk-wb-status__dot { width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--wb-text) 40%, transparent); }
-.pk-wb-status__pinkie.is-live { color: var(--wb-text); }
+.pk-wb-status__pinkie { flex: none; } .pk-wb-status__pinkie.is-live { color: var(--wb-text); }
 .pk-wb-status__pinkie.is-live .pk-wb-status__dot { background: var(--wb-accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--wb-accent) 60%, transparent); animation: pk-wb-pulse 1.6s ease-out infinite; }
 @keyframes pk-wb-pulse { 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
