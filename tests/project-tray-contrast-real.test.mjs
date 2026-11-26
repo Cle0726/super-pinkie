@@ -39,7 +39,8 @@ function measure() {
     return bg;
   };
   const opOf = (el) => { let op = 1; for (let n = el; n && n.nodeType === 1; n = n.parentElement) op *= Number(getComputedStyle(n).opacity); return op; };
-  const visible = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width >= 2 && r.height >= 2 && cs.visibility !== 'hidden'; };
+  // 820 下侧栏收起，「临时」靠祖先 opacity:0 藏起来，盒子还在：不算可见，否则会量出 1.00 的假失败。
+  const visible = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width >= 2 && r.height >= 2 && cs.visibility !== 'hidden' && opOf(el) >= 0.05; };
   const host = (el) => (el instanceof SVGElement ? el.closest('svg')?.parentElement || el : el);
   const k = (el, colorStr) => {
     const raw = rgb(colorStr); const bg = bgOf(host(el));
@@ -87,6 +88,7 @@ test('#261 项目模式：「临时」、工作程度芯片与箭头、「工具
   installed = installRealControlUi({repoRoot: REPO_ROOT});
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
 
+  const badByTheme = {day: [], night: []};
   for (const theme of ['day', 'night']) {
     for (const width of WIDTHS) {
       const good = []; const bad = [];
@@ -118,7 +120,13 @@ test('#261 项目模式：「临时」、工作程度芯片与箭头、「工具
         : ['工作程度·字', '工作程度·箭头', '工具·字', '工具·图标'];
       for (const n of required) assert.ok(names.has(n), `${tag}: 没量到「${n}」（量不到不能算通过） — ${fmt(good)}`);
       assert.deepEqual(low(good).map((i) => i.name), [], `${tag}: 对比度不够 — ${fmt(low(good))}`);
-      assert.ok(low(bad).length >= 1, `${tag}: 反例没生效：贴回旧配方后仍全部达标 — ${fmt(bad)}`);
+      for (const b of bad) {
+        const g = good.find((i) => i.name === b.name);
+        assert.ok(g && b.ratio < g.ratio, `${tag}: 旧配方没贴上「${b.name}」— 改后 ${g?.ratio.toFixed(2)}，旧配方 ${b.ratio.toFixed(2)}`);
+      }
+      badByTheme[theme].push(...bad.map((i) => ({...i, name: `${width}/${i.name}`})));
     }
+    // 夜间 820 没有「临时」，旧配方下芯片和「工具」在夜间本来就达标（6.55 / 3.97 / 4.79），所以反例按日、夜各自汇总判断，不要求每一格都不达标。
+    assert.ok(low(badByTheme[theme]).length >= 1, `${theme}: 反例没生效：贴回旧配方后仍全部达标 — ${fmt(badByTheme[theme])}`);
   }
 });
