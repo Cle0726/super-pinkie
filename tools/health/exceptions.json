@@ -164,8 +164,8 @@
   {
     "file": "ui/injections/laolao-workbench.js",
     "metric": "lines",
-    "value": 2358,
-    "reason": "B30（ui，uireview #218 记）：差异标签拆成文件名 + 比较说明（renderTabs 里 +1 行），标签栏溢出时被挤出的一头淡出并露出「全部标签」键（键 1 行、溢出判断 1 行、scroll / ResizeObserver 挂钩 1 行、注释 1 行、renderTabs 末尾调用 1 行），共 +6；没有新增全局名、MutationObserver 或定时器（B 类，只允许本次实测值）。"
+    "value": 2345,
+    "reason": "B30（ui，uireview #218 记）：差异标签拆成文件名 + 比较说明（renderTabs 里 +1 行），标签栏溢出时被挤出的一头淡出并露出「全部标签」键（键 1 行、溢出判断 1 行、scroll / ResizeObserver 挂钩 1 行、注释 1 行、renderTabs 末尾调用 1 行），共 +6；没有新增全局名、MutationObserver 或定时器（B 类，只允许本次实测值）。；11-26 #299 把终端代码搬到 laolao-workbench-term.js 后 main 实测 2345，#374 合 main 时下调"
   },
   {
     "file": "ui/injections/laolao-workbench.css",
