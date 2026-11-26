@@ -264,7 +264,10 @@
   function closeMenu() { menu?.remove(); menu = null; document.querySelectorAll('.pk-perm-chip[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false')); }
   function place(pop, anchor) {
     document.body.append(pop);
-    const a = anchor.getBoundingClientRect(), r = pop.getBoundingClientRect();
+    // 上下哪边空间大，就最高长到那边的空间（最多 520）：320 × 420 视口里固定 70vh 只有 294px，会话详情最后一行「额度」要滚（uireview #150 第 2 条）
+    const a = anchor.getBoundingClientRect(), room = Math.max(a.top, innerHeight - a.bottom) - 16;
+    pop.style.maxHeight = Math.round(Math.max(120, Math.min(520, room))) + 'px';
+    const r = pop.getBoundingClientRect();
     const left = Math.max(8, Math.min(a.left, innerWidth - r.width - 8));
     const top = a.top - r.height - 8 >= 8 ? a.top - r.height - 8 : Math.min(a.bottom + 8, innerHeight - r.height - 8);
     pop.style.left = Math.round(left) + 'px'; pop.style.top = Math.round(top) + 'px';
