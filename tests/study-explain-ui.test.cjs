@@ -1,5 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+
+// 「出手」选中后会跑 is-ready-pop 缩放动画；慢机器上 Playwright 一直判 not stable，把点击超时耗光。先等它和祖先上有限长的动画放完再点。
+async function clickWhenSettled(locator) {
+  await locator.waitFor();
+  await locator.evaluate(el => {
+    const runs = [];
+    for (let n = el; n; n = n.parentElement) runs.push(...n.getAnimations().filter(a => a.effect?.getComputedTiming().endTime !== Infinity));
+    return Promise.all(runs.map(a => a.finished.catch(() => {})));
+  });
+  await locator.click();
+}
 
 test('刷题讲解失败可切模型重试，成功后显示结果并等足后台时间', {timeout: 30000}, async () => {
   const h = await import('../tools/study-desk/harness.mjs');
@@ -12,7 +24,7 @@ test('刷题讲解失败可切模型重试，成功后显示结果并等足后�
     return {};
   };
   const server = await h.startHarness({handler, legacyUI: true});
-  const browser = await h.launchWithHarness(server, () => h.playwright().chromium.launch({headless:true, channel:'chrome'}));
+  const browser = await h.launchWithHarness(server, () => h.playwright()[engine].launch({headless:true, ...(engine === 'chromium' ? {channel:'chrome'} : {})}));
   try {
     const page = await browser.newPage({viewport:{width:1200,height:800}}), errors = [];
     page.setDefaultTimeout(5000); page.on('pageerror', e => errors.push(e.message));
@@ -28,7 +40,7 @@ test('刷题讲解失败可切模型重试，成功后显示结果并等足后�
     const answer = set.getByRole('group', {name:'选项'}).getByRole('button', {name:/^B\s*in$/});
     await answer.click();
     assert.equal(await answer.getAttribute('aria-pressed'), 'true');
-    await set.getByRole('button', {name:/^出手/}).click();
+    await clickWhenSettled(set.getByRole('button', {name:/^出手/}));
     const box = set.locator('.pkq-fb'); await box.waitFor();
     await box.getByRole('button', {name:'讲给我听'}).click();
     await box.getByText(/限流或额度不足/).waitFor();

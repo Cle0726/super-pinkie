@@ -134,14 +134,17 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
             f'-WindowStyle Hidden & ping -n 60 127.0.0.1 >nul & rem {self.install}"',
             creationflags=subprocess.CREATE_NO_WINDOW)
         self.children.append(opener)
-        time.sleep(2.5)
         log = self.root / "updater.log"
         functions = extract_functions(["Write-UpdateLog", "Stop-InstallLeftovers"])
+        # Instead of a fixed pause, the probe waits (bounded) until the opener
+        # has started its program; "before=1" below still reports a timeout.
         out = self.run_powershell(textwrap.dedent(f"""
             $ErrorActionPreference = 'Stop'
             $LogPath = '{log}'
             $StateRoot = '{self.state}'
             {functions}
+            $until = (Get-Date).AddSeconds(20)
+            while ((Get-Date) -lt $until -and @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }}).Count -lt 1) {{ Start-Sleep -Milliseconds 200 }}
             'before=' + @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }}).Count
             'root=' + (Get-Item -LiteralPath '{self.install}').FullName
             @(Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object {{ $_.CommandLine -like '*rem *' }}) | ForEach-Object {{ 'cmd#' + $_.ProcessId + ' ' + $_.CommandLine }}
