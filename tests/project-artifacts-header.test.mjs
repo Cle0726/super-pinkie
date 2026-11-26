@@ -149,13 +149,13 @@ test('作品库与查看器：窗口键不遮挡、说明字 / 关闭钮 / 边�
           }, width, {timeout: 10_000});
           await page.evaluate(() => window.PinkieArtifacts.open());
           await page.waitForSelector('.pinkie-art-page .pinkie-art-card__meta', {timeout: 10_000});
-          await page.waitForTimeout(300);
+          await page.waitForFunction(() => document.activeElement?.matches('.pinkie-art-search') && document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
           collect(`${where} 作品库`, await page.evaluate(probe, LIBRARY), problems);
           await page.evaluate(() => document.activeElement?.blur());
           collect(`${where} 作品库静止态`, await page.evaluate(probe, {cover: [], text: [], dots: [], edges: ['.pinkie-art-page .pinkie-art-search'], placeholder: []}), problems);
           await page.evaluate(() => window.PinkieArtifacts.openViewer(window.__artTestItem.id));
           await page.waitForSelector('.pinkie-art-view .pinkie-art-btn--quiet', {timeout: 10_000});
-          await page.waitForTimeout(300);
+          await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, {timeout: 10_000});
           collect(`${where} 查看器`, await page.evaluate(probe, VIEWER), problems);
           assert.deepEqual(pageErrors, [], `${where} pageerror`);
         } finally {
