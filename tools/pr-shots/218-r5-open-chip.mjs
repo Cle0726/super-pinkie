@@ -107,8 +107,12 @@ async function cell(theme, width) {
     report.push({theme, width, step: 'open', opened, ...(await benchState(page))});
 
     // 820 时工作台是紧凑的「代码 / 对话」两页，打开以后停在代码页、盖住对话；照用户的做法先切回对话再点下一个签条。
-    const narrow = await page.evaluate(() => 'pkWbNarrow' in document.documentElement.dataset);
-    if (narrow) { await page.getByRole('button', {name: '对话', exact: true}).first().click({timeout: 5000}).catch(() => {}); await page.waitForTimeout(400); }
+    // pkWbNarrow 总是在，值是 '0' / '1'；切换钮是 role=tab。
+    const narrow = await page.evaluate(() => document.documentElement.dataset.pkWbNarrow === '1');
+    if (narrow) {
+      await page.getByRole('tab', {name: '对话', exact: true}).first().click({timeout: 5000}).catch((error) => console.log('[r5] 切回对话失败：' + error.message.split('\n')[0]));
+      await page.waitForFunction(() => document.documentElement.dataset.pkWbView === 'chat', null, {timeout: 3000}).catch(() => console.log('[r5] 切回对话后 pkWbView 不是 chat'));
+    }
     await page.locator('.pk-mfile-chip[data-path="/proj/README.md"]').first().click({timeout: 5000}).catch(() => {});
     const diffed = await page.waitForFunction(() => (window.__pinkieWorkbench?.state?.tabs || []).some((x) => x.kind === 'diff'), null, {timeout: 20_000})
       .then(() => true, () => false);

@@ -173,6 +173,20 @@ test('改动 clicked first, before git status has loaded, still opens the diff (
   } finally { await tab.close(); }
 });
 
+test('at 820 a chip clicked from the 对话 page brings the workbench back to 代码, so the opened tab is on screen (pr-shots 45793117245)', {timeout: 60_000}, async t => {
+  const browser = await launch(t); if (!browser) return;
+  const tab = await open(browser, 'metre', {width: 820});
+  try {
+    await tab.locator('#g11 .pk-mfile-chip[data-path="/etc/hosts"]').click({timeout: 5000});
+    await tab.waitForFunction(() => document.documentElement.dataset.pkWbNarrow === '1' && document.documentElement.dataset.pkWbView === 'code', null, {timeout: 10_000});
+    await tab.getByRole('tab', {name: '对话', exact: true}).first().click({timeout: 5000});
+    await tab.waitForFunction(() => document.documentElement.dataset.pkWbView === 'chat', null, {timeout: 3000});
+    await tab.locator('#g11 .pk-mfile-chip[data-path="/proj/README.md"]').click({timeout: 5000});
+    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff'), null, {timeout: 10_000});
+    assert.equal(await tab.evaluate(() => document.documentElement.dataset.pkWbView), 'code', 'the diff opens on the 代码 page, not behind the chat');
+  } finally { await tab.close(); }
+});
+
 test('without git the 改动 chip opens the file; under 600px the workbench stays away and the row says why', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
   let tab = await open(browser, 'metre', {git: false});
