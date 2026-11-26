@@ -1,0 +1,115 @@
+name: PR shots
+
+# 在 GitHub runner 上给一个 PR 头拍真页面截图，本机不再开浏览器。
+# 用法：gh workflow run pr-shots.yml -f pr=<号> -f sha=<头 SHA> -f script=<截图脚本路径>
+#       gh run download <run id> -D <目录>   # 每个系统一个 artifact：pr-shots-<号>-<SHA 前 8 位>-<linux|windows>
+# 截图脚本约定见 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + <目录>/shots.jsonl。
+# 只读权限；跑的是该 PR 头的代码。
+# pull_request 只在改了本工作流或 tools/pr-shots/ 时触发，拿最小脚本给自己验收
+# （workflow_dispatch 要等文件进了 main 才能手动触发）。
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR 号"
+        type: string
+        required: true
+      sha:
+        description: "PR 头 SHA（完整 40 位；和 PR 当前头不一致就失败）"
+        type: string
+        required: true
+      script:
+        description: "截图脚本，相对仓库根（例：tools/pr-shots/minimal.mjs）"
+        type: string
+        default: tools/pr-shots/minimal.mjs
+  pull_request:
+    paths:
+      - .github/workflows/pr-shots.yml
+      - tools/pr-shots/**
+
+permissions:
+  contents: read
+
+env:
+  PR: ${{ inputs.pr || github.event.pull_request.number }}
+  SHA: ${{ inputs.sha || github.event.pull_request.head.sha }}
+  SCRIPT: ${{ inputs.script || 'tools/pr-shots/minimal.mjs' }}
+
+concurrency:
+  group: pr-shots-${{ inputs.pr || github.event.pull_request.number }}-${{ inputs.sha || github.event.pull_request.head.sha }}-${{ inputs.script || 'minimal' }}
+  cancel-in-progress: false
+
+jobs:
+  shots:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check inputs
+        run: |
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::pr 要是数字：$PR"; exit 1; }
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha 要是完整 40 位小写十六进制：$SHA"; exit 1; }
+          [[ "$SCRIPT" =~ ^[A-Za-z0-9._/-]+$ && "$SCRIPT" != /* && "$SCRIPT" != *..* ]] || { echo "::error::script 要是仓库内相对路径：$SCRIPT"; exit 1; }
+          echo "SHORT=${SHA:0:8}" >> "$GITHUB_ENV"
+          echo "OUT=$RUNNER_TEMP/pr-shots" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ env.PR }}/head
+          persist-credentials: false
+      - name: Require the requested head
+        run: |
+          head="$(git rev-parse HEAD)"
+          [ "$head" = "$SHA" ] || { echo "::error::#$PR 当前头是 $head，不是要拍的 $SHA（推了新头就用新 SHA 重新触发）"; exit 1; }
+          [ -f "$SCRIPT" ] || { echo "::error::$SHA 上没有 $SCRIPT"; exit 1; }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browsers
+        run: |
+          deps="$RUNNER_TEMP/pinkie-shots-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium webkit
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Run the screenshot script
+        timeout-minutes: 15
+        run: |
+          mkdir -p "$OUT"
+          printf '%s\n' "{\"pr\":$PR,\"sha\":\"$SHA\",\"script\":\"$SCRIPT\",\"os\":\"${{ matrix.label }}\",\"run\":\"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}" > "$OUT/run.json"
+          PINKIE_SHOTS_OUT="$OUT" node "$SCRIPT" --out "$OUT"
+      - name: Check what the script wrote
+        run: |
+          node - "$OUT" <<'NODE'
+          const fs = require('fs'), path = require('path');
+          const out = process.argv[2], list = path.join(out, 'shots.jsonl');
+          if (!fs.existsSync(list)) throw new Error('脚本没写 shots.jsonl');
+          const rows = fs.readFileSync(list, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+          if (!rows.length) throw new Error('shots.jsonl 是空的');
+          const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+          for (const r of rows) {
+            const f = path.join(out, r.file || '');
+            if (!r.file || !fs.existsSync(f)) throw new Error('shots.jsonl 里的图不存在：' + JSON.stringify(r));
+            if (!fs.readFileSync(f).subarray(0, 8).equals(sig)) throw new Error('不是 PNG：' + r.file);
+          }
+          console.log(`${rows.length} 张：` + rows.map((r) => r.file).join(', '));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-shots-${{ env.PR }}-${{ env.SHORT }}-${{ matrix.label }}
+          path: ${{ env.OUT }}
+          if-no-files-found: error
+          retention-days: 14
