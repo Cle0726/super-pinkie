@@ -180,6 +180,24 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertIn('"type": "quickAsk"', script)
         self.assertIn('"text": "你好"', script)
 
+    def test_context_fields_capped_b43(self):
+        # B43: mode / modeLabel / running titles used to be stored at any length (1 MB each made it in)
+        self.native._post = lambda *args: None
+        self.native.handle({"type": "context", "mode": "m" * 1_000_000, "modeLabel": "L" * 1_000_000,
+                            "running": [{"key": "k" * 1_000, "title": "t" * 1_000_000}]})
+        self.assertEqual(len(self.native.mode), 32)
+        self.assertEqual(len(self.native.mode_label), 32)
+        self.assertEqual([(len(k), len(t)) for k, t in self.native._running], [(300, 80)])
+        self.native.handle({"type": "context", "mode": "project", "modeLabel": "项目",
+                            "running": [{"key": "agent:main:a", "title": "天气"}]})
+        self.assertEqual((self.native.mode, self.native.mode_label, self.native._running),
+                         ("project", "项目", [("agent:main:a", "天气")]))
+        # non-strings are ignored, not str()-ed into the tray menu
+        self.native.handle({"type": "context", "mode": {"x": 1}, "modeLabel": ["a"],
+                            "running": [{"key": {"x": 1}}, {"key": 5}, {"key": "b", "title": {"t": 1}}, None, 1]})
+        self.assertEqual((self.native.mode, self.native.mode_label, self.native._running),
+                         ("project", "项目", [("b", "未命名会话")]))
+
     def test_edge_command(self):
         pdf = edge_export_command(Path("C:/edge.exe"), Path(self.tmp.name) / "a.html", Path(self.tmp.name) / "o.pdf", True)
         self.assertTrue(any(part.startswith("--print-to-pdf=") for part in pdf))
