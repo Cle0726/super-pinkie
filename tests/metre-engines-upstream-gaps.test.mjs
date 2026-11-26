@@ -252,7 +252,8 @@ test('writePinkieSettings: 0600, no temp file left, old model slots cleared, a b
   writePinkieSettings(dir, {baseUrl: 'http://127.0.0.1:5063', token: PASS, model: 'gw/claude-opus-5-5'});
   const file = path.join(dir, 'settings.json');
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).env.ANTHROPIC_MODEL, 'gw/claude-opus-5-5', 'a broken file does not stop the write');
-  assert.equal(fs.statSync(file).mode & 0o777, 0o600, 'settings hold a session pass: 0600');
+  // Windows 没有 POSIX 权限位（stat().mode 只反映只读属性），这一行只在 Linux/macOS 上查。
+  if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600, 'settings hold a session pass: 0600');
   assert.equal(fs.readdirSync(dir).includes('settings.json.tmp'), false, 'no temp file left behind');
 
   // 不给 model：旧的模型槽清掉，自己的变量留着。
