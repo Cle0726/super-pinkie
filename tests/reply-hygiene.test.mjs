@@ -56,6 +56,36 @@ test('ordinary replies, teaching labels and empty results are left alone', () =>
   assert.equal(cleanReplyText(onlyGate), onlyGate);
 });
 
+// Regressions: body text that only resembles the gate markers must be kept.
+test('a verbless self-check heading over a real lesson list is not treated as a leaked checklist', () => {
+  const reply = [
+    '今天的语法课从被动语态开始。',
+    '',
+    '【课前自检】：',
+    '- 1. 能说出 be + done 的结构',
+    '- 2. 能分清主动和被动',
+    '- 3. 看到 by 想到被动',
+    '',
+    '下面进入正式讲解，先看例句 The letter was written by Tom.',
+  ].join('\n');
+  assert.equal(cleanReplyText(reply), reply);
+});
+
+test('a body sentence that merely starts with a gate phrase survives while the real aside is removed', () => {
+  const reply = [
+    '先生问到点子上了！我来解释一下这个说法。',
+    '（执行【出题自检门禁】：纯净裸题，零暗示👇）',
+    '',
+    '执行【出题自检门禁】的意思是：出题前先在心里核对一遍题干里有没有答案原词，再把题目发给你。',
+    '- 完成【课前自检】后，你就可以开始做第 1 题了。',
+  ].join('\n');
+  const cleaned = cleanReplyText(reply);
+  assert.doesNotMatch(cleaned, /零暗示/);
+  assert.match(cleaned, /^先生问到点子上了！/);
+  assert.match(cleaned, /^执行【出题自检门禁】的意思是：出题前先在心里核对一遍/m);
+  assert.match(cleaned, /^- 完成【课前自检】后，你就可以开始做第 1 题了。$/m);
+});
+
 test('assistant messages are cleaned part by part and untouched messages return null', () => {
   const message = {role: 'assistant', stopReason: 'stop', content: [
     {type: 'thinking', thinking: '内部思考【出题自检门禁】'},
