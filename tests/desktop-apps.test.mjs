@@ -98,6 +98,39 @@ test('A4 卸载：副本目录和记录都删掉；再删一次不报错；没�
   assert.throws(() => apps.get(app.id), /没有装过/);
 });
 
+test('A4b 卸载时删目录失败（文件被锁 / 没权限）：记录保留、错误往上抛、网关回 {ok:false}，不留孤儿目录；恢复后能再卸', async t => {
+  const {dir, record, artifacts} = setup();
+  const api = fakeApi();
+  const root = path.join(dir, 'apps3');
+  const apps = registerDesktopApps(api, {root, artifacts});
+  const item = record('locked.html', '<p>locked</p>');
+  const {app} = apps.install({id: item.id, name: '被锁的'});
+  assert.ok(fs.existsSync(app.dir));
+  // root 下权限失败模拟不出来，打桩：只让删这个应用目录时抛 EBUSY，其余照常。
+  const realRm = fs.rmSync;
+  const rm = t.mock.method(fs, 'rmSync', (target, ...rest) => {
+    if (path.resolve(String(target)) === path.resolve(app.dir)) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rm '${target}'`), {code: 'EBUSY'});
+    }
+    return realRm(target, ...rest);
+  });
+  assert.throws(() => apps.remove(app.id), /EBUSY/);
+  const out = await api.call('pinkie.apps.remove', {id: app.id});
+  assert.equal(out.ok, false);
+  assert.match(out.error, /EBUSY/);
+  // 无孤儿：目录还在，记录也还在（内存里和落盘的 index.json 都在）。
+  assert.ok(fs.existsSync(app.dir));
+  assert.equal(apps.get(app.id).app.name, '被锁的');
+  const fresh = new DesktopApps(root, {artifacts});
+  assert.equal(fresh.list().apps.length, 1);
+  assert.equal(fresh.get(app.id).app.name, '被锁的');
+  // 锁解开后再卸一次就干净了。
+  rm.mock.restore();
+  assert.deepEqual(apps.remove(app.id), {ok: true, removed: true, name: '被锁的'});
+  assert.equal(fs.existsSync(app.dir), false);
+  assert.equal(new DesktopApps(root, {artifacts}).list().apps.length, 0);
+});
+
 test('A5 名字做文件名：去掉非法字符、保留中文、保留字加后缀、空名兜底', () => {
   assert.equal(safeAppName('我的:游戏/第*1版?.html'), '我的 游戏 第 1版');
   assert.equal(safeAppName('  ...  '), '作品');
@@ -106,6 +139,24 @@ test('A5 名字做文件名：去掉非法字符、保留中文、保留字加�
   // 反例：正常名字原样不动。
   assert.equal(safeAppName('单词卡 Pro'), '单词卡 Pro');
 });
+
+// 复发防护：Windows 保留设备名带扩展名（con.txt、lpt1.png）也建不了快捷方式，按第一个点之前的主干判断、不分大小写。
+// 每个名字单独一个测试，红的时候能看清是哪一个漏过去。
+for (const [raw, want] of [
+  ['con.txt', 'con 作品.txt'],
+  ['lpt1.png', 'lpt1 作品.png'],
+  ['CON.TXT', 'CON 作品.TXT'],
+  ['con.tar.gz', 'con 作品.tar.gz'],
+  ['con', 'con 作品'],
+  ['lpt1', 'lpt1 作品'],
+  // 反例：只是以保留字开头的正常名字原样不动。
+  ['content.txt', 'content.txt'],
+  ['icon.png', 'icon.png'],
+]) {
+  test(`A5b 保留设备名看主干：${raw} → ${want}`, () => {
+    assert.equal(safeAppName(raw), want);
+  });
+}
 
 test('A6 CSP 插入点：有 head 进 head；只有 html / doctype 跟在后面；片段放最前；规则本身禁网', () => {
   assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
@@ -285,6 +336,20 @@ test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）�
   }
   // 项目设置「保存」确实是这组主按钮。
   assert.match(read('laolao-artifacts.js'), /el\('button', 'laolao-modal__button laolao-modal__button--primary', '保存'\)/);
+});
+
+test('A15 作品库「从作品库移除」确认框夜间也用实底深色（截图 #163@83b6812a confirm 夜：还是浅底）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-artifacts.css');
+  // 确认框的 .pinkie-art-confirm 在遮罩上，弹层本身只有 .laolao-modal.pinkie-tools-modal，所以按「遮罩里的弹层」认。
+  const group = 'html\\[data-pinkie-night\\] \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pk-apps-dialog,\\.pinkie-art-confirm \\*\\)';
+  assert.match(css, new RegExp(`^${group} \\{ background:#2a2027 !important;color:#f3e9ef !important;`, 'm'), '夜间实底那条带上确认框');
+  assert.match(css, new RegExp(`^${group}::before \\{ display:none \\}$`, 'm'), '夜间去掉顶上的白高光');
+  assert.match(css, new RegExp(`^${group} \\.laolao-modal__button:not\\(\\.laolao-modal__button--primary\\) \\{ background:rgba\\(255,235,245,\\.08\\) !important;`, 'm'), '夜间「取消」用浅色描边底');
+  // 白天不动：小确认框照旧是玻璃，不进实底那组。
+  assert.match(css, /^html \.laolao-modal:is\(\.pinkie-project-settings,\.pinkie-shortcuts,\.pk-apps-dialog\) \{ background:#fff8fb !important;/m);
+  assert.match(read('laolao-artifacts.js'), /el\('div', 'laolao-modal-mask pinkie-tools-mask pinkie-art-confirm'\)/);
 });
 
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。

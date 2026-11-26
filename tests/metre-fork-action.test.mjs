@@ -5,7 +5,7 @@
 //   悬停整组消息区（含页脚）都显示键，鼠标从正文移到键上不会丢。
 // - 同组前面的带键气泡：气泡底部多留一行键高，键放在那里。
 // - 正在输出、没有键的气泡：什么都不改。其他模式不受影响。
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,7 +31,39 @@ test('Metre：分叉键挪到页脚行的规则只在 Metre 下生效，不用 !
 });
 
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+// CI 提速：整个文件只起一个浏览器，日间 / 夜间两轮共用。每轮仍自己开 context（viewport 跟原来的 newPage 一样），结束就关。
+// 起不来就跟以前一样让这个测试失败，不改成跳过。
+let sharedBrowserPromise = null;
+function sharedBrowser() {
+  sharedBrowserPromise ??= playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  return sharedBrowserPromise;
+}
+const launch = async () => {
+  const browser = await sharedBrowser();
+  const opened = [];
+  return {
+    async newPage(options) {
+      const context = await browser.newContext(options);
+      opened.push(context);
+      const page = await context.newPage();
+      const closePage = page.close.bind(page);
+      page.close = async (...args) => {
+        try { return await closePage(...args); }
+        finally { await context.close().catch(() => {}); }
+      };
+      return page;
+    },
+    async close() {
+      await Promise.all(opened.map((context) => context.close().catch(() => {})));
+      opened.length = 0;
+    },
+  };
+};
+after(async () => {
+  if (!sharedBrowserPromise) return;
+  const browser = await sharedBrowserPromise.catch(() => null);
+  if (browser) await browser.close();
+});
 const LONG = '好。我先派一个声部去改按钮颜色，再让另一个声部检查注册页和登录页是不是用的同一个按钮样式。'.repeat(2);
 const BODIES = [
   ['段落', `<p>${LONG}</p><p>第二段。</p>`],
