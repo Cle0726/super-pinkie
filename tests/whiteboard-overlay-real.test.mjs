@@ -5,7 +5,7 @@
 // 白板四角外留白的中点、上边留白中点、顶栏中心点，elementFromPoint 都要命中白板或遮罩。
 // 反例写在同一个测试里：把遮罩藏掉、撤掉 inert（= 打回时的样子），四角外的点必须命中页面原有的东西。
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, {after} from 'node:test';
 import {
   REPO_ROOT,
   installRealControlUi,
@@ -13,6 +13,28 @@ import {
   openRealScenePage,
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
+
+// CI 提速：整个文件只起一个浏览器，两个测试共用；隔离仍按测试走（每次 openRealScenePage 自己开一个 context，结束就关）。
+// 起浏览器的 Promise 只建一次。起不来时记住这次失败，后面的测试抛同一个错误，不改成跳过。
+let sharedBrowser = null;
+function launchSharedBrowser() {
+  sharedBrowser ??= launchRealBrowser().then(
+    (browser) => ({browser}),
+    (error) => ({error}),
+  );
+  return sharedBrowser;
+}
+
+after(async () => {
+  const got = await sharedBrowser;
+  if (got?.browser) await got.browser.close();
+});
+
+async function browserForTest() {
+  const got = await launchSharedBrowser();
+  if (got.error) throw got.error;
+  return got.browser;
+}
 
 const SIZES = [[1440, 900], [1024, 768], [820, 900]];
 const CORNERS = ['tl', 'tr', 'bl', 'br'];
@@ -53,11 +75,11 @@ const backdrop = (page) => page.evaluate((NATIVE) => {
 const openBoard = (page) => page.evaluate(() => Promise.resolve(window.Pinkie.whiteboard.open()).then(() => true, () => true));
 
 test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert page behind; old look (no scrim) fails', async (t) => {
-  let installed; let server; let browser;
-  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  let installed; let server;
+  t.after(async () => { await server?.close(); installed?.cleanup(); });
   installed = installRealControlUi({repoRoot: REPO_ROOT});
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  browser = await launchRealBrowser();
+  const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
     const {context, page} = await openRealScenePage(browser, server.origin, 'home-thinking', theme);
@@ -183,11 +205,11 @@ const toolbarHits = (page) => page.evaluate(() => {
 });
 
 test('#113 real page: whiteboard toolbar clears the desktop shell window controls / drag strip, which stay usable (not inert); old offset is covered', async (t) => {
-  let installed; let server; let browser;
-  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  let installed; let server;
+  t.after(async () => { await server?.close(); installed?.cleanup(); });
   installed = installRealControlUi({repoRoot: REPO_ROOT});
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  browser = await launchRealBrowser();
+  const browser = await browserForTest();
 
   for (const theme of ['day', 'night']) {
     const {context, page} = await openRealScenePage(browser, server.origin, 'home-thinking', theme);
