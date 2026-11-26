@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, {before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -12,6 +12,20 @@ import {pinkieSplitTimelineMessage} from '../patch/apply-chat-timeline.mjs';
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+
+// Start Chrome outside the test's 30 s budget, as metre-sidebar-e2e does. CI
+// runs this file together with the sidebar and switch browser files, and all
+// three cold-launch Chrome at once: on passing runs each one's first test
+// takes ~10 s, but on #132's failed windows-checks run (job 139545533543) the
+// three took 34.7 / 35.5 / 30.0 s. The other two passed only because their
+// launch has a wider budget; this one was cancelled at 30 s while still
+// waiting for Chrome. The test body itself keeps its 30 s budget.
+let browser;
+before(async () => {
+  const playwright = require('playwright');
+  browser = await playwright[engine].launch(engine === 'chromium' ? {headless:true,channel:'chrome'} : {headless:true});
+}, {timeout: 120_000});
+after(async () => { await browser?.close(); });
 
 test(`read-image trace displays the correct image, survives restart, and stays session-scoped (${engine})`, {timeout: 30000}, async () => {
   const parent = fs.realpathSync(os.tmpdir());
@@ -62,11 +76,9 @@ test(`read-image trace displays the correct image, survives restart, and stays s
     res.statusCode=404;res.end();
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  let browser;
+  let page;
   try {
-    const playwright = require('playwright');
-    browser = await playwright[engine].launch(engine === 'chromium' ? {headless:true,channel:'chrome'} : {headless:true});
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}/?session=${encodeURIComponent(sessionKey)}`);
     await page.evaluate(() => window.__pinkieToolImages.refresh());
     await page.locator('#row0 .pinkie-tool-thumb img').waitFor();
@@ -97,7 +109,7 @@ test(`read-image trace displays the correct image, survives restart, and stays s
     await page.evaluate(() => window.__pinkieToolImages.refresh());
     assert.equal(await page.locator('.pinkie-tool-thumb').count(), 0);
   } finally {
-    try { await browser?.close(); }
+    try { await page?.close(); }
     finally {
       server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
       const target = fs.realpathSync(root);
