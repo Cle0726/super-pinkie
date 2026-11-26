@@ -398,6 +398,18 @@
         "laolao-splash.js",
         "laolao-splash-fx.js"
       ]
+    },
+    {
+      "id": "whiteboard",
+      "name": "白板（想法模式）",
+      "rootSelectors": [
+        ".pk-whiteboard",
+        ".pk-whiteboard-entry"
+      ],
+      "files": [
+        "laolao-whiteboard.css",
+        "laolao-whiteboard.js"
+      ]
     }
   ]
 }

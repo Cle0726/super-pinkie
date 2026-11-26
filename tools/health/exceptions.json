@@ -142,5 +142,17 @@
     "metric": "important",
     "value": 2,
     "reason": "B-C3 夜间返工（#85，监工 11-24 15:26 定 a）：所有模式共用的 laolao-theme.css 第 375 行用强制覆盖给对话里的 code / pre 铺了不分日夜的浅底（background-color rgba(255,255,255,.52)、border-color rgba(255,255,255,.58)），Metre 夜间真页面上普通代码只有 1.36:1、diff 行 1.78:1（main 缺陷）。强制覆盖只能用强制覆盖压回去，具体度再高也赢不了；这里只在 html[data-laolao-mode=metre][data-pinkie-night] 下、只对同一组 code / pre / .cm-code-block、只压底色和描边两处。不改 laolao-theme.css（别的线的文件）。diff 颜色和 @@ 行靠 :not(#_mc) 具体度取胜，没有用强制覆盖。"
+  },
+  {
+    "file": "ui/injections/REGIONS.md",
+    "metric": "lines",
+    "value": 28,
+    "reason": "白板（第 4 项 PR ①，ui4）：区域总览表加 whiteboard 一行，和 regions.json 新区域对应（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/roundtable/index.html",
+    "metric": "lines",
+    "value": 50,
+    "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
   }
 ]
