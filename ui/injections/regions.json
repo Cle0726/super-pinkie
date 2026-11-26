@@ -231,6 +231,7 @@
         "laolao-metre-board-data.js",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
+        "laolao-metre-engine-upstream.js",
         "laolao-metre-cite.css",
         "laolao-metre-cite.js",
         "laolao-metre-read.js",

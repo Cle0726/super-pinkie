@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 1, "reason": "feat/metre-engine-pinkie-upstream-3（11-25 engines）再加 1 行：引擎菜单「改用碧琪模型」那一行的画法拆到新文件 laolao-metre-engine-upstream.js（laolao-metre-engine.js 顶在 1374 例外上，不抬它），只能在这里登记加载。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 1, "reason": "feat/metre-engine-pinkie-upstream-3（11-25 engines）在 metre 区域 files 里再登记 1 行 laolao-metre-engine-upstream.js（同上，拆文件以免抬 laolao-metre-engine.js 的例外）。"}
+]
