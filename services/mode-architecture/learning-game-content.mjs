@@ -99,10 +99,6 @@ export async function pool(items, n, fn) {
 }
 
 // 做完才讲：提示词在 learning-explain-voice.mjs，从学习模式工作区的用户铁律 / 碧琪人设 / 错题规范实时读。
-export function validExplain(v) {
-  const text = clean(v?.text, 800);
-  return text.length >= 8 ? {text} : null;
-}
 export function explainInput({question, options, standard, note, yours, correct} = {}) {
   const opts = (Array.isArray(options) ? options : []).map(item => clean(item, 180)).filter(Boolean).slice(0, 8);
   const body = {question: clean(question, 1800), standard: clean(standard, 400), note: clean(note, 300), yours: correct ? '' : clean(yours, 300), correct: Boolean(correct)};

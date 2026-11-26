@@ -37,7 +37,7 @@ async function openMenu(page, engineName = 'Claude Code') {
   if (await page.evaluate(() => document.documentElement.dataset.laolaoMode === 'metre')) {
     await page.waitForFunction((n) => document.querySelectorAll('.pk-eng-menu__body > .pk-fav-row').length === n, MODELS.length, {timeout: 5_000});
   } else {
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(150);   // 保留：非 Metre 时断言「不加星标、不重排」，没有能等的条件
   }
 }
 const order = (page) => page.$$eval('.pk-eng-menu__body .pk-eng-menu__name', (n) => n.map((e) => e.textContent));
@@ -77,7 +77,7 @@ test(`Metre fav: favourites first when the menu opens, toggling does not reorder
 
     // 共用观察器多次触发也不重复包：改一下副标题文字再等一帧。
     await page.evaluate(() => { document.querySelector('.pk-eng-menu__head').dataset.x = '1'; document.querySelector('.pk-eng-menu__body').append(document.createComment('poke')); });
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(150);   // 保留：断言共用观察器多次触发后仍不重复包，要给几次触发留时间
     assert.equal(await page.locator('.pk-fav-star').count(), 4, '每行只有一个星标');
     assert.equal(await page.locator('.pk-fav-row .pk-fav-row').count(), 0, '没有套两层');
 
@@ -101,7 +101,7 @@ test(`Metre fav: other modes and other menu steps are left alone (${engine})`, {
 
     await setup(page, 'metre', null);
     await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<div class="pk-eng-menu"><div class="pk-eng-menu__head"><span class="pk-eng-menu__sub">这段对话交给谁来做</span></div><div class="pk-eng-menu__body"><button class="pk-eng-menu__item pk-eng-menu__item--row" role="menuitemradio"><span class="pk-eng-menu__name">Claude Code</span><span class="pk-eng-menu__note">已登录</span></button></div></div>'));
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(150);   // 保留：断言选引擎那一步「不加星标」，没有能等的条件
     assert.equal(await page.locator('.pk-fav-star').count(), 0, '选引擎那一步不加星标');
 
     // 存储坏了也不抛错。
@@ -121,8 +121,8 @@ test(`Metre fav: native picker gets one "favourite current model" toggle that fe
     const page = await browser.newPage({viewport: {width: 820, height: 720}});
     await setup(page, 'metre', ['Claude Code/haiku']);
     await page.evaluate((html) => { document.body.insertAdjacentHTML('beforeend', html); window.picked = 0; document.querySelector('details').addEventListener('toggle', () => { window.picked += 1; }); }, pickerHtml('route-b/gpt-5'));
-    await page.waitForTimeout(150);
     const toggle = page.locator('[data-pinkie-picker-surface] > .pk-fav-current');
+    await toggle.waitFor({state: 'attached', timeout: 5_000});   // 等观察器给菜单补上「收藏当前模型」键
     assert.equal(await toggle.count(), 1);
     assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
     assert.equal(await toggle.innerText(), '☆ 收藏当前模型 GPT-5');
@@ -139,7 +139,7 @@ test(`Metre fav: native picker gets one "favourite current model" toggle that fe
 
     // 换了当前模型：键跟着换，状态按新模型算；键盘空格切换。
     await page.evaluate(() => { document.querySelector('[aria-selected="true"]').setAttribute('aria-selected', 'false'); document.querySelector('[data-chat-model-option^="route-c"]').setAttribute('aria-selected', 'true'); });
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(150);   // 保留：断言观察器多次触发后仍只有一个键，要给几次触发留时间
     assert.equal(await toggle.count(), 1, '观察器多次触发也只有一个键');
     assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
     await toggle.focus(); await page.keyboard.press('Space');
@@ -151,7 +151,7 @@ test(`Metre fav: native picker gets one "favourite current model" toggle that fe
     // 不是 Metre：不加键，pickerFavs 返回空（原生选择器顺序不变）。
     await setup(page, 'pinkie', ['picker:route-b/gpt-5']);
     await page.evaluate((html) => document.body.insertAdjacentHTML('beforeend', html), pickerHtml('route-b/gpt-5'));
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(150);   // 保留：非 Metre 时断言「不加键」，没有能等的条件
     assert.equal(await page.locator('.pk-fav-current').count(), 0);
     assert.deepEqual(await page.evaluate((v) => window.Pinkie.metre.fav.pickerFavs(v), routes), []);
   } finally { await browser.close(); }
@@ -173,8 +173,8 @@ test(`Metre fav: on the real picker the toggle follows the visible catalog and s
     const page = await browser.newPage({viewport: {width: 820, height: 720}});
     await setup(page, 'metre', []);
     await page.evaluate((html) => document.body.insertAdjacentHTML('beforeend', html), realPickerHtml('google/gemini-3-flash', 'google/gemini-3-flash'));
-    await page.waitForTimeout(150);
     const toggle = page.locator('[data-pinkie-picker-surface] > .pk-fav-current');
+    await toggle.waitFor({state: 'attached', timeout: 5_000});   // 等观察器给菜单补上「收藏当前模型」键
     assert.equal(await toggle.innerText(), '☆ 收藏当前模型 Gemini 3 Flash', '显示展示名，不是路由串');
 
     // 在可见目录里换成 GPT-5.2；藏着的宿主行仍停在 Gemini。
@@ -183,7 +183,7 @@ test(`Metre fav: on the real picker the toggle follows the visible catalog and s
       c.querySelector('[data-chat-model-option="google/gemini-3-flash"]').setAttribute('aria-selected', 'false');
       c.querySelector('[data-chat-model-option="openai/gpt-5.2"]').setAttribute('aria-selected', 'true');
     });
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => document.querySelector('[data-pinkie-picker-surface] > .pk-fav-current')?.dataset.value === 'openai/gpt-5.2', null, {timeout: 5_000});   // 等键跟上可见目录里新选中的路由
     assert.equal(await toggle.innerText(), '☆ 收藏当前模型 GPT-5.2', '跟着可见目录换，不卡在藏着的旧行上');
     await toggle.click();
     assert.deepEqual(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY), ['picker:openai/gpt-5.2'], '收的是现在选中的模型');
