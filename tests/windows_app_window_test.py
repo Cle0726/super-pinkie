@@ -155,5 +155,88 @@ class AppWindowTest(unittest.TestCase):
         self.assertEqual(appwin.handle({"type": "installApp", "appId": APP}, broken), {"ok": False, "error": "没能完成：OSError"})
 
 
+def _has_shell_com():
+    try:
+        import pythoncom  # noqa: F401
+        from win32com.shell import shell  # noqa: F401
+    except ImportError:
+        return False
+    return os.name == "nt"
+
+
+@unittest.skipUnless(_has_shell_com(), "真的 .lnk 只能在装了 pywin32 的 Windows 上写")
+class RealShortcutTest(unittest.TestCase):
+    """真写 .lnk（B19 真机走查）：exe 叫 超級碧琪.exe、作品名是中文 / emoji。
+
+    以前用 WScript.Shell，它按系统 ANSI 代码页转路径：非中文 Windows（代码页 1252）上
+    TargetPath 设成 超級碧琪.exe 报 E_INVALIDARG，中文名的 .lnk 存不下来，「装到桌面」次次失败。
+    这里只把开始菜单 / 桌面两个文件夹换成临时目录，写 .lnk 走的是产品里真的那条路。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name)
+        self.root = self.base / "state" / "apps"
+        self.exe = self.base / "超級碧琪" / "超級碧琪.exe"
+        self.exe.parent.mkdir(parents=True)
+        self.exe.write_bytes(b"MZ")
+        real = appwin._wscript_shell()
+        folders = {"Programs": str(self.base / "开始菜单"), "Desktop": str(self.base / "桌面")}
+        shell = mock.Mock(SpecialFolders=folders.__getitem__, CreateShortcut=real.CreateShortcut)
+        self.store = appwin.AppShortcuts(self.root, shell_factory=lambda: shell,
+                                         launch=lambda app_id: (str(self.exe), f"--app-window {app_id}"))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def read_link(self, path):
+        import pythoncom
+        from win32com.shell import shell
+
+        link = pythoncom.CoCreateInstance(shell.CLSID_ShellLink, None, pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink)
+        link.QueryInterface(pythoncom.IID_IPersistFile).Load(str(path))
+        return {"target": link.GetPath(0)[0], "args": link.GetArguments(), "cwd": link.GetWorkingDirectory(),
+                "icon": link.GetIconLocation()}
+
+    def put(self, app_id, name):
+        folder = self.root / app_id
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "index.html").write_text("<p>hi</p>", encoding="utf-8")
+        index = self.root / "index.json"
+        data = json.loads(index.read_text(encoding="utf-8")) if index.exists() else {"apps": {}}
+        data["apps"][app_id] = {"id": app_id, "name": name}
+        index.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    def test_cjk_exe_and_cjk_emoji_names_round_trip_and_uninstall_cleans_up(self):
+        self.put(APP, "单词小游戏")
+        self.put(OTHER, "番茄🍅计时器")
+        for app_id in (APP, OTHER):
+            self.assertTrue(self.store.install(app_id)["ok"], app_id)
+        desktop = self.base / "桌面" / "单词小游戏.lnk"
+        start = self.base / "开始菜单" / appwin.START_MENU_FOLDER / "番茄🍅计时器.lnk"
+        self.assertTrue(desktop.is_file() and start.is_file())
+        link = self.read_link(desktop)
+        self.assertEqual(link["target"], str(self.exe))
+        self.assertEqual(link["args"], f"--app-window {APP}")
+        self.assertEqual(link["cwd"], str(self.root / APP))
+        self.assertEqual(link["icon"], (str(self.exe), 0))  # no icon.ico: falls back to the exe's own
+
+        self.put(APP, "单词小游戏 第二版")  # reinstall under a new name: the old links go
+        self.assertTrue(self.store.install(APP)["ok"])
+        self.assertFalse(desktop.exists())
+        self.assertTrue((self.base / "桌面" / "单词小游戏 第二版.lnk").is_file())
+
+        for app_id in (APP, OTHER):
+            self.assertEqual(self.store.uninstall(app_id), {"ok": True})
+        self.assertEqual(sorted(p.name for p in self.base.rglob("*.lnk")), [])
+        self.assertFalse((self.base / "开始菜单" / appwin.START_MENU_FOLDER).exists())
+
+    def test_icon_location_with_index_is_kept(self):
+        self.put(APP, "单词小游戏")
+        (self.root / APP / "icon.ico").write_bytes(b"\0\0\1\0")
+        self.assertTrue(self.store.install(APP)["ok"])
+        icon = self.read_link(self.base / "桌面" / "单词小游戏.lnk")["icon"]
+        self.assertEqual(icon, (str(self.root / APP / "icon.ico"), 0))
+
+
 if __name__ == "__main__":
     unittest.main()
