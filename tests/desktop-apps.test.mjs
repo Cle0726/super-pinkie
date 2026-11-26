@@ -107,6 +107,24 @@ test('A5 名字做文件名：去掉非法字符、保留中文、保留字加�
   assert.equal(safeAppName('单词卡 Pro'), '单词卡 Pro');
 });
 
+// 复发防护：Windows 保留设备名带扩展名（con.txt、lpt1.png）也建不了快捷方式，按第一个点之前的主干判断、不分大小写。
+// 每个名字单独一个测试，红的时候能看清是哪一个漏过去。
+for (const [raw, want] of [
+  ['con.txt', 'con 作品.txt'],
+  ['lpt1.png', 'lpt1 作品.png'],
+  ['CON.TXT', 'CON 作品.TXT'],
+  ['con.tar.gz', 'con 作品.tar.gz'],
+  ['con', 'con 作品'],
+  ['lpt1', 'lpt1 作品'],
+  // 反例：只是以保留字开头的正常名字原样不动。
+  ['content.txt', 'content.txt'],
+  ['icon.png', 'icon.png'],
+]) {
+  test(`A5b 保留设备名看主干：${raw} → ${want}`, () => {
+    assert.equal(safeAppName(raw), want);
+  });
+}
+
 test('A6 CSP 插入点：有 head 进 head；只有 html / doctype 跟在后面；片段放最前；规则本身禁网', () => {
   assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
   assert.match(withOfflinePolicy('<!doctype html><html><body>b</body></html>'), /^<!doctype html><html><meta /);
