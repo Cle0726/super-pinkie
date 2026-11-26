@@ -35,7 +35,7 @@ html:not([data-laolao-mode="project"]) #laolao-project-scope[data-bound="false"]
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent));
+  color: var(--muted-strong, var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent)));
   font: inherit;
   font-size: 12.5px;
   white-space: nowrap;
