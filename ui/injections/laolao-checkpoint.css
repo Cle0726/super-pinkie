@@ -1,0 +1,29 @@
+/* M6「回到这一轮之前」：键在回答气泡右上，排在「从这里分出去」（top:2px / right:4px，约 86px 宽）左边；确认框沿用 .laolao-modal。 */
+.chat-group.assistant .chat-bubble > .pinkie-ckpt { position:absolute;top:2px;right:96px;display:inline-flex;align-items:center;gap:6px;opacity:0;pointer-events:none }
+.chat-group.assistant .chat-bubble:is(:hover,:focus-within) > .pinkie-ckpt { opacity:1;pointer-events:auto }
+.pinkie-ckpt__btn { min-height:28px;padding:0 7px;border:0;border-radius:6px;background:var(--pinkie-card-action-bg,#fffafb);color:var(--accent,#d9508d);font:inherit;font-size:12px;cursor:pointer }
+.pinkie-ckpt__btn:hover:not([aria-disabled="true"]) { background:color-mix(in srgb,var(--accent,#d9508d) 10%,var(--pinkie-card-action-bg,#fffafb)) }
+.pinkie-ckpt__btn:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px }
+.pinkie-ckpt__btn[aria-disabled="true"] { color:var(--muted,#8f7a85);cursor:not-allowed }
+.pinkie-ckpt__hint { display:none;font-size:12px;color:var(--muted,#8f7a85);white-space:nowrap }
+.pinkie-ckpt[data-busy] > .pinkie-ckpt__hint { display:inline }
+html[data-pinkie-night] .chat-group.assistant .pinkie-ckpt { --pinkie-card-action-bg:#30232d }
+
+.pinkie-ckpt-modal { width:min(520px,calc(100vw - 48px)) }
+.pinkie-ckpt-groups { display:grid;gap:12px;max-height:min(46vh,360px);margin:0 0 14px;overflow:auto }
+.pinkie-ckpt-group__title { margin:0 0 6px;font-size:12px;font-weight:600 }
+.pinkie-ckpt-group__list { display:grid;gap:4px;margin:0;padding:0;list-style:none }
+.pinkie-ckpt-file { display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;line-height:1.5 }
+.pinkie-ckpt-file__path { flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono,ui-monospace,SFMono-Regular,Menlo,monospace);font-size:12px }
+.pinkie-ckpt-file__note { flex:0 0 auto;opacity:.72 }
+.pinkie-ckpt-file__pick { display:inline-flex;flex:0 0 auto;align-items:center;gap:4px;cursor:pointer }
+.pinkie-ckpt-file__pick input:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px }
+.pinkie-ckpt-note { margin:-4px 0 14px;font-size:12px;line-height:1.5;color:var(--danger,#b34264) }
+.pinkie-ckpt-modal .laolao-modal__btn:disabled { opacity:.6;cursor:progress }
+.pinkie-ckpt-modal .laolao-modal__btn:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:2px }
+html[data-pinkie-night] .pinkie-ckpt-modal { background:#2a2027;color:#f3e9ef;border-color:rgba(255,235,245,.12);box-shadow:0 24px 62px rgba(0,0,0,.5) }
+html[data-pinkie-night] .pinkie-ckpt-modal::before { display:none }
+
+.pinkie-ckpt-toast { position:fixed;left:50%;bottom:96px;z-index:2147483000;transform:translate(-50%,8px);padding:7px 14px;border-radius:9px;background:rgba(43,35,40,.92);color:#fff;font-size:13px;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease }
+.pinkie-ckpt-toast[data-show] { opacity:1;transform:translate(-50%,0) }
+html[data-pinkie-reduce-motion] .pinkie-ckpt-toast { transition:none }

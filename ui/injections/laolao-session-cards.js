@@ -224,12 +224,11 @@
     for (const bubble of pane.querySelectorAll('.chat-group.assistant .chat-bubble[data-message-id]')) {
       let button = bubble.querySelector('.pinkie-fork-action');
       if (!canFork || bubble.classList.contains('streaming') || bubble.classList.contains('chat-bubble--tool-shell')) { button?.remove(); continue; }
-      if (!button) {
-        button = cardButton('从这里分出去', null, 'pinkie-fork-action'); bubble.append(button);
-      }
+      if (!button) { button = cardButton('从这里分出去', null, 'pinkie-fork-action'); bubble.append(button); }
       button.onclick = () => sidebar?.openChildSessionDialog(key, currentTitle(key),
         {fromMessage:true, forkAt:forkEntryId(bubble.dataset.messageId, pane.state?.chatMessages)});
     }
+    pane.dispatchEvent(new CustomEvent('pk-chat-turns', {bubbles: true, detail: {key}}));
   }
 
   function renderManageCard(card, key) {
