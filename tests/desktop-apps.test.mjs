@@ -48,7 +48,7 @@ test('A1 安装：html 作品拷成 apps/<id>/index.html，CSP 在第一个脚�
   const csp = html.indexOf('Content-Security-Policy');
   assert.ok(csp > 0 && csp < html.indexOf('<script>'), 'CSP 要在页面脚本之前');
   assert.ok(html.includes("connect-src 'none'"));
-  assert.equal(out.app.network, false);
+  assert.deepEqual(out.app.network, [], 'PR② 起 network 是放行来源清单，空的就是不联网');
   assert.equal(out.app.name, '单词小游戏');
   assert.equal(out.app.id, appIdFor(item.id));
   assert.ok(fs.existsSync(out.app.icon.ico) && fs.existsSync(out.app.icon.icns));
