@@ -9,7 +9,7 @@
 //   5. 「筛选」键只有一个图标：静止 / 菜单打开（指针还在键上）/ 筛选=未读 / 未读时再打开菜单，图标都相同，
 //      和侧栏其他键（新会话、搜索、作品、总谱、模式切换箭头）都不一样；打开 / 关闭菜单时键上文字不变。
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, {after} from 'node:test';
 import {
   REPO_ROOT,
   installRealControlUi,
@@ -75,20 +75,31 @@ async function restingBackground(page, width) {
   return page.evaluate((sel) => getComputedStyle(document.querySelector(sel)).backgroundColor, FILTER);
 }
 
+// CI 提速：整个文件只起一个浏览器，两个顶层测试共用。
+// 隔离不变：每个子测试仍由 openRealScenePage 新建 context，结束就关。
+// launch 的 Promise 只建一次；起不来时两个测试收到同一次失败，不改成跳过。
+let sharedBrowser;
+after(async () => {
+  if (!sharedBrowser) return;
+  const browser = await sharedBrowser.catch(() => null);
+  if (browser) await browser.close();
+});
+function browserForFile() {
+  sharedBrowser ??= launchRealBrowser();
+  return sharedBrowser;
+}
+
 test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下态有底色、0 条有空态、菜单盖满列表、图标固定（三宽 × 日夜）', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   let server = null;
-  let browser = null;
   // 清理先注册：浏览器起不来时（如找不到 playwright-core）假服务也要关掉，否则 node 永远不退出。
+  // 浏览器是全文件共用的，由文件级 after 关掉；这里只关本测试的假服务和安装目录。
   t.after(async () => {
-    try { await browser?.close(); }
-    finally {
-      try { await server?.close(); }
-      finally { installed.cleanup(); }
-    }
+    try { await server?.close(); }
+    finally { installed.cleanup(); }
   });
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  browser = await launchRealBrowser();
+  const browser = await browserForFile();
 
   for (const theme of ['day', 'night']) {
     for (const width of [1440, 1024, 820]) {
@@ -259,16 +270,13 @@ const removeFakeStop = () => document.querySelector('.pk-test-fake-stop')?.remov
 test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两下 Esc 清空、Esc 点停止键；查看器开着时让路（1440 日 / 820 夜）', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   let server = null;
-  let browser = null;
+  // 浏览器是全文件共用的，由文件级 after 关掉；这里只关本测试的假服务和安装目录。
   t.after(async () => {
-    try { await browser?.close(); }
-    finally {
-      try { await server?.close(); }
-      finally { installed.cleanup(); }
-    }
+    try { await server?.close(); }
+    finally { installed.cleanup(); }
   });
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  browser = await launchRealBrowser();
+  const browser = await browserForFile();
 
   for (const [width, theme] of [[1440, 'day'], [820, 'night']]) {
     await t.test(`K2 ${width} ${theme}`, async () => {
