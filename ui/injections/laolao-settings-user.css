@@ -15,7 +15,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   --pinkie-settings-border: rgba(196, 119, 157, .23); --pinkie-settings-hover-border: rgba(217, 81, 141, .56);
   --pinkie-settings-card: rgba(255, 251, 253, .97); --pinkie-settings-hover: #fff0f7;
   --pinkie-settings-soft: rgba(255, 238, 247, .98); --pinkie-settings-primary-ink: #a83c70;
-  --pinkie-settings-control: rgba(255, 255, 255, .96); --pinkie-settings-primary-bg: linear-gradient(135deg, #ffecf4, #fff8fb);
+  --pinkie-settings-control: rgba(255, 255, 255, .96); --pinkie-settings-primary-bg: linear-gradient(135deg, #ffecf4, #fff8fb); --pinkie-settings-button-edge: #b5698f;   /* B25：设置键描边对卡片 3.80、对键底 3.90:1（共享 border 卡片边 / 分隔线也用，不动） */
   position: fixed;
   z-index: 8;
   right: auto;
@@ -378,7 +378,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 }
 #laolao-user-settings .pinkie-user-settings__custom[hidden] { display: none !important; }
 
-#laolao-user-settings .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; }
+#laolao-user-settings .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; border-color: var(--pinkie-settings-button-edge, var(--pinkie-settings-border)); }
 #laolao-user-settings .pinkie-user-settings__button--primary {
   border-color: rgba(196, 65, 126, .35);
   background: var(--pinkie-settings-primary-bg);
@@ -472,7 +472,7 @@ html[data-color-scheme="dark"] #laolao-user-settings {
   --pinkie-settings-border: rgba(243, 153, 195, .2); --pinkie-settings-hover-border: rgba(255, 154, 196, .5);
   --pinkie-settings-card: rgba(42, 29, 40, .97); --pinkie-settings-hover: #4a2e42;
   --pinkie-settings-soft: rgba(58, 38, 53, .98); --pinkie-settings-primary-ink: #ffd0e4;
-  --pinkie-settings-control: rgba(52, 37, 50, .98); --pinkie-settings-primary-bg: linear-gradient(135deg, #5c2c46, #4a2e42);
+  --pinkie-settings-control: rgba(52, 37, 50, .98); --pinkie-settings-primary-bg: linear-gradient(135deg, #5c2c46, #4a2e42); --pinkie-settings-button-edge: #a8738f;   /* B25 夜：对卡片 4.23、对键底 3.79:1 */
 }
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__title,
