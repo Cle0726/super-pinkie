@@ -96,7 +96,7 @@ test('清单：每段都要命中，glob 与 argPattern 规则', () => {
   for (const name of ['alpha', 'beta']) {
     fs.writeFileSync(path.join(bin, name), '#!/bin/sh\n', {mode: 0o755});
   }
-  const opts = {platform: 'darwin', cwd: dir, env: {PATH: bin}};
+  const opts = {platform: process.platform, cwd: dir, env: {PATH: bin}};
   assert.equal(matchAllowlist('alpha | beta', ['alpha'], opts), false);
   assert.equal(matchAllowlist('alpha | beta', ['alpha', 'beta'], opts), true);
   assert.equal(matchAllowlist('alpha && beta', ['*'], opts), true);
