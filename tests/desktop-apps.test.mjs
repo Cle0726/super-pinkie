@@ -220,6 +220,27 @@ test('A11 碧琪各模式下装到桌面 / 卸载确认主按钮字对比度 ≥
   for (const c of night) assert.ok(ratio(rgb(ink[1]), rgb(c)) >= 4.5, `夜间 ${ink[1]} / ${c} = ${ratio(rgb(ink[1]), rgb(c)).toFixed(2)}`);
 });
 
+test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）用装到桌面那套对比度变量，值跟 .pk-apps-dialog 一致（A11 量过 ≥ 4.5:1）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const apps = read('laolao-desktop-apps.css'), skin = apps;
+  const scopes = [
+    'html:not\\(\\[data-laolao-mode="metre"\\]\\):not\\(\\[data-pinkie-night\\]\\)',
+    'html\\[data-pinkie-night\\]:not\\(\\[data-laolao-mode="metre"\\]\\)',
+    'html\\[data-laolao-mode="metre"\\]:is\\(\\[data-pinkie-night\\],\\[data-theme="dark"\\]\\)',
+  ];
+  for (const scope of scopes) {
+    const ref = apps.match(new RegExp(`^${scope} \\.pk-apps-dialog \\{ (--pk-apps-[a-z-]+:[^}]+?) \\}$`, 'm'));
+    assert.ok(ref, `装到桌面对话框那条还在：${scope}`);
+    const line = new RegExp(`^${scope} \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts\\) \\{ ([^}]+?) \\}$`, 'm');
+    const got = skin.match(line);
+    assert.ok(got, `共享皮肤要设同一个变量：${scope}`);
+    assert.equal(got[1], ref[1], '值跟对话框那条一字不差');
+  }
+  // 项目设置「保存」确实是这组主按钮。
+  assert.match(read('laolao-artifacts.js'), /el\('button', 'laolao-modal__button laolao-modal__button--primary', '保存'\)/);
+});
+
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
 function fakeDom(source) {
   const hasClass = (node, name) => String(node.className || '').split(/\s+/).includes(name);
