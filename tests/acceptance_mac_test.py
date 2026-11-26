@@ -58,6 +58,60 @@ class ReportTest(unittest.TestCase):
         self.assertNotIn("第一个失败", text)
 
 
+class RealPathRewriteTest(unittest.TestCase):
+    def head_text(self, path):
+        return subprocess.run(["git", "show", "HEAD:" + path], cwd=REPO, capture_output=True, text=True, check=True).stdout
+
+    def test_rewrite_removes_every_real_path_from_entry_scripts(self):
+        for path in run.REAL_PATH_REWRITES:
+            text = self.head_text(path)
+            out = run.rewrite_real_paths(path, text)
+            for real in run.REAL_PATHS:
+                self.assertNotIn(real, out, "%s 改写后还留着 %s" % (path, real))
+
+    def test_rewrite_actually_has_something_to_rewrite(self):
+        # 入口脚本若已不再写死这些路径，改写表就该跟着删，别留着假装在防
+        hits = [real for path in run.REAL_PATH_REWRITES for real in run.REAL_PATHS if real in self.head_text(path)]
+        self.assertTrue(hits)
+
+
+class ProxyLogFingerprintTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="pinkie-fp-test-"))
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self.log = self.dir / "proxy.log"
+
+    def test_append_only_passes(self):
+        self.log.write_bytes(b"old line\n")
+        before = run.file_fingerprint(str(self.log))
+        with open(self.log, "ab") as f:
+            f.write(b"proxy kept writing\n")
+        ok, _ = run.log_untouched(before, run.file_fingerprint(str(self.log)))
+        self.assertTrue(ok)
+
+    def test_truncate_fails(self):
+        self.log.write_bytes(b"old line\n")
+        before = run.file_fingerprint(str(self.log))
+        with open(self.log, "wb") as f:
+            f.write(b"new")
+        ok, detail = run.log_untouched(before, run.file_fingerprint(str(self.log)))
+        self.assertFalse(ok, detail)
+
+    def test_rewrite_back_same_bytes_still_fails_on_new_inode(self):
+        self.log.write_bytes(b"old line\n")
+        before = run.file_fingerprint(str(self.log))
+        tmp = self.dir / "x"
+        tmp.write_bytes(b"old line\n")
+        os.replace(tmp, self.log)
+        ok, detail = run.log_untouched(before, run.file_fingerprint(str(self.log)))
+        self.assertFalse(ok, detail)
+
+    def test_created_or_deleted_fails(self):
+        self.assertFalse(run.log_untouched(None, (1, b""))[0])
+        self.assertFalse(run.log_untouched((1, b"a"), None)[0])
+        self.assertTrue(run.log_untouched(None, None)[0])
+
+
 @unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "需要 bash")
 @unittest.skipIf(e2e_skip_reason() is not None, e2e_skip_reason() or "")
 class AcceptanceMacTest(unittest.TestCase):
@@ -73,12 +127,28 @@ class AcceptanceMacTest(unittest.TestCase):
         self.assertEqual(leftover, [], "临时根没删干净")
         return r, report.read_text()
 
+    def assert_proxy_log_untouched(self, before):
+        ok, detail = run.log_untouched(before, run.file_fingerprint(run.PROXY_LOG))
+        self.assertTrue(ok, "正式代理日志被验收碰了：" + detail)
+
     def test_full_cycle_is_green(self):
+        before = run.file_fingerprint(run.PROXY_LOG)
         r, text = self.run_acceptance()
+        self.assert_proxy_log_untouched(before)
         self.assertEqual(r.returncode, 0, text[-3000:])
         self.assertIn("结果：**通过**", text)
-        for title in ("install-full.sh", "install 后第 1 次冒烟", "update 后第 2 次冒烟", "uninstall-full.sh"):
+        for title in ("install-full.sh", "install 后第 1 次冒烟", "update 后第 2 次冒烟", "uninstall-full.sh",
+                      "没被改动（只读核对，不回写）", "真实 LaunchServices 里没有临时根下的 App"):
             self.assertIn(title, text)
+
+    def test_keep_real_paths_refuses_to_run(self):
+        before = run.file_fingerprint(run.PROXY_LOG)
+        r, text = self.run_acceptance("--break", "keep-real-paths")
+        self.assert_proxy_log_untouched(before)
+        self.assertNotEqual(r.returncode, 0, text[-3000:])
+        self.assertIn("拒绝开跑", text)
+        self.assertNotIn("install 后第 1 次冒烟", text)
+        self.assertIn("临时根已删除", text)
 
     def test_break_turns_first_smoke_red(self):
         r, text = self.run_acceptance("--break", "remove-installed-file")

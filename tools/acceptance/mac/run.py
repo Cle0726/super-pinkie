@@ -2,10 +2,12 @@
 """Mac 一键验收：在临时 HOME 里 install -> 冒烟 -> update 到目标提交 -> 冒烟 -> uninstall，最后出一份 Markdown 报告。
 
 隔离：HOME / 状态 / 配置 / App 目录全部指向 /private/tmp/pinkie-accept-*；环境变量只用白名单（不继承任何密钥）；
-launchctl / pkill / killall / osascript / open 换成只记日志的垫片，mv / ditto 拒绝临时根以外的目标；
-OpenClaw 用干净包的克隆；代理只连本进程里的假上游。不碰真实 ~/Library、钥匙串、/Applications/超級碧琪.app 和 18789 网关。
+launchctl / pkill / killall / osascript / open / lsregister 换成只记日志的垫片，mv / ditto 拒绝临时根以外的目标；
+入口脚本里写死的真实路径（install.sh 的代理日志、apply-theme.sh 的 lsregister 绝对路径）在桩提交里换成临时根 / 垫片，
+换不干净就不开跑；正式代理日志只读不写。
+OpenClaw 用干净包的克隆；代理只连本进程里的假上游。不碰真实 ~/Library、钥匙串、LaunchServices、/Applications/超級碧琪.app 和 18789 网关。
 
-用法：python3 tools/acceptance/mac/run.py [--report <路径>] [--keep] [--break remove-installed-file]
+用法：python3 tools/acceptance/mac/run.py [--report <路径>] [--keep] [--break remove-installed-file|keep-real-paths]
 退出码：0 全绿；1 有检查没过（报告里写明是哪一步哪一项）；2 本机条件不满足，没开跑。
 """
 import argparse
@@ -39,8 +41,43 @@ LAUNCHER_MARKERS = ["super-pinkie.material-preview", "laolaoProjectFolder", "lao
 # 两个提交的入口脚本必须认这些覆盖变量，否则会装进真实位置：不满足就不开跑
 SAFETY = {"install-full.sh": "PINKIE_APP_ROOT", "uninstall-full.sh": "PINKIE_APP_PATH",
           "install.sh": "UR_PROMPTS_DIR", "proxy/mm-retry-proxy.py": "UR_PROXY_UPSTREAM_PORT"}
-LOG_SHIMS = ["launchctl", "pkill", "killall", "osascript", "open"]
-BREAKS = ["remove-installed-file"]
+LOG_SHIMS = ["launchctl", "pkill", "killall", "osascript", "open", "lsregister"]
+BREAKS = ["remove-installed-file", "keep-real-paths"]
+# 入口脚本里写死的真实路径：桩提交里换成临时根 / PATH 上的垫片；换完还在 *.sh 里出现就不开跑
+STUB_LOG = "$PINKIE_TEST_ROOT/logs/mm-retry-proxy.log"
+REAL_PATH_REWRITES = {
+    "install.sh": [(PROXY_LOG, STUB_LOG)],
+    "installer/macos/apply-theme.sh": [('"%s"' % LSREGISTER, "lsregister"), (LSREGISTER, "lsregister")],
+}
+REAL_PATHS = [PROXY_LOG, LSREGISTER]
+
+
+def log_untouched(before, after):
+    """正式代理日志只读核对：开跑前不存在的不能冒出来；存在的 inode 不变，且只允许在末尾追加。"""
+    if before is None:
+        return after is None, "开跑前不存在" + ("，现在出现了" if after is not None else "，现在也不存在")
+    if after is None:
+        return False, "开跑前存在，现在被删了"
+    if after[0] != before[0]:
+        return False, "inode 变了（%s → %s），文件被替换" % (before[0], after[0])
+    if not after[1].startswith(before[1]):
+        return False, "已有内容被改动（%d → %d 字节，前缀不一致）" % (len(before[1]), len(after[1]))
+    return True, "inode 未变，原有 %d 字节未动，期间追加 %d 字节" % (len(before[1]), len(after[1]) - len(before[1]))
+
+
+def rewrite_real_paths(path, text):
+    for old, new in REAL_PATH_REWRITES.get(path, []):
+        text = text.replace(old, new)
+    return text
+
+
+def file_fingerprint(path):
+    """正式文件的只读指纹：(inode, 开跑时的全部字节)。之后只许在末尾追加（正式代理自己在写），不许截断或改写。"""
+    try:
+        with open(path, "rb") as fh:
+            return os.fstat(fh.fileno()).st_ino, fh.read()
+    except FileNotFoundError:
+        return None
 
 LOG_SHIM = """#!/bin/bash
 echo "%(name)s $*" >> "$PINKIE_TEST_ROOT/shim.log"
@@ -230,7 +267,7 @@ class Acceptance:
             "GIT_COMMITTER_NAME": "pinkie-acceptance", "GIT_COMMITTER_EMAIL": "acceptance@localhost",
             "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_NO_INDEX": "1", "PYTHONDONTWRITEBYTECODE": "1",
         }
-        self.log_backup = Path(PROXY_LOG).read_bytes() if os.path.isfile(PROXY_LOG) else None
+        self.log_before = file_fingerprint(PROXY_LOG)
         self.real_before = self.snapshot_real()
 
     # ── 小工具 ──
@@ -298,6 +335,12 @@ class Acceptance:
         req = g("hash-object", "-w", "--stdin", data=STUB_REQUIREMENTS.encode())
         g("update-index", "--add", "--cacheinfo", "100755,%s,desktop/macos/build.sh" % build)
         g("update-index", "--add", "--cacheinfo", "100644,%s,services/tts/requirements.txt" % req)
+        if self.args.break_mode != "keep-real-paths":
+            for path in REAL_PATH_REWRITES:
+                mode = g("ls-files", "-s", "--", path).split(" ", 1)[0] or "100755"
+                text = rewrite_real_paths(path, g("show", "%s:%s" % (base, path)) + "\n")
+                blob = g("hash-object", "-w", "--stdin", data=text.encode())
+                g("update-index", "--add", "--cacheinfo", "%s,%s,%s" % (mode, blob, path))
         tree = g("write-tree")
         (self.tmp / "stub.index").unlink()
         return g("commit-tree", tree, "-m", message, *(["-p", parent] if parent else []))
@@ -338,6 +381,17 @@ class Acceptance:
         if unsafe:
             raise RuntimeError("入口脚本不支持临时路径覆盖，拒绝开跑：" + "；".join(unsafe))
         checks.append(("两个提交的入口脚本都认临时路径覆盖", True, "、".join(SAFETY.values())))
+        hard = []
+        for rev in (self.s1, self.s2):
+            cmd = ["git", "--git-dir", str(self.fake), "grep", "-n", "-F"] + \
+                  [a for p in REAL_PATHS for a in ("-e", p)] + [rev, "--", "*.sh"]
+            r = subprocess.run(cmd, env=dict(self.env), capture_output=True)
+            if r.returncode not in (0, 1):
+                raise RuntimeError("git grep 失败：" + r.stderr.decode(errors="replace")[-400:])
+            hard += [line[len(rev) + 1:][:200] for line in r.stdout.decode(errors="replace").splitlines()]
+        if hard:
+            raise RuntimeError("入口脚本里还有写死的真实路径（会碰正式代理日志 / LaunchServices），拒绝开跑：" + "；".join(hard))
+        checks.append(("两个提交的 *.sh 里没有写死的真实路径", True, "代理日志 → %s；lsregister → 垫片" % STUB_LOG))
         self.git("update-ref", "refs/heads/main", self.s1, git_dir=self.fake)
         self.git("clone", "-q", "--shared", self.fake, self.work, cwd=self.root)
         head = self.git("-C", self.work, "rev-parse", "HEAD")
@@ -466,16 +520,20 @@ class Acceptance:
         shim_log = self.root / "shim.log"
         if shim_log.is_file():
             self.shim_calls = shim_log.read_text(errors="replace").splitlines()
-        registered = [self.app, self.state / "build" / APP_NAME] + \
-            [Path(p) for p in glob.glob(str(self.home / ".Trash" / "超級碧琪-*.app"))]
-        unregistered = []
+        blocked = [line for line in self.shim_calls if line.startswith("lsregister ") and " -f" in line]
+        if blocked:
+            self.notes.append("apply-theme.sh 的 lsregister -f 被垫片拦下 %d 次，没有进真实 LaunchServices" % len(blocked))
+        roots = {str(self.root), os.path.realpath(self.root)}
+        leaked = []
         if os.path.exists(LSREGISTER):
-            for p in registered:
-                if p.exists():
-                    subprocess.run([LSREGISTER, "-u", str(p)], capture_output=True)
-                    unregistered.append(str(p))
-        self.notes.append("apply-theme.sh 用绝对路径调 lsregister -f，会把临时 App 登记进真实 LaunchServices 数据库；"
-                          "收尾已对 %d 个临时 App 路径做 lsregister -u" % len(unregistered))
+            dump = subprocess.run([LSREGISTER, "-dump"], capture_output=True, text=True, errors="replace", timeout=300)
+            leaked = sorted({line.split(":", 1)[-1].strip() for line in dump.stdout.splitlines()
+                             if any(r + "/" in line for r in roots)})
+            for p in leaked:
+                subprocess.run([LSREGISTER, "-u", p], capture_output=True)
+            checks.append(("真实 LaunchServices 里没有临时根下的 App（lsregister -dump 只读核对）", dump.returncode == 0 and not leaked,
+                           ("dump 退出码 %d" % dump.returncode if dump.returncode else "") +
+                           ("；漏进去并已补做 -u：" + "、".join(leaked)[:300] if leaked else "")))
         self.notes.append("codesign 用的是真的（只签 / 验临时 App，adhoc，不碰钥匙串）")
         if self.args.keep:
             checks.append(("临时根已保留（--keep）", True, str(self.root)))
@@ -485,14 +543,8 @@ class Acceptance:
         left = [line for line in subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True).stdout.splitlines()
                 if str(self.root) + "/" in line]
         checks.append(("没有残留进程", not left, "; ".join(left)[:200]))
-        if self.log_backup is None:
-            if os.path.exists(PROXY_LOG):
-                os.remove(PROXY_LOG)
-            restored = not os.path.exists(PROXY_LOG)
-        else:
-            Path(PROXY_LOG).write_bytes(self.log_backup)
-            restored = Path(PROXY_LOG).read_bytes() == self.log_backup
-        checks.append(("%s 已恢复原样" % PROXY_LOG, restored, ""))
+        ok, detail = log_untouched(self.log_before, file_fingerprint(PROXY_LOG))
+        checks.append(("正式代理日志 %s 没被改动（只读核对，不回写）" % PROXY_LOG, ok, detail))
         after = self.snapshot_real()
         changed = [p for p in set(self.real_before) | set(after) if self.real_before.get(p) != after.get(p)]
         checks.append(("真实 ~/Library/LaunchAgents（本项目的 plist）和正式 App 没变", not changed, "、".join(sorted(changed))))
@@ -514,7 +566,7 @@ class Acceptance:
                 self.step("uninstall", "uninstall-full.sh", cmd=["/bin/bash", self.work / "uninstall-full.sh"],
                           cwd=self.work, checks=self.uninstall_checks)
         finally:
-            self.step("cleanup", "收尾（停进程、lsregister -u、删临时根、恢复日志、核对真实环境）", checks=self.cleanup)
+            self.step("cleanup", "收尾（停进程、删临时根、只读核对正式代理日志 / LaunchServices / 真实环境）", checks=self.cleanup)
         return all(s["ok"] for s in self.steps)
 
     def report(self):
@@ -558,7 +610,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Mac 一键验收（临时 HOME，install → 冒烟 → update → 冒烟 → uninstall）")
     ap.add_argument("--report", help="Markdown 报告路径（默认 /private/tmp/pinkie-accept-report-<时间>.md）")
     ap.add_argument("--keep", action="store_true", help="调试用：不删临时根")
-    ap.add_argument("--break", dest="break_mode", choices=BREAKS, help="反例：install 后删掉一个装好的 prompt 文件，第 1 次冒烟必须红")
+    ap.add_argument("--break", dest="break_mode", choices=BREAKS, help="反例：remove-installed-file = install 后删掉一个装好的 prompt 文件，第 1 次冒烟必须红；"
+                    "keep-real-paths = 桩提交里不改写写死的真实路径，prepare 必须拒绝开跑")
     ap.add_argument("--to", default="origin/main", help="update 的目标提交（默认 origin/main）")
     ap.add_argument("--from", dest="from_rev", help="install 用的旧提交（默认 <to>^1）")
     ap.add_argument("--openclaw-src", default=os.environ.get("PINKIE_ACCEPT_OPENCLAW_SRC", DEFAULT_OPENCLAW_SRC))
