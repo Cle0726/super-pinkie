@@ -68,7 +68,8 @@ def text_io_without_encoding(source):
                 found.append((node.lineno, f"{name}() without encoding"))
         for flag in ("text", "universal_newlines"):
             value = _keyword(node, flag)
-            if value is not None and _constant(value) is not False:
+            # text="标签"（tk.Button 等）是字符串，不是子进程的文本模式开关
+            if value is not None and _constant(value) is not False and not isinstance(_constant(value), str):
                 if _keyword(node, "encoding") is None and _keyword(node, "errors") is None:
                     found.append((node.lineno, f"{flag}=True without encoding or errors"))
     return sorted(found)
@@ -110,6 +111,7 @@ class GuardCatchesTest(unittest.TestCase):
             "webbrowser.open('https://example.com')\n"
             "store.open(app_id)\n"
             "opener.open(request, timeout=5)\n"
+            "tk.Button(root, text='安装', command=go)\n"
         )
         self.assertEqual([], text_io_without_encoding(source))
 
