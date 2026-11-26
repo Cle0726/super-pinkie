@@ -57,6 +57,7 @@ class GatewaySupervisor:
         self.marker_cleared = False
         self.lock = threading.RLock()
         self.last_restart = 0.0
+        self.restart_gap = 2.0
         self.failure_limit = 2
         self.version = app_version(runtime.root)
         self.log_offset = 0
@@ -154,8 +155,12 @@ class GatewaySupervisor:
             append_log("launcher", f"stale gateway could not be stopped: {error}")
             return None
         deadline = time.monotonic() + wait
-        while time.monotonic() < deadline and http_ready(GATEWAY_URL):
+        still = http_ready(GATEWAY_URL)
+        while still and time.monotonic() < deadline:
             time.sleep(.2)
+            still = http_ready(GATEWAY_URL)
+        if still:  # B44: say so instead of silently attaching to the old page
+            append_log("launcher", f"stale gateway still answering {wait:g}s after stop (pid={pid})")
         return reason
 
     def start(self):
@@ -176,8 +181,12 @@ class GatewaySupervisor:
                 return
             if self.process and self.process.poll() is None:
                 return
-            if time.monotonic() - self.last_restart < 2:
+            # B44: back off between restarts that never got ready (port held by another
+            # program, gateway dying at once): 2 s, doubling to 60 s; note_ready() resets it.
+            if time.monotonic() - self.last_restart < self.restart_gap:
                 return
+            if self.last_restart:
+                self.restart_gap = min(self.restart_gap * 2, 60.0)
             self.last_restart = time.monotonic()
             log_dir = state_root() / "logs"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -306,6 +315,7 @@ class GatewaySupervisor:
         return self.repair_config(paths)
 
     def note_ready(self):
+        self.restart_gap = 2.0  # B44: a gateway that got ready ends the backoff
         if self.good_saved:
             return
         self.good_saved = True
