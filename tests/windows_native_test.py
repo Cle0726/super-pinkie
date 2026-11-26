@@ -205,6 +205,36 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual((out_dir / "会话-20261111.pdf").read_bytes(), b"%PDF-1.4")
 
+    def test_clamp_size_b43(self):
+        # B43: page-supplied export sizes are clamped; anything that is not a finite number falls back to the default
+        self.assertEqual(windows_native.clamp_size(900, 900, 320, 2400), 900)
+        self.assertEqual(windows_native.clamp_size(10 ** 9, 900, 320, 2400), 2400)
+        self.assertEqual(windows_native.clamp_size(-5, 1200, 400, 16000), 400)
+        self.assertEqual(windows_native.clamp_size(1234.7, 1200, 400, 16000), 1234)
+        for bad in (None, "wide", "900", [1], {}, True, float("nan"), float("inf")):
+            self.assertEqual(windows_native.clamp_size(bad, 900, 320, 2400), 900, bad)
+
+    def test_export_bad_sizes_b43(self):
+        # B43: before this, width [1] raised TypeError, 'wide' sent Python's error text to the page, and 10**9 went straight to Edge
+        out_dir = Path(self.tmp.name) / "sizes"
+        out_dir.mkdir()
+        sizes = []
+
+        def fake_run(command, **_):
+            sizes.append(next(part for part in command if part.startswith("--window-size=")))
+            target = next(part.split("=", 1)[1] for part in command if part.startswith("--screenshot="))
+            Path(target).write_bytes(b"png")
+
+        cases = [([1], {}, "900,1200"), ("wide", "tall", "900,1200"), (10 ** 9, 10 ** 9, "2400,16000"), (900, 3000, "900,3000")]
+        with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
+                mock.patch.object(windows_native.subprocess, "run", side_effect=fake_run), \
+                mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
+            for index, (width, height, _) in enumerate(cases):
+                result = self.native.handle({"type": "exportImage", "html": "<p>x</p>", "fileName": f"s{index}",
+                                             "width": width, "height": height})
+                self.assertTrue(result["ok"], (width, height, result))
+        self.assertEqual(sizes, ["--window-size=" + expected for _, _, expected in cases])
+
     def test_export_markdown_copies_assets(self):
         out_dir = Path(self.tmp.name) / "md"
         out_dir.mkdir()

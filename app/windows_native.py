@@ -89,6 +89,13 @@ def parse_accelerator(raw):
     return modifiers | MOD_NOREPEAT, vk
 
 
+def clamp_size(raw, default, low, high):
+    """B43: a page-supplied pixel size → int in [low, high]; anything that is not a finite number → default."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw != raw or raw in (float("inf"), float("-inf")):
+        return default
+    return max(low, min(int(raw), high))
+
+
 def safe_file_name(raw, ext):
     name = str(raw or "").strip()
     for bad in '<>:"/\\|?*':
@@ -357,8 +364,8 @@ class WindowsNative:
             source = work / "export.html"
             source.write_text(html, encoding="utf-8")
             out = work / ("out." + ext)
-            height = max(400, min(int(message.get("height") or 1200), 16000))
-            command = edge_export_command(edge, source, out, pdf, int(message.get("width") or 900), height)
+            height = clamp_size(message.get("height"), 1200, 400, 16000)
+            command = edge_export_command(edge, source, out, pdf, clamp_size(message.get("width"), 900, 320, 2400), height)
             subprocess.run(command, timeout=90, capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             if not out.is_file() or out.stat().st_size == 0:
                 return {"ok": False, "error": ("PDF" if pdf else "长图") + "没生成出来"}
