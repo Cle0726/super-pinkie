@@ -38,7 +38,7 @@ html[data-laolao-mode="metre"] .agent-chat__composer-controls > .pk-eng-chip::be
 .pk-eng-menu__item--dim .pk-eng-menu__name { color: var(--metre-muted, #73726C); }
 /* 模型列表最底下「用谁的模型」那一行（laolao-metre-engine-upstream.js）：上面一道细线（画在按钮外，悬停底色不被切）、多留 5px，和模型行分开（uireview 11-26 02:31Z）。 */
 html[data-laolao-mode="metre"] .pk-eng-menu__item--upstream { margin-top: 5px; }
-html[data-laolao-mode="metre"] .pk-eng-menu__item--upstream::after { content: ""; position: absolute; left: 10px; right: 10px; top: -3px; border-top: 1px solid var(--pk-menu-rule, var(--metre-line, #E8E6DC)); }
+html[data-laolao-mode="metre"] .pk-eng-menu__item--upstream::after { content: ""; position: absolute; left: 10px; right: 10px; top: -3px; border-top: 1px solid color-mix(in srgb, var(--metre-text, #1F1E1D) 34%, var(--metre-surface, #fff)); }
 .pk-eng-menu__name { font-size: 13.5px; }
 .pk-eng-menu__note { color: var(--metre-muted, #73726C); font-size: 12px; }
 .pk-eng-menu__back { border: 0; background: transparent; color: var(--metre-muted, #73726C); cursor: pointer; padding: 4px 10px; font: inherit; }
