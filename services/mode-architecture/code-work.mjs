@@ -20,6 +20,14 @@ const exists = file => { try { fs.accessSync(file); return true; } catch { retur
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max)}…` : text);
+// 跑测试报告里「第一个失败的原文」最多给几行、几个字；超了在报告里明说截了多少。
+const DETAIL_LINES = 45;
+const REPORT_CHARS = 3500;
+const failureExcerpt = (detail, more = 0) => {
+  const text = detail.length > REPORT_CHARS ? `${detail.slice(0, REPORT_CHARS)}\n（已截断，原文共 ${detail.length} 字，只给了前 ${REPORT_CHARS} 字）` : detail;
+  return more ? `${text}\n（已截断：只给了从第一个失败开始的 ${DETAIL_LINES} 行，后面还有 ${more} 行有字的输出没给出，可能包括这个失败的后半段和真正的报错原因；要看全文就用 filter 只跑这一条，或用 command 把输出写进文件再读）` : text;
+};
+const tailExcerpt = tail => (tail.length > REPORT_CHARS ? `（已截断，原文共 ${tail.length} 字，只给了最后 ${REPORT_CHARS} 字）\n${tail.slice(-REPORT_CHARS)}` : tail);
 
 export function resolveInside(root, sub = '') {
   const base = path.resolve(root);
@@ -202,6 +210,8 @@ export function quickSyntax(file, {root = ''} = {}) {
 
 const nodeRunner = root => (exists(path.join(root, 'pnpm-lock.yaml')) ? 'pnpm' : exists(path.join(root, 'yarn.lock')) ? 'yarn' : exists(path.join(root, 'bun.lockb')) || exists(path.join(root, 'bun.lock')) ? 'bun' : 'npm');
 const quote = value => (/^[\w@%+=:,./\\-]+$/.test(value) ? value : `"${value.replace(/"/g, '\\"')}"`);
+// run_tests 的 filter 会接在 shell 命令后面：sh 和 Windows cmd 里能另起命令、重定向、展开变量的符号一律不收。
+const FILTER_SHELL_META = /[;&|<>$`^%\r\n]/;
 
 // 这个项目的测试命令。认不出来返回 null，不编。
 export function detectTestCommand(root) {
@@ -315,9 +325,11 @@ export function parseTestOutput(raw = '', exitCode = 0) {
   if (failedCount == null && failed.size) failedCount = failed.size;
   // 第一个失败从哪一行开始：各家失败段落的开头
   const startAt = lines.findIndex(line => /^=+ (?:FAILURES|ERRORS) =+$|^_{3,} .+ _{3,}$|^(?:FAIL|ERROR): \S+ \(|^\s*not ok \d+|^\s*✖ |^\s*● .+ › |^\s*--- FAIL: |^---- .+ stdout ----$|^\s+1\) |^Traceback \(most recent call last\)|^\s*(?:Assertion|Type|Reference|Syntax)Error\b|panicked at/.test(line));
-  const detail = startAt >= 0 ? lines.slice(startAt, startAt + 45) : [];
+  const detail = startAt >= 0 ? lines.slice(startAt, startAt + DETAIL_LINES) : [];
+  // 窗口之后还剩几行有字的输出：报告里要明说没给全，不能把前 45 行当成「原文」整段交给模型。
+  const detailMore = startAt >= 0 ? lines.slice(startAt + DETAIL_LINES).filter(line => line.trim()).length : 0;
   const ok = exitCode === 0 && !(failedCount > 0);
-  return {ok, framework, passed, failed: failedCount, skipped, failedNames: [...failed].slice(0, 200), detail: detail.join('\n').trimEnd(), tail: lines.slice(-40).join('\n').trim()};
+  return {ok, framework, passed, failed: failedCount, skipped, failedNames: [...failed].slice(0, 200), detail: detail.join('\n').trimEnd(), detailMore, tail: lines.slice(-40).join('\n').trim()};
 }
 
 const baselines = new Map();
@@ -361,7 +373,7 @@ export function formatTestReport({command, exitCode, seconds, timedOut, parsed, 
   if (baselineNote) out.push(baselineNote);
   if (filtered) out.push('这次只跑了一部分（带了 filter），不和基线比，也不能代表全部测试；交付前不带 filter 再跑一次。');
   if (!parsed.ok || timedOut) {
-    out.push(parsed.detail ? `第一个失败的原文：\n${clip(parsed.detail, 3500)}` : `输出的最后一段：\n${clip(parsed.tail, 3500)}`);
+    out.push(parsed.detail ? `第一个失败的原文：\n${failureExcerpt(parsed.detail, parsed.detailMore)}` : `输出的最后一段：\n${tailExcerpt(parsed.tail)}`);
     out.push('先读懂上面的原文再改：改代码的根因，不改测试去迁就，不跳过测试。');
   }
   return out.join('\n');
@@ -408,6 +420,8 @@ export function createRunTestsTool(ctx, {rootFor, run = runCommand} = {}) {
         const detected = params.command ? {command: String(params.command).trim(), label: '你给的命令', joiner: ' '} : detectTestCommand(root);
         if (!detected) return reply('没认出这个项目的测试命令（没有 test 脚本、pytest、测试目录这些）。先看 README 和包清单里怎么跑测试，再用 command 参数把完整命令传进来；项目确实没有测试，就先给要改的部分写几条。', {error: 'no-test-command'}, true);
         const filter = String(params.filter || '').trim();
+        // filter 原样拼进 shell 命令（shell: true），带命令符号就等于另起一条命令，还绕过角色的 deny_commands（只查 command）。
+        if (FILTER_SHELL_META.test(filter)) return reply('filter 只能是测试文件路径或测试名，不能带 ; & | < > $ ` ^ % 或换行这类命令符号；要跑完整命令就用 command 参数。', {error: 'bad-filter'}, true);
         const command = filter ? `${detected.command}${detected.joiner}${filter}` : detected.command;
         const result = await run(command, {cwd: root, timeoutMs: (params.timeout || 300) * 1000});
         const parsed = parseTestOutput(result.output, result.exitCode);
