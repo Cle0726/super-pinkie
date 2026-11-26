@@ -45,7 +45,7 @@ test('camp HUD: name and intimacy level never overlap, stage tag and camp text a
   const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
   try {
     for (const {width, hour, theme} of CASES) {
-      const page = await browser.newPage({viewport: {width, height: 900}});
+      const page = await browser.newPage({viewport: {width, height: 900}, reducedMotion: 'reduce'});
       const errors = []; page.on('pageerror', e => errors.push(e.message));
       await page.addInitScript(h => { window.__pkBeijingHour = h; }, hour);
       await page.goto(harness.url);
