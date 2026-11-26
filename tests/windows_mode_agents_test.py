@@ -118,6 +118,27 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("CLI must not run")):
             self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
 
+    def test_unguarded_build_registers_every_mode_in_one_config_write_without_the_cli(self):
+        # B48: development and local builds (guard=false) ran `openclaw agents
+        # list`, then `agents add` and `agents set-identity` per mode: 11 node
+        # processes at ~16s each, ~192s on the first start before the gateway.
+        self.assertFalse((self.resources / "build-info.json").exists(), "this test must run as an unguarded build")
+        self.write_config(["pinkie-party"])
+        config = self.home / ".openclaw/openclaw.json"
+        fake = FakeOpenClaw()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(fake.calls, [], "registering the modes must not start the openclaw CLI")
+        entries = json.loads(config.read_text(encoding="utf-8"))["agents"]["list"]
+        self.assertEqual([entry["id"] for entry in entries], ["main", "pinkie-party", *super_pinkie.MODE_AGENTS])
+        for entry in entries[2:]:
+            self.assertEqual(entry["workspace"], str(config.parent / super_pinkie.MODE_AGENTS[entry["id"]]))
+        before = config.read_bytes()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
+        self.assertEqual(config.read_bytes(), before)
+        self.assertEqual(fake.calls, [])
+
     def test_failed_first_launch_is_repaired_on_the_next_launch(self):
         with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
