@@ -813,9 +813,16 @@ test(`when something in the row grows after the keys were fitted, the row is mea
     const before = await rows();
     assert.equal(before.rows, 1, JSON.stringify(before)); assert.equal(before.fold, '0', JSON.stringify(before));
     // 后到的容量圈（60px）：按键行被挤换行。不手动调 fit。
+    // 变高以后是输入框上的 ResizeObserver 才去排 fitSoon。假时钟快进不到这个观察器，所以放开真时间，等到回到一行并且收拢了一档。
+    // fold==='0' 在重量前也成立，不能拿它当结束。
     await p.evaluate(() => { const r = document.createElement('details'); r.className = 'laolao-context-viewer'; r.innerHTML = '<summary style="display:inline-block;width:60px;height:28px">13%</summary>'; document.querySelector('.agent-chat__composer-controls').append(r); });
-    await elapse(p, 1900);
-    const after = await rows();
+    await p.clock.resume();
+    let after = await rows();
+    const deadline = Date.now() + 8000;
+    while (!(after.rows === 1 && Number(after.fold) > Number(before.fold)) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      after = await rows();
+    }
     assert.equal(after.rows, 1, `后到的东西把按键行挤换行以后自己重量、回到一行（${JSON.stringify(after)}）`);
     assert.ok(Number(after.fold) > Number(before.fold), `收拢了一档以上（${JSON.stringify({before, after})}）`);
   } finally { await browser.close(); }
