@@ -349,13 +349,15 @@ export class DesktopApps {
   }
 
   // 只删碧琪数据目录里的副本和记录；入口（快捷方式 / .app）由原生端先删。
+  // 先删目录、删干净了再删记录：删目录抛错（文件被锁 / 没权限）时记录保留、错误往上抛，
+  // 不会留下“记录没了、目录还在”的孤儿目录，用户还能再点一次卸载。
   remove(appId) {
     const data = this.load();
     const app = data.apps[String(appId || '')];
     if (!app) return {ok: true, removed: false};
+    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     delete data.apps[app.id];
     this.save();
-    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     return {ok: true, removed: true, name: app.name};
   }
 }
