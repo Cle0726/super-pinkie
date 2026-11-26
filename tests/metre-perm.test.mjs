@@ -63,8 +63,8 @@ const STUBS = (sk) => `
 const gw = (event, payload) => `window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: ${JSON.stringify(event)}, payload: ${JSON.stringify(payload)}}}))`;
 
 // now：把页面里的「现在」钉在这一刻（UTC 时区），跟跑测试的钟点无关；定时器照常走
-async function open(browser, {mode = 'metre', night = false, sk = SK, clock = false, width = 1024, now = null} = {}) {
-  const p = await browser.newPage({viewport: {width, height: 760}, ...(now != null ? {timezoneId: 'UTC'} : {})});
+async function open(browser, {mode = 'metre', night = false, sk = SK, clock = false, width = 1024, height = 760, now = null} = {}) {
+  const p = await browser.newPage({viewport: {width, height}, ...(now != null ? {timezoneId: 'UTC'} : {})});
   if (clock) await p.clock.install();
   if (now != null) await p.clock.setFixedTime(now);
   await p.setContent(page0(mode, night));
@@ -699,6 +699,79 @@ test(`at the last fold a ⋯ still under the floating microphone moves to the st
     const back = await rowState(p);
     assert.equal(back.fold, '0');
     assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.dodge ?? null), null, '放宽后挪回原位');
+  } finally { await browser.close(); }
+});
+
+// uireview #150（05:17Z，review\engines-1126-0517-150.md）两条「可另开」，协调者 21:18 派：
+// ① 收起态「⋯」没边框没底色，只是三个小点（夜间看着约 #7A8A83），不像个键——收到「⋯」时它要和展开态一样带一圈 ≥ 3:1 的描边（内阴影，不占宽度），
+//    夜间点用正文色（对底 ≥ 12:1；之前是 --pk-perm-ink2 #B0ACA3，8.6）。
+// ② 320 × 420 视口里点「⋯」打开会话详情，max-height: min(70vh, 520px) 只有 294px，最后一行「额度」要滚才看得到——面板要按锚点上下哪边空间大就长到多高，
+//    整个露在视口里、不用滚。改前（main 863ef2ae）两条都红。
+async function foldToDots(p) {
+  await p.addStyleTag({content: '.chat-main{height:100vh;display:flex;flex-direction:column;justify-content:flex-end}.agent-chat__input{position:relative;padding:8px 12px 16px}'});
+  await p.evaluate(() => {
+    const c = document.querySelector('.agent-chat__composer-controls');
+    c.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px';
+    const m = document.createElement('button'); m.className = 'chat-composer-model-control'; m.style.cssText = 'flex:0 0 auto;width:150px;height:28px'; m.textContent = 'model'; c.append(m);
+  });
+  await p.evaluate(() => window.PinkieMetrePerm.refresh());
+  await p.waitForTimeout(1700);
+  await p.evaluate(() => {
+    const w = (s) => document.querySelector(s).getBoundingClientRect().width;
+    document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 4 + 10) + 'px';
+    window.PinkieMetrePerm.fit();
+  });
+  assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.fold), '3', '前提：收到「⋯」');
+  assert.equal(await p.textContent('.pk-perm-chip--stat'), '⋯');
+}
+
+test(`the collapsed ⋯ key has a ring at least 3:1 without changing its width, and at night its dots use the text colour (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    for (const night of [false, true]) {
+      const p = await open(browser, {night, width: 320, height: 420});
+      await foldToDots(p);
+      const r = await p.evaluate(() => {
+        const k = document.querySelector('.pk-perm-chip--stat'), name = k.querySelector('.pk-eng-chip__name');
+        return {ring: (getComputedStyle(k).boxShadow.match(/(?:rgba?|color)\([^)]*\)/) || ['none'])[0], dots: getComputedStyle(name).color,
+          bg: getComputedStyle(document.body).backgroundColor, w: k.getBoundingClientRect().width, inset: /inset/.test(getComputedStyle(k).boxShadow),
+          border: getComputedStyle(k).borderLeftWidth};
+      });
+      const tag = night ? '夜' : '日';
+      assert.notEqual(r.ring, 'none', `${tag}：收起态「⋯」有描边（${JSON.stringify(r)}）`);
+      assert.ok(ratio(r.ring, r.bg) >= 3, `${tag}：描边 ${ratio(r.ring, r.bg).toFixed(2)}（${JSON.stringify(r)}）`);
+      assert.ok(r.inset && r.border === '0px', `${tag}：描边是内阴影，不加边框、不占宽度（${JSON.stringify(r)}）`);
+      if (night) assert.ok(ratio(r.dots, r.bg) >= 12, `夜：点色 ${r.dots} 对底 ${ratio(r.dots, r.bg).toFixed(2)}`);
+      // 打开再关上，宽度不变
+      await p.click('.pk-perm-chip--stat'); await p.waitForSelector('.pk-perm-pop--detail'); await p.keyboard.press('Escape');
+      assert.equal(await p.$eval('.pk-perm-chip--stat', (e) => e.getBoundingClientRect().width), r.w, `${tag}：打开前后键宽不变`);
+      await p.close();
+    }
+  } finally { await browser.close(); }
+});
+
+test(`at 320 x 420 the details opened from ⋯ show their last row without scrolling and stay inside the viewport (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    for (const night of [false, true]) {
+      const p = await open(browser, {night, width: 320, height: 420});
+      await foldToDots(p);
+      await p.click('.pk-perm-chip--stat');
+      await p.waitForSelector('.pk-perm-pop--detail');
+      const r = await p.evaluate(() => {
+        const pop = document.querySelector('.pk-perm-pop--detail'), b = pop.getBoundingClientRect();
+        const rows = pop.querySelectorAll('.pk-perm-pop__row'), last = rows[rows.length - 1].getBoundingClientRect();
+        return {top: Math.round(b.top), bottom: Math.round(b.bottom), vh: innerHeight, scrollH: pop.scrollHeight, clientH: pop.clientHeight,
+          last: pop.querySelectorAll('.pk-perm-pop__row')[rows.length - 1].querySelector('.pk-perm-pop__k').textContent,
+          lastBottom: Math.round(last.bottom), acts: Boolean(pop.querySelector('.pk-perm-pop__acts'))};
+      });
+      const tag = night ? '夜' : '日';
+      assert.equal(r.last, '额度'); assert.ok(r.acts, '收到「⋯」时放手程度、先出方案在详情里');
+      assert.ok(r.top >= 0 && r.bottom <= r.vh, `${tag}：面板整个在视口里（${JSON.stringify(r)}）`);
+      assert.ok(r.scrollH <= r.clientH + 1, `${tag}：不用滚（${JSON.stringify(r)}）`);
+      assert.ok(r.lastBottom <= r.bottom, `${tag}：最后一行「额度」露全（${JSON.stringify(r)}）`);
+      await p.close();
+    }
   } finally { await browser.close(); }
 });
 
