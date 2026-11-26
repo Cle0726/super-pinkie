@@ -90,8 +90,14 @@ async function open(browser, mode, {width = 1280} = {}) {
 const viewer = (tab, item, label = '版本 1 / 1') => tab.evaluate(([item, label]) => {
   document.querySelector('.pinkie-art-viewer')?.remove();
   const mask = document.createElement('div'); mask.className = 'pinkie-art-viewer';
+  mask.style.cssText = 'position:fixed;inset:0;z-index:2147481000;display:flex;align-items:center;justify-content:center';   // 同 laolao-artifacts.css 里真查看器的叠放
   mask.innerHTML = `<section class="pinkie-art-view"><header><span class="pinkie-art-versions__label">${label}</span><div class="pinkie-art-view__actions"><button class="pinkie-art-btn">打开</button></div></header></section>`;
   document.body.append(mask);
+  // 和真查看器一样：点遮罩本身关闭；Esc 挂在 document 捕获阶段关闭
+  const onKey = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(); } };
+  const finish = () => { mask.remove(); document.removeEventListener('keydown', onKey, true); };
+  document.addEventListener('keydown', onKey, true);
+  mask.onpointerdown = event => { if (event.target === mask) finish(); };
   window.dispatchEvent(new CustomEvent('pinkie:art-viewer', {detail: {item, actions: mask.querySelector('.pinkie-art-view__actions')}}));
 }, [item, label]);
 const keyText = tab => tab.evaluate(async () => { for (let i = 0; i < 40; i++) { const k = document.querySelector('.pk-mlib-open'); if (k) return k.textContent; await new Promise(r => setTimeout(r, 25)); } return null; });
@@ -116,6 +122,8 @@ test('in Metre the library viewer offers 在工作台打开 for text artifacts i
     await tab.locator('.pk-mlib-open').click();
     await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === 'data.csv' && t.kind === 'text'), null, {timeout: 10_000});
     assert.equal(await tab.locator('.pk-mlib-preview').count(), 0, 'the workbench is here, so no preview panel');
+    await tab.waitForFunction(() => !document.querySelector('.pinkie-art-viewer'), null, {timeout: 3000});
+    assert.equal(await tab.locator('.pinkie-art-viewer').count(), 0, 'the full-screen viewer must not stay over the workbench');
   } finally { await tab.close(); }
 });
 
@@ -133,8 +141,10 @@ test('under 600px the key opens a read-only preview instead: 256 KB head only, s
     assert.equal(await tab.locator('.pk-mlib-preview__note').textContent(), '只显示前 256 KB，完整内容请在工作台或系统程序里打开');
     assert.equal(await tab.locator('.pk-mlib-preview__tag').textContent(), '只读');
     assert.equal(await tab.locator('.pk-mlib-preview').getAttribute('role'), 'dialog');
+    assert.ok(await tab.evaluate(() => Number(getComputedStyle(document.querySelector('.pk-mlib-preview')).zIndex) > 2147481000), 'the panel stacks above the library viewer');
     await tab.keyboard.press('Escape');
     await tab.waitForFunction(() => !document.querySelector('.pk-mlib-preview'));
+    assert.equal(await tab.locator('.pinkie-art-viewer').count(), 1, 'one Esc closes only the preview, the viewer under it stays');
     assert.equal(await tab.evaluate(() => document.activeElement?.classList.contains('pk-mlib-open')), true, 'focus goes back to the key');
     // 不截的文本不出说明；图片内联；二进制说去处
     assert.equal(await tab.evaluate(() => window.Pinkie.metreLibrary.openPreview('/proj/small.md')), 'text');

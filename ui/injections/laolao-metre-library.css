@@ -1,7 +1,8 @@
 /* laolao-metre-library —— R5 ③：工作台不在时的只读预览面板（laolao-metre-library.js）。
  * 日夜都走 Metre 变量（--metre-surface / --metre-line-strong / --metre-text），设计稿第二节 5；只在 Metre 里有。 */
 html[data-laolao-mode="metre"] .pk-mlib-preview {
-  position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center;
+  /* 要盖在作品库查看器（2147481000）上面、确认框（2147482500）下面 */
+  position: fixed; inset: 0; z-index: 2147482000; display: flex; align-items: center; justify-content: center;
   padding: 24px; box-sizing: border-box; background: color-mix(in srgb, var(--metre-text, #1F1E1D) 38%, transparent);
 }
 html[data-laolao-mode="metre"] .pk-mlib-preview__box {

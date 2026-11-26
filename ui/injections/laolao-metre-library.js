@@ -43,10 +43,11 @@
   function closePanel() {
     if (!panel) return;
     panel.remove(); panel = null;
-    document.removeEventListener('keydown', onPanelKey, true);
+    window.removeEventListener('keydown', onPanelKey, true);
     returnFocus?.focus?.(); returnFocus = null;
   }
-  function onPanelKey(event) { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePanel(); } }
+  // 挂在 window 捕获阶段：比作品库查看器挂在 document 上的 Esc 先跑，一次 Esc 只关预览，不连查看器一起关
+  function onPanelKey(event) { if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); closePanel(); } }
   async function openPreview(path) {
     closePanel();
     returnFocus = document.activeElement;
@@ -70,7 +71,7 @@
     panel.append(box);
     panel.addEventListener('click', event => { if (event.target === panel) closePanel(); });
     document.body.append(panel);
-    document.addEventListener('keydown', onPanelKey, true);
+    window.addEventListener('keydown', onPanelKey, true);
     close.focus();
     const mine = panel;
     let result;
@@ -121,7 +122,11 @@
       key.title = '打开的是磁盘上的当前文件，不是作品库里的快照';
       const relabel = () => { key.textContent = labelFor(actions.closest('.pinkie-art-view')); };
       relabel();
-      key.addEventListener('click', () => void openInBench(item.path));
+      // 工作台出来了就收起查看器（全屏遮罩会盖住工作台）；走查看器自己的「点遮罩关闭」，让它的 finish() 收掉 Esc 监听
+      key.addEventListener('click', () => void openInBench(item.path).then(where => {
+        const mask = actions.closest('.pinkie-art-viewer');
+        if (where === 'bench' && mask?.isConnected) mask.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+      }));
       actions.insertBefore(key, actions.firstChild);
       // 换版本（‹ ›、左右键、恢复）后键上的字跟着改
       const viewer = actions.closest('.pinkie-art-viewer');
