@@ -15,3 +15,16 @@ html[data-laolao-mode="metre"]:is([data-pinkie-night],[data-theme="dark"]) .pk-a
 /* 碧琪各模式强调色白字大多不到 4.5:1（日 3.5–4.1、夜 2.0–2.5）：只在装到桌面对话框 / 卸载确认里，日间主按钮底压暗到 85%（≥ 4.68:1），夜间字换成弹层深底色（≥ 6.41:1）。Metre 另算。 */
 html:not([data-laolao-mode="metre"]):not([data-pinkie-night]) .pk-apps-dialog { --pk-apps-accent:color-mix(in srgb,var(--pa-accent) 85%,#000) }
 html[data-pinkie-night]:not([data-laolao-mode="metre"]) .pk-apps-dialog { --pk-apps-on-accent:#2a2027 }
+/* 跟进（#112 之后）：权限勾选框跟主按钮同色；设置里「更新成新版本」做主按钮（同一套 --pk-apps-*，对比度同上）；有新版本时说明栏别被挤断。 */
+.pk-apps-dialog__perm input { flex:none;width:15px;height:15px;margin:0;accent-color:var(--pk-apps-accent,var(--pa-accent)) }
+html[data-laolao-mode="metre"]:is([data-pinkie-night],[data-theme="dark"]) .pk-apps-card { --pk-apps-on-accent:var(--metre-surface,#232321) }
+html:not([data-laolao-mode="metre"]):not([data-pinkie-night]) .pk-apps-card { --pk-apps-accent:color-mix(in srgb,var(--pa-accent) 85%,#000) }
+html[data-pinkie-night]:not([data-laolao-mode="metre"]) .pk-apps-card { --pk-apps-on-accent:#2a2027 }
+/* 不挂 .pinkie-art-btn：Metre 皮肤会强制把它压成透明描边，主按钮自己带一套同尺寸的样式。 */
+.pk-apps-row .pk-apps-update { height:28px;padding:0 11px;border:1px solid transparent;border-radius:8px;background:var(--pk-apps-accent,var(--pa-accent));color:var(--pk-apps-on-accent,#fff);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap }
+.pk-apps-row .pk-apps-update:hover:not(:disabled) { background:color-mix(in srgb,var(--pk-apps-accent,var(--pa-accent)) 88%,#000) }
+.pk-apps-row .pk-apps-update:disabled { opacity:.4;cursor:default }
+html[data-laolao-mode="metre"] .pk-apps-row .pk-apps-update { border-radius:6px }
+/* 设置行默认左栏只占 .34fr，说明一长就折成两三行；应用行改成说明占满、按钮按内容宽。窄屏仍上下排。 */
+#laolao-user-settings .pk-apps-row.pinkie-user-settings__row { grid-template-columns:minmax(0,1fr) auto }
+@media (max-width:780px) { #laolao-user-settings .pk-apps-row.pinkie-user-settings__row { grid-template-columns:1fr } }
