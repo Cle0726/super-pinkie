@@ -15,7 +15,7 @@
     node.type = 'button';
     node.className = 'pk-eng-menu__item pk-eng-menu__item--upstream' + (off ? ' pk-eng-menu__item--dim' : '');
     node.setAttribute('role', 'menuitem');
-    node.innerHTML = `<span class="pk-eng-menu__name">${esc(name)}</span><span class="pk-eng-menu__note">${esc(note)}</span>`;
+    node.innerHTML = `<span class="pk-eng-menu__name">${esc(name)}</span><span class="pk-eng-menu__note">${esc(note).replace(/(?:API )?密钥/g, '<span style="white-space:nowrap">$&</span>')}</span>`;   // 「密钥」不拆两行（协调者 11-25 20:14）
     if (off) node.setAttribute('aria-disabled', 'true');
     return node;
   }
