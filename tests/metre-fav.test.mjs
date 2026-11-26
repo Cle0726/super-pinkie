@@ -32,7 +32,13 @@ async function openMenu(page, engineName = 'Claude Code') {
     document.body.insertAdjacentHTML('beforeend', html);
     document.querySelectorAll('.pk-eng-menu__item').forEach((b) => b.addEventListener('click', () => window.picked.push(b.querySelector('.pk-eng-menu__note').textContent.split(' · ')[0])));
   }, [menuHtml(engineName, MODELS)]);
-  await page.waitForTimeout(150);
+  // decorate() wraps every row and reorders in one pass, so once all rows are wrapped the order is final.
+  // A fixed 150ms was sometimes too short on CI WebKit, which then read the unsorted order.
+  if (await page.evaluate(() => document.documentElement.dataset.laolaoMode === 'metre')) {
+    await page.waitForFunction((n) => document.querySelectorAll('.pk-eng-menu__body > .pk-fav-row').length === n, MODELS.length, {timeout: 5_000});
+  } else {
+    await page.waitForTimeout(150);
+  }
 }
 const order = (page) => page.$$eval('.pk-eng-menu__body .pk-eng-menu__name', (n) => n.map((e) => e.textContent));
 

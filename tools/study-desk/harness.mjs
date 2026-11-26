@@ -4,13 +4,17 @@ import path from 'node:path';
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import {wrapWebKitPlaywright} from '../../tests/visual/lib/webkit-screenshot.mjs';
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
-export function playwright() {
+function loadPlaywright() {
   try { return require('playwright'); }
   catch {}
   try { return require('playwright-core'); }
   catch { return require('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/node_modules/playwright-core'); }
+}
+export function playwright() {
+  return wrapWebKitPlaywright(loadPlaywright());
 }
 // When browser resolution or launch fails, the server was already started.
 // Close it before propagating the original failure; otherwise Node never exits.
