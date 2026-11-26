@@ -114,6 +114,39 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       assert.ok(more.titles.some((i) => !i.active), `${theme}: 侧栏里没找到没选中的会话标题（量不到不能算通过）`);
       assert.ok(more.titles.some((i) => i.active), `${theme}: 侧栏里没找到选中的会话标题（量不到不能算通过）`);
       for (const i of more.titles) assert.ok(i.ratio >= 4.5, `${theme}: ${i.active ? '选中' : '没选中'}的会话标题「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.titles)}`);
+      // 11-25 协调者 16:54：没选中的会话标题单独一条断言（日 / 夜），反例是把颜色改浅要红。
+      const unselectedLow = (titles) => titles.filter((i) => !i.active && i.ratio < 4.5);
+      assert.deepEqual(unselectedLow(more.titles), [], `${theme}: 高对比下没选中的会话标题没到 4.5:1 — ${fmt(more.titles)}`);
+
+      // 反例：只把没选中的标题字色改浅（往它自己的底色靠 60%），同一条断言必须红；选中行不动。
+      const faded = await page.evaluate(() => {
+        const parse = (s) => (s.match(/[\d.]+/g) || []).map(Number);
+        let n = 0;
+        for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session:not(.sidebar-recent-session--active) .sidebar-recent-session__name')) {
+          let bg = [255, 255, 255];
+          for (let p = el; p && p.nodeType === 1; p = p.parentElement) {
+            const c = parse(getComputedStyle(p).backgroundColor);
+            if (c.length >= 3 && (c[3] === undefined || c[3] >= 0.99)) { bg = c.slice(0, 3); break; }
+          }
+          const ink = parse(getComputedStyle(el).color).slice(0, 3);
+          const mix = ink.map((v, i) => Math.round(0.4 * v + 0.6 * bg[i]));
+          el.style.setProperty('transition', 'none', 'important');
+          el.style.setProperty('color', `rgb(${mix.join(', ')})`, 'important');
+          n++;
+        }
+        return n;
+      });
+      assert.ok(faded >= 1, `${theme}: 反例：没找到可以改浅的没选中会话标题`);
+      await page.waitForTimeout(600);
+      const lighter = await page.evaluate(readContrast);
+      console.log(`ℹ ${theme} more, unselected titles faded: ${fmt(lighter.titles)}`);
+      assert.ok(unselectedLow(lighter.titles).length >= 1, `${theme}: 反例没生效：没选中的标题改浅后仍都 ≥ 4.5 — ${fmt(lighter.titles)}`);
+      assert.deepEqual(lighter.titles.filter((i) => i.active).map((i) => i.ink), more.titles.filter((i) => i.active).map((i) => i.ink), `${theme}: 反例改到了选中行`);
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll('aside.sidebar .sidebar-recent-session__name')) { el.style.removeProperty('color'); el.style.removeProperty('transition'); }
+      });
+      await page.waitForTimeout(600);
+      assert.deepEqual(unselectedLow((await page.evaluate(readContrast)).titles), [], `${theme}: 撤掉反例后没选中的标题没回到 4.5:1`);
 
       if (theme === 'night') {
         // 反例：删掉 laolao-metre-contrast.css 的规则，夜间没选中的会话标题必须掉回 4.5 以下（就是协调者看到的那几行）
