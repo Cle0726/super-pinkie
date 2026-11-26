@@ -290,6 +290,7 @@
       "files": [
         "laolao-workbench.css",
         "laolao-workbench.js",
+        "laolao-workbench-term.js",
         "laolao-workspace-focus.css",
         "laolao-workspace-focus.js"
       ]
