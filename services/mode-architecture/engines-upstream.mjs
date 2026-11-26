@@ -7,6 +7,7 @@
 // - 转发口只听 127.0.0.1，认会话令牌，把请求原样转给碧琪上游的 Anthropic /v1/messages，换上真钥匙。
 //   真钥匙每次请求时从碧琪配置里读，只在内存里，不写文件、不写日志、不回给界面。
 // - 用户的规矩：只用最高档的模型、最高的思考档。模型菜单只列碧琪目录里 top 档的 Claude 系模型，所有模型槽都填同一个，思考开到最高。
+import {readBody} from './http-body.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -134,9 +135,9 @@ export class PinkieRelay {
   }
 
   // openai：Codex 那条路（/v1/responses）用 OpenAI 的错误格式，Claude Code 那条路用 Anthropic 的。
-  fail(res, status, type, message, {openai = false} = {}) {
+  fail(res, status, type, message, {openai = false, close = false} = {}) {
     if (res.headersSent) { try { res.end(); } catch {} return; }
-    res.writeHead(status, {'content-type': 'application/json'});
+    res.writeHead(status, {'content-type': 'application/json', ...(close ? {connection: 'close'} : {})});
     res.end(JSON.stringify(openai ? {error: {type, message, code: type}} : {type: 'error', error: {type, message}}));
   }
 
@@ -156,10 +157,12 @@ export class PinkieRelay {
     const openai = codex || chat;
     const opts = {openai};
     if (req.method !== 'POST' || !(openai || claude)) return this.fail(res, 404, 'not_found_error', '只转 /v1/messages、/v1/responses 和 /v1/chat/completions');
-    const chunks = []; let size = 0;
-    for await (const chunk of req) { size += chunk.length; if (size > MAX_BODY) return this.fail(res, 413, 'request_too_large', '请求太大', opts); chunks.push(chunk); }
+    // B5：for await 里提前 return 会销毁请求流、连带把连接 RST 掉，413 到不了先发完再读的客户端；读掉多出来的再回。
+    const read = await readBody(req, {max: MAX_BODY});
+    if (read.error) return void res.destroy();
+    if (read.tooLarge) return this.fail(res, 413, 'request_too_large', '请求太大', {...opts, close: read.close});
     let body;
-    try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
+    try { body = JSON.parse(read.body.toString('utf8')); } catch { return this.fail(res, 400, 'invalid_request_error', '请求不是 JSON', opts); }
     const config = this.config();
     const family = codex ? 'codex' : chat ? 'chat' : 'claude';
     const route = routeModel(body?.model, pinkieModels(config, {family}), codex ? this.codexModel : chat ? this.chatModel : this.defaultModel);

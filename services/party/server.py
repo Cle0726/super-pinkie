@@ -1056,15 +1056,59 @@ class Manager:
         self.pool.shutdown(wait=False, cancel_futures=True)
 
 
+# B5：拒掉的请求最多替客户端读掉这么多请求体再回复（同 roundtable）。
+DRAIN_LIMIT = 1 << 20
+DRAIN_SECONDS = 2
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'PinkieParty/1'
 
     def log_message(self, *_):
         pass  # Never write private prompts or credentials to access logs.
 
+    def handle_one_request(self):
+        self.body_read = False
+        super().handle_one_request()
+
+    def discard_body(self):
+        # B5（同 roundtable #204）：没读请求体就回 4xx 再关连接，内核对没读的字节回 RST，
+        # Windows 客户端连已经发出的回复都收不到（WinError 10053/10054）。回复前先把请求体读掉；
+        # 长度不明、太大或读不完就返回 False，由调用方明说 Connection: close。
+        if getattr(self, 'body_read', True):
+            return True
+        self.body_read = True
+        if self.headers.get('Transfer-Encoding'):
+            return False
+        try:
+            left = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            return False
+        if left <= 0:
+            return left == 0
+        if left > DRAIN_LIMIT:
+            return False
+        try:
+            self.connection.settimeout(DRAIN_SECONDS)
+            while left:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    return False
+                left -= len(chunk)
+            return True
+        except OSError:
+            return False
+        finally:
+            with contextlib.suppress(OSError):
+                self.connection.settimeout(self.timeout)
+
     def reply(self, code, data, mime='application/json; charset=utf-8'):
         body = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode('utf-8')
+        drained = self.discard_body()
         self.send_response(code)
+        if not drained:
+            self.send_header('Connection', 'close')
+            self.close_connection = True
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
@@ -1171,6 +1215,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get('Content-Length', '0'))
             if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
                 raise ValueError('请求格式不正确')
+            self.body_read = True
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict):
                 raise ValueError('请求格式不正确')

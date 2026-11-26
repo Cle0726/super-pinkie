@@ -14,6 +14,7 @@
 // 服务端核对：签名对、没过期、随机串对得上某个 Metre 会话、那个会话此刻的主脑线程就是绑定的线程——只能派到那个会话名下。
 // 线程换新、会话换回 Metre、引擎服务重启（秘钥换新）或过期，令牌就作废。引擎进程拿不到秘钥，伪造不了别的会话的令牌。
 // 外部引擎总开关关着时服务不起；碧琪不经手任何外部账号的凭据。
+import {readBody} from './http-body.mjs';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
@@ -108,14 +109,14 @@ export class EngineDispatch {
   }
 
   handle(req, res) {
-    const send = (code, body) => { res.writeHead(code, {'content-type': 'application/json; charset=utf-8'}); res.end(JSON.stringify(body)); };
+    const send = (code, body, close = false) => { res.writeHead(code, {'content-type': 'application/json; charset=utf-8', ...(close ? {connection: 'close'} : {})}); res.end(JSON.stringify(body)); };
     if (req.method !== 'POST' || req.url !== '/dispatch') return send(404, {ok: false, error: 'not found'});
-    let size = 0;
-    const chunks = [];
-    req.on('data', chunk => { size += chunk.length; if (size > MAX_BODY) req.destroy(); else chunks.push(chunk); });
-    req.on('end', async () => {
+    // B5：超过 MAX_BODY 不再 req.destroy()（客户端一个字都收不到），读掉多出来的再回 413。
+    readBody(req, {max: MAX_BODY}).then(async read => {
+      if (read.error) return void res.destroy();
+      if (read.tooLarge) return send(413, {ok: false, error: '请求太大'}, read.close);
       let body;
-      try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return send(400, {ok: false, error: '请求不是 JSON'}); }
+      try { body = JSON.parse(read.body.toString('utf8') || '{}'); } catch { return send(400, {ok: false, error: '请求不是 JSON'}); }
       const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
       try { send(200, {ok: true, ...await this.call(auth, body)}); }
       // Metre 的报错让它「先用 pinkie_models」：外部引擎调不到这个工具，换成这里对应的写法。
