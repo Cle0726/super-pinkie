@@ -181,6 +181,7 @@ xcrun swiftc -parse-as-library -O \
   "$NATIVE_SOURCE_DIR/LauncherBrowser.swift" \
   "$NATIVE_SOURCE_DIR/LauncherWorkspace.swift" \
   "$NATIVE_SOURCE_DIR/LauncherWebBridge.swift" \
+  "$NATIVE_SOURCE_DIR/AppWindow.swift" \
   "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \

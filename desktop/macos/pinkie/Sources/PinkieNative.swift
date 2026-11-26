@@ -81,6 +81,8 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
             }
             quickModeLabel?.stringValue = currentModeLabel
             reply(reqId, ["ok": true], webView)
+        case "installApp", "uninstallApp", "openApp":
+            reply(reqId, PinkieAppWindow.handle(type, body), webView)
         default:
             reply(reqId, ["ok": false, "error": "不认识的原生请求"], webView)
         }

@@ -210,6 +210,12 @@ class WindowsNative:
             return {"ok": True}
         if kind == "setHotkey":
             return self.set_hotkey(message.get("accelerator"))
+        if kind in ("installApp", "uninstallApp", "openApp"):
+            try:
+                import windows_app_window
+            except ImportError:  # imported as app.<module> (tests)
+                from app import windows_app_window
+            return windows_app_window.handle(message)
         if kind == "context":
             self.mode = str(message.get("mode") or self.mode)
             self.mode_label = str(message.get("modeLabel") or self.mode_label)
