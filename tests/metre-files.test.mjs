@@ -20,6 +20,7 @@ const domWatch = read('../ui/injections/laolao-dom-watch.js');
 const head = read('../ui/injections/laolao-head.fragment.html');
 const regions = JSON.parse(read('../ui/injections/regions.json'));
 const PORT = 30131;
+const TYPES = {js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', json: 'application/json', ttf: 'font/ttf', svg: 'image/svg+xml', png: 'image/png'};
 
 const t = text => [{type: 'text', text}];
 const call = (id, name, args) => ({type: 'toolCall', id, name, arguments: args});
@@ -97,13 +98,17 @@ async function launch(t) {
 const group = index => `<div class="chat-group assistant" id="g${index}"><div class="chat-group-messages">
 <div class="chat-bubble" data-message-id="msg:assistant:${history[index].timestamp}:${index}"><div class="chat-text"><p>${history[index].content[0].text}</p></div></div>
 <div class="chat-group-footer"></div></div></div>`;
-const page = mode => `<!doctype html><html data-laolao-mode="${mode}"><head><style>${css}</style></head><body>
+const page = mode => `<!doctype html><html data-laolao-mode="${mode}"><head><link rel="stylesheet" href="/laolao-workbench.css"><style>${css}</style></head><body>
 <main class="content content--chat" style="position:fixed;inset:0;overflow:auto"><openclaw-chat-pane active><div class="chat-thread" style="width:640px"><div class="chat-thread-inner">${group(11)}${group(13)}</div></div></openclaw-chat-pane></main></body></html>`;
 async function open(browser, mode, {width = 1280, git = true} = {}) {
   const tab = await browser.newPage({viewport: {width, height: 800}});
   await tab.route(`http://127.0.0.1:${PORT}/**`, route => {
     const url = new URL(route.request().url());
-    return url.pathname === '/chat' ? route.fulfill({contentType: 'text/html; charset=utf-8', body: page(mode)}) : route.fulfill({status: 404, body: ''});
+    if (url.pathname === '/chat') return route.fulfill({contentType: 'text/html; charset=utf-8', body: page(mode)});
+    // 工作台从页面目录取 Monaco 和自己的样式（BASE = 页面目录）；照真包一样从 ui/injections 给。以前一律 404，文本标签变成「编辑器加载失败」，CI 上这几条一直是红的。
+    const file = fileURLToPath(new URL('../ui/injections' + url.pathname, import.meta.url));
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return route.fulfill({status: 404, body: ''});
+    return route.fulfill({contentType: TYPES[file.split('.').pop()] || 'application/octet-stream', body: fs.readFileSync(file)});
   });
   await tab.goto(`http://127.0.0.1:${PORT}/chat?session=agent%3A${mode === 'metre' ? 'metre' : 'project'}%3Atest`);
   await tab.evaluate(([items, git]) => {
