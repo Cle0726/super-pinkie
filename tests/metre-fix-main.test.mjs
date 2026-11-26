@@ -122,7 +122,7 @@ test('设置页（Metre）：能力卡说明折行，不用省略号', () => {
 // 两份样式一起加载，量卡的真实宽度，算上悬停投影，灯要在卡右边、又不碰底栏的全屏键（x155）。
 test(`侧栏（Metre，真浏览器）：模式切换卡真实宽度 + 投影在连接灯左边，灯不碰全屏键 (${engine})`, {timeout: 30_000}, async () => {
   const css = inj('laolao-metre-skin.css');
-  const lamp = css.match(/aside\.sidebar:not\(\.sidebar--collapsed\) \.pinkie-connection-status \{ left: (\d+)px !important; top: \d+px/);
+  const lamp = css.match(/aside\.sidebar:not\(\.sidebar--collapsed\) \.pinkie-connection-status \{ left: (\d+)px !important; top: 26px/);   // B14：灯和黑卡竖直居中（top 16 → 26）；只认这一条，别的 top 是更早被覆盖掉的旧规则
   assert.ok(lamp, '找不到连接灯位置的规则');
   const browser = await launch();
   try {
