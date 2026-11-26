@@ -82,7 +82,8 @@ try {
           const info = await page.evaluate(() => {
             const r = document.querySelector('.pk-whiteboard').getBoundingClientRect();
             const s = document.querySelector('.pk-whiteboard__scrim');
-            return {top: Math.round(r.top), items: document.querySelectorAll('.pk-whiteboard [data-id]').length,
+            const b = document.querySelector('.topbar')?.getBoundingClientRect();
+            return {top: Math.round(r.top), topbarBottom: b && b.height > 0 ? Math.round(b.bottom) : null, items: document.querySelectorAll('.pk-whiteboard [data-id]').length,
               scrim: Boolean(s && !s.hidden), modal: document.querySelector('.pk-whiteboard').getAttribute('aria-modal')};
           });
           const name = `wb-mask-${width}-${theme}${shell ? '-shell' : ''}`;
@@ -90,7 +91,7 @@ try {
           const buf = await page.screenshot({path: path.join(out, file)});
           lines.push({name, file, os: process.platform, browser: browser.__pinkieEngine || 'chromium', width, height, bytes: buf.length,
             sha256: crypto.createHash('sha256').update(buf).digest('hex'), seeded, ...info});
-          notes.push(`${name}: top=${info.top} items=${info.items} scrim=${info.scrim} modal=${info.modal}`);
+          notes.push(`${name}: top=${info.top} topbar=${info.topbarBottom} items=${info.items} scrim=${info.scrim} modal=${info.modal}`);
         }
         await page.evaluate(() => window.Pinkie.whiteboard.close());
       }

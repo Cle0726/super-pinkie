@@ -80,6 +80,17 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         const hit = await probe(page);
         t.diagnostic(`${tag} hits ${JSON.stringify(hit)}`);
         assert.ok(hit.gap.every((g) => g >= 2), `${tag}: 白板四周没有留白，量不了 ${JSON.stringify(hit.gap)}`);
+        // 顶栏整条露出（协调者 19:59）：白板顶边在顶栏下沿以下；反例：去掉让位（回到原 CSS）顶栏被切
+        const cut = await page.evaluate(() => {
+          const b = document.querySelector('.topbar')?.getBoundingClientRect(); const wb = document.querySelector('.pk-whiteboard');
+          const now = wb.getBoundingClientRect().top; const keep = wb.style.top; wb.style.removeProperty('top');
+          const old = wb.getBoundingClientRect().top; wb.style.top = keep;
+          return {bar: b && b.height > 0 ? Math.round(b.bottom) : null, now: Math.round(now), old: Math.round(old)};
+        });
+        t.diagnostic(`${tag} topbar ${JSON.stringify(cut)}`);
+        assert.ok(cut.bar !== null, `${tag}: 想法模式首页找不到顶栏 .topbar`);
+        assert.ok(cut.now >= cut.bar, `${tag}: 白板顶边 ${cut.now} 切到了顶栏（下沿 ${cut.bar}）`);
+        assert.ok(cut.old < cut.bar, `反例没生效（${tag}）：去掉让位后顶边 ${cut.old} 也没切到顶栏（下沿 ${cut.bar}）`);
         // 每个点只能是白板、遮罩或桌面壳自己的键，不能是页面原有的东西
         for (const k of [...CORNERS, 'top', 'bar', 'left', 'bottom']) assert.ok(hit[k].own, `${tag}: ${k} 点 ${JSON.stringify(hit[k].at)} 命中了页面的 ${hit[k].tag}，不是白板、遮罩或桌面壳`);
         for (const k of [...CORNERS, 'left', 'bottom']) assert.ok(hit[k].own === 'scrim' || hit[k].own === 'native', `${tag}: ${k} 角外应该是遮罩，命中了 ${hit[k].tag}`);

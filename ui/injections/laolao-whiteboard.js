@@ -591,8 +591,8 @@
   // 桌面壳自己的窗口键 / 拖动条 / 改大小 / 更新提示 / 听写：浮在最上层，白板开着也要能用，不设 inert，白板顶边让到它们下面。
   const NATIVE = /^(pinkie-native-|pinkie-update-|laolao-native-)/;
   function place() { // 只在白板已建好时调（打开、开着时改窗口大小）
-    const bottoms = ['pinkie-native-window-controls', 'pinkie-native-drag-strip']
-      .map(id => document.getElementById(id)?.getBoundingClientRect()).filter(r => r && r.height > 0 && r.top < 80).map(r => r.bottom);
+    const bottoms = [...['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map(id => document.getElementById(id)), document.querySelector('.topbar')] // 顶栏也整条露出（协调者 19:59）
+      .map(n => n?.getBoundingClientRect()).filter(r => r && r.height > 0 && r.top < 80).map(r => r.bottom);
     st.root.style.top = bottoms.length ? Math.ceil(Math.max(...bottoms) + 8) + 'px' : '';
   }
   // 白板和遮罩一起显隐；打开时把 body 下其余顶层节点设 inert（只记自己设的，关的时候只撤自己设的）。
