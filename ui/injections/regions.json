@@ -260,6 +260,8 @@
         "laolao-metre-backstage.js",
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
+        "laolao-metre-worktree.css",
+        "laolao-metre-worktree.js",
         "laolao-metre-display.css",
         "laolao-metre-contrast.css",
         "laolao-metre-chat.css",
