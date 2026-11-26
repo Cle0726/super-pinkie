@@ -120,6 +120,7 @@
     if (!enabled) return false;
     const bang = parseBang(raw);
     if (bang.kind !== 'command') {
+      if (bang.text === raw) return false;
       req.params.message = bang.text;
       return 'rewrite';
     }
@@ -137,7 +138,8 @@
       if (/还没打开/.test(message)) { enabled = false; return false; }
       return refuse(reply, raw, message);
     }
-    reply(true, {status: 'started', runId: null});
+    // 回 ok：原生发送清草稿并马上刷新历史；inject 的「$ 命令」此时已在记录里，本地「!命令」气泡在刷新时被换掉。
+    reply(true, {status: 'ok', runId: typeof req.params.idempotencyKey === 'string' ? req.params.idempotencyKey : null});
     const input = document.querySelector(INPUT);
     if (input) paintTag(input);
     return true;

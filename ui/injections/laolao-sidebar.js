@@ -160,6 +160,7 @@
         const send = ws.send.bind(ws);
         const sendQueues = new Map();
         const abortVersions=new Map();
+        const respond=(id,ok,body)=>ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(ok?{type:'res',id,ok:true,payload:body}:{type:'res',id,ok:false,error:{code:'INVALID_REQUEST',message:body}})}));
         ws.send = function(data) {
           let request;try { request=JSON.parse(data); } catch { return send(data); }
           if(request?.type==='req'){
@@ -174,16 +175,11 @@
             // 用户停止：先在同一条连接上告诉看门狗「这是用户自己停的」，再发 abort。
             // 停止键和上游断流都会落成 aborted，看门狗只等 200ms 的取消信号；取消请求若排在
             // abort 后面（同一连接上网关先处理完 abort），停下的这一轮会被当成故障自动续接。
-            if(key){try{send(JSON.stringify({type:'req',id:'pinkie-stop-'+Date.now()+'-'+Math.random().toString(36).slice(2),method:'pinkie.watchdog.cancel',params:{sessionKey:key}}));}catch{}}
+            if(key)for(const method of ['pinkie.watchdog.cancel','pinkie.shell.cancel'])try{send(JSON.stringify({type:'req',id:'pinkie-stop-'+Date.now()+'-'+Math.random().toString(36).slice(2),method,params:{sessionKey:key}}));}catch{}
             return send(data);
           }
           if (request.type === 'req' && ['chat.send', 'sessions.send', 'sessions.steer'].includes(request.method)
-              && /:subagent:/i.test(request.params?.sessionKey || request.params?.key || '')) {
-            ws.dispatchEvent(new MessageEvent('message', {data: JSON.stringify({
-              type: 'res', id: request.id, ok: false, error: {code: 'INVALID_REQUEST', message: '分身会话只读'},
-            })}));
-            return;
-          }
+              && /:subagent:/i.test(request.params?.sessionKey || request.params?.key || '')) return respond(request.id, false, '分身会话只读');
           if(request.type!=='req'||!['chat.send','sessions.send'].includes(request.method)) return send(data);
           const key=request.params?.sessionKey||request.params?.key;
           const version=abortVersions.get(key)||0;
@@ -198,6 +194,10 @@
               stage = 'workbench';
               await window.__pinkieWorkbench?.flushContext?.(key);
               if((abortVersions.get(key)||0)!==version)throw new Error('发送已取消');
+              // I6：! 开头的命令在这里交给网关 pinkie.shell.run，不再往下发给模型（laolao-composer-bang.js）。
+              const bang = await window.Pinkie?.composerBang?.intercept?.(key, request, (ok, body) => respond(request.id, ok, body));
+              if (bang === true) return;
+              if (bang === 'rewrite') data = JSON.stringify(request);
               const tier = effortLevel(key);
               const enhanced = tier === 'max' || tier === 'ultra';
               const message = messageText(request.params?.message).trim();
@@ -252,7 +252,7 @@
             catch(error) {
               const message = stage === 'reasoning' ? '增强推演未完成：'+error.message : stage === 'workbench' ? '工作台现场尚未同步：'+error.message : '项目目录尚未确认：'+error.message;
               toast('没有发送：'+message);
-              ws.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'res',id:request.id,ok:false,error:{code:'INVALID_REQUEST',message}})}));
+              respond(request.id, false, message);
             } finally {
               if (job && reasoningJobs.get(key) === job) reasoningJobs.delete(key);
               if (job) emitReasoningProgress({active: false, sessionKey: key, requestId: job.requestId});
