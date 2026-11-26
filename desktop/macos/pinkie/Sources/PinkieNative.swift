@@ -27,9 +27,22 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
     private var quickField: NSTextField?
     private var quickModeLabel: NSTextField?
     private var exportJobs = [ExportJob]()
+    // N2 keep-awake (设计-N2.md): same rules as app/windows_native.py --
+    // system idle sleep only, 120 s lease on page heartbeats, 8 h cap per stretch.
+    static let awakeDefault = true
+    static let awakeLease: TimeInterval = 120
+    static let awakeCap: TimeInterval = 8 * 3600
+    private var awakeEnabled = PinkieNativeBridge.awakeDefault
+    private var awakeToken: NSObjectProtocol?
+    private var awakeSince = Date.distantPast
+    private var awakeSeen = Date.distantPast
+    private var awakeCapped = false
+    private var awakeTimer: Timer?
+    private let awakeSystem = ProcessInfo.processInfo.environment["PINKIE_NATIVE_NO_SYSTEM"] != "1"
 
     override init() {
         super.init()
+        awakeEnabled = UserDefaults.standard.object(forKey: "pinkie.awake") as? Bool ?? PinkieNativeBridge.awakeDefault
         // Isolated UI tests load this bridge without the menu bar or a global hotkey.
         if ProcessInfo.processInfo.environment["PINKIE_NATIVE_NO_SYSTEM"] == "1" { return }
         if Bundle.main.bundleIdentifier != nil { UNUserNotificationCenter.current().delegate = self }
@@ -69,15 +82,24 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
         case "setHotkey":
             let accelerator = body["accelerator"] as? String
             reply(reqId, setHotkey(accelerator), webView)
+        case "setAwake":
+            awakeEnabled = body["enabled"] as? Bool ?? true
+            UserDefaults.standard.set(awakeEnabled, forKey: "pinkie.awake")
+            updateAwake()
+            reply(reqId, ["ok": true, "enabled": awakeEnabled], webView)
         case "context":
             if let mode = body["mode"] as? String { currentMode = mode }
             if let label = body["modeLabel"] as? String { currentModeLabel = label }
             if let items = body["running"] as? [[String: Any]] {
-                running = items.prefix(20).compactMap { item in
+                let next: [(key: String, title: String)] = items.prefix(20).compactMap { item in
                     guard let key = item["key"] as? String else { return nil }
                     return (key, (item["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "未命名会话")
                 }
+                if next.map({ $0.key }) != running.map({ $0.key }) { awakeCapped = false }
+                running = next
+                if !running.isEmpty { awakeSeen = Date() }
                 refreshRunningItem()
+                updateAwake()
             }
             quickModeLabel?.stringValue = currentModeLabel
             reply(reqId, ["ok": true], webView)
@@ -384,6 +406,30 @@ final class PinkieNativeBridge: NSObject, UNUserNotificationCenterDelegate, NSMe
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
         return item
+    }
+
+    // MARK: N2 keep-awake
+
+    /// Hold or drop the idle-system-sleep assertion to match what is running.
+    /// Display sleep and locking are untouched. The system drops the activity
+    /// by itself if the app exits.
+    private func updateAwake() {
+        let now = Date()
+        if awakeToken != nil, now.timeIntervalSince(awakeSince) > PinkieNativeBridge.awakeCap { awakeCapped = true }
+        let wanted = awakeSystem && awakeEnabled && !running.isEmpty && !awakeCapped
+            && now.timeIntervalSince(awakeSeen) <= PinkieNativeBridge.awakeLease
+        if wanted, awakeToken == nil {
+            awakeToken = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled],
+                                                               reason: "碧琪有会话在跑")
+            awakeSince = now
+            awakeTimer?.invalidate()
+            awakeTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.updateAwake() }
+        } else if !wanted, let token = awakeToken {
+            ProcessInfo.processInfo.endActivity(token)
+            awakeToken = nil
+            awakeTimer?.invalidate()
+            awakeTimer = nil
+        }
     }
 
     private func refreshRunningItem() {
