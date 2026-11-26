@@ -6,6 +6,7 @@ import {runner, v1, drive, importLine, nativeRecoveryText} from './helpers/fake-
 
 const frameError = 'Error: 400 context_length_exceeded: the request does not fit Amazon Quick\'s 64 KB message limit (63763 bytes after shortening, over 63000)';
 const plainOverflow = 'Context overflow: prompt too large for the model';
+const openaiOverflow = "Error: 400 This model's maximum context length is 128000 tokens. However, your messages resulted in 131072 tokens. Please reduce the length of the messages. (code: context_length_exceeded)";
 const patched = transform(runner, importLine);
 
 test('a frame-limit error compacts once, to the frame budget, then stops with a plain message', () => {
@@ -42,6 +43,19 @@ test('counter-example: a model-window overflow keeps the native three attempts a
   assert.equal(unpatched.requests.length, 3);
 });
 
+test('counter-example: an OpenAI-style window overflow (context_length_exceeded, no 64 KB) stays native', () => {
+  const result = drive(patched, [openaiOverflow]);
+  assert.equal(result.requests.length, 3, 'native three compactions, not the single frame-limit one');
+  assert.ok(result.requests.every((request) => request.tokenBudget === 128000), 'window budget, not the frame budget');
+  assert.ok(result.requests.every((request) => request.runtimeSettings.tokenBudget === 128000));
+  assert.equal(result.truncations, 1);
+  assert.equal(result.text, nativeRecoveryText);
+  assert.notEqual(result.text, FRAME_LIMIT_TEXT);
+  const retried = drive(patched, [openaiOverflow], {attemptCompactionCount: 1});
+  assert.equal(retried.requests.length, 0, 'after in-attempt compaction it still retries without compacting');
+  assert.equal(retried.text, nativeRecoveryText);
+});
+
 test('counter-example: an ordinary 400 is not treated as an overflow', () => {
   const result = drive(patched, ['Error: 400 Bad Request: invalid_request_error (tool_choice)']);
   assert.equal(result.requests.length, 0);
@@ -67,7 +81,7 @@ test('refuses to guess when the runtime changed', () => {
 });
 
 test('the watchdog retires a frame-limit failure instead of replaying it', () => {
-  for (const reason of [frameError, 'context_length_exceeded', "does not fit Amazon Quick's 64 KB message limit", '(63763 bytes after shortening, over 63000)', plainOverflow]) {
+  for (const reason of [frameError, 'context_length_exceeded', "does not fit Amazon Quick's 64 KB message limit", '(63763 bytes after shortening, over 63000)', plainOverflow, openaiOverflow]) {
     assert.match(reason, CONTEXT_OVERFLOW_FAILURE, reason);
   }
   for (const reason of ['Error: 400 Bad Request', 'rate limit exceeded', 'usage limit reached', 'message too long for Slack']) {

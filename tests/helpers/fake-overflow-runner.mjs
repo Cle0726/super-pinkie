@@ -10,7 +10,7 @@ export const runner = [
   'let overflowCompactionAttempts = 0;',
   'let toolResultTruncationAttempted = false;',
   'const attemptCompactionCount = params.attemptCompactionCount ?? 0;',
-  'const isLikelyContextOverflowError = (text) => /context overflow|prompt too large/i.test(text);',
+  'const isLikelyContextOverflowError = (text) => /context overflow|prompt too large|maximum context length/i.test(text);',
   'for (let turn = 0; turn < 10; turn++) {',
   'const promptError = params.assistantError ? null : sendPrompt(turn);',
   'const assistantErrorText = params.assistantError ? sendPrompt(turn) : null;',

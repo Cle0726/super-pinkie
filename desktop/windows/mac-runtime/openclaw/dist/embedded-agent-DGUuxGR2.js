@@ -1,6 +1,6 @@
 /* pinkie-overflow-compaction-events:v2 */
 import { c as pinkieEmitAgentEvent } from "./agent-events-CRggPZCM.js";
-const PINKIE_FRAME_LIMIT = /64 ?KB message limit|context_length_exceeded|bytes after shortening, over \d+/i;
+const PINKIE_FRAME_LIMIT = /64 ?KB message limit|bytes after shortening, over \d+/i;
 const PINKIE_FRAME_TOKEN_BUDGET = 12000;
 import { c as normalizeOptionalString } from "./string-coerce-DW4mBlAt.js";
 import { a as addTimerTimeoutGraceMs } from "./number-coercion-CJQ8TR--.js";

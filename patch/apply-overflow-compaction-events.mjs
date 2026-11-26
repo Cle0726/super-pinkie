@@ -17,12 +17,15 @@
  * Pairs with apply-preflight-compaction-events.mjs (the pre-send path).
  *
  * v2: the aws-quick gateway takes at most ~63000 bytes per request and answers
- * `context_length_exceeded` / "64 KB message limit" otherwise. That is a frame
- * limit, not the model window: compacting to the model window (or retrying
- * without compacting) cannot fit it, so the native loop compacted up to 3 times
- * and the user saw 「整理上下文」 again and again. A frame-limit error now compacts
- * once, straight to PINKIE_FRAME_TOKEN_BUDGET; if the next request is still over
- * the limit the run stops with a plain message instead of looping. */
+ * "64 KB message limit ... bytes after shortening, over N" otherwise. That is a
+ * frame limit, not the model window. Only that gateway wording counts: a bare
+ * `context_length_exceeded` is also what OpenAI-compatible providers send for a
+ * real model-window overflow, which keeps the native loop. Compacting to the
+ * model window (or retrying without compacting) cannot fit it, so the native
+ * loop compacted up to 3 times and the user saw 「整理上下文」 again and again.
+ * A frame-limit error now compacts once, straight to PINKIE_FRAME_TOKEN_BUDGET;
+ * if the next request is still over the limit the run stops with a plain
+ * message instead of looping. */
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -38,7 +41,7 @@ const emit = (data) => `try { if (params.sessionKey) pinkieEmitAgentEvent({ runI
 export const FRAME_TOKEN_BUDGET = 12000;
 export const FRAME_LIMIT_TEXT = '这条对话一帧装不下（模型服务单条消息上限约 63KB），已停下，请开新对话或分段发送。';
 const frameHeader = [
-  'const PINKIE_FRAME_LIMIT = /64 ?KB message limit|context_length_exceeded|bytes after shortening, over \\d+/i;',
+  'const PINKIE_FRAME_LIMIT = /64 ?KB message limit|bytes after shortening, over \\d+/i;',
   `const PINKIE_FRAME_TOKEN_BUDGET = ${FRAME_TOKEN_BUDGET};`,
 ].join('\n');
 const frameBudget = 'tokenBudget: pinkieFrameLimit ? Math.min(ctxInfo.tokens, PINKIE_FRAME_TOKEN_BUDGET) : ctxInfo.tokens,';
