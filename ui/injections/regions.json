@@ -398,7 +398,9 @@
         "laolao-startup-home.js",
         "laolao-splash.css",
         "laolao-splash.js",
-        "laolao-splash-fx.js"
+        "laolao-splash-fx.js",
+        "laolao-recap.css",
+        "laolao-recap.js"
       ]
     },
     {
