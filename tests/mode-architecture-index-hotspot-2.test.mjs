@@ -112,7 +112,13 @@ function resetBackground() {
 
 after(() => {
   resetBackground();
-  fs.rmSync(scratch, {recursive: true, force: true});
+  // Windows 上 scratch 里的文件句柄可能要等进程退出才释放，直接 rmSync 会报 EPERM（CI windows-checks 实测）。
+  // 先用 Node 自带的重试再删；仍删不掉时只在 Windows 上留下这个临时目录，不算测试失败。
+  try {
+    fs.rmSync(scratch, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
+  } catch (error) {
+    if (process.platform !== 'win32') throw error;
+  }
 });
 
 test('前提：插件注册出了后台命令守望，网关入口是假的 openclaw.mjs', () => {
