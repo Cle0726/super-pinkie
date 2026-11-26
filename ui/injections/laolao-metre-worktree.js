@@ -2,6 +2,7 @@
  * 数据只用网关现成的 worktrees.list（{worktrees: [{name, path, branch, ownerKind, ownerId?, removedAt?}]}）：
  * 会话开的工作树 ownerKind = "session"、ownerId = 会话的 canonicalKey（网关 sessions 里 managedWorktrees.create）。
  * 只认还活着的（没有 removedAt）；对不上的行什么都不加。不造后台、不自己猜目录。
+ * 分支和目录重复时只显示一份（见 label）；地方不够时整段不显示（见 .css）。
  * laolao-metre-list.js 的 decorate 每次画完列表叫 mark(groups)；本文件晚加载时自己补画一次。
  * 结果缓存 30 秒；会话有变化（laolao:sessions-changed）后最多 5 秒重取一次。出错就当没有，不报错。
  * 样子在 laolao-metre-worktree.css。 */
@@ -29,6 +30,12 @@
       .then((map) => { byOwner = map; fetchedAt = Date.now(); stale = false; pending = null; paint(document.querySelector('aside.sidebar') || document); });
     return pending;
   }
+  // 分支就是目录（或以 /目录 结尾，如 openclaw/login-blue）时只显示目录；完整的在悬停提示里。
+  function label(w) {
+    const b = w.branch, f = w.folder;
+    if (f && b && (b === f || b.endsWith('/' + f))) return f;
+    return [f, b].filter(Boolean).join(' · ');
+  }
   function paint(root) {
     if (!root || !isMetre()) return;
     for (const n of root.querySelectorAll('.session-row-host[data-session-key]')) {
@@ -37,15 +44,15 @@
       const w = byOwner.get(norm(n.dataset.sessionKey));
       let tag = link.querySelector(':scope > .pk-ml-wt');
       if (!w) { tag?.remove(); continue; }
-      const text = [w.folder, w.branch].filter(Boolean).join(' · ');
-      if (!tag) { tag = document.createElement('span'); tag.className = 'pk-ml-wt'; link.append(tag); }
-      if (tag.textContent !== text) tag.textContent = text;
+      const text = label(w);
+      if (!tag) { tag = document.createElement('span'); tag.className = 'pk-ml-wt'; tag.append(document.createElement('span')); tag.firstChild.className = 'pk-ml-wt__text'; link.append(tag); }
+      if (tag.firstChild.textContent !== text) tag.firstChild.textContent = text;
       const tip = '工作树 ' + (w.path || w.folder) + (w.branch ? '，分支 ' + w.branch : '');
       tag.dataset.pinkieTooltip = tip; tag.setAttribute('aria-label', tip);
     }
   }
   function mark(groups) { if (!isMetre()) return; paint(groups); load(); }
   window.addEventListener('laolao:sessions-changed', () => { stale = true; });
-  window.PinkieMetreWorktree = Object.freeze({mark, index});
+  window.PinkieMetreWorktree = Object.freeze({mark, index, label});
   if (isMetre()) mark(document.querySelector('aside.sidebar'));   // 列表可能在本文件加载前已经画过一遍
 })();

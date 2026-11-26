@@ -1,15 +1,31 @@
 /* laolao-metre-worktree —— S7：Metre 侧栏会话行里的「目录 · 分支」小字（数据见 laolao-metre-worktree.js）。
  * 只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。不加强制覆盖；颜色只用 Metre 自己的变量，日夜跟着变量走。
- * 排在会话名后面、同一条基线，12px 灰字；地方不够时先省略这段小字（最多占行宽四成），会话名优先。 */
-html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt) > .sidebar-recent-session__name { flex: 0 1 auto; min-width: 2em; }
+ * 会话名优先：小字的弹性基准是 0，只吃会话名（和引擎标签）用剩的地方，会话名不因为它变短。
+ * 剩的地方不到 6 个字符就整个不显示：小字是一行高 20px 的换行盒，前面垫一个零宽的块，
+ * 正文弹性基准 0、最少 6ch、最多自身宽，放不下 6ch 就折到第二行被裁掉，不会出现「b…」。
+ * 和会话名之间的 6px 是正文自己的外边距（这一行的列间距归零），所以小字折掉时外框宽 0，会话名一像素不少。 */
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt) { column-gap: 0; }
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt)::after { margin-inline-start: 6px; }
 html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt {
-  flex: 0 10 auto;
+  flex: 1 1 0px;
   min-width: 0;
-  max-width: 40%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-self: center;
+  height: 20px;
+  overflow: hidden;
+  font: 400 12px/20px var(--metre-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  color: var(--metre-muted);
+}
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt::before { content: ""; flex: 0 0 0px; height: 20px; }
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt__text {
+  flex: 1 1 0px;
+  min-width: 6ch;
+  max-width: max-content;
+  margin-inline-start: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 400 12px/20px var(--metre-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
-  color: var(--metre-muted);
 }
 html[data-laolao-mode="metre"] aside.sidebar .session-row-host.sidebar-recent-session--active .pk-ml-wt { color: var(--metre-text); opacity: 0.72; }
