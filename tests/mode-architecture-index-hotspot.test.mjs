@@ -5,9 +5,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-const scratch = fs.mkdtempSync(path.join('/tmp', 'pinkie-hotspot-index-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-hotspot-index-'));
 fs.mkdirSync(path.join(scratch, 'claude'), {recursive: true});
 fs.mkdirSync(path.join(scratch, 'codex'), {recursive: true});
 fs.mkdirSync(path.join(scratch, 'state'), {recursive: true});
