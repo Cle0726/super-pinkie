@@ -1134,7 +1134,7 @@
       if (!tab.pinned) t.classList.add('is-preview');
       if (tab.dirty) t.classList.add('is-dirty');
       t.append(tab.kind === 'diff' ? icon('diff', 'pk-wb-tab__diff') : tab.kind === 'page' ? icon(tab.icon || 'settings', 'pk-wb-tab__diff') : fileIcon(tab.name, 'file'));
-      const vs = tab.kind === 'diff' ? /^(.*?)（(.+)）$/.exec(tab.title || '') : null; // B30：差异标签拆成文件名（不缩）+ 比较说明（先缩），全称在 title
+      const vs = tab.kind === 'diff' ? /^(.*)（([^（）]+)）$/.exec(tab.title || '') : null; // B30：差异标签拆成文件名（不缩）+ 比较说明（先缩），全称在 title
       const label = el('span', 'pk-wb-tab__label', vs ? vs[1] : tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
       t.append(label); if (vs) { t.classList.add('is-diff'); t.append(el('span', 'pk-wb-tab__vs', vs[2])); }
       if (names.get(tab.name) > 1 && tab.kind !== 'diff') { const loc = fileLocation(tab.path); t.append(el('span', 'pk-wb-tab__dir', dirname(loc.relative) || loc.name)); }

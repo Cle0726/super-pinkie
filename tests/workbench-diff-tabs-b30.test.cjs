@@ -62,8 +62,20 @@ test('B30 差异标签：文件名和比较说明分开放，全称在 title', (
   assert.ok(!plain.classList.contains('is-diff'));
 });
 
+// 文件名里本身带全角括号：比较说明只认最后一对（里面不能再有全角括号），文件名整段留着
+const PAREN = {path: 'diff:报告（终稿）.md', name: '报告（终稿）.md（上次提交 ↔ 现在）', title: '报告（终稿）.md（上次提交 ↔ 现在）', kind: 'diff', pinned: true, source: '报告（终稿）.md'};
+test('B30 文件名带全角括号：文件名整段留着，只拆最后一对括号', () => {
+  const ctx = run([PAREN], PAREN.path);
+  assert.deepEqual(spans(ctx.tabsList.children[0]), [{cls: 'pk-wb-tab__label', text: '报告（终稿）.md'}, {cls: 'pk-wb-tab__vs', text: '上次提交 ↔ 现在'}]);
+});
+
+test('B30 反例：换回原来的非贪婪正则，带全角括号的文件名被拆错', () => {
+  const ctx = run([PAREN], PAREN.path, (s) => s.replace('/^(.*)（([^（）]+)）$/', '/^(.*?)（(.+)）$/'));
+  assert.deepEqual(spans(ctx.tabsList.children[0]), [{cls: 'pk-wb-tab__label', text: '报告'}, {cls: 'pk-wb-tab__vs', text: '终稿）.md（上次提交 ↔ 现在'}]);
+});
+
 test('B30 反例：换回整串标签，文件名和说明又挤在同一个 span 里', () => {
-  const ctx = run(DIFFS.slice(0, 1), 'diff:README.md', (s) => s.replace("/^(.*?)（(.+)）$/.exec(tab.title || '')", 'null'));
+  const ctx = run(DIFFS.slice(0, 1), 'diff:README.md', (s) => s.replace("/^(.*)（([^（）]+)）$/.exec(tab.title || '')", 'null'));
   assert.deepEqual(spans(ctx.tabsList.children[0]), [{cls: 'pk-wb-tab__label', text: 'README.md（上次提交 ↔ 现在）'}]);
 });
 
