@@ -166,5 +166,17 @@
     "metric": "lines",
     "value": 438,
     "reason": "engines S6 第 3 步（11-26，feat/engines-s6-board）：总控台加「全部会话」一栏，SLOTS 一项、ICON 一项、SAMPLE 一项各 1 行，共 3 行；渲染全在新文件 laolao-session-board.js，没有新增全局名、观察器或定时器。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board-data.js",
+    "metric": "lines",
+    "value": 541,
+    "reason": "macdev5 G4 规则入口（11-26）：总控台「项目记忆」区多一行「项目规矩」，用已有的 pinkie.fs.stat 列出 project-brief.mjs 读给模型的规则文件，点开交给工作台；和项目记忆同一处请求、同一块，拆到新文件反而要多登记 head / regions 两处。没有新全局、观察器或轮询（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board.css",
+    "metric": "lines",
+    "value": 504,
+    "reason": "macdev5 G4 规则入口（11-26）：「项目规矩」一行的样式，只用 .pk-mb-rules 前缀，跟在项目记忆样式后面，沿用 --metre-* 变量，没有 !important（B 类，只允许本次实测值）。"
   }
 ]
