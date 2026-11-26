@@ -210,6 +210,8 @@ export function quickSyntax(file, {root = ''} = {}) {
 
 const nodeRunner = root => (exists(path.join(root, 'pnpm-lock.yaml')) ? 'pnpm' : exists(path.join(root, 'yarn.lock')) ? 'yarn' : exists(path.join(root, 'bun.lockb')) || exists(path.join(root, 'bun.lock')) ? 'bun' : 'npm');
 const quote = value => (/^[\w@%+=:,./\\-]+$/.test(value) ? value : `"${value.replace(/"/g, '\\"')}"`);
+// run_tests 的 filter 会接在 shell 命令后面：sh 和 Windows cmd 里能另起命令、重定向、展开变量的符号一律不收。
+const FILTER_SHELL_META = /[;&|<>$`^%\r\n]/;
 
 // 这个项目的测试命令。认不出来返回 null，不编。
 export function detectTestCommand(root) {
@@ -418,6 +420,8 @@ export function createRunTestsTool(ctx, {rootFor, run = runCommand} = {}) {
         const detected = params.command ? {command: String(params.command).trim(), label: '你给的命令', joiner: ' '} : detectTestCommand(root);
         if (!detected) return reply('没认出这个项目的测试命令（没有 test 脚本、pytest、测试目录这些）。先看 README 和包清单里怎么跑测试，再用 command 参数把完整命令传进来；项目确实没有测试，就先给要改的部分写几条。', {error: 'no-test-command'}, true);
         const filter = String(params.filter || '').trim();
+        // filter 原样拼进 shell 命令（shell: true），带命令符号就等于另起一条命令，还绕过角色的 deny_commands（只查 command）。
+        if (FILTER_SHELL_META.test(filter)) return reply('filter 只能是测试文件路径或测试名，不能带 ; & | < > $ ` ^ % 或换行这类命令符号；要跑完整命令就用 command 参数。', {error: 'bad-filter'}, true);
         const command = filter ? `${detected.command}${detected.joiner}${filter}` : detected.command;
         const result = await run(command, {cwd: root, timeoutMs: (params.timeout || 300) * 1000});
         const parsed = parseTestOutput(result.output, result.exitCode);

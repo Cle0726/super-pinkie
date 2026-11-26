@@ -4,6 +4,14 @@ let harnessModule;
 const controlUIRoots = [process.env.PINKIE_CONTROL_UI_ROOT, '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui', require('node:path').resolve(__dirname, '../../sandbox/try/dist/control-ui')].filter(Boolean);
 const needsControlUI = controlUIRoots.some(root => require('node:fs').existsSync(require('node:path').join(root, 'index.html'))) ? {} : {skip: '没有构建好的 control-ui'};
 test.before(async () => { harnessModule = await import('../tools/study-desk/harness.mjs'); });
+// 整个文件每种引擎只起一个浏览器（默认 WebKit，chromium 用例用 Chrome）：启动的 promise 只建一次，失败会被记住并在每个用例里重抛（不变成跳过）。
+// 每个用例仍各开各的 context（各自的 localStorage、视口、减少动效和页面错误），用完就关，状态不串。
+const shared = new Map();
+function sharedBrowser(engine) {
+  if (!shared.has(engine)) shared.set(engine, harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}).then(browser => ({browser}), error => ({error})));
+  return shared.get(engine).then(got => { if (got.error) throw got.error; return got.browser; });
+}
+test.after(async () => { for (const pending of shared.values()) { const got = await pending; if (got.browser) await got.browser.close(); } });
 async function run(options, fn) {
   const {handler = () => ({}), reducedMotion, ...settings} = options;
   const harness = await harnessModule.startHarness({
@@ -15,9 +23,10 @@ async function run(options, fn) {
     },
   });
   const engine = options?.engine || 'webkit';
-  const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}));
-  try { const page = await browser.newPage({viewport: {width: 1440, height: 900}, ...(reducedMotion ? {reducedMotion} : {})}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
-  finally { try { await browser.close(); } finally { await harness.close(); } }
+  const browser = await harnessModule.launchWithHarness(harness, () => sharedBrowser(engine));
+  let context;
+  try { context = await browser.newContext({viewport: {width: 1440, height: 900}, ...(reducedMotion ? {reducedMotion} : {})}); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
+  finally { try { await context?.close(); } finally { await harness.close(); } }
 }
 test('learning shell mounts once, restores native chat, and cleans up across ten mode changes', async () => {
   await run({}, async page => {

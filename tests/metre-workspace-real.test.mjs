@@ -9,6 +9,8 @@
 //   5. 「筛选」键只有一个图标：静止 / 菜单打开（指针还在键上）/ 筛选=未读 / 未读时再打开菜单，图标都相同，
 //      和侧栏其他键（新会话、搜索、作品、总谱、模式切换箭头）都不一样；打开 / 关闭菜单时键上文字不变。
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test, {after} from 'node:test';
 import {
   REPO_ROOT,
@@ -82,26 +84,43 @@ async function restingBackground(page, width) {
 // 隔离不变：每个子测试仍由 openRealScenePage 新建 context，结束就关。
 // launch 的 Promise 只建一次；起不来时两个测试收到同一次失败，不改成跳过。
 let sharedBrowser;
+// 安装（拷上游包 + bundle install/stamp/check）也整个文件只做一次：CI 上一次约 25s，原来两个顶层测试各做一遍。
+// 装不上时记住那次失败，两个测试都重抛（不改成跳过）。
+let sharedInstall;
 after(async () => {
-  if (!sharedBrowser) return;
-  const browser = await sharedBrowser.catch(() => null);
-  if (browser) await browser.close();
+  try {
+    const browser = sharedBrowser && await sharedBrowser.catch(() => null);
+    if (browser) await browser.close();
+  } finally {
+    sharedInstall?.installed?.cleanup();
+  }
 });
 function browserForFile() {
   sharedBrowser ??= launchRealBrowser();
   return sharedBrowser;
 }
+function installForFile() {
+  if (!sharedInstall) {
+    try { sharedInstall = {installed: installRealControlUi({repoRoot: REPO_ROOT})}; }
+    catch (error) { sharedInstall = {error}; }
+  }
+  if (sharedInstall.error) throw sharedInstall.error;
+  return sharedInstall.installed;
+}
+// 假服务仍是每个顶层测试各起一个：它在 runDir 下落盘会话偏好（pinkie.session.prefs.set），
+// 每个测试给一个新的 state 子目录，两个测试互相看不到对方写的偏好；子目录随安装目录一起删。
+async function serverForTest(t) {
+  const installed = installForFile();
+  const runDir = fs.mkdtempSync(path.join(installed.runDir, 'state-'));
+  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir});
+  t.after(() => server.close());
+  return server;
+}
 
 test('M5 b6 real page: Metre 会话筛选——鼠标选项不收抽屉、按下态有底色、0 条有空态、菜单盖满列表、图标固定（三宽 × 日夜）', async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  let server = null;
-  // 清理先注册：浏览器起不来时（如找不到 playwright-core）假服务也要关掉，否则 node 永远不退出。
-  // 浏览器是全文件共用的，由文件级 after 关掉；这里只关本测试的假服务和安装目录。
-  t.after(async () => {
-    try { await server?.close(); }
-    finally { installed.cleanup(); }
-  });
-  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  // 假服务的关闭在 serverForTest 里起好就登记；浏览器起不来时假服务照样关，node 能退出。
+  // 浏览器和安装目录是全文件共用的，由文件级 after 收拾。
+  const server = await serverForTest(t);
   const browser = await browserForFile();
 
   for (const theme of ['day', 'night']) {
@@ -277,14 +296,8 @@ const addFakeStop = () => {
 const removeFakeStop = () => document.querySelector('.pk-test-fake-stop')?.remove();
 
 test('M5 b6 real page: K2 Esc——关着的上下文查看器不挡 Esc；两下 Esc 清空、Esc 点停止键；查看器开着时让路（1440 日 / 820 夜）', async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  let server = null;
-  // 浏览器是全文件共用的，由文件级 after 关掉；这里只关本测试的假服务和安装目录。
-  t.after(async () => {
-    try { await server?.close(); }
-    finally { installed.cleanup(); }
-  });
-  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  // 浏览器和安装目录全文件共用（文件级 after 收拾）；假服务本测试自己一个，起好就登记关闭。
+  const server = await serverForTest(t);
   const browser = await browserForFile();
 
   for (const [width, theme] of [[1440, 'day'], [820, 'night']]) {
