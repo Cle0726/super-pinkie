@@ -5,9 +5,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {ReasoningEnhancer, ReviewStore, replyForReview} from '../services/mode-architecture/reasoning.mjs';
-import {EngineTasks, REPORT_KEEP, reportOf} from '../services/mode-architecture/engines-task.mjs';
-import {REVIEW_DIFF_MAX, reviewPrompt} from '../services/mode-architecture/pr-flow.mjs';
+import * as reasoning from '../services/mode-architecture/reasoning.mjs';
+import * as engineTask from '../services/mode-architecture/engines-task.mjs';
+import * as prFlow from '../services/mode-architecture/pr-flow.mjs';
+
+// 整个模块导入：只回退修复时，每条用例按行为变红，而不是整份文件在导入时就挂掉。
+const {ReasoningEnhancer, ReviewStore} = reasoning;
+const {EngineTasks, reportOf} = engineTask;
+const {reviewPrompt} = prFlow;
+const replyForReview = text => { assert.equal(typeof reasoning.replyForReview, 'function', 'reasoning.mjs exports replyForReview'); return reasoning.replyForReview(text); };
+const REPORT_KEEP = engineTask.REPORT_KEEP ?? 20_000;
+const REVIEW_DIFF_MAX = prFlow.REVIEW_DIFF_MAX ?? 200_000;
 
 const SOLVER = /独立解题助手|独立起草助手|验收清单助手/;
 const GEMINI = {id: 'gemini-3.8-flash-tiered', reasoning: true, compat: {supportedReasoningEfforts: ['minimal', 'low', 'medium', 'high', 'xhigh']}};
