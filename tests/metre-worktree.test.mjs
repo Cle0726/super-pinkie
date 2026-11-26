@@ -63,7 +63,9 @@ const measure = (p) => p.evaluate(() => {
       const probe = document.createElement('span'); probe.textContent = '000000'; probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font}`;
       document.body.append(probe); const sixCh = probe.getBoundingClientRect().width; probe.remove();
       const shown = xr.top - tr.top < tr.height - 1 && xr.width > 0;
+      const aside = n.querySelector('.session-row-aside')?.getBoundingClientRect();
       Object.assign(r, {shown, textW: xr.width, sixCh, textClipped: text.scrollWidth > text.clientWidth + 1,
+        gapToTime: shown && aside ? aside.left - xr.right : null,
         oneLine: Math.abs((tr.top + tr.height / 2) - (name.getBoundingClientRect().top + name.getBoundingClientRect().height / 2)) < 4,
         color: getComputedStyle(tag).color});
     }
@@ -130,7 +132,11 @@ test(`Metre worktree tag across sidebar widths: never a stub, never shortens the
       for (const k of ['a', 'h']) {
         const r = m[k];
         assert.equal(r.nameClipped, false, `${w}px：${k} 行短会话名不被截（${JSON.stringify(r)}）`);
-        if (r.shown) { sawShown = true; assert.ok(r.textW >= r.sixCh - 0.5, `${w}px：${k} 行小字露出就至少 6 个字符（${r.textW} / ${r.sixCh}）`); } else sawHidden = true;
+        if (r.shown) {
+          sawShown = true;
+          assert.ok(r.textW >= r.sixCh - 0.5, `${w}px：${k} 行小字露出就至少 6 个字符（${r.textW} / ${r.sixCh}）`);
+          assert.ok(r.gapToTime >= 6, `${w}px：${k} 行小字到右边时间至少 6px（${r.gapToTime}）`);
+        } else sawHidden = true;
       }
       assert.ok(Math.abs(m.d.nameW - m.f.nameW) < 0.5, `${w}px：长会话名有没有小字都一样宽（${m.d.nameW} / ${m.f.nameW}）`);
     }
@@ -139,6 +145,16 @@ test(`Metre worktree tag across sidebar widths: never a stub, never shortens the
     await setWidth(p, 420);
     const wide = await measure(p);
     assert.ok(wide.h.shown && !wide.h.textClipped, `够宽时「audit · feat/baseline」整段放得下（${JSON.stringify(wide.h)}）`);
+
+    // 反例：去掉右边 8px 外边距，小字顶满时会贴住时间（上面那条 ≥ 6px 的断言能抓到）
+    await p.addStyleTag({content: 'html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt__text { margin-inline-end: 0; }'});
+    let minGap = Infinity;
+    for (let w = 120; w <= 420; w += 6) {
+      await setWidth(p, w);
+      const m = await measure(p);
+      for (const k of ['a', 'h']) if (m[k].shown) minGap = Math.min(minGap, m[k].gapToTime);
+    }
+    assert.ok(minGap < 6, `反例：没有右边距时小字会贴到时间（最小 ${minGap}px）`);
   } finally { await browser.close(); }
 });
 
