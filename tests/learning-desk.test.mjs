@@ -290,12 +290,12 @@ test('board renders real metrics, evidence, range switches, themes and plan adop
     assert.equal(overflow.x, false);
     if (process.env.PINKIE_DESK_QA_OUTPUT) {
       fs.mkdirSync(process.env.PINKIE_DESK_QA_OUTPUT, {recursive: true});
-      await page.locator('.b-evidence').first().blur(); await page.mouse.move(10, 10); await page.waitForTimeout(1000);
+      await page.locator('.b-evidence').first().blur(); await page.mouse.move(10, 10); await page.waitForTimeout(1000);   // 保留：只在截图时用，等悬停提示淡出
       const shot = await page.screenshot({path: path.join(process.env.PINKIE_DESK_QA_OUTPUT, 'board-day.png')}); assert.ok(shot.length > 1000);
     }
     await page.getByRole('button', {name: '切换日间和夜间'}).click();
     assert.equal(await page.locator('#pinkie-study-desk').getAttribute('data-theme'), 'night');
-    if (process.env.PINKIE_DESK_QA_OUTPUT) { await page.waitForTimeout(650); const shot = await page.screenshot({path: path.join(process.env.PINKIE_DESK_QA_OUTPUT, 'board-night.png')}); assert.ok(shot.length > 1000); }
+    if (process.env.PINKIE_DESK_QA_OUTPUT) { await page.waitForTimeout(650); const shot = await page.screenshot({path: path.join(process.env.PINKIE_DESK_QA_OUTPUT, 'board-night.png')}); assert.ok(shot.length > 1000); }   // 保留：只在截图时用，等日夜切换的颜色过渡
     await page.getByRole('button', {name: '30 天', exact: true}).click();
     await page.locator('.pinkie-desk-board[aria-busy=false]').waitFor();
     assert.equal(await page.getByRole('button', {name: '30 天', exact: true}).getAttribute('aria-pressed'), 'true');

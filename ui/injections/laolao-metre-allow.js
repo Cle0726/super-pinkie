@@ -7,7 +7,9 @@
  *   - baseHash 对不上（别人刚写过，例如 P2 刚换档）就重新 get、在新文件上再改一次，最多 3 次——和 P2 同一套规矩。
  * 拒绝清单：原生没有「按命令拒绝」的列表（deny 只是整个代理的档位），要做得写内核补丁，本文件不做。
  * pattern 的含义照原生 matchAllowlist / compileGlobRegex：不带路径的按可执行文件名匹配（git、npm），带路径的按完整路径；
- * * 不跨文件夹，** 跨任意层，单独一个 * 放行全部（加它要再点一次确认，清单里写成「全部命令」）。原生按小写去重，这里也按小写判重。
+ * * 不跨文件夹，** 跨任意层，单独一个 * 且没有参数限制才放行全部（加它要再点一次确认，清单里写成「全部命令」）。
+ * 内核比对命令名时，Windows 不区分大小写，macOS / Linux 区分（上游测试：模式 RG 匹配不到 rg）。这里按去掉首尾空白后的字面去重，
+ * 不把 GIT 当成已经有的 git，否则错误大小写会占住正确的那一条。
  * 这里加的条目不带 argPattern（不限参数）；带参数的条目照原样显示、能移除。
  * 不新增观察器、循环定时器和 window.__ 全局名；弹层重新打开时的刷新走 window.Pinkie.domWatch.poll。 */
 (() => {
@@ -24,19 +26,33 @@
     return r ? r(method, params || {}, ms) : Promise.reject(new Error('还没连上网关'));
   };
   const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-  const key = (p) => String(p || '').trim().toLowerCase();
-  const isAll = (p) => String(p || '').trim() === '*';
+  const norm = (p) => String(p || '').trim();
+  const isAll = (p) => norm(p) === '*';
   const entriesOf = (file) => {
     const list = file?.agents?.[AGENT]?.allowlist;
     return Array.isArray(list) ? list.filter((e) => e && typeof e === 'object' && typeof e.pattern === 'string' && e.pattern.trim()) : [];
   };
+  // 档位解析和 P2 的 levelOf 同一套：代理自己的值优先，没有才用 defaults。
+  function policyOf(file) {
+    const a = file?.agents?.[AGENT] || {}, d = file?.defaults || {};
+    return {security: a.security ?? d.security ?? 'full', ask: a.ask ?? d.ask ?? 'off'};
+  }
+  // 清单真正参与放行：security 是 allowlist，而且不是「每条都问」（ask always 时内核先问，清单不算数）。
+  function listIsLive(file) {
+    const {security, ask} = policyOf(file);
+    return security === 'allowlist' && ask !== 'always';
+  }
+  // 单独一个 * 且没有 argPattern 才是内核的 bare wildcard；带参数的 * 不是放行全部。
+  function bareStar(file) {
+    return entriesOf(file).some((e) => isAll(e.pattern) && !e.argPattern);
+  }
   // 一句话说明清单眼下起不起作用（只读 security / ask，不改）。
   function levelNote(file) {
-    const a = file?.agents?.[AGENT] || {}, d = file?.defaults || {};
-    const security = a.security ?? d.security ?? 'full', ask = a.ask ?? d.ask ?? 'off';
+    const {security, ask} = policyOf(file);
     if (security === 'deny') return '放手程度现在是「不跑命令」，这份清单暂时不起作用。';
-    if (security !== 'allowlist') return '放手程度现在是「自动」：命令都直接跑，这份清单暂时不起作用；换到「问我」才按它放行。';
     if (ask === 'always') return '放手程度现在是每条命令都先问你，清单暂时不起作用。';
+    if (!listIsLive(file)) return '放手程度现在是「自动」：命令都直接跑，这份清单暂时不起作用；换到「问我」才按它放行。';
+    if (bareStar(file)) return '清单里有「全部命令」，所以都会直接跑，不再问你。';
     return ask === 'off' ? '清单里的命令直接跑，清单外的不跑。' : '清单里的命令直接跑，清单外的先问你。';
   }
   // 命令名 / 路径：按 / 或 \ 切成段，每段一个 inline-block（laolao-metre-allow.css），长路径只在段与段之间换行，
@@ -50,16 +66,26 @@
     if (!pattern) return '先写一个命令名或路径。';
     if (/[\r\n]/.test(pattern)) return '一次只写一条，不要换行。';
     if ([...pattern].length > MAX) return `太长了（最多 ${MAX} 个字）。`;
-    if (list.some((e) => key(e.pattern) === key(pattern))) return '清单里已经有这一条了。';
+    if (list.some((e) => norm(e.pattern) === norm(pattern))) return '清单里已经有这一条了。';
     return '';
   }
 
   const state = {file: null, loaded: false, busy: false, error: '', note: '', confirmAll: false};
   let card = null, listEl = null, statusEl = null, input = null, addBtn = null, wasShown = false;
+  // 重读和写入会重叠：慢的 get 不能把后写成功的清单盖掉。
+  let viewGen = 0;
 
   async function load() {
-    try { state.file = (await rpc('exec.approvals.get', {}))?.file || {version: 1}; state.error = ''; }
-    catch (error) { state.file = null; state.error = '读不到审批设置：' + String(error?.message || error); }
+    const gen = ++viewGen;
+    try {
+      const file = (await rpc('exec.approvals.get', {}))?.file || {version: 1};
+      if (gen !== viewGen) return;
+      state.file = file; state.error = '';
+    } catch (error) {
+      if (gen !== viewGen) return;
+      state.file = null; state.error = '读不到审批设置：' + String(error?.message || error);
+    }
+    if (gen !== viewGen) return;
     state.loaded = true;
     paint();
   }
@@ -77,6 +103,7 @@
       try {
         const res = await rpc('exec.approvals.set', {file, ...(snap?.hash ? {baseHash: snap.hash} : {})});
         state.file = res?.file || file;
+        viewGen++;
         return;
       } catch (error) {
         last = error;
@@ -97,24 +124,26 @@
     const pattern = String(input.value || '').trim();
     const why = problem(pattern, entriesOf(state.file));
     if (why) { state.note = why; state.confirmAll = false; paint(); input.focus(); return; }
-    // 单独一个 *：等于把「先问你」整个关掉，先说清楚，再点一次才加。
+    // 单独一个 *：清单正在生效时等于不再询问；档位不用清单时先说清楚，再点一次才加。
     if (isAll(pattern) && !state.confirmAll) {
       state.confirmAll = true;
-      state.note = '单独一个 * 会放行所有命令，以后不再问你。确定的话再点一次「确认放行全部」。';
+      state.note = listIsLive(state.file)
+        ? '单独一个 * 会放行所有命令，以后不再问你。确定的话再点一次「确认放行全部」。'
+        : '单独一个 * 只有换到「问我」并且按允许清单放行时才会放行全部；现在的档位下清单不起作用。确定的话再点一次「确认放行全部」。';
       paint(); return;
     }
     state.note = ''; state.confirmAll = false;
-    run((list) => (list.some((e) => key(e.pattern) === key(pattern)) ? list : [...list, {pattern}]), () => { input.value = ''; });
+    run((list) => (list.some((e) => norm(e.pattern) === norm(pattern)) ? list : [...list, {pattern}]), () => { input.value = ''; });
   }
   function remove(entry) {
     state.note = '';
-    run((list) => list.filter((e) => (entry.id ? e.id !== entry.id : key(e.pattern) !== key(entry.pattern))));
+    run((list) => list.filter((e) => (entry.id ? e.id !== entry.id : norm(e.pattern) !== norm(entry.pattern))));
   }
   function syncAdd() {
     const list = entriesOf(state.file);
     const typed = String(input.value || '').trim();
     if (state.confirmAll && !isAll(typed)) { state.confirmAll = false; if (/^单独一个/.test(state.note)) state.note = ''; }
-    input.placeholder = '例如 ' + (EXAMPLES.find((x) => !list.some((e) => key(e.pattern) === x)) || 'pnpm');
+    input.placeholder = '例如 ' + (EXAMPLES.find((x) => !list.some((e) => norm(e.pattern) === x)) || 'pnpm');
     input.disabled = state.busy || !state.file;
     addBtn.disabled = input.disabled || !typed;
     addBtn.textContent = state.confirmAll ? '确认放行全部' : '加进清单';
@@ -129,11 +158,12 @@
     if (state.loaded && state.file) {
       if (!list.length) listEl.append(node('p', S + 'soft-note', '清单是空的。'));
       for (const entry of list) {
-        const all = isAll(entry.pattern);
+        const all = isAll(entry.pattern) && !entry.argPattern;
+        const live = all && listIsLive(state.file);
         const row = node('div', S + 'row pk-metre-allow__item' + (all ? ' pk-metre-allow__item--all' : ''));
         const copy = node('div', S + 'row-copy');
-        copy.append(all ? node('span', S + 'row-title', '全部命令（不再询问）') : pathTitle(entry.pattern));
-        if (all) copy.append(node('span', S + 'hint', '清单里有单独一个 *：所有命令都直接跑。'));
+        copy.append(all ? node('span', S + 'row-title', live ? '全部命令（不再询问）' : '全部命令') : pathTitle(entry.pattern));
+        if (live) copy.append(node('span', S + 'hint', '清单里有单独一个 *：所有命令都直接跑。'));
         if (entry.argPattern) copy.append(node('span', S + 'hint', '参数：' + entry.argPattern));
         const control = node('div', S + 'row-control');
         const btn = node('button', S + 'button ' + S + 'button--small', '移除');
@@ -170,7 +200,7 @@
     addBtn.addEventListener('click', add);
     addControl.append(input, addBtn);
     addRow.append(addCopy, addControl);
-    const help = node('p', S + 'soft-note pk-metre-allow__help', '写命令名（git）或完整路径。* 不跨文件夹，** 跨任意层，大小写不分。这里加的不限参数。');
+    const help = node('p', S + 'soft-note pk-metre-allow__help', '写命令名（git）或完整路径。* 不跨文件夹，** 跨任意层。大小写按字面保存；Windows 上内核比对命令名时不区分大小写。这里加的不限参数。');
     card.append(statusEl, listEl, addRow, help);
     const footer = target.querySelector('.' + S + 'footer');
     footer ? footer.before(card) : target.append(card);
