@@ -972,6 +972,7 @@ class NativeBridge(InAppBrowserBridge):
         append_log("launcher", "startup page: user asked to repair settings")
         result = gateway.repair_config(force=True)
         if not (gateway.process and gateway.process.poll() is None):
+            gateway.reset_backoff()  # B44: a user-asked restart must not wait out the backoff
             gateway.start()
         message = result.get("message") or "已经重新启动本机网关"
         if result.get("step") == "none":

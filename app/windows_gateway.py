@@ -314,6 +314,10 @@ class GatewaySupervisor:
         append_log("launcher", "gateway exited on an invalid config")
         return self.repair_config(paths)
 
+    def reset_backoff(self):
+        # B44: the user asked for a restart (startup page repair): start now, not after the 30–60 s gap.
+        self.restart_gap, self.last_restart = 2.0, 0.0
+
     def note_ready(self):
         self.restart_gap = 2.0  # B44: a gateway that got ready ends the backoff
         if self.good_saved:
