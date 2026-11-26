@@ -176,5 +176,3 @@ export function bankStats() {
   for (const q of DATA.bank) { const s = subOf(q.k); stats[s] = (stats[s] || 0) + 1; }
   return {questions: DATA.bank.length, generators: GENS.length, bySubject: stats};
 }
-
-export function bankQuestion(id) { return BY_ID.get(String(id || '').replace(PREFIX, '')) || null; }
