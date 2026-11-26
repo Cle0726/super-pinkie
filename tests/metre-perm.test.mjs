@@ -684,7 +684,9 @@ test(`at the last fold a ⋯ still under the floating microphone moves to the st
       const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(), c = document.querySelector('.agent-chat__composer-controls').getBoundingClientRect();
       const eng = document.querySelector('.agent-chat__composer-controls > .pk-eng-chip'), e = eng.getBoundingClientRect();
       const hit = document.elementFromPoint(e.left + e.width / 2, e.top + e.height / 2);
-      return {left: Math.round(k.left - c.left), engHit: Boolean(hit && eng.contains(hit)), dodge: document.querySelector('.pk-perm-chips').dataset.dodge ?? null};
+      // 量到键的外边距边上：每个键都带 .pk-eng-chip 自己的 margin-left 10px（laolao-metre-engine.css），行首也一样
+      const ml = parseFloat(getComputedStyle(document.querySelector('.pk-perm-chip--stat')).marginLeft) || 0;
+      return {left: Math.round(k.left - ml - c.left), ml, engHit: Boolean(hit && eng.contains(hit)), dodge: document.querySelector('.pk-perm-chips').dataset.dodge ?? null};
     });
     assert.equal(spot.dodge, '1'); assert.ok(spot.left <= 1, `「⋯」排在行首（${JSON.stringify(spot)}）`);
     assert.equal(spot.engHit, true, `Metre 键没被挪到麦克风底下（${JSON.stringify(spot)}）`);
