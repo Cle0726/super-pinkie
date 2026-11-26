@@ -55,15 +55,18 @@ for (const width of [1500, 900]) {
       await tab.evaluate(() => { const scroll = document.querySelector('.pk-metre-board__scroll'); scroll.scrollTop = document.getElementById('pk-metre-board-timeline').offsetTop - scroll.offsetTop - 20; });
       const start = await place();
       assert.ok(start.top > 100, 'the board scrolled down before the refreshes');
+      // 允许 1px：CI 上的 WebKit 偶尔把亚像素位置取整到相邻像素（11-26 run 45733916177 出过 151 对 150）。
+      // 真回归是被打回顶上或被上面的块顶下去，都是几十像素。
+      const inPlace = (got, why) => assert.ok(Math.abs(got.card - start.card) <= 1, `${why} (card top ${got.card}, was ${start.card})`);
       for (let i = 0; i < 4; i++) {
         await refresh();
-        assert.equal((await place()).card, start.card, `refresh ${i + 1} kept the card being read in place`);
+        inPlace(await place(), `refresh ${i + 1} kept the card being read in place`);
       }
       // 上面的节目单变长：正在看的那一块还在原处（滚动位置跟着加上多出来的高度）。
       await tab.evaluate(() => { window.qa.planSteps = 9; });
       await refresh();
       const after = await place();
-      assert.equal(after.card, start.card, 'a longer plan above did not push the card being read down');
+      inPlace(after, 'a longer plan above did not push the card being read down');
       assert.ok(after.top > start.top, 'scroll position grew with the content above');
       // 在最顶上看的人不被拽下去。
       await tab.evaluate(() => { document.querySelector('.pk-metre-board__scroll').scrollTop = 0; });
