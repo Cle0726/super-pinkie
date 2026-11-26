@@ -34,7 +34,24 @@ test('real model-picker scene waits for the async catalog and a still list befor
   browser = await launchRealBrowser();
 
   const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'home-project', 'day', {
-    initScript: () => { window.__realHarnessHoldCatalog = true; },
+    initScript: () => {
+      window.__realHarnessHoldCatalog = true;
+      // The picker asks for the catalog at page load with gwRequest's 15 s timer, which runs on
+      // real time (only Date is frozen). On a slow CI runner load + open can take longer than
+      // that, the held request then rejects, the picker shows its error state and ready="1"
+      // is correct, so the test would no longer be about a pending catalog. While the hold is
+      // on, give chat.metadata a long timer so only the test's release ends it.
+      let sidebar;
+      Object.defineProperty(window, '__laolaoSidebar', {
+        configurable: true,
+        get: () => sidebar,
+        set: (value) => {
+          const gwRequest = value?.gwRequest;
+          sidebar = typeof gwRequest === 'function' ? {...value, gwRequest: (method, params, timeoutMs) =>
+            gwRequest(method, params, method === 'chat.metadata' && window.__realHarnessHoldCatalog ? 600_000 : timeoutMs)} : value;
+        },
+      });
+    },
   });
   try {
     await page.waitForSelector(TRIGGER, {timeout: 10_000});
@@ -54,7 +71,18 @@ test('real model-picker scene waits for the async catalog and a still list befor
     assert.notEqual(before.ready, '1', 'old wait is satisfied before the catalog lands: main would shoot a list that is not ready');
 
     // ② 新等待：目录没到就不返回。
-    await assert.rejects(waitModelPickerReady(page, {timeout: 1_500}), /timeout/i, 'new wait must not return while the catalog is still pending');
+    const early = await waitModelPickerReady(page, {timeout: 1_500}).then(() => true, (error) => {
+      assert.match(String(error?.message || error), /timeout/i);
+      return false;
+    });
+    if (early) {
+      const why = await page.evaluate((d) => ({
+        ready: document.querySelector(d)?.dataset.pinkieFallbackReady ?? null,
+        held: (window.__realHarnessHeldCatalog || []).length,
+        message: document.querySelector(d)?.querySelector('.pinkie-fallback-message')?.textContent || '',
+      }), DETAILS);
+      assert.fail(`new wait must not return while the catalog is still pending: ${JSON.stringify(why)}`);
+    }
 
     // ③ 放行回包，新等待返回的是落地且静止的列表。
     await page.evaluate(() => {
