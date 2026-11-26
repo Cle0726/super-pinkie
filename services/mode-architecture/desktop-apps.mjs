@@ -324,7 +324,8 @@ export class DesktopApps {
     const used = new Set(needsOf(html).network);
     const origins = cleanOrigins(network).filter(origin => used.has(origin));
     const dir = this.dirOf(appId);
-    const staging = `${dir}.staging-${process.pid}-${this.now()}`;
+    const stamp = `${process.pid}-${this.now()}`;
+    const staging = `${dir}.staging-${stamp}`;
     fs.rmSync(staging, {recursive: true, force: true});
     fs.mkdirSync(staging, {recursive: true, mode: 0o700});
     try {
@@ -335,7 +336,9 @@ export class DesktopApps {
         fs.writeFileSync(path.join(staging, 'icon.icns'), icnsFromPng(png));
       }
       // 换目录不先删旧版本：旧目录先挪成备份，新版本挪进来之后才删备份；挪不进来就把备份挪回去（回滚出错不盖住原错误）。
-      const backup = fs.existsSync(dir) ? `${dir}.backup-${process.pid}-${this.now()}` : '';
+      // 备份名跟暂存目录同一个戳（进程号 + 时钟），不会撞上别的安装；万一撞上，挪备份那一步就失败，旧版本原地不动。
+      // Windows 上旧目录被占用时也是挪备份那一步失败：什么都没动，只清暂存目录、原错误往上抛。
+      const backup = fs.existsSync(dir) ? `${dir}.backup-${stamp}` : '';
       if (backup) fs.renameSync(dir, backup);
       try {
         fs.renameSync(staging, dir);
