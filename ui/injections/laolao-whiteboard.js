@@ -580,30 +580,33 @@
       else if (k === '-') zoomCentre(1 / 1.25);
       else if (k === '0') fit();
     });
-    addEventListener('resize', () => commitEdit());
+    addEventListener('resize', () => { commitEdit(); if (isOpen()) place(); });
     // 浮层四周留 24px 白边：铺一层实的遮罩（点了不穿透，点它就关），背后的页面设 inert，根标 aria-modal。
-    const scrim = el('div', 'pk-whiteboard__scrim');
-    scrim.hidden = true;
-    scrim.setAttribute('aria-hidden', 'true');
-    scrim.addEventListener('click', () => close());
-    document.body.append(scrim, root);
-    st.scrim = scrim;
+    st.scrim = Object.assign(el('div', 'pk-whiteboard__scrim'), {hidden: true, onclick: () => close()});
+    st.scrim.setAttribute('aria-hidden', 'true');
+    document.body.append(st.scrim, root);
     st.root = root;
     updateBar();
   }
-  // 打开时把 body 下其余顶层节点设 inert（只记自己设的，关的时候只撤自己设的）。
+  // 桌面壳自己的窗口键 / 拖动条 / 改大小 / 更新提示 / 听写：浮在最上层，白板开着也要能用，不设 inert，白板顶边让到它们下面。
+  const NATIVE = /^(pinkie-native-|pinkie-update-|laolao-native-)/;
+  function place() { // 只在白板已建好时调（打开、开着时改窗口大小）
+    const bottoms = [...['pinkie-native-window-controls', 'pinkie-native-drag-strip'].map(id => document.getElementById(id)), document.querySelector('.topbar')] // 顶栏也整条露出（协调者 19:59）
+      .map(n => n?.getBoundingClientRect()).filter(r => r && r.height > 0 && r.top < 80).map(r => r.bottom);
+    st.root.style.top = bottoms.length ? Math.ceil(Math.max(...bottoms) + 8) + 'px' : '';
+  }
+  // 白板和遮罩一起显隐；打开时把 body 下其余顶层节点设 inert（只记自己设的，关的时候只撤自己设的）。
   const inerted = new Set();
   function setBackdrop(on) {
-    if (st.scrim) st.scrim.hidden = !on;
+    st.root.hidden = st.scrim.hidden = !on;
     if (on) {
+      place();
       for (const n of document.body.children) {
-        if (n === st.root || n === st.scrim || n.inert || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
-        n.inert = true;
-        inerted.add(n);
+        if (n === st.root || n === st.scrim || n.inert || NATIVE.test(n.id) || n.tagName === 'SCRIPT' || n.tagName === 'STYLE') continue;
+        n.inert = true; inerted.add(n);
       }
     } else {
-      for (const n of inerted) n.inert = false;
-      inerted.clear();
+      inerted.forEach(n => { n.inert = false; }); inerted.clear();
     }
   }
   const isOpen = () => Boolean(st.root && !st.root.hidden);
@@ -616,7 +619,6 @@
       st.rev = 0; st.loaded = false; st.selected = ''; st.linkFrom = ''; st.view = loadView(key);
       say('正在打开白板…');
     }
-    st.root.hidden = false;
     setBackdrop(true);
     // 轮询走共用调度器（页面藏起来时自动停），关掉白板就停。
     st.timer?.stop?.();
@@ -634,10 +636,8 @@
   function close() {
     if (!st.root) return;
     commitEdit();
-    st.root.hidden = true;
     setBackdrop(false);
-    st.timer?.stop?.();
-    st.timer = null;
+    st.timer?.stop?.(); st.timer = null;
     syncEntry();
     if (entry && !entry.hidden) entry.focus({preventScroll: true});
   }

@@ -3,6 +3,9 @@
 .pk-apps-dialog__name:focus-visible { outline:2px solid color-mix(in srgb,currentColor 45%,transparent);outline-offset:1px }
 .pk-apps-list { display:flex;flex-direction:column;gap:2px }
 .pk-apps-row__actions { display:flex;gap:6px;flex-shrink:0 }
+.pk-apps-dialog__perm-head { margin:0 0 6px }
+.pk-apps-dialog__perms { display:flex;flex-direction:column;gap:6px;margin:0 0 16px;max-height:180px;overflow:auto }
+.pk-apps-dialog__perm { display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.4;overflow-wrap:anywhere }
 /* Metre 夜间强调色 #93A5EE 偏亮，白字只有 2.37:1；只在装到桌面对话框里把主按钮字换成 Metre 面板深色（≥ 4.5:1）。 */
 html[data-laolao-mode="metre"]:is([data-pinkie-night],[data-theme="dark"]) .pk-apps-dialog { --pk-apps-on-accent:var(--metre-surface,#232321) }
 /* 碧琪各模式强调色白字大多不到 4.5:1（日 3.5–4.1、夜 2.0–2.5）：只在装到桌面对话框 / 卸载确认里，日间主按钮底压暗到 85%（≥ 4.68:1），夜间字换成弹层深底色（≥ 6.41:1）。Metre 另算。 */
