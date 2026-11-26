@@ -50,6 +50,8 @@
   }
   function doingText(row, skin, offline) {
     if (offline && (row.state === 'run' || row.state === 'queued' || row.state === 'ask')) return '断线前在跑';
+    // 数据层对排队也写「在跑」（#231 describeRow 把 queued 算进 running）：只有泛泛的「在跑」时按 state 改写。
+    if (row.state === 'queued' && (!row.doing || row.doing === '在跑')) return STATE[skin].queued;
     return row.doing || STATE[skin][row.state] || '';
   }
   /** 一行。纯函数：同样的行、皮和时刻画出同样的 HTML。 */
@@ -161,7 +163,8 @@
   function paintPill() {
     const controls = document.querySelector('aside.sidebar .laolao-session-controls');
     const live = view?.running ?? (view?.rows || []).filter((r) => r.state === 'run' || r.state === 'queued' || r.state === 'ask').length;
-    const n = isOpen() || metreShown() || badge == null ? live : badge;
+    const closed = !(isOpen() || metreShown() || badge == null);
+    const n = closed ? badge : live;
     if (!controls || !data()) { pill?.remove(); return; }
     if (!pill) {
       pill = document.createElement('button');
@@ -177,7 +180,8 @@
     pill.dataset.ask = ask ? '1' : '0';
     pill.textContent = `在跑 ${n || 0}`;
     pill.setAttribute('aria-expanded', String(isOpen()));
-    pill.title = summary(view, skinOf());
+    // 提示和数字同一来源；侧栏悬停后改读 data-pinkie-tooltip（laolao-sidebar.js showSidebarTooltip），两处一起写。
+    pill.title = pill.dataset.pinkieTooltip = summary(closed ? {running: badge, rows: []} : view, skinOf());
   }
   function buildPanel() {
     panel = document.createElement('section');
@@ -193,7 +197,13 @@
   }
   function placePanel() {
     const side = document.querySelector('aside.sidebar')?.getBoundingClientRect();
-    panel.style.setProperty('--pk-sb-left', Math.round(side && side.width > 0 ? side.right : 0) + 'px');
+    const left = Math.round(side && side.width > 0 ? side.right : 0);
+    panel.style.setProperty('--pk-sb-left', left + 'px');
+    // 桌面壳的窗口键 / 拖动条 / 顶栏浮在面板上面：顶边让到和面板横向重叠的那几块下面，「收起」才点得到（mac1 #229 WebKit 820 宽）。
+    const box = panel.getBoundingClientRect?.() || {left: left + 8, right: left + 468};
+    const over = [document.getElementById?.('pinkie-native-window-controls'), document.getElementById?.('pinkie-native-drag-strip'), document.querySelector('.topbar')]
+      .map((n) => n?.getBoundingClientRect?.()).filter((r) => r && r.height > 0 && r.height <= 80 && r.top < 80 && r.left < box.right && r.right > box.left);
+    panel.style.setProperty('--pk-sb-top', (over.length ? Math.ceil(Math.max(...over.map((r) => r.bottom))) + 8 : 12) + 'px');
   }
   function paintPanel() {
     if (!isOpen()) return;

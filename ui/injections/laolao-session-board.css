@@ -14,9 +14,9 @@ html[data-laolao-mode="metre"] .pk-sb-pill::before { border-radius: 0; backgroun
 html[data-laolao-mode="metre"] .pk-sb-pill[data-ask="1"] { background: transparent; color: var(--metre-accent, #96681C); border-color: var(--metre-accent, #96681C); }
 
 .pk-sb-panel {
-  position: fixed; z-index: 60; top: 12px; bottom: 12px; left: calc(var(--pk-sb-left, 0px) + 8px);
+  position: fixed; z-index: 60; top: var(--pk-sb-top, 12px); bottom: 12px; left: calc(var(--pk-sb-left, 0px) + 8px);
   width: min(460px, calc(100vw - var(--pk-sb-left, 0px) - 24px)); display: flex; flex-direction: column;
-  border: 1px solid var(--pt-line, #f3c6d8); border-radius: 18px; background: var(--pt-card, #fff);
+  border: 1px solid var(--pt-line, #f3c6d8); border-radius: 18px; background: #fffafc;
   color: var(--pt-text, #3b2a33); box-shadow: 0 12px 32px rgba(120, 40, 80, 0.16); overflow: hidden;
 }
 .pk-sb-panel[hidden] { display: none; }
