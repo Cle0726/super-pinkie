@@ -243,8 +243,48 @@ test('A12 跟进：权限勾选框跟主色、「更新成新版本」是主按�
   assert.match(css, /^\.pk-apps-row \.pk-apps-update \{ height:28px;/m);
   assert.doesNotMatch(css, /!important/);
   // ③ 应用行说明占满、按钮按内容宽（默认设置行左栏 .34fr 会把「作品有新版本…」挤成两三行）；窄屏照旧上下排。
-  assert.match(css, /^#laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:minmax\(0,1fr\) auto \}$/m);
-  assert.match(css, /@media \(max-width:780px\) \{ #laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:1fr \} \}/);
+  // 「第三方许可」那行（.pinkie-user-settings__notices 里）同一条规则（协调者 22:00 ③：820 说明末字别单独一行）。
+  const rowSel = '#laolao-user-settings :is\\(\\.pk-apps-row,\\.pinkie-user-settings__notices > \\.pinkie-user-settings__row\\)\\.pinkie-user-settings__row';
+  assert.match(css, new RegExp(`^${rowSel} \\{ grid-template-columns:minmax\\(0,1fr\\) auto \\}$`, 'm'));
+  assert.match(css, new RegExp(`@media \\(max-width:780px\\) \\{ ${rowSel} \\{ grid-template-columns:1fr \\} \\}`));
+});
+
+test('A14 协调者 22:00：共享对话框按钮有圆角形状（碧琪胶囊 / Metre 6px）；减少动态效果时模式切换的「v」箭头仍是转过的（不再显示成「⌟」）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-desktop-apps.css'), theme = read('laolao-theme.css');
+  // ① 原来 .laolao-modal__button 没有任何基础形状（浏览器默认直角）。
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*border-radius:999px/m);
+  assert.match(css, /^html\[data-laolao-mode="metre"\] :where\(\.laolao-modal\) \.laolao-modal__button \{ border-radius:6px \}$/m);
+  // ② 作品库移除确认框不在共享皮肤里：基础按钮给跟弹层走的底 / 字，主按钮走 --pk-apps-*（CI 图 d7c99f35 夜间灰底深字 1.94）。
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*background:color-mix\(in srgb,currentColor 7%,transparent\);color:inherit;/m);
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button--primary \{ border-color:transparent;background:var\(--pk-apps-accent,var\(--pa-accent\)\);color:var\(--pk-apps-on-accent,#fff\);/m);
+  // ④ 箭头是 1px 右 / 下边框转 45°画的；减少动态效果那条把它的 transform 清成 none，就成了「⌟」。
+  const reduce = theme.match(/@media \(prefers-reduced-motion: reduce\) \{\n  :is\(\.laolao-mode-menu__option,[^{]*\{\n    transition: none !important;\n    transform: none !important;/);
+  assert.ok(reduce, '减少动态效果那条还在');
+  assert.doesNotMatch(reduce[0], /laolao-mode-button__arrow/, '箭头不能被清掉 transform');
+  assert.match(theme, /^\.laolao-mode-button__arrow \{[^}]*transform: rotate\(45deg\);[^}]*transition: transform var\(--motion-fast, \.2s\); \}$/m, '箭头动画时长走 --motion-fast（减少动态效果时 0.01ms）');
+});
+
+test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）用装到桌面那套对比度变量，值跟 .pk-apps-dialog 一致（A11 量过 ≥ 4.5:1）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const apps = read('laolao-desktop-apps.css'), skin = apps;
+  const scopes = [
+    'html:not\\(\\[data-laolao-mode="metre"\\]\\):not\\(\\[data-pinkie-night\\]\\)',
+    'html\\[data-pinkie-night\\]:not\\(\\[data-laolao-mode="metre"\\]\\)',
+    'html\\[data-laolao-mode="metre"\\]:is\\(\\[data-pinkie-night\\],\\[data-theme="dark"\\]\\)',
+  ];
+  for (const scope of scopes) {
+    const ref = apps.match(new RegExp(`^${scope} \\.pk-apps-dialog \\{ (--pk-apps-[a-z-]+:[^}]+?) \\}$`, 'm'));
+    assert.ok(ref, `装到桌面对话框那条还在：${scope}`);
+    const line = new RegExp(`^${scope} \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pinkie-art-confirm \\*\\) \\{ ([^}]+?) \\}$`, 'm');
+    const got = skin.match(line);
+    assert.ok(got, `共享皮肤要设同一个变量：${scope}`);
+    assert.equal(got[1], ref[1], '值跟对话框那条一字不差');
+  }
+  // 项目设置「保存」确实是这组主按钮。
+  assert.match(read('laolao-artifacts.js'), /el\('button', 'laolao-modal__button laolao-modal__button--primary', '保存'\)/);
 });
 
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
