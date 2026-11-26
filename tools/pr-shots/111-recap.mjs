@@ -135,6 +135,8 @@ async function settings(theme, width) {
     await page.waitForTimeout(400);
     await shot(page, 'settings', theme, width);
     await page.locator('#laolao-user-settings .laolao-recap-open').click();
+    // 点完把指针挪开，拍和量的都是平时的样子，不是悬停。
+    await page.mouse.move(2, HEIGHT - 2);
     const preview = page.locator('#laolao-user-settings .laolao-recap-preview .laolao-startup-home__recap');
     await preview.waitFor({timeout: 10_000});
     await card.scrollIntoViewIfNeeded();
@@ -156,6 +158,8 @@ try {
     for (const width of [1440, 820]) {
       await home(theme, width);
       await settings(theme, width);
+      // Windows runner 偶尔整页截图卡 30 秒（run 45760625730 夜间 1440 设置），出错就整格再来一次。
+      if (report.at(-1)?.error) { report.at(-1).retried = true; await settings(theme, width); }
     }
   }
 } finally {
@@ -164,6 +168,8 @@ try {
   installed.cleanup();
 }
 fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
-fs.appendFileSync(path.join(out, 'shots.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
+// 重拍过的同名图只留最后一张。
+const unique = [...new Map(lines.map((l) => [l.name, l])).values()];
+fs.appendFileSync(path.join(out, 'shots.jsonl'), unique.map((l) => JSON.stringify(l) + '\n').join(''));
 console.log(`pr-shots: ${lines.length} 张 → ${out}`);
 for (const r of report) if (r.error) console.log(`pr-shots: ${r.theme} ${r.width} ${r.step} 出错：${r.error}`);
