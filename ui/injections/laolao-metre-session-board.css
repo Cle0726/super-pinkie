@@ -1,0 +1,45 @@
+/* laolao-metre-session-board.css —— S6 Metre 皮：总控台「全部会话」一栏（设计-S6 第五节）。
+ * 只用 metre 区域根选择器 [data-metre-board] 开头（总控台开着时根元素上有这个属性）。
+ * 直角、细线、黄铜色灯，和「声部」「用量」块同一种画法；颜色全走 Metre 变量，日夜跟着变量走。 */
+[data-metre-board] .pk-sb-metre { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+[data-metre-board] .pk-sb-metre .pk-sb-sum { margin: 0; font: 400 14px/1.4 var(--metre-serif, Georgia, serif); color: var(--metre-text, #1F1E1D); }
+[data-metre-board] .pk-sb-metre .pk-sb-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--metre-line, #E8E6DC); }
+[data-metre-board] .pk-sb-metre .pk-sb-row {
+  display: grid; grid-template-columns: 16px auto minmax(0, 1fr) minmax(0, 1.2fr) auto 64px 20px; grid-template-areas: none;
+  align-items: center; column-gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--metre-line, #E8E6DC);
+  border-radius: 0; cursor: pointer; outline: none; color: var(--metre-text, #1F1E1D); font-size: 13px;
+}
+[data-metre-board] .pk-sb-metre .pk-sb-row > * { grid-area: auto; }
+[data-metre-board] .pk-sb-metre .pk-sb-row:hover { background: var(--metre-hover, #EFEDE8); }
+[data-metre-board] .pk-sb-metre .pk-sb-row:focus-visible { box-shadow: inset 2px 0 0 var(--metre-accent, #96681C); background: var(--metre-hover, #EFEDE8); }
+[data-metre-board] .pk-sb-metre .pk-sb-row[data-state="ask"] { box-shadow: inset 2px 0 0 var(--metre-accent, #96681C); background: none; }
+[data-metre-board] .pk-sb-metre .pk-sb-row[data-offline="1"] { color: var(--metre-muted, #73726C); opacity: 1; }
+[data-metre-board] .pk-sb-metre .pk-sb-row.is-child { margin-left: 0; padding-left: 24px; }
+[data-metre-board] .pk-sb-metre .pk-sb-lamp { justify-self: center; width: 8px; height: 8px; background: var(--metre-line-strong, #D9D6CC); }
+[data-metre-board] .pk-sb-metre .pk-sb-lamp[data-lit="1"] { background: var(--metre-accent, #96681C); }
+[data-metre-board] .pk-sb-metre .pk-sb-mode { padding: 0; background: none; border-radius: 0; font: 500 10.5px/1 var(--metre-mono, ui-monospace, Consolas, monospace); letter-spacing: 0.08em; color: var(--metre-muted, #73726C); white-space: nowrap; }
+[data-metre-board] .pk-sb-metre .pk-sb-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+[data-metre-board] .pk-sb-metre .pk-sb-doing { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--metre-muted, #73726C); }
+[data-metre-board] .pk-sb-metre .pk-sb-row[data-state="ask"] .pk-sb-doing { color: var(--metre-accent, #96681C); font-weight: 400; }
+[data-metre-board] .pk-sb-metre .pk-sb-time { font: 400 11.5px/1 var(--metre-mono, ui-monospace, Consolas, monospace); color: var(--metre-muted, #73726C); white-space: nowrap; }
+[data-metre-board] .pk-sb-metre .pk-sb-use { display: block; width: 64px; height: 1px; border-radius: 0; overflow: visible; background: var(--metre-line-strong, #D9D6CC); }
+[data-metre-board] .pk-sb-metre .pk-sb-use i { display: block; height: 3px; margin-top: -1px; border-radius: 0; background: var(--metre-text, #1F1E1D); }
+[data-metre-board] .pk-sb-metre .pk-sb-use.is-over i { background: var(--metre-accent, #96681C); }
+[data-metre-board] .pk-sb-metre .pk-sb-more { border: 0; background: none; padding: 0; color: var(--metre-muted, #73726C); font-size: 15px; cursor: pointer; }
+[data-metre-board] .pk-sb-metre .pk-sb-more[aria-expanded="true"] { transform: rotate(90deg); }
+[data-metre-board] .pk-sb-metre .pk-sb-kids { grid-column: 3 / -1; justify-self: start; border: 0; background: none; padding: 0; color: var(--metre-accent, #96681C); font-size: 12px; cursor: pointer; }
+[data-metre-board] .pk-sb-metre .pk-sb-fold, [data-metre-board] .pk-sb-metre .pk-sb-kid-more { list-style: none; margin: 0; padding: 6px 4px 6px 30px; font-size: 12px; color: var(--metre-muted, #73726C); border-bottom: 1px solid var(--metre-line, #E8E6DC); }
+[data-metre-board] .pk-sb-metre .pk-sb-fold button { border: 0; background: none; padding: 0; font: inherit; color: var(--metre-accent, #96681C); cursor: pointer; }
+[data-metre-board] .pk-sb-metre .pk-sb-detail-row { list-style: none; margin: 0; padding: 6px 4px 10px 30px; border-bottom: 1px solid var(--metre-line, #E8E6DC); }
+[data-metre-board] .pk-sb-metre .pk-sb-detail { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 0; font-size: 12px; }
+[data-metre-board] .pk-sb-metre .pk-sb-detail dt { color: var(--metre-muted, #73726C); }
+[data-metre-board] .pk-sb-metre .pk-sb-detail dd { margin: 0; overflow-wrap: anywhere; }
+[data-metre-board] .pk-sb-metre .pk-sb-sub { margin: 8px 0 0; font: 500 10.5px/1 var(--metre-mono, ui-monospace, Consolas, monospace); letter-spacing: 0.12em; color: var(--metre-muted, #73726C); }
+[data-metre-board] .pk-sb-metre .pk-sb-offline { margin: 0; font-size: 12px; color: var(--metre-accent, #96681C); }
+[data-metre-board] .pk-sb-metre .pk-sb-empty { flex-direction: row; align-items: center; gap: 10px; padding: 16px 0; color: var(--metre-muted, #73726C); font-size: 13px; }
+[data-metre-board] .pk-sb-metre .pk-sb-empty p { margin: 0; }
+@container metre-board (max-width: 720px) {
+  [data-metre-board] .pk-sb-metre .pk-sb-row { grid-template-columns: 16px auto minmax(0, 1fr) auto 20px; }
+  [data-metre-board] .pk-sb-metre .pk-sb-doing { grid-column: 3 / 5; grid-row: 2; }
+  [data-metre-board] .pk-sb-metre .pk-sb-use { display: none; }
+}

@@ -160,5 +160,11 @@
     "metric": "lines",
     "value": 50,
     "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board.js",
+    "metric": "lines",
+    "value": 438,
+    "reason": "engines S6 第 3 步（11-26，feat/engines-s6-board）：总控台加「全部会话」一栏，SLOTS 一项、ICON 一项、SAMPLE 一项各 1 行，共 3 行；渲染全在新文件 laolao-session-board.js，没有新增全局名、观察器或定时器。"
   }
 ]
