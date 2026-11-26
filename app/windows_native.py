@@ -67,14 +67,16 @@ addEventListener('keydown',e=>{if(e.key==='Escape')pywebview.api.close();});
 
 def parse_accelerator(raw):
     """'Ctrl+Alt+Space' → (modifiers, virtual key) or None."""
-    parts = [part.strip().lower() for part in str(raw or "").split("+") if part.strip()]
+    if not isinstance(raw, str) or len(raw) > 64:  # B43: the page sends a short string; anything else is not a hotkey
+        return None
+    parts = [part.strip().lower() for part in raw.split("+") if part.strip()]
     if len(parts) < 2:
         return None
     modifiers = 0
     for part in parts[:-1]:
         flag = {"alt": MOD_ALT, "option": MOD_ALT, "ctrl": MOD_CONTROL, "control": MOD_CONTROL,
                 "shift": MOD_SHIFT, "win": MOD_WIN, "cmd": MOD_WIN, "meta": MOD_WIN}.get(part)
-        if flag is None:
+        if flag is None or modifiers & flag:  # B43: each modifier at most once
             return None
         modifiers |= flag
     key = parts[-1]
