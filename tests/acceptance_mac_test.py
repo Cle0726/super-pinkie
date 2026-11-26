@@ -58,6 +58,7 @@ class ReportTest(unittest.TestCase):
         self.assertNotIn("第一个失败", text)
 
 
+@unittest.skipUnless(shutil.which("git") and (REPO / ".git").exists(), "不在 git 仓库里")
 class RealPathRewriteTest(unittest.TestCase):
     def head_text(self, path):
         return subprocess.run(["git", "show", "HEAD:" + path], cwd=REPO, capture_output=True, text=True, check=True).stdout
@@ -125,7 +126,11 @@ class AcceptanceMacTest(unittest.TestCase):
         after = set(Path("/private/tmp").glob("pinkie-accept-*"))
         leftover = [p for p in after - before if p != out]
         self.assertEqual(leftover, [], "临时根没删干净")
-        return r, report.read_text()
+        shim_copy = report.with_name(report.name + ".shim.log")
+        self.assertTrue(shim_copy.is_file(), "垫片日志没留在报告旁边")
+        text = report.read_text()
+        self.assertIn(str(shim_copy), text)
+        return r, text
 
     def assert_proxy_log_untouched(self, before):
         ok, detail = run.log_untouched(before, run.file_fingerprint(run.PROXY_LOG))

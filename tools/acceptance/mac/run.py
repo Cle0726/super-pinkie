@@ -569,7 +569,7 @@ class Acceptance:
             self.step("cleanup", "收尾（停进程、删临时根、只读核对正式代理日志 / LaunchServices / 真实环境）", checks=self.cleanup)
         return all(s["ok"] for s in self.steps)
 
-    def report(self):
+    def report(self, shim_copy=None):
         counts = {}
         for line in self.shim_calls:
             name = line.split(" ", 1)[0] + (" refused" if " refused " in line else "")
@@ -591,6 +591,8 @@ class Acceptance:
                  (["……另有 %d 个" % (len(self.residue) - 80)] if len(self.residue) > 80 else [])),
             ],
         }
+        if shim_copy:
+            meta["facts"].append(("垫片日志", "`%s`" % shim_copy))
         return render_report(self.steps, meta)
 
 
@@ -633,8 +635,11 @@ def main(argv=None):
         ok = run.run()
     finally:
         report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(run.report())
-    print("%s：%s" % ("通过" if ok else "失败", report))
+        # 临时根收尾会删掉，垫片日志留一份在报告旁边，事后能查
+        shim_copy = report.with_name(report.name + ".shim.log")
+        shim_copy.write_text("".join(line + "\n" for line in run.shim_calls))
+        report.write_text(run.report(shim_copy))
+    print("%s：%s（垫片日志 %s）" % ("通过" if ok else "失败", report, shim_copy))
     return 0 if ok else 1
 
 
