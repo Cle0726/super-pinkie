@@ -1,6 +1,6 @@
 {
   "injectionTotals": {
-    "important": 5065,
+    "important": 5062,
     "importantIndirect": 7,
     "mutationObserverRefs": 20,
     "mutationObservers": 28,
@@ -1613,7 +1613,7 @@
       "windowGlobalsIndirect": 0
     },
     "ui/injections/laolao-metre-skin.css": {
-      "important": 2256,
+      "important": 2253,
       "importantIndirect": 0,
       "lines": 2551,
       "mutationObserverRefs": 0,
