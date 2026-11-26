@@ -62,9 +62,11 @@ const STUBS = (sk) => `
 `;
 const gw = (event, payload) => `window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: ${JSON.stringify(event)}, payload: ${JSON.stringify(payload)}}}))`;
 
-async function open(browser, {mode = 'metre', night = false, sk = SK, clock = false, width = 1024} = {}) {
-  const p = await browser.newPage({viewport: {width, height: 760}});
+// now：把页面里的「现在」钉在这一刻（UTC 时区），跟跑测试的钟点无关；定时器照常走
+async function open(browser, {mode = 'metre', night = false, sk = SK, clock = false, width = 1024, now = null} = {}) {
+  const p = await browser.newPage({viewport: {width, height: 760}, ...(now != null ? {timezoneId: 'UTC'} : {})});
   if (clock) await p.clock.install();
+  if (now != null) await p.clock.setFixedTime(now);
   await p.setContent(page0(mode, night));
   await p.addScriptTag({content: STUBS(sk)});
   await p.addStyleTag({content: read('laolao-metre-engine.css')});   // 按键外形（.pk-eng-chip）是引擎台的样式，真页面上也是它
@@ -116,23 +118,41 @@ test(`P2 / I4 / R3 / U2: Metre composer gets level, plan-first and status keys; 
   } finally { await browser.close(); }
 });
 
+// 「现在」钉在 2026-03-15 12:00 UTC：原来用真钟，开始时间 = 现在 − 10 分钟，每天 00:00–00:10 跑就跨了日、多出「月 日」而红
+const NOON = Date.UTC(2026, 2, 15, 12, 0);
+const detailRows = (p) => p.$$eval('.pk-perm-pop--detail .pk-perm-pop__row', (n) => Object.fromEntries(n.map((r) => [r.children[0].textContent, r.children[1].textContent])));
+
 test(`R1 / U3: the status key opens session details with model, start, folder, tokens, cost, plan and quota (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
   try {
-    const p = await open(browser);
+    const p = await open(browser, {now: NOON});
     await p.evaluate(() => { window.__plan = {items: [{id: '1', text: 'a', status: 'completed'}, {id: '2', text: 'b', status: 'in_progress'}]}; });
     await p.evaluate(() => window.PinkieMetrePerm.refresh());
     await p.click('.pk-perm-chip--stat');
-    const rows = await p.$$eval('.pk-perm-pop--detail .pk-perm-pop__row', (n) => Object.fromEntries(n.map((r) => [r.children[0].textContent, r.children[1].textContent])));
+    const rows = await detailRows(p);
     assert.equal(rows['模型'], 'workbuddy / hy4flash-free');
     assert.equal(rows['工作目录'], 'F:/work/demo');
     assert.equal(rows['本会话令牌'], '15.4k（读 12.0k · 写 3.4k）');
     assert.equal(rows['本会话花费'], '$0.012（估算）');
-    assert.match(rows['额度'], /^Claude 5h 还剩 40% · .+ 重置$/);
-    assert.match(rows['开始'], /^\d\d:\d\d$/);
+    assert.equal(rows['额度'], 'Claude 5h 还剩 40% · 13:00 重置', '同一天的重置时间只写钟点');
+    assert.equal(rows['开始'], '11:50', '今天开始的会话只写钟点，不带日期');
     assert.equal(await p.getAttribute('.pk-perm-bar', 'aria-valuenow'), '1');
     await p.keyboard.press('Escape');
     assert.equal(await p.$('.pk-perm-pop'), null, 'Esc 关掉');
+  } finally { await browser.close(); }
+});
+
+test(`R1 / U3: a session that started on an earlier day shows its start with the date (${engine})`, {timeout: 60_000}, async () => {
+  const browser = await launch();
+  try {
+    // 前一天 23:00 开始（现在 − 13 小时）：只写「23:00」会让人当成今天晚上
+    const p = await open(browser, {now: NOON});
+    await p.evaluate(() => { const f = window.__resp['sessions.usage']; window.__resp['sessions.usage'] = (q) => { const r = f(q); r.sessions[0].usage.firstActivity = Date.now() - 13 * 3600e3; return r; }; });
+    await p.evaluate(() => window.PinkieMetrePerm.refresh());
+    await p.click('.pk-perm-chip--stat');
+    const rows = await detailRows(p);
+    assert.equal(rows['开始'], '3 月 14 日 23:00');
+    assert.equal(rows['额度'], 'Claude 5h 还剩 40% · 13:00 重置', '同一页上今天的时间仍只写钟点');
   } finally { await browser.close(); }
 });
 
