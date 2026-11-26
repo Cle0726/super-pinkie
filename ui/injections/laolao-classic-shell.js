@@ -388,27 +388,16 @@
 
   const render = () => {
     pending = false;
-    const shell = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
-    if (!shell) {
-      /* 原生的 /cron、/settings 这些页：upstream 只在聊天页给 .shell 加 shell--chat。从聊天页点过去时侧栏状态是聊天页留下的，
-         但重新载入时什么都没设，底栏次要键全摊开压在模式卡下面（uireview #98 / 17）。侧栏这几步在所有正式页面都做，
-         只跟聊天页有关的（面包屑、输入框提示、工作区栏）仍然只在聊天页做。引导页 / 启动中不动。 */
-      const page = document.querySelector("openclaw-app-shell .shell, .shell");
-      if (!page || /\bshell--(?:onboarding|booting)\b/.test(page.className || "")) return;
-      if (document.documentElement.getAttribute?.("data-laolao-classic-shell") !== "1") document.documentElement.setAttribute("data-laolao-classic-shell", "1");
-      ensureNavigation();
-      ensureFooterBrand();
-      ensureFooterMenu();
-      return;
-    }
+    /* 17：upstream 只在聊天页加 shell--chat；重新载入的 /cron 等正式页也做侧栏几步，聊天页专属的只在聊天页做，引导 / 启动中不动。 */
+    const chat = document.querySelector("openclaw-app-shell .shell.shell--chat, .shell.shell--chat");
+    const page = document.querySelector("openclaw-app-shell .shell, .shell");
+    if (!chat && (!page || /\bshell--(?:onboarding|booting)\b/.test(page.className || ""))) return;
     if (document.documentElement.getAttribute?.("data-laolao-classic-shell") !== "1") document.documentElement.setAttribute("data-laolao-classic-shell", "1");
-    ensureBreadcrumbs();
+    if (chat) ensureBreadcrumbs();
     ensureNavigation();
     ensureFooterBrand();
     ensureFooterMenu();
-    ensureComposerBrand();
-    observeRailMount();
-    ensureRail();
+    if (chat) { ensureComposerBrand(); observeRailMount(); ensureRail(); }
   };
 
   const schedule = () => {
