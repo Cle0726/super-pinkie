@@ -512,8 +512,8 @@ html[data-pinkie-wb="on"] .pinkie-buddy__caption { max-width: 140px; font-size: 
 
 /* 状态行：编辑卡片窄的时候按重要程度隐藏，左右两边不再叠在一起 */
 .pk-wb-editor { container-type: inline-size; container-name: wbeditor; }
-.pk-wb-status__side:first-child { flex: none; }
-.pk-wb-status__side:last-child { min-width: 0; overflow: hidden; justify-content: flex-end; }
+.pk-wb-status__side:first-child { flex: 0 1 auto; overflow: hidden; } .pk-wb-status__side:first-child > *, .pk-wb-status__branch > * { flex: none; } .pk-wb-status__side:first-child > .pk-wb-status__branch, .pk-wb-status__branch > .pk-wb-status__branch-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pk-wb-status__side:last-child { flex: 0 1000 auto; min-width: 0; overflow: hidden; justify-content: flex-end; } /* B50：右半边先让（按顺序藏项），藏到只剩碧琪键时（fitStatus 把碧琪键宽写成右半边 min-width）再让左半边：分支名缩成省略号，title 有全名 */
 @container wbeditor (max-width: 720px) { .pk-wb-status [data-opt="enc"], .pk-wb-status [data-opt="eol"] { display: none; } }
 @container wbeditor (max-width: 600px) { .pk-wb-status [data-opt="indent"], .pk-wb-status__flash { display: none; } }
 @container wbeditor (max-width: 500px) { .pk-wb-status [data-opt="lang"], .pk-wb-status__mode span { display: none; } }

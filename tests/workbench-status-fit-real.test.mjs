@@ -121,6 +121,27 @@ test('工作台状态栏 real page: 放不下按顺序整项藏，不留半截�
     });
   }
 
+  // uireview #374 ①（协调者 14:25 定在本 PR 做）：分支名长到右半边藏完能藏的也放不下碧琪键时，左半边让——分支名缩成省略号（title 有全名），碧琪键整个露出来。
+  // Linux 字体宽，1280 + LONG 就会这样；这里用更长的名字 + 1024，让 Windows 上也能复现。
+  const HUGE = 'feat/metre-ui4-r5-turn-readonly-and-a-very-long-description-of-what-this-branch-changes';
+  await t.test('分支名特别长：右半边只剩碧琪键也整个露出，分支名缩成省略号', async () => {
+    const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'metre-board', 'day', {initScript});
+    try {
+      await openBench(page, HUGE, 1024);
+      const m = await page.evaluate(inspect, ORDER);
+      checkFit(m, '1024 特长分支名');
+      const b = await page.evaluate(() => { const n = document.querySelector('.pk-wb-status__branch'); const s = n?.querySelector('.pk-wb-status__branch-name');
+        const pk = document.querySelector('.pk-wb-status__pinkie').getBoundingClientRect(); const bar = document.querySelector('.pk-wb-status').getBoundingClientRect();
+        return {title: n?.title || '', clipped: s ? s.scrollWidth > s.clientWidth : null, ellipsis: s ? getComputedStyle(s).textOverflow : '', pinkieIn: pk.left >= bar.left - 0.5 && pk.right <= bar.right + 0.5, pinkieW: Math.round(pk.width)}; });
+      assert.ok(b.title.includes(HUGE), '分支键的 title 要有完整分支名。现场 ' + JSON.stringify(b));
+      assert.equal(b.clipped, true, '这么长的分支名应该被缩短（不然碧琪键放不下）。现场 ' + JSON.stringify({b, m}));
+      assert.equal(b.ellipsis, 'ellipsis', '分支名缩短要带省略号。现场 ' + JSON.stringify(b));
+      assert.ok(b.pinkieIn && b.pinkieW > 30, '碧琪键要整个在状态栏里。现场 ' + JSON.stringify({b, m}));
+      assert.deepEqual(m.fitHidden, m.present, '右半边能藏的应该先全藏了，才轮到左半边让。现场 ' + JSON.stringify(m));
+      assert.deepEqual(pageErrors, [], '页面不该报错');
+    } finally { await context.close(); }
+  });
+
   // uireview #374：闪现提示（左半边 .pk-wb-status__flash）只改字、不重画，也要重算；提示走后字清空、藏掉的项回来。
   // 编辑卡要宽于 600px（容器查询 ≤600 会藏掉闪现提示），所以开 1920、把编辑卡压到 640px，长分支名下右半边刚好紧。
   await t.test('闪现提示挤窄右半边：不留半截，提示走后藏掉的项回来', async () => {

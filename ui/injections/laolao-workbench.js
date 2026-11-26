@@ -1952,8 +1952,8 @@
     left.append(mode);
     const g = state.git;
     if (g?.repo) {
-      const b = el('button', 'pk-wb-status__item'); b.type = 'button'; b.title = '源代码管理';
-      b.append(icon('git-branch'), el('span', '', g.branch || 'HEAD'));
+      const b = el('button', 'pk-wb-status__item pk-wb-status__branch'); b.type = 'button'; b.title = '源代码管理 · ' + (g.branch || 'HEAD');
+      b.append(icon('git-branch'), el('span', 'pk-wb-status__branch-name', g.branch || 'HEAD'));
       if (g.ahead || g.behind) b.append(el('span', '', (g.behind ? ' ↓' + g.behind : '') + (g.ahead ? ' ↑' + g.ahead : '')));
       if (g.changes.length) b.append(el('span', 'pk-wb-status__dirty', '*'));
       b.addEventListener('click', () => openView('scm'));
@@ -1993,7 +1993,7 @@
     status.replaceChildren(left, right); fitStatus();
   }
   // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失、字体晚到（左半边 flex:none 会变宽）也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
-  function fitStatus() { const r = status.lastElementChild; if (!r) return; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
+  function fitStatus() { const r = status.lastElementChild; if (!r) return; const pk = r.querySelector(':scope > .pk-wb-status__pinkie'); r.style.minWidth = pk ? pk.offsetWidth + 'px' : ''; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
   new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']}); document.fonts?.addEventListener('loadingdone', () => fitStatus());
 
   /* ───────── 问碧琪 ───────── */
