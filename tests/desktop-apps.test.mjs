@@ -98,6 +98,39 @@ test('A4 卸载：副本目录和记录都删掉；再删一次不报错；没�
   assert.throws(() => apps.get(app.id), /没有装过/);
 });
 
+test('A4b 卸载时删目录失败（文件被锁 / 没权限）：记录保留、错误往上抛、网关回 {ok:false}，不留孤儿目录；恢复后能再卸', async t => {
+  const {dir, record, artifacts} = setup();
+  const api = fakeApi();
+  const root = path.join(dir, 'apps3');
+  const apps = registerDesktopApps(api, {root, artifacts});
+  const item = record('locked.html', '<p>locked</p>');
+  const {app} = apps.install({id: item.id, name: '被锁的'});
+  assert.ok(fs.existsSync(app.dir));
+  // root 下权限失败模拟不出来，打桩：只让删这个应用目录时抛 EBUSY，其余照常。
+  const realRm = fs.rmSync;
+  const rm = t.mock.method(fs, 'rmSync', (target, ...rest) => {
+    if (path.resolve(String(target)) === path.resolve(app.dir)) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rm '${target}'`), {code: 'EBUSY'});
+    }
+    return realRm(target, ...rest);
+  });
+  assert.throws(() => apps.remove(app.id), /EBUSY/);
+  const out = await api.call('pinkie.apps.remove', {id: app.id});
+  assert.equal(out.ok, false);
+  assert.match(out.error, /EBUSY/);
+  // 无孤儿：目录还在，记录也还在（内存里和落盘的 index.json 都在）。
+  assert.ok(fs.existsSync(app.dir));
+  assert.equal(apps.get(app.id).app.name, '被锁的');
+  const fresh = new DesktopApps(root, {artifacts});
+  assert.equal(fresh.list().apps.length, 1);
+  assert.equal(fresh.get(app.id).app.name, '被锁的');
+  // 锁解开后再卸一次就干净了。
+  rm.mock.restore();
+  assert.deepEqual(apps.remove(app.id), {ok: true, removed: true, name: '被锁的'});
+  assert.equal(fs.existsSync(app.dir), false);
+  assert.equal(new DesktopApps(root, {artifacts}).list().apps.length, 0);
+});
+
 test('A5 名字做文件名：去掉非法字符、保留中文、保留字加后缀、空名兜底', () => {
   assert.equal(safeAppName('我的:游戏/第*1版?.html'), '我的 游戏 第 1版');
   assert.equal(safeAppName('  ...  '), '作品');
