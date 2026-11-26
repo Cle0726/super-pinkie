@@ -86,3 +86,25 @@ test('P5 withPolicy 插入点同 PR①：有 head 进 head；守卫跟在 CSP �
   assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf(FILE_GUARD));
   assert.ok(html.indexOf(FILE_GUARD) < html.indexOf('<title>'));
 });
+
+test('P6 withPolicy 带 charset：离线和放行来源两种都是 charset < CSP < 守卫 < 作品内容，charset 在前 1024 字节；空 charset 不算已声明', () => {
+  const page = '<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>';
+  for (const opts of [{}, {origins: ['https://api.weather.example']}]) {
+    const html = withPolicy(page, opts);
+    const charset = html.indexOf('<meta charset="utf-8">');
+    assert.ok(charset >= 0, JSON.stringify(opts));
+    assert.ok(charset < html.indexOf('Content-Security-Policy'), JSON.stringify(opts));
+    assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf(FILE_GUARD));
+    assert.ok(html.indexOf(FILE_GUARD) < html.indexOf('<title>'));
+    assert.ok(Buffer.byteLength(html.slice(0, charset + '<meta charset="utf-8">'.length), 'utf8') <= 1024);
+  }
+  // 勾了读文件：没有守卫，charset 仍在 CSP 前。
+  const withFiles = withPolicy(page, {files: true});
+  assert.ok(!withFiles.includes(FILE_GUARD));
+  assert.ok(withFiles.indexOf('<meta charset="utf-8">') < withFiles.indexOf('Content-Security-Policy'));
+  // 反例：<meta charset> 不带值、charset=""、charset="  " 浏览器拿不到编码，照样补；写了非空值的不补。
+  for (const head of ['<meta charset>', '<meta charset="">', "<meta charset='  '>"]) {
+    assert.match(withPolicy(`<html><head>${head}<title>t</title></head></html>`, {}), /<meta charset="utf-8">/, head);
+  }
+  assert.doesNotMatch(withPolicy('<html><head><meta charset="gbk"></head></html>', {}), /<meta charset="utf-8">/);
+});

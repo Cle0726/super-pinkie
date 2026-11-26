@@ -108,12 +108,49 @@ test('A5 名字做文件名：去掉非法字符、保留中文、保留字加�
 });
 
 test('A6 CSP 插入点：有 head 进 head；只有 html / doctype 跟在后面；片段放最前；规则本身禁网', () => {
-  assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta http-equiv="Content-Security-Policy"/);
+  assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
   assert.match(withOfflinePolicy('<!doctype html><html><body>b</body></html>'), /^<!doctype html><html><meta /);
-  assert.match(withOfflinePolicy('<p>片段</p><script>1</script>'), /^<meta http-equiv/);
+  assert.match(withOfflinePolicy('<p>片段</p><script>1</script>'), /^<meta charset="utf-8"><meta http-equiv/);
   for (const rule of ["default-src 'none'", "connect-src 'none'", "frame-src 'none'", "form-action 'none'"]) assert.ok(OFFLINE_CSP.includes(rule), rule);
   // 反例：不放行任何 http(s) 来源。
   assert.doesNotMatch(OFFLINE_CSP, /https?:|\*/);
+});
+
+test('A12 编码：作品没写 charset 时补 utf-8 且在前 1024 字节内；写了的不重复补', () => {
+  const charsets = html => (html.match(/<meta\s[^>]*charset\s*=/gi) || []).length;
+  for (const page of ['<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>', '<p>中文片段</p>',
+    '<!doctype html><html><body>' + '<!-- 填充 -->'.repeat(200) + '中文</body></html>']) {
+    const out = withOfflinePolicy(page);
+    assert.equal(charsets(out), 1, page.slice(0, 40));
+    assert.ok(Buffer.byteLength(out.slice(0, out.search(/<meta charset="utf-8">/i)), 'utf8') < 1024, '要在浏览器探测编码的前 1024 字节里');
+  }
+  // 反例：作品自己声明了编码（两种写法、大小写）就不再补，也不改它。
+  for (const page of ['<html><head><meta charset="gbk"><title>t</title></head></html>',
+    '<html><head><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8"></head></html>']) {
+    const out = withOfflinePolicy(page);
+    assert.equal(charsets(out), 1, page);
+    assert.doesNotMatch(out, /<meta charset="utf-8">/);
+  }
+  // 反例：body 脚本字符串里的 <meta charset=x>、name/content 里碰巧出现的 charset= 都不算作品声明，照样补。
+  for (const page of ['<html><head></head><body><script>var s="<meta charset=x>"</script></body></html>',
+    '<html><head><meta name="x" content="charset=foo"></head><body>中文</body></html>']) {
+    assert.match(withOfflinePolicy(page), /<meta charset="utf-8">/, page);
+  }
+  // doctype 后面一大段注释：补的 charset 紧跟 doctype，标签整个落在前 1024 字节内；CSP 仍进 head。
+  const padded = withOfflinePolicy('<!doctype html><!--' + 'x'.repeat(1500) + '--><html><head><title>t</title></head><body>中文</body></html>');
+  const at = padded.indexOf('<meta charset="utf-8">');
+  assert.ok(at >= 0 && Buffer.byteLength(padded.slice(0, at + '<meta charset="utf-8">'.length), 'utf8') <= 1024, '长注释时 charset 也要在前 1024 字节');
+  assert.match(padded, /<head><meta http-equiv="Content-Security-Policy"/);
+  // 没有 > 的长输入不能拖成平方级（原来 20000 个 "<meta " 要 3 秒多）。
+  const t0 = performance.now();
+  assert.match(withOfflinePolicy('<meta '.repeat(20000)), /^<meta charset="utf-8">/);
+  assert.ok(performance.now() - t0 < 200, '20000 个 "<meta " 要在 200ms 内');
+  // 装出来的副本也带上：没写 charset 的中文作品。
+  const {record, apps} = setup();
+  const item = record('cn.html', '<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>');
+  const html = fs.readFileSync(apps.install({id: item.id, name: '拼词'}).app.entry, 'utf8');
+  assert.ok(html.indexOf('<meta charset="utf-8">') < html.indexOf('Content-Security-Policy'));
+  assert.ok(html.includes('<body>拼词</body>'));
 });
 
 test('A7 图标：PNG 包成 ICO / ICNS 文件头正确；不是 PNG 的拒收', () => {
@@ -181,6 +218,33 @@ test('A11 碧琪各模式下装到桌面 / 卸载确认主按钮字对比度 ≥
     assert.ok(ratio([255, 255, 255], bg) >= 4.5, `日间 ${c} 压到 ${mix[1]}% 白字 ${ratio([255, 255, 255], bg).toFixed(2)}`);
   }
   for (const c of night) assert.ok(ratio(rgb(ink[1]), rgb(c)) >= 4.5, `夜间 ${ink[1]} / ${c} = ${ratio(rgb(ink[1]), rgb(c)).toFixed(2)}`);
+});
+
+test('A12 跟进：权限勾选框跟主色、「更新成新版本」是主按钮（同一套对比度变量）、应用行说明栏占满不挤断', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-desktop-apps.css'), js = read('laolao-desktop-apps.js');
+  // ① 勾选框 accent-color 跟主按钮底色同一个变量。
+  assert.match(css, /^\.pk-apps-dialog__perm input \{[^}]*accent-color:var\(--pk-apps-accent,var\(--pa-accent\)\)/m);
+  // ② 「更新成新版本」带 pk-apps-update，底 / 字跟对话框主按钮同一套变量；设置卡片里也设了这套变量（日压暗、夜深字、Metre 夜面板色）。
+  assert.match(js, /button\('更新成新版本', 'pk-apps-update'/);
+  assert.match(css, /^\.pk-apps-row \.pk-apps-update \{[^}]*background:var\(--pk-apps-accent,var\(--pa-accent\)\);color:var\(--pk-apps-on-accent,#fff\)/m);
+  for (const [scope, value] of [
+    ['html:not\\(\\[data-laolao-mode="metre"\\]\\):not\\(\\[data-pinkie-night\\]\\)', '--pk-apps-accent:color-mix\\(in srgb,var\\(--pa-accent\\) 85%,#000\\)'],
+    ['html\\[data-pinkie-night\\]:not\\(\\[data-laolao-mode="metre"\\]\\)', '--pk-apps-on-accent:#2a2027'],
+    ['html\\[data-laolao-mode="metre"\\]:is\\(\\[data-pinkie-night\\],\\[data-theme="dark"\\]\\)', '--pk-apps-on-accent:var\\(--metre-surface,#232321\\)'],
+  ]) {
+    const dialog = new RegExp(`^${scope} \\.pk-apps-dialog \\{ ${value} \\}$`, 'm'), card = new RegExp(`^${scope} \\.pk-apps-card \\{ ${value} \\}$`, 'm');
+    assert.match(css, dialog, '对话框那条还在');
+    assert.match(css, card, '设置卡片用同一个值（A11 量过的对比度）');
+  }
+  // Metre 皮肤用 !important 把 .pinkie-art-btn 全压成透明描边：主按钮不挂这个类，自己带尺寸；本文件不加 !important。
+  assert.doesNotMatch(js, /'pinkie-art-btn[^']*pk-apps-update/);
+  assert.match(css, /^\.pk-apps-row \.pk-apps-update \{ height:28px;/m);
+  assert.doesNotMatch(css, /!important/);
+  // ③ 应用行说明占满、按钮按内容宽（默认设置行左栏 .34fr 会把「作品有新版本…」挤成两三行）；窄屏照旧上下排。
+  assert.match(css, /^#laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:minmax\(0,1fr\) auto \}$/m);
+  assert.match(css, /@media \(max-width:780px\) \{ #laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:1fr \} \}/);
 });
 
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。

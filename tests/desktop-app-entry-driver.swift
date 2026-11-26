@@ -1,12 +1,28 @@
 import Foundation
+import WebKit
 
 // Compiled together with desktop/macos/pinkie/Sources/AppWindow.swift by tests/desktop-app-entry.test.mjs.
-// `driver install|uninstall <id>` prints the native reply as JSON. With no arguments it behaves like the copied
+// `driver install|uninstall <id>` prints the native reply as JSON. `driver decide <dir> <ticked,origins> <url>` prints
+// allow / cancel from the work window's navigation policy. With no arguments it behaves like the copied
 // Launcher inside a work's .app: it records which work it was started for, then exits instead of opening a window.
+final class NavigationTo: WKNavigationAction {
+    let target: URLRequest
+    init(_ url: String) { target = URLRequest(url: URL(string: url)!); super.init() }
+    override var request: URLRequest { target }
+}
+
 @main
 enum DesktopAppEntryDriver {
     static func main() {
         let args = Array(CommandLine.arguments.dropFirst())
+        if args.count == 4, args[0] == "decide" {
+            let network = args[2].split(separator: ",").map(String.init)
+            let app = PinkieAppWindow.App(id: "w0123456789abcde", name: "t", dir: URL(fileURLWithPath: args[1], isDirectory: true), network: network)
+            var out = "no-answer"
+            PinkieAppWindowController(app: app).webView(WKWebView(), decidePolicyFor: NavigationTo(args[3])) { out = $0 == .allow ? "allow" : "cancel" }
+            print(out)
+            return
+        }
         if args.count == 2, ["install", "uninstall"].contains(args[0]) {
             let reply = PinkieAppWindow.handle(args[0] == "install" ? "installApp" : "uninstallApp", ["appId": args[1]])
             let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
