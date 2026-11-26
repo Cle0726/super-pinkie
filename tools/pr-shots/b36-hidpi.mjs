@@ -40,7 +40,8 @@ const measure = (page) => page.evaluate(() => {
     if (!visible(el, r)) continue;
     const cs = getComputedStyle(el);
     const text = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
-    if (text && el.scrollWidth > el.clientWidth + 1 && cs.overflowX !== 'visible') {
+    const srOnly = cs.clip !== 'auto' || (r.width <= 1 && r.height <= 1);  // visually-hidden labels are cut on purpose
+    if (text && !srOnly && el.scrollWidth > el.clientWidth + 1 && cs.overflowX !== 'visible') {
       const row = {el: name(el), text: text.slice(0, 40), over: el.scrollWidth - el.clientWidth, x: Math.round(r.left), y: Math.round(r.top)};
       (cs.textOverflow === 'ellipsis' ? ellip : cut).push(row);
     }
@@ -48,7 +49,7 @@ const measure = (page) => page.evaluate(() => {
       const w = parseFloat(cs['border' + side + 'Width']);
       if (w > 0 && w * dpr < 1 && cs['border' + side + 'Style'] !== 'none') hair.push({el: name(el), side, css: w, device: +(w * dpr).toFixed(2)});
     }
-    if ((r.height > 0 && r.height * dpr < 1) || (r.width > 0 && r.width * dpr < 1)) hair.push({el: name(el), side: 'box', css: +Math.min(r.width, r.height).toFixed(2), device: +(Math.min(r.width, r.height) * dpr).toFixed(2)});
+    if (!el.closest('svg') && ((r.height > 0 && r.height * dpr < 1) || (r.width > 0 && r.width * dpr < 1))) hair.push({el: name(el), side: 'box', css: +Math.min(r.width, r.height).toFixed(2), device: +(Math.min(r.width, r.height) * dpr).toFixed(2)});
   }
   return {dpr, mode: document.documentElement.dataset.laolaoMode || '', cut: cut.slice(0, 40), cutCount: cut.length, ellipCount: ellip.length, ellip: ellip.slice(0, 20), hairCount: hair.length, hair: hair.slice(0, 20)};
 });
