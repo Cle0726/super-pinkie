@@ -210,6 +210,14 @@ export class DesktopApps {
     const data = this.load();
     const appId = appIdFor(item.id);
     if (!data.apps[appId] && Object.keys(data.apps).length >= this.limits.apps) throw new Error(`最多装 ${this.limits.apps} 个应用`);
+    // 快捷方式 / .app 的文件名在 Windows 和 macOS 上不区分大小写，macOS 还会按名字删掉同名的旧入口。
+    // 两件作品落到同一个名字时，后装的会盖掉先装的入口。比较前先走 safeAppName（斜杠会变成空格），
+    // 再按 NFC、en-US 小写对齐。同一件作品重装或更新不算冲突。拒绝发生在写任何文件之前。
+    const storedName = safeAppName(name || item.title);
+    const nameKey = storedName.normalize('NFC').toLocaleLowerCase('en-US');
+    const clash = Object.values(data.apps).some(app => app.id !== appId
+      && safeAppName(app.name).normalize('NFC').toLocaleLowerCase('en-US') === nameKey);
+    if (clash) throw new Error('已经有一个同名的应用，换个名字再装');
     const {path: source} = this.artifacts.versionPath(item.id, item.version);
     const size = fs.statSync(source).size;
     if (size > this.limits.htmlBytes) throw new Error('这件作品太大了，装不了（超过 5 MB）');
@@ -237,7 +245,7 @@ export class DesktopApps {
     }
     const ts = this.now();
     const old = data.apps[appId];
-    data.apps[appId] = {id: appId, artifactId: item.id, name: safeAppName(name || item.title), version: item.version,
+    data.apps[appId] = {id: appId, artifactId: item.id, name: storedName, version: item.version,
       installedAt: old?.installedAt || ts, updatedAt: ts, network: origins, files: files === true};
     this.save();
     return {ok: true, replaced: Boolean(old), previousName: old?.name || '', app: this.view(data.apps[appId])};
