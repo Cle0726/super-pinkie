@@ -86,3 +86,58 @@ test('P5 withPolicy 插入点同 PR①：有 head 进 head；守卫跟在 CSP �
   assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf(FILE_GUARD));
   assert.ok(html.indexOf(FILE_GUARD) < html.indexOf('<title>'));
 });
+
+test('P6 withPolicy 带 charset：离线和放行来源两种都是 charset < CSP < 守卫 < 作品内容，charset 在前 1024 字节；空 charset 不算已声明', () => {
+  const page = '<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>';
+  for (const opts of [{}, {origins: ['https://api.weather.example']}]) {
+    const html = withPolicy(page, opts);
+    const charset = html.indexOf('<meta charset="utf-8">');
+    assert.ok(charset >= 0, JSON.stringify(opts));
+    assert.ok(charset < html.indexOf('Content-Security-Policy'), JSON.stringify(opts));
+    assert.ok(html.indexOf('Content-Security-Policy') < html.indexOf(FILE_GUARD));
+    assert.ok(html.indexOf(FILE_GUARD) < html.indexOf('<title>'));
+    assert.ok(Buffer.byteLength(html.slice(0, charset + '<meta charset="utf-8">'.length), 'utf8') <= 1024);
+  }
+  // 勾了读文件：没有守卫，charset 仍在 CSP 前。
+  const withFiles = withPolicy(page, {files: true});
+  assert.ok(!withFiles.includes(FILE_GUARD));
+  assert.ok(withFiles.indexOf('<meta charset="utf-8">') < withFiles.indexOf('Content-Security-Policy'));
+  // 反例：<meta charset> 不带值、charset=""、charset="  " 浏览器拿不到编码，照样补；写了非空值的不补。
+  for (const head of ['<meta charset>', '<meta charset="">', "<meta charset='  '>"]) {
+    assert.match(withPolicy(`<html><head>${head}<title>t</title></head></html>`, {}), /<meta charset="utf-8">/, head);
+  }
+  assert.doesNotMatch(withPolicy('<html><head><meta charset="gbk"></head></html>', {}), /<meta charset="utf-8">/);
+});
+
+test('P7 withPolicy：head 之前已有脚本 / 可加载标签 / 文字时，策略挪到最前（有干净 doctype 就紧跟它），不让它们抢在 CSP 和守卫前面', () => {
+  const TOP = /^<meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/;
+  const evil = '<script>fetch("https://evil.example/x")</script>';
+  // ① 没有 doctype：head 前的脚本会先建 head 立即执行，CSP 和守卫要在它前面（放最前）。
+  const bare = withPolicy(evil + '<html><head><title>t</title></head></html>', {});
+  assert.ok(bare.indexOf('Content-Security-Policy') < bare.indexOf(evil), 'CSP 要在 leading script 之前');
+  assert.ok(bare.includes(FILE_GUARD) && bare.indexOf(FILE_GUARD) < bare.indexOf(evil), '守卫要在 leading script 之前');
+  // ② 有 doctype：紧跟 doctype（doctype 仍在最前，不进 quirks），脚本在策略之后。
+  const typed = withPolicy('<!doctype html>' + evil + '<html><head></head></html>', {});
+  assert.ok(typed.startsWith('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"'), typed.slice(0, 80));
+  assert.ok(typed.indexOf(FILE_GUARD) < typed.indexOf(evil));
+  // ③ 可加载标签（img）同理：CSP 生效前不能先发请求。
+  const img = '<img src="https://evil.example/p.png">';
+  const pic = withPolicy(img + '<html><head></head></html>', {});
+  assert.ok(pic.indexOf('Content-Security-Policy') < pic.indexOf(img));
+  // ④ 绕过检查本身的写法：<!--> / <!--->、--!> 按 HTML 规范就是注释结尾（后面的脚本照跑）；
+  // </br> 这类结束标签、裸文字会让解析器先关掉 head 进 body，后面插进 <head> 的 CSP 落进 body 被浏览器整条忽略；
+  // doctype 前就有标签的不能紧跟 doctype。
+  for (const before of ['<!-->' + evil + '-->', '<!--->' + evil + '-->', '<!-- a --!>' + evil + '-->', '</br>', 'x', '<p>x</p><!doctype html>']) {
+    assert.match(withPolicy(before + '<html><head></head></html>', {}), TOP, before);
+  }
+  // ⑤ 脚本字符串里的 "<head>"、属性值里的 ">" 不能当插入点（原来会插进字符串 / 属性值里，CSP 根本不是 meta）。
+  assert.match(withPolicy('<!doctype html><html><body><script>var s="<head>"</script></body></html>', {}),
+    /^<!doctype html><html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
+  assert.match(withPolicy('<html><head data-x=">"><script>fetch("https://evil.example/x")</script></head></html>', {}),
+    /^<html><head data-x=">"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
+  // 反例：正常文档（含 BOM、<?xml?>、空白、注释、带属性的 <html>）行为不变，CSP 仍进 head。
+  for (const page of ['<!doctype html><html><head><title>t</title></head></html>',
+    '﻿<?xml version="1.0"?>\n<!DOCTYPE html>\n<!-- c -->\n<html lang="zh">\n<head><title>t</title></head></html>']) {
+    assert.match(withPolicy(page, {}), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/, page);
+  }
+});
