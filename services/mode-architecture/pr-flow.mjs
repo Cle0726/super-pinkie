@@ -51,12 +51,18 @@ export function parseFindings(text) {
 const checksGreen = (rollup) => Array.isArray(rollup) && rollup.length > 0
   && rollup.every((c) => ['SUCCESS', 'NEUTRAL', 'SKIPPED'].includes(String(c.conclusion || c.state || '').toUpperCase()));
 
+// diff 超过上限时只放前面这段，并且明说截了：旧逻辑悄悄截掉，审稿引擎对没看到的文件也回 []，界面就显示「没问题」（同 #199）。
+export const REVIEW_DIFF_MAX = 200_000;
 export function reviewPrompt({pr, diff}) {
+  const text = String(diff ?? '');
+  const cut = text.length > REVIEW_DIFF_MAX;
   return [
     `审查这个 PR：#${pr.number}「${pr.title}」（${pr.headRefName} → ${pr.baseRefName}）。只读，不要改文件、不要提交、不要合并。`,
     '找真正的问题（错误、漏掉的情况、安全、和说明不符），不要挑风格。',
     '只回一个 JSON 数组，每条 {"severity":"high|medium|low","file":"相对路径","line":行号,"title":"一句话","detail":"为什么、怎么改"}；没有问题就回 []。',
-    '', '```diff', diff.slice(0, 200_000), '```',
+    ...(cut ? [`注意：这个 PR 的改动有 ${text.length} 字，下面只放了前 ${REVIEW_DIFF_MAX} 字，后面 ${text.length - REVIEW_DIFF_MAX} 字的改动没给你。没看到的部分不能算没问题：在数组里加一条 {"severity":"medium","file":"","line":0,"title":"改动太长，只审了前一部分","detail":"说明审到哪个文件为止"}。`] : []),
+    '', '```diff', cut ? text.slice(0, REVIEW_DIFF_MAX) : text, '```',
+    ...(cut ? ['（diff 到这里被截断）'] : []),
   ].join('\n');
 }
 
