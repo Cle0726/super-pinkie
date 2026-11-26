@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -58,6 +59,25 @@ class ListenerTest(unittest.TestCase):
         runner = mock.Mock(return_value=subprocess.CompletedProcess([], 0, output, ""))
         self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
         self.assertIsNone(gateway_listener_pid(18790, runner=runner))
+
+    def test_netstat_in_a_non_utf8_console_code_page_does_not_crash_startup(self):
+        """法语 / 德语 Windows 的 netstat 按控制台 OEM 代码页输出（État → 0x90）。
+
+        旧代码 text=True 不带 errors：按 cp1252 或 UTF-8（PYTHONUTF8=1）严格解码都在读线程里抛
+        UnicodeDecodeError，stdout 变 None，找不到占着端口的旧网关，retire_stale() 就不退它——
+        更新后新版接上旧网关，又是「更新了没变化」。只用到 ASCII 字段，坏字节替换掉就行。
+        """
+        output = (
+            b"  Proto  Adresse locale          Adresse distante       \x90tat\r\n"
+            b"  TCP    127.0.0.1:18789        0.0.0.0:0              LISTENING       4242\r\n"
+        )
+        script = f"import sys; sys.stdout.buffer.write({output!r})"
+        passed = ("capture_output", "text", "encoding", "errors", "timeout")
+
+        def runner(command, **options):
+            return subprocess.run([sys.executable, "-c", script], **{k: v for k, v in options.items() if k in passed})
+
+        self.assertEqual(4242, gateway_listener_pid(18789, runner=runner))
 
 
 class RetireStaleTest(unittest.TestCase):
