@@ -77,41 +77,16 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         config = {"agents": {"list": [{"id": agent_id} for agent_id in ids]}}
         (self.home / ".openclaw/openclaw.json").write_text(json.dumps(config), encoding="utf-8")
 
-    def test_utf8_listing_with_chinese_and_emoji_registers_missing_modes(self):
-        with self.assertRaises(UnicodeDecodeError):
-            FRESH_LIST.decode("cp1252")
-        fake = FakeOpenClaw()
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
-            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted", "metre"])
-
-    def test_log_lines_before_json_are_tolerated(self):
-        fake = FakeOpenClaw(listing=b"[plugins] loading pinkie-mode-architecture\n" + FRESH_LIST + b"\n")
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
-            self.assertTrue(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(len(fake.added), 5)
-
-    def test_non_json_listing_is_logged_and_reported(self):
-        fake = FakeOpenClaw(listing=b"Error: config invalid")
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+    def test_a_config_that_cannot_be_written_is_reported(self):
+        # agents.list that is not a list: nothing is changed and the launch
+        # retries registration after the services are installed.
+        config = self.home / ".openclaw/openclaw.json"
+        config.write_text(json.dumps({"agents": {"list": {"main": {}}}}), encoding="utf-8")
+        before = config.read_bytes()
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("CLI must not run")):
             self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(fake.added, [])
-        self.assertTrue(any("读取模式列表失败" in line for line in self.logs))
-
-    def test_failed_list_and_failed_add_are_reported(self):
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
-            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertTrue(any("返回码 1" in line for line in self.logs))
-        self.logs.clear()
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(add_code=2)):
-            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertTrue(any("补齐 project 模式失败" in line for line in self.logs))
-
-    def test_cli_timeout_is_logged_not_raised(self):
-        timeout = subprocess.TimeoutExpired(cmd="openclaw", timeout=60)
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=timeout):
-            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertTrue(self.logs)
+        self.assertEqual(config.read_bytes(), before)
+        self.assertTrue(any("不是列表" in line for line in self.logs))
 
     def test_complete_config_skips_the_cli(self):
         self.write_config(["main", "project", "thinking", "learning", "unrestricted", "metre"])
@@ -140,13 +115,13 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         self.assertEqual(fake.calls, [])
 
     def test_failed_first_launch_is_repaired_on_the_next_launch(self):
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
+        with mock.patch.object(super_pinkie, "ensure_main_agent", return_value=False):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
         self.assertTrue((self.state / "bundled-setup-9.9.9").exists())
-        fake = FakeOpenClaw()
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=fake):
+        self.assertEqual(super_pinkie.configured_agent_ids(), [])
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("CLI must not run")):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
-        self.assertEqual(fake.added, ["project", "thinking", "learning", "unrestricted", "metre"])
+        self.assertEqual(super_pinkie.configured_agent_ids(), ["main", *super_pinkie.MODE_AGENTS])
 
     def test_guarded_legacy_upgrade_stages_all_modes_before_the_first_plugin_is_loaded(self):
         (self.resources / "build-info.json").write_text('{"channel":"release","guard":true}', encoding="utf-8")
@@ -160,7 +135,7 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         def install_service(name, log):
             staged.append(json.loads(config.read_text(encoding="utf-8"))["agents"]["list"])
 
-        with mock.patch.object(super_pinkie, "run_openclaw", side_effect=AssertionError("must not add one agent at a time")), \
+        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=AssertionError("must not add one agent at a time")), \
                 mock.patch.object(super_pinkie, "install_runtime_service", side_effect=install_service):
             super_pinkie.prepare_bundled_desktop(self.logs.append)
             self.assertTrue(staged)
@@ -203,12 +178,6 @@ class ModeAgentRegistrationTests(unittest.TestCase):
         before = config.read_bytes()
         self.assertTrue(super_pinkie.ensure_main_agent(self.logs.append, config))
         self.assertEqual(config.read_bytes(), before)
-
-    def test_main_is_repaired_even_when_the_cli_fails(self):
-        self.write_config(["pinkie-party"])
-        with mock.patch.object(super_pinkie.subprocess, "run", side_effect=FakeOpenClaw(list_code=1)):
-            self.assertFalse(super_pinkie.ensure_mode_agents(self.logs.append))
-        self.assertEqual(super_pinkie.configured_agent_ids()[0], "main")
 
     def test_main_registration_does_not_overwrite_a_concurrent_config_edit(self):
         self.write_config(["pinkie-party"])
