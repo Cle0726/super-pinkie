@@ -2,8 +2,9 @@
 // 真实安装的 Control UI + 碧琪注入 + 假网关（tests/visual/lib/real-harness.mjs），Metre 模式、工作台开 README.md，
 // 长 / 短分支名 × 1440 / 1280 / 1024 日间：
 //   1. 右半边每个看得见的项都整项在框里（不留半截，main 上 1280 长分支名时「AI 补全」只露 3px）；碧琪键一直在；
-//   2. 只按顺序藏（编码 → 换行 → 缩进 → 语言 → 行列 → 语言服务 → AI → PR），并且藏得刚好：把最后藏掉的一项放回来就又放不下；
-//   3. 不重画、只改窗口宽：1440 → 1024 仍没有半截，回到 1440 藏掉的项回来。
+//   2. 只按顺序藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR，uireview #374 定），并且藏得刚好：把最后藏掉的一项放回来就又放不下；
+//   3. 闪现提示（左半边）挤窄右半边时也重算，提示走后藏掉的项回来；
+//   4. 不重画、只改窗口宽：1440 → 1024 仍没有半截，回到 1440 藏掉的项回来。
 // 反例：删掉 laolao-workbench.js 里 renderStatus 末尾的 fitStatus() → 第 1 条在 1280 / 1024 长分支名时变红（PR 说明里有 main 上的实测）。
 // 注意：右半边靠右对齐，溢出在左边，scrollWidth === clientWidth，所以这里按每项的框和右半边的框比，不看 scrollWidth。
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ import {
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
 
-const ORDER = ['enc', 'eol', 'indent', 'lang', 'ln', 'lsp', 'ai', 'pr'];
+const ORDER = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'];
 const LONG = 'feat/metre-ui4-r5-turn-readonly';
 const NAMES = ['README.md', 'package.json', 'src/app.js'];
 
@@ -119,6 +120,33 @@ test('工作台状态栏 real page: 放不下按顺序整项藏，不留半截�
       } finally { await context.close(); }
     });
   }
+
+  // uireview #374：闪现提示（左半边 .pk-wb-status__flash）只改字、不重画，也要重算；提示走后字清空、藏掉的项回来。
+  // 编辑卡要宽于 600px（容器查询 ≤600 会藏掉闪现提示），所以开 1920、把编辑卡压到 640px，长分支名下右半边刚好紧。
+  await t.test('闪现提示挤窄右半边：不留半截，提示走后藏掉的项回来', async () => {
+    const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'metre-board', 'day', {initScript});
+    try {
+      await openBench(page, LONG, 1920);
+      await page.evaluate(() => { const ed = document.querySelector('.pk-wb-editor'); ed.style.maxWidth = '640px'; ed.style.minWidth = '0'; });
+      await page.waitForTimeout(400);
+      const edW = await page.evaluate(() => Math.round(document.querySelector('.pk-wb-editor').getBoundingClientRect().width));
+      assert.ok(edW > 600 && edW <= 660, '编辑卡宽 ' + edW + 'px，不在 601–660，测不到闪现提示');
+      const before = await page.evaluate(inspect, ORDER);
+      checkFit(before, '闪现前');
+      await page.evaluate(() => window.__pinkieWorkbench.statusFlash('运行命令已发送到终端'));
+      await page.waitForTimeout(150);
+      const flashW = await page.evaluate(() => Math.round(document.querySelector('.pk-wb-status__flash')?.getBoundingClientRect().width || 0));
+      const during = await page.evaluate(inspect, ORDER);
+      checkFit(during, '闪现中（提示宽 ' + flashW + 'px）');
+      assert.ok(flashW > 0 && during.fitHidden.length > before.fitHidden.length, '闪现提示应把右半边挤窄、多藏一项。现场 ' + JSON.stringify({edW, flashW, before, during}));
+      await page.waitForFunction(() => !document.querySelector('.pk-wb-status__flash')?.textContent, null, {timeout: 6_000});
+      await page.waitForTimeout(150);
+      const after = await page.evaluate(inspect, ORDER);
+      checkFit(after, '闪现后');
+      assert.deepEqual(after.fitHidden, before.fitHidden, '提示走后藏掉的项应回来。现场 ' + JSON.stringify({before, after}));
+      assert.deepEqual(pageErrors, [], '页面不该报错');
+    } finally { await context.close(); }
+  });
 
   // 只改编辑卡宽度、不调 renderStatus：Monaco 宿主跟着变宽窄，走的是已有的 editorResize 帧里的 fitStatus()。
   // （直接改视口不可靠：工作台不一定马上重排编辑卡，B50 首版测试里 1440 → 1024 后右半边仍是 101px。）

@@ -2,7 +2,7 @@
 // #374（backlog B50）工作台状态栏右半边整项藏的界面截图，给 PR 截图工作流（.github/workflows/pr-shots.yml）用。
 // 约定照 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + <目录>/shots.jsonl，另写 report.json。
 // 真页面（tests/visual/lib/real-harness.mjs），工作台开 README.md，pinkie.fs.* 在页里接到小项目 /proj（照 254-wb-diff-tabs.mjs）。
-//   b50-metre-<宽>-<日夜>-<短|长>   Metre（有 PR 项）× 1440 / 1280 × 日夜 × 短 / 长分支名
+//   b50-metre-<宽>-<日夜>-<短|长>   Metre（有 PR 项）× 1440 / 1280 / 820 × 日夜 × 短 / 长分支名
 //   b50-project-1440-<日夜>-长      碧琪项目（没有 PR 项）
 // 每张记右半边每项的露出宽 / 完整宽、哪些藏了、有没有半截（cut 应为空）。
 import fs from 'node:fs';
@@ -90,7 +90,7 @@ async function cell(scene, theme, width, branch) {
 }
 
 try {
-  for (const theme of ['day', 'night']) for (const width of [1440, 1280]) for (const branch of ['main', LONG]) await cell('metre-board', theme, width, branch);
+  for (const theme of ['day', 'night']) for (const width of [1440, 1280, 820]) for (const branch of ['main', LONG]) await cell('metre-board', theme, width, branch);
   for (const theme of ['day', 'night']) await cell('home-project', theme, 1440, LONG);
 } finally {
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 1));

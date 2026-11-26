@@ -1944,7 +1944,7 @@
   let statusFrame = 0;
   const renderStatusSoon = () => { if (!statusFrame) statusFrame = requestAnimationFrame(() => { statusFrame = 0; renderStatus(); }); };
   let flashTimer = 0;
-  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); clearTimeout(flashTimer); flashTimer = setTimeout(() => n.classList.remove('is-on'), 2600); }
+  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); fitStatus(); clearTimeout(flashTimer); flashTimer = setTimeout(() => { n.classList.remove('is-on'); n.textContent = ''; fitStatus(); }, 2600); }
   function renderStatus() {
     const left = el('div', 'pk-wb-status__side'), right = el('div', 'pk-wb-status__side');
     const mode = el('span', 'pk-wb-status__mode');
@@ -1992,8 +1992,8 @@
     right.append(pinkie);
     status.replaceChildren(left, right); fitStatus();
   }
-  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 行列 → 语言服务 → AI → PR），碧琪键不藏、不留半截；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
-  function fitStatus() { const r = status.lastElementChild; if (!r) return; const nodes = ['enc', 'eol', 'indent', 'lang', 'ln', 'lsp', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
+  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
+  function fitStatus() { const r = status.lastElementChild; if (!r) return; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
   new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']});
 
   /* ───────── 问碧琪 ───────── */
