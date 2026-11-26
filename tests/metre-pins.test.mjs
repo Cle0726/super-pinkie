@@ -292,3 +292,56 @@ test('M3 真浏览器（mac2 任务 32）：用户消息的「置顶」不被复
     assert.equal(await tab.evaluate((k) => JSON.parse(localStorage.getItem(k)).length, KEY), 1);
   } finally { await browser.close(); }
 });
+
+// mac1 任务 63（03:49Z，#102@c9389a20）：键盘按折叠键 / 列表里的「取消置顶」后焦点掉到 body，紧接着再按 Space 不起作用。
+// 原因是 paintBar 一变就整条重建，按下的旧键被移除。这里只用键盘：Enter / Space 切折叠、Enter 取消两条，每一步焦点都要留在条里
+// （取消一条后到下一条的「取消置顶」；最后一条取消、条没了时回到那条消息自己的「置顶」键），不能是 body。
+test('M3 真浏览器（mac1 任务 63）：键盘按折叠键 / 取消置顶后焦点不掉到 body，再按 Space 还能切换', {timeout: 40_000}, async (t) => {
+  const {playwright} = await import('../tools/study-desk/harness.mjs');
+  let lib;
+  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  let browser;
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const DOMWATCH = read('ui/injections/laolao-dom-watch.js');
+  const group = (id, text) => `<div class="chat-group assistant"><div class="chat-group-messages"><div class="chat-bubble" data-message-id="msg:${id}"><div class="chat-text">${text}</div></div>`
+    + `<div class="chat-group-footer"><div class="chat-group-footer__meta"><span class="chat-sender-name">Metre</span></div></div></div></div>`;
+  const page = `<!doctype html><html data-laolao-mode="metre"><head><meta charset="utf-8"><style>${CSS}</style></head><body><textarea></textarea>`
+    + `<div class="chat-thread">${group('a1', '第一条')}${group('a2', '第二条')}</div></body></html>`;
+  const KEY = 'pinkie.metre.pins:agent:metre:p3';
+  try {
+    const tab = await browser.newPage();
+    await tab.route('http://127.0.0.1:30125/**', (route) => route.fulfill({contentType: 'text/html; charset=utf-8', body: page}));
+    await tab.goto('http://127.0.0.1:30125/chat?session=agent%3Ametre%3Ap3');
+    await tab.evaluate((k) => { localStorage.clear(); localStorage.setItem(k, JSON.stringify([{id: 'a1', role: 'assistant', text: '第一条', at: 1}, {id: 'a2', role: 'assistant', text: '第二条', at: 2}])); }, KEY);
+    await tab.addScriptTag({content: DOMWATCH});
+    await tab.addScriptTag({content: SRC});
+    await tab.locator('.pk-metre-pins__toggle').waitFor({timeout: 5000});
+    const focus = () => tab.evaluate(() => { const e = document.activeElement; return {tag: e.tagName, cls: e.className, text: e.textContent, inBar: Boolean(e.closest('.pk-metre-pins')), group: e.closest('.chat-group')?.querySelector('.chat-text')?.textContent || ''}; });
+    const expanded = () => tab.locator('.pk-metre-pins__toggle').getAttribute('aria-expanded');
+    await tab.locator('.pk-metre-pins__toggle').focus();
+    for (const [key, want] of [['Enter', 'true'], ['Space', 'false'], ['Space', 'true']]) {
+      await tab.keyboard.press(key);
+      assert.equal(await expanded(), want, `${key} 后 aria-expanded=${want}（上一步焦点没丢才按得动）`);
+      const f = await focus();
+      assert.equal(f.cls, 'pk-metre-pins__toggle', `${key} 后焦点还在折叠键上，不是 ${f.tag}.${f.cls}`);
+    }
+    // 列表里取消第一条：焦点到剩下那条的「取消置顶」
+    await tab.locator('.pk-metre-pins__x').first().focus();
+    await tab.keyboard.press('Enter');
+    await tab.waitForFunction(() => document.querySelectorAll('.pk-metre-pins__x').length === 1, null, {timeout: 5000});
+    let f = await focus();
+    t.diagnostic('取消一条后焦点 ' + JSON.stringify(f));
+    assert.ok(f.inBar && f.cls === 'pk-metre-pins__x', `取消一条后焦点在剩下那条的「取消置顶」上，不是 ${f.tag}.${f.cls}`);
+    // 取消最后一条：条没了，焦点回到那条消息的「置顶」键
+    await tab.keyboard.press('Enter');
+    await tab.waitForFunction(() => !document.querySelector('.pk-metre-pins'), null, {timeout: 5000});
+    f = await focus();
+    t.diagnostic('取消最后一条后焦点 ' + JSON.stringify(f));
+    assert.equal(f.cls, 'pk-metre-pin', `条没了以后焦点回到消息的「置顶」键，不是 ${f.tag}.${f.cls}`);
+    assert.equal(f.group, '第二条', '是刚取消的那条消息');
+    assert.equal(f.text, '置顶');
+    assert.equal(await tab.evaluate((k) => localStorage.getItem(k), KEY), null);
+  } finally { await browser.close(); }
+});

@@ -29,6 +29,7 @@
   const groupText = (group) => [...group.querySelectorAll('.chat-bubble .chat-text')].map((t) => t.textContent.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 140);
   const groups = () => [...document.querySelectorAll('.chat-thread .chat-group')].filter((g) => !g.closest('.pinkie-session-cards'));
   let open = false;
+  let unpinned = ''; // 列表里刚取消的那条：条整个没了时焦点还给它的「置顶」键
 
   function toggle(group) {
     const key = sessionKey(), id = groupId(group);
@@ -67,7 +68,16 @@
     // 放在对话流 .chat-thread 的最前面，普通排在流里：第一条消息被推下去，不被盖住；跟着对话一起滚走（不 sticky：贴顶时读起来像压住了消息）。
     const host = document.querySelector('.chat-thread');
     let bar = document.querySelector('.pk-metre-pins');
-    if (!key || !list.length || !host) { bar?.remove(); return; }
+    // mac1 任务 63：整条重建会把按下的旧键一起移除，焦点掉到 body（再按 Space 没反应）。重建前记下焦点在条里哪类键的第几个，建好后还给同位置的新键。
+    const a = bar && bar.contains(document.activeElement) ? document.activeElement : null;
+    const cls = a && [...a.classList].find((c) => c.startsWith('pk-metre-pins__'));
+    const had = cls ? {cls, at: [...bar.querySelectorAll('.' + cls)].indexOf(a)} : null;
+    if (!key || !list.length || !host) {
+      bar?.remove();
+      // 最后一条在列表里取消：条没了，焦点还给那条消息自己的「置顶」键（在已加载的记录里时）。
+      if (had) groups().find((g) => groupId(g) === unpinned)?.querySelector('.pk-metre-pin')?.focus({preventScroll: true});
+      return;
+    }
     const sig = JSON.stringify([key, open, list.map((p) => p.id)]);
     if (bar && bar.dataset.sig === sig && host.firstElementChild === bar) return;
     bar?.remove();
@@ -84,12 +94,14 @@
         go.append(node('span', 'pk-metre-pins__role', p.role === 'user' ? '你' : 'Metre'), node('span', 'pk-metre-pins__text', p.text || '（没有文字）'));
         go.addEventListener('click', () => jump(p.id, status));
         const x = node('button', 'pk-metre-pins__x', '取消置顶'); x.type = 'button'; x.setAttribute('aria-label', '取消置顶：' + (p.text || '').slice(0, 30));
-        x.addEventListener('click', () => { save(key, load(key).filter((q) => q.id !== p.id)); paint(); });
+        x.addEventListener('click', () => { unpinned = p.id; save(key, load(key).filter((q) => q.id !== p.id)); paint(); unpinned = ''; });
         li.append(go, x); ul.append(li);
       }
       bar.append(ul, status);
     }
     host.prepend(bar);
+    // 同类键还在就给同位置那个（取消一条后是下一条的「取消置顶」，取消的是最后一条就给上一条）；没有了给折叠键。
+    if (had) { const same = bar.querySelectorAll('.' + had.cls); (same[Math.min(had.at, same.length - 1)] || head).focus({preventScroll: true}); }
   }
   function paint() {
     const key = isMetre() ? sessionKey() : '';
