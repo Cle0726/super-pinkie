@@ -1,0 +1,60 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {harnessWithGame, deskReady} from '../tools/study-game/game-qa.mjs';
+import {playwright, launchWithHarness} from '../tools/study-desk/harness.mjs';
+
+const CASES = [
+  {width: 820, hour: 10, theme: 'day'},
+  {width: 820, hour: 21, theme: 'night'},
+  {width: 1440, hour: 10, theme: 'day'},
+  {width: 1440, hour: 21, theme: 'night'},
+];
+
+function measure() {
+  const P = (s) => { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v[3] ?? 1]; };
+  const over = (f, b) => { const a = f[3]; return [0, 1, 2].map(i => f[i] * a + b[i] * (1 - a)).concat(1); };
+  const lum = (c) => { const t = c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * t[0] + .7152 * t[1] + .0722 * t[2]; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+  const bgOf = (e) => { const chain = []; for (let n = e; n; n = n.parentElement) chain.push(P(getComputedStyle(n).backgroundColor)); let bg = [255, 255, 255, 1]; for (const c of chain.reverse()) bg = over(c, bg); return bg; };
+  const stage = document.querySelector('.pkg-stage'); const tag = stage.querySelector('.pkg-stage__tag');
+  const night = stage.dataset.time === 'night';
+  // 角标是半透明毛玻璃：除了逐层合成，再按舞台天空最不利的一端（白天的亮天、夜里的暗天）兜底。
+  const sky = night ? [0, 0, 0, 1] : [255, 255, 255, 1];
+  const tagBg = over(P(getComputedStyle(tag).backgroundColor), sky);
+  const contrast = (n) => { const fg = P(getComputedStyle(n).color); const cb = bgOf(n); return {text: n.textContent.trim(), chain: ratio(over(fg, cb), cb), sky: ratio(over(fg, tagBg), tagBg)}; };
+  const meta = document.querySelector('.pkg-camp__top .pkg-who__meta');
+  const b = meta.querySelector('b').getBoundingClientRect(), s = meta.querySelector('small').getBoundingClientRect();
+  const overlap = Math.max(0, Math.min(b.right, s.right) - Math.max(b.left, s.left)) * Math.max(0, Math.min(b.bottom, s.bottom) - Math.max(b.top, s.top));
+  const lines = (n, r) => Math.round(r.height / parseFloat(getComputedStyle(n).fontSize));
+  return {time: stage.dataset.time, theme: document.querySelector('#pinkie-study-desk').dataset.theme, metaDisplay: getComputedStyle(meta).display,
+    overlap, bLines: lines(meta.querySelector('b'), b), smallLines: lines(meta.querySelector('small'), s),
+    small: contrast(tag.querySelector('small')), span: contrast(tag.querySelector('span'))};
+}
+
+test('camp HUD: name and intimacy level never overlap, stage tag text is at least 4.5:1 by day and night (WebKit)', async () => {
+  const {harness, close} = await harnessWithGame();
+  const browser = await launchWithHarness(harness, () => playwright().webkit.launch({headless: true}));
+  try {
+    for (const {width, hour, theme} of CASES) {
+      const page = await browser.newPage({viewport: {width, height: 900}});
+      const errors = []; page.on('pageerror', e => errors.push(e.message));
+      await page.addInitScript(h => { window.__pkBeijingHour = h; }, hour);
+      await page.goto(harness.url);
+      await deskReady(page, 'today');
+      if (theme === 'night') { await page.getByRole('button', {name: '切换日间和夜间'}).click(); await page.locator('#pinkie-study-desk[data-theme="night"]').waitFor(); }
+      const r = await page.evaluate(measure);
+      const at = `${width}px 桌面${theme} 舞台${r.time}`;
+      assert.equal(r.time, hour >= 18 ? 'night' : 'day', at);
+      assert.equal(r.metaDisplay, 'grid', `${at}：.pkg-who__meta 的 grid 规则被吞`);
+      assert.equal(r.overlap, 0, `${at}：「日常碧琪」与「亲密度」重叠`);
+      assert.equal(r.bLines, 1, `${at}：名字折成 ${r.bLines} 行`);
+      assert.equal(r.smallLines, 1, `${at}：「亲密度」被挤成 ${r.smallLines} 行`);
+      for (const k of ['small', 'span']) {
+        assert.ok(r[k].chain >= 4.5, `${at}：角标 ${k}「${r[k].text}」对比度 ${r[k].chain.toFixed(2)} < 4.5`);
+        assert.ok(r[k].sky >= 4.5, `${at}：角标 ${k}「${r[k].text}」在最不利天空上 ${r[k].sky.toFixed(2)} < 4.5`);
+      }
+      assert.deepEqual(errors, [], at);
+      await page.close();
+    }
+  } finally { try { await browser.close(); } finally { await close(); } }
+});
