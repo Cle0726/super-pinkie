@@ -196,6 +196,21 @@ class RestartBackoffTest(unittest.TestCase):
         self.assertEqual(before + 1, len(self.spawned))
 
 
+    def test_repair_button_restarts_at_once_even_after_a_minute_of_backoff(self):
+        # #317 review: the startup page's repair button is pressed exactly when the gateway keeps failing,
+        # i.e. when the gap has grown to 60 s; start() then returned and the page still said it restarted.
+        self.supervisor.start()
+        self.tick(600)
+        self.assertEqual(self.supervisor.restart_gap, 60.0)
+        self.clock[0] = self.spawned[-1] + 5  # 5 s after the last respawn: well inside the 60 s gap
+        before = len(self.spawned)
+        bridge = windows_desktop.NativeBridge(mock.Mock())
+        bridge._gateway = self.supervisor
+        with mock.patch.object(GatewaySupervisor, "repair_config", return_value={"repaired": True, "step": "migration", "message": "已经自动修好"}):
+            self.assertEqual(bridge.startup_repair(), {"ok": True, "message": "已经自动修好"})
+        self.assertEqual(before + 1, len(self.spawned), "repair did not start the gateway right away")
+        self.assertEqual(self.supervisor.restart_gap, 2.0)
+
 class ReplacerTest(unittest.TestCase):
     def test_portable_swap_stops_processes_from_the_install_first(self):
         helper = WindowsUpdater._directory_helper_source()
