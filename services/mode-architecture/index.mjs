@@ -14,14 +14,18 @@ import {checkRoleToolCall, formatRoleCardPrompt, isRolePluginToolAllowed, isRole
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
+import {registerWhiteboard} from './whiteboard-store.mjs';
+import {registerWhiteboardTool} from './whiteboard-tools.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
 import {registerSessionManage} from './session-manage.mjs';
 import {registerToolTrace} from './tool-trace.mjs';
 import {registerMetreMemory} from './metre-memory.mjs';
+import {registerMetrePlanMode} from './metre-plan-mode.mjs';
 import {registerMetreBoard} from './metre-board.mjs';
 import {registerQuietMode} from './quiet-mode.mjs';
 import {registerArtifacts} from './artifacts.mjs';
+import {registerDesktopApps} from './desktop-apps.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
@@ -741,6 +745,8 @@ export default {
       isBusy: key => architecture.activityFor(key).parentRunning,
     });
     const sessionPrefs = registerSessionPrefs(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    registerWhiteboard(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    registerWhiteboardTool(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
     // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
@@ -750,6 +756,8 @@ export default {
     registerMetreMemory(toolApi, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
       bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json'),
       childrenRunning: async key => (await sessionLineage.list(key)).children.some(child => child.status === '运行中')});
+    // Metre「先出方案」（第五批 I4）：按会话开关；开着时先写方案、批了再动手。
+    registerMetrePlanMode(toolApi, {root: path.join(pinkieStateRoot(), 'metre-plan-mode'), isLocked: key => metreLock.isLockedSession(key)});
     // Metre 总控台的数据（PLAN 2.12，批 5）：pinkie.metre.board 一次返回九个区块要的东西，pinkie.metre.resume 是「接着做」。
     registerMetreBoard(toolApi, {root: path.join(pinkieStateRoot(), 'metre-board'), lineage: sessionLineage, plans: planStore, modelHealth, lock: metreLock});
     // Metre 批 6（PLAN 2.13 后端）：Metre 是当前模式、别的模式没在跑时，心跳、学习提醒、学习资料的排队轮询都停；渠道看设置。
@@ -758,6 +766,8 @@ export default {
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
     registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(toolApi, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    // 作品装成桌面独立应用（PR①）：拷副本、记清单；入口和窗口归原生端。
+    registerDesktopApps(toolApi, {root: path.join(pinkieStateRoot(), 'apps'), artifacts});
     registerProjectSettings(toolApi, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(toolApi, webGptActivity);
     registerWebGptConnectionGateway(toolApi, webGptConnection);

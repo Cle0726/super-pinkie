@@ -156,6 +156,8 @@
         "laolao-message-actions.js",
         "laolao-artifacts.css",
         "laolao-artifacts.js",
+        "laolao-desktop-apps.css",
+        "laolao-desktop-apps.js",
         "laolao-phrases.js",
         "laolao-biqi-notices.js",
         "laolao-first-person.js",
@@ -231,6 +233,7 @@
         "laolao-metre-board-data.js",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
+        "laolao-metre-engine-upstream.js",
         "laolao-metre-cite.css",
         "laolao-metre-cite.js",
         "laolao-metre-read.js",
@@ -258,9 +261,12 @@
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
         "laolao-metre-display.css",
+        "laolao-metre-contrast.css",
         "laolao-metre-chat.css",
         "laolao-metre-allow.css",
         "laolao-metre-allow.js",
+        "laolao-metre-perm.css",
+        "laolao-metre-perm.js",
         "laolao-metre-suggest.css",
         "laolao-metre-suggest.js",
         "laolao-metre-pr.css",
@@ -392,7 +398,21 @@
         "laolao-startup-home.js",
         "laolao-splash.css",
         "laolao-splash.js",
-        "laolao-splash-fx.js"
+        "laolao-splash-fx.js",
+        "laolao-recap.css",
+        "laolao-recap.js"
+      ]
+    },
+    {
+      "id": "whiteboard",
+      "name": "白板（想法模式）",
+      "rootSelectors": [
+        ".pk-whiteboard",
+        ".pk-whiteboard-entry"
+      ],
+      "files": [
+        "laolao-whiteboard.css",
+        "laolao-whiteboard.js"
       ]
     }
   ]

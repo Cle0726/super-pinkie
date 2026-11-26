@@ -1,0 +1,17 @@
+# macOS WebKit CI suite: one test file per line. Each must pass 3 consecutive runs before it is listed.
+# Not yet listed: *-real tests (real-harness WebKit launch waits on #115), metre-fork-action (WebKit footer-layout failures).
+tests/metre-board-scroll-e2e.test.mjs
+tests/metre-display.test.mjs
+tests/metre-engine-menu-contrast.test.mjs
+tests/metre-engine-menu-scroll.test.mjs
+tests/metre-fav.test.mjs
+tests/metre-fix-main.test.mjs
+tests/metre-prefs.test.mjs
+tests/metre-queue-list.test.mjs
+tests/metre-session-search-skin.test.mjs
+tests/metre-sidebar-e2e.test.mjs
+tests/metre-sidebar-probe-selector.test.mjs
+tests/metre-switch-e2e.test.mjs
+tests/metre-backstage-sync.test.mjs
+tests/metre-engine-ui.test.mjs
+tests/webkit-screenshot.test.mjs

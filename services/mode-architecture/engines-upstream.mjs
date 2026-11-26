@@ -274,10 +274,11 @@ export function codexPinkieInstance(dir, models, {baseUrl, token}) {
 
 // 每一家能不能切到「碧琪模型」（11-25 在引擎服务 0.1.11 里逐家查的，表在 build/quick-run/engines/pinkie-upstream-others-1125.md）。
 // row：能的那几家对应的固定实例；why：不能的那几家给用户看的一句原因（界面上不出现引擎服务的名字）。
+export const OPENCODE_PINKIE_INSTANCE = 'opencode-pinkie';   // OpenCode 那一家的固定实例（说明见下面「OpenCode 那一家」），放这里是因为下面这张表要用
 export const PINKIE_UPSTREAM = Object.freeze({
   claudeAgent: {row: PINKIE_INSTANCE},
-  codex: {row: 'codex-pinkie'},
-  opencode: {row: 'opencode-pinkie'},
+  codex: {row: CODEX_PINKIE_INSTANCE},
+  opencode: {row: OPENCODE_PINKIE_INSTANCE},
   pi: {why: '还没接上：要先在这台电脑上装 Pi 核对它的模型配置'},
   antigravity: {why: '只能用 Google 账号或 Gemini 的 API 密钥，没有换上游的口子'},
   cursor: {why: '模型在 Cursor 自己的服务器上跑，只能用 Cursor 账号'},
@@ -297,7 +298,7 @@ export const pinkieUpstreamOf = driver => PINKIE_UPSTREAM[driver] || {why: '这�
 //   整个 OPENCODE_CONFIG_CONTENT 标 sensitive，引擎服务把这种值另存，不和设置放一起。
 // - 模型名：引擎服务在第一个「/」处拆成 providerID / modelID，所以菜单里的名字是「pinkie/<碧琪的模型名>」，
 //   转发口收到的就是碧琪的模型名（gw/aws-quick/…）。思考开最高档（@ai-sdk/openai-compatible 的 reasoningEffort → reasoning_effort）。
-export const OPENCODE_PINKIE_INSTANCE = 'opencode-pinkie';
+// 固定实例 id OPENCODE_PINKIE_INSTANCE 写在上面那张「能不能切」的表前面。
 export const OPENCODE_PROVIDER_ID = 'pinkie';
 
 export function openCodeConfigContent({baseUrl, token, models}) {
