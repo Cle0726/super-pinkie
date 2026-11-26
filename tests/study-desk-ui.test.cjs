@@ -50,8 +50,9 @@ test('pinned GSAP stays isolated, exact prototype tokens follow night mode', asy
     : {}}, async page => {
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.motion.gsap?.version), '3.13.0');
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('paper')), '#FAF6F1');
-    // Day secondary ink reaches 3:1 on paper (approved token change 2026-10-26).
-    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('ink-3')), '#87788D');
+    // Day secondary ink reaches 4.5:1 on paper / paper-2 / card (B11 L7; was #87788D at 3:1, approved 2026-10-26).
+    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('ink-3')), '#726577');
+    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('pk-ink-3')), '#726577');
     await page.locator('.task .go').waitFor();
     assert.match(await page.locator('.task .go').textContent(), /开始|去学|继续/);
     await page.getByRole('button', {name: '切换日间和夜间'}).click();

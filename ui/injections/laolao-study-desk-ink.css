@@ -7,6 +7,9 @@
 #pinkie-study-desk.pk-ink{
   --paper:#FAF6F1; --paper-2:#F2EBE4; --card:#FFFDFA; --hair:#E6DCD6; --hair-2:#D9CCC5; --ink-tint:rgba(46,34,54,.05);
   --margin-line:#F1B7CF; --rule:#E6DCD6;
+  /* B11 L7：日间弱字（副标题、说明、筛选按钮）原来是 #87788D，在纸色上只有 3.5~4.1。改成 #726577，在 paper / paper-2 / card 上都 ≥ 4.6。
+     只在学习台里改，所以不动 desk-kit 的共享值（学习模式聊天卡片也用它）；夜间块自己另设这两个变量，不受影响。 */
+  --ink-3:#726577; --pk-ink-3:#726577;
   --glass:var(--paper); --glass-strong:var(--paper); --glass-edge:transparent; --glass-hi:transparent; --glass-shadow:none;
   --lift:0 1px 0 rgba(46,34,54,.05),0 18px 30px -22px rgba(90,40,70,.45);
   --book-shadow:0 1px 0 rgba(46,34,54,.05),0 30px 60px -36px rgba(90,40,70,.42);
