@@ -113,6 +113,10 @@ html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat .pk-eng-chip__
 /* 收到第 2 档只剩「详情」时它就是收纳入口（放手程度、先出方案在里面）：键上带「▾」看得出能展开（协调者 11-25 10:23）。
  * 用伪元素画，键的文字不变；宽度算在排版里，fit() 照常量得到。 */
 html[data-laolao-mode="metre"] .pk-perm-chips[data-fold="2"] .pk-perm-chip--stat .pk-eng-chip__name::after { content: "▾"; margin-left: 3px; font-size: 10px; }
+/* 收到第 3 档只剩「⋯」：没打开时也带一圈轮廓色（和展开态同一个内阴影，不占宽度、≥ 3:1），看得出是个键；夜间点用正文色（uireview #150 第 1 条：之前约 #7A8A83 偏淡）。 */
+html[data-laolao-mode="metre"] .pk-perm-chips[data-fold="3"] .pk-perm-chip--stat { box-shadow: inset 0 0 0 1px var(--pk-perm-edge); }
+html[data-laolao-mode="metre"][data-theme="dark"] .pk-perm-chips[data-fold="3"] .pk-perm-chip--stat:not([data-tone]) .pk-eng-chip__name,
+html[data-laolao-mode="metre"][data-pinkie-night] .pk-perm-chips[data-fold="3"] .pk-perm-chip--stat:not([data-tone]) .pk-eng-chip__name { color: var(--metre-text); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="warn"] .pk-eng-chip__name { color: var(--pk-perm-warn); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip--stat[data-tone="danger"] .pk-eng-chip__name { color: var(--metre-danger); }
 html[data-laolao-mode="metre"] .pk-perm-chips .pk-perm-chip:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 1px; }
