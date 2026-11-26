@@ -76,6 +76,13 @@ enum PinkieAppWindow {
         return info["PinkieAppId"] is String
     }
 
+    // https://host:443 and http://host:80 are the same origin as without the port, on both the ticked and the visited side.
+    static func origin(_ url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme), let host = url.host?.lowercased() else { return nil }
+        let port = url.port.flatMap { $0 == (scheme == "https" ? 443 : 80) ? nil : $0 }
+        return scheme + "://" + host + (port.map { ":\($0)" } ?? "")
+    }
+
     static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
     // LSRegisterURL(url, false) only skips a forced refresh; it does not unregister. Deleting the .app alone
@@ -128,11 +135,12 @@ enum PinkieAppWindow {
         guard let launcher = Bundle.main.executableURL?.path else { return ["ok": false, "error": "找不到碧琪自己"] }
         let fm = FileManager.default
         var book = ledger()
-        if let old = book[id] { removeBundle(URL(fileURLWithPath: old, isDirectory: true)) }
         let bundle = applicationsDir.appendingPathComponent("\(app.name).app", isDirectory: true)
+        // Checked before the old entry goes: a refused rename must leave the current .app, its record and the ledger as they were.
         if fm.fileExists(atPath: bundle.path) && !isOurs(bundle) {
             return ["ok": false, "error": "「应用程序」里已经有一个同名的应用，换个名字再装"]
         }
+        if let old = book[id] { removeBundle(URL(fileURLWithPath: old, isDirectory: true)) }
         removeBundle(bundle)
         do {
             let contents = bundle.appendingPathComponent("Contents", isDirectory: true)
@@ -292,10 +300,12 @@ final class PinkieAppWindowController: NSObject, NSApplicationDelegate, NSWindow
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = navigationAction.request.url, let dir = app?.dir.standardizedFileURL.path else { decisionHandler(.cancel); return }
         if ["about", "data", "blob"].contains(url.scheme ?? "") { decisionHandler(.allow); return }
-        if let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(), ["http", "https"].contains(scheme) {
-            let origin = scheme + "://" + host + (url.port.map { ":\($0)" } ?? "")
-            decisionHandler(app?.network.contains(origin) == true ? .allow : .cancel); return
+        if let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+            let ticked = Set((app?.network ?? []).compactMap { URL(string: $0).flatMap(PinkieAppWindow.origin) })
+            decisionHandler(PinkieAppWindow.origin(url).map(ticked.contains) == true ? .allow : .cancel); return
         }
-        decisionHandler(url.isFileURL && url.standardizedFileURL.path.hasPrefix(dir) ? .allow : .cancel)
+        // dir + "/" so a sibling folder sharing the prefix (<id>x/) does not pass.
+        let path = url.standardizedFileURL.path
+        decisionHandler(url.isFileURL && (path == dir || path.hasPrefix(dir + "/")) ? .allow : .cancel)
     }
 }
