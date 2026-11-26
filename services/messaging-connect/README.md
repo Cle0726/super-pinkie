@@ -16,4 +16,6 @@ QQ 必须先选择具体项目目录。扫码完成后，机器人私信返回�
 
 部署先静态校验、备份 App 与配置。网关运行中修正空 channel 时，先用临时 hot 模式写入启用状态，看到日志确认忽略重启后恢复原 reload 配置，再仅刷新对应插件 entry。启用插件会热刷新插件服务，所以必须先检查活动任务和 App 浏览器服务空闲。用解析后的重启日志和进程启动时间共同验收；只检查 PID 无法排除进程内重启。
 
+飞书长连接存活补丁 `apply-feishu-liveness.mjs` 只认 `@openclaw/feishu@2026.7.1`，用法 `node services/messaging-connect/apply-feishu-liveness.mjs <已校验插件包目录>`，同样有原包 SHA 校验、写前检查、`.pinkie-original` 备份与幂等。它补上 SDK 只读的小写 `pingTimeout`（10 秒无 pong 即断开重连）和 15 秒握手超时（避免重连卡在 isConnecting），并让每个入站帧上报 `lastTransportActivityAt`，网关健康检查才能判出半死连接。测试：`node --test tests/feishu-ws-liveness.test.mjs`；设 FEISHU_LIVENESS_TEST_PACKAGE_ROOT 指向已安装插件后，在临时副本上用真实 SDK 和本地假服务器验证半死连接重连、握手超时重试与正常 pong 不误杀，验收必须无 skip。
+
 目标回归：`node --test tests/messaging-connect.test.mjs tests/messaging-settings-ui.test.cjs tests/wechat-settings-ui.test.cjs tests/user-settings.test.cjs tests/qq-connect-adapter.test.mjs tests/messaging-startup.test.mjs`。QQ 发布包测试设置 QQ_ADAPTER_TEST_PACKAGE_ROOT，SDK 集成测试设置 OPENCLAW_ADAPTER_TEST_RUNTIME_ROOT；启动集成测试另设 FEISHU_CONNECT_TEST_PACKAGE_ROOT 和 QQ_CONNECT_TEST_PACKAGE_ROOT，指向已安装的两个 channel。验收必须无 skip。原生目录选择器仅由用户点击启动，测试不打开前台窗口。
