@@ -105,6 +105,9 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       // 高对比
       await page.emulateMedia({contrast: 'more'});
       assert.equal(await page.evaluate(() => matchMedia('(prefers-contrast: more)').matches), true);
+      // 11-26：切高对比后字色有 160ms 过渡，过渡中 Chromium 把颜色报成 oklab(...)（CI 夜间读到过）；等过渡全部停下再量，不去读半路的颜色。
+      // 只看 CSS 过渡：页面上猫、加载圈等无限循环的 CSS 动画一直 running，算进来会永远等不到。getAnimations() 会先刷样式，刚切的过渡已经在里面。
+      await page.waitForFunction(() => document.getAnimations().filter((a) => a instanceof CSSTransition).every((a) => a.playState !== 'running'), null, {timeout: 5000});
       const more = await page.evaluate(readContrast);
       console.log(`ℹ ${theme} more: tokens ${JSON.stringify(more.tokens)}; ${fmt(more.items)}`);
       assert.notEqual(more.tokens.muted, NORMAL[theme].muted, `${theme}: 高对比时弱化色没换`);
