@@ -5,12 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   METRE_MAIN_REFERENCE: cb7931c30ef82b7ac591bec456bd0c2bb7ee048f
 
 jobs:
   portable-checks:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.PINKIE_LINUX_RUNS_ON || '"ubuntu-latest"') }}  # repo variable: '["self-hosted","linux2-docker"]' moves this job to the Linux runners; unset = GitHub-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -207,3 +211,66 @@ jobs:
       - name: Check Python services
         shell: bash
         run: python -m py_compile services/process_io.py services/party/server.py services/roundtable/server.py services/tts/edge_tts_server.py proxy/ur-rewrite-proxy.py app/super_pinkie.py app/windows_desktop.py
+
+  cle-core-checks:
+    name: C.le. 内核
+    # Fork pull requests never receive secrets. Everywhere else this job fails closed.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      PINKIE_CORE: cle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate core-manifest.json for C.le.
+        run: node tools/core/manifest.mjs info --core cle
+      # The token exists only in this step; install scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+            echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be tested."
+            exit 1
+          fi
+          tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+          echo "PINKIE_CLE_CORE_TARBALL=$tgz" >> "$GITHUB_ENV"
+      - name: Prove C.le. equals npm openclaw before and after Pinkie patches
+        env:
+          PINKIE_NPM_REGISTRY: https://registry.npmjs.org
+        run: |
+          official="$RUNNER_TEMP/openclaw-prefix"
+          cle="$RUNNER_TEMP/cle-core-prefix"
+          node tools/core/manifest.mjs install --core openclaw --prefix "$official"
+          node tools/core/manifest.mjs install --core cle --prefix "$cle"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$official/node_modules/openclaw"
+          node tools/core/verify-cle-patches.mjs --openclaw-root "$cle/node_modules/openclaw"
+          node tools/core/verify-equivalence.mjs --openclaw-prefix "$official" --cle-prefix "$cle"
+      - name: Install browser regression dependencies
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps webkit chromium
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Verify M5 visual baseline on C.le. core path (3x determinism, <=0.1% diff)
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test tests/visual-baseline.test.mjs
+      - name: Run core-manifest, Metre inventory, and full regression suites on C.le. path
+        timeout-minutes: 30
+        run: |
+          git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
+          git worktree add --detach "$RUNNER_TEMP/metre-main-reference" "$METRE_MAIN_REFERENCE"
+          PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
+            node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
+          PINKIE_METRE_MAIN_BASELINE="$RUNNER_TEMP/metre-main.json" \
+            node --test tests/*.test.cjs tests/*.test.mjs
+          python -m unittest discover -s tests -p '*_test.py' -v
