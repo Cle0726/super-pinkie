@@ -114,6 +114,12 @@
     "value": 397
   },
   {
+    "file": "ui/injections/laolao-metre-engine.css",
+    "metric": "lines",
+    "reason": "feat/metre-engine-pinkie-upstream-3（11-26 engines，#127）加 3 行：模型列表最底下「改用碧琪模型 / 改回我自己的账号」那一行和上面的模型行分开（上方 1px 分隔线 + 5px 上间距，uireview 11-26 02:31Z 打回要求），一行注释、两条只在 Metre 的规则，没有 !important。放在引擎菜单自己的样式文件里，不另开文件（另开要再加头片段 / regions 各 1 行）。",
+    "value": 314
+  },
+  {
     "file": "ui/injections/laolao-dom-watch.js",
     "metric": "mutationObservers",
     "value": 1,
