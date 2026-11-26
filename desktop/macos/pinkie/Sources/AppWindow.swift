@@ -6,8 +6,9 @@ import WebKit
 // 网关（services/mode-architecture/desktop-apps.mjs）已经把作品拷进
 // <PINKIE_STATE_ROOT 或 ~/Library/Application Support/SuperPinkie>/apps/<appId>/index.html，图标是同目录 icon.icns。
 // 这里做三件事：
-// * 入口：~/Applications/<名字>.app，自己的 bundle id 和图标；Contents/MacOS/run 是一行 sh，
-//   exec 碧琪自己的 Launcher --app-window <appId>。Info.plist 里带 PinkieAppId，卸载只删带这个标记的 .app，
+// * 入口：~/Applications/<名字>.app，自己的 bundle id 和图标；Contents/MacOS/run 是拷过去的碧琪 Launcher（Mach-O，
+//   macOS 26 的 LaunchServices 不启动入口是 sh 脚本的 .app，报 -10669），整包重新 ad-hoc 签名。Finder / Dock 起它时
+//   没有参数，靠 Info.plist 里的 PinkieAppId 认出是哪件作品。卸载只删带这个标记的 .app，删之前先撤 LaunchServices 登记；
 //   建在哪记在 apps/shortcuts-mac.json，不去猜路径；重装改了名字时旧的先删。
 // * 窗口：--app-window 只开一个显示这件作品的 WKWebView 窗口，不起网关、不开碧琪主界面，只读作品自己的目录。
 // * 页面 → 原生：installApp / uninstallApp / openApp，由 PinkieNative.handle 转过来。
@@ -72,13 +73,41 @@ enum PinkieAppWindow {
         return info["PinkieAppId"] is String
     }
 
-    // Only ever deletes a .app we made (it carries PinkieAppId); the ledger is a file on disk.
-    static func removeBundle(_ bundle: URL) {
-        if isOurs(bundle) { try? FileManager.default.removeItem(at: bundle) }
+    static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    // LSRegisterURL(url, false) only skips a forced refresh; it does not unregister. Deleting the .app alone
+    // leaves a stale record pointing at a path that no longer exists.
+    static func unregister(_ bundle: URL) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: lsregister)
+        task.arguments = ["-u", bundle.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        guard (try? task.run()) != nil else { return }
+        task.waitUntilExit()
     }
 
-    static func shellQuote(_ text: String) -> String {
-        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    // Only ever deletes a .app we made (it carries PinkieAppId); the ledger is a file on disk.
+    static func removeBundle(_ bundle: URL) {
+        guard isOurs(bundle) else { return }
+        unregister(bundle)
+        try? FileManager.default.removeItem(at: bundle)
+    }
+
+    // The .app's own Info.plist names the work, so Finder / Dock can start it without arguments.
+    static func bundledAppId(_ bundle: Bundle = .main) -> String? {
+        (bundle.object(forInfoDictionaryKey: "PinkieAppId") as? String).flatMap { isValidId($0) ? $0 : nil }
+    }
+
+    static func adhocSign(_ bundle: URL) -> Bool {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        task.arguments = ["--force", "--sign", "-", bundle.path]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        guard (try? task.run()) != nil else { return false }
+        task.waitUntilExit()
+        return task.terminationStatus == 0
     }
 
     static func handle(_ type: String, _ body: [String: Any]) -> [String: Any] {
@@ -101,7 +130,7 @@ enum PinkieAppWindow {
         if fm.fileExists(atPath: bundle.path) && !isOurs(bundle) {
             return ["ok": false, "error": "「应用程序」里已经有一个同名的应用，换个名字再装"]
         }
-        try? fm.removeItem(at: bundle)
+        removeBundle(bundle)
         do {
             let contents = bundle.appendingPathComponent("Contents", isDirectory: true)
             let macos = contents.appendingPathComponent("MacOS", isDirectory: true)
@@ -128,8 +157,9 @@ enum PinkieAppWindow {
             let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             try plist.write(to: contents.appendingPathComponent("Info.plist"))
             let run = macos.appendingPathComponent("run")
-            try "#!/bin/sh\nexec \(shellQuote(launcher)) \(flag) \(id)\n".write(to: run, atomically: true, encoding: .utf8)
+            try fm.copyItem(at: URL(fileURLWithPath: launcher), to: run)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: run.path)
+            guard adhocSign(bundle) else { throw CocoaError(.fileWriteUnknown) }
         } catch {
             try? fm.removeItem(at: bundle)
             return ["ok": false, "error": "没能建好应用：\(error.localizedDescription)"]
@@ -165,10 +195,15 @@ enum PinkieAppWindow {
         return ["ok": true]
     }
 
-    // Launcher --app-window <id>: one window with only this work in it. Returns false when the flag is absent.
+    // Launcher --app-window <id>, or a copied Launcher inside a work's .app: one window with only this work in it.
+    // Returns false for Super Pinkie itself (no flag, no PinkieAppId in its Info.plist).
+    static func requestedAppId(_ arguments: [String], bundle: Bundle = .main) -> String? {
+        if let index = arguments.firstIndex(of: flag) { return index + 1 < arguments.count ? arguments[index + 1] : "" }
+        return bundledAppId(bundle)
+    }
+
     static func runIfRequested(_ arguments: [String]) -> Bool {
-        guard let index = arguments.firstIndex(of: flag) else { return false }
-        let id = index + 1 < arguments.count ? arguments[index + 1] : ""
+        guard let id = requestedAppId(arguments) else { return false }
         let application = NSApplication.shared
         let controller = PinkieAppWindowController(app: readApp(id))
         PinkieAppWindowController.hold = controller  // NSApp.delegate is weak
