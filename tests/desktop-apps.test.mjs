@@ -287,6 +287,20 @@ test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）�
   assert.match(read('laolao-artifacts.js'), /el\('button', 'laolao-modal__button laolao-modal__button--primary', '保存'\)/);
 });
 
+test('A15 作品库「从作品库移除」确认框夜间也用实底深色（截图 #163@83b6812a confirm 夜：还是浅底）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-artifacts.css');
+  // 确认框的 .pinkie-art-confirm 在遮罩上，弹层本身只有 .laolao-modal.pinkie-tools-modal，所以按「遮罩里的弹层」认。
+  const group = 'html\\[data-pinkie-night\\] \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pk-apps-dialog,\\.pinkie-art-confirm \\*\\)';
+  assert.match(css, new RegExp(`^${group} \\{ background:#2a2027 !important;color:#f3e9ef !important;`, 'm'), '夜间实底那条带上确认框');
+  assert.match(css, new RegExp(`^${group}::before \\{ display:none \\}$`, 'm'), '夜间去掉顶上的白高光');
+  assert.match(css, new RegExp(`^${group} \\.laolao-modal__button:not\\(\\.laolao-modal__button--primary\\) \\{ background:rgba\\(255,235,245,\\.08\\) !important;`, 'm'), '夜间「取消」用浅色描边底');
+  // 白天不动：小确认框照旧是玻璃，不进实底那组。
+  assert.match(css, /^html \.laolao-modal:is\(\.pinkie-project-settings,\.pinkie-shortcuts,\.pk-apps-dialog\) \{ background:#fff8fb !important;/m);
+  assert.match(read('laolao-artifacts.js'), /el\('div', 'laolao-modal-mask pinkie-tools-mask pinkie-art-confirm'\)/);
+});
+
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
 function fakeDom(source) {
   const hasClass = (node, name) => String(node.className || '').split(/\s+/).includes(name);
