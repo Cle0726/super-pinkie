@@ -20,4 +20,50 @@
 
 ## 问题表
 
-待 pr-shots 结果回来后填写。
+数据来源：pr-shots run https://github.com/Cle0726/super-pinkie/actions/runs/45816212756 （PR #250 头 `a5db536c739d32fb998e1f89a65e58ce80198b2d`），Linux 与 Windows 各 40 页，两边数值一致。截图人工看过：`desk-today-1440-day`、`desk-today-820-day`、`desk-today-1440-night`、`desk-vocab-1440-day`、`desk-drill-1440-day`。截断（trunc）四十页都是 0。
+
+「占用」一列按 11-26 12:46 UTC 的 `gh pr list --state open` 与 `open-pr-touched-files.tsv` 核对。
+
+### 学习台自己的问题（学习模式专属文件）
+
+| # | 文件:选择器 | 页面 / 主题 / 宽度 | 现象 | 数值 | 占用 |
+| --- | --- | --- | --- | --- | --- |
+| L1 | `laolao-game-hud.css`：`.pkg-who__meta > b` 与 `> small` | desk-today，日/夜，820 | 营地顶栏「日常碧琪」和「亲密度 Lv.1」两行文字压在一起（820 宽时 Lv.1 被挤到下一行，和名字叠住）；1440 下两段也贴死无间隔 | 交叠 0.6~0.81，811px²，位置 167,47 | 无 |
+| L2 | `laolao-game-hud.css`：营地日间弱字（`.pkg-who__meta small`、`.pkg-purse .pkg-cell small`、`.pkg-entries .pkg-entry small` / `.pkg-entry__sub`、`.pkg-kicker`、`.pkg-jar small`、`.pkg-loop__n`、`.pkg-seg button`、`.pkg-sec__meta`、`.pkg-q__meta .pkg-num`、`.pkg-target__n`） | desk-today，日，1440/820 | 灰紫弱字 `rgb(154,140,156)` 落在纸色上偏淡，9.5–12.5px 的小字 | 2.95~3.08（要 4.5）；纸纹底 approx | 无 |
+| L3 | `laolao-game-hud.css`：`.pkg-stage__tag small`（「N FORM」）、`.pkg-stage__tag span`（「元气：每天第一组 +10」） | desk-today，日/夜，1440/820 | 舞台右上角形态牌上 10px 灰字看不清 | 1.87 / 3.58 | 无 |
+| L4 | `laolao-game-hud.css`：`.pkg-entry__sub` em（「小雪限定」）、`.pkg-target__t em`（「冲刺期·估」） | desk-today，夜，1440/820 | 夜间粉色 `rgb(219,31,116)` 小字落在深底上不够 | 3.59 / 3.38~4.24 | 无 |
+| L5 | `laolao-game-hud.css`：`.pkg-target`（「加一场考试」虚线按钮） | desk-today，日/夜，1440 | 虚线边框太淡 | 边框 1.46~1.55（要 3） | 无 |
+| L6 | `laolao-game-practice.css`：`.pkb-kicker`（「DRILL · 真题题库」） | desk-gamepractice，日，1440/820 | 同 L2 的弱字色 | 2.95 | 无 |
+| L7 | `laolao-study-desk-ink.css` / `laolao-study-desk-board.css` / `-vocab.css` / `-notes.css` / `laolao-learning-library.css`（同一种日间弱字色，具体由哪条规则给色待修复 PR 定位）：`.pk-kicker`、`.b-sub`、`.b-ranges button`、`.b-adopt-row small`、`.pk-pageno`、`.n-subtitle`、`.v-count`、`.v-filters button`、`.v-model`、`.v-add-hint`、`.v-layout button`、`.pk-note small`、`.pinkie-library__eyebrow`、`.pinkie-library__status`、`.pinkie-library__empty` | desk-board / notes / vocab / library，日，1440/820 | 学习台各页副标题、说明、筛选按钮统一用 `rgb(135,120,141)`，日间纸色上不到 4.5；夜间全部过 | 3.83（要 4.5）；纸纹底 approx | 无（规则落在 `laolao-study-desk-ink.css`，类名定义在 board/vocab/notes 与 `laolao-learning-library.css`） |
+| L8 | `laolao-learning-library.css`：`.pinkie-library__search`、`.pinkie-library__primary` | desk-library，日/夜，1440/820 | 书架搜索框和「＋ 打开电子书」按钮边框几乎看不出 | 边框 1.43~1.46（要 3） | 无 |
+| L9 | `laolao-study-desk-board.js:77`（`data.answered.independentRate`） | desk-board 起每页 pageErrors | 看板数据缺 `answered` 时直接抛 `TypeError: Cannot read properties of undefined (reading 'independentRate')` | — | 无 |
+| L10 | `laolao-study-desk-vocab.js`（`.v-count` 文案） | desk-vocab，日/夜 | 生词本标题上方直接显示 JS 异常原文「Cannot read properties of undefined (reading 'due')」（见 desk-vocab-1440-day.png） | — | 无 |
+
+L9 / L10 说明：harness 的假网关不应答看板、生词本的 RPC，所以数据是空的；真网关下多半不会出现。但界面在数据缺字段时把异常原文显示给用户，这算健壮性问题，修之前要先在真数据形状下复核。
+
+### 看图判为误报 / 需复核（不修）
+
+| 文件:选择器 | 数值 | 原因 |
+| --- | --- | --- |
+| `laolao-game-hud.css`：`.pkg-hello`（「下午好。」）、`.pkg-line` | 1.15 / 2.83 | 量到的底色是外层深色块 `rgb(36,24,15)`，实际文字压在浅色插画天空上，截图里清楚 |
+| `laolao-game-hud.css`：`.pkg-boss__copy *`（「巴别兽」、天数、「还没考过…」、BOSS kicker） | 1.03~1.46 | Boss 卡是深色渐变 / 图底，脚本只叠了纸色；截图里白字在深底上清楚 |
+| `laolao-game-stage.css`：`.pkq-plate__row b / small`（背一背顶部「日常碧琪」「气势」） | 1.05~1.08 | 名牌是半透明深底叠在场景图上，脚本没算进去；截图里可读 |
+| 夜间 svg 图标：`.laolao-context-viewer summary svg`、`.pkg-glyph svg`、`.pk-drill-nib svg` | 1.18~1.41 | 量到的图标色是 `rgb(0,0,0)`（填充默认值，实际用 currentColor / 渐变画），属脚本取色不准，需改脚本后复测 |
+
+### 学习模式页面里出现、但属于全局外壳的问题（不在学习模式文件里）
+
+首页、设置页、学习台「对话」页都带着侧栏和输入框，这些不是学习模式自己的样式，留给对应区域。
+
+| 文件:选择器 | 页面 / 主题 / 宽度 | 现象 | 数值 | 占用 |
+| --- | --- | --- | --- | --- |
+| `laolao-composer-tray.css`：`.pinkie-tray-btn span`（「工具」） | home / desk-chat，日 | 输入框工具按钮字淡 | 3.4 | 无 |
+| `laolao-context-compact.js`（样式在 `laolao-theme.css` 一带）：`.laolao-context-viewer__percent`（「13%」） | home / desk-chat，日 | 上下文百分比字淡 | 3.4 | 无 |
+| `laolao-model-picker.css`：`.pinkie-external-tier`（「关闭」） | home / desk-chat，日/夜 | 思考强度牌字和底几乎同色 | 1.04~4.11 | 无 |
+| `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | home / settings / desk-chat，日，1440 | 侧栏「临时」入口文字和图标都淡 | 2.51 | 无 |
+| `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label`、`.laolao-group__count`、`.laolao-group__action`、`.pinkie-session-time` | home / settings / desk-chat，日，1440 | 侧栏分组标题、计数、时间字淡 | 3.39 / 3.61~4.22 | 无 |
+| `laolao-theme.css` / `laolao-mode-switcher.js`：`.laolao-mode-dock-trigger` | home / settings / desk-chat，日/夜，1440 | 分屏按钮边框淡 | 1.46 | 无 |
+| `laolao-motion-system.css`：`.topbar-search` | home / settings / desk-chat，日/夜，820 | 顶栏命令面板按钮边框和底色都贴背景 | 1.24~1.26 | 无 |
+| `laolao-settings-user.js`（`.page-title`「设置」、`.qs-segmented__btn`「高级」） | settings，日 | 标题 / 分段按钮字略淡 | 4.09 / 4.2 | 无 |
+| `laolao-settings-user.css`：`.pinkie-user-settings__choice` | settings，日/夜 | 模式选择按钮边框淡 | 1.26~1.52 | 别人占着：#179 |
+
+后续按「一个问题一个小 PR」修学习模式专属的 L1–L8（L9/L10 先复核）；每个修复 PR 都要附 pr-shots 改前 / 改后数值。本 PR 只含走查脚本和这张表，不改界面。
