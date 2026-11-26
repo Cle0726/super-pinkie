@@ -263,6 +263,8 @@
         "laolao-metre-chat.css",
         "laolao-metre-allow.css",
         "laolao-metre-allow.js",
+        "laolao-metre-perm.css",
+        "laolao-metre-perm.js",
         "laolao-metre-suggest.css",
         "laolao-metre-suggest.js",
         "laolao-metre-pr.css",
@@ -395,6 +397,18 @@
         "laolao-splash.css",
         "laolao-splash.js",
         "laolao-splash-fx.js"
+      ]
+    },
+    {
+      "id": "whiteboard",
+      "name": "白板（想法模式）",
+      "rootSelectors": [
+        ".pk-whiteboard",
+        ".pk-whiteboard-entry"
+      ],
+      "files": [
+        "laolao-whiteboard.css",
+        "laolao-whiteboard.js"
       ]
     }
   ]

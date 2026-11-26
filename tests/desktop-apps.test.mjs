@@ -131,6 +131,28 @@ test('A7 图标：PNG 包成 ICO / ICNS 文件头正确；不是 PNG 的拒收',
   assert.equal(apps.list().apps.length, 0, '图标不对时什么都不装');
 });
 
+test('A9 Metre 夜间装到桌面对话框主按钮字对比度 ≥ 4.5:1（uireview 02:13Z 打回：白字压 #93A5EE 只有 2.37:1）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const skin = read('laolao-metre-skin.css');
+  const night = skin.slice(skin.indexOf('[data-theme="dark"] {'));
+  const hex = name => night.match(new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`))[1];
+  const lum = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+    .map(c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+  const accent = hex('metre-accent'), surface = hex('metre-surface');
+  assert.equal(accent.toUpperCase(), '#93A5EE');
+  assert.ok(ratio('#FFFFFF', accent) < 4.5, '白字本来就不够，这条测试才有意义');
+  // 主按钮字跟 --pk-apps-on-accent 走，默认仍是白字（日间和别的对话框不变）。
+  assert.match(read('laolao-artifacts.css'), /\.pk-apps-dialog\) \.laolao-modal__button--primary \{[^}]*color:var\(--pk-apps-on-accent,#fff\)/);
+  // 只在 Metre 夜间、只在 .pk-apps-dialog 里换成面板深色。
+  const rule = read('laolao-desktop-apps.css').match(/^html\[data-laolao-mode="metre"\]:is\(\[data-pinkie-night\],\[data-theme="dark"\]\) \.pk-apps-dialog \{ --pk-apps-on-accent:var\(--metre-surface,(#[0-9A-Fa-f]{6})\) \}$/m);
+  assert.ok(rule, '夜间对话框要设 --pk-apps-on-accent');
+  assert.equal(rule[1].toLowerCase(), surface.toLowerCase());
+  assert.ok(ratio(surface, accent) >= 4.5, `夜间主按钮 ${surface} / ${accent} = ${ratio(surface, accent).toFixed(2)}`);
+});
+
 test('A8 网关方法：pinkie.apps.* 都在，出错回 {ok:false} 不抛', async () => {
   const {dir, record, artifacts} = setup();
   const api = fakeApi();

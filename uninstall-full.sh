@@ -3,12 +3,14 @@ set -euo pipefail
 
 STATE_ROOT="${PINKIE_STATE_ROOT:-$HOME/Library/Application Support/SuperPinkie}"
 CONFIG_ROOT="${PINKIE_CONFIG_ROOT:-$HOME/.config/super-pinkie}"
+APP_PATH_OVERRIDE="${PINKIE_APP_PATH:-}"
 APP_PATH="/Applications/超級碧琪.app"
 
 if [[ -f "$CONFIG_ROOT/install.env" ]]; then
   source "$CONFIG_ROOT/install.env"
   APP_PATH="${PINKIE_APP_PATH:-$APP_PATH}"
 fi
+APP_PATH="${APP_PATH_OVERRIDE:-$APP_PATH}"
 
 for label in com.super-pinkie.tts com.super-pinkie.reapply; do
   launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
@@ -22,6 +24,7 @@ rm -f \
 
 if [[ -d "$APP_PATH" ]]; then
   TRASH_TARGET="$HOME/.Trash/超級碧琪-$(date +%Y%m%d-%H%M%S).app"
+  mkdir -p "$HOME/.Trash"
   mv "$APP_PATH" "$TRASH_TARGET"
   echo "App 已移到废纸篓：$TRASH_TARGET"
 fi

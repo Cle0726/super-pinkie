@@ -199,7 +199,7 @@
       if (app.latest > app.version) control.append(button('更新成新版本', 'pinkie-art-btn', () => void update(app, list)));
       control.append(
         button('打开', 'pinkie-art-btn', () => nativeOk({type: 'openApp', appId: app.id}).catch(error => toast(error.message))),
-        button('卸载', 'pinkie-art-btn pinkie-art-btn--quiet', () => void uninstall(app, row)),
+        button('卸载', 'pinkie-art-btn pk-apps-uninstall', () => void uninstall(app, row)),
       );
       row.append(copy, control);
       list.append(row);
