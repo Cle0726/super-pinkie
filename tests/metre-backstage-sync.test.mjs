@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -8,6 +8,27 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 // 连接恢复后总谱的断线条和「此刻」必须一起恢复。流程：先断线，再恢复，再打开总谱；以及总谱开着时断线、恢复。
 const file = (name) => fileURLToPath(new URL('../ui/injections/' + name, import.meta.url));
 const read = (name) => fs.readFileSync(file(name), 'utf8');
+
+// 11-26（#217 计时）：CI 的 Linux 上第一次起浏览器要 38 s（launch）+ 16 s（newPage），别的测试文件同时也在起，
+// 第一条测试 60 s 里有 55 s 花在这上面，断言和等待加起来约 3 s。整个文件共用一个浏览器（和 metre-preview.test.mjs 一样），
+// 在 before 里起、有它自己的 120 s 上限；每条测试开自己的 context，收尾只关自己的。断言、等待、每条的 60 s 上限都不变。
+let sharedBrowser;
+before(async () => {
+  let lib;
+  try { lib = playwright(); } catch { sharedBrowser = {why: 'Playwright is not installed here'}; return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  try { sharedBrowser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { sharedBrowser = {why: 'no browser: ' + error.message.split('\n')[0]}; }
+}, {timeout: 120_000});
+after(async () => { await sharedBrowser?.close?.(); });
+async function shared(t) {
+  if (!sharedBrowser || sharedBrowser.why) { t.skip(sharedBrowser?.why || 'no browser'); return null; }
+  const mine = [];
+  return {
+    newPage: async (options) => { const context = await sharedBrowser.newContext(options); mine.push(context); return context.newPage(); },
+    close: async () => { for (const context of mine) await context.close(); },
+  };
+}
 // 11-26 计时：前两条在 CI 上 50–60 s（本机 1–3 s），一次 60 s 超时。每一步打时间看慢在哪一步，不改任何断言。
 // 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。
 function stopwatch(label) {
@@ -20,12 +41,8 @@ function stopwatch(label) {
 
 test('the backstage band and the score read one connection state, so neither says the gateway is down after it came back', {timeout: 60_000}, async (t) => {
   const sw = stopwatch('sync-1');
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
   let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  browser = await shared(t); if (!browser) return;
   sw.lap('launch');
   try {
     const tab = await browser.newPage({viewport: {width: 1024, height: 720}}); sw.lap('L29:newPage');
@@ -84,12 +101,8 @@ test('the backstage band and the score read one connection state, so neither say
 // 以及后台在跑、页面停着。超过 3 秒都显示「不同步」和「同步」键；对上以后（页面自己被清掉，或者点了同步）说 2 秒「已和后台对齐」再回常态。
 test('the band calls out an unsynced round in both directions after 3 seconds, and says it is aligned again for 2 seconds', {timeout: 60_000}, async (t) => {
   const sw = stopwatch('sync-2');
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
   let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  browser = await shared(t); if (!browser) return;
   sw.lap('launch');
   try {
     const tab = await browser.newPage({viewport: {width: 1024, height: 720}}); sw.lap('L91:newPage');
@@ -145,12 +158,8 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
 // 11-24 21:30 派活第 3 条：「1败·1等」看不懂，写全「引擎 4 · 1 失败 · 1 等你」；格子放不下时省略号，悬停 / 读屏是全文。
 // 19:50 审查建议：不用「✕」「!」符号（读屏念成乘号 / 叹号，✕ 像关闭键）；引擎格按钮的读屏名（aria-label）是全档文字。
 test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
   let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  browser = await shared(t); if (!browser) return;
   try {
     const tab = await browser.newPage({viewport: {width: 820, height: 720}});
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
@@ -192,12 +201,8 @@ test('the short tier of the band still says what failed or waits, and which side
 });
 
 test('the band and the model row under the composer sit on one solid theme plate, day and night, so no pixel backdrop shows behind their text', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
   let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  browser = await shared(t); if (!browser) return;
   try {
     const tab = await browser.newPage({viewport: {width: 1024, height: 768}});
     // 一整块红色铺在最底下代替像素背景（skin.css 会把 html / body 刷成主题底色，所以不能直接染 body）：底板 / 带子哪里没盖住，取色就会取到红色
@@ -249,12 +254,8 @@ test('the band and the model row under the composer sit on one solid theme plate
 // 11-24 22:37 打回：z=0 让带子掉到输入框外壳底板下面，格子上沿 6px 被盖、字头被切。遮罩开着时 app 层（openclaw-app z=1）也不再自成层叠上下文，
 // 每格上边框和文字区里，遮罩下面第一层必须是带子自己；反例只留 z=0、拿掉 app 层那一条，外壳要盖住格子（测试能红）。
 test('the band sinks under the narrow nav drawer, its backdrop and the command palette, so it never covers the METRE key', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
   let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  browser = await shared(t); if (!browser) return;
   try {
     const tab = await browser.newPage({viewport: {width: 820, height: 720}});
     const keys = read('laolao-metre-keys.css');
