@@ -369,12 +369,12 @@ reseal_app_on_exit() {
           "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
           || ! codesign -dr - "$LAUNCHER_APP_PATH" 2>&1 \
             | grep -Fq 'designated => identifier "com.cle0726.super-pinkie"'; then
-        echo "error: failed to preserve CLE Kk's stable local permission identity" >&2
+        echo "error: failed to preserve C.le.'s stable local permission identity" >&2
         [[ "$exit_code" -eq 0 ]] && exit_code=1
       fi
     fi
     if ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
-      echo "error: updated CLE Kk App signature did not verify" >&2
+      echo "error: updated C.le. App signature did not verify" >&2
       [[ "$exit_code" -eq 0 ]] && exit_code=1
     fi
   fi
@@ -421,6 +421,11 @@ install_relay_watchdog() {
   else
     rm -f "$target_plist.tmp"
   fi
+  local real_home
+  real_home="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+  if [[ "${PINKIE_SKIP_LAUNCHD:-0}" == "1" ]] || [[ -n "$real_home" && "$(cd "$USER_HOME" 2>/dev/null && pwd -P)" != "$(cd "$real_home" 2>/dev/null && pwd -P)" ]]; then
+    return 0
+  fi
   if ! launchctl print "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1; then
     should_reload=1
   fi
@@ -440,10 +445,17 @@ install_relay_watchdog() {
 }
 
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}"
-if [[ -z "$OPENCLAW_ROOT" ]]; then
+if [[ -z "$OPENCLAW_ROOT" && -f "$REPO_ROOT/tools/core/manifest.mjs" && ( "${PINKIE_INSTALL_CORE:-0}" == "1" || -n "${PINKIE_CORE_PREFIX:-}" ) ]]; then
+  CORE_NAME="$(node "$REPO_ROOT/tools/core/manifest.mjs" field core --root "$REPO_ROOT")"
+  CORE_PREFIX="${PINKIE_CORE_PREFIX:-$USER_HOME/.super-pinkie/core/$CORE_NAME}"
+  node "$REPO_ROOT/tools/core/manifest.mjs" install --root "$REPO_ROOT" --prefix "$CORE_PREFIX"
+  OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
+fi
+if [[ -z "$OPENCLAW_ROOT" && ( "$SKIP_APP_BUNDLES" != "1" || -n "${PINKIE_APP_PATH:-}" ) ]]; then
   # The managed App owns the gateway it is about to update. Prefer that
   # runtime before PATH: a shell shim named `openclaw` is not a package root
-  # and has no `dist/` tree to patch.
+  # and has no `dist/` tree to patch. Never fall back to /Applications when
+  # SKIP_APP_BUNDLES=1 omitted PINKIE_APP_PATH, since reseal is skipped there.
   BUNDLED_RUNTIME="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}/Contents/Resources/SuperPinkie/runtime/openclaw"
   if [[ -f "$BUNDLED_RUNTIME/openclaw.mjs" ]]; then
     OPENCLAW_ROOT="$BUNDLED_RUNTIME"
@@ -561,7 +573,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     apply_ui_skin "$OPENCLAW_ROOT/dist/control-ui"
   fi
 else
-  echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
+  echo "error: C.le. compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
   exit 1
 fi
 

@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   ratchet:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.PINKIE_LINUX_RUNS_ON || '"ubuntu-latest"') }}  # repo variable: '["self-hosted","linux2-docker"]' moves this job to the Linux runners; unset = GitHub-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

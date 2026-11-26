@@ -3265,7 +3265,7 @@
     }
   },
   "longFiles": {
-    "app/super_pinkie.py": 1560,
+    "app/super_pinkie.py": 1559,
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2495,
     "services/mode-architecture/session-lineage.mjs": 1894,
