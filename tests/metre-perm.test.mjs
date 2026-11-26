@@ -658,16 +658,27 @@ test(`at the last fold a ⋯ still under the floating microphone moves to the st
     assert.equal(await p.evaluate(() => document.querySelector('.pk-perm-chips').dataset.dodge ?? null), null, '只是换行、没被盖住：不挪');
     // 和 mac1 的图一样：按键行放得下 Metre 键、模型键和「⋯」，麦克风浮在这一行右端、模型键后面那一截上
     // （挂在输入框里、绝对定位、z-index 3）。第 0–2 档要么换行、要么落在麦克风底下；收到「⋯」也落在麦克风底下，只能自己占一行
-    await p.evaluate(() => {
+    const pre = await p.evaluate(() => {
       const input = document.querySelector('.agent-chat__input'); input.style.position = 'relative';
       const w = (s) => document.querySelector(s).getBoundingClientRect().width;
-      document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + 8 + 40) + 'px';
+      // 宽度按收好的「⋯」那一截自己量（含外边距），刚好放得下第一行；猜一个数会让「⋯」先换到第二行、根本不在麦克风底下
+      const chips = document.querySelector('.pk-perm-chips'), cs = getComputedStyle(chips);
+      const outer = chips.getBoundingClientRect().width + parseFloat(cs.marginLeft) + parseFloat(cs.marginRight);
+      document.querySelector('.agent-chat__composer-controls').style.width = Math.ceil(w('.agent-chat__composer-controls > .pk-eng-chip') + w('.chat-composer-model-control') + outer + 8 + 2) + 'px';
       const m = document.querySelector('.chat-composer-model-control').getBoundingClientRect(), base = input.getBoundingClientRect();
       const mic = document.createElement('button'); mic.className = 'chat-send-btn chat-send-btn--laolao-dictation'; mic.textContent = '🎤';
       mic.style.cssText = `position:absolute;z-index:3;left:${Math.round(m.right - base.left + 2)}px;top:${Math.round(m.top - base.top - 3)}px;width:44px;height:34px;padding:0;border:0`;
       input.append(mic);
+      const k = document.querySelector('.pk-perm-chip--stat').getBoundingClientRect(), b = mic.getBoundingClientRect();
+      const R = (r) => [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      const out = {fold: chips.dataset.fold, sameLine: Math.abs(k.top - m.top) < m.height / 2,
+        covered: Math.min(k.right, b.right) - Math.max(k.left, b.left) > 1 && Math.min(k.bottom, b.bottom) - Math.max(k.top, b.top) > 1,
+        stat: R(k), mic: R(b), model: R(m), controls: R(document.querySelector('.agent-chat__composer-controls').getBoundingClientRect())};
       window.PinkieMetrePerm.fit();
+      return out;
     });
+    // 前提：fit() 之前「⋯」和模型键在同一行、被麦克风盖住；不成立这条就测不到 mac1 的 bug
+    assert.ok(pre.fold === '3' && pre.sameLine && pre.covered, '前提：收到「⋯」、和模型键同一行、被麦克风盖住（' + JSON.stringify(pre) + '）');
     const r = await rowState(p);
     assert.equal(r.fold, '3', `还是「⋯」（${JSON.stringify(r)}）`);
     assert.equal(r.label, '⋯');
