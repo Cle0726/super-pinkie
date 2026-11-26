@@ -5,7 +5,8 @@
 //   ① 日间五个模式：标题 / 计数 / 日期 / 时间 ≥ 4.5:1，分组按钮 ≥ 3:1；
 //   ② 反例：删掉这几行（main 原样），同一套量法必须不到 4.5:1；
 //   ③ 夜间五个模式和 Metre 日夜：有没有这几行，计算结果逐项相同；
-//   ④ 鼠标移到分组头上，分组按钮仍是 1（没把悬停态钉在 .8）。
+//   ④ 鼠标移到分组头上，分组按钮仍是 1（没把悬停态钉在 .8）；
+//   ⑤ 带字的「打开」日间 ≥ 4.5:1；项目标题的 add-project（236–237 行管）平时 / 悬停透明度和 main 相同、字色不比 main 淡。
 import {test, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -58,12 +59,14 @@ const page = (mode, night, surfaceCss) => `<!doctype html><html data-theme="ligh
 ${FILES.map((f) => `<style>${f === 'laolao-sidebar-surface.css' ? surfaceCss : sheets[f]}</style>`).join('\n')}
 <style>body{margin:0;background:#fff}</style></head><body>
 <aside class="sidebar"><section id="sidebar"><div id="laolao-session-manager"><div class="laolao-group">
-<div class="laolao-group__head"><span class="laolao-group__label">最近</span><span class="laolao-group__count">2</span><button class="laolao-group__action pinkie-recent-menu" type="button">⋯</button></div>
+<div class="laolao-group__head"><span class="laolao-group__label">最近</span><span class="laolao-group__count">2</span><button class="laolao-group__action pinkie-recent-menu" type="button">⋯</button><button class="laolao-group__action laolao-group__open" type="button">打开</button></div>
 <div class="pinkie-session-date">今天</div>
 <div class="sidebar-recent-session session-row-host"><a class="sidebar-recent-session__link" href="#"><span class="sidebar-recent-session__name">视觉基线与热点核对</span></a><span class="session-row-aside"><time class="pinkie-session-time">03:58</time></span></div>
-</div></div></section></aside></body></html>`;
+</div>
+<div class="laolao-group__head pinkie-project-heading" id="projhead"><span class="laolao-group__label">项目</span><button class="laolao-group__action laolao-group__add-project" type="button">＋</button></div>
+</div></section></aside></body></html>`;
 
-const PARTS = {label: '.laolao-group__label', count: '.laolao-group__count', action: '.laolao-group__action', date: '.pinkie-session-date', time: '.pinkie-session-time'};
+const PARTS = {label: '.laolao-group__label', count: '.laolao-group__count', action: '.laolao-group__action', open: '.laolao-group__open', date: '.pinkie-session-date', time: '.pinkie-session-time'};
 async function measure(p) {
   return p.evaluate((parts) => {
     const out = {};
@@ -94,9 +97,9 @@ async function withPage(fn) {
   try { await fn(p); } finally { await p.close(); }
   return '';
 }
-const need = (k) => (k === 'action' ? 3 : 4.5);
+const need = (k) => (k === 'action' ? 3 : 4.5);   // open 是带字按钮，按正文 4.5
 
-test('B11 侧栏弱字：日间五个模式标题 / 计数 / 日期 / 时间 ≥ 4.5:1、分组按钮 ≥ 3:1；换回原写法就不到', async (t) => {
+test('B11 侧栏弱字：日间五个模式标题 / 计数 / 日期 / 时间 /「打开」≥ 4.5:1、分组按钮 ≥ 3:1；换回原写法就不到', async (t) => {
   const why = await withPage(async (p) => {
     for (const mode of MODES) {
       await p.setContent(page(mode, false, surface));
@@ -140,6 +143,28 @@ test('B11 侧栏弱字：鼠标移到分组头上，分组按钮仍是不透明'
     const got = await measure(p);
     assert.ok(settled, `悬停后分组按钮停在 ${got.action.opacity}`);
     assert.equal(got.action.opacity, 1);
+  });
+  if (why) t.skip(why);
+});
+
+test('B11 侧栏弱字：项目标题的 add-project 平时和悬停透明度和 main 一样、字不比 main 淡', async (t) => {
+  const why = await withPage(async (p) => {
+    const read = () => p.evaluate(() => { const n = document.querySelector('.laolao-group__add-project'); let o = 1; for (let m = n; m; m = m.parentElement) o *= Number(getComputedStyle(m).opacity); return {color: getComputedStyle(n).color, opacity: Math.round(o * 1000) / 1000}; });
+    const settle = () => p.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch {} }));
+    for (const mode of MODES) for (const hover of [false, true]) {
+      const got = [];
+      for (const css of [surface, reverted]) {
+        await p.mouse.move(318, 238);
+        await p.setContent(page(mode, false, css));
+        if (hover) await p.hover('#projhead');
+        await p.waitForTimeout(60); await settle();
+        got.push(await read());
+      }
+      t.diagnostic(`${mode}${hover ? " hover" : " rest"} branch=${JSON.stringify(got[0])} main=${JSON.stringify(got[1])}`);
+      assert.equal(got[0].opacity, got[1].opacity, `${mode}${hover ? ' 悬停' : ''} add-project 透明度变了`);
+      const ink = (v) => ratio(onWhite({color: v.color, opacity: 1}), WHITE);
+      assert.ok(ink(got[0]) >= ink(got[1]), `${mode}${hover ? ' 悬停' : ''} add-project 字比 main 淡：${ink(got[0]).toFixed(2)} < ${ink(got[1]).toFixed(2)}`);
+    }
   });
   if (why) t.skip(why);
 });
