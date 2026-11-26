@@ -16,7 +16,11 @@ if ! git pull --ff-only origin; then
   echo "local changes detected; stashing and retrying"
   git stash push -m "super-pinkie-update-$(date +%s)" || true
   git pull --ff-only origin
-  git stash pop || true
+  if ! git stash pop; then
+    echo "error: your local changes conflict with the update and were NOT re-applied cleanly." >&2
+    echo "they are still saved in 'git stash list'; resolve the conflicts, then re-run ./install.sh." >&2
+    exit 1
+  fi
 fi
 
 echo "==> re-applying prompts, patches and proxy"
