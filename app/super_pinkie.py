@@ -1533,11 +1533,11 @@ def utf8_console():
 
 
 def main():
-    if "--inapp-browser-host" in sys.argv[1:]:
-        # 碧琪的浏览器窗口（Windows）：独立进程，自己的 WebView2 环境和代理。
+    if "--inapp-browser-host" in sys.argv[1:] or "--app-window" in sys.argv[1:]:
+        # 独立窗口进程（Windows）：碧琪的浏览器（自己的 WebView2 环境和代理）；装到桌面的作品（只开这件作品，不起网关）。
         from inapp_browser_host import run as run_inapp_browser
-
-        run_inapp_browser()
+        from windows_app_window import run as run_app_window
+        (run_inapp_browser if "--inapp-browser-host" in sys.argv[1:] else run_app_window)()
         return
     utf8_console()
     ports = relay_ports_from_argv()

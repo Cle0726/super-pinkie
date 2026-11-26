@@ -24,6 +24,14 @@ class ContextBudgetTests(unittest.TestCase):
         self.assertEqual(600000,unknown['keepRecent'])
         self.assertEqual(600000,unknown['target'])
 
+    def test_small_window_caps_raw_tail_at_thirty_percent(self):
+        # aws-quick 复发：128K 窗口沿用 1M 模型的尾部比例，压缩后立刻又越线。
+        cfg={'models':{'providers':{'b':{'models':[{'id':'same','contextWindow':128000}]},
+                                    'c':{'models':[{'id':'big','contextWindow':272000}]}}}}
+        self.assertEqual(38400,budget['model_budget']('b/same',cfg,self.home)['keepRecent'])
+        self.assertEqual(163200,budget['model_budget']('c/big',cfg,self.home)['keepRecent'])
+        self.assertEqual(600000,budget['model_budget']('other/same',cfg,self.home)['keepRecent'])
+
     def test_existing_policy_removes_retired_fields_with_a_recovery_copy(self):
         config=self.home/'.openclaw/openclaw.json';config.parent.mkdir();config.write_text('{}')
         policy=budget['state_root'](self.home)/'context-policy.json';policy.parent.mkdir(parents=True)

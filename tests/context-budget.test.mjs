@@ -66,7 +66,8 @@ test('compaction triggers at the configured window share and leaves recovery hea
     assert.equal(resolved-b.reserve,b.threshold);
     const requestedKeep=Math.floor(resolved*installedPolicy.targetRatio);
     const workingHeadroom=Math.max(4096,Math.floor(resolved*.15));
-    assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom)));
+    const smallWindowCap=resolved<=256000?Math.floor(resolved*.3):Infinity;
+    assert.equal(b.keepRecent,Math.min(requestedKeep,Math.max(1,b.threshold-workingHeadroom),smallWindowCap));
     assert.equal(b.targetRatio,installedPolicy.targetRatio);
     assert.equal(b.triggerRatio,installedPolicy.triggerRatio);
     assert.ok(b.keepRecent<b.threshold);
@@ -81,6 +82,17 @@ test('272k model compacts far enough that summary and prompt overhead cannot imm
   });
   // The failed production session added about 30k tokens of summary/system overhead.
   assert.ok(b.keepRecent+30000<b.threshold);
+});
+test('128k model caps the raw tail at 30 percent even when keepRecentTokens is sized for 1M models',()=>{
+  // aws-quick 复发：全局 keepRecentTokens 600000/900000 压在 128K 窗口上，压缩后立刻又越线。
+  assert.equal(compactionBudget(128000).keepRecent,38400);
+  const runSettings=executable(transform('settings',currentSettings),'settings');
+  for(const keepRecentTokens of [600000,900000]){
+    const small=runSettings({contextTokenBudget:128000,cfg:{agents:{defaults:{compaction:{keepRecentTokens}}}}});
+    assert.ok(small.recent<=38400,`128k recent ${small.recent} with keepRecentTokens ${keepRecentTokens}`);
+  }
+  const large=runSettings({contextTokenBudget:1000000,cfg:{agents:{defaults:{compaction:{keepRecentTokens:600000}}}}});
+  assert.equal(large.recent,600000);
 });
 test('native compaction settings no longer use a fixed 60k reserve or 40k tail',()=>{
   const run=executable(transform('settings',settings),'settings');
