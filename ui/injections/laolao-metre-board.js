@@ -133,7 +133,7 @@
     {id: 'timeline', en: 'Bars', title: '小节', note: '分谱、交回、打回、验收、出错、收住，一小节一行，新的在上。', source: 'pinkie.metre.board → timeline'},
     {id: 'changes', en: 'Revisions', title: '改谱', note: '各声部动过的文件，按声部分组，点开在工作台里看。', source: 'pinkie.metre.board → changes'},
     {id: 'runtime', en: 'Tuning', title: '调音', note: '网关连接、在用模型的健康状态、角色卡检查、最近的上游错误、上下文和累计用量。', source: 'pinkie.metre.board → runtime'},
-    {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索。', source: 'pinkie.metre.memory（接口已有，面板没接）'},
+    {id: 'memory', en: 'Repertoire', title: '项目记忆', wide: true, note: '当前文件夹记住了什么：按类别分组，可钉住、编辑、删除、搜索；下面列出项目自己的规矩文件，点开在工作台里改。', source: 'pinkie.metre.memory + pinkie.fs.stat'},
     {id: 'raw', en: 'Log', title: '排练记录', note: '后端事件流水，排查问题用，默认收起。', source: 'pinkie.metre.board → raw'},
   ];
   const STATS = [
