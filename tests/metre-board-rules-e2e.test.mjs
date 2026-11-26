@@ -45,6 +45,14 @@ test(`项目规矩：只列出存在的规则文件，点开在工作台里（${
     assert.deepEqual(call.paths, ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', '.cursorrules', 'GEMINI.md'], '和 project-brief.mjs 读给模型的是同一组');
     const names = await tab.evaluate(() => [...document.querySelectorAll('#pk-metre-board .pk-mb-rules button')].map((b) => b.textContent));
     assert.deepEqual(names, ['CLAUDE.md', '.cursorrules'], '只列真有的');
+    // .pk-mb-file 带 direction: rtl（长路径从左边省略），点开头的文件名会被画成「cursorrules.」
+    const dotFirst = await tab.evaluate(() => {
+      const btn = [...document.querySelectorAll('#pk-metre-board .pk-mb-rules button')].find((b) => b.textContent === '.cursorrules');
+      const text = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT).nextNode();
+      const x = (i) => { const r = document.createRange(); r.setStart(text, i); r.setEnd(text, i + 1); return r.getBoundingClientRect().left; };
+      return x(0) < x(1);
+    });
+    assert.equal(dotFirst, true, '.cursorrules 的点要画在最左边');
     await tab.click('#pk-metre-board .pk-mb-rules button >> text=CLAUDE.md');
     assert.deepEqual(await tab.evaluate(() => window.qa.opened), [{path: 'CLAUDE.md', options: {pinned: true}}], '点一下在工作台里打开来改');
 

@@ -262,7 +262,7 @@
     if (!found.length) { row.append(h('p', 'pk-mb-rules__none', '这个文件夹里还没有规则文件（AGENTS.md、CLAUDE.md 这类）。')); return row; }
     const list = h('ul', '');
     for (const name of found) {
-      const li = h('li', '', `<button type="button" class="pk-mb-file" title="在工作台里打开：${esc(name)}">${esc(name)}</button>`);
+      const li = h('li', '', `<button type="button" class="pk-mb-file" title="在工作台里打开：${esc(name)}"><bdi>${esc(name)}</bdi></button>`);
       li.querySelector('button').addEventListener('click', () => { void window.__pinkieWorkbench?.open?.(name, {pinned: true}); });
       list.append(li);
     }
