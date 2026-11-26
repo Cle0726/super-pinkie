@@ -42,6 +42,29 @@ export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), bas
   return candidates.find(isAscii) || candidates[candidates.length - 1];
 }
 
+// 发布包里的路径是下载内容，不是本机路径。绝对路径、盘符、UNC 和 `..`（含反斜杠写法）不能解压出来。
+// Windows 会去掉路径段末尾的点和空格，所以 `...`、`.. ` 这类只有点和空格的段也按 `..` 处理。
+export function archiveMemberEscapes(name) {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  const normalized = raw.replace(/\\/g, '/');
+  if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) return true;
+  return normalized.split('/').some(part => part !== '.' && part !== '' && part.replace(/[. ]+$/, '') === '');
+}
+
+// 列出发布包条目名的命令。Windows 的发布包是 .zip：Windows 上 tar 不一定在 PATH 里，
+// 也不保证能读 zip，所以和解压一样走 PowerShell，用 .NET 的 ZipFile 读 zip 目录（不解压）。
+// 其他平台是 .tar.gz，用 tar -tf。
+export function archiveListCommand(platform, archive) {
+  if (platform !== 'win32') return ['tar', ['-tf', archive]];
+  const literal = String(archive).replace(/'/g, "''");
+  const script = "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+    + 'Add-Type -AssemblyName System.IO.Compression.FileSystem; '
+    + `$z=[IO.Compression.ZipFile]::OpenRead('${literal}'); `
+    + 'try { foreach ($e in $z.Entries) { [Console]::Out.WriteLine($e.FullName) } } finally { $z.Dispose() }';
+  return ['powershell', ['-NoProfile', '-NonInteractive', '-Command', script]];
+}
+
 export function parseSums(text, name) {
   for (const line of String(text).split(/\r?\n/)) {
     const match = line.trim().match(/^([a-f0-9]{64})\s+\*?(.+)$/i);
@@ -187,15 +210,28 @@ export class EngineService {
       const expected = parseSums(fs.readFileSync(path.join(staging, 'SHA256SUMS'), 'utf8'), name);
       if (!expected) throw new Error('发布包的校验清单里没有这个文件');
       if (sha256File(path.join(staging, name)) !== expected) throw new Error('下载的文件校验不对，已丢弃');
+      const archive = path.join(staging, name);
+      const [listFile, listArgs] = archiveListCommand(this.platform, archive);
+      const listed = await this.exec(listFile, listArgs, {timeout: 60_000});
+      if (listed.code !== 0) throw new Error('解压失败：读不到发布包里的文件名');
+      for (const line of String(listed.stdout || '').split(/\r?\n/)) {
+        if (archiveMemberEscapes(line)) throw new Error('发布包里有越界路径，已丢弃');
+      }
       const out = path.join(staging, 'x');
       fs.mkdirSync(out, {recursive: true});
       const extracted = this.platform === 'win32'
-        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${path.join(staging, name).replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
-        : await this.exec('tar', ['-xzf', path.join(staging, name), '-C', out], {timeout: 10 * 60_000});
+        ? await this.exec('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${archive.replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`], {timeout: 10 * 60_000})
+        : await this.exec('tar', ['-xzf', archive, '-C', out], {timeout: 10 * 60_000});
       if (extracted.code !== 0) throw new Error('解压失败：' + (extracted.stderr || '').trim().slice(0, 200));
       const binary = this.platform === 'win32' ? 't3.exe' : 't3';
       const found = [out, ...fs.readdirSync(out).map(entry => path.join(out, entry))].find(dir => fs.existsSync(path.join(dir, binary)));
       if (!found) throw new Error('发布包里没有找到 ' + binary);
+      const binaryPath = path.join(found, binary);
+      if (!fs.lstatSync(binaryPath).isFile()) throw new Error('发布包里的程序不是普通文件，已丢弃');
+      const realOut = fs.realpathSync(out);
+      const realBin = fs.realpathSync(binaryPath);
+      const outPrefix = realOut.endsWith(path.sep) ? realOut : realOut + path.sep;
+      if (!realBin.startsWith(outPrefix)) throw new Error('发布包里的程序指向了目录外面，已丢弃');
       fs.mkdirSync(path.dirname(this.dir), {recursive: true});
       fs.rmSync(this.dir, {recursive: true, force: true});
       fs.renameSync(found, this.dir);
