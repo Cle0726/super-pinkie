@@ -129,7 +129,9 @@ export class LearningRecall {
           }
         }
       }
-    }).finally(() => { this.running = null; });
+    // 和背一背一样：read/write 在 try 之外，磁盘出错会让这条链 reject，而 enqueue 不等它，
+    // 不接住就是一条 unhandledRejection。queue({wait}) 等完照常读快照，没跑完的下次入队再排。
+    }).catch(() => {}).finally(() => { this.running = null; });
   }
   async queue(sessionKey, {limit = 10, dailyLimit = 10, now = Date.now(), generate = true, wait = false, force = false} = {}) {
     const notes = this.notes(sessionKey);

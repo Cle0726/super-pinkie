@@ -801,7 +801,10 @@ export class LearningDrill {
           this.write(live);
         }
       }
-    }).finally(() => { this.running = null; });
+    // 循环里 read/write 在 try 之外，磁盘出错会让这条链 reject；enqueueCards 不看返回值，
+    // 不接住就是一条 unhandledRejection。这一批卡会停在 running（running 清空后下次入队会重排），
+    // 没轮到的还留在 requested 里，下一次 start 接着跑。
+    }).catch(() => {}).finally(() => { this.running = null; });
     return this.running;
   }
 
