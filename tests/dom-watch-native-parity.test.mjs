@@ -694,7 +694,7 @@ test('M3 product regression: unmodified laolao-learning-reminder.js reacts to bo
       await page.setContent('<!doctype html><html data-laolao-mode="study"><head></head><body></body></html>');
       await page.addScriptTag({content: DOM_WATCH_SRC});
       await page.addScriptTag({content: LEARNING_REMINDER_SRC});
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(300);   // 保留：让脚本初始那一轮跑完再换 rAF 计数，没有对外可见的完成信号
       const scheduled = await page.evaluate(async (attrName) => {
         let count = 0;
         const realRaf = window.requestAnimationFrame.bind(window);
@@ -735,7 +735,7 @@ test('M3 product regression: unmodified laolao-learning-reminder.js reacts to bo
     });
     await page.addScriptTag({content: DOM_WATCH_SRC});
     await page.addScriptTag({content: LEARNING_REMINDER_SRC});
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(250);   // 保留：接着断言提醒「没挂上」，没有能等的条件
 
     // Initially in chat mode: reminder should not be mounted
     assert.equal(await page.evaluate(() => Boolean(document.getElementById('pinkie-learning-reminder'))), false);

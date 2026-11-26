@@ -34,7 +34,7 @@ for (const width of [1500, 900]) {
       for (const js of ['laolao-metre-board.js', 'laolao-metre-board-data.js']) await tab.addScriptTag({path: file(js)});
       await tab.evaluate(() => window.__pinkieMetreBoard.open());
       await tab.waitForFunction(() => window.qa.n > 0 && document.getElementById('pk-metre-board-plan')?.dataset.metreState === 'live');
-      await tab.waitForTimeout(300);
+      await tab.waitForTimeout(300);   // 保留：首次画完后等布局稳定再量滚动位置，没有明确的完成信号
       // 11-24 真实页面基线比对时发现：记忆统计不带 count / known 时，卡片写成「undefined 条 · 了解 undefined / 9 类」。
       await tab.waitForFunction(() => document.querySelector('.pk-mb-memory__folder small'));
       assert.equal(await tab.evaluate(() => document.querySelector('.pk-mb-memory__folder small').textContent), '0 条 · 了解 0 / 9 类', 'memory card counts fall back to 0, never undefined');
@@ -48,7 +48,7 @@ for (const width of [1500, 900]) {
         const before = await tab.evaluate(() => window.qa.n);
         await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: 'agent', payload: {}}})));
         await tab.waitForFunction((n) => window.qa.n > n, before);
-        await tab.waitForTimeout(200);
+        await tab.waitForTimeout(200);   // 保留：刷新后断言滚动位置「没变」，只能给重画留时间
       };
 
       // 滚到中间看「小节」那一块，然后连着刷几次：滚动区不能被打回顶上，那一块不能挪。
