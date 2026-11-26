@@ -2,7 +2,7 @@
 // （按键行、openclaw-exec-approval 卡片）、假网关请求函数和本批两个文件。
 // 改前（a4d141bf）：没有这两个文件，Metre 下没有放手程度 / 先出方案 / 状态键，审批卡是原生英文标题、只露第一条，
 // Metre 会话的审批不提醒（laolao-run-notify.js 的会话正则没有 metre），额度用完不会到点接着做——下面每条都失败。
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -11,7 +11,39 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const inj = (f) => fileURLToPath(new URL('../ui/injections/' + f, import.meta.url));
 const read = (f) => fs.readFileSync(inj(f), 'utf8');
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-const launch = () => playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+// CI 提速：整个文件只起一个浏览器，各测试共用。每个测试仍自己开 context（viewport / 时区跟原来的 newPage 一样），结束就关。
+// 起不来就跟以前一样让这个测试失败，不改成跳过。
+let sharedBrowserPromise = null;
+function sharedBrowser() {
+  sharedBrowserPromise ??= playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  return sharedBrowserPromise;
+}
+const launch = async () => {
+  const browser = await sharedBrowser();
+  const opened = [];
+  return {
+    async newPage(options) {
+      const context = await browser.newContext(options);
+      opened.push(context);
+      const page = await context.newPage();
+      const closePage = page.close.bind(page);
+      page.close = async (...args) => {
+        try { return await closePage(...args); }
+        finally { await context.close().catch(() => {}); }
+      };
+      return page;
+    },
+    async close() {
+      await Promise.all(opened.map((context) => context.close().catch(() => {})));
+      opened.length = 0;
+    },
+  };
+};
+after(async () => {
+  if (!sharedBrowserPromise) return;
+  const browser = await sharedBrowserPromise.catch(() => null);
+  if (browser) await browser.close();
+});
 const SK = 'agent:metre:dashboard:t1';
 
 // Metre 的日夜变量（laolao-metre-skin.css 第 1036、1122、1244 行起的原值）
