@@ -22,17 +22,23 @@ function readCaption() {
   const cs = getComputedStyle(el);
   const star = el.querySelector('.pinkie-update-control .pk-star');
   const icon = el.querySelector('button[data-act="min"]') || el.querySelector('button');
-  const probe = document.createElement('i');
-  document.body.append(probe);
-  // 行内要带 !important：Metre 皮肤里有 !important 的 color 规则会盖过普通行内值（CI 上探针量成了 --metre-text）。
-  const resolve = (v) => { probe.style.removeProperty('color'); probe.style.setProperty('color', `var(${v})`, 'important'); return getComputedStyle(probe).color; };
+  // 不用元素探针（CI 上两次都量成继承下来的 --metre-text：颜色过渡 / !important 规则都会干扰）。
+  // 直接读 <html> 上变量的值，画到 1x1 画布上读回像素，换成 rgb(r, g, b)。
+  const root = getComputedStyle(document.documentElement);
+  const ctx = Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d', {willReadFrequently: true});
+  const resolve = (v) => {
+    const raw = root.getPropertyValue(v).trim();
+    if (!raw) return `(${v} 没定义)`;
+    ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = raw; ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  };
   const out = {
     mode: document.documentElement.getAttribute('data-laolao-mode'),
     bgImage: cs.backgroundImage, bg: cs.backgroundColor, edge: cs.borderTopColor,
     star: star ? getComputedStyle(star).fill : null, ink: icon ? getComputedStyle(icon).color : null,
     surface: resolve('--metre-surface'), line: resolve('--metre-line-strong'), cobalt: resolve('--metre-cobalt'), text: resolve('--metre-text'),
   };
-  probe.remove();
   return out;
 }
 
