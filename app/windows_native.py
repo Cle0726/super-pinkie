@@ -95,10 +95,11 @@ def safe_file_name(raw, ext):
     name = str(raw or "").strip()
     for bad in '<>:"/\\|?*':
         name = name.replace(bad, "-")
-    name = name.strip(". ") or "碧琪会话"
-    if not name.lower().endswith("." + ext):
-        name += "." + ext
-    return name[:180]
+    name = "".join("-" if ord(ch) < 32 else ch for ch in name).strip(". ")  # B43: control chars are not allowed in Windows names
+    has_ext = name.lower().endswith("." + ext)
+    stem, suffix = (name[:-len(ext) - 1], name[-len(ext) - 1:]) if has_ext else (name, "." + ext)
+    # B43: cut the stem, not the whole name, so a long title keeps its extension
+    return (stem[:180 - len(suffix)].rstrip(". ") or "碧琪会话") + suffix
 
 
 def write_markdown_export(target, markdown, assets, placeholder="__assets__"):

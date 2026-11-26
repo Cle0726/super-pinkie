@@ -58,6 +58,16 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(safe_file_name("", "png"), "碧琪会话.png")
         self.assertEqual(safe_file_name("x.PDF", "pdf"), "x.PDF")
 
+    def test_safe_file_name_long_keeps_ext_b43(self):
+        # B43: the extension used to be added before the 180-char cut, so long titles lost .md / .pdf
+        for raw, ext in (("n" * 300, "md"), ("会" * 300 + ".pdf", "pdf"), ("a" * 178 + ". . ", "png")):
+            name = safe_file_name(raw, ext)
+            self.assertTrue(name.lower().endswith("." + ext), name[-12:])
+            self.assertLessEqual(len(name), 180)
+            self.assertFalse(name[:-len(ext) - 1].endswith((".", " ")), name[-12:])
+        self.assertEqual(safe_file_name("a\x00b\nc", "md"), "a-b-c.md")
+        self.assertEqual(safe_file_name("...", "md"), "碧琪会话.md")
+
     def test_notify_dedupes_by_run_id(self):
         posted = []
         self.native._post = lambda command, payload=None: posted.append((command, payload))
