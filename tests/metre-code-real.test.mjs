@@ -24,7 +24,7 @@ async function measureRows(page) {
     window.__pinkieMetreBoard?.close?.();
     document.querySelector('.chat-text pre code.language-diff')?.scrollIntoView({block: 'center'});
   });
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(200);   // 保留：滚动后等绘制稳定再量行矩形，没有可等的状态
   const boxes = await page.evaluate(() => {
     const code = document.querySelector('.chat-text pre code.language-diff');
     if (!code) return null;
