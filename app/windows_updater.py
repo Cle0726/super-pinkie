@@ -762,7 +762,11 @@ function Register-RestoreAtLogon {
   try {
     if ((Test-Path -LiteralPath $TargetDir) -or -not (Test-Path -LiteralPath $Backup)) { return }
     $restore = Join-Path $UpdateRoot ('restore-' + $Token + '.ps1')
-    $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
+    # PowerShell ends a '...' string at any of ' U+2018 U+2019 U+201A U+201B, so
+    # double each of them: C:\Users\O<U+2019>Brien left the restore script
+    # unparseable when only the ASCII quote was doubled.
+    $quotes = "['\u2018-\u201b]"
+    $target = $TargetDir -replace $quotes, '$0$0'; $backupPath = $Backup -replace $quotes, '$0$0'; $log = $LogPath -replace $quotes, '$0$0'
     @(
       "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
       "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target' -ErrorAction Stop; `$message = 'previous version restored at sign-in' }",
