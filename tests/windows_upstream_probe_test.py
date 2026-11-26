@@ -31,10 +31,10 @@ class UpstreamProbeTests(unittest.TestCase):
             node.touch()
             auth = root / 'profile' / 'home' / '.openclaw' / 'identity' / 'device-auth.json'
             auth.parent.mkdir(parents=True)
-            auth.write_text(json.dumps({'tokens': {'operator': {'token': 'private', 'scopes': ['operator.read']}}}))
+            auth.write_text(json.dumps({'tokens': {'operator': {'token': 'private', 'scopes': ['operator.read']}}}), encoding="utf-8")
             with patch.object(probe.subprocess, 'run', return_value=SimpleNamespace(returncode=0)):
                 self.assertEqual(probe.seed_read_only_cli(exe, root / 'profile', {}), {'read_only': True})
-                auth.write_text(json.dumps({'tokens': {'operator': {'scopes': ['operator.read', 'operator.write']}}}))
+                auth.write_text(json.dumps({'tokens': {'operator': {'scopes': ['operator.read', 'operator.write']}}}), encoding="utf-8")
                 with self.assertRaises(RuntimeError):
                     probe.seed_read_only_cli(exe, root / 'profile', {})
 

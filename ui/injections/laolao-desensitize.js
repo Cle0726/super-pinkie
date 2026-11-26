@@ -90,7 +90,7 @@
   </div>
   <select class="ds-select" id="ds-model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</select>
 </div>
-<textarea class="ds-input" id="ds-src" rows="2" placeholder="输入敏感目标 / 违规词提问...">${src}</textarea>
+<textarea class="ds-input" id="ds-src" rows="2" placeholder="输入敏感目标 / 违规词提问..."></textarea>
 <div class="ds-bar">
   <span class="ds-status" id="ds-status">就绪</span>
   <button type="button" class="ds-run" id="ds-run">
@@ -99,7 +99,7 @@
   </button>
 </div>
 <div class="ds-result" id="ds-result" style="display:${tgt ? "flex" : "none"}">
-  <textarea class="ds-input ds-output" id="ds-tgt" rows="3" placeholder="改写结果...">${tgt}</textarea>
+  <textarea class="ds-input ds-output" id="ds-tgt" rows="3" placeholder="改写结果..."></textarea>
   <button type="button" class="ds-apply" id="ds-apply">✓ 填入输入框</button>
 </div>`;
 
@@ -110,8 +110,8 @@
     pop.style.left = `${Math.max(8, Math.min(r.right - 310, window.innerWidth - 318))}px`;
     pop.style.bottom = `${Math.max(8, window.innerHeight - r.top + 6)}px`;
 
-    const srcEl = pop.querySelector("#ds-src");
-    const tgtEl = pop.querySelector("#ds-tgt");
+    const srcEl = pop.querySelector("#ds-src"); srcEl.value = src;   // 原文来自输入框、改写结果来自模型：都按纯文本放进去，不拼进上面的 HTML
+    const tgtEl = pop.querySelector("#ds-tgt"); tgtEl.value = tgt;
     const runBtn = pop.querySelector("#ds-run");
     const runLabel = pop.querySelector("#ds-run-label");
     const spinEl = pop.querySelector("#ds-spin");
