@@ -35,6 +35,7 @@ jobs:
         env:
           PINKIE_VISUAL_REPORT: "1"
         run: |
+          set +e
           node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"; echo "before exit=${PIPESTATUS[0]}"
           mkdir -p "$RUNNER_TEMP/diff-before" && cp -r tests/visual/diff-real/. "$RUNNER_TEMP/diff-before/" 2>/dev/null || true
       - name: Capture linux real baselines (3x repeat, 0 px jitter required)
@@ -93,6 +94,7 @@ jobs:
           PYTHONUTF8: "1"
           PINKIE_VISUAL_REPORT: "1"
         run: |
+          set +e
           node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"; echo "before exit=${PIPESTATUS[0]}"
           mkdir -p "$RUNNER_TEMP/diff-before" && cp -r tests/visual/diff-real/. "$RUNNER_TEMP/diff-before/" 2>/dev/null || true
       - name: Capture win32 real baselines (3x repeat, 0 px jitter required)
