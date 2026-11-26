@@ -299,6 +299,11 @@ html[data-laolao-mode="metre"][data-theme="dark"] {
 .pk-mb-memory__list b { padding: 1px 8px; border-radius: 999px; background: var(--mb-s); color: var(--mb-c); font: 500 11.5px/1.6 var(--metre-sans, system-ui, sans-serif); }
 .pk-mb-memory__list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk-mb-memory__list svg { width: 16px; height: 16px; color: var(--metre-accent, #96681C); }
+.pk-mb-rules { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--metre-line, #E8E6DC); }
+.pk-mb-rules h4 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font: 600 13px/1.4 var(--metre-sans, system-ui, sans-serif); }
+.pk-mb-rules h4 small { font-weight: 400; font-size: 12px; color: var(--metre-muted, #73726C); }
+.pk-mb-rules ul { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.pk-mb-rules__none { margin: 0; font-size: 12.5px; color: var(--metre-muted, #73726C); }
 
 /* 原始记录 */
 .pk-mb-log { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--metre-art, #FAF9F5); border: 1px solid var(--metre-line, #E8E6DC); font: 400 12px/1.75 var(--metre-mono, ui-monospace, Consolas, monospace); color: var(--metre-muted, #73726C); white-space: pre; overflow: hidden; }
