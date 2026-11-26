@@ -68,6 +68,33 @@ class HelperVisibilityTest(unittest.TestCase):
         self.assertIn("$data.state -eq 'problem'", PROGRESS_WINDOW_PS)
         self.assertIn("$script:ownerId = [int]$data.owner", PROGRESS_WINDOW_PS)
 
+    def test_progress_window_removes_its_shown_marker_when_it_closes(self):
+        # B19：.shown 只在窗口弹出前写一次，以前关窗只删状态文件和脚本，updates\ 里每次更新多一个。
+        closed = PROGRESS_WINDOW_PS.index("ShowDialog()")
+        self.assertGreater(PROGRESS_WINDOW_PS.index("Remove-Item -LiteralPath ($Status + '.shown')"), closed)
+
+    def test_app_cleanup_and_stale_sweep_remove_shown_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token = "a" * 32
+            for name in (f"progress-{token}.json", f"progress-{token}.json.shown", f"progress-{token}.ps1"):
+                (root / name).write_text("1", encoding="ascii")
+            WindowsUpdater._stop_progress_window(None, root, token)
+            self.assertEqual(sorted(p.name for p in root.iterdir()), [])
+
+            old, fresh, other = (root / f"progress-{c * 32}.json.shown" for c in "bcd")
+            for marker in (old, fresh):
+                marker.write_text("1", encoding="ascii")
+            (root / "progress-x.json").write_text("{}", encoding="utf-8")  # not a marker: left alone
+            now = time.time()
+            os.utime(old, (now - 2 * 86400, now - 2 * 86400))
+            self.assertEqual(WindowsUpdater._sweep_stale_progress_markers(root, now=now), 1)
+            self.assertFalse(old.exists())
+            self.assertTrue(fresh.exists())  # an update that is running right now keeps its marker
+            self.assertFalse(other.exists())
+            self.assertTrue((root / "progress-x.json").exists())
+            self.assertEqual(WindowsUpdater._sweep_stale_progress_markers(root / "missing", now=now), 0)
+
     def test_admin_repair_copies_back_in_backup_mode_and_restarts_unelevated(self):
         copy = REPAIR_PS.index("robocopy.exe $source $Target /E /B")
         self.assertLess(REPAIR_PS.index("Stop-Owned $root"), copy)
