@@ -75,11 +75,14 @@ class ModeArchitectureSetupHotspot2Tests(unittest.TestCase):
         # 并报「有改动」，网关跟着重载。内容相同时在 nt 上不比权限。
         with tempfile.TemporaryDirectory(prefix='pinkie-setup-managed-') as temp:
             path = Path(temp) / 'pinkie-collab'
-            path.write_text('same\n', encoding='utf-8')
+            # 用字节写：真 Windows 上 write_text 会把 \n 写成 \r\n，内容就不「相同」了。
+            path.write_bytes(b'same\n')
             os.chmod(path, 0o600)
+            # 真 Windows 上 chmod(0o600) 读回来是 0o666，只比调用前后不变。
+            before = path.stat().st_mode
             with patch.object(setup, 'os', os_named('nt')):
                 self.assertFalse(setup._write_managed(path, 'same\n', 0o755))
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.stat().st_mode, before)
 
     @unittest.skipIf(os.name == 'nt', '需要 POSIX 权限位')
     def test_posix_still_repairs_permission_bits(self):
