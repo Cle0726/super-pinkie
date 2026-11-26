@@ -22,11 +22,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24.20.0"
+      - name: Read the pinned Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")" >> "$GITHUB_OUTPUT"
+      - name: Cache the WebKit download
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: ms-playwright-webkit-${{ runner.os }}-${{ runner.arch }}-${{ steps.pw.outputs.version }}
       - name: Install WebKit regression dependencies
         run: |
           deps="$RUNNER_TEMP/pinkie-ci-deps"
-          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
-          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@${{ steps.pw.outputs.version }}" "ws@8.23.0"
           "$deps/node_modules/.bin/playwright" install webkit
           echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
       - name: Run the WebKit suite from tests/webkit-ci.list
