@@ -215,6 +215,9 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                            check=True,creationflags=hidden,capture_output=True)
             process=subprocess.Popen([str(executable),'--hold'],creationflags=hidden)
             try:
+                # Kept on purpose: the image lock has no separate observable
+                # signal -- the assertRaises below *is* the probe, and retrying
+                # unlink() until it fails would hide a lock that is never held.
                 time.sleep(.2)
                 with self.assertRaises(PermissionError):executable.unlink()
                 def stop_after_delay():

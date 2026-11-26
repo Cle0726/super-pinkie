@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {EngineService, assetName, engineRoot, errorLine, isAscii, parseJsonOutput, parseSums, readProviders} from '../services/mode-architecture/engines.mjs';
+import {EngineService, archiveListCommand, archiveMemberEscapes, assetName, engineRoot, errorLine, isAscii, parseJsonOutput, parseSums, readProviders} from '../services/mode-architecture/engines.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pk-engines-'));
 
@@ -32,7 +32,8 @@ test('checksum lines and JSON output with surrounding noise are read reliably', 
   assert.equal(errorLine('    at a (b)\nplain failure'), 'plain failure');
 });
 
-function fakeInstall(root, {corrupt = false} = {}) {
+// 假 Windows：tar 不在 PATH 里（像 runProcess 遇到 ENOENT 那样返回 127），PowerShell 读 zip 目录时返回 entries。
+function fakeInstall(root, {corrupt = false, entries = ['t3-win/', 't3-win/t3.exe', 't3-win/resources/app.asar']} = {}) {
   const calls = [];
   const payload = Buffer.from('fake release');
   const exec = async (file, args) => {
@@ -45,6 +46,8 @@ function fakeInstall(root, {corrupt = false} = {}) {
       } else fs.writeFileSync(out, payload);
       return {code: 0, stdout: '', stderr: ''};
     }
+    if (file === 'tar') return {code: 127, stdout: '', stderr: 'spawn tar ENOENT'};
+    if (file === 'powershell' && /ZipFile\]::OpenRead/.test(args.at(-1))) return {code: 0, stdout: entries.join('\r\n') + '\r\n', stderr: ''};
     if (file === 'powershell') {
       const dest = args.at(-1).match(/-DestinationPath '([^']+)'/)[1];
       fs.mkdirSync(path.join(dest, 't3-win'), {recursive: true});
@@ -76,6 +79,103 @@ test('a download that does not match the published checksum is refused and nothi
   await assert.rejects(service.install(), /校验不对/);
   assert.equal(service.installed(), false);
   assert.equal(fs.readdirSync(path.join(root, 'downloads')).length, 0);
+});
+
+test('on Windows the zip entries are listed through PowerShell, so a missing tar does not break the install', async () => {
+  const root = tmp();
+  const {calls, service} = fakeInstall(root);
+  assert.deepEqual(await service.install(), {ok: true});
+  assert.ok(service.installed());
+  assert.equal(calls.some(call => call[0] === 'tar'), false, 'tar is never called on Windows');
+  const ps = calls.filter(call => call[0] === 'powershell');
+  assert.equal(ps.length, 2);
+  assert.match(ps[0].at(-1), /ZipFile\]::OpenRead/, 'entries are listed before unpacking');
+  assert.match(ps[1].at(-1), /Expand-Archive/);
+});
+
+test('a Windows zip entry that leaves the extract directory is refused before Expand-Archive runs', async () => {
+  const bad = ['..\\pwned.txt', '../pwned.txt', 't3-win\\..\\..\\pwned.txt', 'C:\\Windows\\pwned.txt', 'C:pwned.txt',
+    '\\\\server\\share\\pwned.txt', '/etc/pwned', 't3-win\\...\\pwned.txt', 't3-win/.. /pwned.txt'];
+  for (const entry of bad) {
+    const root = tmp();
+    const {calls, service} = fakeInstall(root, {entries: ['t3-win/', entry, 't3-win/t3.exe']});
+    await assert.rejects(service.install(), /越界路径/, entry);
+    assert.equal(service.installed(), false, entry);
+    assert.equal(calls.some(call => call[0] === 'powershell' && /Expand-Archive/.test(call.at(-1))), false, entry);
+    assert.equal(calls.some(call => call[0] === 'tar'), false, entry);
+    assert.equal(fs.readdirSync(path.join(root, 'downloads')).length, 0, entry);
+  }
+});
+
+test('archive member names: escapes in either slash style are caught, ordinary names pass', () => {
+  for (const name of ['../x', '..\\x', 'a/../../x', 'a\\..\\x', '/abs', '\\abs', 'C:\\x', 'c:/x', 'C:x', '\\\\srv\\share\\x', '...\\x', 'a/.. /x']) {
+    assert.equal(archiveMemberEscapes(name), true, name);
+  }
+  for (const name of ['', 't3', './t3', 't3-win/', 't3-win/t3.exe', 'a..b/c', '.hidden/x', 'x./y', 'resources/app.asar']) {
+    assert.equal(archiveMemberEscapes(name), false, name);
+  }
+});
+
+test('the listing command is PowerShell ZipFile on Windows and tar -tf elsewhere', () => {
+  assert.deepEqual(archiveListCommand('linux', '/s/t3.tar.gz'), ['tar', ['-tf', '/s/t3.tar.gz']]);
+  assert.deepEqual(archiveListCommand('darwin', '/s/t3.tar.gz'), ['tar', ['-tf', '/s/t3.tar.gz']]);
+  const [file, args] = archiveListCommand('win32', "C:\\Pro'gram\\t3.zip");
+  assert.equal(file, 'powershell');
+  assert.deepEqual(args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command']);
+  assert.match(args[3], /\[IO\.Compression\.ZipFile\]::OpenRead\('C:\\Pro''gram\\t3\.zip'\)/, 'single quotes in the path are doubled');
+  assert.match(args[3], /\$ErrorActionPreference='Stop'/, 'an unreadable zip makes PowerShell exit non-zero');
+  assert.match(args[3], /Dispose\(\)/);
+});
+
+function linuxDownload(root, onTar) {
+  const calls = [];
+  const payload = Buffer.from('fake release');
+  const name = 't3-0.1.11-linux-x64.tar.gz';
+  const exec = async (file, args) => {
+    calls.push([file, ...args]);
+    if (file === 'curl') {
+      const out = args[args.indexOf('-o') + 1];
+      if (out.endsWith('SHA256SUMS')) fs.writeFileSync(out, `${crypto.createHash('sha256').update(payload).digest('hex')}  ${name}\n`);
+      else fs.writeFileSync(out, payload);
+      return {code: 0, stdout: '', stderr: ''};
+    }
+    if (file === 'tar') return onTar(args, calls);
+    return {code: 0, stdout: '', stderr: ''};
+  };
+  return {calls, service: new EngineService({root, platform: 'linux', arch: 'x64', exec, proxy: async () => ''})};
+}
+
+test('an archive member that leaves the extract directory is refused before unpacking', async () => {
+  const root = tmp();
+  const outside = path.join(root, 'pwned.txt');
+  const {calls, service} = linuxDownload(root, args => {
+    if (args[0] === '-tf') return {code: 0, stdout: '../pwned.txt\nt3\n', stderr: ''};
+    const dest = args[args.indexOf('-C') + 1];
+    fs.mkdirSync(dest, {recursive: true});
+    fs.writeFileSync(outside, 'PINKIE_LEAK');
+    fs.writeFileSync(path.join(dest, 't3'), 'exe');
+    return {code: 0, stdout: '', stderr: ''};
+  });
+  await assert.rejects(service.install(), /越界路径/);
+  assert.equal(service.installed(), false);
+  assert.equal(fs.existsSync(outside), false);
+  assert.equal(calls.some(call => call[0] === 'tar' && call[1] === '-xzf'), false);
+});
+
+test('a symlink shipped as the engine binary is refused', async () => {
+  const root = tmp();
+  const evil = path.join(root, 'evil-bin');
+  fs.writeFileSync(evil, 'evil');
+  const {service} = linuxDownload(root, args => {
+    if (args[0] === '-tf') return {code: 0, stdout: 't3\n', stderr: ''};
+    const dest = args[args.indexOf('-C') + 1];
+    fs.mkdirSync(dest, {recursive: true});
+    fs.symlinkSync(evil, path.join(dest, 't3'));
+    return {code: 0, stdout: '', stderr: ''};
+  });
+  await assert.rejects(service.install(), /不是普通文件|目录外面/);
+  assert.equal(service.installed(), false);
+  assert.equal(fs.existsSync(path.join(service.dir, 't3')), false);
 });
 
 test('provider status keeps sign-in state and plan but never the account e-mail', () => {
