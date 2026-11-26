@@ -85,11 +85,14 @@ test('B22 real page: in Metre the laser entry stays hidden on /cron and nothing 
             if (!/laolao-metre-skin\.css/.test(sh.href || '')) continue;
             for (let i = 0; i < sh.cssRules.length; i++) {
               const r = sh.cssRules[i];
-              if (!(r.selectorText || '').includes('#pinkie-power-entry')) continue;
+              // 只认隐藏规则本身：同时带激光笔入口和新选择器（皮肤里更早还有别的规则也列了 #pinkie-power-entry）。
+              const sel = r.selectorText || '';
+              if (!sel.includes('#pinkie-laser-entry') || !sel.includes(nu)) continue;
               const text = r.cssText.split(nu).join(old);
+              if (text === r.cssText) return -1;
               sh.deleteRule(i);
               sh.insertRule(text, i);
-              return text.includes(nu) ? -1 : 1;
+              return sh.cssRules[i].selectorText.includes(nu) ? -1 : 1;
             }
           }
           return 0;
