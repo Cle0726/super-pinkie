@@ -10,6 +10,8 @@ import runpy
 # tree; see services/state_root.py for the rule and why it is loaded this way.
 STATE = runpy.run_path(str(Path(__file__).resolve().parents[1]/'state_root.py'))
 state_root = STATE['state_root']
+SMALL_WINDOW_TOKENS = 256000
+SMALL_WINDOW_KEEP_RATIO = .3
 
 
 def positive(value):
@@ -133,6 +135,10 @@ def model_budget(ref, config=None, home=None):
     # nearly the whole trigger budget again or recovery will loop forever.
     working_headroom = max(4096, math.floor(limit*.15))
     keep_recent = min(requested_keep, max(1, threshold-working_headroom))
+    # Same small-window cap as budget.mjs: a global keepRecentTokens sized for
+    # 1M models must not leave a 128K model re-overflowing right after compaction.
+    if limit <= SMALL_WINDOW_TOKENS:
+        keep_recent = min(keep_recent, max(1, math.floor(limit*SMALL_WINDOW_KEEP_RATIO)))
     return {'model':ref, 'window':limit, 'threshold':threshold, 'reserve':limit-threshold,
             'target':target, 'keepRecent':keep_recent, 'source':source}
 
