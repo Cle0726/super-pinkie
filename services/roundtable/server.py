@@ -12,6 +12,7 @@ import contextlib
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import math
 import mimetypes
 import os
 from pathlib import Path
@@ -154,6 +155,83 @@ def clean_self_reference(text, name):
     return re.sub(r'(?<!自)(?<!忘)(?<!无)我', name, text)
 
 
+# 白板：规则同 services/mode-architecture/whiteboard-store.mjs。每个元素自带 rev，改要带 baseRev（新建填 0），
+# 服务器上的已经被别人改过就不改、原样退回；删除留墓碑给轮询方；谁改的（by）由服务器写，不信页面。
+WB_KINDS = ('note', 'ink', 'box', 'link')
+WB_COLORS = ('sun', 'mint', 'sky', 'rose', 'paper')
+WB_ACTORS = ('user', 'pinkie')
+WB_LIMITS = {'items': 2000, 'text': 2000, 'label': 200, 'points': 2000, 'ops': 200, 'coord': 1e6, 'size': 2e4, 'group': 40}
+WB_ID = re.compile(r'[A-Za-z0-9_-]{6,40}')
+
+
+def wb_id(value):
+    return isinstance(value, str) and WB_ID.fullmatch(value) is not None
+
+
+def wb_num(value, limit=WB_LIMITS['coord']):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and abs(value) <= limit
+
+
+def wb_text(value, limit):
+    if value is None:
+        return ''
+    if not isinstance(value, str):
+        raise ValueError('白板文字格式不对')
+    if len(value.encode('utf-16-le')) // 2 > limit:  # 按 JS 的 length 数，和 Node 那边一致
+        raise ValueError(f'白板文字太长（最多 {limit} 个字）')
+    return value
+
+
+def wb_round(value):
+    rounded = math.floor(value * 10 + .5) / 10  # 同 Math.round，不用 Python 的银行家舍入
+    return int(rounded) if rounded.is_integer() else rounded
+
+
+def wb_clean(raw):
+    if not isinstance(raw, dict):
+        raise ValueError('白板元素格式不对')
+    item_id, kind = raw.get('id'), raw.get('kind')
+    if not wb_id(item_id):
+        raise ValueError('白板元素编号不对')
+    if kind not in WB_KINDS:
+        raise ValueError('没有这种白板元素')
+    item = {'id': item_id, 'kind': kind}
+    if raw.get('group') not in (None, ''):
+        item['group'] = wb_text(raw['group'], WB_LIMITS['group'])
+    if kind == 'link':
+        if not wb_id(raw.get('from')) or not wb_id(raw.get('to')):
+            raise ValueError('连线两头要连到元素上')
+        if raw['from'] == raw['to']:
+            raise ValueError('连线不能连到自己')
+        item.update({'from': raw['from'], 'to': raw['to'], 'label': wb_text(raw.get('label'), WB_LIMITS['label'])})
+        return item
+    if kind == 'ink':
+        points = raw.get('points')
+        if not isinstance(points, list) or not 2 <= len(points) <= WB_LIMITS['points']:
+            raise ValueError('笔迹点数不对')
+        item['points'] = []
+        for point in points:
+            if not isinstance(point, list) or len(point) != 2 or not wb_num(point[0]) or not wb_num(point[1]):
+                raise ValueError('笔迹坐标不对')
+            item['points'].append([wb_round(point[0]), wb_round(point[1])])
+        width = raw.get('width')
+        item['width'] = width if wb_num(width, 12) and width >= 1 else 2
+        return item
+    for key in ('x', 'y'):
+        if not wb_num(raw.get(key)):
+            raise ValueError('白板位置不对')
+    for key in ('w', 'h'):
+        if not wb_num(raw.get(key), WB_LIMITS['size']) or raw[key] < 8:
+            raise ValueError('白板大小不对')
+    item.update({key: raw[key] for key in ('x', 'y', 'w', 'h')})
+    if kind == 'note':
+        item['text'] = wb_text(raw.get('text'), WB_LIMITS['text'])
+        item['color'] = raw['color'] if raw.get('color') in WB_COLORS else 'sun'
+    else:
+        item['label'] = wb_text(raw.get('label'), WB_LIMITS['label'])
+    return item
+
+
 class Store:
     def __init__(self, root):
         self.root = Path(root).expanduser().resolve()
@@ -188,6 +266,9 @@ class Store:
               INSERT INTO live_events(session,entity,entity_id) VALUES(new.session,'run',new.id); END;
             CREATE TRIGGER IF NOT EXISTS roundtable_session_update AFTER UPDATE ON sessions BEGIN
               INSERT INTO live_events(session,entity,entity_id) VALUES(new.id,'session',new.id); END;
+            CREATE TABLE IF NOT EXISTS whiteboards(
+              session TEXT PRIMARY KEY REFERENCES sessions(id),rev INTEGER NOT NULL,
+              items TEXT NOT NULL,updated REAL NOT NULL);
         ''')
         session_columns = {row['name'] for row in self.db.execute('PRAGMA table_info(sessions)')}
         message_columns = {row['name'] for row in self.db.execute('PRAGMA table_info(messages)')}
@@ -211,6 +292,75 @@ class Store:
     def write(self, sql, args=()):
         with self.lock, self.db:
             return self.db.execute(sql, args).lastrowid
+
+    def board(self, session_id):
+        if not self.rows('SELECT id FROM sessions WHERE id=?', (session_id,)):
+            raise ValueError('圆桌不存在')
+        rows = self.rows('SELECT rev,items FROM whiteboards WHERE session=?', (session_id,))
+        if not rows:
+            return 0, {}
+        items = json.loads(rows[0]['items'])
+        return int(rows[0]['rev']), items if isinstance(items, dict) else {}
+
+    # since=0 拿全部（不含墓碑）；since>0 只拿之后改过的（含墓碑），给轮询用。
+    def whiteboard(self, session_id, since=0):
+        rev, items = self.board(session_id)
+        since = since if isinstance(since, int) and not isinstance(since, bool) and since > 0 else 0
+        return {'ok': True, 'rev': rev,
+                'items': [item for item in items.values() if (item['rev'] > since if since else not item.get('deleted'))]}
+
+    def apply_whiteboard(self, session_id, ops, actor):
+        if actor not in WB_ACTORS:
+            raise ValueError('不知道是谁在改白板')
+        if not isinstance(ops, list) or not 1 <= len(ops) <= WB_LIMITS['ops']:
+            raise ValueError('一次改动的条数不对')
+        prepared = []
+        for op in ops:
+            op = op if isinstance(op, dict) else {}
+            base = op.get('baseRev')
+            if not isinstance(base, int) or isinstance(base, bool) or base < 0:
+                raise ValueError('白板改动缺少版本号')
+            if op.get('op') == 'put':
+                prepared.append(('put', base, wb_clean(op.get('item'))))
+            elif op.get('op') == 'del' and wb_id(op.get('id')):
+                prepared.append(('del', base, op['id']))
+            else:
+                raise ValueError('没有这种白板改动')
+        with self.lock:
+            rev, items = self.board(session_id)
+            applied, conflicts, now = [], [], int(time.time() * 1000)
+            for kind, base, value in prepared:
+                item_id = value['id'] if kind == 'put' else value
+                current = items.get(item_id)
+                if (current['rev'] if current else 0) != base:
+                    conflicts.append(current or {'id': item_id, 'rev': 0, 'deleted': True})
+                    continue
+                if kind == 'del' and (not current or current.get('deleted')):
+                    continue
+                rev += 1
+                if kind == 'put':
+                    nxt = {**value, 'rev': rev, 'by': actor, 'updatedAt': now}
+                else:
+                    nxt = {'id': item_id, 'kind': current['kind'], 'rev': rev, 'by': actor, 'updatedAt': now, 'deleted': True}
+                items[item_id] = nxt
+                applied.append(nxt)
+            # 连线两头必须是还在的元素；一头被删的连线跟着删掉。
+            def alive(end):
+                target = items.get(end)
+                return bool(target) and not target.get('deleted') and target['kind'] != 'link'
+            for item in list(items.values()):
+                if item['kind'] != 'link' or item.get('deleted') or (alive(item['from']) and alive(item['to'])):
+                    continue
+                rev += 1
+                gone = {'id': item['id'], 'kind': 'link', 'rev': rev, 'by': actor, 'updatedAt': now, 'deleted': True}
+                items[item['id']] = gone
+                applied.append(gone)
+            if sum(1 for item in items.values() if not item.get('deleted')) > WB_LIMITS['items']:
+                raise ValueError(f"白板最多放 {WB_LIMITS['items']} 个元素")
+            if applied:
+                self.write('INSERT OR REPLACE INTO whiteboards(session,rev,items,updated) VALUES(?,?,?,?)',
+                           (session_id, rev, json.dumps(items, ensure_ascii=False), time.time()))
+            return {'ok': True, 'rev': rev, 'applied': applied, 'conflicts': conflicts}
 
     def session(self, session_id):
         rows = self.rows('SELECT * FROM sessions WHERE id=?', (session_id,))
@@ -407,8 +557,26 @@ class Roundtable:
         self.store = store
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='roundtable')
         self.processes = {}
+        # 碧琪那一席动白板用的一次性令牌：{token: session}，只在内存里，这一跑结束就删。
+        self.board_tokens = {}
+        self.board_url = ''  # serve() 填 http://127.0.0.1:<port>；没填（测试里直接用 Roundtable）就不给白板令牌
         self.lock = threading.RLock()
         self.closed = False
+
+    def issue_board_token(self, session):
+        if not self.board_url:
+            return ''
+        token = secrets.token_urlsafe(32)
+        with self.lock:
+            self.board_tokens[token] = session
+        return token
+
+    def board_session(self, token):
+        with self.lock:
+            for known, session in self.board_tokens.items():
+                if token and hmac.compare_digest(token, known):
+                    return session
+        return ''
 
     def send(self, session_id, data):
         session = self.store.session(session_id)
@@ -532,6 +700,10 @@ class Roundtable:
                 command = [node, '--import', str(hook), str(Path(binary).resolve())] + command[len(openclaw_command()):]
                 environment['PINKIE_LIVE_ENTRY'] = binary
             environment['OPENCLAW_CONFIG_PATH'] = str(config_path)
+            # 只有碧琪那一席能动白板：一次性令牌只放进她这个子进程的环境，不进日志、提示词和记录，这一跑结束就作废。
+            board_token = self.issue_board_token(session['id']) if member == 'pinkie' else ''
+            if board_token:
+                environment['PINKIE_ROUNDTABLE_BOARD'] = json.dumps({'url': self.board_url, 'session': session['id'], 'token': board_token})
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=self.store.root, env=environment, **PROCESS['popen_group_kwargs']())
             with self.lock:
@@ -603,6 +775,8 @@ class Roundtable:
                     self.kill(process)
                 with self.lock:
                     self.processes.get(run_id, set()).discard(process)
+                    if board_token:
+                        self.board_tokens.pop(board_token, None)
                 process.stdout.close()
                 process.stderr.close()
 
@@ -926,6 +1100,10 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path == '/api/models':
                 models = available_models(query.get('refresh') == ['1'])
                 return self.reply(200, {'models': models, 'available': bool(models)})
+            board_match = re.fullmatch(r'/api/sessions/([a-f0-9]{32})/whiteboard', parsed.path)
+            if board_match:
+                since = query.get('since', ['0'])[0]
+                return self.reply(200, self.server.store.whiteboard(board_match.group(1), int(since) if since.isdigit() else 0))
             match = re.fullmatch(r'/api/sessions/([a-f0-9]{32})', parsed.path)
             if match:
                 session = match.group(1)
@@ -947,6 +1125,10 @@ class Handler(BaseHTTPRequestHandler):
                 '/bg-morning.png': ROOT/'ui/assets/laolao-roundtable-wallpaper-morning-v2.png',
                 '/bg-sunset.png': ROOT/'ui/assets/laolao-roundtable-wallpaper-sunset-v2.png',
                 '/bg-night.png': ROOT/'ui/assets/laolao-roundtable-wallpaper-night-v2.png',
+                # 白板和想法模式共用一份页面脚本（data-host="roundtable"），两个平台的包里 ui/ 都在 services/ 旁边。
+                '/dom-watch.js': ROOT/'ui/injections/laolao-dom-watch.js',
+                '/whiteboard.js': ROOT/'ui/injections/laolao-whiteboard.js',
+                '/whiteboard.css': ROOT/'ui/injections/laolao-whiteboard.css',
             }
             party_portraits = {
                 'pinkie': 'laolao-party-avatar-v1.png',
@@ -998,7 +1180,34 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
             pass
 
+    def pinkie_whiteboard(self, session):
+        # 碧琪那一席的子进程来改白板：只认这一跑发的令牌（和页面令牌分开），不接浏览器（带 Origin 的一律拒），
+        # 令牌对应的圆桌必须就是这一张；by 一律记 pinkie。
+        port = self.server.server_port
+        if self.headers.get('Host') not in {'127.0.0.1:' + str(port), 'localhost:' + str(port)} or self.headers.get('Origin'):
+            return self.reply(403, {'error': '白板令牌只给本机的碧琪用'})
+        owner = self.server.roundtable.board_session(self.headers.get('X-Roundtable-Board', ''))
+        if not owner or owner != session:
+            return self.reply(403, {'error': '白板令牌不对或已经过期'})
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
+                raise ValueError('请求格式不正确')
+            data = json.loads(self.rfile.read(size))
+            if not isinstance(data, dict):
+                raise ValueError('请求格式不正确')
+            if data.get('read') is True:
+                return self.reply(200, self.server.store.whiteboard(session))
+            return self.reply(200, self.server.store.apply_whiteboard(session, data.get('ops'), 'pinkie'))
+        except (ValueError, TypeError, KeyError, OSError) as error:
+            return self.reply(400, {'error': str(error)})
+        except sqlite3.Error:
+            return self.reply(503, {'error': '本机圆桌记录暂时无法保存'})
+
     def do_POST(self):
+        pinkie_board = re.fullmatch(r'/api/sessions/([a-f0-9]{32})/whiteboard/pinkie', self.path)
+        if pinkie_board:
+            return self.pinkie_whiteboard(pinkie_board.group(1))
         if not self.trusted(mutation=True):
             return self.reply(403, {'error': '页面授权失效，请刷新后重试'})
         try:
@@ -1013,6 +1222,9 @@ class Handler(BaseHTTPRequestHandler):
                                                                          data.get('models'), data.get('path', '')))
             if self.path == '/api/projects':
                 return self.reply(200, self.server.store.create_project(data.get('parent', ''), data.get('name', '')))
+            board_match = re.fullmatch(r'/api/sessions/([a-f0-9]{32})/whiteboard', self.path)
+            if board_match:
+                return self.reply(200, self.server.store.apply_whiteboard(board_match.group(1), data.get('ops'), 'user'))
             match = re.fullmatch(r'/api/sessions/([a-f0-9]{32})/(send|stop|update)', self.path)
             if not match:
                 return self.reply(404, {'error': '接口不存在'})
@@ -1035,6 +1247,7 @@ def serve(port, state_dir, on_ready=None):
     server.token = secrets.token_urlsafe(32)
     server.store = Store(state_dir)
     server.roundtable = Roundtable(server.store)
+    server.roundtable.board_url = 'http://127.0.0.1:' + str(server.server_port)
     if on_ready:
         on_ready(server)
     def shutdown(*_):

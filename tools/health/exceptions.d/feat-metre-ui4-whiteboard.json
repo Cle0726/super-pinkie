@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "白板（任务-官方新功能五项-1125 第 4 项 PR ①，ui4，#113）：laolao-whiteboard.css / .js 只能在头片段登记加载（?v=@hash），各一行；功能本身全在这两个新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 12, "reason": "白板（第 4 项 PR ①，ui4，#113）：新增一个 whiteboard 区域，根选择器 .pk-whiteboard / .pk-whiteboard-entry，files 只有 laolao-whiteboard.css / .js；ui-region-ownership 要求头片段加载的每个文件都归属一个区域，新区域只能在 regions.json 里登记。没有跨区域 CSS 放行。"}
+]

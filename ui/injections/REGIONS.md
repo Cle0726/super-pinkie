@@ -25,3 +25,4 @@
 | `study-desk` | 学习台、题库、复习、笔记本与学习内联 | `.pk-desk`, `.laolao-study-desk` |
 | `study-game` | 学习台游戏（HUD、对战、商店、地图、模考） | `.laolao-game-hud`, `.laolao-game-battle`, `.laolao-game-shop`, `.laolao-game-world`, `.laolao-game-exam`, `.laolao-game-loadout`, `.laolao-game-stage`, `.laolao-game-practice` |
 | `companion-and-home` | 陪伴小马、启动首页与开屏 | `.laolao-companion`, `.laolao-startup-home`, `.laolao-splash` |
+| `whiteboard` | 白板（想法模式）：画布、工具条、入口键 | `.pk-whiteboard`, `.pk-whiteboard-entry` |
