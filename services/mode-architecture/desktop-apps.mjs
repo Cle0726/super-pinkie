@@ -60,15 +60,27 @@ export const charsetMeta = text => (declaresCharset(String(text)) ? '' : CHARSET
 export function withOfflinePolicy(html) { return withPolicy(html, {}); }
 
 // 作品里写死的外部来源（https://host[:port]），最多 20 个；只认 http(s) 和 ws(s)，不认相对地址。
+// 只在已经认出的 ASCII 记号上折叠默认端口：浏览器和 macOS 都把 https://host:443 当成 https://host。
+// 不交给 URL 再解析，避免把十进制 IP、百分号点号收成另一个主机。
 const ORIGIN = /\b(?:https?|wss?):\/\/[a-z0-9.-]+(?::\d{1,5})?/gi;
 const FILE_USE = /<input[^>]*type\s*=\s*["']?file|showOpenFilePicker|showDirectoryPicker|showSaveFilePicker|webkitdirectory/i;
+function canonicalOrigin(origin) {
+  const match = /^(https?|wss?):\/\/([a-z0-9.-]+)(?::(\d{1,5}))?$/.exec(origin);
+  if (!match) return '';
+  const [, scheme, host, rawPort] = match;
+  if (rawPort == null) return `${scheme}://${host}`;
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return '';
+  const def = scheme === 'https' || scheme === 'wss' ? 443 : 80;
+  return `${scheme}://${host}${port === def ? '' : `:${port}`}`;
+}
 export function needsOf(html) {
-  const origins = [...new Set([...String(html).matchAll(ORIGIN)].map(match => match[0].toLowerCase()))]
+  const origins = [...new Set([...String(html).matchAll(ORIGIN)].map(match => canonicalOrigin(match[0].toLowerCase())).filter(Boolean))]
     .filter(origin => !/^(?:https?|wss?):\/\/(?:www\.)?w3\.org$/.test(origin)).sort().slice(0, 20);
   return {network: origins, files: FILE_USE.test(String(html))};
 }
-const cleanOrigins = list => [...new Set((Array.isArray(list) ? list : []).map(String).map(item => item.toLowerCase())
-  .filter(item => /^(?:https?|wss?):\/\/[a-z0-9.-]+(?::\d{1,5})?$/.test(item)))].sort().slice(0, 20);
+const cleanOrigins = list => [...new Set((Array.isArray(list) ? list : []).map(String).map(item => canonicalOrigin(item.toLowerCase()))
+  .filter(Boolean))].sort().slice(0, 20);
 
 export function policyFor({origins = []} = {}) {
   const allowed = cleanOrigins(origins);
