@@ -1,0 +1,15 @@
+/* laolao-metre-worktree —— S7：Metre 侧栏会话行里的「目录 · 分支」小字（数据见 laolao-metre-worktree.js）。
+ * 只在 data-laolao-mode="metre" 下生效，其他五个模式一字不变。不加强制覆盖；颜色只用 Metre 自己的变量，日夜跟着变量走。
+ * 排在会话名后面、同一条基线，12px 灰字；地方不够时先省略这段小字（最多占行宽四成），会话名优先。 */
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .sidebar-recent-session__link:has(> .pk-ml-wt) > .sidebar-recent-session__name { flex: 0 1 auto; min-width: 2em; }
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host .pk-ml-wt {
+  flex: 0 10 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 12px/20px var(--metre-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  color: var(--metre-muted);
+}
+html[data-laolao-mode="metre"] aside.sidebar .session-row-host.sidebar-recent-session--active .pk-ml-wt { color: var(--metre-text); opacity: 0.72; }
