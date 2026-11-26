@@ -145,9 +145,14 @@ class WindowsStartupTests(unittest.TestCase):
              mock.patch.object(windows_desktop.subprocess, 'CREATE_NEW_PROCESS_GROUP', 0x200, create=True):
             self.assertEqual(windows_desktop.hidden_process_kwargs(hide_window=False), {'creationflags': 0x08000200})
 
-    def test_both_executable_formats_request_admin_through_the_manifest(self):
+    def test_both_executable_formats_start_as_the_signed_in_user(self):
+        # Opening the App or an installed work must never ask for UAC; only
+        # the update swap into a protected folder elevates, on demand.
         build = (Path(__file__).resolve().parents[1] / 'build-win.ps1').read_text(encoding='utf-8-sig')
-        self.assertIn('"--windowed", "--uac-admin"', build)
+        code = '\n'.join(line.split('#', 1)[0] for line in build.splitlines())
+        self.assertNotIn('--uac-admin', code)
+        self.assertNotIn('requireAdministrator', code)
+        self.assertIn('"--windowed",', build)
         self.assertIn('$pyInstallerCommonArgs', build)
         self.assertIn('--onedir', build)
         self.assertIn('--onefile', build)
