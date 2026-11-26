@@ -1,0 +1,128 @@
+# TEMPORARY (A4 mac/metre-day-muted, #123 follow-up): day sidebar date / time colour changed; re-capture the metre-board real baselines on a clean runner (same method as tmp-115). Delete this file in the commit that adds the baselines.
+name: tmp a4 real baseline capture
+
+on:
+  push:
+    branches: [mac/metre-day-muted]
+
+jobs:
+  linux-capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright Chromium
+        run: |
+          deps="$RUNNER_TEMP/pinkie-ci-deps"
+          version="$(node -p "require('./tools/pinkie-toolbox/toolbox-manifest.json').playwrightVersion")"
+          npm install --prefix "$deps" --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          "$deps/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$deps/node_modules" >> "$GITHUB_ENV"
+      - name: Compare committed linux set first (strict, expected red only on metre-board)
+        continue-on-error: true
+        shell: bash
+        env:
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/compare.tap"; echo "compare exit=${PIPESTATUS[0]}"
+      - name: Keep the compare actual / diff images
+        if: always()
+        shell: bash
+        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null; ls -R tmpa4-compare | head -n 20
+      - name: Capture linux real baselines (3x repeat, 0 px jitter required)
+        shell: bash
+        run: |
+          set +e
+          rm -rf tests/visual/diff-real
+          env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
+            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
+          echo "capture exit=${PIPESTATUS[0]}"
+          git status --porcelain tests/visual/real-baseline | tee "$RUNNER_TEMP/changed.txt"
+      - name: Re-check linux set in a fresh process (strict compare, 3x repeat)
+        shell: bash
+        env:
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
+      - name: Collect logs
+        if: always()
+        shell: bash
+        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null; ls tmpa4-logs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tmpa4-real-baseline-linux
+          path: |
+            tests/visual/real-baseline/linux
+            tmpa4-compare
+            tmpa4-logs
+          if-no-files-found: warn
+
+  windows-capture:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.20.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright pinned Chromium
+        shell: pwsh
+        run: |
+          $deps = Join-Path $env:RUNNER_TEMP 'pinkie-ci-deps'
+          $version = (Get-Content 'tools/pinkie-toolbox/toolbox-manifest.json' -Raw | ConvertFrom-Json).playwrightVersion
+          npm install --prefix $deps --no-save --no-package-lock "playwright@$version" "ws@8.23.0"
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install playwright' }
+          & (Join-Path $deps 'node_modules/.bin/playwright.cmd') install chromium-headless-shell
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to install Chromium' }
+          "NODE_PATH=$(Join-Path $deps 'node_modules')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Compare committed win32 set first (strict, expected red only on metre-board)
+        continue-on-error: true
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/compare.tap"; echo "compare exit=${PIPESTATUS[0]}"
+      - name: Keep the compare actual / diff images
+        if: always()
+        shell: bash
+        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null; ls -R tmpa4-compare | head -n 20
+      - name: Capture win32 real baselines (3x repeat, 0 px jitter required)
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          set +e
+          rm -rf tests/visual/diff-real
+          env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
+            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
+          echo "capture exit=${PIPESTATUS[0]}"
+          git status --porcelain tests/visual/real-baseline | tee "$RUNNER_TEMP/changed.txt"
+      - name: Re-check win32 set in a fresh process (strict compare, 3x repeat)
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+          PINKIE_VISUAL_REPEAT: "3"
+          PINKIE_VISUAL_REPORT: "1"
+        run: node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
+      - name: Collect logs
+        if: always()
+        shell: bash
+        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null; ls tmpa4-logs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tmpa4-real-baseline-win32
+          path: |
+            tests/visual/real-baseline/win32
+            tmpa4-compare
+            tmpa4-logs
+          if-no-files-found: warn
