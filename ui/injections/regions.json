@@ -79,6 +79,7 @@
         "laolao-session-tools.js",
         "laolao-session-board.css",
         "laolao-session-board.js",
+        "laolao-session-board-data.js",
         "laolao-crew.css",
         "laolao-crew.js"
       ]

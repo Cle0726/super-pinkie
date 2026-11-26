@@ -1,5 +1,5 @@
 // S6 第 2、3 步 · 多会话看板两种皮的纯函数（briefs/program-1120/设计-S6.md 第二、四、五节）。
-// 数据层（linux2 的 laolao-session-board-data.js）还没合：这里用假数据直接验 laolao-session-board.js 导出的纯函数，不起浏览器。
+// 这里用假数据直接验 laolao-session-board.js 导出的纯函数，不起浏览器；和 linux2 数据层（#231）真接上的见 session-board-join.test.mjs。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

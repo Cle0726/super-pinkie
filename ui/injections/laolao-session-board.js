@@ -11,6 +11,7 @@
  *   start() / stop()→ 看板打开 / 关上（关着不读列表，设计第一节）
  *   open(key)       → 跳过去（同模式切会话、跨模式重新载入、Metre 上锁先解锁）
  *   usage(key)      → Promise<{cost}>，只在展开一行时调（设计第二节：sessions.usage 太慢，不每行调）
+ *   refreshBadge()  → Promise<在跑数>：看板关着时胶囊上的数字；只在 laolao:sessions-changed 后读，最多 5 秒一次（设计第一节）
  * 一行：{key, mode, modeLabel, title, state: 'ask'|'run'|'queued'|'error'|'done', doing, since, sinceEstimated,
  *        tokens, contextTokens, over, model, tools, children, childMore} */
 (() => {
@@ -155,11 +156,12 @@
   }
 
   // ---------- 碧琪皮：侧栏顶部胶囊 + 从侧栏右边滑出的面板 ----------
-  let panel = null, pill = null, unsub = null, view = null, lastFocus = null;
+  let panel = null, pill = null, unsub = null, view = null, lastFocus = null, badge = null, badgeAt = 0;
   const isOpen = () => Boolean(panel && !panel.hidden);
   function paintPill() {
     const controls = document.querySelector('aside.sidebar .laolao-session-controls');
-    const n = view?.running ?? (view?.rows || []).filter((r) => r.state === 'run' || r.state === 'queued' || r.state === 'ask').length;
+    const live = view?.running ?? (view?.rows || []).filter((r) => r.state === 'run' || r.state === 'queued' || r.state === 'ask').length;
+    const n = isOpen() || metreShown() || badge == null ? live : badge;
     if (!controls || !data()) { pill?.remove(); return; }
     if (!pill) {
       pill = document.createElement('button');
@@ -232,7 +234,14 @@
   }
 
   // ---------- 接线 ----------
-  function onView(next) { view = next; paintPill(); paintPanel(); paintMetre(); }
+  function onView(next) { view = next; if (isOpen() || metreShown()) badge = null; paintPill(); paintPanel(); paintMetre(); }
+  // 看板关着：胶囊上的数字只在会话有变化（laolao:sessions-changed）后读，最多 5 秒一次（不开定时器；5 秒内的变化等下一次）。
+  function readBadge() {
+    const src = data();
+    if (!src?.refreshBadge || isOpen() || metreShown() || Date.now() - badgeAt < 5000) return;
+    badgeAt = Date.now();
+    Promise.resolve(src.refreshBadge()).then((n) => { if (Number.isFinite(n)) { badge = n; paintPill(); } }, () => {});
+  }
   function connect() {
     const src = data();
     if (!src || unsub) return;
@@ -243,6 +252,7 @@
   function start() {
     connect();
     window.addEventListener('pinkie:session-board-ready', connect);
+    window.addEventListener('laolao:sessions-changed', readBadge);
     window.addEventListener('laolao:modechange', () => { if (skinOf() === 'metre') close(false); paintPill(); });
     window.addEventListener('pinkie:metre-board-open', () => { if (!data()) return; data().start?.(); view = data().view?.() || view; paintMetre(); });
     window.addEventListener('pinkie:metre-board-closed', () => { if (!isOpen()) data()?.stop?.(); });
