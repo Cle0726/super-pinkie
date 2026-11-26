@@ -373,9 +373,12 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-connect
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-connection-status > span:last-child:not([class]) { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-footer-icon, .sidebar-brand__icon) { color: var(--metre-muted) !important; background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 6px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-footer-icon, .sidebar-brand__icon):hover { color: var(--metre-text) !important; background: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-laser-entry,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-laser-rail-entry,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-power-entry { display: none !important; }
+/* B22：激光笔按钮带 sidebar-brand__icon，下面「侧栏交互图标」那条（:not(#_m1..#_m3) + :is(...)，特异度 3,3,2）
+ * 给它 display: inline-flex !important，压过原来 3,1,1 的隐藏规则；Metre 里激光笔不轮询、只在载入时挂一次，
+ * 挂上的那次（/cron 重新载入时底栏已在）就露出来，把设置齿轮挤到方灯上。隐藏规则多两个 :not 到 5,1,1，稳压住。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-laser-entry,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-laser-rail-entry,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-power-entry { display: none !important; }
 
 /* ---------- 顶栏：不重复写 Metre；链路和费用是调试信息，鼠标移到顶栏才显示 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .dashboard-header__breadcrumb { display: none !important; }
