@@ -1,0 +1,14 @@
+[
+  {
+    "file": "ui/injections/laolao-head.fragment.html",
+    "metric": "lines",
+    "add": 2,
+    "reason": "月度回顾新文件 laolao-recap.css / laolao-recap.js 只能在这里登记加载（?v=@hash），功能全在新文件里。"
+  },
+  {
+    "file": "ui/injections/regions.json",
+    "metric": "lines",
+    "add": 2,
+    "reason": "两个新文件 laolao-recap.css / .js 各登记一行，没有新区域、新根选择器或跨区域放行。"
+  }
+]
