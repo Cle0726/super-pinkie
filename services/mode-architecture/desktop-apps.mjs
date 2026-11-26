@@ -124,10 +124,71 @@ export const FILE_GUARD = '<script>(()=>{const no=()=>Promise.reject(new DOMExce
   + 'const i=t&&(t.matches("input")?t:t.control);if(i&&i.type==="file"){e.preventDefault();e.stopImmediatePropagation()}},true);'
   + 'const c=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==="file")return;return c.call(this)}})()</script>';
 
-// 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何脚本之前：有 <head> 插在它后面；
-// 没有就插在 <html> / doctype 后面（解析器会把它放进隐式的 head）；都没有才放最前面。
-// 属性最多扫 512 字，没有 > 的长输入不会拖成平方级；<head> 属性超过 512 字时匹配不到它，会插到 <html> 后、
-// <head> 前（解析器先建隐式 head，作品那个 <head> 的属性会丢），作品基本不会这样写，不另处理。
+// 文档开头「解析器还没开始建内容」的那一段：空白、BOM、注释（按 HTML 规范收尾：<!-->、<!--->、--> 或 --!>）、
+// <!…> / <?…> / </> 这类假注释、doctype、<html>、<head>（属性按引号读，引号里的 > 不算结尾）。
+// 返回这一段里第一个 doctype / <html> / <head> 的结尾位置（没有是 -1），碰到别的任何东西（别的标签、结束标签、
+// 文字、没收尾的标签）就停：它们之后再插的 CSP 拦不住它们——head 前的脚本会先执行、<img> 会先加载，
+// 结束标签和文字还会让解析器提前关掉 head，插进 <head> 的 CSP 落进 body 被浏览器整条忽略。一遍扫完，线性。
+const SPACE = new Set(['\t', '\n', '\f', '\r', ' ']);
+const COMMENT_END = /--!?>/g;
+function tagEnd(text, i) {
+  while (i < text.length) {
+    if (text[i] === '>') return i + 1;
+    if (SPACE.has(text[i]) || text[i] === '/') { i++; continue; }
+    i++;
+    while (i < text.length && !SPACE.has(text[i]) && !'/>='.includes(text[i])) i++;
+    while (i < text.length && SPACE.has(text[i])) i++;
+    if (text[i] !== '=') continue;
+    i++;
+    while (i < text.length && SPACE.has(text[i])) i++;
+    if (text[i] === '"' || text[i] === "'") {
+      const close = text.indexOf(text[i], i + 1);
+      if (close < 0) return -1;
+      i = close + 1;
+    } else while (i < text.length && !SPACE.has(text[i]) && text[i] !== '>') i++;
+  }
+  return -1;
+}
+function prologue(text) {
+  const found = {doctype: -1, html: -1, head: -1};
+  let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+  while (i < text.length && found.head < 0) {
+    if (SPACE.has(text[i])) { i++; continue; }
+    if (text[i] !== '<' || i + 2 > text.length) break;
+    const next = text[i + 1];
+    if (text.startsWith('<!--', i)) {
+      if (text[i + 4] === '>') { i += 5; continue; }
+      if (text.startsWith('->', i + 4)) { i += 6; continue; }
+      COMMENT_END.lastIndex = i + 4;
+      const end = COMMENT_END.exec(text);
+      if (!end) break;
+      i = end.index + end[0].length;
+      continue;
+    }
+    if (next === '!' || next === '?' || (next === '/' && i + 2 < text.length && !/[a-z]/i.test(text[i + 2]))) {
+      const end = text.indexOf('>', i + 2);
+      if (end < 0) break;
+      if (next === '!' && text.slice(i, i + 9).toLowerCase() === '<!doctype' && found.doctype < 0) found.doctype = end + 1;
+      i = end + 1;
+      continue;
+    }
+    if (!/[a-z]/i.test(next)) break;
+    let j = i + 1;
+    while (j < text.length && !SPACE.has(text[j]) && text[j] !== '/' && text[j] !== '>') j++;
+    const name = text.slice(i + 1, j).toLowerCase();
+    if (name !== 'html' && name !== 'head') break;
+    const end = tagEnd(text, j);
+    if (end < 0) break;
+    if (found[name] < 0) found[name] = end;
+    i = end;
+  }
+  return found;
+}
+
+// 顺序固定：charset → CSP → 守卫 → 作品自己的内容。CSP（和守卫）必须在任何脚本、任何会加载东西的标签之前：
+// 只在上面那段开头里找插入点——有 <head> 插在它后面；没有就插在 <html> / doctype 后面（解析器会把它放进
+// 隐式的 head）；都没有才放最前面。所以 head 前面先写了脚本 / <img> 的，策略挪到它们前面（doctype 仍在最前）；
+// 脚本字符串里的 "<head>" 也不会被当成插入点。
 // charset 跟 CSP 放在一起；只有那样会超出前 1024 字节时（比如 doctype 后一大段注释），才改成紧跟 doctype，
 // 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
 export function withPolicy(html, {origins = [], files = false} = {}) {
@@ -135,14 +196,10 @@ export function withPolicy(html, {origins = [], files = false} = {}) {
   const allowed = cleanOrigins(origins);
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policyFor({origins: allowed})}">` + (files ? '' : FILE_GUARD) + navGuardScript(allowed);
   const charset = charsetMeta(text);
-  let at = 0;
-  for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
-    const match = pattern.exec(text);
-    if (match) { at = match.index + match[0].length; break; }
-  }
+  const {doctype, html: root, head} = prologue(text);
+  const at = Math.max(head >= 0 ? head : root >= 0 ? root : doctype, 0);
   if (Buffer.byteLength(text.slice(0, at), 'utf8') + charset.length <= PRESCAN_BYTES) return text.slice(0, at) + charset + meta + text.slice(at);
-  const doctype = /<!doctype[^>]{0,512}>/i.exec(text.slice(0, at));
-  const lead = doctype ? doctype.index + doctype[0].length : 0;
+  const lead = doctype >= 0 && doctype <= at ? doctype : 0;
   return text.slice(0, lead) + charset + text.slice(lead, at) + meta + text.slice(at);
 }
 
