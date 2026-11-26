@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import {createInterface} from 'node:readline';
 import {agentOf, channelTitle, isBadTitle, isInternalMessage, isInternalSessionKey, isPersona,
-  messageText, registerSessionMethod, safeText, userChildPrompt} from './session-titles.mjs';
+  messageText, registerSessionMethod, resolveSessionTranscript, safeText, userChildPrompt} from './session-titles.mjs';
 
 // Mode and agent must agree: a search must never accidentally cross modes.
 const MODE_AGENTS = Object.freeze({chat: 'main', project: 'project', thinking: 'thinking', ideas: 'thinking',
@@ -133,9 +132,8 @@ export class SessionSearch {
             : channelTitle(entry, key)?.title || '新会话';
           let hit = excerpt(title, needle);
           if (!hit) {
-            const file = path.resolve(dir, entry.sessionFile || `${entry.sessionId}.jsonl`);
-            const base = path.resolve(dir) + path.sep;
-            if (!file.startsWith(base)) continue;
+            const file = resolveSessionTranscript(dir, entry);
+            if (!file) continue;
             hit = await transcriptHit(file, needle, controller.signal);
           }
           if (hit) matches[index] = {key, title, updatedAt: entry.updatedAt || 0,
