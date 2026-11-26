@@ -26,5 +26,8 @@ html[data-pinkie-night]:not([data-laolao-mode="metre"]) .pk-apps-card { --pk-app
 .pk-apps-row .pk-apps-update:disabled { opacity:.4;cursor:default }
 html[data-laolao-mode="metre"] .pk-apps-row .pk-apps-update { border-radius:6px }
 /* 设置行默认左栏只占 .34fr，说明一长就折成两三行；应用行改成说明占满、按钮按内容宽。窄屏仍上下排。 */
-#laolao-user-settings .pk-apps-row.pinkie-user-settings__row { grid-template-columns:minmax(0,1fr) auto }
-@media (max-width:780px) { #laolao-user-settings .pk-apps-row.pinkie-user-settings__row { grid-template-columns:1fr } }
+#laolao-user-settings :is(.pk-apps-row,.pinkie-user-settings__notices > .pinkie-user-settings__row).pinkie-user-settings__row { grid-template-columns:minmax(0,1fr) auto }
+@media (max-width:780px) { #laolao-user-settings :is(.pk-apps-row,.pinkie-user-settings__notices > .pinkie-user-settings__row).pinkie-user-settings__row { grid-template-columns:1fr } }
+/* 共享对话框按钮（.laolao-modal__button：项目设置 / 装到桌面 / 卸载确认 / 作品库移除确认）原来没有基础形状，是浏览器默认直角：碧琪跟 .laolao-modal__btn 一样胶囊，Metre 跟它别的按钮一样 6px。颜色仍由各皮肤给。 */
+:where(.laolao-modal) .laolao-modal__button { min-height:30px;padding:5px 14px;border-radius:999px;font:inherit;font-size:13px;line-height:1.4;cursor:pointer }
+html[data-laolao-mode="metre"] :where(.laolao-modal) .laolao-modal__button { border-radius:6px }
