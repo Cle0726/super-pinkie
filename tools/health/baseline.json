@@ -406,7 +406,7 @@
     "ui/injections/laolao-deep-think.js": {
       "important": 8,
       "importantIndirect": 0,
-      "lines": 1128,
+      "lines": 1119,
       "mutationObserverRefs": 1,
       "mutationObservers": 2,
       "observeUnclear": 0,
