@@ -95,6 +95,10 @@ def safe_home_file(raw: str) -> Path:
     never keys or 碧琪's own configuration."""
     home = Path.home().resolve()
     text = str(raw or "").strip()
+    if len(text) > 1 and text[0] in "\\/" and text[1] in "\\/":
+        # \\host\share, //host, \\?\UNC\..., \\.\device: resolving one on Windows
+        # already opens an SMB connection (and offers NTLM credentials).
+        raise ValueError("为保护系统文件，只能打开用户主目录里现有的文件。")
     if text.startswith("~"):
         text = str(home) + text[1:]
     path = Path(text)
