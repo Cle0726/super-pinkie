@@ -31,20 +31,47 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
 }
 
 // 副本按 file:// 打开，没有 HTTP 头报编码；作品自己没写 charset 时 WebKit / WebView2 按本地默认编码猜，中文会乱码。
-// 文件是按 utf8 读写的，所以缺了就补 utf-8，放在 CSP 前面。
-const DECLARES_CHARSET = /<meta\s[^>]*charset\s*=/i;
-export const charsetMeta = text => (DECLARES_CHARSET.test(text) ? '' : '<meta charset="utf-8">');
+// 文件是按 utf8 读写的，所以缺了就补 utf-8。浏览器预扫只看前 1024 字节，作品自己的声明也只在这一段、
+// <body / 第一个 <script 之前找（脚本字符串里的 <meta charset> 不算），并且只认 charset 属性或
+// http-equiv=content-type 的 content。
+const PRESCAN_BYTES = 1024;
+const CHARSET_META = '<meta charset="utf-8">';
+const ATTR = /([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+function declaresCharset(text) {
+  let head = Buffer.from(text.slice(0, PRESCAN_BYTES)).subarray(0, PRESCAN_BYTES).toString('utf8');
+  head = head.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+  const stop = head.search(/<(?:body|script)[\s>/]/i);
+  if (stop >= 0) head = head.slice(0, stop);
+  for (const [, inner] of head.matchAll(/<meta(\s[^>]*)>/gi)) {
+    const attrs = {};
+    for (const m of inner.matchAll(ATTR)) {
+      const key = m[1].toLowerCase();
+      if (!(key in attrs)) attrs[key] = m[2] ?? m[3] ?? m[4] ?? '';
+    }
+    if ('charset' in attrs) return true;
+    if (attrs['http-equiv']?.toLowerCase() === 'content-type' && /charset\s*=/i.test(attrs.content || '')) return true;
+  }
+  return false;
+}
+export const charsetMeta = text => (declaresCharset(String(text)) ? '' : CHARSET_META);
 
-// CSP 必须在任何脚本之前：有 <head> 插在它后面；没有就插在 doctype / <html> 后面
-// （解析器会把它放进隐式的 head）；都没有才放最前面。
+// CSP 必须在任何脚本之前：有 <head> 插在它后面；没有就插在 <html> / doctype 后面
+// （解析器会把它放进隐式的 head）；都没有才放最前面。属性最多扫 512 字，没有 > 的长输入不会拖成平方级。
+// charset 跟 CSP 放在一起；只有那样会超出前 1024 字节时（比如 doctype 后一大段注释），才改成紧跟 doctype，
+// 没有 doctype 就放最前。doctype 自己前面就有一大段注释的，不保证在前 1024 字节内。
 export function withOfflinePolicy(html) {
   const text = String(html);
-  const meta = charsetMeta(text) + `<meta http-equiv="Content-Security-Policy" content="${OFFLINE_CSP}">`;
-  for (const pattern of [/<head(?:\s[^>]*)?>/i, /<html(?:\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
+  const csp = `<meta http-equiv="Content-Security-Policy" content="${OFFLINE_CSP}">`;
+  const charset = charsetMeta(text);
+  let at = 0;
+  for (const pattern of [/<head(?:\s[^>]{0,512})?>/i, /<html(?:\s[^>]{0,512})?>/i, /<!doctype[^>]{0,512}>/i]) {
     const match = pattern.exec(text);
-    if (match) return text.slice(0, match.index + match[0].length) + meta + text.slice(match.index + match[0].length);
+    if (match) { at = match.index + match[0].length; break; }
   }
-  return meta + text;
+  if (Buffer.byteLength(text.slice(0, at), 'utf8') + charset.length <= PRESCAN_BYTES) return text.slice(0, at) + charset + csp + text.slice(at);
+  const doctype = /<!doctype[^>]{0,512}>/i.exec(text.slice(0, at));
+  const lead = doctype ? doctype.index + doctype[0].length : 0;
+  return text.slice(0, lead) + charset + text.slice(lead, at) + csp + text.slice(at);
 }
 
 function pngSize(png) {

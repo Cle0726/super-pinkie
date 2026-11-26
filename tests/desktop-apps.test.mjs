@@ -131,6 +131,20 @@ test('A12 编码：作品没写 charset 时补 utf-8 且在前 1024 字节内；
     assert.equal(charsets(out), 1, page);
     assert.doesNotMatch(out, /<meta charset="utf-8">/);
   }
+  // 反例：body 脚本字符串里的 <meta charset=x>、name/content 里碰巧出现的 charset= 都不算作品声明，照样补。
+  for (const page of ['<html><head></head><body><script>var s="<meta charset=x>"</script></body></html>',
+    '<html><head><meta name="x" content="charset=foo"></head><body>中文</body></html>']) {
+    assert.match(withOfflinePolicy(page), /<meta charset="utf-8">/, page);
+  }
+  // doctype 后面一大段注释：补的 charset 紧跟 doctype，标签整个落在前 1024 字节内；CSP 仍进 head。
+  const padded = withOfflinePolicy('<!doctype html><!--' + 'x'.repeat(1500) + '--><html><head><title>t</title></head><body>中文</body></html>');
+  const at = padded.indexOf('<meta charset="utf-8">');
+  assert.ok(at >= 0 && Buffer.byteLength(padded.slice(0, at + '<meta charset="utf-8">'.length), 'utf8') <= 1024, '长注释时 charset 也要在前 1024 字节');
+  assert.match(padded, /<head><meta http-equiv="Content-Security-Policy"/);
+  // 没有 > 的长输入不能拖成平方级（原来 20000 个 "<meta " 要 3 秒多）。
+  const t0 = performance.now();
+  assert.match(withOfflinePolicy('<meta '.repeat(20000)), /^<meta charset="utf-8">/);
+  assert.ok(performance.now() - t0 < 200, '20000 个 "<meta " 要在 200ms 内');
   // 装出来的副本也带上：没写 charset 的中文作品。
   const {record, apps} = setup();
   const item = record('cn.html', '<!doctype html><html><head><title>拼词</title></head><body>拼词</body></html>');
