@@ -1,5 +1,7 @@
-/* pinkie-overflow-compaction-events:v1 */
+/* pinkie-overflow-compaction-events:v2 */
 import { c as pinkieEmitAgentEvent } from "./agent-events-CRggPZCM.js";
+const PINKIE_FRAME_LIMIT = /64 ?KB message limit|bytes after shortening, over \d+/i;
+const PINKIE_FRAME_TOKEN_BUDGET = 12000;
 import { c as normalizeOptionalString } from "./string-coerce-DW4mBlAt.js";
 import { a as addTimerTimeoutGraceMs } from "./number-coercion-CJQ8TR--.js";
 import { t as sanitizeForLog } from "./ansi-D1GK_odF.js";
@@ -3456,13 +3458,13 @@ async function runEmbeddedAgentInternal(paramsInput) {
 					const contextOverflowError = !aborted ? (() => {
 						if (promptError) {
 							const errorText = formatErrorMessage(promptError);
-							if (isLikelyContextOverflowError(errorText)) return {
+							if (isLikelyContextOverflowError(errorText) || PINKIE_FRAME_LIMIT.test(errorText)) return {
 								text: errorText,
 								source: "promptError"
 							};
 							return null;
 						}
-						if (assistantErrorText && isLikelyContextOverflowError(assistantErrorText)) return {
+						if (assistantErrorText && (isLikelyContextOverflowError(assistantErrorText) || PINKIE_FRAME_LIMIT.test(assistantErrorText))) return {
 							text: assistantErrorText,
 							source: "assistantError"
 						};
@@ -3471,6 +3473,7 @@ async function runEmbeddedAgentInternal(paramsInput) {
 					if (contextOverflowError) {
 						const overflowDiagId = createCompactionDiagId();
 						const errorText = contextOverflowError.text;
+const pinkieFrameLimit = PINKIE_FRAME_LIMIT.test(errorText);
 						const msgCount = attempt.messagesSnapshot?.length ?? 0;
 						const observedOverflowTokens = extractObservedOverflowTokenCount(errorText);
 						const preflightEstimatedPromptTokens = typeof preflightRecovery?.estimatedPromptTokens === "number" && Number.isFinite(preflightRecovery.estimatedPromptTokens) && preflightRecovery.estimatedPromptTokens > 0 ? Math.ceil(preflightRecovery.estimatedPromptTokens) : void 0;
@@ -3478,13 +3481,15 @@ async function runEmbeddedAgentInternal(paramsInput) {
 						log$1.warn(`[context-overflow-diag] sessionKey=${params.sessionKey ?? params.sessionId} provider=${provider}/${modelId} source=${contextOverflowError.source} messages=${msgCount} sessionFile=${activeSessionFile} diagId=${overflowDiagId} compactionAttempts=${overflowCompactionAttempts} observedTokens=${observedOverflowTokens ?? "unknown"} preflightEstimatedTokens=${preflightEstimatedPromptTokens ?? "unknown"} compactionTokens=${overflowTokenCountForCompaction ?? "unknown"} error=${errorText.slice(0, 200)}`);
 						const isCompactionFailure = isCompactionFailureError(errorText);
 						const hadAttemptLevelCompaction = attemptCompactionCount > 0;
-						if (!isCompactionFailure && hadAttemptLevelCompaction && overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
+const pinkieFrameStop = pinkieFrameLimit && overflowCompactionAttempts >= 1;
+if (pinkieFrameStop) log$1.warn(`[pinkie-frame-limit] request still over the gateway frame limit after ${overflowCompactionAttempts} compaction(s) for ${provider}/${modelId}; stopping`);
+						if (!pinkieFrameLimit && !isCompactionFailure && hadAttemptLevelCompaction && overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
 							overflowCompactionAttempts++;
 							log$1.warn(`context overflow persisted after in-attempt compaction (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); retrying prompt without additional compaction for ${provider}/${modelId}`);
 							if (preflightRecovery?.source === "mid-turn") continueFromCurrentTranscript();
 							continue;
 						}
-						if (!isCompactionFailure && !hadAttemptLevelCompaction && overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
+						if (!pinkieFrameStop && !isCompactionFailure && (!hadAttemptLevelCompaction || pinkieFrameLimit) && overflowCompactionAttempts < MAX_OVERFLOW_COMPACTION_ATTEMPTS) {
 							if (log$1.isEnabled("debug")) log$1.debug(`[compaction-diag] decision diagId=${overflowDiagId} branch=compact isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=unknown attempt=${overflowCompactionAttempts + 1} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`);
 							overflowCompactionAttempts++;
 							log$1.warn(`context overflow detected (attempt ${overflowCompactionAttempts}/${MAX_OVERFLOW_COMPACTION_ATTEMPTS}); attempting auto-compaction for ${provider}/${modelId}`);
@@ -3541,14 +3546,14 @@ try { if (params.sessionKey) pinkieEmitAgentEvent({ runId: params.runId, session
 									maxAttempts: MAX_OVERFLOW_COMPACTION_ATTEMPTS
 								};
 								const overflowCompactionRuntimeSettings = buildEmbeddedContextEngineRuntimeSettings({
-									tokenBudget: ctxInfo.tokens,
+									tokenBudget: pinkieFrameLimit ? Math.min(ctxInfo.tokens, PINKIE_FRAME_TOKEN_BUDGET) : ctxInfo.tokens,
 									degradedReason: "context_overflow"
 								});
 								compactResult = await compactContextEngineWithSafetyTimeout(contextEngine, {
 									sessionId: activeSessionId,
 									sessionKey: params.sessionKey,
 									sessionFile: activeSessionFile,
-									tokenBudget: ctxInfo.tokens,
+									tokenBudget: pinkieFrameLimit ? Math.min(ctxInfo.tokens, PINKIE_FRAME_TOKEN_BUDGET) : ctxInfo.tokens,
 									...overflowTokenCountForCompaction !== void 0 ? { currentTokenCount: overflowTokenCountForCompaction } : {},
 									force: true,
 									compactionTarget: "budget",
@@ -3625,7 +3630,7 @@ try { if (params.sessionKey) pinkieEmitAgentEvent({ runId: params.runId, session
 							log$1.warn(`auto-compaction failed for ${provider}/${modelId}: ${compactResult.reason ?? "nothing to compact"}`);
 try { if (params.sessionKey) pinkieEmitAgentEvent({ runId: params.runId, sessionKey: params.sessionKey, stream: "compaction", data: { phase: "end", completed: false, willRetry: false, reason: "overflow" } }); } catch {}
 						}
-						if (!toolResultTruncationAttempted) {
+						if (!pinkieFrameStop && !toolResultTruncationAttempted) {
 							const contextWindowTokens = ctxInfo.tokens;
 							const toolResultMaxChars = resolveLiveToolResultMaxChars({
 								contextWindowTokens,
@@ -3659,7 +3664,7 @@ try { if (params.sessionKey) pinkieEmitAgentEvent({ runId: params.runId, session
 						}
 						if ((isCompactionFailure || overflowCompactionAttempts >= MAX_OVERFLOW_COMPACTION_ATTEMPTS) && log$1.isEnabled("debug")) log$1.debug(`[compaction-diag] decision diagId=${overflowDiagId} branch=give_up isCompactionFailure=${isCompactionFailure} hasOversizedToolResults=unknown attempt=${overflowCompactionAttempts} maxAttempts=${MAX_OVERFLOW_COMPACTION_ATTEMPTS}`);
 						const kind = isCompactionFailure ? "compaction_failure" : "context_overflow";
-						const overflowRecoveryText = "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.";
+						const overflowRecoveryText = pinkieFrameLimit ? "这条对话一帧装不下（模型服务单条消息上限约 63KB），已停下，请开新对话或分段发送。" : "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.";
 						log$1.warn(`[context-overflow-recovery] exhausted provider overflow recovery for ${provider}/${modelId}; livenessState=blocked suggestedAction=reset_or_new kind=${kind}`);
 						setTerminalLifecycleMeta({
 							replayInvalid: resolveReplayInvalidForAttempt(),
