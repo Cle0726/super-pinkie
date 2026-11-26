@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import vm from 'node:vm';
 import {ArtifactStore} from '../services/mode-architecture/artifacts.mjs';
 import {DesktopApps, OFFLINE_CSP, appIdFor, icnsFromPng, icoFromPng, registerDesktopApps, safeAppName, withOfflinePolicy}
   from '../services/mode-architecture/desktop-apps.mjs';
@@ -151,6 +152,107 @@ test('A9 Metre 夜间装到桌面对话框主按钮字对比度 ≥ 4.5:1（uire
   assert.ok(rule, '夜间对话框要设 --pk-apps-on-accent');
   assert.equal(rule[1].toLowerCase(), surface.toLowerCase());
   assert.ok(ratio(surface, accent) >= 4.5, `夜间主按钮 ${surface} / ${accent} = ${ratio(surface, accent).toFixed(2)}`);
+});
+
+// A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
+function fakeDom(source) {
+  const hasClass = (node, name) => String(node.className || '').split(/\s+/).includes(name);
+  const detach = n => { if (n.parentNode) { const list = n.parentNode.children; list.splice(list.indexOf(n), 1); n.parentNode = null; } };
+  let body = null;
+  const make = tag => ({
+    tagName: String(tag).toUpperCase(), className: '', children: [], parentNode: null, attrs: {}, ownText: '', value: '',
+    get textContent() { return this.ownText + this.children.map(c => c.textContent).join(''); },
+    set textContent(text) { for (const c of [...this.children]) detach(c); this.ownText = String(text); },
+    setAttribute(name, value) { this.attrs[name] = String(value); },
+    getAttribute(name) { return this.attrs[name] ?? null; },
+    append(...nodes) { for (const n of nodes) { detach(n); n.parentNode = this; this.children.push(n); } },
+    insertBefore(n, ref) { detach(n); n.parentNode = this; const i = this.children.indexOf(ref); this.children.splice(i < 0 ? this.children.length : i, 0, n); return n; },
+    before(n) { this.parentNode.insertBefore(n, this); },
+    remove() { detach(this); },
+    replaceChildren(...nodes) { for (const c of [...this.children]) detach(c); this.ownText = ''; this.append(...nodes); },
+    get firstChild() { return this.children[0] ?? null; },
+    get isConnected() { let n = this; while (n.parentNode) n = n.parentNode; return n === body; },
+    focus() {}, select() {},
+    querySelectorAll(sel) {
+      const out = [];
+      if (!/^\.[\w-]+$/.test(sel)) return out;
+      const walk = n => { for (const c of n.children) { if (hasClass(c, sel.slice(1))) out.push(c); walk(c); } };
+      walk(this);
+      return out;
+    },
+    querySelector(sel) { return this.querySelectorAll(sel)[0] ?? null; },
+  });
+  body = make('body');
+  const keys = new Set(), listeners = {}, calls = {native: [], rpc: []}, toasts = [];
+  const state = {native: {ok: true}};
+  const document = {readyState: 'complete', body, createElement: make, querySelector: sel => body.querySelector(sel),
+    addEventListener(type, fn) { if (type === 'keydown') keys.add(fn); }, removeEventListener(type, fn) { keys.delete(fn); }};
+  const window = {
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
+    webkit: {messageHandlers: {pinkieNative: {}}},
+    pinkieNative: async message => { calls.native.push(JSON.stringify(message)); return state.native; },
+    __laolaoToast: text => toasts.push(text),
+    __laolaoSidebar: {gwRequest: async method => {
+      calls.rpc.push(method);
+      return method === 'pinkie.apps.list' ? {apps: [{id: 'a1', name: '单词小游戏', version: 2, latest: 2}]} : {ok: true, removed: true};
+    }},
+  };
+  vm.runInNewContext(source, {window, document, navigator: {platform: 'Win32'}});
+  const emit = (type, detail) => (listeners[type] || []).forEach(fn => fn({detail}));
+  return {body, make, hasClass, keys, calls, toasts, state, emit};
+}
+
+test('A10 卸载先弹碧琪确认框：取消 / Esc 什么都不动，确认才卸载并提示；卸载键是普通描边键（uireview 01:25Z ① ② ③）', async () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  // ① 对话框非主按钮也在皮肤那组 :is() 里（主按钮 A9 已管）。
+  assert.match(fs.readFileSync(path.join(root, 'ui/injections/laolao-artifacts.css'), 'utf8'), /:is\([^)]*\.pk-apps-dialog\) \.laolao-modal__button \{/);
+  const dom = fakeDom(fs.readFileSync(path.join(root, 'ui/injections/laolao-desktop-apps.js'), 'utf8'));
+  const flush = () => new Promise(resolve => setImmediate(resolve));
+  const click = node => node.onclick({stopPropagation() {}});
+  const scroll = dom.make('div');
+  dom.body.append(scroll);
+  dom.emit('pinkie:settings-ready', scroll);
+  await flush();
+  const row = () => scroll.querySelector('.pk-apps-row');
+  const confirmBox = () => dom.body.querySelector('.pinkie-art-confirm')?.querySelector('.laolao-modal') ?? null;
+  const pick = primary => confirmBox().querySelectorAll('.laolao-modal__button').find(b => dom.hasClass(b, 'laolao-modal__button--primary') === primary);
+  const uninstallBtn = row().querySelector('.pk-apps-uninstall');
+  assert.equal(uninstallBtn.className, 'pinkie-art-btn pk-apps-uninstall', '② 卸载键跟「打开」一样是普通描边键，不是 --quiet');
+
+  click(uninstallBtn); await flush();
+  assert.ok(confirmBox(), '③ 点卸载先弹确认框');
+  assert.ok(dom.hasClass(confirmBox(), 'pk-apps-dialog'), '确认框跟装到桌面对话框同一套碧琪皮肤');
+  assert.equal(confirmBox().getAttribute('role'), 'alertdialog');
+  assert.match(confirmBox().textContent, /卸载「单词小游戏」？/);
+  assert.equal(dom.calls.native.length, 0, '确认前不碰原生端');
+  click(pick(false)); await flush();
+  assert.equal(confirmBox(), null, '取消关掉');
+  assert.equal(dom.calls.native.length, 0);
+  assert.ok(row(), '取消后行还在');
+  assert.equal(dom.toasts.length, 0);
+
+  click(uninstallBtn); await flush();
+  for (const fn of [...dom.keys]) fn({key: 'Escape', preventDefault() {}, stopPropagation() {}});
+  await flush();
+  assert.equal(confirmBox(), null, 'Esc 关掉');
+  assert.equal(dom.calls.native.length, 0);
+  assert.equal(dom.keys.size, 0, '键盘监听收走了');
+
+  dom.state.native = {ok: false, error: '入口删不掉'};
+  click(uninstallBtn); await flush();
+  click(pick(true)); await flush();
+  assert.ok(row(), '原生端失败时行留着');
+  assert.equal(dom.toasts.at(-1), '没卸载干净：入口删不掉');
+  assert.ok(!dom.calls.rpc.includes('pinkie.apps.remove'), '入口没删掉就不删副本');
+
+  dom.state.native = {ok: true};
+  click(uninstallBtn); await flush();
+  click(pick(true)); await flush();
+  assert.equal(dom.calls.native.at(-1), JSON.stringify({type: 'uninstallApp', appId: 'a1'}));
+  assert.ok(dom.calls.rpc.includes('pinkie.apps.remove'));
+  assert.equal(row(), null, '确认后行没了');
+  assert.equal(confirmBox(), null);
+  assert.equal(dom.toasts.at(-1), '「单词小游戏」卸载了，图标也删了');
 });
 
 test('A8 网关方法：pinkie.apps.* 都在，出错回 {ok:false} 不抛', async () => {
