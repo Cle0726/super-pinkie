@@ -115,3 +115,19 @@ test('界面文件不发请求、不开定时器、不加观察器、不新增 w
   }
   for (const f of ['laolao-session-board.css', 'laolao-metre-session-board.css']) assert.doesNotMatch(fs.readFileSync(new URL(`../ui/injections/${f}`, import.meta.url), 'utf8'), /!\s*important/, f);
 });
+
+test('排队的行写「排队中」：数据层对排队也给「在跑」（#231 describeRow），界面认 state（mac1 #229 WebKit）', () => {
+  for (const skin of ['pinkie', 'metre']) {
+    assert.match(ui.rowHtml(row(1, {state: 'queued', doing: '在跑'}), skin, NOW), /排队中/, skin);
+    assert.match(ui.rowHtml(row(2, {state: 'run', doing: '在跑'}), skin, NOW), /在跑/, skin);
+    assert.match(ui.rowHtml(row(3, {state: 'queued', doing: '等你确认：npm test'}), skin, NOW), /等你确认：npm test/, skin);
+  }
+});
+
+test('碧琪皮面板日间底色不透明（主题 --card 是 0.42 透明），顶边可让位', () => {
+  const css = fs.readFileSync(new URL('../ui/injections/laolao-session-board.css', import.meta.url), 'utf8');
+  const rule = css.match(/(?:^|\n)\.pk-sb-panel \{([^}]*)\}/)[1];
+  assert.doesNotMatch(rule, /background:\s*var\(--pt-card/);
+  assert.match(rule, /background:\s*#[0-9a-f]{3,6}\b/i);
+  assert.match(rule, /top:\s*var\(--pk-sb-top,\s*12px\)/);
+});

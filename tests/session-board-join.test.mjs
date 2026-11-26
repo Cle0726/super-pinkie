@@ -13,16 +13,18 @@ const HEAD = read('laolao-head.fragment.html');
 function el(tag = 'div') {
   return {
     tag, className: '', type: '', dataset: {}, hidden: false, textContent: '', innerHTML: '', title: '', nextElementSibling: null,
-    style: {setProperty() {}}, attrs: {}, listeners: {},
+    style: {props: {}, setProperty(k, v) { this.props[k] = String(v); }}, attrs: {}, listeners: {},
     setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k] ?? null; },
     addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }, removeEventListener() {},
-    querySelector: () => null, querySelectorAll: () => [], closest: () => null,
+    querySelector(sel) { return ((this.kids ||= {})[sel] ||= el()); }, querySelectorAll: () => [], closest: () => null,
     append() {}, remove() { this.removed = true; }, focus() {},
     before(other) { other.nextElementSibling = this; this.prev = other; },
   };
 }
 
-function page({orderDataFirst = true, mode = 'chat', running = 2} = {}) {
+function page({orderDataFirst = true, mode = 'chat', running = 2, native = {}} = {}) {
+  const created = [];
+  const box = (id) => (native[id] ? {getBoundingClientRect: () => native[id]} : null);
   let clock = Date.UTC(2026, 10, 26, 12, 0, 0);
   const calls = [];
   const sessions = [
@@ -47,8 +49,8 @@ function page({orderDataFirst = true, mode = 'chat', running = 2} = {}) {
     readyState: 'complete', activeElement: null,
     documentElement: {getAttribute: (k) => (k === 'data-laolao-mode' ? mode : null)},
     body: el('body'),
-    addEventListener() {}, createElement: (tag) => el(tag),
-    querySelector: (sel) => (sel === 'aside.sidebar .laolao-session-controls' ? controls : null),
+    addEventListener() {}, createElement: (tag) => { const node = el(tag); created.push(node); return node; }, getElementById: box,
+    querySelector: (sel) => (sel === 'aside.sidebar .laolao-session-controls' ? controls : sel === '.topbar' ? box('topbar') : null),
   };
   class FakeDate extends Date { static now() { return clock; } }
   const ctx = vm.createContext({
@@ -58,7 +60,7 @@ function page({orderDataFirst = true, mode = 'chat', running = 2} = {}) {
   for (const src of orderDataFirst ? [DATA, UI] : [UI, DATA]) vm.runInContext(src, ctx);
   const tick = async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setImmediate(r)); };
   return {
-    window, calls, opened, filled, controls, tick,
+    window, calls, opened, filled, controls, tick, created,
     pill: () => (controls.prev?.className === 'pk-sb-pill' ? controls.prev : null),
     advance: (ms) => { clock += ms; },
     fire: (type) => window.dispatchEvent(new Event(type)),
@@ -122,4 +124,28 @@ test('Metre 总控台打开：数据层开始读，「全部会话」一栏画�
   p.window.Pinkie.sessionBoard.open('agent:project:s1');
   assert.deepEqual(p.opened, ['agent:project:s1']);
   assert.deepEqual({...(await p.window.Pinkie.sessionBoard.usage('agent:project:s1'))}, {cost: 0.25});
+});
+
+test('胶囊提示和数字同一来源：看板关着时写「N 个在跑」，侧栏缓存的提示也跟着改（mac1 #229 WebKit）', async () => {
+  const p = page({running: 2});
+  p.fire('laolao:sessions-changed'); await p.tick();
+  assert.equal(p.pill().textContent, '在跑 2');
+  assert.equal(p.pill().title, '2 个在跑', '关着时不能写「都歇着呢」');
+  // 侧栏第一次悬停把 title 挪进 data-pinkie-tooltip（laolao-sidebar.js showSidebarTooltip），之后优先读它
+  p.pill().dataset.pinkieTooltip = '都歇着呢';
+  p.advance(6000); p.fire('laolao:sessions-changed'); await p.tick();
+  assert.equal(p.pill().dataset.pinkieTooltip, '2 个在跑');
+});
+
+test('面板顶边让到桌面壳窗口键 / 顶栏下面，「收起」不被盖住；横向不重叠的不算（mac1 #229 WebKit 820 宽）', () => {
+  const rect = (left, top, width, height) => ({left, top, width, height, right: left + width, bottom: top + height});
+  const panelOf = (native) => {
+    const p = page({native});
+    assert.equal(p.window.Pinkie.sessionBoardUi.open(), true);
+    return p.created.find((n) => n.className === 'pk-sb-panel');
+  };
+  assert.equal(panelOf({}).style.props['--pk-sb-top'], '12px');
+  const panel = panelOf({'pinkie-native-window-controls': rect(300, 7, 120, 27), 'pinkie-native-drag-strip': rect(900, 7, 74, 53)});
+  assert.equal(panel.style.props['--pk-sb-top'], '42px', '窗口键和面板横向重叠就让；拖动条在面板右边外面不算');
+  assert.equal(panelOf({topbar: rect(0, 0, 1440, 48)}).style.props['--pk-sb-top'], '56px');
 });
