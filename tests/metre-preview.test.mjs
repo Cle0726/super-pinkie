@@ -107,7 +107,7 @@ test('in Metre: local server addresses from this turn become one preview row; 18
     assert.deepEqual(look, {h: 26, inside: true});
     // 重画不重复
     await tab.evaluate(() => window.Pinkie.metrePreview.paint());
-    await tab.waitForTimeout(100);
+    await tab.waitForTimeout(100);   // 保留：断言重画「不重复」，没有能等的条件
     assert.equal(await tab.locator('#g5 .pk-mprev-row').count(), 1);
     // 点了交给碧琪的浏览器，页面不跳走
     await tab.locator('#g5 .pk-mprev-chip').first().click();
@@ -135,7 +135,7 @@ test('in other modes nothing changes', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
   try {
     const tab = await open(browser, 'chat', 'mac');
-    await tab.waitForTimeout(400);
+    await tab.waitForTimeout(400);   // 保留：断言别的模式「不画」，没有能等的条件
     assert.equal(await tab.locator('.pk-mprev-row').count(), 0);
   } finally { await browser.close(); }
 });

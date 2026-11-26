@@ -1036,10 +1036,11 @@ ${handoffText(JSON.stringify(payload, null, 2), 32_000)}
       const note = unverifiedNote(state.stopMissing || []);
       return note ? draft + '\n\n' + note : draft;
     }
+    // 上一版保存时已按 DRAFT_KEEP 留足，这里整段附上：以前截到 4000 字，长回复的结尾悄悄没了。
     return '本轮未完成：' + state.stopReason + '\n已尝试：' + methods
       + '\n当前流程：' + workflowProgress(state).label
       + '。请查看本轮已有结果后，再决定下一步。'
-      + (draft ? '\n\n上一版回复（还没核对完，仅供参考）：\n' + draft.slice(0, 4000) : '');
+      + (draft ? '\n\n上一版回复（还没核对完，仅供参考）：\n' + draft : '');
   }
 
   stopForHonestIncomplete(state, reply, audit, ctx = {}) {
