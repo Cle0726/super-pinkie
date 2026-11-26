@@ -19,9 +19,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import posixpath
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 APP_KINDS = {"installApp", "uninstallApp", "openApp"}
 APP_ID = re.compile(r"^w[0-9a-f]{15}$")
@@ -67,7 +69,85 @@ def read_app(app_id, root=None):
     app = _read_json(root / "index.json").get("apps", {}).get(app_id)
     if not isinstance(app, dict) or not (root / app_id / "index.html").is_file():
         return None
-    return {"id": app_id, "name": str(app.get("name") or "作品"), "dir": root / app_id}
+    network = [str(origin) for origin in app.get("network") or [] if isinstance(origin, str)]
+    return {"id": app_id, "name": str(app.get("name") or "作品"), "dir": root / app_id, "network": network}
+
+
+# B10：跟 macOS AppWindow.swift 的 decidePolicyFor、网关 #188 的页面守卫同一条规矩，在原生这一层再拦一次——
+# 页面脚本被绕过（或作品在守卫前就跳走）时，WebView2 自己也不放行。
+# about / data / blob 放行；http / https 只放装的时候勾过的来源（默认端口 443 / 80 算同一个）；
+# file: 只能留在这件作品自己的文件夹里（<id>x\ 这种前缀相同的兄弟文件夹不算）；其他一律取消。
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _origin(url):
+    try:
+        parts = urlsplit(str(url))
+        scheme, host, port = parts.scheme.lower(), (parts.hostname or "").lower(), parts.port
+    except ValueError:
+        return None
+    if scheme not in _DEFAULT_PORTS or not host:
+        return None
+    return f"{scheme}://{host}" + ("" if port in (None, _DEFAULT_PORTS[scheme]) else f":{port}")
+
+
+def _file_path(url):
+    """Normalized path of a file: URL (or of a folder's as_uri()), comparable across both."""
+    parts = urlsplit(str(url))
+    if parts.scheme.lower() != "file" or parts.netloc.lower() not in ("", "localhost"):
+        return None
+    path = posixpath.normpath(unquote(parts.path))
+    return path.lower() if os.name == "nt" else path
+
+
+def navigation_allowed(url, app):
+    url = str(url or "")
+    scheme = urlsplit(url).scheme.lower() if ":" in url else ""
+    if scheme in ("about", "data", "blob"):
+        return True
+    if scheme in _DEFAULT_PORTS:
+        ticked = {_origin(origin) for origin in app.get("network") or []}
+        target = _origin(url)
+        return target is not None and target in ticked
+    if scheme == "file":
+        target = _file_path(url)
+        folder = _file_path(Path(app["dir"]).resolve().as_uri())
+        return bool(target and folder) and (target == folder or target.startswith(folder.rstrip("/") + "/"))
+    return False
+
+
+def install_navigation_guard(window, app, log=None):
+    """Cancel every navigation the work is not allowed to make. Runs from before_show on the GUI thread."""
+    log = log or (lambda message: None)
+    control = getattr(getattr(getattr(window, "native", None), "browser", None), "webview", None)
+    if control is None:
+        log("navigation guard not installed: WebView2 control not found")
+        return None
+
+    def starting(sender, args):
+        try:
+            if not navigation_allowed(args.Uri, app):
+                args.Cancel = True
+                log(f"blocked navigation: {str(args.Uri)[:200]}")
+        except Exception as error:  # an event handler must never raise into WebView2; fail closed
+            args.Cancel = True
+            log(f"navigation guard error: {error}")
+
+    def attach_frames(core):
+        if core is not None:
+            core.FrameNavigationStarting += starting
+
+    def ready(sender, args):
+        if getattr(args, "IsSuccess", True):
+            attach_frames(getattr(control, "CoreWebView2", None))
+
+    control.NavigationStarting += starting
+    core = getattr(control, "CoreWebView2", None)
+    if core is not None:
+        attach_frames(core)
+    else:
+        control.CoreWebView2InitializationCompleted += ready
+    return starting
 
 
 def launch_command(app_id, executable=None, frozen=None, script=None):
@@ -243,7 +323,11 @@ def run(arguments=None):
         return
     set_app_user_model_id(app["id"])
     icon = app["dir"] / "icon.ico"
-    webview.create_window(app["name"], (app["dir"] / "index.html").as_uri(), width=WINDOW_SIZE[0], height=WINDOW_SIZE[1],
-                          min_size=(360, 260), resizable=True, text_select=True)
+    # pywebview 默认把新窗口（window.open / target=_blank）交给系统浏览器打开，绕过上面的规矩；
+    # 关掉以后它改成在本窗口里 load_url，就会走 NavigationStarting，被 install_navigation_guard 拦。
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
+    window = webview.create_window(app["name"], (app["dir"] / "index.html").as_uri(), width=WINDOW_SIZE[0], height=WINDOW_SIZE[1],
+                                   min_size=(360, 260), resizable=True, text_select=True)
+    window.events.before_show += lambda *_: install_navigation_guard(window, app)
     webview.start(gui="edgechromium", debug=False, private_mode=False, storage_path=str(app["dir"] / "webview-data"),
                   icon=str(icon) if icon.is_file() else None)
