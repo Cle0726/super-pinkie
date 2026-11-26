@@ -33,7 +33,7 @@ jobs:
       - name: Keep the compare actual / diff images
         if: always()
         shell: bash
-        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null; ls -R tmpa4-compare | head -n 20
+        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null || true; ls -R tmpa4-compare | head -n 20
       - name: Capture linux real baselines (3x repeat, 0 px jitter required)
         shell: bash
         run: |
@@ -52,7 +52,7 @@ jobs:
       - name: Collect logs
         if: always()
         shell: bash
-        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null; ls tmpa4-logs
+        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null || true; ls tmpa4-logs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -94,7 +94,7 @@ jobs:
       - name: Keep the compare actual / diff images
         if: always()
         shell: bash
-        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null; ls -R tmpa4-compare | head -n 20
+        run: mkdir -p tmpa4-compare && cp -r tests/visual/diff-real tmpa4-compare/ 2>/dev/null || true; ls -R tmpa4-compare | head -n 20
       - name: Capture win32 real baselines (3x repeat, 0 px jitter required)
         shell: bash
         env:
@@ -116,7 +116,7 @@ jobs:
       - name: Collect logs
         if: always()
         shell: bash
-        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null; ls tmpa4-logs
+        run: mkdir -p tmpa4-logs && cp "$RUNNER_TEMP"/*.tap "$RUNNER_TEMP"/changed.txt tmpa4-logs/ 2>/dev/null || true; ls tmpa4-logs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
