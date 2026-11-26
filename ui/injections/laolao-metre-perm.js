@@ -482,6 +482,7 @@
     box.style.display = 'none'; const h0 = h(); box.style.display = '';
     squeeze(model, null);
     let cur = box;
+    delete cur.dataset.dodge;   // 上次为躲麦克风挪到行首的，先回原位再量
     const ok = () => h() <= h0 + 1 && !covered(cur, input);
     if (fold === 0 && Number(cur.dataset.fold) === 0 && ok()) return;
     for (let f = 0; f <= 3; f++) {
@@ -489,7 +490,13 @@
       fold = f;
       for (const w of tries) { squeeze(model, w); if (ok()) return; }
     }
-    // 收到「⋯」、模型名截到最短还放不下：停在这里，「⋯」照样占位、点得到（宁可换行也不藏）
+    // 收到「⋯」、模型名截到最短还放不下：停在这里，「⋯」照样占位、点得到（宁可换行也不藏）。
+    // 只是「⋯」还被框角的麦克风 / 发送键盖住时（mac1 任务 58：320 宽，没有更小的档可退）让它自己占一行、排在行首，
+    // 模型名取不被盖住的最长那个；挪了还被盖住就挪回来。宽度够了下次重量从第 0 档重来，自然回原位。
+    if (!covered(cur, input)) return;
+    cur.dataset.dodge = '1';
+    for (const w of tries) { squeeze(model, w); if (!covered(cur, input)) return; }
+    delete cur.dataset.dodge;
   }
   // 原生模型名是后到的、思考档位键第一次点页面会变宽：画完以后隔一会儿再量几次（一次性的 setTimeout，不加循环定时器和观察器）
   function fitSoon() { for (const ms of [60, 400, 1500]) setTimeout(fit, ms); }
