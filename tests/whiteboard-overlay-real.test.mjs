@@ -16,33 +16,38 @@ import {
 
 const SIZES = [[1440, 900], [1024, 768], [820, 900]];
 const CORNERS = ['tl', 'tr', 'bl', 'br'];
+// 真页面框架会加载 app/windows_bridge_scripts.py（桌面壳的拖动条 / 改大小 / 窗口键），它们浮在一切之上、白板开着也要能用。
+const NATIVE_SEL = '[id^="pinkie-native-"], [id^="pinkie-update-"], [id^="laolao-native-"]';
 
-// 每个点命中的是什么：白板 / 遮罩 / 页面（带上标签和类名，失败时好看）
-const probe = (page) => page.evaluate(() => {
+// 每个点命中的是什么：白板 / 遮罩 / 桌面壳 / 页面（带上标签和类名，失败时好看）
+const probe = (page) => page.evaluate((NATIVE) => {
   const r = document.querySelector('.pk-whiteboard').getBoundingClientRect();
   const W = innerWidth; const H = innerHeight;
   const gx = r.left / 2; const gy = r.top / 2; const gr = (W + r.right) / 2; const gb = (H + r.bottom) / 2;
-  const pts = {tl: [gx, gy], tr: [gr, gy], bl: [gx, gb], br: [gr, gb], top: [W / 2, gy], bar: [W / 2, 20]};
+  const pts = {tl: [gx, gy], tr: [gr, gy], bl: [gx, gb], br: [gr, gb], top: [W / 2, gy], bar: [W / 2, 20], left: [gx, H / 2], bottom: [W / 2, gb]};
   const out = {gap: [r.left, r.top, W - r.right, H - r.bottom].map(Math.round)};
   for (const [k, [x, y]] of Object.entries(pts)) {
     const e = document.elementFromPoint(x, y);
-    const own = e ? (e.closest('.pk-whiteboard') ? 'board' : e.closest('.pk-whiteboard__scrim') ? 'scrim' : '') : '';
+    const own = e ? (e.closest('.pk-whiteboard') ? 'board' : e.closest('.pk-whiteboard__scrim') ? 'scrim' : e.closest(NATIVE) ? 'native' : '') : '';
     const cls = e && typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
     out[k] = {own, at: [Math.round(x), Math.round(y)], tag: e ? e.tagName.toLowerCase() + cls : null};
   }
   return out;
-});
+}, NATIVE_SEL);
 
-const backdrop = (page) => page.evaluate(() => {
+const backdrop = (page) => page.evaluate((NATIVE) => {
   const root = document.querySelector('.pk-whiteboard');
   const scrim = document.querySelector('.pk-whiteboard__scrim');
-  const others = [...document.body.children].filter((n) => n !== root && n !== scrim && !/^(SCRIPT|STYLE|LINK)$/.test(n.tagName));
+  const kids = [...document.body.children].filter((n) => n !== root && n !== scrim && !/^(SCRIPT|STYLE|LINK)$/.test(n.tagName));
+  const others = kids.filter((n) => !n.matches(NATIVE));
+  const native = kids.filter((n) => n.matches(NATIVE));
   return {
     open: Boolean(root && !root.hidden), modal: root?.getAttribute('aria-modal') || null,
     scrim: Boolean(scrim && !scrim.hidden && getComputedStyle(scrim).display !== 'none'),
     others: others.length, inert: others.filter((n) => n.inert).length,
+    native: native.map((n) => n.id), nativeInert: native.filter((n) => n.inert).map((n) => n.id),
   };
-});
+}, NATIVE_SEL);
 
 const openBoard = (page) => page.evaluate(() => Promise.resolve(window.Pinkie.whiteboard.open()).then(() => true, () => true));
 
@@ -70,16 +75,19 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
         assert.equal(bd.modal, 'true', `${tag}: 白板根要 aria-modal="true"`);
         assert.equal(bd.scrim, true, `${tag}: 打开白板时要有遮罩`);
         assert.ok(bd.others > 0 && bd.inert === bd.others, `${tag}: 背后页面没全设 inert（${bd.inert}/${bd.others}）`);
+        assert.deepEqual(bd.nativeInert, [], `${tag}: 桌面壳的 ${bd.nativeInert.join(', ')} 不能设 inert`);
 
         const hit = await probe(page);
         t.diagnostic(`${tag} hits ${JSON.stringify(hit)}`);
         assert.ok(hit.gap.every((g) => g >= 2), `${tag}: 白板四周没有留白，量不了 ${JSON.stringify(hit.gap)}`);
-        for (const k of [...CORNERS, 'top', 'bar']) assert.ok(hit[k].own, `${tag}: ${k} 点 ${JSON.stringify(hit[k].at)} 命中了页面的 ${hit[k].tag}，不是白板或遮罩`);
-        for (const k of CORNERS) assert.equal(hit[k].own, 'scrim', `${tag}: ${k} 角外应该是遮罩，命中了 ${hit[k].tag}`);
+        // 每个点只能是白板、遮罩或桌面壳自己的键，不能是页面原有的东西
+        for (const k of [...CORNERS, 'top', 'bar', 'left', 'bottom']) assert.ok(hit[k].own, `${tag}: ${k} 点 ${JSON.stringify(hit[k].at)} 命中了页面的 ${hit[k].tag}，不是白板、遮罩或桌面壳`);
+        for (const k of [...CORNERS, 'left', 'bottom']) assert.ok(hit[k].own === 'scrim' || hit[k].own === 'native', `${tag}: ${k} 角外应该是遮罩，命中了 ${hit[k].tag}`);
+        assert.equal(hit.left.own, 'scrim', `${tag}: 左边留白中点应该是遮罩，命中了 ${hit.left.tag}`);
 
-        // 点上边留白（遮罩）：不穿透、白板关掉、inert 全撤
+        // 点左边留白（遮罩，桌面壳不在这里）：不穿透、白板关掉、inert 全撤
         const before = await page.evaluate(() => location.href);
-        await page.mouse.click(...hit.top.at);
+        await page.mouse.click(...hit.left.at);
         await page.waitForTimeout(200);
         const after = await backdrop(page);
         assert.equal(after.open, false, `${tag}: 点遮罩要关白板`);
@@ -104,9 +112,12 @@ test('#113 real page: whiteboard overlay has a solid scrim, aria-modal and inert
           for (const n of document.body.children) n.inert = false;
         });
         const old = await probe(page);
-        const leaked = CORNERS.filter((k) => !old[k].own).map((k) => `${k}:${old[k].tag}`);
-        t.diagnostic(`${tag} counter-example leaks ${leaked.join(' ')}`);
-        assert.equal(leaked.length, 4, `反例没生效（${tag}）：没遮罩时四角外还是命中白板 ${JSON.stringify(old)}`);
+        // 只看原来是遮罩的点（桌面壳盖着的点本来就不是页面，不算）
+        const masked = [...CORNERS, 'left', 'bottom'].filter((k) => hit[k].own === 'scrim');
+        const leaked = masked.filter((k) => !old[k].own).map((k) => `${k}:${old[k].tag}`);
+        t.diagnostic(`${tag} counter-example leaks ${leaked.join(' ')} (of ${masked.join(',')})`);
+        assert.ok(masked.length >= 3, `${tag}: 遮罩盖着的点太少 ${masked.join(',')}`);
+        assert.equal(leaked.length, masked.length, `反例没生效（${tag}）：没遮罩时还有点命中白板 ${JSON.stringify(old)}`);
         await page.evaluate(() => window.Pinkie.whiteboard.close());
         await page.waitForTimeout(100);
       }
