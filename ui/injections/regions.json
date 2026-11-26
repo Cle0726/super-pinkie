@@ -122,6 +122,7 @@
       "files": [
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
+        "laolao-composer-history.js",
         "laolao-composer-dock.js",
         "laolao-context-compact.js",
         "laolao-queue-steer.js",
@@ -155,6 +156,8 @@
         "laolao-message-actions.js",
         "laolao-artifacts.css",
         "laolao-artifacts.js",
+        "laolao-desktop-apps.css",
+        "laolao-desktop-apps.js",
         "laolao-phrases.js",
         "laolao-biqi-notices.js",
         "laolao-first-person.js",
@@ -230,24 +233,48 @@
         "laolao-metre-board-data.js",
         "laolao-metre-engine.css",
         "laolao-metre-engine.js",
+        "laolao-metre-engine-upstream.js",
+        "laolao-metre-cite.css",
+        "laolao-metre-cite.js",
+        "laolao-metre-read.js",
+        "laolao-metre-preview.css",
+        "laolao-metre-preview.js",
+        "laolao-metre-files.css",
+        "laolao-metre-files.js",
+        "laolao-metre-code.css",
         "laolao-metre-brand.css",
         "laolao-metre-brand.js",
         "laolao-metre-cat.css",
         "laolao-metre-cat.js",
         "laolao-metre-cat-frames.js",
         "laolao-metre-home.js",
+        "laolao-metre-workspace.css",
+        "laolao-metre-workspace.js",
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
         "laolao-metre-transition.js",
+        "laolao-metre-prefs.js",
         "laolao-metre-stagefx.js",
-        "laolao-metre-engine.css",
-        "laolao-metre-engine.js",
+        "laolao-metre-fav.css",
+        "laolao-metre-fav.js",
         "laolao-metre-keys.css",
         "laolao-metre-backstage.js",
         "laolao-metre-queue.js",
         "laolao-metre-list.js",
-        "laolao-metre-display.css"
+        "laolao-metre-worktree.css",
+        "laolao-metre-worktree.js",
+        "laolao-metre-display.css",
+        "laolao-metre-contrast.css",
+        "laolao-metre-chat.css",
+        "laolao-metre-allow.css",
+        "laolao-metre-allow.js",
+        "laolao-metre-perm.css",
+        "laolao-metre-perm.js",
+        "laolao-metre-suggest.css",
+        "laolao-metre-suggest.js",
+        "laolao-metre-pr.css",
+        "laolao-metre-pr.js"
       ]
     },
     {
@@ -375,7 +402,21 @@
         "laolao-startup-home.js",
         "laolao-splash.css",
         "laolao-splash.js",
-        "laolao-splash-fx.js"
+        "laolao-splash-fx.js",
+        "laolao-recap.css",
+        "laolao-recap.js"
+      ]
+    },
+    {
+      "id": "whiteboard",
+      "name": "白板（想法模式）",
+      "rootSelectors": [
+        ".pk-whiteboard",
+        ".pk-whiteboard-entry"
+      ],
+      "files": [
+        "laolao-whiteboard.css",
+        "laolao-whiteboard.js"
       ]
     }
   ]

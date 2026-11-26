@@ -206,10 +206,12 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
         return efforts ? [{id: entry.id, before: JSON.stringify(entry), efforts}] : [];
       });
       const contextUpdates = (provider.models || []).flatMap((entry) => {
-        if (hasCustomContext(name, entry.id)) return [];
         const window = contextWindows.get(entry.id);
+        // 自定义窗口只能往小调：比上游真实窗口还大时，请求会超出上游单帧上限，压缩后仍反复越线。
+        const custom = hasCustomContext(name, entry.id) ? capOverrides[`${name}/${entry.id}`].contextWindow : undefined;
+        if (custom !== undefined && !(window && window < custom)) return [];
         return window && (entry.contextWindow !== window || entry.contextTokens !== window)
-          ? [{id: entry.id, window, beforeWindow: entry.contextWindow, beforeTokens: entry.contextTokens}] : [];
+          ? [{id: entry.id, window, beforeWindow: entry.contextWindow, beforeTokens: entry.contextTokens, customWindow: custom}] : [];
       });
       // This account's clekk GPT-6 endpoints were verified with reasoning_effort.
       // A different provider advertising the same ID is not proof its key can invoke it.
@@ -239,7 +241,7 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       });
       return {name, available: ids.length, unnamed: ids.filter((id) => !known.has(id) && !recognizedModelId(id)).length,
         additions,
-        legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdates, contextUpdated: 0};
+        legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdates, contextUpdated: 0, contextCapped: []};
     }));
     const successes = results.filter((result) => result.status === 'fulfilled').map((result) => result.value);
     if (!successes.length) throw results[0].reason;
@@ -283,6 +285,7 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
               entry.compat = {supportsReasoningEffort: true, supportedReasoningEfforts: change.efforts};
             }
             result.contextUpdated = 0;
+            result.contextCapped = [];
             for (const update of contextUpdates) {
               const entry = models.find((model) => model.id === update.id);
               // A concurrent configuration edit wins; the next poll can reconcile it.
@@ -290,6 +293,11 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
               entry.contextWindow = update.window;
               entry.contextTokens = update.window;
               result.contextUpdated++;
+              if (update.customWindow !== undefined) {
+                const notice = `${name}/${update.id} 自定义上下文窗口 ${update.customWindow} 超过上游声明的 ${update.window}，已按上游取 ${update.window}`;
+                result.contextCapped.push(notice);
+                api.logger?.warn?.(`[model-sync] ${notice}`);
+              }
             }
           }
         },
@@ -300,6 +308,7 @@ export function createModelSynchronizer(api, {fetchImpl = fetch, now = Date.now}
       added: successes.reduce((sum, result) => sum + result.additions.length, 0),
       upgraded: successes.reduce((sum, result) => sum + new Set([...result.legacy,...result.imagePending,...result.workBuddyPending,...result.autoThinkingPending,...result.reasoningPending].map(row=>row.id)).size, 0),
       contextUpdated: successes.reduce((sum, result) => sum + result.contextUpdated, 0),
+      contextCapped: successes.flatMap((result) => result.contextCapped),
       available: successes.reduce((sum, result) => sum + result.available, 0),
       checkedAt: lastChecked,
       providers: Object.fromEntries(successes.map(({name, available, additions, legacy, imagePending, workBuddyPending, autoThinkingPending, reasoningPending, contextUpdated}) =>

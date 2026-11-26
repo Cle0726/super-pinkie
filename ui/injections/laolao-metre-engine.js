@@ -242,7 +242,7 @@
         item.onclick = () => { closeMenu(); choose({engine: engineId, model: model.slug}); };
         body.append(item);
       }
-      if (!(row?.models || []).length) body.append(h('div', 'pk-eng-menu__wait', '这个引擎还没报上来能用的模型：先登录或者在引擎设置里启用它。'));
+      if (!(row?.models || []).length) body.append(h('div', 'pk-eng-menu__wait', '这个引擎还没报上来能用的模型：先登录或者在引擎设置里启用它。')); body.dispatchEvent(new CustomEvent('pk-eng-upstream', {bubbles: true, detail: {row, rows: state.catalog?.engines || [], go: id => openEngineMenu(anchor, 'models', id)}}));
       position(anchor, node);
       return;
     }
@@ -1122,8 +1122,8 @@
       kind = status === 'failed' ? 'fail' : status === 'stopped' ? 'stopped' : 'done';
       // 刚做完：在小标里落款，落完换回静态签名、拆掉 WebGL。
       if (cle.space && !cle.finishing) {
-        cle.space.set('done');
-        cle.finishing = setTimeout(() => { const slot = stage?.querySelector('.pk-eng-live .cle-glyph'); dropCle(); slot?.replaceWith(staticGlyph()); }, CLE_HOLD);
+        const drop = () => { const slot = stage?.querySelector('.pk-eng-live .cle-glyph'); dropCle(); slot?.replaceWith(staticGlyph()); }; cle.space.set(kind === 'done' ? 'done' : 'stopped'); // 中断 / 失败：不落款，演中断形态（新版塌下去变灰；旧版 stopped 就是 idle），停 2 秒、1 秒交回签名，和 cle-stage 一样
+        cle.finishing = kind === 'done' ? setTimeout(drop, CLE_HOLD) : setTimeout(() => { cle.space?.set('idle'); cle.finishing = setTimeout(drop, 1000); }, 2000);
       } else if (!cle.space && !line.querySelector('.cle-glyph--static')) line.querySelector('.cle-glyph').replaceWith(staticGlyph());
     }
     const secs = secondsBetween(summary.runStartedAt, busy ? null : summary.runCompletedAt);

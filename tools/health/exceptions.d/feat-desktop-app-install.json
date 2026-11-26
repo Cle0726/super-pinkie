@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "m0 作品装成桌面应用 PR①（#109，11-25）：laolao-desktop-apps.css / .js 两个新文件只能在这里登记加载（?v=@hash），功能本身全在新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "m0 作品装成桌面应用 PR①（#109，11-25）：laolao-desktop-apps.css / .js 登记在 chat-thread 区域的 files 里（和 laolao-artifacts.* 同区），各一行，没有新区域、新根选择器或跨区域放行。"}
+]

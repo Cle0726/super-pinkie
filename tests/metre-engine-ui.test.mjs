@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -8,6 +8,52 @@ const file = name => fileURLToPath(new URL('../ui/injections/' + name, import.me
 const read = name => fs.readFileSync(file(name), 'utf8');
 const js = read('laolao-metre-engine.js');
 const css = read('laolao-metre-engine.css');
+
+// CI 提速：整个文件只起一个浏览器，各测试共用。每个测试仍自己开 context，结束就关。
+// 起浏览器的 Promise 只建一次。没装 Playwright 或起不来时记住原因，之后每个测试都同样跳过。
+let shared = null;
+function sharedLaunch() {
+  shared ??= (async () => {
+    let lib;
+    try { lib = playwright(); } catch { return {skip: 'Playwright is not installed here'}; }
+    const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+    try {
+      return {browser: await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})})};
+    } catch (error) {
+      return {skip: 'no browser: ' + error.message.split('\n')[0]};
+    }
+  })();
+  return shared;
+}
+function isolate(browser) {
+  const opened = [];
+  return {
+    async newPage(options) {
+      const context = await browser.newContext(options);
+      opened.push(context);
+      const page = await context.newPage();
+      const closePage = page.close.bind(page);
+      page.close = async (...args) => {
+        try { return await closePage(...args); }
+        finally { await context.close().catch(() => {}); }
+      };
+      return page;
+    },
+    async close() {
+      await Promise.all(opened.map((context) => context.close().catch(() => {})));
+      opened.length = 0;
+    },
+  };
+}
+async function sharedPage(t) {
+  const got = await sharedLaunch();
+  if (got.skip) { t.skip(got.skip); return null; }
+  return isolate(got.browser);
+}
+after(async () => {
+  const got = await shared;
+  if (got?.browser) await got.browser.close();
+});
 
 test('the engine stage is loaded by the head fragment and reuses the very same C.le. three.js module', () => {
   const head = read('laolao-head.fragment.html');
@@ -65,12 +111,8 @@ function scene() {
 }
 
 test('in a browser: chip in the composer, stage rows, escaped text, and the approve button sends the decision', {timeout: 40_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -110,12 +152,8 @@ test('in a browser: chip in the composer, stage rows, escaped text, and the appr
 
 // 3.7：对方支持的十家都在菜单里；没设置好的点进去一步步打开、安装、登录。
 test('in a browser: all ten engines are in the menu, and the ones not set up open their own setup steps', {timeout: 60_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -186,12 +224,8 @@ test('in a browser: all ten engines are in the menu, and the ones not set up ope
 
 // 多账号（用户 11-23）：一个账号一行；「再加一个账号」→ 起名字 → 选哪家 → 直接进这个新账号的登录。
 test('in a browser: one row per account, and adding an account goes straight to its sign-in', {timeout: 60_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -246,12 +280,8 @@ test('in a browser: one row per account, and adding an account goes straight to 
 // 侧栏：用外部引擎的会话标上引擎名（账号名），Metre 派给引擎的活标「引擎 · 模型」，在跑的有一道强调色。
 // 不碰侧栏的节点（laolao-session-list.js 每次整片重建），只按 data-session-key 写样式表。
 test('in a browser: sidebar rows of engine sessions carry the engine name, jobs carry engine · model', {timeout: 40_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const row = key => `<div class="sidebar-recent-session session-row-host" data-session-key='${key}'><a class="sidebar-recent-session__link"><span>t</span></a><span class="session-row-aside"></span></div>`;
@@ -288,12 +318,8 @@ test('in a browser: sidebar rows of engine sessions carry the engine name, jobs 
 
 // 乐手（E5）：菜单里一组「乐手」，点了用它那一套；「把现在这一套记成乐手」起个名字（可挂角色卡）存下来。
 test('in a browser: players are one click away, and the current choice can be saved as a player', {timeout: 60_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -355,12 +381,8 @@ test('the settings page leaves a slot for the engines switch and the engine file
 });
 
 test('in a browser: the settings switch turns the engines on, and turning them off takes two clicks', {timeout: 40_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><html data-laolao-mode="chat"><body><section id="card"></section></body></html>'}));
@@ -415,12 +437,8 @@ test('in a browser: the settings switch turns the engines on, and turning them o
 
 // 更多引擎（E6）：搜公开的 ACP 注册表，点「加上」才下载，加好直接进它的登录；删掉点两下，叫「删掉这个引擎」，没有改名字。
 test('in a browser: more engines searches the registry, adding one goes straight to its sign-in', {timeout: 60_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -482,12 +500,8 @@ test('in a browser: more engines searches the registry, adding one goes straight
 
 // PLAN 3.5「每个会话独立工作树」：还没开对话时引擎台底下有「新工作树」，按下以后第一句话带 worktree；对话开了就不再出现。
 test('in a browser: a new conversation can start in its own worktree, and the choice is only offered before it starts', {timeout: 40_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     const page = `<!doctype html><html data-laolao-mode="metre"><head><style>${css}</style></head><body>
@@ -536,12 +550,8 @@ test('the about card leaves the last slot for the third-party notices, and the n
 });
 
 test('in a browser: 第三方许可 shows a 查看 button that opens the full notices and closes again', {timeout: 40_000}, async t => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedPage(t);
+  if (!browser) return;
   try {
     const tab = await browser.newPage();
     await tab.route('http://127.0.0.1:30117/**', route => route.fulfill({contentType: 'text/html', body: `<!doctype html><html data-laolao-mode="chat"><head><style>${css}</style></head><body><section id="card"></section></body></html>`}));
@@ -577,6 +587,12 @@ test('in a browser: 第三方许可 shows a 查看 button that opens the full no
     await tab.waitForFunction(() => !document.querySelector('.pk-notices'));
     assert.deepEqual(await tab.evaluate(() => window.calls), [], 'reading the notices needs no gateway');
   } finally { await browser.close(); }
+});
+
+// 11-24：外部引擎被中断 / 失败时不落款，和 cle-stage 一样演「中断」形态（新版塌下去变灰，旧版 stopped 映射成 idle），停 2 秒、1 秒交回签名。
+test('a stopped or failed engine run plays the C.le. stopped form instead of the signature flourish', () => {
+  assert.match(js, /cle\.space\.set\(kind === 'done' \? 'done' : 'stopped'\)/);
+  assert.match(js, /setTimeout\(\(\) => \{ cle\.space\?\.set\('idle'\); cle\.finishing = setTimeout\(drop, 1000\); \}, 2000\)/);
 });
 
 // 11-24 隔离真跑页面报错 Cannot read properties of null (reading 'replaceWith')：dropCle 直接 remove 实时小标，

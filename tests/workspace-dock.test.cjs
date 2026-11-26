@@ -5,6 +5,18 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
+const readLauncher = () =>
+  [
+    'LauncherRuntime.swift',
+    'LauncherViews.swift',
+    'LauncherServices.swift',
+    'Launcher.swift',
+    'LauncherWorkspace.swift',
+    'LauncherBrowser.swift',
+    'LauncherWebBridge.swift',
+  ]
+    .map((file) => read(`desktop/macos/pinkie/Sources/${file}`))
+    .join('\n');
 
 const between = (source, start, end) => {
   const from = source.indexOf(start);
@@ -15,7 +27,7 @@ const between = (source, start, end) => {
 };
 
 test('workspace dock defaults to its mode root and rejects other-mode or subagent sessions', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const expected = {
     chat: 'agent:main:main',
     project: 'agent:project:main',
@@ -30,27 +42,27 @@ test('workspace dock defaults to its mode root and rejects other-mode or subagen
 
   const dock = between(
     launcher,
-    'private func openWorkspaceDock(',
-    '@objc private func closeWorkspaceDock'
+    'func openWorkspaceDock(',
+    '@objc func closeWorkspaceDock'
   );
   assert.match(dock, /let canonicalSession = workspaceSessions\[requestedModeID\]/);
   assert.match(dock, /let targetSession = requestedSessionKey \?\? canonicalSession/);
   assert.match(dock, /guard isWorkspaceSession\(targetSession, for: requestedModeID\) else \{ return \}/);
   assert.match(dock, /chatURL\(sessionKey: targetSession, docked: true\)/);
-  const validator = between(launcher, 'private func isWorkspaceSession(', 'private func chatURL(');
+  const validator = between(launcher, 'func isWorkspaceSession(', 'func chatURL(');
   assert.match(validator, /sessionKey\.hasPrefix\(prefix\)/);
   assert.match(validator, /!sessionKey\.contains\(":subagent:"\)/);
 });
 
 test('workspace dock is a full-height companion split in the same native window, not another runtime', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const dock = between(
     launcher,
-    'private func openWorkspaceDock(',
-    '@objc private func closeWorkspaceDock'
+    'func openWorkspaceDock(',
+    '@objc func closeWorkspaceDock'
   );
 
-  assert.match(launcher, /private var companionWebView: WKWebView\?/);
+  assert.match(launcher, /(?:private )?var companionWebView: WKWebView\?/);
   assert.match(dock, /let companion = makeChatWebView\(docked: true\)/);
   assert.match(dock, /contentView\.addSubview\(panel\)/);
   assert.match(dock, /companionWebView = companion/);
@@ -81,9 +93,9 @@ test('split close action lives in the existing primary dock picker, not a second
 });
 
 test('docked companion route carries an explicit no-splash marker', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const splash = read('ui/injections/laolao-splash.js');
-  const urlBuilder = between(launcher, 'private func chatURL(', 'private func trustedFrame');
+  const urlBuilder = between(launcher, 'func chatURL(', 'func trustedFrame');
 
   assert.match(urlBuilder, /URLQueryItem\(name: "session", value: sessionKey\)/);
   assert.match(urlBuilder, /URLQueryItem\(name: "laolao-dock", value: "1"\)/);
@@ -97,7 +109,7 @@ test('docked companion route carries an explicit no-splash marker', () => {
 
 test('split keeps the menu as an overlay and leaves real workspace controls visible', () => {
   const theme = read('ui/injections/laolao-ui-subtraction.css');
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   assert.match(theme, /data-laolao-workspace-split/);
   assert.match(theme, /data-laolao-workspace-dock/);
   assert.match(theme, /grid-template-columns: minmax\(0, 1fr\) !important/);
@@ -126,11 +138,11 @@ test('session navigation clears a stale mobile drawer in single and split window
 });
 
 test('native bridge always routes companion messages back to their source WKWebView', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const handler = between(
     launcher,
     'func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage)',
-    'private var nativeDictationBridge'
+    'var nativeDictationBridge'
   );
 
   assert.match(handler, /let sourceWebView = message\.webView/);
@@ -150,11 +162,11 @@ test('native bridge always routes companion messages back to their source WKWebV
 });
 
 test('a failed companion navigation retries only the dock and never reloads the primary chat', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const launcher = readLauncher();
   const failure = between(
     launcher,
     'func webView(_ webView: WKWebView, didFailProvisionalNavigation',
-    'private var nativeDictationBridge'
+    'var nativeDictationBridge'
   );
   const companionStart = failure.indexOf('if isCompanion(webView)');
   const primaryStart = failure.indexOf('guard retries < 8');
@@ -171,8 +183,8 @@ test('a failed companion navigation retries only the dock and never reloads the 
 });
 
 test('foreground recovery reaches both primary and companion chat views', () => {
-  const launcher = read('desktop/macos/pinkie/Sources/Launcher.swift');
-  const notifications = between(launcher, 'func applicationDidResignActive', 'private func isCompanion');
+  const launcher = readLauncher();
+  const notifications = between(launcher, 'func applicationDidResignActive', 'func isCompanion');
 
   assert.match(notifications, /applicationDidBecomeActive[\s\S]{0,260}notifyWebView\("pinkie:app-foreground"\)/);
   assert.match(notifications, /\[self\.webView, self\.companionWebView\]\.compactMap \{ \$0 \}\.forEach/);

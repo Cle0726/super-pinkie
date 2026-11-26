@@ -43,7 +43,7 @@
   const join = (a, b) => a ? a.replace(/\/$/, '') + '/' + b : b;
   const shellQuote = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
-  const isMac = /Mac/.test(navigator.platform);
+  const isMac = /Mac/.test(navigator.platform), benchKey = e => e.code === 'KeyB' && e.altKey && !e.shiftKey && (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey); // ⌥⌘B：非 Mac 按标签认 Alt+Ctrl
   const keyLabel = s => isMac ? s : s.replace(/⌘/g, 'Ctrl+').replace(/⇧/g, 'Shift+').replace(/⌥/g, 'Alt+');
 
   /* ───────── 状态 ───────── */
@@ -65,7 +65,7 @@
     store.set('sideWidth', state.sideWidth); store.set('chatWidth', state.chatWidth); store.set('layoutVersion', 2);
   }
   const extraStatus = new Map();
-  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus};
+  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); workspaceView = 'code'; place(); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
 
   /* ───────── 让模型看见当前工作台和运行现场 ───────── */
   const contextClientId = crypto.randomUUID();
@@ -1195,7 +1195,7 @@
     const mark = el('div', 'pk-wb-welcome__mark');
     mark.append(el('i', 'pk-wb-mark'));
     const title = el('h1', 'pk-wb-welcome__title', state.info?.name || '碧琪工作台');
-    const sub = el('p', 'pk-wb-welcome__sub', state.info?.error ? state.info.error : state.info ? (state.info.bound ? '项目文件夹 · ' : '工作区 · ') + state.info.root : '正在连接…');
+    const sub = el('p', 'pk-wb-welcome__sub', state.info?.error ? state.info.error : state.info ? (state.info.bound ? '项目文件夹' : '工作区') + (state.info.root ? ' · ' + state.info.root : '') : '正在连接…');
     const keys = el('div', 'pk-wb-welcome__keys');
     for (const [label, k, run] of [['快速打开文件', '⌘P', () => showQuick('')], ['在文件中搜索', '⇧⌘F', () => openView('search')], ['打开终端', '⌃`', () => togglePanel('terminal', true)], ['命令', '⇧⌘P', () => showQuick('>')], ['问碧琪', '⌘L', () => askPinkie()]]) {
       const row = el('button', 'pk-wb-welcome__key'); row.type = 'button';
@@ -2229,7 +2229,7 @@
   /* ───────── 快捷键 ───────── */
   document.addEventListener('keydown', event => {
     if (!state.visible) {
-      if (event.altKey && event.metaKey && event.code === 'KeyB' && wanted()) { event.preventDefault(); setEnabled(true); }
+      if (benchKey(event) && wanted()) { event.preventDefault(); setEnabled(true); }
       return;
     }
     const mod = isMac ? event.metaKey : event.ctrlKey;
@@ -2243,7 +2243,7 @@
     if (hit(event.ctrlKey && event.shiftKey && k === 'KeyG', () => openView('scm'))) return;
     if (hit(mod && event.shiftKey && k === 'KeyX', () => openView('extensions'))) return;
     if (hit(event.ctrlKey && k === 'Backquote', () => togglePanel('terminal'))) return;
-    if (hit(event.altKey && event.metaKey && k === 'KeyB', () => setEnabled(false))) return;
+    if (hit(benchKey(event), () => setEnabled(false))) return;
     if (!inBench) return;
     if (hit(mod && !event.shiftKey && k === 'KeyB', () => { state.sideOpen = !state.sideOpen; store.set('sideOpen', state.sideOpen); renderSide(); place(); })) return;
     if (hit(mod && k === 'KeyS', () => saveActive())) return;
