@@ -42,7 +42,7 @@ async function open(browser, withFix) {
   return page;
 }
 const value = (page) => page.locator('openclaw-chat-pane textarea').inputValue();
-const press = async (page, key) => { await page.keyboard.press(key); await page.waitForTimeout(50); };
+const press = async (page, key) => { await page.keyboard.press(key); await page.waitForTimeout(50); };   // 保留：一半调用断言「按了没反应」（假原生不重画、到底不重画、Shift 不碰），没有能等的条件
 
 test(`composer history: without the fix the textarea stays stale after ↑ (guards the test itself) (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
