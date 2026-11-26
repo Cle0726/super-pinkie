@@ -141,7 +141,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-rece
   transition: height .3s cubic-bezier(.3, 1.4, .5, 1), opacity .2s ease;
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active::before { opacity: 1; height: 14px; }
-html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { font-weight: 600 !important; color: color-mix(in srgb, var(--accent) 45%, #3d3036) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { font-weight: 600 !important; color: var(--sb-ink-active, color-mix(in srgb, var(--accent) 45%, #3d3036)) !important; }
 
 /* 滑动柔光（悬停指示），由脚本放进侧栏并移动 */
 .sb-glide {
