@@ -28,6 +28,16 @@ const PAGE = (htmlAttrs) => `<!doctype html><html ${htmlAttrs}><head></head><bod
     <button class="pinkie-user-settings__choice" id="choice" type="button">选项</button>
   </div></section></body></html>`;
 
+// 共享按键规则（settings-user.css 119 行那组）带 transition: border-color .16s，刚加样式就量会量到过渡起点（CI 上量成 rgb(0, 0, 0)）。
+// 量之前关掉过渡，只测最终颜色。
+const NO_TRANSITION = '#laolao-user-settings *, #laolao-user-settings *::before, #laolao-user-settings *::after { transition: none !important; }';
+async function load(p, attrs, sheets) {
+  await p.setContent(PAGE(attrs));
+  await p.addStyleTag({content: NO_TRANSITION});
+  for (const content of sheets) await p.addStyleTag({content});
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
 async function measure(p) {
   return p.evaluate(() => {
     const cs = (id) => getComputedStyle(document.getElementById(id));
@@ -45,8 +55,7 @@ test(`B25: shared settings buttons get a ≥3:1 edge in day and night, other con
     const p = await browser.newPage({viewport: {width: 600, height: 300}});
     const gray = {r: 136, g: 136, b: 136, a: 1};
     for (const [name, attrs, want] of [['日', '', 'rgb(181, 105, 143)'], ['夜', 'data-theme-mode="dark"', 'rgb(168, 115, 143)']]) {
-      await p.setContent(PAGE(attrs));
-      await p.addStyleTag({content: css});
+      await load(p, attrs, [css]);
       const m = await measure(p);
       assert.equal(m.plain, want, `${name}：设置键描边应是新颜色`);
       const card = over(parse(m.card), gray), fill = over(parse(m.plainBg), card), edge = parse(m.plain);
@@ -64,9 +73,7 @@ test(`B25: shared settings buttons get a ≥3:1 edge in day and night, other con
       assert.ok(ratio(over(parse(back.plain), card), card) < 3, `${name} 反例：退回的淡色描边应 < 3:1`);
     }
     // Metre：skin.css 的设置键规则自带 !important 描边（--metre-line-strong），新变量不影响
-    await p.setContent(PAGE('data-laolao-mode="metre"'));
-    await p.addStyleTag({content: css});
-    await p.addStyleTag({content: skin});
+    await load(p, 'data-laolao-mode="metre"', [css, skin]);
     const metre = await measure(p);
     assert.notEqual(metre.plain, 'rgb(181, 105, 143)', 'Metre：设置键不该出现新的粉色描边');
     assert.doesNotMatch(metre.plain, /181, 105, 143|168, 115, 143/);
