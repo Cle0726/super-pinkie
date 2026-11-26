@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "ui2 S7 会话行目录 / 分支（11-26，feat/metre-ui2-s7）：laolao-metre-worktree.css / .js 只能在这里登记加载（?v=@hash），功能全在新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "ui2 S7（feat/metre-ui2-s7）：laolao-metre-worktree.css / .js 登记在 metre 区域 files 里各一行，没有新区域、新根选择器或跨区域放行。"}
+]
