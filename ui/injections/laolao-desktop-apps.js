@@ -159,7 +159,7 @@
       const control = el('div', S + 'row-control pk-apps-row__actions');
       control.append(
         button('打开', 'pinkie-art-btn', () => nativeOk({type: 'openApp', appId: app.id}).catch(error => toast(error.message))),
-        button('卸载', 'pinkie-art-btn pinkie-art-btn--quiet', () => void uninstall(app, row)),
+        button('卸载', 'pinkie-art-btn pk-apps-uninstall', () => void uninstall(app, row)),
       );
       row.append(copy, control);
       list.append(row);
