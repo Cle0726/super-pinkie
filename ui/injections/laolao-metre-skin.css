@@ -373,9 +373,9 @@ html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-connect
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar .pinkie-connection-status > span:last-child:not([class]) { display: none !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-footer-icon, .sidebar-brand__icon) { color: var(--metre-muted) !important; background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 6px !important; }
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) aside.sidebar :is(.sidebar-footer-icon, .sidebar-brand__icon):hover { color: var(--metre-text) !important; background: var(--metre-hover) !important; }
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-laser-entry,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-laser-rail-entry,
-html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) #pinkie-power-entry { display: none !important; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-laser-entry,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-laser-rail-entry,
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) #pinkie-power-entry { display: none !important; }
 
 /* ---------- 顶栏：不重复写 Metre；链路和费用是调试信息，鼠标移到顶栏才显示 ---------- */
 html[data-laolao-mode="metre"]:not(#_m1):not(#_m2) .dashboard-header__breadcrumb { display: none !important; }

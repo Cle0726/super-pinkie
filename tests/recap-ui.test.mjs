@@ -122,12 +122,12 @@ test('真浏览器：8 日以后不出；关掉不出；离开首页卡片撤掉
   const browser = await setup(t); if (!browser) return;
   try {
     let {tab} = await open(browser, {date: new Date(2026, 11, 8, 10, 0, 0)});
-    await tab.waitForTimeout(400);
+    await tab.waitForTimeout(400);   // 保留：断言卡片「不出」，没有能等的条件
     assert.equal(await card(tab).count(), 0, '8 日不出');
     assert.equal(await tab.evaluate(() => window.calls.length), 0, '不出就不去取数');
     await tab.close();
     ({tab} = await open(browser, {date: new Date(2026, 11, 1, 9, 0, 0), prefs: {off: true}}));
-    await tab.waitForTimeout(400);
+    await tab.waitForTimeout(400);   // 保留：断言卡片「不出」，没有能等的条件
     assert.equal(await card(tab).count(), 0, '关掉不出');
     await tab.close();
     ({tab} = await open(browser, {date: new Date(2026, 11, 3, 9, 0, 0)}));
