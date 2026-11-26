@@ -88,7 +88,8 @@ export class WorkbenchContext {
         path: text(d.path, 2000), line: integer(d.line), column: integer(d.column),
         severity: d.severity === 'error' ? 'error' : 'warning', message: text(d.message, 500), source: text(d.source, 80),
       })) : [],
-      terminals: active && Array.isArray(params.terminals) ? params.terminals.slice(0, 3).map(t => ({
+      // 每个聊天会话一个终端（R2）：只收挂在本会话上的那一个，别的会话的终端输出不进本会话上下文。
+      terminals: active && Array.isArray(params.terminals) ? params.terminals.filter(t => t?.sessionKey === scope.key).slice(0, 1).map(t => ({
         sessionId: text(t.sessionId, 160), initialCwd: text(t.initialCwd, 2000), command: text(t.command, 800),
         output: text(t.output, 6000), exitCode: Number.isInteger(t.exitCode) ? t.exitCode : null,
         updatedAt: Number(t.updatedAt) || null,
