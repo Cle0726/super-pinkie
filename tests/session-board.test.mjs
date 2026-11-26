@@ -10,17 +10,26 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function load() {
   // 在当前上下文里跑，避免 vm 沙箱里的字符串/对象对 deepEqual 失败。
+  // 工厂和纯函数在 module.exports；window.Pinkie.sessionBoard 是现成实例。
   const previous = Object.prototype.hasOwnProperty.call(globalThis, 'window') ? globalThis.window : Symbol.for('none');
-  const window = {Pinkie: {}};
+  const prevModule = Object.prototype.hasOwnProperty.call(globalThis, 'module') ? globalThis.module : Symbol.for('none');
+  const window = Object.assign(new EventTarget(), {Pinkie: {}});
+  const module = {exports: {}};
   globalThis.window = window;
+  globalThis.module = module;
   try {
     vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'ui/injections/laolao-session-board-data.js'), 'utf8'), {
       filename: 'laolao-session-board-data.js',
     });
-    return window.Pinkie.sessionBoard;
+    const api = module.exports;
+    api.instance = window.Pinkie.sessionBoard;
+    api.window = window;
+    return api;
   } finally {
     if (previous === Symbol.for('none')) delete globalThis.window;
     else globalThis.window = previous;
+    if (prevModule === Symbol.for('none')) delete globalThis.module;
+    else globalThis.module = prevModule;
   }
 }
 
@@ -141,7 +150,12 @@ test('排序：等你 → 在跑 / 排队中（早的在上）→ 出错 → 刚
   assert.deepEqual(view.rows.map((r) => r.key), [
     'agent:main:wait', 'agent:main:run-old', 'agent:main:queue', 'agent:main:run-new', 'agent:main:err',
   ]);
-  assert.deepEqual(view.done.map((r) => r.key), ['agent:main:done-new']);
+  assert.deepEqual(view.rows.map((r) => r.state), ['ask', 'run', 'queued', 'run', 'error']);
+  assert.deepEqual(view.recent.map((r) => r.key), ['agent:main:done-new']);
+  assert.equal(view.recent[0].state, 'done');
+  assert.equal(view.more, 0);
+  assert.equal(view.offline, false);
+  assert.equal(view.running, 4);
 });
 
 test('上限：13 个在跑时第 13 个折进「还有 1 个」；子会话挂到父行下、超过 10 个折叠', () => {
@@ -164,68 +178,59 @@ test('上限：13 个在跑时第 13 个折进「还有 1 个」；子会话挂�
   }
   const collapsed = api.buildView(sessions, liveBag, now);
   assert.equal(collapsed.rows.length, api.MAX_VISIBLE);
-  assert.equal(collapsed.overflow.count, 1 + 1); // 13 running mains + parent, minus 12? Wait we'll assert after looking
-  // 13 main running + 1 parent = 14 top-level running; 12 visible, 2 overflow.
-  assert.equal(collapsed.overflow.label, `还有 ${14 - api.MAX_VISIBLE} 个在跑`);
-  const dad = api.buildView(sessions, liveBag, now).rows.find((r) => r.key === parent)
-    || api.buildView(sessions, {...liveBag, expandedParents: new Set()}, now).rows.find((r) => r.key === parent);
-  // Parent may be in overflow. Build a tighter fixture below if needed.
+  // 13 个主会话在跑 + 1 个父行 = 14 行顶层；一屏 12 行，折掉 2 个。
+  assert.equal(collapsed.more, 14 - api.MAX_VISIBLE);
+  assert.equal(collapsed.running, 14);
   const onlyFamily = api.buildView(
     [row(parent, {label: '父', hasActiveRun: true}),
       ...Array.from({length: 11}, (_, i) => row(`agent:project:parent:subagent:${i}`, {hasActiveRun: true, spawnedBy: parent}))],
-    {doing: new Map(), waiting: new Map(), errors: new Map(), started: new Map(), stale: false, openedAt: now, expandedParents: new Set()},
+    {doing: new Map(), waiting: new Map(), errors: new Map(), started: new Map(), tools: new Map(), stale: false, openedAt: now, expandedParents: new Set()},
     now,
   );
   assert.equal(onlyFamily.rows.length, 1);
   assert.equal(onlyFamily.rows[0].childCount, 11);
-  assert.equal(onlyFamily.rows[0].children.length, 0);
+  assert.equal(onlyFamily.rows[0].children.length, 10);
+  assert.equal(onlyFamily.rows[0].childMore, 1);
   assert.match(onlyFamily.rows[0].childHint, /另有 11 个分身在跑/);
-  const opened = api.buildView(
-    onlyFamily.rows[0] ? [
-      row(parent, {label: '父', hasActiveRun: true}),
-      ...Array.from({length: 11}, (_, i) => row(`agent:project:parent:subagent:${i}`, {hasActiveRun: true, spawnedBy: parent})),
-    ] : [],
-    {doing: new Map(), waiting: new Map(), errors: new Map(), started: new Map(), stale: false, openedAt: now, expandedParents: new Set([parent])},
-    now,
-  );
-  assert.equal(opened.rows[0].children.length, 10);
-  assert.equal(opened.rows[0].childOverflow, '还有 1 个');
 });
 
 test('打开看板读列表和待批；approval.requested 标「等你」，resolved 后清掉；断线重连清空 doing 和等你', async (t) => {
   const sessions = [row('agent:main:a', {label: '甲', hasActiveRun: true})];
   const {board, gw, gateway, fire, api, clk} = setup(t, sessions);
   gw.execApprovals = [{id: 'pre-1', sessionKey: 'agent:main:a', request: {command: 'rm stale'}}];
-  await board.open();
+  await board.start();
   assert.equal(gw.listCalls().length, 1);
   assert.deepEqual(gw.listCalls()[0].params, {limit: 200, includeLastMessage: true});
   assert.ok(gw.calls.some((c) => c.method === 'exec.approval.list'));
   assert.ok(gw.calls.some((c) => c.method === 'plugin.approval.list'));
   assert.equal(board.view().rows[0].doing, '等你确认：rm stale');
+  assert.equal(board.view().rows[0].state, 'ask');
   gateway('exec.approval.resolved', {id: 'pre-1', sessionKey: 'agent:main:a'});
   assert.equal(board.view().rows[0].doing, '在跑');
+  assert.equal(board.view().rows[0].state, 'run');
   gateway('exec.approval.requested', {id: 'n2', sessionKey: 'agent:main:a', request: {command: 'ls docs'}});
   assert.equal(board.view().rows[0].doing, '等你确认：ls docs');
   gateway('agent', {stream: 'tool', sessionKey: 'agent:main:a', data: {name: 'read'}});
   assert.equal(board.view().rows[0].doing, '等你确认：ls docs');
+  assert.deepEqual(board.view().rows[0].tools, ['读取']);
   gateway('plugin.approval.resolved', {id: 'n2', sessionKey: 'agent:main:a'});
   assert.equal(board.view().rows[0].doing, '在用读取');
   const listsBefore = gw.listCalls().length;
   fire('pinkie:sidebar-gateway-lost');
-  assert.equal(board.view().stale, true);
-  assert.equal(board.view().rows[0].status, 'stale-running');
+  assert.equal(board.view().offline, true);
+  assert.equal(board.view().rows[0].state, 'run');
   assert.equal(board.view().rows[0].doing, '断线前在跑');
-  // 反例：若把断线当成「刚做完」，上面的 status/doing 断言会红。
+  // 反例：若把断线当成「刚做完」，上面的 state/doing 断言会红。
   gw.sessions = [row('agent:main:a', {label: '甲', hasActiveRun: true, lastMessagePreview: '还在'} )];
   await board.handleReady();
   assert.ok(gw.listCalls().length > listsBefore);
-  assert.equal(board.view().stale, false);
+  assert.equal(board.view().offline, false);
   assert.equal(board.view().rows[0].doing, '在跑');
 });
 
 test('节流：一秒内 10 个 sessions.changed 只读一次列表；tool 事件不触发读列表', async (t) => {
   const {board, gw, gateway, fire, clk} = setup(t, [row('agent:main:a', {hasActiveRun: true})]);
-  await board.open();
+  await board.start();
   const afterOpen = gw.listCalls().length;
   for (let i = 0; i < 10; i++) {
     gateway('sessions.changed', {sessionKey: 'agent:main:a', reason: 'send'});
@@ -245,7 +250,7 @@ test('节流：一秒内 10 个 sessions.changed 只读一次列表；tool 事�
 test('看门狗：有在跑时 20 秒无事件读一次，没在跑时不读；看板关着不发请求', async (t) => {
   const running = [row('agent:main:a', {hasActiveRun: true})];
   const {board, gw, clk} = setup(t, running);
-  await board.open();
+  await board.start();
   const afterOpen = gw.listCalls().length;
   clk.tick(19_000);
   assert.equal(gw.listCalls().length, afterOpen);
@@ -253,7 +258,7 @@ test('看门狗：有在跑时 20 秒无事件读一次，没在跑时不读；�
   assert.equal(gw.listCalls().length, afterOpen + 1, '反例：若 20 秒看门狗没触发，这条会红');
 
   const idle = setup(t, [row('agent:main:b', {label: '闲', updatedAt: 1_000_000})]);
-  await idle.board.open();
+  await idle.board.start();
   const idleAfter = idle.gw.listCalls().length;
   idle.clk.tick(30_000);
   assert.equal(idle.gw.listCalls().length, idleAfter, '没在跑时看门狗不应读列表');
@@ -264,7 +269,7 @@ test('看门狗：有在跑时 20 秒无事件读一次，没在跑时不读；�
   closed.gateway('sessions.changed', {sessionKey: 'agent:main:a', reason: 'send'});
   closed.clk.tick(30_000);
   assert.equal(closed.gw.calls.length, 0);
-  closed.board.close();
+  closed.board.stop();
 });
 
 test('有快照的 sessions.changed 先合并行；打开前就在跑的已用时写成 ≥', async (t) => {
@@ -272,9 +277,11 @@ test('有快照的 sessions.changed 先合并行；打开前就在跑的已用�
   const {board, gw, gateway, api} = setup(t, [
     row('agent:main:a', {label: '甲', hasActiveRun: true, startedAt, updatedAt: 990_000}),
   ]);
-  await board.open();
-  const elapsed = board.view().rows[0].elapsed;
-  assert.match(elapsed, /^≥ /);
+  await board.start();
+  const first = board.view().rows[0];
+  assert.equal(first.since, startedAt);
+  assert.equal(first.sinceEstimated, true);
+  assert.match(first.elapsed, /^≥ /);
   gateway('sessions.changed', {sessionKey: 'agent:main:b', reason: 'send', key: 'agent:main:b', hasActiveRun: true, status: 'running', startedAt: 1_000_000, label: '乙'});
   const keys = board.view().rows.map((r) => r.key);
   assert.ok(keys.includes('agent:main:b') || gw.listCalls().length >= 1);
@@ -312,12 +319,62 @@ test('标题与模式标签；点行跳转；展开一行才读花费', async (t
     nativeBridge: {openSession: (key) => opened.push(key)},
   });
   t.after(() => board.dispose());
-  await board.open();
-  board.openSession('agent:main:a');
+  await board.start();
+  board.open('agent:main:a');
   assert.deepEqual(opened, ['agent:main:a']);
   const usageCalls = gw.calls.filter((c) => c.method === 'sessions.usage').length;
   assert.equal(usageCalls, 0);
-  await board.expand('agent:main:a');
+  const billed = await board.usage('agent:main:a');
   assert.equal(gw.calls.filter((c) => c.method === 'sessions.usage').length, 1);
   assert.deepEqual(gw.calls.find((c) => c.method === 'sessions.usage').params, {key: 'agent:main:a'});
+  assert.deepEqual(billed, {cost: 1});
+});
+
+test('window.Pinkie.sessionBoard 是现成实例；就绪时发 pinkie:session-board-ready；subscribe 在变化时回调', async (t) => {
+  const seen = [];
+  const window = Object.assign(new EventTarget(), {Pinkie: {}});
+  const module = {exports: {}};
+  window.addEventListener('pinkie:session-board-ready', (ev) => seen.push(ev.type));
+  const previous = Object.prototype.hasOwnProperty.call(globalThis, 'window') ? globalThis.window : Symbol.for('none');
+  const prevModule = Object.prototype.hasOwnProperty.call(globalThis, 'module') ? globalThis.module : Symbol.for('none');
+  globalThis.window = window;
+  globalThis.module = module;
+  try {
+    vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'ui/injections/laolao-session-board-data.js'), 'utf8'), {
+      filename: 'laolao-session-board-data.js',
+    });
+  } finally {
+    if (previous === Symbol.for('none')) delete globalThis.window;
+    else globalThis.window = previous;
+    if (prevModule === Symbol.for('none')) delete globalThis.module;
+    else globalThis.module = prevModule;
+  }
+  assert.deepEqual(seen, ['pinkie:session-board-ready']);
+  const board = window.Pinkie.sessionBoard;
+  assert.equal(typeof board.start, 'function');
+  assert.equal(typeof board.stop, 'function');
+  assert.equal(typeof board.view, 'function');
+  assert.equal(typeof board.subscribe, 'function');
+  assert.equal(typeof board.open, 'function');
+  assert.equal(typeof board.usage, 'function');
+  assert.equal(typeof board.createSessionBoard, 'undefined');
+  assert.equal(typeof module.exports.createSessionBoard, 'function');
+  const view = board.view();
+  assert.deepEqual(Object.keys(view).sort(), ['more', 'offline', 'recent', 'rows', 'running'].sort());
+
+  const {board: live, gateway, gw} = setup(t, [row('agent:main:a', {hasActiveRun: true})]);
+  const views = [];
+  const unsub = live.subscribe((next) => views.push(next));
+  await live.start();
+  assert.ok(views.length >= 1);
+  assert.equal(views.at(-1).rows[0].state, 'run');
+  const mid = views.length;
+  gateway('exec.approval.requested', {id: 'x', sessionKey: 'agent:main:a', request: {command: 'ls'}});
+  assert.ok(views.length > mid);
+  assert.equal(views.at(-1).rows[0].state, 'ask');
+  unsub();
+  const after = views.length;
+  gateway('exec.approval.resolved', {id: 'x', sessionKey: 'agent:main:a'});
+  assert.equal(views.length, after, '反例：取消订阅后不应再回调');
+  assert.equal(gw.calls.filter((c) => c.method === 'sessions.usage').length, 0);
 });

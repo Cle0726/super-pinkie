@@ -1,7 +1,17 @@
 /* laolao-session-board-data:v1 —— 多会话并行看板的纯数据层（设计 S6 第一步）
  *
  * 只负责读列表、节流、看门狗、事件拼「在做什么 / 等你」、排序和上限。
- * 不画界面。挂 window.Pinkie.sessionBoard，不新增 window.__*，不加观察器。 */
+ * 不画界面。不新增 window.__*，不加观察器。
+ *
+ * window.Pinkie.sessionBoard 是现成实例（不是工厂），接口对齐界面层：
+ *   view()          → {rows, more, recent, offline, running}
+ *   subscribe(fn)   → 取消函数；view 变了调 fn(view)
+ *   start() / stop()→ 看板打开 / 关上（关着不读列表）
+ *   open(key)       → 跳过去
+ *   usage(key)      → Promise<{cost}>，只在展开一行时调
+ * 一行：{key, mode, modeLabel, title, state: 'ask'|'run'|'queued'|'error'|'done', doing, since, sinceEstimated,
+ *        tokens, contextTokens, over, model, tools, children, childMore}
+ * 就绪时发 pinkie:session-board-ready。createSessionBoard 仍从 module.exports 给出，供测试用。 */
 (() => {
   'use strict';
 
@@ -79,6 +89,14 @@
     return 'done';
   }
 
+  function stateOf(status) {
+    if (status === 'waiting') return 'ask';
+    if (status === 'running' || status === 'stale-running') return 'run';
+    if (status === 'queued') return 'queued';
+    if (status === 'error') return 'error';
+    return 'done';
+  }
+
   function formatElapsed(ms, estimated) {
     if (!Number.isFinite(ms) || ms < 0) return '';
     const m = Math.floor(ms / 60000);
@@ -93,10 +111,10 @@
     return null;
   }
 
-  function rankOf(status) {
-    if (status === 'waiting') return 0;
-    if (status === 'running' || status === 'queued' || status === 'stale-running') return 1;
-    if (status === 'error') return 2;
+  function rankOf(state) {
+    if (state === 'ask') return 0;
+    if (state === 'run' || state === 'queued') return 1;
+    if (state === 'error') return 2;
     return 3;
   }
 
@@ -133,23 +151,28 @@
       chat: doing.chat,
       running: status === 'running' || status === 'queued' || status === 'stale-running',
     });
+    const state = stateOf(status);
+    const tokens = Number.isFinite(Number(row.totalTokens)) ? Number(row.totalTokens) : undefined;
+    const contextTokens = Number.isFinite(Number(row.contextTokens)) ? Number(row.contextTokens) : undefined;
+    const tools = (liveBag.tools && liveBag.tools.get(key)) || [];
     return {
       key,
       title: titleOf(row),
       mode: modeOf(key),
       modeLabel: modeLabel(key),
-      status: status === 'stale-running' ? 'stale-running' : status,
-      statusText: status === 'stale-running' ? '断线前在跑' : status,
+      state,
       doing: status === 'stale-running' ? '断线前在跑' : text,
-      doingIdle: !live.waiting && !doing.toolName && !doing.chat && status !== 'running' && status !== 'queued' && status !== 'stale-running',
-      elapsed,
+      since: startedInfo?.at || 0,
+      sinceEstimated: Boolean(startedInfo?.estimated),
+      tokens,
+      contextTokens,
+      over: Boolean(tokens >= 0 && contextTokens > 0 && tokens >= contextTokens),
+      model: row.model || row.activeModel || '',
+      tools: tools.slice(),
       startedAt: startedInfo?.at || 0,
       estimated: Boolean(startedInfo?.estimated),
-      totalTokens: row.totalTokens,
-      contextTokens: row.contextTokens,
-      pinkieCompactionBudget: row.pinkieCompactionBudget,
+      elapsed,
       spawnedBy: row.spawnedBy || '',
-      model: row.model || row.activeModel || '',
       subagent: isSubagent(row),
       source: row,
     };
@@ -174,27 +197,26 @@
     const top = [];
     for (const row of decorated) {
       if (row.subagent) continue;
-      const children = (parents.get(row.key) || []).slice().sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
-      const runningKids = children.filter((c) => c.status === 'running' || c.status === 'queued' || c.status === 'waiting' || c.status === 'stale-running').length;
-      const open = expanded.has(row.key);
-      const shownKids = open ? children.slice(0, MAX_CHILDREN) : [];
-      const hiddenKids = open ? Math.max(0, children.length - MAX_CHILDREN) : 0;
+      const children = (parents.get(row.key) || []).slice().sort((a, b) => (a.startedAt || a.since || 0) - (b.startedAt || b.since || 0));
+      const runningKids = children.filter((c) => c.state === 'run' || c.state === 'queued' || c.state === 'ask').length;
+      const shownKids = children.slice(0, MAX_CHILDREN);
+      const hiddenKids = Math.max(0, children.length - MAX_CHILDREN);
       top.push({
         ...row,
         childCount: children.length,
         runningChildren: runningKids,
         childHint: runningKids ? `另有 ${runningKids} 个分身在跑` : (children.length ? `另有 ${children.length} 个分身` : ''),
         children: shownKids,
-        childOverflow: hiddenKids ? `还有 ${hiddenKids} 个` : '',
-        expanded: open,
+        childMore: hiddenKids,
+        expanded: expanded.has(row.key),
       });
     }
-    for (const row of orphans) top.push({...row, childCount: 0, runningChildren: 0, childHint: '', children: [], childOverflow: '', expanded: false});
+    for (const row of orphans) top.push({...row, childCount: 0, runningChildren: 0, childHint: '', children: [], childMore: 0, expanded: false});
 
     const active = [];
     const done = [];
     for (const row of top) {
-      if (row.status === 'done') {
+      if (row.state === 'done') {
         const at = row.source.updatedAt || row.source.endedAt || 0;
         if (at && now - at <= DONE_MS) done.push(row);
         continue;
@@ -202,19 +224,21 @@
       active.push(row);
     }
     active.sort((a, b) => {
-      const d = rankOf(a.status) - rankOf(b.status);
+      const d = rankOf(a.state) - rankOf(b.state);
       if (d) return d;
-      if (rankOf(a.status) === 1) return (a.startedAt || 0) - (b.startedAt || 0);
+      if (rankOf(a.state) === 1) return (a.since || a.startedAt || 0) - (b.since || b.startedAt || 0);
       return (b.source.updatedAt || 0) - (a.source.updatedAt || 0);
     });
     done.sort((a, b) => (b.source.updatedAt || 0) - (a.source.updatedAt || 0));
     const visible = active.slice(0, MAX_VISIBLE);
     const hidden = active.length - visible.length;
+    const running = active.filter((r) => r.state === 'ask' || r.state === 'run' || r.state === 'queued').length;
     return {
-      stale: Boolean(liveBag.stale),
       rows: visible,
-      overflow: hidden > 0 ? {count: hidden, label: `还有 ${hidden} 个在跑`} : null,
-      done: done.slice(0, MAX_DONE),
+      more: hidden,
+      recent: done.slice(0, MAX_DONE),
+      offline: Boolean(liveBag.stale),
+      running,
     };
   }
 
@@ -275,10 +299,12 @@
       waiting: new Map(),
       errors: new Map(),
       started: new Map(),
+      tools: new Map(),
       stale: false,
       openedAt: 0,
       expandedParents: new Set(),
     };
+    const subs = new Set();
     let sessions = [];
     let opened = false;
     let lastEventAt = 0;
@@ -300,7 +326,21 @@
     }
 
     function hasRunning() {
-      return view().rows.some((r) => r.status === 'running' || r.status === 'queued' || r.status === 'waiting' || r.status === 'stale-running');
+      return (view().running || 0) > 0;
+    }
+
+    function subscribe(fn) {
+      if (typeof fn !== 'function') return () => {};
+      subs.add(fn);
+      return () => { subs.delete(fn); };
+    }
+
+    function notify() {
+      if (!subs.size) return;
+      const snap = view();
+      for (const fn of [...subs]) {
+        try { fn(snap); } catch {}
+      }
     }
 
     function noteEvent() {
@@ -332,7 +372,9 @@
       listTimer = 0;
       lastListAt = now();
       const listed = await gwRequest('sessions.list', {limit: LIST_LIMIT, includeLastMessage: true});
+      if (!opened) return;
       sessions = asArray(listed, 'sessions').map((s) => ({...s}));
+      notify();
     }
 
     async function readApprovals() {
@@ -346,6 +388,7 @@
       };
       try { take(asArray(await gwRequest('exec.approval.list', {}), 'approvals')); } catch {}
       try { take(asArray(await gwRequest('plugin.approval.list', {}), 'approvals')); } catch {}
+      if (opened) notify();
     }
 
     function requestList() {
@@ -363,17 +406,18 @@
       }, wait || LIST_THROTTLE_MS);
     }
 
-    async function open() {
+    async function start() {
       opened = true;
       liveBag.stale = false;
       liveBag.openedAt = now();
       lastEventAt = now();
       await Promise.all([readList(), readApprovals()]);
       armWatch();
+      notify();
       return view();
     }
 
-    function close() {
+    function stop() {
       opened = false;
       if (listTimer) { clearTimer(listTimer); listTimer = 0; }
       if (watchTimer) { clearTimer(watchTimer); watchTimer = 0; }
@@ -401,6 +445,7 @@
 
     function onGateway(detail) {
       if (!opened) return;
+      try {
       const name = eventName(detail);
       const payload = eventPayload(detail);
       const data = payload.data || {};
@@ -435,7 +480,14 @@
       if (name === 'agent' && payload.stream === 'tool') {
         noteEvent();
         const tool = data.name || data.toolName || payload.name || payload.toolName || '';
-        if (key && tool) liveBag.doing.set(key, {toolName: tool, chat: false, at: now()});
+        if (key && tool) {
+          liveBag.doing.set(key, {toolName: tool, chat: false, at: now()});
+          const list = liveBag.tools.get(key) || [];
+          const label = toolLabel(tool) || tool;
+          if (list[list.length - 1] !== label) list.push(label);
+          liveBag.tools.set(key, list);
+        }
+        notify();
         return;
       }
       if (name === 'chat') {
@@ -459,12 +511,16 @@
         noteEvent();
         clearWaiting(payload);
       }
+      } finally {
+        notify();
+      }
     }
 
     function onLost() {
       if (!opened) return;
       liveBag.stale = true;
       if (watchTimer) { clearTimer(watchTimer); watchTimer = 0; }
+      notify();
     }
 
     async function onReady() {
@@ -474,9 +530,11 @@
       liveBag.waiting.clear();
       liveBag.errors.clear();
       liveBag.started.clear();
+      liveBag.tools.clear();
       lastEventAt = now();
       await readList();
       armWatch();
+      notify();
     }
 
     function on(type, fn) {
@@ -504,12 +562,17 @@
     }
 
     async function usage(key) {
-      if (typeof gwRequest !== 'function') return null;
-      return gwRequest('sessions.usage', {key});
+      if (typeof gwRequest !== 'function') return {cost: undefined};
+      const res = await gwRequest('sessions.usage', {key}, 15000);
+      if (res && res.cost != null) return {cost: res.cost};
+      const row = (res?.sessions || []).find((item) => item?.key === key) || res?.sessions?.[0] || null;
+      const cost = row?.usage?.totalCost ?? row?.usage?.cost ?? row?.totalCost ?? row?.cost ?? res?.totalCost;
+      return {cost};
     }
 
     function dispose() {
-      close();
+      stop();
+      subs.clear();
       if (badgeTimer) clearTimer(badgeTimer);
       if (target && typeof target.removeEventListener === 'function') {
         for (const [type, fn] of listeners) target.removeEventListener(type, fn);
@@ -518,14 +581,14 @@
     }
 
     return {
-      open, close, dispose, view,
+      start, stop, view, subscribe, open: nativeOpen, usage,
+      dispose,
       isOpen: () => opened,
       requestList, readList,
-      openSession: nativeOpen,
-      expand: usage,
       toggleChildren(key) {
         if (liveBag.expandedParents.has(key)) liveBag.expandedParents.delete(key);
         else liveBag.expandedParents.add(key);
+        notify();
         return view();
       },
       refreshBadge,
@@ -535,13 +598,24 @@
     };
   }
 
-  const api = {
+  const helpers = {
     describeRow, buildView, createSessionBoard, formatElapsed, toolLabel,
-    modeOf, modeLabel, titleOf, isSubagent, statusOf,
+    modeOf, modeLabel, titleOf, isSubagent, statusOf, stateOf,
     MAX_VISIBLE, MAX_DONE, DONE_MS, MAX_CHILDREN, LIST_LIMIT, LIST_THROTTLE_MS, WATCH_MS,
   };
   const root = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : {});
   root.Pinkie = root.Pinkie || {};
-  root.Pinkie.sessionBoard = api;
-  if (typeof module === 'object' && module && module.exports) module.exports = api;
+  const appRequest = (...args) => {
+    const fn = root.__laolaoSidebar && root.__laolaoSidebar.gwRequest;
+    if (typeof fn === 'function') return fn(...args);
+  };
+  const board = createSessionBoard({
+    gwRequest: appRequest,
+    target: root && typeof root.addEventListener === 'function' ? root : null,
+  });
+  root.Pinkie.sessionBoard = board;
+  if (typeof module === 'object' && module && module.exports) module.exports = helpers;
+  if (typeof root.dispatchEvent === 'function') {
+    try { root.dispatchEvent(new CustomEvent('pinkie:session-board-ready')); } catch {}
+  }
 })();
