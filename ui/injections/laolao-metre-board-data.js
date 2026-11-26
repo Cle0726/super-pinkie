@@ -255,10 +255,26 @@
     return details;
   }
 
+  // ---------- 项目规矩（G4）：project-brief.mjs 读给模型的那几个文件，在这里露出来，点开在工作台里改 ----------
+  const RULE_FILES = ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', '.cursorrules', 'GEMINI.md'];
+  function rulesNode(found) {
+    const row = h('div', 'pk-mb-rules', '<h4>项目规矩<small>Metre 动手前先读</small></h4>');
+    if (!found.length) { row.append(h('p', 'pk-mb-rules__none', '这个文件夹里还没有规则文件（AGENTS.md、CLAUDE.md 这类）。')); return row; }
+    const list = h('ul', '');
+    for (const name of found) {
+      const li = h('li', '', `<button type="button" class="pk-mb-file" title="在工作台里打开：${esc(name)}">${esc(name)}</button>`);
+      li.querySelector('button').addEventListener('click', () => { void window.__pinkieWorkbench?.open?.(name, {pinned: true}); });
+      list.append(li);
+    }
+    row.append(list);
+    return row;
+  }
+
   // ---------- 项目记忆（第 9 区）：可钉住、编辑、删除、搜索 ----------
   async function memoryNode(key) {
     const params = memoryQuery ? {sessionKey: key, action: 'search', query: memoryQuery} : {sessionKey: key, action: 'list'};
-    const [stats, listed] = await Promise.all([rpc('pinkie.metre.memory', {sessionKey: key, action: 'stats'}), rpc('pinkie.metre.memory', params)]);
+    const [stats, listed, ruled] = await Promise.all([rpc('pinkie.metre.memory', {sessionKey: key, action: 'stats'}), rpc('pinkie.metre.memory', params),
+      rpc('pinkie.fs.stat', {sessionKey: key, paths: RULE_FILES}).catch(() => null)]);
     if (!stats || stats.ok === false) return empty(stats?.error || '项目记忆暂时读不到。');
     const items = listed?.items || [];
     const wrap = h('div', 'pk-mb-memory');
@@ -270,6 +286,8 @@
       const n = stats.byCategory?.[cat] || 0;
       cats.append(h('div', 'pk-mb-bar', `<span title="${MEMORY_FULL[cat]}">${name}</span><u><i data-v="${shades[i % 5]}" style="width:${Math.round((n / max) * 100)}%"></i></u><em>${n}</em>`));
     });
+    // 读不到（旧网关没有 fs.stat）就不画这一行，记忆照常显示
+    if (Array.isArray(ruled?.stats)) cats.append(rulesNode(ruled.stats.filter((s) => s.exists && s.kind === 'file').map((s) => s.path)));
     const side = h('div', 'pk-mb-memory__side');
     const search = h('input', 'pk-mb-search');
     search.type = 'search'; search.placeholder = '搜索记忆'; search.value = memoryQuery; search.setAttribute('aria-label', '搜索项目记忆');
