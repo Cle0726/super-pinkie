@@ -18,19 +18,20 @@ fs.mkdirSync(out, {recursive: true});
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 // 页面里：fake-gateway.js 赋 window.WebSocket 时接住它，把 cron.* 请求答成示例任务，其余照旧交给假网关。
-// 时间在请求时才取（那时 Date 已被 harness 冻住），截图每次一样。
+// 时间在请求时才取（那时 Date 已被 harness 冻住），截图每次一样。浏览器时区定成 Asia/Shanghai（CI 机器是 UTC），示例时间按北京时间对齐 cron 表达式。
 const initScript = () => {
   const jobsAt = (t0) => [
     {id: 'j1', name: 'weather', displayName: '早上的天气', enabled: true, agentId: 'main', schedule: {kind: 'cron', expr: '0 8 * * *', tz: 'Asia/Shanghai'},
       payload: {kind: 'agentTurn', message: '查一下今天的天气，告诉我要不要带伞、穿什么。'}, delivery: {mode: 'announce', channel: 'feishu', to: 'ou_123456'},
-      state: {nextRunAtMs: t0 + 5 * 3600e3, lastRunAtMs: t0 - 19 * 3600e3, lastStatus: 'ok'}},
+      // 冻住的时刻 t0 = 11-20 12:00 北京时间（周五）：下次 = 明早 08:00（+20h），上次 = 今早 08:00（-4h），和 0 8 * * * 对得上
+      state: {nextRunAtMs: t0 + 20 * 3600e3, lastRunAtMs: t0 - 4 * 3600e3, lastStatus: 'ok'}},
     {id: 'j2', name: 'ci', displayName: '每隔 30 分钟看一眼 CI 有没有红', enabled: true, agentId: 'metre', schedule: {kind: 'every', everyMs: 30 * 60000},
       payload: {kind: 'agentTurn', message: '打开仓库最近一次 CI，如果有红的就把失败的测试名和第一行报错发给我，没有就什么都不用说。这一段故意写得长一点，看会不会撑破行。'},
       delivery: {mode: 'announce', channel: 'last'},
       state: {nextRunAtMs: t0 + 12 * 60000, lastRunAtMs: t0 - 18 * 60000, lastStatus: 'error'}},
     {id: 'j3', name: 'weekly', displayName: '周一的待办', enabled: false, agentId: 'project', schedule: {kind: 'cron', expr: '0 9 * * 1,3,5', tz: 'Asia/Shanghai'},
       payload: {kind: 'agentTurn', message: '整理上周没做完的事和这周要注意的安排，列成清单。'}, delivery: {mode: 'announce', channel: 'last'},
-      state: {lastRunAtMs: t0 - 6 * 864e5, lastStatus: 'ok'}},
+      state: {lastRunAtMs: t0 - 51 * 3600e3, lastStatus: 'ok'}},   // 停用前最后一次：周三 11-18 09:00 北京时间
   ];
   const answers = {
     'cron.list': () => { const jobs = jobsAt(Date.now()); return {jobs, total: jobs.length, offset: 0, limit: 100, hasMore: false, nextOffset: null}; },
@@ -76,7 +77,7 @@ const shot = async (page, name, theme, width, extra = {}) => {
 };
 
 async function cell(theme, width) {
-  const {context, page, pageErrors} = await H.openRealScenePage(browser, server.origin, 'metre-board', theme, {initScript});
+  const {context, page, pageErrors} = await H.openRealScenePage(browser, server.origin, 'metre-board', theme, {initScript, timezoneId: 'Asia/Shanghai'});
   try {
     await page.setViewportSize({width, height: HEIGHT});
     const mode = await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode'));
@@ -94,7 +95,7 @@ async function cell(theme, width) {
     // 原生 /cron 页：同一个页面换路由（保留查询串，init 脚本重新跑一遍）
     const u = new URL(page.url()); u.pathname = '/cron';
     await page.goto(u.href);
-    const cronOk = await page.waitForFunction(() => /早上的天气/.test(document.querySelector('openclaw-cron-page')?.textContent || ''), null, {timeout: 15_000})
+    const cronOk = await page.waitForFunction(() => /weather/.test(document.querySelector('openclaw-cron-page .list-title')?.textContent || ''), null, {timeout: 15_000})
       .then(() => true, () => false);
     await page.waitForTimeout(400);
     const cron = await page.evaluate(() => ({

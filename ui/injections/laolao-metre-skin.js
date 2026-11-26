@@ -187,17 +187,15 @@
   'use strict';
   const root = document.documentElement;
   const isMetre = () => root.getAttribute('data-laolao-mode') === 'metre';
-  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page, .pinkie-shortcuts, openclaw-skills-page';
+  const SCOPE = '#laolao-user-settings, #pinkie-schedules, #pinkie-connectors, #pinkie-model-setup, .pk-wb, #laolao-link-viewer, openclaw-config-page, .pinkie-shortcuts, openclaw-skills-page, openclaw-cron-page';
   const ATTRS = ['title', 'aria-label', 'placeholder', 'alt', 'data-pinkie-tooltip'];
   // 先处理说的是别的模式或产品本身的句子（碧琪就是那些模式，去掉称呼即可），最后才把助手的称呼换成 Metre。
   const RULES = [
     [/超[級级]碧琪/g, 'Metre'],
     [/碧琪的常用设置/g, '常用设置'],
-    [/碧琪工作台/g, '工作台'],
-    [/碧琪的链接预览/g, '链接预览'],
+    [/碧琪工作台/g, '工作台'], [/碧琪的链接预览/g, '链接预览'],
     [/碧琪的?回收站/g, '回收站'],
-    [/碧琪经典/g, '经典'],
-    [/由碧琪自动选择/g, '自动选择'],
+    [/碧琪经典/g, '经典'], [/由碧琪自动选择/g, '自动选择'],
     [/这台碧琪/g, '这台电脑'],
     [/连接碧琪(?=[^，。]*模式)/g, '连接'],
     [/，碧琪用(?=[^，。]*模式)/g, '，用'],
@@ -216,7 +214,9 @@
   };
   // 记下换过的地方：节点 → {原文, 换后}；离开 Metre 时只还原没被模块重新写过的。
   const texts = new Map(), attrs = new Map();
-  const SKILLS = {'All': '全部', 'Ready': '可用', 'Needs Setup': '待设置', 'Disabled': '已停用', 'Enabled': '已启用', 'Blocked': '已拦下', 'Unavailable': '不可用', 'Pending': '等待中', 'Review': '查看', 'Clean': '无风险', 'Install': '安装', 'Installing…': '正在安装…', 'Acknowledge risk and install': '知道风险，仍然安装', 'shown': '个', 'Installed skills and their status.': '已装的技能和状态。', 'Filter installed skills': '筛选已装的技能', 'Search ClawHub skills…': '搜索 ClawHub 技能…', 'Search and install skills from the registry': '从技能库搜索并安装', 'Not connected to gateway.': '还没连上后台。', 'No skills found.': '没有找到技能。', 'No skills found on ClawHub.': 'ClawHub 上没有找到。', 'Skill not found.': '没有这个技能。', 'ClawHub link invalid': 'ClawHub 链接无效', 'Missing requirements': '缺少依赖', 'Refreshing…': '正在刷新…', 'Searching…': '正在搜索…', 'Full security report': '完整安全报告', 'Source:': '来源：', 'Loading Skill Card...': '正在载入技能卡…', 'Skill Card not loaded.': '技能卡没载入。', 'Built-in Skills': '内置技能', 'Workspace Skills': '工作区技能', 'Extra Skills': '额外技能', 'Other Skills': '其他技能', 'Installed Skills': '已装技能'}, local = (el, text) => (text && el?.closest?.('openclaw-skills-page') && Object.hasOwn(SKILLS, text.trim())) ? text.replace(text.trim(), SKILLS[text.trim()]) : word(text);   // 11-25 ui3 G3a：原生技能页写死的英文，只在这一页里按整句换
+  const SKILLS = {'All': '全部', 'Ready': '可用', 'Needs Setup': '待设置', 'Disabled': '已停用', 'Enabled': '已启用', 'Blocked': '已拦下', 'Unavailable': '不可用', 'Pending': '等待中', 'Review': '查看', 'Clean': '无风险', 'Install': '安装', 'Installing…': '正在安装…', 'Acknowledge risk and install': '知道风险，仍然安装', 'shown': '个', 'Installed skills and their status.': '已装的技能和状态。', 'Filter installed skills': '筛选已装的技能', 'Search ClawHub skills…': '搜索 ClawHub 技能…', 'Search and install skills from the registry': '从技能库搜索并安装', 'Not connected to gateway.': '还没连上后台。', 'No skills found.': '没有找到技能。', 'No skills found on ClawHub.': 'ClawHub 上没有找到。', 'Skill not found.': '没有这个技能。', 'ClawHub link invalid': 'ClawHub 链接无效', 'Missing requirements': '缺少依赖', 'Refreshing…': '正在刷新…', 'Searching…': '正在搜索…', 'Full security report': '完整安全报告', 'Source:': '来源：', 'Loading Skill Card...': '正在载入技能卡…', 'Skill Card not loaded.': '技能卡没载入。', 'Built-in Skills': '内置技能', 'Workspace Skills': '工作区技能', 'Extra Skills': '额外技能', 'Other Skills': '其他技能', 'Installed Skills': '已装技能'}, local = (el, text) => (text && el?.closest?.('openclaw-skills-page') && Object.hasOwn(SKILLS, text.trim())) ? text.replace(text.trim(), SKILLS[text.trim()]) : el?.closest?.('openclaw-cron-page') ? cron(word(text)) : word(text);   // 11-25 ui3 G3a：原生技能页写死的英文，只在这一页里按整句换
+  const UNIT = {ms: '毫秒', s: '秒', m: '分钟', h: '小时', d: '天'}, REL = /^(in <1m|just now|in (\d+)(ms|s|m|h|d)|(\d+)(ms|s|m|h|d) ago)$/, rel = (t) => { const m = t.match(REL); return !m ? null : m[1] === 'in <1m' ? '不到 1 分钟后' : m[1] === 'just now' ? '刚刚' : m[2] ? `${m[2]} ${UNIT[m[3]]}后` : `${m[4]} ${UNIT[m[5]]}前`; };
+  const cron = (text) => { const t = text?.trim(), every = t?.match(/^Every (\d+)(ms|s|m|h|d)$/), paren = t?.match(/^(.*)\(([^()]+)\)$/), next = !t ? null : every ? `每 ${every[1]} ${UNIT[every[2]]}` : rel(t) || (paren && rel(paren[2]) ? `${paren[1]}(${rel(paren[2])})` : null); return next ? text.replace(t, next) : text; };   // 11-26 ui4 A3：原生 /cron 页的相对时间（in 5h / 19h ago / 末尾的 (in 12m)）和间隔（Every 30m）；只换整段就是这几个字的文字，任务名、提示词里的英文不碰
   function rewriteText(node) {
     const value = node.nodeValue;
     const next = local(node.parentElement, value);

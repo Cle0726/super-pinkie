@@ -1025,6 +1025,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
     deviceScaleFactor: 1,
     colorScheme: isNight ? 'dark' : 'light',
     locale: 'zh-CN',
+    ...(opts.timezoneId ? {timezoneId: opts.timezoneId} : {}),   // 不给就跟着机器（CI 上是 UTC）
     reducedMotion: 'reduce',
     serviceWorkers: 'block',
   });
