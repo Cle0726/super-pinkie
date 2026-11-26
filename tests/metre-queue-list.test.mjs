@@ -84,7 +84,7 @@ test(`Metre queue: the native big card never shows — 0 ms and 300 ms after the
       return q.getBoundingClientRect().height;
     }, item('q0', '第一条') + item('q1', '第二条'));
     assert.ok(h0 <= 32, `排队区插进来的当时 ≤ 32px（${h0}）`);
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(300);   // 保留：这条测试本身量的就是「插进来 300 ms 时」的状态
     const at300 = await page.evaluate(() => ({h: document.querySelector('.chat-queue').getBoundingClientRect().height, bar: document.querySelector('.pk-mq__bar')?.textContent || ''}));
     assert.ok(at300.h <= 32, `300 ms 时 ≤ 32px（${at300.h}）`);
     assert.match(at300.bar, /待发送 2/, '300 ms 时那一条已经画好，没有等别的事件');
@@ -93,7 +93,7 @@ test(`Metre queue: the native big card never shows — 0 ms and 300 ms after the
       pane.state.chatQueue = [...pane.state.chatQueue, {id: 'q2', text: '第三条', sessionKey: 'agent:metre:main'}];
       document.querySelector('.chat-queue__list').insertAdjacentHTML('beforeend', html);
     }, item('q2', '第三条'));
-    await page.waitForTimeout(300);
+    await page.waitForFunction(() => /待发送 3/.test(document.querySelector('.pk-mq__bar')?.textContent || ''), null, {timeout: 5_000});   // 等那一条按新队列重画
     assert.match(await page.locator('.pk-mq__bar').innerText(), /待发送 3/, '再排一条，这一条跟着变');
     assert.ok((await page.locator('.chat-queue').boundingBox()).height <= 32);
   } finally { await browser.close(); }
@@ -175,8 +175,8 @@ test(`Metre home: resizing the window does not throw from the companion’s home
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.setContent(`<!doctype html><html data-laolao-mode="metre" data-laolao-startup-home="1"><body><div class="laolao-startup-home"><div class="agent-chat__welcome">早上好</div></div></body></html>`);
     await page.addScriptTag({path: inj('laolao-companion.js')});
-    await page.setViewportSize({width: 1000, height: 640}); await page.waitForTimeout(500);
-    await page.setViewportSize({width: 1200, height: 700}); await page.waitForTimeout(500);
+    await page.setViewportSize({width: 1000, height: 640}); await page.waitForTimeout(500);   // 保留：断言改尺寸「不报错」，给 resize 处理留时间
+    await page.setViewportSize({width: 1200, height: 700}); await page.waitForTimeout(500);   // 保留：同上
     assert.deepEqual(errors.filter((m) => /classList|liftHome/.test(m)), [], '改窗口尺寸不报错');
   } finally { await browser.close(); }
 });

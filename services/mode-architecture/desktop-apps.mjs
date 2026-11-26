@@ -28,7 +28,10 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
   let name = String(raw || '').replace(/\.(html?|htm)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
   name = [...name].slice(0, limit).join('').replace(/^[.\s]+|[.\s]+$/g, '');
   if (!name) name = '作品';
-  if (RESERVED.test(name)) name = name + ' 作品';
+  // Windows 按第一个点之前的主干认保留设备名（con.txt 也不行），后缀插在主干后、点之前，扩展名原样保留。
+  const dot = name.indexOf('.');
+  const stem = dot < 0 ? name : name.slice(0, dot);
+  if (RESERVED.test(stem)) name = stem + ' 作品' + name.slice(stem.length);
   return name;
 }
 
@@ -346,13 +349,15 @@ export class DesktopApps {
   }
 
   // 只删碧琪数据目录里的副本和记录；入口（快捷方式 / .app）由原生端先删。
+  // 先删目录、删干净了再删记录：删目录抛错（文件被锁 / 没权限）时记录保留、错误往上抛，
+  // 不会留下“记录没了、目录还在”的孤儿目录，用户还能再点一次卸载。
   remove(appId) {
     const data = this.load();
     const app = data.apps[String(appId || '')];
     if (!app) return {ok: true, removed: false};
+    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     delete data.apps[app.id];
     this.save();
-    fs.rmSync(this.dirOf(app.id), {recursive: true, force: true});
     return {ok: true, removed: true, name: app.name};
   }
 }
