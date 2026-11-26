@@ -2995,35 +2995,18 @@ test('a final reply cut down to a word gets one more chance, then an honest stop
 });
 
 test('a retry carries the previous reply so the next one replaces it instead of repeating it',t=>{
-  const run=tierRun(t,'retry-draft','boost','帮我做一个记账的小网页');
-  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
-  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。';
-  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
-  assert.equal(decision.action,'revise');
-  assert.match(decision.retry.instruction,/只补做缺的那一步核对/);
-  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/);
-  assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'));
-  // 补了截图之后换了说法：不因为没背「这次和上次不同」而停掉。
-  run.tool('exec',{command:'look-page index.html'},'截图：index.preview.png');
-  run.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
+  const run=tierRun(t,'retry-draft','boost','帮我做一个记账的小网页'); run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const draft='记账网页做好了：能记收入和支出、按月汇总，数据存在本机浏览器里，打开 index.html 就能用，右上角可以导出备份。'; const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
+  assert.equal(decision.action,'revise'); assert.match(decision.retry.instruction,/只补做缺的那一步核对/); assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/); assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'));
+  run.tool('exec',{command:'look-page index.html'},'截图：index.preview.png'); run.tool('read',{path:'index.preview.png'},'Read image file [image/png]');
   assert.equal(run.runtime.finalize({lastAssistantMessage:draft},{...run.ctx,runId:'retry-draft-2'}),undefined);
 });
 
-test('a retry carries a long previous reply whole, so the closing summary is not lost',t=>{
-  // issue #96 任务 0：续跑提示只带上一版前 2400 字（「…（后略）」），却要求「这一版会替代它，所以要完整」；
-  // 模型没见过结论和汇总，只能现编一个短收尾，终稿尾巴就被吞了。完整草稿本来就留在进程里（DRAFT_KEEP）。
-  const run=tierRun(t,'retry-long-draft','boost','帮我做一个记账的小网页');
-  run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
-  const body=Array.from({length:120},(_,i)=>`第 ${i+1} 项：这一块的按钮、输入框和月度汇总都按说明做好了，数据存在本机浏览器里。`).join('\n');
-  const tail='汇总：120 项全部做完，打开 index.html 就能用。结论：可以直接交付。';
-  const draft='记账网页做好了，下面逐项说明。\n\n'+body+'\n\n'+tail;
-  assert.ok(draft.length>3600,'the draft is well past the old 2400-character cut');
-  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx);
-  assert.equal(decision.action,'revise');
-  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/);
-  assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'),'the whole draft is quoted');
-  assert.ok(decision.retry.instruction.includes(tail),'the closing summary is in front of the model');
-  assert.doesNotMatch(decision.retry.instruction,/后略/);
+test('a retry carries a long previous reply whole, so the closing summary is not lost',t=>{ // issue #96 任务 0：续跑提示只带上一版前 2400 字（「…（后略）」），却要求「这一版会替代它，所以要完整」；模型没见过结论和汇总，只能现编一个短收尾，终稿尾巴就被吞了。完整草稿本来就留在进程里（DRAFT_KEEP）。
+  const run=tierRun(t,'retry-long-draft','boost','帮我做一个记账的小网页'); run.tool('write',{path:path.join(run.root,'index.html')},`Successfully wrote 6 bytes to ${run.root}/index.html`);
+  const tail='汇总：120 项全部做完，打开 index.html 就能用。结论：可以直接交付。'; const draft='记账网页做好了，下面逐项说明。\n\n'+'第 N 项：这一块的按钮、输入框和月度汇总都按说明做好了，数据存在本机浏览器里。\n'.repeat(120)+'\n'+tail; assert.ok(draft.length>3600,'the draft is well past the old 2400-character cut');
+  const decision=run.runtime.finalize({lastAssistantMessage:draft},run.ctx); assert.equal(decision.action,'revise');
+  assert.match(decision.retry.instruction,/这一版会替代它，所以要完整/); assert.ok(decision.retry.instruction.includes('上一版回复：<<<'+draft+'>>>'),'the whole draft is quoted'); assert.ok(decision.retry.instruction.includes(tail),'the closing summary is in front of the model'); assert.doesNotMatch(decision.retry.instruction,/后略/);
 });
 
 test('a stop by the system still hands the user the last full reply',t=>{
