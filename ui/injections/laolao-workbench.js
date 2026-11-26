@@ -221,7 +221,11 @@
   const tabsBar = el('div', 'pk-wb-tabs'); tabsBar.setAttribute('role', 'tablist');
   const tabsList = el('div', 'pk-wb-tabs__list');
   const tabsActions = el('div', 'pk-wb-tabs__actions');
-  tabsBar.append(tabsList, tabsActions, benchTools);
+  // B30：标签挤出视野时，被挤出的一头淡出（is-clip-start / is-clip-end），右边露出「全部标签」键列出所有标签。
+  const tabsMore = button('chevron-down', '全部标签', e => { const r = e.currentTarget.getBoundingClientRect(); showMenu(state.tabs.map(t => ({label: t.title || t.name, icon: t.path === state.active ? 'check' : undefined, run: () => activate(t.path)})), r.left, r.bottom + 4); }, 'pk-wb-icon pk-wb-tabs__more'); tabsMore.hidden = true;
+  tabsBar.append(tabsList, tabsMore, tabsActions, benchTools);
+  function updateTabsOverflow() { const over = tabsList.scrollWidth - tabsList.clientWidth > 1, left = tabsList.scrollLeft; tabsList.classList.toggle('is-clip-start', over && left > 1); tabsList.classList.toggle('is-clip-end', over && left < tabsList.scrollWidth - tabsList.clientWidth - 1); tabsMore.hidden = !over; }
+  tabsList.addEventListener('scroll', updateTabsOverflow, {passive: true}); new ResizeObserver(updateTabsOverflow).observe(tabsList);
   const crumbs = el('div', 'pk-wb-crumbs');
   const notice = el('div', 'pk-wb-notice'); notice.hidden = true;
   const host = el('div', 'pk-wb-host');
@@ -1130,8 +1134,9 @@
       if (!tab.pinned) t.classList.add('is-preview');
       if (tab.dirty) t.classList.add('is-dirty');
       t.append(tab.kind === 'diff' ? icon('diff', 'pk-wb-tab__diff') : tab.kind === 'page' ? icon(tab.icon || 'settings', 'pk-wb-tab__diff') : fileIcon(tab.name, 'file'));
-      const label = el('span', 'pk-wb-tab__label', tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
-      t.append(label);
+      const vs = tab.kind === 'diff' ? /^(.*?)（(.+)）$/.exec(tab.title || '') : null; // B30：差异标签拆成文件名（不缩）+ 比较说明（先缩），全称在 title
+      const label = el('span', 'pk-wb-tab__label', vs ? vs[1] : tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
+      t.append(label); if (vs) { t.classList.add('is-diff'); t.append(el('span', 'pk-wb-tab__vs', vs[2])); }
       if (names.get(tab.name) > 1 && tab.kind !== 'diff') { const loc = fileLocation(tab.path); t.append(el('span', 'pk-wb-tab__dir', dirname(loc.relative) || loc.name)); }
       if (tab.readOnly) { const lock = icon('lock', 'pk-wb-tab__readonly'); lock.title = '参考文件 · 只读'; t.append(lock); }
       const close = button('close', '关闭（' + keyLabel('⌘W') + '）', e => { e.stopPropagation(); closeTab(tab.path); }, 'pk-wb-tab__close');
@@ -1150,6 +1155,7 @@
     }
     tabsList.replaceChildren(frag);
     tabsList.querySelector('.is-active')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    updateTabsOverflow();
     tabsBar.classList.toggle('is-empty', !state.tabs.length);
     const tab = findTab(state.active);
     const extra = [];
