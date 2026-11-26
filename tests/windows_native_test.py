@@ -59,6 +59,92 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(self.native.mode_label, "项目")
         self.assertEqual(self.native._running, [("agent:project:a", "甲")])
 
+    # ---------- N2 keep-awake ----------
+    def _awake_rig(self, start=1000.0):
+        posted = []
+        clock = [start]
+        self.native._post = lambda command, payload=None: posted.append((command, payload))
+        self.native._clock = lambda: clock[0]
+        return posted, clock
+
+    @staticmethod
+    def _ctx(*keys):
+        return {"type": "context", "mode": "chat", "running": [{"key": k, "title": k} for k in keys]}
+
+    @staticmethod
+    def _awake(posted):
+        return [payload for command, payload in posted if command == "awake"]
+
+    def test_awake_held_while_running_released_when_empty(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))   # still running: no second request
+        clock[0] += 10
+        self.native.handle(self._ctx())
+        self.assertEqual(self._awake(posted), [True, False])
+
+    def test_awake_never_requested_without_running_sessions(self):
+        # Counter-case: mode changes and empty lists must not touch the power state.
+        posted, _ = self._awake_rig()
+        self.native.handle({"type": "context", "mode": "project", "modeLabel": "项目", "running": []})
+        self.native.handle({"type": "context", "mode": "chat"})
+        self.native.handle({"type": "context", "running": [{"title": "no key"}]})
+        self.assertEqual(self._awake(posted), [])
+
+    def test_awake_lease_expires_when_the_page_goes_quiet(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        clock[0] += windows_native.AWAKE_LEASE_S - 1
+        self.native._awake_tick()
+        self.assertEqual(self._awake(posted), [True])           # within the lease: still held
+        clock[0] += 2
+        self.native._awake_tick()
+        self.assertEqual(self._awake(posted), [True, False])    # page silent past the lease
+        clock[0] += 5
+        self.native.handle(self._ctx("agent:main:a"))           # heartbeat returns -> held again
+        self.assertEqual(self._awake(posted), [True, False, True])
+
+    def test_awake_hard_cap_then_rearms_on_a_new_run(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        for _ in range(int(windows_native.AWAKE_CAP_S // 60) + 2):   # heartbeats every minute for > cap
+            clock[0] += 60
+            self.native.handle(self._ctx("agent:main:a"))
+        self.assertEqual(self._awake(posted), [True, False])
+        clock[0] += 60
+        self.native.handle(self._ctx("agent:main:a"))           # same run, still capped
+        self.assertEqual(self._awake(posted), [True, False])
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))   # new run -> allowed again
+        self.assertEqual(self._awake(posted), [True, False, True])
+
+    def test_awake_switch_off_releases_and_persists(self):
+        posted, _ = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.assertEqual(self.native.handle({"type": "setAwake", "enabled": False}), {"ok": True, "enabled": False})
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))
+        self.assertEqual(self._awake(posted), [True, False])
+        self.assertIs(json.loads(self.settings.read_text(encoding="utf-8"))["awake"], False)
+        again = WindowsNative(FakeBridge(), self.settings)
+        self.assertFalse(again._awake_enabled)
+
+    def test_awake_default_and_bad_setting(self):
+        self.assertIs(self.native._awake_enabled, windows_native.AWAKE_DEFAULT)
+        self.settings.write_text(json.dumps({"awake": "yes"}), encoding="utf-8")
+        self.assertIs(WindowsNative(FakeBridge(), self.settings)._awake_enabled, windows_native.AWAKE_DEFAULT)
+
+    def test_awake_flags_are_system_only(self):
+        self.assertEqual(windows_native.ES_SYSTEM_REQUIRED, 0x1)
+        self.assertEqual(windows_native.ES_CONTINUOUS, 0x80000000)
+        source = Path(windows_native.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("ES_DISPLAY_REQUIRED", source)          # the screen still turns off and locks
+        self.assertIn('set_awake(False)\n                    remove_icon()', source)   # stop drops it on the tray thread
+
+    def test_stop_without_tray_forgets_awake(self):
+        posted, _ = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.native.stop()
+        self.assertFalse(self.native._awake_on)
+
     def test_menubar_and_hotkey_persist(self):
         self.native._post = lambda *args: None
         self.native.handle({"type": "setMenubar", "enabled": False})
@@ -66,7 +152,7 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(self.native.handle({"type": "setHotkey", "accelerator": "Ctrl+Alt+K"}),
                          {"ok": True, "accelerator": "Ctrl+Alt+K"})
         saved = json.loads(self.settings.read_text(encoding="utf-8"))
-        self.assertEqual(saved, {"menubar": False, "hotkey": "Ctrl+Alt+K"})
+        self.assertEqual(saved, {"menubar": False, "hotkey": "Ctrl+Alt+K", "awake": windows_native.AWAKE_DEFAULT})
         again = WindowsNative(FakeBridge(), self.settings)
         self.assertFalse(again._menubar)
         self.assertEqual(again._hotkey, "Ctrl+Alt+K")
