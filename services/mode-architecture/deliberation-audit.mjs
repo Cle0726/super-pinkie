@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {RIGOR_LADDER, SPAWN_FALLBACK} from './run-contract.mjs';
 import {WORK_ROLES, classifyWorkKind, clipToolOutput, toolResultText, evidenceGaps, isWorkKind, kindLabel, kindPlanSection, kindRoles, legacyKinds, milestoneCheck, refineKinds, roleFromLabel, tierName, truncatedFinal, workStages} from './work-kinds.mjs';
-import {COMPLETION_CLAIM, CONTINUATION_ONLY_PROMPT, DELIVERY_CLAIM, MODE_BY_AGENT, ROLE_LABELS, SOLVER_LIMITS, TASK_WORKFLOWS, TIER_CONTROL_PREFIX, TIER_RETRY_LIMITS, classifyDeliberationTask, normalizedTaskType, workFirstPrompt} from './mode-constants.mjs';
+import {COMPLETION_CLAIM, CONTINUATION_ONLY_PROMPT, DELIVERY_CLAIM, DRAFT_KEEP, MODE_BY_AGENT, ROLE_LABELS, SOLVER_LIMITS, TASK_WORKFLOWS, TIER_CONTROL_PREFIX, TIER_RETRY_LIMITS, classifyDeliberationTask, normalizedTaskType, workFirstPrompt} from './mode-constants.mjs';
 import {isHonestIncomplete, resultText, toolResultFailed} from './evidence-rules.mjs';
 import {hashForAudit} from './completion-integrity.mjs';
 
@@ -656,7 +656,7 @@ function tierRetryInstruction(missing = [], gapKind = '', draft = '') {
   const text = String(draft || '').trim();
   if (text) {
     parts.push('上一版回复没有发给用户，这一版会替代它，所以要完整；核对后不用改的内容沿用上一版原文，只改确实要改的地方，不要把同一段话写两遍，也不要提到这条提醒。上一版回复：<<<'
-      + text.slice(0, 2400) + (text.length > 2400 ? '…（后略）' : '') + '>>>');
+      + text.slice(0, DRAFT_KEEP) + '>>>');
   } else {
     parts.push('不要在回复里提到这条提醒。');
   }
