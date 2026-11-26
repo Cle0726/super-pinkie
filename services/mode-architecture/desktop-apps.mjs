@@ -28,7 +28,10 @@ export function safeAppName(raw, limit = APP_LIMITS.nameChars) {
   let name = String(raw || '').replace(/\.(html?|htm)$/i, '').replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
   name = [...name].slice(0, limit).join('').replace(/^[.\s]+|[.\s]+$/g, '');
   if (!name) name = '作品';
-  if (RESERVED.test(name)) name = name + ' 作品';
+  // Windows 按第一个点之前的主干认保留设备名（con.txt 也不行），后缀插在主干后、点之前，扩展名原样保留。
+  const dot = name.indexOf('.');
+  const stem = dot < 0 ? name : name.slice(0, dot);
+  if (RESERVED.test(stem)) name = stem + ' 作品' + name.slice(stem.length);
   return name;
 }
 
