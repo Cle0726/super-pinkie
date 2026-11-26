@@ -386,16 +386,52 @@ function parseLines(text, root, source, defaultSeverity = 'error') {
   }
   return out;
 }
+// 调用方传来的路径是外部输入。只留下解析后仍在项目根里的相对路径，符号链接也不能指到外面。
+function safeRelative(root, raw) {
+  const text = String(raw ?? '');
+  if (!text || text.includes('\0')) return '';
+  const base = path.resolve(root);
+  const file = path.resolve(base, text);
+  const inside = (dir, target) => {
+    const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep;
+    return target === dir || target.startsWith(prefix);
+  };
+  if (!inside(base, file)) return '';
+  try {
+    const realBase = fs.realpathSync(base);
+    let current = file;
+    const rest = [];
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) return '';
+      rest.unshift(path.basename(current));
+      current = parent;
+    }
+    const realCurrent = fs.realpathSync(current);
+    if (!inside(realBase, realCurrent)) return '';
+    const real = rest.length ? path.join(realCurrent, ...rest) : realCurrent;
+    if (!inside(realBase, real)) return '';
+    if (!rest.length && !fs.statSync(real).isFile()) return '';
+    const rel = path.relative(base, file);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return '';
+    return rel;
+  } catch {
+    return '';
+  }
+}
+
 export class CodeChecker {
   async check(root, files = []) {
+    const requested = Array.isArray(files) ? files : [];
+    const scoped = requested.length > 0;
+    const list = scoped ? requested.map(file => safeRelative(root, file)).filter(Boolean) : [];
     const exists = rel => fs.existsSync(path.join(root, rel));
-    const list = files.length ? files : [];
     const byExt = ext => list.filter(f => new RegExp('\\.(' + ext + ')$', 'i').test(f));
     const results = [], checked = [], skipped = [];
     const add = (tool, items) => { checked.push(tool); results.push(...items); };
     // Python
-    const py = files.length ? byExt('py|pyi') : null;
-    if (!files.length || py.length) {
+    const py = scoped ? byExt('py|pyi') : null;
+    if (!scoped || py.length) {
       const pyright = which('pyright');
       if (executable(pyright) && (py?.length || fs.readdirSync(root).some(n => /\.py$/.test(n)) || exists('pyproject.toml') || exists('requirements.txt'))) {
         const r = await runFile(pyright, ['--outputjson', ...(py?.length ? py : [])], {cwd: root, timeout: 180000});
@@ -411,9 +447,9 @@ export class CodeChecker {
       try { add('ruff', JSON.parse(r.stdout || '[]').map(d => ({file: path.relative(root, d.filename), line: d.location.row, column: d.location.column, severity: /^(E9|F8[2-3]|F63|F7)/.test(d.code || '') ? 'error' : 'warning', message: (d.code ? d.code + ' ' : '') + d.message, source: 'ruff'}))); } catch {}
     }
     // TypeScript / JavaScript
-    const ts = files.length ? byExt('ts|tsx|mts|cts') : null;
-    const js = files.length ? byExt('js|mjs|cjs') : null;
-    if (exists('tsconfig.json') && (!files.length || ts.length || js.length)) {
+    const ts = scoped ? byExt('ts|tsx|mts|cts') : null;
+    const js = scoped ? byExt('js|mjs|cjs') : null;
+    if (exists('tsconfig.json') && (!scoped || ts.length || js.length)) {
       const tsc = [path.join(root, 'node_modules/.bin/tsc')].find(executable);
       if (tsc) { const r = await runFile(tsc, ['--noEmit', '--pretty', 'false', '-p', '.'], {cwd: root, timeout: 240000}); add('tsc', parseTsc(r.stdout, root)); }
       else skipped.push('tsc（项目里没装 typescript，可以 npm i -D typescript）');
@@ -421,25 +457,25 @@ export class CodeChecker {
       for (const f of js) { const r = await runFile(process.execPath, ['--check', f], {cwd: root}); add('node --check', r.code ? parseNodeCheck(r.stderr, f) : []); }
     }
     // Go
-    if ((files.length ? byExt('go').length : true) && exists('go.mod')) { const r = await runFile('go', ['vet', './...'], {cwd: root, timeout: 240000}); if (!r.missing) add('go vet', parseLines(r.stderr, root, 'go vet')); }
-    else if (files.length && byExt('go').length) for (const f of byExt('go')) { const r = await runFile('go', ['vet', f], {cwd: root}); if (!r.missing) add('go vet', parseLines(r.stderr, root, 'go vet')); }
+    if ((!scoped || byExt('go').length) && exists('go.mod')) { const r = await runFile('go', ['vet', './...'], {cwd: root, timeout: 240000}); if (!r.missing) add('go vet', parseLines(r.stderr, root, 'go vet')); }
+    else if (scoped && byExt('go').length) for (const f of byExt('go')) { const r = await runFile('go', ['vet', f], {cwd: root}); if (!r.missing) add('go vet', parseLines(r.stderr, root, 'go vet')); }
     // Rust
-    if ((files.length ? byExt('rs').length : true) && exists('Cargo.toml')) { const r = await runFile('cargo', ['check', '--message-format', 'short', '--quiet'], {cwd: root, timeout: 600000}); if (!r.missing) add('cargo check', parseLines(r.stderr, root, 'rustc')); }
-    else for (const f of files.length ? byExt('rs') : []) { const r = await runFile('rustc', ['--edition', '2021', '--error-format', 'short', '--emit=metadata', '-o', '/tmp/pinkie-check.rmeta', f], {cwd: root}); add('rustc', parseLines(r.stderr, root, 'rustc')); }
+    if ((!scoped || byExt('rs').length) && exists('Cargo.toml')) { const r = await runFile('cargo', ['check', '--message-format', 'short', '--quiet'], {cwd: root, timeout: 600000}); if (!r.missing) add('cargo check', parseLines(r.stderr, root, 'rustc')); }
+    else for (const f of scoped ? byExt('rs') : []) { const r = await runFile('rustc', ['--edition', '2021', '--error-format', 'short', '--emit=metadata', '-o', '/tmp/pinkie-check.rmeta', f], {cwd: root}); add('rustc', parseLines(r.stderr, root, 'rustc')); }
     // C / C++ / Objective-C
-    for (const f of files.length ? byExt('c|h') : []) { const r = await runFile('clang', ['-fsyntax-only', '-Wall', '-std=c17', f], {cwd: root}); add('clang', parseLines(r.stderr, root, 'clang')); }
-    for (const f of files.length ? byExt('cc|cpp|cxx|hpp|hh') : []) { const r = await runFile('clang++', ['-fsyntax-only', '-Wall', '-std=c++20', f], {cwd: root}); add('clang++', parseLines(r.stderr, root, 'clang++')); }
-    for (const f of files.length ? byExt('m|mm') : []) { const r = await runFile('clang', ['-fsyntax-only', '-fobjc-arc', f], {cwd: root}); add('clang', parseLines(r.stderr, root, 'clang')); }
+    for (const f of scoped ? byExt('c|h') : []) { const r = await runFile('clang', ['-fsyntax-only', '-Wall', '-std=c17', f], {cwd: root}); add('clang', parseLines(r.stderr, root, 'clang')); }
+    for (const f of scoped ? byExt('cc|cpp|cxx|hpp|hh') : []) { const r = await runFile('clang++', ['-fsyntax-only', '-Wall', '-std=c++20', f], {cwd: root}); add('clang++', parseLines(r.stderr, root, 'clang++')); }
+    for (const f of scoped ? byExt('m|mm') : []) { const r = await runFile('clang', ['-fsyntax-only', '-fobjc-arc', f], {cwd: root}); add('clang', parseLines(r.stderr, root, 'clang')); }
     // Swift
-    if (files.length && byExt('swift').length) { if (exists('Package.swift')) { const r = await runFile('swift', ['build'], {cwd: root, timeout: 600000}); add('swift build', parseLines(r.stderr + r.stdout, root, 'swift')); } else { const r = await runFile('swiftc', ['-typecheck', ...byExt('swift')], {cwd: root}); add('swiftc', parseLines(r.stderr, root, 'swiftc')); } }
+    if (scoped && byExt('swift').length) { if (exists('Package.swift')) { const r = await runFile('swift', ['build'], {cwd: root, timeout: 600000}); add('swift build', parseLines(r.stderr + r.stdout, root, 'swift')); } else { const r = await runFile('swiftc', ['-typecheck', ...byExt('swift')], {cwd: root}); add('swiftc', parseLines(r.stderr, root, 'swiftc')); } }
     // Shell / JSON
     const shellcheck = which('shellcheck');
-    if (shellcheck && files.length && byExt('sh|bash').length) {
+    if (shellcheck && scoped && byExt('sh|bash').length) {
       const r = await runFile(shellcheck, ['-f', 'json', ...byExt('sh|bash')], {cwd: root});
       try { add('shellcheck', JSON.parse(r.stdout || '[]').map(d => ({file: d.file, line: d.line, column: d.column, severity: d.level === 'error' ? 'error' : d.level === 'warning' ? 'warning' : 'info', message: 'SC' + d.code + ' ' + d.message, source: 'shellcheck'}))); } catch {}
     }
-    for (const f of files.length ? byExt('sh|bash|zsh') : []) { const r = await runFile(f.endsWith('.zsh') ? 'zsh' : 'bash', ['-n', f], {cwd: root}); add('bash -n', parseLines(r.stderr.replace(/^(.+?): line (\d+):/gm, '$1:$2:'), root, 'bash')); }
-    for (const f of files.length ? byExt('json') : []) {
+    for (const f of scoped ? byExt('sh|bash|zsh') : []) { const r = await runFile(f.endsWith('.zsh') ? 'zsh' : 'bash', ['-n', f], {cwd: root}); add('bash -n', parseLines(r.stderr.replace(/^(.+?): line (\d+):/gm, '$1:$2:'), root, 'bash')); }
+    for (const f of scoped ? byExt('json') : []) {
       try { JSON.parse(fs.readFileSync(path.join(root, f), 'utf8')); checked.push('json'); }
       catch (error) { add('json', [{file: f, line: 1, column: 1, severity: 'error', message: error.message, source: 'json'}]); }
     }
