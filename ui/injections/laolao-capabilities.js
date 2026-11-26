@@ -259,9 +259,9 @@
       meta.push(d?.mode === 'announce' ? '推送到' + (CHANNEL[d.channel] || d.channel || '最近聊天的地方') : '不推送');
       meta.push((MODES.find(([id]) => id === job.agentId) || [, job.agentId || '唠嗑'])[1] + '模式');
       if (job.enabled && job.state?.nextRunAtMs) meta.push('下次 ' + when(job.state.nextRunAtMs));
-      const last = job.state?.lastRunAtMs;
-      if (last) meta.push('上次 ' + when(last) + (job.state.lastStatus === 'ok' ? ' 做完了' : job.state.lastStatus ? ' 没做成' : ''));
-      main.append(node('small', 'pk-job__meta', meta.join(' · ')));
+      const last = job.state?.lastRunAtMs, lastState = job.state?.lastStatus === 'ok' ? 'ok' : job.state?.lastStatus ? 'error' : 'none';
+      const metaEl = main.appendChild(node('small', 'pk-job__meta', meta.join(' · '))), lastEl = node('b', 'pk-job__last', last ? '上次 ' + when(last) + {ok: ' 做完了', error: ' 没做成', none: ''}[lastState] : '');  // 不用 span：Metre 皮肤把设置页所有 span 高优先级染成 --metre-text
+      if (last) { lastEl.dataset.state = lastState; metaEl.append(' · ', lastEl); }
       const ops = node('div', 'pk-job__ops');
       ops.append(
         textButton('现在做一次', attempt(out, async () => { await request('cron.run', {id: job.id, mode: 'force'}); say(out, '「' + title + '」已经开始了，做完会出现在记录里。', 'ok'); }, '正在叫碧琪…')),
