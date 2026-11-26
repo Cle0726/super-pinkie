@@ -1,4 +1,4 @@
-import {test, before, after} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -9,28 +9,29 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const file = (name) => fileURLToPath(new URL('../ui/injections/' + name, import.meta.url));
 const read = (name) => fs.readFileSync(file(name), 'utf8');
 
-// 11-26（#217 计时）：CI 的 Linux 上第一次起浏览器要 38 s（launch）+ 16 s（newPage），别的测试文件同时也在起，
-// 第一条测试 60 s 里有 55 s 花在这上面，断言和等待加起来约 3 s。整个文件共用一个浏览器（和 metre-preview.test.mjs 一样），
-// 在 before 里起、有它自己的 120 s 上限；每条测试开自己的 context，收尾只关自己的。断言、等待、每条的 60 s 上限都不变。
-let sharedBrowser;
-before(async () => {
-  let lib;
-  try { lib = playwright(); } catch { sharedBrowser = {why: 'Playwright is not installed here'}; return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  try { sharedBrowser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { sharedBrowser = {why: 'no browser: ' + error.message.split('\n')[0]}; }
-}, {timeout: 120_000});
-after(async () => { await sharedBrowser?.close?.(); });
-async function shared(t) {
-  if (!sharedBrowser || sharedBrowser.why) { t.skip(sharedBrowser?.why || 'no browser'); return null; }
-  const mine = [];
-  return {
-    newPage: async (options) => { const context = await sharedBrowser.newContext(options); mine.push(context); return context.newPage(); },
-    close: async () => { for (const context of mine) await context.close(); },
-  };
+// CI 提速：整个文件只起一个浏览器，各测试共用；隔离仍按测试走（每个测试自己开一个 context，结束就关）。
+// 起浏览器的 Promise 只建一次，失败（没装 Playwright / 起不来）也记住，之后每个测试都同样跳过。
+let shared = null;
+async function sharedBrowser(t) {
+  shared ??= (async () => {
+    let lib;
+    try { lib = playwright(); } catch { return {skip: 'Playwright is not installed here'}; }
+    const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+    try { return {browser: await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})})}; }
+    catch (error) { return {skip: 'no browser: ' + error.message.split('\n')[0]}; }
+  })();
+  const got = await shared;
+  if (got.skip) { t.skip(got.skip); return null; }
+  return got.browser;
 }
-// 11-26 计时：前两条在 CI 上 50–60 s（本机 1–3 s），一次 60 s 超时。每一步打时间看慢在哪一步，不改任何断言。
-// 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。
+
+after(async () => {
+  const got = await shared;
+  if (got?.browser) await got.browser.close();
+});
+
+// 11-26 计时（#217）：前两条在 CI 上 50–60 s（本机 1–3 s），一次 60 s 超时。每一步打时间看慢在哪一步，不改任何断言。
+// 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。共用浏览器在第一条测试里才起，所以 sync-1 的 launch 含起浏览器。
 function stopwatch(label) {
   const t0 = performance.now(); let last = t0; const laps = [];
   return {
@@ -41,11 +42,11 @@ function stopwatch(label) {
 
 test('the backstage band and the score read one connection state, so neither says the gateway is down after it came back', {timeout: 60_000}, async (t) => {
   const sw = stopwatch('sync-1');
-  let browser;
-  browser = await shared(t); if (!browser) return;
+  const browser = await sharedBrowser(t); if (!browser) return;
   sw.lap('launch');
+  const context = await browser.newContext({viewport: {width: 1024, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 720}}); sw.lap('L29:newPage');
+    const tab = await context.newPage(); sw.lap('L29:newPage');
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-board.css')}\n${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:100px;top:560px;width:780px;height:92px"></section></body></html>`;
     await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body})); sw.lap('L32:route');
@@ -94,18 +95,18 @@ test('the backstage band and the score read one connection state, so neither say
     await tab.evaluate(() => { const real = window.__laolaoSidebar.gwRequest; window.__laolaoSidebar.gwRequest = async (m, ...rest) => (m === 'pinkie.metre.board' ? Promise.reject(new Error('bad')) : real(m, ...rest)); window.__pinkieMetreBoardData.refresh(); }); sw.lap('L75:evaluate');
     await tab.waitForFunction(() => /没读到/.test(document.querySelector('#pk-metre-board .pk-metre-board__notice')?.textContent || ''), null, {timeout: 5000}); sw.lap('L76:waitForFunction');
     assert.doesNotMatch((await score()).text, /连接断了/);
-  } finally { await browser.close(); sw.lap('close'); sw.done(); }
+  } finally { await context.close(); sw.lap('close'); sw.done(); }
 });
 
 // 11-24 复验第 1 条：「不同步」两个方向都要认。页面以为在跑（停止键亮着、chatRunId 有值）、后台却空闲——这正是用户最常碰到的「转圈不停」；
 // 以及后台在跑、页面停着。超过 3 秒都显示「不同步」和「同步」键；对上以后（页面自己被清掉，或者点了同步）说 2 秒「已和后台对齐」再回常态。
 test('the band calls out an unsynced round in both directions after 3 seconds, and says it is aligned again for 2 seconds', {timeout: 60_000}, async (t) => {
   const sw = stopwatch('sync-2');
-  let browser;
-  browser = await shared(t); if (!browser) return;
+  const browser = await sharedBrowser(t); if (!browser) return;
   sw.lap('launch');
+  const context = await browser.newContext({viewport: {width: 1024, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 720}}); sw.lap('L91:newPage');
+    const tab = await context.newPage(); sw.lap('L91:newPage');
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:100px;top:560px;width:780px;height:92px"></section></body></html>`;
     await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html', body})); sw.lap('L94:route');
@@ -149,7 +150,7 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
     await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe) [data-seg="run"]')?.title || ''), null, {timeout: 3000}); sw.lap('L132:waitForFunction');
     await tab.waitForTimeout(2600); sw.lap('L133:waitForTimeout');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
-  } finally { await browser.close(); sw.lap('close'); sw.done(); }
+  } finally { await context.close(); sw.lap('close'); sw.done(); }
 });
 
 // 11-24 16:10 打回第 4 条：820 宽时状态带走短档，引擎 4 个声部（1 失败、1 等你）只剩「引擎 4」，「不同步」也只剩三个字、看不出哪边在跑。
@@ -158,10 +159,10 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
 // 11-24 21:30 派活第 3 条：「1败·1等」看不懂，写全「引擎 4 · 1 失败 · 1 等你」；格子放不下时省略号，悬停 / 读屏是全文。
 // 19:50 审查建议：不用「✕」「!」符号（读屏念成乘号 / 叹号，✕ 像关闭键）；引擎格按钮的读屏名（aria-label）是全档文字。
 test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
-  let browser;
-  browser = await shared(t); if (!browser) return;
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 820, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const tab = await context.newPage();
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:300px;height:92px"></section></body></html>`;
     await tab.route('http://127.0.0.1:30120/**', (route) => route.fulfill({contentType: 'text/html', body}));
@@ -197,14 +198,14 @@ test('the short tier of the band still says what failed or waits, and which side
     assert.equal(drawn.eng, '引擎 4 · 1 失败 · 1 等你', '820 宽短档：1 失败 + 1 等你两个数都要留，写全不缩成「败」「等」');
     assert.equal(drawn.engLabel, '引擎 4 · 1 失败 · 1 等你', '短档时读屏名仍是全档文字');
     assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 test('the band and the model row under the composer sit on one solid theme plate, day and night, so no pixel backdrop shows behind their text', {timeout: 60_000}, async (t) => {
-  let browser;
-  browser = await shared(t); if (!browser) return;
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 1024, height: 768}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 768}});
+    const tab = await context.newPage();
     // 一整块红色铺在最底下代替像素背景（skin.css 会把 html / body 刷成主题底色，所以不能直接染 body）：底板 / 带子哪里没盖住，取色就会取到红色
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-skin.css')}</style><style>${read('laolao-metre-keys.css')}</style>
       <style>body { margin: 0; } .agent-chat__composer-shell { position: fixed; left: 122px; top: 638px; width: 780px; height: 106px; z-index: 1; }</style></head>
@@ -245,7 +246,7 @@ test('the band and the model row under the composer sit on one solid theme plate
       assert.ok(px.band.every(near), '后台带左端「后台」、格与格之间、右端都是实底：' + px.band.join(' / '));
       assert.equal(px.above, '255,0,0', '底板只到框体下圆角，上面对话区照旧透出背景');
     }
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 21:30 派活第 2 条：窄窗（820）侧栏抽屉打开、命令面板打开时，后台带（body 上 z=36）画在抽屉 / 遮罩上面，压住 METRE 账号键下半。
@@ -254,10 +255,10 @@ test('the band and the model row under the composer sit on one solid theme plate
 // 11-24 22:37 打回：z=0 让带子掉到输入框外壳底板下面，格子上沿 6px 被盖、字头被切。遮罩开着时 app 层（openclaw-app z=1）也不再自成层叠上下文，
 // 每格上边框和文字区里，遮罩下面第一层必须是带子自己；反例只留 z=0、拿掉 app 层那一条，外壳要盖住格子（测试能红）。
 test('the band sinks under the narrow nav drawer, its backdrop and the command palette, so it never covers the METRE key', {timeout: 60_000}, async (t) => {
-  let browser;
-  browser = await shared(t); if (!browser) return;
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 820, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const tab = await context.newPage();
     const keys = read('laolao-metre-keys.css');
     const fix = keys.split(/\r?\n/).find((l) => l.includes(':has(.shell--nav-drawer-open)') && l.includes('.pk-metre-backstage'));
     assert.ok(fix, 'keys.css 里有「抽屉 / 命令面板开着时带子退到 app 层下面」那一条');
@@ -376,5 +377,5 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
     const nat = await ring();
     assert.ok(cr(nat.track, 'rgb(247, 246, 243)') < 3 || /rgba/.test(nat.track), '反例：原生日间底圈不到 3:1 ' + nat.track);
     assert.ok(cr(nat.dash, 'rgb(245, 244, 241)') < 4.5, '反例：原生日间「—」不到 4.5:1 ' + nat.dash);
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });

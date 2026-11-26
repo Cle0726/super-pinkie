@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
+import {after, test} from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
 
@@ -31,6 +31,27 @@ async function launchBrowser() {
   }
   throw lastError;
 }
+
+// One browser for the whole file. The launch promise is created once; a failure
+// is remembered and rethrown for every test, not turned into a skip. Each
+// scenario still opens its own context and closes it, so documents, timers,
+// and page errors stay isolated.
+let shared = null;
+async function sharedBrowser() {
+  shared ??= launchBrowser().then(
+    (browser) => ({browser}),
+    (error) => ({error}),
+  );
+  const got = await shared;
+  if (got.error) throw got.error;
+  return got.browser;
+}
+
+after(async () => {
+  if (!shared) return;
+  const got = await shared;
+  if (got.browser) await got.browser.close();
+});
 
 async function runPair(browser, body) {
   const out = {};
@@ -77,8 +98,7 @@ async function runPair(browser, body) {
 }
 
 test('M3 differential: domWatch observers and polling match native browser APIs', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+  const browser = await sharedBrowser();
 
   await t.test('multi-target observe and mixed observe+watch do not overwrite earlier targets', async () => {
     const res = await runPair(browser, `
@@ -506,9 +526,8 @@ test('M3 differential: domWatch observers and polling match native browser APIs'
   });
 });
 
-test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', async () => {
+  const browser = await sharedBrowser();
   const TOTAL_BLOCKS = 25;
   const PER_BLOCK = 100;
   let total = 0;
@@ -662,9 +681,8 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
   );
 });
 
-test('M3 product regression: unmodified laolao-learning-reminder.js reacts to both html attributes and body subtree mutations', async (t) => {
-  const browser = await launchBrowser();
-  t.after(() => browser.close());
+test('M3 product regression: unmodified laolao-learning-reminder.js reacts to both html attributes and body subtree mutations', async () => {
+  const browser = await sharedBrowser();
 
   // 1. Direct reproduction of the coordinator's product.cjs check
   for (const attr of ['data-pinkie-study-desk', 'data-laolao-mode']) {
