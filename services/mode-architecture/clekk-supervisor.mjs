@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {isRolesContext} from './metre-roles.mjs';
 import {unverifiedNote} from './run-contract.mjs';
 import {renderFirstPerson} from './first-person.mjs';
-import {ACTION_CONTINUATION, AUDIT_CORRUPTION_FAILURE, COMPLETION_CLAIM, DELIVERY_CLAIM, DELIVERY_GUARD_TOOL, IN_PROGRESS_CLAIM, failedAssistantMessage, isInternalExecutionSession, isMutationRequest, pinkieStateRoot, workFirstPrompt} from './mode-constants.mjs';
+import {ACTION_CONTINUATION, AUDIT_CORRUPTION_FAILURE, COMPLETION_CLAIM, DELIVERY_CLAIM, DELIVERY_GUARD_TOOL, DRAFT_KEEP, IN_PROGRESS_CLAIM, failedAssistantMessage, isInternalExecutionSession, isMutationRequest, pinkieStateRoot, workFirstPrompt} from './mode-constants.mjs';
 import {compactToolEvidence, completionRunKey, isHonestIncomplete, isLikelyActionRequest, proseOnly, resultText, toolResultFailed, waitingForGeneratedMedia, workFirstBackgroundResult, workFirstContext, workFirstReplyText} from './evidence-rules.mjs';
 import {CompletionIntegrityGuard, assistantMessageHasToolCall, auditRecordDigest, hashForAudit, housekeepingTurn, internalControlText, isTerminalAssistantMessage, payloadText, runtimeTurnText, visibleAssistantText} from './completion-integrity.mjs';
 import {agentFromSessionKey, assistantTextFromMessages, modeForContext, section} from './deliberation-audit.mjs';
@@ -592,7 +592,7 @@ export class CleKkSupervisor {
       ...decision,
       retry: {
         ...(decision.retry || {}),
-        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里用户要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, 2400)}${reply.length > 2400 ? '…（后略）' : ''}>>>` : ''}`,
+        instruction: `交付前提醒（只提醒这一次）：${reason}。如果确实还没核对，就只补做最必要的一两步检查（运行测试、读回文件、用 curl 测接口之类），不要重做已经完成的工作，也不要去翻看本应用或插件的源代码；如果已经核对过，或者这条提醒不适用（比如只是转述、翻译别人的内容），就直接给出最终回复。这一版最终回复会替代上一版，所以要完整：保留上一版里用户要求汇报的全部内容（结果、数字、原因说明等），再补上新的核对结果。回复里不要提这条提醒。${reply ? `上一版最终回复草稿：<<<${reply.slice(0, DRAFT_KEEP)}>>>` : ''}`,
         maxAttempts: 1,
       },
     };
