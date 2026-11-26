@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {CompletionIntegrityGuard} from '../services/mode-architecture/index.mjs';
+import {CleKkAuditLog, CleKkSupervisor, CompletionIntegrityGuard} from '../services/mode-architecture/index.mjs';
 
 // Two nudges that each fire at most once per turn: look at a finished
 // deliverable before calling it done, and do the work instead of announcing it.
@@ -254,4 +254,30 @@ test('asking with buttons before any work, or answering with a chart, still pass
   const chart = setup(t, '把这三个月的吃饭花销画成图：8月 2400，9月 2050，10月 1760');
   const answer = '吃饭花销连降两个月。\n\n```chart\n{"type":"bar","title":"吃饭花销连降两个月","labels":["8月","9月","10月"],"series":[{"name":"吃饭","data":[2400,2050,1760]}],"unit":"元"}\n```';
   assert.notEqual(chart.guard.finalize({lastAssistantMessage: answer}, chart.ctx, {verifyExternal: false})?.action, 'revise');
+});
+
+test('a long draft sent back by the delivery gate reaches the retry whole, tail included', (t) => {
+  // issue #96 任务 0：重试提示只带了草稿前 2400 字，却要模型「保留上一版全部内容」；
+  // 模型看不到结论和汇总，只能现编一个短收尾，用户收到的终稿尾巴就没了。
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-long-draft-'));
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const ctx = {agentId: 'thinking', sessionKey: 'agent:thinking:long-draft', runId: 'long-1'};
+  const supervisor = new CleKkSupervisor({audit: new CleKkAuditLog(path.join(root, 'audit')), integrity: new CompletionIntegrityGuard()});
+  supervisor.begin({prompt: '帮我做一个 4 分钟的爱情故事视频'}, ctx);
+  const video = path.join(root, 'love.mp4');
+  const command = `ffmpeg -y -i frames/%04d.png "${video}"`;
+  supervisor.beforeTool({toolName: 'exec', toolCallId: 'render', runId: 'long-1', params: {command}}, ctx);
+  fs.writeFileSync(video, 'mp4');
+  supervisor.afterTool({toolName: 'exec', toolCallId: 'render', runId: 'long-1', params: {command}, result: 'ok'}, ctx);
+  const body = Array.from({length: 90}, (_, i) => `第 ${i + 1} 个镜头：画面、配乐和字幕都按分镜做好了，时长约 3 秒，转场用淡入淡出。`).join('\n');
+  const tail = '汇总：共 90 个镜头，成片总时长 4 分钟，文件是 love.mp4。结论：可以直接发。';
+  const reply = '视频已经全部完成，时长 4 分钟，并截图看过。\n\n' + body + '\n\n' + tail;
+  assert.ok(reply.length > 3600, 'the draft is well past the old 2400-character cut');
+  const decision = supervisor.finalizeDecision({lastAssistantMessage: reply}, ctx, {verifyExternal: false});
+  assert.equal(decision?.action, 'revise');
+  const instruction = decision.retry.instruction;
+  assert.match(instruction, /这一版最终回复会替代上一版，所以要完整/);
+  assert.ok(instruction.includes('上一版最终回复草稿：<<<' + reply + '>>>'), 'the whole draft is quoted');
+  assert.ok(instruction.includes(tail), 'the closing summary is in front of the model');
+  assert.doesNotMatch(instruction, /后略/);
 });
