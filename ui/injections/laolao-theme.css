@@ -629,7 +629,7 @@ img.chat-avatar.assistant {
 }
 
 .laolao-mode-button__label { font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; letter-spacing: .3px; white-space: nowrap; }
-.laolao-mode-button__arrow { margin-left: auto; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: .6; transition: transform .2s; }
+.laolao-mode-button__arrow { margin-left: auto; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); opacity: .6; transition: transform var(--motion-fast, .2s); }
 .laolao-mode-switcher[aria-expanded="true"] .laolao-mode-button__arrow { transform: rotate(225deg); }
 [data-mode="chat"] { --mode-button-ink: #b34f7c; }
 [data-mode="project"] { --mode-button-ink: #3e8584; }
@@ -1070,7 +1070,7 @@ html[data-laolao-workspace-dock="1"] .shell.shell--chat {
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger), .laolao-mode-switcher img, .laolao-mode-menu__option img, .laolao-mode-button__arrow {
+  :is(.laolao-mode-menu__option,.agent-chat__suggestion,.agent-chat__input-btn,.chat-settings-chip,.topbar-icon-btn,.chat-send-btn,.btn):not(:disabled):not([aria-disabled="true"]):not(.is-recording):not(.danger), .laolao-mode-switcher img, .laolao-mode-menu__option img {
     transition: none !important;
     transform: none !important;
   }
