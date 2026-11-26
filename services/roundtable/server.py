@@ -47,6 +47,9 @@ STATE = runpy.run_path(str(ROOT/'services/state_root.py'))
 TERMINAL = {'done', 'failed', 'cancelled', 'interrupted'}
 MODEL_CACHE = {'until': 0, 'models': []}
 MODEL_LOCK = threading.Lock()
+# 拒掉的请求最多读掉多少请求体、等多久再回复；超出就回 Connection: close。
+DRAIN_LIMIT = 1 << 20
+DRAIN_SECONDS = 2
 MEMBERS = {
     'pinkie': {'name': '碧琪', 'role': '主持与破题', 'scene': '碧琪把新的问题放到了圆桌中央。'},
     'twilight': {'name': '紫悦', 'role': '分析与结构', 'scene': '紫悦翻开笔记，开始梳理线索。'},
@@ -1060,9 +1063,57 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
+    def handle_one_request(self):
+        self.body_read = False
+        super().handle_one_request()
+
+    def read_json(self):
+        size = int(self.headers.get('Content-Length', '0'))
+        if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
+            raise ValueError('请求格式不正确')
+        self.body_read = True
+        data = json.loads(self.rfile.read(size))
+        if not isinstance(data, dict):
+            raise ValueError('请求格式不正确')
+        return data
+
+    def discard_body(self):
+        # 没读请求体就回 403/400 再关连接：内核对还没读的字节回 RST，Windows 客户端连已经发出的回复都收不到
+        # （WinError 10053/10054）。回复前先把请求体读掉；长度不明、太大或读不完就返回 False，由调用方明说 Connection: close。
+        if self.body_read:
+            return True
+        self.body_read = True
+        if self.headers.get('Transfer-Encoding'):
+            return False
+        try:
+            left = int(self.headers.get('Content-Length', '0'))
+        except ValueError:
+            return False
+        if left <= 0:
+            return left == 0
+        if left > DRAIN_LIMIT:
+            return False
+        try:
+            self.connection.settimeout(DRAIN_SECONDS)
+            while left:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    return False
+                left -= len(chunk)
+            return True
+        except OSError:
+            return False
+        finally:
+            with contextlib.suppress(OSError):
+                self.connection.settimeout(self.timeout)
+
     def reply(self, code, data, mime='application/json; charset=utf-8'):
         body = data if isinstance(data, bytes) else json.dumps(data, ensure_ascii=False).encode('utf-8')
+        drained = self.discard_body()
         self.send_response(code)
+        if not drained:
+            self.send_header('Connection', 'close')
+            self.close_connection = True
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
@@ -1192,12 +1243,7 @@ class Handler(BaseHTTPRequestHandler):
         if not owner or owner != session:
             return self.reply(403, {'error': '白板令牌不对或已经过期'})
         try:
-            size = int(self.headers.get('Content-Length', '0'))
-            if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
-                raise ValueError('请求格式不正确')
-            data = json.loads(self.rfile.read(size))
-            if not isinstance(data, dict):
-                raise ValueError('请求格式不正确')
+            data = self.read_json()
             if data.get('read') is True:
                 return self.reply(200, self.server.store.whiteboard(session))
             return self.reply(200, self.server.store.apply_whiteboard(session, data.get('ops'), 'pinkie'))
@@ -1213,12 +1259,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.trusted(mutation=True):
             return self.reply(403, {'error': '页面授权失效，请刷新后重试'})
         try:
-            size = int(self.headers.get('Content-Length', '0'))
-            if size < 1 or size > 64000 or not self.headers.get('Content-Type', '').startswith('application/json'):
-                raise ValueError('请求格式不正确')
-            data = json.loads(self.rfile.read(size))
-            if not isinstance(data, dict):
-                raise ValueError('请求格式不正确')
+            data = self.read_json()
             if self.path == '/api/sessions':
                 return self.reply(200, self.server.store.create_session(data.get('title', ''), data.get('members'),
                                                                          data.get('models'), data.get('path', '')))
