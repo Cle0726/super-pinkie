@@ -525,6 +525,7 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
     await page.evaluate(() => __pinkieStudyDesk.go('today')); await page.locator('#pinkie-desk-chat .pk-chat-stop').waitFor({state:'hidden'});
     // 聊天区最后一次变动会让课程条按消息刷新一次（250ms 防抖），这不是轮询；等调用数稳定后再看 4 秒内有没有定时轮询。
     const currentCalls = () => f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
+    // 保留死等：调用数记在 Node 侧的 fixture 里，页面里看不到，用不了 waitForFunction；700ms 一轮是「去抖后不再变」的稳定窗口，4200ms 是要证明「没有定时轮询」这件没发生的事，必须留时间窗。
     let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
     await page.waitForTimeout(4200); assert.equal(currentCalls(), before);
   });
