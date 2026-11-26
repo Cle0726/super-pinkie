@@ -68,6 +68,7 @@ async function zoomShot(context, page, name, width, boxes, extra) {
   const x1 = Math.min(width, Math.ceil(Math.max(...boxes.map((b) => b.x + b.w)) + 24));
   const y1 = Math.min(HEIGHT, Math.ceil(Math.max(...boxes.map((b) => b.y + b.h)) + 24));
   const clip = {x: x0, y: y0, width: x1 - x0, height: y1 - y0};
+  if (clip.width <= 0 || clip.height <= 0) { console.log(`${name}: 放大区在视口外，跳过 ${JSON.stringify({clip, boxes})}`); return; }
   const raw = await capture(page, {clip});
   const zoom = await context.newPage();
   try {
