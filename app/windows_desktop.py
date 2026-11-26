@@ -270,7 +270,7 @@ def gateway_listener_pid(port=18789, runner=None):
         return None
     try:
         result = (runner or subprocess.run)(
-            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=5,
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, errors="replace", timeout=5,
             **hidden_process_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
