@@ -1,0 +1,32 @@
+/* laolao-metre-contrast —— X4：系统打开「提高对比度」（prefers-contrast: more）时，Metre 的小字和线加深（夜间提亮）。
+ * 11-25 真页面核实（build\quick-run\mui3\核实-真页面-1125.md 第八节）：Metre 日间弱化色 #77736B 在页面底 / 侧栏 / 悬停底上
+ * 只有 4.37 / 4.10 / 4.03:1，侧栏历史时间、分组标题、输入区下那排 chip 的小字都用它，到不了 4.5。
+ * 只在 data-laolao-mode="metre" 下、只在这个媒体查询里生效：平时外观一格不变，其他五个模式不动（laolao-theme.css 里那段是它们的）。
+ * 只改变量，不加强制覆盖：多一个 :not(#_m3) 压过 laolao-metre-skin.css 里日间、夜间两段变量定义。
+ *   日间：弱化色 #5E5A53（各底 ≥ 5.86）、分隔线 #86827A / 深线 #6B675F（各底 ≥ 3:1）。
+ *   夜间：弱化色 #ADA9A0（各底 ≥ 6.49）、分隔线 #85827A / 深线 #ADA9A0。
+ *   底栏状态带：字本来就 ≥ 4.5；色块（--bs-off）和格线（--bs-rule）加深到对格子底 ≥ 3:1。
+ *   长期记忆弹层遮罩（日间原来是碧琪的粉紫 rgba(92,46,72,.14)）换成更深的墨色；夜间 laolao-night.css 已是 .4 黑，不动。
+ * 焦点框没加粗：laolao-metre-skin.css 里统一焦点框是 2px 且是强制覆盖，这里不加强制覆盖就压不过；颜色对底已 ≥ 5.6:1。 */
+@media (prefers-contrast: more) {
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) {
+    --metre-muted: #5E5A53;
+    --metre-line: #86827A;
+    --metre-line-strong: #6B675F;
+    --bs-off: #6B675F;
+    --bs-rule: #86827A;
+    --sb-ink: var(--metre-text);   /* 没选中的会话标题：Metre 夜间不带 data-pinkie-night，标题吃的是日间配方 accent 22% + #4a3d44，夜间只有约 2.5:1 */
+  }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):is([data-pinkie-night], [data-theme="dark"]) {
+    --metre-muted: #ADA9A0;
+    --metre-line: #85827A;
+    --metre-line-strong: #ADA9A0;
+    --bs-off: #ADA9A0;
+    --bs-rule: #85827A;
+    --sb-ink-active: var(--metre-text);   /* 选中的会话标题：laolao-sidebar-surface.css:144 accent 45% + #3d3036，夜间 accent 下只有约 2.96:1（日间 8.5:1，不动） */
+  }
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) .laolao-memory-layer { background: rgba(27, 26, 24, 0.36); }
+  /* 11-25 截图 + CI 核对：侧栏日期行「今天」（laolao-sidebar.css:466 opacity .58）、历史时间（:467 .56）、分组标题（:98 .7）、计数（:103 .45）
+   * 自己带透明度，光换弱化色实际只到约 2.5（日）/ 3.3（夜）:1。高对比时这几处不透明；三个 id 级 :not() 压过 #laolao-session-manager，不用强制覆盖。 */
+  html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3) aside.sidebar :is(.pinkie-session-date, .pinkie-session-time, .laolao-group__label, .laolao-group__count) { opacity: 1; }
+}
