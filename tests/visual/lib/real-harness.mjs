@@ -1138,7 +1138,7 @@ export async function openRealScenePage(browser, origin, sceneId, theme = 'day',
   const isNight = theme === 'night';
   const context = await browser.newContext({
     viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: opts.deviceScaleFactor || 1,   // B36 高 DPI 走查传 1.25 / 1.5；不给就是 1，现有场景和基线不变
     colorScheme: isNight ? 'dark' : 'light',
     locale: 'zh-CN',
     ...(opts.timezoneId ? {timezoneId: opts.timezoneId} : {}),   // 不给就跟着机器（CI 上是 UTC）
