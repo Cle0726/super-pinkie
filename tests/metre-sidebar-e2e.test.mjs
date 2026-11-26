@@ -56,7 +56,7 @@ test(`Metre dispatch appears during refresh, without its parent in the sidebar (
       window.qa.away = {...window.qa.away, [other]: {parentKey: parent, title: '起草标题方案', mode: 'ideas'}};
       window.qa.changed();
     }, {parent, child, other});
-    await tab.waitForTimeout(300);
+    await tab.waitForTimeout(300);   // 保留：故意让两次 changed 通知先处理、再放行旧读，测的是先后顺序
     await tab.evaluate(() => window.qa.release());
     const sideRow = tab.locator(`[data-laolao-group="__metre-dispatched"] [data-session-key="${child}"]`);
     await sideRow.getByRole('link', {name: '正在整理提纲'}).waitFor();
