@@ -23,17 +23,23 @@ jobs:
   ratchet:
     runs-on: ubuntu-latest
     steps:
+      # Full history: compare-baseline.mjs needs the merge-base of the PR and the
+      # target tip (B38).  The PR merge ref can be older than the target tip when a
+      # run sits in the queue, so the target may have shrunk files the PR never
+      # touched; those are judged against the merge-base, not the newer tip.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: "24.20.0"
       - name: Ratchet and loophole counterexamples
-        run: node --test tests/code-health-ratchet.test.mjs tests/code-health-loopholes.test.mjs
+        run: node --test tests/code-health-ratchet.test.mjs tests/code-health-loopholes.test.mjs tests/compare-baseline-mergebase.test.mjs
       - name: Compare baseline, exceptions and unmeasured list with the target branch
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "refs/heads/$BASE_REF"
+          git fetch --no-tags origin "refs/heads/$BASE_REF"
           git worktree add --detach "$RUNNER_TEMP/health-target" FETCH_HEAD
           node tools/health/compare-baseline.mjs --target "$RUNNER_TEMP/health-target"
