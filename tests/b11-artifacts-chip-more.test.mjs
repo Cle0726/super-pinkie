@@ -124,19 +124,28 @@ describe('真浏览器（server / browser 全文件复用一次）', () => {
   let server = null;
   let browser = null;
 
+  const closeAll = async () => {
+    const [b, s, i] = [browser, server, installed];
+    browser = server = installed = null;
+    try { await b?.close(); }
+    finally {
+      try { await s?.close(); }
+      finally { i?.cleanup(); }
+    }
+  };
   before(async () => {
-    installed = installRealControlUi({repoRoot: REPO_ROOT});
-    server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-    browser = process.env.PINKIE_VISUAL_ENGINE === 'webkit'
-      ? await playwright().webkit.launch({headless: true})
-      : await launchRealBrowser();
+    try {
+      installed = installRealControlUi({repoRoot: REPO_ROOT});
+      server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+      browser = process.env.PINKIE_VISUAL_ENGINE === 'webkit'
+        ? await playwright().webkit.launch({headless: true})
+        : await launchRealBrowser();
+    } catch (error) {
+      await closeAll();
+      throw error;
+    }
   }, {timeout: 120_000});
-
-  after(async () => {
-    await browser?.close();
-    await server?.close();
-    installed?.cleanup();
-  });
+  after(closeAll);
 
   // 同一个 scene×theme 只开一次页：改后依次量 1440 → 820，换回旧写法后再量 820 → 1440，宽度×新旧组合一个不少。
   test('选中键字 ≥4.5、「再看更多」边框 ≥3；换回旧写法必须跌破', {timeout: 240_000}, async (t) => {
