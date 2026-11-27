@@ -289,6 +289,36 @@ class WindowsUpdateTests(unittest.TestCase):
             self.assertEqual(len(payload), seen[-1]['downloaded'])
             self.assertEqual(payload, destination.read_bytes())
 
+    def test_resume_answered_from_the_wrong_byte_is_restarted_not_spliced(self):
+        """续传要 bytes=1MB- ，代理却回 206 + Content-Range: bytes 0-…（把 Range 丢了）。
+
+        旧实现照样从 1MB 处往下写：文件变成「前 1MB + 整包」，字节数和 Content-Length 还对得上，
+        最后在 prepare() 里报成「发布产物和 .sha256 对不上」，把代理的错算到发版头上。
+        现在丢掉半成品、下一次从 0 重下。
+        """
+        payload = bytes(range(256)) * (3 * 1024 * 1024 // 256)
+        offset = 1024 * 1024
+        seen = []
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exe = root / "app.exe"
+            exe.write_bytes(b"old")
+            destination = root / "payload.exe"
+            destination.with_suffix(".exe.download").write_bytes(payload[:offset])
+
+            def opener(request, timeout=0):
+                seen.append(request.headers.get("Range"))
+                response = SizedResponse(payload, status=206 if seen[-1] else 200, content_length=len(payload))
+                if seen[-1]:
+                    response.headers["Content-Range"] = f"bytes 0-{len(payload) - 1}/{len(payload)}"
+                return response
+
+            updater = WindowsUpdater(root, executable=exe, opener=opener)
+            with mock.patch("time.sleep"):
+                updater._download("https://github.com/Cle0726/super-pinkie/x.exe", destination)
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), hashlib.sha256(destination.read_bytes()).hexdigest())
+        self.assertEqual([f"bytes={offset}-", None], seen)
+
     def test_portable_replacer_verifies_the_package_before_swapping(self):
         """便携包必须先验哈希再展开/替换，坏包不能碰安装目录。"""
         helper = WindowsUpdater._directory_helper_source()
