@@ -1,8 +1,12 @@
+import contextlib
 import importlib.util
+import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('shared_ui_bundle', ROOT / 'tools/ui-parity/bundle.py')
@@ -175,6 +179,46 @@ class SharedUiBundleTests(unittest.TestCase):
             self.assertEqual(bundle.entry_tags(root, files, stamped), bundle.entry_tags(root, files))
             # A second package installed the same way ends up identical.
             self.assertEqual(bundle.install(root, windows), installed)
+
+    def test_cli_install_inspects_the_package_once_after_stamping(self):
+        # B17: install() used to inspect (read every package file back) and then
+        # main() inspected again after stamp.mjs; only the second sees the final
+        # bytes. The CLI must inspect exactly once, after stamping, and still fail
+        # on a package file left stale.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mac, windows = self.stamped_fixture(root)
+            for control, corrupt in ((mac, False), (windows, True)):
+                events = []
+                real_inspect = bundle.inspect
+
+                def counting_inspect(*args, **kwargs):
+                    events.append('inspect')
+                    return real_inspect(*args, **kwargs)
+
+                def fake_stamp(_root, ctl):
+                    events.append('stamp')
+                    if corrupt:
+                        (Path(ctl) / 'laolao-stamped.css').write_bytes(b'left stale by stamping')
+
+                output = root / f'{control.name}-manifest.json'
+                argv = ['bundle.py', 'install', '--root', str(root), '--control-ui', str(control), '--output', str(output)]
+                with mock.patch.object(bundle, 'inspect', counting_inspect), \
+                     mock.patch.object(bundle, 'run_stamp_tool', fake_stamp), \
+                     mock.patch.object(sys, 'argv', argv), contextlib.redirect_stdout(io.StringIO()):
+                    if corrupt:
+                        with self.assertRaisesRegex(ValueError, 'stale/modified UI resource'):
+                            bundle.main()
+                    else:
+                        bundle.main()
+                self.assertEqual(events, ['stamp', 'inspect'], control.name)
+                if not corrupt:
+                    fresh = bundle.inspect(root, mac)
+                    self.assertEqual(json.loads(output.read_text(encoding='utf-8')), fresh)
+                    self.assertEqual(json.loads((mac / bundle.MANIFEST).read_text(encoding='utf-8')), fresh)
+            # Library callers still get a verified manifest by default.
+            self.assertEqual(bundle.install(root, mac), bundle.inspect(root, mac))
+            self.assertIsNone(bundle.install(root, mac, verify=False))
 
     def test_reused_source_hashes_still_catch_package_files_changed_after_install(self):
         with tempfile.TemporaryDirectory() as directory:

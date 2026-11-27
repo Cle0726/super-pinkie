@@ -24,11 +24,8 @@ const gen = name => { const g = GENS.find(x => x.name === name); assert.ok(g, `�
 const many = (name, n = SEEDS) => Array.from({length: n}, (_, i) => gen(name).make(rng(i + 1)));
 const picked = q => q.o['ABCD'.indexOf(q.a)];
 
-// 已知 bug 先钉住现状：里面写的是正确行为，外面断言「目前仍然不成立」。
-// 源码修好后这里会变红，届时去掉 stillBuggy 包装和 todo 标记，直接断言正确行为。
-function stillBuggy(correct) {
-  assert.throws(correct, {name: 'AssertionError'}, '这个已知 bug 好像已经修好了：请去掉 stillBuggy 包装和 todo 标记，直接断言正确行为');
-}
+// 已知 bug 用不带函数体的 test.todo 登记，正确行为的断言原文留在注释里：带函数体或 {todo} 选项的测试会照常运行，
+// 失败时 TAP 输出 not ok … # TODO，tools/release-gate/tap.mjs 会把它记成失败。源码修好后把注释里的断言改回普通 test。
 
 // 独立实现的 IPv4 计算（不用位运算，避免和被测代码写法一样而一起错）
 const toInt = s => s.split('.').reduce((a, b) => a * 256 + Number(b), 0);
@@ -218,6 +215,7 @@ function sameSolution(a, b) {
   };
   return norm(a) === norm(b);
 }
+// 下面两条 test.todo 的源码修好后用：断言满足 pred 的题里没有与正确答案等价的干扰项。
 function noEquivalentDistractor(pred) {
   for (let seed = 1; seed <= 3000; seed += 1) {
     const q = gen('特征方程求通解').make(rng(seed));
@@ -241,10 +239,12 @@ test('特征方程题：正确选项的特征根与题面方程吻合', () => {
   }
 });
 
-test('已知 bug：y″ + y = 0（ω = 1）时，干扰项「C₁cos 1x + C₂sin 1x」和正确答案是同一个通解', {todo: '源码未修：ω = 1 时干扰项 w*w 仍是 1，只差一个「1」'}, () => {
-  stillBuggy(() => noEquivalentDistractor(q => q.q.startsWith('微分方程 y″ + 1y = 0')));
-});
+// 待修源码：y″ + y = 0（ω = 1）时干扰项 w*w 仍是 1，「C₁cos 1x + C₂sin 1x」和正确答案只差一个「1」，是同一个通解
+// 修好后把下面这条改回带断言的 test：
+//   noEquivalentDistractor(q => q.q.startsWith('微分方程 y″ + 1y = 0'));
+test.todo('y″ + y = 0（ω = 1）时干扰项不应与正确答案是同一个通解（待修源码）');
 
-test('已知 bug：两根互为相反数（r₁ = −r₂）时，「根取反」干扰项只是把 C₁、C₂ 两项对调，仍是正确通解', {todo: '源码未修：干扰项 e(−r₁)/e(−r₂) 在 r₁ = −r₂ 时与答案等价'}, () => {
-  stillBuggy(() => noEquivalentDistractor(q => / \+ 0y′ /.test(q.q)));
-});
+// 待修源码：两根互为相反数（r₁ = −r₂）时，「根取反」干扰项 e(−r₁)/e(−r₂) 只是把 C₁、C₂ 两项对调，仍是正确通解
+// 修好后把下面这条改回带断言的 test：
+//   noEquivalentDistractor(q => / \+ 0y′ /.test(q.q));
+test.todo('两根互为相反数（r₁ = −r₂）时「根取反」干扰项不应与正确答案等价（待修源码）');
