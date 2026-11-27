@@ -816,8 +816,17 @@ export class EngineBridge {
     // 草稿文件夹做成 git 仓库：引擎服务靠 git 检查点算整段改动（11-23 真机：不是 git 时 Claude、Antigravity 都只报文件名，没有差异）。
     // 只管 Metre 自己的草稿文件夹，用户绑的项目文件夹一概不碰。
     if (!fs.existsSync(path.join(scratch, '.git'))) {
-      const git = (...args) => this.runSync('git', ['-c', 'user.name=Metre', '-c', 'user.email=metre@localhost', ...args], {cwd: scratch, windowsHide: true, timeout: 20_000, stdio: 'ignore'});
-      try { git('init', '-q'); git('commit', '--allow-empty', '-q', '-m', 'Metre 草稿'); } catch (error) { this.logger?.warn?.(`engines scratch git: ${error.message}`); }
+      // spawnSync 不会因为退出码非 0 抛错：要自己看 error / status，并留下 stderr，失败才进得了日志。
+      const git = (...args) => {
+        const result = this.runSync('git', ['-c', 'user.name=Metre', '-c', 'user.email=metre@localhost', ...args], {cwd: scratch, windowsHide: true, timeout: 20_000, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8'});
+        if (result?.error) throw result.error;
+        if (result?.status !== 0) throw new Error(`git ${args[0]} 退出码 ${result?.status ?? result?.signal}：${String(result?.stderr || '').trim().slice(-300)}`);
+      };
+      try { git('init', '-q'); git('commit', '--allow-empty', '-q', '-m', 'Metre 草稿'); } catch (error) {
+        this.logger?.warn?.(`engines scratch git: ${error.message}`);
+        // 只删这次自己建出来的 .git（进这里时还没有），下次再试；留着半成品就永远不会再建第一个提交。
+        try { fs.rmSync(path.join(scratch, '.git'), {recursive: true, force: true}); } catch { /* 下次再说 */ }
+      }
     }
     return scratch;
   }
