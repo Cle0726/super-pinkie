@@ -45,7 +45,28 @@ const USER_VISIBLE_LINES = {
   // 交付核对失败的原因会作为失败「原文」显示（laolao-message-actions.js），也会写进重试指令。
   'services/mode-architecture/clekk-supervisor.mjs': [/状态摘要不一致'/, /状态文件不可读'/, /审计日志正被写入/, /审计链断裂'/,
     /审计日志不可读：/, /状态不可验证'/, /正在继续核对真实执行结果'/],
+  // L83：记忆工具 / computer 工具的报错会原样显示在工具卡片里，插件名显示在插件列表里，安装输出显示在安装窗口里。
+  'services/mode-architecture/index.mjs': [/不属于 [^']* 主模式'/, /桌面执行器尚未连接/, /桌面执行器端点格式无效'/, /桌面执行器端点不完整'/,
+    /description: '通过 [^']* App 自带的本机桌面执行器/, /^\s*name: `.*执行控制层`,$/],
+  'services/mode-architecture/openclaw.plugin.json': [/"name": "[^"]*执行控制层"/],
+  'services/mode-architecture/setup.py': [/模式运行插件被配置禁用/, /模式隔离记忆、压缩重载/],
 };
+
+test('L83：mode-architecture 改用户可见名字时，内部技术名一个不动', () => {
+  const index = read('services/mode-architecture/index.mjs');
+  const manifest = JSON.parse(read('services/mode-architecture/openclaw.plugin.json'));
+  assert.equal(manifest.id, 'pinkie-mode-architecture', '插件 id 是技术名');
+  assert.match(index, /id: 'pinkie-mode-architecture',/);
+  assert.match(index, /environment\.OPENCLAW_CUA_DRIVER_ENDPOINT/, '环境变量名不改');
+  assert.match(index, /`CLE Kk plugin build=\$\{PLUGIN_BUILD\}/, '开发者日志 key 不改');
+  assert.match(index, /`CLE Kk pending recovery failed:/);
+  assert.match(index, /\bCleKkSupervisor\b/, '代码标识符不改');
+  // Windows 包检查 index.mjs 里不能写死「C.le. 执行控制层」（build-win.ps1 / windows-self-contained），平台分支要保留。
+  assert.doesNotMatch(index, /C\.le\. 执行控制层/);
+  assert.match(index, /process\.platform === 'win32' \? '超級碧琪' : 'C\.le\.'\} 执行控制层`/);
+  const setup = read('services/mode-architecture/setup.py');
+  assert.match(setup, /plugin_id = "pinkie-mode-architecture"/);
+});
 
 test('K4：用户可见处不再出现「CLE Kk」', () => {
   for (const rel of USER_VISIBLE) {

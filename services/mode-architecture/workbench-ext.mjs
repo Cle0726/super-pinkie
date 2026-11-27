@@ -257,6 +257,8 @@ export function formatText({language, content, filePath, cwd}) {
       if (error) reject(new Error(bin + ' 格式化失败：' + String(stderr || error.message).split('\n').filter(Boolean).slice(0, 3).join(' ').slice(0, 300)));
       else resolve({text: String(stdout), formatter: bin});
     });
+    // 格式化程序没读完就退出时 stdin 报 EPIPE / EOF；结果由上面的回调给，这里只防它变成 uncaughtException。
+    child.stdin.on('error', () => {});
     child.stdin.end(content);
   });
 }
