@@ -75,6 +75,6 @@ html[data-laolao-startup-home="1"] .pinkie-crew { display: none; }
 @keyframes pinkie-crew-close { from { stroke-dasharray: 26 74; opacity: 1; } to { stroke-dasharray: 100 0; opacity: .5; } }
 @keyframes pinkie-crew-draw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 
-html[data-reduce-motion] .pinkie-crew, html[data-reduce-motion] .pinkie-crew * { animation: none !important; transition: none !important; }
+html[data-pinkie-reduce-motion] .pinkie-crew, html[data-pinkie-reduce-motion] .pinkie-crew * { animation: none !important; transition: none !important; }
 @media (max-width: 900px) { .pinkie-crew { padding-right: 12px; } }
 @media (max-width: 640px) { .pinkie-crew__label { display: none; } }

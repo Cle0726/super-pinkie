@@ -481,7 +481,7 @@ def _configure_plugin(data: dict, target: Path, disabled_vision: set[str] | None
     plugins = data.setdefault("plugins", {})
     plugin_id = "pinkie-mode-architecture"
     if plugins.get("enabled") is False or plugin_id in plugins.get("deny", []):
-        raise RuntimeError("CLE Kk 模式运行插件被配置禁用；没有绕过用户配置。")
+        raise RuntimeError("C.le. 模式运行插件被配置禁用；没有绕过用户配置。")
     entry = plugins.setdefault("entries", {}).setdefault(plugin_id, {})
     entry["enabled"] = True
     entry.setdefault("hooks", {})["allowPromptInjection"] = True
@@ -770,7 +770,7 @@ def install(home=None) -> bool:
                 os.unlink(temp_name)
         changed = True
     if changed:
-        print("CLE Kk 模式隔离记忆、压缩重载、极致思考与网页 GPT 协作已安装；原有账号、权限和上下文文件未覆盖。")
+        print("C.le. 模式隔离记忆、压缩重载、极致思考与网页 GPT 协作已安装；原有账号、权限和上下文文件未覆盖。")
     return changed
 
 

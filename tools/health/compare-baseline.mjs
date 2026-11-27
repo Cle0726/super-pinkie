@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {measure, repoFiles, UNMEASURED_LIST, unmeasuredPaths} from './measure.mjs';
+import {compareLoadedLists, comparePatchLists, loadedPatchNames, patchApplyFileNames, readLoadedList, readPatchList} from './patch-list.mjs';
 import {exceptionsByMetric, FILE_SECTIONS, injectionTotals, LINE_LIMIT, loadExceptions, readJson, TOTALS_OF, VERSION_SECTIONS} from './ratchet.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -181,6 +182,16 @@ async function main(args) {
     targetSkipped: fs.existsSync(path.join(targetRoot, UNMEASURED_LIST)) ? unmeasuredPaths(targetRoot) : [],
     targetHasList: fs.existsSync(path.join(targetRoot, UNMEASURED_LIST)),
   });
+  // L78（PLAN 7.1-6）：补丁清单只许删、不许加，PR 改清单放行新补丁这条路在这里堵上。
+  const patches = comparePatchLists({prList: readPatchList(ROOT), targetList: readPatchList(targetRoot),
+    targetFiles: patchApplyFileNames(targetRoot, repoFiles(targetRoot))});
+  result.failures.push(...patches.failures);
+  result.notes.push(...patches.notes);
+  // L86：加载名单（apply-all.mjs ORDER、apply-theme.sh、install.sh）登记同样只许删、不许加，换名字的新补丁也拦得住。
+  const loaded = compareLoadedLists({prList: readLoadedList(ROOT), targetList: readLoadedList(targetRoot),
+    targetNames: loadedPatchNames(targetRoot).names});
+  result.failures.push(...loaded.failures);
+  result.notes.push(...loaded.notes);
   for (const note of result.notes) console.log(`说明：${note}`);
   if (result.failures.length) {
     console.error(`代码体检基线对比没通过（和目标分支比）：\n- ${result.failures.join('\n- ')}`);

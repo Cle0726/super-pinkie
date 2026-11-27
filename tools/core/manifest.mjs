@@ -5,6 +5,7 @@
 // CLI usage:
 //   node tools/core/manifest.mjs info [--root <dir>] [--core openclaw|cle]
 //   node tools/core/manifest.mjs field <dotted.path> [--root <dir>] [--core openclaw|cle]
+//   node tools/core/manifest.mjs preflight [--root <dir>] [--core openclaw|cle] [--cache-dir <dir>]  (fails fast if the C.le. core cannot be fetched)
 //   node tools/core/manifest.mjs fetch-cle [--root <dir>] [--cache-dir <dir>]
 //   node tools/core/manifest.mjs install --prefix <dir> [--root <dir>] [--core openclaw|cle] [--registry <url>] [--cache-dir <dir>]
 //
@@ -188,6 +189,47 @@ function tryGhReleaseDownload({ repo, tag, asset, destDir }) {
     };
   }
   return { ok: true, filePath: path.join(destDir, asset) };
+}
+
+// B92/B94: say up front how to get the private C.le. core instead of failing
+// halfway through a build with a 404. build-win.ps1 swaps USERPROFILE/APPDATA
+// for an isolated folder before the core install, so a `gh auth login` on the
+// build machine is never visible there; only a token, a local tarball, a
+// file:// URL or an already verified cache copy can work.
+export function cleCorePreflight({
+  repoRoot = DEFAULT_REPO_ROOT,
+  coreOverride = process.env.PINKIE_CORE,
+  cacheDir = path.join(os.tmpdir(), 'pinkie-core-cache'),
+  localOverride = process.env.PINKIE_CLE_CORE_TARBALL,
+  token = process.env.CLE_CORE_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '',
+} = {}) {
+  const manifest = loadCoreManifest(repoRoot);
+  const selected = resolveCoreSelection(manifest, coreOverride);
+  if (selected.core !== 'cle') return { ok: true, core: selected.core, source: 'npm' };
+  const spec = manifest.cle;
+  if (localOverride && localOverride.trim()) {
+    const resolvedLocal = path.resolve(localOverride.trim());
+    if (!fs.existsSync(resolvedLocal)) {
+      throw new Error(`PINKIE_CLE_CORE_TARBALL points to a missing file: ${resolvedLocal}`);
+    }
+    return { ok: true, core: 'cle', source: 'local' };
+  }
+  if (spec.url.startsWith('file://')) return { ok: true, core: 'cle', source: 'file-url' };
+  if (token) return { ok: true, core: 'cle', source: 'token' };
+  const parsed = parseGitHubReleaseUrl(spec.url);
+  const assetName = spec.asset || parsed?.asset || `cle-core-v${spec.version}.tgz`;
+  const cachedPath = path.join(cacheDir, assetName);
+  if (fs.existsSync(cachedPath) && sha256File(cachedPath) === spec.sha256) {
+    return { ok: true, core: 'cle', source: 'cache' };
+  }
+  throw new Error(
+    `C.le. core ${spec.version} comes from the private repo ${spec.repo || parsed?.repo || 'Cle0726/cle-core'}, `
+    + 'and no way to fetch it is set. Before building, do one of:\n'
+    + '  1. set CLE_CORE_TOKEN (or GH_TOKEN) to a GitHub token that can read that repo;\n'
+    + `  2. download ${assetName} yourself and set PINKIE_CLE_CORE_TARBALL to its path (SHA-256 is still checked);\n`
+    + '  3. build the fallback package instead with PINKIE_CORE=openclaw.\n'
+    + '(gh auth login on this machine is not enough: the build hides your user folders during the core install.)',
+  );
 }
 
 export async function fetchCleCoreTarball({
@@ -422,6 +464,17 @@ async function main() {
     const val = getField(info, key);
     if (val === undefined) throw new Error(`Unknown manifest field: ${key}`);
     process.stdout.write(String(val));
+    return;
+  }
+
+  if (cmd === 'preflight') {
+    const res = cleCorePreflight({
+      repoRoot,
+      coreOverride,
+      cacheDir: flags['cache-dir'] ? path.resolve(flags['cache-dir']) : undefined,
+      localOverride: typeof flags.tarball === 'string' ? flags.tarball : undefined,
+    });
+    console.log(JSON.stringify(res));
     return;
   }
 
