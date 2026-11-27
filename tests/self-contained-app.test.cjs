@@ -160,7 +160,7 @@ test('macOS hotfix keeps the same stable local identity used by full builds', ()
   }
   assert.match(hotfix, /preserve-metadata=identifier,requirements,entitlements,flags,runtime/);
   assert.match(hotfix, /codesign -dr - "\$LAUNCHER_APP_PATH"/);
-  assert.match(hotfix, /updated CLE Kk App signature did not verify/);
+  assert.match(hotfix, /updated C\.le\. App signature did not verify/);
 });
 
 test('macOS gateway provenance detects an old executable replaced at the same app path', () => {

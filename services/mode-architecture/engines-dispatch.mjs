@@ -20,6 +20,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isMetreKey} from './session-lineage.mjs';
 import {getActiveMetreLock} from './metre-lock.mjs';
+import {drainThen, readCapped} from './engines-upstream.mjs';
 
 export const TOKEN_TTL_MS = 24 * 60 * 60_000;
 export const ACTIONS = Object.freeze(['start', 'ask', 'models', 'engine', 'engines', 'say', 'list', 'show', 'result', 'stop']);
@@ -108,19 +109,24 @@ export class EngineDispatch {
   }
 
   handle(req, res) {
-    const send = (code, body) => { res.writeHead(code, {'content-type': 'application/json; charset=utf-8'}); res.end(JSON.stringify(body)); };
+    // 回复前先把没读的请求体读掉（drainThen）：不读就回 404、或者超过上限就 req.destroy()，客户端只收到 RST，
+    // 派活小工具连一句报错都拿不到，只会说「连不上派活服务」（11-26 本机回环实测）。
+    const send = (code, body) => drainThen(req, res, () => {
+      if (res.headersSent || res.writableEnded) return;
+      res.writeHead(code, {'content-type': 'application/json; charset=utf-8'}); res.end(JSON.stringify(body));
+    });
     if (req.method !== 'POST' || req.url !== '/dispatch') return send(404, {ok: false, error: 'not found'});
-    let size = 0;
-    const chunks = [];
-    req.on('data', chunk => { size += chunk.length; if (size > MAX_BODY) req.destroy(); else chunks.push(chunk); });
-    req.on('end', async () => {
+    const tooLarge = () => send(413, {ok: false, error: `请求太大（超过 ${MAX_BODY} 字节）`});
+    if (Number(req.headers['content-length']) > MAX_BODY) return tooLarge();
+    readCapped(req, MAX_BODY).then(async raw => {
+      if (!raw) return tooLarge();
       let body;
-      try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return send(400, {ok: false, error: '请求不是 JSON'}); }
+      try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return send(400, {ok: false, error: '请求不是 JSON'}); }
       const auth = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))?.[1] || '';
       try { send(200, {ok: true, ...await this.call(auth, body)}); }
       // Metre 的报错让它「先用 pinkie_models」：外部引擎调不到这个工具，换成这里对应的写法。
       catch (error) { send(error.status || 200, {ok: false, error: clip(String(error.message).replace(/pinkie_models/g, '{"action":"models"}'), 500)}); }
-    });
+    }, () => { try { res.destroy(); } catch {} });
   }
 
   // 鉴权之后的全部动作都转调 Metre 自己用的那几处（同一条路，同一套规矩）。
