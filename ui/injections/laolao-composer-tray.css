@@ -35,13 +35,13 @@ html:not([data-laolao-mode="project"]) #laolao-project-scope[data-bound="false"]
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: var(--muted-strong, var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent)));
+  color: var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent));
   font: inherit;
   font-size: 12.5px;
   white-space: nowrap;
   cursor: pointer;
   transition: background .15s ease, color .15s ease, transform .12s ease;
-}
+} /* #261 项目模式才加深；:where 不抬特异性，hover / expanded 照样盖得过 */ :where(html[data-laolao-mode="project"]) .agent-chat__input .pinkie-tray-btn { color: var(--muted-strong, var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent))); }
 html[data-laolao-plain-composer] .agent-chat__input .pinkie-tray-btn { display: none; }
 .agent-chat__input .pinkie-tray-btn svg { width: 17px; height: 17px; flex: none; }
 .agent-chat__input .pinkie-tray-btn:is(:hover, :focus-visible, [aria-expanded="true"]) {
