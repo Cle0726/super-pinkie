@@ -126,6 +126,8 @@ jobs:
           python-version: "3.12"
       - name: Build Windows .exe
         shell: pwsh
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
         run: |
           $tokens = $null
           $errors = $null
