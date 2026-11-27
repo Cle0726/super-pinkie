@@ -256,8 +256,9 @@ test('Windows desktop launches the bundled gateway and keeps it supervised', () 
   assert.match(launcher, /threading\.Thread\(target=bootstrap/);
   assert.match(launcher, /Never kill a still-live Gateway/);
   const loading = read('ui/launcher-loading.html');
-  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\//);
-  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
+  assert.match(loading, /const gatewayPort = .*: "18789";/, 'the splash must default to the real gateway port');
+  assert.match(loading, /const gatewayUrl = `http:\/\/127\.0\.0\.1:\$\{gatewayPort\}\/`;/);
+  assert.match(loading, /location\.replace\(gatewayUrl \+ "chat"\)/);
   assert.match(loading, /mode: "no-cors"/);
   assert.match(loading, /AbortController/);
   assert.match(loading, /controller\.abort\(\), 2000\)/);

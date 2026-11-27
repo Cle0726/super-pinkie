@@ -62,7 +62,11 @@
     const status = document.getElementById("status");
     let elapsed = 0;
     // Windows passes it in the fragment, because a file URL there cannot carry a query.
-    const updated = new URLSearchParams(location.hash.slice(1) || location.search).get("updated") || "";
+    const splashParams = new URLSearchParams(location.hash.slice(1) || location.search);
+    const updated = splashParams.get("updated") || "";
+    // B95: an isolated test run moves the gateway off 18789 and passes the port here.
+    const gatewayPort = /^[0-9]{4,5}$/.test(splashParams.get("gateway") || "") ? splashParams.get("gateway") : "18789";
+    const gatewayUrl = `http://127.0.0.1:${gatewayPort}/`;
     if (updated && status) status.textContent = "更新已装好，正在打开新版本…";
     // Windows only: the native bridge (pywebview js_api) also exists on this
     // file:// page. 2.5.36 users sat here for ever because nothing on this
@@ -117,11 +121,11 @@
         // cross-thread load_url calls that can make the window appear hung.
         // file:// -> http:// is cross-origin. Without no-cors, a healthy
         // Gateway response is rejected by CORS and the splash waits forever.
-        await fetch("http://127.0.0.1:18789/", { cache: "no-store", mode: "no-cors", signal: controller.signal });
+        await fetch(gatewayUrl, { cache: "no-store", mode: "no-cors", signal: controller.signal });
         clearTimeout(timer);
         // The gateway root is the upstream control-console overview. CLE Kk
         // always enters through the themed chat route after the movie.
-        location.replace("http://127.0.0.1:18789/chat");
+        location.replace(gatewayUrl + "chat");
         return;
       } catch (_) {
         clearTimeout(timer);
