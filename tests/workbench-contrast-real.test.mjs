@@ -1,7 +1,8 @@
 // B11·workbench 复发防护（真页面，Chromium）：项目 / 无限模式工作台日夜 × 1440 / 820。
 // 对比度（判据同 tools/pr-shots/b11-project-walkthrough.mjs：小字 ≥ 4.5，控件边框 / 图标 ≥ 3）：
-//   空态「打开项目文件夹…」字与边框、项目条「未打开 / 主目录」、窄屏「代码 / 对话」切换、状态栏 C.le. 标志（遮罩，取 backgroundColor）、活动栏选中图标。
+//   空态「打开项目文件夹…」字与边框、项目条「未打开 / 主目录」、窄屏「代码 / 对话」切换、状态栏 C.le. 标志（遮罩，按 backgroundImage 渐变各色标逐个量取最低，无渐变才退回 backgroundColor）、活动栏选中图标。
 //   走查旧值（日间）：边框 1.26，夜间字 4.25，标签 3.24，「对话」3.25 / 4.31，标志 1.0，codicon-files 2.98。
+//   标志反例 = main 的渐变 + 只加一层被盖住的底色（不动渐变），日间必须量出不合格。
 // 820 状态栏：任意两项不按走查的 overlap 判据互压（互不包含、相交 ≥ 较小框 15%、相交中心点落在其中一框内），左右两半不相交。
 // 反例：贴回旧配方必须量出不合格；820 撤掉 fitStatus 的整项隐藏并贴回 B50 前的状态栏规则，必须量出互压。
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ const OLD_RECIPE = `
 .pk-wb-project__tag.pk-wb-project__tag { color: var(--wb-cle) !important; }
 .pk-wb-open-project.pk-wb-open-project { color: inherit !important; border-color: var(--wb-line) !important; }
 .pk-workspace-header__views button:not([aria-selected="true"]) { color: var(--muted) !important; }
-.pk-wb-mark.pk-wb-mark { background-color: transparent !important; }
+.pk-wb-mark.pk-wb-mark { background: linear-gradient(110deg, var(--accent, #ff7aa2), var(--cle-accent, #62b4ff)) color-mix(in srgb, var(--wb-accent, #ff7aa2) 55%, var(--wb-text, #efe5ea)) !important; }
 `;
 const OLD_STATUS = `
 .pk-wb-status > .pk-wb-status__side:first-child { flex: none !important; }
@@ -106,7 +107,15 @@ function measure() {
   for (const el of document.querySelectorAll('.pk-workspace-header__views > button')) {
     if (vis(el)) push(`views「${el.textContent.trim()}」·字`, 'text', el, getComputedStyle(el).color, [bgOf(el)]);
   }
-  for (const el of document.querySelectorAll('.pk-wb-status__mode .pk-wb-mark')) if (vis(el)) push('mark·图标', 'icon', el, getComputedStyle(el).backgroundColor, [bgOf(el.parentElement)]);
+  for (const el of document.querySelectorAll('.pk-wb-status__mode .pk-wb-mark')) {
+    if (!vis(el)) continue;
+    const cs = getComputedStyle(el);
+    const stops = cs.backgroundImage && cs.backgroundImage !== 'none' ? cs.backgroundImage.match(/(?:rgba?|color)\([^()]*\)/g) || [] : [];
+    const n = out.length;
+    for (const c of stops.length ? stops : [cs.backgroundColor]) push('mark·图标', 'icon', el, c, [bgOf(el.parentElement)]);
+    const worst = out.splice(n).reduce((a, b) => (b.ratio < a.ratio ? b : a));
+    out.push({...worst, stops: stops.length});
+  }
   for (const el of document.querySelectorAll('.pk-wb-act.is-active .codicon')) {
     if (vis(el)) push(el.classList.contains('codicon-files') ? 'files·图标' : 'act·图标', 'icon', el, getComputedStyle(el).color, [bgOf(el)]);
   }
