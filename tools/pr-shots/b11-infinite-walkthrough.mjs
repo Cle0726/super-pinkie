@@ -163,20 +163,29 @@ const measure = (page, limit) => page.evaluate((LIMIT) => {
     if (!r || r.width > 40 || r.height > 40) continue;
     if (e.closest?.('[aria-hidden="true"]') && !e.closest?.(interactiveSel)) continue;   // 纯装饰
     const s = getComputedStyle(e);
-    let paint = null;
+    const bg = bgOf(parentOf(e) || e);
+    let paint = null, fg = null, k = -1;
     if (e.localName === 'svg') {
-      const shape = e.querySelector('path, circle, rect, line, polyline, polygon, ellipse');
-      const ss = shape ? getComputedStyle(shape) : s;
-      const stroke = ss.stroke && ss.stroke !== 'none' ? P(ss.stroke) : null;
-      const fill = ss.fill && ss.fill !== 'none' && !String(ss.fill).startsWith('url') ? P(ss.fill) : null;
-      paint = (stroke && stroke.a > 0 ? stroke : null) || (fill && fill.a > 0 ? fill : null);
+      // 第一个子图形不代表图标色（进度环先画一圈浅色轨道），fill-opacity / stroke-opacity 也要算：逐个子图形，
+      // stroke / fill 各按自身 opacity 与各层 opacity 叠出墨色，跳过 none、url() 渐变和全透明，取对比度最高的一笔。
+      for (const g of e.querySelectorAll('path, circle, rect, line, polyline, polygon, ellipse, use, text')) {
+        const gs = getComputedStyle(g);
+        if (gs.display === 'none' || gs.visibility === 'hidden') continue;
+        for (const [raw, alpha, on] of [[gs.stroke, gs.strokeOpacity, parseFloat(gs.strokeWidth) > 0], [gs.fill, gs.fillOpacity, g.localName !== 'line']]) {
+          if (!on || !raw || raw === 'none' || String(raw).startsWith('url')) continue;
+          const c = P(raw), a = c.a * (Number.isNaN(parseFloat(alpha)) ? 1 : parseFloat(alpha)) * effOpacity(g);
+          if (a <= 0) continue;
+          const f = over({...c, a}, bg.color), r2 = ratio(f, bg.color);
+          if (r2 > k) { k = r2; fg = f; paint = c; }
+        }
+      }
+      if (!fg) continue;
     } else {
       paint = P(s.color);
+      if (!paint || paint.a === 0) continue;
+      fg = over({...paint, a: paint.a * effOpacity(e)}, bg.color);
+      k = ratio(fg, bg.color);
     }
-    if (!paint || paint.a === 0) continue;
-    const bg = bgOf(parentOf(e) || e);
-    const fg = over({...paint, a: paint.a * effOpacity(e)}, bg.color);
-    const k = ratio(fg, bg.color);
     if (k < 3) icon.push({sel: selOf(e), owner: selOf(e.closest?.(interactiveSel) || parentOf(e) || e), ratio: k, paint: rgb(paint), bg: rgb(bg.color), bgImage: bg.image, ...box(r)});
   }
 
