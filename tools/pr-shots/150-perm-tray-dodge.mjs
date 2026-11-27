@@ -4,8 +4,9 @@
 // 真装的 Control UI + Metre（tests/visual/lib/real-harness.mjs 的 metre-board 场景，关掉看板），和 mac2 的 B 路一样：
 // 320 宽时「⋯」为躲右下角的麦克风（button.chat-send-btn / #laolao-native-dictation）让到行首，改前又落在左下角
 // 浮着的托盘键 button.pinkie-tray-btn 底下，点中心打不开会话详情。360 宽作对照（改前就正常）。
-// 每格（320 / 360 × 日 / 夜）拍两张：按键行（输入区）、点「⋯」中心后的整页；shots.jsonl 每行另记
-// fold / dodge / padLeft / statHit（「⋯」中心点下去是不是它自己）/ top（中心点最上层是谁）/ opened。
+// 每格（320 / 360 × 日 / 夜）拍三张：按键行（输入区）、点「⋯」中心后的整页、关掉详情后再 fit 一次的按键行（refit-row）；
+// shots.jsonl 每行另记 fold / dodge / padLeft / statHit（「⋯」中心点下去是不是它自己）/ top（中心点最上层是谁）/ coveredBy / opened。
+// report.json 另记 refit（再 fit 后的状态）和 forced（临时排到行首量一次的位置、被谁盖、按键行右沿，量完即还原）。
 // 最后再把同一页放宽到 820 量一次，记下放宽后是否回到原位（fold 0、没有 data-dodge、没有让位距离）。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,23 +37,36 @@ const shoot = async (page, name, sel, extra) => {
   record(name, file, extra);
 };
 
-// 量「⋯」：位置、中心点的 elementsFromPoint 栈、哪些浮着的键盖住了它
-const probe = () => {
+// 量「⋯」：位置、中心点的 elementsFromPoint 栈、哪些浮着的键盖住了它、按键行（controls）的右沿。
+// force=true：同一个任务里临时排到行首（data-dodge=1、去掉让位距离）同步量一次，量完原样还原；
+// 只在 refit 之后、放宽之前用一次，给「让到行首后会被谁盖、让不让得开」留数据（uireview 2026-11-27T01:58Z）。
+const probe = (force) => {
   const R = (r) => [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
   const name = (n) => n ? (n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (typeof n.className === 'string' && n.className ? '.' + n.className.trim().split(/\s+/).join('.') : '')) : null;
   const box = document.querySelector('.chat-main .agent-chat__composer-controls > .pk-perm-chips');
   const stat = box?.querySelector('.pk-perm-chip--stat');
   const input = box?.closest('.agent-chat__input');
   if (!stat) return {found: false};
-  const r = stat.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  const top = document.elementFromPoint(cx, cy);
-  const floats = [...(input?.querySelectorAll('button, summary, [role="button"]') || [])].filter((b) => !b.closest('.pk-perm-chips') && /^(?:absolute|fixed)$/.test(getComputedStyle(b).position))
-    .map((b) => ({el: name(b), rect: R(b.getBoundingClientRect()), b: b.getBoundingClientRect()})).filter((f) => f.b.width > 0 && f.b.height > 0);
-  const coveredBy = floats.filter((f) => Math.min(r.right, f.b.right) - Math.max(r.left, f.b.left) > 1 && Math.min(r.bottom, f.b.bottom) - Math.max(r.top, f.b.top) > 1).map((f) => f.el);
-  return {found: true, fold: box.dataset.fold ?? null, dodge: box.dataset.dodge ?? null, padLeft: box.style.paddingLeft || null, label: stat.textContent.trim(),
-    stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
-    stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(name), coveredBy, floats: floats.map(({el, rect}) => ({el, rect})),
-    chips: R(box.getBoundingClientRect()), inputH: input ? Math.round(input.getBoundingClientRect().height) : null};
+  const saved = force ? {dodge: box.dataset.dodge, pad: box.style.paddingLeft} : null;
+  if (force) { box.dataset.dodge = '1'; box.style.paddingLeft = ''; }
+  try {
+    const r = stat.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const top = document.elementFromPoint(cx, cy);
+    const floats = [...(input?.querySelectorAll('button, summary, [role="button"]') || [])].filter((b) => !b.closest('.pk-perm-chips') && /^(?:absolute|fixed)$/.test(getComputedStyle(b).position))
+      .map((b) => ({el: name(b), rect: R(b.getBoundingClientRect()), b: b.getBoundingClientRect()})).filter((f) => f.b.width > 0 && f.b.height > 0);
+    const coveredBy = floats.filter((f) => Math.min(r.right, f.b.right) - Math.max(r.left, f.b.left) > 1 && Math.min(r.bottom, f.b.bottom) - Math.max(r.top, f.b.top) > 1).map((f) => f.el);
+    const controls = box.parentElement?.getBoundingClientRect();
+    return {found: true, forced: Boolean(force), fold: box.dataset.fold ?? null, dodge: box.dataset.dodge ?? null, padLeft: box.style.paddingLeft || null, label: stat.textContent.trim(),
+      stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
+      stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(name), coveredBy, floats: floats.map(({el, rect}) => ({el, rect})),
+      chips: R(box.getBoundingClientRect()), controls: controls ? R(controls) : null, controlsRight: controls ? Math.round(controls.right) : null,
+      inputH: input ? Math.round(input.getBoundingClientRect().height) : null};
+  } finally {
+    if (saved) {
+      if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
+      box.style.paddingLeft = saved.pad;
+    }
+  }
 };
 
 const installed = H.installRealControlUi({repoRoot: root});
@@ -81,12 +95,20 @@ try {
         await page.mouse.move(0, 0);
         await shoot(page, `${base}-detail`, null, {...rec, opened});
         await page.keyboard.press('Escape');
+        // refit：麦克风等浮键可能在最后一次 fit 之后才到位、输入框高度没变就不会再量；手动再量一次看最终状态
+        await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
+        await page.waitForTimeout(1800);
+        const {center: _rc, ...refit} = await page.evaluate(probe);
+        await page.mouse.move(0, 0);
+        await shoot(page, `${base}-refit-row`, '.chat-main .agent-chat__input', {...refit, refit: true});
+        // 临时排到行首量一次（同步还原，不拍图）：让到行首后会被谁盖、按键行右沿在哪
+        const {center: _fc, ...forced} = await page.evaluate(probe, true);
         // 放宽：回到原位
         await page.setViewportSize({width: 820, height: HEIGHT});
         await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
         await page.waitForTimeout(1800);
         const wide = await page.evaluate(probe);
-        report.push({theme, width, row: rec, opened, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
+        report.push({theme, width, row: rec, opened, refit, forced, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
       } catch (error) {
         report.push({theme, width, error: error.message, pageErrors});
       } finally {
@@ -104,5 +126,11 @@ fs.appendFileSync(path.join(out, 'shots.jsonl'), lines.map((l) => JSON.stringify
 console.log(`pr-shots: ${lines.length} 张 → ${out}`);
 for (const r of report) {
   if (r.error) console.log(`pr-shots: ${r.theme} ${r.width} 出错：${r.error}`);
-  else console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} statHit=${r.row.statHit} top=${r.row.top} opened=${r.opened} | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
+  else {
+    const cov = (p) => (p?.coveredBy?.length ? p.coveredBy.join('+') : '-');
+    console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
+      + ` | refit dodge=${r.refit?.dodge} pad=${r.refit?.padLeft} statHit=${r.refit?.statHit} top=${r.refit?.top} coveredBy=${cov(r.refit)}`
+      + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight}`
+      + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
+  }
 }
