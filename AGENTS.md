@@ -18,6 +18,7 @@
 - **1500 行上限**：新文件不得超过 1500 行；已有超限文件只许变小，改善后同步 `tools/health/baseline.json`。
 - 拆出 `services/mode-architecture/*.mjs` 新模块须同步 `setup.py` 与 `installer/macos/apply-theme.sh`；`app/windows_*.py` 须使用顶层导入优先 + `from app.<mod>` 兜底。
 - **补丁与内核**：K5 切换前，修改 `patch/apply-*.mjs` 后必须在 Mac 运行 `tools/windows-package/refresh_mac_runtime.py` 刷新 `desktop/windows/mac-runtime/` 快照，Windows 包才会生效。自有内核 C.le. 源码在私有仓库 `Cle0726/cle-core` 开发，发版后在碧琪更新 `core-manifest.json`。
+- **不再新增补丁（PLAN 7.1-6，11-27 起）**：从现在起改内核行为一律去 `cle-core` 改、发新的内核小版本，碧琪只更新 `core-manifest.json` 里的版本号；碧琪不再新增任何 `patch/apply-*.mjs`。现有补丁按名字登记在 `tools/health/patch-files.json`，只许删、不许加（棘轮测试与 CI 目标分支对比都会拦）；补丁搬进 `cle-core` 后删文件时同一 PR 删掉对应行，现有补丁文件留到 K5 清理。
 - **社区技能**：放入 `skills/<name>/SKILL.md` 并登记到 `skills/community-skills.json`。
 
 ## 4. 测试与复发防护
