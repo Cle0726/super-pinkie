@@ -295,7 +295,10 @@ export class EngineShip {
     this.ghBin = gh;
   }
 
-  // 哪个会话、哪段引擎对话、在哪个文件夹、引擎此刻在不在做。
+  // 哪个会话、哪段引擎对话、在哪个文件夹、引擎此刻在不在做。why 不空 = 这次不能提交、不能开 PR（status 照实说，commit / openPr 拒绝）。
+  // 文件夹只认线程摘要：开在新工作树里就是摘要里的 thread.worktree，不然是开对话时记下的那个文件夹（pref.folder）。
+  // 拿不到摘要（引擎服务没在跑、thread() 抛错、摘要里没有线程）就不猜：工作树路径只在摘要里，pref.folder 是项目根，
+  // 退回去会在项目根给出 token，把用户自己没提交的改动 add -A 掉；也看不出引擎是不是还在做（#445 linuxwatch 11:54Z）。
   async where(params = {}) {
     const key = String(params.sessionKey || '');
     if (!METRE.test(key)) throw shipFail('提交和开 PR 只在 Metre 的会话里用');
@@ -304,9 +307,13 @@ export class EngineShip {
     const pref = b.sessions.get(key) || {};
     if (!pref.threadId) throw shipFail('这个会话还没交给外部引擎做过，没有可以提交的改动。');
     let summary = null;
-    try { summary = await b.thread(pref.threadId); } catch { /* 引擎服务没在跑：照样能看文件夹里的 git */ }
-    const folder = summary?.thread?.worktree || pref.folder || b.folderFor(key);
-    return {key, folder: String(folder || ''), busy: BUSY.has(String(summary?.status || ''))};
+    try { summary = await b.thread(pref.threadId); } catch { summary = null; }
+    if (!summary || typeof summary.thread !== 'object' || !summary.thread) {
+      return {key, folder: '', busy: true, why: '引擎服务没在跑，看不出改动在哪个文件夹、引擎是不是还在做；等引擎服务起来再提交或开 PR。'};
+    }
+    const folder = String(summary.thread.worktree || pref.folder || b.folderFor?.(key) || '');
+    if (!folder) return {key, folder: '', busy: true, why: '看不出这段对话的改动在哪个文件夹，不能提交或开 PR。'};
+    return {key, folder, busy: BUSY.has(String(summary.status || '')), why: ''};
   }
 
   sh(cmd, args, cwd) { return this.run(cmd, args, {cwd, timeout: 120_000}); }
@@ -329,6 +336,7 @@ export class EngineShip {
     const w = await this.where(params);
     const out = {ready: false, why: '', folder: w.folder, busy: w.busy, branch: '', head: '', files: [], remote: false, pr: null,
       canCommit: false, commitWhy: '', commitToken: '', canPr: false, prWhy: '', prToken: ''};
+    if (w.why) { Object.assign(out, {why: w.why, commitWhy: w.why, prWhy: w.why}); return out; } // 不跑任何 git / gh，不给 token
     const g = await this.look(w.folder);
     if (!g) { out.why = '这个文件夹不是 git 仓库。'; return out; }
     Object.assign(out, {ready: true, branch: g.branch, head: g.head, files: g.files.slice(0, 500), remote: g.remote});
@@ -365,6 +373,7 @@ export class EngineShip {
   // 只有界面上点了「确认提交」才来这里。confirm 必须是 status 给的 commitToken，和此刻的头、改动一致。
   async commit(params = {}) {
     const w = await this.where(params);
+    if (w.why) throw shipFail(w.why);
     const message = String(params.message || '').trim();
     if (!message) throw shipFail('请写一句提交说明。');
     if (w.busy) throw shipFail('引擎还在做，做完再提交。');
@@ -385,6 +394,7 @@ export class EngineShip {
   // 只有界面上点了「确认开 PR」才来这里。confirm 必须是 status 给的 prToken（分支 + 头）。只普通 push，不 force，不合并。
   async openPr(params = {}) {
     const w = await this.where(params);
+    if (w.why) throw shipFail(w.why);
     const title = String(params.title || '').trim().slice(0, 200);
     if (!title) throw shipFail('请写 PR 标题。');
     const g = await this.look(w.folder);

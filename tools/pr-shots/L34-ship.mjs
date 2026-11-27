@@ -3,7 +3,7 @@
 // 约定照 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + 追加 <目录>/shots.jsonl。
 // 页面照 tools/pr-shots/127-engine-upstream.mjs 搭：真的 Metre 皮肤、引擎台样式和脚本、共用观察器、本功能的脚本和样式；
 // 网关是假的（只在页面里回会话、目录、改动和 pinkie.engines.ship.*），不连网关、不碰用户会话、不跑 git / gh。
-// 每格（1440 / 820 × 日 / 夜）拍四张，共 16 张：
+// 每格（1440 / 820 / 560 × 日 / 夜）拍四张，共 24 张（560 时改动面板盖住整个引擎台，是窄窗的样子）：
 //   ship-drawer   打开「改动」面板：有两个文件没提交，「提交…」能点，「开 PR…」灰着并写原因
 //   ship-commit   点了「提交…」：确认框（几个文件、哪个分支、写好的提交说明），还没提交
 //   ship-clean    点了「确认提交」以后：结果一行，「提交…」灰着，「开 PR…」能点
@@ -80,7 +80,7 @@ const lines = [];
 const report = [];
 const ORIGIN = 'http://127.0.0.1:30134';
 try {
-  for (const width of [1440, 820]) for (const night of [false, true]) {
+  for (const width of [1440, 820, 560]) for (const night of [false, true]) {
     const height = 900, tag = `${width}-${night ? 'night' : 'day'}`;
     const ctx = await browser.newContext({viewport: {width, height}, colorScheme: night ? 'dark' : 'light', locale: 'zh-CN'});
     const tab = await ctx.newPage();
@@ -132,4 +132,4 @@ try {
   await browser.close();
 }
 console.log(`pr-shots L34: ${lines.length} 张 → ${out}`);
-if (lines.length !== 16) { console.error('expected 16 shots'); process.exit(1); }
+if (lines.length !== 24) { console.error('expected 24 shots'); process.exit(1); }

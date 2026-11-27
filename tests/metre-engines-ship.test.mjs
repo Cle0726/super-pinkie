@@ -11,7 +11,7 @@ const KEY = 'agent:metre:ship';
 const HEAD = 'abc1234def5678abc1234def5678abc1234def56';
 
 function harness({repo = true, branch = 'feat/x', head = HEAD, porcelain = ' M src/a.js\n?? notes.md\n', remote = true, auth = 0, pr = null,
-  status = 'done', threadId = 't1', worktree = null, commitFail = '', pushFail = false} = {}) {
+  status = 'done', threadId = 't1', worktree = null, commitFail = '', pushFail = false, threadError = undefined} = {}) {
   const calls = [];
   const state = {head, porcelain};
   const ok = (stdout = '') => ({code: 0, stdout, stderr: ''});
@@ -40,7 +40,7 @@ function harness({repo = true, branch = 'feat/x', head = HEAD, porcelain = ' M s
   };
   const bridge = {
     sessions: {get: (key) => (key === KEY ? {engine: 'claudeAgent', model: 'haiku', threadId, folder: '/proj'} : null)},
-    thread: async () => ({status, thread: {worktree}}),
+    thread: async () => { if (threadError) throw threadError; return threadError === null ? null : {status, thread: {worktree}}; },
     folderFor: () => '/scratch',
   };
   const ship = new EngineShip({bridge: () => bridge, run});
@@ -165,6 +165,32 @@ test('开 PR：确认对了才普通 push（不 force）+ gh pr create --draft�
   const u = await rejected.ship.status({sessionKey: KEY});
   await assert.rejects(rejected.ship.openPr({sessionKey: KEY, title: 'x', confirm: u.prToken}), (e) => /没推上去/.test(e.message) && !/ghp_/.test(e.message));
   assert.ok(!rejected.writes().some((c) => c.cmd === 'gh'), '推送失败不开 PR');
+});
+
+// #445 linuxwatch 11:54Z：引擎服务没在跑（thread() 抛错）时，不能退回 pref.folder（对话开在新工作树里时那是项目根），
+// 也不能把「看不出在不在做」当成没在做。status 不给 token、不跑任何 git / gh；commit / openPr 就算带着「对的」token 也拒绝。
+test('反例：引擎服务没在跑、pref.folder 是项目根 → status 不给 token，commit / openPr 拒绝，一条命令都不跑', async () => {
+  // 「对的」token：用同样的项目根状态、引擎服务在跑时算出来的那份（攻击面就是拿它去项目根提交）。
+  const healthy = await harness().ship.status({sessionKey: KEY});
+  const healthyClean = await harness({porcelain: ''}).ship.status({sessionKey: KEY});
+  assert.ok(healthy.commitToken && healthyClean.prToken);
+  for (const threadError of [new Error('引擎服务没有在运行'), null]) {
+    const h = harness({threadError});
+    const s = await h.ship.status({sessionKey: KEY});
+    assert.equal(s.canCommit, false);
+    assert.equal(s.canPr, false);
+    assert.equal(s.commitToken, '');
+    assert.equal(s.prToken, '');
+    assert.equal(s.ready, false);
+    assert.match(s.why, /引擎服务没在跑/);
+    assert.match(s.commitWhy, /引擎服务没在跑/);
+    assert.match(s.prWhy, /引擎服务没在跑/);
+    assert.notEqual(s.folder, '/proj', '不退回 pref.folder');
+    await assert.rejects(h.ship.commit({sessionKey: KEY, message: 'x', confirm: healthy.commitToken}), /引擎服务没在跑/);
+    const clean = harness({threadError, porcelain: ''});
+    await assert.rejects(clean.ship.openPr({sessionKey: KEY, title: 't', confirm: healthyClean.prToken}), /引擎服务没在跑/);
+    assert.deepEqual([...h.calls, ...clean.calls], [], '一条 git / gh 都不跑');
+  }
 });
 
 test('registerEngineShip 只注册三个方法：status / commit / openPr', () => {
