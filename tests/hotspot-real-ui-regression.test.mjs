@@ -56,15 +56,17 @@ function rectsOverlap(a, b) {
 }
 
 test('M5 real-page hotspot UI regression suite (10 checks on real Control UI)', async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  const browser = await launchRealBrowser();
-
+  let installed, server, browser;
+  // B55: cleanup is registered before anything starts; a browser that failed to launch used to leave the
+  // server listening, so the file never exited and windows-checks waited out its 30-minute limit.
   t.after(async () => {
-    await browser.close();
-    await server.close();
-    installed.cleanup();
+    await browser?.close();
+    await server?.close();
+    installed?.cleanup();
   });
+  installed = installRealControlUi({repoRoot: REPO_ROOT});
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
 
   await t.test('H1 [HOTSPOTS #5/#30]: Windows native window controls are unobstructed and do not overlap topbar controls', async () => {
     const {context, page, pageErrors, failedRequests} = await openRealScenePage(browser, server.origin, 'sidebar-expanded', 'day');
