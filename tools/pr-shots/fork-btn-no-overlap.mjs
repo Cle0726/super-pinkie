@@ -62,7 +62,7 @@ const installed = H.installRealControlUi({repoRoot: root});
 const server = await H.startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: root, runDir: installed.runDir});
 const browser = await H.launchRealBrowser(engine);
 try {
-  for (const scene of ['short-conversation', 'long-conversation']) {
+  for (const scene of F.SCENES) {
     for (const width of [1440, 820]) {
       for (const theme of ['day', 'night']) {
         const {context, page, pageErrors} = await F.openScene(browser, server.origin, scene, theme, width);
@@ -81,7 +81,7 @@ try {
           await shoot(page, `${base}-after`, pick, now.overText);
           await page.addStyleTag({content: MAIN_CSS});
           const before = await page.evaluate(putMain, pick);
-          await F.hoverKeyGroup(page, pick);
+          await F.hoverKeyGroup(page, pick, {force: true}); // 改前的键就压在正文上，会挡住普通悬停
           await shoot(page, `${base}-before`, pick, before);
           if (pageErrors.length) throw new Error(`${base} 页面报错：${pageErrors.join(' | ').slice(0, 300)}`);
         } finally {
