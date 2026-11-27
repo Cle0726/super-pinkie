@@ -285,7 +285,7 @@ test('I7 只在 Metre：其他五个模式存了 Ctrl + Enter 也不拦；存了
   assert.deepEqual(odd.lookPressed('send'), ['enter']);
 });
 
-test('I7 前提：碧琪共用的 4 个 Enter 钩子都挂在 document 捕获阶段（window 捕获先于它们），本 PR 没改这 4 个文件', () => {
+test('I7 前提：碧琪共用的 4 个 Enter 钩子都挂在 document 捕获阶段（window 捕获先于它们），守卫仍以 key !== "Enter" 开头', () => {
   for (const f of ['laolao-queue-steer.js', 'laolao-resume.js', 'laolao-immersion.js', 'laolao-companion.js']) {
     const text = read('ui/injections/' + f);
     assert.match(text, /document\.addEventListener\("keydown", \((?:e|event)\) => \{\n\s+if \((?:e|event)\.key !== "Enter"/, f);

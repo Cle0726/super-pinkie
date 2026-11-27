@@ -382,7 +382,7 @@
   };
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.altKey) return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229 || event.altKey) return;
     const pane = paneForEvent(event);
     if (getFollowUpMode(pane) === "queue") return;
     const input = composerForEvent(event);
