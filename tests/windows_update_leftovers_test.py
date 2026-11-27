@@ -134,14 +134,17 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
             f'-WindowStyle Hidden & ping -n 60 127.0.0.1 >nul & rem {self.install}"',
             creationflags=subprocess.CREATE_NO_WINDOW)
         self.children.append(opener)
-        time.sleep(2.5)
         log = self.root / "updater.log"
         functions = extract_functions(["Write-UpdateLog", "Stop-InstallLeftovers"])
+        # Instead of a fixed pause, the probe waits (bounded) until the opener
+        # has started its program; "before=1" below still reports a timeout.
         out = self.run_powershell(textwrap.dedent(f"""
             $ErrorActionPreference = 'Stop'
             $LogPath = '{log}'
             $StateRoot = '{self.state}'
             {functions}
+            $until = (Get-Date).AddSeconds(20)
+            while ((Get-Date) -lt $until -and @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }}).Count -lt 1) {{ Start-Sleep -Milliseconds 200 }}
             'before=' + @(Get-CimInstance Win32_Process -Filter "Name='PING.EXE'" | Where-Object {{ $_.CommandLine -like '*-n 67 *' }}).Count
             'root=' + (Get-Item -LiteralPath '{self.install}').FullName
             @(Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object {{ $_.CommandLine -like '*rem *' }}) | ForEach-Object {{ 'cmd#' + $_.ProcessId + ' ' + $_.CommandLine }}
@@ -194,6 +197,44 @@ class LeftoverProcessIntegrationTest(unittest.TestCase):
         self.assertTrue((self.install / "超級碧琪.exe").is_file())
         self.assertFalse(backup.exists())
         self.assertFalse(restore.exists())
+        self.assertIn("previous version restored at sign-in", log.read_text(encoding="utf-8-sig"))
+
+    def test_restore_at_sign_in_survives_curly_quotes_in_the_paths(self):
+        # B33: PowerShell also ends '...' at ‘ ’ ‚ ‛. With only ' doubled,
+        # restore-<token>.ps1 for an install under O’Brien did not even parse.
+        from app.windows_desktop import ps_single_quoted
+        home = self.root / "O’Brien ‘a‚b‛"
+        home.mkdir()
+        install = home / "超級碧琪"
+        backup = home / "超級碧琪.previous-0123"
+        backup.mkdir()
+        (backup / "超級碧琪.exe").write_text("exe", encoding="utf-8")
+        updates = home / "updates"
+        updates.mkdir()
+        log = home / "updater.log"
+        functions = extract_functions(["Write-UpdateLog", "Register-RestoreAtLogon"])
+        out = self.run_powershell(textwrap.dedent(f"""
+            $ErrorActionPreference = 'Stop'
+            $TargetDir = {ps_single_quoted(install)}
+            $Backup = {ps_single_quoted(backup)}
+            $UpdateRoot = {ps_single_quoted(updates)}
+            $LogPath = {ps_single_quoted(log)}
+            $Token = '0123456789abcdef0123456789abcdef'
+            function New-Item {{ param($Path, [switch]$Force) }}
+            function Set-ItemProperty {{ param($Path, $Name, $Value) "runonce=$Name|$Value" }}
+            {functions}
+            Register-RestoreAtLogon
+        """))
+        self.assertIn("runonce=SuperPinkieRestore-01234567|", out)
+        restore = next(updates.glob("restore-*.ps1"))
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(restore)],
+            capture_output=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        self.assertEqual(result.stderr, b"", result.stderr.decode("utf-8", "replace"))
+        self.assertTrue((install / "超級碧琪.exe").is_file())
+        self.assertFalse(backup.exists())
         self.assertIn("previous version restored at sign-in", log.read_text(encoding="utf-8-sig"))
 
 

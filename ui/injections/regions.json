@@ -123,6 +123,8 @@
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
         "laolao-composer-history.js",
+        "laolao-composer-bang.css",
+        "laolao-composer-bang.js",
         "laolao-composer-dock.js",
         "laolao-context-compact.js",
         "laolao-queue-steer.js",
@@ -186,7 +188,9 @@
         "laolao-reading-view.js",
         "laolao-usage-stats.css",
         "laolao-usage-stats.js",
-        "laolao-capabilities.js"
+        "laolao-capabilities.js",
+        "laolao-side-by-side.css",
+        "laolao-side-by-side.js"
       ]
     },
     {
@@ -243,6 +247,8 @@
         "laolao-metre-preview.js",
         "laolao-metre-files.css",
         "laolao-metre-files.js",
+        "laolao-metre-library.css",
+        "laolao-metre-library.js",
         "laolao-metre-code.css",
         "laolao-metre-brand.css",
         "laolao-metre-brand.js",
@@ -292,6 +298,7 @@
       "files": [
         "laolao-workbench.css",
         "laolao-workbench.js",
+        "laolao-workbench-term.js",
         "laolao-workspace-focus.css",
         "laolao-workspace-focus.js"
       ]

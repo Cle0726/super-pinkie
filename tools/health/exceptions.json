@@ -162,6 +162,18 @@
     "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
   },
   {
+    "file": "ui/injections/laolao-workbench.js",
+    "metric": "lines",
+    "value": 2345,
+    "reason": "B30（ui，uireview #218 记）：差异标签拆成文件名 + 比较说明（renderTabs 里 +1 行），标签栏溢出时被挤出的一头淡出并露出「全部标签」键（键 1 行、溢出判断 1 行、scroll / ResizeObserver 挂钩 1 行、注释 1 行、renderTabs 末尾调用 1 行），共 +6；没有新增全局名、MutationObserver 或定时器（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-workbench.css",
+    "metric": "lines",
+    "value": 642,
+    "reason": "B30（ui）：差异标签文件名不缩、比较说明带省略号 1 行，标签栏两头淡出（mask）1 行，「全部标签」键 1 行，注释 1 行，共 +4；0 个 !important（B 类，只允许本次实测值）。"
+  },
+  {
     "file": "ui/injections/laolao-metre-board-data.js",
     "metric": "lines",
     "value": 541,

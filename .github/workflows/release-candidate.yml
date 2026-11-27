@@ -52,6 +52,20 @@ jobs:
           version="$(python3 -c 'import json; print(json.load(open("desktop/windows/runtime-manifest.json"))["openclaw"])')"
           npm install -g "openclaw@$version"
           python3 -m pip install --disable-pip-version-check edge-tts aiohttp
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build the release-channel macOS package (not published)
         shell: bash
         env:
@@ -175,6 +189,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
+        env:
+          CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
       - name: Build the release-channel Windows package (not published)
         shell: pwsh
         env:
@@ -216,6 +244,7 @@ jobs:
   windows-smoke:
     needs: windows
     uses: ./.github/workflows/windows-smoke.yml
+    secrets: inherit
     with:
       app_artifact: windows-onedir
       old_tag: ${{ inputs.old_tag || 'v2.5.49' }}
@@ -225,6 +254,7 @@ jobs:
     # legacy migration failure only after a tag has been pushed.
     needs: windows
     uses: ./.github/workflows/windows-smoke.yml
+    secrets: inherit
     with:
       app_artifact: windows-onedir
       old_tag: v2.5.16
@@ -233,6 +263,7 @@ jobs:
   windows-in-place-update:
     needs: windows
     uses: ./.github/workflows/windows-update-probe.yml
+    secrets: inherit
     with:
       candidate_artifact: windows-rc-portable
       from_tags: ${{ inputs.old_tag || 'v2.5.49' }}
@@ -243,6 +274,7 @@ jobs:
     if: inputs.old_tag != 'v2.5.32'
     needs: windows
     uses: ./.github/workflows/windows-update-probe.yml
+    secrets: inherit
     with:
       candidate_artifact: windows-rc-portable
       from_tags: v2.5.32
