@@ -81,7 +81,7 @@ try {
           await shoot(page, `${base}-after`, pick, now.overText);
           await page.addStyleTag({content: MAIN_CSS});
           const before = await page.evaluate(putMain, pick);
-          await F.hoverKeyGroup(page, pick, {force: true}); // 改前的键就压在正文上，会挡住普通悬停
+          await F.hoverKeyGroup(page, pick);
           await shoot(page, `${base}-before`, pick, before);
           if (pageErrors.length) throw new Error(`${base} 页面报错：${pageErrors.join(' | ').slice(0, 300)}`);
         } finally {

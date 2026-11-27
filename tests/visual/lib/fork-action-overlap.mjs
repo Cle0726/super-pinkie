@@ -45,9 +45,75 @@ export function measureKey({index, asMain = false}) {
   return out;
 }
 
-export async function hoverKeyGroup(page, index, {force = false} = {}) {
-  const group = page.locator('.chat-group.assistant:has(.chat-group-footer .pinkie-fork-action)').nth(index);
-  await group.scrollIntoViewIfNeeded();
-  await group.locator('.chat-text').first().hover({force});
-  await page.waitForTimeout(250);
+// 不用 locator.hover()：它的可操作性等待默认不限时，WebKit 下等不到「稳定 / 收得到事件」就一直挂到测试 300s 超时。
+// 聊天区会异步把 .chat-thread 贴底（悬停诊断：WebKit 开页 scrollTop 3→375；Chromium 滚上去后又被拉回 376），
+// 先算点再移鼠标就会落到别组（最上面那组 #0 贴底后只露页脚，:hover 丢、键 op=0）。所以：
+//   ① 等 .chat-thread scrollTop 连续 500ms 不变；② 悬停点取本组在视口内露出的部分（避开键、elementFromPoint 命中本组），本组看不见才滚 .chat-thread；
+//   ③ 移鼠标后在页内确认本组 :hover，不成立就重来，最多 5 次，失败报命中元素与 scrollTop。可点性另由 measureKey 的 elementFromPoint 断言。
+async function settleThread(page) {
+  await page.waitForFunction(() => {
+    const th = document.querySelector('.chat-thread');
+    const st = th ? Math.round(th.scrollTop) : 0;
+    const w = window.__pkFkSettle || (window.__pkFkSettle = {st, n: 0});
+    if (w.st === st) w.n += 1; else { w.st = st; w.n = 0; }
+    if (w.n >= 10) { delete window.__pkFkSettle; return true; }
+    return false;
+  }, null, {polling: 50, timeout: 10_000});
+}
+
+function pickHoverPoint({index, sel}) {
+  const key = document.querySelectorAll(sel)[index];
+  const group = key.closest('.chat-group');
+  const thread = document.querySelector('.chat-thread');
+  const view = () => {
+    const t = thread ? thread.getBoundingClientRect() : {top: 0, bottom: innerHeight, left: 0, right: innerWidth};
+    return {top: Math.max(t.top, 0), bottom: Math.min(t.bottom, innerHeight), left: Math.max(t.left, 0), right: Math.min(t.right, innerWidth)};
+  };
+  const d = (el) => el ? `${el.tagName.toLowerCase()}${typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 3).join('.') : ''}` : 'null';
+  const v = view(), g = group.getBoundingClientRect(), k = key.getBoundingClientRect();
+  const top = Math.max(g.top, v.top) + 2, bottom = Math.min(g.bottom, v.bottom) - 2;
+  const left = Math.max(g.left, v.left) + 2, right = Math.min(g.right, v.right) - 2;
+  const st = thread ? Math.round(thread.scrollTop) : null;
+  if (bottom > top && right > left) {
+    for (let y = (top + bottom) / 2, step = 0; step < 200; step += 1) {
+      // 从可见部分中线向上下交替扫，每行试几个横向位置。
+      const off = Math.ceil(step / 2) * 6 * (step % 2 ? -1 : 1);
+      const yy = y + off;
+      if (yy < top || yy > bottom) { if (Math.ceil(step / 2) * 6 > (bottom - top)) break; continue; }
+      for (const f of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+        const xx = left + (right - left) * f;
+        if (xx >= k.left - 2 && xx <= k.right + 2 && yy >= k.top - 2 && yy <= k.bottom + 2) continue;
+        const hit = document.elementFromPoint(xx, yy);
+        if (hit && group.contains(hit) && !key.contains(hit)) return {ok: true, x: xx, y: yy, hit: d(hit), st};
+      }
+    }
+  }
+  // 本组没露出可悬停的部分：把键滚到 .chat-thread 中间，交给下一轮（先等稳定）重挑。
+  if (thread) thread.scrollTop += k.top + k.height / 2 - (v.top + v.bottom) / 2;
+  return {ok: false, scrolledFrom: st, scrolledTo: thread ? Math.round(thread.scrollTop) : null, groupBox: [g.left, g.top, g.width, g.height].map(Math.round)};
+}
+
+function hoverState({index, sel, x, y}) {
+  const key = document.querySelectorAll(sel)[index];
+  const group = key.closest('.chat-group');
+  const thread = document.querySelector('.chat-thread');
+  const hit = document.elementFromPoint(x, y);
+  const d = (el) => el ? `${el.tagName.toLowerCase()}${typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 3).join('.') : ''}` : 'null';
+  return {groupHover: group.matches(':hover'), hitNow: d(hit), st: thread ? Math.round(thread.scrollTop) : null};
+}
+
+export async function hoverKeyGroup(page, index) {
+  let last = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await settleThread(page);
+    const p = await page.evaluate(pickHoverPoint, {index, sel: FOOTER_KEY});
+    if (!p.ok) { last = {attempt, ...p}; continue; }
+    await page.mouse.move(p.x - 1, p.y);
+    await page.mouse.move(p.x, p.y);
+    await page.waitForTimeout(250);
+    const s = await page.evaluate(hoverState, {index, sel: FOOTER_KEY, x: p.x, y: p.y});
+    if (s.groupHover) return {...p, attempt};
+    last = {attempt, x: Math.round(p.x), y: Math.round(p.y), hitAtPick: p.hit, stAtPick: p.st, ...s};
+  }
+  throw new Error(`hoverKeyGroup #${index}：5 次都没让本组进入 :hover：${JSON.stringify(last)}`);
 }
