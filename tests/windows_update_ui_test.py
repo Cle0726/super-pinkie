@@ -368,6 +368,46 @@ class ProbeVisibilityTest(unittest.TestCase):
         self.assertEqual(probe.visibility_gaps(samples), [(4, 9, 5), (10, 14, 4)])
         self.assertEqual(probe.visibility_gaps(samples[:4]), [])
 
+    def fake_clock(self, on_tick=None):
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+            if on_tick:
+                on_tick(now[0])
+        return (lambda: now[0]), sleep
+
+    def test_note_wait_keeps_the_old_twenty_seconds_when_the_note_is_read_early(self):
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            # The restored window reads the note at 6 s: still never checked before 20 s.
+            clock, sleep = self.fake_clock(lambda t: note.unlink() if t >= 6 and note.exists() else None)
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 20.0)
+            self.assertFalse(note.exists())
+
+    def test_note_wait_follows_a_slow_window_past_twenty_seconds(self):
+        # 11-26 B19 on a busy machine: the restored dev build loaded its page at +32.6 s and read the
+        # note at 28 s; the fixed 20 s wait reported "user was not told" for a window that did tell them.
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            clock, sleep = self.fake_clock(lambda t: note.unlink() if t >= 28 and note.exists() else None)
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 28.0)
+
+    def test_note_wait_gives_up_at_the_limit_so_a_real_miss_is_still_reported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            clock, sleep = self.fake_clock()
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 120.0)
+            self.assertTrue(note.exists())  # the probe then reports the user was not told
+
+    def test_probe_main_no_longer_sleeps_a_fixed_twenty_seconds_before_checking_the_note(self):
+        source = (ROOT / "tools/windows-smoke/update_probe.py").read_text(encoding="utf-8")
+        self.assertNotIn("time.sleep(20)", source)
+        self.assertIn('summary["note_wait_seconds"] = wait_for_note(state / "updates/last-failure.json")', source)
+
     def test_watch_samples_screenshots_and_spots_the_failure_window(self):
         frames = iter([[], [{"hwnd": 1, "title": "超級碧琪更新"}],
                        [{"hwnd": 2, "title": "超級碧琪更新 · 没有装上"}]])
