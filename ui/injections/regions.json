@@ -123,6 +123,8 @@
         "laolao-composer-tray.css",
         "laolao-composer-tray.js",
         "laolao-composer-history.js",
+        "laolao-composer-bang.css",
+        "laolao-composer-bang.js",
         "laolao-composer-dock.js",
         "laolao-context-compact.js",
         "laolao-queue-steer.js",
