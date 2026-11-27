@@ -68,7 +68,7 @@ test('M3 真浏览器：置顶 / 折叠条 / 展开列表 / 跳过去 / 取消�
   // 两条助手消息时间戳相同（假网关种子记录就是这样）：只置顶最后一条，第一条不能跟着变「已置顶」。
   const thread = (offset) => group('user', `msg:user:1000:${offset}`, '把登录页的按钮改成蓝色') + group('assistant', `msg:assistant:2000:${offset + 1}`, '好，我先改按钮颜色')
     + group('assistant', `msg:assistant:2000:${offset + 2}`, '注册页用的是同一个');
-  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><style>html{--metre-cobalt:#2f4bb0;--metre-chat-small:#6f6c65} .chat-group-footer__meta{display:flex;align-items:center;gap:8px;min-width:0} .chat-group-footer__meta time{min-width:96px;opacity:0} .chat-group:hover .chat-group-footer__meta time{opacity:1}</style><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
+  const page = (mode) => `<!doctype html><html data-laolao-mode="${mode}"><head><meta charset="utf-8"><style>html{--metre-cobalt:#2f4bb0;--metre-chat-small:#6f6c65} .chat-group-footer__meta{display:flex;align-items:center;gap:8px;min-width:0} .chat-group-footer__meta time{min-width:96px;opacity:0} .chat-group:hover .chat-group-footer__meta time{opacity:1}</style><style>${CSS}</style></head><body><div class="chat-main"><div class="chat-workbench"><div class="chat-thread" style="height:300px;overflow:auto">${thread(0)}</div></div></div></body></html>`;
   const KEY = 'pinkie.metre.pins:agent:metre:p1';
   try {
     const tab = await browser.newPage();
