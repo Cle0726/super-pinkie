@@ -57,8 +57,9 @@
   // 原生用量页 render 里读 this.usageResult?.sessions.length，可选链只护到 usageResult：网关回的 sessions.usage 缺 sessions
   // （老网关、隔离 / 假网关回 {}）就 TypeError，页面停在「加载中」。这里在原生 willUpdate 之后（applyRouteData 会换 usageResult）
   // 把缺的 sessions 补成 []，页面就走它自己的空状态。只补这一个字段，不改别的数据；六个模式都要，不看 isMetre。
+  // 页面载入前设 Pinkie.metreUsageGuardOff = true 只关这道护栏（测试反例用），侧栏「用量」入口照旧。
   function guardUsagePage(Cls) {
-    if (!Cls?.prototype || Object.prototype.hasOwnProperty.call(Cls.prototype, '__pkUsageGuard')) return;
+    if (ns.metreUsageGuardOff === true || !Cls?.prototype || Object.prototype.hasOwnProperty.call(Cls.prototype, '__pkUsageGuard')) return;
     const orig = Cls.prototype.willUpdate;
     Object.defineProperty(Cls.prototype, '__pkUsageGuard', {value: true});
     Cls.prototype.willUpdate = function pkUsageWillUpdate(changed) {

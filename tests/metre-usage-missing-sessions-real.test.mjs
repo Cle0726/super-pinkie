@@ -2,7 +2,7 @@
 // this.usageResult?.sessions.length（可选链只护到 usageResult）报 TypeError reading 'length'，页面一直停在「加载中」。
 // 修法在 ui/injections/laolao-metre-usage.js 的 guardUsagePage：原生 willUpdate 之后把缺的 sessions 补成 []，页面走它自己的空状态。
 // 这里在真实安装的 OpenClaw Control UI + 碧琪注入上打开 /usage；隔离假网关对 sessions.usage / usage.cost 本来就回 {}，正好是缺字段的样子。
-// 反例：页面载入前先占住 Pinkie.metreUsage，laolao-metre-usage.js 直接返回、不装护栏——必须报那个 TypeError、停在「加载中」。
+// 反例：页面载入前设 Pinkie.metreUsageGuardOff = true，只关护栏（侧栏「用量」入口照旧装）——必须报那个 TypeError、停在「加载中」。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -15,7 +15,7 @@ import {
 
 const withoutGuard = () => {
   const ns = (window.Pinkie = window.Pinkie || {});
-  ns.metreUsage = Object.freeze({counterExample: true});
+  ns.metreUsageGuardOff = true;
 };
 
 let ctx = null;
@@ -56,6 +56,7 @@ async function openUsage(t, initScript) {
         loading: Boolean(el?.usageLoading),
         sessionsIsArray: Array.isArray(el?.usageResult?.sessions),
         hasResult: Boolean(el?.usageResult),
+        entry: typeof window.Pinkie?.metreUsage?.guardUsagePage === 'function',
         text: (el?.textContent || '').replace(/\s+/g, ' ').slice(0, 400),
       };
     });
@@ -77,11 +78,12 @@ test('网关回的 sessions.usage 缺 sessions：用量页不报错，走原生�
   assert.match(r.state.text, /从日期范围开始|无数据/, '应显示原生空状态');
 });
 
-test('反例：不装护栏（Pinkie.metreUsage 先被占住）时，同样的回包让用量页报 TypeError reading length', async (t) => {
+test('反例：只关护栏（Pinkie.metreUsageGuardOff）时，同样的回包让用量页报 TypeError reading length', async (t) => {
   const r = await openUsage(t, withoutGuard);
   if (!r) return;
   t.diagnostic(JSON.stringify(r));
   assert.equal(r.state.path, '/usage');
   assert.ok(lengthError(r.errors).length > 0, `反例应报 TypeError reading length：${JSON.stringify(r.errors).slice(0, 300)}`);
   assert.equal(r.state.sessionsIsArray, false, '反例里 sessions 不该被补');
+  assert.equal(r.state.entry, true, '反例只关护栏，laolao-metre-usage.js 其余部分照旧装上');
 });
