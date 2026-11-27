@@ -16,7 +16,8 @@ const measureOf = (name) => {
 };
 
 const BG = '#1f1b24';
-const icon = (label, svg) => `<span aria-label="${label}" style="display:inline-block;margin:6px">${svg}</span>`;
+// measure() 的 add() 按 sel() 去重；每个图标带自己的 class，免得 6 个都成 "div > span > svg" 只剩第一条的 label。
+const icon = (label, svg) => `<span class="ico-${label}" aria-label="${label}" style="display:inline-block;margin:6px">${svg}</span>`;
 const PAGE = `<!doctype html><html><body style="margin:0;background:${BG};color:#e8e0f0;font:14px system-ui">
 <div style="padding:12px">
 ${icon('nib', '<svg width="18" height="18" viewBox="0 0 16 16" style="color:#e8e0f0"><path d="M2 2h12v12H2z" fill="currentColor"/></svg>')}
