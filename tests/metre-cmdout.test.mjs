@@ -123,6 +123,21 @@ test('status colours follow the Metre skin variables, so night works with data-t
   for (const m of bare.matchAll(/color:\s*([^;}]+)/g)) assert.match(m[1].trim(), /^var\(--metre-[\w-]+/, 'every colour comes from a Metre skin variable: ' + m[1].trim());
 });
 
+// uireview 15:26Z（#444 截图审，run 46009337154）：日间按钮字用 --metre-muted（#77736B）叠在 #F7F6F3 上只有 4.18–4.37，
+// 12px 正文要 4.5；命令行用 <code> 时被通用 code 样式铺了一块底色和内边距。按钮字改用 --metre-text，命令行改成 <span>。
+test('copy buttons use --metre-text (not the muted grey) and the command line is a plain span, not a <code>', () => {
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const btn = bare.match(/\.pk-mcmd__btn\s*\{([^}]*)\}/);
+  assert.ok(btn, 'has a .pk-mcmd__btn rule');
+  assert.match(btn[1], /(?:^|[;\s])color:\s*var\(--metre-text\b/, 'button text is --metre-text');
+  assert.doesNotMatch(btn[1], /--metre-muted/, 'button text is not the muted grey (under 4.5 by day)');
+  const page = load({history: HISTORY});
+  const body = page.addStep('c1');
+  page.api.paint(); page.flush();
+  const line = headOf(body).children.find(c => c.has('pk-mcmd__line'));
+  assert.equal(line.tagName, 'SPAN', 'command line is not a <code>, so the shared code background does not apply');
+});
+
 test('in Metre: each command step gets `$ command`, the result it really had, and copy buttons; other tools get nothing', () => {
   const page = load({history: HISTORY});
   const failed = page.addStep('c1'), running = page.addStep('c2'), reading = page.addStep('r1');

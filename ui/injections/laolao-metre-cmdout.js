@@ -130,7 +130,7 @@
   }
   function render(head, m) {
     head.textContent = '';
-    const line = document.createElement('code');
+    const line = document.createElement('span');
     line.className = 'pk-mcmd__line';
     line.textContent = '$ ' + m.command.split('\n')[0];
     line.title = m.command;

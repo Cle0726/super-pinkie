@@ -10,7 +10,7 @@ html[data-laolao-mode="metre"] .pk-mcmd {
 html[data-laolao-mode="metre"] .pk-mcmd__line {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 12px/18px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  color: var(--metre-text, #1F1E1C); background: none; padding: 0;
+  color: var(--metre-text, #1F1E1C);
 }
 html[data-laolao-mode="metre"] .pk-mcmd__status { flex: none; white-space: nowrap; }
 /* 失败色用皮肤的 --metre-danger：它日夜都有定义（夜间在 [data-pinkie-night] 和 [data-theme="dark"] 下都生效），
@@ -20,7 +20,7 @@ html[data-laolao-mode="metre"] .pk-mcmd__status[data-kind="running"] { color: va
 html[data-laolao-mode="metre"] .pk-mcmd__actions { flex: none; display: inline-flex; gap: 4px; }
 html[data-laolao-mode="metre"] .pk-mcmd__btn {
   appearance: none; margin: 0; padding: 1px 8px; border: 0; border-radius: 4px; background: none; cursor: pointer;
-  font: inherit; color: var(--metre-muted, #73726C);
+  font: inherit; color: var(--metre-text, #1F1E1C);
 }
 html[data-laolao-mode="metre"] .pk-mcmd__btn:hover { background: var(--metre-hover, rgba(0, 0, 0, 0.05)); color: var(--metre-text, #1F1E1C); }
 html[data-laolao-mode="metre"] .pk-mcmd__btn:focus-visible { outline: 2px solid var(--metre-cobalt, #2D4FA3); outline-offset: 1px; }
