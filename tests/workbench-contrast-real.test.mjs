@@ -2,7 +2,7 @@
 // 对比度（判据同 tools/pr-shots/b11-project-walkthrough.mjs：小字 ≥ 4.5，控件边框 / 图标 ≥ 3）：
 //   空态「打开项目文件夹…」字与边框、项目条「未打开 / 主目录」、窄屏「代码 / 对话」切换、状态栏 C.le. 标志（遮罩，按 backgroundImage 渐变各色标逐个量取最低，无渐变才退回 backgroundColor）、活动栏选中图标。
 //   走查旧值（日间）：边框 1.26，夜间字 4.25，标签 3.24，「对话」3.25 / 4.31，标志 1.0，codicon-files 2.98。
-//   标志反例 = main 的渐变 + 只加一层被盖住的底色（不动渐变），日间必须量出不合格。
+//   标志反例 = main 的渐变 + 只加一层被盖住的底色（不动渐变），日间改后值必须比它高 ≥1（main 可见渐变约 3.1，不一定低于 3）。
 // 820 状态栏：任意两项不按走查的 overlap 判据互压（互不包含、相交 ≥ 较小框 15%、相交中心点落在其中一框内），左右两半不相交。
 // 反例：贴回旧配方必须量出不合格；820 撤掉 fitStatus 的整项隐藏并贴回 B50 前的状态栏规则，必须量出互压。
 import assert from 'node:assert/strict';
@@ -235,9 +235,12 @@ test('B11·workbench 项目 / 无限模式：工作台五项日夜 × 1440/820 �
         assert.ok(g && b.ratio <= g.ratio + 0.01, `${tag}: 旧配方反而更好「${b.name}」— 改后 ${g?.ratio.toFixed(2)}，旧配方 ${b.ratio.toFixed(2)}`);
       }
       if (theme === 'day') {
-        const mustLow = width >= 1440 ? ['已绑定/tag·字', '已绑定/mark·图标', '空态/open-project·边框'] : ['已绑定/mark·图标', '已绑定/views「对话」·字'];
+        const mustLow = width >= 1440 ? ['已绑定/tag·字', '空态/open-project·边框'] : ['已绑定/views「对话」·字'];
         const lowNames = new Set(low(bad).map((i) => i.name));
         for (const n of mustLow) assert.ok(lowNames.has(n), `${tag}: 反例没生效「${n}」— ${fmt(bad)}`);
+        // main 的可见渐变在项目模式日间量出约 3.1，不一定低于 3；只加底色不动渐变时改后值等于旧值，按差值必红。
+        const gm = good.find((i) => i.name === '已绑定/mark·图标'); const bm = bad.find((i) => i.name === '已绑定/mark·图标');
+        assert.ok(gm && bm && gm.ratio >= bm.ratio + 1, `${tag}: 标志只加底色没动可见渐变 — 改后 ${gm?.ratio.toFixed(2)}，main 渐变 ${bm?.ratio.toFixed(2)}`);
       }
       badAll.push(...bad);
     }
