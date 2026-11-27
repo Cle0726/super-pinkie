@@ -54,10 +54,26 @@
     paint(btn);
   }
 
+  // 原生用量页 render 里读 this.usageResult?.sessions.length，可选链只护到 usageResult：网关回的 sessions.usage 缺 sessions
+  // （老网关、隔离 / 假网关回 {}）就 TypeError，页面停在「加载中」。这里在原生 willUpdate 之后（applyRouteData 会换 usageResult）
+  // 把缺的 sessions 补成 []，页面就走它自己的空状态。只补这一个字段，不改别的数据；六个模式都要，不看 isMetre。
+  function guardUsagePage(Cls) {
+    if (!Cls?.prototype || Object.prototype.hasOwnProperty.call(Cls.prototype, '__pkUsageGuard')) return;
+    const orig = Cls.prototype.willUpdate;
+    Object.defineProperty(Cls.prototype, '__pkUsageGuard', {value: true});
+    Cls.prototype.willUpdate = function pkUsageWillUpdate(changed) {
+      const ret = orig ? orig.call(this, changed) : undefined;
+      const r = this.usageResult;
+      if (r && typeof r === 'object' && !Array.isArray(r.sessions)) this.usageResult = {...r, sessions: []};
+      return ret;
+    };
+  }
+  window.customElements?.whenDefined?.('openclaw-usage-page').then(guardUsagePage, () => {});
+
   window.addEventListener('laolao:sessions-changed', () => setTimeout(ensure, 0));
   window.addEventListener('popstate', () => setTimeout(ensure, 0));
   window.Pinkie?.domWatch?.poll?.(ensure, 1500);
   ensure();
 
-  ns.metreUsage = Object.freeze({ROUTE, ensure, openUsage, onUsage});
+  ns.metreUsage = Object.freeze({ROUTE, ensure, openUsage, onUsage, guardUsagePage});
 })();
