@@ -98,3 +98,85 @@ test('反例：修正前的 svg 取色在同一页面把浅色图标误报成 rg
     }
   } finally { await p.close(); }
 });
+
+// project / infinite 走查脚本的量法不叫 measure()，旧写法也不同：只看第一个子图形，进度环的浅色轨道（ring）被当图标色误报；
+// infinite 还不算 fill-opacity，淡色图标（faint）漏报。各自取出页面里那段函数，在同一页面上跑正例和反例。
+const slice = (src, head, end) => { const from = src.indexOf(head), to = src.indexOf(end, from); return from >= 0 && to > from ? src.slice(from, to) : ''; };
+const OTHERS = {
+  'b11-project-walkthrough.mjs': {
+    body: (src) => { const f = slice(src, 'function audit({cap}) {', '\n}\n'); return f && f + '\n}'; },
+    call: (fn) => `(${fn})({cap: 50}).items.icon`,
+    labelOf: (i) => i.label,
+    newFrom: '      let color = s.color, fg = null;', newTo: '      if (fg) {',
+    old: `      let color = s.color, who = e, extra = 1;
+      if (isSvg) {
+        const shape = e.querySelector('path, circle, rect, line, polyline, polygon, ellipse, use');
+        const ss = shape ? getComputedStyle(shape) : s;
+        const useStroke = ss.stroke && ss.stroke !== 'none' && !ss.stroke.startsWith('url');
+        color = useStroke ? ss.stroke : ss.fill;
+        extra = parseFloat(useStroke ? ss.strokeOpacity : ss.fillOpacity);
+        if (Number.isNaN(extra)) extra = 1;
+        if (shape) who = shape;
+      } else if (isMask) color = s.backgroundColor;
+      const bg = isMask ? bgOf(parentOf(e)) : bgOf(e);
+      const fg = fgOn(color, who, bg, extra);
+`,
+    bug: {reported: ['ring'], missed: []},
+  },
+  'b11-infinite-walkthrough.mjs': {
+    body: (src) => { const f = slice(src, '(LIMIT) => {', '\n}, limit);'); return f && f + '\n}'; },
+    call: (fn) => `(${fn})(40).icon.items`,
+    labelOf: (i) => (String(i.sel).match(/ico-(\w+)/) || [])[1] || '',
+    newFrom: '    const bg = bgOf(parentOf(e) || e);\n    let paint', newTo: '    if (k < 3) icon.push',
+    old: `    let paint = null;
+    if (e.localName === 'svg') {
+      const shape = e.querySelector('path, circle, rect, line, polyline, polygon, ellipse');
+      const ss = shape ? getComputedStyle(shape) : s;
+      const stroke = ss.stroke && ss.stroke !== 'none' ? P(ss.stroke) : null;
+      const fill = ss.fill && ss.fill !== 'none' && !String(ss.fill).startsWith('url') ? P(ss.fill) : null;
+      paint = (stroke && stroke.a > 0 ? stroke : null) || (fill && fill.a > 0 ? fill : null);
+    } else {
+      paint = P(s.color);
+    }
+    if (!paint || paint.a === 0) continue;
+    const bg = bgOf(parentOf(e) || e);
+    const fg = over({...paint, a: paint.a * effOpacity(e)}, bg.color);
+    const k = ratio(fg, bg.color);
+`,
+    bug: {reported: ['ring'], missed: ['faint']},
+  },
+};
+
+for (const [name, o] of Object.entries(OTHERS)) {
+  const FN = o.body(fs.readFileSync(new URL(`../tools/pr-shots/${name}`, import.meta.url), 'utf8'));
+  const labels = async (t, fn) => {
+    shared ??= start();
+    const b = await shared;
+    if (b.why) { t.skip(b.why); return null; }
+    const p = await b.newPage({viewport: {width: 400, height: 120}});
+    try {
+      await p.setContent(PAGE);
+      const icons = await p.evaluate(o.call(fn));
+      t.diagnostic(JSON.stringify(icons.map((i) => ({label: o.labelOf(i), ratio: i.ratio, fg: i.fg ?? i.paint}))));
+      return new Set(icons.map(o.labelOf));
+    } finally { await p.close(); }
+  };
+
+  test(`${name}：svg 图标逐个子图形按实际墨色量，取对比度最高的一笔`, async (t) => {
+    assert.ok(FN.includes(o.newFrom), `没从 ${name} 取到图标取色段`);
+    const got = await labels(t, FN);
+    if (!got) return;
+    for (const ok of ['nib', 'ring', 'glyph']) assert.ok(!got.has(ok), `${ok} 在深底上被误报：${[...got]}`);
+    for (const bad of ['dark', 'faint']) assert.ok(got.has(bad), `${bad} 真低对比没报：${[...got]}`);
+    assert.ok(!got.has('grad'), '只用 url() 渐变画的图标应跳过');
+  });
+
+  test(`反例：${name} 换回修正前只看第一个子图形的写法，同一页面就会误报 ${o.bug.reported}${o.bug.missed.length ? '、漏报 ' + o.bug.missed : ''}`, async (t) => {
+    const from = FN.indexOf(o.newFrom), to = FN.indexOf(o.newTo, from);
+    assert.ok(from > 0 && to > from, `没在 ${name} 里找到图标取色段`);
+    const got = await labels(t, FN.slice(0, from) + o.old + FN.slice(to));
+    if (!got) return;
+    for (const label of o.bug.reported) assert.ok(got.has(label), `旧写法应误报 ${label}：${[...got]}`);
+    for (const label of o.bug.missed) assert.ok(!got.has(label), `旧写法应漏报 ${label}：${[...got]}`);
+  });
+}
