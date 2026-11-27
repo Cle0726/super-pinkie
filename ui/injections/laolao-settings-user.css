@@ -4,9 +4,9 @@ body[data-pinkie-user-settings="1"] .config-view-toggle-row {
   display: none !important;
 }
 
-body[data-pinkie-user-settings="1"] .content-header .page-sub {
-  display: none !important;
-}
+body[data-pinkie-user-settings="1"] .content-header .page-sub { display: none !important; }
+html:not([data-pinkie-night], [data-theme-mode="dark"], [data-theme="dark"], [data-color-scheme="dark"]) main.content:has(.config-view-toggle) .content-header .page-title { color: color-mix(in srgb, var(--accent) 70%, var(--text-strong)); }   /* B11 S8：原生标题 --accent / 未选中分段键 --muted 日间只有 3.5 / 4.13:1，各模式压到 ≥4.5 */
+html:not([data-pinkie-night], [data-theme-mode="dark"], [data-theme="dark"], [data-color-scheme="dark"]) main.content .config-view-toggle .qs-segmented__btn:not(.qs-segmented__btn--active, :hover, :focus-visible) { color: color-mix(in srgb, var(--muted-strong) 80%, var(--text-strong)); }
 
 #laolao-user-settings {
   --pinkie-settings-ink: #63364c; --pinkie-settings-custom-ink: #8e5f76;

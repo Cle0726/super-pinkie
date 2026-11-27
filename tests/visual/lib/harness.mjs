@@ -691,10 +691,37 @@ export async function openScenePage(browser, origin, sceneId, theme) {
   return {context, page, pageErrors};
 }
 
+// B62/B51：截图前让整页重新光栅化一次。
+// 字体晚于首帧到达（或元素失焦等）时，Chromium 只局部重画受影响的块，圆角抗锯齿和整块
+// 光栅化的结果差 1 个色阶：CI 上 model-picker-day / home-unrestricted-night 发送按钮上沿
+// 6–7 px（box x=1181..1243 y=732..737 Δ1）。整页隐藏两帧再显示两帧后，不论之前画过什么，
+// 截到的都是同一次完整光栅化的结果；正常路径下截图逐字节不变。
+export async function repaintBeforeCapture(page) {
+  await page.evaluate(async () => {
+    const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    const root = document.documentElement;
+    const hadStyle = root.hasAttribute('style');
+    const prev = root.style.visibility;
+    root.style.visibility = 'hidden';
+    await frame();
+    await frame();
+    root.style.visibility = prev;
+    if (!hadStyle && !root.getAttribute('style')) root.removeAttribute('style');
+    await frame();
+    await frame();
+  });
+}
+
+// 基线截图的唯一截图入口：先整页重新光栅化，再截。
+export async function screenshotScene(page) {
+  await repaintBeforeCapture(page);
+  return page.screenshot({animations: 'disabled', type: 'png'});
+}
+
 export async function captureScenePng(browser, origin, sceneId, theme) {
   const {context, page, pageErrors} = await openScenePage(browser, origin, sceneId, theme);
   try {
-    const png = await page.screenshot({animations: 'disabled', type: 'png'});
+    const png = await screenshotScene(page);
     return {png, pageErrors};
   } finally {
     await context.close();

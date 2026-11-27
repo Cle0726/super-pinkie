@@ -1,0 +1,30 @@
+/* laolao-metre-tasks.css —— 「后台任务」那一页和标签栏入口（laolao-metre-tasks.js），只在 Metre。
+ * 页面骨架用工作台自己的 .pk-wb-page，入口键用工作台的 .pk-wb-icon；这里只管列表排版和在跑个数。颜色全用 Metre 变量，
+ * 边框用 --metre-muted（日夜对底都 ≥ 3:1，和 laolao-metre-pr.css 同一条）。选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名，不用强制覆盖。 */
+html[data-laolao-mode="metre"] .pk-mtask { max-width: 860px; font: 400 13px/1.55 var(--metre-sans); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mtask__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 6px; }
+html[data-laolao-mode="metre"] .pk-mtask__meta { color: var(--metre-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+html[data-laolao-mode="metre"] .pk-mtask__hint { margin: 0 0 12px; color: var(--metre-muted); font-size: 12px; }
+html[data-laolao-mode="metre"] .pk-mtask__btn { appearance: none; height: 28px; padding: 0 12px; border: 1px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); color: var(--metre-text); font: 500 12px/26px var(--metre-sans); cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-mtask__btn:is(:hover, :focus-visible) { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-mtask__btn:focus-visible { outline: 2px solid var(--metre-accent); outline-offset: 1px; }
+html[data-laolao-mode="metre"] .pk-mtask__msg { margin: 6px 0; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .pk-mtask__msg--error { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mtask__empty { padding: 12px 14px; border: 1px dashed var(--metre-muted); border-radius: 8px; color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mtask__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+html[data-laolao-mode="metre"] .pk-mtask__row { min-width: 0; padding: 8px 10px; border: 1px solid var(--metre-line-strong); border-left: 3px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); }
+html[data-laolao-mode="metre"] .pk-mtask__row[data-state="running"] { border-left-color: var(--metre-accent); }
+html[data-laolao-mode="metre"] .pk-mtask__row[data-state="failed"] { border-left-color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mtask__head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
+html[data-laolao-mode="metre"] .pk-mtask__state { font: 600 12px/20px var(--metre-sans); color: var(--metre-text); white-space: nowrap; }
+html[data-laolao-mode="metre"] .pk-mtask__row[data-state="running"] .pk-mtask__state { color: var(--metre-accent); }
+html[data-laolao-mode="metre"] .pk-mtask__row[data-state="failed"] .pk-mtask__state { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mtask__name { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mtask__clock { color: var(--metre-muted); font: 400 12px/20px var(--metre-mono, monospace); font-variant-numeric: tabular-nums; white-space: nowrap; }
+html[data-laolao-mode="metre"] .pk-mtask__what { display: block; margin: 4px 0 0; color: var(--metre-muted); overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mtask__what--cmd { color: var(--metre-text); font: 400 12px/1.5 var(--metre-mono, monospace); white-space: pre-wrap; }   /* 命令块落在页面通用 code 的灰底（= --metre-hover，日 #EFEDE8）上：弱化色 #77736B 只有 4.03:1（linux-review 12:19），改用正文色，日约 15:1、夜 ≥ 4.5 */
+html[data-laolao-mode="metre"] .pk-mtask__note { margin: 2px 0 0; color: var(--metre-muted); font-size: 12px; }
+html[data-laolao-mode="metre"] .pk-mtask__more { margin-top: 6px; height: 24px; line-height: 22px; padding: 0 10px; }
+html[data-laolao-mode="metre"] .pk-mtask__detail { max-height: 320px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--metre-line-strong); border-radius: 4px; background: var(--metre-bg); color: var(--metre-text); font: 400 12px/1.5 var(--metre-mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] .pk-mtask__entry { position: relative; }
+html[data-laolao-mode="metre"] .pk-mtask__count { position: absolute; top: 1px; right: 0; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 7px; background: var(--metre-accent); color: var(--metre-surface); font: 600 10px/14px var(--metre-sans); text-align: center; pointer-events: none; }   /* 日 白字 / #2F4BB0，夜 #232321 / #93A5EE，都 ≥ 4.5:1（同 pk-mpr__btn--main） */

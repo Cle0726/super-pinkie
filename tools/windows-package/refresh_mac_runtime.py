@@ -106,6 +106,8 @@ def main(argv=None):
     parser.add_argument("--mac-runtime", type=Path, default=MAC_RUNTIME)
     parser.add_argument("--pristine", type=Path, help="an unpacked openclaw package (default: npm pack)")
     parser.add_argument("--check", action="store_true", help="report drift and exit 1 instead of writing")
+    parser.add_argument("--allow-drop", action="store_true",
+                        help="drop patched snapshot files the source runtime no longer carries (a retired patch)")
     args = parser.parse_args(argv)
 
     mac_openclaw = args.mac_runtime / "openclaw"
@@ -134,6 +136,11 @@ def main(argv=None):
 
     if args.check:
         return 1 if added or changed or removed else 0
+    # A drop usually means the source runtime lacked a patch (e.g. one missing from
+    # patch/apply-all.mjs ORDER), not that Windows no longer needs the file.
+    if removed and not args.allow_drop:
+        sys.exit(f"refusing to drop {len(removed)} snapshot file(s); nothing written. "
+                 "Rerun with --allow-drop only if those patches were retired.")
     for rel in removed:
         (SNAPSHOT / rel).unlink(missing_ok=True)
         sums.pop(rel)

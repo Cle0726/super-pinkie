@@ -19,6 +19,7 @@ const ORDER = [
   'apply-chat-linebreaks.mjs',
   'apply-composer-drafts.mjs',
   'apply-context-budget.mjs',
+  'apply-history-image-thumbnails.mjs',
   'apply-compaction-boundary-recovery.mjs',
   'apply-preflight-compaction-events.mjs',
   'apply-overflow-compaction-events.mjs',
@@ -32,6 +33,7 @@ const ORDER = [
   'apply-control-ui-cache.mjs',
   'apply-local-unrestricted-policy.mjs',
   'apply-computer-v2.mjs',
+  'apply-stream-survive-steer.mjs',
   // install.sh (unrestricted kit), after the theme runtime patches.
   'reapply-unrestricted-patch.mjs',
   'apply-same-session-recovery.mjs',
@@ -43,9 +45,27 @@ const ORDER = [
   'apply-work-first-media-gate.mjs',
   'apply-fake-ip-benchmark-v6.mjs',
   'apply-metre-lock.mjs',
+  // build.sh, after apply-theme.sh.
+  'apply-pinkie-managed-skills.mjs',
+];
+
+// apply-theme.sh wraps these in `if ! ...; then echo warning` and carries on.
+const OPTIONAL = new Set(['apply-computer-v2.mjs']);
+// These patch node_modules/@openclaw/ai. A bare `npm pack openclaw` pristine has
+// no node_modules, so they throw and their dist/ edits are never written either.
+const NEEDS_SDK = [
+  'apply-loopback-model-reliability.mjs',
+  'apply-work-thinking.mjs',
+  'apply-thinking-capabilities.mjs',
 ];
 
 freshCopy();
+if (!fs.existsSync(path.join(TRY, 'node_modules/@openclaw/ai/package.json'))) {
+  console.error(`missing dependency: ${path.join(TRY, 'node_modules/@openclaw/ai')}`);
+  console.error(`these patches cannot run without it: ${NEEDS_SDK.join(', ')}`);
+  console.error('unpack the matching @openclaw/ai tarball into <pristine>/node_modules/@openclaw/ai and rerun');
+  process.exit(2);
+}
 const backups = path.join(os.tmpdir(), 'pinkie-apply-all-backups');
 fs.rmSync(backups, {recursive: true, force: true});
 const before = hashes(TRY);
@@ -57,9 +77,9 @@ for (const name of ORDER) {
     encoding: 'utf8',
     timeout: 180000,
   });
-  if (run.status !== 0) failed += 1;
+  if (run.status !== 0 && !OPTIONAL.has(name)) failed += 1;
   const line = (run.stdout || '').trim().split('\n').filter(Boolean).slice(0, 2).join(' | ');
-  console.log(`${run.status === 0 ? 'ok  ' : 'FAIL'} ${name}  ${line}`);
+  console.log(`${run.status === 0 ? 'ok  ' : OPTIONAL.has(name) ? 'skip' : 'FAIL'} ${name}  ${line}`);
   if (run.status !== 0) console.log((run.stderr || '').trim().split('\n').slice(0, 4).join('\n'));
 }
 console.log('\n# changed files');
@@ -83,15 +103,18 @@ console.log(checkFailed ? `${checkFailed} files failed node --check` : 'all chan
 console.log('\n# precompressed twins');
 const twins = [];
 const manifestPath = path.join(TRY, 'dist/control-ui/asset-manifest.json');
-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const manifestByPath = new Map(manifest.assets.map((asset) => [asset.path, asset]));
+// Runtimes without asset-manifest.json (2026.7.x) ship no .br/.gz either; any
+// twin that does exist must still decompress to the patched file.
+const manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : null;
+if (!manifest) console.log('runtime ships no dist/control-ui/asset-manifest.json');
+const manifestByPath = new Map((manifest ? manifest.assets : []).map((asset) => [asset.path, asset]));
 for (const rel of diff.changed) {
   if (!rel.startsWith('dist/control-ui/assets/') || !rel.endsWith('.js')) continue;
   const file = path.join(TRY, rel);
   const source = fs.readFileSync(file);
   for (const [suffix, decode] of [['.br', zlib.brotliDecompressSync], ['.gz', zlib.gunzipSync]]) {
     const twin = file + suffix;
-    if (!fs.existsSync(twin)) { twins.push(`MISSING ${rel}${suffix}`); continue; }
+    if (!fs.existsSync(twin)) { if (manifest) twins.push(`MISSING ${rel}${suffix}`); continue; }
     const ok = decode(fs.readFileSync(twin)).equals(source);
     twins.push(`${ok ? 'ok  ' : 'BAD '} ${rel}${suffix}`);
     const entry = manifestByPath.get(rel.split(path.sep).join('/') + suffix);
@@ -102,7 +125,7 @@ for (const rel of diff.changed) {
     }
   }
 }
-const jsEntries = manifest.assets.filter((asset) => /^assets\/[^/]+\.js$/u.test(asset.path));
+const jsEntries = (manifest ? manifest.assets : []).filter((asset) => /^assets\/[^/]+\.js$/u.test(asset.path));
 for (const entry of jsEntries) {
   const file = path.join(TRY, 'dist/control-ui', entry.path);
   const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');

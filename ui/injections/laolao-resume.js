@@ -965,7 +965,7 @@
     if (realSendButton(event.target)) followOwnSend(paneForEvent(event));
   }, true);
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
     const input = event.target?.closest?.(".agent-chat__composer-combobox textarea");
     if (input?.value?.trim()) followOwnSend(paneForEvent(event));
   }, true);
