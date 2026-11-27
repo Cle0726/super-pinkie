@@ -1024,8 +1024,11 @@ export function checkRoleToolCall(card, toolName, params = {}) {
     };
   }
   if (category === 'exec' && card?.deny_commands?.length) {
-    const cmd = typeof params?.command === 'string' ? params.command
-      : typeof params?.cmd === 'string' ? params.cmd : '';
+    // run_tests appends `filter` verbatim to its command and runs it through a shell, so check it
+    // on its own and joined the way run_tests joins it (command: 'git' + filter: 'push' is git push).
+    const text = value => (typeof value === 'string' ? value : '');
+    const base = text(params?.command) || text(params?.cmd), filter = text(params?.filter);
+    const cmd = [base, filter, base && filter ? `${base} ${filter}` : ''].filter(Boolean).join('\n');
     const denied = checkDeniedCommand(cmd, card.deny_commands);
     if (denied.blocked) {
       return {
