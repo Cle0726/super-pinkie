@@ -36,13 +36,17 @@ test('loaded after metre-files, owned by the metre region, rides the existing ar
 
 let sharedBrowser;
 after(async () => { const b = await sharedBrowser; await b?.close?.(); });
+// B63: same as the other browser tests, so a WebKit pre-check (PINKIE_IMAGE_UI_ENGINE=webkit) really runs WebKit
+const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 async function start() {
   let lib;
   try { lib = playwright(); } catch { return {why: 'Playwright is not installed here'}; }
-  for (const options of [{}, {channel: 'chrome'}, {channel: 'msedge'}]) {
-    try { return await lib.chromium.launch({headless: true, ...options}); } catch {}
+  if (!lib[engine]) return {why: `unknown engine ${engine}`};
+  const tries = engine === 'chromium' ? [{}, {channel: 'chrome'}, {channel: 'msedge'}] : [{}];
+  for (const options of tries) {
+    try { return await lib[engine].launch({headless: true, ...options}); } catch {}
   }
-  return {why: 'no Chromium browser here'};
+  return {why: `no ${engine} browser here`};
 }
 async function launch(t) {
   sharedBrowser ??= start();
@@ -167,6 +171,27 @@ test('under 600px the key opens a read-only preview instead: 256 KB head only, s
     assert.equal(await tab.evaluate(() => window.Pinkie.metreLibrary.openPreview('/proj/x.bin')), 'binary');
     assert.match(await tab.locator('.pk-mlib-preview__note').textContent(), /请用系统默认程序打开/);
     assert.equal(await tab.locator('.pk-mlib-preview').count(), 1, 'one panel at a time');
+  } finally { await tab.close(); }
+});
+
+// B63（mac2 #281 14:12Z）：WebKit / WKWebView 鼠标点按钮不给焦点，点开预览时 document.activeElement 是 body。
+// 脚本里的 click() 在所有引擎上都不挪焦点，所以用它在 Chromium 上也能复现：关掉预览后焦点仍要回到键上
+test('B63: a click that does not focus the key (WebKit mouse) still returns focus to the key when the preview closes', {timeout: 60_000}, async t => {
+  const browser = await launch(t); if (!browser) return;
+  const tab = await open(browser, 'metre', {width: 560});
+  try {
+    await viewer(tab, item('/proj/big.md'), '版本 2 / 2');
+    await tab.evaluate(() => { document.activeElement?.blur?.(); document.querySelector('.pk-mlib-open').click(); });
+    await tab.locator('.pk-mlib-preview__text').waitFor({timeout: 5000});
+    await tab.keyboard.press('Escape');
+    await tab.waitForFunction(() => !document.querySelector('.pk-mlib-preview'));
+    assert.equal(await tab.evaluate(() => document.activeElement?.classList.contains('pk-mlib-open')), true, 'Esc: focus goes back to the key, not body');
+    // × 关也一样
+    await tab.evaluate(() => { document.activeElement?.blur?.(); document.querySelector('.pk-mlib-open').click(); });
+    await tab.locator('.pk-mlib-preview__text').waitFor({timeout: 5000});
+    await tab.evaluate(() => document.querySelector('.pk-mlib-preview__close').click());
+    await tab.waitForFunction(() => !document.querySelector('.pk-mlib-preview'));
+    assert.equal(await tab.evaluate(() => document.activeElement?.classList.contains('pk-mlib-open')), true, '×: focus goes back to the key, not body');
   } finally { await tab.close(); }
 });
 
