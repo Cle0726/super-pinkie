@@ -9,7 +9,7 @@
 .pk-gamefx-canvas[data-cine="1"]{z-index:1}
 .pk-gamefx-dot{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;will-change:transform,opacity;
   background:radial-gradient(circle,#fff 0,var(--c,#ffd36e) 45%,transparent 72%)}
-html[data-pinkie-hitstop="1"] #pinkie-study-desk *{animation-play-state:paused!important}
+html[data-pinkie-hitstop="1"] #pinkie-study-desk *{animation-play-state:paused!important} html[data-pinkie-reduce-motion] .pk-gamefx-layer *,html[data-pinkie-reduce-motion] .pk-gamefx-layer *::before,html[data-pinkie-reduce-motion] .pk-gamefx-layer *::after{animation:none;transition:none}
 
 /* ── 大招切入：文字排在条带外侧，跟条带同角度 ── */
 .pk-cut{position:absolute;inset:0;z-index:3;pointer-events:auto;cursor:pointer;color:#fff;font-family:var(--pk-ui)}

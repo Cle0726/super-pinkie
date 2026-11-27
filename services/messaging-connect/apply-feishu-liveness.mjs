@@ -1,7 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {applyPublisherPatch, planPublisherPatch} from './publisher-patch.mjs';
 
 // Publisher baselines are from the integrity-verified @openclaw/feishu 2026.7.1 tarball.
 export const FEISHU_LIVENESS_BASELINES = Object.freeze({
@@ -14,7 +13,6 @@ const PATCHED_HASHES = Object.freeze({
 });
 export const FEISHU_PING_TIMEOUT_SEC = 10;
 export const FEISHU_HANDSHAKE_TIMEOUT_MS = 15000;
-const hash = source => createHash('sha256').update(source).digest('hex');
 
 function replaceOnce(source, before, after, label) {
   if (source.split(before).length !== 2) throw new Error(`Unknown Feishu ${label} structure`);
@@ -100,53 +98,20 @@ const TRANSFORMS = Object.freeze({
   'dist/monitor.account-Dr7do33p.js': adaptFeishuMonitorSource,
 });
 
+// 报错文案与合并前逐字相同（tests/publisher-patch.test.mjs 锁住）。
+export const FEISHU_PATCH = Object.freeze({
+  name: '@openclaw/feishu', version: '2026.7.1',
+  requirement: 'Feishu liveness patch requires verified @openclaw/feishu 2026.7.1',
+  publisher: 'Feishu', patch: 'Feishu liveness', hashLabel: 'Feishu liveness patch', preflight: 'liveness',
+  baselines: FEISHU_LIVENESS_BASELINES, patched: PATCHED_HASHES, transforms: TRANSFORMS,
+});
+
 export function planFeishuLiveness(root) {
-  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  if (pkg.name !== '@openclaw/feishu' || pkg.version !== '2026.7.1') throw new Error('Feishu liveness patch requires verified @openclaw/feishu 2026.7.1');
-  const plan = Object.entries(FEISHU_LIVENESS_BASELINES).map(([relative, baseline]) => {
-    const file = path.join(root, relative);
-    if (!fs.lstatSync(file).isFile()) throw new Error(`Feishu publisher target must be a regular file: ${relative}`);
-    const source = fs.readFileSync(file, 'utf8'), digest = hash(source);
-    if (digest !== baseline && digest !== PATCHED_HASHES[relative]) throw new Error(`Feishu publisher file changed: ${relative}; nothing was written`);
-    const next = digest === baseline ? TRANSFORMS[relative](source) : source;
-    if (hash(next) !== PATCHED_HASHES[relative]) throw new Error(`Feishu liveness patch hash mismatch: ${relative}; nothing was written`);
-    return {file, relative, source, next, mode: fs.statSync(file).mode & 0o777};
-  });
-  // Check every original backup and temporary destination before the first write.
-  for (const item of plan) {
-    const backup = `${item.file}.pinkie-original`, temporary = `${item.file}.pinkie-tmp`;
-    if (fs.existsSync(backup) && (!fs.lstatSync(backup).isFile() || hash(fs.readFileSync(backup)) !== FEISHU_LIVENESS_BASELINES[item.relative])) {
-      throw new Error(`Feishu liveness backup changed: ${item.relative}; nothing was written`);
-    }
-    if (fs.existsSync(temporary)) throw new Error(`Feishu liveness temporary file already exists: ${item.relative}; nothing was written`);
-  }
-  return plan;
+  return planPublisherPatch(root, FEISHU_PATCH);
 }
 
 export function applyFeishuLiveness(root) {
-  const plan = planFeishuLiveness(root);
-  const changed = plan.filter(item => item.source !== item.next);
-  // Avoid overwriting a publisher file modified since preflight.
-  for (const item of plan) if (fs.readFileSync(item.file, 'utf8') !== item.source) throw new Error('Feishu publisher changed during liveness preflight; nothing was written');
-  const written = [], backups = [], temporary = [];
-  try {
-    for (const item of changed) {
-      const backup = `${item.file}.pinkie-original`, temp = `${item.file}.pinkie-tmp`;
-      if (!fs.existsSync(backup)) {
-        fs.writeFileSync(backup, item.source, {flag: 'wx', mode: item.mode}); backups.push(backup);
-      }
-      fs.writeFileSync(temp, item.next, {flag: 'wx', mode: item.mode}); temporary.push(temp);
-    }
-    for (const item of changed) {
-      fs.renameSync(`${item.file}.pinkie-tmp`, item.file); written.push(item);
-    }
-  } catch (error) {
-    for (const item of written) fs.writeFileSync(item.file, item.source, {mode: item.mode});
-    for (const file of temporary) fs.rmSync(file, {force: true});
-    for (const file of backups) fs.rmSync(file, {force: true});
-    throw error;
-  }
-  return plan.map(item => ({file: item.file, changed: item.source !== item.next, sha256: hash(item.next)}));
+  return applyPublisherPatch(root, FEISHU_PATCH);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

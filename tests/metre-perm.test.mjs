@@ -148,9 +148,11 @@ test(`P2 / I4 / R3 / U2: Metre composer gets level, plan-first and status keys; 
     const seq = (await p.evaluate(() => window.__calls)).filter((c) => /planMode\.set|chat\.send/.test(c.method)).map((c) => c.method + ':' + (c.params.on ?? c.params.message));
     assert.deepEqual(seq, ['pinkie.metre.planMode.set:true', 'pinkie.metre.planMode.set:false', 'chat.send:照这个方案做。']);
     assert.equal(await p.$('.pk-perm-chip--go'), null);
-    // 引擎台开着时这一组让位
+    // 引擎台开着时这一组让位。fitSoon 的延时重量会用新节点 replaceWith 换掉 .pk-perm-chips；$eval 先拿元素再读样式，
+    // 正好夹在中间时读的是已脱离页面的旧节点，getComputedStyle 得空串（#502 portable-checks run 46058579784）。
+    // 所以在页面里一次查到、一次判断，等到按键组在页面上且 display 正好是 none；不放宽：按键组不在、或一直不是 none，都会等到超时变红
     await p.evaluate(() => document.documentElement.setAttribute('data-pk-engine', 'on'));
-    assert.equal(await p.$eval('.pk-perm-chips', (e) => getComputedStyle(e).display), 'none');
+    await p.waitForFunction(() => { const e = document.querySelector('.pk-perm-chips'); return !!e && e.isConnected && getComputedStyle(e).display === 'none'; });
   } finally { await browser.close(); }
 });
 

@@ -47,7 +47,13 @@ export class QuietMode {
   setPrefs(patch = {}) {
     if (typeof patch.pauseChannels === 'boolean') this.prefs.pauseChannels = patch.pauseChannels;
     if (this.file) {
-      try { fs.mkdirSync(path.dirname(this.file), {recursive: true}); fs.writeFileSync(this.file, JSON.stringify(this.prefs)); } catch {}
+      // 临时文件 + rename：写一半出错时存盘的旧偏好不坏，临时文件删掉；出错照旧不打断（B89）。
+      const temp = `${this.file}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        fs.mkdirSync(path.dirname(this.file), {recursive: true});
+        fs.writeFileSync(temp, JSON.stringify(this.prefs));
+        fs.renameSync(temp, this.file);
+      } catch { try { fs.rmSync(temp, {force: true}); } catch {} }
     }
     return this.status();
   }

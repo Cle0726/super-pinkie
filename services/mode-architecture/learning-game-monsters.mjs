@@ -88,7 +88,9 @@ export class GameMonsters {
       seed: {question: clean(question, SEED_QUESTION_MAX), answer: clean(answer, 300), options: Array.isArray(options) ? options.map(o => clean(o, 200)).slice(0, 6) : null},
     };
     box.list[id] = m;
-    this.kickNaming();
+    // spawn 跑在外层 game.mutate 的 fn 里：这时新怪还没写盘，起名任务一上来就 read() 会看不到它、调 0 次模型就收工。
+    // 放进微任务：同步的 mutate 写完盘之后才开跑。
+    queueMicrotask(() => this.kickNaming());
     this.kickVariantsSoon();
     return m;
   }
@@ -320,6 +322,6 @@ export class GameMonsters {
           if (r) { m.name = r.value.name; m.blurb = r.value.blurb; m.named = 'model'; }
         });
       }
-    })().finally(() => { this.naming = null; });
+    })().catch(() => {}).finally(() => { this.naming = null; });
   }
 }
