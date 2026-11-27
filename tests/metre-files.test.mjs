@@ -100,7 +100,7 @@ const group = index => `<div class="chat-group assistant" id="g${index}"><div cl
 <div class="chat-group-footer"></div></div></div>`;
 const page = mode => `<!doctype html><html data-laolao-mode="${mode}"><head><link rel="stylesheet" href="/laolao-workbench.css"><style>${css}</style></head><body>
 <main class="content content--chat" style="position:fixed;inset:0;overflow:auto"><openclaw-chat-pane active><div class="chat-thread" style="width:640px"><div class="chat-thread-inner">${group(11)}${group(13)}</div></div></openclaw-chat-pane></main></body></html>`;
-async function open(browser, mode, {width = 1280, git = true} = {}) {
+async function open(browser, mode, {width = 1280, git = true, statusDelay = 0} = {}) {
   const tab = await browser.newPage({viewport: {width, height: 800}});
   await tab.route(`http://127.0.0.1:${PORT}/**`, route => {
     const url = new URL(route.request().url());
@@ -111,13 +111,14 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
     return route.fulfill({contentType: TYPES[file.split('.').pop()] || 'application/octet-stream', body: fs.readFileSync(file)});
   });
   await tab.goto(`http://127.0.0.1:${PORT}/chat?session=agent%3A${mode === 'metre' ? 'metre' : 'project'}%3Atest`);
-  await tab.evaluate(([items, git]) => {
+  await tab.evaluate(([items, git, statusDelay]) => {
     document.querySelector('openclaw-chat-pane').state = {chatMessages: items};
     window.__pinkieMessageActions = {historyItem: (id, list) => list.find(item => id === `msg:${item.role}:${item.timestamp}:${list.indexOf(item)}`) || null};
     window.calls = [];
     window.__laolaoSidebar = {gwRequest: async (method, params = {}) => {
       window.calls.push([method, params.path || '']);
-      if (method === 'pinkie.fs.status') return {root: '/proj', agentId: 'metre', name: 'proj', bound: true, unrestricted: false};
+      // B66：statusDelay 让工作台的 pinkie.fs.status 人为晚到，复现 CI 上「show() 还在等 info」那段窗口
+      if (method === 'pinkie.fs.status') { if (statusDelay) await new Promise(r => setTimeout(r, statusDelay)); return {root: '/proj', agentId: 'metre', name: 'proj', bound: true, unrestricted: false}; }
       if (method === 'pinkie.fs.list') return {entries: []};
       // 后端说了算：项目外只读（这里按非 Metre 的规则答，看前端是不是照抄 readOnly，不自己判）
       if (method === 'pinkie.fs.read') return {kind: 'text', content: 'text of ' + params.path, path: params.path, readOnly: String(params.path).startsWith('/'), size: 10, mtimeMs: 1};
@@ -126,7 +127,7 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
       if (method === 'pinkie.fs.gitShow') return {content: 'old', exists: true};
       return {};
     }};
-  }, [history, git]);
+  }, [history, git, statusDelay]);
   await tab.addScriptTag({content: domWatch});
   await tab.addScriptTag({content: bench});
   await tab.addScriptTag({content: js});
@@ -180,12 +181,16 @@ test('改动 clicked first, before git status has loaded, still opens the diff (
 
 test('at 820 a chip clicked from the 对话 page brings the workbench back to 代码, so the opened tab is on screen (pr-shots 45793117245)', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
-  const tab = await open(browser, 'metre', {width: 820});
+  // B66：pinkie.fs.status 人为晚到 400 ms，用户在工作台还在等的时候就点了「对话」（CI 上 #409 run 45939911423 就是这个时序）。
+  // 等 hosts 标签真的开出来（openChip 走完），用户选的「对话」不能被 show() 改回「代码」，否则对话页整页 visibility: hidden、签条点不着。
+  const tab = await open(browser, 'metre', {width: 820, statusDelay: 400});
   try {
     await tab.locator('#g11 .pk-mfile-chip[data-path="/etc/hosts"]').click({timeout: 5000});
     await tab.waitForFunction(() => document.documentElement.dataset.pkWbNarrow === '1' && document.documentElement.dataset.pkWbView === 'code', null, {timeout: 10_000});
     await tab.getByRole('tab', {name: '对话', exact: true}).first().click({timeout: 5000});
     await tab.waitForFunction(() => document.documentElement.dataset.pkWbView === 'chat', null, {timeout: 3000});
+    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === '/etc/hosts'), null, {timeout: 10_000});
+    assert.equal(await tab.evaluate(() => document.documentElement.dataset.pkWbView), 'chat', 'the late status must not pull the user back from 对话');
     await tab.locator('#g11 .pk-mfile-chip[data-path="/proj/README.md"]').click({timeout: 5000});
     await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff'), null, {timeout: 10_000});
     assert.equal(await tab.evaluate(() => document.documentElement.dataset.pkWbView), 'code', 'the diff opens on the 代码 page, not behind the chat');
