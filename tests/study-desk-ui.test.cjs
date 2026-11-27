@@ -536,8 +536,19 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
     // 聊天区最后一次变动会让课程条按消息刷新一次（250ms 防抖），这不是轮询；等调用数稳定后再看 4 秒内有没有定时轮询。
     const currentCalls = () => f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
     // 保留死等：调用数记在 Node 侧的 fixture 里，页面里看不到，用不了 waitForFunction；700ms 一轮是「去抖后不再变」的稳定窗口，4200ms 是要证明「没有定时轮询」这件没发生的事，必须留时间窗。
-    let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
-    await page.waitForTimeout(4200); assert.equal(currentCalls(), before);
+    // B59：聊天区在稳定窗口之后又动一次，lesson.js:338 会按消息再刷新一次（12 !== 11）。页面里用同一个过滤条件数聊天区变动；
+    // 窗口里聊天动过就重开窗口，只认聊天没动的那 4.2s——定时轮询在这样的窗口里照样会多出调用，所以不放宽。
+    await page.evaluate(() => { const col = window.__pinkieDeskChat?.messageColumn?.() || document.querySelector('openclaw-chat-pane[active] .chat-thread, openclaw-chat-pane .chat-thread, .agent-chat__messages, .chat-thread, .chat-messages'); window.__b59ChatMoves = 0;
+      if (col) new MutationObserver(rs => { if (rs.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !n.closest?.('.lesson-bar') && !(n.parentElement?.closest('.lesson-bar'))))) window.__b59ChatMoves++; }).observe(col, {childList: true, characterData: true, subtree: true}); });
+    const chatMoves = () => page.evaluate(() => window.__b59ChatMoves);
+    let quiet = false;
+    for (let attempt = 0; attempt < 5 && !quiet; attempt++) {
+      let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
+      const moves = await chatMoves(); await page.waitForTimeout(4200);
+      if (await chatMoves() !== moves) continue;
+      quiet = true; assert.equal(currentCalls(), before, '聊天区没动的 4.2s 里 lesson.current 还被调了，是定时轮询');
+    }
+    assert.ok(quiet, '聊天区 5 个窗口都在变动，没法判断有没有定时轮询');
   });
 });
 test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', needsControlUI, async () => {
