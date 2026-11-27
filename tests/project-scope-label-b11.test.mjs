@@ -148,11 +148,11 @@ test('B11 #261 #6：Metre 日夜、非项目模式未绑定时仍然不显示', 
   if (why) t.skip(why);
 });
 
-// ⑤ 820 截断。第 9 列宽 = 输入框宽 − 第 10 列（模型芯片的替身，固定 300px）；前 8 列和 11、12 列这里没东西，宽 0。
+// ⑤ 820 截断。第 9 列宽 = 输入框宽 − 第 10 列（模型芯片的替身，300px + theme.css 第 2 行元素的 margin 0 1px = 302px）；前 8 列和 11、12 列这里没东西，宽 0。
 const gridPage = (night, subtraction, col) => `<!doctype html><html data-theme="light" data-laolao-mode="project"${night ? ' data-pinkie-night=""' : ''}><head>
 ${FILES.map((f) => `<style>${f === 'laolao-ui-subtraction.css' ? subtraction : sheets[f]}</style>`).join('\n')}
 <style>body{margin:0;background:#fff}</style></head><body>
-<div class="agent-chat__input" style="width:${col + 300}px"><div id="laolao-project-scope" role="status" data-error="false" data-bound="false">未绑定项目文件夹</div><div class="chat-composer-model-control" style="width:300px;height:28px"></div></div>
+<div class="agent-chat__input" style="width:${col + 302}px"><div id="laolao-project-scope" role="status" data-error="false" data-bound="false">未绑定项目文件夹</div><div class="chat-composer-model-control" style="width:300px;height:28px"></div></div>
 </body></html>`;
 async function fit(p) {
   return p.evaluate(() => {
