@@ -175,10 +175,32 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
         await transitionsSettled(page);
         const bad = await page.evaluate(readContrast);
         console.log(`ℹ night more without contrast css, titles: ${fmt(bad.titles)}`);
-        assert.ok(bad.titles.some((i) => !i.active), '反例：删掉后侧栏里没找到没选中的会话标题');
-        assert.ok(bad.titles.some((i) => !i.active && i.ratio < 4.5), `反例没生效：删掉后夜间没选中的会话标题仍都 ≥ 4.5 — ${fmt(bad.titles)}`);
-        assert.ok(bad.titles.some((i) => i.active), '反例：删掉后侧栏里没找到选中的会话标题');
-        assert.ok(bad.titles.some((i) => i.active && i.ratio < 4.5), `反例没生效：删掉后夜间选中的会话标题仍 ≥ 4.5 — ${fmt(bad.titles)}`);
+        assert.ok(bad.titles.some((i) => !i.active), '删掉后侧栏里没找到没选中的会话标题（量不到不能算通过）');
+        assert.ok(bad.titles.some((i) => i.active), '删掉后侧栏里没找到选中的会话标题（量不到不能算通过）');
+        // #160 起夜间会话标题平时就由 laolao-metre-skin.css 修好（夜间变量段 --sb-ink: var(--metre-text)；选中标题在「侧栏文字」那条规则里给 --metre-text），
+        // 删掉高对比规则后标题仍 ≥ 4.5，原来「必须掉回 4.5 以下」不成立了；改成平时也要 ≥ 4.5。
+        assert.deepEqual(bad.titles.filter((i) => i.ratio < 4.5).map((i) => `${i.active ? '选中' : '没选中'}「${i.text}」${i.ratio.toFixed(2)}`), [], `删掉高对比规则后夜间会话标题平时也要 ≥ 4.5 — ${fmt(bad.titles)}`);
+        // 反例：再从页面上撤掉皮肤里这两处夜间修复，选中 / 没选中的标题都必须掉回 4.5 以下（#160 之前约 2.9 / 2.5:1）。
+        const undone = await page.evaluate(() => {
+          const hit = {ink: 0, active: 0};
+          const walk = (rules) => {
+            for (const r of rules) {
+              if (r.cssRules && r.cssRules.length) walk(r.cssRules);
+              if (!r.style) continue;
+              if (r.style.getPropertyValue('--sb-ink')) { r.style.removeProperty('--sb-ink'); hit.ink++; }
+              const sel = r.selectorText || '';
+              if (/data-pinkie-night/.test(sel) && /sidebar-recent-session--active \.sidebar-recent-session__name/.test(sel) && r.style.getPropertyValue('color')) { r.style.removeProperty('color'); hit.active++; }
+            }
+          };
+          for (const sh of document.styleSheets) if (/laolao-metre-skin\.css/.test(sh.href || '')) walk(sh.cssRules);
+          return hit;
+        });
+        assert.deepEqual(undone, {ink: 1, active: 1}, `反例：皮肤里没找到夜间 --sb-ink 和夜间选中标题字色各一处 ${JSON.stringify(undone)}`);
+        await transitionsSettled(page);
+        const old = await page.evaluate(readContrast);
+        console.log(`ℹ night without contrast css and without the skin night title fixes: ${fmt(old.titles)}`);
+        assert.ok(old.titles.some((i) => !i.active && i.ratio < 4.5), `反例没生效：撤掉皮肤夜间 --sb-ink 后没选中的标题仍都 ≥ 4.5 — ${fmt(old.titles)}`);
+        assert.ok(old.titles.some((i) => i.active && i.ratio < 4.5), `反例没生效：撤掉皮肤夜间选中标题字色后选中标题仍 ≥ 4.5 — ${fmt(old.titles)}`);
       }
 
       if (theme === 'day') {
