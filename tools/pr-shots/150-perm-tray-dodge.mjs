@@ -8,6 +8,12 @@
 // shots.jsonl 每行另记 fold / dodge / padLeft / statHit（「⋯」中心点下去是不是它自己）/ top（中心点最上层是谁）/ coveredBy / opened。
 // report.json 另记 refit（再 fit 后的状态）和 forced（临时排到行首量一次的位置、被谁盖、按键行右沿，量完即还原）。
 // 最后再把同一页放宽到 820 量一次，记下放宽后是否回到原位（fold 0、没有 data-dodge、没有让位距离）。
+// 正反对照（#273 win-coord issuecomment-7211904180）：每格开两次页，head = 当前头；main = 同一页但 laolao-metre-perm.js 换成
+// 合后 main（不带本单）那份，其余注入、CSS、夹具都一样。report 里 loaded.hasFix 能看出页面实际跑的是哪份。
+// noanchor 档（#273 uireview issuecomment-7212133738）：#271 B28 在 laolao-metre-skin.css:714 用 @supports (anchor-name) 把托盘键、
+// 发送键锚到 composer 下沿，支持锚点的 Chromium 上碰不到托盘键；不支持的引擎（mac2 最早报的 WKWebView）退回 :903 / :904 / :960 的
+// bottom: 49px。这一档在页面 CSSOM 里临时删掉那条 @supports 规则造出碰撞，量 fold / dodge / shift / firstMl / stat / statHit / coveredBy，
+// 点「⋯」看详情开不开，再把规则插回原处。生产布局不动。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -23,6 +29,25 @@ const H = await import(pathToFileURL(path.join(root, 'tests/visual/lib/real-harn
 const engine = String(H.resolveRealEngine() || 'chromium');
 const HEIGHT = 900;
 const lines = [], report = [];
+
+// 合后 main 的 laolao-metre-perm.js：CI 上只 checkout 了 PR 头、没有 main 的历史，按固定 SHA 从公开仓库取，核对 sha256 再用
+// （main 39bc8763 上这个文件和本单分出去的 6e4ea1cc 上逐字节相同）。
+const BASE = {sha: '39bc8763ca49bf83569276488bc70b7216a9ab42', sha256: '4968b20fceb4782ff483dd339905674716935546b09c28e094d7c55c8700781b'};
+const baseSrc = await (async () => {
+  const url = `https://raw.githubusercontent.com/Cle0726/super-pinkie/${BASE.sha}/ui/injections/laolao-metre-perm.js`;
+  let last;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const got = crypto.createHash('sha256').update(buf).digest('hex');
+      if (got !== BASE.sha256) throw new Error(`sha256 ${got}，应为 ${BASE.sha256}`);
+      return buf.toString('utf8');
+    } catch (error) { last = error; await new Promise((r) => setTimeout(r, 2000)); }
+  }
+  throw new Error(`取不到 main@${BASE.sha.slice(0, 8)} 的 laolao-metre-perm.js：${last?.message}`);
+})();
 
 const record = (name, file, extra) => {
   const buf = fs.readFileSync(path.join(out, file));
@@ -101,14 +126,66 @@ const probe = (force) => {
   }
 };
 
+// noanchor 档第 1 步：删掉页面 CSSOM 里条件含 anchor-name 的 @supports 规则（含 @media / @layer 里嵌着的），记下删了几条、
+// 删前删后托盘键和发送键计算出来的 bottom；删掉的规则和原位置留在 window.__pkNoAnchor，第 4 步原样插回
+const cutAnchor = () => {
+  const css = (sel) => { const el = document.querySelector(sel); if (!el) return null; const s = getComputedStyle(el); return {bottom: s.bottom, positionAnchor: s.positionAnchor || null, rect: (({left, top, width, height}) => [left, top, width, height].map(Math.round))(el.getBoundingClientRect())}; };
+  const TRAY = '.chat-main .agent-chat__input .pinkie-tray-btn', SEND = '.chat-main .agent-chat__input button.chat-send-btn';
+  const before = {tray: css(TRAY), send: css(SEND)};
+  const removed = [];
+  let blocked = 0;
+  // 从后往前删，插回时按删的反序（下标从小到大）插，位置就和原来一样
+  const walk = (owner, list, where) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (typeof CSSSupportsRule !== 'undefined' && r instanceof CSSSupportsRule && /anchor-name/.test(r.conditionText)) {
+        removed.push({owner, index: i, text: r.cssText, where});
+        owner.deleteRule(i);
+        continue;
+      }
+      if (r.cssRules && typeof r.deleteRule === 'function') walk(r, r.cssRules, where);
+    }
+  };
+  for (const sh of [...document.styleSheets, ...(document.adoptedStyleSheets || [])]) {
+    let rules; try { rules = sh.cssRules; } catch { blocked++; continue; }
+    walk(sh, rules, (sh.href || 'inline').replace(/^.*\//, ''));
+  }
+  window.__pkNoAnchor = removed;
+  return {removed: removed.length, where: removed.map((r) => r.where), blocked, before, after: {tray: css(TRAY), send: css(SEND)}};
+};
+// noanchor 档第 4 步：把删掉的规则插回原处，看托盘键回没回到锚点位置
+const putAnchor = () => {
+  const list = window.__pkNoAnchor || [];
+  let restored = 0; const errors = [];
+  for (const r of [...list].reverse()) { try { r.owner.insertRule(r.text, r.index); restored++; } catch (e) { errors.push(String(e)); } }
+  delete window.__pkNoAnchor;
+  const el = document.querySelector('.chat-main .agent-chat__input .pinkie-tray-btn');
+  return {restored, errors, trayBottom: el ? getComputedStyle(el).bottom : null};
+};
+
 const installed = H.installRealControlUi({repoRoot: root});
 const server = await H.startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: root, runDir: installed.runDir});
 const browser = await H.launchRealBrowser(engine);
+// main 档：openRealScenePage 自己开 context 再导航，这里在它开 context 时先挂上路由，把 laolao-metre-perm.js 换成 main 那份；
+// 别的属性和方法原样转给真的 browser（夹具不改）
+const mainBrowser = new Proxy(browser, {
+  get(target, prop) {
+    if (prop === 'newContext') {
+      return async (...a) => {
+        const context = await target.newContext(...a);
+        await context.route(/\/laolao-metre-perm\.js(?:\?|$)/, (route) => route.fulfill({status: 200, contentType: 'application/javascript; charset=utf-8', body: baseSrc}));
+        return context;
+      };
+    }
+    const v = Reflect.get(target, prop, target);
+    return typeof v === 'function' ? v.bind(target) : v;
+  },
+});
 try {
-  for (const theme of ['day', 'night']) {
+  for (const variant of ['head', 'main']) for (const theme of ['day', 'night']) {
     for (const width of [320, 360]) {
-      const {context, page, pageErrors} = await H.openRealScenePage(browser, server.origin, 'metre-board', theme);
-      const base = `150b-${width}-${theme}`;
+      const {context, page, pageErrors} = await H.openRealScenePage(variant === 'main' ? mainBrowser : browser, server.origin, 'metre-board', theme);
+      const base = `150b-${variant}-${width}-${theme}`;
       try {
         await page.evaluate(() => window.__pinkieMetreBoard?.close?.());
         await page.setViewportSize({width, height: HEIGHT});
@@ -170,14 +247,40 @@ try {
           try { const t = await (await fetch(src)).text(); return {src, hasFix: /c\.width > 0 \? c\.right : input\.getBoundingClientRect\(\)\.right/.test(t) && /setShift\(box, shiftOf\(box\) \+ need\)/.test(t)}; }
           catch (e) { return {src, hasFix: null, error: String(e)}; }
         });
+        // noanchor 档：删掉 @supports (anchor-name) 规则造出碰撞 → 重新 fit → 量 → 点「⋯」→ 插回规则（uireview 7212133738 第 1–4 步）
+        let noanchor = null;
+        try {
+          const cut = await page.evaluate(cutAnchor);
+          await page.evaluate(() => { window.dispatchEvent(new Event('resize')); window.PinkieMetrePerm?.fit?.(); });
+          await page.waitForTimeout(1800);
+          const {center: naCenter, ...na} = await page.evaluate(probe);
+          await page.mouse.move(0, 0);
+          await shoot(page, `${base}-noanchor-row`, '.chat-main .agent-chat__input', {...na, noanchor: true});
+          let naOpened = false;
+          if (naCenter) {
+            await page.mouse.click(...naCenter);
+            naOpened = await page.waitForSelector('.pk-perm-pop--detail', {timeout: 3000}).then(() => true, () => false);
+          }
+          await page.mouse.move(0, 0);
+          await shoot(page, `${base}-noanchor-detail`, null, {...na, noanchor: true, opened: naOpened});
+          await page.keyboard.press('Escape');
+          const put = await page.evaluate(putAnchor);
+          await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
+          await page.waitForTimeout(1800);
+          const after = await page.evaluate(probe);
+          noanchor = {cut, row: na, opened: naOpened, put, after: {fold: after.fold, dodge: after.dodge, shift: after.shift, firstMl: after.firstMl, statHit: after.statHit, coveredBy: after.coveredBy}};
+        } catch (error) {
+          noanchor = {error: String(error?.message || error)};
+          await page.evaluate(putAnchor).catch(() => {});
+        }
         // 放宽：回到原位
         await page.setViewportSize({width: 820, height: HEIGHT});
         await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
         await page.waitForTimeout(1800);
         const wide = await page.evaluate(probe);
-        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, shifts, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, shift: wide.shift, statHit: wide.statHit}, pageErrors});
+        report.push({variant, theme, width, row: rec, opened, refit, forced, forcedPad, shifts, loaded, noanchor, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, shift: wide.shift, statHit: wide.statHit}, pageErrors});
       } catch (error) {
-        report.push({theme, width, error: error.message, pageErrors});
+        report.push({variant, theme, width, error: error.message, pageErrors});
       } finally {
         await context.close();
       }
@@ -191,11 +294,22 @@ try {
 fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
 fs.appendFileSync(path.join(out, 'shots.jsonl'), lines.map((l) => JSON.stringify(l) + '\n').join(''));
 console.log(`pr-shots: ${lines.length} 张 → ${out}`);
+const cov = (p) => (p?.coveredBy?.length ? p.coveredBy.join('+') : '-');
+// 正反对照一览：每格 head / main 的常态与 noanchor 档各一行
 for (const r of report) {
-  if (r.error) console.log(`pr-shots: ${r.theme} ${r.width} 出错：${r.error}`);
+  if (r.error) { console.log(`pr-shots: [对照] ${r.variant} ${r.theme} ${r.width} 出错：${r.error}`); continue; }
+  const n = r.noanchor || {};
+  console.log(`pr-shots: [对照] ${r.variant} ${r.theme} ${r.width} hasFix=${r.loaded?.hasFix}`
+    + ` | 常态 fold=${r.refit?.fold} dodge=${r.refit?.dodge} shift=${r.refit?.shift} statHit=${r.refit?.statHit} coveredBy=${cov(r.refit)} opened=${r.opened}`
+    + (n.error ? ` | noanchor 出错：${n.error}`
+      : ` | noanchor 删=${n.cut?.removed}(${(n.cut?.where || []).join(',')}) trayBottom=${n.cut?.before?.tray?.bottom}→${n.cut?.after?.tray?.bottom} sendBottom=${n.cut?.before?.send?.bottom}→${n.cut?.after?.send?.bottom}`
+        + ` fold=${n.row?.fold} dodge=${n.row?.dodge} shift=${n.row?.shift} firstMl=${n.row?.firstMl} stat=${JSON.stringify(n.row?.stat)} statHit=${n.row?.statHit} top=${n.row?.top} coveredBy=${cov(n.row)} opened=${n.opened}`
+        + ` | 插回=${n.put?.restored} trayBottom=${n.put?.trayBottom} 插回后 dodge=${n.after?.dodge} shift=${n.after?.shift} statHit=${n.after?.statHit}`));
+}
+for (const r of report) {
+  if (r.error) console.log(`pr-shots: ${r.variant} ${r.theme} ${r.width} 出错：${r.error}`);
   else {
-    const cov = (p) => (p?.coveredBy?.length ? p.coveredBy.join('+') : '-');
-    console.log(`pr-shots: ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} shift=${r.row.shift} firstMl=${r.row.firstMl} stat=${JSON.stringify(r.row.stat)} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
+    console.log(`pr-shots: ${r.variant} ${r.theme} ${r.width} fold=${r.row.fold} dodge=${r.row.dodge} pad=${r.row.padLeft} shift=${r.row.shift} firstMl=${r.row.firstMl} stat=${JSON.stringify(r.row.stat)} statHit=${r.row.statHit} top=${r.row.top} coveredBy=${cov(r.row)} opened=${r.opened}`
       + ` | refit dodge=${r.refit?.dodge} pad=${r.refit?.padLeft} shift=${r.refit?.shift} firstMl=${r.refit?.firstMl} stat=${JSON.stringify(r.refit?.stat)} statHit=${r.refit?.statHit} top=${r.refit?.top} coveredBy=${cov(r.refit)}`
       + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight} inputRight=${r.forced?.inputRight}`
       + ` | pad40 stat=${JSON.stringify(r.forcedPad?.stat)} chips=${JSON.stringify(r.forcedPad?.chips)} coveredBy=${cov(r.forcedPad)} statHit=${r.forcedPad?.statHit}`
