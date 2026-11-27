@@ -1,8 +1,9 @@
-import {after, test} from 'node:test';
+import {after, before, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 // 11-24 验收打回第 3 条：后台带写「网关 连着」，同一时刻总谱顶上却是「连接断了，正在重连」。两边要读同一份连接状态，
 // 连接恢复后总谱的断线条和「此刻」必须一起恢复。流程：先断线，再恢复，再打开总谱；以及总谱开着时断线、恢复。
@@ -10,28 +11,27 @@ const file = (name) => fileURLToPath(new URL('../ui/injections/' + name, import.
 const read = (name) => fs.readFileSync(file(name), 'utf8');
 
 // CI 提速：整个文件只起一个浏览器，各测试共用；隔离仍按测试走（每个测试自己开一个 context，结束就关）。
-// 起浏览器的 Promise 只建一次，失败（没装 Playwright / 起不来）也记住，之后每个测试都同样跳过。
-let shared = null;
-async function sharedBrowser(t) {
-  shared ??= (async () => {
-    let lib;
-    try { lib = playwright(); } catch { return {skip: 'Playwright is not installed here'}; }
-    const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-    try { return {browser: await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})})}; }
-    catch (error) { return {skip: 'no browser: ' + error.message.split('\n')[0]}; }
-  })();
-  const got = await shared;
-  if (got.skip) { t.skip(got.skip); return null; }
-  return got.browser;
+// B65（#96 L41）：浏览器在 before() 里起，并等它真的画出第一帧（helpers/browser-first-frame.mjs），都在任何测试的 60 s 之外。
+// 原来第一次起浏览器放在第一条测试里，冷 runner 上 launch 44.9 / 49.9 s + 第一页 newPage 21.0 / 21.7 s 就超过 60 s，
+// 断言和等待只要约 3 s（run 45947291015 portable-checks、45953565353 C.le. 内核、45929512920 C.le. 内核：sync-1 'test timed out after 60000ms'）。
+// 等的是「浏览器能画页」这个条件，不是把测试的上限调大；没装 Playwright / 起不来时记下原因，每条测试同样跳过。
+let browser = null, why = '';
+before(async () => {
+  let lib;
+  try { lib = playwright(); } catch { why = 'Playwright is not installed here'; return; }
+  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
+  catch (error) { why = 'no browser: ' + error.message.split('\n')[0]; return; }
+  await waitFirstFrame(browser, `metre-backstage-sync (${engine})`);
+}, {timeout: 120_000});
+after(async () => { await browser?.close(); });
+function sharedBrowser(t) {
+  if (!browser) { t.skip(why || 'no browser'); return null; }
+  return browser;
 }
 
-after(async () => {
-  const got = await shared;
-  if (got?.browser) await got.browser.close();
-});
-
 // 11-26 计时（#217）：前两条在 CI 上 50–60 s（本机 1–3 s），一次 60 s 超时。每一步打时间看慢在哪一步，不改任何断言。
-// 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。共用浏览器在第一条测试里才起，所以 sync-1 的 launch 含起浏览器。
+// 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。浏览器和第一帧都在 before() 里，sync-1 的 launch 不再含起浏览器。
 function stopwatch(label) {
   const t0 = performance.now(); let last = t0; const laps = [];
   return {
