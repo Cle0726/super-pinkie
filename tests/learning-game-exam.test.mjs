@@ -158,7 +158,8 @@ test('出卷后盲做复核：对不上的选择题改写一次；改不好就�
 test('守关答完才按标准答案讲解', async t => {
   const {game} = gameFixture(t);
   let seen;
-  game.requestModel = async (rules, payload) => { seen = payload; return isExplainRules(rules) ? {value: {text: '标准答案是 Here you are。'}} : {unavailable: true}; };
+  // 只记讲解那一次的入参：答错会生怪，怪出生后的后台起名 / 出变体也会调到这个模型。
+  game.requestModel = async (rules, payload) => { if (!isExplainRules(rules)) return {unavailable: true}; seen = payload; return {value: {text: '标准答案是 Here you are。'}}; };
   game.mutate(state => { game.modules.world.ensure(state).guards.g1 = {items: [{stem: 'Could you pass the report?', options: ['Yes', 'Here you are.'], answer: 1, why: '请求帮忙'}], answers: {}}; });
   await assert.rejects(() => game.modules.world.guardExplain({attemptId: 'g1', itemId: 'g1'}), /先做完/);
   game.modules.world.guardAnswer({attemptId: 'g1', itemId: 'g1', answer: 0});

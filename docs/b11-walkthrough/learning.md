@@ -38,6 +38,11 @@
 | L8 | `laolao-learning-library.css`：`.pinkie-library__search`、`.pinkie-library__primary` | desk-library，日/夜，1440/820 | 书架搜索框和「＋ 打开电子书」按钮边框几乎看不出 | 边框 1.43~1.46（要 3） | 无 |
 | L9 | `laolao-study-desk-board.js:77`（`data.answered.independentRate`） | desk-board 起每页 pageErrors | 看板数据缺 `answered` 时直接抛 `TypeError: Cannot read properties of undefined (reading 'independentRate')` | — | 无 |
 | L10 | `laolao-study-desk-vocab.js`（`.v-count` 文案） | desk-vocab，日/夜 | 生词本标题上方直接显示 JS 异常原文「Cannot read properties of undefined (reading 'due')」（见 desk-vocab-1440-day.png） | — | 无 |
+| L11 | `laolao-game-hud.css`：`.pkg-purse .pkg-cell .pkg-glyph[data-kind="stars"] svg`（钱包星星，`#D99A1E`） | desk-today / desk-gamepractice，日，1440/820 | 日间钱包里的星星图标偏淡（#474 取色修正后复测发现） | 2.27（像素 2.21~2.25，要 3） | 无 |
+| L12 | `laolao-desk-reward.css`：`.pk-drill-nib svg`（`color:var(--pink)` 落在 `--hair` 上） | desk-drill，日，1440/820 | 日间刷题进度笔尖图标偏淡 | 2.75（像素 3.3，要 3） | 无 |
+| L13 | `laolao-context-compact.js`：`.laolao-context-viewer summary svg`（上下文圆环，`#bd73a2`） | home / desk-chat，日，1440/820 | 日间上下文圆环偏淡；DOM 3.42 过线，但抗锯齿后像素只有 2.08~2.79，修之前要定按哪个算 | 3.42（像素 2.08~2.79） | 无 |
+
+L11~L13 说明：派单只要求夜间三组 SVG 闭环，这三项是日间新发现、且落在 desk-reward / context-compact 等其他文件，不在本单范围，登记待派。形态牌（`.pkg-stage__tag`）里的日间星星 1.84 与夜间主题 + 白天舞台 1.02 同一根因，已在 `mac/b11-night-svg-audit` 一并修（日舞台深金 `#7A5518`、夜舞台亮金 `#F2C14E`）。
 
 L9 / L10 说明：harness 的假网关不应答看板、生词本的 RPC，所以数据是空的；真网关下多半不会出现。但界面在数据缺字段时把异常原文显示给用户，这算健壮性问题，修之前要先在真数据形状下复核。
 
@@ -48,7 +53,7 @@ L9 / L10 说明：harness 的假网关不应答看板、生词本的 RPC，所�
 | `laolao-game-hud.css`：`.pkg-hello`（「下午好。」）、`.pkg-line` | 1.15 / 2.83 | 量到的底色是外层深色块 `rgb(36,24,15)`，实际文字压在浅色插画天空上，截图里清楚 |
 | `laolao-game-hud.css`：`.pkg-boss__copy *`（「巴别兽」、天数、「还没考过…」、BOSS kicker） | 1.03~1.46 | Boss 卡是深色渐变 / 图底，脚本只叠了纸色；截图里白字在深底上清楚 |
 | `laolao-game-stage.css`：`.pkq-plate__row b / small`（背一背顶部「日常碧琪」「气势」） | 1.05~1.08 | 名牌是半透明深底叠在场景图上，脚本没算进去；截图里可读 |
-| 夜间 svg 图标：`.laolao-context-viewer summary svg`、`.pkg-glyph svg`、`.pk-drill-nib svg` | 1.18~1.41 | 量到的图标色是 `rgb(0,0,0)`（填充默认值，实际用 currentColor / 渐变画），属脚本取色不准，需改脚本后复测 |
+| ~~夜间 svg 图标：`.laolao-context-viewer summary svg`、`.pkg-glyph svg`、`.pk-drill-nib svg`~~ **已复测闭环** | ~~1.18~1.41~~ → 夜：圆环 4.51、nib 5.08、glyph 7.95~10.56 | 原读数是脚本把填充默认值 `rgb(0,0,0)` 当图标色。#474 修正取色（只量子图形，stroke / fill 各按自己的 opacity，跳过 `none` / `url()`）后，用 `tools/pr-shots/b11-night-svg-audit.mjs` 在 Chromium + WebKit、1440/820 复测（两引擎读数一致，像素复核相符），确认是误报。唯一真低：desk-today 夜间主题 + 白天舞台时，形态牌里的星星只有 1.02（夜间 stars 规则特异性压过牌子规则，亮黄落在浅色牌上）。本单 `mac/b11-night-svg-audit` 改为让牌子里的 glyph 跟舞台昼夜取色（`--st-glyph`），反例见 `tests/b11-stage-tag-glyph-contrast.test.mjs`。日间顺带发现的三项另登记为 L11~L13 |
 
 ### 学习模式页面里出现、但属于全局外壳的问题（不在学习模式文件里）
 

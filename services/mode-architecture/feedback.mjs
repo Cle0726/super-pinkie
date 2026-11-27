@@ -382,7 +382,8 @@ export class FeedbackManager {
       });
       if (correction) {
         const id = crypto.randomUUID();
-        this.store.enqueue({
+        // 记落盘后的 id（enqueue 会先过 sanitizeFeedbackRecord），保证之后 replaceItem 能按同一个 id 找到它。
+        const {record} = this.store.enqueue({
           id,
           type: 'correction',
           at: minuteStamp(now),
@@ -393,7 +394,7 @@ export class FeedbackManager {
           model: prior?.model || 'unknown',
           ...correction,
         });
-        turn.correctionId = id;
+        turn.correctionId = record.id;
       }
     } catch {}
   }
@@ -454,7 +455,8 @@ export class FeedbackManager {
           }));
         } else {
           const id = crypto.randomUUID();
-          this.store.enqueue({
+          // 同 onUserPrompt：记落盘后的 id，保证内存和磁盘里的 correctionId 一致。
+          const {record} = this.store.enqueue({
             id,
             type: 'correction',
             at: minuteStamp(this.now()),
@@ -465,7 +467,7 @@ export class FeedbackManager {
             model: turn?.model || prior?.model || 'unknown',
             ...classified,
           });
-          if (turn) turn.correctionId = id;
+          if (turn) turn.correctionId = record.id;
         }
       }
     } catch {}

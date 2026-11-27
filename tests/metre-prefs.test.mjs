@@ -55,7 +55,7 @@ function env({mode = 'metre', pane = true, config = false, stored = {}, settings
   const winListeners = {}; const polls = [];
   const state = {pane, config};
   const document = {documentElement: html, readyState: 'complete', createElement: (t) => new El(t), addEventListener() {},
-    querySelector(sel) { if (sel === 'openclaw-chat-pane') return state.pane ? paneEl : null; if (sel === 'openclaw-config-page') return state.config ? configEl : null; if (sel === '#laolao-user-settings .pinkie-user-settings__scroll') return null; return body.querySelector(sel); }};
+    querySelector(sel) { if (sel === '.pinkie-mention .pinkie-mention__item') return state.mention ? {} : null; if (sel === 'openclaw-chat-pane') return state.pane ? paneEl : null; if (sel === 'openclaw-config-page') return state.config ? configEl : null; if (sel === '#laolao-user-settings .pinkie-user-settings__scroll') return null; return body.querySelector(sel); }};
   const window = {localStorage, addEventListener: (t, f) => (winListeners[t] ||= []).push(f), Pinkie: {domWatch: {poll: (f, ms) => polls.push([f, ms])}}};
   vm.runInNewContext(SRC, {window, document});
   const fire = (t, detail) => { for (const f of winListeners[t] || []) f({detail}); };
@@ -72,7 +72,7 @@ function env({mode = 'metre', pane = true, config = false, stored = {}, settings
   const tick = () => polls[0][0]();
   // 模拟「回到对话页」：设置页没了，对话面板回来。
   const backToChat = () => { state.config = false; state.pane = true; if (!paneEl.state) mkPane(); };
-  return {winListeners: (t) => winListeners[t] || [], vars, look, lookBtn, lookPressed, html, scroll, card, buttons, btn, pressed, applied, configWrites, paneEl, fire, polls, tick, ls, backToChat, note: () => card.querySelector('.pk-metre-prefs__note')};
+  return {winListeners: (t) => winListeners[t] || [], vars, look, lookBtn, lookPressed, html, scroll, card, buttons, btn, pressed, applied, configWrites, paneEl, fire, polls, tick, ls, backToChat, setMention: (on) => { state.mention = on; }, note: () => card.querySelector('.pk-metre-prefs__note')};
 }
 
 test('Metre 设置弹层里有「对话」卡片，排在页脚前面，三档对应原生取值，默认选中原生当前值', () => {
@@ -256,6 +256,27 @@ test('I7 选了 Ctrl + Enter：单按 Enter 只停传播（换行照常），Ctr
   assert.equal(e.press(), 0, '斜杠菜单开着时 Enter 归菜单');
 });
 
+// ---------- L25（T3 #11 @文件 / @会话引用）：选了 Ctrl + Enter 时，@ 弹层里的候选仍要能用 Enter 选中 ----------
+test('L25 选了 Ctrl + Enter：@ 提及弹层里有候选时单按 Enter 不拦（归弹层选中插入引用）；弹层关掉或没候选又照常拦', () => {
+  const e = keyEnv({stored: {[SEND_KEY]: 'modifier-enter'}});
+  e.setMention(true);
+  assert.equal(e.press(), 0, '@ 弹层有候选：Enter 交给 laolao-session-tools.js 的 document 捕获钩子去选');
+  e.setMention(false);
+  assert.equal(e.press(), 1, '弹层关了（或只有「没有匹配」空行）：照 I7 拦住，只换行');
+  const dflt = keyEnv();
+  dflt.setMention(true);
+  assert.equal(dflt.press(), 0, '默认 Enter 档本来就不拦');
+});
+
+test('L25 前提：@ 提及弹层和候选的类名、Enter 选中钩子都还在 laolao-session-tools.js（document 捕获阶段，晚于 window 捕获）', () => {
+  const tools = read('ui/injections/laolao-session-tools.js');
+  assert.match(tools, /const panel = el\('div', 'pinkie-mention'\);[\s\S]*?document\.body\.append\(panel\);/, '弹层挂在 body 上、类名 pinkie-mention');
+  assert.match(tools, /el\('div', 'pinkie-mention__item'\)/, '候选类名 pinkie-mention__item');
+  assert.match(tools, /el\('div', 'pinkie-mention__empty'/, '「没有匹配」是另一个类名，不算候选');
+  assert.match(tools, /document\.addEventListener\('keydown', event => \{[\s\S]*?event\.key === 'Enter' \|\| event\.key === 'Tab'[\s\S]*?pick\(mentionUi\.active\)[\s\S]*?\}, true\);/);
+  assert.match(SRC, /document\.querySelector\('\.pinkie-mention \.pinkie-mention__item'\)/);
+});
+
 test('I7 只在 Metre：其他五个模式存了 Ctrl + Enter 也不拦；存了不认识的值按 Enter', () => {
   const other = keyEnv({mode: 'classic', stored: {[SEND_KEY]: 'modifier-enter'}});
   assert.equal(other.press(), 0);
@@ -264,7 +285,7 @@ test('I7 只在 Metre：其他五个模式存了 Ctrl + Enter 也不拦；存了
   assert.deepEqual(odd.lookPressed('send'), ['enter']);
 });
 
-test('I7 前提：碧琪共用的 4 个 Enter 钩子都挂在 document 捕获阶段（window 捕获先于它们），本 PR 没改这 4 个文件', () => {
+test('I7 前提：碧琪共用的 4 个 Enter 钩子都挂在 document 捕获阶段（window 捕获先于它们），守卫仍以 key !== "Enter" 开头', () => {
   for (const f of ['laolao-queue-steer.js', 'laolao-resume.js', 'laolao-immersion.js', 'laolao-companion.js']) {
     const text = read('ui/injections/' + f);
     assert.match(text, /document\.addEventListener\("keydown", \((?:e|event)\) => \{\n\s+if \((?:e|event)\.key !== "Enter"/, f);

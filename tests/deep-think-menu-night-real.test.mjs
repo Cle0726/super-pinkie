@@ -3,7 +3,7 @@
 // 却写死日间深紫 rgba(87,54,74,…)，而 laolao-deep-think.js 原来唯一的夜间规则只认 data-theme-mode="dark"，
 // 还被 night.css 的 !important 盖住，等于没有。
 // 测法：真装的 Control UI，home-thinking × 1440 / 820 × 日 / 夜，点开菜单量四处字对底的对比度（量法见 deep-think-menu-contrast.mjs）。
-// 夜间四处都要 ≥ 4.5；日间四处颜色必须和原来一样（本修复不碰日间）。反例：夜间注回旧日间深紫，必须量出 < 4.5。
+// 日夜四处都要 ≥ 4.5（日间是 B11·T2 把 alpha 提到 .78 / .82 / .78 / .78）。反例：日夜都注回旧日间深紫，必须量出 < 4.5。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -15,9 +15,7 @@ import {
 } from './visual/lib/real-harness.mjs';
 import {MENU_PARTS, measureMenu, openDeepThinkMenu, revertMenuColors} from './visual/lib/deep-think-menu-contrast.mjs';
 
-const DAY_COLORS = {head: 'rgba(87, 54, 74, 0.72)', summary: 'rgba(87, 54, 74, 0.53)', hint: 'rgba(87, 54, 74, 0.62)', footer: 'rgba(87, 54, 74, 0.43)'};
-
-test('夜间思考强度菜单的标题 / 档位说明 / 提示 / 页脚对深底 ≥ 4.5，日间颜色不变；注回旧日间色必须量出 < 4.5', async (t) => {
+test('思考强度菜单的标题 / 档位说明 / 提示 / 页脚日夜对底都 ≥ 4.5；注回旧日间色必须量出 < 4.5', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   let server = null;
   let browser = null;
@@ -43,15 +41,12 @@ test('夜间思考强度菜单的标题 / 档位说明 / 提示 / 页脚对深�
           const now = await page.evaluate(measureMenu, MENU_PARTS);
           t.diagnostic(`${width} ${theme} 现在 ${JSON.stringify(now)}`);
           for (const name of Object.keys(MENU_PARTS)) assert.ok(now[name], `菜单里有 ${name}`);
-          if (theme === 'day') {
-            for (const [name, color] of Object.entries(DAY_COLORS)) assert.equal(now[name].color, color, `日间 ${name} 颜色不变`);
-          } else {
-            for (const name of Object.keys(MENU_PARTS)) assert.ok(now[name].ratio >= 4.5, `夜间 ${name} 对比度 ${now[name].ratio} ≥ 4.5（${JSON.stringify(now[name])}）`);
-            await revertMenuColors(page);
-            const reverted = await page.evaluate(measureMenu, MENU_PARTS);
-            t.diagnostic(`${width} ${theme} 注回旧色 ${JSON.stringify(reverted)}`);
-            for (const name of Object.keys(MENU_PARTS)) assert.ok(reverted[name].ratio < 4.5, `反例：旧色下夜间 ${name} 必须 < 4.5（实际 ${reverted[name].ratio}）`);
-          }
+          const label = theme === 'day' ? '日间' : '夜间';
+          for (const name of Object.keys(MENU_PARTS)) assert.ok(now[name].ratio >= 4.5, `${label} ${name} 对比度 ${now[name].ratio} ≥ 4.5（${JSON.stringify(now[name])}）`);
+          await revertMenuColors(page);
+          const reverted = await page.evaluate(measureMenu, MENU_PARTS);
+          t.diagnostic(`${width} ${theme} 注回旧色 ${JSON.stringify(reverted)}`);
+          for (const name of Object.keys(MENU_PARTS)) assert.ok(reverted[name].ratio < 4.5, `反例：旧色下${label} ${name} 必须 < 4.5（实际 ${reverted[name].ratio}）`);
           assert.deepEqual(pageErrors, [], '页面没有报错');
         } finally {
           await context.close();
