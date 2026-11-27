@@ -270,7 +270,7 @@ def gateway_listener_pid(port=18789, runner=None):
         return None
     try:
         result = (runner or subprocess.run)(
-            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=5,
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, errors="replace", timeout=5,
             **hidden_process_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
@@ -384,8 +384,10 @@ def cleanup_orphan_webview(storage):
     if os.name != "nt":
         return
     path = str(Path(storage).resolve())
+    # -like treats [ ] in a folder name as a character class; escape them so
+    # the path matches itself.
     script = (
-        "$root=" + ps_single_quoted(path) + "; "
+        "$root=[Management.Automation.WildcardPattern]::Escape(" + ps_single_quoted(path) + "); "
         "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
         "Where-Object { $_.CommandLine -and $_.CommandLine -like ('*--user-data-dir=*' + $root + '*') } | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"

@@ -196,6 +196,50 @@ class LaunchTest(unittest.TestCase):
             self.assertTrue(bridge.apply_update()["started"])
         self.assertEqual(updater.launch_replacer.call_args_list[-1], mock.call(elevated=True))
 
+    def test_bridge_does_not_elevate_when_the_user_says_no(self):
+        updater = mock.Mock()
+        updater.launch_replacer.return_value = {"started": False, "elevate": True, "message": "x"}
+        bridge = NativeBridge(updater)
+        bridge._window = mock.Mock()
+        with mock.patch.object(NativeBridge, "_ask_elevated_install", return_value=False):
+            self.assertFalse(bridge.apply_update()["started"])
+        self.assertEqual(updater.launch_replacer.call_args_list, [mock.call()])
+
+
+class ElevationEntryPointsTest(unittest.TestCase):
+    """The App runs unelevated (no --uac-admin); UAC is asked for only here."""
+
+    ALLOWED = {"app/windows_elevated.py", "app/windows_ps_templates.py"}
+
+    def test_only_the_known_entry_points_ask_for_uac(self):
+        pattern = re.compile(r"""lpVerb\s*=\s*["']runas|-Verb\s+RunAs|Verb\s*=\s*["']runas""", re.I)
+        found = set()
+        for folder in ("app", "services", "installer"):
+            for path in (ROOT / folder).rglob("*"):
+                if path.suffix not in (".py", ".ps1", ".mjs", ".js", ".cjs") or "node_modules" in path.parts:
+                    continue
+                if pattern.search(path.read_text(encoding="utf-8-sig", errors="replace")):
+                    found.add(path.relative_to(ROOT).as_posix())
+        self.assertEqual(found, self.ALLOWED)
+
+    def test_the_updater_elevates_in_one_place_and_only_when_asked(self):
+        lines = (ROOT / "app/windows_updater.py").read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any("def launch_replacer(self, elevated=False):" in line for line in lines))
+        calls = [i for i, line in enumerate(lines) if "start_elevated(" in line and "def start_elevated" not in line]
+        self.assertEqual(len(calls), 1)
+        guard = next(lines[i] for i in range(calls[0] - 1, -1, -1) if lines[i].strip().startswith("if "))
+        self.assertEqual(guard.strip(), "if elevated:")
+
+    def test_repair_button_elevates_only_on_click_and_restarts_unelevated(self):
+        from app.windows_ps_templates import __file__ as templates_file
+        templates = Path(templates_file).read_text(encoding="utf-8")
+        click = templates.index("$admin.Add_Click(")
+        runas = templates.index("-Verb RunAs")
+        self.assertLess(click, runas, "RunAs must sit inside the button's click handler")
+        self.assertEqual(templates.count("-Verb RunAs"), 1)
+        # The elevated repair hands the restart to Explorer, so the App comes back unelevated.
+        self.assertIn("& explorer.exe $TargetExe", REPAIR_PS)
+
 
 class PendingLaunchTokenTest(unittest.TestCase):
     def setUp(self):
@@ -323,6 +367,46 @@ class ProbeVisibilityTest(unittest.TestCase):
             (10, []), (11, []), (12, []), (13, []), (14, []))]               # still open at the end
         self.assertEqual(probe.visibility_gaps(samples), [(4, 9, 5), (10, 14, 4)])
         self.assertEqual(probe.visibility_gaps(samples[:4]), [])
+
+    def fake_clock(self, on_tick=None):
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+            if on_tick:
+                on_tick(now[0])
+        return (lambda: now[0]), sleep
+
+    def test_note_wait_keeps_the_old_twenty_seconds_when_the_note_is_read_early(self):
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            # The restored window reads the note at 6 s: still never checked before 20 s.
+            clock, sleep = self.fake_clock(lambda t: note.unlink() if t >= 6 and note.exists() else None)
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 20.0)
+            self.assertFalse(note.exists())
+
+    def test_note_wait_follows_a_slow_window_past_twenty_seconds(self):
+        # 11-26 B19 on a busy machine: the restored dev build loaded its page at +32.6 s and read the
+        # note at 28 s; the fixed 20 s wait reported "user was not told" for a window that did tell them.
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            clock, sleep = self.fake_clock(lambda t: note.unlink() if t >= 28 and note.exists() else None)
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 28.0)
+
+    def test_note_wait_gives_up_at_the_limit_so_a_real_miss_is_still_reported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            note = Path(folder) / "last-failure.json"
+            note.write_text("{}", encoding="utf-8")
+            clock, sleep = self.fake_clock()
+            self.assertEqual(probe.wait_for_note(note, clock=clock, sleep=sleep), 120.0)
+            self.assertTrue(note.exists())  # the probe then reports the user was not told
+
+    def test_probe_main_no_longer_sleeps_a_fixed_twenty_seconds_before_checking_the_note(self):
+        source = (ROOT / "tools/windows-smoke/update_probe.py").read_text(encoding="utf-8")
+        self.assertNotIn("time.sleep(20)", source)
+        self.assertIn('summary["note_wait_seconds"] = wait_for_note(state / "updates/last-failure.json")', source)
 
     def test_watch_samples_screenshots_and_spots_the_failure_window(self):
         frames = iter([[], [{"hwnd": 1, "title": "超級碧琪更新"}],
