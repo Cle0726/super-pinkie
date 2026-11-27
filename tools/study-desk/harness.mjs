@@ -176,7 +176,12 @@ export async function startHarness({vendor = true, handler = () => ({}), realUI 
     });
   }
   await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
-  return {url: `http://127.0.0.1:${server.address().port}/chat?session=agent:learning:study-desk-qa`, calls, realUI, close: () => { for (const client of wss?.clients || []) client.terminate(); wss?.close(); return new Promise(resolve => server.close(resolve)); }};
+  return {url: `http://127.0.0.1:${server.address().port}/chat?session=agent:learning:study-desk-qa`, calls, realUI, close: () => {
+    for (const client of wss?.clients || []) client.terminate(); wss?.close();
+    // B55: server.close() alone waits for every open request; a page killed or stalled mid-request
+    // kept it waiting forever (windows-checks hung 30 min). Drop the open connections ourselves.
+    const closed = new Promise(resolve => server.close(resolve)); server.closeAllConnections(); return closed;
+  }};
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.includes('--capture')) { await (await import('./capture.mjs')).capture({startHarness, isolatedService, playwright}); }
