@@ -114,6 +114,12 @@
     "value": 397
   },
   {
+    "file": "ui/injections/laolao-metre-engine.css",
+    "metric": "lines",
+    "reason": "feat/metre-engine-pinkie-upstream-3（11-26 engines，#127）加 3 行：模型列表最底下「改用碧琪模型 / 改回我自己的账号」那一行和上面的模型行分开（上方 1px 分隔线 + 5px 上间距，uireview 11-26 02:31Z 打回要求），一行注释、两条只在 Metre 的规则，没有 !important。放在引擎菜单自己的样式文件里，不另开文件（另开要再加头片段 / regions 各 1 行）。",
+    "value": 314
+  },
+  {
     "file": "ui/injections/laolao-dom-watch.js",
     "metric": "mutationObservers",
     "value": 1,
@@ -142,5 +148,41 @@
     "metric": "important",
     "value": 2,
     "reason": "B-C3 夜间返工（#85，监工 11-24 15:26 定 a）：所有模式共用的 laolao-theme.css 第 375 行用强制覆盖给对话里的 code / pre 铺了不分日夜的浅底（background-color rgba(255,255,255,.52)、border-color rgba(255,255,255,.58)），Metre 夜间真页面上普通代码只有 1.36:1、diff 行 1.78:1（main 缺陷）。强制覆盖只能用强制覆盖压回去，具体度再高也赢不了；这里只在 html[data-laolao-mode=metre][data-pinkie-night] 下、只对同一组 code / pre / .cm-code-block、只压底色和描边两处。不改 laolao-theme.css（别的线的文件）。diff 颜色和 @@ 行靠 :not(#_mc) 具体度取胜，没有用强制覆盖。"
+  },
+  {
+    "file": "ui/injections/REGIONS.md",
+    "metric": "lines",
+    "value": 28,
+    "reason": "白板（第 4 项 PR ①，ui4）：区域总览表加 whiteboard 一行，和 regions.json 新区域对应（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/roundtable/index.html",
+    "metric": "lines",
+    "value": 50,
+    "reason": "白板（第 4 项 PR ①，ui4）：灵感圆桌页面加一行，加载共用的 whiteboard.css / dom-watch.js / whiteboard.js（data-host=\"roundtable\"，由圆桌服务直接从 ui/injections 发，no-store，不加版本串）；roundtable.js 不动（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-workbench.js",
+    "metric": "lines",
+    "value": 2345,
+    "reason": "B30（ui，uireview #218 记）：差异标签拆成文件名 + 比较说明（renderTabs 里 +1 行），标签栏溢出时被挤出的一头淡出并露出「全部标签」键（键 1 行、溢出判断 1 行、scroll / ResizeObserver 挂钩 1 行、注释 1 行、renderTabs 末尾调用 1 行），共 +6；没有新增全局名、MutationObserver 或定时器（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-workbench.css",
+    "metric": "lines",
+    "value": 642,
+    "reason": "B30（ui）：差异标签文件名不缩、比较说明带省略号 1 行，标签栏两头淡出（mask）1 行，「全部标签」键 1 行，注释 1 行，共 +4；0 个 !important（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board-data.js",
+    "metric": "lines",
+    "value": 541,
+    "reason": "macdev5 G4 规则入口（11-26）：总控台「项目记忆」区多一行「项目规矩」，用已有的 pinkie.fs.stat 列出 project-brief.mjs 读给模型的规则文件，点开交给工作台；和项目记忆同一处请求、同一块，拆到新文件反而要多登记 head / regions 两处。没有新全局、观察器或轮询（B 类，只允许本次实测值）。"
+  },
+  {
+    "file": "ui/injections/laolao-metre-board.css",
+    "metric": "lines",
+    "value": 504,
+    "reason": "macdev5 G4 规则入口（11-26）：「项目规矩」一行的样式，只用 .pk-mb-rules 前缀，跟在项目记忆样式后面，沿用 --metre-* 变量，没有 !important（B 类，只允许本次实测值）。"
   }
 ]

@@ -33,6 +33,7 @@ $ProxyPort    = if ($env:UR_PROXY_LISTEN) { $env:UR_PROXY_LISTEN } elseif ($env:
 $UpstreamPort = if ($env:UR_PROXY_UPSTREAM_PORT) { $env:UR_PROXY_UPSTREAM_PORT } elseif ($env:UR_UPSTREAM_PORT) { $env:UR_UPSTREAM_PORT } else { "1466" }
 $ProxyScript  = Join-Path $RepoDir "proxy\mm-retry-proxy.py"
 $PatchScript  = Join-Path $RepoDir "patch\reapply-unrestricted-patch.mjs"
+$CoreManifestTool = Join-Path $RepoDir "tools\core\manifest.mjs"
 $TaskName     = "OpenClawURProxy"
 $GatewayWatchdogTask = "OpenClawGatewayWatchdog"
 $GatewayWatchdog = Join-Path $RepoDir "services\watchdog\windows-gateway-watchdog.ps1"
@@ -67,6 +68,19 @@ if ($Remove) {
   exit 0
 }
 
+# ── 0/6  按 core-manifest.json 校验并（按需）安装内核 ─────────────────────
+if (Test-Path -LiteralPath $CoreManifestTool) {
+  $CoreInfo = (& node $CoreManifestTool info --root $RepoDir | Out-String | ConvertFrom-Json)
+  if ($LASTEXITCODE -ne 0 -or -not $CoreInfo) { throw "无法解析 core-manifest.json（请检查 PINKIE_CORE 与清单格式）" }
+  if ($env:PINKIE_INSTALL_CORE -eq "1" -or $env:PINKIE_CORE_PREFIX) {
+    $CorePrefix = if ($env:PINKIE_CORE_PREFIX) { $env:PINKIE_CORE_PREFIX } else { Join-Path $env:LOCALAPPDATA ("SuperPinkie\core\" + $CoreInfo.core) }
+    Write-Host "==> 0/6  installing core '$($CoreInfo.core)' ($($CoreInfo.version)) from core-manifest.json -> $CorePrefix"
+    & node $CoreManifestTool install --root $RepoDir --prefix $CorePrefix
+    if ($LASTEXITCODE -ne 0) { throw "内核安装或 SHA-256 校验失败" }
+    $env:OPENCLAW_ROOT = Join-Path $CorePrefix "node_modules\openclaw"
+  }
+}
+
 # ── 1/6  提示词 ───────────────────────────────────────────────────────────
 Write-Host "==> 1/6  copying prompts -> $PromptsDir"
 New-Item -ItemType Directory -Force -Path $PromptsDir | Out-Null
@@ -75,7 +89,7 @@ $count = (Get-ChildItem (Join-Path $RepoDir "prompts\unrestricted-prompt-*.txt")
 Write-Host "    $count prompt files installed"
 
 # ── 2/6  传输层补丁 ───────────────────────────────────────────────────────
-Write-Host "==> 2/6  patching CLE Kk compatibility transports"
+Write-Host "==> 2/6  patching C.le. compatibility transports"
 node $PatchScript
 if ($LASTEXITCODE -ne 0) { throw "Transport patch failed" }
 node (Join-Path $RepoDir "patch\apply-context-budget.mjs")
@@ -88,6 +102,8 @@ node (Join-Path $RepoDir "patch\apply-steer-fallback-wait.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Steer fallback patch failed" }
 node (Join-Path $RepoDir "patch\apply-retry-single-user.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Retry single user patch failed" }
+node (Join-Path $RepoDir "patch\apply-noop-write-continue.mjs")
+if ($LASTEXITCODE -ne 0) { throw "No-op write continue patch failed" }
 node (Join-Path $RepoDir "patch\apply-loopback-model-reliability.mjs")
 if ($LASTEXITCODE -ne 0) { throw "Loopback model reliability patch failed" }
 node (Join-Path $RepoDir "patch\apply-local-unrestricted-policy.mjs")
@@ -247,7 +263,7 @@ if (Test-Path $GatewayWatchdog) {
     $watchTrigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration ([TimeSpan]::MaxValue)
     Register-ScheduledTask -TaskName $GatewayWatchdogTask -Action $watchAction -Trigger @($watchTrigger,$watchTrigger2) -Settings $settings -Principal $env2 -Force | Out-Null
     Start-ScheduledTask -TaskName $GatewayWatchdogTask
-  } else { Write-Warning "找不到 CLE Kk 兼容内核，网关巡检任务暂不注册" }
+  } else { Write-Warning "找不到 C.le. 兼容内核，网关巡检任务暂不注册" }
 }
 
 # ── 6/6  Provider 指向代理（可选）────────────────────────────────────────
@@ -258,9 +274,9 @@ if ($Provider -ne "") {
     $cfg = Get-Content $Cfg -Raw -Encoding UTF8 | ConvertFrom-Json
     $cfg.models.providers.$Provider.baseUrl = "http://127.0.0.1:$ProxyPort/v1"
     $cfg | ConvertTo-Json -Depth 20 | Set-Content $Cfg -Encoding UTF8
-    Write-Host "    done. Restart the CLE Kk gateway for it to take effect."
+    Write-Host "    done. Restart the C.le. gateway for it to take effect."
   } else {
-    Write-Host "==> 6/6  (skipped) CLE Kk provider config not found at $Cfg"
+    Write-Host "==> 6/6  (skipped) C.le. provider config not found at $Cfg"
   }
 } else {
   Write-Host "==> 6/6  (skipped) no -Provider specified"
@@ -270,7 +286,7 @@ Write-Host ""
 Write-Host "========================================"
 Write-Host "安装完成！"
 Write-Host "接下来："
-Write-Host "  1. 在 CLE Kk 提供商配置中填入你的 API Key"
-Write-Host "  2. 重启 CLE Kk 网关"
+Write-Host "  1. 在 C.le. 提供商配置中填入你的 API Key"
+Write-Host "  2. 重启 C.le. 网关"
 Write-Host "  3. 在无限制模式会话中发送验证令牌确认注入生效（见 README.md）"
 Write-Host "========================================"

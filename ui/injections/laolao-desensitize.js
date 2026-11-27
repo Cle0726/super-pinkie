@@ -29,23 +29,24 @@
   const isUnrestricted = () => {
     const attr = document.documentElement.getAttribute("data-laolao-mode");
     if (attr) return attr === "unrestricted";
-    const key =
-      new URLSearchParams(window.location.search).get("session") ||
-      $(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
+    const key = new URLSearchParams(window.location.search).get("session") || $(".sidebar-recent-session--active[data-session-key]")?.dataset.sessionKey || "";
     return key.startsWith("agent:unrestricted:");
   };
 
   /* ── Toast ─────────────────────────────────────────────── */
-  const toast = (msg) => {
-    if (typeof window.__laolaoToast === "function") window.__laolaoToast(msg);
-    else window.dispatchEvent(new CustomEvent("laolao:toast", { detail: { message: msg } }));
+  const toast = (msg) => typeof window.__laolaoToast === "function" ? window.__laolaoToast(msg) : window.dispatchEvent(new CustomEvent("laolao:toast", { detail: { message: msg } }));
+
+  /* ── 报错文案（P4）：界面只放中文说明，原文 / 堆栈进日志 ─────────── */
+  const ERROR_ZH = [[/timeout|timed out|超时/i, "网关没有及时回应，请稍后再试"], [/socket unavailable|disconnect|ECONNREFUSED|ECONNRESET|fetch failed|network|closed/i, "还没连上网关，请稍后再试"]];
+  const friendlyError = (error) => {
+    const original = String(error?.message || error || ""), upstream = original.match(/^上游模型响应异常\s*\((\d+)\)/);
+    if (upstream) return `上游模型出错了（${upstream[1]}），可以换个模型或稍后再试`;
+    const hit = ERROR_ZH.find(([re]) => re.test(original));
+    return hit ? hit[1] : /[㐀-鿿]/.test(original) && !/\n\s+at\s|[{}]/.test(original) ? original : "改写没有完成，请稍后再试";
   };
 
   /* ── 输入框 ────────────────────────────────────────────── */
-  const getTA = () =>
-    $(".agent-chat__composer-combobox textarea") ||
-    $(".agent-chat__composer-shell textarea") ||
-    $("textarea");
+  const getTA = () => $(".agent-chat__composer-combobox textarea") || $(".agent-chat__composer-shell textarea") || $("textarea");
 
   const fillTA = (ta, v) => {
     const s = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -90,7 +91,7 @@
   </div>
   <select class="ds-select" id="ds-model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("")}</select>
 </div>
-<textarea class="ds-input" id="ds-src" rows="2" placeholder="输入敏感目标 / 违规词提问...">${src}</textarea>
+<textarea class="ds-input" id="ds-src" rows="2" placeholder="输入敏感目标 / 违规词提问..."></textarea>
 <div class="ds-bar">
   <span class="ds-status" id="ds-status">就绪</span>
   <button type="button" class="ds-run" id="ds-run">
@@ -99,7 +100,7 @@
   </button>
 </div>
 <div class="ds-result" id="ds-result" style="display:${tgt ? "flex" : "none"}">
-  <textarea class="ds-input ds-output" id="ds-tgt" rows="3" placeholder="改写结果...">${tgt}</textarea>
+  <textarea class="ds-input ds-output" id="ds-tgt" rows="3" placeholder="改写结果..."></textarea>
   <button type="button" class="ds-apply" id="ds-apply">✓ 填入输入框</button>
 </div>`;
 
@@ -110,8 +111,8 @@
     pop.style.left = `${Math.max(8, Math.min(r.right - 310, window.innerWidth - 318))}px`;
     pop.style.bottom = `${Math.max(8, window.innerHeight - r.top + 6)}px`;
 
-    const srcEl = pop.querySelector("#ds-src");
-    const tgtEl = pop.querySelector("#ds-tgt");
+    const srcEl = pop.querySelector("#ds-src"); srcEl.value = src;   // 原文来自输入框、改写结果来自模型：都按纯文本放进去，不拼进上面的 HTML
+    const tgtEl = pop.querySelector("#ds-tgt"); tgtEl.value = tgt;
     const runBtn = pop.querySelector("#ds-run");
     const runLabel = pop.querySelector("#ds-run-label");
     const spinEl = pop.querySelector("#ds-spin");
@@ -146,8 +147,7 @@
         localStorage.setItem(DRAFT_TGT, res.rewritten);
         resultEl.style.display = "flex";
         statusEl.textContent = `完成 ${(ms / 1000).toFixed(1)}s ✓`;
-      } catch (e) {
-        statusEl.textContent = `失败: ${e.message}`;
+      } catch (e) { console.warn("[pinkie-desensitize] 改写失败", e); statusEl.textContent = `失败：${friendlyError(e)}`;
       } finally {
         if (timer) { clearInterval(timer); timer = null; }
         runBtn.disabled = false;

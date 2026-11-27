@@ -31,7 +31,7 @@ class MacSnapshotTest(unittest.TestCase):
             "pinkie-work-first-media-gate:v2",
             "pinkie-fake-ip-benchmark-v6:ip:v1",
             "pinkie-fake-ip-benchmark-v6:ssrf:v1",
-            "pinkie-overflow-compaction-events:v1",
+            "pinkie-overflow-compaction-events:v2",
         ):
             self.assertIn(marker, text)
 

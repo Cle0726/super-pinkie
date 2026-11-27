@@ -1,5 +1,5 @@
 /* 碧琪上岸记 · 刷题（真题题库）。视觉语言见 briefs/study-desk-game/VFX.md：衬线展示字 + 拉丁窄体小字 + 等宽数字；发丝线；克制的金色细节。纸面 / 夜间两套靠 --pkg-* 变量。 */
-#pinkie-study-desk .view.pkp-home{display:flex;flex-direction:column;gap:16px;padding:18px 26px 26px 30px;overflow:auto;color:var(--pkg-ink)}
+#pinkie-study-desk .view.pkp-home{display:flex;flex-direction:column;gap:16px;padding:18px 26px 26px 30px;overflow:auto;color:var(--pkg-ink)} #pinkie-study-desk:not([data-theme="night"]) .pkp-home .pkb-kicker{color:var(--pkg-ink-2)}
 #pinkie-study-desk .pkp-body{display:flex;flex-direction:column;gap:18px;min-width:0}
 #pinkie-study-desk .pkp-lede{margin:0;max-width:760px;font-size:13.5px;line-height:1.7;color:var(--pkg-ink-2)}
 #pinkie-study-desk .pkp-lede b{color:var(--pkg-ink);font-size:15px;margin:0 2px}

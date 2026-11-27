@@ -64,49 +64,21 @@
     state.chatWidth = Math.min(state.chatWidth, 420);
     store.set('sideWidth', state.sideWidth); store.set('chatWidth', state.chatWidth); store.set('layoutVersion', 2);
   }
-  const extraStatus = new Map();
-  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus};
+  const extraStatus = new Map(), held = new Map(), heldOf = path => (path ? held.get(path) || held.get(absolute(path)) || '' : '');   // R5 ②：Metre 这一轮在改的文件临时只读，由 laolao-metre-files.js 填
+  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, held, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); workspaceView = 'code'; place(); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
 
   /* ───────── 让模型看见当前工作台和运行现场 ───────── */
   const contextClientId = crypto.randomUUID();
-  const terminalContext = new Map(), contextSent = new Map();
+  // 每个聊天会话一个终端（R2）：终端现场、会话↔终端对应表都在 laolao-workbench-term.js，这里只留调用点。
+  // 单独注入工作台、没带 laolao-workbench-term.js 时（如只加载本文件的测试页）终端整块不可用，其他照常。
+  const TERM = window.Pinkie?.workbench?.term;
+  const terminalContext = TERM ? TERM.createContext() : {adopt: () => false, input: () => false, event: () => false, snapshot: () => []}, contextSent = new Map();
   let contextQueue = Promise.resolve(), contextBusy = 0;
-  const plainTerminal = value => String(value || '')
-    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1b[@-_]/g, '')
-    .replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
-  function adoptTerminalContext(id, key, rootDir, initialCwd, buffer) {
-    if (!id) return;
-    let item = terminalContext.get(id);
-    if (!item || item.root !== rootDir) item = {sessionId:id, key, root:rootDir, initialCwd, raw:'', draft:'', command:'', exitCode:null, updatedAt:0};
-    item.key = key;
-    if (buffer) { item.raw = String(buffer).slice(-18000); item.updatedAt = Date.now(); }
-    terminalContext.set(id, item);
-    if (terminalContext.size > 12) terminalContext.delete(terminalContext.keys().next().value);
-    contextSoon();
-  }
-  function recordTerminalInput(id, data) {
-    const item = terminalContext.get(id);
-    if (!item) return;
-    // 记录已经回车的命令；未提交的输入不发送给模型。
-    for (const ch of String(data).replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')) {
-      if (ch === '\r' || ch === '\n') {
-        if (item.draft.trim()) { item.command = item.draft.trim().slice(-800); item.raw = ''; item.exitCode = null; item.updatedAt = Date.now(); }
-        item.draft = '';
-      } else if (ch === '\x7f' || ch === '\b') item.draft = item.draft.slice(0,-1);
-      else if (ch === '\x03' || ch === '\x15') item.draft = '';
-      else if (ch >= ' ') item.draft = (item.draft + ch).slice(-2000);
-    }
-    contextSoon();
-  }
+  const adoptTerminalContext = (...args) => { if (terminalContext.adopt(...args)) contextSoon(); };
   window.addEventListener('pinkie:gateway-event', event => {
     const {event: name, payload} = event.detail || {};
-    const item = terminalContext.get(payload?.sessionId);
-    if (!item) return;
-    if (name === 'terminal.data' && typeof payload.data === 'string') item.raw = (item.raw + payload.data).slice(-18000);
-    else if (name === 'terminal.exit') item.exitCode = Number.isInteger(payload.exitCode) ? payload.exitCode : null;
-    else return;
-    item.updatedAt = Date.now(); contextSoon();
+    if (name === 'terminal.data') termSession?.control.noteOutput(payload?.sessionId);
+    if (terminalContext.event(name, payload)) contextSoon();
   });
   function workbenchSnapshot(key) {
     const active = state.visible && key === sessionKey();
@@ -128,8 +100,7 @@
     const modelPaths = new Map(state.tabs.filter(t=>t.model).map(t=>[t.model.uri.toString(),t.path]));
     snapshot.diagnostics = (window.monaco?.editor.getModelMarkers({}) || []).filter(m=>modelPaths.has(m.resource.toString()) && (m.severity === 8 || m.severity === 4))
       .sort((a,b)=>b.severity-a.severity).slice(0,30).map(m=>({path:modelPaths.get(m.resource.toString()),line:m.startLineNumber,column:m.startColumn,severity:m.severity === 8 ? 'error':'warning',message:m.message,source:m.source || ''}));
-    snapshot.terminals = [...terminalContext.values()].filter(t=>t.key === key && t.root === state.root && t.updatedAt)
-      .sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,3).map(t=>({sessionId:t.sessionId,initialCwd:t.initialCwd,command:t.command,output:plainTerminal(t.raw).slice(-6000),exitCode:t.exitCode,updatedAt:t.updatedAt}));
+    snapshot.terminals = terminalContext.snapshot(key, state.root);
     return snapshot;
   }
   function publishContext(forMessage = false, key = sessionKey(), closed = false) {
@@ -221,7 +192,11 @@
   const tabsBar = el('div', 'pk-wb-tabs'); tabsBar.setAttribute('role', 'tablist');
   const tabsList = el('div', 'pk-wb-tabs__list');
   const tabsActions = el('div', 'pk-wb-tabs__actions');
-  tabsBar.append(tabsList, tabsActions, benchTools);
+  // B30：标签挤出视野时，被挤出的一头淡出（is-clip-start / is-clip-end），右边露出「全部标签」键列出所有标签。
+  const tabsMore = button('chevron-down', '全部标签', e => { const r = e.currentTarget.getBoundingClientRect(); showMenu(state.tabs.map(t => ({label: t.title || t.name, icon: t.path === state.active ? 'check' : undefined, run: () => activate(t.path)})), r.left, r.bottom + 4); }, 'pk-wb-icon pk-wb-tabs__more'); tabsMore.hidden = true;
+  tabsBar.append(tabsList, tabsMore, tabsActions, benchTools);
+  function updateTabsOverflow() { const over = tabsList.scrollWidth - tabsList.clientWidth > 1, left = tabsList.scrollLeft; tabsList.classList.toggle('is-clip-start', over && left > 1); tabsList.classList.toggle('is-clip-end', over && left < tabsList.scrollWidth - tabsList.clientWidth - 1); tabsMore.hidden = !over; }
+  tabsList.addEventListener('scroll', updateTabsOverflow, {passive: true}); new ResizeObserver(updateTabsOverflow).observe(tabsList);
   const crumbs = el('div', 'pk-wb-crumbs');
   const notice = el('div', 'pk-wb-notice'); notice.hidden = true;
   const host = el('div', 'pk-wb-host');
@@ -437,6 +412,7 @@
     const generation = ++sessionLoadGeneration;
     const isCurrent = () => generation === sessionLoadGeneration && state.key === key && sessionKey() === key;
     persistTabs();
+    if (state.key !== key) parkTerminal(state.key, state.root);
     if (state.key && state.key !== key) void publishContext(false, state.key, true).catch(()=>{});
     state.key = key; state.info = null;
     if (!key) return;
@@ -445,7 +421,6 @@
     catch (error) { if (isCurrent()) { state.info = {error: error.message}; if (state.visible) { renderSide(); renderWelcome(); renderStatus(); } } return; }
     if (!isCurrent()) return;
     const changed = info.root !== state.root;
-    if (changed) parkTerminal(state.root);
     state.info = info; state.root = info.root;
     state.referenceFolders = store.get('references.' + info.agentId, []).filter(item => item && typeof item.path === 'string' && item.path.startsWith('/')).slice(0, 8);
     const restore = changed || (!state.tree.has('') && !state.tabs.length);
@@ -466,10 +441,6 @@
     refreshGit();
     void fileList().then(() => loadExtensions(true));
     if (terminalEl) terminalEl.agentId = info.agentId;
-    for (const id of liveTerminalIds()) {
-      const item = terminalContext.get(id);
-      if (item?.root === state.root) item.key = key;
-    }
     contextSoon();
   }
   function persistTabs() {
@@ -874,8 +845,8 @@
         'focusBorder': hex(c.accent, 0.55), 'input.background': hex(c.line), 'input.border': hex(c.faint),
         'scrollbarSlider.background': hex(c.text, 0.1), 'scrollbarSlider.hoverBackground': hex(c.text, 0.18), 'scrollbarSlider.activeBackground': hex(c.accent, 0.35),
         'minimap.background': hex(c.bg), 'minimapSlider.background': hex(c.text, 0.07),
-        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': hex(c.accent, 0.22),
-        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': hex(c.accent, 0.09),
+        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': c.dark ? '#ff6b8147' : '#e5394c33', // 删除固定用红（B15：取 --accent 时 Metre 是钴蓝，像选区不像删除）
+        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': c.dark ? '#ff6b811f' : '#e5394c14',
         'editorOverviewRuler.border': '#00000000', 'editorError.foreground': '#ff6b81', 'editorWarning.foreground': '#f6c76f', 'editorInfo.foreground': hex(c.cle),
         'peekViewEditor.background': hex(c.widget), 'peekViewResult.background': hex(c.widget), 'peekView.border': hex(c.accent, 0.6),
       },
@@ -1035,7 +1006,7 @@
       if (!isCurrent()) return;
       monacoHost.hidden = false;
       if (editor.getModel() !== tab.model) editor.setModel(tab.model);
-      editor.updateOptions({readOnly: Boolean(tab.readOnly)});
+      editor.updateOptions({readOnly: Boolean(tab.readOnly || heldOf(tab.path))});
       if (tab.viewState) editor.restoreViewState(tab.viewState);
       place();
       if (options.line) {
@@ -1063,10 +1034,10 @@
       await ensureDiff();
       if (!isCurrent()) return;
       diffHost.hidden = false;
-      diffEditor.setModel({original: tab.original, modified: tab.modified});
+      diffEditor.setModel({original: tab.original, modified: tab.modified}); diffEditor.updateOptions({readOnly: Boolean(heldOf(tab.source))});
       place();
     } else renderPreview(tab);
-    renderStatus(); persistTabs();
+    renderStatus(); persistTabs(); const heldWhy = heldOf(tab.kind === 'diff' ? tab.source : path); if (heldWhy) showBar(heldWhy, []);
     if (state.view === 'explorer' && !path.startsWith('diff:') && !path.startsWith('page:')) revealInTree(path);
   }
   function flashLine(line) {
@@ -1130,10 +1101,11 @@
       if (!tab.pinned) t.classList.add('is-preview');
       if (tab.dirty) t.classList.add('is-dirty');
       t.append(tab.kind === 'diff' ? icon('diff', 'pk-wb-tab__diff') : tab.kind === 'page' ? icon(tab.icon || 'settings', 'pk-wb-tab__diff') : fileIcon(tab.name, 'file'));
-      const label = el('span', 'pk-wb-tab__label', tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
-      t.append(label);
+      const vs = tab.kind === 'diff' ? /^(.*)（([^（）]+)）$/.exec(tab.title || '') : null; // B30：差异标签拆成文件名（不缩）+ 比较说明（先缩），全称在 title
+      const label = el('span', 'pk-wb-tab__label', vs ? vs[1] : tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
+      t.append(label); if (vs) { t.classList.add('is-diff'); t.append(el('span', 'pk-wb-tab__vs', vs[2])); }
       if (names.get(tab.name) > 1 && tab.kind !== 'diff') { const loc = fileLocation(tab.path); t.append(el('span', 'pk-wb-tab__dir', dirname(loc.relative) || loc.name)); }
-      if (tab.readOnly) { const lock = icon('lock', 'pk-wb-tab__readonly'); lock.title = '参考文件 · 只读'; t.append(lock); }
+      if (tab.readOnly || heldOf(tab.path)) { const lock = icon('lock', 'pk-wb-tab__readonly'); lock.title = heldOf(tab.path) || '参考文件 · 只读'; t.append(lock); }
       const close = button('close', '关闭（' + keyLabel('⌘W') + '）', e => { e.stopPropagation(); closeTab(tab.path); }, 'pk-wb-tab__close');
       t.append(close);
       t.addEventListener('click', () => activate(tab.path));
@@ -1150,6 +1122,7 @@
     }
     tabsList.replaceChildren(frag);
     tabsList.querySelector('.is-active')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    updateTabsOverflow();
     tabsBar.classList.toggle('is-empty', !state.tabs.length);
     const tab = findTab(state.active);
     const extra = [];
@@ -1222,7 +1195,7 @@
     let tab = findTab(state.active);
     if (tab?.kind === 'diff') tab = findTab(tab.source);
     if (!tab?.model) return;
-    if (tab.readOnly) { toast('这是项目外的参考文件；请在当前项目中保存修改。'); return; }
+    if (tab.readOnly || heldOf(tab.path)) { toast(heldOf(tab.path) || '这是项目外的参考文件；请在当前项目中保存修改。'); return; }
     try { await window.__pinkieWorkbench.beforeSave?.(tab); } catch {}
     const content = tab.model.getValue(tab.eol === 'crlf' ? 2 : 1);
     try {
@@ -1270,7 +1243,7 @@
     if (!tabs.length || !state.visible || document.hidden) return;
     let stats;
     try { ({stats} = await rpc('pinkie.fs.stat', {paths: tabs.map(t => t.path)})); } catch { return; }
-    for (const s of stats) {
+    for (const s of stats || []) {   // B29：回包里没有 stats（旧网关 / 出错时回 {}）就当没有变化，不抛「stats is not iterable」
       const tab = findTab(s.path);
       if (!tab || !tab.mtimeMs) continue;
       if (!s.exists) { if (!tab.gone) { tab.gone = true; renderTabs(); } continue; }
@@ -1787,16 +1760,22 @@
   });
 
   /* ───────── 面板：终端 / 问题 ───────── */
+  // 每个聊天会话一个终端（R2）：切走时停放（不关），切回来 terminal.attach 接回；没有就显示「打开终端」，不自动开。
   let terminalEl = null;
+  const termSession = TERM?.createSession({request: (method, params) => window.__laolaoSidebar.gwRequest(method, params, 30000), toast, render: () => renderPanel(), nameOf: key => document.querySelector(`.session-row-host[data-session-key="${CSS.escape(key)}"]`)?.textContent?.trim().slice(0, 40) || key.split(':').slice(2).join(':') || key});
   const terminalClient = {
     async request(method, params) {
       const key = state.key, rootDir = state.root;
-      if (method === 'terminal.input') recordTerminalInput(params.sessionId, params.data);
-      const result = await window.__laolaoSidebar.gwRequest(method, params, 30000);
+      if (method === 'terminal.input' && terminalContext.input(params.sessionId, params.data)) contextSoon();
+      let result;
+      try { result = await window.__laolaoSidebar.gwRequest(method, params, 30000); }
+      catch (error) { const notice = TERM.noticeForError(error); if (notice) toast(notice); throw error; }
       if (method === 'terminal.open' || method === 'terminal.attach') adoptTerminalContext(result?.sessionId || params.sessionId, key, rootDir, result?.cwd || rootDir, result?.buffer);
-      // 新开的终端默认在模式工作区；项目绑定了文件夹就切过去
-      if (method === 'terminal.open' && result?.sessionId && state.root && result.cwd !== state.root) {
-        window.__laolaoSidebar.gwRequest('terminal.input', {sessionId: result.sessionId, data: ' cd ' + shellQuote(state.root) + ' && clear\r'}, 8000).catch(() => {});
+      // 新开的终端默认在模式工作区；按 terminal.open 返回的 shell 加引号 cd 到本会话的项目文件夹（cmd 遇 % / " 不发，只提示）
+      if (method === 'terminal.open') {
+        const cd = termSession.control.opened(key, rootDir, result);
+        if (cd?.text) window.__laolaoSidebar.gwRequest('terminal.input', {sessionId: result.sessionId, data: cd.text}, 8000).catch(() => {});
+        else if (cd?.refuse) toast(cd.refuse);
       }
       return result;
     },
@@ -1806,18 +1785,26 @@
       return () => window.removeEventListener('pinkie:gateway-event', handler);
     },
   };
-  // 终端组件把要恢复的会话记在共享的 sessionStorage 键里；每个项目文件夹各自保存一份，切项目时换掉
-  const TERM_KEY = 'openclaw.terminal.sessions.v1';
   function liveTerminalIds() { try { return (terminalEl?.tabs || []).filter(t => t.status === 'live' && t.gatewaySessionId).map(t => t.gatewaySessionId); } catch { return []; } }
-  function parkTerminal(oldRoot) {
-    if (!terminalEl) return;
-    if (oldRoot) store.set('term.' + oldRoot, liveTerminalIds());
-    terminalEl.parentElement?.remove();
-    terminalEl = null;
+  function activeTerminalId() { try { const live = liveTerminalIds(), tab = terminalEl?.tabs?.find(t => t.id === terminalEl.activeId); return live.includes(tab?.gatewaySessionId) ? tab.gatewaySessionId : live[0] || ''; } catch { return ''; } }
+  // 切会话：把本会话在用的终端记到对应表里（不关），拆掉组件；面板换成目标会话自己的。
+  function parkTerminal(oldKey, oldRoot) {
+    if (terminalEl) { termSession.park(oldKey, activeTerminalId(), oldRoot); terminalEl.parentElement?.remove(); terminalEl = null; }
+    else termSession?.park('', '', '');
     if (state.panelOpen && state.panelTab === 'terminal') setTimeout(renderPanel, 0);
   }
-  window.addEventListener('beforeunload', () => { if (terminalEl && state.root) store.set('term.' + state.root, liveTerminalIds()); });
-  function terminalAvailable() { return state.info?.terminal?.enabled === true || document.documentElement.dataset.openclawTerminalEnabled === 'true'; }
+  window.addEventListener('beforeunload', () => { if (terminalEl && state.key) termSession.park(state.key, activeTerminalId(), state.root); });
+  // 没挂组件时画「本会话终端 · 文件夹名」+「打开终端」（人点才新开）；返回 false 表示现在就挂（接回或新开）。
+  function terminalCard(card) {
+    const key = state.key, view = termSession.view(key);
+    if (!view) return false;
+    const go = el('button', 'pk-wb-btn', TERM.TEXT.open); go.type = 'button'; go.disabled = view.busy;
+    go.addEventListener('click', () => termSession.start(key));
+    card.append(icon('terminal', 'pk-wb-empty__icon'), el('p', '', state.root ? TERM.TEXT.title(basename(state.root)) : TERM.TEXT.open), go);
+    if (view.notice) card.append(el('p', 'pk-wb-msg', view.notice));
+    return true;
+  }
+  function terminalAvailable() { return Boolean(termSession) && (state.info?.terminal?.enabled === true || document.documentElement.dataset.openclawTerminalEnabled === 'true'); }
   function renderPanel() {
     panelHead.replaceChildren();
     const tabs = el('div', 'pk-wb-panel__tabs');
@@ -1844,9 +1831,10 @@
         return;
       }
       if (!terminalEl) {
+        const card = el('div', 'pk-wb-empty pk-wb-empty--terminal');
+        if (terminalCard(card)) { panelBody.append(card); return; }
         if (!ghosttyPatch) void patchGhostty();
         const box = el('div', 'pk-wb-term');
-        try { sessionStorage.setItem(TERM_KEY, JSON.stringify(store.get('term.' + state.root, []))); } catch {}
         terminalEl = document.createElement('openclaw-terminal-panel');
         terminalEl.fullscreen = true;
         terminalEl.client = terminalClient;
@@ -1907,6 +1895,11 @@
   function terminalType(data, options = {}) {
     const activeTab = () => terminalEl?.tabs?.find(t => t.id === terminalEl.activeId);
     const writable = tab => Boolean(tab?.gatewaySessionId && tab.status === 'live' && !tab.cancelled);
+    // 本会话还没有终端：人点出来的运行 / 在终端中打开 先给本会话开一个，再等它就绪（不自动开别的会话的）。
+    if (!terminalEl) {
+      termSession?.want(state.key);
+      if (!options.wait) return terminalType(data, {...options, wait: true}).catch(() => toast('终端还没准备好'));
+    }
     if (!options.wait) {
       const tab = activeTab();
       if (writable(tab)) return terminalClient.request('terminal.input', {sessionId: tab.gatewaySessionId, data}).catch(() => {});
@@ -1938,7 +1931,7 @@
   let statusFrame = 0;
   const renderStatusSoon = () => { if (!statusFrame) statusFrame = requestAnimationFrame(() => { statusFrame = 0; renderStatus(); }); };
   let flashTimer = 0;
-  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); clearTimeout(flashTimer); flashTimer = setTimeout(() => n.classList.remove('is-on'), 2600); }
+  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); fitStatus(); clearTimeout(flashTimer); flashTimer = setTimeout(() => { n.classList.remove('is-on'); n.textContent = ''; fitStatus(); }, 2600); }
   function renderStatus() {
     const left = el('div', 'pk-wb-status__side'), right = el('div', 'pk-wb-status__side');
     const mode = el('span', 'pk-wb-status__mode');
@@ -1946,8 +1939,8 @@
     left.append(mode);
     const g = state.git;
     if (g?.repo) {
-      const b = el('button', 'pk-wb-status__item'); b.type = 'button'; b.title = '源代码管理';
-      b.append(icon('git-branch'), el('span', '', g.branch || 'HEAD'));
+      const b = el('button', 'pk-wb-status__item pk-wb-status__branch'); b.type = 'button'; b.title = '源代码管理 · ' + (g.branch || 'HEAD');
+      b.append(icon('git-branch'), el('span', 'pk-wb-status__branch-name', g.branch || 'HEAD'));
       if (g.ahead || g.behind) b.append(el('span', '', (g.behind ? ' ↓' + g.behind : '') + (g.ahead ? ' ↑' + g.ahead : '')));
       if (g.changes.length) b.append(el('span', 'pk-wb-status__dirty', '*'));
       b.addEventListener('click', () => openView('scm'));
@@ -1964,7 +1957,7 @@
     if (tab?.kind === 'text' && editor?.getModel() === tab.model) {
       const sel = editor.getSelection(); const pos = editor.getPosition();
       const chosen = sel && !sel.isEmpty() ? tab.model.getValueInRange(sel).length : 0;
-      const ln = el('button', 'pk-wb-status__item', '行 ' + pos.lineNumber + '，列 ' + pos.column + (chosen ? '（已选择 ' + chosen + '）' : '')); ln.type = 'button';
+      const ln = el('button', 'pk-wb-status__item', '行 ' + pos.lineNumber + '，列 ' + pos.column + (chosen ? '（已选择 ' + chosen + '）' : '')); ln.type = 'button'; ln.dataset.opt = 'ln';
       ln.addEventListener('click', () => showQuick(':'));
       const opts = tab.model.getOptions();
       const indent = el('button', 'pk-wb-status__item', (opts.insertSpaces ? '空格：' : '制表符：') + opts.tabSize); indent.type = 'button';
@@ -1977,16 +1970,18 @@
       const enc = el('span', 'pk-wb-status__item', 'UTF-8'); enc.dataset.opt = 'enc';
       right.append(ln, indent, enc, eol, lang);
     }
-    for (const item of extraStatus.values()) { try { const node = item(tab); if (node) right.append(node); } catch {} }
+    for (const [key, item] of extraStatus) { try { const node = item(tab); if (node) { node.dataset.opt ||= key; right.append(node); } } catch {} }
     const live = document.documentElement.hasAttribute('data-cle-live');
     const pinkie = el('button', 'pk-wb-status__item pk-wb-status__pinkie' + (live ? ' is-live' : '')); pinkie.type = 'button';
-    pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? '碧琪工作中' : '碧琪'));
+    const who = document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? 'Metre' : '碧琪'; pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? who + '工作中' : who)); // B50：Metre 里直接写终稿（皮肤事后把「碧琪」换成「Metre」会变宽，fitStatus 已量过）
     pinkie.title = '把焦点移到对话输入框';
     pinkie.addEventListener('click', () => composer()?.focus());
     right.append(pinkie);
-    status.replaceChildren(left, right);
+    status.replaceChildren(left, right); fitStatus();
   }
-  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']});
+  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失、字体晚到（左半边 flex:none 会变宽）也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
+  function fitStatus() { const r = status.lastElementChild; if (!r) return; const pk = r.querySelector(':scope > .pk-wb-status__pinkie'); r.style.minWidth = pk ? Math.ceil(pk.getBoundingClientRect().width) + 'px' : ''; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
+  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']}); document.fonts?.addEventListener('loadingdone', () => fitStatus());
 
   /* ───────── 问碧琪 ───────── */
   const composer = () => document.querySelector('.agent-chat__input textarea');
@@ -2315,7 +2310,7 @@
   const editorResize = new ResizeObserver(() => {
     if (editorLayoutFrame) return;
     editorLayoutFrame = requestAnimationFrame(() => {
-      editorLayoutFrame = 0;
+      editorLayoutFrame = 0; fitStatus();
       for (const [node, instance] of [[monacoHost, editor], [diffHost, diffEditor]]) {
         const width = node.clientWidth, height = node.clientHeight;
         if (!instance || !width || !height) continue;

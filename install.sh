@@ -27,8 +27,21 @@ PROXY_PORT="${UR_PROXY_PORT:-1467}"
 UPSTREAM_PORT="${UR_UPSTREAM_PORT:-1466}"
 PROXY_SCRIPT="$REPO_DIR/proxy/mm-retry-proxy.py"
 PATCH_SCRIPT="$REPO_DIR/patch/reapply-unrestricted-patch.mjs"
+CORE_MANIFEST_TOOL="$REPO_DIR/tools/core/manifest.mjs"
 LAUNCHD_LABEL="com.openclaw.urproxy"
 MODE="${1:-install}"
+
+# Core selection always comes from core-manifest.json (PINKIE_CORE=openclaw|cle overrides default).
+if [[ "$MODE" != "--remove" && -f "$CORE_MANIFEST_TOOL" ]]; then
+  CORE_NAME="$(node "$CORE_MANIFEST_TOOL" field core --root "$REPO_DIR")"
+  CORE_VERSION="$(node "$CORE_MANIFEST_TOOL" field version --root "$REPO_DIR")"
+  if [[ "${PINKIE_INSTALL_CORE:-0}" == "1" || -n "${PINKIE_CORE_PREFIX:-}" ]]; then
+    CORE_PREFIX="${PINKIE_CORE_PREFIX:-$HOME/.super-pinkie/core/$CORE_NAME}"
+    echo "==> installing core '$CORE_NAME' ($CORE_VERSION) from core-manifest.json into $CORE_PREFIX"
+    node "$CORE_MANIFEST_TOOL" install --root "$REPO_DIR" --prefix "$CORE_PREFIX"
+    export OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
+  fi
+fi
 
 if [[ "$MODE" == "--remove" ]]; then
   echo "==> stripping transport patches"
@@ -49,13 +62,14 @@ mkdir -p "$PROMPTS_DIR"
 cp "$REPO_DIR"/prompts/unrestricted-prompt-*.txt "$PROMPTS_DIR/"
 echo "    $(ls "$REPO_DIR"/prompts/unrestricted-prompt-*.txt | wc -l | tr -d ' ') prompt files installed"
 
-echo "==> 2/4 patching CLE Kk compatibility transports"
+echo "==> 2/4 patching C.le. compatibility transports"
 node "$PATCH_SCRIPT"
 node "$REPO_DIR/patch/apply-context-budget.mjs"
 node "$REPO_DIR/patch/apply-compaction-boundary-recovery.mjs"
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-same-session-recovery.mjs"
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-steer-fallback-wait.mjs"
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-retry-single-user.mjs"
+OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-noop-write-continue.mjs"
 node "$REPO_DIR/patch/apply-loopback-model-reliability.mjs"
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}" node "$REPO_DIR/patch/apply-local-unrestricted-policy.mjs"
 python3 "$REPO_DIR/services/context/setup.py"
@@ -116,12 +130,12 @@ if [[ "$*" == *"--provider"* ]]; then
        "$HOME/.openclaw/openclaw.json" > "$TMP_CFG"
     cp "$TMP_CFG" "$HOME/.openclaw/openclaw.json"
     rm -f "$TMP_CFG"
-    echo "    done. Restart the CLE Kk gateway for it to take effect."
+    echo "    done. Restart the C.le. gateway for it to take effect."
   else
     echo "==> 4/4 (skipped) point your provider's baseUrl at http://127.0.0.1:$PROXY_PORT/v1 manually"
   fi
 fi
 
 echo
-echo "All set. Restart the CLE Kk gateway, then in an unrestricted-mode session send the"
+echo "All set. Restart the C.le. gateway, then in an unrestricted-mode session send the"
 echo "verification token to confirm the injection is live (see README.md)."

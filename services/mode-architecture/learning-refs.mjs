@@ -12,6 +12,11 @@ const TARGETS = {note: '笔记', word: '生词本', wrong: '错题', plan: '明�
 const STATE_LABEL = {none: '还没学', learned: '学过', weak: '待复测', lit: '做对过', mastered: '独立掌握'};
 export const DESK_REF_MARKER = /\[\[DESK_REF_V1((?:\s+[a-z]+:[^\s\]]{1,200}){1,8})\s*\]\]/g;
 const clean = (value, limit = 500) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, limit);
+// 交给模型当「真实记录」、或收进错题笔记的正文：超长时照样截，但要明说截了，免得模型或用户把半截当全文。
+export const clip = (value, limit) => {
+  const full = String(value ?? '').replace(/\u0000/g, '').trim();
+  return full.length > limit ? `${full.slice(0, limit)}…（后略，原文共 ${full.length} 字）` : full;
+};
 const beijingDay = instant => new Date(Number(instant) + 8 * 3_600_000).toISOString().slice(0, 10);
 const addDays = (date, n) => new Date(Date.parse(date + 'T00:00:00Z') + n * DAY).toISOString().slice(0, 10);
 const isLearning = sessionKey => /^agent:learning:/.test(String(sessionKey || ''));
@@ -169,7 +174,7 @@ export class LearningRefs {
       return {ok: true, receipt: this.receipt({...base, ref: `word:${word.id}`, title: result.added.map(word => word.word).join('、'), undo: {kind: 'words', ids: result.added.map(word => word.id)}})};
     }
     if (target === 'plan') {
-      const memo = {id: `m-${randomUUID()}`, date: addDays(beijingDay(this.now()), 1), text: body.slice(0, 300), origin: base.origin, by: who, at: this.now()};
+      const memo = {id: `m-${randomUUID()}`, date: addDays(beijingDay(this.now()), 1), text: body, origin: base.origin, by: who, at: this.now()};
       this.writeMemos([...this.memos(), memo]);
       return {ok: true, receipt: this.receipt({...base, ref: `plan:${memo.date}`, title: memo.text.slice(0, 60), undo: {kind: 'memo', id: memo.id}})};
     }
@@ -224,14 +229,14 @@ export class LearningRefs {
       const q = clean(pub.question, 400);
       return {ref, kind, title: clean(q, 60), subtitle: [pub.topic, a.result.correct ? '答对' : '答错', pub.errorType].filter(Boolean).join(' · '),
         state: a.result.correct ? 'lit' : 'weak', status: a.result.correct ? '答对了' : pub.verifiedBy ? '复测已过' : '待复测',
-        detail: `题目：${q}\n用户的答案：${clean(pub.answerText, 200)}（${a.result.correct ? '对' : '错'}${pub.errorType ? '，错因：' + pub.errorType : ''}）${a.result.explanation ? '\n讲解：' + clean(a.result.explanation, 600) : ''}`,
+        detail: `题目：${clip(pub.question, 400)}\n用户的答案：${clip(pub.answerText, 200)}（${a.result.correct ? '对' : '错'}${pub.errorType ? '，错因：' + pub.errorType : ''}）${a.result.explanation ? '\n讲解：' + clip(a.result.explanation, 600) : ''}`,
         open: {view: 'entry', params:{ref}}};
     }
     if (kind === 'note') {
       const note = this.store.readNotesState().notes.find(item => item.id === id && isLearning(item.sourceSessionKey));
       if (!note) throw new Error('这条笔记已经不在了');
       return {ref, kind, title: clean(note.title, 60), subtitle: (note.tags || []).slice(0, 3).join(' · '), status: note.nextReviewAt && note.nextReviewAt <= this.now() ? '今天该复习' : '',
-        detail: `笔记「${clean(note.title, 80)}」：\n${clean(note.content, 1500)}`, open: {view: 'notes', params: {noteId: note.id}}};
+        detail: `笔记「${clean(note.title, 80)}」：\n${clip(note.content, 1500)}`, open: {view: 'notes', params: {noteId: note.id}}};
     }
     if (kind === 'word') {
       const word = this.store.vocab?.read().words.find(item => item.id === id);

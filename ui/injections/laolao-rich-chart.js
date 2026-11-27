@@ -162,7 +162,32 @@ function saveFile(blob, title) {
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
-// toBlob 回空（无头 WebKit 见过）就改用 toDataURL 解出同一张 PNG；两样都不行才算失败
+// 本机 WebKit（2370 / 2388）画得上却编码不出：toDataURL 三种格式都回 data:，convertToBlob 抛错。
+// 这时用像素自己拼一张不压缩的 PNG（stored deflate + CRC32 + Adler-32），createImageBitmap 能解回原像素
+function pngFromPixels(canvas) {
+  const w = canvas.width, h = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const raw = new Uint8Array((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) raw.set(px.subarray(y * w * 4, (y + 1) * w * 4), y * (w * 4 + 1) + 1);
+  const crcTable = Array.from({length: 256}, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
+  const be = (n) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const chunk = (type, data) => {
+    const body = new Uint8Array(4 + data.length); body.set([...type].map((c) => c.charCodeAt(0))); body.set(data, 4);
+    let c = ~0; for (const v of body) c = crcTable[(c ^ v) & 255] ^ (c >>> 8);
+    return [new Uint8Array(be(data.length)), body, new Uint8Array(be(~c >>> 0))];
+  };
+  const blocks = Math.max(1, Math.ceil(raw.length / 65535)), z = new Uint8Array(2 + raw.length + blocks * 5 + 4);
+  z.set([0x78, 0x01]);
+  let at = 2, a = 1, b = 0;
+  for (let i = 0; i < blocks; i++) {
+    const part = raw.subarray(i * 65535, (i + 1) * 65535), n = part.length;
+    z.set([i === blocks - 1 ? 1 : 0, n & 255, n >>> 8, ~n & 255, (~n >>> 8) & 255], at); z.set(part, at + 5); at += 5 + n;
+  }
+  for (const v of raw) { a = (a + v) % 65521; b = (b + a) % 65521; }
+  z.set(be(((b << 16) | a) >>> 0), at);
+  const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  return new Blob([sig, ...chunk('IHDR', new Uint8Array([...be(w), ...be(h), 8, 6, 0, 0, 0])), ...chunk('IDAT', z), ...chunk('IEND', new Uint8Array())], {type: 'image/png'});
+}
+// toBlob 回空就改用 toDataURL 解出同一张 PNG，再不行用像素自己拼；三样都不行才算失败
 function pngOf(canvas) {
   const viaUrl = () => {
     const url = canvas.toDataURL('image/png');
@@ -173,7 +198,7 @@ function pngOf(canvas) {
     return new Blob([bytes], {type: 'image/png'});
   };
   return new Promise((ok, no) => {
-    const fallback = () => { try { ok(viaUrl()); } catch (error) { no(error); } };
+    const fallback = () => { try { ok(viaUrl()); } catch { try { ok(pngFromPixels(canvas)); } catch (error) { no(error); } } };
     try { canvas.toBlob((b) => (b && b.size ? ok(b) : fallback()), 'image/png'); } catch { fallback(); }
   });
 }

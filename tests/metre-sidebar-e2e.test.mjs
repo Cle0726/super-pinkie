@@ -2,6 +2,7 @@ import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 const script = fileURLToPath(new URL('../ui/injections/laolao-session-list.js', import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
@@ -16,6 +17,7 @@ const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 let browser;
 before(async () => {
   browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  await waitFirstFrame(browser, `metre-sidebar-e2e (${engine})`);
 }, {timeout: 120_000});
 after(async () => { await browser?.close(); });
 
@@ -56,7 +58,7 @@ test(`Metre dispatch appears during refresh, without its parent in the sidebar (
       window.qa.away = {...window.qa.away, [other]: {parentKey: parent, title: '起草标题方案', mode: 'ideas'}};
       window.qa.changed();
     }, {parent, child, other});
-    await tab.waitForTimeout(300);
+    await tab.waitForTimeout(300);   // 保留：故意让两次 changed 通知先处理、再放行旧读，测的是先后顺序
     await tab.evaluate(() => window.qa.release());
     const sideRow = tab.locator(`[data-laolao-group="__metre-dispatched"] [data-session-key="${child}"]`);
     await sideRow.getByRole('link', {name: '正在整理提纲'}).waitFor();
