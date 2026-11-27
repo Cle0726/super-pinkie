@@ -130,6 +130,8 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-context-budget.mjs',
                 'apply-history-image-thumbnails.mjs',
                 'apply-compaction-boundary-recovery.mjs',
+                'apply-preflight-compaction-events.mjs',
+                'apply-overflow-compaction-events.mjs',
                 'apply-loopback-model-reliability.mjs',
                 'apply-work-thinking.mjs',
                 'apply-thinking-capabilities.mjs',
@@ -139,6 +141,13 @@ foreach ($packageRoot in $packageRoots) {
                 'apply-local-unrestricted-policy.mjs',
                 'apply-computer-v2.mjs',
                 'apply-stream-survive-steer.mjs',
+                'apply-same-session-recovery.mjs',
+                'apply-steer-fallback-wait.mjs',
+                'apply-retry-single-user.mjs',
+                'apply-retry-user-preservation.mjs',
+                'apply-steer-images.mjs',
+                'apply-work-first-media-gate.mjs',
+                'apply-fake-ip-benchmark-v6.mjs',
                 'apply-metre-lock.mjs'
             ) | ForEach-Object { Join-Path $RepoRoot "patch\$_" } | Where-Object { Test-Path $_ }
             if ($node -and $runtimePatches.Count -gt 0) {

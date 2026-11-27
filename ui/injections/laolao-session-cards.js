@@ -120,6 +120,25 @@
     button.type = 'button'; button.setAttribute('aria-label', label); button.onclick = action;
     return button;
   }
+  // One click flow for card buttons that ask the gateway: guard double clicks, show busy, write the
+  // answer back only if the session is still selected. apply(result) decides how the card changes.
+  function cardActionHandler(card, key, method, action, apply) {
+    return async () => {
+      if (busy.has(card.id) || key !== selected) return;
+      busy.add(card.id); errors.delete(card.id); paint();
+      try {
+        const result = await request(method, {key, id: card.id, action}, 45_000);
+        if (key === selected && data) apply(result);
+        window.PinkieSessionList?.invalidate();
+      } catch (error) {
+        if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
+      } finally {
+        busy.delete(card.id);
+        if (key === selected) paint();
+      }
+    };
+  }
+  const replaceCard = (id, next) => { data.cards = data.cards.map(item => item.id === id ? next : item); };
   async function showFullPrompt(card, key) {
     if (expanded.has(card.id)) { expanded.delete(card.id); paint(); return; }
     if (fullPrompts.has(card.id)) { expanded.add(card.id); paint(); return; }
@@ -252,20 +271,9 @@
     for (const [action, label] of cardActions(card)) {
       const button = cardButton(label, null, action === 'run' ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
       button.disabled = busy.has(card.id);
-      button.onclick = async () => {
-        if (busy.has(card.id) || key !== selected) return;
-        busy.add(card.id); errors.delete(card.id); paint();
-        try {
-          const result = await request('pinkie.session.manage.confirm', {key, id: card.id, action}, 45_000);
-          if (key === selected && data && result?.card) data.cards = data.cards.map(item => item.id === card.id ? result.card : item);
-          window.PinkieSessionList?.invalidate();
-        } catch (error) {
-          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
-        } finally {
-          busy.delete(card.id);
-          if (key === selected) paint();
-        }
-      };
+      // manage.confirm answers {card}; without one the card stays as it is.
+      button.onclick = cardActionHandler(card, key, 'pinkie.session.manage.confirm', action,
+        (result) => { if (result?.card) replaceCard(card.id, result.card); });
       actions.append(button);
     }
     if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));
@@ -278,22 +286,9 @@
       const primary = action === 'start' || action === 'adopt';
       const button = cardButton(label, null, primary ? 'pinkie-session-card__primary' : 'pinkie-session-card__secondary');
       button.disabled = busy.has(card.id);
-      button.onclick = async () => {
-        if (busy.has(card.id) || key !== selected) return;
-        busy.add(card.id);
-        errors.delete(card.id);
-        paint();
-        try {
-          const result = await request('pinkie.session.card.act', {key, id: card.id, action}, 45_000);
-          if (key === selected && data) data.cards = data.cards.map(item => item.id === card.id ? result : item);
-          window.PinkieSessionList?.invalidate();
-        } catch (error) {
-          if (key === selected) errors.set(card.id, error.message || '这次没有完成，请再试一次');
-        } finally {
-          busy.delete(card.id);
-          if (key === selected) paint();
-        }
-      };
+      // card.act answers the updated card itself.
+      button.onclick = cardActionHandler(card, key, 'pinkie.session.card.act', action,
+        (result) => replaceCard(card.id, result));
       actions.append(button);
     }
     if (errors.has(card.id)) actions.append(el('span', 'pinkie-session-card__error', errors.get(card.id)));

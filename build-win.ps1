@@ -259,8 +259,11 @@ $runtimeInfo = @{
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
+# No --uac-admin: the App and every installed work start as the signed-in user.
+# The only step that needs admin rights (swapping in an update when the install
+# folder is not writable, and its repair) asks for UAC on demand itself.
 $pyInstallerCommonArgs = @(
-    "--noconfirm", "--clean", "--windowed", "--uac-admin",
+    "--noconfirm", "--clean", "--windowed",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
@@ -305,7 +308,10 @@ $pyInstallerCommonArgs = @(
     "app\super_pinkie.py"
 )
 
-$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+# A local build with the C.le. core (PINKIE_CORE=cle) is stamped channel=cle, which is what
+# tools/cle-pkg-win install-cle requires. Every reader only tests for 'release', so cle behaves
+# exactly like dev (guard off, dev splash, no feedback keys); release builds are unchanged.
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } elseif ($coreInfo.core -eq 'cle') { 'cle' } else { 'dev' }
 $guardCommitRaw = (git rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $guardCommitRaw) { $guardCommitRaw = '' }
 $guardCommit = "$guardCommitRaw".Trim()
