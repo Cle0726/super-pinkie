@@ -463,8 +463,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #laolao-user-settings .pinkie-user-settings__usage-value { overflow: hidden; color: var(--pinkie-settings-ink); font-size: 13px; text-overflow: ellipsis; }
 #laolao-user-settings .pinkie-user-settings__footer { display: flex; justify-content: center; padding: 7px 0 16px; }
 
-html[data-pinkie-night] #laolao-user-settings, html[data-theme-mode="dark"] #laolao-user-settings,
-html[data-theme="dark"] #laolao-user-settings,
+html[data-pinkie-night] #laolao-user-settings, html[data-theme-mode="dark"] #laolao-user-settings, html[data-theme="dark"] #laolao-user-settings,
 html[data-color-scheme="dark"] #laolao-user-settings {
   --pinkie-settings-ink: #f6e5ee; --pinkie-settings-custom-ink: #d1b3c2;
   --pinkie-settings-muted: #d1b3c2;
@@ -477,6 +476,7 @@ html[data-color-scheme="dark"] #laolao-user-settings {
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__title { color: #ff9ac4; }
+html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover { border-color: var(--pinkie-settings-accent); }   /* B24 夜：日间 .62 粉边叠在夜卡片上只有 2.45:1；放在 .is-selected 之前，选中态照旧 */
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__preset.is-selected,
