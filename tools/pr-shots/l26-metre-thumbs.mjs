@@ -6,6 +6,7 @@
 //   thumbs-strip   输入框上方的缩略条（图片两张、文件一个）
 //   thumbs-viewer  点第一张缩略图以后：看图器打开整张原图
 //   thumbs-closed  Esc 以后：看图器关掉、附件还在（没被移除）
+//   thumbs-focus   不碰鼠标，从输入框 Shift+Tab 回到附件条，焦点落在图片缩略图上（看焦点框）；report 记 Tab 顺序和 Enter 能否打开
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -87,7 +88,33 @@ async function cell(theme, width) {
     const closed = await page.waitForFunction(() => !document.getElementById('laolao-image-viewer'), null, {timeout: 5000}).then(() => true, () => false);
     await page.waitForTimeout(200);
     await shot(page, 'thumbs-closed', theme, width, {closed});
-    report.push({theme, width, step: 'closed', closed, ...(await viewerState(page)), pageErrors});
+    report.push({theme, width, step: 'closed', closed, ...(await viewerState(page))});
+
+    // 键盘（uireview 08:51Z）：不碰鼠标，从输入框 Shift+Tab 回到附件条，焦点落在图片缩略图上；拍焦点框，
+    // 再记 Tab 顺序（图片 → 移除）和 Enter 能否打开看图器。
+    const focusInfo = () => page.evaluate(() => {
+      const a = document.activeElement;
+      return {tag: a?.tagName || null, role: a?.getAttribute?.('role') ?? null, label: a?.getAttribute?.('aria-label') ?? null,
+        img: a?.tagName === 'IMG' && Boolean(a.closest('.chat-attachments-preview .chat-attachment-thumb:not(.chat-attachment-thumb--file)')),
+        remove: Boolean(a?.closest?.('.chat-attachment-remove')), outline: a ? getComputedStyle(a).outlineStyle + ' ' + getComputedStyle(a).outlineWidth : null};
+    });
+    await page.mouse.move(0, HEIGHT - 1);
+    await page.locator('.agent-chat__composer-combobox textarea').first().focus({timeout: 5000}).catch((e) => console.log('[l26] 聚焦输入框失败：' + e.message.split('\n')[0]));
+    let onImg = null, steps = 0;
+    for (; steps < 12; steps++) {
+      await page.keyboard.press('Shift+Tab');
+      onImg = await focusInfo();
+      if (onImg.img) break;
+    }
+    await page.waitForTimeout(200);
+    await shot(page, 'thumbs-focus', theme, width, {focused: Boolean(onImg?.img)});
+    await page.keyboard.press('Tab');
+    const next = await focusInfo();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Enter');
+    const enterOpens = await page.waitForFunction(() => document.querySelector('#laolao-image-viewer.is-open img')?.complete, null, {timeout: 5000}).then(() => true, () => false);
+    await page.keyboard.press('Escape');
+    report.push({theme, width, step: 'focus', shiftTabs: steps + 1, onImg, nextIsRemove: next.remove, enterOpens, ...(await viewerState(page)), pageErrors});
   } finally {
     await context.close();
   }
