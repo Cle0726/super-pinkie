@@ -98,13 +98,21 @@ def clamp_size(raw, default, low, high):
     return max(low, min(int(raw), high))
 
 
+WINDOWS_RESERVED_NAMES = frozenset(["CON", "PRN", "AUX", "NUL"] + [f"{dev}{i}" for dev in ("COM", "LPT") for i in range(1, 10)])
+
+
 def safe_file_name(raw, ext):
     name = str(raw or "").strip()
     for bad in '<>:"/\\|?*':
         name = name.replace(bad, "-")
-    name = "".join("-" if ord(ch) < 32 else ch for ch in name).strip(". ")  # B43: control chars are not allowed in Windows names
+    name = "".join("-" if ord(ch) < 32 else ch for ch in name).rstrip(". ")  # B43: control chars are not allowed in Windows names
     has_ext = name.lower().endswith("." + ext)
     stem, suffix = (name[:-len(ext) - 1], name[-len(ext) - 1:]) if has_ext else (name, "." + ext)
+    # B60: leading dots are stripped only after the extension is split off, so a bare ".pdf" is all extension, not a stem "pdf"
+    stem = stem.strip(". ")
+    head = stem.split(".", 1)[0].rstrip()
+    if head.upper() in WINDOWS_RESERVED_NAMES:  # B60: Windows opens the device for CON, CON.pdf and con.txt.pdf alike
+        stem = head + "-" + stem[len(head):]
     # B43: cut the stem, not the whole name, so a long title keeps its extension
     return (stem[:180 - len(suffix)].rstrip(". ") or "碧琪会话") + suffix
 
@@ -248,11 +256,13 @@ class WindowsNative:
                 from app import windows_app_window
             return windows_app_window.handle(message)
         if kind == "context":
-            self.mode = str(message.get("mode") or self.mode)
-            self.mode_label = str(message.get("modeLabel") or self.mode_label)
+            # B43: only short strings from the page; the tray menu and quick-ask window show these
+            text = lambda value, cap: value.strip()[:cap] if isinstance(value, str) else ""  # noqa: E731
+            self.mode = text(message.get("mode"), 32) or self.mode
+            self.mode_label = text(message.get("modeLabel"), 32) or self.mode_label
             items = message.get("running") if isinstance(message.get("running"), list) else []
-            running = [(str(item.get("key")), str(item.get("title") or "未命名会话"))
-                       for item in items[:20] if isinstance(item, dict) and item.get("key")]
+            running = [(text(item.get("key"), 300), text(item.get("title"), 80) or "未命名会话")
+                       for item in items[:20] if isinstance(item, dict) and text(item.get("key"), 300)]
             now = self._clock()
             if [key for key, _ in running] != [key for key, _ in self._running]:
                 self._awake_capped = False
