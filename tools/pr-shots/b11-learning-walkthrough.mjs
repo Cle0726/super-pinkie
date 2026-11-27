@@ -25,6 +25,9 @@ fs.mkdirSync(out, {recursive: true});
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const HEIGHT = 800;
 const DESK_VIEWS = ['today', 'board', 'library', 'notes', 'vocab', 'drill', 'gamepractice', 'chat'];
+// 宽度默认 1440 / 820；PINKIE_WALK_WIDTHS=1280,820 这样可换（L67 走查用 tools/pr-shots/L67-learning-1280.mjs 设）。
+const WIDTHS = String(process.env.PINKIE_WALK_WIDTHS || '1440,820').split(',').map((w) => Number(w.trim())).filter((w) => Number.isInteger(w) && w >= 320 && w <= 3840);
+if (!WIDTHS.length) throw new Error(`PINKIE_WALK_WIDTHS 无效：${process.env.PINKIE_WALK_WIDTHS}`);
 
 // 在页面里跑：返回 {counts, issues}。
 function measure() {
@@ -303,7 +306,7 @@ async function desk(theme, width) {
 
 try {
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 820]) {
+    for (const width of WIDTHS) {
       await homeAndSettings(theme, width);
       await desk(theme, width);
     }
