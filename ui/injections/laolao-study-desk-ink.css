@@ -6,7 +6,7 @@
 /* ===== 令牌：v1 的变量映射到手账的纸和墨 ===== */
 #pinkie-study-desk.pk-ink{
   --paper:#FAF6F1; --paper-2:#F2EBE4; --card:#FFFDFA; --hair:#E6DCD6; --hair-2:#D9CCC5; --ink-tint:rgba(46,34,54,.05);
-  --margin-line:#F1B7CF; --rule:#E6DCD6;
+  --margin-line:#F1B7CF; --rule:#E6DCD6; --ink-3:#726577; --pk-ink-3:#726577; /* B11 L7：日间弱字 #87788D→#726577，纸色上 ≥4.6；只在学习台，夜间块另设 */
   --glass:var(--paper); --glass-strong:var(--paper); --glass-edge:transparent; --glass-hi:transparent; --glass-shadow:none;
   --lift:0 1px 0 rgba(46,34,54,.05),0 18px 30px -22px rgba(90,40,70,.45);
   --book-shadow:0 1px 0 rgba(46,34,54,.05),0 30px 60px -36px rgba(90,40,70,.42);
