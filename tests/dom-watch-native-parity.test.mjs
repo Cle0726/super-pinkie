@@ -526,7 +526,21 @@ test('M3 differential: domWatch observers and polling match native browser APIs'
   });
 });
 
-test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', async () => {
+// B72: on GitHub runners the whole fuzz takes ~42 s (25 blocks x ~1.7 s). A stalled page used to
+// leave page.evaluate waiting forever, so the step printed nothing until the 30-min job cancel.
+// Each block now gets 60 s and the whole test 5 min; a normal run is not slowed and the count is unchanged.
+const FUZZ_BLOCK_LIMIT_MS = 60_000;
+const FUZZ_TOTAL_LIMIT_MS = 300_000;
+
+function withinLimit(promise, ms, what) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not finish within ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 0 mismatches vs native MutationObserver)', {timeout: FUZZ_TOTAL_LIMIT_MS}, async () => {
   const browser = await sharedBrowser();
   const TOTAL_BLOCKS = 25;
   const PER_BLOCK = 100;
@@ -540,7 +554,7 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
     try {
       await page.setContent('<!doctype html><html><head></head><body></body></html>');
       await page.addScriptTag({content: DOM_WATCH_SRC});
-      const res = await page.evaluate(async ({blockIndex, count}) => {
+      const res = await withinLimit(page.evaluate(async ({blockIndex, count}) => {
         const bad = [];
         let nonEmptyLocal = 0;
         for (let t = 0; t < count; t += 1) {
@@ -663,7 +677,7 @@ test('M3 differential fuzz: fixed-seed randomized differential (2500 sequences, 
           root.remove();
         }
         return {bad, nonEmptyLocal};
-      }, {blockIndex: block, count: PER_BLOCK});
+      }, {blockIndex: block, count: PER_BLOCK}), FUZZ_BLOCK_LIMIT_MS, `fuzz block ${block}`);
       total += PER_BLOCK;
       nonEmpty += res.nonEmptyLocal;
       if (res.bad.length > 0) mismatches.push(...res.bad);
