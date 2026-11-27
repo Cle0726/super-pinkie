@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
-import {formatMeasurement, measure} from '../tools/health/measure.mjs';
+import {formatMeasurement, measure, repoFiles} from '../tools/health/measure.mjs';
+import {comparePatchLists, PATCH_LIST, patchApplyFileNames, patchListChanges, readPatchList} from '../tools/health/patch-list.mjs';
 import {healthChanges, loadExceptions, readJson, SYNC_HINT} from '../tools/health/ratchet.mjs';
 
 test('代码健康度：每个文件不能变差，改善后要同步基线', async () => {
@@ -67,4 +68,52 @@ test('例外仅放行该文件的准确计数；新文件上限、全仓版本�
   assert.equal(healthChanges(current, empty, [exception(file, 'lines', 1502)]).increases.length, 2);
   assert.deepEqual(healthChanges(current, empty, [exception(file, 'lines', 1501), exception(versionFile, 'manualVersions', 1)]), {increases: [], decreases: [], unused: []});
   assert.equal(healthChanges(empty, current).decreases.length, 2);
+});
+
+test('L78：patch/apply-*.mjs 只许减少、不许新增（按 tools/health/patch-files.json 的名字比）', () => {
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const listed = readPatchList(root);
+  assert.ok(Array.isArray(listed), `缺少 ${PATCH_LIST}`);
+  const {added, removed} = patchListChanges(patchApplyFileNames(root, repoFiles(root)), listed);
+  const notes = [...added, ...removed].map(message => `- ${message}`);
+  if (notes.length) assert.fail(`补丁清单检查未通过：\n${notes.join('\n')}`);
+});
+
+test('补丁清单口径：新增、删一加一、删了文件不改清单、去掉清单都拦得住；和目标分支比不许多出名字', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-patches-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  for (const file of ['patch/apply-a.mjs', 'patch/apply-b.mjs', 'patch/lib-x.mjs', 'patch/sub/apply-c.mjs', 'patch/apply-d.js']) {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
+    fs.writeFileSync(path.join(dir, file), '');
+  }
+  const files = patchApplyFileNames(dir, repoFiles(dir));
+  assert.deepEqual(files, ['patch/apply-a.mjs', 'patch/apply-b.mjs'], '只数 patch/ 顶层的 apply-*.mjs');
+  const list = ['patch/apply-a.mjs', 'patch/apply-b.mjs'];
+  assert.deepEqual(patchListChanges(files, list), {added: [], removed: []});
+  assert.match(patchListChanges([...files, 'patch/apply-new.mjs'], list).added.join('\n'), /patch\/apply-new\.mjs：新增了内核补丁。改内核行为一律去 cle-core 改/);
+  const swapped = patchListChanges(['patch/apply-a.mjs', 'patch/apply-new.mjs'], list);
+  assert.equal(swapped.added.length, 1, '删一个再加一个，个数不变也要拦');
+  assert.equal(swapped.removed.length, 1);
+  assert.match(patchListChanges(['patch/apply-a.mjs'], list).removed.join('\n'), /patch\/apply-b\.mjs：补丁文件已经删了，请从 tools\/health\/patch-files\.json 删掉这一行/);
+  assert.equal(patchListChanges(files, null).added.length, 1, '整个去掉清单不能放行');
+
+  assert.equal(readPatchList(dir), null);
+  fs.mkdirSync(path.join(dir, 'tools/health'), {recursive: true});
+  fs.writeFileSync(path.join(dir, PATCH_LIST), JSON.stringify({files: ['patch/apply-a.mjs', 'patch/apply-a.mjs']}));
+  assert.throws(() => readPatchList(dir), /重复登记/);
+  fs.writeFileSync(path.join(dir, PATCH_LIST), '﻿' + JSON.stringify({files: ['patch/lib-x.mjs']}));
+  assert.throws(() => readPatchList(dir), /必须是 patch\/apply-\*\.mjs/);
+  fs.writeFileSync(path.join(dir, PATCH_LIST), JSON.stringify({files: list}));
+  assert.deepEqual(readPatchList(dir), list);
+
+  const target = {targetList: list, targetFiles: files};
+  assert.deepEqual(comparePatchLists({prList: list, ...target}), {failures: [], notes: []});
+  assert.match(comparePatchLists({prList: [...list, 'patch/apply-new.mjs'], ...target}).failures.join('\n'), /新增登记：patch\/apply-new\.mjs/);
+  const shrunk = comparePatchLists({prList: ['patch/apply-a.mjs'], ...target});
+  assert.deepEqual(shrunk.failures, []);
+  assert.match(shrunk.notes.join('\n'), /补丁清单减少：patch\/apply-b\.mjs/);
+  assert.match(comparePatchLists({prList: null, ...target}).failures.join('\n'), /删掉了 tools\/health\/patch-files\.json/);
+  // 目标分支还没有清单（本 PR 首次引入）：名字必须是目标分支上真有的补丁文件。
+  assert.deepEqual(comparePatchLists({prList: list, targetList: null, targetFiles: files}).failures, []);
+  assert.match(comparePatchLists({prList: [...list, 'patch/apply-new.mjs'], targetList: null, targetFiles: files}).failures.join('\n'), /登记了目标分支上没有的补丁：patch\/apply-new\.mjs/);
 });
