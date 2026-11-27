@@ -21,7 +21,7 @@ A transparent HTML body cannot show the desktop through an opaque native host. T
 
 `ui/parity-policy.json` lists the native-only App icon. Browser resources have no platform exceptions. Both platforms use the locally bundled full OFL Noto Sans SC variable WOFF2, with code/terminal text retaining monospace fonts. Software-renderer detection records diagnostics only; it never disables glass, canvas, 3D, video or reduces animation rates.
 
-Windows onedir and onefile launchers use the standard `requireAdministrator` manifest (`--uac-admin`). The OS still handles UAC consent. Gateway/probe/repair children use hidden-window flags. Explicit Explorer and control-center windows remain visible. Logs remain in their normal files.
+Windows onedir and onefile launchers carry no `requireAdministrator` manifest (no `--uac-admin`): the App and every installed work open as the signed-in user without a UAC prompt. Admin rights are asked for on demand, in two places only: swapping in an update when the install folder refuses the write test (the App asks first, then `start_elevated`; the helper restarts the App unelevated through Explorer), and the update failure window's 「用管理员权限修复」 button (`-Verb RunAs`). Gateway/probe/repair children use hidden-window flags. Explicit Explorer and control-center windows remain visible. Logs remain in their normal files.
 
 ## Verification and release gates
 

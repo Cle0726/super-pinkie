@@ -1,0 +1,75 @@
+/* laolao-metre-library —— R5 ③：作品库查看器里的「在工作台打开」键 + 工作台不在时的只读预览面板（laolao-metre-library.js）。
+ * 日夜都走 Metre 变量（--metre-surface / --metre-line-strong / --metre-text），设计稿第二节 5；只在 Metre 里有。 */
+
+/* 分隔线色：日间 line-strong；夜间 line-strong 和面板底色只有约 1.3:1，往正文色推一点（约 1.8:1） */
+html[data-laolao-mode="metre"] { --pk-mlib-rule: var(--metre-line-strong, #D3D0C8); }
+html[data-pinkie-night][data-laolao-mode="metre"] { --pk-mlib-rule: color-mix(in srgb, var(--metre-line-strong, #393835) 80%, var(--metre-text, #ECEAE4)); }
+
+/* 键：主动作，实心钴蓝底，和旁边次要的「打开 / 在文件夹中显示」分开（日 白字/#2F4BB0、夜 #232321/#93A5EE，都约 7:1）。
+ * 不挂 .pinkie-art-btn：Metre 皮肤用强制规则把它压成透明描边灰字（laolao-metre-skin.css），同 laolao-desktop-apps.css 的主按钮做法，自带同尺寸样式。 */
+html[data-laolao-mode="metre"] .pk-mlib-open {
+  flex: none; height: 28px; padding: 0 11px; box-sizing: border-box; border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+  background: var(--metre-accent, #2F4BB0); color: var(--metre-surface, #FFFFFF);
+  font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+html[data-laolao-mode="metre"] .pk-mlib-open:hover { background: color-mix(in srgb, var(--metre-accent, #2F4BB0) 86%, var(--metre-text, #1B1A18)); }
+html[data-laolao-mode="metre"] .pk-mlib-open:focus-visible { outline: 2px solid var(--metre-accent, #2F4BB0); outline-offset: 2px; }
+/* 键所在的一条：放在查看器头部下面（不挤头部；头部 820 时已经满了）。左说明、右主键；窄了说明自己换行 */
+html[data-laolao-mode="metre"] .pk-mlib-strip {
+  /* 分隔线和查看器头部同色（Metre 皮肤给头部的是 --metre-line）；左右都 18，跟头部文件名对齐 */
+  flex: none; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 8px 18px;
+  border-bottom: 1px solid var(--metre-line, #E8E6DC); background: var(--metre-bg, #F7F6F3);
+}
+html[data-laolao-mode="metre"] .pk-mlib-strip__note {
+  flex: 1 1 auto; min-width: 0; font-size: 12.5px; line-height: 1.4;
+  color: color-mix(in srgb, var(--metre-muted, #77736B) 60%, var(--metre-text, #1B1A18));
+}
+
+html[data-laolao-mode="metre"] .pk-mlib-preview {
+  /* 要盖在作品库查看器（2147481000）上面、确认框（2147482500）下面 */
+  position: fixed; inset: 0; z-index: 2147482000; display: flex; align-items: center; justify-content: center;
+  /* 遮罩日夜都是压暗：不从 --metre-text 混（夜间它是浅色，会把底下提亮成一片灰） */
+  padding: 24px; box-sizing: border-box; background: rgba(20, 18, 16, 0.42);
+}
+html[data-pinkie-night][data-laolao-mode="metre"] .pk-mlib-preview { background: rgba(0, 0, 0, 0.58); }
+html[data-laolao-mode="metre"] .pk-mlib-preview__box {
+  display: flex; flex-direction: column; width: min(860px, 100%); max-height: min(86vh, 100%); min-height: 0;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 10px; overflow: hidden;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D);
+}
+/* 分隔线用 line-strong：夜间 --metre-line 和面板底色几乎一样，三块分不开 */
+html[data-laolao-mode="metre"] .pk-mlib-preview__head {
+  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px;
+  border-bottom: 1px solid var(--pk-mlib-rule);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 13px/1.3 var(--metre-mono, ui-monospace, monospace);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__tag {
+  flex: none; padding: 2px 6px; border-radius: 4px; font-size: 11px; line-height: 1.2;
+  border: 1px solid var(--metre-line-strong, #D9D6CC);
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 60%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__close {
+  margin-left: auto; flex: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--metre-line-strong, #D9D6CC); background: var(--metre-surface, #FFFFFF);
+  color: var(--metre-text, #1F1E1D); font: 400 16px/1 inherit;
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__close:hover { background: var(--metre-hover, #F0EEE6); }
+html[data-laolao-mode="metre"] .pk-mlib-preview__close:focus-visible,
+html[data-laolao-mode="metre"] .pk-mlib-preview__text:focus-visible { outline: 2px solid var(--metre-accent, #C96442); outline-offset: 2px; }
+html[data-laolao-mode="metre"] .pk-mlib-preview__note {
+  margin: 0; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--pk-mlib-rule);
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 60%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__body { min-height: 0; overflow: auto; }
+html[data-laolao-mode="metre"] .pk-mlib-preview__text {
+  margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 400 12.5px/1.55 var(--metre-mono, ui-monospace, monospace); color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pk-mlib-preview__image { display: block; max-width: 100%; height: auto; margin: 12px auto; }
+@media (max-width: 600px) {
+  html[data-laolao-mode="metre"] .pk-mlib-preview { padding: 10px; }
+  html[data-laolao-mode="metre"] .pk-mlib-preview__box { max-height: 94vh; }
+}

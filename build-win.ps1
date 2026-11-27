@@ -259,8 +259,11 @@ $runtimeInfo = @{
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
+# No --uac-admin: the App and every installed work start as the signed-in user.
+# The only step that needs admin rights (swapping in an update when the install
+# folder is not writable, and its repair) asks for UAC on demand itself.
 $pyInstallerCommonArgs = @(
-    "--noconfirm", "--clean", "--windowed", "--uac-admin",
+    "--noconfirm", "--clean", "--windowed",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",

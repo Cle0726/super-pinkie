@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 1, "reason": "T3 #10 计划卡（L24，linux/L24）：Metre 下计划卡换皮的新文件 laolao-metre-plan.css 只能在头片段登记加载（?v=@hash），一行，放在 laolao-plan.js 后面；规则全在新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 1, "reason": "T3 #10 计划卡（L24）：laolao-metre-plan.css 登记在已有的 metre 区域 files 里一行（ui-region-ownership 要求头片段加载的每个文件都归属一个区域）。没有新区域、新根选择器或跨区域 CSS 放行。"}
+]

@@ -37,6 +37,7 @@ const ORDER = [
   'apply-same-session-recovery.mjs',
   'apply-steer-fallback-wait.mjs',
   'apply-retry-single-user.mjs',
+  'apply-noop-write-continue.mjs',
   'apply-retry-user-preservation.mjs',
   'apply-steer-images.mjs',
   'apply-work-first-media-gate.mjs',

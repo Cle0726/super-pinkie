@@ -4,27 +4,27 @@
  * :not(#p1):not(#p2):not(#p3) 只为压过主题里带 ID 级别的 !important 规则。 */
 html:not(#p1):not(#p2):not(#p3) {
   --cle-fg: rgba(29, 27, 43, .82);
-  --cle-mute: rgba(29, 27, 43, .48);
+  --cle-mute: rgba(29, 27, 43, .66);
   --cle-ink: #1a1826;
-  --cle-accent: #2f7bff;
+  --cle-accent: #1d62db;
   --cle-cmd: rgba(29, 27, 43, .78);
-  --cle-chip: rgba(47, 123, 255, .07);
-  --cle-chip-line: rgba(47, 123, 255, .16);
-  --cle-sweep: #2f7bff;
-  --cle-sweep-verb: rgba(29, 27, 43, .46);
-  --cle-sweep-cmd: rgba(29, 27, 43, .5);
+  --cle-chip: rgba(47, 123, 255, .07); --cle-chip-line: rgba(47, 123, 255, .16);
+  --cle-sweep: #1d62db;
+  --cle-sweep-verb: rgba(29, 27, 43, .64);
+  --cle-sweep-cmd: rgba(29, 27, 43, .66);
+  --cle-fail: #bf2b31; --cle-fail-hi: #c93338;
 }
 html[data-pinkie-night]:not(#p1):not(#p2):not(#p3) {
   --cle-fg: rgba(236, 232, 240, .86);
-  --cle-mute: rgba(236, 232, 240, .46);
+  --cle-mute: rgba(236, 232, 240, .58);
   --cle-ink: #e9eeff;
   --cle-accent: #62b4ff;
   --cle-cmd: rgba(214, 228, 255, .9);
-  --cle-chip: rgba(98, 180, 255, .09);
-  --cle-chip-line: rgba(98, 180, 255, .2);
+  --cle-chip: rgba(98, 180, 255, .09); --cle-chip-line: rgba(98, 180, 255, .2);
   --cle-sweep: #ffffff;
-  --cle-sweep-verb: rgba(236, 232, 240, .42);
-  --cle-sweep-cmd: rgba(214, 228, 255, .48);
+  --cle-sweep-verb: rgba(236, 232, 240, .56);
+  --cle-sweep-cmd: rgba(214, 228, 255, .58);
+  --cle-fail: #ff6b70; --cle-fail-hi: #ff8589;
 }
 
 /* ── 卡片 → 一行 ─────────────────────────────────── */
@@ -90,7 +90,7 @@ html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status > span
 @keyframes cle-chip-in { from { opacity: 0; transform: translateY(3px); } }
 
 html:not(#p1):not(#p2):not(#p3) .pinkie-process > .pinkie-process__summary::after { content: none !important; display: none !important; }
-html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status[data-kind="fail"]:not([data-kind="done"]):not([data-kind="stopped"]) b { --cle-sweep: #ff8589; --cle-sweep-base: #e5484d; }
+html:not(#p1):not(#p2):not(#p3) .pinkie-process[data-cle-run] .cle-status[data-kind="fail"]:not([data-kind="done"]):not([data-kind="stopped"]) b { --cle-sweep: var(--cle-fail-hi); --cle-sweep-base: var(--cle-fail); }
 /* 运行中挂在卡片外的思考块（会自动展开、铺开整段思考文字）：状态行已写「思考中」，这份隐藏；
    卡片里面那份保留，点 › 展开仍可看完整思考 */
 html:not(#p1):not(#p2):not(#p3) .chat-group--process > .chat-group-messages > .pinkie-process__thinking { display: none !important; }
