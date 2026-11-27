@@ -110,8 +110,11 @@ test('应用成功：写入改后内容、保留原权限的原文件备份、�
   const spec = synthetic(QQ_PATCH, files);
   const root = tempRoot(t, spec, files);
 
+  // Windows 没有 POSIX 权限位（读出来固定是 0o666），只在别的平台上要求就是建时的 0o640。
+  const mode = fs.statSync(path.join(root, REL)).mode & 0o777;
+  if (process.platform !== 'win32') assert.equal(mode, 0o640);
   const plan = planPublisherPatch(root, spec);
-  assert.deepEqual(plan.map(item => [item.relative, item.mode]), [[REL, 0o640], [REL2, 0o640]]);
+  assert.deepEqual(plan.map(item => [item.relative, item.mode]), [[REL, mode], [REL2, mode]]);
   assert.deepEqual(listing(root), ['a.js', 'b.js'], 'plan 只读不写');
 
   const first = applyPublisherPatch(root, spec);
@@ -122,7 +125,7 @@ test('应用成功：写入改后内容、保留原权限的原文件备份、�
   assert.deepEqual(listing(root), ['a.js', 'a.js.pinkie-original', 'b.js', 'b.js.pinkie-original']);
   assert.equal(fs.readFileSync(path.join(root, REL), 'utf8'), 'first\n// patched\n');
   assert.equal(fs.readFileSync(path.join(root, `${REL}.pinkie-original`), 'utf8'), 'first\n');
-  assert.equal(fs.statSync(path.join(root, `${REL}.pinkie-original`)).mode & 0o777, 0o640);
+  assert.equal(fs.statSync(path.join(root, `${REL}.pinkie-original`)).mode & 0o777, mode);
 
   const second = applyPublisherPatch(root, spec);
   assert.deepEqual(second.map(item => item.changed), [false, false]);
