@@ -105,7 +105,7 @@
     const b = event.target.closest?.('.pk-mq__btn'); if (!b || b.disabled) return;
     event.preventDefault(); event.stopPropagation(); act(b.dataset.act, b.dataset.id);
   }, true);
-  window.addEventListener('pinkie:run-view', () => render());
+  window.addEventListener('pinkie:run-view', () => render()); document.addEventListener('animationstart', (e) => { if (e.animationName === 'pk-mq-born' && isMetre()) render(); }, true);   // 原生排队区或其中一条刚插进来的那一帧（skin.css 的 pk-mq-born）：当帧画出这一条
   // 忙的时候按回车 / 点发送，原生面板把这句排进队列：跟着补画一次（原生面板自己没有对外的「队列变了」事件）
   const soon = () => { for (const ms of [60, 300]) setTimeout(() => render(), ms); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && isMetre()) soon(); }, true);

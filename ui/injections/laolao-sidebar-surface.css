@@ -1,11 +1,11 @@
 /* 侧栏：一层很薄的雾面，和聊天区的雾板融在一起；不画硬边框、不叠多层玻璃。
    悬停有一块会滑动的柔光（laolao-sidebar-autohide.js 移动它），当前会话是一枚白色小卡片。
    收起后完全隐藏，左边缘留一条细把手，鼠标靠近会亮起，碰到就滑出。 */
-html:not([data-laolao-plain-composer]):not([data-r2-off]) {
-  --sb-ink: color-mix(in srgb, var(--accent) 22%, #4a3d44);
-  --sb-muted: color-mix(in srgb, var(--accent) 18%, #9a8b92);
-  --sb-hover: color-mix(in srgb, var(--accent) 9%, rgba(255, 255, 255, .78));
-}
+html:not([data-laolao-plain-composer]):not([data-r2-off]) { --sb-ink: color-mix(in srgb, var(--accent) 22%, #4a3d44); --sb-muted: color-mix(in srgb, var(--accent) 18%, #9a8b92); --sb-hover: color-mix(in srgb, var(--accent) 9%, rgba(255, 255, 255, .78)); }
+/* B11 学习表：日间分组标题 / 计数 / 分组按钮 / 会话日期时间太淡（#9a8b92 再叠 .45–.7 透明度只剩约 2:1）→ #6e6067（五个模式 ≥ 5.0:1）、文字不透明、按钮 .8（≥ 3.4:1，悬停仍是 1）、带字的「打开」1（≥ 4.5:1）；项目标题的 add-project 由 236–237 行管（两级 id），这里碰不到。夜间（laolao-night.css）和 Metre（laolao-metre-contrast.css）不变；id 级压过 laolao-sidebar.css:466–467，不用强制覆盖。 */
+html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-pinkie-night]):not([data-laolao-mode="metre"]) { --sb-muted: color-mix(in srgb, var(--accent) 18%, #6e6067); }
+html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-pinkie-night]):not([data-laolao-mode="metre"]) .sidebar #laolao-session-manager :is(.laolao-group__label, .laolao-group__count, .pinkie-session-time, .pinkie-session-date) { color: var(--sb-muted); opacity: 1; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-pinkie-night]):not([data-laolao-mode="metre"]) .sidebar .laolao-group__action:not(#_sb) { opacity: .8; } html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-pinkie-night]):not([data-laolao-mode="metre"]) .sidebar .laolao-group__action.laolao-group__open:not(#_sb) { opacity: 1; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .shell-nav {
   background: transparent !important; border: 0 !important;
 }
@@ -141,7 +141,7 @@ html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-rece
   transition: height .3s cubic-bezier(.3, 1.4, .5, 1), opacity .2s ease;
 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active::before { opacity: 1; height: 14px; }
-html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { font-weight: 600 !important; color: color-mix(in srgb, var(--accent) 45%, #3d3036) !important; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar .sidebar-recent-session--active .sidebar-recent-session__name { font-weight: 600 !important; color: var(--sb-ink-active, color-mix(in srgb, var(--accent) 45%, #3d3036)) !important; }
 
 /* 滑动柔光（悬停指示），由脚本放进侧栏并移动 */
 .sb-glide {

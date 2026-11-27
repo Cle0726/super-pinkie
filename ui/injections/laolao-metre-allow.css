@@ -1,0 +1,24 @@
+/* laolao-metre-allow.css —— P3「允许的命令」卡片（laolao-metre-allow.js）的版式，只在 Metre。
+ * 卡片本身沿用碧琪设置弹层的类名和 Metre 皮肤，这里只补共用样式管不到的几件事：
+ * 清单行不用设置行的两列（左列只有约四分之一宽，长路径会被硬断）：名字占满，「移除」按内容宽；
+ * 「新加一条」那一行输入框和按键并排、同高、不折行，标题降一档、和清单拉开，不像清单里的一条；
+ * 卡片里的按键一个高度；占位字用 Metre 的暖灰（略加深，输入框底上也够 4.5:1）。
+ * 选择器带 #laolao-user-settings 和 .pk-metre-allow，比共用规则更具体，不靠强制覆盖。 */
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__item { grid-template-columns: minmax(0, 1fr) auto; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__item .pinkie-user-settings__row-title { overflow-wrap: anywhere; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__seg { display: inline-block; max-width: 100%; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pinkie-user-settings__button { flex: 0 0 auto; height: 32px; min-height: 32px; white-space: nowrap; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__add { margin-top: 10px; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__add .pinkie-user-settings__row-title { font-weight: 500; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__add .pinkie-user-settings__row-control { gap: 8px; align-items: center; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__input { flex: 1 1 auto; width: auto; height: 32px; min-height: 32px; padding: 4px 10px; border-radius: 8px; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__input::placeholder { color: color-mix(in srgb, var(--metre-muted) 82%, var(--metre-text)); opacity: 1; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__status[data-tone="warn"] { color: var(--metre-text); }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__help { margin: 2px 0 0; }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__item--all .pinkie-user-settings__row-title { color: var(--metre-accent); }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow .pk-metre-allow__add .pinkie-user-settings__button:disabled { opacity: .5; cursor: default; }
+/* 输入框和「加进清单」「移除」的边框：皮肤给设置控件的边框是 --metre-line-strong，对卡片底只有 1.54:1（日）/ 1.34:1（夜），
+ * 非文本控件要 ≥ 3:1。只在这张卡片里把这个变量换成暖灰掺八成 muted：对卡片底 3.64 / 3.78，对输入框底 3.36 / 4.38，对悬停底 3.11 / 3.96。
+ * 先在卡片上算好（引用的还是皮肤原值），再交给卡片里的按键和输入框，避免变量自己引用自己。 */
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow { --pk-metre-allow-edge: color-mix(in srgb, var(--metre-muted) 80%, var(--metre-line-strong)); }
+html[data-laolao-mode="metre"] #laolao-user-settings .pk-metre-allow :is(.pinkie-user-settings__button, .pk-metre-allow__input) { --metre-line-strong: var(--pk-metre-allow-edge); }

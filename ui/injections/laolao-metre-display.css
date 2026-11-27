@@ -27,26 +27,11 @@ html[data-laolao-mode="metre"] .chat-thread .chat-message-image {
 
 /* B-I6 坏图：只有加载失败的 img 才会画出 ::after */
 html[data-laolao-mode="metre"] .chat-thread .chat-message-image { position: relative; color: transparent; }
-html[data-laolao-mode="metre"] .chat-thread .chat-message-image::after {
-  content: "图片打不开";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  border: 1px dashed var(--metre-line-strong);
-  background: var(--metre-surface);
-  color: var(--metre-muted);
-  font: 400 12px/1.2 var(--metre-sans);
-}
+html[data-laolao-mode="metre"] .chat-thread .chat-message-image::after { content: "图片打不开"; position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--metre-line-strong); background: var(--metre-surface); color: var(--metre-muted); font: 400 12px/1.2 var(--metre-sans); }
 
 /* B-I2 看图器换成 Metre 的颜色 */
 html[data-laolao-mode="metre"] .laolao-image-viewer { background: color-mix(in srgb, var(--metre-text) 48%, transparent); }
-html[data-laolao-mode="metre"] .laolao-image-viewer__image {
-  border: 1px solid var(--metre-line-strong);
-  border-radius: 4px;
-  background: var(--metre-bg);
-  box-shadow: 0 18px 60px color-mix(in srgb, var(--metre-text) 28%, transparent);
-}
+html[data-laolao-mode="metre"] .laolao-image-viewer__image { border: 1px solid var(--metre-line-strong); border-radius: 4px; background: var(--metre-bg); box-shadow: 0 18px 60px color-mix(in srgb, var(--metre-text) 28%, transparent); }
 html[data-laolao-mode="metre"] .laolao-image-viewer__close {
   border: 1px solid var(--metre-line-strong);
   border-radius: 4px;
@@ -62,20 +47,21 @@ html[data-laolao-mode="metre"] .laolao-image-viewer__close:focus-visible { outli
   html[data-laolao-mode="metre"] .chat-bubble .chat-assistant-attachments:has(> .laolao-delivery-card):not(:has(> .laolao-delivery-card.is-media)) { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* 16:10 打回第 2 条（待发送）：原生排队区 .chat-queue 或其中一条刚插进来的那一帧，放一个 1ms 的空动画；
+ * laolao-metre-queue.js 听 animationstart（名字 pk-mq-born）当帧画出那一条，不等别的事件，也不加定时器、观察器。
+ * 原生标题和大卡片在 laolao-metre-skin.css 第 1430 行从第一帧起就不占位。 */
+html[data-laolao-mode="metre"] :is(.chat-queue, .chat-queue__item) { animation: pk-mq-born 1ms; }
+@keyframes pk-mq-born {
+  from { opacity: 1; }
+  to { opacity: 1; }
+}
+
 /* T3#5 复制键重复：碧琪的消息按键行（laolao-message-actions.css）想在有「复制 ▾」时藏掉原生「复制为 Markdown」，
- * 但 2026.7.1-2 里原生键外面包了一层 openclaw-tooltip，那条 `> .chat-copy-btn` 的规则落空，助手消息底部出现两个复制键。
- * openclaw-tooltip 自己在元素上写了 display: contents（内联），外层藏不掉，所以藏里面的原生按钮。只在 Metre 下生效；其他模式的同一问题交给对话区负责人。 */
+ * 但 2026.7.1-2 里原生键外面包了一层 openclaw-tooltip，那条 `> .chat-copy-btn` 的规则落空，助手消息底部出现两个复制键。openclaw-tooltip 自己在元素上写了 display: contents（内联），外层藏不掉，所以藏里面的原生按钮。只在 Metre 下生效；其他模式的同一问题交给对话区负责人。 */
 html[data-laolao-mode="metre"] .chat-group.assistant .chat-group-footer-actions:has(.pinkie-msg-row) > openclaw-tooltip > .chat-copy-btn { display: none; }
 
-/* T3#12 输入框缩略图可以点开放大（laolao-metre-thumbs.js 给它补 data-metre-zoom）：悬停换放大镜指针、加深边线，键盘焦点给钴蓝框。 */
-html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"] { cursor: zoom-in; }
-html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"]:hover { border-color: var(--metre-line-strong); }
-html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"]:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 2px; }
-html[data-laolao-mode="metre"] .chat-attachment-thumb[data-metre-zoom="1"] button { cursor: pointer; }
-
 /* T3#6 用户消息的「复制」「编辑」点不到：Metre 皮肤（laolao-metre-skin.css「11-14 气泡」）把按键行绝对定位到气泡右下角，
- * 正好落在页脚右端的时间戳上；页脚在 DOM 里靠后，盖在按键上，两个键的中心点都点到时间戳（日夜 × 三宽都这样）。
- * 这里：有按键行的用户消息，页脚右边让出按键行的宽度（2 × 26 + 2 间距 + 8 留白 = 62px），时间戳排到按键左边；按键行提一层。 */
+ * 正好落在页脚右端的时间戳上；页脚在 DOM 里靠后，盖在按键上，两个键的中心点都点到时间戳（日夜 × 三宽都这样）。这里：有按键行的用户消息，页脚右边让出按键行的宽度（2 × 26 + 2 间距 + 8 留白 = 62px），时间戳排到按键左边；按键行提一层。 */
 html[data-laolao-mode="metre"] .chat-group.user:has(.pinkie-msg-row) .chat-group-footer { padding-right: 62px; box-sizing: border-box; }
 html[data-laolao-mode="metre"] .chat-group.user .chat-bubble > .pinkie-msg-row { z-index: 1; }
 
@@ -84,14 +70,3 @@ html[data-laolao-mode="metre"] .chat-group.user .chat-bubble > .pinkie-msg-row {
 html[data-laolao-mode="metre"] .chat-group.user:has(.chat-bubble[data-pinkie-editing]) .chat-group-messages { width: 100%; max-width: 100%; }
 html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] { box-sizing: border-box; width: min(520px, 100%); max-width: 100%; }
 html[data-laolao-mode="metre"] .chat-group.user .chat-bubble[data-pinkie-editing] .pinkie-msg-edit { min-width: 0; width: 100%; }
-
-/* T3#10 计划卡配色：碧琪的计划卡（laolao-plan.js，样式 laolao-rich.css）的颜色全来自 --pk-* 变量，挂在 html:not(#p1):not(#p2):not(#p3) 上，
- * Metre 里还是碧琪的蓝 #2f7bff、紫黑边、半透明白底、阴影。这里只在计划卡自己身上把这些变量换成 Metre 的（卡片上的值盖过从 html 继承来的，
- * 不用强制覆盖，也不影响页面上其他用 --pk-* 的组件）。进行中那一项的扫光、完成标记都跟着变量走。 */
-html[data-laolao-mode="metre"] .pk-plan {
-  --pk-fg: var(--metre-text); --pk-mute: var(--metre-muted); --pk-faint: var(--metre-line-strong);
-  --pk-panel: var(--metre-surface, var(--metre-bg)); --pk-chip: var(--metre-hover); --pk-hover: var(--metre-hover);
-  --pk-accent: var(--metre-cobalt); --pk-accent-ink: var(--metre-cobalt);
-  --pk-on: color-mix(in srgb, var(--metre-cobalt) 12%, transparent); --pk-on-line: color-mix(in srgb, var(--metre-cobalt) 42%, transparent);
-  --pk-good: var(--metre-cobalt); --pk-shadow: 0 0 0 0 transparent;
-}

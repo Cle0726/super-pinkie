@@ -205,6 +205,7 @@
     return {label, tone, detail};
   };
 
+  const kernelCredit = (version) => `C.le. 内核 ${version}`; // K4 关于页署名（用户 11-24：不写上游名字，MIT 声明在「第三方许可」里）
   // Small read-only test surface for the preset and exposure rules.
   window.__laolaoUserSettings = Object.freeze({
     presetMap: PRESET_MAP,
@@ -220,7 +221,7 @@
     thinkingChanges,
     fastModeValue,
     fastModeChanges,
-    guardPresentation,
+    guardPresentation, kernelCredit,
   });
 
   const state = {
@@ -228,7 +229,7 @@
     modelButton: null, modelMenu: null, modelList: null, modelChoices: [], brandButtons: [],
     modeButtons: new Map(), reasoningButtons: new Map(), speedButtons: new Map(),
     presetButtons: new Map(), themeButtons: [], themeModeButtons: [], channelList: null,
-    channelDisclosure: null, warning: null, version: null, usageValues: new Map(), statuses: new Map(),
+    channelDisclosure: null, warning: null, version: null, kernelNote: null, usageValues: new Map(), statuses: new Map(),
     saveQueue: Promise.resolve(), lastRoute: "", lastView: "", initialized: false,
     wechat: null, feishu: null, qq: null,
   };
@@ -339,7 +340,7 @@
     };
     const save = async patch => {
       try { sync(await bridge()?.savePrefs(patch)); setStatus("style", "已保存", "success"); }
-      catch (error) { setStatus("style", "没保存上：" + error.message, "error"); }
+      catch (error) { setStatus("style", "没保存上：" + friendlyError(error), "error"); }
     };
     for (const [value, label] of STYLE_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", group, () => save({defaultStyle: value}));
@@ -364,7 +365,7 @@
     const waitingRow = row(notifyCard, "等我回答时", "碧琪提问、或有事等你拍板时提醒。");
     const save = async (patch, label) => {
       try { const value = await bridge()?.savePrefs(patch); sync(value); setStatus("notify", label, "success"); return value; }
-      catch (error) { setStatus("notify", "没保存上：" + error.message, "error"); return null; }
+      catch (error) { setStatus("notify", "没保存上：" + friendlyError(error), "error"); return null; }
     };
     const done = toggle(doneRow.control, "做完时通知", value => save({notify: {done: value}}, value ? "做完时会通知你" : "做完时不再通知"));
     const waiting = toggle(waitingRow.control, "等我回答时通知", value => save({notify: {waiting: value}}, value ? "等你回答时会通知你" : "等你回答时不再通知"));
@@ -378,11 +379,11 @@
     const hotkeyRow = row(notifyCard, "快速提问快捷键", "在任何地方按下，弹出小窗直接问碧琪。");
     const hotkeyLabel = element("kbd", "pinkie-user-settings__kbd", hotkeyRow.control, prettyHotkey(defaultHotkey()));
     const record = button("修改", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
-    const off = button("关闭", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control);
+    const off = button("关闭", "pinkie-user-settings__button pinkie-user-settings__button--small", hotkeyRow.control); button("全部快捷键", "pinkie-user-settings__button pinkie-user-settings__button--small pinkie-user-settings__all-keys", hotkeyRow.control, () => void window.PinkieArtifacts?.openShortcuts?.());   // K4：快捷键一览（⌘/ · Ctrl+/）在设置里的入口
     const applyHotkey = async accelerator => {
       let result = {ok: true, accelerator};
       try { result = await bridge()?.pinkieNative({type: "setHotkey", accelerator}) || result; }
-      catch (error) { setStatus("notify", error.message, "error"); return; }
+      catch (error) { setStatus("notify", "快捷键没改成：" + friendlyError(error), "error"); return; }
       if (result.ok === false) { setStatus("notify", result.error || "这个快捷键用不了", "error"); return; }
       const value = result.accelerator ?? null;
       await save({hotkey: value}, result.conflict ? `这个快捷键被占用了，已改用 ${prettyHotkey(value)}` : value ? `快捷键改成 ${prettyHotkey(value)}` : "快捷键已关闭");
@@ -438,7 +439,6 @@
     const intro = element("div", "pinkie-user-settings__intro", scroll);
     element("h2", "pinkie-user-settings__title", intro, "碧琪的常用设置");
     element("p", "pinkie-user-settings__intro-copy", intro, "把常用的几件事调成顺手的样子。修改后会自动保存。");
-
 
     const modeCard = card(scroll, "🌈", "碧琪", "选择新建聊天时先进入的模式。" );
     const modeRow = row(modeCard, "默认模式", "会影响之后新建的聊天。" );
@@ -667,7 +667,7 @@
       state.usageValues.set(key, value);
     }
     usageLabel.setAttribute("aria-hidden", "true");
-    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); // 第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js
+    makeStatus(aboutCard, "usage"); const noticesHost = element("div", "pinkie-user-settings__notices", aboutCard); noticesHost.pinkieKit = {row, button}; window.dispatchEvent(new CustomEvent("pinkie:settings-notices", {detail: {host: noticesHost}})); state.kernelNote = element("p", "pinkie-user-settings__soft-note", aboutCard, kernelCredit("读取中…")); aboutCard.insertBefore(state.kernelNote, noticesHost); //第三方许可（这张卡片最后一行），内容和弹窗在 laolao-metre-engine.js；K4 内核署名排在它前面
 
     const footer = element("footer", "pinkie-user-settings__footer", scroll);
     button("高级设置（开发者）　›", "pinkie-user-settings__advanced-link", footer, () => openAdvanced());
@@ -678,8 +678,7 @@
     syncPage();
     loadInitialData();
     syncVersion();
-    syncAppearance();
-    syncUsage();
+    syncAppearance(); syncUsage();
   }
 
   function rpc() { return window.__laolaoSidebar?.gwRequest; }
@@ -1087,7 +1086,7 @@
         show(result);
         setStatus("proxy", result.message || "已保存。", "success");
       } catch (error) {
-        setStatus("proxy", error?.message || "没有保存成功，请再试一次。", "error");
+        setStatus("proxy", "没有保存成功：" + friendlyError(error), "error");
       } finally { saveButton.disabled = false; }
     }
     for (const [value, label] of [["system", "跟随系统"], ["custom", "自定义代理"], ["off", "不用代理"]]) {
@@ -1444,7 +1443,7 @@
     const shell = document.querySelector("openclaw-app-shell");
     const version = shell?.context?.config?.current?.serverVersion
       || shell?.context?.gateway?.snapshot?.hello?.server?.version || "暂不可用";
-    ownText(state.version, String(version));
+    ownText(state.version, String(version)); ownText(state.kernelNote, kernelCredit(version));
   }
   const tokenCount = (value) => {
     const number = Number(value);
@@ -1517,7 +1516,7 @@
     else window.location.assign(section === "channels" ? "/settings/channels" : "/settings/general?section=auth");
   }
   function friendlyError(error) {
-    const original = String(error?.message || error || "");
+    const original = String(error?.message || error || ""); globalThis.console?.warn?.("[pinkie] 设置操作没完成", error); // 原文只进日志
     if (/(?:hash|version|conflict)/i.test(original)) return "设置刚刚有变化，请重新打开后再试。";
     if (/(?:schema|invalid|required|validation|parse)/i.test(original)) return "这项设置不符合当前要求，请检查高级设置。";
     if (/(?:unauthori[sz]ed|forbidden|permission|authentication|token)/i.test(original)) return "当前连接没有修改权限。";

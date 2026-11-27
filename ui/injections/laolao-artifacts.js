@@ -328,7 +328,7 @@
     const remove = button('从作品库移除', 'pinkie-art-btn pinkie-art-btn--quiet', () => void doRemove());
     const close = button('关闭预览', 'pinkie-art-close', () => finish(), '×');
     const actions = el('div', 'pinkie-art-view__actions');
-    actions.append(open, reveal, remove, close);
+    actions.append(open, reveal, remove, close); window.dispatchEvent(new CustomEvent('pinkie:art-viewer', {detail: {item, actions}}));
     head.append(name, versions, actions);
     const body = el('div', 'pinkie-art-view__body');
     const status = el('p', 'pinkie-art-status');
@@ -650,7 +650,7 @@
       ]],
       ['作品', [['上一个 / 下一个版本', '← / →'], ['关闭预览', 'Esc']]],
       ['全局', [
-        ['快速提问（在任何地方）', hotkeyLabel()], ['快捷键一览', k('⌘/')], ['显示 / 隐藏侧栏', k('⌘B')], ['终端面板', k('⌃`', 'Ctrl+`')],
+        ['快速提问（在任何地方）', hotkeyLabel()], ['快捷键一览', k('⌘/')], ['显示 / 隐藏侧栏', k('⌘B')], ['打开 / 收起工作台', k('⌥⌘B')], ['终端面板', k('⌃`', 'Ctrl+`')],
       ]],
       ['代码工作台', [
         ['快速打开文件', k('⌘P')], ['命令', k('⇧⌘P', 'Ctrl+Shift+P')], ['在文件中搜索', k('⇧⌘F', 'Ctrl+Shift+F')],

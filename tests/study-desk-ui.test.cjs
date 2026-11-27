@@ -1,9 +1,24 @@
-const test = require('node:test');
+const nodeTest = require('node:test');
+// B55: one case once hung until the 30-minute step limit with no output (run 45841300853). Every case
+// here gets a hang limit far above the slowest Windows run (~19 s), so a hang fails by name instead.
+const HANG_LIMIT = 120_000;
+const test = (name, options, fn) => typeof options === 'function'
+  ? nodeTest(name, {timeout: HANG_LIMIT}, options)
+  : nodeTest(name, {timeout: HANG_LIMIT, ...options}, fn);
+test.before = nodeTest.before; test.after = nodeTest.after;
 const assert = require('node:assert/strict');
 let harnessModule;
 const controlUIRoots = [process.env.PINKIE_CONTROL_UI_ROOT, '/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/dist/control-ui', require('node:path').resolve(__dirname, '../../sandbox/try/dist/control-ui')].filter(Boolean);
 const needsControlUI = controlUIRoots.some(root => require('node:fs').existsSync(require('node:path').join(root, 'index.html'))) ? {} : {skip: '没有构建好的 control-ui'};
 test.before(async () => { harnessModule = await import('../tools/study-desk/harness.mjs'); });
+// 整个文件每种引擎只起一个浏览器（默认 WebKit，chromium 用例用 Chrome）：启动的 promise 只建一次，失败会被记住并在每个用例里重抛（不变成跳过）。
+// 每个用例仍各开各的 context（各自的 localStorage、视口、减少动效和页面错误），用完就关，状态不串。
+const shared = new Map();
+function sharedBrowser(engine) {
+  if (!shared.has(engine)) shared.set(engine, harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}).then(browser => ({browser}), error => ({error})));
+  return shared.get(engine).then(got => { if (got.error) throw got.error; return got.browser; });
+}
+test.after(async () => { for (const pending of shared.values()) { const got = await pending; if (got.browser) await got.browser.close(); } });
 async function run(options, fn) {
   const {handler = () => ({}), reducedMotion, ...settings} = options;
   const harness = await harnessModule.startHarness({
@@ -15,9 +30,10 @@ async function run(options, fn) {
     },
   });
   const engine = options?.engine || 'webkit';
-  const browser = await harnessModule.launchWithHarness(harness, () => harnessModule.playwright()[engine].launch(engine === 'chromium' ? {headless: true, channel: 'chrome'} : {headless: true}));
-  try { const page = await browser.newPage({viewport: {width: 1440, height: 900}, ...(reducedMotion ? {reducedMotion} : {})}); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
-  finally { try { await browser.close(); } finally { await harness.close(); } }
+  const browser = await harnessModule.launchWithHarness(harness, () => sharedBrowser(engine));
+  let context;
+  try { context = await browser.newContext({viewport: {width: 1440, height: 900}, ...(reducedMotion ? {reducedMotion} : {})}); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message)); await page.goto(harness.url); await page.locator('#pinkie-study-desk').waitFor(); await page.evaluate(() => __pinkieStudyDesk.go('today')); await fn(page, harness); assert.deepEqual(errors, []); }
+  finally { try { await context?.close(); } finally { await harness.close(); } }
 }
 test('learning shell mounts once, restores native chat, and cleans up across ten mode changes', async () => {
   await run({}, async page => {
@@ -50,8 +66,9 @@ test('pinned GSAP stays isolated, exact prototype tokens follow night mode', asy
     : {}}, async page => {
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.motion.gsap?.version), '3.13.0');
     assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('paper')), '#FAF6F1');
-    // Day secondary ink reaches 3:1 on paper (approved token change 2026-10-26).
-    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('ink-3')), '#87788D');
+    // Day secondary ink reaches 4.5:1 on paper / paper-2 / card (B11 L7; was #87788D at 3:1, approved 2026-10-26).
+    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('ink-3')), '#726577');
+    assert.equal(await page.evaluate(() => __pinkieStudyDesk.tokens.get('pk-ink-3')), '#726577');
     await page.locator('.task .go').waitFor();
     assert.match(await page.locator('.task .go').textContent(), /开始|去学|继续/);
     await page.getByRole('button', {name: '切换日间和夜间'}).click();
@@ -476,9 +493,11 @@ test('v2 A3: an open finish confirmation survives a course bar repaint', async (
 
 test('v2 A3: course bar, stuck, pause/resume, guarded finish, clean history and four-question bridge', async () => {
   await v2Run({}, async (page, f) => {
-    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click(); await page.locator('.lesson-bar').waitFor();
+    await page.locator('.task').click(); await page.getByRole('button', {name: '开始上课', exact: true}).click();
+    // The bar can be painted before the tonight strip exists; the strip then moves it in. Wait for that end state, not the first paint.
+    await page.locator('.pk-tonight .lesson-bar').waitFor();
     assert.ok(await page.locator('.lesson-bar').evaluate(n => n.getBoundingClientRect().height <= 48));
-    assert.equal(await page.locator('.pk-tonight .lesson-bar').count(), 1);
+    assert.equal(await page.locator('.lesson-bar').count(), 1);
     await page.getByRole('button', {name: '没懂，换个讲法', exact: true}).click();
     await page.waitForFunction(() => qaCalls.some(c => c.method === 'chat.send' && c.params.message === '这段没懂，换个讲法'));
     await page.getByRole('button', {name: '暂停', exact: true}).click(); await page.getByText('已暂停', {exact: true}).waitFor();
@@ -523,8 +542,20 @@ test('v2 A4: board learning progress, adopted learn entries and reduced motion r
     await page.evaluate(() => __pinkieStudyDesk.go('today')); await page.locator('#pinkie-desk-chat .pk-chat-stop').waitFor({state:'hidden'});
     // 聊天区最后一次变动会让课程条按消息刷新一次（250ms 防抖），这不是轮询；等调用数稳定后再看 4 秒内有没有定时轮询。
     const currentCalls = () => f.controls.calls.filter(c => c.method.endsWith('lesson.current')).length;
-    let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
-    await page.waitForTimeout(4200); assert.equal(currentCalls(), before);
+    // 保留死等：调用数记在 Node 侧的 fixture 里，页面里看不到，用不了 waitForFunction；700ms 一轮是「去抖后不再变」的稳定窗口，4200ms 是要证明「没有定时轮询」这件没发生的事，必须留时间窗。
+    // B59：聊天区在稳定窗口之后又动一次，lesson.js:338 会按消息再刷新一次（12 !== 11）。页面里用同一个过滤条件数聊天区变动；
+    // 窗口里聊天动过就重开窗口，只认聊天没动的那 4.2s——定时轮询在这样的窗口里照样会多出调用，所以不放宽。
+    await page.evaluate(() => { const col = window.__pinkieDeskChat?.messageColumn?.() || document.querySelector('openclaw-chat-pane[active] .chat-thread, openclaw-chat-pane .chat-thread, .agent-chat__messages, .chat-thread, .chat-messages'); window.__b59ChatMoves = 0;
+      if (col) new MutationObserver(rs => { if (rs.some(r => r.type === 'characterData' || [...r.addedNodes].some(n => !n.closest?.('.lesson-bar') && !(n.parentElement?.closest('.lesson-bar'))))) window.__b59ChatMoves++; }).observe(col, {childList: true, characterData: true, subtree: true}); });
+    const chatMoves = () => page.evaluate(() => window.__b59ChatMoves);
+    let quiet = false;
+    for (let attempt = 0; attempt < 5 && !quiet; attempt++) {
+      let before = -1; for (let i = 0; i < 10 && before !== currentCalls(); i++) { before = currentCalls(); await page.waitForTimeout(700); }
+      const moves = await chatMoves(); await page.waitForTimeout(4200);
+      if (await chatMoves() !== moves) continue;
+      quiet = true; assert.equal(currentCalls(), before, '聊天区没动的 4.2s 里 lesson.current 还被调了，是定时轮询');
+    }
+    assert.ok(quiet, '聊天区 5 个窗口都在变动，没法判断有没有定时轮询');
   });
 });
 test('v2 A3: independent conversation controls fit their paper and the notebook entry locates the lesson', needsControlUI, async () => {

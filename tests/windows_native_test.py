@@ -39,10 +39,55 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertIsNone(parse_accelerator("Hyper+Space"))
         self.assertIsNone(parse_accelerator("Ctrl+F13"))
 
+    def test_hotkey_rejects_long_and_repeated_b43(self):
+        # B43: 'Ctrl+' x 100000 + 'A' used to be accepted and written to native-settings.json (600 KB)
+        for bad in ("Ctrl+" * 100000 + "A", "Ctrl+Ctrl+A", "Alt+Option+K", "Ctrl+" * 13 + "A", {"a": 1}, ["Ctrl", "A"], 5):
+            self.assertIsNone(parse_accelerator(bad), str(bad)[:20])
+        self.assertIsNotNone(parse_accelerator("Ctrl+Alt+Shift+Win+K"))
+        self.native._call = lambda *args, **kwargs: True
+        self.native._post = lambda *args: None
+        before = self.native._hotkey
+        for bad in ("Ctrl+" * 100000 + "A", "Ctrl+Ctrl+A", {"a": 1}):
+            result = self.native.handle({"type": "setHotkey", "accelerator": bad})
+            self.assertEqual(result, {"ok": False, "error": "这个快捷键写法不认识"})
+        self.assertEqual(self.native._hotkey, before)
+        self.assertFalse(self.settings.exists() and "Ctrl+Ctrl" in self.settings.read_text(encoding="utf-8"))
+
     def test_safe_file_name(self):
         self.assertEqual(safe_file_name('a/b:c?', "pdf"), "a-b-c-.pdf")
         self.assertEqual(safe_file_name("", "png"), "碧琪会话.png")
         self.assertEqual(safe_file_name("x.PDF", "pdf"), "x.PDF")
+
+    def test_safe_file_name_long_keeps_ext_b43(self):
+        # B43: the extension used to be added before the 180-char cut, so long titles lost .md / .pdf
+        for raw, ext in (("n" * 300, "md"), ("会" * 300 + ".pdf", "pdf"), ("a" * 178 + ". . ", "png")):
+            name = safe_file_name(raw, ext)
+            self.assertTrue(name.lower().endswith("." + ext), name[-12:])
+            self.assertLessEqual(len(name), 180)
+            self.assertFalse(name[:-len(ext) - 1].endswith((".", " ")), name[-12:])
+        self.assertEqual(safe_file_name("a\x00b\nc", "md"), "a-b-c.md")
+        self.assertEqual(safe_file_name("...", "md"), "碧琪会话.md")
+
+    def test_safe_file_name_reserved_device_names_b60(self):
+        # B60: "CON.pdf" / "nul" / "COM1" used to pass through, and Windows opens the device instead of a file
+        for raw, ext, want in (("CON", "pdf", "CON-.pdf"), ("CON.pdf", "pdf", "CON-.pdf"), ("con.txt.pdf", "pdf", "con-.txt.pdf"),
+                               ("nul", "png", "nul-.png"), ("Prn.MD", "md", "Prn-.MD"), ("aux", "md", "aux-.md"),
+                               ("COM1", "pdf", "COM1-.pdf"), ("com9.png", "png", "com9-.png"), ("LPT1", "md", "LPT1-.md"),
+                               ("lpt9.txt", "pdf", "lpt9-.txt.pdf"), ("CON .pdf", "pdf", "CON-.pdf"), (" Nul ", "md", "Nul-.md")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+        for raw, ext, want in (("CONSOLE", "pdf", "CONSOLE.pdf"), ("COM10", "pdf", "COM10.pdf"), ("COM0", "pdf", "COM0.pdf"),
+                               ("LPT", "md", "LPT.md"), ("NULL.pdf", "pdf", "NULL.pdf"), ("my-con", "pdf", "my-con.pdf"),
+                               ("x.con", "pdf", "x.con.pdf"), ("会议 CON", "md", "会议 CON.md"), ("auxiliary.png", "png", "auxiliary.png")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+
+    def test_safe_file_name_bare_extension_b60(self):
+        # B60: ".pdf" used to lose its leading dot first and come out as "pdf.pdf"
+        for raw, ext, want in ((".pdf", "pdf", "碧琪会话.pdf"), (" .md ", "md", "碧琪会话.md"), ("..png", "png", "碧琪会话.png"),
+                               (".PDF", "pdf", "碧琪会话.PDF")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
+        for raw, ext, want in (("pdf", "pdf", "pdf.pdf"), (".x.pdf", "pdf", "x.pdf"), (".gitignore", "md", "gitignore.md"),
+                               ("report.pdf", "pdf", "report.pdf"), (".pdf", "md", "pdf.md")):
+            self.assertEqual(safe_file_name(raw, ext), want, raw)
 
     def test_notify_dedupes_by_run_id(self):
         posted = []
@@ -59,6 +104,92 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(self.native.mode_label, "项目")
         self.assertEqual(self.native._running, [("agent:project:a", "甲")])
 
+    # ---------- N2 keep-awake ----------
+    def _awake_rig(self, start=1000.0):
+        posted = []
+        clock = [start]
+        self.native._post = lambda command, payload=None: posted.append((command, payload))
+        self.native._clock = lambda: clock[0]
+        return posted, clock
+
+    @staticmethod
+    def _ctx(*keys):
+        return {"type": "context", "mode": "chat", "running": [{"key": k, "title": k} for k in keys]}
+
+    @staticmethod
+    def _awake(posted):
+        return [payload for command, payload in posted if command == "awake"]
+
+    def test_awake_held_while_running_released_when_empty(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))   # still running: no second request
+        clock[0] += 10
+        self.native.handle(self._ctx())
+        self.assertEqual(self._awake(posted), [True, False])
+
+    def test_awake_never_requested_without_running_sessions(self):
+        # Counter-case: mode changes and empty lists must not touch the power state.
+        posted, _ = self._awake_rig()
+        self.native.handle({"type": "context", "mode": "project", "modeLabel": "项目", "running": []})
+        self.native.handle({"type": "context", "mode": "chat"})
+        self.native.handle({"type": "context", "running": [{"title": "no key"}]})
+        self.assertEqual(self._awake(posted), [])
+
+    def test_awake_lease_expires_when_the_page_goes_quiet(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        clock[0] += windows_native.AWAKE_LEASE_S - 1
+        self.native._awake_tick()
+        self.assertEqual(self._awake(posted), [True])           # within the lease: still held
+        clock[0] += 2
+        self.native._awake_tick()
+        self.assertEqual(self._awake(posted), [True, False])    # page silent past the lease
+        clock[0] += 5
+        self.native.handle(self._ctx("agent:main:a"))           # heartbeat returns -> held again
+        self.assertEqual(self._awake(posted), [True, False, True])
+
+    def test_awake_hard_cap_then_rearms_on_a_new_run(self):
+        posted, clock = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        for _ in range(int(windows_native.AWAKE_CAP_S // 60) + 2):   # heartbeats every minute for > cap
+            clock[0] += 60
+            self.native.handle(self._ctx("agent:main:a"))
+        self.assertEqual(self._awake(posted), [True, False])
+        clock[0] += 60
+        self.native.handle(self._ctx("agent:main:a"))           # same run, still capped
+        self.assertEqual(self._awake(posted), [True, False])
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))   # new run -> allowed again
+        self.assertEqual(self._awake(posted), [True, False, True])
+
+    def test_awake_switch_off_releases_and_persists(self):
+        posted, _ = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.assertEqual(self.native.handle({"type": "setAwake", "enabled": False}), {"ok": True, "enabled": False})
+        self.native.handle(self._ctx("agent:main:a", "agent:main:b"))
+        self.assertEqual(self._awake(posted), [True, False])
+        self.assertIs(json.loads(self.settings.read_text(encoding="utf-8"))["awake"], False)
+        again = WindowsNative(FakeBridge(), self.settings)
+        self.assertFalse(again._awake_enabled)
+
+    def test_awake_default_and_bad_setting(self):
+        self.assertIs(self.native._awake_enabled, windows_native.AWAKE_DEFAULT)
+        self.settings.write_text(json.dumps({"awake": "yes"}), encoding="utf-8")
+        self.assertIs(WindowsNative(FakeBridge(), self.settings)._awake_enabled, windows_native.AWAKE_DEFAULT)
+
+    def test_awake_flags_are_system_only(self):
+        self.assertEqual(windows_native.ES_SYSTEM_REQUIRED, 0x1)
+        self.assertEqual(windows_native.ES_CONTINUOUS, 0x80000000)
+        source = Path(windows_native.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("ES_DISPLAY_REQUIRED", source)          # the screen still turns off and locks
+        self.assertIn('set_awake(False)\n                    remove_icon()', source)   # stop drops it on the tray thread
+
+    def test_stop_without_tray_forgets_awake(self):
+        posted, _ = self._awake_rig()
+        self.native.handle(self._ctx("agent:main:a"))
+        self.native.stop()
+        self.assertFalse(self.native._awake_on)
+
     def test_menubar_and_hotkey_persist(self):
         self.native._post = lambda *args: None
         self.native.handle({"type": "setMenubar", "enabled": False})
@@ -66,7 +197,7 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertEqual(self.native.handle({"type": "setHotkey", "accelerator": "Ctrl+Alt+K"}),
                          {"ok": True, "accelerator": "Ctrl+Alt+K"})
         saved = json.loads(self.settings.read_text(encoding="utf-8"))
-        self.assertEqual(saved, {"menubar": False, "hotkey": "Ctrl+Alt+K"})
+        self.assertEqual(saved, {"menubar": False, "hotkey": "Ctrl+Alt+K", "awake": windows_native.AWAKE_DEFAULT})
         again = WindowsNative(FakeBridge(), self.settings)
         self.assertFalse(again._menubar)
         self.assertEqual(again._hotkey, "Ctrl+Alt+K")
@@ -94,6 +225,24 @@ class WindowsNativeTests(unittest.TestCase):
         self.assertIn('"type": "quickAsk"', script)
         self.assertIn('"text": "你好"', script)
 
+    def test_context_fields_capped_b43(self):
+        # B43: mode / modeLabel / running titles used to be stored at any length (1 MB each made it in)
+        self.native._post = lambda *args: None
+        self.native.handle({"type": "context", "mode": "m" * 1_000_000, "modeLabel": "L" * 1_000_000,
+                            "running": [{"key": "k" * 1_000, "title": "t" * 1_000_000}]})
+        self.assertEqual(len(self.native.mode), 32)
+        self.assertEqual(len(self.native.mode_label), 32)
+        self.assertEqual([(len(k), len(t)) for k, t in self.native._running], [(300, 80)])
+        self.native.handle({"type": "context", "mode": "project", "modeLabel": "项目",
+                            "running": [{"key": "agent:main:a", "title": "天气"}]})
+        self.assertEqual((self.native.mode, self.native.mode_label, self.native._running),
+                         ("project", "项目", [("agent:main:a", "天气")]))
+        # non-strings are ignored, not str()-ed into the tray menu
+        self.native.handle({"type": "context", "mode": {"x": 1}, "modeLabel": ["a"],
+                            "running": [{"key": {"x": 1}}, {"key": 5}, {"key": "b", "title": {"t": 1}}, None, 1]})
+        self.assertEqual((self.native.mode, self.native.mode_label, self.native._running),
+                         ("project", "项目", [("b", "未命名会话")]))
+
     def test_edge_command(self):
         pdf = edge_export_command(Path("C:/edge.exe"), Path(self.tmp.name) / "a.html", Path(self.tmp.name) / "o.pdf", True)
         self.assertTrue(any(part.startswith("--print-to-pdf=") for part in pdf))
@@ -118,6 +267,36 @@ class WindowsNativeTests(unittest.TestCase):
             result = self.native.handle({"type": "exportPDF", "html": "<p>x</p>", "fileName": "会话-20261111"})
         self.assertTrue(result["ok"], result)
         self.assertEqual((out_dir / "会话-20261111.pdf").read_bytes(), b"%PDF-1.4")
+
+    def test_clamp_size_b43(self):
+        # B43: page-supplied export sizes are clamped; anything that is not a finite number falls back to the default
+        self.assertEqual(windows_native.clamp_size(900, 900, 320, 2400), 900)
+        self.assertEqual(windows_native.clamp_size(10 ** 9, 900, 320, 2400), 2400)
+        self.assertEqual(windows_native.clamp_size(-5, 1200, 400, 16000), 400)
+        self.assertEqual(windows_native.clamp_size(1234.7, 1200, 400, 16000), 1234)
+        for bad in (None, "wide", "900", [1], {}, True, float("nan"), float("inf")):
+            self.assertEqual(windows_native.clamp_size(bad, 900, 320, 2400), 900, bad)
+
+    def test_export_bad_sizes_b43(self):
+        # B43: before this, width [1] raised TypeError, 'wide' sent Python's error text to the page, and 10**9 went straight to Edge
+        out_dir = Path(self.tmp.name) / "sizes"
+        out_dir.mkdir()
+        sizes = []
+
+        def fake_run(command, **_):
+            sizes.append(next(part for part in command if part.startswith("--window-size=")))
+            target = next(part.split("=", 1)[1] for part in command if part.startswith("--screenshot="))
+            Path(target).write_bytes(b"png")
+
+        cases = [([1], {}, "900,1200"), ("wide", "tall", "900,1200"), (10 ** 9, 10 ** 9, "2400,16000"), (900, 3000, "900,3000")]
+        with mock.patch.object(windows_native, "find_edge", return_value=Path("edge.exe")), \
+                mock.patch.object(windows_native.subprocess, "run", side_effect=fake_run), \
+                mock.patch.dict(os.environ, {"PINKIE_EXPORT_DIR": str(out_dir)}):
+            for index, (width, height, _) in enumerate(cases):
+                result = self.native.handle({"type": "exportImage", "html": "<p>x</p>", "fileName": f"s{index}",
+                                             "width": width, "height": height})
+                self.assertTrue(result["ok"], (width, height, result))
+        self.assertEqual(sizes, ["--window-size=" + expected for _, _, expected in cases])
 
     def test_export_markdown_copies_assets(self):
         out_dir = Path(self.tmp.name) / "md"

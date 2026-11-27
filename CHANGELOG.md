@@ -4,6 +4,8 @@
 
 > 这里是给开发者看的记录。给用户看的更新说明只写在 `desktop/windows/release-notes.md`，必须用碧琪口吻：一段摘要 + 细节，规则见 `docs/RELEASE-NOTES.md`，发版会自动检查。
 
+- 会话起名模型：`mm/workbuddy/hy4free` 在号池这把 key 上回 404（`model_not_available`），侧栏起名一直退回截第一句；改成同一份免费额度的 `mm/workbuddy/hy4flash-free`，不设付费后备（用户 11-24）。它关不掉思考，输出上限 120 → 400 token（11-25 实测：120 五题全空，400 五题全出合格标题、最慢 2.7 秒）。新测试锁住 `services/` 里不再出现 `workbuddy/hy4free`。
+
 ### 2.5.54
 - 思考折叠：恢复「播完 → 停 1.8–3.6 秒 → 折成『思考了 N 秒』，历史默认折叠、可点开」（`a0ebf381` 改反成默认展开，2.5.52 / 2.5.53 受影响）；新一段思考插入时保留上一段小窗的 scrollTop；`process-card.js` 缓存版本换成 power9。
 - 更新后启动页：`?updated=` 改 `#updated=`（.NET Uri 会把 file 地址里的 `?` 编码成 `%3F`，导致启动页加载失败）。

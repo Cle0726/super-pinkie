@@ -6,9 +6,9 @@
 - Node.js, distributed under its bundled license notices. See `licenses/Node.js-LICENSE`.
 - npm, distributed under the Artistic License 2.0. See `licenses/npm-LICENSE`.
 - Cua Driver by Cua AI, Inc., distributed under the MIT License. The pinned,
-  checksum-verified release contains its notarized macOS helper. CLE Kk keeps
+  checksum-verified release contains its notarized macOS helper. C.le. keeps
   that stable signing identity intact so Accessibility and Screen Recording
-  grants continue to work across CLE Kk rebuilds.
+  grants continue to work across C.le. rebuilds.
 - Python, distributed under the Python Software Foundation license. See `licenses/Python-LICENSE.txt`.
 - Python packages used by the optional local speech service. Their license files remain inside the corresponding `*.dist-info/licenses` directories.
 

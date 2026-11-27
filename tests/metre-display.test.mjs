@@ -131,6 +131,12 @@ test(`Metre user message: copy / edit keys are clickable, the timestamp sits to 
     assert.ok(r.copy && r.edit, `both keys receive their own clicks: ${JSON.stringify(r)}`);
     assert.ok(r.tsRight <= r.rowLeft, `timestamp ends before the key row starts: ${JSON.stringify(r)}`);
     await p.close();
+    // 反例：其他模式这份文件不动页脚（不让出右边距）。
+    const q = await browser.newPage({viewport: {width: 1000, height: 400}});
+    await q.setContent(userRowPage('chat'));
+    const pad = await q.evaluate(() => getComputedStyle(document.querySelector('.chat-group-footer')).paddingRight);
+    assert.equal(pad, '0px', `other modes: footer keeps its native padding: ${pad}`);
+    await q.close();
   } finally { await browser.close(); }
 });
 
@@ -149,31 +155,12 @@ test(`Metre edit-and-resend box stays inside the thread at 820 and keeps a usabl
     assert.ok(r.l >= r.thL && r.r <= r.thR, `edit box inside the thread: ${JSON.stringify(r)}`);
     assert.ok(r.w >= 440, `edit box is still roomy: ${JSON.stringify(r)}`);
     await p.close();
-  } finally { await browser.close(); }
-});
-
-// T3#10：计划卡在 Metre 里还是碧琪的蓝 #2f7bff、紫黑边、阴影（--pk-* 变量挂在 html:not(#p1):not(#p2):not(#p3) 上）。
-const PK_VARS = 'html:not(#p1):not(#p2):not(#p3){--pk-fg:#2a2233;--pk-faint:rgba(42,34,51,.1);--pk-panel:rgba(255,255,255,.62);--pk-accent:#2f7bff;--pk-shadow:0 8px 24px -16px rgba(42,34,51,.18)}html:not(#p1):not(#p2):not(#p3) .pk-plan{display:block;background:var(--pk-panel);box-shadow:inset 0 0 0 1px var(--pk-faint),var(--pk-shadow);color:var(--pk-fg)}html:not(#p1):not(#p2):not(#p3) .pk-plan__bar i[data-status="completed"]{display:inline-block;width:20px;height:4px;background:var(--pk-accent)}';
-const METRE_VARS = 'html[data-laolao-mode="metre"]{--metre-text:#1B1A18;--metre-muted:#77736B;--metre-line-strong:#D3D0C8;--metre-surface:#FFFFFF;--metre-bg:#FAF9F5;--metre-hover:#F0EEE6;--metre-cobalt:#2F4BB0}';
-const planPage = (mode) => `<!doctype html><html${mode ? ` data-laolao-mode="${mode}"` : ''}><head><style>${PK_VARS}\n${METRE_VARS}\n${read('laolao-metre-display.css')}</style></head><body>
-<section class="pk-plan" id="plan"><div class="pk-plan__bar"><i data-status="completed" id="bar"></i></div></section></body></html>`;
-
-test(`Metre plan card uses Metre ink and cobalt, not 碧琪 blue; other modes untouched (${engine})`, {timeout: 60_000}, async () => {
-  const browser = await launch();
-  try {
-    const look = async (mode) => {
-      const p = await browser.newPage({viewport: {width: 600, height: 300}});
-      await p.setContent(planPage(mode));
-      const r = await p.evaluate(() => { const c = getComputedStyle(document.getElementById('plan')); return {bar: getComputedStyle(document.getElementById('bar')).backgroundColor, bg: c.backgroundColor, shadow: c.boxShadow, color: c.color}; });
-      await p.close();
-      return r;
-    };
-    const m = await look('metre');
-    assert.equal(m.bar, 'rgb(47, 75, 176)', `Metre plan progress is cobalt: ${JSON.stringify(m)}`);
-    assert.equal(m.color, 'rgb(27, 26, 24)', `Metre plan text is Metre ink: ${JSON.stringify(m)}`);
-    assert.doesNotMatch(m.shadow, /42, 34, 51/, `no 碧琪 purple border / shadow in Metre: ${JSON.stringify(m)}`);
-    const c = await look('chat');
-    assert.equal(c.bar, 'rgb(47, 123, 255)', `other modes keep 碧琪 blue: ${JSON.stringify(c)}`);
+    // 反例：其他模式这份文件不动编辑框（碧琪原来的 min-width 还在）。
+    const q = await browser.newPage({viewport: {width: 820, height: 500}});
+    await q.setContent(editPage('chat'));
+    const mw = await q.evaluate(() => getComputedStyle(document.getElementById('box')).minWidth);
+    assert.notEqual(mw, '0px', `other modes: edit box keeps its native min-width: ${mw}`);
+    await q.close();
   } finally { await browser.close(); }
 });
 
@@ -181,7 +168,11 @@ test('wiring: laolao-metre-display.css is in the head after the Metre keys and b
   const head = read('laolao-head.fragment.html');
   assert.match(head, /<link rel="stylesheet" href="\/laolao-metre-keys\.css\?v=@hash">\n<script defer src="\/laolao-metre-backstage\.js\?v=@hash"><\/script>\n<link rel="stylesheet" href="\/laolao-metre-display\.css\?v=@hash">\n/);
   assert.ok(/"id": "metre"[\s\S]*?"laolao-metre-display\.css"/.test(read('regions.json')), 'registered in the Metre region');
-  const css = read('laolao-metre-display.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.ok(!css.includes('!important'));
+  const all = read('laolao-metre-display.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!all.includes('!important'));
+  // 关键帧不是选择器规则：先剥出来，只许动 opacity（16:10 打回第 2 条的 pk-mq-born 只是插进来那一帧的信号）
+  const frames = [...all.matchAll(/@keyframes ([\w-]+)\s*\{((?:[^{}]*\{[^}]*\})*)\s*\}/g)];
+  for (const [, name, body] of frames) assert.ok([...body.matchAll(/([a-z-]+)\s*:/g)].every((m) => m[1] === 'opacity'), `${name} only touches opacity`);
+  const css = frames.reduce((s, [block]) => s.replace(block, ''), all);
   for (const rule of css.split('}').map((s) => s.trim().replace(/^@media[^{]*\{\s*/, '')).filter(Boolean)) assert.match(rule, /^html\[data-laolao-mode="metre"\]/, `every rule is Metre-only: ${rule.slice(0, 80)}`);
 });

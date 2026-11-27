@@ -1,15 +1,29 @@
-import {test} from 'node:test';
+import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 const script = fileURLToPath(new URL('../ui/injections/laolao-session-list.js', import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 
+// One browser for the file, started outside every test's 30 s budget. On a
+// cold Windows runner the first Chrome launch alone took ~28 s (run
+// 45557123820: the first test of each of the three browser files that start
+// together took 29.96 / 29.99 / 30.0 s, while the later tests here took
+// ~1.1 s each), so launching inside the test timed Chrome's start-up, not the
+// sidebar. browser.newPage() still gives every test its own fresh context
+// (own localStorage), so the tests stay independent.
+let browser;
+before(async () => {
+  browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  await waitFirstFrame(browser, `metre-sidebar-e2e (${engine})`);
+}, {timeout: 120_000});
+after(async () => { await browser?.close(); });
+
 test(`Metre dispatch appears during refresh, without its parent in the sidebar (${engine})`, {timeout: 30_000}, async () => {
-  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  const tab = await browser.newPage();
   try {
-    const tab = await browser.newPage();
     await tab.route('http://127.0.0.1:30113/**', route => route.fulfill({contentType: 'text/html', body: '<section id="sidebar"></section>'}));
     await tab.goto('http://127.0.0.1:30113/');
     await tab.addScriptTag({path: script});
@@ -44,7 +58,7 @@ test(`Metre dispatch appears during refresh, without its parent in the sidebar (
       window.qa.away = {...window.qa.away, [other]: {parentKey: parent, title: '起草标题方案', mode: 'ideas'}};
       window.qa.changed();
     }, {parent, child, other});
-    await tab.waitForTimeout(300);
+    await tab.waitForTimeout(300);   // 保留：故意让两次 changed 通知先处理、再放行旧读，测的是先后顺序
     await tab.evaluate(() => window.qa.release());
     const sideRow = tab.locator(`[data-laolao-group="__metre-dispatched"] [data-session-key="${child}"]`);
     await sideRow.getByRole('link', {name: '正在整理提纲'}).waitFor();
@@ -71,13 +85,12 @@ test(`Metre dispatch appears during refresh, without its parent in the sidebar (
     });
     await tab.locator(`[data-laolao-group="__recent"] [data-session-key="${child}"]`).getByRole('link', {name: '正在整理提纲'}).waitFor();
     assert.equal(await tab.locator('[data-laolao-group="__metre-dispatched"]').count(), 0);
-  } finally { await browser.close(); }
+  } finally { await tab.close(); }
 });
 
 test(`Metre dispatched sessions can be folded, archived and deleted from the sidebar (${engine})`, {timeout: 30_000}, async () => {
-  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  const tab = await browser.newPage();
   try {
-    const tab = await browser.newPage();
     await tab.route('http://127.0.0.1:30113/**', route => route.fulfill({contentType: 'text/html', body: '<section id="sidebar"></section>'}));
     await tab.goto('http://127.0.0.1:30113/');
     await tab.addScriptTag({path: script});
@@ -114,13 +127,12 @@ test(`Metre dispatched sessions can be folded, archived and deleted from the sid
     assert.equal(await group.locator(`[data-session-key="${live}"]`).count(), 1);
     await group.getByRole('button', {name: '展开派发的会话'}).click();
     await group.locator(`[data-session-key="${done}"]`).waitFor();
-  } finally { await browser.close(); }
+  } finally { await tab.close(); }
 });
 
 test(`Metre dispatched sessions sit under their parent session; only a lost parent leaves them on their own (${engine})`, {timeout: 30_000}, async () => {
-  const browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  const tab = await browser.newPage();
   try {
-    const tab = await browser.newPage();
     await tab.route('http://127.0.0.1:30113/**', route => route.fulfill({contentType: 'text/html', body: '<section id="sidebar"></section>'}));
     await tab.goto('http://127.0.0.1:30113/');
     await tab.addScriptTag({path: script});
@@ -170,5 +182,5 @@ test(`Metre dispatched sessions sit under their parent session; only a lost pare
     assert.equal(await under(live).count(), 1);
     await tab.getByRole('button', {name: '展开收尾检查的子会话'}).click();
     await under(done).waitFor();
-  } finally { await browser.close(); }
+  } finally { await tab.close(); }
 });

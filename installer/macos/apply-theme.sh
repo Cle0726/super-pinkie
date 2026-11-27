@@ -9,7 +9,7 @@ ASSET_ROOT="$REPO_ROOT/ui/assets"
 INJECTION_ROOT="$REPO_ROOT/ui/injections"
 PINKIE_NATIVE_SOURCE_DIR="$REPO_ROOT/desktop/macos/pinkie/Sources"
 LAUNCHER_SOURCE="$PINKIE_NATIVE_SOURCE_DIR/Launcher.swift"
-LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift")
+LAUNCHER_SUPPORT_SOURCES=("$PINKIE_NATIVE_SOURCE_DIR/MaterialPreview.swift" "$PINKIE_NATIVE_SOURCE_DIR/BrowserControl.swift" "$PINKIE_NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" "$PINKIE_NATIVE_SOURCE_DIR/PinkieNative.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherRuntime.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherViews.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherServices.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherBrowser.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherWorkspace.swift" "$PINKIE_NATIVE_SOURCE_DIR/LauncherWebBridge.swift" "$PINKIE_NATIVE_SOURCE_DIR/AppWindow.swift")
 NODE_VERSIONS_ROOT="$USER_HOME/.nvm/versions/node"
 LAUNCHER_APP_PATH="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}"
 SKIP_APP_BUNDLES="${PINKIE_SKIP_APP_BUNDLES:-0}"
@@ -151,7 +151,7 @@ sync_launcher_resources() {
   local native_file native_target
   for native_target in "$bundled_root/desktop/macos/Sources" "$bundled_root/desktop/macos/pinkie/Sources"; do
     mkdir -p "$native_target"
-    for native_file in Launcher.swift MaterialPreview.swift BrowserControl.swift ChatGPTBackgroundWorker.swift PinkieNative.swift BrowserControl.js; do
+    for native_file in Launcher.swift LauncherRuntime.swift LauncherViews.swift LauncherServices.swift LauncherBrowser.swift LauncherWorkspace.swift LauncherWebBridge.swift AppWindow.swift MaterialPreview.swift BrowserControl.swift ChatGPTBackgroundWorker.swift PinkieNative.swift BrowserControl.js; do
       copy_if_changed "$PINKIE_NATIVE_SOURCE_DIR/$native_file" "$native_target/$native_file"
     done
   done
@@ -250,7 +250,7 @@ sync_launcher_resources() {
       "$REPO_ROOT/services/first-person-renderer/$service_file" \
       "$bundled_root/services/first-person-renderer/$service_file"
   done
-  for service_file in index.mjs memory.mjs mode-constants.mjs evidence-rules.mjs completion-integrity.mjs clekk-supervisor.mjs watchdog-runtime.mjs deliberation-audit.mjs mode-architecture-core.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-drill.mjs learning-explain-voice.mjs learning-game-bank.mjs learning-game-real.mjs learning-game-content.mjs learning-game-economy.json learning-game-economy.mjs learning-game-exam.mjs learning-game-forms.json learning-game-monsters.mjs learning-game-world.mjs learning-game.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json learning-library.mjs openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs reply-styles.json session-prefs.mjs session-temp.mjs session-export.mjs session-manage.mjs metre-models.mjs metre-baton.mjs model-tiers.json tool-trace.mjs metre-memory.mjs metre-board.mjs engines.mjs engines-rpc.mjs engines-bridge.mjs engines-task.mjs engines-players.mjs engines-registry.mjs metre-roles.mjs metre_role_assets.py quiet-mode.mjs artifacts.mjs project-settings.mjs reasoning.mjs channel-reasoning.mjs work-kinds.mjs run-contract.mjs skill-routes.mjs work-cards.mjs project-brief.mjs code-tools.mjs code-work.mjs session-hints.mjs design-directions.mjs desk.mjs desk-win.mjs config-floor.mjs background-jobs.mjs work-status.mjs model-sync.mjs model-setup.mjs settings-guard.mjs feedback.mjs feedback-crypto.mjs feedback-sanitize.mjs feedback-transport.mjs feedback-public.json metre-lock.mjs metre-lock-hash.json web-gpt-activity.mjs web-gpt-connection.mjs web-gpt.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs model-health.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json; do
+  for service_file in index.mjs memory.mjs mode-constants.mjs evidence-rules.mjs completion-integrity.mjs clekk-supervisor.mjs watchdog-runtime.mjs deliberation-audit.mjs mode-architecture-core.mjs first-person.mjs learning.mjs learning-visuals.mjs learning-explore.mjs learning-devices.mjs learning-labs.mjs learning-practice.mjs learning-compute.mjs learning-c-trace.mjs learning-engine.py learning-requirements.txt learning-pact.mjs learning-desk.mjs learning-drill.mjs learning-explain-voice.mjs learning-game-bank.mjs learning-game-real.mjs learning-game-content.mjs learning-game-economy.json learning-game-economy.mjs learning-game-exam.mjs learning-game-forms.json learning-game-monsters.mjs learning-game-world.mjs learning-game.mjs learning-exams.mjs learning-vocab.mjs learning-almanac.mjs learning-holidays-cn.json learning-refs.mjs learning-recall.mjs learning-companion.mjs learning-lesson.mjs learning-materials.mjs learning-materials-jobs.mjs learning-materials-extract.mjs learning-zsb.mjs learning-zsb-gen.mjs learning-zsb-data.json learning-zsb-items.json learning-library.mjs openclaw-paths.mjs companion.mjs session-titles.mjs session-lineage.mjs session-search.mjs session-branch.mjs turn-checkpoints.mjs reply-styles.json session-prefs.mjs whiteboard-store.mjs whiteboard-tools.mjs session-temp.mjs session-export.mjs session-manage.mjs metre-models.mjs metre-baton.mjs model-tiers.json tool-trace.mjs metre-memory.mjs metre-board.mjs engines.mjs engines-rpc.mjs engines-bridge.mjs engines-upstream.mjs engines-task.mjs engines-players.mjs engines-registry.mjs engines-dispatch.mjs metre-plan-mode.mjs engines-dispatch-cli.mjs metre-roles.mjs metre_role_assets.py quiet-mode.mjs artifacts.mjs desktop-apps.mjs project-settings.mjs reasoning.mjs channel-reasoning.mjs work-kinds.mjs run-contract.mjs skill-routes.mjs work-cards.mjs project-brief.mjs code-tools.mjs code-work.mjs session-hints.mjs design-directions.mjs desk.mjs desk-win.mjs config-floor.mjs background-jobs.mjs work-status.mjs model-sync.mjs model-setup.mjs settings-guard.mjs feedback.mjs feedback-crypto.mjs feedback-sanitize.mjs feedback-transport.mjs feedback-public.json metre-lock.mjs metre-lock-hash.json web-gpt-activity.mjs web-gpt-connection.mjs web-gpt.mjs web-gpt-project-context.mjs ask.mjs reply-hygiene.mjs app-browser.mjs web-search-fallback.mjs model-health.mjs file-delivery.mjs app-guide.mjs rich-runtime.mjs workbench.mjs workbench-lsp.mjs workbench-ext.mjs pr-flow.mjs nb_runner.py nb_bootstrap.py setup.py package.json openclaw.plugin.json shell-run.mjs monthly-recap.mjs; do
     if [[ -f "$REPO_ROOT/services/mode-architecture/$service_file" ]]; then
       copy_if_changed \
         "$REPO_ROOT/services/mode-architecture/$service_file" \
@@ -369,12 +369,12 @@ reseal_app_on_exit() {
           "$LAUNCHER_APP_PATH" >/dev/null 2>&1 \
           || ! codesign -dr - "$LAUNCHER_APP_PATH" 2>&1 \
             | grep -Fq 'designated => identifier "com.cle0726.super-pinkie"'; then
-        echo "error: failed to preserve CLE Kk's stable local permission identity" >&2
+        echo "error: failed to preserve C.le.'s stable local permission identity" >&2
         [[ "$exit_code" -eq 0 ]] && exit_code=1
       fi
     fi
     if ! codesign --verify --deep --strict "$LAUNCHER_APP_PATH" >/dev/null 2>&1; then
-      echo "error: updated CLE Kk App signature did not verify" >&2
+      echo "error: updated C.le. App signature did not verify" >&2
       [[ "$exit_code" -eq 0 ]] && exit_code=1
     fi
   fi
@@ -421,6 +421,11 @@ install_relay_watchdog() {
   else
     rm -f "$target_plist.tmp"
   fi
+  local real_home
+  real_home="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+  if [[ "${PINKIE_SKIP_LAUNCHD:-0}" == "1" ]] || [[ -n "$real_home" && "$(cd "$USER_HOME" 2>/dev/null && pwd -P)" != "$(cd "$real_home" 2>/dev/null && pwd -P)" ]]; then
+    return 0
+  fi
   if ! launchctl print "gui/$(id -u)/ai.openclaw.watchdog" >/dev/null 2>&1; then
     should_reload=1
   fi
@@ -440,10 +445,17 @@ install_relay_watchdog() {
 }
 
 OPENCLAW_ROOT="${OPENCLAW_ROOT:-}"
-if [[ -z "$OPENCLAW_ROOT" ]]; then
+if [[ -z "$OPENCLAW_ROOT" && -f "$REPO_ROOT/tools/core/manifest.mjs" && ( "${PINKIE_INSTALL_CORE:-0}" == "1" || -n "${PINKIE_CORE_PREFIX:-}" ) ]]; then
+  CORE_NAME="$(node "$REPO_ROOT/tools/core/manifest.mjs" field core --root "$REPO_ROOT")"
+  CORE_PREFIX="${PINKIE_CORE_PREFIX:-$USER_HOME/.super-pinkie/core/$CORE_NAME}"
+  node "$REPO_ROOT/tools/core/manifest.mjs" install --root "$REPO_ROOT" --prefix "$CORE_PREFIX"
+  OPENCLAW_ROOT="$CORE_PREFIX/node_modules/openclaw"
+fi
+if [[ -z "$OPENCLAW_ROOT" && ( "$SKIP_APP_BUNDLES" != "1" || -n "${PINKIE_APP_PATH:-}" ) ]]; then
   # The managed App owns the gateway it is about to update. Prefer that
   # runtime before PATH: a shell shim named `openclaw` is not a package root
-  # and has no `dist/` tree to patch.
+  # and has no `dist/` tree to patch. Never fall back to /Applications when
+  # SKIP_APP_BUNDLES=1 omitted PINKIE_APP_PATH, since reseal is skipped there.
   BUNDLED_RUNTIME="${PINKIE_APP_PATH:-/Applications/超級碧琪.app}/Contents/Resources/SuperPinkie/runtime/openclaw"
   if [[ -f "$BUNDLED_RUNTIME/openclaw.mjs" ]]; then
     OPENCLAW_ROOT="$BUNDLED_RUNTIME"
@@ -544,6 +556,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
     # 模型失败自动重试时，同一次发送的失败记录被重试替换，用户那句话不再写两遍。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
+    # write/edit 内容没变（no-op）时不再提前结束回合，模型照常收到「No changes made」后继续回复。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-noop-write-continue.mjs"
     # 交付前检查要求补一遍时，用户刚发的那句留在会话主线上（以前被当成孤立消息拆掉，切页面回来就不见了）。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-user-preservation.mjs"
     # 立即追加带的图片一起送给正在跑的那一轮（以前图片被丢掉）。
@@ -561,7 +575,7 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     apply_ui_skin "$OPENCLAW_ROOT/dist/control-ui"
   fi
 else
-  echo "error: CLE Kk compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
+  echo "error: C.le. compatibility runtime not found; set OPENCLAW_ROOT and retry" >&2
   exit 1
 fi
 

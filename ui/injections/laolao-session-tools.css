@@ -1,10 +1,10 @@
 /* Milestone 3: temp sessions, export, outline, paste, @ mentions, style/web chips, sources. */
-:root { --pt-accent:var(--accent,#d9508d); --pt-card:var(--card,#fff); --pt-text:var(--text,#2b2328); --pt-line:color-mix(in srgb,currentColor 12%,transparent) }
+:root { --pt-accent:var(--accent,#d9508d); --pt-card:var(--card,#fff); --pt-text:var(--text,#2b2328); --pt-line:color-mix(in srgb,currentColor 12%,transparent); --pt-quiet:var(--muted-strong,color-mix(in srgb,currentColor 80%,transparent)) }
 html[data-pinkie-night] { --pt-card:#2a2027; --pt-text:#f3e9ef }
 
 /* H1 ghost entry beside 新会话 */
 .sidebar-sessions { position:relative }
-.pinkie-temp-entry { position:absolute;right:8px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:color-mix(in srgb,currentColor 55%,transparent);font:inherit;font-size:12px;cursor:pointer;opacity:.75 }
+.pinkie-temp-entry { position:absolute;right:8px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:color-mix(in srgb,currentColor 55%,transparent);font:inherit;font-size:12px;cursor:pointer;opacity:.75 } :where(html[data-laolao-mode="project"]) .pinkie-temp-entry { color:var(--pt-quiet);opacity:1 }
 .pinkie-temp-entry svg { width:15px;height:15px }
 /* 「临时」叠在「新会话」那一行的右端，快捷键提示原来也排在同一个位置，两行字糊成一团：有「临时」时把提示往左让开。 */
 html .sidebar :has(> .pinkie-temp-entry) .sidebar-new-session:not(.sidebar-new-session--worktree)::after { margin-right:54px }
@@ -69,7 +69,7 @@ html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
 
 /* C3 / C4 chips */
 .pinkie-composer-chips { display:inline-flex;align-items:center;gap:4px;margin-left:2px }
-.pinkie-chip { display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 9px;border:0;border-radius:8px;background:transparent;color:color-mix(in srgb,currentColor 68%,transparent);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap }
+.pinkie-chip { display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 9px;border:0;border-radius:8px;background:transparent;color:color-mix(in srgb,currentColor 68%,transparent);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap } :where(html[data-laolao-mode="project"]) .pinkie-chip { color:var(--pt-quiet) }
 .pinkie-chip:hover,.pinkie-chip:focus-visible { background:color-mix(in srgb,currentColor 8%,transparent);color:var(--pt-text);outline:none }
 .pinkie-chip--style:not([data-style="default"]) { color:var(--pt-accent) }
 .pinkie-chip--web svg { width:15px;height:15px }
@@ -92,7 +92,7 @@ html[data-pinkie-night] .pinkie-paste-editor { background:#1f181d }
 /* 模式专属的那一颗（项目：工作程度；想法：取向）。默认时和别的按钮一样安静，选了别的才带上模式色。 */
 .pinkie-chip--mode { gap:5px;padding:0 8px 0 7px }
 .pinkie-chip--mode svg { width:16px;height:16px;flex:none }
-.pinkie-chip--mode .pinkie-chip__caret { width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.7 }
+.pinkie-chip--mode .pinkie-chip__caret { width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:.7 } :where(html[data-laolao-mode="project"]) .pinkie-chip--mode .pinkie-chip__caret { opacity:1 }
 .pinkie-chip--mode:not([data-value="default"]) { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 10%,transparent);font-weight:600 }
 .pinkie-chip--mode:not([data-value="default"]):hover { color:var(--pt-accent);background:color-mix(in srgb,var(--pt-accent) 16%,transparent) }
 .pinkie-style-menu__note { padding:6px 10px 4px;font-size:11px;opacity:.5;max-width:220px }

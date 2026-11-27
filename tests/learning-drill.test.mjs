@@ -407,6 +407,44 @@ test('model questions enter the session, a bad card is kept without its bad mode
   assert.notEqual(drill.read().cards.ok.hash, drillCardHash({question: '指针变量保存什么？', answer: '另一个变量的地址', quote: practice[0].quote}));
 });
 
+test('a disk error inside the drill loop is not an unhandled rejection and the cards run again next time', async t => {
+  const {drill, recall, store, organizer} = fixture(t);
+  const unhandled = [];
+  const onUnhandled = error => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  let calls = 0;
+  organizer.status = () => ({available: true, model: 'qa/fake', modelName: 'QA'});
+  organizer.requestModel = async (_model, _rules, input) => { calls += 1; return {cards: input.map(card => goodQuestion(card))}; };
+  // 只让循环里「标记 running」那一次写盘失败：它在 try 之外，入队时那次写 queued 照常成功。
+  const realWrite = drill.write.bind(drill);
+  let broken = true;
+  drill.write = data => {
+    if (broken && Object.values(data.cards || {}).some(card => card.status === 'running')) {
+      broken = false;
+      throw new Error('EIO: i/o error, write');
+    }
+    return realWrite(data);
+  };
+  const cards = ['d1', 'd2'].map(id => noteCard(id, 1, {answer: '另一个变量的地址', question: '指针变量保存什么？'}));
+  seedRecall(recall, store, cards);
+  drill.session({sessionKey: KEY, source: 'notes', size: 5});
+  assert.ok(drill.running);
+  // 不去 await 这条链：enqueueCards 也不 await 它，要看的就是没人接时会不会漏成 unhandledRejection。
+  for (let i = 0; i < 200 && drill.running; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(broken, false, '写盘故障应该真的触发过');
+  assert.deepEqual(unhandled, []);
+  assert.equal(drill.running, null);
+  assert.equal(calls, 0);
+  drill.session({sessionKey: KEY, source: 'notes', size: 5});
+  await drill.running;
+  assert.equal(calls, 1);
+  const stored = drill.read().cards;
+  assert.equal(stored.d1.status, 'ready');
+  assert.equal(stored.d2.status, 'ready');
+});
+
 test('write judging and the closing line use the model, then fall back locally', async t => {
   const {drill, recall, store, organizer, pact} = await fixture(t);
   let mode = 'ok';

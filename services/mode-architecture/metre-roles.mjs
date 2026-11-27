@@ -1007,7 +1007,9 @@ export function checkRoleToolCall(card, toolName, params = {}) {
       blockReason: `这个角色（${roleLabel}）不能用 ${name} 工具。需要的操作写进汇报，交给 Metre。`,
     };
   }
-  const category = toolCategory(name);
+  // app_browser serve with a command starts that command through a shell (app-browser.mjs spawn shell: true):
+  // it is an exec call, so the card needs exec and deny_commands applies. Static-directory serve has no command.
+  const category = name === 'app_browser' && params?.action === 'serve' && params?.command !== undefined ? 'exec' : toolCategory(name);
   if (!category) {
     return {
       block: true,
@@ -1022,8 +1024,11 @@ export function checkRoleToolCall(card, toolName, params = {}) {
     };
   }
   if (category === 'exec' && card?.deny_commands?.length) {
-    const cmd = typeof params?.command === 'string' ? params.command
-      : typeof params?.cmd === 'string' ? params.cmd : '';
+    // run_tests appends `filter` verbatim to its command and runs it through a shell, so check it
+    // on its own and joined the way run_tests joins it (command: 'git' + filter: 'push' is git push).
+    const text = value => (typeof value === 'string' ? value : '');
+    const base = text(params?.command) || text(params?.cmd), filter = text(params?.filter);
+    const cmd = [base, filter, base && filter ? `${base} ${filter}` : ''].filter(Boolean).join('\n');
     const denied = checkDeniedCommand(cmd, card.deny_commands);
     if (denied.blocked) {
       return {

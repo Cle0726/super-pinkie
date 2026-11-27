@@ -16,7 +16,7 @@
  *   排队   原生面板的 chatQueue 条数
  *   引擎   pinkie.engines.status（开 / 关）+ 总谱数据里外部引擎的声部（在跑 / 等你 / 交回 / 失败）
  * 刷新挂在已有的事件上：run-status 画状态条时发的 pinkie:run-view、总谱数据回来的 pinkie:metre-board-data、换会话、换模式、窗口大小；
- *   两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就停）。不加 setInterval、不加观察器。只在 Metre 出现。 */
+ *   两边对不上、或者正在说「已对齐」时，半秒后再看一次（一次性的 setTimeout，对上了、说完了就停）。不加循环定时器、不加观察器。只在 Metre 出现。 */
 (() => {
   'use strict';
   if (document.querySelector('.pk-metre-backstage')) return;
@@ -49,7 +49,7 @@
     const backText = back == null ? '后台还没回话' : back ? '后台在跑' : '后台空闲';
     const unsynced = back != null && conn?.online !== false && back !== page.busy && since && now - since >= UNSYNC_MS;
     // 两个方向都认：后台在跑、页面停着；或者页面在等 / 在出字、后台空闲。对上了以后 2 秒里说一句「已和后台对齐」
-    const run = unsynced ? {tone: 'fail', full: `不同步 · ${backText} · ${pageText}`, short: '不同步', sync: true}
+    const run = unsynced ? {tone: 'fail', full: `不同步 · ${backText} · ${pageText}`, short: '不同步 · ' + backText, sync: true}
       : aligned ? {tone: 'ok', full: '本轮 已和后台对齐', short: '本轮 已对齐'}
       : {tone: back || page.busy ? 'run' : back == null ? 'off' : 'ok', full: `本轮 ${backText} · ${pageText}`,
         short: '本轮 ' + (back == null ? '—' : page.writing ? '出字' : back ? '在跑' : page.busy ? '等回复' : '空闲')};
@@ -58,7 +58,7 @@
     if (voices.length) {
       const n = (k) => voices.filter((v) => v.tone === k).length;
       const bits = [['fail', '失败'], ['wait', '等你'], ['run', '在跑']].filter(([k]) => n(k)).slice(0, 2).map(([k, w]) => `${n(k)} ${w}`);
-      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}`, pop: true};
+      eng = {tone: n('fail') ? 'fail' : n('wait') ? 'wait' : n('run') ? 'run' : 'ok', full: `引擎 ${voices.length} · ${bits.length ? bits.join(' · ') : '全部交回'}`, short: `引擎 ${voices.length}` + (bits.length ? ' · ' + (n('fail') && n('wait') ? bits.join(' · ') : bits[0]) : ''), pop: true};   // 窄的时候：失败、等你同时有就两个数都留（写全「1 失败 · 1 等你」，不缩成「败」「等」或符号：看不懂、读屏也念不对；格子放不下时省略号，悬停看全文），否则留最要紧的一项（失败 > 等你 > 在跑）
     } else eng = engines == null ? {tone: 'off', full: '引擎 还不知道', short: '引擎 —'}
       : !engines.enabled ? {tone: 'off', full: '引擎 关', short: '引擎 关'}
       : engines.running === false ? {tone: 'wait', full: '引擎 开 · 服务没在跑', short: '引擎 开'} : {tone: 'ok', full: '引擎 开', short: '引擎 开'};
@@ -70,17 +70,17 @@
   const VARIANTS = {
     gw: {full: ['网关 还不知道', '网关 连着', '网关 重连中 · 第 99 次', '网关 断了'], short: ['网关 —', '网关 连着', '网关 重连 99', '网关 断了']},
     run: {full: [...['后台还没回话', '后台在跑', '后台空闲'].flatMap((b) => ['页面在出字', '页面在等回复', '页面停着'].map((p) => `本轮 ${b} · ${p}`)), ...['后台在跑 · 页面停着', '后台空闲 · 页面在出字', '后台空闲 · 页面在等回复'].map((x) => ['sync', `不同步 · ${x}`]), '本轮 已和后台对齐'],
-      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步']]},
+      short: ['本轮 —', '本轮 出字', '本轮 在跑', '本轮 等回复', '本轮 空闲', '本轮 已对齐', ['sync', '不同步 · 后台在跑'], ['sync', '不同步 · 后台空闲']]},
     queue: {full: ['排队 99'], short: ['排队 99']},
     eng: {full: ['引擎 还不知道', '引擎 关', '引擎 开 · 服务没在跑', ['pop', '引擎 99 · 9 等你 · 9 在跑'], ['pop', '引擎 99 · 9 失败 · 9 等你'], ['pop', '引擎 99 · 全部交回']],
-      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99']]},
+      short: ['引擎 —', '引擎 关', '引擎 开', ['pop', '引擎 99'], ...['失败', '等你', '在跑'].map((w) => ['pop', `引擎 99 · 9 ${w}`]), ['pop', '引擎 99 · 9 失败 · 9 等你']]},
   };
 
   // ---------- 画 ----------
   const chip = (c, tier, syncing) => {
     const text = tier === 'full' ? c.full : c.short;
     const tag = c.pop ? 'button' : 'span';
-    return `<${tag}${c.pop ? ' type="button" aria-haspopup="true"' : ''} class="pk-bs__seg${c.pop ? ' pk-bs__seg--pop' : ''}" data-seg="${c.id}" data-tone="${c.tone}" title="${esc(c.title)}"><i aria-hidden="true"></i><span>${esc(text)}</span>${c.sync
+    return `<${tag}${c.pop ? ` type="button" aria-haspopup="true" aria-label="${esc(c.full)}"` : ''} class="pk-bs__seg${c.pop ? ' pk-bs__seg--pop' : ''}" data-seg="${c.id}" data-tone="${c.tone}" title="${esc(c.title)}"><i aria-hidden="true"></i><span>${esc(text)}</span>${c.sync
       ? `<button type="button" class="pk-bs__sync"${syncing ? ' disabled aria-busy="true"' : ''}>${syncing ? '同步中' : '同步'}</button>` : ''}${c.pop ? '<b class="pk-bs__caret" aria-hidden="true"></b>' : ''}</${tag}>`;
   };
   let band = null, sig = '', since = 0, lastPair = '', engines = null, enginesAt = 0, syncing = false, known = null, knownFor = '', askedAt = 0;
@@ -133,7 +133,7 @@
     // 窄窗口的总谱浮层开着时，带子让给浮层（浮层铺到最底下；总谱自己的「运行状况」里有网关那一行，读的是同一份状态）
     if (!r || r.width < 280 || onHome() || root.getAttribute('data-metre-board') === 'overlay') { root.style.setProperty('--metre-bs-room', '0px'); root.removeAttribute('data-metre-bs'); return null; }
     if (!widths) widths = measure();
-    const tier = tierWidth('full') <= r.width ? 'full' : 'short';
+    const tier = tierWidth('full') <= r.width ? 'full' : tierWidth('short') <= r.width ? 'short' : 'tight';   // B28：短档也放不下（1440 开着工作台，聊天栏约 340px）走紧档：短档字，格子可缩、省略号，全文在 title
     const top = window.innerHeight - BOTTOM - 24;   // 离窗口下沿固定 8px，各尺寸一样；输入框那一栏往上让出 24px（keys.css 的 [data-metre-bs]）
     Object.assign(band.style, {left: Math.round(r.left) + 'px', top: top + 'px', width: Math.round(r.width) + 'px'});
     root.style.setProperty('--metre-bs-room', Math.max(0, Math.round(window.innerHeight - top + 4)) + 'px');
@@ -179,7 +179,7 @@
       band.dataset.tier = tier;
       band.dataset.unsynced = view.unsynced ? '1' : '';
       band.innerHTML = (tier === 'full' ? LABEL : '') + view.cells.map((c) => chip(c, tier, syncing)).join('');
-      band.querySelectorAll('.pk-bs__seg').forEach((n) => { n.style.width = widths[tier][n.dataset.seg] + 'px'; });
+      band.querySelectorAll('.pk-bs__seg').forEach((n) => { n.style.width = widths[tier === 'tight' ? 'short' : tier][n.dataset.seg] + 'px'; if (tier === 'tight' && n.dataset.seg !== 'queue') Object.assign(n.style, {flexShrink: String({run: 3, eng: 2, gw: 1}[n.dataset.seg] || 1), minWidth: '44px'}); });   // 紧档：「排队」不缩，本轮先缩、再引擎、再网关
     }
     if (pop) fillPop();
   }
@@ -219,5 +219,5 @@
   window.addEventListener('resize', () => { if (band) render(true); });
   for (const name of ['pinkie:metre-board-open', 'pinkie:metre-board-closed']) window.addEventListener(name, () => render(true));   // 总谱开 / 关（laolao-metre-board.js 发）
   document.fonts?.ready?.then(() => { widths = null; sig = ''; if (band) render(); });
-  window.PinkieMetreBackstage = Object.freeze({describe, voiceState, render: () => render(true)});
+  window.PinkieMetreBackstage = Object.freeze({describe, voiceState, render: () => render(true), tierWidths: () => { widths ||= measure(); return {full: tierWidth('full'), short: tierWidth('short')}; }});   // tierWidths 给测试：两档各要多宽
 })();

@@ -37,7 +37,9 @@ test('night switch follows the native color mode and tells the native shell', ()
   assert.match(js, /prefers-color-scheme: dark/);
   assert.match(js, /laolaoWindowControl/);
   assert.match(js, /disconnect\(\)/);
-  const swift = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const swift = ['Launcher.swift', 'LauncherBrowser.swift', 'LauncherWebBridge.swift']
+    .map((f) => read(`desktop/macos/pinkie/Sources/${f}`))
+    .join('\n');
   assert.match(swift, /"appearance"/);
   assert.match(swift, /func applyNightAppearance\(\)/);
 });
@@ -124,7 +126,9 @@ test('switching dark to system still updates native preference when both resolve
   h.setSaved('system');
   assert.equal(h.window.__pinkieNight.on, true);
   assert.equal(h.messages.at(-1).mode, 'system');
-  const swift = read('desktop/macos/pinkie/Sources/Launcher.swift');
+  const swift = ['Launcher.swift', 'LauncherBrowser.swift', 'LauncherWebBridge.swift']
+    .map((f) => read(`desktop/macos/pinkie/Sources/${f}`))
+    .join('\n');
   assert.match(swift, /NSApp\.appearance = followSystem \? nil : appearance/);
   assert.match(swift, /message\.webView === webView,\s*let body[^]*?body\["action"\] as\? String == "appearance"/);
 });

@@ -21,55 +21,63 @@ import urllib.request
 import uuid
 import zipfile
 
-try:
-    from windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
-except ImportError:  # imported as app.windows_updater (tests)
-    from app.windows_ps_templates import (
-        FOREGROUND_PS,
-        PINKIE_WPF_PS,
-        PROGRESS_WINDOW_PS,
-        REPAIR_PS,
-        UPDATE_LOG_PS,
-        UPDATE_UI_PS,
-    )
+if "_PINKIE_DESKTOP_PART" not in globals():
+    try:
+        from windows_ps_templates import (
+            FOREGROUND_PS,
+            PINKIE_WPF_PS,
+            PROGRESS_WINDOW_PS,
+            REPAIR_PS,
+            UPDATE_LOG_PS,
+            UPDATE_UI_PS,
+        )
+    except ImportError:  # imported as app.windows_updater (tests)
+        from app.windows_ps_templates import (
+            FOREGROUND_PS,
+            PINKIE_WPF_PS,
+            PROGRESS_WINDOW_PS,
+            REPAIR_PS,
+            UPDATE_LOG_PS,
+            UPDATE_UI_PS,
+        )
 
-GATEWAY_URL = "http://127.0.0.1:18789/"
-UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
-TRUSTED_UPDATE_HOSTS = {
-    "api.github.com",
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-}
-UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
-UPDATE_MANIFEST_NAME = "latest.json"
-GUARD_UPDATE_REFUSED = "更新包的签名不对，没有安装，旧版没有改动。"
+    GATEWAY_URL = "http://127.0.0.1:18789/"
+    UPDATE_API_URL = "https://api.github.com/repos/Cle0726/super-pinkie/releases/latest"
+    TRUSTED_UPDATE_HOSTS = {
+        "api.github.com",
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+    }
+    UPDATE_RELEASES_URL = "https://github.com/Cle0726/super-pinkie/releases"
+    UPDATE_MANIFEST_NAME = "latest.json"
+    GUARD_UPDATE_REFUSED = "更新包的签名不对，没有安装，旧版没有改动。"
 
-def _desktop():
-    return sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+    def _desktop():
+        module = sys.modules.get("app.windows_desktop") or sys.modules.get("windows_desktop")
+        if module is not None:
+            return module
+        try:
+            import windows_desktop as module
+        except ImportError:  # imported as app.windows_updater (tests)
+            from app import windows_desktop as module
+        return module
 
-def GatewaySupervisor(*args, **kwargs): return _desktop().GatewaySupervisor(*args, **kwargs)
-def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
-def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
-def guard_release_build(*args, **kwargs): return _desktop().guard_release_build(*args, **kwargs)
-def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
-def manifest_update(*args, **kwargs): return _desktop().manifest_update(*args, **kwargs)
-def mirrored_release_update(*args, **kwargs): return _desktop().mirrored_release_update(*args, **kwargs)
-def release_update(*args, **kwargs): return _desktop().release_update(*args, **kwargs)
-def start_elevated(*args, **kwargs): return _desktop().start_elevated(*args, **kwargs)
-def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
-def trusted_update_url(*args, **kwargs): return _desktop().trusted_update_url(*args, **kwargs)
-def update_helper_protocol(*args, **kwargs): return _desktop().update_helper_protocol(*args, **kwargs)
-def update_mirrors(*args, **kwargs): return _desktop().update_mirrors(*args, **kwargs)
-def verify_signed_latest(*args, **kwargs): return _desktop().verify_signed_latest(*args, **kwargs)
-def version_tuple(*args, **kwargs): return _desktop().version_tuple(*args, **kwargs)
+    def GatewaySupervisor(*args, **kwargs): return _desktop().GatewaySupervisor(*args, **kwargs)
+    def app_version(*args, **kwargs): return _desktop().app_version(*args, **kwargs)
+    def append_log(*args, **kwargs): return _desktop().append_log(*args, **kwargs)
+    def guard_release_build(*args, **kwargs): return _desktop().guard_release_build(*args, **kwargs)
+    def hidden_process_kwargs(*args, **kwargs): return _desktop().hidden_process_kwargs(*args, **kwargs)
+    def manifest_update(*args, **kwargs): return _desktop().manifest_update(*args, **kwargs)
+    def mirrored_release_update(*args, **kwargs): return _desktop().mirrored_release_update(*args, **kwargs)
+    def release_update(*args, **kwargs): return _desktop().release_update(*args, **kwargs)
+    def start_elevated(*args, **kwargs): return _desktop().start_elevated(*args, **kwargs)
+    def state_root(*args, **kwargs): return _desktop().state_root(*args, **kwargs)
+    def trusted_update_url(*args, **kwargs): return _desktop().trusted_update_url(*args, **kwargs)
+    def update_helper_protocol(*args, **kwargs): return _desktop().update_helper_protocol(*args, **kwargs)
+    def update_mirrors(*args, **kwargs): return _desktop().update_mirrors(*args, **kwargs)
+    def verify_signed_latest(*args, **kwargs): return _desktop().verify_signed_latest(*args, **kwargs)
+    def version_tuple(*args, **kwargs): return _desktop().version_tuple(*args, **kwargs)
 
 
 class WindowsUpdater:
@@ -305,12 +313,14 @@ class WindowsUpdater:
             headers = getattr(response, "headers", None)
             declared = headers.get("Content-Length") if headers is not None else None
             declared = int(declared) if isinstance(declared, str) and declared.isdigit() else None
-            if status == 206 and offset:
+            content_range = headers.get("Content-Range", "") if headers is not None else ""
+            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
+            if status == 206 and offset and not (match and int(match.group(1)) != offset):
                 start = offset
-            elif status == 416:
-                # 服务端认为续传起点已经越界：丢掉半成品，让下一次重试从头来。
+            elif status == 416 or (status == 206 and offset):
+                # 416 续传起点越界，或 206 却不是从续传起点开始（代理丢了 Range）：丢掉半成品，下一次从头来。
                 temporary.unlink(missing_ok=True)
-                raise ValueError("update package resume was refused; restarting download")
+                raise ValueError("update package resume was refused or answered from the wrong byte; restarting download")
             else:
                 start = 0
             if declared is not None and start + declared > maximum:
@@ -320,8 +330,6 @@ class WindowsUpdater:
             # response. Use Content-Range for the whole file; if it is absent,
             # report an unknown total instead of inventing a percentage.
             total = declared if start == 0 and status != 206 else None
-            content_range = headers.get("Content-Range", "") if headers is not None else ""
-            match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", content_range.strip())
             if match and int(match.group(1)) == start and match.group(3) != "*":
                 range_end, range_total = int(match.group(2)), int(match.group(3))
                 if range_end >= start and range_total > range_end and (declared is None or range_end - start + 1 == declared):
@@ -754,7 +762,9 @@ function Register-RestoreAtLogon {
   try {
     if ((Test-Path -LiteralPath $TargetDir) -or -not (Test-Path -LiteralPath $Backup)) { return }
     $restore = Join-Path $UpdateRoot ('restore-' + $Token + '.ps1')
-    $target = $TargetDir.Replace("'", "''"); $backupPath = $Backup.Replace("'", "''"); $log = $LogPath.Replace("'", "''")
+    # PowerShell also ends '...' at ‘ ’ ‚ ‛, so double those too (B33).
+    $quotes = "['\u2018-\u201B]"
+    $target = $TargetDir -replace $quotes, '$0$0'; $backupPath = $Backup -replace $quotes, '$0$0'; $log = $LogPath -replace $quotes, '$0$0'
     @(
       "if (-not (Test-Path -LiteralPath '$target') -and (Test-Path -LiteralPath '$backupPath')) {",
       "  try { Move-Item -LiteralPath '$backupPath' -Destination '$target' -ErrorAction Stop; `$message = 'previous version restored at sign-in' }",
@@ -1180,11 +1190,37 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 process.terminate()
             except (OSError, AttributeError):
                 pass
-        for name in (f"progress-{token}.json", f"progress-{token}.ps1", f"repair-{token}.ps1"):
+        for name in (f"progress-{token}.json", f"progress-{token}.json.shown", f"progress-{token}.ps1",
+                     f"repair-{token}.ps1"):
             try:
                 (update_root / name).unlink()
             except OSError:
                 pass
+
+    STALE_MARKER_SECONDS = 24 * 3600
+
+    @classmethod
+    def _sweep_stale_progress_markers(cls, update_root, now=None):
+        """Delete progress-*.json.shown left by earlier updates.
+
+        The window writes the marker before it shows itself and the App only
+        reads it in the three seconds after starting the window, but nothing
+        removed it afterwards, so <state>/updates gained one file per update
+        (B19). A day-old marker belongs to no running update."""
+        now = time.time() if now is None else now
+        try:
+            markers = list(Path(update_root).glob("progress-*.json.shown"))
+        except OSError:
+            return 0
+        removed = 0
+        for marker in markers:
+            try:
+                if now - marker.stat().st_mtime > cls.STALE_MARKER_SECONDS:
+                    marker.unlink()
+                    removed += 1
+            except OSError:
+                pass
+        return removed
 
     def launch_replacer(self, elevated=False):
         with self.lock:
@@ -1198,6 +1234,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             update_root = state_root() / "updates"
             health_root = update_root / "health"
             health_root.mkdir(parents=True, exist_ok=True)
+            self._sweep_stale_progress_markers(update_root)
             # Windows PowerShell 5.1 reads a .ps1 without a BOM in the ANSI code
             # page (GBK on Chinese Windows), which garbled the hard-coded
             # 超級碧琪 folder name: every portable update failed its layout
@@ -1230,7 +1267,7 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                     "-LogPath", str(state_root() / "logs/updater.log"),
                     "-ReadyMarker", str(ready_marker),
                     "-GatewayRecord", str(state_root() / "gateway-owner.json"),
-                    "-GatewayPort", str(urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789),
+                    "-GatewayPort", str(urllib.parse.urlparse(GATEWAY_URL).port or 18789),
                     "-Version", str(self.prepared["version"]),
                     "-StartSeconds", str(int(self.health_start_seconds)),
                     "-ReadySeconds", str(int(self.health_ready_seconds)),
@@ -1346,7 +1383,7 @@ class UpdateHealthReporter:
         self.limit = limit
         self.protocol = update_helper_protocol(token, root)
         self.done = threading.Event()
-        self.port = port or urllib.parse.urlparse(getattr(_desktop(), "GATEWAY_URL", GATEWAY_URL)).port or 18789
+        self.port = port or urllib.parse.urlparse(GATEWAY_URL).port or 18789
         self.hold_limit = hold_limit
         # Set while the gateway port is free for our real gateway to bind.
         self.port_free = threading.Event()

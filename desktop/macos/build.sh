@@ -25,18 +25,6 @@ CUA_DRIVER_URL="https://github.com/trycua/cua/releases/download/cua-driver-rs-v$
 CUA_DRIVER_SHA256="59603bc7e5f8d9d70f165d87158e577f99227ffcbb91d5fd9f9c688f4beb3727"
 CUA_DRIVER_TEAM_ID="YCK386LBJ7"
 
-OPENCLAW_BIN="${PINKIE_OPENCLAW_BIN:-$(command -v openclaw 2>/dev/null || true)}"
-if [[ -z "$OPENCLAW_BIN" || ! -x "$OPENCLAW_BIN" ]]; then
-  echo "error: 构建机没有可用的 OpenClaw" >&2
-  exit 1
-fi
-OPENCLAW_ENTRY="$(realpath "$OPENCLAW_BIN")"
-OPENCLAW_ROOT="$(dirname "$OPENCLAW_ENTRY")"
-if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
-  echo "error: 无法确认 OpenClaw 包目录：$OPENCLAW_ROOT" >&2
-  exit 1
-fi
-
 # The installed App puts its private Node first on PATH during an update. That
 # runtime intentionally has no npm, so look for a complete build toolchain
 # instead of failing before the old App can be replaced.
@@ -64,21 +52,70 @@ if [[ -z "$NODE_BIN" ]]; then
   exit 1
 fi
 
-# The pinned 2026.7.1-2 runtime predates CLE Kk's separately versioned Cua
-# JavaScript bridge. Add that small SDK only inside an isolated build copy;
-# never mutate the developer's globally installed OpenClaw package.
+# Always install the core runtime from core-manifest.json (openclaw by default,
+# or cle when PINKIE_CORE=cle). Never read any globally installed OpenClaw on
+# the build host, and keep the host's real user folders out of core install,
+# Cua staging, skin injection, and runtime patches. npm still reads the host's
+# .npmrc when present, while swiftc and codesign keep the real HOME.
+OPENCLAW_BUILD_HOME=""
+OPENCLAW_CORE_STAGE_ROOT=""
 OPENCLAW_COMPAT_STAGE_ROOT=""
 CUA_VERIFY_DIR=""
 cleanup_build_temps() {
   local target
-  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}"; do
+  for target in "${CUA_VERIFY_DIR:-}" "${OPENCLAW_COMPAT_STAGE_ROOT:-}" "${OPENCLAW_CORE_STAGE_ROOT:-}" "${OPENCLAW_BUILD_HOME:-}"; do
     [[ -n "$target" && -d "$target" ]] || continue
     case "$(basename "$target")" in
-      super-pinkie-cua.*|super-pinkie-openclaw.*) rm -rf "$target" ;;
+      super-pinkie-cua.*|super-pinkie-openclaw.*|super-pinkie-core.*|super-pinkie-home.*) rm -rf "$target" ;;
     esac
   done
 }
 trap cleanup_build_temps EXIT
+
+CORE_CACHE_ROOT="${PINKIE_CORE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/SuperPinkie/build/core}"
+mkdir -p "$CORE_CACHE_ROOT" "$CORE_CACHE_ROOT/npm-cache"
+OPENCLAW_BUILD_HOME="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-home.XXXXXX")"
+mkdir -p \
+  "$OPENCLAW_BUILD_HOME/home" \
+  "$OPENCLAW_BUILD_HOME/xdg-config" \
+  "$OPENCLAW_BUILD_HOME/xdg-cache" \
+  "$OPENCLAW_BUILD_HOME/openclaw-state" \
+  "$OPENCLAW_BUILD_HOME/pinkie-state"
+BUILD_NPM_USERCONFIG="${npm_config_userconfig:-}"
+if [[ -z "$BUILD_NPM_USERCONFIG" && -f "$HOME/.npmrc" ]]; then
+  BUILD_NPM_USERCONFIG="$HOME/.npmrc"
+fi
+if [[ -z "$BUILD_NPM_USERCONFIG" ]]; then
+  BUILD_NPM_USERCONFIG="$OPENCLAW_BUILD_HOME/home/.npmrc"
+fi
+run_with_isolated_home() {
+  env \
+    HOME="$OPENCLAW_BUILD_HOME/home" \
+    XDG_CONFIG_HOME="$OPENCLAW_BUILD_HOME/xdg-config" \
+    XDG_CACHE_HOME="$OPENCLAW_BUILD_HOME/xdg-cache" \
+    OPENCLAW_HOME="$OPENCLAW_BUILD_HOME/home" \
+    OPENCLAW_STATE_DIR="$OPENCLAW_BUILD_HOME/openclaw-state" \
+    PINKIE_STATE_ROOT="$OPENCLAW_BUILD_HOME/pinkie-state" \
+    npm_config_cache="${npm_config_cache:-$CORE_CACHE_ROOT/npm-cache}" \
+    npm_config_userconfig="$BUILD_NPM_USERCONFIG" \
+    "$@"
+}
+
+OPENCLAW_CORE_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-core.XXXXXX")"
+run_with_isolated_home env PATH="$(dirname "$NODE_BIN"):$PATH" \
+  "$NODE_BIN" "$REPO_ROOT/tools/core/manifest.mjs" install \
+  --root "$REPO_ROOT" \
+  --prefix "$OPENCLAW_CORE_STAGE_ROOT" \
+  --cache-dir "$CORE_CACHE_ROOT"
+OPENCLAW_ROOT="$OPENCLAW_CORE_STAGE_ROOT/node_modules/openclaw"
+if [[ ! -f "$OPENCLAW_ROOT/package.json" || ! -f "$OPENCLAW_ROOT/openclaw.mjs" ]]; then
+  echo "error: 无法确认 core-manifest.json 安装的内核包目录：$OPENCLAW_ROOT" >&2
+  exit 1
+fi
+
+# The pinned 2026.7.1-2 runtime predates CLE Kk's separately versioned Cua
+# JavaScript bridge. Add that small SDK only inside an isolated build copy;
+# never mutate any host package.
 CUA_SDK_PACKAGE="$OPENCLAW_ROOT/node_modules/@trycua/cua-driver/package.json"
 if [[ ! -f "$CUA_SDK_PACKAGE" ]]; then
   OPENCLAW_COMPAT_STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/super-pinkie-openclaw.XXXXXX")"
@@ -86,7 +123,7 @@ if [[ ! -f "$CUA_SDK_PACKAGE" ]]; then
   ditto --norsrc --noextattr "$OPENCLAW_ROOT" "$STAGED_OPENCLAW_ROOT"
   install_packed_package() {
     local spec="$1" scope="$2" package_name="$3" archive target
-    archive="$("$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" pack "$spec" \
+    archive="$(run_with_isolated_home "$NODE_BIN" "$NPM_ROOT/bin/npm-cli.js" pack "$spec" \
       --pack-destination "$OPENCLAW_COMPAT_STAGE_ROOT" --silent | tail -n 1)"
     [[ -n "$archive" && -f "$OPENCLAW_COMPAT_STAGE_ROOT/$archive" ]] || {
       echo "error: 无法获取定版构建依赖 $spec" >&2
@@ -175,6 +212,13 @@ xcrun swiftc -parse-as-library -O \
   "$NATIVE_SOURCE_DIR/BrowserControl.swift" \
   "$NATIVE_SOURCE_DIR/ChatGPTBackgroundWorker.swift" \
   "$NATIVE_SOURCE_DIR/PinkieNative.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherRuntime.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherViews.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherServices.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherBrowser.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherWorkspace.swift" \
+  "$NATIVE_SOURCE_DIR/LauncherWebBridge.swift" \
+  "$NATIVE_SOURCE_DIR/AppWindow.swift" \
   "$NATIVE_SOURCE_DIR/Launcher.swift" \
   -framework AppKit \
   -framework AVFoundation \
@@ -193,7 +237,7 @@ for bundle_part in VERSION ui personas installer patch; do
   ditto "$REPO_ROOT/$bundle_part" "$CONTENTS/Resources/SuperPinkie/$bundle_part"
 done
 mkdir -p "$CONTENTS/Resources/SuperPinkie/tools/ui-parity" "$CONTENTS/Resources/SuperPinkie/tools/assets"
-cp "$REPO_ROOT/tools/ui-parity/bundle.py" "$CONTENTS/Resources/SuperPinkie/tools/ui-parity/"
+cp "$REPO_ROOT/tools/ui-parity/bundle.py" "$REPO_ROOT/tools/ui-parity/sw_cache.py" "$CONTENTS/Resources/SuperPinkie/tools/ui-parity/"
 cp "$REPO_ROOT/tools/assets/stamp.mjs" "$CONTENTS/Resources/SuperPinkie/tools/assets/"
 for service in party roundtable tts; do
   mkdir -p "$CONTENTS/Resources/SuperPinkie/services/$service"
@@ -274,26 +318,29 @@ sed \
 
 # Patch the copied OpenClaw package before signing. Build-only mode never
 # touches the user's config, personas or history. (超級碧琪 only.)
-PATH="$RUNTIME_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" \
-PINKIE_OPENCLAW_BIN="$RUNTIME_ROOT/bin/openclaw" \
-PINKIE_PYTHON_BIN="$RUNTIME_ROOT/python/bin/python3" \
-PINKIE_PATCH_BACKUP_ROOT="$RUNTIME_ROOT/patch-originals" \
-PINKIE_BUNDLE_BUILD_ONLY=1 \
-PINKIE_SKIP_APP_BUNDLES=1 \
+run_with_isolated_home env \
+  PATH="$RUNTIME_ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+  OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" \
+  PINKIE_APP_PATH="$APP_PATH" \
+  PINKIE_OPENCLAW_BIN="$RUNTIME_ROOT/bin/openclaw" \
+  PINKIE_PYTHON_BIN="$RUNTIME_ROOT/python/bin/python3" \
+  PINKIE_PATCH_BACKUP_ROOT="$RUNTIME_ROOT/patch-originals" \
+  PINKIE_BUNDLE_BUILD_ONLY=1 \
+  PINKIE_SKIP_APP_BUNDLES=1 \
   /bin/bash "$REPO_ROOT/installer/macos/apply-theme.sh"
 
-OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/patch/apply-pinkie-managed-skills.mjs"
+run_with_isolated_home env OPENCLAW_ROOT="$RUNTIME_ROOT/openclaw" \
+  "$RUNTIME_ROOT/bin/node" "$REPO_ROOT/patch/apply-pinkie-managed-skills.mjs"
 
 sed \
   -e "s/@VERSION@/$VERSION/g" \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
 
-"$PYTHON_DRIVER" "$REPO_ROOT/tools/macos-package/check_runtime.py" \
+run_with_isolated_home "$PYTHON_DRIVER" "$REPO_ROOT/tools/macos-package/check_runtime.py" \
   --resource-root "$CONTENTS/Resources/SuperPinkie" --node "$RUNTIME_ROOT/bin/node" \
   --metre-roles-snapshot "$OUTPUT_ROOT/macos-metre-roles-runtime.json"
 
-"$PYTHON_DRIVER" "$REPO_ROOT/tools/ui-parity/bundle.py" check \
+run_with_isolated_home "$PYTHON_DRIVER" "$REPO_ROOT/tools/ui-parity/bundle.py" check \
   --control-ui "$RUNTIME_ROOT/openclaw/dist/control-ui" --output "$OUTPUT_ROOT/macos-ui-manifest.json"
 
 # 产品设定防护开关：写死在包里（build-info.json），运行时只认这个文件，不读环境变量。

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {monthlyRecap} from './monthly-recap.mjs';
 
 // Le Pacte：学习模式的约定、每日账本、连续天数、专注计时与提醒上下文。
 // 所有日期都按 pact 的时区（默认 Asia/Shanghai）切天，UTC 的 16:30 属于第二天。
@@ -273,11 +274,6 @@ export function dayInZone(instant, timeZone = 'Asia/Shanghai') {
   }
   const parts = Object.fromEntries(formatter.formatToParts(new Date(Number(instant) || 0)).map(part => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function clockInZone(instant, timeZone) {
-  const formatter = new Intl.DateTimeFormat('en-GB', {timeZone: timeZone || 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'});
-  return formatter.format(new Date(Number(instant) || 0));
 }
 
 function addDays(date, delta) {
@@ -975,6 +971,8 @@ export function registerLearningPactGateway(api, pact) {
   register('pinkie.learning.pact.set', params => pact.set(params.patch), 'operator.admin');
   register('pinkie.learning.today', params => pact.today({sessionKey: params.sessionKey}), 'operator.read');
   register('pinkie.learning.history', params => ({days: pact.history({days: params.days})}), 'operator.read');
+  // 月度回顾：只读学习账本 / 词汇本 / 连续天数，算一个月的数（monthly-recap.mjs），不写文件、不外发。
+  register('pinkie.recap.month', params => monthlyRecap(pact, {month: params.month}), 'operator.read');
   register('pinkie.learning.focus.start', params => pact.focusStart({minutes: params.minutes, subject: params.subject, chapter: params.chapter}), 'operator.admin');
   register('pinkie.learning.focus.stop', params => {
     const result = pact.focusStop({id: String(params.id || '')});
@@ -985,4 +983,4 @@ export function registerLearningPactGateway(api, pact) {
   return pact;
 }
 
-export {INTENSITIES, CHANNEL_KINDS, sanitizePact, validDate, validTime, validTimezone, clockInZone, clockLabel};
+export {INTENSITIES, CHANNEL_KINDS, sanitizePact, validDate, validTime, validTimezone, clockLabel};

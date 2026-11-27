@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {T3Rpc, causeMessage} from '../services/mode-architecture/engines-rpc.mjs';
-import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, browserLauncher, driverOf, engineName, installView, openBrowser, openLoginTerminal, openTerminal, privateBrowser, quota, diffFiles, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
+import {ENGINES, EngineBridge, LEVELS, SessionEngines, authView, browserLauncher, driverOf, engineName, installView, loginLine, openBrowser, openLoginTerminal, openTerminal, privateBrowser, quota, diffFiles, summarizeProjection, summarizeProviders, toItem} from '../services/mode-architecture/engines-bridge.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'pk-bridge-'));
 
@@ -267,6 +267,12 @@ test('starting, sending, answering and stopping become the same commands the T3 
   await bridge.send({threadId: 't1', text: 'then the docs'});
   const sends = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').map(call => call[1].dispatchMode);
   assert.deepEqual(sends, [{type: 'start_immediately'}, {type: 'steer_active', targetRunId: 'r1'}, {type: 'queue_after_active'}]);
+  // 11-24 第四次真跑：引擎服务的 message.dispatch 必带 createdBy / creationSource，缺了整条被拒（汇报送不回主脑）。
+  const origins = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').map(call => [call[1].createdBy, call[1].creationSource]);
+  assert.deepEqual(origins, [['user', 'web'], ['user', 'web'], ['user', 'web']]);
+  await bridge.send({threadId: 't1', text: 'report is in', from: 'agent'});
+  const last = calls.filter(call => call[0] === 'orchestration.dispatchCommand' && call[1].type === 'message.dispatch').at(-1)[1];
+  assert.deepEqual([last.createdBy, last.creationSource], ['agent', 'mcp']);
 
   await bridge.respond({threadId: 't1', requestId: 'req1', decision: 'accept'});
   await bridge.stop({threadId: 't1'});
@@ -308,6 +314,8 @@ test('the terminal helper only runs the install and sign-in commands in the tabl
   assert.throws(() => openTerminal('claude auth login', {platform: 'win32', spawnImpl, env: {PATH: 'C:\\x'}}), /不认识/);
   openTerminal('claude auth login', {platform: 'darwin', spawnImpl, env: {CLAUDE_CONFIG_DIR: '/Users/a/.claude-metre-2'}});
   assert.match(spawned.at(-1).args[1], /CLAUDE_CONFIG_DIR='\/Users\/a\/\.claude-metre-2' claude auth login/, 'Terminal.app does not inherit env');
+  // 路径是不是绝对路径按目标平台判断，不按跑测试 / 跑网关的这台机器（CI 的 Linux 上 C:\ 也要认，Mac 上 C:\ 不认）。
+  assert.throws(() => openTerminal('claude auth login', {platform: 'darwin', spawnImpl, env: {CLAUDE_CONFIG_DIR: 'C:\\Users\\a\\.claude-metre-2'}}), /不认识/);
 });
 
 test('several accounts per engine: each one is its own instance with its own login', async () => {
@@ -404,4 +412,26 @@ test('turning an engine on keeps its saved settings, and managed sign-in follows
   assert.deepEqual([terminal.how, terminal.command], ['terminal', 'kiro-cli login']);
   const install = await bridge.install({engine: 'pi'});
   assert.deepEqual([install.how, install.opened], ['terminal', false], 'nothing runs until the user clicks');
+});
+
+test('a login folder from engine config is not pasted into a shell command', async () => {
+  const payload = "/tmp/x'; touch pwned; echo '";
+  assert.throws(() => loginLine('claude auth login', {CLAUDE_CONFIG_DIR: payload}, 'darwin'), /登录文件夹/);
+  assert.throws(() => loginLine('claude auth login', {CLAUDE_CONFIG_DIR: 'C:\\Users\\a" & calc.exe & "'}, 'win32'), /登录文件夹/);
+  assert.equal(loginLine('claude auth login', {CLAUDE_CONFIG_DIR: 'C:\\Users\\a\\.claude-metre-2'}, 'win32'),
+    'set "CLAUDE_CONFIG_DIR=C:\\Users\\a\\.claude-metre-2" && claude auth login');
+  const calls = [];
+  const {bridge} = bridgeWith(calls, {
+    'server.getConfig': () => ({
+      providers: [{instanceId: 'claudeAgent-2', driver: 'claudeAgent', displayName: 'Claude Code · 二号', enabled: true, installed: true, status: 'ready', auth: {status: 'unauthenticated'}}],
+      settings: {providerInstances: {'claudeAgent-2': {driver: 'claudeAgent', config: {homePath: payload}}}},
+    }),
+  });
+  const catalog = await bridge.catalog();
+  const row = catalog.engines.find(item => item.id === 'claudeAgent-2');
+  assert.equal(JSON.stringify(catalog).includes('touch pwned'), false);
+  assert.equal(JSON.stringify(catalog).includes(payload), false);
+  assert.match(row.guide.login, /^claude auth login$/);
+  assert.equal(row.guide.accountDir, undefined);
+  await assert.rejects(bridge.signin({engine: 'claudeAgent-2'}), /登录文件夹/);
 });

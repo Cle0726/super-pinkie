@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""超級碧琪 🎈 控制台 — CLE Kk 全功能安装与无限制注入工具（GUI 版）
+"""超級碧琪 🎈 控制台 — C.le. 全功能安装与无限制注入工具（GUI 版）
 
 一键完成（Windows / macOS 通用）：
-1. 环境检测与自动补齐（Node.js / CLE Kk 兼容内核）
+1. 环境检测与自动补齐（Node.js / C.le. 兼容内核）
 2. API Key 与模型供应商配置（OpenAI / Anthropic / Gemini / DeepSeek / 任意兼容中继）
 3. 提示词库复制与双传输层补丁（纯 Python 注入，无需手动 node）
 4. 四模式人格文件安装（chat / project / thinking / neutral）
 5. 来啦～老弟 完整 UI 皮肤与资源注入
-6. 注入代理自启与 CLE Kk 网关启停管理
+6. 注入代理自启与 C.le. 网关启停管理
 7. 一键状态健康检查与 Cle 验证引导
 
 用法（源码运行）:
@@ -28,6 +28,10 @@ import traceback
 import urllib.request
 import urllib.parse
 from pathlib import Path
+try:
+    from legacy_panel_argv import npm_install_command, open_folder, open_web
+except ImportError:  # imported as app.super_pinkie (tests, no app/ on sys.path)
+    from app.legacy_panel_argv import npm_install_command, open_folder, open_web
 
 # A non-UTF-8 Windows locale gives this process a cp1252 stdout; the Chinese
 # status prints below (e.g. the tkinter prompt) then raise UnicodeEncodeError.
@@ -45,6 +49,7 @@ except ImportError:
 APP_NAME = "超級碧琪"
 DEFAULT_PROXY_PORT = 1467
 DEFAULT_UPSTREAM_PORT = 1466
+RELAY_TIMEOUTS = {"UR_PROXY_FIRST_BYTE_TIMEOUT": "180", "UR_PROXY_RETRY_BUDGET": "300"}
 # Name the bundled relay reports on /health. Port 1467 is shared with the
 # user's own retry proxy, which also answers {"ok": true}, so identity matters.
 RELAY_SERVICE = "super-pinkie-relay"
@@ -162,23 +167,19 @@ def install_node_windows(log):
 
 def install_openclaw_npm(log):
     """通过 npm 全局安装 openclaw"""
-    log("==> 正在安装 CLE Kk 兼容内核...")
+    log("==> 正在安装 C.le. 兼容内核...")
     try:
-        cmd = ["npm", "install", "-g", "openclaw"]
-        if os.name == "nt":
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True, **hidden_process_kwargs())
-        else:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
+        proc = subprocess.Popen(npm_install_command(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
         proc.wait()
         if proc.returncode == 0:
-            log("✅ CLE Kk 兼容内核安装成功！")
+            log("✅ C.le. 兼容内核安装成功！")
             return True
         else:
-            log(f"❌ CLE Kk 兼容内核安装失败，退出码: {proc.returncode}")
+            log(f"❌ C.le. 兼容内核安装失败，退出码: {proc.returncode}")
     except Exception as e:
-        log(f"❌ CLE Kk 兼容内核安装异常: {e}")
+        log(f"❌ C.le. 兼容内核安装异常: {e}")
     return False
 
 
@@ -406,9 +407,9 @@ def patch_ai_file(path, remove, log):
 def apply_patch(remove, log):
     root = resolve_openclaw_root()
     if not root:
-        log("✗ 未找到 CLE Kk 兼容内核。请先运行一键安装 / 修复。")
+        log("✗ 未找到 C.le. 兼容内核。请先运行一键安装 / 修复。")
         return False
-    log(f"CLE Kk 内核路径: {root}")
+    log(f"C.le. 内核路径: {root}")
     # 2026.9 moved the executable provider transport into @openclaw/ai and
     # leaves a small openai-transport-stream shim in the root dist. Keep the
     # legacy name for older installs, then fall back to the current transport
@@ -435,7 +436,7 @@ def apply_patch(remove, log):
     if ai_file:
         patch_ai_file(ai_file, remove, log)
     else:
-        log("✗ 未找到 CLE Kk 兼容传输层文件"); ok = False
+        log("✗ 未找到 C.le. 兼容传输层文件"); ok = False
     
     # 额外运行 apply-context-budget、apply-image-access 和 apply-metre-lock 脚本（如果存在）
     if not remove:
@@ -535,7 +536,7 @@ def _install_metre_role_assets(personas, openclaw_home, backup_root):
 
 
 def install_personas(log, register=True):
-    log("==> 正在安装 CLE Kk 模式人格文件...")
+    log("==> 正在安装 C.le. 模式人格文件...")
     home = Path.home()
     mapping = {
         "chat": home / ".openclaw" / "workspace",
@@ -580,35 +581,6 @@ def install_personas(log, register=True):
     return ensure_mode_agents(log) if register else True
 
 
-def run_openclaw(arguments, timeout):
-    """Run the bundled openclaw CLI and return (returncode, text).
-
-    Node writes UTF-8.  subprocess text=True would decode it with the ANSI code
-    page instead (cp936 on Chinese Windows, cp1252 on English), and the agent
-    names contain Chinese and emoji, so read bytes and decode them ourselves.
-    """
-    result = subprocess.run(openclaw_command(*arguments), capture_output=True, timeout=timeout, **hidden_process_kwargs())
-    output = (result.stdout or b"").decode("utf-8", "replace")
-    errors = (result.stderr or b"").decode("utf-8", "replace")
-    return result.returncode, output, errors
-
-
-def parse_agent_ids(text):
-    """Agent ids from `openclaw agents list --json`, tolerating log lines before the JSON."""
-    decoder = json.JSONDecoder()
-    start = text.find("[")
-    while start >= 0:
-        try:
-            items, _ = decoder.raw_decode(text[start:])
-        except ValueError:
-            items = None
-        # A log prefix such as "[plugins] ..." is not the listing; keep looking.
-        if isinstance(items, list) and all(isinstance(item, dict) for item in items):
-            return {item.get("id") for item in items}
-        start = text.find("[", start + 1)
-    raise ValueError("no JSON agent list in agents list output")
-
-
 def configured_agent_ids(config_path=None):
     """Agent ids registered in openclaw.json, in order, or None when unreadable."""
     try:
@@ -626,8 +598,8 @@ def ensure_main_agent(log, config_path=None, *, stage_modes=False):
     opens the default session.  A fresh Windows profile only ever had the two
     party agents written by services/party, so 唠嗑模式 silently ran as
     pinkie-party.  The Mac install lists main first with this same workspace.
-    In a guarded install, stage all missing bundled modes in the same write,
-    before plugin setup or any CLI command can take a partial baseline.
+    With stage_modes, add all missing bundled modes in the same write, before
+    plugin setup or the release guard can take a partial baseline.
     """
     path = Path(config_path or openclaw_config_path())
     try:
@@ -691,53 +663,19 @@ def ensure_main_agent(log, config_path=None, *, stage_modes=False):
 def ensure_mode_agents(log):
     """Register any missing mode agent.  Returns True when all of them exist.
 
-    Use one config write for the guarded App. Its own `agents add` commands
-    would otherwise load the guard and count each legitimate new bundled mode
-    as a change to protected configuration during a legacy upgrade.
+    One config write for every build, no CLI. In the guarded App the CLI's own
+    `agents add` would load the guard and count each legitimate new bundled
+    mode as a change to protected configuration during a legacy upgrade. In
+    development and local builds it started 11 node processes (agents list,
+    then add and set-identity per mode, ~16s each), ~192s in front of the
+    gateway on the first start (B48). OpenClaw resolves the default agentDir
+    and reads each mode's name and avatar from the IDENTITY.md that
+    install_personas already put in its workspace.
     """
     configured = configured_agent_ids()
     if configured and configured[0] == "main" and all(agent_id in configured for agent_id in MODE_AGENTS):
         return True
-    if bundled_settings_guard_enabled():
-        return ensure_main_agent(log, stage_modes=True)
-    registered = register_mode_agents(log)
-    # After the CLI, which rewrites openclaw.json itself.
-    return ensure_main_agent(log) and registered
-
-
-def register_mode_agents(log):
-    home = Path.home()
-    try:
-        code, output, errors = run_openclaw(("agents", "list", "--json"), timeout=60)
-        if code != 0:
-            log(f"  ⚠️ 读取模式列表失败（返回码 {code}）：{errors.strip()[-400:]}")
-            return False
-        existing = parse_agent_ids(output)
-    except (OSError, subprocess.SubprocessError, ValueError) as exc:
-        log(f"  ⚠️ 读取模式列表失败：{exc}")
-        return False
-    complete = True
-    for agent_id, folder in MODE_AGENTS.items():
-        if agent_id in existing:
-            continue
-        workspace = home / ".openclaw" / folder
-        workspace.mkdir(parents=True, exist_ok=True)
-        try:
-            code, _, errors = run_openclaw(("agents", "add", agent_id, "--non-interactive", "--workspace", workspace), timeout=60)
-            if code != 0:
-                complete = False
-                log(f"  ⚠️ 补齐 {agent_id} 模式失败（返回码 {code}）：{errors.strip()[-400:]}")
-                continue
-            log(f"  已补齐 {agent_id} 模式")
-            identity = workspace / "IDENTITY.md"
-            if identity.is_file():
-                code, _, errors = run_openclaw(("agents", "set-identity", "--agent", agent_id, "--identity-file", identity), timeout=60)
-                if code != 0:
-                    log(f"  ⚠️ 设置 {agent_id} 模式名片失败（返回码 {code}）：{errors.strip()[-400:]}")
-        except (OSError, subprocess.SubprocessError) as exc:
-            complete = False
-            log(f"  ⚠️ 补齐 {agent_id} 模式失败：{exc}")
-    return complete
+    return ensure_main_agent(log, stage_modes=True)
 
 
 def install_runtime_service(service_name, log):
@@ -821,9 +759,8 @@ class ProxyManager:
             self.log(f"✗ 找不到代理脚本: {proxy_py}")
             return
         py = shutil.which("python3") or shutil.which("python") or sys.executable
-        env = dict(os.environ)
-        env["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
-        env["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+        env = {**RELAY_TIMEOUTS, **os.environ,
+               "UR_PROXY_PROMPTS_DIR": str(prompts_dir()), "UR_PROXY_UPSTREAM_PORT": str(upstream)}
         self.proc = subprocess.Popen(
             [py, str(proxy_py), str(port)],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, text=True,
@@ -873,8 +810,8 @@ def proxy_health(port=DEFAULT_PROXY_PORT):
 
 
 def restart_openclaw_gateway(log):
-    """重启 CLE Kk 网关"""
-    log("==> 正在重启 CLE Kk 网关...")
+    """重启 C.le. 网关"""
+    log("==> 正在重启 C.le. 网关...")
     try:
         res = subprocess.run(openclaw_command("gateway", "restart"), capture_output=True, text=True, timeout=10, **hidden_process_kwargs())
         log("  " + (res.stdout.strip() or res.stderr.strip() or "指令已发送"))
@@ -1353,8 +1290,8 @@ def run_control_center():
         health = proxy_health()
         
         status_var.set(
-            f"📦 Node.js: {node_v}   |   CLE Kk 内核: {oc_v}\n"
-            f"📂 CLE Kk 路径: {root_path}\n"
+            f"📦 Node.js: {node_v}   |   C.le. 内核: {oc_v}\n"
+            f"📂 C.le. 路径: {root_path}\n"
             f"💉 注入补丁: {'✅ 已安装' if patched else '❌ 未安装'}   |   "
             f"🔄 代理状态: {'🟢 ' + pstat if pstat == '运行中' else '🔴 未运行'} (健康: {'✅' if health else '—'})"
         )
@@ -1372,9 +1309,9 @@ def run_control_center():
             else:
                 log("请先手动安装 Node.js (https://nodejs.org)")
                 
-        # 2. 检查 CLE Kk 兼容内核
+        # 2. 检查 C.le. 兼容内核
         if not resolve_openclaw_root():
-            log("⚠️ 未找到 CLE Kk 兼容内核，正在自动补齐...")
+            log("⚠️ 未找到 C.le. 兼容内核，正在自动补齐...")
             install_openclaw_npm(log)
             
         # 3. 安装提示词
@@ -1412,7 +1349,7 @@ def run_control_center():
     make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
     make_button(btn_row1, "⬆️ 检查并拉取更新", lambda: threading.Thread(target=lambda: [pull_and_update(log), refresh_status()], daemon=True).start(), color="#C2185B").pack(side="left", padx=4)
     make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
-    make_button(btn_row1, "🌐 打开 Web 界面", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
+    make_button(btn_row1, "🌐 打开 Web 界面", lambda: open_web("http://127.0.0.1:18789")).pack(side="left", padx=4)
 
     # ------------------ Tab 2: API Key 配置 ------------------
     api_card = tk.Frame(tab_api, bg=CARD, highlightbackground=PINK, highlightthickness=1)
@@ -1448,7 +1385,7 @@ def run_control_center():
             return
         update_api_config(prov, k, u, m, log)
         restart_openclaw_gateway(log)
-        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已保存，并已重启 CLE Kk 网关！")
+        messagebox.showinfo("已保存", f"提供商 [{prov}] 配置已保存，并已重启 C.le. 网关！")
 
     make_button(api_card, "💾 保存配置并应用", save_api_settings, color=DEEP).grid(row=4, column=1, sticky="e", padx=10, pady=10)
 
@@ -1459,7 +1396,7 @@ def run_control_center():
     make_button(adv_frame, "⏹ 停止注入代理", lambda: proxy.stop()).pack(side="left", padx=4)
     make_button(adv_frame, "🔄 重启 Gateway", lambda: restart_openclaw_gateway(log)).pack(side="left", padx=4)
     make_button(adv_frame, "🗑 卸载全部补丁", lambda: [apply_patch(True, log), refresh_status()]).pack(side="left", padx=4)
-    make_button(adv_frame, "📂 打开配置目录", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=4)
+    make_button(adv_frame, "📂 打开配置目录", lambda: open_folder(prompts_dir())).pack(side="left", padx=4)
 
     # 公共日志框（置底）
     log_lbl = tk.Label(root, text="📜 操作日志与运行输出:", bg=BG, fg=TEXT, font=("PingFang SC", 9, "bold"), anchor="w")
@@ -1506,9 +1443,8 @@ def run_relay(port, upstream):
     script = resource_path("proxy", "mm-retry-proxy.py")
     if not script.is_file():
         raise SystemExit(f"relay script missing: {script}")
-    os.environ["UR_PROXY_PROMPTS_DIR"] = str(prompts_dir())
-    os.environ["UR_PROXY_LISTEN"] = str(port)
-    os.environ["UR_PROXY_UPSTREAM_PORT"] = str(upstream)
+    os.environ.update({**RELAY_TIMEOUTS, **os.environ, "UR_PROXY_PROMPTS_DIR": str(prompts_dir()),
+                       "UR_PROXY_LISTEN": str(port), "UR_PROXY_UPSTREAM_PORT": str(upstream)})
     sys.argv = [sys.argv[0], str(port), str(upstream)]
     spec = importlib.util.spec_from_file_location("pinkie_relay", script)
     module = importlib.util.module_from_spec(spec)
@@ -1533,11 +1469,11 @@ def utf8_console():
 
 
 def main():
-    if "--inapp-browser-host" in sys.argv[1:]:
-        # 碧琪的浏览器窗口（Windows）：独立进程，自己的 WebView2 环境和代理。
+    if "--inapp-browser-host" in sys.argv[1:] or "--app-window" in sys.argv[1:]:
+        # 独立窗口进程（Windows）：碧琪的浏览器（自己的 WebView2 环境和代理）；装到桌面的作品（只开这件作品，不起网关）。
         from inapp_browser_host import run as run_inapp_browser
-
-        run_inapp_browser()
+        from windows_app_window import run as run_app_window
+        (run_inapp_browser if "--inapp-browser-host" in sys.argv[1:] else run_app_window)()
         return
     utf8_console()
     ports = relay_ports_from_argv()

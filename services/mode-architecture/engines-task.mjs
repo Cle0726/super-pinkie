@@ -20,6 +20,15 @@ const MAX_MISSES = 12;       // 连着这么多次读不到对话（约 1 分钟
 const LEVEL_IDS = new Set(['full-access', 'auto', 'auto-accept-edits', 'approval-required']);
 const REPORT_NOTE = '\n\n做完后用几句话交回：做了什么、改了哪些文件、怎么验证的、还剩什么。';
 const clip = (text, n) => clipGraphemes(String(text ?? '').trim(), n);
+// 交回给 Metre 转告用户的回话：截了就明说，不让后半截悄无声息地没了（同 #199）。
+const SAY_MAX = 12_000;
+export const REPORT_KEEP = 20_000;
+const clipReport = (text, n) => {
+  const full = String(text ?? '').trim();
+  const kept = clipGraphemes(full, n);
+  if (kept === full) return full;
+  return `${kept}\n…（已截断：后面还有约 ${Array.from(full).length - Array.from(kept).length} 字没放进来，全文在它的引擎台里，转告时要说明只交回了前面这部分）`;
+};
 const firstLine = text => String(text || '').split(/\r?\n/).map(line => line.trim()).find(Boolean) || '';
 const childKey = (parentKey, seed) => `agent:metre:pinkie-child:${crypto.createHash('sha256').update(JSON.stringify([parentKey, seed])).digest('hex').slice(0, 32)}`;
 
@@ -56,10 +65,10 @@ export function reportOf(summary, {engineName = '', status = ''} = {}) {
   const changed = files.length ? `\n\n改了：${files.slice(0, 20).join('、')}${files.length > 20 ? ` 等 ${files.length} 个文件` : ''}` : '';
   if (status === 'failed') {
     const why = summary?.error?.text || [...items].reverse().find(item => item.kind === 'error')?.text || '引擎没说原因';
-    return `${engineName || '外部引擎'}没做成：${why}${summary?.error?.resetAt ? `（${summary.error.resetAt} 恢复）` : ''}${reply ? `\n\n它最后说：${clip(reply.text, 2000)}` : ''}${changed}`;
+    return `${engineName || '外部引擎'}没做成：${why}${summary?.error?.resetAt ? `（${summary.error.resetAt} 恢复）` : ''}${reply ? `\n\n它最后说：${clipReport(reply.text, REPORT_KEEP)}` : ''}${changed}`;
   }
-  if (status === 'stopped') return `${engineName || '外部引擎'}停下了，这件活没做完。${reply ? `\n\n停之前它说：${clip(reply.text, 2000)}` : ''}${changed}`;
-  return `${reply ? clip(reply.text, 6000) : `${engineName || '外部引擎'}做完了，没有写回话。`}${changed}`;
+  if (status === 'stopped') return `${engineName || '外部引擎'}停下了，这件活没做完。${reply ? `\n\n停之前它说：${clipReport(reply.text, REPORT_KEEP)}` : ''}${changed}`;
+  return `${reply ? clipReport(reply.text, REPORT_KEEP) : `${engineName || '外部引擎'}做完了，没有写回话。`}${changed}`;
 }
 
 export class EngineTasks {
@@ -139,8 +148,10 @@ export class EngineTasks {
       const {key, record} = this.child(parentKey, params.target);
       const text = String(params.text || '').trim();
       if (!text) throw new Error('text 写要递的话');
+      // 旧逻辑把超长的话截到 12000 字照样回「递过去了」，引擎只收到前半截。超了就不递，说清楚让它拆短。
+      if (text.length > SAY_MAX) throw new Error(`text 有 ${text.length} 字，超过一次能递的 ${SAY_MAX} 字，没有递出去；拆成几次说，或者把长材料写进文件再告诉它路径`);
       await this.ensureRunning();
-      const summary = await this.bridge.send({threadId: record.threadId, text: text.slice(0, 12_000), mode: 'queue'});
+      const summary = await this.bridge.send({threadId: record.threadId, text, mode: 'queue'});
       this.watch(key, {engineAsked: ''});
       return {target: key, status: summary.status, message: '话递过去了。做完会再交回汇报、叫醒你'};
     }

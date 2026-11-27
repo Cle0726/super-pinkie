@@ -223,7 +223,9 @@ const AUDIT_CORRUPTION_FAILURE = /(?:审计链断裂|审计日志不可读|状�
 // OpenClaw has already run its own compaction recovery before agent_end emits
 // this terminal error. Replaying the same oversized transcript cannot shrink
 // it; it only starts another multi-minute compaction and burns quota forever.
-const CONTEXT_OVERFLOW_FAILURE = /(?:context overflow|prompt too large for (?:the )?model|maximum context length|context length exceeded|too many (?:input )?tokens)/i;
+// The aws-quick gateway rejects a single frame over ~63000 bytes with
+// `context_length_exceeded` / "64 KB message limit"; replaying it is the same dead end.
+const CONTEXT_OVERFLOW_FAILURE = /(?:context overflow|prompt too large for (?:the )?model|maximum context length|context[ _]length[ _]exceeded|too many (?:input )?tokens|64 ?KB message limit|bytes after shortening, over \d+)/i;
 // Different from a plain over-limit request: this message means the native
 // compactor did create/re-map a checkpoint but could not hand control back to
 // the interrupted turn.  It is safe to make one bounded continuation attempt

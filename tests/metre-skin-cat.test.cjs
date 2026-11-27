@@ -791,9 +791,10 @@ test('Metre 11-24 keys and backstage: one key language with every state in day a
   assert.match(code, /const top = window\.innerHeight - BOTTOM - 24;/, '输入框正下方、离窗口下沿固定 8px'); assert.match(code, /const BOTTOM = 8;/);
   assert.match(keys, /\[data-metre-bs\] \.agent-chat__composer-shell \{ margin-bottom: 24px; \}/, '输入框那一栏让出这一条');
   assert.match(code, /width: Math\.round\(r\.width\) \+ 'px'/, '宽度跟输入框走，不跟状态走');
-  assert.match(code, /n\.style\.width = widths\[tier\]\[n\.dataset\.seg\] \+ 'px'/, '每一格定宽');
+  assert.match(code, /n\.style\.width = widths\[tier === 'tight' \? 'short' : tier\]\[n\.dataset\.seg\] \+ 'px'/, '每一格定宽（紧档用短档宽度）');
   assert.match(code, /if \(!r \|\| r\.width < 280 \|\| onHome\(\) \|\| root\.getAttribute\('data-metre-board'\) === 'overlay'\)/, '首页、总谱浮层时不出现');
-  assert.match(code, /short: .引擎 \$\{voices\.length\}., pop: true/, '声部多了收成总数，点开看明细');
+  assert.ok(code.includes("short: `引擎 ${voices.length}` + (bits.length ? ' · ' + (n('fail') && n('wait') ? bits.join(' · ') : bits[0]) : ''), pop: true"), '声部多了收成总数加要紧的：失败、等你同时有就两个数都留（18:06 预审第 1 条，19:50 改成字、不用符号，11-24 21:30 写全「1 失败 · 1 等你」），否则留最要紧的一项（16:10 打回第 4 条），点开看明细');
+  assert.match(keys, /\.pk-bs__seg > span \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 16px; \}/, '格子放不下时省略号，不挤出格子；行高装得下中文字头');
   assert.match(keys, /\.shell:not\(\.shell--nav-drawer-open\) > \.shell-nav-backdrop \{ display: none; \}/, '收着的导航遮罩不占位置');
   assert.match(keys, /\[data-metre-board="overlay"\] :is\(\.agent-chat__input, \.pk-run, \.pk-metre-cat--full\) \{ visibility: hidden; \}/, '浮层总谱打开时输入框让位');
   assert.match(read(INJ + 'laolao-metre-board.js'), /page\.style\.bottom = 'var\(--metre-bs-room, 0px\)';/);

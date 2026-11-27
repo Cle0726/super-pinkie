@@ -189,11 +189,14 @@ def version_tag(tag, files, hashes=None):
     return tag[:match.start(1)] + '/' + path + '?' + urlencode(query) + tag[match.end(1):]
 
 
-def entry_tags(root, files):
+def entry_tags(root, files, stamped=None):
+    # stamped: the (data_map, hashes) pair stamped_sources(root, files) returns.
+    # A caller that already computed it for the same root passes it in, so one
+    # install reads and hashes the sources once instead of seven times.
     fragment = (Path(root) / 'ui/injections/laolao-head.fragment.html').read_text(encoding='utf-8')
     if fragment.count(NATIVE_SLOT) != 1:
         raise ValueError('shared head must contain exactly one native-assets slot')
-    data_map, hashes = stamped_sources(root, files)
+    data_map, hashes = stamped if stamped is not None else stamped_sources(root, files)
     before, after = fragment.split(NATIVE_SLOT)
     tags = []
     for section in (before, after):
@@ -225,11 +228,13 @@ def outside_inline(html, transform):
     return ''.join(chunk if i % 2 else transform(chunk) for i, chunk in enumerate(chunks))
 
 
-def normalize_index(html, root, files, control=None):
+def normalize_index(html, root, files, control=None, stamped=None):
     # Browser and gateway must hash exactly the same LF-normalized script bytes.
     html = html.replace('\r\n', '\n').lstrip('\ufeff')
     original_inline = inline_scripts(html)
-    data_map, hashes = stamped_sources(root, files)
+    if stamped is None:
+        stamped = stamped_sources(root, files)
+    data_map, hashes = stamped
     html = re.sub(r",?\s*interactive-widget=[A-Za-z-]+", "", html)
     # WKWebView already sets this at document start; WebView2's loaded bridge
     # used to arrive after the first paint. Share the same initial surface.
@@ -257,8 +262,8 @@ def normalize_index(html, root, files, control=None):
     html = TAG.sub(remove, html)
     if len([t for t in native if t.lower().startswith('<script')]) != 1:
         raise ValueError('expected exactly one upstream entry module')
-    groups = entry_tags(root, files)
-    early = '\n    '.join(groups[0][:2])
+    groups = entry_tags(root, files, stamped)
+    early ='\n    '.join(groups[0][:2])
     block = '\n'.join(groups[0][2:] + native + groups[1])
     # Whitespace outside scripts is disposable. Clearing former tag-only lines
     # makes repeated installation byte-for-byte idempotent.
@@ -305,10 +310,24 @@ def run_stamp_tool(root, control):
         subprocess.run([node, str(script), '--root', str(root), '--control-ui', str(control)], check=True)
 
 
-def install(root, control):
+def brand_service_worker(control):
+    # 用户 11-24：界面上不出现上游名字。通知标题来自 sw.js（不是 assets/ 分块），
+    # 两个平台都在这里把它改成 C.le.；只换独立的词，技术名字（openclaw-*）不动。
+    worker = Path(control) / 'sw.js'
+    if worker.is_file():
+        text = worker.read_text(encoding='utf-8')
+        write_if_changed(worker, re.sub(r'(?<![A-Za-z0-9_$-])OpenClaw(?![A-Za-z0-9_$-])', 'C.le.', text).encode('utf-8'))
+
+
+def install(root, control, verify=True):
+    # verify=False is only for a caller that inspects the package itself right
+    # afterwards (main: stamp.mjs rewrites files after install, so only the
+    # inspect after stamping sees the final bytes). Each inspect reads every
+    # package file back, which is most of an install's time on Windows.
     root, control = Path(root), Path(control)
     files = source_files(root)
-    data_map, _ = stamped_sources(root, files)
+    stamped = stamped_sources(root, files)
+    data_map = stamped[0]
     index = control / 'index.html'
     # The entrypoint is browser code too. A platform runtime overlay must not
     # supply different feature flags, bootstrap or fallback UI.
@@ -327,22 +346,31 @@ def install(root, control):
         if file.is_file() and (retired(name) or (ui_resource(name) and name not in data_map and name not in RUNTIME_DATA)):
             file.unlink()
     refresh_native_imports(control)
-    html = normalize_index(base_html, root, files, control)
+    brand_service_worker(control)
+    html = normalize_index(base_html, root, files, control, stamped)
     write_if_changed(index, html.encode('utf-8'))
-    actual = inspect(root, control)
+    if not verify:
+        return None
+    # Reuse only the source side; inspect still reads every package file back.
+    actual = inspect(root, control, files, stamped)
     write_if_changed(control / MANIFEST, (json.dumps(actual, ensure_ascii=False, indent=2) + '\n').encode())
     return actual
 
 
-def inspect(root, control):
+def inspect(root, control, files=None, stamped=None):
+    # files / stamped: source_files(root) and stamped_sources(root, files) when
+    # the caller (install) has just computed them. They cover only the source
+    # side; every package file under control is still read back and compared.
     root, control = Path(root), Path(control)
-    expected = source_files(root)
-    data_map, hashes = stamped_sources(root, expected)
+    expected = files if files is not None else source_files(root)
+    if stamped is None:
+        stamped = stamped_sources(root, expected)
+    data_map, hashes = stamped
     html = (control / 'index.html').read_bytes().decode('utf-8-sig')
     template = root / 'ui/control-ui.index.html'
-    if template.is_file() and html != normalize_index(template.read_bytes().decode('utf-8-sig'), root, expected, control):
+    if template.is_file() and html != normalize_index(template.read_bytes().decode('utf-8-sig'), root, expected, control, stamped):
         raise ValueError('package entry HTML differs from the shared entrypoint')
-    wanted = [t for group in entry_tags(root, expected) for t in group]
+    wanted = [t for group in entry_tags(root, expected, stamped) for t in group]
     actual = [m[0] for m in TAG.finditer(html) if (r := REF.search(m[0])) and owned(r[1])
               and ref_path(r[1]) != 'laolao-handoff-bootstrap.js']
     if actual != wanted:
@@ -424,7 +452,8 @@ def main():
     if args.control_ui is None:
         parser.error('--control-ui is required')
     if args.action == 'install':
-        install(args.root, args.control_ui)
+        # The inspect below checks the stamped result, so install skips its own.
+        install(args.root, args.control_ui, verify=False)
         run_stamp_tool(args.root, args.control_ui)
     result = inspect(args.root, args.control_ui)
     if args.action == 'install':
