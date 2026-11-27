@@ -108,6 +108,9 @@ export class LearningGame {
     new GameContent(this);
     new GamePractice(this);
   }
+  // 子模块的后台计时器（目前是考场的真题轮询）：服务停 / 插件重载时清掉，服务起时再开（不叠加）。
+  start() { this.modules.exam?.startTimers?.(); }
+  stop() { for (const m of Object.values(this.modules)) { try { m?.stop?.(); } catch { /* 停一个坏了不影响别的 */ } } }
 
   // ---------- 存储：严格读，坏了用上一份好的，绝不静默清零 ----------
   readRaw(file) {
@@ -848,8 +851,15 @@ function howToGet(form) {
 }
 
 // ---------- 注册 ----------
+// 本进程里还活着的游戏实例：插件被再加载一次（热重载 / 重新注册）时先把上一份的后台计时器停掉，免得轮询一份份叠上去。
+const liveGames = new Set();
 export function registerLearningGame(api, store, options = {}) {
+  for (const old of liveGames) { try { old.stop(); } catch { /* ignore */ } }
+  liveGames.clear();
   const game = new LearningGame(store, options);
+  liveGames.add(game);
+  api.on?.('gateway_stop', () => { game.stop(); liveGames.delete(game); });
+  api.registerService?.({id: 'pinkie-learning-game', start() { liveGames.add(game); game.start(); }, stop() { game.stop(); liveGames.delete(game); }});
   store.game = game;
   const register = (name, handler) => api.registerGatewayMethod(`pinkie.learning.game.${name}`, async ({params, respond}) => {
     try {

@@ -22,7 +22,7 @@ import {
   launchVisualBrowser,
   startVisualServer,
 } from './visual/lib/harness.mjs';
-import {comparePng, decodePng} from './visual/lib/png-diff.mjs';
+import {comparePng, decodePng, describeRepeatDiff} from './visual/lib/png-diff.mjs';
 
 const BASELINE_DIR = path.join(REPO_ROOT, 'tests/visual/baseline');
 const DIFF_DIR = path.join(REPO_ROOT, 'tests/visual/diff');
@@ -80,7 +80,7 @@ test('visual baseline rendering, determinism, and pixel diff check', async () =>
             assert.equal(
               repeatDiff.diffPixels,
               0,
-              `${name} non-deterministic render: run 1 vs run ${run + 1} differed by ${repeatDiff.diffPixels} px (${repeatDiff.diffPercent.toFixed(4)}%)`,
+              describeRepeatDiff({scene: scene.id, theme, runA: 1, runB: run + 1}, repeatDiff),
             );
           }
         }
