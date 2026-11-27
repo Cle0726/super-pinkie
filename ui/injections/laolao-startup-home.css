@@ -82,6 +82,8 @@ html[data-laolao-startup-reveal="1"] .laolao-startup-home__recent {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
+/* The day page behind the rows is itself tinted, so the bare accent glyph sits near 3:1 before the square is added. */
+html:not([data-pinkie-night]) .laolao-startup-home__icon { color: color-mix(in srgb, var(--accent) 85%, #000); }
 .laolao-startup-home__icon > svg {
   width: 16px;
   height: 16px;
@@ -133,9 +135,7 @@ html[data-laolao-startup-reveal="1"] .laolao-startup-home__recent {
   from { opacity: 0; transform: translateY(8px); filter: blur(6px); }
   to { opacity: 1; transform: none; filter: none; }
 }
-html[data-pinkie-night] .laolao-startup-home .agent-chat__welcome > h2 {
-  text-shadow: none;
-}
+html[data-pinkie-night] .laolao-startup-home .agent-chat__welcome > h2 { text-shadow: none; }
 @media (max-width: 900px) {
   .laolao-startup-home { padding-inline: 20px; }
   .laolao-startup-home .agent-chat__welcome[data-laolao-minimal-welcome="1"] > h2 { font-size: 22px !important; }

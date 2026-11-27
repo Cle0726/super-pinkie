@@ -355,12 +355,6 @@ export function validateOrganizationOperations(operations, notes, sessionKey) {
 
 function noteSourceText(note) { return String(note.original ?? note.content ?? ''); }
 
-function originalFragment(value, original) {
-  if (typeof value !== 'string') return '';
-  const fragment = value.trim(), compact = text => text.replace(/\s/g, '');
-  return fragment && compact(original).includes(compact(fragment)) ? fragment : '';
-}
-
 const validateNoteWords = validateMovedWords;
 
 // 「记一条」以后判断是不是其实只是单词：整段能拆成 1–5 个词条，中文部分只是释义，没有讲道理。

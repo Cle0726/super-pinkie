@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {after, test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
@@ -9,19 +9,48 @@ import {playwright} from '../tools/study-desk/harness.mjs';
 const file = (name) => fileURLToPath(new URL('../ui/injections/' + name, import.meta.url));
 const read = (name) => fs.readFileSync(file(name), 'utf8');
 
+// CI 提速：整个文件只起一个浏览器，各测试共用；隔离仍按测试走（每个测试自己开一个 context，结束就关）。
+// 起浏览器的 Promise 只建一次，失败（没装 Playwright / 起不来）也记住，之后每个测试都同样跳过。
+let shared = null;
+async function sharedBrowser(t) {
+  shared ??= (async () => {
+    let lib;
+    try { lib = playwright(); } catch { return {skip: 'Playwright is not installed here'}; }
+    const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+    try { return {browser: await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})})}; }
+    catch (error) { return {skip: 'no browser: ' + error.message.split('\n')[0]}; }
+  })();
+  const got = await shared;
+  if (got.skip) { t.skip(got.skip); return null; }
+  return got.browser;
+}
+
+after(async () => {
+  const got = await shared;
+  if (got?.browser) await got.browser.close();
+});
+
+// 11-26 计时（#217）：前两条在 CI 上 50–60 s（本机 1–3 s），一次 60 s 超时。每一步打时间看慢在哪一步，不改任何断言。
+// 每步完成立刻打一行（超时也能看出卡在哪一步之后），结束再打一行汇总。共用浏览器在第一条测试里才起，所以 sync-1 的 launch 含起浏览器。
+function stopwatch(label) {
+  const t0 = performance.now(); let last = t0; const laps = [];
+  return {
+    lap(step) { const now = performance.now(); const line = `${step} ${Math.round(now - last)}ms`; laps.push(line); last = now; console.log(`[timing ${label}] ${line} (at ${Math.round(now - t0)}ms)`); },
+    done() { console.log(`[timing ${label}] total ${Math.round(performance.now() - t0)}ms: ${laps.join(' | ')}`); },
+  };
+}
+
 test('the backstage band and the score read one connection state, so neither says the gateway is down after it came back', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const sw = stopwatch('sync-1');
+  const browser = await sharedBrowser(t); if (!browser) return;
+  sw.lap('launch');
+  const context = await browser.newContext({viewport: {width: 1024, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 720}});
+    const tab = await context.newPage(); sw.lap('L29:newPage');
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-board.css')}\n${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:100px;top:560px;width:780px;height:92px"></section></body></html>`;
-    await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body}));
-    await tab.goto('http://127.0.0.1:30118/chat?session=agent%3Ametre%3Atest');
+    await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body})); sw.lap('L32:route');
+    await tab.goto('http://127.0.0.1:30118/chat?session=agent%3Ametre%3Atest'); sw.lap('L33:goto');
     await tab.evaluate(() => {
       window.CONN = {online: true, attempt: 0};
       window.calls = [];
@@ -33,97 +62,95 @@ test('the backstage band and the score read one connection state, so neither say
         if (method === 'pinkie.engines.status') return {enabled: false};
         return {};
       }};
-    });
-    for (const name of ['laolao-metre-board.js', 'laolao-metre-board-data.js', 'laolao-metre-backstage.js']) await tab.addScriptTag({content: read(name)});
+    }); sw.lap('L45:stubs');
+    for (const name of ['laolao-metre-board.js', 'laolao-metre-board-data.js', 'laolao-metre-backstage.js']) await tab.addScriptTag({content: read(name)}); sw.lap('L46:addScriptTag');
     const tick = () => tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
     const band = () => tab.evaluate(() => document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)')?.innerText.replace(/\s+/g, ' ') || '');
     const score = () => tab.evaluate(() => ({notice: document.querySelector('#pk-metre-board .pk-metre-board__notice')?.textContent || '', text: document.getElementById('pk-metre-board')?.innerText || '', stale: window.__pinkieMetreBoardData.stale}));
-    await tick();
+    await tick(); sw.lap('L50:tick');
     assert.match(await band(), /网关 连着/);
     // 1. 先断线，再恢复，再打开总谱
-    await tab.evaluate(() => { window.CONN.online = false; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); });
-    await tick();
+    await tab.evaluate(() => { window.CONN.online = false; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); }); sw.lap('L53:evaluate');
+    await tick(); sw.lap('L54:tick');
     assert.match(await band(), /网关 断了/, 'the band follows the gateway store');
-    await tab.evaluate(() => { window.CONN.online = true; window.dispatchEvent(new Event('pinkie:sidebar-gateway-ready')); });
-    await tick();
-    await tab.evaluate(() => window.__pinkieMetreBoard.open());
-    await tab.waitForFunction(() => window.calls.includes('pinkie.metre.board') && /Metre 空闲/.test(document.getElementById('pk-metre-board')?.innerText || ''), null, {timeout: 5000});
+    await tab.evaluate(() => { window.CONN.online = true; window.dispatchEvent(new Event('pinkie:sidebar-gateway-ready')); }); sw.lap('L56:evaluate');
+    await tick(); sw.lap('L57:tick');
+    await tab.evaluate(() => window.__pinkieMetreBoard.open()); sw.lap('L58:evaluate');
+    await tab.waitForFunction(() => window.calls.includes('pinkie.metre.board') && /Metre 空闲/.test(document.getElementById('pk-metre-board')?.innerText || ''), null, {timeout: 5000}); sw.lap('L59:waitForFunction');
     let s = await score();
     assert.equal(s.stale, false);
     assert.equal(s.notice, '', 'no 断线 strip once the gateway is back');
     assert.doesNotMatch(s.text, /连接断了/);
     assert.match(await band(), /网关 连着/);
     // 2. 总谱开着时断线：两边一起说断了；恢复：断线条和「此刻」一起恢复
-    await tab.evaluate(() => { window.CONN.online = false; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); });
-    await tick();
+    await tab.evaluate(() => { window.CONN.online = false; window.dispatchEvent(new Event('pinkie:sidebar-gateway-lost')); }); sw.lap('L66:evaluate');
+    await tick(); sw.lap('L67:tick');
     s = await score();
     assert.match(s.notice, /连接断了/); assert.match(await band(), /网关 断了/);
-    await tab.evaluate(() => { window.CONN.online = true; });
-    await tick();
-    await tab.waitForFunction(() => !document.querySelector('#pk-metre-board .pk-metre-board__notice') && /Metre 空闲/.test(document.getElementById('pk-metre-board')?.innerText || ''), null, {timeout: 5000});
+    await tab.evaluate(() => { window.CONN.online = true; }); sw.lap('L70:evaluate');
+    await tick(); sw.lap('L71:tick');
+    await tab.waitForFunction(() => !document.querySelector('#pk-metre-board .pk-metre-board__notice') && /Metre 空闲/.test(document.getElementById('pk-metre-board')?.innerText || ''), null, {timeout: 5000}); sw.lap('L72:waitForFunction');
     assert.match(await band(), /网关 连着/);
     // 3. 连着、但这次总谱没读到：说「没读到」，不说「连接断了」
-    await tab.evaluate(() => { const real = window.__laolaoSidebar.gwRequest; window.__laolaoSidebar.gwRequest = async (m, ...rest) => (m === 'pinkie.metre.board' ? Promise.reject(new Error('bad')) : real(m, ...rest)); window.__pinkieMetreBoardData.refresh(); });
-    await tab.waitForFunction(() => /没读到/.test(document.querySelector('#pk-metre-board .pk-metre-board__notice')?.textContent || ''), null, {timeout: 5000});
+    await tab.evaluate(() => { const real = window.__laolaoSidebar.gwRequest; window.__laolaoSidebar.gwRequest = async (m, ...rest) => (m === 'pinkie.metre.board' ? Promise.reject(new Error('bad')) : real(m, ...rest)); window.__pinkieMetreBoardData.refresh(); }); sw.lap('L75:evaluate');
+    await tab.waitForFunction(() => /没读到/.test(document.querySelector('#pk-metre-board .pk-metre-board__notice')?.textContent || ''), null, {timeout: 5000}); sw.lap('L76:waitForFunction');
     assert.doesNotMatch((await score()).text, /连接断了/);
-  } finally { await browser.close(); }
+  } finally { await context.close(); sw.lap('close'); sw.done(); }
 });
 
 // 11-24 复验第 1 条：「不同步」两个方向都要认。页面以为在跑（停止键亮着、chatRunId 有值）、后台却空闲——这正是用户最常碰到的「转圈不停」；
 // 以及后台在跑、页面停着。超过 3 秒都显示「不同步」和「同步」键；对上以后（页面自己被清掉，或者点了同步）说 2 秒「已和后台对齐」再回常态。
 test('the band calls out an unsynced round in both directions after 3 seconds, and says it is aligned again for 2 seconds', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const sw = stopwatch('sync-2');
+  const browser = await sharedBrowser(t); if (!browser) return;
+  sw.lap('launch');
+  const context = await browser.newContext({viewport: {width: 1024, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 720}});
+    const tab = await context.newPage(); sw.lap('L91:newPage');
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:100px;top:560px;width:780px;height:92px"></section></body></html>`;
-    await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html', body}));
-    await tab.goto('http://127.0.0.1:30119/chat?session=agent%3Ametre%3Atest');
+    await tab.route('http://127.0.0.1:30119/**', (route) => route.fulfill({contentType: 'text/html', body})); sw.lap('L94:route');
+    await tab.goto('http://127.0.0.1:30119/chat?session=agent%3Ametre%3Atest'); sw.lap('L95:goto');
     await tab.evaluate(() => {
       window.ACTIVE = false;
       const pane = document.createElement('openclaw-chat-pane'); pane.state = {chatRunId: null, chatSending: false, chatStream: null, chatQueue: [], sessionKey: 'agent:metre:test'}; document.body.append(pane);
       window.__pinkieRunStatus = {get state() { return {key: 'agent:metre:test', status: {active: window.ACTIVE}, conn: {online: true, attempt: 0}, live: {active: false}}; },
         refresh: async () => { if (window.FINISH_ON_REFRESH) window.ACTIVE = false; return null; }};
       window.__laolaoSidebar = {gwRequest: async (method) => (method === 'pinkie.engines.status' ? {enabled: false} : {})};
-    });
-    await tab.addScriptTag({content: read('laolao-metre-backstage.js')});
+    }); sw.lap('L102:stubs');
+    await tab.addScriptTag({content: read('laolao-metre-backstage.js')}); sw.lap('L103:addScriptTag');
     const tick = () => tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
     // 读每一格的 title（就是全文）。带子按输入框宽度选全文 / 短档，CI 的 Linux 没有同款中文字体，780px 放不下全文就换短档，
     // 可见文字跟着环境变；title 两档一样，断言只看状态，不看字体。
     const band = () => tab.evaluate(() => [...document.querySelectorAll('.pk-metre-backstage:not(.pk-metre-backstage--probe) .pk-bs__seg')].map((n) => n.title).join(' '));
     const hasSync = () => tab.evaluate(() => Boolean(document.querySelector('.pk-metre-backstage .pk-bs__sync')));
-    await tick();
+    await tick(); sw.lap('L109:tick');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
     // 1. 页面以为在跑、后台空闲：不到 3 秒不喊；过了 3 秒自己变成「不同步」（中间没有任何事件，靠带子自己的一次性复查）
-    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = 'stuck-run'; });
-    await tick();
-    await tab.waitForTimeout(1200);
+    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = 'stuck-run'; }); sw.lap('L112:evaluate');
+    await tick(); sw.lap('L113:tick');
+    await tab.waitForTimeout(1200); sw.lap('L114:waitForTimeout');
     assert.match(await band(), /本轮 后台空闲 · 页面在等回复/);
     assert.equal(await hasSync(), false);
-    await tab.waitForTimeout(2400);
+    await tab.waitForTimeout(2400); sw.lap('L117:waitForTimeout');
     assert.match(await band(), /不同步 · 后台空闲 · 页面在等回复/, 'page waiting but the backend is idle is unsynced too');
     assert.equal(await hasSync(), true, 'and offers 同步');
     // 2. 页面自己被清掉（已有代码约 4 秒后会清）：先说「已和后台对齐」，停 2 秒再回常态
-    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = null; });
-    await tab.waitForTimeout(800);
+    await tab.evaluate(() => { document.querySelector('openclaw-chat-pane').state.chatRunId = null; }); sw.lap('L121:evaluate');
+    await tab.waitForTimeout(800); sw.lap('L122:waitForTimeout');
     assert.match(await band(), /本轮 已和后台对齐/);
-    await tab.waitForTimeout(2000);
+    await tab.waitForTimeout(2000); sw.lap('L124:waitForTimeout');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
     // 3. 反方向：后台在跑、页面停着；过了 3 秒「不同步」，点「同步」以后后台这一轮也结束了 → 「已和后台对齐」→ 常态
-    await tab.evaluate(() => { window.ACTIVE = true; window.FINISH_ON_REFRESH = false; });
-    await tick();
-    await tab.waitForTimeout(3600);
+    await tab.evaluate(() => { window.ACTIVE = true; window.FINISH_ON_REFRESH = false; }); sw.lap('L127:evaluate');
+    await tick(); sw.lap('L128:tick');
+    await tab.waitForTimeout(3600); sw.lap('L129:waitForTimeout');
     assert.match(await band(), /不同步 · 后台在跑 · 页面停着/);
-    await tab.evaluate(() => { window.FINISH_ON_REFRESH = true; document.querySelector('.pk-metre-backstage .pk-bs__sync').click(); });
-    await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe) [data-seg="run"]')?.title || ''), null, {timeout: 3000});
-    await tab.waitForTimeout(2600);
+    await tab.evaluate(() => { window.FINISH_ON_REFRESH = true; document.querySelector('.pk-metre-backstage .pk-bs__sync').click(); }); sw.lap('L131:evaluate');
+    await tab.waitForFunction(() => /已和后台对齐/.test(document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe) [data-seg="run"]')?.title || ''), null, {timeout: 3000}); sw.lap('L132:waitForFunction');
+    await tab.waitForTimeout(2600); sw.lap('L133:waitForTimeout');
     assert.match(await band(), /本轮 后台空闲 · 页面停着/);
-  } finally { await browser.close(); }
+  } finally { await context.close(); sw.lap('close'); sw.done(); }
 });
 
 // 11-24 16:10 打回第 4 条：820 宽时状态带走短档，引擎 4 个声部（1 失败、1 等你）只剩「引擎 4」，「不同步」也只剩三个字、看不出哪边在跑。
@@ -132,14 +159,10 @@ test('the band calls out an unsynced round in both directions after 3 seconds, a
 // 11-24 21:30 派活第 3 条：「1败·1等」看不懂，写全「引擎 4 · 1 失败 · 1 等你」；格子放不下时省略号，悬停 / 读屏是全文。
 // 19:50 审查建议：不用「✕」「!」符号（读屏念成乘号 / 叹号，✕ 像关闭键）；引擎格按钮的读屏名（aria-label）是全档文字。
 test('the short tier of the band still says what failed or waits, and which side is running when unsynced', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 820, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const tab = await context.newPage();
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-keys.css')}</style></head>
       <body><main class="content" style="position:fixed;inset:0"></main><section class="agent-chat__input" style="position:fixed;left:40px;top:560px;width:300px;height:92px"></section></body></html>`;
     await tab.route('http://127.0.0.1:30120/**', (route) => route.fulfill({contentType: 'text/html', body}));
@@ -165,7 +188,8 @@ test('the short tier of the band still says what failed or waits, and which side
     assert.deepEqual(short, {failWait: '引擎 4 · 1 失败 · 1 等你', failOnly: '引擎 2 · 1 失败', fail2wait3: '引擎 5 · 2 失败 · 3 等你', wait: '引擎 2 · 1 等你', run: '引擎 2 · 1 在跑', done: '引擎 1',
       backRunning: '不同步 · 后台在跑', backIdle: '不同步 · 后台空闲'});
     // 真画出来：窄输入框只能走短档，引擎格失败数、等你数都在，每一格都不挤字
-    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})));
+    // B28：输入框宽正好等于短档要的宽（原来写死 300px，短档其实放不下、格子伸出带子外；现在放不下会走紧档）
+    await tab.evaluate(() => { document.querySelector('.agent-chat__input').style.width = window.PinkieMetreBackstage.tierWidths().short + 'px'; window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {}})); });
     const drawn = await tab.evaluate(() => {
       const band = document.querySelector('.pk-metre-backstage:not(.pk-metre-backstage--probe)');
       return {tier: band?.dataset.tier, eng: band?.querySelector('[data-seg="eng"] span')?.textContent, engLabel: band?.querySelector('[data-seg="eng"]')?.getAttribute('aria-label'),
@@ -175,18 +199,14 @@ test('the short tier of the band still says what failed or waits, and which side
     assert.equal(drawn.eng, '引擎 4 · 1 失败 · 1 等你', '820 宽短档：1 失败 + 1 等你两个数都要留，写全不缩成「败」「等」');
     assert.equal(drawn.engLabel, '引擎 4 · 1 失败 · 1 等你', '短档时读屏名仍是全档文字');
     assert.deepEqual(drawn.squeezed, [], '短档每一格都放得下');
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 test('the band and the model row under the composer sit on one solid theme plate, day and night, so no pixel backdrop shows behind their text', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 1024, height: 768}});
   try {
-    const tab = await browser.newPage({viewport: {width: 1024, height: 768}});
+    const tab = await context.newPage();
     // 一整块红色铺在最底下代替像素背景（skin.css 会把 html / body 刷成主题底色，所以不能直接染 body）：底板 / 带子哪里没盖住，取色就会取到红色
     const body = `<!doctype html><html data-laolao-mode="metre"><head><style>${read('laolao-metre-skin.css')}</style><style>${read('laolao-metre-keys.css')}</style>
       <style>body { margin: 0; } .agent-chat__composer-shell { position: fixed; left: 122px; top: 638px; width: 780px; height: 106px; z-index: 1; }</style></head>
@@ -227,7 +247,7 @@ test('the band and the model row under the composer sit on one solid theme plate
       assert.ok(px.band.every(near), '后台带左端「后台」、格与格之间、右端都是实底：' + px.band.join(' / '));
       assert.equal(px.above, '255,0,0', '底板只到框体下圆角，上面对话区照旧透出背景');
     }
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });
 
 // 11-24 21:30 派活第 2 条：窄窗（820）侧栏抽屉打开、命令面板打开时，后台带（body 上 z=36）画在抽屉 / 遮罩上面，压住 METRE 账号键下半。
@@ -236,14 +256,10 @@ test('the band and the model row under the composer sit on one solid theme plate
 // 11-24 22:37 打回：z=0 让带子掉到输入框外壳底板下面，格子上沿 6px 被盖、字头被切。遮罩开着时 app 层（openclaw-app z=1）也不再自成层叠上下文，
 // 每格上边框和文字区里，遮罩下面第一层必须是带子自己；反例只留 z=0、拿掉 app 层那一条，外壳要盖住格子（测试能红）。
 test('the band sinks under the narrow nav drawer, its backdrop and the command palette, so it never covers the METRE key', {timeout: 60_000}, async (t) => {
-  let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
-  try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
+  const browser = await sharedBrowser(t); if (!browser) return;
+  const context = await browser.newContext({viewport: {width: 820, height: 720}});
   try {
-    const tab = await browser.newPage({viewport: {width: 820, height: 720}});
+    const tab = await context.newPage();
     const keys = read('laolao-metre-keys.css');
     const fix = keys.split(/\r?\n/).find((l) => l.includes(':has(.shell--nav-drawer-open)') && l.includes('.pk-metre-backstage'));
     assert.ok(fix, 'keys.css 里有「抽屉 / 命令面板开着时带子退到 app 层下面」那一条');
@@ -362,5 +378,5 @@ test('the band sinks under the narrow nav drawer, its backdrop and the command p
     const nat = await ring();
     assert.ok(cr(nat.track, 'rgb(247, 246, 243)') < 3 || /rgba/.test(nat.track), '反例：原生日间底圈不到 3:1 ' + nat.track);
     assert.ok(cr(nat.dash, 'rgb(245, 244, 241)') < 4.5, '反例：原生日间「—」不到 4.5:1 ' + nat.dash);
-  } finally { await browser.close(); }
+  } finally { await context.close(); }
 });

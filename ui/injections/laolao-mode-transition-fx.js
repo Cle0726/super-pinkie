@@ -958,6 +958,14 @@
       add(ui.tip, 'tip');
       if (waiting && frames.length) compositorProgress = .08;
     };
+    // 首帧先直接写进五个元素，动画起来之前这一帧就在屏上，不闪回默认值。
+    const applyFrame = (frame) => {
+      ui.fill.style.transform = frame.fill;
+      ui.fillSurface.style.transform = frame.surface;
+      ui.litViewport.style.transform = frame.fill;
+      ui.lit.style.transform = frame.surface;
+      ui.tip.style.transform = frame.tip;
+    };
     const startWaitingProgress = () => {
       progressBox = {w: ui.progress.clientWidth, h: ui.progress.clientHeight};
       if (!progressBox.w || typeof ui.fill.animate !== 'function') {
@@ -974,12 +982,7 @@
         const filled = progressBox.h + (progressBox.w - progressBox.h) * p;
         return {offset: t / duration, fill: `scaleX(${scale})`, surface: `scaleX(${1 / Math.max(.001, scale)})`, tip: `translateX(${filled}px)`};
       });
-      const first = frames[0];
-      ui.fill.style.transform = first.fill;
-      ui.fillSurface.style.transform = first.surface;
-      ui.litViewport.style.transform = first.fill;
-      ui.lit.style.transform = first.surface;
-      ui.tip.style.transform = first.tip;
+      applyFrame(frames[0]);
       lastNow = root.performance.now();
       startProgressTracks(frames, duration, true);
       return progressAnimations.length > 0;
@@ -991,12 +994,7 @@
       progressAnimations.forEach((animation) => animation.cancel());
       progressAnimations = [];
       const frames = progressTrack(start, 1, FINISH, easeOutCubic, 16);
-      const first = frames[0];
-      ui.fill.style.transform = first.fill;
-      ui.fillSurface.style.transform = first.surface;
-      ui.litViewport.style.transform = first.fill;
-      ui.lit.style.transform = first.surface;
-      ui.tip.style.transform = first.tip;
+      applyFrame(frames[0]);
       startProgressTracks(frames, FINISH);
       compositorProgress = start;
     };

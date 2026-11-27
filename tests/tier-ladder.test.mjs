@@ -504,3 +504,26 @@ test('a marathon with milestones still open is honestly reported as not finished
   assert.match(report, /^本轮未完成：/);
   assert.match(report, /上一版回复（还没核对完，仅供参考）/);
 });
+
+test('an unfinished round attaches the whole previous draft, not a silent 4000-character cut', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-ladder-marathon-long-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const checkpoint = path.join(dir, 'checkpoint.md');
+  fs.writeFileSync(checkpoint, '- [x] 搭好页面 — 验证：截图\n- [ ] 加导出功能 — 验证：导出一次\n');
+  const runtime = new ModeArchitecture();
+  const ctx = {agentId: 'project', sessionKey: 'agent:project:marathon-open-long', runId: 'l-1'};
+  tierTask(runtime, ctx, 'marathon', '求方程 x² = 4，并验算两个根').checkpointFile = checkpoint;
+  runtime.afterTool({toolName: 'exec', params: {command: 'python3 -c "print(2*2)"'}, result: '4'}, ctx);
+  const tail = '总结：导出功能还差最后一步，页面部分已经可以直接使用。';
+  const draft = '页面已经搭好并截图看过，下面是目前的进展说明。'
+    + '每个部分是怎么做出来的、放在哪里，逐段写清楚。'.repeat(300) + tail;
+  assert.ok(draft.length > 6000, 'well past the old 4000-character cut');
+  assert.equal(runtime.finalize({lastAssistantMessage: draft}, ctx).action, 'revise');
+  assert.equal(runtime.finalize({lastAssistantMessage: draft}, {...ctx, runId: 'l-2'}).action, 'revise');
+  assert.equal(runtime.finalize({lastAssistantMessage: draft}, {...ctx, runId: 'l-3'}), undefined);
+  const report = runtime.stopReport({...ctx, runId: 'l-3'});
+  assert.match(report, /^本轮未完成：/);
+  assert.ok(report.endsWith('\n\n上一版回复（还没核对完，仅供参考）：\n' + draft), 'the reference copy is the whole draft');
+  assert.ok(report.includes(tail), 'the ending of the draft is still there');
+  assert.doesNotMatch(report, /后略/);
+});

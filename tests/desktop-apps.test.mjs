@@ -98,6 +98,39 @@ test('A4 卸载：副本目录和记录都删掉；再删一次不报错；没�
   assert.throws(() => apps.get(app.id), /没有装过/);
 });
 
+test('A4b 卸载时删目录失败（文件被锁 / 没权限）：记录保留、错误往上抛、网关回 {ok:false}，不留孤儿目录；恢复后能再卸', async t => {
+  const {dir, record, artifacts} = setup();
+  const api = fakeApi();
+  const root = path.join(dir, 'apps3');
+  const apps = registerDesktopApps(api, {root, artifacts});
+  const item = record('locked.html', '<p>locked</p>');
+  const {app} = apps.install({id: item.id, name: '被锁的'});
+  assert.ok(fs.existsSync(app.dir));
+  // root 下权限失败模拟不出来，打桩：只让删这个应用目录时抛 EBUSY，其余照常。
+  const realRm = fs.rmSync;
+  const rm = t.mock.method(fs, 'rmSync', (target, ...rest) => {
+    if (path.resolve(String(target)) === path.resolve(app.dir)) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rm '${target}'`), {code: 'EBUSY'});
+    }
+    return realRm(target, ...rest);
+  });
+  assert.throws(() => apps.remove(app.id), /EBUSY/);
+  const out = await api.call('pinkie.apps.remove', {id: app.id});
+  assert.equal(out.ok, false);
+  assert.match(out.error, /EBUSY/);
+  // 无孤儿：目录还在，记录也还在（内存里和落盘的 index.json 都在）。
+  assert.ok(fs.existsSync(app.dir));
+  assert.equal(apps.get(app.id).app.name, '被锁的');
+  const fresh = new DesktopApps(root, {artifacts});
+  assert.equal(fresh.list().apps.length, 1);
+  assert.equal(fresh.get(app.id).app.name, '被锁的');
+  // 锁解开后再卸一次就干净了。
+  rm.mock.restore();
+  assert.deepEqual(apps.remove(app.id), {ok: true, removed: true, name: '被锁的'});
+  assert.equal(fs.existsSync(app.dir), false);
+  assert.equal(new DesktopApps(root, {artifacts}).list().apps.length, 0);
+});
+
 test('A5 名字做文件名：去掉非法字符、保留中文、保留字加后缀、空名兜底', () => {
   assert.equal(safeAppName('我的:游戏/第*1版?.html'), '我的 游戏 第 1版');
   assert.equal(safeAppName('  ...  '), '作品');
@@ -106,6 +139,24 @@ test('A5 名字做文件名：去掉非法字符、保留中文、保留字加�
   // 反例：正常名字原样不动。
   assert.equal(safeAppName('单词卡 Pro'), '单词卡 Pro');
 });
+
+// 复发防护：Windows 保留设备名带扩展名（con.txt、lpt1.png）也建不了快捷方式，按第一个点之前的主干判断、不分大小写。
+// 每个名字单独一个测试，红的时候能看清是哪一个漏过去。
+for (const [raw, want] of [
+  ['con.txt', 'con 作品.txt'],
+  ['lpt1.png', 'lpt1 作品.png'],
+  ['CON.TXT', 'CON 作品.TXT'],
+  ['con.tar.gz', 'con 作品.tar.gz'],
+  ['con', 'con 作品'],
+  ['lpt1', 'lpt1 作品'],
+  // 反例：只是以保留字开头的正常名字原样不动。
+  ['content.txt', 'content.txt'],
+  ['icon.png', 'icon.png'],
+]) {
+  test(`A5b 保留设备名看主干：${raw} → ${want}`, () => {
+    assert.equal(safeAppName(raw), want);
+  });
+}
 
 test('A6 CSP 插入点：有 head 进 head；只有 html / doctype 跟在后面；片段放最前；规则本身禁网', () => {
   assert.match(withOfflinePolicy('<html lang="zh"><head><title>t</title></head></html>'), /<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy"/);
@@ -243,8 +294,62 @@ test('A12 跟进：权限勾选框跟主色、「更新成新版本」是主按�
   assert.match(css, /^\.pk-apps-row \.pk-apps-update \{ height:28px;/m);
   assert.doesNotMatch(css, /!important/);
   // ③ 应用行说明占满、按钮按内容宽（默认设置行左栏 .34fr 会把「作品有新版本…」挤成两三行）；窄屏照旧上下排。
-  assert.match(css, /^#laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:minmax\(0,1fr\) auto \}$/m);
-  assert.match(css, /@media \(max-width:780px\) \{ #laolao-user-settings \.pk-apps-row\.pinkie-user-settings__row \{ grid-template-columns:1fr \} \}/);
+  // 「第三方许可」那行（.pinkie-user-settings__notices 里）同一条规则（协调者 22:00 ③：820 说明末字别单独一行）。
+  const rowSel = '#laolao-user-settings :is\\(\\.pk-apps-row,\\.pinkie-user-settings__notices > \\.pinkie-user-settings__row\\)\\.pinkie-user-settings__row';
+  assert.match(css, new RegExp(`^${rowSel} \\{ grid-template-columns:minmax\\(0,1fr\\) auto \\}$`, 'm'));
+  assert.match(css, new RegExp(`@media \\(max-width:780px\\) \\{ ${rowSel} \\{ grid-template-columns:1fr \\} \\}`));
+});
+
+test('A14 协调者 22:00：共享对话框按钮有圆角形状（碧琪胶囊 / Metre 6px）；减少动态效果时模式切换的「v」箭头仍是转过的（不再显示成「⌟」）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-desktop-apps.css'), theme = read('laolao-theme.css');
+  // ① 原来 .laolao-modal__button 没有任何基础形状（浏览器默认直角）。
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*border-radius:999px/m);
+  assert.match(css, /^html\[data-laolao-mode="metre"\] :where\(\.laolao-modal\) \.laolao-modal__button \{ border-radius:6px \}$/m);
+  // ② 作品库移除确认框不在共享皮肤里：基础按钮给跟弹层走的底 / 字，主按钮走 --pk-apps-*（CI 图 d7c99f35 夜间灰底深字 1.94）。
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button \{[^}]*background:color-mix\(in srgb,currentColor 7%,transparent\);color:inherit;/m);
+  assert.match(css, /^:where\(\.laolao-modal\) \.laolao-modal__button--primary \{ border-color:transparent;background:var\(--pk-apps-accent,var\(--pa-accent\)\);color:var\(--pk-apps-on-accent,#fff\);/m);
+  // ④ 箭头是 1px 右 / 下边框转 45°画的；减少动态效果那条把它的 transform 清成 none，就成了「⌟」。
+  const reduce = theme.match(/@media \(prefers-reduced-motion: reduce\) \{\n  :is\(\.laolao-mode-menu__option,[^{]*\{\n    transition: none !important;\n    transform: none !important;/);
+  assert.ok(reduce, '减少动态效果那条还在');
+  assert.doesNotMatch(reduce[0], /laolao-mode-button__arrow/, '箭头不能被清掉 transform');
+  assert.match(theme, /^\.laolao-mode-button__arrow \{[^}]*transform: rotate\(45deg\);[^}]*transition: transform var\(--motion-fast, \.2s\); \}$/m, '箭头动画时长走 --motion-fast（减少动态效果时 0.01ms）');
+});
+
+test('A13 共享皮肤主按钮（项目设置「保存」/ 快捷键一览）用装到桌面那套对比度变量，值跟 .pk-apps-dialog 一致（A11 量过 ≥ 4.5:1）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const apps = read('laolao-desktop-apps.css'), skin = apps;
+  const scopes = [
+    'html:not\\(\\[data-laolao-mode="metre"\\]\\):not\\(\\[data-pinkie-night\\]\\)',
+    'html\\[data-pinkie-night\\]:not\\(\\[data-laolao-mode="metre"\\]\\)',
+    'html\\[data-laolao-mode="metre"\\]:is\\(\\[data-pinkie-night\\],\\[data-theme="dark"\\]\\)',
+  ];
+  for (const scope of scopes) {
+    const ref = apps.match(new RegExp(`^${scope} \\.pk-apps-dialog \\{ (--pk-apps-[a-z-]+:[^}]+?) \\}$`, 'm'));
+    assert.ok(ref, `装到桌面对话框那条还在：${scope}`);
+    const line = new RegExp(`^${scope} \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pinkie-art-confirm \\*\\) \\{ ([^}]+?) \\}$`, 'm');
+    const got = skin.match(line);
+    assert.ok(got, `共享皮肤要设同一个变量：${scope}`);
+    assert.equal(got[1], ref[1], '值跟对话框那条一字不差');
+  }
+  // 项目设置「保存」确实是这组主按钮。
+  assert.match(read('laolao-artifacts.js'), /el\('button', 'laolao-modal__button laolao-modal__button--primary', '保存'\)/);
+});
+
+test('A15 作品库「从作品库移除」确认框夜间也用实底深色（截图 #163@83b6812a confirm 夜：还是浅底）', () => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const read = file => fs.readFileSync(path.join(root, 'ui/injections', file), 'utf8');
+  const css = read('laolao-artifacts.css');
+  // 确认框的 .pinkie-art-confirm 在遮罩上，弹层本身只有 .laolao-modal.pinkie-tools-modal，所以按「遮罩里的弹层」认。
+  const group = 'html\\[data-pinkie-night\\] \\.laolao-modal:is\\(\\.pinkie-project-settings,\\.pinkie-shortcuts,\\.pk-apps-dialog,\\.pinkie-art-confirm \\*\\)';
+  assert.match(css, new RegExp(`^${group} \\{ background:#2a2027 !important;color:#f3e9ef !important;`, 'm'), '夜间实底那条带上确认框');
+  assert.match(css, new RegExp(`^${group}::before \\{ display:none \\}$`, 'm'), '夜间去掉顶上的白高光');
+  assert.match(css, new RegExp(`^${group} \\.laolao-modal__button:not\\(\\.laolao-modal__button--primary\\) \\{ background:rgba\\(255,235,245,\\.08\\) !important;`, 'm'), '夜间「取消」用浅色描边底');
+  // 白天不动：小确认框照旧是玻璃，不进实底那组。
+  assert.match(css, /^html \.laolao-modal:is\(\.pinkie-project-settings,\.pinkie-shortcuts,\.pk-apps-dialog\) \{ background:#fff8fb !important;/m);
+  assert.match(read('laolao-artifacts.js'), /el\('div', 'laolao-modal-mask pinkie-tools-mask pinkie-art-confirm'\)/);
 });
 
 // A10 用：最小假 DOM，只够 laolao-desktop-apps.js 的设置卡片和弹层（单个类选择器、append / remove、onclick）。
@@ -361,4 +466,87 @@ test('A8 网关方法：pinkie.apps.* 都在，出错回 {ok:false} 不抛', asy
   const bad = await api.call('pinkie.apps.install', {id: 'nope'});
   assert.equal(bad.ok, false);
   assert.match(bad.error, /作品库里没有/);
+});
+
+test('A16 重装换目录是原子的：新版本挪不进来时旧版本原样留着、记录仍是旧版本、不留暂存 / 备份目录；恢复后能正常装上新版本', () => {
+  const {dir, record, apps} = setup();
+  const item = record('swap.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '换目录'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  assert.match(v1, /v1/);
+  record('swap.html', '<p>v2</p>');
+  const leftovers = () => fs.readdirSync(path.join(dir, 'apps')).filter(name => /staging|backup/.test(name));
+  // 按路径打桩：只让「暂存 → 应用目录」这一步失败，别的 rename（旧目录 → 备份、回滚）照常。
+  // 按路径而不是按次数：改回「先 rmSync 再 rename」时也是这一步失败，旧版本已经被删，下面的断言就会红。
+  const original = fs.renameSync;
+  const swaps = [];
+  fs.renameSync = (from, to, ...rest) => {
+    if (/\.staging-/.test(String(from)) && path.resolve(String(to)) === path.resolve(first.app.dir)) {
+      swaps.push(fs.existsSync(first.app.entry) || fs.readdirSync(path.join(dir, 'apps')).some(name => name.includes('backup')));
+      throw Object.assign(new Error('模拟：新版本挪不进来'), {code: 'EPERM'});
+    }
+    return original(from, to, ...rest);
+  };
+  try {
+    assert.throws(() => apps.install({id: item.id, name: '换目录'}), /模拟：新版本挪不进来/);
+  } finally {
+    fs.renameSync = original;
+  }
+  assert.equal(swaps.length, 1, '确实走到了暂存 → 应用目录那一步');
+  assert.equal(swaps[0], true, '新版本落位前，旧版本（原目录或备份）一直在');
+  assert.equal(fs.readFileSync(first.app.entry, 'utf8'), v1, '旧版本 index.html 原样还在');
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录仍是旧版本');
+  assert.equal(apps.list().apps[0].version, 1);
+  assert.deepEqual(leftovers(), [], '失败后不留暂存 / 备份目录');
+  // 反例：恢复之后照常装上新版本（也说明回滚留下的是干净状态）。
+  const second = apps.install({id: item.id, name: '换目录'});
+  assert.equal(second.replaced, true);
+  assert.equal(second.app.version, 2);
+  assert.match(fs.readFileSync(second.app.entry, 'utf8'), /v2/);
+  assert.doesNotMatch(fs.readFileSync(second.app.entry, 'utf8'), /v1/);
+  assert.deepEqual(leftovers(), [], '成功后也不留暂存 / 备份目录');
+});
+
+test('A16b Windows 上旧应用目录被占用（挪旧目录就 EBUSY）：原错误往上抛、旧版本和记录原样、不留暂存 / 备份目录', t => {
+  const {dir, record, apps} = setup();
+  const item = record('busy.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '被占用'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  record('busy.html', '<p>v2</p>');
+  const realRename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to, ...rest) => {
+    if (path.resolve(String(from)) === path.resolve(first.app.dir)) {
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rename '${from}'`), {code: 'EBUSY'});
+    }
+    return realRename(from, to, ...rest);
+  });
+  assert.throws(() => apps.install({id: item.id, name: '被占用'}), /EBUSY/);
+  t.mock.restoreAll();
+  assert.equal(fs.readFileSync(first.app.entry, 'utf8'), v1, '旧版本 index.html 原样还在');
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录仍是旧版本');
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'apps')).filter(name => /staging|backup/.test(name)), []);
+});
+
+test('A16c 回滚也失败时抛的仍是原来的错误，旧版本还留在备份目录里没丢', t => {
+  const {dir, record, apps} = setup();
+  const item = record('both.html', '<p>v1</p>');
+  const first = apps.install({id: item.id, name: '两头失败'});
+  const v1 = fs.readFileSync(first.app.entry, 'utf8');
+  record('both.html', '<p>v2</p>');
+  const realRename = fs.renameSync;
+  t.mock.method(fs, 'renameSync', (from, to, ...rest) => {
+    if (path.resolve(String(to)) === path.resolve(first.app.dir)) {
+      if (/\.staging-/.test(String(from))) throw Object.assign(new Error('模拟：新版本挪不进来'), {code: 'EPERM'});
+      throw Object.assign(new Error('模拟：回滚也挪不回去'), {code: 'EACCES'});
+    }
+    return realRename(from, to, ...rest);
+  });
+  assert.throws(() => apps.install({id: item.id, name: '两头失败'}), error => /新版本挪不进来/.test(error.message) && error.code === 'EPERM');
+  t.mock.restoreAll();
+  const names = fs.readdirSync(path.join(dir, 'apps'));
+  assert.deepEqual(names.filter(name => name.includes('staging')), [], '暂存目录照样清掉');
+  const backups = names.filter(name => name.includes('backup'));
+  assert.equal(backups.length, 1, '旧版本留在备份目录');
+  assert.equal(fs.readFileSync(path.join(dir, 'apps', backups[0], 'index.html'), 'utf8'), v1);
+  assert.equal(apps.forArtifact(item.id).app.version, 1, '记录没改成新版本');
 });
