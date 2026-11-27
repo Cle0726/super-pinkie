@@ -45,13 +45,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # repo variable PINKIE_SHOTS_LINUX_RUNS_ON (one runner label, e.g. linux2-docker) moves only this
-          # review-shot job to the self-hosted Linux runners; unset = GitHub-hosted. Separate from PINKIE_LINUX_RUNS_ON.
-          - os: ${{ vars.PINKIE_SHOTS_LINUX_RUNS_ON || 'ubuntu-latest' }}
+          - os: ubuntu-latest
             label: linux
           - os: windows-latest
             label: windows
-    runs-on: ${{ matrix.os }}
+    # repo variable PINKIE_SHOTS_LINUX_RUNS_ON (one runner label, e.g. linux2-docker) moves only the linux
+    # review-shot cell to the self-hosted Linux runners; unset = ubuntu-latest. Separate from PINKIE_LINUX_RUNS_ON.
+    runs-on: ${{ matrix.label == 'linux' && (vars.PINKIE_SHOTS_LINUX_RUNS_ON || 'ubuntu-latest') || matrix.os }}
     timeout-minutes: 30
     defaults:
       run:
