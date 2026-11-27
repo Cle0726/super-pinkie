@@ -319,7 +319,11 @@ def brand_service_worker(control):
         write_if_changed(worker, re.sub(r'(?<![A-Za-z0-9_$-])OpenClaw(?![A-Za-z0-9_$-])', 'C.le.', text).encode('utf-8'))
 
 
-def install(root, control):
+def install(root, control, verify=True):
+    # verify=False is only for a caller that inspects the package itself right
+    # afterwards (main: stamp.mjs rewrites files after install, so only the
+    # inspect after stamping sees the final bytes). Each inspect reads every
+    # package file back, which is most of an install's time on Windows.
     root, control = Path(root), Path(control)
     files = source_files(root)
     stamped = stamped_sources(root, files)
@@ -345,6 +349,8 @@ def install(root, control):
     brand_service_worker(control)
     html = normalize_index(base_html, root, files, control, stamped)
     write_if_changed(index, html.encode('utf-8'))
+    if not verify:
+        return None
     # Reuse only the source side; inspect still reads every package file back.
     actual = inspect(root, control, files, stamped)
     write_if_changed(control / MANIFEST, (json.dumps(actual, ensure_ascii=False, indent=2) + '\n').encode())
@@ -446,7 +452,8 @@ def main():
     if args.control_ui is None:
         parser.error('--control-ui is required')
     if args.action == 'install':
-        install(args.root, args.control_ui)
+        # The inspect below checks the stamped result, so install skips its own.
+        install(args.root, args.control_ui, verify=False)
         run_stamp_tool(args.root, args.control_ui)
     result = inspect(args.root, args.control_ui)
     if args.action == 'install':

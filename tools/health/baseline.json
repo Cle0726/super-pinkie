@@ -2473,7 +2473,7 @@
     "ui/injections/laolao-session-cards.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 532,
+      "lines": 527,
       "mutationObserverRefs": 1,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3265,7 +3265,6 @@
     }
   },
   "longFiles": {
-    "app/super_pinkie.py": 1559,
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2495,
     "services/mode-architecture/session-lineage.mjs": 1894,
