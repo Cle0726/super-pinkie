@@ -41,7 +41,8 @@ function nightProblems(css) {
   return out;
 }
 
-// 触发钮静息 / hover / 原生暗色规则一字不动
+// 触发钮静息 / hover / 原生暗色规则一字不动；第 4 条是 B11 日间加深：非夜间、非 Metre、未开启时把共用的 --fog-muted
+// 换成 --muted-strong（外壳输入区规则 color: var(--fog-muted) !important，改变量不加 !important），字面量锁死
 const BTN_BLOCKS = [
   `.laolao-desensitize-btn {
   display:inline-flex;align-items:center;justify-content:center;gap:3px;
@@ -64,11 +65,12 @@ const BTN_BLOCKS = [
   background:linear-gradient(135deg,rgba(255,249,252,.68),rgba(248,220,236,.55));
   border-color:rgba(255,255,255,.48);color:#8c4a6a;
 }`,
+  'html:not([data-laolao-plain-composer]):not([data-pinkie-night]):not([data-theme-mode="dark"]):not([data-laolao-mode="metre"]) .agent-chat__input .laolao-desensitize-btn:not([aria-pressed="true"]):not(.is-active){--fog-muted:var(--muted-strong)}',
 ];
 function btnProblems(css) {
   const out = BTN_BLOCKS.filter((b) => !css.includes(b)).map((b) => `触发钮规则被改：${b.split('{')[0].trim()}`);
   const n = (css.match(/\.laolao-desensitize-btn/g) || []).length;
-  if (n !== 4) out.push(`.laolao-desensitize-btn 出现 ${n} 次（应只在原有 3 条规则里共 4 次）`);
+  if (n !== 5) out.push(`.laolao-desensitize-btn 出现 ${n} 次（应只在 4 条触发钮规则里共 5 次）`);
   return out;
 }
 
@@ -76,7 +78,7 @@ test('夜间规则同时认 data-theme-mode="dark" 与 data-pinkie-night，覆�
   assert.deepEqual(nightProblems(injectedCss(source)), []);
 });
 
-test('触发钮静息态与原生暗色规则一字未动', () => {
+test('触发钮静息态、原生暗色规则与日间非 Metre 加深规则一字未动', () => {
   assert.deepEqual(btnProblems(injectedCss(source)), []);
 });
 
@@ -95,5 +97,16 @@ test('反例：夜间浮窗退回亮底、或触发钮被顺手改色都必须�
   assert.notEqual(btnTouched, source);
   assert.ok(btnProblems(injectedCss(btnTouched)).length > 0);
   const btnNight = source.replace(`${N} .ds-apply{`, `${N} .laolao-desensitize-btn{color:#fff}${N} .ds-apply{`);
-  assert.ok(btnProblems(injectedCss(btnNight)).some((x) => x.includes('出现 5 次')));
+  assert.ok(btnProblems(injectedCss(btnNight)).some((x) => x.includes('出现 6 次')));
+});
+
+test('反例：日间加深规则被删、或漏掉夜间 / Metre / 开启态排除都必须被抓到', () => {
+  const day = BTN_BLOCKS[3];
+  assert.ok(source.includes(day));
+  const cuts = ['', day.replace(':not([data-pinkie-night])', ''), day.replace(':not([data-laolao-mode="metre"])', ''), day.replace(':not([aria-pressed="true"])', '')];
+  for (const cut of cuts) {
+    assert.notEqual(cut, day);
+    const p = btnProblems(injectedCss(source.replace(day, cut)));
+    assert.ok(p.some((x) => x.startsWith('触发钮规则被改')), p.join('\n'));
+  }
 });
