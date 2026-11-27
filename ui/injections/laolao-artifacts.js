@@ -669,7 +669,7 @@
     const head = el('div', 'pinkie-shortcuts__head');
     head.append(el('h3', 'laolao-modal__title', '快捷键'), button('关闭快捷键一览', 'pinkie-art-close', () => close(), '×'));
     const grid = el('div', 'pinkie-shortcuts__grid');
-    for (const [title, rows] of shortcutGroups()) {
+    for (const [title, rows] of (window.Pinkie?.metreKeymap?.groups?.(shortcutGroups()) || shortcutGroups())) {   // L38：Metre 里按实际按键补行（laolao-metre-keymap.js），其他模式原样
       const section = el('section', 'pinkie-shortcuts__group');
       section.append(el('h4', 'pinkie-shortcuts__title', title));
       const list = el('dl', 'pinkie-shortcuts__list');
