@@ -4,7 +4,7 @@
   --lib-page: #fffdfd;
   --lib-ink: #513c51;
   --lib-muted: #957889;
-  --lib-line: rgba(157,94,126,.16);
+  --lib-line: rgba(157,94,126,.16); --lib-edge: #9d6e86;
   --lib-soft: rgba(230,154,190,.10);
   --lib-accent: #b65381;
   --lib-highlight: rgba(232,79,154,.23);
@@ -17,7 +17,7 @@ html[data-pinkie-night] :is(.pinkie-library,.pinkie-reader) {
   --lib-page: #382d37;
   --lib-ink: #eee0e9;
   --lib-muted: #b7a0b0;
-  --lib-line: rgba(220,169,198,.16);
+  --lib-line: rgba(220,169,198,.16); --lib-edge: #a8869b;
   --lib-soft: rgba(224,151,188,.10);
   --lib-accent: #e6a6c7;
   --lib-highlight: rgba(232,129,178,.28);
@@ -33,7 +33,7 @@ html[data-pinkie-night] :is(.pinkie-library,.pinkie-reader) {
 :is(.pinkie-library,.pinkie-reader) button:hover { background:var(--lib-soft); }
 :is(.pinkie-library,.pinkie-reader) button:disabled { opacity:.5;cursor:default; }
 :is(.pinkie-library,.pinkie-reader) :is(button,input,select):focus-visible { outline:2px solid var(--lib-accent);outline-offset:3px; }
-:is(.pinkie-library,.pinkie-reader) .pinkie-library__primary { color:var(--lib-accent);border-color:var(--lib-line);background:var(--lib-soft);font-weight:600; }
+:is(.pinkie-library,.pinkie-reader) .pinkie-library__primary { color:var(--lib-accent);border-color:var(--lib-edge);background:var(--lib-soft);font-weight:600; }
 :is(.pinkie-library,.pinkie-reader) :is(input:not([type=checkbox]),select) {
   min-width:0; background:var(--lib-page);border:1px solid var(--lib-line);border-radius:10px;
   color:var(--lib-ink);padding:9px 11px;outline:none;font-size:12px;appearance:none;
@@ -51,7 +51,7 @@ html[data-pinkie-night] :is(.pinkie-library,.pinkie-reader) {
 .pinkie-library__close {font-size:22px!important;width:32px;padding:0!important;}
 .pinkie-library__intro {font-size:12px;line-height:1.8;color:var(--lib-muted);margin:0 24px 17px;}
 .pinkie-library__actions {display:flex;gap:8px;margin:0 24px 18px;}
-.pinkie-library__search {width:calc(100% - 48px);margin:0 24px 12px;}
+.pinkie-library input.pinkie-library__search {width:calc(100% - 48px);margin:0 24px 12px;border-color:var(--lib-edge);}
 .pinkie-library__status {font-size:11px;line-height:1.7;color:var(--lib-muted);padding:0 24px 10px;min-height:24px;}
 .pinkie-library__status[data-error="1"] {color:var(--lib-accent);}
 .pinkie-library__list {padding:0 24px 26px;overflow:auto;flex:1;min-height:0;}

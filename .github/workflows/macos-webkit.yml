@@ -4,6 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+    # macOS runners are the scarcest; PRs that touch no UI / browser test code skip this run.
+    paths:
+      - "ui/**"
+      - "tests/metre-*"
+      - "tests/webkit-*"
+      - "tests/*e2e*"
+      - "tests/visual/**"
+      - "tools/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/macos-webkit.yml"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +22,7 @@ permissions:
 
 concurrency:
   group: macos-webkit-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   webkit-suite:

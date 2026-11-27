@@ -30,12 +30,12 @@ class WindowsPackageTests(unittest.TestCase):
             cleaner.clean(ui, control, installer)
             for path in (ui / "injections", control):
                 self.assertTrue(all((path / name).exists() for name in signature))
-                self.assertIn('icon.textContent = "C.le."', (path / "laolao-context-compact.js").read_text())
-            self.assertEqual(index.read_text(), markup)
+                self.assertIn('icon.textContent = "C.le."', (path / "laolao-context-compact.js").read_text(encoding="utf-8"))
+            self.assertEqual(index.read_text(encoding="utf-8"), markup)
             self.assertFalse((ui / "assets/CLeAppIcon.icns").exists())
             self.assertFalse((control / "CLeAppIcon.icns").exists())
-            self.assertEqual((control / "laolao-stats.json").read_text(), "null\n")
-            self.assertEqual((control / "laolao-quota.json").read_text(), "null\n")
+            self.assertEqual((control / "laolao-stats.json").read_text(encoding="utf-8"), "null\n")
+            self.assertEqual((control / "laolao-quota.json").read_text(encoding="utf-8"), "null\n")
 
     def test_rewrite_keeps_line_endings_so_inline_scripts_keep_their_csp_hash(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -54,16 +54,16 @@ class WindowsPackageTests(unittest.TestCase):
             root = Path(directory)
             installer = root / "_internal/installer/windows/apply-theme.ps1"
             installer.parent.mkdir(parents=True)
-            installer.write_text("safe")
+            installer.write_text("safe", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "launcher-loading"):
                 cleaner.check_package(root)
             loading = root / "_internal/ui/launcher-loading.html"
             loading.parent.mkdir(parents=True)
-            loading.write_text("<!doctype html>")
+            loading.write_text("<!doctype html>", encoding="utf-8")
             cleaner.check_package(root)
             forbidden = root / "_internal/installer/cle/overlay.json"
             forbidden.parent.mkdir(parents=True)
-            forbidden.write_text("other product")
+            forbidden.write_text("other product", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "separate product asset"):
                 cleaner.check_package(root)
 

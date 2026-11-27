@@ -17,7 +17,9 @@ $env:PYTHONUTF8 = "1"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
-$manifest = Get-Content ".\desktop\windows\runtime-manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$coreManifestPath = Join-Path $RepoRoot "core-manifest.json"
+$coreManifest = Get-Content $coreManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$coreHelper = Join-Path $RepoRoot "tools\core\manifest.mjs"
 $runtimeStage = Join-Path $RepoRoot "build\windows-runtime"
 $runtimeBin = Join-Path $runtimeStage "bin"
 $runtimeModules = Join-Path $runtimeStage "node_modules"
@@ -28,12 +30,14 @@ python -c "import sqlite3, _sqlite3; print('sqlite3 bundled:', sqlite3.sqlite_ve
 if ($LASTEXITCODE -ne 0) { throw "当前 Python 缺少 sqlite3/_sqlite3，无法构建派对和圆桌服务" }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
+$coreInfo = (& $node $coreHelper info --root $RepoRoot | Out-String | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or -not $coreInfo) { throw "无法解析 core-manifest.json（请检查 PINKIE_CORE 与清单格式）" }
 $nodeVersion = (& $node --version).TrimStart('v')
-if ($nodeVersion -ne $manifest.node) {
+if ($nodeVersion -ne $coreInfo.node) {
     if (-not $AllowLocalNodeVersion -or $nodeVersion -notmatch '^24\.') {
-        throw "Node.js 版本不一致：需要 $($manifest.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
+        throw "Node.js 版本不一致：需要 $($coreInfo.node)，构建机是 $nodeVersion；本机开发构建可加 -AllowLocalNodeVersion（仅接受 Node 24.x）"
     }
-    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($manifest.node)）"
+    Write-Warning "本机开发构建使用 Node.js $nodeVersion（发行构建仍固定 $($coreInfo.node)）"
 }
 
 if (Test-Path $runtimeStage) { Remove-Item $runtimeStage -Recurse -Force }
@@ -64,16 +68,48 @@ $mihomoExe = Get-ChildItem -LiteralPath $mihomoUnpack -Filter "*.exe" -Recurse |
 if (-not $mihomoExe) { throw "mihomo 压缩包里没有 exe" }
 Copy-Item -LiteralPath $mihomoExe.FullName -Destination (Join-Path $browserVpnStage "mihomo.exe") -Force
 
+# 打包不碰构建机上真实的用户目录：内核安装（npm 安装脚本）、皮肤注入（会往 ~\.openclaw\workspace*
+# 写头像）和补丁都在 build\home 里跑，跑完恢复。npm 仍读构建机自己的 .npmrc（代理、镜像）。
+$isolatedHome = Join-Path $RepoRoot "build\home"
+$isolatedUserEnv = [ordered]@{
+    HOME = Join-Path $isolatedHome "home"
+    USERPROFILE = Join-Path $isolatedHome "home"
+    APPDATA = Join-Path $isolatedHome "appdata"
+    LOCALAPPDATA = Join-Path $isolatedHome "localappdata"
+    OPENCLAW_HOME = Join-Path $isolatedHome "home"
+    OPENCLAW_STATE_DIR = Join-Path $isolatedHome "openclaw-state"
+}
+$savedUserEnv = @{}
+foreach ($name in @($isolatedUserEnv.Keys) + @('npm_config_userconfig')) {
+    $savedUserEnv[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+}
+function Restore-BuildUserEnv {
+    foreach ($name in $savedUserEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $savedUserEnv[$name], 'Process') }
+}
+# trap 对整个脚本生效（包括这一段之前），所以不依赖上面的函数，只在已保存过时才恢复。
+trap { if ($savedUserEnv) { foreach ($name in @($savedUserEnv.Keys)) { [Environment]::SetEnvironmentVariable($name, $savedUserEnv[$name], 'Process') } }; break }
+if (Test-Path -LiteralPath $isolatedHome) { Remove-Item -LiteralPath $isolatedHome -Recurse -Force }
+foreach ($name in $isolatedUserEnv.Keys) {
+    New-Item -ItemType Directory -Force -Path $isolatedUserEnv[$name] | Out-Null
+    [Environment]::SetEnvironmentVariable($name, $isolatedUserEnv[$name], 'Process')
+}
+if (-not $savedUserEnv['npm_config_userconfig'] -and $savedUserEnv['USERPROFILE']) {
+    $env:npm_config_userconfig = Join-Path $savedUserEnv['USERPROFILE'] '.npmrc'
+}
+
 # registry.npmjs.org stalled here for minutes at a time (15 idle
 # connections, zero CPU) while the mirror finished the same install in
 # six minutes. Only this build step is pointed at the mirror; the
-# package and its version still come from the manifest.
+# core selection (openclaw / cle), version, URL and SHA-256 all come
+# from core-manifest.json.
 $npmRegistry = if ($env:PINKIE_NPM_REGISTRY) { $env:PINKIE_NPM_REGISTRY } else { "https://registry.npmmirror.com" }
-npm install --prefix $runtimeStage --registry $npmRegistry --omit=dev --no-audit --no-fund "openclaw@$($manifest.openclaw)"
-if ($LASTEXITCODE -ne 0) { throw "OpenClaw 内置运行时下载失败" }
+$coreCache = Join-Path $buildCache "core"
+Write-Host "==> installing core '$($coreInfo.core)' ($($coreInfo.version)) from core-manifest.json"
+& $node $coreHelper install --root $RepoRoot --prefix $runtimeStage --registry $npmRegistry --cache-dir $coreCache
+if ($LASTEXITCODE -ne 0) { throw "内置内核（$($coreInfo.core)@$($coreInfo.version)）下载或校验失败" }
 $openclawRoot = Join-Path $runtimeModules "openclaw"
 if (-not (Test-Path (Join-Path $openclawRoot "openclaw.mjs"))) {
-    throw "OpenClaw 内置运行时不完整"
+    throw "内置内核运行时不完整：$openclawRoot"
 }
 
 $env:OPENCLAW_ROOT = $openclawRoot
@@ -81,7 +117,7 @@ $env:PINKIE_SKIP_APP_BUNDLES = "1"
 $env:PINKIE_SKIP_RUNTIME_PATCHES = "1"
 & ".\installer\windows\apply-theme.ps1"
 python -c "from app.super_pinkie import apply_patch; import sys; sys.exit(0 if apply_patch(False, lambda _message: None) else 1)"
-if ($LASTEXITCODE -ne 0) { throw "内置 OpenClaw 传输补丁失败" }
+if ($LASTEXITCODE -ne 0) { throw "内置 C.le. 传输补丁失败" }
 
 # 后台网关继续采用已验证的 Mac 兼容快照；完整浏览器 UI 统一来自 ui/。
 # 所有覆盖及清理结束后，必须再装公共入口、渲染器和资源，不能恢复旧页面。
@@ -210,23 +246,30 @@ if ($modeText -like '*C.le. 执行控制层*') { throw "Windows 包带上了 C.l
 Remove-Item Env:OPENCLAW_ROOT -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_APP_BUNDLES -ErrorAction SilentlyContinue
 Remove-Item Env:PINKIE_SKIP_RUNTIME_PATCHES -ErrorAction SilentlyContinue
+Restore-BuildUserEnv
 
 $runtimeInfo = @{
     architecture = $env:PROCESSOR_ARCHITECTURE
+    core = $coreInfo.core
+    coreVersion = $coreInfo.version
     node = $nodeVersion
-    openclaw = $manifest.openclaw
+    openclaw = $coreInfo.version
     python = (python -c "import platform; print(platform.python_version())")
     webview = (python -c "import importlib.metadata; print(importlib.metadata.version('pywebview'))")
 }
 $runtimeInfo | ConvertTo-Json | Set-Content (Join-Path $runtimeStage "runtime-manifest.json") -Encoding UTF8
 
+# No --uac-admin: the App and every installed work start as the signed-in user.
+# The only step that needs admin rights (swapping in an update when the install
+# folder is not writable, and its repair) asks for UAC on demand itself.
 $pyInstallerCommonArgs = @(
-    "--noconfirm", "--clean", "--windowed", "--uac-admin",
+    "--noconfirm", "--clean", "--windowed",
     "--name", "超級碧琪",
     "--icon", "ui\assets\favicon.ico",
     "--paths", "app",
     "--hidden-import", "webview.platforms.edgechromium",
     "--hidden-import", "win32com.client",
+    "--hidden-import", "win32com.shell.shell",
     "--hidden-import", "pythoncom",
     "--hidden-import", "pywintypes",
     "--hidden-import", "sqlite3",
@@ -254,6 +297,8 @@ $pyInstallerCommonArgs = @(
     "--add-data", "installer\guard;installer\guard",
     "--add-data", "tools\ui-parity;tools\ui-parity",
     "--add-data", "tools\assets;tools\assets",
+    "--add-data", "tools\core;tools\core",
+    "--add-data", "core-manifest.json;.",
     "--add-data", "scripts;scripts",
     "--add-data", "desktop\windows\THIRD_PARTY_NOTICES.md;runtime",
     "--add-data", "VERSION;.",
@@ -263,7 +308,10 @@ $pyInstallerCommonArgs = @(
     "app\super_pinkie.py"
 )
 
-$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+# A local build with the C.le. core (PINKIE_CORE=cle) is stamped channel=cle, which is what
+# tools/cle-pkg-win install-cle requires. Every reader only tests for 'release', so cle behaves
+# exactly like dev (guard off, dev splash, no feedback keys); release builds are unchanged.
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } elseif ($coreInfo.core -eq 'cle') { 'cle' } else { 'dev' }
 $guardCommitRaw = (git rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $guardCommitRaw) { $guardCommitRaw = '' }
 $guardCommit = "$guardCommitRaw".Trim()
