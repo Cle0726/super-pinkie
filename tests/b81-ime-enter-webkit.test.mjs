@@ -2,7 +2,7 @@
 // Safari / WebKit 的顺序是 compositionend 先到、随后的 keydown 是 isComposing=false + keyCode 229；
 // Chromium 是 keydown 先到、isComposing=true。Playwright 没有 IME 接口，这里在真浏览器里按两种顺序派发合成事件，
 // 加载真的 laolao-metre-prefs.js 和 laolao-session-tools.js，原生发送按 chat-page 快照的规则建模（组字或 229 不发）。
-import {test} from 'node:test';
+import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -73,6 +73,8 @@ const PAGE = `<!doctype html><html data-laolao-mode="metre"><body><openclaw-chat
 
 async function open(browser, {sendKey, tools = TOOLS, hook = HOOK}) {
   const tab = await browser.newPage();
+  // 卡住的一步直接报出是哪一步，而不是吃满整条用例的超时、把原始错误吞掉。
+  tab.setDefaultTimeout(5000);
   await tab.route('http://127.0.0.1:30118/**', (route) => route.fulfill({contentType: 'text/html', body: PAGE}));
   await tab.goto('http://127.0.0.1:30118/chat?session=' + encodeURIComponent(SESSION));
   await tab.evaluate((v) => { v ? localStorage.setItem('pinkie.metre.prefs.sendKey', v) : localStorage.removeItem('pinkie.metre.prefs.sendKey'); }, sendKey);
@@ -94,15 +96,25 @@ async function mentionThenCompose(tab, order) {
   return {down, after: await look(tab)};
 }
 
-async function withBrowser(t, fn) {
+// 整个文件只启动一次浏览器，放在 before 里：CI 全量并发时冷启动可达数十秒，算进第一条真浏览器用例（恰好是 Ctrl + Enter 那条）
+// 就会把它的 60s 吃满，Windows 上同一条也因此 18s。用例自己只计页面里的步骤。
+const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
+let browser = null, skipReason = '', launchMs = 0;
+before(async () => {
   const {playwright} = await import('../tools/study-desk/harness.mjs');
   let lib;
-  try { lib = playwright(); } catch { t.skip('Playwright is not installed here'); return; }
-  const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
-  let browser;
+  try { lib = playwright(); } catch { skipReason = 'Playwright is not installed here'; return; }
+  const t0 = Date.now();
   try { browser = await lib[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: process.env.PINKIE_UI_CHANNEL || 'msedge'} : {})}); }
-  catch (error) { t.skip('no browser: ' + error.message.split('\n')[0]); return; }
-  try { await fn(browser, engine); } finally { await browser.close(); }
+  catch (error) { skipReason = 'no browser: ' + error.message.split('\n')[0]; }
+  launchMs = Date.now() - t0;
+}, {timeout: 180_000});
+after(async () => { await browser?.close(); });
+
+async function withBrowser(t, fn) {
+  if (!browser) { t.skip(skipReason || 'no browser'); return; }
+  if (launchMs) { t.diagnostic(`${engine} 启动 ${launchMs}ms（在 before 里，不计入用例）`); launchMs = 0; }
+  await fn(browser, engine);
 }
 
 test('B81 前提：两处 Enter 守卫都还在 laolao-session-tools.js，Metre 拦截也认 isComposing / 229', () => {
