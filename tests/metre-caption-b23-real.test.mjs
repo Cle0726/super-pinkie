@@ -62,10 +62,12 @@ const ratio = (a, b) => { const x = lum(nums(a)), y = lum(nums(b)); return (Math
 const pinkish = (s) => { const [r, g, b] = nums(s); return r - g > 25 && b - g > 5; };
 
 test('B23: Windows caption capsule uses the Metre palette in Metre (day and night), stays pink elsewhere; removing the rules brings the pink back', {timeout: 240_000}, async (t) => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-  const browser = await launchRealBrowser();
-  t.after(async () => { await browser.close(); await server.close(); installed.cleanup(); });
+  let installed, server, browser;
+  // B55: cleanup first, so a browser that fails to launch cannot leave the server open.
+  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  installed = installRealControlUi({repoRoot: REPO_ROOT});
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+  browser = await launchRealBrowser();
 
   for (const theme of ['day', 'night']) {
     const {context, page} = await openRealScenePage(browser, server.origin, 'metre-board', theme);

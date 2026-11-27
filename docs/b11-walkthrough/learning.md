@@ -58,7 +58,7 @@ L9 / L10 说明：harness 的假网关不应答看板、生词本的 RPC，所�
 | --- | --- | --- | --- | --- |
 | `laolao-composer-tray.css`：`.pinkie-tray-btn span`（「工具」） | home / desk-chat，日 | 输入框工具按钮字淡 | 3.4 | 无 |
 | `laolao-context-compact.js`（样式在 `laolao-theme.css` 一带）：`.laolao-context-viewer__percent`（「13%」） | home / desk-chat，日 | 上下文百分比字淡 | 3.4 | 无 |
-| `laolao-model-picker.css`：`.pinkie-external-tier`（「关闭」） | home / desk-chat，日/夜 | 思考强度牌字和底几乎同色 | 1.04~4.11 | 无 |
+| ~~`laolao-model-picker.css`：`.pinkie-external-tier`（「关闭」）~~ **误报** | home / desk-chat，日/夜 | ~~思考强度牌字和底几乎同色~~ 字用 `background-clip:text` 画，`backgroundColor` 就是墨色，脚本拿墨色当底色算错了；脚本已改按像素量（`tools/pr-shots/clip-text-ink.mjs`），真页面日 4.68–5.33、夜 5.32–5.55，不改样式（协调者 11-26 09:45 划掉） | ~~1.04~4.11~~ | — |
 | `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | home / settings / desk-chat，日，1440 | 侧栏「临时」入口文字和图标都淡 | 2.51 | 无 |
 | `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label`、`.laolao-group__count`、`.laolao-group__action`、`.pinkie-session-time` | home / settings / desk-chat，日，1440 | 侧栏分组标题、计数、时间字淡 | 3.39 / 3.61~4.22 | 无 |
 | `laolao-theme.css` / `laolao-mode-switcher.js`：`.laolao-mode-dock-trigger` | home / settings / desk-chat，日/夜，1440 | 分屏按钮边框淡 | 1.46 | 无 |

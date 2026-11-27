@@ -205,7 +205,7 @@ html[data-laolao-classic-shell="1"] .sidebar-footer-actions {
   gap: 4px;
 }
 
-html[data-laolao-classic-shell="1"] .sidebar-shell__footer [data-laolao-footer-secondary="1"] {
+html[data-laolao-classic-shell="1"] .sidebar-shell__footer :is([data-laolao-footer-secondary="1"], .laolao-memory-entry) {
   display: none !important;
 }
 
