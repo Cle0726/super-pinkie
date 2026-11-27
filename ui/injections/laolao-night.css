@@ -200,7 +200,7 @@ html[data-pinkie-night]:not(#_n) .agent-chat__input :is(textarea, input, [conten
 html[data-pinkie-night]:not(#_n) .agent-chat__composer-combobox textarea::placeholder { color: #8f7d88 !important; }
 html[data-pinkie-night]:not(#_n) .agent-chat__input > div:not([class]) { color: var(--n-muted) !important; }
 html[data-pinkie-night]:not(#_n) .agent-chat__input :is(.agent-chat__input-btn, .chat-settings-chip, .chat-composer-model-control, .laolao-deep-think-btn) { color: #cdbdc6 !important; }
-html[data-pinkie-night]:not(#_n) .agent-chat__input :is(.agent-chat__input-btn, .chat-settings-chip):hover { background: rgba(255, 255, 255, .07) !important; color: var(--accent) !important; }
+html[data-pinkie-night]:not(#_n) .agent-chat__input :is(.agent-chat__input-btn, .chat-settings-chip, .laolao-deep-think-btn):hover { background: rgba(255, 255, 255, .07) !important; color: var(--accent) !important; }
 html[data-pinkie-night]:not(#_n) :is(.chat-controls__inline-select-label, .pinkie-trigger-label, .pinkie-external-model-name, .pinkie-external-tier) { color: #d6c7cf !important; }
 html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) { box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent) !important; }
 html[data-pinkie-night]:not(#_n) .agent-chat__input button.chat-send-btn:not(.chat-send-btn--stop) svg { stroke: #2a0f1d !important; color: #2a0f1d !important; }
