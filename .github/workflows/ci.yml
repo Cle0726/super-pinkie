@@ -34,7 +34,7 @@ jobs:
         env:
           PINKIE_VISUAL_REPEAT: "3"
           PINKIE_VISUAL_REPORT: "1"
-        run: node --test tests/visual-baseline.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/visual-baseline.test.mjs
       - name: Capture the pinned main Metre regression baseline on Linux
         run: |
           git fetch --no-tags --depth=1 origin "$METRE_MAIN_REFERENCE"
@@ -47,7 +47,7 @@ jobs:
       - name: Run all execution, recovery, UI and desktop regression tests
         timeout-minutes: 30
         run: |
-          node --test tests/*.test.cjs tests/*.test.mjs
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
           node --check ui/party/party.js
           node --check ui/party/party-drafts.js
@@ -99,7 +99,7 @@ jobs:
             -framework Foundation -framework Speech -framework UserNotifications \
             -framework WebKit
       - name: Verify self-contained bundle contract
-        run: node --test tests/self-contained-app.test.cjs tests/native-glass.test.cjs tests/macos-ci-contract.test.cjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/self-contained-app.test.cjs tests/native-glass.test.cjs tests/macos-ci-contract.test.cjs
       - name: Install WebKit regression dependencies
         run: |
           deps="$RUNNER_TEMP/pinkie-ci-deps"
@@ -111,7 +111,7 @@ jobs:
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: webkit
-        run: node --test --test-concurrency=1 tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=1 tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
 
   windows-build:
     needs: [portable-checks, macos-check]
@@ -182,7 +182,7 @@ jobs:
         timeout-minutes: 5
         env:
           PINKIE_IMAGE_UI_ENGINE: chromium
-        run: node --test tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/tool-images-e2e.test.mjs tests/metre-sidebar-e2e.test.mjs tests/metre-switch-e2e.test.mjs
       - name: Run the execution, recovery, UI and desktop suites on Windows
         timeout-minutes: 30
         # bash keeps this step identical to portable-checks: the default shell
@@ -207,7 +207,7 @@ jobs:
           # the number of processes instead of extending those test deadlines.
           # Both suites still run even if the other fails.
           status=0
-          node --test --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-concurrency=2 tests/*.test.cjs tests/*.test.mjs || status=1
           python -m unittest discover -s tests -p '*_test.py' -v || status=1
           exit $status
       - name: Check Python services
@@ -265,7 +265,7 @@ jobs:
         env:
           PINKIE_VISUAL_REPEAT: "3"
           PINKIE_VISUAL_REPORT: "1"
-        run: node --test tests/visual-baseline.test.mjs
+        run: node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/visual-baseline.test.mjs
       - name: Run core-manifest, Metre inventory, and full regression suites on C.le. path
         timeout-minutes: 30
         run: |
@@ -274,5 +274,5 @@ jobs:
           PINKIE_INVENTORY_SOURCE_ROOT="$RUNNER_TEMP/metre-main-reference" \
             node tools/metre/inject-inventory.mjs --save-baseline "$RUNNER_TEMP/metre-main.json"
           PINKIE_METRE_MAIN_BASELINE="$RUNNER_TEMP/metre-main.json" \
-            node --test tests/*.test.cjs tests/*.test.mjs
+            node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
