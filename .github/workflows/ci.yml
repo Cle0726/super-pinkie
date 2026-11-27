@@ -47,7 +47,8 @@ jobs:
       - name: Run all execution, recovery, UI and desktop regression tests
         timeout-minutes: 30
         run: |
-          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
+          # B72: one hung test fails after 10 min instead of holding the whole step to the 30-min cancel.
+          node --test --test-force-exit --test-timeout=600000 --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
           node --check ui/party/party.js
           node --check ui/party/party-drafts.js
