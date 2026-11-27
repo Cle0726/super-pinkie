@@ -8,7 +8,7 @@ export const MENU_PARTS = Object.freeze({
   footer: '.laolao-deep-think-menu__footer',
 });
 
-// 修复前写死的日间深紫；日间本来就是这四个值，夜间注回它们就是「改前」。
+// 修复前写死的日间深紫（B11·T1 前夜间也是它，B11·T2 前日间是它）；日夜注回它们都是「改前」。
 export const OLD_COLORS = Object.freeze({head: 'rgba(87,54,74,.72)', summary: 'rgba(87,54,74,.53)', hint: 'rgba(87,54,74,.62)', footer: 'rgba(87,54,74,.43)'});
 
 export const REVERT_CSS = Object.entries(OLD_COLORS)

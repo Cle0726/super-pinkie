@@ -102,3 +102,14 @@ test('night tier menu text follows data-pinkie-night, not only data-theme-mode=d
   assert.ok(src.includes(`${night} .laolao-deep-think-menu__footer{color:`),'夜间 footer 有夜间色');
   assert.doesNotMatch(src,/html\[data-theme-mode="dark"\] \.laolao-deep-think-menu\{/,'不再留只认 dark 的菜单整块规则');
 });
+
+test('day tier menu text keeps >= 4.5:1 alphas, not the old faded ones',()=>{
+  const src=read('ui/injections/laolao-deep-think.js');
+  const day={head:'.78',summary:'.82',hint:'.78',footer:'.78'};
+  for(const [name,a] of Object.entries(day)){
+    const rule=src.match(new RegExp(`\\n\\.laolao-deep-think-menu__${name} ?\\{[^}]*\\}|\\}\\.laolao-deep-think-menu__${name}\\{[^}]*\\}`));
+    assert.ok(rule,`日间 ${name} 规则存在`);
+    assert.ok(rule[0].includes(`color:rgba(87,54,74,${a})`),`日间 ${name} 用 alpha ${a}（实际 ${rule[0]}）`);
+  }
+  assert.doesNotMatch(src,/rgba\(87,54,74,\.(72|53|62|43)\)/,'不留旧日间淡色');
+});
