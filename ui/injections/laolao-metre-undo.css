@@ -1,0 +1,21 @@
+/* laolao-metre-undo —— T3 #17（L29）：Metre 里「已归档 · 撤销」那一条换成 Metre 的样子。
+ * 撤销条本身在 laolao-sidebar.js showArchiveUndo（悬停「归档」小键、Delete 键都走 archiveWithUndo），
+ * 原样式在 laolao-sidebar.css（碧琪粉 #d9508d、夜里 #2b2029）。这里只在 data-laolao-mode="metre" 下改颜色和形状：
+ * 和 Metre 的轻提示（laolao-metre-skin.css .laolao-toast）一样，实底、一道细边、圆角 6、Metre 阴影，「撤销」用钴蓝。
+ * 其他五个模式一条规则都不命中；不加强制覆盖：选择器比原规则多一个属性选择器，又在原文件之后加载。 */
+html[data-laolao-mode="metre"] .pinkie-archive-undo {
+  border: 1px solid var(--metre-line);
+  border-radius: 6px;
+  background: var(--metre-surface);
+  color: var(--metre-text);
+  box-shadow: var(--metre-pop-shadow);
+  font: 500 13px/1.4 var(--metre-sans);
+}
+html[data-laolao-mode="metre"] .pinkie-archive-undo button {
+  border-radius: 4px;
+  color: var(--metre-cobalt);
+  font: inherit;
+}
+html[data-laolao-mode="metre"] .pinkie-archive-undo button:hover { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pinkie-archive-undo button:disabled { color: var(--metre-muted); cursor: default; }
+html[data-laolao-mode="metre"] .pinkie-archive-undo button:focus-visible { outline: 2px solid var(--metre-cobalt); outline-offset: 1px; }
