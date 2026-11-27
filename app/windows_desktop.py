@@ -270,7 +270,7 @@ def gateway_listener_pid(port=18789, runner=None):
         return None
     try:
         result = (runner or subprocess.run)(
-            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=5,
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, errors="replace", timeout=5,
             **hidden_process_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
@@ -369,14 +369,23 @@ def openclaw_config_path():
     return Path(config_name) if config_name else Path.home() / ".openclaw" / "openclaw.json"
 
 
+# PowerShell ends a '...' string at any of these, not only at the ASCII quote
+# (B33: a profile under C:\Users\O’Brien broke the -Command below).
+PS_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
+
+
+def ps_single_quoted(value):
+    """Return value as a PowerShell single-quoted literal that cannot end early."""
+    return "'" + "".join(ch * 2 if ch in PS_SINGLE_QUOTES else ch for ch in str(value)) + "'"
+
+
 def cleanup_orphan_webview(storage):
     """Remove only stale Edge WebView2 children owned by this app's storage path."""
     if os.name != "nt":
         return
     path = str(Path(storage).resolve())
-    escaped = path.replace("'", "''")
     script = (
-        "$root='" + escaped + "'; "
+        "$root=" + ps_single_quoted(path) + "; "
         "Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | "
         "Where-Object { $_.CommandLine -and $_.CommandLine -like ('*--user-data-dir=*' + $root + '*') } | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"

@@ -36,7 +36,10 @@ const inside = (root, target) => target === root || target.startsWith(root + pat
 const digest = value => createHash('sha256').update(String(value || '')).digest('hex');
 const normalized = value => String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 const canonicalKey = value => normalized(value).toLocaleLowerCase().slice(0, 160);
-const boundedText = value => normalized(value).slice(0, 2400);
+// 一条长期记忆最多存这么多字。超了不再悄悄截掉前 2400 字照样回「已存」（以后的模型只看得到前半截、
+// 还当是全文，同 #199）：remember 直接拒绝并说清楚，用户原话自动捕获则跳过，由主会话整理成短结论再存。
+export const MEMORY_TEXT_MAX = 2400;
+const boundedText = value => normalized(value).slice(0, MEMORY_TEXT_MAX);
 const validSession = value => /^agent:(main|project|thinking|learning|unrestricted|metre):[^\s]{1,260}$/.test(String(value || ''));
 const isChild = value => /:subagent:/.test(String(value || ''));
 // H1: temp sessions never write long-term memory.
@@ -111,7 +114,9 @@ export function modeForMemorySession(sessionKey = '') {
 }
 
 export function explicitMemoryCandidate(prompt = '') {
-  const text = boundedText(prompt);
+  const text = normalized(prompt);
+  // 太长的原话不自动存：截一半存进去会被当成用户的完整说法（见 MEMORY_TEXT_MAX），交给主会话整理。
+  if (text.length > MEMORY_TEXT_MAX) return '';
   if (!text || text.length < 4 || INTERNAL_TEXT.test(text) || !EXPLICIT_MEMORY.test(text)) return '';
   return text;
 }
@@ -232,8 +237,11 @@ export class LongTermMemoryStore {
     if (isChild(ctx.sessionKey)) throw new Error('子代理只能读取父模式记忆，不能直接写入');
     if (isTemp(ctx.sessionKey)) throw new Error('临时会话不写长期记忆');
     const scope = this.safeContext(ctx);
-    const text = boundedText(input.text);
+    const text = normalized(input.text);
     if (!text) throw new Error('记忆内容不能为空');
+    if (text.length > MEMORY_TEXT_MAX) {
+      throw new Error(`记忆内容有 ${text.length} 字，超过一条能存的 ${MEMORY_TEXT_MAX} 字，没有写入；整理成一两句以后直接能用的结论再存，长材料写进文件后记它的路径`);
+    }
     if (SECRET_PATTERN.test(text)) throw new Error('检测到疑似密码、令牌或密钥，没有写入长期记忆');
     // 正式版：记忆只收关于用户的事实和偏好；改规则、改设定的命令式内容不写入（见 settings-guard.mjs）。
     if ((this.guardEnabled ?? guardMode().enabled) && instructionLike(text)) throw new Error(MEMORY_REFUSAL);

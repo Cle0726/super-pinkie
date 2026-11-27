@@ -11,7 +11,7 @@
   if (window.__pinkiePower) return;
   const T = () => window.PinkieTuning;
   const BUDDY_PREF_KEY = "pinkie-buddy-prefs-v1";
-  const ART = (name) => `./laolao-pinkie-${name}.png`;
+  const ART = (name) => `/laolao-pinkie-${name}.png`; // 绝对路径：在 /settings/… 这类地址下 ./ 会找错地方（404）
 
   const LEVELS = [
     {id: "saver", title: "省着用", line: "电脑吃力时用：帧率和粒子减半，记录少载一些。", art: "buddy-chat-sleepy"},

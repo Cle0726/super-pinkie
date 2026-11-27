@@ -130,7 +130,7 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
 }
 #laolao-user-settings .pinkie-user-settings__choice,
-#laolao-user-settings .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; }
+#laolao-user-settings .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; } #laolao-user-settings .pinkie-user-settings__choice { border-color: var(--pinkie-settings-button-edge, var(--pinkie-settings-border)); }   /* B32：「开 / 关」选项键描边同 B25 设置键（日 3.80 / 夜 4.23:1），:hover / .is-selected 特异性更高照旧盖过 */
 #laolao-user-settings .pinkie-user-settings__choice:hover,
 #laolao-user-settings .pinkie-user-settings__brand:hover,
 #laolao-user-settings .pinkie-user-settings__model-button:hover,
