@@ -15,17 +15,18 @@ import {
 
 // 平时的 Metre 变量（laolao-metre-skin.css 日间 / 夜间两段），高对比关掉时必须原样
 const NORMAL = {
-  day: {muted: 'rgb(119, 115, 107)', line: 'rgb(228, 226, 220)', strong: 'rgb(211, 208, 200)'},
-  night: {muted: 'rgb(145, 141, 132)', line: 'rgb(39, 39, 37)', strong: 'rgb(57, 56, 53)'},
+  // side：侧栏日期行 / 时间用的 --metre-side-muted（日间 #66625A，夜间跟 --metre-muted）
+  day: {muted: 'rgb(119, 115, 107)', side: 'rgb(102, 98, 90)', line: 'rgb(228, 226, 220)', strong: 'rgb(211, 208, 200)'},
+  night: {muted: 'rgb(145, 141, 132)', side: 'rgb(145, 141, 132)', line: 'rgb(39, 39, 37)', strong: 'rgb(57, 56, 53)'},
 };
 
 // 在页面里：找侧栏和底栏状态带里字色等于弱化色、本身有字的元素，算它对后面第一层不透明底的对比度。
 function readContrast() {
   const probe = document.createElement('i');
-  probe.style.cssText = 'position:absolute;color:var(--metre-muted);border:1px solid var(--metre-line);outline:1px solid var(--metre-line-strong)';
+  probe.style.cssText = 'position:absolute;color:var(--metre-muted);background-color:var(--metre-side-muted);border:1px solid var(--metre-line);outline:1px solid var(--metre-line-strong)';
   document.body.append(probe);
   const ps = getComputedStyle(probe);
-  const tokens = {muted: ps.color, line: ps.borderTopColor, strong: ps.outlineColor};
+  const tokens = {muted: ps.color, side: ps.backgroundColor, line: ps.borderTopColor, strong: ps.outlineColor};
   probe.remove();
   // 11-25：color-mix() 算出来的色，浏览器报成 color(srgb r g b [/ a])，分量是 0–1；以前当 0–255 读，会把 (90,84,105) 读成近黑。
   const rgb = (s) => {
@@ -49,7 +50,7 @@ function readContrast() {
       const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
       if (!own) continue;
       const cs = getComputedStyle(el);
-      if (cs.color !== tokens.muted || cs.visibility === 'hidden' || cs.display === 'none') continue;
+      if ((cs.color !== tokens.muted && cs.color !== tokens.side) || cs.visibility === 'hidden' || cs.display === 'none') continue;
       const r = el.getBoundingClientRect();
       if (r.width < 2 || r.height < 2) continue;
       const bg = bgOf(el);
@@ -119,6 +120,7 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
       const more = await page.evaluate(readContrast);
       console.log(`ℹ ${theme} more: tokens ${JSON.stringify(more.tokens)}; ${fmt(more.items)}`);
       assert.notEqual(more.tokens.muted, NORMAL[theme].muted, `${theme}: 高对比时弱化色没换`);
+      assert.equal(more.tokens.side, more.tokens.muted, `${theme}: 高对比时侧栏日期 / 时间的 --metre-side-muted 没跟着弱化色加深（${more.tokens.side} vs ${more.tokens.muted}）`);
       assert.ok(more.items.length >= 1, `${theme}: 侧栏 / 状态带里没找到用弱化色的小字`);
       for (const i of more.items) assert.ok(i.ratio >= 4.5, `${theme}: ${i.el}「${i.text}」只有 ${i.ratio.toFixed(2)}:1 — ${fmt(more.items)}`);
       console.log(`ℹ ${theme} more titles: ${fmt(more.titles)}`);
@@ -196,7 +198,19 @@ test('X4 real page: with prefers-contrast: more, Metre muted small text in sideb
         assert.ok(bad.items.length >= 1, `反例：删掉后侧栏 / 状态带里没找到用弱化色的小字（量不到不能算通过）；弱化色 ${bad.tokens.muted}，侧栏时间实际 ${seen.join(' | ')}`);
         console.log(`ℹ day more without contrast css: ${fmt(bad.items)}`);
         assert.equal(bad.tokens.muted, NORMAL.day.muted);
-        assert.ok(bad.items.some((i) => i.ratio < 4.5), `反例没生效：删掉后小字仍都 ≥ 4.5 — ${fmt(bad.items)}`);
+        assert.equal(bad.tokens.side, NORMAL.day.side);
+        // #160 起侧栏日期 / 时间平时就用 --metre-side-muted（#66625A，约 5.6:1），删掉高对比规则后本来就 ≥ 4.5，「必须掉回 4.5 以下」对它们不成立了。
+        // 反例改成：用 --metre-muted 的小字（如果场景里有）仍必须掉回 4.5 以下；日期 / 时间必须比高对比时浅（证明高对比规则确实在加深它们，没被侧栏规则压掉）。
+        const key = (i) => `${i.el}「${i.text}」`;
+        const moreBy = new Map(more.items.map((i) => [key(i), i.ratio]));
+        const sideItems = bad.items.filter((i) => /pinkie-session-(date|time)/.test(i.el));
+        assert.ok(sideItems.length >= 1, `反例：删掉后侧栏里没找到日期 / 时间（量不到不能算通过）— ${fmt(bad.items)}`);
+        for (const i of sideItems) {
+          assert.ok(moreBy.has(key(i)), `反例：高对比时没量到 ${key(i)}`);
+          assert.ok(i.ratio < moreBy.get(key(i)) - 0.3, `反例没生效：删掉高对比规则后 ${key(i)} 没变浅（${i.ratio.toFixed(2)} vs 高对比 ${moreBy.get(key(i)).toFixed(2)}）`);
+        }
+        const mutedItems = bad.items.filter((i) => !/pinkie-session-(date|time)/.test(i.el));
+        if (mutedItems.length) assert.ok(mutedItems.some((i) => i.ratio < 4.5), `反例没生效：删掉后 --metre-muted 小字仍都 ≥ 4.5 — ${fmt(mutedItems)}`);
       }
     } finally {
       await context.close();
