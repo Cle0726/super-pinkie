@@ -29,7 +29,9 @@ ITEM 按题型：
 export const FIX_ITEM_RULES = `你是 B 级命题老师。输入一道四选一题 {"material","tts","stem","options","answer","solver"}：另一位老师盲做时选了 solver（或认为不止一个选项都对）。
 改写这道题——可以改选项、题干，听力题可以改原文 tts——让只有 answer 下标对应的那个选项正确，其它三个明显不对；难度、话题和题型不变。
 只输出 JSON：{"tts":"听力题才写","stem":"","options":["","","",""],"answer":0-3}`;
-const choiceContext = (p, it) => (p.material && !p.kind.startsWith('listen') ? `${p.material.slice(0, 1500)}\n\n${it.stem}` : (it.tts ? `${it.tts}\n${it.stem || ''}` : it.stem));
+// 盲做 / 改写要看整篇材料（validSection 已限 4000 字）：只给前 1500 字时，答案依据在后半篇的题会被判成「不唯一」，
+// 改写不成还会把盲做选的错答案记进 alt 当对。
+const choiceContext = (p, it) => (p.material && !p.kind.startsWith('listen') ? `${p.material}\n\n${it.stem}` : (it.tts ? `${it.tts}\n${it.stem || ''}` : it.stem));
 
 export const GRADE_RULES = `你是 B 级阅卷老师。输入 {"kind":"translate-passage|writing","task":题目,"reference":参考答案,"rubric":评分细则,"max":满分,"answer":考生作答}。
 严格按细则给分：空白或只抄题目 0 分；跑题最多给满分的三分之一；写作格式要件（称呼 / 落款 / 日期）缺失要扣分。
@@ -122,12 +124,34 @@ export class GameExam {
     game.modules.exam = this;
     this.audioTokens = new Map();
     this.real = new RealPapers(this, {materials: game.store?.materials || null, requestModel: game.requestModel, now: () => this.now(), dataRoot: game.store?.materials?.root || null});
-    // 插着 U 盘（App 开着）就备真题：每分钟看一眼，盘挂上 / 有没备好的卷就跑一轮。测试里不开（没有模型）。
-    if (game.requestModel && game.autoReal !== false) {
-      this.realTimer = setInterval(() => this.realTick(), 60000);
-      this.realTimer.unref?.();
-      setTimeout(() => this.realTick(), 15000).unref?.();
-    }
+    this.timers = new Set();
+    this.stopped = false;
+    this.startTimers();
+  }
+  // 插着 U 盘（App 开着）就备真题：每分钟看一眼，盘挂上 / 有没备好的卷就跑一轮。测试里不开（没有模型）。
+  // 只开一组：重复调用不叠加；stop() 之后可以再 start（服务重启）。
+  startTimers() {
+    this.stopped = false;
+    if (!this.game.requestModel || this.game.autoReal === false || this.realTimer) return;
+    this.realTimer = setInterval(() => this.realTick(), 60000);
+    this.realTimer.unref?.();
+    this.later(() => this.realTick(), 15000);
+  }
+  // 一次性定时器都记在 this.timers 里，stop() 能一把清掉；停了以后不再排新的。
+  later(fn, ms) {
+    if (this.stopped) return null;
+    const t = setTimeout(() => { this.timers.delete(t); if (!this.stopped) fn(); }, ms);
+    t.unref?.();
+    this.timers.add(t);
+    return t;
+  }
+  // 插件重载 / 网关停 / 服务停时调（registerLearningGame 挂好了）：否则旧实例的 60s 轮询和 15s 首轮会一直留在进程里，每加载一次多一组。
+  stop() {
+    this.stopped = true;
+    clearInterval(this.realTimer);
+    this.realTimer = null;
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.clear();
   }
   realTick() {
     try {
@@ -236,7 +260,7 @@ export class GameExam {
       full.verify = await this.verifyPaper(full).catch(() => null);
       this.writeFull(full);
       this.game.mutate(state => { this.ensure(state).papers[paperId] = {paperId, exam, title: `B 级仿真卷 · ${beijingDate(this.now()).slice(5)}`, createdAt: this.now(), status: 'ready'}; });
-    })().catch(() => {}).finally(() => { this.jobs.delete(paperId); setTimeout(() => { try { this.keepSpare(exam); } catch { /* ignore */ } }, 5000).unref?.(); });
+    })().catch(() => {}).finally(() => { this.jobs.delete(paperId); this.later(() => { try { this.keepSpare(exam); } catch { /* ignore */ } }, 5000); });
     this.jobs.set(paperId, job);
     return paperId;
   }
@@ -254,7 +278,7 @@ export class GameExam {
       if (!solved) { out.unknown += 1; return; }
       if (solved.unique && solved.answer === it.answer) { out.unique += 1; return; }
       const listen = p.kind.startsWith('listen');
-      const r = await modelJson(rm, FIX_ITEM_RULES, {material: listen ? '' : String(p.material || '').slice(0, 1500), tts: it.tts || '', stem: it.stem || '', options: it.options, answer: it.answer, solver: solved.answer}, {
+      const r = await modelJson(rm, FIX_ITEM_RULES, {material: listen ? '' : String(p.material || ''), tts: it.tts || '', stem: it.stem || '', options: it.options, answer: it.answer, solver: solved.answer}, {
         retries: 1, timeoutMs: 100000, maxTokens: 1200,
         validate: v => { const c = validChoice({stem: v?.stem || it.stem || '(听录音选答案)', options: v?.options, answer: v?.answer}); return c ? {...c, stem: v?.stem ? c.stem : it.stem, tts: listen && v?.tts ? String(v.tts).slice(0, 1200) : it.tts} : null; },
       });
@@ -352,7 +376,9 @@ export class GameExam {
         // 模型判不了时的兜底：按长度给一个保守分，并标明需要碧琪稍后复判
         got = r ? {...r.value, source: 'model'} : {score: Math.min(Math.floor(s.max * 0.4), Math.floor(clean(s.ans).split(/\s+/).length / 20)), reason: '碧琪这会儿没法细看，先按字数给了保守分。', source: 'local'};
       }
-      notes[s.id] = {...got, standard: clean(s.it.reference, 400), yours: clean(s.ans, 300)};
+      // 批注卡上「标准答案 / 你的答案」给全文：范文 80–100 词就超过 400 字，截了用户只看到半篇
+      // （上限已在入口定好：仿真卷 validItem 2000、真题 validRealItem 3000、作答 save 3000）
+      notes[s.id] = {...got, standard: clean(s.it.reference, 3000), yours: clean(s.ans, 3000)};
       sections.find(x => x.id === s.sec).score += got.score;
     }
     // 错题：标准答案先定下来，模型只顺着它讲。最多 24 道，避免一页全错时阅卷停太久。

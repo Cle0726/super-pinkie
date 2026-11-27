@@ -54,9 +54,24 @@ test('in a browser: the engine menu separator and hovered row can be seen on the
       await tab.locator('.pk-eng-menu__levels').waitFor();
       const item = tab.locator('.pk-eng-menu__item:not([aria-checked="true"])').first();
       await item.hover();
-      await tab.waitForTimeout(300); // the keys file fades the hover in over 120ms
+      // The keys file fades the hover in from transparent; after a fixed wait a slow runner could still read oklab(0 0 0 / 0)
+      // and measure it as black. Wait until the hovered row's fill paints opaque and holds for two frames.
+      await tab.waitForFunction(() => {
+        const el = [...document.querySelectorAll('.pk-eng-menu__item')].find(e => e.matches(':hover'));
+        if (!el) return false;
+        const ctx = (window.__qaHoverCtx ||= Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d', {willReadFrequently: true}));
+        ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = getComputedStyle(el).backgroundColor; ctx.fillRect(0, 0, 1, 1);
+        const px = ctx.getImageData(0, 0, 1, 1).data.join(), same = px === window.__qaHoverPx;
+        window.__qaHoverPx = px;
+        window.__qaHoverHeld = same ? (window.__qaHoverHeld || 0) + 1 : 0;
+        return px.endsWith(',255') && window.__qaHoverHeld >= 2;
+      }, null, {polling: 'raf', timeout: 10_000});
       const got = await tab.evaluate(() => {
-        const rgb = text => { const n = (text.match(/[\d.]+/g) || []).map(Number); return /^color\(srgb/.test(text) ? n.slice(0, 3).map(v => Math.round(v * 255)) : n.slice(0, 3); };
+        // Paint each computed colour on a 1x1 canvas and read the pixel back, so whatever syntax the engine serialises
+        // color-mix() to (rgb, color(srgb …), display-p3, oklab …) is converted to sRGB 0–255 by the browser itself.
+        const ctx = Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d', {willReadFrequently: true});
+        const raw = [];
+        const rgb = text => { raw.push(text); ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = text; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]; };
         const menu = document.querySelector('.pk-eng-menu'), s = e => getComputedStyle(e);
         const hovered = [...menu.querySelectorAll('.pk-eng-menu__item')].find(e => e.matches(':hover'));
         const probe = document.createElement('i'); probe.style.color = 'var(--mk-run)'; menu.append(probe);
@@ -65,6 +80,7 @@ test('in a browser: the engine menu separator and hovered row can be seen on the
           text: rgb(s(hovered.querySelector('.pk-eng-menu__name')).color), focus: rgb(s(probe).color)};
         probe.remove();
         const note = hovered.querySelector('.pk-eng-menu__note'); if (note) out.note = rgb(s(note).color);
+        out.raw = raw.join(' | ');
         return out;
       });
       const at = `${night ? 'night' : 'day'}${old ? ' (main colours)' : ''}`;
@@ -75,7 +91,7 @@ test('in a browser: the engine menu separator and hovered row can be seen on the
         assert.ok(head >= 1.5, `${at}: the line under the title shows on the panel (${head}:1, got ${got.head} on ${got.panel})`);
         assert.ok(levels >= 1.5, `${at}: the line above the levels shows on the panel (${levels}:1)`);
         assert.ok(hover >= 1.3, `${at}: the hovered row shows on the panel (${hover}:1, got ${got.hover} on ${got.panel})`);
-        assert.ok(ratio(got.text, got.hover) >= 4.5, `${at}: the row name stays readable on the hover (${ratio(got.text, got.hover)}:1)`);
+        assert.ok(ratio(got.text, got.hover) >= 4.5, `${at}: the row name stays readable on the hover (${ratio(got.text, got.hover)}:1, got ${got.text} on ${got.hover}; computed: ${got.raw})`);
         if (got.note) assert.ok(ratio(got.note, got.hover) >= 3, `${at}: the grey note stays readable on the hover (${ratio(got.note, got.hover)}:1)`);
         assert.ok(ratio(got.focus, got.panel) >= 3, `${at}: the keyboard focus ring shows on the panel (${ratio(got.focus, got.panel)}:1)`);
       }

@@ -154,3 +154,15 @@ test('registration uses authenticated RPC and official project-anchor hooks',()=
   for(const name of ['before_prompt_build','before_tool_call','subagent_spawned','subagent_ended'])assert.ok(hooks.has(name));
   assert.equal(hooks.has('after_tool_call'),false);
 });
+
+test('a corrupt bindings.json leaves sessions running unanchored and binding reports it clearly',t=>{
+  const {guard,ctx}=fixture(t);
+  fs.writeFileSync(guard.file,'{"agent:project:a":{"root":');
+  // before_prompt_build calls prompt() with no try around it: a SyntaxError here
+  // used to fail every turn of every mode session until the file was fixed by hand.
+  assert.doesNotThrow(()=>guard.prompt(ctx));
+  assert.equal(guard.prompt(ctx),undefined);
+  assert.equal(guard.before({toolName:'read',params:{path:'a.txt'}},ctx),undefined);
+  // The settings page still learns the record is broken, in words, not a parser dump.
+  assert.throws(()=>guard.bind('agent:project:new',ctx.workspaceDir),/项目绑定记录损坏/);
+});

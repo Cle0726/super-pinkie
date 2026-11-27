@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 const stateRoot = process.env.PINKIE_STATE_ROOT || path.join(os.homedir(), 'Library/Application Support/SuperPinkie');
+export const SMALL_WINDOW_TOKENS = 256000;
+export const SMALL_WINDOW_KEEP_RATIO = 0.3;
 
 export function compactionBudget(window) {
   let policy = {};
@@ -29,7 +31,11 @@ export function compactionBudget(window) {
   // 即使将来把 targetRatio 配得过高，也至少为摘要、工具定义和下一次回复
   // 留出 15% 窗口；小窗口保底留 4096 tokens。
   const workingHeadroom = Math.max(4096, Math.floor(tokens * 0.15));
-  const keepRecent = Math.min(requestedKeep, Math.max(1, threshold - workingHeadroom));
+  // 小窗口（≤256K）的原始尾部再压到窗口的 30%：全局 keepRecentTokens 往往按 1M
+  // 模型配置，压在 128K 模型上时压缩后几乎立刻又越线，表现为反复「整理上下文」。
+  // 大窗口沿用原公式，1M 模型的配置值保持不变。
+  const smallWindowCap = tokens <= SMALL_WINDOW_TOKENS ? Math.max(1, Math.floor(tokens * SMALL_WINDOW_KEEP_RATIO)) : Infinity;
+  const keepRecent = Math.min(requestedKeep, Math.max(1, threshold - workingHeadroom), smallWindowCap);
 
   return {
     window: tokens,

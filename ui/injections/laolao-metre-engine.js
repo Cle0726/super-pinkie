@@ -242,7 +242,7 @@
         item.onclick = () => { closeMenu(); choose({engine: engineId, model: model.slug}); };
         body.append(item);
       }
-      if (!(row?.models || []).length) body.append(h('div', 'pk-eng-menu__wait', '这个引擎还没报上来能用的模型：先登录或者在引擎设置里启用它。'));
+      if (!(row?.models || []).length) body.append(h('div', 'pk-eng-menu__wait', '这个引擎还没报上来能用的模型：先登录或者在引擎设置里启用它。')); body.dispatchEvent(new CustomEvent('pk-eng-upstream', {bubbles: true, detail: {row, rows: state.catalog?.engines || [], go: id => openEngineMenu(anchor, 'models', id)}}));
       position(anchor, node);
       return;
     }

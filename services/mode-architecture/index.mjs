@@ -13,15 +13,20 @@ import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineag
 import {checkRoleToolCall, formatRoleCardPrompt, isRolePluginToolAllowed, isRolesContext, ROLES_BASE, RoleMutationAuditor} from './metre-roles.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
+import {registerTurnCheckpoints} from './turn-checkpoints.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
+import {registerWhiteboard} from './whiteboard-store.mjs';
+import {registerWhiteboardTool} from './whiteboard-tools.mjs';
 import {registerSessionTemp} from './session-temp.mjs';
 import {registerSessionExport} from './session-export.mjs';
 import {registerSessionManage} from './session-manage.mjs';
 import {registerToolTrace} from './tool-trace.mjs';
 import {registerMetreMemory} from './metre-memory.mjs';
+import {registerMetrePlanMode} from './metre-plan-mode.mjs';
 import {registerMetreBoard} from './metre-board.mjs';
 import {registerQuietMode} from './quiet-mode.mjs';
 import {registerArtifacts} from './artifacts.mjs';
+import {registerDesktopApps} from './desktop-apps.mjs';
 import {registerProjectSettings} from './project-settings.mjs';
 import {WebGptActivityStore, createWebGptActivityTool, registerWebGptActivityGateway} from './web-gpt-activity.mjs';
 import {WebGptConnectionManager, registerWebGptConnectionGateway} from './web-gpt-connection.mjs';
@@ -52,6 +57,7 @@ import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerPrFlow} from './pr-flow.mjs';
+import {registerShellRun} from './shell-run.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
@@ -655,6 +661,7 @@ export default {
     // roles 角色子会话按角色卡 tools 类别在插件工具注册时过滤（PLAN 3.6）；非 roles 会话原样透传。
     let sessionLineageRef = null;
     const roleMutations = globalThis[Symbol.for('pinkie.metre-roles.mutations.v1')] ??= new RoleMutationAuditor();
+    const execLikeCall = (name, params) => ['exec', 'run_tests'].includes(name) || (name === 'app_browser' && params?.action === 'serve' && params?.command !== undefined);
     const origRegisterTool = api.registerTool?.bind(api);
     const toolApi = origRegisterTool ? Object.create(api, {
       registerTool: {
@@ -740,7 +747,10 @@ export default {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
       isBusy: key => architecture.activityFor(key).parentRunning,
     });
+    registerTurnCheckpoints(toolApi, {access: sessionTitles.access, isBusy: key => architecture.activityFor(key).parentRunning, isLocked: isMetreTurnLocked});
     const sessionPrefs = registerSessionPrefs(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    registerWhiteboard(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
+    registerWhiteboardTool(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     const sessionTemp = registerSessionTemp(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles, prefs: sessionPrefs});
     const sessionExport = registerSessionExport(toolApi, {root: path.join(pinkieStateRoot(), 'sessions'), titles: sessionTitles});
     // pinkie_sessions（Metre 计划 2.7）：列、搜、读、新建、改名、解绑、归档、停、删（只有 Metre）。
@@ -750,6 +760,8 @@ export default {
     registerMetreMemory(toolApi, {root: path.join(pinkieStateRoot(), 'metre-memory'), stateRoot: pinkieStateRoot(),
       bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json'),
       childrenRunning: async key => (await sessionLineage.list(key)).children.some(child => child.status === '运行中')});
+    // Metre「先出方案」（第五批 I4）：按会话开关；开着时先写方案、批了再动手。
+    registerMetrePlanMode(toolApi, {root: path.join(pinkieStateRoot(), 'metre-plan-mode'), isLocked: key => metreLock.isLockedSession(key)});
     // Metre 总控台的数据（PLAN 2.12，批 5）：pinkie.metre.board 一次返回九个区块要的东西，pinkie.metre.resume 是「接着做」。
     registerMetreBoard(toolApi, {root: path.join(pinkieStateRoot(), 'metre-board'), lineage: sessionLineage, plans: planStore, modelHealth, lock: metreLock});
     // Metre 批 6（PLAN 2.13 后端）：Metre 是当前模式、别的模式没在跑时，心跳、学习提醒、学习资料的排队轮询都停；渠道看设置。
@@ -758,6 +770,8 @@ export default {
     // 状态词「创建」和读图小框（PLAN 2.8、2.9）：写入前查路径、记下工具读过的图片
     registerToolTrace(api, {root: path.join(pinkieStateRoot(), 'tool-trace'), baseFor: ctx => agentWorkspaceDir(ctx)});
     const artifacts = registerArtifacts(toolApi, {root: path.join(pinkieStateRoot(), 'artifacts'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
+    // 作品装成桌面独立应用（PR①）：拷副本、记清单；入口和窗口归原生端。
+    registerDesktopApps(toolApi, {root: path.join(pinkieStateRoot(), 'apps'), artifacts});
     registerProjectSettings(toolApi, {root: path.join(pinkieStateRoot(), 'projects'), bindingsFile: path.join(pinkieStateRoot(), 'project-scope', 'bindings.json')});
     registerWebGptActivityGateway(toolApi, webGptActivity);
     registerWebGptConnectionGateway(toolApi, webGptConnection);
@@ -796,6 +810,7 @@ export default {
     registerRichRuntime(toolApi, {cli: resolveGatewayCliEntry()});
     const workbench = registerWorkbench(toolApi);
     registerPrFlow(toolApi, {scope: (params) => workbench.scope(params)}); // 新功能第 5 项 PR 一条龙（只在 Metre；引擎台用时再取）
+    registerShellRun(toolApi, {stateRoot: pinkieStateRoot, openclawStateDir, config: () => runtimeConfig(api), configFile: openclawConfigPath, lock: metreLock, roleCardFor: key => architecture.roleCardForSession?.(key), activityFor: key => architecture.activityFor(key), boundRoot: key => boundProjectRoot(key, {stateRoot: pinkieStateRoot()}), rpc: (m, p) => gatewayAccess.rpc(m, p, {admin: true}), agentOf: agentFromSessionKey, log: e => api.logger?.warn?.(String(e?.message || e))}); // I6 聊天里 ! 跑命令
     const feedback = registerFeedback(toolApi, {root: resolveFeedbackRoot({stateRoot: process.env.PINKIE_STATE_ROOT || ''})});
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
@@ -812,11 +827,8 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         metreLock.assertSessionAllowed(sessionKey);
-        const pluginConfig = runtimeConfig(api);
-        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
-        if (!Object.keys(config).length) {
-          try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
-        }
+        let config = runtimeConfig(api) || {};
+        if (!Object.keys(config).length) try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
         respond(true, modelHealth.failure(sessionKey, {candidates: configuredModels(config, agentFromSessionKey(sessionKey))}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
@@ -1054,12 +1066,8 @@ export default {
         }
 
         // profile / OPENCLAW_CONFIG_PATH 下配置不在 ~/.openclaw；插件 API 有配置就直接用。
-        const pluginConfig = runtimeConfig(api);
-        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
-        if (!Object.keys(config).length) {
-          const configPath = openclawConfigPath();
-          try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
-        }
+        let config = runtimeConfig(api) || {};
+        if (!Object.keys(config).length) try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
         const providerConfig = config?.models?.providers?.[providerKey] || config?.models?.providers?.mm || {};
         
         let baseUrl = providerConfig.baseUrl || 'http://127.0.0.1:1466/v1';
@@ -1178,7 +1186,7 @@ export default {
         const card = sessionLineage.roleCardForSession(ctx.sessionKey);
         const roleCheck = checkRoleToolCall(card, event.toolName, event.params);
         if (roleCheck?.block) return roleCheck;
-        if (card && !card.tools.includes('write') && ['exec', 'run_tests'].includes(String(event.toolName || ''))) {
+        if (card && !card.tools.includes('write') && execLikeCall(String(event.toolName || ''), event.params)) {
           try {
             const watchKey = String(ctx.sessionKey || '');
             roleMutations.beforeExec(watchKey, event.toolCallId || ctx.toolCallId || event.runId, [
@@ -1206,7 +1214,7 @@ export default {
           const card = sessionLineage.roleCardForSession(ctx.sessionKey);
           if (card && !card.tools.includes('write')) {
             const name = String(event.toolName || '');
-            if (['exec', 'run_tests'].includes(name)) {
+            if (execLikeCall(name, event.params)) {
               roleMutations.afterExec(String(ctx.sessionKey || ''), event.toolCallId || ctx.toolCallId || event.runId);
             } else if (['write', 'edit', 'apply_patch', 'code_edit'].includes(name) && !event.error && !event.isError) {
               roleMutations.record(String(ctx.sessionKey || ''), toolTargetPaths(name, event.params, agentWorkspaceDir(ctx)));

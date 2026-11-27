@@ -11,7 +11,7 @@ import WebKit
 @main
 struct LauncherMain {
     static func main() {
-        let arguments = CommandLine.arguments
+        let arguments = CommandLine.arguments; if PinkieAppWindow.runIfRequested(arguments) { return }  // 装到桌面的作品：只开这件作品的窗口（AppWindow.swift）
         if let flag = arguments.firstIndex(of: "--update-progress"), flag + 1 < arguments.count {
             let app = NSApplication.shared
             let controller = UpdateProgressController(file: URL(fileURLWithPath: arguments[flag + 1]))
@@ -640,6 +640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 深色是出厂默认：没有存过偏好的设备（全新安装 / 首次启动）直接进深色。
         UserDefaults.standard.register(defaults: ["pinkie.appearanceMode": "dark"])
+        DispatchQueue.global(qos: .utility).async { PinkieAppWindow.refreshInstalled() }  // 已装到桌面的作品换上这版启动器（AppWindow.swift）
         UNUserNotificationCenter.current().delegate = self
         let appearanceMode = UserDefaults.standard.string(forKey: "pinkie.appearanceMode") ?? "system"
         nightAppearance = appearanceMode == "dark" || (appearanceMode == "system" && NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)

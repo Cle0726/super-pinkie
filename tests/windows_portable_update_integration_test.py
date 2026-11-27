@@ -215,6 +215,9 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                            check=True,creationflags=hidden,capture_output=True)
             process=subprocess.Popen([str(executable),'--hold'],creationflags=hidden)
             try:
+                # Kept on purpose: the image lock has no separate observable
+                # signal -- the assertRaises below *is* the probe, and retrying
+                # unlink() until it fails would hide a lock that is never held.
                 time.sleep(.2)
                 with self.assertRaises(PermissionError):executable.unlink()
                 def stop_after_delay():
@@ -310,9 +313,9 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
             # slow_ready / scanner_lock test timing and file locks, not gateway identity: their gateway is the install's own.
             gateway_exe=(target if gateway_kind in ('same_install','acl_denied','slow_ready','scanner_lock') else root/'previous-copy')/'_internal/runtime/bin/node.exe'
             gateway_exe.parent.mkdir(parents=True,exist_ok=True);gateway_exe.write_bytes(binary)
-            (target/'old-version.txt').write_text('old')
+            (target/'old-version.txt').write_text('old', encoding="utf-8")
             outside=root/'outside';outside.mkdir();outside_exe=outside/'node.exe';outside_exe.write_bytes(binary)
-            previous=root/'PortableFixture.previous';previous.mkdir();(previous/'keep.txt').write_text('unchanged')
+            previous=root/'PortableFixture.previous';previous.mkdir();(previous/'keep.txt').write_text('unchanged', encoding="utf-8")
             state=root/'state';(state/'logs').mkdir(parents=True)
             payload=root/'new.zip'
             with zipfile.ZipFile(payload,'w',compression=zipfile.ZIP_DEFLATED) as archive:
@@ -386,7 +389,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 deadline=time.monotonic()+10
                 while time.monotonic()<deadline and not child_pid.exists():time.sleep(.1)
                 self.assertTrue(child_pid.is_file(),'test gateway did not start')
-                child_id=int(child_pid.read_text())
+                child_id=int(child_pid.read_text(encoding="utf-8"))
                 self.assertTrue(fixture_child_alive(child_id,outside_exe))
                 if gateway_kind in ('verified_external','log_lock','mismatched_record','wrong_command','external_reappears','locked_rollback'):
                     recorded_exe=str(gateway_exe)+('.wrong' if gateway_kind=='mismatched_record' else '')
@@ -418,6 +421,15 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                               str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
                                              stderr=subprocess.PIPE,creationflags=hidden)
                     out,err=process.communicate(timeout=30)
+                    if gateway_kind=='log_lock':
+                        # B68: keep the log locked until the helper is done. Releasing it after
+                        # the handoff only exercised the first half, and a lock that outlived the
+                        # handoff (CI, #414 job 140329917418) dropped the final log line while the
+                        # update itself completed. Done = in-progress.json removed (both paths).
+                        in_progress=state/'updates'/'in-progress.json'
+                        until=time.monotonic()+60
+                        while time.monotonic()<until and in_progress.exists():time.sleep(.2)
+                        helper_done=not in_progress.exists()
                 self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
                 # 防复发：进度窗口必须走测试替身（不在桌面上弹真窗口）。
@@ -432,13 +444,13 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertIsNone(relay.poll())
                     self.assertIsNone(other.poll())
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
-                    self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
+                    self.assertEqual((previous/'keep.txt').read_text(encoding="utf-8"),'unchanged')
                     return
                 updater_log=lambda:read_updater_log(log,'(updater.log unavailable)')[-6000:]
                 self.assertEqual(process.returncode,0,'%s\noutcome=%s\nstdout=%s\n--- updater.log ---\n%s'%(err.decode('utf-8',errors='replace')[-3000:],json.dumps(outcome,ensure_ascii=False),out.decode('utf-8',errors='replace')[-2000:],updater_log()))
                 self.assertTrue(outcome['started'])
                 update_started=True
-                deadline=time.monotonic()+60;text=''
+                deadline=time.monotonic()+(0 if gateway_kind=='log_lock' else 60);text=''
                 while time.monotonic()<deadline:
                     text=read_updater_log(log,text)
                     if 'portable update completed' in text or 'portable update failed' in text:break
@@ -461,9 +473,16 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                         self.assertTrue(executable.is_file(),'the restored copy has no exe')
                     self.assertIsNone(other.poll())
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
-                    self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
+                    self.assertEqual((previous/'keep.txt').read_text(encoding="utf-8"),'unchanged')
                     return
-                self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
+                if gateway_kind=='log_lock':
+                    # The log was held for the whole update, so its lines may be missing
+                    # (Write-UpdateLog falls back to stderr). Judge by what the helper leaves.
+                    self.assertTrue(helper_done,'update helper still running 60 s after the handoff')
+                    self.assertFalse((state/'updates'/'last-failure.json').exists(),'helper recorded a failure')
+                    self.assertNotIn('portable update failed',read_updater_log(log,''))
+                else:
+                    self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
                 if gateway_kind=='slow_ready':
                     self.assertIn('new version started; waiting for its gateway',text)
                 if gateway_kind=='scanner_lock':
@@ -476,25 +495,25 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertIsNotNone(relay.poll())
                 self.assertIsNone(other.poll())
                 self.assertTrue(fixture_child_alive(child_id,outside_exe),'unrelated gateway child was killed')
-                self.assertEqual((previous/'keep.txt').read_text(),'unchanged')
+                self.assertEqual((previous/'keep.txt').read_text(encoding="utf-8"),'unchanged')
             finally:
                 if locker and locker.is_alive():locker.join(timeout=30)
                 if acl_changed:fixture_acl('restore')
                 stop_watch.set()
                 if watcher:watcher.join(timeout=5)
-                child_stop.write_text('stop')
+                child_stop.write_text('stop', encoding="utf-8")
                 for process in reversed(children+revived):
                     if process.poll() is None:process.terminate()
                 for process in children+revived:
                     try:process.wait(timeout=5)
                     except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
                 child_ids={child_id} if child_id else set()
-                if revived_child_pid.exists():child_ids.add(int(revived_child_pid.read_text()))
+                if revived_child_pid.exists():child_ids.add(int(revived_child_pid.read_text(encoding="utf-8")))
                 deadline=time.monotonic()+15
                 while time.monotonic()<deadline and any(fixture_child_alive(pid,outside_exe) for pid in child_ids):time.sleep(.1)
                 self.assertFalse(any(fixture_child_alive(pid,outside_exe) for pid in child_ids),'fixture child did not exit after stop signal')
                 if update_started and new_pid.exists():
-                    fresh_id=int(new_pid.read_text());deadline=time.monotonic()+5
+                    fresh_id=int(new_pid.read_text(encoding="utf-8"));deadline=time.monotonic()+5
                     while time.monotonic()<deadline and fixture_child_alive(fresh_id,executable):time.sleep(.1)
                 fixture_unlink_executable(outside_exe,root)
 

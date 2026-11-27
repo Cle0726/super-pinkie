@@ -95,7 +95,8 @@ test(`Metre 措辞（真浏览器）：设置页根节点晚于脚本出现时�
     await tab.goto('http://127.0.0.1:30117/settings/general');
     await tab.addScriptTag({path: path.join(root, 'ui', 'injections', 'laolao-dom-watch.js')});
     await tab.addScriptTag({path: path.join(root, 'ui', 'injections', 'laolao-metre-skin.js')});
-    await tab.waitForTimeout(150);
+    // 等措辞脚本跑完初始化（sync → attach，里面登记 domWatch.watch 等根节点）：它最后一行才挂 __pinkieMetreWords
+    await tab.waitForFunction(() => typeof window.__pinkieMetreWords?.attach === 'function' && Boolean(window.Pinkie?.domWatch), null, {timeout: 3000}).catch(() => {});
     await tab.evaluate(() => { document.querySelector('#app').innerHTML = '<openclaw-config-page><button class="qs-link-btn">Configure →</button><a> Manage → </a><span>Configure the gateway</span></openclaw-config-page>'; });
     await tab.waitForFunction(() => document.querySelector('.qs-link-btn')?.textContent === '设置 →', null, {timeout: 3000});
     assert.equal(await tab.evaluate(() => document.querySelector('openclaw-config-page a').textContent), ' 管理 → ');
@@ -107,6 +108,7 @@ test(`Metre 措辞（真浏览器）：设置页根节点晚于脚本出现时�
     await tab.evaluate(() => document.documentElement.setAttribute('data-laolao-mode', 'classic'));
     await tab.waitForFunction(() => document.querySelector('.qs-link-btn')?.textContent === 'Browse →', null, {timeout: 3000});
     await tab.evaluate(() => { document.querySelector('#app').innerHTML = '<openclaw-config-page><button class="qs-link-btn">Connect →</button></openclaw-config-page>'; });
+    // 保留死等：要证明「离开 Metre 后新根节点不再被改」这件没发生的事，必须留时间窗（domWatch 按 rAF 批处理，300ms 覆盖多帧）。
     await tab.waitForTimeout(300);
     assert.equal(await tab.evaluate(() => document.querySelector('.qs-link-btn').textContent), 'Connect →');
   } finally { await browser.close(); }
@@ -122,7 +124,7 @@ test('设置页（Metre）：能力卡说明折行，不用省略号', () => {
 // 两份样式一起加载，量卡的真实宽度，算上悬停投影，灯要在卡右边、又不碰底栏的全屏键（x155）。
 test(`侧栏（Metre，真浏览器）：模式切换卡真实宽度 + 投影在连接灯左边，灯不碰全屏键 (${engine})`, {timeout: 30_000}, async () => {
   const css = inj('laolao-metre-skin.css');
-  const lamp = css.match(/aside\.sidebar:not\(\.sidebar--collapsed\) \.pinkie-connection-status \{ left: (\d+)px !important; top: 16px/);
+  const lamp = css.match(/aside\.sidebar:not\(\.sidebar--collapsed\) \.pinkie-connection-status \{ left: (\d+)px !important; top: 26px/);   // B14：灯和黑卡竖直居中（top 16 → 26）；只认这一条，别的 top 是更早被覆盖掉的旧规则
   assert.ok(lamp, '找不到连接灯位置的规则');
   const browser = await launch();
   try {

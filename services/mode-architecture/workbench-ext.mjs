@@ -173,10 +173,11 @@ export class ExtensionMarket {
     const job = {state: 'queued', log: [], startedAt: Date.now(), action, ok: null};
     this.jobs.set(id, job);
     this.emit(id, {state: 'queued', action});
-    this.queue = this.queue.then(() => new Promise(async resolve => {
+    // 执行器不能是 async：spawn 同步抛错（如 Windows 上不带 shell 起 .cmd 的 EINVAL）会变成没人接的拒绝，
+    // resolve() 也不再调用，队列从此卡死。启动放进 .then 链，出错写进日志按失败收尾。
+    this.queue = this.queue.then(() => new Promise(resolve => {
       job.state = 'running'; this.emit(id, {state: 'running', action});
       const [file, args, env] = spec;
-      const child = this.spawnImpl(file, args, {cwd: LSP_DIR, env: {...process.env, PATH: toolPath(), HOME, ...(await proxyEnv()), ...env, CI: '1', TERM: 'dumb', NO_COLOR: '1'}, stdio: ['ignore', 'pipe', 'pipe']});
       const push = chunk => {
         for (const line of String(chunk).split(/\r?\n|\r/)) {
           const text = line.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
@@ -185,12 +186,16 @@ export class ExtensionMarket {
           this.emit(id, {line: text.slice(0, 400)});
         }
       };
-      child.stdout?.on('data', push); child.stderr?.on('data', push);
-      const timer = setTimeout(() => { try { child.kill('SIGTERM'); } catch {} push('超过 30 分钟，已停止。'); }, 30 * 60 * 1000);
-      timer.unref?.();
+      let timer = null;
       const finish = ok => { clearTimeout(timer); job.state = 'done'; job.ok = ok; job.finishedAt = Date.now(); this.emit(id, {state: 'done', ok, action}); resolve(); };
-      child.on('error', error => { push(String(error.message || error)); finish(false); });
-      child.on('close', code => finish(code === 0));
+      proxyEnv().then(proxy => {
+        const child = this.spawnImpl(file, args, {cwd: LSP_DIR, env: {...process.env, PATH: toolPath(), HOME, ...proxy, ...env, CI: '1', TERM: 'dumb', NO_COLOR: '1'}, stdio: ['ignore', 'pipe', 'pipe']});
+        child.stdout?.on('data', push); child.stderr?.on('data', push);
+        timer = setTimeout(() => { try { child.kill('SIGTERM'); } catch {} push('超过 30 分钟，已停止。'); }, 30 * 60 * 1000);
+        timer.unref?.();
+        child.on('error', error => { push(String(error.message || error)); finish(false); });
+        child.on('close', code => finish(code === 0));
+      }).catch(error => { push(String(error?.message || error)); finish(false); });
     }));
     return {id, state: job.state, action};
   }
