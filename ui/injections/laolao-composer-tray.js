@@ -27,6 +27,7 @@
       + '<path class="pk-f" d="M10.500 7.300c.3 1.900 1.100 2.700 3 3-1.900.3-2.700 1.100-3 3-.3-1.900-1.100-2.700-3-3 1.900-.3 2.700-1.100 3-3z"/>'),
     webgpt: svg('<rect x="3.500" y="5.500" width="17" height="12" rx="2.200"/><path d="M9 20.500h6"/><path class="pk-a" d="M8.500 11.500h3M14 11.500h1.500"/>'),
     split: svg('<rect x="3.500" y="5" width="17" height="14" rx="2.200"/><path class="pk-a" d="M12 5v14"/>'),
+    sbs: svg('<rect x="3.500" y="5" width="7.200" height="14" rx="1.800"/><rect x="13.300" y="5" width="7.200" height="14" rx="1.800"/><path class="pk-a" d="M8.600 12h6.800M10.200 10.300L8.600 12l1.600 1.700M13.800 10.300l1.600 1.700-1.600 1.700"/>'),
   };
   const text = node => (node?.textContent || '').replace(/\s+/g, ' ').trim();
   // 每一行：在这个输入框里找原来的那颗按钮；找不到（这个模式或这个版本没有）就不出这一行。
@@ -40,6 +41,8 @@
     {key: 'research', group: 'session', icon: ICON.research, name: '深度研究', hint: '下一条消息查资料，写成带来源的报告',
       find: input => input.querySelector('.laolao-research-btn'),
       state: node => ({kind: 'switch', on: node.classList.contains('is-on')})},
+    {key: 'sidebyside', group: 'session', icon: ICON.sbs, name: '并排答', get hint() { return root.getAttribute('data-laolao-mode') === 'metre' ? '下一拍两个模型对着写' : '下一句用两个模型同时答'; },
+      find: input => input.querySelector('.pinkie-sbs-toggle'), state: node => ({kind: 'switch', on: node.getAttribute('aria-pressed') === 'true'})},
     {key: 'webgpt', group: 'session', icon: ICON.webgpt, name: '网页 GPT 协作', hint: '借你登录的网页 GPT 一起做',
       find: input => input.querySelector('.laolao-web-gpt-collab'),
       state: node => ({kind: 'switch', on: node.classList.contains('is-active')}),
@@ -167,8 +170,7 @@
     anchor = button;
     menu = document.createElement('div');
     menu.className = 'pinkie-tray';
-    menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', '工具箱');
+    menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', '工具箱');
     document.body.append(menu);
     button.setAttribute('aria-expanded', 'true');
     render();
@@ -179,10 +181,8 @@
   }
   function trayButton() {
     const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'pinkie-tray-btn';
-    button.setAttribute('aria-haspopup', 'menu');
-    button.setAttribute('aria-expanded', 'false');
+    button.type = 'button'; button.className = 'pinkie-tray-btn';
+    button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false');
     button.setAttribute('aria-label', '工具箱：附件、联网、回答风格、深度研究等');
     button.dataset.pinkieTooltip = '工具箱';
     button.innerHTML = ICON.tray + '<span>工具</span>';
