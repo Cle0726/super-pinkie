@@ -1,0 +1,207 @@
+/* 并排答（A5）：输入框旁的开关、两个模型位子，和这道题下面的两栏。脚本在 laolao-side-by-side.js。
+ * 只用 .pinkie-sbs* 和 html[...] 开头的选择器，不加强制覆盖。 */
+
+/* ── 输入框旁的开关：照深度研究开关的样子 ── */
+html .agent-chat__input .pinkie-sbs-toggle {
+  order: -54;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+html .agent-chat__input .pinkie-sbs-toggle > span { display: none; }
+html .agent-chat__input .pinkie-sbs-toggle:hover:not(:disabled) { background: rgba(0, 0, 0, .05); }
+html .agent-chat__input .pinkie-sbs-toggle:disabled { opacity: .45; cursor: not-allowed; }
+html .agent-chat__input .pinkie-sbs-toggle.is-on {
+  padding: 0 10px 0 8px;
+  background: rgba(233, 79, 145, .12);
+  color: #c23f7c;
+  font-weight: 600;
+}
+html .agent-chat__input .pinkie-sbs-toggle.is-on > span { display: inline; }
+html[data-pinkie-night] .agent-chat__input .pinkie-sbs-toggle:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: #f1e6ec; }
+html[data-pinkie-night] .agent-chat__input .pinkie-sbs-toggle.is-on { background: rgba(255, 140, 191, .16); color: #ff9cc8; }
+/* 工具箱收起通用按钮时，关着的开关也收进工具箱；打开了就回到输入框下面。 */
+html[data-pinkie-tray="1"]:not([data-laolao-plain-composer]) .agent-chat__input .pinkie-sbs-toggle:not([aria-pressed="true"]) { display: none; }
+
+.pinkie-sbs-ic {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+/* ── 两个模型位子 ── */
+.pinkie-sbs-models {
+  order: -53;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.pinkie-sbs-models__hint { color: var(--muted, #8a7a83); }
+.pinkie-sbs-models.is-invalid .pinkie-sbs-models__hint { color: #c2410c; }
+.pinkie-sbs-pick {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.pinkie-sbs-pick__select {
+  max-width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, .14);
+  border-radius: 8px;
+  background: var(--card, #fff);
+  color: var(--text, #2a2027);
+  font: inherit;
+  font-size: 12.5px;
+}
+.pinkie-sbs-models.is-invalid .pinkie-sbs-pick__select { border-color: #f59e0b; }
+.pinkie-sbs-pick__vs { color: var(--muted, #8a7a83); font-size: 11.5px; }
+html[data-pinkie-night] .pinkie-sbs-pick__select { border-color: rgba(255, 255, 255, .16); background: #2a2027; color: #f3e9ef; }
+
+/* 比较中父会话的发送键不可用。 */
+html[data-pinkie-sbs="comparing"] .agent-chat__input .chat-send-btn:not(.chat-send-btn--stop) { opacity: .45; cursor: not-allowed; }
+
+/* ── 两栏 ── */
+.pinkie-sbs {
+  margin: 12px 0 18px;
+  padding: 12px;
+  border: 1px solid rgba(217, 80, 141, .22);
+  border-radius: 14px;
+  background: var(--card, #fff);
+  color: var(--text, #2a2027);
+  font-size: 14px;
+}
+html[data-pinkie-night] .pinkie-sbs { border-color: rgba(255, 140, 191, .22); background: #2a2027; color: #f3e9ef; }
+.pinkie-sbs__head, .pinkie-sbs__foot, .pinkie-sbs__col-head, .pinkie-sbs__col-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pinkie-sbs__head { margin-bottom: 10px; }
+.pinkie-sbs__title { font-weight: 600; color: var(--accent, #d9508d); }
+.pinkie-sbs__ask {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted, #8a7a83);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pinkie-sbs__stop-all { margin-left: auto; }
+.pinkie-sbs__cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.pinkie-sbs__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 10px;
+  background: var(--bg, #fdf8fa);
+}
+html[data-pinkie-night] .pinkie-sbs__col { border-color: rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .03); }
+.pinkie-sbs__col[data-status="error"], .pinkie-sbs__col[data-status="aborted"] { border-style: dashed; }
+.pinkie-sbs__model { font-weight: 600; overflow-wrap: anywhere; }
+.pinkie-sbs__state { color: var(--muted, #8a7a83); font-size: 12px; }
+.pinkie-sbs__col[data-status="error"] .pinkie-sbs__state,
+.pinkie-sbs__col[data-status="aborted"] .pinkie-sbs__state { color: #c2410c; }
+html[data-pinkie-night] .pinkie-sbs__col[data-status="error"] .pinkie-sbs__state,
+html[data-pinkie-night] .pinkie-sbs__col[data-status="aborted"] .pinkie-sbs__state { color: #fdba74; }
+.pinkie-sbs__col-head .pinkie-sbs__stop { margin-left: auto; }
+.pinkie-sbs__text {
+  flex: 1 1 auto;
+  min-height: 3em;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pinkie-sbs__col[data-status="running"] .pinkie-sbs__text:empty::before { content: "…"; color: var(--muted, #8a7a83); }
+.pinkie-sbs__why { margin: 0; color: #c2410c; font-size: 13px; }
+html[data-pinkie-night] .pinkie-sbs__why { color: #fdba74; }
+.pinkie-sbs__usage, .pinkie-sbs__total { color: var(--muted, #8a7a83); font-size: 12px; }
+.pinkie-sbs__meter {
+  flex: 1 1 60px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, .06);
+}
+.pinkie-sbs__meter > i { display: block; height: 100%; background: var(--accent, #d9508d); opacity: .6; }
+html[data-pinkie-night] .pinkie-sbs__meter { background: rgba(255, 255, 255, .1); }
+.pinkie-sbs__col-foot .pinkie-sbs__adopt { margin-left: auto; }
+.pinkie-sbs__foot { margin-top: 10px; }
+.pinkie-sbs__foot .pinkie-sbs__discard { margin-left: auto; }
+.pinkie-sbs__lead, .pinkie-sbs__lost { margin: 0 0 8px; }
+.pinkie-sbs[data-phase="pick"], .pinkie-sbs[data-phase="lost"] { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pinkie-sbs[data-phase="pick"] .pinkie-sbs__lead, .pinkie-sbs[data-phase="lost"] .pinkie-sbs__lost { flex: 1 0 100%; }
+
+.pinkie-sbs__btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, .14);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.pinkie-sbs__btn:hover:not(:disabled) { background: rgba(0, 0, 0, .05); }
+.pinkie-sbs__btn:disabled { opacity: .45; cursor: not-allowed; }
+.pinkie-sbs__adopt, .pinkie-sbs__go { border-color: transparent; background: var(--accent, #d9508d); color: #fff; font-weight: 600; }
+.pinkie-sbs__adopt:hover:not(:disabled), .pinkie-sbs__go:hover:not(:disabled) { background: #c23f7c; }
+html[data-pinkie-night] .pinkie-sbs__btn { border-color: rgba(255, 255, 255, .18); }
+html[data-pinkie-night] .pinkie-sbs__btn:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
+html[data-pinkie-night] .pinkie-sbs__adopt, html[data-pinkie-night] .pinkie-sbs__go { border-color: transparent; background: #ff8cbf; color: #2a2027; }
+html[data-pinkie-night] .pinkie-sbs__adopt:hover:not(:disabled), html[data-pinkie-night] .pinkie-sbs__go:hover:not(:disabled) { background: #ff9cc8; }
+.pinkie-sbs__btn:focus-visible, .pinkie-sbs-pick__select:focus-visible, .pinkie-sbs-toggle:focus-visible {
+  outline: 2px solid var(--accent, #d9508d);
+  outline-offset: 2px;
+}
+
+/* ── Metre 皮：外面包一层 Metre 的细框，用量画成细线 ── */
+html[data-laolao-mode="metre"] .pinkie-sbs {
+  border-color: currentColor;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px var(--bg, #fdf8fa), 0 0 0 4px rgba(0, 0, 0, .18);
+}
+html[data-laolao-mode="metre"][data-pinkie-night] .pinkie-sbs { box-shadow: 0 0 0 3px #2a2027, 0 0 0 4px rgba(255, 255, 255, .22); }
+html[data-laolao-mode="metre"] .pinkie-sbs__col { border-radius: 2px; }
+html[data-laolao-mode="metre"] .pinkie-sbs__title { letter-spacing: .08em; }
+html[data-laolao-mode="metre"] .pinkie-sbs__meter { height: 1px; border-radius: 0; background: currentColor; opacity: .25; }
+html[data-laolao-mode="metre"] .pinkie-sbs__meter > i { opacity: 1; }
+html[data-laolao-mode="metre"] .pinkie-sbs__btn { border-radius: 2px; }
+
+/* 窄窗口上下叠：先左后右，按钮在各自文末。 */
+@media (max-width: 960px) {
+  .pinkie-sbs__cols { grid-template-columns: minmax(0, 1fr); }
+  .pinkie-sbs-pick__select { max-width: 160px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html .agent-chat__input .pinkie-sbs-toggle, .pinkie-sbs__btn { transition: none; }
+}
