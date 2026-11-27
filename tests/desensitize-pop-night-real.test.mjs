@@ -13,11 +13,11 @@ import {
   startRealUiServer,
 } from './visual/lib/real-harness.mjs';
 import {
-  BORDER_PARTS, POP, REVERT_MUST_FAIL, TEXT_PARTS,
+  BORDER_PARTS, OUTSIDE_ONLY, POP, REVERT_MUST_FAIL, TEXT_PARTS,
   measurePop, openDesensitizePop, popLightWithNightAttrOnly, revertPopColors,
 } from './visual/lib/desensitize-pop-contrast.mjs';
 
-const ARGS = {pop: POP, text: TEXT_PARTS, border: BORDER_PARTS};
+const ARGS = {pop: POP, text: TEXT_PARTS, border: BORDER_PARTS, outsideOnly: OUTSIDE_ONLY};
 const need = (name) => (name in BORDER_PARTS ? 3 : 4.5);
 
 function assertAllPass(m, label) {

@@ -1,6 +1,7 @@
 // 脱敏浮窗（#laolao-desensitize-pop）日夜对比度的量法，给 tests/desensitize-pop-night-real.test.mjs 和
 // tools/pr-shots/desensitize-pop-night.mjs 共用。量法同 deep-think-menu-contrast.mjs：颜色按 alpha 叠到下面几层底上，
-// 底是渐变时每个色标都算一遍，取最差的那组。字（含 placeholder）对自己所在的底；边框取「对外侧底」「对自己的底」里更差的一个。
+// 底是渐变时每个色标都算一遍，取最差的那组。字（含 placeholder）对自己所在的底；边框取「对外侧底」「对自己的底」里更差的一个，
+// 但实心按钮（OUTSIDE_ONLY）的边框只对外侧底：按钮的边界是「边框+实心填充」对浮窗底，边框和自己的填充之间不是边界。
 
 export const POP = '#laolao-desensitize-pop';
 // 字：≥ 4.5
@@ -22,6 +23,7 @@ export const BORDER_PARTS = Object.freeze({
   applyBorder: '#ds-apply',
 });
 // 修复前一直不达标、注回旧色必须量出不达标的部分（标题和输入字原本就够，不算进反例）。
+export const OUTSIDE_ONLY = Object.freeze(['runBorder', 'applyBorder']);
 export const REVERT_MUST_FAIL = Object.freeze(['placeholder', 'status', 'run', 'apply', 'selectBorder', 'inputBorder', 'outputBorder', 'runBorder', 'applyBorder']);
 
 // 修复前的样式（夜间浮窗原来也是亮底，只是渐变略不同）。直接注到被量的元素上并关掉过渡。
@@ -44,7 +46,7 @@ export function revertCss(theme) {
   ].join('\n');
 }
 
-export function measurePop({pop, text, border}) {
+export function measurePop({pop, text, border, outsideOnly = []}) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 1;
   const cx = cv.getContext('2d', {willReadFrequently: true});
   const P = (c) => {
@@ -98,6 +100,7 @@ export function measurePop({pop, text, border}) {
     if (!el) { out[name] = null; continue; }
     const color = getComputedStyle(el).borderTopColor;
     const outside = worst(color, basesFrom(el.parentElement));
+    if (outsideOnly.includes(name)) { out[name] = {...outside, side: 'outside'}; continue; }
     const inside = worst(color, basesFrom(el));
     out[name] = outside.ratio <= inside.ratio ? {...outside, side: 'outside'} : {...inside, side: 'inside'};
   }

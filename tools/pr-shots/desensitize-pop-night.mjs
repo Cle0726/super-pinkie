@@ -19,7 +19,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const H = await import(pathToFileURL(path.join(root, 'tests/visual/lib/real-harness.mjs')).href);
 const M = await import(pathToFileURL(path.join(root, 'tests/visual/lib/desensitize-pop-contrast.mjs')).href);
 const engine = String(H.resolveRealEngine() || 'chromium');
-const ARGS = {pop: M.POP, text: M.TEXT_PARTS, border: M.BORDER_PARTS};
+const ARGS = {pop: M.POP, text: M.TEXT_PARTS, border: M.BORDER_PARTS, outsideOnly: M.OUTSIDE_ONLY};
 const HEIGHT = 800;
 const lines = [];
 
