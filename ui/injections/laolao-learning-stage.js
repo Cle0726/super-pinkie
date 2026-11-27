@@ -5,7 +5,7 @@
   const ANSWER_MARKER = "[[CLEKK_LEARNING_ANSWER_V1]]";
   const NEXT_MARKER = "[[CLEKK_LEARNING_NEXT_V1]]";
   const BATCH_MARKER = "[[CLEKK_LEARNING_BATCH_V1]]";
-  const ASSET = "./laolao-learning-question.png";
+  const ASSET = "/laolao-learning-question.png";
   const state = {
     sessionKey: "",
     revision: -1,
