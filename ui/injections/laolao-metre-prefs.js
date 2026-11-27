@@ -166,6 +166,8 @@
     if (!isMetre() || sendKey() !== 'modifier-enter') return;
     const ta = event.target?.closest?.('.agent-chat__composer-combobox textarea');
     if (!ta || ta.closest('.agent-chat__input')?.querySelector('.slash-menu')) return;
+    // L25：@ 提及弹层（laolao-session-tools.js 挂在 body 上）里有候选时，Enter 归它选中插入引用；空弹层照常拦。
+    if (document.querySelector('.pinkie-mention .pinkie-mention__item')) return;
     event.stopImmediatePropagation();
   }, true);
   window.addEventListener('laolao:modechange', paint);

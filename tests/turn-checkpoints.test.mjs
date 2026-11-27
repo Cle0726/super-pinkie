@@ -140,6 +140,23 @@ test('本轮新建的文件回退后被删，本轮删掉的文件回退后放�
   assert.equal(fs.readFileSync(old, 'utf8'), 'old body');
 });
 
+test('apply_patch 用相对路径删掉的文件，preview 列为 recreate，回退后放回', async t => {
+  const h = setup({workspace: 'project'});
+  t.after(h.cleanup);
+  const gone = h.file('c.txt', 'charlie v0\n');
+  const {assistantId} = await h.turn([{
+    tool: 'apply_patch',
+    params: {input: '*** Begin Patch\n*** Delete File: c.txt\n*** End Patch'},
+    effect: () => fs.rmSync(gone),
+  }]);
+  const preview = await h.cp.preview(h.params(assistantId));
+  assert.deepEqual(preview.restore, [{path: gone, action: 'recreate'}]);
+  assert.deepEqual(preview.unrecoverable ?? [], []);
+  const result = await h.cp.restore(h.params(assistantId));
+  assert.equal(result.restored, 1);
+  assert.equal(fs.readFileSync(gone, 'utf8'), 'charlie v0\n');
+});
+
 test('跨三轮回到第 2 轮之前：第 2、3 轮的改动没了，第 1 轮的还在，对话截在第 1 轮回答', async t => {
   const h = setup();
   t.after(h.cleanup);

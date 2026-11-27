@@ -54,7 +54,14 @@ const send = (page, message, plan = 'started') => page.evaluate(async ([key, mes
   return {result, replies, message: req.params.message};
 }, [KEY, message, plan]);
 const runs = (page) => page.evaluate(() => window.calls.filter(c => c.method === 'pinkie.shell.run').map(c => c.params));
-const draft = async (page) => { await page.waitForTimeout(30); return page.locator('textarea').inputValue(); };
+// 没跑成时 refuse() 在 setTimeout(0) 里把命令放回输入框（原生发送会先清空）。CI 机器忙时这一拍
+// 会晚于固定 30 ms（本机压满 CPU 时 15 次红 2 次：30 ms 时还是空，再过 14–25 ms 才放回），所以等条件：
+// 等到输入框就是期望的命令；等不到（3 s）就照实返回当时的值，让断言报出实际内容。
+const draft = async (page, expected) => {
+  const box = page.locator('textarea');
+  await page.waitForFunction((want) => document.querySelector('textarea')?.value === want, expected, {timeout: 3_000}).catch(() => {});
+  return box.inputValue();
+};
 
 test(`composer bang: switch off leaves ! messages for the model (${engine})`, {timeout: 60_000}, async () => {
   const browser = await launch();
@@ -112,7 +119,7 @@ test(`composer bang: confirm dialog defaults to 算了, Esc cancels and puts the
     assert.equal(out.result, true);
     assert.deepEqual(out.replies, [{ok: false, body: '没有跑'}]);
     assert.equal(await dialog.count(), 0);
-    assert.equal(await draft(page), '!rm -rf build', '没跑就把命令放回输入框');
+    assert.equal(await draft(page, '!rm -rf build'), '!rm -rf build', '没跑就把命令放回输入框');
     assert.equal(await page.locator('.laolao-composer-bang__hint').count(), 0, '自己取消不弹提示');
     assert.deepEqual(await runs(page), [{sessionKey: KEY, command: 'rm -rf build'}], '只问过一次，没带 confirmed');
   } finally { await browser.close(); }
@@ -138,7 +145,7 @@ test(`composer bang: a refused command shows the reason and restores the draft (
     assert.equal(out.result, true);
     assert.deepEqual(out.replies, [{ok: false, body: '这条命令在「不允许」名单里'}]);
     assert.equal(await page.locator('.laolao-composer-bang__hint').textContent(), '这条命令在「不允许」名单里');
-    assert.equal(await draft(page), '!curl x');
+    assert.equal(await draft(page, '!curl x'), '!curl x');
     await page.locator('textarea').pressSequentially('y');
     assert.equal(await page.locator('.laolao-composer-bang__hint').count(), 0, '一打字提示就收起');
   } finally { await browser.close(); }
