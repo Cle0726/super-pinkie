@@ -594,8 +594,11 @@ export async function startVisualServer({port = 0} = {}) {
   };
 }
 
-export async function launchVisualBrowser(engine = process.env.PINKIE_VISUAL_ENGINE || '') {
-  const {chromium} = playwright();
+export async function launchVisualBrowser(engine = process.env.PINKIE_VISUAL_ENGINE || '', pw = playwright()) {
+  if (engine === 'webkit' || engine === 'firefox') {
+    return pw[engine].launch({headless: true});
+  }
+  const {chromium} = pw;
   const launchOpts = {
     headless: true,
     args: [
