@@ -64,6 +64,8 @@ export class LspHub {
     this.servers.set(key, entry);
     child.stdout.on('data', chunk => this.read(entry, chunk));
     child.stderr.on('data', chunk => { entry.stderr = (entry.stderr + chunk).slice(-4000); });
+    // 语言服务崩了、exit 还没到时 send() 的写入会报 EPIPE：记下来，不让它变成 uncaughtException。
+    child.stdin.on('error', error => { entry.stderr = (entry.stderr + ' | ' + String(error?.message || error)).slice(-4000); });
     child.on('error', error => { entry.exited = true; entry.emit({id, exited: true, error: String(error.message || error)}); });
     child.on('exit', (code, signal) => { entry.exited = true; this.servers.delete(key); entry.emit({id, exited: true, code, signal, stderr: entry.stderr.slice(-800)}); });
     return {available: true, id, server: serverId, label: spec.label};
