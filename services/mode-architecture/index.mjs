@@ -660,6 +660,7 @@ export default {
     // roles 角色子会话按角色卡 tools 类别在插件工具注册时过滤（PLAN 3.6）；非 roles 会话原样透传。
     let sessionLineageRef = null;
     const roleMutations = globalThis[Symbol.for('pinkie.metre-roles.mutations.v1')] ??= new RoleMutationAuditor();
+    const execLikeCall = (name, params) => ['exec', 'run_tests'].includes(name) || (name === 'app_browser' && params?.action === 'serve' && params?.command !== undefined);
     const origRegisterTool = api.registerTool?.bind(api);
     const toolApi = origRegisterTool ? Object.create(api, {
       registerTool: {
@@ -1187,7 +1188,7 @@ export default {
         const card = sessionLineage.roleCardForSession(ctx.sessionKey);
         const roleCheck = checkRoleToolCall(card, event.toolName, event.params);
         if (roleCheck?.block) return roleCheck;
-        if (card && !card.tools.includes('write') && ['exec', 'run_tests'].includes(String(event.toolName || ''))) {
+        if (card && !card.tools.includes('write') && execLikeCall(String(event.toolName || ''), event.params)) {
           try {
             const watchKey = String(ctx.sessionKey || '');
             roleMutations.beforeExec(watchKey, event.toolCallId || ctx.toolCallId || event.runId, [
@@ -1215,7 +1216,7 @@ export default {
           const card = sessionLineage.roleCardForSession(ctx.sessionKey);
           if (card && !card.tools.includes('write')) {
             const name = String(event.toolName || '');
-            if (['exec', 'run_tests'].includes(name)) {
+            if (execLikeCall(name, event.params)) {
               roleMutations.afterExec(String(ctx.sessionKey || ''), event.toolCallId || ctx.toolCallId || event.runId);
             } else if (['write', 'edit', 'apply_patch', 'code_edit'].includes(name) && !event.error && !event.isError) {
               roleMutations.record(String(ctx.sessionKey || ''), toolTargetPaths(name, event.params, agentWorkspaceDir(ctx)));
