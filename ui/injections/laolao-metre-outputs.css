@@ -1,0 +1,25 @@
+/* laolao-metre-outputs.css —— T3 #23「本会话文件」那一页（laolao-metre-outputs.js），只在 Metre。
+ * 页面骨架用工作台自己的 .pk-wb-page；这里只管列表的排版。颜色全用 Metre 变量，日夜跟着变量走；
+ * 按钮边框用 --metre-muted（日夜对底都 >= 3:1，和 laolao-metre-pr.css 同一条）。选择器只带 html[data-laolao-mode="metre"] 和本文件自己的类名。 */
+html[data-laolao-mode="metre"] .pk-mout { max-width: 860px; font: 400 13px/1.55 var(--metre-sans); color: var(--metre-text); }
+html[data-laolao-mode="metre"] .pk-mout__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+html[data-laolao-mode="metre"] .pk-mout__meta { color: var(--metre-muted); font-size: 12px; }
+html[data-laolao-mode="metre"] .pk-mout__btn { appearance: none; height: 28px; padding: 0 12px; border: 1px solid var(--metre-muted); border-radius: 6px; background: var(--metre-surface); color: var(--metre-text); font: 500 12px/26px var(--metre-sans); cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-mout__btn:is(:hover, :focus-visible) { background: var(--metre-hover); }
+html[data-laolao-mode="metre"] .pk-mout__btn:focus-visible, html[data-laolao-mode="metre"] .pk-mout__name:focus-visible { outline: 2px solid var(--metre-accent); outline-offset: 1px; }
+html[data-laolao-mode="metre"] .pk-mout__msg { margin: 6px 0; color: var(--metre-muted); }
+html[data-laolao-mode="metre"] .pk-mout__msg--error { color: var(--metre-danger); }
+html[data-laolao-mode="metre"] .pk-mout__list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--metre-line-strong); border-radius: 8px; background: var(--metre-surface); }
+/* 一行三列：文件名 / 目录（省略号）/ 第几轮；窄时目录掉到第二行，字不断 */
+html[data-laolao-mode="metre"] .pk-mout__row { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto; align-items: baseline; gap: 2px 12px; padding: 7px 12px; border-top: 1px solid var(--metre-line); }
+html[data-laolao-mode="metre"] .pk-mout__row:first-child { border-top: 0; }
+html[data-laolao-mode="metre"] .pk-mout__name { appearance: none; min-width: 0; max-width: 100%; padding: 0; border: 0; background: none; color: var(--metre-accent); font: 500 12px/20px var(--metre-mono, ui-monospace, monospace); text-align: left; text-decoration: underline; text-underline-offset: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+html[data-laolao-mode="metre"] .pk-mout__dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--metre-muted); font: 400 12px/20px var(--metre-mono, ui-monospace, monospace); }
+html[data-laolao-mode="metre"] .pk-mout__when { color: var(--metre-muted); font-size: 12px; white-space: nowrap; }
+/* 状态栏放不下时，工作台按 编码 → … → AI → PR 的顺序整项藏（fitStatus 写行内 display: none）。「文件 N」紧跟在「PR」后面登记，
+ * PR 被藏时它一起藏，PR 放回来它也回来，不会被切成半截（工作台状态栏 real page 测试抓到的；不改 laolao-workbench.js）。 */
+html[data-laolao-mode="metre"] .pk-wb-status__item[data-opt="pr"][style*="display: none"] ~ .pk-mout__status { display: none; }
+@media (max-width: 900px) {
+  html[data-laolao-mode="metre"] .pk-mout__row { grid-template-columns: minmax(0, 1fr) auto; }
+  html[data-laolao-mode="metre"] .pk-mout__dir { grid-column: 1 / -1; grid-row: 2; }
+}
