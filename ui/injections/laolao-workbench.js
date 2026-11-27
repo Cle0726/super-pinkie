@@ -1243,7 +1243,7 @@
     if (!tabs.length || !state.visible || document.hidden) return;
     let stats;
     try { ({stats} = await rpc('pinkie.fs.stat', {paths: tabs.map(t => t.path)})); } catch { return; }
-    for (const s of stats) {
+    for (const s of stats || []) {   // B29：回包里没有 stats（旧网关 / 出错时回 {}）就当没有变化，不抛「stats is not iterable」
       const tab = findTab(s.path);
       if (!tab || !tab.mtimeMs) continue;
       if (!s.exists) { if (!tab.gone) { tab.gone = true; renderTabs(); } continue; }
