@@ -1,5 +1,5 @@
 /* M6: 「回到这一轮之前」。后台 pinkie.checkpoint.list / preview / restore 管快照和截对话；
-   这里只给回答气泡加键、弹确认框、回退后重新拉记录并回填输入框。
+   这里只给回答下方操作栏加键、弹确认框、回退后重新拉记录并回填输入框。
    不开观察器：接 laolao-session-cards.js 每次整理气泡后发的 pk-chat-turns。 */
 (() => {
   'use strict';
@@ -82,18 +82,27 @@
       const row = byEntry.get(entryId);
       if (row) last.set(row.turn, {bubble, entryId, row});
     }
-    const keep = new Set([...last.values()].map(item => item.bubble));
+    const slots = new Map();
+    for (const item of last.values()) {
+      const footer = item.bubble.closest('.chat-group')?.querySelector('.chat-group-footer');
+      if (!footer) continue;
+      let slot = footer.querySelector('.chat-group-footer-actions');
+      if (!slot) { slot = el('div', 'chat-group-footer-actions'); footer.append(slot); }
+      slots.set(item, slot);
+    }
+    const keep = new Set(slots.values());
     for (const node of pane.querySelectorAll('.pinkie-ckpt')) if (!keep.has(node.parentElement)) node.remove();
-    for (const {bubble, entryId, row} of last.values()) {
-      let box = bubble.querySelector(':scope > .pinkie-ckpt');
+    for (const [{bubble, entryId, row}, slot] of slots) {
+      let box = slot.querySelector(':scope > .pinkie-ckpt');
       if (!box) {
         box = el('span', 'pinkie-ckpt');
         const btn = el('button', 'pinkie-ckpt__btn', LABEL);
         btn.type = 'button';
         btn.onclick = event => { event.stopPropagation(); void open(pane, key, box.dataset.entryId, btn); };
         box.append(btn, el('span', 'pinkie-ckpt__hint', BUSY));
-        bubble.append(box);
+        slot.append(box);
       }
+      if (box.dataset.messageId !== bubble.dataset.messageId) box.dataset.messageId = bubble.dataset.messageId;
       if (box.dataset.entryId !== entryId) box.dataset.entryId = entryId;
       if (box.dataset.turn !== String(row.turn)) box.dataset.turn = String(row.turn);
       const btn = box.firstChild;

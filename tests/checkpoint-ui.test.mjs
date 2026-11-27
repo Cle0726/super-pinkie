@@ -41,16 +41,18 @@ const PREVIEW = {ok: true, turn: 2, running: false, text: '第二句',
 const RESTORE = {ok: true, turn: 2, restored: 2, skipped: [], unrecoverable: [{path: 'big.bin', reason: 'too-large'}]};
 
 const group = (role, id, text) => `<div class="chat-group ${role}"><div class="chat-group-messages">`
-  + `<div class="chat-bubble" style="position:relative;padding:8px 12px;min-height:40px" data-message-id="msg:${id}"><div class="chat-text">${text}</div></div></div></div>`;
+  + `<div class="chat-bubble" style="position:relative;padding:8px 12px;min-height:40px" data-message-id="msg:${id}"><div class="chat-text">${text}</div></div></div>`
+  + '<div class="chat-group-footer"><div class="chat-group-footer-actions"></div></div></div>';
 const PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body style="font:14px sans-serif;margin:16px">
 <button id="before" type="button">前</button>
 <openclaw-chat-pane style="display:block;width:720px">${HISTORY.map(m => group(m.role, m.id, m.content)).join('')}
 <div class="agent-chat__composer-combobox"><textarea></textarea></div></openclaw-chat-pane></body></html>`;
 
-async function open({key = KEY, list = LIST, preview = PREVIEW, restore = RESTORE, state = {}} = {}) {
+async function open({key = KEY, list = LIST, preview = PREVIEW, restore = RESTORE, state = {}, css = ''} = {}) {
   const context = await (await browser()).newContext({viewport: {width: 1000, height: 800}});
   const page = await context.newPage();
   await page.setContent(PAGE);
+  if (css) await page.addStyleTag({content: css});
   await page.addStyleTag({content: CSS});
   await page.evaluate(({HISTORY, list, preview, restore, state}) => {
     window.__calls = [];
@@ -73,14 +75,14 @@ const turns = async (page, key = KEY) => {
   await page.waitForTimeout(50);
 };
 const keys = page => page.$$eval('.pinkie-ckpt', nodes => nodes.map(n => ({
-  bubble: n.parentElement.dataset.messageId, entryId: n.dataset.entryId, turn: n.dataset.turn,
+  bubble: n.dataset.messageId, footer: Boolean(n.closest('.chat-group-footer-actions')), entryId: n.dataset.entryId, turn: n.dataset.turn,
   label: n.querySelector('.pinkie-ckpt__btn').textContent, disabled: n.querySelector('.pinkie-ckpt__btn').getAttribute('aria-disabled'),
   tabIndex: n.querySelector('.pinkie-ckpt__btn').tabIndex, hint: getComputedStyle(n.querySelector('.pinkie-ckpt__hint')).display !== 'none'})));
 const calls = (page, method) => page.evaluate(m => window.__calls.filter(c => c.method === m).map(c => c.params), method);
 async function clickKey(page, bubble = 'msg:a2b') {
   const sel = `[data-message-id="${bubble}"]`;
   await page.hover(sel);
-  await page.click(`${sel} > .pinkie-ckpt > .pinkie-ckpt__btn`);
+  await page.click(`.pinkie-ckpt${sel} > .pinkie-ckpt__btn`);
   await page.waitForSelector('.pinkie-ckpt-modal');
 }
 
@@ -88,14 +90,14 @@ test('跑完且 list 里有的轮才有键；每轮只在最后一条回答上�
   const {page, close} = await open();
   try {
     assert.deepEqual(await keys(page), [
-      {bubble: 'msg:a1', entryId: 'E-a1', turn: '1', label: '回到这一轮之前', disabled: null, tabIndex: 0, hint: false},
-      {bubble: 'msg:a2b', entryId: 'E-a2b', turn: '2', label: '回到这一轮之前', disabled: null, tabIndex: 0, hint: false},
+      {bubble: 'msg:a1', footer: true, entryId: 'E-a1', turn: '1', label: '回到这一轮之前', disabled: null, tabIndex: 0, hint: false},
+      {bubble: 'msg:a2b', footer: true, entryId: 'E-a2b', turn: '2', label: '回到这一轮之前', disabled: null, tabIndex: 0, hint: false},
     ]);
     assert.deepEqual(await calls(page, 'pinkie.checkpoint.list'), [{sessionKey: KEY}]);
     await page.focus('#before');
     await page.keyboard.press(TAB);
-    assert.equal(await page.evaluate(() => document.activeElement.closest('.chat-bubble')?.dataset.messageId), 'msg:a1');
-    assert.equal(await page.$eval('[data-message-id="msg:a1"] > .pinkie-ckpt', n => getComputedStyle(n).opacity), '1', 'focus-within 时键要显出来');
+    assert.equal(await page.evaluate(() => document.activeElement.closest('.pinkie-ckpt')?.dataset.messageId), 'msg:a1');
+    assert.equal(await page.$eval('.pinkie-ckpt[data-message-id="msg:a1"]', n => getComputedStyle(n).opacity), '1', 'focus-within 时键要显出来');
   } finally { await close(); }
 });
 
@@ -218,4 +220,47 @@ test('preview 失败或已在跑：只提示原因，不弹框', async () => {
       assert.deepEqual(await calls(page, 'pinkie.checkpoint.restore'), []);
     } finally { await close(); }
   }
+});
+
+test('键在回答下方操作栏，不压任何正文', async () => {
+  const {page, close} = await open();
+  try {
+    await page.hover('[data-message-id="msg:a2b"]');
+    const hits = await page.evaluate(() => {
+      const k = document.querySelector('.pinkie-ckpt[data-message-id="msg:a2b"]').getBoundingClientRect();
+      return [...document.querySelectorAll('.chat-text')].filter(t => {
+        const r = t.getBoundingClientRect();
+        return Math.min(k.bottom, r.bottom) > Math.max(k.top, r.top) && Math.min(k.right, r.right) > Math.max(k.left, r.left);
+      }).map(t => t.textContent);
+    });
+    assert.deepEqual(hits, []);
+  } finally { await close(); }
+});
+
+test('确认框：路径不吃全局 code 黄底，备注用实色、不靠 opacity', async () => {
+  const {page, close} = await open({css: 'code { background: #fff3a0; }'});
+  try {
+    await clickKey(page);
+    const got = await page.$eval('.pinkie-ckpt-modal .pinkie-ckpt-file', li => {
+      const path = getComputedStyle(li.querySelector('.pinkie-ckpt-file__path'));
+      const note = getComputedStyle(li.querySelector('.pinkie-ckpt-file__note'));
+      return {pathBg: path.backgroundColor, radius: path.borderTopLeftRadius, noteColor: note.color, noteOpacity: note.opacity};
+    });
+    assert.deepEqual(got, {pathBg: 'rgba(96, 50, 73, 0.06)', radius: '5px', noteColor: 'rgb(118, 80, 100)', noteOpacity: '1'});
+  } finally { await close(); }
+});
+
+const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lum = hex => { const n = parseInt(hex.slice(1), 16); return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255); };
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const mix = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(t * parseInt(a.slice(i, i + 2), 16) + (1 - t) * parseInt(b.slice(i, i + 2), 16)).toString(16).padStart(2, '0')).join('');
+const noteInk = prefix => CSS.match(new RegExp(String.raw`^${prefix}\.pinkie-ckpt-modal \.pinkie-ckpt-file__note \{[^}]*?\bcolor:(#[0-9a-f]{6})`, 'm'))?.[1];
+
+test('备注日间 / 夜间都 ≥4.5:1；反例：旧写法 #603249 × opacity .72 在日间弹窗底上不到 4.5', () => {
+  const day = noteInk(''), night = noteInk('html\\[data-pinkie-night\\] ');
+  assert.ok(day && night, `day=${day} night=${night}`);
+  for (const bg of ['#fae2ef', '#f3d6e5']) assert.ok(ratio(day, bg) >= 4.5, `${day} 对 ${bg} 只有 ${ratio(day, bg).toFixed(2)}`);
+  assert.ok(ratio(night, '#2a2027') >= 4.5, `${night} 对 #2a2027 只有 ${ratio(night, '#2a2027').toFixed(2)}`);
+  assert.doesNotMatch(CSS.match(/\.pinkie-ckpt-file__note \{[^}]*\}/g).join(''), /opacity/);
+  assert.ok(ratio(mix('#603249', '#fae2ef', 0.72), '#fae2ef') < 4.5);
 });

@@ -106,34 +106,39 @@ async function mount(page, running) {
   await page.waitForTimeout(200);
 }
 
-const lastKey = '.chat-group.assistant .chat-bubble:has(> .pinkie-ckpt[data-turn="2"])';
+const lastKey = '.pinkie-ckpt[data-turn="2"]';
+const lastGroup = '.chat-group.assistant:has(.pinkie-ckpt[data-turn="2"])';
 async function showKey(page) {
-  await page.locator(lastKey).scrollIntoViewIfNeeded();
-  await page.hover(lastKey);
+  await page.locator(lastGroup).scrollIntoViewIfNeeded();
+  await page.hover(lastGroup);
   await page.waitForTimeout(250);
 }
 function measure() {
   const box = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return {x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height)}; };
   const ckpts = [...document.querySelectorAll('.pinkie-ckpt')].map((n) => {
-    const bubble = n.parentElement;
-    const text = bubble.querySelector('.chat-text');
+    const group = n.closest('.chat-group');
+    const bubble = group?.querySelector(`.chat-bubble[data-message-id="${CSS.escape(n.dataset.messageId || '')}"]`);
+    const texts = group ? [...group.querySelectorAll('.chat-text')] : [];
     const k = n.getBoundingClientRect();
-    const overText = (k) => text ? [...text.querySelectorAll('*'), text].reduce((sum, el) => {
+    const overText = (k) => texts.flatMap((t) => [...t.querySelectorAll('*'), t]).reduce((sum, el) => {
       if (el.children.length) return sum;
       const r = el.getBoundingClientRect();
       return sum + Math.max(0, Math.min(k.bottom, r.bottom) - Math.max(k.top, r.top)) * Math.max(0, Math.min(k.right, r.right) - Math.max(k.left, r.left));
-    }, 0) : 0;
+    }, 0);
     const overlapText = overText(k);
-    const fork = bubble.querySelector(':scope > .pinkie-fork-action');
+    const fork = bubble?.querySelector(':scope > .pinkie-fork-action');
     const f = fork?.getBoundingClientRect();
     const forkOverlapText = f ? Math.round(overText(f)) : null;
     const overlapFork = f ? Math.max(0, Math.min(k.bottom, f.bottom) - Math.max(k.top, f.top)) * Math.max(0, Math.min(k.right, f.right) - Math.max(k.left, f.left)) : 0;
     const btn = n.querySelector('.pinkie-ckpt__btn');
-    return {turn: n.dataset.turn, entryId: n.dataset.entryId, box: box(n), fork: box(fork), opacity: getComputedStyle(n).opacity,
+    return {turn: n.dataset.turn, entryId: n.dataset.entryId, footer: Boolean(n.closest('.chat-group-footer-actions')), box: box(n), fork: box(fork), opacity: getComputedStyle(n).opacity,
       disabled: btn.getAttribute('aria-disabled'), tabIndex: btn.tabIndex, overlapText: Math.round(overlapText), overlapFork: Math.round(overlapFork), forkOverlapText};
   });
   const modal = document.querySelector('.pinkie-ckpt-modal');
-  return {ua: navigator.userAgent, ckpts, modal: box(modal), focus: document.activeElement?.textContent?.slice(0, 40) || document.activeElement?.tagName,
+  const file = modal?.querySelector('.pinkie-ckpt-file');
+  const cs = (sel) => getComputedStyle(file.querySelector(sel));
+  const modalInk = file ? {pathBg: cs('.pinkie-ckpt-file__path').backgroundColor, noteColor: cs('.pinkie-ckpt-file__note').color, noteOpacity: cs('.pinkie-ckpt-file__note').opacity} : null;
+  return {ua: navigator.userAgent, ckpts, modal: box(modal), modalInk, focus: document.activeElement?.textContent?.slice(0, 40) || document.activeElement?.tagName,
     draft: document.querySelector('.agent-chat__composer-combobox textarea')?.value || '', groups: document.querySelectorAll('.chat-thread .chat-group').length,
     rpc: window.__ckptRpc || []};
 }
@@ -143,13 +148,13 @@ const SCENES = {
   running: async (page) => { await mount(page, true); await page.waitForFunction(() => document.querySelectorAll('.pinkie-ckpt[data-busy]').length === 2); await showKey(page); },
   confirm: async (page) => {
     await mount(page, false); await showKey(page);
-    await page.click(`${lastKey} > .pinkie-ckpt > .pinkie-ckpt__btn`);
+    await page.click(`${lastKey} > .pinkie-ckpt__btn`);
     await page.waitForSelector('.pinkie-ckpt-modal');
     await page.waitForTimeout(250);
   },
   after: async (page) => {
     await mount(page, false); await showKey(page);
-    await page.click(`${lastKey} > .pinkie-ckpt > .pinkie-ckpt__btn`);
+    await page.click(`${lastKey} > .pinkie-ckpt__btn`);
     await page.waitForSelector('.pinkie-ckpt-modal');
     await page.check('.pinkie-ckpt-modal input[type=checkbox]');
     await page.click('.pinkie-ckpt-modal .laolao-modal__btn--danger');
@@ -172,7 +177,7 @@ try {
           const extra = {theme, scene, ...info, pageErrors};
           rec(name, width, await capture(page, {path: path.join(out, `${name}.png`)}), extra);
           report.push({width, ...extra});
-          console.log(`${name}: ckpts=${JSON.stringify(info.ckpts.map((c) => [c.turn, c.opacity, c.disabled, c.overlapText, c.overlapFork]))} focus=${info.focus} draft=${info.draft.slice(0, 12)} groups=${info.groups} errors=${pageErrors.length}`);
+          console.log(`${name}: ckpts=${JSON.stringify(info.ckpts.map((c) => [c.turn, c.footer, c.opacity, c.disabled, c.overlapText, c.overlapFork]))} focus=${info.focus} draft=${info.draft.slice(0, 12)} groups=${info.groups} errors=${pageErrors.length}`);
         } finally {
           await context.close();
         }
