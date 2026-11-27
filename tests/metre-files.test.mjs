@@ -218,3 +218,74 @@ test('in other modes nothing changes (counterexample: same history, project mode
     assert.equal(await tab.locator('.pk-mfile-row').count(), 0);
   } finally { await tab.close(); }
 });
+
+// ---------- R5 ②：回合中只读 + 回合结束重读 ----------
+// 复发防护：Metre 这一轮的改文件工具一开始，工作台里这个文件不能打字、不能存、标签有锁、顶上说明；回合结束放开，并按磁盘重读（走工作台自己的 mtime 检查，
+// 回合结束时马上查一次，不等 2.5 s 的轮询）。反例：同一轮里只读过的文件、别的会话在改的文件照常可打字；其他模式同样的事件不锁。
+const gw = (tab, payload) => tab.evaluate(p => window.dispatchEvent(new CustomEvent('pinkie:gateway-event', {detail: {event: 'agent', payload: p}})), payload);
+const toolStart = (name, path, sessionKey = 'agent:metre:test') => ({sessionKey, runId: 'run1', stream: 'tool', data: {phase: 'start', name, toolCallId: name + path, args: {path}}});
+const typeInto = async (tab, path) => {
+  await tab.evaluate(p => window.__pinkieWorkbench.open(p, {pinned: true}), path);
+  await tab.waitForFunction(p => window.__pinkieWorkbench.state.active === p && window.__pinkieWorkbench.state.tabs.find(t => t.path === p)?.kind === 'text', path, {timeout: 10_000});
+  await tab.locator('.monaco-editor .view-lines').first().click();
+  await tab.keyboard.press('End'); await tab.keyboard.type('Z');
+  return tab.evaluate(p => window.__pinkieWorkbench.state.tabs.find(t => t.path === p).model.getValue(), path);
+};
+const lockOn = (tab, name) => tab.evaluate(n => [...document.querySelectorAll('.pk-wb-tab')].some(t => t.querySelector('.pk-wb-tab__label')?.textContent === n && t.querySelector('.pk-wb-tab__readonly')), name);
+
+test('while Metre edits a file this turn the workbench tab is read-only with a note; other files stay editable; the turn ending unlocks and re-reads from disk', {timeout: 60_000}, async t => {
+  const browser = await launch(t); if (!browser) return;
+  const tab = await open(browser, 'metre');
+  try {
+    assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.show()), true);
+    await tab.evaluate(() => { const real = window.__laolaoSidebar.gwRequest; window.__laolaoSidebar.gwRequest = async (m, p = {}) => {
+      if (m === 'pinkie.fs.read' && window.DISK && p.path === 'README.md') return {kind: 'text', content: window.DISK, path: p.path, readOnly: false, size: 10, mtimeMs: 2};
+      if (m === 'pinkie.fs.stat' && window.DISK) return {stats: (p.paths || []).map(x => ({path: x, exists: true, kind: 'file', size: 10, mtimeMs: x === 'README.md' ? 2 : 1}))};
+      return real(m, p);
+    }; });
+    await gw(tab, toolStart('edit', '/proj/README.md'));
+    await gw(tab, toolStart('read', '/proj/src/app.js'));
+    await gw(tab, toolStart('edit', '/proj/src/app.js', 'agent:metre:other'));
+    assert.equal(await typeInto(tab, 'README.md'), 'text of README.md', 'the file Metre is editing takes no typing');
+    assert.equal(await lockOn(tab, 'README.md'), true, 'its tab shows the lock');
+    assert.match(await tab.locator('.pk-wb-notice__text').textContent(), /Metre 正在改这个文件，这一轮结束后可以编辑/);
+    await tab.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
+    await tab.waitForTimeout(200);
+    assert.equal((await tab.evaluate(() => window.calls)).some(([m]) => m === 'pinkie.fs.write'), false, 'and cannot be saved');
+    // 反例：读过的、别的会话在改的文件不锁
+    assert.equal(await typeInto(tab, 'src/app.js'), 'text of src/app.jsZ', 'a file only read this turn (or edited in another session) stays editable');
+    assert.equal(await lockOn(tab, 'app.js'), false);
+    // 回合结束：放开 + 按磁盘重读（mtime 没变，自动同步不会读，只能是回合结束读的）
+    await tab.evaluate(() => { window.DISK = 'changed by Metre'; });
+    await gw(tab, {sessionKey: 'agent:metre:test', runId: 'run1', stream: 'lifecycle', data: {phase: 'end'}});
+    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.find(t => t.path === 'README.md')?.model.getValue() === 'changed by Metre', null, {timeout: 5000});
+    assert.equal(await lockOn(tab, 'README.md'), false, 'unlocked once the turn ends');
+    assert.equal(await typeInto(tab, 'README.md'), 'changed by MetreZ', 'and editable again, on top of what Metre wrote');
+    assert.equal(await tab.locator('.pk-wb-notice:not([hidden]) .pk-wb-notice__text').count(), 0, 'the note goes away');
+  } finally { await tab.close(); }
+});
+
+test('the hold also lifts when the status bar says the run stopped or Metre is left; other modes never hold (counterexample)', {timeout: 60_000}, async t => {
+  const browser = await launch(t); if (!browser) return;
+  let tab = await open(browser, 'metre');
+  try {
+    assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.show()), true);
+    await gw(tab, toolStart('write', '/proj/README.md'));
+    await tab.evaluate(() => window.__pinkieWorkbench.open('README.md', {pinned: true}));
+    await tab.waitForFunction(() => document.querySelector('.pk-wb-tab__readonly'), null, {timeout: 10_000});
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent('pinkie:run-view', {detail: {key: 'agent:metre:test', kind: 'idle', live: {active: false}}})));
+    await tab.waitForFunction(() => !document.querySelector('.pk-wb-tab__readonly'), null, {timeout: 5000});
+    await gw(tab, toolStart('apply_patch', '/proj/README.md'));
+    await tab.waitForFunction(() => document.querySelector('.pk-wb-tab__readonly'), null, {timeout: 5000});
+    await tab.evaluate(() => { document.documentElement.setAttribute('data-laolao-mode', 'chat'); window.dispatchEvent(new Event('laolao:modechange')); });
+    // 离开 Metre 时工作台可能已经收起，不一定重画标签；看的是锁本身拿掉了（回来时 activate 照 held 重画）
+    await tab.waitForFunction(() => window.__pinkieWorkbench.held.size === 0, null, {timeout: 5000});
+  } finally { await tab.close(); }
+  tab = await open(browser, 'project');
+  try {
+    assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.show()), true);
+    await gw(tab, toolStart('edit', '/proj/README.md', 'agent:project:test'));
+    assert.equal(await typeInto(tab, 'README.md'), 'text of README.mdZ', 'outside Metre the same event locks nothing');
+    assert.equal(await lockOn(tab, 'README.md'), false);
+  } finally { await tab.close(); }
+});

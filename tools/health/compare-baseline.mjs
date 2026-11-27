@@ -8,7 +8,11 @@
 // - exceptions.json 新增或抬高的条目一律让检查变红，并逐条列出，等协调者认可后再合并。
 // - 不量清单（tools/health/third-party.json 和 skills/community-skills.json 登记的技能目录）不许盖住
 //   目标分支基线里量过的文件；目标分支已有清单时，新增的条目同样变红并列出。
+// - B38：目标分支在 PR 的 merge-base 之后又缩了某个文件（比如 main 缩了 learning.mjs），PR 没改这个文件、
+//   基线里还是 merge-base 的数字，这不算 PR 抬高基线：只要不高于 merge-base 基线里的数字就只记一条说明。
+//   PR 改过的文件、或者手改基线抬过 merge-base 的数字，照样变红。合计项按这些放过的差值放宽。
 // 用法：node tools/health/compare-baseline.mjs --target <目标分支的工作树>
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -42,19 +46,49 @@ function adoptedLimit(keys, targetMeasured) {
   return 0; // 新的超长文件、新的合计项等：目标分支量不到就不许有
 }
 
+// 基线里逐文件的键：injections / otherUi 的 [节, 文件, 指标]，longFiles 的 [longFiles, 文件]。
+const fileOf = keys => (FILE_SECTIONS.includes(keys[0]) && keys.length === 3) || (keys[0] === 'longFiles' && keys.length === 2) ? keys[1] : null;
+const isTotal = keys => keys.length === 2 && Object.values(TOTALS_OF).includes(keys[0]);
+
+// mergeBaseBaseline / changedFiles（B38）：PR 相对 merge-base 的基线和改过的文件。两个都给了才按 merge-base 放宽，
+// 缺一个就和以前一样逐项跟目标分支严格比。
 export function compareBaselines({prBaseline, targetBaseline, targetMeasured, prMeasured,
-  prExceptions, targetExceptions, prSkipped, targetSkipped, targetHasList}) {
+  prExceptions, targetExceptions, prSkipped, targetSkipped, targetHasList, mergeBaseBaseline = null, changedFiles = null}) {
   const failures = [], notes = [];
   const pr = leaves(prBaseline), target = leaves(targetBaseline);
+  const base = mergeBaseBaseline && changedFiles ? leaves(mergeBaseBaseline) : null;
+  const changed = new Set(changedFiles ?? []);
+  const slack = new Map(); // 合计项能放宽多少：「合计节\0指标」→ 放过的逐文件差值之和
+  const totalsLater = [];
 
   for (const [key, value] of pr) {
     const keys = JSON.parse(key);
     if (target.has(key)) {
-      if (value > target.get(key)) failures.push(`基线被抬高：${label(keys)}（目标分支 ${target.get(key)} → PR ${value}）。`);
+      const was = target.get(key);
+      if (value <= was) continue;
+      const file = fileOf(keys);
+      // 目标分支在 merge-base 之后缩了这个文件，PR 没改它，基线也没高过 merge-base：不是 PR 抬的。
+      if (base && file && !changed.has(file) && base.has(key) && value <= base.get(key)) {
+        notes.push(`目标分支在 merge-base 之后缩了 PR 没改的文件，不算抬高：${label(keys)}（目标分支 ${was}，PR 基线 ${value}，merge-base ${base.get(key)}）。`);
+        if (FILE_SECTIONS.includes(keys[0])) {
+          // windowGlobals 合计是去重数，去重数减少不会超过逐文件之和的减少，所以同一份差值也能放宽它。
+          const names = keys[2] === 'windowGlobals' ? ['windowGlobals', 'windowGlobalsPerFileSum'] : [keys[2]];
+          for (const name of names) slack.set(`${TOTALS_OF[keys[0]]}\0${name}`, (slack.get(`${TOTALS_OF[keys[0]]}\0${name}`) ?? 0) + value - was);
+        }
+        continue;
+      }
+      if (base && isTotal(keys)) { totalsLater.push({key, keys, value, was}); continue; }
+      failures.push(`基线被抬高：${label(keys)}（目标分支 ${was} → PR ${value}）。`);
     } else {
       const limit = adoptedLimit(keys, targetMeasured);
       if (value > limit) failures.push(`新补进基线的数字高于目标分支实测：${label(keys)}（目标分支实测 ${limit} → PR 基线 ${value}）。`);
     }
+  }
+  // 合计项只放宽上面放过的那部分逐文件差值；多出来的还是抬高。
+  for (const {keys, value, was} of totalsLater) {
+    const allowed = slack.get(`${keys[0]}\0${keys[1]}`) ?? 0;
+    if (value > was + allowed) failures.push(`基线被抬高：${label(keys)}（目标分支 ${was} → PR ${value}${allowed ? `，其中 ${allowed} 是目标分支缩了 PR 没改的文件` : ''}）。`);
+    else notes.push(`合计项高出目标分支的部分都来自目标分支缩了 PR 没改的文件，不算抬高：${label(keys)}（目标分支 ${was} → PR ${value}）。`);
   }
   for (const [key, value] of target) {
     if (pr.has(key)) continue;
@@ -103,13 +137,40 @@ export function compareBaselines({prBaseline, targetBaseline, targetMeasured, pr
   return {failures, notes};
 }
 
+const git = (root, args) => {
+  const run = spawnSync('git', ['-C', root, ...args], {encoding: 'utf8', maxBuffer: 1 << 28});
+  return run.status === 0 ? run.stdout : null;
+};
+
+// B38：PR 工作树（HEAD 加上没提交的改动）相对 merge-base 改过的文件，和 merge-base 上的 baseline.json。
+// 算不出来（浅克隆没有共同祖先、目标工作树不在同一个仓库、merge-base 上还没有基线）就两个都给 null，
+// compareBaselines 照以前逐项跟目标分支严格比。
+export function mergeBaseInfo(prRoot, targetRoot) {
+  const none = why => ({mergeBaseBaseline: null, changedFiles: null, note: `没按 merge-base 放宽（${why}），逐项跟目标分支严格比。`});
+  const targetHead = git(targetRoot, ['rev-parse', 'HEAD'])?.trim();
+  if (!targetHead) return none('读不到目标工作树的 HEAD');
+  const mergeBase = git(prRoot, ['merge-base', 'HEAD', targetHead])?.trim();
+  if (!mergeBase) return none('算不出 PR 和目标分支的 merge-base，可能是浅克隆');
+  const diffed = git(prRoot, ['diff', '--name-only', '--no-renames', '-z', mergeBase]);
+  const untracked = git(prRoot, ['ls-files', '--others', '--exclude-standard', '-z']);
+  if (diffed === null || untracked === null) return none('列不出 PR 改过的文件');
+  const text = git(prRoot, ['show', `${mergeBase}:${BASELINE}`]);
+  if (text === null) return none(`merge-base ${mergeBase.slice(0, 8)} 上没有 ${BASELINE}`);
+  const changedFiles = [...new Set([...diffed.split('\0'), ...untracked.split('\0')].filter(Boolean))].sort();
+  return {mergeBaseBaseline: JSON.parse(text.replace(/^﻿/, '')), changedFiles,
+    note: `merge-base ${mergeBase.slice(0, 8)}，PR 改过 ${changedFiles.length} 个文件；目标分支在这之后缩了、PR 没改的文件不算 PR 抬高。`};
+}
+
 async function main(args) {
   if (args.length !== 2 || args[0] !== '--target') throw new Error('用法：node tools/health/compare-baseline.mjs --target <目标分支的工作树>');
   const targetRoot = path.resolve(args[1]);
   if (!fs.statSync(targetRoot, {throwIfNoEntry: false})?.isDirectory()) throw new Error(`目标分支工作树不存在：${targetRoot}`);
   const readOr = (root, file, fallback) => fs.existsSync(path.join(root, file)) ? readJson(path.join(root, file)) : fallback;
   repoFiles(targetRoot); // 早点发现目标工作树不是 git 仓库
+  const {mergeBaseBaseline, changedFiles, note} = mergeBaseInfo(ROOT, targetRoot);
+  console.log(`说明：${note}`);
   const result = compareBaselines({
+    mergeBaseBaseline, changedFiles,
     prBaseline: readJson(path.join(ROOT, BASELINE)),
     targetBaseline: readOr(targetRoot, BASELINE, {injections: {}, longFiles: {}}),
     targetMeasured: await measure(targetRoot, {includeTestInventory: false, listRoot: ROOT, strict: false}),

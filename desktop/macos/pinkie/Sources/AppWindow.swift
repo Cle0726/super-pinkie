@@ -1,5 +1,6 @@
 import AppKit
 import CoreServices
+import CryptoKit
 import WebKit
 
 // 作品装成桌面上的独立应用 -- macOS 这一半（任务-官方新功能五项-1125 第 1 项，PR①：安装、打开、卸载）。
@@ -120,6 +121,63 @@ enum PinkieAppWindow {
         return task.terminationStatus == 0
     }
 
+    // Signing rewrites the copied Mach-O, so the copy never matches the Launcher byte for byte; the hash of the
+    // Launcher it was copied from is kept in the work's Info.plist instead.
+    static let launcherHashKey = "PinkieLauncherSHA256"
+
+    static func sha256(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    // After Super Pinkie updates, every installed work still runs the Launcher copied at install time. Swap in the
+    // current one, only inside .app bundles we made for the id the ledger names; on any failure the old Launcher and
+    // Info.plist go back and are signed again. Logs only, never asks the user.
+    @discardableResult
+    static func refreshInstalled(from launcher: URL? = Bundle.main.executableURL) -> [String: String] {
+        guard let launcher, let hash = sha256(launcher) else { return [:] }
+        var out: [String: String] = [:]
+        for (id, path) in ledger() {
+            let result = refresh(URL(fileURLWithPath: path, isDirectory: true), id: id, launcher: launcher, hash: hash)
+            if result == "failed" { NSLog("[碧琪作品] 没能更新 %@ 里的启动器，保留旧的", path) }
+            out[id] = result
+        }
+        return out
+    }
+
+    static func refresh(_ bundle: URL, id: String, launcher: URL, hash: String) -> String {
+        let fm = FileManager.default
+        let plistURL = bundle.appendingPathComponent("Contents/Info.plist")
+        let run = bundle.appendingPathComponent("Contents/MacOS/run")
+        guard isOurs(bundle), let info = NSMutableDictionary(contentsOf: plistURL), info["PinkieAppId"] as? String == id,
+              fm.fileExists(atPath: run.path) else { return "skipped" }
+        if info[launcherHashKey] as? String == hash { return "current" }
+        guard let oldPlist = try? Data(contentsOf: plistURL),
+              let scratch = try? fm.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: bundle, create: true)
+        else { return "failed" }
+        defer { try? fm.removeItem(at: scratch) }
+        let oldRun = scratch.appendingPathComponent("run-old")
+        let newRun = scratch.appendingPathComponent("run-new")
+        var replaced = false
+        do {
+            try fm.copyItem(at: run, to: oldRun)
+            try fm.copyItem(at: launcher, to: newRun)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: newRun.path)
+            _ = try fm.replaceItemAt(run, withItemAt: newRun)
+            replaced = true
+            info[launcherHashKey] = hash
+            guard info.write(to: plistURL, atomically: true), adhocSign(bundle) else { throw CocoaError(.fileWriteUnknown) }
+            return "updated"
+        } catch {
+            if replaced {
+                _ = try? fm.replaceItemAt(run, withItemAt: oldRun)
+                try? oldPlist.write(to: plistURL, options: .atomic)
+                _ = adhocSign(bundle)
+            }
+            return "failed"
+        }
+    }
+
     static func handle(_ type: String, _ body: [String: Any]) -> [String: Any] {
         let id = body["appId"] as? String ?? ""
         switch type {
@@ -154,7 +212,7 @@ enum PinkieAppWindow {
             } else if let own = Bundle.main.url(forResource: "PinkieAppIcon", withExtension: "icns") {
                 try? fm.copyItem(at: own, to: resources.appendingPathComponent("icon.icns"))
             }
-            let info: [String: Any] = [
+            var info: [String: Any] = [
                 "CFBundleExecutable": "run",
                 "CFBundleIdentifier": "com.cle0726.super-pinkie.app.\(id)",
                 "CFBundleName": app.name,
@@ -165,6 +223,7 @@ enum PinkieAppWindow {
                 "LSMinimumSystemVersion": "13.0",
                 "PinkieAppId": id,
             ]
+            if let hash = sha256(URL(fileURLWithPath: launcher)) { info[launcherHashKey] = hash }
             let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             try plist.write(to: contents.appendingPathComponent("Info.plist"))
             let run = macos.appendingPathComponent("run")
