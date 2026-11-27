@@ -32,7 +32,7 @@ const FIXED = {
   'apply-preflight-compaction-events.mjs': 'bc7482b2 pre-send compaction animates, usage refreshes',
   'apply-steer-fallback-wait.mjs': '453233e5 立即追加 no longer collides with the running turn',
   'apply-retry-single-user.mjs': 'ae380b95 automatic retry no longer writes the user message twice',
-  'apply-noop-write-continue.mjs': 'B64 no-op write/edit no longer ends the turn without a reply',
+  'apply-noop-write-continue.mjs': 'aa9c0016 no-op write/edit no longer ends the turn without a reply',
   'apply-retry-user-preservation.mjs': 'ba2c0a64 user message stays when finalize asks for another pass',
   'apply-steer-images.mjs': 'b2ada14d images sent with 立即追加 reach the running turn',
   'apply-work-first-media-gate.mjs': 'b2ada14d replies with images also go through the finalize check',
