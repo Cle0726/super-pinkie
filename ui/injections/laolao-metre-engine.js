@@ -352,7 +352,7 @@
       seg.onclick = () => { closeMenu(); choose({level: level.id}); };
       levels.append(seg);
     }
-    if ((catalog.levels || []).length) body.append(levels); // 取清单失败时退成 levels: []，别只画一个空标题
+    if ((catalog.levels || []).length) body.append(levels); if (levels.isConnected) { const below = () => levels.classList.toggle('is-below', body.scrollHeight - body.scrollTop - body.clientHeight > 1); body.addEventListener('scroll', below, {passive: true}); requestAnimationFrame(below); } // 取清单失败时退成 levels: []，别只画一个空标题；B91：贴底时上面还有没滚到的就标 is-below，CSS 在它上沿补「下面还有」渐变
     position(anchor, node);
   }
 
