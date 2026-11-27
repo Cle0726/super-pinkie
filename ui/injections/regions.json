@@ -260,6 +260,7 @@
         "laolao-metre-workspace.js",
         "laolao-metre-usage.css",
         "laolao-metre-usage.js",
+        "laolao-metre-keymap.js",
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",
@@ -274,6 +275,8 @@
         "laolao-metre-list.js",
         "laolao-metre-worktree.css",
         "laolao-metre-worktree.js",
+        "laolao-metre-peek.css",
+        "laolao-metre-peek.js",
         "laolao-metre-display.css",
         "laolao-metre-contrast.css",
         "laolao-metre-chat.css",
@@ -285,7 +288,11 @@
         "laolao-metre-suggest.css",
         "laolao-metre-suggest.js",
         "laolao-metre-pr.css",
-        "laolao-metre-pr.js"
+        "laolao-metre-pr.js",
+        "laolao-metre-tasks.css",
+        "laolao-metre-tasks.js",
+        "laolao-metre-outputs.css",
+        "laolao-metre-outputs.js"
       ]
     },
     {

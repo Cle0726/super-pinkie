@@ -84,7 +84,7 @@ T1 说明：菜单的 `role="menu"` 读屏要用，不宜去掉；更像是在 `
 | --- | --- | --- | --- | --- |
 | `laolao-composer-tray.css`：`.pinkie-tray-btn > span`（「工具」） | 日，1440/820 | 同 learning.md | 3.36 | 别人占着：#349 |
 | `laolao-context-compact.js`（样式在 `laolao-theme.css` 一带）：`.laolao-context-viewer__percent`（「13%」） | 日，1440/820 | 同 learning.md | 3.36 | 别人占着：#320（`laolao-theme.css`） |
-| `laolao-session-tools.css`：`.pinkie-chip--mode > span`（「想法取向」） | 日，1440/820 | 输入框取向按钮字淡 | 3.55 | 别人占着：#349 |
+| `laolao-session-tools.css`：`.pinkie-chip--mode > span`（「想法取向」） | 日，1440/820 | 输入框取向按钮字淡 | 3.55 | 已修：#457 `mac/b11-mode-chip-contrast`（日间默认态改用 `--pt-quiet`，≥4.5） |
 | `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | 日，1440 | 同 learning.md | 字 2.67、图标 2.67 | 别人占着：#349 |
 | `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label` / `__count` / `__action`、`time.pinkie-session-time` | 日，1440 | 同 learning.md | 3.45 / 4.16 | `laolao-sidebar-surface.css` 别人占着：#346；`laolao-sidebar.css` 无 |
 | `laolao-theme.css`：`.laolao-mode-dock-trigger` | 日/夜，1440 | 同 learning.md | 1.46 → 日 ≥3.80 / 夜 ≥6.88（静态） | 本单：`mac/b11-dock-followup-edge` |

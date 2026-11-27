@@ -183,12 +183,12 @@
     }
     if (pop) fillPop();
   }
-  // 引擎明细：点「引擎」那一格弹出，贴在带子上面；点别处、按 Esc 收起
+  // 引擎明细：点「引擎」那一格弹出，贴在带子上面；点别处、按 Esc、带子被样式藏起（B16 窄代码页）时收起
   function togglePop() { if (pop) closePop(); else { pop = document.createElement('div'); pop.className = 'pk-bs__pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', '外部引擎的声部'); document.body.append(pop); fillPop(); } }
   function closePop() { pop?.remove(); pop = null; }
   function fillPop() {
     const seg = band?.querySelector('.pk-bs__seg--pop');
-    if (!seg || !view?.voices.length) { closePop(); return; }
+    if (!seg || !seg.getClientRects().length || !view?.voices.length) { closePop(); return; }
     pop.innerHTML = '<p class="pk-bs__pop-head">外部引擎的声部</p>' + view.voices.map((v) => `<p class="pk-bs__seg" data-tone="${v.tone === 'done' ? 'ok' : v.tone}"><i aria-hidden="true"></i><span>${esc(v.name)} ${VOICE[v.tone]}</span></p>`).join('');
     const r = seg.getBoundingClientRect();
     Object.assign(pop.style, {left: Math.round(Math.min(r.left, window.innerWidth - 230)) + 'px', bottom: Math.round(window.innerHeight - r.top + 6) + 'px'});

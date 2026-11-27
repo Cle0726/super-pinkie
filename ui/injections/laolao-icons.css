@@ -82,13 +82,13 @@ html .sidebar.sidebar--collapsed .sidebar-new-session:not(.sidebar-new-session--
 @keyframes pinkie-ic-glow { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 @keyframes pinkie-ic-in { from { opacity: 0; transform: scale(.4) rotate(-20deg); } to { opacity: 1; transform: none; } }
 
-html[data-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }
-html[data-reduce-motion] :is(button, a, summary, label, [role]) svg { animation: none !important; transition: none !important; transform: none !important; }
+html[data-pinkie-reduce-motion] .pinkie-ic * { animation: none !important; transition: none !important; }
+html[data-pinkie-reduce-motion] :is(button, a, summary, label, [role]) svg { animation: none !important; transition: none !important; transform: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .pinkie-ic *, :is(button, a, summary, label, [role]) svg { animation: none !important; transition: none !important; }
 }
 
 /* 不能点的装饰小记号（极致思考菜单的标题星）：菜单一打开就闪一下，之后慢慢呼吸。 */
 .laolao-deep-think-menu__mark svg { transform-origin: center; animation: pinkie-ic-in .42s var(--pk-spring) backwards, pinkie-ic-breathe 3.2s ease-in-out .5s infinite; }
-html[data-reduce-motion] .laolao-deep-think-menu__mark svg { animation: none !important; }
+html[data-pinkie-reduce-motion] .laolao-deep-think-menu__mark svg { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .laolao-deep-think-menu__mark svg { animation: none !important; } }

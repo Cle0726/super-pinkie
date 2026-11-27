@@ -54,7 +54,7 @@
 | # | 文件:选择器 | 页面 / 主题 / 宽度 | 现象 | 数值 | 占用 |
 | --- | --- | --- | --- | --- | --- |
 | S1 | `laolao-composer-tray.css`：`.pinkie-tray-btn > span`（「工具」） | home / model-menu / mode-menu / sidebar-collapsed / chat，日，1440/820 | 同 learning 外壳表 `laolao-composer-tray.css` | 3.63 | 别人占着：#349 |
-| S2 | `laolao-context-compact.js`：`.laolao-context-viewer__percent`（「13%」） | 同 S1 | 同 learning 外壳表 `laolao-context-compact.js` | 3.63 | 无 |
+| S2 | `laolao-context-compact.js`：`.laolao-context-viewer__percent`（「13%」） | 同 S1 | 输入区共用规则给 summary 上 var(--fog-muted)（--muted 88% 透明），「13%」继承后偏淡；已在 laolao-context-compact.js 单独上色 color-mix(--muted 30%, --text-strong)，限日间、非 metre、未展开、未悬停 | 改前 2.05–3.25 → 改后 4.96–7.89（Chromium 实拍，8 场景 × 1440/820，最低 sidebar-collapsed / model-picker 820 project）；夜间改前改后一致 4.93–5.57 | macdev2：mac/b11-s2-context-percent |
 | S3 | `laolao-model-picker.css`：`.pinkie-external-tier`（「关闭」） | model-menu / chat，日，1440 | 同 learning 外壳表 `laolao-model-picker.css`。这次用像素量：24 页里 22 页 ≥4.54，只有菜单打开时和对话页 1440 日间低于 4.5 | 4.01~4.47（像素法） | 别人占着：#355 |
 | S4 | `laolao-session-tools.css`：`.pinkie-temp-entry`（「临时」及图标） | home / model-menu / mode-menu / settings / chat / sidebar-open，日，1440/820 | 同 learning 外壳表 `laolao-session-tools.css` | 字 2.85、图标 2.85（approx） | 别人占着：#349 |
 | S5 | `laolao-sidebar.css` / `laolao-sidebar-surface.css`：`.laolao-group__label`（「最近」）、`.laolao-group__count`、`.laolao-group__action`（「⋯」）、`.pinkie-session-time` | home / model-menu / settings / chat / sidebar-open，日，1440/820；时间只在 chat-1440-day 的高亮行 | 同 learning 外壳表 `laolao-sidebar.css`。新多出一项：高亮行里粉色时间 `rgb(233,79,145)` 放在粉底 `rgb(251,237,243)` 上 | 3.4；时间 3.09（approx） | 别人占着：#346（`laolao-sidebar-surface.css`） |
