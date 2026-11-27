@@ -411,7 +411,8 @@ export class AppBrowserServers {
       throw new Error('启动服务请二选一：填写 dir，或同时填写 command、cwd、port。');
     }
     const record = {...sessionContext(ctx), owner: sessionOwner(ctx), logs: [], partial: '', kind: staticMode ? 'static' : 'command', pid: process.pid, stopped: false};
-    const onAbort = () => { void this.stopRecord(record); };
+    // startServe's catch awaits the same record.stopping promise and reports its error; only this copy goes unobserved.
+    const onAbort = () => { this.stopRecord(record).catch(() => {}); };
     signal?.addEventListener('abort', onAbort, {once: true});
     try {
       if (staticMode) {
