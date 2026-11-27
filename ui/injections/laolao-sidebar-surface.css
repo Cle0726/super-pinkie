@@ -237,7 +237,7 @@ html .sidebar #laolao-session-manager .pinkie-project-heading .laolao-group__add
 html .sidebar #laolao-session-manager .pinkie-project-heading:is(:hover,:focus-within) .laolao-group__add-project:not(#_sb) { opacity:.8 }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session__name { margin-left:0 !important; }
 html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active { background:var(--sb-active) !important;box-shadow:none !important;font-weight:600; }
-html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active::before { left:0;width:2px;height:18px; }
+html:not([data-laolao-plain-composer]):not([data-r2-off]) .sidebar #laolao-session-manager .sidebar-recent-session--active::before { left:0;width:2px;height:18px; } /* B11·S5：高亮行时间压在 --sb-active 粉底上，日间 --sb-muted 的 11px 像素只剩 4.3:1，夜间叠 laolao-sidebar.css:467 的 .56 只剩 2.6:1；改用本主题 --sb-ink、不透明，Metre 由 laolao-metre-skin.css 管。 */ html:not([data-laolao-plain-composer]):not([data-r2-off]):not([data-laolao-mode="metre"]) .sidebar #laolao-session-manager .sidebar-recent-session--active .pinkie-session-time { color:var(--sb-ink);opacity:1; }
 html .sidebar .pinkie-session-status--running { color:var(--sb-status-running) }
 html .sidebar .pinkie-session-status--waiting { color:var(--sb-status-waiting) }
 html .sidebar .pinkie-session-status--error { color:var(--sb-status-error) }
