@@ -889,7 +889,7 @@ export class UpstreamWatchdog {
     if (previous) return true;
     const timer = setTimeout(() => {
       this.timers.delete(params.sessionKey);
-      void this.dispatchImmediate(scheduled);
+      this.dispatchImmediate(scheduled).catch(error => this.api.logger?.warn?.(`watchdog immediate dispatch failed session=${params.sessionKey} error=${String(error)}`));
     }, scheduled.delayMs);
     timer.unref?.();
     this.timers.set(params.sessionKey, timer);
@@ -1153,7 +1153,7 @@ export class TierContinuation {
     if (previous) clearTimeout(previous);
     const timer = setTimeout(() => {
       this.timers.delete(params.sessionKey);
-      void this.dispatch(params);
+      this.dispatch(params).catch(error => this.api.logger?.warn?.(`tier continuation dispatch failed session=${params.sessionKey} error=${String(error)}`));
     }, params.delayMs);
     timer.unref?.();
     this.timers.set(params.sessionKey, timer);
