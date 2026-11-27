@@ -135,6 +135,43 @@ test('Metre\'s own scratch folder becomes a git repository once, so the engine s
   assert.equal(runs.length, 2, 'only the first time');
 });
 
+test('B86: a scratch git step that exits non-zero is logged with its stderr and retried next time, not taken as done', () => {
+  const {bridge, root} = bridgeWith([]);
+  const warnings = [];
+  bridge.logger = {warn: text => warnings.push(text)};
+  const runs = [];
+  let commitStatus = 128;
+  bridge.runSync = (file, args, options) => {
+    const step = args.find(arg => ['init', 'commit'].includes(arg));
+    runs.push(step);
+    if (step === 'init') { fs.mkdirSync(path.join(options.cwd, '.git'), {recursive: true}); return {status: 0, stderr: ''}; }
+    return {status: commitStatus, stderr: 'fatal: unable to auto-detect email address\n'};
+  };
+  const scratch = path.join(root, 'scratch');
+  assert.equal(bridge.folderFor('agent:metre:nobound'), scratch);
+  assert.deepEqual(runs, ['init', 'commit']);
+  assert.equal(warnings.length, 1, 'the failed commit is reported');
+  assert.match(warnings[0], /git commit 退出码 128/);
+  assert.match(warnings[0], /unable to auto-detect email address/, 'stderr is kept, not thrown away');
+  assert.equal(fs.existsSync(path.join(scratch, '.git')), false, 'a half-made repository is not left behind');
+  commitStatus = 0;
+  bridge.folderFor('agent:metre:nobound');
+  assert.deepEqual(runs, ['init', 'commit', 'init', 'commit'], 'the next call tries again');
+  assert.equal(fs.existsSync(path.join(scratch, '.git')), true);
+  bridge.folderFor('agent:metre:nobound');
+  assert.equal(runs.length, 4, 'and stops once it worked');
+});
+
+test('B86: a scratch git that cannot start (spawn error) is logged instead of passing silently', () => {
+  const {bridge, root} = bridgeWith([]);
+  const warnings = [];
+  bridge.logger = {warn: text => warnings.push(text)};
+  bridge.runSync = () => ({status: null, error: Object.assign(new Error('spawnSync git ENOENT'), {code: 'ENOENT'})});
+  assert.equal(bridge.folderFor('agent:metre:nobound'), path.join(root, 'scratch'));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /ENOENT/);
+});
+
 test('quota: a whole-account bar that is full means used up; a full per-model bar only marks those models (real data 11-23)', () => {
   const codex = quota({windows: [{label: 'Session', usedPercent: 0}, {label: 'Weekly', usedPercent: 100, resetsAt: '2026-11-27T01:43:42.000Z'}]}, [{slug: 'gpt-6'}]);
   assert.deepEqual([codex.state, codex.resetAt, codex.text], ['out', '2026-11-27T01:43:42.000Z', '额度用完了']);

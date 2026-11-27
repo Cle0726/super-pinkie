@@ -320,6 +320,6 @@ export class GameMonsters {
           if (r) { m.name = r.value.name; m.blurb = r.value.blurb; m.named = 'model'; }
         });
       }
-    })().finally(() => { this.naming = null; });
+    })().catch(() => {}).finally(() => { this.naming = null; });
   }
 }

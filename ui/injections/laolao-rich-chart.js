@@ -164,7 +164,7 @@ function saveFile(blob, title) {
 }
 // 本机 WebKit（2370 / 2388）画得上却编码不出：toDataURL 三种格式都回 data:，convertToBlob 抛错。
 // 这时用像素自己拼一张不压缩的 PNG（stored deflate + CRC32 + Adler-32），createImageBitmap 能解回原像素
-function pngFromPixels(canvas) {
+export function pngFromPixels(canvas) {
   const w = canvas.width, h = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, w, h).data;
   const raw = new Uint8Array((w * 4 + 1) * h);
   for (let y = 0; y < h; y++) raw.set(px.subarray(y * w * 4, (y + 1) * w * 4), y * (w * 4 + 1) + 1);
@@ -188,7 +188,7 @@ function pngFromPixels(canvas) {
   return new Blob([sig, ...chunk('IHDR', new Uint8Array([...be(w), ...be(h), 8, 6, 0, 0, 0])), ...chunk('IDAT', z), ...chunk('IEND', new Uint8Array())], {type: 'image/png'});
 }
 // toBlob 回空就改用 toDataURL 解出同一张 PNG，再不行用像素自己拼；三样都不行才算失败
-function pngOf(canvas) {
+export function pngOf(canvas) {
   const viaUrl = () => {
     const url = canvas.toDataURL('image/png');
     const comma = url.indexOf(',');
