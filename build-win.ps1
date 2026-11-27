@@ -305,7 +305,10 @@ $pyInstallerCommonArgs = @(
     "app\super_pinkie.py"
 )
 
-$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } else { 'dev' }
+# A local build with the C.le. core (PINKIE_CORE=cle) is stamped channel=cle, which is what
+# tools/cle-pkg-win install-cle requires. Every reader only tests for 'release', so cle behaves
+# exactly like dev (guard off, dev splash, no feedback keys); release builds are unchanged.
+$guardChannel = if ($env:PINKIE_RELEASE_BUILD -eq '1') { 'release' } elseif ($coreInfo.core -eq 'cle') { 'cle' } else { 'dev' }
 $guardCommitRaw = (git rev-parse HEAD 2>$null)
 if ($LASTEXITCODE -ne 0 -or -not $guardCommitRaw) { $guardCommitRaw = '' }
 $guardCommit = "$guardCommitRaw".Trim()
