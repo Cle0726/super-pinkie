@@ -13,6 +13,7 @@ import {isChildDelegation, isSessionOperationEvidence, latestChildReport, lineag
 import {checkRoleToolCall, formatRoleCardPrompt, isRolePluginToolAllowed, isRolesContext, ROLES_BASE, RoleMutationAuditor} from './metre-roles.mjs';
 import {registerSessionSearch} from './session-search.mjs';
 import {registerSessionBranches} from './session-branch.mjs';
+import {registerTurnCheckpoints} from './turn-checkpoints.mjs';
 import {registerSessionPrefs} from './session-prefs.mjs';
 import {registerWhiteboard} from './whiteboard-store.mjs';
 import {registerWhiteboardTool} from './whiteboard-tools.mjs';
@@ -746,6 +747,7 @@ export default {
       titles: sessionTitles, root: path.join(pinkieStateRoot(), 'sessions'), lineage: sessionLineage,
       isBusy: key => architecture.activityFor(key).parentRunning,
     });
+    registerTurnCheckpoints(toolApi, {access: sessionTitles.access, isBusy: key => architecture.activityFor(key).parentRunning, isLocked: isMetreTurnLocked});
     const sessionPrefs = registerSessionPrefs(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     registerWhiteboard(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
     registerWhiteboardTool(toolApi, {root: path.join(pinkieStateRoot(), 'sessions')});
@@ -1064,12 +1066,8 @@ export default {
         }
 
         // profile / OPENCLAW_CONFIG_PATH 下配置不在 ~/.openclaw；插件 API 有配置就直接用。
-        const pluginConfig = runtimeConfig(api);
-        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
-        if (!Object.keys(config).length) {
-          const configPath = openclawConfigPath();
-          try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
-        }
+        let config = runtimeConfig(api) || {};
+        if (!Object.keys(config).length) try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
         const providerConfig = config?.models?.providers?.[providerKey] || config?.models?.providers?.mm || {};
         
         let baseUrl = providerConfig.baseUrl || 'http://127.0.0.1:1466/v1';
