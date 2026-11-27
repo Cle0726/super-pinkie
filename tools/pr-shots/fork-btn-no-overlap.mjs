@@ -5,6 +5,7 @@
 //   after  = 本分支现状（键在回答下方操作栏）；
 //   before = 同一组按 main 的挂法在气泡右上角放一个外形相同的键（换了类名，session-cards.js 的整理不会收走它），页脚键藏起来。
 // shots.jsonl 每行多一个 overText 字段（键与正文叶子元素交叠面积，与复发测试同一量法）。不连真网关、不改基线。
+// after 行另带 contrast（页脚键文字按像素量，now = 本分支、old62 = 注回 #477 初版 62% 稀释），now < 4.5 直接报错。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -45,7 +46,7 @@ function putMain(index) {
   return Math.round(overText);
 }
 
-const shoot = async (page, name, index, overText) => {
+const shoot = async (page, name, index, overText, contrast) => {
   const group = page.locator('.chat-group.assistant:has(.chat-group-footer .pinkie-fork-action)').nth(index);
   const r = await group.boundingBox();
   const pad = 8;
@@ -54,7 +55,7 @@ const shoot = async (page, name, index, overText) => {
   const file = `${name}.png`;
   await page.screenshot({path: path.join(out, file), clip, scale: 'device', animations: 'disabled'});
   const buf = fs.readFileSync(path.join(out, file));
-  lines.push({name, file, os: process.platform, browser: engine, width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), overText});
+  lines.push({name, file, os: process.platform, browser: engine, width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), bytes: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), overText, ...(contrast ? {contrast} : {})});
   console.log(`pr-shots: ${name} overText=${overText}`);
 };
 
@@ -78,7 +79,14 @@ try {
           const base = `fork-btn-${scene}-${width}-${theme}`;
           await F.hoverKeyGroup(page, pick);
           const now = await page.evaluate(F.measureKey, {index: pick});
-          await shoot(page, `${base}-after`, pick, now.overText);
+          const ct = await F.measureKeyContrast(page, pick);
+          const tag = await F.revertKeyColor(page);
+          const was = await F.measureKeyContrast(page, pick);
+          await tag.evaluate((n) => n.remove());
+          await F.hoverKeyGroup(page, pick);
+          await shoot(page, `${base}-after`, pick, now.overText, {now: ct.textPx, old62: was.textPx, color: ct.color});
+          console.log(`pr-shots: ${base} 键文字 ${ct.textPx?.ratio}（注回 62% ${was.textPx?.ratio}）`);
+          if (!(ct.textPx?.ratio >= 4.5)) throw new Error(`${base} 页脚键文字对比度 ${ct.textPx?.ratio} < 4.5`);
           await page.addStyleTag({content: MAIN_CSS});
           const before = await page.evaluate(putMain, pick);
           await F.hoverKeyGroup(page, pick);

@@ -34,7 +34,7 @@ openclaw-chat-pane[data-pinkie-session-readonly] :is(.agent-chat__input,.agent-c
 .chat-group.assistant .chat-bubble[data-message-id] { position:relative }
 .chat-group.assistant .chat-bubble > .pinkie-fork-action { position:absolute;top:2px;right:4px;min-height:28px;padding:0 7px;border-radius:6px;background:var(--pinkie-card-action-bg,#fffafb);color:var(--accent,#d9508d);font-size:12px;opacity:0;pointer-events:none }
 html[data-pinkie-night] .chat-group.assistant .pinkie-fork-action { --pinkie-card-action-bg:#30232d }
-.chat-group.assistant .chat-group-footer .pinkie-fork-action { order:1;position:static;min-height:26px;padding:0 7px;border-radius:6px;background:transparent;color:color-mix(in srgb,currentColor 62%,transparent);font-size:12px;white-space:nowrap;opacity:0;pointer-events:none } /* 非 Metre：键在回答下方操作栏，悬停整组显示，不压正文 */
+.chat-group.assistant .chat-group-footer .pinkie-fork-action { order:1;position:static;min-height:26px;padding:0 7px;border-radius:6px;background:transparent;color:color-mix(in srgb,currentColor 78%,transparent);font-size:12px;white-space:nowrap;opacity:0;pointer-events:none } /* 非 Metre：键在回答下方操作栏，悬停整组显示，不压正文 */
 .chat-group.assistant .chat-bubble:is(:hover,:focus-within) > .pinkie-fork-action,.chat-group.assistant:is(:hover,:focus-within) .chat-group-footer .pinkie-fork-action { opacity:1;pointer-events:auto }
 .pinkie-chat-session-menu:focus-visible,.pinkie-fork-action:focus-visible { outline:2px solid var(--accent,#d9508d);outline-offset:1px;opacity:1;pointer-events:auto }
 .pinkie-session-card__body--md { white-space:normal } /* 展开后的子会话汇报：Markdown 排成段落、小标题、列表 */

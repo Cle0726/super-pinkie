@@ -1,6 +1,7 @@
 // 真页面「从这里分出去」键压正文的量法（fork-btn-no-overlap，macdev5）：测试与 pr-shots 共用。
 // overText：键的矩形与所在组 .chat-text 叶子元素矩形交叠面积之和（与 tools/pr-shots/m6-checkpoint.mjs 同一量法）。
 import {FROZEN_TIME_MS, openRealScenePage} from './real-harness.mjs';
+import {wkshotBuffer} from './webkit-screenshot.mjs';
 
 export const FOOTER_KEY = '.chat-group.assistant .chat-group-footer .pinkie-fork-action';
 export const SCENES = ['short-answers', 'long-conversation'];
@@ -116,4 +117,44 @@ export async function hoverKeyGroup(page, index) {
     last = {attempt, x: Math.round(p.x), y: Math.round(p.y), hitAtPick: p.hit, stAtPick: p.st, ...s};
   }
   throw new Error(`hoverKeyGroup #${index}：5 次都没让本组进入 :hover：${JSON.stringify(last)}`);
+}
+
+// 页脚键文字对比度（B11 小字门槛 4.5）：键背景透明，底是页脚 / 气泡，按截图像素量——框里最多的像素当底，和底对比最高的当前景。
+// OLD_KEY_CSS 把 #477 初版的 62% 稀释直接注到被量的键上并关掉过渡，注回它就是「改前」（日间实绘 2.71–2.81）。
+export const OLD_KEY_CSS = `html:not(#_r1):not(#_r2) ${FOOTER_KEY}{color:color-mix(in srgb,currentColor 62%,transparent) !important;transition:none !important}`;
+const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return +((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)).toFixed(2); };
+function pixelPair(px) {
+  if (!px?.length) return null;
+  const count = new Map();
+  for (const c of px) { const k = c.join(','); count.set(k, (count.get(k) || 0) + 1); }
+  const bg = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0].split(',').map(Number);
+  const fg = px.reduce((best, c) => (ratio(c, bg) > ratio(best, bg) ? c : best), bg);
+  return {fg, bg, ratio: ratio(fg, bg)};
+}
+
+// 先 hoverKeyGroup(page, index) 让键 opacity=1 再量。
+export async function measureKeyContrast(page, index) {
+  const engine = page.context().browser()?.browserType().name();
+  const buf = engine === 'webkit' ? await wkshotBuffer(page, {}) : await page.screenshot({animations: 'disabled'});
+  const got = await page.evaluate(async ({png, index, sel}) => {
+    const key = document.querySelectorAll(sel)[index];
+    const img = new Image(); img.src = 'data:image/png;base64,' + png; await img.decode();
+    const cv = Object.assign(document.createElement('canvas'), {width: img.width, height: img.height});
+    const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(img, 0, 0);
+    const scale = img.width / window.innerWidth;
+    const r = key.getBoundingClientRect();
+    const d = cx.getImageData(Math.floor(r.left * scale), Math.floor(r.top * scale), Math.max(1, Math.ceil(r.width * scale)), Math.max(1, Math.ceil(r.height * scale))).data;
+    const px = []; for (let i = 0; i < d.length; i += 4) px.push([d[i], d[i + 1], d[i + 2]]);
+    return {color: getComputedStyle(key).color, opacity: getComputedStyle(key).opacity, px};
+  }, {png: buf.toString('base64'), index, sel: FOOTER_KEY});
+  const {px, ...rest} = got;
+  return {...rest, textPx: pixelPair(px)};
+}
+
+export async function revertKeyColor(page) {
+  const tag = await page.addStyleTag({content: OLD_KEY_CSS});
+  await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].every((k) => !k.getAnimations().some((a) => a.transitionProperty === 'color')), FOOTER_KEY, {timeout: 5_000});
+  return tag;
 }

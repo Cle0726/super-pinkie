@@ -4,14 +4,15 @@
 // 测法：真装的 Control UI，short-answers（long-conversation 灌一行短回答）/ long-conversation × 1440 / 820 × 日 / 夜，非 Metre：
 //   正向：每个页脚键悬停后可见、可点（中心点命中键本身）、overText = 0、有页脚的组气泡里不再有键（工作过程步骤组无页脚，另案）；
 //   反例：同页把键塞回对应气泡（main 的挂法），至少一组 overText > 0；
+//   对比度：悬停后页脚键文字按截图像素量，日 / 夜都 ≥ 4.5；反例把 #477 初版 62% 稀释注回，日间最差那格必须 < 4.5；
 //   并且页面没有报错。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {REPO_ROOT, installRealControlUi, launchRealBrowser, startRealUiServer} from './visual/lib/real-harness.mjs';
-import {SCENES, hoverKeyGroup, measureKey, openScene} from './visual/lib/fork-action-overlap.mjs';
+import {SCENES, hoverKeyGroup, measureKey, measureKeyContrast, openScene, revertKeyColor} from './visual/lib/fork-action-overlap.mjs';
 import {playwright} from '../tools/study-desk/harness.mjs';
 
-test('fork-btn-no-overlap：非 Metre 分叉键在回答下方操作栏、悬停不压正文；塞回气泡就压', {timeout: 300_000}, async (t) => {
+test('fork-btn-no-overlap：非 Metre 分叉键在回答下方操作栏、悬停不压正文；塞回气泡就压', {timeout: 420_000}, async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   let server = null;
   let browser = null;
@@ -26,6 +27,7 @@ test('fork-btn-no-overlap：非 Metre 分叉键在回答下方操作栏、悬停
     : await launchRealBrowser();
 
   let worstOld = 0;
+  const old62 = [];
   for (const scene of SCENES) for (const theme of ['day', 'night']) for (const width of [1440, 820]) {
     const label = `${scene} ${theme} ${width}`;
     const {context, page, pageErrors} = await openScene(browser, server.origin, scene, theme, width);
@@ -52,6 +54,16 @@ test('fork-btn-no-overlap：非 Metre 分叉键在回答下方操作栏、悬停
         assert.ok(now.clickable, `${label} #${i} 键中心被别的元素挡住`);
         assert.equal(now.overText, 0, `${label} #${i} 键压正文 ${now.overText}`);
         worstOld = Math.max(worstOld, old.overText);
+        const ct = await measureKeyContrast(page, i);
+        t.diagnostic(`${label} #${i} 键文字 ${JSON.stringify(ct)}`);
+        assert.ok(ct.textPx?.ratio >= 4.5, `${label} #${i} 页脚键文字对比度 ${ct.textPx?.ratio} ≥ 4.5（${JSON.stringify(ct)}）`);
+        if (theme === 'day') {
+          const tag = await revertKeyColor(page);
+          const was = await measureKeyContrast(page, i);
+          t.diagnostic(`${label} #${i} 注回 62% ${JSON.stringify(was)}`);
+          old62.push({label, i, ratio: was.textPx?.ratio});
+          await tag.evaluate((n) => n.remove());
+        }
       }
       assert.deepEqual(pageErrors, [], `${label} 页面报错`);
     } finally {
@@ -59,4 +71,7 @@ test('fork-btn-no-overlap：非 Metre 分叉键在回答下方操作栏、悬停
     }
   }
   assert.ok(worstOld > 0, `反例没生效：键塞回气泡（main 挂法）也没压到正文，最大 ${worstOld}`);
+  assert.ok(old62.length > 0, '日间量过注回 62% 的键');
+  const worst62 = Math.min(...old62.map((x) => x.ratio));
+  assert.ok(worst62 < 4.5, `反例没生效：注回 62% 稀释日间最差也 ≥ 4.5（${JSON.stringify(old62)}）`);
 });
