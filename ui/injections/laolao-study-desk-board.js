@@ -74,18 +74,15 @@
       animate(motion.gsap.to(state, {value, duration: .9, ease: 'power2.out', onUpdate() { if (alive && node.isConnected) node.textContent = String(Math.round(state.value)); }}));
     };
     function renderMetrics(data) {
-      const rate = data.answered.independentRate, delta = data.minutes.delta;
-      const entries = [['专注', data.minutes.total, '分钟', delta == null ? '暂无上一周期对比' : `比上期${delta >= 0 ? '多' : '少'} ${Math.round(Math.abs(delta) * 100)}%`, data.minutes.series],
-        ['作答', data.answered.total, '题', rate == null ? '暂无可判断的作答' : `独立正确 ${Math.round(rate * 100)}%`, data.answered.series],
-        ['复习', data.reviews.done, '张', `积压 ${data.reviews.backlog} 张`, data.reviews.series],
-        ['连续', data.streak.current, '天', `历史最佳 ${data.streak.best} 天`, data.streak.series || []]];
+      const part = key => data?.[key] && typeof data[key] === 'object' ? data[key] : {}, series = value => Array.isArray(value) ? value : [], minutes = part('minutes'), answered = part('answered'), reviews = part('reviews'), streak = part('streak'), rate = answered.independentRate == null ? null : num(answered.independentRate), delta = minutes.delta == null ? null : num(minutes.delta); // 真网关总带齐四组字段；假网关、旧插件或异常应答可能缺，按 0 / 空序列画，不抛异常。
+      const entries = [['专注', minutes.total, '分钟', delta == null ? '暂无上一周期对比' : `比上期${delta >= 0 ? '多' : '少'} ${Math.round(Math.abs(delta) * 100)}%`, series(minutes.series)], ['作答', answered.total, '题', rate == null ? '暂无可判断的作答' : `独立正确 ${Math.round(rate * 100)}%`, series(answered.series)], ['复习', reviews.done, '张', `积压 ${num(reviews.backlog)} 张`, series(reviews.series)], ['连续', streak.current, '天', `历史最佳 ${num(streak.best)} 天`, series(streak.series)]];
       metrics.replaceChildren();
       entries.forEach(([label, value, unit, note, series]) => {
         const metric = el('div', 'b-metric'), big = el('div', 'b-metric-number'), counter = el('span', 'b-counter'), small = el('span', 'b-unit', unit);
         big.append(counter, small); metric.append(el('small', '', label), big, el('div', 'b-delta', note), spark(series)); metrics.append(metric); countUp(counter, num(value));
       });
       learning.replaceChildren();
-      if (data.learning) {
+      if (data?.learning && typeof data.learning === 'object') {
         const progress = data.learning; learning.append(el('h3', '', '学习进度'));
         for (const [field, label] of [['learned', '已学'], ['practiced', '已练'], ['mastered', '已掌握']]) {
           // 进度只用星星：一排 12 颗，按比例点亮（有一个就至少亮一颗）；已学半颗、已练粉、已掌握金箔。
@@ -115,7 +112,7 @@
     }
     function renderPace(data) {
       chart.replaceChildren();
-      if (!data) {
+      if (!data || typeof data !== 'object') {
         const empty = el('div', 'b-chart-empty'), nap = el('img', 'pk-sticker'), say = el('div'); nap.src = window.__pinkieStudyDesk.sticker?.('asleep') || ''; nap.alt = ''; nap.setAttribute('aria-hidden', 'true');
         say.append(el('p', 'pk-note', '先告诉我两场考试的日期，我才能帮你排节奏哦。'));
         const setup = el('button', 'b-text-button pk-link', '去今日页设置日期'); setup.type = 'button'; setup.onclick = () => ctx.go('today'); say.append(setup); empty.append(nap, say); chart.append(empty);
@@ -174,20 +171,22 @@
       }
       adoptMsg.textContent = result.insightStale ? '数据有更新，可重新分析后再采纳。' : '会写进学习约定，明早按约定时间提醒。';
     }
+    const failText = (error, fallback) => error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError ? (console.warn('[pinkie] 看板渲染失败', error), fallback) : error?.message || fallback; // 脚本自身的异常只进控制台，界面给中文兜底；网关的业务错误本来就是给人看的，照原文显示。
+    const metricsFailed = text => { metrics.replaceChildren(el('p', 'b-failure', text)); learning.replaceChildren(); chart.replaceChildren(); paceNote.textContent = '稍后重试。'; };
     async function load(force = false) {
       const token = ++revision; stopMotion(); refresh.disabled = true; root.setAttribute('aria-busy', 'true');
       buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === range))); kicker.textContent = kickerFor(range);
       skeleton(headline, 1); skeleton(findings); adopt.disabled = true;
       const requestedRange = range;
-      const report = request('insight', {range: requestedRange, force}).catch(error => ({status: 'failed', error: error.message}));
+      const report = request('insight', {range: requestedRange, force}).catch(error => ({status: 'failed', error: failText(error, '分析暂时不可用，稍后再试一次。')}));
       const data = await Promise.allSettled([request('metrics', {range: requestedRange}), request('digest', {range: requestedRange})]);
       if (!alive || token !== revision) return;
-      if (data[0].status === 'fulfilled') { renderMetrics(data[0].value); renderPace(data[0].value.pace); }
-      else { metrics.replaceChildren(el('p', 'b-failure', '统计暂时没有读到：' + data[0].reason.message)); chart.replaceChildren(); paceNote.textContent = '稍后重试。'; }
+      if (data[0].status === 'fulfilled') { try { renderMetrics(data[0].value); renderPace(data[0].value?.pace); } catch (error) { metricsFailed(failText(error, '统计暂时读不到，稍后重试。')); } } else metricsFailed('统计暂时没有读到：' + failText(data[0].reason, '稍后重试。'));
       digest = data[1].status === 'fulfilled' ? data[1].value : null;
       const result = await report;
       if (!alive || token !== revision) return;
-      renderInsight(result); refresh.disabled = false; root.setAttribute('aria-busy', 'false');
+      try { renderInsight(result && typeof result === 'object' ? result : {status: 'failed'}); } catch (error) { headline.textContent = '这次没分析成功'; findings.replaceChildren(el('p', 'b-failure', failText(error, '程序统计仍可查看，稍后再试一次。'))); }
+      refresh.disabled = false; root.setAttribute('aria-busy', 'false');
     }
     refresh.onclick = () => load(true);
     adopt.onclick = async () => {
@@ -197,7 +196,7 @@
         const result = await request('adoptPlan', {planId: insight.plan.id});
         if (!alive || token !== revision) return;
         adopt.textContent = '已采纳'; adoptMsg.textContent = `明早 ${result.reminderAt}，碧琪会按这个计划提醒你。`; motion.confettiAt?.(adopt, 'small');
-      } catch (error) { if (alive && token === revision) { adopt.disabled = false; adopt.textContent = '重试采纳'; adoptMsg.textContent = error.message; } }
+      } catch (error) { if (alive && token === revision) { adopt.disabled = false; adopt.textContent = '重试采纳'; adoptMsg.textContent = failText(error, '没有写进学习约定，稍后再试一次。'); } }
     };
     const changes = el('section', 'b-receipts'); changes.append(el('h3', '', '最近改动')); root.append(changes);
     const refreshChanges = async () => {
@@ -208,10 +207,10 @@
         for (const receipt of receipts.slice(0, 8)) {
           const row = el('div', 'b-receipt'); row.append(el('span', '', (receipt.by === 'biqi' ? '碧琪 · ' : '') + (receipt.title || receipt.text || receipt.action)));
           if (receipt.undone) row.append(el('small', '', '已撤销'));
-          else if (receipt.undoable) { const undo = el('button', 'b-refresh', '撤销'); undo.type = 'button'; undo.onclick = async () => { undo.disabled=true; try { await ctx.request('pinkie.learning.ref.undo', {receiptId:receipt.receiptId}); await refreshChanges(); } catch (error) { undo.disabled=false; undo.textContent=error.message; } }; row.append(undo); }
+          else if (receipt.undoable) { const undo = el('button', 'b-refresh', '撤销'); undo.type = 'button'; undo.onclick = async () => { undo.disabled=true; try { await ctx.request('pinkie.learning.ref.undo', {receiptId:receipt.receiptId}); await refreshChanges(); } catch (error) { undo.disabled=false; undo.textContent=failText(error, '重试撤销'); } }; row.append(undo); }
           changes.append(row);
         }
-      } catch (error) { if (alive) changes.append(el('p', 'b-sub', '改动记录暂时没读到：' + error.message)); }
+      } catch (error) { if (alive) changes.append(el('p', 'b-sub', '改动记录暂时没读到：' + failText(error, '稍后重试。'))); }
     }; void refreshChanges();
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     const reduce = () => { if (motion.reduced) { stopMotion(); root.querySelectorAll('[data-count]').forEach(node => { node.textContent = node.dataset.count; }); root.querySelectorAll('.b-chart path').forEach(path => { path.style.strokeDasharray = 'none'; path.style.strokeDashoffset = '0'; }); } };
