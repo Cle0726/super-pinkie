@@ -257,6 +257,8 @@
         "laolao-metre-home.js",
         "laolao-metre-workspace.css",
         "laolao-metre-workspace.js",
+        "laolao-metre-usage.css",
+        "laolao-metre-usage.js",
         "laolao-metre-lock.css",
         "laolao-metre-lock.js",
         "laolao-metre-prompts.js",

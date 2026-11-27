@@ -8,12 +8,16 @@ export const MENU_PARTS = Object.freeze({
   footer: '.laolao-deep-think-menu__footer',
 });
 
-// 修复前写死的日间深紫；日间本来就是这四个值，夜间注回它们就是「改前」。
+// 修复前写死的日间深紫（B11·T1 前夜间也是它，B11·T2 前日间是它）；日夜注回它们都是「改前」。
 export const OLD_COLORS = Object.freeze({head: 'rgba(87,54,74,.72)', summary: 'rgba(87,54,74,.53)', hint: 'rgba(87,54,74,.62)', footer: 'rgba(87,54,74,.43)'});
 
+// 直接注到被量的元素上并关掉过渡：head 量的是 span，靠继承时夜间 color 过渡没跑完就被量了（mac2 7215398105）。
 export const REVERT_CSS = Object.entries(OLD_COLORS)
-  .map(([name, color]) => `html:not(#_r1):not(#_r2) #laolao-deep-think-menu .laolao-deep-think-menu__${name}{color:${color}}`)
+  .map(([name, color]) => `html:not(#_r1):not(#_r2) #laolao-deep-think-menu ${MENU_PARTS[name]}{color:${color};transition:none}`)
   .join('\n');
+
+const OLD_COMPUTED = Object.fromEntries(Object.entries(OLD_COLORS)
+  .map(([name, c]) => [name, c.replace(/,/g, ', ').replace(/, \./g, ', 0.')]));
 
 export function measureMenu(parts) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 1;
@@ -66,5 +70,9 @@ export async function openDeepThinkMenu(page) {
 
 export async function revertMenuColors(page) {
   await page.addStyleTag({content: REVERT_CSS});
-  await page.waitForFunction(() => getComputedStyle(document.querySelector('#laolao-deep-think-menu .laolao-deep-think-menu__hint')).color === 'rgba(87, 54, 74, 0.62)', null, {timeout: 5_000});
+  await page.waitForFunction(({parts, expected}) => Object.entries(parts).every(([name, sel]) => {
+    const el = document.querySelector(`#laolao-deep-think-menu ${sel}`);
+    return el && getComputedStyle(el).color === expected[name]
+      && !el.getAnimations().some((a) => a.transitionProperty === 'color');
+  }), {parts: MENU_PARTS, expected: OLD_COMPUTED}, {timeout: 5_000});
 }
