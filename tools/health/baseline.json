@@ -1693,7 +1693,7 @@
     "ui/injections/laolao-mode-menu-fx.css": {
       "important": 11,
       "importantIndirect": 0,
-      "lines": 592,
+      "lines": 569,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
