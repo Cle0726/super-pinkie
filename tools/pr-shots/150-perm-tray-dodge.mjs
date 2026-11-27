@@ -61,7 +61,11 @@ const probe = (force) => {
       stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
       stack: document.elementsFromPoint(cx, cy).slice(0, 6).map(name), coveredBy, floats: floats.map(({el, rect}) => ({el, rect})),
       chips: R(box.getBoundingClientRect()), controls: controls ? R(controls) : null, controlsRight: controls ? Math.round(controls.right) : null,
-      inputH: input ? Math.round(input.getBoundingClientRect().height) : null, inputRight: input ? Math.round(input.getBoundingClientRect().right) : null};
+      inputH: input ? Math.round(input.getBoundingClientRect().height) : null, inputRight: input ? Math.round(input.getBoundingClientRect().right) : null,
+      // 计算样式：看真页面上 padding-left 为什么推不动「⋯」（9c94ea4d run 45943798642：pad40 时 chips 变宽、「⋯」不动）
+      boxCss: (({display, paddingLeft, boxSizing, justifyContent, flexDirection, width, gridColumn, gridColumnStart, gridColumnEnd, direction}) => ({display, paddingLeft, boxSizing, justifyContent, flexDirection, width, gridColumn, gridColumnStart, gridColumnEnd, direction}))(getComputedStyle(box)),
+      statCss: (({position, left, right, marginLeft, translate, transform, display, gridColumn}) => ({position, left, right, marginLeft, translate, transform, display, gridColumn}))(getComputedStyle(stat)),
+      statParent: name(stat.parentElement)};
   } finally {
     if (saved) {
       if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
@@ -143,6 +147,7 @@ for (const r of report) {
       + ` | forced stat=${JSON.stringify(r.forced?.stat)} coveredBy=${cov(r.forced)} controlsRight=${r.forced?.controlsRight} inputRight=${r.forced?.inputRight}`
       + ` | pad40 stat=${JSON.stringify(r.forcedPad?.stat)} chips=${JSON.stringify(r.forcedPad?.chips)} coveredBy=${cov(r.forcedPad)} statHit=${r.forcedPad?.statHit}`
       + ` | loaded hasFix=${r.loaded?.hasFix} src=${r.loaded?.src ? r.loaded.src.replace(/^.*\//, '') : null}`
+      + ` | pad40 boxCss=${JSON.stringify(r.forcedPad?.boxCss)} statCss=${JSON.stringify(r.forcedPad?.statCss)} statParent=${r.forcedPad?.statParent}`
       + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
   }
 }
