@@ -156,6 +156,8 @@
         "laolao-stream-fx.js",
         "laolao-message-actions.css",
         "laolao-message-actions.js",
+        "laolao-checkpoint.css",
+        "laolao-checkpoint.js",
         "laolao-artifacts.css",
         "laolao-artifacts.js",
         "laolao-desktop-apps.css",

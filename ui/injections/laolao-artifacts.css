@@ -1,19 +1,19 @@
 /* Milestone 4: artifact library (W2), file cards (W3), project settings (P1), shortcut sheet (N4). */
-:root { --pa-accent:var(--accent,#d9508d); --pa-bg:#fdf8fa; --pa-card:#fff; --pa-text:#3a2532; --pa-muted:color-mix(in srgb,var(--pa-text) 55%,transparent); --pa-line:rgba(96,50,73,.12); --pa-thumb:#f6eef2; --pa-shadow:0 1px 2px rgba(60,25,45,.05),0 6px 18px rgba(60,25,45,.06) }
-html[data-pinkie-night] { --pa-bg:#1d161b; --pa-card:#2a2027; --pa-text:#f3e9ef; --pa-line:rgba(255,235,245,.10); --pa-thumb:#241b21; --pa-shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.28) }
+:root { --pa-accent:var(--accent,#d9508d); --pa-bg:#fdf8fa; --pa-card:#fff; --pa-text:#3a2532; --pa-muted:color-mix(in srgb,var(--pa-text) 68%,transparent); --pa-line:rgba(96,50,73,.12); --pa-edge:#9d6e86; --pa-thumb:#f6eef2; --pa-shadow:0 1px 2px rgba(60,25,45,.05),0 6px 18px rgba(60,25,45,.06) }
+html[data-pinkie-night] { --pa-bg:#1d161b; --pa-card:#2a2027; --pa-text:#f3e9ef; --pa-line:rgba(255,235,245,.10); --pa-edge:#a8869b; --pa-thumb:#241b21; --pa-shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.28) }
 .pinkie-art-icon { width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round }
 
 /* W2 library page */
 .pinkie-art-page { position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147480000;display:flex;flex-direction:column;background:var(--pa-bg);color:var(--pa-text);font-size:13px }
-.pinkie-art-page__head { display:flex;align-items:center;gap:14px;padding:22px 32px 10px }
+.pinkie-art-page__head { display:flex;align-items:center;gap:14px;padding:22px 32px 10px } html[data-pinkie-platform="windows"] .pinkie-art-page__head { padding-right:var(--pinkie-caption-reserve,204px) }
 .pinkie-art-page__title { margin:0;font-size:22px;font-weight:600;letter-spacing:.01em }
-.pinkie-art-search { margin-left:auto;width:min(320px,40vw);height:34px;box-sizing:border-box;padding:0 12px;border:1px solid var(--pa-line);border-radius:10px;background:var(--pa-card);color:inherit;font:inherit;outline:none }
-.pinkie-art-search:focus-visible { border-color:color-mix(in srgb,var(--pa-accent) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pa-accent) 14%,transparent) }
-.pinkie-art-close { flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:20px;line-height:1;cursor:pointer;opacity:.6 }
+.pinkie-art-search { margin-left:auto;width:min(320px,40vw);height:34px;box-sizing:border-box;padding:0 12px;border:1px solid var(--pa-edge);border-radius:10px;background:var(--pa-card);color:inherit;font:inherit;outline:none } .pinkie-art-search::placeholder { color:var(--pa-muted);opacity:1 }
+.pinkie-art-search:focus-visible { border-color:var(--pa-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--pa-accent) 14%,transparent) }
+.pinkie-art-close { flex:none;width:32px;height:32px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:20px;line-height:1;cursor:pointer;opacity:.85 }
 .pinkie-art-close:hover,.pinkie-art-close:focus-visible { opacity:1;background:color-mix(in srgb,currentColor 8%,transparent);outline:none }
 .pinkie-art-filters { display:flex;align-items:center;gap:12px;padding:4px 32px 12px;border-bottom:1px solid var(--pa-line) }
 .pinkie-art-kinds { display:flex;flex-wrap:wrap;gap:6px }
-.pinkie-art-chip { height:28px;padding:0 12px;border:1px solid var(--pa-line);border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer }
+.pinkie-art-chip { height:28px;padding:0 12px;border:1px solid var(--pa-edge);border-radius:999px;background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer }
 .pinkie-art-chip:hover { background:color-mix(in srgb,currentColor 5%,transparent) }
 .pinkie-art-chip[aria-pressed="true"] { border-color:transparent;background:color-mix(in srgb,var(--pa-accent) 14%,transparent);color:color-mix(in srgb,var(--pa-accent) 82%,var(--pa-text));font-weight:600 }
 .pinkie-art-chip--scope { margin-left:auto }
@@ -44,14 +44,14 @@ html[data-pinkie-night] .pinkie-art-viewer { background:rgba(0,0,0,.5) }
 .pinkie-art-view__title { flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px }
 .pinkie-art-versions { display:flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:9px;background:color-mix(in srgb,currentColor 5%,transparent);font-size:12.5px;white-space:nowrap }
 .pinkie-art-versions__label { font-variant-numeric:tabular-nums;margin-right:2px }
-.pinkie-art-versions__dot { opacity:.4;margin:0 2px }
+.pinkie-art-versions__dot { opacity:.7;margin:0 2px }
 .pinkie-art-ver { width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:16px;line-height:1;cursor:pointer }
 .pinkie-art-ver:hover:not(:disabled) { background:color-mix(in srgb,currentColor 9%,transparent) }
 .pinkie-art-ver:disabled,.pinkie-art-restore:disabled { opacity:.35;cursor:default }
 .pinkie-art-restore { height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:color-mix(in srgb,var(--pa-accent) 85%,var(--pa-text));font:inherit;font-size:12.5px;cursor:pointer }
 .pinkie-art-restore:hover:not(:disabled) { background:color-mix(in srgb,var(--pa-accent) 10%,transparent) }
 .pinkie-art-view__actions { display:flex;align-items:center;gap:6px;margin-left:auto }
-.pinkie-art-btn { height:28px;padding:0 11px;border:1px solid var(--pa-line);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap }
+.pinkie-art-btn { height:28px;padding:0 11px;border:1px solid var(--pa-edge);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap }
 .pinkie-art-btn:hover:not(:disabled) { background:color-mix(in srgb,currentColor 6%,transparent) }
 .pinkie-art-btn:disabled { opacity:.4;cursor:default }
 .pinkie-art-btn--quiet { border-color:transparent;color:var(--pa-muted) }
