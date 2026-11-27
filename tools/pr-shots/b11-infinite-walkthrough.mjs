@@ -2,7 +2,7 @@
 // B11 全页面走查（无限制模式 / unrestricted）截图，给 PR 截图工作流（.github/workflows/pr-shots.yml）用。
 // 约定照 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + <目录>/shots.jsonl，另写 report.json。
 // 真页面（tests/visual/lib/real-harness.mjs 的 home-unrestricted 场景）：会话在 agent:unrestricted: 下。
-// 1440 / 820 × 日 / 夜，每格依次拍：
+// 1280 / 820 × 日 / 夜（宽度可用 PINKIE_WALK_WIDTHS 改），每格依次拍：
 //   home       无限制模式首页（问候语 + 继续之前的工作）
 //   chat       离开首页后的空会话（输入框上有无限制模式独有的「脱敏」按钮）
 //   artifacts  作品库（侧栏「作品」）
@@ -22,6 +22,8 @@ const out = path.resolve(at >= 0 && args[at + 1] ? args[at + 1] : process.env.PI
 fs.mkdirSync(out, {recursive: true});
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const HEIGHT = 800;
+// 宽度：默认 1280 / 820（B11 L68 走查要的两档）；PINKIE_WALK_WIDTHS=1440,820 之类可改
+const WIDTHS = (process.env.PINKIE_WALK_WIDTHS || '1280,820').split(',').map(Number).filter((w) => w >= 320 && w <= 3840);
 const LIMIT = 40;   // 每类问题每页最多记这么多条，够看出规律
 
 // 在页面里量。只看视口里看得见的元素；渐变 / 图片底色量不准，记 bgImage 让人工看图核对。
@@ -299,7 +301,7 @@ async function cell(theme, width) {
 
 try {
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 820]) await cell(theme, width);
+    for (const width of WIDTHS) await cell(theme, width);
   }
 } finally {
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2));

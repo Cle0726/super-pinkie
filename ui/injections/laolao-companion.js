@@ -774,7 +774,7 @@
   };
   document.addEventListener("click", (e) => { if (e.target.closest?.(".agent-chat__input .chat-send-btn:not(.chat-send-btn--stop)")) onSend(); }, true);
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.altKey) return;
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229 || e.altKey) return;
     const ta = e.target.closest?.(".agent-chat__composer-combobox textarea");
     if (ta && ta.value.trim()) onSend();
   }, true);

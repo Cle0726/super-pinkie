@@ -20,7 +20,7 @@
   const TIER_ORDER = ['cinematic', 'lush', 'standard', 'quiet'];
   const FIELDS = ['density', 'bloom', 'dof', 'shake', 'hitstop', 'cine', 'biqi', 'book', 'fps', 'res', 'volume'];
   const read = () => { try { const raw = JSON.parse(localStorage.getItem(KEY) || 'null'); if (raw && typeof raw === 'object') return raw; } catch { /* 缺省电影级 */ } return {}; };
-  const reducedMotion = () => { try { if (localStorage.getItem(MOTION_KEY) === '1') return true; } catch { /* 读不到就当没开 */ } return document.documentElement.dataset.pinkieReduceMotion === '1'; };
+  const reducedMotion = () => { try { if (localStorage.getItem(MOTION_KEY) === '1') return true; } catch { /* 读不到就当没开 */ } return document.documentElement.hasAttribute('data-pinkie-reduce-motion'); };
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   function sanitize(field, v) {
     if (v === undefined || v === null) return undefined;
@@ -1288,7 +1288,7 @@
     return true;
   }
   function pulse(node, delay) {
-    try { node.animate([{transform: 'scale(1)'}, {transform: 'scale(1.09)', offset: .28}, {transform: 'scale(1)'}], {duration: 460, delay: delay * 1000, easing: 'cubic-bezier(.2,.8,.2,1)', composite: 'add'}); } catch { /* 老 WebKit 不支持 composite 时不跳 */ }
+    try { if (settings().reduced) return; node.animate([{transform: 'scale(1)'}, {transform: 'scale(1.09)', offset: .28}, {transform: 'scale(1)'}], {duration: 460, delay: delay * 1000, easing: 'cubic-bezier(.2,.8,.2,1)', composite: 'add'}); } catch { /* 老 WebKit 不支持 composite 时不跳 */ }
   }
   function countUp(node, to, ms = 520) {
     if (!(to > 1)) { node.textContent = `+${to}`; return; }
