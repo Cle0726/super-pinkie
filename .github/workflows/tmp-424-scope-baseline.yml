@@ -36,7 +36,7 @@ jobs:
           PINKIE_VISUAL_REPORT: "1"
         run: |
           set +e
-          node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"
           echo "before exit=${PIPESTATUS[0]}"
           mkdir -p before-diff && cp -r tests/visual/diff-real/. before-diff/ 2>/dev/null; ls -la before-diff
       - name: Capture linux real baselines (3x repeat, 0 px jitter required)
@@ -46,7 +46,7 @@ jobs:
           set +e
           rm -rf tests/visual/diff-real
           env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
-            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
+            node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
           echo "capture exit=${PIPESTATUS[0]}"
           git status --short tests/visual/real-baseline/
           sha256sum tests/visual/real-baseline/linux/*.png
@@ -57,7 +57,7 @@ jobs:
           PINKIE_VISUAL_REPORT: "1"
         run: |
           rm -rf tests/visual/diff-real
-          node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,7 +96,7 @@ jobs:
           PINKIE_VISUAL_REPORT: "1"
         run: |
           set +e
-          node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/before.tap"
           echo "before exit=${PIPESTATUS[0]}"
           mkdir -p before-diff && cp -r tests/visual/diff-real/. before-diff/ 2>/dev/null; ls -la before-diff
       - name: Capture win32 real baselines (3x repeat, 0 px jitter required)
@@ -107,7 +107,7 @@ jobs:
           set +e
           rm -rf tests/visual/diff-real
           env -u CI -u GITHUB_ACTIONS PINKIE_VISUAL_UPDATE=1 PINKIE_VISUAL_REPEAT=3 PINKIE_VISUAL_REPORT=1 \
-            node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
+            node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/capture.tap"
           echo "capture exit=${PIPESTATUS[0]}"
           git status --short tests/visual/real-baseline/
           sha256sum tests/visual/real-baseline/win32/*.png
@@ -119,7 +119,7 @@ jobs:
           PINKIE_VISUAL_REPORT: "1"
         run: |
           rm -rf tests/visual/diff-real
-          node --test --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs --test-reporter=tap tests/visual-real-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/recheck.tap"; echo "recheck exit=${PIPESTATUS[0]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
