@@ -1156,10 +1156,16 @@ export async function waitModelPickerReady(page, {timeout = 10_000} = {}) {
       const details = document.querySelector('details.chat-controls__model[open], details.chat-controls__model-picker[open]');
       const menu = details?.querySelector('.chat-controls__inline-select-menu--combined');
       if (!menu) return null;
-      const options = [...menu.querySelectorAll('.chat-controls__combined-model-option, [data-chat-model-option]')]
+      const all = [...menu.querySelectorAll('.chat-controls__combined-model-option, [data-chat-model-option]')];
+      const options = all
         .filter((el) => el.getClientRects().length)
         .map((el) => `${el.textContent.trim()}|${el.getAttribute('aria-selected') || ''}`);
-      return {options, height: Math.round(menu.getBoundingClientRect().height), text: menu.textContent.replace(/\s+/g, ' ').trim()};
+      // The default 常用模型 tab can legitimately be empty (no favourites or recent models yet):
+      // rows are then in the DOM but hidden, and the picker shows its empty-state line instead.
+      // rows = every model row the catalog produced (hidden or not); empty = the visible empty line.
+      const emptyEl = menu.querySelector('.pinkie-model-empty');
+      const empty = emptyEl && emptyEl.getClientRects().length ? emptyEl.textContent.trim() : '';
+      return {options, rows: all.length, empty, height: Math.round(menu.getBoundingClientRect().height), text: menu.textContent.replace(/\s+/g, ' ').trim()};
     };
     let last = JSON.stringify(read());
     let same = 0;

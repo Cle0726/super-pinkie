@@ -91,7 +91,11 @@ test('real model-picker scene waits for the async catalog and a still list befor
     });
     const settled = await waitModelPickerReady(page);
     t.diagnostic(`settled ${JSON.stringify(settled).slice(0, 240)}`);
-    assert.ok(settled && settled.options.length > 0, `settled list must have options: ${JSON.stringify(settled).slice(0, 200)}`);
+    // The catalog really landed: its model rows are in the menu (the default 常用模型 tab may hide
+    // them all on a fresh profile; the committed baseline shows exactly that empty state).
+    assert.ok(settled && settled.rows > 0, `settled menu must contain the catalog's model rows: ${JSON.stringify(settled).slice(0, 200)}`);
+    // And what is on screen is a finished state: visible options, or the picker's own empty line.
+    assert.ok(settled.options.length > 0 || settled.empty, `settled list must show options or the empty-state line: ${JSON.stringify(settled).slice(0, 200)}`);
     const after = await page.evaluate(([d, m]) => {
       const details = document.querySelector(d);
       return {ready: details?.dataset.pinkieFallbackReady, height: Math.round(details.querySelector(m).getBoundingClientRect().height)};
