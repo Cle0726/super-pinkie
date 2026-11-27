@@ -362,6 +362,50 @@ test('delete is Metre only; it backs the transcript up under backups/sessions-de
   assert.notEqual(second.backup, result.backup);
 });
 
+test('restore does not read a transcript path or symlink outside the backup directory', async () => {
+  const marker = 'PINKIE_LEAK';
+  const {access, manager, stateRoot} = setup();
+  access.add(META);
+  const day = new Date();
+  const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  const backups = path.join(stateRoot, 'backups', 'sessions-deleted', date);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'pinkie-restore-outside-'));
+  fs.writeFileSync(path.join(outside, 'secret.jsonl'), marker + '\n');
+  fs.writeFileSync(path.join(outside, 'session.json'), JSON.stringify({
+    key: PROJ, agentId: 'project', transcript: 'secret.jsonl', title: '越界', entry: {label: '越界'},
+  }));
+  const escaped = path.join(backups, 'escaped');
+  fs.mkdirSync(escaped, {recursive: true});
+  fs.writeFileSync(path.join(escaped, 'session.json'), JSON.stringify({
+    key: PROJ, agentId: 'project', transcript: path.relative(escaped, path.join(outside, 'secret.jsonl')),
+    title: '越界', entry: {label: '越界'},
+  }));
+  const linkedDir = path.join(backups, 'linked-dir');
+  fs.symlinkSync(outside, linkedDir);
+  const linkedFile = path.join(backups, 'linked-file');
+  fs.mkdirSync(linkedFile, {recursive: true});
+  fs.symlinkSync(path.join(outside, 'secret.jsonl'), path.join(linkedFile, 'secret.jsonl'));
+  fs.writeFileSync(path.join(linkedFile, 'session.json'), JSON.stringify({
+    key: PROJ, agentId: 'project', transcript: 'secret.jsonl', title: '越界', entry: {label: '越界'},
+  }));
+  for (const backup of [escaped, linkedDir, linkedFile]) {
+    await assert.rejects(manager.run(META, {action: 'restore', backup}), /备份|删除备份目录/);
+    assert.equal(await access.entry(PROJ), null, backup);
+  }
+  const leaked = [];
+  const walk = dir => {
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      const stat = fs.lstatSync(full);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walk(full);
+      else if (fs.readFileSync(full, 'utf8').includes(marker)) leaked.push(full);
+    }
+  };
+  walk(stateRoot);
+  assert.deepEqual(leaked, []);
+});
+
 test('rename never overwrites a name the user chose', async () => {
   const {access, manager, titles} = setup();
   access.add(META);
