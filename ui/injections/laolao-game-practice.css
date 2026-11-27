@@ -195,4 +195,4 @@
 #pinkie-study-desk .pkp-prow[data-busy]{opacity:.6}
 @media (max-width:1100px){#pinkie-study-desk .pkp-hero__fig{right:20px;opacity:.5}#pinkie-study-desk .pkp-hero__stat{display:none}#pinkie-study-desk .pkp-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (prefers-reduced-motion:reduce){#pinkie-study-desk :is(.pkp-hero__bg,.pkp-hero__fig,.pkp-hero__txt,.pkp-qcard,.pkp-prow,.pkp-pip){animation:none!important}}
-#pinkie-study-desk[data-reduce-motion] :is(.pkp-hero__bg,.pkp-hero__fig,.pkp-hero__txt,.pkp-qcard,.pkp-prow,.pkp-pip){animation:none!important}
+html[data-pinkie-reduce-motion] #pinkie-study-desk :is(.pkp-hero__bg,.pkp-hero__fig,.pkp-hero__txt,.pkp-qcard,.pkp-prow,.pkp-pip){animation:none!important}
