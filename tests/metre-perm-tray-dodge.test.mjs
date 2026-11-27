@@ -83,7 +83,8 @@ function layout(w) {
   const lines = count ? line + 1 : Math.max(1, line);
   const input = R(G.left, G.top, CW + G.padL + G.padR, G.head + lines * G.step + G.foot);
   rects.set(w.input, input);
-  rects.set(w.controls, R(cl, ct, CW, lines * G.step - 4));
+  // w.contents：和真页面主题一样，按键行是 display: contents（laolao-theme.css 5024–5027），自己没有盒子，量出来全是 0
+  rects.set(w.controls, w.contents ? R(0, 0, 0, 0) : R(cl, ct, CW, lines * G.step - 4));
   for (const b of w.floats) {
     if (b.style.display === 'none' || !b.parentElement) continue;
     const a = b._anchor, left = a.left != null ? input.left + a.left : input.right - a.right - a.w;
@@ -199,6 +200,27 @@ for (const cls of ['pinkie-tray-btn', 'laolao-deep-think-btn']) {
     assert.deepEqual([back.fold, back.dodge, back.pad, back.keyHit], ['0', null, null, true], `放宽后回原位（${JSON.stringify(back)}）`);
   });
 }
+
+// #273 pr-shots run 45929551714（linux，320 宽）：真页面按键行是 display: contents，getBoundingClientRect() 全是 0，
+// 改前 clearCover 拿 controls.right=0 当行宽，永远判「让不开」挪回原位：refit 后 dodge=null、「⋯」中心点下去是麦克风，点不开详情
+test('按键行是 display: contents（没有盒子、量出来是 0）时：「⋯」让到行首后照样往右让过托盘键，点得开详情，放宽后回原位', () => {
+  const w = boot(1000);
+  w.contents = true;
+  w.tray();
+  w.fit(262);
+  assert.equal(row(w).fold, '3');
+  assert.equal(w.controls.getBoundingClientRect().width, 0, '前提：按键行量出来没有宽度');
+  w.mic(); w.fit();
+  const r = row(w);
+  assert.deepEqual([r.fold, r.label, r.dodge], ['3', '⋯', '1'], `自己占一行、排在行首（${JSON.stringify(r)}）`);
+  assert.ok(parseFloat(r.pad) > 0, `往右让过托盘键（${JSON.stringify(r)}）`);
+  assert.equal(r.keyHit, true, `「⋯」中心点下去是它自己（${JSON.stringify(r)}）`);
+  assert.deepEqual(r.coveredBy, [], `「⋯」没被任何浮着的键盖住（${JSON.stringify(r)}）`);
+  assert.equal(clickCenter(w, r.center), true, '点「⋯」中心打开会话详情');
+  w.fit(1000);
+  const back = row(w);
+  assert.deepEqual([back.fold, back.dodge, back.pad, back.keyHit], ['0', null, null, true], `放宽后回原位（${JSON.stringify(back)}）`);
+});
 
 test('行首浮着的键宽到这一行让不开：挪回原位，不留让位距离（不停在一个仍被盖住的地方）', () => {
   const w = boot(1000);

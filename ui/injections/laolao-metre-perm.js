@@ -436,7 +436,10 @@
   // 「⋯」自己占一行、排到行首以后还被盖住（托盘键就浮在行首）：按键往右让，让过盖住它的那个控件再留 4px，直到不被盖住；
   // 让到超出这一行还盖着就算让不开（返回 false，调用方挪回来）。让的距离记在按键这一截的 padding-left 上，每次重量先清掉。
   function clearCover(box, input, controls) {
-    const room = controls.getBoundingClientRect().right;
+    // 真页面主题里按键行是 display: contents（laolao-theme.css 5024–5027），自己没有盒子、量出来 right 是 0，
+    // 拿它当行宽就永远「让不开」（#273 pr-shots run 45929551714：forced controlsRight=0）：没有盒子时退到输入框的右沿
+    const c = controls.getBoundingClientRect();
+    const room = c.width > 0 ? c.right : input.getBoundingClientRect().right;
     for (let i = 0; i < 4; i++) {
       const floats = floatsOver(input), keys = [...box.querySelectorAll('.pk-perm-chip')].map((k) => k.getBoundingClientRect());
       let need = 0;
