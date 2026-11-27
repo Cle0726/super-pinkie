@@ -7,6 +7,7 @@
 //     审查和跟进里任何一步都不会调 gh pr merge（契约测试锁着）。
 //   - 跟 main 只 merge（不变基、不 force）；有冲突就 merge --abort、报冲突文件，停下。
 // 怎么跑命令、怎么问引擎都由外面注入（run / ask / fix），测试里换成假的。
+import crypto from 'node:crypto';
 import {execFile} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -259,4 +260,157 @@ export function registerPrFlow(api, options = {}) {
   method('pinkie.pr.merge', 'operator.admin', (p) => flow.merge(p));
   method('pinkie.pr.stop', 'operator.admin', (p) => flow.stop(p));
   return flow;
+}
+
+// T3 #22（L34）：Metre 引擎台右侧「改动」面板的「提交 / 开 PR」后端。界面在 ui/injections/laolao-metre-ship.js，测试在 tests/metre-engines-ship.test.mjs。
+// 规矩：
+//   - 只在 Metre 会话、只在这个会话交给外部引擎做过（有引擎对话）以后；文件夹就是引擎在里面动手的那个：
+//     对话开在新工作树里就用工作树，不然用会话绑的项目文件夹（没绑就是 Metre 的草稿文件夹）。
+//   - 引擎自己不提交、不开 PR：只有界面上点了按钮、再点「确认」才到这里。确认时界面把 status 给的 token 原样带回，
+//     提交的 token 跟着「头 + 没提交的改动」，开 PR 的 token 跟着「分支 + 头」；看完以后有变化就拒绝（CONFLICT），要重新看一眼。
+//   - 引擎还在做（在奏 / 等你）时不提交、不开 PR。
+//   - 开 PR：不在 main / master 这类主分支上开；只用普通 push（不 force），然后 gh pr create，默认开成草稿。不合并，也不调 gh pr merge。
+//   - 用用户自己的 git / gh 配置和登录，碧琪不读、不存令牌；输出里像令牌的串先抹掉（pr-flow.mjs 的 redact）。
+// 怎么跑命令由外面注入（run），测试里换成假的。
+// （放在 pr-flow.mjs 里、不另起模块：同一件事，而且新模块要同步 setup.py 和 installer/macos/apply-theme.sh 两份安装清单。）
+const MAIN_BRANCH = /^(main|master|trunk|develop|default)$/i;
+const BUSY = new Set(['running', 'waiting']);
+const shipFail = (message, code = 'INVALID_REQUEST') => Object.assign(new Error(redact(message).slice(0, 400)), {code});
+const digest = (...parts) => crypto.createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 16);
+
+// git status --porcelain 的一行：「XY 路径」，改名是「XY 旧 -> 新」。
+export function parsePorcelain(text) {
+  return String(text ?? '').split(/\r?\n/).filter(line => line.length > 3).map(line => {
+    const file = line.slice(3);
+    const arrow = file.indexOf(' -> ');
+    return {status: line.slice(0, 2).trim() || '?', file: arrow >= 0 ? file.slice(arrow + 4) : file};
+  });
+}
+
+export class EngineShip {
+  constructor({bridge = () => globalThis[Symbol.for('pinkie.engines.v1')]?.bridge, run, git = 'git', gh = 'gh'} = {}) {
+    this.bridge = bridge;
+    this.run = run || defaultRun(new Set());
+    this.gitBin = git;
+    this.ghBin = gh;
+  }
+
+  // 哪个会话、哪段引擎对话、在哪个文件夹、引擎此刻在不在做。
+  async where(params = {}) {
+    const key = String(params.sessionKey || '');
+    if (!METRE.test(key)) throw shipFail('提交和开 PR 只在 Metre 的会话里用');
+    const b = this.bridge();
+    if (!b) throw shipFail('外部引擎还没打开：在 Metre 的引擎菜单里打开并选一个引擎。');
+    const pref = b.sessions.get(key) || {};
+    if (!pref.threadId) throw shipFail('这个会话还没交给外部引擎做过，没有可以提交的改动。');
+    let summary = null;
+    try { summary = await b.thread(pref.threadId); } catch { /* 引擎服务没在跑：照样能看文件夹里的 git */ }
+    const folder = summary?.thread?.worktree || pref.folder || b.folderFor(key);
+    return {key, folder: String(folder || ''), busy: BUSY.has(String(summary?.status || ''))};
+  }
+
+  sh(cmd, args, cwd) { return this.run(cmd, args, {cwd, timeout: 120_000}); }
+  git(args, cwd) { return this.sh(this.gitBin, args, cwd); }
+
+  async look(cwd) {
+    if (!cwd || (await this.git(['rev-parse', '--is-inside-work-tree'], cwd)).code !== 0) return null;
+    const branch = (await this.git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd)).stdout.trim();
+    const headRun = await this.git(['rev-parse', 'HEAD'], cwd);
+    const head = headRun.code === 0 ? headRun.stdout.trim() : '';
+    const porcelain = (await this.git(['status', '--porcelain=v1', '--untracked-files=all'], cwd)).stdout;
+    const remote = (await this.git(['remote', 'get-url', 'origin'], cwd)).code === 0;
+    return {branch, head, porcelain, files: parsePorcelain(porcelain), remote};
+  }
+
+  commitToken(g) { return 'commit@' + digest(g.head, g.porcelain); }
+  prToken(g) { return `pr@${g.branch}@${g.head}`; }
+
+  async status(params) {
+    const w = await this.where(params);
+    const out = {ready: false, why: '', folder: w.folder, busy: w.busy, branch: '', head: '', files: [], remote: false, pr: null,
+      canCommit: false, commitWhy: '', commitToken: '', canPr: false, prWhy: '', prToken: ''};
+    const g = await this.look(w.folder);
+    if (!g) { out.why = '这个文件夹不是 git 仓库。'; return out; }
+    Object.assign(out, {ready: true, branch: g.branch, head: g.head, files: g.files.slice(0, 500), remote: g.remote});
+    out.commitWhy = w.busy ? '引擎还在做，做完再提交。' : g.files.length ? '' : '没有要提交的改动。';
+    out.canCommit = !out.commitWhy;
+    if (out.canCommit) out.commitToken = this.commitToken(g);
+    out.prWhy = this.prBlock(g, w.busy);
+    if (!out.prWhy) {
+      const auth = await this.sh(this.ghBin, ['auth', 'status'], w.folder);
+      if (auth.code === 127 || /ENOENT|not found|不是内部或外部命令/i.test(auth.stderr)) out.prWhy = '本机没装 gh（GitHub 命令行）。';
+      else if (auth.code !== 0) out.prWhy = '本机 gh 还没登录：在终端里跑 gh auth login。';
+    }
+    if (!out.prWhy) {
+      const view = await this.sh(this.ghBin, ['pr', 'view', g.branch, '--json', 'number,url,state,isDraft'], w.folder);
+      let pr = null;
+      try { pr = view.code === 0 ? JSON.parse(view.stdout || 'null') : null; } catch {}
+      if (pr && pr.state === 'OPEN') { out.pr = pr; out.prWhy = `这个分支已经有 PR #${pr.number}。`; }
+    }
+    out.canPr = !out.prWhy;
+    if (out.canPr) out.prToken = this.prToken(g);
+    return out;
+  }
+
+  prBlock(g, busy) {
+    if (busy) return '引擎还在做，做完再开 PR。';
+    if (!g.remote) return '这个文件夹没有远端（origin），开不了 PR。';
+    if (!g.head) return '还没有提交，先提交。';
+    if (!g.branch || g.branch === 'HEAD') return '现在不在任何分支上，开不了 PR。';
+    if (MAIN_BRANCH.test(g.branch)) return `现在在 ${g.branch} 上：先换到一个新分支（或者新对话选「新工作树」）再开 PR。`;
+    if (g.files.length) return '还有没提交的改动，先提交。';
+    return '';
+  }
+
+  // 只有界面上点了「确认提交」才来这里。confirm 必须是 status 给的 commitToken，和此刻的头、改动一致。
+  async commit(params = {}) {
+    const w = await this.where(params);
+    const message = String(params.message || '').trim();
+    if (!message) throw shipFail('请写一句提交说明。');
+    if (w.busy) throw shipFail('引擎还在做，做完再提交。');
+    const g = await this.look(w.folder);
+    if (!g) throw shipFail('这个文件夹不是 git 仓库。');
+    if (!g.files.length) throw shipFail('没有要提交的改动。');
+    if (typeof params.confirm !== 'string' || params.confirm !== this.commitToken(g)) throw shipFail('改动变了或没确认，重新看一眼再提交。', 'CONFLICT');
+    const add = await this.git(['add', '-A'], w.folder);
+    if (add.code !== 0) throw shipFail('没加进暂存区：' + add.stderr);
+    const done = await this.git(['commit', '-m', message.slice(0, 2000)], w.folder);
+    if (done.code !== 0) {
+      throw shipFail(/user\.(email|name)|Please tell me who you are/i.test(done.stderr) ? 'Git 还没设置用户名和邮箱。' : '提交失败：' + (done.stderr || done.stdout).slice(0, 300));
+    }
+    const head = (await this.git(['rev-parse', 'HEAD'], w.folder)).stdout.trim();
+    return {committed: true, head, files: g.files.length, summary: redact(done.stdout.split(/\r?\n/)[0] || '').slice(0, 200)};
+  }
+
+  // 只有界面上点了「确认开 PR」才来这里。confirm 必须是 status 给的 prToken（分支 + 头）。只普通 push，不 force，不合并。
+  async openPr(params = {}) {
+    const w = await this.where(params);
+    const title = String(params.title || '').trim().slice(0, 200);
+    if (!title) throw shipFail('请写 PR 标题。');
+    const g = await this.look(w.folder);
+    if (!g) throw shipFail('这个文件夹不是 git 仓库。');
+    const why = this.prBlock(g, w.busy);
+    if (why) throw shipFail(why);
+    if (typeof params.confirm !== 'string' || params.confirm !== this.prToken(g)) throw shipFail('分支或头变了，或者没确认，重新看一眼再开 PR。', 'CONFLICT');
+    const push = await this.git(['push', '-u', 'origin', `HEAD:refs/heads/${g.branch}`], w.folder);
+    if (push.code !== 0) throw shipFail('没推上去（不会强推；远端有新提交就先跟上再推）：' + push.stderr.slice(0, 200));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-ship-'));
+    try {
+      const body = path.join(dir, 'body.md');
+      fs.writeFileSync(body, String(params.body || '').slice(0, 20_000));
+      const args = ['pr', 'create', '--head', g.branch, '--title', title, '--body-file', body, ...(params.draft === false ? [] : ['--draft'])];
+      const made = await this.sh(this.ghBin, args, w.folder);
+      if (made.code !== 0) throw shipFail('PR 没开成：' + made.stderr.slice(0, 200));
+      const url = made.stdout.trim().split(/\r?\n/).pop() || '';
+      return {opened: true, url: redact(url), branch: g.branch, head: g.head, draft: params.draft !== false};
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  }
+}
+
+export function registerEngineShip(api, {register, ...options} = {}) {
+  const ship = new EngineShip(options);
+  register(api, 'pinkie.engines.ship.status', params => ship.status(params));
+  register(api, 'pinkie.engines.ship.commit', params => ship.commit(params));
+  register(api, 'pinkie.engines.ship.openPr', params => ship.openPr(params));
+  return ship;
 }
