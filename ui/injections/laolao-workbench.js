@@ -65,7 +65,7 @@
     store.set('sideWidth', state.sideWidth); store.set('chatWidth', state.chatWidth); store.set('layoutVersion', 2);
   }
   const extraStatus = new Map(), held = new Map(), heldOf = path => (path ? held.get(path) || held.get(absolute(path)) || '' : '');   // R5 ②：Metre 这一轮在改的文件临时只读，由 laolao-metre-files.js 填
-  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, held, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); workspaceView = 'code'; place(); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
+  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, held, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); workspaceView = 'code'; place(); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
 
   /* ───────── 让模型看见当前工作台和运行现场 ───────── */
   const contextClientId = crypto.randomUUID();
@@ -845,8 +845,8 @@
         'focusBorder': hex(c.accent, 0.55), 'input.background': hex(c.line), 'input.border': hex(c.faint),
         'scrollbarSlider.background': hex(c.text, 0.1), 'scrollbarSlider.hoverBackground': hex(c.text, 0.18), 'scrollbarSlider.activeBackground': hex(c.accent, 0.35),
         'minimap.background': hex(c.bg), 'minimapSlider.background': hex(c.text, 0.07),
-        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': hex(c.accent, 0.22),
-        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': hex(c.accent, 0.09),
+        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': c.dark ? '#ff6b8147' : '#e5394c33', // 删除固定用红（B15：取 --accent 时 Metre 是钴蓝，像选区不像删除）
+        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': c.dark ? '#ff6b811f' : '#e5394c14',
         'editorOverviewRuler.border': '#00000000', 'editorError.foreground': '#ff6b81', 'editorWarning.foreground': '#f6c76f', 'editorInfo.foreground': hex(c.cle),
         'peekViewEditor.background': hex(c.widget), 'peekViewResult.background': hex(c.widget), 'peekView.border': hex(c.accent, 0.6),
       },

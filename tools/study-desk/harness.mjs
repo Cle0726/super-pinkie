@@ -7,11 +7,14 @@ import {createRequire} from 'node:module';
 import {wrapWebKitPlaywright} from '../../tests/visual/lib/webkit-screenshot.mjs';
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
-function loadPlaywright() {
-  try { return require('playwright'); }
-  catch {}
-  try { return require('playwright-core'); }
-  catch { return require('/Applications/超級碧琪.app/Contents/Resources/SuperPinkie/runtime/openclaw/node_modules/playwright-core'); }
+// 不回退正式 App 自带的 playwright-core：验收绝不碰正式 App。
+export function loadPlaywright(load = require) {
+  const errors = [];
+  for (const name of ['playwright', 'playwright-core']) {
+    try { return load(name); }
+    catch (error) { errors.push(error); }
+  }
+  throw new Error('找不到本地 playwright / playwright-core：请设置 NODE_PATH 指向装有 Playwright 的 node_modules 目录后重跑（不会使用正式 App 自带的副本）', {cause: new AggregateError(errors)});
 }
 export function playwright() {
   return wrapWebKitPlaywright(loadPlaywright());

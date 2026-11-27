@@ -1,0 +1,33 @@
+/* laolao-metre-plan.css —— T3 #10「计划卡」（L24）：对话区里的工作计划卡（laolao-plan.js，plan_update 的真实清单）在 Metre 下换皮。
+ * 卡片本身、步骤、状态、折叠早就在 main 上（laolao-plan.js + laolao-rich.css「工作计划」一节，所有模式共用），
+ * 但配色只有碧琪那一套：紫灰字、#2f7bff 蓝、绿色「完成」、半透明面板和大阴影，在 Metre 的谱纸上很扎眼。
+ * 这里只在 data-laolao-mode="metre" 下，把卡片用到的 --pk-* 变量直接定义在 .pk-plan 上（卡片自己的值压过从 html 继承下来的碧琪值，
+ * 不用拼选择器权重、不加强制覆盖），换成 Metre 自己的变量，日夜跟着 Metre 的变量走；其他五个模式一条规则都匹配不上，一字不变。
+ *   字      --metre-text；小字（标题收起后、「2 / 5」、说明）用和 laolao-metre-chat.css 同一配方的小字色：
+ *           日间 --metre-muted 压暗 12%、夜间提亮 14%，对卡片底日 5.8:1、夜 6.36:1（纯 --metre-muted 只有 4.72 / 5.21）。
+ *   强调    钴蓝 --metre-cobalt（进行中的圈、已完成的实心圆、进度条），标签底 --metre-cobalt-soft；「完成」也用钴蓝，不用绿。
+ *   卡片    实底 --metre-card、一道 --metre-line-strong 细边、圆角 10，不要阴影（同 Metre 弹层的「一种样子」）。
+ * 注意 --pk-shadow 不能写 none：laolao-rich.css 是 box-shadow: inset 0 0 0 1px var(--pk-faint), var(--pk-shadow)，
+ * 列表里夹一个 none 整条声明作废、细边也跟着没了，所以写成零尺寸透明阴影。 */
+html[data-laolao-mode="metre"] .pk-plan {
+  --pk-fg: var(--metre-text, #1B1A18);
+  --pk-mute: color-mix(in srgb, var(--metre-muted, #77736B) 88%, #000);
+  --pk-faint: var(--metre-line-strong, #D3D0C8);
+  --pk-panel: var(--metre-card, #FFFFFF);
+  --pk-chip: var(--metre-hover, #EFEDE8);
+  --pk-hover: var(--metre-hover, #EFEDE8);
+  --pk-accent: var(--metre-cobalt, #2F4BB0);
+  --pk-accent-ink: var(--metre-cobalt, #2F4BB0);
+  --pk-on: var(--metre-cobalt-soft, rgba(47, 75, 176, .10));
+  --pk-on-line: color-mix(in srgb, var(--metre-cobalt, #2F4BB0) 45%, transparent);
+  --pk-good: var(--metre-cobalt, #2F4BB0);
+  --pk-solid: var(--metre-card, #FFFFFF);
+  --pk-shadow: 0 0 0 0 transparent;
+}
+html[data-laolao-mode="metre"]:is([data-pinkie-night], [data-theme="dark"]) .pk-plan {
+  --pk-mute: color-mix(in srgb, var(--metre-muted, #918D84) 86%, #fff);
+}
+/* 圆角和字体是 laolao-rich.css 里 .pk-plan 规则本身的属性（三个 #p 压主题），这里多一个 id 压过它，仍只在 Metre。 */
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pk-plan { border-radius: 10px; font-family: var(--metre-sans, sans-serif); }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pk-plan__head { border-radius: 10px; }
+html[data-laolao-mode="metre"]:not(#_m1):not(#_m2):not(#_m3):not(#_m4) .pk-plan__label { border-radius: 4px; }

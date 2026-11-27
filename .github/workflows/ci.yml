@@ -47,7 +47,8 @@ jobs:
       - name: Run all execution, recovery, UI and desktop regression tests
         timeout-minutes: 30
         run: |
-          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
+          # B72: one hung test fails after 10 min instead of holding the whole step to the 30-min cancel.
+          node --test --test-force-exit --test-timeout=600000 --import ./tests/helpers/leak-exit-check.mjs tests/*.test.cjs tests/*.test.mjs
           python -m unittest discover -s tests -p '*_test.py' -v
           node --check ui/party/party.js
           node --check ui/party/party-drafts.js
@@ -124,10 +125,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build Windows .exe
-        shell: pwsh
+      # The token exists only in this step; build scripts and patches never see it.
+      - name: Download C.le. core tarball (SHA-256)
+        shell: bash
         env:
           CLE_CORE_TOKEN: ${{ secrets.CLE_CORE_TOKEN }}
+        run: |
+          if [[ "$(node tools/core/manifest.mjs field core)" == "cle" ]]; then
+            if [[ -z "${CLE_CORE_TOKEN:-}" ]]; then
+              echo "::error::CLE_CORE_TOKEN is not configured, so the C.le. core cannot be packaged."
+              exit 1
+            fi
+            tgz="$(node tools/core/manifest.mjs fetch-cle --cache-dir "$RUNNER_TEMP/core-cache")"
+            printf 'PINKIE_CLE_CORE_TARBALL=%s\n' "$tgz" >> "$GITHUB_ENV"
+          fi
+      - name: Build Windows .exe
+        shell: pwsh
         run: |
           $tokens = $null
           $errors = $null

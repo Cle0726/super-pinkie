@@ -553,9 +553,17 @@ export class FeedbackManager {
     return now - last >= this.flushIntervalMs;
   }
 
+  // 四处调用（setPrefs、攒够一批、启动 15 秒、每 30 分钟）都是 void 发出去不管：
+  // _doFlush 里同步写盘（writePrefs / removeIds）和加密出错会让它 reject，在这里接住并记日志，
+  // 不然就是一条 unhandledRejection。队列里的记录还在，下一次自动上报再发。
   async maybeAutoFlush() {
-    if (!this.shouldAutoFlush()) return {ok: false, skipped: true};
-    return this.flush();
+    try {
+      if (!this.shouldAutoFlush()) return {ok: false, skipped: true};
+      return await this.flush();
+    } catch (error) {
+      try { this.logger?.warn?.(`pinkie feedback auto upload failed: ${String(error?.message || error).slice(0, 200)}`); } catch {}
+      return {ok: false, uploaded: 0, errorCode: 'auto_flush_failed'};
+    }
   }
 
   async flush() {

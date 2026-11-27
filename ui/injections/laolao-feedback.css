@@ -189,18 +189,18 @@ html[data-color-scheme="dark"] .pinkie-feedback-modal__note {
   color: #d6bac8;
 }
 
-html[data-theme-mode="dark"] .pinkie-feedback-modal__equal-btn,
-html[data-theme-mode="dark"] .pinkie-feedback-modal__btn,
-html[data-theme-mode="dark"] .pinkie-feedback-modal__close,
-html[data-theme="dark"] .pinkie-feedback-modal__equal-btn,
-html[data-theme="dark"] .pinkie-feedback-modal__btn,
-html[data-theme="dark"] .pinkie-feedback-modal__close,
-html[data-color-scheme="dark"] .pinkie-feedback-modal__equal-btn,
-html[data-color-scheme="dark"] .pinkie-feedback-modal__btn,
-html[data-color-scheme="dark"] .pinkie-feedback-modal__close {
+html[data-theme-mode="dark"] .pinkie-feedback-modal__equal-btn, html[data-theme-mode="dark"] .pinkie-feedback-modal__btn, html[data-theme-mode="dark"] .pinkie-feedback-modal__close,
+html[data-theme="dark"] .pinkie-feedback-modal__equal-btn, html[data-theme="dark"] .pinkie-feedback-modal__btn, html[data-theme="dark"] .pinkie-feedback-modal__close,
+html[data-color-scheme="dark"] .pinkie-feedback-modal__equal-btn, html[data-color-scheme="dark"] .pinkie-feedback-modal__btn, html[data-color-scheme="dark"] .pinkie-feedback-modal__close {
   border-color: rgba(243, 153, 195, 0.28);
   background: rgba(58, 38, 53, 0.96);
   color: #f7dfeb;
+}
+
+html[data-theme-mode="dark"] .pinkie-feedback-modal__equal-btn:hover, html[data-theme-mode="dark"] .pinkie-feedback-modal__btn:hover, html[data-theme-mode="dark"] .pinkie-feedback-modal__close:hover,
+html[data-theme="dark"] .pinkie-feedback-modal__equal-btn:hover, html[data-theme="dark"] .pinkie-feedback-modal__btn:hover, html[data-theme="dark"] .pinkie-feedback-modal__close:hover,
+html[data-color-scheme="dark"] .pinkie-feedback-modal__equal-btn:hover, html[data-color-scheme="dark"] .pinkie-feedback-modal__btn:hover, html[data-color-scheme="dark"] .pinkie-feedback-modal__close:hover {
+  border-color: #ff9ac4;
 }
 
 html[data-theme-mode="dark"] .pinkie-feedback-modal__pre,
