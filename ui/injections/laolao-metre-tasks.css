@@ -22,7 +22,7 @@ html[data-laolao-mode="metre"] .pk-mtask__row[data-state="failed"] .pk-mtask__st
 html[data-laolao-mode="metre"] .pk-mtask__name { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 html[data-laolao-mode="metre"] .pk-mtask__clock { color: var(--metre-muted); font: 400 12px/20px var(--metre-mono, monospace); font-variant-numeric: tabular-nums; white-space: nowrap; }
 html[data-laolao-mode="metre"] .pk-mtask__what { display: block; margin: 4px 0 0; color: var(--metre-muted); overflow-wrap: anywhere; }
-html[data-laolao-mode="metre"] .pk-mtask__what--cmd { font: 400 12px/1.5 var(--metre-mono, monospace); white-space: pre-wrap; }
+html[data-laolao-mode="metre"] .pk-mtask__what--cmd { color: var(--metre-text); font: 400 12px/1.5 var(--metre-mono, monospace); white-space: pre-wrap; }   /* 命令块落在页面通用 code 的灰底（= --metre-hover，日 #EFEDE8）上：弱化色 #77736B 只有 4.03:1（linux-review 12:19），改用正文色，日约 15:1、夜 ≥ 4.5 */
 html[data-laolao-mode="metre"] .pk-mtask__note { margin: 2px 0 0; color: var(--metre-muted); font-size: 12px; }
 html[data-laolao-mode="metre"] .pk-mtask__more { margin-top: 6px; height: 24px; line-height: 22px; padding: 0 10px; }
 html[data-laolao-mode="metre"] .pk-mtask__detail { max-height: 320px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; border: 1px solid var(--metre-line-strong); border-radius: 4px; background: var(--metre-bg); color: var(--metre-text); font: 400 12px/1.5 var(--metre-mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }

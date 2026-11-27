@@ -2,7 +2,7 @@
 // 用极简假 DOM + 假工作台跑（照 tests/metre-pr-page.test.mjs）：只在 Metre 挂入口、点了开「后台任务」页并取 pinkie.work.status、
 // 后台命令 / 协作 / 子任务三种都列出来且在跑的排前面、没有就写空状态、读不到给原因不假装为空、
 // 只认当前会话的那一份、「看结果」走 pinkie.work.detail、不加定时器 / 观察器 / 全局名、登记在头片段和 metre 区域。
-// 反例：去掉入口里的 Metre 判断、去掉空状态、去掉会话核对，各自的用例都会红（PR 说明里有实测）。
+// 反例：去掉入口里的 Metre 判断、去掉空状态、去掉会话核对、去掉命令块的正文字色，各自的用例都会红（PR 说明 / 评论里有实测）。
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -161,4 +161,25 @@ test('不新增定时器、观察器和 window.__ 全局名，不轮询；CSS �
   const regions = JSON.parse(read('ui/injections/regions.json'));
   const metre = Object.values(regions.regions || regions).find((r) => r?.id === 'metre');
   assert.ok(metre.files.includes('laolao-metre-tasks.js') && metre.files.includes('laolao-metre-tasks.css'));
+});
+
+// linux-review / uireview 12:19–12:22（#434）：命令块落在页面通用 code 的灰底（--metre-hover，日 #EFEDE8）上，
+// 字色继承 .pk-mtask__what 的 --metre-muted（日 #77736B）只有 4.03:1。这里按 laolao-metre-skin.css 里日夜两段变量
+// 静态算命令块字色对 hover / bg / surface 三种底的对比度，12px 正文要 ≥ 4.5。反例：删掉 --cmd 的 color → 日间红。
+test('命令块（.pk-mtask__what--cmd）日夜对灰底 / 页面底 / 卡片底的文字对比度都 ≥ 4.5', () => {
+  const skin = read('ui/injections/laolao-metre-skin.css');
+  const vars = (name) => [...skin.matchAll(new RegExp(`--metre-${name}:\\s*(#[0-9A-Fa-f]{6})\\s*;`, 'g'))].map((m) => m[1]);
+  const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const plain = CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const colorOf = (cls) => plain.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`))?.[1].match(/(?:^|;)\s*color:\s*var\(--metre-([a-z-]+)\)/)?.[1];
+  const ink = colorOf('pk-mtask__what--cmd') || colorOf('pk-mtask__what');   // 自己没写字色就继承 .pk-mtask__what
+  assert.ok(ink, '命令块的字色要走 Metre 变量');
+  for (const name of [ink, 'hover', 'bg', 'surface']) assert.equal(vars(name).length, 2, `--metre-${name} 在 skin 里应只有日、夜两段定义`);
+  ['日', '夜'].forEach((label, i) => {
+    for (const under of ['hover', 'bg', 'surface']) {
+      const r = ratio(vars(ink)[i], vars(under)[i]);
+      assert.ok(r >= 4.5, `${label}间命令块 --metre-${ink} ${vars(ink)[i]} 对 --metre-${under} ${vars(under)[i]} 只有 ${r.toFixed(2)}:1`);
+    }
+  });
 });
