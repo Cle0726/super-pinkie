@@ -84,9 +84,9 @@ html[data-laolao-classic-shell="1"] .sidebar-session-toolbar .sidebar-new-sessio
 }
 #laolao-project-scope {
   order: 20;
-  max-width: 42%;
+  max-width: 100%;
   margin-left: auto;
-  padding: 0 4px; /* B11 #261 #6：日间 11px + --muted-strong（原 9px + theme 无类 div 的 --fog-muted 只有 3.1–3.8:1）；夜间仍由 night.css 无类 div 规则管 */
+  padding: 0 4px; /* B11 #261 #6：日间 11px + --muted-strong（原 9px + theme 无类 div 的 --fog-muted 只有 3.1–3.8:1）；夜间仍由 night.css 无类 div 规则管；max-width 42% → 100%：标签在输入框网格第 9 列，只用 42% 会让 820 宽截断 */
   font-size: 11px !important; color: var(--muted-strong) !important;
 }
 
