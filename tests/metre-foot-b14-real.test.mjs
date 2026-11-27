@@ -47,6 +47,14 @@ function readFoot() {
 const LAMP_SEL = 'aside.sidebar:not(.sidebar--collapsed) .pinkie-connection-status';
 const ARROW_SEL = 'aside.sidebar:not(.sidebar--collapsed) .laolao-mode-switcher.laolao-mode-button--plain .laolao-mode-button__arrow';
 
+// 改了规则后，等 CSS 过渡全部停下再量（和 metre-contrast-real 的 transitionsSettled 同一个条件）。
+// 只看 CSS 过渡：页面上猫、加载圈等无限循环的 CSS 动画一直 running，算进来会永远等不到。getAnimations() 会先刷样式，刚起的过渡已经在里面。
+// 等不到不在这里报错，走到下面原有断言，失败信息和原来一样。
+const transitionsSettled = (page) => page.waitForFunction(
+  () => document.getAnimations().filter((a) => a instanceof CSSTransition).every((a) => a.playState !== 'running'),
+  null, {timeout: 5000},
+).catch(() => {});
+
 test('B14 real page: Metre footer light is vertically centred on the mode card and the ◇ reads at ≥ 4.5:1 on the card, day and night; reverting the two declarations breaks both in day', async (t) => {
   let installed; let server; let browser;
   t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
@@ -59,6 +67,7 @@ test('B14 real page: Metre footer light is vertically centred on the mode card a
     try {
       await page.setViewportSize({width: 1440, height: 900});
       await page.mouse.move(900, 400);   // 指针不在卡上，量的是平时的样子
+      // 保留死等：刚改了视口宽度（1280 → 1440），要等布局 / 媒体查询切换和侧栏重排稳定下来，没有统一的可等状态（同 #259 对改视口后的处理）。
       await page.waitForTimeout(800);
       assert.equal(await page.evaluate(() => document.documentElement.getAttribute('data-laolao-mode')), 'metre');
       const m = await page.evaluate(readFoot);
@@ -84,7 +93,7 @@ test('B14 real page: Metre footer light is vertically centred on the mode card a
           return n;
         }, [LAMP_SEL, ARROW_SEL]);
         assert.equal(removed, 2, `反例：页面上没找到那两处新声明（找到 ${removed} 处）`);
-        await page.waitForTimeout(300);
+        await transitionsSettled(page);   // 改 CSSOM 规则本身是同步的，只有过渡需要等；没有过渡时立即返回
         const bad = await page.evaluate(readFoot);
         console.log(`ℹ day without the fix: ${JSON.stringify(bad)}`);
         assert.ok(Math.abs(bad.lampMid - bad.cardMid) >= 6, `反例没生效：方灯回到 top 16px 后仍和卡中心对齐（差 ${(bad.lampMid - bad.cardMid).toFixed(1)}px）`);
