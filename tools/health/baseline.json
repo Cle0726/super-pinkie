@@ -1966,7 +1966,7 @@
     "ui/injections/laolao-power-settings.css": {
       "important": 1,
       "importantIndirect": 0,
-      "lines": 398,
+      "lines": 438,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2525,7 +2525,7 @@
     "ui/injections/laolao-settings-user.css": {
       "important": 11,
       "importantIndirect": 0,
-      "lines": 551,
+      "lines": 558,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
