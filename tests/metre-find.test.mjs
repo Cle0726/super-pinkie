@@ -121,10 +121,10 @@ function env({mode = 'metre', withThread = true, highlightApi = true} = {}) {
 }
 
 // ---------- 注册与体量 ----------
-test('loaded after laolao-metre-suggest, owned by the metre region, no observer / interval / window.__ / gateway / !important', () => {
+test('loaded after laolao-metre-allow, owned by the metre region, no observer / interval / window.__ / gateway / !important', () => {
   const at = (name) => HEAD.indexOf(`/${name}?v=@hash`);
-  assert.ok(at('laolao-metre-suggest.js') > 0);
-  assert.ok(at('laolao-metre-find.css') > at('laolao-metre-suggest.js'), 'find.css comes after suggest.js');
+  assert.ok(at('laolao-metre-allow.js') > 0);
+  assert.ok(at('laolao-metre-find.css') > at('laolao-metre-allow.js'), 'find.css comes after allow.js');
   assert.ok(at('laolao-metre-find.js') > at('laolao-metre-find.css'), 'find.js comes after find.css');
   assert.ok(HEAD.includes('<script defer src="/laolao-metre-find.js?v=@hash"></script>'));
   assert.ok(HEAD.includes('<link rel="stylesheet" href="/laolao-metre-find.css?v=@hash">'));
