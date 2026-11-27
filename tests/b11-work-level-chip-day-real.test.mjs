@@ -24,18 +24,26 @@ describe('真浏览器（server / browser 全文件复用一次）', () => {
   let installed = null;
   let server = null;
   let browser = null;
-  before(async () => {
-    installed = installRealControlUi({repoRoot: REPO_ROOT});
-    server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-    browser = await launchRealBrowser(engine);
-  }, {timeout: 120_000});
-  after(async () => {
-    try { await browser?.close(); }
+  const closeAll = async () => {
+    const [b, s, i] = [browser, server, installed];
+    browser = server = installed = null;
+    try { await b?.close(); }
     finally {
-      try { await server?.close(); }
-      finally { installed?.cleanup(); }
+      try { await s?.close(); }
+      finally { i?.cleanup(); }
     }
-  });
+  };
+  before(async () => {
+    try {
+      installed = installRealControlUi({repoRoot: REPO_ROOT});
+      server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+      browser = await launchRealBrowser(engine);
+    } catch (error) {
+      await closeAll();
+      throw error;
+    }
+  }, {timeout: 120_000});
+  after(closeAll);
 
   test('项目模式「工作程度」日间字 ≥ 4.5、箭头 ≥ 3；注回旧色最差那格必须 < 4.5', async (t) => {
     const oldWorst = [];
