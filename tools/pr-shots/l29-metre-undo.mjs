@@ -81,16 +81,21 @@ try {
           await page.waitForSelector('aside.sidebar .session-row-host[data-session-key] .pk-ml-act[aria-label="归档"]', {state: 'attached', timeout: 15_000});
           // 归档一行不是当前会话的，免得 followAfterSessionLeaves 去开新会话
           // 只挑屏幕上看得见的行（折叠分组 / 最近页之外的行在 DOM 里但不可见，hover 会一直等）
-          const key = await page.evaluate(() => {
-            const seen = (n) => { const r = n.getBoundingClientRect(); return n.getClientRects().length > 0 && r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; };
-            const rows = [...document.querySelectorAll('aside.sidebar .session-row-host[data-session-key]')].filter((n) => n.querySelector('.pk-ml-act[aria-label="归档"]') && seen(n));
+          // 同一个 key 可能有不止一个节点（.first() 会拿到藏着的那份），可见性也要看 visibility：
+          // 所以在页面里挑出看得见的那一行，直接点它自己的「归档」小键（onclick 就是 archiveWithUndo），不再按 key 重新定位。
+          const pick = await page.evaluate(() => {
+            const seen = (n) => { const r = n.getBoundingClientRect(), s = getComputedStyle(n); return n.getClientRects().length > 0 && r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && s.visibility !== 'hidden'; };
+            const all = [...document.querySelectorAll('aside.sidebar .session-row-host[data-session-key]')];
+            const rows = all.filter((n) => n.querySelector('.pk-ml-act[aria-label="归档"]') && seen(n));
             const row = rows.find((n) => !n.classList.contains('sidebar-recent-session--active')) || rows[0];
-            return row?.dataset.sessionKey || '';
+            if (!row) return {key: '', rows: all.length, diag: all.slice(0, 8).map((n) => ({key: n.dataset.sessionKey, vis: getComputedStyle(n).visibility, top: Math.round(n.getBoundingClientRect().top), h: Math.round(n.getBoundingClientRect().height)}))};
+            const key = row.dataset.sessionKey;
+            row.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+            row.querySelector('.pk-ml-act[aria-label="归档"]').click();
+            return {key, rows: all.length, sameKey: all.filter((n) => n.dataset.sessionKey === key).length};
           });
-          if (!key) throw new Error('侧栏里没有看得见、带「归档」小键的会话行');
-          const row = page.locator(`aside.sidebar .session-row-host[data-session-key="${key}"]`).first();
-          await row.hover();
-          await row.locator('.pk-ml-act[aria-label="归档"]').click({force: true});
+          if (!pick.key) throw new Error('侧栏里没有看得见、带「归档」小键的会话行：' + JSON.stringify(pick));
+          const key = pick.key;
           await page.waitForSelector('.pinkie-archive-undo', {timeout: 10_000});
           await page.waitForTimeout(300);
           const base = `l29-metre-${theme}-${width}`;
@@ -100,7 +105,7 @@ try {
           await page.keyboard.press('Shift');   // 先有一次键盘操作，再聚焦，:focus-visible 才会出来
           await page.focus('.pinkie-archive-undo button');
           await shoot(page, `${base}-undo-focus`, '.pinkie-archive-undo');
-          report.push({scene: 'metre', theme, width, drawer, archivedKey: key, bar: await measureBar(page), pageErrors});
+          report.push({scene: 'metre', theme, width, drawer, archivedKey: key, pick, bar: await measureBar(page), pageErrors});
         } catch (error) {
           report.push({scene: 'metre', theme, width, error: error.message, pageErrors});
         } finally {
