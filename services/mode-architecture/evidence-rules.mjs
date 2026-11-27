@@ -603,6 +603,10 @@ function verifierSkillFile(verifier) {
   return path.join(path.dirname(path.dirname(path.resolve(verifier))), 'SKILL.md');
 }
 
+// Upper bound for waiting until the filesystem clock ticks past the boundary
+// marker (ext4 ticks every ~4 ms, NTFS every ~100 ns).
+const CONTRACT_TICK_LIMIT_MS = 50;
+
 function contractTimeBoundary() {
   // Date.now() loses sub-millisecond ordering, and a fixed age allowance
   // rejects legitimate Skills installed immediately before a task. Use the
@@ -612,17 +616,32 @@ function contractTimeBoundary() {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cle-kk-contract-clock-'));
     const marker = path.join(directory, 'boundary');
     fs.writeFileSync(marker, '', {flag: 'wx', mode: 0o600});
-    // NTFS quantizes ctime to a ~100 ns tick, so a file written immediately
-    // after this marker can land on the SAME ctime as the marker (measured at
-    // ~14% on Windows).  stableContractFile rejects only timestamps strictly
-    // AFTER the boundary, so that collision let a verifier overwritten this
-    // turn pass as pre-existing -- a real hole, and the flaky source of the
-    // `creating or changing a verifier...` test.  Wait past the tick so every
-    // subsequent write is guaranteed to be strictly later.  One millisecond is
-    // ample and costs nothing next to a real turn.
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
-    const contractCutoffNs = fs.statSync(marker, {bigint: true}).ctimeNs.toString();
-    return {startedAt: Date.now(), contractCutoffNs};
+    const markerNs = fs.statSync(marker, {bigint: true}).ctimeNs;
+    // File timestamps advance in filesystem ticks, not in real time: ~100 ns
+    // on NTFS, but ~4 ms on Linux ext4 (the kernel's coarse clock).  A file
+    // written right after this marker can land on the SAME tick as the
+    // marker, and stableContractFile rejects only timestamps strictly AFTER
+    // the boundary, so that collision let a verifier written this turn pass
+    // as pre-existing.  A fixed sleep cannot know the tick size, so wait until
+    // a fresh probe file really carries a later ctime than the marker: from
+    // then on every write is strictly after the boundary, while a contract
+    // installed just before begin() keeps its equal-tick timestamp.
+    const sleeper = new Int32Array(new SharedArrayBuffer(4));
+    const deadline = performance.now() + CONTRACT_TICK_LIMIT_MS;
+    for (let index = 0; ; index += 1) {
+      const probe = path.join(directory, `probe-${index}`);
+      fs.writeFileSync(probe, '', {flag: 'wx', mode: 0o600});
+      if (fs.statSync(probe, {bigint: true}).ctimeNs > markerNs) {
+        return {startedAt: Date.now(), contractCutoffNs: markerNs.toString()};
+      }
+      if (performance.now() >= deadline) break;
+      Atomics.wait(sleeper, 0, 0, 1);
+    }
+    // The clock never ticked past the marker (a filesystem with second-level
+    // timestamps): fail closed so the marker's own tick already counts as this
+    // turn.  A contract installed within that same tick must be re-read in a
+    // later turn, which is safer than letting this turn's writes self-certify.
+    return {startedAt: Date.now(), contractCutoffNs: (markerNs - 1n).toString()};
   } catch {
     // The older boundary is conservative when the temporary directory is
     // unavailable; it never grants a new contract authority after tool work.

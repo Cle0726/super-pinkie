@@ -30,16 +30,51 @@ export function assetName(version = T3_VERSION, platform = process.platform, arc
   return `t3-${version}-${key}.${platform === 'win32' ? 'zip' : 'tar.gz'}`;
 }
 
+// 同一台电脑上每个 Windows 账号一个短标识（DOMAIN\用户名的哈希，纯英文）。
+export function engineUserKey(env = process.env) {
+  let name = env.USERNAME || '';
+  if (!name) { try { name = os.userInfo().username; } catch { name = 'user'; } }
+  return crypto.createHash('sha256').update(`${env.USERDOMAIN || ''}\\${name}`.toLowerCase()).digest('hex').slice(0, 12);
+}
+
+// 2.5.54 及以前所有账号共用的 ProgramData 目录（那时 App 总是用管理员身份跑）。
+export function sharedEngineRoot(env = process.env) {
+  return path.join(env.ProgramData || 'C:\\ProgramData', 'SuperPinkie', 'engines');
+}
+
 // 第一个纯英文的候选目录。用户名是中文时，家目录下的路径不行，退到系统的英文目录。
+// ProgramData 那一级按账号分开：App 不再要管理员（#343），以前提权跑的版本建的共用 engines 目录
+// 归 Administrators，普通身份写不进 prefs.json、换不了版本；而用户自己在 ProgramData 下新建的子目录归自己。
+// 分开也让别的账号读不到这个账号的引擎登录状态（home/）。
 export function engineRoot({stateDir = path.join(os.homedir(), '.openclaw'), base = '', env = process.env, platform = process.platform} = {}) {
   const candidates = [base ? path.join(base, 'engines') : path.join(stateDir, 'pinkie', 'engines')];
   if (platform === 'win32') {
     if (env.LOCALAPPDATA) candidates.push(path.join(env.LOCALAPPDATA, 'SuperPinkie', 'engines'));
-    candidates.push(path.join(env.ProgramData || 'C:\\ProgramData', 'SuperPinkie', 'engines'));
+    candidates.push(`${sharedEngineRoot(env)}-${engineUserKey(env)}`);
   } else {
     candidates.push(path.join('/tmp', 'superpinkie-engines'));
   }
   return candidates.find(isAscii) || candidates[candidates.length - 1];
+}
+
+// 从共用目录搬到按账号的目录时，只带开关和角色分配两个小文件（读得到才带，已有的不覆盖）。
+// 引擎本体（versions/，约 170MB）按需重新下载；home/ 里是引擎的登录状态，可能属于别的账号，不搬。
+export function adoptSharedEngineFiles(root, {env = process.env, platform = process.platform} = {}) {
+  if (platform !== 'win32') return [];
+  const shared = sharedEngineRoot(env);
+  if (root === shared || !root.startsWith(shared + '-')) return [];
+  const copied = [];
+  for (const name of ['prefs.json', 'players.json']) {
+    const from = path.join(shared, name);
+    const to = path.join(root, name);
+    try {
+      if (fs.existsSync(to) || !fs.existsSync(from)) continue;
+      fs.mkdirSync(root, {recursive: true});
+      fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL);
+      copied.push(name);
+    } catch {}
+  }
+  return copied;
 }
 
 // 发布包里的路径是下载内容，不是本机路径。绝对路径、盘符、UNC 和 `..`（含反斜杠写法）不能解压出来。
@@ -342,7 +377,12 @@ const SHARED = Symbol.for('pinkie.engines.v1');
 // lineage：Metre 的血缘（metre-board.mjs 传进来），有了它才提供 pinkie_engine_task（Metre 派活给外部引擎，engines-task.mjs）。
 // modelHealth：碧琪的模型健康（metre-board.mjs 传进来），「碧琪模型」那条路把能用的模型排在前面。
 export function registerEngines(api, {base = '', register, lineage = null, modelHealth = null} = {}) {
-  const shared = globalThis[SHARED] ||= {service: new EngineService({root: engineRoot({base}), logger: api.logger})};
+  const shared = globalThis[SHARED] ||= (() => {
+    const root = engineRoot({base});
+    const adopted = adoptSharedEngineFiles(root);
+    if (adopted.length) api.logger?.info?.(`engines: carried ${adopted.join(', ')} over from the shared ProgramData folder to ${root}`);
+    return {service: new EngineService({root, logger: api.logger})};
+  })();
   const service = shared.service;
   const prefsFile = path.join(service.root, 'prefs.json');
   const prefs = () => { try { return JSON.parse(fs.readFileSync(prefsFile, 'utf8')) || {}; } catch { return {}; } };

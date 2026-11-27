@@ -406,7 +406,7 @@
     "ui/injections/laolao-deep-think.js": {
       "important": 8,
       "importantIndirect": 0,
-      "lines": 1128,
+      "lines": 1119,
       "mutationObserverRefs": 1,
       "mutationObservers": 2,
       "observeUnclear": 0,
@@ -1732,7 +1732,7 @@
     "ui/injections/laolao-mode-transition-fx.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 1248,
+      "lines": 1246,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2473,7 +2473,7 @@
     "ui/injections/laolao-session-cards.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 532,
+      "lines": 527,
       "mutationObserverRefs": 1,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -2720,7 +2720,7 @@
     "ui/injections/laolao-study-desk-board.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 232,
+      "lines": 231,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -3265,7 +3265,6 @@
     }
   },
   "longFiles": {
-    "app/super_pinkie.py": 1559,
     "patch/apply-chat-timeline.mjs": 1978,
     "services/mode-architecture/learning.mjs": 2495,
     "services/mode-architecture/session-lineage.mjs": 1894,
