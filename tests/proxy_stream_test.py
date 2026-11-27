@@ -62,7 +62,9 @@ class ProxyStreamTests(unittest.TestCase):
                 except Exception as error: errors.append(error)
             worker=threading.Thread(target=run);worker.start()
             try:
-                time.sleep(.15)
+                # Observation window: the reader must still be blocked without a
+                # terminal event.  join() wakes at once if it returns early.
+                worker.join(.15)
                 self.assertTrue(worker.is_alive(),filename+' leaked a partial SSE response')
                 self.assertEqual(result,[])
                 release.set();worker.join(2);thread.join(2)

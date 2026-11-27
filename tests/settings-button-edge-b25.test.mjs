@@ -62,7 +62,7 @@ test(`B25: shared settings buttons get a ≥3:1 edge in day and night, other con
       assert.ok(ratio(edge, card) >= 3, `${name}：描边对卡片 ${ratio(edge, card).toFixed(2)}:1 < 3`);
       assert.ok(ratio(edge, fill) >= 3, `${name}：描边对键底 ${ratio(edge, fill).toFixed(2)}:1 < 3`);
       assert.notEqual(m.primary, want, `${name}：主键 --primary 保留自己的描边`);
-      assert.notEqual(m.choice, want, `${name}：选项键（__choice）不跟着变`);
+      assert.equal(m.choice, want, `${name}：选项键（__choice）B32 起用同一描边`);   // B32 起 __choice 也走 --pinkie-settings-button-edge，见 settings-choice-edge-b32.test.mjs
 
       // 反例：删掉 __button 那条里的 border-color，描边退回共享的淡色，对卡片 < 3:1
       await p.evaluate(() => {
