@@ -152,7 +152,7 @@
     root.querySelector('.pinkie-upd__panel').hidden = s === 'installed';
     root.querySelector('.pinkie-upd__reassure').hidden = s === 'installed';
     const img = root.querySelector('.pinkie-upd__mascot img');
-    const sticker = `/laolao-pinkie-status-${stickers[s] || 'thinking'}.png`;
+    const sticker = `/laolao-pinkie-status-${stickers[s] || 'thinking'}.png`; // 绝对路径：在 /settings/… 下 ./ 会 404
     if (img.getAttribute('src') !== sticker) img.setAttribute('src', sticker);
     let index = stages.indexOf(s); if (s === 'available' || s === 'current') index = 0; if (s === 'ready') index = 2; if (s === 'error') index = state.errorAt || 0;
     root.querySelectorAll('.pinkie-upd__steps li').forEach((el, i) => {

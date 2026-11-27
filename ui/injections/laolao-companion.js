@@ -10,7 +10,7 @@
 
   const MODES = ["chat", "project", "thinking", "learning", "unrestricted"];
   const mode = () => { const m = document.documentElement.getAttribute("data-laolao-mode"); return MODES.includes(m) ? m : "chat"; };
-  const ART = (m, s) => `/laolao-pinkie-buddy-${m}-${s}.png`;
+  const ART = (m, s) => `./laolao-pinkie-buddy-${m}-${s}.png`;
   const PREF_KEY = "pinkie-buddy-prefs-v1";
   const SLEEPY_AFTER = 10 * 60_000;
   const FOCUS_MINUTES = 25;
