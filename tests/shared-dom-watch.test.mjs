@@ -35,10 +35,12 @@ test('M3 domWatch static: only ui/injections/laolao-dom-watch.js declares subtre
   assert.equal(report.injectionTotals.subtreeObserverCalls, 1);
 });
 
-test('M3 domWatch runtime: no eager root observer, native MutationObserver instances, live delivery across migrated modules', async () => {
-  const server = await startVisualServer();
-  const browser = await launchVisualBrowser();
-  try {
+test('M3 domWatch runtime: no eager root observer, native MutationObserver instances, live delivery across migrated modules', async (t) => {
+  let server, browser;
+  t.after(async () => { await browser?.close(); await server?.close(); });
+  server = await startVisualServer();
+  browser = await launchVisualBrowser();
+  {
     const context = await browser.newContext();
     await context.addInitScript(() => {
       const NativeMO = window.MutationObserver;
@@ -109,17 +111,17 @@ test('M3 domWatch runtime: no eager root observer, native MutationObserver insta
     assert.ok(result.receivedBeforeDisconnect >= 1, `expected watchTree subscriber to receive DOM mutation, got ${result.receivedBeforeDisconnect}`);
     assert.equal(result.receivedAfterDisconnect, result.receivedBeforeDisconnect, 'disconnect() must stop delivering mutations');
     await context.close();
-  } finally {
-    await browser.close();
-    await server.close();
   }
 });
 
-test('M3/M5 real-page runtime: domWatch works with native MutationObserver semantics on real Control UI bundle', async () => {
-  const installed = installRealControlUi({repoRoot: REPO_ROOT});
-  const server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT});
-  const browser = await launchRealBrowser();
-  try {
+test('M3/M5 real-page runtime: domWatch works with native MutationObserver semantics on real Control UI bundle', async (t) => {
+  let installed, server, browser;
+  // B55: cleanup is registered before anything starts, so a browser that fails to launch cannot leave the server open.
+  t.after(async () => { await browser?.close(); await server?.close(); installed?.cleanup(); });
+  installed = installRealControlUi({repoRoot: REPO_ROOT});
+  server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT});
+  browser = await launchRealBrowser();
+  {
     const {context, page, pageErrors, failedRequests} = await openRealScenePage(
       browser,
       server.origin,
@@ -178,9 +180,5 @@ test('M3/M5 real-page runtime: domWatch works with native MutationObserver seman
     } finally {
       await context.close();
     }
-  } finally {
-    await browser.close();
-    await server.close();
-    installed.cleanup();
   }
 });

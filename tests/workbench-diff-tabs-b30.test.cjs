@@ -27,7 +27,8 @@ class Node {
   querySelector() { return null; }
 }
 
-function run(tabs, active, transform = (s) => s) {
+// held：R5 ② 回合中临时只读的文件（路径 → 提示），和源码里 heldOf() 同一个查法；默认没有文件被扣着。
+function run(tabs, active, transform = (s) => s, held = {}) {
   const tabsList = new Node('div'), tabsMore = new Node('button'), tabsBar = new Node('div'), tabsActions = new Node('div');
   tabsMore.hidden = true;
   const el = (tag, cls, text) => { const n = new Node(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
@@ -38,6 +39,7 @@ function run(tabs, active, transform = (s) => s) {
     keyLabel: (k) => k, absolute: (p) => '/root/' + p, fileLocation: (p) => ({relative: p, name: p}), dirname: (p) => p.split('/').slice(0, -1).join('/'),
     closeTab() {}, activate() {}, pinTab() {}, showMenu() {}, openDiff() {}, previewInBrowser() {},
     findTab: (p) => tabs.find((t) => t.path === p), window: {__pinkieWorkbench: {}},
+    heldOf: (p) => (p ? held[p] || held['/root/' + p] || '' : ''),
     document: {createDocumentFragment: () => new Node('#frag')},
   };
   vm.runInNewContext(transform(overflowFn + renderFn) + '\nrenderTabs();', ctx);
@@ -60,6 +62,18 @@ test('B30 差异标签：文件名和比较说明分开放，全称在 title', (
   // 普通文件标签不受影响
   assert.deepEqual(spans(plain), [{cls: 'pk-wb-tab__label', text: 'b.js'}]);
   assert.ok(!plain.classList.contains('is-diff'));
+});
+
+// R5 ② × B30：回合中被扣着的文件，标签照样按 B30 拆，另带一把锁，锁的 title 是回合提示；没被扣的不带锁。
+test('B30 × R5 ②：回合中只读的文件标签照样拆开，带锁和回合提示', () => {
+  const why = 'Metre 正在改这个文件，这一轮结束后可以编辑';
+  const ctx = run([{path: 'README.md', name: 'README.md', kind: 'text', pinned: true}, {path: 'src/b.js', name: 'b.js', kind: 'text', pinned: true}, DIFFS[0]], 'README.md', undefined, {'README.md': why});
+  const [readme, plain, diff] = ctx.tabsList.children;
+  const lock = (n) => n.children.find((c) => /pk-wb-tab__readonly/.test(c.className));
+  assert.deepEqual(spans(readme), [{cls: 'pk-wb-tab__label', text: 'README.md'}]);
+  assert.equal(lock(readme)?.title, why);
+  assert.equal(lock(plain), undefined, '没被扣的文件不带锁');
+  assert.deepEqual(spans(diff), [{cls: 'pk-wb-tab__label', text: 'README.md'}, {cls: 'pk-wb-tab__vs', text: '上次提交 ↔ 现在'}], '差异标签的拆分不受回合只读影响');
 });
 
 // 文件名里本身带全角括号：比较说明只认最后一对（里面不能再有全角括号），文件名整段留着
