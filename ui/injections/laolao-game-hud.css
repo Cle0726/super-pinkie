@@ -24,7 +24,7 @@
 
 /* ── HUD ── */
 #pinkie-study-desk .pkg-hud{display:flex;align-items:center;gap:18px;min-width:0;color:var(--pkg-ink)}
-#pinkie-study-desk .pkg-who{appearance:none;border:0;background:none;padding:0;display:flex;align-items:center;gap:11px;cursor:pointer;color:inherit;text-align:left}
+#pinkie-study-desk .pkg-who{appearance:none;border:0;background:none;padding:0;display:flex;flex-shrink:0;align-items:center;gap:11px;cursor:pointer;color:inherit;text-align:left}
 #pinkie-study-desk .pkg-who__face{width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:50% 22%;background:var(--pkg-card-solid);
   box-shadow:0 0 0 1px var(--pkg-line-2),0 0 0 3px var(--pkg-card-solid),0 0 0 4px color-mix(in srgb,var(--pkg-form,#DB1F74) 70%,transparent)}
 #pinkie-study-desk .pkg-who__face.is-avatar{object-position:50% 50%}
@@ -262,13 +262,13 @@
 @container pkgcamp (max-width:1020px){
   #pinkie-study-desk .pkg-camp__body{grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;overflow:auto;overscroll-behavior:contain;margin-right:-12px;padding-right:12px;scrollbar-width:thin}
   #pinkie-study-desk .pkg-left{grid-template-rows:max-content max-content;min-height:auto}
-  #pinkie-study-desk .pkg-side{min-height:auto}
+  #pinkie-study-desk .pkg-side{min-height:auto;overflow:visible;padding:0}
   #pinkie-study-desk .pkg-stage{min-height:440px}
-  #pinkie-study-desk .pkg-side{overflow:visible;padding:0}
   #pinkie-study-desk .pkg-jar,#pinkie-study-desk .pkg-wish{display:none}
   #pinkie-study-desk .pkg-entries{grid-template-columns:repeat(4,minmax(0,1fr))}
   #pinkie-study-desk .pkg-boss{margin-top:22px}
 }
+@container pkgcamp (min-width:641px) and (max-width:1020px){/* #325：.pkg-who 不收缩后 810–820 宽「连续 N 天」挤出 .pkg-hud 压到 .pkg-seg；只收窄间距仍差 2px，所以亲密度同时换到第二行。≤640 卡片档另有规则 */#pinkie-study-desk .pkg-hud{gap:12px}#pinkie-study-desk .pkg-cell{min-width:0;padding:2px 10px}#pinkie-study-desk .pkg-who__meta small{grid-column:1/-1}}
 @container pkgcamp (max-width:640px){
   #pinkie-study-desk .view.pkg-camp{padding:14px 14px 14px 16px;gap:12px}
   #pinkie-study-desk .pkg-camp__top{flex-wrap:wrap;gap:10px;padding-bottom:10px}

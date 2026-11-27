@@ -24,8 +24,16 @@ function measure() {
   const c = (n) => { const fg = P(getComputedStyle(n).color), bg = bgOf(n); return {text: n.textContent.trim(), ratio: +ratio(over(fg, bg), bg).toFixed(2)}; };
   const meta = document.querySelector('.pkg-camp__top .pkg-who__meta');
   const b = meta.querySelector('b').getBoundingClientRect(), s = meta.querySelector('small').getBoundingClientRect();
-  const overlap = Math.max(0, Math.min(b.right, s.right) - Math.max(b.left, s.left)) * Math.max(0, Math.min(b.bottom, s.bottom) - Math.max(b.top, s.top));
-  return {stageTime: document.querySelector('.pkg-stage').dataset.time, metaDisplay: getComputedStyle(meta).display, overlap, tagSmall: c(tag.querySelector('small')), tagSpan: c(tag.querySelector('span'))};
+  const hit = (x, y) => Math.max(0, Math.min(x.right, y.right) - Math.max(x.left, y.left)) * Math.max(0, Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top));
+  const overlap = hit(b, s);
+  const top = document.querySelector('.pkg-camp__top'), rect = (sel) => top.querySelector(sel).getBoundingClientRect();
+  const who = rect('.pkg-who'), purse = rect('.pkg-purse'), stars = rect('.pkg-purse .pkg-glyph[data-kind="stars"]'), hud = rect('.pkg-hud'), seg = rect('.pkg-seg');
+  // .pkg-hud 自己 min-width:0 会被压窄，子项溢出时盒子本身碰不到 seg，所以逐个子项量。
+  const kids = [...top.querySelector('.pkg-hud').children].filter(k => k.getClientRects().length).map(k => ({c: k.className, r: k.getBoundingClientRect()}));
+  return {stageTime: document.querySelector('.pkg-stage').dataset.time, metaDisplay: getComputedStyle(meta).display, overlap,
+    smallOutOfWho: +Math.max(0, s.right - who.right).toFixed(1), smallVsPurse: +hit(s, purse).toFixed(1), smallVsStars: +hit(s, stars).toFixed(1), hudVsSeg: +hit(hud, seg).toFixed(1),
+    kidsVsSeg: kids.filter(k => hit(k.r, seg) > 0).map(k => k.c), kidsOutOfHud: kids.filter(k => k.r.right - hud.right > 0.5).map(k => k.c),
+    tagSmall: c(tag.querySelector('small')), tagSpan: c(tag.querySelector('span'))};
 }
 
 const {harness, close} = await harnessWithGame();
