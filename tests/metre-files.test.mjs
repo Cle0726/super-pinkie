@@ -134,6 +134,18 @@ async function open(browser, mode, {width = 1280, git = true} = {}) {
 }
 const chips = (tab, id) => tab.locator(`#${id} .pk-mfile-chip`).evaluateAll(list => list.map(b => [b.querySelector('.pk-mfile-chip__text').textContent, b.dataset.action, b.title]));
 const tabs = tab => tab.evaluate(() => window.__pinkieWorkbench.state.tabs.map(t => [t.path, t.kind === 'diff' ? 'diff' : 'file', Boolean(t.readOnly)]));
+// B84：等标签加载完（不再是 pending / loading）再看它成了什么。以前直接等 kind === 'text'：标签落到 error（编辑器没加载出来）
+// 和 runner 整体慢都只报一个裸的 5 s 超时，分不出来。超时时把各标签现状、Monaco 在不在、最后几次网关调用一起报出来。
+async function settledTab(tab, path, timeout = 5000) {
+  try {
+    await tab.waitForFunction(p => { const t = window.__pinkieWorkbench.state.tabs.find(x => x.path === p); return Boolean(t) && !['pending', 'loading'].includes(t.kind); }, path, {timeout});
+  } catch (error) {
+    const seen = await tab.evaluate(() => ({tabs: window.__pinkieWorkbench.state.tabs.map(t => [t.path, t.kind, t.error || '']), monaco: Boolean(window.monaco), calls: window.calls.slice(-12)})).catch(e => ({evaluateFailed: String(e)}));
+    error.message += `\n  waiting for ${path} to load; workbench: ${JSON.stringify(seen)}`;
+    throw error;
+  }
+  return tab.evaluate(p => { const t = window.__pinkieWorkbench.state.tabs.find(x => x.path === p); return {kind: t.kind, error: t.error || ''}; }, path);
+}
 
 test('in Metre: one 文件 row per turn; 打开 opens a workbench tab with the backend readOnly, 改动 opens the diff', {timeout: 60_000}, async t => {
   const browser = await launch(t); if (!browser) return;
@@ -153,7 +165,8 @@ test('in Metre: one 文件 row per turn; 打开 opens a workbench tab with the b
     assert.equal(await tab.locator('#g11 .pk-mfile-row').count(), 1, 'repainting does not duplicate the row');
     // 打开：项目外 → 后端说只读 → 标签只读
     await tab.locator('#g11 .pk-mfile-chip[data-action="open"]').click();
-    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === '/etc/hosts' && t.kind === 'text'), null, {timeout: 5000});
+    const hosts = await settledTab(tab, '/etc/hosts');
+    assert.equal(hosts.kind, 'text', `the /etc/hosts tab ended as ${hosts.kind} ${hosts.error}`);
     assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.state.visible), true, 'the click brings the workbench out');
     // 改动：项目里的文件 → 相对路径 → 差异视图
     await tab.locator('#g11 .pk-mfile-chip[data-action="diff"]').last().click();
@@ -197,7 +210,8 @@ test('without git the 改动 chip opens the file; under 600px the workbench stay
   let tab = await open(browser, 'metre', {git: false});
   try {
     await tab.locator('#g11 .pk-mfile-chip[data-action="diff"]').last().click({timeout: 5000});
-    await tab.waitForFunction(() => window.__pinkieWorkbench.state.tabs.some(t => t.path === 'README.md' && t.kind === 'text'), null, {timeout: 5000});
+    const readme = await settledTab(tab, 'README.md');
+    assert.equal(readme.kind, 'text', `the README.md tab ended as ${readme.kind} ${readme.error}`);
     assert.equal(await tab.evaluate(() => window.__pinkieWorkbench.state.tabs.some(t => t.kind === 'diff')), false);
   } finally { await tab.close(); }
   tab = await open(browser, 'metre', {width: 560});
