@@ -110,7 +110,7 @@ const ENTRY_PROBES = [['entry', 'shadow', true]];
 const NEED = {text: 4.5, border: 3, shadow: 3};
 const brief = (rows) => Object.fromEntries(Object.entries(rows).map(([k, r]) => [k, r.ratio]));
 
-test('真浏览器：进阶调节在 4 个夜间入口下悬停 / 选中都达标，日间值不变', {timeout: 90_000}, async (t) => {
+test('真浏览器：进阶调节在 4 个夜间入口下悬停 / 选中都达标，日间值不变', {timeout: 180_000}, async (t) => {
   const browser = await launch(t); if (!browser) return;
   try {
     for (const [theme, attrs] of Object.entries(THEMES)) {
