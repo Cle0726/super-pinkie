@@ -27,8 +27,11 @@ import time
 import traceback
 import urllib.request
 import urllib.parse
-import webbrowser
 from pathlib import Path
+try:
+    from legacy_panel_argv import npm_install_command, open_folder, open_web
+except ImportError:  # imported as app.super_pinkie (tests, no app/ on sys.path)
+    from app.legacy_panel_argv import npm_install_command, open_folder, open_web
 
 # A non-UTF-8 Windows locale gives this process a cp1252 stdout; the Chinese
 # status prints below (e.g. the tkinter prompt) then raise UnicodeEncodeError.
@@ -80,32 +83,6 @@ def openclaw_command(*arguments):
 
 def prompts_dir():
     return Path(os.environ.get("UR_PROMPTS_DIR", Path.home() / ".openclaw"))
-
-
-def open_folder_command(folder, platform=None):
-    """argv that opens a folder in the file manager, with no shell in between (B33:
-    os.system(explorer "...") let cmd expand %VAR% inside UR_PROMPTS_DIR)."""
-    platform = platform or sys.platform
-    if platform == "darwin":
-        return ["open", str(folder)]
-    if platform.startswith("win"):
-        return ["explorer.exe", str(folder)]
-    return ["xdg-open", str(folder)]
-
-
-def open_folder(folder):
-    try:
-        subprocess.Popen(open_folder_command(folder))
-    except OSError:
-        pass
-
-
-def npm_install_command(platform_name=None):
-    """argv for the global openclaw install. On Windows npm is npm.cmd, which
-    CreateProcess runs without shell=True once it is named by its full path."""
-    if (platform_name or os.name) == "nt":
-        return [shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd", "install", "-g", "openclaw"]
-    return ["npm", "install", "-g", "openclaw"]
 
 
 def windows_state_root():
@@ -1435,7 +1412,7 @@ def run_control_center():
     make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
     make_button(btn_row1, "⬆️ 检查并拉取更新", lambda: threading.Thread(target=lambda: [pull_and_update(log), refresh_status()], daemon=True).start(), color="#C2185B").pack(side="left", padx=4)
     make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
-    make_button(btn_row1, "🌐 打开 Web 界面", lambda: webbrowser.open("http://127.0.0.1:18789")).pack(side="left", padx=4)
+    make_button(btn_row1, "🌐 打开 Web 界面", lambda: open_web("http://127.0.0.1:18789")).pack(side="left", padx=4)
 
     # ------------------ Tab 2: API Key 配置 ------------------
     api_card = tk.Frame(tab_api, bg=CARD, highlightbackground=PINK, highlightthickness=1)

@@ -17,7 +17,7 @@ import tokenize
 import unittest
 from unittest import mock
 
-from app import super_pinkie
+from app import legacy_panel_argv, super_pinkie
 
 
 def code_without_strings_and_comments(source):
@@ -31,40 +31,42 @@ def code_without_strings_and_comments(source):
 class LegacyPanelArgvTest(unittest.TestCase):
     def test_open_folder_is_an_argv_list_on_every_platform(self):
         folder = "C:\\Users\\a\\%USERPROFILE%\\x\" & calc & \""
-        self.assertEqual(super_pinkie.open_folder_command(folder, "win32"), ["explorer.exe", folder])
-        self.assertEqual(super_pinkie.open_folder_command("/tmp/a b", "darwin"), ["open", "/tmp/a b"])
-        self.assertEqual(super_pinkie.open_folder_command("/tmp/a b", "linux"), ["xdg-open", "/tmp/a b"])
+        self.assertEqual(legacy_panel_argv.open_folder_command(folder, "win32"), ["explorer.exe", folder])
+        self.assertEqual(legacy_panel_argv.open_folder_command("/tmp/a b", "darwin"), ["open", "/tmp/a b"])
+        self.assertEqual(legacy_panel_argv.open_folder_command("/tmp/a b", "linux"), ["xdg-open", "/tmp/a b"])
 
     def test_open_folder_never_uses_a_shell(self):
-        with mock.patch.object(super_pinkie.subprocess, "Popen") as popen:
-            super_pinkie.open_folder("/tmp/%HOME% $(id)")
+        with mock.patch.object(legacy_panel_argv.subprocess, "Popen") as popen:
+            legacy_panel_argv.open_folder("/tmp/%HOME% $(id)")
         args, kwargs = popen.call_args
         self.assertIsInstance(args[0], list)
         self.assertEqual(args[0][-1], "/tmp/%HOME% $(id)")
         self.assertFalse(kwargs.get("shell", False))
 
     def test_open_folder_swallows_a_missing_file_manager(self):
-        with mock.patch.object(super_pinkie.subprocess, "Popen", side_effect=FileNotFoundError):
-            super_pinkie.open_folder("/tmp")
+        with mock.patch.object(legacy_panel_argv.subprocess, "Popen", side_effect=FileNotFoundError):
+            legacy_panel_argv.open_folder("/tmp")
 
     def test_npm_install_command(self):
-        self.assertEqual(super_pinkie.npm_install_command("posix"), ["npm", "install", "-g", "openclaw"])
-        with mock.patch.object(super_pinkie.shutil, "which", side_effect=lambda name: None):
-            self.assertEqual(super_pinkie.npm_install_command("nt"), ["npm.cmd", "install", "-g", "openclaw"])
+        self.assertEqual(legacy_panel_argv.npm_install_command("posix"), ["npm", "install", "-g", "openclaw"])
+        with mock.patch.object(legacy_panel_argv.shutil, "which", side_effect=lambda name: None):
+            self.assertEqual(legacy_panel_argv.npm_install_command("nt"), ["npm.cmd", "install", "-g", "openclaw"])
         found = "C:\\Program Files\\nodejs\\npm.cmd"
-        with mock.patch.object(super_pinkie.shutil, "which", side_effect=lambda name: found if name == "npm.cmd" else None):
-            self.assertEqual(super_pinkie.npm_install_command("nt"), [found, "install", "-g", "openclaw"])
+        with mock.patch.object(legacy_panel_argv.shutil, "which", side_effect=lambda name: found if name == "npm.cmd" else None):
+            self.assertEqual(legacy_panel_argv.npm_install_command("nt"), [found, "install", "-g", "openclaw"])
 
     def test_no_shell_left_in_the_panel(self):
-        code = code_without_strings_and_comments(inspect.getsource(super_pinkie))
-        self.assertIsNone(re.search(r"\bos \. system\b", code), "os.system is back in super_pinkie.py")
-        self.assertIsNone(re.search(r"\bshell = True\b", code), "shell=True is back in super_pinkie.py")
+        for module in (super_pinkie, legacy_panel_argv):
+            name = module.__name__.rsplit(".", 1)[-1] + ".py"
+            code = code_without_strings_and_comments(inspect.getsource(module))
+            self.assertIsNone(re.search(r"\bos \. system\b", code), f"os.system is back in {name}")
+            self.assertIsNone(re.search(r"\bshell = True\b", code), f"shell=True is back in {name}")
 
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("npm.cmd"), "needs npm.cmd on Windows")
 class RealNpmCmdTest(unittest.TestCase):
     def test_npm_cmd_starts_without_a_shell(self):
-        command = super_pinkie.npm_install_command()
+        command = legacy_panel_argv.npm_install_command()
         result = subprocess.run([command[0], "-v"], capture_output=True, text=True, timeout=60,
                                 **super_pinkie.hidden_process_kwargs())
         self.assertEqual(result.returncode, 0, result.stderr)
