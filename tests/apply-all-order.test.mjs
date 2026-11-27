@@ -56,6 +56,66 @@ test('apply-all ORDER only lists patches that exist in patch/', () => {
   assert.deepEqual(missing, [], `apply-all.mjs ORDER lists patches that are gone: ${missing.join(', ')}`);
 });
 
+// #440: ORDER lacked apply-history-image-thumbnails, apply-stream-survive-steer and
+// apply-pinkie-managed-skills, so a refresh_mac_runtime.py run over the trial output
+// dropped their files from desktop/windows/mac-runtime. Every patch the installer
+// runs must be in ORDER, in installer order, with build.sh's managed-skills last.
+const build = fs.readFileSync(path.join(root, 'desktop/macos/build.sh'), 'utf8');
+
+function coverageGaps(harnessSource, themeSource, buildSource) {
+  const order = harnessOrder(harnessSource);
+  const installed = installerOrder(themeSource);
+  const built = [...buildSource.matchAll(/patch\/((?:re)?apply-[a-z0-9-]+\.mjs)/gu)].map((m) => m[1]);
+  const gaps = [];
+  for (const name of [...installed, ...built]) {
+    if (!order.includes(name)) gaps.push(`missing ${name}`);
+  }
+  const shared = installed.filter((name) => order.includes(name));
+  const byHarness = [...shared].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  if (byHarness.join() !== shared.join()) gaps.push('order differs from installer/macos/apply-theme.sh');
+  for (const name of built) {
+    if (order.includes(name) && order.indexOf(name) !== order.length - 1) gaps.push(`${name} is not last`);
+  }
+  return gaps;
+}
+
+test('apply-all ORDER covers every patch apply-theme.sh and build.sh run', () => {
+  assert.ok(installerOrder(theme).length >= 20, 'installerOrder no longer matches apply-theme.sh');
+  assert.deepEqual(coverageGaps(harness, theme, build), []);
+  const order = harnessOrder(harness);
+  for (const name of ['apply-history-image-thumbnails.mjs', 'apply-stream-survive-steer.mjs', 'apply-pinkie-managed-skills.mjs']) {
+    assert.ok(order.includes(name), `apply-all.mjs ORDER dropped ${name} (#440)`);
+  }
+});
+
+test('the coverage check goes red when ORDER loses a patch or reorders one', () => {
+  const dropped = harness.replace("  'apply-history-image-thumbnails.mjs',\n", '');
+  assert.notEqual(dropped, harness);
+  assert.ok(coverageGaps(dropped, theme, build).includes('missing apply-history-image-thumbnails.mjs'));
+  const noSkills = harness.replace("  'apply-pinkie-managed-skills.mjs',\n", '');
+  assert.ok(coverageGaps(noSkills, theme, build).includes('missing apply-pinkie-managed-skills.mjs'));
+  const swapped = harness.replace(
+    "  'apply-computer-v2.mjs',\n  'apply-stream-survive-steer.mjs',\n",
+    "  'apply-stream-survive-steer.mjs',\n  'apply-computer-v2.mjs',\n",
+  );
+  assert.notEqual(swapped, harness);
+  assert.ok(coverageGaps(swapped, theme, build).includes('order differs from installer/macos/apply-theme.sh'));
+  const skillsEarly = noSkills.replace("  'apply-chat-timeline.mjs',\n", "  'apply-chat-timeline.mjs',\n  'apply-pinkie-managed-skills.mjs',\n");
+  assert.ok(coverageGaps(skillsEarly, theme, build).includes('apply-pinkie-managed-skills.mjs is not last'));
+});
+
+// apply-theme.sh lets only computer-v2 fail (`if ! ...; then echo warning`); the
+// harness must not excuse any other patch, and must stop early without the SDK.
+test('apply-all only excuses the patches apply-theme.sh lets fail', () => {
+  const optional = harness.match(/const OPTIONAL = new Set\(\[([^\]]*)\]\)/u);
+  assert.ok(optional, 'apply-all.mjs no longer declares OPTIONAL');
+  const names = [...optional[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
+  for (const name of names) {
+    assert.match(theme, new RegExp(`if ! [^\\n]*patch/${name.replace(/\./gu, '\\.')}`, 'u'), `${name} is not optional in apply-theme.sh`);
+  }
+  assert.match(harness, /node_modules\/@openclaw\/ai\/package\.json[\s\S]*process\.exit\(2\)/u);
+});
+
 test('apply-all ORDER runs those patches in the same order as the macOS installer', () => {
   const order = harnessOrder(harness);
   const installed = installerOrder(theme);

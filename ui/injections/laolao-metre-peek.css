@@ -1,0 +1,35 @@
+/* laolao-metre-peek —— L28（T3 #16）：Metre 侧栏会话行悬停预览卡的样子（行为见 laolao-metre-peek.js）。
+ * 只在 data-laolao-mode="metre" 下生效，其他模式一字不变；不加强制覆盖，颜色只用 Metre 自己的变量，日夜跟着变量走。
+ * 卡片不接指针（pointer-events: none），不挡侧栏和正文的点击；位置由 .js 写 left / top（侧栏右边、和这一行顶对齐）。 */
+html[data-laolao-mode="metre"] .pk-mpeek {
+  position: fixed; z-index: 100003; box-sizing: border-box;
+  width: max-content; min-width: 200px; max-width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px; border: 1px solid var(--metre-line-strong, #D9D6CC); border-radius: 8px;
+  background: var(--metre-surface, #FFFFFF); color: var(--metre-text, #1F1E1D);
+  box-shadow: var(--metre-pop-shadow, 0 10px 32px rgba(31, 30, 29, 0.12));
+  font: 400 13px/1.45 var(--metre-sans, system-ui, sans-serif);
+  pointer-events: none; animation: pk-mpeek-in 120ms ease-out;
+}
+html[data-laolao-mode="metre"] .pk-mpeek__title {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 摘要最多三行，长了省略；没有消息时用灰字 */
+html[data-laolao-mode="metre"] .pk-mpeek__text {
+  margin-top: 4px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow-wrap: anywhere; color: var(--metre-text, #1F1E1D);
+}
+html[data-laolao-mode="metre"] .pk-mpeek__text.is-empty { color: var(--metre-muted, #73726C); }
+/* 小字：日间 --metre-muted 在白底上不到 4.5，往正文色靠一点（同 laolao-metre-preview.css 的做法） */
+html[data-laolao-mode="metre"] .pk-mpeek__meta {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; padding-top: 6px;
+  border-top: 1px solid var(--metre-line, #E8E6DC);
+  font: 400 12px/1.4 var(--metre-mono, ui-monospace, monospace);
+  color: color-mix(in srgb, var(--metre-muted, #73726C) 78%, var(--metre-text, #1F1E1D));
+}
+html[data-laolao-mode="metre"] .pk-mpeek__state { color: var(--metre-cobalt, #2F5BD3); }
+html[data-laolao-mode="metre"] .pk-mpeek__model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes pk-mpeek-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-laolao-mode="metre"] .pk-mpeek { animation: none; }
+}
+html[data-pinkie-reduce-motion][data-laolao-mode="metre"] .pk-mpeek { animation: none; }

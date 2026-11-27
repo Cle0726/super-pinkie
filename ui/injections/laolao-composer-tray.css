@@ -147,7 +147,7 @@ html[data-pinkie-night] .pinkie-tray { background: #2a2027; border-color: rgba(2
 }
 .pinkie-tray__more:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--pt-accent, #d9508d) 10%, transparent); color: var(--pt-accent, #d9508d); outline: none; }
 
-html[data-reduce-motion] .pinkie-tray, html[data-reduce-motion] .pinkie-tray *, html[data-reduce-motion] .pinkie-tray-btn, html[data-reduce-motion] .pinkie-tray-btn * { animation: none !important; transition: none !important; }
+html[data-pinkie-reduce-motion] .pinkie-tray, html[data-pinkie-reduce-motion] .pinkie-tray *, html[data-pinkie-reduce-motion] .pinkie-tray-btn, html[data-pinkie-reduce-motion] .pinkie-tray-btn * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .pinkie-tray, .pinkie-tray *, .pinkie-tray-btn, .pinkie-tray-btn * { animation: none !important; transition: none !important; }
 }
