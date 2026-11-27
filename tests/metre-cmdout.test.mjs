@@ -114,6 +114,15 @@ test('no new observer, interval, window.__ global or !important; every CSS rule 
   assert.equal(load().watches.length, 1, 'exactly one shared domWatch registration');
 });
 
+// linux-review 12:28Z（#444 评论 7218279617）：夜间失败色只写在 [data-pinkie-night] 下，Metre 夜间只带 data-theme="dark" 时
+// 会停在日间 #9A3B2F（对夜间底 #151514 约 2.6:1）。颜色必须跟皮肤的日夜变量走，不自己按 data-pinkie-night 分日夜。
+test('status colours follow the Metre skin variables, so night works with data-theme="dark" too', () => {
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(bare, /\.pk-mcmd__status\[data-kind="fail"\]\s*\{\s*color:\s*var\(--metre-danger\b/, 'fail colour is the skin --metre-danger');
+  assert.doesNotMatch(bare, /\[data-pinkie-night\]/, 'no rule that only applies under data-pinkie-night');
+  for (const m of bare.matchAll(/color:\s*([^;}]+)/g)) assert.match(m[1].trim(), /^var\(--metre-[\w-]+/, 'every colour comes from a Metre skin variable: ' + m[1].trim());
+});
+
 test('in Metre: each command step gets `$ command`, the result it really had, and copy buttons; other tools get nothing', () => {
   const page = load({history: HISTORY});
   const failed = page.addStep('c1'), running = page.addStep('c2'), reading = page.addStep('r1');

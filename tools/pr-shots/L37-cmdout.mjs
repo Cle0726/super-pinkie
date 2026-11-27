@@ -2,7 +2,7 @@
 // L37 / T3#9（Metre 命令输出面板：工作过程里命令那一步的命令头）界面截图，给 PR 截图工作流（.github/workflows/pr-shots.yml）用。
 // 约定照 tools/pr-shots/minimal.mjs：node <脚本> --out <目录>，写 PNG + <目录>/shots.jsonl，另写 report.json。
 // 真页面（tests/visual/lib/real-harness.mjs），Metre 模式；聊天历史用 __fakeSeedHistory 种一轮：一条失败的测试命令、
-// 一条放到后台的命令、一次读文件。每格（1440 / 820 × 日夜）拍：
+// 一条放到后台的命令、一次读文件。每格（1440 / 820 / 560 × 日夜）拍：
 //   cmdout-steps   点开工具组、展开两条命令：每条输出上方一行「$ 命令 · 结果 · 复制命令 / 复制输出」
 //   cmdout-project 同一页切到项目模式（对照：命令头全部拿掉）
 import fs from 'node:fs';
@@ -90,7 +90,7 @@ async function cell(theme, width) {
 
 try {
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 820]) await cell(theme, width);
+    for (const width of [1440, 820, 560]) await cell(theme, width);
   }
 } finally {
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 1));
