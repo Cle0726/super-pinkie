@@ -15,8 +15,8 @@ const DAY = 'html:not([data-pinkie-night], [data-theme-mode="dark"], [data-theme
 const DAY_SEG = DAY.replace(':has(.config-view-toggle)', '');
 const TITLE_RULE = new RegExp(`^${esc(DAY)} \\.content-header \\.page-title \\{([^}]*)\\}`, 'm');
 const SEG_RULE = new RegExp(`^${esc(DAY_SEG)} \\.config-view-toggle \\.qs-segmented__btn:not\\(\\.qs-segmented__btn--active, :hover, :focus-visible\\) \\{([^}]*)\\}`, 'm');
-// 白底 = 标题背后实测；分段键底取比实测（≈#fefcfd）更深的保守值。
-const WHITE = [255, 255, 255], SEG_BG = [0xf6, 0xf0, 0xf3];
+// 白底 = 标题背后实测；分段键底取比 WebKit 真页面实测最深（project 1440 #eeeaec、820 #f2f0ea）更深的保守值 #e8e2e5。
+const WHITE = [255, 255, 255], SEG_BG = [0xe8, 0xe2, 0xe5];
 const MODES = ['base', 'chat', 'project', 'thinking', 'learning', 'unrestricted'];
 
 function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
