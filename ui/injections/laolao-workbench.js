@@ -845,8 +845,8 @@
         'focusBorder': hex(c.accent, 0.55), 'input.background': hex(c.line), 'input.border': hex(c.faint),
         'scrollbarSlider.background': hex(c.text, 0.1), 'scrollbarSlider.hoverBackground': hex(c.text, 0.18), 'scrollbarSlider.activeBackground': hex(c.accent, 0.35),
         'minimap.background': hex(c.bg), 'minimapSlider.background': hex(c.text, 0.07),
-        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': hex(c.accent, 0.22),
-        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': hex(c.accent, 0.09),
+        'diffEditor.insertedTextBackground': c.dark ? '#3ccfa233' : '#0ca67826', 'diffEditor.removedTextBackground': c.dark ? '#ff6b8147' : '#e5394c33', // 删除固定用红（B15：取 --accent 时 Metre 是钴蓝，像选区不像删除）
+        'diffEditor.insertedLineBackground': c.dark ? '#3ccfa214' : '#0ca67812', 'diffEditor.removedLineBackground': c.dark ? '#ff6b811f' : '#e5394c14',
         'editorOverviewRuler.border': '#00000000', 'editorError.foreground': '#ff6b81', 'editorWarning.foreground': '#f6c76f', 'editorInfo.foreground': hex(c.cle),
         'peekViewEditor.background': hex(c.widget), 'peekViewResult.background': hex(c.widget), 'peekView.border': hex(c.accent, 0.6),
       },

@@ -421,6 +421,15 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                                               str(payload),digest,str(result)],env=env,stdout=subprocess.PIPE,
                                              stderr=subprocess.PIPE,creationflags=hidden)
                     out,err=process.communicate(timeout=30)
+                    if gateway_kind=='log_lock':
+                        # B68: keep the log locked until the helper is done. Releasing it after
+                        # the handoff only exercised the first half, and a lock that outlived the
+                        # handoff (CI, #414 job 140329917418) dropped the final log line while the
+                        # update itself completed. Done = in-progress.json removed (both paths).
+                        in_progress=state/'updates'/'in-progress.json'
+                        until=time.monotonic()+60
+                        while time.monotonic()<until and in_progress.exists():time.sleep(.2)
+                        helper_done=not in_progress.exists()
                 self.assertTrue(result.is_file(),'caller wrote no result (exit %s):\n%s\n%s'%(process.returncode,out.decode('utf-8',errors='replace')[-2000:],err.decode('utf-8',errors='replace')[-4000:]))
                 outcome=json.loads(result.read_text(encoding='utf-8'))
                 # 防复发：进度窗口必须走测试替身（不在桌面上弹真窗口）。
@@ -441,7 +450,7 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                 self.assertEqual(process.returncode,0,'%s\noutcome=%s\nstdout=%s\n--- updater.log ---\n%s'%(err.decode('utf-8',errors='replace')[-3000:],json.dumps(outcome,ensure_ascii=False),out.decode('utf-8',errors='replace')[-2000:],updater_log()))
                 self.assertTrue(outcome['started'])
                 update_started=True
-                deadline=time.monotonic()+60;text=''
+                deadline=time.monotonic()+(0 if gateway_kind=='log_lock' else 60);text=''
                 while time.monotonic()<deadline:
                     text=read_updater_log(log,text)
                     if 'portable update completed' in text or 'portable update failed' in text:break
@@ -466,7 +475,14 @@ class PortableUpdateIntegrationTests(unittest.TestCase):
                     self.assertTrue(fixture_child_alive(child_id,outside_exe))
                     self.assertEqual((previous/'keep.txt').read_text(encoding="utf-8"),'unchanged')
                     return
-                self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
+                if gateway_kind=='log_lock':
+                    # The log was held for the whole update, so its lines may be missing
+                    # (Write-UpdateLog falls back to stderr). Judge by what the helper leaves.
+                    self.assertTrue(helper_done,'update helper still running 60 s after the handoff')
+                    self.assertFalse((state/'updates'/'last-failure.json').exists(),'helper recorded a failure')
+                    self.assertNotIn('portable update failed',read_updater_log(log,''))
+                else:
+                    self.assertIn('portable update completed',text,'--- updater.log ---\n'+text[-6000:])
                 if gateway_kind=='slow_ready':
                     self.assertIn('new version started; waiting for its gateway',text)
                 if gateway_kind=='scanner_lock':
