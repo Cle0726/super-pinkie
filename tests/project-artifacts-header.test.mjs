@@ -150,16 +150,26 @@ describe('真浏览器（server / browser 全文件复用一次）', () => {
   let installed = null;
   let server = null;
   let browser = null;
+  const closeAll = async () => {
+    const [b, s, i] = [browser, server, installed];
+    browser = server = installed = null;
+    try { await b?.close(); }
+    finally {
+      try { await s?.close(); }
+      finally { i?.cleanup(); }
+    }
+  };
   before(async () => {
-    installed = installRealControlUi({repoRoot: REPO_ROOT});
-    server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
-    browser = await launchRealBrowser();
+    try {
+      installed = installRealControlUi({repoRoot: REPO_ROOT});
+      server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
+      browser = await launchRealBrowser();
+    } catch (error) {
+      await closeAll();
+      throw error;
+    }
   }, {timeout: 120_000});
-  after(async () => {
-    await browser?.close();
-    await server?.close();
-    installed?.cleanup();
-  });
+  after(closeAll);
 
   test('作品库与查看器：窗口键不遮挡、说明字 / 关闭钮 / 边框对比度达标', {timeout: 240_000}, async (t) => {
     const problems = [];
