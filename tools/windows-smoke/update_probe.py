@@ -201,6 +201,21 @@ def gateway_owner():
     return result.stdout.strip()
 
 
+def wait_for_note(note, minimum=20.0, limit=120.0, clock=time.monotonic, sleep=time.sleep, step=2.0):
+    """Let the restored/new window load and consume last-failure.json; seconds waited.
+
+    The window only reads the note once its main page has loaded, which on a slow
+    machine (a dev build, a busy runner) can be well after the fixed 20 s this used
+    to wait: the probe then reported "user was not told" for a window that told the
+    user a few seconds later. Keep 20 s as the minimum so nothing is checked sooner
+    than before, then wait while the note is still there, up to `limit`.
+    """
+    started = clock()
+    while clock() - started < minimum or (Path(note).exists() and clock() - started < limit):
+        sleep(step)
+    return round(clock() - started, 1)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", required=True)
@@ -307,7 +322,7 @@ def main():
     summary["visibility"] = {key: value for key, value in visibility.items() if key != "samples"}
     (out / f"update-{args.case}-windows.json").write_text(json.dumps(visibility, ensure_ascii=False, indent=2), encoding="utf-8")
     if helper_started:
-        time.sleep(20)  # the restored/new window loads and consumes last-failure.json
+        summary["note_wait_seconds"] = wait_for_note(state / "updates/last-failure.json")
     summary["installed_version"] = read(target / "_internal/VERSION").strip()
     summary["updater_log"] = read(log_path).splitlines()[-40:]
     summary["launcher_log"] = [line for line in read(state / "logs/launcher.log").splitlines()

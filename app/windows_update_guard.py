@@ -267,6 +267,8 @@ def guard_bundle_identity(resource_root):
         info = json.loads((root / "build-info.json").read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         info = {}
+    if not isinstance(info, dict):
+        info = {}
     manifest = {}
     manifest_sha = ""
     manifest_file = root / "guard-manifest.json"
@@ -276,6 +278,8 @@ def guard_bundle_identity(resource_root):
             manifest_sha = hashlib.sha256(raw).hexdigest()
             manifest = json.loads(raw.decode("utf-8"))
         except (OSError, ValueError):
+            manifest = {}
+        if not isinstance(manifest, dict):
             manifest = {}
     return {
         "channel": str(info.get("channel") or "release"),
@@ -304,7 +308,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
     status_file = app_dir / "guard" / "status.json"
     try:
         status = json.loads(status_file.read_text(encoding="utf-8-sig"))
-        if int(status.get("counterSchema") or 0) >= 1 and _guard_receipt_matches(status, version, commit, manifest_sha):
+        if isinstance(status, dict) and int(status.get("counterSchema") or 0) >= 1 and _guard_receipt_matches(status, version, commit, manifest_sha):
             return True
     except (OSError, ValueError, TypeError):
         pass
@@ -312,7 +316,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
     receipt_file = oc_dir / "guard-receipt.json"
     try:
         receipt = json.loads(receipt_file.read_text(encoding="utf-8-sig"))
-        if int(receipt.get("schema") or 0) >= 1 and _guard_receipt_matches(receipt, version, commit, manifest_sha):
+        if isinstance(receipt, dict) and int(receipt.get("schema") or 0) >= 1 and _guard_receipt_matches(receipt, version, commit, manifest_sha):
             return True
     except (OSError, ValueError, TypeError):
         pass
@@ -320,7 +324,7 @@ def has_guard_receipt(app_state, openclaw_state=None, version="", commit="", man
         mark = oc_dir / "extensions" / plugin / "guard-build.json"
         try:
             obj = json.loads(mark.read_text(encoding="utf-8-sig"))
-            if obj.get("counterReady") is True and _guard_receipt_matches(obj, version, commit, manifest_sha):
+            if isinstance(obj, dict) and obj.get("counterReady") is True and _guard_receipt_matches(obj, version, commit, manifest_sha):
                 return True
         except (OSError, ValueError):
             pass
