@@ -3,6 +3,7 @@
 // reports. Only the test's own harmless child is ever signalled; process.kill / child.kill are faked for that child alone.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -29,11 +30,13 @@ test('aborting a serve whose stop signal fails with EPERM reports it once and le
     const pid = record?.child?.pid;
     if (pid > 1) {
       if (childKill) record.child.kill = childKill;
-      if (process.platform !== 'win32') { try { realKill.call(process, -pid, 'SIGKILL'); } catch {} }
+      // On Windows shell:true runs cmd.exe /c node idle.js; killing cmd.exe alone leaves the grandchild holding home as cwd.
+      if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {stdio: 'ignore', windowsHide: true});
+      else { try { realKill.call(process, -pid, 'SIGKILL'); } catch {} }
       try { record.child.kill('SIGKILL'); } catch {}
     }
     servers.disposeSync();
-    fs.rmSync(home, {recursive: true, force: true});
+    fs.rmSync(home, {recursive: true, force: true, maxRetries: 10, retryDelay: 100});
   });
 
   const controller = new AbortController();
