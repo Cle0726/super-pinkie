@@ -38,13 +38,16 @@ const MEASURE = (sel) => {
   const fg = parse(cs.color);
   const span = el.querySelector('span');
   const truncated = Boolean(span && span.scrollWidth > span.clientWidth + 1);
+  // 当前页下划线要真的画出来：span 带 overflow: hidden，下划线得落在 span 的框里（底部内边距 >= 偏移 + 粗细）
+  const ss = span ? getComputedStyle(span) : null;
+  const underline = ss ? {line: ss.textDecorationLine, color: ss.textDecorationColor, padBottom: parseFloat(ss.paddingBottom) || 0, offset: parseFloat(ss.textUnderlineOffset) || 0, thick: parseFloat(ss.textDecorationThickness) || 0} : null;
   const overlaps = [...el.parentElement.children].filter((n) => n !== el).map((n) => ({n, b: n.getBoundingClientRect()}))
     .filter(({b}) => b.width > 0 && b.height > 0 && b.left < r.right - 1 && b.right > r.left + 1 && b.top < r.bottom - 1 && b.bottom > r.top + 1)
     .map(({n}) => n.className || n.tagName);
   const offscreen = r.right > innerWidth + 1 || r.left < -1;
   return {sel, visible, text: el.textContent.trim(), rect: {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)},
     color: cs.color, bg: cs.backgroundColor, ratio: fg ? +ratio(over(fg, ground), ground).toFixed(2) : null,
-    truncated, overlaps, offscreen, current: el.getAttribute('aria-current'),
+    truncated, overlaps, offscreen, underline, current: el.getAttribute('aria-current'),
     night: document.documentElement.hasAttribute('data-pinkie-night'), mode: document.documentElement.getAttribute('data-laolao-mode')};
 };
 
@@ -61,14 +64,24 @@ function record(name, file, extra) {
     sha256: crypto.createHash('sha256').update(buf).digest('hex'), ...extra});
 }
 
+const onScreen = (m) => m.visible && !m.offscreen;
+
 async function revealSidebar(page) {
-  if ((await page.evaluate(MEASURE, SEL)).visible) return 'already';
+  if (onScreen(await page.evaluate(MEASURE, SEL))) return 'already';
+  // 窄宽下侧栏是抽屉，键在屏外（left < 0）：先点原生「展开侧边栏」，等侧栏滑到 x >= 0（同 s7-worktree.mjs / i6-shell-bang.mjs）
+  const drawer = await page.evaluate(() => Math.round(document.querySelector('aside.sidebar')?.getBoundingClientRect().left ?? -9999) < 0);
+  if (drawer && await page.$('button[aria-label="展开侧边栏"]')) {
+    await page.click('button[aria-label="展开侧边栏"]');
+    await page.waitForFunction(() => document.querySelector('aside.sidebar')?.getBoundingClientRect().left >= 0, null, {timeout: 5_000}).catch(() => {});
+    await page.waitForTimeout(400);
+    if (onScreen(await page.evaluate(MEASURE, SEL))) return 'drawer';
+  }
   for (const sel of TOGGLES) {
     const btn = await page.$(sel);
     if (!btn || !(await btn.isVisible())) continue;
     await btn.click();
     await page.waitForTimeout(400);
-    if ((await page.evaluate(MEASURE, SEL)).visible) return sel;
+    if (onScreen(await page.evaluate(MEASURE, SEL))) return sel;
   }
   return '';
 }
@@ -82,7 +95,7 @@ async function cell(theme, width, height) {
     await page.waitForSelector(SEL, {state: 'attached', timeout: 20_000});
     const opened = await revealSidebar(page);
     const rest = await page.evaluate(MEASURE, SEL);
-    if (!rest.visible) { report.push({theme, width, sidebarHidden: true, opened, rest, pageErrors}); return; }
+    if (!onScreen(rest)) { report.push({theme, width, sidebarHidden: true, opened, rest, pageErrors}); return; }
     await page.hover(SEL);
     await page.waitForTimeout(400);
     const hover = await page.evaluate(MEASURE, SEL);
