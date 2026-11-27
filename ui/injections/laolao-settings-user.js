@@ -340,7 +340,7 @@
     };
     const save = async patch => {
       try { sync(await bridge()?.savePrefs(patch)); setStatus("style", "已保存", "success"); }
-      catch (error) { setStatus("style", "没保存上：" + error.message, "error"); }
+      catch (error) { setStatus("style", "没保存上：" + friendlyError(error), "error"); }
     };
     for (const [value, label] of STYLE_OPTIONS) {
       const node = button(label, "pinkie-user-settings__choice", group, () => save({defaultStyle: value}));
@@ -365,7 +365,7 @@
     const waitingRow = row(notifyCard, "等我回答时", "碧琪提问、或有事等你拍板时提醒。");
     const save = async (patch, label) => {
       try { const value = await bridge()?.savePrefs(patch); sync(value); setStatus("notify", label, "success"); return value; }
-      catch (error) { setStatus("notify", "没保存上：" + error.message, "error"); return null; }
+      catch (error) { setStatus("notify", "没保存上：" + friendlyError(error), "error"); return null; }
     };
     const done = toggle(doneRow.control, "做完时通知", value => save({notify: {done: value}}, value ? "做完时会通知你" : "做完时不再通知"));
     const waiting = toggle(waitingRow.control, "等我回答时通知", value => save({notify: {waiting: value}}, value ? "等你回答时会通知你" : "等你回答时不再通知"));
@@ -383,7 +383,7 @@
     const applyHotkey = async accelerator => {
       let result = {ok: true, accelerator};
       try { result = await bridge()?.pinkieNative({type: "setHotkey", accelerator}) || result; }
-      catch (error) { setStatus("notify", error.message, "error"); return; }
+      catch (error) { setStatus("notify", "快捷键没改成：" + friendlyError(error), "error"); return; }
       if (result.ok === false) { setStatus("notify", result.error || "这个快捷键用不了", "error"); return; }
       const value = result.accelerator ?? null;
       await save({hotkey: value}, result.conflict ? `这个快捷键被占用了，已改用 ${prettyHotkey(value)}` : value ? `快捷键改成 ${prettyHotkey(value)}` : "快捷键已关闭");
@@ -1086,7 +1086,7 @@
         show(result);
         setStatus("proxy", result.message || "已保存。", "success");
       } catch (error) {
-        setStatus("proxy", error?.message || "没有保存成功，请再试一次。", "error");
+        setStatus("proxy", "没有保存成功：" + friendlyError(error), "error");
       } finally { saveButton.disabled = false; }
     }
     for (const [value, label] of [["system", "跟随系统"], ["custom", "自定义代理"], ["off", "不用代理"]]) {
@@ -1516,7 +1516,7 @@
     else window.location.assign(section === "channels" ? "/settings/channels" : "/settings/general?section=auth");
   }
   function friendlyError(error) {
-    const original = String(error?.message || error || "");
+    const original = String(error?.message || error || ""); globalThis.console?.warn?.("[pinkie] 设置操作没完成", error); // 原文只进日志
     if (/(?:hash|version|conflict)/i.test(original)) return "设置刚刚有变化，请重新打开后再试。";
     if (/(?:schema|invalid|required|validation|parse)/i.test(original)) return "这项设置不符合当前要求，请检查高级设置。";
     if (/(?:unauthori[sz]ed|forbidden|permission|authentication|token)/i.test(original)) return "当前连接没有修改权限。";

@@ -9,13 +9,13 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 }
 
 #laolao-user-settings {
-  --pinkie-settings-ink: #63364c;
+  --pinkie-settings-ink: #63364c; --pinkie-settings-custom-ink: #8e5f76;
   --pinkie-settings-muted: #886b7c;
-  --pinkie-settings-accent: #d9518d;
-  --pinkie-settings-border: rgba(196, 119, 157, .23);
-  --pinkie-settings-card: rgba(255, 251, 253, .97);
-  --pinkie-settings-soft: rgba(255, 238, 247, .98);
-  --pinkie-settings-control: rgba(255, 255, 255, .96);
+  --pinkie-settings-accent: #d9518d; --pinkie-settings-link: #b84279;
+  --pinkie-settings-border: rgba(196, 119, 157, .23); --pinkie-settings-hover-border: rgba(217, 81, 141, .56);
+  --pinkie-settings-card: rgba(255, 251, 253, .97); --pinkie-settings-hover: #fff0f7;
+  --pinkie-settings-soft: rgba(255, 238, 247, .98); --pinkie-settings-primary-ink: #a83c70;
+  --pinkie-settings-control: rgba(255, 255, 255, .96); --pinkie-settings-primary-bg: linear-gradient(135deg, #ffecf4, #fff8fb); --pinkie-settings-button-edge: #b5698f;   /* B25：设置键描边对卡片 3.80、对键底 3.90:1（共享 border 卡片边 / 分隔线也用，不动） */
   position: fixed;
   z-index: 8;
   right: auto;
@@ -130,15 +130,15 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   transition: border-color .16s ease, background .16s ease, transform .16s ease, box-shadow .16s ease;
 }
 #laolao-user-settings .pinkie-user-settings__choice,
-#laolao-user-settings .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; }
+#laolao-user-settings .pinkie-user-settings__brand { min-height: 34px; padding: 6px 13px; } #laolao-user-settings .pinkie-user-settings__choice { border-color: var(--pinkie-settings-button-edge, var(--pinkie-settings-border)); }   /* B32：「开 / 关」选项键描边同 B25 设置键（日 3.80 / 夜 4.23:1），:hover / .is-selected 特异性更高照旧盖过 */
 #laolao-user-settings .pinkie-user-settings__choice:hover,
 #laolao-user-settings .pinkie-user-settings__brand:hover,
 #laolao-user-settings .pinkie-user-settings__model-button:hover,
 #laolao-user-settings .pinkie-user-settings__button:hover,
 #laolao-user-settings .pinkie-user-settings__text-button:hover,
 #laolao-user-settings .pinkie-user-settings__advanced-link:hover {
-  border-color: rgba(217, 81, 141, .56);
-  background: #fff0f7;
+  border-color: var(--pinkie-settings-hover-border);
+  background: var(--pinkie-settings-hover);
   box-shadow: 0 3px 12px rgba(202, 91, 143, .12);
 }
 #laolao-user-settings .pinkie-user-settings__choice.is-selected,
@@ -373,23 +373,23 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--pinkie-settings-soft);
-  color: #8e5f76;
+  color: var(--pinkie-settings-custom-ink);
   font-size: 12px;
 }
 #laolao-user-settings .pinkie-user-settings__custom[hidden] { display: none !important; }
 
-#laolao-user-settings .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; }
+#laolao-user-settings .pinkie-user-settings__button { min-height: 35px; padding: 7px 14px; border-color: var(--pinkie-settings-button-edge, var(--pinkie-settings-border)); }
 #laolao-user-settings .pinkie-user-settings__button--primary {
   border-color: rgba(196, 65, 126, .35);
-  background: linear-gradient(135deg, #ffecf4, #fff8fb);
-  color: #a83c70;
+  background: var(--pinkie-settings-primary-bg);
+  color: var(--pinkie-settings-primary-ink);
 }
 #laolao-user-settings .pinkie-user-settings__button--small { min-height: 31px; padding: 5px 11px; }
 #laolao-user-settings .pinkie-user-settings__text-button,
 #laolao-user-settings .pinkie-user-settings__advanced-link {
   min-height: 33px;
   padding: 6px 13px;
-  color: #b84279;
+  color: var(--pinkie-settings-link);
 }
 #laolao-user-settings .pinkie-user-settings__channels { margin: 8px 0 0; border-top: 1px solid rgba(196, 119, 157, .14); }
 #laolao-user-settings .pinkie-user-settings__channels-summary {
@@ -463,16 +463,16 @@ body[data-pinkie-user-settings="1"] .content-header .page-sub {
 #laolao-user-settings .pinkie-user-settings__usage-value { overflow: hidden; color: var(--pinkie-settings-ink); font-size: 13px; text-overflow: ellipsis; }
 #laolao-user-settings .pinkie-user-settings__footer { display: flex; justify-content: center; padding: 7px 0 16px; }
 
-html[data-theme-mode="dark"] #laolao-user-settings,
+html[data-pinkie-night] #laolao-user-settings, html[data-theme-mode="dark"] #laolao-user-settings,
 html[data-theme="dark"] #laolao-user-settings,
 html[data-color-scheme="dark"] #laolao-user-settings {
-  --pinkie-settings-ink: #f6e5ee;
+  --pinkie-settings-ink: #f6e5ee; --pinkie-settings-custom-ink: #d1b3c2;
   --pinkie-settings-muted: #d1b3c2;
-  --pinkie-settings-accent: #ff87b8;
-  --pinkie-settings-border: rgba(243, 153, 195, .2);
-  --pinkie-settings-card: rgba(42, 29, 40, .97);
-  --pinkie-settings-soft: rgba(58, 38, 53, .98);
-  --pinkie-settings-control: rgba(52, 37, 50, .98);
+  --pinkie-settings-accent: #ff87b8; --pinkie-settings-link: #ff87b8;
+  --pinkie-settings-border: rgba(243, 153, 195, .2); --pinkie-settings-hover-border: rgba(255, 154, 196, .5);
+  --pinkie-settings-card: rgba(42, 29, 40, .97); --pinkie-settings-hover: #4a2e42;
+  --pinkie-settings-soft: rgba(58, 38, 53, .98); --pinkie-settings-primary-ink: #ffd0e4;
+  --pinkie-settings-control: rgba(52, 37, 50, .98); --pinkie-settings-primary-bg: linear-gradient(135deg, #5c2c46, #4a2e42); --pinkie-settings-button-edge: #a8738f;   /* B25 夜：对卡片 4.23、对键底 3.79:1 */
 }
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__title,

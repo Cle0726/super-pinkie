@@ -1,0 +1,15 @@
+{
+  "default": "cle",
+  "node": "24.20.0",
+  "openclaw": {
+    "version": "2026.7.1-2"
+  },
+  "cle": {
+    "version": "2026.7.1-2-c.3",
+    "tag": "cle-core-v2026.7.1-2-c.3",
+    "repo": "Cle0726/cle-core",
+    "asset": "cle-core-v2026.7.1-2-c.3.tgz",
+    "url": "https://github.com/Cle0726/cle-core/releases/download/cle-core-v2026.7.1-2-c.3/cle-core-v2026.7.1-2-c.3.tgz",
+    "sha256": "4418ab09b2f159672c77ede94a3899a2f0574b797853d3460ce07a27c65ce59f"
+  }
+}

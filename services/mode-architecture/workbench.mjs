@@ -38,6 +38,20 @@ const GIT = ['/usr/bin/git', '/opt/homebrew/bin/git', '/usr/local/bin/git'].find
 const inside = (root, target) => target === root || target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 const posix = value => value.split(path.sep).join('/');
 const fail = (message, code) => Object.assign(new Error(message), code ? {code} : {});
+// 只读文件开头 cap 字节；切在多字节 UTF-8 字符中间就退回到上一个完整字符（中文预览末尾不出 �）。
+async function readHead(file, cap) {
+  const handle = await fsp.open(file, 'r');
+  try {
+    const buffer = Buffer.alloc(cap);
+    const {bytesRead} = await handle.read(buffer, 0, cap, 0);
+    let end = bytesRead, back = 0;
+    while (back < 3 && end - back - 1 >= 0 && (buffer[end - back - 1] & 0xc0) === 0x80) back++;
+    const lead = buffer[end - back - 1];
+    const need = lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1;
+    if (end - back - 1 >= 0 && need > back + 1) end = end - back - 1;
+    return buffer.subarray(0, end);
+  } finally { await handle.close(); }
+}
 
 function realish(target) {
   // 目标可能还不存在（新建文件）：解析已存在的那一截父目录，防止通过符号链接跳出根目录。
@@ -88,7 +102,8 @@ export class WorkbenchContext {
         path: text(d.path, 2000), line: integer(d.line), column: integer(d.column),
         severity: d.severity === 'error' ? 'error' : 'warning', message: text(d.message, 500), source: text(d.source, 80),
       })) : [],
-      terminals: active && Array.isArray(params.terminals) ? params.terminals.slice(0, 3).map(t => ({
+      // 每个聊天会话一个终端（R2）：只收挂在本会话上的那一个，别的会话的终端输出不进本会话上下文。
+      terminals: active && Array.isArray(params.terminals) ? params.terminals.filter(t => t?.sessionKey === scope.key).slice(0, 1).map(t => ({
         sessionId: text(t.sessionId, 160), initialCwd: text(t.initialCwd, 2000), command: text(t.command, 800),
         output: text(t.output, 6000), exitCode: Number.isInteger(t.exitCode) ? t.exitCode : null,
         updatedAt: Number(t.updatedAt) || null,
@@ -218,9 +233,12 @@ export class Workbench {
       return {...base, kind: 'image', dataUrl: 'data:' + IMAGE[ext] + ';base64,' + (await fsp.readFile(file)).toString('base64')};
     }
     if (stat.size > MAX_TEXT) return {...base, kind: 'too-large'};
-    const buffer = await fsp.readFile(file);
+    // R5 ③：只读预览面板只要开头一段（maxBytes，可选）。不给就和以前一样整份读；截了的结果标 truncated 且一律只读，免得半份内容被存回去盖掉原文件。
+    const cap = Number.isFinite(Number(params.maxBytes)) && Number(params.maxBytes) > 0 ? Math.floor(Number(params.maxBytes)) : 0;
+    const buffer = cap && stat.size > cap ? await readHead(file, cap) : await fsp.readFile(file);
     const sample = buffer.subarray(0, Math.min(buffer.length, 8000));
     if (sample.includes(0)) return {...base, kind: 'binary'};
+    if (buffer.length < stat.size) { const text = buffer.toString('utf8'); return {...base, readOnly: true, truncated: true, kind: 'text', content: text, eol: text.includes('\r\n') ? 'crlf' : 'lf'}; }
     const text = buffer.toString('utf8');
     const result = {...base, kind: 'text', content: text, eol: text.includes('\r\n') ? 'crlf' : 'lf'};
     if (ext === 'svg' && stat.size <= MAX_IMAGE) result.dataUrl = 'data:image/svg+xml;base64,' + buffer.toString('base64');
