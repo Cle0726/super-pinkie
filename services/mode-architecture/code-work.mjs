@@ -383,12 +383,25 @@ function runCommand(command, {cwd, timeoutMs}) {
   return new Promise(resolve => {
     const started = Date.now();
     let output = '', timedOut = false, done = false;
-    const child = spawn(command, {cwd, shell: true, windowsHide: true, env: {...process.env, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0', PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1'}});
+    // B86：shell: true 时超时只杀 shell，测试命令起的子进程（npm → node）还占着 stdout，close 不来，run_tests 会一直等到它自己退出。
+    // 所以 POSIX 下让 shell 当进程组长、超时杀整组；Windows 用 taskkill /T 杀整棵树；杀完 2 秒管道还没关就自己收尾。
+    const windows = process.platform === 'win32';
+    const child = spawn(command, {cwd, shell: true, windowsHide: true, detached: !windows, env: {...process.env, CI: '1', NO_COLOR: '1', FORCE_COLOR: '0', PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1'}});
     const take = chunk => { output += chunk.toString('utf8'); if (output.length > 2_000_000) output = output.slice(-1_500_000); };
     child.stdout?.on('data', take);
     child.stderr?.on('data', take);
-    const finish = code => { if (done) return; done = true; clearTimeout(timer); resolve({exitCode: code, output, timedOut, seconds: Math.round((Date.now() - started) / 100) / 10}); };
-    const timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch { /* 已经结束 */ } }, timeoutMs);
+    const finish = code => { if (done) return; done = true; clearTimeout(timer); clearTimeout(grace); resolve({exitCode: code, output, timedOut, seconds: Math.round((Date.now() - started) / 100) / 10}); };
+    let grace;
+    const killTree = () => {
+      if (windows && child.pid) { try { spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], {windowsHide: true, stdio: 'ignore'}).on('error', () => {}); } catch { /* 已经结束 */ } }
+      else if (child.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* 已经结束 */ } } }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killTree();
+      grace = setTimeout(() => { child.stdout?.destroy(); child.stderr?.destroy(); finish(null); }, 2000);
+      grace.unref?.();
+    }, timeoutMs);
     child.on('error', error => { output += `\n${error.message}`; finish(-1); });
     child.on('close', code => finish(code));
   });

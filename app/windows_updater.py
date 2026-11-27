@@ -1230,6 +1230,14 @@ Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
             expected = self.prepared["sha256"]
             if not payload.is_file() or self._file_hash(payload) != expected:
                 return {"started": False, "message": "新版校验失效，请重新下载"}
+            if self.portable and not self.executable.parent.name:
+                # B87: the portable replacer renames the whole install folder. At a drive or
+                # share root (D:\, \\nas\share\) that folder is the root itself: it cannot be
+                # renamed, and stopping processes by its prefix would hit the whole drive.
+                append_log("updater", f"portable update refused: {self.executable} sits at a drive or share root")
+                return {"started": False, "elevate": False,
+                        "message": "碧琪直接放在了盘根（" + str(self.executable.parent) + "），没法自动换新版。"
+                                   "请把碧琪整个移进一个文件夹（比如 " + str(self.executable.parent) + "超級碧琪），再打开更新。"}
             token = uuid.uuid4().hex
             update_root = state_root() / "updates"
             health_root = update_root / "health"
