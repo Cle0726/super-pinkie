@@ -3,7 +3,9 @@
 //   日间 --sb-muted 计算 4.90，但 11px 字像素只有 4.32；夜间继承行色再叠 laolao-sidebar.css:467 的 .56，只有 2.6~2.7。
 // 测法：真装的 Control UI，home-chat 点进一条对话，1440 / 820（820 先展开抽屉）× 日 / 夜，非 Metre：
 //   正向：每一组计算 ≥ 4.5、像素（4px 分箱最浅）≥ 4.5；
-//   反例：同页注回 origin/main@b8fcd5be 的写法，夜间每一组计算都 < 4.5；日间取两档宽度里像素最浅的一档 < 4.5；
+//   反例：同页注回 origin/main@b8fcd5be 的写法，夜间每一组计算都 < 4.5；
+//     日间 main 的计算值本就 4.69/4.90，能否跌破 4.5 只看引擎抗锯齿（Chromium 4.25、WebKit 4.52，mac2 7226016718），
+//     所以日间每一档改断言相对退化：改后比注回 main 计算、像素都至少高 DAY_GAP（实测差值 Chromium ≥1.89、WebKit ≥2.15）；
 //   并且页面没有报错。
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -16,6 +18,7 @@ import {
 import {REVERT_CSS, openActiveRow, pixelTime, visibleTimes} from './visual/lib/session-time-contrast.mjs';
 
 const MIN = 4.5;
+const DAY_GAP = 1.0;
 
 async function measure(page, width) {
   const rows = await visibleTimes(page, width);
@@ -41,7 +44,7 @@ test('B11·S5：高亮会话行时间日夜 ≥ 4.5；注回 main 的写法就�
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  const oldDayPx = {};
+  const dayGap = {};
   const oldNightCalc = {};
   for (const theme of ['day', 'night']) for (const width of [1440, 820]) {
     const {context, page, pageErrors} = await openActiveRow(browser, server.origin, theme, width);
@@ -59,7 +62,7 @@ test('B11·S5：高亮会话行时间日夜 ≥ 4.5；注回 main 的写法就�
       const old = await measure(page, width);
       await tag.evaluate((n) => n.remove());
       t.diagnostic(`${theme} ${width} 注回 main 计算 ${old.calc.toFixed(2)} 像素 ${old.px.toFixed(2)}`);
-      if (theme === 'day') oldDayPx[width] = old.px;
+      if (theme === 'day') dayGap[width] = {calc: now.calc - old.calc, px: now.px - old.px};
       else oldNightCalc[width] = old.calc;
 
       assert.deepEqual(pageErrors, [], `${theme} ${width} 页面报错`);
@@ -68,6 +71,7 @@ test('B11·S5：高亮会话行时间日夜 ≥ 4.5；注回 main 的写法就�
     }
   }
   for (const [width, calc] of Object.entries(oldNightCalc)) assert.ok(calc < MIN, `反例没生效：夜间 ${width} 注回 main 也有 ${calc.toFixed(2)}`);
-  const dayMin = Math.min(...Object.values(oldDayPx));
-  assert.ok(dayMin < MIN, `反例没生效：日间注回 main 最浅一档也有 ${dayMin.toFixed(2)}（${JSON.stringify(oldDayPx)}）`);
+  for (const [width, g] of Object.entries(dayGap)) {
+    assert.ok(g.calc >= DAY_GAP && g.px >= DAY_GAP, `反例没生效：日间 ${width} 改后只比注回 main 高 计算 ${g.calc.toFixed(2)} / 像素 ${g.px.toFixed(2)}（要 ≥ ${DAY_GAP}）`);
+  }
 });
