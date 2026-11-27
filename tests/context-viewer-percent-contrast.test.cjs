@@ -55,7 +55,8 @@ test('context percent reaches 4.5:1 on white and on each mode fog tint',()=>{
     const fg=mix(hex(v.muted),hex(v['text-strong']),p);
     const white=[255,255,255];
     const tint=mix(hex(v.accent),white,0.09);
-    for(const [name,bg] of [['white',white],['fog-tint',tint]]){
+    // composer-grey：pr-shots 实拍最暗底色（sidebar-collapsed 820 project），mix60 在这上面只有 3.5。
+    for(const [name,bg] of [['white',white],['fog-tint',tint],['composer-grey',[200,203,206]]]){
       const r=ratio(fg,bg);
       assert.ok(r>=4.5,`${mode} ${name} 对比度 ${r.toFixed(2)} < 4.5`);
     }
