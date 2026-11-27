@@ -203,27 +203,24 @@ test('快照只保留最近 24 个内存格，编号在每一帧内从 m0 重新
 });
 
 // —— 以下是已发现的源码问题：按 C 语义写出期望，源码修复前保持 todo（不计失败）——
-test('`||` 的结果应为 0 或 1（C11 6.5.14），轨迹里的变量值要与真实程序一致', {
-  todo: '源码 bug：|| 直接返回左操作数的值，`int x = 2 || 0;` 轨迹显示 x=2（真实为 1），程序没打印 x 时仍判 verifiedOutput=true',
-}, () => {
-  const result = run([declare(0, decl('x', 'int', bin('||', int(2), int(0)))), ret()]);
-  assert.equal(result.verifiedOutput, true, result.message);
-  assert.equal(last(result, 'x'), 1);
-});
+// 待修源码：源码 bug：|| 直接返回左操作数的值，`int x = 2 || 0;` 轨迹显示 x=2（真实为 1），程序没打印 x 时仍判 verifiedOutput=true
+// 修好后把下面这条改回带断言的 test：
+//   const result = run([declare(0, decl('x', 'int', bin('||', int(2), int(0)))), ret()]);
+//   assert.equal(result.verifiedOutput, true, result.message);
+//   assert.equal(last(result, 'x'), 1);
+test.todo('`||` 的结果应为 0 或 1（C11 6.5.14），轨迹里的变量值要与真实程序一致（待修源码）');
 
-test('printf 的 %% 应输出一个 %，并通过与真实输出的比对', {
-  todo: '源码 bug：%% 先被替换成 %，随后「残留 %」检查把它当成未支持的格式，任何含 %% 的 printf 都拿不到轨迹',
-}, () => {
-  const result = run([stmt(call('printf', str('%d%%\n'), int(50))), ret()], '50%\n');
-  assert.equal(result.verifiedOutput, true, result.message);
-  assert.equal(result.frames.at(-1).stdout, '50%\n');
-});
+// 待修源码：源码 bug：%% 先被替换成 %，随后「残留 %」检查把它当成未支持的格式，任何含 %% 的 printf 都拿不到轨迹
+// 修好后把下面这条改回带断言的 test：
+//   const result = run([stmt(call('printf', str('%d%%\n'), int(50))), ret()], '50%\n');
+//   assert.equal(result.verifiedOutput, true, result.message);
+//   assert.equal(result.frames.at(-1).stdout, '50%\n');
+test.todo('printf 的 %% 应输出一个 %，并通过与真实输出的比对（待修源码）');
 
-test('for 初始化子句声明的变量在循环结束后失效（C11 6.8.5p5），之后经指针读取应判为未定义行为', {
-  todo: '源码 bug：for 的 init 声明被挂到外层作用域，循环结束后仍算存活，悬空指针解引用漏报',
-}, () => {
-  const p = decl('p', 'int *'), i = decl('i', 'int', int(0));
-  const result = run([declare(0, p), forLoop(declare(0, i), bin('<', v(i), int(1)), un('++', declRef(i), 'int', true),
-    stmt(assign(declRef(p), addr(i), 'int *'))), declare(0, decl('y', 'int', deref(p))), ret()]);
-  assert.deepEqual(result, failed('指针引用了生命周期已经结束的对象', true));
-});
+// 待修源码：源码 bug：for 的 init 声明被挂到外层作用域，循环结束后仍算存活，悬空指针解引用漏报
+// 修好后把下面这条改回带断言的 test：
+//   const p = decl('p', 'int *'), i = decl('i', 'int', int(0));
+//   const result = run([declare(0, p), forLoop(declare(0, i), bin('<', v(i), int(1)), un('++', declRef(i), 'int', true),
+//   stmt(assign(declRef(p), addr(i), 'int *'))), declare(0, decl('y', 'int', deref(p))), ret()]);
+//   assert.deepEqual(result, failed('指针引用了生命周期已经结束的对象', true));
+test.todo('for 初始化子句声明的变量在循环结束后失效（C11 6.8.5p5），之后经指针读取应判为未定义行为（待修源码）');
