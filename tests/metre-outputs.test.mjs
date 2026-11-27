@@ -182,6 +182,12 @@ test('登记：头片段在 laolao-metre-pr.js 后面、归 metre 区域；不�
   assert.ok(rules.length >= 15);
   for (const rule of rules) {
     // 只按顶层逗号切（:is(a, b) 里的逗号不切）
-    for (const sel of rule.split('{')[0].split(/,(?![^(]*\))/).map(x => x.trim()).filter(Boolean)) assert.match(sel, /^html\[data-laolao-mode="metre"\] \.pk-mout/, sel);
+    // 每个选择器都以 Metre 开头，真正被画的那一节（最后一节）是本文件自己的 .pk-mout 类
+    for (const sel of rule.split('{')[0].split(/,(?![^(]*\))/).map(x => x.trim()).filter(Boolean)) {
+      assert.match(sel, /^html\[data-laolao-mode="metre"\] /, sel);
+      assert.match(sel.replace(/\([^)]*\)/g, '()').split(/\s+[~>+]?\s*/).at(-1), /^\.pk-mout/, sel);
+    }
   }
+  // 工作台状态栏放不下时 fitStatus 藏「PR」，「文件 N」跟着藏，不留半截（workbench-status-fit-real.test.mjs 在 CI 上抓到的）
+  assert.match(CSS, /\.pk-wb-status__item\[data-opt="pr"\]\[style\*="display: none"\] ~ \.pk-mout__status \{ display: none; \}/);
 });
