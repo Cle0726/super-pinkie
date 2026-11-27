@@ -1,0 +1,4 @@
+[
+  {"file": "ui/injections/laolao-head.fragment.html", "metric": "lines", "add": 2, "reason": "L35 T3 #23 本会话产出的文件（11-27，linux/L35）：Metre 工作台「本会话文件」页 laolao-metre-outputs.css / .js 只能在头片段登记加载（?v=@hash），各一行，放在 laolao-metre-pr.js 后面；功能本身全在这两个新文件里。"},
+  {"file": "ui/injections/regions.json", "metric": "lines", "add": 2, "reason": "L35 T3 #23（11-27，linux/L35）：laolao-metre-outputs.css / .js 登记在已有的 metre 区域 files 里各一行，没有新区域、新根选择器或跨区域放行。"}
+]
