@@ -27,6 +27,16 @@ function assertAllPass(m, label) {
   }
 }
 
+// 浮窗位置是点开那一刻按窗口宽度算的，所以每换一次宽度都先关掉再重新点开。
+async function reopenAt(page, width) {
+  await page.setViewportSize({width, height: 800});
+  if (await page.evaluate((sel) => !!document.querySelector(sel), POP)) {
+    await page.keyboard.press('Escape');
+    await page.waitForFunction((sel) => !document.querySelector(sel), POP, {timeout: 3_000});
+  }
+  await openDesensitizePop(page);
+}
+
 test('脱敏浮窗的字 ≥ 4.5、下拉 / 输入框 / 按钮边框 ≥ 3，日夜都达标且夜间认 data-pinkie-night；注回旧色必须不达标', async (t) => {
   const installed = installRealControlUi({repoRoot: REPO_ROOT});
   let server = null;
@@ -41,40 +51,44 @@ test('脱敏浮窗的字 ≥ 4.5、下拉 / 输入框 / 按钮边框 ≥ 3，日
   server = await startRealUiServer({controlUiDir: installed.controlUiDir, repoRoot: REPO_ROOT, runDir: installed.runDir});
   browser = await launchRealBrowser();
 
-  for (const width of [1440, 820]) {
-    for (const theme of ['day', 'night']) {
-      await t.test(`${width} ${theme}`, async () => {
-        const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'home-unrestricted', theme);
-        try {
-          await page.setViewportSize({width, height: 800});
-          assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-pinkie-night')), theme === 'night', 'data-pinkie-night 和场景日夜一致');
-          await openDesensitizePop(page);
-          const label = theme === 'day' ? '日间' : '夜间';
+  // 同一个 theme 只开一次页：先量 1440 / 820 正例，再注一次旧色量 1440 / 820 反例，页面加载与网关握手 4 → 2。
+  for (const theme of ['day', 'night']) {
+    await t.test(theme, async () => {
+      const {context, page, pageErrors} = await openRealScenePage(browser, server.origin, 'home-unrestricted', theme);
+      try {
+        assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-pinkie-night')), theme === 'night', 'data-pinkie-night 和场景日夜一致');
+        const label = theme === 'day' ? '日间' : '夜间';
+        for (const width of [1440, 820]) {
+          await reopenAt(page, width);
           const now = await page.evaluate(measurePop, ARGS);
           t.diagnostic(`${width} ${theme} 现在 ${JSON.stringify(now)}`);
-          assertAllPass(now, label);
-          if (theme === 'night') {
-            assert.ok(now.popLuminance < 0.1, `夜间浮窗是深底（亮度 ${now.popLuminance}）`);
-            const only = await page.evaluate(popLightWithNightAttrOnly, POP);
-            assert.equal(only.light, false, `只留 data-pinkie-night 时浮窗仍是深底（${only.bg}）`);
-            await page.evaluate(() => document.documentElement.removeAttribute('data-theme-mode'));
-            await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-            assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-theme-mode')), false, '量的时候确实没有 data-theme-mode');
-            const nightOnly = await page.evaluate(measurePop, ARGS);
-            t.diagnostic(`${width} 只留 data-pinkie-night ${JSON.stringify(nightOnly)}`);
-            assertAllPass(nightOnly, '只留 data-pinkie-night');
-            assert.ok(nightOnly.popLuminance < 0.1, `只留 data-pinkie-night 时浮窗是深底（亮度 ${nightOnly.popLuminance}）`);
-          }
-          await revertPopColors(page, theme);
+          assertAllPass(now, `${width} ${label}`);
+          if (theme !== 'night') continue;
+          assert.ok(now.popLuminance < 0.1, `${width} 夜间浮窗是深底（亮度 ${now.popLuminance}）`);
+          const only = await page.evaluate(popLightWithNightAttrOnly, POP);
+          assert.equal(only.light, false, `${width} 只留 data-pinkie-night 时浮窗仍是深底（${only.bg}）`);
+          const prev = await page.evaluate(() => document.documentElement.getAttribute('data-theme-mode'));
+          await page.evaluate(() => document.documentElement.removeAttribute('data-theme-mode'));
+          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+          assert.equal(await page.evaluate(() => document.documentElement.hasAttribute('data-theme-mode')), false, `${width} 量的时候确实没有 data-theme-mode`);
+          const nightOnly = await page.evaluate(measurePop, ARGS);
+          t.diagnostic(`${width} 只留 data-pinkie-night ${JSON.stringify(nightOnly)}`);
+          assertAllPass(nightOnly, `${width} 只留 data-pinkie-night`);
+          assert.ok(nightOnly.popLuminance < 0.1, `${width} 只留 data-pinkie-night 时浮窗是深底（亮度 ${nightOnly.popLuminance}）`);
+          if (prev !== null) await page.evaluate((v) => document.documentElement.setAttribute('data-theme-mode', v), prev);
+        }
+        await revertPopColors(page, theme);
+        for (const width of [1440, 820]) {
+          await reopenAt(page, width);
           await page.waitForFunction((sel) => getComputedStyle(document.querySelector(sel).querySelector('.ds-status')).color === 'rgba(87, 54, 74, 0.52)', POP, {timeout: 3_000});
           const reverted = await page.evaluate(measurePop, ARGS);
           t.diagnostic(`${width} ${theme} 注回旧色 ${JSON.stringify(reverted)}`);
-          for (const name of REVERT_MUST_FAIL) assert.ok(reverted[name].ratio < need(name), `反例：旧色下${label} ${name} 必须 < ${need(name)}（实际 ${reverted[name].ratio}）`);
-          assert.deepEqual(pageErrors, [], '页面没有报错');
-        } finally {
-          await context.close();
+          for (const name of REVERT_MUST_FAIL) assert.ok(reverted[name].ratio < need(name), `反例：旧色下 ${width} ${label} ${name} 必须 < ${need(name)}（实际 ${reverted[name].ratio}）`);
         }
-      });
-    }
+        assert.deepEqual(pageErrors, [], '页面没有报错');
+      } finally {
+        await context.close();
+      }
+    });
   }
 });
