@@ -64,8 +64,8 @@
     state.chatWidth = Math.min(state.chatWidth, 420);
     store.set('sideWidth', state.sideWidth); store.set('chatWidth', state.chatWidth); store.set('layoutVersion', 2);
   }
-  const extraStatus = new Map();
-  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); workspaceView = 'code'; place(); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
+  const extraStatus = new Map(), held = new Map(), heldOf = path => (path ? held.get(path) || held.get(absolute(path)) || '' : '');   // R5 ②：Metre 这一轮在改的文件临时只读，由 laolao-metre-files.js 填
+  window.__pinkieWorkbench = {state, open: (path, options) => openFile(path, options), refresh: () => refreshAll(), extraStatus, held, rel: path => relativePath(path), diff: async path => { if (!state.git) { try { state.git = await rpc('pinkie.fs.git'); } catch { state.git = null; } } return state.git?.repo ? openDiff(path, false) : openFile(path, {pinned: true}); }, show: async () => { if (!wanted()) return false; state.mode = document.documentElement.dataset.laolaoMode || ''; if (!enabledPref(state.mode)) setEnabled(true); for (let i = 0; i < 60 && !state.info; i++) await new Promise(r => setTimeout(r, 50)); workspaceView = 'code'; place(); return Boolean(state.visible && state.info && !state.info.error); }};   // R5 ①：Metre 文件签条用 show / rel / diff
 
   /* ───────── 让模型看见当前工作台和运行现场 ───────── */
   const contextClientId = crypto.randomUUID();
@@ -1006,7 +1006,7 @@
       if (!isCurrent()) return;
       monacoHost.hidden = false;
       if (editor.getModel() !== tab.model) editor.setModel(tab.model);
-      editor.updateOptions({readOnly: Boolean(tab.readOnly)});
+      editor.updateOptions({readOnly: Boolean(tab.readOnly || heldOf(tab.path))});
       if (tab.viewState) editor.restoreViewState(tab.viewState);
       place();
       if (options.line) {
@@ -1034,10 +1034,10 @@
       await ensureDiff();
       if (!isCurrent()) return;
       diffHost.hidden = false;
-      diffEditor.setModel({original: tab.original, modified: tab.modified});
+      diffEditor.setModel({original: tab.original, modified: tab.modified}); diffEditor.updateOptions({readOnly: Boolean(heldOf(tab.source))});
       place();
     } else renderPreview(tab);
-    renderStatus(); persistTabs();
+    renderStatus(); persistTabs(); const heldWhy = heldOf(tab.kind === 'diff' ? tab.source : path); if (heldWhy) showBar(heldWhy, []);
     if (state.view === 'explorer' && !path.startsWith('diff:') && !path.startsWith('page:')) revealInTree(path);
   }
   function flashLine(line) {
@@ -1105,7 +1105,7 @@
       const label = el('span', 'pk-wb-tab__label', vs ? vs[1] : tab.kind === 'diff' || tab.kind === 'page' ? tab.title : tab.name);
       t.append(label); if (vs) { t.classList.add('is-diff'); t.append(el('span', 'pk-wb-tab__vs', vs[2])); }
       if (names.get(tab.name) > 1 && tab.kind !== 'diff') { const loc = fileLocation(tab.path); t.append(el('span', 'pk-wb-tab__dir', dirname(loc.relative) || loc.name)); }
-      if (tab.readOnly) { const lock = icon('lock', 'pk-wb-tab__readonly'); lock.title = '参考文件 · 只读'; t.append(lock); }
+      if (tab.readOnly || heldOf(tab.path)) { const lock = icon('lock', 'pk-wb-tab__readonly'); lock.title = heldOf(tab.path) || '参考文件 · 只读'; t.append(lock); }
       const close = button('close', '关闭（' + keyLabel('⌘W') + '）', e => { e.stopPropagation(); closeTab(tab.path); }, 'pk-wb-tab__close');
       t.append(close);
       t.addEventListener('click', () => activate(tab.path));
@@ -1195,7 +1195,7 @@
     let tab = findTab(state.active);
     if (tab?.kind === 'diff') tab = findTab(tab.source);
     if (!tab?.model) return;
-    if (tab.readOnly) { toast('这是项目外的参考文件；请在当前项目中保存修改。'); return; }
+    if (tab.readOnly || heldOf(tab.path)) { toast(heldOf(tab.path) || '这是项目外的参考文件；请在当前项目中保存修改。'); return; }
     try { await window.__pinkieWorkbench.beforeSave?.(tab); } catch {}
     const content = tab.model.getValue(tab.eol === 'crlf' ? 2 : 1);
     try {
@@ -1243,7 +1243,7 @@
     if (!tabs.length || !state.visible || document.hidden) return;
     let stats;
     try { ({stats} = await rpc('pinkie.fs.stat', {paths: tabs.map(t => t.path)})); } catch { return; }
-    for (const s of stats) {
+    for (const s of stats || []) {   // B29：回包里没有 stats（旧网关 / 出错时回 {}）就当没有变化，不抛「stats is not iterable」
       const tab = findTab(s.path);
       if (!tab || !tab.mtimeMs) continue;
       if (!s.exists) { if (!tab.gone) { tab.gone = true; renderTabs(); } continue; }

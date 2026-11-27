@@ -9,11 +9,14 @@
 //   overlap  两段文字的框互相压住（交叠 >=25% 小框面积且 >=16px²）
 //   trunc    文字被 overflow 裁掉（scrollWidth>clientWidth）且没有省略号、也没有 title
 // 底色只叠背景色，不算背景图/渐变/纸纹；叠到图的记 approx:true。
+// 例外：background-clip:text 画的字（字色透明、墨色在背景里）改按像素量（clip-text-ink.mjs），
+// 记 method:'pixels'，ratio 取渐变最浅那段；每页全部量值在 row.clipText。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import * as H from '../../tests/visual/lib/real-harness.mjs';
+import {measureClipText} from './clip-text-ink.mjs';
 
 const args = process.argv.slice(2);
 const at = args.indexOf('--out');
@@ -109,11 +112,29 @@ function measure() {
     leaves.push({e, r: tr, text: texts.map((t) => t.textContent.trim()).join(' ').slice(0, 40)});
   }
 
+  // background-clip:text 画的字：字色透明、墨色在背景里，按 color / backgroundColor 算会是假低分，交给页面外按像素量。
+  const clipText = [];
+  const clipSource = (e) => {
+    if (P(getComputedStyle(e).webkitTextFillColor || 'transparent').a > 0 && P(getComputedStyle(e).color).a > 0) return null;
+    for (let x = e, i = 0; x && x.nodeType === 1 && i < 4; x = x.parentElement, i++) {
+      const s = getComputedStyle(x);
+      if (s.backgroundClip === 'text' || s.webkitBackgroundClip === 'text') return x;
+    }
+    return null;
+  };
+
   for (const {e, r, text} of leaves) {
     const s = getComputedStyle(e), px = parseFloat(s.fontSize), wt = Number(s.fontWeight) || 400;
     const large = px >= 24 || (px >= 18.66 && wt >= 700);
-    const {bg, approx} = bgOf(e), fg = over(P(s.color), bg), k = ratio(fg, bg), need = large ? 3 : 4.5;
-    if (k < need) add('text', sel(e), {sel: sel(e), text, ratio: k, need, color: s.color, fg: hex(fg), bg: hex(bg), fontSize: px, fontWeight: wt, approx, ...box(r)});
+    const src = clipSource(e), need = large ? 3 : 4.5;
+    if (src) {
+      const id = String(clipText.length);
+      e.dataset.pkWalkClip = id; src.dataset.pkWalkClipSrc = [src.dataset.pkWalkClipSrc, id].filter(Boolean).join(" ");
+      clipText.push({id, sel: sel(e), text, need, fontSize: px, fontWeight: wt, ...box(r)});
+    } else {
+      const {bg, approx} = bgOf(e), fg = over(P(s.color), bg), k = ratio(fg, bg);
+      if (k < need) add('text', sel(e), {sel: sel(e), text, ratio: k, need, color: s.color, fg: hex(fg), bg: hex(bg), fontSize: px, fontWeight: wt, approx, ...box(r)});
+    }
     // 截断：往上 3 层找第一个会裁的盒子。
     let x = e;
     for (let i = 0; i < 4 && x && x !== document.body; i++, x = x.parentElement) {
@@ -172,6 +193,7 @@ function measure() {
   const list = (m, by) => [...m.values()].sort(by).slice(0, 40);
   return {
     leaves: leaves.length,
+    clipText,
     counts: Object.fromEntries(Object.entries(issues).map(([k, m]) => [k, m.size])),
     issues: {
       text: list(issues.text, (a, b) => a.ratio - b.ratio),
@@ -208,6 +230,7 @@ const shoot = async (page, pageErrors, {group, view, theme, width}) => {
   try {
     await record(page, name);
     Object.assign(row, await page.evaluate(measure));
+    await measureClipText(page, row);
   } catch (error) {
     row.error = String(error?.message || error).slice(0, 300);
   }
