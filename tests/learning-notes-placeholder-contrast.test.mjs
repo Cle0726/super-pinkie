@@ -72,6 +72,56 @@ test('反例：贴回旧配色 #979d91 / #7f7a70 必须判不达标', () => {
   assert.ok(r.night < MIN, `旧夜间色应不达标，实得 ${r.night.toFixed(2)}`);
 });
 
+const DESK = readFileSync(path.join(ROOT, 'ui/injections/laolao-study-desk.css'), 'utf8');
+const INK = readFileSync(path.join(ROOT, 'ui/injections/laolao-study-desk-ink.css'), 'utf8');
+const NOTES = readFileSync(path.join(ROOT, 'ui/injections/laolao-study-desk-notes.css'), 'utf8');
+const NOTES_JS = readFileSync(path.join(ROOT, 'ui/injections/laolao-study-desk-notes.js'), 'utf8');
+const WEBKIT_DEFAULT_PH = '#a9a9a9';
+const LIVE_PH = /#pinkie-study-desk(?:\.pk-ink)? \.pinkie-desk-notes \.n-search input::placeholder\s*\{([^}]*)\}/g;
+
+function vars(css, sel) {
+  const m = css.match(new RegExp(`(?:^|\\n)${sel}\\s*\\{([^}]*)\\}`));
+  assert.ok(m, `未找到令牌块：${sel}`);
+  return Object.fromEntries([...m[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((x) => [x[1], x[2].trim()]));
+}
+function resolve(v, t) {
+  const m = v.match(/^var\((--[\w-]+)\)$/);
+  return m ? resolve(t[m[1]], t) : v;
+}
+function measureLive(notesCss, inkCss) {
+  const v1d = vars(DESK, '#pinkie-study-desk');
+  const v1n = vars(DESK, '#pinkie-study-desk\\[data-theme="night"\\]');
+  const pkd = vars(INK, '#pinkie-study-desk\\.pk-ink');
+  const pkn = vars(INK, '#pinkie-study-desk\\.pk-ink\\[data-theme="night"\\]');
+  const skins = {
+    'v1 日': {t: v1d, rules: [notesCss]},
+    'v1 夜': {t: {...v1d, ...v1n}, rules: [notesCss]},
+    '手账 日': {t: {...v1d, ...pkd}, rules: [notesCss, inkCss]},
+    '手账 夜': {t: {...v1d, ...v1n, ...pkd, ...pkn}, rules: [notesCss, inkCss]},
+  };
+  const out = {};
+  for (const [name, {t, rules}] of Object.entries(skins)) {
+    const hits = rules.flatMap((css) => [...css.matchAll(LIVE_PH)].map((m) => m[1]));
+    const color = hits.length ? resolve(prop(hits.at(-1), 'color'), t) : WEBKIT_DEFAULT_PH;
+    out[name] = Math.min(...['--paper', '--paper-2', '--card'].map((b) => ratio(rgb(color), rgb(resolve(t[b], t)))));
+  }
+  return out;
+}
+
+test('现行「搜笔记」框（.n-search input）占位字日夜、v1/手账都 ≥4.5', () => {
+  assert.match(NOTES_JS, /el\('label', 'n-search'\), search = el\('input'\)/);
+  assert.match(NOTES_JS, /search\.placeholder = '搜笔记'/);
+  for (const [k, r] of Object.entries(measureLive(NOTES, INK))) assert.ok(r >= MIN, `${k} 搜笔记 placeholder ${r.toFixed(2)} < ${MIN}`);
+  const body = [...NOTES.matchAll(LIVE_PH)].at(-1)[1];
+  assert.ok(!body.includes('!important'));
+});
+
+test('反例：去掉 .n-search 占位字规则（落回 WebKit 默认 #a9a9a9）必须判日间不达标', () => {
+  const r = measureLive(NOTES.replace(LIVE_PH, ''), INK.replace(LIVE_PH, ''));
+  assert.ok(r['v1 日'] < MIN && r['手账 日'] < MIN, `默认色日间应不达标，实得 ${JSON.stringify(r)}`);
+  assert.ok(r['v1 夜'] >= MIN && r['手账 夜'] >= MIN, '夜间默认色本来达标，量法不应误判');
+});
+
 test('夜间占位色仍是单行原地规则，不新增 !important', () => {
   const lines = NIGHT.split('\n').filter((l) => l.includes('.laolao-learning-notes__search::placeholder'));
   assert.equal(lines.length, 1);
