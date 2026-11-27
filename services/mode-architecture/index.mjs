@@ -56,6 +56,7 @@ import {createFileDelivery} from './file-delivery.mjs';
 import {PLAN_CONTROL_MARK, PlanContinuationState, RichStore, registerRichRuntime} from './rich-runtime.mjs';
 import {registerWorkbench} from './workbench.mjs';
 import {registerPrFlow} from './pr-flow.mjs';
+import {registerShellRun} from './shell-run.mjs';
 import {registerLearningLibrary} from './learning-library.mjs';
 import {renderFirstPerson} from './first-person.mjs';
 import {registerSettingsGuard} from './settings-guard.mjs';
@@ -806,6 +807,7 @@ export default {
     registerRichRuntime(toolApi, {cli: resolveGatewayCliEntry()});
     const workbench = registerWorkbench(toolApi);
     registerPrFlow(toolApi, {scope: (params) => workbench.scope(params)}); // 新功能第 5 项 PR 一条龙（只在 Metre；引擎台用时再取）
+    registerShellRun(toolApi, {stateRoot: pinkieStateRoot, openclawStateDir, config: () => runtimeConfig(api), configFile: openclawConfigPath, lock: metreLock, roleCardFor: key => architecture.roleCardForSession?.(key), activityFor: key => architecture.activityFor(key), boundRoot: key => boundProjectRoot(key, {stateRoot: pinkieStateRoot()}), rpc: (m, p) => gatewayAccess.rpc(m, p, {admin: true}), agentOf: agentFromSessionKey, log: e => api.logger?.warn?.(String(e?.message || e))}); // I6 聊天里 ! 跑命令
     const feedback = registerFeedback(toolApi, {root: resolveFeedbackRoot({stateRoot: process.env.PINKIE_STATE_ROOT || ''})});
     sharePluginState(watchdog, 'watchdog', ['failures', 'models', 'latestRuns', 'attempts', 'integrityAttempts', 'skipNextFailure', 'timers', 'gatewayBackoff', 'dispatching', 'generations', 'outcomes', 'dispatchFailures']);
     sharePluginState(tierContinuation, 'tier', ['timers', 'dispatching']);
@@ -822,11 +824,8 @@ export default {
       try {
         const sessionKey = String(params?.sessionKey || '');
         metreLock.assertSessionAllowed(sessionKey);
-        const pluginConfig = runtimeConfig(api);
-        let config = pluginConfig && Object.keys(pluginConfig).length ? pluginConfig : {};
-        if (!Object.keys(config).length) {
-          try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
-        }
+        let config = runtimeConfig(api) || {};
+        if (!Object.keys(config).length) try { config = JSON.parse(fs.readFileSync(openclawConfigPath(), 'utf8')); } catch {}
         respond(true, modelHealth.failure(sessionKey, {candidates: configuredModels(config, agentFromSessionKey(sessionKey))}));
       } catch (error) {
         respond(false, undefined, {code: 'INVALID_REQUEST', message: error.message});
