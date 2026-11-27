@@ -4,7 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import {drainThen} from './engines-upstream.mjs';
 
 export const APP_BROWSER_ACTIONS = Object.freeze([
@@ -304,8 +304,12 @@ function addLog(record, text) {
 function signalProcess(record, signal) {
   if (!record.child?.pid) return;
   try {
-    if (process.platform === 'win32') record.child.kill(signal);
-    else process.kill(-record.child.pid, signal);
+    if (process.platform === 'win32') {
+      // B86：shell: true 在 Windows 上是 cmd.exe /c <命令>，只杀 cmd.exe 的话真正监听端口的孙进程还活着、端口一直被占着。
+      // 先 taskkill /T 杀整棵树（失败就算了，比如已经退出），再照旧 child.kill，保留原来的报错语义。
+      spawnSync('taskkill', ['/T', '/F', '/PID', String(record.child.pid)], {stdio: 'ignore', windowsHide: true, timeout: 5000});
+      record.child.kill(signal);
+    } else process.kill(-record.child.pid, signal);
   } catch (error) { if (error.code !== 'ESRCH') throw error; }
 }
 function processAlive(record) {
@@ -411,7 +415,8 @@ export class AppBrowserServers {
       throw new Error('启动服务请二选一：填写 dir，或同时填写 command、cwd、port。');
     }
     const record = {...sessionContext(ctx), owner: sessionOwner(ctx), logs: [], partial: '', kind: staticMode ? 'static' : 'command', pid: process.pid, stopped: false};
-    const onAbort = () => { void this.stopRecord(record); };
+    // startServe's catch awaits the same record.stopping promise and reports its error; only this copy goes unobserved.
+    const onAbort = () => { this.stopRecord(record).catch(() => {}); };
     signal?.addEventListener('abort', onAbort, {once: true});
     try {
       if (staticMode) {

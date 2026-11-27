@@ -41,7 +41,7 @@ html:not([data-laolao-mode="project"]) #laolao-project-scope[data-bound="false"]
   white-space: nowrap;
   cursor: pointer;
   transition: background .15s ease, color .15s ease, transform .12s ease;
-}
+} /* #261 项目模式才加深；:where 不抬特异性，hover / expanded 照样盖得过 */ :where(html[data-laolao-mode="project"]) .agent-chat__input .pinkie-tray-btn { color: var(--muted-strong, var(--fog-muted, color-mix(in srgb, currentColor 68%, transparent))); }
 html[data-laolao-plain-composer] .agent-chat__input .pinkie-tray-btn { display: none; }
 .agent-chat__input .pinkie-tray-btn svg { width: 17px; height: 17px; flex: none; }
 .agent-chat__input .pinkie-tray-btn:is(:hover, :focus-visible, [aria-expanded="true"]) {
@@ -147,7 +147,7 @@ html[data-pinkie-night] .pinkie-tray { background: #2a2027; border-color: rgba(2
 }
 .pinkie-tray__more:is(:hover, :focus-visible) { background: color-mix(in srgb, var(--pt-accent, #d9508d) 10%, transparent); color: var(--pt-accent, #d9508d); outline: none; }
 
-html[data-reduce-motion] .pinkie-tray, html[data-reduce-motion] .pinkie-tray *, html[data-reduce-motion] .pinkie-tray-btn, html[data-reduce-motion] .pinkie-tray-btn * { animation: none !important; transition: none !important; }
+html[data-pinkie-reduce-motion] .pinkie-tray, html[data-pinkie-reduce-motion] .pinkie-tray *, html[data-pinkie-reduce-motion] .pinkie-tray-btn, html[data-pinkie-reduce-motion] .pinkie-tray-btn * { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .pinkie-tray, .pinkie-tray *, .pinkie-tray-btn, .pinkie-tray-btn * { animation: none !important; transition: none !important; }
 }

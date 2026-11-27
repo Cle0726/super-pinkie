@@ -48,7 +48,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: #a36b82;
+  color: #8c5a73;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -72,21 +72,22 @@
 }
 .pk-run__btn:hover { color: #623247; background: #fff; }
 .pk-run__btn:focus-visible, .pk-run__dot:focus-visible { outline: 2px solid #e94f91; outline-offset: 2px; }
-.pk-run__btn[data-act="answer"], .pk-run__btn[data-act="skip"] { color: #fff; background: #e94f91; box-shadow: none; }
-.pk-run__btn[data-act="answer"]:hover, .pk-run__btn[data-act="skip"]:hover { color: #fff; background: #c2457c; }
+.pk-run__btn[data-act="answer"], .pk-run__btn[data-act="skip"] { color: #fff; background: #b73d73; box-shadow: none; }
+.pk-run__btn[data-act="answer"]:hover, .pk-run__btn[data-act="skip"]:hover { color: #fff; background: #a33566; }
 
-/* Give both fixed indicators a real slot; queue rows and New messages stay
-   in their own native rows instead of being translated over one another. */
+/* Give both fixed indicators a real slot; queue rows and New messages stay in their own native rows instead of being translated over one another. */
 .agent-chat__composer-shell[data-pinkie-composer-dock] {
   padding-block-start: var(--pinkie-composer-dock-space, 0px);
 }
 html[data-laolao-mode="metre"].pk-run-on .chat-new-messages { transform: translateY(-40px); }
+/* 「有新消息」：原生 --border 贴底只有 1.3:1，非 Metre 下补到 ≥3:1（Metre 见 laolao-metre-chat.css）；悬停仍走原生 --accent。 */
+html:not([data-laolao-mode="metre"]) .chat-new-messages:not(:hover) { border-color: #c0507f; }
+html[data-pinkie-night]:not(#_n):not([data-laolao-mode="metre"]) .chat-new-messages:not(:hover) { border-color: #9a7f8d; }
 
 /* 等你确认：整条换强调色，要确认的那句话就在条上。 */
 .pk-run[data-tone="ask"] .pk-run__body { background: linear-gradient(135deg, #ffe6f0, rgba(255, 238, 246, 0.92)); box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.5), 0 6px 20px rgba(233, 79, 145, 0.12); }
 .pk-run[data-tone="ask"] .pk-run__text { color: #623247; }
-.pk-run[data-tone="slow"] .pk-run__text, .pk-run[data-tone="warn"] .pk-run__text { color: #c2457c; }
-.pk-run[data-tone="done"] .pk-run__text { color: #c2457c; }
+.pk-run:is([data-tone="slow"], [data-tone="warn"], [data-tone="done"]) .pk-run__text { color: #c2457c; }
 
 /* 窄窗口：收成一个带表情的小圆点，点开是同样内容的浮层。 */
 .pk-run__dot { display: none; }
@@ -104,8 +105,7 @@ html[data-laolao-mode="metre"].pk-run-on .chat-new-messages { transform: transla
   border: 1px solid rgba(255, 255, 255, 0.7);
   box-shadow: inset 0 0 0 1px rgba(217, 89, 143, 0.16), 0 6px 18px rgba(111, 45, 74, 0.08);
 }
-/* The dot's `all: unset` would otherwise inherit pointer-events: none
-   from the fixed wrapper and let the composer swallow the click. */
+/* The dot's `all: unset` would otherwise inherit pointer-events: none from the fixed wrapper and let the composer swallow the click. */
 html:not([data-laolao-mode="metre"]) .pk-run.is-shown[data-layout="dot"] .pk-run__dot { pointer-events: auto; }
 .pk-run[data-layout="dot"][data-tone="ask"] .pk-run__dot { box-shadow: inset 0 0 0 1.5px rgba(233, 79, 145, 0.6), 0 6px 18px rgba(233, 79, 145, 0.14); }
 .pk-run__dot-face { width: 26px; height: 26px; object-fit: contain; }

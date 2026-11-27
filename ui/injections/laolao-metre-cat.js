@@ -379,7 +379,7 @@
     }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) halt(); else { lastDrawn = ''; kick(); } });
-  window.addEventListener('pinkie:motion-change', () => { lastDrawn = ''; halt(); kick(); });
+  for (const type of ['pinkie:motion-change', 'pinkie:night']) window.addEventListener(type, () => { lastDrawn = ''; halt(); kick(); });
   window.addEventListener('pinkie:metre-tap', onTap);
   // 有人回来了：小动作恢复 2～5 秒一次（正在等长间隔的话当场改排，不用等满 20 秒）
   const noticeInput = () => {

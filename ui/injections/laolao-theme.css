@@ -229,7 +229,7 @@ html[data-pinkie-native-glass="1"] .card.chat {
 .topbar {
   border-bottom: 1px solid rgba(217, 89, 143, 0.2) !important;
 }
-
+html:not(#_t) .topbar-search { border-color: var(--muted); } /* 820 宽才出现的原生搜索键：描边对顶栏 >=3:1，日夜随 --muted */
 
 .card.chat {
   background: rgba(255, 251, 252, 0.13) !important;
@@ -2149,13 +2149,12 @@ html[data-laolao-watchdog-state="recovered"] body::after {
   animation: pinkieWatchdogRecovered 1.8s ease-out both;
 }
 
-/* 断线只留顶部这一条碧琪提示：原生的「Gateway 连接已断开 / 立即重试」胶囊和
-   聊天区黄色「已断开与网关的连接。」都在说同一件事，重复且出戏。
-   网关自己会重连；顶部提示不在时（非聊天页）原生胶囊照常显示。 */
+/* 断线只留顶部碧琪提示：原生「Gateway 连接已断开」胶囊和聊天区黄色「已断开与网关的连接。」重复且出戏；顶部提示不在时（非聊天页）原生胶囊照常显示。
+   原生胶囊是 fixed，会盖住聊天页顶部 callout 原文（820 宽换两行盖得更多），聊天页让它回文档流；日间 --bg-elevated 半透明会叠字，胶囊改用不透明 --popover。 */
 html[data-laolao-watchdog-state] .connection-banner { display: none !important; }
-html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.chat > .callout:not(.danger):not(.info):not(.warn):not(.success) {
-  display: none !important;
-}
+html:is([data-laolao-watchdog-state], :has(.connection-banner)) section.card.chat > .callout:not(.danger):not(.info):not(.warn):not(.success) { display: none !important; }
+.content--chat > openclaw-connection-banner > .connection-banner { position: relative; inset: auto; flex: none; margin-top: 6px; }
+.connection-banner .connection-banner__pill { background: var(--popover); }
 
 @keyframes pinkieWatchdogRibbon {
   0%, 100% { opacity: .82; box-shadow: 0 8px 24px rgba(164, 62, 117, .13), inset 0 1px rgba(255, 255, 255, .95); }

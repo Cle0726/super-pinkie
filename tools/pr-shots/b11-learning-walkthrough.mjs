@@ -25,6 +25,9 @@ fs.mkdirSync(out, {recursive: true});
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const HEIGHT = 800;
 const DESK_VIEWS = ['today', 'board', 'library', 'notes', 'vocab', 'drill', 'gamepractice', 'chat'];
+// 宽度默认 1440 / 820；PINKIE_WALK_WIDTHS=1280,820 这样可换（L67 走查用 tools/pr-shots/L67-learning-1280.mjs 设）。
+const WIDTHS = String(process.env.PINKIE_WALK_WIDTHS || '1440,820').split(',').map((w) => Number(w.trim())).filter((w) => Number.isInteger(w) && w >= 320 && w <= 3840);
+if (!WIDTHS.length) throw new Error(`PINKIE_WALK_WIDTHS 无效：${process.env.PINKIE_WALK_WIDTHS}`);
 
 // 在页面里跑：返回 {counts, issues}。
 function measure() {
@@ -165,19 +168,32 @@ function measure() {
     }
   }
 
+  // <svg> 根的 fill 默认是不透明黑，不能当图标色：只看真正画出来的子图形，
+  // stroke/fill 各按自身 opacity 与到 svg 之间各层 opacity 叠出实际墨色，跳过 none 和 url() 渐变，取对比度最高的一笔。
+  const inkOf = (svg, bg) => {
+    let best = null;
+    for (const g of svg.querySelectorAll('path,circle,ellipse,rect,line,polyline,polygon,text')) {
+      const gs = getComputedStyle(g);
+      if (gs.display === 'none' || gs.visibility === 'hidden') continue;
+      let op = 1;
+      for (let x = g; x && x !== svg; x = x.parentElement) op *= Number(getComputedStyle(x).opacity);
+      const paints = [[gs.stroke, gs.strokeOpacity, parseFloat(gs.strokeWidth) > 0], [gs.fill, gs.fillOpacity, g.tagName !== 'line']];
+      for (const [paint, alpha, on] of paints) {
+        if (!on || !paint || paint === 'none' || /^url\(/.test(paint)) continue;
+        const c = P(paint), a = c.a * Number(alpha) * op;
+        if (a <= 0) continue;
+        const fg = over({...c, a}, bg), k = ratio(fg, bg);
+        if (!best || k > best.k) best = {k, fg};
+      }
+    }
+    return best;
+  };
   for (const svg of document.querySelectorAll('svg')) {
     if (svg.parentElement?.closest('svg')) continue;
     const r = shown(svg); if (!r || r.width < 6 || !onTop(svg, r)) continue;
-    const s = getComputedStyle(svg);
-    let c = s.stroke && s.stroke !== 'none' ? s.stroke : s.fill;
-    if (!c || c === 'none' || P(c).a === 0) {
-      const p = svg.querySelector('path,circle,rect,line,polyline,polygon');
-      if (p) { const ps = getComputedStyle(p); c = ps.stroke && ps.stroke !== 'none' ? ps.stroke : ps.fill; }
-    }
-    if (!c || c === 'none' || /^url\(/.test(c)) continue;
-    const {bg, approx} = bgOf(svg.parentElement), fg = over(P(c), bg), k = ratio(fg, bg);
-    if (P(c).a === 0) continue;
-    if (k < 3) add('ui', sel(svg), {kind: 'icon', sel: sel(svg), label: (svg.closest('[aria-label]')?.getAttribute('aria-label') || '').slice(0, 30), ratio: k, need: 3, fg: hex(fg), bg: hex(bg), approx, ...box(r)});
+    const {bg, approx} = bgOf(svg.parentElement), ink = inkOf(svg, bg);
+    if (!ink) continue;
+    if (ink.k < 3) add('ui', sel(svg), {kind: 'icon', sel: sel(svg), label: (svg.closest('[aria-label]')?.getAttribute('aria-label') || '').slice(0, 30), ratio: ink.k, need: 3, fg: hex(ink.fg), bg: hex(bg), approx, ...box(r)});
   }
 
   for (const e of document.querySelectorAll('input:not([type=hidden]),textarea,select,button,[role=checkbox],[role=radio],[role=switch],[role=slider]')) {
@@ -303,7 +319,7 @@ async function desk(theme, width) {
 
 try {
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 820]) {
+    for (const width of WIDTHS) {
       await homeAndSettings(theme, width);
       await desk(theme, width);
     }

@@ -28,6 +28,10 @@ import traceback
 import urllib.request
 import urllib.parse
 from pathlib import Path
+try:
+    from legacy_panel_argv import npm_install_command, open_folder, open_web
+except ImportError:  # imported as app.super_pinkie (tests, no app/ on sys.path)
+    from app.legacy_panel_argv import npm_install_command, open_folder, open_web
 
 # A non-UTF-8 Windows locale gives this process a cp1252 stdout; the Chinese
 # status prints below (e.g. the tkinter prompt) then raise UnicodeEncodeError.
@@ -165,11 +169,7 @@ def install_openclaw_npm(log):
     """通过 npm 全局安装 openclaw"""
     log("==> 正在安装 C.le. 兼容内核...")
     try:
-        cmd = ["npm", "install", "-g", "openclaw"]
-        if os.name == "nt":
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True, **hidden_process_kwargs())
-        else:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
+        proc = subprocess.Popen(npm_install_command(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **hidden_process_kwargs())
         for line in iter(proc.stdout.readline, ""):
             log("  " + line.rstrip())
         proc.wait()
@@ -1349,7 +1349,7 @@ def run_control_center():
     make_button(btn_row1, "🌟 一键全量安装 / 修复", do_full_deploy, big=True, color="#E91E63").pack(side="left", padx=4)
     make_button(btn_row1, "⬆️ 检查并拉取更新", lambda: threading.Thread(target=lambda: [pull_and_update(log), refresh_status()], daemon=True).start(), color="#C2185B").pack(side="left", padx=4)
     make_button(btn_row1, "🔄 刷新状态", refresh_status).pack(side="left", padx=4)
-    make_button(btn_row1, "🌐 打开 Web 界面", lambda: os.system("open http://127.0.0.1:18789" if sys.platform == "darwin" else "start http://127.0.0.1:18789")).pack(side="left", padx=4)
+    make_button(btn_row1, "🌐 打开 Web 界面", lambda: open_web("http://127.0.0.1:18789")).pack(side="left", padx=4)
 
     # ------------------ Tab 2: API Key 配置 ------------------
     api_card = tk.Frame(tab_api, bg=CARD, highlightbackground=PINK, highlightthickness=1)
@@ -1396,7 +1396,7 @@ def run_control_center():
     make_button(adv_frame, "⏹ 停止注入代理", lambda: proxy.stop()).pack(side="left", padx=4)
     make_button(adv_frame, "🔄 重启 Gateway", lambda: restart_openclaw_gateway(log)).pack(side="left", padx=4)
     make_button(adv_frame, "🗑 卸载全部补丁", lambda: [apply_patch(True, log), refresh_status()]).pack(side="left", padx=4)
-    make_button(adv_frame, "📂 打开配置目录", lambda: os.system(f'open "{prompts_dir()}"' if sys.platform == "darwin" else f'explorer "{prompts_dir()}"')).pack(side="left", padx=4)
+    make_button(adv_frame, "📂 打开配置目录", lambda: open_folder(prompts_dir())).pack(side="left", padx=4)
 
     # 公共日志框（置底）
     log_lbl = tk.Label(root, text="📜 操作日志与运行输出:", bg=BG, fg=TEXT, font=("PingFang SC", 9, "bold"), anchor="w")
