@@ -10,7 +10,7 @@
 | K0 摸底 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a（接手 Codex-Win-4d8c） | 2026-11-21 | [PR #41](https://github.com/Cle0726/super-pinkie/pull/41) |
 | K1 建内核仓库 | 已合并（本 PR 进入 main 后生效） | Gemini-Win-9c2a | 2026-11-21 | [PR #50](https://github.com/Cle0726/super-pinkie/pull/50) |
 | K2 换成自己编译的内核 | 未开始（要等维护计划 M0、M5 合进主线） | | | |
-| K3 补丁搬进源码 | 进行中（34 个里 12 个：「易」档 apply-same-session-recovery db2e27bb、apply-loopback-model-reliability f218c65b、apply-work-thinking 90c8b6ab，「中」档 apply-control-ui-cache 05cf69b8、apply-material-preview-csp 4aec0962、apply-pinkie-managed-skills a1151f99、apply-preflight-compaction-events a675facb、apply-overflow-compaction-events f4ff512d、apply-chat-linebreaks 44ad0a32 + 80c9912e（按碧琪 #88 修好的版本），「难」档 apply-retry-user-preservation ad9b5ab1、apply-retry-single-user 88bfc292、apply-compaction-boundary-recovery c5db9a29 已在 cle-core 本机提交；#10–#14 暂不搬；12-01 前 cle-core 不推送，见 progress/K3.md） | Claude Code（m4 线，Windows） | 2026-11-25 | 分支 core/k3-patches |
+| K3 补丁搬进源码 | 进行中（34 个里已搬 26 个，其中已独立复核 16 个；#08 部分搬（缺 v2 帧超限，sha256 待同步）；缺 7 个：#10–#14、#21、#34（基准无落点）。cle-core 链式分支都已推送，栈顶 `core/k3-27-work-first-chat`@04a296e8，未合 cle-core main、未发版。11-27 起 K3 归 Linux 并行：K3-A 盘点、K3-B 复核 #18–#33、K3-C 搬 #10–#14、K3-D #08 v2 / #21 / #34、K3-E 整合，见 progress/K3.md 盘点表） | Linux（linux2 等，win-coord 派单 #96）；先前 m4（Windows）、macK3 / macdev2 / macdev5（Mac） | 2026-11-27 | 分支 core/k3-patches（[PR #80](https://github.com/Cle0726/super-pinkie/pull/80)，草稿） |
 | K4 显示名字改为 C.le. | 进行中（草稿 PR；用户可见处 84 处已改，24 处因文件被 #54/#67/#74 占用延后，见 progress/K4.md） | Claude-Win-r7m3（Windows） | 2026-11-24 | [PR #77](https://github.com/Cle0726/super-pinkie/pull/77) |
 | K5 正式切换 | 未开始（发版要用户点头） | | | |
 | K6 界面搬进源码 | 未开始（要等维护计划 M3 收窄版完成） | | | |
