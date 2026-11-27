@@ -113,3 +113,20 @@ test('day tier menu text keeps >= 4.5:1 alphas, not the old faded ones',()=>{
   }
   assert.doesNotMatch(src,/rgba\(87,54,74,\.(72|53|62|43)\)/,'不留旧日间淡色');
 });
+
+test('tier badges sit on a dark accent mix and tier cards carry a tinted border (B11·T3/T4)',()=>{
+  const src=read('ui/injections/laolao-deep-think.js');
+  const night=':is(html[data-theme-mode="dark"],html[data-pinkie-night])';
+  const numeral=src.match(/\.laolao-deep-think-menu__numeral\{[^}]*\}/);
+  const recommended=src.match(/\.laolao-deep-think-menu__recommended\{[^}]*\}/);
+  const item=src.match(/\n\.laolao-deep-think-menu__item \{[^}]*\}/);
+  assert.ok(numeral&&recommended&&item,'numeral / recommended / item 规则存在');
+  assert.ok(numeral[0].includes('background:color-mix(in srgb,var(--tier-accent) 65%,#3a2030)'),`numeral 底色压深（实际 ${numeral[0]}）`);
+  assert.ok(recommended[0].includes('background:color-mix(in srgb,var(--tier-accent) 60%,#3a2030)'),`recommended 底色压深（实际 ${recommended[0]}）`);
+  assert.doesNotMatch(numeral[0],/background:color-mix\(in srgb,var\(--tier-accent\) 82%,white\)/,'不留旧 numeral 浅底');
+  assert.doesNotMatch(recommended[0],/background:color-mix\(in srgb,var\(--tier-accent\) 76%,white\)/,'不留旧 recommended 浅底');
+  assert.ok(item[0].includes('--tier-line:color-mix(in srgb,var(--tier-accent) 55%,#7a5468)'),'日间 item 有色边框');
+  assert.ok(item[0].includes('border:1px solid var(--tier-line)'),'item 边框走 --tier-line');
+  assert.doesNotMatch(item[0],/border:1px solid rgba\(255,255,255,\.28\)/,'不留旧白色淡边框');
+  assert.ok(src.includes(`${night} .laolao-deep-think-menu__item{--tier-line:color-mix(in srgb,var(--tier-accent) 60%,#d8c8d0);`),'夜间 item 有单独的浅色边框');
+});
