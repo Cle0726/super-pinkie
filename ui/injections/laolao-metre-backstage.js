@@ -133,7 +133,7 @@
     // 窄窗口的总谱浮层开着时，带子让给浮层（浮层铺到最底下；总谱自己的「运行状况」里有网关那一行，读的是同一份状态）
     if (!r || r.width < 280 || onHome() || root.getAttribute('data-metre-board') === 'overlay') { root.style.setProperty('--metre-bs-room', '0px'); root.removeAttribute('data-metre-bs'); return null; }
     if (!widths) widths = measure();
-    const tier = tierWidth('full') <= r.width ? 'full' : 'short';
+    const tier = tierWidth('full') <= r.width ? 'full' : tierWidth('short') <= r.width ? 'short' : 'tight';   // B28：短档也放不下（1440 开着工作台，聊天栏约 340px）走紧档：短档字，格子可缩、省略号，全文在 title
     const top = window.innerHeight - BOTTOM - 24;   // 离窗口下沿固定 8px，各尺寸一样；输入框那一栏往上让出 24px（keys.css 的 [data-metre-bs]）
     Object.assign(band.style, {left: Math.round(r.left) + 'px', top: top + 'px', width: Math.round(r.width) + 'px'});
     root.style.setProperty('--metre-bs-room', Math.max(0, Math.round(window.innerHeight - top + 4)) + 'px');
@@ -179,7 +179,7 @@
       band.dataset.tier = tier;
       band.dataset.unsynced = view.unsynced ? '1' : '';
       band.innerHTML = (tier === 'full' ? LABEL : '') + view.cells.map((c) => chip(c, tier, syncing)).join('');
-      band.querySelectorAll('.pk-bs__seg').forEach((n) => { n.style.width = widths[tier][n.dataset.seg] + 'px'; });
+      band.querySelectorAll('.pk-bs__seg').forEach((n) => { n.style.width = widths[tier === 'tight' ? 'short' : tier][n.dataset.seg] + 'px'; if (tier === 'tight' && n.dataset.seg !== 'queue') Object.assign(n.style, {flexShrink: String({run: 3, eng: 2, gw: 1}[n.dataset.seg] || 1), minWidth: '44px'}); });   // 紧档：「排队」不缩，本轮先缩、再引擎、再网关
     }
     if (pop) fillPop();
   }
@@ -219,5 +219,5 @@
   window.addEventListener('resize', () => { if (band) render(true); });
   for (const name of ['pinkie:metre-board-open', 'pinkie:metre-board-closed']) window.addEventListener(name, () => render(true));   // 总谱开 / 关（laolao-metre-board.js 发）
   document.fonts?.ready?.then(() => { widths = null; sig = ''; if (band) render(); });
-  window.PinkieMetreBackstage = Object.freeze({describe, voiceState, render: () => render(true)});
+  window.PinkieMetreBackstage = Object.freeze({describe, voiceState, render: () => render(true), tierWidths: () => { widths ||= measure(); return {full: tierWidth('full'), short: tierWidth('short')}; }});   // tierWidths 给测试：两档各要多宽
 })();

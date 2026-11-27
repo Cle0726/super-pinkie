@@ -24,7 +24,11 @@ export function trimLessonTranscript(transcript,events=[],limit=20000){
 export class LearningLesson {
  constructor(store,{materials,requestModel=null,now=()=>Date.now()}={}){
   this.store=store;this.materials=materials;this.requestModel=requestModel;this.now=now;this.file=path.join(store.root,'lessons.json');this.pending=new Map();this.saveChain=Promise.resolve();this.data={v:1,lessons:[]};
-  if(fs.existsSync(this.file)){const data=JSON.parse(fs.readFileSync(this.file,'utf8'));if(!Array.isArray(data.lessons))throw new Error('上课记录格式无效');this.data=data;}
+  // A damaged lessons.json must not stop the learning gateway (and with it the whole plugin) from registering:
+  // set the file aside untouched next to the original and start with an empty record.
+  if(fs.existsSync(this.file)){const raw=fs.readFileSync(this.file,'utf8');let data=null;try{data=JSON.parse(raw);}catch{}
+   if(data&&Array.isArray(data.lessons))this.data=data;
+   else{this.corruptFile=this.file+'.corrupt-'+this.now()+'-'+process.pid;try{fs.renameSync(this.file,this.corruptFile);}catch{fs.copyFileSync(this.file,this.corruptFile);}}}
  }
  async close(){for(const lesson of this.all())if(lesson.status==='active'){lesson.status='paused';lesson.pauses.push({start:this.now(),shutdown:true});lesson.lastEventAt=this.now();}await Promise.allSettled([...this.pending.values()]);await this.save();}
  all(){return this.data.lessons;}

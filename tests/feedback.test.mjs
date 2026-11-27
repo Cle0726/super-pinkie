@@ -431,6 +431,54 @@ test('24-hour interval triggers auto-flush even below 50-item batch cap', async 
   assert.equal(requests.length, 2);
 });
 
+test('a disk error during a background auto-flush is logged, not an unhandled rejection, and the queue is kept', async t => {
+  const unhandled = [];
+  const onUnhandled = error => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const root = makeTempDir();
+  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
+  const pair = generateFeedbackKeypair();
+  const warns = [];
+  let uploads = 0;
+  const manager = new FeedbackManager({
+    root,
+    batchSize: 1,
+    logger: {info() {}, warn: message => warns.push(String(message))},
+    buildConfig: {
+      channel: 'release',
+      version: '2.5.49',
+      repo: 'Cle0726/pinkie-feedback',
+      token: 'ghp_FAKE_TOKEN_DISK_ERROR_TEST_1234',
+      publicKey: pair.publicKeyDerBase64,
+    },
+    fetchFn: async () => { uploads += 1; return {ok: true, status: 201}; },
+  });
+  manager.setPrefs({consent: true});
+  // 上传成功后删队列那一步同步写盘失败：它不在 try 里，后台调用方 void 发出去不管。
+  const realRemove = manager.store.removeIds.bind(manager.store);
+  let broken = true;
+  manager.store.removeIds = ids => {
+    if (broken) { broken = false; throw new Error('EIO: i/o error, rename'); }
+    return realRemove(ids);
+  };
+  manager.onUserPrompt({sessionKey: 'agent:main:disk', mode: 'chat', prompt: '你好'});
+  // 攒够一批（batchSize 1）就会在这里 void this.maybeAutoFlush()；不 await，要看的就是没人接时会不会漏出去。
+  manager.onAgentEnd({success: true}, {sessionKey: 'agent:main:disk'});
+  for (let i = 0; i < 200 && (broken || manager.flushing); i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(broken, false, '写盘故障应该真的触发过');
+  assert.deepEqual(unhandled, []);
+  assert.equal(manager.flushing, null);
+  assert.equal(uploads, 1);
+  assert.equal(warns.some(message => /auto upload failed/.test(message) && /EIO/.test(message)), true, '错误要记进日志');
+  assert.equal(manager.status().queueCount, 1, '没删成的记录留在队列里');
+  const retry = await manager.maybeAutoFlush();
+  assert.equal(retry.ok, true);
+  assert.equal(uploads, 2);
+  assert.equal(manager.status().queueCount, 0);
+});
+
 test('Mac/Win packagers and release workflow wire feedback config only on release channel', () => {
   const repoRoot = path.resolve(import.meta.dirname, '..');
   const buildSh = fs.readFileSync(path.join(repoRoot, 'desktop/macos/build.sh'), 'utf8');

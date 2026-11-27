@@ -283,12 +283,18 @@ test('有快照的 sessions.changed 先合并行；打开前就在跑的已用�
   assert.equal(first.sinceEstimated, true);
   assert.match(first.elapsed, /^≥ /);
   gateway('sessions.changed', {sessionKey: 'agent:main:b', reason: 'send', key: 'agent:main:b', hasActiveRun: true, status: 'running', startedAt: 1_000_000, label: '乙'});
+  // 反例：若 sessions.changed 不先把快照合并成行（只等下一次读列表），b 此刻不在看板里，这条会红。
   const keys = board.view().rows.map((r) => r.key);
-  assert.ok(keys.includes('agent:main:b') || gw.listCalls().length >= 1);
+  assert.ok(keys.includes('agent:main:b'), `快照行应立刻出现在看板里，实际：${keys.join(',')}`);
   gateway('agent', {stream: 'lifecycle', sessionKey: 'agent:main:a', data: {phase: 'start', startedAt: 1_000_000}});
-  // 收到带 startedAt 的 start 后不再用「≥」估。
+  // 收到带 startedAt 的 start 后不再用「≥」估；反例：若 start 不记下真实开始时间，下面会红。
   const after = board.view().rows.find((r) => r.key === 'agent:main:a');
-  if (after?.elapsed) assert.ok(!after.elapsed.startsWith('≥ ') || after.estimated === false || true);
+  assert.ok(after, '甲应仍在看板里');
+  assert.equal(after.since, 1_000_000);
+  assert.equal(after.sinceEstimated, false);
+  assert.equal(after.estimated, false);
+  assert.ok(after.elapsed, '在跑的行应有已用时');
+  assert.ok(!after.elapsed.startsWith('≥ '), `已用时不应再是估计值，实际：${after.elapsed}`);
   assert.equal(api.formatElapsed(130_000, false), '2 分 10 秒');
   assert.equal(api.formatElapsed(130_000, true), '≥ 2 分');
 });
