@@ -691,10 +691,29 @@ export async function openScenePage(browser, origin, sceneId, theme) {
   return {context, page, pageErrors};
 }
 
+// B62 / B51：CI Linux 上 visual-baseline 的 3 遍确定性偶发差 6–8 px（#398 home-learning-day、
+// #393 sidebar-collapsed-night、#404 study-desk-day、#407 sidebar-collapsed-day 等，场景分散）。
+// 字体 / 图片 / 背景图的「加载完成」不等于「已经画到合成帧上」：解码或光栅化晚到一两帧时，
+// 第一张截图会拍到还没画完的帧。所以截图前先等画面本身停下来：每隔两帧拍一张，
+// 直到连续两张逐字节相同才算稳定。不加容差、不放宽断言、不加超时；
+// 拍满上限张还在变，就直接报错（页面停不下来本身就是问题）。
+export const SETTLE_MAX_SHOTS = 8;
+
+export async function screenshotWhenSettled(page, {label = 'scene', maxShots = SETTLE_MAX_SHOTS} = {}) {
+  let previous = await page.screenshot({animations: 'disabled', type: 'png'});
+  for (let shot = 2; shot <= maxShots; shot += 1) {
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const next = await page.screenshot({animations: 'disabled', type: 'png'});
+    if (Buffer.compare(next, previous) === 0) return next;
+    previous = next;
+  }
+  throw new Error(`${label} never settled: ${maxShots} screenshots taken 2 frames apart, each differed from the one before`);
+}
+
 export async function captureScenePng(browser, origin, sceneId, theme) {
   const {context, page, pageErrors} = await openScenePage(browser, origin, sceneId, theme);
   try {
-    const png = await page.screenshot({animations: 'disabled', type: 'png'});
+    const png = await screenshotWhenSettled(page, {label: `${sceneId}-${theme}`});
     return {png, pageErrors};
   } finally {
     await context.close();
