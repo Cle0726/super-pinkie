@@ -273,8 +273,10 @@ test('native startup uses the bundled opaque mascot video instead of exposing th
   assert.match(loading, /scene\.duration - 0\.04/);
   assert.match(loading, /assets\/laolao-splash\.mp4/);
   assert.match(loading, /assets\/laolao-splash-video-poster\.png/);
-  assert.match(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/chat"\)/);
-  assert.doesNotMatch(loading, /location\.replace\("http:\/\/127\.0\.0\.1:18789\/"\)/);
+  // B95: the port comes from the fragment and defaults to the real 18789 gateway.
+  assert.match(loading, /gatewayPort = .*: "18789";/);
+  assert.match(loading, /location\.replace\(`http:\/\/127\.0\.0\.1:\$\{gatewayPort\}\/chat`\)/);
+  assert.doesNotMatch(loading, /location\.replace\(`http:\/\/127\.0\.0\.1:\$\{gatewayPort\}\/`\)/);
   assert.match(loading, /background: #efcbd3/);
   assert.doesNotMatch(loading, /background:\s*transparent/);
   assert.doesNotMatch(loading, /<main\b|超級碧琪正在准备<\/p>/);
