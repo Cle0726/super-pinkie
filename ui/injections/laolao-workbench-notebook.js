@@ -63,9 +63,9 @@
           img.alt = '输出图片';
           box.append(img);
         } else if (data['image/svg+xml']) {
-          const wrap = el('div', 'pk-nb-svg');
-          wrap.innerHTML = String(data['image/svg+xml']);
-          box.append(wrap);
+          const wrap = el('div', 'pk-nb-svg'), img = el('img', 'pk-nb-svg-img'), svg = data['image/svg+xml'];
+          img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(Array.isArray(svg) ? svg.join('') : String(svg)); img.alt = '输出图片';
+          wrap.append(img); box.append(wrap);   // 放进 <img>：别人给的 .ipynb 里 SVG 带的 <script>、onload、外链都不会执行
         }
         const plain = data['text/plain'];
         if (plain) {
