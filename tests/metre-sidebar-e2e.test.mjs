@@ -2,6 +2,7 @@ import {test, before, after} from 'node:test';
 import assert from 'node:assert/strict';
 import {fileURLToPath} from 'node:url';
 import {playwright} from '../tools/study-desk/harness.mjs';
+import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
 const script = fileURLToPath(new URL('../ui/injections/laolao-session-list.js', import.meta.url));
 const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
@@ -16,6 +17,7 @@ const engine = process.env.PINKIE_IMAGE_UI_ENGINE || 'chromium';
 let browser;
 before(async () => {
   browser = await playwright()[engine].launch({headless: true, ...(engine === 'chromium' ? {channel: 'chrome'} : {})});
+  await waitFirstFrame(browser, `metre-sidebar-e2e (${engine})`);
 }, {timeout: 120_000});
 after(async () => { await browser?.close(); });
 
