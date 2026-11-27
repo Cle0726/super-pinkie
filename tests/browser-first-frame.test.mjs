@@ -11,7 +11,9 @@ import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {waitFirstFrame} from './helpers/browser-first-frame.mjs';
 
-const FILES = ['metre-sidebar-e2e.test.mjs', 'tool-images-e2e.test.mjs', 'metre-switch-e2e.test.mjs', 'metre-backstage-sync.test.mjs'];
+// L84a (#96): b83-reduced-motion too. Its browser test launched inside its 40 s budget and opened three
+// cold pages; run 46027289535 C.le. timed out at 40000 ms while portable-checks took 19.8 s and windows 2.1 s.
+const FILES = ['metre-sidebar-e2e.test.mjs', 'tool-images-e2e.test.mjs', 'metre-switch-e2e.test.mjs', 'metre-backstage-sync.test.mjs', 'b83-reduced-motion.test.mjs'];
 const LAUNCH = new RegExp('\\.launch\\(');
 
 // Split a test file into its before(...) hook source and its test(...) bodies.

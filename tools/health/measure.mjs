@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {patchApplyFileNames} from './patch-list.mjs';
 import {indirectMetrics} from './patterns.mjs';
 import {adoptUnmeasured, healthChanges, injectionTotals, LINE_LIMIT, loadExceptions, readJson, syncBaseline} from './ratchet.mjs';
 
@@ -233,7 +234,7 @@ export async function measure(root = ROOT, {includeTestInventory = true, listRoo
     otherUi: sections.otherUi,
     otherUiTotals: injectionTotals(sections.otherUi, globals.otherUi.size),
     pageVersions: {occurrences: pageOccurrences, total: pageOccurrences.length},
-    patchApplyFiles: all.filter(file => /^patch\/apply-[^/]*\.mjs$/.test(file) && fs.lstatSync(path.join(root, file), {throwIfNoEntry: false})?.isFile()).length,
+    patchApplyFiles: patchApplyFileNames(root, all).length, // 和 tools/health/patch-files.json 的棘轮用同一个判定
   };
   if (!strict) report.problems = problems;
   // Informational only: the guard doesn't have to open hundreds of test files.

@@ -782,6 +782,7 @@
   const hex = (c, a) => '#' + [c.r, c.g, c.b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('') + (a == null ? '' : Math.round(a * 255).toString(16).padStart(2, '0'));
   const mix = (a, b, t) => ({r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t});
   const luma = c => (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+  const contrast = (a, b) => { const l = c => [c.r, c.g, c.b].map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0); const [x, y] = [l(a), l(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }, reach = (from, to, bg, min) => { for (let t = 0; t < 1; t += 0.05) { const c = mix(from, to, t); if (contrast(c, bg) >= min) return c; } return to; }; // reach：从 from 往 to 挪到对 bg 够 min:1 为止（行号按固定比例日间只有 1.7~2.1:1）
   // C.le. 主题：底色、强调色取当前模式的 CSS 变量；语法色固定一套碧琪粉 + C.le. 蓝。
   function themeColors() {
     const v = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -834,7 +835,7 @@
         'editor.selectionBackground': hex(c.accent, c.dark ? 0.28 : 0.22), 'editor.inactiveSelectionBackground': hex(c.accent, 0.12),
         'editor.selectionHighlightBackground': hex(c.cle, 0.14), 'editor.wordHighlightBackground': hex(c.cle, 0.12), 'editor.wordHighlightStrongBackground': hex(c.cle, 0.2),
         'editor.findMatchBackground': hex(c.cle, 0.42), 'editor.findMatchHighlightBackground': hex(c.cle, 0.2),
-        'editorLineNumber.foreground': hex(c.muted, 0.7), 'editorLineNumber.activeForeground': hex(c.accent),
+        'editorLineNumber.foreground': hex(reach(c.muted, c.text, c.bg, 4.6)), 'editorLineNumber.activeForeground': hex(reach(c.accent, c.text, mix(c.bg, c.accent, c.dark ? 0.06 : 0.05), 4.6)),
         'editorIndentGuide.background1': hex(c.faint), 'editorIndentGuide.activeBackground1': hex(c.muted, 0.6),
         'editorWhitespace.foreground': hex(c.faint), 'editorRuler.foreground': hex(c.faint),
         'editorBracketMatch.background': hex(c.cle, 0.18), 'editorBracketMatch.border': hex(c.cle, 0.6),
@@ -852,7 +853,6 @@
       },
     });
     m.editor.setTheme('cle');
-    root.classList.toggle('is-light', !c.dark);
   }
 
   let notebookReady = null;

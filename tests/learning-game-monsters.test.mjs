@@ -136,3 +136,59 @@ test('错题怪一出生就在后台备好下一次讨伐的变体；讨伐时�
   const h2 = await game.modules.monsters.huntStart({requestId: 'p2', sessionKey: KEY});
   assert.equal(h2.items[0].variant.source, 'local');
 });
+
+test('后台起名时写盘出错不漏成 unhandledRejection；没记上 nameTried，下次还会再起', async t => {
+  const {game} = gameFixture(t);
+  const unhandled = [];
+  const onUnhandled = error => unhandled.push(error);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const model = fakeModel();
+  game.requestModel = model;
+  // 只让起名那一次「记 nameTried」的写盘失败（在 fn 改完、写盘之前抛）；出生、出变体的写盘照常。
+  const realMutate = game.mutate.bind(game);
+  let broken = false;
+  game.mutate = fn => realMutate(state => {
+    const result = fn(state);
+    if (broken && Object.values(state.monsters?.list || {}).some(m => m.nameTried)) { broken = false; throw new Error('EIO: i/o error, write'); }
+    return result;
+  });
+  const monsters = game.modules.monsters;
+  // 出生前就打开故障：spawn 之后那次起名（出生写盘之后才开跑）调完模型、记 nameTried 的那次写盘直接撞上。
+  broken = true;
+  bornWrong(game, 's1', 'k7');
+  await Promise.resolve();
+  assert.ok(monsters.naming, 'spawn 之后的起名已经开跑');
+  // 不去 await monsters.naming：kickNaming 的调用方也不 await 它，要看的就是没人接时会不会漏出去。
+  for (let i = 0; i < 200 && monsters.naming; i += 1) await new Promise(resolve => setTimeout(resolve, 5));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(broken, false, '写盘故障应该真的触发过');
+  assert.equal(model.calls.filter(r => r === MONSTER_NAME_RULES).length, 1, '首次起名真的调过模型');
+  assert.deepEqual(unhandled, []);
+  assert.equal(monsters.naming, null);
+  const m = Object.values(game.read().monsters.list)[0];
+  assert.equal(m.named, 'local');
+  assert.equal(m.nameTried, undefined);
+  monsters.kickNaming();
+  await monsters.naming;
+  assert.equal(Object.values(game.read().monsters.list)[0].named, 'model');
+});
+
+test('L73：新怪出生写盘之后才起名——首次起名就调到模型、新怪当场拿到名字', async t => {
+  const {game} = gameFixture(t);
+  const model = fakeModel();
+  game.requestModel = model;
+  bornWrong(game, 's1', 'k8');
+  const monsters = game.modules.monsters;
+  await Promise.resolve();
+  assert.ok(monsters.naming, 'spawn 之后的起名已经开跑');
+  await monsters.naming;
+  // 旧代码：kickNaming 在外层 mutate 写盘前就 read()，看不到新怪，模型 0 次就收工。
+  assert.equal(model.calls.filter(r => r === MONSTER_NAME_RULES).length, 1, '首次起名调模型 1 次');
+  const m = Object.values(game.read().monsters.list)[0];
+  assert.equal(m.named, 'model');
+  assert.equal(m.nameTried, true);
+  assert.equal(m.name, '一般现在时 · 迷糊史莱姆');
+  await new Promise(resolve => setTimeout(resolve, 10));
+  await monsters.preparing;
+});

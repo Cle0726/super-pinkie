@@ -199,7 +199,8 @@ export class LearningCompanion {
       if (text && text.length <= 48 && !ADDRESS.test(text) && !SCOLD.test(text) && !/[\u{1F300}-\u{1FAFF}]/u.test(text) && !recent.includes(text) && deskJustified(text, rows))
         line = {text, source: 'model', kind, model: response.model?.name || response.model?.ref || ''};
     } catch {}
-    writeJson(this.dailyFile(date), {date, at: this.now(), line});
+    // 后台任务没人接（wait=false）：写盘失败也不能漏成 unhandledRejection；凭据留着 line:null，下次再写。
+    try { writeJson(this.dailyFile(date), {date, at: this.now(), line}); } catch {}
     return line;
   }
 
@@ -256,7 +257,8 @@ export class LearningCompanion {
       }
       result = {date, status: kept.length ? 'ok' : 'none', clippings: kept, at: this.now()};
     } catch (error) { result = {date, status: 'failed', clippings: [], at: this.now(), error: clean(error.message, 200)}; }
-    writeJson(this.clipFile(date), result);
+    // 同上：写盘失败不外漏；文件还停在 running，10 分钟后自然重试。
+    try { writeJson(this.clipFile(date), result); } catch {}
     return result;
   }
 
