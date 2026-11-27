@@ -1329,7 +1329,7 @@
     "ui/injections/laolao-metre-brand.css": {
       "important": 69,
       "importantIndirect": 0,
-      "lines": 250,
+      "lines": 245,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
@@ -1654,7 +1654,7 @@
     "ui/injections/laolao-metre-transition.js": {
       "important": 0,
       "importantIndirect": 0,
-      "lines": 218,
+      "lines": 217,
       "mutationObserverRefs": 0,
       "mutationObservers": 0,
       "observeUnclear": 0,
