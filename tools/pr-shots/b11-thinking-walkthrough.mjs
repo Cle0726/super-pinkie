@@ -260,6 +260,13 @@ function measure() {
 
   const list = (m, by) => [...m.values()].sort(by).slice(0, 40);
   const bar = document.querySelector('.pk-run');
+  const runText = [];
+  for (const {e, text} of leaves) {
+    if (!e.closest('.pk-run')) continue;
+    const s = getComputedStyle(e), px = parseFloat(s.fontSize), wt = Number(s.fontWeight) || 400;
+    const {bg, approx} = bgOf(e), fg = over(P(s.color), bg);
+    runText.push({sel: sel(e), text, ratio: ratio(fg, bg), need: px >= 24 || (px >= 18.66 && wt >= 700) ? 3 : 4.5, fg: hex(fg), bg: hex(bg), fontSize: px, approx});
+  }
   return {
     leaves: leaves.length,
     counts: Object.fromEntries(Object.entries(issues).map(([k, m]) => [k, m.size])),
@@ -272,6 +279,10 @@ function measure() {
     clipText,
     mode: document.documentElement.dataset.laolaoMode || '',
     runBar: Boolean(bar && !bar.hidden && bar.getBoundingClientRect().height > 0),
+    runLayout: bar?.dataset.layout || '',
+    runOpen: Boolean(bar?.classList.contains('is-open')),
+    runSummary: bar && !bar.hidden ? (bar.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',
+    runText,
     thinkingBoxes: document.querySelectorAll('.pinkie-thinking').length,
     processCards: document.querySelectorAll('.chat-group--process[data-pinkie-process]').length,
     path: location.pathname,
@@ -434,12 +445,57 @@ async function session(theme, width) {
   }
 }
 
+// 运行状态条 section.pk-run：直接复用 scripts/chat-ui-harness/run-status-shots.js 的 STATES（同一条
+// pinkie:gateway-event 事件流 + __fakeRunStatus / __fakePlan），逐个状态拍。thinking / done 在非 Metre
+// 下按设计隐藏（laolao-run-status.js:171/:208）。真页面 harness 冻结了 Date：slower-than-usual 的
+// phaseFor 恒为 0，只能显示为 review 态；dropConnection 之后永久离线，所以 reconnecting 必须最后拍。
+const RUN_HIDDEN = new Set(['thinking', 'done']);
+const RUN_SCRIPT = path.join(repoRoot, 'scripts/chat-ui-harness/run-status-shots.js');
+const runRows = [];
+async function runStatus(theme, width) {
+  let opened;
+  try {
+    opened = await openScene('home-thinking', theme, width);
+    const {page, pageErrors} = opened;
+    await page.addScriptTag({path: RUN_SCRIPT});
+    await page.waitForFunction(() => document.querySelector('.chat-thread') && window.__runStatusStates?.length, null, {timeout: 15_000});
+    await page.waitForTimeout(1500);
+    const names = await page.evaluate(() => window.__runStatusStates);
+    for (let i = 0; i < names.length; i++) {
+      const view = names[i];
+      try {
+        await page.evaluate((k) => window.__runStatusShot(k), i);
+        await page.waitForTimeout(view === 'reconnecting' ? 1200 : 900);
+        await shoot(page, pageErrors, {group: 'run', view, theme, width});
+        const row = report[report.length - 1];
+        const expect = !RUN_HIDDEN.has(view);
+        row.runExpect = expect;
+        row.runOk = !row.error && row.runBar === expect && !row.pageErrors.length;
+        row.runLow = (row.runText || []).filter((t) => t.ratio < t.need);
+        runRows.push(row);
+      } catch (error) {
+        fail(`run-${view}`, theme, width, error);
+        runRows.push({name: `run-${view}-${width}-${theme}`, runOk: false, error: String(error?.message || error).slice(0, 300)});
+      }
+    }
+  } catch (error) {
+    fail('run', theme, width, error);
+    runRows.push({name: `run-${width}-${theme}`, runOk: false, error: String(error?.message || error).slice(0, 300)});
+  } finally {
+    await opened?.context.close();
+  }
+}
+
+const only = process.env.PINKIE_WALK_ONLY || '';
 try {
   for (const theme of ['day', 'night']) {
-    for (const width of [1440, 820]) {
-      await homeAndSettings(theme, width);
-      await session(theme, width);
+    if (only !== 'run') {
+      for (const width of [1440, 820]) {
+        await homeAndSettings(theme, width);
+        await session(theme, width);
+      }
     }
+    for (const width of [1440, 820, 480]) await runStatus(theme, width);
   }
 } finally {
   fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
@@ -450,3 +506,6 @@ try {
 }
 console.log(`pr-shots: ${lines.length} 张 → ${out}（${engine}）`);
 for (const r of report) console.log(`${r.name}\t${r.error ? 'ERROR ' + r.error : JSON.stringify(r.counts) + ` mode=${r.mode} clip=${(r.clipText || []).length} run=${r.runBar}`}`);
+const runBad = runRows.filter((r) => !r.runOk);
+for (const r of runRows) console.log(`run\t${r.name}\t${r.runOk ? 'ok' : 'BAD'}\tbar=${r.runBar} expect=${r.runExpect} layout=${r.runLayout || ''} open=${r.runOpen} low=${(r.runLow || []).map((t) => `${t.ratio}<${t.need}`).join(',')} "${r.runSummary || ''}"${r.error ? ' ERROR ' + r.error : ''}`);
+if (runBad.length) { console.error(`pk-run: ${runBad.length}/${runRows.length} 个状态不符预期`); process.exitCode = 1; }
