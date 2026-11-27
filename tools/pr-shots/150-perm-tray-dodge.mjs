@@ -56,6 +56,22 @@ const probe = (force) => {
     const floats = [...(input?.querySelectorAll('button, summary, [role="button"]') || [])].filter((b) => !b.closest('.pk-perm-chips') && /^(?:absolute|fixed)$/.test(getComputedStyle(b).position))
       .map((b) => ({el: name(b), rect: R(b.getBoundingClientRect()), b: b.getBoundingClientRect()})).filter((f) => f.b.width > 0 && f.b.height > 0);
     const coveredBy = floats.filter((f) => Math.min(r.right, f.b.right) - Math.max(r.left, f.b.left) > 1 && Math.min(r.bottom, f.b.bottom) - Math.max(r.top, f.b.top) > 1).map((f) => f.el);
+    // force 是数字时：在真页面样式表里找所有匹配 chips、设了 padding-left 的规则（含 @media / @layer 里的），看是谁把内联 padding-left 压成 0
+    const padRules = [];
+    if (typeof force === 'number') {
+      const walk = (list, sheet) => {
+        for (const r of list) {
+          if (r.cssRules && !r.selectorText) { walk(r.cssRules, sheet); continue; }
+          if (!r.selectorText || !r.style) continue;
+          const v = r.style.getPropertyValue('padding-left') || r.style.getPropertyValue('padding-inline-start');
+          if (!v) continue;
+          let hit = false; try { hit = box.matches(r.selectorText); } catch {}
+          if (hit) padRules.push({sheet, sel: r.selectorText.slice(0, 240), v, imp: r.style.getPropertyPriority('padding-left') || r.style.getPropertyPriority('padding-inline-start') || ''});
+        }
+      };
+      for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules; } catch { continue; } walk(rules, (sh.href || 'inline').replace(/^.*\//, '')); }
+    }
+    const inlineStyle = box.getAttribute('style');
     const controls = box.parentElement?.getBoundingClientRect();
     return {found: true, forced: Boolean(force), fold: box.dataset.fold ?? null, dodge: box.dataset.dodge ?? null, padLeft: box.style.paddingLeft || null, label: stat.textContent.trim(),
       stat: R(r), center: [cx, cy], statHit: Boolean(top && stat.contains(top)), top: name(top),
@@ -65,7 +81,7 @@ const probe = (force) => {
       // 计算样式：看真页面上 padding-left 为什么推不动「⋯」（9c94ea4d run 45943798642：pad40 时 chips 变宽、「⋯」不动）
       boxCss: (({display, paddingLeft, boxSizing, justifyContent, flexDirection, width, gridColumn, gridColumnStart, gridColumnEnd, direction}) => ({display, paddingLeft, boxSizing, justifyContent, flexDirection, width, gridColumn, gridColumnStart, gridColumnEnd, direction}))(getComputedStyle(box)),
       statCss: (({position, left, right, marginLeft, translate, transform, display, gridColumn}) => ({position, left, right, marginLeft, translate, transform, display, gridColumn}))(getComputedStyle(stat)),
-      statParent: name(stat.parentElement)};
+      statParent: name(stat.parentElement), padRules, inlineStyle};
   } finally {
     if (saved) {
       if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
@@ -148,6 +164,7 @@ for (const r of report) {
       + ` | pad40 stat=${JSON.stringify(r.forcedPad?.stat)} chips=${JSON.stringify(r.forcedPad?.chips)} coveredBy=${cov(r.forcedPad)} statHit=${r.forcedPad?.statHit}`
       + ` | loaded hasFix=${r.loaded?.hasFix} src=${r.loaded?.src ? r.loaded.src.replace(/^.*\//, '') : null}`
       + ` | pad40 boxCss=${JSON.stringify(r.forcedPad?.boxCss)} statCss=${JSON.stringify(r.forcedPad?.statCss)} statParent=${r.forcedPad?.statParent}`
+      + ` | pad40 inlineStyle=${JSON.stringify(r.forcedPad?.inlineStyle)} padRules=${JSON.stringify(r.forcedPad?.padRules)}`
       + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
   }
 }
