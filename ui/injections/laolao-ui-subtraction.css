@@ -86,8 +86,8 @@ html[data-laolao-classic-shell="1"] .sidebar-session-toolbar .sidebar-new-sessio
   order: 20;
   max-width: 42%;
   margin-left: auto;
-  padding: 0 4px !important;
-  font-size: 9px !important;
+  padding: 0 4px; /* B11 #261 #6：日间 11px + --muted-strong（原 9px + theme 无类 div 的 --fog-muted 只有 3.1–3.8:1）；夜间仍由 night.css 无类 div 规则管 */
+  font-size: 11px !important; color: var(--muted-strong) !important;
 }
 
 /* 9：启动/模式切换保留阶段动画，不再展示没有任务依据的精确百分比。 */
