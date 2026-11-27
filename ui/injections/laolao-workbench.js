@@ -1931,7 +1931,7 @@
   let statusFrame = 0;
   const renderStatusSoon = () => { if (!statusFrame) statusFrame = requestAnimationFrame(() => { statusFrame = 0; renderStatus(); }); };
   let flashTimer = 0;
-  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); clearTimeout(flashTimer); flashTimer = setTimeout(() => n.classList.remove('is-on'), 2600); }
+  function statusFlash(text) { const n = status.querySelector('.pk-wb-status__flash'); if (!n) return; n.textContent = text; n.classList.add('is-on'); fitStatus(); clearTimeout(flashTimer); flashTimer = setTimeout(() => { n.classList.remove('is-on'); n.textContent = ''; fitStatus(); }, 2600); }
   function renderStatus() {
     const left = el('div', 'pk-wb-status__side'), right = el('div', 'pk-wb-status__side');
     const mode = el('span', 'pk-wb-status__mode');
@@ -1939,8 +1939,8 @@
     left.append(mode);
     const g = state.git;
     if (g?.repo) {
-      const b = el('button', 'pk-wb-status__item'); b.type = 'button'; b.title = '源代码管理';
-      b.append(icon('git-branch'), el('span', '', g.branch || 'HEAD'));
+      const b = el('button', 'pk-wb-status__item pk-wb-status__branch'); b.type = 'button'; b.title = '源代码管理 · ' + (g.branch || 'HEAD');
+      b.append(icon('git-branch'), el('span', 'pk-wb-status__branch-name', g.branch || 'HEAD'));
       if (g.ahead || g.behind) b.append(el('span', '', (g.behind ? ' ↓' + g.behind : '') + (g.ahead ? ' ↑' + g.ahead : '')));
       if (g.changes.length) b.append(el('span', 'pk-wb-status__dirty', '*'));
       b.addEventListener('click', () => openView('scm'));
@@ -1957,7 +1957,7 @@
     if (tab?.kind === 'text' && editor?.getModel() === tab.model) {
       const sel = editor.getSelection(); const pos = editor.getPosition();
       const chosen = sel && !sel.isEmpty() ? tab.model.getValueInRange(sel).length : 0;
-      const ln = el('button', 'pk-wb-status__item', '行 ' + pos.lineNumber + '，列 ' + pos.column + (chosen ? '（已选择 ' + chosen + '）' : '')); ln.type = 'button';
+      const ln = el('button', 'pk-wb-status__item', '行 ' + pos.lineNumber + '，列 ' + pos.column + (chosen ? '（已选择 ' + chosen + '）' : '')); ln.type = 'button'; ln.dataset.opt = 'ln';
       ln.addEventListener('click', () => showQuick(':'));
       const opts = tab.model.getOptions();
       const indent = el('button', 'pk-wb-status__item', (opts.insertSpaces ? '空格：' : '制表符：') + opts.tabSize); indent.type = 'button';
@@ -1970,16 +1970,18 @@
       const enc = el('span', 'pk-wb-status__item', 'UTF-8'); enc.dataset.opt = 'enc';
       right.append(ln, indent, enc, eol, lang);
     }
-    for (const item of extraStatus.values()) { try { const node = item(tab); if (node) right.append(node); } catch {} }
+    for (const [key, item] of extraStatus) { try { const node = item(tab); if (node) { node.dataset.opt ||= key; right.append(node); } } catch {} }
     const live = document.documentElement.hasAttribute('data-cle-live');
     const pinkie = el('button', 'pk-wb-status__item pk-wb-status__pinkie' + (live ? ' is-live' : '')); pinkie.type = 'button';
-    pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? '碧琪工作中' : '碧琪'));
+    const who = document.documentElement.getAttribute('data-laolao-mode') === 'metre' ? 'Metre' : '碧琪'; pinkie.append(el('i', 'pk-wb-status__dot'), el('span', '', live ? who + '工作中' : who)); // B50：Metre 里直接写终稿（皮肤事后把「碧琪」换成「Metre」会变宽，fitStatus 已量过）
     pinkie.title = '把焦点移到对话输入框';
     pinkie.addEventListener('click', () => composer()?.focus());
     right.append(pinkie);
-    status.replaceChildren(left, right);
+    status.replaceChildren(left, right); fitStatus();
   }
-  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']});
+  // B50：右半边放不下时按顺序整项藏（编码 → 换行 → 缩进 → 语言 → 语言服务 → 行列 → AI → PR），碧琪键不藏、不留半截，闪现提示出现 / 消失、字体晚到（左半边 flex:none 会变宽）也重算；靠右对齐时溢出在左边、scrollWidth 量不出，所以看最左一项出没出界
+  function fitStatus() { const r = status.lastElementChild; if (!r) return; const pk = r.querySelector(':scope > .pk-wb-status__pinkie'); r.style.minWidth = pk ? Math.ceil(pk.getBoundingClientRect().width) + 'px' : ''; const nodes = ['enc', 'eol', 'indent', 'lang', 'lsp', 'ln', 'ai', 'pr'].map(k => r.querySelector(':scope > [data-opt="' + k + '"]')).filter(Boolean); nodes.forEach(n => { n.style.display = ''; }); const cut = () => { const edge = r.getBoundingClientRect().left - 0.5; return [...r.children].some(n => n.offsetWidth && n.getBoundingClientRect().left < edge); }; for (const n of nodes) { if (!cut()) break; n.style.display = 'none'; } }
+  new MutationObserver(debounce(() => { if (state.visible) renderStatus(); }, 200)).observe(document.documentElement, {attributes: true, attributeFilter: ['data-cle-live']}); document.fonts?.addEventListener('loadingdone', () => fitStatus());
 
   /* ───────── 问碧琪 ───────── */
   const composer = () => document.querySelector('.agent-chat__input textarea');
@@ -2308,7 +2310,7 @@
   const editorResize = new ResizeObserver(() => {
     if (editorLayoutFrame) return;
     editorLayoutFrame = requestAnimationFrame(() => {
-      editorLayoutFrame = 0;
+      editorLayoutFrame = 0; fitStatus();
       for (const [node, instance] of [[monacoHost, editor], [diffHost, diffEditor]]) {
         const width = node.clientWidth, height = node.clientHeight;
         if (!instance || !width || !height) continue;
