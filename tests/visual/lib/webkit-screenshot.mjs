@@ -93,7 +93,9 @@ export async function wkshotBuffer(page, {
       })));
     });
     const t0 = Date.now();
+    // 保留：这已经是带 5 秒上限的条件轮询；等的 last 是 Node 侧 onFrame 回调里的变量，页面里看不到，用不了 waitForFunction。
     while (!last && Date.now() - t0 < 5000) await page.waitForTimeout(50);
+    // 保留死等：settleMs 是调用方指定的「截图前稳定时间」（等动画 / 字体再出几帧），本身就是接口参数，没有可等的状态。
     await page.waitForTimeout(settleMs);
   } finally {
     await page.screencast.stop().catch(() => {});
