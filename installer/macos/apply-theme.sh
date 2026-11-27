@@ -556,6 +556,8 @@ if [[ -n "$OPENCLAW_ROOT" ]]; then
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-steer-fallback-wait.mjs"
     # 模型失败自动重试时，同一次发送的失败记录被重试替换，用户那句话不再写两遍。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-single-user.mjs"
+    # write/edit 内容没变（no-op）时不再提前结束回合，模型照常收到「No changes made」后继续回复。
+    OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-noop-write-continue.mjs"
     # 交付前检查要求补一遍时，用户刚发的那句留在会话主线上（以前被当成孤立消息拆掉，切页面回来就不见了）。
     OPENCLAW_ROOT="$OPENCLAW_ROOT" "$CONTEXT_NODE" "$REPO_ROOT/patch/apply-retry-user-preservation.mjs"
     # 立即追加带的图片一起送给正在跑的那一轮（以前图片被丢掉）。
