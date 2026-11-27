@@ -2,6 +2,8 @@
 // 改前：原生输入框附件条（.chat-attachments-preview > .chat-attachment-thumb > img）只画缩略图，点了没反应，
 // laolao-image-viewer.js 的选择器只认对话区的 .chat-message-image。改后：Metre 下点缩略图 / Enter 用同一个看图器打开原图；
 // 移除键、文件附件、其他模式一律不动（反例）。
+// uireview 08:45Z：只用键盘的人要能 Tab 到缩略图（焦点从移除键 / 输入框来，不是直接落在格子上）；
+// role=button 挂在 img 上，不挂在包着原生移除 <button> 的格子上。
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,11 +14,13 @@ import {fileURLToPath} from 'node:url';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const SRC = read('ui/injections/laolao-metre-thumbs.js');
+const THUMB_SEL = '.chat-attachments-preview .chat-attachment-thumb:not(.chat-attachment-thumb--file)';
 
 class El {
   constructor(tag, cls = '') { this.tagName = tag.toUpperCase(); this.className = cls; this.children = []; this.parent = null; this.attrs = {}; this.dataset = {}; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return this.attrs[k] ?? null; }
+  removeAttribute(k) { delete this.attrs[k]; }
   append(...kids) { for (const k of kids) { k.parent = this; this.children.push(k); } return this; }
   has(c) { return this.className.split(/\s+/).includes(c); }
   // 只认本文件用到的几种选择器
@@ -24,40 +28,51 @@ class El {
     return sel.split(',').map((s) => s.trim()).some((s) => {
       if (s === 'textarea' || s === 'input') return this.tagName === s.toUpperCase();
       if (s === '[contenteditable="true"]') return this.attrs.contenteditable === 'true';
-      if (s === '.chat-attachment-remove') return this.has('chat-attachment-remove');
-      if (s === '.chat-attachments-preview .chat-attachment-thumb:not(.chat-attachment-thumb--file)') {
+      if (s === '.chat-attachment-remove' || s === '.chat-attachments-preview') return this.has(s.slice(1));
+      if (s === THUMB_SEL) {
         if (!this.has('chat-attachment-thumb') || this.has('chat-attachment-thumb--file')) return false;
         for (let n = this.parent; n; n = n.parent) if (n.has?.('chat-attachments-preview')) return true;
         return false;
       }
+      if (s === THUMB_SEL + ' img') return this.tagName === 'IMG' && Boolean(this.parent?.closest(THUMB_SEL));
+      if (s === 'img[data-pk-metre-thumb="1"]') return this.tagName === 'IMG' && this.dataset.pkMetreThumb === '1';
       if (s === 'img') return this.tagName === 'IMG';
       throw new Error('fake DOM does not know selector: ' + s);
     });
   }
   closest(sel) { for (let n = this; n; n = n.parent) if (n.matches?.(sel)) return n; return null; }
   querySelector(sel) { for (const c of this.children) { if (c.matches(sel)) return c; const d = c.querySelector(sel); if (d) return d; } return null; }
+  querySelectorAll(sel, out = []) { for (const c of this.children) { if (c.matches(sel)) out.push(c); c.querySelectorAll(sel, out); } return out; }
+}
+
+// 原生 uy() 的结构：一张图片附件 + 一个文件附件，各带移除键；下面是输入框。
+function thumbCell(src) {
+  const cell = new El('div', 'chat-attachment-thumb');
+  const img = new El('img'); img.src = src; img.alt = 'Attachment preview';
+  const remove = new El('button', 'chat-attachment-remove');
+  cell.append(img, remove);
+  return {cell, img, remove};
 }
 
 function env({mode = 'metre', viewer = true} = {}) {
   const listen = {};
   const opened = [];
-  const win = {addEventListener: (t, f, cap) => { (listen[t] ||= []).push({f, cap}); }, Pinkie: {}};
-  if (viewer) win.__laolaoImageViewer = {open: (src, alt) => opened.push([src, alt]), close() {}};
-  const html = {getAttribute: (k) => (k === 'data-laolao-mode' ? mode : null)};
-  vm.runInNewContext(SRC, {window: win, document: {documentElement: html}});
-
-  // 原生 uy() 的结构：一张图片附件 + 一个文件附件，各带移除键
+  const body = new El('body');
   const strip = new El('div', 'chat-attachments-preview');
-  const imgCell = new El('div', 'chat-attachment-thumb');
-  const img = new El('img'); img.src = 'data:image/png;base64,QUJD'; img.alt = 'Attachment preview';
-  const removeImg = new El('button', 'chat-attachment-remove');
-  imgCell.append(img, removeImg);
+  const a = thumbCell('data:image/png;base64,QUJD');
   const fileCell = new El('div', 'chat-attachment-thumb chat-attachment-thumb--file');
   const fileName = new El('span', 'chat-attachment-file__name'); const removeFile = new El('button', 'chat-attachment-remove');
   fileCell.append(fileName, removeFile);
-  strip.append(imgCell, fileCell);
+  strip.append(a.cell, fileCell);
   const textarea = new El('textarea');
   const msgImg = new El('img', 'chat-message-image'); msgImg.src = 'data:image/png;base64,REVG';
+  body.append(strip, textarea, msgImg);
+
+  const win = {addEventListener: (t, f, cap) => { (listen[t] ||= []).push({f, cap}); }, Pinkie: {}};
+  if (viewer) win.__laolaoImageViewer = {open: (src, alt) => opened.push([src, alt]), close() {}};
+  const html = {getAttribute: (k) => (k === 'data-laolao-mode' ? mode : null)};
+  const doc = {documentElement: html, querySelectorAll: (s) => body.querySelectorAll(s)};
+  vm.runInNewContext(SRC, {window: win, document: doc});
 
   const fire = (type, target, extra = {}) => {
     const ev = {type, target, button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, prevented: false, stopped: false,
@@ -65,7 +80,9 @@ function env({mode = 'metre', viewer = true} = {}) {
     for (const {f} of listen[type] || []) f(ev);
     return ev;
   };
-  return {win, listen, opened, imgCell, img, removeImg, fileCell, fileName, removeFile, textarea, msgImg, fire, setMode: (m) => { mode = m; }};
+  const addImage = (src) => { const t = thumbCell(src); strip.children.splice(1, 0, t.cell); t.cell.parent = strip; return t; };
+  return {win, listen, opened, strip, imgCell: a.cell, img: a.img, removeImg: a.remove, fileCell, fileName, removeFile, textarea, msgImg, fire, addImage,
+    setMode: (m) => { mode = m; }};
 }
 
 test('Metre：点输入框里的图片缩略图，用同一个看图器打开整张原图，并先于原生接住', () => {
@@ -96,37 +113,73 @@ test('反例：其他模式一个字不动（不打开、不拦、不补属性�
   for (const mode of ['chat', 'baton', 'project', 'study', 'infinite', null]) {
     const e = env({mode});
     const ev = e.fire('click', e.img);
-    e.fire('pointerover', e.img); e.fire('focusin', e.imgCell);
-    const key = e.fire('keydown', e.imgCell, {key: 'Enter'});
+    e.fire('pointerover', e.img); e.fire('focusin', e.removeImg); e.fire('focusin', e.textarea);
+    e.fire('keydown', e.textarea, {key: 'Tab'});
+    const key = e.fire('keydown', e.img, {key: 'Enter'});
     assert.deepEqual(e.opened, [], `mode=${mode}`);
     assert.ok(!ev.prevented && !ev.stopped && !key.prevented, `mode=${mode} 不拦`);
-    assert.deepEqual(e.imgCell.attrs, {}, `mode=${mode} 不补属性`);
+    assert.deepEqual([e.img.attrs, e.img.dataset, e.imgCell.attrs], [{}, {}, {}], `mode=${mode} 不补属性`);
     e.setMode('metre');
     e.fire('click', e.img);
     assert.equal(e.opened.length, 1, '切回 Metre 生效');
   }
 });
 
-test('键盘：指针 / 焦点经过补 tabindex 和 role=button；Enter / 空格打开；输入框里打字的 Enter 不拦', () => {
+test('键盘：焦点到移除键或输入框（不碰鼠标）时，附件条里的图片就能 Tab 到；Enter / 空格打开', () => {
+  for (const from of ['removeImg', 'textarea', 'removeFile']) {
+    const e = env();
+    assert.equal(e.img.getAttribute('tabindex'), null, '还没补');
+    e.fire('focusin', e[from]);
+    assert.equal(e.img.getAttribute('tabindex'), '0', `焦点从 ${from} 来以后图片可 Tab`);
+    assert.equal(e.img.getAttribute('role'), 'button');
+    assert.equal(e.img.getAttribute('aria-label'), '点开放大');
+    for (const key of ['Enter', ' ']) assert.ok(e.fire('keydown', e.img, {key}).prevented, key);
+    assert.equal(e.opened.length, 2);
+    assert.ok(!e.fire('keydown', e.img, {key: 'a'}).prevented);
+    assert.ok(!e.fire('keydown', e.textarea, {key: 'Enter'}).prevented, '输入框里的 Enter 照旧发送');
+    assert.ok(!e.fire('keydown', e.removeImg, {key: 'Enter'}).prevented, '移除键的 Enter 照旧移除');
+    assert.equal(e.opened.length, 2);
+  }
+});
+
+test('键盘：刚贴进来的图，在 Tab 按下（焦点移动之前）就补上；文件附件不补', () => {
   const e = env();
-  e.fire('pointerover', e.img);
-  assert.equal(e.imgCell.getAttribute('tabindex'), '0');
-  assert.equal(e.imgCell.getAttribute('role'), 'button');
-  assert.equal(e.imgCell.getAttribute('aria-label'), '点开放大');
-  assert.equal(e.fileCell.getAttribute('tabindex'), null, '文件附件不补');
-  e.fire('focusin', e.fileCell); assert.equal(e.fileCell.getAttribute('tabindex'), null);
-  for (const key of ['Enter', ' ']) assert.ok(e.fire('keydown', e.imgCell, {key}).prevented, key);
-  assert.equal(e.opened.length, 2);
-  assert.ok(!e.fire('keydown', e.imgCell, {key: 'a'}).prevented);
-  assert.ok(!e.fire('keydown', e.textarea, {key: 'Enter'}).prevented, '输入框里的 Enter 照旧发送');
-  assert.ok(!e.fire('keydown', e.removeImg, {key: 'Enter'}).prevented, '移除键的 Enter 照旧移除');
-  assert.equal(e.opened.length, 2);
+  e.fire('focusin', e.textarea);
+  const late = e.addImage('data:image/png;base64,TEFURQ==');
+  assert.equal(late.img.getAttribute('tabindex'), null);
+  const tab = e.fire('keydown', e.textarea, {key: 'Tab', shiftKey: true});
+  assert.ok(!tab.prevented, 'Tab 本身不拦');
+  assert.equal(late.img.getAttribute('tabindex'), '0', 'Shift+Tab 从输入框回到附件条时新图已可 Tab');
+  assert.deepEqual(e.fileCell.attrs, {}, '文件附件格子不补');
+  assert.equal(e.fileName.getAttribute('tabindex'), null);
+});
+
+test('读屏：role=button 挂在 img 上，不挂在包着原生移除 <button> 的格子上；Tab 顺序是图片 → 移除', () => {
+  const e = env();
+  e.fire('focusin', e.removeImg);
+  assert.deepEqual(e.imgCell.attrs, {}, '格子上不加 tabindex / role / aria-label');
+  assert.equal(e.img.getAttribute('role'), 'button');
+  assert.equal(e.removeImg.getAttribute('role'), null, '移除键不动');
+  const kids = e.imgCell.children;
+  assert.ok(kids.indexOf(e.img) < kids.indexOf(e.removeImg) && e.img.parent === e.removeImg.parent, 'img 和移除键是兄弟，img 在前');
+});
+
+test('离开 Metre：补上的属性原样拿掉；再回来重新补', () => {
+  const e = env();
+  e.fire('focusin', e.textarea);
+  assert.equal(e.img.getAttribute('tabindex'), '0');
+  e.setMode('chat'); e.fire('laolao:modechange', e.textarea);
+  assert.deepEqual([e.img.attrs, e.img.dataset], [{}, {}], '其他模式下不留任何属性');
+  e.setMode('metre'); e.fire('laolao:modechange', e.textarea);
+  assert.equal(e.img.getAttribute('tabindex'), '0');
 });
 
 test('看图器还没加载时不拦，原生行为照旧', () => {
   const e = env({viewer: false});
   const ev = e.fire('click', e.img);
   assert.ok(!ev.prevented && !ev.stopped);
+  e.fire('focusin', e.textarea);
+  assert.ok(!e.fire('keydown', e.img, {key: 'Enter'}).prevented);
 });
 
 test('改前缺口：laolao-image-viewer.js 的选择器不含输入框缩略图，原生模板里缩略图 img 没有点击处理', () => {
