@@ -70,3 +70,86 @@ test('a filesystem clock that never ticks past the marker fails closed', t => {
   assert.equal(stableContractFile(written, state), null);
   assert.ok(BigInt(state.contractCutoffNs) < frozen);
 });
+
+// B67: a virtual clock drives the file timestamps, performance.now() and the 1 ms
+// Atomics.wait inside contractTimeBoundary(), so before / same-tick / after the
+// boundary and a slow write are exercised deterministically instead of by luck.
+// A file's timestamp is the virtual time its write STARTED (that is when the OS
+// stamps it); `slowWriteMs(n)` lets the n-th probe write return later, the way
+// Defender scanning a file on close stalls a Windows CI runner.
+function withVirtualClock(t, {tickMs = 20, startMs = 1_000_000, sleepMs = 1, slowWriteMs = () => 0, frozen = false} = {}) {
+  let now = startMs;
+  let probes = 0;
+  let waits = 0;
+  const stamped = new Map();
+  const tick = BigInt(tickMs) * 1_000_000n;
+  const write = fs.writeFileSync;
+  const stat = fs.statSync;
+  t.mock.method(fs, 'writeFileSync', function virtualWrite(file, ...rest) {
+    const at = now;
+    const result = write.call(fs, file, ...rest);
+    for (const key of [path.resolve(String(file)), fs.realpathSync(String(file)), fs.realpathSync.native(String(file))]) stamped.set(key, at);
+    if (path.basename(String(file)).startsWith('probe-')) now += slowWriteMs(probes++);
+    return result;
+  });
+  t.mock.method(fs, 'statSync', function virtualStat(file, options) {
+    const real = stat.call(fs, file, options);
+    const at = stamped.get(path.resolve(String(file)));
+    if (at === undefined || !options?.bigint || !real) return real;
+    const ns = BigInt(Math.round(at * 1e6));
+    const shaped = frozen ? 1_700_000_000_000_000_000n : ns - (ns % tick);
+    const copy = Object.assign(Object.create(Object.getPrototypeOf(real)), real);
+    for (const field of TIME_FIELDS) { copy[`${field}Ns`] = shaped; copy[`${field}Ms`] = shaped / 1_000_000n; }
+    return copy;
+  });
+  t.mock.method(performance, 'now', () => now);
+  t.mock.method(Atomics, 'wait', () => { waits += 1; now += sleepMs; return 'timed-out'; });
+  return {advance(ms) { now += ms; }, get waits() { return waits; }};
+}
+
+test('B67: contracts before the boundary or on its tick stay usable, writes after it never do (virtual 20 ms clock)', t => {
+  const clock = withVirtualClock(t, {tickMs: 20, startMs: 1_000_000});
+  const root = tempRoot(t);
+  const earlier = path.join(root, 'earlier.py');
+  fs.writeFileSync(earlier, 'print("installed a tick before")\n');
+  clock.advance(25);
+  const sameTick = path.join(root, 'same-tick.py');
+  fs.writeFileSync(sameTick, 'print("installed on the boundary tick")\n');
+  clock.advance(5);
+  const state = contractTimeBoundary();
+  const after = path.join(root, 'after.py');
+  fs.writeFileSync(after, 'print("written during the turn")\n');
+  assert.ok(stableContractFile(earlier, state), 'a contract from an earlier tick stays usable');
+  assert.ok(stableContractFile(sameTick, state), 'a contract installed on the boundary tick stays usable');
+  assert.equal(stableContractFile(after, state), null, 'a file written after begin() is never a contract');
+});
+
+for (const [name, options] of [
+  ['a slow probe write (Defender-style stall) after the tick has really passed', {sleepMs: 1, slowWriteMs: n => (n === 0 ? 60 : 0)}],
+  ['a Windows ~16 ms timer plus a slow second probe write', {sleepMs: 16, slowWriteMs: n => (n === 1 ? 45 : 0)}],
+]) {
+  test(`B67: ${name} does not fail closed on a clock that did tick`, t => {
+    withVirtualClock(t, {tickMs: 20, startMs: 1_000_000, ...options});
+    const root = tempRoot(t);
+    const installed = path.join(root, 'installed.py');
+    fs.writeFileSync(installed, 'print("installed just before the turn")\n');
+    const state = contractTimeBoundary();
+    const written = path.join(root, 'written.py');
+    fs.writeFileSync(written, 'print("written during the turn")\n');
+    assert.ok(stableContractFile(installed, state), 'the boundary gave up although the filesystem clock had passed the marker');
+    assert.equal(stableContractFile(written, state), null);
+  });
+}
+
+test('B67: a frozen clock still fails closed and the wait stays bounded', t => {
+  const clock = withVirtualClock(t, {frozen: true, sleepMs: 1});
+  const root = tempRoot(t);
+  const installed = path.join(root, 'installed.py');
+  fs.writeFileSync(installed, 'print("installed on the frozen tick")\n');
+  const state = contractTimeBoundary();
+  const written = path.join(root, 'written.py');
+  fs.writeFileSync(written, 'print("written during the turn")\n');
+  assert.equal(stableContractFile(written, state), null);
+  assert.equal(stableContractFile(installed, state), null, 'on a frozen clock the marker tick counts as this turn');
+  assert.ok(clock.waits <= 60, `the wait must stay near the 50 ms limit (${clock.waits} waits)`);
+});
