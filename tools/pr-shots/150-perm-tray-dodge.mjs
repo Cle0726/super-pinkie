@@ -61,7 +61,8 @@ const probe = (force) => {
     if (typeof force === 'number') {
       const walk = (list, sheet) => {
         for (const r of list) {
-          if (r.cssRules && !r.selectorText) { walk(r.cssRules, sheet); continue; }
+          if (r.cssRules) walk(r.cssRules, sheet);   // @media / @layer / CSS 嵌套规则里的子规则也看
+          if (!r.selectorText) continue;
           if (!r.selectorText || !r.style) continue;
           const v = r.style.getPropertyValue('padding-left') || r.style.getPropertyValue('padding-inline-start');
           if (!v) continue;
@@ -69,7 +70,13 @@ const probe = (force) => {
           if (hit) padRules.push({sheet, sel: r.selectorText.slice(0, 240), v, imp: r.style.getPropertyPriority('padding-left') || r.style.getPropertyPriority('padding-inline-start') || ''});
         }
       };
-      for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules; } catch { continue; } walk(rules, (sh.href || 'inline').replace(/^.*\//, '')); }
+      // document.styleSheets 之外再看 adoptedStyleSheets（构造样式表）；读不到 cssRules 的跨源表记下来
+      const sheets = [...document.styleSheets, ...(document.adoptedStyleSheets || []).map((s) => Object.assign(s, {__adopted: true}))];
+      for (const sh of sheets) {
+        const label = sh.__adopted ? 'adopted' : (sh.href || 'inline').replace(/^.*\//, '');
+        let rules; try { rules = sh.cssRules; } catch { padRules.push({sheet: label, blocked: true}); continue; }
+        walk(rules, label);
+      }
     }
     const inlineStyle = box.getAttribute('style');
     const controls = box.parentElement?.getBoundingClientRect();
@@ -126,6 +133,31 @@ try {
         const {center: _fc, ...forced} = await page.evaluate(probe, true);
         // 再临时加 40px 让位量一次：看 padding-left 在真页面上推不推得动「⋯」（同步还原，不拍图）
         const {center: _pc, ...forcedPad} = await page.evaluate(probe, 40);
+        // 直接试三种让位 40px 的办法，看哪种在真页面上推得动「⋯」（每种量完同步还原，不拍图）
+        const shifts = await page.evaluate(() => {
+          const box = document.querySelector('.chat-main .agent-chat__composer-controls > .pk-perm-chips');
+          const stat = box?.querySelector('.pk-perm-chip--stat');
+          if (!stat) return null;
+          const first = box.querySelector('.pk-perm-chip');
+          const saved = {dodge: box.dataset.dodge, style: box.getAttribute('style'), firstStyle: first.getAttribute('style')};
+          const measure = () => {
+            const r = stat.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return {x: Math.round(r.left), y: Math.round(r.top), statHit: Boolean(top && stat.contains(top))};
+          };
+          const restore = () => {
+            if (saved.dodge === undefined) delete box.dataset.dodge; else box.dataset.dodge = saved.dodge;
+            if (saved.style == null) box.removeAttribute('style'); else box.setAttribute('style', saved.style);
+            if (saved.firstStyle == null) first.removeAttribute('style'); else first.setAttribute('style', saved.firstStyle);
+            box.querySelector(':scope > .pk-shot-spacer')?.remove();
+          };
+          const out = {};
+          const run = (k, apply) => { box.dataset.dodge = '1'; try { apply(); out[k] = measure(); } catch (e) { out[k] = {error: String(e)}; } finally { restore(); } };
+          run('none', () => {});
+          run('padImportant', () => box.style.setProperty('padding-left', '40px', 'important'));
+          run('firstMargin', () => first.style.setProperty('margin-left', '50px', 'important'));
+          run('spacer', () => { const s = document.createElement('span'); s.className = 'pk-shot-spacer'; s.style.cssText = 'display:inline-block;flex:none;width:40px;height:1px'; box.prepend(s); });
+          return out;
+        });
         // 页面实际加载的 laolao-metre-perm.js 里有没有 clearCover 的 display: contents 兜底（af7ac0a2 的修复）
         const loaded = await page.evaluate(async () => {
           const src = [...document.scripts].map((s) => s.src).find((u) => /laolao-metre-perm\.js/.test(u)) || null;
@@ -138,7 +170,7 @@ try {
         await page.evaluate(() => window.PinkieMetrePerm?.fit?.());
         await page.waitForTimeout(1800);
         const wide = await page.evaluate(probe);
-        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
+        report.push({theme, width, row: rec, opened, refit, forced, forcedPad, shifts, loaded, wide: {fold: wide.fold, dodge: wide.dodge, padLeft: wide.padLeft, statHit: wide.statHit}, pageErrors});
       } catch (error) {
         report.push({theme, width, error: error.message, pageErrors});
       } finally {
@@ -165,6 +197,7 @@ for (const r of report) {
       + ` | loaded hasFix=${r.loaded?.hasFix} src=${r.loaded?.src ? r.loaded.src.replace(/^.*\//, '') : null}`
       + ` | pad40 boxCss=${JSON.stringify(r.forcedPad?.boxCss)} statCss=${JSON.stringify(r.forcedPad?.statCss)} statParent=${r.forcedPad?.statParent}`
       + ` | pad40 inlineStyle=${JSON.stringify(r.forcedPad?.inlineStyle)} padRules=${JSON.stringify(r.forcedPad?.padRules)}`
+      + ` | shifts=${JSON.stringify(r.shifts)}`
       + ` | 820 fold=${r.wide.fold} dodge=${r.wide.dodge} pad=${r.wide.padLeft}`);
   }
 }
