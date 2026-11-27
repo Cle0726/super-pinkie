@@ -32,7 +32,7 @@ jobs:
         run: |
           export PINKIE_TEST_PYTHON="$(command -v python)"
           node tools/pinkie-toolbox/sync.mjs --check
-          node --test tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
+          node --test --test-force-exit --import ./tests/helpers/leak-exit-check.mjs tests/pinkie-toolbox.test.mjs tests/pinkie-toolbox-download.test.mjs tests/pinkie-toolbox-route.test.mjs tests/skill-routes.test.mjs
           # 人格打包测试跑的是 Mac 安装脚本，只在 Mac 上跑
           if [ "$RUNNER_OS" = macOS ]; then python -m unittest discover -s tests -p persona_bundle_test.py; fi
 

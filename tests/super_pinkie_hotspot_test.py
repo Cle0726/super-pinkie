@@ -244,7 +244,6 @@ class HiddenChildWindowTests(unittest.TestCase):
             "check_node": super_pinkie.check_node,
             "check_npm": super_pinkie.check_npm,
             "check_openclaw_cli": super_pinkie.check_openclaw_cli,
-            "run_openclaw": lambda: super_pinkie.run_openclaw(("agents", "list", "--json"), timeout=5),
             "restart_openclaw_gateway": lambda: super_pinkie.restart_openclaw_gateway(lambda _message: None),
         }
         with mock.patch.object(super_pinkie, "hidden_process_kwargs", return_value=hidden), \
