@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// B80（设置页其余按钮 / 卡片夜间悬停对比度）的 PR 截图脚本，约定照 tools/pr-shots/minimal.mjs：
+// B80（进阶调节弹层夜间悬停对比度）的 PR 截图脚本，约定照 tools/pr-shots/minimal.mjs：
 // node <脚本> --out <目录>，写 PNG + 追加 <目录>/shots.jsonl，另写 report.json（量到的前景 / 底色 / 对比度）。
 // 真页面 settings 场景，1440×900 / 820×1180 × 日 / 夜 × 改后 / 改前。
-// 改前：同页停用两份注入样式，换成按 tests/b80-settings-hover-night.test.mjs 反例同一套替换还原的旧写法。
-// 每格量：共享键悬停边框、标题、选中态文字；再 window.__pinkiePower.open() 量关闭钮静止 / 悬停文字、重置钮边框，悬停后拍整页。
+// 改前：同页停用 laolao-power-settings.css，换成按 tests/b80-settings-hover-night.test.mjs 反例同一套替换还原的旧写法。
+// 每格 window.__pinkiePower.open() 后量关闭钮静止 / 悬停文字、重置钮边框 / 文字，悬停关闭钮后拍整页。
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -17,13 +17,9 @@ fs.mkdirSync(out, {recursive: true});
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const read = (f) => fs.readFileSync(path.join(repoRoot, 'ui/injections', f), 'utf8');
 
-const SU = read('laolao-settings-user.css');
 const PS = read('laolao-power-settings.css');
-const SU_OLD = SU.replace('--pinkie-settings-hover-border: rgba(255, 154, 196, .75);', '--pinkie-settings-hover-border: rgba(255, 154, 196, .5);')
-  .replace('html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__title,\n', '')
-  .replace(/html\[data-pinkie-night\] #laolao-user-settings \.pinkie-user-settings__(?:choice|brand|preset)\.is-selected,\n/g, '');
 const PS_OLD = PS.replace(/\/\* B80 夜：[^\n]*\*\/\n(?:[^\n]+\n)+?\n/, '');
-if (SU_OLD === SU || PS_OLD === PS) throw new Error('改前替换没有命中，脚本与 CSS 不同步');
+if (PS_OLD === PS) throw new Error('改前替换没有命中，脚本与 CSS 不同步');
 
 const MEASURE = ([sel, kind]) => {
   const parse = (s) => { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const v = m[1].split(/[\s,/]+/).filter(Boolean).map(Number); return {r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1}; };
@@ -54,9 +50,6 @@ const MEASURE = ([sel, kind]) => {
     ratio: +Math.min(...sides.map((g) => ratio(over(fg, g), g))).toFixed(2)};
 };
 
-const SHARED = '#laolao-user-settings .pinkie-user-settings__choice:not(.is-selected), #laolao-user-settings .pinkie-user-settings__button, #laolao-user-settings .pinkie-user-settings__text-button';
-const TITLE = '#laolao-user-settings .pinkie-user-settings__title';
-const SELECTED = '#laolao-user-settings .is-selected';
 const CLOSE = '#pinkie-power .pinkie-power__close';
 const RESET = '#pinkie-power .pinkie-power__reset';
 
@@ -68,15 +61,15 @@ const report = [];
 const lines = [];
 
 async function swapToOld(page) {
-  await page.evaluate(([su, ps]) => {
+  await page.evaluate((ps) => {
     for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
-      if (/laolao-(?:settings-user|power-settings)\.css/.test(link.getAttribute('href') || '')) link.disabled = true;
+      if (/laolao-power-settings\.css/.test(link.getAttribute('href') || '')) link.disabled = true;
     }
     const style = document.createElement('style');
     style.id = 'b80-before';
-    style.textContent = su + '\n' + ps;
+    style.textContent = ps;
     document.head.appendChild(style);
-  }, [SU_OLD, PS_OLD]);
+  }, PS_OLD);
   await page.waitForTimeout(200);
 }
 
@@ -104,27 +97,21 @@ async function cell(theme, width, height, variant) {
     await page.setViewportSize({width, height});
     await page.waitForSelector('#laolao-user-settings:not([hidden])', {timeout: 10_000});
     if (variant === 'before') await swapToOld(page);
-    await page.mouse.move(1, 1);
-    const m = {
-      title: await page.evaluate(MEASURE, [TITLE, 'text']),
-      selected: await page.evaluate(MEASURE, [SELECTED, 'text']),
-      'shared:hover': await hoverMeasure(page, SHARED, 'border'),
-    };
-    const tag = `b80-${variant}-${theme}-${width}`;
-    const s1 = await shot(page, `${tag}-settings-hover`);
     await page.waitForFunction(() => typeof window.__pinkiePower?.open === 'function', {timeout: 10_000});
     await page.evaluate(() => window.__pinkiePower.open());
     await page.waitForSelector('#pinkie-power:not([hidden]) .pinkie-power__close', {timeout: 10_000});
     await page.waitForTimeout(300);
     await page.mouse.move(1, 1);
-    m.close = await page.evaluate(MEASURE, [CLOSE, 'text']);
-    m.reset = await page.evaluate(MEASURE, [RESET, 'border']);
-    m['reset:text'] = await page.evaluate(MEASURE, [RESET, 'text']);
+    const m = {
+      close: await page.evaluate(MEASURE, [CLOSE, 'text']),
+      reset: await page.evaluate(MEASURE, [RESET, 'border']),
+      'reset:text': await page.evaluate(MEASURE, [RESET, 'text']),
+    };
     m['reset:hover'] = await hoverMeasure(page, RESET, 'border');
     m['close:hover'] = await hoverMeasure(page, CLOSE, 'text');
-    const s2 = await shot(page, `${tag}-power-close-hover`);
+    const s = await shot(page, `b80-${variant}-${theme}-${width}-power-close-hover`);
     const ratios = Object.fromEntries(Object.entries(m).map(([k, r]) => [k, r.missing ? null : r.ratio]));
-    for (const s of [s1, s2]) lines.push({...s, variant, theme, ratios});
+    lines.push({...s, variant, theme, ratios});
     report.push({variant, theme, width, measures: m, pageErrors});
   } catch (error) {
     report.push({variant, theme, width, error: error.message, pageErrors});

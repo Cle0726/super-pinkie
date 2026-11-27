@@ -468,19 +468,15 @@ html[data-color-scheme="dark"] #laolao-user-settings {
   --pinkie-settings-ink: #f6e5ee; --pinkie-settings-custom-ink: #d1b3c2;
   --pinkie-settings-muted: #d1b3c2;
   --pinkie-settings-accent: #ff87b8; --pinkie-settings-link: #ff87b8;
-  --pinkie-settings-border: rgba(243, 153, 195, .2); --pinkie-settings-hover-border: rgba(255, 154, 196, .75);   /* B80 夜：对卡片 5.21、对 hover 底 3.86:1 */
+  --pinkie-settings-border: rgba(243, 153, 195, .2); --pinkie-settings-hover-border: rgba(255, 154, 196, .5);
   --pinkie-settings-card: rgba(42, 29, 40, .97); --pinkie-settings-hover: #4a2e42;
   --pinkie-settings-soft: rgba(58, 38, 53, .98); --pinkie-settings-primary-ink: #ffd0e4;
   --pinkie-settings-control: rgba(52, 37, 50, .98); --pinkie-settings-primary-bg: linear-gradient(135deg, #5c2c46, #4a2e42); --pinkie-settings-button-edge: #a8738f;   /* B25 夜：对卡片 4.23、对键底 3.79:1 */
 }
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__title,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__title,
 html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__title { color: #ff9ac4; }
 html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover, html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__preset:hover { border-color: var(--pinkie-settings-accent); }   /* B24 夜：日间 .62 粉边叠在夜卡片上只有 2.45:1；放在 .is-selected 之前，选中态照旧 */
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__preset.is-selected,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__choice.is-selected,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__brand.is-selected,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__preset.is-selected,
@@ -494,7 +490,6 @@ html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__pres
   background: rgba(119, 56, 88, .7);
   color: #ffe3ef;
 }
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__warning,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__warning,
 html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__warning,
 html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__warning {
@@ -548,10 +543,8 @@ html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__warn
   background: var(--pinkie-settings-soft); color: var(--pinkie-settings-ink);
   font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center;
 }
-html[data-pinkie-night] #laolao-user-settings .pinkie-user-settings__switch-knob,
 html[data-theme-mode="dark"] #laolao-user-settings .pinkie-user-settings__switch-knob,
-html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__switch-knob,
-html[data-color-scheme="dark"] #laolao-user-settings .pinkie-user-settings__switch-knob { background: #f6e9ef; }
+html[data-theme="dark"] #laolao-user-settings .pinkie-user-settings__switch-knob { background: #f6e9ef; }
 @media (prefers-reduced-motion: reduce) {
   #laolao-user-settings .pinkie-user-settings__switch,
   #laolao-user-settings .pinkie-user-settings__switch-knob { transition: none; }
